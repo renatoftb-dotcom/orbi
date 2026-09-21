@@ -2266,11 +2266,24 @@ const api = {
     _ler: async (rota, fd, oque, aoProgresso) => {
       fd.append("modo", "fila");
       let res, json = null;
-      try {
-        res = await fetch(`${_API_URL}${rota}`, { method: "POST", headers: api.ia._cabecalho(), body: fd });
-        try { json = await res.json(); } catch (e) { json = null; }
-      } catch (e) {
-        const erro = new Error("Não consegui falar com o servidor agora."); erro.motivo = "rede"; throw erro;
+      // Sem resposta nenhuma quase sempre é o servidor reiniciando (cada
+      // publicação no Railway derruba o processo por alguns segundos) ou o
+      // sinal piscando. Tenta de novo sozinho antes de desistir.
+      const esperas = [3000, 6000, 10000];
+      const comecouEnvio = Date.now();
+      for (let tentativa = 0; ; tentativa++) {
+        try {
+          res = await fetch(`${_API_URL}${rota}`, { method: "POST", headers: api.ia._cabecalho(), body: fd });
+          try { json = await res.json(); } catch (e) { json = null; }
+          break;
+        } catch (e) {
+          if (tentativa >= esperas.length) {
+            const erro = new Error("Não consegui falar com o servidor — tentei 4 vezes em 20 segundos. Ele pode estar reiniciando depois de uma publicação; espere um minuto e tente de novo.");
+            erro.motivo = "rede"; throw erro;
+          }
+          if (typeof aoProgresso === "function") aoProgresso({ etapa: "reconectando", itens: null, decorridoMs: Date.now() - comecouEnvio });
+          await new Promise((z) => setTimeout(z, esperas[tentativa]));
+        }
       }
       if (!json || !json.ok) throw api.ia._erroDe(res, json, oque);
       // servidor antigo, sem fila: a resposta já é o resultado
@@ -19341,6 +19354,69 @@ function buscarNoCatalogo(insumos, termo, limite) {
     .slice(0, limite || 60);
 }
 
+// ── O item novo no padrão do catálogo ───────────────────────────
+// O catálogo tem família: "PVC - Alimentação Água Fria - Luva 32mm",
+// "... - Luva 50mm", "... - Luva União 50mm". O item novo entra na mesma
+// família, só com a medida que ele pediu: "PVC - Alimentação Água Fria -
+// Luva 32×25mm". A família é tudo até a palavra-chave ("Luva"); o que vem
+// depois é o que muda de um item para outro.
+
+// A medida do que ele escreveu: "32 X 25 MM" → "32×25mm"; "25MM" → "25mm";
+// "3/4" fica "3/4". O separador segue o que a família já usa.
+function medidaDoTexto(texto, sep) {
+  const t = String(texto == null ? "" : texto);
+  const x = sep || "x";
+  const dupla = /(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|pol)?(?![a-z])/i.exec(t);
+  if (dupla) return `${dupla[1]}${x}${dupla[2]}${(dupla[3] || "").toLowerCase()}`;
+  const simples = /(\d+(?:[.,]\d+)?)\s*(mm|cm|pol)(?![a-z])/i.exec(t);
+  if (simples) return `${simples[1]}${simples[2].toLowerCase()}`;
+  const fracao = /\d+\s*\/\s*\d+"?/.exec(t);
+  return fracao ? fracao[0].replace(/\s+/g, "") : "";
+}
+
+// A palavra que diz O QUE é: a primeira de verdade — nem número, nem marca,
+// nem "de". "LUVA SOLDAVEL TIGRE..." → "luva".
+function palavraChave(texto) {
+  const vazias = new Set(["de", "do", "da", "dos", "das", "com", "para", "pra", "tipo"]);
+  return semMarcaNaLista(cotSemAcento(texto).split(" ").filter(Boolean))
+    .find((p) => p.length >= 3 && !/\d/.test(p) && !vazias.has(p) && !COT_MARCAS.has(p)) || "";
+}
+
+// As famílias do catálogo que têm essa palavra, da mais parecida com o que
+// ele escreveu para a menos; empatando, a que tem mais itens. Cada uma vem
+// com o grupo, a unidade e o separador de medida que os itens dela usam.
+function familiasDoCatalogo(chave, escrito, insumos, limite) {
+  const k = cotSemAcento(chave);
+  if (!k) return [];
+  const doEscrito = new Set(cotSemAcento(escrito).split(" "));
+  const mais = (o, v) => { if (v) o[v] = (o[v] || 0) + 1; };
+  const topo = (o, padrao) => Object.keys(o).sort((a, b) => o[b] - o[a])[0] || padrao;
+  const porFamilia = {};
+  for (const i of buscarNoCatalogo(insumos, k, 1000)) {
+    const segs = String(i.nome || "").split(" - ");
+    const ultimo = segs[segs.length - 1].split(/\s+/);
+    const pos = ultimo.findIndex((w) => cotSemAcento(w).startsWith(k));
+    if (pos < 0) continue;
+    const familia = [...segs.slice(0, -1), ultimo.slice(0, pos + 1).join(" ")].join(" - ");
+    const f = porFamilia[familia] || (porFamilia[familia] = { familia, n: 0, grupos: {}, unidades: {}, seps: {} });
+    f.n++;
+    mais(f.grupos, i.grupo); mais(f.unidades, i.unidade);
+    mais(f.seps, /\d\s*×\s*\d/.test(i.nome) ? "×" : /\d\s*x\s*\d/i.test(i.nome) ? "x" : "");
+  }
+  return Object.values(porFamilia)
+    .map((f) => ({
+      familia: f.familia, n: f.n,
+      grupo: topo(f.grupos, "Outros"), unidade: topo(f.unidades, "Unidades"), sep: topo(f.seps, "x"),
+      afinidade: cotSemAcento(f.familia).split(" ").filter((p) => p.length >= 3 && p !== k && doEscrito.has(p)).length,
+    }))
+    .sort((a, b) => b.afinidade - a.afinidade || b.n - a.n || a.familia.localeCompare(b.familia, "pt-BR"))
+    .slice(0, limite || 5);
+}
+
+function nomeNoPadrao(familia, complemento) {
+  return [String(familia || "").trim(), String(complemento || "").trim()].filter(Boolean).join(" ");
+}
+
 // Item novo cadastrado de dentro do pedido: entra no catálogo como qualquer
 // outro, com código do grupo. O que o pedreiro escreveu vira apelido — da
 // próxima vez que ele escrever igual, o VICKE já acha.
@@ -19889,6 +19965,8 @@ function andamentoDaLeitura(p) {
       pct = 6; frase = "Preparando a IA…"; break;
     case "conferindo":
       pct = 95; frase = "Conferindo com o catálogo…"; break;
+    case "reconectando":
+      pct = null; frase = "O servidor não respondeu — tentando de novo…"; break;
     case "sem_sinal":
       pct = null; frase = "Sem sinal agora — a leitura continua no servidor"; break;
     case "lendo":
@@ -22789,6 +22867,11 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
   const digitadas = cotSemAcento(termo).split(" ").filter(Boolean);
   const dentroDoEscrito = digitadas.every((p) => cotSemAcento(escrito).indexOf(p) >= 0);
   const nomeSugerido = semMarca(!digitadas.length || dentroDoEscrito ? escrito : termo.trim());
+  // O nome no padrão do catálogo: família mais parecida + a medida.
+  const baseDoNome = !digitadas.length || dentroDoEscrito ? escrito : termo;
+  const familias = (aberto || novo) ? familiasDoCatalogo(palavraChave(baseDoNome), escrito, insumos) : [];
+  const medidaDe = (f) => medidaDoTexto(termo, f ? f.sep : "x") || medidaDoTexto(escrito, f ? f.sep : "x");
+  const nomePadrao = familias.length ? nomeNoPadrao(familias[0].familia, medidaDe(familias[0])) : nomeSugerido;
   const opcoes = [
     ...achados.map((i) => ({ tipo: "item", i })),
     { tipo: "novo" },
@@ -22804,6 +22887,12 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
   };
   const fechar = () => { setAberto(false); setTermo(""); };
   const comecarCadastro = () => {
+    if (familias.length) {
+      const f = familias[0];
+      setNovo({ padrao: 0, complemento: medidaDe(f), nomeLivre: nomeSugerido, grupo: f.grupo, unidade: f.unidade });
+      fechar();
+      return;
+    }
     let grupo = typeof grupoInferido === "function" ? grupoInferido(nomeSugerido) : "Outros";
     // A regra não conhece "luva"; o catálogo conhece: o grupo mais comum
     // entre os itens com a mesma primeira palavra.
@@ -22814,7 +22903,7 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
       const top = Object.keys(conta).sort((a, b) => conta[b] - conta[a])[0];
       if (top) grupo = top;
     }
-    setNovo({ nome: nomeSugerido, grupo: grupo === "Prestadores de serviços" ? "Outros" : grupo,
+    setNovo({ padrao: -1, complemento: "", nomeLivre: nomeSugerido, grupo: grupo === "Prestadores de serviços" ? "Outros" : grupo,
       unidade: x.unidade || "Unidades" });
     fechar();
   };
@@ -22837,25 +22926,77 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
   );
 
   if (novo) {
+    const fam = novo.padrao >= 0 ? familias[novo.padrao] : null;
+    // No padrão, sem a medida o nome seria só a família ("... - Luva"): não serve.
+    const nomeFinal = fam ? (String(novo.complemento || "").trim() ? nomeNoPadrao(fam.familia, novo.complemento) : "")
+      : String(novo.nomeLivre || "").trim();
+    // Cadastrar duas vezes o mesmo item é o que bagunça um catálogo: se o
+    // nome montado já existe, oferece usar o que existe.
+    const jaExiste = nomeFinal ? (insumos || []).find((i) => i && i.tipo !== "prestador"
+      && cotSemAcento(i.nome) === cotSemAcento(nomeFinal)) : null;
+    const trocarPadrao = (v) => {
+      const p = Number(v);
+      const f = familias[p];
+      setNovo({ ...novo, padrao: p, ...(f ? { grupo: f.grupo, unidade: f.unidade,
+        complemento: novo.complemento || medidaDe(f) } : {}) });
+    };
+    const rot = { fontSize: 11, fontWeight: 600, color: "#4b5563", marginBottom: 3 };
     return (
       <div style={{ border: "1px solid rgba(4,116,244,0.35)", borderRadius: 10, padding: 10, background: "#f7fbff", display: "grid", gap: 8 }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: "#111827" }}>Cadastrar no catálogo</div>
-        <input style={E.input} value={novo.nome} autoFocus placeholder="Nome do item, sem a marca"
-          onChange={(e) => setNovo({ ...novo, nome: e.target.value })} />
+        {familias.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)", gap: 8 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={rot}>No padrão de</div>
+              <select style={{ ...E.input, cursor: "pointer" }} value={novo.padrao} onChange={(e) => trocarPadrao(e.target.value)}>
+                {familias.map((f, k) => <option key={f.familia} value={k}>{f.familia} …</option>)}
+                <option value={-1}>Nome livre, sem padrão</option>
+              </select>
+            </div>
+            {fam && (
+              <div style={{ minWidth: 0 }}>
+                <div style={rot}>Medida / complemento</div>
+                <input style={E.input} value={novo.complemento} autoFocus placeholder="32×25mm"
+                  onChange={(e) => setNovo({ ...novo, complemento: e.target.value })} />
+              </div>
+            )}
+          </div>
+        )}
+        {fam ? (
+          <div style={{ fontSize: 12.5, color: "#111827", padding: "7px 10px", background: "#fff", borderRadius: 8,
+            border: "1px solid rgba(38,36,33,0.12)" }}>
+            <span style={{ fontSize: 11, color: "#6b7280" }}>Vai ficar: </span>
+            {nomeFinal ? <b style={{ fontWeight: 600 }}>{nomeFinal}</b>
+              : <span style={{ color: "#6b7280" }}>{fam.familia} + a medida</span>}
+          </div>
+        ) : (
+          <input style={E.input} value={novo.nomeLivre} autoFocus={!familias.length} placeholder="Nome do item, sem a marca"
+            onChange={(e) => setNovo({ ...novo, nomeLivre: e.target.value })} />
+        )}
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 8 }}>
           <select style={{ ...E.input, cursor: "pointer" }} value={novo.grupo}
             onChange={(e) => setNovo({ ...novo, grupo: e.target.value })}>
-            {grupos.map((g) => <option key={g} value={g}>{g}</option>)}
+            {(grupos.includes(novo.grupo) ? grupos : [novo.grupo, ...grupos]).map((g) => <option key={g} value={g}>{g}</option>)}
           </select>
           <CampoUnidade valor={novo.unidade} unidades={unidades} aoMudar={(v) => setNovo({ ...novo, unidade: v })} />
         </div>
-        <div style={{ fontSize: 11, color: "#6b7280" }}>
-          “{x.termo}” fica guardado como apelido: da próxima vez que escreverem assim, o VICKE já acha.
-        </div>
+        {jaExiste ? (
+          <div style={{ fontSize: 11.5, color: "#b45309" }}>
+            Já existe “{jaExiste.nome}” no catálogo.{" "}
+            <button type="button" onClick={() => { aoEscolher(jaExiste); setNovo(null); }}
+              style={{ color: "#0474f4", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 11.5, fontWeight: 600 }}>
+              Usar este
+            </button>
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: "#6b7280" }}>
+            “{x.termo}” fica guardado como apelido: da próxima vez que escreverem assim, o VICKE já acha.
+          </div>
+        )}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button type="button" style={E.btnSec} onClick={() => setNovo(null)}>Cancelar</button>
-          <button type="button" style={{ ...E.btn, opacity: novo.nome.trim() ? 1 : 0.45 }} disabled={!novo.nome.trim()}
-            onClick={() => { const r = aoCadastrar({ ...novo, escrito: x.termo }); if (r) setNovo(null); }}>
+          <button type="button" style={{ ...E.btn, opacity: nomeFinal && !jaExiste ? 1 : 0.45 }} disabled={!nomeFinal || !!jaExiste}
+            onClick={() => { const r = aoCadastrar({ nome: nomeFinal, grupo: novo.grupo, unidade: novo.unidade, escrito: x.termo }); if (r) setNovo(null); }}>
             Cadastrar e usar
           </button>
         </div>
@@ -22899,7 +23040,7 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
             <div style={{ fontSize: 12.5, color: "#111827" }}>{i.nome}</div>
             <div style={{ fontSize: 11, color: "#6b7280" }}>{[i.codigo, i.grupo, i.unidade].filter(Boolean).join(" · ")}</div>
           </>, k))}
-        {linha(<span style={{ fontSize: 12.5, color: "#0474f4", fontWeight: 600 }}>＋ Cadastrar “{nomeSugerido}” no catálogo</span>,
+        {linha(<span style={{ fontSize: 12.5, color: "#0474f4", fontWeight: 600 }}>＋ Cadastrar “{nomePadrao}” no catálogo</span>,
           achados.length)}
         {linha(<span style={{ fontSize: 12, color: "#4b5563" }}>Deixar fora do catálogo, como “{x.termo}”</span>,
           achados.length + 1)}

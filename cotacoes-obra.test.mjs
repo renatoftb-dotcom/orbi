@@ -72,7 +72,8 @@ const modulo = new Function(`
            interpretarOrcamento, casarOrcamentoComItens, lojaCadastrada,
            papelDaCelula, papeisDaTabela, precoDaLinha,
            orcamentoDaIA, casamentoDaIA, itensParaIA, avisoDaIA, pedidoDaIA, promoverCandidatos,
-           andamentoDaLeitura, semMarca, buscarNoCatalogo, novoInsumoDoPedido, medirAssociacao };
+           andamentoDaLeitura, semMarca, buscarNoCatalogo, novoInsumoDoPedido, medirAssociacao,
+           medidaDoTexto, palavraChave, familiasDoCatalogo, nomeNoPadrao };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -1648,6 +1649,9 @@ teste("a frase diz o que está acontecendo, com o tempo corrido", () => {
   const semSinal = M.andamentoDaLeitura({ etapa: "sem_sinal", decorridoMs: 5000 });
   assert.strictEqual(semSinal.pct, null, "sem sinal, a barra fica onde estava");
   assert.match(semSinal.frase, /continua no servidor/);
+  const rec = M.andamentoDaLeitura({ etapa: "reconectando", decorridoMs: 3000 });
+  assert.strictEqual(rec.pct, null);
+  assert.match(rec.frase, /tentando de novo/);
 });
 
 // ── Trocar o material na conferência ────────────────────────────
@@ -1698,6 +1702,44 @@ teste("item novo entra no catálogo com código do grupo e o texto dele como ape
   const igual = M.novoInsumoDoPedido({ nome: "Prego 17x21", escrito: "prego 17x21" }, [], null, "x");
   assert.deepStrictEqual(igual.aliases, ["Prego 17x21"], "apelido igual ao nome não duplica");
   assert.strictEqual(igual.grupo, "Outros");
+});
+
+// ── Item novo no padrão do catálogo ─────────────────────────────
+const CAT_FAM = [
+  ...["Luva 25mm C/ Bucha latão", "Luva 25×20mm C/ Bucha latão", "Luva 25×50mm Roscável", "Luva 32mm", "Luva 50mm", "Luva União 50mm"]
+    .map((n, k) => ({ id: "a" + k, codigo: "HID-07" + k, nome: "PVC - Alimentação Água Fria - " + n, grupo: "Hidráulica", unidade: "Unidades" })),
+  { id: "e1", codigo: "ELE-050", nome: "PVC - Elétrica - Luva Pressão 25 (3/4)", grupo: "Elétrica e iluminação", unidade: "Unidade" },
+  { id: "s1", codigo: "HID-200", nome: "PVC - Esgoto - Luva Simples 100mm", grupo: "Hidráulica", unidade: "Unidades" },
+  { id: "x1", codigo: "HID-300", nome: "PVC - Esgoto - Joelho 100mm", grupo: "Hidráulica", unidade: "Unidades" },
+];
+
+teste("a medida sai do que ele escreveu, no separador da família", () => {
+  assert.strictEqual(M.medidaDoTexto("LUVA SOLDAVEL TIGRE REDUCAO 32 X 25 MM", "×"), "32×25mm");
+  assert.strictEqual(M.medidaDoTexto("luva 32x25", "x"), "32x25");
+  assert.strictEqual(M.medidaDoTexto("joelho 25MM"), "25mm");
+  assert.strictEqual(M.medidaDoTexto("registro 3/4"), "3/4");
+  assert.strictEqual(M.medidaDoTexto("cimento"), "");
+});
+
+teste("a palavra-chave é o que o item é, sem marca nem número", () => {
+  assert.strictEqual(M.palavraChave("LUVA SOLDAVEL TIGRE REDUCAO 32 X 25 MM"), "luva");
+  assert.strictEqual(M.palavraChave("Tigre joelho 90 25mm"), "joelho");
+  assert.strictEqual(M.palavraChave("25 de cimento"), "cimento");
+});
+
+teste("a família vem do catálogo: tudo até a palavra-chave, a mais comum primeiro", () => {
+  const f = M.familiasDoCatalogo("luva", "LUVA SOLDAVEL TIGRE REDUCAO 32 X 25 MM", CAT_FAM);
+  assert.strictEqual(f[0].familia, "PVC - Alimentação Água Fria - Luva");
+  assert.strictEqual(f[0].n, 6);
+  assert.strictEqual(f[0].sep, "×");
+  assert.strictEqual(f[0].grupo, "Hidráulica");
+  assert.strictEqual(f[0].unidade, "Unidades");
+  assert.deepStrictEqual(f.map(x => x.familia).sort(), ["PVC - Alimentação Água Fria - Luva", "PVC - Elétrica - Luva", "PVC - Esgoto - Luva"]);
+  assert.strictEqual(M.nomeNoPadrao(f[0].familia, M.medidaDoTexto("32 X 25 MM", f[0].sep)), "PVC - Alimentação Água Fria - Luva 32×25mm");
+  const esgoto = M.familiasDoCatalogo("luva", "luva esgoto 100", CAT_FAM);
+  assert.strictEqual(esgoto[0].familia, "PVC - Esgoto - Luva", "o que ele escreveu pesa mais que a quantidade");
+  assert.deepStrictEqual(M.familiasDoCatalogo("", "x", CAT_FAM), []);
+  assert.deepStrictEqual(M.familiasDoCatalogo("cotovelo", "cotovelo", CAT_FAM), []);
 });
 
 for (const [nome, fn] of testes) {

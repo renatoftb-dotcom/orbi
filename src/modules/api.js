@@ -212,11 +212,24 @@ const api = {
     _ler: async (rota, fd, oque, aoProgresso) => {
       fd.append("modo", "fila");
       let res, json = null;
-      try {
-        res = await fetch(`${_API_URL}${rota}`, { method: "POST", headers: api.ia._cabecalho(), body: fd });
-        try { json = await res.json(); } catch (e) { json = null; }
-      } catch (e) {
-        const erro = new Error("Não consegui falar com o servidor agora."); erro.motivo = "rede"; throw erro;
+      // Sem resposta nenhuma quase sempre é o servidor reiniciando (cada
+      // publicação no Railway derruba o processo por alguns segundos) ou o
+      // sinal piscando. Tenta de novo sozinho antes de desistir.
+      const esperas = [3000, 6000, 10000];
+      const comecouEnvio = Date.now();
+      for (let tentativa = 0; ; tentativa++) {
+        try {
+          res = await fetch(`${_API_URL}${rota}`, { method: "POST", headers: api.ia._cabecalho(), body: fd });
+          try { json = await res.json(); } catch (e) { json = null; }
+          break;
+        } catch (e) {
+          if (tentativa >= esperas.length) {
+            const erro = new Error("Não consegui falar com o servidor — tentei 4 vezes em 20 segundos. Ele pode estar reiniciando depois de uma publicação; espere um minuto e tente de novo.");
+            erro.motivo = "rede"; throw erro;
+          }
+          if (typeof aoProgresso === "function") aoProgresso({ etapa: "reconectando", itens: null, decorridoMs: Date.now() - comecouEnvio });
+          await new Promise((z) => setTimeout(z, esperas[tentativa]));
+        }
       }
       if (!json || !json.ok) throw api.ia._erroDe(res, json, oque);
       // servidor antigo, sem fila: a resposta já é o resultado
