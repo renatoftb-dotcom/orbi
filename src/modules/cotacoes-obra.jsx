@@ -1796,6 +1796,8 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   // null = ainda não perguntou. Pergunta uma vez por tela: sem a IA, anexar
   // não pode virar dois envios do mesmo arquivo.
   const [iaDisponivel, setIaDisponivel] = useState(null);
+  const [sobreOPedido, setSobreOPedido] = useState(false);   // arquivo sendo arrastado sobre o campo
+  const refArquivoPedido = useRef(null);
   useEffect(() => {
     let vivo = true;
     if (!api || !api.ia) { setIaDisponivel(false); return; }
@@ -2020,7 +2022,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                 <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 12 }}>
                   {!lidos
                     ? (iaDisponivel
-                      ? "Cole a mensagem como ela veio, ou anexe o print, a foto do papel ou o PDF da lista. A IA separa os itens, tira a quantidade e procura cada material no catálogo."
+                      ? "Cole a mensagem como ela veio, ou jogue o print, a foto do papel ou o PDF da lista dentro do campo. A IA separa os itens, tira a quantidade e procura cada material no catálogo. O arquivo é só para a leitura, não fica guardado."
                       : "Cole a mensagem como ela veio, do jeito que ele escreveu. O VICKE separa as linhas, tira a quantidade e procura cada material no catálogo.")
                     : "Confira antes de entrar na lista. O que foi achado no catálogo vem marcado; o parecido fica como escolha sua; o que não existe entra com o texto dele."}
                   {lidos && colando.leitor ? (
@@ -2035,17 +2037,60 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
 
                 {!lidos ? (
                   <>
-                    <textarea style={{ ...E.input, minHeight: 200, resize: "vertical", fontFamily: "inherit" }}
-                      value={colando.texto} autoFocus
-                      onChange={(e) => setColando(c => ({ ...c, texto: e.target.value }))}
-                      // O exemplo de mensagem que ficava aqui parecia texto
-                      // já colado: dava para clicar em "Ler o pedido" achando
-                      // que tinha conteúdo, e o campo estava vazio.
-                      placeholder="Cole aqui a mensagem do pedreiro" />
-                    {iaDisponivel && (
-                      <CampoPedidoAnexo arquivo={colando.arquivo}
-                        aoEscolher={(f) => setColando(c => c && ({ ...c, arquivo: f }))} />
-                    )}
+                    {/* Um campo só. O mesmo retângulo recebe o texto colado,
+                        o arquivo arrastado e o print colado com Ctrl+V —
+                        dois campos faziam parecer que era preciso preencher
+                        os dois. O exemplo de mensagem que ficava no
+                        placeholder saiu: parecia texto já colado. */}
+                    {(() => {
+                      const porArquivo = (f) => { if (f) setColando(c => c && ({ ...c, arquivo: f })); };
+                      return (
+                        <div
+                          onDragOver={iaDisponivel ? ((e) => { e.preventDefault(); setSobreOPedido(true); }) : undefined}
+                          onDragLeave={iaDisponivel ? (() => setSobreOPedido(false)) : undefined}
+                          onDrop={iaDisponivel ? ((e) => { e.preventDefault(); setSobreOPedido(false); porArquivo((e.dataTransfer.files || [])[0]); }) : undefined}
+                          onPaste={iaDisponivel ? ((e) => { const f = arquivoColado(e.clipboardData); if (f) { e.preventDefault(); porArquivo(f); } }) : undefined}
+                          style={{ border: `1.5px solid ${sobreOPedido ? "#0474f4" : "transparent"}`,
+                            borderRadius: 14, padding: 2, background: sobreOPedido ? "#f0f7ff" : "transparent" }}>
+                          <textarea style={{ ...E.input, minHeight: 200, resize: "vertical", fontFamily: "inherit" }}
+                            value={colando.texto} autoFocus
+                            onChange={(e) => setColando(c => ({ ...c, texto: e.target.value }))}
+                            placeholder={iaDisponivel
+                              ? "Cole aqui a mensagem do pedreiro — ou arraste o print, a foto ou o PDF para dentro deste campo"
+                              : "Cole aqui a mensagem do pedreiro"} />
+                          {iaDisponivel && (
+                            <>
+                              <input ref={refArquivoPedido} type="file" accept="application/pdf,image/*"
+                                style={{ display: "none" }}
+                                onChange={(e) => { porArquivo((e.target.files || [])[0]); e.target.value = ""; }} />
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 11.5, flexWrap: "wrap" }}>
+                                {colando.arquivo ? (
+                                  <>
+                                    <span style={{ color: "#111827", fontWeight: 600, wordBreak: "break-all" }}>
+                                      {colando.arquivo.name}
+                                    </span>
+                                    <button type="button" onClick={() => setColando(c => c && ({ ...c, arquivo: null }))}
+                                      style={{ background: "none", border: "none", padding: 0, fontSize: 11.5, color: "#dc2626",
+                                        cursor: "pointer", fontFamily: "inherit", textDecoration: "underline" }}>
+                                      tirar
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span style={{ color: "#6b7280" }}>Arraste o arquivo aqui, cole com Ctrl+V, ou</span>
+                                    <button type="button" onClick={() => refArquivoPedido.current && refArquivoPedido.current.click()}
+                                      style={{ background: "none", border: "none", padding: 0, fontSize: 11.5, color: "#0474f4",
+                                        cursor: "pointer", fontFamily: "inherit", textDecoration: "underline" }}>
+                                      escolha um arquivo
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })()}
                     <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
                       <button style={E.btnSec} onClick={() => setColando(null)}>Cancelar</button>
                       {colando.lendo && (
@@ -3693,46 +3738,6 @@ function ComparativoLista({ cot, dinheiro, isMobile }) {
         {cmp.ganhoDaDivisao > 0
           ? `Comprando cada item onde está mais barato sairia ${dinheiro(cmp.totalDividido)} — ${dinheiro(cmp.ganhoDaDivisao)} a menos que a loja mais barata na lista inteira. Por enquanto a escolha é de uma loja só; dividir o pedido entre lojas é o próximo passo.`
           : "O verde marca o melhor preço de cada item."}
-      </div>
-    </div>
-  );
-}
-
-// Anexar o pedido: print da conversa, foto do papel ou PDF da lista.
-// Diferente do anexo da proposta, este arquivo não é guardado em lugar
-// nenhum — vai para a leitura e acaba ali.
-function CampoPedidoAnexo({ arquivo, aoEscolher }) {
-  const E = COT_ESTILO;
-  const [sobre, setSobre] = useState(false);
-  const refInput = useRef(null);
-  if (arquivo) {
-    return (
-      <div style={{ ...E.quadro, display: "flex", alignItems: "center", gap: 10, marginTop: 10, padding: "10px 12px" }}>
-        <span style={{ fontSize: 12.5, color: "#111827", flex: 1, wordBreak: "break-all" }}>{arquivo.name}</span>
-        <button type="button" style={{ ...E.btnSec, padding: "5px 11px", color: "#dc2626" }}
-          onClick={() => aoEscolher(null)}>Tirar</button>
-      </div>
-    );
-  }
-  return (
-    <div
-      onDragOver={(e) => { e.preventDefault(); setSobre(true); }}
-      onDragLeave={() => setSobre(false)}
-      onDrop={(e) => { e.preventDefault(); setSobre(false); aoEscolher((e.dataTransfer.files || [])[0] || null); }}
-      onClick={() => refInput.current && refInput.current.click()}
-      onPaste={(e) => { const f = arquivoColado(e.clipboardData); if (f) { e.preventDefault(); aoEscolher(f); } }}
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); refInput.current && refInput.current.click(); } }}
-      style={{ border: `1.5px dashed ${sobre ? "#0474f4" : "rgba(38,36,33,0.22)"}`, borderRadius: 12,
-        padding: "12px", textAlign: "center", cursor: "pointer", marginTop: 10,
-        background: sobre ? "#f0f7ff" : "#fafafa", transition: "all .15s ease" }}>
-      <input ref={refInput} type="file" accept="application/pdf,image/*" style={{ display: "none" }}
-        onChange={(e) => { aoEscolher((e.target.files || [])[0] || null); e.target.value = ""; }} />
-      <div style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>
-        ou arraste o print, a foto ou o PDF do pedido
-      </div>
-      <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>
-        clique para escolher — o arquivo é só para a leitura, não fica guardado
       </div>
     </div>
   );
