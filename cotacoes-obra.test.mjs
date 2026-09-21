@@ -71,7 +71,8 @@ const modulo = new Function(`
            ehNumeroDeOrcamento, numeroDeOrcamento, itemDeOrcamento, dataIsoDoOrcamento,
            interpretarOrcamento, casarOrcamentoComItens, lojaCadastrada,
            papelDaCelula, papeisDaTabela, precoDaLinha,
-           orcamentoDaIA, casamentoDaIA, itensParaIA, avisoDaIA, pedidoDaIA, promoverCandidatos };
+           orcamentoDaIA, casamentoDaIA, itensParaIA, avisoDaIA, pedidoDaIA, promoverCandidatos,
+           andamentoDaLeitura };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -1627,6 +1628,26 @@ teste("o item lido pela IA vira item da cotação com nome do catálogo", () => 
   assert.strictEqual(it.descricao, "Cimento CP-II 50kg");
   assert.strictEqual(it.quantidade, 30);
   assert.strictEqual(it.unidade, "Unidades");
+});
+
+// ── Andamento da leitura ────────────────────────────────────────
+teste("a barra anda por etapa e cresce com os itens, sem chegar a 100 antes do fim", () => {
+  const A = (etapa, itens, s) => M.andamentoDaLeitura({ etapa, itens, decorridoMs: s * 1000 });
+  assert.strictEqual(A("ligando", 0, 1).pct, 6);
+  assert.ok(A("lendo", 0, 5).pct > 6 && A("lendo", 0, 60).pct <= 30, "sem itens ainda, anda com o tempo até 30%");
+  assert.ok(A("lendo", 5, 20).pct > A("lendo", 0, 60).pct, "o primeiro item passa na frente do tempo");
+  assert.ok(A("lendo", 40, 60).pct > A("lendo", 5, 20).pct);
+  assert.ok(A("lendo", 500, 200).pct < 95, "mesmo com muitos itens não encosta no fim");
+  assert.strictEqual(A("conferindo", 40, 60).pct, 95);
+});
+
+teste("a frase diz o que está acontecendo, com o tempo corrido", () => {
+  assert.match(M.andamentoDaLeitura({ etapa: "lendo", itens: 12, decorridoMs: 34000 }).frase, /12 itens até agora/);
+  assert.strictEqual(M.andamentoDaLeitura({ etapa: "lendo", itens: 1, decorridoMs: 0 }).frase, "A IA está lendo · 1 item até agora");
+  assert.strictEqual(M.andamentoDaLeitura({ etapa: "lendo", itens: 12, decorridoMs: 34400 }).seg, 34);
+  const semSinal = M.andamentoDaLeitura({ etapa: "sem_sinal", decorridoMs: 5000 });
+  assert.strictEqual(semSinal.pct, null, "sem sinal, a barra fica onde estava");
+  assert.match(semSinal.frase, /continua no servidor/);
 });
 
 for (const [nome, fn] of testes) {

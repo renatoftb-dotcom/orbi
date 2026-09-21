@@ -177,70 +177,97 @@ const api = {
     list:   (categoria) => get(`/api/uploads${categoria ? `?categoria=${encodeURIComponent(categoria)}` : ""}`),
   },
 
-  // ── IA: leitura do orçamento que a loja mandou ──────────────
+  // ── IA: leitura do orçamento da loja e do pedido do pedreiro ──
   // Só para os escritórios liberados no servidor. Quando falha, o erro traz
   // `motivo` ("token", "limite", "nao_liberada"...) e quem chamou decide cair
   // no leitor por regras.
+  //
+  // A leitura roda em segundo plano no servidor: o envio responde na hora
+  // com o número da leitura, e daqui se pergunta de tempos em tempos como
+  // ela está. Assim um orçamento de várias páginas pode levar os minutos que
+  // precisar, e uma queda de sinal no meio não perde nada — a próxima
+  // pergunta pega de onde parou.
   ia: {
     status: () => get("/api/ia/status"),
-    // A leitura demora: sobe um processo no servidor, lê o arquivo e
-    // procura no catálogo. Mas não pode demorar para sempre — sem um
-    // limite aqui, a tela fica em "Lendo…" até a pessoa desistir.
-    _TEMPO_MAX_MS: 100 * 1000,
-    // O pedido pode vir como texto colado, como arquivo, ou os dois.
-    lerPedido: async ({ arquivo, texto }) => {
+    _INTERVALO_MS: 1500,
+    _TEMPO_MAX_MS: 6 * 60 * 1000,        // o servidor desiste em 5; aqui, um pouco depois
+    _SEM_SINAL_MAX_MS: 90 * 1000,         // quanto tempo sem conseguir perguntar antes de desistir
+
+    _cabecalho: () => {
       const token = typeof localStorage !== "undefined" ? localStorage.getItem("vicke-token") : null;
+      return token ? { Authorization: `Bearer ${token}` } : {};
+    },
+
+    _erroDe: (res, json, oque) => {
+      // Resposta que nem JSON é costuma ser rota que não existe no servidor
+      // publicado (404) ou queda (502). Dizer o código evita caçar fantasma.
+      const erro = new Error((json && json.error) || `O servidor respondeu erro ${res ? res.status : "?"} na leitura ${oque}.`);
+      erro.status = res ? res.status : 0;
+      erro.motivo = (json && json.motivo) || "falha";
+      return erro;
+    },
+
+    // Abre a leitura e acompanha até o fim. aoProgresso recebe
+    // { etapa, itens, decorridoMs } a cada pergunta.
+    _ler: async (rota, fd, oque, aoProgresso) => {
+      fd.append("modo", "fila");
+      let res, json = null;
+      try {
+        res = await fetch(`${_API_URL}${rota}`, { method: "POST", headers: api.ia._cabecalho(), body: fd });
+        try { json = await res.json(); } catch (e) { json = null; }
+      } catch (e) {
+        const erro = new Error("Não consegui falar com o servidor agora."); erro.motivo = "rede"; throw erro;
+      }
+      if (!json || !json.ok) throw api.ia._erroDe(res, json, oque);
+      // servidor antigo, sem fila: a resposta já é o resultado
+      if (!json.data || !json.data.leituraId) return json.data;
+
+      const id = json.data.leituraId;
+      const comecou = Date.now();
+      let semSinalDesde = null;
+      for (;;) {
+        await new Promise((z) => setTimeout(z, api.ia._INTERVALO_MS));
+        if (Date.now() - comecou > api.ia._TEMPO_MAX_MS) {
+          const erro = new Error(`A leitura ${oque} passou de ${Math.round(api.ia._TEMPO_MAX_MS / 60000)} minutos.`);
+          erro.motivo = "tempo"; throw erro;
+        }
+        let r = null, j = null;
+        try {
+          r = await fetch(`${_API_URL}/api/ia/leituras/${encodeURIComponent(id)}`, { headers: api.ia._cabecalho() });
+          try { j = await r.json(); } catch (e) { j = null; }
+        } catch (e) {
+          // sem sinal: continua tentando por um tempo — a leitura segue no servidor
+          if (!semSinalDesde) semSinalDesde = Date.now();
+          if (Date.now() - semSinalDesde > api.ia._SEM_SINAL_MAX_MS) {
+            const erro = new Error("Fiquei sem conexão com o servidor por muito tempo durante a leitura."); erro.motivo = "rede"; throw erro;
+          }
+          if (typeof aoProgresso === "function") aoProgresso({ etapa: "sem_sinal", itens: null, decorridoMs: Date.now() - comecou });
+          continue;
+        }
+        semSinalDesde = null;
+        if (!j || !j.ok) throw api.ia._erroDe(r, j, oque);
+        const d = j.data || {};
+        if (typeof aoProgresso === "function") aoProgresso({ etapa: d.etapa, itens: d.itens, decorridoMs: d.decorridoMs });
+        if (d.estado === "pronto") return d.resultado;
+        if (d.estado === "erro") {
+          const erro = new Error(d.erro || `A IA não conseguiu fazer a leitura ${oque}.`); erro.motivo = d.motivo || "falha"; throw erro;
+        }
+      }
+    },
+
+    // O pedido pode vir como texto colado, como arquivo, ou os dois.
+    lerPedido: async ({ arquivo, texto }, aoProgresso) => {
       const fd = new FormData();
       if (arquivo) fd.append("arquivo", arquivo);
       fd.append("texto", texto || "");
-      const headers = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await api.ia._enviar(`${_API_URL}/api/ia/ler-pedido`, headers, fd, "do pedido");
-      let json = null;
-      try { json = await res.json(); } catch (e) { json = null; }
-      if (!json || !json.ok) {
-        // Resposta que nem JSON é costuma ser rota que não existe no
-        // servidor publicado (404) ou queda (502). Dizer o código evita
-        // caçar fantasma: sem isso, tudo vira "a IA não respondeu".
-        const erro = new Error((json && json.error)
-          || `O servidor respondeu erro ${res.status} na leitura do pedido.`);
-        erro.status = res.status;
-        erro.motivo = (json && json.motivo) || "falha";
-        throw erro;
-      }
-      return json.data;
+      return api.ia._ler("/api/ia/ler-pedido", fd, "do pedido", aoProgresso);
     },
-    _enviar: async (url, headers, fd, oque) => {
-      const parar = typeof AbortController !== "undefined" ? new AbortController() : null;
-      const relogio = parar ? setTimeout(() => parar.abort(), api.ia._TEMPO_MAX_MS) : null;
-      try {
-        return await fetch(url, { method: "POST", headers, body: fd, signal: parar ? parar.signal : undefined });
-      } catch (e) {
-        const erro = new Error(parar && parar.signal.aborted
-          ? `A IA passou de ${Math.round(api.ia._TEMPO_MAX_MS / 1000)} segundos na leitura ${oque} e eu desisti de esperar.`
-          : "Não consegui falar com o servidor agora.");
-        erro.motivo = parar && parar.signal.aborted ? "tempo" : "rede";
-        throw erro;
-      } finally { if (relogio) clearTimeout(relogio); }
-    },
-    lerOrcamento: async (arquivo, itens) => {
-      const token = typeof localStorage !== "undefined" ? localStorage.getItem("vicke-token") : null;
+
+    lerOrcamento: async (arquivo, itens, aoProgresso) => {
       const fd = new FormData();
       fd.append("arquivo", arquivo);
       fd.append("itens", JSON.stringify(itens || []));
-      const headers = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await api.ia._enviar(`${_API_URL}/api/ia/ler-orcamento`, headers, fd, "do orçamento");
-      let json = null;
-      try { json = await res.json(); } catch (e) { json = null; }
-      if (!json || !json.ok) {
-        const erro = new Error((json && json.error)
-          || `O servidor respondeu erro ${res.status} na leitura do orçamento.`);
-        erro.status = res.status;
-        erro.motivo = (json && json.motivo) || "falha";
-        throw erro;
-      }
-      return json.data;
+      return api.ia._ler("/api/ia/ler-orcamento", fd, "do orçamento", aoProgresso);
     },
   },
 

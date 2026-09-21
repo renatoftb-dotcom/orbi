@@ -2231,70 +2231,97 @@ const api = {
     list:   (categoria) => get(`/api/uploads${categoria ? `?categoria=${encodeURIComponent(categoria)}` : ""}`),
   },
 
-  // ── IA: leitura do orçamento que a loja mandou ──────────────
+  // ── IA: leitura do orçamento da loja e do pedido do pedreiro ──
   // Só para os escritórios liberados no servidor. Quando falha, o erro traz
   // `motivo` ("token", "limite", "nao_liberada"...) e quem chamou decide cair
   // no leitor por regras.
+  //
+  // A leitura roda em segundo plano no servidor: o envio responde na hora
+  // com o número da leitura, e daqui se pergunta de tempos em tempos como
+  // ela está. Assim um orçamento de várias páginas pode levar os minutos que
+  // precisar, e uma queda de sinal no meio não perde nada — a próxima
+  // pergunta pega de onde parou.
   ia: {
     status: () => get("/api/ia/status"),
-    // A leitura demora: sobe um processo no servidor, lê o arquivo e
-    // procura no catálogo. Mas não pode demorar para sempre — sem um
-    // limite aqui, a tela fica em "Lendo…" até a pessoa desistir.
-    _TEMPO_MAX_MS: 100 * 1000,
-    // O pedido pode vir como texto colado, como arquivo, ou os dois.
-    lerPedido: async ({ arquivo, texto }) => {
+    _INTERVALO_MS: 1500,
+    _TEMPO_MAX_MS: 6 * 60 * 1000,        // o servidor desiste em 5; aqui, um pouco depois
+    _SEM_SINAL_MAX_MS: 90 * 1000,         // quanto tempo sem conseguir perguntar antes de desistir
+
+    _cabecalho: () => {
       const token = typeof localStorage !== "undefined" ? localStorage.getItem("vicke-token") : null;
+      return token ? { Authorization: `Bearer ${token}` } : {};
+    },
+
+    _erroDe: (res, json, oque) => {
+      // Resposta que nem JSON é costuma ser rota que não existe no servidor
+      // publicado (404) ou queda (502). Dizer o código evita caçar fantasma.
+      const erro = new Error((json && json.error) || `O servidor respondeu erro ${res ? res.status : "?"} na leitura ${oque}.`);
+      erro.status = res ? res.status : 0;
+      erro.motivo = (json && json.motivo) || "falha";
+      return erro;
+    },
+
+    // Abre a leitura e acompanha até o fim. aoProgresso recebe
+    // { etapa, itens, decorridoMs } a cada pergunta.
+    _ler: async (rota, fd, oque, aoProgresso) => {
+      fd.append("modo", "fila");
+      let res, json = null;
+      try {
+        res = await fetch(`${_API_URL}${rota}`, { method: "POST", headers: api.ia._cabecalho(), body: fd });
+        try { json = await res.json(); } catch (e) { json = null; }
+      } catch (e) {
+        const erro = new Error("Não consegui falar com o servidor agora."); erro.motivo = "rede"; throw erro;
+      }
+      if (!json || !json.ok) throw api.ia._erroDe(res, json, oque);
+      // servidor antigo, sem fila: a resposta já é o resultado
+      if (!json.data || !json.data.leituraId) return json.data;
+
+      const id = json.data.leituraId;
+      const comecou = Date.now();
+      let semSinalDesde = null;
+      for (;;) {
+        await new Promise((z) => setTimeout(z, api.ia._INTERVALO_MS));
+        if (Date.now() - comecou > api.ia._TEMPO_MAX_MS) {
+          const erro = new Error(`A leitura ${oque} passou de ${Math.round(api.ia._TEMPO_MAX_MS / 60000)} minutos.`);
+          erro.motivo = "tempo"; throw erro;
+        }
+        let r = null, j = null;
+        try {
+          r = await fetch(`${_API_URL}/api/ia/leituras/${encodeURIComponent(id)}`, { headers: api.ia._cabecalho() });
+          try { j = await r.json(); } catch (e) { j = null; }
+        } catch (e) {
+          // sem sinal: continua tentando por um tempo — a leitura segue no servidor
+          if (!semSinalDesde) semSinalDesde = Date.now();
+          if (Date.now() - semSinalDesde > api.ia._SEM_SINAL_MAX_MS) {
+            const erro = new Error("Fiquei sem conexão com o servidor por muito tempo durante a leitura."); erro.motivo = "rede"; throw erro;
+          }
+          if (typeof aoProgresso === "function") aoProgresso({ etapa: "sem_sinal", itens: null, decorridoMs: Date.now() - comecou });
+          continue;
+        }
+        semSinalDesde = null;
+        if (!j || !j.ok) throw api.ia._erroDe(r, j, oque);
+        const d = j.data || {};
+        if (typeof aoProgresso === "function") aoProgresso({ etapa: d.etapa, itens: d.itens, decorridoMs: d.decorridoMs });
+        if (d.estado === "pronto") return d.resultado;
+        if (d.estado === "erro") {
+          const erro = new Error(d.erro || `A IA não conseguiu fazer a leitura ${oque}.`); erro.motivo = d.motivo || "falha"; throw erro;
+        }
+      }
+    },
+
+    // O pedido pode vir como texto colado, como arquivo, ou os dois.
+    lerPedido: async ({ arquivo, texto }, aoProgresso) => {
       const fd = new FormData();
       if (arquivo) fd.append("arquivo", arquivo);
       fd.append("texto", texto || "");
-      const headers = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await api.ia._enviar(`${_API_URL}/api/ia/ler-pedido`, headers, fd, "do pedido");
-      let json = null;
-      try { json = await res.json(); } catch (e) { json = null; }
-      if (!json || !json.ok) {
-        // Resposta que nem JSON é costuma ser rota que não existe no
-        // servidor publicado (404) ou queda (502). Dizer o código evita
-        // caçar fantasma: sem isso, tudo vira "a IA não respondeu".
-        const erro = new Error((json && json.error)
-          || `O servidor respondeu erro ${res.status} na leitura do pedido.`);
-        erro.status = res.status;
-        erro.motivo = (json && json.motivo) || "falha";
-        throw erro;
-      }
-      return json.data;
+      return api.ia._ler("/api/ia/ler-pedido", fd, "do pedido", aoProgresso);
     },
-    _enviar: async (url, headers, fd, oque) => {
-      const parar = typeof AbortController !== "undefined" ? new AbortController() : null;
-      const relogio = parar ? setTimeout(() => parar.abort(), api.ia._TEMPO_MAX_MS) : null;
-      try {
-        return await fetch(url, { method: "POST", headers, body: fd, signal: parar ? parar.signal : undefined });
-      } catch (e) {
-        const erro = new Error(parar && parar.signal.aborted
-          ? `A IA passou de ${Math.round(api.ia._TEMPO_MAX_MS / 1000)} segundos na leitura ${oque} e eu desisti de esperar.`
-          : "Não consegui falar com o servidor agora.");
-        erro.motivo = parar && parar.signal.aborted ? "tempo" : "rede";
-        throw erro;
-      } finally { if (relogio) clearTimeout(relogio); }
-    },
-    lerOrcamento: async (arquivo, itens) => {
-      const token = typeof localStorage !== "undefined" ? localStorage.getItem("vicke-token") : null;
+
+    lerOrcamento: async (arquivo, itens, aoProgresso) => {
       const fd = new FormData();
       fd.append("arquivo", arquivo);
       fd.append("itens", JSON.stringify(itens || []));
-      const headers = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await api.ia._enviar(`${_API_URL}/api/ia/ler-orcamento`, headers, fd, "do orçamento");
-      let json = null;
-      try { json = await res.json(); } catch (e) { json = null; }
-      if (!json || !json.ok) {
-        const erro = new Error((json && json.error)
-          || `O servidor respondeu erro ${res.status} na leitura do orçamento.`);
-        erro.status = res.status;
-        erro.motivo = (json && json.motivo) || "falha";
-        throw erro;
-      }
-      return json.data;
+      return api.ia._ler("/api/ia/ler-orcamento", fd, "do orçamento", aoProgresso);
     },
   },
 
@@ -19785,6 +19812,38 @@ function pedidoDaIA(bruto, insumos) {
   }).filter((x) => x.termo);
 }
 
+// ── Andamento da leitura ────────────────────────────────────────
+// Ninguém sabe de antemão quantos itens o arquivo tem, então a barra não
+// mente uma porcentagem exata: ela anda por etapas e, enquanto a IA
+// escreve, cresce com os itens que já saíram — rápido no começo, devagar
+// perto do fim, sem nunca encostar em 100% antes de terminar. O que ela
+// garante é que se mexe: tela parada é o que faz a pessoa desistir.
+function andamentoDaLeitura(p) {
+  const x = p || {};
+  const seg = Math.max(0, Math.round((Number(x.decorridoMs) || 0) / 1000));
+  const itens = Number(x.itens) || 0;
+  let pct, frase;
+  switch (x.etapa) {
+    case "fila":
+    case "ligando":
+      pct = 6; frase = "Preparando a IA…"; break;
+    case "conferindo":
+      pct = 95; frase = "Conferindo com o catálogo…"; break;
+    case "sem_sinal":
+      pct = null; frase = "Sem sinal agora — a leitura continua no servidor"; break;
+    case "lendo":
+    default:
+      if (itens > 0) {
+        pct = 30 + 60 * (1 - Math.exp(-itens / 20));
+        frase = `A IA está lendo · ${itens} ${itens === 1 ? "item" : "itens"} até agora`;
+      } else {
+        pct = 12 + 18 * (1 - Math.exp(-seg / 20));
+        frase = "A IA está lendo o arquivo…";
+      }
+  }
+  return { pct: pct == null ? null : Math.round(pct), frase, seg };
+}
+
 // ── O que a IA leu ──────────────────────────────────────────────
 // A IA devolve o orçamento no mesmo formato do leitor por regras, mais uma
 // coisa que o leitor não sabe fazer bem: diz, linha a linha, qual item do
@@ -20631,6 +20690,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const [filaEnvio, setFilaEnvio] = useState(null);   // { lojas: [...], i }
   const [colando, setColando] = useState(null);       // { texto, lidos } ao ler o recado
   const [lendoPdf, setLendoPdf] = useState(false);
+  const [progressoPdf, setProgressoPdf] = useState(null);
   // null = ainda não perguntou. Pergunta uma vez por tela: sem a IA, anexar
   // não pode virar dois envios do mesmo arquivo.
   const [iaDisponivel, setIaDisponivel] = useState(null);
@@ -20926,13 +20986,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                         </div>
                       );
                     })()}
+                    {colando.lendo && colando.progresso && (
+                      <div style={{ marginTop: 12 }}><BarraLeituraIA progresso={colando.progresso} /></div>
+                    )}
                     <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
                       <button style={E.btnSec} onClick={() => setColando(null)}>Cancelar</button>
-                      {colando.lendo && (
-                        <span style={{ fontSize: 11.5, color: "#6b7280", alignSelf: "center", marginRight: "auto" }}>
-                          A IA está lendo — pode levar até um minuto.
-                        </span>
-                      )}
                       {(() => {
                         const temAlgo = !!colando.texto.trim() || !!colando.arquivo;
                         const podeLer = temAlgo && !colando.lendo;
@@ -21110,11 +21168,12 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     if (!ehPdf && !(ehFoto && iaDisponivel)) return;
     setErro("");
     setLendoPdf(true);
+    setProgressoPdf(iaDisponivel ? { etapa: "fila", itens: 0, decorridoMs: 0 } : null);
 
     let aviso = "";
     if (iaDisponivel) {
       try {
-        const r = await api.ia.lerOrcamento(arquivo, itensParaIA(cotacao));
+        const r = await api.ia.lerOrcamento(arquivo, itensParaIA(cotacao), (p) => setProgressoPdf(p));
         const orcamento = orcamentoDaIA(r && r.orcamento);
         const casamento = casamentoDaIA(cotacao, orcamento);
         const escolhas = {};
@@ -21218,13 +21277,14 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   async function lerOPedido() {
     const atual = colando;
     if (!atual) return;
-    setColando((c) => c && ({ ...c, lendo: true, aviso: "" }));
-    const fechar = (extra) => setColando((c) => c && ({ ...c, lendo: false, ...extra }));
+    setColando((c) => c && ({ ...c, lendo: true, aviso: "", progresso: iaDisponivel ? { etapa: "fila", itens: 0, decorridoMs: 0 } : null }));
+    const fechar = (extra) => setColando((c) => c && ({ ...c, lendo: false, progresso: null, ...extra }));
 
     let aviso = "";
     if (iaDisponivel) {
       try {
-        const r = await api.ia.lerPedido({ arquivo: atual.arquivo || null, texto: atual.texto });
+        const r = await api.ia.lerPedido({ arquivo: atual.arquivo || null, texto: atual.texto },
+          (p) => setColando((c) => c && c.lendo ? ({ ...c, progresso: p }) : c));
         const cru = pedidoDaIA(r, insumos);
         fechar({ leitor: "ia", resumo: resumoDaLeitura(cru), lidos: promoverCandidatos(cru) });
         return;
@@ -21465,6 +21525,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
               <label style={E.label}>Proposta enviada pelo fornecedor</label>
               <CampoAnexoProposta anexo={p.anexo} onTrocar={a => set("anexo", a)} onErro={setErro}
                 lendo={lendoPdf}
+                progresso={lendoPdf ? progressoPdf : null}
                 aoLerPdf={comLista ? ((arq) => lerOrcamentoDaLoja(arq, cotDaProposta)) : null}
                 leFoto={comLista && !!iaDisponivel}
                 apoio={comLista
@@ -22641,6 +22702,28 @@ function ComparativoLista({ cot, dinheiro, isMobile }) {
   );
 }
 
+// Barra fina, frase curta e o tempo corrido. A barra só anda para frente:
+// se a etapa seguinte calcular menos (acontece na virada de "lendo o
+// arquivo" para o primeiro item), ela fica onde estava.
+function BarraLeituraIA({ progresso }) {
+  const a = andamentoDaLeitura(progresso);
+  const maximo = useRef(0);
+  if (a.pct != null && a.pct > maximo.current) maximo.current = a.pct;
+  const largura = maximo.current || 4;
+  return (
+    <div role="status" aria-live="polite" style={{ width: "100%" }}>
+      <div style={{ height: 3, borderRadius: 3, background: "rgba(4,116,244,0.12)", overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${largura}%`, background: "#0474f4", borderRadius: 3,
+          transition: "width .6s ease" }} />
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 5, fontSize: 11.5, color: "#6b7280" }}>
+        <span>{a.frase}</span>
+        <span style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{a.seg} s</span>
+      </div>
+    </div>
+  );
+}
+
 // Campo de unidade: sempre com a setinha, nunca texto solto.
 function CampoUnidade({ valor, unidades, aoMudar, estilo }) {
   const E = COT_ESTILO;
@@ -22841,7 +22924,7 @@ function FolhaPedido({ cot, proposta, ctx, aoFechar }) {
 }
 
 // Campo de anexo: arrasta o PDF do e-mail para cá, ou clica e escolhe.
-function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio, aoLerPdf, lendo, leFoto }) {
+function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio, aoLerPdf, lendo, leFoto, progresso }) {
   const [sobre, setSobre] = useState(false);
   const [enviando, setEnviando] = useState(false);
   // "Abrir" aqui era um link direto para a URL do storage. Como o arquivo
@@ -22918,9 +23001,12 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio
           <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", wordBreak: "break-all" }}>{anexo.nome}</div>
           <div style={{ fontSize: 11, color: "#6b7280" }}>{tamanhoLegivel(anexo.bytes)}</div>
         </div>
-        {lendo && <div style={{ fontSize: 11.5, color: "#0474f4", fontWeight: 600 }}>lendo os preços…</div>}
+        {lendo && !progresso && <div style={{ fontSize: 11.5, color: "#0474f4", fontWeight: 600 }}>lendo os preços…</div>}
         <button type="button" style={E.btnSec} onClick={() => setVendo(true)}>Abrir</button>
         <button style={E.btnSec} onClick={remover}>Remover</button>
+        {lendo && progresso && (
+          <div style={{ flexBasis: "100%" }}><BarraLeituraIA progresso={progresso} /></div>
+        )}
         {vendo && <VisorProposta anexo={anexo} aoFechar={() => setVendo(false)} />}
       </div>
     );

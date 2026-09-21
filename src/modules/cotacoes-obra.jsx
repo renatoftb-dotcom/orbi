@@ -973,6 +973,38 @@ function pedidoDaIA(bruto, insumos) {
   }).filter((x) => x.termo);
 }
 
+// ── Andamento da leitura ────────────────────────────────────────
+// Ninguém sabe de antemão quantos itens o arquivo tem, então a barra não
+// mente uma porcentagem exata: ela anda por etapas e, enquanto a IA
+// escreve, cresce com os itens que já saíram — rápido no começo, devagar
+// perto do fim, sem nunca encostar em 100% antes de terminar. O que ela
+// garante é que se mexe: tela parada é o que faz a pessoa desistir.
+function andamentoDaLeitura(p) {
+  const x = p || {};
+  const seg = Math.max(0, Math.round((Number(x.decorridoMs) || 0) / 1000));
+  const itens = Number(x.itens) || 0;
+  let pct, frase;
+  switch (x.etapa) {
+    case "fila":
+    case "ligando":
+      pct = 6; frase = "Preparando a IA…"; break;
+    case "conferindo":
+      pct = 95; frase = "Conferindo com o catálogo…"; break;
+    case "sem_sinal":
+      pct = null; frase = "Sem sinal agora — a leitura continua no servidor"; break;
+    case "lendo":
+    default:
+      if (itens > 0) {
+        pct = 30 + 60 * (1 - Math.exp(-itens / 20));
+        frase = `A IA está lendo · ${itens} ${itens === 1 ? "item" : "itens"} até agora`;
+      } else {
+        pct = 12 + 18 * (1 - Math.exp(-seg / 20));
+        frase = "A IA está lendo o arquivo…";
+      }
+  }
+  return { pct: pct == null ? null : Math.round(pct), frase, seg };
+}
+
 // ── O que a IA leu ──────────────────────────────────────────────
 // A IA devolve o orçamento no mesmo formato do leitor por regras, mais uma
 // coisa que o leitor não sabe fazer bem: diz, linha a linha, qual item do
@@ -1819,6 +1851,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const [filaEnvio, setFilaEnvio] = useState(null);   // { lojas: [...], i }
   const [colando, setColando] = useState(null);       // { texto, lidos } ao ler o recado
   const [lendoPdf, setLendoPdf] = useState(false);
+  const [progressoPdf, setProgressoPdf] = useState(null);
   // null = ainda não perguntou. Pergunta uma vez por tela: sem a IA, anexar
   // não pode virar dois envios do mesmo arquivo.
   const [iaDisponivel, setIaDisponivel] = useState(null);
@@ -2114,13 +2147,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                         </div>
                       );
                     })()}
+                    {colando.lendo && colando.progresso && (
+                      <div style={{ marginTop: 12 }}><BarraLeituraIA progresso={colando.progresso} /></div>
+                    )}
                     <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
                       <button style={E.btnSec} onClick={() => setColando(null)}>Cancelar</button>
-                      {colando.lendo && (
-                        <span style={{ fontSize: 11.5, color: "#6b7280", alignSelf: "center", marginRight: "auto" }}>
-                          A IA está lendo — pode levar até um minuto.
-                        </span>
-                      )}
                       {(() => {
                         const temAlgo = !!colando.texto.trim() || !!colando.arquivo;
                         const podeLer = temAlgo && !colando.lendo;
@@ -2298,11 +2329,12 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     if (!ehPdf && !(ehFoto && iaDisponivel)) return;
     setErro("");
     setLendoPdf(true);
+    setProgressoPdf(iaDisponivel ? { etapa: "fila", itens: 0, decorridoMs: 0 } : null);
 
     let aviso = "";
     if (iaDisponivel) {
       try {
-        const r = await api.ia.lerOrcamento(arquivo, itensParaIA(cotacao));
+        const r = await api.ia.lerOrcamento(arquivo, itensParaIA(cotacao), (p) => setProgressoPdf(p));
         const orcamento = orcamentoDaIA(r && r.orcamento);
         const casamento = casamentoDaIA(cotacao, orcamento);
         const escolhas = {};
@@ -2406,13 +2438,14 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   async function lerOPedido() {
     const atual = colando;
     if (!atual) return;
-    setColando((c) => c && ({ ...c, lendo: true, aviso: "" }));
-    const fechar = (extra) => setColando((c) => c && ({ ...c, lendo: false, ...extra }));
+    setColando((c) => c && ({ ...c, lendo: true, aviso: "", progresso: iaDisponivel ? { etapa: "fila", itens: 0, decorridoMs: 0 } : null }));
+    const fechar = (extra) => setColando((c) => c && ({ ...c, lendo: false, progresso: null, ...extra }));
 
     let aviso = "";
     if (iaDisponivel) {
       try {
-        const r = await api.ia.lerPedido({ arquivo: atual.arquivo || null, texto: atual.texto });
+        const r = await api.ia.lerPedido({ arquivo: atual.arquivo || null, texto: atual.texto },
+          (p) => setColando((c) => c && c.lendo ? ({ ...c, progresso: p }) : c));
         const cru = pedidoDaIA(r, insumos);
         fechar({ leitor: "ia", resumo: resumoDaLeitura(cru), lidos: promoverCandidatos(cru) });
         return;
@@ -2653,6 +2686,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
               <label style={E.label}>Proposta enviada pelo fornecedor</label>
               <CampoAnexoProposta anexo={p.anexo} onTrocar={a => set("anexo", a)} onErro={setErro}
                 lendo={lendoPdf}
+                progresso={lendoPdf ? progressoPdf : null}
                 aoLerPdf={comLista ? ((arq) => lerOrcamentoDaLoja(arq, cotDaProposta)) : null}
                 leFoto={comLista && !!iaDisponivel}
                 apoio={comLista
@@ -3829,6 +3863,28 @@ function ComparativoLista({ cot, dinheiro, isMobile }) {
   );
 }
 
+// Barra fina, frase curta e o tempo corrido. A barra só anda para frente:
+// se a etapa seguinte calcular menos (acontece na virada de "lendo o
+// arquivo" para o primeiro item), ela fica onde estava.
+function BarraLeituraIA({ progresso }) {
+  const a = andamentoDaLeitura(progresso);
+  const maximo = useRef(0);
+  if (a.pct != null && a.pct > maximo.current) maximo.current = a.pct;
+  const largura = maximo.current || 4;
+  return (
+    <div role="status" aria-live="polite" style={{ width: "100%" }}>
+      <div style={{ height: 3, borderRadius: 3, background: "rgba(4,116,244,0.12)", overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${largura}%`, background: "#0474f4", borderRadius: 3,
+          transition: "width .6s ease" }} />
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 5, fontSize: 11.5, color: "#6b7280" }}>
+        <span>{a.frase}</span>
+        <span style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{a.seg} s</span>
+      </div>
+    </div>
+  );
+}
+
 // Campo de unidade: sempre com a setinha, nunca texto solto.
 function CampoUnidade({ valor, unidades, aoMudar, estilo }) {
   const E = COT_ESTILO;
@@ -4029,7 +4085,7 @@ function FolhaPedido({ cot, proposta, ctx, aoFechar }) {
 }
 
 // Campo de anexo: arrasta o PDF do e-mail para cá, ou clica e escolhe.
-function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio, aoLerPdf, lendo, leFoto }) {
+function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio, aoLerPdf, lendo, leFoto, progresso }) {
   const [sobre, setSobre] = useState(false);
   const [enviando, setEnviando] = useState(false);
   // "Abrir" aqui era um link direto para a URL do storage. Como o arquivo
@@ -4106,9 +4162,12 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio
           <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", wordBreak: "break-all" }}>{anexo.nome}</div>
           <div style={{ fontSize: 11, color: "#6b7280" }}>{tamanhoLegivel(anexo.bytes)}</div>
         </div>
-        {lendo && <div style={{ fontSize: 11.5, color: "#0474f4", fontWeight: 600 }}>lendo os preços…</div>}
+        {lendo && !progresso && <div style={{ fontSize: 11.5, color: "#0474f4", fontWeight: 600 }}>lendo os preços…</div>}
         <button type="button" style={E.btnSec} onClick={() => setVendo(true)}>Abrir</button>
         <button style={E.btnSec} onClick={remover}>Remover</button>
+        {lendo && progresso && (
+          <div style={{ flexBasis: "100%" }}><BarraLeituraIA progresso={progresso} /></div>
+        )}
         {vendo && <VisorProposta anexo={anexo} aoFechar={() => setVendo(false)} />}
       </div>
     );
