@@ -73,7 +73,7 @@ const modulo = new Function(`
            papelDaCelula, papeisDaTabela, precoDaLinha,
            orcamentoDaIA, casamentoDaIA, itensParaIA, avisoDaIA, pedidoDaIA, promoverCandidatos,
            andamentoDaLeitura, semMarca, buscarNoCatalogo, novoInsumoDoPedido, medirAssociacao,
-           medidaDoTexto, palavraChave, familiasDoCatalogo, nomeNoPadrao };
+           medidaDoTexto, palavraChave, familiasDoCatalogo, nomeNoPadrao, gruposDoCatalogo, codigoDoGrupo };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -1740,6 +1740,31 @@ teste("a família vem do catálogo: tudo até a palavra-chave, a mais comum prim
   assert.strictEqual(esgoto[0].familia, "PVC - Esgoto - Luva", "o que ele escreveu pesa mais que a quantidade");
   assert.deepStrictEqual(M.familiasDoCatalogo("", "x", CAT_FAM), []);
   assert.deepStrictEqual(M.familiasDoCatalogo("cotovelo", "cotovelo", CAT_FAM), []);
+});
+
+teste("os grupos do cadastro são os do catálogo da empresa, mais os de fábrica", () => {
+  const cat = [{ nome: "a", grupo: "Esgoto e Água Pluvial" }, { nome: "b", grupo: "Hidráulica" }, { nome: "c", grupo: " Hidráulica " },
+    { nome: "d", grupo: "Pedreiro", tipo: "prestador" }];
+  const g = M.gruposDoCatalogo(cat, [{ nome: "Aço" }, { nome: "Impermeabilizantes" }, { nome: "Prestadores de serviços" }, { nome: "hidraulica" }]);
+  assert.deepStrictEqual(g, ["Aço", "Esgoto e Água Pluvial", "Hidráulica", "Impermeabilizantes", "Outros"]);
+});
+
+teste("família com espaço sobrando no nome vira a mesma família", () => {
+  const f = M.familiasDoCatalogo("luva", "luva esgoto", [
+    { id: "1", nome: "PVC -  Esgoto - Luva 100mm", grupo: "Esgoto e Água Pluvial", unidade: "Unidades" },
+    { id: "2", nome: "PVC - Esgoto - Luva 50mm", grupo: "Esgoto e Água Pluvial", unidade: "Unidades" }]);
+  assert.strictEqual(f.length, 1);
+  assert.strictEqual(f[0].familia, "PVC - Esgoto - Luva");
+  assert.strictEqual(f[0].grupo, "Esgoto e Água Pluvial");
+});
+
+teste("grupo criado pela empresa segue o prefixo que o catálogo já usa nele", () => {
+  const cat = [{ codigo: "ESG-004", grupo: "Esgoto e Água Pluvial" }, { codigo: "ESG-011", grupo: "Esgoto e Água Pluvial" },
+    { codigo: "HID-080", grupo: "Hidráulica" }];
+  const fab = (g) => g === "Hidráulica" ? "HID-235" : "OUT-001";
+  assert.strictEqual(M.codigoDoGrupo("Esgoto e Água Pluvial", cat, fab), "ESG-012");
+  assert.strictEqual(M.codigoDoGrupo("Hidráulica", cat, fab), "HID-235", "grupo de fábrica usa a regra de fábrica");
+  assert.strictEqual(M.codigoDoGrupo("Novidade", cat, fab), "OUT-001");
 });
 
 for (const [nome, fn] of testes) {

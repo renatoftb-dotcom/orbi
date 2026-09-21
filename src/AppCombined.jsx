@@ -19397,7 +19397,8 @@ function familiasDoCatalogo(chave, escrito, insumos, limite) {
     const ultimo = segs[segs.length - 1].split(/\s+/);
     const pos = ultimo.findIndex((w) => cotSemAcento(w).startsWith(k));
     if (pos < 0) continue;
-    const familia = [...segs.slice(0, -1), ultimo.slice(0, pos + 1).join(" ")].join(" - ");
+    const familia = [...segs.slice(0, -1), ultimo.slice(0, pos + 1).join(" ")]
+      .map((p) => p.replace(/\s+/g, " ").trim()).join(" - ");     // "PVC -  Esgoto" = "PVC - Esgoto"
     const f = porFamilia[familia] || (porFamilia[familia] = { familia, n: 0, grupos: {}, unidades: {}, seps: {} });
     f.n++;
     mais(f.grupos, i.grupo); mais(f.unidades, i.unidade);
@@ -19411,6 +19412,38 @@ function familiasDoCatalogo(chave, escrito, insumos, limite) {
     }))
     .sort((a, b) => b.afinidade - a.afinidade || b.n - a.n || a.familia.localeCompare(b.familia, "pt-BR"))
     .slice(0, limite || 5);
+}
+
+// Os grupos que a empresa usa de verdade: os do catálogo dela (inclusive os
+// que ela criou, como "Esgoto e Água Pluvial") mais os de fábrica, em ordem
+// alfabética. Prestador de serviço não entra — aqui é material.
+function gruposDoCatalogo(insumos, deFabrica) {
+  const vistos = new Map();
+  const por = (g) => { const t = String(g || "").replace(/\s+/g, " ").trim(); if (t && !vistos.has(cotSemAcento(t))) vistos.set(cotSemAcento(t), t); };
+  for (const i of insumos || []) if (i && i.tipo !== "prestador") por(i.grupo);
+  for (const g of deFabrica || []) por(g && g.nome ? g.nome : g);
+  vistos.delete(cotSemAcento("Prestadores de serviços"));
+  if (!vistos.has("outros")) vistos.set("outros", "Outros");
+  return [...vistos.values()].sort((a, b) => a.localeCompare(b, "pt-BR"));
+}
+
+// Código do item novo. Grupo de fábrica tem prefixo fixo (HID, ACO…); grupo
+// que a empresa criou não tem, e cairia em "OUT". Então: se os itens desse
+// grupo no catálogo já usam um prefixo, segue a sequência dele.
+function codigoDoGrupo(grupo, insumos, deFabrica) {
+  const g = cotSemAcento(grupo);
+  const conta = {}, maior = {};
+  for (const i of insumos || []) {
+    const m = /^([A-Z]{3})-(\d{3,})$/.exec((i && i.codigo) || "");
+    if (!m) continue;
+    maior[m[1]] = Math.max(maior[m[1]] || 0, Number(m[2]));
+    if (cotSemAcento(i.grupo) === g) conta[m[1]] = (conta[m[1]] || 0) + 1;
+  }
+  const pre = Object.keys(conta).sort((a, b) => conta[b] - conta[a])[0];
+  if (!pre) return typeof deFabrica === "function" ? deFabrica(grupo, insumos) : "";
+  const doFabrica = typeof deFabrica === "function" ? deFabrica(grupo, insumos) : "";
+  if (doFabrica && doFabrica.slice(0, 3) === pre) return doFabrica;   // a de fábrica já sabe das reservas
+  return `${pre}-${String((maior[pre] || 0) + 1).padStart(3, "0")}`;
 }
 
 function nomeNoPadrao(familia, complemento) {
@@ -20847,7 +20880,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const cadastrarInsumoDoPedido = (campos) => {
     const todos = data.materiais || [];
     const novo = novoInsumoDoPedido(campos, todos,
-      typeof proximoCodigoInsumo === "function" ? proximoCodigoInsumo : null);
+      (g, lista) => codigoDoGrupo(g, lista, typeof proximoCodigoInsumo === "function" ? proximoCodigoInsumo : null));
     if (!novo) return null;
     save({ ...data, materiais: [...todos, novo] });
     return novo;
@@ -22914,9 +22947,7 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
     else { aoDeixarFora(); fechar(); }
   };
 
-  const grupos = (typeof INSUMO_GRUPOS !== "undefined" ? INSUMO_GRUPOS : [])
-    .map((g) => g.nome).filter((n) => n && n !== "Prestadores de serviços");
-  if (!grupos.includes("Outros")) grupos.push("Outros");
+  const grupos = gruposDoCatalogo(insumos, typeof INSUMO_GRUPOS !== "undefined" ? INSUMO_GRUPOS : []);
 
   const rotulo = x.insumo ? x.insumo.nome : `Fora do catálogo — “${x.termo}”`;
   const linha = (conteudo, k, extra) => (
