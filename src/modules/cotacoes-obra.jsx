@@ -1730,6 +1730,32 @@ const enviarComprovante = (arquivo) => enviarAnexo(arquivo, "comprovante_pagamen
 // (perm.podeGerenciarObra) — sem ele somem criar, editar, escolher e
 // lançar, e aparecem os botões de aprovar e recusar.
 
+// ── Painel sobre a tela ─────────────────────────────────────────
+// No celular o painel ocupa a tela inteira e se mede pelo fundo fixo, que
+// acompanha a área VISÍVEL — "88vh" no Safari conta a faixa que fica atrás
+// da barra de baixo, e era lá que o botão "Pôr na lista" ia parar: tocar
+// nele fazia a barra subir em vez de apertar o botão. A lista rola por
+// dentro (minHeight 0 é o que deixa um filho flex encolher) e os botões
+// ficam fora da rolagem, sempre à vista, acima da faixa do home do iPhone.
+function cotPainel(isMobile, maxWidth) {
+  return {
+    fundo: { position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex",
+      alignItems: isMobile ? "stretch" : "center", justifyContent: "center",
+      // acima da bolha do chat (800), que no celular caía em cima do botão
+      // principal; abaixo do visor de PDF (9000), que abre por cima
+      padding: isMobile ? 0 : 16, zIndex: 1000 },
+    cartao: isMobile
+      // border-box: sem ele o "100%" soma o padding e o cartão passa 28px da
+      // tela — exatamente a faixa onde ficavam os botões de baixo
+      ? { background: "#fff", borderRadius: 0, padding: "14px 14px calc(14px + env(safe-area-inset-bottom))",
+          width: "100%", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column", overflow: "hidden" }
+      : { background: "#fff", borderRadius: 16, padding: 18, width: "100%", maxWidth: maxWidth || 760,
+          maxHeight: "88vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" },
+    rolagem: { overflowY: "auto", flex: "1 1 auto", minHeight: 0, overscrollBehavior: "contain",
+      WebkitOverflowScrolling: "touch" },
+  };
+}
+
 const COT_ESTILO = {
   wrap:  { border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: 16, marginBottom: 20 },
   card:  { border: "1px solid rgba(38,36,33,0.12)", borderRadius: 14, background: "#fff", marginBottom: 10 },
@@ -2011,13 +2037,10 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           // de um trabalho — leitura, conferência, envio, datas — e perder a
           // tela por um clique torto é perder o que já foi feito. Sai pelo
           // botão, que é uma decisão.
+          const PN = cotPainel(isMobile, 760);
           return (
-            <div
-              style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex",
-                alignItems: "center", justifyContent: "center", padding: 16, zIndex: 70 }}>
-              <div onClick={(e) => e.stopPropagation()}
-                style={{ background: "#fff", borderRadius: 16, padding: 18, width: "100%", maxWidth: 760,
-                  maxHeight: "88vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
+            <div style={PN.fundo}>
+              <div onClick={(e) => e.stopPropagation()} style={PN.cartao}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Pedido do pedreiro</div>
                 <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 12 }}>
                   {!lidos
@@ -2129,7 +2152,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                       {res.soltos ? ` · ${res.soltos} fora do catálogo` : ""}
                       {res.semQuantidade ? ` · ${res.semQuantidade} sem quantidade` : ""}
                     </div>
-                    <div style={{ overflowY: "auto", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10 }}>
+                    <div style={{ ...PN.rolagem, border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10 }}>
                       {lidos.map((x) => {
                         const parecidos = [
                           ...(x.insumo ? [x.insumo] : []),
@@ -2146,7 +2169,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                           .sort((a, b) => String(a.nome).localeCompare(String(b.nome), "pt-BR"));
                         const opcoes = [...parecidos, ...resto];
                         const escolhido = x.insumo ? (x.insumo.codigo || x.insumo.id) : (x.escolhaCodigo || "");
-                        const cols = isMobile ? "1fr" : "1fr 90px 96px 30px";
+                        const cols = isMobile ? "1fr 1fr 44px" : "1fr 90px 96px 30px";
                         return (
                           <div key={x.id} style={{ padding: "9px 12px", borderTop: "1px solid rgba(38,36,33,0.06)",
                             background: x.fora ? "#fafafa" : "#fff", opacity: x.fora ? 0.55 : 1 }}>
@@ -2156,7 +2179,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                                   se parece, o catálogo inteiro está a um
                                   clique. E quando fica fora do catálogo, o
                                   texto dele continua editável logo abaixo. */}
-                              <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+                              <div style={{ display: "grid", gap: 6, minWidth: 0, gridColumn: isMobile ? "1 / -1" : undefined }}>
                                 <select style={{ ...E.input, cursor: "pointer" }} value={escolhido}
                                   onChange={(e) => {
                                     const cod = e.target.value;
@@ -2205,20 +2228,34 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                         );
                       })}
                     </div>
-                    <div style={{ display: "flex", gap: 10, justifyContent: "space-between", marginTop: 14, flexWrap: "wrap" }}>
-                      <button style={E.btnSec} onClick={() => setColando({ texto: colando.texto, arquivo: colando.arquivo || null, lidos: null })}>Voltar ao texto</button>
-                      <span style={{ display: "flex", gap: 8 }}>
-                        <button style={E.btnSec} onClick={() => setColando(null)}>Cancelar</button>
-                        <button style={{ ...E.btn, opacity: aceitos.length ? 1 : 0.45, cursor: aceitos.length ? "pointer" : "not-allowed" }}
-                          disabled={!aceitos.length}
-                          onClick={() => {
-                            set("itens", [...(formCotacao.itens || []), ...aceitos.map(itemDoPedidoLido)]);
-                            setColando(null);
-                          }}>
+                    {(() => {
+                      const voltar = () => setColando({ texto: colando.texto, arquivo: colando.arquivo || null, lidos: null });
+                      const por = () => {
+                        set("itens", [...(formCotacao.itens || []), ...aceitos.map(itemDoPedidoLido)]);
+                        setColando(null);
+                      };
+                      const botaoPor = (extra) => (
+                        <button style={{ ...E.btn, opacity: aceitos.length ? 1 : 0.45, cursor: aceitos.length ? "pointer" : "not-allowed", ...extra }}
+                          disabled={!aceitos.length} onClick={por}>
                           Pôr {aceitos.length} na lista
                         </button>
-                      </span>
-                    </div>
+                      );
+                      return isMobile ? (
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12, flexShrink: 0 }}>
+                          {botaoPor({ gridColumn: "1 / -1", padding: "12px 14px", fontSize: 14 })}
+                          <button style={E.btnSec} onClick={voltar}>Voltar ao texto</button>
+                          <button style={E.btnSec} onClick={() => setColando(null)}>Cancelar</button>
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", gap: 10, justifyContent: "space-between", marginTop: 14, flexWrap: "wrap", flexShrink: 0 }}>
+                          <button style={E.btnSec} onClick={voltar}>Voltar ao texto</button>
+                          <span style={{ display: "flex", gap: 8 }}>
+                            <button style={E.btnSec} onClick={() => setColando(null)}>Cancelar</button>
+                            {botaoPor()}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </>
                 )}
               </div>
@@ -2637,13 +2674,10 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
             a + (escolhas[item.id].preco * quantidadeDoItem(item)), 0) * 100) / 100;
           const desconto = o.total > 0 && Math.abs(o.total - soma) > 0.01;
           const cols = isMobile ? "1fr" : "1fr 1.2fr 110px";
+          const PN = cotPainel(isMobile, 780);
           return (
-            <div
-              style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex",
-                alignItems: "center", justifyContent: "center", padding: 16, zIndex: 70 }}>
-              <div onClick={(e) => e.stopPropagation()}
-                style={{ background: "#fff", borderRadius: 16, padding: 18, width: "100%", maxWidth: 780,
-                  maxHeight: "88vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
+            <div style={PN.fundo}>
+              <div onClick={(e) => e.stopPropagation()} style={PN.cartao}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Orçamento da loja</div>
                 <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 12 }}>
                   {nome ? `${nome} · ` : ""}
@@ -2680,7 +2714,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     </span>
                   )}
                 </div>
-                <div style={{ overflowY: "auto", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10 }}>
+                <div style={{ ...PN.rolagem, border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10 }}>
                   {cm.casados.map(({ item }) => {
                     const esc = escolhas[item.id] || { i: -1, preco: 0 };
                     const qtd = quantidadeDoItem(item);
@@ -2717,7 +2751,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   Soma do que tem preço: <strong>{dinheiro(soma)}</strong>
                   {desconto ? ` · o papel fecha em ${dinheiro(o.total)} — a diferença entra como desconto de fechamento.` : "."}
                 </div>
-                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
+                <div style={isMobile
+                  ? { display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 8, marginTop: 12, flexShrink: 0 }
+                  : { display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14, flexShrink: 0 }}>
                   <button style={E.btnSec} onClick={() => setOrcamentoLido(null)}>Cancelar</button>
                   <button style={{ ...E.btn, opacity: comPreco.length ? 1 : 0.45, cursor: comPreco.length ? "pointer" : "not-allowed" }}
                     disabled={!comPreco.length} onClick={aplicarOrcamentoLido}>
@@ -3182,12 +3218,8 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       {visor && <VisorProposta anexo={visor} aoFechar={() => setVisor(null)} />}
 
       {pedirLojas && (
-        <div
-          style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex",
-            alignItems: "center", justifyContent: "center", padding: 16, zIndex: 70 }}>
-          <div onClick={(e) => e.stopPropagation()}
-            style={{ background: "#fff", borderRadius: 16, padding: 18, width: "100%", maxWidth: 560,
-              maxHeight: "86vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
+        <div style={cotPainel(isMobile, 560).fundo}>
+          <div onClick={(e) => e.stopPropagation()} style={cotPainel(isMobile, 560).cartao}>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Pedir preço às lojas</div>
             <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 12 }}>
               {pedirLojas.titulo || "Lista"} · {itensDaCotacao(pedirLojas).length} {itensDaCotacao(pedirLojas).length === 1 ? "item" : "itens"}.
@@ -3204,7 +3236,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
               const enviadas = enviosDaLista(pedirLojas).length;
               return (
                 <>
-                  <div style={{ overflowY: "auto", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10 }}>
+                  <div style={{ ...cotPainel(isMobile).rolagem, border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10 }}>
                     {!lojas.length ? (
                       <div style={{ padding: "12px 14px", fontSize: 12.5, color: "#4b5563" }}>
                         Nenhum fornecedor com esse nome. Cadastre em Prestadores de Serviços, com o telefone.
