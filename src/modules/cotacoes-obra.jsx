@@ -2044,6 +2044,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     )}
                     <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
                       <button style={E.btnSec} onClick={() => setColando(null)}>Cancelar</button>
+                      {colando.lendo && (
+                        <span style={{ fontSize: 11.5, color: "#6b7280", alignSelf: "center", marginRight: "auto" }}>
+                          A IA está lendo — pode levar até um minuto.
+                        </span>
+                      )}
                       {(() => {
                         const temAlgo = !!colando.texto.trim() || !!colando.arquivo;
                         const podeLer = temAlgo && !colando.lendo;

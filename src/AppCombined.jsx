@@ -2237,6 +2237,10 @@ const api = {
   // no leitor por regras.
   ia: {
     status: () => get("/api/ia/status"),
+    // A leitura demora: sobe um processo no servidor, lê o arquivo e
+    // procura no catálogo. Mas não pode demorar para sempre — sem um
+    // limite aqui, a tela fica em "Lendo…" até a pessoa desistir.
+    _TEMPO_MAX_MS: 100 * 1000,
     // O pedido pode vir como texto colado, como arquivo, ou os dois.
     lerPedido: async ({ arquivo, texto }) => {
       const token = typeof localStorage !== "undefined" ? localStorage.getItem("vicke-token") : null;
@@ -2245,7 +2249,7 @@ const api = {
       fd.append("texto", texto || "");
       const headers = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch(`${_API_URL}/api/ia/ler-pedido`, { method: "POST", headers, body: fd });
+      const res = await api.ia._enviar(`${_API_URL}/api/ia/ler-pedido`, headers, fd, "do pedido");
       let json = null;
       try { json = await res.json(); } catch (e) { json = null; }
       if (!json || !json.ok) {
@@ -2260,6 +2264,19 @@ const api = {
       }
       return json.data;
     },
+    _enviar: async (url, headers, fd, oque) => {
+      const parar = typeof AbortController !== "undefined" ? new AbortController() : null;
+      const relogio = parar ? setTimeout(() => parar.abort(), api.ia._TEMPO_MAX_MS) : null;
+      try {
+        return await fetch(url, { method: "POST", headers, body: fd, signal: parar ? parar.signal : undefined });
+      } catch (e) {
+        const erro = new Error(parar && parar.signal.aborted
+          ? `A IA passou de ${Math.round(api.ia._TEMPO_MAX_MS / 1000)} segundos na leitura ${oque} e eu desisti de esperar.`
+          : "Não consegui falar com o servidor agora.");
+        erro.motivo = parar && parar.signal.aborted ? "tempo" : "rede";
+        throw erro;
+      } finally { if (relogio) clearTimeout(relogio); }
+    },
     lerOrcamento: async (arquivo, itens) => {
       const token = typeof localStorage !== "undefined" ? localStorage.getItem("vicke-token") : null;
       const fd = new FormData();
@@ -2267,7 +2284,7 @@ const api = {
       fd.append("itens", JSON.stringify(itens || []));
       const headers = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch(`${_API_URL}/api/ia/ler-orcamento`, { method: "POST", headers, body: fd });
+      const res = await api.ia._enviar(`${_API_URL}/api/ia/ler-orcamento`, headers, fd, "do orçamento");
       let json = null;
       try { json = await res.json(); } catch (e) { json = null; }
       if (!json || !json.ok) {
@@ -20837,6 +20854,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     )}
                     <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
                       <button style={E.btnSec} onClick={() => setColando(null)}>Cancelar</button>
+                      {colando.lendo && (
+                        <span style={{ fontSize: 11.5, color: "#6b7280", alignSelf: "center", marginRight: "auto" }}>
+                          A IA está lendo — pode levar até um minuto.
+                        </span>
+                      )}
                       {(() => {
                         const temAlgo = !!colando.texto.trim() || !!colando.arquivo;
                         const podeLer = temAlgo && !colando.lendo;
