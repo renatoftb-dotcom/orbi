@@ -20815,8 +20815,12 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           const res = colando.resumo || null;
           const trocar = (id, muda) => setColando(c => ({ ...c, lidos: c.lidos.map(x => x.id === id ? { ...x, ...muda } : x) }));
           const aceitos = (lidos || []).filter(x => !x.fora);
+          // Clique fora NÃO fecha nenhum destes painéis: aqui se está no meio
+          // de um trabalho — leitura, conferência, envio, datas — e perder a
+          // tela por um clique torto é perder o que já foi feito. Sai pelo
+          // botão, que é uma decisão.
           return (
-            <div onClick={() => setColando(null)}
+            <div
               style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex",
                 alignItems: "center", justifyContent: "center", padding: 16, zIndex: 70 }}>
               <div onClick={(e) => e.stopPropagation()}
@@ -21399,7 +21403,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           const desconto = o.total > 0 && Math.abs(o.total - soma) > 0.01;
           const cols = isMobile ? "1fr" : "1fr 1.2fr 110px";
           return (
-            <div onClick={() => setOrcamentoLido(null)}
+            <div
               style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex",
                 alignItems: "center", justifyContent: "center", padding: 16, zIndex: 70 }}>
               <div onClick={(e) => e.stopPropagation()}
@@ -21943,7 +21947,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       {visor && <VisorProposta anexo={visor} aoFechar={() => setVisor(null)} />}
 
       {pedirLojas && (
-        <div onClick={fecharPainelLojas}
+        <div
           style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex",
             alignItems: "center", justifyContent: "center", padding: 16, zIndex: 70 }}>
           <div onClick={(e) => e.stopPropagation()}
@@ -22055,7 +22059,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       )}
 
       {detalhePag && (
-        <div onClick={() => { setDatasPag(null); setDetalhePag(null); }}
+        <div
           style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex",
             alignItems: "center", justifyContent: "center", padding: 16, zIndex: 70 }}>
           <div onClick={(e) => e.stopPropagation()}
