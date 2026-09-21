@@ -510,8 +510,10 @@ function Obras({ data, save }) {
   const obraAberta = obraAbertaId ? obras.find(o => o.id === obraAbertaId) : null;
   const clienteDaObra = obraAberta ? clientes.find(c => c.id === obraAberta.clienteId) : null;
   if (obraAberta && clienteDaObra && typeof GestaoObraPanel === "function") {
+    // No celular, 28px de cada lado somados às bordas das caixas de dentro
+    // deixavam a cotação com dois terços da tela.
     return (
-      <PageContainer>
+      <PageContainer padding={isMobile ? "12px 10px 24px" : undefined}>
         <div style={{ marginBottom: 16 }}>
           <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>{clienteDaObra.nome}</h2>
           <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>{obraAberta.nome || obraAberta.referencia || "Obra"}</div>

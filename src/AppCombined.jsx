@@ -3162,8 +3162,10 @@ function Obras({ data, save }) {
   const obraAberta = obraAbertaId ? obras.find(o => o.id === obraAbertaId) : null;
   const clienteDaObra = obraAberta ? clientes.find(c => c.id === obraAberta.clienteId) : null;
   if (obraAberta && clienteDaObra && typeof GestaoObraPanel === "function") {
+    // No celular, 28px de cada lado somados às bordas das caixas de dentro
+    // deixavam a cotação com dois terços da tela.
     return (
-      <PageContainer>
+      <PageContainer padding={isMobile ? "12px 10px 24px" : undefined}>
         <div style={{ marginBottom: 16 }}>
           <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>{clienteDaObra.nome}</h2>
           <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>{obraAberta.nome || obraAberta.referencia || "Obra"}</div>
@@ -20729,7 +20731,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     const etapas = typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [];
     const set = (k, v) => setFormCotacao(f => ({ ...f, [k]: v }));
     return (
-      <div style={E.wrap}>
+      <div style={isMobile ? { ...E.wrap, padding: 12 } : E.wrap}>
         <button onClick={() => { setFormCotacao(null); setErro(""); }} style={{ background: "none", border: "none", color: "#4b5563", cursor: "pointer", fontFamily: "inherit", fontSize: 12, marginBottom: 16 }}>← Voltar</button>
         <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 4 }}>{cotacoes.some(c => c.id === formCotacao.id) ? "Editar cotação" : "Nova cotação"}</div>
         <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 18 }}>O que você vai pedir preço para os fornecedores.</div>
@@ -21271,7 +21273,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     const p = formProposta.proposta;
     const set = (k, v) => setFormProposta(f => ({ ...f, proposta: { ...f.proposta, [k]: v } }));
     return (
-      <div style={E.wrap}>
+      <div style={isMobile ? { ...E.wrap, padding: 12 } : E.wrap}>
         <button onClick={() => { setFormProposta(null); setNovoPrestador(null); setErro(""); }} style={{ background: "none", border: "none", color: "#4b5563", cursor: "pointer", fontFamily: "inherit", fontSize: 12, marginBottom: 16 }}>← Voltar</button>
         <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Proposta recebida</div>
         <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 18 }}>Registre o que o fornecedor respondeu.</div>
@@ -21717,7 +21719,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   );
 
   return (
-    <div style={E.wrap}>
+    <div style={isMobile ? { ...E.wrap, padding: 12 } : E.wrap}>
       <button onClick={onVoltar} style={{ background: "none", border: "none", color: "#4b5563", cursor: "pointer", fontFamily: "inherit", fontSize: 12, marginBottom: 16 }}>← Voltar</button>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
         <div style={{ flex: 1, minWidth: 200 }}>
@@ -21774,7 +21776,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
             </button>
 
             {aberto && (
-              <div style={{ borderTop: "1px solid rgba(38,36,33,0.08)", padding: "12px 14px" }}>
+              <div style={{ borderTop: "1px solid rgba(38,36,33,0.08)", padding: isMobile ? "12px 10px" : "12px 14px" }}>
                 {cot.escopo && <div style={{ fontSize: 12.5, color: "#374151", marginBottom: 12, whiteSpace: "pre-wrap" }}>{cot.escopo}</div>}
                 {(() => {
                   // conta do P&L e etapa ficavam só no formulário; sem isto,
@@ -21801,94 +21803,141 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   );
                 })()}
 
-                {!props.length ? (
-                  <div style={{ fontSize: 12.5, color: "#4b5563", marginBottom: 12 }}>Nenhuma proposta registrada ainda.</div>
-                ) : (
-                  <div style={{ overflowX: "auto", marginBottom: 12 }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 520 }}>
-                      <thead>
-                        <tr style={{ textAlign: "left", color: "#6b7280" }}>
-                          <th style={{ padding: "6px 8px", fontWeight: 600 }}>Fornecedor</th>
-                          <th style={{ padding: "6px 8px", fontWeight: 600, textAlign: "right" }}>Valor</th>
-                          <th style={{ padding: "6px 8px", fontWeight: 600 }}>Prazo</th>
-                          <th style={{ padding: "6px 8px", fontWeight: 600 }}>Condição</th>
-                          {podeGerenciar && <th style={{ padding: "6px 8px", fontWeight: 600 }}></th>}
-                        </tr>
-                      </thead>
-                      <tbody>
+                {(() => {
+                  if (!props.length) {
+                    return <div style={{ fontSize: 12.5, color: "#4b5563", marginBottom: 12 }}>Nenhuma proposta registrada ainda.</div>;
+                  }
+                  // O que se diz de cada proposta e o que se faz com ela é o
+                  // mesmo no computador e no celular; muda só a arrumação. No
+                  // celular a tabela cortava as colunas da direita — e era lá
+                  // que ficava o "Escolher", então a tela pedia "escolha uma
+                  // proposta primeiro" sem mostrar onde escolher.
+                  const infoDa = (p, escolhida, maisBarata) => (
+                    <>
+                      <div style={{ fontWeight: escolhida ? 700 : 500, color: "#111827" }}>{p.favorecido || "—"}</div>
+                      <div style={{ display: "flex", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
+                        {escolhida && selo("#0474f4", "Escolhida")}
+                        {escolhida && cot.escolhidoPor && (
+                          <span style={{ fontSize: 10.5, color: "#6b7280" }}>
+                            por {nomeGravado(cot.escolhidoPor)}{dataCurta(cot.escolhidoEm) ? ` em ${dataCurta(cot.escolhidoEm)}` : ""}
+                          </span>
+                        )}
+                        {maisBarata && !escolhida && selo("#15803d", "Mais barata")}
+                      </div>
+                      {p.observacao && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3 }}>{p.observacao}</div>}
+                      {textoAutoria(p) && (
+                        <div style={{ fontSize: 10.5, color: "#6b7280", marginTop: 3 }}>{textoAutoria(p)}</div>
+                      )}
+                      {p.anexo && p.anexo.url && (
+                        <button type="button" onClick={() => setVisor(p.anexo)}
+                          style={{ fontSize: isMobile ? 12 : 11, color: "#0474f4", background: "none", border: "none", padding: 0,
+                            cursor: "pointer", fontFamily: "inherit", display: "inline-block", marginTop: 3, textAlign: "left" }}>
+                          📎 {p.anexo.formato === "pdf" || p.anexo.resourceType === "raw" ? "Ver proposta (PDF)" : "Ver proposta"}
+                        </button>
+                      )}
+                    </>
+                  );
+                  const bt = isMobile
+                    ? { ...E.btnSec, padding: "8px 12px", fontSize: 12.5 }
+                    : { ...E.btnSec, padding: "5px 10px", fontSize: 11.5 };
+                  const acoesDa = (p, escolhida) => (
+                    <>
+                      {!cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
+                        <button style={isMobile && !escolhida ? { ...E.btn, padding: "8px 14px", fontSize: 12.5 } : { ...bt, marginRight: isMobile ? 0 : 6 }}
+                          onClick={() => trocarCotacao(cot.id, c => (escolhida
+                            ? { ...limparEnvioAoCliente(c), escolhidaId: "", escolhidoPor: "", escolhidoEm: "" }
+                            : { ...limparEnvioAoCliente(c), escolhidaId: p.id, escolhidoPor: nomeDeQuem(usuario), escolhidoEm: new Date().toISOString() }))}>
+                          {escolhida ? "Desfazer" : "Escolher"}
+                        </button>
+                      )}
+                      {/* Os pagamentos combinados pertencem ao fornecedor
+                          escolhido, então o caminho até eles é a linha dele. */}
+                      {escolhida && linhasDoPagamento(cot, obra.contasPagar || [], hoje).linhas.length > 0 && (
+                        <button style={{ ...bt, marginRight: isMobile ? 0 : 6 }}
+                          onClick={() => setDetalhePag(cot)}>Detalhe</button>
+                      )}
+                      <button style={bt}
+                        onClick={() => { setErro(""); setFormProposta({ cotacaoId: cot.id, proposta: p }); }}>Editar</button>
+                      {/* Desfazer o lançamento é ação sobre ESTE fornecedor,
+                          não sobre a cotação: mora ao lado dos pagamentos que
+                          ele gerou. */}
+                      {escolhida && cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
+                        <button style={{ ...bt, marginLeft: isMobile ? 0 : 6, color: "#dc2626" }}
+                          onClick={() => desfazerLancamento(cot)}>Desfazer lançamento</button>
+                      )}
+                      {!cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
+                        <button title="Excluir esta proposta"
+                          style={{ ...bt, marginLeft: isMobile ? 0 : 6, color: "#dc2626" }}
+                          onClick={() => excluirProposta(cot, p)}>Excluir</button>
+                      )}
+                    </>
+                  );
+
+                  if (isMobile) {
+                    return (
+                      <div style={{ display: "grid", gap: 10, marginBottom: 12 }}>
                         {props.map(p => {
                           const escolhida = p.id === cot.escolhidaId;
                           const maisBarata = melhor && p.id === melhor.id;
+                          const detalhes = [p.prazoDias ? `Prazo ${p.prazoDias} dias` : "", p.condicaoPagamento || ""].filter(Boolean);
                           return (
-                            <tr key={p.id} style={{ borderTop: "1px solid rgba(38,36,33,0.08)", background: escolhida ? "#f0f7ff" : "transparent" }}>
-                              <td style={{ padding: "8px" }}>
-                                <div style={{ fontWeight: escolhida ? 700 : 500, color: "#111827" }}>{p.favorecido || "—"}</div>
-                                <div style={{ display: "flex", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
-                                  {escolhida && selo("#0474f4", "Escolhida")}
-                                  {escolhida && cot.escolhidoPor && (
-                                    <span style={{ fontSize: 10.5, color: "#6b7280" }}>
-                                      por {nomeGravado(cot.escolhidoPor)}{dataCurta(cot.escolhidoEm) ? ` em ${dataCurta(cot.escolhidoEm)}` : ""}
-                                    </span>
-                                  )}
-                                  {maisBarata && !escolhida && selo("#15803d", "Mais barata")}
+                            <div key={p.id} style={{ border: `1px solid ${escolhida ? "rgba(4,116,244,0.35)" : "rgba(38,36,33,0.12)"}`,
+                              borderRadius: 12, padding: 10, background: escolhida ? "#f0f7ff" : "#fff" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+                                <div style={{ minWidth: 0, fontSize: 13 }}>{infoDa(p, escolhida, maisBarata)}</div>
+                                <div style={{ fontWeight: 700, fontSize: 15, color: "#111827", whiteSpace: "nowrap" }}>
+                                  {valorProposta(p) > 0 ? dinheiro(valorProposta(p)) : "—"}
                                 </div>
-                                {p.observacao && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3 }}>{p.observacao}</div>}
-                                {textoAutoria(p) && (
-                                  <div style={{ fontSize: 10.5, color: "#6b7280", marginTop: 3 }}>{textoAutoria(p)}</div>
-                                )}
-                                {p.anexo && p.anexo.url && (
-                                  <button type="button" onClick={() => setVisor(p.anexo)}
-                                    style={{ fontSize: 11, color: "#0474f4", background: "none", border: "none", padding: 0,
-                                      cursor: "pointer", fontFamily: "inherit", display: "inline-block", marginTop: 3 }}>
-                                    📎 {p.anexo.formato === "pdf" || p.anexo.resourceType === "raw" ? "Ver proposta (PDF)" : "Ver proposta"}
-                                  </button>
-                                )}
-                              </td>
-                              <td style={{ padding: "8px", textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>{valorProposta(p) > 0 ? dinheiro(valorProposta(p)) : "—"}</td>
-                              <td style={{ padding: "8px", whiteSpace: "nowrap" }}>{p.prazoDias ? `${p.prazoDias} dias` : "—"}</td>
-                              <td style={{ padding: "8px" }}>{p.condicaoPagamento || "—"}</td>
-                              {podeGerenciar && (
-                                <td style={{ padding: "8px", whiteSpace: "nowrap" }}>
-                                  {!cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
-                                    <button style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5, marginRight: 6 }}
-                                      onClick={() => trocarCotacao(cot.id, c => (escolhida
-                                        ? { ...limparEnvioAoCliente(c), escolhidaId: "", escolhidoPor: "", escolhidoEm: "" }
-                                        : { ...limparEnvioAoCliente(c), escolhidaId: p.id, escolhidoPor: nomeDeQuem(usuario), escolhidoEm: new Date().toISOString() }))}>
-                                      {escolhida ? "Desfazer" : "Escolher"}
-                                    </button>
-                                  )}
-                                  {/* Os pagamentos combinados pertencem ao
-                                      fornecedor escolhido, então o caminho
-                                      até eles é a linha dele. Embaixo do
-                                      cartão a tabela competia com a lista de
-                                      propostas e confundia as duas coisas. */}
-                                  {escolhida && linhasDoPagamento(cot, obra.contasPagar || [], hoje).linhas.length > 0 && (
-                                    <button style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5, marginRight: 6 }}
-                                      onClick={() => setDetalhePag(cot)}>Detalhe</button>
-                                  )}
-                                  <button style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5 }}
-                                    onClick={() => { setErro(""); setFormProposta({ cotacaoId: cot.id, proposta: p }); }}>Editar</button>
-                                  {/* Desfazer o lançamento é ação sobre ESTE
-                                      fornecedor, não sobre a cotação: mora ao
-                                      lado dos pagamentos que ele gerou. */}
-                                  {escolhida && cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
-                                    <button style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5, marginLeft: 6, color: "#dc2626" }}
-                                      onClick={() => desfazerLancamento(cot)}>Desfazer lançamento</button>
-                                  )}
-                                  {!cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
-                                    <button title="Excluir esta proposta"
-                                      style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5, marginLeft: 6, color: "#dc2626" }}
-                                      onClick={() => excluirProposta(cot, p)}>Excluir</button>
-                                  )}
-                                </td>
+                              </div>
+                              {detalhes.length > 0 && (
+                                <div style={{ fontSize: 12, color: "#4b5563", marginTop: 6 }}>{detalhes.join(" · ")}</div>
                               )}
-                            </tr>
+                              {podeGerenciar && (
+                                <div className="vk-acoes-proposta" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+                                  <style>{".vk-acoes-proposta > button { flex: 1 1 auto; }"}</style>
+                                  {acoesDa(p, escolhida)}
+                                </div>
+                              )}
+                            </div>
                           );
                         })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div style={{ overflowX: "auto", marginBottom: 12 }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 520 }}>
+                        <thead>
+                          <tr style={{ textAlign: "left", color: "#6b7280" }}>
+                            <th style={{ padding: "6px 8px", fontWeight: 600 }}>Fornecedor</th>
+                            <th style={{ padding: "6px 8px", fontWeight: 600, textAlign: "right" }}>Valor</th>
+                            <th style={{ padding: "6px 8px", fontWeight: 600 }}>Prazo</th>
+                            <th style={{ padding: "6px 8px", fontWeight: 600 }}>Condição</th>
+                            {podeGerenciar && <th style={{ padding: "6px 8px", fontWeight: 600 }}></th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {props.map(p => {
+                            const escolhida = p.id === cot.escolhidaId;
+                            const maisBarata = melhor && p.id === melhor.id;
+                            return (
+                              <tr key={p.id} style={{ borderTop: "1px solid rgba(38,36,33,0.08)", background: escolhida ? "#f0f7ff" : "transparent" }}>
+                                <td style={{ padding: "8px" }}>{infoDa(p, escolhida, maisBarata)}</td>
+                                <td style={{ padding: "8px", textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>{valorProposta(p) > 0 ? dinheiro(valorProposta(p)) : "—"}</td>
+                                <td style={{ padding: "8px", whiteSpace: "nowrap" }}>{p.prazoDias ? `${p.prazoDias} dias` : "—"}</td>
+                                <td style={{ padding: "8px" }}>{p.condicaoPagamento || "—"}</td>
+                                {podeGerenciar && (
+                                  <td style={{ padding: "8px", whiteSpace: "nowrap" }}>{acoesDa(p, escolhida)}</td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
 
                 {temListaDeItens(cot) && (
                   <ComparativoLista cot={cot} dinheiro={dinheiro} isMobile={isMobile} />
@@ -21924,7 +21973,12 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   </div>
                 )}
 
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {/* No celular, grade de duas colunas: botão solto em linha
+                    quebrava onde calhava, e o recado do "por que está
+                    travado" ficava espremido entre dois botões. */}
+                <div style={isMobile
+                  ? { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }
+                  : { display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {podeGerenciar && !cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
                     <>
                       <button style={E.btnSec} onClick={() => { setErro(""); setFormProposta({ cotacaoId: cot.id, proposta: propostaVazia() }); }}>+ Registrar proposta</button>
@@ -21955,9 +22009,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                             onClick={() => abrirLancamento(cot)}>Lançar em contas a pagar</button>
                         );
                       })()}
-                      {!trava.pode && <span style={{ fontSize: 11.5, color: "#6b7280", alignSelf: "center" }}>{trava.motivo}</span>}
+                      {!trava.pode && <span style={{ fontSize: 11.5, color: "#6b7280", alignSelf: "center",
+                        gridColumn: isMobile ? "1 / -1" : undefined }}>{trava.motivo}</span>}
                       {podeExcluir && (
-                        <button style={{ ...E.btnSec, color: "#dc2626", marginLeft: "auto" }}
+                        <button style={{ ...E.btnSec, color: "#dc2626", marginLeft: isMobile ? 0 : "auto",
+                          gridColumn: isMobile ? "1 / -1" : undefined }}
                           onClick={() => excluirCotacao(cot)}>Excluir cotação</button>
                       )}
                     </>
@@ -21985,13 +22041,13 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     </>
                   )}
                   {podeGerenciar && contratoDaCotacao(contratos, cot.id) && (
-                    <span style={{ fontSize: 12, color: "#15803d", alignSelf: "center" }}>
+                    <span style={{ fontSize: 12, color: "#15803d", alignSelf: "center", gridColumn: isMobile ? "1 / -1" : undefined }}>
                       Virou contrato — as parcelas saem de lá, na aba Contratos.
                     </span>
                   )}
                   {podeGerenciar && !contratoDaCotacao(contratos, cot.id) && cot.contaGeradaId && (
                     <>
-                      <span style={{ fontSize: 12, color: "#15803d", alignSelf: "center" }}>
+                      <span style={{ fontSize: 12, color: "#15803d", alignSelf: "center", gridColumn: isMobile ? "1 / -1" : undefined }}>
                         Lançada em contas a pagar{cot.lancadoEm ? ` em ${dataCurta(cot.lancadoEm)}` : ""}
                         {cot.lancadoPor ? ` por ${nomeGravado(cot.lancadoPor)}` : ""} — sem contrato.
                       </span>
