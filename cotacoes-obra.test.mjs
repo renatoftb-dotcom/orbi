@@ -71,7 +71,7 @@ const modulo = new Function(`
            ehNumeroDeOrcamento, numeroDeOrcamento, itemDeOrcamento, dataIsoDoOrcamento,
            interpretarOrcamento, casarOrcamentoComItens, lojaCadastrada,
            papelDaCelula, papeisDaTabela, precoDaLinha,
-           orcamentoDaIA, casamentoDaIA, itensParaIA, avisoDaIA };
+           orcamentoDaIA, casamentoDaIA, itensParaIA, avisoDaIA, pedidoDaIA, promoverCandidatos };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -1569,6 +1569,60 @@ teste("token vencido e crédito esgotado aparecem na tela; o resto não assusta"
   assert.match(M.avisoDaIA(e("limite", "O crédito mensal acabou")), /crédito/);
   assert.strictEqual(M.avisoDaIA(e("nao_liberada", "x")), "", "escritório sem IA não recebe aviso nenhum");
   assert.match(M.avisoDaIA(e("instavel", "x")), /leitor do VICKE/);
+});
+
+// ── O pedido lido pela IA ───────────────────────────────────────
+teste("código do catálogo entra como achado; sem código, vale o parecido", () => {
+  const r = M.pedidoDaIA({ itens: [
+    { descricao: "cimento", quantidade: 30, unidade: "sacos", codigoInsumo: "CIM-001" },
+    { descricao: "arame", quantidade: 20, unidade: "quilos", codigoInsumo: null },
+    { descricao: "telha portuguesa", quantidade: 200, unidade: "un", codigoInsumo: null },
+  ] }, catalogo);
+  assert.strictEqual(r[0].insumo.codigo, "CIM-001");
+  assert.strictEqual(r[0].confianca, "ia");
+  assert.strictEqual(r[0].unidade, "Unidades", "a unidade passa a ser a do catálogo");
+  assert.strictEqual(r[1].insumo, null, "sem código, a IA não escolhe por nós");
+  assert.strictEqual(r[1].candidatos[0].codigo, "FER-010", "mas o parecido fica na setinha");
+  assert.strictEqual(r[2].confianca, "nenhum");
+});
+
+teste("código que não existe no catálogo é ignorado", () => {
+  const r = M.pedidoDaIA({ itens: [{ descricao: "cimento", quantidade: 1, unidade: "", codigoInsumo: "XPTO" }] }, catalogo);
+  assert.strictEqual(r[0].insumo, null);
+});
+
+teste("quantidade zero fica em branco, para você digitar", () => {
+  const r = M.pedidoDaIA({ itens: [{ descricao: "cimento", quantidade: 0, unidade: "sc", codigoInsumo: "CIM-001" }] }, catalogo);
+  assert.strictEqual(r[0].quantidade, "");
+});
+
+teste("linha sem descrição não entra, e prestador nunca é sugerido", () => {
+  const r = M.pedidoDaIA({ itens: [{ descricao: "  ", quantidade: 2, unidade: "", codigoInsumo: null },
+                                   { descricao: "pedreiro", quantidade: 1, unidade: "", codigoInsumo: "PRE-001" }] }, catalogo);
+  assert.strictEqual(r.length, 1);
+  assert.strictEqual(r[0].insumo, null, "prestador não entra em pedido de loja");
+});
+
+teste("o parecido é promovido a escolha, mas marcado para confirmar", () => {
+  const cru = M.pedidoDaIA({ itens: [{ descricao: "arame", quantidade: 20, unidade: "kg", codigoInsumo: null }] }, catalogo);
+  assert.strictEqual(M.resumoDaLeitura(cru).sugeridos, 1, "no resumo ainda conta como sugestão");
+  const l = M.promoverCandidatos(cru);
+  assert.strictEqual(l[0].insumo.codigo, "FER-010");
+  assert.strictEqual(l[0].confirmar, true);
+});
+
+teste("o que a IA achou pelo código não ganha a marca de confirmar", () => {
+  const l = M.promoverCandidatos(M.pedidoDaIA({ itens: [
+    { descricao: "cimento", quantidade: 30, unidade: "sc", codigoInsumo: "CIM-001" }] }, catalogo));
+  assert.ok(!l[0].confirmar);
+});
+
+teste("o item lido pela IA vira item da cotação com nome do catálogo", () => {
+  const l = M.pedidoDaIA({ itens: [{ descricao: "cimento", quantidade: 30, unidade: "sc", codigoInsumo: "CIM-001" }] }, catalogo);
+  const it = M.itemDoPedidoLido(l[0]);
+  assert.strictEqual(it.descricao, "Cimento CP-II 50kg");
+  assert.strictEqual(it.quantidade, 30);
+  assert.strictEqual(it.unidade, "Unidades");
 });
 
 for (const [nome, fn] of testes) {

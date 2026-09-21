@@ -183,6 +183,25 @@ const api = {
   // no leitor por regras.
   ia: {
     status: () => get("/api/ia/status"),
+    // O pedido pode vir como texto colado, como arquivo, ou os dois.
+    lerPedido: async ({ arquivo, texto }) => {
+      const token = typeof localStorage !== "undefined" ? localStorage.getItem("vicke-token") : null;
+      const fd = new FormData();
+      if (arquivo) fd.append("arquivo", arquivo);
+      fd.append("texto", texto || "");
+      const headers = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${_API_URL}/api/ia/ler-pedido`, { method: "POST", headers, body: fd });
+      let json = null;
+      try { json = await res.json(); } catch (e) { json = null; }
+      if (!json || !json.ok) {
+        const erro = new Error((json && json.error) || "A IA não conseguiu ler este pedido.");
+        erro.status = res.status;
+        erro.motivo = (json && json.motivo) || "falha";
+        throw erro;
+      }
+      return json.data;
+    },
     lerOrcamento: async (arquivo, itens) => {
       const token = typeof localStorage !== "undefined" ? localStorage.getItem("vicke-token") : null;
       const fd = new FormData();

@@ -2237,6 +2237,25 @@ const api = {
   // no leitor por regras.
   ia: {
     status: () => get("/api/ia/status"),
+    // O pedido pode vir como texto colado, como arquivo, ou os dois.
+    lerPedido: async ({ arquivo, texto }) => {
+      const token = typeof localStorage !== "undefined" ? localStorage.getItem("vicke-token") : null;
+      const fd = new FormData();
+      if (arquivo) fd.append("arquivo", arquivo);
+      fd.append("texto", texto || "");
+      const headers = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${_API_URL}/api/ia/ler-pedido`, { method: "POST", headers, body: fd });
+      let json = null;
+      try { json = await res.json(); } catch (e) { json = null; }
+      if (!json || !json.ok) {
+        const erro = new Error((json && json.error) || "A IA não conseguiu ler este pedido.");
+        erro.status = res.status;
+        erro.motivo = (json && json.motivo) || "falha";
+        throw erro;
+      }
+      return json.data;
+    },
     lerOrcamento: async (arquivo, itens) => {
       const token = typeof localStorage !== "undefined" ? localStorage.getItem("vicke-token") : null;
       const fd = new FormData();
@@ -19346,6 +19365,16 @@ function interpretarPedido(texto, insumos) {
 }
 
 // Quantas o VICKE achou sozinho, quantas precisam de você.
+// O mais parecido já entra escolhido — senão você escolheria à mão as
+// mesmas três linhas toda vez. Mas fica marcado como "para confirmar": a
+// leitura propõe, quem decide é você. O que a IA achou pelo código do
+// catálogo não precisa dessa marca.
+function promoverCandidatos(lidos) {
+  return (lidos || []).map((x) => (x.insumo || !x.candidatos.length
+    ? x
+    : { ...x, insumo: x.candidatos[0], confirmar: true }));
+}
+
 function resumoDaLeitura(lidos) {
   const l = lidos || [];
   return {
@@ -19698,6 +19727,38 @@ function lojaCadastrada(prestadores, orcamento) {
     || lista.find((f) => { const n = cotSemAcento(f.nome);
         return n && (n.startsWith(alvo + " ") || alvo.startsWith(n + " ")); })
     || null;
+}
+
+// O pedido lido pela IA entra na MESMA lista de conferência do leitor por
+// regras: mesma setinha, mesma quantidade, mesma unidade. Muda só quem
+// achou o item — e o que a IA aponta pelo código do catálogo entra como
+// achado, não como palpite.
+function pedidoDaIA(bruto, insumos) {
+  const materiais = (insumos || []).filter((i) => i && i.tipo !== "prestador");
+  const porCodigo = {};
+  for (const i of materiais) {
+    if (i.codigo) porCodigo[String(i.codigo)] = i;
+    if (i.id) porCodigo[String(i.id)] = i;
+  }
+  return (((bruto || {}).itens) || []).map((l) => {
+    const termo = String((l && l.descricao) || "").trim();
+    const ins = l && l.codigoInsumo ? porCodigo[String(l.codigoInsumo)] || null : null;
+    const parecidos = candidatosDoPedido(termo, materiais, 6);
+    const candidatos = ins
+      ? [ins, ...parecidos.filter((c) => (c.codigo || c.id) !== (ins.codigo || ins.id))]
+      : parecidos;
+    const qtd = Number(l && l.quantidade);
+    return {
+      id: (typeof uid === "function" ? uid() : String(Math.random())),
+      bruto: termo,
+      termo,
+      quantidade: qtd > 0 ? qtd : "",
+      unidade: (ins && ins.unidade) || String((l && l.unidade) || ""),
+      insumo: ins,
+      confianca: ins ? "ia" : (parecidos.length ? "sugestao" : "nenhum"),
+      candidatos,
+    };
+  }).filter((x) => x.termo);
 }
 
 // ── O que a IA leu ──────────────────────────────────────────────
@@ -20656,8 +20717,8 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
               </div>
               <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
                 <button type="button" style={{ ...E.btnSec, fontSize: 11.5, padding: "5px 11px" }}
-                  onClick={() => setColando({ texto: "", lidos: null })}>
-                  Colar o pedido do pedreiro
+                  onClick={() => setColando({ texto: "", lidos: null, arquivo: null })}>
+                  {iaDisponivel ? "Colar ou anexar o pedido" : "Colar o pedido do pedreiro"}
                 </button>
               </div>
               <SeletorInsumo insumos={insumos} aoEscolher={addInsumo} isMobile={isMobile} />
@@ -20739,8 +20800,18 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                 <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Pedido do pedreiro</div>
                 <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 12 }}>
                   {!lidos
-                    ? "Cole a mensagem como ela veio, do jeito que ele escreveu. O VICKE separa as linhas, tira a quantidade e procura cada material no catálogo."
-                    : "Confira antes de entrar na lista. O que o VICKE achou no catálogo vem marcado; o parecido fica como escolha sua; o que não existe entra com o texto dele."}
+                    ? (iaDisponivel
+                      ? "Cole a mensagem como ela veio, ou anexe o print, a foto do papel ou o PDF da lista. A IA separa os itens, tira a quantidade e procura cada material no catálogo."
+                      : "Cole a mensagem como ela veio, do jeito que ele escreveu. O VICKE separa as linhas, tira a quantidade e procura cada material no catálogo.")
+                    : "Confira antes de entrar na lista. O que foi achado no catálogo vem marcado; o parecido fica como escolha sua; o que não existe entra com o texto dele."}
+                  {lidos && colando.leitor ? (
+                    <span style={{ color: "#0474f4", fontWeight: 600 }}>
+                      {" "}{colando.leitor === "ia" ? "Lido pela IA." : "Lido pelo leitor do VICKE."}
+                    </span>
+                  ) : null}
+                  {colando.aviso ? (
+                    <div style={{ marginTop: 6, fontSize: 11.5, color: "#dc2626" }}>{colando.aviso}</div>
+                  ) : null}
                 </div>
 
                 {!lidos ? (
@@ -20749,23 +20820,22 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                       value={colando.texto} autoFocus
                       onChange={(e) => setColando(c => ({ ...c, texto: e.target.value }))}
                       placeholder={"Bom dia Renato\npreciso do material pra semana:\n10 sacos de cimento\n- 30 tabuas de 30cm x 3mts\n1/2 m3 de areia fina\n2 latas de massa corrida\nobrigado"} />
+                    {iaDisponivel && (
+                      <CampoPedidoAnexo arquivo={colando.arquivo}
+                        aoEscolher={(f) => setColando(c => c && ({ ...c, arquivo: f }))} />
+                    )}
                     <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
                       <button style={E.btnSec} onClick={() => setColando(null)}>Cancelar</button>
-                      <button style={{ ...E.btn, opacity: colando.texto.trim() ? 1 : 0.45, cursor: colando.texto.trim() ? "pointer" : "not-allowed" }}
-                        disabled={!colando.texto.trim()}
-                        onClick={() => setColando(c => {
-                          const cru = interpretarPedido(c.texto, insumos);
-                          // O mais parecido já entra escolhido — senão você
-                          // escolheria à mão as mesmas três linhas toda vez.
-                          // Mas fica marcado em âmbar e contado como "para
-                          // confirmar": a leitura propõe, quem decide é você.
-                          return { ...c, resumo: resumoDaLeitura(cru),
-                            lidos: cru.map(x => (x.insumo || !x.candidatos.length
-                              ? x
-                              : { ...x, insumo: x.candidatos[0], confirmar: true })) };
-                        })}>
-                        Ler o pedido
-                      </button>
+                      {(() => {
+                        const temAlgo = !!colando.texto.trim() || !!colando.arquivo;
+                        const podeLer = temAlgo && !colando.lendo;
+                        return (
+                          <button style={{ ...E.btn, opacity: podeLer ? 1 : 0.45, cursor: podeLer ? "pointer" : "not-allowed" }}
+                            disabled={!podeLer} onClick={lerOPedido}>
+                            {colando.lendo ? "Lendo…" : "Ler o pedido"}
+                          </button>
+                        );
+                      })()}
                     </div>
                   </>
                 ) : !lidos.length ? (
@@ -20774,7 +20844,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                       Não deu para achar item nenhum nesse texto. Volte e confira se veio a lista mesmo.
                     </div>
                     <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
-                      <button style={E.btnSec} onClick={() => setColando({ texto: colando.texto, lidos: null })}>Voltar ao texto</button>
+                      <button style={E.btnSec} onClick={() => setColando({ texto: colando.texto, arquivo: colando.arquivo || null, lidos: null })}>Voltar ao texto</button>
                       <button style={E.btnSec} onClick={() => setColando(null)}>Fechar</button>
                     </div>
                   </>
@@ -20864,7 +20934,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                       })}
                     </div>
                     <div style={{ display: "flex", gap: 10, justifyContent: "space-between", marginTop: 14, flexWrap: "wrap" }}>
-                      <button style={E.btnSec} onClick={() => setColando({ texto: colando.texto, lidos: null })}>Voltar ao texto</button>
+                      <button style={E.btnSec} onClick={() => setColando({ texto: colando.texto, arquivo: colando.arquivo || null, lidos: null })}>Voltar ao texto</button>
                       <span style={{ display: "flex", gap: 8 }}>
                         <button style={E.btnSec} onClick={() => setColando(null)}>Cancelar</button>
                         <button style={{ ...E.btn, opacity: aceitos.length ? 1 : 0.45, cursor: aceitos.length ? "pointer" : "not-allowed" }}
@@ -21018,6 +21088,37 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       return { ...f, proposta: p };
     });
     setOrcamentoLido(null);
+  }
+
+  // O pedido chega como recado colado, print da conversa, foto do papel ou
+  // PDF de lista. A IA lê qualquer um; sem ela, o leitor por regras lê o
+  // texto colado, que é o que ele sabe fazer.
+  async function lerOPedido() {
+    const atual = colando;
+    if (!atual) return;
+    setColando((c) => c && ({ ...c, lendo: true, aviso: "" }));
+    const fechar = (extra) => setColando((c) => c && ({ ...c, lendo: false, ...extra }));
+
+    let aviso = "";
+    if (iaDisponivel) {
+      try {
+        const r = await api.ia.lerPedido({ arquivo: atual.arquivo || null, texto: atual.texto });
+        const cru = pedidoDaIA(r, insumos);
+        fechar({ leitor: "ia", resumo: resumoDaLeitura(cru), lidos: promoverCandidatos(cru) });
+        return;
+      } catch (e) {
+        aviso = avisoDaIA(e);
+        if (e && (e.motivo === "token" || e.motivo === "limite" || e.motivo === "conta" || e.motivo === "nao_liberada" || e.motivo === "nao_configurada")) {
+          setIaDisponivel(false);
+        }
+      }
+    }
+    if (!String(atual.texto || "").trim()) {
+      fechar({ aviso: aviso || "Arquivo só a IA lê. Sem ela, cole o texto do pedido aqui." });
+      return;
+    }
+    const cru = interpretarPedido(atual.texto, insumos);
+    fechar({ leitor: "regras", aviso, resumo: resumoDaLeitura(cru), lidos: promoverCandidatos(cru) });
   }
 
   function salvarProposta() {
@@ -22361,6 +22462,46 @@ function ComparativoLista({ cot, dinheiro, isMobile }) {
         {cmp.ganhoDaDivisao > 0
           ? `Comprando cada item onde está mais barato sairia ${dinheiro(cmp.totalDividido)} — ${dinheiro(cmp.ganhoDaDivisao)} a menos que a loja mais barata na lista inteira. Por enquanto a escolha é de uma loja só; dividir o pedido entre lojas é o próximo passo.`
           : "O verde marca o melhor preço de cada item."}
+      </div>
+    </div>
+  );
+}
+
+// Anexar o pedido: print da conversa, foto do papel ou PDF da lista.
+// Diferente do anexo da proposta, este arquivo não é guardado em lugar
+// nenhum — vai para a leitura e acaba ali.
+function CampoPedidoAnexo({ arquivo, aoEscolher }) {
+  const E = COT_ESTILO;
+  const [sobre, setSobre] = useState(false);
+  const refInput = useRef(null);
+  if (arquivo) {
+    return (
+      <div style={{ ...E.quadro, display: "flex", alignItems: "center", gap: 10, marginTop: 10, padding: "10px 12px" }}>
+        <span style={{ fontSize: 12.5, color: "#111827", flex: 1, wordBreak: "break-all" }}>{arquivo.name}</span>
+        <button type="button" style={{ ...E.btnSec, padding: "5px 11px", color: "#dc2626" }}
+          onClick={() => aoEscolher(null)}>Tirar</button>
+      </div>
+    );
+  }
+  return (
+    <div
+      onDragOver={(e) => { e.preventDefault(); setSobre(true); }}
+      onDragLeave={() => setSobre(false)}
+      onDrop={(e) => { e.preventDefault(); setSobre(false); aoEscolher((e.dataTransfer.files || [])[0] || null); }}
+      onClick={() => refInput.current && refInput.current.click()}
+      onPaste={(e) => { const f = arquivoColado(e.clipboardData); if (f) { e.preventDefault(); aoEscolher(f); } }}
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); refInput.current && refInput.current.click(); } }}
+      style={{ border: `1.5px dashed ${sobre ? "#0474f4" : "rgba(38,36,33,0.22)"}`, borderRadius: 12,
+        padding: "12px", textAlign: "center", cursor: "pointer", marginTop: 10,
+        background: sobre ? "#f0f7ff" : "#fafafa", transition: "all .15s ease" }}>
+      <input ref={refInput} type="file" accept="application/pdf,image/*" style={{ display: "none" }}
+        onChange={(e) => { aoEscolher((e.target.files || [])[0] || null); e.target.value = ""; }} />
+      <div style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>
+        ou arraste o print, a foto ou o PDF do pedido
+      </div>
+      <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>
+        clique para escolher — o arquivo é só para a leitura, não fica guardado
       </div>
     </div>
   );
