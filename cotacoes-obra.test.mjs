@@ -72,7 +72,7 @@ const modulo = new Function(`
            interpretarOrcamento, casarOrcamentoComItens, lojaCadastrada,
            papelDaCelula, papeisDaTabela, precoDaLinha,
            orcamentoDaIA, casamentoDaIA, itensParaIA, avisoDaIA, pedidoDaIA, promoverCandidatos,
-           andamentoDaLeitura };
+           andamentoDaLeitura, semMarca, buscarNoCatalogo, novoInsumoDoPedido, medirAssociacao };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -1648,6 +1648,56 @@ teste("a frase diz o que está acontecendo, com o tempo corrido", () => {
   const semSinal = M.andamentoDaLeitura({ etapa: "sem_sinal", decorridoMs: 5000 });
   assert.strictEqual(semSinal.pct, null, "sem sinal, a barra fica onde estava");
   assert.match(semSinal.frase, /continua no servidor/);
+});
+
+// ── Trocar o material na conferência ────────────────────────────
+const CAT_LUVAS = [
+  { id: "1", codigo: "HID-010", nome: "PVC - Elétrica - Luva Pressão 25 (3/4)", grupo: "Hidráulica", unidade: "Unidade" },
+  { id: "2", codigo: "HID-011", nome: "Luva Soldável Redução 32 x 25 mm", grupo: "Hidráulica", unidade: "Unidade" },
+  { id: "3", codigo: "HID-012", nome: "Luva Soldável 25 mm", grupo: "Hidráulica", unidade: "Unidade" },
+  { id: "4", codigo: "ELE-001", nome: "Elétrica - CABO PP - 3 X 2,50 MM2", grupo: "Elétrica", unidade: "Metros" },
+  { id: "5", codigo: "PRE-001", nome: "Luva de pedreiro", tipo: "prestador" },
+  { id: "6", codigo: "HID-013", nome: "Luva antiga", ativo: false },
+];
+
+teste("a marca sai do nome sugerido, o resto fica como ele escreveu", () => {
+  assert.strictEqual(M.semMarca("LUVA SOLDAVEL TIGRE REDUCAO 32 X 25 MM"), "LUVA SOLDAVEL REDUCAO 32 X 25 MM");
+  assert.strictEqual(M.semMarca("Cimento Votoran 50kg"), "Cimento 50kg");
+  assert.strictEqual(M.semMarca("Tigre"), "Tigre", "se só tem a marca, não some tudo");
+});
+
+teste("a marca não derruba a nota do item certo", () => {
+  const com = M.medirAssociacao("luva soldavel tigre reducao 32 x 25", "Luva Soldável Redução 32 x 25 mm");
+  assert.strictEqual(com.cobertura, 1);
+  const cand = M.candidatosDoPedido("LUVA SOLDAVEL TIGRE REDUCAO 32 X 25 MM", CAT_LUVAS, 3);
+  assert.strictEqual(cand[0].codigo, "HID-011");
+});
+
+teste("digitar 'luva' traz todas as luvas do catálogo, e só elas", () => {
+  const r = M.buscarNoCatalogo(CAT_LUVAS, "luva");
+  assert.deepStrictEqual(r.map(i => i.codigo).sort(), ["HID-010", "HID-011", "HID-012"]);
+  assert.deepStrictEqual(M.buscarNoCatalogo(CAT_LUVAS, "luva 32").map(i => i.codigo), ["HID-011"]);
+  assert.deepStrictEqual(M.buscarNoCatalogo(CAT_LUVAS, "luva tigre 25").map(i => i.codigo).sort(), ["HID-010", "HID-011", "HID-012"],
+    "marca digitada é ignorada");
+  assert.deepStrictEqual(M.buscarNoCatalogo(CAT_LUVAS, "soldavel reducao"), [CAT_LUVAS[1]], "sem acento acha");
+  assert.deepStrictEqual(M.buscarNoCatalogo(CAT_LUVAS, "   "), []);
+});
+
+teste("item novo entra no catálogo com código do grupo e o texto dele como apelido", () => {
+  const n = M.novoInsumoDoPedido({ nome: " Luva Soldável Redução 40 x 32 mm ", grupo: "Hidráulica", unidade: "Unidade",
+    escrito: "LUVA SOLDAVEL TIGRE REDUCAO 40 X 32 MM" }, CAT_LUVAS, (g) => g === "Hidráulica" ? "HID-014" : "OUT-001", "novo1");
+  assert.strictEqual(n.id, "novo1");
+  assert.strictEqual(n.codigo, "HID-014");
+  assert.strictEqual(n.nome, "Luva Soldável Redução 40 x 32 mm");
+  assert.strictEqual(n.tipo, "material");
+  assert.strictEqual(n.ativo, true);
+  assert.deepStrictEqual(n.aliases, ["Luva Soldável Redução 40 x 32 mm", "LUVA SOLDAVEL TIGRE REDUCAO 40 X 32 MM"]);
+  assert.strictEqual(M.candidatosDoPedido("luva soldavel tigre reducao 40 x 32 mm", [...CAT_LUVAS, n], 1)[0].id, "novo1",
+    "da próxima vez, acha");
+  assert.strictEqual(M.novoInsumoDoPedido({ nome: "  " }, []), null, "sem nome não cadastra");
+  const igual = M.novoInsumoDoPedido({ nome: "Prego 17x21", escrito: "prego 17x21" }, [], null, "x");
+  assert.deepStrictEqual(igual.aliases, ["Prego 17x21"], "apelido igual ao nome não duplica");
+  assert.strictEqual(igual.grupo, "Outros");
 });
 
 for (const [nome, fn] of testes) {

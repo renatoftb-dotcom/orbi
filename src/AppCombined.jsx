@@ -19302,10 +19302,70 @@ function interpretarLinhaDePedido(linha) {
 // olha PALAVRA por palavra, e não a distância entre as frases inteiras.
 //
 // Mede duas coisas: quanto do que ele escreveu existe no nome do insumo
+// ── Marca não é nome ────────────────────────────────────────────
+// O pedreiro escreve "luva soldável Tigre 32x25"; no catálogo o item é
+// "Luva soldável 32x25", sem marca. Contar "tigre" como palavra a casar
+// derrubava a nota de todo item certo. A marca sai da conta — só da conta:
+// o texto que ele escreveu continua aparecendo inteiro na tela.
+const COT_MARCAS = new Set(("tigre amanco krona fortlev astra deca docol lorenzetti fame perlex blukit "
+  + "votoran votorantim itambe caue cauê holcim intercement gerdau belgo arcelormittal arcelor ciser "
+  + "quartzolit vedacit viapol sika dryko suvinil coral sherwin williams eucatex lukscolor "
+  + "tramontina pial legrand schneider siemens steck margirius weg corfio cobrecom prysmian induscabos sil "
+  + "eternit brasilit precon cortag vonder irwin makita bosch dewalt stanley censi cipla plastilit")
+  .split(" ").map(cotSemAcento));
+
+function semMarcaNaLista(palavras) {
+  const sem = (palavras || []).filter((p) => !COT_MARCAS.has(p));
+  return sem.length ? sem : (palavras || []);     // só marca? então fica como está
+}
+
+function semMarca(texto) {
+  const partes = String(texto == null ? "" : texto).split(/\s+/).filter(Boolean);
+  const sem = partes.filter((p) => !COT_MARCAS.has(cotSemAcento(p)));
+  return (sem.length ? sem : partes).join(" ");
+}
+
+// Busca do seletor: cada palavra digitada tem que aparecer (em qualquer
+// ordem) no nome, código, grupo ou apelido. "luva 25" acha "Luva Pressão
+// 25 (3/4)". Marca digitada é ignorada, igual à leitura do pedido.
+function buscarNoCatalogo(insumos, termo, limite) {
+  const palavras = semMarcaNaLista(cotSemAcento(termo).split(" ").filter(Boolean));
+  if (!palavras.length) return [];
+  return (insumos || [])
+    .filter((i) => i && i.tipo !== "prestador" && i.ativo !== false)
+    .filter((i) => {
+      const alvo = cotSemAcento([i.nome, i.codigo, i.grupo, ...(i.aliases || [])].join(" "));
+      return palavras.every((p) => alvo.indexOf(p) >= 0);
+    })
+    .sort((a, b) => String(a.nome).localeCompare(String(b.nome), "pt-BR"))
+    .slice(0, limite || 60);
+}
+
+// Item novo cadastrado de dentro do pedido: entra no catálogo como qualquer
+// outro, com código do grupo. O que o pedreiro escreveu vira apelido — da
+// próxima vez que ele escrever igual, o VICKE já acha.
+function novoInsumoDoPedido(campos, insumos, gerarCodigo, novoId) {
+  const c = campos || {};
+  const nome = String(c.nome || "").trim();
+  if (!nome) return null;
+  const grupo = c.grupo || "Outros";
+  const aliases = [nome];
+  const escrito = String(c.escrito || "").trim();
+  if (escrito && cotSemAcento(escrito) !== cotSemAcento(nome)) aliases.push(escrito);
+  return {
+    id: novoId || (typeof uid === "function" ? uid() : String(Date.now())),
+    codigo: typeof gerarCodigo === "function" ? gerarCodigo(grupo, insumos || []) : "",
+    nome, grupo, unidade: c.unidade || "Unidades", tipo: "material",
+    precoManual: null, precoFonte: null, precoNCompras: 0, precoFatorInccAplicado: 1,
+    observacao: "", ativo: true, aliases,
+    precoAtualizadoEm: new Date().toISOString(),
+  };
+}
+
 // (cobertura), e quanto o nome do insumo diz a mais do que ele escreveu
 // (um nome muito mais longo é um palpite mais arriscado).
 function medirAssociacao(termo, nome) {
-  const a = cotSemAcento(termo).split(" ").filter(Boolean);
+  const a = semMarcaNaLista(cotSemAcento(termo).split(" ").filter(Boolean));
   const b = cotSemAcento(nome).split(" ").filter(Boolean);
   if (!a.length || !b.length) return { cobertura: 0, score: 0 };
   let casados = 0, uteis = 0;
@@ -20706,6 +20766,14 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   }, []);
   const [orcamentoLido, setOrcamentoLido] = useState(null);  // { orcamento, casamento }
   const insumos = (data.materiais || []).filter(i => i && i.ativo !== false);
+  const cadastrarInsumoDoPedido = (campos) => {
+    const todos = data.materiais || [];
+    const novo = novoInsumoDoPedido(campos, todos,
+      typeof proximoCodigoInsumo === "function" ? proximoCodigoInsumo : null);
+    if (!novo) return null;
+    save({ ...data, materiais: [...todos, novo] });
+    return novo;
+  };
   const unidadesCatalogo = unidadesDoCatalogo(insumos);
   // O que o pedido precisa dizer além da lista: de quem parte e para onde vai.
   const ctxPedido = {
@@ -21028,53 +21096,28 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                           ...(x.insumo ? [x.insumo] : []),
                           ...x.candidatos.filter(c => !x.insumo || (c.codigo || c.id) !== (x.insumo.codigo || x.insumo.id)),
                         ];
-                        // Além dos parecidos, o catálogo inteiro: quando a
-                        // associação erra, trocar tem que ser um clique, não
-                        // uma volta ao formulário.
-                        const jaListado = {};
-                        for (const p of parecidos) jaListado[p.codigo || p.id] = 1;
-                        const resto = insumos
-                          .filter(i => !jaListado[i.codigo || i.id])
-                          .slice()
-                          .sort((a, b) => String(a.nome).localeCompare(String(b.nome), "pt-BR"));
-                        const opcoes = [...parecidos, ...resto];
-                        const escolhido = x.insumo ? (x.insumo.codigo || x.insumo.id) : (x.escolhaCodigo || "");
                         const cols = isMobile ? "1fr 1fr 44px" : "1fr 90px 96px 30px";
                         return (
                           <div key={x.id} style={{ padding: "9px 12px", borderTop: "1px solid rgba(38,36,33,0.06)",
                             background: x.fora ? "#fafafa" : "#fff", opacity: x.fora ? 0.55 : 1 }}>
                             <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 4 }}>“{x.bruto}”</div>
-                            <div style={{ display: "grid", gridTemplateColumns: cols, gap: 8, alignItems: "center" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: cols, gap: 8, alignItems: "start" }}>
                               {/* A setinha existe SEMPRE: mesmo quando nada
                                   se parece, o catálogo inteiro está a um
                                   clique. E quando fica fora do catálogo, o
                                   texto dele continua editável logo abaixo. */}
                               <div style={{ display: "grid", gap: 6, minWidth: 0, gridColumn: isMobile ? "1 / -1" : undefined }}>
-                                <select style={{ ...E.input, cursor: "pointer" }} value={escolhido}
-                                  onChange={(e) => {
-                                    const cod = e.target.value;
-                                    const ins = opcoes.find(o => (o.codigo || o.id) === cod);
-                                    trocar(x.id, { insumo: ins || null, escolhaCodigo: cod,
-                                      unidade: ins ? (ins.unidade || x.unidade) : x.unidade });
-                                  }}>
-                                  {parecidos.length > 0 && (
-                                    <optgroup label="Mais parecidos com o que ele escreveu">
-                                      {parecidos.map(o => (
-                                        <option key={o.codigo || o.id} value={o.codigo || o.id}>{o.nome}</option>
-                                      ))}
-                                    </optgroup>
-                                  )}
-                                  <optgroup label="Fora do catálogo">
-                                    <option value="">Deixar como “{x.termo}”</option>
-                                  </optgroup>
-                                  {resto.length > 0 && (
-                                    <optgroup label="Todo o catálogo">
-                                      {resto.map(o => (
-                                        <option key={o.codigo || o.id} value={o.codigo || o.id}>{o.nome}</option>
-                                      ))}
-                                    </optgroup>
-                                  )}
-                                </select>
+                                <EscolhaInsumoPedido x={x} parecidos={parecidos} insumos={insumos}
+                                  unidades={unidadesCatalogo}
+                                  aoEscolher={(ins) => trocar(x.id, { insumo: ins, escolhaCodigo: ins.codigo || ins.id,
+                                    unidade: ins.unidade || x.unidade, confirmar: false })}
+                                  aoDeixarFora={() => trocar(x.id, { insumo: null, escolhaCodigo: "", confirmar: false })}
+                                  aoCadastrar={(campos) => {
+                                    const novo = cadastrarInsumoDoPedido(campos);
+                                    if (novo) trocar(x.id, { insumo: novo, escolhaCodigo: novo.codigo || novo.id,
+                                      unidade: novo.unidade || x.unidade, confirmar: false });
+                                    return novo;
+                                  }} />
                                 {!x.insumo && (
                                   <input style={{ ...E.input, fontSize: 12 }} value={x.termo}
                                     placeholder="como vai aparecer no pedido"
@@ -21091,7 +21134,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                             </div>
                             {x.confirmar && x.insumo && !x.fora && (
                               <div style={{ fontSize: 11, color: "#b45309", marginTop: 4 }}>
-                                Ele escreveu “{x.termo}” — confirme se é este mesmo, ou troque no seletor.
+                                Ele escreveu “{x.termo}” — confirme se é este mesmo, ou toque no nome para trocar.
                               </div>
                             )}
                           </div>
@@ -22719,6 +22762,147 @@ function BarraLeituraIA({ progresso }) {
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 5, fontSize: 11.5, color: "#6b7280" }}>
         <span>{a.frase}</span>
         <span style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{a.seg} s</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Trocar o material de uma linha lida ─────────────────────────
+// Igual ao campo de material da cotação: toca, digita "luva", aparecem
+// todas as luvas do catálogo. Sem nada digitado, aparecem os parecidos com
+// o que ele escreveu. E se não existe, cadastra ali mesmo — nome, grupo e
+// unidade — sem sair da conferência.
+function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDeixarFora, aoCadastrar }) {
+  const E = COT_ESTILO;
+  const [aberto, setAberto] = useState(false);
+  const [termo, setTermo] = useState("");
+  const [marcado, setMarcado] = useState(0);
+  const [novo, setNovo] = useState(null);      // { nome, grupo, unidade } quando cadastrando
+  const campo = useRef(null);
+  const lista = useRef(null);
+
+  const achados = termo.trim() ? buscarNoCatalogo(insumos, termo, 60) : (parecidos || []);
+  // "luva" digitado para achar a luva soldável 32x25 não é o nome do item
+  // novo: se o que se digitou está dentro do que ele escreveu, o nome
+  // sugerido é o que ele escreveu (sem a marca). Senão, o que se digitou.
+  const escrito = x.termo || x.bruto || "";
+  const digitadas = cotSemAcento(termo).split(" ").filter(Boolean);
+  const dentroDoEscrito = digitadas.every((p) => cotSemAcento(escrito).indexOf(p) >= 0);
+  const nomeSugerido = semMarca(!digitadas.length || dentroDoEscrito ? escrito : termo.trim());
+  const opcoes = [
+    ...achados.map((i) => ({ tipo: "item", i })),
+    { tipo: "novo" },
+    { tipo: "fora" },
+  ];
+  // Na última linha a lista abria abaixo da dobra: rola o painel até ela.
+  const abrir = () => {
+    setAberto(true); setTermo(""); setMarcado(0);
+    setTimeout(() => {
+      if (campo.current) campo.current.focus({ preventScroll: true });
+      if (lista.current && lista.current.scrollIntoView) lista.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }, 0);
+  };
+  const fechar = () => { setAberto(false); setTermo(""); };
+  const comecarCadastro = () => {
+    let grupo = typeof grupoInferido === "function" ? grupoInferido(nomeSugerido) : "Outros";
+    // A regra não conhece "luva"; o catálogo conhece: o grupo mais comum
+    // entre os itens com a mesma primeira palavra.
+    if (grupo === "Outros") {
+      const primeira = cotSemAcento(nomeSugerido).split(" ").find((p) => p.length >= 3);
+      const conta = {};
+      for (const i of primeira ? buscarNoCatalogo(insumos, primeira, 200) : []) if (i.grupo) conta[i.grupo] = (conta[i.grupo] || 0) + 1;
+      const top = Object.keys(conta).sort((a, b) => conta[b] - conta[a])[0];
+      if (top) grupo = top;
+    }
+    setNovo({ nome: nomeSugerido, grupo: grupo === "Prestadores de serviços" ? "Outros" : grupo,
+      unidade: x.unidade || "Unidades" });
+    fechar();
+  };
+  const usar = (o) => {
+    if (!o) return;
+    if (o.tipo === "item") { aoEscolher(o.i); fechar(); }
+    else if (o.tipo === "novo") comecarCadastro();
+    else { aoDeixarFora(); fechar(); }
+  };
+
+  const grupos = (typeof INSUMO_GRUPOS !== "undefined" ? INSUMO_GRUPOS : [])
+    .map((g) => g.nome).filter((n) => n && n !== "Prestadores de serviços");
+  if (!grupos.includes("Outros")) grupos.push("Outros");
+
+  const rotulo = x.insumo ? x.insumo.nome : `Fora do catálogo — “${x.termo}”`;
+  const linha = (conteudo, k, extra) => (
+    <div key={k} onMouseDown={(e) => { e.preventDefault(); usar(opcoes[k]); }} onMouseEnter={() => setMarcado(k)}
+      style={{ padding: "8px 11px", cursor: "pointer", background: k === marcado ? "#eef5ff" : "#fff",
+        borderTop: k ? "1px solid rgba(38,36,33,0.06)" : "none", ...extra }}>{conteudo}</div>
+  );
+
+  if (novo) {
+    return (
+      <div style={{ border: "1px solid rgba(4,116,244,0.35)", borderRadius: 10, padding: 10, background: "#f7fbff", display: "grid", gap: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "#111827" }}>Cadastrar no catálogo</div>
+        <input style={E.input} value={novo.nome} autoFocus placeholder="Nome do item, sem a marca"
+          onChange={(e) => setNovo({ ...novo, nome: e.target.value })} />
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 8 }}>
+          <select style={{ ...E.input, cursor: "pointer" }} value={novo.grupo}
+            onChange={(e) => setNovo({ ...novo, grupo: e.target.value })}>
+            {grupos.map((g) => <option key={g} value={g}>{g}</option>)}
+          </select>
+          <CampoUnidade valor={novo.unidade} unidades={unidades} aoMudar={(v) => setNovo({ ...novo, unidade: v })} />
+        </div>
+        <div style={{ fontSize: 11, color: "#6b7280" }}>
+          “{x.termo}” fica guardado como apelido: da próxima vez que escreverem assim, o VICKE já acha.
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button type="button" style={E.btnSec} onClick={() => setNovo(null)}>Cancelar</button>
+          <button type="button" style={{ ...E.btn, opacity: novo.nome.trim() ? 1 : 0.45 }} disabled={!novo.nome.trim()}
+            onClick={() => { const r = aoCadastrar({ ...novo, escrito: x.termo }); if (r) setNovo(null); }}>
+            Cadastrar e usar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!aberto) {
+    return (
+      <button type="button" onClick={abrir} title="Trocar o material"
+        style={{ ...E.input, cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 8,
+          color: x.insumo ? "#111827" : "#6b7280", fontFamily: "inherit" }}>
+        <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rotulo}</span>
+        <span aria-hidden="true" style={{ fontSize: 10, color: "#6b7280" }}>▼</span>
+      </button>
+    );
+  }
+
+  return (
+    <div>
+      <input ref={campo} style={E.input} value={termo} placeholder="Digite para buscar — luva, cabo, cimento…"
+        onChange={(e) => { setTermo(e.target.value); setMarcado(0); }}
+        onBlur={() => setTimeout(fechar, 150)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown") { e.preventDefault(); setMarcado((m) => Math.min(m + 1, opcoes.length - 1)); }
+          if (e.key === "ArrowUp") { e.preventDefault(); setMarcado((m) => Math.max(m - 1, 0)); }
+          if (e.key === "Enter") { e.preventDefault(); usar(opcoes[marcado]); }
+          if (e.key === "Escape") { e.preventDefault(); fechar(); }
+        }} />
+      {/* A lista abre embaixo do campo, empurrando o resto — e não por cima:
+          dentro do painel que rola, uma lista flutuante ficava cortada. */}
+      <div ref={lista} style={{ border: "1px solid rgba(38,36,33,0.16)", borderRadius: 10, marginTop: 4, maxHeight: 260,
+        overflowY: "auto", background: "#fff", boxShadow: "0 10px 26px -14px rgba(17,24,39,0.35)" }}>
+        <div style={{ padding: "6px 11px", fontSize: 10.5, fontWeight: 600, color: "#6b7280", background: "#f9fafb" }}>
+          {termo.trim()
+            ? (achados.length ? `${achados.length}${achados.length === 60 ? "+" : ""} no catálogo` : "Nada no catálogo com isso")
+            : (achados.length ? "Mais parecidos com o que ele escreveu" : "Digite para buscar no catálogo")}
+        </div>
+        {achados.map((i, k) => linha(
+          <>
+            <div style={{ fontSize: 12.5, color: "#111827" }}>{i.nome}</div>
+            <div style={{ fontSize: 11, color: "#6b7280" }}>{[i.codigo, i.grupo, i.unidade].filter(Boolean).join(" · ")}</div>
+          </>, k))}
+        {linha(<span style={{ fontSize: 12.5, color: "#0474f4", fontWeight: 600 }}>＋ Cadastrar “{nomeSugerido}” no catálogo</span>,
+          achados.length)}
+        {linha(<span style={{ fontSize: 12, color: "#4b5563" }}>Deixar fora do catálogo, como “{x.termo}”</span>,
+          achados.length + 1)}
       </div>
     </div>
   );
