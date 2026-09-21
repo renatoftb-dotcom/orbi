@@ -1077,6 +1077,76 @@ function casarOrcamentoComItens(cot, orcamento) {
   return { casados, sobrando, achados: casados.filter((c) => c.linha).length };
 }
 
+// ── Embalagem diferente não é o mesmo item ──────────────────────
+// A Ourifer cotou "Cimento Votoran 25kg" a R$ 22 para um pedido de saco de
+// 50kg — e o preço entrou no de 50, deixando a loja com o cimento pela
+// metade do preço. Nome parecido engana: o que decide é a embalagem. Peso,
+// volume e o modelo da tela (Q61 × Q92) têm que bater; se os dois dizem e
+// dizem diferente, a linha não é ligada sozinha.
+function medidasDeEmbalagem(texto) {
+  // Sem o normalizador comum: ele troca o ponto por espaço, e "7,404kg"
+  // viraria "7 404kg" — 404 quilos.
+  const t = String(texto == null ? "" : texto).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/(\d),(\d)/g, "$1.$2");
+  const num = (x) => Number(String(x).replace(",", "."));
+  const m = {};
+  const kg = /(\d+(?:\.\d+)?)\s*(kg|kgs|kilos?|quilos?)\b/.exec(t);
+  if (kg) m.kg = num(kg[1]);
+  const l = /(\d+(?:\.\d+)?)\s*(l|lt|lts|litros?)\b/.exec(t);
+  if (l) m.l = num(l[1]);
+  const q = /\be?q\s?0*(\d{2,3})\b/.exec(t);
+  if (q) m.q = Number(q[1]);
+  return m;
+}
+
+function divergenciaDeEmbalagem(doPedido, daLoja) {
+  const a = medidasDeEmbalagem(doPedido), b = medidasDeEmbalagem(daLoja);
+  const fmt = (v) => String(v).replace(".", ",");
+  for (const [k, nome, un] of [["kg", "peso", " kg"], ["l", "volume", " L"], ["q", "modelo", ""]]) {
+    if (a[k] == null || b[k] == null || a[k] === b[k]) continue;
+    const pre = k === "q" ? "Q" : "";
+    return {
+      tipo: nome,
+      texto: `${nome === "modelo" ? "modelo" : "embalagem"} diferente — pedido ${pre}${fmt(a[k])}${un}, loja ${pre}${fmt(b[k])}${un}`,
+      // Só peso e volume convertem: 2 sacos de 25 kg são 1 de 50. Tela Q61
+      // não vira Q92 multiplicando.
+      fator: k === "q" || !(b[k] > 0) ? 0 : a[k] / b[k],
+    };
+  }
+  return null;
+}
+
+// Da leitura para a tela de conferência: que linha vai em cada item, e a
+// que preço. Duas regras em cima do que o leitor achou:
+//  - embalagem diferente não entra sozinha: fica sem preço, com o aviso e
+//    a linha sugerida, para você decidir (e, se quiser, converter);
+//  - item repetido no pedido (o mesmo material em duas linhas) leva o
+//    preço da mesma linha da loja — ela cotou uma vez, vale para as duas.
+function escolhasDoCasamento(casamento, orcamento) {
+  const linhas = ((orcamento || {}).itens) || [];
+  const escolhas = {};
+  const chave = (it) => String(it.codigo || it.insumoId || "") || cotSemAcento(it.descricao);
+  const porChave = {};
+  for (const { item, linha } of (casamento || {}).casados || []) {
+    const i = linha ? linhas.indexOf(linha) : -1;
+    const qtd = quantidadeDoItem(item);
+    const dif = linha ? divergenciaDeEmbalagem(item.descricao, linha.descricao) : null;
+    if (i >= 0 && dif) {
+      escolhas[item.id] = { i: -1, preco: 0, sugerida: i, divergencia: dif };
+      continue;
+    }
+    escolhas[item.id] = { i, preco: linha ? precoDaLinha(linha, qtd) : 0 };
+    if (i >= 0 && !porChave[chave(item)]) porChave[chave(item)] = { i, linha };
+  }
+  for (const { item } of (casamento || {}).casados || []) {
+    const e = escolhas[item.id];
+    if (e.i >= 0 || e.divergencia) continue;
+    const irmao = porChave[chave(item)];
+    if (irmao) escolhas[item.id] = { i: irmao.i, preco: precoDaLinha(irmao.linha, quantidadeDoItem(item)), repetido: true };
+  }
+  return escolhas;
+}
+
 // A loja do papel costuma já estar cadastrada — e aí a proposta tem que
 // ficar amarrada no cadastro, não só com o nome digitado: é o cadastro que
 // leva o telefone, o CNPJ e o contrato depois. O CNPJ é a prova; o nome só
@@ -2478,11 +2548,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         const r = await api.ia.lerOrcamento(arquivo, itensParaIA(cotacao), (p) => setProgressoPdf(p));
         const orcamento = orcamentoDaIA(r && r.orcamento);
         const casamento = casamentoDaIA(cotacao, orcamento);
-        const escolhas = {};
-        for (const { item, linha } of casamento.casados) {
-          const i = linha ? orcamento.itens.indexOf(linha) : -1;
-          escolhas[item.id] = { i, preco: linha ? precoDaLinha(linha, quantidadeDoItem(item)) : 0 };
-        }
+        const escolhas = escolhasDoCasamento(casamento, orcamento);
         setOrcamentoLido({ orcamento, casamento, escolhas, nome: arquivo.name || "", leitor: "ia" });
         setLendoPdf(false);
         return;
@@ -2515,11 +2581,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       // Mesmo sem reconhecer a tabela a conferência abre: cada loja escreve
       // o orçamento de um jeito, e é lá que você aponta a linha certa ou
       // digita o preço — melhor que devolver um erro e nada mais.
-      const escolhas = {};
-      for (const { item, linha } of casamento.casados) {
-        const i = linha ? orcamento.itens.indexOf(linha) : -1;
-        escolhas[item.id] = { i, preco: linha ? precoDaLinha(linha, quantidadeDoItem(item)) : 0 };
-      }
+      const escolhas = escolhasDoCasamento(casamento, orcamento);
       setOrcamentoLido({ orcamento, casamento, escolhas, nome: arquivo.name || "", leitor: "regras",
         aviso: aviso ? aviso + " Li o PDF com o leitor do VICKE." : "" });
     } catch (e) {
@@ -2893,9 +2955,16 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   {cm.casados.map(({ item }) => {
                     const esc = escolhas[item.id] || { i: -1, preco: 0 };
                     const qtd = quantidadeDoItem(item);
+                    // Aviso da embalagem: vale para a linha que o leitor
+                    // sugeriu e também para a que você apontar à mão.
+                    const linhaVista = esc.i >= 0 ? o.itens[esc.i] : (esc.sugerida >= 0 ? o.itens[esc.sugerida] : null);
+                    const dif = linhaVista ? divergenciaDeEmbalagem(item.descricao, linhaVista.descricao) : null;
+                    const unit = linhaVista ? precoDaLinha(linhaVista, 0) : 0;
+                    const convertido = dif && dif.fator > 0 && unit > 0 ? Math.round(unit * dif.fator * 100) / 100 : 0;
                     return (
                       <div key={item.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 10,
-                        padding: "9px 12px", borderTop: "1px solid rgba(38,36,33,0.06)", alignItems: "center" }}>
+                        padding: "9px 12px", borderTop: "1px solid rgba(38,36,33,0.06)", alignItems: "center",
+                        background: dif ? "#fffaf0" : undefined }}>
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontSize: 12.5, color: "#111827" }}>{item.descricao || "Item"}</div>
                           <div style={{ fontSize: 11, color: "#6b7280" }}>{qtdBR(qtd)} {item.unidade || ""}</div>
@@ -2918,6 +2987,25 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                         </select>
                         <CampoNumeroBR estilo={E.input} valor={esc.preco || ""} casas={2} placeholder="0,00"
                           aoMudar={(v) => trocarEscolha(item.id, { preco: v })} />
+                        {dif && (
+                          <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#b45309", lineHeight: 1.45 }}>
+                            {esc.i >= 0 ? "Atenção: " : `A loja cotou “${linhaVista.descricao}” a ${dinheiro(unit)}, mas `}
+                            {dif.texto}.{" "}
+                            {esc.i < 0 ? "Não liguei sozinho. " : ""}
+                            {convertido > 0 && Math.abs((esc.preco || 0) - convertido) > 0.004 && (
+                              <button type="button" onClick={() => trocarEscolha(item.id, { i: esc.i >= 0 ? esc.i : esc.sugerida, preco: convertido })}
+                                style={{ color: "#0474f4", background: "none", border: "none", padding: 0, cursor: "pointer",
+                                  fontFamily: "inherit", fontSize: 11.5, fontWeight: 600 }}>
+                                Usar {dinheiro(convertido)} por {item.unidade ? item.unidade.toLowerCase().replace(/s$/, "") : "unidade"} do pedido ({qtdBR(dif.fator)} × {dinheiro(unit)})
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        {!dif && esc.repetido && esc.i >= 0 && (
+                          <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "#6b7280" }}>
+                            Este material aparece duas vezes no pedido; a loja cotou uma vez — usei o mesmo preço.
+                          </div>
+                        )}
                       </div>
                     );
                   })}

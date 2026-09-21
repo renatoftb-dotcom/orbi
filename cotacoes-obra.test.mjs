@@ -73,7 +73,8 @@ const modulo = new Function(`
            papelDaCelula, papeisDaTabela, precoDaLinha,
            orcamentoDaIA, casamentoDaIA, itensParaIA, avisoDaIA, pedidoDaIA, promoverCandidatos,
            andamentoDaLeitura, semMarca, buscarNoCatalogo, novoInsumoDoPedido, medirAssociacao,
-           medidaDoTexto, palavraChave, familiasDoCatalogo, nomeNoPadrao, gruposDoCatalogo, codigoDoGrupo };
+           medidaDoTexto, palavraChave, familiasDoCatalogo, nomeNoPadrao, gruposDoCatalogo, codigoDoGrupo,
+           medidasDeEmbalagem, divergenciaDeEmbalagem, escolhasDoCasamento };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -1765,6 +1766,52 @@ teste("grupo criado pela empresa segue o prefixo que o catálogo já usa nele", 
   assert.strictEqual(M.codigoDoGrupo("Esgoto e Água Pluvial", cat, fab), "ESG-012");
   assert.strictEqual(M.codigoDoGrupo("Hidráulica", cat, fab), "HID-235", "grupo de fábrica usa a regra de fábrica");
   assert.strictEqual(M.codigoDoGrupo("Novidade", cat, fab), "OUT-001");
+});
+
+// ── Embalagem diferente (caso real: Ourifer, Obra Teste) ─────────
+teste("peso, volume e modelo da tela saem do nome", () => {
+  assert.deepStrictEqual(M.medidasDeEmbalagem("Cimento Votoran 25kg"), { kg: 25 });
+  assert.deepStrictEqual(M.medidasDeEmbalagem("Sacos de cimento 50kg"), { kg: 50 });
+  assert.deepStrictEqual(M.medidasDeEmbalagem("VEDA CONCRETO 5 LITRO"), { l: 5 });
+  assert.deepStrictEqual(M.medidasDeEmbalagem("Veda Concreto 1 Lt"), { l: 1 });
+  assert.deepStrictEqual(M.medidasDeEmbalagem("Aço - Malha pop EQ092 4.2mm 15x15"), { q: 92 });
+  assert.deepStrictEqual(M.medidasDeEmbalagem("Tela Pp Soldada Q61 2 X3m 15x15 3,4 Me"), { q: 61 });
+  assert.deepStrictEqual(M.medidasDeEmbalagem("Ferro Ca50 10,00mm - 3/8 - Br 7,404kg"), { kg: 7.404 });
+  assert.deepStrictEqual(M.medidasDeEmbalagem("JOELHO L.R TIGRE 25 X 3/4 MARROM"), {});
+});
+
+teste("cimento 25kg não entra no de 50kg; converte só se você mandar", () => {
+  const d = M.divergenciaDeEmbalagem("Sacos de cimento 50kg", "Cimento Votoran 25kg");
+  assert.ok(d); assert.strictEqual(d.fator, 2);
+  assert.match(d.texto, /pedido 50 kg, loja 25 kg/);
+  assert.strictEqual(M.divergenciaDeEmbalagem("VEDA CONCRETO 5 LITRO", "Veda Concreto 1 Lt").fator, 5);
+  const tela = M.divergenciaDeEmbalagem("Aço - Malha pop EQ092 4.2mm 15x15", "Tela Pp Soldada Q61 2 X3m 15x15 3,4 Me");
+  assert.ok(tela); assert.strictEqual(tela.fator, 0, "tela de outro modelo não converte");
+  assert.strictEqual(M.divergenciaDeEmbalagem("Aço - Malha pop Q138 4.2mm 10x10", "MALHA POP 3 X 2 MTS FIO 4.2 10 X 10- Q138 - AZUL"), null);
+  assert.strictEqual(M.divergenciaDeEmbalagem("Impermeabilizantes - Vedatop 18KG", "Vedatop 1000 18kg - Vedacit"), null);
+  assert.strictEqual(M.divergenciaDeEmbalagem("Impermeabilizantes - Vedalit 18L", "Vedalit Bd 18 Kg - Vedacit"), null, "kg e litro não se comparam");
+  assert.strictEqual(M.divergenciaDeEmbalagem("PVC - Hidráulica - Caixa d'agua convencional 500 L", "Caixa D Água 500 Lt - Fortlev"), null);
+  assert.strictEqual(M.divergenciaDeEmbalagem("Aço - Arame Recozido", "Arame Recozido Trançado N18 1kg"), null, "pedido sem peso não compara");
+});
+
+teste("na conferência: embalagem diferente fica sem preço, e o repetido do pedido leva o mesmo preço", () => {
+  const cimento = { id: "ci", descricao: "Sacos de cimento 50kg", quantidade: 240, unidade: "Unidades", codigo: "CIM-001" };
+  const ad1 = { id: "a1", descricao: "PVC - Alimentação Água Fria - Adaptador 40mm", quantidade: 6, unidade: "Unidades", codigo: "HID-236" };
+  const ad2 = { id: "a2", descricao: "PVC - Alimentação Água Fria - Adaptador 40mm", quantidade: 3, unidade: "Unidades", codigo: "HID-236" };
+  const areia = { id: "ar", descricao: "Areia Grossa", quantidade: 14, unidade: "m3", codigo: "AGR-002" };
+  const linhas = [
+    { descricao: "Cimento Votoran 25kg", quantidade: 480, unitario: 22, total: 10560 },
+    { descricao: "Adaptador Soldavel Bol Rosca 40mm", quantidade: 6, unitario: 9.4, total: 56.4 },
+    { descricao: "Areia Grossa 1 Mt", quantidade: 14, unitario: 230, total: 3220 },
+  ];
+  const casamento = { casados: [
+    { item: cimento, linha: linhas[0] }, { item: ad1, linha: linhas[1] }, { item: ad2, linha: null }, { item: areia, linha: linhas[2] }] };
+  const e = M.escolhasDoCasamento(casamento, { itens: linhas });
+  assert.strictEqual(e.ci.i, -1); assert.strictEqual(e.ci.preco, 0);
+  assert.strictEqual(e.ci.sugerida, 0); assert.strictEqual(e.ci.divergencia.fator, 2);
+  assert.strictEqual(e.a1.i, 1); assert.strictEqual(e.a1.preco, 9.4);
+  assert.strictEqual(e.a2.i, 1); assert.strictEqual(e.a2.preco, 9.4); assert.strictEqual(e.a2.repetido, true);
+  assert.strictEqual(e.ar.preco, 230);
 });
 
 for (const [nome, fn] of testes) {
