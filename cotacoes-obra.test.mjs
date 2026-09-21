@@ -1563,12 +1563,16 @@ teste("para a IA vai só id, nome, quantidade e unidade do pedido", () => {
   assert.strictEqual(i[1].quantidade, 300);
 });
 
-teste("token vencido e crédito esgotado aparecem na tela; o resto não assusta", () => {
+teste("o aviso diz o motivo de verdade, e escritório sem IA não vê aviso", () => {
   const e = (motivo, message) => Object.assign(new Error(message), { motivo });
   assert.match(M.avisoDaIA(e("token", "O token da IA venceu")), /token/);
   assert.match(M.avisoDaIA(e("limite", "O crédito mensal acabou")), /crédito/);
   assert.strictEqual(M.avisoDaIA(e("nao_liberada", "x")), "", "escritório sem IA não recebe aviso nenhum");
-  assert.match(M.avisoDaIA(e("instavel", "x")), /leitor do VICKE/);
+  assert.strictEqual(M.avisoDaIA(e("nao_configurada", "x")), "");
+  // rota que não existe no servidor publicado tem que aparecer, não virar
+  // "a IA não respondeu" — foi assim que um 404 passou por instabilidade
+  assert.match(M.avisoDaIA(e("falha", "O servidor respondeu erro 404 na leitura do pedido.")), /404/);
+  assert.strictEqual(M.avisoDaIA(e("falha", "")), "A IA não respondeu agora.");
 });
 
 // ── O pedido lido pela IA ───────────────────────────────────────

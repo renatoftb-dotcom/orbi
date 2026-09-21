@@ -195,7 +195,11 @@ const api = {
       let json = null;
       try { json = await res.json(); } catch (e) { json = null; }
       if (!json || !json.ok) {
-        const erro = new Error((json && json.error) || "A IA não conseguiu ler este pedido.");
+        // Resposta que nem JSON é costuma ser rota que não existe no
+        // servidor publicado (404) ou queda (502). Dizer o código evita
+        // caçar fantasma: sem isso, tudo vira "a IA não respondeu".
+        const erro = new Error((json && json.error)
+          || `O servidor respondeu erro ${res.status} na leitura do pedido.`);
         erro.status = res.status;
         erro.motivo = (json && json.motivo) || "falha";
         throw erro;
@@ -213,7 +217,8 @@ const api = {
       let json = null;
       try { json = await res.json(); } catch (e) { json = null; }
       if (!json || !json.ok) {
-        const erro = new Error((json && json.error) || "A IA não conseguiu ler este arquivo.");
+        const erro = new Error((json && json.error)
+          || `O servidor respondeu erro ${res.status} na leitura do orçamento.`);
         erro.status = res.status;
         erro.motivo = (json && json.motivo) || "falha";
         throw erro;

@@ -1032,9 +1032,12 @@ function itensParaIA(cot) {
 // são coisas que o dono precisa saber; o resto é passageiro.
 function avisoDaIA(erro) {
   const m = (erro && erro.motivo) || "";
-  if (m === "token" || m === "limite" || m === "conta") return erro.message;
   if (m === "nao_liberada" || m === "nao_configurada") return "";
-  return "A IA não respondeu agora — usei o leitor do VICKE.";
+  // A mensagem do servidor é mais útil que qualquer frase genérica: ela diz
+  // se foi token, crédito, tempo, ou um erro de rota. Só quando não vem
+  // mensagem nenhuma é que cabe a frase de sempre.
+  const msg = String((erro && erro.message) || "").trim();
+  return msg || "A IA não respondeu agora.";
 }
 
 // ── As unidades que a empresa já usa ────────────────────────────
@@ -2031,7 +2034,10 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     <textarea style={{ ...E.input, minHeight: 200, resize: "vertical", fontFamily: "inherit" }}
                       value={colando.texto} autoFocus
                       onChange={(e) => setColando(c => ({ ...c, texto: e.target.value }))}
-                      placeholder={"Bom dia Renato\npreciso do material pra semana:\n10 sacos de cimento\n- 30 tabuas de 30cm x 3mts\n1/2 m3 de areia fina\n2 latas de massa corrida\nobrigado"} />
+                      // O exemplo de mensagem que ficava aqui parecia texto
+                      // já colado: dava para clicar em "Ler o pedido" achando
+                      // que tinha conteúdo, e o campo estava vazio.
+                      placeholder="Cole aqui a mensagem do pedreiro" />
                     {iaDisponivel && (
                       <CampoPedidoAnexo arquivo={colando.arquivo}
                         aoEscolher={(f) => setColando(c => c && ({ ...c, arquivo: f }))} />
@@ -2226,7 +2232,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       }
     }
     if (!ehPdf) {
-      setErro(aviso || "Não consegui ler a foto. Ela fica anexada; os preços vão a mão.");
+      setErro((aviso ? aviso + " " : "") + "A foto não foi lida — só a IA lê foto. Ela fica anexada, e os preços vão a mão.");
       setLendoPdf(false);
       return;
     }
@@ -2250,7 +2256,8 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         const i = linha ? orcamento.itens.indexOf(linha) : -1;
         escolhas[item.id] = { i, preco: linha ? precoDaLinha(linha, quantidadeDoItem(item)) : 0 };
       }
-      setOrcamentoLido({ orcamento, casamento, escolhas, nome: arquivo.name || "", leitor: "regras", aviso });
+      setOrcamentoLido({ orcamento, casamento, escolhas, nome: arquivo.name || "", leitor: "regras",
+        aviso: aviso ? aviso + " Li o PDF com o leitor do VICKE." : "" });
     } catch (e) {
       setErro(e && e.message ? e.message : "Não consegui ler esse PDF.");
     }
@@ -2325,12 +2332,15 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         }
       }
     }
+    // Sem texto não há para onde cair: o leitor por regras lê texto, não
+    // arquivo. Dizer "usei o leitor do VICKE" aqui seria mentira.
     if (!String(atual.texto || "").trim()) {
-      fechar({ aviso: aviso || "Arquivo só a IA lê. Sem ela, cole o texto do pedido aqui." });
+      fechar({ aviso: (aviso ? aviso + " " : "") + "O arquivo não foi lido — só a IA lê arquivo. Cole o texto do pedido, ou tente de novo em instantes." });
       return;
     }
     const cru = interpretarPedido(atual.texto, insumos);
-    fechar({ leitor: "regras", aviso, resumo: resumoDaLeitura(cru), lidos: promoverCandidatos(cru) });
+    fechar({ leitor: "regras", aviso: aviso ? aviso + " Li o texto colado com o leitor do VICKE." : "",
+      resumo: resumoDaLeitura(cru), lidos: promoverCandidatos(cru) });
   }
 
   function salvarProposta() {
