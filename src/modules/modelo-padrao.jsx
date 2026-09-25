@@ -812,6 +812,12 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
         }
       } catch (errPdf) {
         console.warn("Não foi possível guardar o PDF da proposta:", errPdf);
+        // Falha silenciosa aqui custa caro: a proposta salva parecendo certa e
+        // só semanas depois se descobre que o arquivo não está guardado. O
+        // aviso diz o motivo e não interrompe o fluxo.
+        if (typeof toast !== "undefined" && toast.erro) {
+          toast.erro("Proposta salva, mas o PDF não foi guardado: " + ((errPdf && errPdf.message) || "falha no envio"));
+        }
       }
 
       // 4. Só se o arquivo NÃO subiu é que as páginas viram imagem: sem
