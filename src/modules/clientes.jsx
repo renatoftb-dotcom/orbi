@@ -1133,6 +1133,7 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
   const orcamentos = (data.orcamentosProjeto || []).filter(o => o.clienteId === cliente.id);
   const [vendo, setVendo] = useState(null);
   const [ganhando, setGanhando] = useState(null);
+  const [ganhoVersao, setGanhoVersao] = useState(null);
   const perm = typeof getPermissoes === "function" ? getPermissoes() : { podeEditar: true, podeExcluir: true };
   const statusOrc = {
     rascunho: { label: "Rascunho", cor: "#9ca3af" },
@@ -1165,6 +1166,7 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
   // Ganho, perdido e excluir: as mesmas ações da lista de Orçamentos, aqui
   // na linha do projeto. Quem acompanha um cliente decide o desfecho olhando
   // para ele, e ter que ir até o outro módulo para isso é caminho a mais.
+  const iVerSeguro = (lista, i) => (i >= 0 && i < lista.length ? i : lista.length - 1);
   const gravar = (novos, extra) => save({ ...data, orcamentosProjeto: novos, ...(extra || {}) }).catch(console.error);
 
   async function marcarPerdido(orc) {
@@ -1201,6 +1203,13 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
     const orc = ganhando;
     if (!orc) return;
     const agora = new Date().toISOString();
+    // Fica só a versão que o cliente aceitou; o PDF das outras sai do storage.
+    const props = orc.propostas || [];
+    const iVer = typeof ganhoVersao === "number" && props[iVerSeguro(props, ganhoVersao)] ? iVerSeguro(props, ganhoVersao) : props.length - 1;
+    const fechada = props[iVer] || null;
+    if (typeof esquecerArquivoDaProposta === "function") {
+      props.forEach((p, i) => { if (i !== iVer) esquecerArquivoDaProposta(p); });
+    }
     const projetos = data.projetos || [];
     const novosProjetos = projetos.some(p => p.orcId === orc.id) ? projetos : [...projetos, {
       id: "PRJ-" + Date.now(), orcId: orc.id, clienteId: orc.clienteId,
@@ -1210,7 +1219,8 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
     }];
     const novos = (data.orcamentosProjeto || []).map(o => o.id === orc.id ? {
       ...o, status: "ganho", concluidoEm: o.concluidoEm || agora, ganhoEm: o.ganhoEm || agora,
-      fechamento: { ...fechamento, fechadoEm: agora },
+      ...(fechada ? { propostas: [fechada], ultimaPropostaEm: fechada.enviadaEm || o.ultimaPropostaEm } : {}),
+      fechamento: { ...fechamento, versaoFechada: fechada ? (fechada.versao || `v${iVer + 1}`) : "", fechadoEm: agora },
     } : o);
     setGanhando(null);
     if (typeof toast !== "undefined" && toast.sucesso) toast.sucesso("Orçamento marcado como ganho");
@@ -1281,7 +1291,7 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
                   </div>
                   <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 5 }}>
                     {perm.podeEditar && orc.status !== "ganho" && (
-                      <button onClick={(e) => { e.stopPropagation(); setGanhando(orc); }} style={acao()}>Ganho</button>
+                      <button onClick={(e) => { e.stopPropagation(); setGanhoVersao((orc.propostas || []).length - 1); setGanhando(orc); }} style={acao()}>Ganho</button>
                     )}
                     {perm.podeEditar && (
                       <button onClick={(e) => { e.stopPropagation(); marcarPerdido(orc); }} style={acao()}>
@@ -1305,7 +1315,13 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
       {/* O mesmo visualizador da lista de Orçamentos: as páginas como foram
           enviadas, com o botão de baixar o PDF. */}
       {ganhando && typeof ModalConfirmarGanho === "function" && (
-        <ModalConfirmarGanho orc={ganhando} onClose={() => setGanhando(null)} onConfirmar={confirmarGanho} />
+        <ModalConfirmarGanho
+          key={`ganho-${ganhando.id}-${ganhoVersao}`}
+          orc={ganhando}
+          indiceVersao={ganhoVersao}
+          aoTrocarVersao={setGanhoVersao}
+          onClose={() => setGanhando(null)}
+          onConfirmar={confirmarGanho} />
       )}
 
       {vendo && typeof PropostaVisualizer === "function" && (

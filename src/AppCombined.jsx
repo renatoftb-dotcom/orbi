@@ -24738,6 +24738,7 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
   const orcamentos = (data.orcamentosProjeto || []).filter(o => o.clienteId === cliente.id);
   const [vendo, setVendo] = useState(null);
   const [ganhando, setGanhando] = useState(null);
+  const [ganhoVersao, setGanhoVersao] = useState(null);
   const perm = typeof getPermissoes === "function" ? getPermissoes() : { podeEditar: true, podeExcluir: true };
   const statusOrc = {
     rascunho: { label: "Rascunho", cor: "#9ca3af" },
@@ -24770,6 +24771,7 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
   // Ganho, perdido e excluir: as mesmas ações da lista de Orçamentos, aqui
   // na linha do projeto. Quem acompanha um cliente decide o desfecho olhando
   // para ele, e ter que ir até o outro módulo para isso é caminho a mais.
+  const iVerSeguro = (lista, i) => (i >= 0 && i < lista.length ? i : lista.length - 1);
   const gravar = (novos, extra) => save({ ...data, orcamentosProjeto: novos, ...(extra || {}) }).catch(console.error);
 
   async function marcarPerdido(orc) {
@@ -24806,6 +24808,13 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
     const orc = ganhando;
     if (!orc) return;
     const agora = new Date().toISOString();
+    // Fica só a versão que o cliente aceitou; o PDF das outras sai do storage.
+    const props = orc.propostas || [];
+    const iVer = typeof ganhoVersao === "number" && props[iVerSeguro(props, ganhoVersao)] ? iVerSeguro(props, ganhoVersao) : props.length - 1;
+    const fechada = props[iVer] || null;
+    if (typeof esquecerArquivoDaProposta === "function") {
+      props.forEach((p, i) => { if (i !== iVer) esquecerArquivoDaProposta(p); });
+    }
     const projetos = data.projetos || [];
     const novosProjetos = projetos.some(p => p.orcId === orc.id) ? projetos : [...projetos, {
       id: "PRJ-" + Date.now(), orcId: orc.id, clienteId: orc.clienteId,
@@ -24815,7 +24824,8 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
     }];
     const novos = (data.orcamentosProjeto || []).map(o => o.id === orc.id ? {
       ...o, status: "ganho", concluidoEm: o.concluidoEm || agora, ganhoEm: o.ganhoEm || agora,
-      fechamento: { ...fechamento, fechadoEm: agora },
+      ...(fechada ? { propostas: [fechada], ultimaPropostaEm: fechada.enviadaEm || o.ultimaPropostaEm } : {}),
+      fechamento: { ...fechamento, versaoFechada: fechada ? (fechada.versao || `v${iVer + 1}`) : "", fechadoEm: agora },
     } : o);
     setGanhando(null);
     if (typeof toast !== "undefined" && toast.sucesso) toast.sucesso("Orçamento marcado como ganho");
@@ -24886,7 +24896,7 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
                   </div>
                   <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 5 }}>
                     {perm.podeEditar && orc.status !== "ganho" && (
-                      <button onClick={(e) => { e.stopPropagation(); setGanhando(orc); }} style={acao()}>Ganho</button>
+                      <button onClick={(e) => { e.stopPropagation(); setGanhoVersao((orc.propostas || []).length - 1); setGanhando(orc); }} style={acao()}>Ganho</button>
                     )}
                     {perm.podeEditar && (
                       <button onClick={(e) => { e.stopPropagation(); marcarPerdido(orc); }} style={acao()}>
@@ -24910,7 +24920,13 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
       {/* O mesmo visualizador da lista de Orçamentos: as páginas como foram
           enviadas, com o botão de baixar o PDF. */}
       {ganhando && typeof ModalConfirmarGanho === "function" && (
-        <ModalConfirmarGanho orc={ganhando} onClose={() => setGanhando(null)} onConfirmar={confirmarGanho} />
+        <ModalConfirmarGanho
+          key={`ganho-${ganhando.id}-${ganhoVersao}`}
+          orc={ganhando}
+          indiceVersao={ganhoVersao}
+          aoTrocarVersao={setGanhoVersao}
+          onClose={() => setGanhando(null)}
+          onConfirmar={confirmarGanho} />
       )}
 
       {vendo && typeof PropostaVisualizer === "function" && (
@@ -33510,6 +33526,8 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   const [propostaVisualizada, setPropostaVisualizada] = useState(null);
   // Orçamento selecionado para marcar como ganho (abre ModalConfirmarGanho)
   const [orcGanho, setOrcGanho] = useState(null);
+  // Índice da versão que foi fechada, escolhida dentro do modal de ganho.
+  const [ganhoVersao, setGanhoVersao] = useState(null);
   // Seleção em massa (tabela): Set de ids + modal de confirmação + modo ativável
   const [modoSelecao, setModoSelecao] = useState(false);
   const [selecionados, setSelecionados] = useState(new Set());
@@ -33575,6 +33593,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
     if (acao === "ganho") {
       if (orc.status === "ganho") return; // já ganho
       // Abre modal de confirmação com escopo, valores e condição de pagamento
+      setGanhoVersao((orc.propostas || []).length - 1);
       setOrcGanho(orc);
       return;
     }
@@ -33645,6 +33664,14 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       },
     ];
 
+    // A versão fechada é a que fica. As outras eram propostas de negociação;
+    // depois do aceite, guardar todas só confunde quem abre o projeto — e o
+    // PDF delas sai do storage junto.
+    const props = orc.propostas || [];
+    const iVer = typeof ganhoVersao === "number" && props[ganhoVersao] ? ganhoVersao : props.length - 1;
+    const fechada = props[iVer] || null;
+    props.forEach((p, i) => { if (i !== iVer) esquecerArquivoDaProposta(p); });
+
     // Atualiza o orçamento: status ganho + fechamento
     const novosOrc = todos.map(o =>
       o.id === orc.id
@@ -33653,8 +33680,10 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
             status: "ganho",
             concluidoEm: o.concluidoEm || agora,
             ganhoEm: o.ganhoEm || agora,
+            ...(fechada ? { propostas: [fechada], ultimaPropostaEm: fechada.enviadaEm || o.ultimaPropostaEm } : {}),
             fechamento: {
               ...ganhoData,
+              versaoFechada: fechada ? (fechada.versao || `v${iVer + 1}`) : "",
               fechadoEm: agora,
             },
           }
@@ -34152,7 +34181,10 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       {/* Modal de confirmação de ganho */}
       {orcGanho && (
         <ModalConfirmarGanho
+          key={`ganho-${orcGanho.id}-${ganhoVersao}`}
           orc={orcGanho}
+          indiceVersao={ganhoVersao}
+          aoTrocarVersao={setGanhoVersao}
           onClose={() => setOrcGanho(null)}
           onConfirmar={confirmarGanho}
         />
@@ -35906,12 +35938,16 @@ function InputQtdParcelas({ qtd, onCommit, style }) {
   );
 }
 
-function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
+function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocarVersao }) {
   // ── Valores base do orçamento (com/sem imposto conforme orçamento) ──
-  // Prioridade: snapshot da última proposta > campos raiz
-  const ultPropImp = orc.propostas && orc.propostas.length > 0
-    ? orc.propostas[orc.propostas.length - 1]
-    : null;
+  // Prioridade: snapshot da proposta FECHADA > campos raiz. Com mais de uma
+  // versão enviada, quem fecha é uma delas — e os valores do fechamento têm
+  // que sair da versão certa, não sempre da última.
+  const propostas = orc.propostas || [];
+  const iProp = typeof indiceVersao === "number" && propostas[indiceVersao]
+    ? indiceVersao
+    : propostas.length - 1;
+  const ultPropImp = propostas.length > 0 ? propostas[iProp] : null;
 
   // ── Detecta tipo do orçamento ──
   // Prioridade: snapshot da proposta enviada > campos raiz > default
@@ -36462,6 +36498,40 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
 
         {/* Body */}
         <div style={{ padding:"18px 24px" }}>
+
+          {/* Seção 0: qual proposta o cliente aceitou. Só aparece quando há
+              mais de uma versão enviada — com uma só, não há o que escolher. */}
+          {propostas.length > 1 && (
+            <div style={{ marginBottom:22 }}>
+              <div style={SECTION_TITLE}>Qual proposta foi fechada</div>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                {propostas.map((p, i) => {
+                  const atual = i === iProp;
+                  const valor = p.valorTotalExibido != null
+                    ? p.valorTotalExibido
+                    : ((p.arqEdit != null ? p.arqEdit : (p.calculo?.precoArq || 0)) + (p.engEdit != null ? p.engEdit : (p.calculo?.precoEng || 0)));
+                  return (
+                    <button key={i} type="button" onClick={() => aoTrocarVersao && aoTrocarVersao(i)}
+                      style={{ flex:"1 1 160px", textAlign:"left", cursor: atual ? "default" : "pointer",
+                        background: atual ? "#f0f7ff" : "#fff", fontFamily:"inherit",
+                        border: `1px solid ${atual ? "rgba(4,116,244,0.45)" : "#e5e7eb"}`,
+                        borderRadius: 10, padding:"10px 12px" }}>
+                      <div style={{ fontSize:13, fontWeight: atual ? 700 : 600, color:"#111827" }}>
+                        Proposta {p.versao || `v${i + 1}`}
+                      </div>
+                      <div style={{ fontSize:11.5, color:"#6b7280", marginTop:2 }}>
+                        {valor > 0 ? "R$ " + valor.toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 }) : "—"}
+                        {p.enviadaEm ? " · " + new Date(p.enviadaEm).toLocaleDateString("pt-BR") : ""}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize:11, color:"#9ca3af", marginTop:6 }}>
+                As outras versões saem do projeto ao confirmar — vale a que o cliente aceitou.
+              </div>
+            </div>
+          )}
 
           {/* Seção 1: Escopo */}
           <div style={{ marginBottom:22 }}>
