@@ -3960,6 +3960,30 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
 
   const arquivoPdf = proposta.pdfArquivo && proposta.pdfArquivo.url ? proposta.pdfArquivo : null;
 
+  // O PDF guardado é mostrado aqui mesmo. O storage entrega o arquivo sem
+  // dizer que é PDF (limitação da conta, a mesma das propostas de loja),
+  // então ele é buscado e reembalado antes de ir para o quadro — senão o
+  // navegador oferece baixar em vez de mostrar.
+  const [pdfNaTela, setPdfNaTela] = useState(arquivoPdf ? { estado: "carregando" } : null);
+  useEffect(() => {
+    if (!arquivoPdf) { setPdfNaTela(null); return; }
+    let vivo = true, criada = "";
+    setPdfNaTela({ estado: "carregando" });
+    (async () => {
+      try {
+        const r = await fetch(arquivoPdf.url);
+        if (!r.ok) throw new Error(`O storage respondeu ${r.status}`);
+        const bruto = await r.blob();
+        if (!vivo) return;
+        criada = URL.createObjectURL(new Blob([bruto], { type: "application/pdf" }));
+        setPdfNaTela({ estado: "pronto", url: criada });
+      } catch (e) {
+        if (vivo) setPdfNaTela({ estado: "erro", motivo: (e && e.message) || "não consegui buscar o arquivo" });
+      }
+    })();
+    return () => { vivo = false; if (criada) URL.revokeObjectURL(criada); };
+  }, [arquivoPdf && arquivoPdf.url]);
+
   // Baixa o PDF guardado — o mesmo arquivo que o cliente recebeu. O storage
   // entrega o PDF sem o cabeçalho de PDF (é a mesma limitação da conta que
   // afeta as propostas de loja), então o arquivo é reembalado aqui antes de
@@ -4106,7 +4130,26 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
         flex:1, overflowY:"auto", padding:"24px 20px",
         display:"flex", flexDirection:"column", alignItems:"center", gap:16,
       }}>
-        {temImagens ? (
+        {arquivoPdf ? (
+          pdfNaTela && pdfNaTela.estado === "pronto" ? (
+            <iframe title={`Proposta ${proposta.versao || ""}`} src={pdfNaTela.url}
+              style={{ width: "min(900px, 100%)", flex: 1, minHeight: 420, border: "none", borderRadius: 4,
+                background: "#fff", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }} />
+          ) : (
+            <div style={{ background:"#fff", borderRadius: 14, padding:"32px 28px", maxWidth: 480, textAlign:"center" }}>
+              {pdfNaTela && pdfNaTela.estado === "erro" ? (
+                <>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#991b1b", marginBottom: 8 }}>Não consegui abrir o PDF agora</div>
+                  <div style={{ fontSize: 12.5, color: "#6b7280", lineHeight: 1.55 }}>
+                    {pdfNaTela.motivo}. O arquivo continua guardado — tente de novo em instantes, ou use o "⬇ Baixar PDF" aqui em cima.
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 13, color: "#6b7280" }}>Abrindo a proposta…</div>
+              )}
+            </div>
+          )
+        ) : temImagens ? (
           imagens.map((src, i) => (
             <img
               key={i}

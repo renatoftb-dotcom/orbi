@@ -784,26 +784,11 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
       // 2. Gera o PDF como blob (sem baixar)
       const blob = await handlePdf({ returnBlob: true });
 
-      // 3. Rasteriza as páginas em imagens JPEG base64 (1200px, 70% qualidade)
-      //    Rasterizar ANTES de baixar pra garantir fidelidade ao que vai ser salvo
-      let imagens = [];
-      try {
-        if (blob && typeof rasterizarPdfParaImagens === "function") {
-          imagens = await rasterizarPdfParaImagens(blob, { maxWidth: 1000, quality: 0.6 });
-        }
-      } catch (errImg) {
-        console.warn("Não foi possível gerar snapshot de imagens do PDF:", errImg);
-        // Continua mesmo sem imagens — proposta salva sem snapshot visual
-      }
-
-      // 4. Adiciona imagens ao snapshot
-      snapshot.imagensPdf = imagens;
-
-      // 4b. Guarda o PDF de verdade. As imagens servem para mostrar na tela
-      //     rápido; o arquivo é o que o cliente recebeu, e é ele que deve
-      //     voltar quando alguém baixar a proposta meses depois. Se o
-      //     upload falhar, a proposta salva do mesmo jeito — o download
-      //     volta a ser remontado das imagens.
+      // 3. Guarda o PDF. É ele que o cliente recebeu: texto de verdade,
+      //    tamanho pequeno, e é o que volta quando alguém baixar a proposta
+      //    daqui a um ano. As páginas em imagem, que era como se guardava
+      //    antes, pesavam meio mega dentro do registro do orçamento — e o
+      //    app carrega todos os orçamentos de uma vez.
       snapshot.pdfArquivo = null;
       try {
         if (blob && typeof api !== "undefined" && api.uploads && api.uploads.send) {
@@ -820,6 +805,21 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
       } catch (errPdf) {
         console.warn("Não foi possível guardar o PDF da proposta:", errPdf);
       }
+
+      // 4. Só se o arquivo NÃO subiu é que as páginas viram imagem: sem
+      //    nenhum dos dois, a proposta salva ficaria sem registro visual do
+      //    que foi enviado.
+      let imagens = [];
+      if (!snapshot.pdfArquivo) {
+        try {
+          if (blob && typeof rasterizarPdfParaImagens === "function") {
+            imagens = await rasterizarPdfParaImagens(blob, { maxWidth: 1000, quality: 0.6 });
+          }
+        } catch (errImg) {
+          console.warn("Não foi possível gerar snapshot de imagens do PDF:", errImg);
+        }
+      }
+      snapshot.imagensPdf = imagens;
 
       // 5. Persiste no orçamento
       const propostaSalva = await onSalvarProposta(snapshot);
