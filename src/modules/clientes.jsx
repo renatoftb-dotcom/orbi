@@ -464,6 +464,10 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       const atualizado = data.clientes.find(c => c.id === abrirClienteDetail.id) || abrirClienteDetail;
       setSel(atualizado);
       setView("detail");
+      // Quem volta do orçamento veio da aba Projetos — é lá que o projeto
+      // recém-gerado aparece, com a proposta. Cair no Cadastro obrigava a
+      // procurar o caminho de novo.
+      setAbaCliente("projetos");
       if (onClienteDetailAberto) onClienteDetailAberto();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

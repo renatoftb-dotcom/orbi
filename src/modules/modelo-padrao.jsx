@@ -165,7 +165,7 @@ function PropostaPreview(props) {
   );
 }
 
-function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaReadOnly, propostaSnapshot, lockEdicao, templateId }) {
+function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, propostaReadOnly, propostaSnapshot, lockEdicao, templateId }) {
   // NOTA: NÃO fazer `if (!data) return null` aqui — os hooks abaixo precisam ser
   // chamados em todo render (regra do React). Em vez disso, usamos optional chaining
   // e defaults em cada acesso a `data.xxx` e retornamos null só DEPOIS dos hooks.
@@ -182,6 +182,14 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   // Estado do modal de confirmação de salvar + aviso de proposta salva
   const [confirmSalvar, setConfirmSalvar] = useState(false);
   const [propostaInfo, setPropostaInfo] = useState(propostaReadOnly || null);
+
+  // Com a proposta já salva, a pessoa terminou: "Voltar" a leva para os
+  // projetos do cliente, com a proposta lá. Enquanto ela ainda está montando
+  // a proposta, "Voltar" continua sendo um passo atrás no caminho — forma de
+  // pagamento, textos, preview.
+  const jaEnviada = !!(propostaInfo || lockEdicao);
+  const voltar = () => { if (jaEnviada && onSair) onSair(); else onVoltar(); };
+  const rotuloVoltar = jaEnviada && onSair ? "← Voltar aos projetos" : "← Voltar";
 
   // Estados locais (antes eram props read-only) — editáveis inline.
   // Override (Fase 6d.1): data.template.formaPagamento.tipoPgto vence quando preenchido.
@@ -1418,8 +1426,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             - Em edição sem onSalvarProposta → "Gerar PDF" (chama handlePdf direto)
             Largura limitada a maxWidth:860 e centralizado (mesmo eixo do header). */}
         <div className="no-print" style={{ maxWidth:860, margin:"16px auto 12px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
-          <button onClick={onVoltar} style={{ background:"none", border:"2px solid #d1d5db", borderRadius: 12, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:"#6b7280" }}>
-            ← Voltar
+          <button onClick={voltar} style={{ background:"none", border:"2px solid #d1d5db", borderRadius: 12, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:"#6b7280" }}>
+            {rotuloVoltar}
           </button>
           {(propostaInfo || lockEdicao) ? (
             <button data-tutorial-id="botao-gerar-pdf" onClick={handlePdf} style={{ background:"#111", border:"none", borderRadius: 12, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
@@ -2017,8 +2025,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         )}
 
         <div className="no-print" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:36 }}>
-          <button onClick={onVoltar} style={{ background:"none", border:`1px solid ${LN}`, borderRadius: 12, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:MD }}>
-            ← Voltar
+          <button onClick={voltar} style={{ background:"none", border:`1px solid ${LN}`, borderRadius: 12, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:MD }}>
+            {rotuloVoltar}
           </button>
           {(propostaInfo || lockEdicao) ? (
             <button data-tutorial-id="botao-gerar-pdf" onClick={handlePdf} style={{ background:C, border:"none", borderRadius: 12, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>

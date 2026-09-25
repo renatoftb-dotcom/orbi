@@ -8256,6 +8256,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         setTemplateEdicaoConfirmada(false);
         setPropostaData(null);
       }}
+      onSair={onVoltar}
       onSalvarProposta={handleSalvarPropostaSnapshot}
       propostaReadOnly={propostaAbertaReadOnly}
       propostaSnapshot={ultimaProposta}
