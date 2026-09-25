@@ -24825,7 +24825,9 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
     const novos = (data.orcamentosProjeto || []).map(o => o.id === orc.id ? {
       ...o, status: "ganho", concluidoEm: o.concluidoEm || agora, ganhoEm: o.ganhoEm || agora,
       ...(fechada ? { propostas: [fechada], ultimaPropostaEm: fechada.enviadaEm || o.ultimaPropostaEm } : {}),
-      fechamento: { ...fechamento, versaoFechada: fechada ? (fechada.versao || `v${iVer + 1}`) : "", fechadoEm: agora },
+      fechamento: { ...fechamento,
+        versaoFechada: fechada ? (typeof rotuloDaVersao === "function" ? rotuloDaVersao(props, iVer) : fechada.versao) : "",
+        fechadoEm: agora },
     } : o);
     setGanhando(null);
     if (typeof toast !== "undefined" && toast.sucesso) toast.sucesso("Orçamento marcado como ganho");
@@ -24864,7 +24866,7 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
             const detalhes = [
               orc.referencia && orc.referencia !== "(sem referência)" ? orc.referencia : "",
               orc.padrao ? `Padrão: ${orc.padrao}` : "",
-              prop ? `Proposta ${prop.versao || "v1"}${dataCurta(orc.ultimaPropostaEm || prop.enviadaEm) ? " de " + dataCurta(orc.ultimaPropostaEm || prop.enviadaEm) : ""}` : "Sem proposta enviada",
+              prop ? `Proposta ${typeof rotuloDaVersao === "function" ? rotuloDaVersao(orc.propostas || [], (orc.propostas || []).length - 1) : (prop.versao || "v1")}${dataCurta(orc.ultimaPropostaEm || prop.enviadaEm) ? " de " + dataCurta(orc.ultimaPropostaEm || prop.enviadaEm) : ""}` : "Sem proposta enviada",
             ].filter(Boolean);
             return (
               <div
@@ -33683,7 +33685,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
             ...(fechada ? { propostas: [fechada], ultimaPropostaEm: fechada.enviadaEm || o.ultimaPropostaEm } : {}),
             fechamento: {
               ...ganhoData,
-              versaoFechada: fechada ? (fechada.versao || `v${iVer + 1}`) : "",
+              versaoFechada: fechada ? rotuloDaVersao(props, iVer) : "",
               fechadoEm: agora,
             },
           }
@@ -36517,7 +36519,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
                         border: `1px solid ${atual ? "rgba(4,116,244,0.45)" : "#e5e7eb"}`,
                         borderRadius: 10, padding:"10px 12px" }}>
                       <div style={{ fontSize:13, fontWeight: atual ? 700 : 600, color:"#111827" }}>
-                        Proposta {p.versao || `v${i + 1}`}
+                        Proposta {rotuloDaVersao(propostas, i)}
                       </div>
                       <div style={{ fontSize:11.5, color:"#6b7280", marginTop:2 }}>
                         {valor > 0 ? "R$ " + valor.toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 }) : "—"}
@@ -37425,6 +37427,28 @@ function OpcoesPagamento({ tipo, valor, desc, parcelas, fmtV }) {
 // Tira uma versão da proposta do orçamento. Os rótulos das outras NÃO são
 // renumerados: a v2 continua sendo a v2 mesmo que a v1 saia — é assim que o
 // cliente recebeu, e renumerar faria a conversa com ele deixar de bater.
+// O número da próxima proposta sai do MAIOR já usado, não da contagem: com
+// a contagem, apagar a v1 fazia a próxima nascer "v2" de novo — foi o que
+// deixou duas propostas com o mesmo nome. Contando pelo maior, a sequência
+// nunca reaproveita um número que o cliente já viu.
+function proximaVersaoProposta(propostas) {
+  const maior = (propostas || []).reduce((mx, p) => {
+    const m = /^v(\d+)$/i.exec(String((p && p.versao) || ""));
+    return m ? Math.max(mx, parseInt(m[1], 10)) : mx;
+  }, 0);
+  return "v" + (maior + 1);
+}
+
+// Rótulo que a tela mostra. Se o registro veio com nomes repetidos (as
+// propostas salvas antes do conserto acima), a posição desempata — duas
+// "v2" lado a lado não dizem nada a quem precisa escolher.
+function rotuloDaVersao(propostas, i) {
+  const lista = propostas || [];
+  const v = String((lista[i] || {}).versao || "");
+  const repetido = !v || lista.filter((x) => String((x || {}).versao || "") === v).length > 1;
+  return repetido ? `v${i + 1}` : v;
+}
+
 function orcSemVersao(orc, indice) {
   const props = ((orc || {}).propostas || []).filter((_, i) => i !== indice);
   const ultima = props[props.length - 1] || null;
@@ -37464,6 +37488,10 @@ function PropostaVisualizer({ proposta, onFechar, onEditar, versoes, aoTrocarVer
   }, []);
 
   if (!proposta) return null;
+  const listaVersoes = Array.isArray(versoes) ? versoes : [];
+  const iAtual = listaVersoes.findIndex((v) => v === proposta
+    || (v && v.enviadaEm === proposta.enviadaEm && v.versao === proposta.versao));
+  const rotuloAtual = iAtual >= 0 ? rotuloDaVersao(listaVersoes, iAtual) : (proposta.versao || "v1");
   const imagens = proposta.imagensPdf || [];
   const temImagens = imagens.length > 0;
   const dataFmt = proposta.enviadaEm
@@ -37582,14 +37610,14 @@ function PropostaVisualizer({ proposta, onFechar, onEditar, versoes, aoTrocarVer
         color:"#fff", flexShrink:0,
       }}>
         <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-          <div style={{ fontSize:14, fontWeight:600 }}>📄 Proposta {proposta.versao}</div>
+          <div style={{ fontSize:14, fontWeight:600 }}>📄 Proposta {rotuloAtual}</div>
           {/* Cada versão continua guardada como foi enviada. A v2 não apaga
               a v1: quando há mais de uma, elas ficam aqui, lado a lado, e
               trocar é um clique. */}
           {Array.isArray(versoes) && versoes.length > 1 && (
             <div style={{ display:"flex", alignItems:"center", gap:6 }}>
               {versoes.map((v, i) => {
-                const atual = (v.versao || `v${i + 1}`) === proposta.versao;
+                const atual = i === iAtual;
                 return (
                   <button key={i} type="button" onClick={() => aoTrocarVersao && aoTrocarVersao(i)}
                     title={v.enviadaEm ? `enviada em ${new Date(v.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}` : ""}
@@ -37598,7 +37626,7 @@ function PropostaVisualizer({ proposta, onFechar, onEditar, versoes, aoTrocarVer
                       border: "1px solid rgba(255,255,255,0.25)", borderRadius: 6,
                       padding: "3px 9px", fontSize: 12, fontWeight: atual ? 700 : 500,
                       cursor: atual ? "default" : "pointer", fontFamily: "inherit" }}>
-                    {v.versao || `v${i + 1}`}
+                    {rotuloDaVersao(listaVersoes, i)}
                   </button>
                 );
               })}
@@ -37617,7 +37645,7 @@ function PropostaVisualizer({ proposta, onFechar, onEditar, versoes, aoTrocarVer
             <button
               onClick={async () => {
                 const ok = await dialogo.confirmar({
-                  titulo: `Excluir a proposta ${proposta.versao || ""}?`,
+                  titulo: `Excluir a proposta ${rotuloAtual}?`,
                   mensagem: "Some o registro do que foi enviado nessa versão, junto com o PDF. Esta ação não pode ser desfeita.",
                   confirmar: "Excluir versão", destrutivo: true,
                 });
@@ -41519,7 +41547,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       // Orçamento base pode ser null se é um novo orçamento — usa propostaData como fallback
       const base = orcBase || propostaData;
       const propostasAtuais = base.propostas || [];
-      const nextVersao = "v" + (propostasAtuais.length + 1);
+      const nextVersao = proximaVersaoProposta(propostasAtuais);
       const novaProposta = { ...snapshot, versao: nextVersao };
       // Se ainda é rascunho, promove automaticamente pra "aberto" ao enviar primeira proposta
       const novoStatus = (!base.status || base.status === "rascunho") ? "aberto" : base.status;

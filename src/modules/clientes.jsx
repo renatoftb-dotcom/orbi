@@ -1220,7 +1220,9 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
     const novos = (data.orcamentosProjeto || []).map(o => o.id === orc.id ? {
       ...o, status: "ganho", concluidoEm: o.concluidoEm || agora, ganhoEm: o.ganhoEm || agora,
       ...(fechada ? { propostas: [fechada], ultimaPropostaEm: fechada.enviadaEm || o.ultimaPropostaEm } : {}),
-      fechamento: { ...fechamento, versaoFechada: fechada ? (fechada.versao || `v${iVer + 1}`) : "", fechadoEm: agora },
+      fechamento: { ...fechamento,
+        versaoFechada: fechada ? (typeof rotuloDaVersao === "function" ? rotuloDaVersao(props, iVer) : fechada.versao) : "",
+        fechadoEm: agora },
     } : o);
     setGanhando(null);
     if (typeof toast !== "undefined" && toast.sucesso) toast.sucesso("Orçamento marcado como ganho");
@@ -1259,7 +1261,7 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
             const detalhes = [
               orc.referencia && orc.referencia !== "(sem referência)" ? orc.referencia : "",
               orc.padrao ? `Padrão: ${orc.padrao}` : "",
-              prop ? `Proposta ${prop.versao || "v1"}${dataCurta(orc.ultimaPropostaEm || prop.enviadaEm) ? " de " + dataCurta(orc.ultimaPropostaEm || prop.enviadaEm) : ""}` : "Sem proposta enviada",
+              prop ? `Proposta ${typeof rotuloDaVersao === "function" ? rotuloDaVersao(orc.propostas || [], (orc.propostas || []).length - 1) : (prop.versao || "v1")}${dataCurta(orc.ultimaPropostaEm || prop.enviadaEm) ? " de " + dataCurta(orc.ultimaPropostaEm || prop.enviadaEm) : ""}` : "Sem proposta enviada",
             ].filter(Boolean);
             return (
               <div

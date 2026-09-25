@@ -1815,12 +1815,33 @@ teste("na conferência: embalagem diferente fica sem preço, e o repetido do ped
 });
 
 // ── Versões da proposta de projeto ──────────────────────────────
-const orcSemVersao = (() => {
+const { orcSemVersao, proximaVersaoProposta, rotuloDaVersao } = (() => {
   const src = mod("orcamento-teste.jsx");
-  const i = src.indexOf("function orcSemVersao");
-  const fim = src.indexOf("\n}", i) + 2;
-  return new Function(src.slice(i, fim) + "; return orcSemVersao;")();
+  const recorta = (nome) => {
+    const i = src.indexOf("function " + nome);
+    return src.slice(i, src.indexOf("\n}", i) + 2);
+  };
+  return new Function(recorta("orcSemVersao") + recorta("proximaVersaoProposta") + recorta("rotuloDaVersao")
+    + "; return { orcSemVersao, proximaVersaoProposta, rotuloDaVersao };")();
 })();
+
+teste("a próxima versão conta pelo maior já usado, não pela quantidade", () => {
+  assert.strictEqual(proximaVersaoProposta([]), "v1");
+  assert.strictEqual(proximaVersaoProposta([{ versao: "v1" }]), "v2");
+  assert.strictEqual(proximaVersaoProposta([{ versao: "v2" }]), "v3", "apagar a v1 não recicla o número");
+  assert.strictEqual(proximaVersaoProposta([{ versao: "v1" }, { versao: "v7" }]), "v8");
+  assert.strictEqual(proximaVersaoProposta([{ versao: "" }, { versao: "rascunho" }]), "v1");
+});
+
+teste("rótulo repetido é desempatado pela posição", () => {
+  const boas = [{ versao: "v1" }, { versao: "v2" }];
+  assert.strictEqual(rotuloDaVersao(boas, 0), "v1");
+  assert.strictEqual(rotuloDaVersao(boas, 1), "v2");
+  const repetidas = [{ versao: "v2" }, { versao: "v2" }];
+  assert.strictEqual(rotuloDaVersao(repetidas, 0), "v1");
+  assert.strictEqual(rotuloDaVersao(repetidas, 1), "v2");
+  assert.strictEqual(rotuloDaVersao([{}], 0), "v1", "sem nome nenhum, vale a posição");
+});
 
 teste("excluir uma versão tira só ela, e os rótulos das outras não mudam", () => {
   const orc = { id: "ORC-1", propostas: [
