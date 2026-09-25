@@ -7863,12 +7863,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       // Usa formatComodo top-level (helpers PLURAIS_IRREG, GENERO_AMB, NUM_EXT_*)
       const itensFmt = Object.entries(qtds).filter(([,q])=>q>0).map(([nome,q]) => formatComodo(nome, q));
       const listaStr = itensFmt.length>1 ? itensFmt.slice(0,-1).join(", ")+" e "+itensFmt[itensFmt.length-1] : itensFmt[0]||"";
-      const tipDesc = (tipologia||"").toLowerCase().includes("sobrado") ? "com dois pavimentos" : "térrea";
+      const ed = txtEdificacao({ tipoProjeto, tipologia });
       if (nUnid>1) {
-        const nExt = nUnid>=1&&nUnid<=10 ? NUM_EXT_FEM[nUnid] : String(nUnid);
-        return `${prefixo}${nExt} residências ${tipDesc} idênticas, com ${fmtN2(areaUni)}m² por unidade, totalizando ${fmtN2(areaTotR)}m² de área construída. Cada unidade composta por ${totalAmb} ambientes: ${listaStr}.`;
+        const nExt = txtNumeroExtenso(nUnid, ed.um);
+        return `${prefixo}${nExt} ${ed.plural} ${ed.tipPlural} idênticas, com ${fmtN2(areaUni)}m² por unidade, totalizando ${fmtN2(areaTotR)}m² de área construída. Cada unidade ${ed.composta} por ${totalAmb} ambientes: ${listaStr}.`;
       }
-      return `${prefixo}uma residência ${tipDesc}, com ${fmtN2(areaUni)}m² de área construída, composta por ${totalAmb} ambientes: ${listaStr}.`;
+      return `${prefixo}${ed.um} ${ed.nome} ${ed.tip}, com ${fmtN2(areaUni)}m² de área construída, ${ed.composta} por ${totalAmb} ambientes: ${listaStr}.`;
     })();
     // ─── Objeto canônico de Forma de Pagamento (Fase 1 do refator) ───
     // Centraliza tudo o que foi configurado na Etapa 5. Lido pelo Preview

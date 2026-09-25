@@ -29186,6 +29186,35 @@ function txtTrimBlocoEscopo(texto) {
   return linhas.join("\n");
 }
 
+// ─── Que edificação é esta ──────────────────────────────────
+// A frase descritiva dizia "uma residência" para qualquer projeto — uma
+// clínica saía como residência na proposta do cliente. O tipo do projeto é
+// quem manda: ele dá o nome, o gênero ("térrea"/"térreo", "composta"/
+// "composto") e o plural.
+function txtEdificacao(data) {
+  const tp = (typeof normalizarTexto === "function"
+    ? normalizarTexto(data && data.tipoProjeto)
+    : String((data && data.tipoProjeto) || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""));
+  const sobrado = String((data && data.tipologia) || "").toLowerCase().includes("sobrado");
+  const masc = (nome, plural) => ({ um: "um", nome, plural, composta: "composto",
+    tip: sobrado ? "com dois pavimentos" : "térreo", tipPlural: sobrado ? "com dois pavimentos" : "térreos" });
+  const fem = (nome, plural) => ({ um: "uma", nome, plural, composta: "composta",
+    tip: sobrado ? "com dois pavimentos" : "térrea", tipPlural: sobrado ? "com dois pavimentos" : "térreas" });
+  if (tp.indexOf("clinic") >= 0) return fem("clínica", "clínicas");
+  if (tp.indexOf("galpao") >= 0) return masc("galpão", "galpões");
+  if (tp.indexOf("empreendimento") >= 0) return masc("empreendimento", "empreendimentos");
+  if (tp.indexOf("comercial") >= 0) return masc("conjunto comercial", "conjuntos comerciais");
+  return fem("residência", "residências");
+}
+
+// Número por extenso no gênero da edificação: "duas clínicas", "dois galpões".
+function txtNumeroExtenso(n, genero) {
+  const fem = ["", "uma", "duas", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez"];
+  const masc = ["", "um", "dois", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez"];
+  const lista = genero === "um" ? masc : fem;
+  return n >= 1 && n <= 10 ? lista[n] : String(n);
+}
+
 // ─── Helper de descrição dinâmica do projeto ─────────────────
 
 // Gera uma frase descritiva dinâmica do projeto (ex: "Construção nova de
@@ -29231,13 +29260,12 @@ function txtComputarDescricaoProjeto(data) {
   const listaStr = itensFmt.length > 1
     ? itensFmt.slice(0, -1).join(", ") + " e " + itensFmt[itensFmt.length - 1]
     : itensFmt[0] || "";
-  const tipDesc = (data.tipologia || "").toLowerCase().includes("sobrado") ? "com dois pavimentos" : "térrea";
-  const numFem = ["", "uma", "duas", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez"];
+  const ed = txtEdificacao(data);
   if (nUnid > 1) {
-    const nExt = nUnid >= 1 && nUnid <= 10 ? numFem[nUnid] : String(nUnid);
-    return `${prefixo}${nExt} residências ${tipDesc} idênticas, com ${fmtN2(areaUni)}m² por unidade, totalizando ${fmtN2(areaTotR)}m² de área construída. Cada unidade composta por ${totalAmb} ambientes: ${listaStr}.`;
+    const nExt = txtNumeroExtenso(nUnid, ed.um);
+    return `${prefixo}${nExt} ${ed.plural} ${ed.tipPlural} idênticas, com ${fmtN2(areaUni)}m² por unidade, totalizando ${fmtN2(areaTotR)}m² de área construída. Cada unidade ${ed.composta} por ${totalAmb} ambientes: ${listaStr}.`;
   }
-  return `${prefixo}uma residência ${tipDesc}, com ${fmtN2(areaUni)}m² de área construída, composta por ${totalAmb} ambientes: ${listaStr}.`;
+  return `${prefixo}${ed.um} ${ed.nome} ${ed.tip}, com ${fmtN2(areaUni)}m² de área construída, ${ed.composta} por ${totalAmb} ambientes: ${listaStr}.`;
 }
 
 
@@ -29765,13 +29793,12 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
     const listaStr = itensFmt.length>1
       ? itensFmt.slice(0,-1).join(", ")+" e "+itensFmt[itensFmt.length-1]
       : itensFmt[0]||"";
-    const tipDesc = (data.tipologia||"").toLowerCase().includes("sobrado") ? "com dois pavimentos" : "térrea";
-    const numFem = ["","uma","duas","três","quatro","cinco","seis","sete","oito","nove","dez"];
+    const ed = txtEdificacao(data);
     if (nUnid>1) {
-      const nExt = nUnid>=1&&nUnid<=10 ? numFem[nUnid] : String(nUnid);
-      return `${prefixo}${nExt} residências ${tipDesc} idênticas, com ${fmtN2(areaUni)}m² por unidade, totalizando ${fmtN2(areaTotR)}m² de área construída. Cada unidade composta por ${totalAmb} ambientes: ${listaStr}.`;
+      const nExt = txtNumeroExtenso(nUnid, ed.um);
+      return `${prefixo}${nExt} ${ed.plural} ${ed.tipPlural} idênticas, com ${fmtN2(areaUni)}m² por unidade, totalizando ${fmtN2(areaTotR)}m² de área construída. Cada unidade ${ed.composta} por ${totalAmb} ambientes: ${listaStr}.`;
     }
-    return `${prefixo}uma residência ${tipDesc}, com ${fmtN2(areaUni)}m² de área construída, composta por ${totalAmb} ambientes: ${listaStr}.`;
+    return `${prefixo}${ed.um} ${ed.nome} ${ed.tip}, com ${fmtN2(areaUni)}m² de área construída, ${ed.composta} por ${totalAmb} ambientes: ${listaStr}.`;
   })();
   // Texto vindo do Template de Edição (Fase 4+). Prioridade: template > edit
   // inline (resumoEdit) > dinâmico computado. Se o usuário pulou o template
@@ -30059,11 +30086,16 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
         }
       } catch (errPdf) {
         console.warn("Não foi possível guardar o PDF da proposta:", errPdf);
-        // Falha silenciosa aqui custa caro: a proposta salva parecendo certa e
-        // só semanas depois se descobre que o arquivo não está guardado. O
-        // aviso diz o motivo e não interrompe o fluxo.
+        // O motivo fica gravado NA PROPOSTA, não só num balão que some em
+        // quatro segundos: quem vê o problema depois — ou quem for consertar —
+        // precisa saber o que o servidor respondeu.
+        snapshot.pdfErro = {
+          quando: new Date().toISOString(),
+          mensagem: (errPdf && errPdf.message) || "falha no envio",
+          status: (errPdf && errPdf.status) || 0,
+        };
         if (typeof toast !== "undefined" && toast.erro) {
-          toast.erro("Proposta salva, mas o PDF não foi guardado: " + ((errPdf && errPdf.message) || "falha no envio"));
+          toast.erro("Proposta salva, mas o PDF não foi guardado: " + snapshot.pdfErro.mensagem, 12000);
         }
       }
 
@@ -30099,6 +30131,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
       setPropostaInfo({
         versao: propostaSalva?.versao || snapshot.versao || "v1",
         enviadaEm: snapshot.enviadaEm,
+        pdfErro: snapshot.pdfErro || null,
       });
       setConfirmSalvar(false);
     } catch(e) {
@@ -30669,6 +30702,11 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
           <div className="no-print" style={{ maxWidth:860, margin:"16px auto 0", padding:"10px 14px", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius: 12, fontSize:12.5, color:"#166534" }}>
             ✓ Proposta {propostaInfo.versao || ""} salva
             {propostaInfo.enviadaEm && ` · ${new Date(propostaInfo.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}`}
+            {propostaInfo.pdfErro && (
+              <div style={{ color: "#b91c1c", fontWeight: 500, marginTop: 4 }}>
+                O PDF não foi guardado: {propostaInfo.pdfErro.mensagem}. As páginas ficaram em imagem.
+              </div>
+            )}
           </div>
         )}
 
@@ -31267,6 +31305,11 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
           }}>
             <div>
               <strong style={{ color:"#166534" }}>✓ Proposta {propostaInfo.versao} salva</strong>
+              {propostaInfo.pdfErro && (
+                <div style={{ color:"#b91c1c", fontSize: 12, marginTop: 4 }}>
+                  O PDF não foi guardado: {propostaInfo.pdfErro.mensagem}. As páginas ficaram em imagem.
+                </div>
+              )}
               <span style={{ color:"#15803d", marginLeft:6 }}>
                 em {new Date(propostaInfo.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}
               </span>
@@ -41206,12 +41249,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       // Usa formatComodo top-level (helpers PLURAIS_IRREG, GENERO_AMB, NUM_EXT_*)
       const itensFmt = Object.entries(qtds).filter(([,q])=>q>0).map(([nome,q]) => formatComodo(nome, q));
       const listaStr = itensFmt.length>1 ? itensFmt.slice(0,-1).join(", ")+" e "+itensFmt[itensFmt.length-1] : itensFmt[0]||"";
-      const tipDesc = (tipologia||"").toLowerCase().includes("sobrado") ? "com dois pavimentos" : "térrea";
+      const ed = txtEdificacao({ tipoProjeto, tipologia });
       if (nUnid>1) {
-        const nExt = nUnid>=1&&nUnid<=10 ? NUM_EXT_FEM[nUnid] : String(nUnid);
-        return `${prefixo}${nExt} residências ${tipDesc} idênticas, com ${fmtN2(areaUni)}m² por unidade, totalizando ${fmtN2(areaTotR)}m² de área construída. Cada unidade composta por ${totalAmb} ambientes: ${listaStr}.`;
+        const nExt = txtNumeroExtenso(nUnid, ed.um);
+        return `${prefixo}${nExt} ${ed.plural} ${ed.tipPlural} idênticas, com ${fmtN2(areaUni)}m² por unidade, totalizando ${fmtN2(areaTotR)}m² de área construída. Cada unidade ${ed.composta} por ${totalAmb} ambientes: ${listaStr}.`;
       }
-      return `${prefixo}uma residência ${tipDesc}, com ${fmtN2(areaUni)}m² de área construída, composta por ${totalAmb} ambientes: ${listaStr}.`;
+      return `${prefixo}${ed.um} ${ed.nome} ${ed.tip}, com ${fmtN2(areaUni)}m² de área construída, ${ed.composta} por ${totalAmb} ambientes: ${listaStr}.`;
     })();
     // ─── Objeto canônico de Forma de Pagamento (Fase 1 do refator) ───
     // Centraliza tudo o que foi configurado na Etapa 5. Lido pelo Preview

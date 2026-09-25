@@ -179,6 +179,35 @@ function txtTrimBlocoEscopo(texto) {
   return linhas.join("\n");
 }
 
+// ─── Que edificação é esta ──────────────────────────────────
+// A frase descritiva dizia "uma residência" para qualquer projeto — uma
+// clínica saía como residência na proposta do cliente. O tipo do projeto é
+// quem manda: ele dá o nome, o gênero ("térrea"/"térreo", "composta"/
+// "composto") e o plural.
+function txtEdificacao(data) {
+  const tp = (typeof normalizarTexto === "function"
+    ? normalizarTexto(data && data.tipoProjeto)
+    : String((data && data.tipoProjeto) || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""));
+  const sobrado = String((data && data.tipologia) || "").toLowerCase().includes("sobrado");
+  const masc = (nome, plural) => ({ um: "um", nome, plural, composta: "composto",
+    tip: sobrado ? "com dois pavimentos" : "térreo", tipPlural: sobrado ? "com dois pavimentos" : "térreos" });
+  const fem = (nome, plural) => ({ um: "uma", nome, plural, composta: "composta",
+    tip: sobrado ? "com dois pavimentos" : "térrea", tipPlural: sobrado ? "com dois pavimentos" : "térreas" });
+  if (tp.indexOf("clinic") >= 0) return fem("clínica", "clínicas");
+  if (tp.indexOf("galpao") >= 0) return masc("galpão", "galpões");
+  if (tp.indexOf("empreendimento") >= 0) return masc("empreendimento", "empreendimentos");
+  if (tp.indexOf("comercial") >= 0) return masc("conjunto comercial", "conjuntos comerciais");
+  return fem("residência", "residências");
+}
+
+// Número por extenso no gênero da edificação: "duas clínicas", "dois galpões".
+function txtNumeroExtenso(n, genero) {
+  const fem = ["", "uma", "duas", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez"];
+  const masc = ["", "um", "dois", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez"];
+  const lista = genero === "um" ? masc : fem;
+  return n >= 1 && n <= 10 ? lista[n] : String(n);
+}
+
 // ─── Helper de descrição dinâmica do projeto ─────────────────
 
 // Gera uma frase descritiva dinâmica do projeto (ex: "Construção nova de
@@ -224,11 +253,10 @@ function txtComputarDescricaoProjeto(data) {
   const listaStr = itensFmt.length > 1
     ? itensFmt.slice(0, -1).join(", ") + " e " + itensFmt[itensFmt.length - 1]
     : itensFmt[0] || "";
-  const tipDesc = (data.tipologia || "").toLowerCase().includes("sobrado") ? "com dois pavimentos" : "térrea";
-  const numFem = ["", "uma", "duas", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez"];
+  const ed = txtEdificacao(data);
   if (nUnid > 1) {
-    const nExt = nUnid >= 1 && nUnid <= 10 ? numFem[nUnid] : String(nUnid);
-    return `${prefixo}${nExt} residências ${tipDesc} idênticas, com ${fmtN2(areaUni)}m² por unidade, totalizando ${fmtN2(areaTotR)}m² de área construída. Cada unidade composta por ${totalAmb} ambientes: ${listaStr}.`;
+    const nExt = txtNumeroExtenso(nUnid, ed.um);
+    return `${prefixo}${nExt} ${ed.plural} ${ed.tipPlural} idênticas, com ${fmtN2(areaUni)}m² por unidade, totalizando ${fmtN2(areaTotR)}m² de área construída. Cada unidade ${ed.composta} por ${totalAmb} ambientes: ${listaStr}.`;
   }
-  return `${prefixo}uma residência ${tipDesc}, com ${fmtN2(areaUni)}m² de área construída, composta por ${totalAmb} ambientes: ${listaStr}.`;
+  return `${prefixo}${ed.um} ${ed.nome} ${ed.tip}, com ${fmtN2(areaUni)}m² de área construída, ${ed.composta} por ${totalAmb} ambientes: ${listaStr}.`;
 }
