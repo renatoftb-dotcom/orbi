@@ -1814,6 +1814,32 @@ teste("na conferência: embalagem diferente fica sem preço, e o repetido do ped
   assert.strictEqual(e.ar.preco, 230);
 });
 
+// ── Versões da proposta de projeto ──────────────────────────────
+const orcSemVersao = (() => {
+  const src = mod("orcamento-teste.jsx");
+  const i = src.indexOf("function orcSemVersao");
+  const fim = src.indexOf("\n}", i) + 2;
+  return new Function(src.slice(i, fim) + "; return orcSemVersao;")();
+})();
+
+teste("excluir uma versão tira só ela, e os rótulos das outras não mudam", () => {
+  const orc = { id: "ORC-1", propostas: [
+    { versao: "v1", enviadaEm: "2026-09-25T15:00:00.000Z" },
+    { versao: "v2", enviadaEm: "2026-09-25T18:00:00.000Z" },
+    { versao: "v3", enviadaEm: "2026-09-25T19:00:00.000Z" }],
+    ultimaPropostaEm: "2026-09-25T19:00:00.000Z" };
+  const sem1 = orcSemVersao(orc, 0);
+  assert.deepStrictEqual(sem1.propostas.map(p => p.versao), ["v2", "v3"]);
+  assert.strictEqual(sem1.ultimaPropostaEm, "2026-09-25T19:00:00.000Z", "a última não mudou");
+  assert.strictEqual(orc.propostas.length, 3, "não mexe no original");
+  const semUltima = orcSemVersao(orc, 2);
+  assert.deepStrictEqual(semUltima.propostas.map(p => p.versao), ["v1", "v2"]);
+  assert.strictEqual(semUltima.ultimaPropostaEm, "2026-09-25T18:00:00.000Z", "a data volta para a que sobrou");
+  const vazio = orcSemVersao({ id: "x", propostas: [{ versao: "v1", enviadaEm: "2026-01-01" }] }, 0);
+  assert.deepStrictEqual(vazio.propostas, []);
+  assert.strictEqual(vazio.ultimaPropostaEm, null);
+});
+
 for (const [nome, fn] of testes) {
   try { fn(); console.log("  ok   " + nome); }
   catch (e) { falhas++; console.log("  FALHOU " + nome + "\n         " + e.message); }

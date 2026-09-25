@@ -718,6 +718,19 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
             const lista = (p._orcOrigem || {}).propostas || [];
             return lista[i] ? { ...lista[i], clienteNome: p.clienteNome, _orcOrigem: p._orcOrigem, _indice: i } : p;
           })}
+          aoExcluirVersao={() => {
+            const p = propostaVisualizada;
+            const orc = p._orcOrigem || {};
+            const i = typeof p._indice === "number" ? p._indice : (orc.propostas || []).length - 1;
+            esquecerArquivoDaProposta((orc.propostas || [])[i]);
+            const novo = orcSemVersao(orc, i);
+            save({ ...data, orcamentosProjeto: (data.orcamentosProjeto || []).map(o => o.id === orc.id ? novo : o) })
+              .catch(console.error);
+            const resta = novo.propostas[novo.propostas.length - 1];
+            setPropostaVisualizada(resta
+              ? { ...resta, clienteNome: p.clienteNome, _orcOrigem: novo, _indice: novo.propostas.length - 1 }
+              : null);
+          }}
           onFechar={() => setPropostaVisualizada(null)}
           onEditar={() => {
             const orc = propostaVisualizada._orcOrigem;
@@ -3934,7 +3947,25 @@ function OpcoesPagamento({ tipo, valor, desc, parcelas, fmtV }) {
 // Modal overlay que mostra as páginas da proposta como imagens.
 // É um registro imutável — literalmente as imagens renderizadas
 // do PDF no momento em que a proposta foi enviada ao cliente.
-function PropostaVisualizer({ proposta, onFechar, onEditar, versoes, aoTrocarVersao }) {
+// Tira uma versão da proposta do orçamento. Os rótulos das outras NÃO são
+// renumerados: a v2 continua sendo a v2 mesmo que a v1 saia — é assim que o
+// cliente recebeu, e renumerar faria a conversa com ele deixar de bater.
+function orcSemVersao(orc, indice) {
+  const props = ((orc || {}).propostas || []).filter((_, i) => i !== indice);
+  const ultima = props[props.length - 1] || null;
+  return { ...orc, propostas: props, ultimaPropostaEm: ultima ? ultima.enviadaEm : null };
+}
+
+// O PDF daquela versão sai do storage junto — guardar arquivo de proposta
+// apagada só ocupa espaço. Se o storage recusar, a exclusão continua: o que
+// importa é o registro.
+function esquecerArquivoDaProposta(proposta) {
+  const pid = proposta && proposta.pdfArquivo && proposta.pdfArquivo.publicId;
+  if (!pid || typeof api === "undefined" || !api.uploads || !api.uploads.remove) return;
+  Promise.resolve(api.uploads.remove(pid)).catch((e) => console.warn("[proposta] não deu para apagar o PDF no storage:", e));
+}
+
+function PropostaVisualizer({ proposta, onFechar, onEditar, versoes, aoTrocarVersao, aoExcluirVersao }) {
   const [baixando, setBaixando] = useState(false);
   const [confirmEditar, setConfirmEditar] = useState(false);
 
@@ -4104,6 +4135,24 @@ function PropostaVisualizer({ proposta, onFechar, onEditar, versoes, aoTrocarVer
           )}
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          {/* Só com mais de uma versão: apagar a única deixaria o projeto sem
+              registro nenhum do que foi enviado — para isso existe excluir o
+              projeto inteiro. */}
+          {aoExcluirVersao && Array.isArray(versoes) && versoes.length > 1 && (
+            <button
+              onClick={async () => {
+                const ok = await dialogo.confirmar({
+                  titulo: `Excluir a proposta ${proposta.versao || ""}?`,
+                  mensagem: "Some o registro do que foi enviado nessa versão, junto com o PDF. Esta ação não pode ser desfeita.",
+                  confirmar: "Excluir versão", destrutivo: true,
+                });
+                if (ok) aoExcluirVersao();
+              }}
+              style={{ background:"rgba(220,38,38,0.18)", border:"1px solid rgba(248,113,113,0.5)",
+                color:"#fecaca", borderRadius:6, padding:"6px 12px", cursor:"pointer", fontSize:13, fontFamily:"inherit" }}>
+              Excluir esta versão
+            </button>
+          )}
           {onEditar && (
             <button
               onClick={() => setConfirmEditar(true)}

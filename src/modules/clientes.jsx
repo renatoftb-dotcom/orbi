@@ -1316,6 +1316,18 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
             const lista = (p._orcOrigem || {}).propostas || [];
             return lista[i] ? { ...lista[i], clienteNome: p.clienteNome, _orcOrigem: p._orcOrigem } : p;
           })}
+          aoExcluirVersao={perm.podeExcluir ? () => {
+            const orc = vendo._orcOrigem || {};
+            const lista = orc.propostas || [];
+            const i = lista.findIndex(p => p.versao === vendo.versao && p.enviadaEm === vendo.enviadaEm);
+            if (i < 0) return;
+            if (typeof esquecerArquivoDaProposta === "function") esquecerArquivoDaProposta(lista[i]);
+            const novo = orcSemVersao(orc, i);
+            save({ ...data, orcamentosProjeto: (data.orcamentosProjeto || []).map(o => o.id === orc.id ? novo : o) })
+              .catch(console.error);
+            const resta = novo.propostas[novo.propostas.length - 1];
+            setVendo(resta ? { ...resta, clienteNome: vendo.clienteNome, _orcOrigem: novo } : null);
+          } : null}
           onFechar={() => setVendo(null)}
           onEditar={() => { const orc = vendo._orcOrigem; setVendo(null); if (orc) onAbrirOrcamento(cliente, orc, "editar"); }}
         />
