@@ -3958,9 +3958,40 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
     ? new Date(proposta.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })
     : "";
 
+  const arquivoPdf = proposta.pdfArquivo && proposta.pdfArquivo.url ? proposta.pdfArquivo : null;
+
+  // Baixa o PDF guardado — o mesmo arquivo que o cliente recebeu. O storage
+  // entrega o PDF sem o cabeçalho de PDF (é a mesma limitação da conta que
+  // afeta as propostas de loja), então o arquivo é reembalado aqui antes de
+  // salvar, senão o navegador baixa um arquivo sem extensão.
+  async function baixarArquivoSalvo() {
+    setBaixando(true);
+    try {
+      const r = await fetch(arquivoPdf.url);
+      if (!r.ok) throw new Error(`O storage respondeu ${r.status}.`);
+      const bruto = await r.blob();
+      const url = URL.createObjectURL(new Blob([bruto], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = arquivoPdf.nome || `proposta-${(proposta.clienteNome || "projeto").replace(/\s+/g, "-").toLowerCase()}-${proposta.versao || "v1"}.pdf`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return true;
+    } catch (e) {
+      console.warn("[proposta] não deu para baixar o arquivo guardado:", e);
+      return false;
+    } finally {
+      setBaixando(false);
+    }
+  }
+
   // Gera PDF a partir das imagens salvas — garante fidelidade visual 100% ao que foi enviado
   async function baixarPdf() {
-    if (!temImagens) { dialogo.alertar({ titulo: "Sem imagens salvas", mensagem: "Esta proposta não tem imagens salvas.", tipo: "aviso" }); return; }
+    // O arquivo guardado vem primeiro: é o original, com texto selecionável.
+    // Só se ele não existir (ou o storage falhar) é que o PDF é remontado
+    // das imagens, que é o caminho das propostas antigas.
+    if (arquivoPdf && await baixarArquivoSalvo()) return;
+    if (!temImagens) { dialogo.alertar({ titulo: "Sem o arquivo da proposta", mensagem: arquivoPdf ? "Não consegui buscar o PDF guardado agora. Tente de novo em instantes." : "Esta proposta foi salva antes de o VICKE guardar o PDF, e não tem as páginas em imagem.", tipo: "aviso" }); return; }
     if (!window.jspdf) { dialogo.alertar({ titulo: "Aguarde alguns segundos", mensagem: "A biblioteca de PDF ainda está carregando. Tente novamente em 2 segundos.", tipo: "aviso" }); return; }
     try {
       setBaixando(true);
@@ -4037,10 +4068,11 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
               ✎ Editar
             </button>
           )}
-          {temImagens && (
+          {(temImagens || arquivoPdf) && (
             <button
               onClick={baixarPdf}
               disabled={baixando}
+              title={arquivoPdf ? "Baixa o PDF original, como foi enviado" : "Remonta o PDF a partir das páginas salvas"}
               style={{
                 background: baixando ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.12)",
                 border:"1px solid rgba(255,255,255,0.2)",
@@ -4103,6 +4135,11 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
                 <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.55, marginBottom:20 }}>
                   As imagens desta proposta foram removidas automaticamente após 30 dias sem fechamento pra liberar espaço. Os dados numéricos e textos foram preservados no histórico.
                 </div>
+                {arquivoPdf && (
+                  <div style={{ fontSize:13, color:"#166534", lineHeight:1.55, marginBottom:20 }}>
+                    O PDF que foi enviado ao cliente continua guardado — baixe por "⬇ Baixar PDF", aqui em cima.
+                  </div>
+                )}
                 <div style={{
                   background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius: 12,
                   padding:"14px 18px", textAlign:"left", fontSize:12.5, color:"#374151",

@@ -1121,13 +1121,37 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
 }
 
 // ── Painel "Projetos" — lista orçamentos/projetos do cliente ─────
+// Um projeto com proposta enviada abre a PROPOSTA, não o formulário: quem
+// entra aqui quer rever o que foi mandado ao cliente, e reabrir no editor
+// dava a impressão de que a proposta tinha sumido. Editar continua a um
+// clique, no botão ao lado — e dentro do visualizador.
 function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
   const orcamentos = (data.orcamentosProjeto || []).filter(o => o.clienteId === cliente.id);
+  const [vendo, setVendo] = useState(null);
   const statusOrc = {
     rascunho: { label: "Rascunho", cor: "#9ca3af" },
     aberto:   { label: "Aberto",   cor: "#2563eb" },
     ganho:    { label: "Ganho",    cor: "#10b981" },
     perdido:  { label: "Perdido",  cor: "#dc2626" },
+  };
+  const fmtBRL = (v) => "R$ " + (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const ultimaProposta = (o) => (o.propostas && o.propostas.length > 0 ? o.propostas[o.propostas.length - 1] : null);
+  // Mesmo valor que a lista de Orçamentos mostra: o da proposta enviada
+  // quando existe, senão o do cálculo.
+  const valorDoProjeto = (o) => {
+    const ult = ultimaProposta(o);
+    if (ult) {
+      if (ult.valorTotalExibido != null) return Number(ult.valorTotalExibido) || 0;
+      const arq = ult.arqEdit != null ? ult.arqEdit : (ult.calculo?.precoArq || 0);
+      const eng = ult.engEdit != null ? ult.engEdit : (ult.calculo?.precoEng || 0);
+      return (Number(arq) || 0) + (Number(eng) || 0);
+    }
+    return (o.resultado?.precoArq || 0) + (o.resultado?.precoEng || 0);
+  };
+  const dataCurta = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? "" : d.toLocaleDateString("pt-BR");
   };
 
   return (
@@ -1148,24 +1172,69 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {orcamentos.map(orc => {
             const sts = statusOrc[orc.status] || statusOrc.rascunho;
+            const prop = ultimaProposta(orc);
+            const valor = valorDoProjeto(orc);
+            const abrir = () => {
+              if (prop) {
+                setVendo({ ...prop, clienteNome: cliente.nome || "Cliente", _orcOrigem: orc });
+                return;
+              }
+              onAbrirOrcamento(cliente, orc, "editar");
+            };
+            const detalhes = [
+              orc.referencia && orc.referencia !== "(sem referência)" ? orc.referencia : "",
+              orc.padrao ? `Padrão: ${orc.padrao}` : "",
+              prop ? `Proposta ${prop.versao || "v1"}${dataCurta(orc.ultimaPropostaEm || prop.enviadaEm) ? " de " + dataCurta(orc.ultimaPropostaEm || prop.enviadaEm) : ""}` : "Sem proposta enviada",
+            ].filter(Boolean);
             return (
               <div
                 key={orc.id}
-                onClick={() => onAbrirOrcamento(cliente, orc, "editar")}
+                onClick={abrir}
+                title={prop ? "Ver a proposta enviada" : "Abrir o orçamento"}
                 style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer", transition: "border-color 0.15s, box-shadow 0.15s", backgroundColor: "#fff" }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = AZUL_VK; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(4,116,244,0.12)"; }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor="rgba(38,36,33,0.14)"; e.currentTarget.style.boxShadow="none"; }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color:"#111827" }}>{orc.tipo || "Projeto"}{orc.subtipo ? ` — ${orc.subtipo}` : ""}</div>
-                  <div style={{ fontSize: 11, color:"#4b5563", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ fontSize:12, color:"#111827", fontWeight:600 }}>{sts.label}</span>
-                    {orc.padrao && <span>Padrão: {orc.padrao}</span>}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color:"#111827", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <span>{orc.tipo || "Projeto"}{orc.subtipo ? ` — ${orc.subtipo}` : ""}</span>
+                    {prop && (
+                      <span style={{ fontSize: 11, color: AZUL_VK, fontWeight: 600 }}>
+                        📄 {orc.propostas.length > 1 ? `${orc.propostas.length} versões` : "proposta"}
+                      </span>
+                    )}
                   </div>
+                  <div style={{ fontSize: 11, color:"#4b5563", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize:12, color: sts.cor, fontWeight:600 }}>{sts.label}</span>
+                    {detalhes.map((t, k) => <span key={k}>{t}</span>)}
+                  </div>
+                </div>
+                {/* O valor é o que a pessoa vem buscar: fica na linha, à
+                    direita, do mesmo jeito que na lista de Orçamentos. */}
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>
+                    {valor > 0 ? fmtBRL(valor) : "—"}
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onAbrirOrcamento(cliente, orc, "editar"); }}
+                    style={{ marginTop: 4, background: "none", border: "none", padding: 0, cursor: "pointer",
+                      fontFamily: "inherit", fontSize: 11.5, color: "#6b7280" }}>
+                    Editar orçamento
+                  </button>
                 </div>
               </div>
             );
           })}
         </div>
+      )}
+
+      {/* O mesmo visualizador da lista de Orçamentos: as páginas como foram
+          enviadas, com o botão de baixar o PDF. */}
+      {vendo && typeof PropostaVisualizer === "function" && (
+        <PropostaVisualizer
+          proposta={vendo}
+          onFechar={() => setVendo(null)}
+          onEditar={() => { const orc = vendo._orcOrigem; setVendo(null); if (orc) onAbrirOrcamento(cliente, orc, "editar"); }}
+        />
       )}
     </div>
   );

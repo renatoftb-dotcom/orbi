@@ -24726,13 +24726,37 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
 }
 
 // ── Painel "Projetos" — lista orçamentos/projetos do cliente ─────
+// Um projeto com proposta enviada abre a PROPOSTA, não o formulário: quem
+// entra aqui quer rever o que foi mandado ao cliente, e reabrir no editor
+// dava a impressão de que a proposta tinha sumido. Editar continua a um
+// clique, no botão ao lado — e dentro do visualizador.
 function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
   const orcamentos = (data.orcamentosProjeto || []).filter(o => o.clienteId === cliente.id);
+  const [vendo, setVendo] = useState(null);
   const statusOrc = {
     rascunho: { label: "Rascunho", cor: "#9ca3af" },
     aberto:   { label: "Aberto",   cor: "#2563eb" },
     ganho:    { label: "Ganho",    cor: "#10b981" },
     perdido:  { label: "Perdido",  cor: "#dc2626" },
+  };
+  const fmtBRL = (v) => "R$ " + (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const ultimaProposta = (o) => (o.propostas && o.propostas.length > 0 ? o.propostas[o.propostas.length - 1] : null);
+  // Mesmo valor que a lista de Orçamentos mostra: o da proposta enviada
+  // quando existe, senão o do cálculo.
+  const valorDoProjeto = (o) => {
+    const ult = ultimaProposta(o);
+    if (ult) {
+      if (ult.valorTotalExibido != null) return Number(ult.valorTotalExibido) || 0;
+      const arq = ult.arqEdit != null ? ult.arqEdit : (ult.calculo?.precoArq || 0);
+      const eng = ult.engEdit != null ? ult.engEdit : (ult.calculo?.precoEng || 0);
+      return (Number(arq) || 0) + (Number(eng) || 0);
+    }
+    return (o.resultado?.precoArq || 0) + (o.resultado?.precoEng || 0);
+  };
+  const dataCurta = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? "" : d.toLocaleDateString("pt-BR");
   };
 
   return (
@@ -24753,24 +24777,69 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {orcamentos.map(orc => {
             const sts = statusOrc[orc.status] || statusOrc.rascunho;
+            const prop = ultimaProposta(orc);
+            const valor = valorDoProjeto(orc);
+            const abrir = () => {
+              if (prop) {
+                setVendo({ ...prop, clienteNome: cliente.nome || "Cliente", _orcOrigem: orc });
+                return;
+              }
+              onAbrirOrcamento(cliente, orc, "editar");
+            };
+            const detalhes = [
+              orc.referencia && orc.referencia !== "(sem referência)" ? orc.referencia : "",
+              orc.padrao ? `Padrão: ${orc.padrao}` : "",
+              prop ? `Proposta ${prop.versao || "v1"}${dataCurta(orc.ultimaPropostaEm || prop.enviadaEm) ? " de " + dataCurta(orc.ultimaPropostaEm || prop.enviadaEm) : ""}` : "Sem proposta enviada",
+            ].filter(Boolean);
             return (
               <div
                 key={orc.id}
-                onClick={() => onAbrirOrcamento(cliente, orc, "editar")}
+                onClick={abrir}
+                title={prop ? "Ver a proposta enviada" : "Abrir o orçamento"}
                 style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer", transition: "border-color 0.15s, box-shadow 0.15s", backgroundColor: "#fff" }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = AZUL_VK; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(4,116,244,0.12)"; }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor="rgba(38,36,33,0.14)"; e.currentTarget.style.boxShadow="none"; }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color:"#111827" }}>{orc.tipo || "Projeto"}{orc.subtipo ? ` — ${orc.subtipo}` : ""}</div>
-                  <div style={{ fontSize: 11, color:"#4b5563", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ fontSize:12, color:"#111827", fontWeight:600 }}>{sts.label}</span>
-                    {orc.padrao && <span>Padrão: {orc.padrao}</span>}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color:"#111827", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <span>{orc.tipo || "Projeto"}{orc.subtipo ? ` — ${orc.subtipo}` : ""}</span>
+                    {prop && (
+                      <span style={{ fontSize: 11, color: AZUL_VK, fontWeight: 600 }}>
+                        📄 {orc.propostas.length > 1 ? `${orc.propostas.length} versões` : "proposta"}
+                      </span>
+                    )}
                   </div>
+                  <div style={{ fontSize: 11, color:"#4b5563", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize:12, color: sts.cor, fontWeight:600 }}>{sts.label}</span>
+                    {detalhes.map((t, k) => <span key={k}>{t}</span>)}
+                  </div>
+                </div>
+                {/* O valor é o que a pessoa vem buscar: fica na linha, à
+                    direita, do mesmo jeito que na lista de Orçamentos. */}
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>
+                    {valor > 0 ? fmtBRL(valor) : "—"}
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onAbrirOrcamento(cliente, orc, "editar"); }}
+                    style={{ marginTop: 4, background: "none", border: "none", padding: 0, cursor: "pointer",
+                      fontFamily: "inherit", fontSize: 11.5, color: "#6b7280" }}>
+                    Editar orçamento
+                  </button>
                 </div>
               </div>
             );
           })}
         </div>
+      )}
+
+      {/* O mesmo visualizador da lista de Orçamentos: as páginas como foram
+          enviadas, com o botão de baixar o PDF. */}
+      {vendo && typeof PropostaVisualizer === "function" && (
+        <PropostaVisualizer
+          proposta={vendo}
+          onFechar={() => setVendo(null)}
+          onEditar={() => { const orc = vendo._orcOrigem; setVendo(null); if (orc) onAbrirOrcamento(cliente, orc, "editar"); }}
+        />
       )}
     </div>
   );
@@ -29899,6 +29968,28 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
 
       // 4. Adiciona imagens ao snapshot
       snapshot.imagensPdf = imagens;
+
+      // 4b. Guarda o PDF de verdade. As imagens servem para mostrar na tela
+      //     rápido; o arquivo é o que o cliente recebeu, e é ele que deve
+      //     voltar quando alguém baixar a proposta meses depois. Se o
+      //     upload falhar, a proposta salva do mesmo jeito — o download
+      //     volta a ser remontado das imagens.
+      snapshot.pdfArquivo = null;
+      try {
+        if (blob && typeof api !== "undefined" && api.uploads && api.uploads.send) {
+          const nomeArq = `proposta-${(clienteNome || "projeto").replace(/\s+/g, "-").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`;
+          const arquivo = (typeof File === "function")
+            ? new File([blob], nomeArq, { type: "application/pdf" })
+            : blob;
+          const up = await api.uploads.send(arquivo, "proposta_projeto");
+          if (up && up.url) {
+            snapshot.pdfArquivo = { url: up.url, publicId: up.public_id, bytes: up.bytes || blob.size,
+              nome: nomeArq, resourceType: up.resource_type || "raw", salvoEm: new Date().toISOString() };
+          }
+        }
+      } catch (errPdf) {
+        console.warn("Não foi possível guardar o PDF da proposta:", errPdf);
+      }
 
       // 5. Persiste no orçamento
       const propostaSalva = await onSalvarProposta(snapshot);
@@ -37119,9 +37210,40 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
     ? new Date(proposta.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })
     : "";
 
+  const arquivoPdf = proposta.pdfArquivo && proposta.pdfArquivo.url ? proposta.pdfArquivo : null;
+
+  // Baixa o PDF guardado — o mesmo arquivo que o cliente recebeu. O storage
+  // entrega o PDF sem o cabeçalho de PDF (é a mesma limitação da conta que
+  // afeta as propostas de loja), então o arquivo é reembalado aqui antes de
+  // salvar, senão o navegador baixa um arquivo sem extensão.
+  async function baixarArquivoSalvo() {
+    setBaixando(true);
+    try {
+      const r = await fetch(arquivoPdf.url);
+      if (!r.ok) throw new Error(`O storage respondeu ${r.status}.`);
+      const bruto = await r.blob();
+      const url = URL.createObjectURL(new Blob([bruto], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = arquivoPdf.nome || `proposta-${(proposta.clienteNome || "projeto").replace(/\s+/g, "-").toLowerCase()}-${proposta.versao || "v1"}.pdf`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return true;
+    } catch (e) {
+      console.warn("[proposta] não deu para baixar o arquivo guardado:", e);
+      return false;
+    } finally {
+      setBaixando(false);
+    }
+  }
+
   // Gera PDF a partir das imagens salvas — garante fidelidade visual 100% ao que foi enviado
   async function baixarPdf() {
-    if (!temImagens) { dialogo.alertar({ titulo: "Sem imagens salvas", mensagem: "Esta proposta não tem imagens salvas.", tipo: "aviso" }); return; }
+    // O arquivo guardado vem primeiro: é o original, com texto selecionável.
+    // Só se ele não existir (ou o storage falhar) é que o PDF é remontado
+    // das imagens, que é o caminho das propostas antigas.
+    if (arquivoPdf && await baixarArquivoSalvo()) return;
+    if (!temImagens) { dialogo.alertar({ titulo: "Sem o arquivo da proposta", mensagem: arquivoPdf ? "Não consegui buscar o PDF guardado agora. Tente de novo em instantes." : "Esta proposta foi salva antes de o VICKE guardar o PDF, e não tem as páginas em imagem.", tipo: "aviso" }); return; }
     if (!window.jspdf) { dialogo.alertar({ titulo: "Aguarde alguns segundos", mensagem: "A biblioteca de PDF ainda está carregando. Tente novamente em 2 segundos.", tipo: "aviso" }); return; }
     try {
       setBaixando(true);
@@ -37198,10 +37320,11 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
               ✎ Editar
             </button>
           )}
-          {temImagens && (
+          {(temImagens || arquivoPdf) && (
             <button
               onClick={baixarPdf}
               disabled={baixando}
+              title={arquivoPdf ? "Baixa o PDF original, como foi enviado" : "Remonta o PDF a partir das páginas salvas"}
               style={{
                 background: baixando ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.12)",
                 border:"1px solid rgba(255,255,255,0.2)",
@@ -37264,6 +37387,11 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
                 <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.55, marginBottom:20 }}>
                   As imagens desta proposta foram removidas automaticamente após 30 dias sem fechamento pra liberar espaço. Os dados numéricos e textos foram preservados no histórico.
                 </div>
+                {arquivoPdf && (
+                  <div style={{ fontSize:13, color:"#166534", lineHeight:1.55, marginBottom:20 }}>
+                    O PDF que foi enviado ao cliente continua guardado — baixe por "⬇ Baixar PDF", aqui em cima.
+                  </div>
+                )}
                 <div style={{
                   background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius: 12,
                   padding:"14px 18px", textAlign:"left", fontSize:12.5, color:"#374151",

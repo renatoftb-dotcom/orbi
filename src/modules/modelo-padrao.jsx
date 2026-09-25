@@ -799,6 +799,28 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
       // 4. Adiciona imagens ao snapshot
       snapshot.imagensPdf = imagens;
 
+      // 4b. Guarda o PDF de verdade. As imagens servem para mostrar na tela
+      //     rápido; o arquivo é o que o cliente recebeu, e é ele que deve
+      //     voltar quando alguém baixar a proposta meses depois. Se o
+      //     upload falhar, a proposta salva do mesmo jeito — o download
+      //     volta a ser remontado das imagens.
+      snapshot.pdfArquivo = null;
+      try {
+        if (blob && typeof api !== "undefined" && api.uploads && api.uploads.send) {
+          const nomeArq = `proposta-${(clienteNome || "projeto").replace(/\s+/g, "-").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`;
+          const arquivo = (typeof File === "function")
+            ? new File([blob], nomeArq, { type: "application/pdf" })
+            : blob;
+          const up = await api.uploads.send(arquivo, "proposta_projeto");
+          if (up && up.url) {
+            snapshot.pdfArquivo = { url: up.url, publicId: up.public_id, bytes: up.bytes || blob.size,
+              nome: nomeArq, resourceType: up.resource_type || "raw", salvoEm: new Date().toISOString() };
+          }
+        }
+      } catch (errPdf) {
+        console.warn("Não foi possível guardar o PDF da proposta:", errPdf);
+      }
+
       // 5. Persiste no orçamento
       const propostaSalva = await onSalvarProposta(snapshot);
 
