@@ -988,7 +988,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         )}
 
         {abaCliente === "projetos" && (
-          <ProjetosPanel cliente={cliente} data={data} onAbrirOrcamento={(c, orc, modo) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc, modo); }} />
+          <ProjetosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc, modo) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc, modo); }} />
         )}
 
         {abaCliente === "obras" && (
@@ -1129,9 +1129,11 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
 // entra aqui quer rever o que foi mandado ao cliente, e reabrir no editor
 // dava a impressão de que a proposta tinha sumido. Editar continua a um
 // clique, no botão ao lado — e dentro do visualizador.
-function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
+function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
   const orcamentos = (data.orcamentosProjeto || []).filter(o => o.clienteId === cliente.id);
   const [vendo, setVendo] = useState(null);
+  const [ganhando, setGanhando] = useState(null);
+  const perm = typeof getPermissoes === "function" ? getPermissoes() : { podeEditar: true, podeExcluir: true };
   const statusOrc = {
     rascunho: { label: "Rascunho", cor: "#9ca3af" },
     aberto:   { label: "Aberto",   cor: "#2563eb" },
@@ -1139,6 +1141,8 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
     perdido:  { label: "Perdido",  cor: "#dc2626" },
   };
   const fmtBRL = (v) => "R$ " + (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const acao = (cor) => ({ background: "none", border: "none", padding: 0, cursor: "pointer",
+    fontFamily: "inherit", fontSize: 11.5, color: cor || "#6b7280" });
   const ultimaProposta = (o) => (o.propostas && o.propostas.length > 0 ? o.propostas[o.propostas.length - 1] : null);
   // Mesmo valor que a lista de Orçamentos mostra: o da proposta enviada
   // quando existe, senão o do cálculo.
@@ -1157,6 +1161,61 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
     const d = new Date(iso);
     return isNaN(d.getTime()) ? "" : d.toLocaleDateString("pt-BR");
   };
+
+  // Ganho, perdido e excluir: as mesmas ações da lista de Orçamentos, aqui
+  // na linha do projeto. Quem acompanha um cliente decide o desfecho olhando
+  // para ele, e ter que ir até o outro módulo para isso é caminho a mais.
+  const gravar = (novos, extra) => save({ ...data, orcamentosProjeto: novos, ...(extra || {}) }).catch(console.error);
+
+  async function marcarPerdido(orc) {
+    const todos = data.orcamentosProjeto || [];
+    const agora = new Date().toISOString();
+    if (orc.status === "perdido") {
+      const ok = await dialogo.confirmar({ titulo: "Reabrir este projeto?", confirmar: "Reabrir" });
+      if (!ok) return;
+      return gravar(todos.map(o => o.id === orc.id ? { ...o, status: "rascunho", concluidoEm: null } : o));
+    }
+    const ok = await dialogo.confirmar({ titulo: `Marcar ${orc.id} como Perdido?`, confirmar: "Marcar como perdido" });
+    if (!ok) return;
+    gravar(todos.map(o => o.id === orc.id ? { ...o, status: "perdido", concluidoEm: o.concluidoEm || agora } : o));
+  }
+
+  async function excluirProjeto(orc) {
+    if (!perm.podeExcluir) {
+      dialogo.alertar({ titulo: "Acesso restrito", mensagem: "Apenas administradores podem excluir orçamentos.", tipo: "aviso" });
+      return;
+    }
+    const ok = await dialogo.confirmar({
+      titulo: `Excluir orçamento ${orc.id}?`,
+      mensagem: "Esta ação não pode ser desfeita.",
+      confirmar: "Excluir", destrutivo: true,
+    });
+    if (!ok) return;
+    gravar((data.orcamentosProjeto || []).filter(o => o.id !== orc.id));
+  }
+
+  // Ganhar abre o mesmo modal de fechamento da lista de Orçamentos — escopo,
+  // valores e condição de pagamento — e, como lá, nasce um projeto na etapa
+  // de briefing.
+  function confirmarGanho(fechamento) {
+    const orc = ganhando;
+    if (!orc) return;
+    const agora = new Date().toISOString();
+    const projetos = data.projetos || [];
+    const novosProjetos = projetos.some(p => p.orcId === orc.id) ? projetos : [...projetos, {
+      id: "PRJ-" + Date.now(), orcId: orc.id, clienteId: orc.clienteId,
+      tipo: orc.tipo, subtipo: orc.subtipo, padrao: orc.padrao, tamanho: orc.tamanho,
+      referencia: orc.referencia || "", areaTotal: orc.resultado?.areaTotal || 0,
+      colunaEtapa: "briefing", criadoEm: agora,
+    }];
+    const novos = (data.orcamentosProjeto || []).map(o => o.id === orc.id ? {
+      ...o, status: "ganho", concluidoEm: o.concluidoEm || agora, ganhoEm: o.ganhoEm || agora,
+      fechamento: { ...fechamento, fechadoEm: agora },
+    } : o);
+    setGanhando(null);
+    if (typeof toast !== "undefined" && toast.sucesso) toast.sucesso("Orçamento marcado como ganho");
+    gravar(novos, { projetos: novosProjetos });
+  }
 
   return (
     <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px" }}>
@@ -1218,12 +1277,22 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
                   <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>
                     {valor > 0 ? fmtBRL(valor) : "—"}
                   </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onAbrirOrcamento(cliente, orc, "editar"); }}
-                    style={{ marginTop: 4, background: "none", border: "none", padding: 0, cursor: "pointer",
-                      fontFamily: "inherit", fontSize: 11.5, color: "#6b7280" }}>
-                    Editar orçamento
-                  </button>
+                  <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 5 }}>
+                    {perm.podeEditar && orc.status !== "ganho" && (
+                      <button onClick={(e) => { e.stopPropagation(); setGanhando(orc); }} style={acao()}>Ganho</button>
+                    )}
+                    {perm.podeEditar && (
+                      <button onClick={(e) => { e.stopPropagation(); marcarPerdido(orc); }} style={acao()}>
+                        {orc.status === "perdido" ? "Reabrir" : "Perdido"}
+                      </button>
+                    )}
+                    <button onClick={(e) => { e.stopPropagation(); onAbrirOrcamento(cliente, orc, "editar"); }} style={acao()}>
+                      Editar
+                    </button>
+                    {perm.podeExcluir && (
+                      <button onClick={(e) => { e.stopPropagation(); excluirProjeto(orc); }} style={acao("#dc2626")}>Excluir</button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -1233,6 +1302,10 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
 
       {/* O mesmo visualizador da lista de Orçamentos: as páginas como foram
           enviadas, com o botão de baixar o PDF. */}
+      {ganhando && typeof ModalConfirmarGanho === "function" && (
+        <ModalConfirmarGanho orc={ganhando} onClose={() => setGanhando(null)} onConfirmar={confirmarGanho} />
+      )}
+
       {vendo && typeof PropostaVisualizer === "function" && (
         <PropostaVisualizer
           proposta={vendo}
