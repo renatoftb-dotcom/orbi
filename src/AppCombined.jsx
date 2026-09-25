@@ -24842,9 +24842,11 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
             const sts = statusOrc[orc.status] || statusOrc.rascunho;
             const prop = ultimaProposta(orc);
             const valor = valorDoProjeto(orc);
-            const abrir = () => {
+            const abrir = (indice) => {
               if (prop) {
-                setVendo({ ...prop, clienteNome: cliente.nome || "Cliente", _orcOrigem: orc });
+                const lista = orc.propostas || [];
+                const i = typeof indice === "number" && lista[indice] ? indice : lista.length - 1;
+                setVendo({ ...lista[i], clienteNome: cliente.nome || "Cliente", _orcOrigem: orc });
                 return;
               }
               onAbrirOrcamento(cliente, orc, "editar");
@@ -24857,7 +24859,7 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
             return (
               <div
                 key={orc.id}
-                onClick={abrir}
+                onClick={() => abrir()}
                 title={prop ? "Ver a proposta enviada" : "Abrir o orçamento"}
                 style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer", transition: "border-color 0.15s, box-shadow 0.15s", backgroundColor: "#fff" }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = AZUL_VK; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(4,116,244,0.12)"; }}
@@ -24914,6 +24916,11 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
       {vendo && typeof PropostaVisualizer === "function" && (
         <PropostaVisualizer
           proposta={vendo}
+          versoes={(vendo._orcOrigem || {}).propostas || []}
+          aoTrocarVersao={(i) => setVendo((p) => {
+            const lista = (p._orcOrigem || {}).propostas || [];
+            return lista[i] ? { ...lista[i], clienteNome: p.clienteNome, _orcOrigem: p._orcOrigem } : p;
+          })}
           onFechar={() => setVendo(null)}
           onEditar={() => { const orc = vendo._orcOrigem; setVendo(null); if (orc) onAbrirOrcamento(cliente, orc, "editar"); }}
         />
@@ -33721,7 +33728,8 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         setPropostaVisualizada({
           ...ultima,
           clienteNome: cli?.nome || orc.cliente || "Cliente",
-          _orcOrigem: orc, // guarda referência pra botão Editar
+          _orcOrigem: orc,            // guarda referência pra botão Editar
+          _indice: orc.propostas.length - 1,
         });
         return;
       }
@@ -34098,6 +34106,11 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       {propostaVisualizada && (
         <PropostaVisualizer
           proposta={propostaVisualizada}
+          versoes={(propostaVisualizada._orcOrigem || {}).propostas || []}
+          aoTrocarVersao={(i) => setPropostaVisualizada((p) => {
+            const lista = (p._orcOrigem || {}).propostas || [];
+            return lista[i] ? { ...lista[i], clienteNome: p.clienteNome, _orcOrigem: p._orcOrigem, _indice: i } : p;
+          })}
           onFechar={() => setPropostaVisualizada(null)}
           onEditar={() => {
             const orc = propostaVisualizada._orcOrigem;
@@ -37314,7 +37327,7 @@ function OpcoesPagamento({ tipo, valor, desc, parcelas, fmtV }) {
 // Modal overlay que mostra as páginas da proposta como imagens.
 // É um registro imutável — literalmente as imagens renderizadas
 // do PDF no momento em que a proposta foi enviada ao cliente.
-function PropostaVisualizer({ proposta, onFechar, onEditar }) {
+function PropostaVisualizer({ proposta, onFechar, onEditar, versoes, aoTrocarVersao }) {
   const [baixando, setBaixando] = useState(false);
   const [confirmEditar, setConfirmEditar] = useState(false);
 
@@ -37457,6 +37470,27 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
       }}>
         <div style={{ display:"flex", alignItems:"center", gap:14 }}>
           <div style={{ fontSize:14, fontWeight:600 }}>📄 Proposta {proposta.versao}</div>
+          {/* Cada versão continua guardada como foi enviada. A v2 não apaga
+              a v1: quando há mais de uma, elas ficam aqui, lado a lado, e
+              trocar é um clique. */}
+          {Array.isArray(versoes) && versoes.length > 1 && (
+            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+              {versoes.map((v, i) => {
+                const atual = (v.versao || `v${i + 1}`) === proposta.versao;
+                return (
+                  <button key={i} type="button" onClick={() => aoTrocarVersao && aoTrocarVersao(i)}
+                    title={v.enviadaEm ? `enviada em ${new Date(v.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}` : ""}
+                    style={{ background: atual ? "#fff" : "rgba(255,255,255,0.12)",
+                      color: atual ? "#111827" : "#fff",
+                      border: "1px solid rgba(255,255,255,0.25)", borderRadius: 6,
+                      padding: "3px 9px", fontSize: 12, fontWeight: atual ? 700 : 500,
+                      cursor: atual ? "default" : "pointer", fontFamily: "inherit" }}>
+                    {v.versao || `v${i + 1}`}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {dataFmt && <div style={{ fontSize:12, color:"rgba(255,255,255,0.6)" }}>enviada em {dataFmt}</div>}
           {proposta.clienteNome && (
             <div style={{ fontSize:12, color:"rgba(255,255,255,0.6)" }}>· {proposta.clienteNome}</div>

@@ -1237,9 +1237,11 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
             const sts = statusOrc[orc.status] || statusOrc.rascunho;
             const prop = ultimaProposta(orc);
             const valor = valorDoProjeto(orc);
-            const abrir = () => {
+            const abrir = (indice) => {
               if (prop) {
-                setVendo({ ...prop, clienteNome: cliente.nome || "Cliente", _orcOrigem: orc });
+                const lista = orc.propostas || [];
+                const i = typeof indice === "number" && lista[indice] ? indice : lista.length - 1;
+                setVendo({ ...lista[i], clienteNome: cliente.nome || "Cliente", _orcOrigem: orc });
                 return;
               }
               onAbrirOrcamento(cliente, orc, "editar");
@@ -1252,7 +1254,7 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
             return (
               <div
                 key={orc.id}
-                onClick={abrir}
+                onClick={() => abrir()}
                 title={prop ? "Ver a proposta enviada" : "Abrir o orçamento"}
                 style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer", transition: "border-color 0.15s, box-shadow 0.15s", backgroundColor: "#fff" }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = AZUL_VK; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(4,116,244,0.12)"; }}
@@ -1309,6 +1311,11 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
       {vendo && typeof PropostaVisualizer === "function" && (
         <PropostaVisualizer
           proposta={vendo}
+          versoes={(vendo._orcOrigem || {}).propostas || []}
+          aoTrocarVersao={(i) => setVendo((p) => {
+            const lista = (p._orcOrigem || {}).propostas || [];
+            return lista[i] ? { ...lista[i], clienteNome: p.clienteNome, _orcOrigem: p._orcOrigem } : p;
+          })}
           onFechar={() => setVendo(null)}
           onEditar={() => { const orc = vendo._orcOrigem; setVendo(null); if (orc) onAbrirOrcamento(cliente, orc, "editar"); }}
         />
