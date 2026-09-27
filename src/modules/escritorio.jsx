@@ -3,9 +3,11 @@
 // Visual minimalista, fundo branco, estilo Claude.ai
 // ═══════════════════════════════════════════════════════════════
 
-function Escritorio({ data, save, onReload }) {
+function Escritorio({ data, save, onReload, abaInicial }) {
   const cfg = (data && data.escritorio) || {};
-  const [aba, setAba] = useState("dados");
+  // abaInicial: o menu lateral abre o módulo já na aba pedida (Financeiro,
+  // Cadastro, Equipe, Usuários, Sistema). Sem ela, cai em "dados".
+  const [aba, setAba] = useState(abaInicial || "dados");
   const perm = getPermissoes();
   const [form, setForm] = useState({
     nome:        cfg.nome        || "",

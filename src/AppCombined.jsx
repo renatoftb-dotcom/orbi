@@ -43874,9 +43874,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 // Visual minimalista, fundo branco, estilo Claude.ai
 // ═══════════════════════════════════════════════════════════════
 
-function Escritorio({ data, save, onReload }) {
+function Escritorio({ data, save, onReload, abaInicial }) {
   const cfg = (data && data.escritorio) || {};
-  const [aba, setAba] = useState("dados");
+  // abaInicial: o menu lateral abre o módulo já na aba pedida (Financeiro,
+  // Cadastro, Equipe, Usuários, Sistema). Sem ela, cai em "dados".
+  const [aba, setAba] = useState(abaInicial || "dados");
   const perm = getPermissoes();
   const [form, setForm] = useState({
     nome:        cfg.nome        || "",
@@ -52027,6 +52029,9 @@ function IconeMaster({ nome, tamanho = 18, cor = "currentColor" }) {
     case "insumos":
       // Caixa/pacote — catálogo de insumos
       return (<svg {...props}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>);
+    case "financeiro":
+      // Cédula/nota — bloco financeiro do escritório
+      return (<svg {...props}><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><line x1="6" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="18" y2="12"/></svg>);
     case "escritorio":
       // Engrenagem / settings outline (mesmo ícone que manutenção mas menor uso)
       return (<svg {...props}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>);
@@ -53010,6 +53015,9 @@ export default function ModuloClientesFornecedores() {
   // Popover do submenu Projetos quando sidebar está colapsada. null = fechado,
   // ou {x, y} pra posicionar absolutamente perto do botão pai.
   const [popoverProjetos, setPopoverProjetos] = useState(null);
+  // Accordion do grupo "Escritório" (mesmo padrão do grupo Projetos).
+  const [escritorioAberto, setEscritorioAberto] = useState(() => (typeof aba === "string" && aba.indexOf("escritorio") === 0));
+  const alternarGrupo = (k) => { if (k === "escritorio") setEscritorioAberto(o => !o); else setProjetosAberto(o => !o); };
   // Fecha popover ao clicar fora (delegação no document — captura
   // clicks em qualquer lugar da página quando popover está aberto).
   useEffect(() => {
@@ -53458,6 +53466,7 @@ export default function ModuloClientesFornecedores() {
   //   Empresas, Usuários Master, Manutenção. Não vê Clientes/Projetos/Obras
   //   (irrelevantes pra quem opera o SaaS).
   // - Escritório (Padovan, futuras empresas): menu original — gestão do dia a dia.
+  const permMenu = getPermissoes();
   const MENU = isMaster ? [
     { k:"home",                   icon:"painel",     label:"Painel" },
     { k:"mensagens",               icon:"mensagens",  label:"Mensagens" },
@@ -53482,6 +53491,16 @@ export default function ModuloClientesFornecedores() {
     // (PrestadoresServico em outros.jsx) — cadastro simples de empreiteiros,
     // eletricistas, pintores, gesseiros, lojas, esquadrias etc.
     // Item especial — Tutorial Beta (só dev_mode). Não navega, dispara overlay.
+    // Escritório — bloco próprio no fim do menu, separado por um divisor
+    // discreto. Cada subitem abre o módulo Escritório já na aba pedida.
+    { tipo:"divisor", k:"div-escritorio" },
+    { k:"escritorio", icon:"escritorio", label:"Escritório", sub: [
+      ...(permMenu.podeGerenciarUsuarios ? [{ k:"escritorio:financeiro", icon:"financeiro", label:"Financeiro" }] : []),
+      { k:"escritorio:dados",   icon:"empresas",   label:"Cadastro" },
+      { k:"escritorio:equipe",  icon:"usuarios",   label:"Equipe" },
+      ...(permMenu.podeGerenciarUsuarios ? [{ k:"escritorio:usuarios", icon:"key", label:"Usuários" }] : []),
+      { k:"escritorio:sistema", icon:"manutencao", label:"Sistema" },
+    ]},
     ...(temDevMode(data?.escritorio) ? [
       { k:"tutorial-beta", tipo:"tutorialBeta", label:"+ Novo (Beta) 🧪" },
     ] : []),
@@ -53614,6 +53633,10 @@ export default function ModuloClientesFornecedores() {
           <nav style={{ flex:1, padding:"12px 8px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
             {MENU.map(item => {
               const {k, label, count, sub, icon} = item;
+              // Divisor discreto entre blocos do menu.
+              if (item.tipo === "divisor") {
+                return <div key={k} style={{ height:1, background:"rgba(38,36,33,0.07)", margin: colapsadaEf ? "6px 6px" : "8px 12px" }} />;
+              }
               // Item especial Tutorial Beta — não é uma aba, dispara overlay.
               if (item.tipo === "tutorialBeta") {
                 return (
@@ -53637,6 +53660,7 @@ export default function ModuloClientesFornecedores() {
               }
               if (sub && sub.length) {
                 const ativoNeleMesmoOuSubitem = aba === k || (typeof aba === "string" && aba.indexOf(k + ":") === 0);
+                const grupoAberto = k === "escritorio" ? escritorioAberto : projetosAberto;
                 return (
                   <div key={k} style={{ display:"flex", flexDirection:"column", position:"relative" }}>
                     <button
@@ -53658,10 +53682,10 @@ export default function ModuloClientesFornecedores() {
                           // Sidebar colapsada: abre popover lateral com os subitens.
                           // Posiciona absoluto à direita do botão.
                           const rect = ev.currentTarget.getBoundingClientRect();
-                          setPopoverProjetos({ top: rect.top, left: rect.right + 4 });
+                          setPopoverProjetos({ top: rect.top, left: rect.right + 4, k });
                         } else {
                           // Sidebar aberta: comportamento accordion (expandir/recolher)
-                          setProjetosAberto(o => !o);
+                          alternarGrupo(k);
                         }
                       }}
                     >
@@ -53673,14 +53697,14 @@ export default function ModuloClientesFornecedores() {
                         <span style={{
                           color:"#4b5563", fontSize:9,
                           transition:"transform 0.2s",
-                          transform: projetosAberto ? "rotate(90deg)" : "rotate(0deg)",
+                          transform: grupoAberto ? "rotate(90deg)" : "rotate(0deg)",
                           display:"inline-block",
                           lineHeight: 1,
                         }}>▶</span>
                       )}
                     </button>
                     {/* Submenus inline (accordion) — só quando expandida */}
-                    {!colapsadaEf && projetosAberto && (
+                    {!colapsadaEf && grupoAberto && (
                       <div style={{ display:"flex", flexDirection:"column", gap:1, marginLeft:14, paddingLeft:8, borderLeft:"1px solid rgba(38,36,33,0.1)", marginTop:2 }}>
                         {sub.map(s => {
                           const ativoSub = aba === s.k;
@@ -53706,6 +53730,7 @@ export default function ModuloClientesFornecedores() {
                                   setOrcamentoTelaCheia(null);
                                   if (s.k === "projetos:etapas") setProjetosKey(n=>n+1);
                                   if (s.k === "projetos:orcamentos") setOrcamentosKey(n=>n+1);
+                                  if (s.k.indexOf("escritorio") === 0) setEscritorioKey(n=>n+1);
                                 });
                               }}
                             >
@@ -53753,19 +53778,8 @@ export default function ModuloClientesFornecedores() {
                 Configuração
               </div>
             )}
-            {/* Botão Escritório só pra perfil escritório (Master vê tudo no menu principal) */}
-            {!isMaster && (
-              <button style={itemStyle(aba==="escritorio")}
-                title={colapsadaEf ? "Escritório" : undefined}
-                onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#eef5ff"; }}
-                onMouseLeave={e => { if(aba!=="escritorio") e.currentTarget.style.background="transparent"; }}
-                onClick={() => { tentarTrocar(() => { setAba("escritorio"); setOrcamentoTelaCheia(null); setEscritorioKey(n=>n+1); }); }}>
-                <span style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <IconeMaster nome="escritorio" tamanho={16} cor={aba==="escritorio" ? "#0474f4" : "#4b5563"} />
-                  {!colapsadaEf && "Escritório"}
-                </span>
-              </button>
-            )}
+            {/* O Escritório saiu daqui: virou bloco próprio no menu principal,
+                com subitens (Financeiro, Cadastro, Equipe, Usuários, Sistema). */}
             {/* Aba "Orçamento" — configurações de pricing/calibragem.
                 Visível pra todos os perfis (botão interno é que valida permissão).
                 Master também vê — útil pra Vicke caso queira testar o fluxo. */}
@@ -53961,7 +53975,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "fornecedores"           && <PrestadoresServico key={fornecedoresKey} data={data} save={save} />}
           {aba === "insumos"                && <Insumos data={data} save={save} />}
           {aba === "nf"                     && <ImportarNF data={data} save={save} />}
-          {aba === "escritorio"             && <Escritorio key={escritorioKey} data={data} save={save} onReload={loadData} />}
+          {typeof aba === "string" && aba.indexOf("escritorio") === 0 && <Escritorio key={escritorioKey} abaInicial={aba.indexOf(":") > 0 ? aba.slice(aba.indexOf(":") + 1) : "dados"} data={data} save={save} onReload={loadData} />}
           {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} setUsuario={setUsuario} />}
           {/* Sub-abas do menu Master — Admin recebe initialTab pra abrir direto na aba certa */}
           {aba === "admin" && isMaster && <Admin usuario={usuario} data={data} save={save} />}
@@ -54000,8 +54014,8 @@ export default function ModuloClientesFornecedores() {
         Posicionado fixed na coordenada do trigger. Click fora fecha (handler
         em useEffect mais acima). Aparece à direita do botão na sidebar. */}
     {popoverProjetos && colapsadaEf && (() => {
-      const projetosItem = MENU.find(m => m.k === "projetos");
-      if (!projetosItem) return null;
+      const projetosItem = MENU.find(m => m.k === (popoverProjetos.k || "projetos"));
+      if (!projetosItem || !projetosItem.sub) return null;
       return (
         <div
           id="popover-projetos"
@@ -54033,6 +54047,7 @@ export default function ModuloClientesFornecedores() {
                     setOrcamentoTelaCheia(null);
                     if (s.k === "projetos:etapas") setProjetosKey(n => n+1);
                     if (s.k === "projetos:orcamentos") setOrcamentosKey(n => n+1);
+                    if (s.k.indexOf("escritorio") === 0) setEscritorioKey(n => n+1);
                   });
                   setPopoverProjetos(null);
                 }}
