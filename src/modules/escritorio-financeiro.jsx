@@ -147,9 +147,11 @@ function unidadePeloApelido(nome) {
 // ── Regras do lançamento novo ───────────────────────────────────
 // Valem do corte em diante. O histórico importado entra como está: ele já
 // foi conferido contra o extrato, e reescrever o passado mudaria saldo.
-function validarLancamentoEscritorio(l) {
+function validarLancamentoEscritorio(l, opcoes) {
   const erros = [];
   const lan = l || {};
+  const trava = bloqueioPorMesFechado(lan.competencia, (opcoes || {}).fechamentos);
+  if (trava) erros.push(trava);
   const conta = contaEscritorio(lan.contaId);
   if (!conta) erros.push("Escolha a conta.");
   if (!lan.competencia || !/^\d{4}-\d{2}$/.test(String(lan.competencia))) erros.push("Informe o mês de competência.");
@@ -747,6 +749,101 @@ function efMesPorExtenso(mes, curto) {
   return `${nome} de ${m[1]}`;
 }
 
+
+// ── Filtro do painel ────────────────────────────────────────────
+// Ano, mês e unidade de negócio. Vazio em qualquer um significa "tudo".
+function filtrarLancamentosEscritorio(lancamentos, filtro) {
+  const f = filtro || {};
+  return (lancamentos || []).filter((l) => {
+    if (!l || !/^\d{4}-\d{2}$/.test(String(l.competencia))) return false;
+    const [ano, mes] = String(l.competencia).split("-");
+    if (f.ano && ano !== String(f.ano)) return false;
+    if (f.mes && mes !== String(f.mes).padStart(2, "0")) return false;
+    if (f.unidadeId && l.unidadeId !== f.unidadeId) return false;
+    return true;
+  });
+}
+
+// O que o período filtrado somou, por grupo e por conta. O saldo bancário
+// não entra aqui: ele é do extrato inteiro, não de um recorte.
+function resumoDoPeriodoEscritorio(lancamentos) {
+  const grupos = {}, contas = {};
+  for (const l of lancamentos || []) {
+    const conta = contaEscritorio(l && l.contaId);
+    if (!conta) continue;
+    const v = Number(l.valor) || 0;
+    grupos[conta.grupo] = (grupos[conta.grupo] || 0) + v;
+    contas[conta.id] = (contas[conta.id] || 0) + v;
+  }
+  const g = (id) => efCentavos(grupos[id] || 0);
+  const receitas = g("receitas"), despesas = g("despesas");
+  const linhas = Object.keys(contas).map((id) => {
+    const c = contaEscritorio(id);
+    return { contaId: id, nome: c.nome, grupo: c.grupo, sinal: (grupoEscritorio(c.grupo) || {}).sinal || 1, valor: efCentavos(contas[id]) };
+  }).sort((a, b) => b.valor - a.valor);
+  return {
+    receitas, despesas,
+    resultado: efCentavos(receitas - despesas),
+    retiradas: efCentavos(g("socios") - g("socios_entradas")),
+    entradasGestao: g("gestao_entradas"),
+    saidasGestao: g("gestao_saidas"),
+    saldoGestao: efCentavos(g("gestao_entradas") - g("gestao_saidas")),
+    investimentoEmpreendimento: g("emp_saidas"),
+    vendasEmpreendimento: g("emp_entradas"),
+    contas: linhas,
+    quantidade: (lancamentos || []).length,
+  };
+}
+
+// ── Fechamento do mês ───────────────────────────────────────────
+// Fechar é dizer "conferi este mês contra o extrato do banco e bate".
+// Depois disso o mês não recebe mais lançamento — nem por engano, nem por
+// importação. O registro guarda o saldo do banco para poder reconferir.
+function fechamentosDoEscritorio(data) {
+  const f = (((data || {}).escritorio || {}).financeiro || {}).fechamentos;
+  return (f && typeof f === "object") ? f : {};
+}
+
+function mesEstaFechado(mes, fechamentos) {
+  const f = (fechamentos || {})[String(mes)];
+  return !!(f && f.fechadoEm);
+}
+
+function ultimoMesFechado(fechamentos) {
+  const meses = Object.keys(fechamentos || {}).filter((m) => mesEstaFechado(m, fechamentos)).sort();
+  return meses.length ? meses[meses.length - 1] : "";
+}
+
+// Como está a conferência de um mês: quantos lançamentos já foram marcados
+// como vistos no extrato do banco, e quanto ainda falta conferir.
+function conferenciaDoMes(lancamentos, mes) {
+  const doMes = (lancamentos || []).filter((l) => l && String(l.competencia) === String(mes));
+  const conferidos = doMes.filter((l) => l.conferido);
+  const soma = (lista) => efCentavos(lista.reduce((s, l) => s + (Number(l.valor) || 0), 0));
+  return {
+    total: doMes.length,
+    conferidos: conferidos.length,
+    pendentes: doMes.length - conferidos.length,
+    valorConferido: soma(conferidos),
+    valorPendente: soma(doMes.filter((l) => !l.conferido)),
+    lancamentos: doMes,
+  };
+}
+
+// Diferença entre o que o extrato do VICKE diz e o que o banco diz.
+// Positiva: o banco tem mais do que o sistema — falta lançar entrada.
+function diferencaDeFechamento(saldoCalculado, saldoBanco) {
+  if (saldoBanco == null || saldoBanco === "") return null;
+  return efCentavos((Number(saldoBanco) || 0) - (Number(saldoCalculado) || 0));
+}
+
+// Um lançamento só entra em mês aberto. A regra vale para o formulário e
+// para a importação — mês fechado é passado conferido, não se mexe.
+function bloqueioPorMesFechado(competencia, fechamentos) {
+  if (!competencia || !mesEstaFechado(competencia, fechamentos)) return "";
+  return `${efMesPorExtenso(competencia)} já está fechado: não dá para lançar nesse mês.`;
+}
+
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
 // ── UI — a aba Financeiro do Escritório ─────────────────────────
 // Três telas: o extrato mês a mês (que é o que você já olhava na planilha),
@@ -867,7 +964,7 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
 
 // Formulário de um lançamento. As travas são as do validarLancamento: a
 // mensagem aparece antes de gravar, não depois.
-function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar }) {
+function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos }) {
   const S = EF_ESTILO;
   const [f, setF] = useState(() => ({
     contaId: "", unidadeId: "escritorio", valor: "", competencia: "", lancadoEm: "",
@@ -879,7 +976,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar }) {
   const conta = contaEscritorio(f.contaId);
   const unidadesOk = conta && (conta.unidades || []).length ? conta.unidades : UNIDADES_NEGOCIO.map((u) => u.id);
   const erros = validarLancamentoEscritorio({ ...f, valor: Number(String(f.valor).replace(",", ".")) || 0,
-    clienteId: f.cliente, obraId: f.projeto, empreendimentoId: f.projeto });
+    clienteId: f.cliente, obraId: f.projeto, empreendimentoId: f.projeto }, { fechamentos });
 
   const campo = (rot, filho) => <div><div style={S.rot}>{rot}</div>{filho}</div>;
   return (
@@ -1001,14 +1098,277 @@ function ResumoEscritorioPainel({ resumo, quantidade, aoVerExtrato }) {
   );
 }
 
-function FinanceiroEscritorio({ data, save, onReload, vista, aoAbrirExtrato }) {
+
+// ── Painel do financeiro ────────────────────────────────────────
+// A tela de entrada: filtro em cima, os números do recorte no meio e o
+// caminho para lançar, ver o extrato e fechar o mês.
+function EFSeletor({ rotulo, valor, aoTrocar, opcoes }) {
+  return (
+    <label style={{ display: "grid", gap: 3 }}>
+      <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>{rotulo}</span>
+      <select value={valor} onChange={(e) => aoTrocar(e.target.value)}
+        style={{ ...EF_ESTILO.input, padding: "7px 10px", minWidth: 130, cursor: "pointer" }}>
+        {opcoes.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function PainelFinanceiroEscritorio({ lancs, linhas, fechamentos, filtro, aoFiltrar, aoIr }) {
+  const S = EF_ESTILO;
+  const anos = [...new Set((linhas || []).map((l) => l.mes.slice(0, 4)))].sort();
+  const doFiltro = filtrarLancamentosEscritorio(lancs, filtro);
+  const r = resumoDoPeriodoEscritorio(doFiltro);
+  const unidade = UNIDADES_NEGOCIO.find((u) => u.id === filtro.unidadeId);
+
+  // Saldo do extrato: é do banco inteiro, então só faz sentido sem recorte
+  // de unidade. Mostra o saldo do último mês dentro do período filtrado.
+  const dentro = (linhas || []).filter((l) => {
+    const [a, m] = l.mes.split("-");
+    if (filtro.ano && a !== filtro.ano) return false;
+    if (filtro.mes && m !== filtro.mes) return false;
+    return true;
+  });
+  const fim = dentro.length ? dentro[dentro.length - 1] : null;
+  const fechadoAte = ultimoMesFechado(fechamentos);
+
+  const periodo = filtro.mes
+    ? efMesPorExtenso(`${filtro.ano || anos[anos.length - 1]}-${filtro.mes}`)
+    : (filtro.ano ? `ano de ${filtro.ano}` : "todo o histórico");
+
+  const cartao = (rotulo, valor, apoio, destaque) => (
+    <div key={rotulo} style={{ ...S.card, display: "grid", gap: 2 }}>
+      <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>{rotulo}</div>
+      <div style={{ fontSize: destaque ? 24 : 19, fontWeight: 700, marginTop: 2, fontVariantNumeric: "tabular-nums",
+        color: destaque ? "#0474f4" : "#262421" }}>{valor}</div>
+      <div style={{ fontSize: 11.5, color: "#6b7280" }}>{apoio}</div>
+    </div>
+  );
+
+  const porGrupo = GRUPOS_ESCRITORIO
+    .map((g) => ({ grupo: g, contas: r.contas.filter((c) => c.grupo === g.id) }))
+    .filter((b) => b.contas.length);
+
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      {/* Filtro + caminhos */}
+      <div style={{ ...S.card, display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+        <EFSeletor rotulo="Ano" valor={filtro.ano} aoTrocar={(v) => aoFiltrar({ ...filtro, ano: v })}
+          opcoes={[["", "Todos"], ...anos.map((a) => [a, a])]} />
+        <EFSeletor rotulo="Mês" valor={filtro.mes} aoTrocar={(v) => aoFiltrar({ ...filtro, mes: v })}
+          opcoes={[["", "Todos"], ...Array.from({ length: 12 }, (_, i) => {
+            const m = String(i + 1).padStart(2, "0");
+            return [m, efMesPorExtenso(`2000-${m}`).split(" de ")[0].replace(/^./, (c) => c.toUpperCase())];
+          })]} />
+        <EFSeletor rotulo="Unidade de negócio" valor={filtro.unidadeId} aoTrocar={(v) => aoFiltrar({ ...filtro, unidadeId: v })}
+          opcoes={[["", "Todas"], ...UNIDADES_NEGOCIO.map((u) => [u.id, u.nome])]} />
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button style={S.btnSec} onClick={() => aoIr("lancamentos")}>Lançamento</button>
+          <button style={S.btnSec} onClick={() => aoIr("extrato")}>Extrato</button>
+          <button style={S.btn} onClick={() => aoIr("fechamento")}>Fechamento</button>
+        </div>
+      </div>
+
+      {!doFiltro.length ? (
+        <div style={{ ...S.card, textAlign: "center", color: "#6b7280", fontSize: 13 }}>
+          Nenhum lançamento em {periodo}{unidade ? ` para ${unidade.nome}` : ""}.
+        </div>
+      ) : (
+        <>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>
+              {periodo.replace(/^./, (c) => c.toUpperCase())}{unidade ? ` · ${unidade.nome}` : ""}
+            </div>
+            <div style={{ fontSize: 12.5, color: "#6b7280" }}>
+              {r.quantidade} lançamentos
+              {fechadoAte ? ` · fechado até ${efMesPorExtenso(fechadoAte, true)}` : " · nenhum mês fechado ainda"}
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(185px, 1fr))", gap: 12 }}>
+            {!unidade && fim
+              ? cartao("Saldo do extrato", efDinheiro(fim.saldoExtrato), `fechamento de ${efMesPorExtenso(fim.mes, true)}`, true)
+              : cartao("Movimento no período", efDinheiro(r.receitas + r.entradasGestao + r.vendasEmpreendimento),
+                  "entradas — o saldo do banco não se divide por unidade", true)}
+            {cartao("Receitas", efDinheiro(r.receitas), "projetos, gestão, comissões")}
+            {cartao("Despesas", efDinheiro(r.despesas), "custo do escritório")}
+            {cartao("Resultado", efDinheiro(r.resultado), "antes das retiradas")}
+            {cartao("Retiradas", efDinheiro(r.retiradas), "sócios e empréstimos")}
+            {(r.entradasGestao || r.saidasGestao) ? cartao("Dinheiro de cliente",
+              efDinheiro(Math.abs(r.saldoGestao)),
+              `entrou ${efDinheiro(r.entradasGestao)} · saiu ${efDinheiro(r.saidasGestao)}`) : null}
+            {(r.investimentoEmpreendimento || r.vendasEmpreendimento) ? cartao("Empreendimento",
+              efDinheiro(r.vendasEmpreendimento - r.investimentoEmpreendimento),
+              `investido ${efDinheiro(r.investimentoEmpreendimento)} · vendido ${efDinheiro(r.vendasEmpreendimento)}`) : null}
+          </div>
+
+          {/* Conferência em dia: a régua do fechamento, vista todo dia. */}
+          {(() => {
+            const emFoco = filtro.mes ? `${filtro.ano || anos[anos.length - 1]}-${filtro.mes}` : (fim ? fim.mes : "");
+            if (!emFoco) return null;
+            const c = conferenciaDoMes(lancs, emFoco);
+            if (!c.total) return null;
+            const pronto = !c.pendentes;
+            return (
+              <div style={{ ...S.card, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", fontSize: 12.5, color: "#4b5563" }}>
+                <span>Conferência de {efMesPorExtenso(emFoco, true)}:{" "}
+                  <strong style={{ color: pronto ? "#0474f4" : "#262421" }}>{c.conferidos} de {c.total}</strong> no extrato do banco</span>
+                {!pronto && <span>falta conferir {efDinheiro(c.valorPendente)}</span>}
+                <div style={{ flex: 1, minWidth: 120, height: 5, borderRadius: 3, background: "#eef2f7", overflow: "hidden" }}>
+                  <div style={{ width: `${Math.round((c.conferidos / c.total) * 100)}%`, height: "100%", background: "#0474f4" }} />
+                </div>
+                <button style={S.btnSec} onClick={() => aoIr("fechamento", emFoco)}>
+                  {pronto ? "Fechar o mês" : "Continuar conferindo"}
+                </button>
+              </div>
+            );
+          })()}
+
+          <div style={S.quadro}>
+            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
+              <tbody>
+                {porGrupo.map((b) => (
+                  <Fragment key={b.grupo.id}>
+                    <tr>
+                      <td colSpan={2} style={{ padding: "8px 12px", fontWeight: 700, background: "#f5f7fa",
+                        borderTop: "1px solid rgba(38,36,33,0.12)" }}>{b.grupo.titulo}</td>
+                    </tr>
+                    {b.contas.map((c) => (
+                      <tr key={c.contaId} style={{ borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+                        <td style={{ padding: "7px 12px", color: "#4b5563" }}>{c.sinal < 0 ? "− " : "+ "}{c.nome}</td>
+                        <td style={{ padding: "7px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{efDinheiro(c.valor)}</td>
+                      </tr>
+                    ))}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Fechamento do mês ───────────────────────────────────────────
+// Conferência item a item contra o extrato do banco. Enquanto a diferença
+// não zera, o mês não fecha; depois de fechado, não entra lançamento nele.
+function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes, aoMarcar, aoMarcarTodos, aoFechar, aoReabrir, ocupado }) {
+  const S = EF_ESTILO;
+  // A conferência é feita ao longo do mês, com o extrato parcial: por isso
+  // a tela abre mostrando só o que ainda falta bater.
+  const [soPendentes, setSoPendentes] = useState(true);
+  const meses = (linhas || []).map((l) => l.mes);
+  const linha = (linhas || []).find((l) => l.mes === mes);
+  const conf = conferenciaDoMes(lancs, mes);
+  const registro = (fechamentos || {})[mes] || {};
+  const fechado = mesEstaFechado(mes, fechamentos);
+  const [banco, setBanco] = useState(registro.saldoBanco == null ? "" : String(registro.saldoBanco).replace(".", ","));
+  useEffect(() => {
+    const reg = (fechamentos || {})[mes] || {};
+    setBanco(reg.saldoBanco == null ? "" : String(reg.saldoBanco).replace(".", ","));
+  }, [mes, fechamentos]);
+  const saldoBanco = efNumero(banco);
+  const calculado = linha ? linha.saldoExtrato : 0;
+  const diferenca = diferencaDeFechamento(calculado, saldoBanco == null ? "" : saldoBanco);
+  const podeFechar = !fechado && diferenca === 0 && !ocupado;
+
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <div style={{ ...S.card, display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap" }}>
+        <EFSeletor rotulo="Mês" valor={mes} aoTrocar={aoTrocarMes}
+          opcoes={meses.map((m) => [m, efMesPorExtenso(m) + (mesEstaFechado(m, fechamentos) ? " ✓" : "")])} />
+        <div style={{ display: "grid", gap: 3 }}>
+          <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>Saldo do banco</span>
+          <input style={{ ...S.input, maxWidth: 160 }} inputMode="decimal" value={banco} placeholder="0,00"
+            disabled={fechado} onChange={(e) => setBanco(e.target.value)} />
+        </div>
+        <div style={{ display: "grid", gap: 3 }}>
+          <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>Saldo calculado</span>
+          <div style={{ fontSize: 16, fontWeight: 700, fontVariantNumeric: "tabular-nums", padding: "6px 0" }}>{efDinheiro(calculado)}</div>
+        </div>
+        <div style={{ display: "grid", gap: 3 }}>
+          <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>Diferença</span>
+          <div style={{ fontSize: 16, fontWeight: 700, fontVariantNumeric: "tabular-nums", padding: "6px 0",
+            color: diferenca === 0 ? "#0474f4" : (diferenca == null ? "#6b7280" : "#b45309") }}>
+            {diferenca == null ? "informe o saldo" : efDinheiro(diferenca)}
+          </div>
+        </div>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+          {ocupado && <span style={{ fontSize: 12, color: "#6b7280" }}>{ocupado}</span>}
+          {fechado ? (
+            <button style={S.btnSec} onClick={() => aoReabrir(mes)}>Reabrir mês</button>
+          ) : (
+            <button style={{ ...S.btn, opacity: podeFechar ? 1 : .45 }} disabled={!podeFechar}
+              onClick={() => aoFechar(mes, saldoBanco)}>Fechar {efMesPorExtenso(mes, true)}</button>
+          )}
+        </div>
+      </div>
+
+      <div style={{ ...S.card, display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", fontSize: 12.5, color: "#4b5563" }}>
+        <span><strong style={{ color: "#262421" }}>{conf.conferidos}</strong> de {conf.total} conferidos</span>
+        {conf.pendentes > 0 && <span>Falta conferir {efDinheiro(conf.valorPendente)} em {conf.pendentes} lançamentos</span>}
+        {fechado && <span style={{ color: "#0474f4" }}>Mês fechado em {String(registro.fechadoEm || "").slice(0, 10).split("-").reverse().join("/")}</span>}
+        <label style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+          <input type="checkbox" checked={soPendentes} onChange={(e) => setSoPendentes(e.target.checked)} />
+          Mostrar só o que falta conferir
+        </label>
+        {!fechado && conf.total > 0 && (
+          <button style={S.btnSec} disabled={!!ocupado}
+            onClick={() => aoMarcarTodos(mes, conf.pendentes > 0)}>
+            {conf.pendentes > 0 ? "Marcar todos como conferidos" : "Desmarcar todos"}
+          </button>
+        )}
+      </div>
+
+      {!conf.total ? (
+        <div style={{ ...S.card, textAlign: "center", color: "#6b7280", fontSize: 13 }}>
+          Nenhum lançamento em {efMesPorExtenso(mes)}.
+        </div>
+      ) : (
+        <div style={{ ...S.quadro, maxHeight: 520 }}>
+          <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
+            <thead>
+              <tr>
+                {["", "Conta", "Cliente / obra", "Descrição", "Valor"].map((h, i) => (
+                  <th key={i} style={{ position: "sticky", top: 0, background: "#fff", textAlign: i === 4 ? "right" : "left",
+                    padding: "8px 12px", fontSize: 11, color: "#6b7280", fontWeight: 600,
+                    borderBottom: "1px solid rgba(38,36,33,0.12)" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {conf.lancamentos.filter((l) => !soPendentes || !l.conferido).map((l) => {
+                const conta = contaEscritorio(l.contaId);
+                return (
+                  <tr key={l.id} style={{ borderTop: "1px solid rgba(38,36,33,0.06)", background: l.conferido ? "#f8fafc" : "transparent" }}>
+                    <td style={{ padding: "6px 12px" }}>
+                      <input type="checkbox" checked={!!l.conferido} disabled={fechado || !!ocupado}
+                        onChange={() => aoMarcar(l)} style={{ cursor: fechado ? "default" : "pointer" }} />
+                    </td>
+                    <td style={{ padding: "6px 12px", color: l.conferido ? "#9ca3af" : "#262421" }}>{conta ? conta.nome : "—"}</td>
+                    <td style={{ padding: "6px 12px", color: "#6b7280" }}>{[l.cliente, l.projeto].filter(Boolean).join(" · ") || "—"}</td>
+                    <td style={{ padding: "6px 12px", color: "#6b7280" }}>{l.descricao || l.fornecedor || "—"}</td>
+                    <td style={{ padding: "6px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{efDinheiro(l.valor)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   const S = EF_ESTILO;
   const perm = typeof getPermissoes === "function" ? getPermissoes() : { podeEditar: true, podeExcluir: true };
   // `vista` vem do menu lateral: cada item abre direto a sua tela e o
   // cabeçalho de abas some. Sem ela (Escritório aberto pelo caminho antigo),
   // as abas continuam aparecendo.
-  const [aba, setAba] = useState(vista === "resumo" ? "extrato" : (vista || "extrato"));
-  useEffect(() => { if (vista && vista !== "resumo") setAba(vista); }, [vista]);
+  const [aba, setAba] = useState(["resumo", "fechamento"].includes(vista) ? "extrato" : (vista || "extrato"));
+  useEffect(() => { if (vista && !["resumo", "fechamento"].includes(vista)) setAba(vista); }, [vista]);
   const [form, setForm] = useState(null);
   const [texto, setTexto] = useState("");
   const [lido, setLido] = useState(null);
@@ -1018,11 +1378,30 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoAbrirExtrato }) {
   const [ocupado, setOcupado] = useState("");
   const [aviso, setAviso] = useState("");
   const [busca, setBusca] = useState("");
+  // Filtro do painel e mês em conferência. O mês começa no primeiro que
+  // ainda não foi fechado — é nele que o trabalho do dia acontece.
+  const [filtro, setFiltro] = useState(() => {
+    const hoje = new Date();
+    return { ano: String(hoje.getFullYear()), mes: String(hoje.getMonth() + 1).padStart(2, "0"), unidadeId: "" };
+  });
+  const [mesFecho, setMesFecho] = useState("");
 
   const lancs = lancamentosDoEscritorio(data);
   const cfgFin = ((data || {}).escritorio || {}).financeiro || {};
   const saldoAbertura = Number(cfgFin.saldoAbertura) || 0;
   const linhas = extratoEscritorio(lancs, { saldoAbertura });
+  const fechamentos = fechamentosDoEscritorio(data);
+  const mesesDoExtrato = linhas.map((l) => l.mes);
+  // O mês da conferência é o de hoje — é nele que o extrato parcial chega.
+  // Se ele já estiver fechado, vai para o primeiro aberto depois dele; e se
+  // o histórico nem chegou em hoje, fica no último mês que existe.
+  const mesDeHoje = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+  const primeiroAberto = (mesesDoExtrato.includes(mesDeHoje) && !mesEstaFechado(mesDeHoje, fechamentos))
+    ? mesDeHoje
+    : (mesesDoExtrato.filter((m) => m >= mesDeHoje).find((m) => !mesEstaFechado(m, fechamentos))
+      || mesesDoExtrato.find((m) => !mesEstaFechado(m, fechamentos))
+      || mesesDoExtrato[mesesDoExtrato.length - 1] || "");
+  const mesEmConferencia = mesFecho && mesesDoExtrato.includes(mesFecho) ? mesFecho : primeiroAberto;
   const [ano, setAno] = useState("");
   const anoAtual = ano || (linhas.length ? linhas[linhas.length - 1].mes.slice(0, 4) : String(new Date().getFullYear()));
 
@@ -1067,12 +1446,76 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoAbrirExtrato }) {
     }
   }
 
+  // Conferência: marca um lançamento como visto no extrato do banco. É o
+  // trabalho do dia a dia — por isso vai um a um, sem cerimônia.
+  function marcarConferido(l) {
+    const agora = new Date().toISOString();
+    gravar(lancs.map((x) => x.id === l.id
+      ? (x.conferido ? { ...x, conferido: false, conferidoEm: "" } : { ...x, conferido: true, conferidoEm: agora })
+      : x));
+  }
+
+  // O mês inteiro de uma vez vai pelo lote: são centenas de lançamentos e o
+  // save() normal mandaria um pedido para cada.
+  async function marcarMesInteiro(mes, marcando) {
+    const agora = new Date().toISOString();
+    const alvo = lancs.filter((l) => String(l.competencia) === String(mes) && !!l.conferido !== marcando);
+    if (!alvo.length) return;
+    const novos = alvo.map((l) => marcando ? { ...l, conferido: true, conferidoEm: agora } : { ...l, conferido: false, conferidoEm: "" });
+    setOcupado(marcando ? "Marcando o mês…" : "Desmarcando…");
+    try {
+      const lote = 400;
+      for (let i = 0; i < novos.length; i += lote) await api.lancamentos.batch(novos.slice(i, i + lote));
+      setOcupado("");
+      if (onReload) await onReload();
+    } catch (e) {
+      setOcupado("");
+      setAviso("Não consegui marcar: " + ((e && e.message) || "falha no envio"));
+    }
+  }
+
+  function guardarFechamentos(novos) {
+    const esc = (data || {}).escritorio || {};
+    return save({ ...data, escritorio: { ...esc, financeiro: { ...cfgFin, fechamentos: novos } } });
+  }
+
+  async function fecharMes(mes, saldoBanco) {
+    const conf = conferenciaDoMes(lancs, mes);
+    if (conf.pendentes) {
+      const seguir = await dialogo.confirmar({
+        titulo: `Fechar ${efMesPorExtenso(mes)} com ${conf.pendentes} sem conferir?`,
+        mensagem: `O saldo bate com o banco, mas ${efDinheiro(conf.valorPendente)} ainda não foi marcado como conferido. Depois de fechado, o mês não aceita lançamento novo.`,
+        confirmar: "Fechar assim mesmo",
+      });
+      if (!seguir) return;
+    }
+    await guardarFechamentos({ ...fechamentos, [mes]: { saldoBanco: Number(saldoBanco) || 0, fechadoEm: new Date().toISOString() } });
+    setAviso(`${efMesPorExtenso(mes)} fechado.`);
+  }
+
+  async function reabrirMes(mes) {
+    const ok = await dialogo.confirmar({
+      titulo: `Reabrir ${efMesPorExtenso(mes)}?`,
+      mensagem: "O mês volta a aceitar lançamento. O saldo do banco que você informou fica guardado.",
+      confirmar: "Reabrir",
+    });
+    if (!ok) return;
+    const reg = fechamentos[mes] || {};
+    await guardarFechamentos({ ...fechamentos, [mes]: { ...reg, fechadoEm: "" } });
+    setAviso(`${efMesPorExtenso(mes)} reaberto.`);
+  }
+
   // Importação: vai direto pelo lote, sem passar pelo save() normal — o
   // save compara o que mudou e mandaria os milhares de lançamentos um a um.
   async function importar() {
     if (!lido || !lido.resumo.prontos) return;
     const prontos = lido.itens.filter((i) => !i.erros.length)
       .map((i) => lancamentoDaColagem(i, `imp_${Date.now().toString(36)}_${i.linha}`));
+    const emMesFechado = prontos.filter((l) => mesEstaFechado(l.competencia, fechamentos));
+    if (emMesFechado.length) {
+      setAviso(`${emMesFechado.length} linhas caem em meses já fechados e não podem entrar. Reabra o mês em Fechamento, ou tire essas linhas do arquivo.`);
+      return;
+    }
     setOcupado(`Importando ${prontos.length} lançamentos…`);
     setAviso("");
     try {
@@ -1116,15 +1559,26 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoAbrirExtrato }) {
       )}
 
       {vista === "resumo" && (
-        <ResumoEscritorioPainel
-          resumo={resumoEscritorio(linhas)}
-          quantidade={lancs.length}
-          aoVerExtrato={aoAbrirExtrato} />
+        <PainelFinanceiroEscritorio
+          lancs={lancs} linhas={linhas} fechamentos={fechamentos}
+          filtro={filtro} aoFiltrar={setFiltro}
+          aoIr={(destino, mes) => {
+            if (mes) setMesFecho(mes);
+            if (aoIrPara) aoIrPara(destino); else setAba(destino);
+          }} />
+      )}
+
+      {vista === "fechamento" && (
+        <FechamentoEscritorioTela
+          lancs={lancs} linhas={linhas} fechamentos={fechamentos}
+          mes={mesEmConferencia} aoTrocarMes={setMesFecho}
+          aoMarcar={marcarConferido} aoMarcarTodos={marcarMesInteiro}
+          aoFechar={fecharMes} aoReabrir={reabrirMes} ocupado={ocupado} />
       )}
 
       {aviso && <div style={{ fontSize: 12.5, color: "#0474f4" }}>{aviso}</div>}
 
-      {vista !== "resumo" && aba === "extrato" && (
+      {!["resumo", "fechamento"].includes(vista) && aba === "extrato" && (
         <>
           {!lancs.length ? (
             <div style={{ ...S.card, textAlign: "center", color: "#6b7280", fontSize: 13 }}>
@@ -1150,7 +1604,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoAbrirExtrato }) {
         </>
       )}
 
-      {vista !== "resumo" && aba === "lancamentos" && (
+      {!["resumo", "fechamento"].includes(vista) && aba === "lancamentos" && (
         <>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <input style={{ ...S.input, maxWidth: 320 }} value={busca} placeholder="Buscar por descrição, fornecedor, cliente…"
@@ -1159,7 +1613,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoAbrirExtrato }) {
               <button style={S.btn} onClick={() => setForm({})}>+ Novo lançamento</button>
             )}
           </div>
-          {form && <FormLancamentoEscritorio inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} />}
+          {form && <FormLancamentoEscritorio fechamentos={fechamentos} inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} />}
           <div style={S.quadro}>
             <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
               <thead>
@@ -1203,7 +1657,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoAbrirExtrato }) {
         </>
       )}
 
-      {vista !== "resumo" && aba === "importar" && (
+      {!["resumo", "fechamento"].includes(vista) && aba === "importar" && (
         <>
           <div style={{ ...S.card, display: "grid", gap: 10 }}>
             <div style={{ fontSize: 13, fontWeight: 700 }}>Saldo de abertura</div>

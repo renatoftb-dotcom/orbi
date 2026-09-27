@@ -3,7 +3,7 @@
 // Visual minimalista, fundo branco, estilo Claude.ai
 // ═══════════════════════════════════════════════════════════════
 
-function Escritorio({ data, save, onReload, abaInicial }) {
+function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
   const cfg = (data && data.escritorio) || {};
   // abaInicial: o menu lateral abre o módulo já na aba pedida (Financeiro,
   // Cadastro, Equipe, Usuários, Sistema). Sem ela, cai em "dados".
@@ -1301,10 +1301,10 @@ function Escritorio({ data, save, onReload, abaInicial }) {
       {/* Conteúdo */}
       {aba === "dados"    && renderDados()}
       {aba === "equipe"   && renderEquipe()}
-      {["financeiro", "extrato", "lancamentos", "importar"].includes(aba) && perm.podeGerenciarUsuarios && (
+      {["financeiro", "extrato", "lancamentos", "importar", "fechamento"].includes(aba) && perm.podeGerenciarUsuarios && (
         <FinanceiroEscritorio data={data} save={save} onReload={onReload}
           vista={peloMenu ? (aba === "financeiro" ? "resumo" : aba) : null}
-          aoAbrirExtrato={() => setAba("extrato")} />
+          aoIrPara={(destino) => { setAba(destino); if (aoTrocarAba) aoTrocarAba(destino); }} />
       )}
       {aba === "usuarios" && perm.podeGerenciarUsuarios && renderUsuarios()}
       {aba === "sistema"  && renderSistema()}

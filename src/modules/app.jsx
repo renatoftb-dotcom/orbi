@@ -1557,6 +1557,7 @@ export default function ModuloClientesFornecedores() {
         { k:"escritorio:financeiro",  icon:"financeiro", label:"Financeiro" },
         { k:"escritorio:extrato",     icon:"cub",        label:"Extrato" },
         { k:"escritorio:lancamentos", icon:"editar",     label:"Lançamentos" },
+        { k:"escritorio:fechamento",  icon:"check",      label:"Fechamento" },
         { k:"escritorio:importar",    icon:"copy",       label:"Importar" },
       ] : []),
       { k:"escritorio:dados",   icon:"empresas",   label:"Cadastro" },
@@ -2038,7 +2039,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "fornecedores"           && <PrestadoresServico key={fornecedoresKey} data={data} save={save} />}
           {aba === "insumos"                && <Insumos data={data} save={save} />}
           {aba === "nf"                     && <ImportarNF data={data} save={save} />}
-          {typeof aba === "string" && aba.indexOf("escritorio") === 0 && <Escritorio key={escritorioKey} abaInicial={aba.indexOf(":") > 0 ? aba.slice(aba.indexOf(":") + 1) : "dados"} data={data} save={save} onReload={loadData} />}
+          {typeof aba === "string" && aba.indexOf("escritorio") === 0 && <Escritorio key={escritorioKey} abaInicial={aba.indexOf(":") > 0 ? aba.slice(aba.indexOf(":") + 1) : "dados"} data={data} save={save} onReload={loadData} aoTrocarAba={(k) => setAba("escritorio:" + k)} />}
           {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} setUsuario={setUsuario} />}
           {/* Sub-abas do menu Master — Admin recebe initialTab pra abrir direto na aba certa */}
           {aba === "admin" && isMaster && <Admin usuario={usuario} data={data} save={save} />}

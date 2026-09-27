@@ -552,6 +552,22 @@ async function loadAllData(estado = null) {
 // ── Salva diffs entre newData e oldData ────────────────────────
 // Calcula o que mudou e só envia os itens modificados pro backend.
 // Cada módulo é independente — erro em um não afeta os outros.
+// Quem mudou e quem sumiu, em uma passada por lista.
+// A comparação ingênua (um find dentro de um filter) custa n² — com os
+// milhares de lançamentos do histórico do escritório, marcar UM lançamento
+// como conferido varria a lista inteira para cada item e travava a tela.
+// Com um índice por id, é uma passada só.
+function _mudadosERemovidos(novos, velhos) {
+  const antes = new Map((velhos || []).map(v => [v && v.id, v]));
+  const agora = new Map((novos || []).map(n => [n && n.id, n]));
+  const mudados = (novos || []).filter(n => {
+    const v = antes.get(n && n.id);
+    return !v || JSON.stringify(v) !== JSON.stringify(n);
+  });
+  const removidos = (velhos || []).filter(v => !agora.has(v && v.id));
+  return { mudados, removidos };
+}
+
 async function saveAllData(newData, oldData = {}) {
   const tasks = [];
 
@@ -606,23 +622,15 @@ async function saveAllData(newData, oldData = {}) {
   obrasRemovidas.forEach(o => tasks.push(api.obras.delete(o.id)));
 
   // Lançamentos
-  const lancsNovos = (newData.lancamentos || []).filter(
-    l => !oldData.lancamentos?.find(a => a.id === l.id && JSON.stringify(a) === JSON.stringify(l))
-  );
-  const lancsRemovidos = (oldData.lancamentos || []).filter(
-    a => !newData.lancamentos?.find(l => l.id === a.id)
-  );
+  const { mudados: lancsNovos, removidos: lancsRemovidos } =
+    _mudadosERemovidos(newData.lancamentos, oldData.lancamentos);
   lancsNovos.forEach(l => tasks.push(api.lancamentos.save(l)));
   lancsRemovidos.forEach(l => tasks.push(api.lancamentos.delete(l.id)));
 
   // Materiais / Insumos — faltava aqui: o catálogo semeado ou editado em
   // Insumos ficava só em memória e sumia no reload.
-  const matsNovos = (newData.materiais || []).filter(
-    m => !oldData.materiais?.find(a => a.id === m.id && JSON.stringify(a) === JSON.stringify(m))
-  );
-  const matsRemovidos = (oldData.materiais || []).filter(
-    a => !newData.materiais?.find(m => m.id === a.id)
-  );
+  const { mudados: matsNovos, removidos: matsRemovidos } =
+    _mudadosERemovidos(newData.materiais, oldData.materiais);
   matsNovos.forEach(m => tasks.push(api.materiais.save(m)));
   matsRemovidos.forEach(m => tasks.push(api.materiais.delete(m.id)));
 

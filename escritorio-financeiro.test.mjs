@@ -19,7 +19,9 @@ const M = new Function(src + `
            efNumero, efCompetencia, lancamentosDoEscritorio,
            efAbasDaPlanilha, efLinhasDaAba, efDataDoSerial, efEstilosDeData, efTextosCompartilhados,
            efCsvParaTsv, efAbaDeLancamentos, efTextoDoArquivo,
-           resumoEscritorio, efMesPorExtenso };`)();
+           resumoEscritorio, efMesPorExtenso, filtrarLancamentosEscritorio, resumoDoPeriodoEscritorio,
+           fechamentosDoEscritorio, mesEstaFechado, ultimoMesFechado, conferenciaDoMes,
+           diferencaDeFechamento, bloqueioPorMesFechado };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -411,6 +413,87 @@ teste("o mês vira texto de gente", () => {
   assert.strictEqual(M.efMesPorExtenso("2026-09"), "setembro de 2026");
   assert.strictEqual(M.efMesPorExtenso("2026-03", true), "mar/26");
   assert.strictEqual(M.efMesPorExtenso(""), "");
+});
+
+
+// ── Painel: filtro e resumo do período ──────────────────────────
+const lancParaFiltro = (id, competencia, contaId, unidadeId, valor) =>
+  ({ id, tipo: "escritorio", competencia, contaId, unidadeId, valor });
+
+teste("o filtro corta por ano, por mês e por unidade — e vazio quer dizer tudo", () => {
+  const lista = [
+    lancParaFiltro("a", "2025-03", "rec_projetos", "projetos", 1000),
+    lancParaFiltro("b", "2026-03", "rec_projetos", "projetos", 2000),
+    lancParaFiltro("c", "2026-04", "marketing", "escritorio", 300),
+    lancParaFiltro("d", "2026-03", "dep_consignacao", "gestao_obras", 5000),
+    { id: "e", competencia: "", contaId: "rec_projetos", valor: 9 },
+  ];
+  const ids = (f) => M.filtrarLancamentosEscritorio(lista, f).map((l) => l.id);
+  assert.deepStrictEqual(ids({}), ["a", "b", "c", "d"], "lançamento sem competência fica de fora");
+  assert.deepStrictEqual(ids({ ano: "2026" }), ["b", "c", "d"]);
+  assert.deepStrictEqual(ids({ ano: "2026", mes: "03" }), ["b", "d"]);
+  assert.deepStrictEqual(ids({ unidadeId: "escritorio" }), ["c"]);
+  assert.deepStrictEqual(ids({ ano: "2026", mes: "3" }), ["b", "d"], "mês com um dígito também serve");
+});
+
+teste("o resumo do período soma por grupo e lista as contas do maior para o menor", () => {
+  const r = M.resumoDoPeriodoEscritorio([
+    lancParaFiltro("a", "2026-03", "rec_projetos", "projetos", 10000),
+    lancParaFiltro("b", "2026-03", "rec_gestao", "gestao_obras", 2000),
+    lancParaFiltro("c", "2026-03", "marketing", "escritorio", 500),
+    lancParaFiltro("d", "2026-03", "cartao_credito", "escritorio", 1500),
+    lancParaFiltro("e", "2026-03", "dep_consignacao", "gestao_obras", 7000),
+    lancParaFiltro("f", "2026-03", "pagamentos_compras", "gestao_obras", 6000),
+    lancParaFiltro("g", "2026-03", "retiradas_socios", "escritorio", 3000),
+  ]);
+  assert.strictEqual(r.receitas, 12000);
+  assert.strictEqual(r.despesas, 2000);
+  assert.strictEqual(r.resultado, 10000);
+  assert.strictEqual(r.retiradas, 3000);
+  assert.strictEqual(r.saldoGestao, 1000);
+  assert.strictEqual(r.quantidade, 7);
+  assert.strictEqual(r.contas[0].nome, "Receita Projetos");
+  assert.strictEqual(r.contas[0].sinal, 1);
+  assert.strictEqual(r.contas.find((c) => c.contaId === "marketing").sinal, -1);
+});
+
+// ── Fechamento ──────────────────────────────────────────────────
+teste("fechar é dizer que bate com o banco: diferença, conferência e trava", () => {
+  const fechamentos = { "2026-07": { saldoBanco: 1000, fechadoEm: "2026-08-02T10:00:00Z" }, "2026-08": { saldoBanco: 2000 } };
+  assert.strictEqual(M.mesEstaFechado("2026-07", fechamentos), true);
+  assert.strictEqual(M.mesEstaFechado("2026-08", fechamentos), false, "saldo informado sem fechar não fecha o mês");
+  assert.strictEqual(M.ultimoMesFechado(fechamentos), "2026-07");
+  assert.strictEqual(M.ultimoMesFechado({}), "");
+  assert.strictEqual(M.diferencaDeFechamento(1000, 1000), 0);
+  assert.strictEqual(M.diferencaDeFechamento(1000, 1200.5), 200.5, "banco maior: falta lançar entrada");
+  assert.strictEqual(M.diferencaDeFechamento(1000, ""), null, "sem saldo do banco não há diferença a mostrar");
+  assert.ok(M.bloqueioPorMesFechado("2026-07", fechamentos).includes("julho de 2026"));
+  assert.strictEqual(M.bloqueioPorMesFechado("2026-09", fechamentos), "");
+  assert.deepStrictEqual(M.fechamentosDoEscritorio({ escritorio: { financeiro: { fechamentos } } }), fechamentos);
+  assert.deepStrictEqual(M.fechamentosDoEscritorio({}), {});
+});
+
+teste("a conferência conta o que já foi visto no extrato e o que falta", () => {
+  const lista = [
+    { id: "a", competencia: "2026-07", contaId: "rec_projetos", valor: 1000, conferido: true },
+    { id: "b", competencia: "2026-07", contaId: "marketing", valor: 250 },
+    { id: "c", competencia: "2026-08", contaId: "marketing", valor: 999 },
+  ];
+  const c = M.conferenciaDoMes(lista, "2026-07");
+  assert.strictEqual(c.total, 2);
+  assert.strictEqual(c.conferidos, 1);
+  assert.strictEqual(c.pendentes, 1);
+  assert.strictEqual(c.valorConferido, 1000);
+  assert.strictEqual(c.valorPendente, 250);
+});
+
+teste("mês fechado recusa lançamento novo, mês aberto aceita", () => {
+  const fechamentos = { "2026-07": { saldoBanco: 1, fechadoEm: "2026-08-02" } };
+  const base = { contaId: "marketing", unidadeId: "escritorio", valor: 100 };
+  const fechado = M.validarLancamentoEscritorio({ ...base, competencia: "2026-07" }, { fechamentos });
+  assert.ok(fechado.some((e) => e.includes("julho de 2026")), "avisa qual mês está fechado");
+  assert.deepStrictEqual(M.validarLancamentoEscritorio({ ...base, competencia: "2026-09" }, { fechamentos }), []);
+  assert.deepStrictEqual(M.validarLancamentoEscritorio({ ...base, competencia: "2026-07" }), [], "sem a lista de fechamentos, nada muda");
 });
 
 for (const [nome, fn] of testes) {
