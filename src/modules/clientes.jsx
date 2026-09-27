@@ -1746,6 +1746,10 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL }) {
   // Conta aberta em etapas: clicar no nome mostra onde o dinheiro foi, e não
   // só que a conta estourou. Só abre quando há etapa marcada dos dois lados.
   const [contaAberta, setContaAberta] = useState(null);
+  // Duas leituras da mesma base: por conta (o que comprei) e por etapa
+  // (onde a obra está). Quem está tocando a obra pensa por etapa.
+  const [visao, setVisao] = useState("conta");
+  const porEtapa = plPorEtapa(itens, contasPagar);
   const prog = progressoCusto(pl.custo);
   const num = (v) => (Math.abs(v) < 0.005 ? "—" : fmtBRL(v));
   const grade = {
@@ -1794,13 +1798,42 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL }) {
         </div>
       ) : (
         <div style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, overflow: "hidden" }}>
+          <div style={{ display: "flex", gap: 6, padding: "10px 12px 0" }}>
+            {[["conta", "Por conta"], ["etapa", "Por etapa"]].map(([v, r]) => (
+              <button key={v} onClick={() => setVisao(v)}
+                style={{ fontFamily: "inherit", fontSize: 12, padding: "5px 12px", borderRadius: 8, cursor: "pointer",
+                  border: `1px solid ${visao === v ? "#0474f4" : "rgba(38,36,33,0.16)"}`,
+                  background: visao === v ? "#eef5ff" : "#fff",
+                  color: visao === v ? "#0474f4" : "#4b5563", fontWeight: visao === v ? 600 : 500 }}>{r}</button>
+            ))}
+          </div>
           <div style={{ ...grade, padding: "8px 12px", borderBottom: "1px solid rgba(38,36,33,0.10)" }}>
-            <span style={cab}>Conta</span>
+            <span style={cab}>{visao === "etapa" ? "Etapa" : "Conta"}</span>
             <span style={{ ...cab, textAlign: "right" }}>Estimado</span>
             <span style={{ ...cab, textAlign: "right" }}>Realizado</span>
             {!isMobile && <span style={{ ...cab, textAlign: "right" }}>Saldo</span>}
           </div>
-          {pl.blocos.map(b => (
+          {visao === "etapa" ? (
+            <>
+              {porEtapa.linhas.map(e => (
+                <div key={e.etapaId || "sem"} style={{ ...grade, padding: "6px 12px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+                  <span style={{ fontSize: 12.5, color: "#111827", minWidth: 0 }}>
+                    {e.nome}
+                    {e.notas ? <span style={{ fontSize: 10.5, color: "#9ca3af" }}> · {e.notas} {e.notas === 1 ? "nota" : "notas"}</span> : null}
+                  </span>
+                  <span style={{ ...celula, color: "#6b7280" }}>{num(e.estimado)}</span>
+                  <span style={{ ...celula, color: "#111827" }}>{num(e.realizado)}</span>
+                  {!isMobile && <span style={{ ...celula, color: e.saldo < -0.005 ? "#dc2626" : "#6b7280" }}>{num(e.saldo)}</span>}
+                </div>
+              ))}
+              <div style={{ ...grade, padding: "8px 12px", background: "#fafafa", borderTop: "1px solid rgba(38,36,33,0.10)" }}>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: "#111827" }}>TOTAL DA OBRA</span>
+                <span style={{ ...celula, fontWeight: 700 }}>{num(porEtapa.estimado)}</span>
+                <span style={{ ...celula, fontWeight: 700 }}>{num(porEtapa.realizado)}</span>
+                {!isMobile && <span style={{ ...celula, fontWeight: 700, color: porEtapa.saldo < -0.005 ? "#dc2626" : "#4b5563" }}>{num(porEtapa.saldo)}</span>}
+              </div>
+            </>
+          ) : pl.blocos.map(b => (
             <div key={b.grupo.id}>
               <div style={{ ...grade, padding: "7px 12px", background: "#fafafa", borderTop: "1px solid rgba(38,36,33,0.10)" }}>
                 <span style={{ fontSize: 11.5, fontWeight: 700, color: "#111827" }}>{b.grupo.titulo}</span>

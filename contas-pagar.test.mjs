@@ -37,7 +37,7 @@ const modulo = new Function(`
            extratoMensal, mesesDoExtrato, acumuladoAte, entradaObraVazia, mesDe,
            extratoMatriz, estimativaPorConta,
            GRUPOS_PL, linhasEstimativaPL, definirEstimativaDaConta, totaisEstimativaPL,
-           subcontasDaConta,
+           subcontasDaConta, plPorEtapa, contaPorId,
            itemDeQuadro, itensDetalhados, EST_ORIGEM_QUADRO,
            CARGA_ESTIMATIVA_UNICA, estimativaCargaUnica,
            linhaFinalExtrato, fechoEstimativaPL, plDaObra, progressoCusto,
@@ -1464,6 +1464,39 @@ teste("a conta abre em subcontas: grupo de material dos dois lados", () => {
   assert.strictEqual(porEtapa[0].nome, "Fundação");
   assert.strictEqual(porEtapa[0].saldo, 60);
   assert.deepStrictEqual(modulo.subcontasDaConta([], [], "material"), []);
+});
+
+teste("o P&L girado por etapa fecha com o P&L por conta", () => {
+  const itens = [
+    { contaId: "material",    grupoMaterial: "Concreto", etapaId: "fundacao",        valor: 19417.50 },
+    { contaId: "material",    grupoMaterial: "Aço",      etapaId: "fundacao",        valor: 2461.35 },
+    { contaId: "material",    grupoMaterial: "Tijolos e canaletas", etapaId: "supra_paredes_1", valor: 12112.90 },
+    { contaId: "empreiteiro", grupoMaterial: "Prestadores de serviços", etapaId: "prestadores", valor: 54672 },
+    { contaId: "venda_imovel",      etapaId: "", valor: 630000 },
+    { contaId: "terreno_aquisicao", etapaId: "", valor: 210000 },
+  ];
+  const contas = [
+    { contaId: "material",    etapa: "fundacao",    valor: 3892.72, pago: true },
+    { contaId: "material",    etapa: "fundacao",    valor: 5326.88, pago: true },
+    { contaId: "empreiteiro", etapa: "prestadores", valor: 4280,    pago: true },
+    { contaId: "material",    etapa: "laje_1",      valor: 7200,    pago: true },
+    { contaId: "venda_imovel", etapa: "outros",     valor: 12000,   pago: true },
+    { contaId: "material",    etapa: "fundacao",    valor: 999,     pago: false },
+  ];
+  const r = modulo.plPorEtapa(itens, contas);
+  assert.deepStrictEqual(r.linhas.map(l => l.etapaId), ["fundacao", "supra_paredes_1", "laje_1", "prestadores"],
+    "ordem construtiva, com prestadores no fim");
+  const fund = r.linhas.find(l => l.etapaId === "fundacao");
+  assert.strictEqual(fund.estimado, 21878.85, "soma os grupos da mesma etapa");
+  assert.strictEqual(fund.realizado, 9219.60);
+  assert.strictEqual(fund.notas, 2, "conta não paga não entra");
+  assert.strictEqual(r.linhas.find(l => l.etapaId === "laje_1").estimado, 0, "etapa só com gasto aparece");
+
+  // venda e terreno ficam fora: etapa é obra, não negócio
+  assert.ok(!r.linhas.some(l => l.etapaId === "outros"), "a venda não vira etapa");
+  const pl = modulo.plDaObra(itens, contas, modulo.GRUPOS_PL, modulo.PLANO_CONTAS);
+  assert.strictEqual(r.estimado, pl.custo.estimado - 210000, "o total bate com o custo do P&L sem o terreno");
+  assert.strictEqual(r.realizado, pl.custo.realizado);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

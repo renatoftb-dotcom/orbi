@@ -1042,6 +1042,53 @@ const itensDetalhados = (itens, contaId) =>
 // conta já tem itens detalhados: ali o número é a soma deles, e mexer no
 // quadro esconderia de onde o valor veio.
 
+
+// ── O P&L visto por etapa ───────────────────────────────────────
+// A mesma base, girada: em vez de "quanto gastei de material", "quanto
+// custou a fundação". É a leitura de quem está tocando a obra — a etapa
+// acabou e passou do previsto, ou ainda nem começou. Estimado e realizado
+// vêm dos mesmos lugares do P&L por conta, então os totais fecham iguais.
+function plPorEtapa(itens, contasPagar) {
+  const est = {}, real = {}, contasDe = {};
+  for (const i of itens || []) {
+    if (!i) continue;
+    const c = (typeof contaPorId === "function" ? contaPorId(i.contaId) : null);
+    // Receita e terreno não são etapa de obra: ficam fora deste quadro.
+    if (c && (c.grupo === "receitas" || c.grupo === "terreno")) continue;
+    const k = i.etapaId || "";
+    est[k] = Math.round(((est[k] || 0) + (Number(i.valor) || 0)) * 100) / 100;
+  }
+  for (const c of contasPagar || []) {
+    if (!c || !c.pago) continue;
+    const conta = (typeof contaPorId === "function" ? contaPorId(c.contaId) : null);
+    if (conta && (conta.grupo === "receitas" || conta.grupo === "terreno")) continue;
+    const k = c.etapa || c.etapaId || "";
+    const v = Number(c.valorPago) || Number(c.valor) || 0;
+    real[k] = Math.round(((real[k] || 0) + v) * 100) / 100;
+    (contasDe[k] = contasDe[k] || []).push(c);
+  }
+  const ordem = (id) => {
+    const i = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).findIndex((e) => e.id === id);
+    return i < 0 ? 998 : i;
+  };
+  const nome = (id) => {
+    if (!id) return "Sem etapa";
+    const e = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).find((x) => x.id === id);
+    return e ? e.nome : id;
+  };
+  const linhas = [...new Set([...Object.keys(est), ...Object.keys(real)])]
+    .map((k) => ({
+      etapaId: k, nome: nome(k),
+      estimado: est[k] || 0, realizado: real[k] || 0,
+      saldo: Math.round(((est[k] || 0) - (real[k] || 0)) * 100) / 100,
+      notas: (contasDe[k] || []).length,
+    }))
+    .filter((l) => l.estimado || l.realizado)
+    .sort((a, b) => ordem(a.etapaId) - ordem(b.etapaId));
+  const soma = (campo) => Math.round(linhas.reduce((s, l) => s + l[campo], 0) * 100) / 100;
+  return { linhas, estimado: soma("estimado"), realizado: soma("realizado"), saldo: soma("saldo") };
+}
+
 // ── Subcontas: a conta aberta por grupo de material ─────────────
 // "Material R$ 222 mil" não diz nada. Aberto por grupo — concreto,
 // esquadrias, tintas, aço —, o orçamento vira leitura: dá para ver qual
