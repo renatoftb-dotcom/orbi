@@ -24,7 +24,8 @@ const M = new Function(src + `
            diferencaDeFechamento, bloqueioPorMesFechado,
            detectarColunasTabela, movimentosDaTabela, conciliarExtrato, efEhMovimento,
            lancamentoDoExtrato, efValorDeTexto, efEhData, efLinhaDoCabecalho,
-           layoutsDoEscritorio, layoutSalvo };`)();
+           layoutsDoEscritorio, layoutSalvo,
+           ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -620,6 +621,55 @@ teste("o mapa de colunas fica guardado por assinatura do arquivo", () => {
   assert.strictEqual(M.layoutSalvo(layouts, ""), null);
   assert.deepStrictEqual(M.layoutsDoEscritorio({ escritorio: { financeiro: { layouts } } }), layouts);
   assert.deepStrictEqual(M.layoutsDoEscritorio({}), {});
+});
+
+
+// ── Empreendimento é cliente com tique ──────────────────────────
+teste("o tique no cadastro do cliente é o que faz dele um empreendimento", () => {
+  const data = { clientes: [
+    { id: "c1", nome: "COBOP", servicos: { gestaoObra: true } },
+    { id: "c2", nome: "Casa Jardim Europa", servicos: { empreendimento: true } },
+    { id: "c3", nome: "Sem serviços" },
+  ] };
+  assert.strictEqual(M.ehEmpreendimento(data.clientes[1]), true);
+  assert.strictEqual(M.ehEmpreendimento(data.clientes[0]), false);
+  assert.strictEqual(M.ehEmpreendimento(data.clientes[2]), false);
+  assert.strictEqual(M.ehEmpreendimento(null), false);
+  assert.deepStrictEqual(M.empreendimentosDoData(data).map((c) => c.id), ["c2"]);
+  assert.strictEqual(M.nomeDoEmpreendimento(data, "c2"), "Casa Jardim Europa");
+  assert.strictEqual(M.nomeDoEmpreendimento(data, "xx"), "");
+  assert.deepStrictEqual(M.empreendimentosDoData({}), []);
+});
+
+teste("lançamento de empreendimento exige escolher qual, e o custo só vira lucro na venda", () => {
+  const base = { contaId: "emp_construcao", unidadeId: "empreendimento", valor: 5000, competencia: "2026-09" };
+  assert.ok(M.validarLancamentoEscritorio(base).some((e) => /empreendimento/i.test(e)), "sem empreendimento, recusa");
+  assert.deepStrictEqual(M.validarLancamentoEscritorio({ ...base, empreendimentoId: "c2" }), []);
+
+  const lancs = [
+    { id: "1", contaId: "emp_terreno", unidadeId: "empreendimento", empreendimentoId: "c2", valor: 80000, competencia: "2026-01" },
+    { id: "2", contaId: "emp_construcao", unidadeId: "empreendimento", empreendimentoId: "c2", valor: 120000, competencia: "2026-05" },
+    { id: "3", contaId: "emp_construcao", unidadeId: "empreendimento", empreendimentoId: "outro", valor: 9999, competencia: "2026-05" },
+  ];
+  const andando = M.resultadoEmpreendimento(lancs, "c2");
+  assert.strictEqual(andando.investido, 200000, "só o que é daquele empreendimento");
+  assert.strictEqual(andando.resultado, null, "sem venda não há resultado");
+
+  const vendido = M.resultadoEmpreendimento(lancs.concat(
+    [{ id: "4", contaId: "emp_venda", unidadeId: "empreendimento", empreendimentoId: "c2", valor: 260000, competencia: "2026-09" }]), "c2");
+  assert.strictEqual(vendido.vendido, 260000);
+  assert.strictEqual(vendido.resultado, 60000, "lucro aparece de uma vez na venda");
+});
+
+teste("o investimento em empreendimento sai do saldo do banco sem virar despesa do mês", () => {
+  const lancs = [
+    { contaId: "rec_projetos", competencia: "2026-09", valor: 10000 },
+    { contaId: "emp_construcao", competencia: "2026-09", valor: 4000, empreendimentoId: "c2" },
+  ];
+  const [mes] = M.extratoEscritorio(lancs, { saldoAbertura: 0 });
+  assert.strictEqual(mes.saldoEscritorio, 10000, "o custo do imóvel não é despesa do escritório");
+  assert.strictEqual(mes.saldoEmpreendimento, -4000);
+  assert.strictEqual(mes.saldoExtrato, 6000, "mas o dinheiro saiu da conta");
 });
 
 for (const [nome, fn] of testes) {

@@ -1149,6 +1149,24 @@ function layoutSalvo(layouts, assinatura) {
   return g && g.colunas ? g : null;
 }
 
+
+// ── Empreendimentos ─────────────────────────────────────────────
+// Empreendimento é um cliente com um tique no cadastro: tem obra, contas e
+// P&L como qualquer outro, mas o dinheiro dele não forma o resultado do mês
+// — fica investido no imóvel até a venda.
+function ehEmpreendimento(cliente) {
+  return !!(cliente && cliente.servicos && cliente.servicos.empreendimento);
+}
+
+function empreendimentosDoData(data) {
+  return ((data || {}).clientes || []).filter(ehEmpreendimento);
+}
+
+function nomeDoEmpreendimento(data, id) {
+  const c = ((data || {}).clientes || []).find((x) => x && x.id === id);
+  return c ? c.nome : "";
+}
+
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
 // ── UI — a aba Financeiro do Escritório ─────────────────────────
 // Três telas: o extrato mês a mês (que é o que você já olhava na planilha),
@@ -1269,19 +1287,24 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
 
 // Formulário de um lançamento. As travas são as do validarLancamento: a
 // mensagem aparece antes de gravar, não depois.
-function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos }) {
+function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes }) {
   const S = EF_ESTILO;
   const [f, setF] = useState(() => ({
     contaId: "", unidadeId: "escritorio", valor: "", competencia: "", lancadoEm: "",
-    cliente: "", projeto: "", fornecedor: "", descricao: "", documento: "", contaBanco: "sim",
+    cliente: "", clienteId: "", empreendimentoId: "", projeto: "", fornecedor: "", descricao: "", documento: "", contaBanco: "sim",
     ...(inicial || {}),
   }));
   const [tentou, setTentou] = useState(false);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const conta = contaEscritorio(f.contaId);
   const unidadesOk = conta && (conta.unidades || []).length ? conta.unidades : UNIDADES_NEGOCIO.map((u) => u.id);
+  // Empreendimento é cliente com tique: quando a unidade é Empreendimento, a
+  // lista de escolha só traz esses, e o id escolhido vale pelos dois campos.
+  const ehEmp = f.unidadeId === "empreendimento";
+  const doCadastro = (clientes || []).filter((c) => c && (ehEmp ? ehEmpreendimento(c) : true));
   const erros = validarLancamentoEscritorio({ ...f, valor: Number(String(f.valor).replace(",", ".")) || 0,
-    clienteId: f.cliente, obraId: f.projeto, empreendimentoId: f.projeto }, { fechamentos });
+    clienteId: f.clienteId || f.cliente, obraId: f.projeto,
+    empreendimentoId: ehEmp ? f.empreendimentoId : f.projeto }, { fechamentos });
 
   const campo = (rot, filho) => <div><div style={S.rot}>{rot}</div>{filho}</div>;
   return (
@@ -1325,7 +1348,26 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos }
             <option value="nao">Não</option>
           </select>
         ))}
-        {campo("Cliente", <input style={S.input} value={f.cliente} onChange={(e) => set("cliente", e.target.value)} />)}
+        {campo(ehEmp ? "Empreendimento" : "Cliente", (
+          <select style={{ ...S.input, cursor: "pointer" }}
+            value={f.clienteId || ""}
+            onChange={(e) => {
+              const c = doCadastro.find((x) => x.id === e.target.value);
+              setF((p) => ({ ...p, clienteId: e.target.value, cliente: c ? c.nome : "",
+                empreendimentoId: c && ehEmpreendimento(c) ? c.id : "" }));
+            }}>
+            <option value="">{f.cliente && !f.clienteId ? f.cliente : "— escolha —"}</option>
+            {doCadastro.map((c) => (
+              <option key={c.id} value={c.id}>{c.nome}{ehEmpreendimento(c) && !ehEmp ? " · empreendimento" : ""}</option>
+            ))}
+          </select>
+        ))}
+        {ehEmp && !doCadastro.length && (
+          <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#b45309" }}>
+            Nenhum empreendimento cadastrado ainda. Abra Clientes, cadastre o empreendimento e marque
+            “É um empreendimento do escritório”.
+          </div>
+        )}
         {campo("Projeto / obra", <input style={S.input} value={f.projeto} onChange={(e) => set("projeto", e.target.value)} />)}
         {campo("Fornecedor", <input style={S.input} value={f.fornecedor} onChange={(e) => set("fornecedor", e.target.value)} />)}
         {campo("Documento", <input style={S.input} value={f.documento} onChange={(e) => set("documento", e.target.value)} />)}
@@ -1404,6 +1446,57 @@ function ResumoEscritorioPainel({ resumo, quantidade, aoVerExtrato }) {
 }
 
 
+
+// Quadro dos empreendimentos: quanto já foi investido em cada um e o que
+// sobrou quando vendeu. Enquanto não vende, resultado não existe — é imóvel
+// parado, não lucro nem prejuízo.
+function EmpreendimentosQuadro({ data, lancs, aoFiltrar }) {
+  const S = EF_ESTILO;
+  const lista = empreendimentosDoData(data);
+  if (!lista.length) return null;
+  return (
+    <div style={{ display: "grid", gap: 6 }}>
+      <div style={{ fontSize: 13, fontWeight: 700 }}>Empreendimentos</div>
+      <div style={S.quadro}>
+        <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
+          <thead>
+            <tr>
+              {["Empreendimento", "Investido", "Vendido", "Resultado", ""].map((h, i) => (
+                <th key={i} style={{ textAlign: i === 0 || i === 4 ? "left" : "right", padding: "8px 12px",
+                  fontSize: 11, color: "#6b7280", fontWeight: 600, borderBottom: "1px solid rgba(38,36,33,0.12)" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {lista.map((c) => {
+              const r = resultadoEmpreendimento(lancs, c.id);
+              return (
+                <tr key={c.id} style={{ borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+                  <td style={{ padding: "7px 12px" }}>{c.nome}</td>
+                  <td style={{ padding: "7px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{efDinheiro(r.investido)}</td>
+                  <td style={{ padding: "7px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                    {r.vendido ? efDinheiro(r.vendido) : "—"}
+                  </td>
+                  <td style={{ padding: "7px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums",
+                    color: r.resultado == null ? "#6b7280" : "#0474f4" }}>
+                    {r.resultado == null ? "em andamento" : efDinheiro(r.resultado)}
+                  </td>
+                  <td style={{ padding: "5px 12px" }}>
+                    {aoFiltrar && <button style={S.btnSec} onClick={() => aoFiltrar(c.id)}>Ver lançamentos</button>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ fontSize: 11.5, color: "#6b7280" }}>
+        O investido não entra no resultado do mês. O lucro aparece de uma vez quando a venda é lançada.
+      </div>
+    </div>
+  );
+}
+
 // ── Painel do financeiro ────────────────────────────────────────
 // A tela de entrada: filtro em cima, os números do recorte no meio e o
 // caminho para lançar, ver o extrato e fechar o mês.
@@ -1419,7 +1512,7 @@ function EFSeletor({ rotulo, valor, aoTrocar, opcoes }) {
   );
 }
 
-function PainelFinanceiroEscritorio({ lancs, linhas, fechamentos, filtro, aoFiltrar, aoIr }) {
+function PainelFinanceiroEscritorio({ lancs, linhas, fechamentos, filtro, aoFiltrar, aoIr, dadosDoPainel }) {
   const S = EF_ESTILO;
   const anos = [...new Set((linhas || []).map((l) => l.mes.slice(0, 4)))].sort();
   const doFiltro = filtrarLancamentosEscritorio(lancs, filtro);
@@ -1528,6 +1621,9 @@ function PainelFinanceiroEscritorio({ lancs, linhas, fechamentos, filtro, aoFilt
               </div>
             );
           })()}
+
+          <EmpreendimentosQuadro data={dadosDoPainel} lancs={lancs}
+            aoFiltrar={() => aoFiltrar({ ...filtro, unidadeId: "empreendimento" })} />
 
           <div style={S.quadro}>
             <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
@@ -2122,6 +2218,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
 
       {vista === "resumo" && (
         <PainelFinanceiroEscritorio
+          dadosDoPainel={data}
           lancs={lancs} linhas={linhas} fechamentos={fechamentos}
           filtro={filtro} aoFiltrar={setFiltro}
           aoIr={(destino, mes) => {
@@ -2181,7 +2278,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
               <button style={S.btn} onClick={() => setForm({})}>+ Novo lançamento</button>
             )}
           </div>
-          {form && <FormLancamentoEscritorio fechamentos={fechamentos} inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} />}
+          {form && <FormLancamentoEscritorio fechamentos={fechamentos} clientes={(data || {}).clientes || []} inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} />}
           <div style={S.quadro}>
             <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
               <thead>

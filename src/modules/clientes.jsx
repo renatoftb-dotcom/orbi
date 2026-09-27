@@ -1070,6 +1070,21 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:VK.inkSoft}}>
             <input className="vk-fc-check" type="checkbox" checked={form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} /> Cliente ativo
           </label>
+          {/* Empreendimento do escritório: casa que o escritório constrói para
+              vender. É cliente como qualquer outro — tem obra, contas e P&L —
+              mas o dinheiro dele não é resultado do mês: é investimento em
+              imóvel até a venda. O financeiro usa este tique para saber. */}
+          <label style={{display:"flex",alignItems:"flex-start",gap:8,cursor:"pointer",fontSize:13,color:VK.inkSoft,marginTop:10}}>
+            <input className="vk-fc-check" type="checkbox" style={{marginTop:3}}
+              checked={!!(form.servicos||{}).empreendimento}
+              onChange={e=>setForm({...form,servicos:{...(form.servicos||{}),empreendimento:e.target.checked}})} />
+            <span>
+              É um empreendimento do escritório
+              <span style={{display:"block",fontSize:11.5,color:"#4b5563",marginTop:2}}>
+                Construção para venda. O investimento não entra no resultado do mês; o lucro aparece na venda.
+              </span>
+            </span>
+          </label>
         </div>
         <hr style={FC.divider} />
         <div style={{ marginBottom:16 }}>
