@@ -888,6 +888,21 @@ function extratoMatriz(contas, entradas, meses, estimativa) {
   };
 }
 
+// ── Só o custo de construir ─────────────────────────────
+// Para acompanhar obra o que interessa é material e mão de obra. Preço de
+// venda, terreno e tributos são do negócio, não do canteiro — e entram em
+// saltos grandes justamente quando a casa vende, atrapalhando a leitura de
+// quanto a construção está custando. O filtro é da leitura, não do dado:
+// nada sai da base, só da soma.
+const GRUPOS_FORA_DO_CUSTO_OBRA = ["receitas", "terreno"];
+const CONTAS_TRIBUTO = ["impostos", "ir_receita", "inss", "iss"];
+
+function contaEntraNoCustoDeObra(conta) {
+  if (!conta) return true;
+  if (GRUPOS_FORA_DO_CUSTO_OBRA.indexOf(conta.grupo) >= 0) return false;
+  return CONTAS_TRIBUTO.indexOf(conta.id) < 0;
+}
+
 // ── O P&L da obra, conta a conta ────────────────────────────────
 // Estimado (Planejamento) e realizado (o que já foi PAGO em contas a pagar),
 // lado a lado, na estrutura do plano de contas. É a tela de abertura do
@@ -896,14 +911,17 @@ function extratoMatriz(contas, entradas, meses, estimativa) {
 //
 // Só entra conta que tem algum dos dois lados. Mostrar as 42 contas com zero
 // nas duas colunas afogaria as seis que importam.
-function plDaObra(itens, contasPagar, grupos, plano) {
+function plDaObra(itens, contasPagar, grupos, plano, opcoes) {
   const red = (x) => Math.round(x * 100) / 100;
+  const soCusto = !!(opcoes && opcoes.soCusto);
   const est = estimativaPorConta(itens);
   const real = realizadoPorConta(contasPagar);
   const blocos = [];
   for (const g of grupos || []) {
+    if (soCusto && GRUPOS_FORA_DO_CUSTO_OBRA.indexOf(g.id) >= 0) continue;
     const linhas = [];
     for (const c of (plano || []).filter((x) => x.grupo === g.id)) {
+      if (soCusto && !contaEntraNoCustoDeObra(c)) continue;
       const e = Number(est[c.id]) || 0;
       const r = Number(real[c.id]) || 0;
       if (!e && !r) continue;
@@ -1048,20 +1066,26 @@ const itensDetalhados = (itens, contaId) =>
 // custou a fundação". É a leitura de quem está tocando a obra — a etapa
 // acabou e passou do previsto, ou ainda nem começou. Estimado e realizado
 // vêm dos mesmos lugares do P&L por conta, então os totais fecham iguais.
-function plPorEtapa(itens, contasPagar) {
+function plPorEtapa(itens, contasPagar, opcoes) {
   const est = {}, real = {}, contasDe = {};
+  const soCusto = !!(opcoes && opcoes.soCusto);
+  // Receita e terreno nunca são etapa de obra; com soCusto os tributos
+  // também saem, para o quadro por etapa fechar igual ao por conta.
+  const fora = (contaId) => {
+    const c = (typeof contaPorId === "function" ? contaPorId(contaId) : null);
+    if (!c) return false;
+    if (GRUPOS_FORA_DO_CUSTO_OBRA.indexOf(c.grupo) >= 0) return true;
+    return soCusto && !contaEntraNoCustoDeObra(c);
+  };
   for (const i of itens || []) {
     if (!i) continue;
-    const c = (typeof contaPorId === "function" ? contaPorId(i.contaId) : null);
-    // Receita e terreno não são etapa de obra: ficam fora deste quadro.
-    if (c && (c.grupo === "receitas" || c.grupo === "terreno")) continue;
+    if (fora(i.contaId)) continue;
     const k = i.etapaId || "";
     est[k] = Math.round(((est[k] || 0) + (Number(i.valor) || 0)) * 100) / 100;
   }
   for (const c of contasPagar || []) {
     if (!c || !c.pago) continue;
-    const conta = (typeof contaPorId === "function" ? contaPorId(c.contaId) : null);
-    if (conta && (conta.grupo === "receitas" || conta.grupo === "terreno")) continue;
+    if (fora(c.contaId)) continue;
     const k = c.etapa || c.etapaId || "";
     const v = Number(c.valorPago) || Number(c.valor) || 0;
     real[k] = Math.round(((real[k] || 0) + v) * 100) / 100;

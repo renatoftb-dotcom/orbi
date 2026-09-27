@@ -1742,14 +1742,18 @@ function PrestadoresPLView({ itens, contasPagar, isMobile, fmtBRL }) {
 // A pergunta de todo dia é "quanto eu disse que ia custar e quanto já saiu".
 // Por isso o Planejamento abre aqui, e não no formulário de preencher.
 function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL }) {
-  const pl = plDaObra(itens, contasPagar, GRUPOS_PL, PLANO_CONTAS);
+  // Acompanhar custo e apurar resultado são duas perguntas. Com a venda, o
+  // terreno e os tributos na conta, o número do canteiro fica escondido; o
+  // botão esconde os três e sobra o que custa construir.
+  const [soCusto, setSoCusto] = useState(false);
+  const pl = plDaObra(itens, contasPagar, GRUPOS_PL, PLANO_CONTAS, { soCusto });
   // Conta aberta em etapas: clicar no nome mostra onde o dinheiro foi, e não
   // só que a conta estourou. Só abre quando há etapa marcada dos dois lados.
   const [contaAberta, setContaAberta] = useState(null);
   // Duas leituras da mesma base: por conta (o que comprei) e por etapa
   // (onde a obra está). Quem está tocando a obra pensa por etapa.
   const [visao, setVisao] = useState("conta");
-  const porEtapa = plPorEtapa(itens, contasPagar);
+  const porEtapa = plPorEtapa(itens, contasPagar, { soCusto });
   const prog = progressoCusto(pl.custo);
   const num = (v) => (Math.abs(v) < 0.005 ? "—" : fmtBRL(v));
   const grade = {
@@ -1798,7 +1802,7 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL }) {
         </div>
       ) : (
         <div style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, overflow: "hidden" }}>
-          <div style={{ display: "flex", gap: 6, padding: "10px 12px 0" }}>
+          <div style={{ display: "flex", gap: 6, padding: "10px 12px 0", flexWrap: "wrap", alignItems: "center" }}>
             {[["conta", "Por conta"], ["etapa", "Por etapa"]].map(([v, r]) => (
               <button key={v} onClick={() => setVisao(v)}
                 style={{ fontFamily: "inherit", fontSize: 12, padding: "5px 12px", borderRadius: 8, cursor: "pointer",
@@ -1806,6 +1810,15 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL }) {
                   background: visao === v ? "#eef5ff" : "#fff",
                   color: visao === v ? "#0474f4" : "#4b5563", fontWeight: visao === v ? 600 : 500 }}>{r}</button>
             ))}
+            <button onClick={() => setSoCusto(!soCusto)}
+              title="Esconde preço de venda, terreno e tributos — sobra o que custa construir"
+              style={{ fontFamily: "inherit", fontSize: 12, padding: "5px 12px", borderRadius: 8, cursor: "pointer",
+                marginLeft: "auto",
+                border: `1px solid ${soCusto ? "#0474f4" : "rgba(38,36,33,0.16)"}`,
+                background: soCusto ? "#eef5ff" : "#fff",
+                color: soCusto ? "#0474f4" : "#4b5563", fontWeight: soCusto ? 600 : 500 }}>
+              Só custo de obra
+            </button>
           </div>
           <div style={{ ...grade, padding: "8px 12px", borderBottom: "1px solid rgba(38,36,33,0.10)" }}>
             <span style={cab}>{visao === "etapa" ? "Etapa" : "Conta"}</span>
@@ -1878,10 +1891,10 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL }) {
           ))}
           <div style={{ ...grade, padding: "9px 12px", borderTop: "1.5px solid rgba(38,36,33,0.14)", background: "#fafafa" }}>
             <span style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>
-              {clientePaga ? "CUSTO TOTAL" : "RESULTADO"}
+              {soCusto ? "CUSTO DE CONSTRUÇÃO" : clientePaga ? "CUSTO TOTAL" : "RESULTADO"}
             </span>
-            <span style={{ ...celula, fontWeight: 700 }}>{num(clientePaga ? pl.custo.estimado : pl.resultado.estimado)}</span>
-            <span style={{ ...celula, fontWeight: 700 }}>{num(clientePaga ? pl.custo.realizado : pl.resultado.realizado)}</span>
+            <span style={{ ...celula, fontWeight: 700 }}>{num(soCusto || clientePaga ? pl.custo.estimado : pl.resultado.estimado)}</span>
+            <span style={{ ...celula, fontWeight: 700 }}>{num(soCusto || clientePaga ? pl.custo.realizado : pl.resultado.realizado)}</span>
             {!isMobile && <span />}
           </div>
         </div>
@@ -1889,6 +1902,7 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL }) {
       <div style={{ fontSize: 11, color: "#6b7280", marginTop: 8 }}>
         “Realizado” é o que já foi <strong style={{ color: "#4b5563" }}>pago</strong> em contas a pagar, acumulado até hoje —
         conta em aberto não entra. “Estimado” vem da aba Preencher.
+        {soCusto && " Preço de venda, terreno e tributos ficam fora deste quadro — só o que custa construir."}
         {clientePaga && " O cliente paga os fornecedores direto, então a obra fecha no custo."}
       </div>
     </div>

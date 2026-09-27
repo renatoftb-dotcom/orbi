@@ -1499,5 +1499,56 @@ teste("o P&L girado por etapa fecha com o P&L por conta", () => {
   assert.strictEqual(r.realizado, pl.custo.realizado);
 });
 
+teste("só custo de obra tira venda, terreno e tributos das duas visões", () => {
+  const itens = [
+    { contaId: "material",     etapaId: "fundacao",    valor: 19417.50 },
+    { contaId: "empreiteiro",  etapaId: "prestadores", valor: 54672 },
+    { contaId: "taxa_admin_obra", etapaId: "",         valor: 5000 },
+    { contaId: "ir_receita",   etapaId: "",            valor: 25200 },
+    { contaId: "inss",         etapaId: "",            valor: 3000 },
+    { contaId: "iss",          etapaId: "",            valor: 1200 },
+    { contaId: "impostos",     etapaId: "fundacao",    valor: 800 },
+    { contaId: "venda_imovel", etapaId: "",            valor: 630000 },
+    { contaId: "terreno_aquisicao", etapaId: "",       valor: 210000 },
+  ];
+  const contas = [
+    { contaId: "material",     etapa: "fundacao",    valor: 9219.60, pago: true },
+    { contaId: "empreiteiro",  etapa: "prestadores", valor: 4280,    pago: true },
+    { contaId: "ir_receita",   etapa: "",            valor: 480,     pago: true },
+    { contaId: "venda_imovel", etapa: "",            valor: 12000,   pago: true },
+    { contaId: "terreno_aquisicao", etapa: "",       valor: 70000,   pago: true },
+  ];
+
+  // leitura completa: tudo na mesa
+  const cheio = modulo.plDaObra(itens, contas, modulo.GRUPOS_PL, modulo.PLANO_CONTAS);
+  assert.ok(cheio.blocos.some(b => b.grupo.id === "receitas"), "completo mostra a receita");
+  assert.ok(cheio.blocos.some(b => b.grupo.id === "terreno"), "completo mostra o terreno");
+  assert.strictEqual(cheio.custo.estimado, 19417.50 + 54672 + 5000 + 25200 + 3000 + 1200 + 800 + 210000);
+
+  // só custo: sem receita, sem terreno, sem tributo
+  const custo = modulo.plDaObra(itens, contas, modulo.GRUPOS_PL, modulo.PLANO_CONTAS, { soCusto: true });
+  assert.ok(!custo.blocos.some(b => b.grupo.id === "receitas"), "a venda sai do quadro");
+  assert.ok(!custo.blocos.some(b => b.grupo.id === "terreno"), "o terreno sai do quadro");
+  const servicos = custo.blocos.find(b => b.grupo.id === "servicos");
+  assert.deepStrictEqual(servicos.linhas.map(l => l.conta.id), ["taxa_admin_obra"],
+    "gerenciamento fica, imposto/IR/INSS/ISS saem");
+  assert.strictEqual(custo.custo.estimado, 19417.50 + 54672 + 5000, "custo estimado só do canteiro");
+  assert.strictEqual(custo.custo.realizado, 9219.60 + 4280, "realizado sem IR, venda e terreno");
+
+  // por etapa, com o mesmo filtro, fecha igual ao por conta
+  const etapaCheia = modulo.plPorEtapa(itens, contas);
+  assert.strictEqual(etapaCheia.estimado, 19417.50 + 54672 + 5000 + 25200 + 3000 + 1200 + 800,
+    "sem soCusto o tributo continua no quadro por etapa");
+  const etapaCusto = modulo.plPorEtapa(itens, contas, { soCusto: true });
+  assert.strictEqual(etapaCusto.estimado, custo.custo.estimado, "as duas visões fecham no mesmo total");
+  assert.strictEqual(etapaCusto.realizado, custo.custo.realizado);
+  const fund = etapaCusto.linhas.find(l => l.etapaId === "fundacao");
+  assert.strictEqual(fund.estimado, 19417.50, "o imposto marcado com etapa também sai");
+
+  // o dado não muda: mesma base, só outra leitura
+  assert.strictEqual(itens.length, 9);
+  assert.strictEqual(cheio.entradas.estimado, 630000, "a receita continua lá na leitura completa");
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);
