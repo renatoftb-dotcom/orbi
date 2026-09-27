@@ -1409,5 +1409,28 @@ teste("o dia no registro não escorrega para a véspera em fuso negativo", () =>
   assert.strictEqual(ato.detalhe, "02/10/2026 → 12/10/2026");
 });
 
+teste("empreendimento tem venda, terreno e tributos no P&L da obra", () => {
+  const conta = (id) => modulo.PLANO_CONTAS.find(c => c.id === id);
+  assert.strictEqual(conta("venda_imovel").grupo, "receitas");
+  assert.strictEqual(conta("terreno_aquisicao").grupo, "terreno");
+  for (const id of ["ir_receita", "inss", "iss"]) assert.strictEqual(conta(id).grupo, "servicos", id);
+  const terreno = modulo.GRUPOS_PL.find(g => g.id === "terreno");
+  assert.strictEqual(terreno.sinal, -1);
+  assert.strictEqual(terreno.entra_no_resultado, true);
+  // três casas: venda 630k, terreno 210k, obra 298.057,42, IR 4% da receita
+  const itens = [
+    { id: "1", contaId: "venda_imovel",      valor: 630000 },
+    { id: "2", contaId: "terreno_aquisicao", valor: 210000 },
+    { id: "3", contaId: "material",          valor: 222883.42 },
+    { id: "4", contaId: "empreiteiro",       valor: 75174 },
+    { id: "5", contaId: "ir_receita",        valor: 25200 },
+  ];
+  const pl = modulo.plDaObra(itens, [], modulo.GRUPOS_PL, modulo.PLANO_CONTAS);
+  assert.strictEqual(pl.entradas.estimado, 630000);
+  assert.strictEqual(pl.custo.estimado, 533257.42, "terreno entra no custo junto com obra e tributos");
+  assert.strictEqual(pl.resultado.estimado, 96742.58);
+  assert.strictEqual(Math.round((pl.entradas.estimado - 210000) * 100) / 100, 420000, "venda menos terreno é o lucro bruto");
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

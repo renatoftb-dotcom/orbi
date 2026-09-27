@@ -18,6 +18,11 @@
 // resultado) e a flag entra_no_resultado usada pelo cálculo (§4 da spec). ──
 const GRUPOS_PL = [
   { id: "receitas",  titulo: "ENTRADAS TOTAIS",           sinal: +1, entra_no_resultado: true  },
+  // O terreno tem grupo próprio porque não é material nem serviço: é o bem
+  // que se compra para construir em cima. Separado, a venda menos o terreno
+  // dá o lucro bruto do empreendimento — que é como o escritório lê o
+  // negócio de construir para vender. Em obra de cliente fica zerado.
+  { id: "terreno",   titulo: "TERRENO",                   sinal: -1, entra_no_resultado: true  },
   { id: "materiais", titulo: "MATERIAL & INSUMOS",        sinal: -1, entra_no_resultado: true  },
   { id: "maoDeObra", titulo: "MÃO DE OBRA & PRESTADORES", sinal: -1, entra_no_resultado: true  },
   { id: "servicos",  titulo: "SERVIÇOS & TAXAS",          sinal: -1, entra_no_resultado: true  },
@@ -30,6 +35,11 @@ const PLANO_CONTAS = [
   { id: "deposito_proprio",   nome: "Depósito Recurso Próprio",  grupo: "receitas" },
   { id: "liberacao_financ",   nome: "Liberação de financiamento", grupo: "receitas" },
   { id: "cartao_credito",     nome: "Cartão de crédito",          grupo: "receitas" },
+  // Venda da unidade pronta — receita de empreendimento do escritório.
+  { id: "venda_imovel",       nome: "Venda de imóvel",            grupo: "receitas" },
+
+  // ── terreno ───────────────────────────────────────────────
+  { id: "terreno_aquisicao",  nome: "Aquisição de terreno",       grupo: "terreno" },
 
   // ── material & insumos ────────────────────────────────────
   { id: "material",           nome: "Material",                          grupo: "materiais" },
@@ -80,6 +90,11 @@ const PLANO_CONTAS = [
   // obra"; o id continua o mesmo, porque é chave gravada nos lançamentos
   { id: "taxa_admin_obra",    nome: "Gerenciamento de obra",             grupo: "servicos" },
   { id: "contabilidade",      nome: "Escritório de contabilidade",       grupo: "servicos" },
+  // Tributos do empreendimento. O IR incide sobre a receita da venda, não
+  // sobre o custo; INSS e ISS seguem a mão de obra e os serviços.
+  { id: "ir_receita",         nome: "IR sobre a receita",                grupo: "servicos" },
+  { id: "inss",               nome: "INSS",                              grupo: "servicos" },
+  { id: "iss",                nome: "ISS",                               grupo: "servicos" },
 
   // ── excluídas (fora do resultado) ─────────────────────────
   { id: "reembolsos",         nome: "Reembolsos",               grupo: "excluidas" },
