@@ -7657,6 +7657,9 @@ const ETAPAS_OBRA = [
   { id:"imp_arrimo",          nome:"Impermeabilização de arrimo",      macro:"Impermeabilizações" },
   { id:"fundacao",            nome:"Fundação",                         macro:"Fundação" },
   { id:"imp_baldrame",        nome:"Impermeabilização de baldrame",    macro:"Impermeabilizações" },
+  // Impermeabilização sem destino declarado — a planilha da obra tem essa
+  // linha genérica, e sem ela o gasto caía em "Outros".
+  { id:"impermeabilizacao",   nome:"Impermeabilização",                macro:"Impermeabilizações" },
   { id:"contrapiso_int_1",    nome:"Contrapiso interno pav. 1",        macro:"Contrapisos" },
   { id:"supra_paredes_1",     nome:"Supraestrutura e paredes pav. 1",  macro:"Supraestrutura e paredes" },
   { id:"laje_1",              nome:"Laje pav. 1",                      macro:"Lajes" },
@@ -7670,8 +7673,8 @@ const ETAPAS_OBRA = [
   { id:"hidraulica",          nome:"Hidráulica",                       macro:"Hidráulica" },
   { id:"esgoto_pluvial",      nome:"Esgoto e pluvial",                 macro:"Hidráulica" },
   { id:"contrapiso_ext",      nome:"Contrapisos externos",             macro:"Contrapisos" },
-  { id:"massa_contrapiso_int",nome:"Massa de contrapisos internos",    macro:"Contrapisos" },
-  { id:"massa_contrapiso_ext",nome:"Massa de contrapisos externos",    macro:"Contrapisos" },
+  { id:"massa_contrapiso_int",nome:"Massiamento de contrapisos internos",    macro:"Contrapisos" },
+  { id:"massa_contrapiso_ext",nome:"Massiamento de contrapisos externos",    macro:"Contrapisos" },
   { id:"muros",               nome:"Muros",                            macro:"Muros" },
   { id:"portoes",             nome:"Portões",                          macro:"Portões" },
   { id:"pisos_revest",        nome:"Pisos e revestimentos",            macro:"Pisos e revestimentos" },
@@ -7697,6 +7700,9 @@ const ETAPAS_OBRA = [
   { id:"piscina_deck",        nome:"Piscina — deck",                   macro:"Piscina" },
   { id:"limpeza_final",       nome:"Limpeza final",                    macro:"Limpeza final" },
   { id:"locacao_equip",       nome:"Locação de equipamentos",          macro:"Locação de equipamentos" },
+  // Ferramenta comprada para a obra tem etapa própria na planilha do
+  // escritório; sem ela o gasto caía em "Outros".
+  { id:"ferramentas",         nome:"Ferramentas",                      macro:"Locação de equipamentos" },
   { id:"prestadores",         nome:"Prestadores de serviços",          macro:"Prestadores de serviços" },
   { id:"outros",              nome:"Outros",                           macro:"Outros" },
 ];
