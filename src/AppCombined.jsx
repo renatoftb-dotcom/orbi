@@ -8119,6 +8119,286 @@ function lancamentosDoEscritorio(data) {
   return ((data && data.lancamentos) || []).filter((l) => l && l.tipo === "escritorio");
 }
 
+
+// ── Ler planilha solta (.xlsx/.xlsm) e CSV ──────────────────────
+// ── Leitura de planilha (.xlsx/.xlsm) sem dependência ───────────
+// O arquivo é um ZIP de XMLs. O navegador já sabe descompactar
+// (DecompressionStream), então o que falta é achar as peças dentro do zip e
+// ler o XML da aba. Node 18+ também tem, então o teste roda igual.
+
+function efLerU16(b, i) { return b[i] | (b[i + 1] << 8); }
+function efLerU32(b, i) { return (b[i] | (b[i + 1] << 8) | (b[i + 2] << 16) | (b[i + 3] << 24)) >>> 0; }
+
+// Índice do ZIP: percorre o diretório central e guarda onde cada arquivo
+// começa. Não lê conteúdo — isso é sob demanda, um arquivo por vez.
+function efIndiceZip(buffer) {
+  const b = new Uint8Array(buffer);
+  let fim = -1;
+  for (let i = b.length - 22; i >= 0 && i >= b.length - 66000; i--) {
+    if (efLerU32(b, i) === 0x06054b50) { fim = i; break; }
+  }
+  if (fim < 0) throw new Error("Arquivo não parece uma planilha (.xlsx ou .xlsm).");
+  const total = efLerU16(b, fim + 10);
+  let p = efLerU32(b, fim + 16);
+  const itens = {};
+  const texto = new TextDecoder("utf-8");
+  for (let n = 0; n < total; n++) {
+    if (efLerU32(b, p) !== 0x02014b50) break;
+    const metodo = efLerU16(b, p + 10);
+    const comprimido = efLerU32(b, p + 20);
+    const tamNome = efLerU16(b, p + 28);
+    const tamExtra = efLerU16(b, p + 30);
+    const tamComent = efLerU16(b, p + 32);
+    const local = efLerU32(b, p + 42);
+    const nome = texto.decode(b.subarray(p + 46, p + 46 + tamNome));
+    itens[nome] = { metodo, comprimido, local };
+    p += 46 + tamNome + tamExtra + tamComent;
+  }
+  return { bytes: b, itens };
+}
+
+async function efInflar(pedaco, metodo) {
+  if (metodo === 0) return pedaco;
+  if (typeof DecompressionStream === "undefined") throw new Error("Este navegador não consegue abrir planilhas; cole os dados ou salve como CSV.");
+  const fluxo = new Blob([pedaco]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  const buf = await new Response(fluxo).arrayBuffer();
+  return new Uint8Array(buf);
+}
+
+async function efArquivoDoZip(zip, nome) {
+  const item = zip.itens[nome];
+  if (!item) return null;
+  const b = zip.bytes;
+  const p = item.local;
+  if (efLerU32(b, p) !== 0x04034b50) throw new Error("Planilha corrompida.");
+  const inicio = p + 30 + efLerU16(b, p + 26) + efLerU16(b, p + 28);
+  const cru = b.subarray(inicio, inicio + item.comprimido);
+  const aberto = await efInflar(cru, item.metodo);
+  return new TextDecoder("utf-8").decode(aberto);
+}
+
+// ── XML ─────────────────────────────────────────────────────────
+function efTextoXml(t) {
+  return String(t == null ? "" : t)
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&amp;/g, "&");
+}
+
+function efTextosCompartilhados(xml) {
+  if (!xml) return [];
+  const fora = [];
+  const re = /<si\b[^>]*>([\s\S]*?)<\/si>|<si\b[^>]*\/>/g;
+  let m;
+  while ((m = re.exec(xml))) {
+    const dentro = m[1] || "";
+    let texto = "";
+    const reT = /<t\b[^>]*>([\s\S]*?)<\/t>/g;
+    let t;
+    while ((t = reT.exec(dentro))) texto += efTextoXml(t[1]);
+    fora.push(texto);
+  }
+  return fora;
+}
+
+// Quais estilos são data: os formatos embutidos do Excel mais os
+// personalizados cujo código tem dia/mês/ano fora das aspas.
+const EF_FMT_DATA = new Set([14,15,16,17,18,19,20,21,22,27,28,29,30,31,32,33,34,35,36,45,46,47,50,51,52,53,54,55,56,57,58]);
+function efEstilosDeData(xml) {
+  const datas = new Set();
+  if (!xml) return datas;
+  const personalizados = {};
+  const reN = /<numFmt\b[^>]*numFmtId="(\d+)"[^>]*formatCode="([^"]*)"/g;
+  let m;
+  while ((m = reN.exec(xml))) personalizados[m[1]] = efTextoXml(m[2]);
+  const bloco = /<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/.exec(xml);
+  if (!bloco) return datas;
+  const reX = /<xf\b[^>]*?numFmtId="(\d+)"[^>]*?(?:\/>|>)/g;
+  let i = 0, x;
+  while ((x = reX.exec(bloco[1]))) {
+    const id = Number(x[1]);
+    let ehData = EF_FMT_DATA.has(id);
+    if (!ehData && personalizados[x[1]]) {
+      const limpo = personalizados[x[1]].replace(/\[[^\]]*\]/g, "").replace(/"[^"]*"/g, "").replace(/\\./g, "");
+      ehData = /[ymd]/i.test(limpo) && !/^[^ymd]*$/i.test(limpo);
+    }
+    if (ehData) datas.add(i);
+    i++;
+  }
+  return datas;
+}
+
+// Serial do Excel → "dd/mm/aaaa" (a base é 30/12/1899).
+function efDataDoSerial(n) {
+  const ms = Math.round((Number(n) - 25569) * 86400000);
+  const d = new Date(ms);
+  if (!Number.isFinite(d.getTime())) return String(n);
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm}/${d.getUTCFullYear()}`;
+}
+
+function efColunaDaRef(ref) {
+  let n = 0;
+  for (let i = 0; i < ref.length; i++) {
+    const c = ref.charCodeAt(i);
+    if (c < 65 || c > 90) break;
+    n = n * 26 + (c - 64);
+  }
+  return n - 1;
+}
+
+// Uma aba vira matriz de texto. Célula vazia vira "". Linha sem nada some.
+function efLinhasDaAba(xml, textos, estilosData) {
+  const linhas = [];
+  const reLinha = /<row\b[^>]*>([\s\S]*?)<\/row>|<row\b[^>]*\/>/g;
+  let mr;
+  while ((mr = reLinha.exec(xml))) {
+    const corpo = mr[1] || "";
+    if (!corpo) continue;
+    const celulas = [];
+    let largura = 0;
+    const reCel = /<c\b([^>]*)(?:\/>|>([\s\S]*?)<\/c>)/g;
+    let mc;
+    while ((mc = reCel.exec(corpo))) {
+      const attrs = mc[1] || "";
+      const dentro = mc[2] || "";
+      const ref = /r="([A-Z]+)\d+"/.exec(attrs);
+      const col = ref ? efColunaDaRef(ref[1]) : celulas.length;
+      const tipo = (/t="([^"]+)"/.exec(attrs) || [])[1] || "n";
+      const estilo = Number((/s="(\d+)"/.exec(attrs) || [])[1] || -1);
+      let valor = "";
+      if (tipo === "inlineStr") {
+        const reT = /<t\b[^>]*>([\s\S]*?)<\/t>/g; let t;
+        while ((t = reT.exec(dentro))) valor += efTextoXml(t[1]);
+      } else {
+        const v = /<v\b[^>]*>([\s\S]*?)<\/v>/.exec(dentro);
+        const cru = v ? efTextoXml(v[1]) : "";
+        if (tipo === "s") valor = textos[Number(cru)] || "";
+        else if (tipo === "b") valor = cru === "1" ? "VERDADEIRO" : "FALSO";
+        else if (tipo === "e") valor = "";
+        else if (cru === "") valor = "";
+        else if (estilosData.has(estilo) && Number(cru) > 0) valor = efDataDoSerial(cru);
+        else valor = cru;
+      }
+      celulas[col] = valor;
+      if (col + 1 > largura) largura = col + 1;
+    }
+    if (!largura) continue;
+    const linha = [];
+    for (let i = 0; i < largura; i++) linha.push(String(celulas[i] == null ? "" : celulas[i]).replace(/[\t\r\n]+/g, " ").trim());
+    if (linha.every((c) => c === "")) continue;
+    linhas.push(linha);
+  }
+  return linhas;
+}
+
+// Abre a planilha e devolve as abas com suas linhas.
+async function efAbasDaPlanilha(buffer) {
+  const zip = efIndiceZip(buffer);
+  const textos = efTextosCompartilhados(await efArquivoDoZip(zip, "xl/sharedStrings.xml"));
+  const estilosData = efEstilosDeData(await efArquivoDoZip(zip, "xl/styles.xml"));
+  const livro = (await efArquivoDoZip(zip, "xl/workbook.xml")) || "";
+  const rels = (await efArquivoDoZip(zip, "xl/_rels/workbook.xml.rels")) || "";
+  const alvo = {};
+  const reR = /<Relationship\b[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/g;
+  let mr;
+  while ((mr = reR.exec(rels))) alvo[mr[1]] = efTextoXml(mr[2]).replace(/^\/?xl\//, "").replace(/^\//, "");
+  const abas = [];
+  const reS = /<sheet\b[^>]*\/>/g;
+  let ms;
+  while ((ms = reS.exec(livro))) {
+    const tag = ms[0];
+    const nome = efTextoXml((/name="([^"]*)"/.exec(tag) || [])[1] || "");
+    const rid = (/r:id="([^"]+)"/.exec(tag) || [])[1];
+    const caminho = "xl/" + (alvo[rid] || `worksheets/sheet${abas.length + 1}.xml`);
+    const xml = await efArquivoDoZip(zip, caminho);
+    abas.push({ nome, linhas: xml ? efLinhasDaAba(xml, textos, estilosData) : [] });
+  }
+  return abas;
+}
+
+
+// CSV/TSV também servem: se o separador não for tabulação, converte —
+// respeitando aspas, que é onde vírgula dentro de descrição costuma morar.
+function efSeparadorDoTexto(texto) {
+  const linha = String(texto || "").split(/\r?\n/).find((l) => l.trim() !== "") || "";
+  const fora = linha.replace(/"[^"]*"/g, "");
+  if (fora.indexOf("\t") >= 0) return "\t";
+  const p = (fora.match(/;/g) || []).length;
+  const v = (fora.match(/,/g) || []).length;
+  if (p >= v && p > 0) return ";";
+  if (v > 0) return ",";
+  return "\t";
+}
+
+function efCsvParaTsv(texto, separador) {
+  const sep = separador || efSeparadorDoTexto(texto);
+  if (sep === "\t") return String(texto || "");
+  const linhas = [];
+  let campo = "", linha = [], aspas = false;
+  const t = String(texto || "");
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (aspas) {
+      if (c === '"') { if (t[i + 1] === '"') { campo += '"'; i++; } else aspas = false; }
+      else campo += c;
+      continue;
+    }
+    if (c === '"') { aspas = true; continue; }
+    if (c === sep) { linha.push(campo); campo = ""; continue; }
+    if (c === "\n" || c === "\r") {
+      if (c === "\r" && t[i + 1] === "\n") i++;
+      linha.push(campo); linhas.push(linha); linha = []; campo = "";
+      continue;
+    }
+    campo += c;
+  }
+  if (campo !== "" || linha.length) { linha.push(campo); linhas.push(linha); }
+  return linhas.map((l) => l.map((c) => String(c).replace(/[\t\r\n]+/g, " ").trim()).join("\t")).join("\n");
+}
+
+// Qual aba tem os lançamentos: a primeira cuja primeira linha traz conta,
+// valor e competência. Assim o arquivo pode ter P&L, resumo, o que for.
+function efAbaDeLancamentos(abas) {
+  const lista = abas || [];
+  const pontos = (aba) => {
+    const cab = (aba.linhas && aba.linhas[0]) || [];
+    let achou = 0;
+    for (const campo of ["conta", "valor", "competencia"]) {
+      const nomes = EF_COLUNAS[campo] || [];
+      if (cab.some((c) => nomes.includes(efSemAcento(c)))) achou++;
+    }
+    return achou;
+  };
+  let melhor = null, melhorPonto = 0;
+  for (const aba of lista) {
+    const p = pontos(aba);
+    if (p > melhorPonto) { melhor = aba; melhorPonto = p; }
+  }
+  if (melhor && melhorPonto >= 2) return melhor;
+  return lista.find((a) => (a.linhas || []).length > 1) || lista[0] || null;
+}
+
+// Arquivo solto (planilha, CSV ou texto) → as linhas em formato de colagem.
+// Devolve também o nome da aba, para a tela dizer de onde leu.
+async function efTextoDoArquivo(arquivo) {
+  const nome = String((arquivo && arquivo.name) || "").toLowerCase();
+  const ehPlanilha = /\.(xlsx|xlsm|xltx|xltm)$/.test(nome);
+  if (ehPlanilha) {
+    const abas = await efAbasDaPlanilha(await arquivo.arrayBuffer());
+    const aba = efAbaDeLancamentos(abas);
+    if (!aba || !aba.linhas.length) throw new Error("Não achei linhas nessa planilha.");
+    return { texto: aba.linhas.map((l) => l.join("\t")).join("\n"), aba: aba.nome, abas: abas.map((a) => a.nome) };
+  }
+  if (/\.(xls|numbers|ods)$/.test(nome)) {
+    throw new Error("Esse formato não abre aqui. Salve como .xlsx ou .csv e traga de novo.");
+  }
+  const texto = await arquivo.text();
+  return { texto: efCsvParaTsv(texto), aba: "", abas: [] };
+}
+
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
 // ── UI — a aba Financeiro do Escritório ─────────────────────────
 // Três telas: o extrato mês a mês (que é o que você já olhava na planilha),
@@ -8325,6 +8605,9 @@ function FinanceiroEscritorio({ data, save, onReload }) {
   const [form, setForm] = useState(null);
   const [texto, setTexto] = useState("");
   const [lido, setLido] = useState(null);
+  const [arrastando, setArrastando] = useState(false);
+  const [origem, setOrigem] = useState("");
+  const entradaArquivo = useRef(null);
   const [ocupado, setOcupado] = useState("");
   const [aviso, setAviso] = useState("");
   const [busca, setBusca] = useState("");
@@ -8355,6 +8638,26 @@ function FinanceiroEscritorio({ data, save, onReload }) {
     });
     if (!ok) return;
     gravar(lancs.filter((x) => x.id !== l.id));
+  }
+
+  // Arquivo solto: lê a planilha (ou CSV), joga as linhas na caixa e já
+  // confere. O usuário vê o mesmo resumo de sempre antes de gravar.
+  async function receberArquivo(arquivo) {
+    if (!arquivo) return;
+    setArrastando(false);
+    setOcupado(`Lendo ${arquivo.name}…`);
+    setAviso(""); setLido(null); setOrigem("");
+    try {
+      const { texto: lidoTexto, aba } = await efTextoDoArquivo(arquivo);
+      if (!String(lidoTexto || "").trim()) throw new Error("O arquivo está vazio.");
+      setTexto(lidoTexto);
+      setLido(interpretarColagemEscritorio(lidoTexto));
+      setOrigem(aba ? `${arquivo.name} · aba “${aba}”` : arquivo.name);
+      setOcupado("");
+    } catch (e) {
+      setOcupado("");
+      setAviso("Não consegui ler o arquivo: " + ((e && e.message) || "formato não reconhecido"));
+    }
   }
 
   // Importação: vai direto pelo lote, sem passar pelo save() normal — o
@@ -8505,14 +8808,41 @@ function FinanceiroEscritorio({ data, save, onReload }) {
           <div style={{ ...S.card, display: "grid", gap: 10 }}>
             <div style={{ fontSize: 13, fontWeight: 700 }}>Trazer a planilha</div>
             <div style={{ fontSize: 12.5, color: "#4b5563", lineHeight: 1.5 }}>
-              No Excel, selecione as linhas da base de dados <strong>com o cabeçalho</strong> e copie. Cole aqui embaixo.
-              Nada é gravado antes de você conferir o resumo.
+              Arraste o arquivo da planilha aqui — ele acha sozinho a aba da base de dados.
+              Se preferir, cole as linhas copiadas do Excel. Nada é gravado antes de você conferir o resumo.
             </div>
-            <textarea style={{ ...S.input, minHeight: 130, fontFamily: "ui-monospace, monospace", fontSize: 11.5 }}
-              value={texto} placeholder="Cole aqui as linhas copiadas do Excel"
-              onChange={(e) => { setTexto(e.target.value); setLido(null); }} />
+            <div
+              onDragOver={(e) => { e.preventDefault(); if (!arrastando) setArrastando(true); }}
+              onDragLeave={(e) => { if (e.currentTarget === e.target) setArrastando(false); }}
+              onDrop={(e) => { e.preventDefault(); receberArquivo(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]); }}
+              onClick={() => entradaArquivo.current && entradaArquivo.current.click()}
+              style={{
+                border: `1.5px dashed ${arrastando ? "#0474f4" : "rgba(38,36,33,0.22)"}`,
+                background: arrastando ? "#eef5ff" : "#fff",
+                borderRadius: 14, padding: "26px 16px", textAlign: "center", cursor: "pointer",
+                transition: "background .12s, border-color .12s",
+              }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: arrastando ? "#0474f4" : "#262421" }}>
+                {arrastando ? "Pode soltar" : "Arraste a planilha aqui"}
+              </div>
+              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
+                .xlsx, .xlsm ou .csv — ou clique para escolher
+              </div>
+              {origem && !arrastando && (
+                <div style={{ fontSize: 12, color: "#0474f4", marginTop: 8 }}>Li de {origem}</div>
+              )}
+            </div>
+            <input ref={entradaArquivo} type="file" accept=".xlsx,.xlsm,.xltx,.xltm,.csv,.tsv,.txt" style={{ display: "none" }}
+              onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; receberArquivo(f); }} />
+            <details>
+              <summary style={{ fontSize: 12.5, color: "#4b5563", cursor: "pointer" }}>Ou colar as linhas</summary>
+              <textarea style={{ ...S.input, minHeight: 130, marginTop: 8, fontFamily: "ui-monospace, monospace", fontSize: 11.5 }}
+                value={texto} placeholder="Cole aqui as linhas copiadas do Excel"
+                onChange={(e) => { setTexto(e.target.value); setLido(null); setOrigem(""); }} />
+            </details>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
-              <button style={S.btnSec} onClick={() => { setTexto(""); setLido(null); }}>Limpar</button>
+              {ocupado && <span style={{ fontSize: 12, color: "#6b7280", marginRight: "auto" }}>{ocupado}</span>}
+              <button style={S.btnSec} onClick={() => { setTexto(""); setLido(null); setOrigem(""); }}>Limpar</button>
               <button style={S.btn} onClick={() => setLido(interpretarColagemEscritorio(texto))}>Conferir</button>
             </div>
           </div>

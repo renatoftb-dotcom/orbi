@@ -16,7 +16,9 @@ const M = new Function(src + `
   return { UNIDADES_NEGOCIO, GRUPOS_ESCRITORIO, PLANO_CONTAS_ESCRITORIO, contaEscritorio, grupoEscritorio,
            contaPeloApelido, unidadePeloApelido, validarLancamentoEscritorio, mesesEntreEscritorio,
            extratoEscritorio, resultadoEmpreendimento, interpretarColagemEscritorio, lancamentoDaColagem,
-           efNumero, efCompetencia, lancamentosDoEscritorio };`)();
+           efNumero, efCompetencia, lancamentosDoEscritorio,
+           efAbasDaPlanilha, efLinhasDaAba, efDataDoSerial, efEstilosDeData, efTextosCompartilhados,
+           efCsvParaTsv, efAbaDeLancamentos, efTextoDoArquivo };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -227,8 +229,150 @@ teste("só os lançamentos do escritório entram na conta", () => {
   assert.deepStrictEqual(M.lancamentosDoEscritorio({}), []);
 });
 
+
+// ── Uma planilha .xlsx de verdade, montada aqui (zip sem compressão) ──
+// Sem dependência: o leitor aceita entrada "stored", então o teste escreve
+// o zip na mão e exercita o mesmo caminho que o navegador percorre.
+function crc32(bytes) {
+  let c, tabela = crc32.tabela;
+  if (!tabela) {
+    tabela = crc32.tabela = [];
+    for (let n = 0; n < 256; n++) {
+      c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      tabela[n] = c >>> 0;
+    }
+  }
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) crc = tabela[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function zipSemCompressao(arquivos) {
+  const cod = new TextEncoder();
+  const partes = [], central = [];
+  let desloc = 0;
+  const u16 = (n) => [n & 255, (n >>> 8) & 255];
+  const u32 = (n) => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
+  for (const nome in arquivos) {
+    const dados = cod.encode(arquivos[nome]);
+    const n = cod.encode(nome);
+    const crc = crc32(dados);
+    const local = [].concat(u32(0x04034b50), u16(20), u16(0), u16(0), u16(0), u16(0),
+      u32(crc), u32(dados.length), u32(dados.length), u16(n.length), u16(0));
+    partes.push(new Uint8Array(local), n, dados);
+    central.push([].concat(u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
+      u32(crc), u32(dados.length), u32(dados.length), u16(n.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(desloc),
+      Array.from(n)));
+    desloc += local.length + n.length + dados.length;
+  }
+  const dir = [].concat(...central);
+  const fim = [].concat(u32(0x06054b50), u16(0), u16(0), u16(central.length), u16(central.length),
+    u32(dir.length), u32(desloc), u16(0));
+  partes.push(new Uint8Array(dir), new Uint8Array(fim));
+  const total = partes.reduce((s, p) => s + p.length, 0);
+  const saida = new Uint8Array(total);
+  let i = 0;
+  for (const p of partes) { saida.set(p, i); i += p.length; }
+  return saida.buffer;
+}
+
+function planilhaDeTeste() {
+  const cel = (ref, v, extra) => `<c r="${ref}"${extra || ""}><v>${v}</v></c>`;
+  const sheet = `<worksheet><sheetData>`
+    + `<row r="1">${["A","B","C","D"].map((c,i)=>cel(c+"1", i, ' t="s"')).join("")}</row>`
+    + `<row r="2">${cel("A2", 4, ' t="s"')}${cel("B2", 7500)}${cel("C2", 43831, ' s="1"')}${cel("D2", 5, ' t="s"')}</row>`
+    + `<row r="3">${cel("A3", 6, ' t="s"')}${cel("B3", "635.81")}${cel("C3", 43831, ' s="1"')}${cel("D3", 5, ' t="s"')}</row>`
+    + `</sheetData></worksheet>`;
+  const textos = ["Conta contábil", "Valor total nota", "Período Contábil", "Unidade negócio",
+    "Receita Projetos", "Escritório", "Luz, Água e Internet"];
+  return zipSemCompressao({
+    "xl/workbook.xml": `<workbook><sheets><sheet name="Base de dados" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId1" Type="worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
+    "xl/sharedStrings.xml": `<sst>${textos.map((t) => `<si><t>${t.replace(/&/g, "&amp;")}</t></si>`).join("")}</sst>`,
+    "xl/styles.xml": `<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>`,
+    "xl/worksheets/sheet1.xml": sheet,
+  });
+}
+
+// ── Ler arquivo: planilha, CSV e escolha de aba ─────────────────
+teste("a data em serial do Excel vira dd/mm/aaaa", () => {
+  assert.strictEqual(M.efDataDoSerial(43831), "01/01/2020");   // 1º de janeiro de 2020
+  assert.strictEqual(M.efDataDoSerial(45999), "08/12/2025");
+  assert.strictEqual(M.efDataDoSerial(46022), "31/12/2025");  // virada de ano, sem escorregar um dia
+});
+
+teste("o formato personalizado com dia/mês/ano conta como data, e o de dinheiro não", () => {
+  const styles = `<styleSheet><numFmts count="2">`
+    + `<numFmt numFmtId="165" formatCode="[$-416]dd\\-mmm\\-yy;@"/>`
+    + `<numFmt numFmtId="166" formatCode="&quot;R$&quot;\\ #,##0.00"/>`
+    + `</numFmts><cellXfs count="4">`
+    + `<xf numFmtId="0"/><xf numFmtId="166"/><xf numFmtId="165"/><xf numFmtId="14"/>`
+    + `</cellXfs></styleSheet>`;
+  const datas = M.efEstilosDeData(styles);
+  assert.ok(!datas.has(0), "geral não é data");
+  assert.ok(!datas.has(1), "R$ não é data");
+  assert.ok(datas.has(2), "dd-mmm-yy é data");
+  assert.ok(datas.has(3), "formato 14 embutido é data");
+});
+
+teste("a aba vira matriz: texto compartilhado, número, data e célula vazia", () => {
+  const textos = M.efTextosCompartilhados(
+    `<sst><si><t>Receita Projetos</t></si><si><r><t>Luz, </t></r><r><t>Água e Internet</t></r></si></sst>`);
+  assert.deepStrictEqual(textos, ["Receita Projetos", "Luz, Água e Internet"]);
+  const xml = `<worksheet><sheetData>`
+    + `<row r="1"><c r="A1" t="s"><v>0</v></c><c r="C1" t="s"><v>1</v></c></row>`
+    + `<row r="2"><c r="A2"><v>7500</v></c><c r="B2" s="1"><v>43831</v></c><c r="C2" t="inlineStr"><is><t>Obra &amp; Cia</t></is></c></row>`
+    + `<row r="3"/>`
+    + `</sheetData></worksheet>`;
+  const linhas = M.efLinhasDaAba(xml, textos, new Set([1]));
+  assert.strictEqual(linhas.length, 2, "linha vazia não entra");
+  assert.deepStrictEqual(linhas[0], ["Receita Projetos", "", "Luz, Água e Internet"]);
+  assert.deepStrictEqual(linhas[1], ["7500", "01/01/2020", "Obra & Cia"]);
+});
+
+teste("CSV com vírgula dentro de aspas não parte a coluna no meio", () => {
+  const tsv = M.efCsvParaTsv(`Conta,Descrição,Valor\r\nOutros,"Luz, água e net","1.234,56"`);
+  assert.deepStrictEqual(tsv.split("\n").map((l) => l.split("\t")),
+    [["Conta", "Descrição", "Valor"], ["Outros", "Luz, água e net", "1.234,56"]]);
+  // já vindo com tabulação, passa direto
+  assert.strictEqual(M.efCsvParaTsv("a\tb\nc\td"), "a\tb\nc\td");
+  // ponto e vírgula (Excel em português) também
+  assert.deepStrictEqual(M.efCsvParaTsv("Conta;Valor\nOutros;10").split("\n")[1].split("\t"), ["Outros", "10"]);
+});
+
+teste("de várias abas, escolhe a que tem cabeçalho de lançamento", () => {
+  const abas = [
+    { nome: "Resumo", linhas: [["Mês", "Saldo"], ["jan", "10"]] },
+    { nome: "Base de dados", linhas: [["Nome Cliente", "Conta contábil", "Valor total nota", "Período Contábil"], ["x", "Outros", "10", "01/2026"]] },
+  ];
+  assert.strictEqual(M.efAbaDeLancamentos(abas).nome, "Base de dados");
+  // sem cabeçalho reconhecível, fica com a primeira que tem conteúdo
+  assert.strictEqual(M.efAbaDeLancamentos([{ nome: "A", linhas: [] }, { nome: "B", linhas: [["x"], ["y"]] }]).nome, "B");
+});
+
+teste("planilha montada na hora atravessa o caminho inteiro até virar lançamento", async () => {
+  const buffer = await planilhaDeTeste();
+  const abas = await M.efAbasDaPlanilha(buffer);
+  assert.deepStrictEqual(abas.map((a) => a.nome), ["Base de dados"]);
+  const aba = M.efAbaDeLancamentos(abas);
+  const tsv = aba.linhas.map((l) => l.join("\t")).join("\n");
+  const lido = M.interpretarColagemEscritorio(tsv);
+  assert.strictEqual(lido.resumo.total, 2);
+  assert.strictEqual(lido.resumo.prontos, 2);
+  const lancs = lido.itens.map((i, n) => M.lancamentoDaColagem(i, "t" + n));
+  assert.strictEqual(lancs[0].contaId, "rec_projetos");
+  assert.strictEqual(lancs[0].competencia, "2020-01");
+  assert.strictEqual(lancs[0].valor, 7500);
+  assert.strictEqual(lancs[1].contaId, "luz_agua_net");
+  assert.strictEqual(cent(lancs[1].valor), 635.81);
+  const extrato = M.extratoEscritorio(lancs);
+  assert.strictEqual(extrato.length, 1);
+  assert.strictEqual(cent(extrato[0].saldoExtrato), cent(7500 - 635.81));
+});
+
 for (const [nome, fn] of testes) {
-  try { fn(); console.log("  ok   " + nome); }
+  try { await fn(); console.log("  ok   " + nome); }
   catch (e) { falhas++; console.log("  FALHOU " + nome + "\n         " + e.message); }
 }
 console.log(`\n${testes.length - falhas}/${testes.length} passaram`);
