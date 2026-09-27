@@ -303,7 +303,8 @@ function efData(txt) {
   const t = String(txt == null ? "" : txt).trim();
   let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-  m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(t);
+  // dia/mês/ano com qualquer separador: cada banco escolhe o seu.
+  m = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/.exec(t);
   if (m) return `${m[3]}-${String(m[2]).padStart(2, "0")}-${String(m[1]).padStart(2, "0")}`;
   return "";
 }
@@ -844,6 +845,310 @@ function bloqueioPorMesFechado(competencia, fechamentos) {
   return `${efMesPorExtenso(competencia)} já está fechado: não dá para lançar nesse mês.`;
 }
 
+
+
+// Arquivo solto → a tabela crua, sem supor formato. É o que o
+// reconhecimento de colunas precisa para olhar o conteúdo.
+async function efTabelaDoArquivo(arquivo) {
+  const nome = String((arquivo && arquivo.name) || "").toLowerCase();
+  if (/\.(xlsx|xlsm|xltx|xltm)$/.test(nome)) {
+    const abas = await efAbasDaPlanilha(await arquivo.arrayBuffer());
+    // A aba boa é a que tem mais linhas com data e número.
+    const nota = (a) => (a.linhas || []).filter((l) => (l || []).some(efEhData) && (l || []).some((c) => efValorDeTexto(c) != null)).length;
+    const escolhida = (abas || []).slice().sort((x, y) => nota(y) - nota(x))[0];
+    if (!escolhida || !escolhida.linhas.length) throw new Error("Não achei linhas nessa planilha.");
+    return { linhas: escolhida.linhas, aba: escolhida.nome, abas: (abas || []).map((a) => a.nome) };
+  }
+  if (/\.(xls|numbers|ods)$/.test(nome)) throw new Error("Esse formato não abre aqui. Salve como .xlsx ou .csv.");
+  const texto = efCsvParaTsv(await arquivo.text());
+  return { linhas: texto.split(/\r?\n/).filter((l) => l.trim() !== "").map((l) => l.split("\t")), aba: "", abas: [] };
+}
+
+// ── Reconhecer as colunas de uma tabela qualquer ────────────────
+// Cada banco manda o extrato de um jeito e cada escritório tem a sua
+// planilha. Em vez de exigir um cabeçalho conhecido, olhamos o CONTEÚDO:
+// o que parece data é data, o que tem centavos e sinal é valor, o texto
+// mais longo é o histórico. O nome da coluna, quando existe, só confirma.
+
+function efEhData(t) {
+  const s = String(t == null ? "" : t).trim();
+  if (!s) return false;
+  return /^\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}$/.test(s) || /^\d{4}-\d{2}-\d{2}/.test(s);
+}
+
+// Número em formato brasileiro ou americano, com ou sem R$ e sinal.
+function efValorDeTexto(t) {
+  let s = String(t == null ? "" : t).replace(/\s|R\$| /gi, "").trim();
+  if (!s) return null;
+  const negativo = /^\(.*\)$/.test(s) || s.indexOf("-") >= 0;
+  s = s.replace(/[()]/g, "").replace(/-/g, "");
+  if (!/^[\d.,]+$/.test(s)) return null;
+  const virgula = s.lastIndexOf(","), ponto = s.lastIndexOf(".");
+  if (virgula >= 0 && virgula > ponto) s = s.replace(/\./g, "").replace(",", ".");
+  else if (virgula >= 0) s = s.replace(/,/g, "");
+  const n = Number(s);
+  if (!Number.isFinite(n)) return null;
+  return negativo ? -n : n;
+}
+
+// Onde está o cabeçalho: a primeira linha das 15 primeiras cujas células
+// são texto curto e que é seguida por linhas com dado de verdade. Extrato
+// de banco costuma ter um título antes ("EXTRATO CONTA CORRENTE").
+function efLinhaDoCabecalho(linhas, limite) {
+  const ate = Math.min(linhas.length, limite || 15);
+  let melhor = -1, melhorNota = 0;
+  for (let i = 0; i < ate; i++) {
+    const l = linhas[i] || [];
+    const cheias = l.filter((c) => String(c || "").trim() !== "");
+    if (cheias.length < 2) continue;
+    const textoCurto = cheias.filter((c) => {
+      const s = String(c).trim();
+      return s.length <= 34 && !efEhData(s) && efValorDeTexto(s) == null;
+    }).length;
+    const seguintes = linhas.slice(i + 1, i + 6);
+    const temDadoAbaixo = seguintes.some((s) => (s || []).some((c) => efEhData(c) || efValorDeTexto(c) != null));
+    if (!temDadoAbaixo) continue;
+    const nota = textoCurto / cheias.length + (cheias.length >= 3 ? 0.2 : 0);
+    if (nota > melhorNota && textoCurto >= 2) { melhorNota = nota; melhor = i; }
+  }
+  return melhor;
+}
+
+const EF_NOMES = {
+  data:      ["data", "data lancamento", "data do lancamento", "data mov", "data movimento", "dt", "data da operacao", "periodo contabil", "competencia"],
+  valor:     ["valor", "valor total nota", "valor r$", "vlr", "montante", "valor da operacao", "valor lancamento"],
+  debito:    ["debito", "saida", "pagamento", "debitos"],
+  credito:   ["credito", "entrada", "recebimento", "creditos"],
+  documento: ["documento", "doc", "nota", "nota / comprovante", "numero do documento", "num doc"],
+  historico: ["historico", "descricao", "descricao lancamento", "lancamento", "memo", "detalhe", "fornecedor"],
+  complemento: ["informacoes complementares", "informacoes", "complemento", "observacao", "detalhamento"],
+  saldo:     ["saldo", "saldo do dia", "saldo apos"],
+};
+
+// Uma coluna por vez: o que as células dela parecem ser.
+function efPerfilDaColuna(valores) {
+  const cheias = valores.filter((v) => String(v == null ? "" : v).trim() !== "");
+  if (!cheias.length) return { vazia: true };
+  const datas = cheias.filter(efEhData).length;
+  const numeros = cheias.map(efValorDeTexto).filter((n) => n != null);
+  const comCentavos = numeros.filter((n) => Math.round(n * 100) % 100 !== 0).length;
+  const negativos = numeros.filter((n) => n < 0).length;
+  const textos = cheias.filter((v) => efEhData(v) === false && efValorDeTexto(v) == null);
+  const comprimento = textos.length ? textos.reduce((s, t) => s + String(t).length, 0) / textos.length : 0;
+  return {
+    preenchimento: cheias.length / Math.max(valores.length, 1),
+    pData: datas / cheias.length,
+    pNumero: numeros.length / cheias.length,
+    pCentavos: numeros.length ? comCentavos / numeros.length : 0,
+    pNegativo: numeros.length ? negativos / numeros.length : 0,
+    pTexto: textos.length / cheias.length,
+    comprimento,
+    distintos: new Set(cheias.map((v) => String(v))).size,
+    total: cheias.length,
+  };
+}
+
+// Junta tudo: devolve qual coluna é o quê, com a confiança de cada escolha.
+function detectarColunasTabela(linhas, opcoes) {
+  const o = opcoes || {};
+  const iCab = o.linhaCabecalho != null ? o.linhaCabecalho : efLinhaDoCabecalho(linhas);
+  const cabecalho = iCab >= 0 ? (linhas[iCab] || []).map((c) => efSemAcento(c)) : [];
+  const corpo = linhas.slice(iCab >= 0 ? iCab + 1 : 0).filter((l) => (l || []).some((c) => String(c || "").trim() !== ""));
+  const largura = Math.max(0, ...linhas.map((l) => (l || []).length));
+  const perfis = [];
+  for (let c = 0; c < largura; c++) perfis.push(efPerfilDaColuna(corpo.map((l) => (l || [])[c])));
+
+  const peloNome = (campo, c) => {
+    const nome = cabecalho[c] || "";
+    if (!nome) return 0;
+    const lista = EF_NOMES[campo] || [];
+    if (lista.includes(nome)) return 1;
+    return lista.some((n) => nome.indexOf(n) >= 0 || n.indexOf(nome) >= 0) ? 0.6 : 0;
+  };
+
+  const nota = {
+    data: (p, c) => (p.vazia ? 0 : p.pData * 2 + peloNome("data", c)),
+    valor: (p, c) => (p.vazia ? 0 : p.pNumero * 1.4 + p.pCentavos * 0.6 + p.pNegativo * 0.6 + peloNome("valor", c)
+      - (peloNome("saldo", c) ? 2 : 0)),
+    documento: (p, c) => (p.vazia ? 0 : peloNome("documento", c) * 1.5 + (p.pTexto > 0.3 && p.comprimento < 14 ? 0.4 : 0)),
+    historico: (p, c) => (p.vazia ? 0 : p.pTexto * 1.2 + Math.min(p.comprimento / 40, 1) + peloNome("historico", c) * 2
+      - (peloNome("complemento", c) ? 1 : 0)),
+    complemento: (p, c) => (p.vazia ? 0 : p.pTexto * 0.8 + Math.min(p.comprimento / 60, 1) + peloNome("complemento", c) * 2),
+  };
+
+  const escolhido = {}, confianca = {}, usadas = new Set();
+  for (const campo of ["data", "valor", "documento", "historico", "complemento"]) {
+    let melhor = -1, melhorNota = 0, segunda = 0;
+    perfis.forEach((p, c) => {
+      if (usadas.has(c)) return;
+      const n = nota[campo](p, c);
+      if (n > melhorNota) { segunda = melhorNota; melhorNota = n; melhor = c; }
+      else if (n > segunda) segunda = n;
+    });
+    const minimo = campo === "documento" ? 0.8 : (campo === "complemento" ? 1.2 : 0.9);
+    if (melhor >= 0 && melhorNota >= minimo) {
+      escolhido[campo] = melhor; usadas.add(melhor);
+      confianca[campo] = Math.max(0, Math.min(1, (melhorNota - segunda) / Math.max(melhorNota, 0.001)));
+    }
+  }
+
+  // Débito e crédito em colunas separadas: dois números sem sinal, um só
+  // com saída e outro só com entrada. Nesse caso não existe "valor único".
+  let debito = -1, credito = -1;
+  perfis.forEach((p, c) => {
+    if (p.vazia || p.pNumero < 0.7) return;
+    if (peloNome("debito", c) >= 0.6) debito = c;
+    if (peloNome("credito", c) >= 0.6) credito = c;
+  });
+  if (debito >= 0 && credito >= 0) {
+    escolhido.debito = debito; escolhido.credito = credito;
+    delete escolhido.valor; confianca.valor = 1;
+  }
+
+  // Coluna de saldo, quando existe, fica marcada para ser ignorada.
+  let saldo = -1;
+  perfis.forEach((p, c) => { if (!p.vazia && peloNome("saldo", c) >= 0.6) saldo = c; });
+  if (saldo >= 0 && saldo !== escolhido.valor) escolhido.saldo = saldo;
+
+  return {
+    linhaCabecalho: iCab,
+    colunas: escolhido,
+    confianca,
+    cabecalho: iCab >= 0 ? (linhas[iCab] || []).map((c) => String(c == null ? "" : c).trim()) : [],
+    perfis,
+    // Assinatura do formato: serve para lembrar o mapa deste banco/planilha.
+    assinatura: (iCab >= 0 ? (linhas[iCab] || []) : []).map((c) => efSemAcento(c)).join("|"),
+    completo: escolhido.data != null && (escolhido.valor != null || escolhido.debito != null),
+  };
+}
+
+// Com o mapa em mãos, as linhas viram movimentos comparáveis.
+function movimentosDaTabela(linhas, mapa) {
+  const m = (mapa && mapa.colunas) || {};
+  const corpo = linhas.slice((mapa && mapa.linhaCabecalho >= 0 ? mapa.linhaCabecalho : -1) + 1);
+  const saida = [];
+  corpo.forEach((l, i) => {
+    const cel = (c) => (c == null ? "" : String((l || [])[c] == null ? "" : (l || [])[c]).trim());
+    const data = cel(m.data);
+    let valor = null;
+    if (m.valor != null) valor = efValorDeTexto(cel(m.valor));
+    else {
+      const d = efValorDeTexto(cel(m.debito)), c = efValorDeTexto(cel(m.credito));
+      if (d) valor = -Math.abs(d); else if (c) valor = Math.abs(c);
+    }
+    if (valor == null || !data) return;
+    saida.push({
+      linha: i + 1,
+      data: efData(data) || data,
+      valor,
+      abs: Math.round(Math.abs(valor) * 100) / 100,
+      documento: cel(m.documento),
+      historico: [cel(m.historico), cel(m.complemento)].filter(Boolean).join(" · ").replace(/\s+/g, " ").trim(),
+    });
+  });
+  return saida;
+}
+
+// ── Conciliação com o extrato do banco ──────────────────────────
+// Linhas que não são movimento: saldo do dia, aplicação e resgate,
+// e a perna bloqueada do cheque (que volta como liberação no dia seguinte).
+const EF_NAO_E_MOVIMENTO = [
+  "saldo", "s a l d o", "resgate rdc", "aplicacao", "aplicacao automatica", "resgate automatico",
+  "rdc", "dep.cheque bloq", "deposito bloqueado 1d", "credito resgate", "deb fundo", "cdb",
+];
+
+function efEhMovimento(historico) {
+  const h = efSemAcento(historico);
+  if (!h) return true;
+  return !EF_NAO_E_MOVIMENTO.some((x) => h.indexOf(x) === 0);
+}
+
+// Casa por valor, como a planilha sempre fez. A data NÃO entra na regra: no
+// fluxo real ela é o dia em que se contabiliza, não o dia do banco, então
+// serviria só para casar errado. Com dois movimentos do mesmo valor no mês,
+// vale a ordem do extrato — o mais antigo casa primeiro, e o que sobra na
+// fila é o mais recente, que é justamente o que falta lançar. A tolerância
+// de um centavo existe porque parcela dividida arredonda para lados
+// diferentes; a distância de dias é informação na tela, não critério.
+function conciliarExtrato(movimentos, lancamentos, opcoes) {
+  const o = opcoes || {};
+  const tolerancia = o.tolerancia == null ? 0.01 : o.tolerancia;
+  const doBanco = (movimentos || []).filter((m) => m && efEhMovimento(m.historico));
+  const foraDoBanco = (movimentos || []).filter((m) => m && !efEhMovimento(m.historico));
+  const candidatos = (lancamentos || []).map((l, i) => ({
+    l, i, abs: Math.round(Math.abs(Number(l.valor) || 0) * 100) / 100, usado: false,
+  }));
+
+  const distancia = (m, c) => {
+    const d1 = String(m.data || "").slice(0, 10);
+    const d2 = String(c.l.lancadoEm || c.l.competencia || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d1) || !/^\d{4}-\d{2}-\d{2}$/.test(d2)) return 9999;
+    return Math.abs((new Date(d1) - new Date(d2)) / 86400000);
+  };
+
+  const casados = [], noBancoSemPar = [];
+  const emOrdem = doBanco.slice().sort((a, b) => String(a.data).localeCompare(String(b.data)));
+  for (const m of emOrdem) {
+    const iguais = candidatos.filter((c) => !c.usado && Math.abs(c.abs - m.abs) <= tolerancia);
+    if (!iguais.length) { noBancoSemPar.push(m); continue; }
+    const escolhido = iguais[0];
+    escolhido.usado = true;
+    casados.push({
+      extrato: m, lancamento: escolhido.l,
+      dias: distancia(m, escolhido) === 9999 ? null : distancia(m, escolhido),
+      centavos: Math.round((escolhido.abs - m.abs) * 100),
+      ambiguo: iguais.length > 1,
+    });
+  }
+  const contabilizadoSemPar = candidatos.filter((c) => !c.usado).map((c) => c.l);
+  const soma = (lista, f) => Math.round(lista.reduce((s, x) => s + Math.abs(Number(f(x)) || 0), 0) * 100) / 100;
+  return {
+    casados, noBancoSemPar, contabilizadoSemPar, foraDoBanco,
+    resumo: {
+      movimentos: doBanco.length,
+      lancamentos: candidatos.length,
+      casados: casados.length,
+      noBanco: noBancoSemPar.length,
+      contabilizado: contabilizadoSemPar.length,
+      valorNoBanco: soma(noBancoSemPar, (m) => m.valor),
+      valorContabilizado: soma(contabilizadoSemPar, (l) => l.valor),
+      ignoradas: foraDoBanco.length,
+    },
+  };
+}
+
+// Um lançamento nascido de uma linha do extrato, com o que dá para saber.
+function lancamentoDoExtrato(movimento, extra) {
+  const m = movimento || {};
+  return {
+    tipo: "escritorio",
+    contaId: (extra || {}).contaId || null,
+    unidadeId: (extra || {}).unidadeId || null,
+    valor: Math.round(Math.abs(Number(m.valor) || 0) * 100) / 100,
+    competencia: String(m.data || "").slice(0, 7),
+    lancadoEm: String(m.data || "").slice(0, 10),
+    descricao: (m.historico || "").slice(0, 120),
+    documento: m.documento || "",
+    contaBanco: "sim",
+    conferido: true,
+    conferidoEm: new Date().toISOString(),
+    doExtrato: true,
+  };
+}
+
+// O mapa de colunas de cada banco/planilha fica guardado por assinatura:
+// da segunda vez o arquivo já entra reconhecido.
+function layoutsDoEscritorio(data) {
+  const l = (((data || {}).escritorio || {}).financeiro || {}).layouts;
+  return (l && typeof l === "object") ? l : {};
+}
+
+function layoutSalvo(layouts, assinatura) {
+  if (!assinatura) return null;
+  const g = (layouts || {})[assinatura];
+  return g && g.colunas ? g : null;
+}
+
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
 // ── UI — a aba Financeiro do Escritório ─────────────────────────
 // Três telas: o extrato mês a mês (que é o que você já olhava na planilha),
@@ -1250,10 +1555,137 @@ function PainelFinanceiroEscritorio({ lancs, linhas, fechamentos, filtro, aoFilt
   );
 }
 
+
+// Barra do mapa de colunas: mostra o que foi reconhecido e deixa corrigir.
+// Reconhecer errado em silêncio é pior do que perguntar.
+function MapaDeColunas({ mapa, aoCorrigir }) {
+  const S = EF_ESTILO;
+  if (!mapa) return null;
+  const campos = [["data", "Data"], ["valor", "Valor"], ["debito", "Débito"], ["credito", "Crédito"],
+    ["historico", "Histórico"], ["complemento", "Complemento"], ["documento", "Documento"]];
+  const largura = Math.max(mapa.cabecalho.length, ...mapa.perfis.map((_, i) => i + 1));
+  const opcoes = [["", "—"]].concat(Array.from({ length: largura }, (_, i) =>
+    [String(i), `${String.fromCharCode(65 + i)}${mapa.cabecalho[i] ? " · " + mapa.cabecalho[i] : ""}`]));
+  const duvidoso = campos.some(([k]) => mapa.colunas[k] != null && (mapa.confianca[k] != null && mapa.confianca[k] < 0.3));
+  return (
+    <div style={{ ...S.card, display: "grid", gap: 10 }}>
+      <div style={{ fontSize: 12.5, color: "#4b5563" }}>
+        {mapa.lembrado
+          ? "Reconheci este formato de outras vezes."
+          : "Reconheci as colunas pelo conteúdo do arquivo."}
+        {duvidoso ? " Confira as que ficaram em dúvida." : " Se alguma estiver trocada, corrija aqui."}
+      </div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {campos.filter(([k]) => mapa.colunas[k] != null || ["data", "valor", "historico"].includes(k)).map(([k, r]) => (
+          <label key={k} style={{ display: "grid", gap: 3 }}>
+            <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>{r}</span>
+            <select value={mapa.colunas[k] == null ? "" : String(mapa.colunas[k])}
+              onChange={(e) => aoCorrigir(k, e.target.value === "" ? null : Number(e.target.value))}
+              style={{ ...S.input, padding: "7px 10px", minWidth: 150, cursor: "pointer",
+                borderColor: (mapa.confianca[k] != null && mapa.confianca[k] < 0.3) ? "#f59e0b" : "rgba(38,36,33,0.18)" }}>
+              {opcoes.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+            </select>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// A conferência contra o extrato: as duas filas que o fechamento precisa.
+function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcarCasados, aoDescartar, ocupado }) {
+  const S = EF_ESTILO;
+  if (!resultado) return null;
+  const r = resultado.resumo;
+  const cartao = (rot, n, apoio, cor) => (
+    <div key={rot} style={{ ...S.card, display: "grid", gap: 2 }}>
+      <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>{rot}</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: cor || "#262421" }}>{n}</div>
+      <div style={{ fontSize: 11.5, color: "#6b7280" }}>{apoio}</div>
+    </div>
+  );
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <MapaDeColunas mapa={mapa} aoCorrigir={aoCorrigir} />
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
+        {cartao("Casaram", r.casados, `de ${r.movimentos} movimentos do banco`, "#0474f4")}
+        {cartao("No banco, falta lançar", r.noBanco, efDinheiro(r.valorNoBanco))}
+        {cartao("Lançado, não veio no banco", r.contabilizado, efDinheiro(r.valorContabilizado))}
+        {cartao("Fora da conta", r.ignoradas, "saldo, aplicação, cheque bloqueado")}
+      </div>
+
+      {r.casados > 0 && (
+        <div style={{ ...S.card, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", fontSize: 12.5, color: "#4b5563" }}>
+          <span>{r.casados} movimentos bateram com lançamentos já registrados.</span>
+          <button style={{ ...S.btn, marginLeft: "auto", opacity: ocupado ? .45 : 1 }} disabled={!!ocupado}
+            onClick={aoMarcarCasados}>Marcar os {r.casados} como conferidos</button>
+        </div>
+      )}
+
+      {resultado.noBancoSemPar.length > 0 && (
+        <div style={{ display: "grid", gap: 6 }}>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>No extrato e ainda não contabilizado</div>
+          <div style={S.quadro}>
+            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
+              <tbody>
+                {resultado.noBancoSemPar.map((m, i) => (
+                  <tr key={i} style={{ borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+                    <td style={{ padding: "7px 12px", whiteSpace: "nowrap", color: "#6b7280" }}>
+                      {String(m.data || "").split("-").reverse().join("/")}
+                    </td>
+                    <td style={{ padding: "7px 12px" }}>{m.historico || m.documento || "—"}</td>
+                    <td style={{ padding: "7px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                      {efDinheiro(Math.abs(m.valor))}
+                    </td>
+                    <td style={{ padding: "5px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
+                      <button style={S.btnSec} onClick={() => aoLancar(m)}>Lançar</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {resultado.contabilizadoSemPar.length > 0 && (
+        <div style={{ display: "grid", gap: 6 }}>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>Contabilizado e não apareceu no extrato</div>
+          <div style={S.quadro}>
+            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
+              <tbody>
+                {resultado.contabilizadoSemPar.map((l) => (
+                  <tr key={l.id} style={{ borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+                    <td style={{ padding: "7px 12px", color: "#6b7280", whiteSpace: "nowrap" }}>
+                      {(contaEscritorio(l.contaId) || {}).nome || "—"}
+                    </td>
+                    <td style={{ padding: "7px 12px" }}>{l.descricao || l.fornecedor || "—"}</td>
+                    <td style={{ padding: "7px 12px", color: "#6b7280" }}>{[l.cliente, l.projeto].filter(Boolean).join(" · ")}</td>
+                    <td style={{ padding: "7px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                      {efDinheiro(l.valor)}
+                    </td>
+                    <td style={{ padding: "5px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
+                      <button style={S.btnSec} onClick={() => aoDescartar(l)}>Não passou pela conta</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ fontSize: 11.5, color: "#6b7280" }}>
+            Pode ser compra parcelada a vencer, pagamento agendado ou algo que não passa pela conta do escritório.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Fechamento do mês ───────────────────────────────────────────
 // Conferência item a item contra o extrato do banco. Enquanto a diferença
 // não zera, o mês não fecha; depois de fechado, não entra lançamento nele.
-function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes, aoMarcar, aoMarcarTodos, aoFechar, aoReabrir, ocupado }) {
+function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes, aoMarcar, aoMarcarTodos, aoFechar, aoReabrir, ocupado, extrato }) {
   const S = EF_ESTILO;
   // A conferência é feita ao longo do mês, com o extrato parcial: por isso
   // a tela abre mostrando só o que ainda falta bater.
@@ -1304,6 +1736,39 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
           )}
         </div>
       </div>
+
+      {/* Trazer o extrato do banco: o arquivo vem como o banco manda e o
+          reconhecimento das colunas é por conteúdo. */}
+      {extrato && (
+        <div style={{ ...S.card, display: "grid", gap: 10 }}>
+          <div
+            onDragOver={(e) => { e.preventDefault(); extrato.setArrastando(true); }}
+            onDragLeave={(e) => { if (e.currentTarget === e.target) extrato.setArrastando(false); }}
+            onDrop={(e) => { e.preventDefault(); extrato.receber(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]); }}
+            onClick={() => extrato.entrada.current && extrato.entrada.current.click()}
+            style={{
+              border: `1.5px dashed ${extrato.arrastando ? "#0474f4" : "rgba(38,36,33,0.22)"}`,
+              background: extrato.arrastando ? "#eef5ff" : "#fff",
+              borderRadius: 14, padding: "20px 16px", textAlign: "center", cursor: "pointer",
+            }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: extrato.arrastando ? "#0474f4" : "#262421" }}>
+              {extrato.arrastando ? "Pode soltar" : "Arraste aqui o extrato do banco"}
+            </div>
+            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
+              {extrato.origem ? `Li de ${extrato.origem}` : "qualquer banco — .xlsx, .xlsm, .csv ou .ofx exportado em planilha"}
+            </div>
+          </div>
+          <input ref={extrato.entrada} type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt" style={{ display: "none" }}
+            onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; extrato.receber(f); }} />
+        </div>
+      )}
+
+      {extrato && extrato.resultado && (
+        <ConferenciaComExtrato
+          resultado={extrato.resultado} mapa={extrato.mapa} aoCorrigir={extrato.corrigir}
+          aoLancar={extrato.lancar} aoMarcarCasados={extrato.marcarCasados}
+          aoDescartar={extrato.descartar} ocupado={ocupado} />
+      )}
 
       <div style={{ ...S.card, display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", fontSize: 12.5, color: "#4b5563" }}>
         <span><strong style={{ color: "#262421" }}>{conf.conferidos}</strong> de {conf.total} conferidos</span>
@@ -1446,6 +1911,103 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     }
   }
 
+  // ── Extrato do banco na tela de fechamento ────────────────────
+  // O arquivo vem como o banco manda: o mapa de colunas é reconhecido pelo
+  // conteúdo, guardado por assinatura e reutilizado na próxima vez.
+  const [tabelaExtrato, setTabelaExtrato] = useState(null);
+  const [mapaExtrato, setMapaExtrato] = useState(null);
+  const [arrastandoExtrato, setArrastandoExtrato] = useState(false);
+  const [origemExtrato, setOrigemExtrato] = useState("");
+  const entradaExtrato = useRef(null);
+  const layouts = layoutsDoEscritorio(data);
+
+  async function receberExtrato(arquivo) {
+    if (!arquivo) return;
+    setArrastandoExtrato(false);
+    setOcupado(`Lendo ${arquivo.name}…`); setAviso("");
+    try {
+      const { linhas, aba } = await efTabelaDoArquivo(arquivo);
+      if (!linhas || !linhas.length) throw new Error("O arquivo está vazio.");
+      let mapa = detectarColunasTabela(linhas);
+      const guardado = layoutSalvo(layouts, mapa.assinatura);
+      if (guardado) mapa = { ...mapa, colunas: { ...guardado.colunas }, lembrado: true };
+      setTabelaExtrato(linhas); setMapaExtrato(mapa);
+      setOrigemExtrato(aba ? `${arquivo.name} · aba “${aba}”` : arquivo.name);
+      setOcupado("");
+      if (!mapa.completo) setAviso("Não reconheci a coluna de data ou de valor — escolha nos campos acima.");
+    } catch (e) {
+      setOcupado("");
+      setAviso("Não consegui ler o extrato: " + ((e && e.message) || "formato não reconhecido"));
+    }
+  }
+
+  function corrigirColuna(campo, coluna) {
+    setMapaExtrato((m) => {
+      if (!m) return m;
+      const colunas = { ...m.colunas };
+      if (coluna == null) delete colunas[campo]; else colunas[campo] = coluna;
+      if (campo === "valor" && coluna != null) { delete colunas.debito; delete colunas.credito; }
+      if ((campo === "debito" || campo === "credito") && coluna != null) delete colunas.valor;
+      return { ...m, colunas, lembrado: false, confianca: { ...m.confianca, [campo]: 1 } };
+    });
+  }
+
+  const movimentosExtrato = (tabelaExtrato && mapaExtrato && mapaExtrato.completo)
+    ? movimentosDaTabela(tabelaExtrato, mapaExtrato) : null;
+  const conciliacao = movimentosExtrato
+    ? conciliarExtrato(movimentosExtrato, lancs.filter((l) => String(l.competencia) === String(mesEmConferencia)))
+    : null;
+
+  // Guardar o mapa para a próxima vez que este banco aparecer.
+  function lembrarLayout() {
+    if (!mapaExtrato || !mapaExtrato.assinatura || mapaExtrato.lembrado) return Promise.resolve();
+    const esc = (data || {}).escritorio || {};
+    const novos = { ...layouts, [mapaExtrato.assinatura]: { colunas: mapaExtrato.colunas, visto: new Date().toISOString().slice(0, 10) } };
+    return save({ ...data, escritorio: { ...esc, financeiro: { ...cfgFin, layouts: novos } } });
+  }
+
+  async function marcarCasadosDoExtrato() {
+    if (!conciliacao || !conciliacao.casados.length) return;
+    const agora = new Date().toISOString();
+    const novos = conciliacao.casados.filter((c) => !c.lancamento.conferido)
+      .map((c) => ({ ...c.lancamento, conferido: true, conferidoEm: agora }));
+    setOcupado(`Marcando ${novos.length} lançamentos…`);
+    try {
+      const lote = 400;
+      for (let i = 0; i < novos.length; i += lote) await api.lancamentos.batch(novos.slice(i, i + lote));
+      await lembrarLayout();
+      setOcupado("");
+      setAviso(`${novos.length} lançamentos conferidos pelo extrato.`);
+      if (onReload) await onReload();
+    } catch (e) {
+      setOcupado("");
+      setAviso("Não consegui marcar: " + ((e && e.message) || "falha no envio"));
+    }
+  }
+
+  // Lançar a partir da linha do banco: abre o formulário já preenchido.
+  function lancarDoExtrato(movimento) {
+    lembrarLayout().catch(console.error);
+    setForm({
+      ...lancamentoDoExtrato(movimento),
+      valor: String(Math.abs(Number(movimento.valor) || 0)).replace(".", ","),
+      cliente: "", projeto: "", fornecedor: "", observacao: "",
+    });
+    setAba("lancamentos");
+    if (aoIrPara) aoIrPara("lancamentos");
+  }
+
+  // "Não passou pela conta": tira da fila sem apagar o lançamento.
+  async function marcarForaDoBanco(l) {
+    const ok = await dialogo.confirmar({
+      titulo: "Marcar como fora da conta do escritório?",
+      mensagem: `${(contaEscritorio(l.contaId) || {}).nome || "Lançamento"} · ${efDinheiro(l.valor)}. Ele sai da conferência do banco e continua no extrato do VICKE.`,
+      confirmar: "Marcar",
+    });
+    if (!ok) return;
+    gravar(lancs.map((x) => x.id === l.id ? { ...x, contaBanco: "nao", conferido: true, conferidoEm: new Date().toISOString() } : x));
+  }
+
   // Conferência: marca um lançamento como visto no extrato do banco. É o
   // trabalho do dia a dia — por isso vai um a um, sem cerimônia.
   function marcarConferido(l) {
@@ -1573,7 +2135,13 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
           lancs={lancs} linhas={linhas} fechamentos={fechamentos}
           mes={mesEmConferencia} aoTrocarMes={setMesFecho}
           aoMarcar={marcarConferido} aoMarcarTodos={marcarMesInteiro}
-          aoFechar={fecharMes} aoReabrir={reabrirMes} ocupado={ocupado} />
+          aoFechar={fecharMes} aoReabrir={reabrirMes} ocupado={ocupado}
+          extrato={{
+            arrastando: arrastandoExtrato, setArrastando: setArrastandoExtrato,
+            origem: origemExtrato, entrada: entradaExtrato, receber: receberExtrato,
+            mapa: mapaExtrato, corrigir: corrigirColuna, resultado: conciliacao,
+            lancar: lancarDoExtrato, marcarCasados: marcarCasadosDoExtrato, descartar: marcarForaDoBanco,
+          }} />
       )}
 
       {aviso && <div style={{ fontSize: 12.5, color: "#0474f4" }}>{aviso}</div>}

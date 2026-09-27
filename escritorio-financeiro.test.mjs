@@ -21,7 +21,10 @@ const M = new Function(src + `
            efCsvParaTsv, efAbaDeLancamentos, efTextoDoArquivo,
            resumoEscritorio, efMesPorExtenso, filtrarLancamentosEscritorio, resumoDoPeriodoEscritorio,
            fechamentosDoEscritorio, mesEstaFechado, ultimoMesFechado, conferenciaDoMes,
-           diferencaDeFechamento, bloqueioPorMesFechado };`)();
+           diferencaDeFechamento, bloqueioPorMesFechado,
+           detectarColunasTabela, movimentosDaTabela, conciliarExtrato, efEhMovimento,
+           lancamentoDoExtrato, efValorDeTexto, efEhData, efLinhaDoCabecalho,
+           layoutsDoEscritorio, layoutSalvo };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -494,6 +497,129 @@ teste("mês fechado recusa lançamento novo, mês aberto aceita", () => {
   assert.ok(fechado.some((e) => e.includes("julho de 2026")), "avisa qual mês está fechado");
   assert.deepStrictEqual(M.validarLancamentoEscritorio({ ...base, competencia: "2026-09" }, { fechamentos }), []);
   assert.deepStrictEqual(M.validarLancamentoEscritorio({ ...base, competencia: "2026-07" }), [], "sem a lista de fechamentos, nada muda");
+});
+
+
+// ── Reconhecer as colunas de qualquer planilha ──────────────────
+teste("cada banco manda de um jeito: acha cabeçalho, débito/crédito separados e ignora o saldo", () => {
+  const outroBanco = [
+    ["Banco XPTO - Extrato"], [],
+    ["Data mov.", "Histórico", "Documento", "Débito", "Crédito", "Saldo"],
+    ["01/09/2026", "TARIFA MENSALIDADE", "123", "35,00", "", "1.000,00"],
+    ["02/09/2026", "TED RECEBIDA", "124", "", "2.500,00", "3.465,00"],
+    ["03/09/2026", "PAGTO FORNECEDOR", "125", "1.234,56", "", "2.230,44"],
+  ];
+  const mapa = M.detectarColunasTabela(outroBanco);
+  assert.strictEqual(mapa.linhaCabecalho, 2, "cabeçalho na terceira linha");
+  assert.strictEqual(mapa.colunas.data, 0);
+  assert.strictEqual(mapa.colunas.debito, 3);
+  assert.strictEqual(mapa.colunas.credito, 4);
+  assert.strictEqual(mapa.colunas.saldo, 5);
+  assert.strictEqual(mapa.colunas.valor, undefined, "coluna de saldo não vira valor");
+  const mov = M.movimentosDaTabela(outroBanco, mapa);
+  assert.strictEqual(mov.length, 3);
+  assert.strictEqual(mov[0].valor, -35, "débito entra negativo");
+  assert.strictEqual(mov[1].valor, 2500, "crédito entra positivo");
+});
+
+teste("valor com R$, milhar e parênteses vira número; data em qualquer separador vira ano-mês-dia", () => {
+  const t = [["DT", "DESCRICAO", "VLR"], ["01-09-2026", "Compra material", "R$ 1.234,56"], ["02.09.2026", "Estorno", "(R$ 100,00)"]];
+  const mov = M.movimentosDaTabela(t, M.detectarColunasTabela(t));
+  assert.strictEqual(mov[0].valor, 1234.56);
+  assert.strictEqual(mov[1].valor, -100, "parênteses é negativo");
+  assert.strictEqual(mov[0].data, "2026-09-01");
+  assert.strictEqual(mov[1].data, "2026-09-02");
+  assert.strictEqual(M.efValorDeTexto("1234.56"), 1234.56, "formato americano também");
+  assert.strictEqual(M.efValorDeTexto("abc"), null);
+});
+
+teste("sem cabeçalho nenhum, o conteúdo entrega quem é quem", () => {
+  const t = [["01/09/2026", "Pagamento pix fornecedor", "-250,00"], ["02/09/2026", "Recebimento cliente", "3.000,00"]];
+  const mapa = M.detectarColunasTabela(t);
+  assert.strictEqual(mapa.linhaCabecalho, -1);
+  assert.ok(mapa.completo);
+  assert.strictEqual(mapa.colunas.data, 0);
+  assert.strictEqual(mapa.colunas.historico, 1);
+  assert.strictEqual(M.movimentosDaTabela(t, mapa).length, 2);
+});
+
+teste("a planilha do escritório é reconhecida pelas mesmas regras", () => {
+  const t = [
+    ["#", "Cod. Cliente", "Nome Cliente", "Unidade negócio", "Projeto / obra", "Fornecedor", "Descrição Lançamento",
+     "Conta contábil", "Nota / Comprovante", "Emitir nota fiscal", "Valor total nota", "Período Contábil"],
+    ["1", "202229", "Obra X", "Gestão de obras", "Módulo 1", "Loja", "Cimento", "Pagamentos e compras", "4096", "Não", "780", "23/09/2026"],
+  ];
+  const mapa = M.detectarColunasTabela(t);
+  assert.strictEqual(mapa.colunas.valor, 10, "Valor total nota");
+  assert.strictEqual(mapa.colunas.data, 11, "Período Contábil");
+  assert.strictEqual(mapa.colunas.historico, 6, "Descrição Lançamento");
+});
+
+// ── Conciliação com o extrato ───────────────────────────────────
+teste("saldo, aplicação e a perna bloqueada do cheque não são movimento", () => {
+  assert.ok(M.efEhMovimento("PIX EMITIDO OUTRA IF"));
+  assert.ok(M.efEhMovimento("DÉB.CONV.SANEAMENTO"));
+  assert.ok(!M.efEhMovimento("SALDO DO DIA"));
+  assert.ok(!M.efEhMovimento("SALDO ANTERIOR"));
+  assert.ok(!M.efEhMovimento("RESGATE RDC"));
+  assert.ok(!M.efEhMovimento("DEP.CHEQUE BLOQ.1D"));
+  assert.ok(M.efEhMovimento("LIBERAÇÃO DE DEPÓSITO BLOQUEADO"), "a liberação é o dinheiro entrando de verdade");
+});
+
+teste("conciliar é casar por valor: sobra o que é novo no banco e o que ainda não passou", () => {
+  const movimentos = [
+    { data: "2026-09-08", valor: -1886.67, abs: 1886.67, historico: "DÉB.TIT.COMPE" },
+    { data: "2026-09-14", valor: -400, abs: 400, historico: "PIX empreiteiro" },
+    { data: "2026-09-28", valor: -400, abs: 400, historico: "PIX empreiteiro" },
+    { data: "2026-09-15", valor: 7500, abs: 7500, historico: "LIBERAÇÃO DE DEPÓSITO BLOQUEADO" },
+    { data: "2026-09-14", valor: 7500, abs: 7500, historico: "DEP.CHEQUE BLOQ.1D" },
+    { data: "2026-09-30", valor: 0, abs: 0, historico: "SALDO DO DIA" },
+  ];
+  const lancamentos = [
+    { id: "a", valor: 1886.67, competencia: "2026-09", lancadoEm: "2026-09-23" },
+    { id: "b", valor: 400, competencia: "2026-09", lancadoEm: "2026-09-24" },
+    { id: "c", valor: 7500, competencia: "2026-09", lancadoEm: "2026-09-24" },
+    { id: "d", valor: 1902.82, competencia: "2026-09", lancadoEm: "2026-09-26" },
+  ];
+  const r = M.conciliarExtrato(movimentos, lancamentos);
+  assert.strictEqual(r.resumo.movimentos, 4);
+  assert.strictEqual(r.resumo.ignoradas, 2);
+  assert.strictEqual(r.resumo.casados, 3);
+  assert.deepStrictEqual(r.noBancoSemPar.map((m) => m.data), ["2026-09-28"]);
+  assert.deepStrictEqual(r.contabilizadoSemPar.map((l) => l.id), ["d"]);
+  assert.strictEqual(r.casados.find((c) => c.lancamento.id === "b").extrato.data, "2026-09-14",
+    "com dois do mesmo valor, casa o mais antigo do extrato e sobra o mais recente na fila");
+  assert.strictEqual(r.resumo.valorNoBanco, 400);
+});
+
+teste("parcela arredondada para lados diferentes ainda casa, e o centavo aparece", () => {
+  const banco = [{ data: "2026-09-28", valor: -1902.81, abs: 1902.81, historico: "DÉB.TIT.COMPE" }];
+  const planilha = [{ id: "x", valor: 1902.82, competencia: "2026-09" }];
+  const r = M.conciliarExtrato(banco, planilha);
+  assert.strictEqual(r.resumo.casados, 1);
+  assert.strictEqual(r.casados[0].centavos, 1);
+  assert.strictEqual(M.conciliarExtrato(banco, planilha, { tolerancia: 0 }).resumo.casados, 0);
+});
+
+teste("a linha do banco vira lançamento com o que o banco já sabe", () => {
+  const novo = M.lancamentoDoExtrato({ data: "2026-09-25", valor: -60, historico: "PIX · tubo passagem Ar", documento: "Pix" },
+    { contaId: "pagamentos_compras", unidadeId: "gestao_obras" });
+  assert.strictEqual(novo.valor, 60, "valor entra positivo: o sinal é do grupo da conta");
+  assert.strictEqual(novo.competencia, "2026-09");
+  assert.strictEqual(novo.lancadoEm, "2026-09-25");
+  assert.strictEqual(novo.contaId, "pagamentos_compras");
+  assert.strictEqual(novo.conferido, true);
+  assert.strictEqual(novo.contaBanco, "sim");
+  assert.strictEqual(novo.tipo, "escritorio");
+});
+
+teste("o mapa de colunas fica guardado por assinatura do arquivo", () => {
+  const layouts = { "data|historico|valor": { colunas: { data: 0, valor: 2 }, visto: "2026-09-27" } };
+  assert.ok(M.layoutSalvo(layouts, "data|historico|valor"));
+  assert.strictEqual(M.layoutSalvo(layouts, "outro|formato"), null);
+  assert.strictEqual(M.layoutSalvo(layouts, ""), null);
+  assert.deepStrictEqual(M.layoutsDoEscritorio({ escritorio: { financeiro: { layouts } } }), layouts);
+  assert.deepStrictEqual(M.layoutsDoEscritorio({}), {});
 });
 
 for (const [nome, fn] of testes) {
