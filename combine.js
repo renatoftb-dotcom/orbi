@@ -27,6 +27,12 @@ const ORDER = [
   // (GestaoObraPanel) consome a taxonomia (PLANO_CONTAS, ETAPAS_OBRA,
   // GRUPOS_MATERIAL) e, nas próximas entregas, calcularPLObra().
   "obra-financeiro.jsx",
+  // escritorio-financeiro.jsx: taxonomia e cálculo do extrato do ESCRITÓRIO
+  // (não da obra). Vem logo depois de obra-financeiro.jsx porque as duas
+  // taxonomias se encostam — o bloco de gestão do escritório é o dinheiro
+  // que a obra movimenta — e antes de clientes.jsx, que é quem vai
+  // renderizar a tela.
+  "escritorio-financeiro.jsx",
   // orcamento-obra.jsx vem depois de obra-financeiro.jsx (não logo após
   // outros.jsx) porque o §6 da SPEC-ORCAMENTO-OBRA.md pede pra importar
   // ETAPAS_OBRA de lá quando a ponte com o P&L for implementada; e antes de
