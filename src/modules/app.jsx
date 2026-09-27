@@ -2021,7 +2021,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "fornecedores"           && <PrestadoresServico key={fornecedoresKey} data={data} save={save} />}
           {aba === "insumos"                && <Insumos data={data} save={save} />}
           {aba === "nf"                     && <ImportarNF data={data} save={save} />}
-          {aba === "escritorio"             && <Escritorio key={escritorioKey} data={data} save={save} />}
+          {aba === "escritorio"             && <Escritorio key={escritorioKey} data={data} save={save} onReload={loadData} />}
           {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} setUsuario={setUsuario} />}
           {/* Sub-abas do menu Master — Admin recebe initialTab pra abrir direto na aba certa */}
           {aba === "admin" && isMaster && <Admin usuario={usuario} data={data} save={save} />}

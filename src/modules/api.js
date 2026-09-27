@@ -100,6 +100,8 @@ const api = {
   lancamentos: {
     list:   ()       => get("/api/lancamentos"),
     save:   (l)      => post("/api/lancamentos", l),
+    // Importação da planilha do escritório: vai em lotes, não um a um.
+    batch:  (lista)  => post("/api/lancamentos/batch", { lancamentos: lista }),
     delete: (id)     => del(`/api/lancamentos/${id}`),
   },
 

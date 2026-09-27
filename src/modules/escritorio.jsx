@@ -3,7 +3,7 @@
 // Visual minimalista, fundo branco, estilo Claude.ai
 // ═══════════════════════════════════════════════════════════════
 
-function Escritorio({ data, save }) {
+function Escritorio({ data, save, onReload }) {
   const cfg = (data && data.escritorio) || {};
   const [aba, setAba] = useState("dados");
   const perm = getPermissoes();
@@ -1279,6 +1279,9 @@ function Escritorio({ data, save }) {
             ["dados",    "Dados gerais"],
             ["equipe",   "Equipe"],
           ];
+          // O financeiro do escritório é dado de dono: mesma régua da aba
+          // Usuários, que também só admin enxerga.
+          if (perm.podeGerenciarUsuarios) abasDisponiveis.push(["financeiro", "Financeiro"]);
           if (perm.podeGerenciarUsuarios) abasDisponiveis.push(["usuarios", "Usuários"]);
           abasDisponiveis.push(["sistema", "Sistema"]);
           return abasDisponiveis.map(([key, lbl]) => (
@@ -1290,6 +1293,9 @@ function Escritorio({ data, save }) {
       {/* Conteúdo */}
       {aba === "dados"    && renderDados()}
       {aba === "equipe"   && renderEquipe()}
+      {aba === "financeiro" && perm.podeGerenciarUsuarios && (
+        <FinanceiroEscritorio data={data} save={save} onReload={onReload} />
+      )}
       {aba === "usuarios" && perm.podeGerenciarUsuarios && renderUsuarios()}
       {aba === "sistema"  && renderSistema()}
     </div>

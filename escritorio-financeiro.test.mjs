@@ -8,11 +8,15 @@ import { dirname, join } from "path";
 import assert from "assert";
 
 const raiz = dirname(fileURLToPath(import.meta.url));
-const src = readFileSync(join(raiz, "src", "modules", "escritorio-financeiro.jsx"), "utf8");
+const arquivo = readFileSync(join(raiz, "src", "modules", "escritorio-financeiro.jsx"), "utf8");
+const corte = arquivo.indexOf("// UI — daqui para baixo");
+if (corte < 0) throw new Error("Marcador de início da UI não encontrado em escritorio-financeiro.jsx");
+const src = arquivo.slice(0, corte);
 const M = new Function(src + `
   return { UNIDADES_NEGOCIO, GRUPOS_ESCRITORIO, PLANO_CONTAS_ESCRITORIO, contaEscritorio, grupoEscritorio,
            contaPeloApelido, unidadePeloApelido, validarLancamentoEscritorio, mesesEntreEscritorio,
-           extratoEscritorio, resultadoEmpreendimento };`)();
+           extratoEscritorio, resultadoEmpreendimento, interpretarColagemEscritorio, lancamentoDaColagem,
+           efNumero, efCompetencia, lancamentosDoEscritorio };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -143,6 +147,84 @@ teste("resultado do empreendimento só existe depois da venda", () => {
   assert.strictEqual(vendido.vendido, 420000);
   assert.strictEqual(vendido.resultado, 102000);
   assert.strictEqual(M.resultadoEmpreendimento(obra, "e2").investido, 50000, "um empreendimento não contamina o outro");
+});
+
+// ── Colagem da planilha ─────────────────────────────────────────
+const CAB = "#\tCod. Cliente\tNome Cliente\tUnidade negócio\tProjeto / obra\tFornecedor\tDescrição Lançamento\tConta contábil\tNota / Comprovante\tEmitir nota fiscal\tValor total nota\tPeríodo Contábil\tData do lançamento\tCC Escritório";
+const linha = (...c) => c.join("\t");
+
+teste("a colagem do Excel vira lançamento, com conta, unidade e competência", () => {
+  const txt = [CAB,
+    linha("6352", "202229", "Jacarezinho", "Gestão de obras", "Módulo 1", "SANEPAR", "Conta de água obra",
+          "Pagamentos e compras", "4212", "Não", "70,49", "24/09/2026", "24/09/2026", "Sim"),
+  ].join("\n");
+  const r = M.interpretarColagemEscritorio(txt);
+  assert.strictEqual(r.resumo.total, 1);
+  assert.strictEqual(r.resumo.prontos, 1);
+  const i = r.itens[0];
+  assert.strictEqual(i.contaId, "pagamentos_compras");
+  assert.strictEqual(i.unidadeId, "gestao_obras");
+  assert.strictEqual(i.valor, 70.49);
+  assert.strictEqual(i.competencia, "2026-09");
+  assert.strictEqual(i.lancadoEm, "2026-09-24");
+  assert.strictEqual(i.contaBanco, "sim");
+  assert.strictEqual(i.fornecedor, "SANEPAR");
+  assert.strictEqual(i.documento, "4212");
+});
+
+teste("linha com conta desconhecida ou sem valor volta com o motivo, e não vira lançamento", () => {
+  const txt = [CAB,
+    linha("1", "", "X", "Gestão de obras", "", "", "Serralheiro feito", "Serralheiro", "", "Não", "100", "01/2026", "", ""),
+    linha("2", "", "X", "Escritório", "", "", "sem valor", "Utensílios em geral", "", "Não", "", "01/2026", "", ""),
+  ].join("\n");
+  const r = M.interpretarColagemEscritorio(txt);
+  assert.strictEqual(r.resumo.prontos, 0);
+  assert.match(r.itens[0].erros[0], /Serralheiro/);
+  assert.deepStrictEqual(r.itens[1].erros, ["sem valor"]);
+});
+
+teste("o campo da conta bancária só aceita sim e não; o resto vira observação", () => {
+  const txt = [CAB,
+    linha("1", "", "", "Escritório", "", "", "a", "Utensílios em geral", "", "Não", "10", "01/2026", "", "Não consta no extrato"),
+    linha("2", "", "", "Escritório", "", "", "b", "Utensílios em geral", "", "Não", "10", "01/2026", "", "Não"),
+  ].join("\n");
+  const r = M.interpretarColagemEscritorio(txt);
+  assert.strictEqual(r.itens[0].contaBanco, "");
+  assert.strictEqual(r.itens[0].observacao, "Não consta no extrato");
+  assert.strictEqual(r.itens[1].contaBanco, "nao");
+  assert.strictEqual(r.itens[1].observacao, "");
+});
+
+teste("número e competência aceitam os formatos que o Excel entrega", () => {
+  assert.strictEqual(M.efNumero("1.234,56"), 1234.56);
+  assert.strictEqual(M.efNumero("R$ 1.234,56"), 1234.56);
+  assert.strictEqual(M.efNumero("1234.56"), 1234.56);
+  assert.strictEqual(M.efNumero(""), null);
+  assert.strictEqual(M.efNumero("abc"), null);
+  assert.strictEqual(M.efCompetencia("24/09/2026"), "2026-09");
+  assert.strictEqual(M.efCompetencia("2026-09-24 00:00:00"), "2026-09");
+  assert.strictEqual(M.efCompetencia("9/2026"), "2026-09");
+  assert.strictEqual(M.efCompetencia("setembro"), "");
+});
+
+teste("o lançamento gravado carrega a marca do escritório e o que veio da planilha", () => {
+  const [item] = M.interpretarColagemEscritorio([CAB,
+    linha("1", "", "Cliente X", "Projetos", "Casa", "Loja", "Plotagem", "RRTs e Impressões", "99", "Sim", "120,50", "03/2026", "10/03/2026", "Sim")].join("\n")).itens;
+  const l = M.lancamentoDaColagem(item, "imp1");
+  assert.strictEqual(l.id, "imp1");
+  assert.strictEqual(l.tipo, "escritorio");
+  assert.strictEqual(l.contaId, "rrt_impressoes");
+  assert.strictEqual(l.unidadeId, "projetos");
+  assert.strictEqual(l.valor, 120.5);
+  assert.strictEqual(l.emitirNota, true);
+  assert.strictEqual(l.importado, true);
+  assert.strictEqual(l.contaOriginal, "RRTs e Impressões");
+});
+
+teste("só os lançamentos do escritório entram na conta", () => {
+  const d = { lancamentos: [{ id: "a", tipo: "escritorio" }, { id: "b", obraId: "o1" }, null] };
+  assert.deepStrictEqual(M.lancamentosDoEscritorio(d).map(l => l.id), ["a"]);
+  assert.deepStrictEqual(M.lancamentosDoEscritorio({}), []);
 });
 
 for (const [nome, fn] of testes) {
