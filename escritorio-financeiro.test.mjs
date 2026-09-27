@@ -151,7 +151,8 @@ teste("resultado do empreendimento só existe depois da venda", () => {
   assert.strictEqual(andando.resultado, null, "enquanto não vende, não há lucro nem prejuízo");
   const vendido = M.resultadoEmpreendimento([...obra,
     { contaId: "emp_corretagem", unidadeId: "empreendimento", valor: 18000, competencia: "2026-09", empreendimentoId: "e1" },
-    { contaId: "emp_venda", unidadeId: "empreendimento", valor: 420000, competencia: "2026-09", empreendimentoId: "e1" }], "e1");
+    { contaId: "emp_venda", unidadeId: "empreendimento", valor: 420000, competencia: "2026-09", empreendimentoId: "e1" }],
+    "e1", { concluido: true });
   assert.strictEqual(vendido.investido, 318000);
   assert.strictEqual(vendido.vendido, 420000);
   assert.strictEqual(vendido.resultado, 102000);
@@ -655,10 +656,12 @@ teste("lançamento de empreendimento exige escolher qual, e o custo só vira luc
   assert.strictEqual(andando.investido, 200000, "só o que é daquele empreendimento");
   assert.strictEqual(andando.resultado, null, "sem venda não há resultado");
 
-  const vendido = M.resultadoEmpreendimento(lancs.concat(
-    [{ id: "4", contaId: "emp_venda", unidadeId: "empreendimento", empreendimentoId: "c2", valor: 260000, competencia: "2026-09" }]), "c2");
+  const comVenda = lancs.concat(
+    [{ id: "4", contaId: "emp_venda", unidadeId: "empreendimento", empreendimentoId: "c2", valor: 260000, competencia: "2026-09" }]);
+  const vendido = M.resultadoEmpreendimento(comVenda, "c2", { concluido: true });
   assert.strictEqual(vendido.vendido, 260000);
-  assert.strictEqual(vendido.resultado, 60000, "lucro aparece de uma vez na venda");
+  assert.strictEqual(vendido.resultado, 60000, "lucro aparece de uma vez quando o empreendimento fecha");
+  assert.strictEqual(vendido.parcial, false);
 });
 
 teste("o investimento em empreendimento sai do saldo do banco sem virar despesa do mês", () => {
@@ -670,6 +673,22 @@ teste("o investimento em empreendimento sai do saldo do banco sem virar despesa 
   assert.strictEqual(mes.saldoEscritorio, 10000, "o custo do imóvel não é despesa do escritório");
   assert.strictEqual(mes.saldoEmpreendimento, -4000);
   assert.strictEqual(mes.saldoExtrato, 6000, "mas o dinheiro saiu da conta");
+});
+
+teste("sinal de uma unidade é recebimento, não lucro: sem fechar, não apura resultado", () => {
+  const lancs = [
+    { contaId: "emp_construcao", empreendimentoId: "c2", valor: 90800.67, competencia: "2026-08" },
+    { contaId: "emp_venda", empreendimentoId: "c2", valor: 7000, competencia: "2026-09" },
+    { contaId: "emp_venda", empreendimentoId: "c2", valor: 5000, competencia: "2026-09" },
+  ];
+  const emCurso = M.resultadoEmpreendimento(lancs, "c2");
+  assert.strictEqual(emCurso.investido, 90800.67);
+  assert.strictEqual(emCurso.recebido, 12000);
+  assert.strictEqual(emCurso.parcial, true, "venda começou mas não fechou");
+  assert.strictEqual(emCurso.resultado, null, "não inventa prejuízo de 78 mil com o sinal de uma casa");
+  const fechado = M.resultadoEmpreendimento(lancs, "c2", { concluido: true });
+  assert.strictEqual(fechado.resultado, cent(12000 - 90800.67));
+  assert.strictEqual(fechado.parcial, false);
 });
 
 for (const [nome, fn] of testes) {

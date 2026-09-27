@@ -245,7 +245,13 @@ function extratoEscritorio(lancamentos, opcoes) {
 // Quanto já foi investido em cada empreendimento e o que sobrou na venda.
 // Enquanto não vende, `resultado` é null — investimento em andamento não é
 // lucro nem prejuízo, é dinheiro parado em imóvel.
-function resultadoEmpreendimento(lancamentos, empreendimentoId) {
+// `concluido` é o que separa recebimento de resultado. Um sinal de uma
+// unidade não apura nada: o custo é das três casas, e jogar tudo contra o
+// primeiro sinal mostraria um prejuízo que não existe. Enquanto o
+// empreendimento não fecha, o que há é investido e recebido; o resultado
+// aparece quando o cadastro deixa de estar em andamento.
+function resultadoEmpreendimento(lancamentos, empreendimentoId, opcoes) {
+  const o = opcoes || {};
   let investido = 0, vendido = 0, temVenda = false;
   for (const l of lancamentos || []) {
     if (!l || l.empreendimentoId !== empreendimentoId) continue;
@@ -254,7 +260,13 @@ function resultadoEmpreendimento(lancamentos, empreendimentoId) {
     if (conta.grupo === "emp_saidas") investido = efCentavos(investido + (Number(l.valor) || 0));
     if (conta.grupo === "emp_entradas") { vendido = efCentavos(vendido + (Number(l.valor) || 0)); temVenda = true; }
   }
-  return { investido, vendido, resultado: temVenda ? efCentavos(vendido - investido) : null };
+  const apurado = temVenda && !!o.concluido;
+  return {
+    investido, vendido,
+    recebido: vendido,
+    parcial: temVenda && !o.concluido,
+    resultado: apurado ? efCentavos(vendido - investido) : null,
+  };
 }
 
 // ── Leitura de uma colagem da planilha ──────────────────────────
@@ -1461,7 +1473,7 @@ function EmpreendimentosQuadro({ data, lancs, aoFiltrar }) {
         <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
           <thead>
             <tr>
-              {["Empreendimento", "Investido", "Vendido", "Resultado", ""].map((h, i) => (
+              {["Empreendimento", "Investido", "Recebido em vendas", "Resultado", ""].map((h, i) => (
                 <th key={i} style={{ textAlign: i === 0 || i === 4 ? "left" : "right", padding: "8px 12px",
                   fontSize: 11, color: "#6b7280", fontWeight: 600, borderBottom: "1px solid rgba(38,36,33,0.12)" }}>{h}</th>
               ))}
@@ -1469,17 +1481,19 @@ function EmpreendimentosQuadro({ data, lancs, aoFiltrar }) {
           </thead>
           <tbody>
             {lista.map((c) => {
-              const r = resultadoEmpreendimento(lancs, c.id);
+              // "Em andamento" desmarcado no cadastro = empreendimento fechado.
+              const r = resultadoEmpreendimento(lancs, c.id, { concluido: c.ativo === false });
               return (
                 <tr key={c.id} style={{ borderTop: "1px solid rgba(38,36,33,0.06)" }}>
                   <td style={{ padding: "7px 12px" }}>{c.nome}</td>
                   <td style={{ padding: "7px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{efDinheiro(r.investido)}</td>
                   <td style={{ padding: "7px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                    {r.vendido ? efDinheiro(r.vendido) : "—"}
+                    {r.recebido ? efDinheiro(r.recebido) : "—"}
                   </td>
                   <td style={{ padding: "7px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums",
                     color: r.resultado == null ? "#6b7280" : "#0474f4" }}>
-                    {r.resultado == null ? "em andamento" : efDinheiro(r.resultado)}
+                    {r.resultado != null ? efDinheiro(r.resultado)
+                      : (r.parcial ? "venda em curso" : "em andamento")}
                   </td>
                   <td style={{ padding: "5px 12px" }}>
                     {aoFiltrar && <button style={S.btnSec} onClick={() => aoFiltrar(c.id)}>Ver lançamentos</button>}
@@ -1491,7 +1505,8 @@ function EmpreendimentosQuadro({ data, lancs, aoFiltrar }) {
         </table>
       </div>
       <div style={{ fontSize: 11.5, color: "#6b7280" }}>
-        O investido não entra no resultado do mês. O lucro aparece de uma vez quando a venda é lançada.
+        O investido não entra no resultado do mês. Enquanto houver unidade por vender, o que entra é
+        recebimento, não lucro — o resultado é apurado quando você desmarca “Em andamento” no cadastro.
       </div>
     </div>
   );
