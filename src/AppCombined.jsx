@@ -26593,13 +26593,35 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   function openDetail(c) { setSel(c); setView("detail"); }
 
   function saveCliente() {
-    if (!form.nome?.trim()) { dialogo.alertar({ titulo: "Informe o nome do cliente", tipo: "aviso" }); return; }
+    const souEmp = !!(form.servicos || {}).empreendimento;
+    if (!form.nome?.trim()) {
+      dialogo.alertar({ titulo: souEmp ? "Informe o nome do empreendimento" : "Informe o nome do cliente", tipo: "aviso" });
+      return;
+    }
     const ehNovo = !form.id;
     const clienteFinal = ehNovo ? { ...form, id: uid() } : form;
     const novos = ehNovo
       ? [...data.clientes, clienteFinal]
       : data.clientes.map(c => c.id === form.id ? clienteFinal : c);
-    save({ ...data, clientes: novos });
+
+    // Empreendimento já nasce com a obra. Não existe empreendimento sem obra:
+    // é o escritório construindo para vender, e é na obra que o custo mora.
+    // Só cria se ainda não houver nenhuma — editar o cadastro não duplica.
+    const jaTemObra = (data.obras || []).some(o => o && o.clienteId === clienteFinal.id);
+    const obras = (souEmp && !jaTemObra)
+      ? [...(data.obras || []), {
+          id: uid(), clienteId: clienteFinal.id, nome: clienteFinal.nome,
+          status: "planejamento", dataInicio: clienteFinal.desde || "", dataFim: "",
+          responsavel: "", descricao: "Obra do empreendimento, criada junto com o cadastro.",
+          ativo: true, clientePagaDireto: false, enderecoProprio: false,
+          cep: clienteFinal.cep || "", logradouro: clienteFinal.logradouro || "",
+          numero: clienteFinal.numero || "", complemento: clienteFinal.complemento || "",
+          bairro: clienteFinal.bairro || "", cidade: clienteFinal.cidade || "",
+          estado: clienteFinal.estado || "",
+        }]
+      : (data.obras || []);
+
+    save({ ...data, clientes: novos, obras });
     // Fluxo "Novo Orçamento → Cadastrar Cliente": após salvar, vai direto
     // pra tela de orçamento desse cliente em vez de voltar pra kanban.
     if (ehNovo && veioDeNovoOrcamento && onClienteSalvoVoltarOrcamento) {
