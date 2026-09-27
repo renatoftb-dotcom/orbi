@@ -18,7 +18,8 @@ const M = new Function(src + `
            extratoEscritorio, resultadoEmpreendimento, interpretarColagemEscritorio, lancamentoDaColagem,
            efNumero, efCompetencia, lancamentosDoEscritorio,
            efAbasDaPlanilha, efLinhasDaAba, efDataDoSerial, efEstilosDeData, efTextosCompartilhados,
-           efCsvParaTsv, efAbaDeLancamentos, efTextoDoArquivo };`)();
+           efCsvParaTsv, efAbaDeLancamentos, efTextoDoArquivo,
+           resumoEscritorio, efMesPorExtenso };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -369,6 +370,47 @@ teste("planilha montada na hora atravessa o caminho inteiro até virar lançamen
   const extrato = M.extratoEscritorio(lancs);
   assert.strictEqual(extrato.length, 1);
   assert.strictEqual(cent(extrato[0].saldoExtrato), cent(7500 - 635.81));
+});
+
+
+// ── Resumo do mês ───────────────────────────────────────────────
+teste("o resumo pega o mês corrente, compara com o anterior e avisa do que está à frente", () => {
+  const linhas = [
+    { mes: "2026-07", grupos: { receitas: 10000, despesas: 4000 }, saldoEscritorio: 6000, retiradas: 1000, saldoExtrato: 50000 },
+    { mes: "2026-08", grupos: { receitas: 20000, despesas: 5000 }, saldoEscritorio: 15000, retiradas: 2000, saldoExtrato: 63000 },
+    { mes: "2026-09", grupos: { receitas: 15000, despesas: 5000 }, saldoEscritorio: 10000, retiradas: 2000, saldoExtrato: 71000 },
+    { mes: "2026-11", grupos: { receitas: 1000, despesas: 0 }, saldoEscritorio: 1000, retiradas: 0, saldoExtrato: 72000 },
+  ];
+  const r = M.resumoEscritorio(linhas, { hoje: new Date("2026-09-27T12:00:00Z") });
+  assert.strictEqual(r.mes, "2026-09");
+  assert.strictEqual(r.mesAnterior, "2026-08");
+  assert.strictEqual(r.saldo, 71000);
+  assert.strictEqual(r.resultado, 10000);
+  assert.strictEqual(r.retiradas, 2000);
+  assert.strictEqual(cent(r.variacao.receitas), -0.25);      // caiu um quarto
+  assert.strictEqual(r.variacao.despesas, 0);                 // igual ao mês anterior
+  assert.deepStrictEqual(r.futuro, { ate: "2026-11", saldo: 72000 });
+});
+
+teste("mês sem movimento nenhum ainda cai no último mês fechado, e o primeiro mês não tem com quem comparar", () => {
+  const linhas = [
+    { mes: "2026-06", grupos: { receitas: 9000, despesas: 1000 }, saldoEscritorio: 8000, retiradas: 0, saldoExtrato: 30000 },
+    { mes: "2026-07", grupos: { receitas: 7000, despesas: 2000 }, saldoEscritorio: 5000, retiradas: 0, saldoExtrato: 35000 },
+  ];
+  // hoje é setembro, mas o extrato só vai até julho
+  const r = M.resumoEscritorio(linhas, { hoje: new Date("2026-09-27T12:00:00Z") });
+  assert.strictEqual(r.mes, "2026-07");
+  assert.strictEqual(r.futuro, null);
+  const primeiro = M.resumoEscritorio(linhas, { mes: "2026-06" });
+  assert.strictEqual(primeiro.mesAnterior, "");
+  assert.strictEqual(primeiro.variacao.receitas, null, "sem mês anterior, não inventa variação");
+  assert.strictEqual(M.resumoEscritorio([]), null);
+});
+
+teste("o mês vira texto de gente", () => {
+  assert.strictEqual(M.efMesPorExtenso("2026-09"), "setembro de 2026");
+  assert.strictEqual(M.efMesPorExtenso("2026-03", true), "mar/26");
+  assert.strictEqual(M.efMesPorExtenso(""), "");
 });
 
 for (const [nome, fn] of testes) {

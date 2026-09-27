@@ -8399,6 +8399,63 @@ async function efTextoDoArquivo(arquivo) {
   return { texto: efCsvParaTsv(texto), aba: "", abas: [] };
 }
 
+
+// ── Resumo do mês, para a tela de entrada ───────────────────────
+// Não recalcula nada: lê as linhas que o extrato já produziu e separa o
+// mês de referência do anterior, para a tela mostrar o número e a variação.
+// `hoje` entra por parâmetro para o teste não depender do calendário.
+function resumoEscritorio(linhas, opcoes) {
+  const o = opcoes || {};
+  const lista = (linhas || []).filter((l) => l && /^\d{4}-\d{2}$/.test(String(l.mes)));
+  if (!lista.length) return null;
+  const agora = o.hoje instanceof Date ? o.hoje : new Date();
+  const mesDeHoje = o.mes || `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}`;
+  // Mês de referência: o mês corrente quando ele já existe no extrato;
+  // senão o último mês que o extrato alcança até hoje; senão o primeiro.
+  const ateHoje = lista.filter((l) => String(l.mes) <= mesDeHoje);
+  const atual = lista.find((l) => l.mes === mesDeHoje) || ateHoje[ateHoje.length - 1] || lista[0];
+  const i = lista.indexOf(atual);
+  const anterior = i > 0 ? lista[i - 1] : null;
+  const ultimo = lista[lista.length - 1];
+
+  const campos = (l) => ({
+    receitas: (l.grupos && l.grupos.receitas) || 0,
+    despesas: (l.grupos && l.grupos.despesas) || 0,
+    resultado: l.saldoEscritorio || 0,
+    retiradas: l.retiradas || 0,
+    saldo: l.saldoExtrato || 0,
+  });
+  const a = campos(atual);
+  const b = anterior ? campos(anterior) : null;
+  const variacao = (chave) => {
+    if (!b) return null;
+    const antes = b[chave], agoraV = a[chave];
+    if (!antes) return null;
+    return (agoraV - antes) / Math.abs(antes);
+  };
+
+  return {
+    mes: atual.mes,
+    mesAnterior: anterior ? anterior.mes : "",
+    ...a,
+    anterior: b,
+    variacao: { receitas: variacao("receitas"), despesas: variacao("despesas"), resultado: variacao("resultado") },
+    // Lançamentos com competência à frente do mês de referência já entram
+    // no saldo dos meses seguintes: a tela avisa em vez de esconder.
+    futuro: ultimo.mes > atual.mes ? { ate: ultimo.mes, saldo: ultimo.saldoExtrato || 0 } : null,
+  };
+}
+
+// "2026-09" → "setembro de 2026"; com abreviado, "set/26".
+const EF_MESES = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+function efMesPorExtenso(mes, curto) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(mes || ""));
+  if (!m) return String(mes || "");
+  const nome = EF_MESES[Number(m[2]) - 1] || "";
+  if (curto) return `${nome.slice(0, 3)}/${m[1].slice(2)}`;
+  return `${nome} de ${m[1]}`;
+}
+
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
 // ── UI — a aba Financeiro do Escritório ─────────────────────────
 // Três telas: o extrato mês a mês (que é o que você já olhava na planilha),
@@ -8598,10 +8655,69 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar }) {
 
 // A aba inteira. O extrato é o que se olha todo dia; a lista é onde se
 // lança; a importação é a porta de entrada do histórico da planilha.
-function FinanceiroEscritorio({ data, save, onReload }) {
+
+// Painel de entrada do Financeiro: o mês corrente em quatro números.
+// Sem abas e sem botões — quem quiser detalhe vai pelo menu lateral.
+function ResumoEscritorioPainel({ resumo, quantidade, aoVerExtrato }) {
+  const S = EF_ESTILO;
+  if (!resumo) {
+    return (
+      <div style={{ ...S.card, textAlign: "center", color: "#6b7280", fontSize: 13 }}>
+        Nenhum lançamento ainda. Traga o histórico em <strong>Importar</strong>, no menu ao lado.
+      </div>
+    );
+  }
+  const anterior = resumo.mesAnterior ? efMesPorExtenso(resumo.mesAnterior).split(" de ")[0] : "";
+  const comparacao = (v) => {
+    if (v == null || !anterior) return "";
+    const p = Math.round(Math.abs(v) * 100);
+    if (!p) return `no mesmo nível de ${anterior}`;
+    return `${p}% ${v > 0 ? "acima" : "abaixo"} de ${anterior}`;
+  };
+  const cartao = (rotulo, valor, apoio, destaque) => (
+    <div key={rotulo} style={{ ...S.card, display: "grid", gap: 2 }}>
+      <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>{rotulo}</div>
+      <div style={{ fontSize: destaque ? 26 : 20, fontWeight: 700, marginTop: 2, fontVariantNumeric: "tabular-nums",
+        color: destaque ? "#0474f4" : "#262421" }}>{valor}</div>
+      <div style={{ fontSize: 11.5, color: "#6b7280" }}>{apoio}</div>
+    </div>
+  );
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div>
+        <div style={{ fontSize: 15, fontWeight: 700 }}>{efMesPorExtenso(resumo.mes).replace(/^./, (c) => c.toUpperCase())}</div>
+        <div style={{ fontSize: 12.5, color: "#6b7280", marginTop: 2 }}>
+          {quantidade} lançamentos no histórico
+          {resumo.futuro ? ` · já inclui competências até ${efMesPorExtenso(resumo.futuro.ate, true)}` : ""}
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
+        {cartao("Saldo do extrato", efDinheiro(resumo.saldo), `fechamento de ${efMesPorExtenso(resumo.mes, true)}`, true)}
+        {cartao("Receitas do mês", efDinheiro(resumo.receitas), comparacao(resumo.variacao.receitas) || "projetos, gestão, comissões")}
+        {cartao("Despesas do mês", efDinheiro(resumo.despesas), comparacao(resumo.variacao.despesas) || "custo do escritório")}
+        {cartao("Resultado do mês", efDinheiro(resumo.resultado), comparacao(resumo.variacao.resultado) || "antes das retiradas")}
+      </div>
+      <div style={{ ...S.card, display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center", fontSize: 12.5, color: "#4b5563" }}>
+        <span>Retiradas no mês: <strong style={{ color: "#262421" }}>{efDinheiro(resumo.retiradas)}</strong></span>
+        {resumo.futuro && (
+          <span>Saldo previsto até {efMesPorExtenso(resumo.futuro.ate, true)}: <strong style={{ color: "#262421" }}>{efDinheiro(resumo.futuro.saldo)}</strong></span>
+        )}
+        {aoVerExtrato && (
+          <button onClick={aoVerExtrato} style={{ ...S.btnSec, marginLeft: "auto" }}>Ver o extrato completo</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FinanceiroEscritorio({ data, save, onReload, vista, aoAbrirExtrato }) {
   const S = EF_ESTILO;
   const perm = typeof getPermissoes === "function" ? getPermissoes() : { podeEditar: true, podeExcluir: true };
-  const [aba, setAba] = useState("extrato");
+  // `vista` vem do menu lateral: cada item abre direto a sua tela e o
+  // cabeçalho de abas some. Sem ela (Escritório aberto pelo caminho antigo),
+  // as abas continuam aparecendo.
+  const [aba, setAba] = useState(vista === "resumo" ? "extrato" : (vista || "extrato"));
+  useEffect(() => { if (vista && vista !== "resumo") setAba(vista); }, [vista]);
   const [form, setForm] = useState(null);
   const [texto, setTexto] = useState("");
   const [lido, setLido] = useState(null);
@@ -8700,15 +8816,24 @@ function FinanceiroEscritorio({ data, save, onReload }) {
 
   return (
     <div style={S.wrap}>
-      <div style={S.abas}>
-        {[["extrato", "Extrato"], ["lancamentos", `Lançamentos (${lancs.length})`], ["importar", "Importar"]].map(([k, r]) => (
-          <button key={k} style={S.aba(aba === k)} onClick={() => setAba(k)}>{r}</button>
-        ))}
-      </div>
+      {!vista && (
+        <div style={S.abas}>
+          {[["extrato", "Extrato"], ["lancamentos", `Lançamentos (${lancs.length})`], ["importar", "Importar"]].map(([k, r]) => (
+            <button key={k} style={S.aba(aba === k)} onClick={() => setAba(k)}>{r}</button>
+          ))}
+        </div>
+      )}
+
+      {vista === "resumo" && (
+        <ResumoEscritorioPainel
+          resumo={resumoEscritorio(linhas)}
+          quantidade={lancs.length}
+          aoVerExtrato={aoAbrirExtrato} />
+      )}
 
       {aviso && <div style={{ fontSize: 12.5, color: "#0474f4" }}>{aviso}</div>}
 
-      {aba === "extrato" && (
+      {vista !== "resumo" && aba === "extrato" && (
         <>
           {!lancs.length ? (
             <div style={{ ...S.card, textAlign: "center", color: "#6b7280", fontSize: 13 }}>
@@ -8734,7 +8859,7 @@ function FinanceiroEscritorio({ data, save, onReload }) {
         </>
       )}
 
-      {aba === "lancamentos" && (
+      {vista !== "resumo" && aba === "lancamentos" && (
         <>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <input style={{ ...S.input, maxWidth: 320 }} value={busca} placeholder="Buscar por descrição, fornecedor, cliente…"
@@ -8787,7 +8912,7 @@ function FinanceiroEscritorio({ data, save, onReload }) {
         </>
       )}
 
-      {aba === "importar" && (
+      {vista !== "resumo" && aba === "importar" && (
         <>
           <div style={{ ...S.card, display: "grid", gap: 10 }}>
             <div style={{ fontSize: 13, fontWeight: 700 }}>Saldo de abertura</div>
@@ -44209,6 +44334,10 @@ function Escritorio({ data, save, onReload, abaInicial }) {
   // abaInicial: o menu lateral abre o módulo já na aba pedida (Financeiro,
   // Cadastro, Equipe, Usuários, Sistema). Sem ela, cai em "dados".
   const [aba, setAba] = useState(abaInicial || "dados");
+  useEffect(() => { if (abaInicial) setAba(abaInicial); }, [abaInicial]);
+  // Vindo pelo menu lateral, cada item já é o endereço da tela: o cabeçalho
+  // de abas some para não repetir o que o menu mostra.
+  const peloMenu = !!abaInicial;
   const perm = getPermissoes();
   const [form, setForm] = useState({
     nome:        cfg.nome        || "",
@@ -45475,7 +45604,8 @@ function Escritorio({ data, save, onReload, abaInicial }) {
         </div>
       </div>
 
-      {/* Abas — aba Usuários só visível pra admin (podeGerenciarUsuarios) */}
+      {/* Abas — some quando o menu lateral já diz onde estamos */}
+      {!peloMenu && (
       <div style={E.abas}>
         {(() => {
           const abasDisponiveis = [
@@ -45492,12 +45622,15 @@ function Escritorio({ data, save, onReload, abaInicial }) {
           ));
         })()}
       </div>
+      )}
 
       {/* Conteúdo */}
       {aba === "dados"    && renderDados()}
       {aba === "equipe"   && renderEquipe()}
-      {aba === "financeiro" && perm.podeGerenciarUsuarios && (
-        <FinanceiroEscritorio data={data} save={save} onReload={onReload} />
+      {["financeiro", "extrato", "lancamentos", "importar"].includes(aba) && perm.podeGerenciarUsuarios && (
+        <FinanceiroEscritorio data={data} save={save} onReload={onReload}
+          vista={peloMenu ? (aba === "financeiro" ? "resumo" : aba) : null}
+          aoAbrirExtrato={() => setAba("extrato")} />
       )}
       {aba === "usuarios" && perm.podeGerenciarUsuarios && renderUsuarios()}
       {aba === "sistema"  && renderSistema()}
@@ -53825,7 +53958,12 @@ export default function ModuloClientesFornecedores() {
     // discreto. Cada subitem abre o módulo Escritório já na aba pedida.
     { tipo:"divisor", k:"div-escritorio" },
     { k:"escritorio", icon:"escritorio", label:"Escritório", sub: [
-      ...(permMenu.podeGerenciarUsuarios ? [{ k:"escritorio:financeiro", icon:"financeiro", label:"Financeiro" }] : []),
+      ...(permMenu.podeGerenciarUsuarios ? [
+        { k:"escritorio:financeiro",  icon:"financeiro", label:"Financeiro" },
+        { k:"escritorio:extrato",     icon:"cub",        label:"Extrato" },
+        { k:"escritorio:lancamentos", icon:"editar",     label:"Lançamentos" },
+        { k:"escritorio:importar",    icon:"copy",       label:"Importar" },
+      ] : []),
       { k:"escritorio:dados",   icon:"empresas",   label:"Cadastro" },
       { k:"escritorio:equipe",  icon:"usuarios",   label:"Equipe" },
       ...(permMenu.podeGerenciarUsuarios ? [{ k:"escritorio:usuarios", icon:"key", label:"Usuários" }] : []),

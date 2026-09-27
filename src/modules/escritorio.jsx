@@ -8,6 +8,10 @@ function Escritorio({ data, save, onReload, abaInicial }) {
   // abaInicial: o menu lateral abre o módulo já na aba pedida (Financeiro,
   // Cadastro, Equipe, Usuários, Sistema). Sem ela, cai em "dados".
   const [aba, setAba] = useState(abaInicial || "dados");
+  useEffect(() => { if (abaInicial) setAba(abaInicial); }, [abaInicial]);
+  // Vindo pelo menu lateral, cada item já é o endereço da tela: o cabeçalho
+  // de abas some para não repetir o que o menu mostra.
+  const peloMenu = !!abaInicial;
   const perm = getPermissoes();
   const [form, setForm] = useState({
     nome:        cfg.nome        || "",
@@ -1274,7 +1278,8 @@ function Escritorio({ data, save, onReload, abaInicial }) {
         </div>
       </div>
 
-      {/* Abas — aba Usuários só visível pra admin (podeGerenciarUsuarios) */}
+      {/* Abas — some quando o menu lateral já diz onde estamos */}
+      {!peloMenu && (
       <div style={E.abas}>
         {(() => {
           const abasDisponiveis = [
@@ -1291,12 +1296,15 @@ function Escritorio({ data, save, onReload, abaInicial }) {
           ));
         })()}
       </div>
+      )}
 
       {/* Conteúdo */}
       {aba === "dados"    && renderDados()}
       {aba === "equipe"   && renderEquipe()}
-      {aba === "financeiro" && perm.podeGerenciarUsuarios && (
-        <FinanceiroEscritorio data={data} save={save} onReload={onReload} />
+      {["financeiro", "extrato", "lancamentos", "importar"].includes(aba) && perm.podeGerenciarUsuarios && (
+        <FinanceiroEscritorio data={data} save={save} onReload={onReload}
+          vista={peloMenu ? (aba === "financeiro" ? "resumo" : aba) : null}
+          aoAbrirExtrato={() => setAba("extrato")} />
       )}
       {aba === "usuarios" && perm.podeGerenciarUsuarios && renderUsuarios()}
       {aba === "sistema"  && renderSistema()}

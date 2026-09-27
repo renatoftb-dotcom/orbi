@@ -1553,7 +1553,12 @@ export default function ModuloClientesFornecedores() {
     // discreto. Cada subitem abre o módulo Escritório já na aba pedida.
     { tipo:"divisor", k:"div-escritorio" },
     { k:"escritorio", icon:"escritorio", label:"Escritório", sub: [
-      ...(permMenu.podeGerenciarUsuarios ? [{ k:"escritorio:financeiro", icon:"financeiro", label:"Financeiro" }] : []),
+      ...(permMenu.podeGerenciarUsuarios ? [
+        { k:"escritorio:financeiro",  icon:"financeiro", label:"Financeiro" },
+        { k:"escritorio:extrato",     icon:"cub",        label:"Extrato" },
+        { k:"escritorio:lancamentos", icon:"editar",     label:"Lançamentos" },
+        { k:"escritorio:importar",    icon:"copy",       label:"Importar" },
+      ] : []),
       { k:"escritorio:dados",   icon:"empresas",   label:"Cadastro" },
       { k:"escritorio:equipe",  icon:"usuarios",   label:"Equipe" },
       ...(permMenu.podeGerenciarUsuarios ? [{ k:"escritorio:usuarios", icon:"key", label:"Usuários" }] : []),
