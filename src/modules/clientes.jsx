@@ -523,7 +523,9 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     contatos:[{ id:uid(), nome:"", telefone:"", cargo:"", whatsapp:false }],
     observacoes:"", ativo:true, desde: new Date().toISOString().slice(0,10),
     status:"",
-    servicos:{ projeto:false, acompanhamentoObra:false, gestaoObra:false, empreendimento:false }
+    servicos:{ projeto:false, acompanhamentoObra:false, gestaoObra:false, empreendimento:false },
+    // Só preenchido quando o cadastro é de empreendimento — é o imóvel.
+    empreendimento:{ tipo:"Residencial", implantacao:"Horizontal", unidades:"", area:"", padrao:"Médio", matricula:"" }
   };
   const [form, setForm] = useState(emptyCliente);
   const [abaCliente, setAbaCliente] = useState("cadastro");
@@ -1012,6 +1014,10 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     ink:        "#111827",
     inkSoft:    "#4b5563",
   };
+  // Cliente final ou empreendimento: o mesmo cadastro, perguntas diferentes.
+  const ehEmp = !!(form.servicos || {}).empreendimento;
+  const emp = { tipo:"Residencial", implantacao:"Horizontal", unidades:"", area:"", padrao:"Médio", matricula:"", ...(form.empreendimento || {}) };
+  const setEmp = (k, v) => setForm({ ...form, empreendimento: { ...emp, [k]: v } });
   const FC = {
     input:  { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:9, height:46, padding:"0 14px", fontSize:15, color:"#111827", outline:"none", background:"#fff", fontFamily:"'Inter', system-ui, sans-serif", width:"100%", boxSizing:"border-box" },
     label:  { fontSize:12, color:"#4b5563", fontWeight:600, display:"block", marginBottom:6 },
@@ -1034,8 +1040,70 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:8 }}>
           <button style={FC.btnGhost} onClick={()=>setView("kanban")}>← Voltar</button>
         </div>
-        <div style={{ fontFamily:"'Inter', system-ui, sans-serif", fontSize:24, fontWeight:800, letterSpacing:"-0.02em", color:VK.grafite, margin:"0 0 8px" }}>{form.id?"Editar cliente":"Novo cliente"}</div>
+        <div style={{ fontFamily:"'Inter', system-ui, sans-serif", fontSize:24, fontWeight:800, letterSpacing:"-0.02em", color:VK.grafite, margin:"0 0 8px" }}>{form.id ? (ehEmp ? "Editar empreendimento" : "Editar cliente") : (ehEmp ? "Novo empreendimento" : "Novo cliente")}</div>
+        {/* Cliente final ou empreendimento do escritório. Não é um detalhe do
+            cadastro: muda o que se pergunta. Cliente tem CPF, representante e
+            contatos; empreendimento é um imóvel — tipo, unidades, metragem,
+            padrão e matrícula. O financeiro lê este mesmo tique para saber que
+            o dinheiro dele é investimento, não resultado do mês. */}
         <div style={{ marginBottom:16, marginTop:20 }}>
+          <div style={FC.secTit}>O que é este cadastro</div>
+          <div style={{ display:"flex", gap:8 }}>
+            {[[false,"Cliente final"],[true,"Empreendimento"]].map(([v,l])=>(
+              <button key={String(v)} className={"vk-fc-tipo" + (ehEmp===v ? " ativo" : "")}
+                onClick={()=>setForm({...form, servicos:{...(form.servicos||{}), empreendimento:v}})}
+                style={{ border:"1.5px solid rgba(38,36,33,0.14)", borderRadius:10, height:42, padding:"0 18px", fontSize:13.5, fontWeight:600, background:"#fff", color:VK.grafite, cursor:"pointer", fontFamily:"'Inter', system-ui, sans-serif" }}>{l}</button>
+            ))}
+          </div>
+          {ehEmp && (
+            <div style={{ fontSize:11.5, color:"#4b5563", marginTop:8 }}>
+              Construção para venda. O investimento não entra no resultado do mês; o lucro aparece quando vende.
+            </div>
+          )}
+        </div>
+        {/* ── Empreendimento: o cadastro é do imóvel ─────────────── */}
+        {ehEmp && (
+          <>
+            <hr style={FC.divider} />
+            <div style={{ marginBottom:16 }}>
+              <div style={FC.secTit}>Dados principais</div>
+              <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap:12, marginBottom:12 }}>
+                <div><label style={FC.label}>Nome do empreendimento</label><input className="vk-fc-input" style={FC.input} value={form.nome} onChange={e=>setForm({...form,nome:e.target.value})} placeholder="ex.: Residencial Jardim Europa" /></div>
+                <div><label style={FC.label}>Matrícula</label><input className="vk-fc-input" style={FC.input} value={emp.matricula} onChange={e=>setEmp("matricula",e.target.value)} placeholder="nº da matrícula" /></div>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap:12, marginBottom:12 }}>
+                <div>
+                  <label style={FC.label}>Tipo</label>
+                  <select className="vk-fc-input" style={{...FC.input,cursor:"pointer"}} value={emp.tipo} onChange={e=>setEmp("tipo",e.target.value)}>
+                    {["Residencial","Comercial","Misto"].map(v=><option key={v}>{v}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={FC.label}>Implantação</label>
+                  <select className="vk-fc-input" style={{...FC.input,cursor:"pointer"}} value={emp.implantacao} onChange={e=>setEmp("implantacao",e.target.value)}>
+                    {["Horizontal","Vertical"].map(v=><option key={v}>{v}</option>)}
+                  </select>
+                </div>
+                <div><label style={FC.label}>Unidades</label><input className="vk-fc-input" style={FC.input} inputMode="numeric" value={emp.unidades} onChange={e=>setEmp("unidades",e.target.value)} placeholder="quantas" /></div>
+                <div><label style={FC.label}>Metragem (m²)</label><input className="vk-fc-input" style={FC.input} inputMode="decimal" value={emp.area} onChange={e=>setEmp("area",e.target.value)} placeholder="área construída" /></div>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:12, marginBottom:12 }}>
+                <div>
+                  <label style={FC.label}>Padrão</label>
+                  <select className="vk-fc-input" style={{...FC.input,cursor:"pointer"}} value={emp.padrao} onChange={e=>setEmp("padrao",e.target.value)}>
+                    {["MCMV","Médio","Alto"].map(v=><option key={v}>{v}</option>)}
+                  </select>
+                </div>
+                <div><label style={FC.label}>Início</label><input className="vk-fc-input" style={FC.input} type="date" value={form.desde} onChange={e=>setForm({...form,desde:e.target.value})} /></div>
+              </div>
+              <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:VK.inkSoft}}>
+                <input className="vk-fc-check" type="checkbox" checked={form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} /> Em andamento
+              </label>
+            </div>
+          </>
+        )}
+        {!ehEmp && (
+        <div style={{ marginBottom:16 }}>
           <div style={FC.secTit}>Tipo de pessoa</div>
           <div style={{ display:"flex", gap:8 }}>
             {[["PF","Pessoa física"],["PJ","Pessoa jurídica"]].map(([v,l])=>(
@@ -1044,7 +1112,9 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
             ))}
           </div>
         </div>
-        <hr style={FC.divider} />
+        )}
+        {!ehEmp && <hr style={FC.divider} />}
+        {!ehEmp && (
         <div style={{ marginBottom:16 }}>
           <div style={FC.secTit}>Dados principais</div>
           <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:12, marginBottom:12 }}>
@@ -1070,22 +1140,8 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:VK.inkSoft}}>
             <input className="vk-fc-check" type="checkbox" checked={form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} /> Cliente ativo
           </label>
-          {/* Empreendimento do escritório: casa que o escritório constrói para
-              vender. É cliente como qualquer outro — tem obra, contas e P&L —
-              mas o dinheiro dele não é resultado do mês: é investimento em
-              imóvel até a venda. O financeiro usa este tique para saber. */}
-          <label style={{display:"flex",alignItems:"flex-start",gap:8,cursor:"pointer",fontSize:13,color:VK.inkSoft,marginTop:10}}>
-            <input className="vk-fc-check" type="checkbox" style={{marginTop:3}}
-              checked={!!(form.servicos||{}).empreendimento}
-              onChange={e=>setForm({...form,servicos:{...(form.servicos||{}),empreendimento:e.target.checked}})} />
-            <span>
-              É um empreendimento do escritório
-              <span style={{display:"block",fontSize:11.5,color:"#4b5563",marginTop:2}}>
-                Construção para venda. O investimento não entra no resultado do mês; o lucro aparece na venda.
-              </span>
-            </span>
-          </label>
         </div>
+        )}
         <hr style={FC.divider} />
         <div style={{ marginBottom:16 }}>
           <div style={FC.secTit}>Endereço</div>
@@ -1102,7 +1158,8 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           </div>
           <div style={{maxWidth:120}}><label style={FC.label}>Estado</label><select className="vk-fc-input" style={{...FC.input,cursor:"pointer"}} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>{ESTADOS_BR.map(e=><option key={e}>{e}</option>)}</select></div>
         </div>
-        <hr style={FC.divider} />
+        {!ehEmp && <hr style={FC.divider} />}
+        {!ehEmp && (
         <div style={{ marginBottom:20 }}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
             <div style={FC.secTit}>Contatos</div>
@@ -1125,6 +1182,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
             </div>
           ))}
         </div>
+        )}
         <hr style={FC.divider} />
         <div style={{marginBottom:28}}>
           <div style={FC.secTit}>Observações internas</div>
@@ -1132,7 +1190,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         </div>
         <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
           <button style={FC.btnSec} onClick={()=>setView("kanban")}>Cancelar</button>
-          <button data-tutorial-id="cliente-salvar" style={FC.btn} onClick={saveCliente}>{form.id?"Salvar alterações":"Cadastrar cliente"}</button>
+          <button data-tutorial-id="cliente-salvar" style={FC.btn} onClick={saveCliente}>{form.id ? "Salvar alterações" : (ehEmp ? "Cadastrar empreendimento" : "Cadastrar cliente")}</button>
         </div>
       </div>
     </div>
