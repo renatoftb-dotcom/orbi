@@ -1041,6 +1041,46 @@ const itensDetalhados = (itens, contaId) =>
 // Uma linha por conta do P&L, na ordem do plano. `editavel` é falso quando a
 // conta já tem itens detalhados: ali o número é a soma deles, e mexer no
 // quadro esconderia de onde o valor veio.
+
+// ── Subcontas: a conta aberta por grupo de material ─────────────
+// "Material R$ 222 mil" não diz nada. Aberto por grupo — concreto,
+// esquadrias, tintas, aço —, o orçamento vira leitura: dá para ver qual
+// grupo estourou e qual ainda nem começou. O estimado sai do grupo do item
+// na planilha do escritório; o realizado, do grupo que veio na nota.
+// A mesma função serve para etapa, trocando a chave.
+function subcontasDaConta(itens, contasPagar, contaId, opcoes) {
+  const o = opcoes || {};
+  const chaveEst = o.chave === "etapa" ? ((i) => i.etapaId || "") : ((i) => i.grupoMaterial || "");
+  const chaveReal = o.chave === "etapa" ? ((c) => c.etapa || c.etapaId || "") : ((c) => c.grupoMaterial || "");
+  const est = {}, real = {};
+  for (const i of itens || []) {
+    if (!i || i.contaId !== contaId) continue;
+    const k = chaveEst(i);
+    est[k] = Math.round(((est[k] || 0) + (Number(i.valor) || 0)) * 100) / 100;
+  }
+  for (const c of contasPagar || []) {
+    if (!c || !c.pago || c.contaId !== contaId) continue;
+    const k = chaveReal(c);
+    real[k] = Math.round(((real[k] || 0) + (Number(c.valorPago) || Number(c.valor) || 0)) * 100) / 100;
+  }
+  const chaves = [...new Set([...Object.keys(est), ...Object.keys(real)])];
+  const nomeEtapa = (id) => {
+    const e = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).find((x) => x.id === id);
+    return e ? e.nome : id;
+  };
+  const semNome = o.chave === "etapa" ? "Sem etapa" : "Sem grupo";
+  return chaves
+    .map((k) => ({
+      chave: k,
+      nome: !k ? semNome : (o.chave === "etapa" ? nomeEtapa(k) : k),
+      estimado: est[k] || 0, realizado: real[k] || 0,
+      saldo: Math.round(((est[k] || 0) - (real[k] || 0)) * 100) / 100,
+    }))
+    .filter((l) => l.estimado || l.realizado)
+    // Do maior para o menor: é onde o dinheiro está, não a ordem do plano.
+    .sort((a, b) => (b.estimado || b.realizado) - (a.estimado || a.realizado));
+}
+
 function linhasEstimativaPL(itens, grupos, contas) {
   // Todos os grupos, "Excluídas" incluída: ela tem contas de verdade e
   // precisa de campo. Quem a deixa de fora é o RESULTADO, não o quadro.

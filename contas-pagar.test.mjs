@@ -37,6 +37,7 @@ const modulo = new Function(`
            extratoMensal, mesesDoExtrato, acumuladoAte, entradaObraVazia, mesDe,
            extratoMatriz, estimativaPorConta,
            GRUPOS_PL, linhasEstimativaPL, definirEstimativaDaConta, totaisEstimativaPL,
+           subcontasDaConta,
            itemDeQuadro, itensDetalhados, EST_ORIGEM_QUADRO,
            CARGA_ESTIMATIVA_UNICA, estimativaCargaUnica,
            linhaFinalExtrato, fechoEstimativaPL, plDaObra, progressoCusto,
@@ -1430,6 +1431,39 @@ teste("empreendimento tem venda, terreno e tributos no P&L da obra", () => {
   assert.strictEqual(pl.custo.estimado, 533257.42, "terreno entra no custo junto com obra e tributos");
   assert.strictEqual(pl.resultado.estimado, 96742.58);
   assert.strictEqual(Math.round((pl.entradas.estimado - 210000) * 100) / 100, 420000, "venda menos terreno é o lucro bruto");
+});
+
+teste("a conta abre em subcontas: grupo de material dos dois lados", () => {
+  const itens = [
+    { id: "e1", contaId: "material", grupoMaterial: "Concreto",   valor: 33125.20 },
+    { id: "e2", contaId: "material", grupoMaterial: "Esquadrias", valor: 21712.46 },
+    { id: "e3", contaId: "material", grupoMaterial: "Aço",        valor: 9645.62 },
+    { id: "e4", contaId: "empreiteiro", grupoMaterial: "Prestadores de serviços", valor: 75174 },
+  ];
+  const contas = [
+    { id: "c1", contaId: "material", grupoMaterial: "Concreto", valor: 14546.48, pago: true },
+    { id: "c2", contaId: "material", grupoMaterial: "Aço",      valor: 7882.68,  pago: true },
+    { id: "c3", contaId: "material", grupoMaterial: "Cimento",  valor: 1963.41,  pago: true },
+    { id: "c4", contaId: "material", grupoMaterial: "Concreto", valor: 999,      pago: false },
+  ];
+  const linhas = modulo.subcontasDaConta(itens, contas, "material");
+  assert.deepStrictEqual(linhas.map(l => l.chave), ["Concreto", "Esquadrias", "Aço", "Cimento"],
+    "do maior para o menor, e o que só tem gasto entra no fim");
+  const concreto = linhas.find(l => l.chave === "Concreto");
+  assert.strictEqual(concreto.estimado, 33125.20);
+  assert.strictEqual(concreto.realizado, 14546.48, "conta não paga não entra no realizado");
+  assert.strictEqual(concreto.saldo, 18578.72);
+  const cimento = linhas.find(l => l.chave === "Cimento");
+  assert.strictEqual(cimento.estimado, 0, "gasto em grupo sem estimativa aparece mesmo assim");
+  assert.strictEqual(cimento.saldo, -1963.41);
+  assert.strictEqual(linhas.find(l => l.chave === "Esquadrias").realizado, 0);
+  // a mesma função serve para etapa
+  const porEtapa = modulo.subcontasDaConta(
+    [{ contaId: "material", etapaId: "fundacao", valor: 100 }],
+    [{ contaId: "material", etapa: "fundacao", valor: 40, pago: true }], "material", { chave: "etapa" });
+  assert.strictEqual(porEtapa[0].nome, "Fundação");
+  assert.strictEqual(porEtapa[0].saldo, 60);
+  assert.deepStrictEqual(modulo.subcontasDaConta([], [], "material"), []);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

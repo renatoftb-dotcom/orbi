@@ -20710,6 +20710,46 @@ const itensDetalhados = (itens, contaId) =>
 // Uma linha por conta do P&L, na ordem do plano. `editavel` é falso quando a
 // conta já tem itens detalhados: ali o número é a soma deles, e mexer no
 // quadro esconderia de onde o valor veio.
+
+// ── Subcontas: a conta aberta por grupo de material ─────────────
+// "Material R$ 222 mil" não diz nada. Aberto por grupo — concreto,
+// esquadrias, tintas, aço —, o orçamento vira leitura: dá para ver qual
+// grupo estourou e qual ainda nem começou. O estimado sai do grupo do item
+// na planilha do escritório; o realizado, do grupo que veio na nota.
+// A mesma função serve para etapa, trocando a chave.
+function subcontasDaConta(itens, contasPagar, contaId, opcoes) {
+  const o = opcoes || {};
+  const chaveEst = o.chave === "etapa" ? ((i) => i.etapaId || "") : ((i) => i.grupoMaterial || "");
+  const chaveReal = o.chave === "etapa" ? ((c) => c.etapa || c.etapaId || "") : ((c) => c.grupoMaterial || "");
+  const est = {}, real = {};
+  for (const i of itens || []) {
+    if (!i || i.contaId !== contaId) continue;
+    const k = chaveEst(i);
+    est[k] = Math.round(((est[k] || 0) + (Number(i.valor) || 0)) * 100) / 100;
+  }
+  for (const c of contasPagar || []) {
+    if (!c || !c.pago || c.contaId !== contaId) continue;
+    const k = chaveReal(c);
+    real[k] = Math.round(((real[k] || 0) + (Number(c.valorPago) || Number(c.valor) || 0)) * 100) / 100;
+  }
+  const chaves = [...new Set([...Object.keys(est), ...Object.keys(real)])];
+  const nomeEtapa = (id) => {
+    const e = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).find((x) => x.id === id);
+    return e ? e.nome : id;
+  };
+  const semNome = o.chave === "etapa" ? "Sem etapa" : "Sem grupo";
+  return chaves
+    .map((k) => ({
+      chave: k,
+      nome: !k ? semNome : (o.chave === "etapa" ? nomeEtapa(k) : k),
+      estimado: est[k] || 0, realizado: real[k] || 0,
+      saldo: Math.round(((est[k] || 0) - (real[k] || 0)) * 100) / 100,
+    }))
+    .filter((l) => l.estimado || l.realizado)
+    // Do maior para o menor: é onde o dinheiro está, não a ordem do plano.
+    .sort((a, b) => (b.estimado || b.realizado) - (a.estimado || a.realizado));
+}
+
 function linhasEstimativaPL(itens, grupos, contas) {
   // Todos os grupos, "Excluídas" incluída: ela tem contas de verdade e
   // precisa de campo. Quem a deixa de fora é o RESULTADO, não o quadro.
@@ -27818,6 +27858,9 @@ function PrestadoresPLView({ itens, contasPagar, isMobile, fmtBRL }) {
 // Por isso o Planejamento abre aqui, e não no formulário de preencher.
 function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL }) {
   const pl = plDaObra(itens, contasPagar, GRUPOS_PL, PLANO_CONTAS);
+  // Conta aberta em etapas: clicar no nome mostra onde o dinheiro foi, e não
+  // só que a conta estourou. Só abre quando há etapa marcada dos dois lados.
+  const [contaAberta, setContaAberta] = useState(null);
   const prog = progressoCusto(pl.custo);
   const num = (v) => (Math.abs(v) < 0.005 ? "—" : fmtBRL(v));
   const grade = {
@@ -27880,14 +27923,39 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL }) {
                 <span style={{ ...celula, fontWeight: 700 }}>{num(b.realizado)}</span>
                 {!isMobile && <span style={{ ...celula, fontWeight: 700, color: "#4b5563" }}>{num(b.estimado - b.realizado)}</span>}
               </div>
-              {b.linhas.map(l => (
-                <div key={l.conta.id} style={{ ...grade, padding: "6px 12px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
-                  <span style={{ fontSize: 12.5, color: "#4b5563", minWidth: 0 }}>{l.conta.nome}</span>
+              {b.linhas.map(l => {
+                const etapas = subcontasDaConta(itens, contasPagar, l.conta.id);
+                const abrivel = etapas.length > 1;
+                const aberta = contaAberta === l.conta.id;
+                return (
+                <div key={l.conta.id}>
+                <div style={{ ...grade, padding: "6px 12px", borderTop: "1px solid rgba(38,36,33,0.06)",
+                    cursor: abrivel ? "pointer" : "default" }}
+                  onClick={() => abrivel && setContaAberta(aberta ? null : l.conta.id)}>
+                  <span style={{ fontSize: 12.5, color: "#4b5563", minWidth: 0 }}>
+                    {abrivel && (
+                      <span style={{ display: "inline-block", width: 12, color: "#9ca3af", fontSize: 9,
+                        transform: aberta ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▶</span>
+                    )}
+                    {l.conta.nome}
+                    {abrivel && <span style={{ fontSize: 10.5, color: "#9ca3af" }}> · {etapas.length} grupos</span>}
+                  </span>
                   <span style={{ ...celula, color: "#6b7280" }}>{num(l.estimado)}</span>
                   <span style={{ ...celula, color: "#111827" }}>{num(l.realizado)}</span>
                   {!isMobile && <span style={{ ...celula, color: l.saldo < -0.005 ? "#dc2626" : "#6b7280" }}>{num(l.saldo)}</span>}
                 </div>
-              ))}
+                {aberta && etapas.map(e => (
+                  <div key={e.chave || "sem"} style={{ ...grade, padding: "5px 12px 5px 30px",
+                    borderTop: "1px solid rgba(38,36,33,0.04)", background: "#fcfcfd" }}>
+                    <span style={{ fontSize: 12, color: "#6b7280", minWidth: 0 }}>{e.nome}</span>
+                    <span style={{ ...celula, fontSize: 12, color: "#9ca3af" }}>{num(e.estimado)}</span>
+                    <span style={{ ...celula, fontSize: 12, color: "#4b5563" }}>{num(e.realizado)}</span>
+                    {!isMobile && <span style={{ ...celula, fontSize: 12, color: e.saldo < -0.005 ? "#dc2626" : "#9ca3af" }}>{num(e.saldo)}</span>}
+                  </div>
+                ))}
+                </div>
+                );
+              })}
             </div>
           ))}
           <div style={{ ...grade, padding: "9px 12px", borderTop: "1.5px solid rgba(38,36,33,0.14)", background: "#fafafa" }}>

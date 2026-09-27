@@ -1743,6 +1743,9 @@ function PrestadoresPLView({ itens, contasPagar, isMobile, fmtBRL }) {
 // Por isso o Planejamento abre aqui, e não no formulário de preencher.
 function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL }) {
   const pl = plDaObra(itens, contasPagar, GRUPOS_PL, PLANO_CONTAS);
+  // Conta aberta em etapas: clicar no nome mostra onde o dinheiro foi, e não
+  // só que a conta estourou. Só abre quando há etapa marcada dos dois lados.
+  const [contaAberta, setContaAberta] = useState(null);
   const prog = progressoCusto(pl.custo);
   const num = (v) => (Math.abs(v) < 0.005 ? "—" : fmtBRL(v));
   const grade = {
@@ -1805,14 +1808,39 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL }) {
                 <span style={{ ...celula, fontWeight: 700 }}>{num(b.realizado)}</span>
                 {!isMobile && <span style={{ ...celula, fontWeight: 700, color: "#4b5563" }}>{num(b.estimado - b.realizado)}</span>}
               </div>
-              {b.linhas.map(l => (
-                <div key={l.conta.id} style={{ ...grade, padding: "6px 12px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
-                  <span style={{ fontSize: 12.5, color: "#4b5563", minWidth: 0 }}>{l.conta.nome}</span>
+              {b.linhas.map(l => {
+                const etapas = subcontasDaConta(itens, contasPagar, l.conta.id);
+                const abrivel = etapas.length > 1;
+                const aberta = contaAberta === l.conta.id;
+                return (
+                <div key={l.conta.id}>
+                <div style={{ ...grade, padding: "6px 12px", borderTop: "1px solid rgba(38,36,33,0.06)",
+                    cursor: abrivel ? "pointer" : "default" }}
+                  onClick={() => abrivel && setContaAberta(aberta ? null : l.conta.id)}>
+                  <span style={{ fontSize: 12.5, color: "#4b5563", minWidth: 0 }}>
+                    {abrivel && (
+                      <span style={{ display: "inline-block", width: 12, color: "#9ca3af", fontSize: 9,
+                        transform: aberta ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▶</span>
+                    )}
+                    {l.conta.nome}
+                    {abrivel && <span style={{ fontSize: 10.5, color: "#9ca3af" }}> · {etapas.length} grupos</span>}
+                  </span>
                   <span style={{ ...celula, color: "#6b7280" }}>{num(l.estimado)}</span>
                   <span style={{ ...celula, color: "#111827" }}>{num(l.realizado)}</span>
                   {!isMobile && <span style={{ ...celula, color: l.saldo < -0.005 ? "#dc2626" : "#6b7280" }}>{num(l.saldo)}</span>}
                 </div>
-              ))}
+                {aberta && etapas.map(e => (
+                  <div key={e.chave || "sem"} style={{ ...grade, padding: "5px 12px 5px 30px",
+                    borderTop: "1px solid rgba(38,36,33,0.04)", background: "#fcfcfd" }}>
+                    <span style={{ fontSize: 12, color: "#6b7280", minWidth: 0 }}>{e.nome}</span>
+                    <span style={{ ...celula, fontSize: 12, color: "#9ca3af" }}>{num(e.estimado)}</span>
+                    <span style={{ ...celula, fontSize: 12, color: "#4b5563" }}>{num(e.realizado)}</span>
+                    {!isMobile && <span style={{ ...celula, fontSize: 12, color: e.saldo < -0.005 ? "#dc2626" : "#9ca3af" }}>{num(e.saldo)}</span>}
+                  </div>
+                ))}
+                </div>
+                );
+              })}
             </div>
           ))}
           <div style={{ ...grade, padding: "9px 12px", borderTop: "1.5px solid rgba(38,36,33,0.14)", background: "#fafafa" }}>
