@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "react";
 
 // ═══════════════════════════════════════════════════════════════
 // API URL — lê de VITE_API_URL com fallback pra produção

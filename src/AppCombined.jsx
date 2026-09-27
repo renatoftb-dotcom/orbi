@@ -2,7 +2,7 @@
 // shared.jsx
 // ════════════════════════════════════════════════════════════
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "react";
 
 // ═══════════════════════════════════════════════════════════════
 // API URL — lê de VITE_API_URL com fallback pra produção
@@ -8477,7 +8477,7 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
               const usadas = contas.filter((c) => doAno.some((m) => (m.contas[c.id] || 0) !== 0));
               if (!usadas.length && !doAno.some((m) => m[b.saldo])) return null;
               return (
-                <React.Fragment key={b.titulo}>
+                <Fragment key={b.titulo}>
                   <tr>
                     <td style={{ ...tdNome, fontWeight: 700, background: "#f5f7fa", borderTop: "1px solid rgba(38,36,33,0.12)" }}>{b.titulo}</td>
                     {doAno.map((m) => <td key={m.mes} style={{ ...td, background: "#f5f7fa", borderTop: "1px solid rgba(38,36,33,0.12)" }} />)}
@@ -8498,7 +8498,7 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
                     {doAno.map((m) => <td key={m.mes} style={{ ...td, fontWeight: 600 }}>{cel(m[b.saldo] || 0)}</td>)}
                     <td style={{ ...td, fontWeight: 600 }}>{cel(soma((m) => m[b.saldo] || 0))}</td>
                   </tr>
-                </React.Fragment>
+                </Fragment>
               );
             })}
             <tr>
