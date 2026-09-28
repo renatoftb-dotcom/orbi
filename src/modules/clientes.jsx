@@ -4141,7 +4141,6 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                   </div>
                                   {perm.podeEditar ? (
                                     <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
-                                      {!L.pago && <BotaoCopiarPix compacto pix={pixDoPagamento(L, prestadores.find(x => x.id === L.prestadorId))} />}
                                       <button onClick={() => alternarPagamentoPedido(L)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>
                                         {L.pago ? "Desfazer" : "Pagar pedido"}
                                       </button>
@@ -4229,7 +4228,6 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                               <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", textAlign: isMobile ? "left" : "right" }}>{fmtMoedaCtr(c.pago ? (Number(c.valorPago) || c.valor) : c.valor)}</div>
                               {perm.podeEditar ? (
                                 <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
-                                  {!c.pago && <BotaoCopiarPix compacto pix={pixDoPagamento(c, prestadores.find(x => x.id === c.prestadorId))} />}
                                   <button onClick={() => alternarPagamento(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>{c.pago ? "Desfazer" : "Pagar"}</button>
                                   {c.origem === "avulsa" && <button onClick={() => setFormConta(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>}
                                   {c.origem === "avulsa" && (
