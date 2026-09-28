@@ -50,6 +50,7 @@ const modulo = new Function(`
            aprovacaoDaCotacao, registrarAprovacaoCotacao, situacaoCotacao,
            podeGerarContrato, contratoDaCotacao, tipoDoContaId, dadosDoContratoDaCotacao,
            podeExcluirCotacaoComContratos, resumoCotacoes, cotacoesAguardandoCliente,
+           cotacaoEstaFechada, cotacoesPorSituacao, SITUACOES_FECHADAS,
            nomeDoFornecedor, PLANO_CONTAS,
            podeExcluirCotacao, removerProposta, removerCotacao, anexosDasPropostas,
            prestadorRapidoVazio, criarPrestadorRapido, pareceMesmoPdf,
@@ -1859,6 +1860,40 @@ teste("excluir uma versão tira só ela, e os rótulos das outras não mudam", (
   const vazio = orcSemVersao({ id: "x", propostas: [{ versao: "v1", enviadaEm: "2026-01-01" }] }, 0);
   assert.deepStrictEqual(vazio.propostas, []);
   assert.strictEqual(vazio.ultimaPropostaEm, null);
+});
+
+teste("a lista separa o que ainda pede decisão do que já virou compromisso", () => {
+  const comparando = { ...comPropostas([1000, 4000]), id: "a" };
+  const aEnviar    = { ...comPropostas([2000, 3000]), id: "b", escolhidaId: "p0" };
+  const lancada    = { ...comPropostas([5000, 8000]), id: "c", escolhidaId: "p0", contaGeradaId: "cp1" };
+  const contratada = { ...comPropostas([6000, 9000]), id: "d", escolhidaId: "p0" };
+  const cancelada  = { ...comPropostas([1500, 1800]), id: "e", status: "cancelada" };
+  const recusada   = { ...comPropostas([2500, 4000]), id: "f", escolhidaId: "p0",
+                       enviadaClienteEm: "2026-09-10T12:00:00.000Z" };
+  const aprov = M.registrarAprovacaoCotacao([], { cotacaoId: "f", status: "recusada", por: "C" });
+  const contratos = [{ id: "ct1", cotacaoId: "d" }];
+  const lista = [comparando, aEnviar, lancada, contratada, cancelada, recusada];
+
+  const g = M.cotacoesPorSituacao(lista, aprov, contratos);
+  assert.deepStrictEqual(g.fechadas.map(c => c.id), ["c", "d", "e"],
+    "conta a pagar, contrato e cancelada fecham o ciclo");
+  assert.deepStrictEqual(g.abertas.map(c => c.id), ["a", "b", "f"],
+    "recusada continua aberta — falta reescolher");
+  assert.strictEqual(g.abertas.length + g.fechadas.length, lista.length, "cada cotação em um lado só");
+
+  assert.strictEqual(M.cotacaoEstaFechada(lancada, aprov, contratos), true);
+  assert.strictEqual(M.cotacaoEstaFechada(comparando, aprov, contratos), false);
+
+  // o cartão "Aprovadas" contava só contrato e ignorava a compra de material
+  const r = M.resumoCotacoes(lista, aprov, contratos);
+  assert.strictEqual(r.fechadas, 3);
+  assert.strictEqual(r.lancadas, 2, "contrato gerado e conta a pagar contam juntos");
+  assert.strictEqual(r.abertas, 1, "em andamento continua sendo só quem está comparando");
+  assert.strictEqual(r.recusadas, 1);
+
+  // sem cotação nenhuma nada quebra
+  const vazio = M.cotacoesPorSituacao(null, [], []);
+  assert.deepStrictEqual([vazio.abertas.length, vazio.fechadas.length], [0, 0]);
 });
 
 for (const [nome, fn] of testes) {

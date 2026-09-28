@@ -23239,19 +23239,42 @@ function criarPrestadorRapido(campos, novoId) {
   };
 }
 
+// ── Aberta ou fechada ─────────────────────────────────
+// Cotação fechada é a que não espera mais nada de ninguém: virou
+// compromisso — contrato gerado, para quem assina contrato, ou conta a
+// pagar, para o fornecedor de material que entrega e fatura — ou foi
+// cancelada. Tudo o mais tem um próximo passo e continua na tela.
+// Recusada pelo cliente fica em aberto de propósito: falta reescolher.
+const SITUACOES_FECHADAS = ["contratada", "lancada", "cancelada"];
+
+function cotacaoEstaFechada(cot, aprovacoes, contratos) {
+  return SITUACOES_FECHADAS.indexOf(situacaoCotacao(cot, aprovacoes, contratos).id) >= 0;
+}
+
+function cotacoesPorSituacao(cotacoes, aprovacoes, contratos) {
+  const abertas = [], fechadas = [];
+  for (const c of (cotacoes || []).filter((x) => x && x.id)) {
+    (cotacaoEstaFechada(c, aprovacoes, contratos) ? fechadas : abertas).push(c);
+  }
+  return { abertas, fechadas };
+}
+
 // Contadores do cartão da obra e do topo da tela.
-function resumoCotacoes(cotacoes, aprovacoes) {
+function resumoCotacoes(cotacoes, aprovacoes, contratos) {
   const lista = (cotacoes || []).filter(c => c && c.id);
-  const r = { total: lista.length, abertas: 0, aEnviar: 0, aguardandoCliente: 0, aprovadas: 0, recusadas: 0, lancadas: 0, economia: 0 };
+  const r = { total: lista.length, abertas: 0, aEnviar: 0, aguardandoCliente: 0, aprovadas: 0, recusadas: 0, lancadas: 0, fechadas: 0, economia: 0 };
   for (const c of lista) {
-    const s = situacaoCotacao(c, aprovacoes);
+    const s = situacaoCotacao(c, aprovacoes, contratos);
+    if (SITUACOES_FECHADAS.indexOf(s.id) >= 0) r.fechadas++;
     if (s.id === "coletando" || s.id === "comparando") r.abertas++;
     if (s.id === "aEnviar")     r.aEnviar++;
     if (s.id === "aguardando")  r.aguardandoCliente++;
     if (s.id === "aprovada")    r.aprovadas++;
     if (s.id === "recusada")    r.recusadas++;
-    if (s.id === "contratada")  r.lancadas++;
-    if (s.id === "aprovada" || s.id === "contratada") {
+    // Material não assina contrato: vira conta a pagar. Contava só o
+    // contrato, e o cartão "Aprovadas" ficava em zero com a compra já feita.
+    if (s.id === "contratada" || s.id === "lancada") r.lancadas++;
+    if (s.id === "aprovada" || s.id === "contratada" || s.id === "lancada") {
       const e = economiaDaCotacao(c);
       if (e && e.economia > 0) r.economia += e.economia;
     }
@@ -23609,7 +23632,12 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const gravarCotacoes = (lista) => gravar({ ...obra, cotacoes: lista });
   const trocarCotacao = (id, muda) => gravarCotacoes(cotacoes.map(c => (c.id === id ? muda(c) : c)));
 
-  const resumo = resumoCotacoes(cotacoes, aprovacoes);
+  const resumo = resumoCotacoes(cotacoes, aprovacoes, contratos);
+  // Cotação fechada não pede nada — só ocupa a tela. Fica na outra aba,
+  // à mão para consulta, fora do caminho de quem veio decidir.
+  const [filtroLista, setFiltroLista] = useState("abertas");
+  const grupos = cotacoesPorSituacao(cotacoes, aprovacoes, contratos);
+  const visiveis = filtroLista === "fechadas" ? grupos.fechadas : grupos.abertas;
 
   // ── Formulário da cotação ─────────────────────────────────────
   function salvarCotacao() {
@@ -24630,6 +24658,20 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         {quadro("Economia", dinheiro(resumo.economia), resumo.economia > 0 ? "#15803d" : "#111827")}
       </div>
 
+      {cotacoes.length > 0 && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
+          {[["abertas", "Abertas", grupos.abertas.length], ["fechadas", "Fechadas", grupos.fechadas.length]].map(([k, r, n]) => (
+            <button key={k} onClick={() => setFiltroLista(k)}
+              style={{ fontFamily: "inherit", fontSize: 12, padding: "5px 12px", borderRadius: 8, cursor: "pointer",
+                border: `1px solid ${filtroLista === k ? "#0474f4" : "rgba(38,36,33,0.16)"}`,
+                background: filtroLista === k ? "#eef5ff" : "#fff",
+                color: filtroLista === k ? "#0474f4" : "#4b5563", fontWeight: filtroLista === k ? 600 : 500 }}>
+              {r} ({n})
+            </button>
+          ))}
+        </div>
+      )}
+
       {erro && <div style={{ fontSize: 12, color: "#dc2626", marginBottom: 12 }}>{erro}</div>}
 
       {!cotacoes.length ? (
@@ -24638,7 +24680,13 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
             ? "Nenhuma cotação nesta obra. Abra uma para começar a comparar preços."
             : "Nenhuma cotação nesta obra por enquanto."}
         </div>
-      ) : cotacoes.map(cot => {
+      ) : !visiveis.length ? (
+        <div style={{ textAlign: "center", padding: "36px 20px", fontSize: 13, color: "#4b5563" }}>
+          {filtroLista === "fechadas"
+            ? "Nenhuma cotação fechada ainda. Fecham as que viraram contrato ou conta a pagar, e as canceladas."
+            : "Nenhuma cotação em aberto — todas já viraram contrato ou conta a pagar."}
+        </div>
+      ) : visiveis.map(cot => {
         const s = situacaoCotacao(cot, aprovacoes, contratos);
         const ap = aprovacaoDaEscolha(cot, aprovacoes);
         const props = propostasOrdenadas(cot);
