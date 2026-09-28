@@ -980,7 +980,7 @@ function Financeiro({ data, save }) {
 // "Prestadores de serviços") — é por essa categoria que o gerador de
 // contratos filtra a lista de contratados.
 const CATEGORIAS_PRESTADOR = [
-  "Carpinteiro", "Eletricista", "Empreiteiro", "Encanador",
+  "Carpinteiro", "Concreteira", "Eletricista", "Empreiteiro", "Encanador",
   "Esquadria de Alumínio", "Gesseiro", "Gestão de Obra",
   "Impermeabilizador", "Instalador de Aquecedores",
   "Instalador de Ar Condicionado", "Instalador de Equipamentos de Piscina",
