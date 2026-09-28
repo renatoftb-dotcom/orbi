@@ -51,7 +51,7 @@ const modulo = new Function(`
            podeGerarContrato, contratoDaCotacao, tipoDoContaId, dadosDoContratoDaCotacao,
            podeExcluirCotacaoComContratos, resumoCotacoes, cotacoesAguardandoCliente,
            cotacaoEstaFechada, cotacoesPorSituacao, SITUACOES_FECHADAS, ehContaDeLoja,
-           podeApagarContaDeLoja,
+           podeApagarContaDeLoja, contaDeLojaAberta, pedidoDaCotacao,
            nomeDoFornecedor, PLANO_CONTAS,
            podeExcluirCotacao, removerProposta, removerCotacao, anexosDasPropostas,
            prestadorRapidoVazio, criarPrestadorRapido, pareceMesmoPdf,
@@ -1949,6 +1949,57 @@ teste("apagar a conta de loja: livre até a primeira baixa", () => {
   assert.ok(M.podeApagarContaDeLoja(conta, dois).motivo.indexOf("2 itens") === 0);
 
   assert.strictEqual(M.podeApagarContaDeLoja(conta, []).pode, true, "sem conta nenhuma, pode");
+});
+
+teste("a cotação escolhida vira pedido na conta da loja que ganhou", () => {
+  const ourifer = { id: "loja1", titulo: "Ourifer — conta na loja", contaLoja: true,
+                    lojaId: "f1", prazoLoja: 30 };
+  const encerrada = { id: "loja2", titulo: "Pantanal", contaLoja: true, lojaId: "f2", status: "encerrada" };
+  const abertas = [ourifer, encerrada];
+
+  assert.strictEqual(M.contaDeLojaAberta(abertas, "f1").id, "loja1");
+  assert.strictEqual(M.contaDeLojaAberta(abertas, "f2"), null, "conta encerrada não recebe pedido");
+  assert.strictEqual(M.contaDeLojaAberta(abertas, "f9"), null, "loja sem conta não aparece");
+  assert.strictEqual(M.contaDeLojaAberta(abertas, ""), null);
+
+  // cotação com lista de itens e preço por item
+  const cot = {
+    id: "c1", titulo: "Aço Vergalhões", contaId: "material", etapaId: "fundacao",
+    itens: [
+      { id: "i1", codigo: "ACO-001", descricao: "Vergalhão CA50 8mm", unidade: "Barras 12mts", quantidade: 100 },
+      { id: "i2", codigo: "ACO-002", descricao: "Vergalhão CA60 5mm", unidade: "Barras 12mts", quantidade: 50 },
+    ],
+    propostas: [{ id: "p0", fornecedorId: "f1", precos: { i1: 60, i2: 40 }, totalFechado: "7.600,00" }],
+    escolhidaId: "p0",
+  };
+  const insumos = [{ codigo: "ACO-001", nome: "Vergalhão CA50 8mm", grupo: "Aço", unidade: "Barras 12mts" }];
+  const p = M.pedidoDaCotacao(cot, cot.propostas[0], insumos, 30);
+
+  assert.strictEqual(p.itens.length, 2, "um item de pedido por item cotado");
+  assert.strictEqual(p.itens[0].bruto, 6000, "100 × 60");
+  assert.strictEqual(p.itens[1].bruto, 2000, "50 × 40");
+  assert.strictEqual(p.desconto, 400, "o abatimento negociado (8.000 → 7.600) vira desconto do pedido");
+  assert.ok(p.itens.every(i => i.etapa === "fundacao"), "a etapa da cotação entra em todos");
+  assert.ok(p.itens.every(i => i.contaId === "material"));
+  assert.strictEqual(p.itens[0].grupoMaterial, "Aço", "o grupo vem do catálogo");
+  assert.strictEqual(p.itens[1].grupoMaterial, "", "item fora do catálogo fica sem grupo");
+  assert.strictEqual(p.cotacaoOrigemId, "c1");
+  assert.ok(p.vencimento > p.data, "o prazo da loja dá o vencimento");
+
+  // cotação sem lista: uma linha com o preço fechado
+  const simples = { id: "c2", titulo: "Gesso", contaId: "material", etapaId: "forros",
+    propostas: [{ id: "p0", fornecedorId: "f1", valor: "57.800,00" }], escolhidaId: "p0" };
+  const ps = M.pedidoDaCotacao(simples, simples.propostas[0], [], 30);
+  assert.strictEqual(ps.itens.length, 1);
+  assert.strictEqual(ps.itens[0].descricao, "Gesso");
+  assert.strictEqual(ps.itens[0].bruto, 57800);
+  assert.strictEqual(ps.desconto, 0);
+
+  // depois de virar pedido, a cotação fecha e não lança de novo
+  const virou = { ...cot, pedidoNaLoja: { contaLojaId: "loja1", pedidoId: "ped9", numeroLoja: "136560-109" } };
+  assert.strictEqual(M.situacaoCotacao(virou, [], []).rotulo, "Virou pedido na loja");
+  assert.strictEqual(M.cotacaoEstaFechada(virou, [], []), true);
+  assert.strictEqual(M.podeLancarEmContas(virou, []).pode, false);
 });
 
 for (const [nome, fn] of testes) {

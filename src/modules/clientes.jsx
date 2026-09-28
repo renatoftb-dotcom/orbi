@@ -4322,7 +4322,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       const restantes = jaExiste
         ? removerContasDoPedido(obraAtual.contasPagar || [], pedido.id)
         : (obraAtual.contasPagar || []);
-      const comLoja = { ...obraAtual, contasPagar: [...restantes, ...contas], cotacoes: lista };
+      // A cotação que virou este pedido fecha apontando para ele — na mesma
+      // gravação, senão a segunda parte partiria de uma cópia sem a primeira.
+      const origemId = pedido.cotacaoOrigemId || "";
+      const comOrigem = !origemId ? lista : lista.map(x => x.id !== origemId ? x : ({
+        ...x,
+        pedidoNaLoja: { contaLojaId: dados.cotacaoId, pedidoId: pedido.id, numero: pedido.numero,
+          numeroLoja: pedido.numeroLoja || "", em: pedido.lancadoEm, por: pedido.lancadoPor },
+      }));
+      const comLoja = { ...obraAtual, contasPagar: [...restantes, ...contas], cotacoes: comOrigem };
       gravarObras(obras.map(o => o.id === obraAtual.id ? comLoja : o));
       setObraSelecionada(comLoja);
       return { primeiraContaId: contas[0].id, quantas: contas.length, gravado: true };

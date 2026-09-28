@@ -1464,6 +1464,69 @@ function podeApagarContaDeLoja(cot, contasPagar) {
     : `${pagas} itens desta conta já foram pagos. Desfaça a baixa em contas a pagar antes de apagar.` };
 }
 
+// ── Da cotação para a conta da loja ─────────────────────
+// Cotou quatro lojas, escolheu a Ourifer — e a Ourifer é justamente onde você
+// tem conta aberta. Lançar em parcelas próprias criaria uma cobrança paralela
+// à fatura dela: no dia 28 a loja cobra UM valor, com os pedidos todos dentro.
+// Então a escolha vira mais um pedido na conta, e a cotação fecha apontando
+// para ele.
+function contaDeLojaAberta(cotacoes, prestadorId) {
+  if (!prestadorId) return null;
+  return (cotacoes || []).find((c) => c && ehContaDeLoja(c)
+    && c.status !== "encerrada" && c.status !== "cancelada"
+    && c.lojaId === prestadorId) || null;
+}
+
+// A escolha da cotação virando pedido: item a item quando há lista, uma linha
+// só quando o que existe é um preço fechado. O desconto negociado vem junto e
+// o rateio do pedido se encarrega dele — a mesma conta do desconto de rodapé.
+function pedidoDaCotacao(cot, proposta, insumos, prazoDias) {
+  const c = cot || {}, p = proposta || {};
+  const base = typeof pedidoVazio === "function" ? pedidoVazio("") : { id: "", itens: [] };
+  const hoje = typeof dataParaIso === "function" ? dataParaIso(new Date()) : "";
+  const prazo = Number(prazoDias) || 0;
+  const doCatalogo = (codigo) => (insumos || []).find((x) => x && x.codigo === codigo) || null;
+  const novoItem = () => (typeof itemDoPedidoVazio === "function"
+    ? itemDoPedidoVazio() : { id: String(Math.random()) });
+
+  const itens = [];
+  for (const it of itensDaCotacao(c)) {
+    const bruto = totalBrutoItem(c, p, it);
+    if (!(bruto > 0)) continue;
+    const ins = doCatalogo(it.codigo);
+    itens.push({
+      ...novoItem(),
+      descricao: it.descricao || (ins ? ins.nome : ""),
+      insumoCodigo: it.codigo || (ins ? ins.codigo : ""),
+      grupoMaterial: ins ? ins.grupo || "" : "",
+      quantidade: quantidadeDoItem(it) || "",
+      unidade: it.unidade || (ins ? ins.unidade : "") || "",
+      unitario: precoUnitario(p, it.id) || "",
+      bruto,
+      etapa: c.etapaId || "",
+      contaId: c.contaId || "",
+    });
+  }
+  if (!itens.length) {
+    const total = typeof valorProposta === "function" ? valorProposta(p) : 0;
+    if (total > 0) {
+      itens.push({ ...novoItem(), descricao: c.titulo || "Compra", quantidade: 1,
+        unidade: c.unidade || "vb", unitario: total, bruto: total,
+        etapa: c.etapaId || "", contaId: c.contaId || "" });
+    }
+  }
+  const d = descontoDaProposta(c, p);
+  return {
+    ...base,
+    data: hoje,
+    vencimento: prazo > 0 && typeof somarDias === "function" ? somarDias(hoje, prazo) : "",
+    desconto: d && d.desconto ? d.valor : 0,
+    itens,
+    cotacaoOrigemId: c.id || "",
+    observacao: c.titulo || "",
+  };
+}
+
 // ── Situação, em uma palavra ────────────────────────────────────
 // A ordem dos testes é a ordem do fluxo; o primeiro que casar manda.
 function situacaoCotacao(cot, aprovacoes, contratos) {
@@ -1475,6 +1538,8 @@ function situacaoCotacao(cot, aprovacoes, contratos) {
       ? { id: "encerrada", rotulo: "Conta encerrada",      cor: "#6b7280" }
       : { id: "contaLoja", rotulo: "Conta aberta na loja", cor: "#0474f4" };
   }
+  // Virou pedido na conta da loja: fechou o ciclo por lá, e é lá que se paga.
+  if (c.pedidoNaLoja)                      return { id: "naLoja",    rotulo: "Virou pedido na loja",      cor: "#15803d" };
   if (contratoDaCotacao(contratos, c.id)) return { id: "contratada", rotulo: "Contrato gerado",           cor: "#15803d" };
   // Fornecedor de material não assina contrato: a cotação escolhida vira
   // conta a pagar direto. Também fecha o ciclo, mas por outro caminho — e
@@ -1547,6 +1612,7 @@ function podeLancarEmContas(cot, contratos) {
       : { pode: true, motivo: "" };
   }
   if (contratoDaCotacao(contratos, c.id)) return { pode: false, motivo: "Esta cotação já virou contrato." };
+  if (c.pedidoNaLoja)            return { pode: false, motivo: "Já virou pedido na conta da loja." };
   if (c.contaGeradaId)           return { pode: false, motivo: "Já foi lançada em contas a pagar." };
   const esc = propostaEscolhida(c);
   if (!esc)                      return { pode: false, motivo: "Escolha uma proposta primeiro." };
@@ -1853,7 +1919,7 @@ function criarPrestadorRapido(campos, novoId) {
 // pagar, para o fornecedor de material que entrega e fatura — ou foi
 // cancelada. Tudo o mais tem um próximo passo e continua na tela.
 // Recusada pelo cliente fica em aberto de propósito: falta reescolher.
-const SITUACOES_FECHADAS = ["contratada", "lancada", "cancelada", "encerrada"];
+const SITUACOES_FECHADAS = ["contratada", "lancada", "cancelada", "encerrada", "naLoja"];
 
 function cotacaoEstaFechada(cot, aprovacoes, contratos) {
   return SITUACOES_FECHADAS.indexOf(situacaoCotacao(cot, aprovacoes, contratos).id) >= 0;
@@ -3249,6 +3315,20 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     trocarCotacao(cot.id, (x) => ({ ...x, status: x.status === "encerrada" ? "" : "encerrada" }));
   }
 
+  // A escolha vai para a conta da loja em vez de virar parcelas próprias:
+  // abre o mesmo painel de pedido, já com os itens e os preços cotados.
+  function mandarParaContaDaLoja(cot) {
+    const trava = podeLancarEmContas(cot, contratos);
+    if (!trava.pode) { setErro(trava.motivo); return; }
+    const esc = propostaEscolhida(cot);
+    if (!esc) { setErro("Escolha uma proposta primeiro."); return; }
+    const conta = contaDeLojaAberta(cotacoes, esc.fornecedorId);
+    if (!conta) { setErro("Esta loja não tem conta aberta nesta obra."); return; }
+    setErro("");
+    setFormPedido({ cotacao: conta, origem: cot,
+      pedido: pedidoDaCotacao(cot, esc, insumos, conta.prazoLoja) });
+  }
+
   // ── Lançar direto em contas a pagar ───────────────────────────
   // Fornecedor de material não assina contrato; a cotação escolhida vira
   // conta e o ciclo fecha por aqui.
@@ -3411,6 +3491,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       {formPedido && (
         <PainelPedidoLoja cotacao={formPedido.cotacao} pedido={formPedido.pedido} insumos={insumos}
           isMobile={isMobile} dinheiro={dinheiro} editando={!!formPedido.editando}
+          origem={formPedido.origem}
           aoMudar={(p) => setFormPedido({ ...formPedido, pedido: p })}
           aoFechar={() => setFormPedido(null)} aoLancar={lancarPedido} />
       )}
@@ -3500,6 +3581,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   if (cot.quantidade || cot.unidade) linhas.push(["Quantidade", `${cot.quantidade} ${cot.unidade}`.trim()]);
                   const autoria = textoAutoria(cot);
                   if (autoria) linhas.push(["Registro", autoria]);
+                  if (cot.pedidoNaLoja) {
+                    const alvo = cotacoes.find((x) => x.id === cot.pedidoNaLoja.contaLojaId);
+                    linhas.push(["Virou pedido",
+                      `${cot.pedidoNaLoja.numeroLoja || cot.pedidoNaLoja.numero || ""} na conta ${(alvo || {}).titulo || "da loja"}`.trim()]);
+                  }
                   if (!linhas.length) return null;
                   return (
                     <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 12 }}>
@@ -3719,6 +3805,18 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                           <button disabled={!tl.pode} title={tl.pode ? "Para fornecedor que não assina contrato — não espera o aval do cliente" : tl.motivo}
                             style={{ ...E.btnSec, opacity: tl.pode ? 1 : 0.45, cursor: tl.pode ? "pointer" : "not-allowed" }}
                             onClick={() => abrirLancamento(cot)}>Lançar em contas a pagar</button>
+                        );
+                      })()}
+                      {/* A loja escolhida tem conta aberta? Então o normal é somar
+                          à fatura dela, não abrir uma cobrança em paralelo. */}
+                      {podeGerenciar && (() => {
+                        const esc2 = propostaEscolhida(cot);
+                        const loja = esc2 && contaDeLojaAberta(cotacoes, esc2.fornecedorId);
+                        if (!loja || !podeLancarEmContas(cot, contratos).pode) return null;
+                        const nome = (prestadores.find((f) => f.id === loja.lojaId) || {}).nome || "loja";
+                        return (
+                          <button style={E.btn} title={`Entra como pedido na conta de ${nome} e se soma à fatura dela`}
+                            onClick={() => mandarParaContaDaLoja(cot)}>Somar à conta da {nome}</button>
                         );
                       })()}
                       {!trava.pode && <span style={{ fontSize: 11.5, color: "#6b7280", alignSelf: "center",
@@ -4705,7 +4803,7 @@ function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGe
 // ou os dois. O que a tela cobra é o que o P&L precisa e o papel não traz:
 // a etapa de cada item. Sem ela o pedido não é lançado — é assim que o
 // quadro por etapa para de encher de "Sem etapa".
-function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editando, aoMudar, aoFechar, aoLancar }) {
+function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editando, origem, aoMudar, aoFechar, aoLancar }) {
   const E = COT_ESTILO;
   const p = pedido;
   const P = cotPainel(isMobile, 980);
@@ -4768,7 +4866,10 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
         <div style={{ fontSize: 14.5, fontWeight: 700, color: "#111827", marginBottom: 2 }}>
           {editando ? `Editar pedido ${p.numeroLoja || p.numero || ""}`.trim() : "Novo pedido"}
         </div>
-        <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 12 }}>{cotacao.titulo || "Conta na loja"}</div>
+        <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 12 }}>
+          {cotacao.titulo || "Conta na loja"}
+          {origem ? ` · da cotação "${origem.titulo || "sem nome"}"` : ""}
+        </div>
 
         <div style={P.rolagem}>
           {/* ── de onde vêm os itens ── */}
