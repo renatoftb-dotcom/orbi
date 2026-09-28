@@ -4130,18 +4130,30 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       ? proximoNumeroPedido(data.obras || [])
       : (anterior.numeroPedido || proximoNumeroPedido(data.obras || []));
     if (ehLoja) {
-      const pedido = { ...(dados.pedido || {}), numero: numeroPedido,
+      // Editar um pedido é relançá-lo: ele guarda o próprio id e o próprio
+      // número, as contas antigas saem e as novas entram no lugar.
+      const jaExiste = (anterior.pedidos || []).find(x => x && x.id === (dados.pedido || {}).id);
+      if (jaExiste) {
+        const trava = podeMexerNoPedido(obraAtual.contasPagar || [], jaExiste.id);
+        if (!trava.pode) return { erro: trava.motivo };
+      }
+      const pedido = { ...(dados.pedido || {}), numero: (jaExiste && jaExiste.numero) || numeroPedido,
         lancadoEm: dados.lancadoEm || new Date().toISOString(), lancadoPor: dados.lancadoPor || "" };
-      const contas = contasDaCotacao({ ...dados, numeroPedido, pedido }, uid);
+      const contas = contasDaCotacao({ ...dados, numeroPedido: pedido.numero, pedido }, uid);
       if (!contas.length) return { erro: "O pedido está sem itens com valor." };
       const lista = (obraAtual.cotacoes || []).map(c => c.id !== dados.cotacaoId ? c : ({
         ...c,
-        pedidos: [...(c.pedidos || []), pedido],
+        pedidos: jaExiste
+          ? (c.pedidos || []).map(x => (x && x.id === pedido.id ? pedido : x))
+          : [...(c.pedidos || []), pedido],
         contaGeradaId: c.contaGeradaId || contas[0].id,
         lancadoEm: pedido.lancadoEm, lancadoPor: pedido.lancadoPor,
         pagamento: { ...(c.pagamento || {}), modo: "contaLoja" },
       }));
-      const comLoja = { ...obraAtual, contasPagar: [...(obraAtual.contasPagar || []), ...contas], cotacoes: lista };
+      const restantes = jaExiste
+        ? removerContasDoPedido(obraAtual.contasPagar || [], pedido.id)
+        : (obraAtual.contasPagar || []);
+      const comLoja = { ...obraAtual, contasPagar: [...restantes, ...contas], cotacoes: lista };
       gravarObras(obras.map(o => o.id === obraAtual.id ? comLoja : o));
       setObraSelecionada(comLoja);
       return { primeiraContaId: contas[0].id, quantas: contas.length, gravado: true };
@@ -4161,6 +4173,22 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o));
     setObraSelecionada(atualizada);
     return { primeiraContaId: novas[0].id, quantas: novas.length, gravado: true };
+  }
+
+  // Apagar um pedido da conta de loja: some o pedido e somem as contas dele.
+  // Item já pago trava a operação inteira — o gasto não pode sumir da obra.
+  function excluirPedidoDaLoja(cotacaoId, pedidoId) {
+    if (!obraAtual) return { erro: "Obra não encontrada." };
+    const trava = podeMexerNoPedido(obraAtual.contasPagar || [], pedidoId);
+    if (!trava.pode) return { erro: trava.motivo };
+    const cotacoes = (obraAtual.cotacoes || []).map(c => c.id !== cotacaoId ? c : ({
+      ...c, pedidos: (c.pedidos || []).filter(x => x && x.id !== pedidoId),
+    }));
+    const atualizada = { ...obraAtual,
+      contasPagar: removerContasDoPedido(obraAtual.contasPagar || [], pedidoId), cotacoes };
+    gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o));
+    setObraSelecionada(atualizada);
+    return { gravado: true };
   }
 
   // Recalibrar as entregas de um pedido sem sair da cotação: é lá que se
@@ -4332,7 +4360,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         onGerarContrato={abrirContratoDaCotacao}
         onLancarContas={lancarCotacaoEmContas}
         onDesfazerLancamento={desfazerLancamentoDaCotacao}
-        onRecalibrarPedido={recalibrarPedidoDaCotacao}
+        onRecalibrarPedido={recalibrarPedidoDaCotacao} onExcluirPedido={excluirPedidoDaLoja}
       />
     );
   }

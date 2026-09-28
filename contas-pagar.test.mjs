@@ -28,6 +28,7 @@ const modulo = new Function(`
   return { recalibrarPedido, previaDoPedido, contasDoPedido, docDaConta, diasEntreIso,
            pedidoVazio, itemDoPedidoVazio, brutoDoItem, brutoDoPedido, totalDoPedido,
            itensRateados, contasDoPedidoDaLoja, validarPedido, pedidosPendentes, baixarPedidos,
+           podeMexerNoPedido, removerContasDoPedido,
            MODOS_LANCAMENTO, modoLancamento,
            contasDaCotacao, contasDeCotacao,
            PLANO_CONTAS, contratoVazio, valorContrato,
@@ -1675,6 +1676,37 @@ teste("a fila de pagamento agrupa por loja e a baixa paga só o escolhido", () =
   assert.strictEqual(baixa.contas.find(c => c.id === "a").valorPago, 485.40);
   assert.strictEqual(modulo.pedidosPendentes(baixa.contas, { obraId: "ob1" }).lojas.length, 1,
     "depois da baixa só sobra a Pantanal");
+});
+
+teste("pedido lançado errado se conserta — até alguém pagar", () => {
+  let n = 0;
+  const contas = modulo.contasDoPedidoDaLoja(
+    { obraId: "ob1", cotacaoId: "cot1", favorecido: "Ourifer", contaId: "material" },
+    pedidoOurifer(), () => "c" + (++n));
+
+  // nada pago: dá para refazer e dá para apagar
+  assert.strictEqual(modulo.podeMexerNoPedido(contas, "ped1").pode, true);
+  const limpo = modulo.removerContasDoPedido(contas, "ped1");
+  assert.strictEqual(limpo.length, 0, "some o pedido inteiro");
+
+  // conta de outro pedido não é tocada
+  const comOutro = contas.concat([{ id: "z", pedidoId: "ped2", valor: 10, pago: false }]);
+  assert.deepStrictEqual(modulo.removerContasDoPedido(comOutro, "ped1").map(c => c.id), ["z"]);
+
+  // um item pago trava tudo: o gasto não pode sumir da obra
+  const comPago = contas.map((c, i) => (i === 0 ? { ...c, pago: true, valorPago: c.valor } : c));
+  const trava = modulo.podeMexerNoPedido(comPago, "ped1");
+  assert.strictEqual(trava.pode, false);
+  assert.ok(trava.motivo.indexOf("Um item") === 0, "diz que é um só");
+  const doisPagos = contas.map((c, i) => (i < 2 ? { ...c, pago: true } : c));
+  assert.ok(modulo.podeMexerNoPedido(doisPagos, "ped1").motivo.indexOf("2 itens") === 0);
+
+  // e, se ainda assim a remoção for chamada, o que foi pago fica
+  const sobra = modulo.removerContasDoPedido(comPago, "ped1");
+  assert.strictEqual(sobra.length, 1);
+  assert.strictEqual(sobra[0].pago, true);
+
+  assert.strictEqual(modulo.podeMexerNoPedido(contas, "").pode, false, "sem id não mexe");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

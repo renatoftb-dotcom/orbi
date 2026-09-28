@@ -682,6 +682,26 @@ function validarPedido(pedido, pedidosDaLoja) {
   return { ok: !erros.length, erros };
 }
 
+// ── Corrigir um pedido lançado errado ────────────────────
+// Enquanto ninguém pagou, o pedido é só uma intenção: dá para refazer ou
+// apagar inteiro. Depois da baixa, não — o dinheiro saiu, e apagar o gasto
+// faria a obra mentir e o saldo do banco parar de bater. Aí o caminho é
+// desfazer a baixa primeiro, que é um ato com dono e data.
+function podeMexerNoPedido(contasPagar, pedidoId) {
+  if (!pedidoId) return { pode: false, motivo: "Pedido sem identificação." };
+  const pagas = (contasPagar || []).filter((c) => c && c.pedidoId === pedidoId && c.pago).length;
+  if (!pagas) return { pode: true, motivo: "" };
+  return { pode: false, motivo: pagas === 1
+    ? "Um item deste pedido já foi pago. Desfaça a baixa em contas a pagar antes de mexer."
+    : `${pagas} itens deste pedido já foram pagos. Desfaça a baixa em contas a pagar antes de mexer.` };
+}
+
+// Tira as contas do pedido, deixando as pagas onde estão.
+function removerContasDoPedido(contasPagar, pedidoId) {
+  if (!pedidoId) return contasPagar || [];
+  return (contasPagar || []).filter((c) => !(c && c.pedidoId === pedidoId && !c.pago));
+}
+
 // A fila de pagamento: o que está em aberto, agrupado por loja. É a lista que
 // se abre quando a loja liga dizendo "vamos fechar".
 function pedidosPendentes(contasPagar, opcoes) {

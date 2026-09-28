@@ -19976,6 +19976,26 @@ function validarPedido(pedido, pedidosDaLoja) {
   return { ok: !erros.length, erros };
 }
 
+// ── Corrigir um pedido lançado errado ────────────────────
+// Enquanto ninguém pagou, o pedido é só uma intenção: dá para refazer ou
+// apagar inteiro. Depois da baixa, não — o dinheiro saiu, e apagar o gasto
+// faria a obra mentir e o saldo do banco parar de bater. Aí o caminho é
+// desfazer a baixa primeiro, que é um ato com dono e data.
+function podeMexerNoPedido(contasPagar, pedidoId) {
+  if (!pedidoId) return { pode: false, motivo: "Pedido sem identificação." };
+  const pagas = (contasPagar || []).filter((c) => c && c.pedidoId === pedidoId && c.pago).length;
+  if (!pagas) return { pode: true, motivo: "" };
+  return { pode: false, motivo: pagas === 1
+    ? "Um item deste pedido já foi pago. Desfaça a baixa em contas a pagar antes de mexer."
+    : `${pagas} itens deste pedido já foram pagos. Desfaça a baixa em contas a pagar antes de mexer.` };
+}
+
+// Tira as contas do pedido, deixando as pagas onde estão.
+function removerContasDoPedido(contasPagar, pedidoId) {
+  if (!pedidoId) return contasPagar || [];
+  return (contasPagar || []).filter((c) => !(c && c.pedidoId === pedidoId && !c.pago));
+}
+
 // A fila de pagamento: o que está em aberto, agrupado por loja. É a lista que
 // se abre quando a loja liga dizendo "vamos fechar".
 function pedidosPendentes(contasPagar, opcoes) {
@@ -23338,7 +23358,7 @@ function selo(cor, texto) {
   );
 }
 
-function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, usuario, onGerarContrato, onLancarContas, onDesfazerLancamento, onRecalibrarPedido }) {
+function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, usuario, onGerarContrato, onLancarContas, onDesfazerLancamento, onRecalibrarPedido, onExcluirPedido }) {
   const perm = getPermissoes();
   // O módulo é o mesmo dos dois lados: o cliente cria cotação, registra a
   // proposta que recebeu do fornecedor e escolhe, como o escritório. O que
@@ -24483,6 +24503,34 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     } });
   }
 
+  // Reabre o mesmo pedido para conserto. Ele volta com o id que tinha, e é
+  // por isso que a gravação troca no lugar em vez de criar outro.
+  function editarPedido(cot, pedido) {
+    const trava = podeMexerNoPedido(obra.contasPagar || [], pedido.id);
+    if (!trava.pode) { setErro(trava.motivo); return; }
+    setErro("");
+    setFormPedido({ cotacao: cot, pedido: { ...pedido }, editando: true });
+  }
+
+  async function apagarPedido(cot, pedido) {
+    const trava = podeMexerNoPedido(obra.contasPagar || [], pedido.id);
+    if (!trava.pode) { setErro(trava.motivo); return; }
+    const quantas = (obra.contasPagar || []).filter((x) => x && x.pedidoId === pedido.id).length;
+    const ok = await dialogo.confirmar({
+      titulo: `Apagar o pedido ${pedido.numeroLoja || pedido.numero}?`,
+      mensagem: quantas === 1
+        ? "A conta a pagar que ele gerou sai junto."
+        : `As ${quantas} contas a pagar que ele gerou saem junto.`,
+      confirmar: "Apagar pedido",
+      destrutivo: true,
+    });
+    if (!ok) return;
+    if (!onExcluirPedido) { setErro("Exclusão indisponível nesta tela."); return; }
+    const r = onExcluirPedido(cot.id, pedido.id);
+    if (r && r.erro) { setErro(r.erro); return; }
+    setErro("");
+  }
+
   function lancarPedido(pedido) {
     if (!onLancarContas || !formPedido) { setErro('Lançamento indisponível nesta tela.'); return; }
     const cot = formPedido.cotacao;
@@ -24587,7 +24635,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
 
       {formPedido && (
         <PainelPedidoLoja cotacao={formPedido.cotacao} pedido={formPedido.pedido} insumos={insumos}
-          isMobile={isMobile} dinheiro={dinheiro}
+          isMobile={isMobile} dinheiro={dinheiro} editando={!!formPedido.editando}
           aoMudar={(p) => setFormPedido({ ...formPedido, pedido: p })}
           aoFechar={() => setFormPedido(null)} aoLancar={lancarPedido} />
       )}
@@ -24655,7 +24703,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                 <BlocoContaLoja cotacao={cot} contasPagar={obra.contasPagar || []}
                   loja={prestadores.find((f) => f.id === cot.lojaId)} isMobile={isMobile}
                   dinheiro={dinheiro} podeGerenciar={podeGerenciar}
-                  aoNovoPedido={() => abrirPedido(cot)} />
+                  aoNovoPedido={() => abrirPedido(cot)}
+                  aoEditarPedido={(p) => editarPedido(cot, p)}
+                  aoApagarPedido={(p) => apagarPedido(cot, p)} />
               </div>
             )}
 
@@ -25753,7 +25803,7 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
 // ── O corpo de uma conta de loja ────────────────────────────────
 // Não tem proposta para comparar nem escolha para enviar: tem os pedidos
 // feitos, o que já foi pago e o que está pendurado esperando a loja ligar.
-function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGerenciar, aoNovoPedido }) {
+function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGerenciar, aoNovoPedido, aoEditarPedido, aoApagarPedido }) {
   const E = COT_ESTILO;
   const pedidos = cotacao.pedidos || [];
   const contas = (contasPagar || []).filter((c) => c && c.cotacaoId === cotacao.id);
@@ -25764,7 +25814,7 @@ function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGe
   const pago = soma(contas.filter((c) => c.pago));
 
   const grade = { display: "grid",
-    gridTemplateColumns: isMobile ? "minmax(0,1fr) 92px" : "minmax(0,1.2fr) 96px 96px 70px 110px 92px",
+    gridTemplateColumns: isMobile ? "minmax(0,1fr) 92px" : "minmax(0,1.2fr) 92px 92px 58px 96px 92px 108px",
     gap: 8, alignItems: "center" };
   const cab = { fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600 };
   const cel = { fontSize: 12.5, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
@@ -25813,6 +25863,7 @@ function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGe
             {!isMobile && <span style={cab}>Itens</span>}
             {!isMobile && <span style={cab}>Situação</span>}
             <span style={{ ...cab, textAlign: "right" }}>Valor</span>
+            {!isMobile && <span />}
           </div>
           {pedidos.slice().reverse().map((p) => {
             const cs = doPedido(p.id);
@@ -25833,6 +25884,20 @@ function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGe
                     : selo("#b45309", "parcial")}</span>
                 )}
                 <span style={{ ...cel, textAlign: "right", fontWeight: 600, color: "#111827" }}>{dinheiro(soma(cs))}</span>
+                {!isMobile && (
+                  <span style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                    {podeGerenciar && emAberto === cs.length && cs.length > 0 && (
+                      <>
+                        <button onClick={() => aoEditarPedido && aoEditarPedido(p)}
+                          style={{ background: "none", border: "none", padding: 0, cursor: "pointer",
+                            fontFamily: "inherit", fontSize: 11.5, color: "#4b5563" }}>Editar</button>
+                        <button onClick={() => aoApagarPedido && aoApagarPedido(p)}
+                          style={{ background: "none", border: "none", padding: 0, cursor: "pointer",
+                            fontFamily: "inherit", fontSize: 11.5, color: "#dc2626" }}>Apagar</button>
+                      </>
+                    )}
+                  </span>
+                )}
               </div>
             );
           })}
@@ -25851,7 +25916,7 @@ function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGe
 // ou os dois. O que a tela cobra é o que o P&L precisa e o papel não traz:
 // a etapa de cada item. Sem ela o pedido não é lançado — é assim que o
 // quadro por etapa para de encher de "Sem etapa".
-function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, aoMudar, aoFechar, aoLancar }) {
+function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editando, aoMudar, aoFechar, aoLancar }) {
   const E = COT_ESTILO;
   const p = pedido;
   const P = cotPainel(isMobile, 980);
@@ -25912,7 +25977,7 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, aoMuda
     <div style={P.fundo} onClick={aoFechar}>
       <div style={P.cartao} onClick={(e) => e.stopPropagation()}>
         <div style={{ fontSize: 14.5, fontWeight: 700, color: "#111827", marginBottom: 2 }}>
-          {p.numero ? `Pedido ${p.numero}` : "Novo pedido"}
+          {editando ? `Editar pedido ${p.numeroLoja || p.numero || ""}`.trim() : "Novo pedido"}
         </div>
         <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 12 }}>{cotacao.titulo || "Conta na loja"}</div>
 
@@ -26049,7 +26114,9 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, aoMuda
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
           <button style={E.btnSec} onClick={aoFechar}>Cancelar</button>
           <button style={{ ...E.btn, opacity: prova.ok ? 1 : 0.45, cursor: prova.ok ? "pointer" : "not-allowed" }}
-            disabled={!prova.ok} onClick={() => aoLancar(p)}>Lançar em contas a pagar</button>
+            disabled={!prova.ok} onClick={() => aoLancar(p)}>
+            {editando ? "Regravar o pedido" : "Lançar em contas a pagar"}
+          </button>
         </div>
       </div>
     </div>
@@ -30622,18 +30689,30 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       ? proximoNumeroPedido(data.obras || [])
       : (anterior.numeroPedido || proximoNumeroPedido(data.obras || []));
     if (ehLoja) {
-      const pedido = { ...(dados.pedido || {}), numero: numeroPedido,
+      // Editar um pedido é relançá-lo: ele guarda o próprio id e o próprio
+      // número, as contas antigas saem e as novas entram no lugar.
+      const jaExiste = (anterior.pedidos || []).find(x => x && x.id === (dados.pedido || {}).id);
+      if (jaExiste) {
+        const trava = podeMexerNoPedido(obraAtual.contasPagar || [], jaExiste.id);
+        if (!trava.pode) return { erro: trava.motivo };
+      }
+      const pedido = { ...(dados.pedido || {}), numero: (jaExiste && jaExiste.numero) || numeroPedido,
         lancadoEm: dados.lancadoEm || new Date().toISOString(), lancadoPor: dados.lancadoPor || "" };
-      const contas = contasDaCotacao({ ...dados, numeroPedido, pedido }, uid);
+      const contas = contasDaCotacao({ ...dados, numeroPedido: pedido.numero, pedido }, uid);
       if (!contas.length) return { erro: "O pedido está sem itens com valor." };
       const lista = (obraAtual.cotacoes || []).map(c => c.id !== dados.cotacaoId ? c : ({
         ...c,
-        pedidos: [...(c.pedidos || []), pedido],
+        pedidos: jaExiste
+          ? (c.pedidos || []).map(x => (x && x.id === pedido.id ? pedido : x))
+          : [...(c.pedidos || []), pedido],
         contaGeradaId: c.contaGeradaId || contas[0].id,
         lancadoEm: pedido.lancadoEm, lancadoPor: pedido.lancadoPor,
         pagamento: { ...(c.pagamento || {}), modo: "contaLoja" },
       }));
-      const comLoja = { ...obraAtual, contasPagar: [...(obraAtual.contasPagar || []), ...contas], cotacoes: lista };
+      const restantes = jaExiste
+        ? removerContasDoPedido(obraAtual.contasPagar || [], pedido.id)
+        : (obraAtual.contasPagar || []);
+      const comLoja = { ...obraAtual, contasPagar: [...restantes, ...contas], cotacoes: lista };
       gravarObras(obras.map(o => o.id === obraAtual.id ? comLoja : o));
       setObraSelecionada(comLoja);
       return { primeiraContaId: contas[0].id, quantas: contas.length, gravado: true };
@@ -30653,6 +30732,22 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o));
     setObraSelecionada(atualizada);
     return { primeiraContaId: novas[0].id, quantas: novas.length, gravado: true };
+  }
+
+  // Apagar um pedido da conta de loja: some o pedido e somem as contas dele.
+  // Item já pago trava a operação inteira — o gasto não pode sumir da obra.
+  function excluirPedidoDaLoja(cotacaoId, pedidoId) {
+    if (!obraAtual) return { erro: "Obra não encontrada." };
+    const trava = podeMexerNoPedido(obraAtual.contasPagar || [], pedidoId);
+    if (!trava.pode) return { erro: trava.motivo };
+    const cotacoes = (obraAtual.cotacoes || []).map(c => c.id !== cotacaoId ? c : ({
+      ...c, pedidos: (c.pedidos || []).filter(x => x && x.id !== pedidoId),
+    }));
+    const atualizada = { ...obraAtual,
+      contasPagar: removerContasDoPedido(obraAtual.contasPagar || [], pedidoId), cotacoes };
+    gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o));
+    setObraSelecionada(atualizada);
+    return { gravado: true };
   }
 
   // Recalibrar as entregas de um pedido sem sair da cotação: é lá que se
@@ -30824,7 +30919,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         onGerarContrato={abrirContratoDaCotacao}
         onLancarContas={lancarCotacaoEmContas}
         onDesfazerLancamento={desfazerLancamentoDaCotacao}
-        onRecalibrarPedido={recalibrarPedidoDaCotacao}
+        onRecalibrarPedido={recalibrarPedidoDaCotacao} onExcluirPedido={excluirPedidoDaLoja}
       />
     );
   }

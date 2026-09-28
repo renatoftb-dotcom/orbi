@@ -2092,7 +2092,7 @@ function selo(cor, texto) {
   );
 }
 
-function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, usuario, onGerarContrato, onLancarContas, onDesfazerLancamento, onRecalibrarPedido }) {
+function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, usuario, onGerarContrato, onLancarContas, onDesfazerLancamento, onRecalibrarPedido, onExcluirPedido }) {
   const perm = getPermissoes();
   // O módulo é o mesmo dos dois lados: o cliente cria cotação, registra a
   // proposta que recebeu do fornecedor e escolhe, como o escritório. O que
@@ -3237,6 +3237,34 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     } });
   }
 
+  // Reabre o mesmo pedido para conserto. Ele volta com o id que tinha, e é
+  // por isso que a gravação troca no lugar em vez de criar outro.
+  function editarPedido(cot, pedido) {
+    const trava = podeMexerNoPedido(obra.contasPagar || [], pedido.id);
+    if (!trava.pode) { setErro(trava.motivo); return; }
+    setErro("");
+    setFormPedido({ cotacao: cot, pedido: { ...pedido }, editando: true });
+  }
+
+  async function apagarPedido(cot, pedido) {
+    const trava = podeMexerNoPedido(obra.contasPagar || [], pedido.id);
+    if (!trava.pode) { setErro(trava.motivo); return; }
+    const quantas = (obra.contasPagar || []).filter((x) => x && x.pedidoId === pedido.id).length;
+    const ok = await dialogo.confirmar({
+      titulo: `Apagar o pedido ${pedido.numeroLoja || pedido.numero}?`,
+      mensagem: quantas === 1
+        ? "A conta a pagar que ele gerou sai junto."
+        : `As ${quantas} contas a pagar que ele gerou saem junto.`,
+      confirmar: "Apagar pedido",
+      destrutivo: true,
+    });
+    if (!ok) return;
+    if (!onExcluirPedido) { setErro("Exclusão indisponível nesta tela."); return; }
+    const r = onExcluirPedido(cot.id, pedido.id);
+    if (r && r.erro) { setErro(r.erro); return; }
+    setErro("");
+  }
+
   function lancarPedido(pedido) {
     if (!onLancarContas || !formPedido) { setErro('Lançamento indisponível nesta tela.'); return; }
     const cot = formPedido.cotacao;
@@ -3341,7 +3369,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
 
       {formPedido && (
         <PainelPedidoLoja cotacao={formPedido.cotacao} pedido={formPedido.pedido} insumos={insumos}
-          isMobile={isMobile} dinheiro={dinheiro}
+          isMobile={isMobile} dinheiro={dinheiro} editando={!!formPedido.editando}
           aoMudar={(p) => setFormPedido({ ...formPedido, pedido: p })}
           aoFechar={() => setFormPedido(null)} aoLancar={lancarPedido} />
       )}
@@ -3409,7 +3437,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                 <BlocoContaLoja cotacao={cot} contasPagar={obra.contasPagar || []}
                   loja={prestadores.find((f) => f.id === cot.lojaId)} isMobile={isMobile}
                   dinheiro={dinheiro} podeGerenciar={podeGerenciar}
-                  aoNovoPedido={() => abrirPedido(cot)} />
+                  aoNovoPedido={() => abrirPedido(cot)}
+                  aoEditarPedido={(p) => editarPedido(cot, p)}
+                  aoApagarPedido={(p) => apagarPedido(cot, p)} />
               </div>
             )}
 
@@ -4507,7 +4537,7 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
 // ── O corpo de uma conta de loja ────────────────────────────────
 // Não tem proposta para comparar nem escolha para enviar: tem os pedidos
 // feitos, o que já foi pago e o que está pendurado esperando a loja ligar.
-function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGerenciar, aoNovoPedido }) {
+function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGerenciar, aoNovoPedido, aoEditarPedido, aoApagarPedido }) {
   const E = COT_ESTILO;
   const pedidos = cotacao.pedidos || [];
   const contas = (contasPagar || []).filter((c) => c && c.cotacaoId === cotacao.id);
@@ -4518,7 +4548,7 @@ function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGe
   const pago = soma(contas.filter((c) => c.pago));
 
   const grade = { display: "grid",
-    gridTemplateColumns: isMobile ? "minmax(0,1fr) 92px" : "minmax(0,1.2fr) 96px 96px 70px 110px 92px",
+    gridTemplateColumns: isMobile ? "minmax(0,1fr) 92px" : "minmax(0,1.2fr) 92px 92px 58px 96px 92px 108px",
     gap: 8, alignItems: "center" };
   const cab = { fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600 };
   const cel = { fontSize: 12.5, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
@@ -4567,6 +4597,7 @@ function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGe
             {!isMobile && <span style={cab}>Itens</span>}
             {!isMobile && <span style={cab}>Situação</span>}
             <span style={{ ...cab, textAlign: "right" }}>Valor</span>
+            {!isMobile && <span />}
           </div>
           {pedidos.slice().reverse().map((p) => {
             const cs = doPedido(p.id);
@@ -4587,6 +4618,20 @@ function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGe
                     : selo("#b45309", "parcial")}</span>
                 )}
                 <span style={{ ...cel, textAlign: "right", fontWeight: 600, color: "#111827" }}>{dinheiro(soma(cs))}</span>
+                {!isMobile && (
+                  <span style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                    {podeGerenciar && emAberto === cs.length && cs.length > 0 && (
+                      <>
+                        <button onClick={() => aoEditarPedido && aoEditarPedido(p)}
+                          style={{ background: "none", border: "none", padding: 0, cursor: "pointer",
+                            fontFamily: "inherit", fontSize: 11.5, color: "#4b5563" }}>Editar</button>
+                        <button onClick={() => aoApagarPedido && aoApagarPedido(p)}
+                          style={{ background: "none", border: "none", padding: 0, cursor: "pointer",
+                            fontFamily: "inherit", fontSize: 11.5, color: "#dc2626" }}>Apagar</button>
+                      </>
+                    )}
+                  </span>
+                )}
               </div>
             );
           })}
@@ -4605,7 +4650,7 @@ function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGe
 // ou os dois. O que a tela cobra é o que o P&L precisa e o papel não traz:
 // a etapa de cada item. Sem ela o pedido não é lançado — é assim que o
 // quadro por etapa para de encher de "Sem etapa".
-function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, aoMudar, aoFechar, aoLancar }) {
+function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editando, aoMudar, aoFechar, aoLancar }) {
   const E = COT_ESTILO;
   const p = pedido;
   const P = cotPainel(isMobile, 980);
@@ -4666,7 +4711,7 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, aoMuda
     <div style={P.fundo} onClick={aoFechar}>
       <div style={P.cartao} onClick={(e) => e.stopPropagation()}>
         <div style={{ fontSize: 14.5, fontWeight: 700, color: "#111827", marginBottom: 2 }}>
-          {p.numero ? `Pedido ${p.numero}` : "Novo pedido"}
+          {editando ? `Editar pedido ${p.numeroLoja || p.numero || ""}`.trim() : "Novo pedido"}
         </div>
         <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 12 }}>{cotacao.titulo || "Conta na loja"}</div>
 
@@ -4803,7 +4848,9 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, aoMuda
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
           <button style={E.btnSec} onClick={aoFechar}>Cancelar</button>
           <button style={{ ...E.btn, opacity: prova.ok ? 1 : 0.45, cursor: prova.ok ? "pointer" : "not-allowed" }}
-            disabled={!prova.ok} onClick={() => aoLancar(p)}>Lançar em contas a pagar</button>
+            disabled={!prova.ok} onClick={() => aoLancar(p)}>
+            {editando ? "Regravar o pedido" : "Lançar em contas a pagar"}
+          </button>
         </div>
       </div>
     </div>
