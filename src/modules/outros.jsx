@@ -1007,6 +1007,7 @@ function PrestadoresServico({ data, save }) {
     cep:"", logradouro:"", numero:"", bairro:"", cidade:"", estado:"SP",
     representanteNome:"", representanteCpf:"",
     telefone:"", whatsapp:false, email:"", observacoes:"", ativo:true,
+    pixTipo:"cnpj", pixChave:"", pixBeneficiario:"",
   };
   const [form, setForm] = useState(emptyPrestador);
 
@@ -1210,6 +1211,31 @@ function PrestadoresServico({ data, save }) {
         <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, color:"#111827", marginBottom:20 }}>
           <input type="checkbox" checked={form.whatsapp} onChange={e=>setForm({...form,whatsapp:e.target.checked})} /> Este telefone é WhatsApp
         </label>
+        {/* Pagamento — a chave que se copia na hora de pagar. Fica no
+            cadastro porque é sempre a mesma; a fatura pode trazer um
+            copia-e-cola próprio, e aí é aquele que vale. */}
+        <div style={{ marginBottom:6 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:1 }}>Pagamento</div>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"160px 1fr", gap:12, marginBottom:12 }}>
+          <div>
+            <label style={PS.label}>Tipo da chave</label>
+            <select style={{ ...PS.input, cursor:"pointer" }} value={form.pixTipo || "cnpj"}
+              onChange={e=>setForm({...form, pixTipo:e.target.value})}>
+              {TIPOS_PIX.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={PS.label}>Chave PIX</label>
+            <input style={PS.input} value={form.pixChave || ""} onChange={e=>setForm({...form, pixChave:e.target.value})}
+              placeholder="00.000.000/0001-00" />
+          </div>
+        </div>
+        <div style={{ marginBottom:14 }}>
+          <label style={PS.label}>Beneficiário</label>
+          <input style={PS.input} value={form.pixBeneficiario || ""} onChange={e=>setForm({...form, pixBeneficiario:e.target.value})}
+            placeholder="quem aparece no aplicativo do banco — em branco, vale o nome do prestador" />
+        </div>
         <div style={{ marginBottom:14 }}>
           <label style={PS.label}>Observações</label>
           <textarea style={{ ...PS.input, resize:"vertical" }} value={form.observacoes} onChange={e=>setForm({...form,observacoes:e.target.value})} rows={3} placeholder="Condições, indicações, alertas..." />

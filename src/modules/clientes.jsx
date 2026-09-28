@@ -1741,6 +1741,71 @@ function PrestadoresPLView({ itens, contasPagar, isMobile, fmtBRL }) {
 // ── P&L da obra: a tela de abertura do Planejamento ─────────────
 // A pergunta de todo dia é "quanto eu disse que ia custar e quanto já saiu".
 // Por isso o Planejamento abre aqui, e não no formulário de preencher.
+// ── Copiar a chave PIX ───────────────────────────────
+// O caminho real de pagar é copiar a chave aqui e colar no aplicativo do
+// banco. Um clique, e a confirmação some sozinha — se ficasse, o próximo
+// pagamento começaria dizendo "copiado" sem ninguém ter copiado nada.
+function BotaoCopiarPix({ pix, compacto }) {
+  const [copiado, setCopiado] = useState(false);
+  const [erro, setErro] = useState("");
+  if (!pix || !pix.tem) return null;
+  const copiar = () => {
+    setErro("");
+    const fim = () => { setCopiado(true); setTimeout(() => setCopiado(false), 2200); };
+    if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(pix.valor).then(fim, () => setErro("O navegador não deixou copiar."));
+      return;
+    }
+    setErro("O navegador não deixou copiar.");
+  };
+  const icone = (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+  const titulo = [pix.rotulo, pix.beneficiario, pix.valor].filter(Boolean).join(" · ");
+
+  if (compacto) {
+    return (
+      <button type="button" onClick={copiar} title={titulo}
+        style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "none",
+          border: "1px solid rgba(38,36,33,0.16)", borderRadius: 8, padding: "5px 9px",
+          cursor: "pointer", fontFamily: "inherit", fontSize: 11.5,
+          color: copiado ? "#15803d" : "#4b5563" }}>
+        {icone}{copiado ? "copiado" : "PIX"}
+      </button>
+    );
+  }
+  return (
+    <div style={{ marginTop: 12, padding: "9px 11px", border: "1px solid rgba(38,36,33,0.12)",
+      borderRadius: 10, background: "#fafafa" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: 10.5, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>
+            {pix.rotulo}
+          </div>
+          <div style={{ fontSize: 12.5, color: "#111827", marginTop: 2, wordBreak: "break-all" }}>
+            {pixResumido(pix.valor, 44)}
+          </div>
+          {pix.beneficiario && (
+            <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 1 }}>{pix.beneficiario}</div>
+          )}
+        </div>
+        <button type="button" onClick={copiar}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#fff",
+            border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 10, padding: "7px 12px",
+            cursor: "pointer", fontFamily: "inherit", fontSize: 12.5,
+            color: copiado ? "#15803d" : "#111827", fontWeight: 600 }}>
+          {icone}{copiado ? "Copiado" : "Copiar"}
+        </button>
+      </div>
+      {erro && <div style={{ fontSize: 11.5, color: "#dc2626", marginTop: 6 }}>{erro}</div>}
+    </div>
+  );
+}
+
 function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL }) {
   // Acompanhar custo e apurar resultado são duas perguntas. Com a venda, o
   // terreno e os tributos na conta, o número do canteiro fica escondido; o
@@ -3690,6 +3755,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   a soma é o que sai do caixa. Para pagar um valor diferente, corrija o pedido na cotação.
                 </div>
               )}
+              <BotaoCopiarPix pix={pixDoPagamento(
+                formPagamento.pedido || formPagamento.conta,
+                prestadores.find(x => x.id === ((formPagamento.pedido || formPagamento.conta) || {}).prestadorId))} />
               <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8 }}>
                 A despesa entra no extrato da obra no mês desta data. O dia de hoje ({new Date(hojeIso + "T12:00:00").toLocaleDateString("pt-BR")}) fica registrado como a data em que foi contabilizada.
               </div>
@@ -4073,6 +4141,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                   </div>
                                   {perm.podeEditar ? (
                                     <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
+                                      {!L.pago && <BotaoCopiarPix compacto pix={pixDoPagamento(L, prestadores.find(x => x.id === L.prestadorId))} />}
                                       <button onClick={() => alternarPagamentoPedido(L)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>
                                         {L.pago ? "Desfazer" : "Pagar pedido"}
                                       </button>
@@ -4160,6 +4229,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                               <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", textAlign: isMobile ? "left" : "right" }}>{fmtMoedaCtr(c.pago ? (Number(c.valorPago) || c.valor) : c.valor)}</div>
                               {perm.podeEditar ? (
                                 <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
+                                  {!c.pago && <BotaoCopiarPix compacto pix={pixDoPagamento(c, prestadores.find(x => x.id === c.prestadorId))} />}
                                   <button onClick={() => alternarPagamento(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>{c.pago ? "Desfazer" : "Pagar"}</button>
                                   {c.origem === "avulsa" && <button onClick={() => setFormConta(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>}
                                   {c.origem === "avulsa" && (

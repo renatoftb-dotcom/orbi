@@ -3709,6 +3709,7 @@ function PrestadoresServico({ data, save }) {
     cep:"", logradouro:"", numero:"", bairro:"", cidade:"", estado:"SP",
     representanteNome:"", representanteCpf:"",
     telefone:"", whatsapp:false, email:"", observacoes:"", ativo:true,
+    pixTipo:"cnpj", pixChave:"", pixBeneficiario:"",
   };
   const [form, setForm] = useState(emptyPrestador);
 
@@ -3912,6 +3913,31 @@ function PrestadoresServico({ data, save }) {
         <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, color:"#111827", marginBottom:20 }}>
           <input type="checkbox" checked={form.whatsapp} onChange={e=>setForm({...form,whatsapp:e.target.checked})} /> Este telefone é WhatsApp
         </label>
+        {/* Pagamento — a chave que se copia na hora de pagar. Fica no
+            cadastro porque é sempre a mesma; a fatura pode trazer um
+            copia-e-cola próprio, e aí é aquele que vale. */}
+        <div style={{ marginBottom:6 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:1 }}>Pagamento</div>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"160px 1fr", gap:12, marginBottom:12 }}>
+          <div>
+            <label style={PS.label}>Tipo da chave</label>
+            <select style={{ ...PS.input, cursor:"pointer" }} value={form.pixTipo || "cnpj"}
+              onChange={e=>setForm({...form, pixTipo:e.target.value})}>
+              {TIPOS_PIX.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={PS.label}>Chave PIX</label>
+            <input style={PS.input} value={form.pixChave || ""} onChange={e=>setForm({...form, pixChave:e.target.value})}
+              placeholder="00.000.000/0001-00" />
+          </div>
+        </div>
+        <div style={{ marginBottom:14 }}>
+          <label style={PS.label}>Beneficiário</label>
+          <input style={PS.input} value={form.pixBeneficiario || ""} onChange={e=>setForm({...form, pixBeneficiario:e.target.value})}
+            placeholder="quem aparece no aplicativo do banco — em branco, vale o nome do prestador" />
+        </div>
         <div style={{ marginBottom:14 }}>
           <label style={PS.label}>Observações</label>
           <textarea style={{ ...PS.input, resize:"vertical" }} value={form.observacoes} onChange={e=>setForm({...form,observacoes:e.target.value})} rows={3} placeholder="Condições, indicações, alertas..." />
@@ -19936,6 +19962,7 @@ function contasDoPedidoDaLoja(dados, pedido, novoId) {
     numeroPedido: p.numero || "",
     numeroLoja: p.numeroLoja || "",
     numeroNota: p.numeroNota || "",
+    pixCopiaECola: p.pixCopiaECola || "",
     parcela: 0, parcelasTotal: 0,
     contaId: i.contaId || padrao,
     etapa: i.etapa || "",
@@ -19976,6 +20003,47 @@ function validarPedido(pedido, pedidosDaLoja) {
   return { ok: !erros.length, erros };
 }
 
+// ── Como se paga ───────────────────────────────────
+// Na hora de pagar, o que falta não é o valor — é a chave. Ela mora no
+// cadastro da loja, porque é sempre a mesma; e a fatura pode trazer um
+// "copia e cola" próprio, que já vem com valor e identificador dentro. Quando
+// os dois existem, o da fatura manda: ele foi emitido para AQUELE pagamento.
+const TIPOS_PIX = [
+  { id: "cnpj",      nome: "CNPJ" },
+  { id: "cpf",       nome: "CPF" },
+  { id: "email",     nome: "E-mail" },
+  { id: "telefone",  nome: "Telefone" },
+  { id: "aleatoria", nome: "Chave aleatória" },
+];
+
+function nomeDoTipoPix(id) {
+  const t = TIPOS_PIX.find((x) => x.id === id);
+  return t ? t.nome : "Chave PIX";
+}
+
+function pixDoPagamento(fonte, prestador) {
+  const f = fonte || {}, p = prestador || {};
+  const vazio = { tem: false, valor: "", rotulo: "", beneficiario: "", copiaECola: false };
+  const colar = String(f.pixCopiaECola || "").trim();
+  const nome = String(f.pixBeneficiario || p.pixBeneficiario || p.nome || f.favorecido || "").trim();
+  if (colar) return { tem: true, valor: colar, rotulo: "PIX copia e cola", beneficiario: nome, copiaECola: true };
+  // chave da fatura primeiro, depois a do cadastro — com o tipo de quem deu a chave
+  const daFatura = String(f.pixChave || "").trim();
+  const chave = daFatura || String(p.pixChave || "").trim();
+  if (!chave) return vazio;
+  return { tem: true, valor: chave, rotulo: nomeDoTipoPix(daFatura ? f.pixTipo : p.pixTipo),
+    beneficiario: nome, copiaECola: false };
+}
+
+// Chave aleatória e copia-e-cola não cabem na linha. Mostra as pontas.
+function pixResumido(valor, limite) {
+  const v = String(valor || "").trim();
+  const max = limite || 34;
+  if (v.length <= max) return v;
+  const meio = Math.floor((max - 1) / 2);
+  return v.slice(0, meio) + "…" + v.slice(v.length - meio);
+}
+
 // ── Onze itens não são onze contas para quem paga ───────────
 // A obra precisa do item a item — é dele que sai o custo por etapa. Quem
 // paga precisa do pedido: a loja cobra um valor, com um número. Então o
@@ -19993,6 +20061,7 @@ function linhasDePedido(contas) {
         numeroPedido: c.numeroPedido || "", numeroLoja: c.numeroLoja || "", numeroNota: c.numeroNota || "",
         cotacaoId: c.cotacaoId || "", obraId: c.obraId || "",
         prestadorId: c.prestadorId || "", favorecido: c.favorecido || "",
+        pixCopiaECola: c.pixCopiaECola || "",
         vencimento: c.vencimento || "", contas: [], valor: 0, valorPago: 0, pagos: 0 };
       porPedido.set(c.pedidoId, linha);
       fora.push(linha);
@@ -26119,6 +26188,15 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
             </div>
           </div>
 
+          {/* O copia-e-cola que a loja mandou para ESTE pagamento. Sem ele,
+              vale a chave PIX do cadastro dela. */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={E.label}>PIX copia e cola desta fatura (opcional)</label>
+            <input style={E.input} value={p.pixCopiaECola || ""}
+              onChange={(e) => aoMudar({ ...p, pixCopiaECola: e.target.value })}
+              placeholder="cole aqui o código que a loja mandou — em branco, vale a chave do cadastro" />
+          </div>
+
           {/* ── a etapa de uma vez só, e a exceção corrigida item a item ── */}
           {itens.length > 1 && (
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
@@ -28392,6 +28470,71 @@ function PrestadoresPLView({ itens, contasPagar, isMobile, fmtBRL }) {
 // ── P&L da obra: a tela de abertura do Planejamento ─────────────
 // A pergunta de todo dia é "quanto eu disse que ia custar e quanto já saiu".
 // Por isso o Planejamento abre aqui, e não no formulário de preencher.
+// ── Copiar a chave PIX ───────────────────────────────
+// O caminho real de pagar é copiar a chave aqui e colar no aplicativo do
+// banco. Um clique, e a confirmação some sozinha — se ficasse, o próximo
+// pagamento começaria dizendo "copiado" sem ninguém ter copiado nada.
+function BotaoCopiarPix({ pix, compacto }) {
+  const [copiado, setCopiado] = useState(false);
+  const [erro, setErro] = useState("");
+  if (!pix || !pix.tem) return null;
+  const copiar = () => {
+    setErro("");
+    const fim = () => { setCopiado(true); setTimeout(() => setCopiado(false), 2200); };
+    if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(pix.valor).then(fim, () => setErro("O navegador não deixou copiar."));
+      return;
+    }
+    setErro("O navegador não deixou copiar.");
+  };
+  const icone = (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+  const titulo = [pix.rotulo, pix.beneficiario, pix.valor].filter(Boolean).join(" · ");
+
+  if (compacto) {
+    return (
+      <button type="button" onClick={copiar} title={titulo}
+        style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "none",
+          border: "1px solid rgba(38,36,33,0.16)", borderRadius: 8, padding: "5px 9px",
+          cursor: "pointer", fontFamily: "inherit", fontSize: 11.5,
+          color: copiado ? "#15803d" : "#4b5563" }}>
+        {icone}{copiado ? "copiado" : "PIX"}
+      </button>
+    );
+  }
+  return (
+    <div style={{ marginTop: 12, padding: "9px 11px", border: "1px solid rgba(38,36,33,0.12)",
+      borderRadius: 10, background: "#fafafa" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: 10.5, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>
+            {pix.rotulo}
+          </div>
+          <div style={{ fontSize: 12.5, color: "#111827", marginTop: 2, wordBreak: "break-all" }}>
+            {pixResumido(pix.valor, 44)}
+          </div>
+          {pix.beneficiario && (
+            <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 1 }}>{pix.beneficiario}</div>
+          )}
+        </div>
+        <button type="button" onClick={copiar}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#fff",
+            border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 10, padding: "7px 12px",
+            cursor: "pointer", fontFamily: "inherit", fontSize: 12.5,
+            color: copiado ? "#15803d" : "#111827", fontWeight: 600 }}>
+          {icone}{copiado ? "Copiado" : "Copiar"}
+        </button>
+      </div>
+      {erro && <div style={{ fontSize: 11.5, color: "#dc2626", marginTop: 6 }}>{erro}</div>}
+    </div>
+  );
+}
+
 function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL }) {
   // Acompanhar custo e apurar resultado são duas perguntas. Com a venda, o
   // terreno e os tributos na conta, o número do canteiro fica escondido; o
@@ -30341,6 +30484,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   a soma é o que sai do caixa. Para pagar um valor diferente, corrija o pedido na cotação.
                 </div>
               )}
+              <BotaoCopiarPix pix={pixDoPagamento(
+                formPagamento.pedido || formPagamento.conta,
+                prestadores.find(x => x.id === ((formPagamento.pedido || formPagamento.conta) || {}).prestadorId))} />
               <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8 }}>
                 A despesa entra no extrato da obra no mês desta data. O dia de hoje ({new Date(hojeIso + "T12:00:00").toLocaleDateString("pt-BR")}) fica registrado como a data em que foi contabilizada.
               </div>
@@ -30724,6 +30870,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                   </div>
                                   {perm.podeEditar ? (
                                     <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
+                                      {!L.pago && <BotaoCopiarPix compacto pix={pixDoPagamento(L, prestadores.find(x => x.id === L.prestadorId))} />}
                                       <button onClick={() => alternarPagamentoPedido(L)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>
                                         {L.pago ? "Desfazer" : "Pagar pedido"}
                                       </button>
@@ -30811,6 +30958,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                               <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", textAlign: isMobile ? "left" : "right" }}>{fmtMoedaCtr(c.pago ? (Number(c.valorPago) || c.valor) : c.valor)}</div>
                               {perm.podeEditar ? (
                                 <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
+                                  {!c.pago && <BotaoCopiarPix compacto pix={pixDoPagamento(c, prestadores.find(x => x.id === c.prestadorId))} />}
                                   <button onClick={() => alternarPagamento(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>{c.pago ? "Desfazer" : "Pagar"}</button>
                                   {c.origem === "avulsa" && <button onClick={() => setFormConta(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>}
                                   {c.origem === "avulsa" && (

@@ -642,6 +642,7 @@ function contasDoPedidoDaLoja(dados, pedido, novoId) {
     numeroPedido: p.numero || "",
     numeroLoja: p.numeroLoja || "",
     numeroNota: p.numeroNota || "",
+    pixCopiaECola: p.pixCopiaECola || "",
     parcela: 0, parcelasTotal: 0,
     contaId: i.contaId || padrao,
     etapa: i.etapa || "",
@@ -682,6 +683,47 @@ function validarPedido(pedido, pedidosDaLoja) {
   return { ok: !erros.length, erros };
 }
 
+// ── Como se paga ───────────────────────────────────
+// Na hora de pagar, o que falta não é o valor — é a chave. Ela mora no
+// cadastro da loja, porque é sempre a mesma; e a fatura pode trazer um
+// "copia e cola" próprio, que já vem com valor e identificador dentro. Quando
+// os dois existem, o da fatura manda: ele foi emitido para AQUELE pagamento.
+const TIPOS_PIX = [
+  { id: "cnpj",      nome: "CNPJ" },
+  { id: "cpf",       nome: "CPF" },
+  { id: "email",     nome: "E-mail" },
+  { id: "telefone",  nome: "Telefone" },
+  { id: "aleatoria", nome: "Chave aleatória" },
+];
+
+function nomeDoTipoPix(id) {
+  const t = TIPOS_PIX.find((x) => x.id === id);
+  return t ? t.nome : "Chave PIX";
+}
+
+function pixDoPagamento(fonte, prestador) {
+  const f = fonte || {}, p = prestador || {};
+  const vazio = { tem: false, valor: "", rotulo: "", beneficiario: "", copiaECola: false };
+  const colar = String(f.pixCopiaECola || "").trim();
+  const nome = String(f.pixBeneficiario || p.pixBeneficiario || p.nome || f.favorecido || "").trim();
+  if (colar) return { tem: true, valor: colar, rotulo: "PIX copia e cola", beneficiario: nome, copiaECola: true };
+  // chave da fatura primeiro, depois a do cadastro — com o tipo de quem deu a chave
+  const daFatura = String(f.pixChave || "").trim();
+  const chave = daFatura || String(p.pixChave || "").trim();
+  if (!chave) return vazio;
+  return { tem: true, valor: chave, rotulo: nomeDoTipoPix(daFatura ? f.pixTipo : p.pixTipo),
+    beneficiario: nome, copiaECola: false };
+}
+
+// Chave aleatória e copia-e-cola não cabem na linha. Mostra as pontas.
+function pixResumido(valor, limite) {
+  const v = String(valor || "").trim();
+  const max = limite || 34;
+  if (v.length <= max) return v;
+  const meio = Math.floor((max - 1) / 2);
+  return v.slice(0, meio) + "…" + v.slice(v.length - meio);
+}
+
 // ── Onze itens não são onze contas para quem paga ───────────
 // A obra precisa do item a item — é dele que sai o custo por etapa. Quem
 // paga precisa do pedido: a loja cobra um valor, com um número. Então o
@@ -699,6 +741,7 @@ function linhasDePedido(contas) {
         numeroPedido: c.numeroPedido || "", numeroLoja: c.numeroLoja || "", numeroNota: c.numeroNota || "",
         cotacaoId: c.cotacaoId || "", obraId: c.obraId || "",
         prestadorId: c.prestadorId || "", favorecido: c.favorecido || "",
+        pixCopiaECola: c.pixCopiaECola || "",
         vencimento: c.vencimento || "", contas: [], valor: 0, valorPago: 0, pagos: 0 };
       porPedido.set(c.pedidoId, linha);
       fora.push(linha);

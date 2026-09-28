@@ -29,6 +29,7 @@ const modulo = new Function(`
            pedidoVazio, itemDoPedidoVazio, brutoDoItem, brutoDoPedido, totalDoPedido,
            itensRateados, contasDoPedidoDaLoja, validarPedido, pedidosPendentes, baixarPedidos,
            podeMexerNoPedido, removerContasDoPedido, linhasDePedido,
+           pixDoPagamento, pixResumido, TIPOS_PIX, nomeDoTipoPix,
            MODOS_LANCAMENTO, modoLancamento,
            contasDaCotacao, contasDeCotacao,
            PLANO_CONTAS, contratoVazio, valorContrato,
@@ -1751,6 +1752,62 @@ teste("a lista mostra o pedido, não os onze itens — e o item continua lá den
     "um boleto só vale por todos os itens");
 
   assert.deepStrictEqual(modulo.linhasDePedido(null), []);
+});
+
+teste("a chave que se copia: a da fatura ganha da do cadastro", () => {
+  const loja = { id: "f1", nome: "R. J. Ferreira Ltda", pixTipo: "cnpj",
+                 pixChave: "08.617.563/0001-35", pixBeneficiario: "OURIFER" };
+
+  // sem nada na fatura, vale o cadastro
+  const doCadastro = modulo.pixDoPagamento({ favorecido: "Ourifer" }, loja);
+  assert.strictEqual(doCadastro.tem, true);
+  assert.strictEqual(doCadastro.valor, "08.617.563/0001-35");
+  assert.strictEqual(doCadastro.rotulo, "CNPJ");
+  assert.strictEqual(doCadastro.beneficiario, "OURIFER");
+  assert.strictEqual(doCadastro.copiaECola, false);
+
+  // o copia-e-cola da fatura manda: ele já traz valor e identificador
+  const colar = "00020126580014BR.GOV.BCB.PIX0136abc-123" + "x".repeat(60);
+  const daFatura = modulo.pixDoPagamento({ pixCopiaECola: colar, favorecido: "Ourifer" }, loja);
+  assert.strictEqual(daFatura.valor, colar);
+  assert.strictEqual(daFatura.rotulo, "PIX copia e cola");
+  assert.strictEqual(daFatura.copiaECola, true);
+  assert.strictEqual(daFatura.beneficiario, "OURIFER", "o beneficiário continua vindo do cadastro");
+
+  // chave própria da fatura, com o tipo dela
+  const outra = modulo.pixDoPagamento({ pixChave: "pagamentos@ourifer.com.br", pixTipo: "email" }, loja);
+  assert.strictEqual(outra.valor, "pagamentos@ourifer.com.br");
+  assert.strictEqual(outra.rotulo, "E-mail");
+
+  // sem chave em lugar nenhum, o botão não aparece
+  assert.strictEqual(modulo.pixDoPagamento({ favorecido: "Pantanal" }, { id: "f2", nome: "Pantanal" }).tem, false);
+  assert.strictEqual(modulo.pixDoPagamento(null, null).tem, false);
+
+  // sem beneficiário cadastrado, vale o nome da loja
+  const semNome = modulo.pixDoPagamento({}, { nome: "Pantanal", pixChave: "11122233344" });
+  assert.strictEqual(semNome.beneficiario, "Pantanal");
+
+  // o resumo só encurta o que não cabe
+  assert.strictEqual(modulo.pixResumido("08.617.563/0001-35"), "08.617.563/0001-35");
+  const curto = modulo.pixResumido(colar, 20);
+  assert.ok(curto.length <= 20 && curto.indexOf("…") > 0, "corta no meio e marca");
+  assert.strictEqual(modulo.pixResumido(""), "");
+
+  assert.strictEqual(modulo.nomeDoTipoPix("aleatoria"), "Chave aleatória");
+  assert.strictEqual(modulo.nomeDoTipoPix("xpto"), "Chave PIX", "tipo desconhecido não quebra");
+  assert.strictEqual(modulo.TIPOS_PIX.length, 5);
+});
+
+teste("o pedido leva o copia-e-cola para as contas que gera", () => {
+  let n = 0;
+  const colar = "00020126580014BR.GOV.BCB.PIX";
+  const contas = modulo.contasDoPedidoDaLoja(
+    { obraId: "ob1", cotacaoId: "cot1", prestadorId: "f1", favorecido: "Ourifer" },
+    pedidoOurifer({ pixCopiaECola: colar }), () => "c" + (++n));
+  assert.ok(contas.every(c => c.pixCopiaECola === colar), "toda conta do pedido sabe como se paga");
+  const linha = modulo.linhasDePedido(contas)[0];
+  assert.strictEqual(linha.pixCopiaECola, colar, "e a linha da fila também");
+  assert.strictEqual(modulo.pixDoPagamento(linha, { id: "f1", nome: "Ourifer" }).valor, colar);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

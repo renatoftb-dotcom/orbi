@@ -4816,6 +4816,15 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
             </div>
           </div>
 
+          {/* O copia-e-cola que a loja mandou para ESTE pagamento. Sem ele,
+              vale a chave PIX do cadastro dela. */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={E.label}>PIX copia e cola desta fatura (opcional)</label>
+            <input style={E.input} value={p.pixCopiaECola || ""}
+              onChange={(e) => aoMudar({ ...p, pixCopiaECola: e.target.value })}
+              placeholder="cole aqui o código que a loja mandou — em branco, vale a chave do cadastro" />
+          </div>
+
           {/* ── a etapa de uma vez só, e a exceção corrigida item a item ── */}
           {itens.length > 1 && (
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
