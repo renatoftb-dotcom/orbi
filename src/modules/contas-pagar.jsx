@@ -550,6 +550,190 @@ function totalDasEntregas(entregas) {
   return Math.round(soma * 100) / 100;
 }
 
+// ── Conta na loja: a compra que não acaba ──────────────────
+// Loja de material não se cota a cada saco de cimento: abre-se conta, compra-se
+// todo dia e paga-se tudo junto no fim do prazo. Por isso uma cotação por loja,
+// aberta o mês inteiro recebendo PEDIDOS, em vez de quinze cotações de R$ 60.
+//
+// O pedido é o papel que a loja emite: um número dela, uma data, itens com
+// quantidade e preço — e um desconto que vem no rodapé, nunca no item.
+
+function pedidoVazio(numero) {
+  const id = (typeof uid === "function" ? uid() : String(Date.now()));
+  return {
+    id, numero: numero || "", numeroLoja: "", numeroNota: "",
+    data: dataParaIso(new Date()), vencimento: "",
+    itens: [], desconto: 0, observacao: "",
+  };
+}
+
+function itemDoPedidoVazio() {
+  return {
+    id: (typeof uid === "function" ? uid() : String(Date.now())),
+    codigoLoja: "", descricao: "", insumoCodigo: "", grupoMaterial: "",
+    quantidade: "", unidade: "", unitario: "", bruto: "",
+    etapa: "", contaId: "",
+  };
+}
+
+// Valor digitado em português ("1.234,50") vale o mesmo que 1234.5.
+function cpNumero(v) {
+  if (typeof numeroDeCampo === "function") return numeroDeCampo(v);
+  const n = parseFloat(String(v == null ? "" : v).replace(/\./g, "").replace(",", "."));
+  return isNaN(n) ? 0 : n;
+}
+
+// O valor de tabela do item: o subtotal do papel, ou quantidade × unitário
+// quando a loja só mandou os dois.
+function brutoDoItem(item) {
+  const i = item || {};
+  const sub = cpNumero(i.bruto);
+  if (sub > 0) return Math.round(sub * 100) / 100;
+  return Math.round(cpNumero(i.quantidade) * cpNumero(i.unitario) * 100) / 100;
+}
+
+function brutoDoPedido(pedido) {
+  const itens = ((pedido || {}).itens || []).filter((i) => i && brutoDoItem(i) > 0);
+  return Math.round(itens.reduce((s, i) => s + brutoDoItem(i), 0) * 100) / 100;
+}
+
+function totalDoPedido(pedido) {
+  const p = pedido || {};
+  return Math.round((brutoDoPedido(p) - cpNumero(p.desconto)) * 100) / 100;
+}
+
+// O desconto do rodapé rateado pelos itens. Sem isto a soma dos itens não
+// bate com o que se paga, e a diferença some do P&L sem etapa nenhuma — foi
+// exatamente o que quebrou a conciliação da planilha. O resíduo de centavos
+// vai no maior item, como nas parcelas do contrato.
+function itensRateados(pedido) {
+  const red = (x) => Math.round(x * 100) / 100;
+  const itens = ((pedido || {}).itens || []).filter((i) => i && brutoDoItem(i) > 0);
+  const bruto = brutoDoPedido(pedido);
+  const total = totalDoPedido(pedido);
+  if (!itens.length || bruto <= 0) return [];
+  if (Math.abs(bruto - total) < 0.005) return itens.map((i) => ({ ...i, valor: brutoDoItem(i) }));
+  const fator = total / bruto;
+  const fora = itens.map((i) => ({ ...i, valor: red(brutoDoItem(i) * fator) }));
+  const resto = red(total - fora.reduce((s, i) => s + i.valor, 0));
+  if (Math.abs(resto) >= 0.005) {
+    let maior = 0;
+    for (let k = 1; k < fora.length; k++) if (fora[k].valor > fora[maior].valor) maior = k;
+    fora[maior] = { ...fora[maior], valor: red(fora[maior].valor + resto) };
+  }
+  return fora;
+}
+
+// Uma conta a pagar POR ITEM, não por pedido. É o que faz o P&L por etapa e a
+// abertura por subconta funcionarem sem nenhum código novo: eles já leem
+// `etapa` e `grupoMaterial` de cada conta. O `pedidoId` costura tudo de volta.
+function contasDoPedidoDaLoja(dados, pedido, novoId) {
+  const d = dados || {}, p = pedido || {};
+  const id = typeof novoId === "function" ? novoId : (typeof uid === "function" ? uid : () => String(Date.now()));
+  const venc = String(p.vencimento || "").slice(0, 10) || dataParaIso(new Date());
+  const padrao = d.contaId || (typeof PLANO_CONTAS !== "undefined" && PLANO_CONTAS[0] ? PLANO_CONTAS[0].id : "material");
+  return itensRateados(p).map((i) => ({
+    id: id(),
+    origem: CP_ORIGEM_COTACAO,
+    obraId: d.obraId || "",
+    contratoId: "",
+    cotacaoId: d.cotacaoId || "",
+    pedidoId: p.id || "",
+    numeroPedido: p.numero || "",
+    numeroLoja: p.numeroLoja || "",
+    numeroNota: p.numeroNota || "",
+    parcela: 0, parcelasTotal: 0,
+    contaId: i.contaId || padrao,
+    etapa: i.etapa || "",
+    grupoMaterial: i.grupoMaterial || "",
+    insumoCodigo: i.insumoCodigo || "",
+    prestadorId: d.prestadorId || "",
+    favorecido: d.favorecido || "",
+    descricao: String(i.descricao || "").trim() || "Item",
+    quantidade: cpNumero(i.quantidade) || 0,
+    unidade: String(i.unidade || "").trim(),
+    valor: i.valor,
+    vencimento: venc,
+    pago: false, pagoEm: "", valorPago: "", observacao: d.observacao || "",
+  }));
+}
+
+// O que impede o pedido de entrar torto. Item sem etapa é erro, e não aviso:
+// é assim que "Sem etapa" para de crescer no quadro da obra.
+function validarPedido(pedido, pedidosDaLoja) {
+  const p = pedido || {};
+  const erros = [];
+  const chave = (s) => String(s || "").replace(/[\s.-]/g, "").toLowerCase();
+  const itens = (p.itens || []).filter((i) => i && brutoDoItem(i) > 0);
+  if (!itens.length) erros.push("O pedido não tem nenhum item com valor.");
+  if (!String(p.numeroLoja || "").trim()) {
+    erros.push("Informe o número do pedido da loja.");
+  } else if ((pedidosDaLoja || []).some((o) => o && o.id !== p.id && chave(o.numeroLoja) === chave(p.numeroLoja))) {
+    erros.push(`O pedido ${p.numeroLoja} já foi lançado nesta loja.`);
+  }
+  const semEtapa = itens.filter((i) => !String(i.etapa || "").trim()).length;
+  if (semEtapa) {
+    erros.push(semEtapa === 1 ? "1 item está sem etapa." : `${semEtapa} itens estão sem etapa.`);
+  }
+  const soma = Math.round(itensRateados(p).reduce((s, i) => s + i.valor, 0) * 100) / 100;
+  if (itens.length && Math.abs(soma - totalDoPedido(p)) >= 0.005) {
+    erros.push("A soma dos itens não fecha com o total do pedido.");
+  }
+  return { ok: !erros.length, erros };
+}
+
+// A fila de pagamento: o que está em aberto, agrupado por loja. É a lista que
+// se abre quando a loja liga dizendo "vamos fechar".
+function pedidosPendentes(contasPagar, opcoes) {
+  const red = (x) => Math.round(x * 100) / 100;
+  const o = opcoes || {};
+  const porPedido = new Map();
+  for (const c of contasPagar || []) {
+    if (!c || c.pago || !c.pedidoId) continue;
+    if (o.obraId && c.obraId !== o.obraId) continue;
+    if (!porPedido.has(c.pedidoId)) {
+      porPedido.set(c.pedidoId, {
+        pedidoId: c.pedidoId, numero: c.numeroPedido || "", numeroLoja: c.numeroLoja || "",
+        cotacaoId: c.cotacaoId || "", obraId: c.obraId || "",
+        prestadorId: c.prestadorId || "", favorecido: c.favorecido || "Fornecedor",
+        vencimento: c.vencimento || "", itens: 0, valor: 0, contas: [],
+      });
+    }
+    const p = porPedido.get(c.pedidoId);
+    p.itens++;
+    p.valor = red(p.valor + (Number(c.valor) || 0));
+    p.contas.push(c.id);
+    if (c.vencimento && (!p.vencimento || c.vencimento < p.vencimento)) p.vencimento = c.vencimento;
+  }
+  const porLoja = new Map();
+  for (const p of porPedido.values()) {
+    const k = p.prestadorId || p.favorecido;
+    if (!porLoja.has(k)) porLoja.set(k, { chave: k, prestadorId: p.prestadorId, favorecido: p.favorecido, pedidos: [], valor: 0 });
+    const l = porLoja.get(k);
+    l.pedidos.push(p);
+    l.valor = red(l.valor + p.valor);
+  }
+  const lojas = [...porLoja.values()].sort((a, b) => b.valor - a.valor);
+  for (const l of lojas) l.pedidos.sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)) || String(a.numeroLoja).localeCompare(String(b.numeroLoja)));
+  return { lojas, total: red(lojas.reduce((s, l) => s + l.valor, 0)) };
+}
+
+// Baixa em lote: a loja cobra um valor só e a obra registra item a item. As
+// contas escolhidas recebem a mesma data, e a soma delas é o que saiu do caixa
+// — é essa igualdade que faz o lançamento casar com a linha do extrato.
+function baixarPedidos(contasPagar, pedidoIds, dados, quem, agoraIso) {
+  const alvo = new Set(pedidoIds || []);
+  const d = dados || {};
+  const contas = (contasPagar || []).map((c) => {
+    if (!c || c.pago || !alvo.has(c.pedidoId)) return c;
+    return contaPaga(c, { pagoEm: d.pagoEm || "", valorPago: Number(c.valor) || 0 }, quem, agoraIso);
+  });
+  const total = Math.round((contasPagar || [])
+    .filter((c) => c && !c.pago && alvo.has(c.pedidoId))
+    .reduce((s, c) => s + (Number(c.valor) || 0), 0) * 100) / 100;
+  return { contas, total };
+}
+
 // As formas de pagar de uma compra — as mesmas do contrato, menos a medição,
 // que é de serviço executado e não de material entregue. "Item a item" do
 // contrato é a entrega daqui: o que muda de nome é a coisa que se paga.
@@ -558,6 +742,9 @@ const MODOS_LANCAMENTO = [
   { id: "entregas",     nome: "Por entrega",            resumo: "Cada entrega com nome, valor e data de pagamento." },
   { id: "sinalFinal",   nome: "Sinal + saldo no final", resumo: "Um percentual na compra e o restante na entrega." },
   { id: "sinalParcelas", nome: "Sinal + parcelas",      resumo: "Um percentual na compra e o saldo dividido em parcelas." },
+  // Compra recorrente: a cotação não fecha no primeiro lançamento, vai
+  // recebendo pedidos, e cada pedido vira uma conta por item.
+  { id: "contaLoja",    nome: "Conta na loja",          resumo: "Compra recorrente: cada pedido vira contas, e a cotação segue aberta." },
 ];
 function modoLancamento(id) { return MODOS_LANCAMENTO.find((m) => m.id === id) || MODOS_LANCAMENTO[0]; }
 
@@ -584,6 +771,7 @@ function contaDaCompra(d, novoId, dados) {
 
 function contasDaCotacao(dados, novoId) {
   const d = dados || {};
+  if (d.modo === "contaLoja") return contasDoPedidoDaLoja(d, d.pedido, novoId);
   if (d.modo === "entregas" || (d.entregas || []).some((e) => e && valorDaEntrega(e) > 0)) {
     return contasDasEntregas(d, novoId);
   }

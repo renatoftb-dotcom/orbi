@@ -1429,12 +1429,25 @@ function registrarAprovacaoCotacao(aprovacoes, dados) {
   }]);
 }
 
+// ── A cotação que é uma conta de loja ─────────────────────
+// Compra recorrente não tem proposta para comparar nem escolha para enviar:
+// é uma conta aberta numa loja, que recebe pedidos o mês inteiro e um dia é
+// encerrada. Vale uma linha por loja na tela, não uma por compra.
+function ehContaDeLoja(cot) {
+  return !!(cot && cot.contaLoja);
+}
+
 // ── Situação, em uma palavra ────────────────────────────────────
 // A ordem dos testes é a ordem do fluxo; o primeiro que casar manda.
 function situacaoCotacao(cot, aprovacoes, contratos) {
   const c = cot || {};
   const ap = aprovacaoDaEscolha(c, aprovacoes);
   if (c.status === "cancelada")            return { id: "cancelada",  rotulo: "Cancelada",                 cor: "#6b7280" };
+  if (ehContaDeLoja(c)) {
+    return c.status === "encerrada"
+      ? { id: "encerrada", rotulo: "Conta encerrada",      cor: "#6b7280" }
+      : { id: "contaLoja", rotulo: "Conta aberta na loja", cor: "#0474f4" };
+  }
   if (contratoDaCotacao(contratos, c.id)) return { id: "contratada", rotulo: "Contrato gerado",           cor: "#15803d" };
   // Fornecedor de material não assina contrato: a cotação escolhida vira
   // conta a pagar direto. Também fecha o ciclo, mas por outro caminho — e
@@ -1499,6 +1512,13 @@ function dadosDoContratoDaCotacao(cot) {
 function podeLancarEmContas(cot, contratos) {
   const c = cot || {};
   if (c.status === "cancelada")  return { pode: false, motivo: "A cotação foi cancelada." };
+  // A conta de loja lança várias vezes, de propósito: é um pedido por vez, e
+  // a trava de "já foi lançada" mataria a segunda compra do dia.
+  if (ehContaDeLoja(c)) {
+    return c.status === "encerrada"
+      ? { pode: false, motivo: "A conta desta loja foi encerrada." }
+      : { pode: true, motivo: "" };
+  }
   if (contratoDaCotacao(contratos, c.id)) return { pode: false, motivo: "Esta cotação já virou contrato." };
   if (c.contaGeradaId)           return { pode: false, motivo: "Já foi lançada em contas a pagar." };
   const esc = propostaEscolhida(c);
@@ -1806,7 +1826,7 @@ function criarPrestadorRapido(campos, novoId) {
 // pagar, para o fornecedor de material que entrega e fatura — ou foi
 // cancelada. Tudo o mais tem um próximo passo e continua na tela.
 // Recusada pelo cliente fica em aberto de propósito: falta reescolher.
-const SITUACOES_FECHADAS = ["contratada", "lancada", "cancelada"];
+const SITUACOES_FECHADAS = ["contratada", "lancada", "cancelada", "encerrada"];
 
 function cotacaoEstaFechada(cot, aprovacoes, contratos) {
   return SITUACOES_FECHADAS.indexOf(situacaoCotacao(cot, aprovacoes, contratos).id) >= 0;
@@ -1823,7 +1843,7 @@ function cotacoesPorSituacao(cotacoes, aprovacoes, contratos) {
 // Contadores do cartão da obra e do topo da tela.
 function resumoCotacoes(cotacoes, aprovacoes, contratos) {
   const lista = (cotacoes || []).filter(c => c && c.id);
-  const r = { total: lista.length, abertas: 0, aEnviar: 0, aguardandoCliente: 0, aprovadas: 0, recusadas: 0, lancadas: 0, fechadas: 0, economia: 0 };
+  const r = { total: lista.length, abertas: 0, aEnviar: 0, aguardandoCliente: 0, aprovadas: 0, recusadas: 0, lancadas: 0, fechadas: 0, contasLoja: 0, economia: 0 };
   for (const c of lista) {
     const s = situacaoCotacao(c, aprovacoes, contratos);
     if (SITUACOES_FECHADAS.indexOf(s.id) >= 0) r.fechadas++;
@@ -1832,6 +1852,7 @@ function resumoCotacoes(cotacoes, aprovacoes, contratos) {
     if (s.id === "aguardando")  r.aguardandoCliente++;
     if (s.id === "aprovada")    r.aprovadas++;
     if (s.id === "recusada")    r.recusadas++;
+    if (s.id === "contaLoja")   r.contasLoja++;
     // Material não assina contrato: vira conta a pagar. Contava só o
     // contrato, e o cartão "Aprovadas" ficava em zero com a compra já feita.
     if (s.id === "contratada" || s.id === "lancada") r.lancadas++;

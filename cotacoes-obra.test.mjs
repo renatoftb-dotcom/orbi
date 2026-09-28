@@ -50,7 +50,7 @@ const modulo = new Function(`
            aprovacaoDaCotacao, registrarAprovacaoCotacao, situacaoCotacao,
            podeGerarContrato, contratoDaCotacao, tipoDoContaId, dadosDoContratoDaCotacao,
            podeExcluirCotacaoComContratos, resumoCotacoes, cotacoesAguardandoCliente,
-           cotacaoEstaFechada, cotacoesPorSituacao, SITUACOES_FECHADAS,
+           cotacaoEstaFechada, cotacoesPorSituacao, SITUACOES_FECHADAS, ehContaDeLoja,
            nomeDoFornecedor, PLANO_CONTAS,
            podeExcluirCotacao, removerProposta, removerCotacao, anexosDasPropostas,
            prestadorRapidoVazio, criarPrestadorRapido, pareceMesmoPdf,
@@ -407,9 +407,9 @@ teste("sinal + parcelas: o saldo é que se divide, não o total", () => {
   assert.strictEqual(semSinal.reduce((s, c) => s + c.valor, 0), 900);
 });
 
-teste("as quatro formas de pagar estão no painel, e a medição não", () => {
+teste("as formas de pagar estão no painel, e a medição não", () => {
   assert.deepStrictEqual(M.MODOS_LANCAMENTO.map(m => m.id),
-    ["parcelas", "entregas", "sinalFinal", "sinalParcelas"]);
+    ["parcelas", "entregas", "sinalFinal", "sinalParcelas", "contaLoja"]);
   for (const m of M.MODOS_LANCAMENTO) { assert.ok(m.nome); assert.ok(m.resumo); }
   assert.strictEqual(M.modoLancamento("inexistente").id, "parcelas", "cai no padrão");
 });
@@ -1894,6 +1894,34 @@ teste("a lista separa o que ainda pede decisão do que já virou compromisso", (
   // sem cotação nenhuma nada quebra
   const vazio = M.cotacoesPorSituacao(null, [], []);
   assert.deepStrictEqual([vazio.abertas.length, vazio.fechadas.length], [0, 0]);
+});
+
+teste("a conta de loja fica aberta e lança quantas vezes precisar", () => {
+  const conta = { id: "loja1", titulo: "Ourifer — conta na loja", contaLoja: true, obraId: "ob1" };
+
+  const s = M.situacaoCotacao(conta, [], []);
+  assert.strictEqual(s.id, "contaLoja");
+  assert.strictEqual(s.rotulo, "Conta aberta na loja");
+  assert.strictEqual(M.cotacaoEstaFechada(conta, [], []), false, "fica no lado aberto o mês inteiro");
+  assert.strictEqual(M.ehContaDeLoja(conta), true);
+  assert.strictEqual(M.ehContaDeLoja({ id: "x" }), false);
+
+  // sem proposta escolhida e já lançada uma vez — e mesmo assim pode de novo
+  const jaLancou = { ...conta, contaGeradaId: "c1" };
+  assert.strictEqual(M.podeLancarEmContas(jaLancou, []).pode, true, "o segundo pedido do dia entra");
+  // a cotação comum continua travada depois do primeiro lançamento
+  const comum = { ...comPropostas([9000]), id: "c", escolhidaId: "p0", contaGeradaId: "c1" };
+  assert.strictEqual(M.podeLancarEmContas(comum, []).pode, false);
+
+  const encerrada = { ...conta, status: "encerrada" };
+  assert.strictEqual(M.situacaoCotacao(encerrada, [], []).rotulo, "Conta encerrada");
+  assert.strictEqual(M.cotacaoEstaFechada(encerrada, [], []), true, "encerrada sai da tela de abertas");
+  assert.strictEqual(M.podeLancarEmContas(encerrada, []).pode, false);
+
+  const r = M.resumoCotacoes([conta, encerrada], [], []);
+  assert.strictEqual(r.contasLoja, 1);
+  assert.strictEqual(r.abertas, 0, "conta de loja não é \"em andamento\": não está comparando preço");
+  assert.strictEqual(r.fechadas, 1);
 });
 
 for (const [nome, fn] of testes) {

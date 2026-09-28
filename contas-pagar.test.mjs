@@ -26,6 +26,9 @@ const modulo = new Function(`
              if (i < 0) throw new Error("Marcador de início da UI não encontrado em contas-pagar.jsx");
              return cp.slice(0, cp.lastIndexOf("// ═", i)); })()}
   return { recalibrarPedido, previaDoPedido, contasDoPedido, docDaConta, diasEntreIso,
+           pedidoVazio, itemDoPedidoVazio, brutoDoItem, brutoDoPedido, totalDoPedido,
+           itensRateados, contasDoPedidoDaLoja, validarPedido, pedidosPendentes, baixarPedidos,
+           MODOS_LANCAMENTO, modoLancamento,
            contasDaCotacao, contasDeCotacao,
            PLANO_CONTAS, contratoVazio, valorContrato,
            parcelasAPagar, contasDoContrato, sincronizarContasDoContrato, removerContasDoContrato,
@@ -1548,6 +1551,130 @@ teste("só custo de obra tira venda, terreno e tributos das duas visões", () =>
   // o dado não muda: mesma base, só outra leitura
   assert.strictEqual(itens.length, 9);
   assert.strictEqual(cheio.entradas.estimado, 630000, "a receita continua lá na leitura completa");
+});
+
+// ── Conta na loja ─────────────────────────────────
+// Os números são do pedido 136560-109 da Ourifer, de 28/09/2026: onze itens,
+// R$ 539,40 de tabela e R$ 54,00 de desconto no rodapé — paga-se R$ 485,40.
+const OURIFER_136560 = [
+  ["Tábua de pinus 10x2,0x3,00m", 300.00, "fundacao",   "Madeira de caixaria"],
+  ["Sarrafo 5x2,3x3,00m",           59.00, "fundacao",   "Madeira de caixaria"],
+  ["Prego 17x21 1kg",               14.90, "fundacao",   "Madeira de caixaria"],
+  ["Prego 18x24 1kg",               14.90, "fundacao",   "Madeira de caixaria"],
+  ["Disco de corte fino inox 4\"",   22.50, "fundacao",   "Ferramentas"],
+  ["Lâmina de serra circular 110mm", 43.00, "fundacao", "Ferramentas"],
+  ["Linha trancada multifio 100m",  20.00, "fundacao",   "Outros"],
+  ["Disco diamantado 110mm",        16.90, "fundacao",   "Ferramentas"],
+  ["Cal hidratado CH-III 20kg",     17.90, "chapisco_reboco", "Argamassas"],
+  ["Fita crepe 48mmx50m",           15.50, "chapisco_reboco", "Outros"],
+  ["Arame recozido trançado nº18 1kg", 14.80, "fundacao", "Aço"],
+];
+function pedidoOurifer(extra) {
+  return Object.assign(modulo.pedidoVazio("P-001"), {
+    id: "ped1", numeroLoja: "136560-109", data: "2026-09-28", vencimento: "2026-10-28",
+    desconto: 54.00,
+    itens: OURIFER_136560.map(([descricao, bruto, etapa, grupoMaterial], i) => ({
+      id: "i" + i, descricao, bruto, etapa, grupoMaterial,
+      quantidade: 1, unidade: "un", contaId: grupoMaterial === "Ferramentas" ? "compra_ferramentas" : "material",
+    })),
+  }, extra || {});
+}
+
+teste("o desconto do rodapé se reparte pelos itens e fecha no centavo", () => {
+  const p = pedidoOurifer();
+  assert.strictEqual(modulo.brutoDoPedido(p), 539.40, "a soma de tabela");
+  assert.strictEqual(modulo.totalDoPedido(p), 485.40, "o que se paga");
+
+  const itens = modulo.itensRateados(p);
+  const soma = Math.round(itens.reduce((s, i) => s + i.valor, 0) * 100) / 100;
+  assert.strictEqual(soma, 485.40, "a soma rateada é o total, no centavo");
+  // o resíduo do arredondamento vai no maior item, como nas parcelas
+  assert.strictEqual(itens[0].valor, 269.95, "a tábua absorve os dois centavos");
+  assert.strictEqual(itens[8].valor, 16.11, "o cal");
+
+  // sem desconto, ninguém mexe em nada
+  const limpo = modulo.itensRateados(pedidoOurifer({ desconto: 0 }));
+  assert.strictEqual(limpo[0].valor, 300, "sem desconto o item vale a tabela");
+
+  // quantidade × unitário quando a loja não mandou o subtotal
+  assert.strictEqual(modulo.brutoDoItem({ quantidade: 30, unitario: "10,00" }), 300);
+  assert.strictEqual(modulo.brutoDoItem({ bruto: "1.234,50" }), 1234.5, "valor em português");
+});
+
+teste("o pedido vira uma conta por item, com etapa e grupo de material", () => {
+  let n = 0;
+  const contas = modulo.contasDoPedidoDaLoja(
+    { obraId: "ob1", cotacaoId: "cot1", prestadorId: "f1", favorecido: "Ourifer", contaId: "material" },
+    pedidoOurifer(), () => "c" + (++n));
+
+  assert.strictEqual(contas.length, 11, "uma conta por item, não uma por pedido");
+  assert.strictEqual(Math.round(contas.reduce((s, c) => s + c.valor, 0) * 100) / 100, 485.40);
+  assert.ok(contas.every(c => c.pedidoId === "ped1" && c.numeroLoja === "136560-109"),
+    "todas carregam o pedido, para a baixa em lote achar de volta");
+  assert.ok(contas.every(c => c.vencimento === "2026-10-28" && !c.pago));
+
+  // é isto que faz o P&L por etapa e a abertura por subconta funcionarem
+  const cal = contas.find(c => c.descricao.indexOf("Cal") === 0);
+  assert.strictEqual(cal.etapa, "chapisco_reboco");
+  assert.strictEqual(cal.grupoMaterial, "Argamassas");
+  assert.strictEqual(cal.contaId, "material");
+  const disco = contas.find(c => c.descricao.indexOf("Disco de corte") === 0);
+  assert.strictEqual(disco.contaId, "compra_ferramentas", "ferramenta não é material");
+
+  // o mesmo caminho pelo despacho do modo
+  const pelaCotacao = modulo.contasDaCotacao(
+    { modo: "contaLoja", obraId: "ob1", cotacaoId: "cot1", pedido: pedidoOurifer() }, () => "x" + (++n));
+  assert.strictEqual(pelaCotacao.length, 11);
+  assert.strictEqual(modulo.modoLancamento("contaLoja").nome, "Conta na loja");
+});
+
+teste("o pedido não entra torto", () => {
+  assert.deepStrictEqual(modulo.validarPedido(pedidoOurifer(), []).erros, [], "o pedido bom passa");
+
+  const semEtapa = pedidoOurifer();
+  semEtapa.itens = semEtapa.itens.map((i, k) => (k < 2 ? { ...i, etapa: "" } : i));
+  const r = modulo.validarPedido(semEtapa, []);
+  assert.strictEqual(r.ok, false);
+  assert.ok(r.erros.some(e => e.indexOf("2 itens") === 0), "diz quantos, não só que tem");
+
+  const repetido = modulo.validarPedido(pedidoOurifer({ id: "ped2" }), [pedidoOurifer()]);
+  assert.ok(repetido.erros.some(e => e.indexOf("136560-109") >= 0), "número repetido na loja");
+  // o mesmo pedido sendo reeditado não é duplicidade
+  assert.deepStrictEqual(modulo.validarPedido(pedidoOurifer(), [pedidoOurifer()]).erros, []);
+
+  const vazio = modulo.validarPedido(modulo.pedidoVazio("P-002"), []);
+  assert.strictEqual(vazio.erros.length, 2, "sem item e sem número da loja");
+});
+
+teste("a fila de pagamento agrupa por loja e a baixa paga só o escolhido", () => {
+  const conta = (id, pedidoId, valor, quem, venc) => ({
+    id, pedidoId, numeroPedido: "P", numeroLoja: pedidoId, cotacaoId: "cot1", obraId: "ob1",
+    prestadorId: quem, favorecido: quem, valor, vencimento: venc, pago: false,
+  });
+  const contas = [
+    conta("a", "136560-109", 485.40, "Ourifer",  "2026-10-28"),
+    conta("b", "136594-109",  13.95, "Ourifer",  "2026-10-28"),
+    conta("c", "136614-109", 615.42, "Ourifer",  "2026-10-28"),
+    conta("d", "9001",       200.00, "Pantanal", "2026-11-05"),
+    { ...conta("e", "136400-109", 99, "Ourifer", "2026-09-10"), pago: true },
+    { id: "f", obraId: "ob1", valor: 50, pago: false },                       // avulsa, sem pedido
+    { ...conta("g", "8000", 70, "Ourifer", "2026-10-28"), obraId: "ob2" },    // outra obra
+  ];
+
+  const fila = modulo.pedidosPendentes(contas, { obraId: "ob1" });
+  assert.deepStrictEqual(fila.lojas.map(l => l.favorecido), ["Ourifer", "Pantanal"], "maior primeiro");
+  assert.strictEqual(fila.lojas[0].valor, 1114.77, "o acumulado da Ourifer no mês");
+  assert.strictEqual(fila.lojas[0].pedidos.length, 3, "pago e conta avulsa ficam de fora");
+  assert.strictEqual(fila.total, 1314.77);
+
+  const escolhidos = fila.lojas[0].pedidos.map(p => p.pedidoId);
+  const baixa = modulo.baixarPedidos(contas, escolhidos, { pagoEm: "2026-10-28" }, "Renato", "2026-10-28T12:00:00.000Z");
+  assert.strictEqual(baixa.total, 1114.77, "a soma dos itens é o valor que sai do caixa");
+  assert.ok(["a", "b", "c"].every(id => baixa.contas.find(c => c.id === id).pago));
+  assert.strictEqual(baixa.contas.find(c => c.id === "d").pago, false, "a Pantanal não foi escolhida");
+  assert.strictEqual(baixa.contas.find(c => c.id === "a").valorPago, 485.40);
+  assert.strictEqual(modulo.pedidosPendentes(baixa.contas, { obraId: "ob1" }).lojas.length, 1,
+    "depois da baixa só sobra a Pantanal");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
