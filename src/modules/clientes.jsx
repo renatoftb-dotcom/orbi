@@ -4123,7 +4123,29 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // O pedido entra na mesma fila de números do contrato — quem relança um
     // pedido desfeito reaproveita o número que já era dele.
     const anterior = (obraAtual.cotacoes || []).find(c => c.id === dados.cotacaoId) || {};
-    const numeroPedido = anterior.numeroPedido || proximoNumeroPedido(data.obras || []);
+    // Conta de loja é outra história: cada pedido ganha o SEU número e se soma
+    // aos anteriores; a cotação comum tem um pedido só e reaproveita o dele.
+    const ehLoja = dados.modo === "contaLoja";
+    const numeroPedido = ehLoja
+      ? proximoNumeroPedido(data.obras || [])
+      : (anterior.numeroPedido || proximoNumeroPedido(data.obras || []));
+    if (ehLoja) {
+      const pedido = { ...(dados.pedido || {}), numero: numeroPedido,
+        lancadoEm: dados.lancadoEm || new Date().toISOString(), lancadoPor: dados.lancadoPor || "" };
+      const contas = contasDaCotacao({ ...dados, numeroPedido, pedido }, uid);
+      if (!contas.length) return { erro: "O pedido está sem itens com valor." };
+      const lista = (obraAtual.cotacoes || []).map(c => c.id !== dados.cotacaoId ? c : ({
+        ...c,
+        pedidos: [...(c.pedidos || []), pedido],
+        contaGeradaId: c.contaGeradaId || contas[0].id,
+        lancadoEm: pedido.lancadoEm, lancadoPor: pedido.lancadoPor,
+        pagamento: { ...(c.pagamento || {}), modo: "contaLoja" },
+      }));
+      const comLoja = { ...obraAtual, contasPagar: [...(obraAtual.contasPagar || []), ...contas], cotacoes: lista };
+      gravarObras(obras.map(o => o.id === obraAtual.id ? comLoja : o));
+      setObraSelecionada(comLoja);
+      return { primeiraContaId: contas[0].id, quantas: contas.length, gravado: true };
+    }
     const novas = contasDaCotacao({ ...dados, numeroPedido }, uid);
     if (!novas.length) return { erro: "A proposta escolhida está sem valor." };
     const cotacoes = (obraAtual.cotacoes || []).map(c => c.id !== dados.cotacaoId ? c : ({

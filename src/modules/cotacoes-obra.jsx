@@ -1036,9 +1036,25 @@ function interpretarOrcamento(linhas) {
   // tabela logo abaixo, e o orçamento sairia valendo o número do código.
   // Sem total no cabeçalho, vale a soma dos itens.
   const somaItens = Math.round(itens.reduce((a, i) => a + (i.total || 0), 0) * 100) / 100;
-  const mTotal = /Total:[^\S\n]*([\d.,]+)/i.exec(tudo);
+  // "SubTotal: 539,40" também contém "Total:" e vinha ganhando do total
+  // de verdade — no pedido da loja os dois estão no papel, e o que se paga
+  // é o de baixo. Apaga-se o subtotal antes de procurar.
+  const semSubtotal = tudo.replace(/sub\s*-?\s*total/gi, "§");
+  const mTotal = /Total:?[^\S\n]*([\d.,]+)/i.exec(semSubtotal);
   const total = mTotal ? numeroDeOrcamento(mTotal[1]) : somaItens;
+  // O papel de PEDIDO traz três coisas que o orçamento não tem, e as três
+  // são necessárias na conta de loja: o número com que a loja vai cobrar,
+  // o desconto que ela dá no rodapé (nunca no item) e o vencimento.
+  const numeroPedido = String((/PEDIDO:?[^\S\n]*([\w./-]+)/i.exec(tudo) || [])[1] || "");
+  const mDesconto = /Desconto:?[^\S\n]*([\d.,]+)/i.exec(tudo);
+  const desconto = mDesconto ? numeroDeOrcamento(mDesconto[1]) : 0;
+  const mVenc = /vencimento[\s\S]{0,120}?(\d{2}\/\d{2}\/\d{2,4})/i.exec(tudo);
+  const venc = mVenc ? mVenc[1] : "";
+  const vencimento = /^\d{2}\/\d{2}\/\d{2}$/.test(venc)
+    ? dataIsoDoOrcamento(venc.slice(0, 6) + "20" + venc.slice(6))
+    : dataIsoDoOrcamento(venc);
   return { fornecedor, cnpj, numero: String((/N[ÚU]MERO[:\s]*([\w-]+)/i.exec(tudo) || [])[1] || ""),
+    numeroPedido, desconto, vencimento,
     emitido, validade, condicao, total, somaItens, itens };
 }
 
@@ -2105,6 +2121,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const [formProposta, setFormProposta] = useState(null); // { cotacaoId, proposta }
   const [formDecisao, setFormDecisao] = useState(null);
   const [formLancamento, setFormLancamento] = useState(null);   // { cotacao, status }
+  const [formPedido, setFormPedido] = useState(null);           // { cotacao, pedido }
   const [novoPrestador, setNovoPrestador] = useState(null); // objeto quando o cadastro está aberto
   const [visor, setVisor] = useState(null);                 // anexo aberto na janela
   const [detalhePag, setDetalhePag] = useState(null);       // cotação com os pagamentos abertos
@@ -2225,6 +2242,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   function salvarCotacao() {
     const f = formCotacao;
     if (!String(f.titulo || "").trim()) { setErro("Dê um nome à cotação (ex.: Esquadrias de alumínio)."); return; }
+    if (f.contaLoja && !f.lojaId) { setErro("Escolha a loja desta conta."); return; }
     setErro("");
     const existe = cotacoes.some(c => c.id === f.id);
     const marcada = carimbar(f, usuario, !existe);
@@ -2233,14 +2251,48 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   }
 
   if (formCotacao) {
-    const contas = typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [];
+    const todasAsContas = typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [];
+    const contas = formCotacao.contaLoja
+      ? todasAsContas.filter(c => c.grupo !== "receitas" && c.grupo !== "terreno")
+      : todasAsContas;
     const etapas = typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [];
     const set = (k, v) => setFormCotacao(f => ({ ...f, [k]: v }));
+    // Marcar "conta na loja" com uma conta de entrada selecionada trocaria o
+    // sinal da compra: aí o padrão passa a ser Material.
+    const marcarContaLoja = (v) => setFormCotacao(f => {
+      const conta = todasAsContas.find(x => x.id === f.contaId);
+      const ruim = !conta || conta.grupo === "receitas" || conta.grupo === "terreno";
+      return { ...f, contaLoja: v, contaId: v && ruim ? "material" : f.contaId };
+    });
     return (
       <div style={isMobile ? { ...E.wrap, padding: 12 } : E.wrap}>
         <button onClick={() => { setFormCotacao(null); setErro(""); }} style={{ background: "none", border: "none", color: "#4b5563", cursor: "pointer", fontFamily: "inherit", fontSize: 12, marginBottom: 16 }}>← Voltar</button>
         <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 4 }}>{cotacoes.some(c => c.id === formCotacao.id) ? "Editar cotação" : "Nova cotação"}</div>
-        <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 18 }}>O que você vai pedir preço para os fornecedores.</div>
+        <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 14 }}>
+          {formCotacao.contaLoja
+            ? "Compra recorrente numa loja: a conta fica aberta e vai recebendo pedidos."
+            : "O que você vai pedir preço para os fornecedores."}
+        </div>
+        <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12.5, color: "#374151", marginBottom: 16, cursor: "pointer" }}>
+          <input type="checkbox" checked={!!formCotacao.contaLoja} onChange={e => marcarContaLoja(e.target.checked)} />
+          Conta na loja — compra do dia a dia, sem comparar proposta
+        </label>
+        {formCotacao.contaLoja && (
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: 14, marginBottom: 14 }}>
+            <div>
+              <label style={E.label}>Loja</label>
+              <select style={E.input} value={formCotacao.lojaId || ""} onChange={e => set("lojaId", e.target.value)}>
+                <option value="">— escolha a loja —</option>
+                {prestadores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={E.label}>Prazo de pagamento (dias)</label>
+              <CampoNumeroBR estilo={E.input} valor={formCotacao.prazoLoja} casas={0} placeholder="30"
+                aoMudar={(v) => set("prazoLoja", v)} />
+            </div>
+          </div>
+        )}
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: 14, marginBottom: 14 }}>
           <div>
             <label style={E.label}>O que está sendo cotado</label>
@@ -2253,7 +2305,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
             </select>
           </div>
         </div>
-        <div style={{ marginBottom: 14 }}>
+        <div style={{ marginBottom: 14, display: formCotacao.contaLoja ? "none" : "block" }}>
           <label style={E.label}>Escopo — o que o fornecedor precisa saber para orçar</label>
           <textarea style={{ ...E.input, minHeight: 74, resize: "vertical" }} value={formCotacao.escopo} onChange={e => set("escopo", e.target.value)}
             placeholder="Janelas de correr, linha 25, vidro temperado 6mm, com instalação." />
@@ -3168,6 +3220,39 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     setFormLancamento({ cotacao: cot, dados });
   }
 
+  // ── Conta na loja ────────────────────────────────────
+  // O pedido é lançado direto, sem passar pelo painel de parcelas: ele já tem
+  // data, vencimento e valor — o papel da loja disse os três.
+  function abrirPedido(cot) {
+    const trava = podeLancarEmContas(cot, contratos);
+    if (!trava.pode) { setErro(trava.motivo); return; }
+    setErro('');
+    const loja = prestadores.find((f) => f.id === cot.lojaId);
+    const prazo = Number(cot.prazoLoja) || 0;
+    const novo = pedidoVazio('');
+    setFormPedido({ cotacao: cot, pedido: {
+      ...novo,
+      vencimento: prazo > 0 && typeof somarDias === 'function' ? somarDias(novo.data, prazo) : '',
+      observacao: loja ? loja.nome : '',
+    } });
+  }
+
+  function lancarPedido(pedido) {
+    if (!onLancarContas || !formPedido) { setErro('Lançamento indisponível nesta tela.'); return; }
+    const cot = formPedido.cotacao;
+    const loja = prestadores.find((f) => f.id === cot.lojaId) || {};
+    const r = onLancarContas({
+      cotacaoId: cot.id, obraId: cot.obraId || obra.id, modo: 'contaLoja', pedido,
+      contaId: cot.contaId || 'material',
+      prestadorId: loja.id || '', favorecido: loja.nome || '',
+      descricao: cot.titulo || 'Compra',
+      lancadoEm: new Date().toISOString(), lancadoPor: nomeDeQuem(usuario),
+    });
+    if (r && r.erro) { setErro(r.erro); return; }
+    setErro('');
+    setFormPedido(null);
+  }
+
   function confirmarLancamento(dados) {
     if (!onLancarContas) { setErro("Lançamento indisponível nesta tela."); return; }
     // O carimbo vai junto: quem grava é a tela da obra, numa gravação só.
@@ -3254,6 +3339,13 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         </div>
       )}
 
+      {formPedido && (
+        <PainelPedidoLoja cotacao={formPedido.cotacao} pedido={formPedido.pedido} insumos={insumos}
+          isMobile={isMobile} dinheiro={dinheiro}
+          aoMudar={(p) => setFormPedido({ ...formPedido, pedido: p })}
+          aoFechar={() => setFormPedido(null)} aoLancar={lancarPedido} />
+      )}
+
       {erro && <div style={{ fontSize: 12, color: "#dc2626", marginBottom: 12 }}>{erro}</div>}
 
       {!cotacoes.length ? (
@@ -3278,6 +3370,12 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         const conta = typeof contaPorId === "function" ? contaPorId(cot.contaId) : null;
         const aberto = !!abertas[cot.id];
         const trava = podeGerarContrato(cot, aprovacoes, contratos);
+        // Conta de loja mostra o que está pendurado, não o preço de uma proposta.
+        const pedidosDaLoja = (cot.pedidos || []).length;
+        const abertoDaLoja = !ehContaDeLoja(cot) ? 0 : Math.round(
+          (obra.contasPagar || [])
+            .filter(x => x && x.cotacaoId === cot.id && !x.pago)
+            .reduce((s, x) => s + (Number(x.valor) || 0), 0) * 100) / 100;
         return (
           <div key={cot.id} style={E.card}>
             <button onClick={() => setAbertas(a => ({ ...a, [cot.id]: !a[cot.id] }))}
@@ -3286,16 +3384,36 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                 <div style={{ flex: 1, minWidth: 160, fontSize: 13.5, fontWeight: 700, color: "#111827" }}>{cot.titulo || "Cotação sem nome"}</div>
                 {selo(s.cor, s.rotulo)}
                 <div style={{ fontSize: 13.5, fontWeight: 700, color: "#111827" }}>
-                  {esc ? dinheiro(valorProposta(esc)) : melhor ? `a partir de ${dinheiro(valorProposta(melhor))}` : "—"}
+                  {ehContaDeLoja(cot)
+                    ? dinheiro(abertoDaLoja)
+                    : esc ? dinheiro(valorProposta(esc)) : melhor ? `a partir de ${dinheiro(valorProposta(melhor))}` : "—"}
                 </div>
               </div>
               <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 3 }}>
-                {(conta ? conta.nome + " · " : "")}{props.length === 1 ? "1 proposta" : `${props.length} propostas`}
-                {cot.prazoResposta ? ` · responder até ${cot.prazoResposta.split("-").reverse().join("/")}` : ""}
+                {ehContaDeLoja(cot) ? (
+                  `${(prestadores.find(f => f.id === cot.lojaId) || {}).nome || "sem loja"} · `
+                  + (pedidosDaLoja === 1 ? "1 pedido" : `${pedidosDaLoja} pedidos`)
+                  + (abertoDaLoja > 0 ? " · a pagar" : "")
+                ) : (
+                  <>
+                    {(conta ? conta.nome + " · " : "")}{props.length === 1 ? "1 proposta" : `${props.length} propostas`}
+                    {cot.prazoResposta ? ` · responder até ${cot.prazoResposta.split("-").reverse().join("/")}` : ""}
+                  </>
+                )}
               </div>
             </button>
 
-            {aberto && (
+            {aberto && ehContaDeLoja(cot) && (
+              <div style={{ borderTop: "1px solid rgba(38,36,33,0.08)", padding: isMobile ? "12px 10px" : "12px 14px" }}>
+                {cot.escopo && <div style={{ fontSize: 12.5, color: "#374151", marginBottom: 12, whiteSpace: "pre-wrap" }}>{cot.escopo}</div>}
+                <BlocoContaLoja cotacao={cot} contasPagar={obra.contasPagar || []}
+                  loja={prestadores.find((f) => f.id === cot.lojaId)} isMobile={isMobile}
+                  dinheiro={dinheiro} podeGerenciar={podeGerenciar}
+                  aoNovoPedido={() => abrirPedido(cot)} />
+              </div>
+            )}
+
+            {aberto && !ehContaDeLoja(cot) && (
               <div style={{ borderTop: "1px solid rgba(38,36,33,0.08)", padding: isMobile ? "12px 10px" : "12px 14px" }}>
                 {cot.escopo && <div style={{ fontSize: 12.5, color: "#374151", marginBottom: 12, whiteSpace: "pre-wrap" }}>{cot.escopo}</div>}
                 {(() => {
@@ -4386,6 +4504,312 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
 }
 
 // Campo de unidade: sempre com a setinha, nunca texto solto.
+// ── O corpo de uma conta de loja ────────────────────────────────
+// Não tem proposta para comparar nem escolha para enviar: tem os pedidos
+// feitos, o que já foi pago e o que está pendurado esperando a loja ligar.
+function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGerenciar, aoNovoPedido }) {
+  const E = COT_ESTILO;
+  const pedidos = cotacao.pedidos || [];
+  const contas = (contasPagar || []).filter((c) => c && c.cotacaoId === cotacao.id);
+  const red = (x) => Math.round(x * 100) / 100;
+  const doPedido = (id) => contas.filter((c) => c.pedidoId === id);
+  const soma = (lista) => red(lista.reduce((s, c) => s + (Number(c.valor) || 0), 0));
+  const aberto = soma(contas.filter((c) => !c.pago));
+  const pago = soma(contas.filter((c) => c.pago));
+
+  const grade = { display: "grid",
+    gridTemplateColumns: isMobile ? "minmax(0,1fr) 92px" : "minmax(0,1.2fr) 96px 96px 70px 110px 92px",
+    gap: 8, alignItems: "center" };
+  const cab = { fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600 };
+  const cel = { fontSize: 12.5, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
+  const dataBr = (iso) => (iso ? String(iso).slice(0, 10).split("-").reverse().join("/") : "—");
+
+  return (
+    <>
+      <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "baseline", marginBottom: 12 }}>
+        <div>
+          <div style={cab}>Loja</div>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", marginTop: 2 }}>
+            {loja ? loja.nome : "— sem loja no cadastro —"}
+          </div>
+        </div>
+        {Number(cotacao.prazoLoja) > 0 && (
+          <div>
+            <div style={cab}>Prazo</div>
+            <div style={{ fontSize: 12.5, color: "#111827", marginTop: 2 }}>{Number(cotacao.prazoLoja)} dias</div>
+          </div>
+        )}
+        <div>
+          <div style={cab}>A pagar</div>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: aberto > 0 ? "#0474f4" : "#111827", marginTop: 2 }}>{dinheiro(aberto)}</div>
+        </div>
+        {pago > 0 && (
+          <div>
+            <div style={cab}>Já pago</div>
+            <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 2 }}>{dinheiro(pago)}</div>
+          </div>
+        )}
+        {podeGerenciar && cotacao.status !== "encerrada" && (
+          <button style={{ ...E.btn, marginLeft: "auto" }} onClick={aoNovoPedido}>+ Novo pedido</button>
+        )}
+      </div>
+
+      {!pedidos.length ? (
+        <div style={{ fontSize: 12.5, color: "#4b5563", padding: "10px 0" }}>
+          Nenhum pedido nesta conta ainda. Arraste o PDF que a loja mandou e os itens entram prontos.
+        </div>
+      ) : (
+        <div style={{ border: "1px solid rgba(38,36,33,0.10)", borderRadius: 10, overflow: "hidden" }}>
+          <div style={{ ...grade, padding: "7px 10px", background: "#fafafa" }}>
+            <span style={cab}>Pedido</span>
+            {!isMobile && <span style={cab}>Data</span>}
+            {!isMobile && <span style={cab}>Vencimento</span>}
+            {!isMobile && <span style={cab}>Itens</span>}
+            {!isMobile && <span style={cab}>Situação</span>}
+            <span style={{ ...cab, textAlign: "right" }}>Valor</span>
+          </div>
+          {pedidos.slice().reverse().map((p) => {
+            const cs = doPedido(p.id);
+            const emAberto = cs.filter((c) => !c.pago).length;
+            return (
+              <div key={p.id} style={{ ...grade, padding: "7px 10px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+                <span style={{ ...cel, whiteSpace: "normal", minWidth: 0 }}>
+                  <strong style={{ color: "#111827" }}>{p.numeroLoja || p.numero || "—"}</strong>
+                  {p.numeroNota ? <span style={{ fontSize: 10.5, color: "#9ca3af" }}> · NF {p.numeroNota}</span> : null}
+                </span>
+                {!isMobile && <span style={{ ...cel, color: "#4b5563" }}>{dataBr(p.data)}</span>}
+                {!isMobile && <span style={{ ...cel, color: "#4b5563" }}>{dataBr(p.vencimento)}</span>}
+                {!isMobile && <span style={{ ...cel, color: "#4b5563" }}>{cs.length}</span>}
+                {!isMobile && (
+                  <span>{cs.length === 0 ? selo("#6b7280", "sem contas")
+                    : emAberto === 0 ? selo("#15803d", "pago")
+                    : emAberto === cs.length ? selo("#0474f4", "a pagar")
+                    : selo("#b45309", "parcial")}</span>
+                )}
+                <span style={{ ...cel, textAlign: "right", fontWeight: 600, color: "#111827" }}>{dinheiro(soma(cs))}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div style={{ fontSize: 11, color: "#6b7280", marginTop: 8 }}>
+        Cada pedido vira uma conta a pagar <strong style={{ color: "#4b5563" }}>por item</strong>, com a etapa de cada um —
+        é o que faz o quadro da obra por etapa fechar. Quando a loja cobrar, dê a baixa em contas a pagar.
+      </div>
+    </>
+  );
+}
+
+// ── O painel de um pedido da loja ───────────────────────────────
+// Entra por três caminhos: o PDF que a loja mandou, a lista digitada à mão,
+// ou os dois. O que a tela cobra é o que o P&L precisa e o papel não traz:
+// a etapa de cada item. Sem ela o pedido não é lançado — é assim que o
+// quadro por etapa para de encher de "Sem etapa".
+function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, aoMudar, aoFechar, aoLancar }) {
+  const E = COT_ESTILO;
+  const p = pedido;
+  const P = cotPainel(isMobile, 980);
+  const [lendo, setLendo] = useState(false);
+  const [aviso, setAviso] = useState("");
+  const [sobre, setSobre] = useState(false);
+  const etapas = typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [];
+  const grupos = typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : [];
+  const plano = typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [];
+
+  const itens = p.itens || [];
+  const mexerItem = (i, muda) => aoMudar({ ...p, itens: itens.map((x, j) => (j === i ? { ...x, ...muda } : x)) });
+  const bruto = brutoDoPedido(p);
+  const total = totalDoPedido(p);
+  const rateados = itensRateados(p);
+  const valorDe = (i) => { const r = rateados.find((x) => x.id === itens[i].id); return r ? r.valor : 0; };
+  const prova = validarPedido(p, (cotacao.pedidos || []));
+
+  // O nome que a loja usa vira o insumo do catálogo — e o grupo do insumo é
+  // o grupo de material da subconta, de graça.
+  function casarItem(item) {
+    if (typeof resolverInsumo !== "function") return item;
+    const r = resolverInsumo(item.descricao, insumos || []);
+    if (!r || !r.insumo) return item;
+    return { ...item, insumoCodigo: r.insumo.codigo || "", grupoMaterial: r.insumo.grupo || item.grupoMaterial || "",
+      unidade: item.unidade || r.insumo.unidade || "" };
+  }
+
+  async function lerPdf(arquivo) {
+    if (!arquivo) return;
+    setAviso(""); setLendo(true);
+    try {
+      const o = interpretarOrcamento(await linhasDoPdf(arquivo));
+      if (!o.itens.length) throw new Error("Não achei a tabela de itens neste PDF. Se for foto ou digitalização, digite os itens.");
+      aoMudar({
+        ...p,
+        numeroLoja: o.numeroPedido || o.numero || p.numeroLoja,
+        data: o.emitido || p.data,
+        vencimento: o.vencimento || p.vencimento,
+        desconto: o.desconto || p.desconto || 0,
+        itens: o.itens.map((it) => casarItem({
+          ...itemDoPedidoVazio(),
+          codigoLoja: it.codigo || "", descricao: it.descricao || "",
+          quantidade: it.quantidade || "", unidade: it.unidade || "",
+          unitario: it.unitario || "", bruto: it.total || "",
+        })),
+      });
+    } catch (e) {
+      setAviso(e.message || "Não consegui ler este arquivo.");
+    }
+    setLendo(false);
+  }
+
+  const cols = isMobile ? "1fr" : "minmax(0,3fr) 70px 58px 88px 92px minmax(0,1.5fr) minmax(0,1.5fr) 30px";
+  const celStyle = { ...E.input, padding: "6px 8px", fontSize: 12 };
+
+  return (
+    <div style={P.fundo} onClick={aoFechar}>
+      <div style={P.cartao} onClick={(e) => e.stopPropagation()}>
+        <div style={{ fontSize: 14.5, fontWeight: 700, color: "#111827", marginBottom: 2 }}>
+          {p.numero ? `Pedido ${p.numero}` : "Novo pedido"}
+        </div>
+        <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 12 }}>{cotacao.titulo || "Conta na loja"}</div>
+
+        <div style={P.rolagem}>
+          {/* ── de onde vêm os itens ── */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); setSobre(true); }}
+            onDragLeave={() => setSobre(false)}
+            onDrop={(e) => { e.preventDefault(); setSobre(false); lerPdf(e.dataTransfer.files && e.dataTransfer.files[0]); }}
+            style={{ border: `1.5px dashed ${sobre ? "#0474f4" : "rgba(38,36,33,0.22)"}`, borderRadius: 12,
+              padding: "14px 16px", marginBottom: 14, background: sobre ? "#eef5ff" : "#fafafa", textAlign: "center" }}>
+            <div style={{ fontSize: 12.5, color: "#374151" }}>
+              {lendo ? "Lendo o PDF…" : "Arraste aqui o PDF do pedido da loja"}
+            </div>
+            <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3 }}>
+              número, data, vencimento e itens saem do próprio papel
+            </div>
+            <label style={{ ...E.btnSec, display: "inline-block", marginTop: 9, fontSize: 12 }}>
+              Escolher arquivo
+              <input type="file" accept="application/pdf" style={{ display: "none" }}
+                onChange={(e) => lerPdf(e.target.files && e.target.files[0])} />
+            </label>
+          </div>
+          {aviso && <div style={{ fontSize: 12, color: "#dc2626", marginBottom: 10 }}>{aviso}</div>}
+
+          {/* ── o cabeçalho do papel ── */}
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(5, 1fr)", gap: 10, marginBottom: 14 }}>
+            <div>
+              <label style={E.label}>Nº do pedido na loja *</label>
+              <input style={E.input} value={p.numeroLoja} onChange={(e) => aoMudar({ ...p, numeroLoja: e.target.value })} placeholder="136560-109" />
+            </div>
+            <div>
+              <label style={E.label}>Nº da nota fiscal</label>
+              <input style={E.input} value={p.numeroNota} onChange={(e) => aoMudar({ ...p, numeroNota: e.target.value })} placeholder="entra depois" />
+            </div>
+            <div>
+              <label style={E.label}>Data</label>
+              <input style={E.input} type="date" value={p.data || ""} onChange={(e) => aoMudar({ ...p, data: e.target.value })} />
+            </div>
+            <div>
+              <label style={E.label}>Vencimento</label>
+              <input style={E.input} type="date" value={p.vencimento || ""} onChange={(e) => aoMudar({ ...p, vencimento: e.target.value })} />
+            </div>
+            <div>
+              <label style={E.label}>Desconto (R$)</label>
+              <CampoCtrNum tipo="moeda" valor={p.desconto} onChange={(v) => aoMudar({ ...p, desconto: v })} style={E.input} placeholder="0,00" />
+            </div>
+          </div>
+
+          {/* ── a etapa de uma vez só, e a exceção corrigida item a item ── */}
+          {itens.length > 1 && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+              <span style={{ fontSize: 11.5, color: "#4b5563" }}>Pôr a mesma etapa em todos:</span>
+              <select style={{ ...celStyle, width: "auto", minWidth: 200, cursor: "pointer" }} value=""
+                onChange={(e) => { const v = e.target.value; if (v) aoMudar({ ...p, itens: itens.map((x) => ({ ...x, etapa: v })) }); }}>
+                <option value="">— escolher —</option>
+                {etapas.map((et) => <option key={et.id} value={et.id}>{et.nome}</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* ── os itens ── */}
+          {!isMobile && itens.length > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: cols, gap: 6, marginBottom: 4 }}>
+              <span style={E.label}>Descrição</span><span style={E.label}>Qtd</span><span style={E.label}>Un</span>
+              <span style={E.label}>Unitário</span><span style={E.label}>Total</span>
+              <span style={E.label}>Etapa *</span><span style={E.label}>Conta</span><span />
+            </div>
+          )}
+          {itens.map((it, i) => (
+            <div key={it.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 6, marginBottom: 6, alignItems: "center",
+              paddingBottom: isMobile ? 8 : 0, borderBottom: isMobile ? "1px solid rgba(38,36,33,0.08)" : "none" }}>
+              <div style={{ minWidth: 0 }}>
+                <input style={celStyle} value={it.descricao} placeholder="Descrição do item"
+                  onChange={(e) => mexerItem(i, { descricao: e.target.value })}
+                  onBlur={() => mexerItem(i, casarItem(it))} />
+                <div style={{ fontSize: 10, color: it.insumoCodigo ? "#15803d" : "#9ca3af", marginTop: 2 }}>
+                  {it.insumoCodigo ? `${it.insumoCodigo}${it.grupoMaterial ? " · " + it.grupoMaterial : ""}` : "fora do catálogo"}
+                </div>
+              </div>
+              <CampoNumeroBR estilo={celStyle} valor={it.quantidade} casas={2} placeholder="0"
+                aoMudar={(v) => mexerItem(i, { quantidade: v })} />
+              <input style={celStyle} value={it.unidade} placeholder="un"
+                onChange={(e) => mexerItem(i, { unidade: e.target.value })} />
+              <CampoCtrNum tipo="moeda" valor={it.unitario} style={celStyle} placeholder="0,00"
+                onChange={(v) => mexerItem(i, { unitario: v })} />
+              <CampoCtrNum tipo="moeda" valor={it.bruto} style={celStyle} placeholder="0,00"
+                onChange={(v) => mexerItem(i, { bruto: v })} />
+              <select style={{ ...celStyle, cursor: "pointer", borderColor: it.etapa ? "rgba(38,36,33,0.16)" : "#dc2626" }}
+                value={it.etapa || ""} onChange={(e) => mexerItem(i, { etapa: e.target.value })}>
+                <option value="">— etapa —</option>
+                {etapas.map((et) => <option key={et.id} value={et.id}>{et.nome}</option>)}
+              </select>
+              <select style={{ ...celStyle, cursor: "pointer" }} value={it.contaId || ""}
+                onChange={(e) => mexerItem(i, { contaId: e.target.value })}>
+                <option value="">Material (padrão)</option>
+                {grupos.filter((g) => g.id !== "receitas").map((g) => (
+                  <optgroup key={g.id} label={g.titulo}>
+                    {plano.filter((c) => c.grupo === g.id).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+              <button type="button" title="Tirar do pedido" style={{ ...E.btnSec, padding: "5px 8px", color: "#dc2626" }}
+                onClick={() => aoMudar({ ...p, itens: itens.filter((_, j) => j !== i) })}>×</button>
+            </div>
+          ))}
+          <button type="button" style={{ ...E.btnSec, fontSize: 11.5, padding: "5px 11px", marginTop: 4 }}
+            onClick={() => aoMudar({ ...p, itens: [...itens, itemDoPedidoVazio()] })}>+ Item</button>
+
+          {/* ── o fecho ── */}
+          {itens.length > 0 && (
+            <div style={{ marginTop: 14, padding: "10px 12px", background: "#fafafa", borderRadius: 10,
+              display: "flex", gap: 18, flexWrap: "wrap", alignItems: "baseline" }}>
+              <span style={{ fontSize: 12, color: "#4b5563" }}>Tabela <strong style={{ color: "#111827" }}>{dinheiro(bruto)}</strong></span>
+              {Math.abs(bruto - total) >= 0.005 && (
+                <span style={{ fontSize: 12, color: "#4b5563" }}>Desconto <strong style={{ color: "#111827" }}>{dinheiro(bruto - total)}</strong></span>
+              )}
+              <span style={{ fontSize: 13, color: "#111827", fontWeight: 700 }}>A pagar {dinheiro(total)}</span>
+              {Math.abs(bruto - total) >= 0.005 && (
+                <span style={{ fontSize: 11, color: "#6b7280" }}>
+                  o desconto é repartido pelos itens — a soma deles fecha no centavo com o que você paga
+                </span>
+              )}
+            </div>
+          )}
+
+          {prova.erros.length > 0 && (
+            <div style={{ marginTop: 10, fontSize: 12, color: "#dc2626" }}>
+              {prova.erros.map((e, i) => <div key={i}>{e}</div>)}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
+          <button style={E.btnSec} onClick={aoFechar}>Cancelar</button>
+          <button style={{ ...E.btn, opacity: prova.ok ? 1 : 0.45, cursor: prova.ok ? "pointer" : "not-allowed" }}
+            disabled={!prova.ok} onClick={() => aoLancar(p)}>Lançar em contas a pagar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CampoUnidade({ valor, unidades, aoMudar, estilo }) {
   const E = COT_ESTILO;
   const lista = opcoesDeUnidade(valor, unidades);
