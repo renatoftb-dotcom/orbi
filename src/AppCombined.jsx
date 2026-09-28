@@ -2048,6 +2048,305 @@ function useSessionCoordinator({ usuarioAtual, onOutroUsuario, onMesmoUsuario, o
 }
 
 
+// ═════════════════════════════════════════════════════════════
+// SelectBusca — lista de seleção que abre com o campo de busca em cima
+// ═════════════════════════════════════════════════════════════
+// Etapa da obra são 53 opções; conta do P&L, 43. Num <select> nativo, achar
+// "Reboco interno" é rolar a lista — e num pedido de vinte itens isso se
+// repete vinte vezes. Aqui a lista abre com o cursor já dentro do campo de
+// busca: digitou "reb", a opção certa já está marcada, Enter escolhe. Setas
+// andam, Esc fecha, clique fora fecha, e uma letra digitada com o campo
+// fechado abre a lista já filtrando.
+//
+// Aceita as formas que os módulos já têm em mão, para não obrigar ninguém a
+// remontar a lista só para trocar o select:
+//   ["m2", "un"]                              → valor = rótulo
+//   [{ id, nome }] [{ valor, rotulo }] [{ value, label }]
+//   [{ grupo: "Fundação", opcoes: [...] }]      → cabeçalho de grupo (optgroup)
+//   [{ valor, rotulo, grupo }]                 → idem, já achatado
+// O nome do grupo entra na busca: "fund sap" acha a sapata da fundação.
+
+// ── SelectBusca: parte pura ────────────────────────────
+
+// Ninguém digita "tábua" nem "cerâmica" com acento no meio de um pedido.
+function buscaNormal(t) {
+  return String(t == null ? "" : t)
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+// Achata qualquer das formas aceitas em { valor, rotulo, grupo, busca }.
+function opcoesNormalizadas(opcoes) {
+  const saida = [];
+  (Array.isArray(opcoes) ? opcoes : []).forEach(function (o) {
+    if (o == null) return;
+    if (typeof o === "string" || typeof o === "number") {
+      saida.push({ valor: String(o), rotulo: String(o), grupo: "", extra: "" });
+      return;
+    }
+    if (Array.isArray(o.opcoes)) {
+      const nomeGrupo = String(o.grupo || o.titulo || o.label || o.nome || "");
+      opcoesNormalizadas(o.opcoes).forEach(function (f) {
+        saida.push({ valor: f.valor, rotulo: f.rotulo, grupo: f.grupo || nomeGrupo, extra: f.extra });
+      });
+      return;
+    }
+    const valor = o.valor != null ? o.valor : (o.value != null ? o.value : (o.id != null ? o.id : ""));
+    const rotulo = o.rotulo != null ? o.rotulo
+      : (o.label != null ? o.label : (o.nome != null ? o.nome : String(valor)));
+    saida.push({
+      valor: String(valor),
+      rotulo: String(rotulo),
+      grupo: String(o.grupo != null ? o.grupo : (o.macro != null ? o.macro : "")),
+      extra: String(o.extra != null ? o.extra : ""),
+    });
+  });
+  return saida.map(function (o) {
+    return {
+      valor: o.valor, rotulo: o.rotulo, grupo: o.grupo, extra: o.extra,
+      busca: buscaNormal([o.rotulo, o.grupo, o.extra, o.valor].join(" ")),
+    };
+  });
+}
+
+// Filtra por pedacos soltos ("reb int" acha "Reboco interno") e põe na frente
+// quem COMEÇA com o que foi digitado — é essa a opção que a pessoa espera ver
+// já marcada depois das primeiras letras.
+function filtrarOpcoes(lista, termo) {
+  const alvo = buscaNormal(termo);
+  if (!alvo) return lista;
+  const partes = alvo.split(" ").filter(Boolean);
+  const comeca = [], contem = [];
+  lista.forEach(function (o) {
+    const casa = partes.every(function (p) { return o.busca.indexOf(p) >= 0; });
+    if (!casa) return;
+    (buscaNormal(o.rotulo).indexOf(alvo) === 0 ? comeca : contem).push(o);
+  });
+  return comeca.concat(contem);
+}
+
+// ── SelectBusca: fim da parte pura ────────────────────
+
+const SB_CAMPO = {
+  border: "1px solid rgba(38,36,33,0.16)", borderRadius: 12, padding: "9px 12px",
+  fontSize: 13, background: "#fff", fontFamily: "inherit", width: "100%",
+  boxSizing: "border-box", outline: "none",
+};
+
+function SelectBusca(props) {
+  const lista = useMemo(function () { return opcoesNormalizadas(props.opcoes); }, [props.opcoes]);
+  const [aberto, setAberto] = useState(false);
+  const [termo, setTermo] = useState("");
+  const [marcado, setMarcado] = useState(0);
+  const [caixa, setCaixa] = useState(null);
+  const refBotao = useRef(null);
+  const refBusca = useRef(null);
+  const refPainel = useRef(null);
+  // Lista curta não ganha campo de busca, mas continua respondendo às letras
+  // como o select nativo: "fu" pula para a primeira opção que começa assim.
+  const refDigitado = useRef({ texto: "", quando: 0 });
+
+  const valorAtual = props.value == null ? "" : String(props.value);
+  const escolhida = lista.filter(function (o) { return o.valor === valorAtual; })[0];
+  const filtradas = useMemo(function () { return filtrarOpcoes(lista, termo); }, [lista, termo]);
+  // Um select de duas opções (Material/Prestador) só piora com campo de busca.
+  const minimo = props.minimoParaBusca == null ? 6 : props.minimoParaBusca;
+  const comBusca = props.semBusca ? false : lista.length >= minimo;
+
+  // Painel em position:fixed, medido a partir do botão: assim ele não é
+  // cortado por tabela com overflow nem por card com borda arredondada.
+  const medir = useCallback(function () {
+    const el = refBotao.current;
+    if (!el || typeof window === "undefined") return;
+    const r = el.getBoundingClientRect();
+    const tetoAltura = 320;
+    const abaixo = window.innerHeight - r.bottom - 10;
+    const acima = r.top - 10;
+    const paraBaixo = abaixo >= 200 || abaixo >= acima;
+    const largura = Math.max(r.width, 250);
+    setCaixa({
+      esquerda: Math.max(8, Math.min(r.left, window.innerWidth - largura - 8)),
+      largura: largura,
+      topo: paraBaixo ? r.bottom + 4 : null,
+      base: paraBaixo ? null : Math.max(8, window.innerHeight - r.top + 4),
+      altura: Math.max(150, Math.min(tetoAltura, (paraBaixo ? abaixo : acima))),
+    });
+  }, []);
+
+  useEffect(function () {
+    if (!aberto) return;
+    medir();
+    function fora(ev) {
+      if (refPainel.current && refPainel.current.contains(ev.target)) return;
+      if (refBotao.current && refBotao.current.contains(ev.target)) return;
+      setAberto(false);
+    }
+    document.addEventListener("mousedown", fora, true);
+    window.addEventListener("resize", medir);
+    window.addEventListener("scroll", medir, true);
+    return function () {
+      document.removeEventListener("mousedown", fora, true);
+      window.removeEventListener("resize", medir);
+      window.removeEventListener("scroll", medir, true);
+    };
+  }, [aberto, medir]);
+
+  // O foco vai para o campo de busca (ou para o painel, quando a lista é
+  // curta e não tem busca) — é o que faz as setas e o Enter funcionarem.
+  useEffect(function () {
+    if (!aberto) return;
+    const t = setTimeout(function () {
+      if (comBusca && refBusca.current) refBusca.current.focus();
+      else if (refPainel.current) refPainel.current.focus();
+    }, 0);
+    return function () { clearTimeout(t); };
+  }, [aberto, comBusca]);
+
+  useEffect(function () {
+    if (!aberto || !refPainel.current) return;
+    const el = refPainel.current.querySelector('[data-sb-idx="' + marcado + '"]');
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
+  }, [aberto, marcado, termo]);
+
+  function abrir(comLetra) {
+    setTermo(comLetra || "");
+    setMarcado(0);
+    setAberto(true);
+  }
+
+  function escolher(o) {
+    setAberto(false);
+    setTermo("");
+    if (props.onChange) props.onChange(o.valor, o);
+  }
+
+  function aoTeclar(e) {
+    if (e.key === "Escape") {
+      e.preventDefault(); setAberto(false);
+      if (refBotao.current) refBotao.current.focus();
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setMarcado(function (m) { return Math.min(filtradas.length - 1, m + 1); });
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setMarcado(function (m) { return Math.max(0, m - 1); });
+      return;
+    }
+    if (e.key === "Home") { e.preventDefault(); setMarcado(0); return; }
+    if (e.key === "End") { e.preventDefault(); setMarcado(Math.max(0, filtradas.length - 1)); return; }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const o = filtradas[marcado];
+      if (o) escolher(o);
+      return;
+    }
+    if (e.key === "Tab") { setAberto(false); return; }
+    if (!comBusca && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      const agora = Date.now();
+      const d = refDigitado.current;
+      d.texto = (agora - d.quando < 900 ? d.texto : "") + e.key;
+      d.quando = agora;
+      const alvo = buscaNormal(d.texto);
+      for (let i = 0; i < filtradas.length; i++) {
+        if (buscaNormal(filtradas[i].rotulo).indexOf(alvo) === 0) { setMarcado(i); break; }
+      }
+    }
+  }
+
+  const estiloBotao = Object.assign({}, props.style || SB_CAMPO, {
+    cursor: props.disabled ? "default" : "pointer",
+    textAlign: "left",
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    opacity: props.disabled ? 0.6 : 1,
+    color: escolhida ? "#111827" : "#9ca3af",
+  });
+
+  return (
+    <>
+      <button type="button" ref={refBotao} disabled={!!props.disabled} id={props.id}
+        title={props.title || (escolhida ? escolhida.rotulo : "")}
+        style={estiloBotao}
+        onClick={function () { if (props.disabled) return; if (aberto) setAberto(false); else abrir(""); }}
+        onKeyDown={function (e) {
+          if (props.disabled) return;
+          if (aberto) return;
+          if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") { e.preventDefault(); abrir(""); return; }
+          if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); abrir(e.key); }
+        }}>
+        <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {escolhida ? escolhida.rotulo : (props.vazio || "— escolher —")}
+        </span>
+        <span style={{ color: "#9ca3af", fontSize: 9, flexShrink: 0 }}>▾</span>
+      </button>
+
+      {aberto && caixa && (
+        <div ref={refPainel} tabIndex={-1} onKeyDown={comBusca ? undefined : aoTeclar}
+          style={{
+            position: "fixed", zIndex: 4200, left: caixa.esquerda, width: caixa.largura,
+            top: caixa.topo != null ? caixa.topo : undefined,
+            bottom: caixa.topo != null ? undefined : caixa.base,
+            maxHeight: caixa.altura, display: "flex", flexDirection: "column",
+            background: "#fff", border: "1px solid rgba(38,36,33,0.16)", borderRadius: 12,
+            boxShadow: "0 14px 36px rgba(0,0,0,0.18)", overflow: "hidden", outline: "none",
+          }}>
+          {comBusca && (
+            <div style={{ padding: 8, borderBottom: "1px solid rgba(38,36,33,0.08)", flexShrink: 0 }}>
+              <input ref={refBusca} value={termo} onKeyDown={aoTeclar}
+                placeholder={props.placeholder || "Procurar…"}
+                onChange={function (e) { setTermo(e.target.value); setMarcado(0); }}
+                style={{
+                  border: "1px solid #0474f4", borderRadius: 9, padding: "7px 10px", fontSize: 13,
+                  width: "100%", boxSizing: "border-box", outline: "none", fontFamily: "inherit",
+                }} />
+            </div>
+          )}
+          <div style={{ overflowY: "auto", flex: 1 }}>
+            {filtradas.length === 0 && (
+              <div style={{ padding: "12px 12px", fontSize: 12.5, color: "#9ca3af" }}>
+                nada com esse nome
+              </div>
+            )}
+            {filtradas.map(function (o, i) {
+              const cabecalho = o.grupo && (i === 0 || filtradas[i - 1].grupo !== o.grupo);
+              const atual = o.valor === valorAtual;
+              return (
+                <Fragment key={o.valor + "\u0000" + i}>
+                  {cabecalho && (
+                    <div style={{
+                      padding: "7px 12px 3px", fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+                      textTransform: "uppercase", color: "#9ca3af",
+                    }}>{o.grupo}</div>
+                  )}
+                  <div data-sb-idx={i}
+                    onMouseEnter={function () { setMarcado(i); }}
+                    onMouseDown={function (ev) { ev.preventDefault(); }}
+                    onClick={function () { escolher(o); }}
+                    style={{
+                      padding: "8px 12px", fontSize: 13, cursor: "pointer", lineHeight: 1.3,
+                      background: i === marcado ? "#eef5ff" : "transparent",
+                      color: i === marcado ? "#0474f4" : "#111827",
+                      fontWeight: atual ? 600 : 400,
+                    }}>
+                    {o.rotulo}
+                  </div>
+                </Fragment>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+
 // ════════════════════════════════════════════════════════════
 // api.js
 // ════════════════════════════════════════════════════════════
@@ -6567,15 +6866,16 @@ function InsumoForm({ insumo, insumos, onSalvar, onCancelar, isMobile }) {
         </div>
         <div>
           <label style={INS_S.label}>Grupo</label>
-          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={f.grupo} onChange={e => set("grupo", e.target.value)}>
-            {INSUMO_GRUPOS.map(g => <option key={g.prefixo} value={g.nome}>{g.nome} ({g.prefixo})</option>)}
-          </select>
+          <SelectBusca style={INS_S.input} value={f.grupo} onChange={v => set("grupo", v)}
+            placeholder="Procurar grupo…" vazio="— escolher —"
+            opcoes={INSUMO_GRUPOS.map(function (g) {
+              return { valor: g.nome, rotulo: g.nome + " (" + g.prefixo + ")" };
+            })} />
         </div>
         <div>
           <label style={INS_S.label}>Unidade</label>
-          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={f.unidade} onChange={e => set("unidade", e.target.value)}>
-            {INSUMO_UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
-          </select>
+          <SelectBusca style={INS_S.input} value={f.unidade} onChange={v => set("unidade", v)}
+            placeholder="Procurar unidade…" vazio="— escolher —" opcoes={INSUMO_UNIDADES} />
         </div>
         <div>
           <label style={INS_S.label}>Tipo</label>
@@ -6589,31 +6889,28 @@ function InsumoForm({ insumo, insumos, onSalvar, onCancelar, isMobile }) {
             já entra com ela no pedido; em branco, quem decide é a compra. */}
         <div>
           <label style={INS_S.label}>Etapa padrão</label>
-          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })}
-            value={f.etapaPadrao || ""} onChange={e => set("etapaPadrao", e.target.value)}>
-            <option value="">— decide na compra —</option>
-            {(typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(function (et) {
-              return <option key={et.id} value={et.id}>{et.nome}</option>;
-            })}
-          </select>
+          <SelectBusca style={INS_S.input} value={f.etapaPadrao || ""}
+            onChange={v => set("etapaPadrao", v)} placeholder="Procurar etapa…"
+            opcoes={[{ valor: "", rotulo: "— decide na compra —" }].concat(
+              (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(function (et) {
+                return { valor: et.id, rotulo: et.nome, grupo: et.macro || "" };
+              }))} />
         </div>
         <div>
           <label style={INS_S.label}>Conta padrão do P&amp;L</label>
-          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })}
-            value={f.contaPadrao || ""} onChange={e => set("contaPadrao", e.target.value)}>
-            <option value="">— Material —</option>
-            {(typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : [])
-              .filter(function (g) { return g.id !== "receitas" && g.id !== "terreno"; })
-              .map(function (g) {
-                return (
-                  <optgroup key={g.id} label={g.titulo}>
-                    {(typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [])
+          <SelectBusca style={INS_S.input} value={f.contaPadrao || ""}
+            onChange={v => set("contaPadrao", v)} placeholder="Procurar conta…"
+            opcoes={[{ valor: "", rotulo: "— Material —" }].concat(
+              (typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : [])
+                .filter(function (g) { return g.id !== "receitas" && g.id !== "terreno"; })
+                .map(function (g) {
+                  return {
+                    grupo: g.titulo,
+                    opcoes: (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [])
                       .filter(function (c) { return c.grupo === g.id; })
-                      .map(function (c) { return <option key={c.id} value={c.id}>{c.nome}</option>; })}
-                  </optgroup>
-                );
-              })}
-          </select>
+                      .map(function (c) { return { valor: c.id, rotulo: c.nome }; }),
+                  };
+                }))} />
         </div>
         <div>
           <label style={INS_S.label}>Preço manual (R$)</label>
@@ -7244,10 +7541,10 @@ function Insumos({ data, save }) {
 
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
           <input style={INS_S.input} placeholder="Buscar por nome, código ou apelido…" value={busca} onChange={e => setBusca(e.target.value)} />
-          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={filtroGrupo} onChange={e => setFiltroGrupo(e.target.value)}>
-            <option value="">Todos os grupos</option>
-            {INSUMO_GRUPOS.map(g => <option key={g.prefixo} value={g.nome}>{g.nome}</option>)}
-          </select>
+          <SelectBusca style={INS_S.input} value={filtroGrupo} onChange={v => setFiltroGrupo(v)}
+            placeholder="Procurar grupo…"
+            opcoes={[{ valor: "", rotulo: "Todos os grupos" }].concat(
+              INSUMO_GRUPOS.map(function (g) { return { valor: g.nome, rotulo: g.nome }; }))} />
           <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={filtroConf} onChange={e => setFiltroConf(e.target.value)}>
             <option value="">Qualquer preço</option>
             <option value="alta">Atual</option>
@@ -7313,13 +7610,12 @@ function Insumos({ data, save }) {
                 {chaves.length === 1 ? "1 selecionado" : chaves.length + " selecionados"}
               </span>
               <span style={{ fontSize: 12.5, color: "#4b5563" }}>Etapa padrão:</span>
-              <select style={Object.assign({}, INS_S.input, { cursor: "pointer", width: "auto", minWidth: 220 })}
-                value={etapaLote} onChange={e => setEtapaLote(e.target.value)}>
-                <option value="">— tirar a etapa —</option>
-                {(typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(function (et) {
-                  return <option key={et.id} value={et.id}>{et.nome}</option>;
-                })}
-              </select>
+              <SelectBusca style={Object.assign({}, INS_S.input, { width: "auto", minWidth: 220 })}
+                value={etapaLote} onChange={v => setEtapaLote(v)} placeholder="Procurar etapa…"
+                opcoes={[{ valor: "", rotulo: "— tirar a etapa —" }].concat(
+                  (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(function (et) {
+                    return { valor: et.id, rotulo: et.nome, grupo: et.macro || "" };
+                  }))} />
               <button style={INS_S.btn} onClick={aplicarEtapaEmLote}>Aplicar</button>
               <button style={INS_S.btnGhost} onClick={() => setMarcados({})}>Limpar seleção</button>
             </div>
@@ -24020,10 +24316,12 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: 14, marginBottom: 14 }}>
             <div>
               <label style={E.label}>Loja</label>
-              <select style={E.input} value={formCotacao.lojaId || ""} onChange={e => set("lojaId", e.target.value)}>
-                <option value="">— escolha a loja —</option>
-                {prestadores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
-              </select>
+              <SelectBusca style={E.input} value={formCotacao.lojaId || ""}
+                onChange={v => set("lojaId", v)} placeholder="Procurar loja…"
+                opcoes={[{ valor: "", rotulo: "— escolha a loja —" }].concat(
+                  prestadores.map(function (f) {
+                    return { valor: f.id, rotulo: f.nome, extra: f.categoria || "" };
+                  }))} />
             </div>
             <div>
               <label style={E.label}>Prazo de pagamento (dias)</label>
@@ -24039,9 +24337,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           </div>
           <div>
             <label style={E.label}>Conta do P&amp;L</label>
-            <select style={E.input} value={formCotacao.contaId} onChange={e => set("contaId", e.target.value)}>
-              {contas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-            </select>
+            <SelectBusca style={E.input} value={formCotacao.contaId} onChange={v => set("contaId", v)}
+              placeholder="Procurar conta…"
+              opcoes={contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; })} />
           </div>
         </div>
         <div style={{ marginBottom: 14, display: formCotacao.contaLoja ? "none" : "block" }}>
@@ -24117,10 +24415,10 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           )}
           <div>
             <label style={E.label}>Etapa da obra</label>
-            <select style={E.input} value={formCotacao.etapaId} onChange={e => set("etapaId", e.target.value)}>
-              <option value="">—</option>
-              {etapas.map(et => <option key={et.id} value={et.id}>{et.nome}</option>)}
-            </select>
+            <SelectBusca style={E.input} value={formCotacao.etapaId} onChange={v => set("etapaId", v)}
+              placeholder="Procurar etapa…"
+              opcoes={[{ valor: "", rotulo: "—" }].concat(
+                etapas.map(function (et) { return { valor: et.id, rotulo: et.nome, grupo: et.macro || "" }; }))} />
           </div>
           <div>
             <label style={E.label}>Responder até</label>
@@ -25841,13 +26139,15 @@ function CotacaoLancamento({ cotacao, dados, dinheiro, onConfirmar, onFechar }) 
 
         <div style={{ marginBottom: 12 }}>
           <label style={E.label}>Conta do P&L</label>
-          <select style={{ ...E.input, cursor: "pointer" }} value={f.contaId} onChange={e => set("contaId", e.target.value)}>
-            {grupos.filter(g => g.id !== "receitas").map(g => (
-              <optgroup key={g.id} label={g.titulo}>
-                {contas.filter(c => c.grupo === g.id).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </optgroup>
-            ))}
-          </select>
+          <SelectBusca style={E.input} value={f.contaId} onChange={v => set("contaId", v)}
+            placeholder="Procurar conta…"
+            opcoes={grupos.filter(g => g.id !== "receitas").map(function (g) {
+              return {
+                grupo: g.titulo,
+                opcoes: contas.filter(function (c) { return c.grupo === g.id; })
+                  .map(function (c) { return { valor: c.id, rotulo: c.nome }; }),
+              };
+            })} />
         </div>
         <div style={{ marginBottom: 16 }}>
           <label style={E.label}>Observação</label>
@@ -26262,10 +26562,9 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
             onChange={(e) => setNovo({ ...novo, nomeLivre: e.target.value })} />
         )}
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 8 }}>
-          <select style={{ ...E.input, cursor: "pointer" }} value={novo.grupo}
-            onChange={(e) => setNovo({ ...novo, grupo: e.target.value })}>
-            {(grupos.includes(novo.grupo) ? grupos : [novo.grupo, ...grupos]).map((g) => <option key={g} value={g}>{g}</option>)}
-          </select>
+          <SelectBusca style={E.input} value={novo.grupo} placeholder="Procurar grupo…"
+            onChange={(v) => setNovo({ ...novo, grupo: v })}
+            opcoes={grupos.includes(novo.grupo) ? grupos : [novo.grupo].concat(grupos)} />
           <CampoUnidade valor={novo.unidade} unidades={unidades} aoMudar={(v) => setNovo({ ...novo, unidade: v })} />
         </div>
         {jaExiste ? (
@@ -26597,11 +26896,10 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
           {itens.length > 1 && (
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
               <span style={{ fontSize: 11.5, color: "#4b5563" }}>Pôr a mesma etapa em todos:</span>
-              <select style={{ ...celStyle, width: "auto", minWidth: 200, cursor: "pointer" }} value=""
-                onChange={(e) => { const v = e.target.value; if (v) aoMudar({ ...p, itens: itens.map((x) => ({ ...x, etapa: v })) }); }}>
-                <option value="">— escolher —</option>
-                {etapas.map((et) => <option key={et.id} value={et.id}>{et.nome}</option>)}
-              </select>
+              <SelectBusca style={{ ...celStyle, width: "auto", minWidth: 200 }} value=""
+                placeholder="Procurar etapa…" vazio="— escolher —"
+                onChange={(v) => { if (v) aoMudar({ ...p, itens: itens.map((x) => ({ ...x, etapa: v })) }); }}
+                opcoes={etapas.map((et) => ({ valor: et.id, rotulo: et.nome, grupo: et.macro || "" }))} />
             </div>
           )}
 
@@ -26632,20 +26930,18 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
                 onChange={(v) => mexerItem(i, { unitario: v })} />
               <CampoCtrNum tipo="moeda" valor={it.bruto} style={celStyle} placeholder="0,00"
                 onChange={(v) => mexerItem(i, { bruto: v })} />
-              <select style={{ ...celStyle, cursor: "pointer", borderColor: it.etapa ? "rgba(38,36,33,0.16)" : "#dc2626" }}
-                value={it.etapa || ""} onChange={(e) => mexerItem(i, { etapa: e.target.value })}>
-                <option value="">— etapa —</option>
-                {etapas.map((et) => <option key={et.id} value={et.id}>{et.nome}</option>)}
-              </select>
-              <select style={{ ...celStyle, cursor: "pointer" }} value={it.contaId || ""}
-                onChange={(e) => mexerItem(i, { contaId: e.target.value })}>
-                <option value="">Material (padrão)</option>
-                {grupos.filter((g) => g.id !== "receitas").map((g) => (
-                  <optgroup key={g.id} label={g.titulo}>
-                    {plano.filter((c) => c.grupo === g.id).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                  </optgroup>
-                ))}
-              </select>
+              <SelectBusca style={{ ...celStyle, borderColor: it.etapa ? "rgba(38,36,33,0.16)" : "#dc2626" }}
+                value={it.etapa || ""} onChange={(v) => mexerItem(i, { etapa: v })}
+                placeholder="Procurar etapa…"
+                opcoes={[{ valor: "", rotulo: "— etapa —" }].concat(
+                  etapas.map((et) => ({ valor: et.id, rotulo: et.nome, grupo: et.macro || "" })))} />
+              <SelectBusca style={celStyle} value={it.contaId || ""}
+                onChange={(v) => mexerItem(i, { contaId: v })} placeholder="Procurar conta…"
+                opcoes={[{ valor: "", rotulo: "Material (padrão)" }].concat(
+                  grupos.filter((g) => g.id !== "receitas").map((g) => ({
+                    grupo: g.titulo,
+                    opcoes: plano.filter((c) => c.grupo === g.id).map((c) => ({ valor: c.id, rotulo: c.nome })),
+                  })))} />
               <button type="button" title="Tirar do pedido" style={{ ...E.btnSec, padding: "5px 8px", color: "#dc2626" }}
                 onClick={() => aoMudar({ ...p, itens: itens.filter((_, j) => j !== i) })}>×</button>
             </div>
@@ -26693,11 +26989,11 @@ function CampoUnidade({ valor, unidades, aoMudar, estilo }) {
   const E = COT_ESTILO;
   const lista = opcoesDeUnidade(valor, unidades);
   return (
-    <select style={{ ...(estilo || E.input), cursor: "pointer" }} value={valor || ""}
-      onChange={(e) => aoMudar(e.target.value)}>
-      <option value="">—</option>
-      {lista.map((u) => <option key={u} value={u}>{u}</option>)}
-    </select>
+    <SelectBusca style={estilo || E.input} value={valor || ""} onChange={(v) => aoMudar(v)}
+      placeholder="Procurar unidade…"
+      opcoes={[{ valor: "", rotulo: "—" }].concat(lista.map(function (u) {
+        return { valor: u, rotulo: u };
+      }))} />
   );
 }
 

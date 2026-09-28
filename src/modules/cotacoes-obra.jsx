@@ -2368,10 +2368,12 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: 14, marginBottom: 14 }}>
             <div>
               <label style={E.label}>Loja</label>
-              <select style={E.input} value={formCotacao.lojaId || ""} onChange={e => set("lojaId", e.target.value)}>
-                <option value="">— escolha a loja —</option>
-                {prestadores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
-              </select>
+              <SelectBusca style={E.input} value={formCotacao.lojaId || ""}
+                onChange={v => set("lojaId", v)} placeholder="Procurar loja…"
+                opcoes={[{ valor: "", rotulo: "— escolha a loja —" }].concat(
+                  prestadores.map(function (f) {
+                    return { valor: f.id, rotulo: f.nome, extra: f.categoria || "" };
+                  }))} />
             </div>
             <div>
               <label style={E.label}>Prazo de pagamento (dias)</label>
@@ -2387,9 +2389,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           </div>
           <div>
             <label style={E.label}>Conta do P&amp;L</label>
-            <select style={E.input} value={formCotacao.contaId} onChange={e => set("contaId", e.target.value)}>
-              {contas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-            </select>
+            <SelectBusca style={E.input} value={formCotacao.contaId} onChange={v => set("contaId", v)}
+              placeholder="Procurar conta…"
+              opcoes={contas.map(function (c) { return { valor: c.id, rotulo: c.nome }; })} />
           </div>
         </div>
         <div style={{ marginBottom: 14, display: formCotacao.contaLoja ? "none" : "block" }}>
@@ -2465,10 +2467,10 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           )}
           <div>
             <label style={E.label}>Etapa da obra</label>
-            <select style={E.input} value={formCotacao.etapaId} onChange={e => set("etapaId", e.target.value)}>
-              <option value="">—</option>
-              {etapas.map(et => <option key={et.id} value={et.id}>{et.nome}</option>)}
-            </select>
+            <SelectBusca style={E.input} value={formCotacao.etapaId} onChange={v => set("etapaId", v)}
+              placeholder="Procurar etapa…"
+              opcoes={[{ valor: "", rotulo: "—" }].concat(
+                etapas.map(function (et) { return { valor: et.id, rotulo: et.nome, grupo: et.macro || "" }; }))} />
           </div>
           <div>
             <label style={E.label}>Responder até</label>
@@ -4189,13 +4191,15 @@ function CotacaoLancamento({ cotacao, dados, dinheiro, onConfirmar, onFechar }) 
 
         <div style={{ marginBottom: 12 }}>
           <label style={E.label}>Conta do P&L</label>
-          <select style={{ ...E.input, cursor: "pointer" }} value={f.contaId} onChange={e => set("contaId", e.target.value)}>
-            {grupos.filter(g => g.id !== "receitas").map(g => (
-              <optgroup key={g.id} label={g.titulo}>
-                {contas.filter(c => c.grupo === g.id).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </optgroup>
-            ))}
-          </select>
+          <SelectBusca style={E.input} value={f.contaId} onChange={v => set("contaId", v)}
+            placeholder="Procurar conta…"
+            opcoes={grupos.filter(g => g.id !== "receitas").map(function (g) {
+              return {
+                grupo: g.titulo,
+                opcoes: contas.filter(function (c) { return c.grupo === g.id; })
+                  .map(function (c) { return { valor: c.id, rotulo: c.nome }; }),
+              };
+            })} />
         </div>
         <div style={{ marginBottom: 16 }}>
           <label style={E.label}>Observação</label>
@@ -4610,10 +4614,9 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
             onChange={(e) => setNovo({ ...novo, nomeLivre: e.target.value })} />
         )}
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 8 }}>
-          <select style={{ ...E.input, cursor: "pointer" }} value={novo.grupo}
-            onChange={(e) => setNovo({ ...novo, grupo: e.target.value })}>
-            {(grupos.includes(novo.grupo) ? grupos : [novo.grupo, ...grupos]).map((g) => <option key={g} value={g}>{g}</option>)}
-          </select>
+          <SelectBusca style={E.input} value={novo.grupo} placeholder="Procurar grupo…"
+            onChange={(v) => setNovo({ ...novo, grupo: v })}
+            opcoes={grupos.includes(novo.grupo) ? grupos : [novo.grupo].concat(grupos)} />
           <CampoUnidade valor={novo.unidade} unidades={unidades} aoMudar={(v) => setNovo({ ...novo, unidade: v })} />
         </div>
         {jaExiste ? (
@@ -4945,11 +4948,10 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
           {itens.length > 1 && (
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
               <span style={{ fontSize: 11.5, color: "#4b5563" }}>Pôr a mesma etapa em todos:</span>
-              <select style={{ ...celStyle, width: "auto", minWidth: 200, cursor: "pointer" }} value=""
-                onChange={(e) => { const v = e.target.value; if (v) aoMudar({ ...p, itens: itens.map((x) => ({ ...x, etapa: v })) }); }}>
-                <option value="">— escolher —</option>
-                {etapas.map((et) => <option key={et.id} value={et.id}>{et.nome}</option>)}
-              </select>
+              <SelectBusca style={{ ...celStyle, width: "auto", minWidth: 200 }} value=""
+                placeholder="Procurar etapa…" vazio="— escolher —"
+                onChange={(v) => { if (v) aoMudar({ ...p, itens: itens.map((x) => ({ ...x, etapa: v })) }); }}
+                opcoes={etapas.map((et) => ({ valor: et.id, rotulo: et.nome, grupo: et.macro || "" }))} />
             </div>
           )}
 
@@ -4980,20 +4982,18 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
                 onChange={(v) => mexerItem(i, { unitario: v })} />
               <CampoCtrNum tipo="moeda" valor={it.bruto} style={celStyle} placeholder="0,00"
                 onChange={(v) => mexerItem(i, { bruto: v })} />
-              <select style={{ ...celStyle, cursor: "pointer", borderColor: it.etapa ? "rgba(38,36,33,0.16)" : "#dc2626" }}
-                value={it.etapa || ""} onChange={(e) => mexerItem(i, { etapa: e.target.value })}>
-                <option value="">— etapa —</option>
-                {etapas.map((et) => <option key={et.id} value={et.id}>{et.nome}</option>)}
-              </select>
-              <select style={{ ...celStyle, cursor: "pointer" }} value={it.contaId || ""}
-                onChange={(e) => mexerItem(i, { contaId: e.target.value })}>
-                <option value="">Material (padrão)</option>
-                {grupos.filter((g) => g.id !== "receitas").map((g) => (
-                  <optgroup key={g.id} label={g.titulo}>
-                    {plano.filter((c) => c.grupo === g.id).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                  </optgroup>
-                ))}
-              </select>
+              <SelectBusca style={{ ...celStyle, borderColor: it.etapa ? "rgba(38,36,33,0.16)" : "#dc2626" }}
+                value={it.etapa || ""} onChange={(v) => mexerItem(i, { etapa: v })}
+                placeholder="Procurar etapa…"
+                opcoes={[{ valor: "", rotulo: "— etapa —" }].concat(
+                  etapas.map((et) => ({ valor: et.id, rotulo: et.nome, grupo: et.macro || "" })))} />
+              <SelectBusca style={celStyle} value={it.contaId || ""}
+                onChange={(v) => mexerItem(i, { contaId: v })} placeholder="Procurar conta…"
+                opcoes={[{ valor: "", rotulo: "Material (padrão)" }].concat(
+                  grupos.filter((g) => g.id !== "receitas").map((g) => ({
+                    grupo: g.titulo,
+                    opcoes: plano.filter((c) => c.grupo === g.id).map((c) => ({ valor: c.id, rotulo: c.nome })),
+                  })))} />
               <button type="button" title="Tirar do pedido" style={{ ...E.btnSec, padding: "5px 8px", color: "#dc2626" }}
                 onClick={() => aoMudar({ ...p, itens: itens.filter((_, j) => j !== i) })}>×</button>
             </div>
@@ -5041,11 +5041,11 @@ function CampoUnidade({ valor, unidades, aoMudar, estilo }) {
   const E = COT_ESTILO;
   const lista = opcoesDeUnidade(valor, unidades);
   return (
-    <select style={{ ...(estilo || E.input), cursor: "pointer" }} value={valor || ""}
-      onChange={(e) => aoMudar(e.target.value)}>
-      <option value="">—</option>
-      {lista.map((u) => <option key={u} value={u}>{u}</option>)}
-    </select>
+    <SelectBusca style={estilo || E.input} value={valor || ""} onChange={(v) => aoMudar(v)}
+      placeholder="Procurar unidade…"
+      opcoes={[{ valor: "", rotulo: "—" }].concat(lista.map(function (u) {
+        return { valor: u, rotulo: u };
+      }))} />
   );
 }
 

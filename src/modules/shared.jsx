@@ -2042,3 +2042,302 @@ function useSessionCoordinator({ usuarioAtual, onOutroUsuario, onMesmoUsuario, o
     };
   }, [usuarioAtual?.id, onOutroUsuario, onMesmoUsuario, onLogout]);
 }
+
+
+// ═════════════════════════════════════════════════════════════
+// SelectBusca — lista de seleção que abre com o campo de busca em cima
+// ═════════════════════════════════════════════════════════════
+// Etapa da obra são 53 opções; conta do P&L, 43. Num <select> nativo, achar
+// "Reboco interno" é rolar a lista — e num pedido de vinte itens isso se
+// repete vinte vezes. Aqui a lista abre com o cursor já dentro do campo de
+// busca: digitou "reb", a opção certa já está marcada, Enter escolhe. Setas
+// andam, Esc fecha, clique fora fecha, e uma letra digitada com o campo
+// fechado abre a lista já filtrando.
+//
+// Aceita as formas que os módulos já têm em mão, para não obrigar ninguém a
+// remontar a lista só para trocar o select:
+//   ["m2", "un"]                              → valor = rótulo
+//   [{ id, nome }] [{ valor, rotulo }] [{ value, label }]
+//   [{ grupo: "Fundação", opcoes: [...] }]      → cabeçalho de grupo (optgroup)
+//   [{ valor, rotulo, grupo }]                 → idem, já achatado
+// O nome do grupo entra na busca: "fund sap" acha a sapata da fundação.
+
+// ── SelectBusca: parte pura ────────────────────────────
+
+// Ninguém digita "tábua" nem "cerâmica" com acento no meio de um pedido.
+function buscaNormal(t) {
+  return String(t == null ? "" : t)
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+// Achata qualquer das formas aceitas em { valor, rotulo, grupo, busca }.
+function opcoesNormalizadas(opcoes) {
+  const saida = [];
+  (Array.isArray(opcoes) ? opcoes : []).forEach(function (o) {
+    if (o == null) return;
+    if (typeof o === "string" || typeof o === "number") {
+      saida.push({ valor: String(o), rotulo: String(o), grupo: "", extra: "" });
+      return;
+    }
+    if (Array.isArray(o.opcoes)) {
+      const nomeGrupo = String(o.grupo || o.titulo || o.label || o.nome || "");
+      opcoesNormalizadas(o.opcoes).forEach(function (f) {
+        saida.push({ valor: f.valor, rotulo: f.rotulo, grupo: f.grupo || nomeGrupo, extra: f.extra });
+      });
+      return;
+    }
+    const valor = o.valor != null ? o.valor : (o.value != null ? o.value : (o.id != null ? o.id : ""));
+    const rotulo = o.rotulo != null ? o.rotulo
+      : (o.label != null ? o.label : (o.nome != null ? o.nome : String(valor)));
+    saida.push({
+      valor: String(valor),
+      rotulo: String(rotulo),
+      grupo: String(o.grupo != null ? o.grupo : (o.macro != null ? o.macro : "")),
+      extra: String(o.extra != null ? o.extra : ""),
+    });
+  });
+  return saida.map(function (o) {
+    return {
+      valor: o.valor, rotulo: o.rotulo, grupo: o.grupo, extra: o.extra,
+      busca: buscaNormal([o.rotulo, o.grupo, o.extra, o.valor].join(" ")),
+    };
+  });
+}
+
+// Filtra por pedacos soltos ("reb int" acha "Reboco interno") e põe na frente
+// quem COMEÇA com o que foi digitado — é essa a opção que a pessoa espera ver
+// já marcada depois das primeiras letras.
+function filtrarOpcoes(lista, termo) {
+  const alvo = buscaNormal(termo);
+  if (!alvo) return lista;
+  const partes = alvo.split(" ").filter(Boolean);
+  const comeca = [], contem = [];
+  lista.forEach(function (o) {
+    const casa = partes.every(function (p) { return o.busca.indexOf(p) >= 0; });
+    if (!casa) return;
+    (buscaNormal(o.rotulo).indexOf(alvo) === 0 ? comeca : contem).push(o);
+  });
+  return comeca.concat(contem);
+}
+
+// ── SelectBusca: fim da parte pura ────────────────────
+
+const SB_CAMPO = {
+  border: "1px solid rgba(38,36,33,0.16)", borderRadius: 12, padding: "9px 12px",
+  fontSize: 13, background: "#fff", fontFamily: "inherit", width: "100%",
+  boxSizing: "border-box", outline: "none",
+};
+
+function SelectBusca(props) {
+  const lista = useMemo(function () { return opcoesNormalizadas(props.opcoes); }, [props.opcoes]);
+  const [aberto, setAberto] = useState(false);
+  const [termo, setTermo] = useState("");
+  const [marcado, setMarcado] = useState(0);
+  const [caixa, setCaixa] = useState(null);
+  const refBotao = useRef(null);
+  const refBusca = useRef(null);
+  const refPainel = useRef(null);
+  // Lista curta não ganha campo de busca, mas continua respondendo às letras
+  // como o select nativo: "fu" pula para a primeira opção que começa assim.
+  const refDigitado = useRef({ texto: "", quando: 0 });
+
+  const valorAtual = props.value == null ? "" : String(props.value);
+  const escolhida = lista.filter(function (o) { return o.valor === valorAtual; })[0];
+  const filtradas = useMemo(function () { return filtrarOpcoes(lista, termo); }, [lista, termo]);
+  // Um select de duas opções (Material/Prestador) só piora com campo de busca.
+  const minimo = props.minimoParaBusca == null ? 6 : props.minimoParaBusca;
+  const comBusca = props.semBusca ? false : lista.length >= minimo;
+
+  // Painel em position:fixed, medido a partir do botão: assim ele não é
+  // cortado por tabela com overflow nem por card com borda arredondada.
+  const medir = useCallback(function () {
+    const el = refBotao.current;
+    if (!el || typeof window === "undefined") return;
+    const r = el.getBoundingClientRect();
+    const tetoAltura = 320;
+    const abaixo = window.innerHeight - r.bottom - 10;
+    const acima = r.top - 10;
+    const paraBaixo = abaixo >= 200 || abaixo >= acima;
+    const largura = Math.max(r.width, 250);
+    setCaixa({
+      esquerda: Math.max(8, Math.min(r.left, window.innerWidth - largura - 8)),
+      largura: largura,
+      topo: paraBaixo ? r.bottom + 4 : null,
+      base: paraBaixo ? null : Math.max(8, window.innerHeight - r.top + 4),
+      altura: Math.max(150, Math.min(tetoAltura, (paraBaixo ? abaixo : acima))),
+    });
+  }, []);
+
+  useEffect(function () {
+    if (!aberto) return;
+    medir();
+    function fora(ev) {
+      if (refPainel.current && refPainel.current.contains(ev.target)) return;
+      if (refBotao.current && refBotao.current.contains(ev.target)) return;
+      setAberto(false);
+    }
+    document.addEventListener("mousedown", fora, true);
+    window.addEventListener("resize", medir);
+    window.addEventListener("scroll", medir, true);
+    return function () {
+      document.removeEventListener("mousedown", fora, true);
+      window.removeEventListener("resize", medir);
+      window.removeEventListener("scroll", medir, true);
+    };
+  }, [aberto, medir]);
+
+  // O foco vai para o campo de busca (ou para o painel, quando a lista é
+  // curta e não tem busca) — é o que faz as setas e o Enter funcionarem.
+  useEffect(function () {
+    if (!aberto) return;
+    const t = setTimeout(function () {
+      if (comBusca && refBusca.current) refBusca.current.focus();
+      else if (refPainel.current) refPainel.current.focus();
+    }, 0);
+    return function () { clearTimeout(t); };
+  }, [aberto, comBusca]);
+
+  useEffect(function () {
+    if (!aberto || !refPainel.current) return;
+    const el = refPainel.current.querySelector('[data-sb-idx="' + marcado + '"]');
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
+  }, [aberto, marcado, termo]);
+
+  function abrir(comLetra) {
+    setTermo(comLetra || "");
+    setMarcado(0);
+    setAberto(true);
+  }
+
+  function escolher(o) {
+    setAberto(false);
+    setTermo("");
+    if (props.onChange) props.onChange(o.valor, o);
+  }
+
+  function aoTeclar(e) {
+    if (e.key === "Escape") {
+      e.preventDefault(); setAberto(false);
+      if (refBotao.current) refBotao.current.focus();
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setMarcado(function (m) { return Math.min(filtradas.length - 1, m + 1); });
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setMarcado(function (m) { return Math.max(0, m - 1); });
+      return;
+    }
+    if (e.key === "Home") { e.preventDefault(); setMarcado(0); return; }
+    if (e.key === "End") { e.preventDefault(); setMarcado(Math.max(0, filtradas.length - 1)); return; }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const o = filtradas[marcado];
+      if (o) escolher(o);
+      return;
+    }
+    if (e.key === "Tab") { setAberto(false); return; }
+    if (!comBusca && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      const agora = Date.now();
+      const d = refDigitado.current;
+      d.texto = (agora - d.quando < 900 ? d.texto : "") + e.key;
+      d.quando = agora;
+      const alvo = buscaNormal(d.texto);
+      for (let i = 0; i < filtradas.length; i++) {
+        if (buscaNormal(filtradas[i].rotulo).indexOf(alvo) === 0) { setMarcado(i); break; }
+      }
+    }
+  }
+
+  const estiloBotao = Object.assign({}, props.style || SB_CAMPO, {
+    cursor: props.disabled ? "default" : "pointer",
+    textAlign: "left",
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    opacity: props.disabled ? 0.6 : 1,
+    color: escolhida ? "#111827" : "#9ca3af",
+  });
+
+  return (
+    <>
+      <button type="button" ref={refBotao} disabled={!!props.disabled} id={props.id}
+        title={props.title || (escolhida ? escolhida.rotulo : "")}
+        style={estiloBotao}
+        onClick={function () { if (props.disabled) return; if (aberto) setAberto(false); else abrir(""); }}
+        onKeyDown={function (e) {
+          if (props.disabled) return;
+          if (aberto) return;
+          if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") { e.preventDefault(); abrir(""); return; }
+          if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); abrir(e.key); }
+        }}>
+        <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {escolhida ? escolhida.rotulo : (props.vazio || "— escolher —")}
+        </span>
+        <span style={{ color: "#9ca3af", fontSize: 9, flexShrink: 0 }}>▾</span>
+      </button>
+
+      {aberto && caixa && (
+        <div ref={refPainel} tabIndex={-1} onKeyDown={comBusca ? undefined : aoTeclar}
+          style={{
+            position: "fixed", zIndex: 4200, left: caixa.esquerda, width: caixa.largura,
+            top: caixa.topo != null ? caixa.topo : undefined,
+            bottom: caixa.topo != null ? undefined : caixa.base,
+            maxHeight: caixa.altura, display: "flex", flexDirection: "column",
+            background: "#fff", border: "1px solid rgba(38,36,33,0.16)", borderRadius: 12,
+            boxShadow: "0 14px 36px rgba(0,0,0,0.18)", overflow: "hidden", outline: "none",
+          }}>
+          {comBusca && (
+            <div style={{ padding: 8, borderBottom: "1px solid rgba(38,36,33,0.08)", flexShrink: 0 }}>
+              <input ref={refBusca} value={termo} onKeyDown={aoTeclar}
+                placeholder={props.placeholder || "Procurar…"}
+                onChange={function (e) { setTermo(e.target.value); setMarcado(0); }}
+                style={{
+                  border: "1px solid #0474f4", borderRadius: 9, padding: "7px 10px", fontSize: 13,
+                  width: "100%", boxSizing: "border-box", outline: "none", fontFamily: "inherit",
+                }} />
+            </div>
+          )}
+          <div style={{ overflowY: "auto", flex: 1 }}>
+            {filtradas.length === 0 && (
+              <div style={{ padding: "12px 12px", fontSize: 12.5, color: "#9ca3af" }}>
+                nada com esse nome
+              </div>
+            )}
+            {filtradas.map(function (o, i) {
+              const cabecalho = o.grupo && (i === 0 || filtradas[i - 1].grupo !== o.grupo);
+              const atual = o.valor === valorAtual;
+              return (
+                <Fragment key={o.valor + "\u0000" + i}>
+                  {cabecalho && (
+                    <div style={{
+                      padding: "7px 12px 3px", fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+                      textTransform: "uppercase", color: "#9ca3af",
+                    }}>{o.grupo}</div>
+                  )}
+                  <div data-sb-idx={i}
+                    onMouseEnter={function () { setMarcado(i); }}
+                    onMouseDown={function (ev) { ev.preventDefault(); }}
+                    onClick={function () { escolher(o); }}
+                    style={{
+                      padding: "8px 12px", fontSize: 13, cursor: "pointer", lineHeight: 1.3,
+                      background: i === marcado ? "#eef5ff" : "transparent",
+                      color: i === marcado ? "#0474f4" : "#111827",
+                      fontWeight: atual ? 600 : 400,
+                    }}>
+                    {o.rotulo}
+                  </div>
+                </Fragment>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

@@ -676,15 +676,16 @@ function InsumoForm({ insumo, insumos, onSalvar, onCancelar, isMobile }) {
         </div>
         <div>
           <label style={INS_S.label}>Grupo</label>
-          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={f.grupo} onChange={e => set("grupo", e.target.value)}>
-            {INSUMO_GRUPOS.map(g => <option key={g.prefixo} value={g.nome}>{g.nome} ({g.prefixo})</option>)}
-          </select>
+          <SelectBusca style={INS_S.input} value={f.grupo} onChange={v => set("grupo", v)}
+            placeholder="Procurar grupo…" vazio="— escolher —"
+            opcoes={INSUMO_GRUPOS.map(function (g) {
+              return { valor: g.nome, rotulo: g.nome + " (" + g.prefixo + ")" };
+            })} />
         </div>
         <div>
           <label style={INS_S.label}>Unidade</label>
-          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={f.unidade} onChange={e => set("unidade", e.target.value)}>
-            {INSUMO_UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
-          </select>
+          <SelectBusca style={INS_S.input} value={f.unidade} onChange={v => set("unidade", v)}
+            placeholder="Procurar unidade…" vazio="— escolher —" opcoes={INSUMO_UNIDADES} />
         </div>
         <div>
           <label style={INS_S.label}>Tipo</label>
@@ -698,31 +699,28 @@ function InsumoForm({ insumo, insumos, onSalvar, onCancelar, isMobile }) {
             já entra com ela no pedido; em branco, quem decide é a compra. */}
         <div>
           <label style={INS_S.label}>Etapa padrão</label>
-          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })}
-            value={f.etapaPadrao || ""} onChange={e => set("etapaPadrao", e.target.value)}>
-            <option value="">— decide na compra —</option>
-            {(typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(function (et) {
-              return <option key={et.id} value={et.id}>{et.nome}</option>;
-            })}
-          </select>
+          <SelectBusca style={INS_S.input} value={f.etapaPadrao || ""}
+            onChange={v => set("etapaPadrao", v)} placeholder="Procurar etapa…"
+            opcoes={[{ valor: "", rotulo: "— decide na compra —" }].concat(
+              (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(function (et) {
+                return { valor: et.id, rotulo: et.nome, grupo: et.macro || "" };
+              }))} />
         </div>
         <div>
           <label style={INS_S.label}>Conta padrão do P&amp;L</label>
-          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })}
-            value={f.contaPadrao || ""} onChange={e => set("contaPadrao", e.target.value)}>
-            <option value="">— Material —</option>
-            {(typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : [])
-              .filter(function (g) { return g.id !== "receitas" && g.id !== "terreno"; })
-              .map(function (g) {
-                return (
-                  <optgroup key={g.id} label={g.titulo}>
-                    {(typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [])
+          <SelectBusca style={INS_S.input} value={f.contaPadrao || ""}
+            onChange={v => set("contaPadrao", v)} placeholder="Procurar conta…"
+            opcoes={[{ valor: "", rotulo: "— Material —" }].concat(
+              (typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : [])
+                .filter(function (g) { return g.id !== "receitas" && g.id !== "terreno"; })
+                .map(function (g) {
+                  return {
+                    grupo: g.titulo,
+                    opcoes: (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [])
                       .filter(function (c) { return c.grupo === g.id; })
-                      .map(function (c) { return <option key={c.id} value={c.id}>{c.nome}</option>; })}
-                  </optgroup>
-                );
-              })}
-          </select>
+                      .map(function (c) { return { valor: c.id, rotulo: c.nome }; }),
+                  };
+                }))} />
         </div>
         <div>
           <label style={INS_S.label}>Preço manual (R$)</label>
@@ -1353,10 +1351,10 @@ function Insumos({ data, save }) {
 
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
           <input style={INS_S.input} placeholder="Buscar por nome, código ou apelido…" value={busca} onChange={e => setBusca(e.target.value)} />
-          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={filtroGrupo} onChange={e => setFiltroGrupo(e.target.value)}>
-            <option value="">Todos os grupos</option>
-            {INSUMO_GRUPOS.map(g => <option key={g.prefixo} value={g.nome}>{g.nome}</option>)}
-          </select>
+          <SelectBusca style={INS_S.input} value={filtroGrupo} onChange={v => setFiltroGrupo(v)}
+            placeholder="Procurar grupo…"
+            opcoes={[{ valor: "", rotulo: "Todos os grupos" }].concat(
+              INSUMO_GRUPOS.map(function (g) { return { valor: g.nome, rotulo: g.nome }; }))} />
           <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={filtroConf} onChange={e => setFiltroConf(e.target.value)}>
             <option value="">Qualquer preço</option>
             <option value="alta">Atual</option>
@@ -1422,13 +1420,12 @@ function Insumos({ data, save }) {
                 {chaves.length === 1 ? "1 selecionado" : chaves.length + " selecionados"}
               </span>
               <span style={{ fontSize: 12.5, color: "#4b5563" }}>Etapa padrão:</span>
-              <select style={Object.assign({}, INS_S.input, { cursor: "pointer", width: "auto", minWidth: 220 })}
-                value={etapaLote} onChange={e => setEtapaLote(e.target.value)}>
-                <option value="">— tirar a etapa —</option>
-                {(typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(function (et) {
-                  return <option key={et.id} value={et.id}>{et.nome}</option>;
-                })}
-              </select>
+              <SelectBusca style={Object.assign({}, INS_S.input, { width: "auto", minWidth: 220 })}
+                value={etapaLote} onChange={v => setEtapaLote(v)} placeholder="Procurar etapa…"
+                opcoes={[{ valor: "", rotulo: "— tirar a etapa —" }].concat(
+                  (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(function (et) {
+                    return { valor: et.id, rotulo: et.nome, grupo: et.macro || "" };
+                  }))} />
               <button style={INS_S.btn} onClick={aplicarEtapaEmLote}>Aplicar</button>
               <button style={INS_S.btnGhost} onClick={() => setMarcados({})}>Limpar seleção</button>
             </div>
