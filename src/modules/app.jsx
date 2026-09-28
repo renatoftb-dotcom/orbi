@@ -1542,9 +1542,10 @@ export default function ModuloClientesFornecedores() {
     { k:"obras",       icon:"obras",      label:"Obras" },
     { k:"fornecedores", icon:"prestadores", label:"Prestadores de Serviços" },
     { k:"insumos",     icon:"insumos",    label:"Insumos", count: data?.materiais?.length },
-    // Módulos Financeiro e Notas Fiscais continuam removidos do menu
-    // (decisão Sprint 3): serão refeitos do zero. Mantenho os componentes/rotas
-    // por enquanto pra não quebrar dados antigos, só ocultos do menu.
+    // O Financeiro voltou como módulo Escritório, no fim deste menu.
+    // O importador de nota fiscal foi apagado: estava fora do menu desde a
+    // Sprint 3 e chamava a API da Anthropic direto do navegador, sem chave.
+    // Compra do dia entra por Contas a Pagar; item grande, por Cotações.
     // Fornecedores foi refeito do zero como "Prestadores de Serviços"
     // (PrestadoresServico em outros.jsx) — cadastro simples de empreiteiros,
     // eletricistas, pintores, gesseiros, lojas, esquadrias etc.
@@ -2038,7 +2039,6 @@ export default function ModuloClientesFornecedores() {
           {aba === "financeiro"             && <Financeiro key={financeiroKey} data={data} save={save} />}
           {aba === "fornecedores"           && <PrestadoresServico key={fornecedoresKey} data={data} save={save} />}
           {aba === "insumos"                && <Insumos data={data} save={save} />}
-          {aba === "nf"                     && <ImportarNF data={data} save={save} />}
           {typeof aba === "string" && aba.indexOf("escritorio") === 0 && <Escritorio key={escritorioKey} abaInicial={aba.indexOf(":") > 0 ? aba.slice(aba.indexOf(":") + 1) : "dados"} data={data} save={save} onReload={loadData} aoTrocarAba={(k) => setAba("escritorio:" + k)} />}
           {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} setUsuario={setUsuario} />}
           {/* Sub-abas do menu Master — Admin recebe initialTab pra abrir direto na aba certa */}
