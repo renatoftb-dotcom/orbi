@@ -3771,6 +3771,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   categoria="comprovante_pagamento"
                   chamada="Arraste o comprovante aqui"
                   apoio="cole o print com Ctrl+V, arraste o arquivo ou clique para escolher"
+                  chamadaToque="Toque para anexar o comprovante"
+                  apoioToque="tire a foto do comprovante, escolha da galeria ou pegue o PDF do banco"
                   onTrocar={a => setFormPagamento(f => f && ({ ...f, comprovante: a }))}
                   onErro={m => setFormPagamento(f => f && ({ ...f, erroAnexo: m }))} />
                 {formPagamento.erroAnexo && (

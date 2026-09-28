@@ -4779,7 +4779,9 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
             style={{ border: `1.5px dashed ${sobre ? "#0474f4" : "rgba(38,36,33,0.22)"}`, borderRadius: 12,
               padding: "14px 16px", marginBottom: 14, background: sobre ? "#eef5ff" : "#fafafa", textAlign: "center" }}>
             <div style={{ fontSize: 12.5, color: "#374151" }}>
-              {lendo ? "Lendo o PDF…" : "Arraste aqui o PDF do pedido da loja"}
+              {lendo ? "Lendo o PDF…"
+                : ehPonteiroDeToque() ? "Toque para escolher o PDF do pedido"
+                : "Arraste aqui o PDF do pedido da loja"}
             </div>
             <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3 }}>
               número, data, vencimento e itens saem do próprio papel
@@ -5120,7 +5122,16 @@ function FolhaPedido({ cot, proposta, ctx, aoFechar }) {
 }
 
 // Campo de anexo: arrasta o PDF do e-mail para cá, ou clica e escolhe.
-function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio, aoLerPdf, lendo, leFoto, progresso }) {
+// No celular não existe arrastar nem Ctrl+V — existe tocar. Quem decide a
+// frase é o ponteiro, não a largura da tela: um tablet largo também é dedo.
+function ehPonteiroDeToque() {
+  try {
+    return typeof window !== "undefined" && !!window.matchMedia
+      && window.matchMedia("(hover: none)").matches;
+  } catch (e) { return false; }
+}
+
+function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, chamadaToque, apoio, apoioToque, aoLerPdf, lendo, leFoto, progresso }) {
   const [sobre, setSobre] = useState(false);
   const [enviando, setEnviando] = useState(false);
   // "Abrir" aqui era um link direto para a URL do storage. Como o arquivo
@@ -5208,6 +5219,7 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio
     );
   }
 
+  const toque = ehPonteiroDeToque();
   return (
     <div
       onDragOver={e => { e.preventDefault(); setSobre(true); }}
@@ -5225,10 +5237,14 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio
       <input ref={refInput} type="file" accept="application/pdf,image/*" style={{ display: "none" }}
         onChange={e => { receber(e.target.files && e.target.files[0]); e.target.value = ""; }} />
       <div style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>
-        {enviando ? (lendo ? "Lendo os preços…" : "Enviando…") : (chamada || "Arraste o PDF da proposta aqui")}
+        {enviando
+          ? (lendo ? "Lendo os preços…" : "Enviando…")
+          : (toque ? (chamadaToque || "Toque para anexar") : (chamada || "Arraste o PDF da proposta aqui"))}
       </div>
       <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>
-        {apoio || "clique para escolher, ou cole com Ctrl+V — PDF ou foto, até 10 MB"}
+        {toque
+          ? (apoioToque || "tire a foto na hora, escolha da galeria ou pegue um arquivo — até 10 MB")
+          : (apoio || "clique para escolher, ou cole com Ctrl+V — PDF ou foto, até 10 MB")}
       </div>
     </div>
   );
