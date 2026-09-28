@@ -733,13 +733,13 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
             <div style={E.grid3}>
               <div style={E.campo}>
                 <label style={E.label}>Tipo de conta</label>
-                <select style={E.select} value={form.tipoConta} onChange={e => setF("tipoConta", e.target.value)}>
+                <Selecao style={E.select} value={form.tipoConta} onChange={e => setF("tipoConta", e.target.value)}>
                   <option>Corrente</option><option>Poupança</option><option>Pagamento</option>
-                </select>
+                </Selecao>
               </div>
               <div style={E.campo}>
                 <label style={E.label}>Tipo de chave PIX</label>
-                <select style={E.select} value={form.pixTipo} onChange={e => {
+                <Selecao style={E.select} value={form.pixTipo} onChange={e => {
                   const tipo = e.target.value;
                   let chave = form.pixChave;
                   if (tipo==="CNPJ"||tipo==="CPF") chave = form.cnpj||chave;
@@ -748,7 +748,7 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
                   setForm(f => ({...f, pixTipo:tipo, pixChave:chave}));
                 }}>
                   <option>CNPJ</option><option>CPF</option><option>E-mail</option><option>Telefone</option><option>Chave Aleatória</option>
-                </select>
+                </Selecao>
               </div>
               <div style={E.campo}>
                 <label style={E.label}>Chave PIX</label>
@@ -1057,17 +1057,17 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:14 }}>
                 <div style={E.campo}>
                   <label style={E.label}>Nível de acesso *</label>
-                  <select style={E.select} value={novoUsuario.nivel}
+                  <Selecao style={E.select} value={novoUsuario.nivel}
                     onChange={e => setNovoUsuario(u => ({ ...u, nivel: e.target.value }))}>
                     <option value="admin">Admin — acesso total</option>
                     <option value="editor">Editor — cria e edita</option>
                     <option value="visualizador">Visualizador — só leitura</option>
-                  </select>
+                  </Selecao>
                 </div>
                 <div style={E.campo}>
                   <label style={E.label}>Vincular a membro da equipe</label>
                   <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                    <select style={{ ...E.select, flex:1 }} value={novoUsuario.membro_id}
+                    <Selecao style={{ ...E.select, flex:1 }} value={novoUsuario.membro_id}
                       onChange={e => {
                         const valor = e.target.value;
                         // Opção especial __novo: abre o modal de novo membro sem fechar
@@ -1085,7 +1085,7 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
                         <option key={m.id} value={m.id}>{m.nome}{m.cargo ? ` (${m.cargo})` : ""}</option>
                       ))}
                       <option value="__novo">+ Cadastrar novo membro…</option>
-                    </select>
+                    </Selecao>
                   </div>
                   {equipe.length === 0 && (
                     <div style={{ fontSize:11, color:"#4b5563", marginTop:5 }}>

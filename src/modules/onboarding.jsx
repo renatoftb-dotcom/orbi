@@ -2349,7 +2349,7 @@ function BlocoCadastroEscritorio({
           </div>
           <div style={campoWrap}>
             <label style={labelBase}>Estado</label>
-            <select
+            <Selecao
               value={estado}
               onChange={e => setEstado(e.target.value)}
               style={{ ...inputBase, cursor: "pointer" }}>
@@ -2357,7 +2357,7 @@ function BlocoCadastroEscritorio({
               {ESTADOS_DISPONIVEIS.map(e => (
                 <option key={e.sigla} value={e.sigla}>{e.nome}</option>
               ))}
-            </select>
+            </Selecao>
           </div>
         </div>
 
@@ -2445,7 +2445,7 @@ function BlocoCadastroEscritorio({
         <div className="vk-onb-cad-grid" style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 14 }}>
           <div style={campoWrap}>
             <label style={labelBase}>Tipo de chave</label>
-            <select
+            <Selecao
               value={pixTipo}
               onChange={e => setPixTipo(e.target.value)}
               style={{ ...inputBase, cursor: "pointer" }}>
@@ -2455,7 +2455,7 @@ function BlocoCadastroEscritorio({
               <option value="E-mail">E-mail</option>
               <option value="Telefone">Telefone</option>
               <option value="Aleatória">Aleatória</option>
-            </select>
+            </Selecao>
           </div>
           <div style={campoWrap}>
             <label style={labelBase}>Chave PIX</label>

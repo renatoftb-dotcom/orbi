@@ -5086,11 +5086,11 @@ function CampoSelect({ label, valor, onChange, opcoes }) {
   return (
     <div style={CAMPO_CELULA}>
       <label style={C.label}>{label}</label>
-      <select style={{ ...C.input, cursor: "pointer" }} value={valor ?? ""} onChange={(e) => onChange(e.target.value)}>
+      <Selecao style={{ ...C.input, cursor: "pointer" }} value={valor ?? ""} onChange={(e) => onChange(e.target.value)}>
         {opcoes.map((o) => (
           <option key={o.value ?? o} value={o.value ?? o}>{o.label ?? o}</option>
         ))}
-      </select>
+      </Selecao>
     </div>
   );
 }
@@ -5307,14 +5307,14 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
       </div>
       <div style={{ marginTop: 6, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         {adicionando ? (
-          <select autoFocus style={{ ...C.input, width: "auto", minWidth: 220 }} defaultValue="" onBlur={() => setAdicionando(false)}
+          <Selecao autoFocus style={{ ...C.input, width: "auto", minWidth: 220 }} defaultValue="" onBlur={() => setAdicionando(false)}
             onChange={(e) => { if (e.target.value) { setQtd(e.target.value, 1); setComodoAberto(null); } setAdicionando(false); }}>
             <option value="">Escolha o cômodo…</option>
             {grupos.map((g) => {
               const opts = ausentes.filter((a) => (a.grupo || "") === g);
               return opts.length ? <optgroup key={g} label={g}>{opts.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}</optgroup> : null;
             })}
-          </select>
+          </Selecao>
         ) : (
           ausentes.length > 0 && <button type="button" style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }} onClick={() => setAdicionando(true)}>＋ Adicionar cômodo</button>
         )}
@@ -5584,10 +5584,10 @@ function MatrizExistente({ projetoDraft, get, set, isMobile }) {
                 Incluir a pintura desta parede
               </label>
               {!!get("existente.alvenaria.pintar") && (
-                <select style={{ ...cel, width: "auto", minWidth: 190 }} value={get("existente.alvenaria.pintar")}
+                <Selecao style={{ ...cel, width: "auto", minWidth: 190 }} value={get("existente.alvenaria.pintar")}
                   onChange={(e) => set("existente.alvenaria.pintar", e.target.value)}>
                   {PINTURA_PAREDE.filter((x) => x.id).map((x) => <option key={x.id} value={x.id}>{x.nome}</option>)}
-                </select>
+                </Selecao>
               )}
               {!!get("existente.alvenaria.pintar") && (
                 <span style={{ fontSize: 11.5, color: "#6b7280" }}>
@@ -5607,7 +5607,7 @@ function MatrizExistente({ projetoDraft, get, set, isMobile }) {
                 {Array.from({ length: Math.min(20, Math.round(quantos)) }).map((_, i) => (
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <span style={{ fontSize: 11.5, color: "#6b7280" }}>{i + 1}º</span>
-                    <select style={{ ...cel, width: "auto", minWidth: 120 }}
+                    <Selecao style={{ ...cel, width: "auto", minWidth: 120 }}
                       value={(get(`existente.${it.id}.padroes`) || [])[i] || padraoObra}
                       onChange={(e) => {
                         const lista = (get(`existente.${it.id}.padroes`) || []).slice();
@@ -5616,7 +5616,7 @@ function MatrizExistente({ projetoDraft, get, set, isMobile }) {
                         set(`existente.${it.id}.padroes`, lista.slice(0, Math.round(quantos)));
                       }}>
                       {PADROES_OBRA.map((p) => <option key={p} value={p}>{p}</option>)}
-                    </select>
+                    </Selecao>
                   </div>
                 ))}
               </div>
@@ -5628,10 +5628,10 @@ function MatrizExistente({ projetoDraft, get, set, isMobile }) {
       <div style={{ ...grade, marginTop: 4 }}>
         <label style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>Tipo do forro</label>
         <div style={{ gridColumn: isMobile ? "auto" : "2 / -1" }}>
-          <select style={cel} value={get("existente.forro.tipo") || FORRO_TIPO_PADRAO}
+          <Selecao style={cel} value={get("existente.forro.tipo") || FORRO_TIPO_PADRAO}
             onChange={(e) => set("existente.forro.tipo", e.target.value)}>
             {FORRO_TIPOS.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
-          </select>
+          </Selecao>
         </div>
       </div>
     </div>

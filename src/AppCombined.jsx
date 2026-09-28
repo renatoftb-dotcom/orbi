@@ -2145,6 +2145,8 @@ function SelectBusca(props) {
   // Lista curta não ganha campo de busca, mas continua respondendo às letras
   // como o select nativo: "fu" pula para a primeira opção que começa assim.
   const refDigitado = useRef({ texto: "", quando: 0 });
+  // O ouvinte de clique fora é registrado uma vez; o ref mantém o fechar atual.
+  const fecharRef = useRef(function () {});
 
   const valorAtual = props.value == null ? "" : String(props.value);
   const escolhida = lista.filter(function (o) { return o.valor === valorAtual; })[0];
@@ -2173,13 +2175,20 @@ function SelectBusca(props) {
     });
   }, []);
 
+  fecharRef.current = fechar;
+
+  useEffect(function () {
+    if (props.abrirAoMontar) abrir("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(function () {
     if (!aberto) return;
     medir();
     function fora(ev) {
       if (refPainel.current && refPainel.current.contains(ev.target)) return;
       if (refBotao.current && refBotao.current.contains(ev.target)) return;
-      setAberto(false);
+      fecharRef.current();
     }
     document.addEventListener("mousedown", fora, true);
     window.addEventListener("resize", medir);
@@ -2214,6 +2223,14 @@ function SelectBusca(props) {
     setAberto(true);
   }
 
+  // Fechar sem escolher é diferente de escolher: o <select> nativo dispara
+  // blur, e há tela que conta com isso para desmontar o campo.
+  function fechar() {
+    setAberto(false);
+    setTermo("");
+    if (props.aoFechar) props.aoFechar();
+  }
+
   function escolher(o) {
     setAberto(false);
     setTermo("");
@@ -2222,7 +2239,7 @@ function SelectBusca(props) {
 
   function aoTeclar(e) {
     if (e.key === "Escape") {
-      e.preventDefault(); setAberto(false);
+      e.preventDefault(); fechar();
       if (refBotao.current) refBotao.current.focus();
       return;
     }
@@ -2244,7 +2261,7 @@ function SelectBusca(props) {
       if (o) escolher(o);
       return;
     }
-    if (e.key === "Tab") { setAberto(false); return; }
+    if (e.key === "Tab") { fechar(); return; }
     if (!comBusca && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
       const agora = Date.now();
@@ -2271,9 +2288,10 @@ function SelectBusca(props) {
   return (
     <>
       <button type="button" ref={refBotao} disabled={!!props.disabled} id={props.id}
+        className={props.className}
         title={props.title || (escolhida ? escolhida.rotulo : "")}
         style={estiloBotao}
-        onClick={function () { if (props.disabled) return; if (aberto) setAberto(false); else abrir(""); }}
+        onClick={function () { if (props.disabled) return; if (aberto) fechar(); else abrir(""); }}
         onKeyDown={function (e) {
           if (props.disabled) return;
           if (aberto) return;
@@ -2343,6 +2361,75 @@ function SelectBusca(props) {
         </div>
       )}
     </>
+  );
+}
+
+
+// ── Selecao ────────────────────────────────────────────
+// Troca direta do <select> nativo: mesmos <option> e <optgroup> dentro, mesmo
+// onChange com e.target.value. Serve para varrer o app inteiro sem reescrever
+// sessenta handlers — quem precisa montar a lista de fora usa o SelectBusca.
+
+// ── Selecao: parte pura ──────────────────────────────
+
+function textoDeFilhos(n) {
+  if (n == null || n === false || n === true) return "";
+  if (typeof n === "string") return n;
+  if (typeof n === "number") return String(n);
+  if (Array.isArray(n)) return n.map(textoDeFilhos).join("");
+  if (typeof n === "object" && n.props) return textoDeFilhos(n.props.children);
+  return "";
+}
+
+function opcoesDosFilhos(filhos) {
+  const saida = [];
+  function anda(n, grupo) {
+    if (n == null || n === false || n === true || n === "") return;
+    if (Array.isArray(n)) { n.forEach(function (x) { anda(x, grupo); }); return; }
+    if (typeof n !== "object" || !n.props) return;
+    if (n.type === "optgroup") { anda(n.props.children, String(n.props.label || "")); return; }
+    if (n.type === "option") {
+      const rotulo = textoDeFilhos(n.props.children);
+      // <option key={e}>{e}</option> sem value vale pelo próprio texto, como no nativo.
+      const valor = n.props.value != null ? String(n.props.value) : rotulo;
+      saida.push({ valor: valor, rotulo: rotulo || valor, grupo: grupo || "" });
+      return;
+    }
+    if (n.props.children != null) anda(n.props.children, grupo);
+  }
+  anda(filhos, "");
+  return saida;
+}
+
+// ── Selecao: fim da parte pura ──────────────────────
+
+function Selecao(props) {
+  const opcoes = useMemo(function () { return opcoesDosFilhos(props.children); }, [props.children]);
+  const controlado = props.value !== undefined;
+  const [interno, setInterno] = useState(props.defaultValue == null ? "" : String(props.defaultValue));
+  const escolheu = useRef(false);
+  const valor = controlado ? props.value : interno;
+
+  function aoEscolher(v) {
+    escolheu.current = true;
+    if (!controlado) setInterno(v);
+    if (props.onChange) {
+      props.onChange({
+        target: { value: v }, currentTarget: { value: v },
+        stopPropagation: function () {}, preventDefault: function () {},
+      });
+    }
+  }
+
+  return (
+    <SelectBusca
+      style={props.style} className={props.className} id={props.id} title={props.title}
+      value={valor == null ? "" : String(valor)} opcoes={opcoes}
+      disabled={props.disabled} vazio={props.vazio} placeholder={props.placeholder}
+      minimoParaBusca={props.minimoParaBusca} semBusca={props.semBusca}
+      abrirAoMontar={props.autoFocus}
+      aoFechar={function () { if (!escolheu.current && props.onBlur) props.onBlur({ target: { value: valor } }); }}
+      onChange={aoEscolher} />
   );
 }
 
@@ -4067,10 +4154,10 @@ function PrestadoresServico({ data, save }) {
 
       <div style={{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap" }}>
         <input style={{ ...PS.input, maxWidth:280 }} placeholder="Buscar por nome..." value={busca} onChange={e=>setBusca(e.target.value)} />
-        <select style={{ ...PS.input, maxWidth:220, cursor:"pointer" }} value={filtroCategoria} onChange={e=>setFiltroCategoria(e.target.value)}>
+        <Selecao style={{ ...PS.input, maxWidth:220, cursor:"pointer" }} value={filtroCategoria} onChange={e=>setFiltroCategoria(e.target.value)}>
           <option value="">Todas as categorias</option>
           {CATEGORIAS_PRESTADOR.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
+        </Selecao>
       </div>
 
       {filtrados.length === 0 ? (
@@ -4134,9 +4221,9 @@ function PrestadoresServico({ data, save }) {
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
           <div>
             <label style={PS.label}>Categoria</label>
-            <select style={{ ...PS.input, cursor:"pointer" }} value={form.categoria} onChange={e=>setForm({...form,categoria:e.target.value})}>
+            <Selecao style={{ ...PS.input, cursor:"pointer" }} value={form.categoria} onChange={e=>setForm({...form,categoria:e.target.value})}>
               {CATEGORIAS_PRESTADOR.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            </Selecao>
           </div>
           <div>
             <label style={PS.label}>{form.tipo === "PJ" ? "CNPJ" : "CPF"}</label>
@@ -4172,9 +4259,9 @@ function PrestadoresServico({ data, save }) {
           </div>
           <div>
             <label style={PS.label}>Estado</label>
-            <select style={{ ...PS.input, cursor:"pointer" }} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>
+            <Selecao style={{ ...PS.input, cursor:"pointer" }} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>
               {ESTADOS_BR.map(e => <option key={e}>{e}</option>)}
-            </select>
+            </Selecao>
           </div>
         </div>
 
@@ -4221,10 +4308,10 @@ function PrestadoresServico({ data, save }) {
         <div style={{ display:"grid", gridTemplateColumns:"160px 1fr", gap:12, marginBottom:12 }}>
           <div>
             <label style={PS.label}>Tipo da chave</label>
-            <select style={{ ...PS.input, cursor:"pointer" }} value={form.pixTipo || "cnpj"}
+            <Selecao style={{ ...PS.input, cursor:"pointer" }} value={form.pixTipo || "cnpj"}
               onChange={e=>setForm({...form, pixTipo:e.target.value})}>
               {TIPOS_PIX.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-            </select>
+            </Selecao>
           </div>
           <div>
             <label style={PS.label}>Chave PIX</label>
@@ -6879,10 +6966,10 @@ function InsumoForm({ insumo, insumos, onSalvar, onCancelar, isMobile }) {
         </div>
         <div>
           <label style={INS_S.label}>Tipo</label>
-          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={f.tipo} onChange={e => set("tipo", e.target.value)}>
+          <Selecao style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={f.tipo} onChange={e => set("tipo", e.target.value)}>
             <option value="material">Material</option>
             <option value="prestador">Prestador de serviço</option>
-          </select>
+          </Selecao>
         </div>
         {/* Tubo de esgoto só serve à etapa de esgoto; cimento serve a
             quase todas. Por isso a etapa aqui é opcional: preenchida, o item
@@ -7573,7 +7660,7 @@ function Insumos({ data, save }) {
             placeholder="Procurar grupo…"
             opcoes={[{ valor: "", rotulo: "Todos os grupos" }].concat(
               INSUMO_GRUPOS.map(function (g) { return { valor: g.nome, rotulo: g.nome }; }))} />
-          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={filtroConf} onChange={e => setFiltroConf(e.target.value)}>
+          <Selecao style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={filtroConf} onChange={e => setFiltroConf(e.target.value)}>
             <option value="">Qualquer preço</option>
             <option value="alta">Atual</option>
             <option value="media">Recente</option>
@@ -7581,7 +7668,7 @@ function Insumos({ data, save }) {
             <option value="obsoleta">Obsoleto</option>
             <option value="sem_preco">Sem preço</option>
             <option value="manual">Definido à mão</option>
-          </select>
+          </Selecao>
           <SelectBusca style={INS_S.input} value={filtroEtapa} onChange={v => setFiltroEtapa(v)}
             placeholder="Procurar etapa…"
             opcoes={[{ valor: "", rotulo: "Qualquer etapa" },
@@ -9310,7 +9397,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       <div style={{ fontSize: 13, fontWeight: 700 }}>{inicial && inicial.id ? "Editar lançamento" : "Novo lançamento"}</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
         {campo("Conta", (
-          <select style={{ ...S.input, cursor: "pointer" }} value={f.contaId} onChange={(e) => {
+          <Selecao style={{ ...S.input, cursor: "pointer" }} value={f.contaId} onChange={(e) => {
             const c = contaEscritorio(e.target.value);
             const us = c && (c.unidades || []).length ? c.unidades : [];
             setF((p) => ({ ...p, contaId: e.target.value, unidadeId: us.length && !us.includes(p.unidadeId) ? us[0] : p.unidadeId }));
@@ -9325,14 +9412,14 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                 </optgroup>
               );
             })}
-          </select>
+          </Selecao>
         ))}
         {campo("Unidade de negócio", (
-          <select style={{ ...S.input, cursor: "pointer" }} value={f.unidadeId} onChange={(e) => set("unidadeId", e.target.value)}>
+          <Selecao style={{ ...S.input, cursor: "pointer" }} value={f.unidadeId} onChange={(e) => set("unidadeId", e.target.value)}>
             {UNIDADES_NEGOCIO.filter((u) => unidadesOk.includes(u.id)).map((u) => (
               <option key={u.id} value={u.id}>{u.nome}</option>
             ))}
-          </select>
+          </Selecao>
         ))}
         {campo("Valor", <input style={S.input} inputMode="decimal" value={f.valor} placeholder="0,00"
           onChange={(e) => set("valor", e.target.value)} />)}
@@ -9341,13 +9428,13 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
         {campo("Data do pagamento", <input style={S.input} type="date" value={f.lancadoEm}
           onChange={(e) => set("lancadoEm", e.target.value)} />)}
         {campo("Passou pela conta do escritório", (
-          <select style={{ ...S.input, cursor: "pointer" }} value={f.contaBanco} onChange={(e) => set("contaBanco", e.target.value)}>
+          <Selecao style={{ ...S.input, cursor: "pointer" }} value={f.contaBanco} onChange={(e) => set("contaBanco", e.target.value)}>
             <option value="sim">Sim</option>
             <option value="nao">Não</option>
-          </select>
+          </Selecao>
         ))}
         {campo(ehEmp ? "Empreendimento" : "Cliente", (
-          <select style={{ ...S.input, cursor: "pointer" }}
+          <Selecao style={{ ...S.input, cursor: "pointer" }}
             value={f.clienteId || ""}
             onChange={(e) => {
               const c = doCadastro.find((x) => x.id === e.target.value);
@@ -9358,7 +9445,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             {doCadastro.map((c) => (
               <option key={c.id} value={c.id}>{c.nome}{ehEmpreendimento(c) && !ehEmp ? " · empreendimento" : ""}</option>
             ))}
-          </select>
+          </Selecao>
         ))}
         {ehEmp && !doCadastro.length && (
           <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#b45309" }}>
@@ -9505,10 +9592,10 @@ function EFSeletor({ rotulo, valor, aoTrocar, opcoes }) {
   return (
     <label style={{ display: "grid", gap: 3 }}>
       <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>{rotulo}</span>
-      <select value={valor} onChange={(e) => aoTrocar(e.target.value)}
+      <Selecao value={valor} onChange={(e) => aoTrocar(e.target.value)}
         style={{ ...EF_ESTILO.input, padding: "7px 10px", minWidth: 130, cursor: "pointer" }}>
         {opcoes.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
-      </select>
+      </Selecao>
     </label>
   );
 }
@@ -9676,12 +9763,12 @@ function MapaDeColunas({ mapa, aoCorrigir }) {
         {campos.filter(([k]) => mapa.colunas[k] != null || ["data", "valor", "historico"].includes(k)).map(([k, r]) => (
           <label key={k} style={{ display: "grid", gap: 3 }}>
             <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>{r}</span>
-            <select value={mapa.colunas[k] == null ? "" : String(mapa.colunas[k])}
+            <Selecao value={mapa.colunas[k] == null ? "" : String(mapa.colunas[k])}
               onChange={(e) => aoCorrigir(k, e.target.value === "" ? null : Number(e.target.value))}
               style={{ ...S.input, padding: "7px 10px", minWidth: 150, cursor: "pointer",
                 borderColor: (mapa.confianca[k] != null && mapa.confianca[k] < 0.3) ? "#f59e0b" : "rgba(38,36,33,0.18)" }}>
               {opcoes.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
-            </select>
+            </Selecao>
           </label>
         ))}
       </div>
@@ -15517,11 +15604,11 @@ function CampoSelect({ label, valor, onChange, opcoes }) {
   return (
     <div style={CAMPO_CELULA}>
       <label style={C.label}>{label}</label>
-      <select style={{ ...C.input, cursor: "pointer" }} value={valor ?? ""} onChange={(e) => onChange(e.target.value)}>
+      <Selecao style={{ ...C.input, cursor: "pointer" }} value={valor ?? ""} onChange={(e) => onChange(e.target.value)}>
         {opcoes.map((o) => (
           <option key={o.value ?? o} value={o.value ?? o}>{o.label ?? o}</option>
         ))}
-      </select>
+      </Selecao>
     </div>
   );
 }
@@ -15738,14 +15825,14 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
       </div>
       <div style={{ marginTop: 6, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         {adicionando ? (
-          <select autoFocus style={{ ...C.input, width: "auto", minWidth: 220 }} defaultValue="" onBlur={() => setAdicionando(false)}
+          <Selecao autoFocus style={{ ...C.input, width: "auto", minWidth: 220 }} defaultValue="" onBlur={() => setAdicionando(false)}
             onChange={(e) => { if (e.target.value) { setQtd(e.target.value, 1); setComodoAberto(null); } setAdicionando(false); }}>
             <option value="">Escolha o cômodo…</option>
             {grupos.map((g) => {
               const opts = ausentes.filter((a) => (a.grupo || "") === g);
               return opts.length ? <optgroup key={g} label={g}>{opts.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}</optgroup> : null;
             })}
-          </select>
+          </Selecao>
         ) : (
           ausentes.length > 0 && <button type="button" style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }} onClick={() => setAdicionando(true)}>＋ Adicionar cômodo</button>
         )}
@@ -16015,10 +16102,10 @@ function MatrizExistente({ projetoDraft, get, set, isMobile }) {
                 Incluir a pintura desta parede
               </label>
               {!!get("existente.alvenaria.pintar") && (
-                <select style={{ ...cel, width: "auto", minWidth: 190 }} value={get("existente.alvenaria.pintar")}
+                <Selecao style={{ ...cel, width: "auto", minWidth: 190 }} value={get("existente.alvenaria.pintar")}
                   onChange={(e) => set("existente.alvenaria.pintar", e.target.value)}>
                   {PINTURA_PAREDE.filter((x) => x.id).map((x) => <option key={x.id} value={x.id}>{x.nome}</option>)}
-                </select>
+                </Selecao>
               )}
               {!!get("existente.alvenaria.pintar") && (
                 <span style={{ fontSize: 11.5, color: "#6b7280" }}>
@@ -16038,7 +16125,7 @@ function MatrizExistente({ projetoDraft, get, set, isMobile }) {
                 {Array.from({ length: Math.min(20, Math.round(quantos)) }).map((_, i) => (
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <span style={{ fontSize: 11.5, color: "#6b7280" }}>{i + 1}º</span>
-                    <select style={{ ...cel, width: "auto", minWidth: 120 }}
+                    <Selecao style={{ ...cel, width: "auto", minWidth: 120 }}
                       value={(get(`existente.${it.id}.padroes`) || [])[i] || padraoObra}
                       onChange={(e) => {
                         const lista = (get(`existente.${it.id}.padroes`) || []).slice();
@@ -16047,7 +16134,7 @@ function MatrizExistente({ projetoDraft, get, set, isMobile }) {
                         set(`existente.${it.id}.padroes`, lista.slice(0, Math.round(quantos)));
                       }}>
                       {PADROES_OBRA.map((p) => <option key={p} value={p}>{p}</option>)}
-                    </select>
+                    </Selecao>
                   </div>
                 ))}
               </div>
@@ -16059,10 +16146,10 @@ function MatrizExistente({ projetoDraft, get, set, isMobile }) {
       <div style={{ ...grade, marginTop: 4 }}>
         <label style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>Tipo do forro</label>
         <div style={{ gridColumn: isMobile ? "auto" : "2 / -1" }}>
-          <select style={cel} value={get("existente.forro.tipo") || FORRO_TIPO_PADRAO}
+          <Selecao style={cel} value={get("existente.forro.tipo") || FORRO_TIPO_PADRAO}
             onChange={(e) => set("existente.forro.tipo", e.target.value)}>
             {FORRO_TIPOS.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
-          </select>
+          </Selecao>
         </div>
       </div>
     </div>
@@ -17868,20 +17955,20 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
             <div><div style={rotulo}>Início da obra</div><input type="date" style={input} value={cfg.dataInicio} disabled={!podeEditar} onChange={(e) => setCampo("dataInicio", e.target.value)} /></div>
             <div><div style={rotulo}>Como calcular o prazo</div>
-              <select style={input} value={cfg.modo} disabled={!podeEditar} onChange={(e) => setCampo("modo", e.target.value)}>
+              <Selecao style={input} value={cfg.modo} disabled={!podeEditar} onChange={(e) => setCampo("modo", e.target.value)}>
                 <option value="simplificado">Simplificado (tabela por m²)</option>
                 <option value="produtividade">Por produtividade (HH SINAPI × equipe)</option>
-              </select></div>
+              </Selecao></div>
             <div><div style={rotulo}>Prazo-alvo (meses)</div>
               <input type="number" min="0" step="0.5" style={input} disabled={!podeEditar} value={cfg.prazoAlvoMeses || ""} placeholder={`tabela: ${res.prazoTabela}`} onChange={(e) => setCampo("prazoAlvoMeses", numOrZero(e.target.value))} /></div>
             <div><div style={rotulo}>Eficiência da equipe</div>
-              <select style={input} value={String(cfg.eficiencia)} disabled={!podeEditar} onChange={(e) => setCampo("eficiencia", Number(e.target.value))}>
+              <Selecao style={input} value={String(cfg.eficiencia)} disabled={!podeEditar} onChange={(e) => setCampo("eficiencia", Number(e.target.value))}>
                 <option value="1">100% — produtividade SINAPI</option>
                 <option value="0.85">85%</option>
                 <option value="0.75">75% — obra residencial típica</option>
                 <option value="0.65">65%</option>
                 <option value="0.5">50%</option>
-              </select></div>
+              </Selecao></div>
           </div>
 
           {/* Resumo */}
@@ -18021,10 +18108,10 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
               <div>
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 10, marginBottom: 10 }}>
                   <div><div style={rotulo}>Preço da hora</div>
-                    <select style={input} value={cfg.regimeHora} disabled={!podeEditar} onChange={(e) => setCampo("regimeHora", e.target.value)}>
+                    <Selecao style={input} value={cfg.regimeHora} disabled={!podeEditar} onChange={(e) => setCampo("regimeHora", e.target.value)}>
                       <option value="desonerado">SINAPI desonerado</option>
                       <option value="onerado">SINAPI onerado</option>
-                    </select></div>
+                    </Selecao></div>
                   <div style={card}><div style={rotulo}>Mão de obra SINAPI</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalRef)}</div><div style={{ fontSize: 11, color: "#4b5563" }}>{mo.porM2Ref != null ? `${formatoBRL(mo.porM2Ref)}/m²` : ""} · produtividade de referência</div></div>
                   <div style={card}><div style={rotulo}>Com eficiência {Math.round(mo.eficiencia * 100)}%</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalEficiencia)}</div><div style={{ fontSize: 11, color: "#4b5563" }}>{mo.porM2Eficiencia != null ? `${formatoBRL(mo.porM2Eficiencia)}/m²` : ""} · horas reais da equipe</div></div>
                   <div style={card}><div style={rotulo}>Prestadores no orçamento</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalOrcadoComparavel)}</div><div style={{ fontSize: 11, color: "#4b5563" }}>só os comparáveis · SINAPI {formatoBRL(mo.totalRefComparavel)}</div></div>
@@ -18330,9 +18417,9 @@ function ProdutividadeEditor({ data, save, podeEditar }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
           <div style={{ fontWeight: 600, fontSize: 12.5 }}>Preço da hora por ofício ({referenciaSinapi(data)})</div>
           <label style={{ fontSize: 12, color: "#111827" }}>Regime padrão:{" "}
-            <select value={regime} disabled={!podeEditar} onChange={(e) => gravarCronogramaCfg(data, save, { ...cfg, regimeHora: e.target.value })} style={{ padding: "3px 6px", border: "1px solid #e5e7eb", borderRadius: 6, fontFamily: "inherit", fontSize: 12 }}>
+            <Selecao value={regime} disabled={!podeEditar} onChange={(e) => gravarCronogramaCfg(data, save, { ...cfg, regimeHora: e.target.value })} style={{ padding: "3px 6px", border: "1px solid #e5e7eb", borderRadius: 6, fontFamily: "inherit", fontSize: 12 }}>
               <option value="desonerado">desonerado</option><option value="onerado">onerado</option>
-            </select>
+            </Selecao>
           </label>
         </div>
         <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 640 }}>
@@ -24877,7 +24964,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14, marginBottom: 14 }}>
           <div>
             <label style={E.label}>Fornecedor cadastrado</label>
-            <select style={E.input} value={p.fornecedorId} disabled={!!novoPrestador}
+            <Selecao style={E.input} value={p.fornecedorId} disabled={!!novoPrestador}
               onChange={e => {
                 const id = e.target.value;
                 // "cadastrar" não é um fornecedor: abre o cadastro e o select
@@ -24888,7 +24975,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
               <option value="">— nenhum —</option>
               {prestadores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
               <option value="__novo__">＋ Cadastrar prestador</option>
-            </select>
+            </Selecao>
           </div>
           <div>
             <label style={E.label}>Nome que vai na conta</label>
@@ -24905,15 +24992,15 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
               <div><label style={E.label}>Nome / razão social *</label>
                 <input style={E.input} value={novoPrestador.nome} onChange={e => setNovoPrestador({ ...novoPrestador, nome: e.target.value })} placeholder="MB Viezzer Serralheria" /></div>
               <div><label style={E.label}>Pessoa</label>
-                <select style={E.input} value={novoPrestador.tipo} onChange={e => setNovoPrestador({ ...novoPrestador, tipo: e.target.value })}>
+                <Selecao style={E.input} value={novoPrestador.tipo} onChange={e => setNovoPrestador({ ...novoPrestador, tipo: e.target.value })}>
                   <option value="PJ">Jurídica</option><option value="PF">Física</option>
-                </select></div>
+                </Selecao></div>
               <div><label style={E.label}>{novoPrestador.tipo === "PF" ? "CPF" : "CNPJ"}</label>
                 <input style={E.input} value={novoPrestador.cnpjCpf} onChange={e => setNovoPrestador({ ...novoPrestador, cnpjCpf: e.target.value })} /></div>
               <div><label style={E.label}>Categoria</label>
-                <select style={E.input} value={novoPrestador.categoria} onChange={e => setNovoPrestador({ ...novoPrestador, categoria: e.target.value })}>
+                <Selecao style={E.input} value={novoPrestador.categoria} onChange={e => setNovoPrestador({ ...novoPrestador, categoria: e.target.value })}>
                   {(typeof CATEGORIAS_PRESTADOR !== "undefined" ? CATEGORIAS_PRESTADOR : ["Outro"]).map(c => <option key={c} value={c}>{c}</option>)}
-                </select></div>
+                </Selecao></div>
               <div><label style={E.label}>Telefone</label>
                 <input style={E.input} value={novoPrestador.telefone} onChange={e => setNovoPrestador({ ...novoPrestador, telefone: e.target.value })} /></div>
               <div><label style={E.label}>E-mail</label>
@@ -25145,7 +25232,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                         {/* A setinha com TODAS as linhas do PDF: quando a
                             associação erra — e com tanto formato diferente
                             ela erra — apontar a linha certa é um clique. */}
-                        <select style={{ ...E.input, cursor: "pointer" }} value={String(esc.i)}
+                        <Selecao style={{ ...E.input, cursor: "pointer" }} value={String(esc.i)}
                           onChange={(e) => {
                             const i = Number(e.target.value);
                             const linha = i >= 0 ? o.itens[i] : null;
@@ -25157,7 +25244,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                               {l.descricao}{precoDaLinha(l, 0) > 0 ? ` · ${dinheiro(precoDaLinha(l, 0))}` : ""}
                             </option>
                           ))}
-                        </select>
+                        </Selecao>
                         <CampoNumeroBR estilo={E.input} valor={esc.preco || ""} casas={2} placeholder="0,00"
                           aoMudar={(v) => trocarEscolha(item.id, { preco: v })} />
                         {dif && (
@@ -26571,10 +26658,10 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
           <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)", gap: 8 }}>
             <div style={{ minWidth: 0 }}>
               <div style={rot}>No padrão de</div>
-              <select style={{ ...E.input, cursor: "pointer" }} value={novo.padrao} onChange={(e) => trocarPadrao(e.target.value)}>
+              <Selecao style={{ ...E.input, cursor: "pointer" }} value={novo.padrao} onChange={(e) => trocarPadrao(e.target.value)}>
                 {familias.map((f, k) => <option key={f.familia} value={k}>{f.familia} …</option>)}
                 <option value={-1}>Nome livre, sem padrão</option>
-              </select>
+              </Selecao>
             </div>
             {fam && (
               <div style={{ minWidth: 0 }}>
@@ -27822,9 +27909,9 @@ function CadastroPanel({ cliente, data, waLink, isMobile, colunaAtual, onEditar,
     <div>
       {/* Ações */}
       <div style={{ ...card, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-        <select value={colunaAtual} onChange={e=>onMoverColuna(e.target.value)} style={inputSel}>
+        <Selecao value={colunaAtual} onChange={e=>onMoverColuna(e.target.value)} style={inputSel}>
           {COLUNAS.map(x=><option key={x.key} value={x.key}>{x.label}</option>)}
-        </select>
+        </Selecao>
         <button style={btnSec} onClick={onEditar}>Editar</button>
         <div style={{ flex:1 }} />
         <button style={{ background:"none", border:"none", color:"#dc2626", cursor:"pointer", fontFamily:"inherit", fontSize:13 }} onClick={onRemover}>Remover cliente</button>
@@ -28211,13 +28298,13 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         </div>
         <div style={{ display:"flex", gap:4, alignItems:"center", flexShrink:0 }} onClick={e=>e.stopPropagation()}>
           {mobile ? (
-            <select
+            <Selecao
               value={colunaDoCliente(c)}
               onChange={e => { e.stopPropagation(); moverCliente(c.id, e.target.value); }}
               onClick={e => e.stopPropagation()}
               style={{ fontSize:11, color:"#4b5563", background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:5, padding:"4px 6px", cursor:"pointer", fontFamily:"inherit" }}>
               {COLUNAS.map(col => <option key={col.key} value={col.key}>{col.label}</option>)}
-            </select>
+            </Selecao>
           ) : (
             <button onClick={e=>{e.stopPropagation();openEdit(c);}}
               style={{ fontSize:11, color:"#4b5563", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:"4px 6px" }}
@@ -28566,15 +28653,15 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
               <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap:12, marginBottom:12 }}>
                 <div>
                   <label style={FC.label}>Tipo</label>
-                  <select className="vk-fc-input" style={{...FC.input,cursor:"pointer"}} value={emp.tipo} onChange={e=>setEmp("tipo",e.target.value)}>
+                  <Selecao className="vk-fc-input" style={{...FC.input,cursor:"pointer"}} value={emp.tipo} onChange={e=>setEmp("tipo",e.target.value)}>
                     {["Residencial","Comercial","Misto"].map(v=><option key={v}>{v}</option>)}
-                  </select>
+                  </Selecao>
                 </div>
                 <div>
                   <label style={FC.label}>Implantação</label>
-                  <select className="vk-fc-input" style={{...FC.input,cursor:"pointer"}} value={emp.implantacao} onChange={e=>setEmp("implantacao",e.target.value)}>
+                  <Selecao className="vk-fc-input" style={{...FC.input,cursor:"pointer"}} value={emp.implantacao} onChange={e=>setEmp("implantacao",e.target.value)}>
                     {["Horizontal","Vertical"].map(v=><option key={v}>{v}</option>)}
-                  </select>
+                  </Selecao>
                 </div>
                 <div><label style={FC.label}>Unidades</label><input className="vk-fc-input" style={FC.input} inputMode="numeric" value={emp.unidades} onChange={e=>setEmp("unidades",e.target.value)} placeholder="quantas" /></div>
                 <div><label style={FC.label}>Metragem (m²)</label><input className="vk-fc-input" style={FC.input} inputMode="decimal" value={emp.area} onChange={e=>setEmp("area",e.target.value)} placeholder="área construída" /></div>
@@ -28582,9 +28669,9 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
               <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:12, marginBottom:12 }}>
                 <div>
                   <label style={FC.label}>Padrão</label>
-                  <select className="vk-fc-input" style={{...FC.input,cursor:"pointer"}} value={emp.padrao} onChange={e=>setEmp("padrao",e.target.value)}>
+                  <Selecao className="vk-fc-input" style={{...FC.input,cursor:"pointer"}} value={emp.padrao} onChange={e=>setEmp("padrao",e.target.value)}>
                     {["MCMV","Médio","Alto"].map(v=><option key={v}>{v}</option>)}
-                  </select>
+                  </Selecao>
                 </div>
                 <div><label style={FC.label}>Início</label><input className="vk-fc-input" style={FC.input} type="date" value={form.desde} onChange={e=>setForm({...form,desde:e.target.value})} /></div>
               </div>
@@ -28648,7 +28735,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
             <div><label style={FC.label}>Bairro</label><input className="vk-fc-input" style={FC.input} value={form.bairro} onChange={e=>setForm({...form,bairro:e.target.value})} /></div>
             <div><label style={FC.label}>Cidade</label><input className="vk-fc-input" style={FC.input} value={form.cidade} onChange={e=>setForm({...form,cidade:e.target.value})} /></div>
           </div>
-          <div style={{maxWidth:120}}><label style={FC.label}>Estado</label><select className="vk-fc-input" style={{...FC.input,cursor:"pointer"}} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>{ESTADOS_BR.map(e=><option key={e}>{e}</option>)}</select></div>
+          <div style={{maxWidth:120}}><label style={FC.label}>Estado</label><Selecao className="vk-fc-input" style={{...FC.input,cursor:"pointer"}} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>{ESTADOS_BR.map(e=><option key={e}>{e}</option>)}</Selecao></div>
         </div>
         {!ehEmp && <hr style={FC.divider} />}
         {!ehEmp && (
@@ -30006,7 +30093,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <button onClick={() => setView("contratosDaObra")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
           <div><label style={C.label}>Contratado *</label><input style={C.input} value={formContrato.nomeContratado} onChange={e => setFormContrato({ ...formContrato, nomeContratado: e.target.value })} placeholder="Nome da empresa/pessoa" /></div>
-          <div><label style={C.label}>Status</label><select style={{ ...C.input, cursor: "pointer" }} value={formContrato.status} onChange={e => setFormContrato({ ...formContrato, status: e.target.value })}>{Object.entries(statusContrato).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
+          <div><label style={C.label}>Status</label><Selecao style={{ ...C.input, cursor: "pointer" }} value={formContrato.status} onChange={e => setFormContrato({ ...formContrato, status: e.target.value })}>{Object.entries(statusContrato).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Selecao></div>
           <div><label style={C.label}>Valor (R$)</label><CampoCtrNum tipo="moeda" valor={formContrato.valor} onChange={v => setFormContrato({ ...formContrato, valor: v })} style={C.input} placeholder="0,00" /></div>
           <div><label style={C.label}>Data de assinatura</label><input style={C.input} type="date" value={formContrato.dataAssinatura} onChange={e => setFormContrato({ ...formContrato, dataAssinatura: e.target.value })} /></div>
           <div><label style={C.label}>Data de vencimento</label><input style={C.input} type="date" value={formContrato.dataVencimento} onChange={e => setFormContrato({ ...formContrato, dataVencimento: e.target.value })} /></div>
@@ -30035,7 +30122,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         </div>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
           <div><label style={C.label}>Nome da obra *</label><input style={C.input} value={formObra.nome} onChange={e => setFormObra({ ...formObra, nome: e.target.value })} /></div>
-          <div><label style={C.label}>Status</label><select style={{ ...C.input, cursor: "pointer" }} value={formObra.status} onChange={e => setFormObra({ ...formObra, status: e.target.value })}>{Object.entries(statusObra).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
+          <div><label style={C.label}>Status</label><Selecao style={{ ...C.input, cursor: "pointer" }} value={formObra.status} onChange={e => setFormObra({ ...formObra, status: e.target.value })}>{Object.entries(statusObra).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Selecao></div>
           <div><label style={C.label}>Data de início</label><input style={C.input} type="date" value={formObra.dataInicio} onChange={e => setFormObra({ ...formObra, dataInicio: e.target.value })} /></div>
           <div><label style={C.label}>Data de conclusão</label><input style={C.input} type="date" value={formObra.dataFim} onChange={e => setFormObra({ ...formObra, dataFim: e.target.value })} /></div>
           <div style={isMobile ? { gridColumn: "1 / -1" } : {}}><label style={C.label}>Responsável</label><input style={C.input} value={formObra.responsavel} onChange={e => setFormObra({ ...formObra, responsavel: e.target.value })} placeholder="Nome do responsável" /></div>
@@ -30121,20 +30208,20 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
             <div>
               <label style={C.label}>Conta *</label>
-              <select style={{ ...C.input, cursor: "pointer" }} value={formItemPL.contaId} onChange={e => setFormItemPL({ ...formItemPL, contaId: e.target.value })}>
+              <Selecao style={{ ...C.input, cursor: "pointer" }} value={formItemPL.contaId} onChange={e => setFormItemPL({ ...formItemPL, contaId: e.target.value })}>
                 {GRUPOS_PL.filter(g => g.id !== "excluidas").map(g => (
                   <optgroup key={g.id} label={g.titulo}>
                     {contasDoGrupo(g.id).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                   </optgroup>
                 ))}
-              </select>
+              </Selecao>
             </div>
             <div>
               <label style={C.label}>Prestador de serviço (opcional)</label>
-              <select style={{ ...C.input, cursor: "pointer" }} value={formItemPL.prestadorId || ""} onChange={e => setFormItemPL({ ...formItemPL, prestadorId: e.target.value })}>
+              <Selecao style={{ ...C.input, cursor: "pointer" }} value={formItemPL.prestadorId || ""} onChange={e => setFormItemPL({ ...formItemPL, prestadorId: e.target.value })}>
                 <option value="">— Nenhum —</option>
                 {prestadores.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-              </select>
+              </Selecao>
             </div>
             <div>
               <label style={C.label}>Valor estimado (R$) *</label>
@@ -30258,12 +30345,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
                 <span style={{ fontSize: 11.5, color: "#6b7280" }}>Ver</span>
-                <select style={{ ...C.input, cursor: "pointer", width: 220 }} value={escolha} onChange={e => setMesExtrato(e.target.value)}>
+                <Selecao style={{ ...C.input, cursor: "pointer", width: 220 }} value={escolha} onChange={e => setMesExtrato(e.target.value)}>
                   <option value="total">Só o total da obra</option>
                   <option value="todos">Todos os meses</option>
                   {anos.map(a => <option key={a} value={a}>Meses de {a}</option>)}
                   {meses.map(m => <option key={m} value={m}>{rotuloMes(m)}</option>)}
-                </select>
+                </Selecao>
                 {perm.podeEditar && (
                   <button type="button" style={C.btnSec}
                     onClick={() => setFormEntrada({ ...entradaObraVazia(obraAtual.id), data: `${(colunas[colunas.length - 1] || meses[meses.length - 1] || hojeIso.slice(0, 7))}-01` })}>＋ Registrar entrada</button>
@@ -30276,9 +30363,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr 1fr", gap: 10 }}>
                     <div>
                       <label style={C.label}>Conta</label>
-                      <select style={{ ...C.input, cursor: "pointer" }} value={formEntrada.contaId} onChange={e => setFormEntrada({ ...formEntrada, contaId: e.target.value })}>
+                      <Selecao style={{ ...C.input, cursor: "pointer" }} value={formEntrada.contaId} onChange={e => setFormEntrada({ ...formEntrada, contaId: e.target.value })}>
                         {contasDoGrupo("receitas").map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                      </select>
+                      </Selecao>
                     </div>
                     <div><label style={C.label}>Descrição</label><input style={C.input} value={formEntrada.descricao} onChange={e => setFormEntrada({ ...formEntrada, descricao: e.target.value })} placeholder="opcional" /></div>
                     <div><label style={C.label}>Valor (R$)</label><CampoCtrNum tipo="moeda" valor={formEntrada.valor} onChange={v => setFormEntrada({ ...formEntrada, valor: v })} style={C.input} placeholder="0,00" /></div>
@@ -30535,7 +30622,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         {/* 1 — quem é o profissional. O formulário abaixo é o mesmo para todos. */}
         <div style={{ marginBottom: 12 }}>
           <label style={C.label}>1. Tipo de profissional</label>
-          <select style={{ ...C.input, cursor: "pointer" }} value={g.tipoProfissional || ""} onChange={e => {
+          <Selecao style={{ ...C.input, cursor: "pointer" }} value={g.tipoProfissional || ""} onChange={e => {
             const t = tipoProfissional(e.target.value);
             if (!t) { setG("tipoProfissional", ""); return; }
             // Trocar o tipo reescreve o objeto padrão e o regime, mas preserva
@@ -30551,7 +30638,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           }}>
             <option value="">— escolher o tipo de profissional —</option>
             {TIPOS_PROFISSIONAL.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-          </select>
+          </Selecao>
           <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>São os mesmos prestadores de serviço do catálogo de insumos. O tipo já sugere o regime do contrato e o objeto.</div>
         </div>
 
@@ -30559,10 +30646,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <div>
             <label style={C.label}>2. Prestador (contratado)</label>
             <div style={{ display: "flex", gap: 8 }}>
-              <select style={{ ...C.input, cursor: "pointer", flex: 1 }} value={g.prestadorId} disabled={!tipoP} onChange={e => setG("prestadorId", e.target.value)}>
+              <Selecao style={{ ...C.input, cursor: "pointer", flex: 1 }} value={g.prestadorId} disabled={!tipoP} onChange={e => setG("prestadorId", e.target.value)}>
                 <option value="">{!tipoP ? "— escolha o tipo primeiro —" : prestadoresDisponiveis.length ? "— escolher um prestador cadastrado —" : `— nenhum ${tipoP.nome.toLowerCase()} cadastrado —`}</option>
                 {prestadoresDisponiveis.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-              </select>
+              </Selecao>
               <button type="button" disabled={!tipoP} style={{ ...C.btnSec, whiteSpace: "nowrap", opacity: tipoP ? 1 : 0.5 }}
                 onClick={() => setNovoPrestador({ nome: "", tipo: "PJ", categoria: (tipoP && tipoP.categorias[0]) || "Outro", cnpjCpf: "", cep: "", logradouro: "", numero: "", bairro: "", cidade: "", estado: "SP", representanteNome: "", representanteCpf: "", telefone: "", email: "" })}>
                 ＋ Novo
@@ -30574,7 +30661,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
           <div style={{ display: gerenciamento ? "none" : undefined }}>
             <label style={C.label}>3. O que o contrato inclui</label>
-            <select style={{ ...C.input, cursor: "pointer" }} value={escopo} onChange={e => {
+            <Selecao style={{ ...C.input, cursor: "pointer" }} value={escopo} onChange={e => {
               const base = contratoVazio(null, cliente.id, obraSelecionada.id, g.tipoProfissional, e.target.value);
               setContratoGerando({ ...base, id: g.id, prestadorId: g.prestadorId, nomeContratado: g.nomeContratado,
                 objeto: objetoEditado ? g.objeto : base.objeto,
@@ -30583,7 +30670,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 dataInicio: g.dataInicio, dataAssinatura: g.dataAssinatura });
             }}>
               {ESCOPOS_FORNECIMENTO.map(e2 => <option key={e2.id} value={e2.id}>{e2.nome}</option>)}
-            </select>
+            </Selecao>
             <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>{modelo.resumo}</div>
           </div>
         </div>
@@ -30595,16 +30682,16 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               <div><label style={C.label}>Nome / razão social *</label><input style={C.input} value={novoPrestador.nome} onChange={e => setNovoPrestador({ ...novoPrestador, nome: e.target.value })} /></div>
               <div>
                 <label style={C.label}>Pessoa</label>
-                <select style={{ ...C.input, cursor: "pointer" }} value={novoPrestador.tipo} onChange={e => setNovoPrestador({ ...novoPrestador, tipo: e.target.value })}>
+                <Selecao style={{ ...C.input, cursor: "pointer" }} value={novoPrestador.tipo} onChange={e => setNovoPrestador({ ...novoPrestador, tipo: e.target.value })}>
                   <option value="PJ">Jurídica</option><option value="PF">Física</option>
-                </select>
+                </Selecao>
               </div>
               <div><label style={C.label}>{novoPrestador.tipo === "PF" ? "CPF" : "CNPJ"}</label><input style={C.input} value={novoPrestador.cnpjCpf} onChange={e => setNovoPrestador({ ...novoPrestador, cnpjCpf: e.target.value })} /></div>
               <div>
                 <label style={C.label}>Categoria</label>
-                <select style={{ ...C.input, cursor: "pointer" }} value={novoPrestador.categoria} onChange={e => setNovoPrestador({ ...novoPrestador, categoria: e.target.value })}>
+                <Selecao style={{ ...C.input, cursor: "pointer" }} value={novoPrestador.categoria} onChange={e => setNovoPrestador({ ...novoPrestador, categoria: e.target.value })}>
                   {CATEGORIAS_PRESTADOR.map(c2 => <option key={c2} value={c2}>{c2}</option>)}
-                </select>
+                </Selecao>
               </div>
               <div><label style={C.label}>Telefone</label><input style={C.input} value={novoPrestador.telefone} onChange={e => setNovoPrestador({ ...novoPrestador, telefone: e.target.value })} /></div>
               <div><label style={C.label}>E-mail</label><input style={C.input} value={novoPrestador.email} onChange={e => setNovoPrestador({ ...novoPrestador, email: e.target.value })} /></div>
@@ -30707,11 +30794,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <label style={C.label}>Prazo de execução</label>
             <div style={{ display: "flex", gap: 8 }}>
               <CampoCtrNum tipo="inteiro" valor={pz.qtd} onChange={v => setContratoGerando({ ...g, prazoQtd: v, prazoDias: "", prazoMeses: "" })} style={{ ...C.input, flex: 1 }} placeholder="quantidade" />
-              <select style={{ ...C.input, cursor: "pointer", flex: 1 }} value={pz.unidade} onChange={e => setContratoGerando({ ...g, prazoUnidade: e.target.value, prazoDias: "", prazoMeses: "" })}>
+              <Selecao style={{ ...C.input, cursor: "pointer", flex: 1 }} value={pz.unidade} onChange={e => setContratoGerando({ ...g, prazoUnidade: e.target.value, prazoDias: "", prazoMeses: "" })}>
                 <option value="">— dias ou meses —</option>
                 <option value="dias">Dias corridos</option>
                 <option value="meses">Meses</option>
-              </select>
+              </Selecao>
             </div>
           </div>
           <div><label style={C.label}>Início previsto</label><input style={C.input} type="date" value={g.dataInicio || ""} onChange={e => setG("dataInicio", e.target.value)} /></div>
@@ -30720,7 +30807,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <input style={C.input} type="date" value={g.dataAssinatura || ""} onChange={e => setG("dataAssinatura", e.target.value)} />
             <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>Vem com a data de hoje; é a data que fecha o contrato, acima das assinaturas.</div>
           </div>
-          <div><label style={C.label}>Status</label><select style={{ ...C.input, cursor: "pointer" }} value={g.status} onChange={e => setG("status", e.target.value)}>{Object.entries(statusContrato).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
+          <div><label style={C.label}>Status</label><Selecao style={{ ...C.input, cursor: "pointer" }} value={g.status} onChange={e => setG("status", e.target.value)}>{Object.entries(statusContrato).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Selecao></div>
         </div>
 
         {gerenciamento && (
@@ -30840,9 +30927,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   </div>
                   <div>
                     <label style={C.label}>Unidade</label>
-                    <select style={C.input} value={it.unidade || "hora"} onChange={e => setLista("itens", idx, "unidade", e.target.value)}>
+                    <Selecao style={C.input} value={it.unidade || "hora"} onChange={e => setLista("itens", idx, "unidade", e.target.value)}>
                       {UNIDADES_EQUIP.map(x => <option key={x.id} value={x.id}>{x.nome}</option>)}
-                    </select>
+                    </Selecao>
                   </div>
                   <div>
                     <label style={C.label}>Valor por {uni.abrev} (R$)</label>
@@ -30928,10 +31015,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             {modo === "entradaFinal" && (
               <div>
                 <label style={C.label}>Saldo pago</label>
-                <select style={{ ...C.input, cursor: "pointer" }} value={g.entradaEscopo || "contrato"} onChange={e => setG("entradaEscopo", e.target.value)}>
+                <Selecao style={{ ...C.input, cursor: "pointer" }} value={g.entradaEscopo || "contrato"} onChange={e => setG("entradaEscopo", e.target.value)}>
                   <option value="contrato">Na conclusão do contrato todo</option>
                   <option value="item">Na conclusão de cada item</option>
-                </select>
+                </Selecao>
               </div>
             )}
             {(modo === "parcelado" || modo === "entradaParcelas") && (
@@ -30939,16 +31026,16 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 <div><label style={C.label}>Nº de parcelas</label><CampoCtrNum tipo="inteiro" valor={g.parcelas} onChange={v => setG("parcelas", v)} style={C.input} placeholder="0" /></div>
                 <div>
                   <label style={C.label}>Periodicidade</label>
-                  <select style={{ ...C.input, cursor: "pointer" }} value={g.periodicidade || "quinzenais"} onChange={e => setG("periodicidade", e.target.value)}>
+                  <Selecao style={{ ...C.input, cursor: "pointer" }} value={g.periodicidade || "quinzenais"} onChange={e => setG("periodicidade", e.target.value)}>
                     {PERIODICIDADES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                  </select>
+                  </Selecao>
                 </div>
                 {pagaEmDiaDaSemana(g.periodicidade || "quinzenais") && (
                   <div>
                     <label style={C.label}>Dia do pagamento</label>
-                    <select style={{ ...C.input, cursor: "pointer" }} value={diaSemanaPgto(g)} onChange={e => setG("diaSemana", Number(e.target.value))}>
+                    <Selecao style={{ ...C.input, cursor: "pointer" }} value={diaSemanaPgto(g)} onChange={e => setG("diaSemana", Number(e.target.value))}>
                       {DIAS_SEMANA_PGTO.map(([v, nome]) => <option key={v} value={v}>{nome}</option>)}
-                    </select>
+                    </Selecao>
                     <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>
                       {(g.periodicidade || "quinzenais") === "quinzenais"
                         ? `${diaSemanaPlural(g).replace(/^./, c => c.toUpperCase())} alternadas — uma sim, outra não.`
@@ -30960,17 +31047,17 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             )}
             <div>
               <label style={C.label}>Condição de pagamento</label>
-              <select style={{ ...C.input, cursor: "pointer" }} value={g.meioPagamento || "pixOuTransferencia"} onChange={e => setG("meioPagamento", e.target.value)}>
+              <Selecao style={{ ...C.input, cursor: "pointer" }} value={g.meioPagamento || "pixOuTransferencia"} onChange={e => setG("meioPagamento", e.target.value)}>
                 {MEIOS_PAGAMENTO.map(mp => <option key={mp.id} value={mp.id}>{mp.nome}</option>)}
-              </select>
+              </Selecao>
             </div>
             {modo === "medicao" && (
               <>
                 <div>
                   <label style={C.label}>Medição</label>
-                  <select style={{ ...C.input, cursor: "pointer" }} value={g.medicaoPeriodicidade || "mensal"} onChange={e => setG("medicaoPeriodicidade", e.target.value)}>
+                  <Selecao style={{ ...C.input, cursor: "pointer" }} value={g.medicaoPeriodicidade || "mensal"} onChange={e => setG("medicaoPeriodicidade", e.target.value)}>
                     <option value="semanal">Semanal</option><option value="quinzenal">Quinzenal</option><option value="mensal">Mensal</option>
-                  </select>
+                  </Selecao>
                 </div>
                 <div><label style={C.label}>Pagar em até (dias)</label><CampoCtrNum tipo="inteiro" valor={g.medicaoPrazoDias} onChange={v => setG("medicaoPrazoDias", v)} style={C.input} placeholder="0" /></div>
               </>
@@ -31060,9 +31147,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                       <div key={cp.k} style={{ flex: "1 1 120px" }}>
                         <label style={C.label}>{cp.l}</label>
                         {cp.tipo === "select" ? (
-                          <select style={{ ...C.input, cursor: "pointer" }} value={g[cp.k] || cp.opcoes[0][0]} onChange={e => setG(cp.k, e.target.value)}>
+                          <Selecao style={{ ...C.input, cursor: "pointer" }} value={g[cp.k] || cp.opcoes[0][0]} onChange={e => setG(cp.k, e.target.value)}>
                             {cp.opcoes.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                          </select>
+                          </Selecao>
                         ) : (
                           <CampoCtrNum tipo={cp.tipo} valor={g[cp.k]} onChange={v => setG(cp.k, v)} style={C.input} placeholder={cp.tipo === "pct" ? "0,00%" : "0"} />
                         )}
@@ -31315,20 +31402,20 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               <div><label style={C.label}>Vencimento</label><input style={C.input} type="date" value={formConta.vencimento || ""} onChange={e => setFormConta({ ...formConta, vencimento: e.target.value })} /></div>
               <div>
                 <label style={C.label}>Conta</label>
-                <select style={{ ...C.input, cursor: "pointer" }} value={formConta.contaId} onChange={e => setFormConta({ ...formConta, contaId: e.target.value })}>
+                <Selecao style={{ ...C.input, cursor: "pointer" }} value={formConta.contaId} onChange={e => setFormConta({ ...formConta, contaId: e.target.value })}>
                   {GRUPOS_PL.filter(g => g.id !== "receitas").map(g => (
                     <optgroup key={g.id} label={g.titulo}>
                       {PLANO_CONTAS.filter(c => c.grupo === g.id).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                     </optgroup>
                   ))}
-                </select>
+                </Selecao>
               </div>
               <div>
                 <label style={C.label}>Favorecido</label>
-                <select style={{ ...C.input, cursor: "pointer" }} value={formConta.prestadorId || ""} onChange={e => setFormConta({ ...formConta, prestadorId: e.target.value, favorecido: (prestadores.find(p => p.id === e.target.value) || {}).nome || "" })}>
+                <Selecao style={{ ...C.input, cursor: "pointer" }} value={formConta.prestadorId || ""} onChange={e => setFormConta({ ...formConta, prestadorId: e.target.value, favorecido: (prestadores.find(p => p.id === e.target.value) || {}).nome || "" })}>
                   <option value="">— sem prestador —</option>
                   {prestadores.filter(p => p.ativo !== false).map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-                </select>
+                </Selecao>
               </div>
               <div><label style={C.label}>Observação</label><input style={C.input} value={formConta.observacao || ""} onChange={e => setFormConta({ ...formConta, observacao: e.target.value })} /></div>
             </div>
@@ -31388,10 +31475,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 170px", gap: 12 }}>
                   <div>
                     <label style={C.label}>Contrato ou pedido</label>
-                    <select style={{ ...C.input, cursor: "pointer" }} value={formRecalibrar.contratoId}
+                    <Selecao style={{ ...C.input, cursor: "pointer" }} value={formRecalibrar.contratoId}
                       onChange={e => abrirRecalibragem(e.target.value)}>
                       {alvosRecalibraveis.map(a => <option key={a.id} value={a.id}>{a.rotulo}</option>)}
-                    </select>
+                    </Selecao>
                     {(
                       <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                         {[["junto", "Todos os pagamentos"], ["uma", "Um pagamento só"]].map(([id, nome]) => (
@@ -48008,13 +48095,13 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
             <div style={E.grid3}>
               <div style={E.campo}>
                 <label style={E.label}>Tipo de conta</label>
-                <select style={E.select} value={form.tipoConta} onChange={e => setF("tipoConta", e.target.value)}>
+                <Selecao style={E.select} value={form.tipoConta} onChange={e => setF("tipoConta", e.target.value)}>
                   <option>Corrente</option><option>Poupança</option><option>Pagamento</option>
-                </select>
+                </Selecao>
               </div>
               <div style={E.campo}>
                 <label style={E.label}>Tipo de chave PIX</label>
-                <select style={E.select} value={form.pixTipo} onChange={e => {
+                <Selecao style={E.select} value={form.pixTipo} onChange={e => {
                   const tipo = e.target.value;
                   let chave = form.pixChave;
                   if (tipo==="CNPJ"||tipo==="CPF") chave = form.cnpj||chave;
@@ -48023,7 +48110,7 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
                   setForm(f => ({...f, pixTipo:tipo, pixChave:chave}));
                 }}>
                   <option>CNPJ</option><option>CPF</option><option>E-mail</option><option>Telefone</option><option>Chave Aleatória</option>
-                </select>
+                </Selecao>
               </div>
               <div style={E.campo}>
                 <label style={E.label}>Chave PIX</label>
@@ -48332,17 +48419,17 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:14 }}>
                 <div style={E.campo}>
                   <label style={E.label}>Nível de acesso *</label>
-                  <select style={E.select} value={novoUsuario.nivel}
+                  <Selecao style={E.select} value={novoUsuario.nivel}
                     onChange={e => setNovoUsuario(u => ({ ...u, nivel: e.target.value }))}>
                     <option value="admin">Admin — acesso total</option>
                     <option value="editor">Editor — cria e edita</option>
                     <option value="visualizador">Visualizador — só leitura</option>
-                  </select>
+                  </Selecao>
                 </div>
                 <div style={E.campo}>
                   <label style={E.label}>Vincular a membro da equipe</label>
                   <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                    <select style={{ ...E.select, flex:1 }} value={novoUsuario.membro_id}
+                    <Selecao style={{ ...E.select, flex:1 }} value={novoUsuario.membro_id}
                       onChange={e => {
                         const valor = e.target.value;
                         // Opção especial __novo: abre o modal de novo membro sem fechar
@@ -48360,7 +48447,7 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
                         <option key={m.id} value={m.id}>{m.nome}{m.cargo ? ` (${m.cargo})` : ""}</option>
                       ))}
                       <option value="__novo">+ Cadastrar novo membro…</option>
-                    </select>
+                    </Selecao>
                   </div>
                   {equipe.length === 0 && (
                     <div style={{ fontSize:11, color:"#4b5563", marginTop:5 }}>
@@ -48940,13 +49027,13 @@ function Admin({ usuario, data, save, initialTab }) {
           <div style={{ ...S.secTit, marginBottom:0 }}>Valores atuais</div>
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
             <span style={{ fontSize:12, color:"#4b5563" }}>Filtrar:</span>
-            <select
+            <Selecao
               value={cubFiltroEstado}
               onChange={e => setCubFiltroEstado(e.target.value)}
               style={{ ...S.input, width:"auto", padding:"6px 10px", fontSize:12 }}>
               <option value="">Todos os estados</option>
               {(cubStatus || []).map(s => <option key={s.estado} value={s.estado}>{s.estado}</option>)}
-            </select>
+            </Selecao>
           </div>
         </div>
         {!cubValores || cubValores.length === 0 ? (
@@ -50109,7 +50196,7 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
 
         <div style={{ marginBottom:14 }}>
           <label style={S.label}>Nível de permissão</label>
-          <select
+          <Selecao
             value={nivel}
             onChange={e => setNivel(e.target.value)}
             disabled={salvando}
@@ -50117,7 +50204,7 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
             <option value="admin">Admin — total (criar, editar, excluir, gerenciar usuários)</option>
             <option value="editor">Editor — cria e edita, sem excluir nem gerenciar usuários</option>
             <option value="visualizador">Visualizador — somente leitura</option>
-          </select>
+          </Selecao>
         </div>
 
         <div style={{ marginBottom:18 }}>
@@ -50259,7 +50346,7 @@ function ModalNovaEmpresa({ S, onFechar, onSucesso }) {
             </div>
             <div>
               <label style={S.label}>Plano</label>
-              <select
+              <Selecao
                 style={{ ...S.input, cursor:"pointer" }}
                 value={form.plano}
                 onChange={e => atualizar("plano", e.target.value)}
@@ -50267,7 +50354,7 @@ function ModalNovaEmpresa({ S, onFechar, onSucesso }) {
                 <option value="gratuito">Gratuito</option>
                 <option value="basico">Básico</option>
                 <option value="profissional">Profissional</option>
-              </select>
+              </Selecao>
             </div>
           </div>
 
@@ -50429,7 +50516,7 @@ function ModalEditarEmpresa({ S, empresa, onFechar, onSucesso }) {
             </div>
             <div>
               <label style={S.label}>Plano</label>
-              <select
+              <Selecao
                 style={{ ...S.input, cursor:"pointer" }}
                 value={form.plano}
                 onChange={e => atualizar("plano", e.target.value)}
@@ -50437,7 +50524,7 @@ function ModalEditarEmpresa({ S, empresa, onFechar, onSucesso }) {
                 <option value="gratuito">Gratuito</option>
                 <option value="basico">Básico</option>
                 <option value="profissional">Profissional</option>
-              </select>
+              </Selecao>
             </div>
           </div>
 
@@ -50596,7 +50683,7 @@ function PainelFeedback({ S }) {
 
       {/* ── Filtros ── */}
       <div style={{ display:"flex", gap:8, marginBottom:18, flexWrap:"wrap", alignItems:"center" }}>
-        <select
+        <Selecao
           value={filtros.status}
           onChange={e => setFiltros(f => ({ ...f, status: e.target.value }))}
           style={{ ...S.input, padding:"7px 10px", fontSize:12.5, width:"auto", cursor:"pointer" }}>
@@ -50605,8 +50692,8 @@ function PainelFeedback({ S }) {
           <option value="em_andamento">Em andamento</option>
           <option value="resolvida">Resolvidas</option>
           <option value="arquivada">Arquivadas</option>
-        </select>
-        <select
+        </Selecao>
+        <Selecao
           value={filtros.categoria}
           onChange={e => setFiltros(f => ({ ...f, categoria: e.target.value }))}
           style={{ ...S.input, padding:"7px 10px", fontSize:12.5, width:"auto", cursor:"pointer" }}>
@@ -50617,7 +50704,7 @@ function PainelFeedback({ S }) {
           <option value="cobranca">Cobrança</option>
           <option value="elogio">Elogio</option>
           <option value="outro">Outro</option>
-        </select>
+        </Selecao>
         <input
           type="text"
           placeholder="Buscar no texto..."
@@ -54807,7 +54894,7 @@ function BlocoCadastroEscritorio({
           </div>
           <div style={campoWrap}>
             <label style={labelBase}>Estado</label>
-            <select
+            <Selecao
               value={estado}
               onChange={e => setEstado(e.target.value)}
               style={{ ...inputBase, cursor: "pointer" }}>
@@ -54815,7 +54902,7 @@ function BlocoCadastroEscritorio({
               {ESTADOS_DISPONIVEIS.map(e => (
                 <option key={e.sigla} value={e.sigla}>{e.nome}</option>
               ))}
-            </select>
+            </Selecao>
           </div>
         </div>
 
@@ -54903,7 +54990,7 @@ function BlocoCadastroEscritorio({
         <div className="vk-onb-cad-grid" style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 14 }}>
           <div style={campoWrap}>
             <label style={labelBase}>Tipo de chave</label>
-            <select
+            <Selecao
               value={pixTipo}
               onChange={e => setPixTipo(e.target.value)}
               style={{ ...inputBase, cursor: "pointer" }}>
@@ -54913,7 +55000,7 @@ function BlocoCadastroEscritorio({
               <option value="E-mail">E-mail</option>
               <option value="Telefone">Telefone</option>
               <option value="Aleatória">Aleatória</option>
-            </select>
+            </Selecao>
           </div>
           <div style={campoWrap}>
             <label style={labelBase}>Chave PIX</label>

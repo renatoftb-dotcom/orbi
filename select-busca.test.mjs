@@ -18,7 +18,14 @@ const a = src.indexOf(ABRE), b = src.indexOf(FECHA);
 if (a < 0 || b < 0) throw new Error("Marcadores da parte pura do SelectBusca não encontrados em shared.jsx");
 const puro = src.slice(a, b);
 
-const api = new Function(puro + "\nreturn { buscaNormal, opcoesNormalizadas, filtrarOpcoes };")();
+const ABRE2 = "// \u2500\u2500 Selecao: parte pura";
+const FECHA2 = "// \u2500\u2500 Selecao: fim da parte pura";
+const c = src.indexOf(ABRE2), d = src.indexOf(FECHA2);
+if (c < 0 || d < 0) throw new Error("Marcadores da parte pura da Selecao n\u00e3o encontrados em shared.jsx");
+const puro2 = src.slice(c, d);
+
+const api = new Function(puro + "\n" + puro2 + `
+  return { buscaNormal, opcoesNormalizadas, filtrarOpcoes, textoDeFilhos, opcoesDosFilhos };`)();
 
 let ok = 0; const falhas = [];
 function t(nome, fn) {
@@ -30,7 +37,12 @@ function eq(a, b, msg) {
 }
 function assert(c, msg) { if (!c) throw new Error(msg || "falso"); }
 
-const { buscaNormal, opcoesNormalizadas, filtrarOpcoes } = api;
+const { buscaNormal, opcoesNormalizadas, filtrarOpcoes, textoDeFilhos, opcoesDosFilhos } = api;
+
+// Elementos React são { type, props } — é só disso que a leitura precisa.
+const opt = (valor, texto, extra) => ({ type: "option", props: Object.assign({ value: valor, children: texto }, extra || {}) });
+const optSemValor = (texto) => ({ type: "option", props: { children: texto } });
+const grupo = (label, filhos) => ({ type: "optgroup", props: { label: label, children: filhos } });
 
 // ── buscaNormal ─────────────────────────────────
 
@@ -140,6 +152,63 @@ t("o filtro não mexe na lista recebida", () => {
   const antes = ETAPAS.map(o => o.valor);
   filtrarOpcoes(ETAPAS, "reb");
   eq(ETAPAS.map(o => o.valor), antes);
+});
+
+// ── leitura dos <option>/<optgroup> (troca direta do select) ─────
+
+t("lê uma lista simples de <option>", () => {
+  const l = opcoesDosFilhos([opt("", "Todas as categorias"), opt("pintor", "Pintor"), opt("gesseiro", "Gesseiro")]);
+  eq(l.map(o => o.valor), ["", "pintor", "gesseiro"]);
+  eq(l.map(o => o.rotulo), ["Todas as categorias", "Pintor", "Gesseiro"]);
+});
+
+t("<option> sem value vale pelo próprio texto, como no nativo", () => {
+  const l = opcoesDosFilhos([optSemValor("SP"), optSemValor("PR")]);
+  eq(l.map(o => o.valor), ["SP", "PR"]);
+  eq(l.map(o => o.rotulo), ["SP", "PR"]);
+});
+
+t("<optgroup> vira cabeçalho de grupo em cada opção de dentro", () => {
+  const l = opcoesDosFilhos([
+    opt("", "Material (padrão)"),
+    grupo("Material & insumos", [opt("material", "Material"), opt("frete", "Frete")]),
+    grupo("Mão de obra", [opt("pedreiro", "Pedreiro")]),
+  ]);
+  eq(l.map(o => o.grupo), ["", "Material & insumos", "Material & insumos", "Mão de obra"]);
+  eq(l.map(o => o.valor), ["", "material", "frete", "pedreiro"]);
+});
+
+t("aninhamento de .map e condicional não quebra a leitura", () => {
+  const l = opcoesDosFilhos([
+    opt("", "—"),
+    [opt("a", "A"), opt("b", "B")],       // resultado de .map()
+    false,                                  // {cond && <option/>}
+    null,
+    [[opt("c", "C")]],
+  ]);
+  eq(l.map(o => o.valor), ["", "a", "b", "c"]);
+});
+
+t("texto do <option> montado em pedaços vira um rótulo só", () => {
+  eq(textoDeFilhos(["Sapata", " ", "(fund.)"]), "Sapata (fund.)");
+  eq(textoDeFilhos(12), "12");
+  eq(textoDeFilhos(null), "");
+});
+
+t("valor numérico vira texto — o value do select também é texto", () => {
+  const l = opcoesDosFilhos([opt(0, "Domingo"), opt(1, "Segunda")]);
+  eq(l.map(o => o.valor), ["0", "1"]);
+});
+
+t("as opções lidas alimentam o filtro normalmente", () => {
+  const lidas = opcoesNormalizadas(opcoesDosFilhos([
+    opt("", "Todas as categorias"),
+    opt("serralheiro", "Serralheiro"),
+    opt("gesseiro", "Gesseiro"),
+    opt("encanador", "Encanador"),
+  ]));
+  eq(filtrarOpcoes(lidas, "serr").map(o => o.valor), ["serralheiro"]);
+  eq(filtrarOpcoes(lidas, "eiro").map(o => o.valor).sort(), ["gesseiro", "serralheiro"]);
 });
 
 // ── resultado ─────────────────────────────────

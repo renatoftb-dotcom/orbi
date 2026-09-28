@@ -2894,7 +2894,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14, marginBottom: 14 }}>
           <div>
             <label style={E.label}>Fornecedor cadastrado</label>
-            <select style={E.input} value={p.fornecedorId} disabled={!!novoPrestador}
+            <Selecao style={E.input} value={p.fornecedorId} disabled={!!novoPrestador}
               onChange={e => {
                 const id = e.target.value;
                 // "cadastrar" não é um fornecedor: abre o cadastro e o select
@@ -2905,7 +2905,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
               <option value="">— nenhum —</option>
               {prestadores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
               <option value="__novo__">＋ Cadastrar prestador</option>
-            </select>
+            </Selecao>
           </div>
           <div>
             <label style={E.label}>Nome que vai na conta</label>
@@ -2922,15 +2922,15 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
               <div><label style={E.label}>Nome / razão social *</label>
                 <input style={E.input} value={novoPrestador.nome} onChange={e => setNovoPrestador({ ...novoPrestador, nome: e.target.value })} placeholder="MB Viezzer Serralheria" /></div>
               <div><label style={E.label}>Pessoa</label>
-                <select style={E.input} value={novoPrestador.tipo} onChange={e => setNovoPrestador({ ...novoPrestador, tipo: e.target.value })}>
+                <Selecao style={E.input} value={novoPrestador.tipo} onChange={e => setNovoPrestador({ ...novoPrestador, tipo: e.target.value })}>
                   <option value="PJ">Jurídica</option><option value="PF">Física</option>
-                </select></div>
+                </Selecao></div>
               <div><label style={E.label}>{novoPrestador.tipo === "PF" ? "CPF" : "CNPJ"}</label>
                 <input style={E.input} value={novoPrestador.cnpjCpf} onChange={e => setNovoPrestador({ ...novoPrestador, cnpjCpf: e.target.value })} /></div>
               <div><label style={E.label}>Categoria</label>
-                <select style={E.input} value={novoPrestador.categoria} onChange={e => setNovoPrestador({ ...novoPrestador, categoria: e.target.value })}>
+                <Selecao style={E.input} value={novoPrestador.categoria} onChange={e => setNovoPrestador({ ...novoPrestador, categoria: e.target.value })}>
                   {(typeof CATEGORIAS_PRESTADOR !== "undefined" ? CATEGORIAS_PRESTADOR : ["Outro"]).map(c => <option key={c} value={c}>{c}</option>)}
-                </select></div>
+                </Selecao></div>
               <div><label style={E.label}>Telefone</label>
                 <input style={E.input} value={novoPrestador.telefone} onChange={e => setNovoPrestador({ ...novoPrestador, telefone: e.target.value })} /></div>
               <div><label style={E.label}>E-mail</label>
@@ -3162,7 +3162,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                         {/* A setinha com TODAS as linhas do PDF: quando a
                             associação erra — e com tanto formato diferente
                             ela erra — apontar a linha certa é um clique. */}
-                        <select style={{ ...E.input, cursor: "pointer" }} value={String(esc.i)}
+                        <Selecao style={{ ...E.input, cursor: "pointer" }} value={String(esc.i)}
                           onChange={(e) => {
                             const i = Number(e.target.value);
                             const linha = i >= 0 ? o.itens[i] : null;
@@ -3174,7 +3174,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                               {l.descricao}{precoDaLinha(l, 0) > 0 ? ` · ${dinheiro(precoDaLinha(l, 0))}` : ""}
                             </option>
                           ))}
-                        </select>
+                        </Selecao>
                         <CampoNumeroBR estilo={E.input} valor={esc.preco || ""} casas={2} placeholder="0,00"
                           aoMudar={(v) => trocarEscolha(item.id, { preco: v })} />
                         {dif && (
@@ -4588,10 +4588,10 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
           <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)", gap: 8 }}>
             <div style={{ minWidth: 0 }}>
               <div style={rot}>No padrão de</div>
-              <select style={{ ...E.input, cursor: "pointer" }} value={novo.padrao} onChange={(e) => trocarPadrao(e.target.value)}>
+              <Selecao style={{ ...E.input, cursor: "pointer" }} value={novo.padrao} onChange={(e) => trocarPadrao(e.target.value)}>
                 {familias.map((f, k) => <option key={f.familia} value={k}>{f.familia} …</option>)}
                 <option value={-1}>Nome livre, sem padrão</option>
-              </select>
+              </Selecao>
             </div>
             {fam && (
               <div style={{ minWidth: 0 }}>

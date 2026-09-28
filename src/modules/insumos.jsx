@@ -689,10 +689,10 @@ function InsumoForm({ insumo, insumos, onSalvar, onCancelar, isMobile }) {
         </div>
         <div>
           <label style={INS_S.label}>Tipo</label>
-          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={f.tipo} onChange={e => set("tipo", e.target.value)}>
+          <Selecao style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={f.tipo} onChange={e => set("tipo", e.target.value)}>
             <option value="material">Material</option>
             <option value="prestador">Prestador de serviço</option>
-          </select>
+          </Selecao>
         </div>
         {/* Tubo de esgoto só serve à etapa de esgoto; cimento serve a
             quase todas. Por isso a etapa aqui é opcional: preenchida, o item
@@ -1383,7 +1383,7 @@ function Insumos({ data, save }) {
             placeholder="Procurar grupo…"
             opcoes={[{ valor: "", rotulo: "Todos os grupos" }].concat(
               INSUMO_GRUPOS.map(function (g) { return { valor: g.nome, rotulo: g.nome }; }))} />
-          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={filtroConf} onChange={e => setFiltroConf(e.target.value)}>
+          <Selecao style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={filtroConf} onChange={e => setFiltroConf(e.target.value)}>
             <option value="">Qualquer preço</option>
             <option value="alta">Atual</option>
             <option value="media">Recente</option>
@@ -1391,7 +1391,7 @@ function Insumos({ data, save }) {
             <option value="obsoleta">Obsoleto</option>
             <option value="sem_preco">Sem preço</option>
             <option value="manual">Definido à mão</option>
-          </select>
+          </Selecao>
           <SelectBusca style={INS_S.input} value={filtroEtapa} onChange={v => setFiltroEtapa(v)}
             placeholder="Procurar etapa…"
             opcoes={[{ valor: "", rotulo: "Qualquer etapa" },

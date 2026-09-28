@@ -346,13 +346,13 @@ function Admin({ usuario, data, save, initialTab }) {
           <div style={{ ...S.secTit, marginBottom:0 }}>Valores atuais</div>
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
             <span style={{ fontSize:12, color:"#4b5563" }}>Filtrar:</span>
-            <select
+            <Selecao
               value={cubFiltroEstado}
               onChange={e => setCubFiltroEstado(e.target.value)}
               style={{ ...S.input, width:"auto", padding:"6px 10px", fontSize:12 }}>
               <option value="">Todos os estados</option>
               {(cubStatus || []).map(s => <option key={s.estado} value={s.estado}>{s.estado}</option>)}
-            </select>
+            </Selecao>
           </div>
         </div>
         {!cubValores || cubValores.length === 0 ? (
@@ -1515,7 +1515,7 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
 
         <div style={{ marginBottom:14 }}>
           <label style={S.label}>Nível de permissão</label>
-          <select
+          <Selecao
             value={nivel}
             onChange={e => setNivel(e.target.value)}
             disabled={salvando}
@@ -1523,7 +1523,7 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
             <option value="admin">Admin — total (criar, editar, excluir, gerenciar usuários)</option>
             <option value="editor">Editor — cria e edita, sem excluir nem gerenciar usuários</option>
             <option value="visualizador">Visualizador — somente leitura</option>
-          </select>
+          </Selecao>
         </div>
 
         <div style={{ marginBottom:18 }}>
@@ -1665,7 +1665,7 @@ function ModalNovaEmpresa({ S, onFechar, onSucesso }) {
             </div>
             <div>
               <label style={S.label}>Plano</label>
-              <select
+              <Selecao
                 style={{ ...S.input, cursor:"pointer" }}
                 value={form.plano}
                 onChange={e => atualizar("plano", e.target.value)}
@@ -1673,7 +1673,7 @@ function ModalNovaEmpresa({ S, onFechar, onSucesso }) {
                 <option value="gratuito">Gratuito</option>
                 <option value="basico">Básico</option>
                 <option value="profissional">Profissional</option>
-              </select>
+              </Selecao>
             </div>
           </div>
 
@@ -1835,7 +1835,7 @@ function ModalEditarEmpresa({ S, empresa, onFechar, onSucesso }) {
             </div>
             <div>
               <label style={S.label}>Plano</label>
-              <select
+              <Selecao
                 style={{ ...S.input, cursor:"pointer" }}
                 value={form.plano}
                 onChange={e => atualizar("plano", e.target.value)}
@@ -1843,7 +1843,7 @@ function ModalEditarEmpresa({ S, empresa, onFechar, onSucesso }) {
                 <option value="gratuito">Gratuito</option>
                 <option value="basico">Básico</option>
                 <option value="profissional">Profissional</option>
-              </select>
+              </Selecao>
             </div>
           </div>
 
@@ -2002,7 +2002,7 @@ function PainelFeedback({ S }) {
 
       {/* ── Filtros ── */}
       <div style={{ display:"flex", gap:8, marginBottom:18, flexWrap:"wrap", alignItems:"center" }}>
-        <select
+        <Selecao
           value={filtros.status}
           onChange={e => setFiltros(f => ({ ...f, status: e.target.value }))}
           style={{ ...S.input, padding:"7px 10px", fontSize:12.5, width:"auto", cursor:"pointer" }}>
@@ -2011,8 +2011,8 @@ function PainelFeedback({ S }) {
           <option value="em_andamento">Em andamento</option>
           <option value="resolvida">Resolvidas</option>
           <option value="arquivada">Arquivadas</option>
-        </select>
-        <select
+        </Selecao>
+        <Selecao
           value={filtros.categoria}
           onChange={e => setFiltros(f => ({ ...f, categoria: e.target.value }))}
           style={{ ...S.input, padding:"7px 10px", fontSize:12.5, width:"auto", cursor:"pointer" }}>
@@ -2023,7 +2023,7 @@ function PainelFeedback({ S }) {
           <option value="cobranca">Cobrança</option>
           <option value="elogio">Elogio</option>
           <option value="outro">Outro</option>
-        </select>
+        </Selecao>
         <input
           type="text"
           placeholder="Buscar no texto..."

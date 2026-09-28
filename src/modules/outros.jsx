@@ -1066,10 +1066,10 @@ function PrestadoresServico({ data, save }) {
 
       <div style={{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap" }}>
         <input style={{ ...PS.input, maxWidth:280 }} placeholder="Buscar por nome..." value={busca} onChange={e=>setBusca(e.target.value)} />
-        <select style={{ ...PS.input, maxWidth:220, cursor:"pointer" }} value={filtroCategoria} onChange={e=>setFiltroCategoria(e.target.value)}>
+        <Selecao style={{ ...PS.input, maxWidth:220, cursor:"pointer" }} value={filtroCategoria} onChange={e=>setFiltroCategoria(e.target.value)}>
           <option value="">Todas as categorias</option>
           {CATEGORIAS_PRESTADOR.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
+        </Selecao>
       </div>
 
       {filtrados.length === 0 ? (
@@ -1133,9 +1133,9 @@ function PrestadoresServico({ data, save }) {
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
           <div>
             <label style={PS.label}>Categoria</label>
-            <select style={{ ...PS.input, cursor:"pointer" }} value={form.categoria} onChange={e=>setForm({...form,categoria:e.target.value})}>
+            <Selecao style={{ ...PS.input, cursor:"pointer" }} value={form.categoria} onChange={e=>setForm({...form,categoria:e.target.value})}>
               {CATEGORIAS_PRESTADOR.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            </Selecao>
           </div>
           <div>
             <label style={PS.label}>{form.tipo === "PJ" ? "CNPJ" : "CPF"}</label>
@@ -1171,9 +1171,9 @@ function PrestadoresServico({ data, save }) {
           </div>
           <div>
             <label style={PS.label}>Estado</label>
-            <select style={{ ...PS.input, cursor:"pointer" }} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>
+            <Selecao style={{ ...PS.input, cursor:"pointer" }} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>
               {ESTADOS_BR.map(e => <option key={e}>{e}</option>)}
-            </select>
+            </Selecao>
           </div>
         </div>
 
@@ -1220,10 +1220,10 @@ function PrestadoresServico({ data, save }) {
         <div style={{ display:"grid", gridTemplateColumns:"160px 1fr", gap:12, marginBottom:12 }}>
           <div>
             <label style={PS.label}>Tipo da chave</label>
-            <select style={{ ...PS.input, cursor:"pointer" }} value={form.pixTipo || "cnpj"}
+            <Selecao style={{ ...PS.input, cursor:"pointer" }} value={form.pixTipo || "cnpj"}
               onChange={e=>setForm({...form, pixTipo:e.target.value})}>
               {TIPOS_PIX.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-            </select>
+            </Selecao>
           </div>
           <div>
             <label style={PS.label}>Chave PIX</label>

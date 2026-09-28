@@ -779,20 +779,20 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
             <div><div style={rotulo}>Início da obra</div><input type="date" style={input} value={cfg.dataInicio} disabled={!podeEditar} onChange={(e) => setCampo("dataInicio", e.target.value)} /></div>
             <div><div style={rotulo}>Como calcular o prazo</div>
-              <select style={input} value={cfg.modo} disabled={!podeEditar} onChange={(e) => setCampo("modo", e.target.value)}>
+              <Selecao style={input} value={cfg.modo} disabled={!podeEditar} onChange={(e) => setCampo("modo", e.target.value)}>
                 <option value="simplificado">Simplificado (tabela por m²)</option>
                 <option value="produtividade">Por produtividade (HH SINAPI × equipe)</option>
-              </select></div>
+              </Selecao></div>
             <div><div style={rotulo}>Prazo-alvo (meses)</div>
               <input type="number" min="0" step="0.5" style={input} disabled={!podeEditar} value={cfg.prazoAlvoMeses || ""} placeholder={`tabela: ${res.prazoTabela}`} onChange={(e) => setCampo("prazoAlvoMeses", numOrZero(e.target.value))} /></div>
             <div><div style={rotulo}>Eficiência da equipe</div>
-              <select style={input} value={String(cfg.eficiencia)} disabled={!podeEditar} onChange={(e) => setCampo("eficiencia", Number(e.target.value))}>
+              <Selecao style={input} value={String(cfg.eficiencia)} disabled={!podeEditar} onChange={(e) => setCampo("eficiencia", Number(e.target.value))}>
                 <option value="1">100% — produtividade SINAPI</option>
                 <option value="0.85">85%</option>
                 <option value="0.75">75% — obra residencial típica</option>
                 <option value="0.65">65%</option>
                 <option value="0.5">50%</option>
-              </select></div>
+              </Selecao></div>
           </div>
 
           {/* Resumo */}
@@ -932,10 +932,10 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
               <div>
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 10, marginBottom: 10 }}>
                   <div><div style={rotulo}>Preço da hora</div>
-                    <select style={input} value={cfg.regimeHora} disabled={!podeEditar} onChange={(e) => setCampo("regimeHora", e.target.value)}>
+                    <Selecao style={input} value={cfg.regimeHora} disabled={!podeEditar} onChange={(e) => setCampo("regimeHora", e.target.value)}>
                       <option value="desonerado">SINAPI desonerado</option>
                       <option value="onerado">SINAPI onerado</option>
-                    </select></div>
+                    </Selecao></div>
                   <div style={card}><div style={rotulo}>Mão de obra SINAPI</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalRef)}</div><div style={{ fontSize: 11, color: "#4b5563" }}>{mo.porM2Ref != null ? `${formatoBRL(mo.porM2Ref)}/m²` : ""} · produtividade de referência</div></div>
                   <div style={card}><div style={rotulo}>Com eficiência {Math.round(mo.eficiencia * 100)}%</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalEficiencia)}</div><div style={{ fontSize: 11, color: "#4b5563" }}>{mo.porM2Eficiencia != null ? `${formatoBRL(mo.porM2Eficiencia)}/m²` : ""} · horas reais da equipe</div></div>
                   <div style={card}><div style={rotulo}>Prestadores no orçamento</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalOrcadoComparavel)}</div><div style={{ fontSize: 11, color: "#4b5563" }}>só os comparáveis · SINAPI {formatoBRL(mo.totalRefComparavel)}</div></div>
@@ -1241,9 +1241,9 @@ function ProdutividadeEditor({ data, save, podeEditar }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
           <div style={{ fontWeight: 600, fontSize: 12.5 }}>Preço da hora por ofício ({referenciaSinapi(data)})</div>
           <label style={{ fontSize: 12, color: "#111827" }}>Regime padrão:{" "}
-            <select value={regime} disabled={!podeEditar} onChange={(e) => gravarCronogramaCfg(data, save, { ...cfg, regimeHora: e.target.value })} style={{ padding: "3px 6px", border: "1px solid #e5e7eb", borderRadius: 6, fontFamily: "inherit", fontSize: 12 }}>
+            <Selecao value={regime} disabled={!podeEditar} onChange={(e) => gravarCronogramaCfg(data, save, { ...cfg, regimeHora: e.target.value })} style={{ padding: "3px 6px", border: "1px solid #e5e7eb", borderRadius: 6, fontFamily: "inherit", fontSize: 12 }}>
               <option value="desonerado">desonerado</option><option value="onerado">onerado</option>
-            </select>
+            </Selecao>
           </label>
         </div>
         <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 640 }}>

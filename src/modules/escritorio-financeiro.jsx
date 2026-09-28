@@ -1324,7 +1324,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       <div style={{ fontSize: 13, fontWeight: 700 }}>{inicial && inicial.id ? "Editar lançamento" : "Novo lançamento"}</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
         {campo("Conta", (
-          <select style={{ ...S.input, cursor: "pointer" }} value={f.contaId} onChange={(e) => {
+          <Selecao style={{ ...S.input, cursor: "pointer" }} value={f.contaId} onChange={(e) => {
             const c = contaEscritorio(e.target.value);
             const us = c && (c.unidades || []).length ? c.unidades : [];
             setF((p) => ({ ...p, contaId: e.target.value, unidadeId: us.length && !us.includes(p.unidadeId) ? us[0] : p.unidadeId }));
@@ -1339,14 +1339,14 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                 </optgroup>
               );
             })}
-          </select>
+          </Selecao>
         ))}
         {campo("Unidade de negócio", (
-          <select style={{ ...S.input, cursor: "pointer" }} value={f.unidadeId} onChange={(e) => set("unidadeId", e.target.value)}>
+          <Selecao style={{ ...S.input, cursor: "pointer" }} value={f.unidadeId} onChange={(e) => set("unidadeId", e.target.value)}>
             {UNIDADES_NEGOCIO.filter((u) => unidadesOk.includes(u.id)).map((u) => (
               <option key={u.id} value={u.id}>{u.nome}</option>
             ))}
-          </select>
+          </Selecao>
         ))}
         {campo("Valor", <input style={S.input} inputMode="decimal" value={f.valor} placeholder="0,00"
           onChange={(e) => set("valor", e.target.value)} />)}
@@ -1355,13 +1355,13 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
         {campo("Data do pagamento", <input style={S.input} type="date" value={f.lancadoEm}
           onChange={(e) => set("lancadoEm", e.target.value)} />)}
         {campo("Passou pela conta do escritório", (
-          <select style={{ ...S.input, cursor: "pointer" }} value={f.contaBanco} onChange={(e) => set("contaBanco", e.target.value)}>
+          <Selecao style={{ ...S.input, cursor: "pointer" }} value={f.contaBanco} onChange={(e) => set("contaBanco", e.target.value)}>
             <option value="sim">Sim</option>
             <option value="nao">Não</option>
-          </select>
+          </Selecao>
         ))}
         {campo(ehEmp ? "Empreendimento" : "Cliente", (
-          <select style={{ ...S.input, cursor: "pointer" }}
+          <Selecao style={{ ...S.input, cursor: "pointer" }}
             value={f.clienteId || ""}
             onChange={(e) => {
               const c = doCadastro.find((x) => x.id === e.target.value);
@@ -1372,7 +1372,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             {doCadastro.map((c) => (
               <option key={c.id} value={c.id}>{c.nome}{ehEmpreendimento(c) && !ehEmp ? " · empreendimento" : ""}</option>
             ))}
-          </select>
+          </Selecao>
         ))}
         {ehEmp && !doCadastro.length && (
           <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#b45309" }}>
@@ -1519,10 +1519,10 @@ function EFSeletor({ rotulo, valor, aoTrocar, opcoes }) {
   return (
     <label style={{ display: "grid", gap: 3 }}>
       <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>{rotulo}</span>
-      <select value={valor} onChange={(e) => aoTrocar(e.target.value)}
+      <Selecao value={valor} onChange={(e) => aoTrocar(e.target.value)}
         style={{ ...EF_ESTILO.input, padding: "7px 10px", minWidth: 130, cursor: "pointer" }}>
         {opcoes.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
-      </select>
+      </Selecao>
     </label>
   );
 }
@@ -1690,12 +1690,12 @@ function MapaDeColunas({ mapa, aoCorrigir }) {
         {campos.filter(([k]) => mapa.colunas[k] != null || ["data", "valor", "historico"].includes(k)).map(([k, r]) => (
           <label key={k} style={{ display: "grid", gap: 3 }}>
             <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>{r}</span>
-            <select value={mapa.colunas[k] == null ? "" : String(mapa.colunas[k])}
+            <Selecao value={mapa.colunas[k] == null ? "" : String(mapa.colunas[k])}
               onChange={(e) => aoCorrigir(k, e.target.value === "" ? null : Number(e.target.value))}
               style={{ ...S.input, padding: "7px 10px", minWidth: 150, cursor: "pointer",
                 borderColor: (mapa.confianca[k] != null && mapa.confianca[k] < 0.3) ? "#f59e0b" : "rgba(38,36,33,0.18)" }}>
               {opcoes.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
-            </select>
+            </Selecao>
           </label>
         ))}
       </div>

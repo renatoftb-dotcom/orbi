@@ -2141,6 +2141,8 @@ function SelectBusca(props) {
   // Lista curta não ganha campo de busca, mas continua respondendo às letras
   // como o select nativo: "fu" pula para a primeira opção que começa assim.
   const refDigitado = useRef({ texto: "", quando: 0 });
+  // O ouvinte de clique fora é registrado uma vez; o ref mantém o fechar atual.
+  const fecharRef = useRef(function () {});
 
   const valorAtual = props.value == null ? "" : String(props.value);
   const escolhida = lista.filter(function (o) { return o.valor === valorAtual; })[0];
@@ -2169,13 +2171,20 @@ function SelectBusca(props) {
     });
   }, []);
 
+  fecharRef.current = fechar;
+
+  useEffect(function () {
+    if (props.abrirAoMontar) abrir("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(function () {
     if (!aberto) return;
     medir();
     function fora(ev) {
       if (refPainel.current && refPainel.current.contains(ev.target)) return;
       if (refBotao.current && refBotao.current.contains(ev.target)) return;
-      setAberto(false);
+      fecharRef.current();
     }
     document.addEventListener("mousedown", fora, true);
     window.addEventListener("resize", medir);
@@ -2210,6 +2219,14 @@ function SelectBusca(props) {
     setAberto(true);
   }
 
+  // Fechar sem escolher é diferente de escolher: o <select> nativo dispara
+  // blur, e há tela que conta com isso para desmontar o campo.
+  function fechar() {
+    setAberto(false);
+    setTermo("");
+    if (props.aoFechar) props.aoFechar();
+  }
+
   function escolher(o) {
     setAberto(false);
     setTermo("");
@@ -2218,7 +2235,7 @@ function SelectBusca(props) {
 
   function aoTeclar(e) {
     if (e.key === "Escape") {
-      e.preventDefault(); setAberto(false);
+      e.preventDefault(); fechar();
       if (refBotao.current) refBotao.current.focus();
       return;
     }
@@ -2240,7 +2257,7 @@ function SelectBusca(props) {
       if (o) escolher(o);
       return;
     }
-    if (e.key === "Tab") { setAberto(false); return; }
+    if (e.key === "Tab") { fechar(); return; }
     if (!comBusca && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
       const agora = Date.now();
@@ -2267,9 +2284,10 @@ function SelectBusca(props) {
   return (
     <>
       <button type="button" ref={refBotao} disabled={!!props.disabled} id={props.id}
+        className={props.className}
         title={props.title || (escolhida ? escolhida.rotulo : "")}
         style={estiloBotao}
-        onClick={function () { if (props.disabled) return; if (aberto) setAberto(false); else abrir(""); }}
+        onClick={function () { if (props.disabled) return; if (aberto) fechar(); else abrir(""); }}
         onKeyDown={function (e) {
           if (props.disabled) return;
           if (aberto) return;
@@ -2339,5 +2357,74 @@ function SelectBusca(props) {
         </div>
       )}
     </>
+  );
+}
+
+
+// ── Selecao ────────────────────────────────────────────
+// Troca direta do <select> nativo: mesmos <option> e <optgroup> dentro, mesmo
+// onChange com e.target.value. Serve para varrer o app inteiro sem reescrever
+// sessenta handlers — quem precisa montar a lista de fora usa o SelectBusca.
+
+// ── Selecao: parte pura ──────────────────────────────
+
+function textoDeFilhos(n) {
+  if (n == null || n === false || n === true) return "";
+  if (typeof n === "string") return n;
+  if (typeof n === "number") return String(n);
+  if (Array.isArray(n)) return n.map(textoDeFilhos).join("");
+  if (typeof n === "object" && n.props) return textoDeFilhos(n.props.children);
+  return "";
+}
+
+function opcoesDosFilhos(filhos) {
+  const saida = [];
+  function anda(n, grupo) {
+    if (n == null || n === false || n === true || n === "") return;
+    if (Array.isArray(n)) { n.forEach(function (x) { anda(x, grupo); }); return; }
+    if (typeof n !== "object" || !n.props) return;
+    if (n.type === "optgroup") { anda(n.props.children, String(n.props.label || "")); return; }
+    if (n.type === "option") {
+      const rotulo = textoDeFilhos(n.props.children);
+      // <option key={e}>{e}</option> sem value vale pelo próprio texto, como no nativo.
+      const valor = n.props.value != null ? String(n.props.value) : rotulo;
+      saida.push({ valor: valor, rotulo: rotulo || valor, grupo: grupo || "" });
+      return;
+    }
+    if (n.props.children != null) anda(n.props.children, grupo);
+  }
+  anda(filhos, "");
+  return saida;
+}
+
+// ── Selecao: fim da parte pura ──────────────────────
+
+function Selecao(props) {
+  const opcoes = useMemo(function () { return opcoesDosFilhos(props.children); }, [props.children]);
+  const controlado = props.value !== undefined;
+  const [interno, setInterno] = useState(props.defaultValue == null ? "" : String(props.defaultValue));
+  const escolheu = useRef(false);
+  const valor = controlado ? props.value : interno;
+
+  function aoEscolher(v) {
+    escolheu.current = true;
+    if (!controlado) setInterno(v);
+    if (props.onChange) {
+      props.onChange({
+        target: { value: v }, currentTarget: { value: v },
+        stopPropagation: function () {}, preventDefault: function () {},
+      });
+    }
+  }
+
+  return (
+    <SelectBusca
+      style={props.style} className={props.className} id={props.id} title={props.title}
+      value={valor == null ? "" : String(valor)} opcoes={opcoes}
+      disabled={props.disabled} vazio={props.vazio} placeholder={props.placeholder}
+      minimoParaBusca={props.minimoParaBusca} semBusca={props.semBusca}
+      abrirAoMontar={props.autoFocus}
+      aoFechar={function () { if (!escolheu.current && props.onBlur) props.onBlur({ target: { value: valor } }); }}
+      onChange={aoEscolher} />
   );
 }
