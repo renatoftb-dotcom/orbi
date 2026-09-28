@@ -469,6 +469,26 @@ function semearInsumos(materiais, seed) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// ── Etapa padrão em lote ──────────────────────────────
+// Um catálogo tem centenas de itens e a etapa de cada um não se descobre
+// sozinha — tubo de água fria e tubo de esgoto têm o mesmo grupo e etapas
+// diferentes. Então quem sabe é quem compra, e o que a tela deve dar é um
+// jeito de dizer isso para cinquenta itens de uma vez, não um por um.
+function definirEtapaPadraoEmLote(insumos, chaves, etapaId) {
+  var alvo = {};
+  (chaves || []).forEach(function (k) { alvo[k] = true; });
+  var mudados = 0;
+  var lista = (insumos || []).map(function (x) {
+    if (!x) return x;
+    var chave = x.id || x.codigo;
+    if (!chave || !alvo[chave]) return x;
+    if ((x.etapaPadrao || "") === (etapaId || "")) return x;
+    mudados++;
+    return Object.assign({}, x, { etapaPadrao: etapaId || "" });
+  });
+  return { insumos: lista, mudados: mudados };
+}
+
 // UI
 // ═══════════════════════════════════════════════════════════════
 
@@ -1025,6 +1045,8 @@ function Insumos({ data, save }) {
   var [filtroGrupo, setFiltroGrupo] = useState("");
   var [filtroConf, setFiltroConf] = useState("");
   var [semeando, setSemeando] = useState(false);
+  var [marcados, setMarcados] = useState({});
+  var [etapaLote, setEtapaLote] = useState("");
 
   var [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
   useEffect(function () {
@@ -1083,6 +1105,21 @@ function Insumos({ data, save }) {
     save(Object.assign({}, data, { materiais: lista }));
     setSel(novo);
     setView("detalhe");
+  }
+
+  function aplicarEtapaEmLote() {
+    var chaves = Object.keys(marcados).filter(function (k) { return marcados[k]; });
+    if (!chaves.length) return;
+    var r = definirEtapaPadraoEmLote(insumos, chaves, etapaLote);
+    save(Object.assign({}, data, { materiais: r.insumos }));
+    setMarcados({});
+    setEtapaLote("");
+    dialogo.alertar({
+      titulo: r.mudados === 1 ? "1 insumo atualizado" : r.mudados + " insumos atualizados",
+      mensagem: etapaLote
+        ? "Da próxima compra em diante eles já entram nessa etapa."
+        : "A etapa saiu: esses itens voltam a perguntar na compra.",
+    });
   }
 
   function rodarSemeadura() {
@@ -1226,6 +1263,30 @@ function Insumos({ data, save }) {
           </select>
         </div>
 
+        {(() => {
+          var chaves = Object.keys(marcados).filter(function (k) { return marcados[k]; });
+          if (!chaves.length || !perm.podeEditar) return null;
+          return (
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap",
+              padding: "10px 12px", marginBottom: 12, borderRadius: 12,
+              border: "1px solid #0474f4", background: "#eef5ff" }}>
+              <span style={{ fontSize: 12.5, color: "#0474f4", fontWeight: 600 }}>
+                {chaves.length === 1 ? "1 selecionado" : chaves.length + " selecionados"}
+              </span>
+              <span style={{ fontSize: 12.5, color: "#4b5563" }}>Etapa padrão:</span>
+              <select style={Object.assign({}, INS_S.input, { cursor: "pointer", width: "auto", minWidth: 220 })}
+                value={etapaLote} onChange={e => setEtapaLote(e.target.value)}>
+                <option value="">— tirar a etapa —</option>
+                {(typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(function (et) {
+                  return <option key={et.id} value={et.id}>{et.nome}</option>;
+                })}
+              </select>
+              <button style={INS_S.btn} onClick={aplicarEtapaEmLote}>Aplicar</button>
+              <button style={INS_S.btnGhost} onClick={() => setMarcados({})}>Limpar seleção</button>
+            </div>
+          );
+        })()}
+
         {filtrados.length === 0 ? (
           <div style={{ padding: 28, textAlign: "center", color: "#6b7280", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 16, background: "#fff" }}>
             {insumos.length === 0 ? "Nenhum insumo cadastrado ainda." : "Nenhum insumo com esses filtros."}
@@ -1236,9 +1297,21 @@ function Insumos({ data, save }) {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: isMobile ? 0 : 720 }}>
                 <thead>
                   <tr style={{ background: "#f7f7f8", color: "#4b5563", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, textAlign: "left" }}>
+                    {perm.podeEditar && (
+                      <th style={{ padding: "10px 8px", width: 34 }}>
+                        <input type="checkbox" title="Marcar todos os filtrados"
+                          checked={filtrados.length > 0 && filtrados.every(function (x) { return marcados[x.i.id || x.i.codigo]; })}
+                          onChange={e => {
+                            var novo = Object.assign({}, marcados);
+                            filtrados.forEach(function (x) { novo[x.i.id || x.i.codigo] = e.target.checked; });
+                            setMarcados(novo);
+                          }} />
+                      </th>
+                    )}
                     <th style={{ padding: "10px 12px", fontWeight: 600 }}>Código</th>
                     <th style={{ padding: "10px 12px", fontWeight: 600 }}>Insumo</th>
                     {!isMobile && <th style={{ padding: "10px 12px", fontWeight: 600 }}>Grupo</th>}
+                    {!isMobile && <th style={{ padding: "10px 12px", fontWeight: 600 }}>Etapa padrão</th>}
                     {!isMobile && <th style={{ padding: "10px 12px", fontWeight: 600 }}>Un.</th>}
                     <th style={{ padding: "10px 12px", fontWeight: 600, textAlign: "right" }}>Preço</th>
                     {!isMobile && <th style={{ padding: "10px 12px", fontWeight: 600 }}>Base</th>}
@@ -1252,12 +1325,28 @@ function Insumos({ data, save }) {
                         style={{ borderTop: "1px solid #f3f4f6", cursor: "pointer", opacity: x.i.ativo === false ? 0.5 : 1 }}
                         onMouseEnter={e => { e.currentTarget.style.background = "#fafafa"; }}
                         onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
+                        {perm.podeEditar && (
+                          <td style={{ padding: "10px 8px" }} onClick={e => e.stopPropagation()}>
+                            <input type="checkbox" checked={!!marcados[x.i.id || x.i.codigo]}
+                              onChange={e => setMarcados(Object.assign({}, marcados, { [x.i.id || x.i.codigo]: e.target.checked }))} />
+                          </td>
+                        )}
                         <td style={{ padding: "10px 12px", fontFamily: "ui-monospace, monospace", fontSize: 11.5, color: INS.inkSoft, whiteSpace: "nowrap" }}>{x.i.codigo || "—"}</td>
                         <td style={{ padding: "10px 12px", color: INS.grafite, fontWeight: 500 }}>
                           {x.i.nome}
                           {x.i.precoPendente && <span style={{ marginLeft: 8, fontSize: 11, color: "#b45309", fontWeight: 600 }}>· confirmar</span>}
                         </td>
                         {!isMobile && <td style={{ padding: "10px 12px", color: "#4b5563" }}>{x.i.grupo}</td>}
+                        {!isMobile && (
+                          <td style={{ padding: "10px 12px", color: x.i.etapaPadrao ? "#111827" : "#9ca3af" }}>
+                            {(function () {
+                              if (!x.i.etapaPadrao) return "—";
+                              var et = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [])
+                                .find(function (e) { return e.id === x.i.etapaPadrao; });
+                              return et ? et.nome : x.i.etapaPadrao;
+                            })()}
+                          </td>
+                        )}
                         {!isMobile && <td style={{ padding: "10px 12px", color: "#4b5563" }}>{x.i.unidade}</td>}
                         <td style={{ padding: "10px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600, color: INS.grafite, whiteSpace: "nowrap" }}>
                           <span style={{ display: "inline-flex", alignItems: "center", gap: 7, justifyContent: "flex-end" }}>

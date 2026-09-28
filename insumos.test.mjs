@@ -24,7 +24,8 @@ const shim = `var uid = () => "id" + (++__c);\nvar __c = 0;\n`;
 
 const api = new Function(
   shim + seedSrc + "\n" + puro + `
-  return { INSUMOS_SEED, INSUMO_GRUPOS, normalizarTexto, similaridadeTexto,
+  return { definirEtapaPadraoEmLote,
+           INSUMOS_SEED, INSUMO_GRUPOS, normalizarTexto, similaridadeTexto,
            resolverInsumo, proximoCodigoInsumo, grupoInferido, prefixoDoGrupo,
            mesesEntre, fatorIncc, precoInsumo, atualizarPrecoReferencia,
            migrarMateriaisParaInsumos, semearInsumos };`
@@ -322,6 +323,35 @@ t("material do cadastro antigo (só ultimoPreco) já vale como preço, com confi
   eq(r.preco, 68.9);
   eq(r.confianca, "baixa");
   eq(precoInsumo({ nome: "x", ultimoPreco: 0 }, HOJE).preco, null);
+});
+
+t("a etapa padrão se define em lote, e só no que foi marcado", () => {
+  const cat = [
+    { id: "a", codigo: "HID-009", nome: "PVC - Marrom - Tubo 25mm", grupo: "Hidráulica" },
+    { id: "b", codigo: "HID-300", nome: "PVC - Esgoto 100mm", grupo: "Hidráulica", etapaPadrao: "esgoto_pluvial" },
+    { id: "c", codigo: "CIM-001", nome: "Cimento CP II", grupo: "Cimento" },
+    { codigo: "SEM-ID", nome: "Insumo antigo sem id", grupo: "Outros" },
+  ];
+
+  const r = api.definirEtapaPadraoEmLote(cat, ["a", "SEM-ID"], "hidraulica");
+  eq(r.mudados, 2, "casa por id e, na falta dele, por código:");
+  eq(r.insumos[0].etapaPadrao, "hidraulica");
+  eq(r.insumos[3].etapaPadrao, "hidraulica");
+  eq(r.insumos[1].etapaPadrao, "esgoto_pluvial", "quem não foi marcado não muda:");
+  assert(r.insumos[2].etapaPadrao === undefined, "o cimento continua sem etapa");
+  assert(r.insumos !== cat, "devolve lista nova");
+  assert(r.insumos[2] === cat[2], "o item intocado é o mesmo objeto");
+
+  // reaplicar a mesma etapa não conta como mudança
+  eq(api.definirEtapaPadraoEmLote(r.insumos, ["a"], "hidraulica").mudados, 0);
+
+  // etapa vazia tira a marcação
+  const limpo = api.definirEtapaPadraoEmLote(cat, ["b"], "");
+  eq(limpo.insumos[1].etapaPadrao, "");
+  eq(limpo.mudados, 1);
+
+  eq(api.definirEtapaPadraoEmLote([], ["a"], "x"), { insumos: [], mudados: 0 });
+  eq(api.definirEtapaPadraoEmLote(cat, [], "x").mudados, 0);
 });
 
 console.log("\n" + ok + " testes passaram" + (falhas.length ? ", " + falhas.length + " falharam" : ""));
