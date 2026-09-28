@@ -19976,6 +19976,42 @@ function validarPedido(pedido, pedidosDaLoja) {
   return { ok: !erros.length, erros };
 }
 
+// ── Onze itens não são onze contas para quem paga ───────────
+// A obra precisa do item a item — é dele que sai o custo por etapa. Quem
+// paga precisa do pedido: a loja cobra um valor, com um número. Então o
+// dado continua por item e a LISTA se dobra por pedido, com os itens
+// dentro. Conta sem pedido (avulsa, parcela de contrato) passa direto.
+function linhasDePedido(contas) {
+  const red = (x) => Math.round(x * 100) / 100;
+  const fora = [];
+  const porPedido = new Map();
+  for (const c of contas || []) {
+    if (!c) continue;
+    if (!c.pedidoId) { fora.push({ tipo: "conta", chave: c.id, conta: c }); continue; }
+    if (!porPedido.has(c.pedidoId)) {
+      const linha = { tipo: "pedido", chave: c.pedidoId, pedidoId: c.pedidoId,
+        numeroPedido: c.numeroPedido || "", numeroLoja: c.numeroLoja || "", numeroNota: c.numeroNota || "",
+        cotacaoId: c.cotacaoId || "", obraId: c.obraId || "",
+        prestadorId: c.prestadorId || "", favorecido: c.favorecido || "",
+        vencimento: c.vencimento || "", contas: [], valor: 0, valorPago: 0, pagos: 0 };
+      porPedido.set(c.pedidoId, linha);
+      fora.push(linha);
+    }
+    const l = porPedido.get(c.pedidoId);
+    l.contas.push(c);
+    l.valor = red(l.valor + (Number(c.valor) || 0));
+    if (c.pago) { l.pagos++; l.valorPago = red(l.valorPago + (Number(c.valorPago) || Number(c.valor) || 0)); }
+    // vence pelo mais cedo: é a data que cobra
+    if (c.vencimento && (!l.vencimento || c.vencimento < l.vencimento)) l.vencimento = c.vencimento;
+  }
+  for (const l of porPedido.values()) {
+    l.pago = l.contas.length > 0 && l.pagos === l.contas.length;
+    l.parcial = l.pagos > 0 && !l.pago;
+    l.aberto = red(l.valor - l.valorPago);
+  }
+  return fora;
+}
+
 // ── Corrigir um pedido lançado errado ────────────────────
 // Enquanto ninguém pagou, o pedido é só uma intenção: dá para refazer ou
 // apagar inteiro. Depois da baixa, não — o dinheiro saiu, e apagar o gasto
@@ -20040,7 +20076,8 @@ function baixarPedidos(contasPagar, pedidoIds, dados, quem, agoraIso) {
   const d = dados || {};
   const contas = (contasPagar || []).map((c) => {
     if (!c || c.pago || !alvo.has(c.pedidoId)) return c;
-    return contaPaga(c, { pagoEm: d.pagoEm || "", valorPago: Number(c.valor) || 0 }, quem, agoraIso);
+    return contaPaga(c, { pagoEm: d.pagoEm || "", valorPago: Number(c.valor) || 0,
+      comprovante: d.comprovante || c.comprovante || null }, quem, agoraIso);
   });
   const total = Math.round((contasPagar || [])
     .filter((c) => c && !c.pago && alvo.has(c.pedidoId))
@@ -22719,6 +22756,17 @@ function ehContaDeLoja(cot) {
   return !!(cot && cot.contaLoja);
 }
 
+// Apagar a conta da loja leva os pedidos e as contas dela junto — só
+// enquanto nada foi pago. Depois da primeira baixa a conta fica: o gasto
+// já está na obra e no banco, e sumir com ele quebraria os dois.
+function podeApagarContaDeLoja(cot, contasPagar) {
+  const pagas = (contasPagar || []).filter((x) => x && x.cotacaoId === (cot || {}).id && x.pago).length;
+  if (!pagas) return { pode: true, motivo: "" };
+  return { pode: false, motivo: pagas === 1
+    ? "Um item desta conta já foi pago. Desfaça a baixa em contas a pagar antes de apagar."
+    : `${pagas} itens desta conta já foram pagos. Desfaça a baixa em contas a pagar antes de apagar.` };
+}
+
 // ── Situação, em uma palavra ────────────────────────────────────
 // A ordem dos testes é a ordem do fluxo; o primeiro que casar manda.
 function situacaoCotacao(cot, aprovacoes, contratos) {
@@ -24452,6 +24500,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   }
 
   async function excluirCotacao(cot) {
+    // Conta de loja tem regra própria: ela nasce lançada e segue lançando,
+    // então "já foi lançada" não pode travar. O que trava é pagamento.
+    if (ehContaDeLoja(cot)) { await apagarContaDeLoja(cot); return; }
     const trava = podeExcluirCotacaoComContratos(cot, contratos);
     if (!trava.pode) { setErro(trava.motivo); return; }
     const props = propostasDaCotacao(cot);
@@ -24472,6 +24523,33 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     const r = removerCotacao(cotacoes, aprovacoes, cot.id);
     gravar({ ...obra, cotacoes: r.cotacoes, aprovacoesCotacao: r.aprovacoes });
     limparAnexos(anexosDasPropostas(props));
+  }
+
+  async function apagarContaDeLoja(cot) {
+    const trava = podeApagarContaDeLoja(cot, obra.contasPagar || []);
+    if (!trava.pode) { setErro(trava.motivo); return; }
+    const pedidos = (cot.pedidos || []).length;
+    const quantas = (obra.contasPagar || []).filter((x) => x && x.cotacaoId === cot.id).length;
+    const ok = await dialogo.confirmar({
+      titulo: `Apagar a conta "${cot.titulo || "sem nome"}"?`,
+      mensagem: pedidos
+        ? `Vão junto ${pedidos === 1 ? "1 pedido" : pedidos + " pedidos"} e ${quantas === 1 ? "1 conta a pagar" : quantas + " contas a pagar"}. Não dá para desfazer.`
+        : "A conta ainda não tem pedido nenhum. Não dá para desfazer.",
+      confirmar: "Apagar conta",
+      destrutivo: true,
+    });
+    if (!ok) return;
+    setErro("");
+    const r = removerCotacao(cotacoes, aprovacoes, cot.id);
+    gravar({ ...obra, cotacoes: r.cotacoes, aprovacoesCotacao: r.aprovacoes,
+      contasPagar: removerContasDaCotacao(obra.contasPagar || [], cot.id) });
+  }
+
+  // Encerrar é arquivar: a conta sai das abertas e para de receber pedido,
+  // sem apagar nada. É o fim normal de uma conta de loja.
+  function alternarEncerramento(cot) {
+    setErro("");
+    trocarCotacao(cot.id, (x) => ({ ...x, status: x.status === "encerrada" ? "" : "encerrada" }));
   }
 
   // ── Lançar direto em contas a pagar ───────────────────────────
@@ -24705,7 +24783,10 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   dinheiro={dinheiro} podeGerenciar={podeGerenciar}
                   aoNovoPedido={() => abrirPedido(cot)}
                   aoEditarPedido={(p) => editarPedido(cot, p)}
-                  aoApagarPedido={(p) => apagarPedido(cot, p)} />
+                  aoApagarPedido={(p) => apagarPedido(cot, p)}
+                  aoEditarConta={() => { setErro(""); setFormCotacao(cot); }}
+                  aoApagarConta={() => excluirCotacao(cot)}
+                  aoEncerrar={() => alternarEncerramento(cot)} />
               </div>
             )}
 
@@ -25803,7 +25884,7 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
 // ── O corpo de uma conta de loja ────────────────────────────────
 // Não tem proposta para comparar nem escolha para enviar: tem os pedidos
 // feitos, o que já foi pago e o que está pendurado esperando a loja ligar.
-function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGerenciar, aoNovoPedido, aoEditarPedido, aoApagarPedido }) {
+function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGerenciar, aoNovoPedido, aoEditarPedido, aoApagarPedido, aoEditarConta, aoApagarConta, aoEncerrar }) {
   const E = COT_ESTILO;
   const pedidos = cotacao.pedidos || [];
   const contas = (contasPagar || []).filter((c) => c && c.cotacaoId === cotacao.id);
@@ -25907,6 +25988,17 @@ function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGe
         Cada pedido vira uma conta a pagar <strong style={{ color: "#4b5563" }}>por item</strong>, com a etapa de cada um —
         é o que faz o quadro da obra por etapa fechar. Quando a loja cobrar, dê a baixa em contas a pagar.
       </div>
+      {podeGerenciar && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12,
+          paddingTop: 10, borderTop: "1px solid rgba(38,36,33,0.08)" }}>
+          <button style={{ ...E.btnSec, fontSize: 12, padding: "6px 12px" }} onClick={aoEditarConta}>Editar conta</button>
+          <button style={{ ...E.btnSec, fontSize: 12, padding: "6px 12px" }} onClick={aoEncerrar}>
+            {cotacao.status === "encerrada" ? "Reabrir conta" : "Encerrar conta"}
+          </button>
+          <button style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer",
+            fontFamily: "inherit", fontSize: 12, marginLeft: "auto" }} onClick={aoApagarConta}>Apagar conta</button>
+        </div>
+      )}
     </>
   );
 }
@@ -28719,12 +28811,33 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     setFormPagamento({ conta, dataContab: conta.vencimento && conta.vencimento <= hojeIso ? conta.vencimento : hojeIso,
       valorPago: Number(conta.valor) || 0, comprovante: conta.comprovante || null, erroAnexo: "" });
   };
+  // A loja cobra o pedido, não o saco de cimento: a baixa é de uma vez só,
+  // todos os itens na mesma data, e o boleto vale como comprovante de todos.
+  const alternarPagamentoPedido = (linha) => {
+    if (linha.pago) {
+      const alvo = new Set(linha.contas.map(c => c.id));
+      gravarContas(contasDaObra.map(c => (alvo.has(c.id) ? contaEmAberto(c, quemSou()) : c)), linha.obraId);
+      return;
+    }
+    setFormPagamento({ pedido: linha, conta: null,
+      dataContab: linha.vencimento && linha.vencimento <= hojeIso ? linha.vencimento : hojeIso,
+      valorPago: linha.aberto, comprovante: null, erroAnexo: "" });
+  };
   // Confirma a baixa: a despesa entra no mês da data de contabilização
   // escolhida (`pagoEm`); `contabilizadoEm` guarda o dia em que se registrou.
   const confirmarPagamento = () => {
     const f = formPagamento; if (!f) return;
-    const valor = numeroDeCampo(f.valorPago) || Number(f.conta.valor) || 0;
     if (!f.dataContab) { dialogo.alertar({ titulo: "Informe a data de contabilização", tipo: "aviso" }); return; }
+    // O pedido baixa inteiro, item a item, pelo valor de cada um: é a soma
+    // deles que tem que bater com a linha do extrato.
+    if (f.pedido) {
+      const r = baixarPedidos(contasDaObra, [f.pedido.pedidoId],
+        { pagoEm: f.dataContab, comprovante: f.comprovante || null }, quemSou());
+      gravarContas(r.contas, f.pedido.obraId);
+      setFormPagamento(null);
+      return;
+    }
+    const valor = numeroDeCampo(f.valorPago) || Number(f.conta.valor) || 0;
     const atualizada = contaPaga(f.conta, { pagoEm: f.dataContab, valorPago: valor, comprovante: f.comprovante || null }, quemSou());
     gravarContas(contasDaObra.map(c => c.id === f.conta.id ? atualizada : c), f.conta.obraId);
     setFormPagamento(null);
@@ -30200,7 +30313,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div data-vk-ui="1" onClick={e => e.stopPropagation()}
               style={{ background: "#fff", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: 18, width: "100%", maxWidth: 460, maxHeight: "88vh", overflowY: "auto", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Registrar pagamento</div>
-              <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 14 }}>{tituloConta(formPagamento.conta)}</div>
+              <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 14 }}>
+                {formPagamento.pedido
+                  ? `Pedido ${formPagamento.pedido.numeroLoja || formPagamento.pedido.numeroPedido} · ${formPagamento.pedido.favorecido || "Fornecedor"} · ${formPagamento.pedido.contas.length} itens`
+                  : tituloConta(formPagamento.conta)}
+              </div>
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
                 <div>
                   <label style={C.label}>Data de contabilização</label>
@@ -30209,9 +30326,21 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 </div>
                 <div>
                   <label style={C.label}>Valor pago (R$)</label>
-                  <CampoCtrNum tipo="moeda" valor={formPagamento.valorPago} onChange={v => setFormPagamento({ ...formPagamento, valorPago: v })} style={C.input} placeholder="0,00" />
+                  {formPagamento.pedido ? (
+                    <div style={{ ...C.input, background: "#fafafa", color: "#111827", fontWeight: 600 }}>
+                      {fmtMoedaCtr(formPagamento.pedido.aberto)}
+                    </div>
+                  ) : (
+                    <CampoCtrNum tipo="moeda" valor={formPagamento.valorPago} onChange={v => setFormPagamento({ ...formPagamento, valorPago: v })} style={C.input} placeholder="0,00" />
+                  )}
                 </div>
               </div>
+              {formPagamento.pedido && (
+                <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8 }}>
+                  Os {formPagamento.pedido.contas.length} itens do pedido recebem a baixa juntos, cada um pelo seu valor —
+                  a soma é o que sai do caixa. Para pagar um valor diferente, corrija o pedido na cotação.
+                </div>
+              )}
               <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8 }}>
                 A despesa entra no extrato da obra no mês desta data. O dia de hoje ({new Date(hojeIso + "T12:00:00").toLocaleDateString("pt-BR")}) fica registrado como a data em que foi contabilizada.
               </div>
@@ -30560,11 +30689,73 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                     </button>
                     {!oculto && (
                       <div>
-                        {g.itens.map(c => {
+                        {linhasDePedido(g.itens).map(L => {
+                          const umaLinha = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+                          // Pedido de loja: uma linha com o total, os itens dentro.
+                          if (L.tipo === "pedido") {
+                            const abertaP = !!contasAbertas[L.chave];
+                            const stP = SITUACAO_CONTA[situacaoConta({ vencimento: L.vencimento, pago: L.pago }, hojeIso)] || SITUACAO_CONTA.aberto;
+                            const nomeEtapa = (id) => {
+                              const e = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).find(x => x.id === id);
+                              return e ? e.nome : "";
+                            };
+                            return (
+                              <div key={L.chave} style={{ borderTop: "1px solid rgba(38,36,33,0.06)", background: "#fff" }}>
+                                <div style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, alignItems: "center", padding: "9px 11px" }}>
+                                  <div data-vk-mantem-mes="1" style={{ minWidth: 0, cursor: "pointer" }}
+                                    title={abertaP ? "Fechar itens" : "Ver os itens"}
+                                    onClick={() => setContasAbertas({ ...contasAbertas, [L.chave]: !abertaP })}>
+                                    <div style={{ fontSize: 13, color: "#111827", fontWeight: 600, ...umaLinha }}>
+                                      <span style={{ color: "#6b7280", fontWeight: 400, marginRight: 4 }}>{abertaP ? "▾" : "▸"}</span>
+                                      Pedido {L.numeroLoja || L.numeroPedido}
+                                    </div>
+                                    <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2, ...umaLinha }}>
+                                      {[L.favorecido, L.contas.length === 1 ? "1 item" : `${L.contas.length} itens`,
+                                        L.numeroNota ? "NF " + L.numeroNota : "",
+                                        L.parcial ? "parcialmente pago" : ""].filter(Boolean).join(" · ")}
+                                    </div>
+                                  </div>
+                                  <div style={{ fontSize: 12.5, color: "#111827" }}>
+                                    {L.vencimento ? new Date(L.vencimento + "T12:00:00").toLocaleDateString("pt-BR") : "a definir"}
+                                  </div>
+                                  <div style={{ fontSize: 12, color: stP.forte ? "#111827" : "#4b5563", fontWeight: stP.forte ? 700 : 500 }}>{stP.label}</div>
+                                  <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", textAlign: isMobile ? "left" : "right" }}>
+                                    {fmtMoedaCtr(L.pago ? L.valorPago : L.valor)}
+                                  </div>
+                                  {perm.podeEditar ? (
+                                    <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
+                                      <button onClick={() => alternarPagamentoPedido(L)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>
+                                        {L.pago ? "Desfazer" : "Pagar pedido"}
+                                      </button>
+                                    </div>
+                                  ) : <div />}
+                                </div>
+                                {abertaP && (
+                                  <div style={{ padding: "0 11px 10px 32px", background: "#fcfcfd" }}>
+                                    {L.contas.map(ic => (
+                                      <div key={ic.id} style={{ display: "grid",
+                                        gridTemplateColumns: isMobile ? "minmax(0,1fr) 92px" : "minmax(0,1.6fr) minmax(0,1fr) 110px",
+                                        gap: 10, padding: "5px 0", borderTop: "1px solid rgba(38,36,33,0.05)", alignItems: "center" }}>
+                                        <span style={{ fontSize: 12, color: "#111827", ...umaLinha }}>{ic.descricao}</span>
+                                        {!isMobile && (
+                                          <span style={{ fontSize: 11.5, color: "#6b7280", ...umaLinha }}>
+                                            {[nomeEtapa(ic.etapa), nomeConta(ic.contaId), ic.grupoMaterial].filter(Boolean).join(" · ")}
+                                          </span>
+                                        )}
+                                        <span style={{ fontSize: 12, color: "#111827", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                                          {fmtMoedaCtr(ic.pago ? (Number(ic.valorPago) || ic.valor) : ic.valor)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+                          const c = L.conta;
                           const st = SITUACAO_CONTA[situacaoConta(c, hojeIso)] || SITUACAO_CONTA.aberto;
                           const detalhe = detalheConta(c);
                           const aberta = !!contasAbertas[c.id];
-                          const umaLinha = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
                           const apoio = [apoioCurtoConta(c), nomeConta(c.contaId)].filter(Boolean).join(" · ");
                           const dataBR = (iso) => iso ? new Date(iso + "T12:00:00").toLocaleDateString("pt-BR") : "";
                           return (

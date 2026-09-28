@@ -1453,6 +1453,17 @@ function ehContaDeLoja(cot) {
   return !!(cot && cot.contaLoja);
 }
 
+// Apagar a conta da loja leva os pedidos e as contas dela junto — só
+// enquanto nada foi pago. Depois da primeira baixa a conta fica: o gasto
+// já está na obra e no banco, e sumir com ele quebraria os dois.
+function podeApagarContaDeLoja(cot, contasPagar) {
+  const pagas = (contasPagar || []).filter((x) => x && x.cotacaoId === (cot || {}).id && x.pago).length;
+  if (!pagas) return { pode: true, motivo: "" };
+  return { pode: false, motivo: pagas === 1
+    ? "Um item desta conta já foi pago. Desfaça a baixa em contas a pagar antes de apagar."
+    : `${pagas} itens desta conta já foram pagos. Desfaça a baixa em contas a pagar antes de apagar.` };
+}
+
 // ── Situação, em uma palavra ────────────────────────────────────
 // A ordem dos testes é a ordem do fluxo; o primeiro que casar manda.
 function situacaoCotacao(cot, aprovacoes, contratos) {
@@ -3186,6 +3197,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   }
 
   async function excluirCotacao(cot) {
+    // Conta de loja tem regra própria: ela nasce lançada e segue lançando,
+    // então "já foi lançada" não pode travar. O que trava é pagamento.
+    if (ehContaDeLoja(cot)) { await apagarContaDeLoja(cot); return; }
     const trava = podeExcluirCotacaoComContratos(cot, contratos);
     if (!trava.pode) { setErro(trava.motivo); return; }
     const props = propostasDaCotacao(cot);
@@ -3206,6 +3220,33 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     const r = removerCotacao(cotacoes, aprovacoes, cot.id);
     gravar({ ...obra, cotacoes: r.cotacoes, aprovacoesCotacao: r.aprovacoes });
     limparAnexos(anexosDasPropostas(props));
+  }
+
+  async function apagarContaDeLoja(cot) {
+    const trava = podeApagarContaDeLoja(cot, obra.contasPagar || []);
+    if (!trava.pode) { setErro(trava.motivo); return; }
+    const pedidos = (cot.pedidos || []).length;
+    const quantas = (obra.contasPagar || []).filter((x) => x && x.cotacaoId === cot.id).length;
+    const ok = await dialogo.confirmar({
+      titulo: `Apagar a conta "${cot.titulo || "sem nome"}"?`,
+      mensagem: pedidos
+        ? `Vão junto ${pedidos === 1 ? "1 pedido" : pedidos + " pedidos"} e ${quantas === 1 ? "1 conta a pagar" : quantas + " contas a pagar"}. Não dá para desfazer.`
+        : "A conta ainda não tem pedido nenhum. Não dá para desfazer.",
+      confirmar: "Apagar conta",
+      destrutivo: true,
+    });
+    if (!ok) return;
+    setErro("");
+    const r = removerCotacao(cotacoes, aprovacoes, cot.id);
+    gravar({ ...obra, cotacoes: r.cotacoes, aprovacoesCotacao: r.aprovacoes,
+      contasPagar: removerContasDaCotacao(obra.contasPagar || [], cot.id) });
+  }
+
+  // Encerrar é arquivar: a conta sai das abertas e para de receber pedido,
+  // sem apagar nada. É o fim normal de uma conta de loja.
+  function alternarEncerramento(cot) {
+    setErro("");
+    trocarCotacao(cot.id, (x) => ({ ...x, status: x.status === "encerrada" ? "" : "encerrada" }));
   }
 
   // ── Lançar direto em contas a pagar ───────────────────────────
@@ -3439,7 +3480,10 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   dinheiro={dinheiro} podeGerenciar={podeGerenciar}
                   aoNovoPedido={() => abrirPedido(cot)}
                   aoEditarPedido={(p) => editarPedido(cot, p)}
-                  aoApagarPedido={(p) => apagarPedido(cot, p)} />
+                  aoApagarPedido={(p) => apagarPedido(cot, p)}
+                  aoEditarConta={() => { setErro(""); setFormCotacao(cot); }}
+                  aoApagarConta={() => excluirCotacao(cot)}
+                  aoEncerrar={() => alternarEncerramento(cot)} />
               </div>
             )}
 
@@ -4537,7 +4581,7 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
 // ── O corpo de uma conta de loja ────────────────────────────────
 // Não tem proposta para comparar nem escolha para enviar: tem os pedidos
 // feitos, o que já foi pago e o que está pendurado esperando a loja ligar.
-function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGerenciar, aoNovoPedido, aoEditarPedido, aoApagarPedido }) {
+function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGerenciar, aoNovoPedido, aoEditarPedido, aoApagarPedido, aoEditarConta, aoApagarConta, aoEncerrar }) {
   const E = COT_ESTILO;
   const pedidos = cotacao.pedidos || [];
   const contas = (contasPagar || []).filter((c) => c && c.cotacaoId === cotacao.id);
@@ -4641,6 +4685,17 @@ function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGe
         Cada pedido vira uma conta a pagar <strong style={{ color: "#4b5563" }}>por item</strong>, com a etapa de cada um —
         é o que faz o quadro da obra por etapa fechar. Quando a loja cobrar, dê a baixa em contas a pagar.
       </div>
+      {podeGerenciar && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12,
+          paddingTop: 10, borderTop: "1px solid rgba(38,36,33,0.08)" }}>
+          <button style={{ ...E.btnSec, fontSize: 12, padding: "6px 12px" }} onClick={aoEditarConta}>Editar conta</button>
+          <button style={{ ...E.btnSec, fontSize: 12, padding: "6px 12px" }} onClick={aoEncerrar}>
+            {cotacao.status === "encerrada" ? "Reabrir conta" : "Encerrar conta"}
+          </button>
+          <button style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer",
+            fontFamily: "inherit", fontSize: 12, marginLeft: "auto" }} onClick={aoApagarConta}>Apagar conta</button>
+        </div>
+      )}
     </>
   );
 }

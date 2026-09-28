@@ -682,6 +682,42 @@ function validarPedido(pedido, pedidosDaLoja) {
   return { ok: !erros.length, erros };
 }
 
+// ── Onze itens não são onze contas para quem paga ───────────
+// A obra precisa do item a item — é dele que sai o custo por etapa. Quem
+// paga precisa do pedido: a loja cobra um valor, com um número. Então o
+// dado continua por item e a LISTA se dobra por pedido, com os itens
+// dentro. Conta sem pedido (avulsa, parcela de contrato) passa direto.
+function linhasDePedido(contas) {
+  const red = (x) => Math.round(x * 100) / 100;
+  const fora = [];
+  const porPedido = new Map();
+  for (const c of contas || []) {
+    if (!c) continue;
+    if (!c.pedidoId) { fora.push({ tipo: "conta", chave: c.id, conta: c }); continue; }
+    if (!porPedido.has(c.pedidoId)) {
+      const linha = { tipo: "pedido", chave: c.pedidoId, pedidoId: c.pedidoId,
+        numeroPedido: c.numeroPedido || "", numeroLoja: c.numeroLoja || "", numeroNota: c.numeroNota || "",
+        cotacaoId: c.cotacaoId || "", obraId: c.obraId || "",
+        prestadorId: c.prestadorId || "", favorecido: c.favorecido || "",
+        vencimento: c.vencimento || "", contas: [], valor: 0, valorPago: 0, pagos: 0 };
+      porPedido.set(c.pedidoId, linha);
+      fora.push(linha);
+    }
+    const l = porPedido.get(c.pedidoId);
+    l.contas.push(c);
+    l.valor = red(l.valor + (Number(c.valor) || 0));
+    if (c.pago) { l.pagos++; l.valorPago = red(l.valorPago + (Number(c.valorPago) || Number(c.valor) || 0)); }
+    // vence pelo mais cedo: é a data que cobra
+    if (c.vencimento && (!l.vencimento || c.vencimento < l.vencimento)) l.vencimento = c.vencimento;
+  }
+  for (const l of porPedido.values()) {
+    l.pago = l.contas.length > 0 && l.pagos === l.contas.length;
+    l.parcial = l.pagos > 0 && !l.pago;
+    l.aberto = red(l.valor - l.valorPago);
+  }
+  return fora;
+}
+
 // ── Corrigir um pedido lançado errado ────────────────────
 // Enquanto ninguém pagou, o pedido é só uma intenção: dá para refazer ou
 // apagar inteiro. Depois da baixa, não — o dinheiro saiu, e apagar o gasto
@@ -746,7 +782,8 @@ function baixarPedidos(contasPagar, pedidoIds, dados, quem, agoraIso) {
   const d = dados || {};
   const contas = (contasPagar || []).map((c) => {
     if (!c || c.pago || !alvo.has(c.pedidoId)) return c;
-    return contaPaga(c, { pagoEm: d.pagoEm || "", valorPago: Number(c.valor) || 0 }, quem, agoraIso);
+    return contaPaga(c, { pagoEm: d.pagoEm || "", valorPago: Number(c.valor) || 0,
+      comprovante: d.comprovante || c.comprovante || null }, quem, agoraIso);
   });
   const total = Math.round((contasPagar || [])
     .filter((c) => c && !c.pago && alvo.has(c.pedidoId))

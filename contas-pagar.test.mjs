@@ -28,7 +28,7 @@ const modulo = new Function(`
   return { recalibrarPedido, previaDoPedido, contasDoPedido, docDaConta, diasEntreIso,
            pedidoVazio, itemDoPedidoVazio, brutoDoItem, brutoDoPedido, totalDoPedido,
            itensRateados, contasDoPedidoDaLoja, validarPedido, pedidosPendentes, baixarPedidos,
-           podeMexerNoPedido, removerContasDoPedido,
+           podeMexerNoPedido, removerContasDoPedido, linhasDePedido,
            MODOS_LANCAMENTO, modoLancamento,
            contasDaCotacao, contasDeCotacao,
            PLANO_CONTAS, contratoVazio, valorContrato,
@@ -1707,6 +1707,50 @@ teste("pedido lançado errado se conserta — até alguém pagar", () => {
   assert.strictEqual(sobra[0].pago, true);
 
   assert.strictEqual(modulo.podeMexerNoPedido(contas, "").pode, false, "sem id não mexe");
+});
+
+teste("a lista mostra o pedido, não os onze itens — e o item continua lá dentro", () => {
+  let n = 0;
+  const doPedido = modulo.contasDoPedidoDaLoja(
+    { obraId: "ob1", cotacaoId: "cot1", favorecido: "Ourifer", prestadorId: "f1", contaId: "material" },
+    pedidoOurifer(), () => "c" + (++n));
+  const avulsa = { id: "av1", obraId: "ob1", descricao: "Caçamba de entulho", valor: 350, vencimento: "2026-10-05", pago: false };
+  const parcela = { id: "pc1", obraId: "ob1", origem: "contrato", descricao: "Empreiteiro 1/3", valor: 5000, vencimento: "2026-10-10", pago: false };
+
+  const linhas = modulo.linhasDePedido([avulsa].concat(doPedido).concat([parcela]));
+  assert.deepStrictEqual(linhas.map(l => l.tipo), ["conta", "pedido", "conta"],
+    "onze contas viram uma linha; avulsa e parcela passam direto");
+
+  const ped = linhas[1];
+  assert.strictEqual(ped.contas.length, 11, "os itens continuam dentro da linha");
+  assert.strictEqual(ped.valor, 485.40, "o total do pedido é a soma dos itens");
+  assert.strictEqual(ped.numeroLoja, "136560-109");
+  assert.strictEqual(ped.favorecido, "Ourifer");
+  assert.strictEqual(ped.vencimento, "2026-10-28", "vence pela data mais cedo dos itens");
+  assert.strictEqual(ped.pago, false);
+  assert.strictEqual(ped.aberto, 485.40);
+
+  // meio pago: nem aberto nem quitado
+  const meio = doPedido.map((c, i) => (i < 3 ? { ...c, pago: true, valorPago: c.valor } : c));
+  const parcial = modulo.linhasDePedido(meio)[0];
+  assert.strictEqual(parcial.parcial, true);
+  assert.strictEqual(parcial.pago, false);
+  assert.strictEqual(parcial.aberto, Math.round((485.40 - parcial.valorPago) * 100) / 100);
+
+  // pago inteiro
+  const tudo = modulo.linhasDePedido(doPedido.map(c => ({ ...c, pago: true, valorPago: c.valor })))[0];
+  assert.strictEqual(tudo.pago, true);
+  assert.strictEqual(tudo.valorPago, 485.40);
+  assert.strictEqual(tudo.aberto, 0);
+
+  // a baixa em lote carrega o comprovante para todos os itens do pedido
+  const r = modulo.baixarPedidos(doPedido, ["ped1"],
+    { pagoEm: "2026-10-28", comprovante: { nome: "boleto.pdf" } }, "Renato", "2026-10-28T12:00:00.000Z");
+  assert.strictEqual(r.total, 485.40);
+  assert.ok(r.contas.every(c => c.pago && c.comprovante && c.comprovante.nome === "boleto.pdf"),
+    "um boleto só vale por todos os itens");
+
+  assert.deepStrictEqual(modulo.linhasDePedido(null), []);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

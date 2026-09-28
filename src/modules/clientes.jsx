@@ -2160,12 +2160,33 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     setFormPagamento({ conta, dataContab: conta.vencimento && conta.vencimento <= hojeIso ? conta.vencimento : hojeIso,
       valorPago: Number(conta.valor) || 0, comprovante: conta.comprovante || null, erroAnexo: "" });
   };
+  // A loja cobra o pedido, não o saco de cimento: a baixa é de uma vez só,
+  // todos os itens na mesma data, e o boleto vale como comprovante de todos.
+  const alternarPagamentoPedido = (linha) => {
+    if (linha.pago) {
+      const alvo = new Set(linha.contas.map(c => c.id));
+      gravarContas(contasDaObra.map(c => (alvo.has(c.id) ? contaEmAberto(c, quemSou()) : c)), linha.obraId);
+      return;
+    }
+    setFormPagamento({ pedido: linha, conta: null,
+      dataContab: linha.vencimento && linha.vencimento <= hojeIso ? linha.vencimento : hojeIso,
+      valorPago: linha.aberto, comprovante: null, erroAnexo: "" });
+  };
   // Confirma a baixa: a despesa entra no mês da data de contabilização
   // escolhida (`pagoEm`); `contabilizadoEm` guarda o dia em que se registrou.
   const confirmarPagamento = () => {
     const f = formPagamento; if (!f) return;
-    const valor = numeroDeCampo(f.valorPago) || Number(f.conta.valor) || 0;
     if (!f.dataContab) { dialogo.alertar({ titulo: "Informe a data de contabilização", tipo: "aviso" }); return; }
+    // O pedido baixa inteiro, item a item, pelo valor de cada um: é a soma
+    // deles que tem que bater com a linha do extrato.
+    if (f.pedido) {
+      const r = baixarPedidos(contasDaObra, [f.pedido.pedidoId],
+        { pagoEm: f.dataContab, comprovante: f.comprovante || null }, quemSou());
+      gravarContas(r.contas, f.pedido.obraId);
+      setFormPagamento(null);
+      return;
+    }
+    const valor = numeroDeCampo(f.valorPago) || Number(f.conta.valor) || 0;
     const atualizada = contaPaga(f.conta, { pagoEm: f.dataContab, valorPago: valor, comprovante: f.comprovante || null }, quemSou());
     gravarContas(contasDaObra.map(c => c.id === f.conta.id ? atualizada : c), f.conta.obraId);
     setFormPagamento(null);
@@ -3641,7 +3662,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div data-vk-ui="1" onClick={e => e.stopPropagation()}
               style={{ background: "#fff", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: 18, width: "100%", maxWidth: 460, maxHeight: "88vh", overflowY: "auto", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Registrar pagamento</div>
-              <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 14 }}>{tituloConta(formPagamento.conta)}</div>
+              <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 14 }}>
+                {formPagamento.pedido
+                  ? `Pedido ${formPagamento.pedido.numeroLoja || formPagamento.pedido.numeroPedido} · ${formPagamento.pedido.favorecido || "Fornecedor"} · ${formPagamento.pedido.contas.length} itens`
+                  : tituloConta(formPagamento.conta)}
+              </div>
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
                 <div>
                   <label style={C.label}>Data de contabilização</label>
@@ -3650,9 +3675,21 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 </div>
                 <div>
                   <label style={C.label}>Valor pago (R$)</label>
-                  <CampoCtrNum tipo="moeda" valor={formPagamento.valorPago} onChange={v => setFormPagamento({ ...formPagamento, valorPago: v })} style={C.input} placeholder="0,00" />
+                  {formPagamento.pedido ? (
+                    <div style={{ ...C.input, background: "#fafafa", color: "#111827", fontWeight: 600 }}>
+                      {fmtMoedaCtr(formPagamento.pedido.aberto)}
+                    </div>
+                  ) : (
+                    <CampoCtrNum tipo="moeda" valor={formPagamento.valorPago} onChange={v => setFormPagamento({ ...formPagamento, valorPago: v })} style={C.input} placeholder="0,00" />
+                  )}
                 </div>
               </div>
+              {formPagamento.pedido && (
+                <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8 }}>
+                  Os {formPagamento.pedido.contas.length} itens do pedido recebem a baixa juntos, cada um pelo seu valor —
+                  a soma é o que sai do caixa. Para pagar um valor diferente, corrija o pedido na cotação.
+                </div>
+              )}
               <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8 }}>
                 A despesa entra no extrato da obra no mês desta data. O dia de hoje ({new Date(hojeIso + "T12:00:00").toLocaleDateString("pt-BR")}) fica registrado como a data em que foi contabilizada.
               </div>
@@ -4001,11 +4038,73 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                     </button>
                     {!oculto && (
                       <div>
-                        {g.itens.map(c => {
+                        {linhasDePedido(g.itens).map(L => {
+                          const umaLinha = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+                          // Pedido de loja: uma linha com o total, os itens dentro.
+                          if (L.tipo === "pedido") {
+                            const abertaP = !!contasAbertas[L.chave];
+                            const stP = SITUACAO_CONTA[situacaoConta({ vencimento: L.vencimento, pago: L.pago }, hojeIso)] || SITUACAO_CONTA.aberto;
+                            const nomeEtapa = (id) => {
+                              const e = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).find(x => x.id === id);
+                              return e ? e.nome : "";
+                            };
+                            return (
+                              <div key={L.chave} style={{ borderTop: "1px solid rgba(38,36,33,0.06)", background: "#fff" }}>
+                                <div style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, alignItems: "center", padding: "9px 11px" }}>
+                                  <div data-vk-mantem-mes="1" style={{ minWidth: 0, cursor: "pointer" }}
+                                    title={abertaP ? "Fechar itens" : "Ver os itens"}
+                                    onClick={() => setContasAbertas({ ...contasAbertas, [L.chave]: !abertaP })}>
+                                    <div style={{ fontSize: 13, color: "#111827", fontWeight: 600, ...umaLinha }}>
+                                      <span style={{ color: "#6b7280", fontWeight: 400, marginRight: 4 }}>{abertaP ? "▾" : "▸"}</span>
+                                      Pedido {L.numeroLoja || L.numeroPedido}
+                                    </div>
+                                    <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2, ...umaLinha }}>
+                                      {[L.favorecido, L.contas.length === 1 ? "1 item" : `${L.contas.length} itens`,
+                                        L.numeroNota ? "NF " + L.numeroNota : "",
+                                        L.parcial ? "parcialmente pago" : ""].filter(Boolean).join(" · ")}
+                                    </div>
+                                  </div>
+                                  <div style={{ fontSize: 12.5, color: "#111827" }}>
+                                    {L.vencimento ? new Date(L.vencimento + "T12:00:00").toLocaleDateString("pt-BR") : "a definir"}
+                                  </div>
+                                  <div style={{ fontSize: 12, color: stP.forte ? "#111827" : "#4b5563", fontWeight: stP.forte ? 700 : 500 }}>{stP.label}</div>
+                                  <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", textAlign: isMobile ? "left" : "right" }}>
+                                    {fmtMoedaCtr(L.pago ? L.valorPago : L.valor)}
+                                  </div>
+                                  {perm.podeEditar ? (
+                                    <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
+                                      <button onClick={() => alternarPagamentoPedido(L)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>
+                                        {L.pago ? "Desfazer" : "Pagar pedido"}
+                                      </button>
+                                    </div>
+                                  ) : <div />}
+                                </div>
+                                {abertaP && (
+                                  <div style={{ padding: "0 11px 10px 32px", background: "#fcfcfd" }}>
+                                    {L.contas.map(ic => (
+                                      <div key={ic.id} style={{ display: "grid",
+                                        gridTemplateColumns: isMobile ? "minmax(0,1fr) 92px" : "minmax(0,1.6fr) minmax(0,1fr) 110px",
+                                        gap: 10, padding: "5px 0", borderTop: "1px solid rgba(38,36,33,0.05)", alignItems: "center" }}>
+                                        <span style={{ fontSize: 12, color: "#111827", ...umaLinha }}>{ic.descricao}</span>
+                                        {!isMobile && (
+                                          <span style={{ fontSize: 11.5, color: "#6b7280", ...umaLinha }}>
+                                            {[nomeEtapa(ic.etapa), nomeConta(ic.contaId), ic.grupoMaterial].filter(Boolean).join(" · ")}
+                                          </span>
+                                        )}
+                                        <span style={{ fontSize: 12, color: "#111827", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                                          {fmtMoedaCtr(ic.pago ? (Number(ic.valorPago) || ic.valor) : ic.valor)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+                          const c = L.conta;
                           const st = SITUACAO_CONTA[situacaoConta(c, hojeIso)] || SITUACAO_CONTA.aberto;
                           const detalhe = detalheConta(c);
                           const aberta = !!contasAbertas[c.id];
-                          const umaLinha = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
                           const apoio = [apoioCurtoConta(c), nomeConta(c.contaId)].filter(Boolean).join(" · ");
                           const dataBR = (iso) => iso ? new Date(iso + "T12:00:00").toLocaleDateString("pt-BR") : "";
                           return (

@@ -51,6 +51,7 @@ const modulo = new Function(`
            podeGerarContrato, contratoDaCotacao, tipoDoContaId, dadosDoContratoDaCotacao,
            podeExcluirCotacaoComContratos, resumoCotacoes, cotacoesAguardandoCliente,
            cotacaoEstaFechada, cotacoesPorSituacao, SITUACOES_FECHADAS, ehContaDeLoja,
+           podeApagarContaDeLoja,
            nomeDoFornecedor, PLANO_CONTAS,
            podeExcluirCotacao, removerProposta, removerCotacao, anexosDasPropostas,
            prestadorRapidoVazio, criarPrestadorRapido, pareceMesmoPdf,
@@ -1922,6 +1923,32 @@ teste("a conta de loja fica aberta e lança quantas vezes precisar", () => {
   assert.strictEqual(r.contasLoja, 1);
   assert.strictEqual(r.abertas, 0, "conta de loja não é \"em andamento\": não está comparando preço");
   assert.strictEqual(r.fechadas, 1);
+});
+
+teste("apagar a conta de loja: livre até a primeira baixa", () => {
+  const conta = { id: "loja1", titulo: "Ourifer", contaLoja: true, contaGeradaId: "c1",
+                  pedidos: [{ id: "ped1" }, { id: "ped2" }] };
+  const contas = [
+    { id: "c1", cotacaoId: "loja1", pedidoId: "ped1", valor: 485.40, pago: false },
+    { id: "c2", cotacaoId: "loja1", pedidoId: "ped2", valor: 13.95, pago: false },
+    { id: "c3", cotacaoId: "outra", valor: 100, pago: true },
+  ];
+
+  assert.strictEqual(M.podeApagarContaDeLoja(conta, contas).pode, true,
+    "lançada mas sem pagamento: pode apagar");
+  // a trava antiga travaria — conta de loja nasce lançada e segue lançando
+  assert.strictEqual(M.podeExcluirCotacao(conta).pode, false,
+    "a regra comum barra pelo contaGeradaId; a de loja não usa essa");
+
+  const comPago = contas.map(c => (c.id === "c2" ? { ...c, pago: true } : c));
+  const t = M.podeApagarContaDeLoja(conta, comPago);
+  assert.strictEqual(t.pode, false);
+  assert.ok(t.motivo.indexOf("Um item") === 0);
+
+  const dois = contas.map(c => (c.cotacaoId === "loja1" ? { ...c, pago: true } : c));
+  assert.ok(M.podeApagarContaDeLoja(conta, dois).motivo.indexOf("2 itens") === 0);
+
+  assert.strictEqual(M.podeApagarContaDeLoja(conta, []).pode, true, "sem conta nenhuma, pode");
 });
 
 for (const [nome, fn] of testes) {
