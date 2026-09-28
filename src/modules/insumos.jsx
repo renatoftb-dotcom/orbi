@@ -519,6 +519,7 @@ function InsumoForm({ insumo, insumos, onSalvar, onCancelar, isMobile }) {
     return Object.assign({
       nome: "", grupo: "Outros", unidade: "Unidades", tipo: "material",
       precoManual: null, observacao: "", ativo: true, aliases: [],
+      etapaPadrao: "", contaPadrao: "",
     }, insumo);
   });
   var [novoAlias, setNovoAlias] = useState("");
@@ -593,6 +594,37 @@ function InsumoForm({ insumo, insumos, onSalvar, onCancelar, isMobile }) {
           <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={f.tipo} onChange={e => set("tipo", e.target.value)}>
             <option value="material">Material</option>
             <option value="prestador">Prestador de serviço</option>
+          </select>
+        </div>
+        {/* Tubo de esgoto só serve à etapa de esgoto; cimento serve a
+            quase todas. Por isso a etapa aqui é opcional: preenchida, o item
+            já entra com ela no pedido; em branco, quem decide é a compra. */}
+        <div>
+          <label style={INS_S.label}>Etapa padrão</label>
+          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })}
+            value={f.etapaPadrao || ""} onChange={e => set("etapaPadrao", e.target.value)}>
+            <option value="">— decide na compra —</option>
+            {(typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(function (et) {
+              return <option key={et.id} value={et.id}>{et.nome}</option>;
+            })}
+          </select>
+        </div>
+        <div>
+          <label style={INS_S.label}>Conta padrão do P&amp;L</label>
+          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })}
+            value={f.contaPadrao || ""} onChange={e => set("contaPadrao", e.target.value)}>
+            <option value="">— Material —</option>
+            {(typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : [])
+              .filter(function (g) { return g.id !== "receitas" && g.id !== "terreno"; })
+              .map(function (g) {
+                return (
+                  <optgroup key={g.id} label={g.titulo}>
+                    {(typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [])
+                      .filter(function (c) { return c.grupo === g.id; })
+                      .map(function (c) { return <option key={c.id} value={c.id}>{c.nome}</option>; })}
+                  </optgroup>
+                );
+              })}
           </select>
         </div>
         <div>

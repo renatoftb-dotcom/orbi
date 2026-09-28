@@ -6410,6 +6410,7 @@ function InsumoForm({ insumo, insumos, onSalvar, onCancelar, isMobile }) {
     return Object.assign({
       nome: "", grupo: "Outros", unidade: "Unidades", tipo: "material",
       precoManual: null, observacao: "", ativo: true, aliases: [],
+      etapaPadrao: "", contaPadrao: "",
     }, insumo);
   });
   var [novoAlias, setNovoAlias] = useState("");
@@ -6484,6 +6485,37 @@ function InsumoForm({ insumo, insumos, onSalvar, onCancelar, isMobile }) {
           <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={f.tipo} onChange={e => set("tipo", e.target.value)}>
             <option value="material">Material</option>
             <option value="prestador">Prestador de serviço</option>
+          </select>
+        </div>
+        {/* Tubo de esgoto só serve à etapa de esgoto; cimento serve a
+            quase todas. Por isso a etapa aqui é opcional: preenchida, o item
+            já entra com ela no pedido; em branco, quem decide é a compra. */}
+        <div>
+          <label style={INS_S.label}>Etapa padrão</label>
+          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })}
+            value={f.etapaPadrao || ""} onChange={e => set("etapaPadrao", e.target.value)}>
+            <option value="">— decide na compra —</option>
+            {(typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(function (et) {
+              return <option key={et.id} value={et.id}>{et.nome}</option>;
+            })}
+          </select>
+        </div>
+        <div>
+          <label style={INS_S.label}>Conta padrão do P&amp;L</label>
+          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })}
+            value={f.contaPadrao || ""} onChange={e => set("contaPadrao", e.target.value)}>
+            <option value="">— Material —</option>
+            {(typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : [])
+              .filter(function (g) { return g.id !== "receitas" && g.id !== "terreno"; })
+              .map(function (g) {
+                return (
+                  <optgroup key={g.id} label={g.titulo}>
+                    {(typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [])
+                      .filter(function (c) { return c.grupo === g.id; })
+                      .map(function (c) { return <option key={c.id} value={c.id}>{c.nome}</option>; })}
+                  </optgroup>
+                );
+              })}
           </select>
         </div>
         <div>
@@ -22853,6 +22885,16 @@ function podeApagarContaDeLoja(cot, contasPagar) {
 // à fatura dela: no dia 28 a loja cobra UM valor, com os pedidos todos dentro.
 // Então a escolha vira mais um pedido na conta, e a cotação fecha apontando
 // para ele.
+// A etapa de um item do pedido, na ordem em que a informação é confiável:
+// o insumo que só serve a uma etapa manda; depois a etapa da cotação; e,
+// sem nenhuma das duas, fica em branco para quem está comprando dizer.
+function etapaDoItem(insumo, etapaDaCompra) {
+  return (insumo && insumo.etapaPadrao) || etapaDaCompra || "";
+}
+function contaDoItem(insumo, contaDaCompra) {
+  return (insumo && insumo.contaPadrao) || contaDaCompra || "";
+}
+
 function contaDeLojaAberta(cotacoes, prestadorId) {
   if (!prestadorId) return null;
   return (cotacoes || []).find((c) => c && ehContaDeLoja(c)
@@ -22886,8 +22928,8 @@ function pedidoDaCotacao(cot, proposta, insumos, prazoDias) {
       unidade: it.unidade || (ins ? ins.unidade : "") || "",
       unitario: precoUnitario(p, it.id) || "",
       bruto,
-      etapa: c.etapaId || "",
-      contaId: c.contaId || "",
+      etapa: etapaDoItem(ins, c.etapaId),
+      contaId: contaDoItem(ins, c.contaId),
     });
   }
   if (!itens.length) {
@@ -26211,8 +26253,11 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
     if (typeof resolverInsumo !== "function") return item;
     const r = resolverInsumo(item.descricao, insumos || []);
     if (!r || !r.insumo) return item;
+    // A etapa já escolhida à mão manda: o insumo só preenche o que está vazio.
     return { ...item, insumoCodigo: r.insumo.codigo || "", grupoMaterial: r.insumo.grupo || item.grupoMaterial || "",
-      unidade: item.unidade || r.insumo.unidade || "" };
+      unidade: item.unidade || r.insumo.unidade || "",
+      etapa: item.etapa || r.insumo.etapaPadrao || "",
+      contaId: item.contaId || r.insumo.contaPadrao || "" };
   }
 
   async function lerPdf(arquivo) {

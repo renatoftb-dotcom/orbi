@@ -1470,6 +1470,16 @@ function podeApagarContaDeLoja(cot, contasPagar) {
 // à fatura dela: no dia 28 a loja cobra UM valor, com os pedidos todos dentro.
 // Então a escolha vira mais um pedido na conta, e a cotação fecha apontando
 // para ele.
+// A etapa de um item do pedido, na ordem em que a informação é confiável:
+// o insumo que só serve a uma etapa manda; depois a etapa da cotação; e,
+// sem nenhuma das duas, fica em branco para quem está comprando dizer.
+function etapaDoItem(insumo, etapaDaCompra) {
+  return (insumo && insumo.etapaPadrao) || etapaDaCompra || "";
+}
+function contaDoItem(insumo, contaDaCompra) {
+  return (insumo && insumo.contaPadrao) || contaDaCompra || "";
+}
+
 function contaDeLojaAberta(cotacoes, prestadorId) {
   if (!prestadorId) return null;
   return (cotacoes || []).find((c) => c && ehContaDeLoja(c)
@@ -1503,8 +1513,8 @@ function pedidoDaCotacao(cot, proposta, insumos, prazoDias) {
       unidade: it.unidade || (ins ? ins.unidade : "") || "",
       unitario: precoUnitario(p, it.id) || "",
       bruto,
-      etapa: c.etapaId || "",
-      contaId: c.contaId || "",
+      etapa: etapaDoItem(ins, c.etapaId),
+      contaId: contaDoItem(ins, c.contaId),
     });
   }
   if (!itens.length) {
@@ -4828,8 +4838,11 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
     if (typeof resolverInsumo !== "function") return item;
     const r = resolverInsumo(item.descricao, insumos || []);
     if (!r || !r.insumo) return item;
+    // A etapa já escolhida à mão manda: o insumo só preenche o que está vazio.
     return { ...item, insumoCodigo: r.insumo.codigo || "", grupoMaterial: r.insumo.grupo || item.grupoMaterial || "",
-      unidade: item.unidade || r.insumo.unidade || "" };
+      unidade: item.unidade || r.insumo.unidade || "",
+      etapa: item.etapa || r.insumo.etapaPadrao || "",
+      contaId: item.contaId || r.insumo.contaPadrao || "" };
   }
 
   async function lerPdf(arquivo) {

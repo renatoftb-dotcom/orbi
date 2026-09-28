@@ -51,7 +51,7 @@ const modulo = new Function(`
            podeGerarContrato, contratoDaCotacao, tipoDoContaId, dadosDoContratoDaCotacao,
            podeExcluirCotacaoComContratos, resumoCotacoes, cotacoesAguardandoCliente,
            cotacaoEstaFechada, cotacoesPorSituacao, SITUACOES_FECHADAS, ehContaDeLoja,
-           podeApagarContaDeLoja, contaDeLojaAberta, pedidoDaCotacao,
+           podeApagarContaDeLoja, contaDeLojaAberta, pedidoDaCotacao, etapaDoItem, contaDoItem,
            nomeDoFornecedor, PLANO_CONTAS,
            podeExcluirCotacao, removerProposta, removerCotacao, anexosDasPropostas,
            prestadorRapidoVazio, criarPrestadorRapido, pareceMesmoPdf,
@@ -2000,6 +2000,43 @@ teste("a cotação escolhida vira pedido na conta da loja que ganhou", () => {
   assert.strictEqual(M.situacaoCotacao(virou, [], []).rotulo, "Virou pedido na loja");
   assert.strictEqual(M.cotacaoEstaFechada(virou, [], []), true);
   assert.strictEqual(M.podeLancarEmContas(virou, []).pode, false);
+});
+
+teste("insumo que só serve a uma etapa entra no pedido já com ela", () => {
+  const tubo = { codigo: "HID-010", nome: "PVC — Marrom — Tubo 32mm", grupo: "Hidráulica",
+                 unidade: "Unidades", etapaPadrao: "hidraulica" };
+  const esgoto = { codigo: "HID-300", nome: "PVC — Esgoto — Tubo 100mm", grupo: "Hidráulica",
+                   unidade: "Unidades", etapaPadrao: "esgoto_pluvial", contaPadrao: "material" };
+  const cimento = { codigo: "CIM-001", nome: "Cimento CP II 50kg", grupo: "Cimento", unidade: "Unidades" };
+
+  // o insumo manda; a cotação é o segundo; sem os dois, fica em branco
+  assert.strictEqual(M.etapaDoItem(tubo, "fundacao"), "hidraulica", "o insumo ganha da etapa da cotação");
+  assert.strictEqual(M.etapaDoItem(cimento, "fundacao"), "fundacao", "sem etapa padrão vale a da compra");
+  assert.strictEqual(M.etapaDoItem(cimento, ""), "", "nenhuma das duas: quem compra decide");
+  assert.strictEqual(M.etapaDoItem(null, "laje_1"), "laje_1");
+  assert.strictEqual(M.contaDoItem(esgoto, "compra_ferramentas"), "material");
+  assert.strictEqual(M.contaDoItem(cimento, "material"), "material");
+
+  const cot = {
+    id: "c1", titulo: "Hidráulica", contaId: "material", etapaId: "",
+    itens: [
+      { id: "i1", codigo: "HID-010", descricao: "Tubo 32mm", unidade: "Unidades", quantidade: 38 },
+      { id: "i2", codigo: "HID-300", descricao: "Tubo esgoto 100mm", unidade: "Unidades", quantidade: 10 },
+      { id: "i3", codigo: "CIM-001", descricao: "Cimento", unidade: "Unidades", quantidade: 5 },
+    ],
+    propostas: [{ id: "p0", fornecedorId: "f1", precos: { i1: 12.10, i2: 30, i3: 40 }, valor: "1.359,80" }],
+    escolhidaId: "p0",
+  };
+  const p = M.pedidoDaCotacao(cot, cot.propostas[0], [tubo, esgoto, cimento], 30);
+  assert.deepStrictEqual(p.itens.map(i => i.etapa), ["hidraulica", "esgoto_pluvial", ""],
+    "cada insumo traz a sua etapa; o cimento fica em branco de propósito");
+  assert.deepStrictEqual(p.itens.map(i => i.grupoMaterial), ["Hidráulica", "Hidráulica", "Cimento"]);
+  assert.deepStrictEqual(p.itens.map(i => i.contaId), ["material", "material", "material"],
+    "sem conta padrão vale a da cotação");
+
+  // com etapa na cotação, o que não tem padrão herda dela
+  const comEtapa = M.pedidoDaCotacao({ ...cot, etapaId: "contrapiso_int_1" }, cot.propostas[0], [tubo, esgoto, cimento], 30);
+  assert.deepStrictEqual(comEtapa.itens.map(i => i.etapa), ["hidraulica", "esgoto_pluvial", "contrapiso_int_1"]);
 });
 
 for (const [nome, fn] of testes) {
