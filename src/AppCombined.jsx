@@ -6360,6 +6360,83 @@ function semearInsumos(materiais, seed) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// ── Sugerir a etapa pelo nome do insumo ─────────────────────────
+// Marcar duzentos itens à mão é o tipo de trabalho que não se faz — e por
+// isso a etapa ficaria vazia para sempre. Mas o nome do catálogo carrega a
+// resposta na maioria dos casos: "PVC - Esgoto - Ralo" só serve ao esgoto,
+// "Caixa 4x2 pvc embutir" só à elétrica. Então a máquina PROPÕE e você
+// confere — ela nunca grava sozinha, e nunca mexe no que já tem etapa.
+//
+// A ordem importa: a regra mais específica ganha. "PVC - Esgoto - Joelho"
+// é esgoto, não água fria, embora joelho também exista na alimentação.
+var SUGESTOES_POR_NOME = [
+  ["esgoto_pluvial", /\besgoto\b|\bralo\b|\bgrelha\b|caixa sifonada|\bpluvial\b|\bsifao\b|tubo de queda/],
+  ["coberturas",     /\btelha\b|telhas|cumeeira|\bcalha\b|\brufo\b|manta termica|manta asfaltica de telhado/],
+  ["aquecimento",    /\bboiler\b|aquecedor|pressurizador|bomba circulacao|placa solar|coletor solar/],
+  ["eletrica",       /\beletric|conduite|corrugado|kanaflex|tomada|interruptor|disjuntor|cabo flex|caixa 4x2|caixa 4x4|octogonal|\bquadro de distribuicao\b/],
+  ["hidraulica",     /agua fria|agua quente|alimentacao|hidraulica|\bregistro\b|\bnipel\b|\bengate\b|caixa d.?agua/],
+];
+
+// Quando o nome não diz nada, o grupo ainda diz — mas só para os grupos que
+// servem a UMA etapa. Cimento, areia, aço e madeira de caixaria ficam de
+// fora de propósito: entram em meia obra, e chutar aqui seria pior que o
+// campo em branco.
+var SUGESTOES_POR_GRUPO = {
+  "Tintas": "pintura",
+  "Telhas": "coberturas",
+  "Calhas e rufos": "coberturas",
+  "Elétrica e iluminação": "eletrica",
+  "Hidráulica": "hidraulica",
+  "Tubulação PVC": "hidraulica",
+  "Pisos e revestimentos": "pisos_revest",
+  "Louças e metais": "loucas_metais",
+  "Louças": "loucas_metais",
+  "Metais": "loucas_metais",
+  "Forros e gesso": "forros",
+  "Forros": "forros",
+  "Esquadrias": "esquadrias",
+  "Portas e fechaduras": "portas_internas",
+  "Tijolos e canaletas": "supra_paredes_1",
+  "Lajes": "laje_1",
+  "Trilhos e capas de laje": "laje_1",
+  "Impermeabilizantes": "impermeabilizacao",
+  "Granito": "soleiras_peitoris",
+  "Marcenaria": "marcenaria",
+  "Entulhos": "demolicoes",
+};
+
+function sugerirEtapaDoInsumo(insumo) {
+  if (!insumo || insumo.etapaPadrao) return "";
+  var nome = normalizarTexto(insumo.nome || "");
+  for (var k = 0; k < SUGESTOES_POR_NOME.length; k++) {
+    if (SUGESTOES_POR_NOME[k][1].test(nome)) return SUGESTOES_POR_NOME[k][0];
+  }
+  return SUGESTOES_POR_GRUPO[insumo.grupo] || "";
+}
+
+// As propostas agrupadas por etapa, da maior para a menor — é assim que se
+// confere: "sessenta itens viraram esgoto, faz sentido?".
+function sugestoesDeEtapa(insumos) {
+  var por = {};
+  (insumos || []).forEach(function (x) {
+    if (!x || x.ativo === false) return;
+    var etapa = sugerirEtapaDoInsumo(x);
+    if (!etapa) return;
+    if (!por[etapa]) por[etapa] = { etapaId: etapa, itens: [] };
+    por[etapa].itens.push(x);
+  });
+  var fora = Object.keys(por).map(function (id) {
+    var e = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).find(function (x) { return x.id === id; });
+    return { etapaId: id, nome: e ? e.nome : id, itens: por[id].itens, quantos: por[id].itens.length };
+  });
+  fora.sort(function (a, b) { return b.quantos - a.quantos; });
+  var total = fora.reduce(function (s, g) { return s + g.quantos; }, 0);
+  var semSugestao = (insumos || []).filter(function (x) {
+    return x && x.ativo !== false && !x.etapaPadrao && !sugerirEtapaDoInsumo(x);
+  }).length;
+  return { grupos: fora, total: total, semSugestao: semSugestao };
+}
+
 // ── Etapa padrão em lote ──────────────────────────────
 // Um catálogo tem centenas de itens e a etapa de cada um não se descobre
 // sozinha — tubo de água fria e tubo de esgoto têm o mesmo grupo e etapas
@@ -6938,6 +7015,7 @@ function Insumos({ data, save }) {
   var [semeando, setSemeando] = useState(false);
   var [marcados, setMarcados] = useState({});
   var [etapaLote, setEtapaLote] = useState("");
+  var [sugestao, setSugestao] = useState(null);   // { grupos, fora: {etapaId:true} }
 
   var [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
   useEffect(function () {
@@ -7010,6 +7088,33 @@ function Insumos({ data, save }) {
       mensagem: etapaLote
         ? "Da próxima compra em diante eles já entram nessa etapa."
         : "A etapa saiu: esses itens voltam a perguntar na compra.",
+    });
+  }
+
+  function abrirSugestoes() {
+    var s = sugestoesDeEtapa(insumos);
+    if (!s.total) {
+      dialogo.alertar({ titulo: "Nada a sugerir",
+        mensagem: "Ou todos os insumos já têm etapa, ou nenhum nome deixa claro qual é." });
+      return;
+    }
+    setSugestao({ grupos: s.grupos, semSugestao: s.semSugestao, fora: {} });
+  }
+
+  function aplicarSugestoes() {
+    if (!sugestao) return;
+    var lista = insumos, mudados = 0;
+    sugestao.grupos.forEach(function (g) {
+      if (sugestao.fora[g.etapaId]) return;
+      var chaves = g.itens.map(function (x) { return x.id || x.codigo; });
+      var r = definirEtapaPadraoEmLote(lista, chaves, g.etapaId);
+      lista = r.insumos; mudados += r.mudados;
+    });
+    save(Object.assign({}, data, { materiais: lista }));
+    setSugestao(null);
+    dialogo.alertar({
+      titulo: mudados === 1 ? "1 insumo ganhou etapa" : mudados + " insumos ganharam etapa",
+      mensagem: "Confira na coluna Etapa padrão e ajuste o que estiver errado — dá para trocar em lote.",
     });
   }
 
@@ -7153,6 +7258,49 @@ function Insumos({ data, save }) {
             <option value="manual">Definido à mão</option>
           </select>
         </div>
+
+        {perm.podeEditar && insumos.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <button style={INS_S.btnSec} onClick={abrirSugestoes}>Sugerir etapas pelo nome</button>
+            <span style={{ fontSize: 11.5, color: INS.inkSoft, marginLeft: 10 }}>
+              propõe a etapa de quem ainda não tem; você confere antes de gravar
+            </span>
+          </div>
+        )}
+
+        {sugestao && (
+          <div style={{ border: "1px solid #0474f4", borderRadius: 14, padding: 14, marginBottom: 14, background: "#fff" }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: INS.grafite, marginBottom: 2 }}>Etapas sugeridas</div>
+            <div style={{ fontSize: 11.5, color: INS.inkSoft, marginBottom: 12 }}>
+              Nada foi gravado ainda. Desmarque o grupo que não fizer sentido e clique em Aplicar.
+              {sugestao.semSugestao > 0 ? " " + sugestao.semSugestao + " insumos ficaram sem sugestão — o nome não diz, e chutar seria pior." : ""}
+            </div>
+            {sugestao.grupos.map(function (g) {
+              var dentro = !sugestao.fora[g.etapaId];
+              return (
+                <div key={g.etapaId} style={{ borderTop: "1px solid #f3f4f6", padding: "8px 0" }}>
+                  <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }}>
+                    <input type="checkbox" checked={dentro}
+                      onChange={e => setSugestao(Object.assign({}, sugestao, {
+                        fora: Object.assign({}, sugestao.fora, { [g.etapaId]: !e.target.checked }),
+                      }))} />
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: INS.grafite }}>{g.nome}</span>
+                    <span style={{ fontSize: 12, color: INS.inkSoft }}>{g.quantos} {g.quantos === 1 ? "insumo" : "insumos"}</span>
+                  </label>
+                  <div style={{ fontSize: 11.5, color: INS.inkSoft, marginTop: 3, marginLeft: 24,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: dentro ? 1 : 0.45 }}>
+                    {g.itens.slice(0, 4).map(function (x) { return x.nome; }).join(" · ")}
+                    {g.quantos > 4 ? " · …" : ""}
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
+              <button style={INS_S.btnSec} onClick={() => setSugestao(null)}>Cancelar</button>
+              <button style={INS_S.btn} onClick={aplicarSugestoes}>Aplicar</button>
+            </div>
+          </div>
+        )}
 
         {(() => {
           var chaves = Object.keys(marcados).filter(function (k) { return marcados[k]; });

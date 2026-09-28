@@ -24,7 +24,7 @@ const shim = `var uid = () => "id" + (++__c);\nvar __c = 0;\n`;
 
 const api = new Function(
   shim + seedSrc + "\n" + puro + `
-  return { definirEtapaPadraoEmLote,
+  return { definirEtapaPadraoEmLote, sugerirEtapaDoInsumo, sugestoesDeEtapa,
            INSUMOS_SEED, INSUMO_GRUPOS, normalizarTexto, similaridadeTexto,
            resolverInsumo, proximoCodigoInsumo, grupoInferido, prefixoDoGrupo,
            mesesEntre, fatorIncc, precoInsumo, atualizarPrecoReferencia,
@@ -352,6 +352,49 @@ t("a etapa padrão se define em lote, e só no que foi marcado", () => {
 
   eq(api.definirEtapaPadraoEmLote([], ["a"], "x"), { insumos: [], mudados: 0 });
   eq(api.definirEtapaPadraoEmLote(cat, [], "x").mudados, 0);
+});
+
+t("a sugestão de etapa lê o nome antes do grupo, e cala quando não sabe", () => {
+  const sug = (nome, grupo, etapaPadrao) => api.sugerirEtapaDoInsumo({ nome, grupo, etapaPadrao });
+
+  // o nome manda: joelho existe na água fria e no esgoto
+  eq(sug("PVC - Esgoto - Joelho 100mm", "Hidráulica"), "esgoto_pluvial");
+  eq(sug("PVC - Alimentação Água Fria - Joelho 90° 25mm", "Hidráulica"), "hidraulica");
+  eq(sug("PVC - Esgoto - Ralo Click Inox 10cm", "Hidráulica"), "esgoto_pluvial");
+  eq(sug("PVC - Esgoto - Porta Grelha Ralo PVC 15CM", "Hidráulica"), "esgoto_pluvial");
+
+  // elétrico cadastrado no grupo errado ainda assim vai para elétrica
+  eq(sug("PVC - Elétrica - Caixa 4x2\" pvc embutir", "Hidráulica"), "eletrica");
+  eq(sug("PVC - Elétrica - Corrugado Kanaflex 1.1/2''", "Hidráulica"), "eletrica");
+
+  eq(sug("Equipamentos e Sistemas - Bomba Circulação Boiler", "Hidráulica"), "aquecimento");
+
+  // sem pista no nome, o grupo resolve — mas só os grupos de etapa única
+  eq(sug("Tinta acrílica branca 18L", "Tintas"), "pintura");
+  eq(sug("Telha de concreto", "Telhas"), "coberturas");
+  eq(sug("Cimento CP II 50kg", "Cimento"), "", "cimento serve meia obra: fica em branco");
+  eq(sug("Areia média", "Areia e pedra"), "");
+  eq(sug("Tábua de pinus", "Madeira de caixaria"), "", "caixaria serve fundação e laje");
+
+  // quem já tem etapa não recebe sugestão
+  eq(sug("PVC - Esgoto - Ralo", "Hidráulica", "pre_obra"), "");
+
+  const cat = [
+    { id: "1", nome: "PVC - Esgoto - Ralo Click Inox 10cm", grupo: "Hidráulica" },
+    { id: "2", nome: "PVC - Esgoto - Porta Grelha 15CM", grupo: "Hidráulica" },
+    { id: "3", nome: "PVC - Alimentação Água Fria - Luva 25mm", grupo: "Hidráulica" },
+    { id: "4", nome: "Cimento CP II 50kg", grupo: "Cimento" },
+    { id: "5", nome: "PVC - Esgoto - Tubo 100mm", grupo: "Hidráulica", etapaPadrao: "esgoto_pluvial" },
+    { id: "6", nome: "Insumo desativado", grupo: "Tintas", ativo: false },
+  ];
+  const r = api.sugestoesDeEtapa(cat);
+  eq(r.grupos.map(g => [g.etapaId, g.quantos]), [["esgoto_pluvial", 2], ["hidraulica", 1]],
+     "maior grupo primeiro; quem já tem etapa e o inativo ficam fora:");
+  eq(r.total, 3);
+  eq(r.semSugestao, 1, "o cimento é contado como sem sugestão");
+  // sem a tabela de etapas por perto (este harness não a carrega), o nome
+  // cai no próprio id em vez de quebrar
+  eq(r.grupos[0].nome, "esgoto_pluvial");
 });
 
 console.log("\n" + ok + " testes passaram" + (falhas.length ? ", " + falhas.length + " falharam" : ""));
