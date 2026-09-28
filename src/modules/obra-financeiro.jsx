@@ -146,6 +146,9 @@ const ETAPAS_OBRA = [
   { id:"demolicoes",          nome:"Demolições e entulhos",            macro:"Terraplanagem e demolições" },
   { id:"arrimos",             nome:"Arrimos",                          macro:"Arrimos" },
   { id:"imp_arrimo",          nome:"Impermeabilização de arrimo",      macro:"Impermeabilizações" },
+  // O gabarito — o cavalete de tábuas que guarda os eixos das paredes até a
+  // fundação sair do chão. É madeira e prego, e acontece antes de concretar.
+  { id:"marcacao_obra",       nome:"Marcação obra",                     macro:"Fundação" },
   { id:"fundacao",            nome:"Fundação",                         macro:"Fundação" },
   { id:"imp_baldrame",        nome:"Impermeabilização de baldrame",    macro:"Impermeabilizações" },
   // Impermeabilização sem destino declarado — a planilha da obra tem essa

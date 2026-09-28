@@ -691,7 +691,7 @@ teste("memória de cálculo: instalações pré obra e fundação, com o último
       concreto: { estacas: 3, baldrames: 5 } } },
   };
   const r = gerarOrcamentoObra(proj, { materiais: [] });
-  const etapas = ["Instalações pré obra e projetos", "Fundação"];
+  const etapas = ["Instalações pré obra e projetos", "Marcação obra", "Fundação"];
   const itens = r.itens.filter((i) => etapas.includes(i.etapa));
   assert.ok(itens.length > 20, `poucos itens: ${itens.length}`);
   // toda linha dessas duas etapas tem memória

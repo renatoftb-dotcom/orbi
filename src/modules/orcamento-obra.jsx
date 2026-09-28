@@ -39,6 +39,9 @@ const PESOS_FERRO = {
 const ORD = {
   prestadores: 0,
   instalacoes: 1,
+  // Entre as instalações e a fundação: o gabarito se monta depois do
+  // canteiro e antes de concretar.
+  marcacao: 1.5,
   fundacao: 2,
   esgotoPluvial: 3,
   contrapisoInterno: 4,
@@ -817,7 +820,10 @@ function pintura(cp, out) {
 // ═══════════════════════════════════════════════════════════════
 function instalacoesObraProjetos(cp, out) {
   const baseInst = { ordem: ORD.instalacoes, tipo: "Bruto", etapa: "Instalações pré obra e projetos" };
-  const baseFund = { ordem: ORD.instalacoes, tipo: "Bruto", etapa: "Fundação" };
+  // O gabarito tem etapa própria: ele não é fundação, acontece antes dela, e
+  // o P&L da obra agora separa os dois. As ferramentas do canteiro ficam
+  // onde estavam — serra circular e furadeira não são marcação.
+  const baseMarc = { ordem: ORD.marcacao, tipo: "Bruto", etapa: "Marcação obra" };
 
   // Canteiro novo: o padrão de entrada de energia e o enxoval de ferramentas
   // que se monta ao abrir uma obra. Em terreno vazio isso é obrigatório; numa
@@ -833,22 +839,22 @@ function instalacoesObraProjetos(cp, out) {
     ] });
   }
   if (cp.canteiroNovo) {
-    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Serra Circular Dewalt DWE560-B2", unidade: "Unidades", qtd: 1, memoria: memFerramenta });
-    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Furadeira Dewalt 1/2 DWD502-BR 710W", unidade: "Unidades", qtd: 1, memoria: memFerramenta });
-    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Mangueira de Nível", unidade: "Mts", qtd: 25, memoria: memFerramenta });
-    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Lapis", unidade: "Rolos", qtd: 4, memoria: memFerramenta });
-    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Disco Serra Circular", unidade: "Unidades", qtd: 2, memoria: memFerramenta });
-    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Metal - Hidráulica - Torneira Jardim", unidade: "Unidades", qtd: 1, memoria: memFerramenta });
-    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Pá de bico com cabo", unidade: "Unidades", qtd: 4, memoria: memFerramenta });
-    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Cavadeira", unidade: "Unidades", qtd: 4, memoria: memFerramenta });
-    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Mangueira de Jardim", unidade: "Mts", qtd: 30, memoria: memFerramenta });
-    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Engate Rápido Mangueira Jardim", unidade: "Unidades", qtd: 1, memoria: memFerramenta });
-    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Torquesa Ferragem", unidade: "Unidades", qtd: 5, memoria: memFerramenta });
-    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Luva Mucambo", unidade: "Unidades", qtd: 10, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Ferramentas do canteiro", item: "Ferramentas - Serra Circular Dewalt DWE560-B2", unidade: "Unidades", qtd: 1, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Ferramentas do canteiro", item: "Ferramentas - Furadeira Dewalt 1/2 DWD502-BR 710W", unidade: "Unidades", qtd: 1, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Ferramentas do canteiro", item: "Ferramentas - Mangueira de Nível", unidade: "Mts", qtd: 25, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Ferramentas do canteiro", item: "Ferramentas - Lapis", unidade: "Rolos", qtd: 4, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Ferramentas do canteiro", item: "Disco Serra Circular", unidade: "Unidades", qtd: 2, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Ferramentas do canteiro", item: "Metal - Hidráulica - Torneira Jardim", unidade: "Unidades", qtd: 1, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Ferramentas do canteiro", item: "Ferramentas - Pá de bico com cabo", unidade: "Unidades", qtd: 4, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Ferramentas do canteiro", item: "Ferramentas - Cavadeira", unidade: "Unidades", qtd: 4, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Ferramentas do canteiro", item: "Ferramentas - Mangueira de Jardim", unidade: "Mts", qtd: 30, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Ferramentas do canteiro", item: "Ferramentas - Engate Rápido Mangueira Jardim", unidade: "Unidades", qtd: 1, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Ferramentas do canteiro", item: "Ferramentas - Torquesa Ferragem", unidade: "Unidades", qtd: 5, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Ferramentas do canteiro", item: "Ferramentas - Luva Mucambo", unidade: "Unidades", qtd: 10, memoria: memFerramenta });
   }
   if (cp.canteiroNovo) {
-    emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Ferramentas - Linha de pedreiro", unidade: "Unidades", qtd: 2, memoria: memFerramenta });
-    emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Ferramentas - Carrinho Pedreiro", unidade: "Unidades", qtd: 4, memoria: memFerramenta });
+    emitir(out, { ...baseMarc, subEtapa: "Ferramentas", item: "Ferramentas - Linha de pedreiro", unidade: "Unidades", qtd: 2, memoria: memFerramenta });
+    emitir(out, { ...baseMarc, subEtapa: "Ferramentas", item: "Ferramentas - Carrinho Pedreiro", unidade: "Unidades", qtd: 4, memoria: memFerramenta });
   }
 
   const gab = cp.gabarito;
@@ -861,25 +867,25 @@ function instalacoesObraProjetos(cp, out) {
   const prego17x21 = prego18x27;
   const memGabarito = MEM.dado("Gabarito da obra (perímetro do cavalete de marcação)", gab, "m", "bloco Geral");
 
-  emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Madeira Caixaria - Tábuas de 10cm x 3mts", unidade: "Barras 3mts", qtd: tabua10, memoria: [
+  emitir(out, { ...baseMarc, subEtapa: "Gabarito", item: "Madeira Caixaria - Tábuas de 10cm x 3mts", unidade: "Barras 3mts", qtd: tabua10, memoria: [
     MEM.nota("O gabarito é o cavalete de tábuas que cerca a obra e guarda os eixos das paredes até a fundação sair do chão."),
     memGabarito,
     MEM.conta("Tábuas de 3 m, com 20% de emendas e recortes", "gabarito ÷ 3 × 1,20", [["gabarito", gab]], tabua10Bruto, "tábuas"),
     MEM.teto(tabua10Bruto, tabua10, "tábuas de 3 m", "Arredonda para cima (tábua inteira)"),
   ] });
-  emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Madeira Caixaria - Sarrafos de 05cm x 3mts", unidade: "Barras 3mts", qtd: sarrafo5, memoria: [
+  emitir(out, { ...baseMarc, subEtapa: "Gabarito", item: "Madeira Caixaria - Sarrafos de 05cm x 3mts", unidade: "Barras 3mts", qtd: sarrafo5, memoria: [
     MEM.nota("Sarrafos: as estacas verticais que seguram as tábuas do gabarito, cravadas a cada 1,30 m, mais 20 de folga para escoras e travamento dos cantos."),
     memGabarito,
     MEM.conta("Sarrafos do gabarito", "gabarito × 1,20 ÷ 1,30 × 0,60 ÷ 3 + 20", [["gabarito", gab]], sarrafo5Bruto, "sarrafos"),
     MEM.teto(sarrafo5Bruto, sarrafo5, "sarrafos de 3 m", "Arredonda para cima (sarrafo inteiro)"),
   ] });
-  emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego18x27, memoria: [
+  emitir(out, { ...baseMarc, subEtapa: "Gabarito", item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego18x27, memoria: [
     MEM.nota("Pregos do gabarito: 0,05 kg por tábua pregada, metade em cada bitola (18x27 e 17x21)."),
     MEM.dado("Tábuas de 10 cm do gabarito", tabua10, "tábuas", "passo anterior"),
     MEM.conta("Pregos 18x27", "tábuas × 0,05 ÷ 2", [["tábuas", tabua10]], prego18x27Bruto, "kg"),
     MEM.teto(prego18x27Bruto, prego18x27, "kg", "Arredonda para cima (embalagem fechada)"),
   ] });
-  emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Aço - Pregos 17x21", unidade: "KG", qtd: prego17x21, memoria: [
+  emitir(out, { ...baseMarc, subEtapa: "Gabarito", item: "Aço - Pregos 17x21", unidade: "KG", qtd: prego17x21, memoria: [
     MEM.nota("Mesma conta dos pregos 18x27 — a outra metade do consumo do gabarito."),
     MEM.dado("Tábuas de 10 cm do gabarito", tabua10, "tábuas", "passo anterior"),
     MEM.conta("Pregos 17x21", "tábuas × 0,05 ÷ 2", [["tábuas", tabua10]], prego18x27Bruto, "kg"),
