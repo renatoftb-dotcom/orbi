@@ -7309,6 +7309,8 @@ function Insumos({ data, save }) {
   var [busca, setBusca] = useState("");
   var [filtroGrupo, setFiltroGrupo] = useState("");
   var [filtroConf, setFiltroConf] = useState("");
+  // "" = qualquer etapa; "__sem__" = só quem ainda não tem etapa padrão.
+  var [filtroEtapa, setFiltroEtapa] = useState("");
   var [semeando, setSemeando] = useState(false);
   var [marcados, setMarcados] = useState({});
   var [etapaLote, setEtapaLote] = useState("");
@@ -7343,6 +7345,8 @@ function Insumos({ data, save }) {
       .filter(function (x) {
         if (filtroGrupo && x.i.grupo !== filtroGrupo) return false;
         if (filtroConf && x.p.confianca !== filtroConf) return false;
+        if (filtroEtapa === "__sem__" && (x.i.etapaPadrao || "")) return false;
+        if (filtroEtapa && filtroEtapa !== "__sem__" && x.i.etapaPadrao !== filtroEtapa) return false;
         if (!n) return true;
         if (normalizarTexto(x.i.codigo).indexOf(n) >= 0) return true;
         if (normalizarTexto(x.i.nome).indexOf(n) >= 0) return true;
@@ -7353,13 +7357,14 @@ function Insumos({ data, save }) {
         if (d !== 0) return d;
         return String(a.i.nome).localeCompare(String(b.i.nome), "pt-BR");
       });
-  }, [enriquecidos, busca, filtroGrupo, filtroConf]);
+  }, [enriquecidos, busca, filtroGrupo, filtroConf, filtroEtapa]);
 
   var resumo = useMemo(function () {
-    var r = { total: enriquecidos.length, alta: 0, media: 0, baixa: 0, obsoleta: 0, sem_preco: 0, manual: 0, pendentes: 0 };
+    var r = { total: enriquecidos.length, alta: 0, media: 0, baixa: 0, obsoleta: 0, sem_preco: 0, manual: 0, pendentes: 0, semEtapa: 0 };
     enriquecidos.forEach(function (x) {
       if (r[x.p.confianca] != null) r[x.p.confianca]++;
       if (x.i.precoPendente) r.pendentes++;
+      if (!(x.i.etapaPadrao || "")) r.semEtapa++;
     });
     return r;
   }, [enriquecidos]);
@@ -7371,6 +7376,21 @@ function Insumos({ data, save }) {
     save(Object.assign({}, data, { materiais: lista }));
     setSel(novo);
     setView("detalhe");
+  }
+
+  // "Quero ver quem ainda está sem etapa" é sempre o mesmo gesto: filtrar a
+  // lista e marcar todos. Um clique faz os dois — a barra de seleção já abre
+  // com eles marcados, prontos para receber a etapa ou para só serem lidos.
+  function verOsSemEtapa() {
+    setFiltroEtapa("__sem__");
+    setFiltroGrupo("");
+    setFiltroConf("");
+    setBusca("");
+    var novo = {};
+    enriquecidos.forEach(function (x) {
+      if (!(x.i.etapaPadrao || "")) novo[x.i.id || x.i.codigo] = true;
+    });
+    setMarcados(novo);
   }
 
   function aplicarEtapaEmLote() {
@@ -7536,10 +7556,18 @@ function Insumos({ data, save }) {
             <span><PontoConfianca conf="obsoleta" /> {resumo.obsoleta} obsoleto</span>
             {resumo.sem_preco > 0 && <span><PontoConfianca conf="sem_preco" /> {resumo.sem_preco} sem preço</span>}
             {resumo.pendentes > 0 && <span style={{ color: "#b45309", fontWeight: 600 }}>{resumo.pendentes} aguardando confirmação</span>}
+            {resumo.semEtapa > 0 && (
+              <button type="button" onClick={verOsSemEtapa}
+                title="filtra a lista e marca todos de uma vez"
+                style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit",
+                  fontSize: 12.5, color: INS.azul, fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}>
+                {resumo.semEtapa} sem etapa padrão
+              </button>
+            )}
           </div>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
           <input style={INS_S.input} placeholder="Buscar por nome, código ou apelido…" value={busca} onChange={e => setBusca(e.target.value)} />
           <SelectBusca style={INS_S.input} value={filtroGrupo} onChange={v => setFiltroGrupo(v)}
             placeholder="Procurar grupo…"
@@ -7554,6 +7582,13 @@ function Insumos({ data, save }) {
             <option value="sem_preco">Sem preço</option>
             <option value="manual">Definido à mão</option>
           </select>
+          <SelectBusca style={INS_S.input} value={filtroEtapa} onChange={v => setFiltroEtapa(v)}
+            placeholder="Procurar etapa…"
+            opcoes={[{ valor: "", rotulo: "Qualquer etapa" },
+                     { valor: "__sem__", rotulo: "— sem etapa padrão —" }].concat(
+              (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(function (et) {
+                return { valor: et.id, rotulo: et.nome, grupo: et.macro || "" };
+              }))} />
         </div>
 
         {perm.podeEditar && insumos.length > 0 && (
