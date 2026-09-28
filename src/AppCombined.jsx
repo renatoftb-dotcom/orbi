@@ -20040,7 +20040,9 @@ function pixDoPagamento(fonte, prestador) {
   const daFatura = String(f.pixChave || "").trim();
   const chave = daFatura || String(p.pixChave || "").trim();
   if (!chave) return vazio;
-  return { tem: true, valor: chave, rotulo: nomeDoTipoPix(daFatura ? f.pixTipo : p.pixTipo),
+  // O rótulo diz PIX antes do tipo: "TELEFONE" sozinho em cima de um número
+  // parece o telefone da loja, e não a chave para onde o dinheiro vai.
+  return { tem: true, valor: chave, rotulo: "PIX · " + nomeDoTipoPix(daFatura ? f.pixTipo : p.pixTipo),
     beneficiario: nome, copiaECola: false };
 }
 

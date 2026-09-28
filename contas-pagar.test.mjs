@@ -1762,7 +1762,7 @@ teste("a chave que se copia: a da fatura ganha da do cadastro", () => {
   const doCadastro = modulo.pixDoPagamento({ favorecido: "Ourifer" }, loja);
   assert.strictEqual(doCadastro.tem, true);
   assert.strictEqual(doCadastro.valor, "08.617.563/0001-35");
-  assert.strictEqual(doCadastro.rotulo, "CNPJ");
+  assert.strictEqual(doCadastro.rotulo, "PIX · CNPJ", "o rótulo diz que é PIX, não só o tipo da chave");
   assert.strictEqual(doCadastro.beneficiario, "OURIFER");
   assert.strictEqual(doCadastro.copiaECola, false);
 
@@ -1777,7 +1777,9 @@ teste("a chave que se copia: a da fatura ganha da do cadastro", () => {
   // chave própria da fatura, com o tipo dela
   const outra = modulo.pixDoPagamento({ pixChave: "pagamentos@ourifer.com.br", pixTipo: "email" }, loja);
   assert.strictEqual(outra.valor, "pagamentos@ourifer.com.br");
-  assert.strictEqual(outra.rotulo, "E-mail");
+  assert.strictEqual(outra.rotulo, "PIX · E-mail");
+  const porTelefone = modulo.pixDoPagamento({}, { nome: "Ferro Pronto Ourinhos LTDA", pixTipo: "telefone", pixChave: "18996979916" });
+  assert.strictEqual(porTelefone.rotulo, "PIX · Telefone", "telefone como chave não pode parecer o telefone da loja");
 
   // sem chave em lugar nenhum, o botão não aparece
   assert.strictEqual(modulo.pixDoPagamento({ favorecido: "Pantanal" }, { id: "f2", nome: "Pantanal" }).tem, false);
