@@ -6808,6 +6808,13 @@ var SUGESTOES_POR_GRUPO = {
   "Granito": "soleiras_peitoris",
   "Marcenaria": "marcenaria",
   "Entulhos": "demolicoes",
+  // Ferramenta comprada e equipamento alugado têm etapa própria na planilha
+  // do escritório, e o grupo serve a ela e a mais nenhuma — não há o que
+  // chutar aqui. Sem estas três linhas, toda compra de ferramenta chegava ao
+  // pedido com a etapa em branco, mesmo o catálogo sabendo o grupo.
+  "Ferramentas": "ferramentas",
+  "Locação de equipamentos": "locacao_equip",
+  "Prestadores de serviços": "prestadores",
 };
 
 function sugerirEtapaDoInsumo(insumo) {

@@ -397,6 +397,24 @@ t("a sugestão de etapa lê o nome antes do grupo, e cala quando não sabe", () 
   eq(r.grupos[0].nome, "esgoto_pluvial");
 });
 
+// ── Grupo que serve a uma etapa só ───────────────────────
+t("grupo que serve a uma etapa só propõe essa etapa", () => {
+  const sug = (nome, grupo, etapaPadrao) => api.sugerirEtapaDoInsumo({ nome, grupo, etapaPadrao });
+
+  // ferramenta e equipamento têm etapa própria na planilha do escritório
+  eq(sug("Chave Philips Chata 3x150", "Ferramentas"), "ferramentas");
+  eq(sug("Disco Diamantado Corte Parede", "Ferramentas"), "ferramentas");
+  eq(sug("Betoneira 400L", "Locação de equipamentos"), "locacao_equip");
+  eq(sug("Marceneiro Portas Internas", "Prestadores de serviços"), "prestadores");
+
+  // etapa escolhida à mão nunca é sobrescrita por proposta
+  eq(sug("Chave Philips", "Ferramentas", "eletrica"), "");
+
+  // e o que entra em meia obra continua em branco
+  eq(sug("Areia média", "Areia e pedra"), "");
+  eq(sug("Parafuso bucha 8mm", "Fixação"), "");
+});
+
 console.log("\n" + ok + " testes passaram" + (falhas.length ? ", " + falhas.length + " falharam" : ""));
 if (falhas.length) {
   console.log("\nFALHAS:\n  - " + falhas.join("\n  - ") + "\n");
