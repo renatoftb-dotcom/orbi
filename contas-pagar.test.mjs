@@ -28,7 +28,7 @@ const modulo = new Function(`
   return { recalibrarPedido, previaDoPedido, contasDoPedido, docDaConta, diasEntreIso,
            pedidoVazio, itemDoPedidoVazio, brutoDoItem, brutoDoPedido, totalDoPedido,
            itensRateados, contasDoPedidoDaLoja, validarPedido, pedidosPendentes, baixarPedidos,
-           podeMexerNoPedido, removerContasDoPedido, linhasDePedido,
+           podeMexerNoPedido, removerContasDoPedido, linhasDePedido, linhasDeLoja,
            pixDoPagamento, pixResumido, TIPOS_PIX, nomeDoTipoPix,
            MODOS_LANCAMENTO, modoLancamento,
            contasDaCotacao, contasDeCotacao,
@@ -1752,6 +1752,69 @@ teste("a lista mostra o pedido, não os onze itens — e o item continua lá den
     "um boleto só vale por todos os itens");
 
   assert.deepStrictEqual(modulo.linhasDePedido(null), []);
+});
+
+teste("os pedidos se acumulam debaixo do nome da loja, com o total somado", () => {
+  let n = 0;
+  const id = () => "c" + (++n);
+  const base = { obraId: "ob1", cotacaoId: "cot1", favorecido: "Ourifer", prestadorId: "f1", contaId: "material" };
+  const ped1 = modulo.contasDoPedidoDaLoja(base, pedidoOurifer(), id);
+  const ped2 = modulo.contasDoPedidoDaLoja(base,
+    { ...pedidoOurifer(), id: "ped2", numero: 2, numeroLoja: "136594-109", desconto: "",
+      vencimento: "2026-11-28",
+      itens: [{ id: "i1", descricao: "Arame recozido", quantidade: "1", unidade: "un", unitario: "13,95", bruto: "13,95", etapa: "fundacao" }] },
+    id);
+  const deOutraLoja = modulo.contasDoPedidoDaLoja(
+    { ...base, favorecido: "Pantanal", prestadorId: "f2" },
+    { ...pedidoOurifer(), id: "ped3", numero: 3, numeroLoja: "A-1", desconto: "",
+      itens: [{ id: "i1", descricao: "Cimento", quantidade: "10", unidade: "sc", unitario: "40,00", bruto: "400,00", etapa: "fundacao" }] },
+    id);
+  const avulsa = { id: "av1", obraId: "ob1", descricao: "Ca\u00e7amba de entulho", valor: 350, vencimento: "2026-10-05", pago: false };
+
+  const linhas = modulo.linhasDeLoja([avulsa].concat(ped1).concat(ped2).concat(deOutraLoja));
+  assert.deepStrictEqual(linhas.map(l => l.tipo), ["conta", "loja", "loja"],
+    "a avulsa passa direto; cada loja vira uma linha s\u00f3");
+
+  const ourifer = linhas[1];
+  assert.strictEqual(ourifer.favorecido, "Ourifer");
+  assert.strictEqual(ourifer.pedidos.length, 2, "os dois pedidos ficam debaixo dela");
+  assert.strictEqual(ourifer.valor, 499.35, "485,40 + 13,95 \u00e9 o que se deve \u00e0 loja");
+  assert.strictEqual(ourifer.contas.length, 12, "os itens continuam l\u00e1, dois n\u00edveis abaixo");
+  assert.strictEqual(ourifer.vencimento, "2026-10-28", "cobra pela data mais cedo dos pedidos");
+  assert.deepStrictEqual(ourifer.pedidoIds, ["ped1", "ped2"]);
+  assert.strictEqual(ourifer.pago, false);
+  assert.strictEqual(ourifer.aberto, 499.35);
+  assert.strictEqual(ourifer.pedidosEmAberto, 2);
+
+  assert.strictEqual(linhas[2].favorecido, "Pantanal", "loja diferente n\u00e3o se mistura");
+  assert.strictEqual(linhas[2].pedidos.length, 1);
+
+  // um pedido pago, o outro n\u00e3o: a loja fica parcial
+  const meio = ped1.map(c => ({ ...c, pago: true, valorPago: c.valor })).concat(ped2);
+  const parcial = modulo.linhasDeLoja(meio)[0];
+  assert.strictEqual(parcial.parcial, true);
+  assert.strictEqual(parcial.pago, false);
+  assert.strictEqual(parcial.valorPago, 485.40);
+  assert.strictEqual(parcial.aberto, 13.95, "sobra o que ainda n\u00e3o foi pago");
+  assert.strictEqual(parcial.pedidosEmAberto, 1);
+
+  // tudo pago
+  const quitada = modulo.linhasDeLoja(ped1.concat(ped2).map(c => ({ ...c, pago: true, valorPago: c.valor })))[0];
+  assert.strictEqual(quitada.pago, true);
+  assert.strictEqual(quitada.aberto, 0);
+
+  // a loja liga para fechar: um pagamento s\u00f3 baixa os dois pedidos
+  const r = modulo.baixarPedidos(ped1.concat(ped2), ourifer.pedidoIds,
+    { pagoEm: "2026-10-28", comprovante: { nome: "pix.pdf" } }, "Renato", "2026-10-28T12:00:00.000Z");
+  assert.strictEqual(r.total, 499.35);
+  assert.ok(r.contas.every(c => c.pago), "os doze itens dos dois pedidos saem quitados");
+
+  // na lista j\u00e1 separada por fornecedor o n\u00edvel da loja seria o nome repetido
+  const semNivel = modulo.linhasDeLoja(ped1.concat(ped2), { semNivelDeLoja: true });
+  assert.deepStrictEqual(semNivel.map(l => l.tipo), ["pedido", "pedido"]);
+  assert.deepStrictEqual(semNivel[0].pedidoIds, ["ped1"], "o pedido sozinho tamb\u00e9m sabe se pagar");
+
+  assert.deepStrictEqual(modulo.linhasDeLoja(null), []);
 });
 
 teste("a chave que se copia: a da fatura ganha da do cadastro", () => {

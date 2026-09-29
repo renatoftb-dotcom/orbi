@@ -739,7 +739,7 @@ function linhasDePedido(contas) {
     if (!c) continue;
     if (!c.pedidoId) { fora.push({ tipo: "conta", chave: c.id, conta: c }); continue; }
     if (!porPedido.has(c.pedidoId)) {
-      const linha = { tipo: "pedido", chave: c.pedidoId, pedidoId: c.pedidoId,
+      const linha = { tipo: "pedido", chave: c.pedidoId, pedidoId: c.pedidoId, pedidoIds: [c.pedidoId],
         numeroPedido: c.numeroPedido || "", numeroLoja: c.numeroLoja || "", numeroNota: c.numeroNota || "",
         cotacaoId: c.cotacaoId || "", obraId: c.obraId || "",
         prestadorId: c.prestadorId || "", favorecido: c.favorecido || "",
@@ -761,6 +761,53 @@ function linhasDePedido(contas) {
     l.aberto = red(l.valor - l.valorPago);
   }
   return fora;
+}
+
+// ── A loja é o de cima; o pedido é a fatura ──────────────
+// Conta na loja não é um pedido, é um relacionamento: a loja liga dizendo
+// "vamos fechar" e cobra UM valor, que é a soma do que se pediu no mês. Quem
+// paga pergunta primeiro "quanto devo para a Ourifer" e só depois "de quais
+// pedidos". Por isso os pedidos da mesma loja se juntam num nível acima, com
+// o total somado; o pedido continua existindo um nível abaixo, e os itens
+// abaixo dele. Conta avulsa e parcela de contrato passam direto.
+//
+// A exceção é a lista já separada por fornecedor: ali o nome da loja é o
+// cabeçalho do grupo, e repeti-lo logo abaixo só gasta uma linha.
+function linhasDeLoja(contas, opcoes) {
+  const o = opcoes || {};
+  const linhas = linhasDePedido(contas);
+  if (o.semNivelDeLoja) return linhas;
+  const red = (x) => Math.round(x * 100) / 100;
+  const saida = [];
+  const porLoja = new Map();
+  for (const l of linhas) {
+    if (l.tipo !== "pedido") { saida.push(l); continue; }
+    const chave = String(l.prestadorId || l.favorecido || "sem-loja");
+    if (!porLoja.has(chave)) {
+      const loja = { tipo: "loja", chave: "loja:" + chave, lojaChave: chave,
+        favorecido: l.favorecido || "", prestadorId: l.prestadorId || "",
+        obraId: l.obraId || "", pedidos: [], pedidoIds: [], contas: [],
+        valor: 0, valorPago: 0, pagos: 0, vencimento: "" };
+      porLoja.set(chave, loja);
+      saida.push(loja);
+    }
+    const g = porLoja.get(chave);
+    g.pedidos.push(l);
+    g.pedidoIds.push(l.pedidoId);
+    g.contas = g.contas.concat(l.contas);
+    g.valor = red(g.valor + l.valor);
+    g.valorPago = red(g.valorPago + l.valorPago);
+    g.pagos += l.pagos;
+    // A loja cobra pela data mais cedo: é ela que manda no vencimento.
+    if (l.vencimento && (!g.vencimento || l.vencimento < g.vencimento)) g.vencimento = l.vencimento;
+  }
+  for (const g of porLoja.values()) {
+    g.pago = g.contas.length > 0 && g.pagos === g.contas.length;
+    g.parcial = g.pagos > 0 && !g.pago;
+    g.aberto = red(g.valor - g.valorPago);
+    g.pedidosEmAberto = g.pedidos.filter((x) => !x.pago).length;
+  }
+  return saida;
 }
 
 // ── Corrigir um pedido lançado errado ────────────────────

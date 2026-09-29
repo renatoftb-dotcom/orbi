@@ -4875,6 +4875,9 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
 
   const cols = isMobile ? "1fr" : "minmax(0,3fr) 70px 58px 88px 92px minmax(0,1.5fr) minmax(0,1.5fr) 30px";
   const celStyle = { ...E.input, padding: "6px 8px", fontSize: 12 };
+  // No celular cada campo do item leva o nome em cima — sem isso, "30,00" e
+  // "10,00" um debaixo do outro não dizem qual é a quantidade e qual é o preço.
+  const rotuloMini = { display: "block", fontSize: 10, fontWeight: 600, color: "#6b7280", marginBottom: 2 };
 
   return (
     <div style={P.fundo} onClick={aoFechar}>
@@ -4889,26 +4892,43 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
 
         <div style={P.rolagem}>
           {/* ── de onde vêm os itens ── */}
-          <div
-            onDragOver={(e) => { e.preventDefault(); setSobre(true); }}
-            onDragLeave={() => setSobre(false)}
-            onDrop={(e) => { e.preventDefault(); setSobre(false); lerPdf(e.dataTransfer.files && e.dataTransfer.files[0]); }}
-            style={{ border: `1.5px dashed ${sobre ? "#0474f4" : "rgba(38,36,33,0.22)"}`, borderRadius: 12,
-              padding: "14px 16px", marginBottom: 14, background: sobre ? "#eef5ff" : "#fafafa", textAlign: "center" }}>
-            <div style={{ fontSize: 12.5, color: "#374151" }}>
-              {lendo ? "Lendo o PDF…"
-                : ehPonteiroDeToque() ? "Toque para escolher o PDF do pedido"
-                : "Arraste aqui o PDF do pedido da loja"}
-            </div>
-            <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3 }}>
-              número, data, vencimento e itens saem do próprio papel
-            </div>
-            <label style={{ ...E.btnSec, display: "inline-block", marginTop: 9, fontSize: 12 }}>
-              Escolher arquivo
-              <input type="file" accept="application/pdf" style={{ display: "none" }}
-                onChange={(e) => lerPdf(e.target.files && e.target.files[0])} />
-            </label>
-          </div>
+          {/* Na tela do celular essa área começa ocupando um quarto do que se
+              vê. Depois que o PDF foi lido ela não serve mais para nada — só
+              estorva o caminho até os itens —, então vira uma linha. */}
+          {(() => {
+            const zonaEnxuta = isMobile && itens.length > 0 && !lendo;
+            return (
+              <div
+                onDragOver={(e) => { e.preventDefault(); setSobre(true); }}
+                onDragLeave={() => setSobre(false)}
+                onDrop={(e) => { e.preventDefault(); setSobre(false); lerPdf(e.dataTransfer.files && e.dataTransfer.files[0]); }}
+                style={{ border: `1.5px dashed ${sobre ? "#0474f4" : "rgba(38,36,33,0.22)"}`, borderRadius: 12,
+                  padding: zonaEnxuta ? "7px 10px" : "14px 16px", marginBottom: zonaEnxuta ? 10 : 14,
+                  background: sobre ? "#eef5ff" : "#fafafa",
+                  textAlign: zonaEnxuta ? "left" : "center",
+                  display: zonaEnxuta ? "flex" : "block",
+                  alignItems: "center", gap: 8 }}>
+                <div style={{ fontSize: zonaEnxuta ? 11.5 : 12.5, color: "#374151", flex: zonaEnxuta ? 1 : undefined }}>
+                  {lendo ? "Lendo o PDF…"
+                    : zonaEnxuta ? `${itens.length} ${itens.length === 1 ? "item lido" : "itens lidos"} do PDF`
+                    : ehPonteiroDeToque() ? "Toque para escolher o PDF do pedido"
+                    : "Arraste aqui o PDF do pedido da loja"}
+                </div>
+                {!zonaEnxuta && (
+                  <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3 }}>
+                    número, data, vencimento e itens saem do próprio papel
+                  </div>
+                )}
+                <label style={{ ...E.btnSec, display: "inline-block", flexShrink: 0,
+                  marginTop: zonaEnxuta ? 0 : 9, fontSize: zonaEnxuta ? 11.5 : 12,
+                  padding: zonaEnxuta ? "4px 10px" : undefined }}>
+                  {zonaEnxuta ? "Trocar PDF" : "Escolher arquivo"}
+                  <input type="file" accept="application/pdf" style={{ display: "none" }}
+                    onChange={(e) => lerPdf(e.target.files && e.target.files[0])} />
+                </label>
+              </div>
+            );
+          })()}
           {aviso && <div style={{ fontSize: 12, color: "#dc2626", marginBottom: 10 }}>{aviso}</div>}
 
           {/* ── o cabeçalho do papel ── */}
@@ -4963,30 +4983,45 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
               <span style={E.label}>Etapa *</span><span style={E.label}>Conta</span><span />
             </div>
           )}
-          {itens.map((it, i) => (
-            <div key={it.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 6, marginBottom: 6, alignItems: "center",
-              paddingBottom: isMobile ? 8 : 0, borderBottom: isMobile ? "1px solid rgba(38,36,33,0.08)" : "none" }}>
-              <div style={{ minWidth: 0 }}>
-                <input style={celStyle} value={it.descricao} placeholder="Descrição do item"
-                  onChange={(e) => mexerItem(i, { descricao: e.target.value })}
-                  onBlur={() => mexerItem(i, casarItem(it))} />
-                <div style={{ fontSize: 10, color: it.insumoCodigo ? "#15803d" : "#9ca3af", marginTop: 2 }}>
-                  {it.insumoCodigo ? `${it.insumoCodigo}${it.grupoMaterial ? " · " + it.grupoMaterial : ""}` : "fora do catálogo"}
-                </div>
+          {/* No computador os itens são uma tabela com cabeçalho. No celular não
+              cabe tabela, e sete campos empilhados sem nome viram adivinhação —
+              então cada item vira um cartão com rótulo em cada campo. Os campos
+              em si são os mesmos nos dois, só muda como se arrumam. */}
+          {itens.map((it, i) => {
+            const campoDescricao = (
+              <input style={celStyle} value={it.descricao} placeholder="Descrição do item"
+                onChange={(e) => mexerItem(i, { descricao: e.target.value })}
+                onBlur={() => mexerItem(i, casarItem(it))} />
+            );
+            const linhaCatalogo = (
+              <div style={{ fontSize: 10, color: it.insumoCodigo ? "#15803d" : "#9ca3af", marginTop: 2 }}>
+                {it.insumoCodigo ? `${it.insumoCodigo}${it.grupoMaterial ? " · " + it.grupoMaterial : ""}` : "fora do catálogo"}
               </div>
+            );
+            const campoQtd = (
               <CampoNumeroBR estilo={celStyle} valor={it.quantidade} casas={2} placeholder="0"
                 aoMudar={(v) => mexerItem(i, { quantidade: v })} />
+            );
+            const campoUnidade = (
               <input style={celStyle} value={it.unidade} placeholder="un"
                 onChange={(e) => mexerItem(i, { unidade: e.target.value })} />
+            );
+            const campoUnitario = (
               <CampoCtrNum tipo="moeda" valor={it.unitario} style={celStyle} placeholder="0,00"
                 onChange={(v) => mexerItem(i, { unitario: v })} />
+            );
+            const campoTotal = (
               <CampoCtrNum tipo="moeda" valor={it.bruto} style={celStyle} placeholder="0,00"
                 onChange={(v) => mexerItem(i, { bruto: v })} />
+            );
+            const campoEtapa = (
               <SelectBusca style={{ ...celStyle, borderColor: it.etapa ? "rgba(38,36,33,0.16)" : "#dc2626" }}
                 value={it.etapa || ""} onChange={(v) => mexerItem(i, { etapa: v })}
                 placeholder="Procurar etapa…"
                 opcoes={[{ valor: "", rotulo: "— etapa —" }].concat(
                   etapas.map((et) => ({ valor: et.id, rotulo: et.nome, grupo: et.macro || "" })))} />
+            );
+            const campoConta = (
               <SelectBusca style={celStyle} value={it.contaId || ""}
                 onChange={(v) => mexerItem(i, { contaId: v })} placeholder="Procurar conta…"
                 opcoes={[{ valor: "", rotulo: "Material (padrão)" }].concat(
@@ -4994,10 +5029,46 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
                     grupo: g.titulo,
                     opcoes: plano.filter((c) => c.grupo === g.id).map((c) => ({ valor: c.id, rotulo: c.nome })),
                   })))} />
+            );
+            const botaoTirar = (
               <button type="button" title="Tirar do pedido" style={{ ...E.btnSec, padding: "5px 8px", color: "#dc2626" }}
                 onClick={() => aoMudar({ ...p, itens: itens.filter((_, j) => j !== i) })}>×</button>
-            </div>
-          ))}
+            );
+
+            if (isMobile) {
+              return (
+                <div key={it.id} style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12,
+                  padding: 10, marginBottom: 8, background: "#fff" }}>
+                  <div style={{ display: "flex", gap: 7, alignItems: "flex-start" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", flexShrink: 0, paddingTop: 7 }}>{i + 1}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>{campoDescricao}{linhaCatalogo}</div>
+                    <div style={{ flexShrink: 0 }}>{botaoTirar}</div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, marginTop: 8 }}>
+                    <div><span style={rotuloMini}>Qtd</span>{campoQtd}</div>
+                    <div><span style={rotuloMini}>Un</span>{campoUnidade}</div>
+                    <div><span style={rotuloMini}>Unitário</span>{campoUnitario}</div>
+                    <div><span style={rotuloMini}>Total</span>{campoTotal}</div>
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <span style={Object.assign({}, rotuloMini, { color: it.etapa ? "#6b7280" : "#dc2626" })}>Etapa *</span>
+                    {campoEtapa}
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <span style={rotuloMini}>Conta do P&amp;L</span>
+                    {campoConta}
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div key={it.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 6, marginBottom: 6, alignItems: "center" }}>
+                <div style={{ minWidth: 0 }}>{campoDescricao}{linhaCatalogo}</div>
+                {campoQtd}{campoUnidade}{campoUnitario}{campoTotal}{campoEtapa}{campoConta}{botaoTirar}
+              </div>
+            );
+          })}
           <button type="button" style={{ ...E.btnSec, fontSize: 11.5, padding: "5px 11px", marginTop: 4 }}
             onClick={() => aoMudar({ ...p, itens: [...itens, itemDoPedidoVazio()] })}>+ Item</button>
 

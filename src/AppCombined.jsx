@@ -20755,7 +20755,7 @@ function linhasDePedido(contas) {
     if (!c) continue;
     if (!c.pedidoId) { fora.push({ tipo: "conta", chave: c.id, conta: c }); continue; }
     if (!porPedido.has(c.pedidoId)) {
-      const linha = { tipo: "pedido", chave: c.pedidoId, pedidoId: c.pedidoId,
+      const linha = { tipo: "pedido", chave: c.pedidoId, pedidoId: c.pedidoId, pedidoIds: [c.pedidoId],
         numeroPedido: c.numeroPedido || "", numeroLoja: c.numeroLoja || "", numeroNota: c.numeroNota || "",
         cotacaoId: c.cotacaoId || "", obraId: c.obraId || "",
         prestadorId: c.prestadorId || "", favorecido: c.favorecido || "",
@@ -20777,6 +20777,53 @@ function linhasDePedido(contas) {
     l.aberto = red(l.valor - l.valorPago);
   }
   return fora;
+}
+
+// ── A loja é o de cima; o pedido é a fatura ──────────────
+// Conta na loja não é um pedido, é um relacionamento: a loja liga dizendo
+// "vamos fechar" e cobra UM valor, que é a soma do que se pediu no mês. Quem
+// paga pergunta primeiro "quanto devo para a Ourifer" e só depois "de quais
+// pedidos". Por isso os pedidos da mesma loja se juntam num nível acima, com
+// o total somado; o pedido continua existindo um nível abaixo, e os itens
+// abaixo dele. Conta avulsa e parcela de contrato passam direto.
+//
+// A exceção é a lista já separada por fornecedor: ali o nome da loja é o
+// cabeçalho do grupo, e repeti-lo logo abaixo só gasta uma linha.
+function linhasDeLoja(contas, opcoes) {
+  const o = opcoes || {};
+  const linhas = linhasDePedido(contas);
+  if (o.semNivelDeLoja) return linhas;
+  const red = (x) => Math.round(x * 100) / 100;
+  const saida = [];
+  const porLoja = new Map();
+  for (const l of linhas) {
+    if (l.tipo !== "pedido") { saida.push(l); continue; }
+    const chave = String(l.prestadorId || l.favorecido || "sem-loja");
+    if (!porLoja.has(chave)) {
+      const loja = { tipo: "loja", chave: "loja:" + chave, lojaChave: chave,
+        favorecido: l.favorecido || "", prestadorId: l.prestadorId || "",
+        obraId: l.obraId || "", pedidos: [], pedidoIds: [], contas: [],
+        valor: 0, valorPago: 0, pagos: 0, vencimento: "" };
+      porLoja.set(chave, loja);
+      saida.push(loja);
+    }
+    const g = porLoja.get(chave);
+    g.pedidos.push(l);
+    g.pedidoIds.push(l.pedidoId);
+    g.contas = g.contas.concat(l.contas);
+    g.valor = red(g.valor + l.valor);
+    g.valorPago = red(g.valorPago + l.valorPago);
+    g.pagos += l.pagos;
+    // A loja cobra pela data mais cedo: é ela que manda no vencimento.
+    if (l.vencimento && (!g.vencimento || l.vencimento < g.vencimento)) g.vencimento = l.vencimento;
+  }
+  for (const g of porLoja.values()) {
+    g.pago = g.contas.length > 0 && g.pagos === g.contas.length;
+    g.parcial = g.pagos > 0 && !g.pago;
+    g.aberto = red(g.valor - g.valorPago);
+    g.pedidosEmAberto = g.pedidos.filter((x) => !x.pago).length;
+  }
+  return saida;
 }
 
 // ── Corrigir um pedido lançado errado ────────────────────
@@ -26945,6 +26992,9 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
 
   const cols = isMobile ? "1fr" : "minmax(0,3fr) 70px 58px 88px 92px minmax(0,1.5fr) minmax(0,1.5fr) 30px";
   const celStyle = { ...E.input, padding: "6px 8px", fontSize: 12 };
+  // No celular cada campo do item leva o nome em cima — sem isso, "30,00" e
+  // "10,00" um debaixo do outro não dizem qual é a quantidade e qual é o preço.
+  const rotuloMini = { display: "block", fontSize: 10, fontWeight: 600, color: "#6b7280", marginBottom: 2 };
 
   return (
     <div style={P.fundo} onClick={aoFechar}>
@@ -26959,26 +27009,43 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
 
         <div style={P.rolagem}>
           {/* ── de onde vêm os itens ── */}
-          <div
-            onDragOver={(e) => { e.preventDefault(); setSobre(true); }}
-            onDragLeave={() => setSobre(false)}
-            onDrop={(e) => { e.preventDefault(); setSobre(false); lerPdf(e.dataTransfer.files && e.dataTransfer.files[0]); }}
-            style={{ border: `1.5px dashed ${sobre ? "#0474f4" : "rgba(38,36,33,0.22)"}`, borderRadius: 12,
-              padding: "14px 16px", marginBottom: 14, background: sobre ? "#eef5ff" : "#fafafa", textAlign: "center" }}>
-            <div style={{ fontSize: 12.5, color: "#374151" }}>
-              {lendo ? "Lendo o PDF…"
-                : ehPonteiroDeToque() ? "Toque para escolher o PDF do pedido"
-                : "Arraste aqui o PDF do pedido da loja"}
-            </div>
-            <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3 }}>
-              número, data, vencimento e itens saem do próprio papel
-            </div>
-            <label style={{ ...E.btnSec, display: "inline-block", marginTop: 9, fontSize: 12 }}>
-              Escolher arquivo
-              <input type="file" accept="application/pdf" style={{ display: "none" }}
-                onChange={(e) => lerPdf(e.target.files && e.target.files[0])} />
-            </label>
-          </div>
+          {/* Na tela do celular essa área começa ocupando um quarto do que se
+              vê. Depois que o PDF foi lido ela não serve mais para nada — só
+              estorva o caminho até os itens —, então vira uma linha. */}
+          {(() => {
+            const zonaEnxuta = isMobile && itens.length > 0 && !lendo;
+            return (
+              <div
+                onDragOver={(e) => { e.preventDefault(); setSobre(true); }}
+                onDragLeave={() => setSobre(false)}
+                onDrop={(e) => { e.preventDefault(); setSobre(false); lerPdf(e.dataTransfer.files && e.dataTransfer.files[0]); }}
+                style={{ border: `1.5px dashed ${sobre ? "#0474f4" : "rgba(38,36,33,0.22)"}`, borderRadius: 12,
+                  padding: zonaEnxuta ? "7px 10px" : "14px 16px", marginBottom: zonaEnxuta ? 10 : 14,
+                  background: sobre ? "#eef5ff" : "#fafafa",
+                  textAlign: zonaEnxuta ? "left" : "center",
+                  display: zonaEnxuta ? "flex" : "block",
+                  alignItems: "center", gap: 8 }}>
+                <div style={{ fontSize: zonaEnxuta ? 11.5 : 12.5, color: "#374151", flex: zonaEnxuta ? 1 : undefined }}>
+                  {lendo ? "Lendo o PDF…"
+                    : zonaEnxuta ? `${itens.length} ${itens.length === 1 ? "item lido" : "itens lidos"} do PDF`
+                    : ehPonteiroDeToque() ? "Toque para escolher o PDF do pedido"
+                    : "Arraste aqui o PDF do pedido da loja"}
+                </div>
+                {!zonaEnxuta && (
+                  <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3 }}>
+                    número, data, vencimento e itens saem do próprio papel
+                  </div>
+                )}
+                <label style={{ ...E.btnSec, display: "inline-block", flexShrink: 0,
+                  marginTop: zonaEnxuta ? 0 : 9, fontSize: zonaEnxuta ? 11.5 : 12,
+                  padding: zonaEnxuta ? "4px 10px" : undefined }}>
+                  {zonaEnxuta ? "Trocar PDF" : "Escolher arquivo"}
+                  <input type="file" accept="application/pdf" style={{ display: "none" }}
+                    onChange={(e) => lerPdf(e.target.files && e.target.files[0])} />
+                </label>
+              </div>
+            );
+          })()}
           {aviso && <div style={{ fontSize: 12, color: "#dc2626", marginBottom: 10 }}>{aviso}</div>}
 
           {/* ── o cabeçalho do papel ── */}
@@ -27033,30 +27100,45 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
               <span style={E.label}>Etapa *</span><span style={E.label}>Conta</span><span />
             </div>
           )}
-          {itens.map((it, i) => (
-            <div key={it.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 6, marginBottom: 6, alignItems: "center",
-              paddingBottom: isMobile ? 8 : 0, borderBottom: isMobile ? "1px solid rgba(38,36,33,0.08)" : "none" }}>
-              <div style={{ minWidth: 0 }}>
-                <input style={celStyle} value={it.descricao} placeholder="Descrição do item"
-                  onChange={(e) => mexerItem(i, { descricao: e.target.value })}
-                  onBlur={() => mexerItem(i, casarItem(it))} />
-                <div style={{ fontSize: 10, color: it.insumoCodigo ? "#15803d" : "#9ca3af", marginTop: 2 }}>
-                  {it.insumoCodigo ? `${it.insumoCodigo}${it.grupoMaterial ? " · " + it.grupoMaterial : ""}` : "fora do catálogo"}
-                </div>
+          {/* No computador os itens são uma tabela com cabeçalho. No celular não
+              cabe tabela, e sete campos empilhados sem nome viram adivinhação —
+              então cada item vira um cartão com rótulo em cada campo. Os campos
+              em si são os mesmos nos dois, só muda como se arrumam. */}
+          {itens.map((it, i) => {
+            const campoDescricao = (
+              <input style={celStyle} value={it.descricao} placeholder="Descrição do item"
+                onChange={(e) => mexerItem(i, { descricao: e.target.value })}
+                onBlur={() => mexerItem(i, casarItem(it))} />
+            );
+            const linhaCatalogo = (
+              <div style={{ fontSize: 10, color: it.insumoCodigo ? "#15803d" : "#9ca3af", marginTop: 2 }}>
+                {it.insumoCodigo ? `${it.insumoCodigo}${it.grupoMaterial ? " · " + it.grupoMaterial : ""}` : "fora do catálogo"}
               </div>
+            );
+            const campoQtd = (
               <CampoNumeroBR estilo={celStyle} valor={it.quantidade} casas={2} placeholder="0"
                 aoMudar={(v) => mexerItem(i, { quantidade: v })} />
+            );
+            const campoUnidade = (
               <input style={celStyle} value={it.unidade} placeholder="un"
                 onChange={(e) => mexerItem(i, { unidade: e.target.value })} />
+            );
+            const campoUnitario = (
               <CampoCtrNum tipo="moeda" valor={it.unitario} style={celStyle} placeholder="0,00"
                 onChange={(v) => mexerItem(i, { unitario: v })} />
+            );
+            const campoTotal = (
               <CampoCtrNum tipo="moeda" valor={it.bruto} style={celStyle} placeholder="0,00"
                 onChange={(v) => mexerItem(i, { bruto: v })} />
+            );
+            const campoEtapa = (
               <SelectBusca style={{ ...celStyle, borderColor: it.etapa ? "rgba(38,36,33,0.16)" : "#dc2626" }}
                 value={it.etapa || ""} onChange={(v) => mexerItem(i, { etapa: v })}
                 placeholder="Procurar etapa…"
                 opcoes={[{ valor: "", rotulo: "— etapa —" }].concat(
                   etapas.map((et) => ({ valor: et.id, rotulo: et.nome, grupo: et.macro || "" })))} />
+            );
+            const campoConta = (
               <SelectBusca style={celStyle} value={it.contaId || ""}
                 onChange={(v) => mexerItem(i, { contaId: v })} placeholder="Procurar conta…"
                 opcoes={[{ valor: "", rotulo: "Material (padrão)" }].concat(
@@ -27064,10 +27146,46 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
                     grupo: g.titulo,
                     opcoes: plano.filter((c) => c.grupo === g.id).map((c) => ({ valor: c.id, rotulo: c.nome })),
                   })))} />
+            );
+            const botaoTirar = (
               <button type="button" title="Tirar do pedido" style={{ ...E.btnSec, padding: "5px 8px", color: "#dc2626" }}
                 onClick={() => aoMudar({ ...p, itens: itens.filter((_, j) => j !== i) })}>×</button>
-            </div>
-          ))}
+            );
+
+            if (isMobile) {
+              return (
+                <div key={it.id} style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12,
+                  padding: 10, marginBottom: 8, background: "#fff" }}>
+                  <div style={{ display: "flex", gap: 7, alignItems: "flex-start" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", flexShrink: 0, paddingTop: 7 }}>{i + 1}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>{campoDescricao}{linhaCatalogo}</div>
+                    <div style={{ flexShrink: 0 }}>{botaoTirar}</div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, marginTop: 8 }}>
+                    <div><span style={rotuloMini}>Qtd</span>{campoQtd}</div>
+                    <div><span style={rotuloMini}>Un</span>{campoUnidade}</div>
+                    <div><span style={rotuloMini}>Unitário</span>{campoUnitario}</div>
+                    <div><span style={rotuloMini}>Total</span>{campoTotal}</div>
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <span style={Object.assign({}, rotuloMini, { color: it.etapa ? "#6b7280" : "#dc2626" })}>Etapa *</span>
+                    {campoEtapa}
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <span style={rotuloMini}>Conta do P&amp;L</span>
+                    {campoConta}
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div key={it.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 6, marginBottom: 6, alignItems: "center" }}>
+                <div style={{ minWidth: 0 }}>{campoDescricao}{linhaCatalogo}</div>
+                {campoQtd}{campoUnidade}{campoUnitario}{campoTotal}{campoEtapa}{campoConta}{botaoTirar}
+              </div>
+            );
+          })}
           <button type="button" style={{ ...E.btnSec, fontSize: 11.5, padding: "5px 11px", marginTop: 4 }}
             onClick={() => aoMudar({ ...p, itens: [...itens, itemDoPedidoVazio()] })}>+ Item</button>
 
@@ -29802,7 +29920,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // O pedido baixa inteiro, item a item, pelo valor de cada um: é a soma
     // deles que tem que bater com a linha do extrato.
     if (f.pedido) {
-      const r = baixarPedidos(contasDaObra, [f.pedido.pedidoId],
+      const r = baixarPedidos(contasDaObra, f.pedido.pedidoIds || [f.pedido.pedidoId],
         { pagoEm: f.dataContab, comprovante: f.comprovante || null }, quemSou());
       gravarContas(r.contas, f.pedido.obraId);
       setFormPagamento(null);
@@ -31252,6 +31370,72 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     );
     // grade das colunas — a mesma no cabeçalho e nas linhas
     const COLS = isMobile ? "1fr" : "1fr 104px 96px 116px 150px";
+    const umaLinha = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+    // A linha de um pedido de loja: o total na frente, os itens dentro. Serve
+    // solta (visao por fornecedor, onde o cabeçalho já é a loja) e recuada,
+    // debaixo do nome da loja.
+    const linhaDoPedido = (L, recuado, semNomeDaLoja) => {
+
+                            const abertaP = !!contasAbertas[L.chave];
+                            const stP = SITUACAO_CONTA[situacaoConta({ vencimento: L.vencimento, pago: L.pago }, hojeIso)] || SITUACAO_CONTA.aberto;
+                            const nomeEtapa = (id) => {
+                              const e = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).find(x => x.id === id);
+                              return e ? e.nome : "";
+                            };
+                            return (
+                              <div key={L.chave} style={{ borderTop: "1px solid rgba(38,36,33,0.06)", background: "#fff" }}>
+                                <div style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, alignItems: "center", padding: "9px 11px" }}>
+                                  <div data-vk-mantem-mes="1" style={{ minWidth: 0, cursor: "pointer", paddingLeft: recuado ? 18 : 0 }}
+                                    title={abertaP ? "Fechar itens" : "Ver os itens"}
+                                    onClick={() => setContasAbertas({ ...contasAbertas, [L.chave]: !abertaP })}>
+                                    <div style={{ fontSize: 13, color: "#111827", fontWeight: 600, ...umaLinha }}>
+                                      <span style={{ color: "#6b7280", fontWeight: 400, marginRight: 4 }}>{abertaP ? "▾" : "▸"}</span>
+                                      Pedido {L.numeroLoja || L.numeroPedido}
+                                    </div>
+                                    <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2, ...umaLinha }}>
+                                      {[(recuado || semNomeDaLoja) ? "" : L.favorecido, L.contas.length === 1 ? "1 item" : `${L.contas.length} itens`,
+                                        L.numeroNota ? "NF " + L.numeroNota : "",
+                                        L.parcial ? "parcialmente pago" : ""].filter(Boolean).join(" · ")}
+                                    </div>
+                                  </div>
+                                  <div style={{ fontSize: 12.5, color: "#111827" }}>
+                                    {L.vencimento ? new Date(L.vencimento + "T12:00:00").toLocaleDateString("pt-BR") : "a definir"}
+                                  </div>
+                                  <div style={{ fontSize: 12, color: stP.forte ? "#111827" : "#4b5563", fontWeight: stP.forte ? 700 : 500 }}>{stP.label}</div>
+                                  <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", textAlign: isMobile ? "left" : "right" }}>
+                                    {fmtMoedaCtr(L.pago ? L.valorPago : L.valor)}
+                                  </div>
+                                  {perm.podeEditar ? (
+                                    <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
+                                      <button onClick={() => alternarPagamentoPedido(L)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>
+                                        {L.pago ? "Desfazer" : "Pagar pedido"}
+                                      </button>
+                                    </div>
+                                  ) : <div />}
+                                </div>
+                                {abertaP && (
+                                  <div style={{ padding: recuado ? "0 11px 10px 50px" : "0 11px 10px 32px", background: "#fcfcfd" }}>
+                                    {L.contas.map(ic => (
+                                      <div key={ic.id} style={{ display: "grid",
+                                        gridTemplateColumns: isMobile ? "minmax(0,1fr) 92px" : "minmax(0,1.6fr) minmax(0,1fr) 110px",
+                                        gap: 10, padding: "5px 0", borderTop: "1px solid rgba(38,36,33,0.05)", alignItems: "center" }}>
+                                        <span style={{ fontSize: 12, color: "#111827", ...umaLinha }}>{ic.descricao}</span>
+                                        {!isMobile && (
+                                          <span style={{ fontSize: 11.5, color: "#6b7280", ...umaLinha }}>
+                                            {[nomeEtapa(ic.etapa), nomeConta(ic.contaId), ic.grupoMaterial].filter(Boolean).join(" · ")}
+                                          </span>
+                                        )}
+                                        <span style={{ fontSize: 12, color: "#111827", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                                          {fmtMoedaCtr(ic.pago ? (Number(ic.valorPago) || ic.valor) : ic.valor)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+    };
+
 
     // ── Gráfico do fluxo mensal (desenho em contas-pagar.jsx) ──
     const fluxo = fluxoMensal(contasDaObra, hojeIso);
@@ -31665,66 +31849,47 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                     </button>
                     {!oculto && (
                       <div>
-                        {linhasDePedido(g.itens).map(L => {
-                          const umaLinha = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
-                          // Pedido de loja: uma linha com o total, os itens dentro.
-                          if (L.tipo === "pedido") {
-                            const abertaP = !!contasAbertas[L.chave];
-                            const stP = SITUACAO_CONTA[situacaoConta({ vencimento: L.vencimento, pago: L.pago }, hojeIso)] || SITUACAO_CONTA.aberto;
-                            const nomeEtapa = (id) => {
-                              const e = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).find(x => x.id === id);
-                              return e ? e.nome : "";
-                            };
+                        {linhasDeLoja(g.itens, { semNivelDeLoja: visaoContas === "fornecedor" }).map(L => {
+                          if (L.tipo === "pedido") return linhaDoPedido(L, false, visaoContas === "fornecedor");
+                          // A loja: o nome, o total do que se deve a ela e os
+                          // pedidos por dentro — abertos por padrão, porque é
+                          // a lista deles que se confere com a cobrança.
+                          if (L.tipo === "loja") {
+                            const abertaL = contasAbertas[L.chave] === undefined ? true : !!contasAbertas[L.chave];
+                            const stL = SITUACAO_CONTA[situacaoConta({ vencimento: L.vencimento, pago: L.pago }, hojeIso)] || SITUACAO_CONTA.aberto;
                             return (
                               <div key={L.chave} style={{ borderTop: "1px solid rgba(38,36,33,0.06)", background: "#fff" }}>
-                                <div style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, alignItems: "center", padding: "9px 11px" }}>
+                                <div style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, alignItems: "center",
+                                  padding: "9px 11px", background: "#f6f8fc" }}>
                                   <div data-vk-mantem-mes="1" style={{ minWidth: 0, cursor: "pointer" }}
-                                    title={abertaP ? "Fechar itens" : "Ver os itens"}
-                                    onClick={() => setContasAbertas({ ...contasAbertas, [L.chave]: !abertaP })}>
-                                    <div style={{ fontSize: 13, color: "#111827", fontWeight: 600, ...umaLinha }}>
-                                      <span style={{ color: "#6b7280", fontWeight: 400, marginRight: 4 }}>{abertaP ? "▾" : "▸"}</span>
-                                      Pedido {L.numeroLoja || L.numeroPedido}
+                                    title={abertaL ? "Fechar os pedidos" : "Ver os pedidos"}
+                                    onClick={() => setContasAbertas({ ...contasAbertas, [L.chave]: !abertaL })}>
+                                    <div style={{ fontSize: 13, color: "#111827", fontWeight: 700, ...umaLinha }}>
+                                      <span style={{ color: "#6b7280", fontWeight: 400, marginRight: 4 }}>{abertaL ? "\u25be" : "\u25b8"}</span>
+                                      {L.favorecido || "Loja"}
                                     </div>
                                     <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2, ...umaLinha }}>
-                                      {[L.favorecido, L.contas.length === 1 ? "1 item" : `${L.contas.length} itens`,
-                                        L.numeroNota ? "NF " + L.numeroNota : "",
-                                        L.parcial ? "parcialmente pago" : ""].filter(Boolean).join(" · ")}
+                                      {[L.pedidos.length === 1 ? "1 pedido" : `${L.pedidos.length} pedidos`,
+                                        L.contas.length === 1 ? "1 item" : `${L.contas.length} itens`,
+                                        L.parcial ? "parcialmente pago" : ""].filter(Boolean).join(" \u00b7 ")}
                                     </div>
                                   </div>
                                   <div style={{ fontSize: 12.5, color: "#111827" }}>
                                     {L.vencimento ? new Date(L.vencimento + "T12:00:00").toLocaleDateString("pt-BR") : "a definir"}
                                   </div>
-                                  <div style={{ fontSize: 12, color: stP.forte ? "#111827" : "#4b5563", fontWeight: stP.forte ? 700 : 500 }}>{stP.label}</div>
-                                  <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", textAlign: isMobile ? "left" : "right" }}>
+                                  <div style={{ fontSize: 12, color: stL.forte ? "#111827" : "#4b5563", fontWeight: stL.forte ? 700 : 500 }}>{stL.label}</div>
+                                  <div style={{ fontSize: 13.5, fontWeight: 700, color: "#111827", textAlign: isMobile ? "left" : "right" }}>
                                     {fmtMoedaCtr(L.pago ? L.valorPago : L.valor)}
                                   </div>
-                                  {perm.podeEditar ? (
+                                  {perm.podeEditar && L.pedidosEmAberto > 1 ? (
                                     <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
-                                      <button onClick={() => alternarPagamentoPedido(L)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>
-                                        {L.pago ? "Desfazer" : "Pagar pedido"}
+                                      <button onClick={() => alternarPagamentoPedido(L)} style={{ ...C.btn, fontSize: 12, padding: "6px 12px" }}>
+                                        Pagar os {L.pedidosEmAberto} pedidos
                                       </button>
                                     </div>
                                   ) : <div />}
                                 </div>
-                                {abertaP && (
-                                  <div style={{ padding: "0 11px 10px 32px", background: "#fcfcfd" }}>
-                                    {L.contas.map(ic => (
-                                      <div key={ic.id} style={{ display: "grid",
-                                        gridTemplateColumns: isMobile ? "minmax(0,1fr) 92px" : "minmax(0,1.6fr) minmax(0,1fr) 110px",
-                                        gap: 10, padding: "5px 0", borderTop: "1px solid rgba(38,36,33,0.05)", alignItems: "center" }}>
-                                        <span style={{ fontSize: 12, color: "#111827", ...umaLinha }}>{ic.descricao}</span>
-                                        {!isMobile && (
-                                          <span style={{ fontSize: 11.5, color: "#6b7280", ...umaLinha }}>
-                                            {[nomeEtapa(ic.etapa), nomeConta(ic.contaId), ic.grupoMaterial].filter(Boolean).join(" · ")}
-                                          </span>
-                                        )}
-                                        <span style={{ fontSize: 12, color: "#111827", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                                          {fmtMoedaCtr(ic.pago ? (Number(ic.valorPago) || ic.valor) : ic.valor)}
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
+                                {abertaL && <div>{L.pedidos.map(pd => linhaDoPedido(pd, true))}</div>}
                               </div>
                             );
                           }
