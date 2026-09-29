@@ -20917,6 +20917,32 @@ function contasDoPedidoDaLoja(dados, pedido, novoId) {
   }));
 }
 
+// A conta contábil é quase sempre a mesma no pedido inteiro ("Material").
+// Repetida em cada item ela vira ruído e empurra para fora da linha o que
+// muda de item para item — quantidade, unidade e preço. No cabeçalho ela
+// aparece uma vez só. Quando o pedido mistura contas, o cabeçalho diz isso
+// em vez de esconder: é informação contábil, não detalhe.
+function contasDoPedidoDeConta(contas) {
+  const vistos = [];
+  for (const c of contas || []) {
+    const id = (c && c.contaId) || "";
+    if (id && vistos.indexOf(id) < 0) vistos.push(id);
+  }
+  return vistos;
+}
+
+// O unitário não é guardado: sai do valor já rateado dividido pela
+// quantidade. E é assim que tem que ser — com desconto no pedido, o preço
+// de tabela não é o que se paga, e quem confere a conta quer o que se paga.
+function unitarioDaConta(conta) {
+  const c = conta || {};
+  const q = cpNumero(c.quantidade);
+  if (!(q > 0)) return null;
+  const v = cpNumero(c.pago ? (c.valorPago || c.valor) : c.valor);
+  if (!(v > 0)) return null;
+  return Math.round((v / q) * 100) / 100;
+}
+
 // O que impede o pedido de entrar torto. Item sem etapa é erro, e não aviso:
 // é assim que "Sem etapa" para de crescer no quadro da obra.
 function validarPedido(pedido, pedidosDaLoja) {
@@ -32841,6 +32867,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                     </div>
                                     <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2, ...umaLinha }}>
                                       {[(recuado || semNomeDaLoja) ? "" : L.favorecido, L.contas.length === 1 ? "1 item" : `${L.contas.length} itens`,
+                                        (() => {
+                                          // A conta contábil vale para o pedido inteiro: dita uma vez aqui,
+                                          // sai de todas as linhas de item lá embaixo.
+                                          const cs = contasDoPedidoDeConta(L.contas);
+                                          if (!cs.length) return "";
+                                          if (cs.length === 1) return "conta " + nomeConta(cs[0]);
+                                          return "contas " + cs.map(nomeConta).filter(Boolean).join(" e ");
+                                        })(),
                                         L.numeroNota ? "NF " + L.numeroNota : "",
                                         L.parcial ? "parcialmente pago" : ""].filter(Boolean).join(" · ")}
                                     </div>
@@ -32862,21 +32896,60 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                 </div>
                                 {abertaP && (
                                   <div style={{ padding: recuado ? "0 11px 10px 50px" : "0 11px 10px 32px", background: "#fcfcfd" }}>
-                                    {L.contas.map(ic => (
-                                      <div key={ic.id} style={{ display: "grid",
-                                        gridTemplateColumns: isMobile ? "minmax(0,1fr) 92px" : "minmax(0,1.6fr) minmax(0,1fr) 110px",
-                                        gap: 10, padding: "5px 0", borderTop: "1px solid rgba(38,36,33,0.05)", alignItems: "center" }}>
-                                        <span style={{ fontSize: 12, color: "#111827", ...umaLinha }}>{ic.descricao}</span>
-                                        {!isMobile && (
-                                          <span style={{ fontSize: 11.5, color: "#6b7280", ...umaLinha }}>
-                                            {[nomeEtapa(ic.etapa), nomeConta(ic.contaId), ic.grupoMaterial].filter(Boolean).join(" · ")}
-                                          </span>
-                                        )}
-                                        <span style={{ fontSize: 12, color: "#111827", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                                          {fmtMoedaCtr(ic.pago ? (Number(ic.valorPago) || ic.valor) : ic.valor)}
-                                        </span>
-                                      </div>
-                                    ))}
+                                    {/* O que muda de item para item: quanto, de que unidade, a que
+                                        preço e quanto deu. Sem cabeçalho, uma coluna de números soltos
+                                        é adivinhação — então o cabeçalho vem junto. A etapa fica
+                                        embaixo do nome, que é onde ela não disputa espaço com o
+                                        número. */}
+                                    {(() => {
+                                      const GRADE = isMobile ? "minmax(0,1fr) 96px" : "minmax(0,1fr) 58px 92px 88px 104px";
+                                      const numero = { textAlign: "right", fontVariantNumeric: "tabular-nums" };
+                                      const cabeca = { fontSize: 10.5, color: "#9ca3af", fontWeight: 600,
+                                        textTransform: "uppercase", letterSpacing: 0.3 };
+                                      return (
+                                        <>
+                                          {!isMobile && (
+                                            <div style={{ display: "grid", gridTemplateColumns: GRADE, gap: 10, padding: "4px 0 2px" }}>
+                                              <span style={cabeca}>Item</span>
+                                              <span style={{ ...cabeca, ...numero }}>Qtd</span>
+                                              <span style={cabeca}>Unidade</span>
+                                              <span style={{ ...cabeca, ...numero }}>Unitário</span>
+                                              <span style={{ ...cabeca, ...numero }}>Total</span>
+                                            </div>
+                                          )}
+                                          {L.contas.map(ic => {
+                                            const total = ic.pago ? (Number(ic.valorPago) || ic.valor) : ic.valor;
+                                            const un = unitarioDaConta(ic);
+                                            const qtd = Number(ic.quantidade) || 0;
+                                            return (
+                                              <div key={ic.id} style={{ display: "grid", gridTemplateColumns: GRADE,
+                                                gap: 10, padding: "6px 0", borderTop: "1px solid rgba(38,36,33,0.05)", alignItems: "baseline" }}>
+                                                <div style={{ minWidth: 0 }}>
+                                                  <div style={{ fontSize: 12, color: "#111827", ...umaLinha }}>{ic.descricao}</div>
+                                                  {(nomeEtapa(ic.etapa) || (isMobile && qtd > 0)) && (
+                                                    <div style={{ fontSize: 10.5, color: "#9ca3af", marginTop: 1, ...umaLinha }}>
+                                                      {[nomeEtapa(ic.etapa),
+                                                        isMobile && qtd > 0
+                                                          ? `${qtdBR(qtd)} ${ic.unidade || ""}`.trim() + (un != null ? ` × ${valorBR(un)}` : "")
+                                                          : ""].filter(Boolean).join(" · ")}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                                {!isMobile && <span style={{ fontSize: 12, color: "#4b5563", ...numero }}>
+                                                  {qtd > 0 ? qtdBR(qtd) : "—"}</span>}
+                                                {!isMobile && <span style={{ fontSize: 12, color: "#4b5563", ...umaLinha }}>
+                                                  {ic.unidade || ""}</span>}
+                                                {!isMobile && <span style={{ fontSize: 12, color: "#4b5563", ...numero }}>
+                                                  {un != null ? valorBR(un) : "—"}</span>}
+                                                <span style={{ fontSize: 12, color: "#111827", fontWeight: 600, ...numero }}>
+                                                  {fmtMoedaCtr(total)}
+                                                </span>
+                                              </div>
+                                            );
+                                          })}
+                                        </>
+                                      );
+                                    })()}
                                   </div>
                                 )}
                               </div>

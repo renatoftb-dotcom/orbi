@@ -687,6 +687,32 @@ function contasDoPedidoDaLoja(dados, pedido, novoId) {
   }));
 }
 
+// A conta contábil é quase sempre a mesma no pedido inteiro ("Material").
+// Repetida em cada item ela vira ruído e empurra para fora da linha o que
+// muda de item para item — quantidade, unidade e preço. No cabeçalho ela
+// aparece uma vez só. Quando o pedido mistura contas, o cabeçalho diz isso
+// em vez de esconder: é informação contábil, não detalhe.
+function contasDoPedidoDeConta(contas) {
+  const vistos = [];
+  for (const c of contas || []) {
+    const id = (c && c.contaId) || "";
+    if (id && vistos.indexOf(id) < 0) vistos.push(id);
+  }
+  return vistos;
+}
+
+// O unitário não é guardado: sai do valor já rateado dividido pela
+// quantidade. E é assim que tem que ser — com desconto no pedido, o preço
+// de tabela não é o que se paga, e quem confere a conta quer o que se paga.
+function unitarioDaConta(conta) {
+  const c = conta || {};
+  const q = cpNumero(c.quantidade);
+  if (!(q > 0)) return null;
+  const v = cpNumero(c.pago ? (c.valorPago || c.valor) : c.valor);
+  if (!(v > 0)) return null;
+  return Math.round((v / q) * 100) / 100;
+}
+
 // O que impede o pedido de entrar torto. Item sem etapa é erro, e não aviso:
 // é assim que "Sem etapa" para de crescer no quadro da obra.
 function validarPedido(pedido, pedidosDaLoja) {

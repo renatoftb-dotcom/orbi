@@ -29,6 +29,7 @@ const modulo = new Function(`
            pedidoVazio, itemDoPedidoVazio, brutoDoItem, brutoDoPedido, totalDoPedido,
            itensRateados, contasDoPedidoDaLoja, validarPedido, pedidosPendentes, baixarPedidos,
            podeMexerNoPedido, removerContasDoPedido, linhasDePedido, linhasDeLoja,
+           contasDoPedidoDeConta, unitarioDaConta,
            pixDoPagamento, pixResumido, TIPOS_PIX, nomeDoTipoPix,
            MODOS_LANCAMENTO, modoLancamento,
            contasDaCotacao, contasDeCotacao,
@@ -1925,6 +1926,36 @@ teste("o pedido leva o copia-e-cola para as contas que gera", () => {
   const linha = modulo.linhasDePedido(contas)[0];
   assert.strictEqual(linha.pixCopiaECola, colar, "e a linha da fila também");
   assert.strictEqual(modulo.pixDoPagamento(linha, { id: "f1", nome: "Ourifer" }).valor, colar);
+});
+
+
+// ── O item da conta a pagar ────────────────────────────
+teste("a conta contábil do pedido sai uma vez, não por item", () => {
+  assert.deepStrictEqual(modulo.contasDoPedidoDeConta(
+    [{ contaId: "material" }, { contaId: "material" }, { contaId: "material" }]), ["material"]);
+});
+
+teste("pedido que mistura contas mostra as duas", () => {
+  assert.deepStrictEqual(modulo.contasDoPedidoDeConta(
+    [{ contaId: "material" }, { contaId: "ferramentas" }, { contaId: "material" }]),
+    ["material", "ferramentas"]);
+  assert.deepStrictEqual(modulo.contasDoPedidoDeConta([]), []);
+  assert.deepStrictEqual(modulo.contasDoPedidoDeConta([{ contaId: "" }]), []);
+});
+
+teste("o unitário sai do valor rateado, não do preço de tabela", () => {
+  assert.strictEqual(modulo.unitarioDaConta({ quantidade: 100, valor: 585 }), 5.85);
+  assert.strictEqual(modulo.unitarioDaConta({ quantidade: 3, valor: 10 }), 3.33);
+});
+
+teste("item pago usa o que foi pago de verdade", () => {
+  assert.strictEqual(modulo.unitarioDaConta({ quantidade: 2, valor: 100, pago: true, valorPago: 90 }), 45);
+});
+
+teste("sem quantidade ou sem valor não se inventa unitário", () => {
+  assert.strictEqual(modulo.unitarioDaConta({ quantidade: 0, valor: 50 }), null);
+  assert.strictEqual(modulo.unitarioDaConta({ quantidade: 5, valor: 0 }), null);
+  assert.strictEqual(modulo.unitarioDaConta(null), null);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
