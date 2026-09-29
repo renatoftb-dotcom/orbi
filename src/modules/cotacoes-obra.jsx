@@ -2567,8 +2567,11 @@ function cotPainel(isMobile, maxWidth) {
           width: "100%", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column", overflow: "hidden" }
       : { background: "#fff", borderRadius: 16, padding: 18, width: "100%", maxWidth: maxWidth || 760,
           maxHeight: "88vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" },
+    // A folga de baixo não é estética: sem ela o corte da rolagem cai em cima
+    // da borda do último bloco, e o cartão do fim aparece sempre sem a linha
+    // de baixo — como se estivesse cortado no meio.
     rolagem: { overflowY: "auto", flex: "1 1 auto", minHeight: 0, overscrollBehavior: "contain",
-      WebkitOverflowScrolling: "touch" },
+      paddingBottom: 6, WebkitOverflowScrolling: "touch" },
   };
 }
 
