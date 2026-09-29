@@ -76,7 +76,9 @@ const modulo = new Function(`
            orcamentoDaIA, casamentoDaIA, itensParaIA, avisoDaIA, pedidoDaIA, promoverCandidatos,
            andamentoDaLeitura, semMarca, buscarNoCatalogo, novoInsumoDoPedido, medirAssociacao,
            medidaDoTexto, palavraChave, familiasDoCatalogo, nomeNoPadrao, gruposDoCatalogo, codigoDoGrupo,
-           medidasDeEmbalagem, divergenciaDeEmbalagem, escolhasDoCasamento };
+           medidasDeEmbalagem, divergenciaDeEmbalagem, escolhasDoCasamento,
+           indiceDoCatalogo, casarNoCatalogo, sugestaoDoCatalogo, comApelidoDaLoja,
+           cotPalavrasDoNome };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -2037,6 +2039,120 @@ teste("insumo que só serve a uma etapa entra no pedido já com ela", () => {
   // com etapa na cotação, o que não tem padrão herda dela
   const comEtapa = M.pedidoDaCotacao({ ...cot, etapaId: "contrapiso_int_1" }, cot.propostas[0], [tubo, esgoto, cimento], 30);
   assert.deepStrictEqual(comEtapa.itens.map(i => i.etapa), ["hidraulica", "esgoto_pluvial", "contrapiso_int_1"]);
+});
+
+
+// ── o papel da loja contra o nome do catálogo ─────────────
+
+// Um catálogo pequeno, mas com as armadilhas de verdade: prefixo de
+// categoria que a loja nunca escreve ("Aço - "), plural, medida colada na
+// letra e vizinhos quase iguais que não podem ganhar.
+const CATALOGO_TESTE = [
+  { codigo: "CIM-010", nome: "Cal Hidratado 20kg", grupo: "Cimento", unidade: "sc" },
+  { codigo: "TIN-050", nome: "Fita Crepe", grupo: "Tintas", unidade: "un" },
+  { codigo: "ACO-101", nome: "A\u00e7o - Pregos 17x21", grupo: "A\u00e7o", unidade: "kg" },
+  { codigo: "ACO-102", nome: "A\u00e7o - Pregos 15x21", grupo: "A\u00e7o", unidade: "kg" },
+  { codigo: "ACO-103", nome: "A\u00e7o - Pregos 18x24", grupo: "A\u00e7o", unidade: "kg" },
+  { codigo: "ACO-200", nome: "A\u00e7o - Arame Recozido", grupo: "A\u00e7o", unidade: "kg" },
+  { codigo: "HID-300", nome: "PVC - Esgoto - Tubo 100mm", grupo: "Hidr\u00e1ulica", unidade: "br" },
+  { codigo: "HID-301", nome: "PVC - Esgoto - Tubo 50mm", grupo: "Hidr\u00e1ulica", unidade: "br" },
+  { codigo: "FER-010", nome: "Disco Corte Inox", grupo: "Ferramentas", unidade: "un" },
+  { codigo: "ARE-001", nome: "Areia M\u00e9dia", grupo: "Areia e pedra", unidade: "m3" },
+  { codigo: "PRE-001", nome: "Pedreiro", grupo: "Prestadores de servi\u00e7os", tipo: "prestador" },
+  { codigo: "OUT-999", nome: "Item desativado", grupo: "Outros", ativo: false },
+];
+const idxTeste = () => modulo.indiceDoCatalogo(CATALOGO_TESTE);
+
+teste("letra colada em n\u00famero se separa e marca n\u00e3o conta", () => {
+  assert.deepStrictEqual(modulo.cotPalavrasDoNome("Cal Hidratado Ch-iii 20kg - Pinocal"),
+    ["cal", "hidratado", "ch", "iii", "20", "kg", "pinocal"]);
+  assert.deepStrictEqual(modulo.cotPalavrasDoNome("Fita Crepe 48mmx50m - Tigre"),
+    ["fita", "crepe", "48", "mm", "50", "m"], "Tigre \u00e9 marca; o x entre medidas n\u00e3o diz nada");
+  assert.deepStrictEqual(modulo.cotPalavrasDoNome(""), []);
+});
+
+teste("prestador e item desativado ficam fora do \u00edndice", () => {
+  const idx = idxTeste();
+  assert.strictEqual(idx.itens.length, 10);
+  assert.ok(!idx.itens.some(x => x.insumo.codigo === "PRE-001"), "n\u00e3o se compra prestador num pedido de loja");
+  assert.ok(!idx.itens.some(x => x.insumo.codigo === "OUT-999"));
+});
+
+teste("o nome do cat\u00e1logo cabendo dentro da descri\u00e7\u00e3o da loja \u00e9 o casamento", () => {
+  const idx = idxTeste();
+  const s = modulo.sugestaoDoCatalogo("Cal Hidratado Ch-iii 20kg - Pinocal", idx);
+  assert.strictEqual(s.codigo, "CIM-010");
+  assert.strictEqual(s.segura, true, "cabe inteiro e n\u00e3o tem concorrente");
+
+  const f = modulo.sugestaoDoCatalogo("Fita Crepe 48mmx50m - Tigre", idx);
+  assert.strictEqual(f.codigo, "TIN-050");
+  assert.strictEqual(f.segura, true);
+});
+
+teste("a medida decide entre vizinhos quase iguais", () => {
+  const idx = idxTeste();
+  assert.strictEqual(modulo.sugestaoDoCatalogo("Prego 17x21 1kg", idx).codigo, "ACO-101");
+  assert.strictEqual(modulo.sugestaoDoCatalogo("Prego 18x24 1kg", idx).codigo, "ACO-103");
+  assert.strictEqual(modulo.sugestaoDoCatalogo("Tubo esgoto 100mm", idx).codigo, "HID-300");
+  assert.strictEqual(modulo.sugestaoDoCatalogo("Tubo esgoto 50mm", idx).codigo, "HID-301");
+});
+
+teste("prefixo de categoria e plural n\u00e3o atrapalham", () => {
+  const idx = idxTeste();
+  // a loja escreve "Prego", o cat\u00e1logo escreve "A\u00e7o - Pregos": plural e o
+  // "A\u00e7o - " que a loja nunca digita n\u00e3o podem derrubar o casamento
+  const r = modulo.casarNoCatalogo("Prego 17x21 1kg", idx, 3);
+  assert.strictEqual(r[0].insumo.codigo, "ACO-101");
+  assert.ok(r[0].score >= 0.72, "casa forte mesmo escrito diferente");
+  assert.ok(r.every(x => x.insumo.codigo !== "ACO-102"),
+    "o vizinho de outra medida nem chega a ser candidato");
+});
+
+teste("acento e caixa n\u00e3o mudam nada", () => {
+  const idx = idxTeste();
+  assert.strictEqual(modulo.sugestaoDoCatalogo("AREIA MEDIA", idx).codigo, "ARE-001");
+  assert.strictEqual(modulo.sugestaoDoCatalogo("areia m\u00e9dia", idx).codigo, "ARE-001");
+});
+
+teste("o que n\u00e3o existe no cat\u00e1logo n\u00e3o inventa casamento", () => {
+  const idx = idxTeste();
+  assert.strictEqual(modulo.sugestaoDoCatalogo("Linha Trancada Firme Multifio 100m", idx), null);
+  assert.strictEqual(modulo.sugestaoDoCatalogo("", idx), null);
+  assert.deepStrictEqual(modulo.casarNoCatalogo("qualquer coisa", null, 3), []);
+});
+
+teste("empate t\u00e9cnico sugere, mas n\u00e3o entra no casar tudo", () => {
+  // a loja escreveu s\u00f3 "Prego 21": 17x21 e 15x21 ficam exatamente iguais,
+  // e a m\u00e1quina n\u00e3o tem como saber qual dos dois \u00e9
+  const s = modulo.sugestaoDoCatalogo("Prego 21", idxTeste());
+  assert.ok(s, "ainda sugere \u2014 quem decide \u00e9 a pessoa");
+  assert.strictEqual(s.segura, false, "empate t\u00e9cnico n\u00e3o se resolve sozinho");
+});
+
+teste("o texto da loja vira apelido do insumo, e s\u00f3 uma vez", () => {
+  const um = modulo.comApelidoDaLoja(CATALOGO_TESTE, "CIM-010", "Cal Hidratado Ch-iii 20kg - Pinocal");
+  assert.strictEqual(um.mudou, true);
+  const alvo = um.insumos.find(i => i.codigo === "CIM-010");
+  assert.deepStrictEqual(alvo.aliases, ["Cal Hidratado Ch-iii 20kg - Pinocal"]);
+  assert.ok(CATALOGO_TESTE.find(i => i.codigo === "CIM-010").aliases === undefined,
+    "o cat\u00e1logo recebido n\u00e3o \u00e9 alterado no lugar");
+
+  const dois = modulo.comApelidoDaLoja(um.insumos, "CIM-010", "CAL HIDRATADO CH-III 20KG - PINOCAL");
+  assert.strictEqual(dois.mudou, false, "mesmo texto com outra caixa j\u00e1 est\u00e1 guardado");
+
+  const igual = modulo.comApelidoDaLoja(CATALOGO_TESTE, "TIN-050", "Fita Crepe");
+  assert.strictEqual(igual.mudou, false, "apelido igual ao pr\u00f3prio nome n\u00e3o serve para nada");
+
+  assert.strictEqual(modulo.comApelidoDaLoja(CATALOGO_TESTE, "", "x").mudou, false);
+  assert.strictEqual(modulo.comApelidoDaLoja(CATALOGO_TESTE, "CIM-010", "   ").mudou, false);
+});
+
+teste("com o apelido guardado, o pr\u00f3ximo pedido casa exato \u2014 sem aposta", () => {
+  const texto = "Cal Hidratado Ch-iii 20kg - Pinocal";
+  const depois = modulo.comApelidoDaLoja(CATALOGO_TESTE, "CIM-010", texto).insumos;
+  const r = modulo.resolverInsumo(texto, depois);
+  assert.strictEqual(r.confianca, "alias");
+  assert.strictEqual(r.insumo.codigo, "CIM-010");
 });
 
 for (const [nome, fn] of testes) {

@@ -502,6 +502,132 @@ function buscarNoCatalogo(insumos, termo, limite) {
     .slice(0, limite || 60);
 }
 
+// ── Casar a descrição da loja com o catálogo ─────────────
+// O papel da loja escreve "Cal Hidratado Ch-iii 20kg - Pinocal"; o catálogo
+// tem "Cal Hidratado 20kg". Letra a letra nunca batem — e é por isso que
+// resolverInsumo, que exige igualdade de código, apelido ou nome, devolvia
+// todos os onze itens do pedido como "fora do catálogo".
+//
+// A conta aqui é outra. Cada palavra do nome do catálogo vale conforme sua
+// raridade: "pvc" está em trezentos insumos e não decide nada; "vergalhao"
+// está em três e decide sozinho. O placar é quanto do PESO do nome do
+// catálogo aparece na descrição da loja, mais um pedaço de quanto da
+// descrição foi aproveitado — senão um nome curto e genérico casaria com
+// tudo. Marca fica de fora (a loja põe, o catálogo não) e letra colada em
+// número se separa, porque "8mm" e "8 mm" são a mesma medida.
+//
+// O que sai daqui é uma aposta, nunca uma decisão: quem carimba o insumo é
+// a pessoa, com um toque. O trabalho da máquina é pôr a resposta certa na
+// frente — e, depois que ela confirma, o texto da loja vira apelido do
+// insumo e no mês seguinte o casamento é exato, sem aposta nenhuma.
+
+// "x" entra aqui: em "10 x 3" ele só separa medidas, não diz o que a coisa é.
+const COT_VAZIAS_CATALOGO = new Set(("de da do dos das e com para pra por a o em un x").split(" "));
+
+function cotPalavrasDoNome(texto) {
+  return cotSemAcento(texto)
+    // "48mmx50m" é 48mm por 50m: o x que antecede número só separa medida.
+    .replace(/x(?=\d)/g, " ")
+    .replace(/([a-z])(\d)/g, "$1 $2")
+    .replace(/(\d)([a-z])/g, "$1 $2")
+    .split(" ")
+    .filter((w) => w && !COT_MARCAS.has(w) && !COT_VAZIAS_CATALOGO.has(w));
+}
+
+function cotDistancia(a, b) {
+  if (typeof distanciaTexto === "function") return distanciaTexto(a, b);
+  return a === b ? 0 : 99;
+}
+
+// "pregos" casa com "prego"; "0mm" com "0mmm" não precisa casar.
+function cotCasaPalavra(a, b) {
+  if (a === b) return 1;
+  if (a.length >= 4 && b.length >= 4) {
+    if (cotDistancia(a, b) <= 1) return 0.92;
+    if (b.indexOf(a) === 0 || a.indexOf(b) === 0) return 0.85;
+  }
+  return 0;
+}
+
+// O peso das palavras sai do catálogo inteiro, então se calcula uma vez e
+// serve para os onze itens do pedido.
+function indiceDoCatalogo(insumos) {
+  const itens = [];
+  const em = new Map();
+  for (const i of insumos || []) {
+    if (!i || i.tipo === "prestador" || i.ativo === false) continue;
+    const palavras = cotPalavrasDoNome(i.nome);
+    if (!palavras.length) continue;
+    itens.push({ insumo: i, palavras });
+    for (const w of new Set(palavras)) em.set(w, (em.get(w) || 0) + 1);
+  }
+  const n = itens.length || 1;
+  return { itens, peso: (w) => Math.log((n + 1) / ((em.get(w) || 0) + 1)) + 0.2 };
+}
+
+function casarNoCatalogo(descricao, indice, limite) {
+  const ts = cotPalavrasDoNome(descricao);
+  if (!ts.length || !indice || !indice.itens.length) return [];
+  const achados = [];
+  for (const it of indice.itens) {
+    let num = 0, den = 0;
+    for (const t of it.palavras) {
+      const w = indice.peso(t);
+      den += w;
+      let melhor = 0;
+      for (const s of ts) { const v = cotCasaPalavra(t, s); if (v > melhor) melhor = v; }
+      num += w * melhor;
+    }
+    if (!den) continue;
+    let usados = 0;
+    for (const s of ts) {
+      for (const t of it.palavras) { if (cotCasaPalavra(t, s) > 0) { usados++; break; } }
+    }
+    const score = (num / den) * 0.78 + (usados / ts.length) * 0.22;
+    if (score >= 0.5) achados.push({ insumo: it.insumo, score: Math.round(score * 100) / 100 });
+  }
+  achados.sort((a, b) => (b.score - a.score)
+    || (String(a.insumo.nome).length - String(b.insumo.nome).length));
+  return achados.slice(0, limite || 5);
+}
+
+// Segura = boa E sozinha. É a que entra no "casar tudo de uma vez"; as
+// outras continuam valendo um toque cada, porque a segunda colocada estar
+// colada quer dizer que a máquina não sabe qual das duas é.
+const COT_SUGESTAO_SEGURA = 0.72;
+const COT_SUGESTAO_FOLGA = 0.08;
+function sugestaoDoCatalogo(descricao, indice) {
+  const r = casarNoCatalogo(descricao, indice, 3);
+  if (!r.length) return null;
+  const folga = r.length > 1 ? r[0].score - r[1].score : r[0].score;
+  return {
+    codigo: r[0].insumo.codigo || "",
+    nome: r[0].insumo.nome || "",
+    grupo: r[0].insumo.grupo || "",
+    score: r[0].score,
+    segura: r[0].score >= COT_SUGESTAO_SEGURA && folga >= COT_SUGESTAO_FOLGA,
+  };
+}
+
+// O apelido é o que faz a próxima vez ser exata: guardado no insumo, a
+// mesma linha do mesmo papel casa por igualdade no mês seguinte. Só entra
+// texto que ainda não está lá e que é diferente do próprio nome.
+function comApelidoDaLoja(insumos, codigo, descricao) {
+  const texto = String(descricao == null ? "" : descricao).trim();
+  if (!codigo || !texto) return { insumos: insumos || [], mudou: false };
+  let mudou = false;
+  const lista = (insumos || []).map((i) => {
+    if (!i || i.codigo !== codigo) return i;
+    const atuais = i.aliases || [];
+    const alvo = cotSemAcento(texto);
+    if (!alvo || alvo === cotSemAcento(i.nome)) return i;
+    if (atuais.some((a) => cotSemAcento(a) === alvo)) return i;
+    mudou = true;
+    return { ...i, aliases: atuais.concat([texto]) };
+  });
+  return { insumos: lista, mudou };
+}
+
 // ── O item novo no padrão do catálogo ───────────────────────────
 // O catálogo tem família: "PVC - Alimentação Água Fria - Luva 32mm",
 // "... - Luva 50mm", "... - Luva União 50mm". O item novo entra na mesma
@@ -2251,6 +2377,19 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     save({ ...data, materiais: [...todos, novo] });
     return novo;
   };
+  // O texto que a loja usa vira apelido do insumo assim que a pessoa
+  // confirma o casamento. É o que faz o pedido do mês que vem casar sozinho,
+  // sem aposta: resolverInsumo acha por apelido antes de qualquer palpite.
+  const aprenderApelidos = (pares) => {
+    let lista = data.materiais || [];
+    let mudou = false;
+    for (const par of pares || []) {
+      const r = comApelidoDaLoja(lista, par.codigo, par.descricao);
+      lista = r.insumos;
+      if (r.mudou) mudou = true;
+    }
+    if (mudou) save({ ...data, materiais: lista });
+  };
   const unidadesCatalogo = unidadesDoCatalogo(insumos);
   // O que o pedido precisa dizer além da lista: de quem parte e para onde vai.
   const ctxPedido = {
@@ -3505,6 +3644,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           isMobile={isMobile} dinheiro={dinheiro} editando={!!formPedido.editando}
           origem={formPedido.origem}
           aoMudar={(p) => setFormPedido({ ...formPedido, pedido: p })}
+          aoAprender={aprenderApelidos}
           aoFechar={() => setFormPedido(null)} aoLancar={lancarPedido} />
       )}
 
@@ -4816,7 +4956,7 @@ function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGe
 // ou os dois. O que a tela cobra é o que o P&L precisa e o papel não traz:
 // a etapa de cada item. Sem ela o pedido não é lançado — é assim que o
 // quadro por etapa para de encher de "Sem etapa".
-function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editando, origem, aoMudar, aoFechar, aoLancar }) {
+function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editando, origem, aoMudar, aoFechar, aoLancar, aoAprender }) {
   const E = COT_ESTILO;
   const p = pedido;
   const P = cotPainel(isMobile, 980);
@@ -4829,6 +4969,14 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
 
   const itens = p.itens || [];
   const mexerItem = (i, muda) => aoMudar({ ...p, itens: itens.map((x, j) => (j === i ? { ...x, ...muda } : x)) });
+  // O peso das palavras sai do catálogo inteiro: calcula uma vez e serve
+  // para os onze itens do papel.
+  const indiceCat = useMemo(() => indiceDoCatalogo(insumos || []), [insumos]);
+  const opcoesCatalogo = useMemo(() => (insumos || [])
+    .filter((i) => i && i.tipo !== "prestador" && i.ativo !== false)
+    .map((i) => ({ valor: i.codigo, rotulo: i.nome, grupo: i.grupo || "", extra: (i.aliases || []).join(" ") })),
+    [insumos]);
+  const [procurando, setProcurando] = useState(-1);
   const bruto = brutoDoPedido(p);
   const total = totalDoPedido(p);
   const rateados = itensRateados(p);
@@ -4837,15 +4985,48 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
 
   // O nome que a loja usa vira o insumo do catálogo — e o grupo do insumo é
   // o grupo de material da subconta, de graça.
+  // A etapa já escolhida à mão manda: o insumo só preenche o que está vazio.
+  function comInsumo(item, ins) {
+    return { ...item, insumoCodigo: ins.codigo || "", grupoMaterial: ins.grupo || item.grupoMaterial || "",
+      unidade: item.unidade || ins.unidade || "",
+      etapa: item.etapa || ins.etapaPadrao || "",
+      contaId: item.contaId || ins.contaPadrao || "",
+      sugestao: null };
+  }
+
+  // Primeiro o caminho exato — código, apelido, nome igual —, que é o que
+  // carimba o insumo sozinho. Só se ele não achar é que entra a aposta, e
+  // aposta fica guardada como sugestão, esperando um toque.
   function casarItem(item) {
-    if (typeof resolverInsumo !== "function") return item;
-    const r = resolverInsumo(item.descricao, insumos || []);
-    if (!r || !r.insumo) return item;
-    // A etapa já escolhida à mão manda: o insumo só preenche o que está vazio.
-    return { ...item, insumoCodigo: r.insumo.codigo || "", grupoMaterial: r.insumo.grupo || item.grupoMaterial || "",
-      unidade: item.unidade || r.insumo.unidade || "",
-      etapa: item.etapa || r.insumo.etapaPadrao || "",
-      contaId: item.contaId || r.insumo.contaPadrao || "" };
+    if (typeof resolverInsumo === "function") {
+      const r = resolverInsumo(item.descricao, insumos || []);
+      if (r && r.insumo) return comInsumo(item, r.insumo);
+    }
+    const sug = sugestaoDoCatalogo(item.descricao, indiceCat);
+    return { ...item, insumoCodigo: "", sugestao: sug };
+  }
+
+  function aplicarInsumo(i, codigo) {
+    const ins = (insumos || []).find((x) => x && x.codigo === codigo);
+    const it = itens[i];
+    if (!ins || !it) return;
+    mexerItem(i, comInsumo(it, ins));
+    if (aoAprender) aoAprender([{ codigo: ins.codigo, descricao: it.descricao }]);
+  }
+
+  // As sugestões seguras de uma vez: onze toques viram um.
+  const paraCasar = itens.filter((x) => !x.insumoCodigo && x.sugestao && x.sugestao.segura).length;
+  function casarOsSeguros() {
+    const aprendidos = [];
+    const novos = itens.map((x) => {
+      if (x.insumoCodigo || !x.sugestao || !x.sugestao.segura) return x;
+      const ins = (insumos || []).find((y) => y && y.codigo === x.sugestao.codigo);
+      if (!ins) return x;
+      aprendidos.push({ codigo: ins.codigo, descricao: x.descricao });
+      return comInsumo(x, ins);
+    });
+    aoMudar({ ...p, itens: novos });
+    if (aoAprender && aprendidos.length) aoAprender(aprendidos);
   }
 
   async function lerPdf(arquivo) {
@@ -4964,6 +5145,21 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
               placeholder="cole aqui o código que a loja mandou — em branco, vale a chave do cadastro" />
           </div>
 
+          {/* ── o catálogo de uma vez só ── */}
+          {paraCasar > 0 && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10,
+              padding: "8px 10px", borderRadius: 10, border: "1px solid rgba(4,116,244,0.30)", background: "#eef5ff" }}>
+              <span style={{ fontSize: 11.5, color: "#0474f4", fontWeight: 600 }}>
+                {paraCasar === 1 ? "1 item reconhecido no catálogo" : paraCasar + " itens reconhecidos no catálogo"}
+              </span>
+              <button type="button" style={{ ...E.btn, fontSize: 11.5, padding: "5px 12px" }}
+                onClick={casarOsSeguros}>Casar com o catálogo</button>
+              <span style={{ fontSize: 11, color: "#4b5563" }}>
+                o nome que a loja usa fica guardado como apelido do insumo — no próximo pedido ele casa sozinho
+              </span>
+            </div>
+          )}
+
           {/* ── a etapa de uma vez só, e a exceção corrigida item a item ── */}
           {itens.length > 1 && (
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
@@ -4993,9 +5189,41 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
                 onChange={(e) => mexerItem(i, { descricao: e.target.value })}
                 onBlur={() => mexerItem(i, casarItem(it))} />
             );
-            const linhaCatalogo = (
-              <div style={{ fontSize: 10, color: it.insumoCodigo ? "#15803d" : "#9ca3af", marginTop: 2 }}>
-                {it.insumoCodigo ? `${it.insumoCodigo}${it.grupoMaterial ? " · " + it.grupoMaterial : ""}` : "fora do catálogo"}
+            const elo = { background: "none", border: "none", padding: 0, fontFamily: "inherit",
+              fontSize: 10.5, color: "#6b7280", cursor: "pointer", textDecoration: "underline" };
+            const linhaCatalogo = procurando === i ? (
+              <div style={{ marginTop: 3 }}>
+                <SelectBusca style={{ ...celStyle, fontSize: 11.5 }} value={it.insumoCodigo || ""}
+                  abrirAoMontar placeholder="Procurar no catálogo…" vazio="— escolher do catálogo —"
+                  opcoes={opcoesCatalogo} aoFechar={() => setProcurando(-1)}
+                  onChange={(v) => { setProcurando(-1); aplicarInsumo(i, v); }} />
+              </div>
+            ) : (
+              <div style={{ fontSize: 10.5, marginTop: 3, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                {it.insumoCodigo ? (
+                  <>
+                    <span style={{ color: "#15803d" }}>
+                      {it.insumoCodigo}{it.grupoMaterial ? " · " + it.grupoMaterial : ""}
+                    </span>
+                    <button type="button" style={elo} onClick={() => setProcurando(i)}>trocar</button>
+                  </>
+                ) : it.sugestao ? (
+                  <>
+                    <span style={{ color: "#9ca3af" }}>parece</span>
+                    <button type="button" title={"usar “" + it.sugestao.nome + "” do catálogo"}
+                      style={{ ...elo, color: "#0474f4", fontWeight: 600, textDecoration: "none",
+                        border: "1px solid rgba(4,116,244,0.35)", borderRadius: 20, padding: "1px 8px" }}
+                      onClick={() => aplicarInsumo(i, it.sugestao.codigo)}>
+                      {it.sugestao.nome}
+                    </button>
+                    <button type="button" style={elo} onClick={() => setProcurando(i)}>outro</button>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ color: "#9ca3af" }}>fora do catálogo</span>
+                    <button type="button" style={elo} onClick={() => setProcurando(i)}>procurar</button>
+                  </>
+                )}
               </div>
             );
             const campoQtd = (

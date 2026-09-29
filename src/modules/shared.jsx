@@ -2143,10 +2143,19 @@ function SelectBusca(props) {
   const refDigitado = useRef({ texto: "", quando: 0 });
   // O ouvinte de clique fora é registrado uma vez; o ref mantém o fechar atual.
   const fecharRef = useRef(function () {});
+  // O campo de busca só existe depois que o painel foi medido; por isso quem
+  // põe o cursor nele é o próprio nascimento do campo, e não um temporizador
+  // que pode disparar antes — ou depois de o clique devolver o foco ao corpo.
+  const jaFocou = useRef(false);
 
   const valorAtual = props.value == null ? "" : String(props.value);
   const escolhida = lista.filter(function (o) { return o.valor === valorAtual; })[0];
   const filtradas = useMemo(function () { return filtrarOpcoes(lista, termo); }, [lista, termo]);
+  // O catálogo de insumos passa de mil linhas: desenhar todas só para a
+  // pessoa digitar três letras é trabalho jogado fora. Mostra as primeiras e
+  // avisa que refinar a busca traz o resto.
+  const teto = props.teto == null ? 200 : props.teto;
+  const visiveis = useMemo(function () { return filtradas.slice(0, teto); }, [filtradas, teto]);
   // Um select de duas opções (Material/Prestador) só piora com campo de busca.
   const minimo = props.minimoParaBusca == null ? 6 : props.minimoParaBusca;
   const comBusca = props.semBusca ? false : lista.length >= minimo;
@@ -2214,6 +2223,7 @@ function SelectBusca(props) {
   }, [aberto, marcado, termo]);
 
   function abrir(comLetra) {
+    jaFocou.current = false;
     setTermo(comLetra || "");
     setMarcado(0);
     setAberto(true);
@@ -2241,7 +2251,7 @@ function SelectBusca(props) {
     }
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setMarcado(function (m) { return Math.min(filtradas.length - 1, m + 1); });
+      setMarcado(function (m) { return Math.min(visiveis.length - 1, m + 1); });
       return;
     }
     if (e.key === "ArrowUp") {
@@ -2250,10 +2260,10 @@ function SelectBusca(props) {
       return;
     }
     if (e.key === "Home") { e.preventDefault(); setMarcado(0); return; }
-    if (e.key === "End") { e.preventDefault(); setMarcado(Math.max(0, filtradas.length - 1)); return; }
+    if (e.key === "End") { e.preventDefault(); setMarcado(Math.max(0, visiveis.length - 1)); return; }
     if (e.key === "Enter") {
       e.preventDefault();
-      const o = filtradas[marcado];
+      const o = visiveis[marcado];
       if (o) escolher(o);
       return;
     }
@@ -2265,8 +2275,8 @@ function SelectBusca(props) {
       d.texto = (agora - d.quando < 900 ? d.texto : "") + e.key;
       d.quando = agora;
       const alvo = buscaNormal(d.texto);
-      for (let i = 0; i < filtradas.length; i++) {
-        if (buscaNormal(filtradas[i].rotulo).indexOf(alvo) === 0) { setMarcado(i); break; }
+      for (let i = 0; i < visiveis.length; i++) {
+        if (buscaNormal(visiveis[i].rotulo).indexOf(alvo) === 0) { setMarcado(i); break; }
       }
     }
   }
@@ -2312,7 +2322,11 @@ function SelectBusca(props) {
           }}>
           {comBusca && (
             <div style={{ padding: 8, borderBottom: "1px solid rgba(38,36,33,0.08)", flexShrink: 0 }}>
-              <input ref={refBusca} value={termo} onKeyDown={aoTeclar}
+              <input value={termo} onKeyDown={aoTeclar}
+                ref={function (el) {
+                  refBusca.current = el;
+                  if (el && !jaFocou.current) { jaFocou.current = true; el.focus(); }
+                }}
                 placeholder={props.placeholder || "Procurar…"}
                 onChange={function (e) { setTermo(e.target.value); setMarcado(0); }}
                 style={{
@@ -2322,13 +2336,13 @@ function SelectBusca(props) {
             </div>
           )}
           <div style={{ overflowY: "auto", flex: 1 }}>
-            {filtradas.length === 0 && (
+            {visiveis.length === 0 && (
               <div style={{ padding: "12px 12px", fontSize: 12.5, color: "#9ca3af" }}>
                 nada com esse nome
               </div>
             )}
-            {filtradas.map(function (o, i) {
-              const cabecalho = o.grupo && (i === 0 || filtradas[i - 1].grupo !== o.grupo);
+            {visiveis.map(function (o, i) {
+              const cabecalho = o.grupo && (i === 0 || visiveis[i - 1].grupo !== o.grupo);
               const atual = o.valor === valorAtual;
               return (
                 <Fragment key={o.valor + "\u0000" + i}>
@@ -2353,6 +2367,11 @@ function SelectBusca(props) {
                 </Fragment>
               );
             })}
+            {filtradas.length > visiveis.length && (
+              <div style={{ padding: "8px 12px", fontSize: 11, color: "#9ca3af", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+                mostrando {visiveis.length} de {filtradas.length} — escreva mais para achar o resto
+              </div>
+            )}
           </div>
         </div>
       )}
