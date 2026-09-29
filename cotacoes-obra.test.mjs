@@ -78,7 +78,8 @@ const modulo = new Function(`
            medidaDoTexto, palavraChave, familiasDoCatalogo, nomeNoPadrao, gruposDoCatalogo, codigoDoGrupo,
            medidasDeEmbalagem, divergenciaDeEmbalagem, escolhasDoCasamento,
            indiceDoCatalogo, casarNoCatalogo, sugestaoDoCatalogo, comApelidoDaLoja,
-           cotPalavrasDoNome, cotPartesDoNome, sugestoesDaIA, textoParaAIA };
+           cotPalavrasDoNome, cotPartesDoNome, cotPalavrasDaLoja, cotCasaPalavra,
+           sugestoesDaIA, textoParaAIA };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -2344,6 +2345,75 @@ teste("mesmo material em duas gavetas vira pergunta, não carimbo", () => {
   const sg = modulo.sugestaoDoCatalogo("Fita Isolante 10 Mt", modulo.indiceDoCatalogo(dois));
   assert.ok(sg, "deveria achar as duas");
   assert.strictEqual(sg.segura, false, "empate entre gavetas não pode carimbar sozinho");
+});
+
+
+// ── O ruído do papel da loja ─────────────────────────────
+teste("código interno da loja sai da conta", () => {
+  assert.deepStrictEqual(modulo.cotPalavrasDaLoja("Disco Diamantado Eco 110mm Cod 61699 - Cortag"),
+    ["disco", "diamantado", "110", "mm"]);
+  assert.deepStrictEqual(modulo.cotPalavrasDaLoja("Cabo Flex Ref 12345 2,5mm"),
+    ["cabo", "flex", "2", "5", "mm"]);
+});
+
+teste("número de quatro dígitos é código, não medida", () => {
+  assert.ok(!modulo.cotPalavrasDaLoja("Disco 61699").includes("61699"));
+  assert.ok(modulo.cotPalavrasDaLoja("Prego 17x21").includes("17"), "medida curta fica");
+});
+
+teste("descrição que é só ruído não volta vazia", () => {
+  assert.deepStrictEqual(modulo.cotPalavrasDaLoja("Cod 61699"), ["cod", "61699"]);
+});
+
+teste("zero à esquerda e abreviação de unidade casam", () => {
+  assert.strictEqual(modulo.cotCasaPalavra("05", "5"), 1);
+  assert.strictEqual(modulo.cotCasaPalavra("3", "03"), 1);
+  assert.strictEqual(modulo.cotCasaPalavra("17", "18"), 0);
+  assert.ok(modulo.cotCasaPalavra("mts", "mt") >= 0.9);
+  assert.strictEqual(modulo.cotCasaPalavra("kg", "mm"), 0);
+});
+
+// ── Os itens que a nota da Ourifer trazia ─────────────────
+const CAT_LOJA = [
+  { codigo:"FER-024", nome:"Disco Diamantado Corte Parede", grupo:"Ferramentas", aliases:[] },
+  { codigo:"FER-010", nome:"Ferramentas - Disco Corte Inox", grupo:"Ferramentas", aliases:[] },
+  { codigo:"FER-020", nome:"Ferramentas - Disco Serra Circular", grupo:"Ferramentas", aliases:[] },
+  { codigo:"MAD-020", nome:"Madeira Caixaria - Sarrafos de 05cm x 3mts", grupo:"Madeira", aliases:[] },
+  { codigo:"MAD-010", nome:"Madeira Caixaria - Tábuas de 10cm x 3mts", grupo:"Madeira", aliases:[] },
+  { codigo:"ACO-101", nome:"Aço - Pregos 17x21", grupo:"Aço", aliases:[] },
+  { codigo:"CIM-010", nome:"Cimento - Cal Hidratado 20kg", grupo:"Cimento", aliases:[] },
+];
+
+teste("“Disco Diamantado Segmentado Eco 110mm Cod 61699” chega ao disco diamantado", () => {
+  const sg = modulo.sugestaoDoCatalogo("Disco Diamantado Segmentado Eco 110mm Cod 61699 - Cortag",
+    modulo.indiceDoCatalogo(CAT_LOJA));
+  assert.ok(sg, "sumia da lista inteira — nem candidato era");
+  assert.strictEqual(sg.nome, "Disco Diamantado Corte Parede");
+  assert.strictEqual(sg.segura, false, "são discos diferentes: propõe, não carimba");
+});
+
+teste("a medida escrita de outro jeito casa do mesmo jeito", () => {
+  const idx = modulo.indiceDoCatalogo(CAT_LOJA);
+  const sarrafo = modulo.sugestaoDoCatalogo("Sarrafo 5x2.3x3.00mt", idx);
+  assert.strictEqual(sarrafo && sarrafo.nome, "Madeira Caixaria - Sarrafos de 05cm x 3mts",
+    "“05cm” e “5”, “3mts” e “3.00mt”");
+  assert.ok(sarrafo.segura);
+  const tabua = modulo.sugestaoDoCatalogo("Tabua De Pinos 10x2.0x3.00mt", idx);
+  assert.strictEqual(tabua && tabua.nome, "Madeira Caixaria - Tábuas de 10cm x 3mts");
+  assert.ok(tabua.segura);
+});
+
+teste("qualificador que a loja não escreve não derruba mais o casamento", () => {
+  const idx = modulo.indiceDoCatalogo(CAT_LOJA);
+  const sg = modulo.sugestaoDoCatalogo("Disco Corte Fino Inox 4 - Norton", idx);
+  assert.strictEqual(sg.nome, "Ferramentas - Disco Corte Inox");
+  assert.ok(sg.segura, "deu " + sg.score);
+});
+
+teste("material de outra família continua fora", () => {
+  const idx = modulo.indiceDoCatalogo(CAT_LOJA);
+  const sg = modulo.sugestaoDoCatalogo("Argamassa ACIII 20kg", idx);
+  assert.ok(!sg || !sg.segura, "argamassa não pode virar cal hidratado sozinha");
 });
 
 for (const [nome, fn] of testes) {

@@ -561,6 +561,29 @@ function cotPartesDoNome(nome) {
   return { gaveta, corpo };
 }
 
+// A descrição da loja não é só o material: vem com código interno
+// ("Cod 61699"), palavra de folheto ("Eco", "Premium") e a medida. Nada
+// disso existe no catálogo, e cada uma dessas palavras baixava o placar,
+// porque metade da conta é "quanto da descrição foi aproveitado". Quanto
+// mais detalhada a nota, pior o casamento — o contrário do que deveria ser.
+const COT_MARCADOR_CODIGO = new Set(("cod codigo cd ref refer referencia".split(" ")));
+const COT_FOLHETO = new Set(("eco premium plus super master profissional linha standard top".split(" ")));
+
+function cotPalavrasDaLoja(texto) {
+  const todas = cotPalavrasDoNome(texto);
+  const limpo = [];
+  for (let i = 0; i < todas.length; i++) {
+    const w = todas[i];
+    // "Cod 61699": o marcador e o que vem logo depois saem juntos.
+    if (COT_MARCADOR_CODIGO.has(w)) { if (/^\d+$/.test(todas[i + 1] || "")) i++; continue; }
+    // Número de quatro dígitos ou mais é código, não medida.
+    if (/^\d{4,}$/.test(w)) continue;
+    if (COT_FOLHETO.has(w)) continue;
+    limpo.push(w);
+  }
+  return limpo.length ? limpo : todas;
+}
+
 function cotDistancia(a, b) {
   if (typeof distanciaTexto === "function") return distanciaTexto(a, b);
   return a === b ? 0 : 99;
@@ -569,6 +592,13 @@ function cotDistancia(a, b) {
 // "pregos" casa com "prego"; "0mm" com "0mmm" não precisa casar.
 function cotCasaPalavra(a, b) {
   if (a === b) return 1;
+  // "05" e "5" são o mesmo cinco; "3.00" e "3" o mesmo três.
+  if (/^\d+$/.test(a) && /^\d+$/.test(b)) return Number(a) === Number(b) ? 1 : 0;
+  // "mt" e "mts" são a mesma unidade — a mesma tabela que arruma "un".
+  if (a.length <= 4 && b.length <= 4) {
+    const ua = COT_UNIDADE_SINONIMOS[a], ub = COT_UNIDADE_SINONIMOS[b];
+    if (ua && ua === ub) return 0.9;
+  }
   if (a.length >= 4 && b.length >= 4) {
     if (cotDistancia(a, b) <= 1) return 0.92;
     if (b.indexOf(a) === 0 || a.indexOf(b) === 0) return 0.85;
@@ -595,8 +625,15 @@ function indiceDoCatalogo(insumos) {
   return { itens, peso: (w) => Math.log((n + 1) / ((em.get(w) || 0) + 1)) + 0.2 };
 }
 
+// O nome bem-feito do catálogo diz mais do que a loja escreve: "Disco
+// Diamantado Corte Parede" contra "Disco Diamantado Segmentado 110mm". As
+// duas palavras que sobram do catálogo são raras, e por serem raras pesavam
+// muito — castigando justamente o cadastro mais descritivo. Palavra que
+// faltou continua pesando, mas pela metade: quem decide é o que bateu.
+const COT_PESO_SOBRA = 0.5;
+
 function casarNoCatalogo(descricao, indice, limite) {
-  const ts = cotPalavrasDoNome(descricao);
+  const ts = cotPalavrasDaLoja(descricao);
   if (!ts.length || !indice || !indice.itens.length) return [];
   const achados = [];
   for (const it of indice.itens) {
@@ -604,9 +641,9 @@ function casarNoCatalogo(descricao, indice, limite) {
     for (let k = 0; k < it.palavras.length; k++) {
       const t = it.palavras[k];
       const w = indice.peso(t) * (it.fator ? it.fator[k] : 1);
-      den += w;
       let melhor = 0;
       for (const s of ts) { const v = cotCasaPalavra(t, s); if (v > melhor) melhor = v; }
+      den += w * (melhor > 0 ? 1 : COT_PESO_SOBRA);
       num += w * melhor;
     }
     if (!den) continue;
@@ -5091,13 +5128,21 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
     );
   }
 
+  // Nada achado e nada proposto é o único estado que exige ação: se o item
+  // seguir assim, ele entra no pedido sem insumo, sem etapa e sem conta. É
+  // isso que o vermelho diz — e por isso ele não aparece quando há proposta
+  // em cima da linha, que é só um toque de confirmação.
+  const semNadaNoCatalogo = !x.insumo && !x.rotuloVazio;
+
   if (!aberto) {
     return (
       <button type="button" onClick={abrir} title="Trocar o material"
         style={{ ...E.input, cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 8,
-          color: x.insumo ? "#111827" : "#6b7280", fontFamily: "inherit" }}>
+          border: semNadaNoCatalogo ? "1.5px solid rgba(220,38,38,0.45)" : E.input.border,
+          background: semNadaNoCatalogo ? "#fff6f6" : "#fff",
+          color: x.insumo ? "#111827" : semNadaNoCatalogo ? "#dc2626" : "#6b7280", fontFamily: "inherit" }}>
         <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rotulo}</span>
-        <span aria-hidden="true" style={{ fontSize: 10, color: "#6b7280" }}>▼</span>
+        <span aria-hidden="true" style={{ fontSize: 10, color: semNadaNoCatalogo ? "#dc2626" : "#6b7280" }}>▼</span>
       </button>
     );
   }
@@ -5469,8 +5514,12 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                 </div>
                 <div style={{ fontSize: 11.5, color: "#4b5563" }}>
                   {[resumo.comCatalogo ? `${resumo.comCatalogo} casaram com o catálogo` : "",
-                    resumo.comProposta ? `${resumo.comProposta} com proposta a confirmar` : "",
-                    resumo.semNada ? `${resumo.semNada} fora do catálogo` : ""].filter(Boolean).join(" · ")}
+                    resumo.comProposta ? `${resumo.comProposta} com proposta a confirmar` : ""].filter(Boolean).join(" · ")}
+                  {resumo.semNada ? (
+                    <span style={{ color: "#dc2626", fontWeight: 600 }}>
+                      {resumo.comCatalogo || resumo.comProposta ? " · " : ""}{resumo.semNada} fora do catálogo
+                    </span>
+                  ) : null}
                 </div>
                 {(paraCasar > 0 || (sobras.length > 0 && iaDisponivel)) && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 8 }}>
@@ -5942,7 +5991,7 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
                   </>
                 ) : (
                   <>
-                    <span style={{ color: "#9ca3af" }}>fora do catálogo</span>
+                    <span style={{ color: "#dc2626", fontWeight: 600 }}>fora do catálogo</span>
                     <button type="button" style={elo} onClick={() => setProcurando(i)}>procurar</button>
                   </>
                 )}
