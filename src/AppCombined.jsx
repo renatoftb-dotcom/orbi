@@ -5459,7 +5459,7 @@ var INSUMOS_SEED = [
   { codigo:"PRE-004", nome:"Encanador", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"areaConstruida", precoReferencia:60, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Encanador"] },
   { codigo:"PRE-005", nome:"Carpinteiro", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"areaConstruida", precoReferencia:25, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Carpinteiro", "Prestadores de Serviços - Carpinteiro"] },
   { codigo:"PRE-006", nome:"Impermeabilizador", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"areaImpermeabilizacao", precoReferencia:25, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Impermeabilizador", "Prestadores de Serviços - Impermeabilização Casa"] },
-  { codigo:"PRE-007", nome:"Marceneiro Portas Internas", grupo:"Prestadores de serviços", unidade:"un", tipo:"prestador", baseCalculo:"portasInternas", precoReferencia:150, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Marceneiro Portas Internas", "Prestadores de Serviços - Marceneiro"], observacao:"Medido por PORTA instalada, não por m² de casa. R$ 150 por porta." },
+  { codigo:"PRE-007", nome:"Marceneiro Portas Internas", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"portasInternas", precoReferencia:150, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Marceneiro Portas Internas", "Prestadores de Serviços - Marceneiro"], observacao:"Medido por PORTA instalada, não por m² de casa. R$ 150 por porta." },
   { codigo:"PRE-008", nome:"Serralheiro", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"areaConstruida", precoReferencia:null, precoFonte:null, precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Serralheiro"], observacao:"Sem taxa no VBA e sem cotação — definir" },
   { codigo:"PRE-009", nome:"Pedreiros Pavim. Externa", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"areaPavimentacao", precoReferencia:59, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Pedreiros Pavim. Externa", "Prestadores de Serviços - Pav Externa"] },
   { codigo:"PRE-010", nome:"Pedreiros Muro Divisa", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"m2MuroDivisa", precoReferencia:59, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Pedreiros Muro Divisa", "Prestadores de Serviços - Empreiteiro Muro"] },
@@ -6173,17 +6173,17 @@ var PRODUTIVIDADE_SEED = {
   TELHA_CERAMICA: { nome: "Telhamento com telha cerâmica ou de concreto", unidade: "m²", fonte: "SINAPI 94201", horas: { telhadista: 0.168, servente: 0.53 }, receita: [{ c: "94201", f: 1 }] },
   TELHA_FIBRO:    { nome: "Telhamento com telha de fibrocimento",        unidade: "m²", fonte: "SINAPI 94210",  horas: { telhadista: 0.134, servente: 0.163 }, receita: [{ c: "94210", f: 1 }] },
   TELHA_METALICA: { nome: "Telhamento com telha metálica",               unidade: "m²", fonte: "SINAPI 94213",  horas: { telhadista: 0.09, servente: 0.097 }, receita: [{ c: "94213", f: 1 }] },
-  PONTO_LUZ:      { nome: "Ponto de luz (eletroduto, cabo, rasgo, caixa, interruptor)", unidade: "un", fonte: "SINAPI 104473", horas: { eletricista: 1.934, servente: 1.612, pedreiro: 0.557 }, receita: [{ c: "90447", f: 1.2429 }, { c: "90456", f: 1 }, { c: "90466", f: 1.2429 }, { c: "91845", f: 2.2171 }, { c: "91855", f: 1.2429 }, { c: "91924", f: 10.7114 }, { c: "91926", f: 1.4786 }, { c: "91937", f: 1 }, { c: "91940", f: 1 }, { c: "91953", f: 1 }] },
-  PONTO_TOMADA:   { nome: "Ponto de tomada (eletroduto, cabo, rasgo, caixa, tomada)", unidade: "un", fonte: "SINAPI 104475", horas: { eletricista: 1.563, servente: 1.302, pedreiro: 0.397 }, receita: [{ c: "90447", f: 0.885 }, { c: "90456", f: 1 }, { c: "90466", f: 0.885 }, { c: "91845", f: 1.614 }, { c: "91855", f: 0.885 }, { c: "91926", f: 10.531 }, { c: "91940", f: 1 }, { c: "92000", f: 1 }] },
-  HIDRO_BANHEIRO: { nome: "Conjunto de pontos de água fria — banheiro",  unidade: "un", fonte: "SINAPI 104660", horas: { encanador: 20.232, servente: 11.693 }, receita: null },
-  ESGOTO_BANHEIRO: { nome: "Conjunto de pontos de esgoto — banheiro",    unidade: "un", fonte: "SINAPI 104676", horas: { encanador: 5.457, servente: 3.351 }, receita: null },
+  PONTO_LUZ:      { nome: "Ponto de luz (eletroduto, cabo, rasgo, caixa, interruptor)", unidade: "Unidades", fonte: "SINAPI 104473", horas: { eletricista: 1.934, servente: 1.612, pedreiro: 0.557 }, receita: [{ c: "90447", f: 1.2429 }, { c: "90456", f: 1 }, { c: "90466", f: 1.2429 }, { c: "91845", f: 2.2171 }, { c: "91855", f: 1.2429 }, { c: "91924", f: 10.7114 }, { c: "91926", f: 1.4786 }, { c: "91937", f: 1 }, { c: "91940", f: 1 }, { c: "91953", f: 1 }] },
+  PONTO_TOMADA:   { nome: "Ponto de tomada (eletroduto, cabo, rasgo, caixa, tomada)", unidade: "Unidades", fonte: "SINAPI 104475", horas: { eletricista: 1.563, servente: 1.302, pedreiro: 0.397 }, receita: [{ c: "90447", f: 0.885 }, { c: "90456", f: 1 }, { c: "90466", f: 0.885 }, { c: "91845", f: 1.614 }, { c: "91855", f: 0.885 }, { c: "91926", f: 10.531 }, { c: "91940", f: 1 }, { c: "92000", f: 1 }] },
+  HIDRO_BANHEIRO: { nome: "Conjunto de pontos de água fria — banheiro",  unidade: "Unidades", fonte: "SINAPI 104660", horas: { encanador: 20.232, servente: 11.693 }, receita: null },
+  ESGOTO_BANHEIRO: { nome: "Conjunto de pontos de esgoto — banheiro",    unidade: "Unidades", fonte: "SINAPI 104676", horas: { encanador: 5.457, servente: 3.351 }, receita: null },
   PISO_CERAMICO:  { nome: "Piso cerâmico / porcelanato",                 unidade: "m²", fonte: "SINAPI 87251",  horas: { azulejista: 0.254, servente: 0.131 }, receita: [{ c: "87251", f: 1 }] },
   AZULEJO:        { nome: "Revestimento cerâmico de parede",             unidade: "m²", fonte: "SINAPI 87275",  horas: { azulejista: 0.888, servente: 0.367 }, receita: [{ c: "87275", f: 1 }] },
   FORRO_GESSO:    { nome: "Forro de gesso acartonado",                   unidade: "m²", fonte: "SINAPI 96110",  horas: { gesseiro: 0.546, servente: 0.546 }, receita: [{ c: "96110", f: 1 }] },
   PINTURA_INT:    { nome: "Pintura interna (selador, massa 2 demãos, tinta 2 demãos)", unidade: "m²", fonte: "SINAPI 88485 + 88497 + 88489", horas: { pintor: 0.591, servente: 0.197 }, receita: [{ c: "88485", f: 1 }, { c: "88497", f: 1 }, { c: "88489", f: 1 }] },
   PINTURA_EXT:    { nome: "Pintura externa (selador, tinta 2 demãos)",   unidade: "m²", fonte: "SINAPI 88485 + 88489", horas: { pintor: 0.23, servente: 0.077 }, receita: [{ c: "88485", f: 1 }, { c: "88489", f: 1 }] },
   ESQUADRIA:      { nome: "Instalação de esquadria de alumínio",         unidade: "m²", fonte: "SINAPI 94570",  horas: { pedreiro: 0.313, servente: 0.157 }, receita: [{ c: "94570", f: 1 }] },
-  PORTA:          { nome: "Porta interna completa (batente, folha, fechadura, alizar)", unidade: "un", fonte: "SINAPI 90843", horas: { carpinteiro: 9.015, pedreiro: 1.673, servente: 3.02 }, receita: [{ c: "90806", f: 1 }, { c: "90822", f: 1 }, { c: "90830", f: 1 }, { c: "100659", f: 10 }] },
+  PORTA:          { nome: "Porta interna completa (batente, folha, fechadura, alizar)", unidade: "Unidades", fonte: "SINAPI 90843", horas: { carpinteiro: 9.015, pedreiro: 1.673, servente: 3.02 }, receita: [{ c: "90806", f: 1 }, { c: "90822", f: 1 }, { c: "90830", f: 1 }, { c: "100659", f: 10 }] },
 
   // ── Reforma ──────────────────────────────────────────────────
   // Estes NÃO vêm do SINAPI: são referência de partida para o prazo, para a
@@ -6197,10 +6197,10 @@ var PRODUTIVIDADE_SEED = {
   RETIRADA_CONTRAPISO: { nome: "Retirada de contrapiso",                      unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { servente: 0.7, pedreiro: 0.1 }, receita: null },
   REMOCAO_FORRO:       { nome: "Remoção de forro",                            unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { servente: 0.2 }, receita: null },
   DEMOLICAO_CALCADA:   { nome: "Demolição de calçada / piso de concreto",     unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { servente: 0.8, pedreiro: 0.1 }, receita: null },
-  RETIRADA_ESQUADRIA:  { nome: "Retirada de esquadria",                       unidade: "un", fonte: "referência — calibrar com a equipe", horas: { servente: 0.8, pedreiro: 0.4 }, receita: null },
-  DESMONTAGEM_BANHEIRO:{ nome: "Desmontagem de banheiro (louças e metais)",   unidade: "un", fonte: "referência — calibrar com a equipe", horas: { encanador: 2, servente: 2 }, receita: null },
-  MONTAGEM_BANHEIRO:   { nome: "Montagem de banheiro (louças e metais)",      unidade: "un", fonte: "referência — calibrar com a equipe", horas: { encanador: 6, servente: 3 }, receita: null },
-  CARGA_ENTULHO:       { nome: "Carga de entulho na caçamba",                 unidade: "un", fonte: "referência — calibrar com a equipe", horas: { servente: 4 }, receita: null },
+  RETIRADA_ESQUADRIA:  { nome: "Retirada de esquadria",                       unidade: "Unidades", fonte: "referência — calibrar com a equipe", horas: { servente: 0.8, pedreiro: 0.4 }, receita: null },
+  DESMONTAGEM_BANHEIRO:{ nome: "Desmontagem de banheiro (louças e metais)",   unidade: "Unidades", fonte: "referência — calibrar com a equipe", horas: { encanador: 2, servente: 2 }, receita: null },
+  MONTAGEM_BANHEIRO:   { nome: "Montagem de banheiro (louças e metais)",      unidade: "Unidades", fonte: "referência — calibrar com a equipe", horas: { encanador: 6, servente: 3 }, receita: null },
+  CARGA_ENTULHO:       { nome: "Carga de entulho na caçamba",                 unidade: "Unidades", fonte: "referência — calibrar com a equipe", horas: { servente: 4 }, receita: null },
   DRYWALL_PAREDE:      { nome: "Parede de drywall (estrutura, placas, tratamento de junta)", unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { gesseiro: 0.8, servente: 0.4 }, receita: null },
 };
 
@@ -11345,11 +11345,11 @@ function prestadores(cp, out, data) {
         MEM.nota(`${l.item}: ${l.base === "fixo" ? "serviço de valor fechado" : "medido por m²"}. Quantidade e preço saem do quadro de Prestadores; em branco, valem a medida do projeto e o preço do catálogo.`),
         ...(p && p.regressiva && l.precoDigitado == null
           ? [MEM.nota("A gestão de obra cobra numa escada regressiva: quanto maior a obra, menor o valor por metro.")] : []),
-        MEM.dado(l.rotulo, l.qtd, l.unidade === "m2" ? "m²" : "un",
+        MEM.dado(l.rotulo, l.qtd, l.unidade === "m2" ? "m²" : "Unidades",
           l.qtdDigitada != null ? "digitado no quadro de Prestadores" : "medida do projeto"),
         MEM.dado("Preço unitário", l.preco, l.unidade === "m2" ? "R$/m²" : "R$", fonte),
         MEM.conta("Total do serviço", "quantidade × preço", [["quantidade", l.qtd], ["preço", l.preco]], l.total, "R$"),
-        MEM.dado("Quantidade no orçamento", l.qtd, l.unidade === "m2" ? "m²" : "un", "a própria medida acima"),
+        MEM.dado("Quantidade no orçamento", l.qtd, l.unidade === "m2" ? "m²" : "Unidades", "a própria medida acima"),
       ],
     });
   }
@@ -15134,7 +15134,7 @@ function demolicoesRemocoes(cp, out, data) {
           ? `${s.item}: preço do catálogo de Insumos.`
           : `${s.item}: o serviço não está no catálogo de Insumos, então entra a referência do módulo. Cadastre-o em Insumos para usar o preço do seu empreiteiro.`),
         MEM.dado("Quantidade medida na visita", qtd, unidadeTexto, `linha "${it.nome}", coluna Demolir`),
-        MEM.dado("Preço unitário", taxa.valor, it.unidade === "un" ? "R$/un" : "R$/m²", taxa.fonte === "insumo" ? "catálogo de Insumos" : "referência do módulo"),
+        MEM.dado("Preço unitário", taxa.valor, it.unidade === "un" ? "R$/unidade" : "R$/m²", taxa.fonte === "insumo" ? "catálogo de Insumos" : "referência do módulo"),
       ],
     });
   }
@@ -15494,7 +15494,7 @@ function execucaoNoExistente(cp, out, data) {
       memoria: [
         MEM.nota(`${sv.item}: mão de obra. As peças em si entram pelo bloco de itens do projeto.`),
         MEM.dado(`${it.nome} a instalar`, qtd, it.unidade === "un" ? "unidades" : "m²", `linha "${it.nome}", coluna Instalar`),
-        MEM.dado("Preço unitário", taxa.valor, it.unidade === "un" ? "R$/un" : "R$/m²", taxa.fonte === "insumo" ? "catálogo de Insumos" : "referência do módulo"),
+        MEM.dado("Preço unitário", taxa.valor, it.unidade === "un" ? "R$/unidade" : "R$/m²", taxa.fonte === "insumo" ? "catálogo de Insumos" : "referência do módulo"),
       ],
     });
   }
@@ -16198,7 +16198,7 @@ function QuadroPrestadores({ projetoDraft, data, get, set, isMobile }) {
           <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{dentroDeGrupo ? l.sub : l.item}</div>
           <div style={{ fontSize: 10.5, color: cor(l) }}>{fonteTexto(l)}</div>
         </div>
-        <div style={{ fontSize: 11.5, color: "#6b7280", textAlign: "center" }}>{l.unidade === "m2" ? "m²" : "un"}</div>
+        <div style={{ fontSize: 11.5, color: "#6b7280", textAlign: "center" }}>{l.unidade === "m2" ? "m²" : "Unidades"}</div>
         <CampoNumeroBR estilo={cel} disabled={apagado} valor={l.qtdDigitada}
           placeholder={numMem(l.auto)}
           aoMudar={(v) => set(`prestadores.${l.chave}.qtd`, v)} />
@@ -16281,7 +16281,7 @@ function MatrizExistente({ projetoDraft, get, set, isMobile }) {
         <div key={it.id} style={{ marginBottom: 10 }}>
           <div style={grade}>
             <label style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>
-              {it.nome} <span style={{ color: "#6b7280", fontWeight: 400 }}>({it.unidade === "un" ? "un" : "m²"})</span>
+              {it.nome} <span style={{ color: "#6b7280", fontWeight: 400 }}>({it.unidade === "un" ? "unidades" : "m²"})</span>
             </label>
             <div>
               {isMobile && <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>Demolir / desmontar</div>}
@@ -16601,7 +16601,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
     if (!ins) return { cor: "#b45309", texto: "não encontrado em Insumos — entra sem preço (R$ 0)" };
     const p = typeof precoInsumo === "function" ? precoInsumo(ins) : null;
     if (!p || p.preco == null) return { cor: "#b45309", texto: `${ins.codigo} · sem preço cadastrado` };
-    return { cor: "#15803d", texto: `${ins.codigo} · ${formatoBRL(p.preco)}/${ins.unidade || "un"}` };
+    return { cor: "#15803d", texto: `${ins.codigo} · ${formatoBRL(p.preco)}/${ins.unidade || "Unidades"}` };
   }
 
   const wrap = { border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 };
@@ -22879,6 +22879,33 @@ function cotPalavrasDoNome(texto) {
     .filter((w) => w && !COT_MARCAS.has(w) && !COT_VAZIAS_CATALOGO.has(w));
 }
 
+// O catálogo arquiva pelo que a coisa é: "Elétrica - Fita Isolante",
+// "Aço - Pregos 17x21", "Madeira Caixaria - Tábuas de 10cm x 3mts". O que
+// vem antes do travéssão é gaveta, não material — a nota da loja diz "Fita
+// Isolante 10 Mt - Tigre" e nunca vai dizer "Elétrica". Cobrando essas
+// palavras da descrição, o placar castigava justamente o insumo bem
+// arquivado: "Fita Crepe", sem gaveta, dava 0,85; "Elétrica - Fita
+// Isolante" dava 0,71 e ficava abaixo da linha do carimbo automático.
+//
+// A gaveta não sai de cena — é ela que separa "Elétrica - Fita Isolante"
+// de "Hidráulica - Fita Veda Rosca" —, mas passa a valer um quarto. Duas
+// gavetas com o mesmo material continuam empatadas, e empate não carimba
+// sozinho: vira pergunta, como deve ser.
+const COT_PESO_GAVETA = 0.25;
+
+function cotPartesDoNome(nome) {
+  const txt = String(nome == null ? "" : nome);
+  const todas = cotPalavrasDoNome(txt);
+  const i = txt.indexOf(" - ");
+  if (i <= 0) return { gaveta: [], corpo: todas };
+  const gaveta = cotPalavrasDoNome(txt.slice(0, i));
+  const corpo = cotPalavrasDoNome(txt.slice(i + 3));
+  // Sem corpo não há gaveta nenhuma — é nome com travéssão, não
+  // arquivo. Gaveta longa também não é gaveta.
+  if (!gaveta.length || !corpo.length || gaveta.length > 3) return { gaveta: [], corpo: todas };
+  return { gaveta, corpo };
+}
+
 function cotDistancia(a, b) {
   if (typeof distanciaTexto === "function") return distanciaTexto(a, b);
   return a === b ? 0 : 99;
@@ -22901,9 +22928,12 @@ function indiceDoCatalogo(insumos) {
   const em = new Map();
   for (const i of insumos || []) {
     if (!i || i.tipo === "prestador" || i.ativo === false) continue;
-    const palavras = cotPalavrasDoNome(i.nome);
+    const partes = cotPartesDoNome(i.nome);
+    const palavras = partes.gaveta.concat(partes.corpo);
     if (!palavras.length) continue;
-    itens.push({ insumo: i, palavras });
+    // Na mesma ordem das palavras: o quanto cada uma pesa no placar.
+    const fator = partes.gaveta.map(() => COT_PESO_GAVETA).concat(partes.corpo.map(() => 1));
+    itens.push({ insumo: i, palavras, fator });
     for (const w of new Set(palavras)) em.set(w, (em.get(w) || 0) + 1);
   }
   const n = itens.length || 1;
@@ -22916,8 +22946,9 @@ function casarNoCatalogo(descricao, indice, limite) {
   const achados = [];
   for (const it of indice.itens) {
     let num = 0, den = 0;
-    for (const t of it.palavras) {
-      const w = indice.peso(t);
+    for (let k = 0; k < it.palavras.length; k++) {
+      const t = it.palavras[k];
+      const w = indice.peso(t) * (it.fator ? it.fator[k] : 1);
       den += w;
       let melhor = 0;
       for (const s of ts) { const v = cotCasaPalavra(t, s); if (v > melhor) melhor = v; }
@@ -23081,9 +23112,11 @@ function casarItemDaEntrada(item, insumos, indice) {
 function itensDaEntrada(bruto, tipo, insumos) {
   const crus = tipo === "orcamento" ? (((bruto || {}).itens) || []) : (bruto || []);
   const indice = indiceDoCatalogo(insumos || []);
+  const unidades = unidadesDoCatalogo(insumos || []);
   return crus
     .map((c) => itemDaEntrada(c, tipo))
     .filter((x) => x.descricao)
+    .map((x) => ({ ...x, unidade: unidadeNoPadrao(x.unidade, unidades) }))
     .map((x) => casarItemDaEntrada(x, insumos, indice))
     .map((x) => ({ ...(typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio() : {}), ...x }));
 }
@@ -23954,12 +23987,63 @@ function unidadesDoCatalogo(insumos) {
   return Object.keys(conta).sort((a, b) => conta[b] - conta[a] || a.localeCompare(b, "pt-BR"));
 }
 
-// O que o pedreiro escreveu ("sacos", "quilos") não está no catálogo, mas
-// também não se joga fora — entra na lista, em cima, para você trocar ou
-// manter com um clique.
-function opcoesDeUnidade(valor, unidades) {
-  const v = String(valor == null ? "" : valor).trim();
+// A nota da loja escreve "un", "UN", "und", "pç". É a mesma coisa que o
+// catálogo chama de "Unidades" — e se a abreviação entrar como está, o
+// pedido nasce com duas unidades para o mesmo material e a lista de escolha
+// passa a mostrar "un" e "Unidades" lado a lado, como se fossem diferentes.
+// Então a abreviação é traduzida na porta, uma vez, para o nome que a
+// empresa usa.
+const COT_UNIDADE_SINONIMOS = {
+  un: "Unidades", uns: "Unidades", und: "Unidades", unds: "Unidades",
+  unid: "Unidades", unids: "Unidades", unidade: "Unidades", unidades: "Unidades",
+  pc: "Unidades", pcs: "Unidades", pca: "Unidades", peca: "Unidades", pecas: "Unidades",
+  jg: "Unidades", jogo: "Unidades", jogos: "Unidades",
+  cj: "Unidades", conj: "Unidades", conjunto: "Unidades", conjuntos: "Unidades",
+  par: "Unidades", pares: "Unidades",
+  kg: "Kg", kgs: "Kg", quilo: "Kg", quilos: "Kg", kilo: "Kg", kilos: "Kg",
+  m2: "m2", "m²": "m2",
+  m3: "m3", "m³": "m3",
+  m: "Mts", mt: "Mts", mts: "Mts", ml: "Mts", metro: "Mts", metros: "Mts",
+  l: "Lts", lt: "Lts", lts: "Lts", litro: "Lts", litros: "Lts",
+  rl: "Rolos", rolo: "Rolos", rolos: "Rolos",
+  dia: "Dias", dias: "Dias",
+  mes: "Meses", meses: "Meses",
+};
+
+// A chave de comparação: sem acento, sem ponto, minúscula.
+function cotChaveUnidade(texto) {
+  return String(texto == null ? "" : texto)
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[.\s]/g, "").trim();
+}
+
+// Devolve a unidade no vocabulário da empresa. A ordem importa: primeiro o
+// que o catálogo já tem escrito exatamente assim, depois o mesmo nome com
+// outra caixa ("KG" → "Kg"), depois a tradução da abreviação. Só o que
+// não é nada disso volta como foi escrito — "vb", "sacos", o que o
+// escritório inventar continua valendo.
+function unidadeNoPadrao(texto, unidades) {
+  const v = String(texto == null ? "" : texto).trim();
+  if (!v) return "";
   const lista = unidades || [];
+  if (lista.indexOf(v) >= 0) return v;
+  const chave = cotChaveUnidade(v);
+  if (!chave) return "";
+  const igual = lista.find((u) => cotChaveUnidade(u) === chave);
+  if (igual) return igual;
+  const canonico = COT_UNIDADE_SINONIMOS[chave];
+  if (!canonico) return v;
+  const noCatalogo = lista.find((u) => cotChaveUnidade(u) === cotChaveUnidade(canonico));
+  return noCatalogo || canonico;
+}
+
+// O que o pedreiro escreveu ("sacos", "vb") não está no catálogo, mas
+// também não se joga fora — entra na lista, em cima, para você trocar ou
+// manter com um clique. Abreviação conhecida não entra: ela vira o nome do
+// catálogo antes de chegar aqui.
+function opcoesDeUnidade(valor, unidades) {
+  const lista = unidades || [];
+  const v = unidadeNoPadrao(valor, lista);
   return v && lista.indexOf(v) < 0 ? [v, ...lista] : lista;
 }
 
@@ -25100,7 +25184,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           {!temListaDeItens(formCotacao) && (
             <div>
               <label style={E.label}>Unidade</label>
-              <input style={E.input} value={formCotacao.unidade} onChange={e => set("unidade", e.target.value)} placeholder="un / m² / vb" />
+              <input style={E.input} value={formCotacao.unidade} onChange={e => set("unidade", e.target.value)} placeholder="Unidades / m² / vb" />
             </div>
           )}
           <div>
@@ -26200,7 +26284,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       {entradaAberta && (
         <PainelEntrada insumos={insumos} prestadores={prestadores} unidades={unidadesCatalogo}
           iaDisponivel={!!iaDisponivel} isMobile={isMobile} dinheiro={dinheiro}
-          aoCadastrarInsumo={cadastrarInsumoDoPedido}
+          aoCadastrarInsumo={cadastrarInsumoDoPedido} aoAprender={aprenderApelidos}
           aoFechar={() => setEntradaAberta(false)} aoSeguir={seguirDaEntrada} />
       )}
 
@@ -27263,7 +27347,11 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
 
   const grupos = gruposDoCatalogo(insumos, typeof INSUMO_GRUPOS !== "undefined" ? INSUMO_GRUPOS : []);
 
-  const rotulo = x.insumo ? x.insumo.nome : `Fora do catálogo — “${x.termo}”`;
+  // Com uma proposta em cima da linha, dizer "fora do catálogo" aqui embaixo
+  // seria desmentir o que a tela acabou de afirmar: o campo passa a ser o que
+  // é de fato, a porta para escolher outro.
+  const rotulo = x.insumo ? x.insumo.nome
+    : (x.rotuloVazio || `Fora do catálogo — “${x.termo}”`);
   const linha = (conteudo, k, extra) => (
     <div key={k} onMouseDown={(e) => { e.preventDefault(); usar(opcoes[k]); }} onMouseEnter={() => setMarcado(k)}
       style={{ padding: "8px 11px", cursor: "pointer", background: k === marcado ? "#eef5ff" : "#fff",
@@ -27527,7 +27615,7 @@ function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGe
 // contra o catálogo, e aí se diz o que o papel é. Nenhum dado é gravado
 // aqui — a Entrada só entrega a lista pronta para a porta escolhida.
 function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile, dinheiro,
-  aoCadastrarInsumo, aoFechar, aoSeguir }) {
+  aoCadastrarInsumo, aoAprender, aoFechar, aoSeguir }) {
   const E = COT_ESTILO;
   const P = cotPainel(isMobile, 940);
   const [texto, setTexto] = useState("");
@@ -27539,6 +27627,9 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const [destino, setDestino] = useState("");
   const [lojaId, setLojaId] = useState("");
   const [sobre, setSobre] = useState(false);
+  const [conferindo, setConferindo] = useState(false);
+  const [progressoIA, setProgressoIA] = useState(null);
+  const [avisoIA, setAvisoIA] = useState("");
 
   const lojas = (prestadores || []).filter((f) => f && f.ativo !== false);
   const indiceCat = useMemo(() => indiceDoCatalogo(insumos || []), [insumos]);
@@ -27556,6 +27647,56 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   });
   const resumo = itens ? resumoDaEntrada(itens) : null;
   const prova = entradaPronta(destino, lojaId, itens || []);
+
+  // A leitura já sabe o que cada linha é — mas proposta é proposta, e quem
+  // carimba é a pessoa. O que não pode é cobrar onze toques por isso: as
+  // que vieram seguras vira uma só.
+  const paraCasar = (itens || []).filter((x) => !x.insumoCodigo && x.sugestao && x.sugestao.segura).length;
+  function casarOsSegurosDaEntrada() {
+    const aprendidos = [];
+    setItens((lista) => (lista || []).map((x) => {
+      if (x.insumoCodigo || !x.sugestao || !x.sugestao.segura) return x;
+      const ins = (insumos || []).find((y) => y && y.codigo === x.sugestao.codigo);
+      if (!ins) return x;
+      aprendidos.push({ codigo: ins.codigo, descricao: x.descricao });
+      return comInsumoDaEntrada(x, ins);
+    }));
+    if (aoAprender && aprendidos.length) aoAprender(aprendidos);
+  }
+
+  // Sobra é o que ficou sem casamento E sem proposta segura. Item que já
+  // tem proposta boa está a um toque — não vale gastar leitura com ele.
+  const ehSobraDaEntrada = (x) => !x.insumoCodigo && !(x.sugestao && x.sugestao.segura)
+    && !!String(x.descricao || "").trim();
+  const sobras = (itens || []).filter(ehSobraDaEntrada);
+  async function conferirSobrasComIA() {
+    const alvos = [];
+    (itens || []).forEach((x, i) => { if (ehSobraDaEntrada(x)) alvos.push({ i, x }); });
+    if (!alvos.length || conferindo) return;
+    setConferindo(true); setAvisoIA("");
+    setProgressoIA({ etapa: "fila", itens: 0, decorridoMs: 0 });
+    try {
+      const r = await api.ia.lerPedido(
+        { arquivo: null, texto: textoParaAIA(alvos.map((a) => a.x)) },
+        (pr) => setProgressoIA(pr));
+      const achados = sugestoesDaIA(alvos.map((a) => a.x), r, insumos || []);
+      if (!achados.length) {
+        setAvisoIA("A IA tamb\u00e9m n\u00e3o achou esses itens no cat\u00e1logo.");
+      } else {
+        const porItem = new Map();
+        for (const a of achados) porItem.set(alvos[a.indice].i, a);
+        setItens((lista) => (lista || []).map((x, i) => {
+          const a = porItem.get(i);
+          return a ? { ...x, sugestao: { codigo: a.codigo, nome: a.nome, grupo: a.grupo,
+            score: 1, segura: true, ia: true } } : x;
+        }));
+      }
+    } catch (e) {
+      setAvisoIA(avisoDaIA(e) || "A IA n\u00e3o respondeu agora.");
+    } finally {
+      setConferindo(false); setProgressoIA(null);
+    }
+  }
 
   const ehPdf = (f) => !!f && (/pdf$/i.test(f.name || "") || f.type === "application/pdf");
 
@@ -27676,6 +27817,33 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                     resumo.comProposta ? `${resumo.comProposta} com proposta a confirmar` : "",
                     resumo.semNada ? `${resumo.semNada} fora do catálogo` : ""].filter(Boolean).join(" · ")}
                 </div>
+                {(paraCasar > 0 || (sobras.length > 0 && iaDisponivel)) && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 8 }}>
+                    {paraCasar > 0 && (
+                      <>
+                        <span style={{ fontSize: 11.5, color: "#0474f4", fontWeight: 600 }}>
+                          {paraCasar === 1 ? "1 item reconhecido no catálogo" : paraCasar + " itens reconhecidos no catálogo"}
+                        </span>
+                        <button type="button" style={{ ...E.btn, fontSize: 11.5, padding: "5px 12px" }}
+                          onClick={casarOsSegurosDaEntrada}>Casar com o catálogo</button>
+                      </>
+                    )}
+                    {sobras.length > 0 && iaDisponivel && (
+                      <button type="button" disabled={conferindo}
+                        style={{ ...E.btnSec, fontSize: 11.5, padding: "5px 12px",
+                          opacity: conferindo ? 0.5 : 1, cursor: conferindo ? "progress" : "pointer" }}
+                        onClick={conferirSobrasComIA}>
+                        {conferindo ? "A IA está conferindo…"
+                          : sobras.length === 1 ? "Perguntar à IA pelo item que sobrou"
+                          : `Perguntar à IA pelos ${sobras.length} que sobraram`}
+                      </button>
+                    )}
+                  </div>
+                )}
+                {conferindo && <div style={{ marginTop: 8 }}><BarraLeituraIA progresso={progressoIA} /></div>}
+                {avisoIA && !conferindo && (
+                  <div style={{ marginTop: 6, fontSize: 11.5, color: "#b45309" }}>{avisoIA}</div>
+                )}
               </div>
 
               {/* Cada linha é uma busca no catálogo: o texto do papel fica em
@@ -27688,7 +27856,8 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                     ? (insumos || []).find((y) => y && (y.codigo === it.insumoCodigo || y.id === it.insumoCodigo)) || null
                     : null;
                   const x = { id: "e" + i, termo: it.descricao || "", bruto: it.descricao || "",
-                    unidade: it.unidade || "", insumo: casado };
+                    unidade: it.unidade || "", insumo: casado,
+                    rotuloVazio: (!casado && it.sugestao) ? `Procurar outro — “${it.descricao}”` : "" };
                   const parecidos = casado ? [] : casarNoCatalogo(it.descricao, indiceCat, 6).map((c) => c.insumo);
                   return (
                     <div key={i} style={{ padding: "8px 0", borderTop: i ? "1px solid rgba(38,36,33,0.06)" : "none" }}>
@@ -27702,6 +27871,27 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                         {!isMobile && <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
                           {it.bruto || it.unitario || ""}</span>}
                       </div>
+                      {/* A máquina achou, mas não carimba sozinha: dizer "parece
+                          Elétrica - Fita Isolante" e deixar o botão do lado é o
+                          meio-termo honesto. Sem isso a linha diz "fora do
+                          catálogo" enquanto o resumo conta a proposta — e a
+                          pessoa procura à mão o que já estava achado. */}
+                      {!casado && it.sugestao && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5, fontSize: 11.5 }}>
+                          <span style={{ color: "#9ca3af" }}>{it.sugestao.ia ? "a IA diz" : "parece"}</span>
+                          <button type="button" title={"usar “" + it.sugestao.nome + "” do catálogo"}
+                            style={{ border: "1px solid rgba(4,116,244,0.35)", background: "#f7fbff", color: "#0474f4",
+                              borderRadius: 999, padding: "2px 10px", fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}
+                            onClick={() => {
+                              const ins = (insumos || []).find((y) => y && y.codigo === it.sugestao.codigo);
+                              if (!ins) return;
+                              mexerItem(i, comInsumoDaEntrada(it, ins));
+                              if (aoAprender) aoAprender([{ codigo: ins.codigo, descricao: it.descricao }]);
+                            }}>
+                            {it.sugestao.nome}
+                          </button>
+                        </div>
+                      )}
                       <EscolhaInsumoPedido x={x} parecidos={parecidos} insumos={insumos} unidades={unidades}
                         aoEscolher={(ins) => mexerItem(i, comInsumoDaEntrada(it, ins))}
                         aoDeixarFora={() => mexerItem(i, { insumoCodigo: "", grupoMaterial: "", sugestao: null })}
@@ -28108,7 +28298,7 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
                 aoMudar={(v) => mexerItem(i, { quantidade: v })} />
             );
             const campoUnidade = (
-              <input style={celStyle} value={it.unidade} placeholder="un"
+              <input style={celStyle} value={it.unidade} placeholder="Unidades"
                 onChange={(e) => mexerItem(i, { unidade: e.target.value })} />
             );
             const campoUnitario = (
@@ -28216,8 +28406,11 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
 function CampoUnidade({ valor, unidades, aoMudar, estilo }) {
   const E = COT_ESTILO;
   const lista = opcoesDeUnidade(valor, unidades);
+  // Dado velho gravado como "un" aparece já como "Unidades" e se conserta na
+  // próxima gravação — sem um efeito que mexa no formulário sozinho.
+  const padrao = unidadeNoPadrao(valor, unidades || []);
   return (
-    <SelectBusca style={estilo || E.input} value={valor || ""} onChange={(v) => aoMudar(v)}
+    <SelectBusca style={estilo || E.input} value={padrao} onChange={(v) => aoMudar(unidadeNoPadrao(v, unidades || []))}
       placeholder="Procurar unidade…"
       opcoes={[{ valor: "", rotulo: "—" }].concat(lista.map(function (u) {
         return { valor: u, rotulo: u };

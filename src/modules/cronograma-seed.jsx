@@ -81,17 +81,17 @@ var PRODUTIVIDADE_SEED = {
   TELHA_CERAMICA: { nome: "Telhamento com telha cerâmica ou de concreto", unidade: "m²", fonte: "SINAPI 94201", horas: { telhadista: 0.168, servente: 0.53 }, receita: [{ c: "94201", f: 1 }] },
   TELHA_FIBRO:    { nome: "Telhamento com telha de fibrocimento",        unidade: "m²", fonte: "SINAPI 94210",  horas: { telhadista: 0.134, servente: 0.163 }, receita: [{ c: "94210", f: 1 }] },
   TELHA_METALICA: { nome: "Telhamento com telha metálica",               unidade: "m²", fonte: "SINAPI 94213",  horas: { telhadista: 0.09, servente: 0.097 }, receita: [{ c: "94213", f: 1 }] },
-  PONTO_LUZ:      { nome: "Ponto de luz (eletroduto, cabo, rasgo, caixa, interruptor)", unidade: "un", fonte: "SINAPI 104473", horas: { eletricista: 1.934, servente: 1.612, pedreiro: 0.557 }, receita: [{ c: "90447", f: 1.2429 }, { c: "90456", f: 1 }, { c: "90466", f: 1.2429 }, { c: "91845", f: 2.2171 }, { c: "91855", f: 1.2429 }, { c: "91924", f: 10.7114 }, { c: "91926", f: 1.4786 }, { c: "91937", f: 1 }, { c: "91940", f: 1 }, { c: "91953", f: 1 }] },
-  PONTO_TOMADA:   { nome: "Ponto de tomada (eletroduto, cabo, rasgo, caixa, tomada)", unidade: "un", fonte: "SINAPI 104475", horas: { eletricista: 1.563, servente: 1.302, pedreiro: 0.397 }, receita: [{ c: "90447", f: 0.885 }, { c: "90456", f: 1 }, { c: "90466", f: 0.885 }, { c: "91845", f: 1.614 }, { c: "91855", f: 0.885 }, { c: "91926", f: 10.531 }, { c: "91940", f: 1 }, { c: "92000", f: 1 }] },
-  HIDRO_BANHEIRO: { nome: "Conjunto de pontos de água fria — banheiro",  unidade: "un", fonte: "SINAPI 104660", horas: { encanador: 20.232, servente: 11.693 }, receita: null },
-  ESGOTO_BANHEIRO: { nome: "Conjunto de pontos de esgoto — banheiro",    unidade: "un", fonte: "SINAPI 104676", horas: { encanador: 5.457, servente: 3.351 }, receita: null },
+  PONTO_LUZ:      { nome: "Ponto de luz (eletroduto, cabo, rasgo, caixa, interruptor)", unidade: "Unidades", fonte: "SINAPI 104473", horas: { eletricista: 1.934, servente: 1.612, pedreiro: 0.557 }, receita: [{ c: "90447", f: 1.2429 }, { c: "90456", f: 1 }, { c: "90466", f: 1.2429 }, { c: "91845", f: 2.2171 }, { c: "91855", f: 1.2429 }, { c: "91924", f: 10.7114 }, { c: "91926", f: 1.4786 }, { c: "91937", f: 1 }, { c: "91940", f: 1 }, { c: "91953", f: 1 }] },
+  PONTO_TOMADA:   { nome: "Ponto de tomada (eletroduto, cabo, rasgo, caixa, tomada)", unidade: "Unidades", fonte: "SINAPI 104475", horas: { eletricista: 1.563, servente: 1.302, pedreiro: 0.397 }, receita: [{ c: "90447", f: 0.885 }, { c: "90456", f: 1 }, { c: "90466", f: 0.885 }, { c: "91845", f: 1.614 }, { c: "91855", f: 0.885 }, { c: "91926", f: 10.531 }, { c: "91940", f: 1 }, { c: "92000", f: 1 }] },
+  HIDRO_BANHEIRO: { nome: "Conjunto de pontos de água fria — banheiro",  unidade: "Unidades", fonte: "SINAPI 104660", horas: { encanador: 20.232, servente: 11.693 }, receita: null },
+  ESGOTO_BANHEIRO: { nome: "Conjunto de pontos de esgoto — banheiro",    unidade: "Unidades", fonte: "SINAPI 104676", horas: { encanador: 5.457, servente: 3.351 }, receita: null },
   PISO_CERAMICO:  { nome: "Piso cerâmico / porcelanato",                 unidade: "m²", fonte: "SINAPI 87251",  horas: { azulejista: 0.254, servente: 0.131 }, receita: [{ c: "87251", f: 1 }] },
   AZULEJO:        { nome: "Revestimento cerâmico de parede",             unidade: "m²", fonte: "SINAPI 87275",  horas: { azulejista: 0.888, servente: 0.367 }, receita: [{ c: "87275", f: 1 }] },
   FORRO_GESSO:    { nome: "Forro de gesso acartonado",                   unidade: "m²", fonte: "SINAPI 96110",  horas: { gesseiro: 0.546, servente: 0.546 }, receita: [{ c: "96110", f: 1 }] },
   PINTURA_INT:    { nome: "Pintura interna (selador, massa 2 demãos, tinta 2 demãos)", unidade: "m²", fonte: "SINAPI 88485 + 88497 + 88489", horas: { pintor: 0.591, servente: 0.197 }, receita: [{ c: "88485", f: 1 }, { c: "88497", f: 1 }, { c: "88489", f: 1 }] },
   PINTURA_EXT:    { nome: "Pintura externa (selador, tinta 2 demãos)",   unidade: "m²", fonte: "SINAPI 88485 + 88489", horas: { pintor: 0.23, servente: 0.077 }, receita: [{ c: "88485", f: 1 }, { c: "88489", f: 1 }] },
   ESQUADRIA:      { nome: "Instalação de esquadria de alumínio",         unidade: "m²", fonte: "SINAPI 94570",  horas: { pedreiro: 0.313, servente: 0.157 }, receita: [{ c: "94570", f: 1 }] },
-  PORTA:          { nome: "Porta interna completa (batente, folha, fechadura, alizar)", unidade: "un", fonte: "SINAPI 90843", horas: { carpinteiro: 9.015, pedreiro: 1.673, servente: 3.02 }, receita: [{ c: "90806", f: 1 }, { c: "90822", f: 1 }, { c: "90830", f: 1 }, { c: "100659", f: 10 }] },
+  PORTA:          { nome: "Porta interna completa (batente, folha, fechadura, alizar)", unidade: "Unidades", fonte: "SINAPI 90843", horas: { carpinteiro: 9.015, pedreiro: 1.673, servente: 3.02 }, receita: [{ c: "90806", f: 1 }, { c: "90822", f: 1 }, { c: "90830", f: 1 }, { c: "100659", f: 10 }] },
 
   // ── Reforma ──────────────────────────────────────────────────
   // Estes NÃO vêm do SINAPI: são referência de partida para o prazo, para a
@@ -105,10 +105,10 @@ var PRODUTIVIDADE_SEED = {
   RETIRADA_CONTRAPISO: { nome: "Retirada de contrapiso",                      unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { servente: 0.7, pedreiro: 0.1 }, receita: null },
   REMOCAO_FORRO:       { nome: "Remoção de forro",                            unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { servente: 0.2 }, receita: null },
   DEMOLICAO_CALCADA:   { nome: "Demolição de calçada / piso de concreto",     unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { servente: 0.8, pedreiro: 0.1 }, receita: null },
-  RETIRADA_ESQUADRIA:  { nome: "Retirada de esquadria",                       unidade: "un", fonte: "referência — calibrar com a equipe", horas: { servente: 0.8, pedreiro: 0.4 }, receita: null },
-  DESMONTAGEM_BANHEIRO:{ nome: "Desmontagem de banheiro (louças e metais)",   unidade: "un", fonte: "referência — calibrar com a equipe", horas: { encanador: 2, servente: 2 }, receita: null },
-  MONTAGEM_BANHEIRO:   { nome: "Montagem de banheiro (louças e metais)",      unidade: "un", fonte: "referência — calibrar com a equipe", horas: { encanador: 6, servente: 3 }, receita: null },
-  CARGA_ENTULHO:       { nome: "Carga de entulho na caçamba",                 unidade: "un", fonte: "referência — calibrar com a equipe", horas: { servente: 4 }, receita: null },
+  RETIRADA_ESQUADRIA:  { nome: "Retirada de esquadria",                       unidade: "Unidades", fonte: "referência — calibrar com a equipe", horas: { servente: 0.8, pedreiro: 0.4 }, receita: null },
+  DESMONTAGEM_BANHEIRO:{ nome: "Desmontagem de banheiro (louças e metais)",   unidade: "Unidades", fonte: "referência — calibrar com a equipe", horas: { encanador: 2, servente: 2 }, receita: null },
+  MONTAGEM_BANHEIRO:   { nome: "Montagem de banheiro (louças e metais)",      unidade: "Unidades", fonte: "referência — calibrar com a equipe", horas: { encanador: 6, servente: 3 }, receita: null },
+  CARGA_ENTULHO:       { nome: "Carga de entulho na caçamba",                 unidade: "Unidades", fonte: "referência — calibrar com a equipe", horas: { servente: 4 }, receita: null },
   DRYWALL_PAREDE:      { nome: "Parede de drywall (estrutura, placas, tratamento de junta)", unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { gesseiro: 0.8, servente: 0.4 }, receita: null },
 };
 

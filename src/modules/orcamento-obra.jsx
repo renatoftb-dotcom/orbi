@@ -627,11 +627,11 @@ function prestadores(cp, out, data) {
         MEM.nota(`${l.item}: ${l.base === "fixo" ? "serviço de valor fechado" : "medido por m²"}. Quantidade e preço saem do quadro de Prestadores; em branco, valem a medida do projeto e o preço do catálogo.`),
         ...(p && p.regressiva && l.precoDigitado == null
           ? [MEM.nota("A gestão de obra cobra numa escada regressiva: quanto maior a obra, menor o valor por metro.")] : []),
-        MEM.dado(l.rotulo, l.qtd, l.unidade === "m2" ? "m²" : "un",
+        MEM.dado(l.rotulo, l.qtd, l.unidade === "m2" ? "m²" : "Unidades",
           l.qtdDigitada != null ? "digitado no quadro de Prestadores" : "medida do projeto"),
         MEM.dado("Preço unitário", l.preco, l.unidade === "m2" ? "R$/m²" : "R$", fonte),
         MEM.conta("Total do serviço", "quantidade × preço", [["quantidade", l.qtd], ["preço", l.preco]], l.total, "R$"),
-        MEM.dado("Quantidade no orçamento", l.qtd, l.unidade === "m2" ? "m²" : "un", "a própria medida acima"),
+        MEM.dado("Quantidade no orçamento", l.qtd, l.unidade === "m2" ? "m²" : "Unidades", "a própria medida acima"),
       ],
     });
   }
@@ -4416,7 +4416,7 @@ function demolicoesRemocoes(cp, out, data) {
           ? `${s.item}: preço do catálogo de Insumos.`
           : `${s.item}: o serviço não está no catálogo de Insumos, então entra a referência do módulo. Cadastre-o em Insumos para usar o preço do seu empreiteiro.`),
         MEM.dado("Quantidade medida na visita", qtd, unidadeTexto, `linha "${it.nome}", coluna Demolir`),
-        MEM.dado("Preço unitário", taxa.valor, it.unidade === "un" ? "R$/un" : "R$/m²", taxa.fonte === "insumo" ? "catálogo de Insumos" : "referência do módulo"),
+        MEM.dado("Preço unitário", taxa.valor, it.unidade === "un" ? "R$/unidade" : "R$/m²", taxa.fonte === "insumo" ? "catálogo de Insumos" : "referência do módulo"),
       ],
     });
   }
@@ -4776,7 +4776,7 @@ function execucaoNoExistente(cp, out, data) {
       memoria: [
         MEM.nota(`${sv.item}: mão de obra. As peças em si entram pelo bloco de itens do projeto.`),
         MEM.dado(`${it.nome} a instalar`, qtd, it.unidade === "un" ? "unidades" : "m²", `linha "${it.nome}", coluna Instalar`),
-        MEM.dado("Preço unitário", taxa.valor, it.unidade === "un" ? "R$/un" : "R$/m²", taxa.fonte === "insumo" ? "catálogo de Insumos" : "referência do módulo"),
+        MEM.dado("Preço unitário", taxa.valor, it.unidade === "un" ? "R$/unidade" : "R$/m²", taxa.fonte === "insumo" ? "catálogo de Insumos" : "referência do módulo"),
       ],
     });
   }
@@ -5480,7 +5480,7 @@ function QuadroPrestadores({ projetoDraft, data, get, set, isMobile }) {
           <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{dentroDeGrupo ? l.sub : l.item}</div>
           <div style={{ fontSize: 10.5, color: cor(l) }}>{fonteTexto(l)}</div>
         </div>
-        <div style={{ fontSize: 11.5, color: "#6b7280", textAlign: "center" }}>{l.unidade === "m2" ? "m²" : "un"}</div>
+        <div style={{ fontSize: 11.5, color: "#6b7280", textAlign: "center" }}>{l.unidade === "m2" ? "m²" : "Unidades"}</div>
         <CampoNumeroBR estilo={cel} disabled={apagado} valor={l.qtdDigitada}
           placeholder={numMem(l.auto)}
           aoMudar={(v) => set(`prestadores.${l.chave}.qtd`, v)} />
@@ -5563,7 +5563,7 @@ function MatrizExistente({ projetoDraft, get, set, isMobile }) {
         <div key={it.id} style={{ marginBottom: 10 }}>
           <div style={grade}>
             <label style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>
-              {it.nome} <span style={{ color: "#6b7280", fontWeight: 400 }}>({it.unidade === "un" ? "un" : "m²"})</span>
+              {it.nome} <span style={{ color: "#6b7280", fontWeight: 400 }}>({it.unidade === "un" ? "unidades" : "m²"})</span>
             </label>
             <div>
               {isMobile && <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>Demolir / desmontar</div>}
@@ -5883,7 +5883,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
     if (!ins) return { cor: "#b45309", texto: "não encontrado em Insumos — entra sem preço (R$ 0)" };
     const p = typeof precoInsumo === "function" ? precoInsumo(ins) : null;
     if (!p || p.preco == null) return { cor: "#b45309", texto: `${ins.codigo} · sem preço cadastrado` };
-    return { cor: "#15803d", texto: `${ins.codigo} · ${formatoBRL(p.preco)}/${ins.unidade || "un"}` };
+    return { cor: "#15803d", texto: `${ins.codigo} · ${formatoBRL(p.preco)}/${ins.unidade || "Unidades"}` };
   }
 
   const wrap = { border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 };

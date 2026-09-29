@@ -69,7 +69,7 @@ const modulo = new Function(`
            linkWhatsApp, enviosDaLista, envioParaLoja, registrarEnvioDaLista, lojasParaPedir,
            interpretarPedido, interpretarLinhaDePedido, quantidadeDoTexto, resumoDaLeitura,
            itemDoPedidoLido, resolverInsumo, scoreAssociacao, candidatosDoPedido,
-           unidadesDoCatalogo, opcoesDeUnidade,
+           unidadesDoCatalogo, opcoesDeUnidade, unidadeNoPadrao, itensDaEntrada,
            ehNumeroDeOrcamento, numeroDeOrcamento, itemDeOrcamento, dataIsoDoOrcamento,
            interpretarOrcamento, casarOrcamentoComItens, lojaCadastrada,
            papelDaCelula, papeisDaTabela, precoDaLinha,
@@ -78,7 +78,7 @@ const modulo = new Function(`
            medidaDoTexto, palavraChave, familiasDoCatalogo, nomeNoPadrao, gruposDoCatalogo, codigoDoGrupo,
            medidasDeEmbalagem, divergenciaDeEmbalagem, escolhasDoCasamento,
            indiceDoCatalogo, casarNoCatalogo, sugestaoDoCatalogo, comApelidoDaLoja,
-           cotPalavrasDoNome, sugestoesDaIA, textoParaAIA };
+           cotPalavrasDoNome, cotPartesDoNome, sugestoesDaIA, textoParaAIA };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -2104,8 +2104,12 @@ teste("prefixo de categoria e plural n\u00e3o atrapalham", () => {
   const r = modulo.casarNoCatalogo("Prego 17x21 1kg", idx, 3);
   assert.strictEqual(r[0].insumo.codigo, "ACO-101");
   assert.ok(r[0].score >= 0.72, "casa forte mesmo escrito diferente");
-  assert.ok(r.every(x => x.insumo.codigo !== "ACO-102"),
-    "o vizinho de outra medida nem chega a ser candidato");
+  // O vizinho de outra medida pode aparecer na lista de parecidos — ela
+  // existe para oferecer opção —, mas tão atrás que não disputa o carimbo.
+  const vizinho = r.find(x => x.insumo.codigo === "ACO-102");
+  if (vizinho) assert.ok(r[0].score - vizinho.score >= 0.25,
+    "o vizinho de outra medida não pode chegar perto: " + vizinho.score);
+  assert.strictEqual(modulo.sugestaoDoCatalogo("Prego 17x21 1kg", idx).segura, true);
 });
 
 teste("acento e caixa n\u00e3o mudam nada", () => {
@@ -2221,6 +2225,125 @@ teste("o insumo tamb\u00e9m se acha pelo id, quando o c\u00f3digo n\u00e3o veio"
   const bruto = { itens: [{ descricao: "Linha Trancada Firme Multifio 100m", codigoInsumo: "m1" }] };
   const r = modulo.sugestoesDaIA(SOBRAS, bruto, cat);
   assert.deepStrictEqual(r.map(x => [x.indice, x.nome]), [[1, "Linha de pedreiro"]]);
+});
+
+
+// ── Unidade no vocabulário da empresa ────────────────────────
+const UN_CAT = ["Unidades", "m2", "Mts", "Kg", "Baldes 18L"];
+
+teste("\"un\" da nota vira \"Unidades\" do catálogo", () => {
+  for (const escrito of ["un", "UN", "un.", "und", "unid", "unidade", "Unidade", " un "])
+    assert.strictEqual(modulo.unidadeNoPadrao(escrito, UN_CAT), "Unidades", escrito);
+});
+
+teste("peça, jogo, conjunto e par também contam como Unidades", () => {
+  for (const escrito of ["pc", "pç", "peça", "peças", "jg", "cj", "conj", "par"])
+    assert.strictEqual(modulo.unidadeNoPadrao(escrito, UN_CAT), "Unidades", escrito);
+});
+
+teste("abreviação de medida cai no nome que o catálogo usa", () => {
+  assert.strictEqual(modulo.unidadeNoPadrao("m²", UN_CAT), "m2");
+  assert.strictEqual(modulo.unidadeNoPadrao("mt", UN_CAT), "Mts");
+  assert.strictEqual(modulo.unidadeNoPadrao("KG", UN_CAT), "Kg");
+  assert.strictEqual(modulo.unidadeNoPadrao("quilos", UN_CAT), "Kg");
+});
+
+teste("o que o catálogo já escreve assim fica como está", () => {
+  assert.strictEqual(modulo.unidadeNoPadrao("Baldes 18L", UN_CAT), "Baldes 18L");
+  assert.strictEqual(modulo.unidadeNoPadrao("Unidades", UN_CAT), "Unidades");
+});
+
+teste("unidade que ninguém conhece volta como foi escrita", () => {
+  assert.strictEqual(modulo.unidadeNoPadrao("vb", UN_CAT), "vb");
+  assert.strictEqual(modulo.unidadeNoPadrao("sacos", UN_CAT), "sacos");
+  assert.strictEqual(modulo.unidadeNoPadrao("", UN_CAT), "");
+  assert.strictEqual(modulo.unidadeNoPadrao(null, UN_CAT), "");
+});
+
+teste("sem catálogo, a abreviação ainda vira o nome inteiro", () => {
+  assert.strictEqual(modulo.unidadeNoPadrao("un", []), "Unidades");
+  assert.strictEqual(modulo.unidadeNoPadrao("un"), "Unidades");
+});
+
+teste("\"un\" não entra como opção extra na lista de unidades", () => {
+  assert.deepStrictEqual(modulo.opcoesDeUnidade("un", UN_CAT), UN_CAT);
+  assert.deepStrictEqual(modulo.opcoesDeUnidade("UND", UN_CAT), UN_CAT);
+  assert.deepStrictEqual(modulo.opcoesDeUnidade("vb", UN_CAT), ["vb", ...UN_CAT]);
+});
+
+teste("item lido do orçamento chega com a unidade já no padrão", () => {
+  const cat = [{ codigo: "MAD-010", nome: "Tabua de pinus", grupo: "Madeiras", unidade: "Unidades" }];
+  const bruto = { itens: [{ descricao: "Parafuso bucha 8mm", quantidade: 50, unidade: "un", unitario: 1, total: 50 }] };
+  const itens = modulo.itensDaEntrada(bruto, "orcamento", cat);
+  assert.strictEqual(itens.length, 1);
+  assert.strictEqual(itens[0].unidade, "Unidades");
+});
+
+
+// ── A gaveta do catálogo não é o material ────────────────────
+const CAT_GAV = [
+  { codigo:"ELE-100", nome:"Elétrica - Fita Isolante", grupo:"Elétrica", unidade:"Unidades", aliases:[] },
+  { codigo:"ELE-110", nome:"Elétrica - Cabo Flexível 2,5mm", grupo:"Elétrica", unidade:"Mts", aliases:[] },
+  { codigo:"ELE-120", nome:"Elétrica - Eletroduto 25mm", grupo:"Elétrica", unidade:"Mts", aliases:[] },
+  { codigo:"ELE-130", nome:"Elétrica - Tomada 10A", grupo:"Elétrica", unidade:"Unidades", aliases:[] },
+  { codigo:"TIN-050", nome:"Fita Crepe", grupo:"Tintas", unidade:"Unidades", aliases:[] },
+  { codigo:"TIN-060", nome:"Hidráulica - Fita Veda Rosca", grupo:"Hidráulica", unidade:"Unidades", aliases:[] },
+  { codigo:"ACO-101", nome:"Aço - Pregos 17x21", grupo:"Aço", unidade:"Kg", aliases:[] },
+  { codigo:"ACO-200", nome:"Aço - Arame Recozido", grupo:"Aço", unidade:"Kg", aliases:[] },
+  { codigo:"CIM-010", nome:"Cal Hidratado 20kg", grupo:"Cimento", unidade:"Sacos", aliases:[] },
+];
+
+teste("o nome do catálogo se parte em gaveta e material", () => {
+  assert.deepStrictEqual(modulo.cotPartesDoNome("Elétrica - Fita Isolante"),
+    { gaveta: ["eletrica"], corpo: ["fita", "isolante"] });
+  assert.deepStrictEqual(modulo.cotPartesDoNome("Madeira Caixaria - Sarrafos de 05cm"),
+    { gaveta: ["madeira", "caixaria"], corpo: ["sarrafos", "05", "cm"] });
+});
+
+teste("nome sem travéssão não tem gaveta", () => {
+  assert.deepStrictEqual(modulo.cotPartesDoNome("Cal Hidratado 20kg").gaveta, []);
+  assert.deepStrictEqual(modulo.cotPartesDoNome("Fita Crepe").gaveta, []);
+});
+
+teste("travéssão sem corpo, ou gaveta longa demais, não é gaveta", () => {
+  assert.deepStrictEqual(modulo.cotPartesDoNome("Fita Isolante - ").gaveta, []);
+  assert.deepStrictEqual(modulo.cotPartesDoNome("Uma duas três quatro cinco - Fita").gaveta, []);
+});
+
+teste("“Fita Isolante 10 Mt - Tigre” acha a fita isolante do catálogo", () => {
+  const sg = modulo.sugestaoDoCatalogo("Fita Isolante 10 Mt - Tigre", modulo.indiceDoCatalogo(CAT_GAV));
+  assert.strictEqual(sg.nome, "Elétrica - Fita Isolante");
+  assert.ok(sg.segura, "deveria carimbar sozinho, e não só sugerir — deu " + sg.score);
+});
+
+teste("a gaveta não castiga mais o insumo bem arquivado", () => {
+  const idx = modulo.indiceDoCatalogo(CAT_GAV);
+  for (const [texto, nome] of [
+    ["Prego 17x21 1kg", "Aço - Pregos 17x21"],
+    ["Arame Recozido Trançado N18 1kg", "Aço - Arame Recozido"],
+    ["Eletroduto 25mm", "Elétrica - Eletroduto 25mm"],
+    ["Tomada 10A Branca", "Elétrica - Tomada 10A"],
+  ]) {
+    const sg = modulo.sugestaoDoCatalogo(texto, idx);
+    assert.strictEqual(sg && sg.nome, nome, texto);
+    assert.ok(sg.segura, texto + " deu só " + sg.score);
+  }
+});
+
+teste("a gaveta ainda separa dois materiais de nome parecido", () => {
+  const idx = modulo.indiceDoCatalogo(CAT_GAV);
+  const sg = modulo.sugestaoDoCatalogo("Fita Veda Rosca 18mm", idx);
+  assert.strictEqual(sg.nome, "Hidráulica - Fita Veda Rosca");
+});
+
+teste("mesmo material em duas gavetas vira pergunta, não carimbo", () => {
+  const dois = [
+    { codigo:"A-1", nome:"Elétrica - Fita Isolante", grupo:"Elétrica", aliases:[] },
+    { codigo:"B-1", nome:"Hidráulica - Fita Isolante", grupo:"Hidráulica", aliases:[] },
+  ];
+  const sg = modulo.sugestaoDoCatalogo("Fita Isolante 10 Mt", modulo.indiceDoCatalogo(dois));
+  assert.ok(sg, "deveria achar as duas");
+  assert.strictEqual(sg.segura, false, "empate entre gavetas não pode carimbar sozinho");
 });
 
 for (const [nome, fn] of testes) {
