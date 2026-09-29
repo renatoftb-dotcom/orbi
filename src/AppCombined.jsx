@@ -23183,6 +23183,37 @@ function itensDaEntrada(bruto, tipo, insumos) {
 
 // O que a leitura achou, em uma frase — é o que a pessoa confere antes de
 // dizer o que o papel é.
+// Duas descrições DIFERENTES apontando para o mesmo insumo não podem
+// carimbar as duas: uma delas está errada. "Plugue Pad 2p+t 10a Cz" e
+// "Tomada Pad 2p+t 10a Cz" são quase a mesma frase; se o catálogo só tem a
+// tomada, as duas linhas apostam nela e o pedido nasce com um plugue que é
+// uma tomada. Carimba a de melhor placar; a outra fica esperando um toque —
+// que é quando a pessoa vê que falta cadastrar o plugue.
+//
+// Repetição do MESMO texto continua valendo: nota com duas linhas do mesmo
+// material é comum, e as duas devem casar.
+function casamentosSeguros(itens) {
+  const cand = [];
+  (itens || []).forEach((x, i) => {
+    if (!x || x.insumoCodigo || !x.sugestao || !x.sugestao.segura || !x.sugestao.codigo) return;
+    cand.push({ i, codigo: x.sugestao.codigo, score: Number(x.sugestao.score) || 0,
+      texto: cotSemAcento(String(x.descricao || "")) });
+  });
+  const porCodigo = new Map();
+  for (const c of cand) {
+    const g = porCodigo.get(c.codigo) || [];
+    g.push(c); porCodigo.set(c.codigo, g);
+  }
+  const ok = [];
+  porCodigo.forEach((g) => {
+    const textos = new Set(g.map((c) => c.texto));
+    if (textos.size <= 1) { for (const c of g) ok.push(c.i); return; }
+    const melhor = g.slice().sort((a, b) => (b.score - a.score) || (a.i - b.i))[0];
+    for (const c of g) if (c.texto === melhor.texto) ok.push(c.i);
+  });
+  return ok.sort((a, b) => a - b);
+}
+
 function resumoDaEntrada(itens) {
   const lista = itens || [];
   const comCatalogo = lista.filter((x) => x.insumoCodigo).length;
@@ -27722,11 +27753,13 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // A leitura já sabe o que cada linha é — mas proposta é proposta, e quem
   // carimba é a pessoa. O que não pode é cobrar onze toques por isso: as
   // que vieram seguras vira uma só.
-  const paraCasar = (itens || []).filter((x) => !x.insumoCodigo && x.sugestao && x.sugestao.segura).length;
+  const seguros = casamentosSeguros(itens || []);
+  const paraCasar = seguros.length;
   function casarOsSegurosDaEntrada() {
     const aprendidos = [];
-    setItens((lista) => (lista || []).map((x) => {
-      if (x.insumoCodigo || !x.sugestao || !x.sugestao.segura) return x;
+    const podem = new Set(casamentosSeguros(itens || []));
+    setItens((lista) => (lista || []).map((x, i) => {
+      if (!podem.has(i)) return x;
       const ins = (insumos || []).find((y) => y && y.codigo === x.sugestao.codigo);
       if (!ins) return x;
       aprendidos.push({ codigo: ins.codigo, descricao: x.descricao });
@@ -28134,11 +28167,12 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
   }
 
   // As sugestões seguras de uma vez: onze toques viram um.
-  const paraCasar = itens.filter((x) => !x.insumoCodigo && x.sugestao && x.sugestao.segura).length;
+  const paraCasar = casamentosSeguros(itens).length;
   function casarOsSeguros() {
     const aprendidos = [];
-    const novos = itens.map((x) => {
-      if (x.insumoCodigo || !x.sugestao || !x.sugestao.segura) return x;
+    const podem = new Set(casamentosSeguros(itens));
+    const novos = itens.map((x, i) => {
+      if (!podem.has(i)) return x;
       const ins = (insumos || []).find((y) => y && y.codigo === x.sugestao.codigo);
       if (!ins) return x;
       aprendidos.push({ codigo: ins.codigo, descricao: x.descricao });
@@ -28330,7 +28364,12 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
             const campoDescricao = (
               <input style={celStyle} value={it.descricao} placeholder="Descrição do item"
                 onChange={(e) => mexerItem(i, { descricao: e.target.value })}
-                onBlur={() => mexerItem(i, casarItem(it))} />
+                // Reprocurar só quando não há escolha: antes, sair do campo
+                // rodava o casamento de novo e, se o texto não batesse exato,
+                // o insumo que a pessoa tinha escolhido virava "parece" — a
+                // tela desfazia sozinha o trabalho dela. Para trocar existe
+                // o botão "trocar".
+                onBlur={() => { if (!it.insumoCodigo) mexerItem(i, casarItem(it)); }} />
             );
             const elo = { background: "none", border: "none", padding: 0, fontFamily: "inherit",
               fontSize: 10.5, color: "#6b7280", cursor: "pointer", textDecoration: "underline" };

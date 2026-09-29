@@ -61,7 +61,7 @@ const modulo = new Function(`
            podeLancarEmContas, dadosDoLancamento, contasDaCotacao, removerContasDaCotacao, contasDeCotacao,
            contasDasEntregas, totalDasEntregas, entregaVazia, MODOS_LANCAMENTO, modoLancamento,
            planoDoLancamento, linhasDoPagamento, resumoDoPlano,
-           itemCotacaoVazio, itensDaCotacao, temListaDeItens, quantidadeDoItem, precoUnitario,
+           casamentosSeguros, itemCotacaoVazio, itensDaCotacao, temListaDeItens, quantidadeDoItem, precoUnitario,
            propostaTemPrecoPorItem, totalDosItens, itensSemPreco, valorDaProposta,
            melhorPorItem, comparativoDaLista, textoDoPedido, qtdBR,
            unitarioDoTotal, totalBrutoItem, valoresComDesconto, totalEfetivoItem,
@@ -2431,6 +2431,59 @@ teste("dinheiro sai com duas casas e vírgula, sempre", () => {
 teste("quantidade não ganha centavos à força", () => {
   assert.strictEqual(modulo.qtdBR(30), "30");
   assert.strictEqual(modulo.qtdBR(2.5), "2,5");
+});
+
+
+// ── Um insumo não carimba duas descrições diferentes ─────────
+const seg = (codigo, score) => ({ codigo, nome: codigo, score, segura: true });
+
+teste("duas descrições diferentes no mesmo insumo: só a melhor carimba", () => {
+  const itens = [
+    { descricao: "Tomada Pad 2p+t 10a Cz - Fame", sugestao: seg("ELE-136", 0.88) },
+    { descricao: "Plugue Pad 2p+t 10a Cz - Fame", sugestao: seg("ELE-136", 0.79) },
+  ];
+  assert.deepStrictEqual(modulo.casamentosSeguros(itens), [0], "o plugue fica esperando um toque");
+});
+
+teste("a ordem da lista não decide — o placar decide", () => {
+  const itens = [
+    { descricao: "Plugue Pad 2p+t 10a Cz - Fame", sugestao: seg("ELE-136", 0.79) },
+    { descricao: "Tomada Pad 2p+t 10a Cz - Fame", sugestao: seg("ELE-136", 0.88) },
+  ];
+  assert.deepStrictEqual(modulo.casamentosSeguros(itens), [1]);
+});
+
+teste("o mesmo material repetido na nota casa nas duas linhas", () => {
+  const itens = [
+    { descricao: "Cimento CP-II 50kg", sugestao: seg("CIM-001", 0.9) },
+    { descricao: "Cimento CP-II 50kg", sugestao: seg("CIM-001", 0.9) },
+  ];
+  assert.deepStrictEqual(modulo.casamentosSeguros(itens), [0, 1]);
+});
+
+teste("insumos diferentes carimbam todos", () => {
+  const itens = [
+    { descricao: "Tomada", sugestao: seg("ELE-136", 0.9) },
+    { descricao: "Plugue", sugestao: seg("ELE-137", 0.85) },
+  ];
+  assert.deepStrictEqual(modulo.casamentosSeguros(itens), [0, 1]);
+});
+
+teste("item já escolhido e proposta insegura ficam de fora", () => {
+  const itens = [
+    { descricao: "Tomada", insumoCodigo: "ELE-136", sugestao: null },
+    { descricao: "Plugue", sugestao: { codigo: "ELE-137", nome: "x", score: 0.6, segura: false } },
+    { descricao: "Cabo", sugestao: null },
+  ];
+  assert.deepStrictEqual(modulo.casamentosSeguros(itens), []);
+});
+
+teste("empate no placar: a primeira linha carimba, e só ela", () => {
+  const itens = [
+    { descricao: "Plugue A", sugestao: seg("ELE-136", 0.8) },
+    { descricao: "Plugue B", sugestao: seg("ELE-136", 0.8) },
+  ];
+  assert.deepStrictEqual(modulo.casamentosSeguros(itens), [0]);
 });
 
 for (const [nome, fn] of testes) {
