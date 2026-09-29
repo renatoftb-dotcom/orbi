@@ -4528,7 +4528,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         pedidoNaLoja: { contaLojaId: dados.cotacaoId, pedidoId: pedido.id, numero: pedido.numero,
           numeroLoja: pedido.numeroLoja || "", em: pedido.lancadoEm, por: pedido.lancadoPor },
       }));
-      const comLoja = { ...obraAtual, contasPagar: [...restantes, ...contas], cotacoes: comOrigem };
+      // Papel que já foi pago nasce baixado: numa gravação só, senão ficaria
+      // um instante em "a pagar" e o P&L do mês piscaria com um custo em aberto
+      // que nunca existiu.
+      const todas = [...restantes, ...contas];
+      const finais = pedido.jaPago && pedido.pagoEm
+        ? baixarPedidos(todas, [pedido.id], { pagoEm: pedido.pagoEm }, quemSou()).contas
+        : todas;
+      const comLoja = { ...obraAtual, contasPagar: finais, cotacoes: comOrigem };
       gravarObras(obras.map(o => o.id === obraAtual.id ? comLoja : o));
       setObraSelecionada(comLoja);
       return { primeiraContaId: contas[0].id, quantas: contas.length, gravado: true };

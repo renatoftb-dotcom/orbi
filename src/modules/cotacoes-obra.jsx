@@ -682,6 +682,105 @@ function textoParaAIA(itens) {
     .join("\n");
 }
 
+// ═════════════════════════════════════════════════════════════
+// ENTRADA — uma caixa só para tudo que chega
+// ═════════════════════════════════════════════════════════════
+// Até aqui cada tipo de papel tinha sua porta: a proposta do fornecedor numa
+// tela, a lista do pedreiro noutra, o PDF do pedido numa terceira. Só que
+// quem recebe o papel não sabe de antemão o que vai fazer com ele — a mesma
+// nota pode virar um pedido a pagar, o registro de algo já pago, ou a lista
+// que vai para três lojas cotarem.
+//
+// Então a ordem se inverte: primeiro entra o material, depois se pergunta o
+// que ele é. A leitura é a mesma nos três casos; o que muda é a porta de
+// saída. Nada aqui lê de um jeito novo — é o leitor de PDF para papel com
+// preço, e a IA (ou o leitor por regras) para texto e foto.
+
+// Cada leitor devolve um formato. Aqui os três viram um só, no molde do item
+// do pedido, para que a tela de saída receba sempre a mesma coisa.
+function itemDaEntrada(cru, tipo) {
+  const c = cru || {};
+  if (tipo === "orcamento") {
+    return { descricao: String(c.descricao || "").trim(), quantidade: c.quantidade || "",
+      unidade: c.unidade || "", unitario: c.unitario || "", bruto: c.total || "",
+      codigoLoja: c.codigo || "" };
+  }
+  // lista (IA ou leitor por regras): tem o que se pede, não o que se paga
+  const ins = c.insumo || null;
+  return { descricao: String(c.termo || c.descricao || c.bruto || "").trim(),
+    quantidade: c.quantidade || "", unidade: c.unidade || (ins && ins.unidade) || "",
+    unitario: "", bruto: "", codigoLoja: "",
+    insumoCodigo: ins ? (ins.codigo || "") : "",
+    grupoMaterial: ins ? (ins.grupo || "") : "" };
+}
+
+// Casa com o catálogo pelo caminho de sempre: primeiro o exato (código,
+// apelido, nome igual), depois a aposta do peso das palavras. O que a IA já
+// carimbou passa direto — ela olhou o catálogo pelo código.
+function casarItemDaEntrada(item, insumos, indice) {
+  const it = item || {};
+  if (it.insumoCodigo) return it;
+  const lista = insumos || [];
+  if (typeof resolverInsumo === "function") {
+    const r = resolverInsumo(it.descricao, lista);
+    if (r && r.insumo) {
+      return { ...it, insumoCodigo: r.insumo.codigo || "", grupoMaterial: r.insumo.grupo || "",
+        unidade: it.unidade || r.insumo.unidade || "",
+        etapa: it.etapa || r.insumo.etapaPadrao || "",
+        contaId: it.contaId || r.insumo.contaPadrao || "", sugestao: null };
+    }
+  }
+  return { ...it, sugestao: sugestaoDoCatalogo(it.descricao, indice) };
+}
+
+function itensDaEntrada(bruto, tipo, insumos) {
+  const crus = tipo === "orcamento" ? (((bruto || {}).itens) || []) : (bruto || []);
+  const indice = indiceDoCatalogo(insumos || []);
+  return crus
+    .map((c) => itemDaEntrada(c, tipo))
+    .filter((x) => x.descricao)
+    .map((x) => casarItemDaEntrada(x, insumos, indice))
+    .map((x) => ({ ...(typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio() : {}), ...x }));
+}
+
+// O que a leitura achou, em uma frase — é o que a pessoa confere antes de
+// dizer o que o papel é.
+function resumoDaEntrada(itens) {
+  const lista = itens || [];
+  const comCatalogo = lista.filter((x) => x.insumoCodigo).length;
+  const comProposta = lista.filter((x) => !x.insumoCodigo && x.sugestao).length;
+  // pelo mesmo caminho do pedido: subtotal do papel, ou quantidade × unitário
+  const soma = lista.reduce((t, x) => {
+    return t + (typeof brutoDoItem === "function" ? brutoDoItem(x) : 0);
+  }, 0);
+  return { quantos: lista.length, comCatalogo, comProposta,
+    semNada: lista.length - comCatalogo - comProposta,
+    total: Math.round(soma * 100) / 100,
+    temPreco: lista.some((x) => x.bruto || x.unitario) };
+}
+
+// As três portas de saída. A ordem é a da vida: o pedido é o caso de todo
+// dia, o pagamento já feito é o que chega depois, e a cotação é quando
+// ainda não se sabe o preço.
+const DESTINOS_DA_ENTRADA = [
+  { id: "pedido", nome: "Pedido", resumo: "Vai virar conta a pagar na loja, com vencimento." },
+  { id: "pagamento", nome: "Pagamento já feito", resumo: "Já saiu o dinheiro: entra lançado e baixado, na data em que foi pago." },
+  { id: "cotacao", nome: "Cotação", resumo: "Ainda sem preço fechado: vira lista para as lojas cotarem." },
+];
+
+// Pedido e pagamento precisam saber de qual loja é; cotação, não — ela
+// nasce justamente para perguntar a várias.
+function entradaPedeLoja(destino) {
+  return destino === "pedido" || destino === "pagamento";
+}
+
+function entradaPronta(destino, lojaId, itens) {
+  if (!destino) return { ok: false, motivo: "Diga o que é este papel." };
+  if (!(itens || []).length) return { ok: false, motivo: "A leitura não achou itens." };
+  if (entradaPedeLoja(destino) && !lojaId) return { ok: false, motivo: "Escolha a loja." };
+  return { ok: true, motivo: "" };
+}
+
 // ── O item novo no padrão do catálogo ───────────────────────────
 // O catálogo tem família: "PVC - Alimentação Água Fria - Luva 32mm",
 // "... - Luva 50mm", "... - Luva União 50mm". O item novo entra na mesma
@@ -2422,6 +2521,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     return () => { vivo = false; };
   }, []);
   const [orcamentoLido, setOrcamentoLido] = useState(null);  // { orcamento, casamento }
+  const [entradaAberta, setEntradaAberta] = useState(false);
   const insumos = (data.materiais || []).filter(i => i && i.ativo !== false);
   const cadastrarInsumoDoPedido = (campos) => {
     const todos = data.materiais || [];
@@ -3591,12 +3691,67 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     setErro("");
   }
 
+  // A Entrada entrega a lista pronta; aqui ela vira pedido, pagamento ou
+  // cotação. Nenhuma tela nova de saída: as três já existiam, e a Entrada
+  // só chega nelas com o trabalho de leitura feito.
+  function seguirDaEntrada({ destino, lojaId, itens, papel }) {
+    setEntradaAberta(false);
+    setErro("");
+    if (destino === "cotacao") {
+      const nova = cotacaoVazia(obra.id);
+      setFormCotacao({ ...nova, titulo: nova.titulo || "",
+        itens: (itens || []).map((it) => ({
+          ...(typeof itemCotacaoVazio === "function" ? itemCotacaoVazio() : {}),
+          codigo: it.insumoCodigo || "", descricao: it.descricao || "",
+          unidade: it.unidade || "", quantidade: it.quantidade || "",
+        })) });
+      return;
+    }
+    const loja = prestadores.find((f) => f.id === lojaId);
+    if (!loja) { setErro("Escolha a loja."); return; }
+    // Sem conta aberta nessa loja, a Entrada abre uma: é onde os pedidos dela
+    // se acumulam, e criar à mão antes só seria um passo a mais.
+    let conta = contaDeLojaAberta(cotacoes, loja.id);
+    let criada = null;
+    if (!conta) {
+      criada = { ...cotacaoVazia(obra.id), titulo: loja.nome, contaLoja: true,
+        lojaId: loja.id, prazoLoja: 30, contaId: "material" };
+      conta = criada;
+    }
+    const base = pedidoVazio("");
+    const prazo = Number(conta.prazoLoja) || 0;
+    const data = (papel && papel.emitido) || base.data;
+    const pedido = {
+      ...base,
+      data,
+      numeroLoja: (papel && papel.numeroPedido) || "",
+      desconto: (papel && papel.desconto) || "",
+      vencimento: destino === "pagamento" ? data
+        : ((papel && papel.vencimento) || (prazo > 0 && typeof somarDias === "function" ? somarDias(data, prazo) : "")),
+      jaPago: destino === "pagamento",
+      pagoEm: destino === "pagamento" ? data : "",
+      itens: itens || [],
+    };
+    setFormPedido({ cotacao: conta, pedido, contaNova: criada });
+  }
+
   function lancarPedido(pedido) {
     if (!onLancarContas || !formPedido) { setErro('Lançamento indisponível nesta tela.'); return; }
     const cot = formPedido.cotacao;
     const loja = prestadores.find((f) => f.id === cot.lojaId) || {};
+    // Conta de loja que a Entrada abriu só na memória: grava antes, senão o
+    // pedido nasceria pendurado numa conta que não existe.
+    if (formPedido.contaNova) {
+      const r0 = gravarCotacoes([...(obra.cotacoes || []), formPedido.contaNova]);
+      if (r0 && r0.erro) { setErro(r0.erro); return; }
+    }
+    // "Já pago" não é outro lançamento: é o mesmo, com a baixa no mesmo ato.
+    // A data que a pessoa pôs no campo é o dia em que o dinheiro saiu.
+    const comBaixa = pedido.jaPago
+      ? { ...pedido, pagoEm: pedido.pagoEm || pedido.vencimento || pedido.data || "" }
+      : pedido;
     const r = onLancarContas({
-      cotacaoId: cot.id, obraId: cot.obraId || obra.id, modo: 'contaLoja', pedido,
+      cotacaoId: cot.id, obraId: cot.obraId || obra.id, modo: 'contaLoja', pedido: comBaixa,
       contaId: cot.contaId || 'material',
       prestadorId: loja.id || '', favorecido: loja.nome || '',
       descricao: cot.titulo || 'Compra',
@@ -3666,7 +3821,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2 }}>{obra.nome}</div>
         </div>
         {podeGerenciar && (
-          <button style={E.btn} onClick={() => { setErro(""); setFormCotacao(cotacaoVazia(obra.id)); }}>+ Nova cotação</button>
+          <>
+            <button style={{ ...E.btnSec, marginRight: 8 }}
+              onClick={() => { setErro(""); setEntradaAberta(true); }}>Entrada</button>
+            <button style={E.btn} onClick={() => { setErro(""); setFormCotacao(cotacaoVazia(obra.id)); }}>+ Nova cotação</button>
+          </>
         )}
       </div>
 
@@ -3691,6 +3850,12 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
             </button>
           ))}
         </div>
+      )}
+
+      {entradaAberta && (
+        <PainelEntrada insumos={insumos} prestadores={prestadores} iaDisponivel={!!iaDisponivel}
+          isMobile={isMobile} dinheiro={dinheiro}
+          aoFechar={() => setEntradaAberta(false)} aoSeguir={seguirDaEntrada} />
       )}
 
       {formPedido && (
@@ -5010,6 +5175,211 @@ function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGe
 // ou os dois. O que a tela cobra é o que o P&L precisa e o papel não traz:
 // a etapa de cada item. Sem ela o pedido não é lançado — é assim que o
 // quadro por etapa para de encher de "Sem etapa".
+
+// ── A caixa da Entrada ──────────────────────────────
+// Três passos numa tela só: o material entra, a lista aparece conferida
+// contra o catálogo, e aí se diz o que o papel é. Nenhum dado é gravado
+// aqui — a Entrada só entrega a lista pronta para a porta escolhida.
+function PainelEntrada({ insumos, prestadores, iaDisponivel, isMobile, dinheiro, aoFechar, aoSeguir }) {
+  const E = COT_ESTILO;
+  const P = cotPainel(isMobile, 940);
+  const [texto, setTexto] = useState("");
+  const [arquivo, setArquivo] = useState(null);
+  const [lendo, setLendo] = useState(false);
+  const [progresso, setProgresso] = useState(null);
+  const [aviso, setAviso] = useState("");
+  const [itens, setItens] = useState(null);
+  const [destino, setDestino] = useState("");
+  const [lojaId, setLojaId] = useState("");
+  const [sobre, setSobre] = useState(false);
+
+  const lojas = (prestadores || []).filter((f) => f && f.ativo !== false);
+  const resumo = itens ? resumoDaEntrada(itens) : null;
+  const prova = entradaPronta(destino, lojaId, itens || []);
+
+  const ehPdf = (f) => !!f && (/pdf$/i.test(f.name || "") || f.type === "application/pdf");
+
+  async function ler() {
+    if (lendo) return;
+    if (!arquivo && !String(texto).trim()) { setAviso("Cole a lista ou escolha um arquivo."); return; }
+    setLendo(true); setAviso(""); setProgresso(null);
+    try {
+      // Papel com preço (PDF) tem leitor próprio, de graça e na hora: número,
+      // vencimento, desconto e valor saem do papel. Só texto e foto é que
+      // precisam da IA, e mesmo aí ela volta sem preço — preço é do papel.
+      if (ehPdf(arquivo)) {
+        const o = interpretarOrcamento(await linhasDoPdf(arquivo));
+        if (!(o.itens || []).length) throw new Error("Não achei a tabela de itens neste PDF. Se for foto ou digitalização, cole o texto.");
+        const lidos = itensDaEntrada(o, "orcamento", insumos || []);
+        setItens(lidos);
+        setPapel({ numeroPedido: o.numeroPedido || o.numero || "", emitido: o.emitido || "",
+          vencimento: o.vencimento || "", desconto: o.desconto || "" });
+      } else if (iaDisponivel) {
+        const r = await api.ia.lerPedido({ arquivo: arquivo || null, texto: texto || "" },
+          (pr) => setProgresso(pr));
+        const cru = pedidoDaIA(r, insumos || []);
+        if (!cru.length) throw new Error("A IA não achou itens aí.");
+        setItens(itensDaEntrada(promoverCandidatos(cru), "lista", insumos || []));
+        setPapel(null);
+      } else {
+        if (!String(texto).trim()) throw new Error("Sem a IA eu leio o texto colado e o PDF. Cole o texto da lista.");
+        const cru = interpretarPedido(texto, insumos || []);
+        if (!cru.length) throw new Error("Não achei itens no texto.");
+        setItens(itensDaEntrada(promoverCandidatos(cru), "lista", insumos || []));
+        setPapel(null);
+      }
+    } catch (e) {
+      setAviso((typeof avisoDaIA === "function" ? avisoDaIA(e) : "") || e.message || "Não consegui ler.");
+    } finally {
+      setLendo(false); setProgresso(null);
+    }
+  }
+
+  const [papel, setPapel] = useState(null);
+
+  function seguir() {
+    if (!prova.ok) { setAviso(prova.motivo); return; }
+    aoSeguir({ destino, lojaId, itens, papel });
+  }
+
+  const cartao = { borderWidth: 1, borderStyle: "solid", borderColor: "rgba(38,36,33,0.14)",
+    borderRadius: 12, padding: 12, marginBottom: 12, background: "#fff" };
+
+  return (
+    <div style={P.fundo} onClick={aoFechar}>
+      <div style={P.cartao} onClick={(e) => e.stopPropagation()}>
+        <div style={{ fontSize: 14.5, fontWeight: 700, color: "#111827", marginBottom: 2 }}>Entrada</div>
+        <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 12 }}>
+          Nota, pedido ou lista para cotar — entra tudo por aqui. Primeiro a lista; depois você diz o que é.
+        </div>
+
+        <div style={P.rolagem}>
+          {!itens ? (
+            <>
+              <div
+                onDragOver={(e) => { e.preventDefault(); setSobre(true); }}
+                onDragLeave={() => setSobre(false)}
+                onDrop={(e) => { e.preventDefault(); setSobre(false);
+                  const f = (e.dataTransfer.files || [])[0]; if (f) { setArquivo(f); setAviso(""); } }}
+                onPaste={(e) => { const f = typeof arquivoColado === "function" ? arquivoColado(e.clipboardData) : null;
+                  if (f) { e.preventDefault(); setArquivo(f); setAviso(""); } }}
+                style={{ borderWidth: 1.5, borderStyle: "dashed",
+                  borderColor: sobre ? "#0474f4" : "rgba(38,36,33,0.22)", borderRadius: 12,
+                  padding: 12, marginBottom: 12, background: sobre ? "#eef5ff" : "#fafafa" }}>
+                <textarea style={{ ...E.input, minHeight: 150, resize: "vertical", border: "none",
+                  background: "transparent", fontSize: 13 }}
+                  value={texto} onChange={(e) => setTexto(e.target.value)}
+                  placeholder={"Cole aqui a lista, o pedido ou o texto da nota — ou arraste o arquivo (PDF, print, foto) para dentro desta caixa."} />
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
+                  <label style={{ ...E.btnSec, fontSize: 12, display: "inline-block" }}>
+                    Escolher arquivo
+                    <input type="file" accept="application/pdf,image/*" style={{ display: "none" }}
+                      onChange={(e) => { const f = (e.target.files || [])[0]; if (f) { setArquivo(f); setAviso(""); } }} />
+                  </label>
+                  {arquivo && (
+                    <span style={{ fontSize: 11.5, color: "#111827" }}>
+                      {arquivo.name}
+                      <button type="button" onClick={() => setArquivo(null)}
+                        style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer",
+                          fontFamily: "inherit", fontSize: 11.5, textDecoration: "underline", marginLeft: 6 }}>tirar</button>
+                    </span>
+                  )}
+                  {!iaDisponivel && (
+                    <span style={{ fontSize: 11, color: "#6b7280" }}>
+                      sem a IA eu leio o PDF e o texto colado — foto e print precisam dela
+                    </span>
+                  )}
+                </div>
+              </div>
+              {lendo && <div style={{ marginBottom: 10 }}><BarraLeituraIA progresso={progresso} /></div>}
+            </>
+          ) : (
+            <>
+              <div style={{ ...cartao, borderColor: "rgba(4,116,244,0.35)", background: "#f7fbff" }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0474f4", marginBottom: 4 }}>
+                  {resumo.quantos === 1 ? "1 item lido" : `${resumo.quantos} itens lidos`}
+                  {resumo.temPreco ? ` · ${dinheiro(resumo.total)}` : " · sem preço"}
+                </div>
+                <div style={{ fontSize: 11.5, color: "#4b5563" }}>
+                  {[resumo.comCatalogo ? `${resumo.comCatalogo} casaram com o catálogo` : "",
+                    resumo.comProposta ? `${resumo.comProposta} com proposta a confirmar` : "",
+                    resumo.semNada ? `${resumo.semNada} fora do catálogo` : ""].filter(Boolean).join(" · ")}
+                </div>
+              </div>
+
+              <div style={{ ...cartao, maxHeight: 240, overflowY: "auto" }}>
+                {itens.map((it, i) => (
+                  <div key={i} style={{ display: "grid",
+                    gridTemplateColumns: isMobile ? "1fr 70px" : "minmax(0,3fr) 70px 60px 90px",
+                    gap: 8, padding: "5px 0", borderTop: i ? "1px solid rgba(38,36,33,0.06)" : "none",
+                    alignItems: "center", fontSize: 12 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.descricao}</div>
+                      <div style={{ fontSize: 10, color: it.insumoCodigo ? "#15803d" : "#9ca3af" }}>
+                        {it.insumoCodigo ? `${it.insumoCodigo}${it.grupoMaterial ? " · " + it.grupoMaterial : ""}`
+                          : it.sugestao ? `parece ${it.sugestao.nome}` : "fora do catálogo"}
+                      </div>
+                    </div>
+                    <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{it.quantidade || "—"}</span>
+                    {!isMobile && <span style={{ color: "#6b7280" }}>{it.unidade || ""}</span>}
+                    {!isMobile && <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                      {it.bruto || it.unitario || ""}</span>}
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", margin: "14px 0 8px" }}>
+                O que é este papel?
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 8 }}>
+                {DESTINOS_DA_ENTRADA.map((d) => (
+                  <button key={d.id} type="button" onClick={() => setDestino(d.id)}
+                    style={{ textAlign: "left", cursor: "pointer", fontFamily: "inherit",
+                      borderWidth: destino === d.id ? 1.5 : 1, borderStyle: "solid",
+                      borderColor: destino === d.id ? "#0474f4" : "rgba(38,36,33,0.16)",
+                      background: destino === d.id ? "#eef5ff" : "#fff", borderRadius: 12, padding: "10px 12px" }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: destino === d.id ? "#0474f4" : "#111827" }}>{d.nome}</div>
+                    <div style={{ fontSize: 11, color: "#4b5563", marginTop: 2, lineHeight: 1.35 }}>{d.resumo}</div>
+                  </button>
+                ))}
+              </div>
+
+              {entradaPedeLoja(destino) && (
+                <div style={{ marginTop: 12 }}>
+                  <label style={E.label}>De qual loja</label>
+                  <SelectBusca style={E.input} value={lojaId} onChange={(v) => setLojaId(v)}
+                    placeholder="Procurar loja…"
+                    opcoes={[{ valor: "", rotulo: "— escolha a loja —" }].concat(
+                      lojas.map((f) => ({ valor: f.id, rotulo: f.nome, extra: f.categoria || "" })))} />
+                </div>
+              )}
+            </>
+          )}
+
+          {aviso && <div style={{ fontSize: 12, color: "#dc2626", marginTop: 10 }}>{aviso}</div>}
+        </div>
+
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14, flexWrap: "wrap" }}>
+          <button type="button" style={E.btnSec} onClick={aoFechar}>Cancelar</button>
+          {itens && (
+            <button type="button" style={E.btnSec}
+              onClick={() => { setItens(null); setDestino(""); setAviso(""); }}>Ler de novo</button>
+          )}
+          {!itens ? (
+            <button type="button" style={{ ...E.btn, opacity: lendo ? 0.5 : 1 }} disabled={lendo} onClick={ler}>
+              {lendo ? "Lendo…" : "Ler"}
+            </button>
+          ) : (
+            <button type="button" onClick={seguir}
+              style={{ ...E.btn, opacity: prova.ok ? 1 : 0.45, cursor: prova.ok ? "pointer" : "not-allowed" }}
+              disabled={!prova.ok}>Seguir</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editando, origem, aoMudar, aoFechar, aoLancar, aoAprender, iaDisponivel }) {
   const E = COT_ESTILO;
   const p = pedido;
@@ -5221,7 +5591,9 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
               <input style={E.input} type="date" value={p.data || ""} onChange={(e) => aoMudar({ ...p, data: e.target.value })} />
             </div>
             <div>
-              <label style={E.label}>Vencimento</label>
+              {/* Já pago não tem vencimento: tem o dia em que o dinheiro saiu —
+                  e é esse dia que manda no mês do P&L. */}
+              <label style={E.label}>{p.jaPago ? "Data do pagamento *" : "Vencimento"}</label>
               <input style={E.input} type="date" value={p.vencimento || ""} onChange={(e) => aoMudar({ ...p, vencimento: e.target.value })} />
             </div>
             <div>
@@ -5444,7 +5816,7 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
           <button style={E.btnSec} onClick={aoFechar}>Cancelar</button>
           <button style={{ ...E.btn, opacity: prova.ok ? 1 : 0.45, cursor: prova.ok ? "pointer" : "not-allowed" }}
             disabled={!prova.ok} onClick={() => aoLancar(p)}>
-            {editando ? "Regravar o pedido" : "Lançar em contas a pagar"}
+            {editando ? "Regravar o pedido" : p.jaPago ? "Lançar já pago" : "Lançar em contas a pagar"}
           </button>
         </div>
       </div>
