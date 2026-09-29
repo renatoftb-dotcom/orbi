@@ -314,6 +314,15 @@ function qtdBR(n) {
   return v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
+// Dinheiro na tela nunca aparece cru. "14.8" é como a máquina guarda; quem
+// lê uma nota lê "14,80" — duas casas e vírgula, sempre, mesmo quando o
+// papel veio com uma casa só. Sem o "R$" porque isto é coluna de números,
+// onde o símbolo repetido em toda linha só atrapalha a comparação.
+function valorBR(n) {
+  const v = Number(n) || 0;
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function textoDoPedido(cot, proposta, ctx) {
   const c = cot || {};
   const x = ctx || {};
@@ -5570,10 +5579,11 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                         gap: 8, alignItems: "baseline", fontSize: 11.5, color: "#6b7280", marginBottom: 5 }}>
                         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                           title={it.descricao}>“{it.descricao}”</span>
-                        <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{it.quantidade || "\u2014"}</span>
+                        <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                          {quantidadeDoItem(it) > 0 ? qtdBR(quantidadeDoItem(it)) : "\u2014"}</span>
                         {!isMobile && <span>{it.unidade || ""}</span>}
                         {!isMobile && <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                          {it.bruto || it.unitario || ""}</span>}
+                          {brutoDoItem(it) > 0 ? valorBR(brutoDoItem(it)) : ""}</span>}
                       </div>
                       {/* A máquina achou, mas não carimba sozinha: dizer "parece
                           Elétrica - Fita Isolante" e deixar o botão do lado é o

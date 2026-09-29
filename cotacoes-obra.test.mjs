@@ -67,7 +67,7 @@ const modulo = new Function(`
            unitarioDoTotal, totalBrutoItem, valoresComDesconto, totalEfetivoItem,
            precoEfetivo, totalNegociado, descontoDaProposta,
            linkWhatsApp, enviosDaLista, envioParaLoja, registrarEnvioDaLista, lojasParaPedir,
-           interpretarPedido, interpretarLinhaDePedido, quantidadeDoTexto, resumoDaLeitura,
+           interpretarPedido, interpretarLinhaDePedido, quantidadeDoTexto, resumoDaLeitura, valorBR,
            itemDoPedidoLido, resolverInsumo, scoreAssociacao, candidatosDoPedido,
            unidadesDoCatalogo, opcoesDeUnidade, unidadeNoPadrao, itensDaEntrada,
            ehNumeroDeOrcamento, numeroDeOrcamento, itemDeOrcamento, dataIsoDoOrcamento,
@@ -2414,6 +2414,23 @@ teste("material de outra família continua fora", () => {
   const idx = modulo.indiceDoCatalogo(CAT_LOJA);
   const sg = modulo.sugestaoDoCatalogo("Argamassa ACIII 20kg", idx);
   assert.ok(!sg || !sg.segura, "argamassa não pode virar cal hidratado sozinha");
+});
+
+
+// ── Número na tela ───────────────────────────────────
+teste("dinheiro sai com duas casas e vírgula, sempre", () => {
+  assert.strictEqual(modulo.valorBR(14.9), "14,90");
+  assert.strictEqual(modulo.valorBR(14.8), "14,80");
+  assert.strictEqual(modulo.valorBR(300), "300,00");
+  assert.strictEqual(modulo.valorBR(59), "59,00");
+  assert.strictEqual(modulo.valorBR(1234.5), "1.234,50");
+  assert.strictEqual(modulo.valorBR(0), "0,00");
+  assert.strictEqual(modulo.valorBR(null), "0,00");
+});
+
+teste("quantidade não ganha centavos à força", () => {
+  assert.strictEqual(modulo.qtdBR(30), "30");
+  assert.strictEqual(modulo.qtdBR(2.5), "2,5");
 });
 
 for (const [nome, fn] of testes) {

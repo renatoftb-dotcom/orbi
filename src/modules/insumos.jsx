@@ -593,6 +593,13 @@ var CONF_INSUMO = {
   sem_preco: { label: "Sem preço", cor: "#9ca3af" },
 };
 
+// Quantidade com vírgula, como o resto: "2,5", nunca "2.5".
+function qtdIns(n) {
+  const v = Number(n);
+  if (!isFinite(v)) return String(n == null ? "" : n);
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
 function fmtBRLIns(v) {
   if (v == null) return "—";
   return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -889,7 +896,7 @@ function InsumoDetalhe({ insumo, data, onEditar, onVoltar, onAceitarPendente, on
                   {compras.slice().reverse().map((c, i) => (
                     <tr key={i} style={{ borderTop: "1px solid #f3f4f6" }}>
                       <td style={{ padding: "7px 8px" }}>{fmtDataIns(c.data)}</td>
-                      <td style={{ padding: "7px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{c.qtd}</td>
+                      <td style={{ padding: "7px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{qtdIns(c.qtd)}</td>
                       <td style={{ padding: "7px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtBRLIns(c.total)}</td>
                       <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtBRLIns(c.unitario)}</td>
                     </tr>

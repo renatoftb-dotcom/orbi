@@ -6889,6 +6889,13 @@ var CONF_INSUMO = {
   sem_preco: { label: "Sem preço", cor: "#9ca3af" },
 };
 
+// Quantidade com vírgula, como o resto: "2,5", nunca "2.5".
+function qtdIns(n) {
+  const v = Number(n);
+  if (!isFinite(v)) return String(n == null ? "" : n);
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
 function fmtBRLIns(v) {
   if (v == null) return "—";
   return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -7185,7 +7192,7 @@ function InsumoDetalhe({ insumo, data, onEditar, onVoltar, onAceitarPendente, on
                   {compras.slice().reverse().map((c, i) => (
                     <tr key={i} style={{ borderTop: "1px solid #f3f4f6" }}>
                       <td style={{ padding: "7px 8px" }}>{fmtDataIns(c.data)}</td>
-                      <td style={{ padding: "7px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{c.qtd}</td>
+                      <td style={{ padding: "7px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{qtdIns(c.qtd)}</td>
                       <td style={{ padding: "7px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtBRLIns(c.total)}</td>
                       <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtBRLIns(c.unitario)}</td>
                     </tr>
@@ -19084,6 +19091,13 @@ function porExtensoCtr(n) {
   const ligacao = (resto > 0 && resto >= 100 && resto % 100 !== 0) ? ", " : " e ";
   return partes.slice(0, -1).join(", ") + ligacao + partes[partes.length - 1];
 }
+// Quantidade na tela com vírgula, como todo número daqui: "2,5", nunca "2.5".
+function qtdCtr(n) {
+  const v = Number(String(n == null ? "" : n).replace(",", "."));
+  if (!isFinite(v)) return String(n == null ? "" : n);
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
 function moedaExtensoCtr(v) {
   const n = Number(v) || 0;
   const reais = Math.floor(n);
@@ -20119,8 +20133,8 @@ function ContratoDocumento({ contrato, cliente, obra, prestador }) {
             <td style={CTR_S.td}>{it.descricao}</td>
             <td style={CTR_S.td}>{it.unidade}</td>
             <td style={CTR_S.tdNum}>{moeda(it.unitario)}</td>
-            <td style={CTR_S.td}>{it.minimo}</td>
-            <td style={CTR_S.td}>{it.quantidade}</td>
+            <td style={CTR_S.td}>{qtdCtr(it.minimo)}</td>
+            <td style={CTR_S.td}>{qtdCtr(it.quantidade)}</td>
             <td style={CTR_S.tdNum}>{moeda(it.valor)}</td>
           </tr>
         ))}
@@ -22657,6 +22671,15 @@ function comparativoDaLista(cot) {
 function qtdBR(n) {
   const v = Number(n) || 0;
   return v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+// Dinheiro na tela nunca aparece cru. "14.8" é como a máquina guarda; quem
+// lê uma nota lê "14,80" — duas casas e vírgula, sempre, mesmo quando o
+// papel veio com uma casa só. Sem o "R$" porque isto é coluna de números,
+// onde o símbolo repetido em toda linha só atrapalha a comparação.
+function valorBR(n) {
+  const v = Number(n) || 0;
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function textoDoPedido(cot, proposta, ctx) {
@@ -27915,10 +27938,11 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                         gap: 8, alignItems: "baseline", fontSize: 11.5, color: "#6b7280", marginBottom: 5 }}>
                         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                           title={it.descricao}>“{it.descricao}”</span>
-                        <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{it.quantidade || "\u2014"}</span>
+                        <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                          {quantidadeDoItem(it) > 0 ? qtdBR(quantidadeDoItem(it)) : "\u2014"}</span>
                         {!isMobile && <span>{it.unidade || ""}</span>}
                         {!isMobile && <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                          {it.bruto || it.unitario || ""}</span>}
+                          {brutoDoItem(it) > 0 ? valorBR(brutoDoItem(it)) : ""}</span>}
                       </div>
                       {/* A máquina achou, mas não carimba sozinha: dizer "parece
                           Elétrica - Fita Isolante" e deixar o botão do lado é o

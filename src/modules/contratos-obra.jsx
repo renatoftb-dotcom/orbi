@@ -401,6 +401,13 @@ function porExtensoCtr(n) {
   const ligacao = (resto > 0 && resto >= 100 && resto % 100 !== 0) ? ", " : " e ";
   return partes.slice(0, -1).join(", ") + ligacao + partes[partes.length - 1];
 }
+// Quantidade na tela com vírgula, como todo número daqui: "2,5", nunca "2.5".
+function qtdCtr(n) {
+  const v = Number(String(n == null ? "" : n).replace(",", "."));
+  if (!isFinite(v)) return String(n == null ? "" : n);
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
 function moedaExtensoCtr(v) {
   const n = Number(v) || 0;
   const reais = Math.floor(n);
@@ -1436,8 +1443,8 @@ function ContratoDocumento({ contrato, cliente, obra, prestador }) {
             <td style={CTR_S.td}>{it.descricao}</td>
             <td style={CTR_S.td}>{it.unidade}</td>
             <td style={CTR_S.tdNum}>{moeda(it.unitario)}</td>
-            <td style={CTR_S.td}>{it.minimo}</td>
-            <td style={CTR_S.td}>{it.quantidade}</td>
+            <td style={CTR_S.td}>{qtdCtr(it.minimo)}</td>
+            <td style={CTR_S.td}>{qtdCtr(it.quantidade)}</td>
             <td style={CTR_S.tdNum}>{moeda(it.valor)}</td>
           </tr>
         ))}
