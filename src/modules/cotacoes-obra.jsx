@@ -5199,23 +5199,34 @@ function PainelEntrada({ insumos, prestadores, iaDisponivel, isMobile, dinheiro,
 
   const ehPdf = (f) => !!f && (/pdf$/i.test(f.name || "") || f.type === "application/pdf");
 
-  async function ler() {
+  // Escolher o arquivo JÁ é dizer "leia isto": pedir um clique a mais só para
+  // confirmar o que a pessoa acabou de fazer é um passo que não decide nada.
+  // Por isso `ler` recebe o arquivo pela mão — o estado ainda não mudou
+  // quando o onChange dispara.
+  function porArquivoDaEntrada(f) {
+    if (!f) return;
+    setArquivo(f); setAviso("");
+    ler(f);
+  }
+
+  async function ler(arq) {
     if (lendo) return;
-    if (!arquivo && !String(texto).trim()) { setAviso("Cole a lista ou escolha um arquivo."); return; }
+    const alvo = arq || arquivo;
+    if (!alvo && !String(texto).trim()) { setAviso("Cole a lista ou escolha um arquivo."); return; }
     setLendo(true); setAviso(""); setProgresso(null);
     try {
       // Papel com preço (PDF) tem leitor próprio, de graça e na hora: número,
       // vencimento, desconto e valor saem do papel. Só texto e foto é que
       // precisam da IA, e mesmo aí ela volta sem preço — preço é do papel.
-      if (ehPdf(arquivo)) {
-        const o = interpretarOrcamento(await linhasDoPdf(arquivo));
+      if (ehPdf(alvo)) {
+        const o = interpretarOrcamento(await linhasDoPdf(alvo));
         if (!(o.itens || []).length) throw new Error("Não achei a tabela de itens neste PDF. Se for foto ou digitalização, cole o texto.");
         const lidos = itensDaEntrada(o, "orcamento", insumos || []);
         setItens(lidos);
         setPapel({ numeroPedido: o.numeroPedido || o.numero || "", emitido: o.emitido || "",
           vencimento: o.vencimento || "", desconto: o.desconto || "" });
       } else if (iaDisponivel) {
-        const r = await api.ia.lerPedido({ arquivo: arquivo || null, texto: texto || "" },
+        const r = await api.ia.lerPedido({ arquivo: alvo || null, texto: texto || "" },
           (pr) => setProgresso(pr));
         const cru = pedidoDaIA(r, insumos || []);
         if (!cru.length) throw new Error("A IA não achou itens aí.");
@@ -5260,9 +5271,9 @@ function PainelEntrada({ insumos, prestadores, iaDisponivel, isMobile, dinheiro,
                 onDragOver={(e) => { e.preventDefault(); setSobre(true); }}
                 onDragLeave={() => setSobre(false)}
                 onDrop={(e) => { e.preventDefault(); setSobre(false);
-                  const f = (e.dataTransfer.files || [])[0]; if (f) { setArquivo(f); setAviso(""); } }}
+                  porArquivoDaEntrada((e.dataTransfer.files || [])[0]); }}
                 onPaste={(e) => { const f = typeof arquivoColado === "function" ? arquivoColado(e.clipboardData) : null;
-                  if (f) { e.preventDefault(); setArquivo(f); setAviso(""); } }}
+                  if (f) { e.preventDefault(); porArquivoDaEntrada(f); } }}
                 style={{ borderWidth: 1.5, borderStyle: "dashed",
                   borderColor: sobre ? "#0474f4" : "rgba(38,36,33,0.22)", borderRadius: 12,
                   padding: 12, marginBottom: 12, background: sobre ? "#eef5ff" : "#fafafa" }}>
@@ -5274,11 +5285,11 @@ function PainelEntrada({ insumos, prestadores, iaDisponivel, isMobile, dinheiro,
                   <label style={{ ...E.btnSec, fontSize: 12, display: "inline-block" }}>
                     Escolher arquivo
                     <input type="file" accept="application/pdf,image/*" style={{ display: "none" }}
-                      onChange={(e) => { const f = (e.target.files || [])[0]; if (f) { setArquivo(f); setAviso(""); } }} />
+                      onChange={(e) => porArquivoDaEntrada((e.target.files || [])[0])} />
                   </label>
                   {arquivo && (
                     <span style={{ fontSize: 11.5, color: "#111827" }}>
-                      {arquivo.name}
+                      {lendo ? "Lendo " : ""}{arquivo.name}
                       <button type="button" onClick={() => setArquivo(null)}
                         style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer",
                           fontFamily: "inherit", fontSize: 11.5, textDecoration: "underline", marginLeft: 6 }}>tirar</button>
@@ -5366,8 +5377,10 @@ function PainelEntrada({ insumos, prestadores, iaDisponivel, isMobile, dinheiro,
               onClick={() => { setItens(null); setDestino(""); setAviso(""); }}>Ler de novo</button>
           )}
           {!itens ? (
-            <button type="button" style={{ ...E.btn, opacity: lendo ? 0.5 : 1 }} disabled={lendo} onClick={ler}>
-              {lendo ? "Lendo…" : "Ler"}
+            <button type="button" style={{ ...E.btn, opacity: (lendo || !String(texto).trim()) ? 0.45 : 1,
+              cursor: (lendo || !String(texto).trim()) ? "not-allowed" : "pointer" }}
+              disabled={lendo || !String(texto).trim()} onClick={() => ler()}>
+              {lendo ? "Lendo…" : "Ler o texto"}
             </button>
           ) : (
             <button type="button" onClick={seguir}
