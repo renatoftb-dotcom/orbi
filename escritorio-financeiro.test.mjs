@@ -25,7 +25,8 @@ const M = new Function(src + `
            detectarColunasTabela, movimentosDaTabela, conciliarExtrato, efEhMovimento,
            lancamentoDoExtrato, efValorDeTexto, efEhData, efLinhaDoCabecalho,
            layoutsDoEscritorio, layoutSalvo,
-           ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento };`)();
+           ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento,
+           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -689,6 +690,191 @@ teste("sinal de uma unidade é recebimento, não lucro: sem fechar, não apura r
   const fechado = M.resultadoEmpreendimento(lancs, "c2", { concluido: true });
   assert.strictEqual(fechado.resultado, cent(12000 - 90800.67));
   assert.strictEqual(fechado.parcial, false);
+});
+
+
+// \u2500\u2500 Ponte obra \u2192 escrit\u00f3rio \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+// O plano da obra mora em obra-financeiro.jsx, que n\u00e3o entra neste recorte:
+// entra aqui como dado, que \u00e9 justamente como a ponte o recebe.
+const PLANO_OBRA = [
+  { id: "deposito_proprio",  grupo: "receitas" },
+  { id: "liberacao_financ",  grupo: "receitas" },
+  { id: "cartao_credito",    grupo: "receitas" },
+  { id: "venda_imovel",      grupo: "receitas" },
+  { id: "terreno_aquisicao", grupo: "terreno" },
+  { id: "material",          grupo: "materiais" },
+  { id: "frete",             grupo: "materiais" },
+  { id: "pedreiros",         grupo: "maoDeObra" },
+  { id: "impostos",          grupo: "servicos" },
+  { id: "taxa_admin_obra",   grupo: "servicos" },
+  { id: "reembolsos",        grupo: "excluidas" },
+];
+const OPC = { planoObra: PLANO_OBRA };
+const dest = (contaId, modo) => M.destinoNoEscritorio(contaId, modo, OPC);
+
+teste("o dono do dinheiro decide o caminho", () => {
+  assert.strictEqual(M.modoDaPonte({}, { servicos: { empreendimento: true } }), "empreendimento");
+  assert.strictEqual(M.modoDaPonte({ clientePagaDireto: true }, { servicos: {} }), "clientePaga");
+  assert.strictEqual(M.modoDaPonte({}, { servicos: {} }), "gestao");
+  assert.strictEqual(M.modoDaPonte({}, null), "gestao");
+});
+
+teste("gest\u00e3o de obras: dep\u00f3sito entra, custo sai, honor\u00e1rio vira receita", () => {
+  assert.strictEqual(dest("deposito_proprio", "gestao"), "dep_consignacao");
+  assert.strictEqual(dest("liberacao_financ", "gestao"), "dep_consignacao");
+  assert.strictEqual(dest("material", "gestao"), "pagamentos_compras");
+  assert.strictEqual(dest("frete", "gestao"), "pagamentos_compras");
+  assert.strictEqual(dest("pedreiros", "gestao"), "pagamentos_compras");
+  assert.strictEqual(dest("impostos", "gestao"), "pagamentos_compras");
+  assert.strictEqual(dest("reembolsos", "gestao"), "reembolsos");
+  assert.strictEqual(dest("taxa_admin_obra", "gestao"), "rec_gestao");
+  // o que \u00e9 do empreendimento n\u00e3o entra na gest\u00e3o
+  assert.strictEqual(dest("cartao_credito", "gestao"), "");
+  assert.strictEqual(dest("venda_imovel", "gestao"), "");
+  assert.strictEqual(dest("terreno_aquisicao", "gestao"), "");
+});
+
+teste("honor\u00e1rio atravessa mesmo quando o cliente paga tudo direto", () => {
+  assert.strictEqual(dest("taxa_admin_obra", "clientePaga"), "rec_gestao");
+  assert.strictEqual(dest("material", "clientePaga"), "");
+  assert.strictEqual(dest("pedreiros", "clientePaga"), "");
+  assert.strictEqual(dest("deposito_proprio", "clientePaga"), "");
+});
+
+teste("empreendimento: terreno, constru\u00e7\u00e3o, taxas e venda \u2014 sem honor\u00e1rio de si mesmo", () => {
+  assert.strictEqual(dest("terreno_aquisicao", "empreendimento"), "emp_terreno");
+  assert.strictEqual(dest("material", "empreendimento"), "emp_construcao");
+  assert.strictEqual(dest("pedreiros", "empreendimento"), "emp_construcao");
+  assert.strictEqual(dest("impostos", "empreendimento"), "emp_taxas");
+  assert.strictEqual(dest("venda_imovel", "empreendimento"), "emp_venda");
+  assert.strictEqual(dest("deposito_proprio", "empreendimento"), "emp_aporte");
+  assert.strictEqual(dest("taxa_admin_obra", "empreendimento"), "");
+  assert.strictEqual(dest("liberacao_financ", "empreendimento"), "");
+  assert.strictEqual(dest("cartao_credito", "empreendimento"), "");
+});
+
+teste("o aporte n\u00e3o vira venda nem investimento", () => {
+  const conta = M.contaEscritorio("emp_aporte");
+  assert.ok(conta, "a conta existe");
+  assert.strictEqual(conta.grupo, "emp_aportes");
+  const g = M.grupoEscritorio("emp_aportes");
+  assert.strictEqual(g.sinal, +1);
+  assert.strictEqual(g.resultado, false, "dinheiro que entra para tocar a obra n\u00e3o \u00e9 resultado");
+  // e a apura\u00e7\u00e3o do empreendimento continua olhando s\u00f3 venda contra investimento
+  const r = M.resultadoEmpreendimento([
+    { empreendimentoId: "e1", contaId: "emp_aporte",     valor: 200000 },
+    { empreendimentoId: "e1", contaId: "emp_construcao", valor: 150000 },
+  ], "e1", { concluido: true });
+  assert.strictEqual(r.investido, 150000);
+  assert.strictEqual(r.vendido, 0, "aporte n\u00e3o \u00e9 venda");
+  assert.strictEqual(r.resultado, null, "sem venda n\u00e3o h\u00e1 lucro a apurar");
+});
+
+teste("a obra manda o que pagou, com a compet\u00eancia do pagamento", () => {
+  const obra = { id: "ob1", clienteId: "c1" };
+  const cliente = { id: "c1", servicos: {} };
+  const r = M.lancamentosDaObraParaEscritorio(obra, cliente, {
+    planoObra: PLANO_OBRA,
+    contasPagar: [
+      { id: "a1", contaId: "material", valor: 1000, pago: true, valorPago: 1000, pagoEm: "2026-10-05",
+        descricao: "Vergalh\u00e3o", favorecido: "Ourifer", numeroNota: "123" },
+      { id: "a2", contaId: "taxa_admin_obra", valor: 500, pago: true, valorPago: 500, pagoEm: "2026-10-10" },
+      { id: "a3", contaId: "material", valor: 300, pago: false, vencimento: "2026-11-01" },
+    ],
+    entradas: [{ id: "e1", contaId: "deposito_proprio", valor: 5000, data: "2026-10-01" }],
+  });
+  assert.strictEqual(r.modo, "gestao");
+  assert.strictEqual(r.lancamentos.length, 3, "conta n\u00e3o paga n\u00e3o atravessa");
+  const porConta = {};
+  for (const l of r.lancamentos) porConta[l.contaId] = l;
+  assert.strictEqual(porConta.pagamentos_compras.valor, 1000);
+  assert.strictEqual(porConta.pagamentos_compras.competencia, "2026-10");
+  assert.strictEqual(porConta.pagamentos_compras.fornecedor, "Ourifer");
+  assert.strictEqual(porConta.pagamentos_compras.unidade, "gestao_obras");
+  assert.strictEqual(porConta.pagamentos_compras.obraId, "ob1");
+  assert.strictEqual(porConta.rec_gestao.valor, 500);
+  assert.strictEqual(porConta.dep_consignacao.valor, 5000);
+  assert.strictEqual(r.total, 6500);
+});
+
+teste("rodar duas vezes n\u00e3o duplica: o id vem da origem", () => {
+  const obra = { id: "ob1", clienteId: "c1" };
+  const cliente = { id: "c1", servicos: {} };
+  const base = { planoObra: PLANO_OBRA, entradas: [],
+    contasPagar: [{ id: "a1", contaId: "material", valor: 1000, pago: true, valorPago: 1000, pagoEm: "2026-10-05" }] };
+  const um = M.lancamentosDaObraParaEscritorio(obra, cliente, base);
+  assert.strictEqual(um.lancamentos.length, 1);
+  assert.strictEqual(um.lancamentos[0].id, M.idDaPonte("ob1", "conta", "a1"));
+  const dois = M.lancamentosDaObraParaEscritorio(obra, cliente, { ...base, lancamentos: um.lancamentos });
+  assert.strictEqual(dois.lancamentos.length, 0, "j\u00e1 foi mandado");
+  assert.strictEqual(dois.existentes.length, 1);
+});
+
+teste("m\u00eas fechado n\u00e3o recebe lan\u00e7amento \u2014 fica separado, com o motivo", () => {
+  const r = M.lancamentosDaObraParaEscritorio({ id: "ob1", clienteId: "c1" }, { id: "c1", servicos: {} }, {
+    planoObra: PLANO_OBRA,
+    fechamentos: { "2026-08": { fechadoEm: "2026-09-02" } },
+    contasPagar: [
+      { id: "a1", contaId: "material", valor: 800, pago: true, valorPago: 800, pagoEm: "2026-08-20" },
+      { id: "a2", contaId: "material", valor: 900, pago: true, valorPago: 900, pagoEm: "2026-10-20" },
+    ],
+  });
+  assert.strictEqual(r.lancamentos.length, 1);
+  assert.strictEqual(r.lancamentos[0].valor, 900);
+  assert.strictEqual(r.bloqueados.length, 1);
+  assert.strictEqual(r.bloqueados[0].competencia, "2026-08");
+  assert.strictEqual(r.totalBloqueado, 800);
+  assert.ok(/fechado/i.test(r.bloqueados[0].motivo));
+});
+
+teste("o que n\u00e3o atravessa volta dito, n\u00e3o some", () => {
+  const r = M.lancamentosDaObraParaEscritorio({ id: "ob1", clienteId: "c1", clientePagaDireto: true },
+    { id: "c1", servicos: {} }, {
+      planoObra: PLANO_OBRA,
+      contasPagar: [
+        { id: "a1", contaId: "material", valor: 1000, pago: true, valorPago: 1000, pagoEm: "2026-10-05" },
+        { id: "a2", contaId: "taxa_admin_obra", valor: 500, pago: true, valorPago: 500, pagoEm: "2026-10-10" },
+        { id: "a3", contaId: "cartao_credito", valor: 700, pago: true, valorPago: 700, pagoEm: "2026-10-11" },
+      ],
+    });
+  assert.strictEqual(r.modo, "clientePaga");
+  assert.strictEqual(r.lancamentos.length, 1, "s\u00f3 o honor\u00e1rio");
+  assert.strictEqual(r.lancamentos[0].contaId, "rec_gestao");
+  assert.strictEqual(r.ignorados.length, 2);
+  assert.ok(r.ignorados.every((x) => x.motivo), "cada ignorado diz por qu\u00ea");
+});
+
+teste("empreendimento carimba o empreendimento, n\u00e3o a obra", () => {
+  const r = M.lancamentosDaObraParaEscritorio({ id: "ob9", clienteId: "e1" },
+    { id: "e1", servicos: { empreendimento: true } }, {
+      planoObra: PLANO_OBRA,
+      contasPagar: [
+        { id: "a1", contaId: "terreno_aquisicao", valor: 120000, pago: true, valorPago: 120000, pagoEm: "2026-03-10" },
+        { id: "a2", contaId: "pedreiros", valor: 20000, pago: true, valorPago: 20000, pagoEm: "2026-06-10" },
+        { id: "a3", contaId: "venda_imovel", valor: 400000, pago: true, valorPago: 400000, pagoEm: "2026-12-10" },
+      ],
+    });
+  assert.strictEqual(r.modo, "empreendimento");
+  assert.deepStrictEqual(r.lancamentos.map((l) => l.contaId).sort(),
+    ["emp_construcao", "emp_terreno", "emp_venda"]);
+  assert.ok(r.lancamentos.every((l) => l.unidade === "empreendimento"));
+  assert.ok(r.lancamentos.every((l) => l.empreendimentoId === "e1" && !l.obraId));
+});
+
+teste("sem data de pagamento n\u00e3o vira lan\u00e7amento", () => {
+  const r = M.lancamentosDaObraParaEscritorio({ id: "ob1", clienteId: "c1" }, { id: "c1", servicos: {} }, {
+    planoObra: PLANO_OBRA,
+    contasPagar: [{ id: "a1", contaId: "material", valor: 100, pago: true, valorPago: 100, pagoEm: "" }],
+  });
+  assert.strictEqual(r.lancamentos.length, 0);
+  assert.strictEqual(r.ignorados.length, 1);
+  assert.ok(/data/i.test(r.ignorados[0].motivo));
+});
+
+teste("obra vazia n\u00e3o quebra", () => {
+  const r = M.lancamentosDaObraParaEscritorio(null, null, { planoObra: PLANO_OBRA });
+  assert.deepStrictEqual([r.lancamentos.length, r.ignorados.length, r.total], [0, 0, 0]);
 });
 
 for (const [nome, fn] of testes) {

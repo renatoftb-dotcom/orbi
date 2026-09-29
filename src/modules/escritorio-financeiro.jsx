@@ -45,6 +45,11 @@ const GRUPOS_ESCRITORIO = [
   { id: "receitas",        titulo: "RECEITAS ESCRITÓRIO",  sinal: +1, resultado: true,  bloco: "escritorio" },
   { id: "despesas",        titulo: "DESPESAS ESCRITÓRIO",  sinal: -1, resultado: true,  bloco: "escritorio" },
   { id: "emp_entradas",    titulo: "VENDAS DE EMPREENDIMENTO", sinal: +1, resultado: false, bloco: "empreendimento" },
+  // Dinheiro que ENTRA para tocar o empreendimento — hoje o do próprio
+  // escritório, amanhã o de um investidor. Fica em grupo separado de proprósito:
+  // em "vendas" ele viraria lucro que ninguém recebeu, e em "investimento" viraria
+  // custo em dobro (entra o dinheiro, depois sai para a obra).
+  { id: "emp_aportes",     titulo: "APORTES EM EMPREENDIMENTO", sinal: +1, resultado: false, bloco: "empreendimento" },
   { id: "emp_saidas",      titulo: "INVESTIMENTO EM EMPREENDIMENTO", sinal: -1, resultado: false, bloco: "empreendimento" },
   { id: "socios",          titulo: "RETIRADAS E OUTROS",   sinal: -1, resultado: false, bloco: "socios" },
   { id: "socios_entradas", titulo: "DEVOLUÇÕES E APORTES", sinal: +1, resultado: false, bloco: "socios" },
@@ -99,6 +104,7 @@ const PLANO_CONTAS_ESCRITORIO = [
   { id: "emp_taxas",      nome: "Taxas e registros",      grupo: "emp_saidas",   unidades: ["empreendimento"], apelidos: [] },
   { id: "emp_corretagem", nome: "Corretagem",             grupo: "emp_saidas",   unidades: ["empreendimento"], apelidos: [] },
   { id: "emp_venda",      nome: "Venda de imóvel",        grupo: "emp_entradas", unidades: ["empreendimento"], apelidos: [] },
+  { id: "emp_aporte",     nome: "Aporte no empreendimento", grupo: "emp_aportes", unidades: ["empreendimento"], apelidos: [] },
 
   // ── sócios (não é resultado; é conta corrente) ────────────
   // O escritório paga algo do sócio pela conta dele e depois é reembolsado.
@@ -267,6 +273,175 @@ function resultadoEmpreendimento(lancamentos, empreendimentoId, opcoes) {
     parcial: temVenda && !o.concluido,
     resultado: apurado ? efCentavos(vendido - investido) : null,
   };
+}
+
+// ═════════════════════════════════════════════════════════════
+// PONTE OBRA → ESCRITÓRIO
+// ═════════════════════════════════════════════════════════════
+// A obra registra o dinheiro pela lente de quem constrói: material, mão de
+// obra, etapa. O escritório registra pela lente de quem tem a conta no banco:
+// entrou, saiu, de quem era. É o mesmo dinheiro visto de dois lugares, e até
+// agora ninguém ligava um ao outro — o extrato do escritório só sabia da obra
+// quando alguém digitava.
+//
+// Quem decide o caminho é o dono do dinheiro, e são três casos:
+//
+//   empreendimento — a obra é do escritório. Tudo passa: terreno, construção,
+//                    taxas e a venda. Nada disso forma resultado no mês; soma
+//                    no valor do imóvel e vira lucro no dia da venda.
+//   gestão         — a obra é do cliente e o dinheiro dele passa pela conta do
+//                    escritório. Entra como consignação, sai como pagamento, e
+//                    nenhum dos dois é receita: é dinheiro em trânsito.
+//   clientePaga    — a obra é do cliente e ele paga os fornecedores direto. Só
+//                    o gerenciamento atravessa, porque honorário é do escritório
+//                    sempre — custo para ele, receita para cá.
+//
+// A conta que não tem destino não some: volta na lista de ignoradas, com o
+// motivo. É assim que uma conta nova do plano da obra aparece aqui em vez de
+// escorregar calada para "Pagamentos e compras".
+
+const PONTE_GRUPOS_CUSTO = ["materiais", "maoDeObra", "servicos"];
+
+function pontePlanoDaObra(opcoes) {
+  const o = opcoes || {};
+  if (Array.isArray(o.planoObra)) return o.planoObra;
+  return typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [];
+}
+
+function ponteGrupoDaConta(contaId, opcoes) {
+  const c = pontePlanoDaObra(opcoes).find((x) => x && x.id === contaId);
+  return c ? c.grupo : "";
+}
+
+function modoDaPonte(obra, cliente) {
+  if (typeof ehEmpreendimento === "function" && ehEmpreendimento(cliente)) return "empreendimento";
+  return (obra && obra.clientePagaDireto) ? "clientePaga" : "gestao";
+}
+
+// Conta da obra + modo → conta do escritório. "" quer dizer que não atravessa.
+function destinoNoEscritorio(contaId, modo, opcoes) {
+  const grupo = ponteGrupoDaConta(contaId, opcoes);
+  if (modo === "empreendimento") {
+    // gerenciar a própria obra não é receita: seria tirar de um bolso e pôr no outro
+    if (contaId === "taxa_admin_obra") return "";
+    if (contaId === "venda_imovel") return "emp_venda";
+    if (contaId === "deposito_proprio") return "emp_aporte";
+    if (grupo === "terreno") return "emp_terreno";
+    if (grupo === "materiais" || grupo === "maoDeObra") return "emp_construcao";
+    if (grupo === "servicos") return "emp_taxas";
+    return "";
+  }
+  // honorário do escritório atravessa mesmo quando o cliente paga tudo direto
+  if (contaId === "taxa_admin_obra") return "rec_gestao";
+  if (modo === "clientePaga") return "";
+  if (contaId === "deposito_proprio" || contaId === "liberacao_financ") return "dep_consignacao";
+  if (contaId === "reembolsos") return "reembolsos";
+  if (PONTE_GRUPOS_CUSTO.indexOf(grupo) >= 0) return "pagamentos_compras";
+  return "";
+}
+
+// O id é derivado da origem, não sorteado: rodar a ponte duas vezes na mesma
+// obra não cria o lançamento duas vezes.
+function idDaPonte(obraId, tipo, refId) {
+  return `ponte:${obraId || "?"}:${tipo}:${refId || "?"}`;
+}
+
+function ponteCompetencia(iso) {
+  const d = String(iso || "").slice(0, 7);
+  return /^\d{4}-\d{2}$/.test(d) ? d : "";
+}
+
+// Monta o que a obra tem para mandar. NÃO grava: devolve as três listas e quem
+// chama decide. `lancamentos` é o que entra; `existentes` já foi mandado antes;
+// `bloqueados` esbarrou em mês fechado; `ignorados` não atravessa, com o motivo.
+function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
+  const o = opcoes || {};
+  const ob = obra || {};
+  const modo = modoDaPonte(ob, cliente);
+  const jaTem = new Set((o.lancamentos || []).map((l) => l && l.id).filter(Boolean));
+  const fechamentos = o.fechamentos || {};
+  const lancamentos = [], ignorados = [], bloqueados = [], existentes = [];
+
+  const empurrar = (fonte) => {
+    const destino = destinoNoEscritorio(fonte.contaId, modo, o);
+    if (!destino) {
+      ignorados.push({ origem: fonte.refId, descricao: fonte.descricao, valor: fonte.valor,
+        motivo: motivoDeIgnorar(fonte.contaId, modo, o) });
+      return;
+    }
+    const id = idDaPonte(ob.id, fonte.tipo, fonte.refId);
+    if (jaTem.has(id)) { existentes.push({ id, descricao: fonte.descricao, valor: fonte.valor }); return; }
+    const competencia = ponteCompetencia(fonte.data);
+    if (!competencia) {
+      ignorados.push({ origem: fonte.refId, descricao: fonte.descricao, valor: fonte.valor,
+        motivo: "sem data de pagamento" });
+      return;
+    }
+    const trava = bloqueioPorMesFechado(competencia, fechamentos);
+    if (trava) {
+      bloqueados.push({ id, descricao: fonte.descricao, valor: fonte.valor, competencia, motivo: trava });
+      return;
+    }
+    lancamentos.push({
+      id,
+      origem: { obraId: ob.id || "", tipo: fonte.tipo, refId: fonte.refId, contaObra: fonte.contaId },
+      unidade: modo === "empreendimento" ? "empreendimento" : "gestao_obras",
+      clienteId: (cliente && cliente.id) || ob.clienteId || "",
+      obraId: modo === "empreendimento" ? "" : (ob.id || ""),
+      empreendimentoId: modo === "empreendimento" ? ((cliente && cliente.id) || "") : "",
+      contaId: destino,
+      valor: Math.round((Number(fonte.valor) || 0) * 100) / 100,
+      competencia,
+      lancadoEm: String(fonte.data || "").slice(0, 10),
+      descricao: fonte.descricao || "",
+      fornecedor: fonte.fornecedor || "",
+      documento: fonte.documento || "",
+      contaBanco: "sim",
+    });
+  };
+
+  // as contas pagas da obra — o dinheiro que saiu
+  for (const c of o.contasPagar || []) {
+    if (!c || !c.pago) continue;
+    empurrar({
+      tipo: "conta", refId: c.id, contaId: c.contaId || "",
+      valor: Number(c.valorPago) || Number(c.valor) || 0,
+      data: c.pagoEm || c.vencimento || "",
+      descricao: c.descricao || "",
+      fornecedor: c.favorecido || "",
+      documento: c.numeroNota || c.numeroLoja || "",
+    });
+  }
+  // as entradas da obra — o dinheiro que entrou
+  for (const e of o.entradas || []) {
+    if (!e) continue;
+    empurrar({
+      tipo: "entrada", refId: e.id, contaId: e.contaId || "deposito_proprio",
+      valor: Number(e.valor) || 0,
+      data: e.data || "",
+      descricao: e.descricao || "Entrada da obra",
+      fornecedor: "", documento: e.documento || "",
+    });
+  }
+
+  const soma = (lista) => Math.round(lista.reduce((t, x) => t + (Number(x.valor) || 0), 0) * 100) / 100;
+  return { modo, lancamentos, existentes, bloqueados, ignorados,
+    total: soma(lancamentos), totalBloqueado: soma(bloqueados) };
+}
+
+function motivoDeIgnorar(contaId, modo, opcoes) {
+  const grupo = ponteGrupoDaConta(contaId, opcoes);
+  if (!contaId || !grupo) return "conta da obra sem correspondência no escritório";
+  if (modo === "clientePaga") return "o cliente paga direto: este dinheiro não passa pelo escritório";
+  if (modo === "empreendimento") {
+    if (contaId === "taxa_admin_obra") return "gerenciamento da obra própria não é receita";
+    if (contaId === "liberacao_financ") return "financiamento é dívida, e não há conta para isso ainda";
+    if (contaId === "cartao_credito") return "cartão de crédito não passa pelo escritório";
+    return "não atravessa no empreendimento";
+  }
+  if (contaId === "cartao_credito") return "cartão de crédito não passa pelo escritório";
+  if (contaId === "venda_imovel" || grupo === "terreno") return "é do empreendimento, não da gestão";
+  return "não atravessa na gestão de obras";
 }
 
 // ── Leitura de uma colagem da planilha ──────────────────────────
@@ -1222,7 +1397,7 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
   const blocos = [
     { titulo: "Gestão de obras — dinheiro do cliente", grupos: ["gestao_entradas", "gestao_saidas"], saldo: "saldoGestao", rotulo: "Saldo da gestão" },
     { titulo: "Escritório", grupos: ["receitas", "despesas"], saldo: "saldoEscritorio", rotulo: "Resultado do escritório" },
-    { titulo: "Empreendimentos", grupos: ["emp_entradas", "emp_saidas"], saldo: "saldoEmpreendimento", rotulo: "Saldo de empreendimentos" },
+    { titulo: "Empreendimentos", grupos: ["emp_aportes", "emp_entradas", "emp_saidas"], saldo: "saldoEmpreendimento", rotulo: "Saldo de empreendimentos" },
     { titulo: "Sócios", grupos: ["socios", "socios_entradas"], saldo: "retiradas", rotulo: "Retiradas e empréstimos" },
   ];
   const soma = (f) => doAno.reduce((s, m) => s + (f(m) || 0), 0);
