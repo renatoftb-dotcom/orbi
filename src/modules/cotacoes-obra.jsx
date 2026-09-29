@@ -628,6 +628,60 @@ function comApelidoDaLoja(insumos, codigo, descricao) {
   return { insumos: lista, mudou };
 }
 
+// ── A IA como segunda opinião do casamento ──────────────
+// Comparar texto não sabe que "Tabua De Pinos" e "Madeira Caixaria -
+// Tábuas" são a mesma coisa: são palavras diferentes para o mesmo objeto.
+// A IA sabe. Então o leitor por regras faz o grosso — de graça, na hora,
+// sem internet — e a IA recebe só as sobras, como texto, para dizer a qual
+// insumo do catálogo cada uma corresponde. O que ela aponta entra igual às
+// outras propostas: com um toque para confirmar.
+//
+// O reencontro é pelo texto, não pela ordem: a IA pode devolver em outra
+// sequência, juntar duas linhas ou pular uma. Linha que não se reconhece é
+// linha descartada — melhor faltar proposta do que carimbar o item errado.
+function sugestoesDaIA(itensSemCatalogo, bruto, insumos) {
+  const alvos = itensSemCatalogo || [];
+  const linhas = (((bruto || {}).itens) || []).filter((l) => l && l.codigoInsumo);
+  if (!alvos.length || !linhas.length) return [];
+  const porCodigo = new Map();
+  for (const i of insumos || []) {
+    if (!i) continue;
+    if (i.codigo) porCodigo.set(String(i.codigo), i);
+    if (i.id) porCodigo.set(String(i.id), i);
+  }
+  const usados = new Set();
+  const saida = [];
+  for (const l of linhas) {
+    const ins = porCodigo.get(String(l.codigoInsumo));
+    if (!ins) continue;
+    const alvo = cotSemAcento(l.descricao);
+    if (!alvo) continue;
+    let escolhido = -1;
+    for (let k = 0; k < alvos.length; k++) {
+      if (usados.has(k)) continue;
+      const d = cotSemAcento(alvos[k].descricao);
+      if (!d) continue;
+      if (d === alvo) { escolhido = k; break; }
+      if (escolhido < 0 && (d.indexOf(alvo) >= 0 || alvo.indexOf(d) >= 0)) escolhido = k;
+    }
+    if (escolhido < 0) continue;
+    usados.add(escolhido);
+    saida.push({ indice: escolhido, codigo: ins.codigo || "", nome: ins.nome || "",
+      grupo: ins.grupo || "", ia: true });
+  }
+  return saida;
+}
+
+// O que a IA precisa ver de cada sobra: quantidade, unidade e o texto do
+// papel. Preço e número do pedido não entram — o leitor por regras já os
+// leu certo, e mandar de novo só aumentaria a conta.
+function textoParaAIA(itens) {
+  return (itens || [])
+    .map((x) => [x.quantidade || "", x.unidade || "", x.descricao || ""].join(" ").trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
 // ── O item novo no padrão do catálogo ───────────────────────────
 // O catálogo tem família: "PVC - Alimentação Água Fria - Luva 32mm",
 // "... - Luva 50mm", "... - Luva União 50mm". O item novo entra na mesma
@@ -3644,7 +3698,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           isMobile={isMobile} dinheiro={dinheiro} editando={!!formPedido.editando}
           origem={formPedido.origem}
           aoMudar={(p) => setFormPedido({ ...formPedido, pedido: p })}
-          aoAprender={aprenderApelidos}
+          aoAprender={aprenderApelidos} iaDisponivel={!!iaDisponivel}
           aoFechar={() => setFormPedido(null)} aoLancar={lancarPedido} />
       )}
 
@@ -4956,7 +5010,7 @@ function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGe
 // ou os dois. O que a tela cobra é o que o P&L precisa e o papel não traz:
 // a etapa de cada item. Sem ela o pedido não é lançado — é assim que o
 // quadro por etapa para de encher de "Sem etapa".
-function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editando, origem, aoMudar, aoFechar, aoLancar, aoAprender }) {
+function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editando, origem, aoMudar, aoFechar, aoLancar, aoAprender, iaDisponivel }) {
   const E = COT_ESTILO;
   const p = pedido;
   const P = cotPainel(isMobile, 980);
@@ -4977,6 +5031,9 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
     .map((i) => ({ valor: i.codigo, rotulo: i.nome, grupo: i.grupo || "", extra: (i.aliases || []).join(" ") })),
     [insumos]);
   const [procurando, setProcurando] = useState(-1);
+  const [conferindo, setConferindo] = useState(false);
+  const [progressoIA, setProgressoIA] = useState(null);
+  const [avisoIA, setAvisoIA] = useState("");
   const bruto = brutoDoPedido(p);
   const total = totalDoPedido(p);
   const rateados = itensRateados(p);
@@ -5012,6 +5069,43 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
     if (!ins || !it) return;
     mexerItem(i, comInsumo(it, ins));
     if (aoAprender) aoAprender([{ codigo: ins.codigo, descricao: it.descricao }]);
+  }
+
+  // As sobras do leitor por regras vão para a IA como texto. Ela devolve o
+  // código do catálogo de cada uma — e isso entra como proposta, não como
+  // carimbo. Se a IA não estiver ligada, o botão nem aparece.
+  // Sobra é o que ficou sem casamento E sem proposta segura: item que já
+  // tem proposta boa está a um toque, não precisa gastar leitura com ele.
+  const ehSobra = (x) => !x.insumoCodigo && !(x.sugestao && x.sugestao.segura)
+    && !!String(x.descricao || "").trim();
+  const sobrasDaLeitura = itens.filter(ehSobra);
+  async function conferirComIA() {
+    const alvos = [];
+    itens.forEach((x, i) => { if (ehSobra(x)) alvos.push({ i, x }); });
+    if (!alvos.length || conferindo) return;
+    setConferindo(true); setAvisoIA("");
+    setProgressoIA({ etapa: "fila", itens: 0, decorridoMs: 0 });
+    try {
+      const r = await api.ia.lerPedido(
+        { arquivo: null, texto: textoParaAIA(alvos.map((a) => a.x)) },
+        (pr) => setProgressoIA(pr));
+      const achados = sugestoesDaIA(alvos.map((a) => a.x), r, insumos || []);
+      if (!achados.length) {
+        setAvisoIA("A IA tamb\u00e9m n\u00e3o achou esses itens no cat\u00e1logo.");
+      } else {
+        const porItem = new Map();
+        for (const a of achados) porItem.set(alvos[a.indice].i, a);
+        aoMudar({ ...p, itens: itens.map((x, i) => {
+          const a = porItem.get(i);
+          return a ? { ...x, sugestao: { codigo: a.codigo, nome: a.nome, grupo: a.grupo,
+            score: 1, segura: true, ia: true } } : x;
+        }) });
+      }
+    } catch (e) {
+      setAvisoIA(avisoDaIA(e) || "A IA n\u00e3o respondeu agora.");
+    } finally {
+      setConferindo(false); setProgressoIA(null);
+    }
   }
 
   // As sugestões seguras de uma vez: onze toques viram um.
@@ -5146,17 +5240,39 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
           </div>
 
           {/* ── o catálogo de uma vez só ── */}
-          {paraCasar > 0 && (
-            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10,
-              padding: "8px 10px", borderRadius: 10, border: "1px solid rgba(4,116,244,0.30)", background: "#eef5ff" }}>
-              <span style={{ fontSize: 11.5, color: "#0474f4", fontWeight: 600 }}>
-                {paraCasar === 1 ? "1 item reconhecido no catálogo" : paraCasar + " itens reconhecidos no catálogo"}
-              </span>
-              <button type="button" style={{ ...E.btn, fontSize: 11.5, padding: "5px 12px" }}
-                onClick={casarOsSeguros}>Casar com o catálogo</button>
-              <span style={{ fontSize: 11, color: "#4b5563" }}>
-                o nome que a loja usa fica guardado como apelido do insumo — no próximo pedido ele casa sozinho
-              </span>
+          {(paraCasar > 0 || sobrasDaLeitura.length > 0 || conferindo || avisoIA) && itens.length > 0 && (
+            <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 10,
+              border: "1px solid rgba(4,116,244,0.30)", background: "#eef5ff" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                {paraCasar > 0 && (
+                  <>
+                    <span style={{ fontSize: 11.5, color: "#0474f4", fontWeight: 600 }}>
+                      {paraCasar === 1 ? "1 item reconhecido no catálogo" : paraCasar + " itens reconhecidos no catálogo"}
+                    </span>
+                    <button type="button" style={{ ...E.btn, fontSize: 11.5, padding: "5px 12px" }}
+                      onClick={casarOsSeguros}>Casar com o catálogo</button>
+                  </>
+                )}
+                {sobrasDaLeitura.length > 0 && iaDisponivel && (
+                  <button type="button" disabled={conferindo}
+                    style={{ ...E.btnSec, fontSize: 11.5, padding: "5px 12px",
+                      opacity: conferindo ? 0.5 : 1, cursor: conferindo ? "progress" : "pointer" }}
+                    onClick={conferirComIA}>
+                    {conferindo ? "A IA está conferindo…"
+                      : sobrasDaLeitura.length === 1 ? "Perguntar à IA pelo item que sobrou"
+                      : `Perguntar à IA pelos ${sobrasDaLeitura.length} que sobraram`}
+                  </button>
+                )}
+                {paraCasar > 0 && (
+                  <span style={{ fontSize: 11, color: "#4b5563" }}>
+                    o nome que a loja usa fica guardado como apelido do insumo — no próximo pedido ele casa sozinho
+                  </span>
+                )}
+              </div>
+              {conferindo && <div style={{ marginTop: 8 }}><BarraLeituraIA progresso={progressoIA} /></div>}
+              {avisoIA && !conferindo && (
+                <div style={{ marginTop: 6, fontSize: 11.5, color: "#b45309" }}>{avisoIA}</div>
+              )}
             </div>
           )}
 
@@ -5209,7 +5325,7 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
                   </>
                 ) : it.sugestao ? (
                   <>
-                    <span style={{ color: "#9ca3af" }}>parece</span>
+                    <span style={{ color: "#9ca3af" }}>{it.sugestao.ia ? "a IA diz" : "parece"}</span>
                     <button type="button" title={"usar “" + it.sugestao.nome + "” do catálogo"}
                       style={{ ...elo, color: "#0474f4", fontWeight: 600, textDecoration: "none",
                         border: "1px solid rgba(4,116,244,0.35)", borderRadius: 20, padding: "1px 8px" }}

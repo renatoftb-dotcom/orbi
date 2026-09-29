@@ -78,7 +78,7 @@ const modulo = new Function(`
            medidaDoTexto, palavraChave, familiasDoCatalogo, nomeNoPadrao, gruposDoCatalogo, codigoDoGrupo,
            medidasDeEmbalagem, divergenciaDeEmbalagem, escolhasDoCasamento,
            indiceDoCatalogo, casarNoCatalogo, sugestaoDoCatalogo, comApelidoDaLoja,
-           cotPalavrasDoNome };
+           cotPalavrasDoNome, sugestoesDaIA, textoParaAIA };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -2153,6 +2153,74 @@ teste("com o apelido guardado, o pr\u00f3ximo pedido casa exato \u2014 sem apost
   const r = modulo.resolverInsumo(texto, depois);
   assert.strictEqual(r.confianca, "alias");
   assert.strictEqual(r.insumo.codigo, "CIM-010");
+});
+
+
+// ── a IA conferindo as sobras ──────────────────────
+
+const SOBRAS = [
+  { descricao: "Tabua De Pinos 10x2.0x3.00mt", quantidade: "30", unidade: "un" },
+  { descricao: "Linha Trancada Firme Multifio 100m", quantidade: "2", unidade: "un" },
+  { descricao: "Sarrafo 5x2.3x3.00mt", quantidade: "10", unidade: "un" },
+];
+const CAT_IA = [
+  { codigo: "MAD-010", nome: "Madeira Caixaria - T\u00e1buas de 10cm x 3mts", grupo: "Madeira de caixaria" },
+  { codigo: "MAD-020", nome: "Madeira Caixaria - Sarrafos de 05cm", grupo: "Madeira de caixaria" },
+];
+
+teste("o que vai para a IA \u00e9 quantidade, unidade e texto \u2014 nada de pre\u00e7o", () => {
+  assert.strictEqual(modulo.textoParaAIA(SOBRAS),
+    "30 un Tabua De Pinos 10x2.0x3.00mt\n2 un Linha Trancada Firme Multifio 100m\n10 un Sarrafo 5x2.3x3.00mt");
+  assert.strictEqual(modulo.textoParaAIA([]), "");
+  assert.strictEqual(modulo.textoParaAIA(null), "");
+});
+
+teste("o c\u00f3digo que a IA aponta volta para o item certo", () => {
+  const bruto = { itens: [
+    { descricao: "Tabua De Pinos 10x2.0x3.00mt", codigoInsumo: "MAD-010" },
+    { descricao: "Sarrafo 5x2.3x3.00mt", codigoInsumo: "MAD-020" },
+  ] };
+  const r = modulo.sugestoesDaIA(SOBRAS, bruto, CAT_IA);
+  assert.deepStrictEqual(r.map(x => [x.indice, x.codigo]), [[0, "MAD-010"], [2, "MAD-020"]],
+    "a ordem da resposta n\u00e3o \u00e9 a ordem do papel");
+  assert.strictEqual(r[0].nome, "Madeira Caixaria - T\u00e1buas de 10cm x 3mts");
+  assert.strictEqual(r[0].ia, true);
+});
+
+teste("linha sem c\u00f3digo, c\u00f3digo fora do cat\u00e1logo e texto irreconhec\u00edvel s\u00e3o descartados", () => {
+  const bruto = { itens: [
+    { descricao: "Tabua De Pinos 10x2.0x3.00mt" },                          // a IA n\u00e3o achou
+    { descricao: "Sarrafo 5x2.3x3.00mt", codigoInsumo: "NAO-EXISTE" },      // c\u00f3digo de outro cat\u00e1logo
+    { descricao: "Cimento CP II", codigoInsumo: "MAD-010" },                // n\u00e3o \u00e9 nenhuma das sobras
+  ] };
+  assert.deepStrictEqual(modulo.sugestoesDaIA(SOBRAS, bruto, CAT_IA), [],
+    "melhor faltar proposta do que carimbar o item errado");
+});
+
+teste("a IA n\u00e3o carimba dois itens com o mesmo c\u00f3digo por engano", () => {
+  const sobras = [
+    { descricao: "Tabua De Pinos 10cm", quantidade: "5", unidade: "un" },
+    { descricao: "Tabua De Pinos 10cm", quantidade: "3", unidade: "un" },
+  ];
+  const bruto = { itens: [
+    { descricao: "Tabua De Pinos 10cm", codigoInsumo: "MAD-010" },
+    { descricao: "Tabua De Pinos 10cm", codigoInsumo: "MAD-010" },
+  ] };
+  const r = modulo.sugestoesDaIA(sobras, bruto, CAT_IA);
+  assert.deepStrictEqual(r.map(x => x.indice), [0, 1], "duas linhas iguais casam uma com cada");
+});
+
+teste("resposta vazia ou sem sobra n\u00e3o gera sugest\u00e3o", () => {
+  assert.deepStrictEqual(modulo.sugestoesDaIA(SOBRAS, null, CAT_IA), []);
+  assert.deepStrictEqual(modulo.sugestoesDaIA(SOBRAS, { itens: [] }, CAT_IA), []);
+  assert.deepStrictEqual(modulo.sugestoesDaIA([], { itens: [{ descricao: "x", codigoInsumo: "MAD-010" }] }, CAT_IA), []);
+});
+
+teste("o insumo tamb\u00e9m se acha pelo id, quando o c\u00f3digo n\u00e3o veio", () => {
+  const cat = [{ id: "m1", nome: "Linha de pedreiro", grupo: "Ferramentas" }];
+  const bruto = { itens: [{ descricao: "Linha Trancada Firme Multifio 100m", codigoInsumo: "m1" }] };
+  const r = modulo.sugestoesDaIA(SOBRAS, bruto, cat);
+  assert.deepStrictEqual(r.map(x => [x.indice, x.nome]), [[1, "Linha de pedreiro"]]);
 });
 
 for (const [nome, fn] of testes) {
