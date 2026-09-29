@@ -26198,8 +26198,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       )}
 
       {entradaAberta && (
-        <PainelEntrada insumos={insumos} prestadores={prestadores} iaDisponivel={!!iaDisponivel}
-          isMobile={isMobile} dinheiro={dinheiro}
+        <PainelEntrada insumos={insumos} prestadores={prestadores} unidades={unidadesCatalogo}
+          iaDisponivel={!!iaDisponivel} isMobile={isMobile} dinheiro={dinheiro}
+          aoCadastrarInsumo={cadastrarInsumoDoPedido}
           aoFechar={() => setEntradaAberta(false)} aoSeguir={seguirDaEntrada} />
       )}
 
@@ -27525,7 +27526,8 @@ function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGe
 // Três passos numa tela só: o material entra, a lista aparece conferida
 // contra o catálogo, e aí se diz o que o papel é. Nenhum dado é gravado
 // aqui — a Entrada só entrega a lista pronta para a porta escolhida.
-function PainelEntrada({ insumos, prestadores, iaDisponivel, isMobile, dinheiro, aoFechar, aoSeguir }) {
+function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile, dinheiro,
+  aoCadastrarInsumo, aoFechar, aoSeguir }) {
   const E = COT_ESTILO;
   const P = cotPainel(isMobile, 940);
   const [texto, setTexto] = useState("");
@@ -27539,6 +27541,19 @@ function PainelEntrada({ insumos, prestadores, iaDisponivel, isMobile, dinheiro,
   const [sobre, setSobre] = useState(false);
 
   const lojas = (prestadores || []).filter((f) => f && f.ativo !== false);
+  const indiceCat = useMemo(() => indiceDoCatalogo(insumos || []), [insumos]);
+  const mexerItem = (i, muda) => setItens((lista) => (lista || []).map((x, j) => (j === i ? { ...x, ...muda } : x)));
+  // O insumo escolhido traz consigo o que ele já sabe: unidade, etapa e conta.
+  // O que a pessoa já tinha posto à mão continua valendo.
+  const comInsumoDaEntrada = (it, ins) => ({
+    ...it,
+    insumoCodigo: ins.codigo || ins.id || "",
+    grupoMaterial: ins.grupo || "",
+    unidade: it.unidade || ins.unidade || "",
+    etapa: it.etapa || ins.etapaPadrao || "",
+    contaId: it.contaId || ins.contaPadrao || "",
+    sugestao: null,
+  });
   const resumo = itens ? resumoDaEntrada(itens) : null;
   const prova = entradaPronta(destino, lojaId, itens || []);
 
@@ -27663,25 +27678,41 @@ function PainelEntrada({ insumos, prestadores, iaDisponivel, isMobile, dinheiro,
                 </div>
               </div>
 
-              <div style={{ ...cartao, maxHeight: 240, overflowY: "auto" }}>
-                {itens.map((it, i) => (
-                  <div key={i} style={{ display: "grid",
-                    gridTemplateColumns: isMobile ? "1fr 70px" : "minmax(0,3fr) 70px 60px 90px",
-                    gap: 8, padding: "5px 0", borderTop: i ? "1px solid rgba(38,36,33,0.06)" : "none",
-                    alignItems: "center", fontSize: 12 }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.descricao}</div>
-                      <div style={{ fontSize: 10, color: it.insumoCodigo ? "#15803d" : "#9ca3af" }}>
-                        {it.insumoCodigo ? `${it.insumoCodigo}${it.grupoMaterial ? " · " + it.grupoMaterial : ""}`
-                          : it.sugestao ? `parece ${it.sugestao.nome}` : "fora do catálogo"}
+              {/* Cada linha é uma busca no catálogo: o texto do papel fica em
+                  cima, como veio, e embaixo se digita "caixaria" e se escolhe a
+                  tábua certa. Não achou? A mesma lista cadastra o item, no
+                  padrão do catálogo, sem sair daqui. */}
+              <div style={cartao}>
+                {itens.map((it, i) => {
+                  const casado = it.insumoCodigo
+                    ? (insumos || []).find((y) => y && (y.codigo === it.insumoCodigo || y.id === it.insumoCodigo)) || null
+                    : null;
+                  const x = { id: "e" + i, termo: it.descricao || "", bruto: it.descricao || "",
+                    unidade: it.unidade || "", insumo: casado };
+                  const parecidos = casado ? [] : casarNoCatalogo(it.descricao, indiceCat, 6).map((c) => c.insumo);
+                  return (
+                    <div key={i} style={{ padding: "8px 0", borderTop: i ? "1px solid rgba(38,36,33,0.06)" : "none" }}>
+                      <div style={{ display: "grid",
+                        gridTemplateColumns: isMobile ? "1fr 64px" : "minmax(0,1fr) 70px 60px 90px",
+                        gap: 8, alignItems: "baseline", fontSize: 11.5, color: "#6b7280", marginBottom: 5 }}>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                          title={it.descricao}>“{it.descricao}”</span>
+                        <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{it.quantidade || "\u2014"}</span>
+                        {!isMobile && <span>{it.unidade || ""}</span>}
+                        {!isMobile && <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                          {it.bruto || it.unitario || ""}</span>}
                       </div>
+                      <EscolhaInsumoPedido x={x} parecidos={parecidos} insumos={insumos} unidades={unidades}
+                        aoEscolher={(ins) => mexerItem(i, comInsumoDaEntrada(it, ins))}
+                        aoDeixarFora={() => mexerItem(i, { insumoCodigo: "", grupoMaterial: "", sugestao: null })}
+                        aoCadastrar={(campos) => {
+                          const novo = aoCadastrarInsumo ? aoCadastrarInsumo(campos) : null;
+                          if (novo) mexerItem(i, comInsumoDaEntrada(it, novo));
+                          return novo;
+                        }} />
                     </div>
-                    <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{it.quantidade || "—"}</span>
-                    {!isMobile && <span style={{ color: "#6b7280" }}>{it.unidade || ""}</span>}
-                    {!isMobile && <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                      {it.bruto || it.unitario || ""}</span>}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", margin: "14px 0 8px" }}>
