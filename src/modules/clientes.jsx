@@ -2055,6 +2055,152 @@ function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL, cl
   );
 }
 
+
+// ── A obra mandando o que pagou para o extrato do escritório ────
+// A regra de quem vai para onde mora em escritorio-financeiro.jsx. Aqui é
+// só a vitrine: mostrar o que vai acontecer ANTES de gravar, porque escrever
+// no extrato sem a pessoa ver é mexer em saldo sem avisar. Nada sai daqui
+// sem um clique e uma confirmação.
+function PonteEscritorioView({ obra, cliente, contasPagar, entradas, data, isMobile, fmtBRL, podeEditar, dialogo, aoMandar }) {
+  const [mandando, setMandando] = useState(false);
+  const fechamentos = typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {};
+  const jaNoEscritorio = typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : [];
+
+  const r = useMemo(function () {
+    if (typeof lancamentosDaObraParaEscritorio !== "function") return null;
+    return lancamentosDaObraParaEscritorio(obra, cliente, {
+      contasPagar: contasPagar, entradas: entradas,
+      fechamentos: fechamentos, lancamentos: jaNoEscritorio,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [obra, cliente, contasPagar, entradas, data]);
+
+  if (!r) return null;
+
+  const explicacao = r.modo === "empreendimento"
+    ? "O empreendimento é do escritório, então tudo passa pela conta dele: terreno, construção, taxas e a venda. Nada disso forma resultado no mês — soma no valor do imóvel e vira lucro no dia da venda."
+    : r.modo === "clientePaga"
+      ? "Esta obra está marcada como “o cliente realiza os pagamentos”: o dinheiro dos fornecedores não passa pela conta do escritório. Só o gerenciamento atravessa, porque honorário é do escritório de qualquer jeito."
+      : "O dinheiro do cliente passa pela conta do escritório: entra como consignação e sai como pagamento. Nenhum dos dois é receita — é dinheiro em trânsito. O gerenciamento, sim, é receita.";
+
+  // Agrupa por conta do escritório: o que interessa antes de gravar é
+  // "quanto vai para cada conta", não a lista de cinquenta linhas.
+  const porConta = [];
+  const indice = {};
+  for (const l of r.lancamentos) {
+    if (!indice[l.contaId]) { indice[l.contaId] = { contaId: l.contaId, quantos: 0, valor: 0 }; porConta.push(indice[l.contaId]); }
+    indice[l.contaId].quantos++;
+    indice[l.contaId].valor = Math.round((indice[l.contaId].valor + (Number(l.valor) || 0)) * 100) / 100;
+  }
+  porConta.sort((a, b) => b.valor - a.valor);
+  const nomeDaConta = (id) => {
+    const c = typeof contaEscritorio === "function" ? contaEscritorio(id) : null;
+    return c ? c.nome : id;
+  };
+
+  // Ignorados iguais viram uma linha só: "3 compras no cartão de crédito".
+  const porMotivo = [];
+  const iMotivo = {};
+  for (const x of r.ignorados) {
+    if (!iMotivo[x.motivo]) { iMotivo[x.motivo] = { motivo: x.motivo, quantos: 0, valor: 0 }; porMotivo.push(iMotivo[x.motivo]); }
+    iMotivo[x.motivo].quantos++;
+    iMotivo[x.motivo].valor = Math.round((iMotivo[x.motivo].valor + (Number(x.valor) || 0)) * 100) / 100;
+  }
+  porMotivo.sort((a, b) => b.valor - a.valor);
+
+  // Em partes, e não no atalho "border": quem herda esta caixa troca só a cor,
+  // e misturar atalho com propriedade solta faz o React reclamar — com razão,
+  // porque a ordem entre os dois não é garantida.
+  const caixa = { borderWidth: 1, borderStyle: "solid", borderColor: "rgba(38,36,33,0.14)",
+    borderRadius: 12, padding: 14, marginBottom: 12, background: "#fff" };
+  const titulo = { fontSize: 12.5, fontWeight: 700, color: "#111827", marginBottom: 8 };
+
+  async function mandar() {
+    if (!r.lancamentos.length || mandando) return;
+    const ok = await dialogo.confirmar({
+      titulo: r.lancamentos.length === 1 ? "Mandar 1 lançamento para o escritório?"
+        : `Mandar ${r.lancamentos.length} lançamentos para o escritório?`,
+      mensagem: `${fmtBRL(r.total)} entram no extrato do escritório, na competência de cada pagamento. `
+        + "Mandar de novo depois não duplica: cada lançamento sabe de qual conta da obra veio.",
+      confirmar: "Mandar",
+    });
+    if (!ok) return;
+    setMandando(true);
+    try { await aoMandar(r.lancamentos); } finally { setMandando(false); }
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 12, lineHeight: 1.5 }}>{explicacao}</div>
+
+      {r.lancamentos.length > 0 ? (
+        <div style={{ ...caixa, borderColor: "rgba(4,116,244,0.35)", background: "#f7fbff" }}>
+          <div style={titulo}>
+            {r.lancamentos.length === 1 ? "1 lançamento a mandar" : `${r.lancamentos.length} lançamentos a mandar`}
+            <span style={{ fontWeight: 400, color: "#4b5563" }}> · {fmtBRL(r.total)}</span>
+          </div>
+          {porConta.map((c) => (
+            <div key={c.contaId} style={{ display: "flex", justifyContent: "space-between", gap: 10,
+              fontSize: 12.5, padding: "4px 0", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+              <span style={{ color: "#111827" }}>
+                {nomeDaConta(c.contaId)}
+                <span style={{ color: "#6b7280" }}> · {c.quantos === 1 ? "1 lançamento" : c.quantos + " lançamentos"}</span>
+              </span>
+              <span style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{fmtBRL(c.valor)}</span>
+            </div>
+          ))}
+          {podeEditar && (
+            <button type="button" onClick={mandar} disabled={mandando}
+              style={{ marginTop: 12, background: mandando ? "#9ca3af" : "#262421", color: "#fff", border: "none",
+                borderRadius: 12, padding: "9px 18px", fontSize: 13, fontWeight: 600,
+                cursor: mandando ? "progress" : "pointer", fontFamily: "inherit" }}>
+              {mandando ? "Mandando…" : "Mandar para o escritório"}
+            </button>
+          )}
+        </div>
+      ) : (
+        <div style={{ ...caixa, textAlign: "center", color: "#6b7280", fontSize: 12.5 }}>
+          {r.existentes.length
+            ? "Tudo que esta obra pagou já está no extrato do escritório."
+            : "Nada a mandar por enquanto — só o que já foi pago atravessa."}
+        </div>
+      )}
+
+      {r.existentes.length > 0 && (
+        <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 12 }}>
+          {r.existentes.length === 1 ? "1 lançamento já foi mandado antes" : `${r.existentes.length} lançamentos já foram mandados antes`} — não entram de novo.
+        </div>
+      )}
+
+      {r.bloqueados.length > 0 && (
+        <div style={{ ...caixa, borderColor: "#f59e0b", background: "#fffbeb" }}>
+          <div style={titulo}>
+            {r.bloqueados.length === 1 ? "1 pagamento em mês fechado" : `${r.bloqueados.length} pagamentos em mês fechado`}
+            <span style={{ fontWeight: 400, color: "#4b5563" }}> · {fmtBRL(r.totalBloqueado)}</span>
+          </div>
+          <div style={{ fontSize: 11.5, color: "#4b5563" }}>
+            Mês fechado é passado conferido contra o banco: nada entra nele. Reabra o mês no Financeiro do
+            escritório se precisar, ou deixe como está.
+          </div>
+        </div>
+      )}
+
+      {porMotivo.length > 0 && (
+        <div style={caixa}>
+          <div style={titulo}>O que não atravessa</div>
+          {porMotivo.map((m) => (
+            <div key={m.motivo} style={{ display: "flex", justifyContent: "space-between", gap: 10,
+              fontSize: 12, padding: "4px 0", borderTop: "1px solid rgba(38,36,33,0.06)", color: "#4b5563" }}>
+              <span>{m.quantos === 1 ? "1 lançamento" : m.quantos + " lançamentos"} — {m.motivo}</span>
+              <span style={{ whiteSpace: "nowrap" }}>{fmtBRL(m.valor)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaObra }) {
   const perm = getPermissoes();
   const [view, setView] = useState(obraInicial ? "detalheObra" : "lista");
@@ -2744,7 +2890,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
         {/* Toggle de visão */}
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          {[["pl", "P&L"], ["quadro", "Preencher"], ["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"]].map(([v, l]) => (
+          {[["pl", "P&L"], ["quadro", "Preencher"], ["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"], ["escritorio", "Para o escrit\u00f3rio"]].map(([v, l]) => (
             <button key={v} onClick={() => setVisaoPL(v)}
               style={{ border: visaoPL === v ? `1.5px solid ${AZUL_VK}` : "1px solid rgba(38,36,33,0.16)", background: "#fff", color: visaoPL === v ? "#111827" : "#4b5563", borderRadius: 20, padding: "6px 16px", fontSize: 12.5, fontWeight: visaoPL === v ? 700 : 500, cursor: "pointer", fontFamily: "inherit" }}>
               {l}
@@ -2752,7 +2898,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           ))}
         </div>
 
-        {visaoPL === "pl" ? (
+        {visaoPL === "escritorio" ? (
+          <PonteEscritorioView obra={obraAtual} cliente={cliente} contasPagar={contasDaObra}
+            entradas={entradasDaObra} data={data} isMobile={isMobile} fmtBRL={fmtBRL}
+            podeEditar={!!perm.podeGerenciarObra} dialogo={dialogo}
+            aoMandar={(novos) => save({ ...data, lancamentos: [...(data.lancamentos || []), ...novos] })} />
+        ) : visaoPL === "pl" ? (
           <PLDaObraView itens={itensPL} contasPagar={contasDaObra} clientePaga={!!obraAtual.clientePagaDireto}
             isMobile={isMobile} fmtBRL={fmtBRL} />
         ) : visaoPL === "quadro" ? (

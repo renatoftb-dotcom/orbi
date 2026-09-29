@@ -382,12 +382,18 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
       bloqueados.push({ id, descricao: fonte.descricao, valor: fonte.valor, competencia, motivo: trava });
       return;
     }
+    // O formato é o mesmo que o formulário do escritório grava — `unidadeId`,
+    // cliente e projeto por nome —, senão o lançamento existiria no banco sem
+    // aparecer em lugar nenhum da tela. `origem` é o extra que a ponte carrega
+    // para saber de onde veio e não repetir.
     lancamentos.push({
       id,
+      tipo: "escritorio",
       origem: { obraId: ob.id || "", tipo: fonte.tipo, refId: fonte.refId, contaObra: fonte.contaId },
-      unidade: modo === "empreendimento" ? "empreendimento" : "gestao_obras",
+      unidadeId: modo === "empreendimento" ? "empreendimento" : "gestao_obras",
       clienteId: (cliente && cliente.id) || ob.clienteId || "",
-      obraId: modo === "empreendimento" ? "" : (ob.id || ""),
+      cliente: (cliente && cliente.nome) || "",
+      projeto: ob.nome || "",
       empreendimentoId: modo === "empreendimento" ? ((cliente && cliente.id) || "") : "",
       contaId: destino,
       valor: Math.round((Number(fonte.valor) || 0) * 100) / 100,

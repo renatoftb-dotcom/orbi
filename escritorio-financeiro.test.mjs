@@ -772,8 +772,8 @@ teste("o aporte n\u00e3o vira venda nem investimento", () => {
 });
 
 teste("a obra manda o que pagou, com a compet\u00eancia do pagamento", () => {
-  const obra = { id: "ob1", clienteId: "c1" };
-  const cliente = { id: "c1", servicos: {} };
+  const obra = { id: "ob1", clienteId: "c1", nome: "Reforma Loja Cobop" };
+  const cliente = { id: "c1", nome: "COBOP", servicos: {} };
   const r = M.lancamentosDaObraParaEscritorio(obra, cliente, {
     planoObra: PLANO_OBRA,
     contasPagar: [
@@ -791,8 +791,12 @@ teste("a obra manda o que pagou, com a compet\u00eancia do pagamento", () => {
   assert.strictEqual(porConta.pagamentos_compras.valor, 1000);
   assert.strictEqual(porConta.pagamentos_compras.competencia, "2026-10");
   assert.strictEqual(porConta.pagamentos_compras.fornecedor, "Ourifer");
-  assert.strictEqual(porConta.pagamentos_compras.unidade, "gestao_obras");
-  assert.strictEqual(porConta.pagamentos_compras.obraId, "ob1");
+  assert.strictEqual(porConta.pagamentos_compras.unidadeId, "gestao_obras");
+  assert.strictEqual(porConta.pagamentos_compras.tipo, "escritorio");
+  assert.strictEqual(porConta.pagamentos_compras.projeto, "Reforma Loja Cobop",
+    "o extrato mostra a obra pelo nome, na coluna Cliente / obra");
+  assert.strictEqual(porConta.pagamentos_compras.cliente, "COBOP");
+  assert.strictEqual(porConta.pagamentos_compras.origem.refId, "a1");
   assert.strictEqual(porConta.rec_gestao.valor, 500);
   assert.strictEqual(porConta.dep_consignacao.valor, 5000);
   assert.strictEqual(r.total, 6500);
@@ -858,8 +862,9 @@ teste("empreendimento carimba o empreendimento, n\u00e3o a obra", () => {
   assert.strictEqual(r.modo, "empreendimento");
   assert.deepStrictEqual(r.lancamentos.map((l) => l.contaId).sort(),
     ["emp_construcao", "emp_terreno", "emp_venda"]);
-  assert.ok(r.lancamentos.every((l) => l.unidade === "empreendimento"));
-  assert.ok(r.lancamentos.every((l) => l.empreendimentoId === "e1" && !l.obraId));
+  assert.ok(r.lancamentos.every((l) => l.unidadeId === "empreendimento"));
+  assert.ok(r.lancamentos.every((l) => l.empreendimentoId === "e1"),
+    "no empreendimento o carimbo \u00e9 o empreendimento, e \u00e9 por ele que a apura\u00e7\u00e3o soma");
 });
 
 teste("sem data de pagamento n\u00e3o vira lan\u00e7amento", () => {
@@ -875,6 +880,25 @@ teste("sem data de pagamento n\u00e3o vira lan\u00e7amento", () => {
 teste("obra vazia n\u00e3o quebra", () => {
   const r = M.lancamentosDaObraParaEscritorio(null, null, { planoObra: PLANO_OBRA });
   assert.deepStrictEqual([r.lancamentos.length, r.ignorados.length, r.total], [0, 0, 0]);
+});
+
+teste("o lan\u00e7amento que a ponte gera passa na valida\u00e7\u00e3o do escrit\u00f3rio", () => {
+  const r = M.lancamentosDaObraParaEscritorio(
+    { id: "ob1", clienteId: "c1", nome: "Reforma Loja Cobop" },
+    { id: "c1", nome: "COBOP", servicos: {} },
+    { planoObra: PLANO_OBRA,
+      contasPagar: [{ id: "a1", contaId: "material", valor: 1000, pago: true, valorPago: 1000, pagoEm: "2026-10-05" }] });
+  const l = r.lancamentos[0];
+  // a valida\u00e7\u00e3o pede obraId; na grava\u00e7\u00e3o ele vem do campo "projeto"
+  const erros = M.validarLancamentoEscritorio({ ...l, obraId: l.projeto }, {});
+  assert.deepStrictEqual(erros, [], "sen\u00e3o o lan\u00e7amento nasceria recusado");
+
+  const emp = M.lancamentosDaObraParaEscritorio(
+    { id: "ob9", clienteId: "e1", nome: "Casa Jardim Europa" },
+    { id: "e1", nome: "Jardim Europa", servicos: { empreendimento: true } },
+    { planoObra: PLANO_OBRA,
+      contasPagar: [{ id: "a1", contaId: "pedreiros", valor: 2000, pago: true, valorPago: 2000, pagoEm: "2026-10-05" }] });
+  assert.deepStrictEqual(M.validarLancamentoEscritorio(emp.lancamentos[0], {}), []);
 });
 
 for (const [nome, fn] of testes) {
