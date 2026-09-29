@@ -627,7 +627,11 @@ function indiceDoCatalogo(insumos) {
     if (!palavras.length) continue;
     // Na mesma ordem das palavras: o quanto cada uma pesa no placar.
     const fator = partes.gaveta.map(() => COT_PESO_GAVETA).concat(partes.corpo.map(() => 1));
-    itens.push({ insumo: i, palavras, fator });
+    // true nas palavras que dizem o que a coisa é. A gaveta nunca é identidade:
+    // a loja não escreve "Elétrica" na nota.
+    const identidade = partes.gaveta.map(() => false)
+      .concat(partes.corpo.map((_, k) => k < COT_PALAVRAS_DE_IDENTIDADE));
+    itens.push({ insumo: i, palavras, fator, identidade });
     for (const w of new Set(palavras)) em.set(w, (em.get(w) || 0) + 1);
   }
   const n = itens.length || 1;
@@ -641,6 +645,15 @@ function indiceDoCatalogo(insumos) {
 // faltou continua pesando, mas pela metade: quem decide é o que bateu.
 const COT_PESO_SOBRA = 0.5;
 
+// Mas nem toda palavra que falta é qualificador. No nome do catálogo as duas
+// primeiras palavras do corpo dizem O QUE a coisa é — "Disco Madeira",
+// "Disco Diamantado", "Cabo Flexível" — e o que vem depois só estreita:
+// "Corte Parede", "750V 4mm". Faltar um qualificador é normal, a loja quase
+// nunca escreve todos. Faltar a identidade é outra coisa: "Disco Madeira"
+// contra "Disco Diamantado" não é um casamento incompleto, é outro material.
+// Por isso a identidade que falta pesa inteiro, e o qualificador, metade.
+const COT_PALAVRAS_DE_IDENTIDADE = 2;
+
 function casarNoCatalogo(descricao, indice, limite) {
   const ts = cotPalavrasDaLoja(descricao);
   if (!ts.length || !indice || !indice.itens.length) return [];
@@ -652,7 +665,8 @@ function casarNoCatalogo(descricao, indice, limite) {
       const w = indice.peso(t) * (it.fator ? it.fator[k] : 1);
       let melhor = 0;
       for (const s of ts) { const v = cotCasaPalavra(t, s); if (v > melhor) melhor = v; }
-      den += w * (melhor > 0 ? 1 : COT_PESO_SOBRA);
+      const ehIdentidade = it.identidade ? it.identidade[k] : false;
+      den += w * (melhor > 0 ? 1 : (ehIdentidade ? 1 : COT_PESO_SOBRA));
       num += w * melhor;
     }
     if (!den) continue;

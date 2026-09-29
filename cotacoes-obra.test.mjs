@@ -2486,6 +2486,55 @@ teste("empate no placar: a primeira linha carimba, e só ela", () => {
   assert.deepStrictEqual(modulo.casamentosSeguros(itens), [0]);
 });
 
+
+// ── Identidade x qualificador ───────────────────────────
+const CAT_DISCO = [
+  { codigo:"FER-020", nome:"Ferramentas - Disco Madeira", grupo:"Ferramentas", aliases:[] },
+  { codigo:"FER-021", nome:"Ferramentas - Disco Corte Inox", grupo:"Ferramentas", aliases:[] },
+  { codigo:"FER-024", nome:"Ferramentas - Disco Diamantado Corte Parede", grupo:"Ferramentas", aliases:[] },
+  { codigo:"FER-025", nome:"Ferramentas - Disco Desbaste", grupo:"Ferramentas", aliases:[] },
+  { codigo:"CIM-010", nome:"Cimento - Cal Hidratado 20kg", grupo:"Cimento", aliases:[] },
+  { codigo:"ELE-028", nome:"Elétrica - Cabo Flexível 750V 4mm", grupo:"Elétrica", aliases:[] },
+];
+
+teste("o disco diamantado da loja acha o disco diamantado do catálogo", () => {
+  const r = modulo.casarNoCatalogo("Disco Diamantado Segmentado Eco 110mm Cod 61699 - Cortag",
+    modulo.indiceDoCatalogo(CAT_DISCO), 9);
+  assert.ok(r.length, "nenhum candidato");
+  assert.strictEqual(r[0].insumo.codigo, "FER-024");
+});
+
+teste("“disco” sozinho não é casamento: o disco de madeira nem entra na lista", () => {
+  const r = modulo.casarNoCatalogo("Disco Diamantado Segmentado Eco 110mm Cod 61699 - Cortag",
+    modulo.indiceDoCatalogo(CAT_DISCO), 9);
+  assert.ok(r.every((c) => c.insumo.codigo !== "FER-020"),
+    "Disco Madeira não pode aparecer: a palavra que decide é a segunda");
+  assert.ok(r.every((c) => c.insumo.codigo !== "FER-025"));
+});
+
+teste("e o disco de madeira continua achando o dele", () => {
+  const sg = modulo.sugestaoDoCatalogo("Disco Madeira 110mm - Cortag", modulo.indiceDoCatalogo(CAT_DISCO));
+  assert.strictEqual(sg.codigo, "FER-020");
+  assert.ok(sg.segura, "deu " + sg.score);
+});
+
+teste("qualificador que falta não impede, identidade que falta impede", () => {
+  const idx = modulo.indiceDoCatalogo(CAT_DISCO);
+  // "Corte Parede" é qualificador: a loja não escreveu e mesmo assim casa
+  assert.ok(modulo.casarNoCatalogo("Disco Diamantado 110mm", idx, 5).length);
+  // "Hidratado" é identidade: argamassa não pode virar cal
+  const arg = modulo.casarNoCatalogo("Argamassa ACIII 20kg", idx, 5);
+  assert.ok(arg.every((c) => c.insumo.codigo !== "CIM-010"), "argamassa não é cal hidratado");
+});
+
+teste("a gaveta nunca conta como identidade", () => {
+  const partes = modulo.cotPartesDoNome("Elétrica - Cabo Flexível 750V 4mm");
+  assert.deepStrictEqual(partes.gaveta, ["eletrica"]);
+  // só "cabo" e "flexivel" são identidade; "750", "v", "4", "mm" estreitam
+  const sg = modulo.sugestaoDoCatalogo("Cabo Flexsil 750 V 4.00 Preto", modulo.indiceDoCatalogo(CAT_DISCO));
+  assert.strictEqual(sg && sg.codigo, "ELE-028");
+});
+
 for (const [nome, fn] of testes) {
   try { fn(); console.log("  ok   " + nome); }
   catch (e) { falhas++; console.log("  FALHOU " + nome + "\n         " + e.message); }
