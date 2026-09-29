@@ -34,7 +34,8 @@ const modulo = new Function(`
            contasDaCotacao, contasDeCotacao,
            PLANO_CONTAS, contratoVazio, valorContrato,
            parcelasAPagar, contasDoContrato, sincronizarContasDoContrato, removerContasDoContrato,
-           situacaoConta, totaisContas, realizadoPorConta, realizadoPorPrestador,
+           situacaoConta, rotuloSituacaoConta, diasParaVencer,
+           totaisContas, realizadoPorConta, realizadoPorPrestador,
            contaDoTipo, contaAvulsaVazia, somarDias, somarMeses, vencimentoFinal, medicoesPrevistas,
            tituloConta, detalheConta, agruparContas, filtrarContas, rotuloMes,
            VISOES_CONTAS, FILTROS_CONTAS, FILTRO_CONTAS_PADRAO, seriesDoFiltro,
@@ -1815,6 +1816,57 @@ teste("os pedidos se acumulam debaixo do nome da loja, com o total somado", () =
   assert.deepStrictEqual(semNivel[0].pedidoIds, ["ped1"], "o pedido sozinho tamb\u00e9m sabe se pagar");
 
   assert.deepStrictEqual(modulo.linhasDeLoja(null), []);
+});
+
+teste("o aviso conta os dias de verdade e acompanha a data", () => {
+  const hoje = "2026-09-29";
+  const rot = (venc, extra) => modulo.rotuloSituacaoConta(Object.assign({ vencimento: venc }, extra || {}), hoje).label;
+
+  assert.strictEqual(rot("2026-09-29"), "Vence hoje");
+  assert.strictEqual(rot("2026-09-30"), "Vence amanh\u00e3");
+  assert.strictEqual(rot("2026-10-01"), "Vence em 2 dias");
+  assert.strictEqual(rot("2026-10-06"), "Vence em 7 dias");
+  // fora da semana volta a ser o estado, sem contagem
+  assert.strictEqual(rot("2026-10-07"), "Em aberto");
+  assert.strictEqual(rot("2026-10-28"), "Em aberto");
+
+  // atraso: a loja pergunta h\u00e1 quanto tempo, n\u00e3o s\u00f3 que venceu
+  assert.strictEqual(rot("2026-09-28"), "Venceu ontem");
+  assert.strictEqual(rot("2026-09-26"), "Vencida h\u00e1 3 dias");
+
+  // paga e sem data n\u00e3o contam dia nenhum
+  assert.strictEqual(rot("2026-09-20", { pago: true }), "Paga");
+  assert.strictEqual(rot(""), "Sem data");
+
+  // mudar o vencimento muda a frase: \u00e9 o que estava faltando na tela
+  const conta = { vencimento: "2026-10-06" };
+  assert.strictEqual(modulo.rotuloSituacaoConta(conta, hoje).label, "Vence em 7 dias");
+  assert.strictEqual(modulo.rotuloSituacaoConta({ ...conta, vencimento: hoje }, hoje).label, "Vence hoje");
+});
+
+teste("o que pede aten\u00e7\u00e3o hoje vem em negrito; o resto, n\u00e3o", () => {
+  const hoje = "2026-09-29";
+  const forte = (venc) => modulo.rotuloSituacaoConta({ vencimento: venc }, hoje).forte;
+  assert.strictEqual(forte("2026-09-29"), true, "vence hoje \u00e9 para ver primeiro");
+  assert.strictEqual(forte("2026-09-26"), true, "vencida tamb\u00e9m");
+  assert.strictEqual(forte("2026-09-30"), false);
+  assert.strictEqual(forte("2026-10-20"), false);
+});
+
+teste("os dias at\u00e9 o vencimento, com sinal", () => {
+  const hoje = "2026-09-29";
+  assert.strictEqual(modulo.diasParaVencer({ vencimento: "2026-09-29" }, hoje), 0);
+  assert.strictEqual(modulo.diasParaVencer({ vencimento: "2026-10-06" }, hoje), 7);
+  assert.strictEqual(modulo.diasParaVencer({ vencimento: "2026-09-26" }, hoje), -3);
+  assert.strictEqual(modulo.diasParaVencer({ vencimento: "" }, hoje), null);
+  assert.strictEqual(modulo.diasParaVencer(null, hoje), null);
+});
+
+teste("a faixa continua a mesma \u2014 os totais e os filtros n\u00e3o mudam", () => {
+  const hoje = "2026-09-29";
+  assert.strictEqual(modulo.situacaoConta({ vencimento: "2026-09-29" }, hoje), "vencendo");
+  assert.strictEqual(modulo.situacaoConta({ vencimento: "2026-09-26" }, hoje), "vencido");
+  assert.strictEqual(modulo.situacaoConta({ vencimento: "2026-10-20" }, hoje), "aberto");
 });
 
 teste("a chave que se copia: a da fatura ganha da do cadastro", () => {

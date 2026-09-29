@@ -3702,7 +3702,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const linhaDoPedido = (L, recuado, semNomeDaLoja) => {
 
                             const abertaP = !!contasAbertas[L.chave];
-                            const stP = SITUACAO_CONTA[situacaoConta({ vencimento: L.vencimento, pago: L.pago }, hojeIso)] || SITUACAO_CONTA.aberto;
+                            const stP = rotuloSituacaoConta({ vencimento: L.vencimento, pago: L.pago }, hojeIso);
                             const nomeEtapa = (id) => {
                               const e = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).find(x => x.id === id);
                               return e ? e.nome : "";
@@ -4181,7 +4181,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                           // a lista deles que se confere com a cobrança.
                           if (L.tipo === "loja") {
                             const abertaL = contasAbertas[L.chave] === undefined ? true : !!contasAbertas[L.chave];
-                            const stL = SITUACAO_CONTA[situacaoConta({ vencimento: L.vencimento, pago: L.pago }, hojeIso)] || SITUACAO_CONTA.aberto;
+                            const stL = rotuloSituacaoConta({ vencimento: L.vencimento, pago: L.pago }, hojeIso);
                             return (
                               <div key={L.chave} style={{ borderTop: "1px solid rgba(38,36,33,0.06)", background: "#fff" }}>
                                 <div style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, alignItems: "center",
@@ -4219,7 +4219,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                             );
                           }
                           const c = L.conta;
-                          const st = SITUACAO_CONTA[situacaoConta(c, hojeIso)] || SITUACAO_CONTA.aberto;
+                          const st = rotuloSituacaoConta(c, hojeIso);
                           const detalhe = detalheConta(c);
                           const aberta = !!contasAbertas[c.id];
                           const apoio = [apoioCurtoConta(c), nomeConta(c.contaId)].filter(Boolean).join(" · ");

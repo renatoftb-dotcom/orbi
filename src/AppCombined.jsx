@@ -20481,6 +20481,34 @@ const SITUACAO_CONTA = {
   semData:  { label: "Sem data",    forte: false },
   pago:     { label: "Paga",        forte: false },
 };
+
+// Quantos dias faltam para vencer — negativo quando já passou.
+function diasParaVencer(conta, hoje) {
+  const venc = (conta || {}).vencimento;
+  if (!venc) return null;
+  return diasEntreIso(hoje || dataParaIso(new Date()), venc);
+}
+
+// "Vence em 7d" é o nome da FAIXA (vence dentro de uma semana), e numa conta
+// que vence hoje ele faz o olho relaxar justamente no dia de pagar. Aqui o
+// texto conta os dias de verdade, então muda sozinho quando a data muda —
+// e, no vencido, diz há quanto tempo, que é o que a loja pergunta.
+// A faixa (situacaoConta) continua a mesma: é dela que vivem os totais e os
+// filtros. O que muda é só a frase.
+function rotuloSituacaoConta(conta, hoje) {
+  const situacao = situacaoConta(conta, hoje);
+  if (situacao !== "vencido" && situacao !== "vencendo") {
+    return SITUACAO_CONTA[situacao] || SITUACAO_CONTA.aberto;
+  }
+  const dias = diasParaVencer(conta, hoje);
+  if (dias == null) return SITUACAO_CONTA.semData;
+  if (dias === 0) return { label: "Vence hoje", forte: true };
+  if (dias === 1) return { label: "Vence amanhã", forte: false };
+  if (dias > 1) return { label: `Vence em ${dias} dias`, forte: false };
+  const atraso = -dias;
+  if (atraso === 1) return { label: "Venceu ontem", forte: true };
+  return { label: `Vencida há ${atraso} dias`, forte: true };
+}
 function totaisContas(contas, hoje) {
   const r = { total: 0, aberto: 0, vencido: 0, pago: 0, qtdAberto: 0, qtdVencido: 0 };
   for (const c of contas || []) {
@@ -31740,7 +31768,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const linhaDoPedido = (L, recuado, semNomeDaLoja) => {
 
                             const abertaP = !!contasAbertas[L.chave];
-                            const stP = SITUACAO_CONTA[situacaoConta({ vencimento: L.vencimento, pago: L.pago }, hojeIso)] || SITUACAO_CONTA.aberto;
+                            const stP = rotuloSituacaoConta({ vencimento: L.vencimento, pago: L.pago }, hojeIso);
                             const nomeEtapa = (id) => {
                               const e = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).find(x => x.id === id);
                               return e ? e.nome : "";
@@ -32219,7 +32247,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                           // a lista deles que se confere com a cobrança.
                           if (L.tipo === "loja") {
                             const abertaL = contasAbertas[L.chave] === undefined ? true : !!contasAbertas[L.chave];
-                            const stL = SITUACAO_CONTA[situacaoConta({ vencimento: L.vencimento, pago: L.pago }, hojeIso)] || SITUACAO_CONTA.aberto;
+                            const stL = rotuloSituacaoConta({ vencimento: L.vencimento, pago: L.pago }, hojeIso);
                             return (
                               <div key={L.chave} style={{ borderTop: "1px solid rgba(38,36,33,0.06)", background: "#fff" }}>
                                 <div style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, alignItems: "center",
@@ -32257,7 +32285,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                             );
                           }
                           const c = L.conta;
-                          const st = SITUACAO_CONTA[situacaoConta(c, hojeIso)] || SITUACAO_CONTA.aberto;
+                          const st = rotuloSituacaoConta(c, hojeIso);
                           const detalhe = detalheConta(c);
                           const aberta = !!contasAbertas[c.id];
                           const apoio = [apoioCurtoConta(c), nomeConta(c.contaId)].filter(Boolean).join(" · ");
