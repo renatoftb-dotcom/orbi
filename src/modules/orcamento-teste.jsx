@@ -3583,9 +3583,9 @@ function AreaDetalhe({ calculo, fmtNum }) {
               </div>
             )}
             {calculo.nRep > 1 && row(`Área Total (${calculo.nRep}x)`, `${fmt2(calculo.areaTotal)} m² → Total ${fmt2(calculo.areaTot)} m²`)}
-            {/* Garagem — fora das faixas de desconto de propósito: a área dela não
-                pode empurrar o projeto para a faixa de 50% e baratear o
-                apartamento junto. A taxa sai do preço JÁ descontado. */}
+            {/* Garagem — a área dela JÁ passou pelas faixas junto com o resto, e é
+                por isso que o desconto do projeto inteiro é maior. O que aparece
+                aqui é o abatimento: sobre a taxa MÉDIA do projeto, ela paga 80%. */}
             {calculo.garagem && (
               <div style={{ borderTop:"1px solid #c8cdd6", marginTop:6, paddingTop:6 }}>
                 <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, fontWeight:700, color:"#374151", marginBottom:3 }}>
@@ -3593,13 +3593,13 @@ function AreaDetalhe({ calculo, fmtNum }) {
                   <span>{fmt2(calculo.garagem.area)} m²</span>
                 </div>
                 <div style={{ fontSize:10, color:"#9aa1ac", marginBottom:3 }}>
-                  5 × 2,5 m + {pct(calculo.acrescimoCirk)} manobra = {fmt2(calculo.garagem.porVaga)} m² por vaga · fora das faixas de desconto
+                  5 × 2,5 m + {pct(calculo.acrescimoCirk)} manobra = {fmt2(calculo.garagem.porVaga)} m² por vaga · dentro da metragem que gera as faixas
                 </div>
-                {row(`Arquitetura (${Math.round(calculo.garagem.fator*100)}% de R$ ${fmt2(calculo.garagem.arq.taxaEfetiva)}/m² → R$ ${fmt2(calculo.garagem.arq.taxaGaragem)}/m²)`,
-                  brl(calculo.garagem.arq.valor), { bold:false })}
-                {calculo.garagem.eng.valor > 0 && row(`Engenharia (${Math.round(calculo.garagem.fator*100)}% de R$ ${fmt2(calculo.garagem.eng.taxaEfetiva)}/m² → R$ ${fmt2(calculo.garagem.eng.taxaGaragem)}/m²)`,
-                  brl(calculo.garagem.eng.valor), { bold:false })}
-                {row("Total garagem", brl(calculo.garagem.valor), { bold:true, valColor:"#262421" })}
+                {row(`Arquitetura · ${Math.round(calculo.garagem.fator*100)}% de R$ ${fmt2(calculo.garagem.arq.taxaMedia)}/m² → R$ ${fmt2(calculo.garagem.arq.taxaGaragem)}/m²`,
+                  `− ${brl(calculo.garagem.arq.abatimento)}`, { bold:false })}
+                {calculo.garagem.eng.abatimento > 0 && row(`Engenharia · ${Math.round(calculo.garagem.fator*100)}% de R$ ${fmt2(calculo.garagem.eng.taxaMedia)}/m² → R$ ${fmt2(calculo.garagem.eng.taxaGaragem)}/m²`,
+                  `− ${brl(calculo.garagem.eng.abatimento)}`, { bold:false })}
+                {row("Abatimento da garagem", `− ${brl(calculo.garagem.abatimento)}`, { bold:true, valColor:"#262421" })}
               </div>
             )}
             {row("Total de ambientes", calculo.totalAmbientes)}
@@ -7074,7 +7074,14 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       else areaBruta += area;
     });
 
-    const areaTotal = Math.round((areaBruta + areaPiscina) * (1 + tcfg.acrescimoCirk) * 100) / 100;
+    // A garagem é área de projeto como qualquer outra: entra na metragem que
+    // gera as faixas de desconto. Já vem com a manobra embutida (a vaga de
+    // 5 × 2,5 leva o mesmo acréscimo de circulação do resto), por isso soma
+    // FORA do parênteses — aplicar o acréscimo de novo contaria duas vezes.
+    const garagemUnid = (tipoProjeto === "Empreendimento" && vagasPorUnidade > 0)
+      ? areaDeGaragem(vagasPorUnidade, 1) : null;
+    const areaGaragemUnid = garagemUnid ? garagemUnid.area : 0;
+    const areaTotal = Math.round(((areaBruta + areaPiscina) * (1 + tcfg.acrescimoCirk) + areaGaragemUnid) * 100) / 100;
     if (areaTotal === 0) return null;
 
     const indiceComodos = (() => {
@@ -7146,24 +7153,24 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     const areaTot  = areaTotal * nRep;
 
     // ── Garagem ────────────────────────────────────
-    // Calculada FORA da área que gera as faixas de desconto, de propósito: se
-    // entrasse junto, seiscentos metros de garagem empurrariam o projeto para
-    // a faixa de 50% e baratearia o apartamento também. A taxa dela sai do
-    // preço já descontado, e só depois leva o fator e o desconto próprios.
+    // A área dela já está dentro do preço acima — ela passou pelas faixas junto
+    // com o resto. O que falta é o abatimento: sobre a taxa MÉDIA do projeto
+    // (preço total ÷ metragem total), a garagem paga 80%. Os 20% que sobram
+    // saem do total.
     const garagem = (() => {
-      if (tipoProjeto !== "Empreendimento" || !(vagasPorUnidade > 0) || !(areaTotal > 0)) return null;
+      if (!garagemUnid) return null;
       const g = areaDeGaragem(vagasPorUnidade, nRep);
       if (!(g.area > 0)) return null;
-      const taxaArq = Math.round(precoArq1 / areaTotal * 100) / 100;
-      const taxaEng = Math.round(precoEng1 / areaTotal * 100) / 100;
-      const arq = valorDaGaragem(g.area, taxaArq);
-      const eng = valorDaGaragem(g.area, taxaEng);
+      const arq = abatimentoDaGaragem(g.area, precoArqUnid, areaTot);
+      const eng = abatimentoDaGaragem(g.area, precoEngUnid, areaTot);
       return { ...g, vagasPorUnidade, arq, eng, fator: GARAGEM_FATOR,
+        areaUnid: garagemUnid.area,
+        abatimento: Math.round((arq.abatimento + eng.abatimento) * 100) / 100,
         valor: Math.round((arq.valor + eng.valor) * 100) / 100 };
     })();
 
-    const precoArq = Math.round((precoArqUnid + (garagem ? garagem.arq.valor : 0)) * 100) / 100;
-    const precoEng = Math.round((precoEngUnid + (garagem ? garagem.eng.valor : 0)) * 100) / 100;
+    const precoArq = Math.round((precoArqUnid - (garagem ? garagem.arq.abatimento : 0)) * 100) / 100;
+    const precoEng = Math.round((precoEngUnid - (garagem ? garagem.eng.abatimento : 0)) * 100) / 100;
 
     return {
       areaBruta: Math.round(areaBruta * 100) / 100,

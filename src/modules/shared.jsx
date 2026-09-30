@@ -1354,16 +1354,27 @@ function areaDeGaragem(vagasPorUnidade, nUnidades) {
   return { vagas, porVaga, area: Math.round(vagas * porVaga * 100) / 100 };
 }
 
-// O valor da garagem sai da taxa EFETIVA — a que sobrou depois de todas as
-// faixas de desconto —, nunca do preço base. E a área de garagem não entra
-// na conta que gera as faixas: ela não pode empurrar o projeto para a faixa
-// de 50% e baratear o apartamento junto.
-function valorDaGaragem(area, taxaEfetiva) {
-  const a = Math.max(0, Number(area) || 0);
-  const t = Math.max(0, Number(taxaEfetiva) || 0);
-  const taxaGaragem = Math.round(t * GARAGEM_FATOR * 100) / 100;
-  return { taxaEfetiva: t, taxaGaragem,
-    valor: Math.round(a * taxaGaragem * 100) / 100 };
+// A área de garagem entra na metragem que gera as faixas de desconto — ela
+// empurra o projeto inteiro para faixas maiores, e isso é desejado: quem
+// desenha 6.000 m² ganha desconto de 6.000 m², mesmo que parte seja garagem.
+//
+// O abatimento vem depois, e sai da taxa MÉDIA do projeto: preço total ÷
+// metragem total. Sobre essa taxa a garagem paga 80%. Calcular assim, e não
+// por dentro das faixas, evita a circularidade — o preço total não pode
+// depender de um desconto que depende do preço total.
+function abatimentoDaGaragem(areaGaragem, precoTotal, areaTotal) {
+  const ag = Math.max(0, Number(areaGaragem) || 0);
+  const pt = Math.max(0, Number(precoTotal) || 0);
+  const at = Math.max(0, Number(areaTotal) || 0);
+  if (!(ag > 0) || !(pt > 0) || !(at > 0)) {
+    return { taxaMedia: 0, taxaGaragem: 0, valorCheio: 0, abatimento: 0, valor: 0 };
+  }
+  const taxaMedia = Math.round(pt / at * 100) / 100;
+  const taxaGaragem = Math.round(taxaMedia * GARAGEM_FATOR * 100) / 100;
+  const valorCheio = Math.round(ag * taxaMedia * 100) / 100;
+  const valor = Math.round(ag * taxaGaragem * 100) / 100;
+  return { taxaMedia, taxaGaragem, valorCheio,
+    abatimento: Math.round((valorCheio - valor) * 100) / 100, valor };
 }
 
 // Configuracao centralizada por tipo — todos os parametros condicionais em um lugar
