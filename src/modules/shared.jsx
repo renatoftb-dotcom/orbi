@@ -1286,6 +1286,11 @@ var GRUPOS_COMODOS_GALERIA_COMUM  = { "Áreas Comuns":    Object.keys(COMODOS_GA
 var GRUPOS_COMODOS_GALERIA_APTO   = { "Por Apartamento": Object.keys(COMODOS_GALERIA_APTO)   };
 var INDICE_FACHADA_GALERIA = 0.15;
 var CUSTOM_CONFIG_KEY_GALERIA = "obramanager-config-galeria-v1";
+// O empreendimento usa os mesmos ambientes do bloco "Por Apartamento" do
+// conjunto comercial — é a mesma unidade sendo projetada, muda só o que a
+// cerca. Chave de configuração própria: quem ajusta as medidas de um
+// empreendimento não quer mexer nos apartamentos de uma galeria.
+var CUSTOM_CONFIG_KEY_EMPREENDIMENTO = "obramanager-config-empreendimento-v1";
 
 // Retorna COMODOS e GRUPOS conforme tipo de obra
 function getComodosConfig(tipo) {
@@ -1299,6 +1304,11 @@ function getComodosConfig(tipo) {
     comodos: COMODOS_GALPAO,
     grupos:  GRUPOS_COMODOS_GALPAO,
     storageKey: CUSTOM_CONFIG_KEY_GALPAO
+  };
+  if (tipo === "Empreendimento") return {
+    comodos: COMODOS_GALERIA_APTO,
+    grupos:  GRUPOS_COMODOS_GALERIA_APTO,
+    storageKey: CUSTOM_CONFIG_KEY_EMPREENDIMENTO
   };
   return { comodos: COMODOS, grupos: GRUPOS_COMODOS, storageKey: CUSTOM_CONFIG_KEY };
 }
@@ -1363,6 +1373,31 @@ var TIPO_CONFIG = {
       { ate: Infinity, desconto: 0.50 },
     ],
     repeticaoPcts: (acum) => acum < 1000 ? 0.25 : acum < 2000 ? 0.20 : 0.15,
+    labelCirk: "25",
+  },
+  // Empreendimento — prédio ou conjunto de unidades iguais para venda.
+  // Mesmo desenho do bloco "Por Apartamento" do conjunto comercial: CUB PP-4
+  // (não R-1, que é casa unifamiliar), as mesmas faixas de desconto por área,
+  // e — esta é a diferença que importa — repetição ESCALONADA: a segunda
+  // unidade custa 25% da primeira, mas a partir de 1.000 m² acumulados cai
+  // para 20% e depois 15%. Projetar a décima unidade igual dá menos trabalho
+  // que projetar a segunda, e o preço tem que dizer isso.
+  Empreendimento: {
+    precoBase:      45.00,
+    acrescimoCirk:  0.25,
+    faixasDesconto: [
+      { ate: 200,      desconto: 0.00 },
+      { ate: 300,      desconto: 0.30 },
+      { ate: 400,      desconto: 0.35 },
+      { ate: 500,      desconto: 0.40 },
+      { ate: 600,      desconto: 0.45 },
+      { ate: Infinity, desconto: 0.50 },
+    ],
+    repeticaoPcts: (acum) => acum < 1000 ? 0.25 : acum < 2000 ? 0.20 : 0.15,
+    // Liga o escalonamento. Os outros tipos declaram repeticaoPcts mas usam
+    // 25% fixo há tempo; mudar isso mexeria em orçamento já enviado, então
+    // o escalonamento entra por adesão, tipo a tipo.
+    repeticaoEscalonada: true,
     labelCirk: "25",
   },
   Galpao: {
@@ -1441,6 +1476,11 @@ function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
   } else if (tipoProjeto === "Galpão") {
     categoriaCub = cub.GI;    // GI para galpão
     padraoCub = "Unico";      // GI tem apenas padrão único
+  } else if (tipoProjeto === "Empreendimento") {
+    // PP-4 (Prédio Popular, NBR 12721): unidade em prédio, não casa
+    // unifamiliar. Só tem Baixo e Normal — Médio e Alto caem em Normal.
+    categoriaCub = cub.PP4;
+    if (padraoCub === "Alto") padraoCub = "Normal";
   } else {
     categoriaCub = cub.R1;    // R-1 para Residencial, Clínica
   }
@@ -1449,7 +1489,9 @@ function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
   if (!cubObj || !cubObj.valor_m2 || cubObj.valor_m2 <= 0) return fallback;
 
   const precoBase = Math.round(pct * cubObj.valor_m2 * 100) / 100;
-  const categoria = categoriaCub === cub.R1 ? "R-1" : categoriaCub === cub.CSL8 ? "CSL-8" : "GI";
+  const categoria = categoriaCub === cub.R1 ? "R-1"
+                  : categoriaCub === cub.CSL8 ? "CSL-8"
+                  : categoriaCub === cub.PP4 ? "PP-4" : "GI";
   console.log(`[PREÇO BASE] ${tipoProjeto} ${padrao} → ${categoria} ${padraoCub} | pct=${pct.toFixed(4)} × CUB=${cubObj.valor_m2.toFixed(2)} = R$ ${precoBase.toFixed(2)}/m²`);
   return { precoBase, modo: "dinamico", pct, cubM2: cubObj.valor_m2, padraoCub, categoria };
 }

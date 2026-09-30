@@ -1290,6 +1290,11 @@ var GRUPOS_COMODOS_GALERIA_COMUM  = { "Áreas Comuns":    Object.keys(COMODOS_GA
 var GRUPOS_COMODOS_GALERIA_APTO   = { "Por Apartamento": Object.keys(COMODOS_GALERIA_APTO)   };
 var INDICE_FACHADA_GALERIA = 0.15;
 var CUSTOM_CONFIG_KEY_GALERIA = "obramanager-config-galeria-v1";
+// O empreendimento usa os mesmos ambientes do bloco "Por Apartamento" do
+// conjunto comercial — é a mesma unidade sendo projetada, muda só o que a
+// cerca. Chave de configuração própria: quem ajusta as medidas de um
+// empreendimento não quer mexer nos apartamentos de uma galeria.
+var CUSTOM_CONFIG_KEY_EMPREENDIMENTO = "obramanager-config-empreendimento-v1";
 
 // Retorna COMODOS e GRUPOS conforme tipo de obra
 function getComodosConfig(tipo) {
@@ -1303,6 +1308,11 @@ function getComodosConfig(tipo) {
     comodos: COMODOS_GALPAO,
     grupos:  GRUPOS_COMODOS_GALPAO,
     storageKey: CUSTOM_CONFIG_KEY_GALPAO
+  };
+  if (tipo === "Empreendimento") return {
+    comodos: COMODOS_GALERIA_APTO,
+    grupos:  GRUPOS_COMODOS_GALERIA_APTO,
+    storageKey: CUSTOM_CONFIG_KEY_EMPREENDIMENTO
   };
   return { comodos: COMODOS, grupos: GRUPOS_COMODOS, storageKey: CUSTOM_CONFIG_KEY };
 }
@@ -1367,6 +1377,31 @@ var TIPO_CONFIG = {
       { ate: Infinity, desconto: 0.50 },
     ],
     repeticaoPcts: (acum) => acum < 1000 ? 0.25 : acum < 2000 ? 0.20 : 0.15,
+    labelCirk: "25",
+  },
+  // Empreendimento — prédio ou conjunto de unidades iguais para venda.
+  // Mesmo desenho do bloco "Por Apartamento" do conjunto comercial: CUB PP-4
+  // (não R-1, que é casa unifamiliar), as mesmas faixas de desconto por área,
+  // e — esta é a diferença que importa — repetição ESCALONADA: a segunda
+  // unidade custa 25% da primeira, mas a partir de 1.000 m² acumulados cai
+  // para 20% e depois 15%. Projetar a décima unidade igual dá menos trabalho
+  // que projetar a segunda, e o preço tem que dizer isso.
+  Empreendimento: {
+    precoBase:      45.00,
+    acrescimoCirk:  0.25,
+    faixasDesconto: [
+      { ate: 200,      desconto: 0.00 },
+      { ate: 300,      desconto: 0.30 },
+      { ate: 400,      desconto: 0.35 },
+      { ate: 500,      desconto: 0.40 },
+      { ate: 600,      desconto: 0.45 },
+      { ate: Infinity, desconto: 0.50 },
+    ],
+    repeticaoPcts: (acum) => acum < 1000 ? 0.25 : acum < 2000 ? 0.20 : 0.15,
+    // Liga o escalonamento. Os outros tipos declaram repeticaoPcts mas usam
+    // 25% fixo há tempo; mudar isso mexeria em orçamento já enviado, então
+    // o escalonamento entra por adesão, tipo a tipo.
+    repeticaoEscalonada: true,
     labelCirk: "25",
   },
   Galpao: {
@@ -1445,6 +1480,11 @@ function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
   } else if (tipoProjeto === "Galpão") {
     categoriaCub = cub.GI;    // GI para galpão
     padraoCub = "Unico";      // GI tem apenas padrão único
+  } else if (tipoProjeto === "Empreendimento") {
+    // PP-4 (Prédio Popular, NBR 12721): unidade em prédio, não casa
+    // unifamiliar. Só tem Baixo e Normal — Médio e Alto caem em Normal.
+    categoriaCub = cub.PP4;
+    if (padraoCub === "Alto") padraoCub = "Normal";
   } else {
     categoriaCub = cub.R1;    // R-1 para Residencial, Clínica
   }
@@ -1453,7 +1493,9 @@ function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
   if (!cubObj || !cubObj.valor_m2 || cubObj.valor_m2 <= 0) return fallback;
 
   const precoBase = Math.round(pct * cubObj.valor_m2 * 100) / 100;
-  const categoria = categoriaCub === cub.R1 ? "R-1" : categoriaCub === cub.CSL8 ? "CSL-8" : "GI";
+  const categoria = categoriaCub === cub.R1 ? "R-1"
+                  : categoriaCub === cub.CSL8 ? "CSL-8"
+                  : categoriaCub === cub.PP4 ? "PP-4" : "GI";
   console.log(`[PREÇO BASE] ${tipoProjeto} ${padrao} → ${categoria} ${padraoCub} | pct=${pct.toFixed(4)} × CUB=${cubObj.valor_m2.toFixed(2)} = R$ ${precoBase.toFixed(2)}/m²`);
   return { precoBase, modo: "dinamico", pct, cubM2: cubObj.valor_m2, padraoCub, categoria };
 }
@@ -17552,7 +17594,10 @@ function prazoParametricoMeses(areaConstruida, tipologia, data) {
     const a = tab[i - 1], b = tab[i];
     meses = a.terrea + (b.terrea - a.terrea) * (area - a.area) / (b.area - a.area);
   }
-  if (tipologia === "Sobrado") meses += extraSobradoMeses(data);
+  // Multipavimento herda o acréscimo do sobrado. Não é o número certo — um
+  // prédio de quatro pavimentos leva mais que um sobrado —, mas é melhor que
+  // o térreo, que é onde ele cairia sem esta linha. Calibrar com a equipe.
+  if (tipologia === "Sobrado" || tipologia === "Multipavimento") meses += extraSobradoMeses(data);
   return Math.round(meses * 10) / 10;
 }
 
@@ -17576,7 +17621,7 @@ function ferroColunasAchatado(cp, sufixo) {
 }
 function condicoesObra(cp) {
   return {
-    sobrado: cp.tipologia === "Sobrado",
+    sobrado: cp.tipologia === "Sobrado" || cp.tipologia === "Multipavimento",
     arrimo: cp.arrimo.comprimento > 0 && cp.arrimo.altura > 0,
     muro: cp.comprimentoMuroDivisa > 0 && cp.alturaMuroDivisa > 0,
     piscina: cp.piscina.areaConstruida > 0,
@@ -17601,7 +17646,7 @@ function medicoesCronograma(projeto, data) {
     const q = Math.round(numOrZero(qtd) * 100) / 100;
     if (q > 0) m.push({ etapa, servico, qtd: q, nota });
   };
-  const sobrado = cp.tipologia === "Sobrado";
+  const sobrado = cp.tipologia === "Sobrado" || cp.tipologia === "Multipavimento";
 
   // Telhado por tipo (calcularTelhado dá a área inclinada de cada água)
   const telhado = { ceramica: 0, fibro: 0, metalica: 0, total: 0 };
@@ -43422,8 +43467,12 @@ function ResumoDetalhes({ calculo, fmtNum, C, temImposto, aliqImp }) {
           </div>
           {hasRep && arqAberto && (
             <div style={{ marginTop:8, paddingLeft:10, borderLeft:"2px solid #e5e7eb", display:"flex", flexDirection:"column", gap:4 }}>
+              {/* Cada unidade tem o SEU percentual: nos tipos escalonados ele cai
+                  conforme a área acumulada, e mostrar 25% em todas seria mentir
+                  sobre a conta que está do lado. */}
               {calculo.unidades.map(u => {
-                const pct = u.und > 1 ? Math.round(calculo.pctRep * 100) : null;
+                const pctU = u.pct != null ? u.pct : calculo.pctRep;
+                const pct = u.und > 1 ? Math.round(pctU * 100) : null;
                 const m2u = calculo.areaTotal > 0 ? Math.round(u.arq / calculo.areaTotal * 100) / 100 : 0;
                 return (
                   <div key={u.und} style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#6b7280" }}>
@@ -43462,7 +43511,8 @@ function ResumoDetalhes({ calculo, fmtNum, C, temImposto, aliqImp }) {
           {hasRep && engAberto && (
             <div style={{ marginTop:8, paddingLeft:10, borderLeft:"2px solid #e5e7eb", display:"flex", flexDirection:"column", gap:4 }}>
               {calculo.unidades.map(u => {
-                const pct = u.und > 1 ? Math.round(calculo.pctRep * 100) : null;
+                const pctU = u.pct != null ? u.pct : calculo.pctRep;
+                const pct = u.und > 1 ? Math.round(pctU * 100) : null;
                 const m2u = calculo.areaTotal > 0 ? Math.round(u.eng / calculo.areaTotal * 100) / 100 : 0;
                 return (
                   <div key={u.und} style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#6b7280" }}>
@@ -46394,7 +46444,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     tipoObra:    ["Construção nova", "Reforma"],
     tipoProjeto: ["Residencial", "Clínica", "Conj. Comercial", "Galpão", "Empreendimento"],
     padrao:      ["Alto", "Médio", "Baixo"],
-    tipologia:   ["Térreo", "Sobrado"],
+    // Térreo = 1 pavimento, Sobrado = 2. "Multipavimento" é o termo que o
+    // meio usa para 3 ou mais — mais claro que "+ de 2 pavimentos", e é o que
+    // cabe num prédio de empreendimento.
+    tipologia:   ["Térreo", "Sobrado", "Multipavimento"],
     tamanho:     ["Grande", "Médio", "Pequeno", "Compacta"],
   };
 
@@ -46803,13 +46856,23 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     const precoEng1 = Math.round(engCalc.totalEng * 100) / 100;
 
     const nRep   = qtdRep > 1 ? qtdRep : 1;
+    // A primeira unidade custa o projeto inteiro; as seguintes custam uma
+    // fração, porque o desenho já existe. Nos tipos escalonados essa fração
+    // cai conforme a área acumulada — a décima unidade igual dá menos
+    // trabalho que a segunda. Nos demais segue 25% fixo, como sempre foi:
+    // mudar isso mexeria em orçamento já enviado ao cliente.
+    const escalona = !!tcfg.repeticaoEscalonada && typeof tcfg.repeticaoPcts === "function";
     const pctRep = 0.25;
     const unidades = [{ und: 1, arq: precoArq1, eng: precoEng1 }];
+    let acumRep = areaTotal;
     for (let i = 2; i <= nRep; i++) {
+      acumRep += areaTotal;
+      const pct = escalona ? tcfg.repeticaoPcts(acumRep) : pctRep;
       unidades.push({
         und: i,
-        arq: Math.round(precoArq1 * pctRep * 100) / 100,
-        eng: Math.round(precoEng1 * pctRep * 100) / 100,
+        pct,
+        arq: Math.round(precoArq1 * pct * 100) / 100,
+        eng: Math.round(precoEng1 * pct * 100) / 100,
       });
     }
     const precoArq = Math.round(unidades.reduce((s, u) => s + u.arq, 0) * 100) / 100;
@@ -46838,7 +46901,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         cubM2: _precoBaseInfo.cubM2 || null,
         pct: _precoBaseInfo.pct || null,
         precoBase: precoBaseVal,
-        cubKey: (tipoProjeto === "Galpão") ? "GI" : "R1",
+        cubKey: (tipoProjeto === "Galpão") ? "GI"
+              : (tipoProjeto === "Empreendimento") ? "PP4" : "R1",
       }],
       faixasArqDet, faixasEng: engCalc.faixas,
       totalAmbientes,

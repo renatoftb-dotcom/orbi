@@ -162,7 +162,10 @@ function prazoParametricoMeses(areaConstruida, tipologia, data) {
     const a = tab[i - 1], b = tab[i];
     meses = a.terrea + (b.terrea - a.terrea) * (area - a.area) / (b.area - a.area);
   }
-  if (tipologia === "Sobrado") meses += extraSobradoMeses(data);
+  // Multipavimento herda o acréscimo do sobrado. Não é o número certo — um
+  // prédio de quatro pavimentos leva mais que um sobrado —, mas é melhor que
+  // o térreo, que é onde ele cairia sem esta linha. Calibrar com a equipe.
+  if (tipologia === "Sobrado" || tipologia === "Multipavimento") meses += extraSobradoMeses(data);
   return Math.round(meses * 10) / 10;
 }
 
@@ -186,7 +189,7 @@ function ferroColunasAchatado(cp, sufixo) {
 }
 function condicoesObra(cp) {
   return {
-    sobrado: cp.tipologia === "Sobrado",
+    sobrado: cp.tipologia === "Sobrado" || cp.tipologia === "Multipavimento",
     arrimo: cp.arrimo.comprimento > 0 && cp.arrimo.altura > 0,
     muro: cp.comprimentoMuroDivisa > 0 && cp.alturaMuroDivisa > 0,
     piscina: cp.piscina.areaConstruida > 0,
@@ -211,7 +214,7 @@ function medicoesCronograma(projeto, data) {
     const q = Math.round(numOrZero(qtd) * 100) / 100;
     if (q > 0) m.push({ etapa, servico, qtd: q, nota });
   };
-  const sobrado = cp.tipologia === "Sobrado";
+  const sobrado = cp.tipologia === "Sobrado" || cp.tipologia === "Multipavimento";
 
   // Telhado por tipo (calcularTelhado dá a área inclinada de cada água)
   const telhado = { ceramica: 0, fibro: 0, metalica: 0, total: 0 };
