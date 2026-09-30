@@ -1286,11 +1286,6 @@ var GRUPOS_COMODOS_GALERIA_COMUM  = { "Áreas Comuns":    Object.keys(COMODOS_GA
 var GRUPOS_COMODOS_GALERIA_APTO   = { "Por Apartamento": Object.keys(COMODOS_GALERIA_APTO)   };
 var INDICE_FACHADA_GALERIA = 0.15;
 var CUSTOM_CONFIG_KEY_GALERIA = "obramanager-config-galeria-v1";
-// O empreendimento usa os mesmos ambientes do bloco "Por Apartamento" do
-// conjunto comercial — é a mesma unidade sendo projetada, muda só o que a
-// cerca. Chave de configuração própria: quem ajusta as medidas de um
-// empreendimento não quer mexer nos apartamentos de uma galeria.
-var CUSTOM_CONFIG_KEY_EMPREENDIMENTO = "obramanager-config-empreendimento-v1";
 
 // Retorna COMODOS e GRUPOS conforme tipo de obra
 function getComodosConfig(tipo) {
@@ -1304,11 +1299,6 @@ function getComodosConfig(tipo) {
     comodos: COMODOS_GALPAO,
     grupos:  GRUPOS_COMODOS_GALPAO,
     storageKey: CUSTOM_CONFIG_KEY_GALPAO
-  };
-  if (tipo === "Empreendimento") return {
-    comodos: COMODOS_GALERIA_APTO,
-    grupos:  GRUPOS_COMODOS_GALERIA_APTO,
-    storageKey: CUSTOM_CONFIG_KEY_EMPREENDIMENTO
   };
   return { comodos: COMODOS, grupos: GRUPOS_COMODOS, storageKey: CUSTOM_CONFIG_KEY };
 }
