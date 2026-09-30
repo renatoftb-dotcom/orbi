@@ -29,7 +29,7 @@ const modulo = new Function(`
            pedidoVazio, itemDoPedidoVazio, brutoDoItem, brutoDoPedido, totalDoPedido,
            itensRateados, contasDoPedidoDaLoja, validarPedido, pedidosPendentes, baixarPedidos,
            podeMexerNoPedido, removerContasDoPedido, linhasDePedido, linhasDeLoja,
-           contasDoPedidoDeConta, unitarioDaConta,
+           contasDoPedidoDeConta, unitarioDaConta, apagarPedidoInteiro, resumoDoQueSai,
            pixDoPagamento, pixResumido, TIPOS_PIX, nomeDoTipoPix,
            MODOS_LANCAMENTO, modoLancamento,
            contasDaCotacao, contasDeCotacao,
@@ -1956,6 +1956,47 @@ teste("sem quantidade ou sem valor não se inventa unitário", () => {
   assert.strictEqual(modulo.unitarioDaConta({ quantidade: 0, valor: 50 }), null);
   assert.strictEqual(modulo.unitarioDaConta({ quantidade: 5, valor: 0 }), null);
   assert.strictEqual(modulo.unitarioDaConta(null), null);
+});
+
+
+// ── Apagar um pedido que nunca devia ter entrado ──────────
+const cpTeste = [
+  { id: "a", pedidoId: "p1", valor: 100, pago: false },
+  { id: "b", pedidoId: "p1", valor: 50, pago: true, valorPago: 48 },
+  { id: "c", pedidoId: "p2", valor: 30, pago: false },
+  { id: "d", pedidoId: "", valor: 20, pago: false },
+];
+
+teste("apagar o pedido leva também o que já foi baixado", () => {
+  const r = modulo.apagarPedidoInteiro(cpTeste, "p1");
+  assert.deepStrictEqual(r.map(c => c.id), ["c", "d"]);
+});
+
+teste("e não encosta em conta de outro pedido nem em avulsa", () => {
+  assert.deepStrictEqual(modulo.apagarPedidoInteiro(cpTeste, "p2").map(c => c.id), ["a", "b", "d"]);
+  assert.deepStrictEqual(modulo.apagarPedidoInteiro(cpTeste, "").map(c => c.id), ["a", "b", "c", "d"]);
+  assert.deepStrictEqual(modulo.apagarPedidoInteiro(cpTeste, "naoexiste").map(c => c.id), ["a", "b", "c", "d"]);
+});
+
+teste("remover e apagar são coisas diferentes: um poupa o pago, o outro não", () => {
+  // relançar um pedido poupa o que já foi pago
+  assert.deepStrictEqual(modulo.removerContasDoPedido(cpTeste, "p1").map(c => c.id), ["b", "c", "d"]);
+  // apagar diz que ele nunca existiu
+  assert.deepStrictEqual(modulo.apagarPedidoInteiro(cpTeste, "p1").map(c => c.id), ["c", "d"]);
+});
+
+teste("o resumo diz em números o que vai sair", () => {
+  assert.deepStrictEqual(modulo.resumoDoQueSai(cpTeste, "p1"),
+    { quantas: 2, valor: 150, pagas: 1, valorPago: 48 });
+  assert.deepStrictEqual(modulo.resumoDoQueSai(cpTeste, "p2"),
+    { quantas: 1, valor: 30, pagas: 0, valorPago: 0 });
+});
+
+teste("pedido que não existe não tem o que sair", () => {
+  assert.deepStrictEqual(modulo.resumoDoQueSai(cpTeste, "naoexiste"),
+    { quantas: 0, valor: 0, pagas: 0, valorPago: 0 });
+  assert.deepStrictEqual(modulo.resumoDoQueSai([], "p1"),
+    { quantas: 0, valor: 0, pagas: 0, valorPago: 0 });
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

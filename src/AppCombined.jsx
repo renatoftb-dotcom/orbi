@@ -21116,6 +21116,31 @@ function podeMexerNoPedido(contasPagar, pedidoId) {
 }
 
 // Tira as contas do pedido, deixando as pagas onde estão.
+// Apagar um pedido inteiro, inclusive o que já foi baixado. É diferente de
+// `removerContasDoPedido`, que poupa o pago de propósito: lá se está
+// relançando um pedido e o gasto continua existindo; aqui se está dizendo
+// que ele nunca existiu — lançamento de teste, papel duplicado, loja errada.
+// Por isso quem chama tem que mostrar antes o que vai sair, e o realizado da
+// obra cai junto.
+function apagarPedidoInteiro(contasPagar, pedidoId) {
+  if (!pedidoId) return contasPagar || [];
+  return (contasPagar || []).filter((c) => !(c && c.pedidoId === pedidoId));
+}
+
+// O que a pessoa precisa ler antes de confirmar: quantas contas somem, de
+// quanto, e quanto disso já estava baixado — porque essa parte sai do
+// realizado da obra e mexe no P&L do mês.
+function resumoDoQueSai(contasPagar, pedidoId) {
+  const alvo = (contasPagar || []).filter((c) => c && c.pedidoId === pedidoId);
+  let valor = 0, pagas = 0, valorPago = 0;
+  for (const c of alvo) {
+    valor += cpNumero(c.valor);
+    if (c.pago) { pagas++; valorPago += cpNumero(c.valorPago || c.valor); }
+  }
+  return { quantas: alvo.length, valor: Math.round(valor * 100) / 100,
+    pagas, valorPago: Math.round(valorPago * 100) / 100 };
+}
+
 function removerContasDoPedido(contasPagar, pedidoId) {
   if (!pedidoId) return contasPagar || [];
   return (contasPagar || []).filter((c) => !(c && c.pedidoId === pedidoId && !c.pago));
@@ -31567,6 +31592,48 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       dataContab: linha.vencimento && linha.vencimento <= hojeIso ? linha.vencimento : hojeIso,
       valorPago: linha.aberto, comprovante: null, erroAnexo: "" });
   };
+  // Apagar um pedido a partir do contas a pagar. É a saída para o que nunca
+  // devia ter entrado: lançamento de teste, papel em duplicidade, loja
+  // errada. Some o pedido e somem as contas dele — inclusive as já baixadas,
+  // e aí o realizado da obra cai junto. Por isso a confirmação diz em
+  // números o que vai acontecer, em vez de perguntar "tem certeza?".
+  //
+  // Serve também para o pedido que ficou sem cotação dona: até aqui ele não
+  // aparecia em tela nenhuma que soubesse apagá-lo.
+  const apagarPedidoDeContas = async (linha) => {
+    const obra = (obras || []).find(o => o && o.id === linha.obraId);
+    if (!obra) return;
+    const ids = linha.pedidoIds || [linha.pedidoId];
+    const sai = ids.reduce((a, id) => {
+      const r = resumoDoQueSai(obra.contasPagar || [], id);
+      return { quantas: a.quantas + r.quantas, valor: a.valor + r.valor,
+        pagas: a.pagas + r.pagas, valorPago: a.valorPago + r.valorPago };
+    }, { quantas: 0, valor: 0, pagas: 0, valorPago: 0 });
+    if (!sai.quantas) return;
+    const nome = linha.numeroLoja || linha.numeroPedido || "";
+    const ok = await dialogo.confirmar({
+      titulo: `Apagar o pedido ${nome}?`,
+      mensagem: [
+        sai.quantas === 1 ? "Sai 1 conta a pagar" : `Saem ${sai.quantas} contas a pagar`,
+        `, no total de ${fmtMoedaCtr(sai.valor)}.`,
+        sai.pagas ? ` ${sai.pagas === 1 ? "Uma delas j\u00e1 estava baixada" : `${sai.pagas} delas j\u00e1 estavam baixadas`}`
+          + `, ent\u00e3o o realizado da obra cai ${fmtMoedaCtr(sai.valorPago)}.` : "",
+        " Isto n\u00e3o tem volta.",
+      ].join(""),
+      confirmar: "Apagar pedido",
+      destrutivo: true,
+    });
+    if (!ok) return;
+    let contas = obra.contasPagar || [];
+    for (const id of ids) contas = apagarPedidoInteiro(contas, id);
+    const cotacoes = (obra.cotacoes || []).map(c => !c ? c : ({
+      ...c, pedidos: (c.pedidos || []).filter(x => x && ids.indexOf(x.id) < 0),
+    }));
+    const atualizada = { ...obra, contasPagar: contas, cotacoes };
+    gravarObras(obras.map(o => o.id === obra.id ? atualizada : o));
+    if (obraAtual && obraAtual.id === obra.id) setObraSelecionada(atualizada);
+  };
+
   // Confirma a baixa: a despesa entra no mês da data de contabilização
   // escolhida (`pagoEm`); `contabilizadoEm` guarda o dia em que se registrou.
   const confirmarPagamento = () => {
@@ -33077,6 +33144,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                     <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
                                       <button onClick={() => alternarPagamentoPedido(L)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>
                                         {L.pago ? "Desfazer" : "Pagar pedido"}
+                                      </button>
+                                      <button onClick={() => apagarPedidoDeContas(L)} title="Apagar o pedido e as contas dele"
+                                        style={{ ...C.btnSec, fontSize: 12, padding: "6px 10px", color: "#dc2626",
+                                          borderColor: "rgba(220,38,38,0.35)" }}>
+                                        Apagar
                                       </button>
                                     </div>
                                   ) : <div />}

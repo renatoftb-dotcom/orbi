@@ -879,6 +879,31 @@ function podeMexerNoPedido(contasPagar, pedidoId) {
 }
 
 // Tira as contas do pedido, deixando as pagas onde estão.
+// Apagar um pedido inteiro, inclusive o que já foi baixado. É diferente de
+// `removerContasDoPedido`, que poupa o pago de propósito: lá se está
+// relançando um pedido e o gasto continua existindo; aqui se está dizendo
+// que ele nunca existiu — lançamento de teste, papel duplicado, loja errada.
+// Por isso quem chama tem que mostrar antes o que vai sair, e o realizado da
+// obra cai junto.
+function apagarPedidoInteiro(contasPagar, pedidoId) {
+  if (!pedidoId) return contasPagar || [];
+  return (contasPagar || []).filter((c) => !(c && c.pedidoId === pedidoId));
+}
+
+// O que a pessoa precisa ler antes de confirmar: quantas contas somem, de
+// quanto, e quanto disso já estava baixado — porque essa parte sai do
+// realizado da obra e mexe no P&L do mês.
+function resumoDoQueSai(contasPagar, pedidoId) {
+  const alvo = (contasPagar || []).filter((c) => c && c.pedidoId === pedidoId);
+  let valor = 0, pagas = 0, valorPago = 0;
+  for (const c of alvo) {
+    valor += cpNumero(c.valor);
+    if (c.pago) { pagas++; valorPago += cpNumero(c.valorPago || c.valor); }
+  }
+  return { quantas: alvo.length, valor: Math.round(valor * 100) / 100,
+    pagas, valorPago: Math.round(valorPago * 100) / 100 };
+}
+
 function removerContasDoPedido(contasPagar, pedidoId) {
   if (!pedidoId) return contasPagar || [];
   return (contasPagar || []).filter((c) => !(c && c.pedidoId === pedidoId && !c.pago));
