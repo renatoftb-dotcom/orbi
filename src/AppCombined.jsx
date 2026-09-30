@@ -1440,6 +1440,18 @@ function getTipoConfig(tipo) {
 //
 // Retorna: { precoBase, modo } — modo "dinamico" ou "fixo"
 // ═══════════════════════════════════════════════════════════════
+// O CUB muda todo mês. Um orçamento feito em março com o CUB de janeiro não
+// está errado — mas quem olha a proposta seis meses depois precisa saber de
+// quando é o número, ou não tem como refazer a conta.
+function mesDoCub(d) {
+  if (!d) return "";
+  const t = String(d).slice(0, 7).split("-");
+  if (t.length < 2) return "";
+  const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  const m = meses[parseInt(t[1], 10) - 1];
+  return m ? `${m}/${t[0]}` : "";
+}
+
 function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
   const tcfg = getTipoConfig(tipoProjeto === "Clínica" ? "Clinica"
                           : tipoProjeto === "Galpão" ? "Galpao"
@@ -1487,7 +1499,9 @@ function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
                   : categoriaCub === cub.CSL8 ? "CSL-8"
                   : categoriaCub === cub.PP4 ? "PP-4" : "GI";
   console.log(`[PREÇO BASE] ${tipoProjeto} ${padrao} → ${categoria} ${padraoCub} | pct=${pct.toFixed(4)} × CUB=${cubObj.valor_m2.toFixed(2)} = R$ ${precoBase.toFixed(2)}/m²`);
-  return { precoBase, modo: "dinamico", pct, cubM2: cubObj.valor_m2, padraoCub, categoria };
+  return { precoBase, modo: "dinamico", pct, cubM2: cubObj.valor_m2, padraoCub, categoria,
+    mesCub: mesDoCub(cubObj.mes_referencia), fonteCub: cubObj.fonte || "",
+    estadoCub: cub.estado || cubObj.estado || "" };
 }
 var fmt = (v) => (v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 var fmtM2 = (v) => `${(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})} m²`;
@@ -43254,12 +43268,19 @@ function AreaDetalhe({ calculo, fmtNum }) {
                           {ok ? `✓ ${c.categoria} ${c.padraoCub}` : "⚠ FIXO (não pegou CUB)"}
                         </span>
                       </div>
-                      {ok ? (
+                      {ok ? (<>
                         <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginTop:2 }}>
                           <span style={{ color:"#6b7280" }}>R$ {fmt2(c.cubM2)}/m² × {(c.pct*100).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}%</span>
                           <span style={{ color:"#15803d", fontWeight:600 }}>= R$ {fmt2(c.precoBase)}/m²</span>
                         </div>
-                      ) : (
+                        {/* De quando é o número e quem divulgou. Discreto, mas presente:
+                            sem isso ninguém refaz a conta de uma proposta antiga. */}
+                        {(c.mesCub || c.fonteCub || c.estadoCub) && (
+                          <div style={{ fontSize:9.5, color:"#9aa1ac", marginTop:1 }}>
+                            {[c.mesCub, c.estadoCub, c.fonteCub].filter(Boolean).join(" · ")}
+                          </div>
+                        )}
+                      </>) : (
                         <div style={{ fontSize:10, color:"#b91c1c", marginTop:2 }}>
                           Base fixa R$ {fmt2(c.precoBase)}/m² — verifique cub.{c.label==="Apartamento"?"PP4":c.label==="Galpão"?"GI":"CSL8"} / pct de calibragem / onboarding.
                         </div>
@@ -43321,12 +43342,19 @@ function AreaDetalhe({ calculo, fmtNum }) {
                           {ok ? `✓ ${c.categoria} ${c.padraoCub}` : "⚠ FIXO (não pegou CUB)"}
                         </span>
                       </div>
-                      {ok ? (
+                      {ok ? (<>
                         <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginTop:2 }}>
                           <span style={{ color:"#6b7280" }}>R$ {fmt2(c.cubM2)}/m² × {(c.pct*100).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}%</span>
                           <span style={{ color:"#15803d", fontWeight:600 }}>= R$ {fmt2(c.precoBase)}/m²</span>
                         </div>
-                      ) : (
+                        {/* De quando é o número e quem divulgou. Discreto, mas presente:
+                            sem isso ninguém refaz a conta de uma proposta antiga. */}
+                        {(c.mesCub || c.fonteCub || c.estadoCub) && (
+                          <div style={{ fontSize:9.5, color:"#9aa1ac", marginTop:1 }}>
+                            {[c.mesCub, c.estadoCub, c.fonteCub].filter(Boolean).join(" · ")}
+                          </div>
+                        )}
+                      </>) : (
                         <div style={{ fontSize:10, color:"#b91c1c", marginTop:2 }}>
                           Base fixa R$ {fmt2(c.precoBase)}/m² — verifique cub.{c.cubKey||"R1"} / pct de calibragem / onboarding.
                         </div>
@@ -46662,7 +46690,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         if (!_cubObj || !_cubObj.valor_m2 || _cubObj.valor_m2 <= 0) return _fixo;
         const _precoBase = Math.round(_pct * _cubObj.valor_m2 * 100) / 100;
         console.log(`[PREÇO BASE] Apartamento ${_padraoSel} → PP-4 ${_padraoCub} | pct=${_pct.toFixed(4)} × CUB=${_cubObj.valor_m2.toFixed(2)} = R$ ${_precoBase.toFixed(2)}/m²`);
-        return { precoBase: _precoBase, modo: "dinamico", pct: _pct, cubM2: _cubObj.valor_m2, padraoCub: _padraoCub, categoria: "PP-4" };
+        return { precoBase: _precoBase, modo: "dinamico", pct: _pct, cubM2: _cubObj.valor_m2,
+          padraoCub: _padraoCub, categoria: "PP-4",
+          mesCub: (typeof mesDoCub === "function" ? mesDoCub(_cubObj.mes_referencia) : ""),
+          fonteCub: _cubObj.fonte || "", estadoCub: cub.estado || "" };
       })();
       const pbInfoGalpao = getPrecoBaseDinamico("Galpão", gpGalpao.padrao || padrao, usuario, cub);
 
@@ -46762,6 +46793,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         cubM2:     info.cubM2 || null,        // R$ do CUB/m²
         pct:       info.pct || null,          // fração de calibragem
         precoBase: info.precoBase,            // R$ base/m² resultante
+        mesCub:    info.mesCub || "",         // mês de referência do CUB
+        fonteCub:  info.fonteCub || "",       // sindicato que divulgou
+        estadoCub: info.estadoCub || "",      // UF da tabela
       });
       const cubInfoBlocos = [
         (nLojas>0&&atLoja1>0)     ? _diagBloco("Loja",        pbInfoLoja,   gpLoja.padrao||padrao)   : null,
@@ -46891,6 +46925,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         cubM2: _precoBaseInfo.cubM2 || null,
         pct: _precoBaseInfo.pct || null,
         precoBase: precoBaseVal,
+        mesCub:    _precoBaseInfo.mesCub || "",
+        fonteCub:  _precoBaseInfo.fonteCub || "",
+        estadoCub: _precoBaseInfo.estadoCub || "",
         cubKey: (tipoProjeto === "Galpão") ? "GI"
               : (tipoProjeto === "Empreendimento") ? "PP4" : "R1",
       }],

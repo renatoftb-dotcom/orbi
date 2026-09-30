@@ -1436,6 +1436,18 @@ function getTipoConfig(tipo) {
 //
 // Retorna: { precoBase, modo } — modo "dinamico" ou "fixo"
 // ═══════════════════════════════════════════════════════════════
+// O CUB muda todo mês. Um orçamento feito em março com o CUB de janeiro não
+// está errado — mas quem olha a proposta seis meses depois precisa saber de
+// quando é o número, ou não tem como refazer a conta.
+function mesDoCub(d) {
+  if (!d) return "";
+  const t = String(d).slice(0, 7).split("-");
+  if (t.length < 2) return "";
+  const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  const m = meses[parseInt(t[1], 10) - 1];
+  return m ? `${m}/${t[0]}` : "";
+}
+
 function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
   const tcfg = getTipoConfig(tipoProjeto === "Clínica" ? "Clinica"
                           : tipoProjeto === "Galpão" ? "Galpao"
@@ -1483,7 +1495,9 @@ function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
                   : categoriaCub === cub.CSL8 ? "CSL-8"
                   : categoriaCub === cub.PP4 ? "PP-4" : "GI";
   console.log(`[PREÇO BASE] ${tipoProjeto} ${padrao} → ${categoria} ${padraoCub} | pct=${pct.toFixed(4)} × CUB=${cubObj.valor_m2.toFixed(2)} = R$ ${precoBase.toFixed(2)}/m²`);
-  return { precoBase, modo: "dinamico", pct, cubM2: cubObj.valor_m2, padraoCub, categoria };
+  return { precoBase, modo: "dinamico", pct, cubM2: cubObj.valor_m2, padraoCub, categoria,
+    mesCub: mesDoCub(cubObj.mes_referencia), fonteCub: cubObj.fonte || "",
+    estadoCub: cub.estado || cubObj.estado || "" };
 }
 var fmt = (v) => (v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 var fmtM2 = (v) => `${(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})} m²`;
