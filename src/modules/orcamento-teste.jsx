@@ -3600,6 +3600,21 @@ function AreaDetalhe({ calculo, fmtNum }) {
                 {calculo.garagem.eng.abatimento > 0 && row(`Engenharia · ${Math.round(calculo.garagem.fator*100)}% de R$ ${fmt2(calculo.garagem.eng.taxaMedia)}/m² → R$ ${fmt2(calculo.garagem.eng.taxaGaragem)}/m²`,
                   `− ${brl(calculo.garagem.eng.abatimento)}`, { bold:false })}
                 {row("Abatimento da garagem", `− ${brl(calculo.garagem.abatimento)}`, { bold:true, valColor:"#262421" })}
+                {/* O preço final aberto em duas partes que somam o total. Sem isto
+                    a área do apartamento fica ambígua: quem lê não sabe se a
+                    garagem está por dentro ou por fora do número dele. */}
+                <div style={{ borderTop:"1px dashed #dde0e5", marginTop:6, paddingTop:6 }}>
+                  <div style={{ fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>
+                    Depois dos descontos
+                  </div>
+                  {row(`Apartamentos · ${fmt2(calculo.garagem.areaApt)} m² · sem garagem`,
+                    brl(Math.round((calculo.garagem.aptArq + calculo.garagem.aptEng) * 100) / 100), { bold:false })}
+                  {row(`Garagem · ${fmt2(calculo.garagem.area)} m²`,
+                    brl(calculo.garagem.valor), { bold:false })}
+                  {row(`Total · ${fmt2(Math.round((calculo.garagem.areaApt + calculo.garagem.area) * 100) / 100)} m²`,
+                    brl(Math.round((calculo.garagem.aptArq + calculo.garagem.aptEng + calculo.garagem.valor) * 100) / 100),
+                    { bold:true, valColor:"#262421" })}
+                </div>
               </div>
             )}
             {row("Total de ambientes", calculo.totalAmbientes)}
@@ -3607,10 +3622,14 @@ function AreaDetalhe({ calculo, fmtNum }) {
             {calculo.areaPiscina > 0 && row("Piscina (Excluído)", fmt2(calculo.areaPiscina)+" m²")}
             {(() => {
               const base = (calculo.areaBruta||0) + (calculo.areaPiscina||0);
-              const cirkReal = base > 0 ? Math.round((calculo.areaTotal/base - 1)*100) : 0;
-              const vCirk = Math.round(base*(cirkReal/100)*100)/100;
+              // Contra a área CONSTRUÍDA, nunca contra a total: a garagem não é
+              // circulação, e somada aqui faria os 25% virarem 57%.
+              const construida = calculo.areaConstruida != null ? calculo.areaConstruida : calculo.areaTotal;
+              const cirkReal = base > 0 ? Math.round((construida/base - 1)*100) : 0;
+              const vCirk = Math.round((construida - base)*100)/100;
               return row(`+ ${cirkReal}% Circulação e paredes`, `+${fmt2(vCirk)} m²`);
             })()}
+            {calculo.areaGaragemUnid > 0 && row("+ Garagem", `+${fmt2(calculo.areaGaragemUnid)} m²`)}
             <div style={{ borderTop:"1px solid #c8cdd6", marginTop:4, paddingTop:6 }}>
               <div style={{ fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Índice multiplicador</div>
               {row("Qtd de cômodos", calculo.indiceComodos.toLocaleString("pt-BR",{minimumFractionDigits:3,maximumFractionDigits:3}))}
@@ -7081,7 +7100,13 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     const garagemUnid = (tipoProjeto === "Empreendimento" && vagasPorUnidade > 0)
       ? areaDeGaragem(vagasPorUnidade, 1) : null;
     const areaGaragemUnid = garagemUnid ? garagemUnid.area : 0;
-    const areaTotal = Math.round(((areaBruta + areaPiscina) * (1 + tcfg.acrescimoCirk) + areaGaragemUnid) * 100) / 100;
+    // Área construída = ambientes + circulação. Área total = essa mais a
+    // garagem. As duas precisam viver separadas: quem lê o quadro quer saber
+    // quanto é circulação e quanto é garagem, e a linha da circulação deduz a
+    // porcentagem de trás para frente — se a garagem entrar no mesmo número,
+    // ela aparece como se fosse parede.
+    const areaConstruida = Math.round((areaBruta + areaPiscina) * (1 + tcfg.acrescimoCirk) * 100) / 100;
+    const areaTotal = Math.round((areaConstruida + areaGaragemUnid) * 100) / 100;
     if (areaTotal === 0) return null;
 
     const indiceComodos = (() => {
@@ -7163,8 +7188,14 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       if (!(g.area > 0)) return null;
       const arq = abatimentoDaGaragem(g.area, precoArqUnid, areaTot);
       const eng = abatimentoDaGaragem(g.area, precoEngUnid, areaTot);
+      // A separação entre unidade e garagem fecha por construção: o preço
+      // final é o bruto menos o abatimento, e o bruto é (apartamentos a taxa
+      // cheia) + (garagem a taxa cheia). Logo apartamentos = final − garagem.
+      const areaApt = Math.round((areaConstruida * nRep) * 100) / 100;
       return { ...g, vagasPorUnidade, arq, eng, fator: GARAGEM_FATOR,
-        areaUnid: garagemUnid.area,
+        areaUnid: garagemUnid.area, areaApt,
+        aptArq: Math.round((precoArqUnid - arq.valorCheio) * 100) / 100,
+        aptEng: Math.round((precoEngUnid - eng.valorCheio) * 100) / 100,
         abatimento: Math.round((arq.abatimento + eng.abatimento) * 100) / 100,
         valor: Math.round((arq.valor + eng.valor) * 100) / 100 };
     })();
@@ -7175,7 +7206,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     return {
       areaBruta: Math.round(areaBruta * 100) / 100,
       areaPiscina: Math.round(areaPiscina * 100) / 100,
-      areaTotal, areaTot,
+      areaTotal, areaTot, areaConstruida, areaGaragemUnid,
       precoArq1, precoArq, precoArqUnid,
       precoEng1, precoEng, precoEngUnid,
       garagem,
