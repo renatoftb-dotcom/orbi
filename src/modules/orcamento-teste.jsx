@@ -54,6 +54,7 @@ const GENERO_AMB = {
   "Área de lazer":"f","Piscina":"f","Lavabo Lazer":"m","Sauna":"f","Academia":"f",
   "Brinquedoteca":"f","Louceiro":"m","Dormitório":"m","Closet":"m","WC":"m",
   "Suíte":"f","Closet Suíte":"m","Suíte Master":"f","Escada":"f",
+  "Quadra poliesportiva":"f",
 };
 const NUM_EXT_MASC = ["","um","dois","três","quatro","cinco","seis","sete","oito","nove","dez"];
 const NUM_EXT_FEM  = ["","uma","duas","três","quatro","cinco","seis","sete","oito","nove","dez"];

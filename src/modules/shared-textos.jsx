@@ -211,40 +211,40 @@ function txtDescricaoEmpreendimento(data, ctx) {
   const x = ctx || {};
   const n2 = (v) => Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const m2 = (v) => n2(v) + "m²";
+  const ext = (n) => {
+    const l = ["", "Uma", "Duas", "Três", "Quatro", "Cinco", "Seis", "Sete", "Oito", "Nove", "Dez"];
+    return (n >= 1 && n <= 10) ? l[n] : String(n);
+  };
   const nUnid = c.nRep || 1;
   const areaUnid = c.areaConstruida != null ? c.areaConstruida : (c.areaTotal || 0);
-  const pav = Number(x.pavimentos || data.qtdPavimentos || 0);
-  const partes = [];
+  const pav = Number(x.pavimentos || (data && data.qtdPavimentos) || 0);
 
-  // 1. O prédio
-  const cabeca = pav > 0
-    ? `empreendimento de ${pav} pavimento${pav !== 1 ? "s" : ""}`
-    : "empreendimento";
+  // 1ª frase — o prédio: pavimentos, unidades, área de cada uma e o total.
+  const cabeca = ["empreendimento"];
+  if (pav > 0) cabeca.push(`com ${pav} pavimento${pav !== 1 ? "s" : ""}`);
+  let frase = `${x.prefixo || ""}${cabeca.join(" ")}, `
+    + `${nUnid} unidade${nUnid !== 1 ? "s" : ""}`
+    + `${nUnid !== 1 ? " cada uma" : ""} com ${m2(areaUnid)}, `
+    + `totalizando ${m2(c.areaTot || 0)} de área construída.`;
 
-  // 2. As unidades
-  partes.push(`${nUnid} unidade${nUnid !== 1 ? "s" : ""} de ${m2(areaUnid)}`
-    + (nUnid !== 1 ? " cada" : ""));
+  // 2ª frase — a unidade por dentro.
+  if (x.ambientesUnidade) {
+    frase += ` Cada unidade composta por ${x.totalAmbientes} ambiente`
+      + `${x.totalAmbientes !== 1 ? "s" : ""}: ${x.ambientesUnidade}.`;
+  }
 
-  // 3. A garagem
+  // 3ª frase — o que é do condomínio: garagem e área comum.
+  const terceira = [];
   const g = c.garagem;
   if (g && g.vagasPorUnidade > 0) {
-    partes.push(`${g.vagasPorUnidade} vaga${g.vagasPorUnidade !== 1 ? "s" : ""} de garagem por unidade `
-      + `(${g.vagas} vaga${g.vagas !== 1 ? "s" : ""}, ${m2(g.area)})`);
+    terceira.push(`${ext(g.vagasPorUnidade)} vaga${g.vagasPorUnidade !== 1 ? "s" : ""} de garagem por unidade`);
   }
-
-  // 4. Os espaços comuns, com os nomes deles
-  if (c.comuns && c.comuns.area > 0) {
-    const nomes = (x.comunsNomes || []).filter(Boolean);
-    partes.push(`${m2(c.comuns.area)} de espaços comuns`
-      + (nomes.length ? ` (${txtLista(nomes)})` : ""));
-  }
-
-  const corpo = txtLista(partes);
-  const total = c.areaTot || 0;
-  let frase = `${x.prefixo || ""}${cabeca}, com ${corpo}, totalizando ${m2(total)} de área construída.`;
-  if (x.ambientesUnidade) {
-    frase += ` Cada unidade é composta por ${x.totalAmbientes} ambiente`
-      + `${x.totalAmbientes !== 1 ? "s" : ""}: ${x.ambientesUnidade}.`;
+  const nomes = (x.comunsNomes || []).filter(Boolean);
+  if (nomes.length) terceira.push(`uma área comum contendo ${txtLista(nomes)}`);
+  else if (c.comuns && c.comuns.area > 0) terceira.push(`uma área comum de ${m2(c.comuns.area)}`);
+  if (terceira.length) {
+    const t = terceira.join(", ");
+    frase += " " + t.charAt(0).toUpperCase() + t.slice(1) + ".";
   }
   return frase;
 }
