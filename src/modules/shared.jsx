@@ -1287,6 +1287,16 @@ var GRUPOS_COMODOS_GALERIA_APTO   = { "Por Apartamento": Object.keys(COMODOS_GAL
 var INDICE_FACHADA_GALERIA = 0.15;
 var CUSTOM_CONFIG_KEY_GALERIA = "obramanager-config-galeria-v1";
 
+// ── Espaços comuns do condomínio ───────────────────────
+// No empreendimento estes ambientes não pertencem à unidade: o prédio tem UMA
+// academia, não uma por apartamento. Contam uma vez, e a repetição de
+// unidades não os multiplica.
+var GRUPO_COMUNS_EMPREENDIMENTO = "Espaços comuns";
+var COMODOS_COMUNS_EMPREENDIMENTO = ["Área de lazer","Piscina","Lavabo Lazer","Sauna","Academia","Brinquedoteca","Louceiro"];
+function ehComumDoEmpreendimento(nome) {
+  return COMODOS_COMUNS_EMPREENDIMENTO.indexOf(nome) >= 0;
+}
+
 // Retorna COMODOS e GRUPOS conforme tipo de obra
 function getComodosConfig(tipo) {
   if (tipo === "Clínica") return { comodos: COMODOS_CLINICA, grupos: GRUPOS_COMODOS_CLINICA, storageKey: CUSTOM_CONFIG_KEY_CLINICA };
@@ -1301,13 +1311,19 @@ function getComodosConfig(tipo) {
     storageKey: CUSTOM_CONFIG_KEY_GALPAO
   };
   if (tipo === "Empreendimento") {
-    // Os mesmos cômodos residenciais, menos a Garagem: no empreendimento ela
-    // saiu de dentro da unidade e virou área própria, calculada por vagas.
-    // Deixar as duas seria contar a mesma garagem duas vezes.
+    // Os mesmos cômodos residenciais, com duas diferenças. A Garagem saiu:
+    // virou área própria, calculada por vagas, e deixar as duas contaria a
+    // mesma garagem duas vezes. E o Lazer deixou de ser da unidade: sauna,
+    // academia e brinquedoteca são do condomínio, existem uma vez, não uma
+    // por apartamento — por isso viram um quadrante próprio.
     const comodos = {};
     for (const k of Object.keys(COMODOS)) if (k !== "Garagem") comodos[k] = COMODOS[k];
     const grupos = {};
-    for (const g of Object.keys(GRUPOS_COMODOS)) grupos[g] = GRUPOS_COMODOS[g].filter((n) => n !== "Garagem");
+    for (const g of Object.keys(GRUPOS_COMODOS)) {
+      if (g === "Lazer") continue;
+      grupos[g] = GRUPOS_COMODOS[g].filter((n) => n !== "Garagem");
+    }
+    grupos[GRUPO_COMUNS_EMPREENDIMENTO] = COMODOS_COMUNS_EMPREENDIMENTO.slice();
     return { comodos, grupos, storageKey: CUSTOM_CONFIG_KEY };
   }
   return { comodos: COMODOS, grupos: GRUPOS_COMODOS, storageKey: CUSTOM_CONFIG_KEY };

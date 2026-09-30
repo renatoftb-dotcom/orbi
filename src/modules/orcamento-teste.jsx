@@ -3609,10 +3609,13 @@ function AreaDetalhe({ calculo, fmtNum }) {
                   </div>
                   {row(`Apartamentos · ${fmt2(calculo.garagem.areaApt)} m² · sem garagem`,
                     brl(Math.round((calculo.garagem.aptArq + calculo.garagem.aptEng) * 100) / 100), { bold:false })}
+                  {calculo.comuns && row(`Espaços comuns · ${fmt2(calculo.comuns.area)} m² · conta 1×`,
+                    brl(Math.round((calculo.comuns.arq + calculo.comuns.eng) * 100) / 100), { bold:false })}
                   {row(`Garagem · ${fmt2(calculo.garagem.area)} m²`,
                     brl(calculo.garagem.valor), { bold:false })}
-                  {row(`Total · ${fmt2(Math.round((calculo.garagem.areaApt + calculo.garagem.area) * 100) / 100)} m²`,
-                    brl(Math.round((calculo.garagem.aptArq + calculo.garagem.aptEng + calculo.garagem.valor) * 100) / 100),
+                  {row(`Total · ${fmt2(Math.round((calculo.garagem.areaApt + calculo.garagem.area + (calculo.comuns?calculo.comuns.area:0)) * 100) / 100)} m²`,
+                    brl(Math.round((calculo.garagem.aptArq + calculo.garagem.aptEng + calculo.garagem.valor
+                      + (calculo.comuns ? calculo.comuns.arq + calculo.comuns.eng : 0)) * 100) / 100),
                     { bold:true, valColor:"#262421" })}
                 </div>
               </div>
@@ -3630,6 +3633,18 @@ function AreaDetalhe({ calculo, fmtNum }) {
               return row(`+ ${cirkReal}% Circulação e paredes`, `+${fmt2(vCirk)} m²`);
             })()}
             {calculo.areaGaragemUnid > 0 && row("+ Garagem", `+${fmt2(calculo.areaGaragemUnid)} m²`)}
+            {calculo.comuns && (
+              <div style={{ borderTop:"1px solid #c8cdd6", marginTop:6, paddingTop:6 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:"#374151", marginBottom:3 }}>
+                  Espaços comuns do condomínio · conta 1×
+                </div>
+                {row("Ambientes", calculo.comuns.ambientes)}
+                {row("Área útil", fmt2(calculo.comuns.areaUtil)+" m²")}
+                {row(`+ ${pct(calculo.acrescimoCirk)} Circulação e paredes`,
+                  `+${fmt2(Math.round((calculo.comuns.area - calculo.comuns.areaUtil)*100)/100)} m²`)}
+                {row("Área dos comuns", fmt2(calculo.comuns.area)+" m²", { bold:true, valColor:"#262421" })}
+              </div>
+            )}
             <div style={{ borderTop:"1px solid #c8cdd6", marginTop:4, paddingTop:6 }}>
               <div style={{ fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Índice multiplicador</div>
               {row("Qtd de cômodos", calculo.indiceComodos.toLocaleString("pt-BR",{minimumFractionDigits:3,maximumFractionDigits:3}))}
@@ -7082,13 +7097,20 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       };
     }
 
-    let areaBruta = 0, areaPiscina = 0;
+    // Três baldes de área no empreendimento: a unidade (multiplica pelas
+    // unidades), a garagem (idem) e os espaços comuns (contam UMA vez — o
+    // prédio tem uma academia, não uma por apartamento).
+    const ehEmpreend = tipoProjeto === "Empreendimento";
+    let areaBruta = 0, areaPiscina = 0, areaComuns = 0, ambientesComuns = 0;
     Object.entries(qtds).forEach(([nome, qtd]) => {
       if (!qtd || qtd <= 0) return;
       const cfg = COMODOS_USE[nome];
       if (!cfg) return;
       const [L, W_] = cfg.medidas[tamanho] || [0, 0];
       const area = L * W_ * qtd;
+      if (ehEmpreend && typeof ehComumDoEmpreendimento === "function" && ehComumDoEmpreendimento(nome)) {
+        areaComuns += area; ambientesComuns += qtd; return;
+      }
       if (nome === "Piscina") areaPiscina += area;
       else areaBruta += area;
     });
@@ -7153,6 +7175,18 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     const engCalc   = calcularEngenharia(areaTotal);
     const precoEng1 = Math.round(engCalc.totalEng * 100) / 100;
 
+    // Os espaços comuns passam pelas faixas com a área deles e entram no
+    // total UMA vez. Não repetem com as unidades: a repetição é desconto por
+    // redesenhar a mesma planta, e a academia só é desenhada uma vez.
+    const comuns = (() => {
+      if (!(areaComuns > 0)) return null;
+      const construida = Math.round(areaComuns * (1 + tcfg.acrescimoCirk) * 100) / 100;
+      const arq = calcArqFaixas(construida);
+      const eng = calcularEngenharia(construida);
+      return { ambientes: ambientesComuns, areaUtil: Math.round(areaComuns * 100) / 100,
+        area: construida, arq, eng: Math.round(eng.totalEng * 100) / 100 };
+    })();
+
     const nRep   = qtdRep > 1 ? qtdRep : 1;
     // A primeira unidade custa o projeto inteiro; as seguintes custam uma
     // fração, porque o desenho já existe. Nos tipos escalonados essa fração
@@ -7173,9 +7207,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         eng: Math.round(precoEng1 * pct * 100) / 100,
       });
     }
-    const precoArqUnid = Math.round(unidades.reduce((s, u) => s + u.arq, 0) * 100) / 100;
-    const precoEngUnid = Math.round(unidades.reduce((s, u) => s + u.eng, 0) * 100) / 100;
-    const areaTot  = areaTotal * nRep;
+    const precoArqUnid = Math.round((unidades.reduce((s, u) => s + u.arq, 0) + (comuns ? comuns.arq : 0)) * 100) / 100;
+    const precoEngUnid = Math.round((unidades.reduce((s, u) => s + u.eng, 0) + (comuns ? comuns.eng : 0)) * 100) / 100;
+    const areaTot  = Math.round((areaTotal * nRep + (comuns ? comuns.area : 0)) * 100) / 100;
 
     // ── Garagem ────────────────────────────────────
     // A área dela já está dentro do preço acima — ela passou pelas faixas junto
@@ -7194,8 +7228,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       const areaApt = Math.round((areaConstruida * nRep) * 100) / 100;
       return { ...g, vagasPorUnidade, arq, eng, fator: GARAGEM_FATOR,
         areaUnid: garagemUnid.area, areaApt,
-        aptArq: Math.round((precoArqUnid - arq.valorCheio) * 100) / 100,
-        aptEng: Math.round((precoEngUnid - eng.valorCheio) * 100) / 100,
+        aptArq: Math.round((precoArqUnid - arq.valorCheio - (comuns ? comuns.arq : 0)) * 100) / 100,
+        aptEng: Math.round((precoEngUnid - eng.valorCheio - (comuns ? comuns.eng : 0)) * 100) / 100,
         abatimento: Math.round((arq.abatimento + eng.abatimento) * 100) / 100,
         valor: Math.round((arq.valor + eng.valor) * 100) / 100 };
     })();
@@ -7206,7 +7240,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     return {
       areaBruta: Math.round(areaBruta * 100) / 100,
       areaPiscina: Math.round(areaPiscina * 100) / 100,
-      areaTotal, areaTot, areaConstruida, areaGaragemUnid,
+      areaTotal, areaTot, areaConstruida, areaGaragemUnid, comuns,
       precoArq1, precoArq, precoArqUnid,
       precoEng1, precoEng, precoEngUnid,
       garagem,
