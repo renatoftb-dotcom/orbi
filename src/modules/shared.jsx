@@ -1300,6 +1300,16 @@ function getComodosConfig(tipo) {
     grupos:  GRUPOS_COMODOS_GALPAO,
     storageKey: CUSTOM_CONFIG_KEY_GALPAO
   };
+  if (tipo === "Empreendimento") {
+    // Os mesmos cômodos residenciais, menos a Garagem: no empreendimento ela
+    // saiu de dentro da unidade e virou área própria, calculada por vagas.
+    // Deixar as duas seria contar a mesma garagem duas vezes.
+    const comodos = {};
+    for (const k of Object.keys(COMODOS)) if (k !== "Garagem") comodos[k] = COMODOS[k];
+    const grupos = {};
+    for (const g of Object.keys(GRUPOS_COMODOS)) grupos[g] = GRUPOS_COMODOS[g].filter((n) => n !== "Garagem");
+    return { comodos, grupos, storageKey: CUSTOM_CONFIG_KEY };
+  }
   return { comodos: COMODOS, grupos: GRUPOS_COMODOS, storageKey: CUSTOM_CONFIG_KEY };
 }
 
@@ -1320,6 +1330,41 @@ function loadCustomConfig() {
 var PRECO_BASE = 45.00;
 var PRECO_BASE_CLINICA = 32.00; // preço base clínica
 var ACRESCIMO_AREA = 0.25;
+
+// ── Garagem do empreendimento ─────────────────────────
+// A vaga do carro é 5 × 2,5 — e é só o carro. O corredor de manobra, a rampa
+// e o giro na cabeceira entram pelo mesmo +25% que o resto do prédio leva.
+var VAGA_LARGURA_M = 2.5;
+var VAGA_COMPRIMENTO_M = 5;
+var VAGA_AREA_M2 = VAGA_LARGURA_M * VAGA_COMPRIMENTO_M;
+
+// Desenhar garagem não dá o mesmo trabalho que desenhar apartamento: o
+// pavimento se repete, não tem acabamento, não tem detalhamento de ambiente.
+// Daí a garagem valer 80% da taxa que sobrou depois das faixas — os 20% de
+// abatimento são esses mesmos, não um segundo desconto por cima.
+var GARAGEM_FATOR = 0.80;
+
+// A área de garagem do empreendimento inteiro: vagas por unidade × unidades.
+// Volta também a área de uma vaga, porque é o número que a tela mostra.
+function areaDeGaragem(vagasPorUnidade, nUnidades) {
+  const v = Math.max(0, Number(vagasPorUnidade) || 0);
+  const n = Math.max(1, Number(nUnidades) || 1);
+  const porVaga = Math.round(VAGA_AREA_M2 * (1 + ACRESCIMO_AREA) * 1000) / 1000;
+  const vagas = v * n;
+  return { vagas, porVaga, area: Math.round(vagas * porVaga * 100) / 100 };
+}
+
+// O valor da garagem sai da taxa EFETIVA — a que sobrou depois de todas as
+// faixas de desconto —, nunca do preço base. E a área de garagem não entra
+// na conta que gera as faixas: ela não pode empurrar o projeto para a faixa
+// de 50% e baratear o apartamento junto.
+function valorDaGaragem(area, taxaEfetiva) {
+  const a = Math.max(0, Number(area) || 0);
+  const t = Math.max(0, Number(taxaEfetiva) || 0);
+  const taxaGaragem = Math.round(t * GARAGEM_FATOR * 100) / 100;
+  return { taxaEfetiva: t, taxaGaragem,
+    valor: Math.round(a * taxaGaragem * 100) / 100 };
+}
 
 // Configuracao centralizada por tipo — todos os parametros condicionais em um lugar
 var TIPO_CONFIG = {

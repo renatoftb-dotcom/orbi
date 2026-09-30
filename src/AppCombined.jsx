@@ -1304,6 +1304,16 @@ function getComodosConfig(tipo) {
     grupos:  GRUPOS_COMODOS_GALPAO,
     storageKey: CUSTOM_CONFIG_KEY_GALPAO
   };
+  if (tipo === "Empreendimento") {
+    // Os mesmos cômodos residenciais, menos a Garagem: no empreendimento ela
+    // saiu de dentro da unidade e virou área própria, calculada por vagas.
+    // Deixar as duas seria contar a mesma garagem duas vezes.
+    const comodos = {};
+    for (const k of Object.keys(COMODOS)) if (k !== "Garagem") comodos[k] = COMODOS[k];
+    const grupos = {};
+    for (const g of Object.keys(GRUPOS_COMODOS)) grupos[g] = GRUPOS_COMODOS[g].filter((n) => n !== "Garagem");
+    return { comodos, grupos, storageKey: CUSTOM_CONFIG_KEY };
+  }
   return { comodos: COMODOS, grupos: GRUPOS_COMODOS, storageKey: CUSTOM_CONFIG_KEY };
 }
 
@@ -1324,6 +1334,41 @@ function loadCustomConfig() {
 var PRECO_BASE = 45.00;
 var PRECO_BASE_CLINICA = 32.00; // preço base clínica
 var ACRESCIMO_AREA = 0.25;
+
+// ── Garagem do empreendimento ─────────────────────────
+// A vaga do carro é 5 × 2,5 — e é só o carro. O corredor de manobra, a rampa
+// e o giro na cabeceira entram pelo mesmo +25% que o resto do prédio leva.
+var VAGA_LARGURA_M = 2.5;
+var VAGA_COMPRIMENTO_M = 5;
+var VAGA_AREA_M2 = VAGA_LARGURA_M * VAGA_COMPRIMENTO_M;
+
+// Desenhar garagem não dá o mesmo trabalho que desenhar apartamento: o
+// pavimento se repete, não tem acabamento, não tem detalhamento de ambiente.
+// Daí a garagem valer 80% da taxa que sobrou depois das faixas — os 20% de
+// abatimento são esses mesmos, não um segundo desconto por cima.
+var GARAGEM_FATOR = 0.80;
+
+// A área de garagem do empreendimento inteiro: vagas por unidade × unidades.
+// Volta também a área de uma vaga, porque é o número que a tela mostra.
+function areaDeGaragem(vagasPorUnidade, nUnidades) {
+  const v = Math.max(0, Number(vagasPorUnidade) || 0);
+  const n = Math.max(1, Number(nUnidades) || 1);
+  const porVaga = Math.round(VAGA_AREA_M2 * (1 + ACRESCIMO_AREA) * 1000) / 1000;
+  const vagas = v * n;
+  return { vagas, porVaga, area: Math.round(vagas * porVaga * 100) / 100 };
+}
+
+// O valor da garagem sai da taxa EFETIVA — a que sobrou depois de todas as
+// faixas de desconto —, nunca do preço base. E a área de garagem não entra
+// na conta que gera as faixas: ela não pode empurrar o projeto para a faixa
+// de 50% e baratear o apartamento junto.
+function valorDaGaragem(area, taxaEfetiva) {
+  const a = Math.max(0, Number(area) || 0);
+  const t = Math.max(0, Number(taxaEfetiva) || 0);
+  const taxaGaragem = Math.round(t * GARAGEM_FATOR * 100) / 100;
+  return { taxaEfetiva: t, taxaGaragem,
+    valor: Math.round(a * taxaGaragem * 100) / 100 };
+}
 
 // Configuracao centralizada por tipo — todos os parametros condicionais em um lugar
 var TIPO_CONFIG = {
@@ -43365,6 +43410,25 @@ function AreaDetalhe({ calculo, fmtNum }) {
               </div>
             )}
             {calculo.nRep > 1 && row(`Área Total (${calculo.nRep}x)`, `${fmt2(calculo.areaTotal)} m² → Total ${fmt2(calculo.areaTot)} m²`)}
+            {/* Garagem — fora das faixas de desconto de propósito: a área dela não
+                pode empurrar o projeto para a faixa de 50% e baratear o
+                apartamento junto. A taxa sai do preço JÁ descontado. */}
+            {calculo.garagem && (
+              <div style={{ borderTop:"1px solid #c8cdd6", marginTop:6, paddingTop:6 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, fontWeight:700, color:"#374151", marginBottom:3 }}>
+                  <span>Garagem · {calculo.garagem.vagasPorUnidade} vaga{calculo.garagem.vagasPorUnidade>1?"s":""}/unid. · {calculo.garagem.vagas} vaga{calculo.garagem.vagas>1?"s":""}</span>
+                  <span>{fmt2(calculo.garagem.area)} m²</span>
+                </div>
+                <div style={{ fontSize:10, color:"#9aa1ac", marginBottom:3 }}>
+                  5 × 2,5 m + {pct(calculo.acrescimoCirk)} manobra = {fmt2(calculo.garagem.porVaga)} m² por vaga · fora das faixas de desconto
+                </div>
+                {row(`Arquitetura (${Math.round(calculo.garagem.fator*100)}% de R$ ${fmt2(calculo.garagem.arq.taxaEfetiva)}/m² → R$ ${fmt2(calculo.garagem.arq.taxaGaragem)}/m²)`,
+                  brl(calculo.garagem.arq.valor), { bold:false })}
+                {calculo.garagem.eng.valor > 0 && row(`Engenharia (${Math.round(calculo.garagem.fator*100)}% de R$ ${fmt2(calculo.garagem.eng.taxaEfetiva)}/m² → R$ ${fmt2(calculo.garagem.eng.taxaGaragem)}/m²)`,
+                  brl(calculo.garagem.eng.valor), { bold:false })}
+                {row("Total garagem", brl(calculo.garagem.valor), { bold:true, valColor:"#262421" })}
+              </div>
+            )}
             {row("Total de ambientes", calculo.totalAmbientes)}
             {row("Área útil", fmt2(calculo.areaBruta)+" m²")}
             {calculo.areaPiscina > 0 && row("Piscina (Excluído)", fmt2(calculo.areaPiscina)+" m²")}
@@ -46121,7 +46185,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     { id:3, nome:"Aprovação na Prefeitura",pct:12 },
     { id:4, nome:"Projeto Executivo",      pct:38 },
   ]);
+  const [editandoVagas, setEditandoVagas] = useState(false);
   const [qtdRep, setQtdRep] = useState(orcBase?.repeticao ? (orcBase?.nUnidades || 2) : 0);
+  // Vagas por unidade — só o empreendimento usa. A garagem dele não é cômodo
+  // da unidade: é área própria, que sai daqui.
+  const [vagasPorUnidade, setVagasPorUnidade] = useState(orcBase?.vagasPorUnidade || 0);
   const [editandoRep, setEditandoRep] = useState(false);
   const [editandoAliq, setEditandoAliq] = useState(false);
   const [editandoGrupoQtd, setEditandoGrupoQtd] = useState(null); // guarda o nome do grupo que está com input aberto
@@ -46188,6 +46256,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (orcBase.tamanho     !== undefined) setTamanho(orcBase.tamanho);
     if (orcBase.comodos)     setQtds(Object.fromEntries(orcBase.comodos.map(c => [c.nome, c.qtd])));
     if (orcBase.repeticao   !== undefined) setQtdRep(orcBase.repeticao ? (orcBase.nUnidades || 2) : 0);
+    if (orcBase.vagasPorUnidade !== undefined) setVagasPorUnidade(orcBase.vagasPorUnidade || 0);
     if (orcBase.tipoPgto    !== undefined) setTipoPgto(orcBase.tipoPgto);
     if (orcBase.temImposto  !== undefined) setTemImposto(orcBase.temImposto);
     if (orcBase.aliqImp     !== undefined) setAliqImp(orcBase.aliqImp);
@@ -46899,16 +46968,37 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         eng: Math.round(precoEng1 * pct * 100) / 100,
       });
     }
-    const precoArq = Math.round(unidades.reduce((s, u) => s + u.arq, 0) * 100) / 100;
-    const precoEng = Math.round(unidades.reduce((s, u) => s + u.eng, 0) * 100) / 100;
+    const precoArqUnid = Math.round(unidades.reduce((s, u) => s + u.arq, 0) * 100) / 100;
+    const precoEngUnid = Math.round(unidades.reduce((s, u) => s + u.eng, 0) * 100) / 100;
     const areaTot  = areaTotal * nRep;
+
+    // ── Garagem ────────────────────────────────────
+    // Calculada FORA da área que gera as faixas de desconto, de propósito: se
+    // entrasse junto, seiscentos metros de garagem empurrariam o projeto para
+    // a faixa de 50% e baratearia o apartamento também. A taxa dela sai do
+    // preço já descontado, e só depois leva o fator e o desconto próprios.
+    const garagem = (() => {
+      if (tipoProjeto !== "Empreendimento" || !(vagasPorUnidade > 0) || !(areaTotal > 0)) return null;
+      const g = areaDeGaragem(vagasPorUnidade, nRep);
+      if (!(g.area > 0)) return null;
+      const taxaArq = Math.round(precoArq1 / areaTotal * 100) / 100;
+      const taxaEng = Math.round(precoEng1 / areaTotal * 100) / 100;
+      const arq = valorDaGaragem(g.area, taxaArq);
+      const eng = valorDaGaragem(g.area, taxaEng);
+      return { ...g, vagasPorUnidade, arq, eng, fator: GARAGEM_FATOR,
+        valor: Math.round((arq.valor + eng.valor) * 100) / 100 };
+    })();
+
+    const precoArq = Math.round((precoArqUnid + (garagem ? garagem.arq.valor : 0)) * 100) / 100;
+    const precoEng = Math.round((precoEngUnid + (garagem ? garagem.eng.valor : 0)) * 100) / 100;
 
     return {
       areaBruta: Math.round(areaBruta * 100) / 100,
       areaPiscina: Math.round(areaPiscina * 100) / 100,
       areaTotal, areaTot,
-      precoArq1, precoArq,
-      precoEng1, precoEng,
+      precoArq1, precoArq, precoArqUnid,
+      precoEng1, precoEng, precoEngUnid,
+      garagem,
       precoM2Arq: areaTot > 0 ? Math.round(precoArq / areaTot * 100) / 100 : 0,
       precoM2Eng: areaTot > 0 ? Math.round(precoEng / areaTot * 100) / 100 : 0,
       nRep, pctRep, unidades,
@@ -46937,7 +47027,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       labelCirk: tcfg.labelCirk || String(Math.round(tcfg.acrescimoCirk*100)),
       cubInfo: { categoria: _precoBaseInfo.categoria, modo: _precoBaseInfo.modo, pct: _precoBaseInfo.pct, cubM2: _precoBaseInfo.cubM2, padraoCub: _precoBaseInfo.padraoCub },
     };
-  }, [qtds, tamanho, padrao, tipoProjeto, configAtual, qtdRep, grupoQtds, isComercial, grupoParams, grupoDeComodo, usuario, cub]);
+  }, [qtds, tamanho, padrao, tipoProjeto, configAtual, qtdRep, vagasPorUnidade, grupoQtds, isComercial, grupoParams, grupoDeComodo, usuario, cub]);
 
   const temComodos = isComercial
     ? Object.entries(grupoQtds).some(([g, gq]) => gq > 0 && Object.keys(qtds).some(nome => grupoDeComodo[nome] === g && (qtds[nome]||0) > 0))
@@ -47894,6 +47984,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       cliente: clienteNome, referencia,
       comodos: Object.entries(qtds).filter(([,q])=>q>0).map(([nome,qtd])=>({nome,qtd})),
       repeticao: qtdRep > 0, nUnidades: qtdRep > 0 ? qtdRep : 1,
+      vagasPorUnidade,
       grupoQtds: isComercial ? grupoQtds : null,
       grupoParams: isComercial ? grupoParams : null,
       incluiArq, incluiEng, incluiMarcenaria,
@@ -48432,6 +48523,34 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             )}
             <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
               onClick={() => setQtdRep(n => n + 1)}>+</button>
+          </div>
+        )}
+
+        {/* Vagas por unidade — só no empreendimento. A garagem saiu de dentro
+            dos cômodos da unidade e passou a ser calculada daqui. */}
+        {tipoProjeto === "Empreendimento" && (
+          <div style={{ display:"flex", alignItems:"center", gap:6, paddingLeft:12, marginLeft:4, borderLeft:"2px solid #d1d5db" }}>
+            <span style={{ fontSize:14, color:"#828a98" }}>Vagas/unid.</span>
+            <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
+              onClick={() => setVagasPorUnidade(n => Math.max(0, n - 1))}>−</button>
+            {editandoVagas ? (
+              <input
+                ref={el => { if (el) { el.focus(); try { el.select(); } catch {} } }}
+                type="number" min="0"
+                defaultValue={vagasPorUnidade}
+                onBlur={e => { const v = parseInt(e.target.value)||0; setVagasPorUnidade(Math.max(0,v)); setEditandoVagas(false); }}
+                onKeyDown={e => { if(e.key==="Enter"||e.key==="Escape"){ const v=parseInt(e.target.value)||0; setVagasPorUnidade(Math.max(0,v)); setEditandoVagas(false); } }}
+                className="no-spin"
+                style={{ width:36, textAlign:"center", fontSize:13, fontWeight:600, border:"1px solid #333", borderRadius:5, padding:"1px 4px", outline:"none", fontFamily:"inherit", MozAppearance:"textfield" }}
+              />
+            ) : (
+              <span onClick={() => setEditandoVagas(true)} title="Clique para digitar"
+                style={{ fontSize:13, fontWeight: vagasPorUnidade > 0 ? 700 : 400, minWidth:16, textAlign:"center", color: vagasPorUnidade > 0 ? "#262421" : "#9ca3af", cursor:"text" }}>
+                {vagasPorUnidade}
+              </span>
+            )}
+            <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
+              onClick={() => setVagasPorUnidade(n => n + 1)}>+</button>
           </div>
         )}
       </div>
