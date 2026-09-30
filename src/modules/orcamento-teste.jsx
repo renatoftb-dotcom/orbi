@@ -8255,6 +8255,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     };
     setPropostaData({
       tipoProjeto, tipoObra, padrao, tipologia, tamanho,
+      qtdPavimentos, vagasPorUnidade,
       clienteNome, referencia,
       comodos: Object.entries(qtds).filter(([,q])=>q>0).map(([nome,qtd])=>({nome,qtd})),
       resumoDescritivo,

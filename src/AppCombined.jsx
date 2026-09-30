@@ -36389,6 +36389,24 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
       const lista = partes.length>1 ? partes.slice(0,-1).join(", ")+" e "+partes[partes.length-1] : partes[0]||"";
       return `${prefixo}conjunto comercial, contendo ${lista}, totalizando ${fmtArea(calc.areaTot||calc.areaTotal)}.`;
     }
+    // Empreendimento tem forma própria: prédio, unidades, garagem e espaços
+    // comuns são quatro coisas distintas. Mesma função que o template e o
+    // resumo gravado usam — esta frase já existiu em três cópias, e foi por
+    // isso que consertar duas deixou o PDF errado.
+    if (String((data && data.tipoProjeto) || "").toLowerCase().indexOf("empreendimento") >= 0
+        && typeof txtDescricaoEmpreendimento === "function") {
+      const comodos0 = data.comodos || [];
+      const ehComum = (n) => (typeof ehComumDoEmpreendimento === "function") && ehComumDoEmpreendimento(n);
+      const daUnidade = comodos0.filter(c => (c.qtd || 0) > 0 && !ehComum(c.nome));
+      return txtDescricaoEmpreendimento(data, {
+        prefixo,
+        pavimentos: data.qtdPavimentos,
+        comunsNomes: comodos0.filter(c => (c.qtd || 0) > 0 && ehComum(c.nome)).map(c => formatComodo(c.nome, c.qtd)),
+        totalAmbientes: daUnidade.reduce((s, c) => s + (c.qtd || 0), 0),
+        ambientesUnidade: txtLista(daUnidade.map(c => formatComodo(c.nome, c.qtd))),
+      });
+    }
+
     // Caso residencial
     const nUnid = calc.nRep || 1;
     const areaUni = calc.areaTotal || calc.areaTot || 0;
@@ -48250,6 +48268,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     };
     setPropostaData({
       tipoProjeto, tipoObra, padrao, tipologia, tamanho,
+      qtdPavimentos, vagasPorUnidade,
       clienteNome, referencia,
       comodos: Object.entries(qtds).filter(([,q])=>q>0).map(([nome,qtd])=>({nome,qtd})),
       resumoDescritivo,
