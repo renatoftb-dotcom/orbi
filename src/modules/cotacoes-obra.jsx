@@ -3917,12 +3917,10 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     if (!onLancarContas || !formPedido) { setErro('Lançamento indisponível nesta tela.'); return; }
     const cot = formPedido.cotacao;
     const loja = prestadores.find((f) => f.id === cot.lojaId) || {};
-    // Conta de loja que a Entrada abriu só na memória: grava antes, senão o
-    // pedido nasceria pendurado numa conta que não existe.
-    if (formPedido.contaNova) {
-      const r0 = gravarCotacoes([...(obra.cotacoes || []), formPedido.contaNova]);
-      if (r0 && r0.erro) { setErro(r0.erro); return; }
-    }
+    // A conta de loja que a Entrada abriu só na memória vai JUNTO com o
+    // pedido, numa gravação só. Gravá-la antes, por fora, parecia funcionar
+    // e não funcionava: o lançamento seguinte parte do estado anterior e
+    // sobrescreve a obra sem ela.
     // "Já pago" não é outro lançamento: é o mesmo, com a baixa no mesmo ato.
     // A data que a pessoa pôs no campo é o dia em que o dinheiro saiu.
     const comBaixa = pedido.jaPago
@@ -3930,6 +3928,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       : pedido;
     const r = onLancarContas({
       cotacaoId: cot.id, obraId: cot.obraId || obra.id, modo: 'contaLoja', pedido: comBaixa,
+      contaNova: formPedido.contaNova || null,
       contaId: cot.contaId || 'material',
       prestadorId: loja.id || '', favorecido: loja.nome || '',
       descricao: cot.titulo || 'Compra',

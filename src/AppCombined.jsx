@@ -26309,12 +26309,10 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     if (!onLancarContas || !formPedido) { setErro('Lançamento indisponível nesta tela.'); return; }
     const cot = formPedido.cotacao;
     const loja = prestadores.find((f) => f.id === cot.lojaId) || {};
-    // Conta de loja que a Entrada abriu só na memória: grava antes, senão o
-    // pedido nasceria pendurado numa conta que não existe.
-    if (formPedido.contaNova) {
-      const r0 = gravarCotacoes([...(obra.cotacoes || []), formPedido.contaNova]);
-      if (r0 && r0.erro) { setErro(r0.erro); return; }
-    }
+    // A conta de loja que a Entrada abriu só na memória vai JUNTO com o
+    // pedido, numa gravação só. Gravá-la antes, por fora, parecia funcionar
+    // e não funcionava: o lançamento seguinte parte do estado anterior e
+    // sobrescreve a obra sem ela.
     // "Já pago" não é outro lançamento: é o mesmo, com a baixa no mesmo ato.
     // A data que a pessoa pôs no campo é o dia em que o dinheiro saiu.
     const comBaixa = pedido.jaPago
@@ -26322,6 +26320,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       : pedido;
     const r = onLancarContas({
       cotacaoId: cot.id, obraId: cot.obraId || obra.id, modo: 'contaLoja', pedido: comBaixa,
+      contaNova: formPedido.contaNova || null,
       contaId: cot.contaId || 'material',
       prestadorId: loja.id || '', favorecido: loja.nome || '',
       descricao: cot.titulo || 'Compra',
@@ -33554,7 +33553,17 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!obraAtual) return { erro: "Obra não encontrada." };
     // O pedido entra na mesma fila de números do contrato — quem relança um
     // pedido desfeito reaproveita o número que já era dele.
-    const anterior = (obraAtual.cotacoes || []).find(c => c.id === dados.cotacaoId) || {};
+    // A conta de loja que a Entrada acabou de abrir vem junto com o pedido e
+    // entra aqui, na mesma gravação. Gravar as duas em separado não funciona:
+    // a segunda parte de `obraAtual`, que ainda é o estado de antes da
+    // primeira — ela não enxerga a conta recém-criada, não acha a cotação
+    // para pendurar o pedido, e grava a obra por cima SEM a conta. O gasto
+    // ficava em contas a pagar e o pedido não existia em lugar nenhum: nem
+    // para conferir, nem para apagar.
+    const baseCotacoes = (dados.contaNova && !(obraAtual.cotacoes || []).some(c => c && c.id === dados.contaNova.id))
+      ? [...(obraAtual.cotacoes || []), dados.contaNova]
+      : (obraAtual.cotacoes || []);
+    const anterior = baseCotacoes.find(c => c.id === dados.cotacaoId) || {};
     // Conta de loja é outra história: cada pedido ganha o SEU número e se soma
     // aos anteriores; a cotação comum tem um pedido só e reaproveita o dele.
     const ehLoja = dados.modo === "contaLoja";
@@ -33573,7 +33582,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         lancadoEm: dados.lancadoEm || new Date().toISOString(), lancadoPor: dados.lancadoPor || "" };
       const contas = contasDaCotacao({ ...dados, numeroPedido: pedido.numero, pedido }, uid);
       if (!contas.length) return { erro: "O pedido está sem itens com valor." };
-      const lista = (obraAtual.cotacoes || []).map(c => c.id !== dados.cotacaoId ? c : ({
+      const lista = baseCotacoes.map(c => c.id !== dados.cotacaoId ? c : ({
         ...c,
         pedidos: jaExiste
           ? (c.pedidos || []).map(x => (x && x.id === pedido.id ? pedido : x))
