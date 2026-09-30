@@ -61,7 +61,7 @@ const modulo = new Function(`
            podeLancarEmContas, dadosDoLancamento, contasDaCotacao, removerContasDaCotacao, contasDeCotacao,
            contasDasEntregas, totalDasEntregas, entregaVazia, MODOS_LANCAMENTO, modoLancamento,
            planoDoLancamento, linhasDoPagamento, resumoDoPlano,
-           casamentosSeguros, itemCotacaoVazio, itensDaCotacao, temListaDeItens, quantidadeDoItem, precoUnitario,
+           casamentosSeguros, numerosDoExtenso, textoComDitado, itemCotacaoVazio, itensDaCotacao, temListaDeItens, quantidadeDoItem, precoUnitario,
            propostaTemPrecoPorItem, totalDosItens, itensSemPreco, valorDaProposta,
            melhorPorItem, comparativoDaLista, textoDoPedido, qtdBR,
            unitarioDoTotal, totalBrutoItem, valoresComDesconto, totalEfetivoItem,
@@ -2533,6 +2533,46 @@ teste("a gaveta nunca conta como identidade", () => {
   // só "cabo" e "flexivel" são identidade; "750", "v", "4", "mm" estreitam
   const sg = modulo.sugestaoDoCatalogo("Cabo Flexsil 750 V 4.00 Preto", modulo.indiceDoCatalogo(CAT_DISCO));
   assert.strictEqual(sg && sg.codigo, "ELE-028");
+});
+
+
+// ── Ditado: o número falado vira número escrito ────────────
+teste("número por extenso vira dígito", () => {
+  assert.strictEqual(modulo.numerosDoExtenso("dez sacos de cimento"), "10 sacos de cimento");
+  assert.strictEqual(modulo.numerosDoExtenso("cinco quilos de prego"), "5 quilos de prego");
+  assert.strictEqual(modulo.numerosDoExtenso("uma tábua"), "1 tábua");
+});
+
+teste("número composto é um número só", () => {
+  assert.strictEqual(modulo.numerosDoExtenso("vinte e um sacos"), "21 sacos");
+  assert.strictEqual(modulo.numerosDoExtenso("cento e cinquenta metros"), "150 metros");
+  assert.strictEqual(modulo.numerosDoExtenso("duzentos e trinta e cinco"), "235");
+  assert.strictEqual(modulo.numerosDoExtenso("cem"), "100");
+});
+
+teste("“e” entre coisas diferentes não soma", () => {
+  assert.strictEqual(modulo.numerosDoExtenso("dois sacos e três latas"), "2 sacos e 3 latas");
+  assert.strictEqual(modulo.numerosDoExtenso("dez e dez"), "10 e 10");
+});
+
+teste("o que não é número fica como veio", () => {
+  assert.strictEqual(modulo.numerosDoExtenso("tábua de pinus"), "tábua de pinus");
+  assert.strictEqual(modulo.numerosDoExtenso("30 sacos"), "30 sacos");
+  assert.strictEqual(modulo.numerosDoExtenso(""), "");
+  assert.strictEqual(modulo.numerosDoExtenso(null), "");
+});
+
+teste("acento e caixa da fala não atrapalham", () => {
+  assert.strictEqual(modulo.numerosDoExtenso("Três sacos"), "3 sacos");
+  assert.strictEqual(modulo.numerosDoExtenso("DEZOITO barras"), "18 barras");
+});
+
+teste("cada frase ditada entra em linha nova", () => {
+  assert.strictEqual(modulo.textoComDitado("", "dez sacos de cimento"), "10 sacos de cimento");
+  assert.strictEqual(modulo.textoComDitado("10 sacos de cimento", "cinco tábuas"),
+    "10 sacos de cimento\ncinco tábuas".replace("cinco", "5"));
+  assert.strictEqual(modulo.textoComDitado("já escrito   ", "  "), "já escrito   ");
+  assert.strictEqual(modulo.textoComDitado(null, "três latas"), "3 latas");
 });
 
 for (const [nome, fn] of testes) {

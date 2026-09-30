@@ -23261,6 +23261,92 @@ function casamentosSeguros(itens) {
   return ok.sort((a, b) => a - b);
 }
 
+// ── Ditar a lista ────────────────────────────────
+// Na obra não se digita: a mão está suja, o telefone fica no bolso e a lista
+// é falada. O reconhecimento de voz é do próprio navegador — nada sai para
+// servidor nenhum, não há chave nem custo por minuto. O que ele devolve cai
+// na mesma caixa de texto, e daí segue pelo leitor de sempre.
+
+// Quem fala diz "dez sacos"; o leitor de lista procura "10". Sem esta
+// tradução, toda linha ditada chegaria sem quantidade — e quantidade em
+// branco é justamente o que trava o lançamento lá na frente.
+const COT_EXTENSO_UNIDADE = {
+  zero: 0, um: 1, uma: 1, dois: 2, duas: 2, tres: 3, quatro: 4, cinco: 5,
+  seis: 6, sete: 7, oito: 8, nove: 9, dez: 10, onze: 11, doze: 12, treze: 13,
+  quatorze: 14, catorze: 14, quinze: 15, dezesseis: 16, dezessete: 17,
+  dezoito: 18, dezenove: 19,
+};
+const COT_EXTENSO_DEZENA = {
+  vinte: 20, trinta: 30, quarenta: 40, cinquenta: 50, sessenta: 60,
+  setenta: 70, oitenta: 80, noventa: 90,
+};
+const COT_EXTENSO_CENTENA = {
+  cem: 100, cento: 100, duzentos: 200, duzentas: 200, trezentos: 300, trezentas: 300,
+  quatrocentos: 400, quatrocentas: 400, quinhentos: 500, quinhentas: 500,
+  seiscentos: 600, seiscentas: 600, setecentos: 700, setecentas: 700,
+  oitocentos: 800, oitocentas: 800, novecentos: 900, novecentas: 900,
+  mil: 1000,
+};
+
+// Junta o que a fala separa: "vinte e um" é um número só, "cento e
+// cinquenta" também. Palavra que não é número corta a sequência — senão
+// "dois sacos e três latas" viraria "5".
+function numerosDoExtenso(texto) {
+  const bruto = String(texto == null ? "" : texto);
+  if (!bruto.trim()) return bruto;
+  const partes = bruto.split(/(\s+)/);
+  const chave = (w) => cotSemAcento(String(w)).replace(/[^a-z]/g, "");
+  const ehNumero = (w) => {
+    const k = chave(w);
+    return k && (COT_EXTENSO_UNIDADE[k] != null || COT_EXTENSO_DEZENA[k] != null
+      || COT_EXTENSO_CENTENA[k] != null);
+  };
+  const valor = (w) => {
+    const k = chave(w);
+    if (COT_EXTENSO_CENTENA[k] != null) return COT_EXTENSO_CENTENA[k];
+    if (COT_EXTENSO_DEZENA[k] != null) return COT_EXTENSO_DEZENA[k];
+    return COT_EXTENSO_UNIDADE[k];
+  };
+  // Cada bloco vira um número: centena + dezena + unidade, com "e" no meio.
+  const saida = [];
+  let i = 0;
+  while (i < partes.length) {
+    const w = partes[i];
+    if (!w.trim() || !ehNumero(w)) { saida.push(w); i++; continue; }
+    // `fim` é o que veio DEPOIS do último número de fato usado. O laço engole
+    // o "e" na esperança de um próximo número ("vinte e um"); se ele não vier
+    // — "dois sacos e três latas" —, voltar a `fim` devolve o "e" e os
+    // espaços ao texto, em vez de comê-los.
+    let total = 0, usou = 0, j = i, ultimaOrdem = 4, fim = i;
+    while (j < partes.length) {
+      const t = partes[j];
+      if (!t.trim()) { j++; continue; }
+      if (chave(t) === "e" && usou) { j++; continue; }
+      if (!ehNumero(t)) break;
+      const k = chave(t);
+      const ordem = COT_EXTENSO_CENTENA[k] != null ? 3 : (COT_EXTENSO_DEZENA[k] != null ? 2 : 1);
+      // Ordem tem que ir decrescendo: "cento e vinte e um". "dez dez" não.
+      if (ordem >= ultimaOrdem) break;
+      total += valor(t); usou++; ultimaOrdem = ordem;
+      j++; fim = j;
+    }
+    if (!usou) { saida.push(w); i++; continue; }
+    saida.push(String(total));
+    i = fim;
+  }
+  return saida.join("").replace(/\s+\n/g, "\n");
+}
+
+// O trecho ditado entra no fim do que já existe, em linha nova: cada frase
+// é um item, e é por linha que o leitor separa a lista.
+function textoComDitado(atual, trecho) {
+  const t = String(trecho == null ? "" : trecho).trim();
+  if (!t) return String(atual == null ? "" : atual);
+  const a = String(atual == null ? "" : atual).replace(/\s+$/, "");
+  const limpo = numerosDoExtenso(t);
+  return a ? a + "\n" + limpo : limpo;
+}
+
 function resumoDaEntrada(itens) {
   const lista = itens || [];
   const comCatalogo = lista.filter((x) => x.insumoCodigo).length;
@@ -27762,6 +27848,85 @@ function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGe
 // Três passos numa tela só: o material entra, a lista aparece conferida
 // contra o catálogo, e aí se diz o que o papel é. Nenhum dado é gravado
 // aqui — a Entrada só entrega a lista pronta para a porta escolhida.
+// O reconhecimento de voz é do navegador e não existe em todos. Quando não
+// existe, o botão simplesmente não aparece — melhor do que um botão que
+// falha no toque.
+function vozDoNavegador() {
+  if (typeof window === "undefined") return null;
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+function BotaoDitar({ aoDitar, isMobile }) {
+  const E = COT_ESTILO;
+  const [ouvindo, setOuvindo] = useState(false);
+  const [erro, setErro] = useState("");
+  const [parcial, setParcial] = useState("");
+  const ref = useRef(null);
+
+  // Desligar ao sair: o microfone não pode continuar aberto depois que a
+  // tela fechou.
+  useEffect(() => () => { try { if (ref.current) ref.current.abort(); } catch (e) {} }, []);
+
+  const Voz = vozDoNavegador();
+  if (!Voz) return null;
+
+  function parar() {
+    try { if (ref.current) ref.current.stop(); } catch (e) {}
+    ref.current = null; setOuvindo(false); setParcial("");
+  }
+
+  function comecar() {
+    if (ouvindo) { parar(); return; }
+    setErro("");
+    let r;
+    try { r = new Voz(); } catch (e) { setErro("Não consegui abrir o microfone."); return; }
+    r.lang = "pt-BR";
+    r.continuous = true;
+    // Enquanto a pessoa fala, o trecho ainda por confirmar aparece em cinza:
+    // é como ela sabe que está sendo ouvida.
+    r.interimResults = true;
+    r.onresult = (ev) => {
+      let confirmado = "", andando = "";
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const t = ev.results[i][0].transcript;
+        if (ev.results[i].isFinal) confirmado += t; else andando += t;
+      }
+      setParcial(andando);
+      if (confirmado.trim() && aoDitar) aoDitar(confirmado);
+    };
+    r.onerror = (ev) => {
+      const c = (ev && ev.error) || "";
+      setErro(c === "not-allowed" || c === "service-not-allowed"
+        ? "O navegador não deixou usar o microfone. Libere e tente de novo."
+        : c === "no-speech" ? "Não ouvi nada." : "O reconhecimento de voz parou.");
+      parar();
+    };
+    r.onend = () => { ref.current = null; setOuvindo(false); setParcial(""); };
+    try { r.start(); } catch (e) { setErro("Não consegui abrir o microfone."); return; }
+    ref.current = r; setOuvindo(true);
+  }
+
+  return (
+    <>
+      <button type="button" onClick={comecar}
+        title={ouvindo ? "Parar de ouvir" : "Ditar a lista em voz alta"}
+        style={{ ...E.btnSec, fontSize: 12,
+          borderColor: ouvindo ? "#dc2626" : "rgba(38,36,33,0.16)",
+          color: ouvindo ? "#dc2626" : "#111827",
+          background: ouvindo ? "#fff6f6" : "#fff", fontWeight: ouvindo ? 600 : 400 }}>
+        {ouvindo ? "■ Parar de ditar" : "● Ditar"}
+      </button>
+      {ouvindo && (
+        <span style={{ fontSize: 11.5, color: "#6b7280", minWidth: 0,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {parcial ? `“${parcial}”` : "ouvindo… fale um item por vez"}
+        </span>
+      )}
+      {erro && !ouvindo && <span style={{ fontSize: 11.5, color: "#b45309" }}>{erro}</span>}
+    </>
+  );
+}
+
 function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile, dinheiro,
   aoCadastrarInsumo, aoAprender, aoFechar, aoSeguir }) {
   const E = COT_ESTILO;
@@ -27931,13 +28096,15 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                 <textarea style={{ ...E.input, minHeight: 150, resize: "vertical", border: "none",
                   background: "transparent", fontSize: 13 }}
                   value={texto} onChange={(e) => setTexto(e.target.value)}
-                  placeholder={"Cole aqui a lista, o pedido ou o texto da nota — ou arraste o arquivo (PDF, print, foto) para dentro desta caixa."} />
+                  placeholder={"Cole aqui a lista, o pedido ou o texto da nota — arraste o arquivo (PDF, print, foto) para dentro desta caixa, ou aperte Ditar e fale a lista."} />
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
                   <label style={{ ...E.btnSec, fontSize: 12, display: "inline-block" }}>
                     Escolher arquivo
                     <input type="file" accept="application/pdf,image/*" style={{ display: "none" }}
                       onChange={(e) => porArquivoDaEntrada((e.target.files || [])[0])} />
                   </label>
+                  <BotaoDitar isMobile={isMobile}
+                    aoDitar={(trecho) => setTexto((t) => textoComDitado(t, trecho))} />
                   {arquivo && (
                     <span style={{ fontSize: 11.5, color: "#111827" }}>
                       {lendo ? "Lendo " : ""}{arquivo.name}
