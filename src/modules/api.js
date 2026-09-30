@@ -482,9 +482,13 @@ async function loadAllData(estado = null) {
     // CSL-8 (Conj. Comercial)
     api.cub.atual(estado, "CSL-8", "Normal").catch(() => null),
     api.cub.atual(estado, "CSL-8", "Alto").catch(() => null),
-    // PP-4 (Apartamento — Prédio Popular)
+    // PP-4 (Apartamento — Prédio Popular, até 4 pavimentos)
     api.cub.atual(estado, "PP-4", "Baixo").catch(() => null),
     api.cub.atual(estado, "PP-4", "Normal").catch(() => null),
+    // R-8 (Residencial multifamiliar acima de 4 pavimentos)
+    api.cub.atual(estado, "R-8", "Baixo").catch(() => null),
+    api.cub.atual(estado, "R-8", "Normal").catch(() => null),
+    api.cub.atual(estado, "R-8", "Alto").catch(() => null),
     // GI (Galpão)
     api.cub.atual(estado, "GI", "Único").catch(() => null),
   ] : Array(8).fill(Promise.resolve(null));
@@ -502,17 +506,19 @@ async function loadAllData(estado = null) {
     r1Baixo, r1Normal, r1Alto,
     csl8Normal, csl8Alto,
     pp4Baixo, pp4Normal,
+    r8Baixo, r8Normal, r8Alto,
     giUnico,
   ] = await Promise.all([...promisesBase, ...cubPromises]);
 
   // DEBUG: mostra valores brutos antes de processar
-  console.log("[loadAllData] CUB bruto:", { r1Baixo, r1Normal, r1Alto, csl8Normal, csl8Alto, pp4Baixo, pp4Normal, giUnico });
+
 
   // Monta objeto cub estruturado por categoria.
   // Cada categoria pode ter padrões nulos se a API falhar.
   // getPrecoBaseDinamico já lida com isso retornando fallback fixo.
   let cub = null;
-  if (estado && (r1Baixo || r1Normal || r1Alto || csl8Normal || csl8Alto || pp4Baixo || pp4Normal || giUnico)) {
+  if (estado && (r1Baixo || r1Normal || r1Alto || csl8Normal || csl8Alto || pp4Baixo || pp4Normal
+      || r8Baixo || r8Normal || r8Alto || giUnico)) {
     cub = {
       estado,
       R1: {
@@ -527,6 +533,11 @@ async function loadAllData(estado = null) {
       PP4: {
         Baixo: pp4Baixo?.data || pp4Baixo,
         Normal: pp4Normal?.data || pp4Normal,
+      },
+      R8: {
+        Baixo: r8Baixo?.data || r8Baixo,
+        Normal: r8Normal?.data || r8Normal,
+        Alto: r8Alto?.data || r8Alto,
       },
       GI: {
         Unico: giUnico?.data || giUnico,

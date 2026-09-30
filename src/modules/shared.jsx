@@ -1360,6 +1360,20 @@ var VAGA_AREA_M2 = VAGA_LARGURA_M * VAGA_COMPRIMENTO_M;
 // abatimento são esses mesmos, não um segundo desconto por cima.
 var GARAGEM_FATOR = 0.80;
 
+// Os espaços comuns são um projeto à parte — passam pelas faixas com a área
+// deles, não com a do conjunto. Mas fazem parte do mesmo empreendimento, e é
+// o mesmo escritório desenhando junto com o resto: daí a metade do preço.
+var COMUNS_DESCONTO = 0.50;
+
+// NBR 12721: PP-4 é prédio popular de até 4 pavimentos; acima disso o CUB de
+// referência passa a ser o R-8 (residencial multifamiliar). O coletor já traz
+// os dois — e o R-16 também, se um dia houver uma terceira faixa.
+var PAVIMENTOS_PP4_MAX = 4;
+function cubDePavimentos(pavimentos) {
+  const n = Math.max(0, Number(pavimentos) || 0);
+  return (n > PAVIMENTOS_PP4_MAX) ? "R8" : "PP4";
+}
+
 // A área de garagem do empreendimento inteiro: vagas por unidade × unidades.
 // Volta também a área de uma vaga, porque é o número que a tela mostra.
 function areaDeGaragem(vagasPorUnidade, nUnidades) {
@@ -1520,7 +1534,7 @@ function mesDoCub(d) {
   return m ? `${m}/${t[0]}` : "";
 }
 
-function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
+function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub, pavimentos) {
   const tcfg = getTipoConfig(tipoProjeto === "Clínica" ? "Clinica"
                           : tipoProjeto === "Galpão" ? "Galpao"
                           : (tipoProjeto || "Residencial"));
@@ -1551,10 +1565,13 @@ function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
     categoriaCub = cub.GI;    // GI para galpão
     padraoCub = "Unico";      // GI tem apenas padrão único
   } else if (tipoProjeto === "Empreendimento") {
-    // PP-4 (Prédio Popular, NBR 12721): unidade em prédio, não casa
-    // unifamiliar. Só tem Baixo e Normal — Médio e Alto caem em Normal.
-    categoriaCub = cub.PP4;
-    if (padraoCub === "Alto") padraoCub = "Normal";
+    // Até 4 pavimentos o CUB é o PP-4 (Prédio Popular); acima, o R-8. São
+    // prédios diferentes: elevador, estrutura e instalações mudam de porte, e
+    // o CUB acompanha. O PP-4 só tem Baixo e Normal — Alto cai em Normal;
+    // o R-8 tem os três.
+    const chave = cubDePavimentos(pavimentos);
+    categoriaCub = chave === "R8" ? cub.R8 : cub.PP4;
+    if (chave === "PP4" && padraoCub === "Alto") padraoCub = "Normal";
   } else {
     categoriaCub = cub.R1;    // R-1 para Residencial, Clínica
   }
@@ -1565,7 +1582,8 @@ function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
   const precoBase = Math.round(pct * cubObj.valor_m2 * 100) / 100;
   const categoria = categoriaCub === cub.R1 ? "R-1"
                   : categoriaCub === cub.CSL8 ? "CSL-8"
-                  : categoriaCub === cub.PP4 ? "PP-4" : "GI";
+                  : categoriaCub === cub.PP4 ? "PP-4"
+                  : categoriaCub === cub.R8 ? "R-8" : "GI";
   console.log(`[PREÇO BASE] ${tipoProjeto} ${padrao} → ${categoria} ${padraoCub} | pct=${pct.toFixed(4)} × CUB=${cubObj.valor_m2.toFixed(2)} = R$ ${precoBase.toFixed(2)}/m²`);
   return { precoBase, modo: "dinamico", pct, cubM2: cubObj.valor_m2, padraoCub, categoria,
     mesCub: mesDoCub(cubObj.mes_referencia), fonteCub: cubObj.fonte || "",

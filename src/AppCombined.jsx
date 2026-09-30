@@ -1364,6 +1364,20 @@ var VAGA_AREA_M2 = VAGA_LARGURA_M * VAGA_COMPRIMENTO_M;
 // abatimento são esses mesmos, não um segundo desconto por cima.
 var GARAGEM_FATOR = 0.80;
 
+// Os espaços comuns são um projeto à parte — passam pelas faixas com a área
+// deles, não com a do conjunto. Mas fazem parte do mesmo empreendimento, e é
+// o mesmo escritório desenhando junto com o resto: daí a metade do preço.
+var COMUNS_DESCONTO = 0.50;
+
+// NBR 12721: PP-4 é prédio popular de até 4 pavimentos; acima disso o CUB de
+// referência passa a ser o R-8 (residencial multifamiliar). O coletor já traz
+// os dois — e o R-16 também, se um dia houver uma terceira faixa.
+var PAVIMENTOS_PP4_MAX = 4;
+function cubDePavimentos(pavimentos) {
+  const n = Math.max(0, Number(pavimentos) || 0);
+  return (n > PAVIMENTOS_PP4_MAX) ? "R8" : "PP4";
+}
+
 // A área de garagem do empreendimento inteiro: vagas por unidade × unidades.
 // Volta também a área de uma vaga, porque é o número que a tela mostra.
 function areaDeGaragem(vagasPorUnidade, nUnidades) {
@@ -1524,7 +1538,7 @@ function mesDoCub(d) {
   return m ? `${m}/${t[0]}` : "";
 }
 
-function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
+function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub, pavimentos) {
   const tcfg = getTipoConfig(tipoProjeto === "Clínica" ? "Clinica"
                           : tipoProjeto === "Galpão" ? "Galpao"
                           : (tipoProjeto || "Residencial"));
@@ -1555,10 +1569,13 @@ function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
     categoriaCub = cub.GI;    // GI para galpão
     padraoCub = "Unico";      // GI tem apenas padrão único
   } else if (tipoProjeto === "Empreendimento") {
-    // PP-4 (Prédio Popular, NBR 12721): unidade em prédio, não casa
-    // unifamiliar. Só tem Baixo e Normal — Médio e Alto caem em Normal.
-    categoriaCub = cub.PP4;
-    if (padraoCub === "Alto") padraoCub = "Normal";
+    // Até 4 pavimentos o CUB é o PP-4 (Prédio Popular); acima, o R-8. São
+    // prédios diferentes: elevador, estrutura e instalações mudam de porte, e
+    // o CUB acompanha. O PP-4 só tem Baixo e Normal — Alto cai em Normal;
+    // o R-8 tem os três.
+    const chave = cubDePavimentos(pavimentos);
+    categoriaCub = chave === "R8" ? cub.R8 : cub.PP4;
+    if (chave === "PP4" && padraoCub === "Alto") padraoCub = "Normal";
   } else {
     categoriaCub = cub.R1;    // R-1 para Residencial, Clínica
   }
@@ -1569,7 +1586,8 @@ function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
   const precoBase = Math.round(pct * cubObj.valor_m2 * 100) / 100;
   const categoria = categoriaCub === cub.R1 ? "R-1"
                   : categoriaCub === cub.CSL8 ? "CSL-8"
-                  : categoriaCub === cub.PP4 ? "PP-4" : "GI";
+                  : categoriaCub === cub.PP4 ? "PP-4"
+                  : categoriaCub === cub.R8 ? "R-8" : "GI";
   console.log(`[PREÇO BASE] ${tipoProjeto} ${padrao} → ${categoria} ${padraoCub} | pct=${pct.toFixed(4)} × CUB=${cubObj.valor_m2.toFixed(2)} = R$ ${precoBase.toFixed(2)}/m²`);
   return { precoBase, modo: "dinamico", pct, cubM2: cubObj.valor_m2, padraoCub, categoria,
     mesCub: mesDoCub(cubObj.mes_referencia), fonteCub: cubObj.fonte || "",
@@ -3059,9 +3077,13 @@ async function loadAllData(estado = null) {
     // CSL-8 (Conj. Comercial)
     api.cub.atual(estado, "CSL-8", "Normal").catch(() => null),
     api.cub.atual(estado, "CSL-8", "Alto").catch(() => null),
-    // PP-4 (Apartamento — Prédio Popular)
+    // PP-4 (Apartamento — Prédio Popular, até 4 pavimentos)
     api.cub.atual(estado, "PP-4", "Baixo").catch(() => null),
     api.cub.atual(estado, "PP-4", "Normal").catch(() => null),
+    // R-8 (Residencial multifamiliar acima de 4 pavimentos)
+    api.cub.atual(estado, "R-8", "Baixo").catch(() => null),
+    api.cub.atual(estado, "R-8", "Normal").catch(() => null),
+    api.cub.atual(estado, "R-8", "Alto").catch(() => null),
     // GI (Galpão)
     api.cub.atual(estado, "GI", "Único").catch(() => null),
   ] : Array(8).fill(Promise.resolve(null));
@@ -3079,17 +3101,19 @@ async function loadAllData(estado = null) {
     r1Baixo, r1Normal, r1Alto,
     csl8Normal, csl8Alto,
     pp4Baixo, pp4Normal,
+    r8Baixo, r8Normal, r8Alto,
     giUnico,
   ] = await Promise.all([...promisesBase, ...cubPromises]);
 
   // DEBUG: mostra valores brutos antes de processar
-  console.log("[loadAllData] CUB bruto:", { r1Baixo, r1Normal, r1Alto, csl8Normal, csl8Alto, pp4Baixo, pp4Normal, giUnico });
+
 
   // Monta objeto cub estruturado por categoria.
   // Cada categoria pode ter padrões nulos se a API falhar.
   // getPrecoBaseDinamico já lida com isso retornando fallback fixo.
   let cub = null;
-  if (estado && (r1Baixo || r1Normal || r1Alto || csl8Normal || csl8Alto || pp4Baixo || pp4Normal || giUnico)) {
+  if (estado && (r1Baixo || r1Normal || r1Alto || csl8Normal || csl8Alto || pp4Baixo || pp4Normal
+      || r8Baixo || r8Normal || r8Alto || giUnico)) {
     cub = {
       estado,
       R1: {
@@ -3104,6 +3128,11 @@ async function loadAllData(estado = null) {
       PP4: {
         Baixo: pp4Baixo?.data || pp4Baixo,
         Normal: pp4Normal?.data || pp4Normal,
+      },
+      R8: {
+        Baixo: r8Baixo?.data || r8Baixo,
+        Normal: r8Normal?.data || r8Normal,
+        Alto: r8Alto?.data || r8Alto,
       },
       GI: {
         Unico: giUnico?.data || giUnico,
@@ -43497,6 +43526,10 @@ function AreaDetalhe({ calculo, fmtNum }) {
                 {row(`+ ${pct(calculo.acrescimoCirk)} Circulação e paredes`,
                   `+${fmt2(Math.round((calculo.comuns.area - calculo.comuns.areaUtil)*100)/100)} m²`)}
                 {row("Área dos comuns", fmt2(calculo.comuns.area)+" m²", { bold:true, valColor:"#262421" })}
+                {row("Projeto à parte, pelas faixas da área dele",
+                  brl(Math.round((calculo.comuns.arqCheio + calculo.comuns.engCheio) * 100) / 100), { bold:false })}
+                {row(`− ${Math.round(calculo.comuns.descontoPct*100)}% por fazer parte do empreendimento`,
+                  `− ${brl(calculo.comuns.desconto)}`, { bold:false })}
               </div>
             )}
             <div style={{ borderTop:"1px solid #c8cdd6", marginTop:4, paddingTop:6 }}>
@@ -46251,6 +46284,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   // Vagas por unidade — só o empreendimento usa. A garagem dele não é cômodo
   // da unidade: é área própria, que sai daqui.
   const [vagasPorUnidade, setVagasPorUnidade] = useState(orcBase?.vagasPorUnidade || 0);
+  // Pavimentos — decide o CUB: até 4 é PP-4, acima é R-8.
+  const [qtdPavimentos, setQtdPavimentos] = useState(orcBase?.qtdPavimentos || 0);
+  const [editandoPav, setEditandoPav] = useState(false);
   const [editandoRep, setEditandoRep] = useState(false);
   const [editandoAliq, setEditandoAliq] = useState(false);
   const [editandoGrupoQtd, setEditandoGrupoQtd] = useState(null); // guarda o nome do grupo que está com input aberto
@@ -46318,6 +46354,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (orcBase.comodos)     setQtds(Object.fromEntries(orcBase.comodos.map(c => [c.nome, c.qtd])));
     if (orcBase.repeticao   !== undefined) setQtdRep(orcBase.repeticao ? (orcBase.nUnidades || 2) : 0);
     if (orcBase.vagasPorUnidade !== undefined) setVagasPorUnidade(orcBase.vagasPorUnidade || 0);
+    if (orcBase.qtdPavimentos !== undefined) setQtdPavimentos(orcBase.qtdPavimentos || 0);
     if (orcBase.tipoPgto    !== undefined) setTipoPgto(orcBase.tipoPgto);
     if (orcBase.temImposto  !== undefined) setTemImposto(orcBase.temImposto);
     if (orcBase.aliqImp     !== undefined) setAliqImp(orcBase.aliqImp);
@@ -46763,7 +46800,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     // Se onboarding incompleto OU sem CUB do estado, cai no fallback fixo
     // (getPrecoBaseDinamico devolve tcfg.precoBase com modo:"fixo").
     // Padrão Médio do projeto = Normal do CUB (NBR 12721).
-    const _precoBaseInfo = getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub);
+    const _precoBaseInfo = getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub, qtdPavimentos);
     const pb = _precoBaseInfo.precoBase;
     console.log(`[FÓRMULA REAL] modo=${_precoBaseInfo.modo} | padrão=${padrao} | cubCategory=${_precoBaseInfo.categoria} | cubPadrão=${_precoBaseInfo.padraoCub} | cubValor=${_precoBaseInfo.cubM2} | pct=${_precoBaseInfo.pct*100}% | pb=${pb}`);
 
@@ -47035,10 +47072,15 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     const comuns = (() => {
       if (!(areaComuns > 0)) return null;
       const construida = Math.round(areaComuns * (1 + tcfg.acrescimoCirk) * 100) / 100;
-      const arq = calcArqFaixas(construida);
-      const eng = calcularEngenharia(construida);
+      const arqCheio = calcArqFaixas(construida);
+      const engCheio = Math.round(calcularEngenharia(construida).totalEng * 100) / 100;
+      // Projeto à parte, mas do mesmo empreendimento: sai pela metade.
+      const d = (typeof COMUNS_DESCONTO !== "undefined") ? COMUNS_DESCONTO : 0.5;
+      const arq = Math.round(arqCheio * (1 - d) * 100) / 100;
+      const eng = Math.round(engCheio * (1 - d) * 100) / 100;
       return { ambientes: ambientesComuns, areaUtil: Math.round(areaComuns * 100) / 100,
-        area: construida, arq, eng: Math.round(eng.totalEng * 100) / 100 };
+        area: construida, arqCheio, engCheio, descontoPct: d, arq, eng,
+        desconto: Math.round((arqCheio - arq + engCheio - eng) * 100) / 100 };
     })();
 
     const nRep   = qtdRep > 1 ? qtdRep : 1;
@@ -47118,7 +47160,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         fonteCub:  _precoBaseInfo.fonteCub || "",
         estadoCub: _precoBaseInfo.estadoCub || "",
         cubKey: (tipoProjeto === "Galpão") ? "GI"
-              : (tipoProjeto === "Empreendimento") ? "PP4" : "R1",
+              : (tipoProjeto === "Empreendimento") ? (qtdPavimentos > 4 ? "R8" : "PP4") : "R1",
       }],
       faixasArqDet, faixasEng: engCalc.faixas,
       totalAmbientes,
@@ -47126,7 +47168,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       labelCirk: tcfg.labelCirk || String(Math.round(tcfg.acrescimoCirk*100)),
       cubInfo: { categoria: _precoBaseInfo.categoria, modo: _precoBaseInfo.modo, pct: _precoBaseInfo.pct, cubM2: _precoBaseInfo.cubM2, padraoCub: _precoBaseInfo.padraoCub },
     };
-  }, [qtds, tamanho, padrao, tipoProjeto, configAtual, qtdRep, vagasPorUnidade, grupoQtds, isComercial, grupoParams, grupoDeComodo, usuario, cub]);
+  }, [qtds, tamanho, padrao, tipoProjeto, configAtual, qtdRep, vagasPorUnidade, qtdPavimentos, grupoQtds, isComercial, grupoParams, grupoDeComodo, usuario, cub]);
 
   const temComodos = isComercial
     ? Object.entries(grupoQtds).some(([g, gq]) => gq > 0 && Object.keys(qtds).some(nome => grupoDeComodo[nome] === g && (qtds[nome]||0) > 0))
@@ -48083,7 +48125,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       cliente: clienteNome, referencia,
       comodos: Object.entries(qtds).filter(([,q])=>q>0).map(([nome,qtd])=>({nome,qtd})),
       repeticao: qtdRep > 0, nUnidades: qtdRep > 0 ? qtdRep : 1,
-      vagasPorUnidade,
+      vagasPorUnidade, qtdPavimentos,
       grupoQtds: isComercial ? grupoQtds : null,
       grupoParams: isComercial ? grupoParams : null,
       incluiArq, incluiEng, incluiMarcenaria,
@@ -48650,6 +48692,36 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             )}
             <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
               onClick={() => setVagasPorUnidade(n => n + 1)}>+</button>
+          </div>
+        )}
+
+        {/* Pavimentos — decide qual CUB entra: até 4 é PP-4, acima é R-8. */}
+        {tipoProjeto === "Empreendimento" && (
+          <div style={{ display:"flex", alignItems:"center", gap:6, paddingLeft:12, marginLeft:4, borderLeft:"2px solid #d1d5db" }}>
+            <span style={{ fontSize:14, color:"#828a98" }}>Pavimentos</span>
+            <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
+              onClick={() => setQtdPavimentos(n => Math.max(0, n - 1))}>−</button>
+            {editandoPav ? (
+              <input
+                ref={el => { if (el) { el.focus(); try { el.select(); } catch {} } }}
+                type="number" min="0"
+                defaultValue={qtdPavimentos}
+                onBlur={e => { const v = parseInt(e.target.value)||0; setQtdPavimentos(Math.max(0,v)); setEditandoPav(false); }}
+                onKeyDown={e => { if(e.key==="Enter"||e.key==="Escape"){ const v=parseInt(e.target.value)||0; setQtdPavimentos(Math.max(0,v)); setEditandoPav(false); } }}
+                className="no-spin"
+                style={{ width:36, textAlign:"center", fontSize:13, fontWeight:600, border:"1px solid #333", borderRadius:5, padding:"1px 4px", outline:"none", fontFamily:"inherit", MozAppearance:"textfield" }}
+              />
+            ) : (
+              <span onClick={() => setEditandoPav(true)} title="Até 4 pavimentos usa o CUB PP-4; acima, o R-8"
+                style={{ fontSize:13, fontWeight: qtdPavimentos > 0 ? 700 : 400, minWidth:16, textAlign:"center", color: qtdPavimentos > 0 ? "#262421" : "#9ca3af", cursor:"text" }}>
+                {qtdPavimentos}
+              </span>
+            )}
+            <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
+              onClick={() => setQtdPavimentos(n => n + 1)}>+</button>
+            <span style={{ fontSize:10.5, color:"#9aa1ac" }}>
+              {qtdPavimentos > 4 ? "R-8" : "PP-4"}
+            </span>
           </div>
         )}
       </div>
