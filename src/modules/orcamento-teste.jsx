@@ -8203,6 +8203,21 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         const lista = partes.length>1 ? partes.slice(0,-1).join(", ")+" e "+partes[partes.length-1] : partes[0]||"";
         return `${prefixo}conjunto comercial, contendo ${lista}, totalizando ${fmtArea(c.areaTot||c.areaTotal)}.`;
       }
+      // Empreendimento tem forma própria: prédio, unidades, garagem e comuns
+      // são quatro coisas distintas, e a área "por unidade" não pode vir com a
+      // garagem por dentro nem com a sauna do condomínio na lista de ambientes.
+      if (tipoProjeto === "Empreendimento" && calculo) {
+        const ehComum = (n) => (typeof ehComumDoEmpreendimento === "function") && ehComumDoEmpreendimento(n);
+        const daUnidade = Object.entries(qtds).filter(([n,q]) => q > 0 && !ehComum(n));
+        const dosComuns = Object.entries(qtds).filter(([n,q]) => q > 0 && ehComum(n));
+        return txtDescricaoEmpreendimento({ calculo, tipoProjeto }, {
+          prefixo,
+          pavimentos: qtdPavimentos,
+          comunsNomes: dosComuns.map(([n,q]) => formatComodo(n, q)),
+          totalAmbientes: daUnidade.reduce((s,[,q]) => s + q, 0),
+          ambientesUnidade: txtLista(daUnidade.map(([n,q]) => formatComodo(n, q))),
+        });
+      }
       const nUnid = calculo?.nRep || 1;
       const areaUni = calculo?.areaTotal || calculo?.areaTot || 0;
       const areaTotR = Math.round(areaUni * nUnid * 100)/100;

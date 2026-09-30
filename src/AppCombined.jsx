@@ -35744,6 +35744,63 @@ function txtEdificacao(data) {
   return fem("residência", "residências");
 }
 
+// ── Descrição do empreendimento ─────────────────────────
+// O caminho residencial dizia "40 empreendimentos térreos idênticas" — são 40
+// unidades de UM empreendimento, e térreo ele não é. Além disso a área "por
+// unidade" vinha com a garagem por dentro, e sauna e academia apareciam como
+// ambientes do apartamento. São quatro coisas distintas para contar: o
+// prédio, a unidade, a garagem e o que é do condomínio.
+function txtDescricaoEmpreendimento(data, ctx) {
+  const c = (data && data.calculo) || {};
+  const x = ctx || {};
+  const n2 = (v) => Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const m2 = (v) => n2(v) + "m²";
+  const nUnid = c.nRep || 1;
+  const areaUnid = c.areaConstruida != null ? c.areaConstruida : (c.areaTotal || 0);
+  const pav = Number(x.pavimentos || data.qtdPavimentos || 0);
+  const partes = [];
+
+  // 1. O prédio
+  const cabeca = pav > 0
+    ? `empreendimento de ${pav} pavimento${pav !== 1 ? "s" : ""}`
+    : "empreendimento";
+
+  // 2. As unidades
+  partes.push(`${nUnid} unidade${nUnid !== 1 ? "s" : ""} de ${m2(areaUnid)}`
+    + (nUnid !== 1 ? " cada" : ""));
+
+  // 3. A garagem
+  const g = c.garagem;
+  if (g && g.vagasPorUnidade > 0) {
+    partes.push(`${g.vagasPorUnidade} vaga${g.vagasPorUnidade !== 1 ? "s" : ""} de garagem por unidade `
+      + `(${g.vagas} vaga${g.vagas !== 1 ? "s" : ""}, ${m2(g.area)})`);
+  }
+
+  // 4. Os espaços comuns, com os nomes deles
+  if (c.comuns && c.comuns.area > 0) {
+    const nomes = (x.comunsNomes || []).filter(Boolean);
+    partes.push(`${m2(c.comuns.area)} de espaços comuns`
+      + (nomes.length ? ` (${txtLista(nomes)})` : ""));
+  }
+
+  const corpo = txtLista(partes);
+  const total = c.areaTot || 0;
+  let frase = `${x.prefixo || ""}${cabeca}, com ${corpo}, totalizando ${m2(total)} de área construída.`;
+  if (x.ambientesUnidade) {
+    frase += ` Cada unidade é composta por ${x.totalAmbientes} ambiente`
+      + `${x.totalAmbientes !== 1 ? "s" : ""}: ${x.ambientesUnidade}.`;
+  }
+  return frase;
+}
+
+// "a, b e c" — a vírgula separa, o "e" fecha.
+function txtLista(itens) {
+  const l = (itens || []).filter(Boolean);
+  if (!l.length) return "";
+  if (l.length === 1) return l[0];
+  return l.slice(0, -1).join(", ") + " e " + l[l.length - 1];
+}
+
 // Número por extenso no gênero da edificação: "duas clínicas", "dois galpões".
 function txtNumeroExtenso(n, genero) {
   const fem = ["", "uma", "duas", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez"];
@@ -35784,6 +35841,21 @@ function txtComputarDescricaoProjeto(data) {
     const bc = calc.blocosCom.find(x => x.label === "Área Comum"); if (bc) partes.push(`Área Comum (${fmtArea(bc.area1)})`);
     const lista = partes.length > 1 ? partes.slice(0, -1).join(", ") + " e " + partes[partes.length - 1] : partes[0] || "";
     return `${prefixo}conjunto comercial, contendo ${lista}, totalizando ${fmtArea(calc.areaTot || calc.areaTotal)}.`;
+  }
+
+  // Empreendimento tem forma própria — prédio, unidades, garagem e comuns.
+  if (String((data && data.tipoProjeto) || "").toLowerCase().indexOf("empreendimento") >= 0) {
+    const comodos0 = data.comodos || [];
+    const ehComum = (n) => (typeof ehComumDoEmpreendimento === "function") && ehComumDoEmpreendimento(n);
+    const daUnidade = comodos0.filter(c => (c.qtd || 0) > 0 && !ehComum(c.nome));
+    const fc0 = (typeof formatComodo === "function") ? formatComodo : (n, q) => `${q} ${n}`;
+    return txtDescricaoEmpreendimento(data, {
+      prefixo,
+      pavimentos: data.qtdPavimentos,
+      comunsNomes: comodos0.filter(c => (c.qtd || 0) > 0 && ehComum(c.nome)).map(c => fc0(c.nome, c.qtd)),
+      totalAmbientes: daUnidade.reduce((s, c) => s + (c.qtd || 0), 0),
+      ambientesUnidade: txtLista(daUnidade.map(c => fc0(c.nome, c.qtd))),
+    });
   }
 
   // Caso residencial
@@ -48125,6 +48197,21 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         if (c.blocosCom) { const bc=c.blocosCom.find(x=>x.label==="Área Comum"); if(bc) partes.push(`Área Comum (${fmtArea(bc.area1)})`); }
         const lista = partes.length>1 ? partes.slice(0,-1).join(", ")+" e "+partes[partes.length-1] : partes[0]||"";
         return `${prefixo}conjunto comercial, contendo ${lista}, totalizando ${fmtArea(c.areaTot||c.areaTotal)}.`;
+      }
+      // Empreendimento tem forma própria: prédio, unidades, garagem e comuns
+      // são quatro coisas distintas, e a área "por unidade" não pode vir com a
+      // garagem por dentro nem com a sauna do condomínio na lista de ambientes.
+      if (tipoProjeto === "Empreendimento" && calculo) {
+        const ehComum = (n) => (typeof ehComumDoEmpreendimento === "function") && ehComumDoEmpreendimento(n);
+        const daUnidade = Object.entries(qtds).filter(([n,q]) => q > 0 && !ehComum(n));
+        const dosComuns = Object.entries(qtds).filter(([n,q]) => q > 0 && ehComum(n));
+        return txtDescricaoEmpreendimento({ calculo, tipoProjeto }, {
+          prefixo,
+          pavimentos: qtdPavimentos,
+          comunsNomes: dosComuns.map(([n,q]) => formatComodo(n, q)),
+          totalAmbientes: daUnidade.reduce((s,[,q]) => s + q, 0),
+          ambientesUnidade: txtLista(daUnidade.map(([n,q]) => formatComodo(n, q))),
+        });
       }
       const nUnid = calculo?.nRep || 1;
       const areaUni = calculo?.areaTotal || calculo?.areaTot || 0;
