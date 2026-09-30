@@ -1292,7 +1292,42 @@ var CUSTOM_CONFIG_KEY_GALERIA = "obramanager-config-galeria-v1";
 // academia, não uma por apartamento. Contam uma vez, e a repetição de
 // unidades não os multiplica.
 var GRUPO_COMUNS_EMPREENDIMENTO = "Espaços comuns";
-var COMODOS_COMUNS_EMPREENDIMENTO = ["Área de lazer","Piscina","Lavabo Lazer","Sauna","Academia","Brinquedoteca","Louceiro"];
+var COMODOS_COMUNS_EMPREENDIMENTO = ["Área de lazer","Piscina","Quadra poliesportiva","Lavabo Lazer","Sauna","Academia","Brinquedoteca","Louceiro"];
+
+// As medidas do catálogo são de casa: academia de 6 × 5, área de lazer de
+// 8 × 6. Num prédio esses ambientes atendem dezenas de famílias, e dobrar
+// cada lado é o ajuste de escala. Dobrar os DOIS lados quadruplica a área —
+// é o que se espera de um salão de condomínio contra o de uma casa.
+var COMUNS_FATOR_DIMENSAO = 2;
+
+// A quadra já nasce no tamanho real, então fica de fora do dobro.
+// Referência: a área de jogo oficial do basquete é 28 × 15 m, e com as faixas
+// de escape em volta a área construída vai a 32 × 19 m. Abaixo disso entram
+// os tamanhos que condomínio costuma executar — futsal reduzido e recreativa.
+var COMODOS_QUADRA = {
+  "Quadra poliesportiva": { indice:0.03, medidas:{
+    Grande:[32,19], Médio:[28,15], Pequeno:[25,12.5], Compacta:[20,10] }},
+};
+
+// Quadra é piso, alambrado e pintura de demarcação. Não tem hidráulica de
+// recirculação, nem impermeabilização, nem casa de máquinas — desenhar um
+// metro dela custa metade do que custa um metro de piscina.
+var QUADRA_FATOR_PRECO = 0.50;
+
+function ehQuadraDoEmpreendimento(nome) {
+  return nome === "Quadra poliesportiva";
+}
+
+// Dobra os dois lados de um cômodo, preservando o resto da ficha.
+function comodoEmDobro(cfg) {
+  if (!cfg || !cfg.medidas) return cfg;
+  const medidas = {};
+  for (const t of Object.keys(cfg.medidas)) {
+    const m = cfg.medidas[t] || [0, 0];
+    medidas[t] = [m[0] * COMUNS_FATOR_DIMENSAO, m[1] * COMUNS_FATOR_DIMENSAO];
+  }
+  return Object.assign({}, cfg, { medidas });
+}
 function ehComumDoEmpreendimento(nome) {
   return COMODOS_COMUNS_EMPREENDIMENTO.indexOf(nome) >= 0;
 }
@@ -1317,7 +1352,12 @@ function getComodosConfig(tipo) {
     // academia e brinquedoteca são do condomínio, existem uma vez, não uma
     // por apartamento — por isso viram um quadrante próprio.
     const comodos = {};
-    for (const k of Object.keys(COMODOS)) if (k !== "Garagem") comodos[k] = COMODOS[k];
+    for (const k of Object.keys(COMODOS)) {
+      if (k === "Garagem") continue;
+      // Ambiente comum do condomínio entra em dobro; o da unidade, como está.
+      comodos[k] = ehComumDoEmpreendimento(k) ? comodoEmDobro(COMODOS[k]) : COMODOS[k];
+    }
+    for (const k of Object.keys(COMODOS_QUADRA)) comodos[k] = COMODOS_QUADRA[k];
     const grupos = {};
     for (const g of Object.keys(GRUPOS_COMODOS)) {
       if (g === "Lazer") continue;

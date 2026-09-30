@@ -3643,6 +3643,9 @@ function AreaDetalhe({ calculo, fmtNum }) {
                 {row(`+ ${pct(calculo.acrescimoCirk)} Circulação e paredes`,
                   `+${fmt2(Math.round((calculo.comuns.area - calculo.comuns.areaUtil)*100)/100)} m²`)}
                 {row("Área dos comuns", fmt2(calculo.comuns.area)+" m²", { bold:true, valColor:"#262421" })}
+                {calculo.comuns.areaQuadra > 0 && row(
+                  `− ${Math.round((1-calculo.comuns.fatorQuadra)*100)}% da quadra · ${fmt2(calculo.comuns.areaQuadra)} m²`,
+                  `− ${brl(calculo.comuns.abateQuadra)}`, { bold:false })}
                 {row("Projeto à parte, pelas faixas da área dele",
                   brl(Math.round((calculo.comuns.arqCheio + calculo.comuns.engCheio) * 100) / 100), { bold:false })}
                 {row(`− ${Math.round(calculo.comuns.descontoPct*100)}% por fazer parte do empreendimento`,
@@ -7109,7 +7112,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     // unidades), a garagem (idem) e os espaços comuns (contam UMA vez — o
     // prédio tem uma academia, não uma por apartamento).
     const ehEmpreend = tipoProjeto === "Empreendimento";
-    let areaBruta = 0, areaPiscina = 0, areaComuns = 0, ambientesComuns = 0;
+    let areaBruta = 0, areaPiscina = 0, areaComuns = 0, ambientesComuns = 0, areaQuadra = 0;
     Object.entries(qtds).forEach(([nome, qtd]) => {
       if (!qtd || qtd <= 0) return;
       const cfg = COMODOS_USE[nome];
@@ -7117,7 +7120,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       const [L, W_] = cfg.medidas[tamanho] || [0, 0];
       const area = L * W_ * qtd;
       if (ehEmpreend && typeof ehComumDoEmpreendimento === "function" && ehComumDoEmpreendimento(nome)) {
-        areaComuns += area; ambientesComuns += qtd; return;
+        areaComuns += area; ambientesComuns += qtd;
+        if (typeof ehQuadraDoEmpreendimento === "function" && ehQuadraDoEmpreendimento(nome)) areaQuadra += area;
+        return;
       }
       if (nome === "Piscina") areaPiscina += area;
       else areaBruta += area;
@@ -7189,14 +7194,28 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     const comuns = (() => {
       if (!(areaComuns > 0)) return null;
       const construida = Math.round(areaComuns * (1 + tcfg.acrescimoCirk) * 100) / 100;
-      const arqCheio = calcArqFaixas(construida);
-      const engCheio = Math.round(calcularEngenharia(construida).totalEng * 100) / 100;
+      const arqBruto = calcArqFaixas(construida);
+      const engBruto = Math.round(calcularEngenharia(construida).totalEng * 100) / 100;
+
+      // A quadra passa pelas faixas junto com o resto dos comuns, e depois
+      // paga metade: é piso, alambrado e pintura, não piscina. O abatimento
+      // sai da parcela dela na taxa média do bloco.
+      const areaQuadraC = Math.round(areaQuadra * (1 + tcfg.acrescimoCirk) * 100) / 100;
+      const fq = (typeof QUADRA_FATOR_PRECO !== "undefined") ? QUADRA_FATOR_PRECO : 0.5;
+      const abateQuadra = (bruto) => (construida > 0 && areaQuadraC > 0)
+        ? Math.round(areaQuadraC * (bruto / construida) * (1 - fq) * 100) / 100 : 0;
+      const arqQuadra = abateQuadra(arqBruto), engQuadra = abateQuadra(engBruto);
+      const arqCheio = Math.round((arqBruto - arqQuadra) * 100) / 100;
+      const engCheio = Math.round((engBruto - engQuadra) * 100) / 100;
+
       // Projeto à parte, mas do mesmo empreendimento: sai pela metade.
       const d = (typeof COMUNS_DESCONTO !== "undefined") ? COMUNS_DESCONTO : 0.5;
       const arq = Math.round(arqCheio * (1 - d) * 100) / 100;
       const eng = Math.round(engCheio * (1 - d) * 100) / 100;
       return { ambientes: ambientesComuns, areaUtil: Math.round(areaComuns * 100) / 100,
-        area: construida, arqCheio, engCheio, descontoPct: d, arq, eng,
+        area: construida, areaQuadra: areaQuadraC, fatorQuadra: fq,
+        abateQuadra: Math.round((arqQuadra + engQuadra) * 100) / 100,
+        arqCheio, engCheio, descontoPct: d, arq, eng,
         desconto: Math.round((arqCheio - arq + engCheio - eng) * 100) / 100 };
     })();
 

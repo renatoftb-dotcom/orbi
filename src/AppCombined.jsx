@@ -1296,7 +1296,42 @@ var CUSTOM_CONFIG_KEY_GALERIA = "obramanager-config-galeria-v1";
 // academia, não uma por apartamento. Contam uma vez, e a repetição de
 // unidades não os multiplica.
 var GRUPO_COMUNS_EMPREENDIMENTO = "Espaços comuns";
-var COMODOS_COMUNS_EMPREENDIMENTO = ["Área de lazer","Piscina","Lavabo Lazer","Sauna","Academia","Brinquedoteca","Louceiro"];
+var COMODOS_COMUNS_EMPREENDIMENTO = ["Área de lazer","Piscina","Quadra poliesportiva","Lavabo Lazer","Sauna","Academia","Brinquedoteca","Louceiro"];
+
+// As medidas do catálogo são de casa: academia de 6 × 5, área de lazer de
+// 8 × 6. Num prédio esses ambientes atendem dezenas de famílias, e dobrar
+// cada lado é o ajuste de escala. Dobrar os DOIS lados quadruplica a área —
+// é o que se espera de um salão de condomínio contra o de uma casa.
+var COMUNS_FATOR_DIMENSAO = 2;
+
+// A quadra já nasce no tamanho real, então fica de fora do dobro.
+// Referência: a área de jogo oficial do basquete é 28 × 15 m, e com as faixas
+// de escape em volta a área construída vai a 32 × 19 m. Abaixo disso entram
+// os tamanhos que condomínio costuma executar — futsal reduzido e recreativa.
+var COMODOS_QUADRA = {
+  "Quadra poliesportiva": { indice:0.03, medidas:{
+    Grande:[32,19], Médio:[28,15], Pequeno:[25,12.5], Compacta:[20,10] }},
+};
+
+// Quadra é piso, alambrado e pintura de demarcação. Não tem hidráulica de
+// recirculação, nem impermeabilização, nem casa de máquinas — desenhar um
+// metro dela custa metade do que custa um metro de piscina.
+var QUADRA_FATOR_PRECO = 0.50;
+
+function ehQuadraDoEmpreendimento(nome) {
+  return nome === "Quadra poliesportiva";
+}
+
+// Dobra os dois lados de um cômodo, preservando o resto da ficha.
+function comodoEmDobro(cfg) {
+  if (!cfg || !cfg.medidas) return cfg;
+  const medidas = {};
+  for (const t of Object.keys(cfg.medidas)) {
+    const m = cfg.medidas[t] || [0, 0];
+    medidas[t] = [m[0] * COMUNS_FATOR_DIMENSAO, m[1] * COMUNS_FATOR_DIMENSAO];
+  }
+  return Object.assign({}, cfg, { medidas });
+}
 function ehComumDoEmpreendimento(nome) {
   return COMODOS_COMUNS_EMPREENDIMENTO.indexOf(nome) >= 0;
 }
@@ -1321,7 +1356,12 @@ function getComodosConfig(tipo) {
     // academia e brinquedoteca são do condomínio, existem uma vez, não uma
     // por apartamento — por isso viram um quadrante próprio.
     const comodos = {};
-    for (const k of Object.keys(COMODOS)) if (k !== "Garagem") comodos[k] = COMODOS[k];
+    for (const k of Object.keys(COMODOS)) {
+      if (k === "Garagem") continue;
+      // Ambiente comum do condomínio entra em dobro; o da unidade, como está.
+      comodos[k] = ehComumDoEmpreendimento(k) ? comodoEmDobro(COMODOS[k]) : COMODOS[k];
+    }
+    for (const k of Object.keys(COMODOS_QUADRA)) comodos[k] = COMODOS_QUADRA[k];
     const grupos = {};
     for (const g of Object.keys(GRUPOS_COMODOS)) {
       if (g === "Lazer") continue;
@@ -43526,6 +43566,9 @@ function AreaDetalhe({ calculo, fmtNum }) {
                 {row(`+ ${pct(calculo.acrescimoCirk)} Circulação e paredes`,
                   `+${fmt2(Math.round((calculo.comuns.area - calculo.comuns.areaUtil)*100)/100)} m²`)}
                 {row("Área dos comuns", fmt2(calculo.comuns.area)+" m²", { bold:true, valColor:"#262421" })}
+                {calculo.comuns.areaQuadra > 0 && row(
+                  `− ${Math.round((1-calculo.comuns.fatorQuadra)*100)}% da quadra · ${fmt2(calculo.comuns.areaQuadra)} m²`,
+                  `− ${brl(calculo.comuns.abateQuadra)}`, { bold:false })}
                 {row("Projeto à parte, pelas faixas da área dele",
                   brl(Math.round((calculo.comuns.arqCheio + calculo.comuns.engCheio) * 100) / 100), { bold:false })}
                 {row(`− ${Math.round(calculo.comuns.descontoPct*100)}% por fazer parte do empreendimento`,
@@ -46992,7 +47035,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     // unidades), a garagem (idem) e os espaços comuns (contam UMA vez — o
     // prédio tem uma academia, não uma por apartamento).
     const ehEmpreend = tipoProjeto === "Empreendimento";
-    let areaBruta = 0, areaPiscina = 0, areaComuns = 0, ambientesComuns = 0;
+    let areaBruta = 0, areaPiscina = 0, areaComuns = 0, ambientesComuns = 0, areaQuadra = 0;
     Object.entries(qtds).forEach(([nome, qtd]) => {
       if (!qtd || qtd <= 0) return;
       const cfg = COMODOS_USE[nome];
@@ -47000,7 +47043,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       const [L, W_] = cfg.medidas[tamanho] || [0, 0];
       const area = L * W_ * qtd;
       if (ehEmpreend && typeof ehComumDoEmpreendimento === "function" && ehComumDoEmpreendimento(nome)) {
-        areaComuns += area; ambientesComuns += qtd; return;
+        areaComuns += area; ambientesComuns += qtd;
+        if (typeof ehQuadraDoEmpreendimento === "function" && ehQuadraDoEmpreendimento(nome)) areaQuadra += area;
+        return;
       }
       if (nome === "Piscina") areaPiscina += area;
       else areaBruta += area;
@@ -47072,14 +47117,28 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     const comuns = (() => {
       if (!(areaComuns > 0)) return null;
       const construida = Math.round(areaComuns * (1 + tcfg.acrescimoCirk) * 100) / 100;
-      const arqCheio = calcArqFaixas(construida);
-      const engCheio = Math.round(calcularEngenharia(construida).totalEng * 100) / 100;
+      const arqBruto = calcArqFaixas(construida);
+      const engBruto = Math.round(calcularEngenharia(construida).totalEng * 100) / 100;
+
+      // A quadra passa pelas faixas junto com o resto dos comuns, e depois
+      // paga metade: é piso, alambrado e pintura, não piscina. O abatimento
+      // sai da parcela dela na taxa média do bloco.
+      const areaQuadraC = Math.round(areaQuadra * (1 + tcfg.acrescimoCirk) * 100) / 100;
+      const fq = (typeof QUADRA_FATOR_PRECO !== "undefined") ? QUADRA_FATOR_PRECO : 0.5;
+      const abateQuadra = (bruto) => (construida > 0 && areaQuadraC > 0)
+        ? Math.round(areaQuadraC * (bruto / construida) * (1 - fq) * 100) / 100 : 0;
+      const arqQuadra = abateQuadra(arqBruto), engQuadra = abateQuadra(engBruto);
+      const arqCheio = Math.round((arqBruto - arqQuadra) * 100) / 100;
+      const engCheio = Math.round((engBruto - engQuadra) * 100) / 100;
+
       // Projeto à parte, mas do mesmo empreendimento: sai pela metade.
       const d = (typeof COMUNS_DESCONTO !== "undefined") ? COMUNS_DESCONTO : 0.5;
       const arq = Math.round(arqCheio * (1 - d) * 100) / 100;
       const eng = Math.round(engCheio * (1 - d) * 100) / 100;
       return { ambientes: ambientesComuns, areaUtil: Math.round(areaComuns * 100) / 100,
-        area: construida, arqCheio, engCheio, descontoPct: d, arq, eng,
+        area: construida, areaQuadra: areaQuadraC, fatorQuadra: fq,
+        abateQuadra: Math.round((arqQuadra + engQuadra) * 100) / 100,
+        arqCheio, engCheio, descontoPct: d, arq, eng,
         desconto: Math.round((arqCheio - arq + engCheio - eng) * 100) / 100 };
     })();
 
