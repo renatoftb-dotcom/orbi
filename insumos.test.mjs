@@ -27,7 +27,7 @@ const api = new Function(
   return { definirEtapaPadraoEmLote, sugerirEtapaDoInsumo, sugestoesDeEtapa,
            INSUMOS_SEED, INSUMO_GRUPOS, normalizarTexto, similaridadeTexto,
            resolverInsumo, proximoCodigoInsumo, grupoInferido, prefixoDoGrupo,
-           mesesEntre, fatorIncc, precoInsumo, atualizarPrecoReferencia,
+           mesesEntre, fatorIncc, precoInsumo, atualizarPrecoReferencia, comprasDoInsumo,
            migrarMateriaisParaInsumos, semearInsumos };`
 )();
 
@@ -414,6 +414,54 @@ t("grupo que serve a uma etapa só propõe essa etapa", () => {
   eq(sug("Areia média", "Areia e pedra"), "");
   eq(sug("Parafuso bucha 8mm", "Fixação"), "");
 });
+
+t("as compras do insumo vêm do escritório E das obras", () => {
+  const insumo = { codigo: "ELE-062", nome: "Elétrica - Fita Isolante" };
+  const data = {
+    lancamentos: [
+      { id: "l1", insumoCodigo: "ELE-062", quantidade: 10, valor: 49, dataPagamento: "2026-03-10", fornecedorId: "f9" },
+      { id: "l2", insumoCodigo: "OUTRO", quantidade: 5, valor: 20, data: "2026-03-11" },
+    ],
+    obras: [{ id: "ob1", nome: "Reforma Cobop", contasPagar: [
+      { id: "c1", insumoCodigo: "ELE-062", quantidade: 1, valor: 4.90, vencimento: "2026-09-28", prestadorId: "f1", favorecido: "OURIFER" },
+      { id: "c2", insumoCodigo: "ELE-062", quantidade: 2, valor: 12, pago: true, valorPago: 10, pagoEm: "2026-05-02" },
+      { id: "c3", insumoCodigo: "ACO-101", quantidade: 3, valor: 30 },
+    ] }],
+  };
+  const r = api.comprasDoInsumo(insumo, data);
+  eq(r.length, 3, "duas da obra e uma do escritório");
+  eq(r.map(c => c.id), ["l1", "c2", "c1"], "ordenadas pela data");
+  eq(r.map(c => c.origem), ["escritorio", "obra", "obra"]);
+});
+
+t("o valor da compra é o que de fato saiu", () => {
+  const insumo = { codigo: "X" };
+  const pago = api.comprasDoInsumo(insumo, { obras: [{ id:"o", contasPagar: [
+    { insumoCodigo: "X", quantidade: 2, valor: 12, pago: true, valorPago: 10, pagoEm: "2026-05-02" }] }] });
+  eq(pago[0].total, 10, "baixado vale o valorPago, já rateado com o desconto");
+  eq(pago[0].unitario, 5);
+  const aberto = api.comprasDoInsumo(insumo, { obras: [{ id:"o", contasPagar: [
+    { insumoCodigo: "X", quantidade: 2, valor: 12, vencimento: "2026-05-02" }] }] });
+  eq(aberto[0].total, 12, "em aberto vale o valor da conta");
+  eq(aberto[0].pago, false);
+});
+
+t("conta sem quantidade, sem valor ou sem data não vira compra", () => {
+  const insumo = { codigo: "X" };
+  const r = api.comprasDoInsumo(insumo, { obras: [{ id:"o", contasPagar: [
+    { insumoCodigo: "X", quantidade: 0, valor: 12, vencimento: "2026-01-01" },
+    { insumoCodigo: "X", quantidade: 2, valor: 0, vencimento: "2026-01-01" },
+    { insumoCodigo: "X", quantidade: 2, valor: 12 },
+  ] }] });
+  eq(r.length, 0);
+});
+
+t("insumo sem código não puxa compra nenhuma", () => {
+  eq(api.comprasDoInsumo({ nome: "sem codigo" }, { lancamentos: [{ insumoCodigo: "", quantidade: 1, valor: 1, data: "2026-01-01" }] }).length, 0);
+  eq(api.comprasDoInsumo(null, {}).length, 0);
+  eq(api.comprasDoInsumo({ codigo: "X" }, null).length, 0);
+});
+
 
 console.log("\n" + ok + " testes passaram" + (falhas.length ? ", " + falhas.length + " falharam" : ""));
 if (falhas.length) {

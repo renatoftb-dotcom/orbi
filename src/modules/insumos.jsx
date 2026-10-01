@@ -291,6 +291,50 @@ function precoInsumo(insumo, ate) {
   return { preco: preco, confianca: confianca, meses: meses, corrigido: corrigido, fator: fator };
 }
 
+// ── As compras de um insumo ────────────────────────────
+// Elas vivem em dois lugares. Os lançamentos do escritório — o que a Padovan
+// compra para si — e as contas a pagar das obras, que é onde o material é de
+// fato comprado. A ficha do insumo lia só o primeiro: você lançava a nota da
+// loja, o código do insumo era gravado certinho em cada item, e a ficha
+// continuava dizendo que aquele material nunca tinha sido comprado.
+//
+// O valor usado é o que de fato saiu: com o pedido baixado vale o valorPago,
+// que já vem rateado com o desconto da loja; em aberto, vale o valor da
+// conta. A data é a da baixa quando existe, e o vencimento enquanto não há.
+function comprasDoInsumo(insumo, data) {
+  if (!insumo || !insumo.codigo) return [];
+  var cod = insumo.codigo;
+  var out = [];
+  var juntar = function (c) {
+    var qtd = Number(c.qtd) || 0;
+    var total = Number(c.total) || 0;
+    if (!(qtd > 0) || !(total > 0) || !c.data) return;
+    c.qtd = qtd; c.total = total;
+    c.unitario = Math.round((total / qtd) * 10000) / 10000;
+    out.push(c);
+  };
+  ((data && data.lancamentos) || []).forEach(function (l) {
+    if (!l || l.insumoCodigo !== cod) return;
+    juntar({ origem: "escritorio", id: l.id || "",
+      data: l.dataPagamento || l.data || "",
+      qtd: Number(l.quantidade) || 0,
+      total: Number(l.total != null ? l.total : l.valor) || 0,
+      fornecedorId: l.fornecedorId || "", pago: true });
+  });
+  ((data && data.obras) || []).forEach(function (o) {
+    ((o && o.contasPagar) || []).forEach(function (c) {
+      if (!c || c.insumoCodigo !== cod) return;
+      juntar({ origem: "obra", id: c.id || "", obraId: o.id || "", obraNome: o.nome || "",
+        data: c.pagoEm || c.vencimento || "",
+        qtd: Number(c.quantidade) || 0,
+        total: Number(c.pago ? (c.valorPago || c.valor) : c.valor) || 0,
+        fornecedorId: c.prestadorId || "", favorecido: c.favorecido || "",
+        pago: !!c.pago });
+    });
+  });
+  return out.sort(function (a, b) { return String(a.data).localeCompare(String(b.data)); });
+}
+
 /**
  * Atualiza o preço de referência a partir de um lançamento de compra.
  * Pura: recebe insumo + lançamento, devolve insumo novo (ou o mesmo).
@@ -794,17 +838,8 @@ function InsumoDetalhe({ insumo, data, onEditar, onVoltar, onAceitarPendente, on
   var p = precoInsumo(insumo);
   var conf = CONF_INSUMO[p.confianca] || CONF_INSUMO.sem_preco;
 
-  var compras = (data.lancamentos || [])
-    .filter(l => l.insumoCodigo === insumo.codigo)
-    .map(l => ({
-      data: l.dataPagamento || l.data,
-      qtd: Number(l.quantidade) || 0,
-      total: Number(l.total != null ? l.total : l.valor) || 0,
-      fornecedorId: l.fornecedorId,
-    }))
-    .filter(c => c.qtd > 0 && c.total > 0 && c.data)
-    .map(c => Object.assign(c, { unitario: c.total / c.qtd }))
-    .sort((a, b) => String(a.data).localeCompare(String(b.data)));
+  // Escritório e obras, na mesma lista.
+  var compras = comprasDoInsumo(insumo, data);
 
   var usoEstimativas = (data.obras || []).filter(o =>
     o.orcamento && (o.orcamento.itens || []).some(i => i.insumoCodigo === insumo.codigo)
@@ -894,6 +929,7 @@ function InsumoDetalhe({ insumo, data, onEditar, onVoltar, onAceitarPendente, on
                 <thead>
                   <tr style={{ textAlign: "left", color: "#6b7280", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 }}>
                     <th style={{ padding: "6px 8px" }}>Data</th>
+                    <th style={{ padding: "6px 8px" }}>Origem</th>
                     <th style={{ padding: "6px 8px", textAlign: "right" }}>Qtd</th>
                     <th style={{ padding: "6px 8px", textAlign: "right" }}>Total</th>
                     <th style={{ padding: "6px 8px", textAlign: "right" }}>Unitário</th>
@@ -902,7 +938,21 @@ function InsumoDetalhe({ insumo, data, onEditar, onVoltar, onAceitarPendente, on
                 <tbody>
                   {compras.slice().reverse().map((c, i) => (
                     <tr key={i} style={{ borderTop: "1px solid #f3f4f6" }}>
-                      <td style={{ padding: "7px 8px" }}>{fmtDataIns(c.data)}</td>
+                      <td style={{ padding: "7px 8px" }}>
+                        {fmtDataIns(c.data)}
+                        {c.origem === "obra" && !c.pago && (
+                          <span style={{ fontSize: 10, color: "#b45309", marginLeft: 5 }}>a pagar</span>
+                        )}
+                      </td>
+                      {/* De onde veio a compra: a obra que comprou, ou o
+                          escritório. Sem isto a lista mistura as duas e ninguém
+                          sabe a qual nota um preço estranho pertence. */}
+                      <td style={{ padding: "7px 8px", color: "#4b5563", maxWidth: 180,
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        title={c.origem === "obra" ? (c.obraNome || "Obra") : "Escritório"}>
+                        {c.origem === "obra" ? (c.obraNome || "Obra") : "Escritório"}
+                        {c.favorecido ? <span style={{ color: "#9ca3af" }}> · {c.favorecido}</span> : null}
+                      </td>
                       <td style={{ padding: "7px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{qtdIns(c.qtd)}</td>
                       <td style={{ padding: "7px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtBRLIns(c.total)}</td>
                       <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtBRLIns(c.unitario)}</td>
