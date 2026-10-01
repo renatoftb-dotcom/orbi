@@ -3738,8 +3738,9 @@ function Obras({ data, save }) {
   // A Entrada aberta daqui, antes de escolher a obra: a nota chega na mão e
   // entra; de qual obra ela é se diz depois de ler. Quando a pessoa segue,
   // guardamos o que ela montou e abrimos a obra já com isso na mão.
-  const [entradaAberta, setEntradaAberta] = useState(false);
   const [entradaPendente, setEntradaPendente] = useState(null);
+  const [busca, setBusca] = useState("");
+  const [buscaFocada, setBuscaFocada] = useState(false);
   const perm = typeof getPermissoes === "function" ? getPermissoes() : { podeGerenciarObra: true };
 
   function nomeCliente(clienteId) {
@@ -3786,9 +3787,14 @@ function Obras({ data, save }) {
   }
 
   const obrasFiltradas = obras.filter(o => {
-    if (filtro === "andamento") return o.status !== "concluida";
-    if (filtro === "concluidas") return o.status === "concluida";
-    return true;
+    if (filtro === "andamento" && o.status === "concluida") return false;
+    if (filtro === "concluidas" && o.status !== "concluida") return false;
+    const termo = semAcento(busca);
+    if (!termo) return true;
+    const alvo = semAcento([o.nome, o.referencia, nomeCliente(o.clienteId), o.cidade].filter(Boolean).join(" "));
+    // Cada palavra digitada tem que aparecer: "cobop reforma" acha a obra
+    // mesmo com o cliente e o nome em pontas opostas da linha.
+    return termo.split(/\s+/).every(w => alvo.indexOf(w) >= 0);
   });
 
   const totais = {
@@ -3814,9 +3820,17 @@ function Obras({ data, save }) {
   function seguirDaEntradaDeObras(carga) {
     const alvo = (carga && carga.obraId) || "";
     if (!alvo) return;
-    setEntradaAberta(false);
     setEntradaPendente(carga);
     setObraAbertaId(alvo);
+  }
+
+  // A busca compara sem acento e sem caixa, pelo nome da obra, pelo cliente e
+  // pela referência — é por qualquer um dos três que se procura uma obra.
+  // Declarada como function de propósito: `obrasFiltradas` usa isto algumas
+  // linhas ACIMA, e um const aí morreria na zona morta temporal — tela branca.
+  function semAcento(s) {
+    return String(s == null ? "" : s)
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
   }
 
   // Obra aberta: mesma tela da obra que existe dentro do cliente
@@ -3841,27 +3855,40 @@ function Obras({ data, save }) {
 
   return (
     <PageContainer>
-      <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:4 }}>
-        <div>
-          <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Obras</h2>
-          <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>Gestão de obras em execução</div>
-        </div>
-        {perm.podeGerenciarObra && obrasVigentes.length > 0 && typeof EntradaDaObra === "function" && (
-          <button onClick={() => setEntradaAberta(true)}
-            style={{ border:"1.5px solid #0474f4", background:"#fff", color:"#0474f4", borderRadius:9,
-              padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-            Entrada
-          </button>
+      <div style={{ marginBottom:16 }}>
+        <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Obras</h2>
+        <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>Gestão de obras em execução</div>
+      </div>
+
+      {/* A Entrada não é mais um botão que abre uma telinha: ela É o alto da
+          página. Quem chega aqui chega com uma nota na mão — o campo já está
+          aberto esperando, e a lista de obras fica embaixo. */}
+      {perm.podeGerenciarObra && obrasVigentes.length > 0 && typeof EntradaDaObra === "function" && (
+        <EntradaDaObra data={data} save={save} obras={obrasVigentes} isMobile={isMobile}
+          embutido aoSeguir={seguirDaEntradaDeObras} />
+      )}
+
+      {/* Busca dinâmica: filtra enquanto se digita, sem botão nenhum. */}
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12,
+        border: "1.5px solid " + (buscaFocada ? "rgba(4,116,244,0.55)" : "rgba(38,36,33,0.12)"),
+        borderRadius: 999, background:"#fff", padding: isMobile ? "8px 14px" : "9px 16px",
+        transition: "border-color .15s, box-shadow .15s",
+        boxShadow: buscaFocada ? "0 0 0 4px rgba(4,116,244,0.10)" : "none" }}>
+        <span aria-hidden="true" style={{ color: buscaFocada ? "#0474f4" : "#9ca3af", fontSize:14, lineHeight:1 }}>⌕</span>
+        <input value={busca} onChange={(e) => setBusca(e.target.value)}
+          onFocus={() => setBuscaFocada(true)} onBlur={() => setBuscaFocada(false)}
+          placeholder="Procurar obra pelo nome ou pelo cliente…"
+          style={{ flex:1, minWidth:0, border:"none", outline:"none", background:"transparent",
+            fontFamily:"inherit", fontSize: isMobile ? 16 : 14, color:"#111827" }} />
+        {busca && (
+          <button type="button" onClick={() => setBusca("")} title="Limpar"
+            style={{ border:"none", background:"none", color:"#9ca3af", cursor:"pointer",
+              fontFamily:"inherit", fontSize:16, lineHeight:1, padding:0 }}>×</button>
         )}
       </div>
 
-      {entradaAberta && (
-        <EntradaDaObra data={data} save={save} obras={obrasVigentes} isMobile={isMobile}
-          aoFechar={() => setEntradaAberta(false)} aoSeguir={seguirDaEntradaDeObras} />
-      )}
-
       {/* Filtros */}
-      <div style={{ display:"flex", gap:8, marginTop:20, marginBottom:20 }}>
+      <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
         <button onClick={() => setFiltro("andamento")} style={pillStyle(filtro==="andamento")}>
           Em andamento {totais.andamento > 0 && <span style={{ opacity:0.7, marginLeft:4 }}>{totais.andamento}</span>}
         </button>
@@ -3880,13 +3907,19 @@ function Obras({ data, save }) {
           border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 14, background: "#fafafa",
         }}>
           <div style={{ color:"#4b5563", fontSize:13 }}>
-            {filtro === "andamento" && "Nenhuma obra em andamento."}
-            {filtro === "concluidas" && "Nenhuma obra concluída ainda."}
-            {filtro === "todas" && "Nenhuma obra cadastrada."}
+            {busca ? `Nenhuma obra para “${busca}”.` : (
+              <>
+                {filtro === "andamento" && "Nenhuma obra em andamento."}
+                {filtro === "concluidas" && "Nenhuma obra concluída ainda."}
+                {filtro === "todas" && "Nenhuma obra cadastrada."}
+              </>
+            )}
           </div>
-          <div style={{ color:"#4b5563", fontSize:12, marginTop:6, maxWidth:440, margin:"6px auto 0" }}>
-            Obras aparecem aqui automaticamente quando um projeto é finalizado na etapa <strong style={{ color:"#4b5563" }}>Engenharia</strong> do Kanban de Projetos.
-          </div>
+          {!busca && (
+            <div style={{ color:"#4b5563", fontSize:12, marginTop:6, maxWidth:440, margin:"6px auto 0" }}>
+              Obras aparecem aqui automaticamente quando um projeto é finalizado na etapa <strong style={{ color:"#4b5563" }}>Engenharia</strong> do Kanban de Projetos.
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:8, maxWidth:960 }}>
@@ -28517,7 +28550,7 @@ function useIaDisponivel() {
 // A caixa em si (PainelEntrada) não conhece `data` nem `save`: recebe listas.
 // Este invólucro faz a ligação, e é ele que as duas portas usam — a de dentro
 // da obra e a da lista de Obras. Uma fiação só.
-function EntradaDaObra({ data, save, obras, isMobile, dinheiro, aoFechar, aoSeguir }) {
+function EntradaDaObra({ data, save, obras, isMobile, dinheiro, embutido, aoFechar, aoSeguir }) {
   const insumos = insumosDoCatalogo(data);
   const prestadores = ((data || {}).fornecedores || []).filter((f) => f && f.ativo !== false);
   const iaDisponivel = useIaDisponivel();
@@ -28525,7 +28558,7 @@ function EntradaDaObra({ data, save, obras, isMobile, dinheiro, aoFechar, aoSegu
   return (
     <PainelEntrada
       insumos={insumos} prestadores={prestadores} unidades={unidadesDoCatalogo(insumos)}
-      iaDisponivel={!!iaDisponivel} isMobile={isMobile} dinheiro={moeda} obras={obras}
+      iaDisponivel={!!iaDisponivel} isMobile={isMobile} dinheiro={moeda} obras={obras} embutido={embutido}
       aoCadastrarInsumo={(campos) => cadastrarInsumoNoCatalogo(data, save, campos)}
       aoAprender={(pares) => aprenderApelidosNoCatalogo(data, save, pares)}
       aoFechar={aoFechar} aoSeguir={aoSeguir} />
@@ -28544,7 +28577,15 @@ function vozDoNavegador() {
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 }
 
-function BotaoDitar({ aoDitar, isMobile }) {
+// Os botões redondos do composer: discretos, do tamanho do dedo, sem texto.
+const ENT_ICONE = {
+  width: 34, height: 34, borderRadius: 999, border: "1px solid rgba(38,36,33,0.12)",
+  background: "#fff", color: "#4b5563", cursor: "pointer", fontFamily: "inherit",
+  display: "inline-flex", alignItems: "center", justifyContent: "center",
+  padding: 0, flexShrink: 0, transition: "background .15s, border-color .15s",
+};
+
+function BotaoDitar({ aoDitar, isMobile, compacto }) {
   const E = COT_ESTILO;
   const [ouvindo, setOuvindo] = useState(false);
   const [erro, setErro] = useState("");
@@ -28594,6 +28635,28 @@ function BotaoDitar({ aoDitar, isMobile }) {
     ref.current = r; setOuvindo(true);
   }
 
+  if (compacto) {
+    return (
+      <>
+        <button type="button" onClick={comecar}
+          title={ouvindo ? "Parar de ouvir" : "Ditar a lista em voz alta"}
+          style={{ ...ENT_ICONE,
+            borderColor: ouvindo ? "#dc2626" : "rgba(38,36,33,0.12)",
+            color: ouvindo ? "#dc2626" : "#4b5563",
+            background: ouvindo ? "#fff6f6" : "#fff" }}>
+          <span aria-hidden="true" style={{ fontSize: 14, lineHeight: 1 }}>{ouvindo ? "■" : "🎤"}</span>
+        </button>
+        {ouvindo && (
+          <span style={{ fontSize: 11.5, color: "#dc2626", minWidth: 0,
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {parcial ? "“" + parcial + "”" : "ouvindo…"}
+          </span>
+        )}
+        {erro && !ouvindo && <span style={{ fontSize: 11.5, color: "#b45309" }}>{erro}</span>}
+      </>
+    );
+  }
+
   return (
     <>
       <button type="button" onClick={comecar}
@@ -28616,7 +28679,7 @@ function BotaoDitar({ aoDitar, isMobile }) {
 }
 
 function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile, dinheiro,
-  obras, aoCadastrarInsumo, aoAprender, aoFechar, aoSeguir }) {
+  obras, embutido, aoCadastrarInsumo, aoAprender, aoFechar, aoSeguir }) {
   const E = COT_ESTILO;
   const P = cotPainel(isMobile, 940);
   const [texto, setTexto] = useState("");
@@ -28632,6 +28695,18 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // de qual obra ela é — entra tudo, e aí se diz.
   const [obraId, setObraId] = useState("");
   const [sobre, setSobre] = useState(false);
+  const [focado, setFocado] = useState(false);
+  const refTexto = useRef(null);
+  // A caixa cresce com o que se escreve, até um teto: lista de trinta itens
+  // não pode empurrar o botão de ler para fora da tela.
+  useEffect(() => {
+    const el = refTexto.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const teto = isMobile ? 260 : 340;
+    el.style.height = Math.min(el.scrollHeight, teto) + "px";
+    el.style.overflowY = el.scrollHeight > teto ? "auto" : "hidden";
+  }, [texto, isMobile, itens]);
   const [conferindo, setConferindo] = useState(false);
   const [progressoIA, setProgressoIA] = useState(null);
   const [avisoIA, setAvisoIA] = useState("");
@@ -28651,6 +28726,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     sugestao: null,
   });
   const resumo = itens ? resumoDaEntrada(itens) : null;
+  const podeLer = !lendo && (!!String(texto).trim() || !!arquivo);
   const pedeObra = entradaPedeObra(obras);
   const prova = entradaPronta(destino, lojaId, itens || [], obras, obraId);
 
@@ -28757,25 +28833,48 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
 
   const [papel, setPapel] = useState(null);
 
+  function limpar() {
+    setTexto(""); setArquivo(null); setItens(null); setPapel(null);
+    setDestino(""); setLojaId(""); setObraId(""); setAviso("");
+  }
+
   function seguir() {
     if (!prova.ok) { setAviso(prova.motivo); return; }
     aoSeguir({ destino, lojaId, obraId, itens, papel });
+    // Embutida, a caixa é a própria tela: ela fica, e tem que ficar limpa
+    // para a próxima nota. Em modal não se limpa — o painel vai fechar.
+    if (embutido) limpar();
   }
 
   const cartao = { borderWidth: 1, borderStyle: "solid", borderColor: "rgba(38,36,33,0.14)",
     borderRadius: 12, padding: 12, marginBottom: 12, background: "#fff" };
 
+  // Duas roupas para o mesmo conteúdo: modal, quando a Entrada é chamada de
+  // dentro de uma tela que já tem assunto; e card na página, quando ela É o
+  // assunto — o campo grande no alto de Obras, sempre aberto, esperando a
+  // nota. Trocar a roupa não pode duplicar o miolo: é o mesmo componente.
+  const fundo = embutido ? { } : P.fundo;
+  const moldura = embutido
+    ? { background: "#fff", border: "1px solid rgba(38,36,33,0.10)", borderRadius: 18,
+        padding: isMobile ? 14 : 18, marginBottom: 18, display: "flex", flexDirection: "column",
+        boxShadow: "0 1px 3px rgba(17,24,39,0.05)" }
+    : P.cartao;
+  const rolagem = embutido ? { } : P.rolagem;
+
   return (
-    <div style={P.fundo} onClick={aoFechar}>
-      <div style={P.cartao} onClick={(e) => e.stopPropagation()}>
+    <div style={fundo} onClick={embutido ? undefined : aoFechar}>
+      <div style={moldura} onClick={embutido ? undefined : ((e) => e.stopPropagation())}>
         <div style={{ fontSize: 14.5, fontWeight: 700, color: "#111827", marginBottom: 2 }}>Entrada</div>
         <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 12 }}>
           Nota, pedido ou lista para cotar — entra tudo por aqui. Primeiro a lista; depois você diz o que é.
         </div>
 
-        <div style={P.rolagem}>
+        <div style={rolagem}>
           {!itens ? (
             <>
+              {/* O composer: uma caixa só, que cresce com o texto, aceita
+                  arquivo arrastado ou colado, e tem a ação à direita. O campo
+                  é a tela — não há formulário em volta dele para preencher. */}
               <div
                 onDragOver={(e) => { e.preventDefault(); setSobre(true); }}
                 onDragLeave={() => setSobre(false)}
@@ -28783,37 +28882,68 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                   porArquivoDaEntrada((e.dataTransfer.files || [])[0]); }}
                 onPaste={(e) => { const f = typeof arquivoColado === "function" ? arquivoColado(e.clipboardData) : null;
                   if (f) { e.preventDefault(); porArquivoDaEntrada(f); } }}
-                style={{ borderWidth: 1.5, borderStyle: "dashed",
-                  borderColor: sobre ? "#0474f4" : "rgba(38,36,33,0.22)", borderRadius: 12,
-                  padding: 12, marginBottom: 12, background: sobre ? "#eef5ff" : "#fafafa" }}>
-                <textarea style={{ ...E.input, minHeight: 150, resize: "vertical", border: "none",
-                  background: "transparent", fontSize: 13 }}
+                style={{ border: "1.5px solid " + (sobre ? "#0474f4" : focado ? "rgba(4,116,244,0.55)" : "rgba(38,36,33,0.14)"),
+                  borderRadius: 20, background: sobre ? "#f3f8ff" : "#fff", padding: isMobile ? 10 : 12,
+                  transition: "border-color .15s, box-shadow .15s, background .15s",
+                  boxShadow: (sobre || focado) ? "0 0 0 4px rgba(4,116,244,0.10)" : "0 1px 2px rgba(17,24,39,0.04)" }}>
+
+                {arquivo && (
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginBottom: 8,
+                    background: "#eef5ff", border: "1px solid rgba(4,116,244,0.25)", borderRadius: 10,
+                    padding: "5px 10px", fontSize: 12, color: "#111827", maxWidth: "100%" }}>
+                    <span aria-hidden="true" style={{ color: "#0474f4", fontWeight: 700, fontSize: 10.5, letterSpacing: 0.4 }}>
+                      {ehPdf(arquivo) ? "PDF" : "IMG"}
+                    </span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{arquivo.name}</span>
+                    <button type="button" onClick={() => setArquivo(null)} title="Tirar o arquivo"
+                      style={{ background: "none", border: "none", color: "#6b7280", cursor: "pointer",
+                        fontFamily: "inherit", fontSize: 15, lineHeight: 1, padding: 0 }}>×</button>
+                  </div>
+                )}
+
+                <textarea ref={refTexto} rows={1}
+                  onFocus={() => setFocado(true)} onBlur={() => setFocado(false)}
+                  onKeyDown={(e) => {
+                    // Enter quebra linha — a lista tem várias. Quem manda ler é
+                    // Ctrl/Cmd+Enter, como em toda caixa de conversa.
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); ler(); }
+                  }}
+                  style={{ width: "100%", border: "none", outline: "none", background: "transparent",
+                    resize: "none", overflow: "hidden", fontFamily: "inherit", fontSize: isMobile ? 16 : 14.5,
+                    lineHeight: 1.5, color: "#111827", padding: "6px 6px 2px",
+                    minHeight: embutido ? 84 : 120, boxSizing: "border-box" }}
                   value={texto} onChange={(e) => setTexto(e.target.value)}
-                  placeholder={"Cole aqui a lista, o pedido ou o texto da nota — arraste o arquivo (PDF, print, foto) para dentro desta caixa, ou aperte Ditar e fale a lista."} />
-                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
-                  <label style={{ ...E.btnSec, fontSize: 12, display: "inline-block" }}>
-                    Escolher arquivo
+                  placeholder={"Cole a lista, o pedido ou a nota… arraste um PDF ou print para dentro, ou fale."} />
+
+                <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}>
+                  <label title="Anexar PDF, print ou foto" style={ENT_ICONE}>
+                    <span aria-hidden="true" style={{ fontSize: 14, lineHeight: 1 }}>📎</span>
                     <input type="file" accept="application/pdf,image/*" style={{ display: "none" }}
                       onChange={(e) => porArquivoDaEntrada((e.target.files || [])[0])} />
                   </label>
-                  <BotaoDitar isMobile={isMobile}
+                  <BotaoDitar isMobile={isMobile} compacto
                     aoDitar={(trecho) => setTexto((t) => textoComDitado(t, trecho))} />
-                  {arquivo && (
-                    <span style={{ fontSize: 11.5, color: "#111827" }}>
-                      {lendo ? "Lendo " : ""}{arquivo.name}
-                      <button type="button" onClick={() => setArquivo(null)}
-                        style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer",
-                          fontFamily: "inherit", fontSize: 11.5, textDecoration: "underline", marginLeft: 6 }}>tirar</button>
-                    </span>
-                  )}
-                  {!iaDisponivel && (
-                    <span style={{ fontSize: 11, color: "#6b7280" }}>
-                      sem a IA eu leio o PDF e o texto colado — foto e print precisam dela
-                    </span>
-                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {!iaDisponivel && (
+                      <span style={{ fontSize: 11, color: "#9ca3af" }}>
+                        sem a IA: PDF e texto colado — foto e print precisam dela
+                      </span>
+                    )}
+                  </div>
+                  <button type="button" onClick={() => ler()} title="Ler (Ctrl+Enter)"
+                    disabled={!podeLer}
+                    style={{ width: 34, height: 34, borderRadius: 999, border: "none",
+                      cursor: podeLer ? "pointer" : "default",
+                      background: podeLer ? "#0474f4" : "rgba(38,36,33,0.10)",
+                      color: podeLer ? "#fff" : "#9ca3af",
+                      fontFamily: "inherit", fontSize: 16, lineHeight: 1, display: "flex",
+                      alignItems: "center", justifyContent: "center", transition: "background .15s",
+                      flexShrink: 0 }}>
+                    <span aria-hidden="true">{lendo ? "···" : "↑"}</span>
+                  </button>
                 </div>
               </div>
-              {lendo && <div style={{ marginBottom: 10 }}><BarraLeituraIA progresso={progresso} /></div>}
+              {lendo && <div style={{ marginTop: 10 }}><BarraLeituraIA progresso={progresso} /></div>}
             </>
           ) : (
             <>
@@ -28964,18 +29094,17 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
         </div>
 
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14, flexWrap: "wrap" }}>
-          <button type="button" style={E.btnSec} onClick={aoFechar}>Cancelar</button>
+          {!embutido && <button type="button" style={E.btnSec} onClick={aoFechar}>Fechar</button>}
           {itens && (
             <button type="button" style={E.btnSec}
               onClick={() => { setItens(null); setDestino(""); setObraId(""); setAviso(""); }}>Ler de novo</button>
           )}
-          {!itens ? (
-            <button type="button" style={{ ...E.btn, opacity: (lendo || !String(texto).trim()) ? 0.45 : 1,
-              cursor: (lendo || !String(texto).trim()) ? "not-allowed" : "pointer" }}
-              disabled={lendo || !String(texto).trim()} onClick={() => ler()}>
-              {lendo ? "Lendo…" : "Ler o texto"}
-            </button>
-          ) : (
+          {embutido && !itens && String(texto).trim() !== "" && (
+            <button type="button" style={E.btnSec} onClick={limpar}>Limpar</button>
+          )}
+          {/* Ler é a seta azul do composer, uma ação só e no lugar onde a mão
+              já está. O rodapé só aparece quando há o que seguir. */}
+          {itens && (
             <button type="button" onClick={seguir}
               style={{ ...E.btn, opacity: prova.ok ? 1 : 0.45, cursor: prova.ok ? "pointer" : "not-allowed" }}
               disabled={!prova.ok}>Seguir</button>

@@ -444,8 +444,9 @@ function Obras({ data, save }) {
   // A Entrada aberta daqui, antes de escolher a obra: a nota chega na mão e
   // entra; de qual obra ela é se diz depois de ler. Quando a pessoa segue,
   // guardamos o que ela montou e abrimos a obra já com isso na mão.
-  const [entradaAberta, setEntradaAberta] = useState(false);
   const [entradaPendente, setEntradaPendente] = useState(null);
+  const [busca, setBusca] = useState("");
+  const [buscaFocada, setBuscaFocada] = useState(false);
   const perm = typeof getPermissoes === "function" ? getPermissoes() : { podeGerenciarObra: true };
 
   function nomeCliente(clienteId) {
@@ -492,9 +493,14 @@ function Obras({ data, save }) {
   }
 
   const obrasFiltradas = obras.filter(o => {
-    if (filtro === "andamento") return o.status !== "concluida";
-    if (filtro === "concluidas") return o.status === "concluida";
-    return true;
+    if (filtro === "andamento" && o.status === "concluida") return false;
+    if (filtro === "concluidas" && o.status !== "concluida") return false;
+    const termo = semAcento(busca);
+    if (!termo) return true;
+    const alvo = semAcento([o.nome, o.referencia, nomeCliente(o.clienteId), o.cidade].filter(Boolean).join(" "));
+    // Cada palavra digitada tem que aparecer: "cobop reforma" acha a obra
+    // mesmo com o cliente e o nome em pontas opostas da linha.
+    return termo.split(/\s+/).every(w => alvo.indexOf(w) >= 0);
   });
 
   const totais = {
@@ -520,9 +526,17 @@ function Obras({ data, save }) {
   function seguirDaEntradaDeObras(carga) {
     const alvo = (carga && carga.obraId) || "";
     if (!alvo) return;
-    setEntradaAberta(false);
     setEntradaPendente(carga);
     setObraAbertaId(alvo);
+  }
+
+  // A busca compara sem acento e sem caixa, pelo nome da obra, pelo cliente e
+  // pela referência — é por qualquer um dos três que se procura uma obra.
+  // Declarada como function de propósito: `obrasFiltradas` usa isto algumas
+  // linhas ACIMA, e um const aí morreria na zona morta temporal — tela branca.
+  function semAcento(s) {
+    return String(s == null ? "" : s)
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
   }
 
   // Obra aberta: mesma tela da obra que existe dentro do cliente
@@ -547,27 +561,40 @@ function Obras({ data, save }) {
 
   return (
     <PageContainer>
-      <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:4 }}>
-        <div>
-          <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Obras</h2>
-          <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>Gestão de obras em execução</div>
-        </div>
-        {perm.podeGerenciarObra && obrasVigentes.length > 0 && typeof EntradaDaObra === "function" && (
-          <button onClick={() => setEntradaAberta(true)}
-            style={{ border:"1.5px solid #0474f4", background:"#fff", color:"#0474f4", borderRadius:9,
-              padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-            Entrada
-          </button>
+      <div style={{ marginBottom:16 }}>
+        <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Obras</h2>
+        <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>Gestão de obras em execução</div>
+      </div>
+
+      {/* A Entrada não é mais um botão que abre uma telinha: ela É o alto da
+          página. Quem chega aqui chega com uma nota na mão — o campo já está
+          aberto esperando, e a lista de obras fica embaixo. */}
+      {perm.podeGerenciarObra && obrasVigentes.length > 0 && typeof EntradaDaObra === "function" && (
+        <EntradaDaObra data={data} save={save} obras={obrasVigentes} isMobile={isMobile}
+          embutido aoSeguir={seguirDaEntradaDeObras} />
+      )}
+
+      {/* Busca dinâmica: filtra enquanto se digita, sem botão nenhum. */}
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12,
+        border: "1.5px solid " + (buscaFocada ? "rgba(4,116,244,0.55)" : "rgba(38,36,33,0.12)"),
+        borderRadius: 999, background:"#fff", padding: isMobile ? "8px 14px" : "9px 16px",
+        transition: "border-color .15s, box-shadow .15s",
+        boxShadow: buscaFocada ? "0 0 0 4px rgba(4,116,244,0.10)" : "none" }}>
+        <span aria-hidden="true" style={{ color: buscaFocada ? "#0474f4" : "#9ca3af", fontSize:14, lineHeight:1 }}>⌕</span>
+        <input value={busca} onChange={(e) => setBusca(e.target.value)}
+          onFocus={() => setBuscaFocada(true)} onBlur={() => setBuscaFocada(false)}
+          placeholder="Procurar obra pelo nome ou pelo cliente…"
+          style={{ flex:1, minWidth:0, border:"none", outline:"none", background:"transparent",
+            fontFamily:"inherit", fontSize: isMobile ? 16 : 14, color:"#111827" }} />
+        {busca && (
+          <button type="button" onClick={() => setBusca("")} title="Limpar"
+            style={{ border:"none", background:"none", color:"#9ca3af", cursor:"pointer",
+              fontFamily:"inherit", fontSize:16, lineHeight:1, padding:0 }}>×</button>
         )}
       </div>
 
-      {entradaAberta && (
-        <EntradaDaObra data={data} save={save} obras={obrasVigentes} isMobile={isMobile}
-          aoFechar={() => setEntradaAberta(false)} aoSeguir={seguirDaEntradaDeObras} />
-      )}
-
       {/* Filtros */}
-      <div style={{ display:"flex", gap:8, marginTop:20, marginBottom:20 }}>
+      <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
         <button onClick={() => setFiltro("andamento")} style={pillStyle(filtro==="andamento")}>
           Em andamento {totais.andamento > 0 && <span style={{ opacity:0.7, marginLeft:4 }}>{totais.andamento}</span>}
         </button>
@@ -586,13 +613,19 @@ function Obras({ data, save }) {
           border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 14, background: "#fafafa",
         }}>
           <div style={{ color:"#4b5563", fontSize:13 }}>
-            {filtro === "andamento" && "Nenhuma obra em andamento."}
-            {filtro === "concluidas" && "Nenhuma obra concluída ainda."}
-            {filtro === "todas" && "Nenhuma obra cadastrada."}
+            {busca ? `Nenhuma obra para “${busca}”.` : (
+              <>
+                {filtro === "andamento" && "Nenhuma obra em andamento."}
+                {filtro === "concluidas" && "Nenhuma obra concluída ainda."}
+                {filtro === "todas" && "Nenhuma obra cadastrada."}
+              </>
+            )}
           </div>
-          <div style={{ color:"#4b5563", fontSize:12, marginTop:6, maxWidth:440, margin:"6px auto 0" }}>
-            Obras aparecem aqui automaticamente quando um projeto é finalizado na etapa <strong style={{ color:"#4b5563" }}>Engenharia</strong> do Kanban de Projetos.
-          </div>
+          {!busca && (
+            <div style={{ color:"#4b5563", fontSize:12, marginTop:6, maxWidth:440, margin:"6px auto 0" }}>
+              Obras aparecem aqui automaticamente quando um projeto é finalizado na etapa <strong style={{ color:"#4b5563" }}>Engenharia</strong> do Kanban de Projetos.
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:8, maxWidth:960 }}>
