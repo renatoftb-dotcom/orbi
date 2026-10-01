@@ -21635,16 +21635,36 @@ function unitarioDaConta(conta) {
 
 // O que impede o pedido de entrar torto. Item sem etapa é erro, e não aviso:
 // é assim que "Sem etapa" para de crescer no quadro da obra.
+// O que identifica a compra na loja: o número do PEDIDO ou o da NOTA. Nota
+// fiscal não tem número de pedido — exigir um deixava quem anexou a nota
+// sem saída, tendo que inventar um número para conseguir lançar. Qualquer
+// um dos dois identifica; nenhum dos dois, não.
+// A chave ignora pontos, traços e zeros à esquerda: "000.008.623" e "8623"
+// são a mesma nota, e sem isso ela entraria duas vezes.
+function chaveDoDocumento(s) {
+  const t = String(s || "").replace(/[\s./-]/g, "").toLowerCase();
+  return /^\d+$/.test(t) ? t.replace(/^0+/, "") : t;
+}
+
 function validarPedido(pedido, pedidosDaLoja) {
   const p = pedido || {};
   const erros = [];
-  const chave = (s) => String(s || "").replace(/[\s.-]/g, "").toLowerCase();
+  const chave = chaveDoDocumento;
   const itens = (p.itens || []).filter((i) => i && brutoDoItem(i) > 0);
   if (!itens.length) erros.push("O pedido não tem nenhum item com valor.");
-  if (!String(p.numeroLoja || "").trim()) {
-    erros.push("Informe o número do pedido da loja.");
-  } else if ((pedidosDaLoja || []).some((o) => o && o.id !== p.id && chave(o.numeroLoja) === chave(p.numeroLoja))) {
-    erros.push(`O pedido ${p.numeroLoja} já foi lançado nesta loja.`);
+  const temPedido = !!String(p.numeroLoja || "").trim();
+  const temNota = !!String(p.numeroNota || "").trim();
+  if (!temPedido && !temNota) {
+    erros.push("Informe o número do pedido da loja ou o número da nota fiscal.");
+  } else {
+    const repetido = (campo, rotulo) => {
+      const meu = chave(p[campo]);
+      if (!meu) return;
+      const outro = (pedidosDaLoja || []).find((o) => o && o.id !== p.id && chave(o[campo]) === meu);
+      if (outro) erros.push(`${rotulo} ${p[campo]} já foi lançad${rotulo === "A nota" ? "a" : "o"} nesta loja.`);
+    };
+    repetido("numeroLoja", "O pedido");
+    repetido("numeroNota", "A nota");
   }
   const semEtapa = itens.filter((i) => !String(i.etapa || "").trim()).length;
   if (semEtapa) {
@@ -24790,6 +24810,21 @@ function pedacoDeDanfe(celulas) {
     numeros: [numeros[0], numeros[1], numeros[2]] };
 }
 
+// O papel é uma nota fiscal? A DANFE se identifica no cabeçalho, sempre.
+function ehDanfe(texto) {
+  return /\bDANFE\b|NOTA\s+FISCAL\s+ELETR/i.test(String(texto || ""));
+}
+
+// O número da nota: "Nº 000.008.623" vira "8623". Os zeros à esquerda e os
+// pontos são enfeite de impressão — e guardar "000.008.623" num lugar e
+// "8.623" noutro faria a mesma nota entrar duas vezes sem ninguém notar.
+function numeroDaNota(texto) {
+  const m = /N[º°o]\.?\s*([\d.]{3,})/i.exec(String(texto || ""));
+  if (!m) return "";
+  const so = String(m[1]).replace(/\D/g, "").replace(/^0+/, "");
+  return so || "";
+}
+
 // A linha de uma DANFE vira uma linha comum de tabela. Quando a descrição
 // veio sozinha na linha de cima, é aqui que as duas se juntam — e a de cima
 // sai, para não sobrar um item sem número nenhum.
@@ -24899,8 +24934,12 @@ function interpretarOrcamento(linhas) {
   const vencimento = /^\d{2}\/\d{2}\/\d{2}$/.test(venc)
     ? dataIsoDoOrcamento(venc.slice(0, 6) + "20" + venc.slice(6))
     : dataIsoDoOrcamento(venc);
+  // Nota fiscal não tem número de pedido — tem número de NOTA, e é por ele
+  // que a compra se identifica, se concilia e se evita lançar duas vezes.
+  const nota = ehDanfe(tudo);
   return { fornecedor, cnpj, numero: String((/N[ÚU]MERO[:\s]*([\w-]+)/i.exec(tudo) || [])[1] || ""),
-    numeroPedido, desconto, vencimento,
+    numeroPedido, numeroNota: nota ? numeroDaNota(tudo) : "", ehNota: nota,
+    desconto, vencimento,
     emitido, validade, condicao, total, somaItens, itens };
 }
 
@@ -27330,6 +27369,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       ...base,
       data,
       numeroLoja: (papel && papel.numeroPedido) || "",
+      numeroNota: (papel && papel.numeroNota) || "",
       desconto: (papel && papel.desconto) || "",
       vencimento: destino === "pagamento" ? data
         : ((papel && papel.vencimento) || (prazo > 0 && typeof somarDias === "function" ? somarDias(data, prazo) : "")),
@@ -29252,7 +29292,8 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
         if (!(o.itens || []).length) throw new Error("Não achei a tabela de itens neste PDF. Se for foto ou digitalização, cole o texto.");
         const lidos = itensDaEntrada(o, "orcamento", insumos || []);
         setItens(lidos);
-        setPapel({ numeroPedido: o.numeroPedido || o.numero || "", emitido: o.emitido || "",
+        setPapel({ numeroPedido: o.numeroPedido || (o.ehNota ? "" : o.numero) || "",
+          numeroNota: o.numeroNota || "", ehNota: !!o.ehNota, emitido: o.emitido || "",
           vencimento: o.vencimento || "", desconto: o.desconto || "" });
       } else if (iaDisponivel) {
         const r = await api.ia.lerPedido({ arquivo: alvo || null, texto: paraLer || "" },
@@ -29948,13 +29989,21 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
 
           {/* ── o cabeçalho do papel ── */}
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(5, 1fr)", gap: 10, marginBottom: 14 }}>
+            {/* Um dos dois identifica a compra. A estrela acompanha o que
+                ainda falta: com a nota preenchida, o pedido deixa de ser
+                obrigatório — e vice-versa. */}
             <div>
-              <label style={E.label}>Nº do pedido na loja *</label>
+              <label style={E.label}>
+                Nº do pedido na loja{String(p.numeroNota || "").trim() ? "" : " *"}
+              </label>
               <input style={E.input} value={p.numeroLoja} onChange={(e) => aoMudar({ ...p, numeroLoja: e.target.value })} placeholder="136560-109" />
             </div>
             <div>
-              <label style={E.label}>Nº da nota fiscal</label>
-              <input style={E.input} value={p.numeroNota} onChange={(e) => aoMudar({ ...p, numeroNota: e.target.value })} placeholder="entra depois" />
+              <label style={E.label}>
+                Nº da nota fiscal{String(p.numeroLoja || "").trim() ? "" : " *"}
+              </label>
+              <input style={E.input} value={p.numeroNota} onChange={(e) => aoMudar({ ...p, numeroNota: e.target.value })}
+                placeholder={String(p.numeroLoja || "").trim() ? "entra depois" : "8623"} />
             </div>
             <div>
               <label style={E.label}>Data</label>

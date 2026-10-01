@@ -715,16 +715,36 @@ function unitarioDaConta(conta) {
 
 // O que impede o pedido de entrar torto. Item sem etapa é erro, e não aviso:
 // é assim que "Sem etapa" para de crescer no quadro da obra.
+// O que identifica a compra na loja: o número do PEDIDO ou o da NOTA. Nota
+// fiscal não tem número de pedido — exigir um deixava quem anexou a nota
+// sem saída, tendo que inventar um número para conseguir lançar. Qualquer
+// um dos dois identifica; nenhum dos dois, não.
+// A chave ignora pontos, traços e zeros à esquerda: "000.008.623" e "8623"
+// são a mesma nota, e sem isso ela entraria duas vezes.
+function chaveDoDocumento(s) {
+  const t = String(s || "").replace(/[\s./-]/g, "").toLowerCase();
+  return /^\d+$/.test(t) ? t.replace(/^0+/, "") : t;
+}
+
 function validarPedido(pedido, pedidosDaLoja) {
   const p = pedido || {};
   const erros = [];
-  const chave = (s) => String(s || "").replace(/[\s.-]/g, "").toLowerCase();
+  const chave = chaveDoDocumento;
   const itens = (p.itens || []).filter((i) => i && brutoDoItem(i) > 0);
   if (!itens.length) erros.push("O pedido não tem nenhum item com valor.");
-  if (!String(p.numeroLoja || "").trim()) {
-    erros.push("Informe o número do pedido da loja.");
-  } else if ((pedidosDaLoja || []).some((o) => o && o.id !== p.id && chave(o.numeroLoja) === chave(p.numeroLoja))) {
-    erros.push(`O pedido ${p.numeroLoja} já foi lançado nesta loja.`);
+  const temPedido = !!String(p.numeroLoja || "").trim();
+  const temNota = !!String(p.numeroNota || "").trim();
+  if (!temPedido && !temNota) {
+    erros.push("Informe o número do pedido da loja ou o número da nota fiscal.");
+  } else {
+    const repetido = (campo, rotulo) => {
+      const meu = chave(p[campo]);
+      if (!meu) return;
+      const outro = (pedidosDaLoja || []).find((o) => o && o.id !== p.id && chave(o[campo]) === meu);
+      if (outro) erros.push(`${rotulo} ${p[campo]} já foi lançad${rotulo === "A nota" ? "a" : "o"} nesta loja.`);
+    };
+    repetido("numeroLoja", "O pedido");
+    repetido("numeroNota", "A nota");
   }
   const semEtapa = itens.filter((i) => !String(i.etapa || "").trim()).length;
   if (semEtapa) {

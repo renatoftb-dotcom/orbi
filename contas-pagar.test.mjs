@@ -27,7 +27,7 @@ const modulo = new Function(`
              return cp.slice(0, cp.lastIndexOf("// ═", i)); })()}
   return { recalibrarPedido, previaDoPedido, contasDoPedido, docDaConta, diasEntreIso,
            pedidoVazio, itemDoPedidoVazio, brutoDoItem, brutoDoPedido, totalDoPedido,
-           itensRateados, contasDoPedidoDaLoja, validarPedido, pedidosPendentes, baixarPedidos,
+           itensRateados, contasDoPedidoDaLoja, validarPedido, chaveDoDocumento, pedidosPendentes, baixarPedidos,
            podeMexerNoPedido, removerContasDoPedido, linhasDePedido, linhasDeLoja,
            contasDoPedidoDeConta, unitarioDaConta, apagarPedidoInteiro, resumoDoQueSai,
            pixDoPagamento, pixResumido, TIPOS_PIX, nomeDoTipoPix,
@@ -1998,6 +1998,48 @@ teste("pedido que não existe não tem o que sair", () => {
   assert.deepStrictEqual(modulo.resumoDoQueSai([], "p1"),
     { quantas: 0, valor: 0, pagas: 0, valorPago: 0 });
 });
+
+teste("a nota fiscal identifica a compra tão bem quanto o pedido", () => {
+  // Nota fiscal não tem número de pedido. Exigir um deixava quem anexou a
+  // nota sem saída: tinha que inventar um número para conseguir lançar.
+  const comNota = pedidoOurifer({ numeroLoja: "", numeroNota: "8623" });
+  assert.deepStrictEqual(modulo.validarPedido(comNota, []).erros, []);
+
+  const comPedido = pedidoOurifer({ numeroNota: "" });
+  assert.deepStrictEqual(modulo.validarPedido(comPedido, []).erros, []);
+
+  const semNenhum = pedidoOurifer({ numeroLoja: "", numeroNota: "" });
+  const r = modulo.validarPedido(semNenhum, []);
+  assert.strictEqual(r.ok, false);
+  assert.ok(r.erros.some(e => /n[úu]mero da nota fiscal/i.test(e)),
+    "e o recado diz que a nota serve: " + r.erros.join(" | "));
+});
+
+teste("a mesma nota não entra duas vezes", () => {
+  const nota = pedidoOurifer({ numeroLoja: "", numeroNota: "8623" });
+  const outra = pedidoOurifer({ id: "ped2", numeroLoja: "", numeroNota: "8623" });
+  const r = modulo.validarPedido(outra, [nota]);
+  assert.ok(r.erros.some(e => /A nota 8623 j[áa] foi lan[çc]ada/.test(e)), r.erros.join(" | "));
+  // reeditar a mesma não é duplicidade
+  assert.deepStrictEqual(modulo.validarPedido(nota, [nota]).erros, []);
+});
+
+teste("zero à esquerda e ponto não criam uma nota nova", () => {
+  // o papel imprime "Nº 000.008.623"; a pessoa digita "8623"
+  assert.strictEqual(modulo.chaveDoDocumento("000.008.623"), "8623");
+  assert.strictEqual(modulo.chaveDoDocumento("8623"), "8623");
+  assert.strictEqual(modulo.chaveDoDocumento("8.623"), "8623");
+  const a = pedidoOurifer({ numeroLoja: "", numeroNota: "000.008.623" });
+  const b = pedidoOurifer({ id: "ped2", numeroLoja: "", numeroNota: "8623" });
+  assert.ok(modulo.validarPedido(b, [a]).erros.some(e => /j[áa] foi lan[çc]ada/.test(e)),
+    "senão a mesma nota entraria duas vezes sem ninguém notar");
+});
+
+teste("número de pedido com letra continua comparando como antes", () => {
+  assert.strictEqual(modulo.chaveDoDocumento("136560-109"), "136560109");
+  assert.strictEqual(modulo.chaveDoDocumento("A-0012"), "a0012", "letra não perde o zero");
+});
+
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

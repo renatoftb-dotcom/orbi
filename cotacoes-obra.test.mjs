@@ -82,7 +82,8 @@ const modulo = new Function(`
            sugestoesDaIA, textoParaAIA,
            entradaPronta, entradaPedeLoja, entradaPedeObra, DESTINOS_DA_ENTRADA,
            contextoDaEntrada, cotMioloDoNome, tituloDaListaRapida, textoDaListaRapida,
-           pedacoDeDanfe, juntarLinhasDaDanfe, descricaoSemMaterial, palavraDeMaterial };
+           pedacoDeDanfe, juntarLinhasDaDanfe, descricaoSemMaterial, palavraDeMaterial,
+           ehDanfe, numeroDaNota };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -2922,6 +2923,31 @@ teste("descrição vazia conta como torta", () => {
   assert.strictEqual(M.descricaoSemMaterial(""), true);
   assert.strictEqual(M.descricaoSemMaterial(null), true);
   assert.strictEqual(M.descricaoSemMaterial("   "), true);
+});
+
+
+teste("a nota se identifica como nota, e o orçamento não", () => {
+  assert.strictEqual(M.ehDanfe("DANFE DOCUMENTO AUXILIAR DA NOTA FISCAL ELETRÔNICA"), true);
+  assert.strictEqual(M.ehDanfe("NOTA FISCAL ELETRONICA"), true);
+  assert.strictEqual(M.ehDanfe("ORÇAMENTO Nº 1234 — Rei do Cimento"), false);
+});
+
+teste("o número da nota perde os zeros e os pontos da impressão", () => {
+  assert.strictEqual(M.numeroDaNota("Nº 000.008.623 fl. 1 /1"), "8623");
+  assert.strictEqual(M.numeroDaNota("N° 8.623"), "8623");
+  assert.strictEqual(M.numeroDaNota("sem número nenhum"), "");
+});
+
+teste("a nota da Canroberto chega com o próprio número, sem pedido", () => {
+  const comCabecalho = [
+    { celulas: ["DANFE DOCUMENTO AUXILIAR DA NOTA FISCAL ELETRÔNICA"] },
+    { celulas: ["Nº 000.008.623 fl. 1 /1"] },
+  ].map((l) => ({ ...l, texto: l.celulas.join(" ") })).concat(DANFE_REAL);
+  const r = M.interpretarOrcamento(comCabecalho);
+  assert.strictEqual(r.ehNota, true);
+  assert.strictEqual(r.numeroNota, "8623");
+  assert.strictEqual(r.numeroPedido, "", "nota não tem número de pedido — e não se inventa um");
+  assert.strictEqual(r.itens.length, 3);
 });
 
 
