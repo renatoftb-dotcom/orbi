@@ -580,7 +580,9 @@ function Obras({ data, save }) {
         borderRadius: 999, background:"#fff", padding: isMobile ? "8px 14px" : "9px 16px",
         transition: "border-color .15s, box-shadow .15s",
         boxShadow: buscaFocada ? "0 0 0 4px rgba(4,116,244,0.10)" : "none" }}>
-        <span aria-hidden="true" style={{ color: buscaFocada ? "#0474f4" : "#9ca3af", fontSize:14, lineHeight:1 }}>⌕</span>
+        <span style={{ color: buscaFocada ? "#0474f4" : "#9ca3af", display:"flex", flexShrink:0 }}>
+          <IconeLupa tamanho={17} />
+        </span>
         <input value={busca} onChange={(e) => setBusca(e.target.value)}
           onFocus={() => setBuscaFocada(true)} onBlur={() => setBuscaFocada(false)}
           placeholder="Procurar obra pelo nome ou pelo cliente…"

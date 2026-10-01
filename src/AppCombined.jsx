@@ -3874,7 +3874,9 @@ function Obras({ data, save }) {
         borderRadius: 999, background:"#fff", padding: isMobile ? "8px 14px" : "9px 16px",
         transition: "border-color .15s, box-shadow .15s",
         boxShadow: buscaFocada ? "0 0 0 4px rgba(4,116,244,0.10)" : "none" }}>
-        <span aria-hidden="true" style={{ color: buscaFocada ? "#0474f4" : "#9ca3af", fontSize:14, lineHeight:1 }}>⌕</span>
+        <span style={{ color: buscaFocada ? "#0474f4" : "#9ca3af", display:"flex", flexShrink:0 }}>
+          <IconeLupa tamanho={17} />
+        </span>
         <input value={busca} onChange={(e) => setBusca(e.target.value)}
           onFocus={() => setBuscaFocada(true)} onBlur={() => setBuscaFocada(false)}
           placeholder="Procurar obra pelo nome ou pelo cliente…"
@@ -28577,12 +28579,49 @@ function vozDoNavegador() {
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 }
 
-// Os botões redondos do composer: discretos, do tamanho do dedo, sem texto.
+// Os símbolos do composer. Desenhados a traço, herdando a cor de quem os
+// contém — emoji muda de desenho em cada sistema e engorda a linha; linha
+// fina é o que combina com uma caixa de digitar.
+function IconeTraco({ children, tamanho }) {
+  return (
+    <svg width={tamanho || 20} height={tamanho || 20} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+      aria-hidden="true" focusable="false" style={{ display: "block" }}>
+      {children}
+    </svg>
+  );
+}
+
+const IconeMais = ({ tamanho }) => (
+  <IconeTraco tamanho={tamanho}><path d="M12 5v14" /><path d="M5 12h14" /></IconeTraco>
+);
+
+const IconeMicrofone = ({ tamanho }) => (
+  <IconeTraco tamanho={tamanho}>
+    <rect x="9" y="2.5" width="6" height="11" rx="3" />
+    <path d="M5.5 11a6.5 6.5 0 0 0 13 0" />
+    <path d="M12 17.5V21" />
+  </IconeTraco>
+);
+
+const IconeParar = ({ tamanho }) => (
+  <IconeTraco tamanho={tamanho}><rect x="7" y="7" width="10" height="10" rx="2" /></IconeTraco>
+);
+
+const IconeSeta = ({ tamanho }) => (
+  <IconeTraco tamanho={tamanho}><path d="M12 19V5" /><path d="M5.5 11.5 12 5l6.5 6.5" /></IconeTraco>
+);
+
+const IconeLupa = ({ tamanho }) => (
+  <IconeTraco tamanho={tamanho}><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></IconeTraco>
+);
+
+// Os botões do composer: só o símbolo, sem moldura — a moldura é a caixa.
 const ENT_ICONE = {
-  width: 34, height: 34, borderRadius: 999, border: "1px solid rgba(38,36,33,0.12)",
-  background: "#fff", color: "#4b5563", cursor: "pointer", fontFamily: "inherit",
+  width: 32, height: 32, borderRadius: 999, border: "none",
+  background: "transparent", color: "#5b6472", cursor: "pointer", fontFamily: "inherit",
   display: "inline-flex", alignItems: "center", justifyContent: "center",
-  padding: 0, flexShrink: 0, transition: "background .15s, border-color .15s",
+  padding: 0, flexShrink: 0, transition: "color .15s, background .15s",
 };
 
 function BotaoDitar({ aoDitar, isMobile, compacto }) {
@@ -28641,10 +28680,9 @@ function BotaoDitar({ aoDitar, isMobile, compacto }) {
         <button type="button" onClick={comecar}
           title={ouvindo ? "Parar de ouvir" : "Ditar a lista em voz alta"}
           style={{ ...ENT_ICONE,
-            borderColor: ouvindo ? "#dc2626" : "rgba(38,36,33,0.12)",
-            color: ouvindo ? "#dc2626" : "#4b5563",
-            background: ouvindo ? "#fff6f6" : "#fff" }}>
-          <span aria-hidden="true" style={{ fontSize: 14, lineHeight: 1 }}>{ouvindo ? "■" : "🎤"}</span>
+            color: ouvindo ? "#dc2626" : "#5b6472",
+            background: ouvindo ? "#fff1f1" : "transparent" }}>
+          {ouvindo ? <IconeParar /> : <IconeMicrofone />}
         </button>
         {ouvindo && (
           <span style={{ fontSize: 11.5, color: "#dc2626", minWidth: 0,
@@ -28917,7 +28955,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
 
                 <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}>
                   <label title="Anexar PDF, print ou foto" style={ENT_ICONE}>
-                    <span aria-hidden="true" style={{ fontSize: 14, lineHeight: 1 }}>📎</span>
+                    <IconeMais />
                     <input type="file" accept="application/pdf,image/*" style={{ display: "none" }}
                       onChange={(e) => porArquivoDaEntrada((e.target.files || [])[0])} />
                   </label>
@@ -28939,7 +28977,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                       fontFamily: "inherit", fontSize: 16, lineHeight: 1, display: "flex",
                       alignItems: "center", justifyContent: "center", transition: "background .15s",
                       flexShrink: 0 }}>
-                    <span aria-hidden="true">{lendo ? "···" : "↑"}</span>
+                    {lendo ? <IconeParar tamanho={16} /> : <IconeSeta tamanho={18} />}
                   </button>
                 </div>
               </div>
