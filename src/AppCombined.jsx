@@ -9221,6 +9221,38 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
     total: soma(lancamentos), totalBloqueado: soma(bloqueados) };
 }
 
+// ── A baixa atravessando sozinha ───────────────────────
+// Quando o dinheiro é do escritório, esperar alguém lembrar de apertar um
+// botão numa aba de dentro do Planejamento é pedir que o saldo do mês fique
+// errado. A baixa já é a decisão: o dinheiro saiu da conta, e o extrato tem
+// que saber.
+//
+// Duas guardas, e as duas importam:
+//
+//   1. Só as contas que ACABARAM de ser pagas. Rodar a ponte na obra inteira
+//      traria de volta tudo que já foi pago antes — e o histórico antigo veio
+//      por importação de base, sem id de ponte, então duplicaria em silêncio.
+//   2. Só onde o dinheiro passa pela conta do escritório: empreendimento (a
+//      obra é dele) e gestão (o dinheiro do cliente transita por lá). Obra
+//      marcada como "o cliente paga direto" continua pelo botão: lá só o
+//      honorário atravessa, e isso é decisão de quem fecha o mês.
+function ponteAutomaticaNaBaixa(modo) {
+  return modo === "empreendimento" || modo === "gestao";
+}
+
+function lancamentosDaBaixa(obra, cliente, contasPagas, opcoes) {
+  const modo = modoDaPonte(obra, cliente);
+  const vazio = { modo, lancamentos: [], bloqueados: [], ignorados: [], existentes: [], total: 0 };
+  if (!ponteAutomaticaNaBaixa(modo)) return vazio;
+  if (!(contasPagas || []).length) return vazio;
+  // A ponte recebe SÓ as recém-pagas no lugar da lista inteira da obra; o
+  // resto do cálculo — destino, competência, mês fechado, id derivado — é o
+  // mesmo de sempre, para preview e automático nunca divergirem.
+  const r = lancamentosDaObraParaEscritorio(obra, cliente,
+    Object.assign({}, opcoes || {}, { contasPagar: contasPagas, entradas: [] }));
+  return Object.assign({}, r, { modo });
+}
+
 function motivoDeIgnorar(contaId, modo, opcoes) {
   const grupo = ponteGrupoDaConta(contaId, opcoes);
   if (!contaId || !grupo) return "conta da obra sem correspondência no escritório";
@@ -32969,6 +33001,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Dar baixa muda o preço de referência do insumo, e isso não pode acontecer
   // calado — principalmente o que PAROU, que é o que precisa da mão dele.
   const [avisoPreco, setAvisoPreco] = useState(null);
+  // O que a baixa mandou sozinha para o extrato do escritório.
+  const [avisoExtrato, setAvisoExtrato] = useState(null);
   // Extrato mensal (P&L realizado): mês escolhido e formulário de entrada.
   const [mesExtrato, setMesExtrato] = useState("");
   const [formEntrada, setFormEntrada] = useState(null);
@@ -33053,8 +33087,27 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const pagas = contasRecemPagas(antes, novasContas);
     if (!pagas.length) { gravarObras(fatia); return; }
     const r = aplicarComprasNoCatalogo(data.materiais, pagas);
-    gravarObras(fatia, r.materiais === data.materiais ? null : { materiais: r.materiais });
+
+    // O dinheiro saiu da conta do escritório? Então o extrato dele sabe na
+    // hora. Vai no MESMO save das contas e do catálogo — três gravadas
+    // seguidas partiriam do mesmo retrato antigo e a última apagaria as
+    // outras duas.
+    const obraDepois = fatia.find(o => o && o.id === alvo) || null;
+    const ponte = (typeof lancamentosDaBaixa === "function" && obraDepois)
+      ? lancamentosDaBaixa(obraDepois, cliente, pagas, {
+          fechamentos: typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {},
+          lancamentos: typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : [],
+        })
+      : { lancamentos: [], bloqueados: [], modo: "" };
+
+    const extras = {};
+    if (r.materiais !== data.materiais) extras.materiais = r.materiais;
+    if (ponte.lancamentos.length) extras.lancamentos = (data.lancamentos || []).concat(ponte.lancamentos);
+    gravarObras(fatia, Object.keys(extras).length ? extras : null);
+
     setAvisoPreco(r.relato.aplicados.length || r.relato.pendencias.length ? r.relato : null);
+    setAvisoExtrato((ponte.lancamentos.length || ponte.bloqueados.length)
+      ? { modo: ponte.modo, lancamentos: ponte.lancamentos, bloqueados: ponte.bloqueados } : null);
   };
   // Contas geradas por uma versão antiga das regras de vencimento (ex.: as
   // mensais que andavam de 30 em 30 dias, escorregando o dia do mês) se
@@ -34756,6 +34809,54 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     return (
       <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => { setFormConta(null); setView("detalheObra"); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
+
+        {avisoExtrato && (() => {
+          const ap = avisoExtrato.lancamentos || [], bl = avisoExtrato.bloqueados || [];
+          const porConta = [];
+          const indice = {};
+          for (const l of ap) {
+            if (!indice[l.contaId]) { indice[l.contaId] = { contaId: l.contaId, valor: 0 }; porConta.push(indice[l.contaId]); }
+            indice[l.contaId].valor = Math.round((indice[l.contaId].valor + (Number(l.valor) || 0)) * 100) / 100;
+          }
+          const nomeDaConta = (id) => {
+            const c = typeof contaEscritorio === "function" ? contaEscritorio(id) : null;
+            return c ? c.nome : id;
+          };
+          const ondeVer = avisoExtrato.modo === "empreendimento"
+            ? "Escritório → Financeiro, no quadro Empreendimentos"
+            : "Escritório → Financeiro, no bloco Gestão de obras";
+          return (
+            <div style={{ border: "1px solid rgba(4,116,244,0.30)", background: "rgba(4,116,244,0.05)",
+              borderRadius: 14, padding: "12px 14px", marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: AZUL_VK }}>
+                  {ap.length === 1 ? "Entrou no extrato do escritório" : `${ap.length} lançamentos entraram no extrato do escritório`}
+                </div>
+                <button type="button" onClick={() => setAvisoExtrato(null)}
+                  style={{ border: "none", background: "transparent", color: AZUL_VK, cursor: "pointer",
+                    fontFamily: "inherit", fontSize: 12.5, padding: 0 }}>Fechar</button>
+              </div>
+              {porConta.length > 0 && (
+                <div style={{ fontSize: 12.5, color: "#374151", marginTop: 6 }}>
+                  {porConta.map(c => `${nomeDaConta(c.contaId)} ${fmtMoedaCtr(c.valor)}`).join(" · ")}
+                  <span style={{ color: "#6b7280" }}> — veja em {ondeVer}.</span>
+                </div>
+              )}
+              {avisoExtrato.modo === "empreendimento" && ap.length > 0 && (
+                <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 4 }}>
+                  Não entra no resultado do mês: soma no valor do imóvel e vira lucro no dia da venda.
+                </div>
+              )}
+              {bl.length > 0 && (
+                <div style={{ fontSize: 12.5, color: "#b45309", marginTop: 8, paddingTop: 8,
+                  borderTop: "1px solid rgba(38,36,33,0.08)" }}>
+                  {bl.length === 1 ? "1 lançamento não entrou" : `${bl.length} lançamentos não entraram`}: {bl[0].motivo}
+                  {" "}Quando reabrir o mês, mande pelo Planejamento → Para o escritório.
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {avisoPreco && (() => {
           const ap = avisoPreco.aplicados || [], pd = avisoPreco.pendencias || [];

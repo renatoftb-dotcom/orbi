@@ -435,6 +435,38 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
     total: soma(lancamentos), totalBloqueado: soma(bloqueados) };
 }
 
+// ── A baixa atravessando sozinha ───────────────────────
+// Quando o dinheiro é do escritório, esperar alguém lembrar de apertar um
+// botão numa aba de dentro do Planejamento é pedir que o saldo do mês fique
+// errado. A baixa já é a decisão: o dinheiro saiu da conta, e o extrato tem
+// que saber.
+//
+// Duas guardas, e as duas importam:
+//
+//   1. Só as contas que ACABARAM de ser pagas. Rodar a ponte na obra inteira
+//      traria de volta tudo que já foi pago antes — e o histórico antigo veio
+//      por importação de base, sem id de ponte, então duplicaria em silêncio.
+//   2. Só onde o dinheiro passa pela conta do escritório: empreendimento (a
+//      obra é dele) e gestão (o dinheiro do cliente transita por lá). Obra
+//      marcada como "o cliente paga direto" continua pelo botão: lá só o
+//      honorário atravessa, e isso é decisão de quem fecha o mês.
+function ponteAutomaticaNaBaixa(modo) {
+  return modo === "empreendimento" || modo === "gestao";
+}
+
+function lancamentosDaBaixa(obra, cliente, contasPagas, opcoes) {
+  const modo = modoDaPonte(obra, cliente);
+  const vazio = { modo, lancamentos: [], bloqueados: [], ignorados: [], existentes: [], total: 0 };
+  if (!ponteAutomaticaNaBaixa(modo)) return vazio;
+  if (!(contasPagas || []).length) return vazio;
+  // A ponte recebe SÓ as recém-pagas no lugar da lista inteira da obra; o
+  // resto do cálculo — destino, competência, mês fechado, id derivado — é o
+  // mesmo de sempre, para preview e automático nunca divergirem.
+  const r = lancamentosDaObraParaEscritorio(obra, cliente,
+    Object.assign({}, opcoes || {}, { contasPagar: contasPagas, entradas: [] }));
+  return Object.assign({}, r, { modo });
+}
+
 function motivoDeIgnorar(contaId, modo, opcoes) {
   const grupo = ponteGrupoDaConta(contaId, opcoes);
   if (!contaId || !grupo) return "conta da obra sem correspondência no escritório";

@@ -26,7 +26,8 @@ const M = new Function(src + `
            lancamentoDoExtrato, efValorDeTexto, efEhData, efLinhaDoCabecalho,
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento,
-           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte };`)();
+           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
+           lancamentosDaBaixa, ponteAutomaticaNaBaixa };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -900,6 +901,81 @@ teste("o lan\u00e7amento que a ponte gera passa na valida\u00e7\u00e3o do escrit
       contasPagar: [{ id: "a1", contaId: "pedreiros", valor: 2000, pago: true, valorPago: 2000, pagoEm: "2026-10-05" }] });
   assert.deepStrictEqual(M.validarLancamentoEscritorio(emp.lancamentos[0], {}), []);
 });
+
+// ── A baixa atravessando sozinha ────────────────────────────────
+
+const EMP = { id: "c9", nome: "Jacarezinho Módulo 1", servicos: { empreendimento: true } };
+const CLI = { id: "c1", nome: "COBOP", servicos: { gestaoObra: true } };
+const OBRA = { id: "ob1", nome: "Jacarezinho Módulo 1" };
+
+const conta = (id, contaId, valor) => ({
+  id, contaId, pago: true, pagoEm: "2026-09-28",
+  valor, valorPago: valor, descricao: "AREIA FINA", favorecido: "Rei do Cimento",
+  numeroNota: "8623",
+});
+
+teste("no empreendimento a baixa vai sozinha para Construção", () => {
+  const r = M.lancamentosDaBaixa(OBRA, EMP, [conta("k1", "material", 304)], { ...OPC });
+  assert.strictEqual(r.modo, "empreendimento");
+  assert.strictEqual(r.lancamentos.length, 1);
+  const l = r.lancamentos[0];
+  assert.strictEqual(l.contaId, "emp_construcao");
+  assert.strictEqual(l.unidadeId, "empreendimento");
+  assert.strictEqual(l.empreendimentoId, "c9", "é por aqui que o quadro do empreendimento soma");
+  assert.strictEqual(l.valor, 304);
+  assert.strictEqual(l.documento, "8623", "a nota identifica o lançamento");
+  assert.strictEqual(l.competencia, "2026-09");
+});
+
+teste("na gestão a baixa vai sozinha para Pagamentos e compras", () => {
+  const r = M.lancamentosDaBaixa(OBRA, CLI, [conta("k1", "material", 304)], { ...OPC });
+  assert.strictEqual(r.modo, "gestao");
+  assert.strictEqual(r.lancamentos[0].contaId, "pagamentos_compras");
+  assert.strictEqual(r.lancamentos[0].unidadeId, "gestao_obras");
+});
+
+teste("obra em que o cliente paga direto não atravessa sozinha", () => {
+  const r = M.lancamentosDaBaixa({ ...OBRA, clientePagaDireto: true }, CLI, [conta("k1", "material", 304)], { ...OPC });
+  assert.strictEqual(r.modo, "clientePaga");
+  assert.strictEqual(r.lancamentos.length, 0, "lá só o honorário cruza, e isso é decisão de quem fecha o mês");
+  assert.strictEqual(M.ponteAutomaticaNaBaixa("clientePaga"), false);
+});
+
+teste("só as recém-pagas atravessam — o histórico importado não volta", () => {
+  // A obra tem meses de contas pagas; a baixa de hoje manda UMA.
+  const hoje = conta("k9", "material", 304);
+  const r = M.lancamentosDaBaixa(OBRA, EMP, [hoje], { ...OPC });
+  assert.strictEqual(r.lancamentos.length, 1);
+  assert.strictEqual(r.lancamentos[0].origem.refId, "k9");
+});
+
+teste("o mesmo lançamento não entra duas vezes", () => {
+  const c = conta("k1", "material", 304);
+  const primeiro = M.lancamentosDaBaixa(OBRA, EMP, [c], { ...OPC });
+  const denovo = M.lancamentosDaBaixa(OBRA, EMP, [c], { ...OPC, lancamentos: primeiro.lancamentos });
+  assert.strictEqual(denovo.lancamentos.length, 0);
+  assert.strictEqual(denovo.existentes.length, 1);
+});
+
+teste("mês fechado segura o lançamento em vez de furar o fechamento", () => {
+  const r = M.lancamentosDaBaixa(OBRA, EMP, [conta("k1", "material", 304)],
+    { ...OPC, fechamentos: { "2026-09": { fechadoEm: "2026-10-01" } } });
+  assert.strictEqual(r.lancamentos.length, 0);
+  assert.strictEqual(r.bloqueados.length, 1);
+  assert.ok(/fechado/i.test(r.bloqueados[0].motivo));
+});
+
+teste("conta sem destino no escritório não vira lançamento", () => {
+  const r = M.lancamentosDaBaixa(OBRA, EMP, [conta("k1", "cartao_credito", 100)], { ...OPC });
+  assert.strictEqual(r.lancamentos.length, 0);
+  assert.ok(r.ignorados.length >= 1, "e volta na lista de ignoradas, com o motivo");
+});
+
+teste("sem conta paga nenhuma, nada acontece", () => {
+  assert.strictEqual(M.lancamentosDaBaixa(OBRA, EMP, [], { ...OPC }).lancamentos.length, 0);
+  assert.strictEqual(M.lancamentosDaBaixa(OBRA, EMP, null, { ...OPC }).lancamentos.length, 0);
+});
+
 
 for (const [nome, fn] of testes) {
   try { await fn(); console.log("  ok   " + nome); }
