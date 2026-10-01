@@ -969,14 +969,20 @@ function resumoDaEntrada(itens) {
     temPreco: lista.some((x) => x.bruto || x.unitario) };
 }
 
-// As três portas de saída. A ordem é a da vida: o pedido é o caso de todo
-// dia, o pagamento já feito é o que chega depois, e a cotação é quando
-// ainda não se sabe o preço.
+// As portas de saída. A ordem é a da vida: pedir preço é o que vem antes de
+// tudo e é o caso mais rápido — ditou, mandou; o pedido é o de todo dia; o
+// pagamento já feito é o que chega depois; e a cotação formal é quando a
+// compra merece comparação lado a lado antes de decidir.
 const DESTINOS_DA_ENTRADA = [
+  { id: "mandar", nome: "Mandar para a loja", resumo: "Vira mensagem pronta no WhatsApp da loja, pedindo preço. É o caminho curto." },
   { id: "pedido", nome: "Pedido", resumo: "Vai virar conta a pagar na loja, com vencimento." },
   { id: "pagamento", nome: "Pagamento já feito", resumo: "Já saiu o dinheiro: entra lançado e baixado, na data em que foi pago." },
-  { id: "cotacao", nome: "Cotação", resumo: "Ainda sem preço fechado: vira lista para as lojas cotarem." },
+  { id: "cotacao", nome: "Cotação", resumo: "Comparação formal: várias lojas, propostas lado a lado." },
 ];
+
+// "Mandar para a loja" não exige escolher a loja aqui: a próxima tela mostra
+// todas, com quem já recebeu marcado. Se a frase disse a loja, ela vai
+// marcada — mas pode ser mais de uma, e esse é o ponto de pedir preço.
 
 // Pedido e pagamento precisam saber de qual loja é; cotação, não — ela
 // nasce justamente para perguntar a várias.
@@ -987,6 +993,27 @@ function entradaPedeLoja(destino) {
 // Aberta de dentro da obra, a obra já é conhecida e `obras` vem vazia.
 // Aberta na lista de Obras, a lista chega cheia e escolher uma é obrigatório
 // — é o que permite ler a nota primeiro e só depois dizer de onde ela é.
+// A lista ditada também precisa de nome — ela vira uma cotação na obra, e
+// cotação sem nome vira "sem nome" na lista daqui a um mês. O nome sai do
+// que ela tem: os primeiros materiais, e quantos sobraram.
+function tituloDaListaRapida(itens, hojeIso) {
+  const nomes = (itens || [])
+    .map((i) => String((i && (i.descricao || i.termo)) || "").trim())
+    .filter(Boolean)
+    .map((n) => n.split(/\s+/).slice(0, 2).join(" "));
+  if (!nomes.length) return "Lista" + (hojeIso ? " de " + dataDoDiaBR(hojeIso) : "");
+  const cabeca = nomes.slice(0, 2).join(", ");
+  const resto = nomes.length - 2;
+  return resto > 0 ? `${cabeca} e mais ${resto}` : cabeca;
+}
+
+// dd/mm/aaaa sem depender de locale do navegador no meio de um nome.
+function dataDoDiaBR(iso) {
+  const s = String(iso || "").slice(0, 10);
+  const [a, m, d] = s.split("-");
+  return (d && m && a) ? `${d}/${m}/${a}` : s;
+}
+
 function entradaPedeObra(obras) {
   return !!(obras && obras.length);
 }
@@ -4025,6 +4052,26 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   function seguirDaEntrada({ destino, lojaId, itens, papel }) {
     setEntradaAberta(false);
     setErro("");
+    // O caminho curto: a lista ditada vira cotação gravada e cai direto na
+    // tela de pedir preço, com a loja que a frase citou já marcada. Gravar é
+    // preciso, não é cerimônia: é onde o preço que a loja responder vai
+    // morar, e o que registra para quem a lista já foi.
+    if (destino === "mandar") {
+      const base = cotacaoVazia(obra.id);
+      const nova = carimbar({ ...base,
+        titulo: tituloDaListaRapida(itens, hoje),
+        etapaId: base.etapaId || "",
+        itens: (itens || []).map((it) => ({
+          ...(typeof itemCotacaoVazio === "function" ? itemCotacaoVazio() : {}),
+          codigo: it.insumoCodigo || "", descricao: it.descricao || "",
+          unidade: it.unidade || "", quantidade: it.quantidade || "",
+        })) }, usuario, true);
+      gravarCotacoes(cotacoes.concat([nova]));
+      if (lojaId) setLojasMarcadas({ [lojaId]: true });
+      setBuscaLoja("");
+      setPedirLojas(nova);
+      return;
+    }
     if (destino === "cotacao") {
       const nova = cotacaoVazia(obra.id);
       setFormCotacao({ ...nova, titulo: nova.titulo || "",
@@ -6156,9 +6203,13 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                 ))}
               </div>
 
-              {entradaPedeLoja(destino) && (
+              {(entradaPedeLoja(destino) || destino === "mandar") && (
                 <div style={{ marginTop: 12 }}>
-                  <label style={E.label}>De qual loja</label>
+                  <label style={E.label}>
+                    {destino === "mandar"
+                      ? "Começar por qual loja (opcional — na próxima tela dá para marcar várias)"
+                      : "De qual loja"}
+                  </label>
                   <SelectBusca style={E.input} value={lojaId} onChange={(v) => setLojaId(v)}
                     placeholder="Procurar loja…"
                     opcoes={[{ valor: "", rotulo: "— escolha a loja —" }].concat(

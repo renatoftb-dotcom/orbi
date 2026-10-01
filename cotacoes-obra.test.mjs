@@ -81,7 +81,7 @@ const modulo = new Function(`
            cotPalavrasDoNome, cotPartesDoNome, cotPalavrasDaLoja, cotCasaPalavra,
            sugestoesDaIA, textoParaAIA,
            entradaPronta, entradaPedeLoja, entradaPedeObra, DESTINOS_DA_ENTRADA,
-           contextoDaEntrada, cotMioloDoNome };
+           contextoDaEntrada, cotMioloDoNome, tituloDaListaRapida };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -2616,8 +2616,9 @@ teste("pedido e pagamento pedem loja; cotação não", () => {
   assert.strictEqual(M.entradaPronta("pedido", "f1", ITEM).ok, true);
 });
 
-teste("os três destinos de hoje continuam sendo os três", () => {
-  assert.deepStrictEqual(M.DESTINOS_DA_ENTRADA.map((d) => d.id), ["pedido", "pagamento", "cotacao"]);
+teste("as portas de saída, na ordem da vida", () => {
+  assert.deepStrictEqual(M.DESTINOS_DA_ENTRADA.map((d) => d.id),
+    ["mandar", "pedido", "pagamento", "cotacao"]);
 });
 
 
@@ -2724,6 +2725,50 @@ teste("a segunda menção do mesmo tipo não sobrescreve a primeira", () => {
   const r = ctx("obra Cobop\nobra Jacarezinho\n10 cimento");
   assert.strictEqual(r.obra.id, "ob1", "a primeira manda");
   assert.ok(/Jacarezinho/.test(r.textoLimpo), "e a segunda fica à vista, não some calada");
+});
+
+
+// ── A lista rápida para a loja ──────────────────────────────────
+
+teste("“Mandar para a loja” é a primeira porta, e não exige loja aqui", () => {
+  assert.strictEqual(M.DESTINOS_DA_ENTRADA[0].id, "mandar");
+  assert.strictEqual(M.entradaPedeLoja("mandar"), false, "a loja se escolhe na tela seguinte");
+  assert.strictEqual(M.entradaPronta("mandar", "", [{ descricao: "Cimento" }]).ok, true);
+});
+
+teste("a lista ditada ganha nome do que ela tem", () => {
+  assert.strictEqual(
+    M.tituloDaListaRapida([{ descricao: "Cimento CP II 50kg" }, { descricao: "Tubo 100mm esgoto" }]),
+    "Cimento CP, Tubo 100mm");
+  assert.strictEqual(
+    M.tituloDaListaRapida([{ descricao: "Cimento CP II" }, { descricao: "Tubo 100mm" }, { descricao: "Areia" }, { descricao: "Brita" }]),
+    "Cimento CP, Tubo 100mm e mais 2");
+  assert.strictEqual(M.tituloDaListaRapida([{ descricao: "Areia média" }]), "Areia média");
+});
+
+teste("lista sem descrição nenhuma ainda ganha um nome com data", () => {
+  assert.strictEqual(M.tituloDaListaRapida([], "2026-09-06"), "Lista de 06/09/2026");
+  assert.strictEqual(M.tituloDaListaRapida([{ descricao: "  " }], "2026-09-06"), "Lista de 06/09/2026");
+  assert.strictEqual(M.tituloDaListaRapida(null), "Lista");
+});
+
+teste("o texto que vai para a loja traz obra, endereço e os itens numerados", () => {
+  const cot = { itens: [
+    { descricao: "Cimento CP II 50kg", unidade: "sacos", quantidade: 10 },
+    { descricao: "Tubo 100mm", unidade: "Unidades", quantidade: 5 },
+  ] };
+  const msg = M.textoDoPedido(cot, null, { obra: "Reforma Loja Cobop", endereco: "Ourinhos, SP" });
+  assert.ok(/^Obra: Reforma Loja Cobop — Ourinhos, SP/.test(msg));
+  assert.ok(/1\. Cimento CP II 50kg — 10 sacos/.test(msg));
+  assert.ok(/2\. Tubo 100mm — 5 Unidades/.test(msg));
+});
+
+teste("mandar duas vezes para a mesma loja não duplica o registro", () => {
+  const f = { id: "f1", nome: "OURIFER" };
+  let cot = M.registrarEnvioDaLista({ id: "c1" }, f, "Renato", "2026-09-06T12:00:00.000Z");
+  cot = M.registrarEnvioDaLista(cot, f, "Renato", "2026-09-07T12:00:00.000Z");
+  assert.strictEqual(M.enviosDaLista(cot).length, 1);
+  assert.ok(/2026-09-07/.test(M.envioParaLoja(cot, "f1").em), "fica o envio mais recente");
 });
 
 
