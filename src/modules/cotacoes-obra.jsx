@@ -1462,7 +1462,10 @@ function numeroDeOrcamento(txt) {
 // vale. Quando nenhuma fecha, a linha entra como está e você corrige na
 // conferência — é para isso que a conferência existe.
 
-const COT_RE_UNIDADE_TABELA = /^(un|und|unid|unidade|unidades|pc|p[çc]|peca|pe[çc]a|cx|caixa|sc|saco|kg|g|ton|m|mt|mts|metro|m2|m²|m3|m³|l|lt|lata|br|barra|rl|rolo|pt|pct|pacote|jg|cj|conj|ml|par|dz|fd|gl|vb)\.?$/i;
+// A nota fiscal escreve a unidade por extenso e em maiúscula — "METRO",
+// "QUILO", "PECAS" — onde o orçamento da loja abrevia. Faltando a palavra
+// inteira, ela é lida como parte do nome do material.
+const COT_RE_UNIDADE_TABELA = /^(un|und|unid|unidade|unidades|pc|p[çc]|pcs|peca|pe[çc]a|pecas|pe[çc]as|cx|caixa|caixas|sc|saco|sacos|kg|kgs|g|ton|quilo|quilos|kilo|kilos|m|mt|mts|metro|metros|m2|m²|m3|m³|l|lt|lts|litro|litros|lata|latas|br|barra|barras|rl|rolo|rolos|pt|pct|pacote|pacotes|jg|jogo|jogos|cj|conj|ml|par|pares|dz|duzia|dúzia|duzias|fd|fardo|gl|galao|galão|milheiro|vb)\.?$/i;
 
 // Cada rótulo de coluna, no que ele significa. A ordem importa: "Un." é
 // unidade, "Unit." é preço — o teste da unidade vem antes e exige a célula
@@ -1506,6 +1509,7 @@ function papeisDaTabela(linhas) {
 function itemDeOrcamento(linha, papeis) {
   const cel = ((linha || {}).celulas || []).map((c) => String(c).trim()).filter(Boolean);
   if (cel.length < 2) return null;
+  const daNota = !!(linha && linha.danfe);
 
   // De trás para a frente: os números do fim são os valores, e uma unidade
   // ("UN", "SC") no meio deles não interrompe a contagem.
@@ -1523,11 +1527,12 @@ function itemDeOrcamento(linha, papeis) {
   // Código de produto tem cara de código: zeros à esquerda ou quatro dígitos
   // para cima. "300" na frente da descrição é quantidade, não código — e
   // confundir os dois estraga o preço da linha inteira.
-  const codigo = /^0\d{2,}$|^\d{4,}$/.test(cabeca[0] || "") ? cabeca[0] : "";
+  const codigo = (daNota || /^0\d{2,}$|^\d{4,}$/.test(cabeca[0] || "")) ? (cabeca[0] || "") : "";
   // A descrição começa na primeira palavra de verdade: número solto antes
   // dela é código ou quantidade, nunca nome de material. Já número DEPOIS
   // ("Tijolo 8 Furos") é parte do nome e fica.
-  const iNome = cabeca.findIndex((c) => /[a-zA-ZÀ-ÿ]{3}/.test(c) && !COT_RE_UNIDADE_TABELA.test(c));
+  const iNome = cabeca.findIndex((c, i) => (!daNota || i > 0)
+    && /[a-zA-ZÀ-ÿ]{3}/.test(c) && !COT_RE_UNIDADE_TABELA.test(c));
   if (iNome < 0) return null;
   const palavras = cabeca.slice(iNome).filter((c) => !COT_RE_UNIDADE_TABELA.test(c));
   if (!unidade) {
@@ -1591,6 +1596,98 @@ function itemDeOrcamento(linha, papeis) {
   return { codigo, descricao, unidade, quantidade, unitario, total };
 }
 
+// ── A nota fiscal é outra tabela ─────────────────────────
+// A DANFE não é o orçamento de uma loja: o layout dela é fixado por lei, e
+// traz entre o nome do produto e os valores um bloco fiscal que orçamento
+// nenhum tem — NCM, CST/CSOSN e CFOP. Pior: muitos emissores imprimem a
+// DESCRIÇÃO numa linha própria, logo acima da linha dos números.
+//
+// Lida pela regra geral, a linha de números fica assim:
+//     ["8","25059000","0103","6102 METRO","2,00","130,00","260,00","0,00",…]
+// e o único pedaço com letras é "6102 METRO" — que vira o nome do material.
+// Foi exatamente o que apareceu na tela: três itens chamados "6102 METRO" e
+// "6404 QUILO", com a quantidade e o total certos e o nome perdido.
+//
+// A saída não é afrouxar a regra geral, que atende dezenas de orçamentos
+// diferentes: é reconhecer a DANFE pelo que ela tem de único e reescrever a
+// linha no formato que a regra geral já entende.
+
+// NCM tem oito dígitos; CFOP tem quatro e começa em 1..7. O emissor costuma
+// grudar o CFOP na unidade numa célula só ("6102 METRO").
+const COT_RE_NCM = /^\d{8}$/;
+const COT_RE_CFOP = /^[1-7]\d{3}$/;
+const COT_RE_CFOP_UNID = /^([1-7]\d{3})\s+([A-Za-zÀ-ÿ²³]{1,12})\.?$/;
+
+// Devolve o miolo de uma linha de produto da DANFE, ou null se não for uma.
+// Exige o bloco fiscal INTEIRO: achar só um número de oito dígitos não basta
+// — orçamento tem código de barras, que também é um número comprido.
+function pedacoDeDanfe(celulas) {
+  const cel = (celulas || []).map((c) => String(c).trim()).filter(Boolean);
+  if (cel.length < 5) return null;
+
+  let iNcm = -1;
+  for (let i = 0; i < cel.length; i++) if (COT_RE_NCM.test(cel[i])) { iNcm = i; break; }
+  if (iNcm < 0) return null;
+
+  let j = iNcm + 1;
+  if (j < cel.length && /^\d{3,4}$/.test(cel[j]) && !COT_RE_CFOP.test(cel[j])) j++;  // CST/CSOSN
+  let unidade = "";
+  const m = j < cel.length ? COT_RE_CFOP_UNID.exec(cel[j]) : null;
+  if (m) { unidade = m[2]; j++; }
+  else if (j < cel.length && COT_RE_CFOP.test(cel[j])) {
+    j++;
+    if (j < cel.length && COT_RE_UNIDADE_TABELA.test(cel[j])) { unidade = cel[j].replace(/\.$/, ""); j++; }
+  } else return null;   // sem CFOP depois do NCM não é DANFE
+
+  // A ordem das colunas da DANFE é lei: QUANT, UNITÁRIO, TOTAL, e depois
+  // desconto, bases e alíquotas. São os três primeiros que interessam.
+  const numeros = cel.slice(j).filter(ehNumeroDeOrcamento);
+  if (numeros.length < 3) return null;
+  const q = numeroDeOrcamento(numeros[0]);
+  const u = numeroDeOrcamento(numeros[1]);
+  const tot = numeroDeOrcamento(numeros[2]);
+  // A conta tem que fechar. Não fechando, prefiro devolver a linha à regra
+  // geral a inventar um preço com a ordem que eu supus.
+  if (!(q > 0) || !(u > 0) || !(tot > 0)) return null;
+  if (Math.abs(q * u - tot) > Math.max(0.02, tot * 0.012)) return null;
+
+  const antes = cel.slice(0, iNcm);
+  const codigo = antes.length ? antes[0] : "";
+  return { codigo, descricao: antes.slice(1).join(" ").trim(), unidade,
+    numeros: [numeros[0], numeros[1], numeros[2]] };
+}
+
+// A linha de uma DANFE vira uma linha comum de tabela. Quando a descrição
+// veio sozinha na linha de cima, é aqui que as duas se juntam — e a de cima
+// sai, para não sobrar um item sem número nenhum.
+function juntarLinhasDaDanfe(linhas) {
+  const lista = linhas || [];
+  const saida = [];
+  for (let i = 0; i < lista.length; i++) {
+    const d = pedacoDeDanfe((lista[i] || {}).celulas);
+    if (!d) { saida.push(lista[i]); continue; }
+
+    let descricao = d.descricao;
+    if (!descricao && saida.length) {
+      const acima = ((saida[saida.length - 1] || {}).celulas || [])
+        .map((c) => String(c).trim()).filter(Boolean);
+      if (acima.length === 1 && /[a-zA-ZÀ-ÿ]{3}/.test(acima[0]) && !ehNumeroDeOrcamento(acima[0])) {
+        descricao = acima[0];
+        saida.pop();
+      }
+    }
+    if (!descricao) { saida.push(lista[i]); continue; }
+
+    const celulas = [d.codigo, descricao, d.unidade].filter(Boolean).concat(d.numeros);
+    // `danfe` diz à regra geral que a primeira célula É o código do produto.
+    // Sem isso ela desconfia de número curto na frente — e com razão, porque
+    // em orçamento "300" na frente costuma ser quantidade —, mas na nota a
+    // coluna é fixa e eu já a identifiquei pela estrutura.
+    saida.push({ celulas, texto: celulas.join(" "), danfe: !!d.codigo });
+  }
+  return saida;
+}
+
 const COT_MESES_PT = {};
 
 function dataIsoDoOrcamento(txt) {
@@ -1601,7 +1698,10 @@ function dataIsoDoOrcamento(txt) {
 // O orçamento inteiro: o cabeçalho responde de quem é e até quando vale; a
 // tabela responde quanto custa cada coisa.
 function interpretarOrcamento(linhas) {
-  const lista = (linhas || []).map((l) => (typeof l === "string" ? { celulas: [l], texto: l } : l));
+  const cru = (linhas || []).map((l) => (typeof l === "string" ? { celulas: [l], texto: l } : l));
+  // Nota fiscal primeiro: ela tem um desenho próprio, e reconhecê-lo aqui
+  // evita afrouxar a regra que lê os orçamentos das lojas.
+  const lista = juntarLinhasDaDanfe(cru);
   const tudo = lista.map((l) => l.texto).join("\n");
   // Achado o cabeçalho, a tabela começa embaixo dele: o que está acima é
   // papel timbrado, dados do cliente e o total do rodapé do cabeçalho — e

@@ -81,7 +81,8 @@ const modulo = new Function(`
            cotPalavrasDoNome, cotPartesDoNome, cotPalavrasDaLoja, cotCasaPalavra,
            sugestoesDaIA, textoParaAIA,
            entradaPronta, entradaPedeLoja, entradaPedeObra, DESTINOS_DA_ENTRADA,
-           contextoDaEntrada, cotMioloDoNome, tituloDaListaRapida, textoDaListaRapida };
+           contextoDaEntrada, cotMioloDoNome, tituloDaListaRapida, textoDaListaRapida,
+           pedacoDeDanfe, juntarLinhasDaDanfe };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -2796,6 +2797,101 @@ teste("a mensagem rápida e a da cotação dizem a mesma coisa", () => {
   const ctx = { obra: "Obra X", endereco: "Rua Y" };
   assert.strictEqual(M.textoDaListaRapida(itens, ctx),
     M.textoDoPedido({ itens }, null, ctx), "dois formatos divergindo é o que confunde a loja");
+});
+
+
+// ── A nota fiscal (DANFE) ───────────────────────────────────────
+// As linhas abaixo são as que o pdf.js devolve para a nota 8.623 da
+// Canroberto Said — a que chegou lendo "6102 METRO" como nome do material.
+
+const DANFE_REAL = [
+  { celulas: ["CÓDIGO DO PROD.", "CSOSN", "VALOR", "VALOR", "DESCONTO", "BASE", "VALOR", "VALOR"] },
+  { celulas: ["DESCRIÇÃO DO PRODUTO / SERVIÇO", "NCM / SH", "CFOP", "UNID.", "QUANT."] },
+  { celulas: ["/ CST", "UNITÁRIO", "TOTAL", "CÁLC. ICMS", "I.C.M.S.", "I.P.I."] },
+  { celulas: ["/ SERV.", "ICMS", "IPI"] },
+  { celulas: ["AREIA FINA"] },
+  { celulas: ["8", "25059000", "0103", "6102 METRO", "2,00", "130,00", "260,00", "0,00", "0,00", "0,00", "0,00", "0,00", "0,00"] },
+  { celulas: ["ARAME RECOZIDO"] },
+  { celulas: ["1364", "72172090", "0500", "6404 QUILO", "2,00", "14,00", "28,00", "0,00", "0,00", "0,00", "0,00", "0,00", "0,00"] },
+  { celulas: ["PREGO 18X27"] },
+  { celulas: ["99", "73170090", "0500", "6404 QUILO", "1,00", "16,00", "16,00", "0,00", "0,00", "0,00", "0,00", "0,00", "0,00"] },
+  { celulas: ["DADOS ADICIONAIS"] },
+].map((l) => ({ ...l, texto: l.celulas.join(" ") }));
+
+teste("a nota fiscal da Canroberto sai com o nome certo, não com o CFOP", () => {
+  const r = M.interpretarOrcamento(DANFE_REAL);
+  assert.strictEqual(r.itens.length, 3);
+  assert.deepStrictEqual(r.itens.map((i) => i.descricao),
+    ["AREIA FINA", "ARAME RECOZIDO", "PREGO 18X27"]);
+});
+
+teste("quantidade, unitário e total da nota batem com o papel", () => {
+  const r = M.interpretarOrcamento(DANFE_REAL);
+  assert.deepStrictEqual(r.itens.map((i) => [i.quantidade, i.unitario, i.total]),
+    [[2, 130, 260], [2, 14, 28], [1, 16, 16]]);
+  const soma = r.itens.reduce((s, i) => s + i.total, 0);
+  assert.strictEqual(soma, 304, "e a soma é o total da nota");
+});
+
+teste("a unidade da nota vem por extenso e é aproveitada", () => {
+  const r = M.interpretarOrcamento(DANFE_REAL);
+  assert.deepStrictEqual(r.itens.map((i) => i.unidade), ["METRO", "QUILO", "QUILO"]);
+  // e o vocabulário do catálogo sabe traduzi-las
+  assert.strictEqual(M.unidadeNoPadrao("METRO", ["Mts", "Kg"]), "Mts");
+  assert.strictEqual(M.unidadeNoPadrao("QUILO", ["Mts", "Kg"]), "Kg");
+});
+
+teste("o código do produto da nota é preservado", () => {
+  const r = M.interpretarOrcamento(DANFE_REAL);
+  assert.deepStrictEqual(r.itens.map((i) => i.codigo), ["8", "1364", "99"]);
+});
+
+teste("a descrição também pode vir na mesma linha dos números", () => {
+  const umaLinha = [{ celulas: ["8", "AREIA FINA", "25059000", "0103", "6102", "METRO", "2,00", "130,00", "260,00", "0,00"] }]
+    .map((l) => ({ ...l, texto: l.celulas.join(" ") }));
+  const d = M.pedacoDeDanfe(umaLinha[0].celulas);
+  assert.strictEqual(d.descricao, "AREIA FINA");
+  assert.strictEqual(d.unidade, "METRO");
+  assert.deepStrictEqual(d.numeros, ["2,00", "130,00", "260,00"]);
+});
+
+teste("sem CFOP depois do NCM não é nota — não mexe na linha", () => {
+  // código de barras numa linha de orçamento tem 8 dígitos e não é NCM
+  assert.strictEqual(M.pedacoDeDanfe(["7", "CIMENTO CP II", "78912345", "6", "43,00", "258,00"]), null);
+});
+
+teste("linha de nota cuja conta não fecha volta para a regra geral", () => {
+  // 2 × 130 ≠ 999: prefiro devolver do que inventar a ordem das colunas
+  assert.strictEqual(
+    M.pedacoDeDanfe(["8", "AREIA", "25059000", "0103", "6102 METRO", "2,00", "130,00", "999,00"]), null);
+});
+
+teste("a linha da descrição sozinha é consumida, não vira item vazio", () => {
+  const r = M.juntarLinhasDaDanfe(DANFE_REAL);
+  const texto = r.map((l) => l.texto).join("\n");
+  assert.ok(!/^AREIA FINA$/m.test(texto), "não pode sobrar a linha solta");
+  assert.ok(/AREIA FINA METRO 2,00 130,00 260,00/.test(texto));
+});
+
+teste("o orçamento comum não é tocado pelo leitor de nota", () => {
+  const orc = [
+    { celulas: ["Código", "Descrição", "Qtde", "Unitário", "Total"] },
+    { celulas: ["7", "CIMENTO CP II 50KG", "SC", "6", "43,00", "258,00"] },
+  ].map((l) => ({ ...l, texto: l.celulas.join(" ") }));
+  const r = M.interpretarOrcamento(orc);
+  assert.strictEqual(r.itens.length, 1);
+  assert.strictEqual(r.itens[0].descricao, "CIMENTO CP II 50KG");
+  assert.strictEqual(r.itens[0].total, 258);
+});
+
+teste("“QUILO” e “METRO” não entram no nome do material", () => {
+  // era isto que colava a unidade na descrição antes de a tabela conhecer
+  // as palavras por extenso
+  const orc = [{ celulas: ["ARAME RECOZIDO", "QUILO", "2,00", "14,00", "28,00"] }]
+    .map((l) => ({ ...l, texto: l.celulas.join(" ") }));
+  const r = M.interpretarOrcamento(orc);
+  assert.strictEqual(r.itens[0].descricao, "ARAME RECOZIDO");
+  assert.strictEqual(r.itens[0].unidade, "QUILO");
 });
 
 
