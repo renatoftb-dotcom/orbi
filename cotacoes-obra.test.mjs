@@ -81,7 +81,7 @@ const modulo = new Function(`
            cotPalavrasDoNome, cotPartesDoNome, cotPalavrasDaLoja, cotCasaPalavra,
            sugestoesDaIA, textoParaAIA,
            entradaPronta, entradaPedeLoja, entradaPedeObra, DESTINOS_DA_ENTRADA,
-           contextoDaEntrada, cotMioloDoNome, tituloDaListaRapida };
+           contextoDaEntrada, cotMioloDoNome, tituloDaListaRapida, textoDaListaRapida };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -2769,6 +2769,33 @@ teste("mandar duas vezes para a mesma loja não duplica o registro", () => {
   cot = M.registrarEnvioDaLista(cot, f, "Renato", "2026-09-07T12:00:00.000Z");
   assert.strictEqual(M.enviosDaLista(cot).length, 1);
   assert.ok(/2026-09-07/.test(M.envioParaLoja(cot, "f1").em), "fica o envio mais recente");
+});
+
+
+teste("a mensagem da lista rápida sai pronta dos itens da Entrada", () => {
+  const msg = M.textoDaListaRapida(
+    [{ descricao: "Cimento CP II 50kg", unidade: "sacos", quantidade: 10 },
+     { descricao: "Tubo 100mm", unidade: "Unidades", quantidade: 5 },
+     { descricao: "Fita crepe", unidade: "", quantidade: 0 }],
+    { obra: "Reforma Loja Cobop", endereco: "Ourinhos, SP" });
+  assert.strictEqual(msg,
+    "Obra: Reforma Loja Cobop — Ourinhos, SP\n\n" +
+    "1. Cimento CP II 50kg — 10 sacos\n" +
+    "2. Tubo 100mm — 5 Unidades\n" +
+    "3. Fita crepe");
+});
+
+teste("sem obra no contexto a mensagem é só a lista", () => {
+  assert.strictEqual(M.textoDaListaRapida([{ descricao: "Areia", quantidade: 2, unidade: "m3" }], {}),
+    "1. Areia — 2 m3");
+  assert.strictEqual(M.textoDaListaRapida([], {}), "");
+});
+
+teste("a mensagem rápida e a da cotação dizem a mesma coisa", () => {
+  const itens = [{ descricao: "Cimento", unidade: "sacos", quantidade: 10 }];
+  const ctx = { obra: "Obra X", endereco: "Rua Y" };
+  assert.strictEqual(M.textoDaListaRapida(itens, ctx),
+    M.textoDoPedido({ itens }, null, ctx), "dois formatos divergindo é o que confunde a loja");
 });
 
 

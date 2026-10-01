@@ -1999,6 +1999,22 @@ function linkWhatsApp(telefone, msg) {
   return `https://wa.me/${completo}${msg ? `?text=${encodeURIComponent(msg)}` : ""}`;
 }
 
+// A mensagem da lista rápida. A da cotação (textoDoPedido) parte de uma
+// cotação gravada; aqui ainda não há nenhuma — os itens vieram da frase que
+// acabou de ser ditada. Mesmo formato, mesma leitura do outro lado.
+function textoDaListaRapida(itens, ctx) {
+  const x = ctx || {};
+  const linhas = [];
+  const ondeVai = [x.obra, x.endereco].filter(Boolean).join(" — ");
+  if (ondeVai) { linhas.push(`Obra: ${ondeVai}`); linhas.push(""); }
+  (itens || []).forEach((it, i) => {
+    const q = Number(it && it.quantidade) || 0;
+    const qtd = q > 0 ? `${typeof qtdBR === "function" ? qtdBR(q) : q} ${(it.unidade || "")}`.trim() : "";
+    linhas.push(`${i + 1}. ${(it && it.descricao) || "Item"}${qtd ? ` — ${qtd}` : ""}`);
+  });
+  return linhas.join("\n");
+}
+
 function enviosDaLista(cot) {
   return ((cot || {}).enviosLista) || [];
 }
@@ -4052,26 +4068,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   function seguirDaEntrada({ destino, lojaId, itens, papel }) {
     setEntradaAberta(false);
     setErro("");
-    // O caminho curto: a lista ditada vira cotação gravada e cai direto na
-    // tela de pedir preço, com a loja que a frase citou já marcada. Gravar é
-    // preciso, não é cerimônia: é onde o preço que a loja responder vai
-    // morar, e o que registra para quem a lista já foi.
-    if (destino === "mandar") {
-      const base = cotacaoVazia(obra.id);
-      const nova = carimbar({ ...base,
-        titulo: tituloDaListaRapida(itens, hoje),
-        etapaId: base.etapaId || "",
-        itens: (itens || []).map((it) => ({
-          ...(typeof itemCotacaoVazio === "function" ? itemCotacaoVazio() : {}),
-          codigo: it.insumoCodigo || "", descricao: it.descricao || "",
-          unidade: it.unidade || "", quantidade: it.quantidade || "",
-        })) }, usuario, true);
-      gravarCotacoes(cotacoes.concat([nova]));
-      if (lojaId) setLojasMarcadas({ [lojaId]: true });
-      setBuscaLoja("");
-      setPedirLojas(nova);
-      return;
-    }
+    // "mandar" não chega aqui: a própria caixa resolve, sem trocar de tela.
     if (destino === "cotacao") {
       const nova = cotacaoVazia(obra.id);
       setFormCotacao({ ...nova, titulo: nova.titulo || "",
@@ -4228,6 +4225,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
 
       {entradaAberta && (
         <EntradaDaObra data={data} save={save} isMobile={isMobile} dinheiro={dinheiro}
+          obraPadrao={obra} usuario={usuario}
           aoFechar={() => setEntradaAberta(false)} aoSeguir={seguirDaEntrada} />
       )}
 
@@ -5611,18 +5609,69 @@ function useIaDisponivel() {
 // A caixa em si (PainelEntrada) não conhece `data` nem `save`: recebe listas.
 // Este invólucro faz a ligação, e é ele que as duas portas usam — a de dentro
 // da obra e a da lista de Obras. Uma fiação só.
-function EntradaDaObra({ data, save, obras, isMobile, dinheiro, embutido, aoFechar, aoSeguir }) {
+function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinheiro, embutido, aoFechar, aoSeguir }) {
   const insumos = insumosDoCatalogo(data);
   const prestadores = ((data || {}).fornecedores || []).filter((f) => f && f.ativo !== false);
   const iaDisponivel = useIaDisponivel();
   const moeda = dinheiro || ((v) => (typeof fmtMoedaCtr === "function" ? fmtMoedaCtr(v) : "R$ " + Number(v || 0).toFixed(2)));
+
+  // "Mandar para a loja" termina aqui mesmo: grava a lista na obra, registra
+  // para quem foi, e devolve a mensagem para a caixa abrir as conversas.
+  // Nada de navegar para outra tela — pedir preço é o caminho curto, e um
+  // caminho curto que muda de tela no meio deixou de ser curto.
+  function mandarDaEntrada(carga) {
+    const todas = (data || {}).obras || [];
+    const alvo = todas.find((o) => o && o.id === (carga.obraId || (obraPadrao || {}).id));
+    if (!alvo) return { erro: "Escolha a obra." };
+
+    // Mandar para mais uma loja é a MESMA lista indo adiante, não outra lista:
+    // duas cópias da mesma cotação na obra são duas respostas de preço que
+    // nunca mais se encontram.
+    const jaExiste = carga.cotacaoId
+      ? (alvo.cotacoes || []).find((c) => c && c.id === carga.cotacaoId) : null;
+
+    const lista = jaExiste || carimbar({ ...cotacaoVazia(alvo.id),
+      titulo: tituloDaListaRapida(carga.itens, new Date().toISOString().slice(0, 10)),
+      itens: (carga.itens || []).map((it) => ({
+        ...(typeof itemCotacaoVazio === "function" ? itemCotacaoVazio() : {}),
+        codigo: it.insumoCodigo || "", descricao: it.descricao || "",
+        unidade: it.unidade || "", quantidade: it.quantidade || "",
+      })) }, usuario, true);
+
+    const agora = new Date().toISOString();
+    const quem = typeof nomeDeQuem === "function" ? nomeDeQuem(usuario) : "";
+    let comEnvios = lista;
+    for (const id of carga.lojaIds || []) {
+      const f = prestadores.find((x) => x.id === id);
+      if (f) comEnvios = registrarEnvioDaLista(comEnvios, f, quem, agora);
+    }
+
+    const cotacoesNovas = jaExiste
+      ? (alvo.cotacoes || []).map((c) => (c.id === comEnvios.id ? comEnvios : c))
+      : (alvo.cotacoes || []).concat([comEnvios]);
+    save({ ...data, obras: todas.map((o) => (o.id === alvo.id ? { ...o, cotacoes: cotacoesNovas } : o)) });
+
+    return {
+      cotacaoId: comEnvios.id,
+      obraNome: alvo.nome || "",
+      mensagem: textoDaListaRapida(carga.itens, {
+        obra: alvo.nome || "",
+        endereco: [alvo.endereco, alvo.cidade, alvo.estado].filter(Boolean).join(", "),
+      }),
+    };
+  }
+
+  const seguir = (carga) => (carga && carga.destino === "mandar")
+    ? mandarDaEntrada(carga)
+    : (aoSeguir ? aoSeguir(carga) : undefined);
+
   return (
     <PainelEntrada
       insumos={insumos} prestadores={prestadores} unidades={unidadesDoCatalogo(insumos)}
       iaDisponivel={!!iaDisponivel} isMobile={isMobile} dinheiro={moeda} obras={obras} embutido={embutido}
       aoCadastrarInsumo={(campos) => cadastrarInsumoNoCatalogo(data, save, campos)}
       aoAprender={(pares) => aprenderApelidosNoCatalogo(data, save, pares)}
-      aoFechar={aoFechar} aoSeguir={aoSeguir} />
+      aoFechar={aoFechar} aoSeguir={seguir} />
   );
 }
 
@@ -5796,6 +5845,12 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // O que a própria frase já disse: { obra, loja }. Preenche os campos e fica
   // à vista — reconhecimento calado é reconhecimento em que não se confia.
   const [reconhecido, setReconhecido] = useState(null);
+  // "Mandar para a loja" resolve-se AQUI: as lojas aparecem na própria caixa,
+  // marcam-se, e o WhatsApp abre. Sem sair da tela, sem formulário nenhum.
+  const [buscaLoja, setBuscaLoja] = useState("");
+  const [lojasMarcadas, setLojasMarcadas] = useState({});
+  const [fila, setFila] = useState(null);      // { lojas, i } — uma conversa por vez
+  const [enviado, setEnviado] = useState(null); // { quantas, obraNome }
   const refTexto = useRef(null);
   // A caixa cresce com o que se escreve, até um teto: lista de trinta itens
   // não pode empurrar o botão de ler para fora da tela.
@@ -5904,7 +5959,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     const ctx = contextoDaEntrada(texto, obras || [], lojas);
     const paraLer = ctx.trechos.length ? ctx.textoLimpo : texto;
     if (ctx.obra) setObraId(ctx.obra.id);
-    if (ctx.loja) setLojaId(ctx.loja.id);
+    if (ctx.loja) { setLojaId(ctx.loja.id); setLojasMarcadas({ [ctx.loja.id]: true }); }
     setReconhecido((ctx.obra || ctx.loja) ? { obra: ctx.obra, loja: ctx.loja } : null);
     try {
       // Papel com preço (PDF) tem leitor próprio, de graça e na hora: número,
@@ -5943,9 +5998,51 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   function limpar() {
     setTexto(""); setArquivo(null); setItens(null); setPapel(null);
     setDestino(""); setLojaId(""); setObraId(""); setAviso(""); setReconhecido(null);
+    setLojasMarcadas({}); setBuscaLoja(""); setFila(null); setEnviado(null);
+  }
+
+  // As lojas com telefone, filtradas pela busca; sem telefone aparecem
+  // desligadas em vez de sumirem — é assim que ele descobre o cadastro furado.
+  const lojasDaLista = (lojas || []).filter((f) => {
+    const q = cotSemAcento(buscaLoja);
+    return !q || cotSemAcento(f.nome || "").indexOf(q) >= 0;
+  });
+  const marcadasIds = lojasDaLista.filter((f) => lojasMarcadas[f.id] && linkWhatsApp(f.telefone, "")).map((f) => f.id);
+
+  // Abre uma conversa de cada vez: o navegador bloqueia várias janelas de
+  // uma tacada, e o que é bloqueado some sem avisar.
+  function abrirConversa(loja, msg) {
+    const link = linkWhatsApp(loja.telefone, msg);
+    if (!link) return false;
+    if (typeof window !== "undefined") window.open(link, "_blank", "noopener");
+    return true;
+  }
+
+  function mandarParaAsLojas() {
+    const escolhidas = (lojas || []).filter((f) => marcadasIds.indexOf(f.id) >= 0);
+    if (!escolhidas.length) { setAviso("Marque pelo menos uma loja."); return; }
+    setAviso("");
+    // Quem grava é quem tem os dados; aqui só se diz o que foi escolhido.
+    const r = aoSeguir({ destino: "mandar", obraId, itens, papel,
+      lojaIds: escolhidas.map((f) => f.id),
+      cotacaoId: (enviado && enviado.cotacaoId) || "" }) || {};
+    if (r.erro) { setAviso(r.erro); return; }
+    abrirConversa(escolhidas[0], r.mensagem || "");
+    setEnviado({ quantas: escolhidas.length, obraNome: r.obraNome || "",
+      mensagem: r.mensagem || "", cotacaoId: r.cotacaoId || "" });
+    setFila(escolhidas.length > 1 ? { lojas: escolhidas, i: 1 } : null);
+  }
+
+  function abrirProxima() {
+    if (!fila) return;
+    const loja = fila.lojas[fila.i];
+    if (!loja) { setFila(null); return; }
+    abrirConversa(loja, (enviado && enviado.mensagem) || "");
+    setFila(fila.i + 1 < fila.lojas.length ? { ...fila, i: fila.i + 1 } : null);
   }
 
   function seguir() {
+    if (destino === "mandar") { mandarParaAsLojas(); return; }
     if (!prova.ok) { setAviso(prova.motivo); return; }
     aoSeguir({ destino, lojaId, obraId, itens, papel });
     // Embutida, a caixa é a própria tela: ela fica, e tem que ficar limpa
@@ -6203,13 +6300,66 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                 ))}
               </div>
 
-              {(entradaPedeLoja(destino) || destino === "mandar") && (
+              {destino === "mandar" && (
                 <div style={{ marginTop: 12 }}>
-                  <label style={E.label}>
-                    {destino === "mandar"
-                      ? "Começar por qual loja (opcional — na próxima tela dá para marcar várias)"
-                      : "De qual loja"}
-                  </label>
+                  <label style={E.label}>Para quais lojas</label>
+                  <input style={{ ...E.input, marginBottom: 8 }} value={buscaLoja}
+                    placeholder="Achar a loja pelo nome"
+                    onChange={(e) => setBuscaLoja(e.target.value)} />
+                  <div style={{ maxHeight: 190, overflowY: "auto", border: "1px solid rgba(38,36,33,0.12)",
+                    borderRadius: 12, background: "#fff" }}>
+                    {!lojasDaLista.length ? (
+                      <div style={{ padding: "12px 14px", fontSize: 12.5, color: "#4b5563" }}>
+                        Nenhum fornecedor com esse nome. Cadastre em Prestadores de Serviços, com o telefone.
+                      </div>
+                    ) : lojasDaLista.map((f) => {
+                      const temZap = !!linkWhatsApp(f.telefone, "");
+                      return (
+                        <label key={f.id} style={{ display: "flex", alignItems: "center", gap: 10,
+                          padding: "9px 12px", borderTop: "1px solid rgba(38,36,33,0.06)",
+                          cursor: temZap ? "pointer" : "default", opacity: temZap ? 1 : 0.55 }}>
+                          <input type="checkbox" disabled={!temZap} checked={!!lojasMarcadas[f.id] && temZap}
+                            onChange={(e) => setLojasMarcadas((m) => ({ ...m, [f.id]: e.target.checked }))}
+                            style={{ cursor: temZap ? "pointer" : "not-allowed" }} />
+                          <span style={{ minWidth: 0 }}>
+                            <span style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{f.nome || "Sem nome"}</span>
+                            <span style={{ display: "block", fontSize: 11, color: temZap ? "#6b7280" : "#b45309" }}>
+                              {temZap ? f.telefone : "sem telefone no cadastro"}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6 }}>
+                    Cada conversa abre com a lista já escrita — quem aperta enviar é você, lá no WhatsApp.
+                  </div>
+                </div>
+              )}
+
+              {enviado && (
+                <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 12,
+                  background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
+                  <div style={{ fontSize: 12.5, color: "#15803d", fontWeight: 600 }}>
+                    {fila ? `Conversa ${fila.i} de ${enviado.quantas} aberta.`
+                          : `${enviado.quantas === 1 ? "Conversa aberta" : `${enviado.quantas} conversas abertas`}.`}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 3 }}>
+                    A lista ficou guardada{enviado.obraNome ? ` na obra ${enviado.obraNome}` : ""} — é lá que o preço
+                    que a loja responder vai entrar.
+                  </div>
+                  {fila && (
+                    <button type="button" onClick={abrirProxima}
+                      style={{ ...E.btnSec, fontSize: 12, marginTop: 8 }}>
+                      Abrir a próxima — {fila.lojas[fila.i] ? fila.lojas[fila.i].nome : ""}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {entradaPedeLoja(destino) && (
+                <div style={{ marginTop: 12 }}>
+                  <label style={E.label}>De qual loja</label>
                   <SelectBusca style={E.input} value={lojaId} onChange={(v) => setLojaId(v)}
                     placeholder="Procurar loja…"
                     opcoes={[{ valor: "", rotulo: "— escolha a loja —" }].concat(
@@ -6233,11 +6383,18 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
           )}
           {/* Ler é a seta azul do composer, uma ação só e no lugar onde a mão
               já está. O rodapé só aparece quando há o que seguir. */}
-          {itens && (
+          {itens && destino === "mandar" ? (
+            <button type="button" onClick={seguir}
+              style={{ ...E.btn, opacity: marcadasIds.length ? 1 : 0.45,
+                cursor: marcadasIds.length ? "pointer" : "not-allowed" }}
+              disabled={!marcadasIds.length}>
+              {enviado ? "Mandar de novo" : marcadasIds.length > 1 ? `Enviar para ${marcadasIds.length}` : "Enviar"}
+            </button>
+          ) : itens ? (
             <button type="button" onClick={seguir}
               style={{ ...E.btn, opacity: prova.ok ? 1 : 0.45, cursor: prova.ok ? "pointer" : "not-allowed" }}
               disabled={!prova.ok}>Seguir</button>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

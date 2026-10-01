@@ -571,6 +571,7 @@ function Obras({ data, save }) {
           aberto esperando, e a lista de obras fica embaixo. */}
       {perm.podeGerenciarObra && obrasVigentes.length > 0 && typeof EntradaDaObra === "function" && (
         <EntradaDaObra data={data} save={save} obras={obrasVigentes} isMobile={isMobile}
+          usuario={(typeof getUsuarioAtual === "function" ? getUsuarioAtual() : null)}
           embutido aoSeguir={seguirDaEntradaDeObras} />
       )}
 
