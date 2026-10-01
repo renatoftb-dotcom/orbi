@@ -28,6 +28,7 @@ const api = new Function(
            INSUMOS_SEED, INSUMO_GRUPOS, normalizarTexto, similaridadeTexto,
            resolverInsumo, proximoCodigoInsumo, grupoInferido, prefixoDoGrupo,
            mesesEntre, fatorIncc, precoInsumo, atualizarPrecoReferencia, comprasDoInsumo,
+           previaDePrecosPorCompra,
            migrarMateriaisParaInsumos, semearInsumos };`
 )();
 
@@ -460,6 +461,144 @@ t("insumo sem código não puxa compra nenhuma", () => {
   eq(api.comprasDoInsumo({ nome: "sem codigo" }, { lancamentos: [{ insumoCodigo: "", quantidade: 1, valor: 1, data: "2026-01-01" }] }).length, 0);
   eq(api.comprasDoInsumo(null, {}).length, 0);
   eq(api.comprasDoInsumo({ codigo: "X" }, null).length, 0);
+});
+
+
+// ── previaDePrecosPorCompra — o levantamento não grava, só conta ─────────
+
+// Uma obra com uma conta paga, pronta para montar os cenários.
+function conta(codigo, qtd, valor, data) {
+  return { insumoCodigo: codigo, quantidade: qtd, valor: valor, valorPago: valor,
+           pago: true, pagoEm: data, vencimento: data };
+}
+function mundo(contas) { return { obras: [{ id: "o1", nome: "Obra 1", contasPagar: contas }] }; }
+
+t("insumo sem compra não aparece no levantamento", () => {
+  const r = api.previaDePrecosPorCompra(
+    [{ codigo: "MAT.001", nome: "Cimento", precoReferencia: 40 }], mundo([]));
+  eq(r.linhas.length, 0);
+  eq(r.resumo.comCompras, 0);
+});
+
+t("compra normal atualiza o preço e mede a variação", () => {
+  const r = api.previaDePrecosPorCompra(
+    [{ codigo: "MAT.001", nome: "Cimento", precoReferencia: 40, precoData: "2026-01-01" }],
+    mundo([conta("MAT.001", 10, 500, "2026-03-01")]));
+  eq(r.linhas.length, 1);
+  eq(r.linhas[0].situacao, "atualiza");
+  eq(r.linhas[0].precoAntes, 40);
+  eq(r.linhas[0].precoDepois, 50);
+  eq(r.linhas[0].variacao, 25);
+  eq(r.resumo.atualiza, 1);
+  eq(r.resumo.compras, 1);
+});
+
+t("preço manual fica intocado e é contado à parte", () => {
+  const r = api.previaDePrecosPorCompra(
+    [{ codigo: "MAT.001", nome: "Cimento", precoReferencia: 40, precoManual: 38 }],
+    mundo([conta("MAT.001", 10, 500, "2026-03-01")]));
+  eq(r.linhas[0].situacao, "manual");
+  eq(r.linhas[0].precoAntes, 38);
+  eq(r.linhas[0].precoDepois, 38);
+  eq(r.resumo.manual, 1);
+  eq(r.resumo.atualiza, 0);
+});
+
+t("salto suspeito cai em pendência, não no preço", () => {
+  const r = api.previaDePrecosPorCompra(
+    [{ codigo: "MAT.001", nome: "Cimento", precoReferencia: 40, precoData: "2026-01-01" }],
+    mundo([conta("MAT.001", 1, 400, "2026-03-01")]));
+  eq(r.linhas[0].situacao, "pendente");
+  eq(r.linhas[0].precoAntes, 40);
+  eq(r.linhas[0].precoDepois, 400);
+  eq(r.linhas[0].variacao, null);
+  eq(r.resumo.pendente, 1);
+  eq(r.resumo.atualiza, 0);
+});
+
+t("queda suspeita também cai em pendência", () => {
+  const r = api.previaDePrecosPorCompra(
+    [{ codigo: "MAT.001", nome: "Cimento", precoReferencia: 40, precoData: "2026-01-01" }],
+    mundo([conta("MAT.001", 10, 50, "2026-03-01")]));
+  eq(r.linhas[0].situacao, "pendente");
+  eq(r.linhas[0].precoDepois, 5);
+});
+
+t("nota retroativa não rebaixa preço mais novo", () => {
+  const r = api.previaDePrecosPorCompra(
+    [{ codigo: "MAT.001", nome: "Cimento", precoReferencia: 40, precoData: "2026-06-01" }],
+    mundo([conta("MAT.001", 10, 450, "2026-02-01")]));
+  eq(r.linhas[0].situacao, "semMudanca");
+  eq(r.linhas[0].precoAntes, 40);
+  eq(r.linhas[0].precoDepois, 40);
+  eq(r.resumo.semMudanca, 1);
+});
+
+t("compra que repete o preço de hoje ainda atualiza a data", () => {
+  const r = api.previaDePrecosPorCompra(
+    [{ codigo: "MAT.001", nome: "Cimento", precoReferencia: 50, precoData: "2026-01-01" }],
+    mundo([conta("MAT.001", 10, 500, "2026-03-01")]));
+  eq(r.linhas[0].situacao, "atualiza");
+  eq(r.linhas[0].precoAntes, 50);
+  eq(r.linhas[0].precoDepois, 50);
+  eq(r.linhas[0].variacao, 0);
+});
+
+t("várias compras aplicam na ordem: a última manda", () => {
+  const r = api.previaDePrecosPorCompra(
+    [{ codigo: "MAT.001", nome: "Cimento", precoReferencia: 40, precoData: "2026-01-01" }],
+    mundo([
+      conta("MAT.001", 10, 450, "2026-02-01"),
+      conta("MAT.001", 10, 520, "2026-04-01"),
+    ]));
+  eq(r.linhas[0].compras, 2);
+  eq(r.linhas[0].precoDepois, 52);
+  eq(r.resumo.compras, 2);
+});
+
+t("insumo sem preço de referência aceita a primeira compra", () => {
+  const r = api.previaDePrecosPorCompra(
+    [{ codigo: "MAT.001", nome: "Cimento", precoReferencia: null }],
+    mundo([conta("MAT.001", 4, 100, "2026-03-01")]));
+  eq(r.linhas[0].situacao, "atualiza");
+  eq(r.linhas[0].precoAntes, null);
+  eq(r.linhas[0].precoDepois, 25);
+  eq(r.linhas[0].variacao, null);
+});
+
+t("insumo inativo fica fora do levantamento", () => {
+  const r = api.previaDePrecosPorCompra(
+    [{ codigo: "MAT.001", nome: "Cimento", precoReferencia: 40, ativo: false }],
+    mundo([conta("MAT.001", 10, 500, "2026-03-01")]));
+  eq(r.linhas.length, 0);
+  eq(r.resumo.comCompras, 0);
+});
+
+t("pendência vem antes de atualização na ordem de conferência", () => {
+  const r = api.previaDePrecosPorCompra([
+    { codigo: "MAT.001", nome: "Cimento", precoReferencia: 40, precoData: "2026-01-01" },
+    { codigo: "MAT.002", nome: "Areia",   precoReferencia: 40, precoData: "2026-01-01" },
+    { codigo: "MAT.003", nome: "Brita",   precoReferencia: 40, precoManual: 40 },
+  ], mundo([
+    conta("MAT.001", 10, 440, "2026-03-01"),   // atualiza
+    conta("MAT.002", 1, 400, "2026-03-01"),    // pendente
+    conta("MAT.003", 10, 600, "2026-03-01"),   // manual
+  ]));
+  eq(r.linhas.map((l) => l.situacao).join(","), "pendente,atualiza,manual");
+});
+
+t("o levantamento não toca no insumo que recebeu", () => {
+  const insumo = { codigo: "MAT.001", nome: "Cimento", precoReferencia: 40, precoData: "2026-01-01" };
+  api.previaDePrecosPorCompra([insumo], mundo([conta("MAT.001", 10, 500, "2026-03-01")]));
+  eq(insumo.precoReferencia, 40);
+  eq(insumo.precoData, "2026-01-01");
+  eq(insumo.precoPendente, undefined);
+});
+
+t("lista vazia ou dados ausentes não explodem", () => {
+  eq(api.previaDePrecosPorCompra([], {}).linhas.length, 0);
+  eq(api.previaDePrecosPorCompra(null, null).linhas.length, 0);
+  eq(api.previaDePrecosPorCompra([null], {}).resumo.comCompras, 0);
 });
 
 

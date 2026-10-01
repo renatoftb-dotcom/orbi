@@ -376,6 +376,60 @@ function atualizarPrecoReferencia(insumo, lancamento) {
   });
 }
 
+// ── O que as compras fariam com o preço do catálogo ────────
+// Antes de deixar as notas reescreverem o catálogo, é preciso ver o estrago:
+// quais insumos mudariam de preço, de quanto para quanto, e quais cairiam na
+// fila de pendência por salto suspeito. Esta função não grava nada — ela
+// SIMULA, aplicando as compras na ordem em que aconteceram, pela mesma
+// `atualizarPrecoReferencia` que valeria de verdade. Preview e ação usando o
+// mesmo motor é o que impede os dois de divergirem.
+function previaDePrecosPorCompra(insumos, data) {
+  var linhas = [];
+  var resumo = { comCompras: 0, atualiza: 0, pendente: 0, semMudanca: 0, manual: 0, compras: 0 };
+  (insumos || []).forEach(function (i) {
+    if (!i || i.ativo === false) return;
+    var compras = comprasDoInsumo(i, data);
+    if (!compras.length) return;
+    resumo.comCompras++;
+    resumo.compras += compras.length;
+
+    if (i.precoManual != null) {
+      resumo.manual++;
+      linhas.push({ insumo: i, compras: compras.length, situacao: "manual",
+        precoAntes: i.precoManual, precoDepois: i.precoManual, variacao: 0 });
+      return;
+    }
+
+    // Aplica uma a uma, como a vida aplicaria.
+    var atual = i;
+    compras.forEach(function (c) {
+      atual = atualizarPrecoReferencia(atual, {
+        tipo: "custo", quantidade: c.qtd, total: c.total, data: c.data, id: c.id,
+      });
+    });
+
+    var antes = i.precoReferencia != null ? i.precoReferencia : null;
+    var depois = atual.precoReferencia != null ? atual.precoReferencia : null;
+    var virouPendente = !!atual.precoPendente && !i.precoPendente;
+    var situacao = virouPendente ? "pendente"
+      : (antes !== depois || atual.precoData !== i.precoData) ? "atualiza" : "semMudanca";
+    resumo[situacao]++;
+    linhas.push({ insumo: i, compras: compras.length, situacao: situacao,
+      precoAntes: antes, precoDepois: virouPendente ? atual.precoPendente.valor : depois,
+      ultimaCompra: compras[compras.length - 1],
+      variacao: (antes > 0 && depois > 0 && !virouPendente)
+        ? Math.round((depois / antes - 1) * 1000) / 10 : null });
+  });
+  // O que mais muda primeiro — é por onde se começa a conferir.
+  linhas.sort(function (a, b) {
+    var ordem = { pendente: 0, atualiza: 1, semMudanca: 2, manual: 3 };
+    if (ordem[a.situacao] !== ordem[b.situacao]) return ordem[a.situacao] - ordem[b.situacao];
+    return Math.abs(b.variacao || 0) - Math.abs(a.variacao || 0);
+  });
+  return { linhas: linhas, resumo: resumo };
+}
+
+
 // ═══════════════════════════════════════════════════════════════
 // MIGRAÇÃO E SEMEADURA — ambas idempotentes
 // ═══════════════════════════════════════════════════════════════
@@ -1189,6 +1243,7 @@ function Insumos({ data, save }) {
   var [marcados, setMarcados] = useState({});
   var [etapaLote, setEtapaLote] = useState("");
   var [sugestao, setSugestao] = useState(null);   // { grupos, fora: {etapaId:true} }
+  var [previaPrecos, setPreviaPrecos] = useState(null);  // { linhas, resumo } - levantamento, nunca grava
 
   var [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
   useEffect(function () {
@@ -1280,6 +1335,18 @@ function Insumos({ data, save }) {
         ? "Da próxima compra em diante eles já entram nessa etapa."
         : "A etapa saiu: esses itens voltam a perguntar na compra.",
     });
+  }
+
+  // Levantamento, não ação: mostra o que as compras FARIAM com o catálogo.
+  // Nada é gravado ao abrir — é a conferida antes da decisão.
+  function abrirPreviaPrecos() {
+    var r = previaDePrecosPorCompra(insumos, data);
+    if (!r.resumo.comCompras) {
+      dialogo.alertar({ titulo: "Nenhuma compra vinculada ainda",
+        mensagem: "Nenhum insumo tem compra com código casado — nem nos lançamentos do escritório, nem nas contas a pagar das obras." });
+      return;
+    }
+    setPreviaPrecos(r);
   }
 
   function abrirSugestoes() {
@@ -1468,11 +1535,78 @@ function Insumos({ data, save }) {
         {perm.podeEditar && insumos.length > 0 && (
           <div style={{ marginBottom: 12 }}>
             <button style={INS_S.btnSec} onClick={abrirSugestoes}>Sugerir etapas pelo nome</button>
-            <span style={{ fontSize: 11.5, color: INS.inkSoft, marginLeft: 10 }}>
-              propõe a etapa de quem ainda não tem; você confere antes de gravar
-            </span>
+            <button style={{ ...INS_S.btnSec, marginLeft: 8 }} onClick={abrirPreviaPrecos}>
+              O que as compras fariam no preço
+            </button>
+            <div style={{ fontSize: 11.5, color: INS.inkSoft, marginTop: 6 }}>
+              Os dois são levantamento: mostram o que mudaria e esperam você conferir antes de gravar.
+            </div>
           </div>
         )}
+
+        {previaPrecos && (() => {
+          var R = previaPrecos.resumo;
+          var brl = function (v) { return v == null ? "—" : fmtBRLIns(v); };
+          var cor = { pendente: "#b45309", atualiza: "#0474f4", semMudanca: "#6b7280", manual: "#6b7280" };
+          var rotulo = { pendente: "salto suspeito", atualiza: "atualiza", semMudanca: "sem mudança", manual: "preço manual" };
+          var th = { padding: "6px 8px", textAlign: "left", fontSize: 10.5, color: INS.inkSoft,
+            textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600 };
+          var td = { padding: "6px 8px", fontSize: 12 };
+          var num = { textAlign: "right", fontVariantNumeric: "tabular-nums" };
+          return (
+            <div style={{ border: "1px solid #0474f4", borderRadius: 14, padding: 14, marginBottom: 14, background: "#fff" }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: INS.grafite, marginBottom: 2 }}>
+                O que as compras fariam no preço do catálogo
+              </div>
+              <div style={{ fontSize: 11.5, color: INS.inkSoft, marginBottom: 12 }}>
+                Levantamento. Nada foi gravado — isto é a simulação de aplicar {R.compras} compra{R.compras !== 1 ? "s" : ""} de
+                {" "}{R.comCompras} insumo{R.comCompras !== 1 ? "s" : ""}, na ordem em que aconteceram.
+              </div>
+              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12, fontSize: 12 }}>
+                <span><b style={{ color: "#0474f4", fontSize: 15 }}>{R.atualiza}</b> mudariam de preço</span>
+                <span><b style={{ color: "#b45309", fontSize: 15 }}>{R.pendente}</b> cairiam em pendência (salto &gt; 3×)</span>
+                <span><b style={{ fontSize: 15 }}>{R.semMudanca}</b> ficariam como estão</span>
+                {R.manual > 0 && <span><b style={{ fontSize: 15 }}>{R.manual}</b> com preço manual, intocados</span>}
+              </div>
+              <div style={{ maxHeight: 360, overflowY: "auto", border: "1px solid #eef0f3", borderRadius: 10 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead><tr>
+                    <th style={th}>Insumo</th>
+                    <th style={{ ...th, ...num }}>Compras</th>
+                    <th style={{ ...th, ...num }}>Hoje</th>
+                    <th style={{ ...th, ...num }}>Viraria</th>
+                    <th style={{ ...th, ...num }}>Variação</th>
+                    <th style={th}>Situação</th>
+                  </tr></thead>
+                  <tbody>
+                    {previaPrecos.linhas.map(function (l, k) {
+                      return (
+                        <tr key={k} style={{ borderTop: "1px solid #f3f4f6" }}>
+                          <td style={{ ...td, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                            title={l.insumo.nome}>
+                            <span style={{ color: INS.inkSoft, fontSize: 10.5 }}>{l.insumo.codigo}</span> {l.insumo.nome}
+                          </td>
+                          <td style={{ ...td, ...num, color: INS.inkSoft }}>{l.compras}</td>
+                          <td style={{ ...td, ...num }}>{brl(l.precoAntes)}</td>
+                          <td style={{ ...td, ...num, fontWeight: 600 }}>{brl(l.precoDepois)}</td>
+                          <td style={{ ...td, ...num, color: l.variacao == null ? INS.inkSoft : l.variacao > 0 ? "#b45309" : "#15803d" }}>
+                            {l.variacao == null ? "—" : (l.variacao > 0 ? "+" : "") + l.variacao.toLocaleString("pt-BR") + "%"}
+                          </td>
+                          <td style={{ ...td, color: cor[l.situacao], fontWeight: l.situacao === "pendente" ? 600 : 400 }}>
+                            {rotulo[l.situacao]}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+                <button style={INS_S.btnSec} onClick={function () { setPreviaPrecos(null); }}>Fechar</button>
+              </div>
+            </div>
+          );
+        })()}
 
         {sugestao && (
           <div style={{ border: "1px solid #0474f4", borderRadius: 14, padding: 14, marginBottom: 14, background: "#fff" }}>
