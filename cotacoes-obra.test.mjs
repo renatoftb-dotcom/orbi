@@ -82,7 +82,7 @@ const modulo = new Function(`
            sugestoesDaIA, textoParaAIA,
            entradaPronta, entradaPedeLoja, entradaPedeObra, DESTINOS_DA_ENTRADA,
            contextoDaEntrada, cotMioloDoNome, tituloDaListaRapida, textoDaListaRapida,
-           pedacoDeDanfe, juntarLinhasDaDanfe };
+           pedacoDeDanfe, juntarLinhasDaDanfe, descricaoSemMaterial, palavraDeMaterial };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -2892,6 +2892,36 @@ teste("“QUILO” e “METRO” não entram no nome do material", () => {
   const r = M.interpretarOrcamento(orc);
   assert.strictEqual(r.itens[0].descricao, "ARAME RECOZIDO");
   assert.strictEqual(r.itens[0].unidade, "QUILO");
+});
+
+
+// ── Leitura torta não é insumo faltando ─────────────────────────
+
+teste("o que saiu da nota lida errado é reconhecido como leitura torta", () => {
+  for (const s of ["6102 METRO", "6404 QUILO", "5102 UN", "25059000 0103", "2,00 130,00"])
+    assert.strictEqual(M.descricaoSemMaterial(s), true, s);
+});
+
+teste("material de verdade nunca é confundido com leitura torta", () => {
+  for (const s of ["AREIA FINA", "ARAME RECOZIDO", "PREGO 18X27", "Cal hidratada",
+                   "Tubo 100mm", "Cimento CP II 50kg", "Tela soldada Q138",
+                   "Viga", "Cola PVC 175g", "Disco diamantado 110mm"])
+    assert.strictEqual(M.descricaoSemMaterial(s), false, s);
+});
+
+teste("rótulo de coluna fiscal não conta como nome de material", () => {
+  assert.strictEqual(M.palavraDeMaterial("CFOP"), false);
+  assert.strictEqual(M.palavraDeMaterial("ICMS"), false);
+  assert.strictEqual(M.palavraDeMaterial("Unitário"), false);
+  assert.strictEqual(M.palavraDeMaterial("QUILO"), false);
+  assert.strictEqual(M.palavraDeMaterial("18X27"), false, "dois dígitos e um X não é nome");
+  assert.strictEqual(M.palavraDeMaterial("AREIA"), true);
+});
+
+teste("descrição vazia conta como torta", () => {
+  assert.strictEqual(M.descricaoSemMaterial(""), true);
+  assert.strictEqual(M.descricaoSemMaterial(null), true);
+  assert.strictEqual(M.descricaoSemMaterial("   "), true);
 });
 
 

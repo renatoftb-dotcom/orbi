@@ -1596,6 +1596,39 @@ function itemDeOrcamento(linha, papeis) {
   return { codigo, descricao, unidade, quantidade, unitario, total };
 }
 
+// ── Descrição que nem material é ───────────────────────
+// "6102 METRO" não é um insumo que falta no catálogo: é CFOP com unidade, o
+// sinal de que a leitura do papel pegou a coluna errada. A diferença importa
+// porque as duas situações pedem coisas opostas: uma pede cadastrar o item,
+// a outra pede reler o papel.
+//
+// Perguntar à IA por uma dessas é gastar chamada para consertar um dado que
+// nasceu torto duas etapas antes — e ela responde, com razão, que não achou.
+// Isso parece falha da IA e esconde a falha real.
+
+// Palavras que aparecem no papel mas nunca nomeiam um material.
+// Sem acento de propósito: a comparação passa por cotSemAcento antes.
+const COT_PALAVRA_FISCAL = /^(ncm|sh|cst|csosn|cfop|icms|ipi|pis|cofins|aliq|aliquota|bc|st|un|unid|vl|vlr|qtd|qtde|quant|total|subtotal|desc|desconto|base|calc|valor|unit|unitario|serv|prod|produto|item)$/i;
+
+// Uma palavra que pode ser nome de material: tem letra que baste, não é
+// unidade e não é rótulo de coluna fiscal.
+function palavraDeMaterial(p) {
+  const w = String(p == null ? "" : p).trim();
+  if (!w) return false;
+  const letras = (w.match(/[a-zA-ZÀ-ÿ]/g) || []).length;
+  if (letras < 3) return false;                    // "18X27", "6102", "m²"
+  if (COT_RE_UNIDADE_TABELA.test(w)) return false; // "METRO", "QUILO", "SC"
+  if (COT_PALAVRA_FISCAL.test(cotSemAcento(w))) return false;
+  return true;
+}
+
+// A descrição não nomeia material nenhum? Então o papel foi lido torto.
+function descricaoSemMaterial(texto) {
+  const t = String(texto == null ? "" : texto).trim();
+  if (!t) return true;
+  return !t.split(/[\s\/\-|]+/).some(palavraDeMaterial);
+}
+
 // ── A nota fiscal é outra tabela ─────────────────────────
 // A DANFE não é o orçamento de uma loja: o layout dela é fixado por lei, e
 // traz entre o nome do produto e os valores um bloco fiscal que orçamento
@@ -6008,9 +6041,15 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const ehSobraDaEntrada = (x) => !x.insumoCodigo && !(x.sugestao && x.sugestao.segura)
     && !!String(x.descricao || "").trim();
   const sobras = (itens || []).filter(ehSobraDaEntrada);
+  // E dentro das sobras, duas coisas diferentes: insumo que falta no catálogo
+  // (a IA ajuda) e leitura torta do papel (a IA não tem o que achar).
+  const sobrasTortas = sobras.filter((x) => descricaoSemMaterial(x.descricao));
+  const sobrasUteis = sobras.filter((x) => !descricaoSemMaterial(x.descricao));
   async function conferirSobrasComIA() {
     const alvos = [];
-    (itens || []).forEach((x, i) => { if (ehSobraDaEntrada(x)) alvos.push({ i, x }); });
+    (itens || []).forEach((x, i) => {
+      if (ehSobraDaEntrada(x) && !descricaoSemMaterial(x.descricao)) alvos.push({ i, x });
+    });
     if (!alvos.length || conferindo) return;
     setConferindo(true); setAvisoIA("");
     setProgressoIA({ etapa: "fila", itens: 0, decorridoMs: 0 });
@@ -6265,7 +6304,23 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                     </span>
                   ) : null}
                 </div>
-                {(paraCasar > 0 || (sobras.length > 0 && iaDisponivel)) && (
+                {sobrasTortas.length > 0 && (
+                  <div style={{ marginTop: 8, padding: "9px 12px", borderRadius: 10,
+                    background: "#fff7ed", border: "1px solid rgba(180,83,9,0.28)" }}>
+                    <div style={{ fontSize: 12, color: "#b45309", fontWeight: 600 }}>
+                      {sobrasTortas.length === 1
+                        ? "1 item veio sem nome de material — a leitura deste papel saiu torta"
+                        : `${sobrasTortas.length} itens vieram sem nome de material — a leitura deste papel saiu torta`}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "#7c2d12", marginTop: 3 }}>
+                      O que foi lido ({sobrasTortas.slice(0, 3).map((x) => `“${x.descricao}”`).join(", ")}
+                      {sobrasTortas.length > 3 ? "…" : ""}) é código e unidade, não nome de produto — a coluna
+                      errada do papel. Perguntar à IA não adianta: não há o que achar no catálogo.
+                      Escolha o insumo à mão abaixo, ou cole o texto da nota em vez do arquivo.
+                    </div>
+                  </div>
+                )}
+                {(paraCasar > 0 || (sobrasUteis.length > 0 && iaDisponivel)) && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 8 }}>
                     {paraCasar > 0 && (
                       <>
@@ -6276,14 +6331,14 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                           onClick={casarOsSegurosDaEntrada}>Casar com o catálogo</button>
                       </>
                     )}
-                    {sobras.length > 0 && iaDisponivel && (
+                    {sobrasUteis.length > 0 && iaDisponivel && (
                       <button type="button" disabled={conferindo}
                         style={{ ...E.btnSec, fontSize: 11.5, padding: "5px 12px",
                           opacity: conferindo ? 0.5 : 1, cursor: conferindo ? "progress" : "pointer" }}
                         onClick={conferirSobrasComIA}>
                         {conferindo ? "A IA está conferindo…"
-                          : sobras.length === 1 ? "Perguntar à IA pelo item que sobrou"
-                          : `Perguntar à IA pelos ${sobras.length} que sobraram`}
+                          : sobrasUteis.length === 1 ? "Perguntar à IA pelo item que sobrou"
+                          : `Perguntar à IA pelos ${sobrasUteis.length} que sobraram`}
                       </button>
                     )}
                   </div>
@@ -6570,9 +6625,13 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
   const ehSobra = (x) => !x.insumoCodigo && !(x.sugestao && x.sugestao.segura)
     && !!String(x.descricao || "").trim();
   const sobrasDaLeitura = itens.filter(ehSobra);
+  // Descrição que não nomeia material é leitura torta do papel, não insumo
+  // faltando: a IA não tem o que achar, e perguntar só esconde a falha real.
+  const sobrasTortas = sobrasDaLeitura.filter((x) => descricaoSemMaterial(x.descricao));
+  const sobrasUteis = sobrasDaLeitura.filter((x) => !descricaoSemMaterial(x.descricao));
   async function conferirComIA() {
     const alvos = [];
-    itens.forEach((x, i) => { if (ehSobra(x)) alvos.push({ i, x }); });
+    itens.forEach((x, i) => { if (ehSobra(x) && !descricaoSemMaterial(x.descricao)) alvos.push({ i, x }); });
     if (!alvos.length || conferindo) return;
     setConferindo(true); setAvisoIA("");
     setProgressoIA({ etapa: "fila", itens: 0, decorridoMs: 0 });
@@ -6747,14 +6806,14 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
                       onClick={casarOsSeguros}>Casar com o catálogo</button>
                   </>
                 )}
-                {sobrasDaLeitura.length > 0 && iaDisponivel && (
+                {sobrasUteis.length > 0 && iaDisponivel && (
                   <button type="button" disabled={conferindo}
                     style={{ ...E.btnSec, fontSize: 11.5, padding: "5px 12px",
                       opacity: conferindo ? 0.5 : 1, cursor: conferindo ? "progress" : "pointer" }}
                     onClick={conferirComIA}>
                     {conferindo ? "A IA está conferindo…"
-                      : sobrasDaLeitura.length === 1 ? "Perguntar à IA pelo item que sobrou"
-                      : `Perguntar à IA pelos ${sobrasDaLeitura.length} que sobraram`}
+                      : sobrasUteis.length === 1 ? "Perguntar à IA pelo item que sobrou"
+                      : `Perguntar à IA pelos ${sobrasUteis.length} que sobraram`}
                   </button>
                 )}
                 {paraCasar > 0 && (
@@ -6763,6 +6822,14 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
                   </span>
                 )}
               </div>
+              {sobrasTortas.length > 0 && (
+                <div style={{ marginTop: 8, fontSize: 11.5, color: "#b45309" }}>
+                  {sobrasTortas.length === 1 ? "1 item veio" : `${sobrasTortas.length} itens vieram`} sem nome de
+                  material ({sobrasTortas.slice(0, 3).map((x) => `“${x.descricao}”`).join(", ")}
+                  {sobrasTortas.length > 3 ? "…" : ""}) — é a coluna errada do papel, não insumo faltando.
+                  Escolha à mão ou leia o papel de novo.
+                </div>
+              )}
               {conferindo && <div style={{ marginTop: 8 }}><BarraLeituraIA progresso={progressoIA} /></div>}
               {avisoIA && !conferindo && (
                 <div style={{ marginTop: 6, fontSize: 11.5, color: "#b45309" }}>{avisoIA}</div>
