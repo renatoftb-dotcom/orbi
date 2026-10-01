@@ -2252,6 +2252,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Baixa de conta: telinha com a data de contabilização e o valor pago.
   const [formPagamento, setFormPagamento] = useState(null);
   const [folhaComprov, setFolhaComprov] = useState(null); // { titulo, contas } quando aberta
+  // O que a baixa fez no preço do catálogo: { aplicados, pendencias, semCodigo }.
+  // Dar baixa muda o preço de referência do insumo, e isso não pode acontecer
+  // calado — principalmente o que PAROU, que é o que precisa da mão dele.
+  const [avisoPreco, setAvisoPreco] = useState(null);
   // Extrato mensal (P&L realizado): mês escolhido e formulário de entrada.
   const [mesExtrato, setMesExtrato] = useState("");
   const [formEntrada, setFormEntrada] = useState(null);
@@ -2275,7 +2279,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // data.obras guarda as obras de TODOS os clientes; `obras` acima é só a
   // fatia deste. Gravar a fatia por cima da coleção apagava as obras dos
   // outros clientes — por isso toda escrita passa por aqui.
-  const gravarObras = (fatia) => save({ ...data, obras: mesclarPorCliente(data.obras, cliente.id, fatia) });
+  // `extras` entra no MESMO save. Dois saves seguidos leem o mesmo retrato
+  // antigo de `data`, e o segundo apaga o que o primeiro escreveu — foi assim
+  // que uma conta de loja criada pela Entrada sumiu. Quando a baixa precisa
+  // mexer no catálogo também, as duas coisas vão juntas ou nenhuma vai.
+  const gravarObras = (fatia, extras) => save({ ...data,
+    obras: mesclarPorCliente(data.obras, cliente.id, fatia), ...(extras || {}) });
   // Escritório e cliente usam esta mesma tela e mexem nas mesmas contas.
   // Tudo que é gravado daqui leva o nome de quem gravou — é o que permite
   // abrir uma baixa meses depois e saber de quem foi a mão.
@@ -2315,10 +2324,24 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // `obraAtual`, o registro fresco da coleção; a cópia do estado é só reserva.
   const obraAtual = obraSelecionada ? (obras.find(o => o.id === obraSelecionada.id) || obraSelecionada) : null;
   const contasDaObra = (obraAtual && obraAtual.contasPagar) || [];
+  // Toda escrita de contas da obra passa aqui — e é por isso que o catálogo
+  // aprende aqui, por diff, e não em cada botão de pagar: baixa de pedido,
+  // baixa em lote, baixa avulsa e o que vier depois caíram todos nesta porta.
+  //
+  // O catálogo de insumos é do ESCRITÓRIO. O cliente final usa esta mesma tela
+  // e pode dar baixa na obra dele; o preço de referência do escritório não se
+  // mexe por isso.
   const gravarContas = (novasContas, obraId) => {
     const alvo = obraId || (obraSelecionada && obraSelecionada.id);
     if (!alvo) return;
-    gravarObras(obras.map(o => o.id === alvo ? { ...o, contasPagar: novasContas } : o));
+    const fatia = obras.map(o => o.id === alvo ? { ...o, contasPagar: novasContas } : o);
+    if (!perm.podeGerenciarObra) { gravarObras(fatia); return; }
+    const antes = (obras.find(o => o.id === alvo) || {}).contasPagar || [];
+    const pagas = contasRecemPagas(antes, novasContas);
+    if (!pagas.length) { gravarObras(fatia); return; }
+    const r = aplicarComprasNoCatalogo(data.materiais, pagas);
+    gravarObras(fatia, r.materiais === data.materiais ? null : { materiais: r.materiais });
+    setAvisoPreco(r.relato.aplicados.length || r.relato.pendencias.length ? r.relato : null);
   };
   // Contas geradas por uma versão antiga das regras de vencimento (ex.: as
   // mensais que andavam de 30 em 30 dias, escorregando o dia do mês) se
@@ -4020,6 +4043,53 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     return (
       <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => { setFormConta(null); setView("detalheObra"); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
+
+        {avisoPreco && (() => {
+          const ap = avisoPreco.aplicados || [], pd = avisoPreco.pendencias || [];
+          const alerta = pd.length > 0;
+          const cor = alerta ? "#b45309" : AZUL_VK;
+          const fundo = alerta ? "rgba(180,83,9,0.06)" : "rgba(4,116,244,0.05)";
+          return (
+            <div style={{ border: `1px solid ${cor}`, background: fundo, borderRadius: 14,
+              padding: "12px 14px", marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: cor }}>
+                  {alerta ? "Confira a unidade antes de aceitar o preço" : "Preço do catálogo atualizado"}
+                </div>
+                <button type="button" onClick={() => setAvisoPreco(null)}
+                  style={{ border: "none", background: "transparent", color: cor, cursor: "pointer",
+                    fontFamily: "inherit", fontSize: 12.5, padding: 0 }}>Fechar</button>
+              </div>
+              {ap.length > 0 && (
+                <div style={{ fontSize: 12.5, color: "#374151", marginTop: 6 }}>
+                  {ap.length === 1 ? "1 insumo passou" : `${ap.length} insumos passaram`} a valer o preço desta compra:
+                  {" "}{ap.slice(0, 4).map(a => `${a.nome} ${fmtMoedaCtr(a.precoDepois)}${a.unidade ? "/" + a.unidade : ""}`).join(" · ")}
+                  {ap.length > 4 ? ` · e outros ${ap.length - 4}` : ""}.
+                </div>
+              )}
+              {pd.map((x, k) => (
+                <div key={k} style={{ fontSize: 12.5, color: "#374151", marginTop: 8, paddingTop: 8,
+                  borderTop: k === 0 && ap.length === 0 ? "none" : "1px solid rgba(38,36,33,0.08)" }}>
+                  <b>{x.nome}</b>{" "}
+                  {x.motivo === "unidade" ? (
+                    <>— a loja cobrou <b>{fmtMoedaCtr(x.precoDaCompra)}</b> por <b>{x.unidadeCompra || "?"}</b>,
+                      {" "}mas o catálogo guarda o preço por <b>{x.unidadePreco || "?"}</b>.
+                      {" "}Unidade diferente não é comparável — o preço <b>não foi alterado</b>.</>
+                  ) : (
+                    <>— a compra deu <b>{fmtMoedaCtr(x.precoDaCompra)}</b> contra{" "}
+                      <b>{x.precoAntes != null ? fmtMoedaCtr(x.precoAntes) : "—"}</b> do catálogo,
+                      {" "}mais de três vezes de diferença. O preço <b>não foi alterado</b>.</>
+                  )}
+                </div>
+              ))}
+              {pd.length > 0 && (
+                <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 8 }}>
+                  Em Insumos, a ficha do item mostra a compra e deixa você aceitar ou descartar o preço.
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Baixa da conta: a data de contabilização é o que define em que mês
             a despesa entra no extrato da obra. */}

@@ -1824,30 +1824,13 @@ function unidadesDoCatalogo(insumos) {
 // pedido nasce com duas unidades para o mesmo material e a lista de escolha
 // passa a mostrar "un" e "Unidades" lado a lado, como se fossem diferentes.
 // Então a abreviação é traduzida na porta, uma vez, para o nome que a
-// empresa usa.
-const COT_UNIDADE_SINONIMOS = {
-  un: "Unidades", uns: "Unidades", und: "Unidades", unds: "Unidades",
-  unid: "Unidades", unids: "Unidades", unidade: "Unidades", unidades: "Unidades",
-  pc: "Unidades", pcs: "Unidades", pca: "Unidades", peca: "Unidades", pecas: "Unidades",
-  jg: "Unidades", jogo: "Unidades", jogos: "Unidades",
-  cj: "Unidades", conj: "Unidades", conjunto: "Unidades", conjuntos: "Unidades",
-  par: "Unidades", pares: "Unidades",
-  kg: "Kg", kgs: "Kg", quilo: "Kg", quilos: "Kg", kilo: "Kg", kilos: "Kg",
-  m2: "m2", "m²": "m2",
-  m3: "m3", "m³": "m3",
-  m: "Mts", mt: "Mts", mts: "Mts", ml: "Mts", metro: "Mts", metros: "Mts",
-  l: "Lts", lt: "Lts", lts: "Lts", litro: "Lts", litros: "Lts",
-  rl: "Rolos", rolo: "Rolos", rolos: "Rolos",
-  dia: "Dias", dias: "Dias",
-  mes: "Meses", meses: "Meses",
-};
+// empresa usa — e o vocabulário mora em insumos.jsx, junto do catálogo que o define — a
+// Entrada e o preço de referência precisam enxergar "un" e "Unidades" como a
+// mesma coisa, e duas tabelas acabariam divergindo.
+const COT_UNIDADE_SINONIMOS = UNIDADE_SINONIMOS;
 
-// A chave de comparação: sem acento, sem ponto, minúscula.
-function cotChaveUnidade(texto) {
-  return String(texto == null ? "" : texto)
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase().replace(/[.\s]/g, "").trim();
-}
+// A chave de comparação: a mesma de insumos.jsx.
+function cotChaveUnidade(texto) { return chaveUnidade(texto); }
 
 // Devolve a unidade no vocabulário da empresa. A ordem importa: primeiro o
 // que o catálogo já tem escrito exatamente assim, depois o mesmo nome com

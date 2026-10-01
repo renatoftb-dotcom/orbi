@@ -28,7 +28,8 @@ const api = new Function(
            INSUMOS_SEED, INSUMO_GRUPOS, normalizarTexto, similaridadeTexto,
            resolverInsumo, proximoCodigoInsumo, grupoInferido, prefixoDoGrupo,
            mesesEntre, fatorIncc, precoInsumo, atualizarPrecoReferencia, comprasDoInsumo,
-           previaDePrecosPorCompra,
+           previaDePrecosPorCompra, aplicarComprasNoCatalogo, contasRecemPagas,
+           chaveUnidade, unidadeCanonica, mesmaUnidade, unidadeDoPreco,
            migrarMateriaisParaInsumos, semearInsumos };`
 )();
 
@@ -599,6 +600,247 @@ t("lista vazia ou dados ausentes não explodem", () => {
   eq(api.previaDePrecosPorCompra([], {}).linhas.length, 0);
   eq(api.previaDePrecosPorCompra(null, null).linhas.length, 0);
   eq(api.previaDePrecosPorCompra([null], {}).resumo.comCompras, 0);
+});
+
+
+// ── unidade ─────────────────────────────────────────────────────────────
+
+t("abreviação da loja é a mesma unidade do catálogo", () => {
+  eq(api.mesmaUnidade("un", "Unidades"), true);
+  eq(api.mesmaUnidade("PÇ", "Unidades"), true);
+  eq(api.mesmaUnidade("m", "Mts"), true);
+  eq(api.mesmaUnidade("ML", "Mts"), true);
+  eq(api.mesmaUnidade("KG", "Kg"), true);
+  eq(api.mesmaUnidade("rl", "Rolos"), true);
+});
+
+t("metro e rolo não são a mesma unidade", () => {
+  eq(api.mesmaUnidade("m", "Rolos"), false);
+  eq(api.mesmaUnidade("Mts", "Unidades"), false);
+  eq(api.mesmaUnidade("Kg", "Lts"), false);
+});
+
+t("unidade desconhecida de um lado só vale por ela mesma", () => {
+  eq(api.mesmaUnidade("vb", "vb"), true);
+  eq(api.mesmaUnidade("sacos", "Unidades"), false);
+});
+
+t("unidade em branco é dúvida, não divergência", () => {
+  eq(api.mesmaUnidade("", "Mts"), null);
+  eq(api.mesmaUnidade("Mts", null), null);
+  eq(api.mesmaUnidade(undefined, undefined), null);
+});
+
+t("a unidade do preço é a do último preço, e cai na do cadastro", () => {
+  eq(api.unidadeDoPreco({ unidade: "Rolos" }), "Rolos");
+  eq(api.unidadeDoPreco({ unidade: "Rolos", precoUnidade: "Mts" }), "Mts");
+  eq(api.unidadeDoPreco({}), "");
+});
+
+// ── a guarda de unidade em atualizarPrecoReferencia ──────────────────────
+
+t("linha de pedreiro: catálogo em rolo, loja cobra o metro — para e não altera", () => {
+  const insumo = { codigo: "FER.001", nome: "Linha de pedreiro",
+    unidade: "Rolos", precoReferencia: 48, precoData: "2026-01-01" };
+  const r = api.atualizarPrecoReferencia(insumo, {
+    tipo: "custo", quantidade: 100, total: 48, data: "2026-03-01", unidade: "m", id: "L1" });
+  eq(r.precoReferencia, 48, "o preço do rolo continua de pé");
+  eq(r.precoPendente.motivo, "unidade");
+  eq(r.precoPendente.valor, 0.48);
+  eq(r.precoPendente.unidade, "m");
+  eq(r.precoPendente.unidadePreco, "Rolos");
+});
+
+t("cano: catálogo na barra, loja cota o metro — para por unidade", () => {
+  const insumo = { codigo: "HID.001", nome: "Cano PVC 100mm barra 6m",
+    unidade: "Unidades", precoReferencia: 90, precoData: "2026-01-01" };
+  const r = api.atualizarPrecoReferencia(insumo, {
+    tipo: "custo", quantidade: 60, total: 900, data: "2026-03-01", unidade: "Mts" });
+  eq(r.precoReferencia, 90);
+  eq(r.precoPendente.motivo, "unidade");
+  eq(r.precoPendente.valor, 15);
+});
+
+t("a guarda de unidade pega o que o fator 3x não pegaria", () => {
+  // Barra de 2m: razão 1,6 passa folgada pelo salto, mas a unidade não bate.
+  const insumo = { codigo: "X", unidade: "Mts", precoReferencia: 2.5, precoData: "2026-01-01" };
+  const r = api.atualizarPrecoReferencia(insumo, {
+    tipo: "custo", quantidade: 10, total: 40, data: "2026-03-01", unidade: "un" });
+  eq(r.precoPendente.motivo, "unidade");
+  eq(r.precoReferencia, 2.5);
+});
+
+t("unidade bate: o preço entra e carrega a unidade conferida", () => {
+  const insumo = { codigo: "X", unidade: "Rolos", precoReferencia: 48, precoData: "2026-01-01" };
+  const r = api.atualizarPrecoReferencia(insumo, {
+    tipo: "custo", quantidade: 2, total: 104, data: "2026-03-01", unidade: "rl" });
+  eq(r.precoReferencia, 52);
+  eq(r.precoUnidade, "rl");
+  eq(r.precoUnidadeConferida, true);
+  eq(r.precoPendente, null);
+});
+
+t("unidade divergente para até sem preço anterior", () => {
+  const insumo = { codigo: "X", unidade: "Rolos", precoReferencia: null };
+  const r = api.atualizarPrecoReferencia(insumo, {
+    tipo: "custo", quantidade: 100, total: 48, data: "2026-03-01", unidade: "m" });
+  eq(r.precoPendente.motivo, "unidade");
+  eq(r.precoReferencia, null);
+});
+
+t("sem unidade na compra o preço entra, mas marcado como não conferido", () => {
+  const insumo = { codigo: "X", unidade: "Rolos", precoReferencia: 48, precoData: "2026-01-01" };
+  const r = api.atualizarPrecoReferencia(insumo, {
+    tipo: "custo", quantidade: 2, total: 104, data: "2026-03-01" });
+  eq(r.precoReferencia, 52);
+  eq(r.precoUnidadeConferida, false);
+  eq(r.precoPendente, null);
+});
+
+t("insumo sem unidade cadastrada não bloqueia nada", () => {
+  const insumo = { codigo: "X", precoReferencia: 48, precoData: "2026-01-01" };
+  const r = api.atualizarPrecoReferencia(insumo, {
+    tipo: "custo", quantidade: 2, total: 104, data: "2026-03-01", unidade: "rl" });
+  eq(r.precoReferencia, 52);
+  eq(r.precoUnidadeConferida, false);
+});
+
+t("salto continua sendo salto, com o motivo escrito", () => {
+  const insumo = { codigo: "X", unidade: "Kg", precoReferencia: 10, precoData: "2026-01-01" };
+  const r = api.atualizarPrecoReferencia(insumo, {
+    tipo: "custo", quantidade: 1, total: 100, data: "2026-03-01", unidade: "kg" });
+  eq(r.precoPendente.motivo, "salto");
+  eq(r.precoReferencia, 10);
+});
+
+t("a unidade do preço manda sobre a do cadastro na próxima conferência", () => {
+  // Cadastro diz Rolos, mas o último preço foi gravado em Mts: a compra em
+  // metro passa a ser a comparável.
+  const insumo = { codigo: "X", unidade: "Rolos", precoUnidade: "Mts",
+    precoReferencia: 0.5, precoData: "2026-01-01" };
+  const r = api.atualizarPrecoReferencia(insumo, {
+    tipo: "custo", quantidade: 100, total: 52, data: "2026-03-01", unidade: "m" });
+  eq(r.precoReferencia, 0.52);
+  eq(r.precoPendente, null);
+});
+
+// ── previaDePrecosPorCompra com unidade ─────────────────────────────────
+
+t("a prévia separa quem para por unidade de quem para por salto", () => {
+  const r = api.previaDePrecosPorCompra([
+    { codigo: "A", nome: "Linha", unidade: "Rolos", precoReferencia: 48, precoData: "2026-01-01" },
+    { codigo: "B", nome: "Cimento", unidade: "Unidades", precoReferencia: 40, precoData: "2026-01-01" },
+  ], { obras: [{ id: "o1", contasPagar: [
+    { insumoCodigo: "A", quantidade: 100, valor: 48, unidade: "m", pago: true, pagoEm: "2026-03-01" },
+    { insumoCodigo: "B", quantidade: 1, valor: 400, unidade: "un", pago: true, pagoEm: "2026-03-01" },
+  ] }] });
+  eq(r.resumo.pendente, 2);
+  eq(r.resumo.porUnidade, 1);
+  eq(r.resumo.porSalto, 1);
+  const porCod = {}; for (const l of r.linhas) porCod[l.insumo.codigo] = l;
+  eq(porCod.A.motivo, "unidade");
+  eq(porCod.A.unidadeCompra, "m");
+  eq(porCod.A.unidadePreco, "Rolos");
+  eq(porCod.B.motivo, "salto");
+});
+
+// ── aplicarComprasNoCatalogo ────────────────────────────────────────────
+
+t("a baixa aplica o preço e relata o que fez", () => {
+  const mats = [{ codigo: "A", nome: "Cimento", unidade: "Unidades", precoReferencia: 40, precoData: "2026-01-01" }];
+  const r = api.aplicarComprasNoCatalogo(mats, [
+    { id: "c1", insumoCodigo: "A", quantidade: 10, valor: 500, valorPago: 450,
+      unidade: "un", pago: true, pagoEm: "2026-03-01" },
+  ]);
+  eq(r.materiais[0].precoReferencia, 45, "vale o valor PAGO, não o de tabela");
+  eq(r.relato.aplicados.length, 1);
+  eq(r.relato.aplicados[0].precoAntes, 40);
+  eq(r.relato.aplicados[0].precoDepois, 45);
+  eq(r.relato.aplicados[0].conferida, true);
+  eq(r.relato.pendencias.length, 0);
+});
+
+t("a baixa com unidade errada não muda o catálogo e vira pendência relatada", () => {
+  const mats = [{ codigo: "A", nome: "Linha de pedreiro", unidade: "Rolos", precoReferencia: 48, precoData: "2026-01-01" }];
+  const r = api.aplicarComprasNoCatalogo(mats, [
+    { id: "c1", insumoCodigo: "A", quantidade: 100, valor: 48, unidade: "m", pago: true, pagoEm: "2026-03-01" },
+  ]);
+  eq(r.materiais[0].precoReferencia, 48);
+  eq(r.relato.aplicados.length, 0);
+  eq(r.relato.pendencias.length, 1);
+  eq(r.relato.pendencias[0].motivo, "unidade");
+  eq(r.relato.pendencias[0].unidadeCompra, "m");
+  eq(r.relato.pendencias[0].unidadePreco, "Rolos");
+  eq(r.relato.pendencias[0].precoDaCompra, 0.48);
+});
+
+t("nada a aplicar devolve a MESMA lista, para não gravar à toa", () => {
+  const mats = [{ codigo: "A", nome: "Cimento", precoReferencia: 40, precoManual: 40 }];
+  const r = api.aplicarComprasNoCatalogo(mats, [
+    { id: "c1", insumoCodigo: "A", quantidade: 10, valor: 500, pago: true, pagoEm: "2026-03-01" },
+  ]);
+  if (r.materiais !== mats) throw new Error("devia devolver a mesma referência");
+});
+
+t("conta sem código de insumo é contada e ignorada", () => {
+  const mats = [{ codigo: "A", nome: "Cimento", precoReferencia: 40 }];
+  const r = api.aplicarComprasNoCatalogo(mats, [
+    { id: "c1", insumoCodigo: "", quantidade: 1, valor: 10, pago: true, pagoEm: "2026-03-01" },
+    { id: "c2", insumoCodigo: "ZZZ", quantidade: 1, valor: 10, pago: true, pagoEm: "2026-03-01" },
+  ]);
+  eq(r.relato.semCodigo, 2);
+  if (r.materiais !== mats) throw new Error("não devia mexer na lista");
+});
+
+t("duas contas do mesmo insumo na mesma baixa: a mais nova manda", () => {
+  const mats = [{ codigo: "A", nome: "Cimento", unidade: "un", precoReferencia: 40, precoData: "2026-01-01" }];
+  const r = api.aplicarComprasNoCatalogo(mats, [
+    { id: "c2", insumoCodigo: "A", quantidade: 10, valor: 520, unidade: "un", pago: true, pagoEm: "2026-04-01" },
+    { id: "c1", insumoCodigo: "A", quantidade: 10, valor: 450, unidade: "un", pago: true, pagoEm: "2026-02-01" },
+  ]);
+  eq(r.materiais[0].precoReferencia, 52);
+});
+
+t("aplicarComprasNoCatalogo não muta a lista nem os insumos recebidos", () => {
+  const insumo = { codigo: "A", nome: "Cimento", unidade: "un", precoReferencia: 40, precoData: "2026-01-01" };
+  const mats = [insumo];
+  api.aplicarComprasNoCatalogo(mats, [
+    { id: "c1", insumoCodigo: "A", quantidade: 10, valor: 500, unidade: "un", pago: true, pagoEm: "2026-03-01" },
+  ]);
+  eq(insumo.precoReferencia, 40);
+  eq(mats[0].precoReferencia, 40);
+});
+
+t("catálogo vazio não explode", () => {
+  eq(api.aplicarComprasNoCatalogo([], [{ id: "c", insumoCodigo: "A", quantidade: 1, valor: 1 }]).relato.aplicados.length, 0);
+  eq(api.aplicarComprasNoCatalogo(null, null).relato.aplicados.length, 0);
+});
+
+// ── contasRecemPagas ────────────────────────────────────────────────────
+
+t("só as que acabaram de virar pagas entram", () => {
+  const antes = [
+    { id: "1", insumoCodigo: "A", pago: true },
+    { id: "2", insumoCodigo: "B", pago: false },
+    { id: "3", insumoCodigo: "C", pago: false },
+  ];
+  const depois = [
+    { id: "1", insumoCodigo: "A", pago: true },
+    { id: "2", insumoCodigo: "B", pago: true },
+    { id: "3", insumoCodigo: "C", pago: false },
+    { id: "4", insumoCodigo: "D", pago: true },
+  ];
+  eq(api.contasRecemPagas(antes, depois).map((c) => c.id).join(","), "2,4",
+    "a 1 já estava paga, a 3 segue aberta, a 4 nasceu paga");
+});
+
+t("conta sem insumo não entra nem quando é paga", () => {
+  eq(api.contasRecemPagas([], [{ id: "1", pago: true, insumoCodigo: "" }]).length, 0);
+});
+
+t("desfazer baixa não vira compra", () => {
+  eq(api.contasRecemPagas([{ id: "1", insumoCodigo: "A", pago: true }],
+                          [{ id: "1", insumoCodigo: "A", pago: false }]).length, 0);
 });
 
 

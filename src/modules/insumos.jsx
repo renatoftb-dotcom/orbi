@@ -156,6 +156,55 @@ function resolverInsumo(termo, insumos, opts) {
   };
 }
 
+// ══════════════════════════════════════════════════════════════
+// UNIDADE — o vocabulário mora aqui, perto do catálogo
+// ══════════════════════════════════════════════════════════════
+// A nota da loja escreve "un", "UN", "und", "pç" para a mesma coisa que o
+// catálogo chama de "Unidades". Quem precisa saber disso é a Entrada do
+// pedido (para não criar duas unidades iguais) e o preço de referência (para
+// não comparar preço de metro com preço de rolo). Fica aqui, uma vez, e a
+// Entrada usa daqui — a mesma lição da descrição que estava escrita em três
+// lugares e errada em dois.
+var UNIDADE_SINONIMOS = {
+  un: "Unidades", uns: "Unidades", und: "Unidades", unds: "Unidades",
+  unid: "Unidades", unids: "Unidades", unidade: "Unidades", unidades: "Unidades",
+  pc: "Unidades", pcs: "Unidades", pca: "Unidades", peca: "Unidades", pecas: "Unidades",
+  jg: "Unidades", jogo: "Unidades", jogos: "Unidades",
+  cj: "Unidades", conj: "Unidades", conjunto: "Unidades", conjuntos: "Unidades",
+  par: "Unidades", pares: "Unidades",
+  kg: "Kg", kgs: "Kg", quilo: "Kg", quilos: "Kg", kilo: "Kg", kilos: "Kg",
+  m2: "m2", "m\u00b2": "m2",
+  m3: "m3", "m\u00b3": "m3",
+  m: "Mts", mt: "Mts", mts: "Mts", ml: "Mts", metro: "Mts", metros: "Mts",
+  l: "Lts", lt: "Lts", lts: "Lts", litro: "Lts", litros: "Lts",
+  rl: "Rolos", rolo: "Rolos", rolos: "Rolos",
+  dia: "Dias", dias: "Dias",
+  mes: "Meses", meses: "Meses",
+};
+
+// A chave de comparação: sem acento, sem ponto, minúscula.
+function chaveUnidade(texto) {
+  return String(texto == null ? "" : texto)
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[.\s]/g, "").trim();
+}
+
+// A unidade reduzida ao nome canônico, para comparar "un" com "Unidades".
+function unidadeCanonica(texto) {
+  var k = chaveUnidade(texto);
+  if (!k) return "";
+  return UNIDADE_SINONIMOS[k] || k;
+}
+
+// Duas unidades são a mesma coisa? Unidade em branco de um dos lados é
+// `null` — "não sei", que é diferente de "não é". Quem chama decide o que
+// fazer com a dúvida; aqui não se chuta.
+function mesmaUnidade(a, b) {
+  var ca = unidadeCanonica(a), cb = unidadeCanonica(b);
+  if (!ca || !cb) return null;
+  return ca === cb;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // CÓDIGO
 // ═══════════════════════════════════════════════════════════════
@@ -319,6 +368,7 @@ function comprasDoInsumo(insumo, data) {
       data: l.dataPagamento || l.data || "",
       qtd: Number(l.quantidade) || 0,
       total: Number(l.total != null ? l.total : l.valor) || 0,
+      unidade: l.unidade || "",
       fornecedorId: l.fornecedorId || "", pago: true });
   });
   ((data && data.obras) || []).forEach(function (o) {
@@ -328,6 +378,7 @@ function comprasDoInsumo(insumo, data) {
         data: c.pagoEm || c.vencimento || "",
         qtd: Number(c.quantidade) || 0,
         total: Number(c.pago ? (c.valorPago || c.valor) : c.valor) || 0,
+        unidade: c.unidade || "",
         fornecedorId: c.prestadorId || "", favorecido: c.favorecido || "",
         pago: !!c.pago });
     });
@@ -335,9 +386,34 @@ function comprasDoInsumo(insumo, data) {
   return out.sort(function (a, b) { return String(a.data).localeCompare(String(b.data)); });
 }
 
+
+// A unidade a que o preço de referência se refere. O catálogo tem a unidade
+// do insumo, mas é a do ÚLTIMO preço que importa comparar — senão trocar a
+// unidade do cadastro faria todas as compras antigas parecerem divergentes.
+function unidadeDoPreco(insumo) {
+  var i = insumo || {};
+  return i.precoUnidade || i.unidade || "";
+}
+
 /**
  * Atualiza o preço de referência a partir de um lançamento de compra.
  * Pura: recebe insumo + lançamento, devolve insumo novo (ou o mesmo).
+ *
+ * Duas guardas, e as duas param no mesmo lugar — a fila de pendência:
+ *
+ * 1. UNIDADE. "Linha de pedreiro" no catálogo é o rolo de 100 m; a loja cobra
+ *    por metro. Cano é vendido em barra de 6 m, e tem loja que cota o metro. Se
+ *    a unidade da compra não é a unidade do preço, o número não é comparável
+ *    — e sobrescrever seria trocar R$ 48,00 o rolo por R$ 0,48 o metro, sem
+ *    ninguém ver. Converter sozinho seria pior: o fator está no nome do
+ *    produto ("rolo 100 m"), que a loja escreve como quer. Então para e
+ *    pergunta.
+ * 2. SALTO. Mesma unidade, preço três vezes maior ou menor: erro de digitação,
+ *    ou compra de outra coisa com o código errado.
+ *
+ * Unidade em branco de um dos lados não é divergência — é dúvida. A compra
+ * passa (o salto ainda a vigia), mas o preço fica marcado como não conferido,
+ * para a ficha poder dizer isso.
  */
 function atualizarPrecoReferencia(insumo, lancamento) {
   if (!insumo || !lancamento) return insumo;
@@ -350,15 +426,28 @@ function atualizarPrecoReferencia(insumo, lancamento) {
 
   var unitario = Math.round((total / qtd) * 100) / 100;
   var data = lancamento.dataPagamento || lancamento.data || null;
+  var uniCompra = lancamento.unidade || "";
+  var uniPreco = unidadeDoPreco(insumo);
+  var confere = mesmaUnidade(uniCompra, uniPreco);
 
+  var pendencia = function (motivo) {
+    return Object.assign({}, insumo, {
+      precoPendente: {
+        valor: unitario, data: data, lancamentoId: lancamento.id || null,
+        motivo: motivo, unidade: uniCompra, unidadePreco: uniPreco,
+      },
+    });
+  };
+
+  // Guarda 1: unidade diferente. Vale mesmo sem preço anterior — nascer com o
+  // preço do metro num catálogo que cobra o rolo é o mesmo estrago.
+  if (confere === false) return pendencia("unidade");
+
+  // Guarda 2: salto suspeito.
   var ref = insumo.precoReferencia;
   if (ref > 0) {
     var razao = unitario / ref;
-    if (razao > INSUMO_FATOR_SUSPEITO || razao < 1 / INSUMO_FATOR_SUSPEITO) {
-      return Object.assign({}, insumo, {
-        precoPendente: { valor: unitario, data: data, lancamentoId: lancamento.id || null },
-      });
-    }
+    if (razao > INSUMO_FATOR_SUSPEITO || razao < 1 / INSUMO_FATOR_SUSPEITO) return pendencia("salto");
   }
 
   // Nota retroativa não rebaixa preço mais novo.
@@ -369,10 +458,97 @@ function atualizarPrecoReferencia(insumo, lancamento) {
     ultimoPreco: unitario, // campo legado — o importador de NF ainda lê
     precoFonte: "compra",
     precoData: data,
+    // A unidade viaja com o preço: é ela que a próxima compra vai conferir.
+    precoUnidade: uniCompra || uniPreco || "",
+    precoUnidadeConferida: confere === true,
     precoNCompras: (insumo.precoNCompras || 0) + 1,
     precoFatorInccAplicado: 1,
     precoPendente: null,
     precoAtualizadoEm: new Date().toISOString(),
+  });
+}
+
+// ── Da baixa da conta para o preço do catálogo ────────────
+// O catálogo só aprende quando o dinheiro sai: é na baixa que se conhece o
+// valor realmente pago (com desconto rateado) e a data que conta. Esta função
+// recebe as contas que ACABARAM de ser pagas e devolve o catálogo novo mais o
+// relatório do que fez — porque o que ela recusou é mais importante do que o
+// que ela aceitou, e alguém tem que poder contar isso na tela.
+//
+// Pura: nada de save, nada de alert. Quem chama grava e avisa.
+function aplicarComprasNoCatalogo(materiais, contas) {
+  var lista = (materiais || []).slice();
+  var relato = { aplicados: [], pendencias: [], semCodigo: 0 };
+  if (!lista.length) return { materiais: materiais || [], relato: relato };
+
+  var porCodigo = {};
+  for (var k = 0; k < lista.length; k++) {
+    if (lista[k] && lista[k].codigo) porCodigo[lista[k].codigo] = k;
+  }
+
+  // Mais de uma conta do mesmo insumo na mesma baixa: a mais nova manda, mas
+  // todas passam pela guarda, na ordem em que foram pagas.
+  var ordenadas = (contas || []).slice().sort(function (a, b) {
+    return String((a && (a.pagoEm || a.vencimento)) || "")
+      .localeCompare(String((b && (b.pagoEm || b.vencimento)) || ""));
+  });
+
+  ordenadas.forEach(function (c) {
+    if (!c) return;
+    var cod = c.insumoCodigo || "";
+    if (!cod) { relato.semCodigo++; return; }
+    var pos = porCodigo[cod];
+    if (pos == null) { relato.semCodigo++; return; }
+
+    var antes = lista[pos];
+    var qtd = Number(c.quantidade) || 0;
+    var total = Number(c.valorPago != null && c.valorPago !== "" ? c.valorPago : c.valor) || 0;
+    if (!(qtd > 0) || !(total > 0)) return;
+
+    var depois = atualizarPrecoReferencia(antes, {
+      tipo: "custo", quantidade: qtd, total: total,
+      data: c.pagoEm || c.vencimento || "", unidade: c.unidade || "", id: c.id || "",
+    });
+    if (depois === antes) return;
+    lista[pos] = depois;
+
+    var novaPendencia = depois.precoPendente
+      && (!antes.precoPendente || antes.precoPendente.lancamentoId !== depois.precoPendente.lancamentoId);
+    if (novaPendencia) {
+      relato.pendencias.push({
+        codigo: cod, nome: antes.nome || cod, contaId: c.id || "",
+        descricao: c.descricao || "", motivo: depois.precoPendente.motivo || "salto",
+        unidadeCompra: depois.precoPendente.unidade || "",
+        unidadePreco: depois.precoPendente.unidadePreco || "",
+        precoAntes: antes.precoReferencia != null ? antes.precoReferencia : null,
+        precoDaCompra: depois.precoPendente.valor,
+      });
+    } else if (depois.precoReferencia !== antes.precoReferencia
+            || depois.precoData !== antes.precoData) {
+      relato.aplicados.push({
+        codigo: cod, nome: antes.nome || cod, contaId: c.id || "",
+        precoAntes: antes.precoReferencia != null ? antes.precoReferencia : null,
+        precoDepois: depois.precoReferencia,
+        unidade: depois.precoUnidade || "",
+        conferida: !!depois.precoUnidadeConferida,
+      });
+    }
+  });
+
+  if (!relato.aplicados.length && !relato.pendencias.length) {
+    return { materiais: materiais || [], relato: relato };
+  }
+  return { materiais: lista, relato: relato };
+}
+
+// As contas que acabaram de virar pagas entre dois retratos da mesma lista. É
+// este diff que liga a baixa ao catálogo sem precisar lembrar de chamar nada
+// em cada botão de pagar — e sem reaplicar o que já estava pago.
+function contasRecemPagas(antes, depois) {
+  var eraPaga = {};
+  (antes || []).forEach(function (c) { if (c && c.id) eraPaga[c.id] = !!c.pago; });
+  return (depois || []).filter(function (c) {
+    return c && c.pago && c.insumoCodigo && !eraPaga[c.id];
   });
 }
 
@@ -385,7 +561,8 @@ function atualizarPrecoReferencia(insumo, lancamento) {
 // mesmo motor é o que impede os dois de divergirem.
 function previaDePrecosPorCompra(insumos, data) {
   var linhas = [];
-  var resumo = { comCompras: 0, atualiza: 0, pendente: 0, semMudanca: 0, manual: 0, compras: 0 };
+  var resumo = { comCompras: 0, atualiza: 0, pendente: 0, semMudanca: 0, manual: 0, compras: 0,
+                 porUnidade: 0, porSalto: 0 };
   (insumos || []).forEach(function (i) {
     if (!i || i.ativo === false) return;
     var compras = comprasDoInsumo(i, data);
@@ -405,6 +582,7 @@ function previaDePrecosPorCompra(insumos, data) {
     compras.forEach(function (c) {
       atual = atualizarPrecoReferencia(atual, {
         tipo: "custo", quantidade: c.qtd, total: c.total, data: c.data, id: c.id,
+        unidade: c.unidade || "",
       });
     });
 
@@ -414,8 +592,12 @@ function previaDePrecosPorCompra(insumos, data) {
     var situacao = virouPendente ? "pendente"
       : (antes !== depois || atual.precoData !== i.precoData) ? "atualiza" : "semMudanca";
     resumo[situacao]++;
+    if (virouPendente) resumo[atual.precoPendente.motivo === "unidade" ? "porUnidade" : "porSalto"]++;
     linhas.push({ insumo: i, compras: compras.length, situacao: situacao,
       precoAntes: antes, precoDepois: virouPendente ? atual.precoPendente.valor : depois,
+      motivo: virouPendente ? (atual.precoPendente.motivo || "salto") : null,
+      unidadeCompra: virouPendente ? (atual.precoPendente.unidade || "") : "",
+      unidadePreco: virouPendente ? (atual.precoPendente.unidadePreco || "") : "",
       ultimaCompra: compras[compras.length - 1],
       variacao: (antes > 0 && depois > 0 && !virouPendente)
         ? Math.round((depois / antes - 1) * 1000) / 10 : null });
@@ -953,19 +1135,39 @@ function InsumoDetalhe({ insumo, data, onEditar, onVoltar, onAceitarPendente, on
         )}
       </div>
 
-      {insumo.precoPendente && (
+      {insumo.precoPendente && (() => {
+        var pend = insumo.precoPendente;
+        var porUnidade = pend.motivo === "unidade";
+        var uc = pend.unidade || "?", up = pend.unidadePreco || unidadeDoPreco(insumo) || "?";
+        return (
         <div style={{ border: "1.5px solid #f59e0b", background: "#fffbeb", borderRadius: 16, padding: 16, marginBottom: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#92400e", marginBottom: 4 }}>Compra fora da faixa esperada</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#92400e", marginBottom: 4 }}>
+            {porUnidade ? "Compra em outra unidade" : "Compra fora da faixa esperada"}
+          </div>
           <div style={{ fontSize: 12.5, color: "#78350f", marginBottom: 12 }}>
-            Uma compra de {fmtDataIns(insumo.precoPendente.data)} registrou {fmtBRLIns(insumo.precoPendente.valor)},
-            muito distante do preço atual de {fmtBRLIns(p.preco)}. O preço não foi alterado.
+            {porUnidade ? (
+              <>
+                A compra de {fmtDataIns(pend.data)} saiu a {fmtBRLIns(pend.valor)} por <b>{uc}</b>,
+                mas este insumo tem preço por <b>{up}</b> — hoje {fmtBRLIns(p.preco)}. Preço de {uc} e preço
+                de {up} não são o mesmo número, então <b>nada foi alterado</b>.
+                {" "}Aceite só se {fmtBRLIns(pend.valor)} for mesmo o preço por {up}; se a loja cotou em {uc},
+                corrija a unidade no pedido ou lance o preço à mão.
+              </>
+            ) : (
+              <>
+                Uma compra de {fmtDataIns(pend.data)} registrou {fmtBRLIns(pend.valor)},
+                muito distante do preço atual de {fmtBRLIns(p.preco)}. O preço não foi alterado.
+                {uc !== "?" ? <> A compra veio em <b>{uc}</b>.</> : null}
+              </>
+            )}
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button style={INS_S.btn} onClick={onAceitarPendente}>Aceitar como novo preço</button>
             <button style={INS_S.btnSec} onClick={onDescartarPendente}>Descartar</button>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       <div style={Object.assign({}, INS_S.card, { marginBottom: 16 })}>
         <div style={{ fontSize: 13, fontWeight: 700, color: INS.grafite, marginBottom: 12 }}>
@@ -1398,11 +1600,17 @@ function Insumos({ data, save }) {
     var lista = insumos.map(function (x) {
       if (x.codigo !== insumo.codigo) return x;
       if (!aceitar) return Object.assign({}, x, { precoPendente: null });
+      // Aceitar é dizer "este valor é o preço NA MINHA UNIDADE". A unidade do
+      // preço não vira a da loja — se virasse, aceitar uma vez o preço do metro
+      // num catálogo que cobra o rolo calaria a guarda para sempre. E fica
+      // conferida: foi conferida por ele, à mão, que é a conferida que vale.
       return Object.assign({}, x, {
         precoReferencia: insumo.precoPendente.valor,
         ultimoPreco: insumo.precoPendente.valor,
         precoFonte: "compra",
         precoData: insumo.precoPendente.data,
+        precoUnidade: unidadeDoPreco(x),
+        precoUnidadeConferida: true,
         precoNCompras: (x.precoNCompras || 0) + 1,
         precoFatorInccAplicado: 1,
         precoPendente: null,
@@ -1548,7 +1756,13 @@ function Insumos({ data, save }) {
           var R = previaPrecos.resumo;
           var brl = function (v) { return v == null ? "—" : fmtBRLIns(v); };
           var cor = { pendente: "#b45309", atualiza: "#0474f4", semMudanca: "#6b7280", manual: "#6b7280" };
-          var rotulo = { pendente: "salto suspeito", atualiza: "atualiza", semMudanca: "sem mudança", manual: "preço manual" };
+          var rotulo = { pendente: "para e pergunta", atualiza: "atualiza", semMudanca: "sem mudança", manual: "preço manual" };
+          var porque = function (l) {
+            if (l.situacao !== "pendente") return "";
+            return l.motivo === "unidade"
+              ? "compra em " + (l.unidadeCompra || "?") + ", preço em " + (l.unidadePreco || "?")
+              : "salto maior que 3×";
+          };
           var th = { padding: "6px 8px", textAlign: "left", fontSize: 10.5, color: INS.inkSoft,
             textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600 };
           var td = { padding: "6px 8px", fontSize: 12 };
@@ -1564,7 +1778,8 @@ function Insumos({ data, save }) {
               </div>
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12, fontSize: 12 }}>
                 <span><b style={{ color: "#0474f4", fontSize: 15 }}>{R.atualiza}</b> mudariam de preço</span>
-                <span><b style={{ color: "#b45309", fontSize: 15 }}>{R.pendente}</b> cairiam em pendência (salto &gt; 3×)</span>
+                <span><b style={{ color: "#b45309", fontSize: 15 }}>{R.pendente}</b> parariam para conferir
+                  {R.pendente > 0 ? ` (${R.porUnidade} por unidade, ${R.porSalto} por salto)` : ""}</span>
                 <span><b style={{ fontSize: 15 }}>{R.semMudanca}</b> ficariam como estão</span>
                 {R.manual > 0 && <span><b style={{ fontSize: 15 }}>{R.manual}</b> com preço manual, intocados</span>}
               </div>
@@ -1594,6 +1809,7 @@ function Insumos({ data, save }) {
                           </td>
                           <td style={{ ...td, color: cor[l.situacao], fontWeight: l.situacao === "pendente" ? 600 : 400 }}>
                             {rotulo[l.situacao]}
+                            {porque(l) ? <div style={{ fontSize: 10.5, fontWeight: 400, color: INS.inkSoft }}>{porque(l)}</div> : null}
                           </td>
                         </tr>
                       );
@@ -1712,7 +1928,8 @@ function Insumos({ data, save }) {
                         <td style={{ padding: "10px 12px", fontFamily: "ui-monospace, monospace", fontSize: 11.5, color: INS.inkSoft, whiteSpace: "nowrap" }}>{x.i.codigo || "—"}</td>
                         <td style={{ padding: "10px 12px", color: INS.grafite, fontWeight: 500 }}>
                           {x.i.nome}
-                          {x.i.precoPendente && <span style={{ marginLeft: 8, fontSize: 11, color: "#b45309", fontWeight: 600 }}>· confirmar</span>}
+                          {x.i.precoPendente && <span style={{ marginLeft: 8, fontSize: 11, color: "#b45309", fontWeight: 600 }}>
+                            · {x.i.precoPendente.motivo === "unidade" ? "unidade" : "confirmar"}</span>}
                         </td>
                         {!isMobile && <td style={{ padding: "10px 12px", color: "#4b5563" }}>{x.i.grupo}</td>}
                         {!isMobile && (
