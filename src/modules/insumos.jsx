@@ -542,13 +542,19 @@ function aplicarComprasNoCatalogo(materiais, contas) {
 }
 
 // As contas que acabaram de virar pagas entre dois retratos da mesma lista. É
-// este diff que liga a baixa ao catálogo sem precisar lembrar de chamar nada
-// em cada botão de pagar — e sem reaplicar o que já estava pago.
+// este diff que liga a baixa ao resto do sistema sem precisar lembrar de
+// chamar nada em cada botão de pagar — e sem reaplicar o que já estava pago.
+//
+// NÃO exige insumo casado: isto responde "o que acabou de ser pago", e quem
+// usa decide o que fazer. O preço do catálogo ignora conta sem código (não
+// há insumo para atualizar); o extrato do escritório, não — dinheiro que sai
+// da conta sai com ou sem catálogo, e filtrar aqui fazia a nota de um
+// material fora do catálogo nunca chegar ao financeiro.
 function contasRecemPagas(antes, depois) {
   var eraPaga = {};
   (antes || []).forEach(function (c) { if (c && c.id) eraPaga[c.id] = !!c.pago; });
   return (depois || []).filter(function (c) {
-    return c && c.pago && c.insumoCodigo && !eraPaga[c.id];
+    return c && c.pago && !eraPaga[c.id];
   });
 }
 

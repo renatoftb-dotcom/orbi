@@ -7117,13 +7117,19 @@ function aplicarComprasNoCatalogo(materiais, contas) {
 }
 
 // As contas que acabaram de virar pagas entre dois retratos da mesma lista. É
-// este diff que liga a baixa ao catálogo sem precisar lembrar de chamar nada
-// em cada botão de pagar — e sem reaplicar o que já estava pago.
+// este diff que liga a baixa ao resto do sistema sem precisar lembrar de
+// chamar nada em cada botão de pagar — e sem reaplicar o que já estava pago.
+//
+// NÃO exige insumo casado: isto responde "o que acabou de ser pago", e quem
+// usa decide o que fazer. O preço do catálogo ignora conta sem código (não
+// há insumo para atualizar); o extrato do escritório, não — dinheiro que sai
+// da conta sai com ou sem catálogo, e filtrar aqui fazia a nota de um
+// material fora do catálogo nunca chegar ao financeiro.
 function contasRecemPagas(antes, depois) {
   var eraPaga = {};
   (antes || []).forEach(function (c) { if (c && c.id) eraPaga[c.id] = !!c.pago; });
   return (depois || []).filter(function (c) {
-    return c && c.pago && c.insumoCodigo && !eraPaga[c.id];
+    return c && c.pago && !eraPaga[c.id];
   });
 }
 
@@ -32802,6 +32808,58 @@ function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL, cl
 // só a vitrine: mostrar o que vai acontecer ANTES de gravar, porque escrever
 // no extrato sem a pessoa ver é mexer em saldo sem avisar. Nada sai daqui
 // sem um clique e uma confirmação.
+// O aviso de que a baixa atravessou. Vive fora das telas porque há dois
+// lugares onde se paga — contas a pagar e o pedido que nasce pago, lá nas
+// cotações — e o recado tem que aparecer onde a mão está.
+function AvisoDoExtrato({ aviso, aoFechar, fmtBRL }) {
+  if (!aviso) return null;
+  const ap = aviso.lancamentos || [], bl = aviso.bloqueados || [];
+  const porConta = [];
+  const indice = {};
+  for (const l of ap) {
+    if (!indice[l.contaId]) { indice[l.contaId] = { contaId: l.contaId, valor: 0 }; porConta.push(indice[l.contaId]); }
+    indice[l.contaId].valor = Math.round((indice[l.contaId].valor + (Number(l.valor) || 0)) * 100) / 100;
+  }
+  const nomeDaConta = (id) => {
+    const c = typeof contaEscritorio === "function" ? contaEscritorio(id) : null;
+    return c ? c.nome : id;
+  };
+  const ondeVer = aviso.modo === "empreendimento"
+    ? "Escritório → Financeiro, no quadro Empreendimentos"
+    : "Escritório → Financeiro, no bloco Gestão de obras";
+  return (
+    <div style={{ border: "1px solid rgba(4,116,244,0.30)", background: "rgba(4,116,244,0.05)",
+      borderRadius: 14, padding: "12px 14px", marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: AZUL_VK }}>
+          {ap.length === 1 ? "Entrou no extrato do escritório" : `${ap.length} lançamentos entraram no extrato do escritório`}
+        </div>
+        <button type="button" onClick={aoFechar}
+          style={{ border: "none", background: "transparent", color: AZUL_VK, cursor: "pointer",
+            fontFamily: "inherit", fontSize: 12.5, padding: 0 }}>Fechar</button>
+      </div>
+      {porConta.length > 0 && (
+        <div style={{ fontSize: 12.5, color: "#374151", marginTop: 6 }}>
+          {porConta.map(c => `${nomeDaConta(c.contaId)} ${fmtBRL(c.valor)}`).join(" · ")}
+          <span style={{ color: "#6b7280" }}> — veja em {ondeVer}.</span>
+        </div>
+      )}
+      {aviso.modo === "empreendimento" && ap.length > 0 && (
+        <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 4 }}>
+          Não entra no resultado do mês: soma no valor do imóvel e vira lucro no dia da venda.
+        </div>
+      )}
+      {bl.length > 0 && (
+        <div style={{ fontSize: 12.5, color: "#b45309", marginTop: 8, paddingTop: 8,
+          borderTop: "1px solid rgba(38,36,33,0.08)" }}>
+          {bl.length === 1 ? "1 lançamento não entrou" : `${bl.length} lançamentos não entraram`}: {bl[0].motivo}
+          {" "}Quando reabrir o mês, mande pelo Planejamento → Para o escritório.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PonteEscritorioView({ obra, cliente, contasPagar, entradas, data, isMobile, fmtBRL, podeEditar, dialogo, aoMandar }) {
   const [mandando, setMandando] = useState(false);
   const fechamentos = typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {};
@@ -33071,28 +33129,27 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // `obraAtual`, o registro fresco da coleção; a cópia do estado é só reserva.
   const obraAtual = obraSelecionada ? (obras.find(o => o.id === obraSelecionada.id) || obraSelecionada) : null;
   const contasDaObra = (obraAtual && obraAtual.contasPagar) || [];
-  // Toda escrita de contas da obra passa aqui — e é por isso que o catálogo
-  // aprende aqui, por diff, e não em cada botão de pagar: baixa de pedido,
-  // baixa em lote, baixa avulsa e o que vier depois caíram todos nesta porta.
+  // Tudo que uma baixa provoca FORA das contas: o preço do catálogo aprende,
+  // e o extrato do escritório recebe o lançamento. Mora numa função só
+  // porque há DOIS caminhos que pagam nesta tela — dar baixa numa conta, e
+  // lançar um pedido que já nasce pago — e o segundo não passava por aqui:
+  // o papel ia para contas a pagar baixado, e nem o preço nem o extrato
+  // ficavam sabendo. Quem paga por um caminho novo só precisa chamar isto.
   //
-  // O catálogo de insumos é do ESCRITÓRIO. O cliente final usa esta mesma tela
-  // e pode dar baixa na obra dele; o preço de referência do escritório não se
-  // mexe por isso.
-  const gravarContas = (novasContas, obraId) => {
-    const alvo = obraId || (obraSelecionada && obraSelecionada.id);
-    if (!alvo) return;
-    const fatia = obras.map(o => o.id === alvo ? { ...o, contasPagar: novasContas } : o);
-    if (!perm.podeGerenciarObra) { gravarObras(fatia); return; }
-    const antes = (obras.find(o => o.id === alvo) || {}).contasPagar || [];
-    const pagas = contasRecemPagas(antes, novasContas);
-    if (!pagas.length) { gravarObras(fatia); return; }
-    const r = aplicarComprasNoCatalogo(data.materiais, pagas);
+  // Devolve `extras` para entrar no MESMO save das contas: duas gravadas
+  // seguidas partem do mesmo retrato antigo de `data`, e a segunda apaga a
+  // primeira.
+  //
+  // O catálogo de insumos é do ESCRITÓRIO. O cliente final usa esta mesma
+  // tela e pode dar baixa na obra dele; o preço de referência não se mexe
+  // por isso.
+  const efeitosDaBaixa = (contasAntes, contasDepois, obraDepois) => {
+    const nada = { extras: null };
+    if (!perm.podeGerenciarObra) return nada;
+    const pagas = contasRecemPagas(contasAntes, contasDepois);
+    if (!pagas.length) return nada;
 
-    // O dinheiro saiu da conta do escritório? Então o extrato dele sabe na
-    // hora. Vai no MESMO save das contas e do catálogo — três gravadas
-    // seguidas partiriam do mesmo retrato antigo e a última apagaria as
-    // outras duas.
-    const obraDepois = fatia.find(o => o && o.id === alvo) || null;
+    const r = aplicarComprasNoCatalogo(data.materiais, pagas);
     const ponte = (typeof lancamentosDaBaixa === "function" && obraDepois)
       ? lancamentosDaBaixa(obraDepois, cliente, pagas, {
           fechamentos: typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {},
@@ -33103,11 +33160,23 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const extras = {};
     if (r.materiais !== data.materiais) extras.materiais = r.materiais;
     if (ponte.lancamentos.length) extras.lancamentos = (data.lancamentos || []).concat(ponte.lancamentos);
-    gravarObras(fatia, Object.keys(extras).length ? extras : null);
 
     setAvisoPreco(r.relato.aplicados.length || r.relato.pendencias.length ? r.relato : null);
     setAvisoExtrato((ponte.lancamentos.length || ponte.bloqueados.length)
       ? { modo: ponte.modo, lancamentos: ponte.lancamentos, bloqueados: ponte.bloqueados } : null);
+
+    return { extras: Object.keys(extras).length ? extras : null };
+  };
+
+  // Toda escrita de contas da obra passa aqui — baixa de pedido, baixa em
+  // lote, baixa avulsa e o que vier depois caíram todos nesta porta.
+  const gravarContas = (novasContas, obraId) => {
+    const alvo = obraId || (obraSelecionada && obraSelecionada.id);
+    if (!alvo) return;
+    const fatia = obras.map(o => o.id === alvo ? { ...o, contasPagar: novasContas } : o);
+    const antes = (obras.find(o => o.id === alvo) || {}).contasPagar || [];
+    const ef = efeitosDaBaixa(antes, novasContas, fatia.find(o => o && o.id === alvo) || null);
+    gravarObras(fatia, ef.extras);
   };
   // Contas geradas por uma versão antiga das regras de vencimento (ex.: as
   // mensais que andavam de 30 em 30 dias, escorregando o dia do mês) se
@@ -34810,53 +34879,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => { setFormConta(null); setView("detalheObra"); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
 
-        {avisoExtrato && (() => {
-          const ap = avisoExtrato.lancamentos || [], bl = avisoExtrato.bloqueados || [];
-          const porConta = [];
-          const indice = {};
-          for (const l of ap) {
-            if (!indice[l.contaId]) { indice[l.contaId] = { contaId: l.contaId, valor: 0 }; porConta.push(indice[l.contaId]); }
-            indice[l.contaId].valor = Math.round((indice[l.contaId].valor + (Number(l.valor) || 0)) * 100) / 100;
-          }
-          const nomeDaConta = (id) => {
-            const c = typeof contaEscritorio === "function" ? contaEscritorio(id) : null;
-            return c ? c.nome : id;
-          };
-          const ondeVer = avisoExtrato.modo === "empreendimento"
-            ? "Escritório → Financeiro, no quadro Empreendimentos"
-            : "Escritório → Financeiro, no bloco Gestão de obras";
-          return (
-            <div style={{ border: "1px solid rgba(4,116,244,0.30)", background: "rgba(4,116,244,0.05)",
-              borderRadius: 14, padding: "12px 14px", marginBottom: 16 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: AZUL_VK }}>
-                  {ap.length === 1 ? "Entrou no extrato do escritório" : `${ap.length} lançamentos entraram no extrato do escritório`}
-                </div>
-                <button type="button" onClick={() => setAvisoExtrato(null)}
-                  style={{ border: "none", background: "transparent", color: AZUL_VK, cursor: "pointer",
-                    fontFamily: "inherit", fontSize: 12.5, padding: 0 }}>Fechar</button>
-              </div>
-              {porConta.length > 0 && (
-                <div style={{ fontSize: 12.5, color: "#374151", marginTop: 6 }}>
-                  {porConta.map(c => `${nomeDaConta(c.contaId)} ${fmtMoedaCtr(c.valor)}`).join(" · ")}
-                  <span style={{ color: "#6b7280" }}> — veja em {ondeVer}.</span>
-                </div>
-              )}
-              {avisoExtrato.modo === "empreendimento" && ap.length > 0 && (
-                <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 4 }}>
-                  Não entra no resultado do mês: soma no valor do imóvel e vira lucro no dia da venda.
-                </div>
-              )}
-              {bl.length > 0 && (
-                <div style={{ fontSize: 12.5, color: "#b45309", marginTop: 8, paddingTop: 8,
-                  borderTop: "1px solid rgba(38,36,33,0.08)" }}>
-                  {bl.length === 1 ? "1 lançamento não entrou" : `${bl.length} lançamentos não entraram`}: {bl[0].motivo}
-                  {" "}Quando reabrir o mês, mande pelo Planejamento → Para o escritório.
-                </div>
-              )}
-            </div>
-          );
-        })()}
+        <AvisoDoExtrato aviso={avisoExtrato} aoFechar={() => setAvisoExtrato(null)} fmtBRL={fmtMoedaCtr} />
 
         {avisoPreco && (() => {
           const ap = avisoPreco.aplicados || [], pd = avisoPreco.pendencias || [];
@@ -35524,7 +35547,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         ? baixarPedidos(todas, [pedido.id], { pagoEm: pedido.pagoEm }, quemSou()).contas
         : todas;
       const comLoja = { ...obraAtual, contasPagar: finais, cotacoes: comOrigem };
-      gravarObras(obras.map(o => o.id === obraAtual.id ? comLoja : o));
+      // Papel que nasce pago é uma baixa como outra qualquer: o preço do
+      // catálogo aprende e o extrato do escritório recebe — na mesma gravada
+      // da obra, senão uma sobrescreve a outra.
+      const efLoja = efeitosDaBaixa(obraAtual.contasPagar || [], finais, comLoja);
+      gravarObras(obras.map(o => o.id === obraAtual.id ? comLoja : o), efLoja.extras);
       setObraSelecionada(comLoja);
       return { primeiraContaId: contas[0].id, quantas: contas.length, gravado: true };
     }
@@ -35540,7 +35567,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       pagamento: planoDoLancamento({ ...dados, numeroPedido }),
     }));
     const atualizada = { ...obraAtual, contasPagar: [...(obraAtual.contasPagar || []), ...novas], cotacoes };
-    gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o));
+    // Quase sempre nascem em aberto; quando alguma já vem paga, atravessa.
+    const efCot = efeitosDaBaixa(obraAtual.contasPagar || [], atualizada.contasPagar, atualizada);
+    gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o), efCot.extras);
     setObraSelecionada(atualizada);
     return { primeiraContaId: novas[0].id, quantas: novas.length, gravado: true };
   }
@@ -35718,6 +35747,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
   if (view === "cotacoesObra" && obraSelecionada) {
     return (
+      <>
+      <AvisoDoExtrato aviso={avisoExtrato} aoFechar={() => setAvisoExtrato(null)} fmtBRL={fmtMoedaCtr} />
       <CotacoesObraView
         obra={obraAtual}
         obras={obras}
@@ -35733,6 +35764,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         onDesfazerLancamento={desfazerLancamentoDaCotacao}
         onRecalibrarPedido={recalibrarPedidoDaCotacao} onExcluirPedido={excluirPedidoDaLoja}
       />
+      </>
     );
   }
 

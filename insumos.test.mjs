@@ -834,8 +834,15 @@ t("só as que acabaram de virar pagas entram", () => {
     "a 1 já estava paga, a 3 segue aberta, a 4 nasceu paga");
 });
 
-t("conta sem insumo não entra nem quando é paga", () => {
-  eq(api.contasRecemPagas([], [{ id: "1", pago: true, insumoCodigo: "" }]).length, 0);
+t("conta sem insumo casado AINDA é uma conta paga", () => {
+  // Quem pergunta "o que acabou de ser pago" não quer só o que tem catálogo:
+  // o extrato do escritório precisa do dinheiro que saiu, com código ou sem.
+  eq(api.contasRecemPagas([], [{ id: "1", pago: true, insumoCodigo: "" }]).length, 1);
+  // e o preço do catálogo, esse sim, ignora quem não tem código
+  const mats = [{ codigo: "A", nome: "Cimento", precoReferencia: 40 }];
+  const r = api.aplicarComprasNoCatalogo(mats, [{ id: "1", insumoCodigo: "", quantidade: 1, valor: 10, pago: true, pagoEm: "2026-03-01" }]);
+  eq(r.relato.aplicados.length, 0);
+  eq(r.relato.semCodigo, 1);
 });
 
 t("desfazer baixa não vira compra", () => {
