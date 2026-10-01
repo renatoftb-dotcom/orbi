@@ -3735,6 +3735,12 @@ function Obras({ data, save }) {
   const [filtro, setFiltro] = useState("andamento"); // "andamento" | "concluidas" | "todas"
   const [obraAbertaId, setObraAbertaId] = useState(null);
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+  // A Entrada aberta daqui, antes de escolher a obra: a nota chega na mão e
+  // entra; de qual obra ela é se diz depois de ler. Quando a pessoa segue,
+  // guardamos o que ela montou e abrimos a obra já com isso na mão.
+  const [entradaAberta, setEntradaAberta] = useState(false);
+  const [entradaPendente, setEntradaPendente] = useState(null);
+  const perm = typeof getPermissoes === "function" ? getPermissoes() : { podeGerenciarObra: true };
 
   function nomeCliente(clienteId) {
     return clientes.find(c => c.id === clienteId)?.nome || "—";
@@ -3799,6 +3805,20 @@ function Obras({ data, save }) {
     cursor: "pointer", fontFamily: "inherit", fontWeight: ativa ? 600 : 400,
   });
 
+  // Obras vigentes, com o nome do cliente junto: duas obras podem se chamar
+  // "Reforma", e o que as separa na lista é de quem elas são.
+  const obrasVigentes = obras
+    .filter(o => o && o.status !== "concluida" && clientes.some(c => c.id === o.clienteId))
+    .map(o => ({ id: o.id, nome: o.nome || o.referencia || "Obra", clienteNome: nomeCliente(o.clienteId) }));
+
+  function seguirDaEntradaDeObras(carga) {
+    const alvo = (carga && carga.obraId) || "";
+    if (!alvo) return;
+    setEntradaAberta(false);
+    setEntradaPendente(carga);
+    setObraAbertaId(alvo);
+  }
+
   // Obra aberta: mesma tela da obra que existe dentro do cliente
   // (GestaoObraPanel → detalhe: orçamento, planejamento, contratos, cronograma).
   const obraAberta = obraAbertaId ? obras.find(o => o.id === obraAbertaId) : null;
@@ -3812,7 +3832,9 @@ function Obras({ data, save }) {
           <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>{clienteDaObra.nome}</h2>
           <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>{obraAberta.nome || obraAberta.referencia || "Obra"}</div>
         </div>
-        <GestaoObraPanel key={obraAberta.id} cliente={clienteDaObra} data={data} save={save} isMobile={isMobile} obraInicial={obraAberta} onSairDaObra={() => setObraAbertaId(null)} />
+        <GestaoObraPanel key={obraAberta.id} cliente={clienteDaObra} data={data} save={save} isMobile={isMobile}
+          obraInicial={obraAberta} entradaInicial={entradaPendente}
+          onSairDaObra={() => { setEntradaPendente(null); setObraAbertaId(null); }} />
       </PageContainer>
     );
   }
@@ -3824,7 +3846,19 @@ function Obras({ data, save }) {
           <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Obras</h2>
           <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>Gestão de obras em execução</div>
         </div>
+        {perm.podeGerenciarObra && obrasVigentes.length > 0 && typeof EntradaDaObra === "function" && (
+          <button onClick={() => setEntradaAberta(true)}
+            style={{ border:"1.5px solid #0474f4", background:"#fff", color:"#0474f4", borderRadius:9,
+              padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+            Entrada
+          </button>
+        )}
       </div>
+
+      {entradaAberta && (
+        <EntradaDaObra data={data} save={save} obras={obrasVigentes} isMobile={isMobile}
+          aoFechar={() => setEntradaAberta(false)} aoSeguir={seguirDaEntradaDeObras} />
+      )}
 
       {/* Filtros */}
       <div style={{ display:"flex", gap:8, marginTop:20, marginBottom:20 }}>
@@ -23992,9 +24026,17 @@ function entradaPedeLoja(destino) {
   return destino === "pedido" || destino === "pagamento";
 }
 
-function entradaPronta(destino, lojaId, itens) {
-  if (!destino) return { ok: false, motivo: "Diga o que é este papel." };
+// Aberta de dentro da obra, a obra já é conhecida e `obras` vem vazia.
+// Aberta na lista de Obras, a lista chega cheia e escolher uma é obrigatório
+// — é o que permite ler a nota primeiro e só depois dizer de onde ela é.
+function entradaPedeObra(obras) {
+  return !!(obras && obras.length);
+}
+
+function entradaPronta(destino, lojaId, itens, obras, obraId) {
   if (!(itens || []).length) return { ok: false, motivo: "A leitura não achou itens." };
+  if (entradaPedeObra(obras) && !obraId) return { ok: false, motivo: "Escolha a obra." };
+  if (!destino) return { ok: false, motivo: "Diga o que é este papel." };
   if (entradaPedeLoja(destino) && !lojaId) return { ok: false, motivo: "Escolha a loja." };
   return { ok: true, motivo: "" };
 }
@@ -25713,7 +25755,7 @@ function selo(cor, texto) {
   );
 }
 
-function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, usuario, onGerarContrato, onLancarContas, onDesfazerLancamento, onRecalibrarPedido, onExcluirPedido }) {
+function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, usuario, onGerarContrato, onLancarContas, onDesfazerLancamento, onRecalibrarPedido, onExcluirPedido, abrirEntrada, entradaInicial }) {
   const perm = getPermissoes();
   // O módulo é o mesmo dos dois lados: o cliente cria cotação, registra a
   // proposta que recebeu do fornecedor e escolhe, como o escritório. O que
@@ -25764,41 +25806,25 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const [progressoPdf, setProgressoPdf] = useState(null);
   // null = ainda não perguntou. Pergunta uma vez por tela: sem a IA, anexar
   // não pode virar dois envios do mesmo arquivo.
-  const [iaDisponivel, setIaDisponivel] = useState(null);
+  const iaDisponivel = useIaDisponivel();
   const [sobreOPedido, setSobreOPedido] = useState(false);   // arquivo sendo arrastado sobre o campo
   const refArquivoPedido = useRef(null);
-  useEffect(() => {
-    let vivo = true;
-    if (!api || !api.ia) { setIaDisponivel(false); return; }
-    api.ia.status()
-      .then((d) => { if (vivo) setIaDisponivel(!!(d && d.disponivel)); })
-      .catch(() => { if (vivo) setIaDisponivel(false); });
-    return () => { vivo = false; };
-  }, []);
   const [orcamentoLido, setOrcamentoLido] = useState(null);  // { orcamento, casamento }
   const [entradaAberta, setEntradaAberta] = useState(false);
-  const insumos = (data.materiais || []).filter(i => i && i.ativo !== false);
-  const cadastrarInsumoDoPedido = (campos) => {
-    const todos = data.materiais || [];
-    const novo = novoInsumoDoPedido(campos, todos,
-      (g, lista) => codigoDoGrupo(g, lista, typeof proximoCodigoInsumo === "function" ? proximoCodigoInsumo : null));
-    if (!novo) return null;
-    save({ ...data, materiais: [...todos, novo] });
-    return novo;
-  };
-  // O texto que a loja usa vira apelido do insumo assim que a pessoa
-  // confirma o casamento. É o que faz o pedido do mês que vem casar sozinho,
-  // sem aposta: resolverInsumo acha por apelido antes de qualquer palpite.
-  const aprenderApelidos = (pares) => {
-    let lista = data.materiais || [];
-    let mudou = false;
-    for (const par of pares || []) {
-      const r = comApelidoDaLoja(lista, par.codigo, par.descricao);
-      lista = r.insumos;
-      if (r.mudou) mudou = true;
-    }
-    if (mudou) save({ ...data, materiais: lista });
-  };
+  // A Entrada pode ter começado fora daqui. Vinda da lista de Obras ela chega
+  // com a lista já lida e a obra já escolhida (`entradaInicial`) e cai direto
+  // na porta de saída; vinda do card do painel da obra, só pede para abrir a
+  // caixa (`abrirEntrada`). O ref garante que isso aconteça uma vez — um
+  // segundo disparo montaria o mesmo pedido duas vezes.
+  const entradaJaveio = useRef(false);
+  useEffect(() => {
+    if (entradaJaveio.current) return;
+    if (entradaInicial) { entradaJaveio.current = true; seguirDaEntrada(entradaInicial); return; }
+    if (abrirEntrada) { entradaJaveio.current = true; setEntradaAberta(true); }
+  }, [entradaInicial, abrirEntrada]);
+  const insumos = insumosDoCatalogo(data);
+  const cadastrarInsumoDoPedido = (campos) => cadastrarInsumoNoCatalogo(data, save, campos);
+  const aprenderApelidos = (pares) => aprenderApelidosNoCatalogo(data, save, pares);
   const unidadesCatalogo = unidadesDoCatalogo(insumos);
   // O que o pedido precisa dizer além da lista: de quem parte e para onde vai.
   const ctxPedido = {
@@ -27107,9 +27133,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       )}
 
       {entradaAberta && (
-        <PainelEntrada insumos={insumos} prestadores={prestadores} unidades={unidadesCatalogo}
-          iaDisponivel={!!iaDisponivel} isMobile={isMobile} dinheiro={dinheiro}
-          aoCadastrarInsumo={cadastrarInsumoDoPedido} aoAprender={aprenderApelidos}
+        <EntradaDaObra data={data} save={save} isMobile={isMobile} dinheiro={dinheiro}
           aoFechar={() => setEntradaAberta(false)} aoSeguir={seguirDaEntrada} />
       )}
 
@@ -28443,6 +28467,71 @@ function BlocoContaLoja({ cotacao, contasPagar, loja, isMobile, dinheiro, podeGe
 // a etapa de cada item. Sem ela o pedido não é lançado — é assim que o
 // quadro por etapa para de encher de "Sem etapa".
 
+// ── O catálogo visto de fora ──────────────────
+// Três coisas que qualquer tela precisa para mexer no catálogo a partir de um
+// papel da loja. Moram aqui soltas porque a Entrada agora abre de dois
+// lugares, e a mesma regra escrita em dois componentes vira duas regras.
+function insumosDoCatalogo(data) {
+  return ((data || {}).materiais || []).filter((i) => i && i.ativo !== false);
+}
+
+function cadastrarInsumoNoCatalogo(data, save, campos) {
+  const todos = (data || {}).materiais || [];
+  const novo = novoInsumoDoPedido(campos, todos,
+    (g, lista) => codigoDoGrupo(g, lista, typeof proximoCodigoInsumo === "function" ? proximoCodigoInsumo : null));
+  if (!novo) return null;
+  save({ ...data, materiais: [...todos, novo] });
+  return novo;
+}
+
+// O texto que a loja usa vira apelido do insumo assim que a pessoa confirma
+// o casamento. É o que faz o pedido do mês que vem casar sozinho, sem aposta:
+// resolverInsumo acha por apelido antes de qualquer palpite.
+function aprenderApelidosNoCatalogo(data, save, pares) {
+  let lista = (data || {}).materiais || [];
+  let mudou = false;
+  for (const par of pares || []) {
+    const r = comApelidoDaLoja(lista, par.codigo, par.descricao);
+    lista = r.insumos;
+    if (r.mudou) mudou = true;
+  }
+  if (mudou) save({ ...data, materiais: lista });
+}
+
+// null = ainda não perguntou. Pergunta uma vez por tela: sem a IA, anexar
+// não pode virar dois envios do mesmo arquivo.
+function useIaDisponivel() {
+  const [disp, setDisp] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    if (!api || !api.ia) { setDisp(false); return; }
+    api.ia.status()
+      .then((d) => { if (vivo) setDisp(!!(d && d.disponivel)); })
+      .catch(() => { if (vivo) setDisp(false); });
+    return () => { vivo = false; };
+  }, []);
+  return disp;
+}
+
+// ── A Entrada, pronta para pendurar em qualquer tela ────────
+// A caixa em si (PainelEntrada) não conhece `data` nem `save`: recebe listas.
+// Este invólucro faz a ligação, e é ele que as duas portas usam — a de dentro
+// da obra e a da lista de Obras. Uma fiação só.
+function EntradaDaObra({ data, save, obras, isMobile, dinheiro, aoFechar, aoSeguir }) {
+  const insumos = insumosDoCatalogo(data);
+  const prestadores = ((data || {}).fornecedores || []).filter((f) => f && f.ativo !== false);
+  const iaDisponivel = useIaDisponivel();
+  const moeda = dinheiro || ((v) => (typeof fmtMoedaCtr === "function" ? fmtMoedaCtr(v) : "R$ " + Number(v || 0).toFixed(2)));
+  return (
+    <PainelEntrada
+      insumos={insumos} prestadores={prestadores} unidades={unidadesDoCatalogo(insumos)}
+      iaDisponivel={!!iaDisponivel} isMobile={isMobile} dinheiro={moeda} obras={obras}
+      aoCadastrarInsumo={(campos) => cadastrarInsumoNoCatalogo(data, save, campos)}
+      aoAprender={(pares) => aprenderApelidosNoCatalogo(data, save, pares)}
+      aoFechar={aoFechar} aoSeguir={aoSeguir} />
+  );
+}
+
 // ── A caixa da Entrada ──────────────────────────────
 // Três passos numa tela só: o material entra, a lista aparece conferida
 // contra o catálogo, e aí se diz o que o papel é. Nenhum dado é gravado
@@ -28527,7 +28616,7 @@ function BotaoDitar({ aoDitar, isMobile }) {
 }
 
 function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile, dinheiro,
-  aoCadastrarInsumo, aoAprender, aoFechar, aoSeguir }) {
+  obras, aoCadastrarInsumo, aoAprender, aoFechar, aoSeguir }) {
   const E = COT_ESTILO;
   const P = cotPainel(isMobile, 940);
   const [texto, setTexto] = useState("");
@@ -28538,6 +28627,10 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const [itens, setItens] = useState(null);
   const [destino, setDestino] = useState("");
   const [lojaId, setLojaId] = useState("");
+  // Só existe quando a Entrada foi aberta fora de uma obra. A obra entra
+  // DEPOIS da leitura, de propósito: a nota na mão não espera você lembrar
+  // de qual obra ela é — entra tudo, e aí se diz.
+  const [obraId, setObraId] = useState("");
   const [sobre, setSobre] = useState(false);
   const [conferindo, setConferindo] = useState(false);
   const [progressoIA, setProgressoIA] = useState(null);
@@ -28558,7 +28651,8 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     sugestao: null,
   });
   const resumo = itens ? resumoDaEntrada(itens) : null;
-  const prova = entradaPronta(destino, lojaId, itens || []);
+  const pedeObra = entradaPedeObra(obras);
+  const prova = entradaPronta(destino, lojaId, itens || [], obras, obraId);
 
   // A leitura já sabe o que cada linha é — mas proposta é proposta, e quem
   // carimba é a pessoa. O que não pode é cobrar onze toques por isso: as
@@ -28665,7 +28759,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
 
   function seguir() {
     if (!prova.ok) { setAviso(prova.motivo); return; }
-    aoSeguir({ destino, lojaId, itens, papel });
+    aoSeguir({ destino, lojaId, obraId, itens, papel });
   }
 
   const cartao = { borderWidth: 1, borderStyle: "solid", borderColor: "rgba(38,36,33,0.14)",
@@ -28826,6 +28920,18 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                 })}
               </div>
 
+              {pedeObra && (
+                <>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", margin: "14px 0 8px" }}>
+                    Para qual obra?
+                  </div>
+                  <SelectBusca style={E.input} value={obraId} onChange={(v) => setObraId(v)}
+                    placeholder="Procurar obra…"
+                    opcoes={[{ valor: "", rotulo: "— escolha a obra —" }].concat(
+                      (obras || []).map((o) => ({ valor: o.id, rotulo: o.nome, grupo: o.clienteNome || "" })))} />
+                </>
+              )}
+
               <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", margin: "14px 0 8px" }}>
                 O que é este papel?
               </div>
@@ -28861,7 +28967,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
           <button type="button" style={E.btnSec} onClick={aoFechar}>Cancelar</button>
           {itens && (
             <button type="button" style={E.btnSec}
-              onClick={() => { setItens(null); setDestino(""); setAviso(""); }}>Ler de novo</button>
+              onClick={() => { setItens(null); setDestino(""); setObraId(""); setAviso(""); }}>Ler de novo</button>
           )}
           {!itens ? (
             <button type="button" style={{ ...E.btn, opacity: (lendo || !String(texto).trim()) ? 0.45 : 1,
@@ -31984,9 +32090,13 @@ function PonteEscritorioView({ obra, cliente, contasPagar, entradas, data, isMob
   );
 }
 
-function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaObra }) {
+function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaObra, entradaInicial }) {
   const perm = getPermissoes();
-  const [view, setView] = useState(obraInicial ? "detalheObra" : "lista");
+  // Chegando com uma Entrada já lida (veio da lista de Obras), a tela abre
+  // direto em Cotações: é lá que as três portas de saída moram.
+  const [view, setView] = useState(entradaInicial ? "cotacoesObra" : obraInicial ? "detalheObra" : "lista");
+  // Pedido de abrir a caixa da Entrada vindo do card do painel da obra.
+  const [abrirEntrada, setAbrirEntrada] = useState(false);
   const [formObra, setFormObra] = useState(null);
   const [formContrato, setFormContrato] = useState(null);
   // Gerador de contratos: `contratoGerando` é o rascunho em edição e
@@ -34695,7 +34805,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         onObraAtualizada={setObraSelecionada}
         isMobile={isMobile}
         usuario={perm.usuario}
-        onVoltar={() => setView("detalheObra")}
+        onVoltar={() => { setAbrirEntrada(false); setView("detalheObra"); }}
+        abrirEntrada={abrirEntrada} entradaInicial={entradaInicial}
         onGerarContrato={abrirContratoDaCotacao}
         onLancarContas={lancarCotacaoEmContas}
         onDesfazerLancamento={desfazerLancamentoDaCotacao}
@@ -34733,6 +34844,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           )}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 16, marginBottom: 20 }}>
+          {perm.podeGerenciarObra && (
+            <button onClick={() => { setAbrirEntrada(true); setView("cotacoesObra"); }}
+              style={{ border: "1.5px solid #0474f4", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#0474f4", textAlign: "center" }}>Entrada</div>
+              <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>Nota, pedido ou lista — entra tudo por aqui</div>
+            </button>
+          )}
           <button onClick={() => setView("orcamentoObra")}
             style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Orçamento</div>

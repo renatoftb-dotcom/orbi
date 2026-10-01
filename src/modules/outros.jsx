@@ -441,6 +441,12 @@ function Obras({ data, save }) {
   const [filtro, setFiltro] = useState("andamento"); // "andamento" | "concluidas" | "todas"
   const [obraAbertaId, setObraAbertaId] = useState(null);
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+  // A Entrada aberta daqui, antes de escolher a obra: a nota chega na mão e
+  // entra; de qual obra ela é se diz depois de ler. Quando a pessoa segue,
+  // guardamos o que ela montou e abrimos a obra já com isso na mão.
+  const [entradaAberta, setEntradaAberta] = useState(false);
+  const [entradaPendente, setEntradaPendente] = useState(null);
+  const perm = typeof getPermissoes === "function" ? getPermissoes() : { podeGerenciarObra: true };
 
   function nomeCliente(clienteId) {
     return clientes.find(c => c.id === clienteId)?.nome || "—";
@@ -505,6 +511,20 @@ function Obras({ data, save }) {
     cursor: "pointer", fontFamily: "inherit", fontWeight: ativa ? 600 : 400,
   });
 
+  // Obras vigentes, com o nome do cliente junto: duas obras podem se chamar
+  // "Reforma", e o que as separa na lista é de quem elas são.
+  const obrasVigentes = obras
+    .filter(o => o && o.status !== "concluida" && clientes.some(c => c.id === o.clienteId))
+    .map(o => ({ id: o.id, nome: o.nome || o.referencia || "Obra", clienteNome: nomeCliente(o.clienteId) }));
+
+  function seguirDaEntradaDeObras(carga) {
+    const alvo = (carga && carga.obraId) || "";
+    if (!alvo) return;
+    setEntradaAberta(false);
+    setEntradaPendente(carga);
+    setObraAbertaId(alvo);
+  }
+
   // Obra aberta: mesma tela da obra que existe dentro do cliente
   // (GestaoObraPanel → detalhe: orçamento, planejamento, contratos, cronograma).
   const obraAberta = obraAbertaId ? obras.find(o => o.id === obraAbertaId) : null;
@@ -518,7 +538,9 @@ function Obras({ data, save }) {
           <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>{clienteDaObra.nome}</h2>
           <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>{obraAberta.nome || obraAberta.referencia || "Obra"}</div>
         </div>
-        <GestaoObraPanel key={obraAberta.id} cliente={clienteDaObra} data={data} save={save} isMobile={isMobile} obraInicial={obraAberta} onSairDaObra={() => setObraAbertaId(null)} />
+        <GestaoObraPanel key={obraAberta.id} cliente={clienteDaObra} data={data} save={save} isMobile={isMobile}
+          obraInicial={obraAberta} entradaInicial={entradaPendente}
+          onSairDaObra={() => { setEntradaPendente(null); setObraAbertaId(null); }} />
       </PageContainer>
     );
   }
@@ -530,7 +552,19 @@ function Obras({ data, save }) {
           <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Obras</h2>
           <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>Gestão de obras em execução</div>
         </div>
+        {perm.podeGerenciarObra && obrasVigentes.length > 0 && typeof EntradaDaObra === "function" && (
+          <button onClick={() => setEntradaAberta(true)}
+            style={{ border:"1.5px solid #0474f4", background:"#fff", color:"#0474f4", borderRadius:9,
+              padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+            Entrada
+          </button>
+        )}
       </div>
+
+      {entradaAberta && (
+        <EntradaDaObra data={data} save={save} obras={obrasVigentes} isMobile={isMobile}
+          aoFechar={() => setEntradaAberta(false)} aoSeguir={seguirDaEntradaDeObras} />
+      )}
 
       {/* Filtros */}
       <div style={{ display:"flex", gap:8, marginTop:20, marginBottom:20 }}>

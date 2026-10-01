@@ -2201,9 +2201,13 @@ function PonteEscritorioView({ obra, cliente, contasPagar, entradas, data, isMob
   );
 }
 
-function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaObra }) {
+function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaObra, entradaInicial }) {
   const perm = getPermissoes();
-  const [view, setView] = useState(obraInicial ? "detalheObra" : "lista");
+  // Chegando com uma Entrada já lida (veio da lista de Obras), a tela abre
+  // direto em Cotações: é lá que as três portas de saída moram.
+  const [view, setView] = useState(entradaInicial ? "cotacoesObra" : obraInicial ? "detalheObra" : "lista");
+  // Pedido de abrir a caixa da Entrada vindo do card do painel da obra.
+  const [abrirEntrada, setAbrirEntrada] = useState(false);
   const [formObra, setFormObra] = useState(null);
   const [formContrato, setFormContrato] = useState(null);
   // Gerador de contratos: `contratoGerando` é o rascunho em edição e
@@ -4912,7 +4916,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         onObraAtualizada={setObraSelecionada}
         isMobile={isMobile}
         usuario={perm.usuario}
-        onVoltar={() => setView("detalheObra")}
+        onVoltar={() => { setAbrirEntrada(false); setView("detalheObra"); }}
+        abrirEntrada={abrirEntrada} entradaInicial={entradaInicial}
         onGerarContrato={abrirContratoDaCotacao}
         onLancarContas={lancarCotacaoEmContas}
         onDesfazerLancamento={desfazerLancamentoDaCotacao}
@@ -4950,6 +4955,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           )}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 16, marginBottom: 20 }}>
+          {perm.podeGerenciarObra && (
+            <button onClick={() => { setAbrirEntrada(true); setView("cotacoesObra"); }}
+              style={{ border: "1.5px solid #0474f4", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#0474f4", textAlign: "center" }}>Entrada</div>
+              <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>Nota, pedido ou lista — entra tudo por aqui</div>
+            </button>
+          )}
           <button onClick={() => setView("orcamentoObra")}
             style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Orçamento</div>

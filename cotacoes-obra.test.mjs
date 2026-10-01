@@ -79,7 +79,8 @@ const modulo = new Function(`
            medidasDeEmbalagem, divergenciaDeEmbalagem, escolhasDoCasamento,
            indiceDoCatalogo, casarNoCatalogo, sugestaoDoCatalogo, comApelidoDaLoja,
            cotPalavrasDoNome, cotPartesDoNome, cotPalavrasDaLoja, cotCasaPalavra,
-           sugestoesDaIA, textoParaAIA };
+           sugestoesDaIA, textoParaAIA,
+           entradaPronta, entradaPedeLoja, entradaPedeObra, DESTINOS_DA_ENTRADA };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -2574,6 +2575,50 @@ teste("cada frase ditada entra em linha nova", () => {
   assert.strictEqual(modulo.textoComDitado("já escrito   ", "  "), "já escrito   ");
   assert.strictEqual(modulo.textoComDitado(null, "três latas"), "3 latas");
 });
+
+// ── A Entrada como porta de insumos ─────────────────────────────
+
+const ITEM = [{ descricao: "Cimento", quantidade: 10 }];
+
+teste("sem item lido não segue, qualquer que seja o destino", () => {
+  assert.strictEqual(M.entradaPronta("pedido", "f1", []).ok, false);
+  assert.strictEqual(M.entradaPronta("pedido", "f1", []).motivo, "A leitura não achou itens.");
+});
+
+teste("dentro da obra não se pergunta a obra", () => {
+  const r = M.entradaPronta("cotacao", "", ITEM);
+  assert.strictEqual(r.ok, true, r.motivo);
+  assert.strictEqual(M.entradaPedeObra(undefined), false);
+  assert.strictEqual(M.entradaPedeObra([]), false);
+});
+
+teste("aberta fora da obra, a obra é obrigatória", () => {
+  const obras = [{ id: "ob1", nome: "Reforma", clienteNome: "COBOP" }];
+  assert.strictEqual(M.entradaPedeObra(obras), true);
+  const sem = M.entradaPronta("cotacao", "", ITEM, obras, "");
+  assert.strictEqual(sem.ok, false);
+  assert.strictEqual(sem.motivo, "Escolha a obra.");
+  assert.strictEqual(M.entradaPronta("cotacao", "", ITEM, obras, "ob1").ok, true);
+});
+
+teste("a obra é cobrada antes do destino — é a primeira pergunta depois de ler", () => {
+  const obras = [{ id: "ob1", nome: "Reforma" }];
+  assert.strictEqual(M.entradaPronta("", "", ITEM, obras, "").motivo, "Escolha a obra.");
+  assert.strictEqual(M.entradaPronta("", "", ITEM, obras, "ob1").motivo, "Diga o que é este papel.");
+});
+
+teste("pedido e pagamento pedem loja; cotação não", () => {
+  assert.strictEqual(M.entradaPedeLoja("pedido"), true);
+  assert.strictEqual(M.entradaPedeLoja("pagamento"), true);
+  assert.strictEqual(M.entradaPedeLoja("cotacao"), false);
+  assert.strictEqual(M.entradaPronta("pedido", "", ITEM).motivo, "Escolha a loja.");
+  assert.strictEqual(M.entradaPronta("pedido", "f1", ITEM).ok, true);
+});
+
+teste("os três destinos de hoje continuam sendo os três", () => {
+  assert.deepStrictEqual(M.DESTINOS_DA_ENTRADA.map((d) => d.id), ["pedido", "pagamento", "cotacao"]);
+});
+
 
 for (const [nome, fn] of testes) {
   try { fn(); console.log("  ok   " + nome); }
