@@ -80,7 +80,8 @@ const modulo = new Function(`
            indiceDoCatalogo, casarNoCatalogo, sugestaoDoCatalogo, comApelidoDaLoja,
            cotPalavrasDoNome, cotPartesDoNome, cotPalavrasDaLoja, cotCasaPalavra,
            sugestoesDaIA, textoParaAIA,
-           entradaPronta, entradaPedeLoja, entradaPedeObra, DESTINOS_DA_ENTRADA };
+           entradaPronta, entradaPedeLoja, entradaPedeObra, DESTINOS_DA_ENTRADA,
+           contextoDaEntrada, cotMioloDoNome };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -2617,6 +2618,112 @@ teste("pedido e pagamento pedem loja; cotação não", () => {
 
 teste("os três destinos de hoje continuam sendo os três", () => {
   assert.deepStrictEqual(M.DESTINOS_DA_ENTRADA.map((d) => d.id), ["pedido", "pagamento", "cotacao"]);
+});
+
+
+// ── O que a frase diz além da lista ─────────────────────────────
+
+const OBRAS_CTX = [
+  { id: "ob1", nome: "Reforma Loja Cobop", clienteNome: "COBOP COMÉRCIO DE BOMBAS" },
+  { id: "ob2", nome: "Jacarezinho Mod 1", clienteNome: "Padovan Empreendimentos" },
+];
+const LOJAS_CTX = [
+  { id: "f1", nome: "OURIFER" },
+  { id: "f2", nome: "Pantanal Materiais" },
+];
+const ctx = (txt) => M.contextoDaEntrada(txt, OBRAS_CTX, LOJAS_CTX);
+
+teste("“para a obra da Cobop” acha a obra pelo nome do cliente", () => {
+  const r = ctx("para a obra da Cobop\n10 sacos de cimento");
+  assert.strictEqual(r.obra && r.obra.id, "ob1");
+  assert.strictEqual(r.textoLimpo, "10 sacos de cimento");
+});
+
+teste("“Loja Ourifer” acha a loja e sai da lista", () => {
+  const r = ctx("Loja Ourifer\n10 sacos de cimento");
+  assert.strictEqual(r.loja && r.loja.id, "f1");
+  assert.strictEqual(r.textoLimpo, "10 sacos de cimento");
+});
+
+teste("os dois juntos, em qualquer ordem", () => {
+  const r = ctx("10 sacos de cimento\nLoja Ourifer\npara a obra da Cobop\n5 tubo 100mm");
+  assert.strictEqual(r.obra.id, "ob1");
+  assert.strictEqual(r.loja.id, "f1");
+  assert.strictEqual(r.textoLimpo, "10 sacos de cimento\n5 tubo 100mm");
+  assert.strictEqual(r.trechos.length, 2);
+});
+
+teste("“obra” sozinha não é menção — a linha fica", () => {
+  const r = ctx("obra\n10 sacos de cimento");
+  assert.strictEqual(r.obra, null);
+  assert.ok(/obra/.test(r.textoLimpo));
+});
+
+teste("linha com quantidade é material, mesmo citando a loja", () => {
+  const r = ctx("2 caixas Ourifer 4x2");
+  assert.strictEqual(r.loja, null, "não pode consumir um item");
+  assert.strictEqual(r.textoLimpo, "2 caixas Ourifer 4x2");
+});
+
+teste("a marca decide de que lado procurar", () => {
+  // A obra chama "Reforma LOJA Cobop"; dizer "loja Ourifer" não pode
+  // esbarrar nela, e dizer "obra Cobop" não pode virar fornecedor.
+  const r = ctx("loja Ourifer\nobra Cobop");
+  assert.strictEqual(r.loja.id, "f1");
+  assert.strictEqual(r.obra.id, "ob1");
+});
+
+teste("menção ambígua entre duas obras não preenche nada", () => {
+  const duas = [
+    { id: "a", nome: "Reforma Centro", clienteNome: "Silva" },
+    { id: "b", nome: "Reforma Centro", clienteNome: "Souza" },
+  ];
+  const r = M.contextoDaEntrada("obra Reforma Centro\n10 cimento", duas, LOJAS_CTX);
+  assert.strictEqual(r.obra, null, "duas casaram: quem escolhe é ele");
+  assert.ok(/Reforma Centro/.test(r.textoLimpo), "e a linha fica à vista");
+});
+
+teste("nome curto demais não casa — “sa” não é nome", () => {
+  const r = M.contextoDaEntrada("obra sa", [{ id: "x", nome: "Sabará" }], []);
+  assert.strictEqual(r.obra, null);
+});
+
+teste("acento e caixa não atrapalham", () => {
+  const r = ctx("PARA A OBRA DA COBOP COMÉRCIO\nloja pantanal materiais");
+  assert.strictEqual(r.obra.id, "ob1");
+  assert.strictEqual(r.loja.id, "f2");
+});
+
+teste("pelo nome da obra, não só do cliente", () => {
+  assert.strictEqual(ctx("obra Jacarezinho Mod 1").obra.id, "ob2");
+  assert.strictEqual(ctx("obra jacarezinho").obra.id, "ob2");
+});
+
+teste("linha solta sem marca que casa dos dois lados fica para ele", () => {
+  const confuso = [{ id: "o", nome: "Ourifer Reforma", clienteNome: "X" }];
+  const r = M.contextoDaEntrada("ourifer", confuso, LOJAS_CTX);
+  assert.strictEqual(r.obra, null);
+  assert.strictEqual(r.loja, null);
+  assert.strictEqual(r.textoLimpo, "ourifer");
+});
+
+teste("só a lista, sem menção nenhuma, volta intacta", () => {
+  const r = ctx("10 sacos de cimento\n5 tubo 100mm esgoto");
+  assert.strictEqual(r.obra, null);
+  assert.strictEqual(r.loja, null);
+  assert.strictEqual(r.textoLimpo, "10 sacos de cimento\n5 tubo 100mm esgoto");
+  assert.strictEqual(r.trechos.length, 0);
+});
+
+teste("texto vazio ou listas vazias não explodem", () => {
+  assert.strictEqual(M.contextoDaEntrada("", [], []).textoLimpo, "");
+  assert.strictEqual(M.contextoDaEntrada(null, null, null).obra, null);
+});
+
+teste("a segunda menção do mesmo tipo não sobrescreve a primeira", () => {
+  const r = ctx("obra Cobop\nobra Jacarezinho\n10 cimento");
+  assert.strictEqual(r.obra.id, "ob1", "a primeira manda");
+  assert.ok(/Jacarezinho/.test(r.textoLimpo), "e a segunda fica à vista, não some calada");
 });
 
 

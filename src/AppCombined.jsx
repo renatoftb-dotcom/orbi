@@ -24260,6 +24260,95 @@ function ehConversaSolta(termo, quantidade) {
   return COT_ABERTURA_PEDIDO.test(t);
 }
 
+// ── O que a frase diz além da lista ─────────────────────
+// Ditando, ninguém dita só a lista: diz "para a obra da Cobop", "loja
+// Ourifer", e depois os itens. Essas linhas não são material — se entrarem
+// na lista viram item fantasma; se forem ignoradas, ele ainda tem que
+// escolher no campo o que já falou. Então são lidas, consumidas, e viram o
+// preenchimento dos campos.
+//
+// A regra é conservadora de propósito: só consome a linha quando ela é
+// INTEIRA uma menção, e só preenche quando bate com UM candidato. Na dúvida
+// devolve a escolha para quem sabe — preencher errado a obra manda a compra
+// para o lugar errado, e ele só descobre no extrato.
+
+// As palavras que apontam o que vem depois.
+const COT_MARCA_OBRA = /^(para\s+)?(a\s+|o\s+)?(obra|cliente)\s+(d[aoe]s?\s+)?/;
+const COT_MARCA_LOJA = /^(na\s+|no\s+|d[aoe]\s+)?(loja|fornecedor|material(is)?\s+d[aoe]|comprei\s+n[ao])\s+(d[aoe]s?\s+)?/;
+// Sobras de ligação que atrapalham a comparação, mas não dizem nada.
+const COT_SOBRA_LIGACAO = /\b(d[aoe]s?|em|no|na|para|pra|com)\b/g;
+// Abaixo disso não é nome, é coincidência: "sa" casaria com meio cadastro.
+const COT_MIOLO_MINIMO = 4;
+
+function cotMioloDoNome(texto) {
+  return cotSemAcento(texto).replace(COT_SOBRA_LIGACAO, " ").replace(/\s+/g, " ").trim();
+}
+
+// Casa o miolo da linha com os nomes de um candidato. Vale nos dois sentidos:
+// "cobop" acha "COBOP COMÉRCIO DE BOMBAS", e "obra da reforma loja cobop"
+// acha "Reforma Loja Cobop".
+function cotCasaMencao(miolo, nomes) {
+  if (!miolo || miolo.length < COT_MIOLO_MINIMO) return false;
+  for (const n of nomes) {
+    const alvo = cotMioloDoNome(n);
+    if (!alvo || alvo.length < COT_MIOLO_MINIMO) continue;
+    if (alvo.indexOf(miolo) >= 0 || miolo.indexOf(alvo) >= 0) return true;
+  }
+  return false;
+}
+
+function cotUnicoQueCasa(miolo, candidatos, nomesDe) {
+  let achado = null;
+  for (const c of candidatos || []) {
+    if (!c) continue;
+    if (!cotCasaMencao(miolo, nomesDe(c))) continue;
+    if (achado) return null;   // dois casaram: ambíguo, ele escolhe
+    achado = c;
+  }
+  return achado;
+}
+
+function contextoDaEntrada(texto, obras, lojas) {
+  const fora = { obra: null, loja: null, textoLimpo: String(texto == null ? "" : texto), trechos: [] };
+  const linhas = fora.textoLimpo.split(/\r?\n/);
+  if (!linhas.length) return fora;
+
+  const nomesDaObra = (o) => [o.nome, o.clienteNome, o.referencia].filter(Boolean);
+  const nomesDaLoja = (f) => [f.nome, f.favorecido].filter(Boolean);
+  const sobrou = [];
+
+  for (const linha of linhas) {
+    const cru = String(linha || "").trim();
+    if (!cru) { sobrou.push(linha); continue; }
+
+    // Linha que começa com número é item, ponto: "2 caixas Ourifer" é
+    // material. O teste é o COMEÇO da linha, não "tem número em algum lugar"
+    // — obra chamada "Jacarezinho Mod 1" ou "Lote 20" tem número no fim, e
+    // pedir a quantidade a um leitor de itens dava 1 e engolia a menção.
+    if (/^\s*\d/.test(cru)) { sobrou.push(linha); continue; }
+
+    const base = cotSemAcento(cru).replace(/[.:;!?]+$/, "").trim();
+    const marcaObra = COT_MARCA_OBRA.test(base);
+    const marcaLoja = COT_MARCA_LOJA.test(base);
+    const miolo = cotMioloDoNome(base.replace(marcaLoja ? COT_MARCA_LOJA : COT_MARCA_OBRA, ""));
+
+    // Com marca, procura só do lado que a marca aponta. Sem marca, a linha
+    // solta tem que casar com um lado só — senão não dá para saber.
+    const achaObra = (!fora.obra && (marcaObra || !marcaLoja))
+      ? cotUnicoQueCasa(miolo, obras, nomesDaObra) : null;
+    const achaLoja = (!fora.loja && (marcaLoja || !marcaObra))
+      ? cotUnicoQueCasa(miolo, lojas, nomesDaLoja) : null;
+
+    if (achaObra && achaLoja) { sobrou.push(linha); continue; }   // não sei qual é
+    if (achaObra) { fora.obra = achaObra; fora.trechos.push(cru); continue; }
+    if (achaLoja) { fora.loja = achaLoja; fora.trechos.push(cru); continue; }
+    sobrou.push(linha);
+  }
+
+  fora.textoLimpo = sobrou.join("\n");
+  return fora;
+}
+
 function interpretarPedido(texto, insumos) {
   // O recado nem sempre vem em lista. Muitas vezes é uma frase só: "compra
   // 30 sacos de cimento, 40 tábuas de 30, 25 pregos 17x21 e 20 quilos de
@@ -28734,6 +28823,9 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const [obraId, setObraId] = useState("");
   const [sobre, setSobre] = useState(false);
   const [focado, setFocado] = useState(false);
+  // O que a própria frase já disse: { obra, loja }. Preenche os campos e fica
+  // à vista — reconhecimento calado é reconhecimento em que não se confia.
+  const [reconhecido, setReconhecido] = useState(null);
   const refTexto = useRef(null);
   // A caixa cresce com o que se escreve, até um teto: lista de trinta itens
   // não pode empurrar o botão de ler para fora da tela.
@@ -28837,6 +28929,13 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     const alvo = arq || arquivo;
     if (!alvo && !String(texto).trim()) { setAviso("Cole a lista ou escolha um arquivo."); return; }
     setLendo(true); setAviso(""); setProgresso(null);
+    // Antes de procurar material, ouve o que a frase disse sobre obra e loja
+    // — e tira esses pedaços do texto, para não virarem item fantasma.
+    const ctx = contextoDaEntrada(texto, obras || [], lojas);
+    const paraLer = ctx.trechos.length ? ctx.textoLimpo : texto;
+    if (ctx.obra) setObraId(ctx.obra.id);
+    if (ctx.loja) setLojaId(ctx.loja.id);
+    setReconhecido((ctx.obra || ctx.loja) ? { obra: ctx.obra, loja: ctx.loja } : null);
     try {
       // Papel com preço (PDF) tem leitor próprio, de graça e na hora: número,
       // vencimento, desconto e valor saem do papel. Só texto e foto é que
@@ -28849,15 +28948,15 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
         setPapel({ numeroPedido: o.numeroPedido || o.numero || "", emitido: o.emitido || "",
           vencimento: o.vencimento || "", desconto: o.desconto || "" });
       } else if (iaDisponivel) {
-        const r = await api.ia.lerPedido({ arquivo: alvo || null, texto: texto || "" },
+        const r = await api.ia.lerPedido({ arquivo: alvo || null, texto: paraLer || "" },
           (pr) => setProgresso(pr));
         const cru = pedidoDaIA(r, insumos || []);
         if (!cru.length) throw new Error("A IA não achou itens aí.");
         setItens(itensDaEntrada(promoverCandidatos(cru), "lista", insumos || []));
         setPapel(null);
       } else {
-        if (!String(texto).trim()) throw new Error("Sem a IA eu leio o texto colado e o PDF. Cole o texto da lista.");
-        const cru = interpretarPedido(texto, insumos || []);
+        if (!String(paraLer).trim()) throw new Error("Sem a IA eu leio o texto colado e o PDF. Cole o texto da lista.");
+        const cru = interpretarPedido(paraLer, insumos || []);
         if (!cru.length) throw new Error("Não achei itens no texto.");
         setItens(itensDaEntrada(promoverCandidatos(cru), "lista", insumos || []));
         setPapel(null);
@@ -28873,7 +28972,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
 
   function limpar() {
     setTexto(""); setArquivo(null); setItens(null); setPapel(null);
-    setDestino(""); setLojaId(""); setObraId(""); setAviso("");
+    setDestino(""); setLojaId(""); setObraId(""); setAviso(""); setReconhecido(null);
   }
 
   function seguir() {
@@ -29088,6 +29187,24 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                 })}
               </div>
 
+              {reconhecido && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
+                  marginTop: 10, padding: "8px 12px", borderRadius: 12,
+                  background: "#f3f8ff", border: "1px solid rgba(4,116,244,0.22)" }}>
+                  <span style={{ fontSize: 11.5, color: "#0474f4", fontWeight: 600 }}>No que você disse</span>
+                  {reconhecido.obra && (
+                    <span style={{ fontSize: 12, color: "#111827" }}>
+                      obra <b>{reconhecido.obra.nome}</b>
+                      {reconhecido.obra.clienteNome ? <span style={{ color: "#6b7280" }}> · {reconhecido.obra.clienteNome}</span> : null}
+                    </span>
+                  )}
+                  {reconhecido.loja && (
+                    <span style={{ fontSize: 12, color: "#111827" }}>loja <b>{reconhecido.loja.nome}</b></span>
+                  )}
+                  <span style={{ fontSize: 11.5, color: "#6b7280" }}>— já preenchi abaixo; troque se não for.</span>
+                </div>
+              )}
+
               {pedeObra && (
                 <>
                   <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", margin: "14px 0 8px" }}>
@@ -29135,7 +29252,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
           {!embutido && <button type="button" style={E.btnSec} onClick={aoFechar}>Fechar</button>}
           {itens && (
             <button type="button" style={E.btnSec}
-              onClick={() => { setItens(null); setDestino(""); setObraId(""); setAviso(""); }}>Ler de novo</button>
+              onClick={() => { setItens(null); setDestino(""); setObraId(""); setAviso(""); setReconhecido(null); }}>Ler de novo</button>
           )}
           {embutido && !itens && String(texto).trim() !== "" && (
             <button type="button" style={E.btnSec} onClick={limpar}>Limpar</button>
