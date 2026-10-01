@@ -2301,6 +2301,16 @@ function filtrarOpcoes(lista, termo) {
   return comeca.concat(contem);
 }
 
+// O que não está na lista precisa poder entrar sem sair da lista. Quem já
+// escreveu o nome na busca não deve escrevê-lo de novo num formulário: o
+// que ele digitou é o nome, e o botão diz isso em vez de "cadastrar novo".
+function rotuloDeCriar(termo, oQue) {
+  const t = String(termo == null ? "" : termo).trim();
+  const coisa = String(oQue || "").trim();
+  if (t) return "＋ Cadastrar “" + t + "”";
+  return coisa ? "＋ Cadastrar " + coisa : "＋ Cadastrar";
+}
+
 // ── SelectBusca: fim da parte pura ────────────────────
 
 const SB_CAMPO = {
@@ -2553,6 +2563,18 @@ function SelectBusca(props) {
               </div>
             )}
           </div>
+          {props.aoCriar && (
+            <div onMouseDown={function (ev) { ev.preventDefault(); }}
+              onClick={function () { const q = termo; fechar(); props.aoCriar(String(q || "").trim()); }}
+              style={{
+                padding: "9px 12px", fontSize: 12.5, cursor: "pointer", flexShrink: 0,
+                borderTop: "1px solid rgba(38,36,33,0.10)",
+                background: visiveis.length === 0 ? "#eef5ff" : "#fff",
+                color: "#0474f4", fontWeight: 600,
+              }}>
+              {rotuloDeCriar(termo, props.criarRotulo)}
+            </div>
+          )}
         </div>
       )}
     </>
@@ -28872,6 +28894,27 @@ function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinhe
     };
   }
 
+  // A loja nova nasce com o mínimo: nome e telefone. O resto do cadastro é
+  // de Prestadores de Serviços — exigir CNPJ aqui mandaria de volta para o
+  // "anota num papel e cadastra depois" que esta tela veio desfazer.
+  function criarLoja(campos) {
+    const todos = (data || {}).fornecedores || [];
+    const nome = String((campos || {}).nome || "").trim();
+    if (!nome) return null;
+    // Loja com esse nome já existe? É ela — cadastrar a segunda só criaria
+    // dois históricos de preço para o mesmo fornecedor.
+    const chave = (s) => (typeof cotSemAcento === "function" ? cotSemAcento(s) : String(s || "").toLowerCase());
+    const igual = todos.find((f) => f && chave(f.nome) === chave(nome));
+    if (igual) return igual;
+    const nova = criarPrestadorRapido({
+      nome, telefone: String((campos || {}).telefone || "").trim(),
+      categoria: "Loja / Comércio",
+    }, typeof uid === "function" ? uid() : String(Date.now()));
+    if (!nova) return null;
+    save({ ...data, fornecedores: todos.concat([nova]) });
+    return nova;
+  }
+
   const seguir = (carga) => (carga && carga.destino === "mandar")
     ? mandarDaEntrada(carga)
     : (aoSeguir ? aoSeguir(carga) : undefined);
@@ -28881,6 +28924,7 @@ function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinhe
       insumos={insumos} prestadores={prestadores} unidades={unidadesDoCatalogo(insumos)}
       iaDisponivel={!!iaDisponivel} isMobile={isMobile} dinheiro={moeda} obras={obras} embutido={embutido}
       aoCadastrarInsumo={(campos) => cadastrarInsumoNoCatalogo(data, save, campos)}
+      aoCriarLoja={criarLoja}
       aoAprender={(pares) => aprenderApelidosNoCatalogo(data, save, pares)}
       aoFechar={aoFechar} aoSeguir={seguir} />
   );
@@ -29036,7 +29080,7 @@ function BotaoDitar({ aoDitar, isMobile, compacto }) {
 }
 
 function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile, dinheiro,
-  obras, embutido, aoCadastrarInsumo, aoAprender, aoFechar, aoSeguir }) {
+  obras, embutido, aoCadastrarInsumo, aoCriarLoja, aoAprender, aoFechar, aoSeguir }) {
   const E = COT_ESTILO;
   const P = cotPainel(isMobile, 940);
   const [texto, setTexto] = useState("");
@@ -29062,6 +29106,27 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const [lojasMarcadas, setLojasMarcadas] = useState({});
   const [fila, setFila] = useState(null);      // { lojas, i } — uma conversa por vez
   const [enviado, setEnviado] = useState(null); // { quantas, obraNome }
+  // A loja que ainda não existe entra aqui, sem sair da Entrada: quem está
+  // com a nota na mão não pode ser mandado para o cadastro de prestadores e
+  // ter que recomeçar a leitura quando voltar.
+  const [novaLoja, setNovaLoja] = useState(null);   // { nome, telefone }
+  const [erroLoja, setErroLoja] = useState("");
+
+  function abrirCadastroDeLoja(nome) {
+    setErroLoja("");
+    setNovaLoja({ nome: nome || "", telefone: "" });
+  }
+
+  function salvarNovaLoja() {
+    const f = novaLoja || {};
+    if (!String(f.nome || "").trim()) { setErroLoja("Escreva o nome da loja."); return; }
+    const criada = aoCriarLoja ? aoCriarLoja({ nome: f.nome, telefone: f.telefone }) : null;
+    if (!criada) { setErroLoja("Não consegui cadastrar agora."); return; }
+    // Já escolhida: cadastrar e ter que procurar de novo é meio passo.
+    setLojaId(criada.id);
+    setLojasMarcadas(function (m) { return Object.assign({}, m, { [criada.id]: true }); });
+    setNovaLoja(null); setErroLoja(""); setAviso("");
+  }
   const refTexto = useRef(null);
   // A caixa cresce com o que se escreve, até um teto: lista de trinta itens
   // não pode empurrar o botão de ler para fora da tela.
@@ -29564,11 +29629,56 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                       );
                     })}
                   </div>
-                  <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6 }}>
-                    Cada conversa abre com a lista já escrita — quem aperta enviar é você, lá no WhatsApp.
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
+                    <button type="button" onClick={() => abrirCadastroDeLoja(buscaLoja)}
+                      style={{ ...E.btnSec, fontSize: 11.5, padding: "5px 12px", color: "#0474f4",
+                        borderColor: "rgba(4,116,244,0.35)", fontWeight: 600 }}>
+                      ＋ Cadastrar loja
+                    </button>
+                    <span style={{ fontSize: 11.5, color: "#6b7280" }}>
+                      Cada conversa abre com a lista já escrita — quem aperta enviar é você, lá no WhatsApp.
+                    </span>
                   </div>
                 </div>
               )}
+
+              {novaLoja && (
+                <div style={{ marginTop: 10, padding: 12, borderRadius: 12,
+                  border: "1.5px solid #0474f4", background: "#f7fbff" }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0474f4", marginBottom: 8 }}>
+                    Cadastrar loja
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 200px", gap: 10 }}>
+                    <div>
+                      <label style={E.label}>Nome *</label>
+                      <input style={E.input} autoFocus value={novaLoja.nome}
+                        onChange={(e) => setNovaLoja({ ...novaLoja, nome: e.target.value })}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); salvarNovaLoja(); } }}
+                        placeholder="ART GLASS vidros e esquadrias" />
+                    </div>
+                    <div>
+                      <label style={E.label}>WhatsApp</label>
+                      <input style={E.input} value={novaLoja.telefone}
+                        onChange={(e) => setNovaLoja({ ...novaLoja, telefone: e.target.value })}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); salvarNovaLoja(); } }}
+                        placeholder="(14) 99999-9999" />
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>
+                    Só o nome é obrigatório. Sem telefone, a loja fica cadastrada mas não recebe a
+                    lista pelo WhatsApp — o resto do cadastro se completa depois em Prestadores de Serviços.
+                  </div>
+                  {erroLoja && <div style={{ fontSize: 11.5, color: "#dc2626", marginTop: 6 }}>{erroLoja}</div>}
+                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                    <button type="button" style={{ ...E.btn, fontSize: 12, padding: "6px 14px" }}
+                      onClick={salvarNovaLoja}>Cadastrar e usar</button>
+                    <button type="button" style={{ ...E.btnSec, fontSize: 12, padding: "6px 14px" }}
+                      onClick={() => { setNovaLoja(null); setErroLoja(""); }}>Cancelar</button>
+                  </div>
+                </div>
+              )}
+
+
 
               {enviado && (
                 <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 12,
@@ -29594,7 +29704,8 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                 <div style={{ marginTop: 12 }}>
                   <label style={E.label}>De qual loja</label>
                   <SelectBusca style={E.input} value={lojaId} onChange={(v) => setLojaId(v)}
-                    placeholder="Procurar loja…"
+                    placeholder="Procurar loja…" criarRotulo="loja"
+                    aoCriar={aoCriarLoja ? abrirCadastroDeLoja : undefined}
                     opcoes={[{ valor: "", rotulo: "— escolha a loja —" }].concat(
                       lojas.map((f) => ({ valor: f.id, rotulo: f.nome, extra: f.categoria || "" })))} />
                 </div>

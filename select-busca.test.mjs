@@ -25,7 +25,7 @@ if (c < 0 || d < 0) throw new Error("Marcadores da parte pura da Selecao n\u00e3
 const puro2 = src.slice(c, d);
 
 const api = new Function(puro + "\n" + puro2 + `
-  return { buscaNormal, opcoesNormalizadas, filtrarOpcoes, textoDeFilhos, opcoesDosFilhos };`)();
+  return { buscaNormal, opcoesNormalizadas, filtrarOpcoes, textoDeFilhos, opcoesDosFilhos, rotuloDeCriar };`)();
 
 let ok = 0; const falhas = [];
 function t(nome, fn) {
@@ -218,4 +218,19 @@ if (falhas.length) {
   falhas.forEach(f => console.log("  • " + f));
   process.exit(1);
 }
+// ── Cadastrar sem sair da lista ─────────────────────────────────
+
+t("o que foi digitado vira o nome a cadastrar", () => {
+  eq(api.rotuloDeCriar("ART GLASS", "loja"), "＋ Cadastrar “ART GLASS”");
+  eq(api.rotuloDeCriar("  BRN DOORS  ", "loja"), "＋ Cadastrar “BRN DOORS”");
+});
+
+t("sem nada digitado, o rótulo diz o que se cadastra", () => {
+  eq(api.rotuloDeCriar("", "loja"), "＋ Cadastrar loja");
+  eq(api.rotuloDeCriar("   ", "insumo"), "＋ Cadastrar insumo");
+  eq(api.rotuloDeCriar(null, ""), "＋ Cadastrar");
+  eq(api.rotuloDeCriar(undefined, undefined), "＋ Cadastrar");
+});
+
+
 console.log("✅ " + ok + " testes do SelectBusca passaram");

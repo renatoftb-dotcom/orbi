@@ -2297,6 +2297,16 @@ function filtrarOpcoes(lista, termo) {
   return comeca.concat(contem);
 }
 
+// O que não está na lista precisa poder entrar sem sair da lista. Quem já
+// escreveu o nome na busca não deve escrevê-lo de novo num formulário: o
+// que ele digitou é o nome, e o botão diz isso em vez de "cadastrar novo".
+function rotuloDeCriar(termo, oQue) {
+  const t = String(termo == null ? "" : termo).trim();
+  const coisa = String(oQue || "").trim();
+  if (t) return "＋ Cadastrar “" + t + "”";
+  return coisa ? "＋ Cadastrar " + coisa : "＋ Cadastrar";
+}
+
 // ── SelectBusca: fim da parte pura ────────────────────
 
 const SB_CAMPO = {
@@ -2549,6 +2559,18 @@ function SelectBusca(props) {
               </div>
             )}
           </div>
+          {props.aoCriar && (
+            <div onMouseDown={function (ev) { ev.preventDefault(); }}
+              onClick={function () { const q = termo; fechar(); props.aoCriar(String(q || "").trim()); }}
+              style={{
+                padding: "9px 12px", fontSize: 12.5, cursor: "pointer", flexShrink: 0,
+                borderTop: "1px solid rgba(38,36,33,0.10)",
+                background: visiveis.length === 0 ? "#eef5ff" : "#fff",
+                color: "#0474f4", fontWeight: 600,
+              }}>
+              {rotuloDeCriar(termo, props.criarRotulo)}
+            </div>
+          )}
         </div>
       )}
     </>
