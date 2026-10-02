@@ -1434,6 +1434,20 @@ function efValorDoCampo(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
+// ── Fornecedor: nem todo papel tem um nome que importe ──────────
+// Tarifa bancária, estacionamento, a compra de R$ 12 na loja da esquina —
+// identificar o fornecedor aí não paga o trabalho de cadastrá-lo. Quem não
+// for escolhido entra como "Outros", que é um nome de verdade no relatório:
+// some a linha em branco, e a soma de "Outros" diz quanto foi o miúdo.
+const EF_FORNECEDOR_OUTROS = "Outros";
+// Valor que o seletor usa para dizer "é Outros mesmo", distinto de "ainda
+// não mexi no campo" — são a mesma coisa no fim, mas não na tela.
+const EF_OPCAO_OUTROS = "__outros";
+
+function efNomeDoFornecedor(l) {
+  return String((l || {}).fornecedor || "").trim() || EF_FORNECEDOR_OUTROS;
+}
+
 // ── Os papéis da transação ──────────────────────────────────────
 // Nota fiscal, comprovante, boleto: numa lista só. O campo único de
 // `comprovante` veio antes e continua valendo — ele é lido como o primeiro
@@ -1860,15 +1874,22 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             ))
           : campo("Projeto / obra", <input style={S.input} value={f.projeto} onChange={(e) => set("projeto", e.target.value)} />)}
         {campo("Fornecedor", (
-          <SelectBusca style={S.input} value={f.fornecedorId}
+          <SelectBusca style={S.input}
+            /* Campo em branco já é "Outros" no fim, então ele diz isso desde
+               o começo: o que está escrito ali é o que vai ser gravado. */
+            value={f.fornecedorId
+              || (f.fornecedor && f.fornecedor !== EF_FORNECEDOR_OUTROS ? "" : EF_OPCAO_OUTROS)}
             onChange={(v) => {
+              if (v === EF_OPCAO_OUTROS) { setF((p) => ({ ...p, fornecedorId: "", fornecedor: EF_FORNECEDOR_OUTROS })); return; }
               const pr = (prestadores || []).find((x) => x && x.id === v) || null;
               setF((p) => ({ ...p, fornecedorId: v, fornecedor: pr ? pr.nome : "" }));
             }}
             placeholder="Procurar fornecedor…"
-            aoCriar={(termo) => { setErroPrest(""); setNovoPrest({ nome: termo || f.fornecedor || "", categoria: "Loja / Comércio" }); }}
+            aoCriar={(termo) => { setErroPrest(""); setNovoPrest({ nome: termo || "", categoria: "Loja / Comércio" }); }}
             criarRotulo="cadastrar"
-            opcoes={[{ valor: "", rotulo: f.fornecedor && !f.fornecedorId ? f.fornecedor : "— escolha —" }]
+            opcoes={[{ valor: EF_OPCAO_OUTROS, rotulo: "Outros — não identificado" }]
+              .concat(f.fornecedor && !f.fornecedorId && f.fornecedor !== EF_FORNECEDOR_OUTROS
+                ? [{ valor: "", rotulo: f.fornecedor }] : [])
               .concat((prestadores || []).map((x) => ({ valor: x.id, rotulo: x.nome, grupo: x.categoria || "" })))} />
         ))}
         {novoPrest && (
@@ -2563,8 +2584,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const base = { ...contaAvulsaVazia(obra.id),
       contaId: l.contaId,
       prestadorId: l.fornecedorId || "",
-      favorecido: l.fornecedor || "",
-      descricao: String(l.descricao || "").trim() || (l.fornecedor || "Compra"),
+      favorecido: efNomeDoFornecedor(l),
+      descricao: String(l.descricao || "").trim() || efNomeDoFornecedor(l),
       numeroNota: l.documento || "",
       valor: valor, vencimento: l.lancadoEm };
     // Número de referência e papéis entram na conta: a ponte os copia para o
@@ -2611,7 +2632,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     // renumerado — número de papel entregue não muda.
     const numeroDoc = l.numeroDoc
       || proximaReferencia((data || {}).obras || [], lancs);
-    gravar([...semEle, { ...l, id, numeroDoc, tipo: "escritorio" }]);
+    gravar([...semEle, { ...l, id, numeroDoc, fornecedor: efNomeDoFornecedor(l), tipo: "escritorio" }]);
     setForm(null);
   }
 

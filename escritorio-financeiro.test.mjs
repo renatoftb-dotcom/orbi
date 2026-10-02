@@ -30,7 +30,8 @@ const M = new Function(src + `
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
            obrasDoLancamento, validarLancamentoNaObra, destinoVisivelDoCusto,
-           efValorDoCampo, anexosDaTransacao, comAnexos };`)();
+           efValorDoCampo, anexosDaTransacao, comAnexos,
+           efNomeDoFornecedor, EF_FORNECEDOR_OUTROS };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -53,6 +54,25 @@ const OPC_OBRA = { planoObra: PLANO_OBRA_T };
 
 
 // ── Os papéis da transação ──────────────────────────────────────
+
+// ── Fornecedor não identificado ─────────────────────────────────
+teste("sem fornecedor escolhido, a transação entra como Outros", () => {
+  assert.strictEqual(M.efNomeDoFornecedor({}), "Outros");
+  assert.strictEqual(M.efNomeDoFornecedor({ fornecedor: "" }), "Outros");
+  assert.strictEqual(M.efNomeDoFornecedor({ fornecedor: "   " }), "Outros");
+  assert.strictEqual(M.efNomeDoFornecedor(null), "Outros");
+});
+
+teste("fornecedor escolhido continua sendo ele", () => {
+  assert.strictEqual(M.efNomeDoFornecedor({ fornecedor: "OURIFER" }), "OURIFER");
+  assert.strictEqual(M.efNomeDoFornecedor({ fornecedor: " Pantanal " }), "Pantanal");
+});
+
+teste("Outros é um nome de verdade, não uma linha em branco", () => {
+  assert.strictEqual(M.EF_FORNECEDOR_OUTROS, "Outros");
+  assert.strictEqual(M.efNomeDoFornecedor({ fornecedor: "Outros" }), "Outros");
+});
+
 teste("o comprovante antigo é lido como o primeiro documento", () => {
   const c = { comprovante: { url: "u1", nome: "pix.pdf" } };
   assert.deepStrictEqual(M.anexosDaTransacao(c).map((a) => a.nome), ["pix.pdf"]);
