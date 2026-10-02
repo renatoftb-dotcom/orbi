@@ -2649,3 +2649,119 @@ function Selecao(props) {
       onChange={aoEscolher} />
   );
 }
+
+// ── Menu de ações de uma linha ("⋯") ────────────────────────────
+// Numa lista de vinte linhas, três botões em cada uma competem com o que a
+// linha tem a dizer — e o botão vermelho de apagar é o que mais puxa o olho,
+// sendo o que menos se usa. Fica à vista só o que se faz toda hora; o resto
+// se recolhe aqui.
+//
+// O painel é position:fixed, medido a partir do botão, pela mesma razão do
+// SelectBusca: dentro de uma tabela com overflow, um painel absoluto seria
+// cortado pela borda do card.
+function MenuDeAcoes(props) {
+  const itens = (props.itens || []).filter(Boolean);
+  // No celular o dedo precisa de alvo: o botao e cada linha do menu passam
+  // de 30 para 44px. No desktop o botao continua pequeno, que e o pedido.
+  const toque = props.toque != null ? !!props.toque
+    : (typeof window !== "undefined" && window.innerWidth < 768);
+  const [caixa, setCaixa] = useState(null);
+  const refBotao = useRef(null);
+  const refPainel = useRef(null);
+  const aberto = !!caixa;
+
+  const fechar = useCallback(function () { setCaixa(null); }, []);
+
+  const abrir = useCallback(function () {
+    const el = refBotao.current;
+    if (!el || typeof window === "undefined") { setCaixa({ top: 0, left: 0 }); return; }
+    const r = el.getBoundingClientRect();
+    const largura = 164;
+    const alturaEstimada = 14 + itens.length * (toque ? 46 : 36);
+    const cabeAbaixo = window.innerHeight - r.bottom - 8 >= alturaEstimada;
+    // Encosta à direita do botão — é de onde o menu "sai". Quando o botão
+    // está perto da margem esquerda (no celular a coluna de ações fica à
+    // esquerda), isso jogaria o painel para fora da tela: aí ele encosta à
+    // esquerda do botão. Nos dois casos, sem passar das bordas.
+    const naDireita = r.right - largura;
+    const bruto = naDireita >= 8 ? naDireita : r.left;
+    setCaixa({
+      left: Math.max(8, Math.min(bruto, window.innerWidth - largura - 8)),
+      top: cabeAbaixo ? r.bottom + 6 : Math.max(8, r.top - alturaEstimada - 6),
+      largura: largura,
+    });
+  }, [itens.length, toque]);
+
+  useEffect(function () {
+    if (!aberto || typeof document === "undefined") return;
+    const foraDaqui = function (e) {
+      const p = refPainel.current, b = refBotao.current;
+      if (p && p.contains(e.target)) return;
+      if (b && b.contains(e.target)) return;
+      fechar();
+    };
+    const naTecla = function (e) { if (e.key === "Escape") fechar(); };
+    // Rolar com o menu aberto deixaria o painel parado longe do botão que o
+    // abriu — fechar é mais honesto que persegui-lo.
+    document.addEventListener("mousedown", foraDaqui, true);
+    document.addEventListener("keydown", naTecla, true);
+    window.addEventListener("scroll", fechar, true);
+    window.addEventListener("resize", fechar);
+    return function () {
+      document.removeEventListener("mousedown", foraDaqui, true);
+      document.removeEventListener("keydown", naTecla, true);
+      window.removeEventListener("scroll", fechar, true);
+      window.removeEventListener("resize", fechar);
+    };
+  }, [aberto, fechar]);
+
+  if (!itens.length) return null;
+
+  return (
+    <>
+      <button ref={refBotao} type="button" aria-haspopup="menu" aria-expanded={aberto ? "true" : "false"}
+        title={props.title || "Mais ações"}
+        onClick={function (e) { e.stopPropagation(); if (aberto) fechar(); else abrir(); }}
+        style={{
+          background: aberto ? "rgba(38,36,33,0.06)" : "#fff",
+          color: "#4b5563", border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 10,
+          width: toque ? 44 : (props.compacto ? 32 : 36),
+          height: toque ? 44 : (props.compacto ? 30 : 34),
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          fontSize: 15, lineHeight: 1, cursor: "pointer", fontFamily: "inherit", padding: 0,
+          flexShrink: 0,
+        }}>
+        <span aria-hidden="true" style={{ marginTop: -3, letterSpacing: 1 }}>···</span>
+      </button>
+      {aberto && (
+        <div ref={refPainel} data-vk-menu-acoes="1" role="menu"
+          onClick={function (e) { e.stopPropagation(); }}
+          style={{
+            position: "fixed", top: caixa.top, left: caixa.left, width: caixa.largura,
+            background: "#fff", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12,
+            boxShadow: "0 16px 40px -16px rgba(17,24,39,0.45)", padding: 6, zIndex: 80,
+          }}>
+          {itens.map(function (it, i) {
+            return (
+              <button key={i} type="button" role="menuitem" disabled={it.desativado}
+                onClick={function () { fechar(); if (it.onClick) it.onClick(); }}
+                style={{
+                  display: "block", width: "100%", textAlign: "left",
+                  background: "none", border: "none", borderRadius: 8,
+                  padding: toque ? "13px 10px" : "9px 10px", minHeight: toque ? 44 : "auto",
+                  fontSize: toque ? 14 : 13, fontFamily: "inherit",
+                  color: it.destrutivo ? "#dc2626" : "#111827",
+                  cursor: it.desativado ? "default" : "pointer",
+                  opacity: it.desativado ? 0.45 : 1,
+                }}
+                onMouseEnter={function (e) { if (!it.desativado) e.currentTarget.style.background = "rgba(38,36,33,0.05)"; }}
+                onMouseLeave={function (e) { e.currentTarget.style.background = "none"; }}>
+                {it.rotulo}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}

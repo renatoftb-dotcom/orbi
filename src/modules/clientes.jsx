@@ -30,6 +30,10 @@ const C = {
   btn:      { background:"#111827", color:"#fff", border:"none", borderRadius: 12, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
   btnSec:   { background:"#fff", color:"#111827", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
   btnGhost: { background:"none", border:"none", color:"#4b5563", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
+  // Botao de acao de uma linha da lista: pequeno, para nao competir com o
+  // que a linha diz. O que nao e de todo dia mora no menu "···" ao lado.
+  btnLinha: { background:"#fff", color:"#111827", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:10, padding:"6px 12px", fontSize:12, height:30, cursor:"pointer", fontFamily:"inherit", flexShrink:0 },
+  btnLinhaToque: { background:"#fff", color:"#111827", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:10, padding:"0 16px", fontSize:13.5, height:44, cursor:"pointer", fontFamily:"inherit", flexShrink:0 },
   tag:      (cor) => ({ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:6, background:cor+"18", color:cor }),
   grid2:    { display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 },
   grid3:    { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14 },
@@ -4129,14 +4133,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                   </div>
                                   {perm.podeEditar ? (
                                     <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
-                                      <button onClick={() => alternarPagamentoPedido(L)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>
-                                        {L.pago ? "Desfazer" : "Pagar pedido"}
+                                      <button onClick={() => alternarPagamentoPedido(L)} style={isMobile ? C.btnLinhaToque : C.btnLinha}>
+                                        {L.pago ? "Desfazer" : "Pagar"}
                                       </button>
-                                      <button onClick={() => apagarPedidoDeContas(L)} title="Apagar o pedido e as contas dele"
-                                        style={{ ...C.btnSec, fontSize: 12, padding: "6px 10px", color: "#dc2626",
-                                          borderColor: "rgba(220,38,38,0.35)" }}>
-                                        Apagar
-                                      </button>
+                                      <MenuDeAcoes compacto toque={isMobile} title="Mais ações do pedido" itens={[
+                                        { rotulo: "Excluir", destrutivo: true, onClick: () => apagarPedidoDeContas(L) },
+                                      ]} />
                                     </div>
                                   ) : <div />}
                                 </div>
@@ -4891,18 +4893,19 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                               <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", textAlign: isMobile ? "left" : "right" }}>{fmtMoedaCtr(c.pago ? (Number(c.valorPago) || c.valor) : c.valor)}</div>
                               {perm.podeEditar ? (
                                 <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
-                                  <button onClick={() => alternarPagamento(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>{c.pago ? "Desfazer" : "Pagar"}</button>
+                                  <button onClick={() => alternarPagamento(c)} style={isMobile ? C.btnLinhaToque : C.btnLinha}>{c.pago ? "Desfazer" : "Pagar"}</button>
                                   {/* Parcela de contrato é regerada pela regra a cada
                                       abertura da tela — editá-la aqui não duraria um
                                       render; ela se corrige pelo Recalibrar. O resto
                                       é linha concreta e se edita. */}
-                                  {c.origem !== "contrato" && !c.pago && (
-                                    <button onClick={() => abrirEdicaoDaConta(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
-                                  )}
-                                  {c.origem === "avulsa" && (
-                                    <button onClick={() => { dialogo.confirmar({ titulo: "Remover conta?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true }).then(ok => { if (ok) gravarContas(contasDaObra.filter(x => x.id !== c.id)); }); }}
-                                      style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12 }}>Remover</button>
-                                  )}
+                                  <MenuDeAcoes compacto toque={isMobile} title="Mais ações da conta" itens={[
+                                    (c.origem !== "contrato" && !c.pago)
+                                      ? { rotulo: "Editar", onClick: () => abrirEdicaoDaConta(c) } : null,
+                                    (c.origem === "avulsa")
+                                      ? { rotulo: "Excluir", destrutivo: true, onClick: () => {
+                                          dialogo.confirmar({ titulo: "Excluir conta?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Excluir", destrutivo: true })
+                                            .then(ok => { if (ok) gravarContas(contasDaObra.filter(x => x.id !== c.id)); }); } } : null,
+                                  ]} />
                                 </div>
                               ) : <div />}
                             </div>
