@@ -2503,10 +2503,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const f = formConta;
     if (!f.descricao?.trim()) { dialogo.alertar({ titulo: "Informe a descrição da conta", tipo: "aviso" }); return; }
     if (!(Number(f.valor) > 0)) { dialogo.alertar({ titulo: "Informe um valor maior que zero", tipo: "aviso" }); return; }
-    const existe = contasDaObra.some(c => c.id === f.id);
-    const carimbada = existe
-      ? registrarAto(f, "editada", quemSou())
+    const antiga = contasDaObra.find(c => c.id === f.id) || null;
+    const carimbada = antiga
+      ? registrarAto(f, "editada", quemSou(), undefined, detalheDaEdicaoDaConta(antiga, f))
       : numerarContas([registrarAto(f, "criada", quemSou())], obras, lancamentosDoEscritorio(data))[0];
+    const existe = !!antiga;
     gravarContas(existe ? contasDaObra.map(c => c.id === f.id ? carimbada : c) : [...contasDaObra, carimbada]);
     setFormConta(null);
   };
@@ -4132,7 +4133,26 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                         embaixo do nome, que é onde ela não disputa espaço com o
                                         número. */}
                                     {(() => {
-                                      const GRADE = isMobile ? "minmax(0,1fr) 96px" : "minmax(0,1fr) 58px 92px 88px 104px";
+                                      // A última coluna é a ação: é no item que se corrige
+                                      // quantidade e preço quando a obra consumiu menos
+                                      // do que o pedido dizia.
+                                      const podeMexer = perm.podeEditar;
+                                      const GRADE = isMobile
+                                        ? "minmax(0,1fr) 96px"
+                                        : (podeMexer ? "minmax(0,1fr) 58px 92px 88px 104px 64px" : "minmax(0,1fr) 58px 92px 88px 104px");
+                                      // Item pago nao se edita: o dinheiro ja saiu, e reescreve-lo
+                                      // seria reescrever o extrato.
+                                      const botaoEditar = (ic, naLinha) => (!podeMexer || ic.pago) ? null : (
+                                        <button type="button" onClick={() => setFormConta(ic)}
+                                          title="Corrigir quantidade, pre\u00e7o ou valor deste item"
+                                          style={{ background: "none", border: "none", cursor: "pointer",
+                                            color: AZUL_VK, fontFamily: "inherit",
+                                            fontSize: naLinha ? 11.5 : 12.5, textAlign: naLinha ? "right" : "left",
+                                            /* no celular o dedo precisa de alvo: o link ganha uma faixa de 44px */
+                                            padding: naLinha ? 0 : "12px 10px 12px 0", minHeight: naLinha ? "auto" : 44 }}>
+                                          editar
+                                        </button>
+                                      );
                                       const numero = { textAlign: "right", fontVariantNumeric: "tabular-nums" };
                                       const cabeca = { fontSize: 10.5, color: "#9ca3af", fontWeight: 600,
                                         textTransform: "uppercase", letterSpacing: 0.3 };
@@ -4145,6 +4165,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                               <span style={cabeca}>Unidade</span>
                                               <span style={{ ...cabeca, ...numero }}>Unitário</span>
                                               <span style={{ ...cabeca, ...numero }}>Total</span>
+                                              {podeMexer && <span style={cabeca} />}
                                             </div>
                                           )}
                                           {L.contas.map(ic => {
@@ -4164,6 +4185,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                                           : ""].filter(Boolean).join(" · ")}
                                                     </div>
                                                   )}
+                                                  {isMobile && botaoEditar(ic, false)}
                                                 </div>
                                                 {!isMobile && <span style={{ fontSize: 12, color: "#4b5563", ...numero }}>
                                                   {qtd > 0 ? qtdBR(qtd) : "—"}</span>}
@@ -4174,6 +4196,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                                 <span style={{ fontSize: 12, color: "#111827", fontWeight: 600, ...numero }}>
                                                   {fmtMoedaCtr(total)}
                                                 </span>
+                                                {!isMobile && podeMexer && (botaoEditar(ic, true) || <span />)}
                                               </div>
                                             );
                                           })}
@@ -4381,7 +4404,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 10 }}>{contasDaObra.some(c => c.id === formConta.id) ? "Editar conta" : "Nova conta"}</div>
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
               <div><label style={C.label}>Descrição *</label><input style={C.input} value={formConta.descricao} onChange={e => setFormConta({ ...formConta, descricao: e.target.value })} placeholder="ex.: caçamba de entulho" /></div>
-              <div><label style={C.label}>Valor (R$)</label><CampoCtrNum tipo="moeda" valor={formConta.valor} onChange={v => setFormConta({ ...formConta, valor: v })} style={C.input} placeholder="0,00" /></div>
+              {/* O valor é o que o fornecedor cobrou; mexer nele refaz o
+                  unitário, para os três números continuarem dizendo a
+                  mesma coisa. */}
+              <div><label style={C.label}>Valor (R$)</label><CampoCtrNum tipo="moeda" valor={formConta.valor}
+                onChange={v => setFormConta(conciliarValorDaConta(formConta, "valor", v))} style={C.input} placeholder="0,00" /></div>
               <div><label style={C.label}>Vencimento</label><input style={C.input} type="date" value={formConta.vencimento || ""} onChange={e => setFormConta({ ...formConta, vencimento: e.target.value })} /></div>
               <div>
                 <label style={C.label}>Conta</label>
@@ -4401,6 +4428,63 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 </Selecao>
               </div>
               <div><label style={C.label}>Observação</label><input style={C.input} value={formConta.observacao || ""} onChange={e => setFormConta({ ...formConta, observacao: e.target.value })} /></div>
+            </div>
+
+            {/* ── O que foi comprado ──
+                Quantidade e preço são o que o custo por etapa e o preço do
+                catálogo leem. Consumiu menos do que o cotado? Muda a
+                quantidade aqui: o valor se refaz, e a conta a pagar passa a
+                dizer o que você vai pagar de verdade. */}
+            <div style={{ borderTop: "1px solid rgba(38,36,33,0.1)", paddingTop: 12, marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 10 }}>O que foi comprado</div>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr 1fr 1.4fr", gap: 12, alignItems: "end" }}>
+                <div style={{ minWidth: 0 }}>
+                  <label style={C.label}>Item do catálogo</label>
+                  <SelectBusca style={C.input} value={formConta.insumoCodigo || ""}
+                    onChange={(v) => {
+                      const ins = (data.materiais || []).find(x => x && (x.codigo === v || x.id === v)) || null;
+                      setFormConta(f => ({ ...f, insumoCodigo: v,
+                        descricao: f.descricao || (ins && ins.nome) || "",
+                        grupoMaterial: (ins && ins.grupo) || f.grupoMaterial || "",
+                        unidade: f.unidade || (ins && ins.unidade) || "",
+                        etapa: f.etapa || (ins && ins.etapaPadrao) || "" }));
+                    }}
+                    placeholder="Procurar no catálogo…"
+                    opcoes={[{ valor: "", rotulo: "— sem item do catálogo —" }].concat(
+                      (data.materiais || []).filter(i => i && i.ativo !== false)
+                        .map(i => ({ valor: i.codigo || i.id, rotulo: i.nome, grupo: i.grupo || "",
+                          extra: (i.aliases || []).join(" ") })))} />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <label style={C.label}>Quantidade</label>
+                  <input style={C.input} inputMode="decimal" value={formConta.quantidade == null ? "" : formConta.quantidade}
+                    onChange={e => setFormConta(conciliarValorDaConta(formConta, "quantidade", e.target.value))} placeholder="0" />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <label style={C.label}>Unidade</label>
+                  <input style={C.input} value={formConta.unidade || ""}
+                    onChange={e => setFormConta({ ...formConta, unidade: e.target.value })} placeholder="un" />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <label style={C.label}>Preço unitário</label>
+                  <CampoCtrNum tipo="moeda" style={C.input} valor={formConta.unitario}
+                    onChange={v => setFormConta(conciliarValorDaConta(formConta, "unitario", v))} placeholder="0,00" />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <label style={C.label}>Etapa</label>
+                  <SelectBusca style={C.input} value={formConta.etapa || ""}
+                    onChange={(v) => setFormConta(f => ({ ...f, etapa: v }))}
+                    placeholder="Procurar etapa…"
+                    opcoes={[{ valor: "", rotulo: "— sem etapa —" }].concat(
+                      (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(e => ({ valor: e.id, rotulo: e.nome || e.id })))} />
+                </div>
+              </div>
+              {numeroDeCampo(formConta.quantidade) > 0 && numeroDeCampo(formConta.unitario) > 0 && (
+                <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8 }}>
+                  {qtdBR(numeroDeCampo(formConta.quantidade))} {formConta.unidade || "un"} × {fmtMoedaCtr(numeroDeCampo(formConta.unitario))}
+                  {" = "}<b style={{ color: "#111827" }}>{fmtMoedaCtr(numeroDeCampo(formConta.valor))}</b>
+                </div>
+              )}
             </div>
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button style={C.btnSec} onClick={() => setFormConta(null)}>Cancelar</button>
@@ -4793,7 +4877,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                               {perm.podeEditar ? (
                                 <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
                                   <button onClick={() => alternarPagamento(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>{c.pago ? "Desfazer" : "Pagar"}</button>
-                                  {c.origem === "avulsa" && <button onClick={() => setFormConta(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>}
+                                  {/* Parcela de contrato é regerada pela regra a cada
+                                      abertura da tela — editá-la aqui não duraria um
+                                      render; ela se corrige pelo Recalibrar. O resto
+                                      é linha concreta e se edita. */}
+                                  {c.origem !== "contrato" && !c.pago && (
+                                    <button onClick={() => setFormConta(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
+                                  )}
                                   {c.origem === "avulsa" && (
                                     <button onClick={() => { dialogo.confirmar({ titulo: "Remover conta?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true }).then(ok => { if (ok) gravarContas(contasDaObra.filter(x => x.id !== c.id)); }); }}
                                       style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12 }}>Remover</button>

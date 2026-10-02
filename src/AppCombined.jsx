@@ -22260,6 +22260,66 @@ function cpMedicaoEmUmaData(d) {
   return Math.max(1, Math.floor(Number(dd.parcelas) || 1)) === 1;
 }
 
+// ── Quantidade, preço e valor: um acerta o outro ────────────────
+// Três números que dizem a mesma coisa de dois jeitos, e por isso não podem
+// divergir. Mexeu na quantidade ou no unitário, o valor se refaz; mexeu no
+// valor — porque foi o que o fornecedor cobrou —, o unitário se refaz para
+// explicar esse valor. É o mesmo acerto da tela de proposta, onde preencher
+// o unitário OU o total dá no mesmo.
+//
+// Sem quantidade não há o que acertar: a conta é um valor seco, como sempre
+// foi, e continua podendo ser editada assim.
+function conciliarValorDaConta(conta, campo, valorDigitado) {
+  const n = (v) => (typeof numeroDeCampo === "function" ? numeroDeCampo(v) : Number(v) || 0);
+  const red = (x) => Math.round(x * 100) / 100;
+  const c = { ...(conta || {}) };
+  if (campo === "quantidade") c.quantidade = valorDigitado;
+  if (campo === "unitario") c.unitario = valorDigitado;
+  if (campo === "valor") c.valor = valorDigitado;
+  const q = n(c.quantidade);
+  const u = n(c.unitario);
+  const v = n(c.valor);
+  if (campo === "valor") {
+    // o valor manda: o unitário passa a ser o que explica esse valor
+    if (q > 0) c.unitario = red(v / q);
+    return c;
+  }
+  if (q > 0 && u > 0) { c.valor = red(q * u); return c; }
+  // quantidade sem preço: o unitário sai do valor que já estava lá
+  if (campo === "quantidade" && q > 0 && v > 0 && !(u > 0)) { c.unitario = red(v / q); return c; }
+  return c;
+}
+
+// O que mudou nesta conta, em uma linha, para o registro do ato. Na
+// prestacao de contas o que importa nao e que alguem editou: e que o
+// concreto passou de 11 para 7 m3 e a conta caiu de 3.780,04 para 2.405,48.
+function detalheDaEdicaoDaConta(antes, depois) {
+  const a = antes || {}, d = depois || {};
+  const n = (v) => (typeof numeroDeCampo === "function" ? numeroDeCampo(v) : Number(v) || 0);
+  const q = (v) => {
+    const x = n(v);
+    return String(Math.round(x * 1000) / 1000).replace(".", ",");
+  };
+  const un = String(d.unidade || a.unidade || "").trim();
+  const partes = [];
+  if (n(a.quantidade) !== n(d.quantidade)) {
+    partes.push("quantidade " + q(a.quantidade) + " \u2192 " + q(d.quantidade) + (un ? " " + un : ""));
+  }
+  if (n(a.unitario) !== n(d.unitario)) {
+    partes.push("unit\u00e1rio " + cpDinheiro(n(a.unitario)) + " \u2192 " + cpDinheiro(n(d.unitario)));
+  }
+  if (n(a.valor) !== n(d.valor)) {
+    partes.push("valor " + cpDinheiro(n(a.valor)) + " \u2192 " + cpDinheiro(n(d.valor)));
+  }
+  if (String(a.etapa || "") !== String(d.etapa || "")) {
+    partes.push("etapa " + (a.etapa || "\u2014") + " \u2192 " + (d.etapa || "\u2014"));
+  }
+  if (String(a.vencimento || "") !== String(d.vencimento || "")) {
+    partes.push("vencimento " + (a.vencimento || "\u2014") + " \u2192 " + (d.vencimento || "\u2014"));
+  }
+  return partes.join("; ");
+}
+
 // Conta avulsa, fora de contrato.
 function contaAvulsaVazia(obraId) {
   return {
@@ -29204,20 +29264,10 @@ function CotacaoLancamento({ cotacao, dados, dinheiro, isMobile, onConfirmar, on
   const [f, setF] = useState(dados);
   const E = COT_ESTILO;
   const set = (k, v) => setF(x => ({ ...x, [k]: v }));
-  // ── A medição ──
-  const medicao = f.medicao || [];
-  const temMedicao = medicao.length > 0;
-  const etapas = typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [];
-  // Mexer na quantidade medida move o valor da conta junto — é o ponto todo:
-  // o que se paga é o que entrou.
-  const mexerMedicao = (i, muda) => setF((x) => {
-    const nova = (x.medicao || []).map((r, j) => (j === i ? { ...r, ...muda } : r));
-    return { ...x, medicao: nova, valor: totalDaMedicao(nova) };
-  });
-  const provaMedicao = temMedicao ? validarMedicao(medicao) : { ok: true, erros: [] };
-  const cotadoTotal = temMedicao
-    ? Math.round(medicao.reduce((s, r) => s + numeroDoCampo(r.cotada) * numeroDoCampo(r.unitario), 0) * 100) / 100
-    : 0;
+  // A cotação lançada nasce com uma conta POR ITEM, com quantidade e etapa —
+  // é o que faz o custo por etapa enxergar a compra. Quantidade e preço se
+  // corrigem depois, na própria conta a pagar: é lá que o dinheiro está, e
+  // é lá que se olha quando a realidade veio diferente do cotado.
   const porEntrega = f.modo === "entregas";
   // "Item a item" do contrato é a entrega aqui: o que se paga por vez é a
   // entrega do fornecedor, não o item de um objeto fabricado.
@@ -29250,7 +29300,7 @@ function CotacaoLancamento({ cotacao, dados, dinheiro, isMobile, onConfirmar, on
   const grupos = typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : [];
   // Com medição, a etapa de cada item é condição para lançar — mesma regra
   // do pedido da loja, e pela mesma razão.
-  const podeLancar = previa.length > 0 && provaMedicao.ok;
+  const podeLancar = previa.length > 0;
 
   const comSinal = f.modo === "sinalFinal" || f.modo === "sinalParcelas";
   const opcao = (m) => (
@@ -29270,78 +29320,6 @@ function CotacaoLancamento({ cotacao, dados, dinheiro, isMobile, onConfirmar, on
         <div style={{ fontSize: 12.5, color: "#4b5563", marginBottom: 14 }}>
           {cotacao.titulo} — {f.favorecido || "fornecedor"}, {dinheiro(f.valor)}. Vai direto para contas a pagar, sem contrato e sem esperar o aval do cliente.
         </div>
-
-        {/* ── Medição ──
-            Cotar é estimar; medir é o que entrou. A cotação guarda os 11 m³
-            que se pediu preço; aqui se diz quantos de fato vieram, e é por
-            esse número que a conta a pagar e o custo da obra se fazem. */}
-        {temMedicao && (
-          <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, marginBottom: 14 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", marginBottom: 2 }}>
-              Medição — o que de fato entrou na obra
-            </div>
-            <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 10 }}>
-              Veio tudo? Deixe como está. Consumiu menos, mude a quantidade: a conta a pagar
-              e o custo da obra saem daqui, e a cotação continua guardando o que foi cotado.
-            </div>
-            {medicao.map((r, i) => {
-              const total = Math.round(numeroDoCampo(r.quantidade) * numeroDoCampo(r.unitario) * 100) / 100;
-              const mudou = Math.abs(numeroDoCampo(r.quantidade) - numeroDoCampo(r.cotada)) > 0.0001;
-              return (
-                <div key={r.id || i} style={{ paddingBottom: 10, marginBottom: 10,
-                  borderBottom: i < medicao.length - 1 ? "1px solid rgba(38,36,33,0.08)" : "none" }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", marginBottom: 6 }}>{r.descricao}</div>
-                  <div style={{ display: "grid", gap: 8, alignItems: "end",
-                    gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(110px, 1fr))" }}>
-                    <div>
-                      <label style={E.label}>Cotado</label>
-                      <div style={{ ...E.input, background: "#f9fafb", color: "#6b7280",
-                        display: "flex", alignItems: "center", minHeight: 36 }}>
-                        {qtdBR ? qtdBR(r.cotada) : r.cotada} {r.unidade}
-                      </div>
-                    </div>
-                    <div>
-                      <label style={E.label}>Medido</label>
-                      <input style={{ ...E.input, borderColor: mudou ? "#0474f4" : undefined }}
-                        inputMode="decimal" value={r.quantidade}
-                        onChange={(e) => mexerMedicao(i, { quantidade: e.target.value })} />
-                    </div>
-                    <div>
-                      <label style={E.label}>Unitário</label>
-                      <div style={{ ...E.input, background: "#f9fafb", color: "#6b7280",
-                        display: "flex", alignItems: "center", minHeight: 36 }}>{dinheiro(r.unitario)}</div>
-                    </div>
-                    <div>
-                      <label style={E.label}>Total</label>
-                      <div style={{ ...E.input, background: "#f9fafb", fontWeight: 600,
-                        display: "flex", alignItems: "center", minHeight: 36 }}>{dinheiro(total)}</div>
-                    </div>
-                    <div style={{ gridColumn: isMobile ? "1 / -1" : "auto" }}>
-                      <label style={E.label}>Etapa</label>
-                      <SelectBusca style={E.input} value={r.etapa}
-                        onChange={(v) => mexerMedicao(i, { etapa: v })}
-                        placeholder="Procurar etapa…"
-                        opcoes={[{ valor: "", rotulo: "— escolha a etapa —" }]
-                          .concat(etapas.map((e) => ({ valor: e.id, rotulo: e.nome || e.id })))} />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-            <div style={{ fontSize: 12.5, color: "#111827", marginTop: 4 }}>
-              Cotado <b>{dinheiro(cotadoTotal)}</b> · medido <b>{dinheiro(f.valor)}</b>
-              {Math.abs(cotadoTotal - f.valor) >= 0.005 && (
-                <span style={{ color: "#0474f4" }}>
-                  {" — "}{cotadoTotal > f.valor ? "consumiu" : "passou"} {dinheiro(Math.abs(cotadoTotal - f.valor))}
-                  {cotadoTotal > f.valor ? " a menos" : " a mais"} que o cotado
-                </span>
-              )}
-            </div>
-            {!provaMedicao.ok && (
-              <div style={{ fontSize: 11.5, color: "#b45309", marginTop: 6 }}>{provaMedicao.erros.join(" · ")}</div>
-            )}
-          </div>
-        )}
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
           {MODOS_LANCAMENTO.map(opcao)}
@@ -34810,10 +34788,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const f = formConta;
     if (!f.descricao?.trim()) { dialogo.alertar({ titulo: "Informe a descrição da conta", tipo: "aviso" }); return; }
     if (!(Number(f.valor) > 0)) { dialogo.alertar({ titulo: "Informe um valor maior que zero", tipo: "aviso" }); return; }
-    const existe = contasDaObra.some(c => c.id === f.id);
-    const carimbada = existe
-      ? registrarAto(f, "editada", quemSou())
+    const antiga = contasDaObra.find(c => c.id === f.id) || null;
+    const carimbada = antiga
+      ? registrarAto(f, "editada", quemSou(), undefined, detalheDaEdicaoDaConta(antiga, f))
       : numerarContas([registrarAto(f, "criada", quemSou())], obras, lancamentosDoEscritorio(data))[0];
+    const existe = !!antiga;
     gravarContas(existe ? contasDaObra.map(c => c.id === f.id ? carimbada : c) : [...contasDaObra, carimbada]);
     setFormConta(null);
   };
@@ -36439,7 +36418,26 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                         embaixo do nome, que é onde ela não disputa espaço com o
                                         número. */}
                                     {(() => {
-                                      const GRADE = isMobile ? "minmax(0,1fr) 96px" : "minmax(0,1fr) 58px 92px 88px 104px";
+                                      // A última coluna é a ação: é no item que se corrige
+                                      // quantidade e preço quando a obra consumiu menos
+                                      // do que o pedido dizia.
+                                      const podeMexer = perm.podeEditar;
+                                      const GRADE = isMobile
+                                        ? "minmax(0,1fr) 96px"
+                                        : (podeMexer ? "minmax(0,1fr) 58px 92px 88px 104px 64px" : "minmax(0,1fr) 58px 92px 88px 104px");
+                                      // Item pago nao se edita: o dinheiro ja saiu, e reescreve-lo
+                                      // seria reescrever o extrato.
+                                      const botaoEditar = (ic, naLinha) => (!podeMexer || ic.pago) ? null : (
+                                        <button type="button" onClick={() => setFormConta(ic)}
+                                          title="Corrigir quantidade, pre\u00e7o ou valor deste item"
+                                          style={{ background: "none", border: "none", cursor: "pointer",
+                                            color: AZUL_VK, fontFamily: "inherit",
+                                            fontSize: naLinha ? 11.5 : 12.5, textAlign: naLinha ? "right" : "left",
+                                            /* no celular o dedo precisa de alvo: o link ganha uma faixa de 44px */
+                                            padding: naLinha ? 0 : "12px 10px 12px 0", minHeight: naLinha ? "auto" : 44 }}>
+                                          editar
+                                        </button>
+                                      );
                                       const numero = { textAlign: "right", fontVariantNumeric: "tabular-nums" };
                                       const cabeca = { fontSize: 10.5, color: "#9ca3af", fontWeight: 600,
                                         textTransform: "uppercase", letterSpacing: 0.3 };
@@ -36452,6 +36450,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                               <span style={cabeca}>Unidade</span>
                                               <span style={{ ...cabeca, ...numero }}>Unitário</span>
                                               <span style={{ ...cabeca, ...numero }}>Total</span>
+                                              {podeMexer && <span style={cabeca} />}
                                             </div>
                                           )}
                                           {L.contas.map(ic => {
@@ -36471,6 +36470,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                                           : ""].filter(Boolean).join(" · ")}
                                                     </div>
                                                   )}
+                                                  {isMobile && botaoEditar(ic, false)}
                                                 </div>
                                                 {!isMobile && <span style={{ fontSize: 12, color: "#4b5563", ...numero }}>
                                                   {qtd > 0 ? qtdBR(qtd) : "—"}</span>}
@@ -36481,6 +36481,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                                 <span style={{ fontSize: 12, color: "#111827", fontWeight: 600, ...numero }}>
                                                   {fmtMoedaCtr(total)}
                                                 </span>
+                                                {!isMobile && podeMexer && (botaoEditar(ic, true) || <span />)}
                                               </div>
                                             );
                                           })}
@@ -36688,7 +36689,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 10 }}>{contasDaObra.some(c => c.id === formConta.id) ? "Editar conta" : "Nova conta"}</div>
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
               <div><label style={C.label}>Descrição *</label><input style={C.input} value={formConta.descricao} onChange={e => setFormConta({ ...formConta, descricao: e.target.value })} placeholder="ex.: caçamba de entulho" /></div>
-              <div><label style={C.label}>Valor (R$)</label><CampoCtrNum tipo="moeda" valor={formConta.valor} onChange={v => setFormConta({ ...formConta, valor: v })} style={C.input} placeholder="0,00" /></div>
+              {/* O valor é o que o fornecedor cobrou; mexer nele refaz o
+                  unitário, para os três números continuarem dizendo a
+                  mesma coisa. */}
+              <div><label style={C.label}>Valor (R$)</label><CampoCtrNum tipo="moeda" valor={formConta.valor}
+                onChange={v => setFormConta(conciliarValorDaConta(formConta, "valor", v))} style={C.input} placeholder="0,00" /></div>
               <div><label style={C.label}>Vencimento</label><input style={C.input} type="date" value={formConta.vencimento || ""} onChange={e => setFormConta({ ...formConta, vencimento: e.target.value })} /></div>
               <div>
                 <label style={C.label}>Conta</label>
@@ -36708,6 +36713,63 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 </Selecao>
               </div>
               <div><label style={C.label}>Observação</label><input style={C.input} value={formConta.observacao || ""} onChange={e => setFormConta({ ...formConta, observacao: e.target.value })} /></div>
+            </div>
+
+            {/* ── O que foi comprado ──
+                Quantidade e preço são o que o custo por etapa e o preço do
+                catálogo leem. Consumiu menos do que o cotado? Muda a
+                quantidade aqui: o valor se refaz, e a conta a pagar passa a
+                dizer o que você vai pagar de verdade. */}
+            <div style={{ borderTop: "1px solid rgba(38,36,33,0.1)", paddingTop: 12, marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 10 }}>O que foi comprado</div>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr 1fr 1.4fr", gap: 12, alignItems: "end" }}>
+                <div style={{ minWidth: 0 }}>
+                  <label style={C.label}>Item do catálogo</label>
+                  <SelectBusca style={C.input} value={formConta.insumoCodigo || ""}
+                    onChange={(v) => {
+                      const ins = (data.materiais || []).find(x => x && (x.codigo === v || x.id === v)) || null;
+                      setFormConta(f => ({ ...f, insumoCodigo: v,
+                        descricao: f.descricao || (ins && ins.nome) || "",
+                        grupoMaterial: (ins && ins.grupo) || f.grupoMaterial || "",
+                        unidade: f.unidade || (ins && ins.unidade) || "",
+                        etapa: f.etapa || (ins && ins.etapaPadrao) || "" }));
+                    }}
+                    placeholder="Procurar no catálogo…"
+                    opcoes={[{ valor: "", rotulo: "— sem item do catálogo —" }].concat(
+                      (data.materiais || []).filter(i => i && i.ativo !== false)
+                        .map(i => ({ valor: i.codigo || i.id, rotulo: i.nome, grupo: i.grupo || "",
+                          extra: (i.aliases || []).join(" ") })))} />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <label style={C.label}>Quantidade</label>
+                  <input style={C.input} inputMode="decimal" value={formConta.quantidade == null ? "" : formConta.quantidade}
+                    onChange={e => setFormConta(conciliarValorDaConta(formConta, "quantidade", e.target.value))} placeholder="0" />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <label style={C.label}>Unidade</label>
+                  <input style={C.input} value={formConta.unidade || ""}
+                    onChange={e => setFormConta({ ...formConta, unidade: e.target.value })} placeholder="un" />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <label style={C.label}>Preço unitário</label>
+                  <CampoCtrNum tipo="moeda" style={C.input} valor={formConta.unitario}
+                    onChange={v => setFormConta(conciliarValorDaConta(formConta, "unitario", v))} placeholder="0,00" />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <label style={C.label}>Etapa</label>
+                  <SelectBusca style={C.input} value={formConta.etapa || ""}
+                    onChange={(v) => setFormConta(f => ({ ...f, etapa: v }))}
+                    placeholder="Procurar etapa…"
+                    opcoes={[{ valor: "", rotulo: "— sem etapa —" }].concat(
+                      (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(e => ({ valor: e.id, rotulo: e.nome || e.id })))} />
+                </div>
+              </div>
+              {numeroDeCampo(formConta.quantidade) > 0 && numeroDeCampo(formConta.unitario) > 0 && (
+                <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8 }}>
+                  {qtdBR(numeroDeCampo(formConta.quantidade))} {formConta.unidade || "un"} × {fmtMoedaCtr(numeroDeCampo(formConta.unitario))}
+                  {" = "}<b style={{ color: "#111827" }}>{fmtMoedaCtr(numeroDeCampo(formConta.valor))}</b>
+                </div>
+              )}
             </div>
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button style={C.btnSec} onClick={() => setFormConta(null)}>Cancelar</button>
@@ -37100,7 +37162,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                               {perm.podeEditar ? (
                                 <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
                                   <button onClick={() => alternarPagamento(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>{c.pago ? "Desfazer" : "Pagar"}</button>
-                                  {c.origem === "avulsa" && <button onClick={() => setFormConta(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>}
+                                  {/* Parcela de contrato é regerada pela regra a cada
+                                      abertura da tela — editá-la aqui não duraria um
+                                      render; ela se corrige pelo Recalibrar. O resto
+                                      é linha concreta e se edita. */}
+                                  {c.origem !== "contrato" && !c.pago && (
+                                    <button onClick={() => setFormConta(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
+                                  )}
                                   {c.origem === "avulsa" && (
                                     <button onClick={() => { dialogo.confirmar({ titulo: "Remover conta?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true }).then(ok => { if (ok) gravarContas(contasDaObra.filter(x => x.id !== c.id)); }); }}
                                       style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12 }}>Remover</button>

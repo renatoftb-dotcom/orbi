@@ -573,6 +573,66 @@ function cpMedicaoEmUmaData(d) {
   return Math.max(1, Math.floor(Number(dd.parcelas) || 1)) === 1;
 }
 
+// ── Quantidade, preço e valor: um acerta o outro ────────────────
+// Três números que dizem a mesma coisa de dois jeitos, e por isso não podem
+// divergir. Mexeu na quantidade ou no unitário, o valor se refaz; mexeu no
+// valor — porque foi o que o fornecedor cobrou —, o unitário se refaz para
+// explicar esse valor. É o mesmo acerto da tela de proposta, onde preencher
+// o unitário OU o total dá no mesmo.
+//
+// Sem quantidade não há o que acertar: a conta é um valor seco, como sempre
+// foi, e continua podendo ser editada assim.
+function conciliarValorDaConta(conta, campo, valorDigitado) {
+  const n = (v) => (typeof numeroDeCampo === "function" ? numeroDeCampo(v) : Number(v) || 0);
+  const red = (x) => Math.round(x * 100) / 100;
+  const c = { ...(conta || {}) };
+  if (campo === "quantidade") c.quantidade = valorDigitado;
+  if (campo === "unitario") c.unitario = valorDigitado;
+  if (campo === "valor") c.valor = valorDigitado;
+  const q = n(c.quantidade);
+  const u = n(c.unitario);
+  const v = n(c.valor);
+  if (campo === "valor") {
+    // o valor manda: o unitário passa a ser o que explica esse valor
+    if (q > 0) c.unitario = red(v / q);
+    return c;
+  }
+  if (q > 0 && u > 0) { c.valor = red(q * u); return c; }
+  // quantidade sem preço: o unitário sai do valor que já estava lá
+  if (campo === "quantidade" && q > 0 && v > 0 && !(u > 0)) { c.unitario = red(v / q); return c; }
+  return c;
+}
+
+// O que mudou nesta conta, em uma linha, para o registro do ato. Na
+// prestacao de contas o que importa nao e que alguem editou: e que o
+// concreto passou de 11 para 7 m3 e a conta caiu de 3.780,04 para 2.405,48.
+function detalheDaEdicaoDaConta(antes, depois) {
+  const a = antes || {}, d = depois || {};
+  const n = (v) => (typeof numeroDeCampo === "function" ? numeroDeCampo(v) : Number(v) || 0);
+  const q = (v) => {
+    const x = n(v);
+    return String(Math.round(x * 1000) / 1000).replace(".", ",");
+  };
+  const un = String(d.unidade || a.unidade || "").trim();
+  const partes = [];
+  if (n(a.quantidade) !== n(d.quantidade)) {
+    partes.push("quantidade " + q(a.quantidade) + " \u2192 " + q(d.quantidade) + (un ? " " + un : ""));
+  }
+  if (n(a.unitario) !== n(d.unitario)) {
+    partes.push("unit\u00e1rio " + cpDinheiro(n(a.unitario)) + " \u2192 " + cpDinheiro(n(d.unitario)));
+  }
+  if (n(a.valor) !== n(d.valor)) {
+    partes.push("valor " + cpDinheiro(n(a.valor)) + " \u2192 " + cpDinheiro(n(d.valor)));
+  }
+  if (String(a.etapa || "") !== String(d.etapa || "")) {
+    partes.push("etapa " + (a.etapa || "\u2014") + " \u2192 " + (d.etapa || "\u2014"));
+  }
+  if (String(a.vencimento || "") !== String(d.vencimento || "")) {
+    partes.push("vencimento " + (a.vencimento || "\u2014") + " \u2192 " + (d.vencimento || "\u2014"));
+  }
+  return partes.join("; ");
+}
+
 // Conta avulsa, fora de contrato.
 function contaAvulsaVazia(obraId) {
   return {

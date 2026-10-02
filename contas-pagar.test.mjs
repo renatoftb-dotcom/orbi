@@ -58,7 +58,8 @@ const modulo = new Function(`
            registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
-           ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem,
+           ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
+           detalheDaEdicaoDaConta,
            pagamentosEmAberto, ajustarVencimentos, limparAjustes, ajustesDoContrato,
            previaAjusteContrato, proximoNumeroDoc };
 `)();
@@ -91,6 +92,45 @@ const CONTAS_REC = [
 
 
 // ── Exceção de valor no contrato ────────────────────────────────
+
+// ── Quantidade, preço e valor na conta a pagar ──────────────────
+teste("mexer na quantidade refaz o valor", () => {
+  const c = { quantidade: 11, unitario: 343.64, valor: 3780.04 };
+  const r = modulo.conciliarValorDaConta(c, "quantidade", 7);
+  assert.strictEqual(r.quantidade, 7);
+  assert.strictEqual(r.unitario, 343.64);
+  assert.strictEqual(r.valor, 2405.48);
+});
+
+teste("mexer no unitário refaz o valor", () => {
+  const r = modulo.conciliarValorDaConta({ quantidade: 7, unitario: 343.64, valor: 2405.48 }, "unitario", 300);
+  assert.strictEqual(r.valor, 2100);
+});
+
+teste("mexer no valor refaz o unitário — o valor é o que o fornecedor cobrou", () => {
+  const r = modulo.conciliarValorDaConta({ quantidade: 7, unitario: 343.64, valor: 2405.48 }, "valor", 2100);
+  assert.strictEqual(r.valor, 2100);
+  assert.strictEqual(r.unitario, 300);
+});
+
+teste("sem quantidade, a conta é um valor seco e continua assim", () => {
+  const r = modulo.conciliarValorDaConta({ descricao: "Caçamba", valor: 300 }, "valor", 250);
+  assert.strictEqual(r.valor, 250);
+  assert.strictEqual(r.unitario, undefined);
+});
+
+teste("pôr quantidade numa conta que só tinha valor deduz o unitário", () => {
+  const r = modulo.conciliarValorDaConta({ valor: 600 }, "quantidade", 4);
+  assert.strictEqual(r.unitario, 150);
+  assert.strictEqual(r.valor, 600);
+});
+
+teste("quantidade zerada não divide por zero", () => {
+  const r = modulo.conciliarValorDaConta({ quantidade: 7, unitario: 100, valor: 700 }, "quantidade", 0);
+  assert.strictEqual(r.valor, 700, "sem quantidade o valor fica como estava");
+  assert.ok(Number.isFinite(modulo.conciliarValorDaConta({ quantidade: 0, valor: 700 }, "valor", 500).valor));
+});
+
 teste("valor corrigido na parcela do contrato sobrevive ao recálculo da tela", () => {
   const ct = base({ valor: 3000, modalidade: "parcelado", parcelas: 3,
     periodicidade: "mensais", dataInicio: "2026-09-01" });
@@ -2187,6 +2227,33 @@ teste("número de pedido com letra continua comparando como antes", () => {
   assert.strictEqual(modulo.chaveDoDocumento("A-0012"), "a0012", "letra não perde o zero");
 });
 
+
+// ── O registro da edicao conta a historia ──────────────────────
+teste("o registro da edicao diz o que mudou, nao so que mudou", () => {
+  const antes = { quantidade: 11, unidade: "m3", unitario: 343.64, valor: 3780.04, etapa: "fundacao" };
+  const d = modulo.detalheDaEdicaoDaConta(antes, { ...antes, quantidade: 7, valor: 2405.48 });
+  assert.ok(/quantidade 11 \u2192 7 m3/.test(d), d);
+  assert.ok(/valor/.test(d) && /2\.405,48/.test(d), d);
+  assert.ok(!/unit/.test(d), "o unitario nao mudou, nao entra no registro: " + d);
+});
+
+teste("sem mudanca nenhuma o detalhe sai vazio", () => {
+  const c = { quantidade: 7, unidade: "m3", unitario: 100, valor: 700, etapa: "fundacao" };
+  assert.strictEqual(modulo.detalheDaEdicaoDaConta(c, { ...c }), "");
+});
+
+teste("mudanca de etapa e de vencimento tambem ficam registradas", () => {
+  const a = { valor: 700, etapa: "fundacao", vencimento: "2026-10-10" };
+  const d = modulo.detalheDaEdicaoDaConta(a, { ...a, etapa: "estrutura", vencimento: "2026-11-10" });
+  assert.ok(/etapa fundacao \u2192 estrutura/.test(d), d);
+  assert.ok(/vencimento 2026-10-10 \u2192 2026-11-10/.test(d), d);
+});
+
+teste("valor digitado com virgula nao vira mudanca falsa", () => {
+  // a tela devolve "3.780,04" como texto; o numero por tras e o mesmo
+  const a = { quantidade: 11, unidade: "m3", valor: 3780.04 };
+  assert.strictEqual(modulo.detalheDaEdicaoDaConta(a, { ...a, valor: "3.780,04" }), "");
+});
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);
