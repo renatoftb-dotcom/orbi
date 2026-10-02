@@ -31,7 +31,8 @@ const M = new Function(src + `
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
            obrasDoLancamento, validarLancamentoNaObra, destinoVisivelDoCusto,
            efValorDoCampo, anexosDaTransacao, comAnexos,
-           efNomeDoFornecedor, EF_FORNECEDOR_OUTROS };`)();
+           efNomeDoFornecedor, EF_FORNECEDOR_OUTROS,
+           custoDoLancamento, validarCustoEmItens };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -56,6 +57,64 @@ const OPC_OBRA = { planoObra: PLANO_OBRA_T };
 // ── Os papéis da transação ──────────────────────────────────────
 
 // ── Fornecedor não identificado ─────────────────────────────────
+
+// ── Custo da obra, item a item ──────────────────────────────────
+const IT = (q, u, etapa) => ({ id: "i" + q + u, descricao: "x", quantidade: q, unitario: u,
+  etapa: etapa === undefined ? "fundacao" : etapa });
+
+teste("itens que somam o valor pago: fecha, sem desconto", () => {
+  const r = M.custoDoLancamento(100, [IT(2, 30), IT(4, 10)]);
+  assert.strictEqual(r.bruto, 100);
+  assert.strictEqual(r.desconto, 0);
+  assert.strictEqual(r.falta, 0);
+  assert.strictEqual(r.fecha, true);
+});
+
+teste("soma maior que o pago vira desconto", () => {
+  const r = M.custoDoLancamento(90, [IT(2, 30), IT(4, 10)]);
+  assert.strictEqual(r.bruto, 100);
+  assert.strictEqual(r.desconto, 10);
+  assert.strictEqual(r.falta, 0);
+});
+
+teste("soma menor que o pago é item faltando, não desconto", () => {
+  const r = M.custoDoLancamento(150, [IT(2, 30)]);
+  assert.strictEqual(r.falta, 90);
+  assert.strictEqual(r.desconto, 0);
+  const v = M.validarCustoEmItens(150, [IT(2, 30)], "o1");
+  assert.strictEqual(v.ok, false);
+  assert.ok(v.erros.some((e) => /menor que o valor pago/.test(e)), JSON.stringify(v.erros));
+});
+
+teste("centavo de arredondamento não é buraco", () => {
+  const r = M.custoDoLancamento(100, [IT(3, 33.333)]);
+  assert.strictEqual(r.fecha, true);
+});
+
+teste("item sem etapa trava o lançamento", () => {
+  const v = M.validarCustoEmItens(60, [IT(2, 30, "")], "o1");
+  assert.strictEqual(v.ok, false);
+  assert.ok(v.erros.some((e) => /sem etapa/.test(e)));
+});
+
+teste("sem obra e sem item, diz as duas coisas", () => {
+  const v = M.validarCustoEmItens(0, [], "");
+  assert.ok(v.erros.some((e) => /Escolha a obra/.test(e)));
+  assert.ok(v.erros.some((e) => /pelo menos um item/.test(e)));
+  assert.ok(v.erros.some((e) => /valor pago/.test(e)));
+});
+
+teste("tudo no lugar: passa", () => {
+  const v = M.validarCustoEmItens(59.96, [IT(4, 14.99)], "o1");
+  assert.deepStrictEqual(v.erros, []);
+  assert.strictEqual(v.ok, true);
+});
+
+teste("item sem valor não conta nem como item nem como etapa faltando", () => {
+  const v = M.validarCustoEmItens(60, [IT(2, 30), { id: "vazio", quantidade: "", unitario: "", etapa: "" }], "o1");
+  assert.deepStrictEqual(v.erros, []);
+});
+
 teste("sem fornecedor escolhido, a transação entra como Outros", () => {
   assert.strictEqual(M.efNomeDoFornecedor({}), "Outros");
   assert.strictEqual(M.efNomeDoFornecedor({ fornecedor: "" }), "Outros");

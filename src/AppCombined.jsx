@@ -10267,6 +10267,63 @@ function efValorDoCampo(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
+// ── O custo da obra, item a item ────────────────────────────────
+// A conta a pagar sempre foi POR ITEM — é dela que saem o custo por etapa e
+// a abertura por subconta. O que faltava era a tela de contabilização falar
+// essa língua: ela criava uma conta com um valor seco, e o gasto entrava na
+// obra sem etapa nenhuma.
+//
+// Quem manda no total é a linha do extrato: foi aquele dinheiro que saiu do
+// banco. Os itens somam o preço de tabela; a diferença entre a soma e o que
+// saiu é desconto, e se espalha proporcionalmente — é o mesmo
+// `itensRateados` que o pedido da loja usa, não uma segunda regra.
+//
+// Soma MENOR que o pago não é desconto: é item faltando. Aceitar isso seria
+// inventar um custo que o papel não tem.
+// O preço de tabela de um item: o subtotal que o papel trouxe, ou
+// quantidade × unitário. Delega ao `brutoDoItem` do pedido da loja quando
+// ele está por perto — que é sempre, no app montado; a conta local existe
+// para o teste deste módulo, que roda sozinho.
+function efBrutoDoItem(i) {
+  if (typeof brutoDoItem === "function") return brutoDoItem(i);
+  const it = i || {};
+  const sub = efValorDoCampo(it.bruto);
+  if (sub > 0) return sub;
+  return Math.round(efValorDoCampo(it.quantidade) * efValorDoCampo(it.unitario) * 100) / 100;
+}
+
+function custoDoLancamento(valorPago, itens) {
+  const red = (x) => Math.round(x * 100) / 100;
+  const comValor = (itens || []).filter((i) => i && efBrutoDoItem(i) > 0);
+  const bruto = red(comValor.reduce((s, i) => s + efBrutoDoItem(i), 0));
+  const pago = red(Number(valorPago) || 0);
+  const desconto = red(Math.max(0, bruto - pago));
+  const falta = red(Math.max(0, pago - bruto));
+  return {
+    itens: comValor.length, bruto: bruto, pago: pago,
+    desconto: desconto, falta: falta,
+    // Centavo de arredondamento não é buraco: a tolerância é a mesma do
+    // pedido da loja, meio centavo.
+    fecha: Math.abs(bruto - pago) < 0.005,
+  };
+}
+
+// O que falta para o custo poder ser gravado. A etapa é erro e não aviso —
+// é o que impede a linha "Sem etapa" de crescer no quadro da obra.
+function validarCustoEmItens(valorPago, itens, obraId) {
+  const erros = [];
+  const r = custoDoLancamento(valorPago, itens);
+  if (!obraId) erros.push("Escolha a obra que recebe o custo.");
+  if (!r.itens) erros.push("Lance pelo menos um item com quantidade e preço.");
+  const semEtapa = (itens || []).filter((i) => i && efBrutoDoItem(i) > 0 && !String(i.etapa || "").trim()).length;
+  if (semEtapa) erros.push(semEtapa === 1 ? "1 item está sem etapa." : semEtapa + " itens estão sem etapa.");
+  if (!(r.pago > 0)) erros.push("Informe o valor pago.");
+  else if (r.falta >= 0.005) {
+    erros.push("A soma dos itens é menor que o valor pago — falta item, e o que falta não pode virar desconto.");
+  }
+  return { ok: !erros.length, erros: erros, resumo: r };
+}
+
 // ── Fornecedor: nem todo papel tem um nome que importe ──────────
 // Tarifa bancária, estacionamento, a compra de R$ 12 na loja da esquina —
 // identificar o fornecedor aí não paga o trabalho de cadastrá-lo. Quem não
@@ -10512,10 +10569,10 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
 
 // Formulário de um lançamento. As travas são as do validarLancamento: a
 // mensagem aparece antes de gravar, não depois.
-function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, prestadores, aoCriarPrestador }) {
+function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, prestadores, aoCriarPrestador, insumos }) {
   const S = EF_ESTILO;
   const [f, setF] = useState(() => ({
-    contaId: "", contaFonte: "", obraIdAlvo: "", fornecedorId: "", anexos: [],
+    contaId: "", contaFonte: "", obraIdAlvo: "", fornecedorId: "", anexos: [], itens: [],
     unidadeId: "escritorio", valor: "", competencia: "", lancadoEm: "",
     cliente: "", clienteId: "", empreendimentoId: "", projeto: "", fornecedor: "", descricao: "", documento: "", contaBanco: "sim",
     ...(inicial || {}),
@@ -10585,6 +10642,37 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const clienteAlvo = (clientes || []).find((c) => c && c.id === f.clienteId) || null;
   const destinoDoCusto = naObra ? destinoVisivelDoCusto(f.contaId, obraAlvo, clienteAlvo, {}) : null;
 
+  // ── Os itens do custo ──
+  const itensDoCusto = f.itens || [];
+  const resumoCusto = naObra ? custoDoLancamento(efValorDoCampo(f.valor), itensDoCusto) : null;
+  const etapasDaObra = typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [];
+  const opcoesInsumo = (insumos || [])
+    .filter((i) => i && i.ativo !== false)
+    .map((i) => ({ valor: i.codigo || i.id, rotulo: i.nome, grupo: i.grupo || "",
+      extra: (i.aliases || []).join(" ") }));
+  const mexerItem = (i, muda) => setF((p) => ({ ...p,
+    itens: (p.itens || []).map((x, j) => (j === i ? { ...x, ...muda } : x)) }));
+  const tirarItem = (i) => setF((p) => ({ ...p, itens: (p.itens || []).filter((x, j) => j !== i) }));
+  const novoItem = () => setF((p) => ({ ...p,
+    itens: (p.itens || []).concat([typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio()
+      : { id: String(Date.now()), descricao: "", insumoCodigo: "", quantidade: "", unidade: "", unitario: "", etapa: "", contaId: "" }]) }));
+  // O insumo escolhido traz o que ele já sabe: unidade, etapa e conta
+  // contábil. O que a pessoa tiver posto à mão continua valendo.
+  const porInsumo = (i, codigo) => {
+    const ins = (insumos || []).find((x) => x && (x.codigo === codigo || x.id === codigo)) || null;
+    if (!ins) { mexerItem(i, { insumoCodigo: codigo }); return; }
+    const atual = itensDoCusto[i] || {};
+    mexerItem(i, {
+      insumoCodigo: ins.codigo || ins.id || "",
+      descricao: atual.descricao || ins.nome || "",
+      grupoMaterial: ins.grupo || "",
+      unidade: atual.unidade || ins.unidade || "",
+      etapa: atual.etapa || ins.etapaPadrao || "",
+      contaId: atual.contaId || ins.contaPadrao || f.contaId || "",
+      unitario: atual.unitario || (ins.precoReferencia > 0 ? ins.precoReferencia : ""),
+    });
+  };
+
   const conta = naObra ? null : contaEscritorio(f.contaId);
   const unidadesOk = conta && (conta.unidades || []).length ? conta.unidades : UNIDADES_NEGOCIO.map((u) => u.id);
   // Empreendimento é cliente com tique: quando a unidade é Empreendimento, a
@@ -10593,6 +10681,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const doCadastro = (clientes || []).filter((c) => c && (ehEmp ? ehEmpreendimento(c) : true));
   const erros = naObra
     ? validarLancamentoNaObra({ ...f, valor: efValorDoCampo(f.valor) }, { fechamentos })
+        .concat(validarCustoEmItens(efValorDoCampo(f.valor), itensDoCusto, f.obraIdAlvo).erros
+          .filter((e) => !/Escolha a obra|Informe o valor pago/.test(e)))
     : validarLancamentoEscritorio({ ...f, valor: efValorDoCampo(f.valor),
         clienteId: f.clienteId || f.cliente, obraId: f.projeto,
         empreendimentoId: ehEmp ? f.empreendimentoId : f.projeto }, { fechamentos });
@@ -10743,6 +10833,109 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           onChange={(e) => set("documento", e.target.value)} />)}
       </div>
       {campo("Descrição", <input style={S.input} value={f.descricao} onChange={(e) => set("descricao", e.target.value)} />)}
+      {/* ── O custo, item a item ──
+          A conta a pagar sempre foi por item; é daqui que saem o custo por
+          etapa e a abertura por subconta. Escolher o insumo traz unidade,
+          etapa e conta contábil do catálogo — a etapa não se digita, ela
+          vem com o material. */}
+      {naObra && (
+        <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, background: "#fff" }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>O que foi comprado</div>
+            <div style={{ fontSize: 11.5, color: "#6b7280" }}>
+              o custo por etapa da obra sai daqui
+            </div>
+          </div>
+
+          {!itensDoCusto.length && (
+            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>
+              Nenhum item ainda. Sem item, o gasto entra na obra sem etapa — e é assim que
+              o quadro por etapa fica com uma linha “Sem etapa” crescendo.
+            </div>
+          )}
+
+          {itensDoCusto.map((it, i) => {
+            const bruto = efBrutoDoItem(it);
+            return (
+              <div key={it.id || i} style={{ display: "grid", gap: 8, marginBottom: 10, paddingBottom: 10,
+                borderBottom: i < itensDoCusto.length - 1 ? "1px solid rgba(38,36,33,0.08)" : "none",
+                gridTemplateColumns: "1fr" }}>
+                <div style={{ display: "grid", gap: 8,
+                  gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", alignItems: "end" }}>
+                  <div style={{ minWidth: 0, gridColumn: "1 / -1" }}>
+                    <div style={S.rot}>Item do catálogo</div>
+                    <SelectBusca style={S.input} value={it.insumoCodigo}
+                      onChange={(v) => porInsumo(i, v)}
+                      placeholder="Procurar no catálogo…"
+                      opcoes={[{ valor: "", rotulo: it.descricao || "— escolha o material —" }].concat(opcoesInsumo)} />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={S.rot}>Quantidade</div>
+                    <input style={S.input} inputMode="decimal" value={it.quantidade}
+                      onChange={(e) => mexerItem(i, { quantidade: e.target.value })} placeholder="0" />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={S.rot}>Unidade</div>
+                    <input style={S.input} value={it.unidade}
+                      onChange={(e) => mexerItem(i, { unidade: e.target.value })} placeholder="un" />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={S.rot}>Preço unitário</div>
+                    <input style={S.input} inputMode="decimal" value={it.unitario}
+                      onChange={(e) => mexerItem(i, { unitario: e.target.value })} placeholder="0,00" />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={S.rot}>Total do item</div>
+                    <div style={{ ...S.input, background: "#f9fafb", fontVariantNumeric: "tabular-nums",
+                      display: "flex", alignItems: "center", minHeight: 36 }}>{efDinheiro(bruto)}</div>
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={S.rot}>Etapa</div>
+                    <SelectBusca style={S.input} value={it.etapa}
+                      onChange={(v) => mexerItem(i, { etapa: v })}
+                      placeholder="Procurar etapa…"
+                      opcoes={[{ valor: "", rotulo: "— escolha a etapa —" }]
+                        .concat(etapasDaObra.map((e) => ({ valor: e.id, rotulo: e.nome || e.titulo || e.id })))} />
+                  </div>
+                  <div style={{ minWidth: 0, display: "flex", alignItems: "flex-end" }}>
+                    <button type="button" style={{ ...S.btnSec, color: "#dc2626" }}
+                      onClick={() => tirarItem(i)}>Tirar</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 4 }}>
+            <button type="button" style={S.btnSec} onClick={novoItem}>+ item</button>
+            {resumoCusto && resumoCusto.itens > 0 && (
+              <div style={{ fontSize: 12, color: "#4b5563" }}>
+                soma dos itens <b style={{ color: "#111827" }}>{efDinheiro(resumoCusto.bruto)}</b>
+                {" · "}pago <b style={{ color: "#111827" }}>{efDinheiro(resumoCusto.pago)}</b>
+              </div>
+            )}
+          </div>
+
+          {/* A diferença entre a soma e o que saiu do banco: para baixo é
+              desconto e se rateia; para cima é item faltando, e aí não se
+              grava — inventar custo que o papel não tem é pior que travar. */}
+          {resumoCusto && resumoCusto.itens > 0 && resumoCusto.desconto >= 0.005 && (
+            <div style={{ fontSize: 12, color: "#1e3a5f", marginTop: 8, padding: "8px 10px", borderRadius: 10,
+              border: "1px solid rgba(4,116,244,0.3)", background: "#eef5ff" }}>
+              A soma passa o pago em <b>{efDinheiro(resumoCusto.desconto)}</b> — entra como desconto,
+              espalhado nos itens na proporção de cada um. É o mesmo rateio do pedido da loja.
+            </div>
+          )}
+          {resumoCusto && resumoCusto.itens > 0 && resumoCusto.falta >= 0.005 && (
+            <div style={{ fontSize: 12, color: "#b45309", marginTop: 8, padding: "8px 10px", borderRadius: 10,
+              border: "1px solid rgba(245,158,11,0.45)", background: "#fffbeb" }}>
+              Faltam <b>{efDinheiro(resumoCusto.falta)}</b> para fechar com o que saiu do banco —
+              falta item. O que falta não pode virar desconto.
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Lançando "Material" num empreendimento, do outro lado isso se chama
           "Construção". Quem fecha o mês precisa saber disso ANTES de gravar,
           senão vai procurar a vassoura pelo nome errado no extrato. */}
@@ -11414,21 +11607,35 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const cliente = ((data || {}).clientes || []).find((c) => c && c.id === obra.clienteId) || null;
     const quem = typeof nomeDeQuem === "function" ? nomeDeQuem(perm && perm.usuario) : "";
     const valor = Number(l.valor) || 0;
-    const base = { ...contaAvulsaVazia(obra.id),
-      contaId: l.contaId,
-      prestadorId: l.fornecedorId || "",
-      favorecido: efNomeDoFornecedor(l),
-      descricao: String(l.descricao || "").trim() || efNomeDoFornecedor(l),
+    // UMA CONTA POR ITEM — é o que já faz o custo por etapa e a abertura por
+    // subconta funcionarem, sem código novo: eles leem `etapa` e
+    // `grupoMaterial` de cada conta. O `pedidoId` costura tudo de volta, e o
+    // desconto (a diferença entre a soma dos itens e o que saiu do banco) se
+    // espalha proporcionalmente pelo mesmo `itensRateados` do pedido da loja.
+    const resumo = custoDoLancamento(valor, l.itens || []);
+    const papel = { ...pedidoVazio(""),
       numeroNota: l.documento || "",
-      valor: valor, vencimento: l.lancadoEm };
-    // Número de referência e papéis entram na conta: a ponte os copia para o
-    // lançamento do escritório, e aí os dois lados falam do mesmo "0147".
-    const comNumero = numerarContas([registrarAto(base, "criada", quem)],
-      todas, lancamentosDoEscritorio(data))[0];
-    const nova = comAnexos(contaPaga(comNumero,
-      { pagoEm: l.lancadoEm, valorPago: valor }, quem), anexosDaTransacao(l));
-    const obraNova = { ...obra, contasPagar: (obra.contasPagar || []).concat([nova]) };
-    const ponte = lancamentosDaBaixa(obraNova, cliente, [nova],
+      data: l.lancadoEm, vencimento: l.lancadoEm,
+      desconto: resumo.desconto,
+      itens: (l.itens || []).filter((i) => i && efBrutoDoItem(i) > 0),
+      observacao: String(l.descricao || "").trim() };
+    const contasDoPapel = contasDoPedidoDaLoja({
+      obraId: obra.id, cotacaoId: "", contaId: l.contaId,
+      prestadorId: l.fornecedorId || "", favorecido: efNomeDoFornecedor(l),
+      observacao: String(l.descricao || "").trim(),
+    }, papel, typeof uid === "function" ? uid : undefined);
+
+    // Um papel, um número. A nota tem dez itens e dez contas, mas é UMA
+    // transação: dar dez referências faria a prestação de contas procurar
+    // dez papéis que não existem.
+    const numeroDoc = proximaReferencia(todas, lancamentosDoEscritorio(data));
+    const papeis = anexosDaTransacao(l);
+    const novas = contasDoPapel.map((c) => comAnexos(
+      contaPaga(registrarAto({ ...c, numeroDoc: numeroDoc }, "criada", quem),
+        { pagoEm: l.lancadoEm, valorPago: Number(c.valor) || 0 }, quem), papeis));
+    if (!novas.length) return;
+    const obraNova = { ...obra, contasPagar: (obra.contasPagar || []).concat(novas) };
+    const ponte = lancamentosDaBaixa(obraNova, cliente, novas,
       { fechamentos: fechamentosDoEscritorio(data), lancamentos: lancamentosDoEscritorio(data) });
     save({ ...data,
       obras: todas.map((o) => (o && o.id === obra.id ? obraNova : o)),
@@ -11783,6 +11990,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
           {form && <FormLancamentoEscritorio fechamentos={fechamentos} clientes={(data || {}).clientes || []}
             obras={(data || {}).obras || []}
             prestadores={((data || {}).fornecedores || []).filter((x) => x && x.ativo !== false)}
+            insumos={((data || {}).materiais || []).filter((x) => x && x.ativo !== false)}
             aoCriarPrestador={criarPrestadorDoLancamento}
             inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} />}
           {vendoComprovante && typeof VisorProposta === "function" && (
