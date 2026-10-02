@@ -1293,8 +1293,15 @@ export default function ModuloClientesFornecedores() {
   // IMPORTANTE: callers em callbacks capturados (ex: onSalvar do FormOrcamento)
   // devem usar dataRef.current em vez de data, senão leem data congelado e
   // sobrescrevem atualizações intermediárias.
+  // `newData` pode vir como função. Quem grava a partir de um efeito de
+  // montagem não pode partir do retrato com que a tela renderizou: outra
+  // ação pode ter gravado no mesmo commit, e o retrato antigo apagaria o
+  // que ela acabou de escrever. A forma de função recebe o dado mais
+  // fresco que o app tem neste instante.
   async function save(newData, opts = {}) {
     const oldData = dataRef.current || data;
+    if (typeof newData === "function") newData = newData(oldData);
+    if (!newData) return;
     setData(newData);
     dataRef.current = newData; // mantém ref em sync imediato pra callbacks subsequentes
     savingRef.current = true;

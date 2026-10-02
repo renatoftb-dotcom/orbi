@@ -970,13 +970,19 @@ function resumoDaEntrada(itens) {
 }
 
 // As portas de saída. A ordem é a da vida: pedir preço é o que vem antes de
-// tudo e é o caso mais rápido — ditou, mandou; o pedido é o de todo dia; o
-// pagamento já feito é o que chega depois; e a cotação formal é quando a
+// tudo e é o caso mais rápido — ditou, mandou; o pedido é o de todo dia; a
+// compra já paga é o que chega depois; a despesa é o que não passa por loja
+// nenhuma — empreiteiro, taxa, aluguel —; e a cotação formal é quando a
 // compra merece comparação lado a lado antes de decidir.
+//
+// "Compra já paga" e "Despesa paga" são as duas formas de dinheiro que já
+// saiu, e a diferença é o que o papel traz: a compra tem itens, quantidade e
+// unidade; a despesa tem só quem recebeu, quanto e quando.
 const DESTINOS_DA_ENTRADA = [
   { id: "mandar", nome: "Mandar para a loja", resumo: "Vira mensagem pronta no WhatsApp da loja, pedindo preço. É o caminho curto." },
   { id: "pedido", nome: "Pedido", resumo: "Vai virar conta a pagar na loja, com vencimento." },
-  { id: "pagamento", nome: "Pagamento já feito", resumo: "Já saiu o dinheiro: entra lançado e baixado, na data em que foi pago." },
+  { id: "pagamento", nome: "Compra já paga", resumo: "Material que já foi pago: entra lançado e baixado, na data em que saiu o dinheiro." },
+  { id: "despesa", nome: "Despesa paga", resumo: "Empreiteiro, mão de obra, taxa, aluguel: entra como conta da obra já baixada, com o comprovante anexado." },
   { id: "cotacao", nome: "Cotação", resumo: "Comparação formal: várias lojas, propostas lado a lado." },
 ];
 
@@ -1024,6 +1030,174 @@ function entradaPronta(destino, lojaId, itens, obras, obraId) {
   if (!destino) return { ok: false, motivo: "Diga o que é este papel." };
   if (entradaPedeLoja(destino) && !lojaId) return { ok: false, motivo: "Escolha a loja." };
   return { ok: true, motivo: "" };
+}
+
+// ── O papel que não é nota: o comprovante ──────────────────────
+// A nota fiscal diz o que se comprou; o comprovante diz que o dinheiro saiu.
+// Os dois chegam pela mesma caixa, e quem decide é o papel. A ordem importa:
+// nota é nota mesmo que fale em "pagamento", então a DANFE responde primeiro.
+const COT_RE_COMPROVANTE = new RegExp(
+  "comprovante|\\bpix\\b|transfer[êe]ncia|\\bted\\b|\\bdoc\\b|boleto pago"
+  + "|pagamento (efetuado|realizado|conclu[íi]do|aprovado)"
+  + "|autentica[çc][ãa]o|id da transa[çc][ãa]o|\\be2e\\b|recibo"
+  + "|\\bpaguei\\b", "i");
+
+function ehComprovante(texto) {
+  const t = String(texto || "");
+  if (typeof ehDanfe === "function" && ehDanfe(t)) return false;
+  return COT_RE_COMPROVANTE.test(t);
+}
+
+// "Valor: R$ 5.000,00", "VALOR DO PAGAMENTO" com o número na linha de baixo,
+// "R$ 5.000,00" sozinho. Procura do mais específico para o mais solto, para
+// não pegar a tarifa de R$ 0,00 que alguns bancos imprimem no rodapé.
+function valorDoComprovante(texto) {
+  const t = String(texto || "");
+  const tentativas = [
+    /valor\s*(?:do\s*)?(?:pagamento|transa[çc][ãa]o|transfer[êe]ncia|p[ií]x)?\s*:?\s*R?\$?\s*([\d.]{1,14},\d{2})/i,
+    /valor[\s\S]{0,60}?R\$\s*([\d.]{1,14},\d{2})/i,
+    /R\$\s*([\d.]{1,14},\d{2})/,
+  ];
+  for (const re of tentativas) {
+    const m = t.match(re);
+    if (m && numeroDeCampo(m[1]) > 0) return m[1];
+  }
+  return "";
+}
+
+// A data que interessa é a do pagamento, não a da emissão do comprovante
+// nem a do vencimento do boleto — é ela que diz em que mês a despesa cai.
+function dataDoComprovante(texto) {
+  const t = String(texto || "");
+  const tentativas = [
+    /data\s*(?:do\s*)?(?:pagamento|transa[çc][ãa]o|transfer[êe]ncia|cr[ée]dito)[\s\S]{0,80}?(\d{2}\/\d{2}\/\d{4})/i,
+    /(?:pago|pagamento|realizad[ao]|efetuad[ao])\s*em[\s\S]{0,40}?(\d{2}\/\d{2}\/\d{4})/i,
+    /(\d{2}\/\d{2}\/\d{4})/,
+  ];
+  for (const re of tentativas) {
+    const m = t.match(re);
+    if (m) {
+      const d = m[1].split("/");
+      return d[2] + "-" + d[1] + "-" + d[0];
+    }
+  }
+  return "";
+}
+
+const COT_RE_ROTULO_FAVORECIDO = /(destinat[áa]ri[oa]|favorecid[oa]|benefici[áa]ri[oa]|recebedor|quem recebeu|cr[ée]dito para|pagar a|pago a|paguei (?:para )?[oa]?)/i;
+// Linhas que o banco imprime em volta do nome e que nome nenhum é.
+const COT_RE_ROTULO_BANCARIO = /^(cpf|cnpj|ag[êe]ncia|conta|banco|institui[çc][ãa]o|chave|tipo|valor|data|nome|raz[ãa]o social|documento|id|e2e|autentica)/i;
+
+// Nome de quem recebeu: na mesma linha do rótulo, ou na primeira linha
+// abaixo dele que pareça nome e não etiqueta de banco.
+function pareceNomeDeFavorecido(s) {
+  const t = String(s || "").trim();
+  if (t.length < 3 || t.length > 90) return false;
+  if (COT_RE_ROTULO_BANCARIO.test(t)) return false;
+  const letras = (t.match(/[A-Za-zÀ-ÿ]/g) || []).length;
+  const digitos = (t.match(/\d/g) || []).length;
+  return letras >= 3 && letras > digitos;
+}
+
+// A linha chega de duas procedências: do PDF, como { celulas, texto }, e do
+// texto colado, como string. Normalizar aqui é o que deixa o resto do leitor
+// ignorar de onde o papel veio.
+function cotLinhaComoTexto(l) {
+  if (l == null) return "";
+  if (typeof l === "string") return l;
+  if (l.texto != null) return String(l.texto);
+  if (Array.isArray(l.celulas)) return l.celulas.join(" ");
+  return "";
+}
+
+function favorecidoDoComprovante(linhas) {
+  const ls = (linhas || []).map((l) => cotLinhaComoTexto(l).trim()).filter(Boolean);
+  for (let i = 0; i < ls.length; i++) {
+    if (!COT_RE_ROTULO_FAVORECIDO.test(ls[i])) continue;
+    const resto = ls[i].replace(/^[\s\S]*?(destinat[áa]ri[oa]|favorecid[oa]|benefici[áa]ri[oa]|recebedor|quem recebeu|cr[ée]dito para|pagar a|pago a|paguei (?:para )?[oa]?)\s*[:·\-–]*\s*/i, "").trim();
+    if (pareceNomeDeFavorecido(resto)) return resto;
+    for (let j = i + 1; j < Math.min(ls.length, i + 5); j++) {
+      if (pareceNomeDeFavorecido(ls[j])) return ls[j];
+    }
+  }
+  return "";
+}
+
+// CPF e CNPJ vêm mascarados na maioria dos comprovantes (***.123.456-**).
+// Serve para conferir o prestador, não para cadastrar — por isso entra como
+// veio, sem tentar completar o que o banco escondeu.
+function documentoDoComprovante(texto) {
+  const t = String(texto || "");
+  const m = t.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/)
+    || t.match(/[*\d]{3}\.[*\d]{3}\.[*\d]{3}-[*\d]{2}/);
+  return m ? m[0] : "";
+}
+
+// O comprovante lido de uma vez. Devolve null quando o papel não é
+// comprovante — quem chama segue pelo caminho da nota, como antes.
+function dadosDoComprovante(linhas) {
+  const lista = linhas || [];
+  const tudo = lista.map(cotLinhaComoTexto).join("\n");
+  if (!ehComprovante(tudo)) return null;
+  return {
+    valor: valorDoComprovante(tudo),
+    pagoEm: dataDoComprovante(tudo),
+    favorecido: favorecidoDoComprovante(lista),
+    documento: documentoDoComprovante(tudo),
+  };
+}
+
+// O prestador do comprovante já está cadastrado? O nome do banco vem em
+// caixa alta e com a razão social inteira ("JOSE DA SILVA ME"), então casa
+// por pedaço: o cadastro dentro do nome do papel, ou o contrário.
+function prestadorDoComprovante(prestadores, nome) {
+  const alvo = cotSemAcento(nome || "");
+  if (alvo.length < 3) return null;
+  const lista = (prestadores || []).filter(Boolean);
+  const exato = lista.find((f) => cotSemAcento(f.nome || "") === alvo);
+  if (exato) return exato;
+  const dentro = lista.filter((f) => {
+    const n = cotSemAcento(f.nome || "");
+    return n.length >= 3 && (alvo.indexOf(n) >= 0 || n.indexOf(alvo) >= 0);
+  });
+  return dentro.length === 1 ? dentro[0] : null;
+}
+
+// ── Despesa paga: a saída que não tem itens ────────────────────
+// Pedido e cotação falam de material, com quantidade e unidade. O pagamento
+// do empreiteiro não tem nada disso: tem quem recebeu, quanto, quando e em
+// que conta entra. Por isso a prova do que falta é outra.
+function despesaPronta(d, obras, obraId) {
+  if (entradaPedeObra(obras) && !obraId) return { ok: false, motivo: "Escolha a obra." };
+  const dd = d || {};
+  if (!String(dd.favorecidoId || "").trim()) return { ok: false, motivo: "Escolha quem recebeu." };
+  if (!(numeroDeCampo(dd.valor) > 0)) return { ok: false, motivo: "Informe o valor pago." };
+  if (!String(dd.pagoEm || "").trim()) return { ok: false, motivo: "Informe a data do pagamento." };
+  // Baixando parcela de contrato, a conta contábil e a descrição já são as
+  // da parcela — perguntá-las de novo só abriria caminho para divergirem.
+  if (String(dd.parcelaId || "").trim()) return { ok: true, motivo: "" };
+  if (!String(dd.contaId || "").trim()) return { ok: false, motivo: "Escolha a conta contábil." };
+  return { ok: true, motivo: "" };
+}
+
+// O empreiteiro que recebeu já tinha parcela combinada? Então o pagamento é
+// a baixa dela, não uma despesa nova — senão o contrato fica eternamente em
+// aberto e a obra conta o mesmo gasto duas vezes.
+function parcelasEmAbertoDoPrestador(contas, prestadorId) {
+  if (!prestadorId) return [];
+  return (contas || [])
+    .filter((c) => c && !c.pago && c.prestadorId === prestadorId && (c.origem === "contrato" || c.contratoId))
+    .slice()
+    .sort((a, b) => String(a.vencimento || "").localeCompare(String(b.vencimento || "")));
+}
+
+// A parcela que casa é a do mesmo valor; havendo duas iguais, a mais antiga.
+// Sem valor igual não se adivinha — a pessoa aponta qual é.
+function parcelaQueCasa(parcelas, valor) {
+  const v = numeroDeCampo(valor);
+  if (!(v > 0)) return null;
+  const iguais = (parcelas || []).filter((p) => Math.abs(numeroDeCampo(p.valor) - v) < 0.01);
+  return iguais[0] || null;
 }
 
 // ── O item novo no padrão do catálogo ───────────────────────────
@@ -3015,7 +3189,7 @@ function selo(cor, texto) {
   );
 }
 
-function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, usuario, onGerarContrato, onLancarContas, onDesfazerLancamento, onRecalibrarPedido, onExcluirPedido, abrirEntrada, entradaInicial }) {
+function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, usuario, onGerarContrato, onLancarContas, onLancarDespesa, onDesfazerLancamento, onRecalibrarPedido, onExcluirPedido, abrirEntrada, entradaInicial }) {
   const perm = getPermissoes();
   // O módulo é o mesmo dos dois lados: o cliente cria cotação, registra a
   // proposta que recebeu do fornecedor e escolhe, como o escritório. O que
@@ -4235,9 +4409,19 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   // A Entrada entrega a lista pronta; aqui ela vira pedido, pagamento ou
   // cotação. Nenhuma tela nova de saída: as três já existiam, e a Entrada
   // só chega nelas com o trabalho de leitura feito.
-  function seguirDaEntrada({ destino, lojaId, itens, papel }) {
-    setEntradaAberta(false);
+  function seguirDaEntrada({ destino, lojaId, itens, papel, despesa }) {
     setErro("");
+    // A despesa também se resolve sem trocar de tela: não há formulário
+    // adiante onde ela caberia — o que ela precisa já foi preenchido na
+    // própria caixa. Por isso ela é a única que volta um resultado.
+    if (destino === "despesa") {
+      if (!onLancarDespesa) return { erro: "Lançamento indisponível nesta tela." };
+      const r = onLancarDespesa({ ...(despesa || {}), obraId: obra.id }) || {};
+      if (r.erro) return r;
+      setEntradaAberta(false);
+      return r;
+    }
+    setEntradaAberta(false);
     // "mandar" não chega aqui: a própria caixa resolve, sem trocar de tela.
     if (destino === "cotacao") {
       const nova = cotacaoVazia(obra.id);
@@ -5846,12 +6030,20 @@ function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinhe
     if (igual) return igual;
     const nova = criarPrestadorRapido({
       nome, telefone: String((campos || {}).telefone || "").trim(),
-      categoria: "Loja / Comércio",
+      categoria: String((campos || {}).categoria || "").trim() || "Loja / Comércio",
     }, typeof uid === "function" ? uid() : String(Date.now()));
     if (!nova) return null;
     save({ ...data, fornecedores: todos.concat([nova]) });
     return nova;
   }
+
+  // As contas a pagar da obra em questão — é nelas que mora a parcela de
+  // contrato que o pagamento do empreiteiro pode estar quitando. Dentro da
+  // obra a lista chega vazia e vale a obra padrão; fora dela, a escolhida.
+  const contasDaObraDe = (id) => {
+    const alvo = ((data || {}).obras || []).find((o) => o && o.id === (id || (obraPadrao || {}).id));
+    return (alvo && alvo.contasPagar) || [];
+  };
 
   const seguir = (carga) => (carga && carga.destino === "mandar")
     ? mandarDaEntrada(carga)
@@ -5864,6 +6056,7 @@ function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinhe
       aoCadastrarInsumo={(campos) => cadastrarInsumoNoCatalogo(data, save, campos)}
       aoCriarLoja={criarLoja}
       aoAprender={(pares) => aprenderApelidosNoCatalogo(data, save, pares)}
+      aoVerContas={contasDaObraDe}
       aoFechar={aoFechar} aoSeguir={seguir} />
   );
 }
@@ -6018,7 +6211,7 @@ function BotaoDitar({ aoDitar, isMobile, compacto }) {
 }
 
 function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile, dinheiro,
-  obras, embutido, aoCadastrarInsumo, aoCriarLoja, aoAprender, aoFechar, aoSeguir }) {
+  obras, embutido, aoCadastrarInsumo, aoCriarLoja, aoAprender, aoVerContas, aoFechar, aoSeguir }) {
   const E = COT_ESTILO;
   const P = cotPainel(isMobile, 940);
   const [texto, setTexto] = useState("");
@@ -6049,20 +6242,28 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // ter que recomeçar a leitura quando voltar.
   const [novaLoja, setNovaLoja] = useState(null);   // { nome, telefone }
   const [erroLoja, setErroLoja] = useState("");
+  // O papel que não é nota: o comprovante. Não tem itens — tem quem recebeu,
+  // quanto e quando. Quando ele chega, a leitura devolve isto em vez da
+  // lista, e a tela toda muda de assunto.
+  const [despesa, setDespesa] = useState(null);
+  const [enviandoComprov, setEnviandoComprov] = useState(false);
 
-  function abrirCadastroDeLoja(nome) {
+  // O mesmo cadastro-relâmpago serve a loja e a empreiteiro: muda só a
+  // categoria com que ele nasce, e quem abre o formulário é quem sabe dela.
+  function abrirCadastroDeLoja(nome, categoria) {
     setErroLoja("");
-    setNovaLoja({ nome: nome || "", telefone: "" });
+    setNovaLoja({ nome: nome || "", telefone: "", categoria: categoria || "Loja / Comércio" });
   }
 
   function salvarNovaLoja() {
     const f = novaLoja || {};
-    if (!String(f.nome || "").trim()) { setErroLoja("Escreva o nome da loja."); return; }
-    const criada = aoCriarLoja ? aoCriarLoja({ nome: f.nome, telefone: f.telefone }) : null;
+    if (!String(f.nome || "").trim()) { setErroLoja("Escreva o nome."); return; }
+    const criada = aoCriarLoja ? aoCriarLoja({ nome: f.nome, telefone: f.telefone, categoria: f.categoria }) : null;
     if (!criada) { setErroLoja("Não consegui cadastrar agora."); return; }
-    // Já escolhida: cadastrar e ter que procurar de novo é meio passo.
+    // Já escolhido: cadastrar e ter que procurar de novo é meio passo.
     setLojaId(criada.id);
     setLojasMarcadas(function (m) { return Object.assign({}, m, { [criada.id]: true }); });
+    setDespesa(function (d) { return d ? Object.assign({}, d, { favorecidoId: criada.id, parcelaId: "" }) : d; });
     setNovaLoja(null); setErroLoja(""); setAviso("");
   }
   const refTexto = useRef(null);
@@ -6097,7 +6298,21 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const resumo = itens ? resumoDaEntrada(itens) : null;
   const podeLer = !lendo && (!!String(texto).trim() || !!arquivo);
   const pedeObra = entradaPedeObra(obras);
-  const prova = entradaPronta(destino, lojaId, itens || [], obras, obraId);
+  const prova = despesa
+    ? despesaPronta(despesa, obras, obraId)
+    : entradaPronta(destino, lojaId, itens || [], obras, obraId);
+  const mexerDespesa = (muda) => setDespesa((d) => (d ? { ...d, ...muda } : d));
+  // As contas da obra escolhida, para achar parcela de contrato em aberto do
+  // prestador que acabou de receber.
+  const contasDaObraEscolhida = (typeof aoVerContas === "function" ? aoVerContas(obraId) : []) || [];
+  const parcelasDoFavorecido = despesa
+    ? parcelasEmAbertoDoPrestador(contasDaObraEscolhida, despesa.favorecidoId)
+    : [];
+  const parcelaSugerida = despesa ? parcelaQueCasa(parcelasDoFavorecido, despesa.valor) : null;
+  // Só as contas de despesa: lançar um pagamento numa conta de receita é
+  // inverter o sinal do P&L inteiro.
+  const contasDeDespesa = (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [])
+    .filter((c) => c && c.grupo !== "receitas");
 
   // A leitura já sabe o que cada linha é — mas proposta é proposta, e quem
   // carimba é a pessoa. O que não pode é cobrar onze toques por isso: as
@@ -6185,8 +6400,17 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
       // Papel com preço (PDF) tem leitor próprio, de graça e na hora: número,
       // vencimento, desconto e valor saem do papel. Só texto e foto é que
       // precisam da IA, e mesmo aí ela volta sem preço — preço é do papel.
+      // Comprovante antes de tudo: é outro papel, com outra saída. Decidir
+      // isto depois de tentar achar a tabela de itens só daria o erro
+      // errado — "não achei a tabela" num papel que nunca teve tabela.
+      const linhasDoComprovante = ehPdf(alvo) ? await linhasDoPdf(alvo) : String(paraLer || texto || "").split("\n");
+      const comp = dadosDoComprovante(linhasDoComprovante);
+      if (comp) {
+        abrirDespesaLida(comp, ctx);
+        return;
+      }
       if (ehPdf(alvo)) {
-        const o = interpretarOrcamento(await linhasDoPdf(alvo));
+        const o = interpretarOrcamento(linhasDoComprovante);
         if (!(o.itens || []).length) throw new Error("Não achei a tabela de itens neste PDF. Se for foto ou digitalização, cole o texto.");
         const lidos = itensDaEntrada(o, "orcamento", insumos || []);
         setItens(lidos);
@@ -6216,8 +6440,31 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
 
   const [papel, setPapel] = useState(null);
 
+  // O comprovante lido vira o card da despesa já preenchido. Quem recebeu sai
+  // de duas fontes que se completam: o nome que o banco imprimiu, casado com
+  // o cadastro; e o prestador que a própria frase disse ("paguei o Zé").
+  // A conta contábil fica em branco de propósito — é a única coisa que nem o
+  // papel nem a frase sabem, e chutá-la é errar o P&L em silêncio.
+  function abrirDespesaLida(comp, ctx) {
+    const achado = prestadorDoComprovante(prestadores || [], comp.favorecido)
+      || (ctx && ctx.loja) || null;
+    setItens(null); setPapel(null);
+    setDestino("despesa");
+    setDespesa({
+      favorecidoId: achado ? achado.id : "",
+      lidoComo: comp.favorecido || "",
+      documento: comp.documento || "",
+      // O campo de dinheiro trabalha com número; o papel entrega "5.000,00".
+      valor: comp.valor ? numeroDeCampo(comp.valor) : "",
+      pagoEm: comp.pagoEm || new Date().toISOString().slice(0, 10),
+      contaId: "",
+      descricao: "",
+      parcelaId: "",
+    });
+  }
+
   function limpar() {
-    setTexto(""); setArquivo(null); setItens(null); setPapel(null);
+    setTexto(""); setArquivo(null); setItens(null); setPapel(null); setDespesa(null);
     setDestino(""); setLojaId(""); setObraId(""); setAviso(""); setReconhecido(null);
     setLojasMarcadas({}); setBuscaLoja(""); setFila(null); setEnviado(null);
   }
@@ -6262,8 +6509,29 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     setFila(fila.i + 1 < fila.lojas.length ? { ...fila, i: fila.i + 1 } : null);
   }
 
+  // A despesa é a única saída que GRAVA de dentro da Entrada sem passar por
+  // outra tela — não há formulário adiante onde anexar o comprovante, então
+  // ele sobe aqui, antes de mandar. Falhar o envio não impede o lançamento:
+  // o gasto é o que importa, e o papel se anexa depois na conta.
+  async function seguirComDespesa() {
+    if (!prova.ok) { setAviso(prova.motivo); return; }
+    let comprovante = null;
+    if (arquivo) {
+      setEnviandoComprov(true);
+      try { comprovante = await enviarComprovante(arquivo); }
+      catch (e) { setAviso("O pagamento foi lançado, mas o comprovante não subiu: " + (e.message || "")); }
+      finally { setEnviandoComprov(false); }
+    }
+    const fav = (prestadores || []).find((f) => f && f.id === despesa.favorecidoId) || {};
+    const r = aoSeguir({ destino: "despesa", obraId,
+      despesa: { ...despesa, favorecido: fav.nome || despesa.lidoComo || "", comprovante } }) || {};
+    if (r.erro) { setAviso(r.erro); return; }
+    if (embutido) limpar();
+  }
+
   function seguir() {
     if (destino === "mandar") { mandarParaAsLojas(); return; }
+    if (destino === "despesa") { seguirComDespesa(); return; }
     if (!prova.ok) { setAviso(prova.motivo); return; }
     aoSeguir({ destino, lojaId, obraId, itens, papel });
     // Embutida, a caixa é a própria tela: ela fica, e tem que ficar limpa
@@ -6273,6 +6541,111 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
 
   const cartao = { borderWidth: 1, borderStyle: "solid", borderColor: "rgba(38,36,33,0.14)",
     borderRadius: 12, padding: 12, marginBottom: 12, background: "#fff" };
+
+  // Cadastro-relâmpago de quem ainda não existe. Serve a loja do pedido e o
+  // empreiteiro da despesa — mora numa variável porque aparece nos dois
+  // lugares, e escrito duas vezes viraria dois cadastros diferentes.
+  const blocoCadastroRapido = novaLoja && (
+    <div style={{ marginTop: 10, padding: 12, borderRadius: 12,
+      border: "1.5px solid #0474f4", background: "#f7fbff" }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0474f4", marginBottom: 8 }}>
+        Cadastrar {novaLoja.categoria === "Loja / Comércio" ? "loja" : "prestador"}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 200px", gap: 10 }}>
+        <div>
+          <label style={E.label}>Nome *</label>
+          <input style={E.input} autoFocus value={novaLoja.nome}
+            onChange={(e) => setNovaLoja({ ...novaLoja, nome: e.target.value })}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); salvarNovaLoja(); } }}
+            placeholder="ART GLASS vidros e esquadrias" />
+        </div>
+        <div>
+          <label style={E.label}>WhatsApp</label>
+          <input style={E.input} value={novaLoja.telefone}
+            onChange={(e) => setNovaLoja({ ...novaLoja, telefone: e.target.value })}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); salvarNovaLoja(); } }}
+            placeholder="(14) 99999-9999" />
+        </div>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label style={E.label}>Categoria</label>
+        <SelectBusca style={E.input} value={novaLoja.categoria}
+          onChange={(v) => setNovaLoja({ ...novaLoja, categoria: v })}
+          placeholder="Procurar categoria…"
+          opcoes={(typeof CATEGORIAS_PRESTADOR !== "undefined" ? CATEGORIAS_PRESTADOR : ["Loja / Comércio"])
+            .map((c) => ({ valor: c, rotulo: c }))} />
+      </div>
+      <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>
+        Só o nome é obrigatório. Sem telefone, o cadastro existe mas não recebe a lista
+        pelo WhatsApp — o resto se completa depois em Prestadores de Serviços.
+      </div>
+      {erroLoja && <div style={{ fontSize: 11.5, color: "#dc2626", marginTop: 6 }}>{erroLoja}</div>}
+      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        <button type="button" style={{ ...E.btn, fontSize: 12, padding: "6px 14px" }}
+          onClick={salvarNovaLoja}>Cadastrar e usar</button>
+        <button type="button" style={{ ...E.btnSec, fontSize: 12, padding: "6px 14px" }}
+          onClick={() => { setNovaLoja(null); setErroLoja(""); }}>Cancelar</button>
+      </div>
+    </div>
+  );
+
+  // Obra e destino são as mesmas duas perguntas para qualquer papel — lista
+  // de material ou comprovante de pagamento. Moram numa variável só porque
+  // aparecem em dois lugares da tela, e a mesma pergunta escrita duas vezes
+  // vira duas perguntas diferentes na primeira correção.
+  const blocoObraEDestino = (
+    <>
+      {pedeObra && (
+        <>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", margin: "14px 0 8px" }}>
+            Para qual obra?
+          </div>
+          <SelectBusca style={E.input} value={obraId} onChange={(v) => setObraId(v)}
+            placeholder="Procurar obra…"
+            opcoes={[{ valor: "", rotulo: "— escolha a obra —" }].concat(
+              (obras || []).map((o) => ({ valor: o.id, rotulo: o.nome, grupo: o.clienteNome || "" })))} />
+        </>
+      )}
+
+      {/* Comprovante não se pergunta: o papel já disse o que é, e as outras
+          saídas pedem itens que ele não tem. Fica a porta de volta, para o
+          dia em que a leitura errar. */}
+      {despesa ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+          margin: "14px 0 0", padding: "10px 12px", borderRadius: 12,
+          border: "1.5px solid #0474f4", background: "#eef5ff" }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#0474f4" }}>Comprovante de pagamento</div>
+            <div style={{ fontSize: 11, color: "#4b5563", marginTop: 2, lineHeight: 1.35 }}>
+              Entra como conta da obra já baixada, na data em que o dinheiro saiu.
+            </div>
+          </div>
+          <button type="button" style={{ ...E.btnSec, fontSize: 11.5, padding: "5px 12px" }}
+            onClick={() => { setDespesa(null); setDestino(""); setAviso(""); }}>
+            Não é comprovante
+          </button>
+        </div>
+      ) : (
+      <>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", margin: "14px 0 8px" }}>
+        O que é este papel?
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 8 }}>
+        {DESTINOS_DA_ENTRADA.filter((d) => d.id !== "despesa").map((d) => (
+          <button key={d.id} type="button" onClick={() => setDestino(d.id)}
+            style={{ textAlign: "left", cursor: "pointer", fontFamily: "inherit",
+              borderWidth: destino === d.id ? 1.5 : 1, borderStyle: "solid",
+              borderColor: destino === d.id ? "#0474f4" : "rgba(38,36,33,0.16)",
+              background: destino === d.id ? "#eef5ff" : "#fff", borderRadius: 12, padding: "10px 12px" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: destino === d.id ? "#0474f4" : "#111827" }}>{d.nome}</div>
+            <div style={{ fontSize: 11, color: "#4b5563", marginTop: 2, lineHeight: 1.35 }}>{d.resumo}</div>
+          </button>
+        ))}
+      </div>
+      </>
+      )}
+    </>
+  );
 
   // Duas roupas para o mesmo conteúdo: modal, quando a Entrada é chamada de
   // dentro de uma tela que já tem assunto; e card na página, quando ela É o
@@ -6295,7 +6668,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
         </div>
 
         <div style={rolagem}>
-          {!itens ? (
+          {!itens && !despesa ? (
             <>
               {/* O composer: uma caixa só, que cresce com o texto, aceita
                   arquivo arrastado ou colado, e tem a ação à direita. O campo
@@ -6369,6 +6742,127 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                 </div>
               </div>
               {lendo && <div style={{ marginTop: 10 }}><BarraLeituraIA progresso={progresso} /></div>}
+            </>
+          ) : despesa ? (
+            <>
+              {/* O comprovante lido. O que o banco disse fica à vista, como
+                  veio; o que ele não sabe (a conta contábil, o que foi o
+                  serviço) se escolhe aqui. */}
+              <div style={{ ...cartao, borderColor: "rgba(4,116,244,0.35)", background: "#f7fbff" }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0474f4", marginBottom: 4 }}>
+                  Pagamento lido do comprovante
+                </div>
+                <div style={{ fontSize: 11.5, color: "#4b5563" }}>
+                  {[despesa.lidoComo ? `para “${despesa.lidoComo}”` : "",
+                    despesa.documento || "",
+                    despesa.valor ? dinheiro(numeroDeCampo(despesa.valor)) : "sem valor no papel",
+                    despesa.pagoEm ? "em " + dataDoDiaBR(despesa.pagoEm) : ""]
+                    .filter(Boolean).join(" · ")}
+                </div>
+                {!despesa.favorecidoId && despesa.lidoComo && (
+                  <div style={{ fontSize: 11.5, color: "#b45309", marginTop: 6 }}>
+                    Não achei “{despesa.lidoComo}” no cadastro de prestadores. Escolha abaixo quem é,
+                    ou cadastre na hora pelo “+ cadastrar”.
+                  </div>
+                )}
+              </div>
+
+              <div style={cartao}>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={E.label}>Quem recebeu</label>
+                  <SelectBusca style={E.input} value={despesa.favorecidoId}
+                    onChange={(v) => mexerDespesa({ favorecidoId: v, parcelaId: "" })}
+                    placeholder="Procurar prestador…"
+                    aoCriar={(termo) => abrirCadastroDeLoja(termo || despesa.lidoComo || "", "Empreiteiro")}
+                    criarRotulo="cadastrar"
+                    opcoes={[{ valor: "", rotulo: "— escolha quem recebeu —" }].concat(
+                      (prestadores || []).map((f) => ({ valor: f.id, rotulo: f.nome, grupo: f.categoria || "" })))} />
+                  {blocoCadastroRapido}
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
+                  <div>
+                    <label style={E.label}>Valor pago</label>
+                    <CampoCtrNum tipo="moeda" style={E.input} valor={despesa.valor}
+                      onChange={(v) => mexerDespesa({ valor: v, parcelaId: "" })} />
+                  </div>
+                  <div>
+                    <label style={E.label}>Data do pagamento</label>
+                    <input type="date" style={E.input} value={despesa.pagoEm || ""}
+                      onChange={(e) => mexerDespesa({ pagoEm: e.target.value })} />
+                  </div>
+                </div>
+
+                {despesa.parcelaId ? (
+                  <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 10 }}>
+                    A conta contábil e a descrição vêm da parcela do contrato.
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ marginTop: 10 }}>
+                      <label style={E.label}>Conta contábil</label>
+                      <SelectBusca style={E.input} value={despesa.contaId}
+                        onChange={(v) => mexerDespesa({ contaId: v })}
+                        placeholder="Procurar conta…"
+                        opcoes={[{ valor: "", rotulo: "— escolha a conta —" }].concat(
+                          contasDeDespesa.map((c) => ({ valor: c.id, rotulo: c.nome, grupo: c.grupo || "" })))} />
+                    </div>
+
+                    <div style={{ marginTop: 10 }}>
+                      <label style={E.label}>O que foi (aparece no contas a pagar)</label>
+                      <input style={E.input} value={despesa.descricao || ""}
+                        placeholder="Mão de obra da alvenaria, 2ª medição…"
+                        onChange={(e) => mexerDespesa({ descricao: e.target.value })} />
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Quem recebeu já tinha parcela combinada? Então este dinheiro
+                  é a baixa dela. Criar despesa nova por cima deixaria o
+                  contrato eternamente em aberto e o gasto contado duas vezes. */}
+              {parcelasDoFavorecido.length > 0 && (
+                <div style={{ ...cartao, borderColor: "rgba(245,158,11,0.45)", background: "#fffbeb" }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "#92400e", marginBottom: 2 }}>
+                    {parcelasDoFavorecido.length === 1
+                      ? "Esse prestador tem 1 parcela de contrato em aberto nesta obra"
+                      : `Esse prestador tem ${parcelasDoFavorecido.length} parcelas de contrato em aberto nesta obra`}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "#78350f", marginBottom: 8 }}>
+                    Se este pagamento é de uma delas, aponte qual: a parcela é baixada, e o contrato anda.
+                    Lançar como despesa avulsa deixaria a parcela em aberto e o gasto contado duas vezes.
+                  </div>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", cursor: "pointer" }}>
+                    <input type="radio" name="parcela-despesa" checked={!despesa.parcelaId}
+                      onChange={() => mexerDespesa({ parcelaId: "" })} />
+                    <span style={{ fontSize: 12.5, color: "#111827" }}>Despesa avulsa, fora de contrato</span>
+                  </label>
+                  {parcelasDoFavorecido.map((c) => (
+                    <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 8,
+                      padding: "6px 0", borderTop: "1px solid rgba(146,64,14,0.12)", cursor: "pointer" }}>
+                      <input type="radio" name="parcela-despesa" checked={despesa.parcelaId === c.id}
+                        onChange={() => mexerDespesa({ parcelaId: c.id, valor: despesa.valor })} />
+                      <span style={{ fontSize: 12.5, color: "#111827", minWidth: 0 }}>
+                        {(c.descricao || c.servico || "Parcela")}
+                        {/* a descrição do contrato quase sempre já diz "2ª parcela" —
+                            repetir o número ali vira "2ª parcela 2" */}
+                        {c.parcela && !/parcela/i.test(c.descricao || "") ? ` · parcela ${c.parcela}` : ""}
+                        {" · vence "}{dataDoDiaBR(c.vencimento)}{" · "}{dinheiro(numeroDeCampo(c.valor))}
+                        {parcelaSugerida && parcelaSugerida.id === c.id && !despesa.parcelaId
+                          ? " — mesmo valor do comprovante" : ""}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              {blocoObraEDestino}
+
+              {arquivo && (
+                <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 10 }}>
+                  {"\u{1F4CE}"} {arquivo.name} — vai anexado à conta como comprovante.
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -6509,33 +7003,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                 </div>
               )}
 
-              {pedeObra && (
-                <>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", margin: "14px 0 8px" }}>
-                    Para qual obra?
-                  </div>
-                  <SelectBusca style={E.input} value={obraId} onChange={(v) => setObraId(v)}
-                    placeholder="Procurar obra…"
-                    opcoes={[{ valor: "", rotulo: "— escolha a obra —" }].concat(
-                      (obras || []).map((o) => ({ valor: o.id, rotulo: o.nome, grupo: o.clienteNome || "" })))} />
-                </>
-              )}
-
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", margin: "14px 0 8px" }}>
-                O que é este papel?
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 8 }}>
-                {DESTINOS_DA_ENTRADA.map((d) => (
-                  <button key={d.id} type="button" onClick={() => setDestino(d.id)}
-                    style={{ textAlign: "left", cursor: "pointer", fontFamily: "inherit",
-                      borderWidth: destino === d.id ? 1.5 : 1, borderStyle: "solid",
-                      borderColor: destino === d.id ? "#0474f4" : "rgba(38,36,33,0.16)",
-                      background: destino === d.id ? "#eef5ff" : "#fff", borderRadius: 12, padding: "10px 12px" }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: destino === d.id ? "#0474f4" : "#111827" }}>{d.nome}</div>
-                    <div style={{ fontSize: 11, color: "#4b5563", marginTop: 2, lineHeight: 1.35 }}>{d.resumo}</div>
-                  </button>
-                ))}
-              </div>
+              {blocoObraEDestino}
 
               {destino === "mandar" && (
                 <div style={{ marginTop: 12 }}>
@@ -6581,41 +7049,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                 </div>
               )}
 
-              {novaLoja && (
-                <div style={{ marginTop: 10, padding: 12, borderRadius: 12,
-                  border: "1.5px solid #0474f4", background: "#f7fbff" }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0474f4", marginBottom: 8 }}>
-                    Cadastrar loja
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 200px", gap: 10 }}>
-                    <div>
-                      <label style={E.label}>Nome *</label>
-                      <input style={E.input} autoFocus value={novaLoja.nome}
-                        onChange={(e) => setNovaLoja({ ...novaLoja, nome: e.target.value })}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); salvarNovaLoja(); } }}
-                        placeholder="ART GLASS vidros e esquadrias" />
-                    </div>
-                    <div>
-                      <label style={E.label}>WhatsApp</label>
-                      <input style={E.input} value={novaLoja.telefone}
-                        onChange={(e) => setNovaLoja({ ...novaLoja, telefone: e.target.value })}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); salvarNovaLoja(); } }}
-                        placeholder="(14) 99999-9999" />
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>
-                    Só o nome é obrigatório. Sem telefone, a loja fica cadastrada mas não recebe a
-                    lista pelo WhatsApp — o resto do cadastro se completa depois em Prestadores de Serviços.
-                  </div>
-                  {erroLoja && <div style={{ fontSize: 11.5, color: "#dc2626", marginTop: 6 }}>{erroLoja}</div>}
-                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                    <button type="button" style={{ ...E.btn, fontSize: 12, padding: "6px 14px" }}
-                      onClick={salvarNovaLoja}>Cadastrar e usar</button>
-                    <button type="button" style={{ ...E.btnSec, fontSize: 12, padding: "6px 14px" }}
-                      onClick={() => { setNovaLoja(null); setErroLoja(""); }}>Cancelar</button>
-                  </div>
-                </div>
-              )}
+              {blocoCadastroRapido}
 
 
 
@@ -6657,11 +7091,11 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
 
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14, flexWrap: "wrap" }}>
           {!embutido && <button type="button" style={E.btnSec} onClick={aoFechar}>Fechar</button>}
-          {itens && (
+          {(itens || despesa) && (
             <button type="button" style={E.btnSec}
-              onClick={() => { setItens(null); setDestino(""); setObraId(""); setAviso(""); setReconhecido(null); }}>Ler de novo</button>
+              onClick={() => { setItens(null); setDespesa(null); setDestino(""); setObraId(""); setAviso(""); setReconhecido(null); }}>Ler de novo</button>
           )}
-          {embutido && !itens && String(texto).trim() !== "" && (
+          {embutido && !itens && !despesa && String(texto).trim() !== "" && (
             <button type="button" style={E.btnSec} onClick={limpar}>Limpar</button>
           )}
           {/* Ler é a seta azul do composer, uma ação só e no lugar onde a mão
@@ -6672,6 +7106,14 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                 cursor: marcadasIds.length ? "pointer" : "not-allowed" }}
               disabled={!marcadasIds.length}>
               {enviado ? "Mandar de novo" : marcadasIds.length > 1 ? `Enviar para ${marcadasIds.length}` : "Enviar"}
+            </button>
+          ) : despesa ? (
+            <button type="button" onClick={seguir}
+              style={{ ...E.btn, opacity: prova.ok && !enviandoComprov ? 1 : 0.45,
+                cursor: prova.ok && !enviandoComprov ? "pointer" : "not-allowed" }}
+              disabled={!prova.ok || enviandoComprov}>
+              {enviandoComprov ? "Anexando o comprovante…"
+                : despesa.parcelaId ? "Baixar a parcela" : "Lançar a despesa"}
             </button>
           ) : itens ? (
             <button type="button" onClick={seguir}

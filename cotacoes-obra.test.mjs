@@ -83,13 +83,158 @@ const modulo = new Function(`
            entradaPronta, entradaPedeLoja, entradaPedeObra, DESTINOS_DA_ENTRADA,
            contextoDaEntrada, cotMioloDoNome, tituloDaListaRapida, textoDaListaRapida,
            pedacoDeDanfe, juntarLinhasDaDanfe, descricaoSemMaterial, palavraDeMaterial,
-           ehDanfe, numeroDaNota, dataDaNota };
+           ehDanfe, numeroDaNota, dataDaNota,
+           ehComprovante, valorDoComprovante, dataDoComprovante, favorecidoDoComprovante,
+           documentoDoComprovante, dadosDoComprovante, prestadorDoComprovante,
+           despesaPronta, parcelasEmAbertoDoPrestador, parcelaQueCasa };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
 const M = modulo;
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
+
+
+// ── O comprovante de pagamento ──────────────────────────────────
+const COMPROV_PIX = [
+  "Banco Exemplo S.A.",
+  "Comprovante de transferência Pix",
+  "Valor",
+  "R$ 5.000,00",
+  "Data do pagamento",
+  "02/10/2026",
+  "Destinatário",
+  "JOSE DA SILVA CONSTRUCOES ME",
+  "CNPJ",
+  "12.345.678/0001-90",
+  "Instituição",
+  "Banco do Brasil",
+  "ID da transação E2E123456789",
+];
+
+teste("comprovante de Pix é reconhecido como comprovante", () => {
+  assert.strictEqual(M.ehComprovante(COMPROV_PIX.join("\n")), true);
+});
+
+teste("nota fiscal não vira comprovante, mesmo falando em pagamento", () => {
+  const danfe = ["DANFE", "DOCUMENTO AUXILIAR DA NOTA FISCAL ELETRONICA",
+    "FORMA DE PAGAMENTO", "Comprovante de entrega"].join("\n");
+  assert.strictEqual(M.ehComprovante(danfe), false);
+});
+
+teste("comprovante entrega valor, data, favorecido e documento", () => {
+  const d = M.dadosDoComprovante(COMPROV_PIX);
+  assert.strictEqual(d.valor, "5.000,00");
+  assert.strictEqual(d.pagoEm, "2026-10-02");
+  assert.strictEqual(d.favorecido, "JOSE DA SILVA CONSTRUCOES ME");
+  assert.strictEqual(d.documento, "12.345.678/0001-90");
+});
+
+teste("a linha do PDF chega como objeto e é lida igual", () => {
+  const doPdf = COMPROV_PIX.map((s) => ({ celulas: s.split(" "), texto: s }));
+  const d = M.dadosDoComprovante(doPdf);
+  assert.strictEqual(d.valor, "5.000,00");
+  assert.strictEqual(d.favorecido, "JOSE DA SILVA CONSTRUCOES ME");
+});
+
+teste("papel que não é comprovante volta null", () => {
+  assert.strictEqual(M.dadosDoComprovante(["Lista de material", "10 sacos de cimento"]), null);
+});
+
+teste("valor na mesma linha do rótulo também é lido", () => {
+  assert.strictEqual(M.valorDoComprovante("Valor do pagamento: R$ 1.234,56"), "1.234,56");
+});
+
+teste("tarifa de R$ 0,00 no rodapé não vira o valor do pagamento", () => {
+  const t = ["Comprovante", "Valor: R$ 850,00", "Tarifa: R$ 0,00"].join("\n");
+  assert.strictEqual(M.valorDoComprovante(t), "850,00");
+});
+
+teste("data do pagamento ganha da data de emissão do comprovante", () => {
+  const t = ["Comprovante emitido em 05/10/2026", "Data do pagamento", "02/10/2026"].join("\n");
+  assert.strictEqual(M.dataDoComprovante(t), "2026-10-02");
+});
+
+teste("CPF mascarado é aceito como documento", () => {
+  assert.strictEqual(M.documentoDoComprovante("CPF ***.123.456-**"), "***.123.456-**");
+});
+
+teste("rótulo do banco não é confundido com o nome de quem recebeu", () => {
+  const ls = ["Favorecido", "CPF", "***.111.222-**", "MARIA DE SOUZA"];
+  assert.strictEqual(M.favorecidoDoComprovante(ls), "MARIA DE SOUZA");
+});
+
+teste("favorecido na mesma linha do rótulo", () => {
+  assert.strictEqual(M.favorecidoDoComprovante(["Favorecido: Zé Pedreiro Ltda"]), "Zé Pedreiro Ltda");
+});
+
+teste("o prestador do comprovante casa por pedaço do nome", () => {
+  const lista = [{ id: "p1", nome: "José da Silva Construções" }, { id: "p2", nome: "Pantanal Materiais" }];
+  const achado = M.prestadorDoComprovante(lista, "JOSE DA SILVA CONSTRUCOES ME");
+  assert.strictEqual(achado && achado.id, "p1");
+});
+
+teste("dois prestadores plausíveis: não adivinha", () => {
+  const lista = [{ id: "p1", nome: "Silva" }, { id: "p2", nome: "Silva Materiais" }];
+  assert.strictEqual(M.prestadorDoComprovante(lista, "Silva Materiais e Silva"), null);
+});
+
+// ── Despesa paga ────────────────────────────────────────────────
+teste("despesa pede obra, favorecido, valor, data e conta — nessa ordem", () => {
+  const obras = [{ id: "o1" }];
+  assert.strictEqual(M.despesaPronta({}, obras, "").motivo, "Escolha a obra.");
+  assert.strictEqual(M.despesaPronta({}, obras, "o1").motivo, "Escolha quem recebeu.");
+  assert.strictEqual(M.despesaPronta({ favorecidoId: "p1" }, obras, "o1").motivo, "Informe o valor pago.");
+  assert.strictEqual(M.despesaPronta({ favorecidoId: "p1", valor: "5.000,00" }, obras, "o1").motivo,
+    "Informe a data do pagamento.");
+  assert.strictEqual(M.despesaPronta({ favorecidoId: "p1", valor: "5.000,00", pagoEm: "2026-10-02" }, obras, "o1").motivo,
+    "Escolha a conta contábil.");
+  assert.strictEqual(M.despesaPronta({ favorecidoId: "p1", valor: "5.000,00", pagoEm: "2026-10-02", contaId: "mao_obra" },
+    obras, "o1").ok, true);
+});
+
+teste("baixando parcela, a conta contábil vem dela — não se pergunta", () => {
+  const r = M.despesaPronta({ favorecidoId: "p1", valor: "5.000,00", pagoEm: "2026-10-02", parcelaId: "c2" }, [], "");
+  assert.strictEqual(r.ok, true);
+});
+
+teste("dentro da obra não se pede obra de novo", () => {
+  const r = M.despesaPronta({ favorecidoId: "p1", valor: "100,00", pagoEm: "2026-10-02", contaId: "mao_obra" }, [], "");
+  assert.strictEqual(r.ok, true);
+});
+
+teste("despesa com destino na lista de saídas", () => {
+  assert.ok(M.DESTINOS_DA_ENTRADA.some((d) => d.id === "despesa"));
+  assert.strictEqual(M.entradaPedeLoja("despesa"), false);
+});
+
+const CONTAS_PARCELA = [
+  { id: "c1", origem: "contrato", contratoId: "ct1", prestadorId: "p1", valor: 5000, vencimento: "2026-11-10", pago: false },
+  { id: "c2", origem: "contrato", contratoId: "ct1", prestadorId: "p1", valor: 5000, vencimento: "2026-10-10", pago: false },
+  { id: "c3", origem: "contrato", contratoId: "ct1", prestadorId: "p1", valor: 5000, vencimento: "2026-09-10", pago: true },
+  { id: "c4", origem: "avulsa", contratoId: "", prestadorId: "p1", valor: 300, vencimento: "2026-10-01", pago: false },
+  { id: "c5", origem: "contrato", contratoId: "ct2", prestadorId: "p2", valor: 900, vencimento: "2026-10-05", pago: false },
+];
+
+teste("parcelas em aberto do prestador: só contrato, só dele, mais antiga primeiro", () => {
+  const ps = M.parcelasEmAbertoDoPrestador(CONTAS_PARCELA, "p1");
+  assert.deepStrictEqual(ps.map((c) => c.id), ["c2", "c1"]);
+});
+
+teste("sem prestador não há parcela", () => {
+  assert.deepStrictEqual(M.parcelasEmAbertoDoPrestador(CONTAS_PARCELA, ""), []);
+});
+
+teste("a parcela que casa é a do mesmo valor, a mais antiga", () => {
+  const ps = M.parcelasEmAbertoDoPrestador(CONTAS_PARCELA, "p1");
+  const casa = M.parcelaQueCasa(ps, "5.000,00");
+  assert.strictEqual(casa && casa.id, "c2");
+});
+
+teste("valor diferente não casa parcela nenhuma", () => {
+  const ps = M.parcelasEmAbertoDoPrestador(CONTAS_PARCELA, "p1");
+  assert.strictEqual(M.parcelaQueCasa(ps, "4.000,00"), null);
+});
 
 // ── Modelo ──────────────────────────────────────────────────────
 teste("cotação nasce aberta, sem propostas e exigindo aval do cliente", () => {
@@ -2620,7 +2765,7 @@ teste("pedido e pagamento pedem loja; cotação não", () => {
 
 teste("as portas de saída, na ordem da vida", () => {
   assert.deepStrictEqual(M.DESTINOS_DA_ENTRADA.map((d) => d.id),
-    ["mandar", "pedido", "pagamento", "cotacao"]);
+    ["mandar", "pedido", "pagamento", "despesa", "cotacao"]);
 });
 
 

@@ -2725,6 +2725,18 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // o que estava solto neste cliente já foi para dentro das obras
     contratos: (data.contratos || []).filter(c => c.clienteId !== cliente.id),
   });
+  // Gravada que parte do dado MAIS FRESCO, não do retrato com que a tela
+  // renderizou. É o que as migrações de montagem precisam: elas disparam no
+  // mesmo commit em que outra ação pode estar gravando, e partindo do
+  // retrato antigo apagam o que a outra acabou de escrever — foi assim que
+  // a primeira despesa lançada pela Entrada sumiu das contas a pagar.
+  const gravarObrasFrescas = (mudar) => save((atual) => {
+    const minhas = (atual.obras || []).filter(o => o && o.clienteId === cliente.id);
+    const fatia = mudar(minhas);
+    if (!fatia) return null;
+    return { ...atual, obras: mesclarPorCliente(atual.obras, cliente.id, fatia) };
+  });
+
   const statusObra = { planejamento: { label: "Planejamento", cor: "#f59e0b" }, execucao: { label: "Em execução", cor: "#3b82f6" }, concluida: { label: "Concluída", cor: "#10b981" } };
   const statusContrato = { ativo: { label: "Ativo", cor: "#10b981" }, pendente: { label: "Pendente", cor: "#f59e0b" }, encerrado: { label: "Encerrado", cor: "#9ca3af" } };
 
@@ -2782,10 +2794,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const carregouEstimativa = useRef(false);
   useEffect(() => {
     if (carregouEstimativa.current) return;
-    const alvo = obras.map(o => estimativaCargaUnica(o, CARGA_ESTIMATIVA_UNICA, () => uid())).find(Boolean);
-    if (!alvo) return;
+    if (!obras.map(o => estimativaCargaUnica(o, CARGA_ESTIMATIVA_UNICA, () => uid())).find(Boolean)) return;
     carregouEstimativa.current = true;
-    gravarObras(obras.map(o => (o.id === alvo.id ? alvo : o)));
+    // Recalcula sobre o dado fresco: entre o teste acima e esta gravada pode
+    // ter entrado uma conta a pagar, e regravar o retrato antigo a apagaria.
+    gravarObrasFrescas((atuais) => {
+      const alvo = atuais.map(o => estimativaCargaUnica(o, CARGA_ESTIMATIVA_UNICA, () => uid())).find(Boolean);
+      return alvo ? atuais.map(o => (o.id === alvo.id ? alvo : o)) : null;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [obras.length]);
 
@@ -2798,7 +2814,17 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       && !obras.some(o => (o.contratos || []).some(x => x.id === c.id)));
     if (!soltos.length) return;
     migrouContratos.current = true;
-    gravarContratos(contratos);
+    // Mesma razão da carga da estimativa: parte do dado fresco, senão
+    // apaga o que outra ação gravou no mesmo commit.
+    save((atual) => {
+      const minhas = (atual.obras || []).filter(o => o && o.clienteId === cliente.id);
+      const todos = contratosDasObras(minhas, cliente.id)
+        .concat((atual.contratos || []).filter(c => c.clienteId === cliente.id));
+      return { ...atual,
+        obras: mesclarPorCliente(atual.obras, cliente.id,
+          contratosNasObras(minhas, todos, cliente.id, obraSelecionada && obraSelecionada.id)),
+        contratos: (atual.contratos || []).filter(c => c.clienteId !== cliente.id) };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contratosLegado.length, obras.length]);
 
@@ -4879,6 +4905,42 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     return { gravado: true };
   }
 
+  // Despesa paga lida pela Entrada: empreiteiro, mão de obra, taxa, aluguel.
+  // Dois desfechos, uma gravada só. Se a pessoa apontou a parcela de
+  // contrato, é ela que recebe a baixa — o contrato anda e o gasto não se
+  // conta duas vezes. Se não, abre-se uma conta avulsa que já nasce baixada,
+  // porque o dinheiro saiu antes de a conta existir.
+  //
+  // Nos dois casos a escrita passa por `gravarContas`, e por isso o preço do
+  // catálogo e o extrato do escritório ficam sabendo sem ninguém avisar.
+  function lancarDespesaDaEntrada(d) {
+    if (!obraAtual) return { erro: "Obra não encontrada." };
+    if (!perm.podeGerenciarObra) return { erro: "Sem permissão para lançar nesta obra." };
+    const valor = numeroDeCampo(d.valor) || 0;
+    if (!(valor > 0)) return { erro: "Informe o valor pago." };
+    if (!d.pagoEm) return { erro: "Informe a data do pagamento." };
+    const quem = quemSou();
+    const baixa = { pagoEm: d.pagoEm, valorPago: valor, comprovante: d.comprovante || null };
+    const contas = obraAtual.contasPagar || [];
+
+    if (d.parcelaId) {
+      const alvo = contas.find(c => c && c.id === d.parcelaId);
+      if (!alvo) return { erro: "Não achei essa parcela — ela pode ter sido baixada por outro caminho." };
+      if (alvo.pago) return { erro: "Essa parcela já está baixada." };
+      gravarContas(contas.map(c => c.id === alvo.id ? contaPaga(c, baixa, quem) : c), obraAtual.id);
+      return { gravado: true, parcela: true, favorecido: alvo.favorecido || d.favorecido || "" };
+    }
+
+    const nova = registrarAto({ ...contaAvulsaVazia(obraAtual.id),
+      contaId: d.contaId || "material",
+      prestadorId: d.prestadorId || d.favorecidoId || "",
+      favorecido: d.favorecido || "",
+      descricao: String(d.descricao || "").trim() || "Pagamento a " + (d.favorecido || "prestador"),
+      valor, vencimento: d.pagoEm }, "criada", quem);
+    gravarContas(contas.concat([contaPaga(nova, baixa, quem)]), obraAtual.id);
+    return { gravado: true, contaId: nova.id, favorecido: d.favorecido || "" };
+  }
+
   // Recalibrar as entregas de um pedido sem sair da cotação: é lá que se
   // olha o combinado com o fornecedor, e é lá que se descobre que a entrega
   // mudou de data. As contas a pagar são as mesmas — só quem as move muda.
@@ -5050,6 +5112,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         abrirEntrada={abrirEntrada} entradaInicial={entradaInicial}
         onGerarContrato={abrirContratoDaCotacao}
         onLancarContas={lancarCotacaoEmContas}
+        onLancarDespesa={lancarDespesaDaEntrada}
         onDesfazerLancamento={desfazerLancamentoDaCotacao}
         onRecalibrarPedido={recalibrarPedidoDaCotacao} onExcluirPedido={excluirPedidoDaLoja}
       />
