@@ -2485,6 +2485,10 @@ function SelectBusca(props) {
     <>
       <button type="button" ref={refBotao} disabled={!!props.disabled} id={props.id}
         className={props.className}
+        /* Diz que isto é um CAMPO, e não um botão de ação: é o que permite à
+           regra de toque do celular engordar os campos sem engordar junto o
+           "Editar" e o "Excluir" das listas. */
+        data-vk-campo="1"
         title={props.title || (escolhida ? escolhida.rotulo : "")}
         style={estiloBotao}
         onClick={function () { if (props.disabled) return; if (aberto) fechar(); else abrir(""); }}
@@ -61870,6 +61874,32 @@ export default function ModuloClientesFornecedores() {
         [data-vk-ui="1"] select:focus,
         [data-vk-ui="1"] textarea:focus {
           border-color:#0474f4 !important; box-shadow:0 0 0 3px rgba(4,116,244,0.18); outline:none;
+        }
+
+        /* ── O campo no celular ──────────────────────────────────
+           Duas coisas, e as duas só abaixo de 768px (o mesmo corte do
+           isMobile), para a tela grande ficar exatamente como está:
+
+           16px de fonte. Abaixo disso o Safari do iPhone dá zoom sozinho ao
+           focar o campo, e a tela fica torta até o teclado fechar. É regra
+           do navegador, não preferência de desenho.
+
+           44px de altura. É o alvo de toque mínimo; com 33px erra-se o
+           campo vizinho com o polegar.
+
+           O !important e porque os estilos do app sao inline, e inline ganha
+           de folha de estilo sem ele. Caixa de marcar, botao de radio e
+           campo de arquivo ficam de fora: engorda-los nao ajuda ninguem.
+           O seletor data-vk-campo e o gatilho do SelectBusca, que e um botao
+           mas se comporta como campo. */
+        @media (max-width: 767px) {
+          [data-vk-ui="1"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+          [data-vk-ui="1"] select,
+          [data-vk-ui="1"] textarea,
+          [data-vk-ui="1"] [data-vk-campo="1"] {
+            font-size: 16px !important;
+            min-height: 44px !important;
+          }
         }
       `}</style>
 

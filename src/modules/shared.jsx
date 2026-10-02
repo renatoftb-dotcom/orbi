@@ -2481,6 +2481,10 @@ function SelectBusca(props) {
     <>
       <button type="button" ref={refBotao} disabled={!!props.disabled} id={props.id}
         className={props.className}
+        /* Diz que isto é um CAMPO, e não um botão de ação: é o que permite à
+           regra de toque do celular engordar os campos sem engordar junto o
+           "Editar" e o "Excluir" das listas. */
+        data-vk-campo="1"
         title={props.title || (escolhida ? escolhida.rotulo : "")}
         style={estiloBotao}
         onClick={function () { if (props.disabled) return; if (aberto) fechar(); else abrir(""); }}
