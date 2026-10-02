@@ -140,6 +140,29 @@ teste("a etapa vem do insumo, não se digita", () => {
   assert.strictEqual(m[0].etapa, "fundacao");
 });
 
+teste("insumo sem etapa padrao usa a etapa escolhida na cotacao", () => {
+  // a cotacao guarda a etapa em `etapaId`; ler `etapa` deixava tudo em branco
+  const cot = { ...COT_MED, etapaId: "supra_paredes_1" };
+  const semPadrao = [{ id: "m1", codigo: "CON-001", nome: "Concreto FCK25", unidade: "m3", grupo: "Concreto" }];
+  const m = M.medicaoDaCotacao(cot, cot.propostas[0], semPadrao);
+  assert.strictEqual(m[0].etapa, "supra_paredes_1");
+  assert.deepStrictEqual(M.validarMedicao(m).erros, [], "e com etapa ela ja passa a valer");
+});
+
+teste("item fora do catalogo tambem herda a etapa da cotacao", () => {
+  const cot = { ...COT_MED, etapaId: "pre_obra" };
+  const m = M.medicaoDaCotacao(cot, cot.propostas[0], []);
+  assert.strictEqual(m[0].etapa, "pre_obra");
+});
+
+teste("a conta antiga herda a etapa da cotacao quando o insumo nao tem padrao", () => {
+  const cot = { ...COT_MED, etapaId: "supra_paredes_1" };
+  const semPadrao = [{ id: "m1", codigo: "CON-001", nome: "Concreto FCK25", unidade: "m3", grupo: "Concreto" }];
+  const c = { id: "k9", cotacaoId: "c1", valor: 6050 };
+  const r = M.completarItemDaConta(c, { id: "o1", cotacoes: [cot] }, semPadrao, [c]);
+  assert.strictEqual(r.etapa, "supra_paredes_1");
+});
+
 teste("medir menos muda o total — e é o total que vira conta", () => {
   const m = M.medicaoDaCotacao(COT_MED, COT_MED.propostas[0], INS_MED);
   assert.strictEqual(M.totalDaMedicao(m), 3780.04);
@@ -206,10 +229,10 @@ teste("parcelada nao recebe quantidade — consumo nao se divide por mes", () =>
 });
 
 teste("o que a conta ja tem nao e sobrescrito", () => {
-  const corrigida = { ...CONTA_SECA, quantidade: 7, unitario: 343.64, valor: 2405.48, etapa: "estrutura" };
+  const corrigida = { ...CONTA_SECA, quantidade: 7, unitario: 343.64, valor: 2405.48, etapa: "supra_paredes_1" };
   const r = M.completarItemDaConta(corrigida, OBRA_MED, INS_MED, [corrigida]);
   assert.strictEqual(r.quantidade, 7, "a correcao de quem editou manda");
-  assert.strictEqual(r.etapa, "estrutura");
+  assert.strictEqual(r.etapa, "supra_paredes_1");
 });
 
 teste("varios itens numa conta so: preenche a etapa comum, nunca a quantidade", () => {

@@ -2695,7 +2695,10 @@ function medicaoDaCotacao(cot, proposta, insumos) {
       // e quem consumiu menos muda um número.
       quantidade: cotada,
       unitario: precoUnitario(proposta, it.id),
-      etapa: etapaDoItem(ins, (cot || {}).etapa),
+      // a cotacao guarda a etapa em `etapaId` — ler `etapa` aqui jogava fora
+      // a etapa escolhida na cotacao e deixava em branco todo item cujo
+      // insumo nao tem etapa padrao
+      etapa: etapaDoItem(ins, (cot || {}).etapaId),
       contaId: (cot || {}).contaId || "",
     };
   }).filter((r) => r.unitario > 0 || r.cotada > 0);
