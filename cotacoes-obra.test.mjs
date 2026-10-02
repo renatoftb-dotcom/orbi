@@ -86,7 +86,8 @@ const modulo = new Function(`
            ehDanfe, numeroDaNota, dataDaNota,
            ehComprovante, valorDoComprovante, dataDoComprovante, favorecidoDoComprovante,
            documentoDoComprovante, dadosDoComprovante, prestadorDoComprovante,
-           despesaPronta, parcelasEmAbertoDoPrestador, parcelaQueCasa };
+           despesaPronta, parcelasEmAbertoDoPrestador, parcelaQueCasa,
+           medicaoDaCotacao, totalDaMedicao, validarMedicao };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -111,6 +112,65 @@ const COMPROV_PIX = [
   "Banco do Brasil",
   "ID da transação E2E123456789",
 ];
+
+
+// ── Medição: cotado × consumido ─────────────────────────────────
+const COT_MED = {
+  id: "c1", obraId: "o1", contaId: "material",
+  itens: [{ id: "i1", codigo: "CON-001", descricao: "Concreto - FCK25", unidade: "m3", quantidade: "11" }],
+  propostas: [{ id: "p1", fornecedorId: "f1", favorecido: "D-MIX CONCRETO",
+    precos: { i1: "343,64" }, valor: "6.050,00" }],
+  escolhidaId: "p1",
+};
+const INS_MED = [{ id: "m1", codigo: "CON-001", nome: "Concreto FCK25", unidade: "m3",
+  grupo: "Concreto", etapaPadrao: "fundacao" }];
+
+teste("a medição nasce igual ao cotado", () => {
+  const m = M.medicaoDaCotacao(COT_MED, COT_MED.propostas[0], INS_MED);
+  assert.strictEqual(m.length, 1);
+  assert.strictEqual(m[0].cotada, 11);
+  assert.strictEqual(m[0].quantidade, 11);
+  assert.strictEqual(m[0].unitario, 343.64);
+  assert.strictEqual(m[0].unidade, "m3");
+  assert.strictEqual(m[0].insumoCodigo, "CON-001");
+});
+
+teste("a etapa vem do insumo, não se digita", () => {
+  const m = M.medicaoDaCotacao(COT_MED, COT_MED.propostas[0], INS_MED);
+  assert.strictEqual(m[0].etapa, "fundacao");
+});
+
+teste("medir menos muda o total — e é o total que vira conta", () => {
+  const m = M.medicaoDaCotacao(COT_MED, COT_MED.propostas[0], INS_MED);
+  assert.strictEqual(M.totalDaMedicao(m), 3780.04);
+  const menos = m.map((r) => ({ ...r, quantidade: 7 }));
+  assert.strictEqual(M.totalDaMedicao(menos), 2405.48);
+});
+
+teste("o campo Valor solto da proposta não entra na medição", () => {
+  // a proposta diz 6.050,00 no campo solto; a medição soma item a item
+  const m = M.medicaoDaCotacao(COT_MED, COT_MED.propostas[0], INS_MED);
+  assert.notStrictEqual(M.totalDaMedicao(m), 6050);
+});
+
+teste("item sem etapa trava a medição", () => {
+  const m = M.medicaoDaCotacao(COT_MED, COT_MED.propostas[0], []);
+  assert.strictEqual(m[0].etapa, "");
+  const v = M.validarMedicao(m);
+  assert.strictEqual(v.ok, false);
+  assert.ok(v.erros.some((e) => /sem etapa/.test(e)));
+});
+
+teste("medição zerada não passa", () => {
+  const v = M.validarMedicao([{ id: "x", quantidade: 0, unitario: 0, etapa: "fundacao" }]);
+  assert.strictEqual(v.ok, false);
+  assert.ok(v.erros.some((e) => /Nenhum item/.test(e)));
+});
+
+teste("medição boa passa", () => {
+  const m = M.medicaoDaCotacao(COT_MED, COT_MED.propostas[0], INS_MED).map((r) => ({ ...r, quantidade: 7 }));
+  assert.deepStrictEqual(M.validarMedicao(m).erros, []);
+});
 
 teste("comprovante de Pix é reconhecido como comprovante", () => {
   assert.strictEqual(M.ehComprovante(COMPROV_PIX.join("\n")), true);

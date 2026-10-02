@@ -57,7 +57,7 @@ const modulo = new Function(`
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
            registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS,
            CP_MAX_REGISTROS,
-           recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia,
+           recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            pagamentosEmAberto, ajustarVencimentos, limparAjustes, ajustesDoContrato,
            previaAjusteContrato, proximoNumeroDoc };
 `)();
@@ -72,6 +72,40 @@ const soma = (linhas) => Math.round(linhas.reduce((a, l) => a + l.valor, 0) * 10
 
 
 // ── Número de referência da transação ───────────────────────────
+
+// ── Medição vira conta por item ─────────────────────────────────
+const MED = [{ id: "i1", insumoCodigo: "CON-001", descricao: "Concreto - FCK25",
+  unidade: "m3", quantidade: 7, unitario: 343.64, etapa: "fundacao", grupoMaterial: "Concreto" }];
+const DADOS_MED = { cotacaoId: "c1", obraId: "o1", contaId: "material",
+  prestadorId: "f1", favorecido: "D-MIX CONCRETO", modo: "parcelas", parcelas: 1,
+  primeiroVencimento: "2026-09-30", medicao: MED, valor: 2405.48, descricao: "Concreto" };
+
+teste("medição com uma data vira conta por item, com quantidade e etapa", () => {
+  assert.strictEqual(modulo.cpMedicaoEmUmaData(DADOS_MED), true);
+  let n = 0;
+  const contas = modulo.contasDaCotacao(DADOS_MED, () => "k" + (++n));
+  assert.strictEqual(contas.length, 1);
+  assert.strictEqual(contas[0].insumoCodigo, "CON-001");
+  assert.strictEqual(contas[0].quantidade, 7);
+  assert.strictEqual(contas[0].unidade, "m3");
+  assert.strictEqual(contas[0].etapa, "fundacao");
+  assert.strictEqual(contas[0].cotacaoId, "c1");
+  assert.strictEqual(Math.round(contas[0].valor * 100) / 100, 2405.48);
+});
+
+teste("parcelado volta a ser por parcela — consumo não se divide por mês", () => {
+  const d = { ...DADOS_MED, parcelas: 3 };
+  assert.strictEqual(modulo.cpMedicaoEmUmaData(d), false);
+  const contas = modulo.contasDaCotacao(d, (() => { let n = 0; return () => "p" + (++n); })());
+  assert.strictEqual(contas.length, 3);
+  assert.strictEqual(contas[0].insumoCodigo, undefined);
+});
+
+teste("sem medição, nada muda", () => {
+  const d = { ...DADOS_MED, medicao: [] };
+  assert.strictEqual(modulo.cpMedicaoEmUmaData(d), false);
+});
+
 teste("a sequência é uma só: conta a pagar continua de onde o pedido parou", () => {
   const obras = [{ id: "o1", contratos: [{ numeroContrato: "0003" }], cotacoes: [{ numeroPedido: "0007" }], contasPagar: [] }];
   const contas = [{ id: "a" }, { id: "b" }];

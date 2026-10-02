@@ -530,6 +530,17 @@ function proximaReferencia(obras, lancamentos) {
   return proximoNumeroDoc(obras, lancamentos);
 }
 
+// A medição vira conta por item só quando o pagamento é de uma vez. Com
+// parcelas, sinal ou entregas, as contas voltam a ser por parcela — e aí o
+// item não cabe nelas.
+function cpMedicaoEmUmaData(d) {
+  const dd = d || {};
+  if (!((dd.medicao || []).length)) return false;
+  if (dd.modo === "entregas" || dd.modo === "sinalFinal" || dd.modo === "sinalParcelas") return false;
+  if ((dd.entregas || []).some((e) => e && valorDaEntrega(e) > 0)) return false;
+  return Math.max(1, Math.floor(Number(dd.parcelas) || 1)) === 1;
+}
+
 // Conta avulsa, fora de contrato.
 function contaAvulsaVazia(obraId) {
   return {
@@ -1044,6 +1055,20 @@ function contaDaCompra(d, novoId, dados) {
 function contasDaCotacao(dados, novoId) {
   const d = dados || {};
   if (d.modo === "contaLoja") return contasDoPedidoDaLoja(d, d.pedido, novoId);
+  // Medição: a cotação foi lançada pelo que de fato entrou na obra, item a
+  // item. Uma conta por item, com quantidade e etapa — é o que faz o custo
+  // por etapa enxergar a compra. Só vale quando há UMA data de pagamento:
+  // consumo acontece uma vez, e espalhá-lo por parcelas inventaria um
+  // consumo por mês que não houve.
+  if (cpMedicaoEmUmaData(d)) {
+    const venc = String(d.primeiroVencimento || "").slice(0, 10) || dataParaIso(new Date());
+    return contasDoPedidoDaLoja(d, {
+      id: (typeof uid === "function" ? uid() : String(Date.now())),
+      numero: d.numeroPedido || "", numeroLoja: "", numeroNota: "",
+      data: venc, vencimento: venc, desconto: 0,
+      itens: (d.medicao || []),
+    }, novoId);
+  }
   if (d.modo === "entregas" || (d.entregas || []).some((e) => e && valorDaEntrega(e) > 0)) {
     return contasDasEntregas(d, novoId);
   }

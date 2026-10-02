@@ -22217,6 +22217,17 @@ function proximaReferencia(obras, lancamentos) {
   return proximoNumeroDoc(obras, lancamentos);
 }
 
+// A medição vira conta por item só quando o pagamento é de uma vez. Com
+// parcelas, sinal ou entregas, as contas voltam a ser por parcela — e aí o
+// item não cabe nelas.
+function cpMedicaoEmUmaData(d) {
+  const dd = d || {};
+  if (!((dd.medicao || []).length)) return false;
+  if (dd.modo === "entregas" || dd.modo === "sinalFinal" || dd.modo === "sinalParcelas") return false;
+  if ((dd.entregas || []).some((e) => e && valorDaEntrega(e) > 0)) return false;
+  return Math.max(1, Math.floor(Number(dd.parcelas) || 1)) === 1;
+}
+
 // Conta avulsa, fora de contrato.
 function contaAvulsaVazia(obraId) {
   return {
@@ -22731,6 +22742,20 @@ function contaDaCompra(d, novoId, dados) {
 function contasDaCotacao(dados, novoId) {
   const d = dados || {};
   if (d.modo === "contaLoja") return contasDoPedidoDaLoja(d, d.pedido, novoId);
+  // Medição: a cotação foi lançada pelo que de fato entrou na obra, item a
+  // item. Uma conta por item, com quantidade e etapa — é o que faz o custo
+  // por etapa enxergar a compra. Só vale quando há UMA data de pagamento:
+  // consumo acontece uma vez, e espalhá-lo por parcelas inventaria um
+  // consumo por mês que não houve.
+  if (cpMedicaoEmUmaData(d)) {
+    const venc = String(d.primeiroVencimento || "").slice(0, 10) || dataParaIso(new Date());
+    return contasDoPedidoDaLoja(d, {
+      id: (typeof uid === "function" ? uid() : String(Date.now())),
+      numero: d.numeroPedido || "", numeroLoja: "", numeroNota: "",
+      data: venc, vencimento: venc, desconto: 0,
+      itens: (d.medicao || []),
+    }, novoId);
+  }
   if (d.modo === "entregas" || (d.entregas || []).some((e) => e && valorDaEntrega(e) > 0)) {
     return contasDasEntregas(d, novoId);
   }
@@ -26580,6 +26605,54 @@ function dadosDoLancamento(cot) {
   };
 }
 
+// ── Medição: o que foi cotado e o que foi consumido ─────────────
+// Cotar é estimar. Concreto cotado em 11 m³ pode virar 7 na laje — e é por
+// 7 que se paga. A cotação guarda o COTADO, que é o preço que o fornecedor
+// deu e o histórico de quanto se pediu; o lançamento guarda o MEDIDO, que é
+// o que entra na obra e no contas a pagar.
+//
+// Sem isto, lançar a cotação criava conta a pagar pelo valor estimado e sem
+// item nenhum: o concreto entrava na obra sem m³ e sem etapa, e corrigir a
+// quantidade depois não tinha onde.
+function medicaoDaCotacao(cot, proposta, insumos) {
+  const itens = typeof itensDaCotacao === "function" ? itensDaCotacao(cot) : ((cot || {}).itens || []);
+  const lista = (insumos || []);
+  return itens.map((it) => {
+    const ins = lista.find((x) => x && (x.codigo === it.codigo || x.id === it.insumoId)) || null;
+    const cotada = quantidadeDoItem(it);
+    return {
+      id: it.id,
+      insumoCodigo: it.codigo || (ins && ins.codigo) || "",
+      descricao: it.descricao || (ins && ins.nome) || "Item",
+      unidade: it.unidade || (ins && ins.unidade) || "",
+      grupoMaterial: (ins && ins.grupo) || "",
+      cotada: cotada,
+      // Nasce medido igual ao cotado: o caso comum é consumir o que se pediu,
+      // e quem consumiu menos muda um número.
+      quantidade: cotada,
+      unitario: precoUnitario(proposta, it.id),
+      etapa: etapaDoItem(ins, (cot || {}).etapa),
+      contaId: (cot || {}).contaId || "",
+    };
+  }).filter((r) => r.unitario > 0 || r.cotada > 0);
+}
+
+function totalDaMedicao(medicao) {
+  const soma = (medicao || []).reduce((s, r) => s + (numeroDoCampo(r.quantidade) * numeroDoCampo(r.unitario)), 0);
+  return Math.round(soma * 100) / 100;
+}
+
+// O que falta para a medição poder virar conta. Etapa é erro e não aviso,
+// pela mesma razão do pedido da loja: é o que impede a linha "Sem etapa".
+function validarMedicao(medicao) {
+  const erros = [];
+  const comValor = (medicao || []).filter((r) => r && numeroDoCampo(r.quantidade) * numeroDoCampo(r.unitario) > 0);
+  if (!comValor.length) erros.push("Nenhum item com quantidade e preço.");
+  const semEtapa = comValor.filter((r) => !String(r.etapa || "").trim()).length;
+  if (semEtapa) erros.push(semEtapa === 1 ? "1 item está sem etapa." : semEtapa + " itens estão sem etapa.");
+  return { ok: !erros.length, erros: erros };
+}
+
 // ── O que foi combinado com o fornecedor ────────────────────────
 // As contas a pagar são a EXECUÇÃO do acerto: elas escorregam de data,
 // recebem baixa, somem se o lançamento for desfeito. O acerto em si — três
@@ -28269,7 +28342,12 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     const dados = dadosDoLancamento(cot);
     if (!dados) { setErro("Escolha uma proposta primeiro."); return; }
     setErro("");
-    setFormLancamento({ cotacao: cot, dados });
+    // Proposta com preço item a item vira medição: o valor da conta sai da
+    // quantidade que de fato entrou na obra, não da estimativa cotada.
+    const esc = propostaEscolhida(cot);
+    const medicao = propostaTemPrecoPorItem(cot, esc) ? medicaoDaCotacao(cot, esc, insumos) : [];
+    setFormLancamento({ cotacao: cot,
+      dados: medicao.length ? { ...dados, medicao, valor: totalDaMedicao(medicao) } : dados });
   }
 
   // ── Conta na loja ────────────────────────────────────
@@ -28893,6 +28971,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         <CotacaoLancamento
           cotacao={formLancamento.cotacao}
           dados={formLancamento.dados}
+          isMobile={isMobile}
           dinheiro={dinheiro}
           onConfirmar={confirmarLancamento}
           onFechar={() => setFormLancamento(null)}
@@ -29052,10 +29131,24 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
 // ── Lançar a cotação em contas a pagar ──────────────────────────
 // Só três perguntas: quantas parcelas, quando vence a primeira e em que
 // conta do P&L o gasto cai. O resto vem da proposta escolhida.
-function CotacaoLancamento({ cotacao, dados, dinheiro, onConfirmar, onFechar }) {
+function CotacaoLancamento({ cotacao, dados, dinheiro, isMobile, onConfirmar, onFechar }) {
   const [f, setF] = useState(dados);
   const E = COT_ESTILO;
   const set = (k, v) => setF(x => ({ ...x, [k]: v }));
+  // ── A medição ──
+  const medicao = f.medicao || [];
+  const temMedicao = medicao.length > 0;
+  const etapas = typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [];
+  // Mexer na quantidade medida move o valor da conta junto — é o ponto todo:
+  // o que se paga é o que entrou.
+  const mexerMedicao = (i, muda) => setF((x) => {
+    const nova = (x.medicao || []).map((r, j) => (j === i ? { ...r, ...muda } : r));
+    return { ...x, medicao: nova, valor: totalDaMedicao(nova) };
+  });
+  const provaMedicao = temMedicao ? validarMedicao(medicao) : { ok: true, erros: [] };
+  const cotadoTotal = temMedicao
+    ? Math.round(medicao.reduce((s, r) => s + numeroDoCampo(r.cotada) * numeroDoCampo(r.unitario), 0) * 100) / 100
+    : 0;
   const porEntrega = f.modo === "entregas";
   // "Item a item" do contrato é a entrega aqui: o que se paga por vez é a
   // entrega do fornecedor, não o item de um objeto fabricado.
@@ -29086,7 +29179,9 @@ function CotacaoLancamento({ cotacao, dados, dinheiro, onConfirmar, onFechar }) 
   const diferenca = Math.round((somaEntregas - (Number(f.valor) || 0)) * 100) / 100;
   const contas = typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [];
   const grupos = typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : [];
-  const podeLancar = previa.length > 0;
+  // Com medição, a etapa de cada item é condição para lançar — mesma regra
+  // do pedido da loja, e pela mesma razão.
+  const podeLancar = previa.length > 0 && provaMedicao.ok;
 
   const comSinal = f.modo === "sinalFinal" || f.modo === "sinalParcelas";
   const opcao = (m) => (
@@ -29106,6 +29201,78 @@ function CotacaoLancamento({ cotacao, dados, dinheiro, onConfirmar, onFechar }) 
         <div style={{ fontSize: 12.5, color: "#4b5563", marginBottom: 14 }}>
           {cotacao.titulo} — {f.favorecido || "fornecedor"}, {dinheiro(f.valor)}. Vai direto para contas a pagar, sem contrato e sem esperar o aval do cliente.
         </div>
+
+        {/* ── Medição ──
+            Cotar é estimar; medir é o que entrou. A cotação guarda os 11 m³
+            que se pediu preço; aqui se diz quantos de fato vieram, e é por
+            esse número que a conta a pagar e o custo da obra se fazem. */}
+        {temMedicao && (
+          <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, marginBottom: 14 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", marginBottom: 2 }}>
+              Medição — o que de fato entrou na obra
+            </div>
+            <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 10 }}>
+              Veio tudo? Deixe como está. Consumiu menos, mude a quantidade: a conta a pagar
+              e o custo da obra saem daqui, e a cotação continua guardando o que foi cotado.
+            </div>
+            {medicao.map((r, i) => {
+              const total = Math.round(numeroDoCampo(r.quantidade) * numeroDoCampo(r.unitario) * 100) / 100;
+              const mudou = Math.abs(numeroDoCampo(r.quantidade) - numeroDoCampo(r.cotada)) > 0.0001;
+              return (
+                <div key={r.id || i} style={{ paddingBottom: 10, marginBottom: 10,
+                  borderBottom: i < medicao.length - 1 ? "1px solid rgba(38,36,33,0.08)" : "none" }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", marginBottom: 6 }}>{r.descricao}</div>
+                  <div style={{ display: "grid", gap: 8, alignItems: "end",
+                    gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(110px, 1fr))" }}>
+                    <div>
+                      <label style={E.label}>Cotado</label>
+                      <div style={{ ...E.input, background: "#f9fafb", color: "#6b7280",
+                        display: "flex", alignItems: "center", minHeight: 36 }}>
+                        {qtdBR ? qtdBR(r.cotada) : r.cotada} {r.unidade}
+                      </div>
+                    </div>
+                    <div>
+                      <label style={E.label}>Medido</label>
+                      <input style={{ ...E.input, borderColor: mudou ? "#0474f4" : undefined }}
+                        inputMode="decimal" value={r.quantidade}
+                        onChange={(e) => mexerMedicao(i, { quantidade: e.target.value })} />
+                    </div>
+                    <div>
+                      <label style={E.label}>Unitário</label>
+                      <div style={{ ...E.input, background: "#f9fafb", color: "#6b7280",
+                        display: "flex", alignItems: "center", minHeight: 36 }}>{dinheiro(r.unitario)}</div>
+                    </div>
+                    <div>
+                      <label style={E.label}>Total</label>
+                      <div style={{ ...E.input, background: "#f9fafb", fontWeight: 600,
+                        display: "flex", alignItems: "center", minHeight: 36 }}>{dinheiro(total)}</div>
+                    </div>
+                    <div style={{ gridColumn: isMobile ? "1 / -1" : "auto" }}>
+                      <label style={E.label}>Etapa</label>
+                      <SelectBusca style={E.input} value={r.etapa}
+                        onChange={(v) => mexerMedicao(i, { etapa: v })}
+                        placeholder="Procurar etapa…"
+                        opcoes={[{ valor: "", rotulo: "— escolha a etapa —" }]
+                          .concat(etapas.map((e) => ({ valor: e.id, rotulo: e.nome || e.id })))} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{ fontSize: 12.5, color: "#111827", marginTop: 4 }}>
+              Cotado <b>{dinheiro(cotadoTotal)}</b> · medido <b>{dinheiro(f.valor)}</b>
+              {Math.abs(cotadoTotal - f.valor) >= 0.005 && (
+                <span style={{ color: "#0474f4" }}>
+                  {" — "}{cotadoTotal > f.valor ? "consumiu" : "passou"} {dinheiro(Math.abs(cotadoTotal - f.valor))}
+                  {cotadoTotal > f.valor ? " a menos" : " a mais"} que o cotado
+                </span>
+              )}
+            </div>
+            {!provaMedicao.ok && (
+              <div style={{ fontSize: 11.5, color: "#b45309", marginTop: 6 }}>{provaMedicao.erros.join(" · ")}</div>
+            )}
+          </div>
+        )}
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
           {MODOS_LANCAMENTO.map(opcao)}
