@@ -1410,6 +1410,104 @@ function nomeDoEmpreendimento(data, id) {
   return c ? c.nome : "";
 }
 
+// O valor digitado em português. "5.000,00" com Number() direto dá NaN — o
+// ponto do milhar vira ponto decimal e a vírgula sobra, e o formulário
+// respondia "Informe o valor" com o valor ali na tela. Quem lê certo é o
+// campo numérico do contrato, e é dele que este formulário passa a viver.
+function efValorDoCampo(v) {
+  if (typeof numeroDeCampo === "function") return numeroDeCampo(v) || 0;
+  const s = String(v == null ? "" : v).trim();
+  const limpo = s.indexOf(",") >= 0 ? s.replace(/\./g, "").replace(",", ".") : s;
+  const n = parseFloat(limpo);
+  return Number.isFinite(n) ? n : 0;
+}
+
+// ── De qual plano é a conta do lançamento ───────────────────────
+// Dois planos convivem nesta tela, e é de propósito. Uma compra para a obra
+// de um cliente, ou para um empreendimento do escritório, é custo DAQUELA
+// obra: ela nasce lá, com o nome que a obra usa (Material, Mão de obra), e
+// chega ao extrato do escritório pela ponte, já traduzida. O que é do
+// escritório — ou do empreendimento mas de obra nenhuma, como corretagem e
+// registro em cartório — entra direto no extrato, pelo plano do escritório.
+//
+// Antes disto o seletor oferecia só o plano do escritório, em qualquer
+// unidade: escolhendo Empreendimento apareciam as contas de gestão, que ali
+// não valem, e "Material" não aparecia em lugar nenhum.
+
+// Unidade que fala de uma obra de cliente ou de um empreendimento.
+function unidadePedeObra(unidadeId) {
+  const u = UNIDADES_NEGOCIO.find((x) => x && x.id === unidadeId);
+  return !!u && (!!u.exigeObra || !!u.exigeEmpreendimento);
+}
+
+// Os grupos do plano da obra que são custo. "excluidas" e as receitas ficam
+// de fora: receita de obra tem porta própria, não se lança pelo extrato.
+const EF_GRUPOS_CUSTO_OBRA = ["terreno", "materiais", "maoDeObra", "servicos"];
+
+// O id vem prefixado porque os dois planos têm ids iguais — "cartao_credito"
+// existe nos dois — e sem o prefixo o seletor não saberia de qual falava.
+function valorDaConta(contaId, fonte) {
+  return (fonte === "obra" ? "o:" : "e:") + String(contaId == null ? "" : contaId);
+}
+
+function contaEscolhida(valor) {
+  const s = String(valor == null ? "" : valor);
+  if (s.indexOf("o:") === 0) return { fonte: "obra", id: s.slice(2) };
+  if (s.indexOf("e:") === 0) return { fonte: "escritorio", id: s.slice(2) };
+  // lançamento antigo gravou o id puro, e ele é sempre do escritório
+  return { fonte: s ? "escritorio" : "", id: s };
+}
+
+function contasDoLancamento(unidadeId, opcoes) {
+  const escritorio = PLANO_CONTAS_ESCRITORIO
+    .filter((c) => c && (!(c.unidades || []).length || c.unidades.indexOf(unidadeId) >= 0))
+    .map((c) => ({ valor: valorDaConta(c.id, "escritorio"), id: c.id, nome: c.nome, grupo: c.grupo, fonte: "escritorio" }));
+  if (!unidadePedeObra(unidadeId)) return { obra: [], escritorio: escritorio };
+  const obra = pontePlanoDaObra(opcoes)
+    .filter((c) => c && EF_GRUPOS_CUSTO_OBRA.indexOf(c.grupo) >= 0)
+    .map((c) => ({ valor: valorDaConta(c.id, "obra"), id: c.id, nome: c.nome, grupo: c.grupo, fonte: "obra" }));
+  return { obra: obra, escritorio: escritorio };
+}
+
+// As obras entre as quais o custo pode cair.
+function obrasDoLancamento(data, clienteId) {
+  if (!clienteId) return [];
+  return (((data || {}).obras) || []).filter((o) => o && o.clienteId === clienteId);
+}
+
+// O que falta para lançar um custo na obra. É outra prova que a do
+// escritório: aqui a conta é do plano da obra, e a obra é obrigatória —
+// custo sem obra não tem onde morar.
+function validarLancamentoNaObra(l, opcoes) {
+  const erros = [];
+  const lan = l || {};
+  const conta = pontePlanoDaObra(opcoes).find((c) => c && c.id === lan.contaId);
+  if (!conta) erros.push("Escolha a conta.");
+  if (!lan.clienteId) erros.push("Informe o cliente ou o empreendimento.");
+  if (!lan.obraIdAlvo) erros.push("Escolha a obra que recebe o custo.");
+  const valor = Number(lan.valor);
+  if (!Number.isFinite(valor) || !(valor > 0)) erros.push("Informe o valor.");
+  if (!lan.lancadoEm) erros.push("Informe a data do pagamento.");
+  else {
+    const trava = bloqueioPorMesFechado(String(lan.lancadoEm).slice(0, 7), (opcoes || {}).fechamentos);
+    if (trava) erros.push(trava);
+  }
+  return erros;
+}
+
+// Para onde o custo da obra vai aparecer no extrato do escritório. Serve de
+// aviso na tela: quem lança "Material" num empreendimento precisa saber que
+// do outro lado isso se chama "Construção", senão vai procurá-lo pelo nome
+// errado no fechamento.
+function destinoVisivelDoCusto(contaId, obra, cliente, opcoes) {
+  if (!contaId || !obra) return null;
+  const modo = modoDaPonte(obra, cliente);
+  const destino = destinoNoEscritorio(contaId, modo, opcoes);
+  if (!destino) return { modo: modo, conta: null };
+  const c = contaEscritorio(destino);
+  return { modo: modo, conta: c ? c.nome : "" };
+}
+
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
 // ── UI — a aba Financeiro do Escritório ─────────────────────────
 // Três telas: o extrato mês a mês (que é o que você já olhava na planilha),
@@ -1532,24 +1630,13 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
   );
 }
 
-// O valor digitado em português. "5.000,00" com Number() direto dá NaN — o
-// ponto do milhar vira ponto decimal e a vírgula sobra, e o formulário
-// respondia "Informe o valor" com o valor ali na tela. Quem lê certo é o
-// campo numérico do contrato, e é dele que este formulário passa a viver.
-function efValorDoCampo(v) {
-  if (typeof numeroDeCampo === "function") return numeroDeCampo(v) || 0;
-  const s = String(v == null ? "" : v).trim();
-  const limpo = s.indexOf(",") >= 0 ? s.replace(/\./g, "").replace(",", ".") : s;
-  const n = parseFloat(limpo);
-  return Number.isFinite(n) ? n : 0;
-}
-
 // Formulário de um lançamento. As travas são as do validarLancamento: a
 // mensagem aparece antes de gravar, não depois.
-function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes }) {
+function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras }) {
   const S = EF_ESTILO;
   const [f, setF] = useState(() => ({
-    contaId: "", unidadeId: "escritorio", valor: "", competencia: "", lancadoEm: "",
+    contaId: "", contaFonte: "", obraIdAlvo: "",
+    unidadeId: "escritorio", valor: "", competencia: "", lancadoEm: "",
     cliente: "", clienteId: "", empreendimentoId: "", projeto: "", fornecedor: "", descricao: "", documento: "", contaBanco: "sim",
     ...(inicial || {}),
   }));
@@ -1598,15 +1685,26 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       setLendoComprov(false);
     }
   }
-  const conta = contaEscritorio(f.contaId);
+  // Conta do plano da OBRA: o lançamento não nasce aqui, nasce lá — e chega
+  // ao extrato do escritório pela ponte, já traduzido.
+  const naObra = f.contaFonte === "obra";
+  const opcoesConta = contasDoLancamento(f.unidadeId, {});
+  const obrasDoCliente = obrasDoLancamento({ obras: obras || [] }, f.clienteId);
+  const obraAlvo = obrasDoCliente.find((o) => o && o.id === f.obraIdAlvo) || null;
+  const clienteAlvo = (clientes || []).find((c) => c && c.id === f.clienteId) || null;
+  const destinoDoCusto = naObra ? destinoVisivelDoCusto(f.contaId, obraAlvo, clienteAlvo, {}) : null;
+
+  const conta = naObra ? null : contaEscritorio(f.contaId);
   const unidadesOk = conta && (conta.unidades || []).length ? conta.unidades : UNIDADES_NEGOCIO.map((u) => u.id);
   // Empreendimento é cliente com tique: quando a unidade é Empreendimento, a
   // lista de escolha só traz esses, e o id escolhido vale pelos dois campos.
   const ehEmp = f.unidadeId === "empreendimento";
   const doCadastro = (clientes || []).filter((c) => c && (ehEmp ? ehEmpreendimento(c) : true));
-  const erros = validarLancamentoEscritorio({ ...f, valor: efValorDoCampo(f.valor),
-    clienteId: f.clienteId || f.cliente, obraId: f.projeto,
-    empreendimentoId: ehEmp ? f.empreendimentoId : f.projeto }, { fechamentos });
+  const erros = naObra
+    ? validarLancamentoNaObra({ ...f, valor: efValorDoCampo(f.valor) }, { fechamentos })
+    : validarLancamentoEscritorio({ ...f, valor: efValorDoCampo(f.valor),
+        clienteId: f.clienteId || f.cliente, obraId: f.projeto,
+        empreendimentoId: ehEmp ? f.empreendimentoId : f.projeto }, { fechamentos });
 
   const campo = (rot, filho) => <div style={{ minWidth: 0 }}><div style={S.rot}>{rot}</div>{filho}</div>;
   return (
@@ -1614,34 +1712,62 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       <div style={{ fontSize: 13, fontWeight: 700 }}>{inicial && inicial.id ? "Editar lançamento" : "Novo lançamento"}</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
         gap: 12, alignItems: "end" }}>
-        {campo("Conta", (
-          <Selecao style={{ ...S.input, cursor: "pointer" }} value={f.contaId} onChange={(e) => {
-            const c = contaEscritorio(e.target.value);
-            const us = c && (c.unidades || []).length ? c.unidades : [];
-            setF((p) => ({ ...p, contaId: e.target.value, unidadeId: us.length && !us.includes(p.unidadeId) ? us[0] : p.unidadeId }));
-          }}>
-            <option value="">— escolha —</option>
-            {GRUPOS_ESCRITORIO.map((g) => {
-              const doGrupo = PLANO_CONTAS_ESCRITORIO.filter((c) => c.grupo === g.id);
-              if (!doGrupo.length) return null;
-              return (
-                <optgroup key={g.id} label={g.titulo}>
-                  {doGrupo.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                </optgroup>
-              );
-            })}
-          </Selecao>
-        ))}
+        {/* A unidade vem PRIMEIRO porque é ela que decide quais contas
+            existem: no empreendimento não há "Depósito em consignação", e
+            no escritório não há "Material". Trocar a unidade limpa a conta
+            escolhida se ela não valer mais ali. */}
         {campo("Unidade de negócio", (
-          <Selecao style={{ ...S.input, cursor: "pointer" }} value={f.unidadeId} onChange={(e) => set("unidadeId", e.target.value)}>
+          <Selecao style={{ ...S.input, cursor: "pointer" }} value={f.unidadeId} onChange={(e) => {
+            const nova = e.target.value;
+            setF((p) => {
+              const ops = contasDoLancamento(nova, {});
+              const aindaVale = (p.contaFonte === "obra")
+                ? ops.obra.some((c) => c.id === p.contaId)
+                : ops.escritorio.some((c) => c.id === p.contaId);
+              return { ...p, unidadeId: nova,
+                contaId: aindaVale ? p.contaId : "",
+                contaFonte: aindaVale ? p.contaFonte : "",
+                obraIdAlvo: aindaVale && p.contaFonte === "obra" ? p.obraIdAlvo : "" };
+            });
+          }}>
             {UNIDADES_NEGOCIO.filter((u) => unidadesOk.includes(u.id)).map((u) => (
               <option key={u.id} value={u.id}>{u.nome}</option>
             ))}
           </Selecao>
         ))}
+        {campo("Conta", (
+          <Selecao style={{ ...S.input, cursor: "pointer" }}
+            value={f.contaId ? valorDaConta(f.contaId, f.contaFonte || "escritorio") : ""}
+            onChange={(e) => {
+              const esc = contaEscolhida(e.target.value);
+              const c = esc.fonte === "escritorio" ? contaEscritorio(esc.id) : null;
+              const us = c && (c.unidades || []).length ? c.unidades : [];
+              setF((p) => ({ ...p, contaId: esc.id, contaFonte: esc.fonte,
+                unidadeId: us.length && !us.includes(p.unidadeId) ? us[0] : p.unidadeId,
+                obraIdAlvo: esc.fonte === "obra" ? p.obraIdAlvo : "" }));
+            }}>
+            <option value="">— escolha —</option>
+            {/* Primeiro o que é custo de uma obra: é o caso mais comum vindo
+                do extrato, e é o que não existia aqui até agora. */}
+            {opcoesConta.obra.length > 0 && (
+              <optgroup label="CUSTO DE UMA OBRA (entra na obra e atravessa)">
+                {opcoesConta.obra.map((c) => <option key={c.valor} value={c.valor}>{c.nome}</option>)}
+              </optgroup>
+            )}
+            {GRUPOS_ESCRITORIO.map((g) => {
+              const doGrupo = opcoesConta.escritorio.filter((c) => c.grupo === g.id);
+              if (!doGrupo.length) return null;
+              return (
+                <optgroup key={g.id} label={g.titulo}>
+                  {doGrupo.map((c) => <option key={c.valor} value={c.valor}>{c.nome}</option>)}
+                </optgroup>
+              );
+            })}
+          </Selecao>
+        ))}
         {campo("Valor", <input style={S.input} inputMode="decimal" value={f.valor} placeholder="0,00"
           onChange={(e) => set("valor", e.target.value)} />)}
-        {campo("Competência", <input style={S.input} type="month" value={f.competencia}
+        {!naObra && campo("Competência", <input style={S.input} type="month" value={f.competencia}
           onChange={(e) => set("competencia", e.target.value)} />)}
         {campo("Data do pagamento", <input style={S.input} type="date" value={f.lancadoEm}
           onChange={(e) => set("lancadoEm", e.target.value)} />)}
@@ -1671,11 +1797,45 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             “É um empreendimento do escritório”.
           </div>
         )}
-        {campo("Projeto / obra", <input style={S.input} value={f.projeto} onChange={(e) => set("projeto", e.target.value)} />)}
+        {naObra
+          ? campo("Obra que recebe o custo", (
+              <SelectBusca style={S.input} value={f.obraIdAlvo}
+                onChange={(v) => setF((p) => ({ ...p, obraIdAlvo: v,
+                  projeto: (obrasDoCliente.find((o) => o && o.id === v) || {}).nome || p.projeto }))}
+                placeholder="Procurar obra…"
+                opcoes={[{ valor: "", rotulo: f.clienteId ? "— escolha a obra —" : "— escolha o cliente antes —" }]
+                  .concat(obrasDoCliente.map((o) => ({ valor: o.id, rotulo: o.nome || "Obra" })))} />
+            ))
+          : campo("Projeto / obra", <input style={S.input} value={f.projeto} onChange={(e) => set("projeto", e.target.value)} />)}
         {campo("Fornecedor", <input style={S.input} value={f.fornecedor} onChange={(e) => set("fornecedor", e.target.value)} />)}
         {campo("Documento", <input style={S.input} value={f.documento} onChange={(e) => set("documento", e.target.value)} />)}
       </div>
       {campo("Descrição", <input style={S.input} value={f.descricao} onChange={(e) => set("descricao", e.target.value)} />)}
+      {/* Lançando "Material" num empreendimento, do outro lado isso se chama
+          "Construção". Quem fecha o mês precisa saber disso ANTES de gravar,
+          senão vai procurar a vassoura pelo nome errado no extrato. */}
+      {naObra && (
+        <div style={{ fontSize: 12, lineHeight: 1.5, padding: "10px 12px", borderRadius: 10,
+          border: "1px solid rgba(4,116,244,0.35)", background: "#eef5ff", color: "#1e3a5f" }}>
+          {!obraAlvo ? (
+            <>Escolha o cliente e a obra: este custo nasce na obra, e é de lá que ele atravessa para o extrato do escritório.</>
+          ) : destinoDoCusto && destinoDoCusto.conta ? (
+            <>
+              Entra em <b>{(obraAlvo.nome || "obra")}</b> como custo, e aparece no extrato do
+              escritório como <b>{destinoDoCusto.conta}</b> — um valor só, lido dos dois lados.
+              A competência sai da data do pagamento.
+            </>
+          ) : (
+            <>
+              Entra em <b>{(obraAlvo.nome || "obra")}</b> como custo, mas <b>não</b> atravessa para o
+              extrato do escritório:{" "}
+              {destinoDoCusto && destinoDoCusto.modo === "clientePaga"
+                ? "esta obra está marcada como “cliente paga direto”, então o dinheiro não passa pela conta do escritório."
+                : "esta conta não tem correspondência no plano do escritório."}
+            </>
+          )}
+        </div>
+      )}
       {/* O comprovante fica guardado no lançamento. Não é obrigatório: a
           linha do extrato vale por si — mas a conciliação de daqui a um ano
           vai querer o papel junto. */}
@@ -1713,6 +1873,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
         <button style={EF_ESTILO.btn} onClick={() => {
           setTentou(true);
           if (erros.length) return;
+          if (naObra) { aoSalvar({ ...f, naObra: true, valor: efValorDoCampo(f.valor) }); return; }
           aoSalvar({ ...f, tipo: "escritorio", valor: efValorDoCampo(f.valor) });
         }}>Salvar</button>
       </div>
@@ -2305,7 +2466,42 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   const gravar = (novosDoEscritorio) =>
     save({ ...data, lancamentos: [...outrosLancamentos, ...novosDoEscritorio] }).catch(console.error);
 
+  // Custo de uma obra lançado a partir do extrato. Ele NÃO vira lançamento
+  // do escritório escrito à mão: vira conta a pagar na obra, já baixada, e
+  // quem o põe no extrato é a mesma ponte que já traz as baixas feitas lá
+  // dentro. Assim existe um número só — o custo por etapa da obra e o
+  // Investido do empreendimento leem o mesmo lançamento, e desfazer de um
+  // lado desfaz do outro.
+  //
+  // Obras e lançamentos vão na MESMA gravada: duas seguidas partem do mesmo
+  // retrato antigo de `data`, e a segunda apaga o que a primeira escreveu.
+  function lancarCustoNaObra(l) {
+    const todas = (data || {}).obras || [];
+    const obra = todas.find((o) => o && o.id === l.obraIdAlvo);
+    if (!obra) return;
+    const cliente = ((data || {}).clientes || []).find((c) => c && c.id === obra.clienteId) || null;
+    const quem = typeof nomeDeQuem === "function" ? nomeDeQuem(perm && perm.usuario) : "";
+    const valor = Number(l.valor) || 0;
+    const base = { ...contaAvulsaVazia(obra.id),
+      contaId: l.contaId,
+      favorecido: l.fornecedor || "",
+      descricao: String(l.descricao || "").trim() || (l.fornecedor || "Compra"),
+      documento: l.documento || "",
+      valor: valor, vencimento: l.lancadoEm };
+    const nova = contaPaga(registrarAto(base, "criada", quem),
+      { pagoEm: l.lancadoEm, valorPago: valor, comprovante: l.comprovante || null }, quem);
+    const obraNova = { ...obra, contasPagar: (obra.contasPagar || []).concat([nova]) };
+    const ponte = lancamentosDaBaixa(obraNova, cliente, [nova],
+      { fechamentos: fechamentosDoEscritorio(data), lancamentos: lancamentosDoEscritorio(data) });
+    save({ ...data,
+      obras: todas.map((o) => (o && o.id === obra.id ? obraNova : o)),
+      lancamentos: [...outrosLancamentos, ...lancs, ...ponte.lancamentos],
+    }).catch(console.error);
+    setForm(null);
+  }
+
   function salvarLancamento(l) {
+    if (l && l.naObra) { lancarCustoNaObra(l); return; }
     const id = l.id || (typeof uid === "function" ? uid() : String(Date.now()));
     const semEle = lancs.filter((x) => x.id !== id);
     gravar([...semEle, { ...l, id, tipo: "escritorio" }]);
@@ -2623,7 +2819,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
               <button style={S.btn} onClick={() => setForm({})}>+ Novo lançamento</button>
             )}
           </div>
-          {form && <FormLancamentoEscritorio fechamentos={fechamentos} clientes={(data || {}).clientes || []} inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} />}
+          {form && <FormLancamentoEscritorio fechamentos={fechamentos} clientes={(data || {}).clientes || []}
+            obras={(data || {}).obras || []} inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} />}
           {vendoComprovante && typeof VisorProposta === "function" && (
             <VisorProposta anexo={vendoComprovante} aoFechar={() => setVendoComprovante(null)} />
           )}

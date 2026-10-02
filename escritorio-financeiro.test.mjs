@@ -27,7 +27,10 @@ const M = new Function(src + `
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
-           lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas };`)();
+           lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas,
+           unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
+           obrasDoLancamento, validarLancamentoNaObra, destinoVisivelDoCusto,
+           efValorDoCampo };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -35,6 +38,120 @@ let falhas = 0;
 const cent = (v) => Math.round(v * 100) / 100;
 
 // ── Taxonomia ───────────────────────────────────────────────────
+
+// ── De qual plano é a conta ─────────────────────────────────────
+const PLANO_OBRA_T = [
+  { id: "material",      nome: "Material",            grupo: "materiais" },
+  { id: "frete",         nome: "Frete",               grupo: "materiais" },
+  { id: "empreiteiro",   nome: "Empreiteiro",         grupo: "maoDeObra" },
+  { id: "impostos",      nome: "Impostos",            grupo: "servicos" },
+  { id: "terreno_aquisicao", nome: "Aquisição de terreno", grupo: "terreno" },
+  { id: "deposito_proprio",  nome: "Depósito Recurso Próprio", grupo: "receitas" },
+  { id: "cartao_credito",    nome: "Cartão de crédito", grupo: "receitas" },
+];
+const OPC_OBRA = { planoObra: PLANO_OBRA_T };
+
+teste("unidade que fala de obra: gestão de obras e empreendimento", () => {
+  assert.strictEqual(M.unidadePedeObra("empreendimento"), true);
+  assert.strictEqual(M.unidadePedeObra("gestao_obras"), true);
+  assert.strictEqual(M.unidadePedeObra("escritorio"), false);
+  assert.strictEqual(M.unidadePedeObra("projetos"), false);
+  assert.strictEqual(M.unidadePedeObra(""), false);
+});
+
+teste("no escritório só aparece o plano do escritório, filtrado pela unidade", () => {
+  const r = M.contasDoLancamento("escritorio", OPC_OBRA);
+  assert.deepStrictEqual(r.obra, []);
+  assert.ok(r.escritorio.some((c) => c.id === "luz_agua_net"));
+  // conta de gestão não vale no escritório
+  assert.ok(!r.escritorio.some((c) => c.id === "dep_consignacao"));
+});
+
+teste("o bug: empreendimento não pode oferecer conta de gestão", () => {
+  const r = M.contasDoLancamento("empreendimento", OPC_OBRA);
+  assert.ok(!r.escritorio.some((c) => c.id === "dep_consignacao"));
+  assert.ok(!r.escritorio.some((c) => c.id === "pagamentos_compras"));
+  assert.ok(r.escritorio.some((c) => c.id === "emp_construcao"));
+});
+
+teste("no empreendimento o plano da obra entra, só com os grupos de custo", () => {
+  const r = M.contasDoLancamento("empreendimento", OPC_OBRA);
+  const ids = r.obra.map((c) => c.id);
+  assert.ok(ids.indexOf("material") >= 0, "material tem que aparecer");
+  assert.ok(ids.indexOf("empreiteiro") >= 0);
+  assert.ok(ids.indexOf("terreno_aquisicao") >= 0);
+  // receita de obra não se lança pelo extrato
+  assert.ok(ids.indexOf("deposito_proprio") < 0);
+});
+
+teste("o prefixo distingue os dois planos quando o id se repete", () => {
+  const r = M.contasDoLancamento("empreendimento", OPC_OBRA);
+  const doEsc = r.escritorio.find((c) => c.id === "emp_construcao");
+  assert.strictEqual(doEsc.valor, "e:emp_construcao");
+  assert.deepStrictEqual(M.contaEscolhida("o:material"), { fonte: "obra", id: "material" });
+  assert.deepStrictEqual(M.contaEscolhida("e:material"), { fonte: "escritorio", id: "material" });
+});
+
+teste("lançamento antigo, sem prefixo, continua sendo do escritório", () => {
+  assert.deepStrictEqual(M.contaEscolhida("luz_agua_net"), { fonte: "escritorio", id: "luz_agua_net" });
+  assert.deepStrictEqual(M.contaEscolhida(""), { fonte: "", id: "" });
+});
+
+teste("as obras oferecidas são as do cliente escolhido", () => {
+  const data = { obras: [{ id: "o1", clienteId: "c1" }, { id: "o2", clienteId: "c2" }, { id: "o3", clienteId: "c1" }] };
+  assert.deepStrictEqual(M.obrasDoLancamento(data, "c1").map((o) => o.id), ["o1", "o3"]);
+  assert.deepStrictEqual(M.obrasDoLancamento(data, ""), []);
+});
+
+teste("custo na obra: cobra conta, cliente, obra, valor e data", () => {
+  const vazio = M.validarLancamentoNaObra({}, OPC_OBRA);
+  assert.ok(vazio.includes("Escolha a conta."));
+  assert.ok(vazio.includes("Informe o cliente ou o empreendimento."));
+  assert.ok(vazio.includes("Escolha a obra que recebe o custo."));
+  assert.ok(vazio.includes("Informe o valor."));
+  assert.ok(vazio.includes("Informe a data do pagamento."));
+  const bom = M.validarLancamentoNaObra({ contaId: "material", clienteId: "c1", obraIdAlvo: "o1",
+    valor: 59.96, lancadoEm: "2026-09-24" }, OPC_OBRA);
+  assert.deepStrictEqual(bom, []);
+});
+
+teste("custo na obra respeita mês fechado, pela data do pagamento", () => {
+  const r = M.validarLancamentoNaObra({ contaId: "material", clienteId: "c1", obraIdAlvo: "o1",
+    valor: 10, lancadoEm: "2026-08-10" }, { ...OPC_OBRA, fechamentos: { "2026-08": { fechadoEm: "x" } } });
+  assert.ok(r.some((e) => /fechad/i.test(e)), JSON.stringify(r));
+});
+
+teste("a tela avisa onde o custo vai aparecer no escritório", () => {
+  const emp = { id: "o1", clienteId: "c3" };
+  const clienteEmp = { id: "c3", servicos: { empreendimento: true } };
+  const r = M.destinoVisivelDoCusto("material", emp, clienteEmp, OPC_OBRA);
+  assert.strictEqual(r.modo, "empreendimento");
+  assert.strictEqual(r.conta, "Construção");
+});
+
+teste("na gestão de obras o mesmo custo chega como Pagamentos e compras", () => {
+  const obra = { id: "o1", clienteId: "c1" };
+  const cliente = { id: "c1", servicos: { gestaoObra: true } };
+  const r = M.destinoVisivelDoCusto("material", obra, cliente, OPC_OBRA);
+  assert.strictEqual(r.modo, "gestao");
+  assert.strictEqual(r.conta, "Pagamentos e compras");
+});
+
+teste("cliente que paga direto: o custo não atravessa, e a tela diz", () => {
+  const obra = { id: "o1", clienteId: "c1", clientePagaDireto: true };
+  const cliente = { id: "c1", servicos: { gestaoObra: true } };
+  const r = M.destinoVisivelDoCusto("material", obra, cliente, OPC_OBRA);
+  assert.strictEqual(r.modo, "clientePaga");
+  assert.strictEqual(r.conta, null);
+});
+
+teste("valor em português no campo: 5.000,00 não vira NaN", () => {
+  assert.strictEqual(M.efValorDoCampo("5.000,00"), 5000);
+  assert.strictEqual(M.efValorDoCampo("59,96"), 59.96);
+  assert.strictEqual(M.efValorDoCampo(""), 0);
+  assert.strictEqual(M.efValorDoCampo(1234.5), 1234.5);
+});
+
 teste("toda conta aponta para um grupo que existe, e todo id é único", () => {
   const ids = new Set();
   for (const c of M.PLANO_CONTAS_ESCRITORIO) {
