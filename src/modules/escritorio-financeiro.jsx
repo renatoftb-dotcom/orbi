@@ -1424,9 +1424,13 @@ const EF_ESTILO = {
     color: on ? "#fff" : "#262421", fontWeight: on ? 600 : 500, fontFamily: "inherit" }),
   card: { background: "#fff", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding: 16 },
   quadro: { background: "#fff", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, overflow: "auto" },
-  input: { width: "100%", padding: "8px 10px", borderRadius: 9, border: "1px solid rgba(38,36,33,0.18)",
-    fontSize: 13, fontFamily: "inherit", background: "#fff", color: "#262421" },
-  rot: { fontSize: 11, fontWeight: 600, color: "#6b7280", marginBottom: 4 },
+  // boxSizing é o que impede o campo de transbordar a coluna: sem ele,
+  // "100% + 20 de padding + 2 de borda" passa da largura da célula e as
+  // bordas de um campo entram por cima do vizinho.
+  input: { width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 9,
+    border: "1px solid rgba(38,36,33,0.18)", fontSize: 13, fontFamily: "inherit",
+    background: "#fff", color: "#262421" },
+  rot: { fontSize: 11, fontWeight: 600, color: "#6b7280", marginBottom: 4, lineHeight: 1.3 },
   btn: { background: "#0474f4", color: "#fff", border: "none", borderRadius: 10, padding: "9px 18px",
     fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" },
   btnSec: { background: "#fff", color: "#262421", border: "1px solid rgba(38,36,33,0.18)", borderRadius: 10,
@@ -1604,11 +1608,12 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     clienteId: f.clienteId || f.cliente, obraId: f.projeto,
     empreendimentoId: ehEmp ? f.empreendimentoId : f.projeto }, { fechamentos });
 
-  const campo = (rot, filho) => <div><div style={S.rot}>{rot}</div>{filho}</div>;
+  const campo = (rot, filho) => <div style={{ minWidth: 0 }}><div style={S.rot}>{rot}</div>{filho}</div>;
   return (
-    <div style={{ ...S.card, borderColor: "rgba(4,116,244,0.35)", background: "#f7fbff", display: "grid", gap: 10 }}>
+    <div style={{ ...S.card, borderColor: "rgba(4,116,244,0.35)", background: "#f7fbff", display: "grid", gap: 12 }}>
       <div style={{ fontSize: 13, fontWeight: 700 }}>{inicial && inicial.id ? "Editar lançamento" : "Novo lançamento"}</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+        gap: 12, alignItems: "end" }}>
         {campo("Conta", (
           <Selecao style={{ ...S.input, cursor: "pointer" }} value={f.contaId} onChange={(e) => {
             const c = contaEscritorio(e.target.value);
