@@ -205,6 +205,27 @@ function mesmaUnidade(a, b) {
   return ca === cb;
 }
 
+// A loja escreveu uma unidade; o catálogo conhece outra para o mesmo insumo.
+// "Areia Fina" é vendida em m³ e veio na nota como METRO — a troca passa
+// despercebida e contabiliza R$ 130,00 o metro onde eram R$ 130,00 o metro
+// cúbico. O preço de referência já se defende disso na hora do pagamento,
+// mas aí já foi: a conta nasceu com a unidade errada, e o quantitativo da
+// obra também. O lugar de avisar é ANTES de lançar.
+//
+// Devolve null quando não há o que dizer: sem insumo casado, sem unidade de
+// um dos lados, ou quando as duas são a mesma coisa escrita diferente.
+function divergenciaDeUnidade(unidadeDoItem, insumo) {
+  if (!insumo) return null;
+  // Sem chamar unidadeDoPreco: ela mora depois do corte que os testes da
+  // Entrada usam, e um ReferenceError aqui derrubaria a tela do pedido.
+  var doCatalogo = insumo.precoUnidade || insumo.unidade || "";
+  var daLoja = String(unidadeDoItem == null ? "" : unidadeDoItem).trim();
+  if (!doCatalogo || !daLoja) return null;
+  if (mesmaUnidade(daLoja, doCatalogo) !== false) return null;
+  return { daLoja: daLoja, doCatalogo: doCatalogo };
+}
+
+
 // ═══════════════════════════════════════════════════════════════
 // CÓDIGO
 // ═══════════════════════════════════════════════════════════════

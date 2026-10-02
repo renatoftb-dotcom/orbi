@@ -29,7 +29,7 @@ const api = new Function(
            resolverInsumo, proximoCodigoInsumo, grupoInferido, prefixoDoGrupo,
            mesesEntre, fatorIncc, precoInsumo, atualizarPrecoReferencia, comprasDoInsumo,
            previaDePrecosPorCompra, aplicarComprasNoCatalogo, contasRecemPagas,
-           chaveUnidade, unidadeCanonica, mesmaUnidade, unidadeDoPreco,
+           chaveUnidade, unidadeCanonica, mesmaUnidade, unidadeDoPreco, divergenciaDeUnidade,
            migrarMateriaisParaInsumos, semearInsumos };`
 )();
 
@@ -848,6 +848,47 @@ t("conta sem insumo casado AINDA é uma conta paga", () => {
 t("desfazer baixa não vira compra", () => {
   eq(api.contasRecemPagas([{ id: "1", insumoCodigo: "A", pago: true }],
                           [{ id: "1", insumoCodigo: "A", pago: false }]).length, 0);
+});
+
+
+// ── Unidade trocada na nota, pega antes de lançar ───────────────
+
+const AREIA = { codigo: "AGR-001", nome: "Areia Fina", unidade: "m3" };
+
+t("areia em METRO quando o catálogo usa m3 é divergência", () => {
+  const d = api.divergenciaDeUnidade("Mts", AREIA);
+  eq(d.daLoja, "Mts");
+  eq(d.doCatalogo, "m3");
+  eq(api.divergenciaDeUnidade("METRO", AREIA).doCatalogo, "m3");
+});
+
+t("a mesma unidade escrita diferente não é divergência", () => {
+  eq(api.divergenciaDeUnidade("m3", AREIA), null);
+  eq(api.divergenciaDeUnidade("M3", AREIA), null);
+  eq(api.divergenciaDeUnidade("m³", AREIA), null);
+});
+
+t("sem insumo casado não há o que comparar", () => {
+  eq(api.divergenciaDeUnidade("Mts", null), null);
+  eq(api.divergenciaDeUnidade("Mts", undefined), null);
+});
+
+t("unidade em branco de um dos lados é dúvida, não divergência", () => {
+  eq(api.divergenciaDeUnidade("", AREIA), null);
+  eq(api.divergenciaDeUnidade("Mts", { codigo: "X" }), null);
+});
+
+t("a unidade do ÚLTIMO preço manda sobre a do cadastro", () => {
+  // trocar a unidade do cadastro não pode acusar todas as compras antigas
+  const comPreco = { codigo: "X", unidade: "Rolos", precoUnidade: "Mts" };
+  eq(api.divergenciaDeUnidade("Mts", comPreco), null);
+  eq(api.divergenciaDeUnidade("Rolos", comPreco).doCatalogo, "Mts");
+});
+
+t("abreviação da loja casa com a palavra do catálogo", () => {
+  eq(api.divergenciaDeUnidade("un", { codigo: "X", unidade: "Unidades" }), null);
+  eq(api.divergenciaDeUnidade("KG", { codigo: "X", unidade: "Kg" }), null);
+  eq(api.divergenciaDeUnidade("QUILO", { codigo: "X", unidade: "Kg" }), null);
 });
 
 

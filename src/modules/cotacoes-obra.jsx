@@ -6739,6 +6739,22 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
   // faltando: a IA não tem o que achar, e perguntar só esconde a falha real.
   const sobrasTortas = sobrasDaLeitura.filter((x) => descricaoSemMaterial(x.descricao));
   const sobrasUteis = sobrasDaLeitura.filter((x) => !descricaoSemMaterial(x.descricao));
+  // Unidade da nota contra a do catálogo, item a item. Conta aqui para o
+  // aviso do topo; a correção fica na linha, onde a mão está.
+  const unidadesTrocadas = (typeof divergenciaDeUnidade === "function" ? itens : [])
+    .map((x, i) => {
+      if (!x.insumoCodigo) return null;
+      const ins = (insumos || []).find((y) => y && y.codigo === x.insumoCodigo);
+      const d = divergenciaDeUnidade(x.unidade, ins);
+      return d ? { i, nome: (ins && ins.nome) || x.descricao, ...d } : null;
+    })
+    .filter(Boolean);
+  function corrigirTodasAsUnidades() {
+    aoMudar({ ...p, itens: itens.map((x, i) => {
+      const d = unidadesTrocadas.find((u) => u.i === i);
+      return d ? { ...x, unidade: d.doCatalogo } : x;
+    }) });
+  }
   async function conferirComIA() {
     const alvos = [];
     itens.forEach((x, i) => { if (ehSobra(x) && !descricaoSemMaterial(x.descricao)) alvos.push({ i, x }); });
@@ -6955,6 +6971,27 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
             </div>
           )}
 
+          {unidadesTrocadas.length > 0 && (
+            <div style={{ marginBottom: 10, padding: "9px 12px", borderRadius: 10,
+              border: "1px solid rgba(180,83,9,0.30)", background: "#fff7ed" }}>
+              <div style={{ fontSize: 12.5, color: "#b45309", fontWeight: 600 }}>
+                {unidadesTrocadas.length === 1
+                  ? "1 item com unidade diferente da do catálogo"
+                  : `${unidadesTrocadas.length} itens com unidade diferente da do catálogo`}
+              </div>
+              <div style={{ fontSize: 11.5, color: "#7c2d12", marginTop: 3 }}>
+                {unidadesTrocadas.slice(0, 3).map((d) => `${d.nome}: a loja pôs ${d.daLoja}, o catálogo usa ${d.doCatalogo}`).join(" · ")}
+                {unidadesTrocadas.length > 3 ? " · …" : ""}. Lançar assim leva a unidade errada para a conta e para o
+                quantitativo da obra.
+              </div>
+              <button type="button" onClick={corrigirTodasAsUnidades}
+                style={{ ...E.btnSec, fontSize: 11.5, padding: "5px 12px", marginTop: 8,
+                  color: "#b45309", borderColor: "rgba(180,83,9,0.35)", fontWeight: 600 }}>
+                {unidadesTrocadas.length === 1 ? "Usar a unidade do catálogo" : "Usar as unidades do catálogo"}
+              </button>
+            </div>
+          )}
+
           {/* ── a etapa de uma vez só, e a exceção corrigida item a item ── */}
           {itens.length > 1 && (
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
@@ -7030,9 +7067,29 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
               <CampoNumeroBR estilo={celStyle} valor={it.quantidade} casas={2} placeholder="0"
                 aoMudar={(v) => mexerItem(i, { quantidade: v })} />
             );
+            // A unidade da nota contra a do catálogo. Avisa aqui, na linha,
+            // antes de lançar — e com a correção a um clique, porque avisar
+            // sem dar o caminho só empurra o trabalho para quem já está com a
+            // nota na mão.
+            const divUn = (typeof divergenciaDeUnidade === "function" && it.insumoCodigo)
+              ? divergenciaDeUnidade(it.unidade, (insumos || []).find((x) => x && x.codigo === it.insumoCodigo))
+              : null;
             const campoUnidade = (
-              <input style={celStyle} value={it.unidade} placeholder="Unidades"
-                onChange={(e) => mexerItem(i, { unidade: e.target.value })} />
+              <div>
+                <input value={it.unidade} placeholder="Unidades"
+                  style={{ ...celStyle, borderColor: divUn ? "#b45309" : celStyle.borderColor,
+                    background: divUn ? "#fff7ed" : celStyle.background }}
+                  onChange={(e) => mexerItem(i, { unidade: e.target.value })} />
+                {divUn && (
+                  <div style={{ fontSize: 10.5, color: "#b45309", marginTop: 2, lineHeight: 1.3 }}>
+                    catálogo: {divUn.doCatalogo}{" "}
+                    <button type="button" onClick={() => mexerItem(i, { unidade: divUn.doCatalogo })}
+                      style={{ background: "none", border: "none", padding: 0, color: "#b45309",
+                        cursor: "pointer", fontFamily: "inherit", fontSize: 10.5,
+                        textDecoration: "underline", fontWeight: 600 }}>usar</button>
+                  </div>
+                )}
+              </div>
             );
             const campoUnitario = (
               <CampoCtrNum tipo="moeda" valor={it.unitario} style={celStyle} placeholder="0,00"
