@@ -2341,8 +2341,19 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // antigo de `data`, e o segundo apaga o que o primeiro escreveu — foi assim
   // que uma conta de loja criada pela Entrada sumiu. Quando a baixa precisa
   // mexer no catálogo também, as duas coisas vão juntas ou nenhuma vai.
-  const gravarObras = (fatia, extras) => save({ ...data,
-    obras: mesclarPorCliente(data.obras, cliente.id, fatia), ...(extras || {}) });
+  // Toda gravada de obra deste cliente passa por aqui, e por isso é aqui que
+  // se pergunta se as contas a pagar mudaram. Era o que faltava: cada botão
+  // que pagava lembrava de avisar o preço e o extrato, mas o de APAGAR o
+  // pedido não — e o lançamento ficava órfão no escritório. Agora não há o
+  // que lembrar; quem grava a obra já está avisando.
+  //
+  // `extras` continua aceito para quem precisa gravar outra coisa no mesmo
+  // save (o que vier daqui entra junto).
+  const gravarObras = (fatia, extras) => {
+    const efeito = efeitosDaFatia(fatia);
+    save({ ...data, obras: mesclarPorCliente(data.obras, cliente.id, fatia),
+      ...(efeito || {}), ...(extras || {}) });
+  };
   // Escritório e cliente usam esta mesma tela e mexem nas mesmas contas.
   // Tudo que é gravado daqui leva o nome de quem gravou — é o que permite
   // abrir uma baixa meses depois e saber de quem foi a mão.
@@ -2437,15 +2448,26 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     return { extras: Object.keys(extras).length ? extras : null };
   };
 
+  // Qual obra da fatia teve as contas trocadas. Uma ação mexe numa obra só,
+  // então para na primeira que rendeu efeito: `efeitosDaBaixa` lê o extrato
+  // do `data` de agora, e somar duas rodadas perderia a primeira.
+  const efeitosDaFatia = (fatia) => {
+    for (const o of fatia || []) {
+      if (!o || !o.id) continue;
+      const velha = (obras || []).find(x => x && x.id === o.id);
+      if (!velha || velha.contasPagar === o.contasPagar) continue;
+      const ef = efeitosDaBaixa(velha.contasPagar || [], o.contasPagar || [], o);
+      if (ef.extras) return ef.extras;
+    }
+    return null;
+  };
+
   // Toda escrita de contas da obra passa aqui — baixa de pedido, baixa em
   // lote, baixa avulsa e o que vier depois caíram todos nesta porta.
   const gravarContas = (novasContas, obraId) => {
     const alvo = obraId || (obraSelecionada && obraSelecionada.id);
     if (!alvo) return;
-    const fatia = obras.map(o => o.id === alvo ? { ...o, contasPagar: novasContas } : o);
-    const antes = (obras.find(o => o.id === alvo) || {}).contasPagar || [];
-    const ef = efeitosDaBaixa(antes, novasContas, fatia.find(o => o && o.id === alvo) || null);
-    gravarObras(fatia, ef.extras);
+    gravarObras(obras.map(o => o.id === alvo ? { ...o, contasPagar: novasContas } : o));
   };
   // Contas geradas por uma versão antiga das regras de vencimento (ex.: as
   // mensais que andavam de 30 em 30 dias, escorregando o dia do mês) se
@@ -4819,8 +4841,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       // Papel que nasce pago é uma baixa como outra qualquer: o preço do
       // catálogo aprende e o extrato do escritório recebe — na mesma gravada
       // da obra, senão uma sobrescreve a outra.
-      const efLoja = efeitosDaBaixa(obraAtual.contasPagar || [], finais, comLoja);
-      gravarObras(obras.map(o => o.id === obraAtual.id ? comLoja : o), efLoja.extras);
+      gravarObras(obras.map(o => o.id === obraAtual.id ? comLoja : o));
       setObraSelecionada(comLoja);
       return { primeiraContaId: contas[0].id, quantas: contas.length, gravado: true };
     }
@@ -4837,8 +4858,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     }));
     const atualizada = { ...obraAtual, contasPagar: [...(obraAtual.contasPagar || []), ...novas], cotacoes };
     // Quase sempre nascem em aberto; quando alguma já vem paga, atravessa.
-    const efCot = efeitosDaBaixa(obraAtual.contasPagar || [], atualizada.contasPagar, atualizada);
-    gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o), efCot.extras);
+    gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o));
     setObraSelecionada(atualizada);
     return { primeiraContaId: novas[0].id, quantas: novas.length, gravado: true };
   }
@@ -4854,8 +4874,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     }));
     const atualizada = { ...obraAtual,
       contasPagar: removerContasDoPedido(obraAtual.contasPagar || [], pedidoId), cotacoes };
-    const efApagar = efeitosDaBaixa(obraAtual.contasPagar || [], atualizada.contasPagar, atualizada);
-    gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o), efApagar.extras);
+    gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o));
     setObraSelecionada(atualizada);
     return { gravado: true };
   }
