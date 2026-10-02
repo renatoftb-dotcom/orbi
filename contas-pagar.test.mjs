@@ -58,6 +58,7 @@ const modulo = new Function(`
            registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
+           ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem,
            pagamentosEmAberto, ajustarVencimentos, limparAjustes, ajustesDoContrato,
            previaAjusteContrato, proximoNumeroDoc };
 `)();
@@ -79,6 +80,90 @@ const MED = [{ id: "i1", insumoCodigo: "CON-001", descricao: "Concreto - FCK25",
 const DADOS_MED = { cotacaoId: "c1", obraId: "o1", contaId: "material",
   prestadorId: "f1", favorecido: "D-MIX CONCRETO", modo: "parcelas", parcelas: 1,
   primeiroVencimento: "2026-09-30", medicao: MED, valor: 2405.48, descricao: "Concreto" };
+
+
+// ── Recalibrar valor, não só data ───────────────────────────────
+const CONTAS_REC = [
+  { id: "x1", cotacaoId: "cot1", descricao: "Parcela 1", vencimento: "2026-10-10", valor: 1000, pago: false, registros: [] },
+  { id: "x2", cotacaoId: "cot1", descricao: "Parcela 2", vencimento: "2026-11-10", valor: 1000, pago: false, registros: [] },
+  { id: "x3", cotacaoId: "cot1", descricao: "Parcela 3", vencimento: "2026-09-10", valor: 1000, pago: true, valorPago: 1000, registros: [] },
+];
+
+
+// ── Exceção de valor no contrato ────────────────────────────────
+teste("valor corrigido na parcela do contrato sobrevive ao recálculo da tela", () => {
+  const ct = base({ valor: 3000, modalidade: "parcelado", parcelas: 3,
+    periodicidade: "mensais", dataInicio: "2026-09-01" });
+  const antes = modulo.contasDoContrato(ct);
+  assert.strictEqual(antes.length, 3);
+  const alvo = antes[0];
+  const ajustado = modulo.ajustarValores(ct, [{ id: alvo.id, valor: 700 }]);
+  const depois = modulo.contasDoContrato(ajustado);
+  assert.strictEqual(depois[0].valor, 700);
+  assert.strictEqual(depois[0].valorAjustado, true);
+  assert.strictEqual(depois[1].valor, antes[1].valor, "as outras não se mexem");
+  // e o recálculo de novo, como a tela faz a cada abertura, mantém o 700
+  assert.strictEqual(modulo.contasDoContrato(ajustado)[0].valor, 700);
+});
+
+teste("voltar ao valor da regra apaga a exceção", () => {
+  const ct = base({ valor: 3000, modalidade: "parcelado", parcelas: 3,
+    periodicidade: "mensais", dataInicio: "2026-09-01" });
+  const original = modulo.contasDoContrato(ct)[0];
+  const ajustado = modulo.ajustarValores(ct, [{ id: original.id, valor: 700 }]);
+  assert.ok(Object.keys(modulo.ajustesDeValorDoContrato(ajustado)).length);
+  const devolvido = modulo.ajustarValores(ajustado, [{ id: original.id, valor: original.valor }]);
+  assert.strictEqual(Object.keys(modulo.ajustesDeValorDoContrato(devolvido)).length, 0);
+});
+
+teste("recalibrar muda o valor da parcela em aberto", () => {
+  const r = modulo.recalibrarContasDoPedido(CONTAS_REC, [{ id: "x1", valor: 700 }], "Renato", "2026-10-02T10:00:00Z");
+  assert.strictEqual(r[0].valor, 700);
+  assert.strictEqual(r[0].vencimento, "2026-10-10", "data não mexida continua igual");
+  assert.strictEqual(r[1].valor, 1000);
+});
+
+teste("data e valor na mesma mexida, num registro só", () => {
+  const r = modulo.recalibrarContasDoPedido(CONTAS_REC,
+    [{ id: "x1", valor: 700, vencimento: "2026-10-20" }], "Renato", "2026-10-02T10:00:00Z");
+  assert.strictEqual(r[0].valor, 700);
+  assert.strictEqual(r[0].vencimento, "2026-10-20");
+  const ato = (r[0].registros || []).slice(-1)[0];
+  assert.ok(/→/.test(ato.detalhe || ""), JSON.stringify(ato));
+  assert.ok(/R\$/.test(ato.detalhe || ""), "o registro conta a mudança de valor");
+});
+
+teste("parcela paga não se mexe — é fato consumado", () => {
+  const r = modulo.recalibrarContasDoPedido(CONTAS_REC, [{ id: "x3", valor: 1 }], "Renato");
+  assert.strictEqual(r[2].valor, 1000);
+});
+
+teste("valor igual não é mudança", () => {
+  const r = modulo.recalibrarContasDoPedido(CONTAS_REC, [{ id: "x1", valor: 1000 }], "Renato");
+  assert.strictEqual(r[0], CONTAS_REC[0]);
+});
+
+teste("valor zero ou vazio é ignorado, não zera a parcela", () => {
+  const r = modulo.recalibrarContasDoPedido(CONTAS_REC, [{ id: "x1", valor: "" }, { id: "x2", valor: 0 }], "Renato");
+  assert.strictEqual(r[0].valor, 1000);
+  assert.strictEqual(r[1].valor, 1000);
+});
+
+teste("o total antes e depois, que é o que se confere", () => {
+  const tot = modulo.totalDaRecalibragem([
+    { id: "a", valorOriginal: 1000, valor: 700 },
+    { id: "b", valorOriginal: 1000, valor: 1000 },
+  ]);
+  assert.strictEqual(tot.antes, 2000);
+  assert.strictEqual(tot.depois, 1700);
+  assert.strictEqual(tot.diferenca, -300);
+  assert.strictEqual(tot.mudou, true);
+});
+
+teste("só mexeu em data: o total diz que não mudou", () => {
+  const tot = modulo.totalDaRecalibragem([{ id: "a", valorOriginal: 1000, valor: 1000 }]);
+  assert.strictEqual(tot.mudou, false);
+});
 
 teste("medição com uma data vira conta por item, com quantidade e etapa", () => {
   assert.strictEqual(modulo.cpMedicaoEmUmaData(DADOS_MED), true);

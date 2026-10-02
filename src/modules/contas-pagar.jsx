@@ -298,6 +298,35 @@ function ajustesDoContrato(contrato) {
   return (contrato && contrato.ajustesVencimento) || {};
 }
 
+// A exceção de VALOR, irmã da de vencimento. A parcela do contrato é
+// recalculada toda vez que a tela abre, a partir da regra; sem guardar a
+// exceção aqui, um valor corrigido à mão voltaria sozinho ao da regra no
+// próximo render.
+function ajustesDeValorDoContrato(contrato) {
+  return (contrato && contrato.ajustesValor) || {};
+}
+
+// Mesma lógica de `ajustarVencimentos`: valor igual ao da regra não é
+// exceção, e exceção que voltou a coincidir com a regra é apagada — senão
+// mexer no valor do contrato depois não moveria mais essa parcela.
+function ajustarValores(contrato, pagamentos) {
+  const c = contrato || {};
+  const daRegra = {};
+  for (const l of contasDoContrato({ ...c, ajustesValor: null })) daRegra[l.id] = Math.round((Number(l.valor) || 0) * 100) / 100;
+  const ajustes = { ...ajustesDeValorDoContrato(c) };
+  for (const d of pagamentos || []) {
+    if (!d || !d.id || d.valor == null || d.valor === "") continue;
+    const novo = Math.round((typeof numeroDeCampo === "function" ? numeroDeCampo(d.valor) : Number(d.valor) || 0) * 100) / 100;
+    if (!(novo > 0)) continue;
+    if (Math.abs((daRegra[d.id] || 0) - novo) < 0.005) delete ajustes[d.id];
+    else ajustes[d.id] = novo;
+  }
+  if (!Object.keys(ajustes).length) {
+    const limpo = { ...c }; delete limpo.ajustesValor; return limpo;
+  }
+  return { ...c, ajustesValor: ajustes };
+}
+
 function ajustarVencimentos(contrato, datas) {
   const c = contrato || {};
   // O que a regra diria sem exceção nenhuma. Data igual à da regra NÃO vira
@@ -322,6 +351,7 @@ function ajustarVencimentos(contrato, datas) {
 function limparAjustes(contrato) {
   const c = { ...(contrato || {}) };
   delete c.ajustesVencimento;
+  delete c.ajustesValor;
   return c;
 }
 
@@ -329,6 +359,7 @@ function contasDoContrato(contrato) {
   const c = contrato || {};
   const servico = typeof servicoDoContrato === "function" ? servicoDoContrato(c) : "Serviços";
   const ajustes = ajustesDoContrato(c);
+  const ajustesV = ajustesDeValorDoContrato(c);
   return parcelasAPagar(c).map((p, idx) => ({
     id: `${c.id}:${idx + 1}`,
     origem: "contrato",
@@ -342,7 +373,8 @@ function contasDoContrato(contrato) {
     prestadorId: c.prestadorId || "",
     favorecido: c.nomeContratado || "",
     descricao: p.descricao,
-    valor: p.valor,
+    valor: ajustesV[`${c.id}:${idx + 1}`] != null ? ajustesV[`${c.id}:${idx + 1}`] : p.valor,
+    valorAjustado: ajustesV[`${c.id}:${idx + 1}`] != null,
     vencimento: ajustes[`${c.id}:${idx + 1}`] || p.vencimento || "",
     ajustada: !!ajustes[`${c.id}:${idx + 1}`],
     estimada: !!p.estimada && !ajustes[`${c.id}:${idx + 1}`],
@@ -1225,6 +1257,13 @@ function registrosDaConta(conta) {
   return ((conta || {}).registros || []).filter((r) => r && r.ato);
 }
 
+// Dinheiro no registro do ato. O formatador bonito mora na tela; aqui
+// basta o número legível, e ele não pode depender dela.
+function cpDinheiro(v) {
+  const n = Number(v) || 0;
+  return "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function cpDiaBR(iso) {
   if (!iso) return "";
   const s = String(iso);
@@ -1785,21 +1824,50 @@ function recalibrarPedido(contas, cotacaoId, novaData, quem, agoraIso) {
 // combinado, e mover todas seria reescrever um acerto que ninguém desfez.
 // Então a telinha tem os dois caminhos, e este é o segundo — cada conta em
 // aberto com a data dela.
-function recalibrarContasDoPedido(contas, datas, quem, agoraIso) {
+// Recalibrar move a data E o valor do que ainda não foi pago. O valor entra
+// aqui porque a realidade corrige a previsão: mediu menos, entregou menos,
+// o fornecedor deu desconto. O que já foi pago não se mexe — é fato
+// consumado, e reescrevê-lo seria reescrever o extrato.
+function recalibrarContasDoPedido(contas, mudancas, quem, agoraIso) {
   const porId = {};
-  for (const d of datas || []) {
-    if (d && d.id && d.vencimento) porId[d.id] = String(d.vencimento).slice(0, 10);
+  for (const d of mudancas || []) {
+    if (!d || !d.id) continue;
+    const alvo = porId[d.id] || (porId[d.id] = {});
+    if (d.vencimento) alvo.vencimento = String(d.vencimento).slice(0, 10);
+    if (d.valor != null && d.valor !== "") {
+      const v = Math.round((typeof numeroDeCampo === "function" ? numeroDeCampo(d.valor) : Number(d.valor) || 0) * 100) / 100;
+      if (v > 0) alvo.valor = v;
+    }
   }
   const agora = agoraIso || new Date().toISOString();
   return (contas || []).map((c) => {
-    // conta paga não se mexe, e data igual não é mudança nenhuma
-    if (!c || c.pago || !porId[c.id] || porId[c.id] === c.vencimento) return c;
-    const movida = { ...c, vencimento: porId[c.id] };
-    return quem
-      ? registrarAto(movida, "recalibrada", quem, agora,
-          `${cpDiaBR(c.vencimento)} → ${cpDiaBR(movida.vencimento)}`)
-      : movida;
+    if (!c || c.pago || !porId[c.id]) return c;
+    const m = porId[c.id];
+    const mudouData = !!m.vencimento && m.vencimento !== c.vencimento;
+    const mudouValor = m.valor != null && Math.abs(m.valor - (Number(c.valor) || 0)) >= 0.005;
+    if (!mudouData && !mudouValor) return c;
+    const movida = { ...c };
+    if (mudouData) movida.vencimento = m.vencimento;
+    if (mudouValor) movida.valor = m.valor;
+    if (!quem) return movida;
+    const conta = [
+      mudouData ? `${cpDiaBR(c.vencimento)} → ${cpDiaBR(movida.vencimento)}` : "",
+      mudouValor ? `${cpDinheiro(c.valor)} → ${cpDinheiro(movida.valor)}` : "",
+    ].filter(Boolean).join(" · ");
+    return registrarAto(movida, "recalibrada", quem, agora, conta);
   });
+}
+
+// O total do que ainda está em aberto, antes e depois do ajuste. É o número
+// que se confere antes de confirmar: recalibrar sem ver o total é mudar
+// parcela por parcela sem saber onde a soma foi parar.
+function totalDaRecalibragem(pagamentos) {
+  const n = (v) => (typeof numeroDeCampo === "function" ? numeroDeCampo(v) : Number(v) || 0);
+  const red = (x) => Math.round(x * 100) / 100;
+  const lista = (pagamentos || []).filter(Boolean);
+  const antes = red(lista.reduce((s, p) => s + (Number(p.valorOriginal != null ? p.valorOriginal : p.valor) || 0), 0));
+  const depois = red(lista.reduce((s, p) => s + n(p.valor), 0));
+  return { antes: antes, depois: depois, diferenca: red(depois - antes), mudou: Math.abs(depois - antes) >= 0.005 };
 }
 
 function previaDatasDoPedido(contas, cotacaoId, datas, limite) {
@@ -1826,7 +1894,8 @@ function pagamentosEmAberto(contas, alvoId, tipo) {
     .filter((c) => c && c[campo] === alvoId && !c.pago)
     .slice()
     .sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)))
-    .map((c) => ({ id: c.id, descricao: c.descricao || "", vencimento: c.vencimento || "" }));
+    .map((c) => ({ id: c.id, descricao: c.descricao || "", vencimento: c.vencimento || "",
+      valor: Number(c.valor) || 0 }));
 }
 
 // A prévia de um ajuste de contrato: gera as contas com a exceção aplicada e

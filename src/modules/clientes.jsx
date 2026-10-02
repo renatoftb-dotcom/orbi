@@ -2625,7 +2625,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // e por isso apaga as exceções anotadas antes — elas eram exceções àquele
     // calendário, não a este.
     const recalibrado = { ...(umaSo
-      ? ajustarVencimentos(alvo, f.pagamentos || [])
+      // Data e valor andam juntos: quem corrige a parcela quase sempre mexe
+      // nos dois, e separar em dois botões seria pedir duas confirmações
+      // para um ajuste só.
+      ? ajustarValores(ajustarVencimentos(alvo, f.pagamentos || []), f.pagamentos || [])
       : (porItem
           ? { ...recalibrarItens(limparAjustes(alvo), f.itens || []), previsaoConclusao: f.previsaoConclusao || "" }
           : recalibrarContrato(limparAjustes(alvo), f.novaData))),
@@ -4408,7 +4411,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
             <button style={C.btnSec} onClick={() => setFormConta(contaAvulsaVazia(obraSelecionada.id))}>＋ Nova conta</button>
             {alvosRecalibraveis.length > 0 && (
-              <button style={C.btnSec} onClick={() => abrirRecalibragem(alvosRecalibraveis[0].id)}>Recalibrar datas</button>
+              <button style={C.btnSec} onClick={() => abrirRecalibragem(alvosRecalibraveis[0].id)}>Recalibrar</button>
             )}
           </div>
         ))}
@@ -4441,7 +4444,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               <div data-vk-ui="1" onClick={e => e.stopPropagation()}
                 style={{ background: "#fff", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: 18, width: "100%", maxWidth: 520, maxHeight: "86vh", overflowY: "auto", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
-                  {ehPedido ? "Recalibrar datas do pedido" : "Recalibrar datas do contrato"}
+                  {ehPedido ? "Recalibrar o pedido" : "Recalibrar o contrato"}
                 </div>
                 <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 14 }}>
                   {umaAUma
@@ -4453,7 +4456,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                     : "A obra não começou na data registrada? Informe quando vence o primeiro pagamento; as parcelas em aberto andam junto, na mesma periodicidade."}
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 170px", gap: 12 }}>
-                  <div>
+                  {/* minWidth 0: célula de grade não encolhe abaixo do conteúdo
+                      sem isto, e "Pedido 0007 · Aço Vergalhões · OURIFER"
+                      empurrava o campo para fora do painel no celular. */}
+                  <div style={{ minWidth: 0 }}>
                     <label style={C.label}>Contrato ou pedido</label>
                     <Selecao style={{ ...C.input, cursor: "pointer" }} value={formRecalibrar.contratoId}
                       onChange={e => abrirRecalibragem(e.target.value)}>
@@ -4464,7 +4470,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                         {[["junto", "Todos os pagamentos"], ["uma", "Um pagamento só"]].map(([id, nome]) => (
                           <button key={id} type="button"
                             onClick={() => setFormRecalibrar({ ...formRecalibrar, modo: id,
-                              pagamentos: pagamentosEmAberto(contasDaObra, escolhido.id, escolhido.tipo) })}
+                              pagamentos: pagamentosEmAberto(contasDaObra, escolhido.id, escolhido.tipo)
+                                .map(x => ({ ...x, valorOriginal: x.valor })) })}
                             style={{ border: `1.5px solid ${formRecalibrar.modo === id ? AZUL_VK : "rgba(38,36,33,0.16)"}`,
                               background: "#fff", color: formRecalibrar.modo === id ? AZUL_VK : "#4b5563",
                               borderRadius: 20, padding: "6px 14px", fontSize: 12,
@@ -4491,6 +4498,28 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   )}
                 </div>
 
+                {/* O total, sempre. Recalibrar sem ver a soma é mudar parcela
+                    por parcela sem saber onde o total foi parar. */}
+                {(() => {
+                  const tot = totalDaRecalibragem(formRecalibrar.pagamentos || []);
+                  if (!(tot.antes > 0 || tot.depois > 0)) return null;
+                  return (
+                    <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: 10,
+                      border: `1px solid ${tot.mudou ? "rgba(4,116,244,0.35)" : "rgba(38,36,33,0.12)"}`,
+                      background: tot.mudou ? "#eef5ff" : "#fafafa", fontSize: 12.5, color: "#111827" }}>
+                      Em aberto hoje <b>{fmtMoedaCtr(tot.antes)}</b>
+                      {tot.mudou ? (
+                        <>
+                          {" → depois do ajuste "}<b>{fmtMoedaCtr(tot.depois)}</b>
+                          <span style={{ color: AZUL_VK }}>
+                            {" ("}{tot.diferenca < 0 ? "−" : "+"}{fmtMoedaCtr(Math.abs(tot.diferenca))}{")"}
+                          </span>
+                        </>
+                      ) : <span style={{ color: "#6b7280" }}>{" — o total não muda, só as datas."}</span>}
+                    </div>
+                  );
+                })()}
+
                 {umaAUma && (
                   <div style={{ marginTop: 14 }}>
                     <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 8 }}>
@@ -4498,14 +4527,29 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                     </div>
                     {(formRecalibrar.pagamentos || []).length === 0 ? (
                       <div style={{ fontSize: 12, color: "#4b5563" }}>Nenhum pagamento em aberto {ehPedido ? "neste pedido" : "neste contrato"}.</div>
-                    ) : (formRecalibrar.pagamentos || []).map((it, i) => (
-                      <div key={it.id} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 170px", gap: 8, marginBottom: 8, alignItems: "center" }}>
-                        <span style={{ fontSize: 12.5, color: "#111827" }}>{it.descricao || `Pagamento ${i + 1}`}</span>
-                        <input style={C.input} type="date" value={it.vencimento || ""}
-                          onChange={e => setFormRecalibrar({ ...formRecalibrar,
-                            pagamentos: (formRecalibrar.pagamentos || []).map((x, j) => j === i ? { ...x, vencimento: e.target.value } : x) })} />
-                      </div>
-                    ))}
+                    ) : (formRecalibrar.pagamentos || []).map((it, i) => {
+                      const mexer = (muda) => setFormRecalibrar({ ...formRecalibrar,
+                        pagamentos: (formRecalibrar.pagamentos || []).map((x, j) => j === i ? { ...x, ...muda } : x) });
+                      const mudouValor = Math.abs(numeroDeCampo(it.valor) - (Number(it.valorOriginal) || 0)) >= 0.005;
+                      return (
+                        <div key={it.id} style={{ display: "grid", gap: 8, marginBottom: 10,
+                          gridTemplateColumns: isMobile ? "1fr" : "1fr 150px 150px", alignItems: "end" }}>
+                          <span style={{ fontSize: 12.5, color: "#111827", alignSelf: "center" }}>{it.descricao || `Pagamento ${i + 1}`}</span>
+                          <div>
+                            {isMobile && <label style={C.label}>Vence em</label>}
+                            <input style={C.input} type="date" value={it.vencimento || ""}
+                              onChange={e => mexer({ vencimento: e.target.value })} />
+                          </div>
+                          {/* O valor ao lado da data: a realidade corrige a previsão —
+                              mediu menos, entregou menos, o fornecedor deu desconto. */}
+                          <div>
+                            {isMobile && <label style={C.label}>Valor</label>}
+                            <CampoCtrNum tipo="moeda" style={{ ...C.input, borderColor: mudouValor ? AZUL_VK : undefined }}
+                              valor={it.valor} onChange={(v) => mexer({ valor: v })} />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 

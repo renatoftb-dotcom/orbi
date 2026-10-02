@@ -21985,6 +21985,35 @@ function ajustesDoContrato(contrato) {
   return (contrato && contrato.ajustesVencimento) || {};
 }
 
+// A exceção de VALOR, irmã da de vencimento. A parcela do contrato é
+// recalculada toda vez que a tela abre, a partir da regra; sem guardar a
+// exceção aqui, um valor corrigido à mão voltaria sozinho ao da regra no
+// próximo render.
+function ajustesDeValorDoContrato(contrato) {
+  return (contrato && contrato.ajustesValor) || {};
+}
+
+// Mesma lógica de `ajustarVencimentos`: valor igual ao da regra não é
+// exceção, e exceção que voltou a coincidir com a regra é apagada — senão
+// mexer no valor do contrato depois não moveria mais essa parcela.
+function ajustarValores(contrato, pagamentos) {
+  const c = contrato || {};
+  const daRegra = {};
+  for (const l of contasDoContrato({ ...c, ajustesValor: null })) daRegra[l.id] = Math.round((Number(l.valor) || 0) * 100) / 100;
+  const ajustes = { ...ajustesDeValorDoContrato(c) };
+  for (const d of pagamentos || []) {
+    if (!d || !d.id || d.valor == null || d.valor === "") continue;
+    const novo = Math.round((typeof numeroDeCampo === "function" ? numeroDeCampo(d.valor) : Number(d.valor) || 0) * 100) / 100;
+    if (!(novo > 0)) continue;
+    if (Math.abs((daRegra[d.id] || 0) - novo) < 0.005) delete ajustes[d.id];
+    else ajustes[d.id] = novo;
+  }
+  if (!Object.keys(ajustes).length) {
+    const limpo = { ...c }; delete limpo.ajustesValor; return limpo;
+  }
+  return { ...c, ajustesValor: ajustes };
+}
+
 function ajustarVencimentos(contrato, datas) {
   const c = contrato || {};
   // O que a regra diria sem exceção nenhuma. Data igual à da regra NÃO vira
@@ -22009,6 +22038,7 @@ function ajustarVencimentos(contrato, datas) {
 function limparAjustes(contrato) {
   const c = { ...(contrato || {}) };
   delete c.ajustesVencimento;
+  delete c.ajustesValor;
   return c;
 }
 
@@ -22016,6 +22046,7 @@ function contasDoContrato(contrato) {
   const c = contrato || {};
   const servico = typeof servicoDoContrato === "function" ? servicoDoContrato(c) : "Serviços";
   const ajustes = ajustesDoContrato(c);
+  const ajustesV = ajustesDeValorDoContrato(c);
   return parcelasAPagar(c).map((p, idx) => ({
     id: `${c.id}:${idx + 1}`,
     origem: "contrato",
@@ -22029,7 +22060,8 @@ function contasDoContrato(contrato) {
     prestadorId: c.prestadorId || "",
     favorecido: c.nomeContratado || "",
     descricao: p.descricao,
-    valor: p.valor,
+    valor: ajustesV[`${c.id}:${idx + 1}`] != null ? ajustesV[`${c.id}:${idx + 1}`] : p.valor,
+    valorAjustado: ajustesV[`${c.id}:${idx + 1}`] != null,
     vencimento: ajustes[`${c.id}:${idx + 1}`] || p.vencimento || "",
     ajustada: !!ajustes[`${c.id}:${idx + 1}`],
     estimada: !!p.estimada && !ajustes[`${c.id}:${idx + 1}`],
@@ -22912,6 +22944,13 @@ function registrosDaConta(conta) {
   return ((conta || {}).registros || []).filter((r) => r && r.ato);
 }
 
+// Dinheiro no registro do ato. O formatador bonito mora na tela; aqui
+// basta o número legível, e ele não pode depender dela.
+function cpDinheiro(v) {
+  const n = Number(v) || 0;
+  return "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function cpDiaBR(iso) {
   if (!iso) return "";
   const s = String(iso);
@@ -23472,21 +23511,50 @@ function recalibrarPedido(contas, cotacaoId, novaData, quem, agoraIso) {
 // combinado, e mover todas seria reescrever um acerto que ninguém desfez.
 // Então a telinha tem os dois caminhos, e este é o segundo — cada conta em
 // aberto com a data dela.
-function recalibrarContasDoPedido(contas, datas, quem, agoraIso) {
+// Recalibrar move a data E o valor do que ainda não foi pago. O valor entra
+// aqui porque a realidade corrige a previsão: mediu menos, entregou menos,
+// o fornecedor deu desconto. O que já foi pago não se mexe — é fato
+// consumado, e reescrevê-lo seria reescrever o extrato.
+function recalibrarContasDoPedido(contas, mudancas, quem, agoraIso) {
   const porId = {};
-  for (const d of datas || []) {
-    if (d && d.id && d.vencimento) porId[d.id] = String(d.vencimento).slice(0, 10);
+  for (const d of mudancas || []) {
+    if (!d || !d.id) continue;
+    const alvo = porId[d.id] || (porId[d.id] = {});
+    if (d.vencimento) alvo.vencimento = String(d.vencimento).slice(0, 10);
+    if (d.valor != null && d.valor !== "") {
+      const v = Math.round((typeof numeroDeCampo === "function" ? numeroDeCampo(d.valor) : Number(d.valor) || 0) * 100) / 100;
+      if (v > 0) alvo.valor = v;
+    }
   }
   const agora = agoraIso || new Date().toISOString();
   return (contas || []).map((c) => {
-    // conta paga não se mexe, e data igual não é mudança nenhuma
-    if (!c || c.pago || !porId[c.id] || porId[c.id] === c.vencimento) return c;
-    const movida = { ...c, vencimento: porId[c.id] };
-    return quem
-      ? registrarAto(movida, "recalibrada", quem, agora,
-          `${cpDiaBR(c.vencimento)} → ${cpDiaBR(movida.vencimento)}`)
-      : movida;
+    if (!c || c.pago || !porId[c.id]) return c;
+    const m = porId[c.id];
+    const mudouData = !!m.vencimento && m.vencimento !== c.vencimento;
+    const mudouValor = m.valor != null && Math.abs(m.valor - (Number(c.valor) || 0)) >= 0.005;
+    if (!mudouData && !mudouValor) return c;
+    const movida = { ...c };
+    if (mudouData) movida.vencimento = m.vencimento;
+    if (mudouValor) movida.valor = m.valor;
+    if (!quem) return movida;
+    const conta = [
+      mudouData ? `${cpDiaBR(c.vencimento)} → ${cpDiaBR(movida.vencimento)}` : "",
+      mudouValor ? `${cpDinheiro(c.valor)} → ${cpDinheiro(movida.valor)}` : "",
+    ].filter(Boolean).join(" · ");
+    return registrarAto(movida, "recalibrada", quem, agora, conta);
   });
+}
+
+// O total do que ainda está em aberto, antes e depois do ajuste. É o número
+// que se confere antes de confirmar: recalibrar sem ver o total é mudar
+// parcela por parcela sem saber onde a soma foi parar.
+function totalDaRecalibragem(pagamentos) {
+  const n = (v) => (typeof numeroDeCampo === "function" ? numeroDeCampo(v) : Number(v) || 0);
+  const red = (x) => Math.round(x * 100) / 100;
+  const lista = (pagamentos || []).filter(Boolean);
+  const antes = red(lista.reduce((s, p) => s + (Number(p.valorOriginal != null ? p.valorOriginal : p.valor) || 0), 0));
+  const depois = red(lista.reduce((s, p) => s + n(p.valor), 0));
+  return { antes: antes, depois: depois, diferenca: red(depois - antes), mudou: Math.abs(depois - antes) >= 0.005 };
 }
 
 function previaDatasDoPedido(contas, cotacaoId, datas, limite) {
@@ -23513,7 +23581,8 @@ function pagamentosEmAberto(contas, alvoId, tipo) {
     .filter((c) => c && c[campo] === alvoId && !c.pago)
     .slice()
     .sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)))
-    .map((c) => ({ id: c.id, descricao: c.descricao || "", vencimento: c.vencimento || "" }));
+    .map((c) => ({ id: c.id, descricao: c.descricao || "", vencimento: c.vencimento || "",
+      valor: Number(c.valor) || 0 }));
 }
 
 // A prévia de um ajuste de contrato: gera as contas com a exceção aplicada e
@@ -34863,7 +34932,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // e por isso apaga as exceções anotadas antes — elas eram exceções àquele
     // calendário, não a este.
     const recalibrado = { ...(umaSo
-      ? ajustarVencimentos(alvo, f.pagamentos || [])
+      // Data e valor andam juntos: quem corrige a parcela quase sempre mexe
+      // nos dois, e separar em dois botões seria pedir duas confirmações
+      // para um ajuste só.
+      ? ajustarValores(ajustarVencimentos(alvo, f.pagamentos || []), f.pagamentos || [])
       : (porItem
           ? { ...recalibrarItens(limparAjustes(alvo), f.itens || []), previsaoConclusao: f.previsaoConclusao || "" }
           : recalibrarContrato(limparAjustes(alvo), f.novaData))),
@@ -36646,7 +36718,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
             <button style={C.btnSec} onClick={() => setFormConta(contaAvulsaVazia(obraSelecionada.id))}>＋ Nova conta</button>
             {alvosRecalibraveis.length > 0 && (
-              <button style={C.btnSec} onClick={() => abrirRecalibragem(alvosRecalibraveis[0].id)}>Recalibrar datas</button>
+              <button style={C.btnSec} onClick={() => abrirRecalibragem(alvosRecalibraveis[0].id)}>Recalibrar</button>
             )}
           </div>
         ))}
@@ -36679,7 +36751,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               <div data-vk-ui="1" onClick={e => e.stopPropagation()}
                 style={{ background: "#fff", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: 18, width: "100%", maxWidth: 520, maxHeight: "86vh", overflowY: "auto", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
-                  {ehPedido ? "Recalibrar datas do pedido" : "Recalibrar datas do contrato"}
+                  {ehPedido ? "Recalibrar o pedido" : "Recalibrar o contrato"}
                 </div>
                 <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 14 }}>
                   {umaAUma
@@ -36691,7 +36763,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                     : "A obra não começou na data registrada? Informe quando vence o primeiro pagamento; as parcelas em aberto andam junto, na mesma periodicidade."}
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 170px", gap: 12 }}>
-                  <div>
+                  {/* minWidth 0: célula de grade não encolhe abaixo do conteúdo
+                      sem isto, e "Pedido 0007 · Aço Vergalhões · OURIFER"
+                      empurrava o campo para fora do painel no celular. */}
+                  <div style={{ minWidth: 0 }}>
                     <label style={C.label}>Contrato ou pedido</label>
                     <Selecao style={{ ...C.input, cursor: "pointer" }} value={formRecalibrar.contratoId}
                       onChange={e => abrirRecalibragem(e.target.value)}>
@@ -36702,7 +36777,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                         {[["junto", "Todos os pagamentos"], ["uma", "Um pagamento só"]].map(([id, nome]) => (
                           <button key={id} type="button"
                             onClick={() => setFormRecalibrar({ ...formRecalibrar, modo: id,
-                              pagamentos: pagamentosEmAberto(contasDaObra, escolhido.id, escolhido.tipo) })}
+                              pagamentos: pagamentosEmAberto(contasDaObra, escolhido.id, escolhido.tipo)
+                                .map(x => ({ ...x, valorOriginal: x.valor })) })}
                             style={{ border: `1.5px solid ${formRecalibrar.modo === id ? AZUL_VK : "rgba(38,36,33,0.16)"}`,
                               background: "#fff", color: formRecalibrar.modo === id ? AZUL_VK : "#4b5563",
                               borderRadius: 20, padding: "6px 14px", fontSize: 12,
@@ -36729,6 +36805,28 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   )}
                 </div>
 
+                {/* O total, sempre. Recalibrar sem ver a soma é mudar parcela
+                    por parcela sem saber onde o total foi parar. */}
+                {(() => {
+                  const tot = totalDaRecalibragem(formRecalibrar.pagamentos || []);
+                  if (!(tot.antes > 0 || tot.depois > 0)) return null;
+                  return (
+                    <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: 10,
+                      border: `1px solid ${tot.mudou ? "rgba(4,116,244,0.35)" : "rgba(38,36,33,0.12)"}`,
+                      background: tot.mudou ? "#eef5ff" : "#fafafa", fontSize: 12.5, color: "#111827" }}>
+                      Em aberto hoje <b>{fmtMoedaCtr(tot.antes)}</b>
+                      {tot.mudou ? (
+                        <>
+                          {" → depois do ajuste "}<b>{fmtMoedaCtr(tot.depois)}</b>
+                          <span style={{ color: AZUL_VK }}>
+                            {" ("}{tot.diferenca < 0 ? "−" : "+"}{fmtMoedaCtr(Math.abs(tot.diferenca))}{")"}
+                          </span>
+                        </>
+                      ) : <span style={{ color: "#6b7280" }}>{" — o total não muda, só as datas."}</span>}
+                    </div>
+                  );
+                })()}
+
                 {umaAUma && (
                   <div style={{ marginTop: 14 }}>
                     <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 8 }}>
@@ -36736,14 +36834,29 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                     </div>
                     {(formRecalibrar.pagamentos || []).length === 0 ? (
                       <div style={{ fontSize: 12, color: "#4b5563" }}>Nenhum pagamento em aberto {ehPedido ? "neste pedido" : "neste contrato"}.</div>
-                    ) : (formRecalibrar.pagamentos || []).map((it, i) => (
-                      <div key={it.id} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 170px", gap: 8, marginBottom: 8, alignItems: "center" }}>
-                        <span style={{ fontSize: 12.5, color: "#111827" }}>{it.descricao || `Pagamento ${i + 1}`}</span>
-                        <input style={C.input} type="date" value={it.vencimento || ""}
-                          onChange={e => setFormRecalibrar({ ...formRecalibrar,
-                            pagamentos: (formRecalibrar.pagamentos || []).map((x, j) => j === i ? { ...x, vencimento: e.target.value } : x) })} />
-                      </div>
-                    ))}
+                    ) : (formRecalibrar.pagamentos || []).map((it, i) => {
+                      const mexer = (muda) => setFormRecalibrar({ ...formRecalibrar,
+                        pagamentos: (formRecalibrar.pagamentos || []).map((x, j) => j === i ? { ...x, ...muda } : x) });
+                      const mudouValor = Math.abs(numeroDeCampo(it.valor) - (Number(it.valorOriginal) || 0)) >= 0.005;
+                      return (
+                        <div key={it.id} style={{ display: "grid", gap: 8, marginBottom: 10,
+                          gridTemplateColumns: isMobile ? "1fr" : "1fr 150px 150px", alignItems: "end" }}>
+                          <span style={{ fontSize: 12.5, color: "#111827", alignSelf: "center" }}>{it.descricao || `Pagamento ${i + 1}`}</span>
+                          <div>
+                            {isMobile && <label style={C.label}>Vence em</label>}
+                            <input style={C.input} type="date" value={it.vencimento || ""}
+                              onChange={e => mexer({ vencimento: e.target.value })} />
+                          </div>
+                          {/* O valor ao lado da data: a realidade corrige a previsão —
+                              mediu menos, entregou menos, o fornecedor deu desconto. */}
+                          <div>
+                            {isMobile && <label style={C.label}>Valor</label>}
+                            <CampoCtrNum tipo="moeda" style={{ ...C.input, borderColor: mudouValor ? AZUL_VK : undefined }}
+                              valor={it.valor} onChange={(v) => mexer({ valor: v })} />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
