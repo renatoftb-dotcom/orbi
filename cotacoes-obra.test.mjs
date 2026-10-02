@@ -87,7 +87,7 @@ const modulo = new Function(`
            ehComprovante, valorDoComprovante, dataDoComprovante, favorecidoDoComprovante,
            documentoDoComprovante, dadosDoComprovante, prestadorDoComprovante,
            despesaPronta, parcelasEmAbertoDoPrestador, parcelaQueCasa,
-           medicaoDaCotacao, totalDaMedicao, validarMedicao };
+           medicaoDaCotacao, totalDaMedicao, validarMedicao, completarItemDaConta };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -170,6 +170,78 @@ teste("medição zerada não passa", () => {
 teste("medição boa passa", () => {
   const m = M.medicaoDaCotacao(COT_MED, COT_MED.propostas[0], INS_MED).map((r) => ({ ...r, quantidade: 7 }));
   assert.deepStrictEqual(M.validarMedicao(m).erros, []);
+});
+
+// ── A conta antiga vai buscar na cotacao o que nao herdou ───────
+const OBRA_MED = { id: "o1", cotacoes: [COT_MED] };
+const CONTA_SECA = { id: "k1", obraId: "o1", origem: "cotacao", cotacaoId: "c1",
+  descricao: "Concreto \u2014 Concreto Brocas", favorecido: "D-MIX CONCRETO",
+  contaId: "material", valor: 6050, vencimento: "2026-10-28", pago: false };
+
+teste("conta lancada antes do item vai buscar quantidade, unidade e etapa na cotacao", () => {
+  const r = M.completarItemDaConta(CONTA_SECA, OBRA_MED, INS_MED, [CONTA_SECA]);
+  assert.strictEqual(r.insumoCodigo, "CON-001");
+  assert.strictEqual(r.quantidade, 11);
+  assert.strictEqual(r.unidade, "m3");
+  assert.strictEqual(r.etapa, "fundacao");
+  assert.strictEqual(r.grupoMaterial, "Concreto");
+});
+
+teste("o unitario sai do valor da conta, nao do preco da proposta", () => {
+  // a proposta diz 343,64; a conta cobra 6.050,00 por 11 m3 = 550,00
+  const r = M.completarItemDaConta(CONTA_SECA, OBRA_MED, INS_MED, [CONTA_SECA]);
+  assert.strictEqual(r.unitario, 550);
+  assert.strictEqual(r.valor, 6050, "o valor da conta nao se mexe");
+  assert.strictEqual(Math.round(r.quantidade * r.unitario * 100) / 100, 6050);
+});
+
+teste("parcelada nao recebe quantidade — consumo nao se divide por mes", () => {
+  const p1 = { ...CONTA_SECA, id: "k1", parcela: 1, parcelasTotal: 3, valor: 2016.67 };
+  const p2 = { ...CONTA_SECA, id: "k2", parcela: 2, parcelasTotal: 3, valor: 2016.67 };
+  const r = M.completarItemDaConta(p1, OBRA_MED, INS_MED, [p1, p2]);
+  assert.strictEqual(r.etapa, "fundacao", "a classificacao vale");
+  assert.strictEqual(r.insumoCodigo, "CON-001");
+  assert.ok(!(r.quantidade > 0), "senao 11 m3 virariam 33");
+  assert.strictEqual(r.unitario, undefined);
+});
+
+teste("o que a conta ja tem nao e sobrescrito", () => {
+  const corrigida = { ...CONTA_SECA, quantidade: 7, unitario: 343.64, valor: 2405.48, etapa: "estrutura" };
+  const r = M.completarItemDaConta(corrigida, OBRA_MED, INS_MED, [corrigida]);
+  assert.strictEqual(r.quantidade, 7, "a correcao de quem editou manda");
+  assert.strictEqual(r.etapa, "estrutura");
+});
+
+teste("varios itens numa conta so: preenche a etapa comum, nunca a quantidade", () => {
+  const cot = { ...COT_MED, itens: [
+    { id: "i1", codigo: "CON-001", descricao: "Concreto", unidade: "m3", quantidade: "11" },
+    { id: "i2", codigo: "CON-002", descricao: "Bomba", unidade: "h", quantidade: "4" }],
+    propostas: [{ id: "p1", precos: { i1: "343,64", i2: "200,00" }, valor: "6.050,00" }] };
+  const ins = INS_MED.concat([{ id: "m2", codigo: "CON-002", nome: "Bomba", unidade: "h",
+    grupo: "Concreto", etapaPadrao: "fundacao" }]);
+  const c = { ...CONTA_SECA };
+  const r = M.completarItemDaConta(c, { id: "o1", cotacoes: [cot] }, ins, [c]);
+  assert.strictEqual(r.etapa, "fundacao", "os dois itens sao da fundacao");
+  assert.ok(!(r.quantidade > 0), "nao da para dizer a quantidade de uma conta de dois itens");
+});
+
+teste("itens de etapas diferentes nao inventam etapa", () => {
+  const cot = { ...COT_MED, itens: [
+    { id: "i1", codigo: "CON-001", descricao: "Concreto", unidade: "m3", quantidade: "11" },
+    { id: "i2", codigo: "PIN-001", descricao: "Tinta", unidade: "l", quantidade: "4" }],
+    propostas: [{ id: "p1", precos: { i1: "343,64", i2: "80,00" }, valor: "6.050,00" }] };
+  const ins = INS_MED.concat([{ id: "m3", codigo: "PIN-001", nome: "Tinta", unidade: "l",
+    grupo: "Pintura", etapaPadrao: "acabamento" }]);
+  const c = { ...CONTA_SECA };
+  const r = M.completarItemDaConta(c, { id: "o1", cotacoes: [cot] }, ins, [c]);
+  assert.ok(!String(r.etapa || "").trim(), "chutar a etapa e pior que deixar em branco");
+});
+
+teste("conta sem cotacao, ou de cotacao que sumiu, volta intacta", () => {
+  const avulsa = { id: "a1", origem: "avulsa", descricao: "Caçamba", valor: 300 };
+  assert.strictEqual(M.completarItemDaConta(avulsa, OBRA_MED, INS_MED, [avulsa]), avulsa);
+  const orfa = { ...CONTA_SECA, cotacaoId: "nao-existe" };
+  assert.strictEqual(M.completarItemDaConta(orfa, OBRA_MED, INS_MED, [orfa]).quantidade, undefined);
 });
 
 teste("comprovante de Pix é reconhecido como comprovante", () => {

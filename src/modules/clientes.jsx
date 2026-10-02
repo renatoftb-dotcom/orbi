@@ -2499,11 +2499,26 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   }, [view, obraAtual && obraAtual.id, assinaturaContas(contasDaObra), pedidosSemNumero,
       JSON.stringify((obraAtual && obraAtual.contratos) || []), contratos.map(c => c.id).join("|")]);
 
+  // Abrir para editar e a hora de completar o que a conta nao herdou da
+  // cotacao que a gerou — item, quantidade, unidade e etapa. Fica aqui, e
+  // nao numa migracao, porque assim vale tambem para o que ja estava
+  // lancado antes de a conta passar a nascer por item.
+  const abrirEdicaoDaConta = (conta, soCalcular) => {
+    const completa = typeof completarItemDaConta === "function"
+      ? completarItemDaConta(conta, obraAtual, data.materiais || [], contasDaObra)
+      : conta;
+    if (soCalcular) return completa;
+    setFormConta(completa);
+  };
   const salvarContaAvulsa = () => {
     const f = formConta;
     if (!f.descricao?.trim()) { dialogo.alertar({ titulo: "Informe a descrição da conta", tipo: "aviso" }); return; }
     if (!(Number(f.valor) > 0)) { dialogo.alertar({ titulo: "Informe um valor maior que zero", tipo: "aviso" }); return; }
-    const antiga = contasDaObra.find(c => c.id === f.id) || null;
+    // O antes e o que o formulario mostrou, nao o que estava gravado: o que
+    // veio da cotacao ao abrir nao foi decisao de ninguem, e registrar
+    // "quantidade 0 -> 7" esconderia que o ajuste foi de 11 para 7.
+    const guardada = contasDaObra.find(c => c.id === f.id) || null;
+    const antiga = guardada ? abrirEdicaoDaConta(guardada, true) : null;
     const carimbada = antiga
       ? registrarAto(f, "editada", quemSou(), undefined, detalheDaEdicaoDaConta(antiga, f))
       : numerarContas([registrarAto(f, "criada", quemSou())], obras, lancamentosDoEscritorio(data))[0];
@@ -4143,7 +4158,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                       // Item pago nao se edita: o dinheiro ja saiu, e reescreve-lo
                                       // seria reescrever o extrato.
                                       const botaoEditar = (ic, naLinha) => (!podeMexer || ic.pago) ? null : (
-                                        <button type="button" onClick={() => setFormConta(ic)}
+                                        <button type="button" onClick={() => abrirEdicaoDaConta(ic)}
                                           title="Corrigir quantidade, pre\u00e7o ou valor deste item"
                                           style={{ background: "none", border: "none", cursor: "pointer",
                                             color: AZUL_VK, fontFamily: "inherit",
@@ -4882,7 +4897,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                       render; ela se corrige pelo Recalibrar. O resto
                                       é linha concreta e se edita. */}
                                   {c.origem !== "contrato" && !c.pago && (
-                                    <button onClick={() => setFormConta(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
+                                    <button onClick={() => abrirEdicaoDaConta(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
                                   )}
                                   {c.origem === "avulsa" && (
                                     <button onClick={() => { dialogo.confirmar({ titulo: "Remover conta?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true }).then(ok => { if (ok) gravarContas(contasDaObra.filter(x => x.id !== c.id)); }); }}

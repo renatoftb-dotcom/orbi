@@ -26766,6 +26766,60 @@ function medicaoDaCotacao(cot, proposta, insumos) {
   }).filter((r) => r.unitario > 0 || r.cotada > 0);
 }
 
+// ── O que a conta a pagar nao herdou da cotacao ─────────────────
+// Cotacao lancada a vista ou parcelada nasce de `contaDaCompra`, que so
+// carrega descricao, valor e vencimento: o concreto chega no contas a pagar
+// sem m3, sem etapa e sem insumo. A informacao nao se perdeu — esta na
+// cotacao, que guarda o item, a quantidade e a proposta escolhida. Ao abrir
+// a conta para editar, buscamos la o que falta.
+//
+// O que se preenche e so o que e inequivoco. Um item e uma conta: tudo. Um
+// item em tres parcelas: nao se preenche quantidade, porque consumo nao se
+// divide por mes — se dividisse, 11 m3 virariam 33. Varios itens numa conta
+// so: so a etapa, e so quando todos caem na mesma.
+//
+// O valor da conta e intocavel: e o que o fornecedor cobrou. Por isso o
+// unitario sai de valor / quantidade, e nao do preco da proposta — com
+// desconto de rodape os dois divergem, e quem confere a conta quer o que
+// se paga.
+function completarItemDaConta(conta, obra, insumos, contasDaObra) {
+  const c = conta || {};
+  if (!c.cotacaoId) return c;
+  if (String(c.insumoCodigo || "").trim() || numeroDoCampo(c.quantidade) > 0) return c;
+  const cot = ((obra || {}).cotacoes || []).find((x) => x && x.id === c.cotacaoId) || null;
+  if (!cot) return c;
+  const linhas = medicaoDaCotacao(cot, propostaEscolhida(cot), insumos || []);
+  if (!linhas.length) return c;
+
+  const irmas = (contasDaObra || []).filter((x) => x && x.cotacaoId === c.cotacaoId);
+  const umaContaSo = irmas.length <= 1 && !(Number(c.parcelasTotal) > 1);
+  const umaMesma = (campo) => {
+    const v = String(linhas[0][campo] || "");
+    return linhas.every((l) => String(l[campo] || "") === v) ? v : "";
+  };
+
+  if (linhas.length > 1) {
+    // varios itens numa conta so: nao da para dizer qual quantidade e qual
+    // preco, mas a classificacao ainda vale quando e a mesma em todos
+    const etapa = umaMesma("etapa"), grupo = umaMesma("grupoMaterial");
+    if (!etapa && !grupo) return c;
+    return { ...c, etapa: c.etapa || etapa, grupoMaterial: c.grupoMaterial || grupo };
+  }
+
+  const l = linhas[0];
+  const base = { ...c,
+    insumoCodigo: c.insumoCodigo || l.insumoCodigo || "",
+    unidade: String(c.unidade || "").trim() || l.unidade || "",
+    etapa: c.etapa || l.etapa || "",
+    grupoMaterial: c.grupoMaterial || l.grupoMaterial || "" };
+  if (!umaContaSo) return base;
+
+  const q = numeroDoCampo(l.quantidade) || numeroDoCampo(l.cotada);
+  const v = numeroDoCampo(c.valor);
+  if (!(q > 0) || !(v > 0)) return base;
+  return { ...base, quantidade: q, unitario: Math.round((v / q) * 100) / 100 };
+}
+
 function totalDaMedicao(medicao) {
   const soma = (medicao || []).reduce((s, r) => s + (numeroDoCampo(r.quantidade) * numeroDoCampo(r.unitario)), 0);
   return Math.round(soma * 100) / 100;
@@ -34784,11 +34838,26 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   }, [view, obraAtual && obraAtual.id, assinaturaContas(contasDaObra), pedidosSemNumero,
       JSON.stringify((obraAtual && obraAtual.contratos) || []), contratos.map(c => c.id).join("|")]);
 
+  // Abrir para editar e a hora de completar o que a conta nao herdou da
+  // cotacao que a gerou — item, quantidade, unidade e etapa. Fica aqui, e
+  // nao numa migracao, porque assim vale tambem para o que ja estava
+  // lancado antes de a conta passar a nascer por item.
+  const abrirEdicaoDaConta = (conta, soCalcular) => {
+    const completa = typeof completarItemDaConta === "function"
+      ? completarItemDaConta(conta, obraAtual, data.materiais || [], contasDaObra)
+      : conta;
+    if (soCalcular) return completa;
+    setFormConta(completa);
+  };
   const salvarContaAvulsa = () => {
     const f = formConta;
     if (!f.descricao?.trim()) { dialogo.alertar({ titulo: "Informe a descrição da conta", tipo: "aviso" }); return; }
     if (!(Number(f.valor) > 0)) { dialogo.alertar({ titulo: "Informe um valor maior que zero", tipo: "aviso" }); return; }
-    const antiga = contasDaObra.find(c => c.id === f.id) || null;
+    // O antes e o que o formulario mostrou, nao o que estava gravado: o que
+    // veio da cotacao ao abrir nao foi decisao de ninguem, e registrar
+    // "quantidade 0 -> 7" esconderia que o ajuste foi de 11 para 7.
+    const guardada = contasDaObra.find(c => c.id === f.id) || null;
+    const antiga = guardada ? abrirEdicaoDaConta(guardada, true) : null;
     const carimbada = antiga
       ? registrarAto(f, "editada", quemSou(), undefined, detalheDaEdicaoDaConta(antiga, f))
       : numerarContas([registrarAto(f, "criada", quemSou())], obras, lancamentosDoEscritorio(data))[0];
@@ -36428,7 +36497,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                       // Item pago nao se edita: o dinheiro ja saiu, e reescreve-lo
                                       // seria reescrever o extrato.
                                       const botaoEditar = (ic, naLinha) => (!podeMexer || ic.pago) ? null : (
-                                        <button type="button" onClick={() => setFormConta(ic)}
+                                        <button type="button" onClick={() => abrirEdicaoDaConta(ic)}
                                           title="Corrigir quantidade, pre\u00e7o ou valor deste item"
                                           style={{ background: "none", border: "none", cursor: "pointer",
                                             color: AZUL_VK, fontFamily: "inherit",
@@ -37167,7 +37236,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                       render; ela se corrige pelo Recalibrar. O resto
                                       é linha concreta e se edita. */}
                                   {c.origem !== "contrato" && !c.pago && (
-                                    <button onClick={() => setFormConta(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
+                                    <button onClick={() => abrirEdicaoDaConta(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
                                   )}
                                   {c.origem === "avulsa" && (
                                     <button onClick={() => { dialogo.confirmar({ titulo: "Remover conta?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true }).then(ok => { if (ok) gravarContas(contasDaObra.filter(x => x.id !== c.id)); }); }}
