@@ -29,6 +29,7 @@ const api = new Function(
            resolverInsumo, proximoCodigoInsumo, grupoInferido, prefixoDoGrupo,
            mesesEntre, fatorIncc, precoInsumo, atualizarPrecoReferencia, comprasDoInsumo,
            previaDePrecosPorCompra, aplicarComprasNoCatalogo, contasRecemPagas,
+           contasQueDeixaramDeSerPagas,
            chaveUnidade, unidadeCanonica, mesmaUnidade, unidadeDoPreco, divergenciaDeUnidade,
            migrarMateriaisParaInsumos, semearInsumos };`
 )();
@@ -889,6 +890,41 @@ t("abreviação da loja casa com a palavra do catálogo", () => {
   eq(api.divergenciaDeUnidade("un", { codigo: "X", unidade: "Unidades" }), null);
   eq(api.divergenciaDeUnidade("KG", { codigo: "X", unidade: "Kg" }), null);
   eq(api.divergenciaDeUnidade("QUILO", { codigo: "X", unidade: "Kg" }), null);
+});
+
+
+// ── O estorno: o que deixou de ser pago ─────────────────────────
+
+t("desfazer a baixa devolve a conta para o estorno", () => {
+  const r = api.contasQueDeixaramDeSerPagas(
+    [{ id: "1", pago: true }, { id: "2", pago: true }],
+    [{ id: "1", pago: false }, { id: "2", pago: true }]);
+  eq(r.map((c) => c.id).join(","), "1");
+});
+
+t("conta apagada também deixou de ser paga", () => {
+  const r = api.contasQueDeixaramDeSerPagas([{ id: "1", pago: true }], []);
+  eq(r.length, 1, "sumiu da obra — o dinheiro dela tem que voltar do extrato");
+});
+
+t("relançar troca o id: a antiga conta como estorno e a nova como baixa", () => {
+  const antes = [{ id: "velho", pago: true, valor: 260 }];
+  const depois = [{ id: "novo", pago: true, valor: 260 }];
+  eq(api.contasQueDeixaramDeSerPagas(antes, depois).map((c) => c.id).join(","), "velho");
+  eq(api.contasRecemPagas(antes, depois).map((c) => c.id).join(","), "novo");
+});
+
+t("conta que continua paga não estorna nada", () => {
+  eq(api.contasQueDeixaramDeSerPagas([{ id: "1", pago: true }], [{ id: "1", pago: true }]).length, 0);
+});
+
+t("conta que nunca foi paga não entra no estorno", () => {
+  eq(api.contasQueDeixaramDeSerPagas([{ id: "1", pago: false }], []).length, 0);
+});
+
+t("listas vazias não explodem", () => {
+  eq(api.contasQueDeixaramDeSerPagas(null, null).length, 0);
+  eq(api.contasQueDeixaramDeSerPagas([], []).length, 0);
 });
 
 

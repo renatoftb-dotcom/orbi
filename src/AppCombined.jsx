@@ -7154,6 +7154,22 @@ function contasRecemPagas(antes, depois) {
   });
 }
 
+// O contrário: as que ERAM pagas e deixaram de ser — porque a baixa foi
+// desfeita, porque a conta foi apagada, ou porque um relançamento trocou o
+// id dela. São três histórias diferentes e um efeito só: o dinheiro que elas
+// mandaram para o extrato do escritório tem que voltar.
+//
+// Sai do mesmo diff de `contasRecemPagas` de propósito. Pedir a cada botão
+// que apaga ou desfaz que se lembre de avisar é pedir que um dia alguém
+// esqueça — e aí sobra dinheiro no extrato sem conta nenhuma atrás dele.
+function contasQueDeixaramDeSerPagas(antes, depois) {
+  var aindaPaga = {};
+  (depois || []).forEach(function (c) { if (c && c.id && c.pago) aindaPaga[c.id] = true; });
+  return (antes || []).filter(function (c) {
+    return c && c.pago && !aindaPaga[c.id];
+  });
+}
+
 // ── O que as compras fariam com o preço do catálogo ────────
 // Antes de deixar as notas reescreverem o catálogo, é preciso ver o estrago:
 // quais insumos mudariam de preço, de quanto para quanto, e quais cairiam na
@@ -9216,6 +9232,10 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
       fornecedor: fonte.fornecedor || "",
       documento: fonte.documento || "",
       contaBanco: "sim",
+      // Quando ele nasceu, para a lista pôr o mais novo na frente dentro do
+      // mês. Sem isto, o lançamento recém-criado cai no meio dos outros de
+      // setembro e parece que não entrou.
+      criadoEm: new Date().toISOString(),
     });
   };
 
@@ -9278,6 +9298,20 @@ function lancamentosDaBaixa(obra, cliente, contasPagas, opcoes) {
   const r = lancamentosDaObraParaEscritorio(obra, cliente,
     Object.assign({}, opcoes || {}, { contasPagar: contasPagas, entradas: [] }));
   return Object.assign({}, r, { modo });
+}
+
+// Conta que saiu da obra leva o lançamento dela junto. Relançar um pedido
+// pago apaga as contas antigas e cria outras, com ids novos — e o lançamento
+// velho ficava órfão no extrato, somando duas vezes o mesmo dinheiro no
+// Investido do empreendimento. Quem some da obra some do extrato.
+function semLancamentosDasContas(lancamentos, obraId, contasRemovidas) {
+  const fora = {};
+  for (const c of contasRemovidas || []) {
+    if (c && c.id) fora[idDaPonte(obraId, "conta", c.id)] = true;
+  }
+  if (!Object.keys(fora).length) return { lancamentos: lancamentos || [], removidos: 0 };
+  const ficam = (lancamentos || []).filter((l) => !(l && fora[l.id]));
+  return { lancamentos: ficam, removidos: (lancamentos || []).length - ficam.length };
 }
 
 function motivoDeIgnorar(contaId, modo, opcoes) {
@@ -11236,7 +11270,13 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
 
   const filtrados = (() => {
     const t = efSemAcento(busca);
-    const lista = lancs.slice().sort((a, b) => String(b.competencia).localeCompare(String(a.competencia)));
+    // Dentro do mês, o mais novo na frente. Ordenar só por competência fazia
+    // o lançamento recém-criado cair no meio de uma dúzia de outros do mesmo
+    // mês — e quem acabou de lançar conclui que não entrou.
+    const quando = (l) => String((l && (l.criadoEm || l.lancadoEm)) || "");
+    const lista = lancs.slice().sort((a, b) =>
+      String(b.competencia).localeCompare(String(a.competencia))
+      || quando(b).localeCompare(quando(a)));
     if (!t) return lista.slice(0, 300);
     return lista.filter((l) => efSemAcento([l.descricao, l.fornecedor, l.cliente, l.projeto,
       (contaEscritorio(l.contaId) || {}).nome].join(" ")).indexOf(t) >= 0).slice(0, 300);
@@ -24884,6 +24924,22 @@ function numeroDaNota(texto) {
   return so || "";
 }
 
+// A data de emissão da nota. Na DANFE o rótulo "DATA DA EMISSÃO" fica num
+// cabeçalho e o valor cai noutra linha, então procurar "DATA" e ler o resto
+// da linha devolve " DA EMISSÃO" — nada. Sem a data o pedido assume HOJE, e
+// uma nota de 29/09 lançada em 02/10 entra na competência errada: o custo
+// muda de mês, e o mês que já foi conferido passa a mentir.
+//
+// O rodapé da DANFE repete "EMISSÃO: 29/09/2026" numa linha só — é por ali
+// que se começa; o rótulo com o valor adiante é a segunda tentativa.
+function dataDaNota(texto) {
+  const tudo = String(texto || "");
+  const m1 = /EMISS[ÃA]O:?\s*(\d{2}\/\d{2}\/\d{4})/i.exec(tudo);
+  if (m1) return dataIsoDoOrcamento(m1[1]);
+  const m2 = /DATA\s+DA\s+EMISS[ÃA]O[\s\S]{0,240}?(\d{2}\/\d{2}\/\d{4})/i.exec(tudo);
+  return m2 ? dataIsoDoOrcamento(m2[1]) : "";
+}
+
 // A linha de uma DANFE vira uma linha comum de tabela. Quando a descrição
 // veio sozinha na linha de cima, é aqui que as duas se juntam — e a de cima
 // sai, para não sobrar um item sem número nenhum.
@@ -24953,7 +25009,9 @@ function interpretarOrcamento(linhas) {
     break;
   }
   const validade = dataIsoDoOrcamento((/V[ÁA]LIDO\s+AT[ÉE][:\s]*([^•\n]+)/i.exec(tudo) || [])[1] || "");
-  const emitido = dataIsoDoOrcamento((/DATA[:\s]*([^•\n]+)/i.exec(tudo) || [])[1] || "");
+  // A emissão declarada vale mais do que a primeira "DATA" que aparecer.
+  const emitido = dataDaNota(tudo)
+    || dataIsoDoOrcamento((/DATA[:\s]*([^•\n]+)/i.exec(tudo) || [])[1] || "");
   // A condição costuma vir na mesma linha do rótulo, mas nem sempre: tem
   // PDF em que o valor cai na linha de cima, junto do total. Então, quando a
   // linha do rótulo não traz nada, olha-se a vizinha.
@@ -33224,20 +33282,36 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const efeitosDaBaixa = (contasAntes, contasDepois, obraDepois) => {
     const nada = { extras: null };
     if (!perm.podeGerenciarObra) return nada;
+
+    // Primeiro o estorno. Conta que ERA paga e deixou de ser — desfeita,
+    // apagada, ou com o id trocado por um relançamento — leva embora o
+    // lançamento que mandou para o escritório. Sai do próprio diff: assim
+    // vale para os três casos e para o botão que alguém criar amanhã.
+    const lancsAgora = typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : [];
+    const desfeitas = typeof contasQueDeixaramDeSerPagas === "function"
+      ? contasQueDeixaramDeSerPagas(contasAntes, contasDepois) : [];
+    const limpo = (typeof semLancamentosDasContas === "function" && obraDepois)
+      ? semLancamentosDasContas(lancsAgora, obraDepois.id, desfeitas)
+      : { lancamentos: lancsAgora, removidos: 0 };
+
     const pagas = contasRecemPagas(contasAntes, contasDepois);
-    if (!pagas.length) return nada;
+    if (!pagas.length) {
+      return { extras: limpo.removidos ? { lancamentos: limpo.lancamentos } : null };
+    }
 
     const r = aplicarComprasNoCatalogo(data.materiais, pagas);
     const ponte = (typeof lancamentosDaBaixa === "function" && obraDepois)
       ? lancamentosDaBaixa(obraDepois, cliente, pagas, {
           fechamentos: typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {},
-          lancamentos: typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : [],
+          lancamentos: limpo.lancamentos,
         })
       : { lancamentos: [], bloqueados: [], modo: "" };
 
     const extras = {};
     if (r.materiais !== data.materiais) extras.materiais = r.materiais;
-    if (ponte.lancamentos.length) extras.lancamentos = (data.lancamentos || []).concat(ponte.lancamentos);
+    if (ponte.lancamentos.length || limpo.removidos) {
+      extras.lancamentos = limpo.lancamentos.concat(ponte.lancamentos);
+    }
 
     setAvisoPreco(r.relato.aplicados.length || r.relato.pendencias.length ? r.relato : null);
     setAvisoExtrato((ponte.lancamentos.length || ponte.bloqueados.length)
@@ -35663,7 +35737,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     }));
     const atualizada = { ...obraAtual,
       contasPagar: removerContasDoPedido(obraAtual.contasPagar || [], pedidoId), cotacoes };
-    gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o));
+    const efApagar = efeitosDaBaixa(obraAtual.contasPagar || [], atualizada.contasPagar, atualizada);
+    gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o), efApagar.extras);
     setObraSelecionada(atualizada);
     return { gravado: true };
   }

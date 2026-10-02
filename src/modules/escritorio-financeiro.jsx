@@ -403,6 +403,10 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
       fornecedor: fonte.fornecedor || "",
       documento: fonte.documento || "",
       contaBanco: "sim",
+      // Quando ele nasceu, para a lista pôr o mais novo na frente dentro do
+      // mês. Sem isto, o lançamento recém-criado cai no meio dos outros de
+      // setembro e parece que não entrou.
+      criadoEm: new Date().toISOString(),
     });
   };
 
@@ -465,6 +469,20 @@ function lancamentosDaBaixa(obra, cliente, contasPagas, opcoes) {
   const r = lancamentosDaObraParaEscritorio(obra, cliente,
     Object.assign({}, opcoes || {}, { contasPagar: contasPagas, entradas: [] }));
   return Object.assign({}, r, { modo });
+}
+
+// Conta que saiu da obra leva o lançamento dela junto. Relançar um pedido
+// pago apaga as contas antigas e cria outras, com ids novos — e o lançamento
+// velho ficava órfão no extrato, somando duas vezes o mesmo dinheiro no
+// Investido do empreendimento. Quem some da obra some do extrato.
+function semLancamentosDasContas(lancamentos, obraId, contasRemovidas) {
+  const fora = {};
+  for (const c of contasRemovidas || []) {
+    if (c && c.id) fora[idDaPonte(obraId, "conta", c.id)] = true;
+  }
+  if (!Object.keys(fora).length) return { lancamentos: lancamentos || [], removidos: 0 };
+  const ficam = (lancamentos || []).filter((l) => !(l && fora[l.id]));
+  return { lancamentos: ficam, removidos: (lancamentos || []).length - ficam.length };
 }
 
 function motivoDeIgnorar(contaId, modo, opcoes) {
@@ -2423,7 +2441,13 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
 
   const filtrados = (() => {
     const t = efSemAcento(busca);
-    const lista = lancs.slice().sort((a, b) => String(b.competencia).localeCompare(String(a.competencia)));
+    // Dentro do mês, o mais novo na frente. Ordenar só por competência fazia
+    // o lançamento recém-criado cair no meio de uma dúzia de outros do mesmo
+    // mês — e quem acabou de lançar conclui que não entrou.
+    const quando = (l) => String((l && (l.criadoEm || l.lancadoEm)) || "");
+    const lista = lancs.slice().sort((a, b) =>
+      String(b.competencia).localeCompare(String(a.competencia))
+      || quando(b).localeCompare(quando(a)));
     if (!t) return lista.slice(0, 300);
     return lista.filter((l) => efSemAcento([l.descricao, l.fornecedor, l.cliente, l.projeto,
       (contaEscritorio(l.contaId) || {}).nome].join(" ")).indexOf(t) >= 0).slice(0, 300);

@@ -83,7 +83,7 @@ const modulo = new Function(`
            entradaPronta, entradaPedeLoja, entradaPedeObra, DESTINOS_DA_ENTRADA,
            contextoDaEntrada, cotMioloDoNome, tituloDaListaRapida, textoDaListaRapida,
            pedacoDeDanfe, juntarLinhasDaDanfe, descricaoSemMaterial, palavraDeMaterial,
-           ehDanfe, numeroDaNota };
+           ehDanfe, numeroDaNota, dataDaNota };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -2948,6 +2948,35 @@ teste("a nota da Canroberto chega com o próprio número, sem pedido", () => {
   assert.strictEqual(r.numeroNota, "8623");
   assert.strictEqual(r.numeroPedido, "", "nota não tem número de pedido — e não se inventa um");
   assert.strictEqual(r.itens.length, 3);
+});
+
+
+teste("a data de emissão da nota sai do rodapé, não de hoje", () => {
+  assert.strictEqual(M.dataDaNota("EMISSÃO: 29/09/2026 - DEST. / REM.: LEO PADOVAN"), "2026-09-29");
+  assert.strictEqual(M.dataDaNota("EMISSAO 29/09/2026"), "2026-09-29");
+});
+
+teste("rótulo numa linha e valor noutra também é lido", () => {
+  const danfe = "NOME / RAZÃO SOCIAL  CNPJ / CPF  DATA DA EMISSÃO\n" +
+                "LEO PADOVAN PROJETOS E CONSTRUCOES  36.122.417/0001-74  29/09/2026";
+  assert.strictEqual(M.dataDaNota(danfe), "2026-09-29");
+});
+
+teste("papel sem emissão declarada não inventa data", () => {
+  assert.strictEqual(M.dataDaNota("ORÇAMENTO Nº 1234 — sem data nenhuma"), "");
+  assert.strictEqual(M.dataDaNota(""), "");
+  assert.strictEqual(M.dataDaNota(null), "");
+});
+
+teste("a nota da Canroberto entra na competência dela, não na de hoje", () => {
+  const comCabecalho = [
+    { celulas: ["DANFE DOCUMENTO AUXILIAR DA NOTA FISCAL ELETRÔNICA"] },
+    { celulas: ["Nº 000.008.623 fl. 1 /1"] },
+    { celulas: ["EMISSÃO: 29/09/2026 - DEST. / REM.: LEO PADOVAN - VALOR TOTAL: R$ 304,00"] },
+  ].map((l) => ({ ...l, texto: l.celulas.join(" ") })).concat(DANFE_REAL);
+  const r = M.interpretarOrcamento(comCabecalho);
+  assert.strictEqual(r.emitido, "2026-09-29",
+    "é esta data que vira pagoEm no “pagamento já feito”, e dela sai a competência");
 });
 
 

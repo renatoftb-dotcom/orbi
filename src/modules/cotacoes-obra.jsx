@@ -1705,6 +1705,22 @@ function numeroDaNota(texto) {
   return so || "";
 }
 
+// A data de emissão da nota. Na DANFE o rótulo "DATA DA EMISSÃO" fica num
+// cabeçalho e o valor cai noutra linha, então procurar "DATA" e ler o resto
+// da linha devolve " DA EMISSÃO" — nada. Sem a data o pedido assume HOJE, e
+// uma nota de 29/09 lançada em 02/10 entra na competência errada: o custo
+// muda de mês, e o mês que já foi conferido passa a mentir.
+//
+// O rodapé da DANFE repete "EMISSÃO: 29/09/2026" numa linha só — é por ali
+// que se começa; o rótulo com o valor adiante é a segunda tentativa.
+function dataDaNota(texto) {
+  const tudo = String(texto || "");
+  const m1 = /EMISS[ÃA]O:?\s*(\d{2}\/\d{2}\/\d{4})/i.exec(tudo);
+  if (m1) return dataIsoDoOrcamento(m1[1]);
+  const m2 = /DATA\s+DA\s+EMISS[ÃA]O[\s\S]{0,240}?(\d{2}\/\d{2}\/\d{4})/i.exec(tudo);
+  return m2 ? dataIsoDoOrcamento(m2[1]) : "";
+}
+
 // A linha de uma DANFE vira uma linha comum de tabela. Quando a descrição
 // veio sozinha na linha de cima, é aqui que as duas se juntam — e a de cima
 // sai, para não sobrar um item sem número nenhum.
@@ -1774,7 +1790,9 @@ function interpretarOrcamento(linhas) {
     break;
   }
   const validade = dataIsoDoOrcamento((/V[ÁA]LIDO\s+AT[ÉE][:\s]*([^•\n]+)/i.exec(tudo) || [])[1] || "");
-  const emitido = dataIsoDoOrcamento((/DATA[:\s]*([^•\n]+)/i.exec(tudo) || [])[1] || "");
+  // A emissão declarada vale mais do que a primeira "DATA" que aparecer.
+  const emitido = dataDaNota(tudo)
+    || dataIsoDoOrcamento((/DATA[:\s]*([^•\n]+)/i.exec(tudo) || [])[1] || "");
   // A condição costuma vir na mesma linha do rótulo, mas nem sempre: tem
   // PDF em que o valor cai na linha de cima, junto do total. Então, quando a
   // linha do rótulo não traz nada, olha-se a vizinha.

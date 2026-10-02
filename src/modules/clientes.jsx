@@ -2399,20 +2399,36 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const efeitosDaBaixa = (contasAntes, contasDepois, obraDepois) => {
     const nada = { extras: null };
     if (!perm.podeGerenciarObra) return nada;
+
+    // Primeiro o estorno. Conta que ERA paga e deixou de ser — desfeita,
+    // apagada, ou com o id trocado por um relançamento — leva embora o
+    // lançamento que mandou para o escritório. Sai do próprio diff: assim
+    // vale para os três casos e para o botão que alguém criar amanhã.
+    const lancsAgora = typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : [];
+    const desfeitas = typeof contasQueDeixaramDeSerPagas === "function"
+      ? contasQueDeixaramDeSerPagas(contasAntes, contasDepois) : [];
+    const limpo = (typeof semLancamentosDasContas === "function" && obraDepois)
+      ? semLancamentosDasContas(lancsAgora, obraDepois.id, desfeitas)
+      : { lancamentos: lancsAgora, removidos: 0 };
+
     const pagas = contasRecemPagas(contasAntes, contasDepois);
-    if (!pagas.length) return nada;
+    if (!pagas.length) {
+      return { extras: limpo.removidos ? { lancamentos: limpo.lancamentos } : null };
+    }
 
     const r = aplicarComprasNoCatalogo(data.materiais, pagas);
     const ponte = (typeof lancamentosDaBaixa === "function" && obraDepois)
       ? lancamentosDaBaixa(obraDepois, cliente, pagas, {
           fechamentos: typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {},
-          lancamentos: typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : [],
+          lancamentos: limpo.lancamentos,
         })
       : { lancamentos: [], bloqueados: [], modo: "" };
 
     const extras = {};
     if (r.materiais !== data.materiais) extras.materiais = r.materiais;
-    if (ponte.lancamentos.length) extras.lancamentos = (data.lancamentos || []).concat(ponte.lancamentos);
+    if (ponte.lancamentos.length || limpo.removidos) {
+      extras.lancamentos = limpo.lancamentos.concat(ponte.lancamentos);
+    }
 
     setAvisoPreco(r.relato.aplicados.length || r.relato.pendencias.length ? r.relato : null);
     setAvisoExtrato((ponte.lancamentos.length || ponte.bloqueados.length)
@@ -4838,7 +4854,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     }));
     const atualizada = { ...obraAtual,
       contasPagar: removerContasDoPedido(obraAtual.contasPagar || [], pedidoId), cotacoes };
-    gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o));
+    const efApagar = efeitosDaBaixa(obraAtual.contasPagar || [], atualizada.contasPagar, atualizada);
+    gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o), efApagar.extras);
     setObraSelecionada(atualizada);
     return { gravado: true };
   }

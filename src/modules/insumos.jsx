@@ -579,6 +579,22 @@ function contasRecemPagas(antes, depois) {
   });
 }
 
+// O contrário: as que ERAM pagas e deixaram de ser — porque a baixa foi
+// desfeita, porque a conta foi apagada, ou porque um relançamento trocou o
+// id dela. São três histórias diferentes e um efeito só: o dinheiro que elas
+// mandaram para o extrato do escritório tem que voltar.
+//
+// Sai do mesmo diff de `contasRecemPagas` de propósito. Pedir a cada botão
+// que apaga ou desfaz que se lembre de avisar é pedir que um dia alguém
+// esqueça — e aí sobra dinheiro no extrato sem conta nenhuma atrás dele.
+function contasQueDeixaramDeSerPagas(antes, depois) {
+  var aindaPaga = {};
+  (depois || []).forEach(function (c) { if (c && c.id && c.pago) aindaPaga[c.id] = true; });
+  return (antes || []).filter(function (c) {
+    return c && c.pago && !aindaPaga[c.id];
+  });
+}
+
 // ── O que as compras fariam com o preço do catálogo ────────
 // Antes de deixar as notas reescreverem o catálogo, é preciso ver o estrago:
 // quais insumos mudariam de preço, de quanto para quanto, e quais cairiam na

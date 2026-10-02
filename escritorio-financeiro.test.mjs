@@ -27,7 +27,7 @@ const M = new Function(src + `
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
-           lancamentosDaBaixa, ponteAutomaticaNaBaixa };`)();
+           lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -974,6 +974,36 @@ teste("conta sem destino no escritório não vira lançamento", () => {
 teste("sem conta paga nenhuma, nada acontece", () => {
   assert.strictEqual(M.lancamentosDaBaixa(OBRA, EMP, [], { ...OPC }).lancamentos.length, 0);
   assert.strictEqual(M.lancamentosDaBaixa(OBRA, EMP, null, { ...OPC }).lancamentos.length, 0);
+});
+
+
+teste("conta que sai da obra leva o lançamento dela junto", () => {
+  // Relançar um pedido pago apaga as contas e cria outras com ids novos: sem
+  // isto o lançamento velho ficava somando o mesmo dinheiro duas vezes.
+  const antigo = M.lancamentosDaBaixa(OBRA, EMP, [conta("k1", "material", 260)], { ...OPC }).lancamentos;
+  assert.strictEqual(antigo.length, 1);
+  const r = M.semLancamentosDasContas(antigo, "ob1", [{ id: "k1" }]);
+  assert.strictEqual(r.lancamentos.length, 0);
+  assert.strictEqual(r.removidos, 1);
+});
+
+teste("conta de OUTRA obra com o mesmo id não é tocada", () => {
+  const meu = M.lancamentosDaBaixa(OBRA, EMP, [conta("k1", "material", 260)], { ...OPC }).lancamentos;
+  const r = M.semLancamentosDasContas(meu, "ob-outra", [{ id: "k1" }]);
+  assert.strictEqual(r.lancamentos.length, 1, "o id da ponte carrega a obra — e é por isso que carrega");
+  assert.strictEqual(r.removidos, 0);
+});
+
+teste("sem conta removida, a lista volta intacta", () => {
+  const meu = M.lancamentosDaBaixa(OBRA, EMP, [conta("k1", "material", 260)], { ...OPC }).lancamentos;
+  assert.strictEqual(M.semLancamentosDasContas(meu, "ob1", []).lancamentos.length, 1);
+  assert.strictEqual(M.semLancamentosDasContas(meu, "ob1", null).removidos, 0);
+  assert.strictEqual(M.semLancamentosDasContas(null, "ob1", [{ id: "k1" }]).lancamentos.length, 0);
+});
+
+teste("o lançamento da ponte nasce com a hora, para ir ao topo da lista", () => {
+  const l = M.lancamentosDaBaixa(OBRA, EMP, [conta("k1", "material", 260)], { ...OPC }).lancamentos[0];
+  assert.ok(/^\d{4}-\d{2}-\d{2}T/.test(l.criadoEm), "criadoEm: " + l.criadoEm);
 });
 
 
