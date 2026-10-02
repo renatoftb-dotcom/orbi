@@ -10253,9 +10253,13 @@ const EF_ESTILO = {
     color: on ? "#fff" : "#262421", fontWeight: on ? 600 : 500, fontFamily: "inherit" }),
   card: { background: "#fff", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding: 16 },
   quadro: { background: "#fff", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, overflow: "auto" },
-  input: { width: "100%", padding: "8px 10px", borderRadius: 9, border: "1px solid rgba(38,36,33,0.18)",
-    fontSize: 13, fontFamily: "inherit", background: "#fff", color: "#262421" },
-  rot: { fontSize: 11, fontWeight: 600, color: "#6b7280", marginBottom: 4 },
+  // boxSizing é o que impede o campo de transbordar a coluna: sem ele,
+  // "100% + 20 de padding + 2 de borda" passa da largura da célula e as
+  // bordas de um campo entram por cima do vizinho.
+  input: { width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 9,
+    border: "1px solid rgba(38,36,33,0.18)", fontSize: 13, fontFamily: "inherit",
+    background: "#fff", color: "#262421" },
+  rot: { fontSize: 11, fontWeight: 600, color: "#6b7280", marginBottom: 4, lineHeight: 1.3 },
   btn: { background: "#0474f4", color: "#fff", border: "none", borderRadius: 10, padding: "9px 18px",
     fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" },
   btnSec: { background: "#fff", color: "#262421", border: "1px solid rgba(38,36,33,0.18)", borderRadius: 10,
@@ -10357,6 +10361,18 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
   );
 }
 
+// O valor digitado em português. "5.000,00" com Number() direto dá NaN — o
+// ponto do milhar vira ponto decimal e a vírgula sobra, e o formulário
+// respondia "Informe o valor" com o valor ali na tela. Quem lê certo é o
+// campo numérico do contrato, e é dele que este formulário passa a viver.
+function efValorDoCampo(v) {
+  if (typeof numeroDeCampo === "function") return numeroDeCampo(v) || 0;
+  const s = String(v == null ? "" : v).trim();
+  const limpo = s.indexOf(",") >= 0 ? s.replace(/\./g, "").replace(",", ".") : s;
+  const n = parseFloat(limpo);
+  return Number.isFinite(n) ? n : 0;
+}
+
 // Formulário de um lançamento. As travas são as do validarLancamento: a
 // mensagem aparece antes de gravar, não depois.
 function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes }) {
@@ -10367,22 +10383,66 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     ...(inicial || {}),
   }));
   const [tentou, setTentou] = useState(false);
+  const [erroAnexo, setErroAnexo] = useState("");
+  const [lendoComprov, setLendoComprov] = useState(false);
+  // O que o comprovante disse e o lançamento já dizia diferente. Não corrige
+  // nada sozinho: só põe à vista, porque na conciliação do extrato isto
+  // costuma ser comprovante colado na linha errada.
+  const [divergencia, setDivergencia] = useState(null);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+
+  // O mesmo leitor da Entrada: PIX, TED, boleto pago. Preenche só o que
+  // está VAZIO — a linha veio do extrato com valor e data próprios, e
+  // sobrescrevê-los seria trocar o que o banco afirma pelo que o papel
+  // repete. O que estiver preenchido e divergir vira aviso, não correção.
+  async function lerComprovante(arquivo) {
+    if (typeof linhasDoPdf !== "function" || typeof dadosDoComprovante !== "function") return;
+    setLendoComprov(true); setErroAnexo(""); setDivergencia(null);
+    try {
+      const d = dadosDoComprovante(await linhasDoPdf(arquivo));
+      if (!d) { setErroAnexo("Anexei o arquivo, mas não reconheci um comprovante de pagamento nele — os campos ficam como estão."); return; }
+      const valorLido = typeof numeroDeCampo === "function" ? numeroDeCampo(d.valor) : 0;
+      setF((p) => {
+        const novo = { ...p };
+        if (valorLido > 0 && !(efValorDoCampo(p.valor) > 0)) {
+          novo.valor = String(d.valor);
+        }
+        if (d.pagoEm && !p.lancadoEm) novo.lancadoEm = d.pagoEm;
+        if (d.pagoEm && !p.competencia) novo.competencia = d.pagoEm.slice(0, 7);
+        if (d.favorecido && !String(p.fornecedor || "").trim()) novo.fornecedor = d.favorecido;
+        if (!String(p.descricao || "").trim()) {
+          novo.descricao = [d.favorecido, d.documento].filter(Boolean).join(" · ") || "Pagamento";
+        }
+        return novo;
+      });
+      const valorForm = efValorDoCampo(f.valor);
+      const difValor = valorLido > 0 && valorForm > 0 && Math.abs(valorLido - valorForm) >= 0.01;
+      const difData = !!(d.pagoEm && f.lancadoEm && d.pagoEm !== f.lancadoEm);
+      setDivergencia(difValor || difData
+        ? { valor: difValor ? valorLido : 0, data: difData ? d.pagoEm : "", favorecido: d.favorecido || "" }
+        : null);
+    } catch (e) {
+      setErroAnexo(e.message || "Não consegui ler o comprovante — ele fica anexado do mesmo jeito.");
+    } finally {
+      setLendoComprov(false);
+    }
+  }
   const conta = contaEscritorio(f.contaId);
   const unidadesOk = conta && (conta.unidades || []).length ? conta.unidades : UNIDADES_NEGOCIO.map((u) => u.id);
   // Empreendimento é cliente com tique: quando a unidade é Empreendimento, a
   // lista de escolha só traz esses, e o id escolhido vale pelos dois campos.
   const ehEmp = f.unidadeId === "empreendimento";
   const doCadastro = (clientes || []).filter((c) => c && (ehEmp ? ehEmpreendimento(c) : true));
-  const erros = validarLancamentoEscritorio({ ...f, valor: Number(String(f.valor).replace(",", ".")) || 0,
+  const erros = validarLancamentoEscritorio({ ...f, valor: efValorDoCampo(f.valor),
     clienteId: f.clienteId || f.cliente, obraId: f.projeto,
     empreendimentoId: ehEmp ? f.empreendimentoId : f.projeto }, { fechamentos });
 
-  const campo = (rot, filho) => <div><div style={S.rot}>{rot}</div>{filho}</div>;
+  const campo = (rot, filho) => <div style={{ minWidth: 0 }}><div style={S.rot}>{rot}</div>{filho}</div>;
   return (
-    <div style={{ ...S.card, borderColor: "rgba(4,116,244,0.35)", background: "#f7fbff", display: "grid", gap: 10 }}>
+    <div style={{ ...S.card, borderColor: "rgba(4,116,244,0.35)", background: "#f7fbff", display: "grid", gap: 12 }}>
       <div style={{ fontSize: 13, fontWeight: 700 }}>{inicial && inicial.id ? "Editar lançamento" : "Novo lançamento"}</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+        gap: 12, alignItems: "end" }}>
         {campo("Conta", (
           <Selecao style={{ ...S.input, cursor: "pointer" }} value={f.contaId} onChange={(e) => {
             const c = contaEscritorio(e.target.value);
@@ -10445,6 +10505,35 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
         {campo("Documento", <input style={S.input} value={f.documento} onChange={(e) => set("documento", e.target.value)} />)}
       </div>
       {campo("Descrição", <input style={S.input} value={f.descricao} onChange={(e) => set("descricao", e.target.value)} />)}
+      {/* O comprovante fica guardado no lançamento. Não é obrigatório: a
+          linha do extrato vale por si — mas a conciliação de daqui a um ano
+          vai querer o papel junto. */}
+      <div>
+        <div style={S.rot}>Comprovante (opcional)</div>
+        {typeof CampoAnexoProposta === "function" ? (
+          <CampoAnexoProposta
+            anexo={f.comprovante || null}
+            categoria="comprovante_pagamento"
+            chamada="Arraste o comprovante aqui"
+            apoio="cole o print com Ctrl+V, arraste o arquivo ou clique para escolher — do PDF eu leio valor, data e quem recebeu"
+            chamadaToque="Toque para anexar o comprovante"
+            apoioToque="tire a foto do comprovante, escolha da galeria ou pegue o PDF do banco"
+            lendo={lendoComprov}
+            aoLerPdf={lerComprovante}
+            onTrocar={(a) => { set("comprovante", a); if (!a) { setDivergencia(null); setErroAnexo(""); } }}
+            onErro={setErroAnexo} />
+        ) : null}
+        {erroAnexo && <div style={{ fontSize: 12, color: "#b45309", marginTop: 6 }}>{erroAnexo}</div>}
+        {divergencia && (
+          <div style={{ fontSize: 12, color: "#b45309", marginTop: 6, lineHeight: 1.45 }}>
+            O comprovante não bate com esta linha:
+            {divergencia.valor ? ` ele diz ${efDinheiro(divergencia.valor)}` : ""}
+            {divergencia.data ? ` ${divergencia.valor ? "e" : "ele diz"} pago em ${typeof dataDoDiaBR === "function" ? dataDoDiaBR(divergencia.data) : divergencia.data}` : ""}
+            {divergencia.favorecido ? ` (para ${divergencia.favorecido})` : ""}.
+            Confira se é o papel desta linha do extrato — não mexi em nada.
+          </div>
+        )}
+      </div>
       {tentou && erros.length > 0 && (
         <div style={{ fontSize: 12, color: "#b91c1c" }}>{erros.join(" · ")}</div>
       )}
@@ -10453,7 +10542,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
         <button style={EF_ESTILO.btn} onClick={() => {
           setTentou(true);
           if (erros.length) return;
-          aoSalvar({ ...f, tipo: "escritorio", valor: Number(String(f.valor).replace(",", ".")) || 0 });
+          aoSalvar({ ...f, tipo: "escritorio", valor: efValorDoCampo(f.valor) });
         }}>Salvar</button>
       </div>
     </div>
@@ -11052,6 +11141,10 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     setForm(null);
   }
 
+  // O comprovante aberto no visor. Guardado aqui em cima porque a lista e o
+  // formulário são duas telas do mesmo painel.
+  const [vendoComprovante, setVendoComprovante] = useState(null);
+
   async function excluirLancamento(l) {
     const ok = await dialogo.confirmar({
       titulo: "Excluir este lançamento?",
@@ -11360,6 +11453,9 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             )}
           </div>
           {form && <FormLancamentoEscritorio fechamentos={fechamentos} clientes={(data || {}).clientes || []} inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} />}
+          {vendoComprovante && typeof VisorProposta === "function" && (
+            <VisorProposta anexo={vendoComprovante} aoFechar={() => setVendoComprovante(null)} />
+          )}
           <div style={S.quadro}>
             <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
               <thead>
@@ -11380,7 +11476,19 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
                       <td style={{ padding: "7px 12px" }}>{c ? c.nome : <span style={{ color: "#b45309" }}>{l.contaOriginal || "sem conta"}</span>}</td>
                       <td style={{ padding: "7px 12px", color: "#6b7280" }}>{u ? u.nome : l.unidadeOriginal || "—"}</td>
                       <td style={{ padding: "7px 12px", color: "#6b7280" }}>{[l.cliente, l.projeto].filter(Boolean).join(" · ") || "—"}</td>
-                      <td style={{ padding: "7px 12px" }}>{l.descricao || l.fornecedor || "—"}</td>
+                      <td style={{ padding: "7px 12px" }}>
+                        {l.descricao || l.fornecedor || "—"}
+                        {/* O clipe diz, de relance, qual linha tem papel e qual
+                            não tem — é o que se procura numa conciliação. */}
+                        {l.comprovante && l.comprovante.url && (
+                          <button type="button" title={"Ver o comprovante" + (l.comprovante.nome ? ": " + l.comprovante.nome : "")}
+                            onClick={() => setVendoComprovante(l.comprovante)}
+                            style={{ marginLeft: 6, border: "none", background: "none", padding: 0, cursor: "pointer",
+                              color: "#0474f4", fontSize: 12.5, fontFamily: "inherit" }}>
+                            {"\u{1F4CE}"}
+                          </button>
+                        )}
+                      </td>
                       <td style={{ padding: "7px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{efDinheiro(l.valor)}</td>
                       <td style={{ padding: "7px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
                         {perm.podeEditar && (
