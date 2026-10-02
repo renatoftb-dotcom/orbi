@@ -401,7 +401,14 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
       lancadoEm: String(fonte.data || "").slice(0, 10),
       descricao: fonte.descricao || "",
       fornecedor: fonte.fornecedor || "",
+      fornecedorId: fonte.fornecedorId || "",
       documento: fonte.documento || "",
+      // O número de referência e os papéis são da TRANSAÇÃO, não do lado em
+      // que ela é olhada: a conta da obra e o lançamento que ela gera aqui
+      // carregam o mesmo número e os mesmos anexos. É o que faz a prestação
+      // de contas fechar de qualquer um dos dois lados.
+      numeroDoc: fonte.numeroDoc || "",
+      anexos: fonte.anexos || [],
       contaBanco: "sim",
       // Quando ele nasceu, para a lista pôr o mais novo na frente dentro do
       // mês. Sem isto, o lançamento recém-criado cai no meio dos outros de
@@ -419,7 +426,10 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
       data: c.pagoEm || c.vencimento || "",
       descricao: c.descricao || "",
       fornecedor: c.favorecido || "",
+      fornecedorId: c.prestadorId || "",
       documento: c.numeroNota || c.numeroLoja || "",
+      numeroDoc: c.numeroDoc || "",
+      anexos: anexosDaTransacao(c),
     });
   }
   // as entradas da obra — o dinheiro que entrou
@@ -431,6 +441,8 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
       data: e.data || "",
       descricao: e.descricao || "Entrada da obra",
       fornecedor: "", documento: e.documento || "",
+      numeroDoc: e.numeroDoc || "",
+      anexos: anexosDaTransacao(e),
     });
   }
 
@@ -1422,6 +1434,27 @@ function efValorDoCampo(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
+// ── Os papéis da transação ──────────────────────────────────────
+// Nota fiscal, comprovante, boleto: numa lista só. O campo único de
+// `comprovante` veio antes e continua valendo — ele é lido como o primeiro
+// anexo, e o que já foi gravado não precisa ser remexido para aparecer.
+function anexosDaTransacao(x) {
+  const t = x || {};
+  const lista = Array.isArray(t.anexos) ? t.anexos.filter(Boolean) : [];
+  if (!t.comprovante) return lista;
+  const jaEsta = lista.some((a) => a && (a.public_id || a.url) &&
+    (a.public_id === t.comprovante.public_id || a.url === t.comprovante.url));
+  return jaEsta ? lista : [t.comprovante].concat(lista);
+}
+
+function comAnexos(x, lista) {
+  // Guardar os dois seria pedir para divergirem: quem passa a mexer na lista
+  // leva o comprovante antigo para dentro dela e o campo velho sai de cena.
+  const novo = Object.assign({}, x || {}, { anexos: (lista || []).filter(Boolean) });
+  delete novo.comprovante;
+  return novo;
+}
+
 // ── De qual plano é a conta do lançamento ───────────────────────
 // Dois planos convivem nesta tela, e é de propósito. Uma compra para a obra
 // de um cliente, ou para um empreendimento do escritório, é custo DAQUELA
@@ -1632,16 +1665,18 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
 
 // Formulário de um lançamento. As travas são as do validarLancamento: a
 // mensagem aparece antes de gravar, não depois.
-function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras }) {
+function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, prestadores, aoCriarPrestador }) {
   const S = EF_ESTILO;
   const [f, setF] = useState(() => ({
-    contaId: "", contaFonte: "", obraIdAlvo: "",
+    contaId: "", contaFonte: "", obraIdAlvo: "", fornecedorId: "", anexos: [],
     unidadeId: "escritorio", valor: "", competencia: "", lancadoEm: "",
     cliente: "", clienteId: "", empreendimentoId: "", projeto: "", fornecedor: "", descricao: "", documento: "", contaBanco: "sim",
     ...(inicial || {}),
   }));
   const [tentou, setTentou] = useState(false);
   const [erroAnexo, setErroAnexo] = useState("");
+  const [novoPrest, setNovoPrest] = useState(null);   // { nome, categoria }
+  const [erroPrest, setErroPrest] = useState("");
   const [lendoComprov, setLendoComprov] = useState(false);
   // O que o comprovante disse e o lançamento já dizia diferente. Não corrige
   // nada sozinho: só põe à vista, porque na conciliação do extrato isto
@@ -1690,6 +1725,15 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const naObra = f.contaFonte === "obra";
   const opcoesConta = contasDoLancamento(f.unidadeId, {});
   const obrasDoCliente = obrasDoLancamento({ obras: obras || [] }, f.clienteId);
+  // Cliente com uma obra só não é uma escolha: é a resposta. Perguntar
+  // seria pedir que ele confirmasse o óbvio em todo lançamento.
+  useEffect(() => {
+    if (f.contaFonte !== "obra") return;
+    if (f.obraIdAlvo) return;
+    if (obrasDoCliente.length !== 1) return;
+    const unica = obrasDoCliente[0];
+    setF((p) => ({ ...p, obraIdAlvo: unica.id, projeto: unica.nome || p.projeto }));
+  }, [f.contaFonte, f.obraIdAlvo, f.clienteId, obrasDoCliente.length]);
   const obraAlvo = obrasDoCliente.find((o) => o && o.id === f.obraIdAlvo) || null;
   const clienteAlvo = (clientes || []).find((c) => c && c.id === f.clienteId) || null;
   const destinoDoCusto = naObra ? destinoVisivelDoCusto(f.contaId, obraAlvo, clienteAlvo, {}) : null;
@@ -1709,7 +1753,15 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const campo = (rot, filho) => <div style={{ minWidth: 0 }}><div style={S.rot}>{rot}</div>{filho}</div>;
   return (
     <div style={{ ...S.card, borderColor: "rgba(4,116,244,0.35)", background: "#f7fbff", display: "grid", gap: 12 }}>
-      <div style={{ fontSize: 13, fontWeight: 700 }}>{inicial && inicial.id ? "Editar lançamento" : "Novo lançamento"}</div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>{inicial && inicial.id ? "Editar lançamento" : "Novo lançamento"}</div>
+        {/* O número da transação: é por ele que a prestação de contas acha
+            o lançamento e os papéis dele. Sai da sequência sozinho ao
+            gravar — não há o que digitar aqui. */}
+        <div style={{ fontSize: 11.5, color: "#6b7280" }}>
+          {f.numeroDoc ? <>referência <b style={{ color: "#111827" }}>{f.numeroDoc}</b></> : "a referência sai ao gravar"}
+        </div>
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
         gap: 12, alignItems: "end" }}>
         {/* A unidade vem PRIMEIRO porque é ela que decide quais contas
@@ -1807,8 +1859,34 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                   .concat(obrasDoCliente.map((o) => ({ valor: o.id, rotulo: o.nome || "Obra" })))} />
             ))
           : campo("Projeto / obra", <input style={S.input} value={f.projeto} onChange={(e) => set("projeto", e.target.value)} />)}
-        {campo("Fornecedor", <input style={S.input} value={f.fornecedor} onChange={(e) => set("fornecedor", e.target.value)} />)}
-        {campo("Documento", <input style={S.input} value={f.documento} onChange={(e) => set("documento", e.target.value)} />)}
+        {campo("Fornecedor", (
+          <SelectBusca style={S.input} value={f.fornecedorId}
+            onChange={(v) => {
+              const pr = (prestadores || []).find((x) => x && x.id === v) || null;
+              setF((p) => ({ ...p, fornecedorId: v, fornecedor: pr ? pr.nome : "" }));
+            }}
+            placeholder="Procurar fornecedor…"
+            aoCriar={(termo) => { setErroPrest(""); setNovoPrest({ nome: termo || f.fornecedor || "", categoria: "Loja / Comércio" }); }}
+            criarRotulo="cadastrar"
+            opcoes={[{ valor: "", rotulo: f.fornecedor && !f.fornecedorId ? f.fornecedor : "— escolha —" }]
+              .concat((prestadores || []).map((x) => ({ valor: x.id, rotulo: x.nome, grupo: x.categoria || "" })))} />
+        ))}
+        {novoPrest && (
+          <div style={{ gridColumn: "1 / -1" }}>
+            <CadastroRapidoDePrestador form={novoPrest} aoMudar={setNovoPrest} erro={erroPrest}
+              aoSalvar={() => {
+                if (!String(novoPrest.nome || "").trim()) { setErroPrest("Escreva o nome."); return; }
+                const criado = aoCriarPrestador ? aoCriarPrestador(novoPrest) : null;
+                if (!criado) { setErroPrest("Não consegui cadastrar agora."); return; }
+                setF((p) => ({ ...p, fornecedorId: criado.id, fornecedor: criado.nome || "" }));
+                setNovoPrest(null); setErroPrest("");
+              }}
+              aoCancelar={() => { setNovoPrest(null); setErroPrest(""); }} />
+          </div>
+        )}
+        {campo("Nº da nota / boleto", <input style={S.input} value={f.documento}
+          placeholder="o número do papel, não a forma de pagamento"
+          onChange={(e) => set("documento", e.target.value)} />)}
       </div>
       {campo("Descrição", <input style={S.input} value={f.descricao} onChange={(e) => set("descricao", e.target.value)} />)}
       {/* Lançando "Material" num empreendimento, do outro lado isso se chama
@@ -1840,18 +1918,18 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           linha do extrato vale por si — mas a conciliação de daqui a um ano
           vai querer o papel junto. */}
       <div>
-        <div style={S.rot}>Comprovante (opcional)</div>
-        {typeof CampoAnexoProposta === "function" ? (
-          <CampoAnexoProposta
-            anexo={f.comprovante || null}
+        <div style={S.rot}>
+          Documentos — nota fiscal, comprovante, boleto (opcional)
+        </div>
+        {typeof CampoDocumentos === "function" ? (
+          <CampoDocumentos
+            anexos={anexosDaTransacao(f)}
             categoria="comprovante_pagamento"
-            chamada="Arraste o comprovante aqui"
-            apoio="cole o print com Ctrl+V, arraste o arquivo ou clique para escolher — do PDF eu leio valor, data e quem recebeu"
-            chamadaToque="Toque para anexar o comprovante"
-            apoioToque="tire a foto do comprovante, escolha da galeria ou pegue o PDF do banco"
             lendo={lendoComprov}
             aoLerPdf={lerComprovante}
-            onTrocar={(a) => { set("comprovante", a); if (!a) { setDivergencia(null); setErroAnexo(""); } }}
+            aoMudar={(lista) => setF((p) => { const novo = comAnexos(p, lista);
+              if (!lista.length) { setDivergencia(null); setErroAnexo(""); }
+              return novo; })}
             onErro={setErroAnexo} />
         ) : null}
         {erroAnexo && <div style={{ fontSize: 12, color: "#b45309", marginTop: 6 }}>{erroAnexo}</div>}
@@ -2484,12 +2562,17 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const valor = Number(l.valor) || 0;
     const base = { ...contaAvulsaVazia(obra.id),
       contaId: l.contaId,
+      prestadorId: l.fornecedorId || "",
       favorecido: l.fornecedor || "",
       descricao: String(l.descricao || "").trim() || (l.fornecedor || "Compra"),
-      documento: l.documento || "",
+      numeroNota: l.documento || "",
       valor: valor, vencimento: l.lancadoEm };
-    const nova = contaPaga(registrarAto(base, "criada", quem),
-      { pagoEm: l.lancadoEm, valorPago: valor, comprovante: l.comprovante || null }, quem);
+    // Número de referência e papéis entram na conta: a ponte os copia para o
+    // lançamento do escritório, e aí os dois lados falam do mesmo "0147".
+    const comNumero = numerarContas([registrarAto(base, "criada", quem)],
+      todas, lancamentosDoEscritorio(data))[0];
+    const nova = comAnexos(contaPaga(comNumero,
+      { pagoEm: l.lancadoEm, valorPago: valor }, quem), anexosDaTransacao(l));
     const obraNova = { ...obra, contasPagar: (obra.contasPagar || []).concat([nova]) };
     const ponte = lancamentosDaBaixa(obraNova, cliente, [nova],
       { fechamentos: fechamentosDoEscritorio(data), lancamentos: lancamentosDoEscritorio(data) });
@@ -2500,11 +2583,35 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     setForm(null);
   }
 
+  // O fornecedor que ainda não existe entra sem sair da tela — quem está
+  // conciliando o extrato não pode ser mandado para o cadastro e ter que
+  // recomeçar a classificação quando voltar.
+  function criarPrestadorDoLancamento(campos) {
+    const todos = (data || {}).fornecedores || [];
+    const nome = String((campos || {}).nome || "").trim();
+    if (!nome) return null;
+    const chave = (s) => efSemAcento(s);
+    const igual = todos.find((x) => x && chave(x.nome) === chave(nome));
+    if (igual) return igual;
+    const novo = typeof criarPrestadorRapido === "function"
+      ? criarPrestadorRapido({ nome, telefone: String((campos || {}).telefone || "").trim(),
+          categoria: String((campos || {}).categoria || "").trim() || "Loja / Comércio" },
+          typeof uid === "function" ? uid() : String(Date.now()))
+      : null;
+    if (!novo) return null;
+    save({ ...data, fornecedores: todos.concat([novo]) }).catch(console.error);
+    return novo;
+  }
+
   function salvarLancamento(l) {
     if (l && l.naObra) { lancarCustoNaObra(l); return; }
     const id = l.id || (typeof uid === "function" ? uid() : String(Date.now()));
     const semEle = lancs.filter((x) => x.id !== id);
-    gravar([...semEle, { ...l, id, tipo: "escritorio" }]);
+    // Toda transação sai daqui com referência. Quem já tem a sua não é
+    // renumerado — número de papel entregue não muda.
+    const numeroDoc = l.numeroDoc
+      || proximaReferencia((data || {}).obras || [], lancs);
+    gravar([...semEle, { ...l, id, numeroDoc, tipo: "escritorio" }]);
     setForm(null);
   }
 
@@ -2738,7 +2845,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       String(b.competencia).localeCompare(String(a.competencia))
       || quando(b).localeCompare(quando(a)));
     if (!t) return lista.slice(0, 300);
-    return lista.filter((l) => efSemAcento([l.descricao, l.fornecedor, l.cliente, l.projeto,
+    return lista.filter((l) => efSemAcento([l.numeroDoc, l.documento, l.descricao, l.fornecedor, l.cliente, l.projeto,
       (contaEscritorio(l.contaId) || {}).nome].join(" ")).indexOf(t) >= 0).slice(0, 300);
   })();
 
@@ -2820,7 +2927,10 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             )}
           </div>
           {form && <FormLancamentoEscritorio fechamentos={fechamentos} clientes={(data || {}).clientes || []}
-            obras={(data || {}).obras || []} inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} />}
+            obras={(data || {}).obras || []}
+            prestadores={((data || {}).fornecedores || []).filter((x) => x && x.ativo !== false)}
+            aoCriarPrestador={criarPrestadorDoLancamento}
+            inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} />}
           {vendoComprovante && typeof VisorProposta === "function" && (
             <VisorProposta anexo={vendoComprovante} aoFechar={() => setVendoComprovante(null)} />
           )}
@@ -2828,9 +2938,9 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
               <thead>
                 <tr style={{ color: "#6b7280", textAlign: "left" }}>
-                  {["Competência", "Conta", "Unidade", "Cliente / obra", "Descrição", "Valor", ""].map((h, i) => (
+                  {["Ref.", "Competência", "Conta", "Unidade", "Cliente / obra", "Descrição", "Valor", ""].map((h, i) => (
                     <th key={h + i} style={{ padding: "7px 12px", fontSize: 11, textTransform: "uppercase", letterSpacing: .4,
-                      borderBottom: "1px solid rgba(38,36,33,0.12)", textAlign: i === 5 ? "right" : "left" }}>{h}</th>
+                      borderBottom: "1px solid rgba(38,36,33,0.12)", textAlign: i === 6 ? "right" : "left" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -2840,6 +2950,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
                   const u = UNIDADES_NEGOCIO.find((x) => x.id === l.unidadeId);
                   return (
                     <tr key={l.id} style={{ borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+                      <td style={{ padding: "7px 12px", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums",
+                        color: l.numeroDoc ? "#111827" : "#9ca3af" }}>{l.numeroDoc || "—"}</td>
                       <td style={{ padding: "7px 12px", whiteSpace: "nowrap" }}>{l.competencia}</td>
                       <td style={{ padding: "7px 12px" }}>{c ? c.nome : <span style={{ color: "#b45309" }}>{l.contaOriginal || "sem conta"}</span>}</td>
                       <td style={{ padding: "7px 12px", color: "#6b7280" }}>{u ? u.nome : l.unidadeOriginal || "—"}</td>
@@ -2847,15 +2959,22 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
                       <td style={{ padding: "7px 12px" }}>
                         {l.descricao || l.fornecedor || "—"}
                         {/* O clipe diz, de relance, qual linha tem papel e qual
-                            não tem — é o que se procura numa conciliação. */}
-                        {l.comprovante && l.comprovante.url && (
-                          <button type="button" title={"Ver o comprovante" + (l.comprovante.nome ? ": " + l.comprovante.nome : "")}
-                            onClick={() => setVendoComprovante(l.comprovante)}
-                            style={{ marginLeft: 6, border: "none", background: "none", padding: 0, cursor: "pointer",
-                              color: "#0474f4", fontSize: 12.5, fontFamily: "inherit" }}>
-                            {"\u{1F4CE}"}
-                          </button>
-                        )}
+                            não tem — é o que se procura numa prestação de
+                            contas. Com mais de um, ele traz a conta. */}
+                        {(() => {
+                          const papeis = anexosDaTransacao(l).filter((a) => a && a.url);
+                          if (!papeis.length) return null;
+                          return (
+                            <button type="button"
+                              title={papeis.length === 1 ? "Ver o documento: " + (papeis[0].nome || "")
+                                : "Ver os " + papeis.length + " documentos"}
+                              onClick={() => setVendoComprovante(papeis[0])}
+                              style={{ marginLeft: 6, border: "none", background: "none", padding: 0, cursor: "pointer",
+                                color: "#0474f4", fontSize: 12.5, fontFamily: "inherit" }}>
+                              {"\u{1F4CE}"}{papeis.length > 1 ? " " + papeis.length : ""}
+                            </button>
+                          );
+                        })()}
                       </td>
                       <td style={{ padding: "7px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{efDinheiro(l.valor)}</td>
                       <td style={{ padding: "7px 12px", textAlign: "right", whiteSpace: "nowrap" }}>

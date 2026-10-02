@@ -9234,7 +9234,14 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
       lancadoEm: String(fonte.data || "").slice(0, 10),
       descricao: fonte.descricao || "",
       fornecedor: fonte.fornecedor || "",
+      fornecedorId: fonte.fornecedorId || "",
       documento: fonte.documento || "",
+      // O número de referência e os papéis são da TRANSAÇÃO, não do lado em
+      // que ela é olhada: a conta da obra e o lançamento que ela gera aqui
+      // carregam o mesmo número e os mesmos anexos. É o que faz a prestação
+      // de contas fechar de qualquer um dos dois lados.
+      numeroDoc: fonte.numeroDoc || "",
+      anexos: fonte.anexos || [],
       contaBanco: "sim",
       // Quando ele nasceu, para a lista pôr o mais novo na frente dentro do
       // mês. Sem isto, o lançamento recém-criado cai no meio dos outros de
@@ -9252,7 +9259,10 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
       data: c.pagoEm || c.vencimento || "",
       descricao: c.descricao || "",
       fornecedor: c.favorecido || "",
+      fornecedorId: c.prestadorId || "",
       documento: c.numeroNota || c.numeroLoja || "",
+      numeroDoc: c.numeroDoc || "",
+      anexos: anexosDaTransacao(c),
     });
   }
   // as entradas da obra — o dinheiro que entrou
@@ -9264,6 +9274,8 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
       data: e.data || "",
       descricao: e.descricao || "Entrada da obra",
       fornecedor: "", documento: e.documento || "",
+      numeroDoc: e.numeroDoc || "",
+      anexos: anexosDaTransacao(e),
     });
   }
 
@@ -10255,6 +10267,27 @@ function efValorDoCampo(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
+// ── Os papéis da transação ──────────────────────────────────────
+// Nota fiscal, comprovante, boleto: numa lista só. O campo único de
+// `comprovante` veio antes e continua valendo — ele é lido como o primeiro
+// anexo, e o que já foi gravado não precisa ser remexido para aparecer.
+function anexosDaTransacao(x) {
+  const t = x || {};
+  const lista = Array.isArray(t.anexos) ? t.anexos.filter(Boolean) : [];
+  if (!t.comprovante) return lista;
+  const jaEsta = lista.some((a) => a && (a.public_id || a.url) &&
+    (a.public_id === t.comprovante.public_id || a.url === t.comprovante.url));
+  return jaEsta ? lista : [t.comprovante].concat(lista);
+}
+
+function comAnexos(x, lista) {
+  // Guardar os dois seria pedir para divergirem: quem passa a mexer na lista
+  // leva o comprovante antigo para dentro dela e o campo velho sai de cena.
+  const novo = Object.assign({}, x || {}, { anexos: (lista || []).filter(Boolean) });
+  delete novo.comprovante;
+  return novo;
+}
+
 // ── De qual plano é a conta do lançamento ───────────────────────
 // Dois planos convivem nesta tela, e é de propósito. Uma compra para a obra
 // de um cliente, ou para um empreendimento do escritório, é custo DAQUELA
@@ -10465,16 +10498,18 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
 
 // Formulário de um lançamento. As travas são as do validarLancamento: a
 // mensagem aparece antes de gravar, não depois.
-function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras }) {
+function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, prestadores, aoCriarPrestador }) {
   const S = EF_ESTILO;
   const [f, setF] = useState(() => ({
-    contaId: "", contaFonte: "", obraIdAlvo: "",
+    contaId: "", contaFonte: "", obraIdAlvo: "", fornecedorId: "", anexos: [],
     unidadeId: "escritorio", valor: "", competencia: "", lancadoEm: "",
     cliente: "", clienteId: "", empreendimentoId: "", projeto: "", fornecedor: "", descricao: "", documento: "", contaBanco: "sim",
     ...(inicial || {}),
   }));
   const [tentou, setTentou] = useState(false);
   const [erroAnexo, setErroAnexo] = useState("");
+  const [novoPrest, setNovoPrest] = useState(null);   // { nome, categoria }
+  const [erroPrest, setErroPrest] = useState("");
   const [lendoComprov, setLendoComprov] = useState(false);
   // O que o comprovante disse e o lançamento já dizia diferente. Não corrige
   // nada sozinho: só põe à vista, porque na conciliação do extrato isto
@@ -10523,6 +10558,15 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const naObra = f.contaFonte === "obra";
   const opcoesConta = contasDoLancamento(f.unidadeId, {});
   const obrasDoCliente = obrasDoLancamento({ obras: obras || [] }, f.clienteId);
+  // Cliente com uma obra só não é uma escolha: é a resposta. Perguntar
+  // seria pedir que ele confirmasse o óbvio em todo lançamento.
+  useEffect(() => {
+    if (f.contaFonte !== "obra") return;
+    if (f.obraIdAlvo) return;
+    if (obrasDoCliente.length !== 1) return;
+    const unica = obrasDoCliente[0];
+    setF((p) => ({ ...p, obraIdAlvo: unica.id, projeto: unica.nome || p.projeto }));
+  }, [f.contaFonte, f.obraIdAlvo, f.clienteId, obrasDoCliente.length]);
   const obraAlvo = obrasDoCliente.find((o) => o && o.id === f.obraIdAlvo) || null;
   const clienteAlvo = (clientes || []).find((c) => c && c.id === f.clienteId) || null;
   const destinoDoCusto = naObra ? destinoVisivelDoCusto(f.contaId, obraAlvo, clienteAlvo, {}) : null;
@@ -10542,7 +10586,15 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const campo = (rot, filho) => <div style={{ minWidth: 0 }}><div style={S.rot}>{rot}</div>{filho}</div>;
   return (
     <div style={{ ...S.card, borderColor: "rgba(4,116,244,0.35)", background: "#f7fbff", display: "grid", gap: 12 }}>
-      <div style={{ fontSize: 13, fontWeight: 700 }}>{inicial && inicial.id ? "Editar lançamento" : "Novo lançamento"}</div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>{inicial && inicial.id ? "Editar lançamento" : "Novo lançamento"}</div>
+        {/* O número da transação: é por ele que a prestação de contas acha
+            o lançamento e os papéis dele. Sai da sequência sozinho ao
+            gravar — não há o que digitar aqui. */}
+        <div style={{ fontSize: 11.5, color: "#6b7280" }}>
+          {f.numeroDoc ? <>referência <b style={{ color: "#111827" }}>{f.numeroDoc}</b></> : "a referência sai ao gravar"}
+        </div>
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
         gap: 12, alignItems: "end" }}>
         {/* A unidade vem PRIMEIRO porque é ela que decide quais contas
@@ -10640,8 +10692,34 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                   .concat(obrasDoCliente.map((o) => ({ valor: o.id, rotulo: o.nome || "Obra" })))} />
             ))
           : campo("Projeto / obra", <input style={S.input} value={f.projeto} onChange={(e) => set("projeto", e.target.value)} />)}
-        {campo("Fornecedor", <input style={S.input} value={f.fornecedor} onChange={(e) => set("fornecedor", e.target.value)} />)}
-        {campo("Documento", <input style={S.input} value={f.documento} onChange={(e) => set("documento", e.target.value)} />)}
+        {campo("Fornecedor", (
+          <SelectBusca style={S.input} value={f.fornecedorId}
+            onChange={(v) => {
+              const pr = (prestadores || []).find((x) => x && x.id === v) || null;
+              setF((p) => ({ ...p, fornecedorId: v, fornecedor: pr ? pr.nome : "" }));
+            }}
+            placeholder="Procurar fornecedor…"
+            aoCriar={(termo) => { setErroPrest(""); setNovoPrest({ nome: termo || f.fornecedor || "", categoria: "Loja / Comércio" }); }}
+            criarRotulo="cadastrar"
+            opcoes={[{ valor: "", rotulo: f.fornecedor && !f.fornecedorId ? f.fornecedor : "— escolha —" }]
+              .concat((prestadores || []).map((x) => ({ valor: x.id, rotulo: x.nome, grupo: x.categoria || "" })))} />
+        ))}
+        {novoPrest && (
+          <div style={{ gridColumn: "1 / -1" }}>
+            <CadastroRapidoDePrestador form={novoPrest} aoMudar={setNovoPrest} erro={erroPrest}
+              aoSalvar={() => {
+                if (!String(novoPrest.nome || "").trim()) { setErroPrest("Escreva o nome."); return; }
+                const criado = aoCriarPrestador ? aoCriarPrestador(novoPrest) : null;
+                if (!criado) { setErroPrest("Não consegui cadastrar agora."); return; }
+                setF((p) => ({ ...p, fornecedorId: criado.id, fornecedor: criado.nome || "" }));
+                setNovoPrest(null); setErroPrest("");
+              }}
+              aoCancelar={() => { setNovoPrest(null); setErroPrest(""); }} />
+          </div>
+        )}
+        {campo("Nº da nota / boleto", <input style={S.input} value={f.documento}
+          placeholder="o número do papel, não a forma de pagamento"
+          onChange={(e) => set("documento", e.target.value)} />)}
       </div>
       {campo("Descrição", <input style={S.input} value={f.descricao} onChange={(e) => set("descricao", e.target.value)} />)}
       {/* Lançando "Material" num empreendimento, do outro lado isso se chama
@@ -10673,18 +10751,18 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           linha do extrato vale por si — mas a conciliação de daqui a um ano
           vai querer o papel junto. */}
       <div>
-        <div style={S.rot}>Comprovante (opcional)</div>
-        {typeof CampoAnexoProposta === "function" ? (
-          <CampoAnexoProposta
-            anexo={f.comprovante || null}
+        <div style={S.rot}>
+          Documentos — nota fiscal, comprovante, boleto (opcional)
+        </div>
+        {typeof CampoDocumentos === "function" ? (
+          <CampoDocumentos
+            anexos={anexosDaTransacao(f)}
             categoria="comprovante_pagamento"
-            chamada="Arraste o comprovante aqui"
-            apoio="cole o print com Ctrl+V, arraste o arquivo ou clique para escolher — do PDF eu leio valor, data e quem recebeu"
-            chamadaToque="Toque para anexar o comprovante"
-            apoioToque="tire a foto do comprovante, escolha da galeria ou pegue o PDF do banco"
             lendo={lendoComprov}
             aoLerPdf={lerComprovante}
-            onTrocar={(a) => { set("comprovante", a); if (!a) { setDivergencia(null); setErroAnexo(""); } }}
+            aoMudar={(lista) => setF((p) => { const novo = comAnexos(p, lista);
+              if (!lista.length) { setDivergencia(null); setErroAnexo(""); }
+              return novo; })}
             onErro={setErroAnexo} />
         ) : null}
         {erroAnexo && <div style={{ fontSize: 12, color: "#b45309", marginTop: 6 }}>{erroAnexo}</div>}
@@ -11317,12 +11395,17 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const valor = Number(l.valor) || 0;
     const base = { ...contaAvulsaVazia(obra.id),
       contaId: l.contaId,
+      prestadorId: l.fornecedorId || "",
       favorecido: l.fornecedor || "",
       descricao: String(l.descricao || "").trim() || (l.fornecedor || "Compra"),
-      documento: l.documento || "",
+      numeroNota: l.documento || "",
       valor: valor, vencimento: l.lancadoEm };
-    const nova = contaPaga(registrarAto(base, "criada", quem),
-      { pagoEm: l.lancadoEm, valorPago: valor, comprovante: l.comprovante || null }, quem);
+    // Número de referência e papéis entram na conta: a ponte os copia para o
+    // lançamento do escritório, e aí os dois lados falam do mesmo "0147".
+    const comNumero = numerarContas([registrarAto(base, "criada", quem)],
+      todas, lancamentosDoEscritorio(data))[0];
+    const nova = comAnexos(contaPaga(comNumero,
+      { pagoEm: l.lancadoEm, valorPago: valor }, quem), anexosDaTransacao(l));
     const obraNova = { ...obra, contasPagar: (obra.contasPagar || []).concat([nova]) };
     const ponte = lancamentosDaBaixa(obraNova, cliente, [nova],
       { fechamentos: fechamentosDoEscritorio(data), lancamentos: lancamentosDoEscritorio(data) });
@@ -11333,11 +11416,35 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     setForm(null);
   }
 
+  // O fornecedor que ainda não existe entra sem sair da tela — quem está
+  // conciliando o extrato não pode ser mandado para o cadastro e ter que
+  // recomeçar a classificação quando voltar.
+  function criarPrestadorDoLancamento(campos) {
+    const todos = (data || {}).fornecedores || [];
+    const nome = String((campos || {}).nome || "").trim();
+    if (!nome) return null;
+    const chave = (s) => efSemAcento(s);
+    const igual = todos.find((x) => x && chave(x.nome) === chave(nome));
+    if (igual) return igual;
+    const novo = typeof criarPrestadorRapido === "function"
+      ? criarPrestadorRapido({ nome, telefone: String((campos || {}).telefone || "").trim(),
+          categoria: String((campos || {}).categoria || "").trim() || "Loja / Comércio" },
+          typeof uid === "function" ? uid() : String(Date.now()))
+      : null;
+    if (!novo) return null;
+    save({ ...data, fornecedores: todos.concat([novo]) }).catch(console.error);
+    return novo;
+  }
+
   function salvarLancamento(l) {
     if (l && l.naObra) { lancarCustoNaObra(l); return; }
     const id = l.id || (typeof uid === "function" ? uid() : String(Date.now()));
     const semEle = lancs.filter((x) => x.id !== id);
-    gravar([...semEle, { ...l, id, tipo: "escritorio" }]);
+    // Toda transação sai daqui com referência. Quem já tem a sua não é
+    // renumerado — número de papel entregue não muda.
+    const numeroDoc = l.numeroDoc
+      || proximaReferencia((data || {}).obras || [], lancs);
+    gravar([...semEle, { ...l, id, numeroDoc, tipo: "escritorio" }]);
     setForm(null);
   }
 
@@ -11571,7 +11678,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       String(b.competencia).localeCompare(String(a.competencia))
       || quando(b).localeCompare(quando(a)));
     if (!t) return lista.slice(0, 300);
-    return lista.filter((l) => efSemAcento([l.descricao, l.fornecedor, l.cliente, l.projeto,
+    return lista.filter((l) => efSemAcento([l.numeroDoc, l.documento, l.descricao, l.fornecedor, l.cliente, l.projeto,
       (contaEscritorio(l.contaId) || {}).nome].join(" ")).indexOf(t) >= 0).slice(0, 300);
   })();
 
@@ -11653,7 +11760,10 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             )}
           </div>
           {form && <FormLancamentoEscritorio fechamentos={fechamentos} clientes={(data || {}).clientes || []}
-            obras={(data || {}).obras || []} inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} />}
+            obras={(data || {}).obras || []}
+            prestadores={((data || {}).fornecedores || []).filter((x) => x && x.ativo !== false)}
+            aoCriarPrestador={criarPrestadorDoLancamento}
+            inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} />}
           {vendoComprovante && typeof VisorProposta === "function" && (
             <VisorProposta anexo={vendoComprovante} aoFechar={() => setVendoComprovante(null)} />
           )}
@@ -11661,9 +11771,9 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
               <thead>
                 <tr style={{ color: "#6b7280", textAlign: "left" }}>
-                  {["Competência", "Conta", "Unidade", "Cliente / obra", "Descrição", "Valor", ""].map((h, i) => (
+                  {["Ref.", "Competência", "Conta", "Unidade", "Cliente / obra", "Descrição", "Valor", ""].map((h, i) => (
                     <th key={h + i} style={{ padding: "7px 12px", fontSize: 11, textTransform: "uppercase", letterSpacing: .4,
-                      borderBottom: "1px solid rgba(38,36,33,0.12)", textAlign: i === 5 ? "right" : "left" }}>{h}</th>
+                      borderBottom: "1px solid rgba(38,36,33,0.12)", textAlign: i === 6 ? "right" : "left" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -11673,6 +11783,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
                   const u = UNIDADES_NEGOCIO.find((x) => x.id === l.unidadeId);
                   return (
                     <tr key={l.id} style={{ borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+                      <td style={{ padding: "7px 12px", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums",
+                        color: l.numeroDoc ? "#111827" : "#9ca3af" }}>{l.numeroDoc || "—"}</td>
                       <td style={{ padding: "7px 12px", whiteSpace: "nowrap" }}>{l.competencia}</td>
                       <td style={{ padding: "7px 12px" }}>{c ? c.nome : <span style={{ color: "#b45309" }}>{l.contaOriginal || "sem conta"}</span>}</td>
                       <td style={{ padding: "7px 12px", color: "#6b7280" }}>{u ? u.nome : l.unidadeOriginal || "—"}</td>
@@ -11680,15 +11792,22 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
                       <td style={{ padding: "7px 12px" }}>
                         {l.descricao || l.fornecedor || "—"}
                         {/* O clipe diz, de relance, qual linha tem papel e qual
-                            não tem — é o que se procura numa conciliação. */}
-                        {l.comprovante && l.comprovante.url && (
-                          <button type="button" title={"Ver o comprovante" + (l.comprovante.nome ? ": " + l.comprovante.nome : "")}
-                            onClick={() => setVendoComprovante(l.comprovante)}
-                            style={{ marginLeft: 6, border: "none", background: "none", padding: 0, cursor: "pointer",
-                              color: "#0474f4", fontSize: 12.5, fontFamily: "inherit" }}>
-                            {"\u{1F4CE}"}
-                          </button>
-                        )}
+                            não tem — é o que se procura numa prestação de
+                            contas. Com mais de um, ele traz a conta. */}
+                        {(() => {
+                          const papeis = anexosDaTransacao(l).filter((a) => a && a.url);
+                          if (!papeis.length) return null;
+                          return (
+                            <button type="button"
+                              title={papeis.length === 1 ? "Ver o documento: " + (papeis[0].nome || "")
+                                : "Ver os " + papeis.length + " documentos"}
+                              onClick={() => setVendoComprovante(papeis[0])}
+                              style={{ marginLeft: 6, border: "none", background: "none", padding: 0, cursor: "pointer",
+                                color: "#0474f4", fontSize: 12.5, fontFamily: "inherit" }}>
+                              {"\u{1F4CE}"}{papeis.length > 1 ? " " + papeis.length : ""}
+                            </button>
+                          );
+                        })()}
                       </td>
                       <td style={{ padding: "7px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{efDinheiro(l.valor)}</td>
                       <td style={{ padding: "7px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
@@ -20434,7 +20553,16 @@ function opcaoAtiva(c, id) {
 // A FILA É A MESMA para os dois. Numerar cada tipo por conta própria daria
 // um Contrato 0004 e um Pedido 0004 convivendo na mesma obra, e aí o número
 // deixa de identificar coisa alguma.
-function proximoNumeroDoc(obras) {
+// Uma sequência só para a casa inteira. Contrato, pedido, conta a pagar e
+// lançamento do escritório puxam todos daqui, e por isso um número nunca se
+// repete em lugar nenhum: procurar por "0147" acha UMA transação, sem ter
+// que dizer de qual obra ela é. É o número que a prestação de contas usa
+// para amarrar o lançamento aos papéis dele.
+//
+// `lancamentos` entra como segundo argumento porque o lançamento do
+// escritório também consome a sequência; sem olhá-lo, o próximo número
+// repetiria um que já existe no extrato.
+function proximoNumeroDoc(obras, lancamentos) {
   let maior = 0;
   const olhar = (v) => {
     const n = parseInt(String(v || "").replace(/\D/g, ""), 10);
@@ -20443,7 +20571,9 @@ function proximoNumeroDoc(obras) {
   for (const o of obras || []) {
     for (const c of (o && o.contratos) || []) olhar(c && c.numeroContrato);
     for (const c of (o && o.cotacoes) || []) olhar(c && c.numeroPedido);
+    for (const c of (o && o.contasPagar) || []) olhar(c && c.numeroDoc);
   }
+  for (const l of lancamentos || []) olhar(l && l.numeroDoc);
   return String(maior + 1).padStart(4, "0");
 }
 const proximoNumeroContrato = proximoNumeroDoc;
@@ -21834,6 +21964,30 @@ function realizadoPorPrestador(contas) {
   }
   return r;
 }
+// ── O número de referência da transação ─────────────────────────
+// Cada conta a pagar ganha um número da sequência única da casa — a mesma
+// que numera contratos e pedidos. É por ele que a prestação de contas acha
+// o lançamento e os papéis dele, e por isso ele não pode ser o id interno:
+// "0147" se dita ao telefone, "lhpipxm" não.
+//
+// Quem já tem número não é renumerado: o número é do papel, e papel
+// entregue não muda de nome.
+function numerarContas(contas, obras, lancamentos) {
+  const faltando = (contas || []).filter((c) => c && !c.numeroDoc);
+  if (!faltando.length) return contas || [];
+  let n = parseInt(String(proximoNumeroDoc(obras, lancamentos)).replace(/\D/g, ""), 10);
+  if (!Number.isFinite(n)) n = 1;
+  const novos = {};
+  for (const c of faltando) { novos[c.id] = String(n).padStart(4, "0"); n++; }
+  return (contas || []).map((c) => (c && novos[c.id] ? { ...c, numeroDoc: novos[c.id] } : c));
+}
+
+// O próximo número para UMA transação só — o lançamento do escritório, que
+// não nasce em lista.
+function proximaReferencia(obras, lancamentos) {
+  return proximoNumeroDoc(obras, lancamentos);
+}
+
 // Conta avulsa, fora de contrato.
 function contaAvulsaVazia(obraId) {
   return {
@@ -30073,48 +30227,10 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // Cadastro-relâmpago de quem ainda não existe. Serve a loja do pedido e o
   // empreiteiro da despesa — mora numa variável porque aparece nos dois
   // lugares, e escrito duas vezes viraria dois cadastros diferentes.
-  const blocoCadastroRapido = novaLoja && (
-    <div style={{ marginTop: 10, padding: 12, borderRadius: 12,
-      border: "1.5px solid #0474f4", background: "#f7fbff" }}>
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0474f4", marginBottom: 8 }}>
-        Cadastrar {novaLoja.categoria === "Loja / Comércio" ? "loja" : "prestador"}
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 200px", gap: 10 }}>
-        <div>
-          <label style={E.label}>Nome *</label>
-          <input style={E.input} autoFocus value={novaLoja.nome}
-            onChange={(e) => setNovaLoja({ ...novaLoja, nome: e.target.value })}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); salvarNovaLoja(); } }}
-            placeholder="ART GLASS vidros e esquadrias" />
-        </div>
-        <div>
-          <label style={E.label}>WhatsApp</label>
-          <input style={E.input} value={novaLoja.telefone}
-            onChange={(e) => setNovaLoja({ ...novaLoja, telefone: e.target.value })}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); salvarNovaLoja(); } }}
-            placeholder="(14) 99999-9999" />
-        </div>
-      </div>
-      <div style={{ marginTop: 10 }}>
-        <label style={E.label}>Categoria</label>
-        <SelectBusca style={E.input} value={novaLoja.categoria}
-          onChange={(v) => setNovaLoja({ ...novaLoja, categoria: v })}
-          placeholder="Procurar categoria…"
-          opcoes={(typeof CATEGORIAS_PRESTADOR !== "undefined" ? CATEGORIAS_PRESTADOR : ["Loja / Comércio"])
-            .map((c) => ({ valor: c, rotulo: c }))} />
-      </div>
-      <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>
-        Só o nome é obrigatório. Sem telefone, o cadastro existe mas não recebe a lista
-        pelo WhatsApp — o resto se completa depois em Prestadores de Serviços.
-      </div>
-      {erroLoja && <div style={{ fontSize: 11.5, color: "#dc2626", marginTop: 6 }}>{erroLoja}</div>}
-      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-        <button type="button" style={{ ...E.btn, fontSize: 12, padding: "6px 14px" }}
-          onClick={salvarNovaLoja}>Cadastrar e usar</button>
-        <button type="button" style={{ ...E.btnSec, fontSize: 12, padding: "6px 14px" }}
-          onClick={() => { setNovaLoja(null); setErroLoja(""); }}>Cancelar</button>
-      </div>
-    </div>
+  const blocoCadastroRapido = (
+    <CadastroRapidoDePrestador form={novaLoja} aoMudar={setNovaLoja} erro={erroLoja}
+      aoSalvar={salvarNovaLoja} aoCancelar={() => { setNovaLoja(null); setErroLoja(""); }}
+      isMobile={isMobile} />
   );
 
   // Obra e destino são as mesmas duas perguntas para qualquer papel — lista
@@ -31390,6 +31506,98 @@ function ehPonteiroDeToque() {
     return typeof window !== "undefined" && !!window.matchMedia
       && window.matchMedia("(hover: none)").matches;
   } catch (e) { return false; }
+}
+
+// ── Cadastro-relâmpago de quem ainda não existe ────────────────
+// A loja do pedido e o empreiteiro da despesa entram pelo mesmo formulário,
+// de dois lugares diferentes: a Entrada e o lançamento do escritório. Mora
+// num componente só porque escrito duas vezes viraria dois cadastros com
+// regras diferentes na primeira correção.
+function CadastroRapidoDePrestador({ form, aoMudar, erro, aoSalvar, aoCancelar, isMobile }) {
+  const E = COT_ESTILO;
+  if (!form) return null;
+  const mexer = (campo, valor) => aoMudar(Object.assign({}, form, { [campo]: valor }));
+  const noEnter = (e) => { if (e.key === "Enter") { e.preventDefault(); aoSalvar(); } };
+  return (
+    <div style={{ marginTop: 10, padding: 12, borderRadius: 12,
+      border: "1.5px solid #0474f4", background: "#f7fbff" }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0474f4", marginBottom: 8 }}>
+        Cadastrar {form.categoria === "Loja / Comércio" ? "loja" : "prestador"}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 200px", gap: 10 }}>
+        <div>
+          <label style={E.label}>Nome *</label>
+          <input style={E.input} autoFocus value={form.nome || ""}
+            onChange={(e) => mexer("nome", e.target.value)} onKeyDown={noEnter}
+            placeholder="ART GLASS vidros e esquadrias" />
+        </div>
+        <div>
+          <label style={E.label}>WhatsApp</label>
+          <input style={E.input} value={form.telefone || ""}
+            onChange={(e) => mexer("telefone", e.target.value)} onKeyDown={noEnter}
+            placeholder="(14) 99999-9999" />
+        </div>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label style={E.label}>Categoria</label>
+        <SelectBusca style={E.input} value={form.categoria}
+          onChange={(v) => mexer("categoria", v)}
+          placeholder="Procurar categoria…"
+          opcoes={(typeof CATEGORIAS_PRESTADOR !== "undefined" ? CATEGORIAS_PRESTADOR : ["Loja / Comércio"])
+            .map((c) => ({ valor: c, rotulo: c }))} />
+      </div>
+      <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>
+        Só o nome é obrigatório. Sem telefone, o cadastro existe mas não recebe a lista
+        pelo WhatsApp — o resto se completa depois em Prestadores de Serviços.
+      </div>
+      {erro && <div style={{ fontSize: 11.5, color: "#dc2626", marginTop: 6 }}>{erro}</div>}
+      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        <button type="button" style={{ ...E.btn, fontSize: 12, padding: "6px 14px" }}
+          onClick={aoSalvar}>Cadastrar e usar</button>
+        <button type="button" style={{ ...E.btnSec, fontSize: 12, padding: "6px 14px" }}
+          onClick={aoCancelar}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Os papéis de uma transação ─────────────────────────────────
+// Nota fiscal, comprovante, boleto: uma lista, não um campo só. Para
+// prestação de contas o que importa é que TUDO que sustenta o lançamento
+// esteja pendurado no mesmo número — e nunca se sabe de antemão se vão ser
+// um papel ou três.
+//
+// Cada linha é o mesmo CampoAnexoProposta de sempre, com o arquivo dentro;
+// a última é ele vazio, esperando mais um. Nada de componente novo para
+// anexar: anexar já tinha dono.
+function CampoDocumentos({ anexos, aoMudar, onErro, categoria, aoLerPdf, lendo, progresso }) {
+  const lista = (anexos || []).filter(Boolean);
+  const trocar = (i, novo) => {
+    const nova = lista.slice();
+    if (novo) nova[i] = novo; else nova.splice(i, 1);
+    aoMudar(nova);
+  };
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      {lista.map((a, i) => (
+        <CampoAnexoProposta key={(a && (a.public_id || a.url)) || i}
+          anexo={a} categoria={categoria}
+          onTrocar={(novo) => trocar(i, novo)} onErro={onErro} />
+      ))}
+      <CampoAnexoProposta
+        anexo={null} categoria={categoria}
+        lendo={lendo} progresso={progresso}
+        aoLerPdf={aoLerPdf}
+        chamada={lista.length ? "Arraste mais um documento" : "Arraste a nota ou o comprovante aqui"}
+        apoio={lista.length
+          ? "nota fiscal, comprovante, boleto — tudo que sustenta este lançamento"
+          : "cole o print com Ctrl+V, arraste o arquivo ou clique para escolher — do PDF eu leio valor, data e quem recebeu"}
+        chamadaToque={lista.length ? "Toque para anexar mais um" : "Toque para anexar a nota ou o comprovante"}
+        apoioToque="tire a foto do papel, escolha da galeria ou pegue o PDF do banco"
+        onTrocar={(novo) => { if (novo) aoMudar(lista.concat([novo])); }}
+        onErro={onErro} />
+    </div>
+  );
 }
 
 function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, chamadaToque, apoio, apoioToque, aoLerPdf, lendo, leFoto, progresso }) {
@@ -34138,7 +34346,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!f.descricao?.trim()) { dialogo.alertar({ titulo: "Informe a descrição da conta", tipo: "aviso" }); return; }
     if (!(Number(f.valor) > 0)) { dialogo.alertar({ titulo: "Informe um valor maior que zero", tipo: "aviso" }); return; }
     const existe = contasDaObra.some(c => c.id === f.id);
-    const carimbada = registrarAto(f, existe ? "editada" : "criada", quemSou());
+    const carimbada = existe
+      ? registrarAto(f, "editada", quemSou())
+      : numerarContas([registrarAto(f, "criada", quemSou())], obras, lancamentosDoEscritorio(data))[0];
     gravarContas(existe ? contasDaObra.map(c => c.id === f.id ? carimbada : c) : [...contasDaObra, carimbada]);
     setFormConta(null);
   };
@@ -36468,7 +36678,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       }
       const pedido = { ...(dados.pedido || {}), numero: (jaExiste && jaExiste.numero) || numeroPedido,
         lancadoEm: dados.lancadoEm || new Date().toISOString(), lancadoPor: dados.lancadoPor || "" };
-      const contas = contasDaCotacao({ ...dados, numeroPedido: pedido.numero, pedido }, uid);
+      const contas = numerarContas(contasDaCotacao({ ...dados, numeroPedido: pedido.numero, pedido }, uid),
+        obras, lancamentosDoEscritorio(data));
       if (!contas.length) return { erro: "O pedido está sem itens com valor." };
       const lista = baseCotacoes.map(c => c.id !== dados.cotacaoId ? c : ({
         ...c,
@@ -36505,7 +36716,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       setObraSelecionada(comLoja);
       return { primeiraContaId: contas[0].id, quantas: contas.length, gravado: true };
     }
-    const novas = contasDaCotacao({ ...dados, numeroPedido }, uid);
+    const novas = numerarContas(contasDaCotacao({ ...dados, numeroPedido }, uid),
+      obras, lancamentosDoEscritorio(data));
     if (!novas.length) return { erro: "A proposta escolhida está sem valor." };
     const cotacoes = (obraAtual.cotacoes || []).map(c => c.id !== dados.cotacaoId ? c : ({
       ...c,
@@ -36565,12 +36777,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       return { gravado: true, parcela: true, favorecido: alvo.favorecido || d.favorecido || "" };
     }
 
-    const nova = registrarAto({ ...contaAvulsaVazia(obraAtual.id),
+    const nova = numerarContas([registrarAto({ ...contaAvulsaVazia(obraAtual.id),
       contaId: d.contaId || "material",
       prestadorId: d.prestadorId || d.favorecidoId || "",
       favorecido: d.favorecido || "",
       descricao: String(d.descricao || "").trim() || "Pagamento a " + (d.favorecido || "prestador"),
-      valor, vencimento: d.pagoEm }, "criada", quem);
+      valor, vencimento: d.pagoEm }, "criada", quem)],
+      obras, lancamentosDoEscritorio(data))[0];
     gravarContas(contas.concat([contaPaga(nova, baixa, quem)]), obraAtual.id);
     return { gravado: true, contaId: nova.id, favorecido: d.favorecido || "" };
   }

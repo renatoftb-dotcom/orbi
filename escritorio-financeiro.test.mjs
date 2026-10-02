@@ -30,7 +30,7 @@ const M = new Function(src + `
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
            obrasDoLancamento, validarLancamentoNaObra, destinoVisivelDoCusto,
-           efValorDoCampo };`)();
+           efValorDoCampo, anexosDaTransacao, comAnexos };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -50,6 +50,35 @@ const PLANO_OBRA_T = [
   { id: "cartao_credito",    nome: "Cartão de crédito", grupo: "receitas" },
 ];
 const OPC_OBRA = { planoObra: PLANO_OBRA_T };
+
+
+// ── Os papéis da transação ──────────────────────────────────────
+teste("o comprovante antigo é lido como o primeiro documento", () => {
+  const c = { comprovante: { url: "u1", nome: "pix.pdf" } };
+  assert.deepStrictEqual(M.anexosDaTransacao(c).map((a) => a.nome), ["pix.pdf"]);
+});
+
+teste("comprovante antigo + lista nova aparecem juntos, sem repetir", () => {
+  const c = { comprovante: { url: "u1", public_id: "p1", nome: "pix.pdf" },
+    anexos: [{ url: "u2", public_id: "p2", nome: "nota.pdf" }] };
+  assert.deepStrictEqual(M.anexosDaTransacao(c).map((a) => a.nome), ["pix.pdf", "nota.pdf"]);
+  const jaDentro = { comprovante: { url: "u1", public_id: "p1" },
+    anexos: [{ url: "u1", public_id: "p1" }] };
+  assert.strictEqual(M.anexosDaTransacao(jaDentro).length, 1);
+});
+
+teste("sem papel nenhum, a lista é vazia", () => {
+  assert.deepStrictEqual(M.anexosDaTransacao({}), []);
+  assert.deepStrictEqual(M.anexosDaTransacao(null), []);
+});
+
+teste("ao mexer na lista, o campo antigo sai de cena — guardar os dois é pedir divergência", () => {
+  const c = { id: "x", comprovante: { url: "u1" }, anexos: [] };
+  const novo = M.comAnexos(c, [{ url: "u1" }, { url: "u2" }]);
+  assert.strictEqual("comprovante" in novo, false);
+  assert.strictEqual(novo.anexos.length, 2);
+  assert.strictEqual(novo.id, "x");
+});
 
 teste("unidade que fala de obra: gestão de obras e empreendimento", () => {
   assert.strictEqual(M.unidadePedeObra("empreendimento"), true);

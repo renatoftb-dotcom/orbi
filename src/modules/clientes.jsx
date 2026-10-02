@@ -2504,7 +2504,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!f.descricao?.trim()) { dialogo.alertar({ titulo: "Informe a descrição da conta", tipo: "aviso" }); return; }
     if (!(Number(f.valor) > 0)) { dialogo.alertar({ titulo: "Informe um valor maior que zero", tipo: "aviso" }); return; }
     const existe = contasDaObra.some(c => c.id === f.id);
-    const carimbada = registrarAto(f, existe ? "editada" : "criada", quemSou());
+    const carimbada = existe
+      ? registrarAto(f, "editada", quemSou())
+      : numerarContas([registrarAto(f, "criada", quemSou())], obras, lancamentosDoEscritorio(data))[0];
     gravarContas(existe ? contasDaObra.map(c => c.id === f.id ? carimbada : c) : [...contasDaObra, carimbada]);
     setFormConta(null);
   };
@@ -4834,7 +4836,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       }
       const pedido = { ...(dados.pedido || {}), numero: (jaExiste && jaExiste.numero) || numeroPedido,
         lancadoEm: dados.lancadoEm || new Date().toISOString(), lancadoPor: dados.lancadoPor || "" };
-      const contas = contasDaCotacao({ ...dados, numeroPedido: pedido.numero, pedido }, uid);
+      const contas = numerarContas(contasDaCotacao({ ...dados, numeroPedido: pedido.numero, pedido }, uid),
+        obras, lancamentosDoEscritorio(data));
       if (!contas.length) return { erro: "O pedido está sem itens com valor." };
       const lista = baseCotacoes.map(c => c.id !== dados.cotacaoId ? c : ({
         ...c,
@@ -4871,7 +4874,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       setObraSelecionada(comLoja);
       return { primeiraContaId: contas[0].id, quantas: contas.length, gravado: true };
     }
-    const novas = contasDaCotacao({ ...dados, numeroPedido }, uid);
+    const novas = numerarContas(contasDaCotacao({ ...dados, numeroPedido }, uid),
+      obras, lancamentosDoEscritorio(data));
     if (!novas.length) return { erro: "A proposta escolhida está sem valor." };
     const cotacoes = (obraAtual.cotacoes || []).map(c => c.id !== dados.cotacaoId ? c : ({
       ...c,
@@ -4931,12 +4935,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       return { gravado: true, parcela: true, favorecido: alvo.favorecido || d.favorecido || "" };
     }
 
-    const nova = registrarAto({ ...contaAvulsaVazia(obraAtual.id),
+    const nova = numerarContas([registrarAto({ ...contaAvulsaVazia(obraAtual.id),
       contaId: d.contaId || "material",
       prestadorId: d.prestadorId || d.favorecidoId || "",
       favorecido: d.favorecido || "",
       descricao: String(d.descricao || "").trim() || "Pagamento a " + (d.favorecido || "prestador"),
-      valor, vencimento: d.pagoEm }, "criada", quem);
+      valor, vencimento: d.pagoEm }, "criada", quem)],
+      obras, lancamentosDoEscritorio(data))[0];
     gravarContas(contas.concat([contaPaga(nova, baixa, quem)]), obraAtual.id);
     return { gravado: true, contaId: nova.id, favorecido: d.favorecido || "" };
   }

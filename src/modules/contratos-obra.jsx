@@ -646,7 +646,16 @@ function opcaoAtiva(c, id) {
 // A FILA É A MESMA para os dois. Numerar cada tipo por conta própria daria
 // um Contrato 0004 e um Pedido 0004 convivendo na mesma obra, e aí o número
 // deixa de identificar coisa alguma.
-function proximoNumeroDoc(obras) {
+// Uma sequência só para a casa inteira. Contrato, pedido, conta a pagar e
+// lançamento do escritório puxam todos daqui, e por isso um número nunca se
+// repete em lugar nenhum: procurar por "0147" acha UMA transação, sem ter
+// que dizer de qual obra ela é. É o número que a prestação de contas usa
+// para amarrar o lançamento aos papéis dele.
+//
+// `lancamentos` entra como segundo argumento porque o lançamento do
+// escritório também consome a sequência; sem olhá-lo, o próximo número
+// repetiria um que já existe no extrato.
+function proximoNumeroDoc(obras, lancamentos) {
   let maior = 0;
   const olhar = (v) => {
     const n = parseInt(String(v || "").replace(/\D/g, ""), 10);
@@ -655,7 +664,9 @@ function proximoNumeroDoc(obras) {
   for (const o of obras || []) {
     for (const c of (o && o.contratos) || []) olhar(c && c.numeroContrato);
     for (const c of (o && o.cotacoes) || []) olhar(c && c.numeroPedido);
+    for (const c of (o && o.contasPagar) || []) olhar(c && c.numeroDoc);
   }
+  for (const l of lancamentos || []) olhar(l && l.numeroDoc);
   return String(maior + 1).padStart(4, "0");
 }
 const proximoNumeroContrato = proximoNumeroDoc;

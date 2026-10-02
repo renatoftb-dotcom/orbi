@@ -6545,48 +6545,10 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // Cadastro-relâmpago de quem ainda não existe. Serve a loja do pedido e o
   // empreiteiro da despesa — mora numa variável porque aparece nos dois
   // lugares, e escrito duas vezes viraria dois cadastros diferentes.
-  const blocoCadastroRapido = novaLoja && (
-    <div style={{ marginTop: 10, padding: 12, borderRadius: 12,
-      border: "1.5px solid #0474f4", background: "#f7fbff" }}>
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0474f4", marginBottom: 8 }}>
-        Cadastrar {novaLoja.categoria === "Loja / Comércio" ? "loja" : "prestador"}
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 200px", gap: 10 }}>
-        <div>
-          <label style={E.label}>Nome *</label>
-          <input style={E.input} autoFocus value={novaLoja.nome}
-            onChange={(e) => setNovaLoja({ ...novaLoja, nome: e.target.value })}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); salvarNovaLoja(); } }}
-            placeholder="ART GLASS vidros e esquadrias" />
-        </div>
-        <div>
-          <label style={E.label}>WhatsApp</label>
-          <input style={E.input} value={novaLoja.telefone}
-            onChange={(e) => setNovaLoja({ ...novaLoja, telefone: e.target.value })}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); salvarNovaLoja(); } }}
-            placeholder="(14) 99999-9999" />
-        </div>
-      </div>
-      <div style={{ marginTop: 10 }}>
-        <label style={E.label}>Categoria</label>
-        <SelectBusca style={E.input} value={novaLoja.categoria}
-          onChange={(v) => setNovaLoja({ ...novaLoja, categoria: v })}
-          placeholder="Procurar categoria…"
-          opcoes={(typeof CATEGORIAS_PRESTADOR !== "undefined" ? CATEGORIAS_PRESTADOR : ["Loja / Comércio"])
-            .map((c) => ({ valor: c, rotulo: c }))} />
-      </div>
-      <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>
-        Só o nome é obrigatório. Sem telefone, o cadastro existe mas não recebe a lista
-        pelo WhatsApp — o resto se completa depois em Prestadores de Serviços.
-      </div>
-      {erroLoja && <div style={{ fontSize: 11.5, color: "#dc2626", marginTop: 6 }}>{erroLoja}</div>}
-      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-        <button type="button" style={{ ...E.btn, fontSize: 12, padding: "6px 14px" }}
-          onClick={salvarNovaLoja}>Cadastrar e usar</button>
-        <button type="button" style={{ ...E.btnSec, fontSize: 12, padding: "6px 14px" }}
-          onClick={() => { setNovaLoja(null); setErroLoja(""); }}>Cancelar</button>
-      </div>
-    </div>
+  const blocoCadastroRapido = (
+    <CadastroRapidoDePrestador form={novaLoja} aoMudar={setNovaLoja} erro={erroLoja}
+      aoSalvar={salvarNovaLoja} aoCancelar={() => { setNovaLoja(null); setErroLoja(""); }}
+      isMobile={isMobile} />
   );
 
   // Obra e destino são as mesmas duas perguntas para qualquer papel — lista
@@ -7862,6 +7824,98 @@ function ehPonteiroDeToque() {
     return typeof window !== "undefined" && !!window.matchMedia
       && window.matchMedia("(hover: none)").matches;
   } catch (e) { return false; }
+}
+
+// ── Cadastro-relâmpago de quem ainda não existe ────────────────
+// A loja do pedido e o empreiteiro da despesa entram pelo mesmo formulário,
+// de dois lugares diferentes: a Entrada e o lançamento do escritório. Mora
+// num componente só porque escrito duas vezes viraria dois cadastros com
+// regras diferentes na primeira correção.
+function CadastroRapidoDePrestador({ form, aoMudar, erro, aoSalvar, aoCancelar, isMobile }) {
+  const E = COT_ESTILO;
+  if (!form) return null;
+  const mexer = (campo, valor) => aoMudar(Object.assign({}, form, { [campo]: valor }));
+  const noEnter = (e) => { if (e.key === "Enter") { e.preventDefault(); aoSalvar(); } };
+  return (
+    <div style={{ marginTop: 10, padding: 12, borderRadius: 12,
+      border: "1.5px solid #0474f4", background: "#f7fbff" }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0474f4", marginBottom: 8 }}>
+        Cadastrar {form.categoria === "Loja / Comércio" ? "loja" : "prestador"}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 200px", gap: 10 }}>
+        <div>
+          <label style={E.label}>Nome *</label>
+          <input style={E.input} autoFocus value={form.nome || ""}
+            onChange={(e) => mexer("nome", e.target.value)} onKeyDown={noEnter}
+            placeholder="ART GLASS vidros e esquadrias" />
+        </div>
+        <div>
+          <label style={E.label}>WhatsApp</label>
+          <input style={E.input} value={form.telefone || ""}
+            onChange={(e) => mexer("telefone", e.target.value)} onKeyDown={noEnter}
+            placeholder="(14) 99999-9999" />
+        </div>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label style={E.label}>Categoria</label>
+        <SelectBusca style={E.input} value={form.categoria}
+          onChange={(v) => mexer("categoria", v)}
+          placeholder="Procurar categoria…"
+          opcoes={(typeof CATEGORIAS_PRESTADOR !== "undefined" ? CATEGORIAS_PRESTADOR : ["Loja / Comércio"])
+            .map((c) => ({ valor: c, rotulo: c }))} />
+      </div>
+      <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>
+        Só o nome é obrigatório. Sem telefone, o cadastro existe mas não recebe a lista
+        pelo WhatsApp — o resto se completa depois em Prestadores de Serviços.
+      </div>
+      {erro && <div style={{ fontSize: 11.5, color: "#dc2626", marginTop: 6 }}>{erro}</div>}
+      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        <button type="button" style={{ ...E.btn, fontSize: 12, padding: "6px 14px" }}
+          onClick={aoSalvar}>Cadastrar e usar</button>
+        <button type="button" style={{ ...E.btnSec, fontSize: 12, padding: "6px 14px" }}
+          onClick={aoCancelar}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Os papéis de uma transação ─────────────────────────────────
+// Nota fiscal, comprovante, boleto: uma lista, não um campo só. Para
+// prestação de contas o que importa é que TUDO que sustenta o lançamento
+// esteja pendurado no mesmo número — e nunca se sabe de antemão se vão ser
+// um papel ou três.
+//
+// Cada linha é o mesmo CampoAnexoProposta de sempre, com o arquivo dentro;
+// a última é ele vazio, esperando mais um. Nada de componente novo para
+// anexar: anexar já tinha dono.
+function CampoDocumentos({ anexos, aoMudar, onErro, categoria, aoLerPdf, lendo, progresso }) {
+  const lista = (anexos || []).filter(Boolean);
+  const trocar = (i, novo) => {
+    const nova = lista.slice();
+    if (novo) nova[i] = novo; else nova.splice(i, 1);
+    aoMudar(nova);
+  };
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      {lista.map((a, i) => (
+        <CampoAnexoProposta key={(a && (a.public_id || a.url)) || i}
+          anexo={a} categoria={categoria}
+          onTrocar={(novo) => trocar(i, novo)} onErro={onErro} />
+      ))}
+      <CampoAnexoProposta
+        anexo={null} categoria={categoria}
+        lendo={lendo} progresso={progresso}
+        aoLerPdf={aoLerPdf}
+        chamada={lista.length ? "Arraste mais um documento" : "Arraste a nota ou o comprovante aqui"}
+        apoio={lista.length
+          ? "nota fiscal, comprovante, boleto — tudo que sustenta este lançamento"
+          : "cole o print com Ctrl+V, arraste o arquivo ou clique para escolher — do PDF eu leio valor, data e quem recebeu"}
+        chamadaToque={lista.length ? "Toque para anexar mais um" : "Toque para anexar a nota ou o comprovante"}
+        apoioToque="tire a foto do papel, escolha da galeria ou pegue o PDF do banco"
+        onTrocar={(novo) => { if (novo) aoMudar(lista.concat([novo])); }}
+        onErro={onErro} />
+    </div>
+  );
 }
 
 function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, chamadaToque, apoio, apoioToque, aoLerPdf, lendo, leFoto, progresso }) {

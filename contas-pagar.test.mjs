@@ -57,7 +57,7 @@ const modulo = new Function(`
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
            registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS,
            CP_MAX_REGISTROS,
-           recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos,
+           recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia,
            pagamentosEmAberto, ajustarVencimentos, limparAjustes, ajustesDoContrato,
            previaAjusteContrato, proximoNumeroDoc };
 `)();
@@ -69,6 +69,34 @@ function teste(nome, fn) {
 }
 const base = (extra) => ({ ...modulo.contratoVazio(null, "c1", "o1", "empreiteiro", "maoDeObra"), obraId: "o1", prestadorId: "p1", nomeContratado: "Zé Empreiteiro", ...extra });
 const soma = (linhas) => Math.round(linhas.reduce((a, l) => a + l.valor, 0) * 100) / 100;
+
+
+// ── Número de referência da transação ───────────────────────────
+teste("a sequência é uma só: conta a pagar continua de onde o pedido parou", () => {
+  const obras = [{ id: "o1", contratos: [{ numeroContrato: "0003" }], cotacoes: [{ numeroPedido: "0007" }], contasPagar: [] }];
+  const contas = [{ id: "a" }, { id: "b" }];
+  const r = modulo.numerarContas(contas, obras, []);
+  assert.deepStrictEqual(r.map((c) => c.numeroDoc), ["0008", "0009"]);
+});
+
+teste("o lançamento do escritório também consome a sequência", () => {
+  const obras = [{ id: "o1", contratos: [], cotacoes: [], contasPagar: [{ numeroDoc: "0011" }] }];
+  const lancs = [{ numeroDoc: "0042" }];
+  assert.strictEqual(modulo.proximaReferencia(obras, lancs), "0043");
+  assert.deepStrictEqual(modulo.numerarContas([{ id: "x" }], obras, lancs).map((c) => c.numeroDoc), ["0043"]);
+});
+
+teste("quem já tem número não é renumerado", () => {
+  const contas = [{ id: "a", numeroDoc: "0002" }, { id: "b" }];
+  const r = modulo.numerarContas(contas, [], []);
+  assert.strictEqual(r[0].numeroDoc, "0002");
+  assert.strictEqual(r[1].numeroDoc, "0001");
+});
+
+teste("lista toda numerada volta intacta, sem criar objeto novo", () => {
+  const contas = [{ id: "a", numeroDoc: "0002" }];
+  assert.strictEqual(modulo.numerarContas(contas, [], []), contas);
+});
 
 teste("datas: soma dias e meses sem escorregar no fim do mês", () => {
   assert.strictEqual(modulo.somarDias("2026-09-07", 15), "2026-09-22");

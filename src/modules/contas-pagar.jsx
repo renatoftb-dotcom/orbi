@@ -506,6 +506,30 @@ function realizadoPorPrestador(contas) {
   }
   return r;
 }
+// ── O número de referência da transação ─────────────────────────
+// Cada conta a pagar ganha um número da sequência única da casa — a mesma
+// que numera contratos e pedidos. É por ele que a prestação de contas acha
+// o lançamento e os papéis dele, e por isso ele não pode ser o id interno:
+// "0147" se dita ao telefone, "lhpipxm" não.
+//
+// Quem já tem número não é renumerado: o número é do papel, e papel
+// entregue não muda de nome.
+function numerarContas(contas, obras, lancamentos) {
+  const faltando = (contas || []).filter((c) => c && !c.numeroDoc);
+  if (!faltando.length) return contas || [];
+  let n = parseInt(String(proximoNumeroDoc(obras, lancamentos)).replace(/\D/g, ""), 10);
+  if (!Number.isFinite(n)) n = 1;
+  const novos = {};
+  for (const c of faltando) { novos[c.id] = String(n).padStart(4, "0"); n++; }
+  return (contas || []).map((c) => (c && novos[c.id] ? { ...c, numeroDoc: novos[c.id] } : c));
+}
+
+// O próximo número para UMA transação só — o lançamento do escritório, que
+// não nasce em lista.
+function proximaReferencia(obras, lancamentos) {
+  return proximoNumeroDoc(obras, lancamentos);
+}
+
 // Conta avulsa, fora de contrato.
 function contaAvulsaVazia(obraId) {
   return {
