@@ -31,7 +31,7 @@ const M = new Function(src + `
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
            competenciasDoCartao,
-           faturasFechadas, faturaParaFechar, lancamentosParaResultado,
+           faturasFechadas, faturaParaFechar, lancamentosParaResultado, mesAnoPorExtenso, efDiaBR,
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
            obrasDoLancamento, validarLancamentoNaObra, destinoVisivelDoCusto,
@@ -1592,6 +1592,15 @@ teste("compra no cartão fica fora da conferência com o banco; a fatura entra",
   assert.strictEqual(M.conferenciaDoMes([fat], "2026-10").total, 1);
   const r = M.conciliarExtrato([{ data: "2026-09-24", valor: -300, historico: "PIX ENVIADO" }], doSet);
   assert.ok(!JSON.stringify(r).includes('"E1"'), "não casa a compra no cartão com movimento do banco");
+});
+
+
+teste("mês e dia como se lê: Outubro 2026, 04/09/2026", () => {
+  assert.strictEqual(M.mesAnoPorExtenso("2026-10"), "Outubro 2026");
+  assert.strictEqual(M.mesAnoPorExtenso("2027-03"), "Março 2027");
+  assert.strictEqual(M.mesAnoPorExtenso(""), "");
+  assert.strictEqual(M.efDiaBR("2026-09-04"), "04/09/2026");
+  assert.ok(/Outubro 2026/.test(faturaRes().descricao), faturaRes().descricao);
 });
 
 

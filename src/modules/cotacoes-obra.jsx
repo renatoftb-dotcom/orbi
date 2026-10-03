@@ -5684,7 +5684,7 @@ function VisorProposta({ anexo, aoFechar }) {
           {/* Com o arquivo já reembalado, o download sai com o nome certo —
               é o que conserta o anexo antigo, que chegava sem extensão. */}
           {blobUrl
-            ? <a href={blobUrl} download={a.nome || "proposta.pdf"} style={{ ...E.btnSec, textDecoration: "none" }}>Baixar</a>
+            ? <a href={blobUrl} download={/\.pdf$/i.test(a.nome || "") ? a.nome : (a.nome || "arquivo") + ".pdf"} style={{ ...E.btnSec, textDecoration: "none" }}>Baixar</a>
             : <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ ...E.btnSec, textDecoration: "none" }}>Baixar</a>}
           <button style={E.btnSec} onClick={aoFechar}>Fechar</button>
         </div>
@@ -5696,7 +5696,7 @@ function VisorProposta({ anexo, aoFechar }) {
         <div style={{ flex: 1, minHeight: 0, overflow: "auto", background: "#f3f4f6", position: "relative" }}>
           {estado === "carregando" && (
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, color: "#4b5563" }}>
-              Abrindo a proposta…
+              Abrindo o arquivo…
             </div>
           )}
           {estado === "erro" && (
@@ -5852,7 +5852,38 @@ function BarraLeituraIA({ progresso }) {
 // todas as luvas do catálogo. Sem nada digitado, aparecem os parecidos com
 // o que ele escreveu. E se não existe, cadastra ali mesmo — nome, grupo e
 // unidade — sem sair da conferência.
-function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDeixarFora, aoCadastrar }) {
+// O campo "Item do catálogo" de qualquer formulário de transação: procura,
+// e quando não acha cadastra no padrão do catálogo e já usa. É o mesmo
+// seletor das linhas do pedido — um jeito só de escolher e de cadastrar.
+function CampoItemDoCatalogo({ codigo, descricao, unidade, insumos, aoEscolher, aoCadastrar, aoLimpar }) {
+  const lista = insumos || [];
+  const casado = codigo ? lista.find((y) => y && (y.codigo === codigo || y.id === codigo)) || null : null;
+  const termo = String(descricao || "").trim();
+  const x = { id: "item", termo, bruto: termo, unidade: unidade || "", insumo: casado,
+    rotuloVazio: casado ? "" : (termo ? `Escolher do catálogo — “${termo}”` : "Escolher do catálogo") };
+  const parecidos = useMemo(() => (casado || !termo ? [] : buscarNoCatalogo(lista, termo, 6)), [casado, termo, lista]);
+  // A descrição da nota vira apelido do item novo só quando fala do mesmo
+  // item. Cadastrar "Brita 1" numa conta descrita como "Concreto usinado"
+  // não pode ensinar o catálogo que concreto é brita.
+  const apelidoSe = (nome) => {
+    const t = cotSemAcento(termo);
+    const ps = cotSemAcento(nome).split(" ").filter((w) => w.length >= 3);
+    return ps.length > 0 && ps.filter((w) => t.indexOf(w) >= 0).length * 2 >= ps.length;
+  };
+  return (
+    <EscolhaInsumoPedido x={x} parecidos={parecidos} insumos={lista} unidades={unidadesDoCatalogo(lista)}
+      apelidoSe={apelidoSe}
+      aoEscolher={(ins) => ins && aoEscolher && aoEscolher(ins)}
+      aoDeixarFora={casado && aoLimpar ? aoLimpar : undefined}
+      aoCadastrar={(campos) => {
+        const novo = aoCadastrar ? aoCadastrar(campos) : null;
+        if (novo && aoEscolher) aoEscolher(novo);
+        return novo;
+      }} />
+  );
+}
+
+function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDeixarFora, aoCadastrar, apelidoSe }) {
   const E = COT_ESTILO;
   const [aberto, setAberto] = useState(false);
   const [termo, setTermo] = useState("");
@@ -5877,7 +5908,7 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
   const opcoes = [
     ...achados.map((i) => ({ tipo: "item", i })),
     { tipo: "novo" },
-    { tipo: "fora" },
+    ...(aoDeixarFora ? [{ tipo: "fora" }] : []),
   ];
   // Na última linha a lista abria abaixo da dobra: rola o painel até ela.
   const abrir = () => {
@@ -5991,15 +6022,16 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
               Usar este
             </button>
           </div>
-        ) : (
+        ) : x.termo && (!apelidoSe || apelidoSe(nomeFinal)) ? (
           <div style={{ fontSize: 11, color: "#6b7280" }}>
             “{x.termo}” fica guardado como apelido: da próxima vez que escreverem assim, o VICKE já acha.
           </div>
-        )}
+        ) : null}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button type="button" style={E.btnSec} onClick={() => setNovo(null)}>Cancelar</button>
           <button type="button" style={{ ...E.btn, opacity: nomeFinal && !jaExiste ? 1 : 0.45 }} disabled={!nomeFinal || !!jaExiste}
-            onClick={() => { const r = aoCadastrar({ nome: nomeFinal, grupo: novo.grupo, unidade: novo.unidade, escrito: x.termo }); if (r) setNovo(null); }}>
+            onClick={() => { const r = aoCadastrar({ nome: nomeFinal, grupo: novo.grupo, unidade: novo.unidade,
+              escrito: !apelidoSe || apelidoSe(nomeFinal) ? x.termo : "" }); if (r) setNovo(null); }}>
             Cadastrar e usar
           </button>
         </div>
@@ -6051,9 +6083,10 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
             <div style={{ fontSize: 12.5, color: "#111827" }}>{i.nome}</div>
             <div style={{ fontSize: 11, color: "#6b7280" }}>{[i.codigo, i.grupo, i.unidade].filter(Boolean).join(" · ")}</div>
           </>, k))}
-        {linha(<span style={{ fontSize: 12.5, color: "#0474f4", fontWeight: 600 }}>＋ Cadastrar “{nomePadrao}” no catálogo</span>,
+        {linha(<span style={{ fontSize: 12.5, color: "#0474f4", fontWeight: 600 }}>
+          ＋ {nomePadrao ? <>Cadastrar “{nomePadrao}” no catálogo</> : "Cadastrar item novo no catálogo"}</span>,
           achados.length)}
-        {linha(<span style={{ fontSize: 12, color: "#4b5563" }}>Deixar fora do catálogo, como “{x.termo}”</span>,
+        {aoDeixarFora && linha(<span style={{ fontSize: 12, color: "#4b5563" }}>Deixar fora do catálogo, como “{x.termo}”</span>,
           achados.length + 1)}
       </div>
     </div>
@@ -7091,21 +7124,15 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                           {ex.item && (
                             <div style={{ minWidth: 0 }}>
                               <label style={E.label}>Item do catálogo</label>
-                              <SelectBusca style={E.input} value={despesa.insumoCodigo || ""}
-                                onChange={(v) => {
-                                  const ins = (insumos || []).find((x) => x && (x.codigo === v || x.id === v)) || null;
-                                  mexerDespesa({ insumoCodigo: v,
-                                    unidade: despesa.unidade || (ins && ins.unidade) || "",
-                                    grupoMaterial: (ins && ins.grupo) || "",
-                                    // a etapa do insumo só preenche o que está vazio
-                                    etapa: despesa.etapa || (ins && ins.etapaPadrao) || "",
-                                    descricao: despesa.descricao || (ins && ins.nome) || "" });
-                                }}
-                                placeholder="Procurar no catálogo…"
-                                opcoes={[{ valor: "", rotulo: "— escolha o item —" }].concat(
-                                  (insumos || []).filter((i) => i && i.ativo !== false)
-                                    .map((i) => ({ valor: i.codigo || i.id, rotulo: i.nome, grupo: i.grupo || "",
-                                      extra: (i.aliases || []).join(" ") })))} />
+                              <CampoItemDoCatalogo codigo={despesa.insumoCodigo || ""} descricao={despesa.descricao || ""}
+                                unidade={despesa.unidade || ""} insumos={insumos}
+                                aoCadastrar={aoCadastrarInsumo}
+                                aoLimpar={() => mexerDespesa({ insumoCodigo: "" })}
+                                aoEscolher={(ins) => mexerDespesa({ insumoCodigo: ins.codigo || ins.id || "",
+                                  unidade: despesa.unidade || ins.unidade || "",
+                                  grupoMaterial: ins.grupo || "",
+                                  etapa: despesa.etapa || ins.etapaPadrao || "",
+                                  descricao: despesa.descricao || ins.nome || "" })} />
                             </div>
                           )}
                           {ex.item && (
@@ -7187,7 +7214,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                             <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8, lineHeight: 1.6 }}>
                               Cai {plano.length === 1 ? "na fatura de " : "nas faturas de "}
                               <b style={{ color: "#111827" }}>
-                                {plano.map((p) => p.competencia + " (" + dinheiro(p.valor) + ")").join(" · ")}
+                                {plano.map((p) => (typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso(p.competencia) : p.competencia) + " (" + dinheiro(p.valor) + ")").join(" · ")}
                               </b>. O custo da obra é integral nesta data; o escritório recebe a fatura quando você fechar.
                             </div>
                           )}

@@ -2236,7 +2236,8 @@ function AvisoDoExtrato({ aviso, aoFechar, fmtBRL }) {
           {fmtBRL(ct.reduce((s, x) => s + x.valor, 0))} no cartão — o custo da obra já está lançado;
           o extrato do escritório recebe quando você fechar a fatura
           {(() => { const f = [...new Set(ct.flatMap(x => x.faturas))].sort();
-            return f.length ? (f.length === 1 ? " de " + f[0] : " de " + f.join(", ")) : ""; })()}
+            const m = f.map((typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso : (x) => x));
+            return m.length ? " de " + m.join(", ") : ""; })()}
           , em Escritório → Cartões.
         </div>
       )}
@@ -4555,7 +4556,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                           <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8, lineHeight: 1.6 }}>
                             Vai cair {parcelas.length === 1 ? "na fatura de " : "nas faturas de "}
                             <b style={{ color: "#111827" }}>
-                              {parcelas.map(p => p.competencia + " (" + fmtMoedaCtr(p.valor) + ")").join(" · ")}
+                              {parcelas.map(p => (typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso : (x) => x)(p.competencia) + " (" + fmtMoedaCtr(p.valor) + ")").join(" · ")}
                             </b>
                             . O custo da obra é integral hoje; o extrato do escritório só recebe a fatura, quando
                             você fechar.
@@ -4689,6 +4690,20 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr 1fr 1.4fr", gap: 12, alignItems: "end" }}>
                 <div style={{ minWidth: 0 }}>
                   <label style={C.label}>Item do catálogo</label>
+                  {/* Não achou o item? O mesmo campo cadastra no catálogo, no padrão
+                      dele, e já usa — sem sair da conta. */}
+                  {typeof CampoItemDoCatalogo === "function" ? (
+                    <CampoItemDoCatalogo codigo={formConta.insumoCodigo || ""} descricao={formConta.descricao || ""}
+                      unidade={formConta.unidade || ""} insumos={data.materiais || []}
+                      aoCadastrar={(campos) => typeof cadastrarInsumoNoCatalogo === "function"
+                        ? cadastrarInsumoNoCatalogo(data, save, campos) : null}
+                      aoLimpar={() => setFormConta(f => ({ ...f, insumoCodigo: "" }))}
+                      aoEscolher={(ins) => setFormConta(f => ({ ...f, insumoCodigo: ins.codigo || ins.id || "",
+                        descricao: f.descricao || ins.nome || "",
+                        grupoMaterial: ins.grupo || f.grupoMaterial || "",
+                        unidade: f.unidade || ins.unidade || "",
+                        etapa: f.etapa || ins.etapaPadrao || "" }))} />
+                  ) : (
                   <SelectBusca style={C.input} value={formConta.insumoCodigo || ""}
                     onChange={(v) => {
                       const ins = (data.materiais || []).find(x => x && (x.codigo === v || x.id === v)) || null;
@@ -4703,6 +4718,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                       (data.materiais || []).filter(i => i && i.ativo !== false)
                         .map(i => ({ valor: i.codigo || i.id, rotulo: i.nome, grupo: i.grupo || "",
                           extra: (i.aliases || []).join(" ") })))} />
+                  )}
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <label style={C.label}>Quantidade</label>
@@ -5107,7 +5123,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                       ["Valor pago", c.pago ? fmtMoedaCtr(Number(c.valorPago) || Number(c.valor) || 0) : ""],
                                       ["Pago", c.pago ? (c.formaPagamento === "cartao"
                                         ? "no cartão" + (c.parcelasCartao && c.parcelasCartao.length > 1 ? `, em ${c.parcelasCartao.length}x` : "")
-                                          + " — faturas " + [...new Set((c.parcelasCartao || []).map(p => p.competencia))].join(", ")
+                                          + " — faturas " + [...new Set((c.parcelasCartao || []).map(p => p.competencia))].map((typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso : (x) => x)).join(", ")
                                         : (c.formaPagamento === "avista" ? "à vista / transferência" : "")) : ""],
                                       ["Baixa dada por", c.pago ? nomeGravado((ultimoAto(c, "paga") || {}).por) : ""],
                                       ["Observação", c.observacao]].filter(([, v]) => v).map(([rot, v]) => (

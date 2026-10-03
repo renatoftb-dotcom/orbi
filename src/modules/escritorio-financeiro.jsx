@@ -741,7 +741,7 @@ function lancamentoDaFatura(cartao, competencia, linhas, opcoes) {
     valor: total,
     competencia: String(venc).slice(0, 7),
     lancadoEm: venc,
-    descricao: `Fatura ${(cartao || {}).nome || "cartão"} — ${competencia}`
+    descricao: `Fatura ${(cartao || {}).nome || "cartão"} — ${mesAnoPorExtenso(competencia)}`
       + (linhas.length === 1 ? " · 1 compra" : ` · ${linhas.length} compras`),
     fornecedor: (cartao || {}).nome || "",
     documento: "",
@@ -1423,6 +1423,22 @@ function efMesPorExtenso(mes, curto) {
   return `${nome} de ${m[1]}`;
 }
 
+// "2026-10" → "Outubro 2026". É assim que o mês aparece para quem lê:
+// fatura, competência, prévia de parcelas. O "2026-10" fica para o banco
+// de dados e para os filtros.
+function mesAnoPorExtenso(comp) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(comp || "").trim());
+  if (!m) return String(comp || "");
+  const nome = EF_MESES[Number(m[2]) - 1] || "";
+  return nome.charAt(0).toUpperCase() + nome.slice(1) + " " + m[1];
+}
+
+// "2026-09-04" → "04/09/2026", sem passar por Date (fuso não mexe no dia).
+function efDiaBR(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(iso || "");
+}
+
 
 // ── Filtro do painel ────────────────────────────────────────────
 // Ano, mês e unidade de negócio. Vazio em qualquer um significa "tudo".
@@ -2049,13 +2065,24 @@ function destinoVisivelDoCusto(contaId, obra, cliente, opcoes) {
 // na conta a pagar, no extrato do escritório e na fatura do cartão — o
 // papel anexado na contabilização tem que ser achado de qualquer ponta.
 function LinksDeAnexo({ transacao, compacto }) {
+  // O arquivo abre no visor do VICKE, não por link cru: o storage guarda o
+  // PDF sem extensão, e o navegador baixava um arquivo com nome de código
+  // que o computador não sabe abrir. O visor reembala como PDF e o "Baixar"
+  // de lá sai com o nome certo.
+  const [vendo, setVendo] = useState(null);
   const lista = anexosDaTransacao(transacao).filter((a) => a && a.url);
   if (!lista.length) return null;
   return (
     <span style={{ display: "inline-flex", gap: compacto ? 6 : 10, flexWrap: "wrap", alignItems: "center" }}>
+      {vendo && typeof VisorProposta === "function" && (
+        <VisorProposta anexo={vendo} aoFechar={() => setVendo(null)} />
+      )}
       {lista.map((a, i) => (
         <a key={a.public_id || a.url || i} href={a.url} target="_blank" rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (typeof VisorProposta === "function") { e.preventDefault(); setVendo(a); }
+          }}
           title={a.nome || rotuloDoAnexo(a, i)}
           style={{ fontSize: compacto ? 11 : 11.5, color: "#0474f4", textDecoration: "none",
             whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 3 }}>
@@ -2190,7 +2217,7 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
 
 // Formulário de um lançamento. As travas são as do validarLancamento: a
 // mensagem aparece antes de gravar, não depois.
-function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, prestadores, aoCriarPrestador, insumos, cartoes }) {
+function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, prestadores, aoCriarPrestador, insumos, cartoes, aoCadastrarInsumo }) {
   const S = EF_ESTILO;
   const [f, setF] = useState(() => ({
     contaId: "", contaFonte: "", obraIdAlvo: "", fornecedorId: "", anexos: [], itens: [],
@@ -2280,8 +2307,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       : { id: String(Date.now()), descricao: "", insumoCodigo: "", quantidade: "", unidade: "", unitario: "", etapa: "", contaId: "" }]) }));
   // O insumo escolhido traz o que ele já sabe: unidade, etapa e conta
   // contábil. O que a pessoa tiver posto à mão continua valendo.
-  const porInsumo = (i, codigo) => {
-    const ins = (insumos || []).find((x) => x && (x.codigo === codigo || x.id === codigo)) || null;
+  const porInsumo = (i, codigo, recemCadastrado) => {
+    const ins = recemCadastrado || (insumos || []).find((x) => x && (x.codigo === codigo || x.id === codigo)) || null;
     if (!ins) { mexerItem(i, { insumoCodigo: codigo }); return; }
     const atual = itensDoCusto[i] || {};
     mexerItem(i, {
@@ -2523,10 +2550,17 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                   gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", alignItems: "end" }}>
                   <div style={{ minWidth: 0, gridColumn: "1 / -1" }}>
                     <div style={S.rot}>Item do catálogo</div>
-                    <SelectBusca style={S.input} value={it.insumoCodigo}
-                      onChange={(v) => porInsumo(i, v)}
-                      placeholder="Procurar no catálogo…"
-                      opcoes={[{ valor: "", rotulo: it.descricao || "— escolha o material —" }].concat(opcoesInsumo)} />
+                    {typeof CampoItemDoCatalogo === "function" ? (
+                      <CampoItemDoCatalogo codigo={it.insumoCodigo} descricao={it.descricao} unidade={it.unidade}
+                        insumos={insumos} aoEscolher={(ins) => porInsumo(i, ins.codigo || ins.id, ins)}
+                        aoCadastrar={aoCadastrarInsumo}
+                        aoLimpar={() => mexerItem(i, { insumoCodigo: "" })} />
+                    ) : (
+                      <SelectBusca style={S.input} value={it.insumoCodigo}
+                        onChange={(v) => porInsumo(i, v)}
+                        placeholder="Procurar no catálogo…"
+                        opcoes={[{ valor: "", rotulo: it.descricao || "— escolha o material —" }].concat(opcoesInsumo)} />
+                    )}
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={S.rot}>Quantidade</div>
@@ -2651,7 +2685,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       </div>
       {noCartao && planoCartao.length > 0 && (
         <div style={{ fontSize: 12, color: "#4b5563" }}>
-          Cai nas faturas de <b>{planoCartao.map((x) => `${x.competencia} (${efDinheiro(x.valor)})`).join(" · ")}</b>.
+          Cai nas faturas de <b>{planoCartao.map((x) => `${mesAnoPorExtenso(x.competencia)} (${efDinheiro(x.valor)})`).join(" · ")}</b>.
           {" "}{naObra ? "O custo da obra é integral nesta data;" : "A compra conta na conta escolhida;"} o
           extrato do escritório recebe quando você fechar a fatura, em Cartões.
         </div>
@@ -3250,10 +3284,14 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo }) {
     setForm(null);
   }
 
+  // A linha da fatura no extrato: é ela que diz que a fatura está fechada.
+  // Excluir essa linha em Lançamentos é o que reabre a fatura.
+  const lancDaFatura = cartao && compAtual ? lancs.find((l) => l && l.id === idDaFatura(cartao.id, compAtual)) || null : null;
+
   async function fecharFatura() {
-    if (!fatura || !fatura.linhas.length || fechando) return;
+    if (!fatura || !fatura.linhas.length || fechando || fatura.jaFechada) return;
     const ok = await dialogo.confirmar({
-      titulo: `Fechar a fatura de ${compAtual}?`,
+      titulo: `Fechar a fatura de ${mesAnoPorExtenso(compAtual)}?`,
       mensagem: `${efDinheiro(fatura.total)} entram no extrato do escritório como UMA linha, na conta Cartão de crédito`
         + (fatura.atrasadas.length ? `, incluindo ${fatura.atrasadas.length} compra(s) de meses que ficaram em aberto.` : ".")
         + " Confira contra a fatura que o banco mandou antes de confirmar.",
@@ -3263,7 +3301,12 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo }) {
     setFechando(true);
     try {
       const l = lancamentoDaFatura(cartao, compAtual, fatura.linhas, {});
-      if (l) save({ ...data, lancamentos: [...lancs, l] });
+      // A tela FICA no mês que acabou de fechar, mostrando o status novo.
+      // Pular sozinha para o mês seguinte parecia que nada tinha acontecido
+      // — e o botão de fechar estava lá de novo, agora de outra fatura.
+      if (l) { await save({ ...data, lancamentos: [...lancs, l] }); setMes(compAtual); }
+    } catch (e) {
+      dialogo.alertar({ titulo: "A fatura não foi fechada", mensagem: (e && e.message) || "Tente de novo.", tipo: "aviso" });
     } finally { setFechando(false); }
   }
 
@@ -3332,9 +3375,17 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo }) {
               <select style={{ ...S.input, width: "auto", minWidth: 150 }} value={compAtual}
                 onChange={(e) => setMes(e.target.value)}>
                 {comps.map((c) => (
-                  <option key={c} value={c}>{c}{fechadas.has(c) ? " · fechada" : ""}</option>
+                  <option key={c} value={c}>{mesAnoPorExtenso(c)}{fechadas.has(c) ? " · fechada" : " · aberta"}</option>
                 ))}
               </select>
+            )}
+            {compAtual && (
+              <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: "3px 10px",
+                background: fechadas.has(compAtual) ? "#0474f4" : "#fff",
+                color: fechadas.has(compAtual) ? "#fff" : "#0474f4",
+                border: "1px solid #0474f4" }}>
+                {fechadas.has(compAtual) ? "Fechada" : "Aberta"}
+              </span>
             )}
           </div>
 
@@ -3361,8 +3412,8 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo }) {
                         <td style={cel}>
                           {l.descricao}
                           <div style={{ fontSize: 10.5, color: "#9ca3af" }}>
-                            {l.compraEm}{l.numeroDoc ? " · nº " + l.numeroDoc : ""}
-                            {l.atrasada ? ` · de ${l.competenciaOriginal}, ficou em aberto` : ""}
+                            {efDiaBR(l.compraEm)}{l.numeroDoc ? " · nº " + l.numeroDoc : ""}
+                            {l.atrasada ? ` · de ${mesAnoPorExtenso(l.competenciaOriginal)}, ficou em aberto` : ""}
                           </div>
                           {/* onde a compra pesa no resultado: a fatura é uma linha no
                               banco, mas cada compra conta na conta dela */}
@@ -3393,8 +3444,18 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo }) {
               </div>
 
               {fatura.jaFechada ? (
-                <div style={{ fontSize: 12.5, color: "#6b7280" }}>
-                  Fatura já fechada — está no extrato do escritório como uma linha de {efDinheiro(fatura.total)}.
+                <div style={{ fontSize: 12.5, color: "#1f2937", padding: "10px 12px", borderRadius: 10,
+                  background: "#eef5ff", border: "1px solid rgba(4,116,244,0.25)", lineHeight: 1.5 }}>
+                  <b>Fatura fechada.</b> Está no extrato do escritório como uma linha de{" "}
+                  <b>{efDinheiro(lancDaFatura ? lancDaFatura.valor : fatura.total)}</b>
+                  {lancDaFatura && lancDaFatura.lancadoEm ? <>, em {efDiaBR(lancDaFatura.lancadoEm)}</> : null}.
+                  {" "}Para fechar de novo, exclua essa linha em Lançamentos.
+                  {lancDaFatura && Math.abs((Number(lancDaFatura.valor) || 0) - fatura.total) >= 0.01 && (
+                    <div style={{ color: "#92400e", marginTop: 4 }}>
+                      Depois de fechada entrou compra nesta fatura ({efDinheiro(fatura.total)} hoje). Ela vai para a próxima
+                      fatura aberta como atrasada.
+                    </div>
+                  )}
                 </div>
               ) : podeEditar ? (
                 <button style={{ ...S.btn, background: fechando ? "#9ca3af" : "#262421" }}
@@ -3562,7 +3623,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   async function excluirLancamento(l) {
     const ok = await dialogo.confirmar({
       titulo: "Excluir este lançamento?",
-      mensagem: `${contaEscritorio(l.contaId)?.nome || "Lançamento"} · ${efDinheiro(l.valor)} · ${l.competencia}`,
+      mensagem: `${contaEscritorio(l.contaId)?.nome || "Lançamento"} · ${efDinheiro(l.valor)} · ${mesAnoPorExtenso(l.competencia)}`,
       confirmar: "Excluir", destrutivo: true,
     });
     if (!ok) return;
@@ -3871,6 +3932,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             prestadores={((data || {}).fornecedores || []).filter((x) => x && x.ativo !== false)}
             insumos={((data || {}).materiais || []).filter((x) => x && x.ativo !== false)}
             cartoes={cartoesDoEscritorio(data)}
+            aoCadastrarInsumo={(campos) => typeof cadastrarInsumoNoCatalogo === "function"
+              ? cadastrarInsumoNoCatalogo(data, save, campos) : null}
             aoCriarPrestador={criarPrestadorDoLancamento}
             inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} />}
           {vendoComprovante && typeof VisorProposta === "function" && (
@@ -3894,7 +3957,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
                     <tr key={l.id} style={{ borderTop: "1px solid rgba(38,36,33,0.06)" }}>
                       <td style={{ padding: "7px 12px", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums",
                         color: l.numeroDoc ? "#111827" : "#9ca3af" }}>{l.numeroDoc || "—"}</td>
-                      <td style={{ padding: "7px 12px", whiteSpace: "nowrap" }}>{l.competencia}</td>
+                      <td style={{ padding: "7px 12px", whiteSpace: "nowrap" }}>{mesAnoPorExtenso(l.competencia)}</td>
                       <td style={{ padding: "7px 12px" }}>{c ? c.nome : <span style={{ color: "#b45309" }}>{l.contaOriginal || "sem conta"}</span>}</td>
                       <td style={{ padding: "7px 12px", color: "#6b7280" }}>{u ? u.nome : l.unidadeOriginal || "—"}</td>
                       <td style={{ padding: "7px 12px", color: "#6b7280" }}>{[l.cliente, l.projeto].filter(Boolean).join(" · ") || "—"}</td>
@@ -3942,7 +4005,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
                         })()}
                         {compraNoCartaoDoEscritorio(l) && (
                           <div style={{ fontSize: 11, color: "#6b7280" }}>
-                            no cartão — sai do banco na fatura de {[...new Set((l.parcelasCartao || []).map((x) => x.competencia))].join(", ")}
+                            no cartão — sai do banco na fatura de {[...new Set((l.parcelasCartao || []).map((x) => x.competencia))].map(mesAnoPorExtenso).join(", ")}
                           </div>
                         )}
                       </td>
