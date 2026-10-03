@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -1402,6 +1402,58 @@ teste("baixa sem comprovante não inventa ato de anexo", () => {
     "Cliente", "2026-09-20T12:00:00.000Z");
   assert.deepStrictEqual(modulo.registrosDaConta(paga).map(r => r.ato), ["paga"]);
   assert.strictEqual(paga.comprovante, null);
+});
+
+teste("entrada a pagar em 3 boletos: uma conta por item e por parcela, mesma referência", () => {
+  let k = 0;
+  const contas = modulo.contasDaEntrada({
+    situacao: "apagar", prestadorId: "f1", favorecido: "Construfácil", numeroNota: "163",
+    apagar: { vencimento: "2026-10-10", parcelas: 3, intervalo: 30 },
+    itens: [
+      { descricao: "Veda concreto 18L", insumoCodigo: "VED-1", quantidade: "3", unidade: "BD", unitario: "428", total: "1284", etapa: "fundacao", contaId: "material" },
+      { descricao: "Frete", total: "100", etapa: "fundacao", contaId: "frete" },
+    ],
+  }, { obraId: "ob1", numeroDoc: "0200", quem: "Renato", agora: "2026-10-03T12:00:00.000Z", novoId: () => "id" + (++k) });
+  assert.strictEqual(contas.length, 6);
+  assert.ok(contas.every((c) => c.numeroDoc === "0200" && c.numeroNota === "163" && !c.pago));
+  assert.deepStrictEqual([...new Set(contas.map((c) => c.vencimento))], ["2026-10-10", "2026-11-09", "2026-12-09"]);
+  assert.strictEqual(new Set(contas.map((c) => c.pedidoId)).size, 3, "cada boleto paga sozinho");
+  const veda = contas.filter((c) => c.insumoCodigo === "VED-1");
+  assert.strictEqual(Math.round(veda.reduce((s, c) => s + c.valor, 0) * 100) / 100, 1284);
+  assert.strictEqual(Math.round(veda.reduce((s, c) => s + c.quantidade, 0) * 1000) / 1000, 3, "a quantidade soma a da nota");
+  assert.ok(/parcela 2\/3/.test(contas[2].descricao), contas[2].descricao);
+  const uma = modulo.contasDaEntrada({ situacao: "apagar", apagar: { vencimento: "2026-10-10", parcelas: 3 },
+    itens: [{ descricao: "x", quantidade: 1, total: 428, contaId: "material" }] }, {});
+  assert.deepStrictEqual(uma.map((c) => c.quantidade), [0.333, 0.333, 0.334], "a última leva o resto");
+});
+
+teste("entrada paga à vista: baixada, com o papel e a forma", () => {
+  const contas = modulo.contasDaEntrada({
+    situacao: "pago", prestadorId: "f1", favorecido: "Construfácil",
+    pagamento: { data: "2026-09-02", forma: "avista" },
+    itens: [{ descricao: "Veda", insumoCodigo: "VED-1", quantidade: 1, unitario: 428, etapa: "fundacao", contaId: "material" }],
+  }, { obraId: "ob1", quem: "Renato", anexo: { url: "u", tipo: "nota", nome: "4183.pdf" } });
+  assert.strictEqual(contas.length, 1);
+  const c = contas[0];
+  assert.strictEqual(c.pago, true);
+  assert.strictEqual(c.pagoEm, "2026-09-02");
+  assert.strictEqual(c.valorPago, 428);
+  assert.strictEqual(c.formaPagamento, "avista");
+  assert.strictEqual(c.comprovante.tipo, "nota");
+});
+
+teste("entrada paga no cartão: o plano vem de quem conhece o cartão", () => {
+  const contas = modulo.contasDaEntrada({
+    situacao: "pago", pagamento: { data: "2026-09-04", forma: "cartao", parcelas: 2 },
+    itens: [{ descricao: "Concreto", total: 1000, contaId: "material", etapa: "fundacao" }],
+  }, { cartao: { id: "k1" }, planoDoCartao: (c, ct, d) => ({ formaPagamento: "cartao", cartaoId: ct.id,
+    parcelasCartao: [{ parcela: 1, de: d.parcelas, competencia: "2026-10", valor: 500 }, { parcela: 2, de: 2, competencia: "2026-11", valor: 500 }] }) });
+  assert.strictEqual(contas[0].formaPagamento, "cartao");
+  assert.strictEqual(contas[0].parcelasCartao.length, 2);
+});
+
+teste("item sem valor não vira conta", () => {
+  assert.deepStrictEqual(modulo.contasDaEntrada({ situacao: "pago", itens: [{ descricao: "x" }] }, {}), []);
 });
 
 teste("desfazer pagamento no cartão tira a conta das faturas", () => {

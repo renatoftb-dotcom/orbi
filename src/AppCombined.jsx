@@ -11229,6 +11229,7 @@ function rotuloDoAnexo(a, i) {
   if (tipo === "nota") return "Nota fiscal";
   if (tipo === "comprovante") return "Comprovante";
   if (tipo === "boleto") return "Boleto";
+  if (tipo === "pedido") return "Pedido";
   return i === 0 ? "Comprovante" : "Anexo";
 }
 
@@ -23994,6 +23995,79 @@ function contasDoPedidoDaLoja(dados, pedido, novoId) {
   }));
 }
 
+// ── A Entrada vira contas a pagar ───────────────────────
+// Uma tela só para qualquer papel: itens (cada um com item do catálogo,
+// etapa e conta), fornecedor, e a situação — A PAGAR (com 1º vencimento,
+// parcelas e intervalo) ou PAGO (data e jeito de pagar). Uma conta POR ITEM
+// e POR PARCELA, como no pedido da loja: é o que faz o custo por etapa, o
+// P&L por insumo e a baixa de cada boleto funcionarem.
+//
+// Cada parcela é um pedido próprio (pagar o 1º boleto não paga o 2º), mas a
+// transação é uma só: todas as contas levam o MESMO número de referência e
+// a mesma nota. A quantidade se divide entre as parcelas na proporção do
+// valor — somadas, dão a quantidade da nota, e o preço unitário não muda.
+//
+// `op`: { obraId, numeroDoc, quem, agora, novoId, anexo,
+//         cartao, planoDoCartao(conta, cartao, dados) }
+function contasDaEntrada(lanc, op) {
+  const l = lanc || {}, o = op || {};
+  const red = (x) => Math.round(x * 100) / 100;
+  const id = typeof o.novoId === "function" ? o.novoId : (typeof uid === "function" ? uid : () => String(Date.now()) + Math.random());
+  const agora = o.agora || new Date().toISOString();
+  const pago = l.situacao === "pago";
+  const itens = (l.itens || []).map((i) => {
+    const q = cpNumero(i.quantidade), u = cpNumero(i.unitario), t = cpNumero(i.total);
+    return { ...i, _valor: red(t > 0 ? t : q * u), _q: q };
+  }).filter((i) => i._valor > 0);
+  if (!itens.length) return [];
+  const pg = l.pagamento || {}, ap = l.apagar || {};
+  const n = pago ? 1 : Math.max(1, Math.floor(Number(ap.parcelas) || 1));
+  const intervalo = Math.max(1, Math.floor(Number(ap.intervalo) || 30));
+  const primeiro = String((pago ? pg.data : ap.vencimento) || "").slice(0, 10) || dataParaIso(new Date());
+  const anexos = o.anexo ? [o.anexo] : [];
+  const fora = [];
+  const qUsada = itens.map(() => 0);
+  for (let p = 0; p < n; p++) {
+    const pedidoId = id();
+    const venc = p === 0 ? primeiro : somarDias(primeiro, p * intervalo);
+    for (let k = 0; k < itens.length; k++) {
+      const it = itens[k];
+      const base = red(it._valor / n);
+      const valor = p === n - 1 ? red(it._valor - base * (n - 1)) : base;
+      // A última parcela leva o que sobrou da quantidade, como leva o centavo.
+      let q = 0;
+      if (it._q > 0) {
+        q = n === 1 ? it._q : (p === n - 1 ? Math.round((it._q - qUsada[k]) * 1000) / 1000
+          : Math.round((it._q * valor / it._valor) * 1000) / 1000);
+        qUsada[k] = Math.round((qUsada[k] + q) * 1000) / 1000;
+      }
+      let c = {
+        id: id(), origem: "avulsa", obraId: o.obraId || l.obraId || "", contratoId: "", cotacaoId: "",
+        pedidoId, numeroNota: String(l.numeroNota || "").trim(), numeroDoc: o.numeroDoc || "",
+        parcela: n > 1 ? p + 1 : 0, parcelasTotal: n > 1 ? n : 0,
+        contaId: it.contaId || "", etapa: it.etapa || "", grupoMaterial: it.grupoMaterial || "",
+        insumoCodigo: it.insumoCodigo || "",
+        prestadorId: l.prestadorId || "", favorecido: l.favorecido || "",
+        descricao: (String(it.descricao || "").trim() || "Item") + (n > 1 ? ` (parcela ${p + 1}/${n})` : ""),
+        quantidade: q, unidade: String(it.unidade || "").trim(),
+        valor, vencimento: venc,
+        pago: false, pagoEm: "", valorPago: "", observacao: String(l.observacao || "").trim(),
+      };
+      c = registrarAto(c, "criada", o.quem || "", agora);
+      if (pago) {
+        c = contaPaga(c, { pagoEm: primeiro, valorPago: valor, comprovante: o.anexo || null }, o.quem || "", agora);
+        const plano = pg.forma === "cartao" && o.cartao && typeof o.planoDoCartao === "function"
+          ? o.planoDoCartao(c, o.cartao, { pagoEm: primeiro, valorPago: valor, parcelas: pg.parcelas }) : null;
+        c = plano ? { ...c, ...plano } : { ...c, formaPagamento: "avista" };
+      } else if (anexos.length) {
+        c = { ...c, anexos };
+      }
+      fora.push(c);
+    }
+  }
+  return fora;
+}
+
 // A conta contábil é quase sempre a mesma no pedido inteiro ("Material").
 // Repetida em cada item ela vira ruído e empurra para fora da linha o que
 // muda de item para item — quantidade, unidade e preço. No cabeçalho ela
@@ -26786,6 +26860,117 @@ function entradaPronta(destino, lojaId, itens, obras, obraId) {
   return { ok: true, motivo: "" };
 }
 
+// ── A tela única da Entrada ─────────────────────────────────────
+// Qualquer papel termina no mesmo lugar: itens + fornecedor + SITUAÇÃO.
+// A situação é o que antes era "o que é este papel": cotação (pedir preço),
+// a pagar (vira conta com vencimento) ou pago (o dinheiro já saiu).
+const SITUACOES_DA_ENTRADA = [
+  { id: "cotacao", nome: "Cotação", resumo: "Pedir preço: a lista vai para as lojas no WhatsApp e fica na obra esperando as propostas." },
+  { id: "apagar", nome: "A pagar", resumo: "Vira conta a pagar com vencimento — um boleto ou várias parcelas." },
+  { id: "pago", nome: "Pago", resumo: "O dinheiro já saiu: entra baixado, na data do pagamento, à vista ou no cartão." },
+];
+
+const COLS_ENTRADA = "minmax(0,2.2fr) 62px 52px 92px 100px minmax(0,1.3fr) minmax(0,1.3fr) 24px";
+
+// Empreendimento é do escritório: quem paga é ele, e o papel chega depois
+// do dinheiro — entra pago (dá para trocar para cotação). Obra de cliente
+// não tem padrão: pago ou a pagar é a pergunta que importa ali. Comprovante
+// é prova de que o dinheiro saiu, então é pago, sempre.
+function situacaoPadraoDaEntrada(papel, tipoDaObra) {
+  if (papel && papel.tipo === "comprovante") return "pago";
+  return tipoDaObra === "empreendimento" ? "pago" : "";
+}
+
+// O que a regra da transação pede para UM item. Obra, data e fornecedor são
+// do lançamento inteiro e se cobram uma vez só, fora daqui.
+function faltasDoItemNaEntrada(it, situacao, pagamento) {
+  if (typeof faltasDaTransacao !== "function") return [];
+  const pago = situacao === "pago";
+  return faltasDaTransacao({ obraId: "-", contaId: (it || {}).contaId, valor: brutoDoItem(it), vencimento: "-",
+    pago, favorecido: "-", insumoCodigo: (it || {}).insumoCodigo, quantidade: (it || {}).quantidade,
+    etapa: (it || {}).etapa, formaPagamento: pago ? (((pagamento || {}).forma) || "avista") : "" });
+}
+
+// Os boletos que vão nascer: 1º vencimento, e os outros a cada N dias.
+function previaDosBoletos(total, ap) {
+  const a = ap || {};
+  const n = Math.max(1, Math.floor(Number(a.parcelas) || 1));
+  const intervalo = Math.max(1, Math.floor(Number(a.intervalo) || 30));
+  const v0 = String(a.vencimento || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v0) || !(total > 0)) return [];
+  const base = Math.round((total / n) * 100) / 100;
+  return Array.from({ length: n }, (_, p) => ({
+    vencimento: p === 0 ? v0 : somarDias(v0, p * intervalo),
+    valor: p === n - 1 ? Math.round((total - base * (n - 1)) * 100) / 100 : base,
+  }));
+}
+
+// Pronto para lançar? Diz o PRIMEIRO que falta, na ordem em que se preenche.
+// `e`: { situacao, prestadorId, itens, pagamento, apagar, parcelaId }
+function entradaUnicaPronta(e, obras, obraId) {
+  const d = e || {};
+  const itens = d.itens || [];
+  if (!itens.length) return { ok: false, motivo: "Inclua pelo menos um item." };
+  if (entradaPedeObra(obras) && !obraId) return { ok: false, motivo: "Escolha a obra." };
+  if (!d.situacao) return { ok: false, motivo: "Diga a situação: cotação, a pagar ou pago." };
+  if (d.situacao === "cotacao") {
+    if (!itens.some((i) => i && (String(i.descricao || "").trim() || i.insumoCodigo))) return { ok: false, motivo: "A lista está sem itens." };
+    return { ok: true, motivo: "" };
+  }
+  if (!String(d.prestadorId || "").trim()) return { ok: false, motivo: "Escolha o fornecedor." };
+  const pago = d.situacao === "pago";
+  const pg = d.pagamento || {}, ap = d.apagar || {};
+  if (pago) {
+    if (!String(pg.data || "").trim()) return { ok: false, motivo: "Informe a data do pagamento." };
+    if (pg.forma === "cartao" && !pg.cartaoId) return { ok: false, motivo: "Escolha o cartão." };
+  } else if (!String(ap.vencimento || "").trim()) {
+    return { ok: false, motivo: Number(ap.parcelas) > 1 ? "Informe o 1º vencimento." : "Informe o vencimento." };
+  }
+  const total = itens.reduce((s, i) => s + brutoDoItem(i), 0);
+  if (!(total > 0)) return { ok: false, motivo: "Informe o valor dos itens." };
+  // Pagamento de parcela de contrato: conta, etapa e descrição são as da parcela.
+  if (pago && String(d.parcelaId || "").trim()) return { ok: true, motivo: "" };
+  for (let k = 0; k < itens.length; k++) {
+    const it = itens[k];
+    if (!(brutoDoItem(it) > 0)) return { ok: false, motivo: (itens.length > 1 ? `Item ${k + 1}: ` : "") + "falta o valor." };
+    const faltas = faltasDoItemNaEntrada(it, d.situacao, pg);
+    if (faltas.length) {
+      const nome = String(it.descricao || "").trim();
+      const quem = itens.length > 1 ? `Item ${k + 1}${nome ? " (" + nome.slice(0, 30) + ")" : ""}: ` : "";
+      return { ok: false, motivo: quem + frasesDasFaltas(faltas) };
+    }
+  }
+  return { ok: true, motivo: "" };
+}
+
+function rotuloDoPapelDaEntrada(papel, itens) {
+  const p = papel || {};
+  if (p.tipo === "comprovante") return "Comprovante de pagamento lido";
+  if (p.tipo === "nfse") return "Nota fiscal de serviço lida";
+  if (p.ehNota) return "Nota fiscal lida";
+  if (p.numeroPedido || p.total) return "Pedido / orçamento lido";
+  const n = (itens || []).length;
+  return n === 1 ? "1 item lido" : `${n} itens lidos`;
+}
+
+// Como o papel fica marcado na conta: é o nome que aparece no 📎.
+function tipoDoAnexoDaEntrada(papel) {
+  const p = papel || {};
+  if (p.tipo === "comprovante") return "comprovante";
+  if (p.tipo === "nfse" || p.ehNota) return "nota";
+  return "pedido";
+}
+function rotuloDoAnexoDaEntrada(papel) {
+  const t = tipoDoAnexoDaEntrada(papel);
+  return t === "comprovante" ? "comprovante" : t === "nota" ? "nota fiscal" : "pedido";
+}
+
+// Conta padrão dos itens lidos de nota, pedido ou lista: material. A pessoa
+// troca o que não for (frete, serviço); o que veio escolhido fica.
+function comContaPadraoDaEntrada(lista, padrao) {
+  return (lista || []).map((x) => (x && !x.contaId && padrao ? { ...x, contaId: padrao } : x));
+}
+
 // ── O papel que não é nota: o comprovante ──────────────────────
 // A nota fiscal diz o que se comprou; o comprovante diz que o dinheiro saiu.
 // Os dois chegam pela mesma caixa, e quem decide é o papel. A ordem importa:
@@ -27054,7 +27239,17 @@ function prestadorDoComprovante(prestadores, nome) {
     const n = cotSemAcento(f.nome || "");
     return n.length >= 3 && (alvo.indexOf(n) >= 0 || n.indexOf(alvo) >= 0);
   });
-  return dentro.length === 1 ? dentro[0] : null;
+  if (dentro.length === 1) return dentro[0];
+  if (dentro.length > 1) return null;
+  // O cadastro escreve "Construfácil", a nota "CONSTRU FACIL ACABAMENTO
+  // LTDA": sem os espaços, e sem o LTDA/ME/EIRELI do fim, é o mesmo nome.
+  const junto = (t) => cotSemAcento(t).replace(/\b(ltda|me|epp|eireli|s\/?a|sa|mei)\b/g, "").replace(/[^a-z0-9]/g, "");
+  const a2 = junto(nome || "");
+  const colados = a2.length >= 5 ? lista.filter((f) => {
+    const n = junto(f.nome || "");
+    return n.length >= 5 && (a2.indexOf(n) >= 0 || n.indexOf(a2) >= 0);
+  }) : [];
+  return colados.length === 1 ? colados[0] : null;
 }
 
 // ── Despesa paga: a saída que não tem itens ────────────────────
@@ -27882,10 +28077,20 @@ function interpretarOrcamento(linhas) {
   // o nome da loja é a primeira linha de verdade do papel — antes de
   // qualquer rótulo ("IE:", "CNPJ", "Rua", "Fone")
   let fornecedor = "";
-  for (const l of lista.slice(0, 8)) {
+  // Na nota fiscal o emitente vem no canhoto: "RECEBEMOS DE <emitente> OS
+  // PRODUTOS CONSTANTES…" — às vezes na mesma linha, às vezes na de baixo.
+  if (ehDanfe(tudo)) {
+    const iRec = lista.findIndex((l) => /RECEBEMOS\s+DE/i.test(String(l.texto || "")));
+    if (iRec >= 0) {
+      const mesma = String(lista[iRec].texto || "").replace(/^.*RECEBEMOS\s+DE\s*/i, "");
+      const alvo = mesma.trim() ? mesma : String((lista[iRec + 1] || {}).texto || "");
+      fornecedor = alvo.replace(/\s*OS PRODUTOS.*$/i, "").replace(/\s*DATA DE RECEBIMENTO.*$/i, "").trim();
+    }
+  }
+  for (const l of fornecedor ? [] : lista.slice(0, 8)) {
     const t = String(l.texto || "").trim();
     if (!t || t.length < 3) continue;
-    if (/^(ie:|cnpj|cpf|rua|av\.|avenida|fone|tel|e-?mail|or[çc]amento|n[úu]mero|data)/i.test(t)) continue;
+    if (/^(ie:|cnpj|cpf|rua|av\.|avenida|fone|tel|e-?mail|or[çc]amento|n[úu]mero|data|nf-?e\b|danfe|recebemos)/i.test(t)) continue;
     if (!/[a-zA-ZÀ-ÿ]{3}/.test(t)) continue;
     fornecedor = t;
     break;
@@ -29227,7 +29432,7 @@ function selo(cor, texto) {
   );
 }
 
-function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, usuario, onGerarContrato, onLancarContas, onLancarDespesa, onDesfazerLancamento, onRecalibrarPedido, onExcluirPedido, abrirEntrada, entradaInicial }) {
+function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, usuario, onGerarContrato, onLancarContas, onLancarDespesa, onLancarEntrada, onDesfazerLancamento, onRecalibrarPedido, onExcluirPedido, abrirEntrada, entradaInicial }) {
   const perm = getPermissoes();
   // O módulo é o mesmo dos dois lados: o cliente cria cotação, registra a
   // proposta que recebeu do fornecedor e escolhe, como o escritório. O que
@@ -30452,8 +30657,17 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   // A Entrada entrega a lista pronta; aqui ela vira pedido, pagamento ou
   // cotação. Nenhuma tela nova de saída: as três já existiam, e a Entrada
   // só chega nelas com o trabalho de leitura feito.
-  function seguirDaEntrada({ destino, lojaId, itens, papel, despesa }) {
+  function seguirDaEntrada({ destino, lojaId, itens, papel, despesa, lancamento, anexo }) {
     setErro("");
+    // A tela única da Entrada lança daqui mesmo — a pagar ou pago, com os
+    // itens, as etapas e as contas já escolhidos lá. Sem tela no meio.
+    if (destino === "lancar") {
+      if (!onLancarEntrada) return { erro: "Lançamento indisponível nesta tela." };
+      const r = onLancarEntrada({ ...(lancamento || {}), obraId: obra.id }, anexo || null) || {};
+      if (r.erro) { setErro(r.erro); return r; }
+      setEntradaAberta(false);
+      return r;
+    }
     // A despesa também se resolve sem trocar de tela: não há formulário
     // adiante onde ela caberia — o que ela precisa já foi preenchido na
     // própria caixa. Por isso ela é a única que volta um resultado.
@@ -32132,6 +32346,14 @@ function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinhe
     ? mandarDaEntrada(carga)
     : (aoSeguir ? aoSeguir(carga) : undefined);
 
+  // Empreendimento ou obra de cliente — é o que decide a situação de partida.
+  const tipoDaObra = (id) => {
+    const o = ((data || {}).obras || []).find((x) => x && x.id === id);
+    if (!o) return "";
+    const c = ((data || {}).clientes || []).find((x) => x && x.id === o.clienteId);
+    return c && typeof ehEmpreendimento === "function" && ehEmpreendimento(c) ? "empreendimento" : "cliente";
+  };
+
   return (
     <PainelEntrada
       insumos={insumos} prestadores={prestadores} unidades={unidadesDoCatalogo(insumos)}
@@ -32141,6 +32363,7 @@ function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinhe
       aoAprender={(pares) => aprenderApelidosNoCatalogo(data, save, pares)}
       aoVerContas={contasDaObraDe}
       cartoes={typeof cartoesDoEscritorio === "function" ? cartoesDoEscritorio(data) : []}
+      tipoDaObra={tipoDaObra} obraPadraoId={(obraPadrao || {}).id || ""}
       aoFechar={aoFechar} aoSeguir={seguir} />
   );
 }
@@ -32295,7 +32518,8 @@ function BotaoDitar({ aoDitar, isMobile, compacto }) {
 }
 
 function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile, dinheiro,
-  obras, embutido, aoCadastrarInsumo, aoCriarLoja, aoAprender, aoVerContas, aoFechar, aoSeguir, cartoes }) {
+  obras, embutido, aoCadastrarInsumo, aoCriarLoja, aoAprender, aoVerContas, aoFechar, aoSeguir, cartoes,
+  tipoDaObra, obraPadraoId }) {
   const E = COT_ESTILO;
   const P = cotPainel(isMobile, 940);
   const [texto, setTexto] = useState("");
@@ -32331,6 +32555,14 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // lista, e a tela toda muda de assunto.
   const [despesa, setDespesa] = useState(null);
   const [enviandoComprov, setEnviandoComprov] = useState(false);
+  // A situação do lançamento e o que cada uma pede.
+  const [situacao, setSituacao] = useState("");
+  const situacaoTocada = useRef(false);
+  const [pagamento, setPagamento] = useState({ data: "", forma: "avista", cartaoId: "", parcelas: 1 });
+  const [apagar, setApagar] = useState({ vencimento: "", parcelas: "1", intervalo: "30" });
+  const [parcelaId, setParcelaId] = useState("");
+  // O que o papel disse no cabeçalho: número, emissão, vencimento, total, emitente.
+  const [papel, setPapel] = useState(null);
 
   // O mesmo cadastro-relâmpago serve a loja e a empreiteiro: muda só a
   // categoria com que ele nasce, e quem abre o formulário é quem sabe dela.
@@ -32347,7 +32579,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     // Já escolhido: cadastrar e ter que procurar de novo é meio passo.
     setLojaId(criada.id);
     setLojasMarcadas(function (m) { return Object.assign({}, m, { [criada.id]: true }); });
-    setDespesa(function (d) { return d ? Object.assign({}, d, { favorecidoId: criada.id, parcelaId: "" }) : d; });
+    setParcelaId("");
     setNovaLoja(null); setErroLoja(""); setAviso("");
   }
   const refTexto = useRef(null);
@@ -32382,17 +32614,53 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const resumo = itens ? resumoDaEntrada(itens) : null;
   const podeLer = !lendo && (!!String(texto).trim() || !!arquivo);
   const pedeObra = entradaPedeObra(obras);
-  const prova = despesa
-    ? despesaPronta(despesa, obras, obraId)
-    : entradaPronta(destino, lojaId, itens || [], obras, obraId);
-  const mexerDespesa = (muda) => setDespesa((d) => (d ? { ...d, ...muda } : d));
+  const obraEfetivaId = obraId || obraPadraoId || "";
+  const tipoObraEfetiva = typeof tipoDaObra === "function" ? (tipoDaObra(obraEfetivaId) || "") : "";
+  const etapasDaEntrada = typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [];
+  const mexerPapel = (muda) => setPapel((p) => ({ ...(p || {}), ...muda }));
+  const descontoDoPapel = papel && numeroDeCampo(papel.desconto) > 0 ? numeroDeCampo(papel.desconto) : 0;
+  const somaDosItens = (itens || []).reduce((t, x) => t + brutoDoItem(x), 0);
+  const totalDaEntrada = Math.round((somaDosItens - descontoDoPapel) * 100) / 100;
+  const papelTotal = papel ? (numeroDeCampo(papel.total) || numeroDeCampo(papel.valor) || 0) : 0;
+  const faltasDoItemDaEntrada = (it) => faltasDoItemNaEntrada(it, situacao, pagamento);
+  const previaAPagar = situacao === "apagar" ? previaDosBoletos(totalDaEntrada, apagar) : [];
+  const cartaoDaEntrada = (cartoes || []).find((c) => c && c.id === pagamento.cartaoId) || null;
+  const previaCartao = situacao === "pago" && pagamento.forma === "cartao" && cartaoDaEntrada && typeof parcelasDoCartao === "function"
+    ? parcelasDoCartao(cartaoDaEntrada, pagamento.data, totalDaEntrada, pagamento.parcelas) : [];
   // As contas da obra escolhida, para achar parcela de contrato em aberto do
-  // prestador que acabou de receber.
+  // fornecedor que acabou de receber.
   const contasDaObraEscolhida = (typeof aoVerContas === "function" ? aoVerContas(obraId) : []) || [];
-  const parcelasDoFavorecido = despesa
-    ? parcelasEmAbertoDoPrestador(contasDaObraEscolhida, despesa.favorecidoId)
-    : [];
-  const parcelaSugerida = despesa ? parcelaQueCasa(parcelasDoFavorecido, despesa.valor) : null;
+  const parcelasDoFavorecido = situacao === "pago" ? parcelasEmAbertoDoPrestador(contasDaObraEscolhida, lojaId) : [];
+  const parcelaSugerida = parcelaQueCasa(parcelasDoFavorecido, totalDaEntrada);
+  const prova = itens
+    ? entradaUnicaPronta({ situacao, prestadorId: lojaId, itens, pagamento, apagar, parcelaId }, obras, obraId)
+    : { ok: false, motivo: "" };
+  // A situação de partida sai da obra e do papel — e só até a pessoa tocar.
+  useEffect(() => {
+    if (!itens || situacaoTocada.current) return;
+    setSituacao(situacaoPadraoDaEntrada(papel, tipoObraEfetiva));
+  }, [itens ? 1 : 0, papel ? papel.tipo : "", tipoObraEfetiva]);
+  function iniciarSituacao(p) {
+    situacaoTocada.current = false;
+    setParcelaId("");
+    const hoje = new Date().toISOString().slice(0, 10);
+    setPagamento({ data: (p && (p.pagoEm || p.emitido)) || hoje, forma: "avista", cartaoId: "", parcelas: 1 });
+    setApagar({ vencimento: (p && p.vencimento) || "", parcelas: "1", intervalo: "30" });
+  }
+  const mexerQtdOuUnit = (i, muda) => setItens((lista) => (lista || []).map((x, j) => {
+    if (j !== i) return x;
+    const n = { ...x, ...muda };
+    const q = numeroDeCampo(n.quantidade), u = numeroDeCampo(n.unitario);
+    return q > 0 && u > 0 ? { ...n, bruto: Math.round(q * u * 100) / 100 } : n;
+  }));
+  const mexerTotal = (i, v) => setItens((lista) => (lista || []).map((x, j) => {
+    if (j !== i) return x;
+    const t = numeroDeCampo(v), q = numeroDeCampo(x.quantidade);
+    return { ...x, bruto: t > 0 ? t : "", unitario: q > 0 && t > 0 ? Math.round((t / q) * 100) / 100 : x.unitario };
+  }));
+  const novoItemDaEntrada = () => setItens((l) => (l || []).concat([{
+    ...(typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio() : {}),
+    etapa: ((l || [])[0] || {}).etapa || "", contaId: ((l || [])[0] || {}).contaId || "" }]));
   // Só as contas de despesa: lançar um pagamento numa conta de receita é
   // inverter o sinal do P&L inteiro.
   const contasDeDespesa = (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [])
@@ -32523,23 +32791,30 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
           ? "Nem o leitor nem a IA acharam itens neste PDF."
           : "Não achei a tabela de itens neste PDF. Se for foto ou digitalização, cole o texto.");
         const lidos = itensDaEntrada(o, "orcamento", insumos || []);
-        setItens(lidos);
-        setPapel({ numeroPedido: o.numeroPedido || (o.ehNota ? "" : o.numero) || "",
+        setItens(comContaPadraoDaEntrada(lidos, "material"));
+        const novoPapel = { tipo: o.ehNota ? "nota" : "pedido",
+          numeroPedido: o.numeroPedido || (o.ehNota ? "" : o.numero) || "",
           numeroNota: o.numeroNota || "", ehNota: !!o.ehNota, emitido: o.emitido || "",
-          vencimento: o.vencimento || "", desconto: o.desconto || "" });
+          vencimento: o.vencimento || "", desconto: o.desconto || "", total: o.total || 0,
+          lidoComo: o.fornecedor || "" };
+        setPapel(novoPapel);
+        // O emitente da nota costuma já estar no cadastro: pelo nome.
+        const doPapel = !ctx.loja && o.fornecedor ? prestadorDoComprovante(prestadores || [], o.fornecedor) : null;
+        if (doPapel) setLojaId(doPapel.id);
+        iniciarSituacao(novoPapel);
       } else if (iaDisponivel) {
         const r = await api.ia.lerPedido({ arquivo: alvo || null, texto: paraLer || "" },
           (pr) => setProgresso(pr));
         const cru = pedidoDaIA(r, insumos || []);
         if (!cru.length) throw new Error("A IA não achou itens aí.");
-        setItens(itensDaEntrada(promoverCandidatos(cru), "lista", insumos || []));
-        setPapel(null);
+        setItens(comContaPadraoDaEntrada(itensDaEntrada(promoverCandidatos(cru), "lista", insumos || []), "material"));
+        setPapel(null); iniciarSituacao(null);
       } else {
         if (!String(paraLer).trim()) throw new Error("Sem a IA eu leio o texto colado e o PDF. Cole o texto da lista.");
         const cru = interpretarPedido(paraLer, insumos || []);
         if (!cru.length) throw new Error("Não achei itens no texto.");
-        setItens(itensDaEntrada(promoverCandidatos(cru), "lista", insumos || []));
-        setPapel(null);
+        setItens(comContaPadraoDaEntrada(itensDaEntrada(promoverCandidatos(cru), "lista", insumos || []), "material"));
+        setPapel(null); iniciarSituacao(null);
       }
     } catch (e) {
       setAviso((typeof avisoDaIA === "function" ? avisoDaIA(e) : "") || e.message || "Não consegui ler.");
@@ -32548,7 +32823,6 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     }
   }
 
-  const [papel, setPapel] = useState(null);
 
   // O comprovante lido vira o card da despesa já preenchido. Quem recebeu sai
   // de duas fontes que se completam: o nome que o banco imprimiu, casado com
@@ -32558,27 +32832,25 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   function abrirDespesaLida(comp, ctx) {
     const achado = prestadorDoComprovante(prestadores || [], comp.favorecido)
       || (ctx && ctx.loja) || null;
-    setItens(null); setPapel(null);
-    setDestino("despesa");
-    setDespesa({
-      favorecidoId: achado ? achado.id : "",
-      lidoComo: comp.favorecido || "",
+    const valor = comp.valor ? numeroDeCampo(comp.valor) : 0;
+    // O comprovante e a nota de serviço também viram itens — um só, com o
+    // valor do papel. A conta contábil fica em branco de propósito: é a
+    // única coisa que nem o papel nem a frase sabem.
+    const p = { tipo: comp.notaDeServico ? "nfse" : "comprovante", lidoComo: comp.favorecido || "",
       documento: comp.documento || "",
-      // O campo de dinheiro trabalha com número; o papel entrega "5.000,00".
-      valor: comp.valor ? numeroDeCampo(comp.valor) : "",
-      // Comprovante traz a data do PAGAMENTO; nota de serviço traz a da
-      // EMISSÃO, que não é a mesma coisa. A nota chega com a emissão
-      // preenchida e avisando que é ela — quem lança diz quando pagou.
-      pagoEm: comp.pagoEm || comp.emitidoEm || new Date().toISOString().slice(0, 10),
-      notaDeServico: !!comp.notaDeServico,
-      emitidoEm: comp.emitidoEm || "",
-      contaId: "",
-      descricao: comp.descricao || "",
-      parcelaId: "",
-    });
+      numeroNota: comp.notaDeServico ? String(comp.documento || "").replace(/\D/g, "").replace(/^0+/, "") : "",
+      valor, emitido: comp.emitidoEm || "", pagoEm: comp.pagoEm || "" };
+    setDespesa(null); setDestino("");
+    setLojaId(achado ? achado.id : "");
+    setPapel(p);
+    setItens([{ ...(typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio() : {}),
+      descricao: comp.descricao || "", bruto: valor || "", contaId: "" }]);
+    iniciarSituacao(p);
   }
 
+
   function limpar() {
+    situacaoTocada.current = false; setSituacao(""); setParcelaId("");
     setTexto(""); setArquivo(null); setItens(null); setPapel(null); setDespesa(null);
     setDestino(""); setLojaId(""); setObraId(""); setAviso(""); setReconhecido(null);
     setLojasMarcadas({}); setBuscaLoja(""); setFila(null); setEnviado(null);
@@ -32628,35 +32900,53 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // outra tela — não há formulário adiante onde anexar o comprovante, então
   // ele sobe aqui, antes de mandar. Falhar o envio não impede o lançamento:
   // o gasto é o que importa, e o papel se anexa depois na conta.
-  async function seguirComDespesa() {
+  // O papel sobe antes de lançar: não há outra tela adiante onde anexá-lo.
+  // Falhar o envio não impede o lançamento — o papel se anexa depois na conta.
+  async function enviarPapelDaEntrada() {
+    if (!arquivo) return null;
+    setEnviandoComprov(true);
+    try {
+      const up = await enviarComprovante(arquivo);
+      return up ? { ...up, tipo: tipoDoAnexoDaEntrada(papel) } : null;
+    } catch (e) {
+      setAviso("O papel não subiu (" + (e.message || "erro") + ") — o lançamento segue; anexe depois na conta.");
+      return null;
+    } finally { setEnviandoComprov(false); }
+  }
+
+  async function seguir() {
+    if (situacao === "cotacao") { mandarParaAsLojas(); return; }
     if (!prova.ok) { setAviso(prova.motivo); return; }
-    let comprovante = null;
-    if (arquivo) {
-      setEnviandoComprov(true);
-      // O papel diz o que é: nota fiscal ou comprovante. A pasta no
-      // armazenamento é a mesma; a etiqueta é que separa os dois na hora de
-      // prestar contas.
-      try { const up = await enviarComprovante(arquivo);
-        comprovante = up ? { ...up, tipo: despesa.notaDeServico ? "nota" : "comprovante" } : up; }
-      catch (e) { setAviso("O pagamento foi lançado, mas o comprovante não subiu: " + (e.message || "")); }
-      finally { setEnviandoComprov(false); }
+    const fav = (prestadores || []).find((f) => f && f.id === lojaId) || {};
+    const pp = papel || {};
+    const anexo = await enviarPapelDaEntrada();
+    let r;
+    if (situacao === "pago" && parcelaId) {
+      r = aoSeguir({ destino: "despesa", obraId, despesa: {
+        favorecidoId: lojaId, favorecido: fav.nome || pp.lidoComo || "", lidoComo: pp.lidoComo || "",
+        valor: totalDaEntrada, pagoEm: pagamento.data, parcelaId,
+        forma: pagamento.forma, cartaoId: pagamento.cartaoId, parcelas: pagamento.parcelas,
+        comprovante: anexo, notaDeServico: pp.tipo === "nfse", numeroNota: pp.numeroNota || "" } }) || {};
+    } else {
+      const rateados = typeof itensRateados === "function"
+        ? itensRateados({ itens, desconto: descontoDoPapel })
+        : (itens || []).map((x) => ({ ...x, valor: brutoDoItem(x) }));
+      const nomeDe = (x) => {
+        const ins = x.insumoCodigo ? (insumos || []).find((y) => y && (y.codigo === x.insumoCodigo || y.id === x.insumoCodigo)) : null;
+        return String(x.descricao || "").trim() || (ins && ins.nome) || "";
+      };
+      const lancamento = { situacao, prestadorId: lojaId, favorecido: fav.nome || pp.lidoComo || "",
+        numeroNota: pp.numeroNota || pp.numeroPedido || "", emitido: pp.emitido || "",
+        itens: rateados.map((x) => ({ descricao: nomeDe(x), insumoCodigo: x.insumoCodigo || "",
+          grupoMaterial: x.grupoMaterial || "", quantidade: x.quantidade, unidade: x.unidade || "",
+          total: x.valor, etapa: x.etapa || "", contaId: x.contaId || "" })),
+        pagamento, apagar };
+      r = aoSeguir({ destino: "lancar", obraId, lancamento, anexo }) || {};
     }
-    const fav = (prestadores || []).find((f) => f && f.id === despesa.favorecidoId) || {};
-    const r = aoSeguir({ destino: "despesa", obraId,
-      despesa: { ...despesa, favorecido: fav.nome || despesa.lidoComo || "", comprovante } }) || {};
     if (r.erro) { setAviso(r.erro); return; }
     if (embutido) limpar();
   }
 
-  function seguir() {
-    if (destino === "mandar") { mandarParaAsLojas(); return; }
-    if (destino === "despesa") { seguirComDespesa(); return; }
-    if (!prova.ok) { setAviso(prova.motivo); return; }
-    aoSeguir({ destino, lojaId, obraId, itens, papel });
-    // Embutida, a caixa é a própria tela: ela fica, e tem que ficar limpa
-    // para a próxima nota. Em modal não se limpa — o painel vai fechar.
-    if (embutido) limpar();
-  }
 
   const cartao = { borderWidth: 1, borderStyle: "solid", borderColor: "rgba(38,36,33,0.14)",
     borderRadius: 12, padding: 12, marginBottom: 12, background: "#fff" };
@@ -32674,58 +32964,49 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // de material ou comprovante de pagamento. Moram numa variável só porque
   // aparecem em dois lugares da tela, e a mesma pergunta escrita duas vezes
   // vira duas perguntas diferentes na primeira correção.
-  const blocoObraEDestino = (
-    <>
-      {pedeObra && (
-        <>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", margin: "14px 0 8px" }}>
-            Para qual obra?
-          </div>
-          <SelectBusca style={E.input} value={obraId} onChange={(v) => setObraId(v)}
-            placeholder="Procurar obra…"
-            opcoes={[{ valor: "", rotulo: "— escolha a obra —" }].concat(
-              (obras || []).map((o) => ({ valor: o.id, rotulo: o.nome, grupo: o.clienteNome || "" })))} />
-        </>
-      )}
-
-      {/* Comprovante não se pergunta: o papel já disse o que é, e as outras
-          saídas pedem itens que ele não tem. Fica a porta de volta, para o
-          dia em que a leitura errar. */}
-      {despesa ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
-          margin: "14px 0 0", padding: "10px 12px", borderRadius: 12,
-          border: "1.5px solid #0474f4", background: "#eef5ff" }}>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#0474f4" }}>Comprovante de pagamento</div>
-            <div style={{ fontSize: 11, color: "#4b5563", marginTop: 2, lineHeight: 1.35 }}>
-              Entra como conta da obra já baixada, na data em que o dinheiro saiu.
-            </div>
-          </div>
-          <button type="button" style={{ ...E.btnSec, fontSize: 11.5, padding: "5px 12px" }}
-            onClick={() => { setDespesa(null); setDestino(""); setAviso(""); }}>
-            Não é comprovante
-          </button>
-        </div>
-      ) : (
-      <>
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", margin: "14px 0 8px" }}>
-        O que é este papel?
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 8 }}>
-        {DESTINOS_DA_ENTRADA.filter((d) => d.id !== "despesa").map((d) => (
-          <button key={d.id} type="button" onClick={() => setDestino(d.id)}
-            style={{ textAlign: "left", cursor: "pointer", fontFamily: "inherit",
-              borderWidth: destino === d.id ? 1.5 : 1, borderStyle: "solid",
-              borderColor: destino === d.id ? "#0474f4" : "rgba(38,36,33,0.16)",
-              background: destino === d.id ? "#eef5ff" : "#fff", borderRadius: 12, padding: "10px 12px" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: destino === d.id ? "#0474f4" : "#111827" }}>{d.nome}</div>
-            <div style={{ fontSize: 11, color: "#4b5563", marginTop: 2, lineHeight: 1.35 }}>{d.resumo}</div>
-          </button>
-        ))}
-      </div>
-      </>
-      )}
-    </>
+  // As lojas para a cotação: marcam-se aqui, e o WhatsApp abre com a lista.
+  const blocoLojas = (
+    <div>
+                  <label style={E.label}>Para quais lojas</label>
+                  <input style={{ ...E.input, marginBottom: 8 }} value={buscaLoja}
+                    placeholder="Achar a loja pelo nome"
+                    onChange={(e) => setBuscaLoja(e.target.value)} />
+                  <div style={{ maxHeight: 190, overflowY: "auto", border: "1px solid rgba(38,36,33,0.12)",
+                    borderRadius: 12, background: "#fff" }}>
+                    {!lojasDaLista.length ? (
+                      <div style={{ padding: "12px 14px", fontSize: 12.5, color: "#4b5563" }}>
+                        Nenhum fornecedor com esse nome. Cadastre em Prestadores de Serviços, com o telefone.
+                      </div>
+                    ) : lojasDaLista.map((f) => {
+                      const temZap = !!linkWhatsApp(f.telefone, "");
+                      return (
+                        <label key={f.id} style={{ display: "flex", alignItems: "center", gap: 10,
+                          padding: "9px 12px", borderTop: "1px solid rgba(38,36,33,0.06)",
+                          cursor: temZap ? "pointer" : "default", opacity: temZap ? 1 : 0.55 }}>
+                          <input type="checkbox" disabled={!temZap} checked={!!lojasMarcadas[f.id] && temZap}
+                            onChange={(e) => setLojasMarcadas((m) => ({ ...m, [f.id]: e.target.checked }))}
+                            style={{ cursor: temZap ? "pointer" : "not-allowed" }} />
+                          <span style={{ minWidth: 0 }}>
+                            <span style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{f.nome || "Sem nome"}</span>
+                            <span style={{ display: "block", fontSize: 11, color: temZap ? "#6b7280" : "#b45309" }}>
+                              {temZap ? f.telefone : "sem telefone no cadastro"}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
+                    <button type="button" onClick={() => abrirCadastroDeLoja(buscaLoja)}
+                      style={{ ...E.btnSec, fontSize: 11.5, padding: "5px 12px", color: "#0474f4",
+                        borderColor: "rgba(4,116,244,0.35)", fontWeight: 600 }}>
+                      ＋ Cadastrar loja
+                    </button>
+                    <span style={{ fontSize: 11.5, color: "#6b7280" }}>
+                      Cada conversa abre com a lista já escrita — quem aperta enviar é você, lá no WhatsApp.
+                    </span>
+                  </div>
+                </div>
   );
 
   // Duas roupas para o mesmo conteúdo: modal, quando a Entrada é chamada de
@@ -32749,7 +33030,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
         </div>
 
         <div style={rolagem}>
-          {!itens && !despesa ? (
+          {!itens ? (
             <>
               {/* O composer: uma caixa só, que cresce com o texto, aceita
                   arquivo arrastado ou colado, e tem a ação à direita. O campo
@@ -32824,262 +33105,44 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
               </div>
               {lendo && <div style={{ marginTop: 10 }}><BarraLeituraIA progresso={progresso} /></div>}
             </>
-          ) : despesa ? (
+          ) : (
             <>
-              {/* O comprovante lido. O que o banco disse fica à vista, como
-                  veio; o que ele não sabe (a conta contábil, o que foi o
-                  serviço) se escolhe aqui. */}
+              {/* ── A tela única ──────────────────────────────────────
+                  Qualquer papel cai aqui: nota, pedido, orçamento, lista,
+                  comprovante, nota de serviço. Em cima o que o papel disse;
+                  no meio os itens, cada um com catálogo, etapa e conta; e
+                  embaixo a situação — cotação, a pagar ou pago. Lança
+                  daqui mesmo, sem abrir outra tela. */}
               <div style={{ ...cartao, borderColor: "rgba(4,116,244,0.35)", background: "#f7fbff" }}>
                 <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0474f4", marginBottom: 4 }}>
-                  {despesa.notaDeServico ? "Nota fiscal de serviço lida" : "Pagamento lido do comprovante"}
+                  {rotuloDoPapelDaEntrada(papel, itens)}
                 </div>
-                {despesa.notaDeServico && (
+                {papel && papel.tipo === "nfse" && (
                   <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 4 }}>
                     A data veio da emissão da nota. Se o pagamento foi em outro dia, troque abaixo — é ela que
                     decide o mês da despesa e a fatura do cartão.
                   </div>
                 )}
                 <div style={{ fontSize: 11.5, color: "#4b5563" }}>
-                  {[despesa.lidoComo ? `para “${despesa.lidoComo}”` : "",
-                    despesa.documento || "",
-                    despesa.valor ? dinheiro(numeroDeCampo(despesa.valor)) : "sem valor no papel",
-                    despesa.pagoEm ? "em " + dataDoDiaBR(despesa.pagoEm) : ""]
+                  {[papel && papel.lidoComo ? `de “${papel.lidoComo}”` : "",
+                    papel && (papel.numeroNota || papel.numeroPedido || papel.documento)
+                      ? (papel.numeroNota ? "nota nº " + papel.numeroNota : (papel.numeroPedido ? "pedido " + papel.numeroPedido : papel.documento)) : "",
+                    papelTotal > 0 ? dinheiro(papelTotal) : "",
+                    papel && (papel.emitido || papel.pagoEm) ? "em " + dataDoDiaBR(papel.pagoEm || papel.emitido) : ""]
                     .filter(Boolean).join(" · ")}
                 </div>
-                {!despesa.favorecidoId && despesa.lidoComo && (
-                  <div style={{ fontSize: 11.5, color: "#b45309", marginTop: 6 }}>
-                    Não achei “{despesa.lidoComo}” no cadastro de prestadores. Escolha abaixo quem é,
-                    ou cadastre na hora pelo “+ cadastrar”.
-                  </div>
-                )}
-              </div>
-
-              <div style={cartao}>
-                <div style={{ marginBottom: 10 }}>
-                  <label style={E.label}>Quem recebeu</label>
-                  <SelectBusca style={E.input} value={despesa.favorecidoId}
-                    onChange={(v) => mexerDespesa({ favorecidoId: v, parcelaId: "" })}
-                    placeholder="Procurar prestador…"
-                    aoCriar={(termo) => abrirCadastroDeLoja(termo || despesa.lidoComo || "", "Empreiteiro")}
-                    criarRotulo="cadastrar"
-                    opcoes={[{ valor: "", rotulo: "— escolha quem recebeu —" }].concat(
-                      (prestadores || []).map((f) => ({ valor: f.id, rotulo: f.nome, grupo: f.categoria || "" })))} />
-                  {blocoCadastroRapido}
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
-                  <div>
-                    <label style={E.label}>Valor pago</label>
-                    <CampoCtrNum tipo="moeda" style={E.input} valor={despesa.valor}
-                      onChange={(v) => mexerDespesa({ valor: v, parcelaId: "" })} />
-                  </div>
-                  <div>
-                    <label style={E.label}>Data do pagamento</label>
-                    <input type="date" style={E.input} value={despesa.pagoEm || ""}
-                      onChange={(e) => mexerDespesa({ pagoEm: e.target.value })} />
-                  </div>
-                </div>
-
-                {despesa.parcelaId ? (
-                  <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 10 }}>
-                    A conta contábil e a descrição vêm da parcela do contrato.
-                  </div>
-                ) : (
-                  <>
-                    <div style={{ marginTop: 10 }}>
-                      <label style={E.label}>Conta contábil</label>
-                      <SelectBusca style={E.input} value={despesa.contaId}
-                        onChange={(v) => mexerDespesa({ contaId: v })}
-                        placeholder="Procurar conta…"
-                        opcoes={[{ valor: "", rotulo: "— escolha a conta —" }].concat(
-                          contasDeDespesa.map((c) => ({ valor: c.id, rotulo: c.nome, grupo: c.grupo || "" })))} />
-                    </div>
-
-                    <div style={{ marginTop: 10 }}>
-                      <label style={E.label}>O que foi (aparece no contas a pagar)</label>
-                      <input style={E.input} value={despesa.descricao || ""}
-                        placeholder="Mão de obra da alvenaria, 2ª medição…"
-                        onChange={(e) => mexerDespesa({ descricao: e.target.value })} />
-                    </div>
-
-                    {/* O que a regra da transação pede para esta conta: item e
-                        quantidade quando é material, etapa quando é custo da
-                        obra. Só aparece o que a conta escolhida pede — frete
-                        não tem item, imposto não tem etapa. */}
-                    {(() => {
-                      const ex = typeof exigenciasDaTransacao === "function"
-                        ? exigenciasDaTransacao({ contaId: despesa.contaId }) : { item: false, etapa: false };
-                      if (!ex.item && !ex.etapa) return null;
-                      return (
-                        <div style={{ display: "grid", gap: 10, marginTop: 10,
-                          gridTemplateColumns: isMobile ? "1fr" : (ex.item ? "2fr 1fr 1fr" : "1fr") }}>
-                          {ex.item && (
-                            <div style={{ minWidth: 0 }}>
-                              <label style={E.label}>Item do catálogo</label>
-                              <CampoItemDoCatalogo codigo={despesa.insumoCodigo || ""} descricao={despesa.descricao || ""}
-                                unidade={despesa.unidade || ""} insumos={insumos}
-                                aoCadastrar={aoCadastrarInsumo}
-                                aoLimpar={() => mexerDespesa({ insumoCodigo: "" })}
-                                aoEscolher={(ins) => mexerDespesa({ insumoCodigo: ins.codigo || ins.id || "",
-                                  unidade: despesa.unidade || ins.unidade || "",
-                                  grupoMaterial: ins.grupo || "",
-                                  etapa: despesa.etapa || ins.etapaPadrao || "",
-                                  descricao: despesa.descricao || ins.nome || "" })} />
-                            </div>
-                          )}
-                          {ex.item && (
-                            <div>
-                              <label style={E.label}>Quantidade</label>
-                              <input style={E.input} inputMode="decimal" value={despesa.quantidade || ""}
-                                onChange={(e) => mexerDespesa({ quantidade: e.target.value })} placeholder="0" />
-                            </div>
-                          )}
-                          {ex.item && (
-                            <div>
-                              <label style={E.label}>Unidade</label>
-                              <input style={E.input} value={despesa.unidade || ""}
-                                onChange={(e) => mexerDespesa({ unidade: e.target.value })} placeholder="m3" />
-                            </div>
-                          )}
-                          {ex.etapa && (
-                            <div style={{ minWidth: 0, gridColumn: isMobile ? "auto" : "1 / -1" }}>
-                              <label style={E.label}>Etapa</label>
-                              <SelectBusca style={E.input} value={despesa.etapa || ""}
-                                onChange={(v) => mexerDespesa({ etapa: v })}
-                                placeholder="Procurar etapa…"
-                                opcoes={[{ valor: "", rotulo: "— escolha a etapa —" }].concat(
-                                  (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [])
-                                    .map((e) => ({ valor: e.id, rotulo: e.nome })))} />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </>
-                )}
-
-                {/* Como o dinheiro saiu. No cartão, a compra entra na obra hoje,
-                    integral, mas NÃO atravessa para o escritório: quem
-                    atravessa é a fatura, quando você fechar. */}
-                <div style={{ marginTop: 12, borderTop: "1px solid rgba(38,36,33,0.08)", paddingTop: 10 }}>
-                  <label style={E.label}>Como foi pago</label>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {[["avista", "À vista / transferência"], ["cartao", "Cartão de crédito"]].map(([k, r]) => {
-                      const on = (despesa.forma || "avista") === k;
-                      return (
-                        <button key={k} type="button"
-                          onClick={() => mexerDespesa({ forma: k,
-                            cartaoId: k === "cartao" ? (despesa.cartaoId || ((cartoes || [])[0] || {}).id || "") : "",
-                            parcelas: despesa.parcelas || 1 })}
-                          style={{ ...E.btnSec, fontSize: 12.5, borderColor: on ? "#0474f4" : "rgba(38,36,33,0.16)",
-                            fontWeight: on ? 700 : 500, color: on ? "#111827" : "#4b5563" }}>
-                          {r}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {despesa.forma === "cartao" && (
-                    !(cartoes || []).length ? (
-                      <div style={{ fontSize: 11.5, color: "#b45309", marginTop: 8 }}>
-                        Nenhum cartão cadastrado. Cadastre em Escritório → Cartões.
-                      </div>
-                    ) : (() => {
-                      const ct = (cartoes || []).find((c) => c.id === despesa.cartaoId) || cartoes[0];
-                      const plano = typeof parcelasDoCartao === "function"
-                        ? parcelasDoCartao(ct, despesa.pagoEm, numeroDeCampo(despesa.valor), despesa.parcelas) : [];
-                      return (
-                        <>
-                          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: 10, marginTop: 10 }}>
-                            <div>
-                              <label style={E.label}>Cartão</label>
-                              <SelectBusca style={E.input} value={despesa.cartaoId || (ct || {}).id || ""}
-                                onChange={(v) => mexerDespesa({ cartaoId: v })}
-                                opcoes={(cartoes || []).map((c) => ({ valor: c.id, rotulo: c.nome }))} />
-                            </div>
-                            <div>
-                              <label style={E.label}>Parcelas</label>
-                              <input style={E.input} inputMode="numeric" value={despesa.parcelas || 1}
-                                onChange={(e) => mexerDespesa({ parcelas: e.target.value })} />
-                            </div>
-                          </div>
-                          {plano.length > 0 && (
-                            <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8, lineHeight: 1.6 }}>
-                              Cai {plano.length === 1 ? "na fatura de " : "nas faturas de "}
-                              <b style={{ color: "#111827" }}>
-                                {plano.map((p) => (typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso(p.competencia) : p.competencia) + " (" + dinheiro(p.valor) + ")").join(" · ")}
-                              </b>. O custo da obra é integral nesta data; o escritório recebe a fatura quando você fechar.
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()
-                  )}
-                </div>
-              </div>
-
-              {/* Quem recebeu já tinha parcela combinada? Então este dinheiro
-                  é a baixa dela. Criar despesa nova por cima deixaria o
-                  contrato eternamente em aberto e o gasto contado duas vezes. */}
-              {parcelasDoFavorecido.length > 0 && (
-                <div style={{ ...cartao, borderColor: "rgba(245,158,11,0.45)", background: "#fffbeb" }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "#92400e", marginBottom: 2 }}>
-                    {parcelasDoFavorecido.length === 1
-                      ? "Esse prestador tem 1 parcela de contrato em aberto nesta obra"
-                      : `Esse prestador tem ${parcelasDoFavorecido.length} parcelas de contrato em aberto nesta obra`}
-                  </div>
-                  <div style={{ fontSize: 11.5, color: "#78350f", marginBottom: 8 }}>
-                    Se este pagamento é de uma delas, aponte qual: a parcela é baixada, e o contrato anda.
-                    Lançar como despesa avulsa deixaria a parcela em aberto e o gasto contado duas vezes.
-                  </div>
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", cursor: "pointer" }}>
-                    <input type="radio" name="parcela-despesa" checked={!despesa.parcelaId}
-                      onChange={() => mexerDespesa({ parcelaId: "" })} />
-                    <span style={{ fontSize: 12.5, color: "#111827" }}>Despesa avulsa, fora de contrato</span>
-                  </label>
-                  {parcelasDoFavorecido.map((c) => (
-                    <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 8,
-                      padding: "6px 0", borderTop: "1px solid rgba(146,64,14,0.12)", cursor: "pointer" }}>
-                      <input type="radio" name="parcela-despesa" checked={despesa.parcelaId === c.id}
-                        onChange={() => mexerDespesa({ parcelaId: c.id, valor: despesa.valor })} />
-                      <span style={{ fontSize: 12.5, color: "#111827", minWidth: 0 }}>
-                        {(c.descricao || c.servico || "Parcela")}
-                        {/* a descrição do contrato quase sempre já diz "2ª parcela" —
-                            repetir o número ali vira "2ª parcela 2" */}
-                        {c.parcela && !/parcela/i.test(c.descricao || "") ? ` · parcela ${c.parcela}` : ""}
-                        {" · vence "}{dataDoDiaBR(c.vencimento)}{" · "}{dinheiro(numeroDeCampo(c.valor))}
-                        {parcelaSugerida && parcelaSugerida.id === c.id && !despesa.parcelaId
-                          ? " — mesmo valor do comprovante" : ""}
+                {resumo && !(papel && (papel.tipo === "comprovante" || papel.tipo === "nfse"))
+                  && (resumo.semNada > 0 || paraCasar > 0 || sobrasTortas.length > 0 || (sobrasUteis.length > 0 && iaDisponivel)) && (
+                  <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 4 }}>
+                    {[resumo.comCatalogo ? `${resumo.comCatalogo} no catálogo` : "",
+                      resumo.comProposta ? `${resumo.comProposta} com proposta a confirmar` : ""].filter(Boolean).join(" · ")}
+                    {resumo.semNada ? (
+                      <span style={{ color: "#dc2626", fontWeight: 600 }}>
+                        {resumo.comCatalogo || resumo.comProposta ? " · " : ""}{resumo.semNada} fora do catálogo
                       </span>
-                    </label>
-                  ))}
-                </div>
-              )}
-
-              {blocoObraEDestino}
-
-              {arquivo && (
-                <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 10 }}>
-                  {"\u{1F4CE}"} {arquivo.name} — fica anexado ao pagamento
-                  {despesa.notaDeServico ? ", como nota fiscal" : ", como comprovante"}; abre pela linha da conta e pelo extrato do escritório.
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              <div style={{ ...cartao, borderColor: "rgba(4,116,244,0.35)", background: "#f7fbff" }}>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0474f4", marginBottom: 4 }}>
-                  {resumo.quantos === 1 ? "1 item lido" : `${resumo.quantos} itens lidos`}
-                  {resumo.temPreco ? ` · ${dinheiro(resumo.total)}` : " · sem preço"}
-                </div>
-                <div style={{ fontSize: 11.5, color: "#4b5563" }}>
-                  {[resumo.comCatalogo ? `${resumo.comCatalogo} casaram com o catálogo` : "",
-                    resumo.comProposta ? `${resumo.comProposta} com proposta a confirmar` : ""].filter(Boolean).join(" · ")}
-                  {resumo.semNada ? (
-                    <span style={{ color: "#dc2626", fontWeight: 600 }}>
-                      {resumo.comCatalogo || resumo.comProposta ? " · " : ""}{resumo.semNada} fora do catálogo
-                    </span>
-                  ) : null}
-                </div>
+                    ) : null}
+                  </div>
+                )}
                 {sobrasTortas.length > 0 && (
                   <div style={{ marginTop: 8, padding: "9px 12px", borderRadius: 10,
                     background: "#fff7ed", border: "1px solid rgba(180,83,9,0.28)" }}>
@@ -33089,9 +33152,6 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                         : `${sobrasTortas.length} itens vieram sem nome de material — a leitura deste papel saiu torta`}
                     </div>
                     <div style={{ fontSize: 11.5, color: "#7c2d12", marginTop: 3 }}>
-                      O que foi lido ({sobrasTortas.slice(0, 3).map((x) => `“${x.descricao}”`).join(", ")}
-                      {sobrasTortas.length > 3 ? "…" : ""}) é código e unidade, não nome de produto — a coluna
-                      errada do papel. Perguntar à IA não adianta: não há o que achar no catálogo.
                       Escolha o insumo à mão abaixo, ou cole o texto da nota em vez do arquivo.
                     </div>
                   </div>
@@ -33099,13 +33159,10 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                 {(paraCasar > 0 || (sobrasUteis.length > 0 && iaDisponivel)) && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 8 }}>
                     {paraCasar > 0 && (
-                      <>
-                        <span style={{ fontSize: 11.5, color: "#0474f4", fontWeight: 600 }}>
-                          {paraCasar === 1 ? "1 item reconhecido no catálogo" : paraCasar + " itens reconhecidos no catálogo"}
-                        </span>
-                        <button type="button" style={{ ...E.btn, fontSize: 11.5, padding: "5px 12px" }}
-                          onClick={casarOsSegurosDaEntrada}>Casar com o catálogo</button>
-                      </>
+                      <button type="button" style={{ ...E.btn, fontSize: 11.5, padding: "5px 12px" }}
+                        onClick={casarOsSegurosDaEntrada}>
+                        Casar {paraCasar === 1 ? "1 item" : paraCasar + " itens"} com o catálogo
+                      </button>
                     )}
                     {sobrasUteis.length > 0 && iaDisponivel && (
                       <button type="button" disabled={conferindo}
@@ -33125,136 +33182,339 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                 )}
               </div>
 
-              {/* Cada linha é uma busca no catálogo: o texto do papel fica em
-                  cima, como veio, e embaixo se digita "caixaria" e se escolhe a
-                  tábua certa. Não achou? A mesma lista cadastra o item, no
-                  padrão do catálogo, sem sair daqui. */}
+              {reconhecido && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
+                  marginBottom: 10, padding: "8px 12px", borderRadius: 12,
+                  background: "#f3f8ff", border: "1px solid rgba(4,116,244,0.22)" }}>
+                  <span style={{ fontSize: 11.5, color: "#0474f4", fontWeight: 600 }}>No que você disse</span>
+                  {reconhecido.obra && <span style={{ fontSize: 12, color: "#111827" }}>obra <b>{reconhecido.obra.nome}</b></span>}
+                  {reconhecido.loja && <span style={{ fontSize: 12, color: "#111827" }}>loja <b>{reconhecido.loja.nome}</b></span>}
+                  <span style={{ fontSize: 11.5, color: "#6b7280" }}>— já preenchi abaixo; troque se não for.</span>
+                </div>
+              )}
+
+              {/* De onde e de quem */}
               <div style={cartao}>
+                <div style={{ display: "grid", gap: 10,
+                  gridTemplateColumns: isMobile ? "1fr" : (pedeObra ? "1.3fr 1.3fr 0.7fr 0.8fr" : "2fr 0.7fr 0.8fr") }}>
+                  {pedeObra && (
+                    <div style={{ minWidth: 0 }}>
+                      <label style={E.label}>Obra</label>
+                      <SelectBusca style={E.input} value={obraId} onChange={(v) => setObraId(v)}
+                        placeholder="Procurar obra…"
+                        opcoes={[{ valor: "", rotulo: "— escolha a obra —" }].concat(
+                          (obras || []).map((o) => ({ valor: o.id, rotulo: o.nome, grupo: o.clienteNome || "" })))} />
+                    </div>
+                  )}
+                  <div style={{ minWidth: 0 }}>
+                    <label style={E.label}>Fornecedor</label>
+                    <SelectBusca style={E.input} value={lojaId} onChange={(v) => { setLojaId(v); setParcelaId(""); }}
+                      placeholder="Procurar fornecedor…" criarRotulo="cadastrar"
+                      aoCriar={aoCriarLoja ? ((termo) => abrirCadastroDeLoja(termo || (papel && papel.lidoComo) || "",
+                        papel && (papel.tipo === "nfse" || papel.tipo === "comprovante") ? "Empreiteiro" : "Loja / Comércio")) : undefined}
+                      opcoes={[{ valor: "", rotulo: "— escolha o fornecedor —" }].concat(
+                        lojas.map((f) => ({ valor: f.id, rotulo: f.nome, grupo: f.categoria || "" })))} />
+                    {!lojaId && papel && papel.lidoComo && (
+                      <div style={{ fontSize: 11, color: "#b45309", marginTop: 4 }}>
+                        Não achei “{papel.lidoComo}” no cadastro — escolha quem é, ou “＋ cadastrar”.
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <label style={E.label}>Nota / pedido nº</label>
+                    <input style={E.input} value={(papel && (papel.numeroNota || papel.numeroPedido)) || ""}
+                      onChange={(e) => mexerPapel(papel && papel.numeroPedido && !papel.numeroNota
+                        ? { numeroPedido: e.target.value } : { numeroNota: e.target.value })} placeholder="—" />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <label style={E.label}>Emissão</label>
+                    <input type="date" style={E.input} value={(papel && papel.emitido) || ""}
+                      onChange={(e) => mexerPapel({ emitido: e.target.value })} />
+                  </div>
+                </div>
+                {blocoCadastroRapido}
+              </div>
+
+              {/* Os itens: cada um com o que a regra da transação pede. */}
+              <div style={cartao}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>
+                    {itens.length === 1 ? "1 item" : `${itens.length} itens`}
+                  </div>
+                  {itens.length > 1 && (
+                    <div style={{ minWidth: isMobile ? "100%" : 240, marginLeft: isMobile ? 0 : "auto" }}>
+                      <SelectBusca style={{ ...E.input, padding: "6px 10px", fontSize: 12 }} value=""
+                        onChange={(v) => { if (v) setItens((l) => (l || []).map((x) => ({ ...x, etapa: v }))); }}
+                        placeholder="Procurar etapa…"
+                        opcoes={[{ valor: "", rotulo: "Mesma etapa para todos…" }].concat(
+                          etapasDaEntrada.map((e) => ({ valor: e.id, rotulo: e.nome })))} />
+                    </div>
+                  )}
+                </div>
+                {!isMobile && (
+                  <div style={{ display: "grid", gridTemplateColumns: COLS_ENTRADA, gap: 6, fontSize: 10, fontWeight: 600,
+                    color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, padding: "0 0 4px" }}>
+                    <span>Item do catálogo</span><span style={{ textAlign: "right" }}>Qtd</span><span>Un</span>
+                    <span style={{ textAlign: "right" }}>Unitário</span><span style={{ textAlign: "right" }}>Total</span>
+                    <span>Etapa</span><span>Conta</span><span />
+                  </div>
+                )}
                 {itens.map((it, i) => {
                   const casado = it.insumoCodigo
                     ? (insumos || []).find((y) => y && (y.codigo === it.insumoCodigo || y.id === it.insumoCodigo)) || null
                     : null;
                   const x = { id: "e" + i, termo: it.descricao || "", bruto: it.descricao || "",
                     unidade: it.unidade || "", insumo: casado,
-                    rotuloVazio: (!casado && it.sugestao) ? `Procurar outro — “${it.descricao}”` : "" };
-                  const parecidos = casado ? [] : casarNoCatalogo(it.descricao, indiceCat, 6).map((c) => c.insumo);
+                    rotuloVazio: casado ? "" : (it.descricao ? `Escolher do catálogo — “${it.descricao}”` : "Escolher do catálogo") };
+                  const parecidos = casado || !it.descricao ? [] : casarNoCatalogo(it.descricao, indiceCat, 6).map((c) => c.insumo);
+                  const faltas = faltasDoItemDaEntrada(it);
+                  const mini = (t) => isMobile ? <span style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#6b7280", marginBottom: 2 }}>{t}</span> : null;
+                  const cel = { ...E.input, padding: "6px 8px", fontSize: 12.5 };
                   return (
-                    <div key={i} style={{ padding: "8px 0", borderTop: i ? "1px solid rgba(38,36,33,0.06)" : "none" }}>
-                      <div style={{ display: "grid",
-                        gridTemplateColumns: isMobile ? "1fr 64px" : "minmax(0,1fr) 70px 60px 90px",
-                        gap: 8, alignItems: "baseline", fontSize: 11.5, color: "#6b7280", marginBottom: 5 }}>
-                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                          title={it.descricao}>“{it.descricao}”</span>
-                        <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                          {quantidadeDoItem(it) > 0 ? qtdBR(quantidadeDoItem(it)) : "\u2014"}</span>
-                        {!isMobile && <span>{it.unidade || ""}</span>}
-                        {!isMobile && <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                          {brutoDoItem(it) > 0 ? valorBR(brutoDoItem(it)) : ""}</span>}
-                      </div>
-                      {/* A máquina achou, mas não carimba sozinha: dizer "parece
-                          Elétrica - Fita Isolante" e deixar o botão do lado é o
-                          meio-termo honesto. Sem isso a linha diz "fora do
-                          catálogo" enquanto o resumo conta a proposta — e a
-                          pessoa procura à mão o que já estava achado. */}
-                      {!casado && it.sugestao && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5, fontSize: 11.5 }}>
-                          <span style={{ color: "#9ca3af" }}>{it.sugestao.ia ? "a IA diz" : "parece"}</span>
+                    <div key={it.id || i} style={{ padding: "8px 0", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 5 }}>
+                        <input style={{ ...cel, flex: 1, minWidth: 0, background: "#fbfbfa" }} value={it.descricao || ""}
+                          placeholder="O que foi (aparece no contas a pagar)"
+                          onChange={(e) => mexerItem(i, { descricao: e.target.value })} />
+                        {!casado && it.sugestao && (
                           <button type="button" title={"usar “" + it.sugestao.nome + "” do catálogo"}
                             style={{ border: "1px solid rgba(4,116,244,0.35)", background: "#f7fbff", color: "#0474f4",
-                              borderRadius: 999, padding: "2px 10px", fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}
+                              borderRadius: 999, padding: "3px 10px", fontSize: 11.5, fontWeight: 600, cursor: "pointer",
+                              maxWidth: isMobile ? 150 : 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                             onClick={() => {
                               const ins = (insumos || []).find((y) => y && y.codigo === it.sugestao.codigo);
                               if (!ins) return;
                               mexerItem(i, comInsumoDaEntrada(it, ins));
                               if (aoAprender) aoAprender([{ codigo: ins.codigo, descricao: it.descricao }]);
                             }}>
-                            {it.sugestao.nome}
+                            {(it.sugestao.ia ? "a IA diz: " : "parece: ") + it.sugestao.nome}
                           </button>
+                        )}
+                      </div>
+                      <div style={{ display: "grid", gap: 6, alignItems: "end",
+                        gridTemplateColumns: isMobile ? "1fr 1fr" : COLS_ENTRADA }}>
+                        <div style={{ minWidth: 0, gridColumn: isMobile ? "1 / -1" : "auto" }}>
+                          {mini("Item do catálogo")}
+                          <EscolhaInsumoPedido x={x} parecidos={parecidos} insumos={insumos} unidades={unidades}
+                            aoEscolher={(ins) => mexerItem(i, comInsumoDaEntrada(it, ins))}
+                            aoDeixarFora={casado ? () => mexerItem(i, { insumoCodigo: "", grupoMaterial: "", sugestao: null }) : undefined}
+                            aoCadastrar={(campos) => {
+                              const novo = aoCadastrarInsumo ? aoCadastrarInsumo(campos) : null;
+                              if (novo) mexerItem(i, comInsumoDaEntrada(it, novo));
+                              return novo;
+                            }} />
                         </div>
+                        <div style={{ minWidth: 0 }}>{mini("Quantidade")}
+                          <input style={{ ...cel, textAlign: "right" }} inputMode="decimal" value={it.quantidade == null ? "" : it.quantidade}
+                            onChange={(e) => mexerQtdOuUnit(i, { quantidade: e.target.value })} placeholder="0" /></div>
+                        <div style={{ minWidth: 0 }}>{mini("Unidade")}
+                          <input style={cel} value={it.unidade || ""} onChange={(e) => mexerItem(i, { unidade: e.target.value })} placeholder="un" /></div>
+                        <div style={{ minWidth: 0 }}>{mini("Unitário")}
+                          <CampoCtrNum tipo="moeda" style={{ ...cel, textAlign: "right" }} valor={it.unitario}
+                            onChange={(v) => mexerQtdOuUnit(i, { unitario: v })} /></div>
+                        <div style={{ minWidth: 0 }}>{mini("Total")}
+                          <CampoCtrNum tipo="moeda" style={{ ...cel, textAlign: "right", fontWeight: 600 }} valor={brutoDoItem(it) || ""}
+                            onChange={(v) => mexerTotal(i, v)} /></div>
+                        <div style={{ minWidth: 0, gridColumn: isMobile ? "1 / -1" : "auto" }}>{mini("Etapa")}
+                          <SelectBusca style={cel} value={it.etapa || ""} onChange={(v) => mexerItem(i, { etapa: v })}
+                            placeholder="Procurar etapa…"
+                            opcoes={[{ valor: "", rotulo: "— etapa —" }].concat(etapasDaEntrada.map((e) => ({ valor: e.id, rotulo: e.nome })))} /></div>
+                        <div style={{ minWidth: 0, gridColumn: isMobile ? "1 / -1" : "auto" }}>{mini("Conta contábil")}
+                          <SelectBusca style={cel} value={it.contaId || ""} onChange={(v) => mexerItem(i, { contaId: v })}
+                            placeholder="Procurar conta…"
+                            opcoes={[{ valor: "", rotulo: "— conta —" }].concat(
+                              contasDeDespesa.map((c) => ({ valor: c.id, rotulo: c.nome, grupo: c.grupo || "" })))} /></div>
+                        <div style={{ textAlign: isMobile ? "left" : "center", gridColumn: isMobile ? "1 / -1" : "auto" }}>
+                          {itens.length > 1 && (
+                            <button type="button" title="Tirar este item" onClick={() => setItens((l) => (l || []).filter((_, j) => j !== i))}
+                              style={{ background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: 16,
+                                padding: isMobile ? "2px 0" : 0, fontFamily: "inherit" }}>{isMobile ? "× tirar item" : "×"}</button>
+                          )}
+                        </div>
+                      </div>
+                      {situacao && situacao !== "cotacao" && faltas.length > 0 && (
+                        <div style={{ fontSize: 11, color: "#b45309", marginTop: 4 }}>{frasesDasFaltas(faltas)}</div>
                       )}
-                      <EscolhaInsumoPedido x={x} parecidos={parecidos} insumos={insumos} unidades={unidades}
-                        aoEscolher={(ins) => mexerItem(i, comInsumoDaEntrada(it, ins))}
-                        aoDeixarFora={() => mexerItem(i, { insumoCodigo: "", grupoMaterial: "", sugestao: null })}
-                        aoCadastrar={(campos) => {
-                          const novo = aoCadastrarInsumo ? aoCadastrarInsumo(campos) : null;
-                          if (novo) mexerItem(i, comInsumoDaEntrada(it, novo));
-                          return novo;
-                        }} />
                     </div>
                   );
                 })}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 8,
+                  paddingTop: 8, borderTop: "1px solid rgba(38,36,33,0.08)" }}>
+                  <button type="button" style={{ ...E.btnSec, fontSize: 12, padding: "5px 12px", color: "#0474f4",
+                    borderColor: "rgba(4,116,244,0.35)", fontWeight: 600 }} onClick={novoItemDaEntrada}>＋ Item</button>
+                  <div style={{ marginLeft: "auto", textAlign: "right" }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
+                      Total {dinheiro(totalDaEntrada)}
+                      {descontoDoPapel > 0 ? <span style={{ fontWeight: 400, color: "#6b7280" }}> (com desconto de {dinheiro(descontoDoPapel)})</span> : null}
+                    </div>
+                    {papelTotal > 0 && Math.abs(papelTotal - totalDaEntrada) >= 0.01 && (
+                      <div style={{ fontSize: 11.5, color: "#b45309" }}>o papel diz {dinheiro(papelTotal)} — confira os itens</div>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              {reconhecido && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
-                  marginTop: 10, padding: "8px 12px", borderRadius: 12,
-                  background: "#f3f8ff", border: "1px solid rgba(4,116,244,0.22)" }}>
-                  <span style={{ fontSize: 11.5, color: "#0474f4", fontWeight: 600 }}>No que você disse</span>
-                  {reconhecido.obra && (
-                    <span style={{ fontSize: 12, color: "#111827" }}>
-                      obra <b>{reconhecido.obra.nome}</b>
-                      {reconhecido.obra.clienteNome ? <span style={{ color: "#6b7280" }}> · {reconhecido.obra.clienteNome}</span> : null}
-                    </span>
-                  )}
-                  {reconhecido.loja && (
-                    <span style={{ fontSize: 12, color: "#111827" }}>loja <b>{reconhecido.loja.nome}</b></span>
-                  )}
-                  <span style={{ fontSize: 11.5, color: "#6b7280" }}>— já preenchi abaixo; troque se não for.</span>
+              {/* A situação: é ela que decide o que o lançamento vira. */}
+              <div style={cartao}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", marginBottom: 8 }}>
+                  Situação
+                  {tipoObraEfetiva === "empreendimento" && <span style={{ fontWeight: 400, color: "#6b7280" }}> · empreendimento: entra pago, salvo se for cotação</span>}
+                  {tipoObraEfetiva === "cliente" && !situacao && <span style={{ fontWeight: 400, color: "#b45309" }}> · obra de cliente: diga se já foi pago</span>}
                 </div>
-              )}
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 8 }}>
+                  {SITUACOES_DA_ENTRADA.map((s) => {
+                    const on = situacao === s.id;
+                    const fora = papel && papel.tipo === "comprovante" && s.id !== "pago";
+                    return (
+                      <button key={s.id} type="button" disabled={fora}
+                        onClick={() => { situacaoTocada.current = true; setSituacao(s.id); setAviso(""); }}
+                        style={{ textAlign: "left", cursor: fora ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: fora ? 0.45 : 1,
+                          borderWidth: on ? 1.5 : 1, borderStyle: "solid",
+                          borderColor: on ? "#0474f4" : "rgba(38,36,33,0.16)",
+                          background: on ? "#eef5ff" : "#fff", borderRadius: 12, padding: "10px 12px" }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: on ? "#0474f4" : "#111827" }}>{s.nome}</div>
+                        <div style={{ fontSize: 11, color: "#4b5563", marginTop: 2, lineHeight: 1.35 }}>{s.resumo}</div>
+                      </button>
+                    );
+                  })}
+                </div>
 
-              {blocoObraEDestino}
-
-              {destino === "mandar" && (
-                <div style={{ marginTop: 12 }}>
-                  <label style={E.label}>Para quais lojas</label>
-                  <input style={{ ...E.input, marginBottom: 8 }} value={buscaLoja}
-                    placeholder="Achar a loja pelo nome"
-                    onChange={(e) => setBuscaLoja(e.target.value)} />
-                  <div style={{ maxHeight: 190, overflowY: "auto", border: "1px solid rgba(38,36,33,0.12)",
-                    borderRadius: 12, background: "#fff" }}>
-                    {!lojasDaLista.length ? (
-                      <div style={{ padding: "12px 14px", fontSize: 12.5, color: "#4b5563" }}>
-                        Nenhum fornecedor com esse nome. Cadastre em Prestadores de Serviços, com o telefone.
+                {situacao === "apagar" && (
+                  <>
+                    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1.4fr 0.8fr 0.8fr", gap: 10, marginTop: 12 }}>
+                      <div style={{ gridColumn: isMobile ? "1 / -1" : "auto" }}>
+                        <label style={E.label}>{Number(apagar.parcelas) > 1 ? "1º vencimento" : "Vencimento"}</label>
+                        <input type="date" style={E.input} value={apagar.vencimento || ""}
+                          onChange={(e) => setApagar((a) => ({ ...a, vencimento: e.target.value }))} />
                       </div>
-                    ) : lojasDaLista.map((f) => {
-                      const temZap = !!linkWhatsApp(f.telefone, "");
-                      return (
-                        <label key={f.id} style={{ display: "flex", alignItems: "center", gap: 10,
-                          padding: "9px 12px", borderTop: "1px solid rgba(38,36,33,0.06)",
-                          cursor: temZap ? "pointer" : "default", opacity: temZap ? 1 : 0.55 }}>
-                          <input type="checkbox" disabled={!temZap} checked={!!lojasMarcadas[f.id] && temZap}
-                            onChange={(e) => setLojasMarcadas((m) => ({ ...m, [f.id]: e.target.checked }))}
-                            style={{ cursor: temZap ? "pointer" : "not-allowed" }} />
-                          <span style={{ minWidth: 0 }}>
-                            <span style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{f.nome || "Sem nome"}</span>
-                            <span style={{ display: "block", fontSize: 11, color: temZap ? "#6b7280" : "#b45309" }}>
-                              {temZap ? f.telefone : "sem telefone no cadastro"}
-                            </span>
-                          </span>
+                      <div>
+                        <label style={E.label}>Parcelas</label>
+                        <input style={E.input} inputMode="numeric" value={apagar.parcelas}
+                          onChange={(e) => setApagar((a) => ({ ...a, parcelas: e.target.value.replace(/\D/g, "").slice(0, 2) }))} />
+                      </div>
+                      <div>
+                        <label style={E.label}>A cada (dias)</label>
+                        <input style={{ ...E.input, opacity: Number(apagar.parcelas) > 1 ? 1 : 0.5 }} inputMode="numeric"
+                          disabled={!(Number(apagar.parcelas) > 1)} value={apagar.intervalo}
+                          onChange={(e) => setApagar((a) => ({ ...a, intervalo: e.target.value.replace(/\D/g, "").slice(0, 3) }))} />
+                      </div>
+                    </div>
+                    {previaAPagar.length > 1 && (
+                      <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8, lineHeight: 1.6 }}>
+                        {previaAPagar.length} boletos: <b style={{ color: "#111827" }}>
+                          {previaAPagar.map((p) => dataDoDiaBR(p.vencimento) + " (" + dinheiro(p.valor) + ")").join(" · ")}</b>.
+                        Cada um paga sozinho no contas a pagar.
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {situacao === "pago" && (
+                  <>
+                    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 2fr", gap: 10, marginTop: 12, alignItems: "end" }}>
+                      <div>
+                        <label style={E.label}>Data do pagamento</label>
+                        <input type="date" style={E.input} value={pagamento.data || ""}
+                          onChange={(e) => setPagamento((p) => ({ ...p, data: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label style={E.label}>Como foi pago</label>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {[["avista", "À vista / transferência"], ["cartao", "Cartão de crédito"]].map(([k, r]) => {
+                            const on = (pagamento.forma || "avista") === k;
+                            return (
+                              <button key={k} type="button"
+                                onClick={() => setPagamento((p) => ({ ...p, forma: k,
+                                  cartaoId: k === "cartao" ? (p.cartaoId || ((cartoes || [])[0] || {}).id || "") : "",
+                                  parcelas: p.parcelas || 1 }))}
+                                style={{ ...E.btnSec, fontSize: 12.5, borderColor: on ? "#0474f4" : "rgba(38,36,33,0.16)",
+                                  fontWeight: on ? 700 : 500, color: on ? "#111827" : "#4b5563" }}>
+                                {r}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                    {pagamento.forma === "cartao" && (
+                      !(cartoes || []).length ? (
+                        <div style={{ fontSize: 11.5, color: "#b45309", marginTop: 8 }}>
+                          Nenhum cartão cadastrado. Cadastre em Escritório → Cartões.
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: 10, marginTop: 10 }}>
+                            <div>
+                              <label style={E.label}>Cartão</label>
+                              <SelectBusca style={E.input} value={pagamento.cartaoId || ""}
+                                onChange={(v) => setPagamento((p) => ({ ...p, cartaoId: v }))}
+                                opcoes={(cartoes || []).map((c) => ({ valor: c.id, rotulo: c.nome }))} />
+                            </div>
+                            <div>
+                              <label style={E.label}>Parcelas</label>
+                              <input style={E.input} inputMode="numeric" value={pagamento.parcelas || 1}
+                                onChange={(e) => setPagamento((p) => ({ ...p, parcelas: e.target.value.replace(/\D/g, "").slice(0, 2) }))} />
+                            </div>
+                          </div>
+                          {previaCartao.length > 0 && (
+                            <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8, lineHeight: 1.6 }}>
+                              Cai {previaCartao.length === 1 ? "na fatura de " : "nas faturas de "}
+                              <b style={{ color: "#111827" }}>
+                                {previaCartao.map((p) => (typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso(p.competencia) : p.competencia) + " (" + dinheiro(p.valor) + ")").join(" · ")}
+                              </b>. O custo da obra é integral nesta data; o escritório recebe a fatura quando você fechar.
+                            </div>
+                          )}
+                        </>
+                      )
+                    )}
+                    {parcelasDoFavorecido.length > 0 && (
+                      <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 12,
+                        border: "1px solid rgba(245,158,11,0.45)", background: "#fffbeb" }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: "#92400e", marginBottom: 2 }}>
+                          {parcelasDoFavorecido.length === 1
+                            ? "Esse fornecedor tem 1 parcela de contrato em aberto nesta obra"
+                            : `Esse fornecedor tem ${parcelasDoFavorecido.length} parcelas de contrato em aberto nesta obra`}
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "#78350f", marginBottom: 8 }}>
+                          Se este pagamento é de uma delas, aponte qual: a parcela é baixada, e o contrato anda.
+                        </div>
+                        <label style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", cursor: "pointer" }}>
+                          <input type="radio" name="parcela-entrada" checked={!parcelaId} onChange={() => setParcelaId("")} />
+                          <span style={{ fontSize: 12.5, color: "#111827" }}>Lançamento novo, fora de contrato</span>
                         </label>
-                      );
-                    })}
+                        {parcelasDoFavorecido.map((c) => (
+                          <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 8,
+                            padding: "6px 0", borderTop: "1px solid rgba(146,64,14,0.12)", cursor: "pointer" }}>
+                            <input type="radio" name="parcela-entrada" checked={parcelaId === c.id} onChange={() => setParcelaId(c.id)} />
+                            <span style={{ fontSize: 12.5, color: "#111827", minWidth: 0 }}>
+                              {(c.descricao || c.servico || "Parcela")}
+                              {c.parcela && !/parcela/i.test(c.descricao || "") ? ` · parcela ${c.parcela}` : ""}
+                              {" · vence "}{dataDoDiaBR(c.vencimento)}{" · "}{dinheiro(numeroDeCampo(c.valor))}
+                              {parcelaSugerida && parcelaSugerida.id === c.id && !parcelaId ? " — mesmo valor" : ""}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {situacao === "cotacao" && (
+                  <div style={{ marginTop: 12 }}>
+                    {blocoLojas}
+                    {aoSeguir && (
+                      <button type="button" onClick={() => { const r = aoSeguir({ destino: "cotacao", obraId, itens, papel }); if (r && r.erro) setAviso(r.erro); }}
+                        style={{ background: "none", border: "none", padding: 0, marginTop: 8, color: "#0474f4", cursor: "pointer",
+                          fontSize: 11.5, fontFamily: "inherit", textDecoration: "underline" }}>
+                        Prefere a cotação formal (propostas lado a lado)? Abrir assim
+                      </button>
+                    )}
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
-                    <button type="button" onClick={() => abrirCadastroDeLoja(buscaLoja)}
-                      style={{ ...E.btnSec, fontSize: 11.5, padding: "5px 12px", color: "#0474f4",
-                        borderColor: "rgba(4,116,244,0.35)", fontWeight: 600 }}>
-                      ＋ Cadastrar loja
-                    </button>
-                    <span style={{ fontSize: 11.5, color: "#6b7280" }}>
-                      Cada conversa abre com a lista já escrita — quem aperta enviar é você, lá no WhatsApp.
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {blocoCadastroRapido}
-
-
+                )}
+              </div>
 
               {enviado && (
-                <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 12,
+                <div style={{ marginTop: 4, marginBottom: 10, padding: "10px 12px", borderRadius: 12,
                   background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
                   <div style={{ fontSize: 12.5, color: "#15803d", fontWeight: 600 }}>
                     {fila ? `Conversa ${fila.i} de ${enviado.quantas} aberta.`
@@ -33265,22 +33525,16 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                     que a loja responder vai entrar.
                   </div>
                   {fila && (
-                    <button type="button" onClick={abrirProxima}
-                      style={{ ...E.btnSec, fontSize: 12, marginTop: 8 }}>
+                    <button type="button" onClick={abrirProxima} style={{ ...E.btnSec, fontSize: 12, marginTop: 8 }}>
                       Abrir a próxima — {fila.lojas[fila.i] ? fila.lojas[fila.i].nome : ""}
                     </button>
                   )}
                 </div>
               )}
 
-              {entradaPedeLoja(destino) && (
-                <div style={{ marginTop: 12 }}>
-                  <label style={E.label}>De qual loja</label>
-                  <SelectBusca style={E.input} value={lojaId} onChange={(v) => setLojaId(v)}
-                    placeholder="Procurar loja…" criarRotulo="loja"
-                    aoCriar={aoCriarLoja ? abrirCadastroDeLoja : undefined}
-                    opcoes={[{ valor: "", rotulo: "— escolha a loja —" }].concat(
-                      lojas.map((f) => ({ valor: f.id, rotulo: f.nome, extra: f.categoria || "" })))} />
+              {arquivo && situacao !== "cotacao" && (
+                <div style={{ fontSize: 11.5, color: "#4b5563" }}>
+                  {"\u{1F4CE}"} {arquivo.name} — fica anexado ao lançamento, como {rotuloDoAnexoDaEntrada(papel)}; abre pela linha da conta.
                 </div>
               )}
             </>
@@ -33292,39 +33546,37 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
         {/* O botão desabilitado sem dizer por quê é uma porta trancada sem
             placa. Com a regra da transação há mais o que faltar, e o que
             falta tem que estar escrito ao lado de quem vai clicar. */}
-        {despesa && !prova.ok && prova.motivo && (
+        {itens && situacao !== "cotacao" && !prova.ok && prova.motivo && (
           <div style={{ fontSize: 12, color: "#b45309", marginTop: 12, textAlign: "right" }}>{prova.motivo}</div>
         )}
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14, flexWrap: "wrap" }}>
           {!embutido && <button type="button" style={E.btnSec} onClick={aoFechar}>Fechar</button>}
-          {(itens || despesa) && (
+          {itens && (
             <button type="button" style={E.btnSec}
-              onClick={() => { setItens(null); setDespesa(null); setDestino(""); setObraId(""); setAviso(""); setReconhecido(null); }}>Ler de novo</button>
+              onClick={() => { situacaoTocada.current = false; setSituacao(""); setParcelaId("");
+                setItens(null); setDespesa(null); setPapel(null); setDestino(""); setObraId(""); setAviso(""); setReconhecido(null); }}>Ler de novo</button>
           )}
-          {embutido && !itens && !despesa && String(texto).trim() !== "" && (
+          {embutido && !itens && String(texto).trim() !== "" && (
             <button type="button" style={E.btnSec} onClick={limpar}>Limpar</button>
           )}
-          {/* Ler é a seta azul do composer, uma ação só e no lugar onde a mão
-              já está. O rodapé só aparece quando há o que seguir. */}
-          {itens && destino === "mandar" ? (
+          {itens && situacao === "cotacao" ? (
             <button type="button" onClick={seguir}
               style={{ ...E.btn, opacity: marcadasIds.length ? 1 : 0.45,
                 cursor: marcadasIds.length ? "pointer" : "not-allowed" }}
               disabled={!marcadasIds.length}>
-              {enviado ? "Mandar de novo" : marcadasIds.length > 1 ? `Enviar para ${marcadasIds.length}` : "Enviar"}
+              {enviado ? "Mandar de novo" : marcadasIds.length > 1 ? `Enviar para ${marcadasIds.length} lojas` : "Enviar para a loja"}
             </button>
-          ) : despesa ? (
+          ) : itens ? (
             <button type="button" onClick={seguir}
               style={{ ...E.btn, opacity: prova.ok && !enviandoComprov ? 1 : 0.45,
                 cursor: prova.ok && !enviandoComprov ? "pointer" : "not-allowed" }}
               disabled={!prova.ok || enviandoComprov}>
-              {enviandoComprov ? "Anexando o comprovante…"
-                : despesa.parcelaId ? "Baixar a parcela" : "Lançar a despesa"}
+              {enviandoComprov ? "Anexando o papel…"
+                : situacao === "pago" && parcelaId ? "Baixar a parcela"
+                : situacao === "pago" ? `Lançar pago · ${dinheiro(totalDaEntrada)}`
+                : situacao === "apagar" ? `Lançar a pagar · ${dinheiro(totalDaEntrada)}`
+                : "Lançar"}
             </button>
-          ) : itens ? (
-            <button type="button" onClick={seguir}
-              style={{ ...E.btn, opacity: prova.ok ? 1 : 0.45, cursor: prova.ok ? "pointer" : "not-allowed" }}
-              disabled={!prova.ok}>Seguir</button>
           ) : null}
         </div>
       </div>
@@ -39775,6 +40027,31 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   //
   // Nos dois casos a escrita passa por `gravarContas`, e por isso o preço do
   // catálogo e o extrato do escritório ficam sabendo sem ninguém avisar.
+  // A tela única da Entrada: itens com catálogo, etapa e conta, a pagar
+  // (um boleto ou várias parcelas) ou pago (à vista ou no cartão). Vira
+  // contas na obra numa gravação só, pelo `gravarContas` — e por isso a
+  // ponte para o escritório, o preço do catálogo e o aviso da baixa vêm
+  // junto, sem ninguém chamar.
+  function lancarEntradaDaObra(l, anexo) {
+    if (!obraAtual) return { erro: "Obra não encontrada." };
+    if (!perm.podeGerenciarObra) return { erro: "Sem permissão para lançar nesta obra." };
+    const contas = obraAtual.contasPagar || [];
+    const nota = String((l || {}).numeroNota || "").trim();
+    if (nota && (l || {}).prestadorId && contas.some(c => c && c.numeroNota === nota && c.prestadorId === l.prestadorId)) {
+      return { erro: `A nota nº ${nota} desse fornecedor já está lançada nesta obra.` };
+    }
+    const pg = (l || {}).pagamento || {};
+    const cartao = l.situacao === "pago" && pg.forma === "cartao"
+      ? cartaoPorId(cartoesDoEscritorio(data), pg.cartaoId) : null;
+    if (l.situacao === "pago" && pg.forma === "cartao" && !cartao) return { erro: "Escolha o cartão." };
+    const numeroDoc = typeof proximaReferencia === "function" ? proximaReferencia(obras, lancamentosDoEscritorio(data)) : "";
+    const novas = contasDaEntrada(l, { obraId: obraAtual.id, numeroDoc, quem: quemSou(), novoId: uid,
+      anexo, cartao, planoDoCartao: pagamentoNoCartao });
+    if (!novas.length) return { erro: "Nenhum item com valor." };
+    gravarContas([...contas, ...novas], obraAtual.id);
+    return { gravado: true, quantas: novas.length };
+  }
+
   function lancarDespesaDaEntrada(d) {
     if (!obraAtual) return { erro: "Obra não encontrada." };
     if (!perm.podeGerenciarObra) return { erro: "Sem permissão para lançar nesta obra." };
@@ -40001,6 +40278,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         onGerarContrato={abrirContratoDaCotacao}
         onLancarContas={lancarCotacaoEmContas}
         onLancarDespesa={lancarDespesaDaEntrada}
+        onLancarEntrada={lancarEntradaDaObra}
         onDesfazerLancamento={desfazerLancamentoDaCotacao}
         onRecalibrarPedido={recalibrarPedidoDaCotacao} onExcluirPedido={excluirPedidoDaLoja}
       />

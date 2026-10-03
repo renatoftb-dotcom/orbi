@@ -5371,6 +5371,31 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   //
   // Nos dois casos a escrita passa por `gravarContas`, e por isso o preço do
   // catálogo e o extrato do escritório ficam sabendo sem ninguém avisar.
+  // A tela única da Entrada: itens com catálogo, etapa e conta, a pagar
+  // (um boleto ou várias parcelas) ou pago (à vista ou no cartão). Vira
+  // contas na obra numa gravação só, pelo `gravarContas` — e por isso a
+  // ponte para o escritório, o preço do catálogo e o aviso da baixa vêm
+  // junto, sem ninguém chamar.
+  function lancarEntradaDaObra(l, anexo) {
+    if (!obraAtual) return { erro: "Obra não encontrada." };
+    if (!perm.podeGerenciarObra) return { erro: "Sem permissão para lançar nesta obra." };
+    const contas = obraAtual.contasPagar || [];
+    const nota = String((l || {}).numeroNota || "").trim();
+    if (nota && (l || {}).prestadorId && contas.some(c => c && c.numeroNota === nota && c.prestadorId === l.prestadorId)) {
+      return { erro: `A nota nº ${nota} desse fornecedor já está lançada nesta obra.` };
+    }
+    const pg = (l || {}).pagamento || {};
+    const cartao = l.situacao === "pago" && pg.forma === "cartao"
+      ? cartaoPorId(cartoesDoEscritorio(data), pg.cartaoId) : null;
+    if (l.situacao === "pago" && pg.forma === "cartao" && !cartao) return { erro: "Escolha o cartão." };
+    const numeroDoc = typeof proximaReferencia === "function" ? proximaReferencia(obras, lancamentosDoEscritorio(data)) : "";
+    const novas = contasDaEntrada(l, { obraId: obraAtual.id, numeroDoc, quem: quemSou(), novoId: uid,
+      anexo, cartao, planoDoCartao: pagamentoNoCartao });
+    if (!novas.length) return { erro: "Nenhum item com valor." };
+    gravarContas([...contas, ...novas], obraAtual.id);
+    return { gravado: true, quantas: novas.length };
+  }
+
   function lancarDespesaDaEntrada(d) {
     if (!obraAtual) return { erro: "Obra não encontrada." };
     if (!perm.podeGerenciarObra) return { erro: "Sem permissão para lançar nesta obra." };
@@ -5597,6 +5622,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         onGerarContrato={abrirContratoDaCotacao}
         onLancarContas={lancarCotacaoEmContas}
         onLancarDespesa={lancarDespesaDaEntrada}
+        onLancarEntrada={lancarEntradaDaObra}
         onDesfazerLancamento={desfazerLancamentoDaCotacao}
         onRecalibrarPedido={recalibrarPedidoDaCotacao} onExcluirPedido={excluirPedidoDaLoja}
       />

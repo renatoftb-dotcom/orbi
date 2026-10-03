@@ -90,7 +90,8 @@ const modulo = new Function(`
            medicaoDaCotacao, totalDaMedicao, validarMedicao, completarItemDaConta,
            ehNotaDeServico, valorDaNotaDeServico, emissaoDaNotaDeServico,
            prestadorDaNotaDeServico, discriminacaoDaNotaDeServico, dadosDaNotaDeServico,
-           numeroDaNotaDeServico };
+           numeroDaNotaDeServico, entradaUnicaPronta, situacaoPadraoDaEntrada, previaDosBoletos,
+           comContaPadraoDaEntrada, tipoDoAnexoDaEntrada, SITUACOES_DA_ENTRADA };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -3180,9 +3181,53 @@ teste("a mensagem rápida e a da cotação dizem a mesma coisa", () => {
 });
 
 
+// ── A tela única da Entrada ─────────────────────────────────────
+const IT = (x) => ({ descricao: "Veda concreto", insumoCodigo: "VED-1", quantidade: "1", unidade: "BD", bruto: 428,
+  etapa: "fundacao", contaId: "material", ...x });
+
+teste("situação de partida: empreendimento entra pago; cliente pergunta; comprovante é pago", () => {
+  assert.strictEqual(M.situacaoPadraoDaEntrada({ tipo: "nota" }, "empreendimento"), "pago");
+  assert.strictEqual(M.situacaoPadraoDaEntrada({ tipo: "nota" }, "cliente"), "");
+  assert.strictEqual(M.situacaoPadraoDaEntrada({ tipo: "comprovante" }, "cliente"), "pago");
+  assert.deepStrictEqual(M.SITUACOES_DA_ENTRADA.map((s) => s.id), ["cotacao", "apagar", "pago"]);
+});
+
+teste("tela única: diz o primeiro que falta, na ordem de quem preenche", () => {
+  const base = { situacao: "pago", prestadorId: "f1", itens: [IT()], pagamento: { data: "2026-09-02", forma: "avista" } };
+  assert.deepStrictEqual(M.entradaUnicaPronta(base, [], ""), { ok: true, motivo: "" });
+  assert.match(M.entradaUnicaPronta({ ...base, situacao: "" }, [], "").motivo, /situação/);
+  assert.match(M.entradaUnicaPronta({ ...base, prestadorId: "" }, [], "").motivo, /fornecedor/);
+  assert.match(M.entradaUnicaPronta({ ...base, pagamento: { data: "2026-09-02", forma: "cartao" } }, [], "").motivo, /cartão/);
+  assert.match(M.entradaUnicaPronta({ ...base, itens: [IT(), IT({ etapa: "", descricao: "Cimento" })] }, [], "").motivo,
+    /Item 2 \(Cimento\): Falta a etapa/);
+  assert.match(M.entradaUnicaPronta({ ...base, itens: [IT({ insumoCodigo: "" })] }, [], "").motivo, /item do catálogo/);
+  assert.match(M.entradaUnicaPronta(base, [{ id: "o1" }], "").motivo, /obra/);
+  assert.ok(M.entradaUnicaPronta({ ...base, situacao: "apagar", apagar: { vencimento: "2026-10-10", parcelas: "3" } }, [], "").ok);
+  assert.match(M.entradaUnicaPronta({ ...base, situacao: "apagar", apagar: { vencimento: "", parcelas: "3" } }, [], "").motivo, /1º vencimento/);
+  assert.ok(M.entradaUnicaPronta({ situacao: "cotacao", itens: [{ descricao: "cimento", quantidade: 30 }] }, [], "").ok,
+    "cotação não pede fornecedor nem preço");
+  assert.ok(M.entradaUnicaPronta({ ...base, parcelaId: "p1", itens: [IT({ contaId: "", etapa: "" })] }, [], "").ok,
+    "baixando parcela de contrato, conta e etapa vêm da parcela");
+});
+
+teste("prévia dos boletos: 1º vencimento e os outros a cada N dias, sem perder centavo", () => {
+  const p = M.previaDosBoletos(1000, { vencimento: "2026-10-10", parcelas: 3, intervalo: 30 });
+  assert.deepStrictEqual(p.map((x) => x.vencimento), ["2026-10-10", "2026-11-09", "2026-12-09"]);
+  assert.strictEqual(Math.round(p.reduce((s, x) => s + x.valor, 0) * 100) / 100, 1000);
+  assert.deepStrictEqual(M.previaDosBoletos(1000, { vencimento: "" }), []);
+});
+
+teste("papel lido vira anexo com o nome certo; itens de nota começam em Material", () => {
+  assert.strictEqual(M.tipoDoAnexoDaEntrada({ tipo: "comprovante" }), "comprovante");
+  assert.strictEqual(M.tipoDoAnexoDaEntrada({ tipo: "nota", ehNota: true }), "nota");
+  assert.strictEqual(M.tipoDoAnexoDaEntrada({ tipo: "nfse" }), "nota");
+  assert.strictEqual(M.tipoDoAnexoDaEntrada({ tipo: "pedido" }), "pedido");
+  assert.deepStrictEqual(M.comContaPadraoDaEntrada([{ contaId: "" }, { contaId: "frete" }], "material").map((x) => x.contaId), ["material", "frete"]);
+});
+
 // ── DANFE com o nome do produto ABAIXO da linha dos números (FlexDev) ──
 const DANFE_NOME_ABAIXO = [
-  ["NF-e"], ["DANFE"], ["Documento Auxiliar da"], ["N.º 000.000.163-FL"],
+  ["NF-e"], ["RECEBEMOS DE"], ["CONSTRU", "FACIL ACABAMENTO LTDA", "OS PRODUTOS CONSTANTES DA NOTA FISCAL INDICADA AO LADO"], ["DANFE"], ["Documento Auxiliar da"], ["N.º 000.000.163-FL"],
   ["DADOS DOS PRODUTOS / SERVIÇOS"],
   ["CÓDIGO", "DESCRIÇÃO DOS PRODUTOS", "NCM", "CSOSN", "CFOP", "UN", "QUANTID.", "V. UNITÁRIO", "VALOR TOTAL", "BASE ICMS", "% ICMS", "% IPI"],
   ["00109-1", "38244000", "0102", "5102 BD", "1", "428,00", "428,00", "0,00", "0,00", "0"],
@@ -3203,6 +3248,13 @@ teste("DANFE com o nome embaixo dos números: cada item leva o seu nome", () => 
   assert.strictEqual(r.itens[1].total, 385);
   assert.strictEqual(r.ehNota, true);
   assert.strictEqual(r.numeroNota, "163");
+  assert.strictEqual(r.fornecedor, "CONSTRU FACIL ACABAMENTO LTDA", "o emitente vem do canhoto");
+});
+
+teste("emitente da nota casa com o cadastro mesmo escrito separado e com LTDA", () => {
+  const cad = [{ id: "cf", nome: "Construfácil Acabamento" }, { id: "o", nome: "OURIFER" }];
+  assert.strictEqual((M.prestadorDoComprovante(cad, "CONSTRU FACIL ACABAMENTO LTDA") || {}).id, "cf");
+  assert.strictEqual(M.prestadorDoComprovante(cad, "LOJA QUALQUER LTDA"), null);
 });
 
 teste("DANFE com o nome em cima continua lendo igual", () => {

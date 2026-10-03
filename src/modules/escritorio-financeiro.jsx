@@ -2018,6 +2018,7 @@ function rotuloDoAnexo(a, i) {
   if (tipo === "nota") return "Nota fiscal";
   if (tipo === "comprovante") return "Comprovante";
   if (tipo === "boleto") return "Boleto";
+  if (tipo === "pedido") return "Pedido";
   return i === 0 ? "Comprovante" : "Anexo";
 }
 

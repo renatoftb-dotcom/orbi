@@ -838,6 +838,79 @@ function contasDoPedidoDaLoja(dados, pedido, novoId) {
   }));
 }
 
+// ── A Entrada vira contas a pagar ───────────────────────
+// Uma tela só para qualquer papel: itens (cada um com item do catálogo,
+// etapa e conta), fornecedor, e a situação — A PAGAR (com 1º vencimento,
+// parcelas e intervalo) ou PAGO (data e jeito de pagar). Uma conta POR ITEM
+// e POR PARCELA, como no pedido da loja: é o que faz o custo por etapa, o
+// P&L por insumo e a baixa de cada boleto funcionarem.
+//
+// Cada parcela é um pedido próprio (pagar o 1º boleto não paga o 2º), mas a
+// transação é uma só: todas as contas levam o MESMO número de referência e
+// a mesma nota. A quantidade se divide entre as parcelas na proporção do
+// valor — somadas, dão a quantidade da nota, e o preço unitário não muda.
+//
+// `op`: { obraId, numeroDoc, quem, agora, novoId, anexo,
+//         cartao, planoDoCartao(conta, cartao, dados) }
+function contasDaEntrada(lanc, op) {
+  const l = lanc || {}, o = op || {};
+  const red = (x) => Math.round(x * 100) / 100;
+  const id = typeof o.novoId === "function" ? o.novoId : (typeof uid === "function" ? uid : () => String(Date.now()) + Math.random());
+  const agora = o.agora || new Date().toISOString();
+  const pago = l.situacao === "pago";
+  const itens = (l.itens || []).map((i) => {
+    const q = cpNumero(i.quantidade), u = cpNumero(i.unitario), t = cpNumero(i.total);
+    return { ...i, _valor: red(t > 0 ? t : q * u), _q: q };
+  }).filter((i) => i._valor > 0);
+  if (!itens.length) return [];
+  const pg = l.pagamento || {}, ap = l.apagar || {};
+  const n = pago ? 1 : Math.max(1, Math.floor(Number(ap.parcelas) || 1));
+  const intervalo = Math.max(1, Math.floor(Number(ap.intervalo) || 30));
+  const primeiro = String((pago ? pg.data : ap.vencimento) || "").slice(0, 10) || dataParaIso(new Date());
+  const anexos = o.anexo ? [o.anexo] : [];
+  const fora = [];
+  const qUsada = itens.map(() => 0);
+  for (let p = 0; p < n; p++) {
+    const pedidoId = id();
+    const venc = p === 0 ? primeiro : somarDias(primeiro, p * intervalo);
+    for (let k = 0; k < itens.length; k++) {
+      const it = itens[k];
+      const base = red(it._valor / n);
+      const valor = p === n - 1 ? red(it._valor - base * (n - 1)) : base;
+      // A última parcela leva o que sobrou da quantidade, como leva o centavo.
+      let q = 0;
+      if (it._q > 0) {
+        q = n === 1 ? it._q : (p === n - 1 ? Math.round((it._q - qUsada[k]) * 1000) / 1000
+          : Math.round((it._q * valor / it._valor) * 1000) / 1000);
+        qUsada[k] = Math.round((qUsada[k] + q) * 1000) / 1000;
+      }
+      let c = {
+        id: id(), origem: "avulsa", obraId: o.obraId || l.obraId || "", contratoId: "", cotacaoId: "",
+        pedidoId, numeroNota: String(l.numeroNota || "").trim(), numeroDoc: o.numeroDoc || "",
+        parcela: n > 1 ? p + 1 : 0, parcelasTotal: n > 1 ? n : 0,
+        contaId: it.contaId || "", etapa: it.etapa || "", grupoMaterial: it.grupoMaterial || "",
+        insumoCodigo: it.insumoCodigo || "",
+        prestadorId: l.prestadorId || "", favorecido: l.favorecido || "",
+        descricao: (String(it.descricao || "").trim() || "Item") + (n > 1 ? ` (parcela ${p + 1}/${n})` : ""),
+        quantidade: q, unidade: String(it.unidade || "").trim(),
+        valor, vencimento: venc,
+        pago: false, pagoEm: "", valorPago: "", observacao: String(l.observacao || "").trim(),
+      };
+      c = registrarAto(c, "criada", o.quem || "", agora);
+      if (pago) {
+        c = contaPaga(c, { pagoEm: primeiro, valorPago: valor, comprovante: o.anexo || null }, o.quem || "", agora);
+        const plano = pg.forma === "cartao" && o.cartao && typeof o.planoDoCartao === "function"
+          ? o.planoDoCartao(c, o.cartao, { pagoEm: primeiro, valorPago: valor, parcelas: pg.parcelas }) : null;
+        c = plano ? { ...c, ...plano } : { ...c, formaPagamento: "avista" };
+      } else if (anexos.length) {
+        c = { ...c, anexos };
+      }
+      fora.push(c);
+    }
+  }
+  return fora;
+}
+
 // A conta contábil é quase sempre a mesma no pedido inteiro ("Material").
 // Repetida em cada item ela vira ruído e empurra para fora da linha o que
 // muda de item para item — quantidade, unidade e preço. No cabeçalho ela
