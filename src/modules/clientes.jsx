@@ -2495,10 +2495,18 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // `contratos` é a lista completa do cliente (obras + coleção antiga) —
     // com uma lista parcial a faxina apagaria parcela boa
     const semOrfas = removerOrfasDeContrato(alvo.contasPagar || [], contratos);
-    const novas = contratosDaObra.length ? sincronizarContasDaObra(semOrfas, contratosDaObra) : semOrfas;
-    // a assinatura não olha o número do pedido, então a numeração precisa
-    // dizer por si mesma que houve mudança
-    if (!numerada && assinaturaContas(novas) === assinaturaContas(contasDaObra)) return;
+    const sincronizadas = contratosDaObra.length ? sincronizarContasDaObra(semOrfas, contratosDaObra) : semOrfas;
+    // Toda transação tem que ter um número de referência — é por ele que a
+    // nota e o comprovante se amarram a ela. A parcela de contrato nasce da
+    // regra, não de um lançamento, então é aqui que ela entra na fila; uma
+    // vez numerada, a ressincronização preserva o número.
+    const faltavaNumero = sincronizadas.some(c => c && !c.numeroDoc);
+    const novas = faltavaNumero
+      ? numerarContas(sincronizadas, obras, lancamentosDoEscritorio(data))
+      : sincronizadas;
+    // a assinatura não olha o número do pedido nem o de documento, então a
+    // numeração precisa dizer por si mesma que houve mudança
+    if (!numerada && !faltavaNumero && assinaturaContas(novas) === assinaturaContas(contasDaObra)) return;
     gravarObras(obras.map(o => o.id === obraAtual.id ? { ...alvo, contasPagar: novas } : o));
   }, [view, obraAtual && obraAtual.id, assinaturaContas(contasDaObra), pedidosSemNumero,
       JSON.stringify((obraAtual && obraAtual.contratos) || []), contratos.map(c => c.id).join("|")]);

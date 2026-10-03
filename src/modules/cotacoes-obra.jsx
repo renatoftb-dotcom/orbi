@@ -2477,11 +2477,15 @@ function podeApagarContaDeLoja(cot, contasPagar) {
 // à fatura dela: no dia 28 a loja cobra UM valor, com os pedidos todos dentro.
 // Então a escolha vira mais um pedido na conta, e a cotação fecha apontando
 // para ele.
-// A etapa de um item do pedido, na ordem em que a informação é confiável:
-// o insumo que só serve a uma etapa manda; depois a etapa da cotação; e,
-// sem nenhuma das duas, fica em branco para quem está comprando dizer.
+// A etapa de um item do pedido, na ordem em que a informação e confiavel:
+// quem cotou para uma etapa determinada ja disse para que a compra e, e
+// isso vale mais que o palpite do catalogo — concreto cotado para a laje e
+// da laje, por mais que o catalogo chame concreto de fundacao. Sem escolha
+// na compra, o padrao do insumo preenche; sem nenhum dos dois, fica em
+// branco para quem compra dizer. Em qualquer caso a etapa continua
+// editavel, item a item, na tela do pedido e na conta a pagar.
 function etapaDoItem(insumo, etapaDaCompra) {
-  return (insumo && insumo.etapaPadrao) || etapaDaCompra || "";
+  return etapaDaCompra || (insumo && insumo.etapaPadrao) || "";
 }
 function contaDoItem(insumo, contaDaCompra) {
   return (insumo && insumo.contaPadrao) || contaDaCompra || "";

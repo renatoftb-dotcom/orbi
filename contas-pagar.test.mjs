@@ -2255,5 +2255,39 @@ teste("valor digitado com virgula nao vira mudanca falsa", () => {
   assert.strictEqual(modulo.detalheDaEdicaoDaConta(a, { ...a, valor: "3.780,04" }), "");
 });
 
+// ── O numero de documento da parcela de contrato ───────────────
+teste("a parcela de contrato nao perde o numero de documento na ressincronia", () => {
+  const ct = { id: "k1", obraId: "o1", nomeContratado: "ADRIANO", tipoProfissional: "empreiteiro",
+    valor: 10000, modalidade: "parcelado", parcelas: 2, periodicidade: "mensal", dataInicio: "2026-10-05" };
+  const base = modulo.contasDoContrato(ct);
+  assert.ok(base.length >= 2);
+  // a tela numera uma vez
+  const numeradas = modulo.numerarContas(base, [{ id: "o1", contasPagar: [] }], []);
+  const n1 = numeradas[0].numeroDoc;
+  assert.ok(n1, "a parcela tem que sair daqui com numero");
+  // e a regra do contrato roda de novo, como a cada abertura da tela
+  const depois = modulo.sincronizarContasDoContrato(numeradas, ct);
+  const mesma = depois.find(c => c.id === numeradas[0].id);
+  assert.strictEqual(mesma.numeroDoc, n1, "o numero nao pode mudar a cada abertura da tela");
+});
+
+teste("ja numerada, a lista nao consome numero novo", () => {
+  const ct = { id: "k1", obraId: "o1", nomeContratado: "ADRIANO", tipoProfissional: "empreiteiro",
+    valor: 10000, modalidade: "parcelado", parcelas: 2, periodicidade: "mensal", dataInicio: "2026-10-05" };
+  const numeradas = modulo.numerarContas(modulo.contasDoContrato(ct), [{ id: "o1", contasPagar: [] }], []);
+  const dedup = modulo.sincronizarContasDoContrato(numeradas, ct)
+    .filter(c => c.origem === "contrato").map(c => c.numeroDoc);
+  assert.strictEqual(new Set(dedup).size, dedup.length, "dois numeros iguais quebrariam a prestacao de contas");
+});
+
+teste("parcela paga tambem guarda o numero", () => {
+  const ct = { id: "k1", obraId: "o1", nomeContratado: "ADRIANO", tipoProfissional: "empreiteiro",
+    valor: 10000, modalidade: "parcelado", parcelas: 2, periodicidade: "mensal", dataInicio: "2026-10-05" };
+  const numeradas = modulo.numerarContas(modulo.contasDoContrato(ct), [{ id: "o1", contasPagar: [] }], []);
+  const paga = numeradas.map((c, i) => i === 0 ? { ...c, pago: true, pagoEm: "2026-10-05", valorPago: c.valor } : c);
+  const depois = modulo.sincronizarContasDoContrato(paga, ct);
+  assert.strictEqual(depois.find(c => c.id === paga[0].id).numeroDoc, numeradas[0].numeroDoc);
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

@@ -9300,6 +9300,73 @@ function ponteCompetencia(iso) {
   return /^\d{4}-\d{2}$/.test(d) ? d : "";
 }
 
+// ── Uma nota, uma linha no extrato ──────────────────────────────
+// A conta a pagar é por item — é o que faz o custo por etapa funcionar. Mas
+// o banco não debita item: debita a nota. Uma compra de onze itens virava
+// onze linhas no extrato do escritório contra UM débito no extrato do
+// banco, e conferir um contra o outro deixava de ser possível.
+//
+// Então o que atravessa é o pedido, com o valor total dos itens. O corte é
+// por pedido + conta contábil + data de pagamento: um pedido que mistura
+// contas do plano não cabe numa linha só (o destino no escritório é outro),
+// e itens baixados em datas diferentes são débitos diferentes no banco.
+function fontesDasContasPagas(contas) {
+  const pagas = (contas || []).filter((c) => c && c.pago);
+  const soltas = [], grupos = [], porChave = {};
+  const num = (v) => Math.round((Number(v) || 0) * 100) / 100;
+  const valorDe = (c) => num(Number(c.valorPago) || Number(c.valor) || 0);
+  const dataDe = (c) => String(c.pagoEm || c.vencimento || "").slice(0, 10);
+  const fonteDaConta = (c) => ({
+    tipo: "conta", refId: c.id, contaId: c.contaId || "",
+    valor: valorDe(c), data: dataDe(c),
+    descricao: c.descricao || "",
+    fornecedor: c.favorecido || "", fornecedorId: c.prestadorId || "",
+    documento: c.numeroNota || c.numeroLoja || "",
+    numeroDoc: c.numeroDoc || "",
+    anexos: anexosDaTransacao(c),
+  });
+  for (const c of pagas) {
+    if (!c.pedidoId) { soltas.push(fonteDaConta(c)); continue; }
+    const chave = c.pedidoId + "|" + (c.contaId || "") + "|" + dataDe(c);
+    if (!porChave[chave]) {
+      porChave[chave] = { chave, itens: [], contas: [] };
+      grupos.push(porChave[chave]);
+    }
+    porChave[chave].itens.push(c);
+  }
+  const doGrupo = (g) => {
+    const itens = g.itens;
+    // um item só não é grupo: continua sendo a própria conta, com o id de
+    // ponte que ela sempre teve
+    if (itens.length === 1) return fonteDaConta(itens[0]);
+    const p = itens[0];
+    const rotulo = p.numeroLoja || p.numeroNota || p.numeroPedido || "";
+    const anexos = [], vistos = {};
+    for (const c of itens) {
+      for (const a of anexosDaTransacao(c) || []) {
+        const k = (a && (a.id || a.url || a.nome)) || Math.random();
+        if (vistos[k]) continue; vistos[k] = 1; anexos.push(a);
+      }
+    }
+    return {
+      tipo: "pedido", refId: g.chave, contaId: p.contaId || "",
+      valor: num(itens.reduce((s, c) => s + valorDe(c), 0)),
+      data: dataDe(p),
+      descricao: (rotulo ? "Pedido " + rotulo : "Pedido") + " \u2014 " + itens.length + " itens",
+      fornecedor: p.favorecido || "", fornecedorId: p.prestadorId || "",
+      documento: p.numeroNota || p.numeroLoja || "",
+      numeroDoc: p.numeroDoc || "",
+      anexos: anexos,
+      // Os ids que ESTES itens teriam tido um a um. O que já atravessou
+      // assim continua valendo: sem isto, a primeira ponte depois desta
+      // mudança mandaria a mesma compra de novo, agora agrupada, e o
+      // escritório contaria o gasto duas vezes.
+      idsDeAntes: itens.map((c) => c.id),
+    };
+  };
+  return soltas.concat(grupos.map(doGrupo));
+}
+
 // Monta o que a obra tem para mandar. NÃO grava: devolve as três listas e quem
 // chama decide. `lancamentos` é o que entra; `existentes` já foi mandado antes;
 // `bloqueados` esbarrou em mês fechado; `ignorados` não atravessa, com o motivo.
@@ -9320,6 +9387,12 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
     }
     const id = idDaPonte(ob.id, fonte.tipo, fonte.refId);
     if (jaTem.has(id)) { existentes.push({ id, descricao: fonte.descricao, valor: fonte.valor }); return; }
+    // atravessou antes item a item? então já está lá, só com outra cara
+    const antes = (fonte.idsDeAntes || []).map((x) => idDaPonte(ob.id, "conta", x));
+    if (antes.some((x) => jaTem.has(x))) {
+      existentes.push({ id, descricao: fonte.descricao, valor: fonte.valor });
+      return;
+    }
     const competencia = ponteCompetencia(fonte.data);
     if (!competencia) {
       ignorados.push({ origem: fonte.refId, descricao: fonte.descricao, valor: fonte.valor,
@@ -9366,21 +9439,8 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
     });
   };
 
-  // as contas pagas da obra — o dinheiro que saiu
-  for (const c of o.contasPagar || []) {
-    if (!c || !c.pago) continue;
-    empurrar({
-      tipo: "conta", refId: c.id, contaId: c.contaId || "",
-      valor: Number(c.valorPago) || Number(c.valor) || 0,
-      data: c.pagoEm || c.vencimento || "",
-      descricao: c.descricao || "",
-      fornecedor: c.favorecido || "",
-      fornecedorId: c.prestadorId || "",
-      documento: c.numeroNota || c.numeroLoja || "",
-      numeroDoc: c.numeroDoc || "",
-      anexos: anexosDaTransacao(c),
-    });
-  }
+  // as contas pagas da obra — o dinheiro que saiu, uma linha por nota
+  for (const fonte of fontesDasContasPagas(o.contasPagar)) empurrar(fonte);
   // as entradas da obra — o dinheiro que entrou
   for (const e of o.entradas || []) {
     if (!e) continue;
@@ -22205,9 +22265,13 @@ function sincronizarContasDoContrato(contas, contrato) {
     // CLASSIFICAÇÃO acompanha o contrato: mudou a conta do plano, o extrato
     // do mês passado passa a mostrá-la no lugar certo
     if (anterior.pago) return { ...anterior, contaId: nova.contaId, servico: nova.servico, favorecido: nova.favorecido };
-    // a parcela em aberto é reescrita pela regra do contrato, mas o que
-    // alguém anotou ou registrou nela não é da regra — fica
-    return { ...nova, observacao: anterior.observacao || "", registros: anterior.registros || [] };
+    // A parcela em aberto é reescrita pela regra do contrato, mas o que
+    // alguém anotou ou registrou nela não é da regra — fica. O número de
+    // documento também: é por ele que a nota e o comprovante se amarram a
+    // esta parcela na prestação de contas, e um número que muda a cada
+    // abertura da tela não amarra nada.
+    return { ...nova, observacao: anterior.observacao || "", registros: anterior.registros || [],
+      ...(anterior.numeroDoc ? { numeroDoc: anterior.numeroDoc } : {}) };
   });
   // parcela paga que não existe mais no contrato continua na lista: o
   // dinheiro saiu, e sumir com ela esconderia um pagamento real
@@ -22349,13 +22413,29 @@ function realizadoPorPrestador(contas) {
 //
 // Quem já tem número não é renumerado: o número é do papel, e papel
 // entregue não muda de nome.
+// O numero de referencia e da TRANSACAO, nao da linha: o pedido da loja e
+// uma nota e um debito no banco, por mais que vire onze contas a pagar — as
+// onze carregam o mesmo numero, e e por ele que a nota e o comprovante se
+// amarram ao conjunto. Parcela de contrato e o contrario: cada parcela e um
+// pagamento seu, com numero proprio.
 function numerarContas(contas, obras, lancamentos) {
   const faltando = (contas || []).filter((c) => c && !c.numeroDoc);
   if (!faltando.length) return contas || [];
   let n = parseInt(String(proximoNumeroDoc(obras, lancamentos)).replace(/\D/g, ""), 10);
   if (!Number.isFinite(n)) n = 1;
+  // um pedido ja numerado empresta o numero dele aos itens que chegarem depois
+  const porPedido = {};
+  for (const c of contas || []) {
+    if (c && c.pedidoId && c.numeroDoc && !porPedido[c.pedidoId]) porPedido[c.pedidoId] = c.numeroDoc;
+  }
   const novos = {};
-  for (const c of faltando) { novos[c.id] = String(n).padStart(4, "0"); n++; }
+  for (const c of faltando) {
+    const chave = c.pedidoId || "";
+    if (chave && porPedido[chave]) { novos[c.id] = porPedido[chave]; continue; }
+    const numero = String(n).padStart(4, "0"); n++;
+    novos[c.id] = numero;
+    if (chave) porPedido[chave] = numero;
+  }
   return (contas || []).map((c) => (c && novos[c.id] ? { ...c, numeroDoc: novos[c.id] } : c));
 }
 
@@ -26658,11 +26738,15 @@ function podeApagarContaDeLoja(cot, contasPagar) {
 // à fatura dela: no dia 28 a loja cobra UM valor, com os pedidos todos dentro.
 // Então a escolha vira mais um pedido na conta, e a cotação fecha apontando
 // para ele.
-// A etapa de um item do pedido, na ordem em que a informação é confiável:
-// o insumo que só serve a uma etapa manda; depois a etapa da cotação; e,
-// sem nenhuma das duas, fica em branco para quem está comprando dizer.
+// A etapa de um item do pedido, na ordem em que a informação e confiavel:
+// quem cotou para uma etapa determinada ja disse para que a compra e, e
+// isso vale mais que o palpite do catalogo — concreto cotado para a laje e
+// da laje, por mais que o catalogo chame concreto de fundacao. Sem escolha
+// na compra, o padrao do insumo preenche; sem nenhum dos dois, fica em
+// branco para quem compra dizer. Em qualquer caso a etapa continua
+// editavel, item a item, na tela do pedido e na conta a pagar.
 function etapaDoItem(insumo, etapaDaCompra) {
-  return (insumo && insumo.etapaPadrao) || etapaDaCompra || "";
+  return etapaDaCompra || (insumo && insumo.etapaPadrao) || "";
 }
 function contaDoItem(insumo, contaDaCompra) {
   return (insumo && insumo.contaPadrao) || contaDaCompra || "";
@@ -34953,10 +35037,18 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // `contratos` é a lista completa do cliente (obras + coleção antiga) —
     // com uma lista parcial a faxina apagaria parcela boa
     const semOrfas = removerOrfasDeContrato(alvo.contasPagar || [], contratos);
-    const novas = contratosDaObra.length ? sincronizarContasDaObra(semOrfas, contratosDaObra) : semOrfas;
-    // a assinatura não olha o número do pedido, então a numeração precisa
-    // dizer por si mesma que houve mudança
-    if (!numerada && assinaturaContas(novas) === assinaturaContas(contasDaObra)) return;
+    const sincronizadas = contratosDaObra.length ? sincronizarContasDaObra(semOrfas, contratosDaObra) : semOrfas;
+    // Toda transação tem que ter um número de referência — é por ele que a
+    // nota e o comprovante se amarram a ela. A parcela de contrato nasce da
+    // regra, não de um lançamento, então é aqui que ela entra na fila; uma
+    // vez numerada, a ressincronização preserva o número.
+    const faltavaNumero = sincronizadas.some(c => c && !c.numeroDoc);
+    const novas = faltavaNumero
+      ? numerarContas(sincronizadas, obras, lancamentosDoEscritorio(data))
+      : sincronizadas;
+    // a assinatura não olha o número do pedido nem o de documento, então a
+    // numeração precisa dizer por si mesma que houve mudança
+    if (!numerada && !faltavaNumero && assinaturaContas(novas) === assinaturaContas(contasDaObra)) return;
     gravarObras(obras.map(o => o.id === obraAtual.id ? { ...alvo, contasPagar: novas } : o));
   }, [view, obraAtual && obraAtual.id, assinaturaContas(contasDaObra), pedidosSemNumero,
       JSON.stringify((obraAtual && obraAtual.contratos) || []), contratos.map(c => c.id).join("|")]);

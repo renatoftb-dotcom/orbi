@@ -402,9 +402,13 @@ function sincronizarContasDoContrato(contas, contrato) {
     // CLASSIFICAÇÃO acompanha o contrato: mudou a conta do plano, o extrato
     // do mês passado passa a mostrá-la no lugar certo
     if (anterior.pago) return { ...anterior, contaId: nova.contaId, servico: nova.servico, favorecido: nova.favorecido };
-    // a parcela em aberto é reescrita pela regra do contrato, mas o que
-    // alguém anotou ou registrou nela não é da regra — fica
-    return { ...nova, observacao: anterior.observacao || "", registros: anterior.registros || [] };
+    // A parcela em aberto é reescrita pela regra do contrato, mas o que
+    // alguém anotou ou registrou nela não é da regra — fica. O número de
+    // documento também: é por ele que a nota e o comprovante se amarram a
+    // esta parcela na prestação de contas, e um número que muda a cada
+    // abertura da tela não amarra nada.
+    return { ...nova, observacao: anterior.observacao || "", registros: anterior.registros || [],
+      ...(anterior.numeroDoc ? { numeroDoc: anterior.numeroDoc } : {}) };
   });
   // parcela paga que não existe mais no contrato continua na lista: o
   // dinheiro saiu, e sumir com ela esconderia um pagamento real
@@ -546,13 +550,29 @@ function realizadoPorPrestador(contas) {
 //
 // Quem já tem número não é renumerado: o número é do papel, e papel
 // entregue não muda de nome.
+// O numero de referencia e da TRANSACAO, nao da linha: o pedido da loja e
+// uma nota e um debito no banco, por mais que vire onze contas a pagar — as
+// onze carregam o mesmo numero, e e por ele que a nota e o comprovante se
+// amarram ao conjunto. Parcela de contrato e o contrario: cada parcela e um
+// pagamento seu, com numero proprio.
 function numerarContas(contas, obras, lancamentos) {
   const faltando = (contas || []).filter((c) => c && !c.numeroDoc);
   if (!faltando.length) return contas || [];
   let n = parseInt(String(proximoNumeroDoc(obras, lancamentos)).replace(/\D/g, ""), 10);
   if (!Number.isFinite(n)) n = 1;
+  // um pedido ja numerado empresta o numero dele aos itens que chegarem depois
+  const porPedido = {};
+  for (const c of contas || []) {
+    if (c && c.pedidoId && c.numeroDoc && !porPedido[c.pedidoId]) porPedido[c.pedidoId] = c.numeroDoc;
+  }
   const novos = {};
-  for (const c of faltando) { novos[c.id] = String(n).padStart(4, "0"); n++; }
+  for (const c of faltando) {
+    const chave = c.pedidoId || "";
+    if (chave && porPedido[chave]) { novos[c.id] = porPedido[chave]; continue; }
+    const numero = String(n).padStart(4, "0"); n++;
+    novos[c.id] = numero;
+    if (chave) porPedido[chave] = numero;
+  }
   return (contas || []).map((c) => (c && novos[c.id] ? { ...c, numeroDoc: novos[c.id] } : c));
 }
 

@@ -27,6 +27,7 @@ const M = new Function(src + `
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
+           fontesDasContasPagas,
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
            obrasDoLancamento, validarLancamentoNaObra, destinoVisivelDoCusto,
@@ -1039,6 +1040,78 @@ teste("rodar duas vezes n\u00e3o duplica: o id vem da origem", () => {
   const dois = M.lancamentosDaObraParaEscritorio(obra, cliente, { ...base, lancamentos: um.lancamentos });
   assert.strictEqual(dois.lancamentos.length, 0, "j\u00e1 foi mandado");
   assert.strictEqual(dois.existentes.length, 1);
+});
+
+// ── Uma nota, uma linha no extrato ──────────────────────────────
+const PEDIDO_PAGO = [
+  { id: "i1", pedidoId: "p1", contaId: "material", numeroLoja: "136560-109", numeroDoc: "0012",
+    favorecido: "OURIFER", descricao: "Vergalhão 8mm", valor: 200, valorPago: 200, pago: true, pagoEm: "2026-10-05" },
+  { id: "i2", pedidoId: "p1", contaId: "material", numeroLoja: "136560-109", numeroDoc: "0012",
+    favorecido: "OURIFER", descricao: "Arame recozido", valor: 85.40, valorPago: 85.40, pago: true, pagoEm: "2026-10-05" },
+  { id: "i3", pedidoId: "p1", contaId: "material", numeroLoja: "136560-109", numeroDoc: "0012",
+    favorecido: "OURIFER", descricao: "Prego", valor: 200, valorPago: 200, pago: true, pagoEm: "2026-10-05" },
+];
+const OBRA_P = { id: "ob1", clienteId: "c1", nome: "Reforma Loja Cobop" };
+const CLI_P = { id: "c1", nome: "COBOP", servicos: {} };
+const basePonte = (contas) => ({ planoObra: PLANO_OBRA, entradas: [], contasPagar: contas });
+
+teste("o pedido atravessa como UMA linha, com o total dos itens", () => {
+  const r = M.lancamentosDaObraParaEscritorio(OBRA_P, CLI_P, basePonte(PEDIDO_PAGO));
+  assert.strictEqual(r.lancamentos.length, 1, "o banco debitou a nota, nao os tres itens");
+  const l = r.lancamentos[0];
+  assert.strictEqual(l.valor, 485.40, "o extrato so confere se bater com o debito");
+  assert.strictEqual(l.fornecedor, "OURIFER");
+  assert.strictEqual(l.numeroDoc, "0012");
+  assert.strictEqual(l.documento, "136560-109");
+  assert.ok(/136560-109/.test(l.descricao) && /3 itens/.test(l.descricao), l.descricao);
+});
+
+teste("o que ja atravessou item a item nao atravessa de novo agrupado", () => {
+  const antigos = PEDIDO_PAGO.map((c) => ({ id: M.idDaPonte("ob1", "conta", c.id) }));
+  const r = M.lancamentosDaObraParaEscritorio(OBRA_P, CLI_P,
+    { ...basePonte(PEDIDO_PAGO), lancamentos: antigos });
+  assert.strictEqual(r.lancamentos.length, 0, "senao o escritorio contaria o gasto duas vezes");
+  assert.strictEqual(r.existentes.length, 1);
+});
+
+teste("rodar duas vezes com o agrupamento tambem nao duplica", () => {
+  const um = M.lancamentosDaObraParaEscritorio(OBRA_P, CLI_P, basePonte(PEDIDO_PAGO));
+  const dois = M.lancamentosDaObraParaEscritorio(OBRA_P, CLI_P,
+    { ...basePonte(PEDIDO_PAGO), lancamentos: um.lancamentos });
+  assert.strictEqual(dois.lancamentos.length, 0);
+});
+
+teste("itens do mesmo pedido pagos em datas diferentes sao debitos diferentes", () => {
+  const contas = PEDIDO_PAGO.map((c, i) => i === 2 ? { ...c, pagoEm: "2026-10-20" } : c);
+  const r = M.lancamentosDaObraParaEscritorio(OBRA_P, CLI_P, basePonte(contas));
+  assert.strictEqual(r.lancamentos.length, 2);
+  assert.deepStrictEqual(r.lancamentos.map((l) => l.valor).sort((a, b) => a - b), [200, 285.40]);
+});
+
+teste("pedido que mistura contas do plano nao cabe numa linha so", () => {
+  const contas = PEDIDO_PAGO.map((c, i) => i === 2 ? { ...c, contaId: "taxa_admin_obra" } : c);
+  const r = M.lancamentosDaObraParaEscritorio(OBRA_P, CLI_P, basePonte(contas));
+  assert.strictEqual(r.lancamentos.length, 2, "o destino no escritorio e outro");
+  const porConta = {};
+  for (const l of r.lancamentos) porConta[l.contaId] = l.valor;
+  assert.strictEqual(porConta.pagamentos_compras, 285.40);
+  assert.strictEqual(porConta.rec_gestao, 200);
+});
+
+teste("item solto de pedido continua com o id de ponte que sempre teve", () => {
+  const r = M.lancamentosDaObraParaEscritorio(OBRA_P, CLI_P, basePonte([PEDIDO_PAGO[0]]));
+  assert.strictEqual(r.lancamentos[0].id, M.idDaPonte("ob1", "conta", "i1"),
+    "um item so nao e grupo — e o que ja atravessou assim nao pode virar linha nova");
+});
+
+teste("conta sem pedido segue uma a uma", () => {
+  const f = M.fontesDasContasPagas([
+    { id: "a1", contaId: "material", valor: 100, pago: true, pagoEm: "2026-10-05" },
+    { id: "a2", contaId: "material", valor: 50, pago: true, pagoEm: "2026-10-05" },
+    { id: "a3", contaId: "material", valor: 70, pago: false },
+  ]);
+  assert.strictEqual(f.length, 2, "conta nao paga nao atravessa");
+  assert.deepStrictEqual(f.map((x) => x.tipo), ["conta", "conta"]);
 });
 
 teste("m\u00eas fechado n\u00e3o recebe lan\u00e7amento \u2014 fica separado, com o motivo", () => {

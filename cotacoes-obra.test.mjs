@@ -2316,8 +2316,10 @@ teste("insumo que só serve a uma etapa entra no pedido já com ela", () => {
                    unidade: "Unidades", etapaPadrao: "esgoto_pluvial", contaPadrao: "material" };
   const cimento = { codigo: "CIM-001", nome: "Cimento CP II 50kg", grupo: "Cimento", unidade: "Unidades" };
 
-  // o insumo manda; a cotação é o segundo; sem os dois, fica em branco
-  assert.strictEqual(M.etapaDoItem(tubo, "fundacao"), "hidraulica", "o insumo ganha da etapa da cotação");
+  // a etapa da compra manda; o catálogo é o segundo; sem os dois, fica em branco
+  assert.strictEqual(M.etapaDoItem(tubo, "fundacao"), "fundacao",
+    "quem cotou para uma etapa ja disse para que a compra e — isso ganha do catalogo");
+  assert.strictEqual(M.etapaDoItem(tubo, ""), "hidraulica", "sem escolha na compra, o catalogo preenche");
   assert.strictEqual(M.etapaDoItem(cimento, "fundacao"), "fundacao", "sem etapa padrão vale a da compra");
   assert.strictEqual(M.etapaDoItem(cimento, ""), "", "nenhuma das duas: quem compra decide");
   assert.strictEqual(M.etapaDoItem(null, "laje_1"), "laje_1");
@@ -2341,9 +2343,11 @@ teste("insumo que só serve a uma etapa entra no pedido já com ela", () => {
   assert.deepStrictEqual(p.itens.map(i => i.contaId), ["material", "material", "material"],
     "sem conta padrão vale a da cotação");
 
-  // com etapa na cotação, o que não tem padrão herda dela
+  // Cotou para uma etapa determinada: a cotação inteira é daquela etapa, e
+  // isso vence o palpite do catálogo. Quem precisar de exceção muda o item.
   const comEtapa = M.pedidoDaCotacao({ ...cot, etapaId: "contrapiso_int_1" }, cot.propostas[0], [tubo, esgoto, cimento], 30);
-  assert.deepStrictEqual(comEtapa.itens.map(i => i.etapa), ["hidraulica", "esgoto_pluvial", "contrapiso_int_1"]);
+  assert.deepStrictEqual(comEtapa.itens.map(i => i.etapa),
+    ["contrapiso_int_1", "contrapiso_int_1", "contrapiso_int_1"]);
 });
 
 
