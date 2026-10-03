@@ -87,7 +87,10 @@ const modulo = new Function(`
            ehComprovante, valorDoComprovante, dataDoComprovante, favorecidoDoComprovante,
            documentoDoComprovante, dadosDoComprovante, prestadorDoComprovante,
            despesaPronta, parcelasEmAbertoDoPrestador, parcelaQueCasa,
-           medicaoDaCotacao, totalDaMedicao, validarMedicao, completarItemDaConta };
+           medicaoDaCotacao, totalDaMedicao, validarMedicao, completarItemDaConta,
+           ehNotaDeServico, valorDaNotaDeServico, emissaoDaNotaDeServico,
+           prestadorDaNotaDeServico, discriminacaoDaNotaDeServico, dadosDaNotaDeServico,
+           numeroDaNotaDeServico };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -265,6 +268,78 @@ teste("conta sem cotacao, ou de cotacao que sumiu, volta intacta", () => {
   assert.strictEqual(M.completarItemDaConta(avulsa, OBRA_MED, INS_MED, [avulsa]), avulsa);
   const orfa = { ...CONTA_SECA, cotacaoId: "nao-existe" };
   assert.strictEqual(M.completarItemDaConta(orfa, OBRA_MED, INS_MED, [orfa]).quantidade, undefined);
+});
+
+// ── Nota fiscal de servico: a nota que nao tem tabela ──────────
+const NFSE_CONCRETO = [
+  "PREFEITURA DO MUNICIPIO DE OURINHOS",
+  "NOTA FISCAL DE SERVIÇOS ELETRÔNICA - NFS-e",
+  "Número da Nota  4177",
+  "Data e Hora de Emissão  23/09/2026 14:32",
+  "Código de Verificação  A1B2-C3D4",
+  "PRESTADOR DE SERVIÇOS",
+  "Razão Social",
+  "VOTORANTIM CIMENTOS S.A.",
+  "CNPJ  01.637.895/0001-32",
+  "Endereço  Rod. Raposo Tavares, km 100",
+  "TOMADOR DE SERVIÇOS",
+  "Razão Social",
+  "RENATO F TEIXEIRA DE BARROS LTDA",
+  "CNPJ  20.205.619/0001-40",
+  "DISCRIMINAÇÃO DOS SERVIÇOS",
+  "Concreto usinado FCK 25 MPa com bombeamento - fundacao radier",
+  "VALOR TOTAL DA NOTA = R$ 9.000,00",
+  "Base de Cálculo  R$ 9.000,00",
+  "Alíquota  3,00%",
+  "Valor do ISS  R$ 270,00",
+];
+
+teste("nota de servico e reconhecida, e nao se confunde com DANFE nem comprovante", () => {
+  const t = NFSE_CONCRETO.join("\n");
+  assert.strictEqual(M.ehNotaDeServico(t), true);
+  assert.strictEqual(M.ehComprovante(t), false, "nota nao prova pagamento");
+  assert.strictEqual(M.ehNotaDeServico("DANFE NOTA FISCAL ELETRONICA\nDiscriminação dos Serviços"), false,
+    "DANFE tem tabela e segue pelo outro caminho");
+  assert.strictEqual(M.ehNotaDeServico("Contrato de prestação de serviços entre as partes"), false);
+});
+
+teste("le valor, emissao, prestador, numero e o que foi o servico", () => {
+  const d = M.dadosDaNotaDeServico(NFSE_CONCRETO);
+  assert.ok(d, "tinha que ler");
+  assert.strictEqual(d.valor, "9.000,00");
+  assert.strictEqual(d.emitidoEm, "2026-09-23");
+  assert.strictEqual(d.favorecido, "VOTORANTIM CIMENTOS S.A.", "o PRESTADOR, nunca o tomador");
+  assert.strictEqual(d.documento, "4177");
+  assert.ok(/Concreto usinado/.test(d.descricao), d.descricao);
+  assert.strictEqual(d.notaDeServico, true);
+  assert.ok(!d.pagoEm, "a nota nao sabe quando foi paga");
+});
+
+teste("nao pega o tomador por engano, nem com o nome do tomador antes no papel", () => {
+  const invertida = NFSE_CONCRETO.slice();
+  const d = M.dadosDaNotaDeServico(invertida);
+  assert.notStrictEqual(d.favorecido, "RENATO F TEIXEIRA DE BARROS LTDA");
+});
+
+teste("ISS retido: o liquido manda sobre o total", () => {
+  const com = NFSE_CONCRETO.concat(["Valor Líquido da Nota  R$ 8.730,00"]);
+  assert.strictEqual(M.dadosDaNotaDeServico(com).valor, "8.730,00");
+});
+
+teste("sem rotulo de total, o maior valor do papel e a nota", () => {
+  const sem = ["NFS-e", "DISCRIMINAÇÃO DOS SERVIÇOS", "Bombeamento de concreto",
+    "PRESTADOR DE SERVIÇOS", "Razão Social", "D-MIX CONCRETO LTDA",
+    "Alíquota R$ 2,00", "R$ 270,00", "R$ 9.000,00"];
+  const d = M.dadosDaNotaDeServico(sem);
+  assert.strictEqual(d.valor, "9.000,00", "a aliquota e a base sao sempre menores que o total");
+  assert.strictEqual(d.favorecido, "D-MIX CONCRETO LTDA");
+});
+
+teste("papel que nao e nota de servico volta nulo, sem inventar despesa", () => {
+  assert.strictEqual(M.dadosDaNotaDeServico(["Orçamento", "Item", "Qtd", "Preço"]), null);
+  assert.strictEqual(M.dadosDaNotaDeServico([]), null);
+  assert.strictEqual(M.dadosDaNotaDeServico(["NFS-e", "DISCRIMINAÇÃO DOS SERVIÇOS", "sem valor nenhum"]), null,
+    "nota sem valor nao vira despesa de zero");
 });
 
 teste("comprovante de Pix é reconhecido como comprovante", () => {

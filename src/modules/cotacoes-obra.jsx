@@ -1147,6 +1147,146 @@ function dadosDoComprovante(linhas) {
   };
 }
 
+// ── Nota fiscal de SERVIÇO: a nota que não tem tabela ──────────
+// O concreto chega como serviço: usinagem e bombeamento. A NFS-e não tem
+// tabela de itens — tem "Discriminação dos Serviços" em texto corrido e um
+// total. Procurar tabela nela dá o erro errado ("não achei a tabela de
+// itens") num papel que nunca teve tabela, e a compra fica sem lançar.
+//
+// Ela também não é comprovante: comprovante prova que o dinheiro saiu; a
+// nota prova o que foi comprado. Por isso a data que sai daqui é a de
+// EMISSÃO, e quem lança diz quando pagou.
+function ehNotaDeServico(texto) {
+  const t = String(texto || "");
+  if (typeof ehDanfe === "function" && ehDanfe(t)) return false;
+  const marcas = [
+    /\bNFS-?e\b/i,
+    /nota\s+fiscal\s+(eletr[ôo]nica\s+)?de\s+servi[çc]o/i,
+    /nota\s+fiscal\s+de\s+servi[çc]os/i,
+    /discrimina[çc][ãa]o\s+d[oa]s?\s+servi[çc]os?/i,
+  ];
+  const quantas = marcas.filter((re) => re.test(t)).length;
+  if (!quantas) return false;
+  // "prestador" e "ISS" sozinhos aparecem em contrato e em recibo; o que
+  // identifica a nota é a marca dela mais um sinal de documento fiscal
+  const apoio = /prestador\s+de\s+servi[çc]os?|tomador\s+de\s+servi[çc]os?|\bISSQN?\b|c[óo]digo\s+de\s+verifica[çc][ãa]o/i.test(t);
+  return quantas >= 2 || apoio;
+}
+
+// O total da nota, do rótulo mais específico para o mais solto. O líquido
+// vem antes do bruto: é o que a prefeitura diz que se paga quando há ISS
+// retido, e é esse o valor que sai da conta.
+function valorDaNotaDeServico(texto) {
+  const t = String(texto || "");
+  const tentativas = [
+    /valor\s*l[íi]quido\s*(?:da\s*nota)?\s*:?\s*=?\s*R?\$?\s*([\d.]{1,14},\d{2})/i,
+    /valor\s*total\s*(?:da\s*)?nota\s*:?\s*=?\s*R?\$?\s*([\d.]{1,14},\d{2})/i,
+    /valor\s*(?:total\s*)?d[oe]s?\s*servi[çc]os?\s*:?\s*=?\s*R?\$?\s*([\d.]{1,14},\d{2})/i,
+    /valor\s*total\s*:?\s*=?\s*R?\$?\s*([\d.]{1,14},\d{2})/i,
+  ];
+  for (const re of tentativas) {
+    const m = t.match(re);
+    if (m && numeroDeCampo(m[1]) > 0) return m[1];
+  }
+  // sem rótulo que sirva, o maior valor do papel é o total da nota — as
+  // bases e as alíquotas de imposto são sempre menores que ele
+  const todos = (t.match(/R?\$?\s*([\d.]{1,14},\d{2})/g) || [])
+    .map((s) => numeroDeCampo(s.replace(/[R$\s]/g, "")))
+    .filter((n) => n > 0);
+  if (!todos.length) return "";
+  const maior = Math.max.apply(null, todos);
+  return maior.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function emissaoDaNotaDeServico(texto) {
+  const t = String(texto || "");
+  const tentativas = [
+    /data\s*(?:e\s*hora\s*)?d[ae]\s*emiss[ãa]o[\s\S]{0,60}?(\d{2}\/\d{2}\/\d{4})/i,
+    /emiss[ãa]o[\s\S]{0,40}?(\d{2}\/\d{2}\/\d{4})/i,
+    /compet[êe]ncia[\s\S]{0,40}?(\d{2}\/\d{2}\/\d{4})/i,
+    /(\d{2}\/\d{2}\/\d{4})/,
+  ];
+  for (const re of tentativas) {
+    const m = t.match(re);
+    if (m) {
+      const [d, mes, a] = m[1].split("/");
+      return `${a}-${mes}-${d}`;
+    }
+  }
+  return "";
+}
+
+// Quem emitiu. Na NFS-e o prestador vem primeiro e o tomador depois — se
+// pegarmos o nome errado, a despesa vai para o favorecido errado, que é o
+// erro mais caro que esta leitura pode cometer. Por isso só aceitamos o
+// nome que estiver DEPOIS de "prestador" e ANTES de "tomador".
+function prestadorDaNotaDeServico(linhas) {
+  const lista = (linhas || []).map((l) => (typeof cotLinhaComoTexto === "function" ? cotLinhaComoTexto(l) : String(l)));
+  const ini = lista.findIndex((l) => /prestador\s+de\s+servi[çc]os?/i.test(l));
+  const fim = lista.findIndex((l) => /tomador\s+de\s+servi[çc]os?/i.test(l));
+  const janela = ini < 0 ? lista : lista.slice(ini + 1, fim > ini ? fim : ini + 12);
+  const rotulo = /raz[ãa]o\s*social|nome\s*(?:\/|ou\s*)?(?:raz[ãa]o|empresarial)|nome\s*fantasia/i;
+  for (let i = 0; i < janela.length; i++) {
+    if (!rotulo.test(janela[i])) continue;
+    // o nome pode vir na mesma linha, depois do rótulo, ou na linha seguinte
+    const mesma = janela[i].replace(rotulo, "").replace(/^[\s:.-]+/, "").trim();
+    if (mesma.length >= 4 && !/^\d/.test(mesma)) return mesma;
+    const prox = (janela[i + 1] || "").trim();
+    if (prox.length >= 4 && !/^\d/.test(prox) && !rotulo.test(prox)) return prox;
+  }
+  // sem rótulo: a primeira linha com cara de razão social
+  const cara = janela.find((l) => /[A-ZÁÂÃÉÊÍÓÔÕÚÇ]{3}/.test(l) && l.trim().length >= 6
+    && !/cnpj|cpf|inscri|endere|munic|\bcep\b|telefone|e-?mail/i.test(l));
+  return (cara || "").trim();
+}
+
+function discriminacaoDaNotaDeServico(linhas) {
+  const lista = (linhas || []).map((l) => (typeof cotLinhaComoTexto === "function" ? cotLinhaComoTexto(l) : String(l)));
+  const i = lista.findIndex((l) => /discrimina[çc][ãa]o/i.test(l));
+  if (i < 0) return "";
+  for (let k = i; k < Math.min(lista.length, i + 6); k++) {
+    const t = lista[k].replace(/discrimina[çc][ãa]o\s+d[oa]s?\s+servi[çc]os?/i, "").replace(/^[\s:.-]+/, "").trim();
+    if (t.length >= 6) return t.slice(0, 160);
+  }
+  return "";
+}
+
+// O número da NFS-e. O leitor da DANFE procura "Nº 000.008.623"; a nota de
+// serviço escreve "Número da Nota 4177", quase sempre sem o "nº".
+function numeroDaNotaDeServico(texto) {
+  const t = String(texto || "");
+  const tentativas = [
+    /n[úu]mero\s*d[ae]\s*nota\s*:?\s*([\d.]{1,12})/i,
+    /nota\s*(?:fiscal)?\s*n[º°o]\.?\s*([\d.]{1,12})/i,
+    /\bNFS-?e\s*n[º°o]\.?\s*([\d.]{1,12})/i,
+  ];
+  for (const re of tentativas) {
+    const m = t.match(re);
+    if (m) {
+      const so = String(m[1]).replace(/\D/g, "").replace(/^0+/, "");
+      if (so) return so;
+    }
+  }
+  return typeof numeroDaNota === "function" ? numeroDaNota(t) : "";
+}
+
+function dadosDaNotaDeServico(linhas) {
+  const lista = linhas || [];
+  const tudo = lista.map((l) => (typeof cotLinhaComoTexto === "function" ? cotLinhaComoTexto(l) : String(l))).join("\n");
+  if (!ehNotaDeServico(tudo)) return null;
+  const valor = valorDaNotaDeServico(tudo);
+  if (!(numeroDeCampo(valor) > 0)) return null;
+  return {
+    notaDeServico: true,
+    valor,
+    // emissão, não pagamento — a nota não prova que o dinheiro saiu
+    emitidoEm: emissaoDaNotaDeServico(tudo),
+    favorecido: prestadorDaNotaDeServico(lista),
+    documento: numeroDaNotaDeServico(tudo),
+    descricao: discriminacaoDaNotaDeServico(lista),
+  };
+}
+
 // O prestador do comprovante já está cadastrado? O nome do banco vem em
 // caixa alta e com a razão social inteira ("JOSE DA SILVA ME"), então casa
 // por pedaço: o cadastro dentro do nome do papel, ou o contrário.
@@ -6530,6 +6670,15 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
         abrirDespesaLida(comp, ctx);
         return;
       }
+      // Nota de SERVIÇO antes de procurar tabela, pela mesma razão do
+      // comprovante: ela nunca teve tabela de itens, e insistir só daria o
+      // erro errado. O concreto chega assim — usinagem e bombeamento são
+      // serviço, não mercadoria.
+      const nfs = dadosDaNotaDeServico(linhasDoComprovante);
+      if (nfs) {
+        abrirDespesaLida(nfs, ctx);
+        return;
+      }
       if (ehPdf(alvo)) {
         const o = interpretarOrcamento(linhasDoComprovante);
         if (!(o.itens || []).length) throw new Error("Não achei a tabela de itens neste PDF. Se for foto ou digitalização, cole o texto.");
@@ -6577,9 +6726,14 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
       documento: comp.documento || "",
       // O campo de dinheiro trabalha com número; o papel entrega "5.000,00".
       valor: comp.valor ? numeroDeCampo(comp.valor) : "",
-      pagoEm: comp.pagoEm || new Date().toISOString().slice(0, 10),
+      // Comprovante traz a data do PAGAMENTO; nota de serviço traz a da
+      // EMISSÃO, que não é a mesma coisa. A nota chega com a emissão
+      // preenchida e avisando que é ela — quem lança diz quando pagou.
+      pagoEm: comp.pagoEm || comp.emitidoEm || new Date().toISOString().slice(0, 10),
+      notaDeServico: !!comp.notaDeServico,
+      emitidoEm: comp.emitidoEm || "",
       contaId: "",
-      descricao: "",
+      descricao: comp.descricao || "",
       parcelaId: "",
     });
   }
