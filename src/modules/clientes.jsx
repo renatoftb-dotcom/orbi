@@ -2678,17 +2678,23 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Desfazer pede confirmação: a conta volta a ficar A PAGAR — e, com o
   // vencimento no passado, aparece vencida. Quem quer tirar um lançamento
   // errado procura o Excluir, e a pergunta diz isso.
-  const confirmarDesfazer = async (lista) => {
+  // Compra no cartão com parcela em fatura FECHADA não sai nem muda daqui:
+  // a fatura já é uma linha no extrato, conferida com o banco. Mexer na
+  // compra deixaria a fatura dizendo um total e as compras outro.
+  const travouNaFatura = (lista, acao) => {
     const doEscritorio = (data && data.lancamentos) || [];
     const travadas = typeof fechadasDaCompra === "function"
-      ? [...new Set(lista.flatMap(c => fechadasDaCompra(c, doEscritorio)))] : [];
-    if (travadas.length) {
-      dialogo.alertar({ titulo: "Pagamento está numa fatura fechada",
-        mensagem: "Este pagamento foi no cartão e já está na fatura de "
-          + travadas.map(x => typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso(x) : x).join(", ")
-          + ", que está fechada. Reabra a fatura em Escritório → Cartões antes de desfazer.", tipo: "aviso" });
-      return false;
-    }
+      ? [...new Set((lista || []).flatMap(c => fechadasDaCompra(c, doEscritorio)))].sort() : [];
+    if (!travadas.length) return false;
+    dialogo.alertar({ titulo: "Está numa fatura fechada",
+      mensagem: "Esta compra foi no cartão e tem parcela na fatura de "
+        + travadas.map(x => typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso(x) : x).join(", ")
+        + ", que já está fechada. Reabra a fatura em Escritório → Cartões (⋯ ao lado do mês) antes de " + acao + ".",
+      tipo: "aviso" });
+    return true;
+  };
+  const confirmarDesfazer = async (lista) => {
+    if (travouNaFatura(lista, "desfazer o pagamento")) return false;
     return dialogo.confirmar({
       titulo: "Desfazer o pagamento?",
       mensagem: "A conta volta a ficar a pagar (em aberto), com o vencimento que ela tem — se já passou, aparece vencida. "
@@ -2734,6 +2740,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const obra = (obras || []).find(o => o && o.id === linha.obraId);
     if (!obra) return;
     const ids = linha.pedidoIds || [linha.pedidoId];
+    if (travouNaFatura((obra.contasPagar || []).filter(c => c && ids.indexOf(c.pedidoId) >= 0), "apagar o pedido")) return;
     const sai = ids.reduce((a, id) => {
       const r = resumoDoQueSai(obra.contasPagar || [], id);
       return { quantas: a.quantas + r.quantas, valor: a.valor + r.valor,
@@ -5197,6 +5204,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                       ? { rotulo: "Editar", onClick: () => abrirEdicaoDaConta(c) } : null,
                                     (c.origem === "avulsa")
                                       ? { rotulo: "Excluir", destrutivo: true, onClick: () => {
+                                          if (travouNaFatura([c], "excluir")) return;
                                           dialogo.confirmar({ titulo: "Excluir conta?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Excluir", destrutivo: true })
                                             .then(ok => { if (ok) gravarContas(contasDaObra.filter(x => x.id !== c.id)); }); } } : null,
                                   ]} />

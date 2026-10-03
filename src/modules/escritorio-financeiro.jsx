@@ -3859,6 +3859,16 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
 
   function salvarLancamento(l) {
     if (l && l.naObra) { lancarCustoNaObra(l); return; }
+    // A compra no cartão que já está numa fatura fechada só muda a
+    // descrição por aqui; o dinheiro dela está conferido com o banco.
+    const antes = l.id ? lancs.find((x) => x && x.id === l.id) : null;
+    if (antes && compraNoCartaoDoEscritorio(antes) && fechadasDaCompra(antes, lancs).length
+      && compraMexeuNoDinheiro(antes, l)) {
+      dialogo.alertar({ titulo: "Está numa fatura fechada", tipo: "aviso",
+        mensagem: `Esta compra tem parcela na fatura de ${fechadasDaCompra(antes, lancs).map(mesAnoPorExtenso).join(", ")}, `
+          + "que já está fechada. Reabra a fatura em Cartões (⋯ ao lado do mês) para mudar valor, data, parcelas ou cartão." });
+      return;
+    }
     const id = l.id || (typeof uid === "function" ? uid() : String(Date.now()));
     const semEle = lancs.filter((x) => x.id !== id);
     // Toda transação sai daqui com referência. Quem já tem a sua não é
@@ -3877,9 +3887,24 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   const [faturaAberta, setFaturaAberta] = useState(null);
 
   async function excluirLancamento(l) {
+    // Mês conferido com o banco não perde linha: o saldo dele está fechado.
+    const trava = bloqueioPorMesFechado(l.competencia, fechamentos);
+    if (trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: trava + " Reabra o mês no Fechamento antes.", tipo: "aviso" }); return; }
+    // Compra no cartão já dentro de fatura fechada: sai só reabrindo a fatura.
+    const fechadasDela = compraNoCartaoDoEscritorio(l) ? fechadasDaCompra(l, lancs) : [];
+    if (fechadasDela.length) {
+      dialogo.alertar({ titulo: "Está numa fatura fechada", tipo: "aviso",
+        mensagem: `Esta compra tem parcela na fatura de ${fechadasDela.map(mesAnoPorExtenso).join(", ")}, que já está fechada. `
+          + "Reabra a fatura em Cartões (⋯ ao lado do mês) antes de excluir." });
+      return;
+    }
+    const daFatura = ((l.origem || {}).tipo === "fatura");
     const ok = await dialogo.confirmar({
-      titulo: "Excluir este lançamento?",
-      mensagem: `${contaEscritorio(l.contaId)?.nome || "Lançamento"} · ${efDinheiro(l.valor)} · ${mesAnoPorExtenso(l.competencia)}`,
+      titulo: daFatura ? "Excluir a linha da fatura?" : "Excluir este lançamento?",
+      mensagem: `${contaEscritorio(l.contaId)?.nome || "Lançamento"} · ${efDinheiro(l.valor)} · ${mesAnoPorExtenso(l.competencia)}`
+        + (daFatura ? `. A fatura de ${mesAnoPorExtenso(l.origem.competencia)} volta a ficar ABERTA em Cartões — as compras dela continuam lá, `
+          + "e dá para editar e fechar de novo." : "")
+        + (compraNoCartaoDoEscritorio(l) ? ". A compra sai também das faturas abertas do cartão." : ""),
       confirmar: "Excluir", destrutivo: true,
     });
     if (!ok) return;

@@ -13070,6 +13070,16 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
 
   function salvarLancamento(l) {
     if (l && l.naObra) { lancarCustoNaObra(l); return; }
+    // A compra no cartão que já está numa fatura fechada só muda a
+    // descrição por aqui; o dinheiro dela está conferido com o banco.
+    const antes = l.id ? lancs.find((x) => x && x.id === l.id) : null;
+    if (antes && compraNoCartaoDoEscritorio(antes) && fechadasDaCompra(antes, lancs).length
+      && compraMexeuNoDinheiro(antes, l)) {
+      dialogo.alertar({ titulo: "Está numa fatura fechada", tipo: "aviso",
+        mensagem: `Esta compra tem parcela na fatura de ${fechadasDaCompra(antes, lancs).map(mesAnoPorExtenso).join(", ")}, `
+          + "que já está fechada. Reabra a fatura em Cartões (⋯ ao lado do mês) para mudar valor, data, parcelas ou cartão." });
+      return;
+    }
     const id = l.id || (typeof uid === "function" ? uid() : String(Date.now()));
     const semEle = lancs.filter((x) => x.id !== id);
     // Toda transação sai daqui com referência. Quem já tem a sua não é
@@ -13088,9 +13098,24 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   const [faturaAberta, setFaturaAberta] = useState(null);
 
   async function excluirLancamento(l) {
+    // Mês conferido com o banco não perde linha: o saldo dele está fechado.
+    const trava = bloqueioPorMesFechado(l.competencia, fechamentos);
+    if (trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: trava + " Reabra o mês no Fechamento antes.", tipo: "aviso" }); return; }
+    // Compra no cartão já dentro de fatura fechada: sai só reabrindo a fatura.
+    const fechadasDela = compraNoCartaoDoEscritorio(l) ? fechadasDaCompra(l, lancs) : [];
+    if (fechadasDela.length) {
+      dialogo.alertar({ titulo: "Está numa fatura fechada", tipo: "aviso",
+        mensagem: `Esta compra tem parcela na fatura de ${fechadasDela.map(mesAnoPorExtenso).join(", ")}, que já está fechada. `
+          + "Reabra a fatura em Cartões (⋯ ao lado do mês) antes de excluir." });
+      return;
+    }
+    const daFatura = ((l.origem || {}).tipo === "fatura");
     const ok = await dialogo.confirmar({
-      titulo: "Excluir este lançamento?",
-      mensagem: `${contaEscritorio(l.contaId)?.nome || "Lançamento"} · ${efDinheiro(l.valor)} · ${mesAnoPorExtenso(l.competencia)}`,
+      titulo: daFatura ? "Excluir a linha da fatura?" : "Excluir este lançamento?",
+      mensagem: `${contaEscritorio(l.contaId)?.nome || "Lançamento"} · ${efDinheiro(l.valor)} · ${mesAnoPorExtenso(l.competencia)}`
+        + (daFatura ? `. A fatura de ${mesAnoPorExtenso(l.origem.competencia)} volta a ficar ABERTA em Cartões — as compras dela continuam lá, `
+          + "e dá para editar e fechar de novo." : "")
+        + (compraNoCartaoDoEscritorio(l) ? ". A compra sai também das faturas abertas do cartão." : ""),
       confirmar: "Excluir", destrutivo: true,
     });
     if (!ok) return;
@@ -37019,17 +37044,23 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Desfazer pede confirmação: a conta volta a ficar A PAGAR — e, com o
   // vencimento no passado, aparece vencida. Quem quer tirar um lançamento
   // errado procura o Excluir, e a pergunta diz isso.
-  const confirmarDesfazer = async (lista) => {
+  // Compra no cartão com parcela em fatura FECHADA não sai nem muda daqui:
+  // a fatura já é uma linha no extrato, conferida com o banco. Mexer na
+  // compra deixaria a fatura dizendo um total e as compras outro.
+  const travouNaFatura = (lista, acao) => {
     const doEscritorio = (data && data.lancamentos) || [];
     const travadas = typeof fechadasDaCompra === "function"
-      ? [...new Set(lista.flatMap(c => fechadasDaCompra(c, doEscritorio)))] : [];
-    if (travadas.length) {
-      dialogo.alertar({ titulo: "Pagamento está numa fatura fechada",
-        mensagem: "Este pagamento foi no cartão e já está na fatura de "
-          + travadas.map(x => typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso(x) : x).join(", ")
-          + ", que está fechada. Reabra a fatura em Escritório → Cartões antes de desfazer.", tipo: "aviso" });
-      return false;
-    }
+      ? [...new Set((lista || []).flatMap(c => fechadasDaCompra(c, doEscritorio)))].sort() : [];
+    if (!travadas.length) return false;
+    dialogo.alertar({ titulo: "Está numa fatura fechada",
+      mensagem: "Esta compra foi no cartão e tem parcela na fatura de "
+        + travadas.map(x => typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso(x) : x).join(", ")
+        + ", que já está fechada. Reabra a fatura em Escritório → Cartões (⋯ ao lado do mês) antes de " + acao + ".",
+      tipo: "aviso" });
+    return true;
+  };
+  const confirmarDesfazer = async (lista) => {
+    if (travouNaFatura(lista, "desfazer o pagamento")) return false;
     return dialogo.confirmar({
       titulo: "Desfazer o pagamento?",
       mensagem: "A conta volta a ficar a pagar (em aberto), com o vencimento que ela tem — se já passou, aparece vencida. "
@@ -37075,6 +37106,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const obra = (obras || []).find(o => o && o.id === linha.obraId);
     if (!obra) return;
     const ids = linha.pedidoIds || [linha.pedidoId];
+    if (travouNaFatura((obra.contasPagar || []).filter(c => c && ids.indexOf(c.pedidoId) >= 0), "apagar o pedido")) return;
     const sai = ids.reduce((a, id) => {
       const r = resumoDoQueSai(obra.contasPagar || [], id);
       return { quantas: a.quantas + r.quantas, valor: a.valor + r.valor,
@@ -39538,6 +39570,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                       ? { rotulo: "Editar", onClick: () => abrirEdicaoDaConta(c) } : null,
                                     (c.origem === "avulsa")
                                       ? { rotulo: "Excluir", destrutivo: true, onClick: () => {
+                                          if (travouNaFatura([c], "excluir")) return;
                                           dialogo.confirmar({ titulo: "Excluir conta?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Excluir", destrutivo: true })
                                             .then(ok => { if (ok) gravarContas(contasDaObra.filter(x => x.id !== c.id)); }); } } : null,
                                   ]} />
