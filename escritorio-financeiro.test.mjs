@@ -31,7 +31,7 @@ const M = new Function(src + `
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
            competenciasDoCartao,
-           faturasFechadas, faturaParaFechar,
+           faturasFechadas, faturaParaFechar, lancamentosParaResultado,
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
            obrasDoLancamento, validarLancamentoNaObra, destinoVisivelDoCusto,
@@ -1506,6 +1506,92 @@ teste("sem conta removida, a lista volta intacta", () => {
 teste("o lançamento da ponte nasce com a hora, para ir ao topo da lista", () => {
   const l = M.lancamentosDaBaixa(OBRA, EMP, [conta("k1", "material", 260)], { ...OPC }).lancamentos[0];
   assert.ok(/^\d{4}-\d{2}-\d{2}T/.test(l.criadoEm), "criadoEm: " + l.criadoEm);
+});
+
+
+// ── A fatura no resultado: abre nas compras, sem mexer no saldo ──
+const OBRAS_RES = [
+  { id: "ob1", nome: "Jacarezinho Módulo 1", clienteId: "c9", contasPagar: [
+    { id: "cc", cartaoId: "k1", contaId: "material", descricao: "Concreto", favorecido: "Votorantim", pagoEm: "2026-09-23",
+      parcelasCartao: [{ parcela:1, de:3, competencia:"2026-10", valor:1775.63 }] } ] },
+  { id: "ob2", nome: "Loja COBOP", clienteId: "c1", contasPagar: [
+    { id: "cb", cartaoId: "k1", contaId: "material", descricao: "Tinta", favorecido: "Loja", pagoEm: "2026-09-25",
+      parcelasCartao: [{ parcela:1, de:1, competencia:"2026-10", valor:200 }] } ] },
+];
+const LANC_RES = [{ id: "E1", tipo: "escritorio", unidadeId: "escritorio", contaId: "marketing", descricao: "Anúncio",
+  lancadoEm: "2026-09-24", competencia: "2026-09", valor: 300, cartaoId: "k1",
+  parcelasCartao: [{ parcela:1, de:1, competencia:"2026-10", valor:300 }] }];
+const OPC_RES = { clientes: [EMP, CLI], planoObra: PLANO_OBRA };
+const faturaRes = () => {
+  const f = M.faturaParaFechar(CARTAO, OBRAS_RES, LANC_RES, "2026-10", OPC_RES);
+  return M.lancamentoDaFatura(CARTAO, "2026-10", f.linhas, {});
+};
+
+teste("cada compra da fatura sabe para onde vai no escritório", () => {
+  const l = faturaRes();
+  const por = (d) => l.linhas.find((x) => x.descricao === d);
+  assert.strictEqual(por("Concreto").destinoContaId, "emp_construcao");
+  assert.strictEqual(por("Concreto").empreendimentoId, "c9");
+  assert.strictEqual(por("Tinta").destinoContaId, "pagamentos_compras");
+  assert.strictEqual(por("Anúncio").destinoContaId, "marketing");
+});
+
+teste("no resultado a fatura abre nas compras; no saldo nada muda", () => {
+  const fat = faturaRes();
+  const fechado = { ...fat, linhas: fat.linhas.map((x) => ({ ...x, destinoContaId: "" })) };
+  const comAberta = M.extratoEscritorio([fat], { saldoAbertura: 10000 });
+  const inteira = M.extratoEscritorio([fechado], { saldoAbertura: 10000 });
+  const mes = (ls) => ls.find((x) => x.mes === "2026-10");
+  assert.strictEqual(mes(comAberta).saldoExtrato, mes(inteira).saldoExtrato, "o banco debitou o mesmo valor");
+  assert.strictEqual(mes(inteira).contas.cartao_credito, 2275.63);
+  assert.strictEqual(mes(comAberta).contas.cartao_credito, undefined);
+  assert.strictEqual(mes(comAberta).contas.emp_construcao, 1775.63);
+  assert.strictEqual(mes(comAberta).contas.pagamentos_compras, 200);
+  assert.strictEqual(mes(comAberta).contas.marketing, 300);
+});
+
+teste("concreto no cartão é investimento do empreendimento, não despesa do escritório", () => {
+  const fat = faturaRes();
+  const todos = [...LANC_RES, fat];
+  assert.strictEqual(M.resultadoEmpreendimento(todos, "c9").investido, 1775.63);
+  const r = M.resumoDoPeriodoEscritorio(todos);
+  assert.strictEqual(r.despesas, 300, "só o anúncio é despesa do escritório — e uma vez só");
+  assert.strictEqual(r.investimentoEmpreendimento, 1775.63);
+  assert.strictEqual(r.saidasGestao, 200);
+});
+
+teste("compra do escritório no cartão não conta antes da fatura fechar", () => {
+  const r = M.resumoDoPeriodoEscritorio(LANC_RES);
+  assert.strictEqual(r.despesas, 0, "o banco ainda não debitou");
+  assert.strictEqual(M.lancamentosParaResultado(LANC_RES).length, 0);
+});
+
+teste("fatura antiga, sem destino nas linhas, continua inteira em cartão", () => {
+  const velha = M.lancamentoDaFatura(CARTAO, "2026-09", [{ descricao: "x", valor: 500 }], {});
+  const ls = M.lancamentosParaResultado([velha]);
+  assert.strictEqual(ls.length, 1);
+  assert.strictEqual(ls[0].contaId, "cartao_credito");
+});
+
+teste("juros na fatura viram uma linha a mais em cartão; fatura menor que as compras não abre", () => {
+  const fat = faturaRes();
+  const maior = M.lancamentosParaResultado([{ ...fat, valor: 2300 }]);
+  const resto = maior.find((x) => /:resto$/.test(x.id));
+  assert.ok(resto && resto.contaId === "cartao_credito" && resto.valor === 24.37, JSON.stringify(resto));
+  const menor = M.lancamentosParaResultado([{ ...fat, valor: 2000 }]);
+  assert.strictEqual(menor.length, 1, "não abre — abrir daria linha negativa");
+  assert.ok(maior.every((x) => x.valor > 0) && menor.every((x) => x.valor > 0));
+});
+
+
+teste("compra no cartão fica fora da conferência com o banco; a fatura entra", () => {
+  const fat = faturaRes();
+  const doSet = [{ ...LANC_RES[0] }, { id: "P1", contaId: "luz_agua_net", competencia: "2026-09", valor: 90, lancadoEm: "2026-09-10" }];
+  const c = M.conferenciaDoMes(doSet, "2026-09");
+  assert.strictEqual(c.total, 1, "só a luz — o anúncio no cartão não passa pelo banco");
+  assert.strictEqual(M.conferenciaDoMes([fat], "2026-10").total, 1);
+  const r = M.conciliarExtrato([{ data: "2026-09-24", valor: -300, historico: "PIX ENVIADO" }], doSet);
+  assert.ok(!JSON.stringify(r).includes('"E1"'), "não casa a compra no cartão com movimento do banco");
 });
 
 

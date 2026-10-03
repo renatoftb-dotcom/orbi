@@ -9389,7 +9389,7 @@ const efCentavos = (v) => Math.round((Number(v) || 0) * 100) / 100;
 // É a mesma conta da planilha, com o bloco de empreendimento a mais.
 function extratoEscritorio(lancamentos, opcoes) {
   const o = opcoes || {};
-  const lista = (lancamentos || []).filter((l) => l && /^\d{4}-\d{2}$/.test(String(l.competencia)));
+  const lista = lancamentosParaResultado(lancamentos).filter((l) => l && /^\d{4}-\d{2}$/.test(String(l.competencia)));
   const todos = lista.map((l) => String(l.competencia)).sort();
   const de = o.de || todos[0] || "";
   const ate = o.ate || todos[todos.length - 1] || "";
@@ -9445,7 +9445,7 @@ function extratoEscritorio(lancamentos, opcoes) {
 function resultadoEmpreendimento(lancamentos, empreendimentoId, opcoes) {
   const o = opcoes || {};
   let investido = 0, vendido = 0, temVenda = false;
-  for (const l of lancamentos || []) {
+  for (const l of lancamentosParaResultado(lancamentos)) {
     if (!l || l.empreendimentoId !== empreendimentoId) continue;
     const conta = contaEscritorio(l.contaId);
     if (!conta) continue;
@@ -9798,10 +9798,15 @@ function pagamentoNoCartao(conta, cartao, dados) {
 // Tudo que compõe UMA fatura: as parcelas de qualquer obra e os
 // lançamentos do próprio escritório feitos naquele cartão, com a
 // competência desta fatura.
-function linhasDaFatura(obras, lancamentos, cartaoId, competencia) {
+function linhasDaFatura(obras, lancamentos, cartaoId, competencia, opcoes) {
+  const op = opcoes || {};
   const linhas = [];
   if (!cartaoId || !competencia) return linhas;
   for (const o of obras || []) {
+    // Para onde a compra iria no escritório se fosse à vista — o mesmo
+    // caminho da ponte. É o que a fatura usa para se abrir no resultado.
+    const cli = (op.clientes || []).find((x) => x && o && x.id === o.clienteId) || null;
+    const modo = modoDaPonte(o, cli);
     for (const c of (o && o.contasPagar) || []) {
       if (!c || c.cartaoId !== cartaoId) continue;
       for (const p of c.parcelasCartao || []) {
@@ -9814,6 +9819,15 @@ function linhasDaFatura(obras, lancamentos, cartaoId, competencia) {
           parcela: p.parcela, de: p.de, valor: Math.round((Number(p.valor) || 0) * 100) / 100,
           refId: c.id,
           anexos: anexosDaTransacao(c),
+          ...(() => {
+            const destino = destinoNoEscritorio(c.contaId, modo, op);
+            return {
+              destinoContaId: destino,
+              unidadeId: destino ? (modo === "empreendimento" ? "empreendimento" : "gestao_obras") : "",
+              empreendimentoId: destino && modo === "empreendimento" ? ((cli && cli.id) || o.clienteId || "") : "",
+              clienteId: (cli && cli.id) || o.clienteId || "",
+            };
+          })(),
         });
       }
     }
@@ -9830,6 +9844,10 @@ function linhasDaFatura(obras, lancamentos, cartaoId, competencia) {
         parcela: p.parcela, de: p.de, valor: Math.round((Number(p.valor) || 0) * 100) / 100,
         refId: l.id,
         anexos: anexosDaTransacao(l),
+        destinoContaId: l.contaId || "",
+        unidadeId: l.unidadeId || "escritorio",
+        empreendimentoId: l.empreendimentoId || "",
+        clienteId: l.clienteId || "",
       });
     }
   }
@@ -9856,15 +9874,15 @@ function faturasFechadas(lancamentos, cartaoId) {
 // extrato do escritório ficaria menor que a fatura do banco. Por isso as
 // atrasadas vêm marcadas, e não escondidas: você vê que elas são de outro
 // mês antes de confirmar.
-function faturaParaFechar(cartao, obras, lancamentos, competencia) {
+function faturaParaFechar(cartao, obras, lancamentos, competencia, opcoes) {
   const cid = (cartao || {}).id || "";
   const fechadas = faturasFechadas(lancamentos, cid);
-  const doMes = linhasDaFatura(obras, lancamentos, cid, competencia);
+  const doMes = linhasDaFatura(obras, lancamentos, cid, competencia, opcoes);
   const atrasadas = [];
   for (const comp of competenciasDoCartao(obras, lancamentos, cid)) {
     if (comp >= competencia) continue;
     if (fechadas.has(comp)) continue;
-    for (const l of linhasDaFatura(obras, lancamentos, cid, comp)) {
+    for (const l of linhasDaFatura(obras, lancamentos, cid, comp, opcoes)) {
       atrasadas.push({ ...l, competenciaOriginal: comp, atrasada: true });
     }
   }
@@ -9918,7 +9936,11 @@ function lancamentoDaFatura(cartao, competencia, linhas, opcoes) {
     // a composição, para a fatura poder ser aberta e conferida
     linhas: linhas.map((l) => ({ obra: l.obra, descricao: l.descricao, fornecedor: l.fornecedor,
       contaId: l.contaId, parcela: l.parcela, de: l.de, valor: l.valor, numeroDoc: l.numeroDoc,
-      anexos: l.anexos || [] })),
+      anexos: l.anexos || [],
+      // para onde cada compra vai no resultado (ver lancamentosParaResultado)
+      origem: l.origem || "", obraId: l.obraId || "", refId: l.refId || "", compraEm: l.compraEm || "",
+      destinoContaId: l.destinoContaId || "", unidadeId: l.unidadeId || "",
+      empreendimentoId: l.empreendimentoId || "", clienteId: l.clienteId || "" })),
     // As notas de cada compra sobem para a fatura: é com elas que a fatura se
     // explica na prestação de contas. Uma nota parcelada aparece uma vez só.
     anexos: (() => {
@@ -9931,6 +9953,79 @@ function lancamentoDaFatura(cartao, competencia, linhas, opcoes) {
     })(),
     criadoEm: new Date().toISOString(),
   };
+}
+
+// ── A fatura no RESULTADO ───────────────────────────────────────
+// No extrato e na conferência com o banco a fatura é UMA linha, porque o
+// banco debitou um valor. No resultado ela não pode ficar inteira em
+// "Cartão de crédito": o concreto pago no cartão é Construção do
+// empreendimento, não despesa do escritório. Então, para somar, a fatura se
+// abre nas compras que ela contém, cada uma na conta para onde iria se
+// tivesse sido paga à vista. O total é o mesmo, no mesmo mês — o saldo do
+// extrato não mexe um centavo; muda só em que linha o dinheiro aparece.
+//
+// A compra que o próprio escritório lança no cartão (com o plano de
+// parcelas) é o outro lado da mesma moeda: ela não sai do banco no dia, sai
+// dentro da fatura. Somá-la também contaria o mesmo dinheiro duas vezes —
+// por isso ela fica fora da soma e entra pela fatura, na conta dela.
+//
+// Fatura antiga, sem o destino gravado nas linhas, continua como estava:
+// inteira em Cartão de crédito.
+function compraNoCartaoDoEscritorio(l) {
+  const o = (l && l.origem) || {};
+  return !!(l && l.cartaoId && Array.isArray(l.parcelasCartao) && l.parcelasCartao.length && o.tipo !== "fatura");
+}
+
+function contaQueSaiDoBanco(contaId) {
+  const c = contaEscritorio(contaId);
+  const g = c && grupoEscritorio(c.grupo);
+  return !!(g && g.sinal < 0);
+}
+
+function lancamentosParaResultado(lancamentos) {
+  const fora = [];
+  for (const l of lancamentos || []) {
+    if (!l) continue;
+    if (compraNoCartaoDoEscritorio(l)) continue;
+    const o = l.origem || {};
+    const linhas = Array.isArray(l.linhas) ? l.linhas : [];
+    if (o.tipo !== "fatura" || !linhas.some((x) => x && x.destinoContaId)) { fora.push(l); continue; }
+    const partes = [];
+    let soma = 0;
+    linhas.forEach((x, i) => {
+      const v = efCentavos(x && x.valor);
+      if (!(v > 0)) return;
+      soma = efCentavos(soma + v);
+      // Destino que ENTRARIA no banco (receita, venda) não cabe numa
+      // fatura: fica em Cartão de crédito, para o saldo não inverter.
+      const destino = x.destinoContaId && contaQueSaiDoBanco(x.destinoContaId) ? x.destinoContaId : "";
+      partes.push({
+        ...l,
+        id: `${l.id}:${i + 1}`,
+        origem: { tipo: "faturaLinha", faturaId: l.id, cartaoId: o.cartaoId || "", competencia: o.competencia || "",
+          obraId: x.obraId || "", refId: x.refId || "" },
+        contaId: destino || l.contaId,
+        unidadeId: destino ? (x.unidadeId || l.unidadeId) : l.unidadeId,
+        empreendimentoId: destino ? (x.empreendimentoId || "") : (l.empreendimentoId || ""),
+        clienteId: destino ? (x.clienteId || "") : (l.clienteId || ""),
+        projeto: x.obra || "",
+        valor: v,
+        descricao: [x.descricao, x.de > 1 ? `parcela ${x.parcela}/${x.de}` : ""].filter(Boolean).join(" · "),
+        fornecedor: x.fornecedor || "",
+        anexos: x.anexos || [],
+        linhas: undefined,
+      });
+    });
+    const resto = efCentavos((Number(l.valor) || 0) - soma);
+    // Valor da fatura menor que a soma das compras: algo foi editado à mão.
+    // Abrir daria uma linha negativa — melhor somar a fatura como está.
+    if (resto < 0 || !partes.length) { fora.push(l); continue; }
+    if (resto > 0) partes.push({ ...l, id: `${l.id}:resto`, valor: resto, linhas: undefined,
+      origem: { tipo: "faturaLinha", faturaId: l.id, cartaoId: o.cartaoId || "", competencia: o.competencia || "" },
+      descricao: "Diferença da fatura (juros, tarifas)" });
+    for (const p of partes) fora.push(p);
+  }
+  return fora;
 }
 
 // As faturas que existem num cartão: toda competência que tem alguma linha.
@@ -10533,7 +10628,7 @@ function filtrarLancamentosEscritorio(lancamentos, filtro) {
 // não entra aqui: ele é do extrato inteiro, não de um recorte.
 function resumoDoPeriodoEscritorio(lancamentos) {
   const grupos = {}, contas = {};
-  for (const l of lancamentos || []) {
+  for (const l of lancamentosParaResultado(lancamentos)) {
     const conta = contaEscritorio(l && l.contaId);
     if (!conta) continue;
     const v = Number(l.valor) || 0;
@@ -10582,7 +10677,9 @@ function ultimoMesFechado(fechamentos) {
 // Como está a conferência de um mês: quantos lançamentos já foram marcados
 // como vistos no extrato do banco, e quanto ainda falta conferir.
 function conferenciaDoMes(lancamentos, mes) {
-  const doMes = (lancamentos || []).filter((l) => l && String(l.competencia) === String(mes));
+  // A compra no cartão não aparece no banco — quem aparece é a fatura.
+  const doMes = (lancamentos || []).filter((l) => l && String(l.competencia) === String(mes)
+    && !compraNoCartaoDoEscritorio(l));
   const conferidos = doMes.filter((l) => l.conferido);
   const soma = (lista) => efCentavos(lista.reduce((s, l) => s + (Number(l.valor) || 0), 0));
   return {
@@ -10839,7 +10936,7 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
   const tolerancia = o.tolerancia == null ? 0.01 : o.tolerancia;
   const doBanco = (movimentos || []).filter((m) => m && efEhMovimento(m.historico));
   const foraDoBanco = (movimentos || []).filter((m) => m && !efEhMovimento(m.historico));
-  const candidatos = (lancamentos || []).map((l, i) => ({
+  const candidatos = (lancamentos || []).filter((l) => !compraNoCartaoDoEscritorio(l)).map((l, i) => ({
     l, i, abs: Math.round(Math.abs(Number(l.valor) || 0) * 100) / 100, usado: false,
   }));
 
@@ -11279,13 +11376,14 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
 
 // Formulário de um lançamento. As travas são as do validarLancamento: a
 // mensagem aparece antes de gravar, não depois.
-function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, prestadores, aoCriarPrestador, insumos }) {
+function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, prestadores, aoCriarPrestador, insumos, cartoes }) {
   const S = EF_ESTILO;
   const [f, setF] = useState(() => ({
     contaId: "", contaFonte: "", obraIdAlvo: "", fornecedorId: "", anexos: [], itens: [],
     unidadeId: "escritorio", valor: "", competencia: "", lancadoEm: "",
     cliente: "", clienteId: "", empreendimentoId: "", projeto: "", fornecedor: "", descricao: "", documento: "", contaBanco: "sim",
     ...(inicial || {}),
+    parcelas: (inicial && Array.isArray(inicial.parcelasCartao) && inicial.parcelasCartao.length) || (inicial && inicial.parcelas) || 1,
   }));
   const [tentou, setTentou] = useState(false);
   const [erroAnexo, setErroAnexo] = useState("");
@@ -11397,6 +11495,26 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
         clienteId: f.clienteId || f.cliente, obraId: f.projeto,
         empreendimentoId: ehEmp ? f.empreendimentoId : f.projeto }, { fechamentos });
 
+  // ── Pago no cartão ──
+  // A compra entra integral, na data dela, na conta escolhida (ou na obra);
+  // no banco ela só sai dentro da fatura. Por isso o lançamento fica fora da
+  // conferência com o banco e do resultado até a fatura fechar.
+  const cartoesAtivos = (cartoes || []).filter((c) => c && c.ativo !== false);
+  const noCartao = f.formaPagamento === "cartao";
+  const cartaoEscolhido = noCartao ? cartaoPorId(cartoesAtivos, f.cartaoId) : null;
+  const planoCartao = cartaoEscolhido
+    ? parcelasDoCartao(cartaoEscolhido, f.lancadoEm, efValorDoCampo(f.valor), f.parcelas) : [];
+  const comoFoiPago = noCartao ? "cartao" : (f.contaBanco === "nao" ? "nao" : "sim");
+  const errosCartao = !noCartao ? []
+    : [!cartaoEscolhido ? "Escolha o cartão." : "", !f.lancadoEm ? "Informe a data da compra." : ""].filter(Boolean);
+  const todosErros = erros.concat(errosCartao);
+  const comCartao = (x) => {
+    if (!noCartao) return { ...x, formaPagamento: naObra ? "avista" : (x.formaPagamento === "cartao" ? "" : x.formaPagamento),
+      cartaoId: "", parcelasCartao: undefined };
+    return { ...x, formaPagamento: "cartao", cartaoId: cartaoEscolhido.id, contaBanco: "nao",
+      parcelasCartao: planoCartao };
+  };
+
   const campo = (rot, filho) => <div style={{ minWidth: 0 }}><div style={S.rot}>{rot}</div>{filho}</div>;
   return (
     <div style={{ ...S.card, borderColor: "rgba(4,116,244,0.35)", background: "#f7fbff", display: "grid", gap: 12 }}>
@@ -11470,12 +11588,29 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           onChange={(e) => set("competencia", e.target.value)} />)}
         {campo("Data do pagamento", <input style={S.input} type="date" value={f.lancadoEm}
           onChange={(e) => set("lancadoEm", e.target.value)} />)}
-        {campo("Passou pela conta do escritório", (
-          <Selecao style={{ ...S.input, cursor: "pointer" }} value={f.contaBanco} onChange={(e) => set("contaBanco", e.target.value)}>
-            <option value="sim">Sim</option>
-            <option value="nao">Não</option>
+        {campo("Como foi pago", (
+          <Selecao style={{ ...S.input, cursor: "pointer" }} value={comoFoiPago} onChange={(e) => {
+            const v = e.target.value;
+            if (v === "cartao") {
+              setF((p) => ({ ...p, formaPagamento: "cartao", contaBanco: "nao",
+                cartaoId: p.cartaoId || (cartoesAtivos[0] ? cartoesAtivos[0].id : ""), parcelas: p.parcelas || 1 }));
+            } else {
+              setF((p) => ({ ...p, formaPagamento: "", contaBanco: v, cartaoId: "" }));
+            }
+          }}>
+            <option value="sim">Conta do escritório</option>
+            {(cartoesAtivos.length > 0 || noCartao) && <option value="cartao">Cartão do escritório</option>}
+            <option value="nao">Fora da conta do escritório</option>
           </Selecao>
         ))}
+        {noCartao && campo("Cartão", (
+          <Selecao style={{ ...S.input, cursor: "pointer" }} value={f.cartaoId || ""} onChange={(e) => set("cartaoId", e.target.value)}>
+            <option value="">Escolha…</option>
+            {cartoesAtivos.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </Selecao>
+        ))}
+        {noCartao && campo("Parcelas", <input style={S.input} inputMode="numeric" value={f.parcelas}
+          onChange={(e) => set("parcelas", e.target.value.replace(/\D/g, "").slice(0, 2))} />)}
         {campo(ehEmp ? "Empreendimento" : "Cliente", (
           <Selecao style={{ ...S.input, cursor: "pointer" }}
             value={f.clienteId || ""}
@@ -11700,16 +11835,23 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           </div>
         )}
       </div>
-      {tentou && erros.length > 0 && (
-        <div style={{ fontSize: 12, color: "#b91c1c" }}>{erros.join(" · ")}</div>
+      {noCartao && planoCartao.length > 0 && (
+        <div style={{ fontSize: 12, color: "#4b5563" }}>
+          Cai nas faturas de <b>{planoCartao.map((x) => `${x.competencia} (${efDinheiro(x.valor)})`).join(" · ")}</b>.
+          {" "}{naObra ? "O custo da obra é integral nesta data;" : "A compra conta na conta escolhida;"} o
+          extrato do escritório recebe quando você fechar a fatura, em Cartões.
+        </div>
+      )}
+      {tentou && todosErros.length > 0 && (
+        <div style={{ fontSize: 12, color: "#b91c1c" }}>{todosErros.join(" · ")}</div>
       )}
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button style={EF_ESTILO.btnSec} onClick={aoCancelar}>Cancelar</button>
         <button style={EF_ESTILO.btn} onClick={() => {
           setTentou(true);
-          if (erros.length) return;
-          if (naObra) { aoSalvar({ ...f, naObra: true, valor: efValorDoCampo(f.valor) }); return; }
-          aoSalvar({ ...f, tipo: "escritorio", valor: efValorDoCampo(f.valor) });
+          if (todosErros.length) return;
+          if (naObra) { aoSalvar(comCartao({ ...f, naObra: true, valor: efValorDoCampo(f.valor) })); return; }
+          aoSalvar(comCartao({ ...f, tipo: "escritorio", valor: efValorDoCampo(f.valor) }));
         }}>Salvar</button>
       </div>
     </div>
@@ -11847,7 +11989,8 @@ function PainelFinanceiroEscritorio({ lancs, linhas, fechamentos, filtro, aoFilt
   const S = EF_ESTILO;
   const anos = [...new Set((linhas || []).map((l) => l.mes.slice(0, 4)))].sort();
   const doFiltro = filtrarLancamentosEscritorio(lancs, filtro);
-  const r = resumoDoPeriodoEscritorio(doFiltro);
+  // o resultado olha a fatura aberta nas compras; a lista continua com uma linha
+  const r = resumoDoPeriodoEscritorio(filtrarLancamentosEscritorio(lancamentosParaResultado(lancs), filtro));
   const unidade = UNIDADES_NEGOCIO.find((u) => u.id === filtro.unidadeId);
 
   // Saldo do extrato: é do banco inteiro, então só faz sentido sem recorte
@@ -12278,7 +12421,7 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo }) {
   const comps = cartao ? competenciasDoCartao(obras, lancs, cartao.id) : [];
   const fechadas = cartao ? faturasFechadas(lancs, cartao.id) : new Set();
   const compAtual = mes || comps.find((c) => !fechadas.has(c)) || comps[comps.length - 1] || "";
-  const fatura = cartao && compAtual ? faturaParaFechar(cartao, obras, lancs, compAtual) : null;
+  const fatura = cartao && compAtual ? faturaParaFechar(cartao, obras, lancs, compAtual, { clientes: (data && data.clientes) || [] }) : null;
 
   function salvarCartao() {
     const f = form || {};
@@ -12406,6 +12549,11 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo }) {
                           <div style={{ fontSize: 10.5, color: "#9ca3af" }}>
                             {l.compraEm}{l.numeroDoc ? " · nº " + l.numeroDoc : ""}
                             {l.atrasada ? ` · de ${l.competenciaOriginal}, ficou em aberto` : ""}
+                          </div>
+                          {/* onde a compra pesa no resultado: a fatura é uma linha no
+                              banco, mas cada compra conta na conta dela */}
+                          <div style={{ fontSize: 10.5, color: "#6b7280" }}>
+                            no resultado: {((contaEscritorio(l.destinoContaId) || {}).nome) || "Cartão de crédito"}
                           </div>
                           <LinksDeAnexo transacao={l} compacto />
                         </td>
@@ -12535,9 +12683,18 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     // dez papéis que não existem.
     const numeroDoc = proximaReferencia(todas, lancamentosDoEscritorio(data));
     const papeis = anexosDaTransacao(l);
-    const novas = contasDoPapel.map((c) => comAnexos(
-      contaPaga(registrarAto({ ...c, numeroDoc: numeroDoc }, "criada", quem),
-        { pagoEm: l.lancadoEm, valorPago: Number(c.valor) || 0 }, quem), papeis));
+    // No cartão, cada conta leva o seu plano de parcelas: a fatura acha
+    // por ele, e a ponte não manda a compra sozinha para o extrato.
+    const cartaoDoCusto = l.formaPagamento === "cartao" ? cartaoPorId(cartoesDoEscritorio(data), l.cartaoId) : null;
+    const novas = contasDoPapel.map((c) => {
+      let paga = contaPaga(registrarAto({ ...c, numeroDoc: numeroDoc }, "criada", quem),
+        { pagoEm: l.lancadoEm, valorPago: Number(c.valor) || 0 }, quem);
+      const plano = cartaoDoCusto
+        ? pagamentoNoCartao(paga, cartaoDoCusto, { pagoEm: l.lancadoEm, valorPago: Number(c.valor) || 0, parcelas: l.parcelas })
+        : null;
+      paga = plano ? { ...paga, ...plano } : { ...paga, formaPagamento: "avista" };
+      return comAnexos(paga, papeis);
+    });
     if (!novas.length) return;
     const obraNova = { ...obra, contasPagar: (obra.contasPagar || []).concat(novas) };
     const ponte = lancamentosDaBaixa(obraNova, cliente, novas,
@@ -12899,6 +13056,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             obras={(data || {}).obras || []}
             prestadores={((data || {}).fornecedores || []).filter((x) => x && x.ativo !== false)}
             insumos={((data || {}).materiais || []).filter((x) => x && x.ativo !== false)}
+            cartoes={cartoesDoEscritorio(data)}
             aoCriarPrestador={criarPrestadorDoLancamento}
             inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} />}
           {vendoComprovante && typeof VisorProposta === "function" && (
@@ -12942,7 +13100,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
                               <div key={i} style={{ fontSize: 11.5, color: "#4b5563", display: "flex", gap: 8,
                                 flexWrap: "wrap", alignItems: "baseline" }}>
                                 <span style={{ color: "#111827" }}>{x.descricao || "—"}</span>
-                                <span>{[x.obra || "Escritório", x.fornecedor, x.de > 1 ? x.parcela + "/" + x.de : ""]
+                                <span>{[x.obra || "Escritório", x.fornecedor, x.de > 1 ? x.parcela + "/" + x.de : "",
+                                  x.destinoContaId && contaEscritorio(x.destinoContaId) ? "no resultado: " + contaEscritorio(x.destinoContaId).nome : ""]
                                   .filter(Boolean).join(" · ")}</span>
                                 <span style={{ fontVariantNumeric: "tabular-nums" }}>{efDinheiro(x.valor)}</span>
                                 <LinksDeAnexo transacao={x} compacto />
@@ -12967,6 +13126,11 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
                             </button>
                           );
                         })()}
+                        {compraNoCartaoDoEscritorio(l) && (
+                          <div style={{ fontSize: 11, color: "#6b7280" }}>
+                            no cartão — sai do banco na fatura de {[...new Set((l.parcelasCartao || []).map((x) => x.competencia))].join(", ")}
+                          </div>
+                        )}
                       </td>
                       <td style={{ padding: "7px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{efDinheiro(l.valor)}</td>
                       <td style={{ padding: "7px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
