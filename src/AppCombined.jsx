@@ -2280,7 +2280,13 @@ function opcoesNormalizadas(opcoes) {
   return saida.map(function (o) {
     return {
       valor: o.valor, rotulo: o.rotulo, grupo: o.grupo, extra: o.extra,
-      busca: buscaNormal([o.rotulo, o.grupo, o.extra, o.valor].join(" ")),
+      busca: buscaNormal([o.rotulo, o.grupo, o.extra].join(" ")),
+      // O valor costuma ser um id ("1afw1za") ou um código ("CON-001"). Ele
+      // não entra na busca por pedaço — senão o "1" de "módulo 1" achava o
+      // Módulo 3 pelo id dele. Só vale quando o que se digitou É o começo
+      // do código.
+      buscaValor: buscaNormal(o.valor),
+      buscaRotulo: buscaNormal(o.rotulo),
     };
   });
 }
@@ -2288,17 +2294,36 @@ function opcoesNormalizadas(opcoes) {
 // Filtra por pedacos soltos ("reb int" acha "Reboco interno") e põe na frente
 // quem COMEÇA com o que foi digitado — é essa a opção que a pessoa espera ver
 // já marcada depois das primeiras letras.
+// Número digitado casa com número inteiro, não com o meio de outro: "1"
+// acha "Módulo 1" e "10 mm", mas não o "1" de "L21". Texto casa em qualquer
+// lugar, como sempre ("eiro" acha serralheiro).
+function casaPedaco(texto, p) {
+  if (!/^\d/.test(p)) return texto.indexOf(p) >= 0;
+  let i = texto.indexOf(p);
+  while (i >= 0) {
+    if (i === 0 || !/\d/.test(texto.charAt(i - 1))) return true;
+    i = texto.indexOf(p, i + 1);
+  }
+  return false;
+}
+
 function filtrarOpcoes(lista, termo) {
   const alvo = buscaNormal(termo);
   if (!alvo) return lista;
   const partes = alvo.split(" ").filter(Boolean);
-  const comeca = [], contem = [];
+  // Na frente quem começa com o que foi digitado; depois quem tem tudo no
+  // PRÓPRIO nome; por último quem só casou pelo grupo ou pelo apelido.
+  const comeca = [], noNome = [], contem = [];
   lista.forEach(function (o) {
-    const casa = partes.every(function (p) { return o.busca.indexOf(p) >= 0; });
-    if (!casa) return;
-    (buscaNormal(o.rotulo).indexOf(alvo) === 0 ? comeca : contem).push(o);
+    const rot = o.buscaRotulo != null ? o.buscaRotulo : buscaNormal(o.rotulo);
+    const pelaBusca = partes.every(function (p) { return casaPedaco(o.busca, p); });
+    const peloCodigo = !!o.buscaValor && o.buscaValor.indexOf(alvo) === 0;
+    if (!pelaBusca && !peloCodigo) return;
+    if (rot.indexOf(alvo) === 0 || peloCodigo) comeca.push(o);
+    else if (partes.every(function (p) { return casaPedaco(rot, p); })) noNome.push(o);
+    else contem.push(o);
   });
-  return comeca.concat(contem);
+  return comeca.concat(noNome, contem);
 }
 
 // O que não está na lista precisa poder entrar sem sair da lista. Quem já
@@ -24512,7 +24537,9 @@ function contaPaga(conta, dados, quem, agoraIso) {
 // Desfazer. O comprovante fica: ele é do pagamento que houve, e apagá-lo
 // junto perderia o documento por causa de um clique errado.
 function contaEmAberto(conta, quem, agoraIso) {
-  const c = conta || {};
+  // O jeito de pagar vai embora junto com o pagamento: uma conta em aberto
+  // com plano de parcelas continuaria caindo na fatura do cartão.
+  const { formaPagamento, cartaoId, parcelasCartao, ...c } = conta || {};
   const agora = agoraIso || new Date().toISOString();
   return registrarAto({ ...c, pago: false, pagoEm: "", valorPago: "", contabilizadoEm: "" },
     "desfeita", quem, agora);
@@ -36989,8 +37016,33 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Pagar registra o realizado na própria conta — é ela que alimenta o
   // realizado por conta do plano de contas e por prestador.
   // Desfazer é imediato; pagar abre a telinha da data de contabilização.
-  const alternarPagamento = (conta) => {
+  // Desfazer pede confirmação: a conta volta a ficar A PAGAR — e, com o
+  // vencimento no passado, aparece vencida. Quem quer tirar um lançamento
+  // errado procura o Excluir, e a pergunta diz isso.
+  const confirmarDesfazer = async (lista) => {
+    const doEscritorio = (data && data.lancamentos) || [];
+    const travadas = typeof fechadasDaCompra === "function"
+      ? [...new Set(lista.flatMap(c => fechadasDaCompra(c, doEscritorio)))] : [];
+    if (travadas.length) {
+      dialogo.alertar({ titulo: "Pagamento está numa fatura fechada",
+        mensagem: "Este pagamento foi no cartão e já está na fatura de "
+          + travadas.map(x => typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso(x) : x).join(", ")
+          + ", que está fechada. Reabra a fatura em Escritório → Cartões antes de desfazer.", tipo: "aviso" });
+      return false;
+    }
+    return dialogo.confirmar({
+      titulo: "Desfazer o pagamento?",
+      mensagem: "A conta volta a ficar a pagar (em aberto), com o vencimento que ela tem — se já passou, aparece vencida. "
+        + (lista.some(c => c && c.cartaoId)
+          ? "Como foi no cartão, a compra sai das faturas abertas do cartão. "
+          : "O lançamento que foi para o extrato do escritório sai junto. ")
+        + "Se o lançamento estava errado e você quer tirá-lo, use ⋯ → Excluir.",
+      confirmar: "Desfazer pagamento",
+    });
+  };
+  const alternarPagamento = async (conta) => {
     if (conta.pago) {
+      if (!(await confirmarDesfazer([conta]))) return;
       const atualizada = contaEmAberto(conta, quemSou());
       gravarContas(contasDaObra.map(c => c.id === conta.id ? atualizada : c), conta.obraId);
       return;
@@ -37000,8 +37052,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   };
   // A loja cobra o pedido, não o saco de cimento: a baixa é de uma vez só,
   // todos os itens na mesma data, e o boleto vale como comprovante de todos.
-  const alternarPagamentoPedido = (linha) => {
+  const alternarPagamentoPedido = async (linha) => {
     if (linha.pago) {
+      if (!(await confirmarDesfazer(linha.contas))) return;
       const alvo = new Set(linha.contas.map(c => c.id));
       gravarContas(contasDaObra.map(c => (alvo.has(c.id) ? contaEmAberto(c, quemSou()) : c)), linha.obraId);
       return;

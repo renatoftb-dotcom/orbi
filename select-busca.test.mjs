@@ -93,12 +93,13 @@ t("nulos e lista fora de formato não quebram", () => {
   eq(opcoesNormalizadas([null, undefined, "un"]).length, 1);
 });
 
-t("a chave de busca junta rótulo, grupo, extra e valor, sem acento", () => {
+t("a chave de busca junta rótulo, grupo e extra, sem acento; o valor fica à parte", () => {
   const l = opcoesNormalizadas([{ id: "c1", nome: "Cerâmica", grupo: "Pisos", extra: "Ourifer" }]);
   assert(l[0].busca.indexOf("ceramica") >= 0, "rótulo");
   assert(l[0].busca.indexOf("pisos") >= 0, "grupo");
   assert(l[0].busca.indexOf("ourifer") >= 0, "extra");
-  assert(l[0].busca.indexOf("c1") >= 0, "valor");
+  assert(l[0].busca.indexOf("c1") < 0, "o id não entra na busca por pedaço");
+  eq(l[0].buscaValor, "c1");
 });
 
 // ── filtrarOpcoes ─────────────────────────────
@@ -230,6 +231,31 @@ t("sem nada digitado, o rótulo diz o que se cadastra", () => {
   eq(api.rotuloDeCriar("   ", "insumo"), "＋ Cadastrar insumo");
   eq(api.rotuloDeCriar(null, ""), "＋ Cadastrar");
   eq(api.rotuloDeCriar(undefined, undefined), "＋ Cadastrar");
+});
+
+
+t("número acha número inteiro, e o id não entra na busca", () => {
+  const obras = opcoesNormalizadas([
+    { valor: "1afw1za", rotulo: "Jacarezinho Módulo 3", grupo: "Jacarezinho Módulo 3", extra: "L21 Q5" },
+    { valor: "xflr1rp", rotulo: "Jacarezinho Módulo 1", grupo: "Jacarezinho Módulo 1" },
+    { valor: "z9", rotulo: "Jacarezinho Módulo 10" },
+  ]);
+  eq(filtrarOpcoes(obras, "módulo 1").map(o => o.rotulo), ["Jacarezinho Módulo 1", "Jacarezinho Módulo 10"]);
+  eq(filtrarOpcoes(obras, "modulo 3").map(o => o.rotulo), ["Jacarezinho Módulo 3"]);
+});
+
+t("código digitado do começo ainda acha pelo valor", () => {
+  const ins = opcoesNormalizadas([{ valor: "CON-001", rotulo: "Concreto usinado FCK25" }, { valor: "ACO-002", rotulo: "Aço CA50" }]);
+  eq(filtrarOpcoes(ins, "con-001").map(o => o.valor), ["CON-001"]);
+  eq(filtrarOpcoes(ins, "fck25").map(o => o.valor), ["CON-001"]);
+});
+
+t("quem tem tudo no próprio nome vem antes de quem casou pelo grupo", () => {
+  const l = opcoesNormalizadas([
+    { valor: "a", rotulo: "Caixa d'água", grupo: "Hidráulica fundação" },
+    { valor: "b", rotulo: "Forma fundação", grupo: "Fundação" },
+  ]);
+  eq(filtrarOpcoes(l, "fundacao").map(o => o.valor), ["b", "a"]);
 });
 
 

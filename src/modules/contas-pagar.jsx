@@ -1406,7 +1406,9 @@ function contaPaga(conta, dados, quem, agoraIso) {
 // Desfazer. O comprovante fica: ele é do pagamento que houve, e apagá-lo
 // junto perderia o documento por causa de um clique errado.
 function contaEmAberto(conta, quem, agoraIso) {
-  const c = conta || {};
+  // O jeito de pagar vai embora junto com o pagamento: uma conta em aberto
+  // com plano de parcelas continuaria caindo na fatura do cartão.
+  const { formaPagamento, cartaoId, parcelasCartao, ...c } = conta || {};
   const agora = agoraIso || new Date().toISOString();
   return registrarAto({ ...c, pago: false, pagoEm: "", valorPago: "", contabilizadoEm: "" },
     "desfeita", quem, agora);

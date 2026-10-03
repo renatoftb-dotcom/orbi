@@ -2675,8 +2675,33 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Pagar registra o realizado na própria conta — é ela que alimenta o
   // realizado por conta do plano de contas e por prestador.
   // Desfazer é imediato; pagar abre a telinha da data de contabilização.
-  const alternarPagamento = (conta) => {
+  // Desfazer pede confirmação: a conta volta a ficar A PAGAR — e, com o
+  // vencimento no passado, aparece vencida. Quem quer tirar um lançamento
+  // errado procura o Excluir, e a pergunta diz isso.
+  const confirmarDesfazer = async (lista) => {
+    const doEscritorio = (data && data.lancamentos) || [];
+    const travadas = typeof fechadasDaCompra === "function"
+      ? [...new Set(lista.flatMap(c => fechadasDaCompra(c, doEscritorio)))] : [];
+    if (travadas.length) {
+      dialogo.alertar({ titulo: "Pagamento está numa fatura fechada",
+        mensagem: "Este pagamento foi no cartão e já está na fatura de "
+          + travadas.map(x => typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso(x) : x).join(", ")
+          + ", que está fechada. Reabra a fatura em Escritório → Cartões antes de desfazer.", tipo: "aviso" });
+      return false;
+    }
+    return dialogo.confirmar({
+      titulo: "Desfazer o pagamento?",
+      mensagem: "A conta volta a ficar a pagar (em aberto), com o vencimento que ela tem — se já passou, aparece vencida. "
+        + (lista.some(c => c && c.cartaoId)
+          ? "Como foi no cartão, a compra sai das faturas abertas do cartão. "
+          : "O lançamento que foi para o extrato do escritório sai junto. ")
+        + "Se o lançamento estava errado e você quer tirá-lo, use ⋯ → Excluir.",
+      confirmar: "Desfazer pagamento",
+    });
+  };
+  const alternarPagamento = async (conta) => {
     if (conta.pago) {
+      if (!(await confirmarDesfazer([conta]))) return;
       const atualizada = contaEmAberto(conta, quemSou());
       gravarContas(contasDaObra.map(c => c.id === conta.id ? atualizada : c), conta.obraId);
       return;
@@ -2686,8 +2711,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   };
   // A loja cobra o pedido, não o saco de cimento: a baixa é de uma vez só,
   // todos os itens na mesma data, e o boleto vale como comprovante de todos.
-  const alternarPagamentoPedido = (linha) => {
+  const alternarPagamentoPedido = async (linha) => {
     if (linha.pago) {
+      if (!(await confirmarDesfazer(linha.contas))) return;
       const alvo = new Set(linha.contas.map(c => c.id));
       gravarContas(contasDaObra.map(c => (alvo.has(c.id) ? contaEmAberto(c, quemSou()) : c)), linha.obraId);
       return;

@@ -2276,7 +2276,13 @@ function opcoesNormalizadas(opcoes) {
   return saida.map(function (o) {
     return {
       valor: o.valor, rotulo: o.rotulo, grupo: o.grupo, extra: o.extra,
-      busca: buscaNormal([o.rotulo, o.grupo, o.extra, o.valor].join(" ")),
+      busca: buscaNormal([o.rotulo, o.grupo, o.extra].join(" ")),
+      // O valor costuma ser um id ("1afw1za") ou um código ("CON-001"). Ele
+      // não entra na busca por pedaço — senão o "1" de "módulo 1" achava o
+      // Módulo 3 pelo id dele. Só vale quando o que se digitou É o começo
+      // do código.
+      buscaValor: buscaNormal(o.valor),
+      buscaRotulo: buscaNormal(o.rotulo),
     };
   });
 }
@@ -2284,17 +2290,36 @@ function opcoesNormalizadas(opcoes) {
 // Filtra por pedacos soltos ("reb int" acha "Reboco interno") e põe na frente
 // quem COMEÇA com o que foi digitado — é essa a opção que a pessoa espera ver
 // já marcada depois das primeiras letras.
+// Número digitado casa com número inteiro, não com o meio de outro: "1"
+// acha "Módulo 1" e "10 mm", mas não o "1" de "L21". Texto casa em qualquer
+// lugar, como sempre ("eiro" acha serralheiro).
+function casaPedaco(texto, p) {
+  if (!/^\d/.test(p)) return texto.indexOf(p) >= 0;
+  let i = texto.indexOf(p);
+  while (i >= 0) {
+    if (i === 0 || !/\d/.test(texto.charAt(i - 1))) return true;
+    i = texto.indexOf(p, i + 1);
+  }
+  return false;
+}
+
 function filtrarOpcoes(lista, termo) {
   const alvo = buscaNormal(termo);
   if (!alvo) return lista;
   const partes = alvo.split(" ").filter(Boolean);
-  const comeca = [], contem = [];
+  // Na frente quem começa com o que foi digitado; depois quem tem tudo no
+  // PRÓPRIO nome; por último quem só casou pelo grupo ou pelo apelido.
+  const comeca = [], noNome = [], contem = [];
   lista.forEach(function (o) {
-    const casa = partes.every(function (p) { return o.busca.indexOf(p) >= 0; });
-    if (!casa) return;
-    (buscaNormal(o.rotulo).indexOf(alvo) === 0 ? comeca : contem).push(o);
+    const rot = o.buscaRotulo != null ? o.buscaRotulo : buscaNormal(o.rotulo);
+    const pelaBusca = partes.every(function (p) { return casaPedaco(o.busca, p); });
+    const peloCodigo = !!o.buscaValor && o.buscaValor.indexOf(alvo) === 0;
+    if (!pelaBusca && !peloCodigo) return;
+    if (rot.indexOf(alvo) === 0 || peloCodigo) comeca.push(o);
+    else if (partes.every(function (p) { return casaPedaco(rot, p); })) noNome.push(o);
+    else contem.push(o);
   });
-  return comeca.concat(contem);
+  return comeca.concat(noNome, contem);
 }
 
 // O que não está na lista precisa poder entrar sem sair da lista. Quem já

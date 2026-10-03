@@ -1404,6 +1404,16 @@ teste("baixa sem comprovante não inventa ato de anexo", () => {
   assert.strictEqual(paga.comprovante, null);
 });
 
+teste("desfazer pagamento no cartão tira a conta das faturas", () => {
+  const paga = { id: "c9", valor: 300, pago: true, pagoEm: "2026-09-04", valorPago: 300, formaPagamento: "cartao", cartaoId: "k1",
+    parcelasCartao: [{ parcela: 1, de: 1, competencia: "2026-10", valor: 300 }] };
+  const aberta = modulo.contaEmAberto(paga, "Renato", "2026-10-03T12:00:00.000Z");
+  assert.strictEqual(aberta.pago, false);
+  assert.strictEqual(aberta.cartaoId, undefined);
+  assert.strictEqual(aberta.parcelasCartao, undefined);
+  assert.strictEqual(aberta.formaPagamento, undefined);
+});
+
 teste("desfazer registra o ato e preserva o comprovante", () => {
   const paga = modulo.contaPaga({ id: "c1", valor: 500 }, { pagoEm: "2026-09-10", valorPago: 500,
     comprovante: { nome: "pix.png" } }, "Renato", "2026-09-20T12:00:00.000Z");
