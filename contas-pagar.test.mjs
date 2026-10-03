@@ -60,6 +60,8 @@ const modulo = new Function(`
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
            plPorEtapa, estimativaPorEtapaDoOrcamento,
+           plPorInsumo, conferenciaDaLigacao, dimensoesDaConta,
+           grupoCanonico, grupoDoItem, subcontasDaConta, GRUPOS_MATERIAL,
            detalheDaEdicaoDaConta,
            pagamentosEmAberto, ajustarVencimentos, limparAjustes, ajustesDoContrato,
            previaAjusteContrato, proximoNumeroDoc };
@@ -2349,6 +2351,132 @@ teste("orcado e estimado nao se somam — sao duas contas do mesmo gasto", () =>
   const linhaSem = r.linhas.find(l => l.etapaId === "");
   assert.strictEqual(linhaSem.estimado, 11280.04);
   assert.strictEqual(linhaSem.orcado, 500, "so o que o orcamento nao soube classificar");
+});
+
+
+// ── A corrente: orcamento → catalogo → compra → pagamento ──────
+const INS_CAT = [
+  { codigo: "CON-001", nome: "Concreto FCK25", unidade: "m3", grupo: "Concreto", etapaPadrao: "fundacao" },
+  { codigo: "ACO-8",   nome: "Vergalhão 8mm",  unidade: "br", grupo: "Aço",      etapaPadrao: "fundacao" },
+];
+const ORC_LIG = { itens: [
+  { etapa: "Fundação", item: "Concreto FCK25", insumoCodigo: "CON-001", unidade: "m3", qtd: 11, preco: 343.64, total: 3780.04 },
+  { etapa: "Fundação", item: "Vergalhão 8mm",  insumoCodigo: "ACO-8",   unidade: "br", qtd: 40, preco: 12.14, total: 485.60 },
+  { etapa: "Fundação", item: "Arame que ninguem cadastrou", unidade: "kg", qtd: 5, preco: 20, total: 100 },
+] };
+const CONTAS_LIG = [
+  { id: "a", contaId: "material", insumoCodigo: "CON-001", etapa: "fundacao", numeroDoc: "0001",
+    quantidade: 7, unidade: "m3", valor: 2405.48, valorPago: 2405.48, pago: true, pagoEm: "2026-10-05" },
+  { id: "b", contaId: "material", insumoCodigo: "ACO-8", etapa: "fundacao", numeroDoc: "0002",
+    quantidade: 40, unidade: "br", valor: 485.60, valorPago: 485.60, pago: true, pagoEm: "2026-10-06" },
+  { id: "c", contaId: "material", descricao: "Caçamba", numeroDoc: "0003",
+    valor: 300, valorPago: 300, pago: true, pagoEm: "2026-10-07" },
+];
+
+teste("por insumo: o confronto que responde em m3, nao so em reais", () => {
+  const r = modulo.plPorInsumo(ORC_LIG, CONTAS_LIG, INS_CAT);
+  const concreto = r.find(x => x.insumoCodigo === "CON-001");
+  assert.strictEqual(concreto.nome, "Concreto FCK25");
+  assert.strictEqual(concreto.qtdOrcada, 11);
+  assert.strictEqual(concreto.qtdRealizada, 7, "consumiu menos do que orcou");
+  assert.strictEqual(concreto.saldoQtd, 4);
+  assert.strictEqual(concreto.orcado, 3780.04);
+  assert.strictEqual(concreto.realizado, 2405.48);
+  assert.strictEqual(concreto.unidade, "m3");
+  assert.strictEqual(concreto.grupo, "Concreto");
+});
+
+teste("linha de orcamento sem codigo nao entra no confronto por insumo", () => {
+  const r = modulo.plPorInsumo(ORC_LIG, CONTAS_LIG, INS_CAT);
+  assert.strictEqual(r.length, 2, "o arame nao cadastrado nao vira linha fantasma");
+  assert.ok(!r.some(x => !x.insumoCodigo));
+});
+
+teste("a conferencia aponta onde a corrente arrebenta, com quantos e quanto", () => {
+  const obra = { id: "o1", clienteId: "c1", orcamento: ORC_LIG, contasPagar: CONTAS_LIG };
+  const c = modulo.conferenciaDaLigacao(obra, INS_CAT);
+  assert.strictEqual(c.ok, false);
+  const por = {};
+  for (const f of c.furos) por[f.titulo] = f;
+  assert.strictEqual(por["Orçamento sem item do catálogo"].quantos, 1);
+  assert.strictEqual(por["Orçamento sem item do catálogo"].valor, 100);
+  assert.strictEqual(por["Pagamento sem etapa"].quantos, 1, "a caçamba");
+  assert.strictEqual(por["Pagamento sem etapa"].valor, 300);
+  assert.strictEqual(por["Pagamento sem item do catálogo"].quantos, 1);
+  assert.ok(!por["Transação sem número de referência"], "todas tem numero aqui");
+});
+
+teste("o quanto da obra e rastreavel ate o item orcado", () => {
+  const obra = { id: "o1", clienteId: "c1", orcamento: ORC_LIG, contasPagar: CONTAS_LIG };
+  const c = modulo.conferenciaDaLigacao(obra, INS_CAT);
+  assert.strictEqual(c.totalPago, 3191.08);
+  assert.strictEqual(c.ligado, 2891.08, "a caçamba nao tem insumo nem etapa");
+  assert.strictEqual(c.pctLigado, 90.6);
+});
+
+teste("obra sem cliente nao chega a base nenhuma — e isso e um furo", () => {
+  const c = modulo.conferenciaDaLigacao({ id: "o1", orcamento: { itens: [] }, contasPagar: [] }, INS_CAT);
+  assert.ok(c.furos.some(f => /sem cliente/i.test(f.titulo)));
+});
+
+teste("corrente inteira ligada nao reclama de nada", () => {
+  const c = modulo.conferenciaDaLigacao({
+    id: "o1", clienteId: "c1",
+    orcamento: { itens: [ORC_LIG.itens[0]] },
+    contasPagar: [CONTAS_LIG[0]],
+  }, INS_CAT);
+  assert.strictEqual(c.ok, true, JSON.stringify(c.furos));
+  assert.strictEqual(c.pctLigado, 100);
+});
+
+teste("a transacao carrega as dimensoes das tres bases", () => {
+  const d = modulo.dimensoesDaConta(CONTAS_LIG[0],
+    { id: "o1", nome: "Jacarezinho M1", clienteId: "c1", empreendimento: true },
+    { id: "c1", nome: "Padovan" }, INS_CAT);
+  assert.strictEqual(d.clienteId, "c1");
+  assert.strictEqual(d.empreendimentoId, "c1", "obra do escritorio alimenta a base do empreendimento");
+  assert.strictEqual(d.obraId, "o1");
+  assert.strictEqual(d.insumoCodigo, "CON-001");
+  assert.strictEqual(d.insumo, "Concreto FCK25");
+  assert.strictEqual(d.grupoMaterial, "Concreto");
+  assert.strictEqual(d.etapa, "fundacao");
+  assert.strictEqual(d.competencia, "2026-10");
+  assert.strictEqual(d.numeroDoc, "0001");
+  assert.strictEqual(d.quantidade, 7);
+});
+
+teste("obra de cliente nao vira empreendimento do escritorio", () => {
+  const d = modulo.dimensoesDaConta(CONTAS_LIG[0], { id: "o1", clienteId: "c1" }, { id: "c1", nome: "COBOP" }, INS_CAT);
+  assert.strictEqual(d.empreendimentoId, "", "senao a obra do cliente entraria no resultado do escritorio");
+});
+
+teste("grupo: um vocabulario so, traduzindo o que ficou gravado antes", () => {
+  assert.strictEqual(modulo.grupoCanonico("Louças"), "Louças e metais");
+  assert.strictEqual(modulo.grupoCanonico("Metais"), "Louças e metais");
+  assert.strictEqual(modulo.grupoCanonico("Tubulação PVC"), "Hidráulica");
+  assert.strictEqual(modulo.grupoCanonico("locacao de ferramentas"), "Locação de equipamentos");
+  assert.strictEqual(modulo.grupoCanonico("FORROS"), "Forros e gesso", "a caixa nao pode importar");
+  assert.strictEqual(modulo.grupoCanonico("Cimento"), "Cimento", "o que ja esta certo passa reto");
+  assert.strictEqual(modulo.grupoCanonico("Grupo novo que inventaram"), "Grupo novo que inventaram",
+    "nao se joga fora informacao que nao se entende");
+  assert.strictEqual(modulo.grupoCanonico(""), "");
+});
+
+teste("o quadro por grupo soma Loucas com Metais numa linha so", () => {
+  const itens = [{ contaId: "material", grupoMaterial: "Louças", valor: 100 }];
+  const contas = [{ contaId: "material", grupoMaterial: "Metais", valor: 60, valorPago: 60, pago: true }];
+  const sub = modulo.subcontasDaConta(itens, contas, "material", {});
+  assert.strictEqual(sub.length, 1, "antes eram duas linhas que nunca se encontravam");
+  assert.strictEqual(sub[0].nome, "Louças e metais");
+  assert.strictEqual(sub[0].estimado, 100);
+  assert.strictEqual(sub[0].realizado, 60);
+});
+
+teste("o grupo vem do catalogo; o gravado e so reserva", () => {
+  const ins = { codigo: "X", grupo: "Louças e metais" };
+  assert.strictEqual(modulo.grupoDoItem(ins, "Tintas"), "Louças e metais", "o catalogo manda");
+  assert.strictEqual(modulo.grupoDoItem(null, "Metais"), "Louças e metais", "sem catalogo, traduz o gravado");
+  assert.strictEqual(modulo.grupoDoItem(null, ""), "");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

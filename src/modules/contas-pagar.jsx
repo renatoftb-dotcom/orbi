@@ -1749,6 +1749,155 @@ function plPorEtapa(itens, contasPagar, opcoes) {
     saldoOrcado: temOrcamento ? soma("saldoOrcado") : null };
 }
 
+// ══════════════════════════════════════════════════════════════
+// A CORRENTE: ORÇAMENTO → CATÁLOGO → COMPRA → PAGAMENTO
+// ══════════════════════════════════════════════════════════════
+// Estimativa, cotação, pedido, conta a pagar e extrato só conversam se
+// falarem da MESMA coisa pelo mesmo nome. O elo é o código do insumo: o
+// motor de orçamento já resolve cada linha contra o catálogo e grava
+// `insumoCodigo`; a cotação e o pedido levam o mesmo código para a conta a
+// pagar; e dele saem, de graça, o grupo de material e a etapa.
+//
+// Onde o código falta, o elo arrebenta — e arrebenta em silêncio: o gasto
+// continua somando no total e some do confronto item a item. Por isso a
+// conferência existe e mostra o buraco em vez de maquiar.
+
+// Toda transação pertence a um cliente, a um empreendimento (quando a obra
+// é do escritório), a uma obra, a uma etapa e a uma conta contábil — e é
+// isso que faz a mesma despesa aparecer no lugar certo das três bases:
+// a do cliente, a do empreendimento e a do escritório.
+function dimensoesDaConta(conta, obra, cliente, insumos) {
+  const c = conta || {}, o = obra || {}, cl = cliente || {};
+  const ins = (insumos || []).find((x) => x && (x.codigo === c.insumoCodigo || x.id === c.insumoCodigo)) || null;
+  const doEscritorio = !!(o.empreendimento || o.ehEmpreendimento || (cl.servicos && cl.servicos.empreendimento));
+  return {
+    // quem
+    clienteId: cl.id || o.clienteId || "",
+    cliente: cl.nome || "",
+    empreendimentoId: doEscritorio ? (cl.id || o.clienteId || "") : "",
+    obraId: c.obraId || o.id || "",
+    obra: o.nome || "",
+    // o quê
+    insumoCodigo: c.insumoCodigo || "",
+    insumo: (ins && ins.nome) || c.descricao || "",
+    grupoMaterial: typeof grupoDoItem === "function" ? grupoDoItem(ins, c.grupoMaterial) : (c.grupoMaterial || ""),
+    etapa: c.etapa || c.etapaId || "",
+    contaId: c.contaId || "",
+    quantidade: Number(c.quantidade) || 0,
+    unidade: c.unidade || (ins && ins.unidade) || "",
+    // quanto, quando, com quem, e por qual papel
+    valor: Math.round(((c.pago ? (Number(c.valorPago) || Number(c.valor)) : Number(c.valor)) || 0) * 100) / 100,
+    pago: !!c.pago,
+    data: String((c.pago ? c.pagoEm : c.vencimento) || "").slice(0, 10),
+    competencia: String((c.pago ? c.pagoEm : c.vencimento) || "").slice(0, 7),
+    fornecedorId: c.prestadorId || "",
+    fornecedor: c.favorecido || "",
+    numeroDoc: c.numeroDoc || "",
+    documento: c.numeroNota || c.numeroLoja || "",
+    pedidoId: c.pedidoId || "",
+  };
+}
+
+// Estimado × realizado POR INSUMO, em dinheiro e em quantidade. É a leitura
+// que responde "orcei 11 m3 de concreto e consumi 7" — a que nem o quadro
+// por conta nem o por etapa dão, porque os dois somam reais e perdem o m3.
+function plPorInsumo(orcamento, contasPagar, insumos) {
+  const linhas = ((orcamento || {}).itens) || [];
+  const cat = (codigo) => (insumos || []).find((x) => x && x.codigo === codigo) || null;
+  const red = (x) => Math.round(x * 100) / 100;
+  const por = {};
+  const pegar = (codigo) => {
+    const k = codigo || "";
+    if (!por[k]) {
+      const ins = cat(k);
+      por[k] = { insumoCodigo: k, nome: (ins && ins.nome) || "", unidade: (ins && ins.unidade) || "",
+        grupo: typeof grupoDoItem === "function" ? grupoDoItem(ins, "") : ((ins && ins.grupo) || ""),
+        orcado: 0, qtdOrcada: 0, realizado: 0, qtdRealizada: 0 };
+    }
+    return por[k];
+  };
+  for (const i of linhas) {
+    if (!i || !i.insumoCodigo) continue;
+    const r = pegar(i.insumoCodigo);
+    const v = Number(i.total);
+    r.orcado = red(r.orcado + (Number.isFinite(v) && v !== 0 ? v : (Number(i.qtd) || 0) * (Number(i.preco) || 0)));
+    r.qtdOrcada = Math.round((r.qtdOrcada + (Number(i.qtd) || 0)) * 1000) / 1000;
+    if (!r.nome) r.nome = i.item || "";
+    if (!r.unidade) r.unidade = i.unidade || "";
+  }
+  for (const c of contasPagar || []) {
+    if (!c || !c.pago || !c.insumoCodigo) continue;
+    const r = pegar(c.insumoCodigo);
+    r.realizado = red(r.realizado + ((Number(c.valorPago) || Number(c.valor)) || 0));
+    r.qtdRealizada = Math.round((r.qtdRealizada + (Number(c.quantidade) || 0)) * 1000) / 1000;
+    if (!r.nome) r.nome = c.descricao || "";
+    if (!r.unidade) r.unidade = c.unidade || "";
+  }
+  return Object.keys(por).map((k) => {
+    const r = por[k];
+    return { ...r,
+      saldo: red(r.orcado - r.realizado),
+      saldoQtd: Math.round((r.qtdOrcada - r.qtdRealizada) * 1000) / 1000 };
+  }).sort((a, b) => (b.orcado || b.realizado) - (a.orcado || a.realizado));
+}
+
+// Onde a corrente arrebenta nesta obra. Cada buraco vem com quantas linhas
+// e quanto dinheiro estão fora — um aviso sem número não faz ninguém mexer.
+function conferenciaDaLigacao(obra, insumos) {
+  const o = obra || {};
+  const linhas = ((o.orcamento || {}).itens) || [];
+  const contas = o.contasPagar || [];
+  const red = (x) => Math.round(x * 100) / 100;
+  const valorDaLinha = (i) => {
+    const v = Number(i.total);
+    return Number.isFinite(v) && v !== 0 ? v : (Number(i.qtd) || 0) * (Number(i.preco) || 0);
+  };
+  const furo = (titulo, oQue, itens, valor) => ({ titulo, oQue, quantos: itens, valor: red(valor) });
+  const furos = [];
+
+  const semInsumo = linhas.filter((i) => i && !i.insumoCodigo);
+  if (semInsumo.length) furos.push(furo("Orçamento sem item do catálogo",
+    "Estas linhas não casaram com nenhum insumo, então o orçado delas não encontra o que foi comprado.",
+    semInsumo.length, semInsumo.reduce((s, i) => s + valorDaLinha(i), 0)));
+
+  const semEtapaOrc = typeof etapasDoOrcamentoSemMapa === "function" ? etapasDoOrcamentoSemMapa(linhas) : [];
+  if (semEtapaOrc.length) furos.push(furo("Orçamento com etapa que a obra não conhece",
+    "A etapa destas linhas não tem correspondente: " + semEtapaOrc.map((x) => x.etapa).join(", ") + ".",
+    semEtapaOrc.reduce((s, x) => s + x.linhas, 0), 0));
+
+  const pagas = contas.filter((c) => c && c.pago);
+  const contaSemEtapa = pagas.filter((c) => !String(c.etapa || c.etapaId || "").trim());
+  if (contaSemEtapa.length) furos.push(furo("Pagamento sem etapa",
+    "Entra no custo da obra e some do custo por etapa.",
+    contaSemEtapa.length, contaSemEtapa.reduce((s, c) => s + ((Number(c.valorPago) || Number(c.valor)) || 0), 0)));
+
+  const contaSemInsumo = pagas.filter((c) => !String(c.insumoCodigo || "").trim());
+  if (contaSemInsumo.length) furos.push(furo("Pagamento sem item do catálogo",
+    "Soma em reais, mas não dá para confrontar com o que foi orçado item a item.",
+    contaSemInsumo.length, contaSemInsumo.reduce((s, c) => s + ((Number(c.valorPago) || Number(c.valor)) || 0), 0)));
+
+  const semRef = contas.filter((c) => c && !String(c.numeroDoc || "").trim());
+  if (semRef.length) furos.push(furo("Transação sem número de referência",
+    "Sem número não há como amarrar nota e comprovante na prestação de contas.",
+    semRef.length, semRef.reduce((s, c) => s + ((Number(c.valorPago) || Number(c.valor)) || 0), 0)));
+
+  const semCliente = !String(o.clienteId || "").trim();
+  if (semCliente) furos.push(furo("Obra sem cliente",
+    "Sem cliente, nada desta obra chega à base do cliente nem à do escritório.", contas.length, 0));
+
+  const totalPago = red(pagas.reduce((s, c) => s + ((Number(c.valorPago) || Number(c.valor)) || 0), 0));
+  const ligado = red(pagas.filter((c) => String(c.insumoCodigo || "").trim() && String(c.etapa || c.etapaId || "").trim())
+    .reduce((s, c) => s + ((Number(c.valorPago) || Number(c.valor)) || 0), 0));
+  return {
+    furos,
+    ok: furos.length === 0,
+    totalPago,
+    ligado,
+    // quanto do que já foi pago dá para rastrear até o item orçado
+    pctLigado: totalPago > 0 ? Math.round((ligado / totalPago) * 1000) / 10 : 0,
+  };
+}
+
 // ── Subcontas: a conta aberta por grupo de material ─────────────
 // "Material R$ 222 mil" não diz nada. Aberto por grupo — concreto,
 // esquadrias, tintas, aço —, o orçamento vira leitura: dá para ver qual
@@ -1757,8 +1906,11 @@ function plPorEtapa(itens, contasPagar, opcoes) {
 // A mesma função serve para etapa, trocando a chave.
 function subcontasDaConta(itens, contasPagar, contaId, opcoes) {
   const o = opcoes || {};
-  const chaveEst = o.chave === "etapa" ? ((i) => i.etapaId || "") : ((i) => i.grupoMaterial || "");
-  const chaveReal = o.chave === "etapa" ? ((c) => c.etapa || c.etapaId || "") : ((c) => c.grupoMaterial || "");
+  // o grupo passa pelo vocabulário do catálogo: "Louças" e "Metais" viravam
+  // duas linhas onde o catálogo diz "Louças e metais"
+  const gr = (v) => (typeof grupoCanonico === "function" ? grupoCanonico(v) : (v || ""));
+  const chaveEst = o.chave === "etapa" ? ((i) => i.etapaId || "") : ((i) => gr(i.grupoMaterial));
+  const chaveReal = o.chave === "etapa" ? ((c) => c.etapa || c.etapaId || "") : ((c) => gr(c.grupoMaterial));
   const est = {}, real = {};
   for (const i of itens || []) {
     if (!i || i.contaId !== contaId) continue;

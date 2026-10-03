@@ -8918,15 +8918,56 @@ const ETAPAS_OBRA = [
   { id:"outros",              nome:"Outros",                           macro:"Outros" },
 ];
 
-// ── Grupos de material — dimensão de suprimentos, usada no lançamento e
-// nos rankings. Lista simples de strings (sem id próprio na spec). ──
+// ══════════════════════════════════════════════════════════════
+// GRUPO DE MATERIAL — UM VOCABULÁRIO SÓ
+// ══════════════════════════════════════════════════════════════
+// O grupo não é digitado: ele vem do INSUMO. Quem manda é o catálogo, e é
+// por isso que a lista canônica abaixo é a do catálogo — assim o grupo da
+// linha do orçamento, o da cotação, o do item do pedido e o da conta a
+// pagar são sempre a mesma palavra, porque todos saem do mesmo lugar.
+//
+// O que sobra são os nomes que ficaram gravados antes disso, ou digitados
+// à mão. "Louças" e "Metais" viravam duas linhas no quadro onde o catálogo
+// diz "Louças e metais"; "Tubulação PVC" era uma terceira "Hidráulica".
+// `grupoCanonico` traduz na leitura — nada é reescrito no banco.
 const GRUPOS_MATERIAL = [
-  "Aço", "Areia e pedra", "Argamassas", "Cimento", "Elétrica e iluminação",
-  "Entulhos", "Equipamentos", "Esquadrias", "Ferramentas", "Forros", "Granito",
-  "Impermeabilizantes", "Locação de ferramentas", "Louças", "Madeira de caixaria",
-  "Marcenaria", "Metais", "Pisos e revestimentos", "Prestadores de serviços",
-  "Telhas", "Tijolos e canaletas", "Tintas", "Tubulação PVC", "Outros",
+  "Aço", "Areia e pedra", "Argamassas", "Calhas e rufos", "Cimento", "Concreto",
+  "Elétrica e iluminação", "Entulhos", "Equipamentos e sistemas", "Esquadrias",
+  "Ferramentas", "Fixação", "Forros e gesso", "Hidráulica", "Impermeabilizantes",
+  "Lajes", "Locação de equipamentos", "Louças e metais", "Madeira de caixaria",
+  "Madeira de estrutura", "Marcenaria", "Pisos e revestimentos",
+  "Portas e fechaduras", "Prestadores de serviços", "Telhas",
+  "Tijolos e canaletas", "Tintas", "Outros",
 ];
+
+// nome antigo (normalizado) → nome do catálogo
+const GRUPO_APELIDOS = {
+  "equipamentos": "Equipamentos e sistemas",
+  "forros": "Forros e gesso",
+  "locacao de ferramentas": "Locação de equipamentos",
+  "loucas": "Louças e metais",
+  "metais": "Louças e metais",
+  "tubulacao pvc": "Hidráulica",
+  "granito": "Pisos e revestimentos",
+  "entulho": "Entulhos",
+};
+
+function grupoCanonico(nome) {
+  const n = normalizarNomeEtapa(nome);   // mesma normalização: sem acento, sem caixa
+  if (!n) return "";
+  const apelido = GRUPO_APELIDOS[n];
+  if (apelido) return apelido;
+  const certo = GRUPOS_MATERIAL.find((g) => normalizarNomeEtapa(g) === n);
+  return certo || String(nome).trim();   // nome novo passa; não se joga fora informação
+}
+
+// O grupo de um item, na ordem em que a informação é confiável: o catálogo
+// manda, porque é ele que define o vocabulário; o que está gravado na linha
+// serve de reserva para o item que não casou com o catálogo.
+function grupoDoItem(insumo, grupoGravado) {
+  return grupoCanonico((insumo && insumo.grupo) || grupoGravado || "");
+}
+
 
 
 // ══════════════════════════════════════════════════════════════
@@ -23723,6 +23764,155 @@ function plPorEtapa(itens, contasPagar, opcoes) {
     saldoOrcado: temOrcamento ? soma("saldoOrcado") : null };
 }
 
+// ══════════════════════════════════════════════════════════════
+// A CORRENTE: ORÇAMENTO → CATÁLOGO → COMPRA → PAGAMENTO
+// ══════════════════════════════════════════════════════════════
+// Estimativa, cotação, pedido, conta a pagar e extrato só conversam se
+// falarem da MESMA coisa pelo mesmo nome. O elo é o código do insumo: o
+// motor de orçamento já resolve cada linha contra o catálogo e grava
+// `insumoCodigo`; a cotação e o pedido levam o mesmo código para a conta a
+// pagar; e dele saem, de graça, o grupo de material e a etapa.
+//
+// Onde o código falta, o elo arrebenta — e arrebenta em silêncio: o gasto
+// continua somando no total e some do confronto item a item. Por isso a
+// conferência existe e mostra o buraco em vez de maquiar.
+
+// Toda transação pertence a um cliente, a um empreendimento (quando a obra
+// é do escritório), a uma obra, a uma etapa e a uma conta contábil — e é
+// isso que faz a mesma despesa aparecer no lugar certo das três bases:
+// a do cliente, a do empreendimento e a do escritório.
+function dimensoesDaConta(conta, obra, cliente, insumos) {
+  const c = conta || {}, o = obra || {}, cl = cliente || {};
+  const ins = (insumos || []).find((x) => x && (x.codigo === c.insumoCodigo || x.id === c.insumoCodigo)) || null;
+  const doEscritorio = !!(o.empreendimento || o.ehEmpreendimento || (cl.servicos && cl.servicos.empreendimento));
+  return {
+    // quem
+    clienteId: cl.id || o.clienteId || "",
+    cliente: cl.nome || "",
+    empreendimentoId: doEscritorio ? (cl.id || o.clienteId || "") : "",
+    obraId: c.obraId || o.id || "",
+    obra: o.nome || "",
+    // o quê
+    insumoCodigo: c.insumoCodigo || "",
+    insumo: (ins && ins.nome) || c.descricao || "",
+    grupoMaterial: typeof grupoDoItem === "function" ? grupoDoItem(ins, c.grupoMaterial) : (c.grupoMaterial || ""),
+    etapa: c.etapa || c.etapaId || "",
+    contaId: c.contaId || "",
+    quantidade: Number(c.quantidade) || 0,
+    unidade: c.unidade || (ins && ins.unidade) || "",
+    // quanto, quando, com quem, e por qual papel
+    valor: Math.round(((c.pago ? (Number(c.valorPago) || Number(c.valor)) : Number(c.valor)) || 0) * 100) / 100,
+    pago: !!c.pago,
+    data: String((c.pago ? c.pagoEm : c.vencimento) || "").slice(0, 10),
+    competencia: String((c.pago ? c.pagoEm : c.vencimento) || "").slice(0, 7),
+    fornecedorId: c.prestadorId || "",
+    fornecedor: c.favorecido || "",
+    numeroDoc: c.numeroDoc || "",
+    documento: c.numeroNota || c.numeroLoja || "",
+    pedidoId: c.pedidoId || "",
+  };
+}
+
+// Estimado × realizado POR INSUMO, em dinheiro e em quantidade. É a leitura
+// que responde "orcei 11 m3 de concreto e consumi 7" — a que nem o quadro
+// por conta nem o por etapa dão, porque os dois somam reais e perdem o m3.
+function plPorInsumo(orcamento, contasPagar, insumos) {
+  const linhas = ((orcamento || {}).itens) || [];
+  const cat = (codigo) => (insumos || []).find((x) => x && x.codigo === codigo) || null;
+  const red = (x) => Math.round(x * 100) / 100;
+  const por = {};
+  const pegar = (codigo) => {
+    const k = codigo || "";
+    if (!por[k]) {
+      const ins = cat(k);
+      por[k] = { insumoCodigo: k, nome: (ins && ins.nome) || "", unidade: (ins && ins.unidade) || "",
+        grupo: typeof grupoDoItem === "function" ? grupoDoItem(ins, "") : ((ins && ins.grupo) || ""),
+        orcado: 0, qtdOrcada: 0, realizado: 0, qtdRealizada: 0 };
+    }
+    return por[k];
+  };
+  for (const i of linhas) {
+    if (!i || !i.insumoCodigo) continue;
+    const r = pegar(i.insumoCodigo);
+    const v = Number(i.total);
+    r.orcado = red(r.orcado + (Number.isFinite(v) && v !== 0 ? v : (Number(i.qtd) || 0) * (Number(i.preco) || 0)));
+    r.qtdOrcada = Math.round((r.qtdOrcada + (Number(i.qtd) || 0)) * 1000) / 1000;
+    if (!r.nome) r.nome = i.item || "";
+    if (!r.unidade) r.unidade = i.unidade || "";
+  }
+  for (const c of contasPagar || []) {
+    if (!c || !c.pago || !c.insumoCodigo) continue;
+    const r = pegar(c.insumoCodigo);
+    r.realizado = red(r.realizado + ((Number(c.valorPago) || Number(c.valor)) || 0));
+    r.qtdRealizada = Math.round((r.qtdRealizada + (Number(c.quantidade) || 0)) * 1000) / 1000;
+    if (!r.nome) r.nome = c.descricao || "";
+    if (!r.unidade) r.unidade = c.unidade || "";
+  }
+  return Object.keys(por).map((k) => {
+    const r = por[k];
+    return { ...r,
+      saldo: red(r.orcado - r.realizado),
+      saldoQtd: Math.round((r.qtdOrcada - r.qtdRealizada) * 1000) / 1000 };
+  }).sort((a, b) => (b.orcado || b.realizado) - (a.orcado || a.realizado));
+}
+
+// Onde a corrente arrebenta nesta obra. Cada buraco vem com quantas linhas
+// e quanto dinheiro estão fora — um aviso sem número não faz ninguém mexer.
+function conferenciaDaLigacao(obra, insumos) {
+  const o = obra || {};
+  const linhas = ((o.orcamento || {}).itens) || [];
+  const contas = o.contasPagar || [];
+  const red = (x) => Math.round(x * 100) / 100;
+  const valorDaLinha = (i) => {
+    const v = Number(i.total);
+    return Number.isFinite(v) && v !== 0 ? v : (Number(i.qtd) || 0) * (Number(i.preco) || 0);
+  };
+  const furo = (titulo, oQue, itens, valor) => ({ titulo, oQue, quantos: itens, valor: red(valor) });
+  const furos = [];
+
+  const semInsumo = linhas.filter((i) => i && !i.insumoCodigo);
+  if (semInsumo.length) furos.push(furo("Orçamento sem item do catálogo",
+    "Estas linhas não casaram com nenhum insumo, então o orçado delas não encontra o que foi comprado.",
+    semInsumo.length, semInsumo.reduce((s, i) => s + valorDaLinha(i), 0)));
+
+  const semEtapaOrc = typeof etapasDoOrcamentoSemMapa === "function" ? etapasDoOrcamentoSemMapa(linhas) : [];
+  if (semEtapaOrc.length) furos.push(furo("Orçamento com etapa que a obra não conhece",
+    "A etapa destas linhas não tem correspondente: " + semEtapaOrc.map((x) => x.etapa).join(", ") + ".",
+    semEtapaOrc.reduce((s, x) => s + x.linhas, 0), 0));
+
+  const pagas = contas.filter((c) => c && c.pago);
+  const contaSemEtapa = pagas.filter((c) => !String(c.etapa || c.etapaId || "").trim());
+  if (contaSemEtapa.length) furos.push(furo("Pagamento sem etapa",
+    "Entra no custo da obra e some do custo por etapa.",
+    contaSemEtapa.length, contaSemEtapa.reduce((s, c) => s + ((Number(c.valorPago) || Number(c.valor)) || 0), 0)));
+
+  const contaSemInsumo = pagas.filter((c) => !String(c.insumoCodigo || "").trim());
+  if (contaSemInsumo.length) furos.push(furo("Pagamento sem item do catálogo",
+    "Soma em reais, mas não dá para confrontar com o que foi orçado item a item.",
+    contaSemInsumo.length, contaSemInsumo.reduce((s, c) => s + ((Number(c.valorPago) || Number(c.valor)) || 0), 0)));
+
+  const semRef = contas.filter((c) => c && !String(c.numeroDoc || "").trim());
+  if (semRef.length) furos.push(furo("Transação sem número de referência",
+    "Sem número não há como amarrar nota e comprovante na prestação de contas.",
+    semRef.length, semRef.reduce((s, c) => s + ((Number(c.valorPago) || Number(c.valor)) || 0), 0)));
+
+  const semCliente = !String(o.clienteId || "").trim();
+  if (semCliente) furos.push(furo("Obra sem cliente",
+    "Sem cliente, nada desta obra chega à base do cliente nem à do escritório.", contas.length, 0));
+
+  const totalPago = red(pagas.reduce((s, c) => s + ((Number(c.valorPago) || Number(c.valor)) || 0), 0));
+  const ligado = red(pagas.filter((c) => String(c.insumoCodigo || "").trim() && String(c.etapa || c.etapaId || "").trim())
+    .reduce((s, c) => s + ((Number(c.valorPago) || Number(c.valor)) || 0), 0));
+  return {
+    furos,
+    ok: furos.length === 0,
+    totalPago,
+    ligado,
+    // quanto do que já foi pago dá para rastrear até o item orçado
+    pctLigado: totalPago > 0 ? Math.round((ligado / totalPago) * 1000) / 10 : 0,
+  };
+}
+
 // ── Subcontas: a conta aberta por grupo de material ─────────────
 // "Material R$ 222 mil" não diz nada. Aberto por grupo — concreto,
 // esquadrias, tintas, aço —, o orçamento vira leitura: dá para ver qual
@@ -23731,8 +23921,11 @@ function plPorEtapa(itens, contasPagar, opcoes) {
 // A mesma função serve para etapa, trocando a chave.
 function subcontasDaConta(itens, contasPagar, contaId, opcoes) {
   const o = opcoes || {};
-  const chaveEst = o.chave === "etapa" ? ((i) => i.etapaId || "") : ((i) => i.grupoMaterial || "");
-  const chaveReal = o.chave === "etapa" ? ((c) => c.etapa || c.etapaId || "") : ((c) => c.grupoMaterial || "");
+  // o grupo passa pelo vocabulário do catálogo: "Louças" e "Metais" viravam
+  // duas linhas onde o catálogo diz "Louças e metais"
+  const gr = (v) => (typeof grupoCanonico === "function" ? grupoCanonico(v) : (v || ""));
+  const chaveEst = o.chave === "etapa" ? ((i) => i.etapaId || "") : ((i) => gr(i.grupoMaterial));
+  const chaveReal = o.chave === "etapa" ? ((c) => c.etapa || c.etapaId || "") : ((c) => gr(c.grupoMaterial));
   const est = {}, real = {};
   for (const i of itens || []) {
     if (!i || i.contaId !== contaId) continue;
@@ -34495,6 +34688,100 @@ function BotaoCopiarPix({ pix, compacto }) {
   );
 }
 
+// ── A corrente, e onde ela arrebenta ────────────────────────────
+// O número que importa não é quanto a obra gastou — é quanto do que ela
+// gastou dá para rastrear até o item que foi orçado. O resto some do
+// confronto e volta como surpresa no fechamento.
+function ConferenciaDaObraView({ obra, insumos, isMobile, fmtBRL }) {
+  const c = conferenciaDaLigacao(obra, insumos);
+  const porInsumo = plPorInsumo(obra && obra.orcamento, (obra && obra.contasPagar) || [], insumos);
+  const qtd = (n) => (!n ? "—" : String(Math.round(n * 1000) / 1000).replace(".", ","));
+  const num = (v) => (Math.abs(v) < 0.005 ? "—" : fmtBRL(v));
+  const cab = { fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600 };
+  const celula = { fontSize: 12.5, textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
+  const grade = {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "minmax(0,1fr) 78px 78px" : "minmax(180px,1fr) 110px 110px 110px 110px 110px",
+    gap: 8, alignItems: "center",
+  };
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14,
+        padding: isMobile ? 14 : "16px 18px", marginBottom: 18 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
+          {c.pctLigado}% do que foi pago chega até o item orçado
+        </div>
+        <div style={{ fontSize: 12, color: "#4b5563", marginTop: 4 }}>
+          {fmtBRL(c.ligado)} de {fmtBRL(c.totalPago)} têm item do catálogo e etapa — é o que dá para
+          confrontar com o orçamento linha a linha. O resto soma no total e some do confronto.
+        </div>
+        <div style={{ height: 8, borderRadius: 999, background: "rgba(38,36,33,0.08)", marginTop: 12, overflow: "hidden" }}>
+          <div style={{ width: Math.max(0, Math.min(100, c.pctLigado)) + "%", height: "100%", background: AZUL_VK }} />
+        </div>
+      </div>
+
+      {c.ok ? (
+        <div style={{ fontSize: 12.5, color: "#4b5563", padding: "4px 2px 18px" }}>
+          Nada fora do lugar: todo pagamento tem item e etapa, todo item do orçamento casou com o
+          catálogo, e toda transação tem número de referência.
+        </div>
+      ) : (
+        <div style={{ marginBottom: 20 }}>
+          {c.furos.map((f, i) => (
+            <div key={i} style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12,
+              padding: "11px 14px", marginBottom: 8, display: "flex", gap: 12,
+              flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "flex-start" : "center" }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{f.titulo}</div>
+                <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 2 }}>{f.oQue}</div>
+              </div>
+              <div style={{ textAlign: isMobile ? "left" : "right", flexShrink: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>
+                  {f.quantos} {f.quantos === 1 ? "linha" : "linhas"}
+                </div>
+                {f.valor > 0 && <div style={{ fontSize: 11.5, color: "#6b7280" }}>{fmtBRL(f.valor)}</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {porInsumo.length > 0 && (
+        <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, overflow: "hidden" }}>
+          <div style={{ padding: "12px 14px 2px" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>Orçado × consumido, item a item</div>
+            <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3, marginBottom: 8 }}>
+              O confronto em quantidade, que o quadro por conta e o por etapa não dão — os dois somam
+              reais e perdem o m³.
+            </div>
+          </div>
+          <div style={{ ...grade, padding: "8px 14px", borderBottom: "1px solid rgba(38,36,33,0.10)" }}>
+            <span style={cab}>Item</span>
+            <span style={{ ...cab, textAlign: "right" }}>Orçado</span>
+            {!isMobile && <span style={{ ...cab, textAlign: "right" }}>R$ orçado</span>}
+            <span style={{ ...cab, textAlign: "right" }}>Consumido</span>
+            {!isMobile && <span style={{ ...cab, textAlign: "right" }}>R$ pago</span>}
+            {!isMobile && <span style={{ ...cab, textAlign: "right" }}>Saldo</span>}
+          </div>
+          {porInsumo.map((r) => (
+            <div key={r.insumoCodigo} style={{ ...grade, padding: "7px 14px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+              <span style={{ fontSize: 12.5, color: "#111827", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {r.nome || r.insumoCodigo}
+                <span style={{ fontSize: 10.5, color: "#9ca3af" }}> · {r.insumoCodigo}</span>
+              </span>
+              <span style={{ ...celula, color: "#6b7280" }}>{qtd(r.qtdOrcada)} {r.unidade}</span>
+              {!isMobile && <span style={{ ...celula, color: "#6b7280" }}>{num(r.orcado)}</span>}
+              <span style={{ ...celula, color: "#111827" }}>{qtd(r.qtdRealizada)} {r.unidade}</span>
+              {!isMobile && <span style={{ ...celula, color: "#111827" }}>{num(r.realizado)}</span>}
+              {!isMobile && <span style={{ ...celula, color: r.saldo < -0.005 ? "#dc2626" : "#6b7280" }}>{num(r.saldo)}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcamento }) {
   // Acompanhar custo e apurar resultado são duas perguntas. Com a venda, o
   // terreno e os tributos na conta, o número do canteiro fica escondido; o
@@ -35849,9 +36136,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
         </div>
 
-        {/* Toggle de visão */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          {[["pl", "P&L"], ["quadro", "Preencher"], ["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"], ["escritorio", "Para o escrit\u00f3rio"]].map(([v, l]) => (
+        {/* Toggle de visão — quebra linha no celular: sem isto a última aba
+            fica fora da tela, inalcançável, e ninguém descobre que existe */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+          {[["pl", "P&L"], ["quadro", "Preencher"], ["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"], ["ligacao", "Confer\u00eancia"], ["escritorio", "Para o escrit\u00f3rio"]].map(([v, l]) => (
             <button key={v} onClick={() => setVisaoPL(v)}
               style={{ border: visaoPL === v ? `1.5px solid ${AZUL_VK}` : "1px solid rgba(38,36,33,0.16)", background: "#fff", color: visaoPL === v ? "#111827" : "#4b5563", borderRadius: 20, padding: "6px 16px", fontSize: 12.5, fontWeight: visaoPL === v ? 700 : 500, cursor: "pointer", fontFamily: "inherit" }}>
               {l}
@@ -35859,7 +36147,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           ))}
         </div>
 
-        {visaoPL === "escritorio" ? (
+        {visaoPL === "ligacao" ? (
+          <ConferenciaDaObraView obra={{ ...obraAtual, contasPagar: contasDaObra }}
+            insumos={data.materiais || []} isMobile={isMobile} fmtBRL={fmtBRL} />
+        ) : visaoPL === "escritorio" ? (
           <PonteEscritorioView obra={obraAtual} cliente={cliente} contasPagar={contasDaObra}
             entradas={entradasDaObra} data={data} isMobile={isMobile} fmtBRL={fmtBRL}
             podeEditar={!!perm.podeGerenciarObra} dialogo={dialogo}
@@ -61697,6 +61988,287 @@ function OrcamentoConfig({ usuario, data, setUsuario }) {
 
 
 // ════════════════════════════════════════════════════════════
+// whatsapp-piloto.jsx
+// ════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// WHATSAPP PILOTO — teste grátis da Cloud API (só Padovan)
+// ═══════════════════════════════════════════════════════════════
+// Tela de teste da integração com o número de teste da Meta. Conversa com
+// as rotas /api/whatsapp-teste/* do vicke-backend (whatsapp-teste.js), que
+// só respondem para a empresa piloto — para as outras o menu nem aparece
+// (waPilotoStatus devolve liberado:false).
+//
+// Duas colunas como a caixa de Mensagens: à esquerda as obras (filtro), à
+// direita o status da configuração, a conversa e o campo de envio. No
+// celular vira uma coluna só: escolhe a obra e a conversa abre por cima.
+// Atualiza sozinha a cada 5s enquanto a aba está visível.
+
+async function waReq(method, path, body) {
+  const token = typeof localStorage !== "undefined" ? localStorage.getItem("vicke-token") : null;
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${_API_URL}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  const json = await res.json().catch(() => ({}));
+  if (!json.ok) throw new Error(json.error || `Erro ${res.status}`);
+  return json.data;
+}
+
+// Usada pelo app.jsx para decidir se o item de menu aparece.
+async function waPilotoStatus() {
+  try { return await waReq("GET", "/api/whatsapp-teste/status"); }
+  catch { return { liberado: false }; }
+}
+
+const WA_AZUL = "#0474f4";
+const WA_BORDA = "1.5px solid rgba(38,36,33,0.16)";
+
+function waHora(iso) {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  } catch { return ""; }
+}
+
+function waTelefone(n) {
+  const d = String(n || "").replace(/\D/g, "");
+  if (d.length === 13) return `+${d.slice(0, 2)} (${d.slice(2, 4)}) ${d.slice(4, 9)}-${d.slice(9)}`;
+  if (d.length === 12) return `+${d.slice(0, 2)} (${d.slice(2, 4)}) ${d.slice(4, 8)}-${d.slice(8)}`;
+  return n || "";
+}
+
+const WA_STATUS = {
+  enviado: "✓ enviado", sent: "✓ enviado", delivered: "✓✓ entregue", read: "✓✓ lido",
+  failed: "não entregue", falhou: "não enviado", simulado: "simulação",
+};
+
+function WhatsappPiloto({ data, usuario }) {
+  const [isMobile, setIsMobile] = useState(() => { try { return window.innerWidth < 768; } catch { return false; } });
+  useEffect(() => {
+    const f = () => { try { setIsMobile(window.innerWidth < 768); } catch {} };
+    window.addEventListener("resize", f);
+    return () => window.removeEventListener("resize", f);
+  }, []);
+
+  const [status, setStatus] = useState(null);
+  const [filtroObra, setFiltroObra] = useState("");     // "" = todas, "__sem_obra__", ou id
+  const [busca, setBusca] = useState("");
+  const [msgs, setMsgs] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState("");
+  const [para, setPara] = useState("");
+  const [paraEditado, setParaEditado] = useState(false);
+  const [texto, setTexto] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [abertoMobile, setAbertoMobile] = useState(false);
+  const [mostrarConfig, setMostrarConfig] = useState(false);
+  const [copiado, setCopiado] = useState(false);
+  const fimRef = useRef(null);
+
+  const podeEscrever = usuario?.nivel === "admin" || usuario?.nivel === "editor" || usuario?.perfil === "master";
+  const obras = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return (data?.obras || [])
+      .filter(o => o && o.id && (!q || String(o.nome || "").toLowerCase().includes(q)))
+      .sort((a, b) => String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR"));
+  }, [data?.obras, busca]);
+  const nomeFiltro = filtroObra === "" ? "Todas as mensagens"
+    : filtroObra === "__sem_obra__" ? "Sem obra vinculada"
+    : ((data?.obras || []).find(o => o.id === filtroObra)?.nome || "Obra");
+
+  const carregar = useCallback(async () => {
+    try {
+      const qs = filtroObra ? `?obra_id=${encodeURIComponent(filtroObra)}` : "";
+      const [st, lista] = await Promise.all([
+        waReq("GET", "/api/whatsapp-teste/status"),
+        waReq("GET", `/api/whatsapp-teste/mensagens${qs}`),
+      ]);
+      setStatus(st);
+      setMsgs(lista || []);
+      setErro("");
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setCarregando(false);
+    }
+  }, [filtroObra]);
+
+  useEffect(() => {
+    setCarregando(true);
+    carregar();
+    const t = setInterval(() => { if (document.visibilityState === "visible") carregar(); }, 5000);
+    return () => clearInterval(t);
+  }, [carregar]);
+
+  // O destino padrão é quem mandou a última mensagem de verdade: responder
+  // para o wa_id que a Meta entregou evita o problema do 9 dos celulares.
+  useEffect(() => {
+    if (paraEditado) return;
+    const ultima = [...msgs].reverse().find(m => m.direcao === "entrada" && m.wa_id && m.wa_id !== "simulado");
+    if (ultima) setPara(ultima.wa_id);
+  }, [msgs, paraEditado]);
+
+  useEffect(() => { fimRef.current?.scrollIntoView({ block: "end" }); }, [msgs.length]);
+
+  async function enviar() {
+    if (!texto.trim() || !para.trim() || enviando) return;
+    setEnviando(true); setErro("");
+    try {
+      const obraId = filtroObra && filtroObra !== "__sem_obra__" ? filtroObra : null;
+      await waReq("POST", "/api/whatsapp-teste/enviar", { para, texto, obra_id: obraId });
+      setTexto("");
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setEnviando(false);
+      carregar();
+    }
+  }
+
+  async function simular() {
+    setErro("");
+    try {
+      const obraId = filtroObra && filtroObra !== "__sem_obra__" ? filtroObra : null;
+      await waReq("POST", "/api/whatsapp-teste/simular", { obra_id: obraId });
+      carregar();
+    } catch (e) { setErro(e.message); }
+  }
+
+  const urlWebhook = `${_API_URL}${status?.webhookPath || "/webhook/whatsapp-teste"}`;
+  function copiarUrl() {
+    try { navigator.clipboard.writeText(urlWebhook); setCopiado(true); setTimeout(() => setCopiado(false), 1500); } catch {}
+  }
+
+  const configOk = status?.tokenConfigurado && status?.phoneIdConfigurado;
+
+  const S = {
+    raiz: { display: "flex", height: "100%", minHeight: 0, fontFamily: "'Inter', system-ui, -apple-system, sans-serif", background: "#fff", color: "#111827" },
+    lista: { width: isMobile ? "100%" : 300, minWidth: isMobile ? 0 : 300, borderRight: isMobile ? "none" : WA_BORDA, overflowY: "auto", display: isMobile && abertoMobile ? "none" : "flex", flexDirection: "column" },
+    conversa: { flex: 1, minWidth: 0, display: isMobile && !abertoMobile ? "none" : "flex", flexDirection: "column" },
+    item: (ativo) => ({ display: "block", width: "100%", textAlign: "left", background: "#fff", border: "none", borderLeft: `3px solid ${ativo ? WA_AZUL : "transparent"}`, padding: isMobile ? "14px 16px" : "10px 14px", fontSize: 13, fontWeight: ativo ? 600 : 400, color: ativo ? WA_AZUL : "#111827", cursor: "pointer", fontFamily: "inherit" }),
+    btn: { background: "#fff", color: "#111827", border: WA_BORDA, borderRadius: 8, padding: "8px 12px", fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" },
+    btnAzul: { background: WA_AZUL, color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" },
+    input: { border: WA_BORDA, borderRadius: 8, padding: "9px 11px", fontSize: isMobile ? 16 : 13, fontFamily: "inherit", color: "#111827", outline: "none", background: "#fff", minWidth: 0 },
+  };
+
+  if (status && status.liberado === false) {
+    return <div style={{ padding: 32, fontFamily: "'Inter', system-ui, sans-serif", color: "#4b5563", fontSize: 14 }}>O teste de WhatsApp está liberado só para o escritório piloto.</div>;
+  }
+
+  return (
+    <div style={S.raiz} data-vk-wa-piloto>
+      {/* ── Coluna das obras ── */}
+      <div style={S.lista}>
+        <div style={{ padding: isMobile ? "16px 16px 10px" : "20px 14px 10px" }}>
+          <div style={{ fontSize: 18, fontWeight: 600 }}>WhatsApp <span style={{ fontSize: 12, fontWeight: 500, color: "#4b5563" }}>· teste</span></div>
+          <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2 }}>Número de teste da Meta, sem custo</div>
+          <input style={{ ...S.input, width: "100%", boxSizing: "border-box", marginTop: 12 }} placeholder="Filtrar obras" value={busca} onChange={e => setBusca(e.target.value)} />
+        </div>
+        <button style={S.item(filtroObra === "")} onClick={() => { setFiltroObra(""); setAbertoMobile(true); }}>Todas as mensagens</button>
+        <button style={S.item(filtroObra === "__sem_obra__")} onClick={() => { setFiltroObra("__sem_obra__"); setAbertoMobile(true); }}>Sem obra vinculada</button>
+        <div style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", letterSpacing: 0.4, textTransform: "uppercase", padding: "14px 14px 6px" }}>Obras</div>
+        {obras.length === 0 && <div style={{ fontSize: 13, color: "#6b7280", padding: "4px 14px" }}>Nenhuma obra encontrada</div>}
+        {obras.map(o => (
+          <button key={o.id} style={S.item(filtroObra === o.id)} onClick={() => { setFiltroObra(o.id); setAbertoMobile(true); }}>{o.nome || "(sem nome)"}</button>
+        ))}
+      </div>
+
+      {/* ── Conversa ── */}
+      <div style={S.conversa}>
+        <div style={{ padding: isMobile ? "12px 16px" : "16px 20px", borderBottom: WA_BORDA, display: "flex", alignItems: "center", gap: 10 }}>
+          {isMobile && <button style={{ ...S.btn, padding: "6px 10px" }} onClick={() => setAbertoMobile(false)}>‹ Obras</button>}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nomeFiltro}</div>
+          </div>
+          <button style={{ ...S.btn, borderColor: configOk ? "rgba(38,36,33,0.16)" : WA_AZUL, color: configOk ? "#111827" : WA_AZUL }} onClick={() => setMostrarConfig(v => !v)}>
+            {status ? (configOk ? "✓ Configurado" : "Configurar") : "…"}
+          </button>
+        </div>
+
+        {/* Card de status */}
+        {(mostrarConfig || (status && !configOk)) && status && (
+          <div style={{ margin: isMobile ? "12px 12px 0" : "14px 20px 0", border: WA_BORDA, borderRadius: 10, padding: 14, fontSize: 13 }}>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>Status do teste</div>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "6px 16px", color: "#4b5563" }}>
+              <div>{status.tokenConfigurado ? "✓" : "✗"} WHATSAPP_TEST_TOKEN</div>
+              <div>{status.phoneIdConfigurado ? "✓" : "✗"} WHATSAPP_TEST_PHONE_ID</div>
+              <div>{status.assinaturaLigada ? "✓ assinatura da Meta conferida" : "– assinatura não conferida (opcional)"}</div>
+              <div>Última mensagem recebida: <span style={{ color: "#111827" }}>{status.ultimaEntrada ? waHora(status.ultimaEntrada) : "nenhuma ainda"}</span></div>
+            </div>
+            <div style={{ marginTop: 10, color: "#4b5563" }}>URL do webhook (colar no painel da Meta):</div>
+            <div style={{ display: "flex", gap: 8, marginTop: 4, alignItems: "center", flexWrap: "wrap" }}>
+              <code style={{ fontSize: 12, background: "#f3f4f6", borderRadius: 6, padding: "6px 8px", wordBreak: "break-all", flex: 1, minWidth: 0, color: "#111827" }}>{urlWebhook}</code>
+              <button style={S.btn} onClick={copiarUrl}>{copiado ? "Copiado ✓" : "Copiar"}</button>
+            </div>
+            <div style={{ marginTop: 6, color: "#4b5563" }}>Verify token: <code style={{ color: "#111827" }}>{status.verifyTokenPadrao ? "vicke_teste_padovan" : "o valor de WHATSAPP_VERIFY_TOKEN"}</code></div>
+          </div>
+        )}
+
+        {/* Histórico */}
+        <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "12px" : "16px 20px", display: "flex", flexDirection: "column", gap: 8, background: "#fafafa" }}>
+          {carregando && msgs.length === 0 && <div style={{ color: "#6b7280", fontSize: 13 }}>Carregando…</div>}
+          {!carregando && msgs.length === 0 && (
+            <div style={{ color: "#4b5563", fontSize: 13, textAlign: "center", marginTop: 40, lineHeight: 1.6 }}>
+              Nenhuma mensagem aqui ainda.<br />Mande um "oi" do seu celular para o número de teste,<br />ou use "Simular mensagem de pedreiro".
+            </div>
+          )}
+          {msgs.map(m => {
+            const saida = m.direcao === "saida";
+            const falhou = m.status === "failed" || m.status === "falhou";
+            return (
+              <div key={m.id} style={{ alignSelf: saida ? "flex-end" : "flex-start", maxWidth: isMobile ? "88%" : "70%" }}>
+                <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 2, textAlign: saida ? "right" : "left" }}>
+                  {saida ? `VICKE → ${waTelefone(m.wa_id)}` : (m.nome_contato || waTelefone(m.wa_id))}
+                  {m.obra_nome && filtroObra === "" ? ` · ${m.obra_nome}` : ""}
+                </div>
+                <div style={{
+                  background: saida ? WA_AZUL : "#f3f4f6", color: saida ? "#fff" : "#111827",
+                  border: falhou ? "1.5px solid #b91c1c" : "none",
+                  borderRadius: 12, padding: "8px 12px", fontSize: 14, lineHeight: 1.45, whiteSpace: "pre-wrap", wordBreak: "break-word",
+                }}>
+                  {m.tipo !== "texto" && <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.85, marginBottom: m.conteudo_texto ? 4 : 0 }}>[{m.tipo}{m.media_id ? " · mídia guardada" : ""}]</div>}
+                  {m.conteudo_texto}
+                </div>
+                <div style={{ fontSize: 11, color: falhou ? "#b91c1c" : "#6b7280", marginTop: 2, textAlign: saida ? "right" : "left" }}>
+                  {waHora(m.created_at)}{saida && m.status ? ` · ${WA_STATUS[m.status] || m.status}` : ""}{!saida && m.status === "simulado" ? " · simulação" : ""}
+                </div>
+                {falhou && m.erro && <div style={{ fontSize: 12, color: "#b91c1c", marginTop: 2, textAlign: "right" }}>{m.erro}</div>}
+              </div>
+            );
+          })}
+          <div ref={fimRef} />
+        </div>
+
+        {/* Envio */}
+        <div style={{ borderTop: WA_BORDA, padding: isMobile ? "10px 12px 14px" : "12px 20px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+          {erro && <div style={{ fontSize: 13, color: "#b91c1c" }}>{erro}</div>}
+          {podeEscrever ? (<>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, color: "#4b5563" }}>Para</span>
+              <input style={{ ...S.input, flex: isMobile ? "1 1 0" : "0 0 220px" }} inputMode="tel" placeholder="55 14 99999-9999"
+                value={para} onChange={e => { setPara(e.target.value); setParaEditado(true); }} />
+              <button style={{ ...S.btn, width: isMobile ? "100%" : "auto" }} onClick={simular}>Simular mensagem de pedreiro</button>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <textarea style={{ ...S.input, flex: 1, resize: "none", height: 42 }} placeholder="Escreva a resposta"
+                value={texto} onChange={e => setTexto(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !isMobile) { e.preventDefault(); enviar(); } }} />
+              <button style={{ ...S.btnAzul, opacity: (!texto.trim() || !para.trim() || enviando) ? 0.5 : 1 }} disabled={!texto.trim() || !para.trim() || enviando} onClick={enviar}>
+                {enviando ? "Enviando…" : "Enviar"}
+              </button>
+            </div>
+            <div style={{ fontSize: 11, color: "#6b7280" }}>Texto livre só chega a quem mandou mensagem nas últimas 24h e está na lista de números do painel da Meta.</div>
+          </>) : (
+            <div style={{ fontSize: 13, color: "#4b5563" }}>Seu nível de acesso só permite ver as mensagens.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ════════════════════════════════════════════════════════════
 // app.jsx
 // ════════════════════════════════════════════════════════════
 
@@ -61789,6 +62361,9 @@ function IconeMaster({ nome, tamanho = 18, cor = "currentColor" }) {
     case "insumos":
       // Caixa/pacote — catálogo de insumos
       return (<svg {...props}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>);
+    case "whatsapp":
+      // Balão de conversa redondo — teste do WhatsApp
+      return (<svg {...props}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>);
     case "financeiro":
       // Cédula/nota — bloco financeiro do escritório
       return (<svg {...props}><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><line x1="6" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="18" y2="12"/></svg>);
@@ -62642,6 +63217,15 @@ export default function ModuloClientesFornecedores() {
   const [projetosKey, setProjetosKey]         = useState(0);
   const [orcamentosKey, setOrcamentosKey]     = useState(0);
   const [obrasKey, setObrasKey]               = useState(0);
+  // Teste grátis do WhatsApp: o backend diz se esta empresa é a piloto.
+  // Para as outras o item de menu não aparece.
+  const [waPiloto, setWaPiloto] = useState(false);
+  useEffect(() => {
+    if (!autenticado || !usuario || usuario.perfil === "master" || usuario.perfil === "cliente") { setWaPiloto(false); return; }
+    let vivo = true;
+    waPilotoStatus().then(s => { if (vivo) setWaPiloto(!!s?.liberado); });
+    return () => { vivo = false; };
+  }, [autenticado, usuario?.empresa_id, usuario?.perfil]);
   // Tutorial Beta — disparado pelo item "+ Novo (Beta) 🧪" no sidebar.
   // Só visível em empresas com escritorio.dev_mode=true (ex: Vicke Dev).
   const [tutorialBetaAtivo, setTutorialBetaAtivo] = useState(false);
@@ -63251,6 +63835,7 @@ export default function ModuloClientesFornecedores() {
     { k:"obras",       icon:"obras",      label:"Obras" },
     { k:"fornecedores", icon:"prestadores", label:"Prestadores de Serviços" },
     { k:"insumos",     icon:"insumos",    label:"Insumos", count: data?.materiais?.length },
+    ...(waPiloto ? [{ k:"whatsapp-piloto", icon:"whatsapp", label:"WhatsApp (teste)" }] : []),
     // O Financeiro voltou como módulo Escritório, no fim deste menu.
     // O importador de nota fiscal foi apagado: estava fora do menu desde a
     // Sprint 3 e chamava a API da Anthropic direto do navegador, sem chave.
@@ -63774,6 +64359,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "financeiro"             && <Financeiro key={financeiroKey} data={data} save={save} />}
           {aba === "fornecedores"           && <PrestadoresServico key={fornecedoresKey} data={data} save={save} />}
           {aba === "insumos"                && <Insumos data={data} save={save} />}
+          {aba === "whatsapp-piloto" && waPiloto && <WhatsappPiloto data={data} usuario={usuario} />}
           {typeof aba === "string" && aba.indexOf("escritorio") === 0 && <Escritorio key={escritorioKey} abaInicial={aba.indexOf(":") > 0 ? aba.slice(aba.indexOf(":") + 1) : "dados"} data={data} save={save} onReload={loadData} aoTrocarAba={(k) => setAba("escritorio:" + k)} />}
           {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} setUsuario={setUsuario} />}
           {/* Sub-abas do menu Master — Admin recebe initialTab pra abrir direto na aba certa */}

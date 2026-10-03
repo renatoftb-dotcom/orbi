@@ -201,15 +201,56 @@ const ETAPAS_OBRA = [
   { id:"outros",              nome:"Outros",                           macro:"Outros" },
 ];
 
-// ── Grupos de material — dimensão de suprimentos, usada no lançamento e
-// nos rankings. Lista simples de strings (sem id próprio na spec). ──
+// ══════════════════════════════════════════════════════════════
+// GRUPO DE MATERIAL — UM VOCABULÁRIO SÓ
+// ══════════════════════════════════════════════════════════════
+// O grupo não é digitado: ele vem do INSUMO. Quem manda é o catálogo, e é
+// por isso que a lista canônica abaixo é a do catálogo — assim o grupo da
+// linha do orçamento, o da cotação, o do item do pedido e o da conta a
+// pagar são sempre a mesma palavra, porque todos saem do mesmo lugar.
+//
+// O que sobra são os nomes que ficaram gravados antes disso, ou digitados
+// à mão. "Louças" e "Metais" viravam duas linhas no quadro onde o catálogo
+// diz "Louças e metais"; "Tubulação PVC" era uma terceira "Hidráulica".
+// `grupoCanonico` traduz na leitura — nada é reescrito no banco.
 const GRUPOS_MATERIAL = [
-  "Aço", "Areia e pedra", "Argamassas", "Cimento", "Elétrica e iluminação",
-  "Entulhos", "Equipamentos", "Esquadrias", "Ferramentas", "Forros", "Granito",
-  "Impermeabilizantes", "Locação de ferramentas", "Louças", "Madeira de caixaria",
-  "Marcenaria", "Metais", "Pisos e revestimentos", "Prestadores de serviços",
-  "Telhas", "Tijolos e canaletas", "Tintas", "Tubulação PVC", "Outros",
+  "Aço", "Areia e pedra", "Argamassas", "Calhas e rufos", "Cimento", "Concreto",
+  "Elétrica e iluminação", "Entulhos", "Equipamentos e sistemas", "Esquadrias",
+  "Ferramentas", "Fixação", "Forros e gesso", "Hidráulica", "Impermeabilizantes",
+  "Lajes", "Locação de equipamentos", "Louças e metais", "Madeira de caixaria",
+  "Madeira de estrutura", "Marcenaria", "Pisos e revestimentos",
+  "Portas e fechaduras", "Prestadores de serviços", "Telhas",
+  "Tijolos e canaletas", "Tintas", "Outros",
 ];
+
+// nome antigo (normalizado) → nome do catálogo
+const GRUPO_APELIDOS = {
+  "equipamentos": "Equipamentos e sistemas",
+  "forros": "Forros e gesso",
+  "locacao de ferramentas": "Locação de equipamentos",
+  "loucas": "Louças e metais",
+  "metais": "Louças e metais",
+  "tubulacao pvc": "Hidráulica",
+  "granito": "Pisos e revestimentos",
+  "entulho": "Entulhos",
+};
+
+function grupoCanonico(nome) {
+  const n = normalizarNomeEtapa(nome);   // mesma normalização: sem acento, sem caixa
+  if (!n) return "";
+  const apelido = GRUPO_APELIDOS[n];
+  if (apelido) return apelido;
+  const certo = GRUPOS_MATERIAL.find((g) => normalizarNomeEtapa(g) === n);
+  return certo || String(nome).trim();   // nome novo passa; não se joga fora informação
+}
+
+// O grupo de um item, na ordem em que a informação é confiável: o catálogo
+// manda, porque é ele que define o vocabulário; o que está gravado na linha
+// serve de reserva para o item que não casou com o catálogo.
+function grupoDoItem(insumo, grupoGravado) {
+  return grupoCanonico((insumo && insumo.grupo) || grupoGravado || "");
+}
+
 
 
 // ══════════════════════════════════════════════════════════════

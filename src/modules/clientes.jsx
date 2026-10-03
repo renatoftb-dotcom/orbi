@@ -1810,6 +1810,100 @@ function BotaoCopiarPix({ pix, compacto }) {
   );
 }
 
+// ── A corrente, e onde ela arrebenta ────────────────────────────
+// O número que importa não é quanto a obra gastou — é quanto do que ela
+// gastou dá para rastrear até o item que foi orçado. O resto some do
+// confronto e volta como surpresa no fechamento.
+function ConferenciaDaObraView({ obra, insumos, isMobile, fmtBRL }) {
+  const c = conferenciaDaLigacao(obra, insumos);
+  const porInsumo = plPorInsumo(obra && obra.orcamento, (obra && obra.contasPagar) || [], insumos);
+  const qtd = (n) => (!n ? "—" : String(Math.round(n * 1000) / 1000).replace(".", ","));
+  const num = (v) => (Math.abs(v) < 0.005 ? "—" : fmtBRL(v));
+  const cab = { fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600 };
+  const celula = { fontSize: 12.5, textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
+  const grade = {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "minmax(0,1fr) 78px 78px" : "minmax(180px,1fr) 110px 110px 110px 110px 110px",
+    gap: 8, alignItems: "center",
+  };
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14,
+        padding: isMobile ? 14 : "16px 18px", marginBottom: 18 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
+          {c.pctLigado}% do que foi pago chega até o item orçado
+        </div>
+        <div style={{ fontSize: 12, color: "#4b5563", marginTop: 4 }}>
+          {fmtBRL(c.ligado)} de {fmtBRL(c.totalPago)} têm item do catálogo e etapa — é o que dá para
+          confrontar com o orçamento linha a linha. O resto soma no total e some do confronto.
+        </div>
+        <div style={{ height: 8, borderRadius: 999, background: "rgba(38,36,33,0.08)", marginTop: 12, overflow: "hidden" }}>
+          <div style={{ width: Math.max(0, Math.min(100, c.pctLigado)) + "%", height: "100%", background: AZUL_VK }} />
+        </div>
+      </div>
+
+      {c.ok ? (
+        <div style={{ fontSize: 12.5, color: "#4b5563", padding: "4px 2px 18px" }}>
+          Nada fora do lugar: todo pagamento tem item e etapa, todo item do orçamento casou com o
+          catálogo, e toda transação tem número de referência.
+        </div>
+      ) : (
+        <div style={{ marginBottom: 20 }}>
+          {c.furos.map((f, i) => (
+            <div key={i} style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12,
+              padding: "11px 14px", marginBottom: 8, display: "flex", gap: 12,
+              flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "flex-start" : "center" }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{f.titulo}</div>
+                <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 2 }}>{f.oQue}</div>
+              </div>
+              <div style={{ textAlign: isMobile ? "left" : "right", flexShrink: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>
+                  {f.quantos} {f.quantos === 1 ? "linha" : "linhas"}
+                </div>
+                {f.valor > 0 && <div style={{ fontSize: 11.5, color: "#6b7280" }}>{fmtBRL(f.valor)}</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {porInsumo.length > 0 && (
+        <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, overflow: "hidden" }}>
+          <div style={{ padding: "12px 14px 2px" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>Orçado × consumido, item a item</div>
+            <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3, marginBottom: 8 }}>
+              O confronto em quantidade, que o quadro por conta e o por etapa não dão — os dois somam
+              reais e perdem o m³.
+            </div>
+          </div>
+          <div style={{ ...grade, padding: "8px 14px", borderBottom: "1px solid rgba(38,36,33,0.10)" }}>
+            <span style={cab}>Item</span>
+            <span style={{ ...cab, textAlign: "right" }}>Orçado</span>
+            {!isMobile && <span style={{ ...cab, textAlign: "right" }}>R$ orçado</span>}
+            <span style={{ ...cab, textAlign: "right" }}>Consumido</span>
+            {!isMobile && <span style={{ ...cab, textAlign: "right" }}>R$ pago</span>}
+            {!isMobile && <span style={{ ...cab, textAlign: "right" }}>Saldo</span>}
+          </div>
+          {porInsumo.map((r) => (
+            <div key={r.insumoCodigo} style={{ ...grade, padding: "7px 14px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+              <span style={{ fontSize: 12.5, color: "#111827", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {r.nome || r.insumoCodigo}
+                <span style={{ fontSize: 10.5, color: "#9ca3af" }}> · {r.insumoCodigo}</span>
+              </span>
+              <span style={{ ...celula, color: "#6b7280" }}>{qtd(r.qtdOrcada)} {r.unidade}</span>
+              {!isMobile && <span style={{ ...celula, color: "#6b7280" }}>{num(r.orcado)}</span>}
+              <span style={{ ...celula, color: "#111827" }}>{qtd(r.qtdRealizada)} {r.unidade}</span>
+              {!isMobile && <span style={{ ...celula, color: "#111827" }}>{num(r.realizado)}</span>}
+              {!isMobile && <span style={{ ...celula, color: r.saldo < -0.005 ? "#dc2626" : "#6b7280" }}>{num(r.saldo)}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcamento }) {
   // Acompanhar custo e apurar resultado são duas perguntas. Com a venda, o
   // terreno e os tributos na conta, o número do canteiro fica escondido; o
@@ -3164,9 +3258,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
         </div>
 
-        {/* Toggle de visão */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          {[["pl", "P&L"], ["quadro", "Preencher"], ["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"], ["escritorio", "Para o escrit\u00f3rio"]].map(([v, l]) => (
+        {/* Toggle de visão — quebra linha no celular: sem isto a última aba
+            fica fora da tela, inalcançável, e ninguém descobre que existe */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+          {[["pl", "P&L"], ["quadro", "Preencher"], ["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"], ["ligacao", "Confer\u00eancia"], ["escritorio", "Para o escrit\u00f3rio"]].map(([v, l]) => (
             <button key={v} onClick={() => setVisaoPL(v)}
               style={{ border: visaoPL === v ? `1.5px solid ${AZUL_VK}` : "1px solid rgba(38,36,33,0.16)", background: "#fff", color: visaoPL === v ? "#111827" : "#4b5563", borderRadius: 20, padding: "6px 16px", fontSize: 12.5, fontWeight: visaoPL === v ? 700 : 500, cursor: "pointer", fontFamily: "inherit" }}>
               {l}
@@ -3174,7 +3269,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           ))}
         </div>
 
-        {visaoPL === "escritorio" ? (
+        {visaoPL === "ligacao" ? (
+          <ConferenciaDaObraView obra={{ ...obraAtual, contasPagar: contasDaObra }}
+            insumos={data.materiais || []} isMobile={isMobile} fmtBRL={fmtBRL} />
+        ) : visaoPL === "escritorio" ? (
           <PonteEscritorioView obra={obraAtual} cliente={cliente} contasPagar={contasDaObra}
             entradas={entradasDaObra} data={data} isMobile={isMobile} fmtBRL={fmtBRL}
             podeEditar={!!perm.podeGerenciarObra} dialogo={dialogo}
