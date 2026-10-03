@@ -3180,6 +3180,45 @@ teste("a mensagem rápida e a da cotação dizem a mesma coisa", () => {
 });
 
 
+// ── DANFE com o nome do produto ABAIXO da linha dos números (FlexDev) ──
+const DANFE_NOME_ABAIXO = [
+  ["NF-e"], ["DANFE"], ["Documento Auxiliar da"], ["N.º 000.000.163-FL"],
+  ["DADOS DOS PRODUTOS / SERVIÇOS"],
+  ["CÓDIGO", "DESCRIÇÃO DOS PRODUTOS", "NCM", "CSOSN", "CFOP", "UN", "QUANTID.", "V. UNITÁRIO", "VALOR TOTAL", "BASE ICMS", "% ICMS", "% IPI"],
+  ["00109-1", "38244000", "0102", "5102 BD", "1", "428,00", "428,00", "0,00", "0,00", "0"],
+  ["VEDA", "CONCRETO", "BALDE COM 18 LITROS"],
+  ["00110-2", "25232910", "0102", "5102 SC", "10", "38,50", "385,00", "0,00", "0,00", "0"],
+  ["CIMENTO CP II 50KG"],
+  [".........................................................................."],
+  ["CÁLCULO DO I S S Q N"],
+].map((c) => ({ celulas: c, texto: c.join(" ") }));
+
+teste("DANFE com o nome embaixo dos números: cada item leva o seu nome", () => {
+  const r = M.interpretarOrcamento(DANFE_NOME_ABAIXO);
+  assert.strictEqual(r.itens.length, 2, JSON.stringify(r.itens));
+  assert.strictEqual(r.itens[0].descricao, "VEDA CONCRETO BALDE COM 18 LITROS", "a unidade BD não gruda no nome");
+  assert.strictEqual(r.itens[0].total, 428);
+  assert.strictEqual(r.itens[0].quantidade, 1);
+  assert.ok(/CIMENTO CP II 50KG/.test(r.itens[1].descricao), r.itens[1].descricao);
+  assert.strictEqual(r.itens[1].total, 385);
+  assert.strictEqual(r.ehNota, true);
+  assert.strictEqual(r.numeroNota, "163");
+});
+
+teste("DANFE com o nome em cima continua lendo igual", () => {
+  const acima = [
+    ["DANFE"], ["N.º 000.008.623"],
+    ["CÓDIGO", "DESCRIÇÃO", "NCM", "CST", "CFOP", "UN", "QUANT", "V.UNIT", "V.TOTAL"],
+    ["AREIA MEDIA LAVADA"],
+    ["8", "25059000", "0103", "6102 METRO", "2,00", "130,00", "260,00", "0,00"],
+    ["PEDRA BRITADA 1"],
+    ["9", "25171000", "0103", "6102 METRO", "3,00", "120,00", "360,00", "0,00"],
+  ].map((c) => ({ celulas: c, texto: c.join(" ") }));
+  const r = M.interpretarOrcamento(acima);
+  assert.deepStrictEqual(r.itens.map((i) => i.total), [260, 360]);
+  assert.ok(/AREIA/.test(r.itens[0].descricao) && /PEDRA/.test(r.itens[1].descricao), JSON.stringify(r.itens.map(i => i.descricao)));
+});
+
 // ── A nota fiscal (DANFE) ───────────────────────────────────────
 // As linhas abaixo são as que o pdf.js devolve para a nota 8.623 da
 // Canroberto Said — a que chegou lendo "6102 METRO" como nome do material.

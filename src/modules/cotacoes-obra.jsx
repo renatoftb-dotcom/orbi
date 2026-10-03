@@ -1791,7 +1791,7 @@ function numeroDeOrcamento(txt) {
 // A nota fiscal escreve a unidade por extenso e em maiúscula — "METRO",
 // "QUILO", "PECAS" — onde o orçamento da loja abrevia. Faltando a palavra
 // inteira, ela é lida como parte do nome do material.
-const COT_RE_UNIDADE_TABELA = /^(un|und|unid|unidade|unidades|pc|p[çc]|pcs|peca|pe[çc]a|pecas|pe[çc]as|cx|caixa|caixas|sc|saco|sacos|kg|kgs|g|ton|quilo|quilos|kilo|kilos|m|mt|mts|metro|metros|m2|m²|m3|m³|l|lt|lts|litro|litros|lata|latas|br|barra|barras|rl|rolo|rolos|pt|pct|pacote|pacotes|jg|jogo|jogos|cj|conj|ml|par|pares|dz|duzia|dúzia|duzias|fd|fardo|gl|galao|galão|milheiro|vb)\.?$/i;
+const COT_RE_UNIDADE_TABELA = /^(un|und|unid|unidade|unidades|pc|p[çc]|pcs|peca|pe[çc]a|pecas|pe[çc]as|cx|caixa|caixas|sc|saco|sacos|kg|kgs|g|ton|quilo|quilos|kilo|kilos|m|mt|mts|metro|metros|m2|m²|m3|m³|l|lt|lts|litro|litros|lata|latas|br|barra|barras|rl|rolo|rolos|pt|pct|pacote|pacotes|jg|jogo|jogos|cj|conj|ml|par|pares|dz|duzia|dúzia|duzias|fd|fardo|gl|galao|galão|bd|balde|baldes|milheiro|vb)\.?$/i;
 
 // Cada rótulo de coluna, no que ele significa. A ordem importa: "Un." é
 // unidade, "Unit." é preço — o teste da unidade vem antes e exige a célula
@@ -2025,7 +2025,8 @@ function ehDanfe(texto) {
 // pontos são enfeite de impressão — e guardar "000.008.623" num lugar e
 // "8.623" noutro faria a mesma nota entrar duas vezes sem ninguém notar.
 function numeroDaNota(texto) {
-  const m = /N[º°o]\.?\s*([\d.]{3,})/i.exec(String(texto || ""));
+  // "Nº 000.008.623" e também "N.º 000.000.163" (FlexDev põe o ponto antes do º)
+  const m = /N\.?\s*[º°o]\.?\s*([\d.]{3,})/i.exec(String(texto || ""));
   if (!m) return "";
   const so = String(m[1]).replace(/\D/g, "").replace(/^0+/, "");
   return so || "";
@@ -2050,6 +2051,21 @@ function dataDaNota(texto) {
 // A linha de uma DANFE vira uma linha comum de tabela. Quando a descrição
 // veio sozinha na linha de cima, é aqui que as duas se juntam — e a de cima
 // sai, para não sobrar um item sem número nenhum.
+// Uma linha que é SÓ o nome do produto: tem letras, nenhum número de
+// valor, e não é cabeçalho de coluna nem título de bloco da nota. O nome
+// pode vir quebrado em várias células ("VEDA", "CONCRETO", "BALDE COM 18
+// LITROS") — o PDF corta onde o emissor mudou de fonte.
+function textoDeNomeDaDanfe(linha) {
+  const cel = (((linha || {}).celulas) || []).map((c) => String(c).trim()).filter(Boolean);
+  if (!cel.length) return "";
+  if (cel.some((c) => ehNumeroDeOrcamento(c))) return "";
+  const t = cel.join(" ");
+  if (!/[a-zA-ZÀ-ÿ]{3}/.test(t)) return "";
+  if (/^[.\-_=\s]+$/.test(t)) return "";
+  if (/DESCRI[ÇC][ÃA]O|\bNCM\b|\bCFOP\b|QUANT|C[ÁA]LCULO|DADOS (DOS|ADICIONAIS)|INFORMA[ÇC][ÕO]ES|TRANSPORTADOR|DESTINAT[ÁA]RIO/i.test(t)) return "";
+  return t;
+}
+
 function juntarLinhasDaDanfe(linhas) {
   const lista = linhas || [];
   const saida = [];
@@ -2057,14 +2073,19 @@ function juntarLinhasDaDanfe(linhas) {
     const d = pedacoDeDanfe((lista[i] || {}).celulas);
     if (!d) { saida.push(lista[i]); continue; }
 
+    // O nome que não veio na linha dos números está numa vizinha: a maioria
+    // dos emissores imprime ACIMA; alguns (o FlexDev, por exemplo) imprimem
+    // ABAIXO. Acima vale primeiro — o nome de cima de um item é sempre dele.
+    // Abaixo só se a linha de cima não é nome (cabeçalho, ou a linha do
+    // item anterior, que já levou o nome dela).
     let descricao = d.descricao;
     if (!descricao && saida.length) {
-      const acima = ((saida[saida.length - 1] || {}).celulas || [])
-        .map((c) => String(c).trim()).filter(Boolean);
-      if (acima.length === 1 && /[a-zA-ZÀ-ÿ]{3}/.test(acima[0]) && !ehNumeroDeOrcamento(acima[0])) {
-        descricao = acima[0];
-        saida.pop();
-      }
+      const acima = textoDeNomeDaDanfe(saida[saida.length - 1]);
+      if (acima && !saida[saida.length - 1].danfe) { descricao = acima; saida.pop(); }
+    }
+    if (!descricao && i + 1 < lista.length && !pedacoDeDanfe((lista[i + 1] || {}).celulas)) {
+      const abaixo = textoDeNomeDaDanfe(lista[i + 1]);
+      if (abaixo) { descricao = abaixo; i++; }
     }
     if (!descricao) { saida.push(lista[i]); continue; }
 
@@ -6728,8 +6749,25 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
         return;
       }
       if (ehPdf(alvo)) {
-        const o = interpretarOrcamento(linhasDoComprovante);
-        if (!(o.itens || []).length) throw new Error("Não achei a tabela de itens neste PDF. Se for foto ou digitalização, cole o texto.");
+        let o = interpretarOrcamento(linhasDoComprovante);
+        // O leitor do VICKE lê os desenhos que ele conhece, na hora e de
+        // graça. Desenho novo (cada emissor de nota tem o seu), ou PDF que é
+        // foto escaneada, vai para a IA — que lê qualquer papel. Os dados do
+        // cabeçalho que o leitor já achou (número da nota, emissão) ficam.
+        if (!(o.itens || []).length && iaDisponivel) {
+          const r = await api.ia.lerOrcamento(alvo, [], (pr) => setProgresso(pr));
+          const ia = orcamentoDaIA(r && r.orcamento);
+          const tudo = linhasDoComprovante.map((l) => (l && l.texto) || "").join("\n");
+          const nota = o.ehNota || ehDanfe(tudo);
+          o = { ...o, itens: ia.itens, somaItens: ia.somaItens, total: ia.total || o.total,
+            fornecedor: o.fornecedor || ia.fornecedor, cnpj: o.cnpj || ia.cnpj,
+            emitido: o.emitido || ia.emitido, condicao: o.condicao || ia.condicao, ehNota: nota,
+            numeroNota: nota ? (o.numeroNota || String(ia.numero || "").replace(/\D/g, "").replace(/^0+/, "")) : "",
+            numeroPedido: nota ? "" : (o.numeroPedido || ia.numero || "") };
+        }
+        if (!(o.itens || []).length) throw new Error(iaDisponivel
+          ? "Nem o leitor nem a IA acharam itens neste PDF."
+          : "Não achei a tabela de itens neste PDF. Se for foto ou digitalização, cole o texto.");
         const lidos = itensDaEntrada(o, "orcamento", insumos || []);
         setItens(lidos);
         setPapel({ numeroPedido: o.numeroPedido || (o.ehNota ? "" : o.numero) || "",
