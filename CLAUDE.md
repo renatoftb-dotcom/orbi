@@ -7,14 +7,30 @@ Este arquivo fornece orientação ao Claude Code (claude.ai/code) ao trabalhar c
 Orbi (também chamado **Vicke** internamente — marca antiga ainda hard-coded em IDs/chaves/nomes de storage como `vicke-token`, `vicke-sidebar-colapsada`, prefixos de tabela, subject do JWT) é um SaaS em português para escritórios de arquitetura/construção: clientes, projetos, orçamentos, fornecedores, materiais, financeiro e propostas em PDF.
 
 - **Frontend**: React 19 + Vite, deploy na Vercel (`vercel.json` com SPA rewrite). Sem TypeScript, sem framework de CSS — estilos inline em todo o código.
-- **Backend**: Node 18+ Express + PostgreSQL, deploy na Railway. Mora em `backend/` com seu próprio `package.json`/`node_modules`. Os arquivos `orbi.db*` são resíduo de SQLite — o backend atual é só Postgres via `DATABASE_URL`.
+- **Backend**: Node 18+ Express + PostgreSQL, deploy na Railway (serviço `sparkling-patience`, `orbi-production-5f5c.up.railway.app`). **O backend em produção é o repositório separado `vicke-backend`** (`C:\Users\renat\vicke-backend`, GitHub `renatoftb-dotcom/vicke-backend`). A pasta `backend/` deste repo é uma cópia antiga, parada desde set/2026 (não tem, por exemplo, o coletor SINAPI) — não edite nela achando que vai para produção. Os arquivos `orbi.db*` são resíduo de SQLite — o backend atual é só Postgres via `DATABASE_URL`.
+- **E-mail**: Resend (domínio `vicke.com.br`), com webhook de entrada em `/webhook/resend-inbound` (Svix, precisa de `express.raw()` antes do `express.json()` global).
 - **Idioma do domínio é português** (`cliente`, `orçamento`, `escritório`, `obra`, `lançamento`, `receita`, `fornecedor`, `material`). Mantenha isso em identificadores e strings de UI.
 
 ## Trabalhando com este codebase
 
 - **Sempre releia arquivos do disco antes de editar.** Este codebase é editado em paralelo a partir de múltiplas sessões; visões em cache ou desatualizadas no contexto já causaram perda de alterações no passado.
-- **Módulos grandes — edite cirurgicamente, não reescreva:** `src/modules/orcamento-teste.jsx` (~4400 linhas) e `src/modules/resultado-pdf.jsx` (~1000 linhas). Use substituições de string específicas; nunca reescreva esses arquivos por inteiro.
+- **Módulos grandes — edite cirurgicamente, não reescreva:** `orcamento-teste.jsx` (~9.900 linhas), `cotacoes-obra.jsx` (~8.300), `orcamento-obra.jsx` (~6.700), `clientes.jsx` (~5.600), `escritorio-financeiro.jsx` (~3.400), `resultado-pdf.jsx`. Use substituições de string específicas; nunca reescreva esses arquivos por inteiro.
 - **Smoke test em HTML standalone antes do deploy.** Ao iterar em um único módulo, teste-o em uma página HTML standalone (carregando React + o módulo via CDN) antes de rodar `npm run cpush`. Isso pega bugs de escopo/ordem que o dev server esconde.
+
+## Regras do usuário (Renato) — valem sempre
+
+- **Comandos de terminal sempre num único bloco**, um por linha, para colar de uma vez — nunca um comando por bloco.
+- **`git push` é sempre manual**, feito por ele no VSCode/Windows. Claude não roda git na máquina dele e não guarda credenciais.
+- **Nunca pedir nem receber tokens/credenciais pelo chat** — ele cola direto no Railway/Vercel.
+- **Antes de gravar qualquer dado em produção** (SQL, script, endpoint admin), mostrar exatamente o que vai mudar e esperar o ok.
+- **Edições no backend são cirúrgicas.** Quando as duas pontas mudam, o backend publica primeiro.
+- **Toda tela mexida é conferida no celular e no desktop**, e o resultado dos dois vai no relato da entrega.
+- **Visual** (detalhes em `docs/SPEC-VISUAL.md`): azul de interação `#0474f4`; nada de fundos cobre/âmbar/verde; texto `#111827` / `#4b5563` / `#6b7280`.
+- **Números sempre em pt-BR**: dinheiro com duas casas e vírgula (`14,80`, nunca `14.8`), em todas as telas.
+- **A interface não mostra valores negativos** — única exceção: saldos financeiros reais no extrato do escritório.
+- **Saldos do escritório conciliados até ago/2026 não podem mudar** — reclassificar contas pode, alterar cálculo ou saldo final não.
+- Rotinas de parâmetros compartilhados (SINAPI etc.) rodam **no backend para todas as empresas**, nunca numa tarefa local nem só para a Padovan.
+- IA dentro do VICKE: para a Padovan usa o plano Claude do Renato (não API paga); outros escritórios ficariam com API cobrada à parte ou sem IA.
 
 ## Modo Dev — empresa de teste isolada
 
@@ -70,7 +86,24 @@ Frontend (rode da raiz do repositório):
 | `npm run combine` | Regera `src/AppCombined.jsx` a partir de `src/modules/*` |
 | `npm run build` | Build de produção do Vite em `dist/` (**não** roda combine antes) |
 | `npm run cb` | `combine` e depois `build` — use isso antes de fazer deploy |
-| `npm run cpush` | `combine` + `build` + `git add . && git commit -m "update" && git push` (atalho de deploy do usuário) |
+| `npm run cpush` | `combine` + `build` + `git add . && git commit -m "update" && git push` (atalho antigo — ver publicação abaixo) |
+
+**Publicação (desde set/2026)** — a integração GitHub→Vercel do projeto `orbi-pouk` parou de disparar builds, então o deploy é pela CLI (projeto já linkado). Detalhes e o problema da tela branca em `docs/SPEC-DEPLOY.md`:
+
+```
+cd C:\Users\renat\orbi
+git push
+npx vercel --prod
+```
+
+Backend (`vicke-backend`, Railway publica no push para `main`):
+
+```
+cd C:\Users\renat\vicke-backend
+git add server.js
+git commit -m "<mensagem>"
+git push
+```
 
 Backend (`cd backend`):
 
@@ -89,14 +122,22 @@ Não há suíte de testes, nem script de lint plugado em CI, nem typecheck. O ES
 
 Essa é a peculiaridade arquitetural mais importante do codebase.
 
-`src/AppCombined.jsx` (~26.000 linhas) é **gerado** pelo `combine.js`, que concatena os arquivos em `src/modules/` numa ordem fixa:
+`src/AppCombined.jsx` (~64.000 linhas) é **gerado** pelo `combine.js`, que concatena os arquivos em `src/modules/` numa ordem fixa:
 
 ```
-shared.jsx → api.js → outros.jsx → clientes.jsx → resultado-pdf.jsx →
+shared.jsx → api.js → outros.jsx →
+insumos-seed-cadastro.jsx → insumos-seed.jsx → composicoes-seed.jsx →
+cronograma-seed.jsx → insumos.jsx → obra-financeiro.jsx →
+escritorio-financeiro.jsx → orcamento-obra.jsx → cronograma-obra.jsx →
+contratos-obra.jsx → contas-pagar.jsx → cotacoes-obra.jsx → clientes.jsx →
+resultado-pdf.jsx → shared-textos.jsx → modelo-padrao.jsx →
+modelos-registry.jsx → template-edicao.jsx → orcamento-onboarding.jsx →
 orcamento-teste.jsx → escritorio.jsx → admin.jsx → login.jsx →
 mensagens.jsx → onboarding.jsx → orcamento-config.jsx → app.jsx →
 render-pdf-route.jsx
 ```
+
+A fonte da verdade é o array `ORDER` em `combine.js` (com comentários explicando por que cada bloco vem onde vem — ex.: insumos antes de obra-financeiro, porque o catálogo de insumos é a fonte de preço da estimativa e `insumo.codigo` é a chave que liga estimado e realizado).
 
 Implicações:
 
@@ -123,7 +164,7 @@ Dentro do app principal, o "roteamento" é uma string de state `aba` em `app.jsx
 
 JWT mora em `localStorage["vicke-token"]`, assinado por 7 dias, payload inclui `id, nome, email, perfil, nivel, membro_id, empresa_id, empresa_nome`.
 
-- `perfil`: `master` (admin cross-app, vê Master Dashboard, módulo Admin, Mensagens) ou qualquer outra coisa (usuário tenant).
+- `perfil`: `master` (admin cross-app, vê Master Dashboard, módulo Admin, Mensagens), `cliente` (cliente final do escritório, só leitura da própria obra — lista branca `API_CLIENTE_LEITURA` no backend, ver `docs/SPEC-ACESSO-CLIENTE.md`) ou qualquer outra coisa (usuário tenant).
 - `nivel`: `admin | editor | visualizador` (dentro da empresa).
 
 Helpers de auth do frontend ficam no topo de `shared.jsx`: `decodeJWT`, `isTokenExpirado`, `getUsuarioAtual`, `getNivelUsuario`, `getPermissoes`. A UI mostra/esconde ações conforme isso; o backend re-checa (defesa em profundidade).
@@ -175,9 +216,42 @@ O módulo de proposta/orçamento tem matemática de precificação não-óbvia. 
 
 `/render-pdf/:uuid?token=...` é a rota standalone que o Puppeteer (rodando no backend, não está neste repositório) acessa para renderizar `<PropostaPreview/>` com `lockEdicao=true`. A rota busca `/api/proposta/render-data`, renderiza, e então monta `<div data-render-ready="true"/>` quando tudo está pronto — o Puppeteer espera por esse selector antes de capturar. Veja `src/modules/render-pdf-route.jsx` para o contrato.
 
-## Cron / manutenção do backend
+## Cron / manutenção do backend (repo `vicke-backend`)
 
-`backend/jobs/manutencao.js` roda toda noite às 03:00 pelo `node-cron` (agendado em `server.js:1347`). Usa a mesma função `query` que as rotas.
+- `jobs/manutencao.js` roda toda noite às 03:00 pelo `node-cron`. Usa a mesma função `query` que as rotas.
+- `jobs/sinapi-coletor.js` — cron nos dias 20 e 27; grava `config_geral.sinapi_parametros` (R$/h, produtividade HH, preços de insumos) para todas as empresas; endpoints `/api/sinapi/parametros` e `/admin/sinapi/*`; o frontend lê `data.sinapi`. Ver `docs/ROTINA-SINAPI.md`.
+
+## Gestão de obra — módulos e specs
+
+Tudo versionado em `docs/` — **leia a spec antes de mexer no módulo correspondente**:
+
+| Spec | Assunto | Módulo principal |
+|---|---|---|
+| `SPEC-INSUMOS.md` | catálogo central de insumos, chave única `codigo`, preço manual ou da última compra | `insumos.jsx` + seeds |
+| `PRECOS-REFERENCIA.md` | origem dos preços de referência | `insumos-seed*.jsx` |
+| `SPEC-ORCAMENTO-OBRA.md` | estimado: quantitativos a partir da geometria | `orcamento-obra.jsx` |
+| `SPEC-INSTALACOES.md` | hidráulica/elétrica/louças por contagem de ambientes, kits SINAPI | `orcamento-obra.jsx` |
+| `SPEC-PL-OBRA.md` | P&L da obra, estimado × realizado | `obra-financeiro.jsx` |
+| `SPEC-CRONOGRAMA.md` | prazo simplificado + opção por produtividade HH | `cronograma-obra.jsx` |
+| `SPEC-COTACOES.md` | cotação → escolha → pedido; "conta na loja"; envio por WhatsApp | `cotacoes-obra.jsx` |
+| `SPEC-CONTAS-PAGAR.md` | uma linha por pedido sob o nome da loja, pagar vários juntos, PIX copiável | `contas-pagar.jsx` |
+| `SPEC-CONTRATOS.md` | contratos de obra | `contratos-obra.jsx` |
+| `SPEC-REFORMA.md` | obras de reforma | — |
+| `SPEC-ACESSO-CLIENTE.md` | perfil `cliente` e o bug da tela "sem obra vinculada" | `api.js` |
+| `SPEC-VISUAL.md` | formato visual de todos os módulos (menos orçamento de projeto) | `app.jsx` |
+| `SPEC-DEPLOY.md` | publicação e tela branca | — |
+| `ROTINA-SINAPI.md` | coletor SINAPI no backend | `vicke-backend/jobs` |
+
+Referência das planilhas VBA antigas em `docs/referencia-orcamento/` — usar a **mecânica**, nunca copiar as fórmulas antigas.
+
+Regras de negócio já decididas: em obra de cliente o pagamento é do cliente e não entra no extrato do escritório; número do pedido da loja ≠ número da NF (guardar os dois); insumos de etapa definida preenchem a etapa sozinhos, insumos ambíguos (cimento, areia, aço, tábua) ficam em branco de propósito; no orçamento, esquadria aparece como uma linha com preço fechado.
+
+## WhatsApp — estado atual
+
+- **Não há integração por API ainda.** Todo envio é por link `wa.me`: `linkWhatsApp(telefone, msg)` em `cotacoes-obra.jsx` (normaliza para `55` + DDD + número; abaixo de 10 dígitos devolve `""`). O VICKE abre a conversa com o texto pronto e **quem aperta enviar é o usuário**, no WhatsApp dele. Envio para várias lojas é uma fila, uma conversa por vez.
+- Contatos de clientes e prestadores têm o flag `whatsapp: true/false` no item de `contatos` (`clientes.jsx`, `outros.jsx`); a proposta usa o primeiro contato com WhatsApp.
+- Respostas de loja que chegam pelo WhatsApp são lançadas à mão na cotação.
+- **Visão de produto (out/2026):** o WhatsApp como elo entre obra (pedreiros), lojas (vendedores) e escritório — "como se conectasse todos os WhatsApps formando um sistema". Também pendente: entrada por voz no lançamento de pedido/cotação.
 
 ## Pegadinhas de nomenclatura
 
