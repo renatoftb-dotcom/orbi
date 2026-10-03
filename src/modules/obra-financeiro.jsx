@@ -363,6 +363,91 @@ function etapasDoOrcamentoSemMapa(linhas) {
   return fora;
 }
 
+// ══════════════════════════════════════════════════════════════
+// A REGRA DA TRANSAÇÃO — o que todo lançamento precisa carregar
+// ══════════════════════════════════════════════════════════════
+// Cada porta de entrada nasceu numa época e pedia uma coisa: o pedido da
+// loja exigia item e etapa; a despesa da Entrada não pedia nada além do
+// valor. O resultado era a corrente arrebentada em silêncio — o gasto
+// somava no total e sumia do custo por etapa, do orçado × consumido e da
+// prestação de contas.
+//
+// Esta é a regra única. Toda porta pergunta a ela o que falta antes de
+// gravar, e a conferência da obra usa a mesma régua para apontar o que já
+// entrou torto. As exceções estão escritas aqui, com o motivo, e não
+// espalhadas pelas telas.
+//
+//   SEMPRE: obra, conta contábil, valor, data.
+//   CUSTO DA OBRA: fornecedor ("Outros" vale) e etapa.
+//   MATERIAL: item do catálogo e quantidade — é o que confronta com o
+//     orçado. Frete, água, aluguel de equipamento e afins são custo de
+//     material sem item: não há o que contar em m³.
+//   PAGO: forma de pagamento — à vista ou cartão, porque é ela que diz se
+//     o dinheiro atravessa para o escritório agora ou na fatura.
+//
+// Não pedem etapa: receita (dinheiro que entra), terreno (é anterior à
+// obra), tributo sobre a receita (não é de etapa nenhuma) e parcela de
+// contrato que não diz a etapa (o contrato de obra civil atravessa a obra
+// inteira — inventar uma etapa seria pior que deixar em branco).
+//
+// Não pede item nem quantidade a PARCELA de uma compra parcelada no boleto:
+// o consumo aconteceu uma vez, e dividi-lo pelas parcelas inventaria 11 m³
+// de concreto em cada mês. O item mora na compra; a parcela é só dinheiro.
+const TRANSACAO_CONTAS_COM_ITEM = ["material", "adicionais_material"];
+const TRANSACAO_CONTAS_SEM_ETAPA = ["impostos", "ir_receita", "inss", "iss",
+  "tarifas_bancarias", "contabilidade", "taxa_admin_obra"];
+
+function exigenciasDaTransacao(t) {
+  const c = t || {};
+  const conta = (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((x) => x && x.id === c.contaId) || null;
+  const grupo = conta ? conta.grupo : "";
+  const receita = grupo === "receitas";
+  const terreno = grupo === "terreno";
+  const excluida = grupo === "excluidas";
+  const custo = !!conta && !receita && !terreno && !excluida;
+  const contratoSemEtapa = c.origem === "contrato" && !c.etapa;
+  const parcelaDeCompra = Number(c.parcelasTotal) > 1;
+  return {
+    obra: true,
+    conta: true,
+    valor: true,
+    data: true,
+    fornecedor: custo || terreno,
+    etapa: custo && TRANSACAO_CONTAS_SEM_ETAPA.indexOf(c.contaId) < 0 && !contratoSemEtapa,
+    item: TRANSACAO_CONTAS_COM_ITEM.indexOf(c.contaId) >= 0 && !parcelaDeCompra,
+    quantidade: TRANSACAO_CONTAS_COM_ITEM.indexOf(c.contaId) >= 0 && !parcelaDeCompra,
+    formaPagamento: !!c.pago && !receita,
+  };
+}
+
+// O que falta, em português, na ordem em que a pessoa preenche. Lista
+// vazia = transação fechada.
+function faltasDaTransacao(t) {
+  const c = t || {};
+  const e = exigenciasDaTransacao(c);
+  const n = (v) => (typeof numeroDeCampo === "function" ? numeroDeCampo(v) : Number(v) || 0);
+  const tem = (v) => String(v == null ? "" : v).trim() !== "";
+  const faltas = [];
+  if (e.obra && !tem(c.obraId)) faltas.push("a obra");
+  if (e.conta && !tem(c.contaId)) faltas.push("a conta contábil");
+  if (e.valor && !(n(c.valorPago || c.valor) > 0)) faltas.push("o valor");
+  if (e.data && !tem(c.pagoEm || c.vencimento)) faltas.push("a data");
+  if (e.fornecedor && !tem(c.prestadorId) && !tem(c.favorecido)) faltas.push("o fornecedor");
+  if (e.item && !tem(c.insumoCodigo)) faltas.push("o item do catálogo");
+  if (e.quantidade && !(n(c.quantidade) > 0)) faltas.push("a quantidade");
+  if (e.etapa && !tem(c.etapa || c.etapaId)) faltas.push("a etapa");
+  if (e.formaPagamento && !tem(c.formaPagamento)) faltas.push("a forma de pagamento");
+  return faltas;
+}
+
+// "Falta a etapa e o item do catálogo." — a frase que a tela mostra.
+function frasesDasFaltas(faltas) {
+  const f = faltas || [];
+  if (!f.length) return "";
+  if (f.length === 1) return "Falta " + f[0] + ".";
+  return "Falta " + f.slice(0, -1).join(", ") + " e " + f[f.length - 1] + ".";
+}
+
 // ── Helpers puros sobre a taxonomia — o resto do módulo (cálculo, UI,
 // formulário) vai depender destes dois. ──
 

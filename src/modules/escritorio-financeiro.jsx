@@ -490,8 +490,19 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
     });
   };
 
+  // Paga no cartão não atravessa: o banco não debitou esta compra, vai
+  // debitar a FATURA. Mandar a compra agora e a fatura depois contaria o
+  // mesmo dinheiro duas vezes no extrato. Fica em ignorados, com o motivo,
+  // para o painel e a conferência dizerem onde ela está.
+  const noCartao = (c) => !!(c && c.pago && (c.formaPagamento === "cartao" || c.cartaoId));
+  for (const c of o.contasPagar || []) {
+    if (!noCartao(c)) continue;
+    ignorados.push({ origem: c.id, descricao: c.descricao || "",
+      valor: Number(c.valorPago) || Number(c.valor) || 0,
+      motivo: "pago no cartão — entra no escritório pela fatura" });
+  }
   // as contas pagas da obra — o dinheiro que saiu, uma linha por nota
-  for (const fonte of fontesDasContasPagas(o.contasPagar)) empurrar(fonte);
+  for (const fonte of fontesDasContasPagas((o.contasPagar || []).filter((c) => !noCartao(c)))) empurrar(fonte);
   // as entradas da obra — o dinheiro que entrou
   for (const e of o.entradas || []) {
     if (!e) continue;
@@ -616,6 +627,7 @@ function linhasDaFatura(obras, lancamentos, cartaoId, competencia) {
           compraEm: String(c.pagoEm || "").slice(0, 10),
           parcela: p.parcela, de: p.de, valor: Math.round((Number(p.valor) || 0) * 100) / 100,
           refId: c.id,
+          anexos: anexosDaTransacao(c),
         });
       }
     }
@@ -631,6 +643,7 @@ function linhasDaFatura(obras, lancamentos, cartaoId, competencia) {
         compraEm: String(l.lancadoEm || "").slice(0, 10),
         parcela: p.parcela, de: p.de, valor: Math.round((Number(p.valor) || 0) * 100) / 100,
         refId: l.id,
+        anexos: anexosDaTransacao(l),
       });
     }
   }
@@ -718,7 +731,18 @@ function lancamentoDaFatura(cartao, competencia, linhas, opcoes) {
     contaBanco: "sim",
     // a composição, para a fatura poder ser aberta e conferida
     linhas: linhas.map((l) => ({ obra: l.obra, descricao: l.descricao, fornecedor: l.fornecedor,
-      contaId: l.contaId, parcela: l.parcela, de: l.de, valor: l.valor, numeroDoc: l.numeroDoc })),
+      contaId: l.contaId, parcela: l.parcela, de: l.de, valor: l.valor, numeroDoc: l.numeroDoc,
+      anexos: l.anexos || [] })),
+    // As notas de cada compra sobem para a fatura: é com elas que a fatura se
+    // explica na prestação de contas. Uma nota parcelada aparece uma vez só.
+    anexos: (() => {
+      const vistos = {}, todos = [];
+      for (const l of linhas || []) for (const a of l.anexos || []) {
+        const k = (a && (a.public_id || a.url)) || "";
+        if (!k || vistos[k]) continue; vistos[k] = 1; todos.push(a);
+      }
+      return todos;
+    })(),
     criadoEm: new Date().toISOString(),
   };
 }
@@ -1817,6 +1841,17 @@ function anexosDaTransacao(x) {
   return jaEsta ? lista : [t.comprovante].concat(lista);
 }
 
+// O nome que a pessoa reconhece: "Nota fiscal", "Comprovante". O tipo vem
+// de quem anexou (a Entrada sabe se leu uma nota ou um comprovante); sem
+// ele, o primeiro papel de uma conta paga é o comprovante.
+function rotuloDoAnexo(a, i) {
+  const tipo = (a || {}).tipo || "";
+  if (tipo === "nota") return "Nota fiscal";
+  if (tipo === "comprovante") return "Comprovante";
+  if (tipo === "boleto") return "Boleto";
+  return i === 0 ? "Comprovante" : "Anexo";
+}
+
 function comAnexos(x, lista) {
   // Guardar os dois seria pedir para divergirem: quem passa a mexer na lista
   // leva o comprovante antigo para dentro dela e o campo velho sai de cena.
@@ -1912,6 +1947,29 @@ function destinoVisivelDoCusto(contaId, obra, cliente, opcoes) {
 }
 
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
+
+// Os papéis da transação, cada um abrindo numa aba. É o mesmo componente
+// na conta a pagar, no extrato do escritório e na fatura do cartão — o
+// papel anexado na contabilização tem que ser achado de qualquer ponta.
+function LinksDeAnexo({ transacao, compacto }) {
+  const lista = anexosDaTransacao(transacao).filter((a) => a && a.url);
+  if (!lista.length) return null;
+  return (
+    <span style={{ display: "inline-flex", gap: compacto ? 6 : 10, flexWrap: "wrap", alignItems: "center" }}>
+      {lista.map((a, i) => (
+        <a key={a.public_id || a.url || i} href={a.url} target="_blank" rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          title={a.nome || rotuloDoAnexo(a, i)}
+          style={{ fontSize: compacto ? 11 : 11.5, color: "#0474f4", textDecoration: "none",
+            whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 3 }}>
+          <span aria-hidden="true">{"\u{1F4CE}"}</span>
+          {compacto ? rotuloDoAnexo(a, i) : rotuloDoAnexo(a, i) + (a.nome ? " · " + a.nome : "")}
+        </a>
+      ))}
+    </span>
+  );
+}
+
 // ── UI — a aba Financeiro do Escritório ─────────────────────────
 // Três telas: o extrato mês a mês (que é o que você já olhava na planilha),
 // a lista de lançamentos e a importação. Tudo em cima das mesmas funções
@@ -3163,6 +3221,7 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo }) {
                             {l.compraEm}{l.numeroDoc ? " · nº " + l.numeroDoc : ""}
                             {l.atrasada ? ` · de ${l.competenciaOriginal}, ficou em aberto` : ""}
                           </div>
+                          <LinksDeAnexo transacao={l} compacto />
                         </td>
                         {!isMobile && <td style={cel}>{l.obra || "Escritório"}</td>}
                         {!isMobile && <td style={cel}>{l.fornecedor || "—"}</td>}
@@ -3339,6 +3398,9 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   // O comprovante aberto no visor. Guardado aqui em cima porque a lista e o
   // formulário são duas telas do mesmo painel.
   const [vendoComprovante, setVendoComprovante] = useState(null);
+  // A fatura do cartão é uma linha só no extrato, mas guarda as compras por
+  // dentro: clicar nela abre a composição, cada compra com a sua nota.
+  const [faturaAberta, setFaturaAberta] = useState(null);
 
   async function excluirLancamento(l) {
     const ok = await dialogo.confirmar({
@@ -3679,7 +3741,29 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
                       <td style={{ padding: "7px 12px", color: "#6b7280" }}>{u ? u.nome : l.unidadeOriginal || "—"}</td>
                       <td style={{ padding: "7px 12px", color: "#6b7280" }}>{[l.cliente, l.projeto].filter(Boolean).join(" · ") || "—"}</td>
                       <td style={{ padding: "7px 12px" }}>
-                        {l.descricao || l.fornecedor || "—"}
+                        {(l.origem || {}).tipo === "fatura" && (l.linhas || []).length ? (
+                          <button type="button" onClick={() => setFaturaAberta(faturaAberta === l.id ? null : l.id)}
+                            style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: "inherit",
+                              fontSize: 12.5, color: "#111827", textAlign: "left" }}>
+                            <span style={{ color: "#6b7280", marginRight: 4 }}>{faturaAberta === l.id ? "▾" : "▸"}</span>
+                            {l.descricao}
+                          </button>
+                        ) : (l.descricao || l.fornecedor || "—")}
+                        {faturaAberta === l.id && (
+                          <div style={{ marginTop: 6, paddingLeft: 12, borderLeft: "2px solid rgba(38,36,33,0.10)",
+                            display: "grid", gap: 4 }}>
+                            {(l.linhas || []).map((x, i) => (
+                              <div key={i} style={{ fontSize: 11.5, color: "#4b5563", display: "flex", gap: 8,
+                                flexWrap: "wrap", alignItems: "baseline" }}>
+                                <span style={{ color: "#111827" }}>{x.descricao || "—"}</span>
+                                <span>{[x.obra || "Escritório", x.fornecedor, x.de > 1 ? x.parcela + "/" + x.de : ""]
+                                  .filter(Boolean).join(" · ")}</span>
+                                <span style={{ fontVariantNumeric: "tabular-nums" }}>{efDinheiro(x.valor)}</span>
+                                <LinksDeAnexo transacao={x} compacto />
+                              </div>
+                            ))}
+                          </div>
+                        )}
                         {/* O clipe diz, de relance, qual linha tem papel e qual
                             não tem — é o que se procura numa prestação de
                             contas. Com mais de um, ele traz a conta. */}

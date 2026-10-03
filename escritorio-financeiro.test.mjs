@@ -1262,6 +1262,48 @@ teste("fechadas sao lidas pela origem do lancamento, nao pelo texto", () => {
   assert.strictEqual(l.origem.competencia, "2026-10");
 });
 
+teste("conta paga no cartao nao atravessa na baixa — so a fatura atravessa", () => {
+  // empreendimento: a baixa atravessa sozinha. Menos no cartao.
+  const obra = { id: "ob1", clienteId: "c1", nome: "Jacarezinho M1" };
+  const emp = { id: "c1", nome: "Padovan", servicos: { empreendimento: true } };
+  const noCartao = { id: "k1", contaId: "material", valor: 5326.88, valorPago: 5326.88, pago: true,
+    pagoEm: "2026-09-23", formaPagamento: "cartao", cartaoId: "sicoob",
+    parcelasCartao: [{ parcela:1, de:1, competencia:"2026-10", valor:5326.88 }] };
+  const aVista = { id: "k2", contaId: "material", valor: 100, valorPago: 100, pago: true, pagoEm: "2026-09-23" };
+  const r = M.lancamentosDaBaixa(obra, emp, [noCartao, aVista], { planoObra: PLANO_OBRA });
+  assert.strictEqual(r.lancamentos.length, 1, "so a compra a vista atravessa");
+  assert.strictEqual(r.lancamentos[0].valor, 100);
+  const ig = r.ignorados.find((x) => x.origem === "k1");
+  assert.ok(ig, "a do cartao aparece em ignorados");
+  assert.ok(/fatura/.test(ig.motivo), ig.motivo);
+});
+
+teste("o painel da obra tambem nao manda conta paga no cartao", () => {
+  const r = M.lancamentosDaObraParaEscritorio(
+    { id: "ob1", clienteId: "c1", nome: "Obra" }, { id: "c1", servicos: { empreendimento: true } },
+    { planoObra: PLANO_OBRA, entradas: [], contasPagar: [
+      { id: "a", contaId: "material", valor: 1000, valorPago: 1000, pago: true, pagoEm: "2026-09-23",
+        formaPagamento: "cartao", cartaoId: "k1" }] });
+  assert.strictEqual(r.lancamentos.length, 0);
+  assert.strictEqual(r.total, 0);
+});
+
+teste("a fatura carrega a nota de cada compra, sem repetir a mesma nota", () => {
+  const nota = { public_id: "n1", url: "https://x/nota.pdf", nome: "4177.pdf", tipo: "nota" };
+  const obras = [{ id: "o1", nome: "Jacarezinho M1", contasPagar: [
+    { id: "a", cartaoId: "k1", contaId: "material", descricao: "Concreto", pagoEm: "2026-09-23",
+      comprovante: nota,
+      parcelasCartao: [{ parcela:1, de:2, competencia:"2026-10", valor:500 },
+                       { parcela:2, de:2, competencia:"2026-11", valor:500 }] },
+  ]}];
+  const linhas = M.linhasDaFatura(obras, [], "k1", "2026-10");
+  assert.strictEqual(linhas[0].anexos.length, 1, "a linha da fatura sabe da nota");
+  const l = M.lancamentoDaFatura(CARTAO, "2026-10", linhas.concat(linhas), {});
+  assert.strictEqual(l.anexos.length, 1, "a mesma nota duas vezes aparece uma");
+  assert.strictEqual(l.anexos[0].url, nota.url);
+  assert.strictEqual(l.linhas[0].anexos[0].tipo, "nota", "a composicao guarda o papel de cada compra");
+});
+
 teste("compra no cartao nao atravessa sozinha para o escritorio", () => {
   // quem atravessa e a fatura; a compra viraria uma linha que o banco nunca debitou
   const r = M.lancamentosDaObraParaEscritorio(

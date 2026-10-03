@@ -9080,6 +9080,91 @@ function etapasDoOrcamentoSemMapa(linhas) {
   return fora;
 }
 
+// ══════════════════════════════════════════════════════════════
+// A REGRA DA TRANSAÇÃO — o que todo lançamento precisa carregar
+// ══════════════════════════════════════════════════════════════
+// Cada porta de entrada nasceu numa época e pedia uma coisa: o pedido da
+// loja exigia item e etapa; a despesa da Entrada não pedia nada além do
+// valor. O resultado era a corrente arrebentada em silêncio — o gasto
+// somava no total e sumia do custo por etapa, do orçado × consumido e da
+// prestação de contas.
+//
+// Esta é a regra única. Toda porta pergunta a ela o que falta antes de
+// gravar, e a conferência da obra usa a mesma régua para apontar o que já
+// entrou torto. As exceções estão escritas aqui, com o motivo, e não
+// espalhadas pelas telas.
+//
+//   SEMPRE: obra, conta contábil, valor, data.
+//   CUSTO DA OBRA: fornecedor ("Outros" vale) e etapa.
+//   MATERIAL: item do catálogo e quantidade — é o que confronta com o
+//     orçado. Frete, água, aluguel de equipamento e afins são custo de
+//     material sem item: não há o que contar em m³.
+//   PAGO: forma de pagamento — à vista ou cartão, porque é ela que diz se
+//     o dinheiro atravessa para o escritório agora ou na fatura.
+//
+// Não pedem etapa: receita (dinheiro que entra), terreno (é anterior à
+// obra), tributo sobre a receita (não é de etapa nenhuma) e parcela de
+// contrato que não diz a etapa (o contrato de obra civil atravessa a obra
+// inteira — inventar uma etapa seria pior que deixar em branco).
+//
+// Não pede item nem quantidade a PARCELA de uma compra parcelada no boleto:
+// o consumo aconteceu uma vez, e dividi-lo pelas parcelas inventaria 11 m³
+// de concreto em cada mês. O item mora na compra; a parcela é só dinheiro.
+const TRANSACAO_CONTAS_COM_ITEM = ["material", "adicionais_material"];
+const TRANSACAO_CONTAS_SEM_ETAPA = ["impostos", "ir_receita", "inss", "iss",
+  "tarifas_bancarias", "contabilidade", "taxa_admin_obra"];
+
+function exigenciasDaTransacao(t) {
+  const c = t || {};
+  const conta = (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((x) => x && x.id === c.contaId) || null;
+  const grupo = conta ? conta.grupo : "";
+  const receita = grupo === "receitas";
+  const terreno = grupo === "terreno";
+  const excluida = grupo === "excluidas";
+  const custo = !!conta && !receita && !terreno && !excluida;
+  const contratoSemEtapa = c.origem === "contrato" && !c.etapa;
+  const parcelaDeCompra = Number(c.parcelasTotal) > 1;
+  return {
+    obra: true,
+    conta: true,
+    valor: true,
+    data: true,
+    fornecedor: custo || terreno,
+    etapa: custo && TRANSACAO_CONTAS_SEM_ETAPA.indexOf(c.contaId) < 0 && !contratoSemEtapa,
+    item: TRANSACAO_CONTAS_COM_ITEM.indexOf(c.contaId) >= 0 && !parcelaDeCompra,
+    quantidade: TRANSACAO_CONTAS_COM_ITEM.indexOf(c.contaId) >= 0 && !parcelaDeCompra,
+    formaPagamento: !!c.pago && !receita,
+  };
+}
+
+// O que falta, em português, na ordem em que a pessoa preenche. Lista
+// vazia = transação fechada.
+function faltasDaTransacao(t) {
+  const c = t || {};
+  const e = exigenciasDaTransacao(c);
+  const n = (v) => (typeof numeroDeCampo === "function" ? numeroDeCampo(v) : Number(v) || 0);
+  const tem = (v) => String(v == null ? "" : v).trim() !== "";
+  const faltas = [];
+  if (e.obra && !tem(c.obraId)) faltas.push("a obra");
+  if (e.conta && !tem(c.contaId)) faltas.push("a conta contábil");
+  if (e.valor && !(n(c.valorPago || c.valor) > 0)) faltas.push("o valor");
+  if (e.data && !tem(c.pagoEm || c.vencimento)) faltas.push("a data");
+  if (e.fornecedor && !tem(c.prestadorId) && !tem(c.favorecido)) faltas.push("o fornecedor");
+  if (e.item && !tem(c.insumoCodigo)) faltas.push("o item do catálogo");
+  if (e.quantidade && !(n(c.quantidade) > 0)) faltas.push("a quantidade");
+  if (e.etapa && !tem(c.etapa || c.etapaId)) faltas.push("a etapa");
+  if (e.formaPagamento && !tem(c.formaPagamento)) faltas.push("a forma de pagamento");
+  return faltas;
+}
+
+// "Falta a etapa e o item do catálogo." — a frase que a tela mostra.
+function frasesDasFaltas(faltas) {
+  const f = faltas || [];
+  if (!f.length) return "";
+  if (f.length === 1) return "Falta " + f[0] + ".";
+  return "Falta " + f.slice(0, -1).join(", ") + " e " + f[f.length - 1] + ".";
+}
+
 // ── Helpers puros sobre a taxonomia — o resto do módulo (cálculo, UI,
 // formulário) vai depender destes dois. ──
 
@@ -9591,8 +9676,19 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
     });
   };
 
+  // Paga no cartão não atravessa: o banco não debitou esta compra, vai
+  // debitar a FATURA. Mandar a compra agora e a fatura depois contaria o
+  // mesmo dinheiro duas vezes no extrato. Fica em ignorados, com o motivo,
+  // para o painel e a conferência dizerem onde ela está.
+  const noCartao = (c) => !!(c && c.pago && (c.formaPagamento === "cartao" || c.cartaoId));
+  for (const c of o.contasPagar || []) {
+    if (!noCartao(c)) continue;
+    ignorados.push({ origem: c.id, descricao: c.descricao || "",
+      valor: Number(c.valorPago) || Number(c.valor) || 0,
+      motivo: "pago no cartão — entra no escritório pela fatura" });
+  }
   // as contas pagas da obra — o dinheiro que saiu, uma linha por nota
-  for (const fonte of fontesDasContasPagas(o.contasPagar)) empurrar(fonte);
+  for (const fonte of fontesDasContasPagas((o.contasPagar || []).filter((c) => !noCartao(c)))) empurrar(fonte);
   // as entradas da obra — o dinheiro que entrou
   for (const e of o.entradas || []) {
     if (!e) continue;
@@ -9717,6 +9813,7 @@ function linhasDaFatura(obras, lancamentos, cartaoId, competencia) {
           compraEm: String(c.pagoEm || "").slice(0, 10),
           parcela: p.parcela, de: p.de, valor: Math.round((Number(p.valor) || 0) * 100) / 100,
           refId: c.id,
+          anexos: anexosDaTransacao(c),
         });
       }
     }
@@ -9732,6 +9829,7 @@ function linhasDaFatura(obras, lancamentos, cartaoId, competencia) {
         compraEm: String(l.lancadoEm || "").slice(0, 10),
         parcela: p.parcela, de: p.de, valor: Math.round((Number(p.valor) || 0) * 100) / 100,
         refId: l.id,
+        anexos: anexosDaTransacao(l),
       });
     }
   }
@@ -9819,7 +9917,18 @@ function lancamentoDaFatura(cartao, competencia, linhas, opcoes) {
     contaBanco: "sim",
     // a composição, para a fatura poder ser aberta e conferida
     linhas: linhas.map((l) => ({ obra: l.obra, descricao: l.descricao, fornecedor: l.fornecedor,
-      contaId: l.contaId, parcela: l.parcela, de: l.de, valor: l.valor, numeroDoc: l.numeroDoc })),
+      contaId: l.contaId, parcela: l.parcela, de: l.de, valor: l.valor, numeroDoc: l.numeroDoc,
+      anexos: l.anexos || [] })),
+    // As notas de cada compra sobem para a fatura: é com elas que a fatura se
+    // explica na prestação de contas. Uma nota parcelada aparece uma vez só.
+    anexos: (() => {
+      const vistos = {}, todos = [];
+      for (const l of linhas || []) for (const a of l.anexos || []) {
+        const k = (a && (a.public_id || a.url)) || "";
+        if (!k || vistos[k]) continue; vistos[k] = 1; todos.push(a);
+      }
+      return todos;
+    })(),
     criadoEm: new Date().toISOString(),
   };
 }
@@ -10918,6 +11027,17 @@ function anexosDaTransacao(x) {
   return jaEsta ? lista : [t.comprovante].concat(lista);
 }
 
+// O nome que a pessoa reconhece: "Nota fiscal", "Comprovante". O tipo vem
+// de quem anexou (a Entrada sabe se leu uma nota ou um comprovante); sem
+// ele, o primeiro papel de uma conta paga é o comprovante.
+function rotuloDoAnexo(a, i) {
+  const tipo = (a || {}).tipo || "";
+  if (tipo === "nota") return "Nota fiscal";
+  if (tipo === "comprovante") return "Comprovante";
+  if (tipo === "boleto") return "Boleto";
+  return i === 0 ? "Comprovante" : "Anexo";
+}
+
 function comAnexos(x, lista) {
   // Guardar os dois seria pedir para divergirem: quem passa a mexer na lista
   // leva o comprovante antigo para dentro dela e o campo velho sai de cena.
@@ -11013,6 +11133,29 @@ function destinoVisivelDoCusto(contaId, obra, cliente, opcoes) {
 }
 
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
+
+// Os papéis da transação, cada um abrindo numa aba. É o mesmo componente
+// na conta a pagar, no extrato do escritório e na fatura do cartão — o
+// papel anexado na contabilização tem que ser achado de qualquer ponta.
+function LinksDeAnexo({ transacao, compacto }) {
+  const lista = anexosDaTransacao(transacao).filter((a) => a && a.url);
+  if (!lista.length) return null;
+  return (
+    <span style={{ display: "inline-flex", gap: compacto ? 6 : 10, flexWrap: "wrap", alignItems: "center" }}>
+      {lista.map((a, i) => (
+        <a key={a.public_id || a.url || i} href={a.url} target="_blank" rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          title={a.nome || rotuloDoAnexo(a, i)}
+          style={{ fontSize: compacto ? 11 : 11.5, color: "#0474f4", textDecoration: "none",
+            whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 3 }}>
+          <span aria-hidden="true">{"\u{1F4CE}"}</span>
+          {compacto ? rotuloDoAnexo(a, i) : rotuloDoAnexo(a, i) + (a.nome ? " · " + a.nome : "")}
+        </a>
+      ))}
+    </span>
+  );
+}
+
 // ── UI — a aba Financeiro do Escritório ─────────────────────────
 // Três telas: o extrato mês a mês (que é o que você já olhava na planilha),
 // a lista de lançamentos e a importação. Tudo em cima das mesmas funções
@@ -12264,6 +12407,7 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo }) {
                             {l.compraEm}{l.numeroDoc ? " · nº " + l.numeroDoc : ""}
                             {l.atrasada ? ` · de ${l.competenciaOriginal}, ficou em aberto` : ""}
                           </div>
+                          <LinksDeAnexo transacao={l} compacto />
                         </td>
                         {!isMobile && <td style={cel}>{l.obra || "Escritório"}</td>}
                         {!isMobile && <td style={cel}>{l.fornecedor || "—"}</td>}
@@ -12440,6 +12584,9 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   // O comprovante aberto no visor. Guardado aqui em cima porque a lista e o
   // formulário são duas telas do mesmo painel.
   const [vendoComprovante, setVendoComprovante] = useState(null);
+  // A fatura do cartão é uma linha só no extrato, mas guarda as compras por
+  // dentro: clicar nela abre a composição, cada compra com a sua nota.
+  const [faturaAberta, setFaturaAberta] = useState(null);
 
   async function excluirLancamento(l) {
     const ok = await dialogo.confirmar({
@@ -12780,7 +12927,29 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
                       <td style={{ padding: "7px 12px", color: "#6b7280" }}>{u ? u.nome : l.unidadeOriginal || "—"}</td>
                       <td style={{ padding: "7px 12px", color: "#6b7280" }}>{[l.cliente, l.projeto].filter(Boolean).join(" · ") || "—"}</td>
                       <td style={{ padding: "7px 12px" }}>
-                        {l.descricao || l.fornecedor || "—"}
+                        {(l.origem || {}).tipo === "fatura" && (l.linhas || []).length ? (
+                          <button type="button" onClick={() => setFaturaAberta(faturaAberta === l.id ? null : l.id)}
+                            style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: "inherit",
+                              fontSize: 12.5, color: "#111827", textAlign: "left" }}>
+                            <span style={{ color: "#6b7280", marginRight: 4 }}>{faturaAberta === l.id ? "▾" : "▸"}</span>
+                            {l.descricao}
+                          </button>
+                        ) : (l.descricao || l.fornecedor || "—")}
+                        {faturaAberta === l.id && (
+                          <div style={{ marginTop: 6, paddingLeft: 12, borderLeft: "2px solid rgba(38,36,33,0.10)",
+                            display: "grid", gap: 4 }}>
+                            {(l.linhas || []).map((x, i) => (
+                              <div key={i} style={{ fontSize: 11.5, color: "#4b5563", display: "flex", gap: 8,
+                                flexWrap: "wrap", alignItems: "baseline" }}>
+                                <span style={{ color: "#111827" }}>{x.descricao || "—"}</span>
+                                <span>{[x.obra || "Escritório", x.fornecedor, x.de > 1 ? x.parcela + "/" + x.de : ""]
+                                  .filter(Boolean).join(" · ")}</span>
+                                <span style={{ fontVariantNumeric: "tabular-nums" }}>{efDinheiro(x.valor)}</span>
+                                <LinksDeAnexo transacao={x} compacto />
+                              </div>
+                            ))}
+                          </div>
+                        )}
                         {/* O clipe diz, de relance, qual linha tem papel e qual
                             não tem — é o que se procura numa prestação de
                             contas. Com mais de um, ele traz a conta. */}
@@ -22823,6 +22992,10 @@ function contasDoContrato(contrato) {
     parcela: p.parcela || idx + 1,
     totalParcelas: p.totalParcelas || 0,
     contaId: contaDoTipo(c.tipoProfissional),
+    // O contrato que é de UMA etapa (o serralheiro do portão, o pintor)
+    // passa a etapa para as parcelas. O de obra civil, que atravessa a obra,
+    // fica em branco — a regra da transação sabe disso.
+    etapa: c.etapa || "",
     prestadorId: c.prestadorId || "",
     favorecido: c.nomeContratado || "",
     descricao: p.descricao,
@@ -23608,6 +23781,10 @@ function contaDaCompra(d, novoId, dados) {
     parcela: d.parcela || 0,
     parcelasTotal: d.parcelasTotal || 0,
     contaId: dados.contaId || (typeof PLANO_CONTAS !== "undefined" && PLANO_CONTAS[0] ? PLANO_CONTAS[0].id : "material"),
+    // A etapa é da compra inteira e vale para cada parcela: é o que põe o
+    // dinheiro no custo por etapa. Sem ela, a cotação lançada parcelada
+    // caía inteira em "Sem etapa".
+    etapa: dados.etapa || dados.etapaId || "",
     prestadorId: dados.prestadorId || "",
     favorecido: dados.favorecido || "",
     descricao: d.descricao,
@@ -23770,6 +23947,7 @@ const CP_ATOS = {
   paga: "Pagamento registrado",
   desfeita: "Pagamento desfeito",
   comprovante: "Comprovante anexado",
+  nota: "Nota fiscal anexada",
   comprovanteRemovido: "Comprovante removido",
   recalibrada: "Datas recalibradas",
 };
@@ -23842,7 +24020,7 @@ function contaPaga(conta, dados, quem, agoraIso) {
   };
   nova = registrarAto(nova, "paga", quem, agora);
   const mudouAnexo = JSON.stringify(antes || null) !== JSON.stringify(depois || null);
-  if (mudouAnexo && depois) nova = registrarAto(nova, "comprovante", quem, agora, depois.nome || "");
+  if (mudouAnexo && depois) nova = registrarAto(nova, depois.tipo === "nota" ? "nota" : "comprovante", quem, agora, depois.nome || "");
   if (mudouAnexo && !depois && antes) nova = registrarAto(nova, "comprovanteRemovido", quem, agora);
   return nova;
 }
@@ -24319,13 +24497,18 @@ function conferenciaDaLigacao(obra, insumos) {
     semEtapaOrc.reduce((s, x) => s + x.linhas, 0), 0));
 
   const pagas = contas.filter((c) => c && c.pago);
-  const contaSemEtapa = pagas.filter((c) => !String(c.etapa || c.etapaId || "").trim());
+  // A régua é a regra da transação: só é furo o que ela EXIGE. Tarifa
+  // bancária sem etapa, frete sem item e parcela de obra civil sem etapa
+  // estão certos, e apontá-los como erro faria a pessoa parar de olhar.
+  const exige = (c, campo) => (typeof exigenciasDaTransacao === "function"
+    ? exigenciasDaTransacao(c)[campo] : true);
+  const contaSemEtapa = pagas.filter((c) => exige(c, "etapa") && !String(c.etapa || c.etapaId || "").trim());
   if (contaSemEtapa.length) furos.push(furo("Pagamento sem etapa",
     "Entra no custo da obra e some do custo por etapa.",
     contaSemEtapa.length, contaSemEtapa.reduce((s, c) => s + ((Number(c.valorPago) || Number(c.valor)) || 0), 0)));
 
-  const contaSemInsumo = pagas.filter((c) => !String(c.insumoCodigo || "").trim());
-  if (contaSemInsumo.length) furos.push(furo("Pagamento sem item do catálogo",
+  const contaSemInsumo = pagas.filter((c) => exige(c, "item") && !String(c.insumoCodigo || "").trim());
+  if (contaSemInsumo.length) furos.push(furo("Material sem item do catálogo",
     "Soma em reais, mas não dá para confrontar com o que foi orçado item a item.",
     contaSemInsumo.length, contaSemInsumo.reduce((s, c) => s + ((Number(c.valorPago) || Number(c.valor)) || 0), 0)));
 
@@ -26352,6 +26535,18 @@ function despesaPronta(d, obras, obraId) {
   // da parcela — perguntá-las de novo só abriria caminho para divergirem.
   if (String(dd.parcelaId || "").trim()) return { ok: true, motivo: "" };
   if (!String(dd.contaId || "").trim()) return { ok: false, motivo: "Escolha a conta contábil." };
+  // Daqui em diante quem decide é a regra única da transação: a mesma que o
+  // pedido, a conta avulsa e a conferência usam. Sem isto a despesa da
+  // Entrada era a porta por onde o gasto entrava sem item e sem etapa.
+  if (typeof faltasDaTransacao === "function") {
+    const faltas = faltasDaTransacao({
+      obraId: obraId || "(esta obra)", contaId: dd.contaId, valor: dd.valor, pagoEm: dd.pagoEm, pago: true,
+      favorecido: dd.favorecidoId, insumoCodigo: dd.insumoCodigo, quantidade: dd.quantidade,
+      etapa: dd.etapa, formaPagamento: dd.forma === "cartao" ? (dd.cartaoId ? "cartao" : "") : "avista",
+    });
+    if (dd.forma === "cartao" && !dd.cartaoId) faltas.push("o cartão");
+    if (faltas.length) return { ok: false, motivo: frasesDasFaltas(faltas) };
+  }
   return { ok: true, motivo: "" };
 }
 
@@ -27833,6 +28028,8 @@ function dadosDoLancamento(cot) {
     cotacaoId: c.id,
     obraId: c.obraId || "",
     contaId: c.contaId || "",
+    // a etapa para a qual se cotou — vai para cada conta que nascer daqui
+    etapaId: c.etapaId || "",
     prestadorId: esc.fornecedorId || "",
     favorecido: esc.favorecido || "",
     descricao: String(c.titulo || "").trim() || "Compra",
@@ -31353,6 +31550,7 @@ function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinhe
       aoCriarLoja={criarLoja}
       aoAprender={(pares) => aprenderApelidosNoCatalogo(data, save, pares)}
       aoVerContas={contasDaObraDe}
+      cartoes={typeof cartoesDoEscritorio === "function" ? cartoesDoEscritorio(data) : []}
       aoFechar={aoFechar} aoSeguir={seguir} />
   );
 }
@@ -31507,7 +31705,7 @@ function BotaoDitar({ aoDitar, isMobile, compacto }) {
 }
 
 function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile, dinheiro,
-  obras, embutido, aoCadastrarInsumo, aoCriarLoja, aoAprender, aoVerContas, aoFechar, aoSeguir }) {
+  obras, embutido, aoCadastrarInsumo, aoCriarLoja, aoAprender, aoVerContas, aoFechar, aoSeguir, cartoes }) {
   const E = COT_ESTILO;
   const P = cotPainel(isMobile, 940);
   const [texto, setTexto] = useState("");
@@ -31828,7 +32026,11 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     let comprovante = null;
     if (arquivo) {
       setEnviandoComprov(true);
-      try { comprovante = await enviarComprovante(arquivo); }
+      // O papel diz o que é: nota fiscal ou comprovante. A pasta no
+      // armazenamento é a mesma; a etiqueta é que separa os dois na hora de
+      // prestar contas.
+      try { const up = await enviarComprovante(arquivo);
+        comprovante = up ? { ...up, tipo: despesa.notaDeServico ? "nota" : "comprovante" } : up; }
       catch (e) { setAviso("O pagamento foi lançado, mas o comprovante não subiu: " + (e.message || "")); }
       finally { setEnviandoComprov(false); }
     }
@@ -32022,8 +32224,14 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                   serviço) se escolhe aqui. */}
               <div style={{ ...cartao, borderColor: "rgba(4,116,244,0.35)", background: "#f7fbff" }}>
                 <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0474f4", marginBottom: 4 }}>
-                  Pagamento lido do comprovante
+                  {despesa.notaDeServico ? "Nota fiscal de serviço lida" : "Pagamento lido do comprovante"}
                 </div>
+                {despesa.notaDeServico && (
+                  <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 4 }}>
+                    A data veio da emissão da nota. Se o pagamento foi em outro dia, troque abaixo — é ela que
+                    decide o mês da despesa e a fatura do cartão.
+                  </div>
+                )}
                 <div style={{ fontSize: 11.5, color: "#4b5563" }}>
                   {[despesa.lidoComo ? `para “${despesa.lidoComo}”` : "",
                     despesa.documento || "",
@@ -32086,8 +32294,126 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                         placeholder="Mão de obra da alvenaria, 2ª medição…"
                         onChange={(e) => mexerDespesa({ descricao: e.target.value })} />
                     </div>
+
+                    {/* O que a regra da transação pede para esta conta: item e
+                        quantidade quando é material, etapa quando é custo da
+                        obra. Só aparece o que a conta escolhida pede — frete
+                        não tem item, imposto não tem etapa. */}
+                    {(() => {
+                      const ex = typeof exigenciasDaTransacao === "function"
+                        ? exigenciasDaTransacao({ contaId: despesa.contaId }) : { item: false, etapa: false };
+                      if (!ex.item && !ex.etapa) return null;
+                      return (
+                        <div style={{ display: "grid", gap: 10, marginTop: 10,
+                          gridTemplateColumns: isMobile ? "1fr" : (ex.item ? "2fr 1fr 1fr" : "1fr") }}>
+                          {ex.item && (
+                            <div style={{ minWidth: 0 }}>
+                              <label style={E.label}>Item do catálogo</label>
+                              <SelectBusca style={E.input} value={despesa.insumoCodigo || ""}
+                                onChange={(v) => {
+                                  const ins = (insumos || []).find((x) => x && (x.codigo === v || x.id === v)) || null;
+                                  mexerDespesa({ insumoCodigo: v,
+                                    unidade: despesa.unidade || (ins && ins.unidade) || "",
+                                    grupoMaterial: (ins && ins.grupo) || "",
+                                    // a etapa do insumo só preenche o que está vazio
+                                    etapa: despesa.etapa || (ins && ins.etapaPadrao) || "",
+                                    descricao: despesa.descricao || (ins && ins.nome) || "" });
+                                }}
+                                placeholder="Procurar no catálogo…"
+                                opcoes={[{ valor: "", rotulo: "— escolha o item —" }].concat(
+                                  (insumos || []).filter((i) => i && i.ativo !== false)
+                                    .map((i) => ({ valor: i.codigo || i.id, rotulo: i.nome, grupo: i.grupo || "",
+                                      extra: (i.aliases || []).join(" ") })))} />
+                            </div>
+                          )}
+                          {ex.item && (
+                            <div>
+                              <label style={E.label}>Quantidade</label>
+                              <input style={E.input} inputMode="decimal" value={despesa.quantidade || ""}
+                                onChange={(e) => mexerDespesa({ quantidade: e.target.value })} placeholder="0" />
+                            </div>
+                          )}
+                          {ex.item && (
+                            <div>
+                              <label style={E.label}>Unidade</label>
+                              <input style={E.input} value={despesa.unidade || ""}
+                                onChange={(e) => mexerDespesa({ unidade: e.target.value })} placeholder="m3" />
+                            </div>
+                          )}
+                          {ex.etapa && (
+                            <div style={{ minWidth: 0, gridColumn: isMobile ? "auto" : "1 / -1" }}>
+                              <label style={E.label}>Etapa</label>
+                              <SelectBusca style={E.input} value={despesa.etapa || ""}
+                                onChange={(v) => mexerDespesa({ etapa: v })}
+                                placeholder="Procurar etapa…"
+                                opcoes={[{ valor: "", rotulo: "— escolha a etapa —" }].concat(
+                                  (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [])
+                                    .map((e) => ({ valor: e.id, rotulo: e.nome })))} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </>
                 )}
+
+                {/* Como o dinheiro saiu. No cartão, a compra entra na obra hoje,
+                    integral, mas NÃO atravessa para o escritório: quem
+                    atravessa é a fatura, quando você fechar. */}
+                <div style={{ marginTop: 12, borderTop: "1px solid rgba(38,36,33,0.08)", paddingTop: 10 }}>
+                  <label style={E.label}>Como foi pago</label>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {[["avista", "À vista / transferência"], ["cartao", "Cartão de crédito"]].map(([k, r]) => {
+                      const on = (despesa.forma || "avista") === k;
+                      return (
+                        <button key={k} type="button"
+                          onClick={() => mexerDespesa({ forma: k,
+                            cartaoId: k === "cartao" ? (despesa.cartaoId || ((cartoes || [])[0] || {}).id || "") : "",
+                            parcelas: despesa.parcelas || 1 })}
+                          style={{ ...E.btnSec, fontSize: 12.5, borderColor: on ? "#0474f4" : "rgba(38,36,33,0.16)",
+                            fontWeight: on ? 700 : 500, color: on ? "#111827" : "#4b5563" }}>
+                          {r}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {despesa.forma === "cartao" && (
+                    !(cartoes || []).length ? (
+                      <div style={{ fontSize: 11.5, color: "#b45309", marginTop: 8 }}>
+                        Nenhum cartão cadastrado. Cadastre em Escritório → Cartões.
+                      </div>
+                    ) : (() => {
+                      const ct = (cartoes || []).find((c) => c.id === despesa.cartaoId) || cartoes[0];
+                      const plano = typeof parcelasDoCartao === "function"
+                        ? parcelasDoCartao(ct, despesa.pagoEm, numeroDeCampo(despesa.valor), despesa.parcelas) : [];
+                      return (
+                        <>
+                          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: 10, marginTop: 10 }}>
+                            <div>
+                              <label style={E.label}>Cartão</label>
+                              <SelectBusca style={E.input} value={despesa.cartaoId || (ct || {}).id || ""}
+                                onChange={(v) => mexerDespesa({ cartaoId: v })}
+                                opcoes={(cartoes || []).map((c) => ({ valor: c.id, rotulo: c.nome }))} />
+                            </div>
+                            <div>
+                              <label style={E.label}>Parcelas</label>
+                              <input style={E.input} inputMode="numeric" value={despesa.parcelas || 1}
+                                onChange={(e) => mexerDespesa({ parcelas: e.target.value })} />
+                            </div>
+                          </div>
+                          {plano.length > 0 && (
+                            <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8, lineHeight: 1.6 }}>
+                              Cai {plano.length === 1 ? "na fatura de " : "nas faturas de "}
+                              <b style={{ color: "#111827" }}>
+                                {plano.map((p) => p.competencia + " (" + dinheiro(p.valor) + ")").join(" · ")}
+                              </b>. O custo da obra é integral nesta data; o escritório recebe a fatura quando você fechar.
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()
+                  )}
+                </div>
               </div>
 
               {/* Quem recebeu já tinha parcela combinada? Então este dinheiro
@@ -32132,7 +32458,8 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
 
               {arquivo && (
                 <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 10 }}>
-                  {"\u{1F4CE}"} {arquivo.name} — vai anexado à conta como comprovante.
+                  {"\u{1F4CE}"} {arquivo.name} — fica anexado ao pagamento
+                  {despesa.notaDeServico ? ", como nota fiscal" : ", como comprovante"}; abre pela linha da conta e pelo extrato do escritório.
                 </div>
               )}
             </>
@@ -32361,6 +32688,12 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
           {aviso && <div style={{ fontSize: 12, color: "#dc2626", marginTop: 10 }}>{aviso}</div>}
         </div>
 
+        {/* O botão desabilitado sem dizer por quê é uma porta trancada sem
+            placa. Com a regra da transação há mais o que faltar, e o que
+            falta tem que estar escrito ao lado de quem vai clicar. */}
+        {despesa && !prova.ok && prova.motivo && (
+          <div style={{ fontSize: 12, color: "#b45309", marginTop: 12, textAlign: "right" }}>{prova.motivo}</div>
+        )}
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14, flexWrap: "wrap" }}>
           {!embutido && <button type="button" style={E.btnSec} onClick={aoFechar}>Fechar</button>}
           {(itens || despesa) && (
@@ -35663,7 +35996,7 @@ function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL, cl
 // cotações — e o recado tem que aparecer onde a mão está.
 function AvisoDoExtrato({ aviso, aoFechar, fmtBRL }) {
   if (!aviso) return null;
-  const ap = aviso.lancamentos || [], bl = aviso.bloqueados || [];
+  const ap = aviso.lancamentos || [], bl = aviso.bloqueados || [], ct = aviso.noCartao || [];
   const porConta = [];
   const indice = {};
   for (const l of ap) {
@@ -35682,7 +36015,8 @@ function AvisoDoExtrato({ aviso, aoFechar, fmtBRL }) {
       borderRadius: 14, padding: "12px 14px", marginBottom: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: AZUL_VK }}>
-          {ap.length === 1 ? "Entrou no extrato do escritório" : `${ap.length} lançamentos entraram no extrato do escritório`}
+          {ap.length === 0 && ct.length ? "Pago no cartão"
+            : ap.length === 1 ? "Entrou no extrato do escritório" : `${ap.length} lançamentos entraram no extrato do escritório`}
         </div>
         <button type="button" onClick={aoFechar}
           style={{ border: "none", background: "transparent", color: AZUL_VK, cursor: "pointer",
@@ -35699,11 +36033,22 @@ function AvisoDoExtrato({ aviso, aoFechar, fmtBRL }) {
           Não entra no resultado do mês: soma no valor do imóvel e vira lucro no dia da venda.
         </div>
       )}
+      {ct.length > 0 && (
+        <div style={{ fontSize: 12.5, color: "#374151", marginTop: ap.length ? 8 : 6,
+          paddingTop: ap.length ? 8 : 0, borderTop: ap.length ? "1px solid rgba(38,36,33,0.08)" : "none" }}>
+          {fmtBRL(ct.reduce((s, x) => s + x.valor, 0))} no cartão — o custo da obra já está lançado;
+          o extrato do escritório recebe quando você fechar a fatura
+          {(() => { const f = [...new Set(ct.flatMap(x => x.faturas))].sort();
+            return f.length ? (f.length === 1 ? " de " + f[0] : " de " + f.join(", ")) : ""; })()}
+          , em Escritório → Cartões.
+        </div>
+      )}
       {bl.length > 0 && (
         <div style={{ fontSize: 12.5, color: "#b45309", marginTop: 8, paddingTop: 8,
           borderTop: "1px solid rgba(38,36,33,0.08)" }}>
           {bl.length === 1 ? "1 lançamento não entrou" : `${bl.length} lançamentos não entraram`}: {bl[0].motivo}
-          {" "}Quando reabrir o mês, mande pelo Planejamento → Para o escritório.
+          {" "}O mês está fechado e não muda. Se o pagamento é de um mês aberto, desfaça a baixa e pague de novo
+          com a data certa — ela atravessa na hora.
         </div>
       )}
     </div>
@@ -36028,8 +36373,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     }
 
     setAvisoPreco(r.relato.aplicados.length || r.relato.pendencias.length ? r.relato : null);
-    setAvisoExtrato((ponte.lancamentos.length || ponte.bloqueados.length)
-      ? { modo: ponte.modo, lancamentos: ponte.lancamentos, bloqueados: ponte.bloqueados } : null);
+    // Pago no cartão não atravessa agora — e quem pagou precisa ver isso,
+    // senão procura no extrato uma linha que só vai existir na fatura.
+    const noCartao = pagas.filter(c => c && (c.formaPagamento === "cartao" || c.cartaoId))
+      .map(c => ({ valor: Number(c.valorPago) || Number(c.valor) || 0,
+        faturas: [...new Set((c.parcelasCartao || []).map(p => p.competencia))] }));
+    setAvisoExtrato((ponte.lancamentos.length || ponte.bloqueados.length || noCartao.length)
+      ? { modo: ponte.modo, lancamentos: ponte.lancamentos, bloqueados: ponte.bloqueados, noCartao } : null);
 
     return { extras: Object.keys(extras).length ? extras : null };
   };
@@ -36108,6 +36458,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const f = formConta;
     if (!f.descricao?.trim()) { dialogo.alertar({ titulo: "Informe a descrição da conta", tipo: "aviso" }); return; }
     if (!(Number(f.valor) > 0)) { dialogo.alertar({ titulo: "Informe um valor maior que zero", tipo: "aviso" }); return; }
+    // A mesma régua de todas as portas: conta que entra torta aqui
+    // arrebenta o custo por etapa e o orçado × consumido lá na frente.
+    const faltas = faltasDaTransacao({ ...f, obraId: f.obraId || (obraAtual && obraAtual.id) });
+    if (faltas.length) { dialogo.alertar({ titulo: frasesDasFaltas(faltas), tipo: "aviso" }); return; }
     // O antes e o que o formulario mostrou, nao o que estava gravado: o que
     // veio da cotacao ao abrir nao foi decisao de ninguem, e registrar
     // "quantidade 0 -> 7" esconderia que o ajuste foi de 11 para 7.
@@ -36198,7 +36552,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // que a fatura encontra esta compra depois.
     const cartao = f.forma === "cartao" ? cartaoPorId(cartoesDoEscritorio(data), f.cartaoId) : null;
     const noCartao = (conta, valor) => {
-      if (!cartao) return conta;
+      if (!cartao) return { ...conta, formaPagamento: "avista" };
       const p = pagamentoNoCartao(conta, cartao, { pagoEm: f.dataContab, valorPago: valor, parcelas: f.parcelas });
       return p ? { ...conta, ...p } : conta;
     };
@@ -37081,6 +37435,22 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             {TIPOS_PROFISSIONAL.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
           </Selecao>
           <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>São os mesmos prestadores de serviço do catálogo de insumos. O tipo já sugere o regime do contrato e o objeto.</div>
+        </div>
+
+        {/* A etapa do contrato vai para cada parcela — é o que põe o serviço
+            no custo por etapa. Contrato de obra civil atravessa a obra
+            inteira, e aí o certo é deixar em branco: inventar uma etapa
+            seria pior que não ter. */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={C.label}>Etapa da obra (opcional)</label>
+          <SelectBusca style={C.input} value={g.etapa || ""}
+            onChange={(v) => setG("etapa", v)}
+            placeholder="Procurar etapa…"
+            opcoes={[{ valor: "", rotulo: "— várias etapas (obra civil, empreitada geral) —" }].concat(
+              (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(e => ({ valor: e.id, rotulo: e.nome })))} />
+          <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>
+            Contrato de uma etapa só — o portão, a pintura, a impermeabilização — leva a etapa para as parcelas.
+          </div>
         </div>
 
         <div style={{ ...grade("1fr 1fr"), marginBottom: 12 }}>
@@ -38522,20 +38892,40 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                 {aberta && (
                                   <div style={{ marginTop: 8, marginBottom: 2, paddingLeft: 12, borderLeft: "2px solid rgba(38,36,33,0.10)", display: "flex", flexDirection: "column", gap: 4 }}>
                                     {detalhe && <div style={{ fontSize: 12, color: "#4b5563", whiteSpace: "pre-wrap" }}>{detalhe}</div>}
-                                    {[["Conta", nomeConta(c.contaId)],
+                                    {[["Ref.", c.numeroDoc],
+                                      ["Conta", nomeConta(c.contaId)],
                                       ["Favorecido", c.favorecido || (c.prestadorId ? nomePrestador(c.prestadorId) : "")],
                                       ["Serviço", c.servico],
+                                      ["Item", c.insumoCodigo
+                                        ? (((data.materiais || []).find(m => m && m.codigo === c.insumoCodigo) || {}).nome || c.insumoCodigo)
+                                          + (Number(c.quantidade) > 0 ? ` · ${qtdBR(Number(c.quantidade))} ${c.unidade || ""}`.trimEnd() : "")
+                                        : ""],
+                                      ["Etapa", c.etapa ? (((typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [])
+                                        .find(x => x.id === c.etapa) || {}).nome || c.etapa) : ""],
+                                      ["Nota fiscal", c.numeroNota ? "nº " + c.numeroNota : ""],
                                       ["Origem", c.origem === "contrato" ? "Parcela de contrato" : "Conta avulsa"],
                                       ["Vencimento", c.vencimento ? `${dataBR(c.vencimento)}${c.estimada ? " (prevista)" : ""}` : "a definir"],
                                       ["Contabilizado em", c.pago ? dataBR(c.pagoEm) : ""],
                                       ["Registrado em", c.pago ? dataBR(c.contabilizadoEm) : ""],
                                       ["Valor pago", c.pago ? fmtMoedaCtr(Number(c.valorPago) || Number(c.valor) || 0) : ""],
+                                      ["Pago", c.pago ? (c.formaPagamento === "cartao"
+                                        ? "no cartão" + (c.parcelasCartao && c.parcelasCartao.length > 1 ? `, em ${c.parcelasCartao.length}x` : "")
+                                          + " — faturas " + [...new Set((c.parcelasCartao || []).map(p => p.competencia))].join(", ")
+                                        : (c.formaPagamento === "avista" ? "à vista / transferência" : "")) : ""],
                                       ["Baixa dada por", c.pago ? nomeGravado((ultimoAto(c, "paga") || {}).por) : ""],
                                       ["Observação", c.observacao]].filter(([, v]) => v).map(([rot, v]) => (
                                         <div key={rot} style={{ fontSize: 11.5, color: "#4b5563" }}>
                                           <span style={{ color: "#6b7280" }}>{rot}: </span><span style={{ color: "#111827" }}>{v}</span>
                                         </div>
                                       ))}
+                                    {/* O papel anexado na contabilização mora aqui, na conta:
+                                        abre direto, sem ir procurar em pasta. */}
+                                    {anexosDaTransacao(c).length > 0 && (
+                                      <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>
+                                        <span style={{ color: "#6b7280" }}>Papéis: </span>
+                                        <LinksDeAnexo transacao={c} />
+                                      </div>
+                                    )}
                                     {/* O histórico é a resposta para "quem mexeu nisso?" — a
                                         mesma conta é do escritório e do cliente. Conta de antes
                                         deste registro não tem histórico, e é isso que ela diz. */}
@@ -38748,19 +39138,44 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       const alvo = contas.find(c => c && c.id === d.parcelaId);
       if (!alvo) return { erro: "Não achei essa parcela — ela pode ter sido baixada por outro caminho." };
       if (alvo.pago) return { erro: "Essa parcela já está baixada." };
-      gravarContas(contas.map(c => c.id === alvo.id ? contaPaga(c, baixa, quem) : c), obraAtual.id);
+      const cartaoP = d.forma === "cartao" ? cartaoPorId(cartoesDoEscritorio(data), d.cartaoId) : null;
+      let pagaP = { ...contaPaga(alvo, baixa, quem), formaPagamento: cartaoP ? "cartao" : "avista" };
+      if (cartaoP) {
+        const plano = pagamentoNoCartao(pagaP, cartaoP, { pagoEm: d.pagoEm, valorPago: valor, parcelas: d.parcelas });
+        if (plano) pagaP = { ...pagaP, ...plano };
+      }
+      gravarContas(contas.map(c => c.id === alvo.id ? pagaP : c), obraAtual.id);
       return { gravado: true, parcela: true, favorecido: alvo.favorecido || d.favorecido || "" };
     }
 
+    const q = numeroDeCampo(d.quantidade) || 0;
     const nova = numerarContas([registrarAto({ ...contaAvulsaVazia(obraAtual.id),
       contaId: d.contaId || "material",
       prestadorId: d.prestadorId || d.favorecidoId || "",
       favorecido: d.favorecido || "",
       descricao: String(d.descricao || "").trim() || "Pagamento a " + (d.favorecido || "prestador"),
+      // a corrente: o que foi comprado, quanto, em que etapa — é o que liga
+      // esta despesa ao orçado e ao custo por etapa
+      insumoCodigo: d.insumoCodigo || "",
+      quantidade: q || "",
+      unidade: d.unidade || "",
+      unitario: q > 0 ? Math.round((valor / q) * 100) / 100 : "",
+      etapa: d.etapa || "",
+      grupoMaterial: d.grupoMaterial || "",
+      numeroNota: d.documento || "",
       valor, vencimento: d.pagoEm }, "criada", quem)],
       obras, lancamentosDoEscritorio(data))[0];
-    gravarContas(contas.concat([contaPaga(nova, baixa, quem)]), obraAtual.id);
-    return { gravado: true, contaId: nova.id, favorecido: d.favorecido || "" };
+    // Como o dinheiro saiu. No cartão o custo da obra fica nesta data, mas o
+    // plano de parcelas vai junto — é por ele que a fatura acha a compra, e
+    // é ele que impede a ponte de mandar a compra para o escritório agora.
+    const cartao = d.forma === "cartao" ? cartaoPorId(cartoesDoEscritorio(data), d.cartaoId) : null;
+    let paga = { ...contaPaga(nova, baixa, quem), formaPagamento: cartao ? "cartao" : "avista" };
+    if (cartao) {
+      const plano = pagamentoNoCartao(paga, cartao, { pagoEm: d.pagoEm, valorPago: valor, parcelas: d.parcelas });
+      if (plano) paga = { ...paga, ...plano };
+    }
+    gravarContas(contas.concat([paga]), obraAtual.id);
+    return { gravado: true, contaId: nova.id, favorecido: d.favorecido || "", cartao: !!cartao };
   }
 
   // Recalibrar as entregas de um pedido sem sair da cotação: é lá que se

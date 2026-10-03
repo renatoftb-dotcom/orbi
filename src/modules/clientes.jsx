@@ -2193,7 +2193,7 @@ function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL, cl
 // cotações — e o recado tem que aparecer onde a mão está.
 function AvisoDoExtrato({ aviso, aoFechar, fmtBRL }) {
   if (!aviso) return null;
-  const ap = aviso.lancamentos || [], bl = aviso.bloqueados || [];
+  const ap = aviso.lancamentos || [], bl = aviso.bloqueados || [], ct = aviso.noCartao || [];
   const porConta = [];
   const indice = {};
   for (const l of ap) {
@@ -2212,7 +2212,8 @@ function AvisoDoExtrato({ aviso, aoFechar, fmtBRL }) {
       borderRadius: 14, padding: "12px 14px", marginBottom: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: AZUL_VK }}>
-          {ap.length === 1 ? "Entrou no extrato do escritório" : `${ap.length} lançamentos entraram no extrato do escritório`}
+          {ap.length === 0 && ct.length ? "Pago no cartão"
+            : ap.length === 1 ? "Entrou no extrato do escritório" : `${ap.length} lançamentos entraram no extrato do escritório`}
         </div>
         <button type="button" onClick={aoFechar}
           style={{ border: "none", background: "transparent", color: AZUL_VK, cursor: "pointer",
@@ -2229,11 +2230,22 @@ function AvisoDoExtrato({ aviso, aoFechar, fmtBRL }) {
           Não entra no resultado do mês: soma no valor do imóvel e vira lucro no dia da venda.
         </div>
       )}
+      {ct.length > 0 && (
+        <div style={{ fontSize: 12.5, color: "#374151", marginTop: ap.length ? 8 : 6,
+          paddingTop: ap.length ? 8 : 0, borderTop: ap.length ? "1px solid rgba(38,36,33,0.08)" : "none" }}>
+          {fmtBRL(ct.reduce((s, x) => s + x.valor, 0))} no cartão — o custo da obra já está lançado;
+          o extrato do escritório recebe quando você fechar a fatura
+          {(() => { const f = [...new Set(ct.flatMap(x => x.faturas))].sort();
+            return f.length ? (f.length === 1 ? " de " + f[0] : " de " + f.join(", ")) : ""; })()}
+          , em Escritório → Cartões.
+        </div>
+      )}
       {bl.length > 0 && (
         <div style={{ fontSize: 12.5, color: "#b45309", marginTop: 8, paddingTop: 8,
           borderTop: "1px solid rgba(38,36,33,0.08)" }}>
           {bl.length === 1 ? "1 lançamento não entrou" : `${bl.length} lançamentos não entraram`}: {bl[0].motivo}
-          {" "}Quando reabrir o mês, mande pelo Planejamento → Para o escritório.
+          {" "}O mês está fechado e não muda. Se o pagamento é de um mês aberto, desfaça a baixa e pague de novo
+          com a data certa — ela atravessa na hora.
         </div>
       )}
     </div>
@@ -2558,8 +2570,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     }
 
     setAvisoPreco(r.relato.aplicados.length || r.relato.pendencias.length ? r.relato : null);
-    setAvisoExtrato((ponte.lancamentos.length || ponte.bloqueados.length)
-      ? { modo: ponte.modo, lancamentos: ponte.lancamentos, bloqueados: ponte.bloqueados } : null);
+    // Pago no cartão não atravessa agora — e quem pagou precisa ver isso,
+    // senão procura no extrato uma linha que só vai existir na fatura.
+    const noCartao = pagas.filter(c => c && (c.formaPagamento === "cartao" || c.cartaoId))
+      .map(c => ({ valor: Number(c.valorPago) || Number(c.valor) || 0,
+        faturas: [...new Set((c.parcelasCartao || []).map(p => p.competencia))] }));
+    setAvisoExtrato((ponte.lancamentos.length || ponte.bloqueados.length || noCartao.length)
+      ? { modo: ponte.modo, lancamentos: ponte.lancamentos, bloqueados: ponte.bloqueados, noCartao } : null);
 
     return { extras: Object.keys(extras).length ? extras : null };
   };
@@ -2638,6 +2655,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const f = formConta;
     if (!f.descricao?.trim()) { dialogo.alertar({ titulo: "Informe a descrição da conta", tipo: "aviso" }); return; }
     if (!(Number(f.valor) > 0)) { dialogo.alertar({ titulo: "Informe um valor maior que zero", tipo: "aviso" }); return; }
+    // A mesma régua de todas as portas: conta que entra torta aqui
+    // arrebenta o custo por etapa e o orçado × consumido lá na frente.
+    const faltas = faltasDaTransacao({ ...f, obraId: f.obraId || (obraAtual && obraAtual.id) });
+    if (faltas.length) { dialogo.alertar({ titulo: frasesDasFaltas(faltas), tipo: "aviso" }); return; }
     // O antes e o que o formulario mostrou, nao o que estava gravado: o que
     // veio da cotacao ao abrir nao foi decisao de ninguem, e registrar
     // "quantidade 0 -> 7" esconderia que o ajuste foi de 11 para 7.
@@ -2728,7 +2749,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // que a fatura encontra esta compra depois.
     const cartao = f.forma === "cartao" ? cartaoPorId(cartoesDoEscritorio(data), f.cartaoId) : null;
     const noCartao = (conta, valor) => {
-      if (!cartao) return conta;
+      if (!cartao) return { ...conta, formaPagamento: "avista" };
       const p = pagamentoNoCartao(conta, cartao, { pagoEm: f.dataContab, valorPago: valor, parcelas: f.parcelas });
       return p ? { ...conta, ...p } : conta;
     };
@@ -3611,6 +3632,22 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             {TIPOS_PROFISSIONAL.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
           </Selecao>
           <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>São os mesmos prestadores de serviço do catálogo de insumos. O tipo já sugere o regime do contrato e o objeto.</div>
+        </div>
+
+        {/* A etapa do contrato vai para cada parcela — é o que põe o serviço
+            no custo por etapa. Contrato de obra civil atravessa a obra
+            inteira, e aí o certo é deixar em branco: inventar uma etapa
+            seria pior que não ter. */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={C.label}>Etapa da obra (opcional)</label>
+          <SelectBusca style={C.input} value={g.etapa || ""}
+            onChange={(v) => setG("etapa", v)}
+            placeholder="Procurar etapa…"
+            opcoes={[{ valor: "", rotulo: "— várias etapas (obra civil, empreitada geral) —" }].concat(
+              (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(e => ({ valor: e.id, rotulo: e.nome })))} />
+          <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>
+            Contrato de uma etapa só — o portão, a pintura, a impermeabilização — leva a etapa para as parcelas.
+          </div>
         </div>
 
         <div style={{ ...grade("1fr 1fr"), marginBottom: 12 }}>
@@ -5052,20 +5089,40 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                 {aberta && (
                                   <div style={{ marginTop: 8, marginBottom: 2, paddingLeft: 12, borderLeft: "2px solid rgba(38,36,33,0.10)", display: "flex", flexDirection: "column", gap: 4 }}>
                                     {detalhe && <div style={{ fontSize: 12, color: "#4b5563", whiteSpace: "pre-wrap" }}>{detalhe}</div>}
-                                    {[["Conta", nomeConta(c.contaId)],
+                                    {[["Ref.", c.numeroDoc],
+                                      ["Conta", nomeConta(c.contaId)],
                                       ["Favorecido", c.favorecido || (c.prestadorId ? nomePrestador(c.prestadorId) : "")],
                                       ["Serviço", c.servico],
+                                      ["Item", c.insumoCodigo
+                                        ? (((data.materiais || []).find(m => m && m.codigo === c.insumoCodigo) || {}).nome || c.insumoCodigo)
+                                          + (Number(c.quantidade) > 0 ? ` · ${qtdBR(Number(c.quantidade))} ${c.unidade || ""}`.trimEnd() : "")
+                                        : ""],
+                                      ["Etapa", c.etapa ? (((typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [])
+                                        .find(x => x.id === c.etapa) || {}).nome || c.etapa) : ""],
+                                      ["Nota fiscal", c.numeroNota ? "nº " + c.numeroNota : ""],
                                       ["Origem", c.origem === "contrato" ? "Parcela de contrato" : "Conta avulsa"],
                                       ["Vencimento", c.vencimento ? `${dataBR(c.vencimento)}${c.estimada ? " (prevista)" : ""}` : "a definir"],
                                       ["Contabilizado em", c.pago ? dataBR(c.pagoEm) : ""],
                                       ["Registrado em", c.pago ? dataBR(c.contabilizadoEm) : ""],
                                       ["Valor pago", c.pago ? fmtMoedaCtr(Number(c.valorPago) || Number(c.valor) || 0) : ""],
+                                      ["Pago", c.pago ? (c.formaPagamento === "cartao"
+                                        ? "no cartão" + (c.parcelasCartao && c.parcelasCartao.length > 1 ? `, em ${c.parcelasCartao.length}x` : "")
+                                          + " — faturas " + [...new Set((c.parcelasCartao || []).map(p => p.competencia))].join(", ")
+                                        : (c.formaPagamento === "avista" ? "à vista / transferência" : "")) : ""],
                                       ["Baixa dada por", c.pago ? nomeGravado((ultimoAto(c, "paga") || {}).por) : ""],
                                       ["Observação", c.observacao]].filter(([, v]) => v).map(([rot, v]) => (
                                         <div key={rot} style={{ fontSize: 11.5, color: "#4b5563" }}>
                                           <span style={{ color: "#6b7280" }}>{rot}: </span><span style={{ color: "#111827" }}>{v}</span>
                                         </div>
                                       ))}
+                                    {/* O papel anexado na contabilização mora aqui, na conta:
+                                        abre direto, sem ir procurar em pasta. */}
+                                    {anexosDaTransacao(c).length > 0 && (
+                                      <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>
+                                        <span style={{ color: "#6b7280" }}>Papéis: </span>
+                                        <LinksDeAnexo transacao={c} />
+                                      </div>
+                                    )}
                                     {/* O histórico é a resposta para "quem mexeu nisso?" — a
                                         mesma conta é do escritório e do cliente. Conta de antes
                                         deste registro não tem histórico, e é isso que ela diz. */}
@@ -5278,19 +5335,44 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       const alvo = contas.find(c => c && c.id === d.parcelaId);
       if (!alvo) return { erro: "Não achei essa parcela — ela pode ter sido baixada por outro caminho." };
       if (alvo.pago) return { erro: "Essa parcela já está baixada." };
-      gravarContas(contas.map(c => c.id === alvo.id ? contaPaga(c, baixa, quem) : c), obraAtual.id);
+      const cartaoP = d.forma === "cartao" ? cartaoPorId(cartoesDoEscritorio(data), d.cartaoId) : null;
+      let pagaP = { ...contaPaga(alvo, baixa, quem), formaPagamento: cartaoP ? "cartao" : "avista" };
+      if (cartaoP) {
+        const plano = pagamentoNoCartao(pagaP, cartaoP, { pagoEm: d.pagoEm, valorPago: valor, parcelas: d.parcelas });
+        if (plano) pagaP = { ...pagaP, ...plano };
+      }
+      gravarContas(contas.map(c => c.id === alvo.id ? pagaP : c), obraAtual.id);
       return { gravado: true, parcela: true, favorecido: alvo.favorecido || d.favorecido || "" };
     }
 
+    const q = numeroDeCampo(d.quantidade) || 0;
     const nova = numerarContas([registrarAto({ ...contaAvulsaVazia(obraAtual.id),
       contaId: d.contaId || "material",
       prestadorId: d.prestadorId || d.favorecidoId || "",
       favorecido: d.favorecido || "",
       descricao: String(d.descricao || "").trim() || "Pagamento a " + (d.favorecido || "prestador"),
+      // a corrente: o que foi comprado, quanto, em que etapa — é o que liga
+      // esta despesa ao orçado e ao custo por etapa
+      insumoCodigo: d.insumoCodigo || "",
+      quantidade: q || "",
+      unidade: d.unidade || "",
+      unitario: q > 0 ? Math.round((valor / q) * 100) / 100 : "",
+      etapa: d.etapa || "",
+      grupoMaterial: d.grupoMaterial || "",
+      numeroNota: d.documento || "",
       valor, vencimento: d.pagoEm }, "criada", quem)],
       obras, lancamentosDoEscritorio(data))[0];
-    gravarContas(contas.concat([contaPaga(nova, baixa, quem)]), obraAtual.id);
-    return { gravado: true, contaId: nova.id, favorecido: d.favorecido || "" };
+    // Como o dinheiro saiu. No cartão o custo da obra fica nesta data, mas o
+    // plano de parcelas vai junto — é por ele que a fatura acha a compra, e
+    // é ele que impede a ponte de mandar a compra para o escritório agora.
+    const cartao = d.forma === "cartao" ? cartaoPorId(cartoesDoEscritorio(data), d.cartaoId) : null;
+    let paga = { ...contaPaga(nova, baixa, quem), formaPagamento: cartao ? "cartao" : "avista" };
+    if (cartao) {
+      const plano = pagamentoNoCartao(paga, cartao, { pagoEm: d.pagoEm, valorPago: valor, parcelas: d.parcelas });
+      if (plano) paga = { ...paga, ...plano };
+    }
+    gravarContas(contas.concat([paga]), obraAtual.id);
+    return { gravado: true, contaId: nova.id, favorecido: d.favorecido || "", cartao: !!cartao };
   }
 
   // Recalibrar as entregas de um pedido sem sair da cotação: é lá que se

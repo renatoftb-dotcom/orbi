@@ -2402,7 +2402,7 @@ teste("a conferencia aponta onde a corrente arrebenta, com quantos e quanto", ()
   assert.strictEqual(por["Orçamento sem item do catálogo"].valor, 100);
   assert.strictEqual(por["Pagamento sem etapa"].quantos, 1, "a caçamba");
   assert.strictEqual(por["Pagamento sem etapa"].valor, 300);
-  assert.strictEqual(por["Pagamento sem item do catálogo"].quantos, 1);
+  assert.strictEqual(por["Material sem item do catálogo"].quantos, 1);
   assert.ok(!por["Transação sem número de referência"], "todas tem numero aqui");
 });
 
@@ -2477,6 +2477,34 @@ teste("o grupo vem do catalogo; o gravado e so reserva", () => {
   assert.strictEqual(modulo.grupoDoItem(ins, "Tintas"), "Louças e metais", "o catalogo manda");
   assert.strictEqual(modulo.grupoDoItem(null, "Metais"), "Louças e metais", "sem catalogo, traduz o gravado");
   assert.strictEqual(modulo.grupoDoItem(null, ""), "");
+});
+
+teste("compra parcelada no boleto leva a etapa da cotacao para cada parcela", () => {
+  const contas = modulo.contasDaCotacao({ cotacaoId: "c1", obraId: "o1", contaId: "material", etapaId: "fundacao",
+    descricao: "Concreto", valor: 3000, parcelas: 3, primeiroVencimento: "2026-10-10", modo: "parcelas" },
+    (() => { let i = 0; return () => "x" + (++i); })());
+  assert.strictEqual(contas.length, 3);
+  assert.ok(contas.every(c => c.etapa === "fundacao"), JSON.stringify(contas.map(c => c.etapa)));
+});
+
+teste("parcela de contrato leva a etapa quando o contrato e de uma etapa so", () => {
+  const ct = { id: "k1", obraId: "o1", nomeContratado: "Paulo Serralheiro", tipoProfissional: "serralheiro",
+    valor: 3000, modalidade: "parcelado", parcelas: 2, periodicidade: "mensal", dataInicio: "2026-10-05",
+    etapa: "portoes" };
+  assert.ok(modulo.contasDoContrato(ct).every(c => c.etapa === "portoes"));
+  const civil = { ...ct, etapa: "" };
+  assert.ok(modulo.contasDoContrato(civil).every(c => c.etapa === ""), "obra civil fica em branco");
+});
+
+teste("a conferencia nao chama de furo o que a regra dispensa", () => {
+  const obra = { id: "o1", clienteId: "c1", orcamento: { itens: [] }, contasPagar: [
+    { id: "t", contaId: "tarifas_bancarias", valor: 35, valorPago: 35, pago: true, pagoEm: "2026-10-01", numeroDoc: "1" },
+    { id: "f", contaId: "frete", etapa: "fundacao", valor: 350, valorPago: 350, pago: true, pagoEm: "2026-10-01", numeroDoc: "2" },
+    { id: "k", contaId: "empreiteiro", origem: "contrato", valor: 9142.86, valorPago: 9142.86, pago: true, pagoEm: "2026-10-09", numeroDoc: "3" },
+  ] };
+  const c = modulo.conferenciaDaLigacao(obra, []);
+  assert.ok(!c.furos.some(f => /sem etapa/.test(f.titulo)), JSON.stringify(c.furos.map(f => f.titulo)));
+  assert.ok(!c.furos.some(f => /sem item/.test(f.titulo)), "frete nao tem item");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

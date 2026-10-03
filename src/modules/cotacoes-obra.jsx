@@ -1317,6 +1317,18 @@ function despesaPronta(d, obras, obraId) {
   // da parcela — perguntá-las de novo só abriria caminho para divergirem.
   if (String(dd.parcelaId || "").trim()) return { ok: true, motivo: "" };
   if (!String(dd.contaId || "").trim()) return { ok: false, motivo: "Escolha a conta contábil." };
+  // Daqui em diante quem decide é a regra única da transação: a mesma que o
+  // pedido, a conta avulsa e a conferência usam. Sem isto a despesa da
+  // Entrada era a porta por onde o gasto entrava sem item e sem etapa.
+  if (typeof faltasDaTransacao === "function") {
+    const faltas = faltasDaTransacao({
+      obraId: obraId || "(esta obra)", contaId: dd.contaId, valor: dd.valor, pagoEm: dd.pagoEm, pago: true,
+      favorecido: dd.favorecidoId, insumoCodigo: dd.insumoCodigo, quantidade: dd.quantidade,
+      etapa: dd.etapa, formaPagamento: dd.forma === "cartao" ? (dd.cartaoId ? "cartao" : "") : "avista",
+    });
+    if (dd.forma === "cartao" && !dd.cartaoId) faltas.push("o cartão");
+    if (faltas.length) return { ok: false, motivo: frasesDasFaltas(faltas) };
+  }
   return { ok: true, motivo: "" };
 }
 
@@ -2798,6 +2810,8 @@ function dadosDoLancamento(cot) {
     cotacaoId: c.id,
     obraId: c.obraId || "",
     contaId: c.contaId || "",
+    // a etapa para a qual se cotou — vai para cada conta que nascer daqui
+    etapaId: c.etapaId || "",
     prestadorId: esc.fornecedorId || "",
     favorecido: esc.favorecido || "",
     descricao: String(c.titulo || "").trim() || "Compra",
@@ -6318,6 +6332,7 @@ function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinhe
       aoCriarLoja={criarLoja}
       aoAprender={(pares) => aprenderApelidosNoCatalogo(data, save, pares)}
       aoVerContas={contasDaObraDe}
+      cartoes={typeof cartoesDoEscritorio === "function" ? cartoesDoEscritorio(data) : []}
       aoFechar={aoFechar} aoSeguir={seguir} />
   );
 }
@@ -6472,7 +6487,7 @@ function BotaoDitar({ aoDitar, isMobile, compacto }) {
 }
 
 function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile, dinheiro,
-  obras, embutido, aoCadastrarInsumo, aoCriarLoja, aoAprender, aoVerContas, aoFechar, aoSeguir }) {
+  obras, embutido, aoCadastrarInsumo, aoCriarLoja, aoAprender, aoVerContas, aoFechar, aoSeguir, cartoes }) {
   const E = COT_ESTILO;
   const P = cotPainel(isMobile, 940);
   const [texto, setTexto] = useState("");
@@ -6793,7 +6808,11 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     let comprovante = null;
     if (arquivo) {
       setEnviandoComprov(true);
-      try { comprovante = await enviarComprovante(arquivo); }
+      // O papel diz o que é: nota fiscal ou comprovante. A pasta no
+      // armazenamento é a mesma; a etiqueta é que separa os dois na hora de
+      // prestar contas.
+      try { const up = await enviarComprovante(arquivo);
+        comprovante = up ? { ...up, tipo: despesa.notaDeServico ? "nota" : "comprovante" } : up; }
       catch (e) { setAviso("O pagamento foi lançado, mas o comprovante não subiu: " + (e.message || "")); }
       finally { setEnviandoComprov(false); }
     }
@@ -6987,8 +7006,14 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                   serviço) se escolhe aqui. */}
               <div style={{ ...cartao, borderColor: "rgba(4,116,244,0.35)", background: "#f7fbff" }}>
                 <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0474f4", marginBottom: 4 }}>
-                  Pagamento lido do comprovante
+                  {despesa.notaDeServico ? "Nota fiscal de serviço lida" : "Pagamento lido do comprovante"}
                 </div>
+                {despesa.notaDeServico && (
+                  <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 4 }}>
+                    A data veio da emissão da nota. Se o pagamento foi em outro dia, troque abaixo — é ela que
+                    decide o mês da despesa e a fatura do cartão.
+                  </div>
+                )}
                 <div style={{ fontSize: 11.5, color: "#4b5563" }}>
                   {[despesa.lidoComo ? `para “${despesa.lidoComo}”` : "",
                     despesa.documento || "",
@@ -7051,8 +7076,126 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                         placeholder="Mão de obra da alvenaria, 2ª medição…"
                         onChange={(e) => mexerDespesa({ descricao: e.target.value })} />
                     </div>
+
+                    {/* O que a regra da transação pede para esta conta: item e
+                        quantidade quando é material, etapa quando é custo da
+                        obra. Só aparece o que a conta escolhida pede — frete
+                        não tem item, imposto não tem etapa. */}
+                    {(() => {
+                      const ex = typeof exigenciasDaTransacao === "function"
+                        ? exigenciasDaTransacao({ contaId: despesa.contaId }) : { item: false, etapa: false };
+                      if (!ex.item && !ex.etapa) return null;
+                      return (
+                        <div style={{ display: "grid", gap: 10, marginTop: 10,
+                          gridTemplateColumns: isMobile ? "1fr" : (ex.item ? "2fr 1fr 1fr" : "1fr") }}>
+                          {ex.item && (
+                            <div style={{ minWidth: 0 }}>
+                              <label style={E.label}>Item do catálogo</label>
+                              <SelectBusca style={E.input} value={despesa.insumoCodigo || ""}
+                                onChange={(v) => {
+                                  const ins = (insumos || []).find((x) => x && (x.codigo === v || x.id === v)) || null;
+                                  mexerDespesa({ insumoCodigo: v,
+                                    unidade: despesa.unidade || (ins && ins.unidade) || "",
+                                    grupoMaterial: (ins && ins.grupo) || "",
+                                    // a etapa do insumo só preenche o que está vazio
+                                    etapa: despesa.etapa || (ins && ins.etapaPadrao) || "",
+                                    descricao: despesa.descricao || (ins && ins.nome) || "" });
+                                }}
+                                placeholder="Procurar no catálogo…"
+                                opcoes={[{ valor: "", rotulo: "— escolha o item —" }].concat(
+                                  (insumos || []).filter((i) => i && i.ativo !== false)
+                                    .map((i) => ({ valor: i.codigo || i.id, rotulo: i.nome, grupo: i.grupo || "",
+                                      extra: (i.aliases || []).join(" ") })))} />
+                            </div>
+                          )}
+                          {ex.item && (
+                            <div>
+                              <label style={E.label}>Quantidade</label>
+                              <input style={E.input} inputMode="decimal" value={despesa.quantidade || ""}
+                                onChange={(e) => mexerDespesa({ quantidade: e.target.value })} placeholder="0" />
+                            </div>
+                          )}
+                          {ex.item && (
+                            <div>
+                              <label style={E.label}>Unidade</label>
+                              <input style={E.input} value={despesa.unidade || ""}
+                                onChange={(e) => mexerDespesa({ unidade: e.target.value })} placeholder="m3" />
+                            </div>
+                          )}
+                          {ex.etapa && (
+                            <div style={{ minWidth: 0, gridColumn: isMobile ? "auto" : "1 / -1" }}>
+                              <label style={E.label}>Etapa</label>
+                              <SelectBusca style={E.input} value={despesa.etapa || ""}
+                                onChange={(v) => mexerDespesa({ etapa: v })}
+                                placeholder="Procurar etapa…"
+                                opcoes={[{ valor: "", rotulo: "— escolha a etapa —" }].concat(
+                                  (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [])
+                                    .map((e) => ({ valor: e.id, rotulo: e.nome })))} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </>
                 )}
+
+                {/* Como o dinheiro saiu. No cartão, a compra entra na obra hoje,
+                    integral, mas NÃO atravessa para o escritório: quem
+                    atravessa é a fatura, quando você fechar. */}
+                <div style={{ marginTop: 12, borderTop: "1px solid rgba(38,36,33,0.08)", paddingTop: 10 }}>
+                  <label style={E.label}>Como foi pago</label>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {[["avista", "À vista / transferência"], ["cartao", "Cartão de crédito"]].map(([k, r]) => {
+                      const on = (despesa.forma || "avista") === k;
+                      return (
+                        <button key={k} type="button"
+                          onClick={() => mexerDespesa({ forma: k,
+                            cartaoId: k === "cartao" ? (despesa.cartaoId || ((cartoes || [])[0] || {}).id || "") : "",
+                            parcelas: despesa.parcelas || 1 })}
+                          style={{ ...E.btnSec, fontSize: 12.5, borderColor: on ? "#0474f4" : "rgba(38,36,33,0.16)",
+                            fontWeight: on ? 700 : 500, color: on ? "#111827" : "#4b5563" }}>
+                          {r}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {despesa.forma === "cartao" && (
+                    !(cartoes || []).length ? (
+                      <div style={{ fontSize: 11.5, color: "#b45309", marginTop: 8 }}>
+                        Nenhum cartão cadastrado. Cadastre em Escritório → Cartões.
+                      </div>
+                    ) : (() => {
+                      const ct = (cartoes || []).find((c) => c.id === despesa.cartaoId) || cartoes[0];
+                      const plano = typeof parcelasDoCartao === "function"
+                        ? parcelasDoCartao(ct, despesa.pagoEm, numeroDeCampo(despesa.valor), despesa.parcelas) : [];
+                      return (
+                        <>
+                          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: 10, marginTop: 10 }}>
+                            <div>
+                              <label style={E.label}>Cartão</label>
+                              <SelectBusca style={E.input} value={despesa.cartaoId || (ct || {}).id || ""}
+                                onChange={(v) => mexerDespesa({ cartaoId: v })}
+                                opcoes={(cartoes || []).map((c) => ({ valor: c.id, rotulo: c.nome }))} />
+                            </div>
+                            <div>
+                              <label style={E.label}>Parcelas</label>
+                              <input style={E.input} inputMode="numeric" value={despesa.parcelas || 1}
+                                onChange={(e) => mexerDespesa({ parcelas: e.target.value })} />
+                            </div>
+                          </div>
+                          {plano.length > 0 && (
+                            <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8, lineHeight: 1.6 }}>
+                              Cai {plano.length === 1 ? "na fatura de " : "nas faturas de "}
+                              <b style={{ color: "#111827" }}>
+                                {plano.map((p) => p.competencia + " (" + dinheiro(p.valor) + ")").join(" · ")}
+                              </b>. O custo da obra é integral nesta data; o escritório recebe a fatura quando você fechar.
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()
+                  )}
+                </div>
               </div>
 
               {/* Quem recebeu já tinha parcela combinada? Então este dinheiro
@@ -7097,7 +7240,8 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
 
               {arquivo && (
                 <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 10 }}>
-                  {"\u{1F4CE}"} {arquivo.name} — vai anexado à conta como comprovante.
+                  {"\u{1F4CE}"} {arquivo.name} — fica anexado ao pagamento
+                  {despesa.notaDeServico ? ", como nota fiscal" : ", como comprovante"}; abre pela linha da conta e pelo extrato do escritório.
                 </div>
               )}
             </>
@@ -7326,6 +7470,12 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
           {aviso && <div style={{ fontSize: 12, color: "#dc2626", marginTop: 10 }}>{aviso}</div>}
         </div>
 
+        {/* O botão desabilitado sem dizer por quê é uma porta trancada sem
+            placa. Com a regra da transação há mais o que faltar, e o que
+            falta tem que estar escrito ao lado de quem vai clicar. */}
+        {despesa && !prova.ok && prova.motivo && (
+          <div style={{ fontSize: 12, color: "#b45309", marginTop: 12, textAlign: "right" }}>{prova.motivo}</div>
+        )}
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14, flexWrap: "wrap" }}>
           {!embutido && <button type="button" style={E.btnSec} onClick={aoFechar}>Fechar</button>}
           {(itens || despesa) && (

@@ -370,6 +370,10 @@ function contasDoContrato(contrato) {
     parcela: p.parcela || idx + 1,
     totalParcelas: p.totalParcelas || 0,
     contaId: contaDoTipo(c.tipoProfissional),
+    // O contrato que é de UMA etapa (o serralheiro do portão, o pintor)
+    // passa a etapa para as parcelas. O de obra civil, que atravessa a obra,
+    // fica em branco — a regra da transação sabe disso.
+    etapa: c.etapa || "",
     prestadorId: c.prestadorId || "",
     favorecido: c.nomeContratado || "",
     descricao: p.descricao,
@@ -1155,6 +1159,10 @@ function contaDaCompra(d, novoId, dados) {
     parcela: d.parcela || 0,
     parcelasTotal: d.parcelasTotal || 0,
     contaId: dados.contaId || (typeof PLANO_CONTAS !== "undefined" && PLANO_CONTAS[0] ? PLANO_CONTAS[0].id : "material"),
+    // A etapa é da compra inteira e vale para cada parcela: é o que põe o
+    // dinheiro no custo por etapa. Sem ela, a cotação lançada parcelada
+    // caía inteira em "Sem etapa".
+    etapa: dados.etapa || dados.etapaId || "",
     prestadorId: dados.prestadorId || "",
     favorecido: dados.favorecido || "",
     descricao: d.descricao,
@@ -1317,6 +1325,7 @@ const CP_ATOS = {
   paga: "Pagamento registrado",
   desfeita: "Pagamento desfeito",
   comprovante: "Comprovante anexado",
+  nota: "Nota fiscal anexada",
   comprovanteRemovido: "Comprovante removido",
   recalibrada: "Datas recalibradas",
 };
@@ -1389,7 +1398,7 @@ function contaPaga(conta, dados, quem, agoraIso) {
   };
   nova = registrarAto(nova, "paga", quem, agora);
   const mudouAnexo = JSON.stringify(antes || null) !== JSON.stringify(depois || null);
-  if (mudouAnexo && depois) nova = registrarAto(nova, "comprovante", quem, agora, depois.nome || "");
+  if (mudouAnexo && depois) nova = registrarAto(nova, depois.tipo === "nota" ? "nota" : "comprovante", quem, agora, depois.nome || "");
   if (mudouAnexo && !depois && antes) nova = registrarAto(nova, "comprovanteRemovido", quem, agora);
   return nova;
 }
@@ -1866,13 +1875,18 @@ function conferenciaDaLigacao(obra, insumos) {
     semEtapaOrc.reduce((s, x) => s + x.linhas, 0), 0));
 
   const pagas = contas.filter((c) => c && c.pago);
-  const contaSemEtapa = pagas.filter((c) => !String(c.etapa || c.etapaId || "").trim());
+  // A régua é a regra da transação: só é furo o que ela EXIGE. Tarifa
+  // bancária sem etapa, frete sem item e parcela de obra civil sem etapa
+  // estão certos, e apontá-los como erro faria a pessoa parar de olhar.
+  const exige = (c, campo) => (typeof exigenciasDaTransacao === "function"
+    ? exigenciasDaTransacao(c)[campo] : true);
+  const contaSemEtapa = pagas.filter((c) => exige(c, "etapa") && !String(c.etapa || c.etapaId || "").trim());
   if (contaSemEtapa.length) furos.push(furo("Pagamento sem etapa",
     "Entra no custo da obra e some do custo por etapa.",
     contaSemEtapa.length, contaSemEtapa.reduce((s, c) => s + ((Number(c.valorPago) || Number(c.valor)) || 0), 0)));
 
-  const contaSemInsumo = pagas.filter((c) => !String(c.insumoCodigo || "").trim());
-  if (contaSemInsumo.length) furos.push(furo("Pagamento sem item do catálogo",
+  const contaSemInsumo = pagas.filter((c) => exige(c, "item") && !String(c.insumoCodigo || "").trim());
+  if (contaSemInsumo.length) furos.push(furo("Material sem item do catálogo",
     "Soma em reais, mas não dá para confrontar com o que foi orçado item a item.",
     contaSemInsumo.length, contaSemInsumo.reduce((s, c) => s + ((Number(c.valorPago) || Number(c.valor)) || 0), 0)));
 
