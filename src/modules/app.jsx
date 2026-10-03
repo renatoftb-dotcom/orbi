@@ -87,6 +87,9 @@ function IconeMaster({ nome, tamanho = 18, cor = "currentColor" }) {
     case "insumos":
       // Caixa/pacote — catálogo de insumos
       return (<svg {...props}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>);
+    case "whatsapp":
+      // Balão de conversa redondo — teste do WhatsApp
+      return (<svg {...props}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>);
     case "financeiro":
       // Cédula/nota — bloco financeiro do escritório
       return (<svg {...props}><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><line x1="6" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="18" y2="12"/></svg>);
@@ -940,6 +943,15 @@ export default function ModuloClientesFornecedores() {
   const [projetosKey, setProjetosKey]         = useState(0);
   const [orcamentosKey, setOrcamentosKey]     = useState(0);
   const [obrasKey, setObrasKey]               = useState(0);
+  // Teste grátis do WhatsApp: o backend diz se esta empresa é a piloto.
+  // Para as outras o item de menu não aparece.
+  const [waPiloto, setWaPiloto] = useState(false);
+  useEffect(() => {
+    if (!autenticado || !usuario || usuario.perfil === "master" || usuario.perfil === "cliente") { setWaPiloto(false); return; }
+    let vivo = true;
+    waPilotoStatus().then(s => { if (vivo) setWaPiloto(!!s?.liberado); });
+    return () => { vivo = false; };
+  }, [autenticado, usuario?.empresa_id, usuario?.perfil]);
   // Tutorial Beta — disparado pelo item "+ Novo (Beta) 🧪" no sidebar.
   // Só visível em empresas com escritorio.dev_mode=true (ex: Vicke Dev).
   const [tutorialBetaAtivo, setTutorialBetaAtivo] = useState(false);
@@ -1549,6 +1561,7 @@ export default function ModuloClientesFornecedores() {
     { k:"obras",       icon:"obras",      label:"Obras" },
     { k:"fornecedores", icon:"prestadores", label:"Prestadores de Serviços" },
     { k:"insumos",     icon:"insumos",    label:"Insumos", count: data?.materiais?.length },
+    ...(waPiloto ? [{ k:"whatsapp-piloto", icon:"whatsapp", label:"WhatsApp (teste)" }] : []),
     // O Financeiro voltou como módulo Escritório, no fim deste menu.
     // O importador de nota fiscal foi apagado: estava fora do menu desde a
     // Sprint 3 e chamava a API da Anthropic direto do navegador, sem chave.
@@ -2072,6 +2085,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "financeiro"             && <Financeiro key={financeiroKey} data={data} save={save} />}
           {aba === "fornecedores"           && <PrestadoresServico key={fornecedoresKey} data={data} save={save} />}
           {aba === "insumos"                && <Insumos data={data} save={save} />}
+          {aba === "whatsapp-piloto" && waPiloto && <WhatsappPiloto data={data} usuario={usuario} />}
           {typeof aba === "string" && aba.indexOf("escritorio") === 0 && <Escritorio key={escritorioKey} abaInicial={aba.indexOf(":") > 0 ? aba.slice(aba.indexOf(":") + 1) : "dados"} data={data} save={save} onReload={loadData} aoTrocarAba={(k) => setAba("escritorio:" + k)} />}
           {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} setUsuario={setUsuario} />}
           {/* Sub-abas do menu Master — Admin recebe initialTab pra abrir direto na aba certa */}
