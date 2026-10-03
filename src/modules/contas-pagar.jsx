@@ -1670,8 +1670,35 @@ const itensDetalhados = (itens, contaId) =>
 // custou a fundação". É a leitura de quem está tocando a obra — a etapa
 // acabou e passou do previsto, ou ainda nem começou. Estimado e realizado
 // vêm dos mesmos lugares do P&L por conta, então os totais fecham iguais.
+// O orçamento da obra é a única estimativa que fala por etapa: ele nasce
+// item a item, com etapa e subetapa. A estimativa do P&L fala por conta do
+// plano, e nunca soube de etapa — por isso o quadro por etapa mostrava o
+// estimado inteiro em "Sem etapa".
+//
+// Os dois não se substituem e NÃO se somam: são duas contas do mesmo gasto,
+// uma por conta contábil e outra por etapa. Por isso o orçado entra como
+// coluna própria, ao lado, em vez de virar o estimado — somar daria uma
+// obra duas vezes mais cara, e trocar faria o quadro por etapa fechar num
+// total diferente do quadro por conta.
+function estimativaPorEtapaDoOrcamento(orcamento) {
+  const linhas = ((orcamento || {}).itens) || [];
+  const por = {};
+  for (const i of linhas) {
+    if (!i) continue;
+    const k = (typeof etapaDoOrcamento === "function" ? etapaDoOrcamento(i.etapa, i.subEtapa) : "") || "";
+    const v = Number(i.total);
+    const valor = Number.isFinite(v) && v !== 0
+      ? v
+      : (Number(i.qtd) || 0) * (Number(i.preco) || 0);
+    por[k] = Math.round(((por[k] || 0) + valor) * 100) / 100;
+  }
+  return por;
+}
+
 function plPorEtapa(itens, contasPagar, opcoes) {
   const est = {}, real = {}, contasDe = {};
+  const orc = estimativaPorEtapaDoOrcamento((opcoes || {}).orcamento);
+  const temOrcamento = Object.keys(orc).length > 0;
   const soCusto = !!(opcoes && opcoes.soCusto);
   // Receita e terreno nunca são etapa de obra; com soCusto os tributos
   // também saem, para o quadro por etapa fechar igual ao por conta.
@@ -1704,17 +1731,22 @@ function plPorEtapa(itens, contasPagar, opcoes) {
     const e = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).find((x) => x.id === id);
     return e ? e.nome : id;
   };
-  const linhas = [...new Set([...Object.keys(est), ...Object.keys(real)])]
+  const linhas = [...new Set([...Object.keys(est), ...Object.keys(real), ...Object.keys(orc)])]
     .map((k) => ({
       etapaId: k, nome: nome(k),
       estimado: est[k] || 0, realizado: real[k] || 0,
+      orcado: temOrcamento ? (orc[k] || 0) : null,
       saldo: Math.round(((est[k] || 0) - (real[k] || 0)) * 100) / 100,
+      saldoOrcado: temOrcamento ? Math.round(((orc[k] || 0) - (real[k] || 0)) * 100) / 100 : null,
       notas: (contasDe[k] || []).length,
     }))
-    .filter((l) => l.estimado || l.realizado)
+    .filter((l) => l.estimado || l.realizado || l.orcado)
     .sort((a, b) => ordem(a.etapaId) - ordem(b.etapaId));
-  const soma = (campo) => Math.round(linhas.reduce((s, l) => s + l[campo], 0) * 100) / 100;
-  return { linhas, estimado: soma("estimado"), realizado: soma("realizado"), saldo: soma("saldo") };
+  const soma = (campo) => Math.round(linhas.reduce((s, l) => s + (Number(l[campo]) || 0), 0) * 100) / 100;
+  return { linhas, temOrcamento,
+    estimado: soma("estimado"), realizado: soma("realizado"), saldo: soma("saldo"),
+    orcado: temOrcamento ? soma("orcado") : null,
+    saldoOrcado: temOrcamento ? soma("saldoOrcado") : null };
 }
 
 // ── Subcontas: a conta aberta por grupo de material ─────────────

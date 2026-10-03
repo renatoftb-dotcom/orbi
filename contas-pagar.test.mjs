@@ -59,6 +59,7 @@ const modulo = new Function(`
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
+           plPorEtapa, estimativaPorEtapaDoOrcamento,
            detalheDaEdicaoDaConta,
            pagamentosEmAberto, ajustarVencimentos, limparAjustes, ajustesDoContrato,
            previaAjusteContrato, proximoNumeroDoc };
@@ -2287,6 +2288,67 @@ teste("parcela paga tambem guarda o numero", () => {
   const paga = numeradas.map((c, i) => i === 0 ? { ...c, pago: true, pagoEm: "2026-10-05", valorPago: c.valor } : c);
   const depois = modulo.sincronizarContasDoContrato(paga, ct);
   assert.strictEqual(depois.find(c => c.id === paga[0].id).numeroDoc, numeradas[0].numeroDoc);
+});
+
+
+// ── Estimado × realizado por etapa, com o orçamento da obra ────
+const ORC_OBRA = { versao: 1, itens: [
+  { etapa: "Fundação", subEtapa: "Brocas e baldrames", item: "Concreto", unidade: "m3", qtd: 11, preco: 343.64, total: 3780.04 },
+  { etapa: "Supra estrutura e paredes", subEtapa: "Paredes", item: "Tijolo", unidade: "un", qtd: 1000, preco: 2, total: 2000 },
+  { etapa: "Viga Respaldo e Laje", subEtapa: "Laje Pav 1", item: "Laje", unidade: "m2", qtd: 50, preco: 100, total: 5000 },
+  { etapa: "Construção existente", subEtapa: "Parede de drywall", item: "Drywall", unidade: "m2", qtd: 10, preco: 50, total: 500 },
+] };
+
+teste("o orcado por etapa sai do orcamento, traduzido para os ids da obra", () => {
+  const por = modulo.estimativaPorEtapaDoOrcamento(ORC_OBRA);
+  assert.strictEqual(por.fundacao, 3780.04);
+  assert.strictEqual(por.supra_paredes_1, 2000);
+  assert.strictEqual(por.laje_2, 5000, "'Pav 1' da planilha e o pavimento de cima");
+  assert.strictEqual(por[""], 500, "o que nao traduz aparece como sem etapa, nao some");
+});
+
+teste("sem total gravado, o orcado sai de qtd x preco", () => {
+  const por = modulo.estimativaPorEtapaDoOrcamento({ itens: [
+    { etapa: "Fundação", item: "Concreto", qtd: 10, preco: 50 }] });
+  assert.strictEqual(por.fundacao, 500);
+});
+
+teste("o quadro por etapa poe orcado e realizado lado a lado", () => {
+  const contas = [
+    { id: "c1", contaId: "material", etapa: "fundacao", valor: 2405.48, valorPago: 2405.48, pago: true },
+    { id: "c2", contaId: "material", etapa: "supra_paredes_1", valor: 2500, valorPago: 2500, pago: true },
+  ];
+  const r = modulo.plPorEtapa([], contas, { orcamento: ORC_OBRA });
+  assert.strictEqual(r.temOrcamento, true);
+  const por = {};
+  for (const l of r.linhas) por[l.etapaId] = l;
+  assert.strictEqual(por.fundacao.orcado, 3780.04);
+  assert.strictEqual(por.fundacao.realizado, 2405.48);
+  assert.strictEqual(por.fundacao.saldoOrcado, 1374.56, "gastou menos do que orcou");
+  assert.strictEqual(por.supra_paredes_1.saldoOrcado, -500, "esta e a etapa que estourou");
+  assert.ok(por.laje_2, "etapa orcada e ainda nao gasta aparece");
+  assert.strictEqual(por.laje_2.realizado, 0);
+});
+
+teste("sem orcamento, o quadro por etapa continua exatamente como era", () => {
+  const contas = [{ id: "c1", contaId: "material", etapa: "fundacao", valor: 100, valorPago: 100, pago: true }];
+  const r = modulo.plPorEtapa([{ contaId: "material", etapaId: "fundacao", valor: 150 }], contas, {});
+  assert.strictEqual(r.temOrcamento, false);
+  assert.strictEqual(r.orcado, null);
+  assert.strictEqual(r.linhas[0].orcado, null);
+  assert.strictEqual(r.linhas[0].estimado, 150);
+  assert.strictEqual(r.linhas[0].saldo, 50);
+});
+
+teste("orcado e estimado nao se somam — sao duas contas do mesmo gasto", () => {
+  const contas = [];
+  const est = [{ contaId: "material", etapaId: "", valor: 11280.04 }];
+  const r = modulo.plPorEtapa(est, contas, { orcamento: ORC_OBRA });
+  assert.strictEqual(r.estimado, 11280.04, "o estimado do P&L fica intacto");
+  assert.strictEqual(r.orcado, 11280.04, "e o orcamento soma o dele, na coluna dele");
+  const linhaSem = r.linhas.find(l => l.etapaId === "");
+  assert.strictEqual(linhaSem.estimado, 11280.04);
+  assert.strictEqual(linhaSem.orcado, 500, "so o que o orcamento nao soube classificar");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

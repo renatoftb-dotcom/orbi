@@ -211,6 +211,117 @@ const GRUPOS_MATERIAL = [
   "Telhas", "Tijolos e canaletas", "Tintas", "Tubulação PVC", "Outros",
 ];
 
+
+// ══════════════════════════════════════════════════════════════
+// DE QUE ETAPA É ESTA LINHA DO ORÇAMENTO
+// ══════════════════════════════════════════════════════════════
+// O motor de orçamento nasceu antes de ETAPAS_OBRA e nomeia etapa por
+// extenso, com a grafia da planilha: "Supra estrutura e paredes", "Muro
+// Arrimo", "Instalações pré obra e projetos". A obra, do outro lado,
+// trabalha com ids. Enquanto os dois não se encontram, o estimado e o
+// realizado nunca somam na mesma linha — é o mesmo gasto contado em dois
+// idiomas.
+//
+// A tradução tem três passos, nesta ordem:
+//   1. o nome, normalizado (sem acento, sem hífen, sem caixa) — pega
+//      "Chapisco e Reboco" → chapisco_reboco sem precisar de apelido;
+//   2. a tabela de apelidos, para o que a planilha escreve diferente;
+//   3. a subetapa, quando o nome sozinho não decide — "Piscina" é sete
+//      etapas na obra, e quem diz qual é a subetapa.
+//
+// O que não traduzir volta "", e `etapasDoOrcamentoSemMapa` lista o que
+// ficou de fora: um gasto sem etapa tem que aparecer como sem etapa, não
+// ser enfiado em "Outros" para a tela ficar bonita.
+function normalizarNomeEtapa(s) {
+  return String(s == null ? "" : s)
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+// CONVENÇÃO DE PAVIMENTO — a planilha chama o térreo de "Térreo" e o
+// primeiro andar de "Pav 1"; ETAPAS_OBRA chama o térreo de "pav. 1" e o
+// andar de cima de "pav. 2". Os dois aparecem lado a lado nas subetapas
+// ("Laje Térreo" e "Laje Pav 1"), e é isso que fixa a leitura.
+function pavimentoDaSubEtapa(subEtapa) {
+  const s = normalizarNomeEtapa(subEtapa);
+  if (/\bterreo\b/.test(s)) return 1;
+  if (/\bpav\s*2\b/.test(s)) return 3;      // não existe hoje, mas não se inventa
+  if (/\bpav\s*1\b/.test(s)) return 2;
+  return 1;                                  // sem dizer, é o térreo
+}
+
+// nome do orçamento (normalizado) → id de ETAPAS_OBRA
+const ETAPA_APELIDOS_ORCAMENTO = {
+  "cobertura": "coberturas",
+  "demolicoes e remocoes": "demolicoes",
+  "entulho": "demolicoes",
+  "locacao equipamentos": "locacao_equip",
+  "muro arrimo": "arrimos",
+  "muro divisa": "muros",
+  "contrapiso interno": "contrapiso_int_1",
+  "contrapiso interno pav 1": "contrapiso_int_1",
+  "massiamento contrapisos internos": "massa_contrapiso_int",
+  "contrapisos externos massiamento": "massa_contrapiso_ext",
+};
+
+// etapa "Piscina": quem decide é a subetapa
+const ETAPA_PISCINA_POR_SUB = {
+  "brocas": "piscina_fundacao",
+  "supra estrutura": "piscina_supra",
+  "paredes": "piscina_supra",
+  "impermeabilizacao": "piscina_imp",
+  "chapisco e reboco": "piscina_chapisco",
+  "revestimento": "piscina_revest",
+  "hidraulica": "piscina_hidraulica",
+  "contrapiso": "piscina_deck",
+  "deck": "piscina_deck",
+  "diversas": "piscina_equip",
+};
+
+function etapaDoOrcamento(etapa, subEtapa) {
+  const n = normalizarNomeEtapa(etapa);
+  if (!n) return "";
+
+  // Piscina e as etapas por pavimento não se resolvem pelo nome
+  if (n === "piscina") return ETAPA_PISCINA_POR_SUB[normalizarNomeEtapa(subEtapa)] || "";
+  if (n === "supra estrutura e paredes") {
+    return pavimentoDaSubEtapa(subEtapa) >= 2 ? "supra_paredes_2" : "supra_paredes_1";
+  }
+  if (n === "viga respaldo e laje") {
+    return pavimentoDaSubEtapa(subEtapa) >= 2 ? "laje_2" : "laje_1";
+  }
+
+  const apelido = ETAPA_APELIDOS_ORCAMENTO[n];
+  if (apelido) return apelido;
+
+  const porNome = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [])
+    .find((e) => e && normalizarNomeEtapa(e.nome) === n);
+  if (porNome) return porNome.id;
+
+  // o id cru também serve, caso a linha já venha traduzida
+  const porId = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [])
+    .find((e) => e && e.id === String(etapa || "").trim());
+  return porId ? porId.id : "";
+}
+
+// O que o motor emite e a obra não sabe receber. Serve para a tela dizer o
+// que está caindo em "Sem etapa" em vez de deixar a pessoa descobrir pela
+// soma que não fecha.
+function etapasDoOrcamentoSemMapa(linhas) {
+  const fora = [], vistos = {};
+  for (const l of linhas || []) {
+    if (!l || !l.etapa) continue;
+    if (etapaDoOrcamento(l.etapa, l.subEtapa)) continue;
+    const k = String(l.etapa) + "|" + String(l.subEtapa || "");
+    if (vistos[k]) { vistos[k].linhas++; continue; }
+    vistos[k] = { etapa: l.etapa, subEtapa: l.subEtapa || "", linhas: 1 };
+    fora.push(vistos[k]);
+  }
+  return fora;
+}
+
 // ── Helpers puros sobre a taxonomia — o resto do módulo (cálculo, UI,
 // formulário) vai depender destes dois. ──
 

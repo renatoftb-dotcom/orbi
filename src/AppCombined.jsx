@@ -8928,6 +8928,117 @@ const GRUPOS_MATERIAL = [
   "Telhas", "Tijolos e canaletas", "Tintas", "Tubulação PVC", "Outros",
 ];
 
+
+// ══════════════════════════════════════════════════════════════
+// DE QUE ETAPA É ESTA LINHA DO ORÇAMENTO
+// ══════════════════════════════════════════════════════════════
+// O motor de orçamento nasceu antes de ETAPAS_OBRA e nomeia etapa por
+// extenso, com a grafia da planilha: "Supra estrutura e paredes", "Muro
+// Arrimo", "Instalações pré obra e projetos". A obra, do outro lado,
+// trabalha com ids. Enquanto os dois não se encontram, o estimado e o
+// realizado nunca somam na mesma linha — é o mesmo gasto contado em dois
+// idiomas.
+//
+// A tradução tem três passos, nesta ordem:
+//   1. o nome, normalizado (sem acento, sem hífen, sem caixa) — pega
+//      "Chapisco e Reboco" → chapisco_reboco sem precisar de apelido;
+//   2. a tabela de apelidos, para o que a planilha escreve diferente;
+//   3. a subetapa, quando o nome sozinho não decide — "Piscina" é sete
+//      etapas na obra, e quem diz qual é a subetapa.
+//
+// O que não traduzir volta "", e `etapasDoOrcamentoSemMapa` lista o que
+// ficou de fora: um gasto sem etapa tem que aparecer como sem etapa, não
+// ser enfiado em "Outros" para a tela ficar bonita.
+function normalizarNomeEtapa(s) {
+  return String(s == null ? "" : s)
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+// CONVENÇÃO DE PAVIMENTO — a planilha chama o térreo de "Térreo" e o
+// primeiro andar de "Pav 1"; ETAPAS_OBRA chama o térreo de "pav. 1" e o
+// andar de cima de "pav. 2". Os dois aparecem lado a lado nas subetapas
+// ("Laje Térreo" e "Laje Pav 1"), e é isso que fixa a leitura.
+function pavimentoDaSubEtapa(subEtapa) {
+  const s = normalizarNomeEtapa(subEtapa);
+  if (/\bterreo\b/.test(s)) return 1;
+  if (/\bpav\s*2\b/.test(s)) return 3;      // não existe hoje, mas não se inventa
+  if (/\bpav\s*1\b/.test(s)) return 2;
+  return 1;                                  // sem dizer, é o térreo
+}
+
+// nome do orçamento (normalizado) → id de ETAPAS_OBRA
+const ETAPA_APELIDOS_ORCAMENTO = {
+  "cobertura": "coberturas",
+  "demolicoes e remocoes": "demolicoes",
+  "entulho": "demolicoes",
+  "locacao equipamentos": "locacao_equip",
+  "muro arrimo": "arrimos",
+  "muro divisa": "muros",
+  "contrapiso interno": "contrapiso_int_1",
+  "contrapiso interno pav 1": "contrapiso_int_1",
+  "massiamento contrapisos internos": "massa_contrapiso_int",
+  "contrapisos externos massiamento": "massa_contrapiso_ext",
+};
+
+// etapa "Piscina": quem decide é a subetapa
+const ETAPA_PISCINA_POR_SUB = {
+  "brocas": "piscina_fundacao",
+  "supra estrutura": "piscina_supra",
+  "paredes": "piscina_supra",
+  "impermeabilizacao": "piscina_imp",
+  "chapisco e reboco": "piscina_chapisco",
+  "revestimento": "piscina_revest",
+  "hidraulica": "piscina_hidraulica",
+  "contrapiso": "piscina_deck",
+  "deck": "piscina_deck",
+  "diversas": "piscina_equip",
+};
+
+function etapaDoOrcamento(etapa, subEtapa) {
+  const n = normalizarNomeEtapa(etapa);
+  if (!n) return "";
+
+  // Piscina e as etapas por pavimento não se resolvem pelo nome
+  if (n === "piscina") return ETAPA_PISCINA_POR_SUB[normalizarNomeEtapa(subEtapa)] || "";
+  if (n === "supra estrutura e paredes") {
+    return pavimentoDaSubEtapa(subEtapa) >= 2 ? "supra_paredes_2" : "supra_paredes_1";
+  }
+  if (n === "viga respaldo e laje") {
+    return pavimentoDaSubEtapa(subEtapa) >= 2 ? "laje_2" : "laje_1";
+  }
+
+  const apelido = ETAPA_APELIDOS_ORCAMENTO[n];
+  if (apelido) return apelido;
+
+  const porNome = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [])
+    .find((e) => e && normalizarNomeEtapa(e.nome) === n);
+  if (porNome) return porNome.id;
+
+  // o id cru também serve, caso a linha já venha traduzida
+  const porId = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [])
+    .find((e) => e && e.id === String(etapa || "").trim());
+  return porId ? porId.id : "";
+}
+
+// O que o motor emite e a obra não sabe receber. Serve para a tela dizer o
+// que está caindo em "Sem etapa" em vez de deixar a pessoa descobrir pela
+// soma que não fecha.
+function etapasDoOrcamentoSemMapa(linhas) {
+  const fora = [], vistos = {};
+  for (const l of linhas || []) {
+    if (!l || !l.etapa) continue;
+    if (etapaDoOrcamento(l.etapa, l.subEtapa)) continue;
+    const k = String(l.etapa) + "|" + String(l.subEtapa || "");
+    if (vistos[k]) { vistos[k].linhas++; continue; }
+    vistos[k] = { etapa: l.etapa, subEtapa: l.subEtapa || "", linhas: 1 };
+    fora.push(vistos[k]);
+  }
+  return fora;
+}
+
 // ── Helpers puros sobre a taxonomia — o resto do módulo (cálculo, UI,
 // formulário) vai depender destes dois. ──
 
@@ -23533,8 +23644,35 @@ const itensDetalhados = (itens, contaId) =>
 // custou a fundação". É a leitura de quem está tocando a obra — a etapa
 // acabou e passou do previsto, ou ainda nem começou. Estimado e realizado
 // vêm dos mesmos lugares do P&L por conta, então os totais fecham iguais.
+// O orçamento da obra é a única estimativa que fala por etapa: ele nasce
+// item a item, com etapa e subetapa. A estimativa do P&L fala por conta do
+// plano, e nunca soube de etapa — por isso o quadro por etapa mostrava o
+// estimado inteiro em "Sem etapa".
+//
+// Os dois não se substituem e NÃO se somam: são duas contas do mesmo gasto,
+// uma por conta contábil e outra por etapa. Por isso o orçado entra como
+// coluna própria, ao lado, em vez de virar o estimado — somar daria uma
+// obra duas vezes mais cara, e trocar faria o quadro por etapa fechar num
+// total diferente do quadro por conta.
+function estimativaPorEtapaDoOrcamento(orcamento) {
+  const linhas = ((orcamento || {}).itens) || [];
+  const por = {};
+  for (const i of linhas) {
+    if (!i) continue;
+    const k = (typeof etapaDoOrcamento === "function" ? etapaDoOrcamento(i.etapa, i.subEtapa) : "") || "";
+    const v = Number(i.total);
+    const valor = Number.isFinite(v) && v !== 0
+      ? v
+      : (Number(i.qtd) || 0) * (Number(i.preco) || 0);
+    por[k] = Math.round(((por[k] || 0) + valor) * 100) / 100;
+  }
+  return por;
+}
+
 function plPorEtapa(itens, contasPagar, opcoes) {
   const est = {}, real = {}, contasDe = {};
+  const orc = estimativaPorEtapaDoOrcamento((opcoes || {}).orcamento);
+  const temOrcamento = Object.keys(orc).length > 0;
   const soCusto = !!(opcoes && opcoes.soCusto);
   // Receita e terreno nunca são etapa de obra; com soCusto os tributos
   // também saem, para o quadro por etapa fechar igual ao por conta.
@@ -23567,17 +23705,22 @@ function plPorEtapa(itens, contasPagar, opcoes) {
     const e = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).find((x) => x.id === id);
     return e ? e.nome : id;
   };
-  const linhas = [...new Set([...Object.keys(est), ...Object.keys(real)])]
+  const linhas = [...new Set([...Object.keys(est), ...Object.keys(real), ...Object.keys(orc)])]
     .map((k) => ({
       etapaId: k, nome: nome(k),
       estimado: est[k] || 0, realizado: real[k] || 0,
+      orcado: temOrcamento ? (orc[k] || 0) : null,
       saldo: Math.round(((est[k] || 0) - (real[k] || 0)) * 100) / 100,
+      saldoOrcado: temOrcamento ? Math.round(((orc[k] || 0) - (real[k] || 0)) * 100) / 100 : null,
       notas: (contasDe[k] || []).length,
     }))
-    .filter((l) => l.estimado || l.realizado)
+    .filter((l) => l.estimado || l.realizado || l.orcado)
     .sort((a, b) => ordem(a.etapaId) - ordem(b.etapaId));
-  const soma = (campo) => Math.round(linhas.reduce((s, l) => s + l[campo], 0) * 100) / 100;
-  return { linhas, estimado: soma("estimado"), realizado: soma("realizado"), saldo: soma("saldo") };
+  const soma = (campo) => Math.round(linhas.reduce((s, l) => s + (Number(l[campo]) || 0), 0) * 100) / 100;
+  return { linhas, temOrcamento,
+    estimado: soma("estimado"), realizado: soma("realizado"), saldo: soma("saldo"),
+    orcado: temOrcamento ? soma("orcado") : null,
+    saldoOrcado: temOrcamento ? soma("saldoOrcado") : null };
 }
 
 // ── Subcontas: a conta aberta por grupo de material ─────────────
@@ -34352,7 +34495,7 @@ function BotaoCopiarPix({ pix, compacto }) {
   );
 }
 
-function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL }) {
+function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcamento }) {
   // Acompanhar custo e apurar resultado são duas perguntas. Com a venda, o
   // terreno e os tributos na conta, o número do canteiro fica escondido; o
   // botão esconde os três e sobra o que custa construir.
@@ -34364,7 +34507,17 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL }) {
   // Duas leituras da mesma base: por conta (o que comprei) e por etapa
   // (onde a obra está). Quem está tocando a obra pensa por etapa.
   const [visao, setVisao] = useState("conta");
-  const porEtapa = plPorEtapa(itens, contasPagar, { soCusto });
+  const porEtapa = plPorEtapa(itens, contasPagar, { soCusto, orcamento });
+  // A estimativa do P&L fala por conta do plano e não sabe de etapa; quem
+  // fala por etapa é o orçamento da obra. Com orçamento gerado, a coluna
+  // dele entra ao lado — duas contas do mesmo gasto, e é assim que se vê
+  // qual etapa estourou. A grade do quadro por etapa muda só aí.
+  const comOrcado = visao === "etapa" && porEtapa.temOrcamento;
+  const gradeEtapa = comOrcado ? {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "minmax(0,1fr) 88px 88px" : "minmax(180px, 1fr) 140px 140px 140px 140px",
+    gap: 8, alignItems: "center",
+  } : null;
   const prog = progressoCusto(pl.custo);
   const num = (v) => (Math.abs(v) < 0.005 ? "—" : fmtBRL(v));
   const grade = {
@@ -34431,31 +34584,47 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL }) {
               Só custo de obra
             </button>
           </div>
-          <div style={{ ...grade, padding: "8px 12px", borderBottom: "1px solid rgba(38,36,33,0.10)" }}>
+          <div style={{ ...(gradeEtapa || grade), padding: "8px 12px", borderBottom: "1px solid rgba(38,36,33,0.10)" }}>
             <span style={cab}>{visao === "etapa" ? "Etapa" : "Conta"}</span>
-            <span style={{ ...cab, textAlign: "right" }}>Estimado</span>
+            {comOrcado && !isMobile && <span style={{ ...cab, textAlign: "right" }} title="Do orçamento da obra, item a item">Orçado</span>}
+            {!(comOrcado && isMobile) && <span style={{ ...cab, textAlign: "right" }}>Estimado</span>}
+            {comOrcado && isMobile && <span style={{ ...cab, textAlign: "right" }}>Orçado</span>}
             <span style={{ ...cab, textAlign: "right" }}>Realizado</span>
             {!isMobile && <span style={{ ...cab, textAlign: "right" }}>Saldo</span>}
           </div>
           {visao === "etapa" ? (
             <>
               {porEtapa.linhas.map(e => (
-                <div key={e.etapaId || "sem"} style={{ ...grade, padding: "6px 12px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+                <div key={e.etapaId || "sem"} style={{ ...(gradeEtapa || grade), padding: "6px 12px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
                   <span style={{ fontSize: 12.5, color: "#111827", minWidth: 0 }}>
                     {e.nome}
                     {e.notas ? <span style={{ fontSize: 10.5, color: "#9ca3af" }}> · {e.notas} {e.notas === 1 ? "nota" : "notas"}</span> : null}
                   </span>
-                  <span style={{ ...celula, color: "#6b7280" }}>{num(e.estimado)}</span>
+                  {comOrcado && !isMobile && <span style={{ ...celula, color: "#6b7280" }}>{num(e.orcado)}</span>}
+                  {!(comOrcado && isMobile) && <span style={{ ...celula, color: "#6b7280" }}>{num(e.estimado)}</span>}
+                  {comOrcado && isMobile && <span style={{ ...celula, color: "#6b7280" }}>{num(e.orcado)}</span>}
                   <span style={{ ...celula, color: "#111827" }}>{num(e.realizado)}</span>
-                  {!isMobile && <span style={{ ...celula, color: e.saldo < -0.005 ? "#dc2626" : "#6b7280" }}>{num(e.saldo)}</span>}
+                  {!isMobile && <span style={{ ...celula, color: (comOrcado ? e.saldoOrcado : e.saldo) < -0.005 ? "#dc2626" : "#6b7280" }}>
+                    {num(comOrcado ? e.saldoOrcado : e.saldo)}</span>}
                 </div>
               ))}
-              <div style={{ ...grade, padding: "8px 12px", background: "#fafafa", borderTop: "1px solid rgba(38,36,33,0.10)" }}>
+              <div style={{ ...(gradeEtapa || grade), padding: "8px 12px", background: "#fafafa", borderTop: "1px solid rgba(38,36,33,0.10)" }}>
                 <span style={{ fontSize: 11.5, fontWeight: 700, color: "#111827" }}>TOTAL DA OBRA</span>
-                <span style={{ ...celula, fontWeight: 700 }}>{num(porEtapa.estimado)}</span>
+                {comOrcado && !isMobile && <span style={{ ...celula, fontWeight: 700 }}>{num(porEtapa.orcado)}</span>}
+                {!(comOrcado && isMobile) && <span style={{ ...celula, fontWeight: 700 }}>{num(porEtapa.estimado)}</span>}
+                {comOrcado && isMobile && <span style={{ ...celula, fontWeight: 700 }}>{num(porEtapa.orcado)}</span>}
                 <span style={{ ...celula, fontWeight: 700 }}>{num(porEtapa.realizado)}</span>
-                {!isMobile && <span style={{ ...celula, fontWeight: 700, color: porEtapa.saldo < -0.005 ? "#dc2626" : "#4b5563" }}>{num(porEtapa.saldo)}</span>}
+                {!isMobile && <span style={{ ...celula, fontWeight: 700, color: (comOrcado ? porEtapa.saldoOrcado : porEtapa.saldo) < -0.005 ? "#dc2626" : "#4b5563" }}>
+                  {num(comOrcado ? porEtapa.saldoOrcado : porEtapa.saldo)}</span>}
               </div>
+              {comOrcado && (
+                <div style={{ fontSize: 11, color: "#6b7280", padding: "8px 12px", lineHeight: 1.5 }}>
+                  <b style={{ color: "#4b5563" }}>Orçado</b> vem do orçamento da obra, item a item, e é o que fala por etapa.
+                  {" "}<b style={{ color: "#4b5563" }}>Estimado</b> vem do quadro do P&amp;L, que fala por conta contábil — o que
+                  não tem etapa marcada cai em "Sem etapa". Os dois são contas do mesmo gasto, por caminhos diferentes:
+                  não se somam.
+                </div>
+              )}
             </>
           ) : pl.blocos.map(b => (
             <div key={b.grupo.id}>
@@ -35697,7 +35866,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             aoMandar={(novos) => save({ ...data, lancamentos: [...(data.lancamentos || []), ...novos] })} />
         ) : visaoPL === "pl" ? (
           <PLDaObraView itens={itensPL} contasPagar={contasDaObra} clientePaga={!!obraAtual.clientePagaDireto}
-            isMobile={isMobile} fmtBRL={fmtBRL} />
+            isMobile={isMobile} fmtBRL={fmtBRL} orcamento={obraAtual.orcamento} />
         ) : visaoPL === "quadro" ? (
           <QuadroEstimativaPL itens={itensPL} podeEditar={perm.podeGerenciarObra} isMobile={isMobile}
             fmtBRL={fmtBRL} aoDefinir={definirEstimativa} clientePaga={!!obraAtual.clientePagaDireto} />
