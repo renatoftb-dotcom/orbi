@@ -2180,7 +2180,10 @@ function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL, cl
 }
 
 
-// ── A obra mandando o que pagou para o extrato do escritório ────
+// ── O que a obra pagou e o escritório ainda não viu ─────────────
+// Painel de leitura, de propósito. A travessia acontece na baixa; este
+// quadro só mostra o que ficou para trás, para ser conciliado contra o
+// banco. Ver <- isto é um relatório, não uma ação.
 // A regra de quem vai para onde mora em escritorio-financeiro.jsx. Aqui é
 // só a vitrine: mostrar o que vai acontecer ANTES de gravar, porque escrever
 // no extrato sem a pessoa ver é mexer em saldo sem avisar. Nada sai daqui
@@ -2237,8 +2240,7 @@ function AvisoDoExtrato({ aviso, aoFechar, fmtBRL }) {
   );
 }
 
-function PonteEscritorioView({ obra, cliente, contasPagar, entradas, data, isMobile, fmtBRL, podeEditar, dialogo, aoMandar }) {
-  const [mandando, setMandando] = useState(false);
+function PonteEscritorioView({ obra, cliente, contasPagar, entradas, data, isMobile, fmtBRL }) {
   const fechamentos = typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {};
   const jaNoEscritorio = typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : [];
 
@@ -2291,20 +2293,6 @@ function PonteEscritorioView({ obra, cliente, contasPagar, entradas, data, isMob
     borderRadius: 12, padding: 14, marginBottom: 12, background: "#fff" };
   const titulo = { fontSize: 12.5, fontWeight: 700, color: "#111827", marginBottom: 8 };
 
-  async function mandar() {
-    if (!r.lancamentos.length || mandando) return;
-    const ok = await dialogo.confirmar({
-      titulo: r.lancamentos.length === 1 ? "Mandar 1 lançamento para o escritório?"
-        : `Mandar ${r.lancamentos.length} lançamentos para o escritório?`,
-      mensagem: `${fmtBRL(r.total)} entram no extrato do escritório, na competência de cada pagamento. `
-        + "Mandar de novo depois não duplica: cada lançamento sabe de qual conta da obra veio.",
-      confirmar: "Mandar",
-    });
-    if (!ok) return;
-    setMandando(true);
-    try { await aoMandar(r.lancamentos); } finally { setMandando(false); }
-  }
-
   return (
     <div>
       <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 12, lineHeight: 1.5 }}>{explicacao}</div>
@@ -2325,14 +2313,18 @@ function PonteEscritorioView({ obra, cliente, contasPagar, entradas, data, isMob
               <span style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{fmtBRL(c.valor)}</span>
             </div>
           ))}
-          {podeEditar && (
-            <button type="button" onClick={mandar} disabled={mandando}
-              style={{ marginTop: 12, background: mandando ? "#9ca3af" : "#262421", color: "#fff", border: "none",
-                borderRadius: 12, padding: "9px 18px", fontSize: 13, fontWeight: 600,
-                cursor: mandando ? "progress" : "pointer", fontFamily: "inherit" }}>
-              {mandando ? "Mandando…" : "Mandar para o escritório"}
-            </button>
-          )}
+          {/* Sem botão de propósito. Mandar em lote era a segunda rota para o
+              mesmo dinheiro, e duas rotas é como o mesmo gasto entra duas
+              vezes — uma pela mão, outra pelo lote. O que atravessa agora
+              atravessa na baixa, na hora em que o dinheiro sai. O que está
+              nesta lista é o que foi pago ANTES disso existir: é trabalho de
+              conciliação contra o extrato do banco, não de um clique. */}
+          <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 10, lineHeight: 1.5 }}>
+            Isto é o que foi pago nesta obra e nunca atravessou — pagamentos anteriores à travessia
+            automática, ou trazidos por importação. Não há botão para mandar em lote: boa parte disto
+            costuma já estar no escritório lançada à mão, e mandar de novo contaria o gasto duas vezes.
+            Confira contra o extrato do banco, mês a mês. Daqui para frente, a baixa já atravessa sozinha.
+          </div>
         </div>
       ) : (
         <div style={{ ...caixa, textAlign: "center", color: "#6b7280", fontSize: 12.5 }}>
@@ -2731,15 +2723,28 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!f.dataContab) { dialogo.alertar({ titulo: "Informe a data de contabilização", tipo: "aviso" }); return; }
     // O pedido baixa inteiro, item a item, pelo valor de cada um: é a soma
     // deles que tem que bater com a linha do extrato.
+    // O cartão não muda a data nem o valor da baixa — muda só POR ONDE o
+    // dinheiro sai. O plano de parcelas fica gravado na conta, e é por ele
+    // que a fatura encontra esta compra depois.
+    const cartao = f.forma === "cartao" ? cartaoPorId(cartoesDoEscritorio(data), f.cartaoId) : null;
+    const noCartao = (conta, valor) => {
+      if (!cartao) return conta;
+      const p = pagamentoNoCartao(conta, cartao, { pagoEm: f.dataContab, valorPago: valor, parcelas: f.parcelas });
+      return p ? { ...conta, ...p } : conta;
+    };
     if (f.pedido) {
       const r = baixarPedidos(contasDaObra, f.pedido.pedidoIds || [f.pedido.pedidoId],
         { pagoEm: f.dataContab, comprovante: f.comprovante || null }, quemSou());
-      gravarContas(r.contas, f.pedido.obraId);
+      const alvo = new Set((f.pedido.contas || []).map(c => c.id));
+      gravarContas(r.contas.map(c => (alvo.has(c.id) ? noCartao(c, Number(c.valorPago) || Number(c.valor) || 0) : c)),
+        f.pedido.obraId);
       setFormPagamento(null);
       return;
     }
     const valor = numeroDeCampo(f.valorPago) || Number(f.conta.valor) || 0;
-    const atualizada = contaPaga(f.conta, { pagoEm: f.dataContab, valorPago: valor, comprovante: f.comprovante || null }, quemSou());
+    const atualizada = noCartao(
+      contaPaga(f.conta, { pagoEm: f.dataContab, valorPago: valor, comprovante: f.comprovante || null }, quemSou()),
+      valor);
     gravarContas(contasDaObra.map(c => c.id === f.conta.id ? atualizada : c), f.conta.obraId);
     setFormPagamento(null);
   };
@@ -3274,9 +3279,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             insumos={data.materiais || []} isMobile={isMobile} fmtBRL={fmtBRL} />
         ) : visaoPL === "escritorio" ? (
           <PonteEscritorioView obra={obraAtual} cliente={cliente} contasPagar={contasDaObra}
-            entradas={entradasDaObra} data={data} isMobile={isMobile} fmtBRL={fmtBRL}
-            podeEditar={!!perm.podeGerenciarObra} dialogo={dialogo}
-            aoMandar={(novos) => save({ ...data, lancamentos: [...(data.lancamentos || []), ...novos] })} />
+            entradas={entradasDaObra} data={data} isMobile={isMobile} fmtBRL={fmtBRL} />
         ) : visaoPL === "pl" ? (
           <PLDaObraView itens={itensPL} contasPagar={contasDaObra} clientePaga={!!obraAtual.clientePagaDireto}
             isMobile={isMobile} fmtBRL={fmtBRL} orcamento={obraAtual.orcamento} />
@@ -4467,6 +4470,66 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   a soma é o que sai do caixa. Para pagar um valor diferente, corrija o pedido na cotação.
                 </div>
               )}
+              {/* ── Como esse dinheiro saiu ──
+                  No cartão, o banco não debita esta compra: debita a fatura,
+                  lá na frente. Por isso a compra não atravessa sozinha para o
+                  escritório — quem atravessa é a fatura, fechada por você. O
+                  custo da obra, esse sim, é integral na data de hoje: o
+                  material entrou na obra agora, parcelar é decisão de caixa. */}
+              {cartoesDoEscritorio(data).length > 0 && (
+                <div style={{ marginTop: 14, borderTop: "1px solid rgba(38,36,33,0.1)", paddingTop: 12 }}>
+                  <label style={C.label}>Como foi pago</label>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                    {[["avista", "À vista / transferência"], ["cartao", "Cartão de crédito"]].map(([k, r]) => (
+                      <button key={k} type="button"
+                        onClick={() => setFormPagamento({ ...formPagamento, forma: k,
+                          cartaoId: k === "cartao" ? (formPagamento.cartaoId || (cartoesDoEscritorio(data)[0] || {}).id || "") : "",
+                          parcelas: formPagamento.parcelas || 1 })}
+                        style={{ ...C.btnSec, fontSize: 12.5,
+                          borderColor: (formPagamento.forma || "avista") === k ? AZUL_VK : "rgba(38,36,33,0.16)",
+                          color: (formPagamento.forma || "avista") === k ? "#111827" : "#4b5563",
+                          fontWeight: (formPagamento.forma || "avista") === k ? 700 : 500 }}>
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                  {formPagamento.forma === "cartao" && (() => {
+                    const cartao = cartaoPorId(cartoesDoEscritorio(data), formPagamento.cartaoId) || cartoesDoEscritorio(data)[0];
+                    const total = formPagamento.pedido
+                      ? Number(formPagamento.pedido.aberto) || 0
+                      : (numeroDeCampo(formPagamento.valorPago) || Number((formPagamento.conta || {}).valor) || 0);
+                    const parcelas = parcelasDoCartao(cartao, formPagamento.dataContab, total, formPagamento.parcelas);
+                    return (
+                      <>
+                        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: 12 }}>
+                          <div>
+                            <label style={C.label}>Cartão</label>
+                            <SelectBusca style={C.input} value={formPagamento.cartaoId || (cartao || {}).id || ""}
+                              onChange={(v) => setFormPagamento({ ...formPagamento, cartaoId: v })}
+                              opcoes={cartoesDoEscritorio(data).map(c => ({ valor: c.id, rotulo: c.nome }))} />
+                          </div>
+                          <div>
+                            <label style={C.label}>Parcelas</label>
+                            <input style={C.input} inputMode="numeric" value={formPagamento.parcelas || 1}
+                              onChange={e => setFormPagamento({ ...formPagamento, parcelas: e.target.value })} />
+                          </div>
+                        </div>
+                        {parcelas.length > 0 && (
+                          <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8, lineHeight: 1.6 }}>
+                            Vai cair {parcelas.length === 1 ? "na fatura de " : "nas faturas de "}
+                            <b style={{ color: "#111827" }}>
+                              {parcelas.map(p => p.competencia + " (" + fmtMoedaCtr(p.valor) + ")").join(" · ")}
+                            </b>
+                            . O custo da obra é integral hoje; o extrato do escritório só recebe a fatura, quando
+                            você fechar.
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
               <BotaoCopiarPix pix={pixDoPagamento(
                 formPagamento.pedido || formPagamento.conta,
                 prestadores.find(x => x.id === ((formPagamento.pedido || formPagamento.conta) || {}).prestadorId))} />

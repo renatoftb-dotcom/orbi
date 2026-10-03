@@ -32,6 +32,9 @@ function IconeMaster({ nome, tamanho = 18, cor = "currentColor" }) {
     case "feedback":
       // Balão de chat outline
       return (<svg {...props}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>);
+    case "cartao":
+      // Credit card outline
+      return (<svg {...props}><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg>);
     case "empresas":
       // Building outline
       return (<svg {...props}><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="9" y1="22" x2="9" y2="18"/><line x1="15" y1="22" x2="15" y2="18"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="9" y1="10" x2="15" y2="10"/><line x1="9" y1="14" x2="15" y2="14"/></svg>);
@@ -1578,6 +1581,7 @@ export default function ModuloClientesFornecedores() {
         { k:"escritorio:financeiro",  icon:"financeiro", label:"Financeiro" },
         { k:"escritorio:extrato",     icon:"cub",        label:"Extrato" },
         { k:"escritorio:lancamentos", icon:"editar",     label:"Lançamentos" },
+        { k:"escritorio:cartoes",     icon:"cartao",     label:"Cartões" },
         { k:"escritorio:fechamento",  icon:"check",      label:"Fechamento" },
         { k:"escritorio:importar",    icon:"copy",       label:"Importar" },
       ] : []),

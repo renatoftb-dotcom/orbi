@@ -28,6 +28,10 @@ const M = new Function(src + `
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
            fontesDasContasPagas,
+           cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
+           pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
+           competenciasDoCartao,
+           faturasFechadas, faturaParaFechar,
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
            obrasDoLancamento, validarLancamentoNaObra, destinoVisivelDoCusto,
@@ -1114,6 +1118,160 @@ teste("conta sem pedido segue uma a uma", () => {
   assert.deepStrictEqual(f.map((x) => x.tipo), ["conta", "conta"]);
 });
 
+// ── Cartão de crédito: a compra, a fatura e o banco ────────────
+const CARTAO = { id: "k1", nome: "Sicoob Empresarial", diaFechamento: 20, diaVencimento: 1 };
+
+teste("comprou antes do fechamento, cai na fatura do mes; no dia ou depois, na seguinte", () => {
+  assert.strictEqual(M.faturaDaCompra(CARTAO, "2026-09-19"), "2026-09");
+  assert.strictEqual(M.faturaDaCompra(CARTAO, "2026-09-20"), "2026-10", "no dia do fechamento ja e a seguinte");
+  assert.strictEqual(M.faturaDaCompra(CARTAO, "2026-09-23"), "2026-10");
+  assert.strictEqual(M.faturaDaCompra(CARTAO, "2026-12-28"), "2027-01", "vira o ano");
+  assert.strictEqual(M.faturaDaCompra(CARTAO, ""), "");
+});
+
+teste("a vista no cartao e uma parcela so, na fatura em que caiu", () => {
+  const p = M.parcelasDoCartao(CARTAO, "2026-09-23", 7200, 1);
+  assert.strictEqual(p.length, 1);
+  assert.strictEqual(p[0].competencia, "2026-10");
+  assert.strictEqual(p[0].valor, 7200);
+});
+
+teste("parcelado anda mes a mes e fecha no centavo", () => {
+  const p = M.parcelasDoCartao(CARTAO, "2026-09-23", 1000, 3);
+  assert.deepStrictEqual(p.map((x) => x.competencia), ["2026-10", "2026-11", "2026-12"]);
+  assert.deepStrictEqual(p.map((x) => x.valor), [333.33, 333.33, 333.34],
+    "o residuo vai na ultima, senao a soma nao fecha na compra");
+  assert.strictEqual(M.totalDaFatura(p), 1000);
+});
+
+teste("o custo da obra e integral na data da compra, nao nas parcelas", () => {
+  const conta = { id: "c1", valor: 1000, descricao: "Concreto" };
+  const r = M.pagamentoNoCartao(conta, CARTAO, { pagoEm: "2026-09-23", valorPago: 1000, parcelas: 3 });
+  assert.strictEqual(r.formaPagamento, "cartao");
+  assert.strictEqual(r.cartaoId, "k1");
+  assert.strictEqual(r.parcelasCartao.length, 3);
+  // quem grava `pagoEm` e a baixa; o que importa aqui e que o plano nao mexe nisso
+  assert.ok(!("pagoEm" in r), "a data da compra e da baixa, o cartao nao a desloca");
+});
+
+teste("a fatura junta as parcelas daquela competencia, de qualquer obra", () => {
+  const obras = [
+    { id: "o1", nome: "Jacarezinho M1", contasPagar: [
+      { id: "a", cartaoId: "k1", contaId: "material", descricao: "Concreto", favorecido: "Votorantim",
+        pagoEm: "2026-09-23", numeroDoc: "0130",
+        parcelasCartao: [{ parcela:1, de:3, competencia:"2026-10", valor:1000 },
+                         { parcela:2, de:3, competencia:"2026-11", valor:1000 },
+                         { parcela:3, de:3, competencia:"2026-12", valor:1000 }] },
+      { id: "b", cartaoId: "k1", contaId: "material", descricao: "Lajes", favorecido: "TONET",
+        pagoEm: "2026-09-25", numeroDoc: "0132",
+        parcelasCartao: [{ parcela:1, de:1, competencia:"2026-10", valor:7200 }] },
+      { id: "c", cartaoId: "outro", contaId: "material", descricao: "De outro cartao",
+        pagoEm: "2026-09-25", parcelasCartao: [{ parcela:1, de:1, competencia:"2026-10", valor:999 }] },
+    ] },
+    { id: "o2", nome: "Jacarezinho M2", contasPagar: [
+      { id: "d", cartaoId: "k1", contaId: "material", descricao: "Cimento", favorecido: "Rei do Cimento",
+        pagoEm: "2026-09-22", parcelasCartao: [{ parcela:1, de:1, competencia:"2026-10", valor:300 }] },
+    ] },
+  ];
+  const lanc = [{ id: "L1", cartaoId: "k1", contaId: "pagamentos_compras", descricao: "Papelaria",
+    lancadoEm: "2026-09-24", parcelasCartao: [{ parcela:1, de:1, competencia:"2026-10", valor:120 }] }];
+  const linhas = M.linhasDaFatura(obras, lanc, "k1", "2026-10");
+  assert.strictEqual(linhas.length, 4, "duas obras mais o escritorio; o outro cartao fica de fora");
+  assert.strictEqual(M.totalDaFatura(linhas), 8620);
+  assert.ok(linhas.some((l) => l.origem === "escritorio" && l.valor === 120));
+  assert.ok(!linhas.some((l) => l.descricao === "De outro cartao"));
+  // novembro leva so a segunda parcela do concreto
+  const nov = M.linhasDaFatura(obras, lanc, "k1", "2026-11");
+  assert.strictEqual(nov.length, 1);
+  assert.strictEqual(M.totalDaFatura(nov), 1000);
+  assert.strictEqual(nov[0].parcela, 2);
+  assert.deepStrictEqual(M.competenciasDoCartao(obras, lanc, "k1"), ["2026-10", "2026-11", "2026-12"]);
+});
+
+teste("a fatura vira UMA linha no extrato, com o total e a composicao por dentro", () => {
+  const linhas = [
+    { obra: "Jacarezinho M1", descricao: "Concreto", fornecedor: "Votorantim", contaId: "material", parcela:1, de:3, valor: 1000 },
+    { obra: "Jacarezinho M1", descricao: "Lajes", fornecedor: "TONET", contaId: "material", parcela:1, de:1, valor: 7200 },
+  ];
+  const l = M.lancamentoDaFatura(CARTAO, "2026-10", linhas, {});
+  assert.strictEqual(l.valor, 8200, "o banco debitou isto, e so isto");
+  assert.strictEqual(l.contaId, "cartao_credito");
+  assert.strictEqual(l.unidadeId, "escritorio");
+  assert.strictEqual(l.lancadoEm, "2026-10-01", "o dia do vencimento do cartao");
+  assert.strictEqual(l.competencia, "2026-10");
+  assert.strictEqual(l.linhas.length, 2, "a composicao fica guardada para conferencia");
+  assert.ok(/Sicoob Empresarial/.test(l.descricao) && /2 compras/.test(l.descricao), l.descricao);
+});
+
+teste("lancar a mesma fatura duas vezes nao cria duas linhas", () => {
+  const linhas = [{ descricao: "x", valor: 100 }];
+  const a = M.lancamentoDaFatura(CARTAO, "2026-10", linhas, {});
+  const b = M.lancamentoDaFatura(CARTAO, "2026-10", linhas, {});
+  assert.strictEqual(a.id, b.id);
+  assert.strictEqual(a.id, M.idDaFatura("k1", "2026-10"));
+});
+
+teste("fatura vazia nao vira lancamento", () => {
+  assert.strictEqual(M.lancamentoDaFatura(CARTAO, "2026-10", [], {}), null);
+  assert.strictEqual(M.totalDaFatura([]), 0);
+});
+
+// ── Fechar a fatura: o mês mais o que ficou para trás ──────────
+const OBRAS_CT = [{ id: "o1", nome: "Jacarezinho M1", contasPagar: [
+  { id: "a", cartaoId: "k1", contaId: "material", descricao: "Concreto", pagoEm: "2026-09-23",
+    parcelasCartao: [{ parcela:1, de:2, competencia:"2026-09", valor:500 },
+                     { parcela:2, de:2, competencia:"2026-10", valor:500 }] },
+  { id: "b", cartaoId: "k1", contaId: "material", descricao: "Lajes", pagoEm: "2026-10-02",
+    parcelasCartao: [{ parcela:1, de:1, competencia:"2026-10", valor:7200 }] },
+]}];
+
+teste("fechar o mes leva as parcelas do mes", () => {
+  const f = M.faturaParaFechar(CARTAO, OBRAS_CT, [], "2026-09");
+  assert.strictEqual(f.total, 500);
+  assert.strictEqual(f.atrasadas.length, 0);
+  assert.strictEqual(f.jaFechada, false);
+});
+
+teste("compra lancada com atraso entra na proxima fatura, marcada como atrasada", () => {
+  // setembro ja foi fechado; so depois alguem lancou uma compra de setembro
+  const setFechado = [M.lancamentoDaFatura(CARTAO, "2026-09", [{ descricao:"x", valor:500 }], {})];
+  const f = M.faturaParaFechar(CARTAO, OBRAS_CT, setFechado, "2026-10");
+  assert.strictEqual(f.totalDoMes, 7700, "lajes 7200 + a 2a parcela do concreto 500");
+  assert.strictEqual(f.atrasadas.length, 0, "setembro esta fechado, nao volta");
+  assert.strictEqual(f.total, 7700);
+});
+
+teste("o mes anterior em aberto e varrido junto — nao deixa parcela orfa", () => {
+  const f = M.faturaParaFechar(CARTAO, OBRAS_CT, [], "2026-10");
+  assert.strictEqual(f.totalAtrasado, 500, "a parcela de setembro, que nunca foi fechada");
+  assert.strictEqual(f.totalDoMes, 7700);
+  assert.strictEqual(f.total, 8200);
+  assert.ok(f.atrasadas.every((l) => l.atrasada && l.competenciaOriginal === "2026-09"));
+});
+
+teste("fatura ja fechada se reconhece, para nao lancar duas vezes", () => {
+  const out = [M.lancamentoDaFatura(CARTAO, "2026-10", [{ descricao:"x", valor:8200 }], {})];
+  const f = M.faturaParaFechar(CARTAO, OBRAS_CT, out, "2026-10");
+  assert.strictEqual(f.jaFechada, true);
+});
+
+teste("fechadas sao lidas pela origem do lancamento, nao pelo texto", () => {
+  const l = M.lancamentoDaFatura(CARTAO, "2026-10", [{ descricao:"x", valor:10 }], {});
+  assert.strictEqual(l.origem.tipo, "fatura");
+  assert.strictEqual(l.origem.cartaoId, "k1");
+  assert.strictEqual(l.origem.competencia, "2026-10");
+});
+
+teste("compra no cartao nao atravessa sozinha para o escritorio", () => {
+  // quem atravessa e a fatura; a compra viraria uma linha que o banco nunca debitou
+  const r = M.lancamentosDaObraParaEscritorio(
+    { id: "ob1", clienteId: "c1", nome: "Obra" }, { id: "c1", servicos: {} },
+    { planoObra: PLANO_OBRA, entradas: [], contasPagar: [
+      { id: "a", contaId: "cartao_credito", valor: 1000, valorPago: 1000, pago: true, pagoEm: "2026-09-23" }] });
+  assert.strictEqual(r.lancamentos.length, 0);
+  assert.ok(r.ignorados.some((x) => /cart[ãa]o/i.test(x.motivo)), JSON.stringify(r.ignorados));
+});
+
 teste("m\u00eas fechado n\u00e3o recebe lan\u00e7amento \u2014 fica separado, com o motivo", () => {
   const r = M.lancamentosDaObraParaEscritorio({ id: "ob1", clienteId: "c1" }, { id: "c1", servicos: {} }, {
     planoObra: PLANO_OBRA,
@@ -1232,11 +1390,15 @@ teste("na gestão a baixa vai sozinha para Pagamentos e compras", () => {
   assert.strictEqual(r.lancamentos[0].unidadeId, "gestao_obras");
 });
 
-teste("obra em que o cliente paga direto não atravessa sozinha", () => {
+teste("obra em que o cliente paga direto: a baixa atravessa, mas só o que é do escritório", () => {
+  // O botão de mandar em lote saiu: a baixa é a única rota, em qualquer
+  // modo. Quem filtra é o destino — material que o cliente pagou direto não
+  // tem destino no escritório e continua de fora.
+  assert.strictEqual(M.ponteAutomaticaNaBaixa("clientePaga"), true, "a rota existe");
   const r = M.lancamentosDaBaixa({ ...OBRA, clientePagaDireto: true }, CLI, [conta("k1", "material", 304)], { ...OPC });
   assert.strictEqual(r.modo, "clientePaga");
-  assert.strictEqual(r.lancamentos.length, 0, "lá só o honorário cruza, e isso é decisão de quem fecha o mês");
-  assert.strictEqual(M.ponteAutomaticaNaBaixa("clientePaga"), false);
+  assert.strictEqual(r.lancamentos.length, 0, "o dinheiro do material não passou pela conta do escritório");
+  assert.ok(r.ignorados.length, "e isso aparece como ignorado, com o motivo");
 });
 
 teste("só as recém-pagas atravessam — o histórico importado não volta", () => {
