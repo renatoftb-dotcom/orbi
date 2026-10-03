@@ -10028,6 +10028,62 @@ function lancamentosParaResultado(lancamentos) {
   return fora;
 }
 
+// ── Mexer numa compra do cartão ─────────────────────────────────
+// A compra é a fonte: a conta da obra (ou o lançamento do escritório) com o
+// plano de parcelas. Editar refaz o plano a partir da data, do valor e do
+// número de parcelas — e as faturas se refazem sozinhas, porque são lidas
+// dele. A única trava é a fatura FECHADA: ela já virou linha no extrato e
+// conferiu com o banco. Mexer no dinheiro de uma parcela que está nela
+// deixaria o extrato dizendo uma coisa e a fatura outra.
+function fechadasDaCompra(compra, lancamentos) {
+  const t = compra || {};
+  if (!t.cartaoId) return [];
+  const fechadas = faturasFechadas(lancamentos, t.cartaoId);
+  return [...new Set((t.parcelasCartao || []).map((p) => p && p.competencia)
+    .filter((c) => c && fechadas.has(c)))].sort();
+}
+
+// `origem` é "obra" (conta a pagar) ou "escritorio" (lançamento). Devolve a
+// compra nova, ou null quando o que veio não forma um plano (sem data, sem
+// valor).
+function compraEditada(compra, mudancas, cartao, origem) {
+  const t = compra || {}, m = mudancas || {};
+  const ehObra = origem === "obra";
+  const dataAntes = String((ehObra ? t.pagoEm : t.lancadoEm) || "").slice(0, 10);
+  const valorAntes = ehObra ? (Number(t.valorPago) || Number(t.valor) || 0) : (Number(t.valor) || 0);
+  const data = m.data != null && m.data !== "" ? String(m.data).slice(0, 10) : dataAntes;
+  const valor = m.valor != null && m.valor !== "" ? efCentavos(m.valor) : efCentavos(valorAntes);
+  const parcelas = m.parcelas != null && m.parcelas !== ""
+    ? Math.max(1, Math.floor(Number(m.parcelas) || 1)) : ((t.parcelasCartao || []).length || 1);
+  const plano = parcelasDoCartao(cartao, data, valor, parcelas);
+  if (!plano.length) return null;
+  const base = { ...t, descricao: m.descricao != null ? String(m.descricao).trim() : (t.descricao || ""),
+    formaPagamento: "cartao", cartaoId: (cartao || {}).id || "", parcelasCartao: plano };
+  if (ehObra) {
+    return { ...base, pagoEm: data, valorPago: valor, valor,
+      vencimento: t.vencimento && t.vencimento !== dataAntes ? t.vencimento : data };
+  }
+  return { ...base, valor, lancadoEm: data, competencia: data.slice(0, 7) };
+}
+
+// O que mudou no DINHEIRO da compra — é isso que a fatura fechada trava.
+// Trocar só a descrição passa.
+function compraMexeuNoDinheiro(antes, depois) {
+  const plano = (x) => JSON.stringify(((x || {}).parcelasCartao || []).map((p) => [p.competencia, p.valor]));
+  return plano(antes) !== plano(depois) || (antes || {}).cartaoId !== (depois || {}).cartaoId;
+}
+
+// A fatura fechada com o valor que o banco debitou de verdade — juros,
+// tarifa, anuidade. A composição não muda; a diferença aparece no resultado
+// como uma linha a mais em Cartão de crédito.
+function faturaAjustada(lanc, mudancas) {
+  const l = lanc || {}, m = mudancas || {};
+  const valor = m.valor != null && m.valor !== "" ? efCentavos(m.valor) : efCentavos(l.valor);
+  const data = m.data ? String(m.data).slice(0, 10) : String(l.lancadoEm || "").slice(0, 10);
+  if (!(valor > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(data)) return null;
+  return { ...l, valor, lancadoEm: data, competencia: data.slice(0, 7) };
+}
+
 // As faturas que existem num cartão: toda competência que tem alguma linha.
 function competenciasDoCartao(obras, lancamentos, cartaoId) {
   const set = new Set();
@@ -12441,7 +12497,7 @@ function cartoesDoEscritorio(data) {
   return ((data || {}).escritorio || {}).cartoes || [];
 }
 
-function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo }) {
+function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo, quem }) {
   const S = EF_ESTILO;
   const cartoes = cartoesDoEscritorio(data);
   const obras = (data && data.obras) || [];
@@ -12450,6 +12506,9 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo }) {
   const [escolhido, setEscolhido] = useState(cartoes[0] ? cartoes[0].id : "");
   const [mes, setMes] = useState("");
   const [fechando, setFechando] = useState(false);
+  const [editando, setEditando] = useState(null);       // { linha, descricao, data, valor, parcelas, cartaoId }
+  const [editFatura, setEditFatura] = useState(null);   // { valor, data }
+  const fechamentos = fechamentosDoEscritorio(data);
 
   const cartao = cartaoPorId(cartoes, escolhido) || cartoes[0] || null;
   const comps = cartao ? competenciasDoCartao(obras, lancs, cartao.id) : [];
@@ -12484,9 +12543,12 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo }) {
       confirmar: "Fechar fatura",
     });
     if (!ok) return;
+    const previa = lancamentoDaFatura(cartao, compAtual, fatura.linhas, {});
+    const trava = previa ? bloqueioPorMesFechado(previa.competencia, fechamentos) : "";
+    if (trava) { dialogo.alertar({ titulo: "Não dá para fechar a fatura", mensagem: trava, tipo: "aviso" }); return; }
     setFechando(true);
     try {
-      const l = lancamentoDaFatura(cartao, compAtual, fatura.linhas, {});
+      const l = previa;
       // A tela FICA no mês que acabou de fechar, mostrando o status novo.
       // Pular sozinha para o mês seguinte parecia que nada tinha acontecido
       // — e o botão de fechar estava lá de novo, agora de outra fatura.
@@ -12494,6 +12556,106 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo }) {
     } catch (e) {
       dialogo.alertar({ titulo: "A fatura não foi fechada", mensagem: (e && e.message) || "Tente de novo.", tipo: "aviso" });
     } finally { setFechando(false); }
+  }
+
+  // ── Editar / excluir uma compra da fatura ──
+  // A compra mora na obra (conta a pagar) ou no escritório (lançamento);
+  // aqui só se acha a fonte e grava nela — a fatura é lida de lá.
+  const fonteDaLinha = (l) => {
+    if (!l) return null;
+    if (l.origem === "obra") {
+      const obra = obras.find((o) => o && o.id === l.obraId);
+      const c = obra && (obra.contasPagar || []).find((x) => x && x.id === l.refId);
+      return c ? { tipo: "obra", obra, compra: c } : null;
+    }
+    const c = lancs.find((x) => x && x.id === l.refId);
+    return c ? { tipo: "escritorio", compra: c } : null;
+  };
+  const gravarFonte = (f, nova) => {
+    if (f.tipo === "obra") {
+      return save({ ...data, obras: obras.map((o) => (o && o.id === f.obra.id
+        ? { ...o, contasPagar: (o.contasPagar || []).flatMap((x) => (x && x.id === f.compra.id ? (nova ? [nova] : []) : [x])) }
+        : o)) });
+    }
+    return save({ ...data, lancamentos: lancs.flatMap((x) => (x && x.id === f.compra.id ? (nova ? [nova] : []) : [x])) });
+  };
+  const travaDaFatura = (f) => {
+    const fech = fechadasDaCompra(f.compra, lancs);
+    return fech.length ? `Esta compra tem parcela na fatura de ${fech.map(mesAnoPorExtenso).join(", ")}, que já está fechada.`
+      + " Reabra essa fatura (nos ⋯ ao lado do mês) para mudar valor, data, parcelas ou cartão." : "";
+  };
+  function abrirEdicao(l) {
+    const f = fonteDaLinha(l);
+    if (!f) { dialogo.alertar({ titulo: "Não achei esta compra", mensagem: "Ela pode ter sido apagada em outro lugar.", tipo: "aviso" }); return; }
+    const c = f.compra;
+    const valor = f.tipo === "obra" ? (Number(c.valorPago) || Number(c.valor) || 0) : (Number(c.valor) || 0);
+    setEditFatura(null);
+    setEditando({ linha: l, descricao: c.descricao || "", data: String((f.tipo === "obra" ? c.pagoEm : c.lancadoEm) || "").slice(0, 10),
+      valor: valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      parcelas: String((c.parcelasCartao || []).length || 1), cartaoId: c.cartaoId || (cartao && cartao.id) || "" });
+  }
+  async function salvarEdicao() {
+    const e = editando; if (!e) return;
+    const f = fonteDaLinha(e.linha);
+    if (!f) return;
+    const cartaoNovo = cartaoPorId(cartoes, e.cartaoId);
+    if (!cartaoNovo) { dialogo.alertar({ titulo: "Escolha o cartão", tipo: "aviso" }); return; }
+    const nova = compraEditada(f.compra, { descricao: e.descricao, data: e.data, valor: efValorDoCampo(e.valor), parcelas: e.parcelas },
+      cartaoNovo, f.tipo);
+    if (!nova) { dialogo.alertar({ titulo: "Confira a data e o valor", mensagem: "A compra precisa de data e de valor maior que zero.", tipo: "aviso" }); return; }
+    if (compraMexeuNoDinheiro(f.compra, nova)) {
+      const trava = travaDaFatura(f);
+      if (trava) { dialogo.alertar({ titulo: "Fatura fechada", mensagem: trava, tipo: "aviso" }); return; }
+    }
+    const final = f.tipo === "obra" && typeof registrarAto === "function"
+      ? registrarAto(nova, "editada", quem || "", new Date().toISOString(), "pela fatura do cartão") : nova;
+    try { await gravarFonte(f, final); setEditando(null); }
+    catch (err) { dialogo.alertar({ titulo: "Não gravou", mensagem: (err && err.message) || "Tente de novo.", tipo: "aviso" }); }
+  }
+  async function excluirCompra(l) {
+    const f = fonteDaLinha(l);
+    if (!f) return;
+    const trava = travaDaFatura(f);
+    if (trava) { dialogo.alertar({ titulo: "Fatura fechada", mensagem: trava, tipo: "aviso" }); return; }
+    const c = f.compra;
+    const valor = f.tipo === "obra" ? (Number(c.valorPago) || Number(c.valor) || 0) : (Number(c.valor) || 0);
+    const n = (c.parcelasCartao || []).length || 1;
+    const ok = await dialogo.confirmar({
+      titulo: "Excluir esta compra?",
+      mensagem: `${c.descricao || "Compra"} · ${efDinheiro(valor)}${n > 1 ? ` em ${n}x` : ""}. Ela sai `
+        + (f.tipo === "obra" ? `do contas a pagar da obra ${f.obra.nome || ""} ` : "dos lançamentos do escritório ")
+        + "e de todas as faturas deste cartão.",
+      confirmar: "Excluir", destrutivo: true,
+    });
+    if (!ok) return;
+    if (editando && editando.linha && editando.linha.refId === l.refId) setEditando(null);
+    try { await gravarFonte(f, null); }
+    catch (err) { dialogo.alertar({ titulo: "Não excluiu", mensagem: (err && err.message) || "Tente de novo.", tipo: "aviso" }); }
+  }
+
+  // ── A fatura fechada: ajustar o valor debitado ou reabrir ──
+  async function salvarFatura() {
+    if (!editFatura || !lancDaFatura) return;
+    const nova = faturaAjustada(lancDaFatura, { valor: efValorDoCampo(editFatura.valor), data: editFatura.data });
+    if (!nova) { dialogo.alertar({ titulo: "Confira o valor e a data", tipo: "aviso" }); return; }
+    const trava = bloqueioPorMesFechado(lancDaFatura.competencia, fechamentos) || bloqueioPorMesFechado(nova.competencia, fechamentos);
+    if (trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: trava, tipo: "aviso" }); return; }
+    try { await save({ ...data, lancamentos: lancs.map((x) => (x && x.id === nova.id ? nova : x)) }); setEditFatura(null); }
+    catch (err) { dialogo.alertar({ titulo: "Não gravou", mensagem: (err && err.message) || "Tente de novo.", tipo: "aviso" }); }
+  }
+  async function reabrirFatura() {
+    if (!lancDaFatura) return;
+    const trava = bloqueioPorMesFechado(lancDaFatura.competencia, fechamentos);
+    if (trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: trava + " Reabra o mês no Fechamento antes.", tipo: "aviso" }); return; }
+    const ok = await dialogo.confirmar({
+      titulo: `Reabrir a fatura de ${mesAnoPorExtenso(compAtual)}?`,
+      mensagem: `A linha de ${efDinheiro(lancDaFatura.valor)} sai do extrato do escritório e a fatura volta a ficar aberta — `
+        + "aí dá para editar ou excluir as compras dela e fechar de novo.",
+      confirmar: "Reabrir", destrutivo: true,
+    });
+    if (!ok) return;
+    try { await save({ ...data, lancamentos: lancs.filter((x) => !(x && x.id === lancDaFatura.id)) }); setEditFatura(null); }
+    catch (err) { dialogo.alertar({ titulo: "Não reabriu", mensagem: (err && err.message) || "Tente de novo.", tipo: "aviso" }); }
   }
 
   const cel = { fontSize: 12.5, padding: "7px 10px", borderTop: "1px solid rgba(38,36,33,0.06)" };
@@ -12573,6 +12735,14 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo }) {
                 {fechadas.has(compAtual) ? "Fechada" : "Aberta"}
               </span>
             )}
+            {podeEditar && lancDaFatura && typeof MenuDeAcoes === "function" && (
+              <MenuDeAcoes compacto toque={isMobile} title="Mais ações da fatura" itens={[
+                { rotulo: "Editar valor debitado", onClick: () => { setEditando(null);
+                  setEditFatura({ valor: (Number(lancDaFatura.valor) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                    data: String(lancDaFatura.lancadoEm || "").slice(0, 10) }); } },
+                { rotulo: "Reabrir fatura", destrutivo: true, onClick: reabrirFatura },
+              ]} />
+            )}
           </div>
 
           {!fatura || !fatura.linhas.length ? (
@@ -12591,6 +12761,7 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo }) {
                     {!isMobile && <th style={cab}>Fornecedor</th>}
                     <th style={{ ...cab, textAlign: "center" }}>Parcela</th>
                     <th style={{ ...cab, textAlign: "right" }}>Valor</th>
+                    {podeEditar && <th style={{ ...cab, width: isMobile ? 44 : 40 }} aria-label="Ações" />}
                   </tr></thead>
                   <tbody>
                     {fatura.linhas.map((l, i) => (
@@ -12612,6 +12783,16 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo }) {
                         {!isMobile && <td style={cel}>{l.fornecedor || "—"}</td>}
                         <td style={{ ...cel, textAlign: "center" }}>{l.de > 1 ? `${l.parcela}/${l.de}` : "—"}</td>
                         <td style={num}>{efDinheiro(l.valor)}</td>
+                        {podeEditar && (
+                          <td style={{ ...cel, textAlign: "right", padding: "4px 6px" }}>
+                            {typeof MenuDeAcoes === "function" && (
+                              <MenuDeAcoes compacto toque={isMobile} title="Mais ações da compra" itens={[
+                                { rotulo: "Editar", onClick: () => abrirEdicao(l) },
+                                { rotulo: "Excluir", destrutivo: true, onClick: () => excluirCompra(l) },
+                              ]} />
+                            )}
+                          </td>
+                        )}
                       </tr>
                     ))}
                     <tr>
@@ -12624,10 +12805,79 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo }) {
                         )}
                       </td>
                       <td style={{ ...num, fontWeight: 700 }}>{efDinheiro(fatura.total)}</td>
+                      {podeEditar && <td style={cel} />}
                     </tr>
                   </tbody>
                 </table>
               </div>
+
+              {editando && (() => {
+                const f = fonteDaLinha(editando.linha);
+                const trava = f ? travaDaFatura(f) : "";
+                const cartaoNovo = cartaoPorId(cartoes, editando.cartaoId);
+                const plano = cartaoNovo ? parcelasDoCartao(cartaoNovo, editando.data, efValorDoCampo(editando.valor), editando.parcelas) : [];
+                const mexe = (k, v) => setEditando({ ...editando, [k]: v });
+                const bloq = !!trava;
+                const inp = { ...S.input, ...(bloq ? { background: "#f3f4f6", color: "#6b7280" } : {}) };
+                return (
+                  <div style={{ border: "1px solid rgba(4,116,244,0.35)", background: "#f7fbff", borderRadius: 12, padding: 12,
+                    display: "grid", gap: 10, marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700 }}>Editar compra
+                      <span style={{ fontWeight: 400, color: "#6b7280" }}> · {editando.linha.obra || "Escritório"}</span></div>
+                    {trava && <div style={{ fontSize: 12, color: "#92400e" }}>{trava} A descrição dá para mudar.</div>}
+                    <div style={{ display: "grid", gap: 10, gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr 0.6fr 1.2fr", alignItems: "end" }}>
+                      <div style={{ minWidth: 0 }}><div style={S.rot}>Descrição</div>
+                        <input style={S.input} value={editando.descricao} onChange={(e) => mexe("descricao", e.target.value)} /></div>
+                      <div style={{ minWidth: 0 }}><div style={S.rot}>Data da compra</div>
+                        <input style={inp} type="date" disabled={bloq} value={editando.data} onChange={(e) => mexe("data", e.target.value)} /></div>
+                      <div style={{ minWidth: 0 }}><div style={S.rot}>Valor total da compra</div>
+                        <input style={inp} inputMode="decimal" disabled={bloq} value={editando.valor} onChange={(e) => mexe("valor", e.target.value)} /></div>
+                      <div style={{ minWidth: 0 }}><div style={S.rot}>Parcelas</div>
+                        <input style={inp} inputMode="numeric" disabled={bloq} value={editando.parcelas}
+                          onChange={(e) => mexe("parcelas", e.target.value.replace(/\D/g, "").slice(0, 2))} /></div>
+                      <div style={{ minWidth: 0 }}><div style={S.rot}>Cartão</div>
+                        <select style={{ ...inp, cursor: bloq ? "default" : "pointer" }} disabled={bloq} value={editando.cartaoId}
+                          onChange={(e) => mexe("cartaoId", e.target.value)}>
+                          {cartoes.filter((c) => c && (c.ativo !== false || c.id === editando.cartaoId))
+                            .map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                        </select></div>
+                    </div>
+                    {!bloq && plano.length > 0 && (
+                      <div style={{ fontSize: 12, color: "#4b5563" }}>
+                        Fica nas faturas de <b>{plano.map((x) => `${mesAnoPorExtenso(x.competencia)} (${efDinheiro(x.valor)})`).join(" · ")}</b>.
+                        {f && f.tipo === "obra" ? " O custo da obra muda junto, na data da compra." : ""}
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                      <button style={S.btnSec} onClick={() => setEditando(null)}>Cancelar</button>
+                      <button style={S.btn} onClick={salvarEdicao}>Salvar</button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {editFatura && lancDaFatura && (
+                <div style={{ border: "1px solid rgba(4,116,244,0.35)", background: "#f7fbff", borderRadius: 12, padding: 12,
+                  display: "grid", gap: 10, marginBottom: 12 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>Valor que o banco debitou</div>
+                  <div style={{ fontSize: 12, color: "#4b5563" }}>
+                    Use quando a fatura do banco vier diferente da soma das compras — juros, tarifa, anuidade. A diferença
+                    entra no resultado em Cartão de crédito; as compras continuam na conta delas.
+                  </div>
+                  <div style={{ display: "grid", gap: 10, gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", alignItems: "end", maxWidth: 520 }}>
+                    <div style={{ minWidth: 0 }}><div style={S.rot}>Valor debitado</div>
+                      <input style={S.input} inputMode="decimal" value={editFatura.valor}
+                        onChange={(e) => setEditFatura({ ...editFatura, valor: e.target.value })} /></div>
+                    <div style={{ minWidth: 0 }}><div style={S.rot}>Data do débito</div>
+                      <input style={S.input} type="date" value={editFatura.data}
+                        onChange={(e) => setEditFatura({ ...editFatura, data: e.target.value })} /></div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                    <button style={S.btnSec} onClick={() => setEditFatura(null)}>Cancelar</button>
+                    <button style={S.btn} onClick={salvarFatura}>Salvar</button>
+                  </div>
+                </div>
+              )}
 
               {fatura.jaFechada ? (
                 <div style={{ fontSize: 12.5, color: "#1f2937", padding: "10px 12px", borderRadius: 10,
@@ -12635,11 +12885,17 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo }) {
                   <b>Fatura fechada.</b> Está no extrato do escritório como uma linha de{" "}
                   <b>{efDinheiro(lancDaFatura ? lancDaFatura.valor : fatura.total)}</b>
                   {lancDaFatura && lancDaFatura.lancadoEm ? <>, em {efDiaBR(lancDaFatura.lancadoEm)}</> : null}.
-                  {" "}Para fechar de novo, exclua essa linha em Lançamentos.
-                  {lancDaFatura && Math.abs((Number(lancDaFatura.valor) || 0) - fatura.total) >= 0.01 && (
+                  {" "}Para mexer nas compras dela, use ⋯ → Reabrir fatura (ou exclua essa linha em Lançamentos).
+                  {lancDaFatura && fatura.total - (Number(lancDaFatura.valor) || 0) >= 0.01 && (
                     <div style={{ color: "#92400e", marginTop: 4 }}>
                       Depois de fechada entrou compra nesta fatura ({efDinheiro(fatura.total)} hoje). Ela vai para a próxima
                       fatura aberta como atrasada.
+                    </div>
+                  )}
+                  {lancDaFatura && (Number(lancDaFatura.valor) || 0) - fatura.total >= 0.01 && (
+                    <div style={{ color: "#4b5563", marginTop: 4 }}>
+                      O banco debitou {efDinheiro((Number(lancDaFatura.valor) || 0) - fatura.total)} a mais que as compras
+                      (juros, tarifa) — essa diferença entra no resultado em Cartão de crédito.
                     </div>
                   )}
                 </div>
@@ -13219,7 +13475,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
 
       {!["resumo", "fechamento"].includes(vista) && aba === "cartoes" && (
         <CartoesEscritorio data={data} save={save} isMobile={typeof window !== "undefined" && window.innerWidth < 768}
-          podeEditar={!!perm.podeEditar} dialogo={dialogo} />
+          podeEditar={!!perm.podeEditar} dialogo={dialogo}
+          quem={typeof nomeDeQuem === "function" ? nomeDeQuem(perm && perm.usuario) : ""} />
       )}
 
       {!["resumo", "fechamento"].includes(vista) && aba === "importar" && (

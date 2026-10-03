@@ -31,7 +31,7 @@ const M = new Function(src + `
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
            competenciasDoCartao,
-           faturasFechadas, faturaParaFechar, lancamentosParaResultado, mesAnoPorExtenso, efDiaBR,
+           faturasFechadas, faturaParaFechar, lancamentosParaResultado, mesAnoPorExtenso, efDiaBR, fechadasDaCompra, compraEditada, compraMexeuNoDinheiro, faturaAjustada,
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
            obrasDoLancamento, validarLancamentoNaObra, destinoVisivelDoCusto,
@@ -1601,6 +1601,39 @@ teste("mês e dia como se lê: Outubro 2026, 04/09/2026", () => {
   assert.strictEqual(M.mesAnoPorExtenso(""), "");
   assert.strictEqual(M.efDiaBR("2026-09-04"), "04/09/2026");
   assert.ok(/Outubro 2026/.test(faturaRes().descricao), faturaRes().descricao);
+});
+
+
+teste("editar a compra refaz as parcelas e as faturas", () => {
+  const c = OBRAS_RES[0].contasPagar[0];
+  const comp = { ...c, valorPago: 5326.88, valor: 5326.88, parcelasCartao: M.parcelasDoCartao(CARTAO, "2026-09-23", 5326.88, 3) };
+  const nova = M.compraEditada(comp, { valor: 5326.9, parcelas: 5 }, CARTAO, "obra");
+  assert.strictEqual(nova.parcelasCartao.length, 5);
+  assert.strictEqual(nova.valorPago, 5326.9);
+  assert.strictEqual(Math.round(nova.parcelasCartao.reduce((s, p) => s + p.valor, 0) * 100) / 100, 5326.9);
+  assert.ok(M.compraMexeuNoDinheiro(comp, nova));
+  assert.ok(!M.compraMexeuNoDinheiro(comp, M.compraEditada(comp, { descricao: "Concretagem fundação" }, CARTAO, "obra")),
+    "trocar só a descrição não mexe no dinheiro");
+  const esc = M.compraEditada(LANC_RES[0], { data: "2026-10-05" }, CARTAO, "escritorio");
+  assert.strictEqual(esc.competencia, "2026-10");
+  assert.strictEqual(esc.parcelasCartao[0].competencia, "2026-10", "antes do dia 20, cai na fatura do mês");
+  assert.strictEqual(M.compraEditada(comp, { valor: 0 }, CARTAO, "obra"), null);
+});
+
+teste("compra com parcela em fatura fechada fica travada", () => {
+  const comp = { ...OBRAS_RES[0].contasPagar[0], parcelasCartao: M.parcelasDoCartao(CARTAO, "2026-09-23", 300, 3) };
+  assert.deepStrictEqual(M.fechadasDaCompra(comp, []), []);
+  const fechada = M.lancamentoDaFatura(CARTAO, "2026-10", [{ descricao: "x", valor: 100 }], {});
+  assert.deepStrictEqual(M.fechadasDaCompra(comp, [fechada]), ["2026-10"]);
+});
+
+teste("ajustar o valor debitado da fatura fechada", () => {
+  const f = faturaRes();
+  const a = M.faturaAjustada(f, { valor: 2310.5, data: "2026-11-01" });
+  assert.strictEqual(a.valor, 2310.5);
+  assert.strictEqual(a.competencia, "2026-11");
+  assert.strictEqual(a.linhas.length, f.linhas.length, "a composição não muda");
+  assert.strictEqual(M.faturaAjustada(f, { valor: 0 }), null);
 });
 
 
