@@ -26707,6 +26707,9 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   // "Completar a base": o que as regras preenchem no que já está gravado,
   // listado para conferir; só grava no clique de quem confere.
   const [conferindo, setConferindo] = useState(false);
+  // a linha clicada fica marcada em azul claro, para não perder o fio ao
+  // correr os olhos pela linha comprida; outro clique desmarca
+  const [linhaMarcada, setLinhaMarcada] = useState("");
   // a caixa da grade vai até o pé da janela, para a barra lateral aparecer
   const gradeRef = useRef(null);
   const [alturaGrade, setAlturaGrade] = useState(0);
@@ -26940,7 +26943,9 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       ) : isMobile ? (
         <div style={{ display: "grid", gap: 8 }}>
           {visiveis.map((l) => (
-            <div key={l.id} style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, padding: 12, background: "#fff" }}>
+            <div key={l.id} onClick={() => setLinhaMarcada(linhaMarcada === l.id ? "" : l.id)} aria-selected={linhaMarcada === l.id}
+              style={{ border: `1px solid ${linhaMarcada === l.id ? "#93c5fd" : "rgba(38,36,33,0.12)"}`, borderRadius: 12, padding: 12,
+                background: linhaMarcada === l.id ? "#dbeafe" : "#fff", cursor: "pointer" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", minWidth: 0 }}>{l.insumoNome || l.descricaoLanc || "—"}</div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>{moeda(l.total)}</div>
@@ -26966,7 +26971,8 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
           <style>{`[data-vk-base-grade="1"]::-webkit-scrollbar{width:12px;height:12px}
 [data-vk-base-grade="1"]::-webkit-scrollbar-track{background:#f3f4f6;border-radius:0 0 12px 12px}
 [data-vk-base-grade="1"]::-webkit-scrollbar-thumb{background:#9ca3af;border-radius:8px;border:3px solid #f3f4f6}
-[data-vk-base-grade="1"]::-webkit-scrollbar-thumb:hover{background:#6b7280}`}</style>
+[data-vk-base-grade="1"]::-webkit-scrollbar-thumb:hover{background:#6b7280}
+[data-vk-base-linha="1"]:hover{background:#f3f7fd}`}</style>
           <div style={{ minWidth: largura }}>
             <div style={{ display: "grid", gridTemplateColumns: grade, gap: 10, padding: "8px 12px", borderBottom: "1px solid rgba(38,36,33,0.1)",
               fontSize: 10.5, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.3, position: "sticky", top: 0, background: "#fff", zIndex: 2,
@@ -26974,8 +26980,11 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
               {COLS.map((c) => <span key={c.titulo} title={c.titulo} style={{ textAlign: alinhamentoDaCelula(c), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.titulo}</span>)}
             </div>
             {visiveis.map((l, i) => (
-              <div key={l.id} style={{ display: "grid", gridTemplateColumns: grade, gap: 10, padding: "7px 12px", borderBottom: "1px solid rgba(38,36,33,0.05)",
-                fontSize: 12, color: "#374151", alignItems: "baseline" }}>
+              <div key={l.id} data-vk-base-linha="1" onClick={() => setLinhaMarcada(linhaMarcada === l.id ? "" : l.id)}
+                aria-selected={linhaMarcada === l.id}
+                style={{ display: "grid", gridTemplateColumns: grade, gap: 10, padding: "7px 12px", borderBottom: "1px solid rgba(38,36,33,0.05)",
+                  fontSize: 12, color: "#374151", alignItems: "baseline", cursor: "pointer",
+                  background: linhaMarcada === l.id ? "#dbeafe" : undefined }}>
                 {COLS.map((c) => {
                   const t = textoDaCelula(relat.linhas[i][c.j], c);
                   return (
