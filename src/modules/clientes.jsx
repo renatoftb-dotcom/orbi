@@ -4349,6 +4349,20 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // A linha de um pedido de loja: o total na frente, os itens dentro. Serve
     // solta (visao por fornecedor, onde o cabeçalho já é a loja) e recuada,
     // debaixo do nome da loja.
+    // Os papéis da nota são da compra, não de um item: aparecem uma vez, na
+    // linha da nota — antes só apareciam abrindo o detalhe de um item
+    // solto, e a nota agrupada parecia não ter papel nenhum.
+    const papeisDoPedido = (L) => {
+      const vistos = new Set(), lista = [];
+      for (const c of (L && L.contas) || []) {
+        for (const a of anexosDaTransacao(c)) {
+          const k = (a && (a.public_id || a.url)) || "";
+          if (!k || vistos.has(k)) continue;
+          vistos.add(k); lista.push(a);
+        }
+      }
+      return lista;
+    };
     const linhaDoPedido = (L, recuado, semNomeDaLoja) => {
 
                             const abertaP = !!contasAbertas[L.chave];
@@ -4378,6 +4392,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                           return "contas " + cs.map(nomeConta).filter(Boolean).join(" e ");
                                         })(),
                                         L.numeroNota && !pedidoEhNotaPaga(L) ? "NF " + L.numeroNota : "",
+                                        (() => { const n = papeisDoPedido(L).length; return n ? "\u{1F4CE} " + (n === 1 ? "1 papel" : n + " papéis") : "sem papel"; })(),
                                         L.parcial ? "parcialmente pago" : ""].filter(Boolean).join(" · ")}
                                     </div>
                                   </div>
@@ -4477,6 +4492,25 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                         </>
                                       );
                                     })()}
+                                    {(papeisDoPedido(L).length > 0 || perm.podeGerenciarObra) && (
+                                      <div data-vk-mantem-mes="1" style={{ fontSize: 11.5, color: "#4b5563", padding: "8px 0 2px", borderTop: "1px solid rgba(38,36,33,0.05)" }}>
+                                        <span style={{ color: "#6b7280" }}>Papéis: </span>
+                                        {papeisDoPedido(L).length === 0 && <span style={{ color: "#9ca3af" }}>nenhum ainda </span>}
+                                        <LinksDeAnexo transacao={{ anexos: papeisDoPedido(L) }} ocupado={papelOcupado === L.contas[0].id}
+                                          aoTrocar={perm.podeGerenciarObra ? (a, f) => mexerNoPapel(L.contas[0], "trocar", a, f) : undefined}
+                                          aoTirar={perm.podeGerenciarObra ? (a) => mexerNoPapel(L.contas[0], "tirar", a, null) : undefined} />
+                                        {perm.podeGerenciarObra && (
+                                          <label onClick={e => e.stopPropagation()} style={{ marginLeft: 10, fontSize: 11, color: AZUL_VK, cursor: papelOcupado ? "default" : "pointer" }}>
+                                            {papelOcupado === L.contas[0].id ? "enviando…" : "＋ papel"}
+                                            <input type="file" accept="application/pdf,image/*" style={{ display: "none" }} disabled={!!papelOcupado}
+                                              onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) mexerNoPapel(L.contas[0], "anexar", null, f, L.contas.map(c => c.id)); }} />
+                                          </label>
+                                        )}
+                                        {erroPapel && erroPapel.indexOf(L.contas[0].id + ":") === 0 && (
+                                          <div style={{ color: "#b91c1c", fontSize: 11 }}>{erroPapel.slice(L.contas[0].id.length + 1)}</div>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -5500,7 +5534,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Trocar, tirar ou pôr um papel numa conta já lançada. O papel é da
   // compra, não do item: vale para todas as contas que já o têm (trocar,
   // tirar) ou para todas da mesma referência (pôr).
-  async function mexerNoPapel(conta, acao, antigo, arquivo) {
+  async function mexerNoPapel(conta, acao, antigo, arquivo, idsAlvo) {
     if (!perm.podeGerenciarObra || !conta) return;
     setErroPapel(""); setPapelOcupado(conta.id);
     try {
@@ -5513,7 +5547,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       if (!obra) return;
       const mesmo = (a) => !!antigo && !!a && (antigo.public_id ? a.public_id === antigo.public_id : a.url === antigo.url);
       const alvo = (c) => (acao === "anexar"
-        ? (conta.numeroDoc ? c.numeroDoc === conta.numeroDoc : c.id === conta.id)
+        ? (idsAlvo ? idsAlvo.indexOf(c.id) >= 0 : (conta.numeroDoc ? c.numeroDoc === conta.numeroDoc : c.id === conta.id))
         : anexosDaTransacao(c).some(mesmo));
       const quem = quemSou();
       const novas = (obra.contasPagar || []).map((c) => {
