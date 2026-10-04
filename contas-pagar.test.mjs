@@ -2701,20 +2701,33 @@ teste("nota paga nao vira conta de loja; pedido a pagar continua sob a loja", ()
   assert.strictEqual(modulo.rotuloDoPedido(loja.pedidos[0]), "Pedido 777");
 });
 
-teste("base de dados: uma linha por item, com tudo que a planilha tem", () => {
+teste("base de dados: uma linha por item, nas colunas da planilha do escritório", () => {
   const obras = [{ id: "o1", nome: "Jacarezinho Módulo 1", clienteId: "c1", contasPagar: [
     { id: "a", numeroDoc: "0173", numeroNota: "8623", prestadorId: "rc", descricao: "Areia Fina", insumoCodigo: "ARE-1",
       quantidade: 2, unidade: "m3", valor: 260, valorPago: 260, pago: true, pagoEm: "2026-09-29", vencimento: "2026-09-29",
       contaId: "material", etapa: "fundacao", registros: [{ ato: "criada", em: "2026-10-04T03:31:00Z" }], comprovante: { url: "u" } },
-    { id: "b", numeroDoc: "0051", doc: "4098", favorecido: "Krona", descricao: "Tubo 40mm", quantidade: 4, unidade: "Unidades",
+    { id: "a2", numeroDoc: "0173", numeroNota: "8623", prestadorId: "rc", descricao: "Cimento CP II", quantidade: 10, unidade: "sacos",
+      valor: 340, valorPago: 340, pago: true, pagoEm: "2026-09-29", contaId: "material", etapa: "fundacao" },
+    { id: "b", numeroDoc: "0051", doc: "4098", favorecido: "Krona", descricao: "Tubo 40mm", quantidade: 4, unidade: "unidades",
       valor: 137.45, valorPago: 137.45, pago: true, pagoEm: "2026-07-08", grupoMaterial: "Tubulação PVC", contaId: "material", etapa: "esgoto_pluvial",
       importadoEm: "2026-09-20T10:00:00Z" },
     { id: "c", numeroDoc: "0180", favorecido: "Ourifer", descricao: "Fita crepe", valor: 12, vencimento: "2026-10-28", pago: false, contaId: "material" },
-  ] }];
+    { id: "d", numeroDoc: "0215", origem: "contrato", contratoId: "k1", servico: "Obra Civil", favorecido: "Adriano", descricao: "Parcela 11/14 (quinzenal)",
+      valor: 9142.86, vencimento: "2026-11-26", pago: false, contaId: "empreiteiro" },
+    { id: "e", numeroDoc: "0175", origem: "cotacao", cotacaoId: "q1", favorecido: "Ferro Pronto", descricao: "Aço Vergalhões — Vigas Baldrame",
+      valor: 2537.23, valorPago: 2537.23, pago: true, pagoEm: "2026-10-01", contaId: "material", registros: [{ ato: "paga", em: "2026-10-01T10:00:00Z" }] },
+    { id: "e2", numeroDoc: "0174", origem: "cotacao", cotacaoId: "q1", parcelasTotal: 5, favorecido: "Ferro Pronto", descricao: "Aço Vergalhões — Pilares",
+      valor: 1020.64, vencimento: "2026-11-09", pago: false, contaId: "material" },
+    { id: "f", numeroDoc: "0181", origem: "cotacao", cotacaoId: "q2", pedidoId: "p9", numeroLoja: "136614-109", favorecido: "OURIFER",
+      descricao: "Cabo Flexsil 750 V 4.00 Preto", insumoCodigo: "X", quantidade: 100, unidade: "Mts", valor: 585, vencimento: "2026-10-27", pago: false, contaId: "material" },
+  ], cotacoes: [{ id: "q1", titulo: "Aço Vergalhões", lancadoEm: "2026-09-20T12:00:00Z" }, { id: "q2", titulo: "OURIFER" }],
+     contratos: [{ id: "k1", criadoEm: "2026-08-01T09:00:00Z" }] }];
+  const lancamentos = [{ id: "x", tipo: "escritorio", origem: { obraId: "o1", tipo: "doc", refId: "4098" }, descricao: "Tubulação esgoto",
+    valor: 5406.92, competencia: "2026-07", unidadeId: "empreendimento" }];
   const L = modulo.linhasDaBase(obras, { clientes: [{ id: "c1", nome: "Jacarezinho Mod 1" }], prestadores: [{ id: "rc", nome: "Rei do Cimento" }],
-    insumos: [{ codigo: "ARE-1", nome: "Areia Fina", grupo: "Areia e pedra" }], etapas: [{ id: "fundacao", nome: "Fundação" }],
-    planoContas: [{ id: "material", nome: "Material" }] });
-  assert.deepStrictEqual(L.map((l) => l.id), ["c", "a", "b"], "mais recente primeiro");
+    insumos: [{ codigo: "ARE-1", nome: "Areia Fina", grupo: "Areia e pedra", unidade: "m3" }, { codigo: "X", nome: "Prego", unidade: "Unidades" }],
+    etapas: [{ id: "fundacao", nome: "Fundação" }], planoContas: [{ id: "material", nome: "Material" }], lancamentos });
+  assert.deepStrictEqual(L.map((l) => l.id), ["d", "e2", "c", "f", "e", "a", "a2", "b"], "mais recente primeiro");
   const a = L.find((l) => l.id === "a");
   assert.strictEqual(a.fornecedor, "Rei do Cimento");
   assert.strictEqual(a.nota, "8623");
@@ -2724,18 +2737,50 @@ teste("base de dados: uma linha por item, com tudo que a planilha tem", () => {
   assert.strictEqual(a.conta, "Material");
   assert.strictEqual(a.entradaEm, "2026-10-04");
   assert.strictEqual(a.papeis, 1);
+  assert.strictEqual(a.unidadeNegocio, "Gestão de obras");
+  assert.strictEqual(a.valorNota, 600, "o total da nota soma os itens da mesma Ref");
+  assert.strictEqual(a.descricaoLanc, "Nota 8623");
+  assert.strictEqual(a.insumoNome, "Areia Fina");
+  assert.strictEqual(L.find((l) => l.id === "a2").insumoNome, "Cimento CP II", "sem catálogo, o item da nota");
+  assert.strictEqual(a.competencia, "2026-09");
   const b = L.find((l) => l.id === "b");
   assert.strictEqual(b.nota, "4098", "a planilha antiga traz o nº do papel");
   assert.strictEqual(b.entradaEm, "2026-09-20");
-  assert.strictEqual(L.find((l) => l.id === "c").unitario, null);
-  assert.deepStrictEqual(modulo.filtrarBase(L, { situacao: "pago" }).map((l) => l.id), ["a", "b"]);
+  assert.strictEqual(b.descricaoLanc, "Tubulação esgoto", "a descrição é a do lançamento do escritório");
+  assert.strictEqual(b.valorNota, 5406.92);
+  assert.strictEqual(b.unidadeNegocio, "Empreendimento");
+  assert.strictEqual(b.unidade, "Unidades", "a grafia do catálogo");
+  assert.strictEqual(b.insumoNome, "Tubo 40mm");
+  const c = L.find((l) => l.id === "c");
+  assert.strictEqual(c.unitario, null);
+  assert.strictEqual(c.quantidade, null, "sem quantidade fica em branco, não zero");
+  assert.strictEqual(c.pagoEm, "");
+  assert.strictEqual(c.competencia, "2026-10");
+  const d = L.find((l) => l.id === "d");
+  assert.strictEqual(d.descricaoLanc, "Obra Civil — Parcela 11/14 (quinzenal)");
+  assert.strictEqual(d.insumoNome, "");
+  assert.strictEqual(d.entradaEm, "2026-08-01", "a parcela entrou com o contrato");
+  const e = L.find((l) => l.id === "e");
+  assert.strictEqual(e.descricaoLanc, "Aço Vergalhões");
+  assert.strictEqual(e.insumoNome, "Vigas Baldrame");
+  assert.strictEqual(e.entradaEm, "2026-09-20", "o pedido entrou quando foi lançado");
+  const e2 = L.find((l) => l.id === "e2");
+  assert.strictEqual(e2.descricaoLanc, "Aço Vergalhões — Pilares", "compra paga por entrega: a parcela é a transação");
+  assert.strictEqual(e2.insumoNome, "Aço Vergalhões");
+  const f = L.find((l) => l.id === "f");
+  assert.strictEqual(f.descricaoLanc, "Pedido 136614-109", "título igual à loja não descreve: vale o pedido");
+  assert.strictEqual(f.insumoNome, "Prego", "o nome do catálogo");
+  assert.deepStrictEqual(modulo.filtrarBase(L, { situacao: "pago" }).map((l) => l.id), ["e", "a", "a2", "b"]);
   assert.deepStrictEqual(modulo.filtrarBase(L, { grupo: "Tubulação PVC" }).map((l) => l.id), ["b"]);
-  assert.deepStrictEqual(modulo.filtrarBase(L, { de: "2026-09-01", ate: "2026-09-30" }).map((l) => l.id), ["a"]);
+  assert.deepStrictEqual(modulo.filtrarBase(L, { de: "2026-09-01", ate: "2026-09-30" }).map((l) => l.id), ["a", "a2"]);
   assert.deepStrictEqual(modulo.filtrarBase(L, { texto: "krona" }).map((l) => l.id), ["b"]);
   const t = modulo.tabelaDaBase(L);
-  assert.strictEqual(t[0][5], "Item");
-  assert.strictEqual(t.length, 4);
-  assert.strictEqual(t[2][t[0].indexOf("Situação")], "Pago");
+  assert.deepStrictEqual(t[0].slice(0, 18), ["Ref", "Nome Cliente", "Projeto / obra", "Unidade negócio", "Fornecedor", "Descrição Lançamento",
+    "Conta contábil", "Nota / Comprovante", "Valor total nota", "Período Contábil", "Data do lançamento", "Nome Insumo (catálogo)",
+    "Unidade", "Quantidade", "Preço", "Valor", "Etapa", "Grupo Materiais"]);
+  assert.strictEqual(t.length, 9);
+  assert.strictEqual(t[5][t[0].indexOf("Situação")], "Pago");
+  assert.strictEqual(t[1][t[0].indexOf("Quantidade")], "");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

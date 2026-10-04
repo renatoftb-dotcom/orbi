@@ -13654,6 +13654,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
           <BaseDeDados obras={(data || {}).obras || []} clientes={(data || {}).clientes || []}
             prestadores={(data || {}).fornecedores || []}
             insumos={typeof insumosDoCatalogo === "function" ? insumosDoCatalogo(data) : []}
+            lancamentos={lancamentosDoEscritorio(data)}
             isMobile={typeof window !== "undefined" && window.innerWidth < 768} nomeDoArquivo="base de dados" />
         </div>
       )}
@@ -25876,38 +25877,114 @@ function filtrarContas(contas, filtro, hoje) {
 }
 // ── A base de dados: uma linha por item ─────────────────────────
 // O espelho da planilha de controle: cada conta da obra é um item (de uma
-// nota, de um pedido, de um contrato), com fornecedor, quantidade, preço,
-// grupo, etapa, conta contábil, quando foi pago e quando entrou no
-// sistema. É daqui que se filtra, soma e exporta.
+// nota, de um pedido, de um contrato). As colunas são as da planilha do
+// escritório — Ref, cliente, obra, unidade de negócio, fornecedor, a
+// descrição do lançamento (a transação inteira), conta contábil, nota, o
+// valor total da nota, período contábil, data do lançamento (o pagamento),
+// e o item: insumo do catálogo, unidade, quantidade, preço, valor, etapa e
+// grupo. É daqui que se filtra, soma e exporta.
+const CP_UNIDADES_NEGOCIO = { escritorio: "Escritório", projetos: "Projetos", gestao_obras: "Gestão de obras", empreendimento: "Empreendimento" };
+
+// O lançamento do escritório que representa esta conta (a ponte grava a
+// origem: a conta, o pedido inteiro ou o papel da planilha antiga).
+function cpLancamentoDaConta(lancamentos, obraId, c) {
+  for (const l of lancamentos || []) {
+    const o = (l && l.origem) || {};
+    if (!o.obraId || o.obraId !== obraId) continue;
+    if (o.tipo === "conta" && o.refId === c.id) return l;
+    if (o.tipo === "pedido" && c.pedidoId && String(o.refId || "").split("|")[0] === c.pedidoId) return l;
+    if (o.tipo === "doc" && c.doc && String(o.refId || "") === String(c.doc)) return l;
+  }
+  return null;
+}
+
 function linhasDaBase(obras, opcoes) {
   const o = opcoes || {};
   const red = (x) => Math.round(x * 100) / 100;
   const nomeDe = (lista, id) => ((lista || []).find((x) => x && x.id === id) || {}).nome || "";
   const insumoDe = (cod) => (o.insumos || []).find((x) => x && (x.codigo === cod || x.id === cod)) || null;
+  // "unidades" e "Unidades" são a mesma unidade: vale a grafia do catálogo
+  const grafia = {};
+  for (const i of o.insumos || []) {
+    const u = String((i && i.unidade) || "").trim();
+    if (u && !grafia[u.toLowerCase()]) grafia[u.toLowerCase()] = u;
+  }
+  const dia = (v) => String(v || "").slice(0, 10);
   const saida = [];
   for (const ob of obras || []) {
     if (!ob) continue;
-    const cliente = nomeDe(o.clientes, ob.clienteId);
-    for (const c of ob.contasPagar || []) {
-      if (!c) continue;
-      const total = red(Number(c.pago ? (c.valorPago || c.valor) : c.valor) || 0);
+    const cli = (o.clientes || []).find((x) => x && x.id === ob.clienteId) || null;
+    const cliente = (cli && cli.nome) || "";
+    const unidadeDaObra = cli && cli.servicos && cli.servicos.empreendimento ? "empreendimento" : "gestao_obras";
+    const contas = (ob.contasPagar || []).filter(Boolean);
+    const valorDe = (c) => red(Number(c.pago ? (c.valorPago || c.valor) : c.valor) || 0);
+    // a transação: a mesma Ref junta os itens de uma compra
+    const chave = (c) => String(c.numeroDoc || c.pedidoId || c.id);
+    const porChave = {};
+    for (const c of contas) (porChave[chave(c)] = porChave[chave(c)] || []).push(c);
+    for (const c of contas) {
+      const total = valorDe(c);
       const qtd = Number(c.quantidade) || 0;
       const ins = c.insumoCodigo ? insumoDe(c.insumoCodigo) : null;
-      const criada = (c.registros || []).find((r) => r && r.ato === "criada");
+      const irmas = porChave[chave(c)] || [c];
+      const lanc = cpLancamentoDaConta(o.lancamentos, ob.id, c);
+      const cot = c.cotacaoId ? (ob.cotacoes || []).find((x) => x && x.id === c.cotacaoId) : null;
+      const ctr = c.contratoId ? (ob.contratos || []).find((x) => x && x.id === c.contratoId) : null;
+      const titulo = String((cot && cot.titulo) || "").trim();
+      const desc = String(c.descricao || "").trim();
+      // a descrição da transação inteira; o item fica na coluna do insumo.
+      // Cotação que o lançamento da loja abriu leva o nome da loja como
+      // título — aí o título não descreve nada e vale o pedido.
+      const tituloUtil = titulo && cpSemAcento(titulo) !== cpSemAcento(c.favorecido || "") ? titulo : "";
+      const n = c.numeroNota || c.doc;
+      const itemTexto = titulo && desc.indexOf(titulo + " — ") === 0 ? desc.slice(titulo.length + 3).trim() : desc;
+      let descricaoLanc = desc;
+      let insumoNome = ins ? ins.nome : "";
+      if (c.contratoId) {
+        // parcela de contrato não é item: o serviço vai na descrição
+        descricaoLanc = c.servico && desc.indexOf(c.servico) < 0 ? `${c.servico} — ${desc}` : desc;
+      } else if (c.pedidoId) {
+        descricaoLanc = n ? "Nota " + n : (c.numeroLoja ? "Pedido " + c.numeroLoja : (tituloUtil || desc));
+        if (!ins) insumoNome = desc;
+      } else if (tituloUtil && Number(c.parcelasTotal) > 1) {
+        // a compra paga por entrega: cada parcela é uma etapa da mesma compra
+        if (!ins) insumoNome = tituloUtil;
+      } else if (tituloUtil) {
+        descricaoLanc = tituloUtil;
+        if (!ins && itemTexto !== tituloUtil) insumoNome = itemTexto;
+      } else if (irmas.length > 1) {
+        descricaoLanc = n ? "Nota " + n : desc;
+        if (!ins) insumoNome = desc;
+      }
+      if (lanc && lanc.descricao) descricaoLanc = String(lanc.descricao).trim();
+      if (!ins && !insumoNome && !c.contratoId && itemTexto && itemTexto !== descricaoLanc) insumoNome = itemTexto;
+      if (insumoNome === descricaoLanc && !ins) insumoNome = "";
+      const valorNota = lanc && (lanc.origem || {}).tipo !== "conta" && Number(lanc.valor)
+        ? red(Math.abs(Number(lanc.valor)))
+        : red(irmas.reduce((t, x) => t + valorDe(x), 0));
+      const pagoEm = c.pago ? dia(c.pagoEm) : "";
+      const vencimento = dia(c.vencimento);
+      const competencia = String((lanc && lanc.competencia) || c.competencia || (pagoEm || vencimento).slice(0, 7) || "").slice(0, 7);
+      const regs = (c.registros || []).filter((r) => r && r.em);
+      const criada = regs.find((r) => r.ato === "criada");
+      const primeiro = regs.map((r) => dia(r.em)).sort()[0] || "";
+      const entradaEm = dia((criada && criada.em) || c.importadoEm || c.lancadoEm || (cot && cot.lancadoEm)
+        || (ctr && (ctr.criadoEm || ctr.criadaEm || ctr.dataAssinatura)) || primeiro);
+      const un = String(c.unidade || "").trim();
       saida.push({
         id: c.id, obraId: ob.id, obra: ob.nome || "", cliente,
+        unidadeNegocio: CP_UNIDADES_NEGOCIO[(lanc && lanc.unidadeId) || unidadeDaObra] || "",
         ref: c.numeroDoc || "", nota: String(c.numeroNota || c.doc || ""), arquivo: String(c.doc || ""),
         fornecedor: c.favorecido || nomeDe(o.prestadores, c.prestadorId) || "",
-        item: c.descricao || "", insumoCodigo: c.insumoCodigo || "", insumo: ins ? ins.nome : "",
-        quantidade: qtd, unidade: c.unidade || "",
+        descricaoLanc, item: desc, insumoCodigo: c.insumoCodigo || "", insumo: ins ? ins.nome : "", insumoNome,
+        quantidade: qtd > 0 ? qtd : null, unidade: grafia[un.toLowerCase()] || un,
         unitario: qtd > 0 ? Math.round((total / qtd) * 10000) / 10000 : null,
-        total,
+        total, valorNota,
         grupo: c.grupoMaterial || (ins && ins.grupo) || "",
         etapaId: c.etapa || "", etapa: nomeDe(o.etapas, c.etapa) || c.etapa || "",
         contaId: c.contaId || "", conta: nomeDe(o.planoContas, c.contaId) || c.contaId || "",
-        pago: !!c.pago, pagoEm: c.pago ? String(c.pagoEm || "").slice(0, 10) : "",
-        vencimento: String(c.vencimento || "").slice(0, 10),
-        entradaEm: String((criada && criada.em) || c.importadoEm || c.lancadoEm || "").slice(0, 10),
+        pago: !!c.pago, pagoEm, vencimento, competencia, entradaEm,
+        noEscritorio: !!lanc,
         origem: c.origem || "", papeis: (Array.isArray(c.anexos) ? c.anexos.filter(Boolean).length : 0) + (c.comprovante ? 1 : 0),
         conta_: c,
       });
@@ -25930,12 +26007,16 @@ function filtrarBase(linhas, filtro, op) {
     && (!f.situacao || (f.situacao === "pago" ? l.pago : !l.pago)));
 }
 
-// As colunas da planilha, na ordem da planilha de controle.
+// As colunas da planilha, na ordem e com os títulos da planilha de
+// controle do escritório. Situação e vencimento vêm depois, para as contas
+// ainda a pagar.
 const BASE_COLUNAS = [
-  ["obra", "Obra"], ["cliente", "Cliente"], ["ref", "Ref"], ["nota", "Nota / comprovante"], ["fornecedor", "Fornecedor"],
-  ["item", "Item"], ["insumoCodigo", "Código do insumo"], ["quantidade", "Quantidade"], ["unidade", "Unidade"],
-  ["unitario", "Unitário"], ["total", "Total"], ["grupo", "Grupo de material"], ["etapa", "Etapa"], ["conta", "Conta contábil"],
-  ["pagoEm", "Data de pagamento"], ["vencimento", "Vencimento"], ["entradaEm", "Entrada no sistema"], ["situacao", "Situação"],
+  ["ref", "Ref"], ["cliente", "Nome Cliente"], ["obra", "Projeto / obra"], ["unidadeNegocio", "Unidade negócio"],
+  ["fornecedor", "Fornecedor"], ["descricaoLanc", "Descrição Lançamento"], ["conta", "Conta contábil"],
+  ["nota", "Nota / Comprovante"], ["valorNota", "Valor total nota"], ["competencia", "Período Contábil"],
+  ["pagoEm", "Data do lançamento"], ["insumoNome", "Nome Insumo (catálogo)"], ["unidade", "Unidade"],
+  ["quantidade", "Quantidade"], ["unitario", "Preço"], ["total", "Valor"], ["etapa", "Etapa"], ["grupo", "Grupo Materiais"],
+  ["situacao", "Situação"], ["vencimento", "Vencimento"], ["entradaEm", "Entrada no sistema"],
 ];
 function tabelaDaBase(linhas) {
   return [BASE_COLUNAS.map((c) => c[1])].concat((linhas || []).map((l) => BASE_COLUNAS.map(([k]) => {
@@ -26274,7 +26355,7 @@ function carregarXlsx() {
   return cpCargaXlsx;
 }
 
-function BaseDeDados({ obras, clientes, prestadores, insumos, isMobile, obraFixa, nomeDoArquivo }) {
+function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMobile, obraFixa, nomeDoArquivo }) {
   const [texto, setTexto] = useState("");
   const [obraId, setObraId] = useState("");
   const [contaId, setContaId] = useState("");
@@ -26288,8 +26369,8 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, isMobile, obraFixa
   const [baixando, setBaixando] = useState("");
   const etapas = typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [];
   const plano = typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [];
-  const linhas = useMemo(() => linhasDaBase(obras || [], { clientes, prestadores, insumos, etapas, planoContas: plano }),
-    [obras, clientes, prestadores, insumos]);
+  const linhas = useMemo(() => linhasDaBase(obras || [], { clientes, prestadores, insumos, lancamentos, etapas, planoContas: plano }),
+    [obras, clientes, prestadores, insumos, lancamentos]);
   const nomeDe = (lista, id) => ((lista || []).find((x) => x && x.id === id) || {}).nome || "";
   const op = { nomePrestador: (id) => nomeDe(prestadores, id), nomeConta: (id) => nomeDe(plano, id), nomeEtapa: (id) => nomeDe(etapas, id) };
   const filtradas = filtrarBase(linhas, { texto, obraId, contaId, etapa, grupo, papel, situacao, de, ate }, op);
@@ -26301,6 +26382,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, isMobile, obraFixa
   const moeda = (v) => (typeof fmtMoedaCtr === "function" ? fmtMoedaCtr(v) : "R$ " + Number(v || 0).toFixed(2));
   const num = (v, casas) => (v == null || v === "" ? "—" : Number(v).toLocaleString("pt-BR", { minimumFractionDigits: casas || 0, maximumFractionDigits: casas == null ? 3 : casas }));
   const diaBR = (iso) => { const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : ""; };
+  const mesBR = (ym) => { const m = String(ym || "").match(/^(\d{4})-(\d{2})/); return m ? `${m[2]}/${m[1]}` : ""; };
   const procurando = !!(texto.trim() || obraId || contaId || etapa || grupo || papel !== "todos" || situacao || de || ate);
   const limpar = () => { setTexto(""); setObraId(""); setContaId(""); setEtapa(""); setGrupo(""); setPapel("todos"); setSituacao(""); setDe(""); setAte(""); };
 
@@ -26308,14 +26390,32 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, isMobile, obraFixa
     setBaixando("Montando a planilha…");
     const tabela = tabelaDaBase(filtradas);
     const cab = tabela[0];
-    const datas = ["Data de pagamento", "Vencimento", "Entrada no sistema"].map((n) => cab.indexOf(n));
-    const comDatas = tabela.map((linha, i) => (i === 0 ? linha : linha.map((v, j) => (datas.indexOf(j) >= 0 && v ? new Date(v + "T12:00:00") : v))));
     const nome = (nomeDoArquivo || "base-de-dados").replace(/[^\w-]+/g, "-").toLowerCase() + "-" + new Date().toISOString().slice(0, 10);
     try {
       const X = await carregarXlsx();
-      const ws = X.utils.aoa_to_sheet(comDatas, { cellDates: true, dateNF: "dd/mm/yyyy" });
-      ws["!cols"] = cab.map((c) => ({ wch: Math.max(10, Math.min(48, c.length + 4, c === "Item" ? 48 : 22)) }));
-      ws["!autofilter"] = { ref: X.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: comDatas.length - 1, c: cab.length - 1 } }) };
+      const ws = X.utils.aoa_to_sheet(tabela);
+      // datas como número de série do Excel (sem fuso, sem hora escondida)
+      const serie = (iso) => { const m = String(iso || "").match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);
+        return m ? Math.round((Date.UTC(+m[1], +m[2] - 1, m[3] ? +m[3] : 1) - Date.UTC(1899, 11, 30)) / 86400000) : null; };
+      const formatos = { "Período Contábil": "mm/yyyy", "Data do lançamento": "dd/mm/yyyy", "Vencimento": "dd/mm/yyyy",
+        "Entrada no sistema": "dd/mm/yyyy", "Valor total nota": '"R$" #,##0.00', "Preço": '"R$" #,##0.00', "Valor": '"R$" #,##0.00' };
+      cab.forEach((titulo, j) => {
+        const fmt = formatos[titulo];
+        if (!fmt) return;
+        const data = fmt.indexOf("yy") >= 0;
+        for (let i = 1; i < tabela.length; i++) {
+          const ref = X.utils.encode_cell({ r: i, c: j });
+          const v = tabela[i][j];
+          if (v === "" || v == null) { delete ws[ref]; continue; }
+          ws[ref] = data ? { t: "n", v: serie(v), z: fmt } : { t: "n", v: Number(v), z: fmt };
+        }
+      });
+      const larguras = { "Ref": 8, "Nome Cliente": 26, "Projeto / obra": 20, "Unidade negócio": 18, "Fornecedor": 30,
+        "Descrição Lançamento": 36, "Conta contábil": 26, "Nota / Comprovante": 14, "Valor total nota": 16, "Período Contábil": 12,
+        "Data do lançamento": 14, "Nome Insumo (catálogo)": 44, "Unidade": 10, "Quantidade": 11, "Preço": 13, "Valor": 14,
+        "Etapa": 28, "Grupo Materiais": 22, "Situação": 10, "Vencimento": 12, "Entrada no sistema": 14 };
+      ws["!cols"] = cab.map((c) => ({ wch: larguras[c] || 14 }));
+      ws["!autofilter"] = { ref: X.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: tabela.length - 1, c: cab.length - 1 } }) };
       const wb = X.utils.book_new();
       X.utils.book_append_sheet(wb, ws, "Base de dados");
       X.writeFile(wb, nome + ".xlsx");
@@ -26323,7 +26423,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, isMobile, obraFixa
     } catch (e) {
       // sem a biblioteca: CSV com ponto e vírgula, que o Excel brasileiro abre
       const esc = (v) => { const t = typeof v === "number" ? String(v).replace(".", ",") : String(v == null ? "" : v); return /[;"\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
-      const csv = "﻿" + tabela.map((l) => l.map(esc).join(";")).join("\r\n");
+      const csv = "\ufeff" + tabela.map((l) => l.map(esc).join(";")).join("\r\n");
       const a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
       a.download = nome + ".csv"; document.body.appendChild(a); a.click(); a.remove();
@@ -26339,20 +26439,25 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, isMobile, obraFixa
       background: ativo ? "#eff6ff" : "#fff", color: ativo ? "#0474f4" : "#374151", borderRadius: 999, padding: "5px 12px",
       fontSize: 12, fontWeight: ativo ? 600 : 500, cursor: "pointer", fontFamily: "inherit" }}>{rot}</button>
   );
+  // a mesma ordem da planilha; na obra, cliente e obra já estão no título
   const COLS = [
-    ...(obraFixa ? [] : [["obra", "Obra", 140]]),
-    ["pagoEm", "Pagamento", 92], ["ref", "Ref", 52], ["nota", "Nota", 70], ["fornecedor", "Fornecedor", 150], ["item", "Item", 240],
-    ["quantidade", "Qtd", 64], ["unidade", "Un", 70], ["unitario", "Unitário", 84], ["total", "Total", 96],
-    ["grupo", "Grupo", 120], ["etapa", "Etapa", 130], ["conta", "Conta", 120], ["entradaEm", "Entrada", 86], ["papeis", "📎", 34],
+    ["ref", "Ref", 48],
+    ...(obraFixa ? [] : [["cliente", "Cliente", 150], ["obra", "Projeto / obra", 130]]),
+    ["unidadeNegocio", "Unid. negócio", 110], ["fornecedor", "Fornecedor", 150], ["descricaoLanc", "Descrição lançamento", 190],
+    ["conta", "Conta contábil", 130], ["nota", "Nota", 64], ["valorNota", "Total nota", 96], ["competencia", "Período", 64],
+    ["pagoEm", "Data lanç.", 86], ["insumoNome", "Insumo (catálogo)", 210], ["unidade", "Un", 70], ["quantidade", "Qtd", 56],
+    ["unitario", "Preço", 80], ["total", "Valor", 92], ["etapa", "Etapa", 130], ["grupo", "Grupo", 120], ["papeis", "📎", 30],
   ];
   const grade = COLS.map((c) => c[2] + "px").join(" ");
   const largura = COLS.reduce((t, c) => t + c[2], 0) + COLS.length * 8 + 24;
-  const direita = ["quantidade", "unitario", "total"];
+  const direita = ["quantidade", "unitario", "total", "valorNota"];
   const celula = (l, k) => {
     if (k === "pagoEm") return l.pago ? diaBR(l.pagoEm) : <span style={{ color: "#b45309" }}>vence {diaBR(l.vencimento)}</span>;
+    if (k === "competencia") return mesBR(l.competencia);
+    if (k === "valorNota") return moeda(l.valorNota);
     if (k === "entradaEm") return diaBR(l.entradaEm);
-    if (k === "quantidade") return l.quantidade ? num(l.quantidade) : "—";
-    if (k === "unitario") return l.unitario == null ? "—" : num(l.unitario, 2);
+    if (k === "quantidade") return l.quantidade ? num(l.quantidade) : "";
+    if (k === "unitario") return l.unitario == null ? "" : num(l.unitario, 2);
     if (k === "total") return moeda(l.total);
     if (k === "papeis") return l.papeis ? (l.papeis > 1 ? "📎" + l.papeis : "📎") : "";
     return l[k] || "";
@@ -26410,14 +26515,17 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, isMobile, obraFixa
           {visiveis.map((l) => (
             <div key={l.id} style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, padding: 12, background: "#fff" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", minWidth: 0 }}>{l.item || "—"}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", minWidth: 0 }}>{l.insumoNome || l.descricaoLanc || "—"}</div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>{moeda(l.total)}</div>
               </div>
               <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 3 }}>
-                {[l.fornecedor, l.nota ? "nota " + l.nota : "", l.ref ? "ref " + l.ref : "", l.pago ? diaBR(l.pagoEm) : "vence " + diaBR(l.vencimento)].filter(Boolean).join(" · ")}
+                {[l.ref ? "ref " + l.ref : "", l.fornecedor, l.insumoNome && l.descricaoLanc !== l.insumoNome ? l.descricaoLanc : "",
+                  l.nota && l.descricaoLanc !== "Nota " + l.nota ? "nota " + l.nota : "", l.valorNota !== l.total ? "total nota " + moeda(l.valorNota) : "",
+                  l.pago ? diaBR(l.pagoEm) : "vence " + diaBR(l.vencimento)].filter(Boolean).join(" · ")}
               </div>
               <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>
-                {[l.quantidade ? `${num(l.quantidade)} ${l.unidade}`.trim() + (l.unitario != null ? ` × ${num(l.unitario, 2)}` : "") : "", l.etapa, l.grupo, l.conta, !obraFixa ? l.obra : ""].filter(Boolean).join(" · ")}
+                {[l.quantidade ? `${num(l.quantidade)} ${l.unidade}`.trim() + (l.unitario != null ? ` × ${num(l.unitario, 2)}` : "") : "", l.etapa, l.grupo, l.conta,
+                  l.unidadeNegocio, !obraFixa ? [l.cliente, l.obra].filter(Boolean).join(" / ") : ""].filter(Boolean).join(" · ")}
                 {l.papeis ? " · 📎" : ""}
               </div>
             </div>
@@ -41784,7 +41892,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Base de dados</div>
         <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2, marginBottom: 14 }}>{obraAtual.nome} · cada item de cada nota, com etapa, conta e datas</div>
         <BaseDeDados obras={[obraAtual]} clientes={data.clientes || []} prestadores={prestadores}
-          insumos={insumosDoCatalogo(data)} isMobile={isMobile} obraFixa nomeDoArquivo={"base " + (obraAtual.nome || "obra")} />
+          insumos={insumosDoCatalogo(data)} lancamentos={typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : []}
+          isMobile={isMobile} obraFixa nomeDoArquivo={"base " + (obraAtual.nome || "obra")} />
       </div>
     );
   }

@@ -4428,6 +4428,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
           <BaseDeDados obras={(data || {}).obras || []} clientes={(data || {}).clientes || []}
             prestadores={(data || {}).fornecedores || []}
             insumos={typeof insumosDoCatalogo === "function" ? insumosDoCatalogo(data) : []}
+            lancamentos={lancamentosDoEscritorio(data)}
             isMobile={typeof window !== "undefined" && window.innerWidth < 768} nomeDoArquivo="base de dados" />
         </div>
       )}

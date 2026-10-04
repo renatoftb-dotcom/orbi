@@ -5872,7 +5872,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Base de dados</div>
         <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2, marginBottom: 14 }}>{obraAtual.nome} · cada item de cada nota, com etapa, conta e datas</div>
         <BaseDeDados obras={[obraAtual]} clientes={data.clientes || []} prestadores={prestadores}
-          insumos={insumosDoCatalogo(data)} isMobile={isMobile} obraFixa nomeDoArquivo={"base " + (obraAtual.nome || "obra")} />
+          insumos={insumosDoCatalogo(data)} lancamentos={typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : []}
+          isMobile={isMobile} obraFixa nomeDoArquivo={"base " + (obraAtual.nome || "obra")} />
       </div>
     );
   }
