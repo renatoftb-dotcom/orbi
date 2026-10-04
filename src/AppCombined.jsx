@@ -26684,6 +26684,20 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   // "Completar a base": o que as regras preenchem no que já está gravado,
   // listado para conferir; só grava no clique de quem confere.
   const [conferindo, setConferindo] = useState(false);
+  // a caixa da grade vai até o pé da janela, para a barra lateral aparecer
+  const gradeRef = useRef(null);
+  const [alturaGrade, setAlturaGrade] = useState(0);
+  useEffect(() => {
+    const medir = () => {
+      const g = gradeRef.current;
+      if (!g || typeof window === "undefined") return;
+      const topo = g.getBoundingClientRect().top;
+      setAlturaGrade(Math.max(320, Math.round(window.innerHeight - Math.max(topo, 0) - 16)));
+    };
+    medir();
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  });
   const [gravandoBase, setGravandoBase] = useState("");
   const pendencias = useMemo(() => (completar && completar.data ? completarBase(completar.data, { quem: completar.quem }) : null),
     [completar && completar.data]);
@@ -26936,10 +26950,19 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
           ))}
         </div>
       ) : (
-        <div style={{ overflowX: "auto", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, background: "#fff" }}>
+        // A grade rola dentro de uma caixa da altura da tela: os títulos ficam
+        // presos no alto e a barra de rolagem lateral fica sempre à vista, em
+        // vez de lá no fim da lista.
+        <div data-vk-base-grade="1" ref={gradeRef} style={{ overflow: "auto", maxHeight: alturaGrade || "calc(100vh - 140px)", minHeight: 320,
+          border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, background: "#fff" }}>
+          <style>{`[data-vk-base-grade="1"]::-webkit-scrollbar{width:12px;height:12px}
+[data-vk-base-grade="1"]::-webkit-scrollbar-track{background:#f3f4f6;border-radius:0 0 12px 12px}
+[data-vk-base-grade="1"]::-webkit-scrollbar-thumb{background:#9ca3af;border-radius:8px;border:3px solid #f3f4f6}
+[data-vk-base-grade="1"]::-webkit-scrollbar-thumb:hover{background:#6b7280}`}</style>
           <div style={{ minWidth: largura }}>
             <div style={{ display: "grid", gridTemplateColumns: grade, gap: 8, padding: "8px 12px", borderBottom: "1px solid rgba(38,36,33,0.1)",
-              fontSize: 10.5, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.3, position: "sticky", top: 0, background: "#fff" }}>
+              fontSize: 10.5, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.3, position: "sticky", top: 0, background: "#fff", zIndex: 2,
+              boxShadow: "0 1px 0 rgba(38,36,33,0.1)" }}>
               {COLS.map(([k, rot]) => <span key={k} style={{ textAlign: direita.indexOf(k) >= 0 ? "right" : "left" }}>{rot}</span>)}
             </div>
             {visiveis.map((l) => (
