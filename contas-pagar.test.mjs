@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -2846,6 +2846,50 @@ teste("contrato aponta para o prestador do catálogo", () => {
   assert.strictEqual(L.find((l) => l.id === "g").insumoNome, "Gestão Obra");
   assert.strictEqual(L.find((l) => l.id === "s").insumoNome, "Serralheiro");
   assert.strictEqual(L.find((l) => l.id === "s").grupo, "Prestadores de serviços");
+});
+
+teste("completar a base: lista o que as regras preenchem e só isso", () => {
+  const dados = {
+    obras: [
+      { id: "ob", nome: "Cobop", contasPagar: [
+        { id: "p1", numeroDoc: "0185", pago: true, pagoEm: "2026-10-10", favorecido: "Padovan", descricao: "Parcela 3/12", comprovante: { url: "u1", nome: "image.png" } },
+        { id: "p0", numeroDoc: "0183", pago: true, pagoEm: "2026-08-05", favorecido: "Padovan", descricao: "Parcela 1/12", comprovante: { url: "u0", nome: "x.png" } },
+        { id: "a1", numeroDoc: "0174", cotacaoId: "q", descricao: "Aço — brocas", pago: false },
+        { id: "u1", numeroDoc: "0179", descricao: "Perfuração", unidade: "unidades", pago: false },
+      ] },
+      { id: "m1", nome: "M1", contasPagar: [
+        ...[3274, 3275, 3276].map((n) => ({ id: "v" + n, doc: String(n), pago: true, descricao: "x" })),
+        { id: "t1", numeroDoc: "0051", pedidoId: "nota-1", pago: true, pagoEm: "2026-09-29", descricao: "PVC -  Esgoto – Tubo 40mm", anexos: [{ public_id: "k", nome: "nfe.pdf" }] },
+        { id: "t2", numeroDoc: "0051", pedidoId: "nota-1", pago: true, pagoEm: "2026-09-29", descricao: "Lixa", anexos: [{ public_id: "k", nome: "nfe.pdf" }] },
+      ] },
+    ],
+    lancamentos: [{ id: "L", tipo: "escritorio", documento: "8623", descricao: "Pedido 8623", origem: { obraId: "m1", tipo: "pedido", refId: "nota-1|material|2026-09-29" } }],
+    materiais: [{ codigo: "HID-033", nome: "PVC - Esgoto - Tubo 40mm", unidade: "Unidades" }, { codigo: "PRE-001", nome: "Pedreiros Casa", aliases: ["X"] }],
+  };
+  const ajustes = { contas: [{ obraId: "ob", ref: "0174", cotacaoId: "q", etapa: "fundacao", grupoMaterial: "Aço" }],
+    catalogo: [{ codigo: "PRE-001", de: "Pedreiros Casa", para: "Empreiteiro" }] };
+  const r = modulo.completarBase(dados, { ajustes, quem: "Renato", agora: "2026-10-05T00:00:00Z", etapas: [{ id: "fundacao", nome: "Fundação" }] });
+  const conta = (ob, id) => r.dados.obras.find((o) => o.id === ob).contasPagar.find((c) => c.id === id);
+  assert.strictEqual(conta("ob", "p0").doc, "3277", "o pago mais antigo leva o primeiro número");
+  assert.strictEqual(conta("ob", "p0").comprovante.nome, "3277.png");
+  assert.strictEqual(conta("m1", "t1").doc, "3278");
+  assert.strictEqual(conta("m1", "t2").doc, "3278", "a transação inteira com um número");
+  assert.strictEqual(conta("m1", "t1").anexos[0].nome, "3278.pdf");
+  assert.strictEqual(conta("ob", "p1").doc, "3279");
+  assert.strictEqual(r.dados.lancamentos[0].documento, "3278", "o escritório leva o mesmo número");
+  assert.strictEqual(conta("m1", "t1").insumoCodigo, "HID-033", "nome igual ao do catálogo");
+  assert.strictEqual(conta("m1", "t2").insumoCodigo, undefined);
+  assert.strictEqual(conta("ob", "u1").unidade, "Unidades");
+  assert.strictEqual(conta("ob", "a1").etapa, "fundacao");
+  assert.strictEqual(conta("ob", "a1").grupoMaterial, "Aço");
+  assert.strictEqual(r.dados.materiais[1].nome, "Empreiteiro");
+  assert.deepStrictEqual(r.dados.materiais[1].aliases, ["X", "Pedreiros Casa"]);
+  assert.strictEqual(r.grupos.papel.length, 3);
+  assert.strictEqual(r.grupos.escritorio.length, 1);
+  assert.ok(conta("ob", "p0").registros.some((x) => x.ato === "editada" && /3277/.test(x.detalhe)));
+  // rodar de novo sobre o resultado não acha mais nada
+  const r2 = modulo.completarBase(r.dados, { ajustes, quem: "Renato" });
+  assert.strictEqual(r2.total, 0);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

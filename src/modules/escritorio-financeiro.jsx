@@ -4429,6 +4429,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             prestadores={(data || {}).fornecedores || []}
             insumos={typeof insumosDoCatalogo === "function" ? insumosDoCatalogo(data) : []}
             lancamentos={lancamentosDoEscritorio(data)}
+            completar={perm.podeEditar !== false ? { data, save, quem: typeof nomeDeQuem === "function" ? nomeDeQuem(perm && perm.usuario) : "" } : null}
             isMobile={typeof window !== "undefined" && window.innerWidth < 768} nomeDoArquivo="base de dados" />
         </div>
       )}

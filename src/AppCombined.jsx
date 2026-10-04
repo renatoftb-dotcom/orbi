@@ -13655,6 +13655,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             prestadores={(data || {}).fornecedores || []}
             insumos={typeof insumosDoCatalogo === "function" ? insumosDoCatalogo(data) : []}
             lancamentos={lancamentosDoEscritorio(data)}
+            completar={perm.podeEditar !== false ? { data, save, quem: typeof nomeDeQuem === "function" ? nomeDeQuem(perm && perm.usuario) : "" } : null}
             isMobile={typeof window !== "undefined" && window.innerWidth < 768} nomeDoArquivo="base de dados" />
         </div>
       )}
@@ -25921,7 +25922,7 @@ function cpNomeJaENumero(nome) {
 // aos arquivos delas. `elegivel(c)` diz quais contas podem ganhar número
 // agora (na gravação do dia a dia, só as que acabaram de ser pagas ou de
 // receber um papel). Devolve as contas e o próximo número livre.
-function numerarPapeisDasPagas(contas, proximo, elegivel) {
+function numerarPapeisDasPagas(contas, proximo, elegivel, numeros) {
   const lista = (contas || []).slice();
   let n = Number(proximo) || 1;
   const pode = typeof elegivel === "function" ? elegivel : () => true;
@@ -25933,6 +25934,7 @@ function numerarPapeisDasPagas(contas, proximo, elegivel) {
     if (!idx.some((i) => pode(lista[i]))) continue;
     const comDoc = idx.map((i) => lista[i]).find((c) => String(c.doc || "").trim());
     let numero = comDoc ? String(comDoc.doc).trim() : "";
+    if (!numero && numeros && numeros[k]) numero = String(numeros[k]);
     if (!numero) { numero = String(n); n++; }
     // os papéis da transação, na ordem em que aparecem, com o nome novo
     const nomes = new Map();
@@ -25957,6 +25959,156 @@ function numerarPapeisDasPagas(contas, proximo, elegivel) {
     }
   }
   return { contas: lista, proximo: n };
+}
+
+// ── Completar a base ────────────────────────────────────────────
+// O que as regras conseguem preencher no que já está gravado, numa lista
+// para conferir antes de gravar:
+//   1. número do papel nas transações pagas sem número (na ordem do
+//      pagamento), com o arquivo renomeado, e o mesmo número no lançamento
+//      do escritório ligado a ela;
+//   2. item ligado ao catálogo quando o nome é igual ao de um insumo;
+//   3. unidade com a grafia do catálogo ("unidades" → "Unidades");
+//   4. os ajustes combinados um a um (etapa do aço da Cobop, a perfuração,
+//      o nome do prestador do empreiteiro) — cada um só vale enquanto o
+//      campo ainda estiver como estava.
+const CP_AJUSTES_COMBINADOS = {
+  contas: [
+    { obraId: "in624qo", ref: "0174", cotacaoId: "6y18uze", etapa: "fundacao", grupoMaterial: "Aço" },
+    { obraId: "in624qo", ref: "0175", cotacaoId: "6y18uze", etapa: "fundacao", grupoMaterial: "Aço" },
+    { obraId: "in624qo", ref: "0176", cotacaoId: "6y18uze", etapa: "supra_paredes_1", grupoMaterial: "Aço" },
+    { obraId: "in624qo", ref: "0177", cotacaoId: "6y18uze", etapa: "supra_paredes_1", grupoMaterial: "Aço" },
+    { obraId: "in624qo", ref: "0178", cotacaoId: "6y18uze", etapa: "supra_paredes_1", grupoMaterial: "Aço" },
+    { obraId: "in624qo", ref: "0179", cotacaoId: "kzzld9w", insumoCodigo: "LOC-003" },
+  ],
+  catalogo: [{ codigo: "PRE-001", de: "Pedreiros Casa", para: "Empreiteiro" }],
+};
+function cpChaveDoNome(t) {
+  return cpSemAcento(t).replace(/[\u2013\u2014-]/g, "-").replace(/\s+/g, " ").trim();
+}
+function completarBase(dados, opcoes) {
+  const d = dados || {};
+  const o = opcoes || {};
+  const quem = o.quem || "";
+  const agora = o.agora || new Date().toISOString();
+  const ajustes = o.ajustes || CP_AJUSTES_COMBINADOS;
+  const etapas = o.etapas || (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []);
+  const nomeEtapa = (id) => ((etapas || []).find((e) => e && e.id === id) || {}).nome || id;
+  const obras = (d.obras || []).filter(Boolean);
+  const lancs = d.lancamentos || [];
+  const materiais = (d.materiais || []).filter(Boolean);
+  const ativos = materiais.filter((m) => m.ativo !== false);
+  const grupos = { papel: [], escritorio: [], catalogo: [], unidade: [], ajuste: [], insumos: [] };
+  const nomeObra = (ob) => ob.nome || ob.id;
+  const reg = (c, det) => (typeof registrarAto === "function" ? registrarAto(c, "editada", quem, agora, det) : c);
+
+  // 1. números do papel, na ordem do pagamento
+  const chave = (c) => String(c.numeroDoc || c.pedidoId || c.id);
+  const pend = [];
+  for (const ob of obras) {
+    const vistos = {};
+    for (const c of ob.contasPagar || []) {
+      if (!c || !c.pago || String(c.doc || "").trim()) continue;
+      const k = chave(c);
+      const irmas = (ob.contasPagar || []).filter((x) => x && x.pago && chave(x) === k);
+      if (vistos[k] || irmas.some((x) => String(x.doc || "").trim())) continue;
+      vistos[k] = 1;
+      pend.push({ ob, k, irmas, data: String(c.pagoEm || c.vencimento || "").slice(0, 10), ref: c.numeroDoc || "" });
+    }
+  }
+  pend.sort((a, b) => a.data.localeCompare(b.data) || String(a.ref).localeCompare(String(b.ref)));
+  let n = proximoNumeroDePapel(obras, lancs);
+  const numerosPorObra = {};
+  for (const p of pend) {
+    const num = n++;
+    (numerosPorObra[p.ob.id] = numerosPorObra[p.ob.id] || {})[p.k] = num;
+    const c0 = p.irmas[0];
+    const papeis = [];
+    for (const c of p.irmas) for (const a of (c.anexos || []).filter(Boolean).concat(c.comprovante ? [c.comprovante] : [])) {
+      if (a && papeis.indexOf(a.nome) < 0) papeis.push(a.nome);
+    }
+    grupos.papel.push({ obraId: p.ob.id, texto: `${num} · ${nomeObra(p.ob)} · Ref ${p.ref || "—"} · ${c0.favorecido || ""} · ${c0.descricao || ""}`
+      + (p.irmas.length > 1 ? ` (${p.irmas.length} itens)` : "")
+      + " · " + (papeis.length ? papeis.map((x, i) => `${x} → ${cpNomeJaENumero(x) ? x : cpNomeDoPapel(num, i, x)}`).join(", ") : "sem arquivo") });
+  }
+
+  // índice do catálogo pelo nome e apelidos
+  const porNome = new Map();
+  for (const m of ativos) for (const nm of [m.nome].concat(m.aliases || [])) {
+    const k = cpChaveDoNome(nm);
+    if (k && !porNome.has(k)) porNome.set(k, m);
+  }
+  const grafia = {};
+  for (const m of ativos) { const u = String(m.unidade || "").trim(); if (u && !grafia[u.toLowerCase()]) grafia[u.toLowerCase()] = u; }
+
+  const obrasNovas = obras.map((ob) => {
+    let contas = (ob.contasPagar || []).slice();
+    if (numerosPorObra[ob.id]) {
+      const alvo = numerosPorObra[ob.id];
+      contas = numerarPapeisDasPagas(contas, 0, (c) => !!alvo[chave(c)], alvo).contas
+        .map((c, i) => (c !== ob.contasPagar[i] && String(c.doc || "") !== String((ob.contasPagar[i] || {}).doc || "")
+          ? reg(c, "número do papel " + c.doc) : c));
+    }
+    contas = contas.map((c) => {
+      if (!c) return c;
+      let x = c;
+      // 4. ajustes combinados
+      for (const a of ajustes.contas || []) {
+        if (a.obraId !== ob.id || a.ref !== x.numeroDoc || (a.cotacaoId && a.cotacaoId !== x.cotacaoId)) continue;
+        const muda = [];
+        if (a.etapa && !x.etapa) { x = { ...x, etapa: a.etapa }; muda.push("etapa " + nomeEtapa(a.etapa)); }
+        if (a.grupoMaterial && !x.grupoMaterial) { x = { ...x, grupoMaterial: a.grupoMaterial }; muda.push("grupo " + a.grupoMaterial); }
+        if (a.insumoCodigo && !x.insumoCodigo) {
+          const m = ativos.find((i) => i.codigo === a.insumoCodigo);
+          if (m) { x = { ...x, insumoCodigo: m.codigo }; muda.push(`catálogo ${m.codigo} ${m.nome}`); }
+        }
+        if (muda.length) {
+          x = reg(x, muda.join(", "));
+          grupos.ajuste.push({ obraId: ob.id, texto: `${nomeObra(ob)} · Ref ${x.numeroDoc} · ${x.descricao || ""} → ${muda.join(" · ")}` });
+        }
+      }
+      // 2. ligar ao catálogo pelo nome
+      if (!x.insumoCodigo && !x.contratoId) {
+        const m = porNome.get(cpChaveDoNome(x.descricao));
+        if (m) {
+          x = reg({ ...x, insumoCodigo: m.codigo }, "ligado ao catálogo " + m.codigo);
+          grupos.catalogo.push({ obraId: ob.id, texto: `${nomeObra(ob)} · Ref ${x.numeroDoc || "—"} · ${x.descricao} → ${m.codigo}` });
+        }
+      }
+      // 3. unidade com a grafia do catálogo
+      const u = String(x.unidade || "").trim();
+      if (u && grafia[u.toLowerCase()] && grafia[u.toLowerCase()] !== u) {
+        const nova = grafia[u.toLowerCase()];
+        x = reg({ ...x, unidade: nova }, `unidade ${u} → ${nova}`);
+        grupos.unidade.push({ obraId: ob.id, texto: `${nomeObra(ob)} · Ref ${x.numeroDoc || "—"} · ${x.descricao} · ${u} → ${nova}` });
+      }
+      return x;
+    });
+    return contas.some((c, i) => c !== (ob.contasPagar || [])[i]) ? { ...ob, contasPagar: contas } : ob;
+  });
+
+  // 1b. o número no lançamento do escritório ligado à transação
+  const lancsNovos = lancs.map((l) => {
+    const or = (l && l.origem) || {};
+    const ob = or.obraId && obrasNovas.find((x) => x.id === or.obraId);
+    if (!ob || !numerosPorObra[ob.id]) return l;
+    const conta = (ob.contasPagar || []).find((c) => c && cpLancamentoDaConta([l], ob.id, c));
+    const doc = conta && String(conta.doc || "").trim();
+    if (!doc || !numerosPorObra[ob.id][chave(conta)] || String(l.documento || "") === doc) return l;
+    grupos.escritorio.push({ texto: `${l.descricao || "Lançamento"} · documento ${l.documento || "—"} → ${doc}` });
+    return { ...l, documento: doc };
+  });
+
+  // 4b. o nome no catálogo
+  const materiaisNovos = materiais.map((m) => {
+    const a = (ajustes.catalogo || []).find((x) => x.codigo === m.codigo);
+    if (!a || m.nome !== a.de) return m;
+    grupos.insumos.push({ texto: `${m.codigo} · ${a.de} → ${a.para} (o nome antigo fica como apelido)` });
+    return { ...m, nome: a.para, aliases: [...new Set((m.aliases || []).concat([a.de]))] };
+  });
+
+  const total = Object.values(grupos).reduce((t, g) => t + g.length, 0);
+  return { dados: { ...d, obras: obrasNovas, lancamentos: lancsNovos, materiais: materiaisNovos }, grupos, total };
 }
 
 // O lançamento do escritório que representa esta conta (a ponte grava a
@@ -26528,7 +26680,25 @@ function carregarExcelJS() {
   return cpCargaExcel;
 }
 
-function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMobile, obraFixa, nomeDoArquivo }) {
+function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMobile, obraFixa, nomeDoArquivo, completar }) {
+  // "Completar a base": o que as regras preenchem no que já está gravado,
+  // listado para conferir; só grava no clique de quem confere.
+  const [conferindo, setConferindo] = useState(false);
+  const [gravandoBase, setGravandoBase] = useState("");
+  const pendencias = useMemo(() => (completar && completar.data ? completarBase(completar.data, { quem: completar.quem }) : null),
+    [completar && completar.data]);
+  async function gravarCompletar() {
+    if (!completar || !pendencias || !pendencias.total) return;
+    setGravandoBase("Gravando…");
+    try {
+      const r = completarBase(completar.data, { quem: completar.quem });
+      await completar.save(r.dados);
+      setGravandoBase(`Gravado: ${r.total} ${r.total === 1 ? "ajuste" : "ajustes"}.`);
+      setConferindo(false);
+    } catch (e) {
+      setGravandoBase("Não gravou: " + ((e && e.message) || "erro"));
+    }
+  }
   const [texto, setTexto] = useState("");
   const [obraId, setObraId] = useState("");
   const [contaId, setContaId] = useState("");
@@ -26685,12 +26855,57 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
           {somaPaga !== soma ? ` · pago ${moeda(somaPaga)}` : ""}
           {procurando && <> · <button type="button" onClick={limpar} style={{ background: "none", border: "none", padding: 0, color: "#0474f4", cursor: "pointer", fontFamily: "inherit", fontSize: 12.5 }}>limpar filtros</button></>}
         </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        {pendencias && pendencias.total > 0 && (
+          <button type="button" onClick={() => setConferindo(!conferindo)}
+            style={{ background: "#fff", color: "#0474f4", border: "1.5px solid #0474f4", borderRadius: 10, padding: "7px 14px", fontSize: 12.5,
+              fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+            Completar a base ({pendencias.total})
+          </button>
+        )}
         <button type="button" onClick={baixar} disabled={!filtradas.length || !!baixando}
           style={{ background: "#0474f4", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 12.5, fontWeight: 600,
             cursor: filtradas.length ? "pointer" : "default", opacity: filtradas.length ? 1 : 0.5, fontFamily: "inherit" }}>
           {baixando || "Baixar Excel"}
         </button>
+        </div>
       </div>
+      {gravandoBase && !conferindo && <div style={{ fontSize: 12.5, color: /^Não/.test(gravandoBase) ? "#b91c1c" : "#047857", marginBottom: 10 }}>{gravandoBase}</div>}
+      {conferindo && pendencias && (
+        <div style={{ border: "1.5px solid #0474f4", borderRadius: 12, padding: 14, marginBottom: 12, background: "#f8fbff" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Completar a base</div>
+          <div style={{ fontSize: 12, color: "#4b5563", margin: "2px 0 10px" }}>
+            O que as regras preenchem no que já está gravado. Confira; nada muda até você gravar.
+          </div>
+          {[["papel", "Número do papel (e nome do arquivo)"], ["escritorio", "Mesmo número no lançamento do escritório"],
+            ["catalogo", "Item ligado ao catálogo pelo nome"], ["unidade", "Unidade com a grafia do catálogo"],
+            ["ajuste", "Ajustes combinados"], ["insumos", "Catálogo"]].map(([k, titulo]) => {
+            const linhas = pendencias.grupos[k] || [];
+            if (!linhas.length) return null;
+            return (
+              <details key={k} open={linhas.length <= 12} style={{ marginBottom: 8 }}>
+                <summary style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", cursor: "pointer" }}>{titulo} — {linhas.length}</summary>
+                <div style={{ maxHeight: 260, overflowY: "auto", marginTop: 4 }}>
+                  {linhas.map((l, i) => (
+                    <div key={i} style={{ fontSize: 11.5, color: "#374151", padding: "3px 0", borderBottom: "1px solid rgba(38,36,33,0.06)", overflowWrap: "anywhere" }}>{l.texto}</div>
+                  ))}
+                </div>
+              </details>
+            );
+          })}
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+            <button type="button" onClick={gravarCompletar} disabled={!!gravandoBase && gravandoBase === "Gravando…"}
+              style={{ background: "#0474f4", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+              {gravandoBase === "Gravando…" ? "Gravando…" : `Gravar ${pendencias.total} ${pendencias.total === 1 ? "ajuste" : "ajustes"}`}
+            </button>
+            <button type="button" onClick={() => setConferindo(false)}
+              style={{ background: "#fff", color: "#374151", border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 10, padding: "7px 14px", fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>
+              Cancelar
+            </button>
+          </div>
+          {/^Não/.test(gravandoBase) && <div style={{ fontSize: 12, color: "#b91c1c", marginTop: 6 }}>{gravandoBase}</div>}
+        </div>
+      )}
 
       {!filtradas.length ? (
         <div style={{ border: "1px dashed rgba(38,36,33,0.2)", borderRadius: 12, padding: 24, textAlign: "center", color: "#6b7280", fontSize: 13 }}>
