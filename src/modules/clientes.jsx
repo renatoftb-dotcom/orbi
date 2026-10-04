@@ -2382,11 +2382,16 @@ function PonteEscritorioView({ obra, cliente, contasPagar, entradas, data, isMob
   );
 }
 
-function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaObra, entradaInicial }) {
+function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaObra, entradaInicial, aoTerminarEntrada }) {
   const perm = getPermissoes();
   // Chegando com uma Entrada já lida (veio da lista de Obras), a tela abre
   // direto em Cotações: é lá que as três portas de saída moram.
-  const [view, setView] = useState(entradaInicial ? "cotacoesObra" : obraInicial ? "detalheObra" : "lista");
+  // Lançar (pago ou a pagar) e pagar parcela vindos da Entrada da lista de
+  // Obras não passam por tela nenhuma: a obra grava e devolve o controle —
+  // quem lança uma nota quer voltar para a Entrada, não cair nas cotações.
+  const entradaDireta = !!(entradaInicial && aoTerminarEntrada
+    && (entradaInicial.destino === "lancar" || entradaInicial.destino === "despesa"));
+  const [view, setView] = useState(entradaDireta ? "detalheObra" : entradaInicial ? "cotacoesObra" : obraInicial ? "detalheObra" : "lista");
   // Pedido de abrir a caixa da Entrada vindo do card do painel da obra.
   const [abrirEntrada, setAbrirEntrada] = useState(false);
   const [formObra, setFormObra] = useState(null);
@@ -2530,6 +2535,17 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // `obraAtual`, o registro fresco da coleção; a cópia do estado é só reserva.
   const obraAtual = obraSelecionada ? (obras.find(o => o.id === obraSelecionada.id) || obraSelecionada) : null;
   obraAtualRef.current = obraAtual;
+  const entradaDiretaFeita = useRef(false);
+  useEffect(() => {
+    if (!entradaDireta || entradaDiretaFeita.current || !obraAtual) return;
+    entradaDiretaFeita.current = true;
+    const e = entradaInicial;
+    const r = e.destino === "lancar"
+      ? lancarEntradaDaObra({ ...(e.lancamento || {}), obraId: obraAtual.id }, e.anexo || null)
+      : lancarDespesaDaEntrada({ ...(e.despesa || {}), obraId: obraAtual.id });
+    aoTerminarEntrada({ ...(r || {}), destino: e.destino, obraNome: obraAtual.nome || "",
+      situacao: (e.lancamento || {}).situacao || (e.destino === "despesa" ? "pago" : "") });
+  }, [entradaDireta, obraAtual]);
   const contasDaObra = (obraAtual && obraAtual.contasPagar) || [];
   // Tudo que uma baixa provoca FORA das contas: o preço do catálogo aprende,
   // e o extrato do escritório recebe o lançamento. Mora numa função só

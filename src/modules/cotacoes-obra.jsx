@@ -6947,7 +6947,7 @@ function PapeisEmLote({ obra, prestadores, isMobile, aoAnexar, aoFechar }) {
 // A caixa em si (PainelEntrada) não conhece `data` nem `save`: recebe listas.
 // Este invólucro faz a ligação, e é ele que as duas portas usam — a de dentro
 // da obra e a da lista de Obras. Uma fiação só.
-function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinheiro, embutido, aoFechar, aoSeguir }) {
+function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinheiro, embutido, aoFechar, aoSeguir, confirmacao }) {
   const insumos = insumosDoCatalogo(data);
   const prestadores = ((data || {}).fornecedores || []).filter((f) => f && f.ativo !== false);
   const iaDisponivel = useIaDisponivel();
@@ -7043,7 +7043,7 @@ function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinhe
   return (
     <PainelEntrada
       insumos={insumos} prestadores={prestadores} unidades={unidadesDoCatalogo(insumos)}
-      iaDisponivel={!!iaDisponivel} isMobile={isMobile} dinheiro={moeda} obras={obras} embutido={embutido}
+      iaDisponivel={!!iaDisponivel} isMobile={isMobile} dinheiro={moeda} obras={obras} embutido={embutido} confirmacao={confirmacao}
       aoCadastrarInsumo={(campos) => cadastrarInsumoNoCatalogo(data, save, campos)}
       aoCriarLoja={criarLoja}
       aoAprender={(pares) => aprenderApelidosNoCatalogo(data, save, pares)}
@@ -7203,9 +7203,18 @@ function BotaoDitar({ aoDitar, isMobile, compacto }) {
   );
 }
 
+function textoDoLancado(r, situacao, dinheiro, totalPadrao) {
+  const x = r || {};
+  const fmt = dinheiro || ((v) => (typeof fmtMoedaCtr === "function" ? fmtMoedaCtr(v) : "R$ " + Number(v || 0).toFixed(2)));
+  const v = x.valor != null ? x.valor : totalPadrao;
+  return ["Lançado" + (situacao === "apagar" ? " a pagar" : " pago"),
+    x.ref ? "ref " + x.ref : "", x.quantas ? (x.quantas === 1 ? "1 conta" : x.quantas + " contas") : "",
+    v != null ? fmt(v) : "", x.obraNome ? "em " + x.obraNome : "", "está no contas a pagar da obra"].filter(Boolean).join(" · ");
+}
+
 function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile, dinheiro,
   obras, embutido, aoCadastrarInsumo, aoCriarLoja, aoAprender, aoVerContas, aoFechar, aoSeguir, cartoes,
-  tipoDaObra, obraPadraoId }) {
+  tipoDaObra, obraPadraoId, confirmacao }) {
   const E = COT_ESTILO;
   const P = cotPainel(isMobile, 940);
   const [texto, setTexto] = useState("");
@@ -7213,6 +7222,15 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const [lendo, setLendo] = useState(false);
   const [progresso, setProgresso] = useState(null);
   const [lancado, setLancado] = useState("");
+  const [lancadoErro, setLancadoErro] = useState(false);
+  // Lançado fora daqui (a lista de Obras abre a obra, grava e volta): a
+  // confirmação chega pronta e aparece igual à de quem lançou daqui.
+  useEffect(() => {
+    if (!confirmacao) return;
+    if (confirmacao.erro) { setLancadoErro(true); setLancado("Não lançou: " + confirmacao.erro); return; }
+    setLancadoErro(false);
+    setLancado(textoDoLancado(confirmacao, confirmacao.situacao, dinheiro, null));
+  }, [confirmacao && confirmacao.em]);
   const [aviso, setAviso] = useState("");
   const [itens, setItens] = useState(null);
   const [destino, setDestino] = useState("");
@@ -7668,12 +7686,13 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     if (r.erro) { setAviso(r.erro); return; }
     // Lançou: a Entrada volta limpa, pronta para o próximo papel, e diz o
     // que entrou — sem fechar e cair na tela de cotações.
-    const fmt = dinheiro || ((v) => (typeof fmtMoedaCtr === "function" ? fmtMoedaCtr(v) : "R$ " + Number(v || 0).toFixed(2)));
-    const valor = fmt(r.valor != null ? r.valor : totalDaEntrada);
+    // Da lista de Obras, a gravação acontece na obra e a confirmação volta
+    // por `confirmacao` — aqui só se limpa a caixa.
+    if (r.pendente) { limpar(); return; }
+    const total = totalDaEntrada;
     limpar();
-    setLancado(["Lançado" + (situacao === "apagar" ? " a pagar" : " pago"),
-      r.ref ? "ref " + r.ref : "", r.quantas ? (r.quantas === 1 ? "1 conta" : r.quantas + " contas") : "",
-      valor, "está no contas a pagar da obra"].filter(Boolean).join(" · "));
+    setLancadoErro(false);
+    setLancado(textoDoLancado(r, situacao, dinheiro, total));
   }
 
 
@@ -7759,9 +7778,10 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
         </div>
         {lancado && !itens && (
           <div role="status" style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between",
-            border: "1px solid #bfdbfe", background: "#eff6ff", color: "#0b4fb3", borderRadius: 10,
+            border: "1px solid " + (lancadoErro ? "#fecaca" : "#bfdbfe"), background: lancadoErro ? "#fef2f2" : "#eff6ff",
+            color: lancadoErro ? "#b91c1c" : "#0b4fb3", borderRadius: 10,
             padding: "8px 12px", fontSize: 12.5, marginBottom: 12 }}>
-            <span><b>✓</b> {lancado}. Pode mandar o próximo papel.</span>
+            <span><b>{lancadoErro ? "!" : "✓"}</b> {lancado}{lancadoErro ? "" : ". Pode mandar o próximo papel."}</span>
             <button type="button" onClick={() => setLancado("")} aria-label="Fechar aviso"
               style={{ background: "none", border: "none", color: "#0b4fb3", cursor: "pointer", fontSize: 15, padding: 0 }}>×</button>
           </div>

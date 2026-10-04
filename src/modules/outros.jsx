@@ -445,6 +445,9 @@ function Obras({ data, save }) {
   // entra; de qual obra ela é se diz depois de ler. Quando a pessoa segue,
   // guardamos o que ela montou e abrimos a obra já com isso na mão.
   const [entradaPendente, setEntradaPendente] = useState(null);
+  // O que a Entrada daqui lançou numa obra: a obra abre só o tempo de
+  // gravar e a página volta para a Entrada, que mostra isto.
+  const [confirmacaoEntrada, setConfirmacaoEntrada] = useState(null);
   const [busca, setBusca] = useState("");
   const [buscaFocada, setBuscaFocada] = useState(false);
   const perm = typeof getPermissoes === "function" ? getPermissoes() : { podeGerenciarObra: true };
@@ -526,8 +529,10 @@ function Obras({ data, save }) {
   function seguirDaEntradaDeObras(carga) {
     const alvo = (carga && carga.obraId) || "";
     if (!alvo) return;
+    setConfirmacaoEntrada(null);
     setEntradaPendente(carga);
     setObraAbertaId(alvo);
+    return (carga.destino === "lancar" || carga.destino === "despesa") ? { pendente: true } : undefined;
   }
 
   // A busca compara sem acento e sem caixa, pelo nome da obra, pelo cliente e
@@ -554,6 +559,7 @@ function Obras({ data, save }) {
         </div>
         <GestaoObraPanel key={obraAberta.id} cliente={clienteDaObra} data={data} save={save} isMobile={isMobile}
           obraInicial={obraAberta} entradaInicial={entradaPendente}
+          aoTerminarEntrada={(r) => { setEntradaPendente(null); setObraAbertaId(null); setConfirmacaoEntrada({ ...(r || {}), em: Date.now() }); }}
           onSairDaObra={() => { setEntradaPendente(null); setObraAbertaId(null); }} />
       </PageContainer>
     );
@@ -572,7 +578,7 @@ function Obras({ data, save }) {
       {perm.podeGerenciarObra && obrasVigentes.length > 0 && typeof EntradaDaObra === "function" && (
         <EntradaDaObra data={data} save={save} obras={obrasVigentes} isMobile={isMobile}
           usuario={(typeof getUsuarioAtual === "function" ? getUsuarioAtual() : null)}
-          embutido aoSeguir={seguirDaEntradaDeObras} />
+          embutido aoSeguir={seguirDaEntradaDeObras} confirmacao={confirmacaoEntrada} />
       )}
 
       {/* Busca dinâmica: filtra enquanto se digita, sem botão nenhum. */}
