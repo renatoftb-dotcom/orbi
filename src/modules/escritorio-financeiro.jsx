@@ -476,12 +476,13 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
       fornecedor: fonte.fornecedor || "",
       fornecedorId: fonte.fornecedorId || "",
       documento: fonte.documento || "",
-      // O número de referência e os papéis são da TRANSAÇÃO, não do lado em
-      // que ela é olhada: a conta da obra e o lançamento que ela gera aqui
-      // carregam o mesmo número e os mesmos anexos. É o que faz a prestação
-      // de contas fechar de qualquer um dos dois lados.
+      // O número de referência é da TRANSAÇÃO: a conta da obra e o
+      // lançamento que ela gera aqui carregam o mesmo número. Os papéis, não:
+      // o comprovante de obra e de empreendimento mora na obra (e no
+      // cliente). Anexo no escritório é só o que a pessoa anexa num
+      // lançamento do próprio escritório.
       numeroDoc: fonte.numeroDoc || "",
-      anexos: fonte.anexos || [],
+      anexos: [],
       contaBanco: "sim",
       // Quando ele nasceu, para a lista pôr o mais novo na frente dentro do
       // mês. Sem isto, o lançamento recém-criado cai no meio dos outros de
@@ -632,7 +633,8 @@ function linhasDaFatura(obras, lancamentos, cartaoId, competencia, opcoes) {
           compraEm: String(c.pagoEm || "").slice(0, 10),
           parcela: p.parcela, de: p.de, valor: Math.round((Number(p.valor) || 0) * 100) / 100,
           refId: c.id,
-          anexos: anexosDaTransacao(c),
+          // o papel da compra de obra fica na obra — a fatura não o copia
+          anexos: [],
           ...(() => {
             const destino = destinoNoEscritorio(c.contaId, modo, op);
             return {

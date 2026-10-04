@@ -1288,20 +1288,23 @@ teste("o painel da obra tambem nao manda conta paga no cartao", () => {
   assert.strictEqual(r.total, 0);
 });
 
-teste("a fatura carrega a nota de cada compra, sem repetir a mesma nota", () => {
+teste("a fatura nao copia o papel da compra de obra; o do proprio escritorio continua", () => {
   const nota = { public_id: "n1", url: "https://x/nota.pdf", nome: "4177.pdf", tipo: "nota" };
+  const meu = { public_id: "e1", url: "https://x/recibo.pdf", nome: "recibo.pdf", tipo: "comprovante" };
   const obras = [{ id: "o1", nome: "Jacarezinho M1", contasPagar: [
     { id: "a", cartaoId: "k1", contaId: "material", descricao: "Concreto", pagoEm: "2026-09-23",
       comprovante: nota,
       parcelasCartao: [{ parcela:1, de:2, competencia:"2026-10", valor:500 },
                        { parcela:2, de:2, competencia:"2026-11", valor:500 }] },
   ]}];
-  const linhas = M.linhasDaFatura(obras, [], "k1", "2026-10");
-  assert.strictEqual(linhas[0].anexos.length, 1, "a linha da fatura sabe da nota");
-  const l = M.lancamentoDaFatura(CARTAO, "2026-10", linhas.concat(linhas), {});
-  assert.strictEqual(l.anexos.length, 1, "a mesma nota duas vezes aparece uma");
-  assert.strictEqual(l.anexos[0].url, nota.url);
-  assert.strictEqual(l.linhas[0].anexos[0].tipo, "nota", "a composicao guarda o papel de cada compra");
+  const doEscritorio = [{ id: "l1", tipo: "escritorio", cartaoId: "k1", contaId: "softwares", descricao: "Assinatura",
+    lancadoEm: "2026-09-23", anexos: [meu], parcelasCartao: [{ parcela: 1, de: 1, competencia: "2026-10", valor: 50 }] }];
+  const linhas = M.linhasDaFatura(obras, doEscritorio, "k1", "2026-10");
+  const daObra = linhas.find((x) => x.origem === "obra"), doEsc = linhas.find((x) => x.origem === "escritorio");
+  assert.strictEqual(daObra.anexos.length, 0, "o papel da obra fica na obra");
+  assert.strictEqual(doEsc.anexos.length, 1, "o que foi anexado no escritorio continua");
+  const l = M.lancamentoDaFatura(CARTAO, "2026-10", linhas, {});
+  assert.deepStrictEqual(l.anexos.map((x) => x.nome), ["recibo.pdf"]);
 });
 
 teste("compra no cartao nao atravessa sozinha para o escritorio", () => {
@@ -1410,6 +1413,13 @@ const conta = (id, contaId, valor) => ({
   id, contaId, pago: true, pagoEm: "2026-09-28",
   valor, valorPago: valor, descricao: "AREIA FINA", favorecido: "Rei do Cimento",
   numeroNota: "8623",
+});
+
+teste("a ponte leva a referencia, mas nao o comprovante da obra", () => {
+  const c = { ...conta("k9", "material", 100), anexos: [{ url: "u", public_id: "p", nome: "4204.pdf", tipo: "nota" }], numeroDoc: "0158" };
+  const l = M.lancamentosDaBaixa(OBRA, EMP, [c], { ...OPC }).lancamentos[0];
+  assert.strictEqual(l.numeroDoc, "0158");
+  assert.deepStrictEqual(l.anexos, []);
 });
 
 teste("no empreendimento a baixa vai sozinha para Construção", () => {
