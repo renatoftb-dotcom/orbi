@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, textoDaCelula, alinhamentoDaCelula,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -2893,6 +2893,18 @@ teste("completar a base: lista o que as regras preenchem e só isso", () => {
   // rodar de novo sobre o resultado não acha mais nada
   const r2 = modulo.completarBase(r.dados, { ajustes, quem: "Renato" });
   assert.strictEqual(r2.total, 0);
+});
+
+teste("a tela da base mostra cada célula como o Excel", () => {
+  const T = modulo.textoDaCelula;
+  assert.strictEqual(T("0194", { tipo: "numeroTexto" }), "194");
+  assert.strictEqual(T(10833.37, { tipo: "moeda" }), "R$ 10.833,37");
+  assert.strictEqual(T("2027-07", { tipo: "mes" }), "jul-27");
+  assert.strictEqual(T("2026-09-08", { tipo: "data" }), "8-set-26");
+  assert.strictEqual(T(4, { tipo: "numero" }), "4,00");
+  assert.strictEqual(T("", { tipo: "moeda" }), "");
+  assert.strictEqual(modulo.alinhamentoDaCelula({ tipo: "moeda", alinhar: "" }), "right");
+  assert.strictEqual(modulo.alinhamentoDaCelula({ tipo: "texto", alinhar: "center" }), "center");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

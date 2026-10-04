@@ -3025,6 +3025,29 @@ const BASE_RELATORIO = [
   ["Quantidade", "numero", '_-* #,##0.00_-;\\-* #,##0.00_-;_-* "-"??_-;_-@_-', ""], ["Preço", "moeda", CP_MOEDA_XL, ""],
   ["Valor", "moeda", CP_MOEDA_XL, ""], ["Etapa", "texto", "", "center"], ["Grupo Materiais", "texto", "", "center"],
 ];
+// O texto que o Excel mostra na célula, com os mesmos formatos do
+// relatório — é o que a tela da base exibe, para as duas lerem igual.
+const CP_MESES_XL = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+function textoDaCelula(valor, coluna) {
+  const v = valor;
+  if (v === "" || v == null) return "";
+  const tipo = (coluna || {}).tipo || "texto";
+  const br = (x, casas) => Number(x).toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+  const m = String(v).match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);
+  if (tipo === "moeda") return "R$ " + br(v, 2);
+  if (tipo === "numero") return br(v, 2);
+  if (tipo === "mes" && m) return CP_MESES_XL[+m[2] - 1] + "-" + m[1].slice(2);
+  if (tipo === "data" && m) return (m[3] ? +m[3] : 1) + "-" + CP_MESES_XL[+m[2] - 1] + "-" + m[1].slice(2);
+  if (tipo === "numeroTexto" && /^\d{1,9}$/.test(String(v).trim())) return String(Number(String(v).trim()));
+  return String(v);
+}
+// número fica à direita, como no Excel, quando a coluna não diz outra coisa
+function alinhamentoDaCelula(coluna) {
+  const c = coluna || {};
+  if (c.alinhar) return c.alinhar;
+  return ["moeda", "numero"].indexOf(c.tipo) >= 0 ? "right" : "left";
+}
+
 // largura aproximada do texto na fonte (maiúscula é mais larga)
 function cpLarguraDoTexto(t) {
   let w = 0;
@@ -3518,30 +3541,16 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       background: ativo ? "#eff6ff" : "#fff", color: ativo ? "#0474f4" : "#374151", borderRadius: 999, padding: "5px 12px",
       fontSize: 12, fontWeight: ativo ? 600 : 500, cursor: "pointer", fontFamily: "inherit" }}>{rot}</button>
   );
-  // a mesma ordem da planilha; na obra, cliente e obra já estão no título
-  const COLS = [
-    ["ref", "Ref", 48],
-    ...(obraFixa ? [] : [["cliente", "Cliente", 150], ["obra", "Projeto / obra", 130]]),
-    ["unidadeNegocio", "Unid. negócio", 110], ["fornecedor", "Fornecedor", 150], ["descricaoLanc", "Descrição lançamento", 190],
-    ["conta", "Conta contábil", 130], ["nota", "Nota", 64], ["valorNota", "Total nota", 96], ["competencia", "Período", 64],
-    ["dataLanc", "Data lanç.", 80], ["pagoEm", "Pagamento", 86], ["insumoNome", "Insumo (catálogo)", 210], ["unidade", "Un", 70], ["quantidade", "Qtd", 56],
-    ["unitario", "Preço", 80], ["total", "Valor", 92], ["etapa", "Etapa", 130], ["grupo", "Grupo", 120], ["papeis", "📎", 30],
-  ];
-  const grade = COLS.map((c) => c[2] + "px").join(" ");
-  const largura = COLS.reduce((t, c) => t + c[2], 0) + COLS.length * 8 + 24;
-  const direita = ["quantidade", "unitario", "total", "valorNota"];
-  const celula = (l, k) => {
-    if (k === "pagoEm") return l.pago ? diaBR(l.pagoEm) : <span style={{ color: "#b45309" }}>vence {diaBR(l.vencimento)}</span>;
-    if (k === "competencia") return mesBR(l.competencia);
-    if (k === "dataLanc") return diaBR(l.dataLanc);
-    if (k === "valorNota") return moeda(l.valorNota);
-    if (k === "entradaEm") return diaBR(l.entradaEm);
-    if (k === "quantidade") return l.quantidade ? num(l.quantidade) : "";
-    if (k === "unitario") return l.unitario == null ? "" : num(l.unitario, 2);
-    if (k === "total") return moeda(l.total);
-    if (k === "papeis") return l.papeis ? (l.papeis > 1 ? "📎" + l.papeis : "📎") : "";
-    return l[k] || "";
-  };
+  // As colunas, os formatos e o alinhamento são os do Excel; a largura vem
+  // do maior conteúdo (com teto, para texto longo não esticar a coluna — o
+  // texto inteiro aparece ao passar o mouse). Na obra, cliente e obra já
+  // estão no título da tela.
+  const relat = planilhaDaBase(tabelaDaBase(filtradas));
+  const ocultas = obraFixa ? ["Nome Cliente", "Projeto / obra"] : [];
+  const COLS = relat.colunas.map((c, j) => ({ ...c, j, px: Math.max(56, Math.round(c.largura * 7.2)) }))
+    .filter((c) => ocultas.indexOf(c.titulo) < 0);
+  const grade = COLS.map((c) => c.px + "px").join(" ") + " 30px";
+  const largura = COLS.reduce((t, c) => t + c.px, 0) + 30 + (COLS.length + 1) * 10 + 24;
   const visiveis = filtradas.slice(0, limite);
 
   return (
@@ -3667,22 +3676,27 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
 [data-vk-base-grade="1"]::-webkit-scrollbar-thumb{background:#9ca3af;border-radius:8px;border:3px solid #f3f4f6}
 [data-vk-base-grade="1"]::-webkit-scrollbar-thumb:hover{background:#6b7280}`}</style>
           <div style={{ minWidth: largura }}>
-            <div style={{ display: "grid", gridTemplateColumns: grade, gap: 8, padding: "8px 12px", borderBottom: "1px solid rgba(38,36,33,0.1)",
+            <div style={{ display: "grid", gridTemplateColumns: grade, gap: 10, padding: "8px 12px", borderBottom: "1px solid rgba(38,36,33,0.1)",
               fontSize: 10.5, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.3, position: "sticky", top: 0, background: "#fff", zIndex: 2,
               boxShadow: "0 1px 0 rgba(38,36,33,0.1)" }}>
-              {COLS.map(([k, rot]) => <span key={k} style={{ textAlign: direita.indexOf(k) >= 0 ? "right" : "left" }}>{rot}</span>)}
+              {COLS.map((c) => <span key={c.titulo} title={c.titulo} style={{ textAlign: alinhamentoDaCelula(c), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.titulo}</span>)}
+              <span title="Papéis anexados">📎</span>
             </div>
-            {visiveis.map((l) => (
-              <div key={l.id} style={{ display: "grid", gridTemplateColumns: grade, gap: 8, padding: "7px 12px", borderBottom: "1px solid rgba(38,36,33,0.05)",
+            {visiveis.map((l, i) => (
+              <div key={l.id} style={{ display: "grid", gridTemplateColumns: grade, gap: 10, padding: "7px 12px", borderBottom: "1px solid rgba(38,36,33,0.05)",
                 fontSize: 12, color: "#374151", alignItems: "baseline" }}>
-                {COLS.map(([k]) => (
-                  <span key={k} title={typeof l[k] === "string" ? l[k] : undefined}
-                    style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                      textAlign: direita.indexOf(k) >= 0 ? "right" : "left", fontVariantNumeric: "tabular-nums",
-                      color: k === "item" || k === "total" ? "#111827" : undefined, fontWeight: k === "total" ? 600 : 400 }}>
-                    {celula(l, k)}
-                  </span>
-                ))}
+                {COLS.map((c) => {
+                  const t = textoDaCelula(relat.linhas[i][c.j], c);
+                  return (
+                    <span key={c.titulo} title={t.length > 12 ? t : undefined}
+                      style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        textAlign: alinhamentoDaCelula(c), fontVariantNumeric: "tabular-nums",
+                        color: c.titulo === "Valor" ? "#111827" : undefined, fontWeight: c.titulo === "Valor" ? 600 : 400 }}>
+                      {t}
+                    </span>
+                  );
+                })}
+                <span style={{ textAlign: "center" }}>{l.papeis ? (l.papeis > 1 ? "📎" + l.papeis : "📎") : ""}</span>
               </div>
             ))}
           </div>
