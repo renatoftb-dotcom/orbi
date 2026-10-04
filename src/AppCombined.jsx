@@ -26842,8 +26842,8 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   const ocultas = obraFixa ? ["Nome Cliente", "Projeto / obra"] : [];
   const COLS = relat.colunas.map((c, j) => ({ ...c, j, px: Math.max(56, Math.round(c.largura * 7.2)) }))
     .filter((c) => ocultas.indexOf(c.titulo) < 0);
-  const grade = COLS.map((c) => c.px + "px").join(" ") + " 30px";
-  const largura = COLS.reduce((t, c) => t + c.px, 0) + 30 + (COLS.length + 1) * 10 + 24;
+  const grade = COLS.map((c) => c.px + "px").join(" ");
+  const largura = COLS.reduce((t, c) => t + c.px, 0) + COLS.length * 10 + 24;
   const visiveis = filtradas.slice(0, limite);
 
   return (
@@ -26953,7 +26953,6 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
               <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>
                 {[l.quantidade ? `${num(l.quantidade)} ${l.unidade}`.trim() + (l.unitario != null ? ` × ${num(l.unitario, 2)}` : "") : "", l.etapa, l.grupo, l.conta,
                   l.unidadeNegocio, !obraFixa ? [l.cliente, l.obra].filter(Boolean).join(" / ") : ""].filter(Boolean).join(" · ")}
-                {l.papeis ? " · 📎" : ""}
               </div>
             </div>
           ))}
@@ -26973,7 +26972,6 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
               fontSize: 10.5, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.3, position: "sticky", top: 0, background: "#fff", zIndex: 2,
               boxShadow: "0 1px 0 rgba(38,36,33,0.1)" }}>
               {COLS.map((c) => <span key={c.titulo} title={c.titulo} style={{ textAlign: alinhamentoDaCelula(c), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.titulo}</span>)}
-              <span title="Papéis anexados">📎</span>
             </div>
             {visiveis.map((l, i) => (
               <div key={l.id} style={{ display: "grid", gridTemplateColumns: grade, gap: 10, padding: "7px 12px", borderBottom: "1px solid rgba(38,36,33,0.05)",
@@ -26989,7 +26987,6 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
                     </span>
                   );
                 })}
-                <span style={{ textAlign: "center" }}>{l.papeis ? (l.papeis > 1 ? "📎" + l.papeis : "📎") : ""}</span>
               </div>
             ))}
           </div>
