@@ -2725,7 +2725,9 @@ teste("base de dados: uma linha por item, nas colunas da planilha do escritório
   const lancamentos = [{ id: "x", tipo: "escritorio", origem: { obraId: "o1", tipo: "doc", refId: "4098" }, descricao: "Tubulação esgoto",
     valor: 5406.92, competencia: "2026-07", unidadeId: "empreendimento" }];
   const L = modulo.linhasDaBase(obras, { clientes: [{ id: "c1", nome: "Jacarezinho Mod 1" }], prestadores: [{ id: "rc", nome: "Rei do Cimento" }],
-    insumos: [{ codigo: "ARE-1", nome: "Areia Fina", grupo: "Areia e pedra", unidade: "m3" }, { codigo: "X", nome: "Prego", unidade: "Unidades" }],
+    insumos: [{ codigo: "ARE-1", nome: "Areia Fina", grupo: "Areia e pedra", unidade: "m3" }, { codigo: "X", nome: "Prego", unidade: "Unidades" },
+      { codigo: "PRE-001", nome: "Empreiteiro", grupo: "Prestadores de serviços", tipo: "prestador", unidade: "m2" },
+      { codigo: "PRE-017", nome: "Gestão Obra", grupo: "Prestadores de serviços", tipo: "prestador", unidade: "m2" }],
     etapas: [{ id: "fundacao", nome: "Fundação" }], planoContas: [{ id: "material", nome: "Material" }], lancamentos });
   assert.deepStrictEqual(L.map((l) => l.id), ["d", "e2", "c", "f", "e", "a", "a2", "b"], "mais recente primeiro");
   const a = L.find((l) => l.id === "a");
@@ -2756,12 +2758,13 @@ teste("base de dados: uma linha por item, nas colunas da planilha do escritório
   assert.strictEqual(c.unidade, "Unidades");
   assert.strictEqual(c.unitario, 12);
   assert.strictEqual(c.pagoEm, "");
-  assert.strictEqual(c.dataLanc, "2026-10-28", "a pagar: a data é o vencimento");
+  assert.strictEqual(c.dataLanc, c.entradaEm, "data do lançamento = entrada no sistema");
   assert.strictEqual(c.competencia, "2026-10");
   assert.strictEqual(c.insumoNome, "Outros", "sem insumo nem grupo: Outros");
   const d = L.find((l) => l.id === "d");
   assert.strictEqual(d.descricaoLanc, "Obra Civil — Parcela 11/14 (quinzenal)");
-  assert.strictEqual(d.insumoNome, "Obra Civil", "a parcela de contrato tem o serviço como item");
+  assert.strictEqual(d.insumoNome, "Empreiteiro", "obra civil aponta para o prestador do catálogo");
+  assert.strictEqual(d.insumoCodigo, "PRE-001");
   assert.strictEqual(d.etapa, "Prestadores de serviços");
   assert.strictEqual(d.grupo, "Prestadores de serviços");
   assert.strictEqual(d.quantidade, 1);
@@ -2788,7 +2791,8 @@ teste("base de dados: uma linha por item, nas colunas da planilha do escritório
   assert.strictEqual(t.length, 9);
   assert.strictEqual(t[5][t[0].indexOf("Situação")], "Pago");
   assert.strictEqual(t[1][t[0].indexOf("Quantidade")], 1);
-  assert.strictEqual(t[1][t[0].indexOf("Data do lançamento")], "2026-11-26");
+  assert.strictEqual(t[1][t[0].indexOf("Data do lançamento")], "2026-08-01", "a parcela entrou com o contrato");
+  assert.strictEqual(t[1][t[0].indexOf("Período Contábil")], "2026-11", "competência no vencimento");
   const p = modulo.planilhaDaBase(t);
   const col = (n) => p.colunas.find((c) => c.titulo === n);
   assert.strictEqual(p.colunas.length, 18, "o relatório tem as 18 colunas do modelo");
@@ -2829,6 +2833,19 @@ teste("número do papel: segue a série dos arquivos e dá nome ao arquivo", () 
   assert.strictEqual(por("e").doc, undefined, "a pagar não ganha número");
   assert.strictEqual(por("f").doc, undefined, "fora da gravação de agora não mexe");
   assert.strictEqual(r.proximo, 4217);
+});
+
+teste("contrato aponta para o prestador do catálogo", () => {
+  const ins = [{ codigo: "PRE-017", nome: "Gestão Obra", grupo: "Prestadores de serviços", tipo: "prestador" },
+    { codigo: "PRE-008", nome: "Serralheiro", grupo: "Prestadores de serviços", tipo: "prestador" },
+    { codigo: "PRE-001", nome: "Pedreiros Casa", grupo: "Prestadores de serviços", tipo: "prestador" }];
+  const L = modulo.linhasDaBase([{ id: "o", contasPagar: [
+    { id: "g", contratoId: "k1", servico: "Gerenciamento de Obra", descricao: "Parcela 1/12", valor: 10, vencimento: "2026-08-05", contaId: "taxa_admin_obra" },
+    { id: "s", contratoId: "k2", servico: "Serralheria", descricao: "ACM — entrada", valor: 10, vencimento: "2026-08-05", contaId: "serralheiro" },
+  ], contratos: [{ id: "k1" }, { id: "k2", tipoProfissional: "serralheiro" }] }], { insumos: ins });
+  assert.strictEqual(L.find((l) => l.id === "g").insumoNome, "Gestão Obra");
+  assert.strictEqual(L.find((l) => l.id === "s").insumoNome, "Serralheiro");
+  assert.strictEqual(L.find((l) => l.id === "s").grupo, "Prestadores de serviços");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

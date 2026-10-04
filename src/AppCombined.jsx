@@ -25972,6 +25972,36 @@ function cpLancamentoDaConta(lancamentos, obraId, c) {
   return null;
 }
 
+// O prestador do catálogo que o contrato representa. Vale o que o contrato
+// gravou (`insumoCodigo`); sem isso, o tipo do profissional e o texto do
+// serviço apontam para o item do grupo "Prestadores de serviços".
+const CP_SERVICO_NO_CATALOGO = [
+  [/gerenc|gest[aã]o|administra/, ["gestao obra"]],
+  [/serralh/, ["serralheiro"]],
+  [/eletric/, ["eletricista"]],
+  [/encan|hidraul/, ["encanador"]],
+  [/pint/, ["pintor"]],
+  [/carpint/, ["carpinteiro"]],
+  [/marcen/, ["marceneiro portas internas"]],
+  [/impermeab/, ["impermeabilizador"]],
+  [/terraplan/, ["terraplanagem"]],
+  [/empreit|obra civil|pedreir|alvenaria/, ["empreiteiro", "pedreiros casa"]],
+];
+function cpInsumoDoContrato(c, ctr, insumos) {
+  const lista = (insumos || []).filter(Boolean);
+  const cod = (c && c.insumoCodigo) || (ctr && ctr.insumoCodigo);
+  if (cod) { const x = lista.find((i) => i.codigo === cod || i.id === cod); if (x) return x; }
+  const texto = cpSemAcento([ctr && ctr.tipoProfissional, c && c.servico, ctr && ctr.servico, ctr && ctr.descricaoServico, c && c.contaId].filter(Boolean).join(" "));
+  if (!texto) return null;
+  const prest = lista.filter((i) => i.tipo === "prestador" || /prestador/i.test(i.grupo || ""));
+  for (const [rx, nomes] of CP_SERVICO_NO_CATALOGO) {
+    if (!rx.test(texto)) continue;
+    const x = prest.find((i) => nomes.indexOf(cpSemAcento(i.nome)) >= 0);
+    if (x) return x;
+  }
+  return null;
+}
+
 function linhasDaBase(obras, opcoes) {
   const o = opcoes || {};
   const red = (x) => Math.round(x * 100) / 100;
@@ -26038,15 +26068,17 @@ function linhasDaBase(obras, opcoes) {
         : red(irmas.reduce((t, x) => t + valorDe(x), 0));
       const pagoEm = c.pago ? dia(c.pagoEm) : "";
       const vencimento = dia(c.vencimento);
-      // o período contábil é o do vencimento; a data do lançamento é a do
-      // pagamento e, enquanto não paga, a do vencimento
+      // o período contábil é a competência, reconhecida no vencimento (o
+      // contrato tem várias parcelas: cada uma no mês em que vence)
       const competencia = String((vencimento || pagoEm).slice(0, 7) || c.competencia || (lanc && lanc.competencia) || "").slice(0, 7);
-      const dataLanc = pagoEm || vencimento;
+
       const regs = (c.registros || []).filter((r) => r && r.em);
       const criada = regs.find((r) => r.ato === "criada");
       const primeiro = regs.map((r) => dia(r.em)).sort()[0] || "";
       const entradaEm = dia((criada && criada.em) || c.importadoEm || c.lancadoEm || (cot && cot.lancadoEm)
         || (ctr && (ctr.criadoEm || ctr.criadaEm || ctr.dataAssinatura)) || primeiro);
+      // a data do lançamento é a da entrada no sistema
+      const dataLanc = entradaEm;
       const un = String(c.unidade || "").trim();
       // Regras para não ficar em branco. Parcela de contrato: o serviço é o
       // item, 1 unidade, preço = valor, etapa e grupo "Prestadores de
@@ -26055,9 +26087,12 @@ function linhasDaBase(obras, opcoes) {
       const PREST = "Prestadores de serviços";
       const ehContrato = !!c.contratoId;
       const semQtd = !(qtd > 0);
-      let insumoFinal = insumoNome;
-      if (ehContrato && !ins) insumoFinal = String(c.servico || (ctr && (ctr.servico || ctr.descricaoServico)) || "Serviço").trim();
-      const grupoFinal = c.grupoMaterial || (ins && ins.grupo) || (ehContrato ? PREST : "");
+      // o contrato aponta para o prestador do catálogo (Gestão Obra,
+      // Serralheiro, Empreiteiro…) pelo tipo do profissional e pelo serviço
+      const insC = ins || (ehContrato ? cpInsumoDoContrato(c, ctr, o.insumos) : null);
+      let insumoFinal = insC ? insC.nome : insumoNome;
+      if (ehContrato && !insC) insumoFinal = String(c.servico || (ctr && (ctr.servico || ctr.descricaoServico)) || "Serviço").trim();
+      const grupoFinal = c.grupoMaterial || (insC && insC.grupo) || (ehContrato ? PREST : "");
       if (!insumoFinal) insumoFinal = grupoFinal || "Outros";
       const etapaNome = nomeDe(o.etapas, c.etapa) || c.etapa || (ehContrato ? PREST : "");
       saida.push({
@@ -26065,7 +26100,7 @@ function linhasDaBase(obras, opcoes) {
         unidadeNegocio: CP_UNIDADES_NEGOCIO[(lanc && lanc.unidadeId) || unidadeDaObra] || "",
         ref: c.numeroDoc || "", nota: String(c.doc || c.numeroNota || ""), arquivo: String(c.doc || ""),
         fornecedor: c.favorecido || nomeDe(o.prestadores, c.prestadorId) || "",
-        descricaoLanc, item: desc, insumoCodigo: c.insumoCodigo || "", insumo: ins ? ins.nome : "", insumoNome: insumoFinal,
+        descricaoLanc, item: desc, insumoCodigo: c.insumoCodigo || (insC && insC.codigo) || "", insumo: insC ? insC.nome : "", insumoNome: insumoFinal,
         quantidade: semQtd ? 1 : qtd, unidade: semQtd ? (grafia[un.toLowerCase()] || un || "Unidades") : (grafia[un.toLowerCase()] || un || "Unidades"),
         unitario: semQtd ? total : Math.round((total / qtd) * 10000) / 10000,
         total, valorNota,
@@ -26595,7 +26630,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
     ...(obraFixa ? [] : [["cliente", "Cliente", 150], ["obra", "Projeto / obra", 130]]),
     ["unidadeNegocio", "Unid. negócio", 110], ["fornecedor", "Fornecedor", 150], ["descricaoLanc", "Descrição lançamento", 190],
     ["conta", "Conta contábil", 130], ["nota", "Nota", 64], ["valorNota", "Total nota", 96], ["competencia", "Período", 64],
-    ["pagoEm", "Data lanç.", 86], ["insumoNome", "Insumo (catálogo)", 210], ["unidade", "Un", 70], ["quantidade", "Qtd", 56],
+    ["dataLanc", "Data lanç.", 80], ["pagoEm", "Pagamento", 86], ["insumoNome", "Insumo (catálogo)", 210], ["unidade", "Un", 70], ["quantidade", "Qtd", 56],
     ["unitario", "Preço", 80], ["total", "Valor", 92], ["etapa", "Etapa", 130], ["grupo", "Grupo", 120], ["papeis", "📎", 30],
   ];
   const grade = COLS.map((c) => c[2] + "px").join(" ");
@@ -26604,6 +26639,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   const celula = (l, k) => {
     if (k === "pagoEm") return l.pago ? diaBR(l.pagoEm) : <span style={{ color: "#b45309" }}>vence {diaBR(l.vencimento)}</span>;
     if (k === "competencia") return mesBR(l.competencia);
+    if (k === "dataLanc") return diaBR(l.dataLanc);
     if (k === "valorNota") return moeda(l.valorNota);
     if (k === "entradaEm") return diaBR(l.entradaEm);
     if (k === "quantidade") return l.quantidade ? num(l.quantidade) : "";
