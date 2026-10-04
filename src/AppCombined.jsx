@@ -13647,6 +13647,17 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         </>
       )}
 
+      {!["resumo", "fechamento"].includes(vista) && aba === "base" && (
+        <div style={{ ...S.card, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Base de dados</div>
+          <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2, marginBottom: 14 }}>Todas as obras · cada item de cada nota, com etapa, conta e datas</div>
+          <BaseDeDados obras={(data || {}).obras || []} clientes={(data || {}).clientes || []}
+            prestadores={(data || {}).fornecedores || []}
+            insumos={typeof insumosDoCatalogo === "function" ? insumosDoCatalogo(data) : []}
+            isMobile={typeof window !== "undefined" && window.innerWidth < 768} nomeDoArquivo="base de dados" />
+        </div>
+      )}
+
       {!["resumo", "fechamento"].includes(vista) && aba === "cartoes" && (
         <CartoesEscritorio data={data} save={save} isMobile={typeof window !== "undefined" && window.innerWidth < 768}
           podeEditar={!!perm.podeEditar} dialogo={dialogo}
@@ -25863,6 +25874,77 @@ function filtrarContas(contas, filtro, hoje) {
   if (filtro === "vencidas") return lista.filter((c) => situacaoConta(c, hoje) === "vencido");
   return lista;
 }
+// ── A base de dados: uma linha por item ─────────────────────────
+// O espelho da planilha de controle: cada conta da obra é um item (de uma
+// nota, de um pedido, de um contrato), com fornecedor, quantidade, preço,
+// grupo, etapa, conta contábil, quando foi pago e quando entrou no
+// sistema. É daqui que se filtra, soma e exporta.
+function linhasDaBase(obras, opcoes) {
+  const o = opcoes || {};
+  const red = (x) => Math.round(x * 100) / 100;
+  const nomeDe = (lista, id) => ((lista || []).find((x) => x && x.id === id) || {}).nome || "";
+  const insumoDe = (cod) => (o.insumos || []).find((x) => x && (x.codigo === cod || x.id === cod)) || null;
+  const saida = [];
+  for (const ob of obras || []) {
+    if (!ob) continue;
+    const cliente = nomeDe(o.clientes, ob.clienteId);
+    for (const c of ob.contasPagar || []) {
+      if (!c) continue;
+      const total = red(Number(c.pago ? (c.valorPago || c.valor) : c.valor) || 0);
+      const qtd = Number(c.quantidade) || 0;
+      const ins = c.insumoCodigo ? insumoDe(c.insumoCodigo) : null;
+      const criada = (c.registros || []).find((r) => r && r.ato === "criada");
+      saida.push({
+        id: c.id, obraId: ob.id, obra: ob.nome || "", cliente,
+        ref: c.numeroDoc || "", nota: String(c.numeroNota || c.doc || ""), arquivo: String(c.doc || ""),
+        fornecedor: c.favorecido || nomeDe(o.prestadores, c.prestadorId) || "",
+        item: c.descricao || "", insumoCodigo: c.insumoCodigo || "", insumo: ins ? ins.nome : "",
+        quantidade: qtd, unidade: c.unidade || "",
+        unitario: qtd > 0 ? Math.round((total / qtd) * 10000) / 10000 : null,
+        total,
+        grupo: c.grupoMaterial || (ins && ins.grupo) || "",
+        etapaId: c.etapa || "", etapa: nomeDe(o.etapas, c.etapa) || c.etapa || "",
+        contaId: c.contaId || "", conta: nomeDe(o.planoContas, c.contaId) || c.contaId || "",
+        pago: !!c.pago, pagoEm: c.pago ? String(c.pagoEm || "").slice(0, 10) : "",
+        vencimento: String(c.vencimento || "").slice(0, 10),
+        entradaEm: String((criada && criada.em) || c.importadoEm || c.lancadoEm || "").slice(0, 10),
+        origem: c.origem || "", papeis: (Array.isArray(c.anexos) ? c.anexos.filter(Boolean).length : 0) + (c.comprovante ? 1 : 0),
+        conta_: c,
+      });
+    }
+  }
+  // o mais recente primeiro; dentro do dia, pela referência
+  return saida.sort((a, b) => (b.pagoEm || b.vencimento).localeCompare(a.pagoEm || a.vencimento)
+    || String(b.ref).localeCompare(String(a.ref)));
+}
+
+function filtrarBase(linhas, filtro, op) {
+  const f = filtro || {};
+  const contas = buscarContas(linhas.map((l) => l.conta_), f, op);
+  const ids = new Set(contas.map((c) => c.id));
+  return linhas.filter((l) => ids.has(l.id)
+    && (!f.obraId || l.obraId === f.obraId)
+    && (!f.grupo || l.grupo === f.grupo)
+    && (!f.de || (l.pagoEm || l.vencimento) >= f.de)
+    && (!f.ate || (l.pagoEm || l.vencimento) <= f.ate)
+    && (!f.situacao || (f.situacao === "pago" ? l.pago : !l.pago)));
+}
+
+// As colunas da planilha, na ordem da planilha de controle.
+const BASE_COLUNAS = [
+  ["obra", "Obra"], ["cliente", "Cliente"], ["ref", "Ref"], ["nota", "Nota / comprovante"], ["fornecedor", "Fornecedor"],
+  ["item", "Item"], ["insumoCodigo", "Código do insumo"], ["quantidade", "Quantidade"], ["unidade", "Unidade"],
+  ["unitario", "Unitário"], ["total", "Total"], ["grupo", "Grupo de material"], ["etapa", "Etapa"], ["conta", "Conta contábil"],
+  ["pagoEm", "Data de pagamento"], ["vencimento", "Vencimento"], ["entradaEm", "Entrada no sistema"], ["situacao", "Situação"],
+];
+function tabelaDaBase(linhas) {
+  return [BASE_COLUNAS.map((c) => c[1])].concat((linhas || []).map((l) => BASE_COLUNAS.map(([k]) => {
+    if (k === "situacao") return l.pago ? "Pago" : "A pagar";
+    const v = l[k];
+    return v == null ? "" : v;
+  })));
+}
+
 // ── Procurar e filtrar as contas ────────────────────────────────
 // Uma caixa só: cada palavra digitada tem que aparecer em algum lugar da
 // conta — ref, descrição, fornecedor, conta contábil, etapa, nº da nota,
@@ -26170,6 +26252,208 @@ function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid
         })}
         <line x1="0" y1={BASE + 0.5} x2={largura} y2={BASE + 0.5} stroke="rgba(38,36,33,0.14)" strokeWidth="1" />
       </svg>
+    </div>
+  );
+}
+
+// ── UI — a Base de dados ─────────────────────────────────────────
+// A planilha de controle dentro do VICKE: uma linha por item, as colunas
+// de sempre, os filtros por cima e o botão de baixar em Excel. Na obra
+// mostra só a obra; no escritório, todas.
+let cpCargaXlsx = null;
+function carregarXlsx() {
+  if (typeof window !== "undefined" && window.XLSX) return Promise.resolve(window.XLSX);
+  if (cpCargaXlsx) return cpCargaXlsx;
+  cpCargaXlsx = new Promise((ok, falha) => {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    s.onload = () => (window.XLSX ? ok(window.XLSX) : falha(new Error("sem XLSX")));
+    s.onerror = () => { cpCargaXlsx = null; falha(new Error("não carregou")); };
+    document.head.appendChild(s);
+  });
+  return cpCargaXlsx;
+}
+
+function BaseDeDados({ obras, clientes, prestadores, insumos, isMobile, obraFixa, nomeDoArquivo }) {
+  const [texto, setTexto] = useState("");
+  const [obraId, setObraId] = useState("");
+  const [contaId, setContaId] = useState("");
+  const [etapa, setEtapa] = useState("");
+  const [grupo, setGrupo] = useState("");
+  const [papel, setPapel] = useState("todos");
+  const [situacao, setSituacao] = useState("");
+  const [de, setDe] = useState("");
+  const [ate, setAte] = useState("");
+  const [limite, setLimite] = useState(300);
+  const [baixando, setBaixando] = useState("");
+  const etapas = typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [];
+  const plano = typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [];
+  const linhas = useMemo(() => linhasDaBase(obras || [], { clientes, prestadores, insumos, etapas, planoContas: plano }),
+    [obras, clientes, prestadores, insumos]);
+  const nomeDe = (lista, id) => ((lista || []).find((x) => x && x.id === id) || {}).nome || "";
+  const op = { nomePrestador: (id) => nomeDe(prestadores, id), nomeConta: (id) => nomeDe(plano, id), nomeEtapa: (id) => nomeDe(etapas, id) };
+  const filtradas = filtrarBase(linhas, { texto, obraId, contaId, etapa, grupo, papel, situacao, de, ate }, op);
+  const red = (x) => Math.round(x * 100) / 100;
+  const soma = red(filtradas.reduce((t, l) => t + l.total, 0));
+  const somaPaga = red(filtradas.filter((l) => l.pago).reduce((t, l) => t + l.total, 0));
+  const unicos = (k, rot) => [...new Map(linhas.filter((l) => l[k]).map((l) => [l[k], rot ? l[rot] : l[k]])).entries()]
+    .map(([valor, rotulo]) => ({ valor, rotulo })).sort((a, b) => String(a.rotulo).localeCompare(String(b.rotulo)));
+  const moeda = (v) => (typeof fmtMoedaCtr === "function" ? fmtMoedaCtr(v) : "R$ " + Number(v || 0).toFixed(2));
+  const num = (v, casas) => (v == null || v === "" ? "—" : Number(v).toLocaleString("pt-BR", { minimumFractionDigits: casas || 0, maximumFractionDigits: casas == null ? 3 : casas }));
+  const diaBR = (iso) => { const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : ""; };
+  const procurando = !!(texto.trim() || obraId || contaId || etapa || grupo || papel !== "todos" || situacao || de || ate);
+  const limpar = () => { setTexto(""); setObraId(""); setContaId(""); setEtapa(""); setGrupo(""); setPapel("todos"); setSituacao(""); setDe(""); setAte(""); };
+
+  async function baixar() {
+    setBaixando("Montando a planilha…");
+    const tabela = tabelaDaBase(filtradas);
+    const cab = tabela[0];
+    const datas = ["Data de pagamento", "Vencimento", "Entrada no sistema"].map((n) => cab.indexOf(n));
+    const comDatas = tabela.map((linha, i) => (i === 0 ? linha : linha.map((v, j) => (datas.indexOf(j) >= 0 && v ? new Date(v + "T12:00:00") : v))));
+    const nome = (nomeDoArquivo || "base-de-dados").replace(/[^\w-]+/g, "-").toLowerCase() + "-" + new Date().toISOString().slice(0, 10);
+    try {
+      const X = await carregarXlsx();
+      const ws = X.utils.aoa_to_sheet(comDatas, { cellDates: true, dateNF: "dd/mm/yyyy" });
+      ws["!cols"] = cab.map((c) => ({ wch: Math.max(10, Math.min(48, c.length + 4, c === "Item" ? 48 : 22)) }));
+      ws["!autofilter"] = { ref: X.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: comDatas.length - 1, c: cab.length - 1 } }) };
+      const wb = X.utils.book_new();
+      X.utils.book_append_sheet(wb, ws, "Base de dados");
+      X.writeFile(wb, nome + ".xlsx");
+      setBaixando("");
+    } catch (e) {
+      // sem a biblioteca: CSV com ponto e vírgula, que o Excel brasileiro abre
+      const esc = (v) => { const t = typeof v === "number" ? String(v).replace(".", ",") : String(v == null ? "" : v); return /[;"\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+      const csv = "﻿" + tabela.map((l) => l.map(esc).join(";")).join("\r\n");
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      a.download = nome + ".csv"; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      setBaixando("");
+    }
+  }
+
+  const input = { border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 10, padding: "8px 11px", fontSize: 13, color: "#111827",
+    outline: "none", background: "#fff", fontFamily: "inherit", width: "100%", boxSizing: "border-box" };
+  const chip = (ativo, rot, fn) => (
+    <button key={rot} type="button" onClick={fn} style={{ border: `1.5px solid ${ativo ? "#0474f4" : "rgba(38,36,33,0.16)"}`,
+      background: ativo ? "#eff6ff" : "#fff", color: ativo ? "#0474f4" : "#374151", borderRadius: 999, padding: "5px 12px",
+      fontSize: 12, fontWeight: ativo ? 600 : 500, cursor: "pointer", fontFamily: "inherit" }}>{rot}</button>
+  );
+  const COLS = [
+    ...(obraFixa ? [] : [["obra", "Obra", 140]]),
+    ["pagoEm", "Pagamento", 92], ["ref", "Ref", 52], ["nota", "Nota", 70], ["fornecedor", "Fornecedor", 150], ["item", "Item", 240],
+    ["quantidade", "Qtd", 64], ["unidade", "Un", 70], ["unitario", "Unitário", 84], ["total", "Total", 96],
+    ["grupo", "Grupo", 120], ["etapa", "Etapa", 130], ["conta", "Conta", 120], ["entradaEm", "Entrada", 86], ["papeis", "📎", 34],
+  ];
+  const grade = COLS.map((c) => c[2] + "px").join(" ");
+  const largura = COLS.reduce((t, c) => t + c[2], 0) + COLS.length * 8 + 24;
+  const direita = ["quantidade", "unitario", "total"];
+  const celula = (l, k) => {
+    if (k === "pagoEm") return l.pago ? diaBR(l.pagoEm) : <span style={{ color: "#b45309" }}>vence {diaBR(l.vencimento)}</span>;
+    if (k === "entradaEm") return diaBR(l.entradaEm);
+    if (k === "quantidade") return l.quantidade ? num(l.quantidade) : "—";
+    if (k === "unitario") return l.unitario == null ? "—" : num(l.unitario, 2);
+    if (k === "total") return moeda(l.total);
+    if (k === "papeis") return l.papeis ? (l.papeis > 1 ? "📎" + l.papeis : "📎") : "";
+    return l[k] || "";
+  };
+  const visiveis = filtradas.slice(0, limite);
+
+  return (
+    <div style={{ minWidth: 0, maxWidth: "100%" }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : (obraFixa ? "minmax(0,2fr) repeat(3, minmax(0,1fr))" : "minmax(0,2fr) repeat(4, minmax(0,1fr))"), gap: 8, marginBottom: 8 }}>
+        <input style={input} value={texto} onChange={(e) => setTexto(e.target.value)} aria-label="Procurar na base"
+          placeholder="Procurar: item, fornecedor, nota, ref, valor…" />
+        {!obraFixa && (
+          <SelectBusca style={input} value={obraId} onChange={(v) => setObraId(v || "")} vazio="Todas as obras" placeholder="Procurar obra…"
+            opcoes={[{ valor: "", rotulo: "Todas as obras" }].concat(unicos("obraId", "obra"))} />
+        )}
+        <SelectBusca style={input} value={etapa} onChange={(v) => setEtapa(v || "")} vazio="Todas as etapas" placeholder="Procurar etapa…"
+          opcoes={[{ valor: "", rotulo: "Todas as etapas" }].concat(unicos("etapaId", "etapa"))} />
+        <SelectBusca style={input} value={grupo} onChange={(v) => setGrupo(v || "")} vazio="Todos os grupos" placeholder="Procurar grupo…"
+          opcoes={[{ valor: "", rotulo: "Todos os grupos" }].concat(unicos("grupo"))} />
+        <SelectBusca style={input} value={contaId} onChange={(v) => setContaId(v || "")} vazio="Todas as contas" placeholder="Procurar conta…"
+          opcoes={[{ valor: "", rotulo: "Todas as contas" }].concat(unicos("contaId", "conta"))} />
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+        {chip(situacao === "", "Tudo", () => setSituacao(""))}
+        {chip(situacao === "pago", "Pago", () => setSituacao("pago"))}
+        {chip(situacao === "apagar", "A pagar", () => setSituacao("apagar"))}
+        <span style={{ width: 8 }} />
+        {chip(papel === "com", "Com papel", () => setPapel(papel === "com" ? "todos" : "com"))}
+        {chip(papel === "sem", "Sem papel", () => setPapel(papel === "sem" ? "todos" : "sem"))}
+        <span style={{ display: isMobile ? "grid" : "inline-flex", gridTemplateColumns: "auto minmax(0,1fr) auto minmax(0,1fr)", width: isMobile ? "100%" : undefined,
+          gap: 6, alignItems: "center", fontSize: 12, color: "#4b5563" }}>
+          de <input type="date" value={de} onChange={(e) => setDe(e.target.value)} aria-label="De" style={{ ...input, width: isMobile ? "100%" : 140, minWidth: 0, padding: "5px 8px" }} />
+          até <input type="date" value={ate} onChange={(e) => setAte(e.target.value)} aria-label="Até" style={{ ...input, width: isMobile ? "100%" : 140, minWidth: 0, padding: "5px 8px" }} />
+        </span>
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+        <div style={{ fontSize: 12.5, color: "#374151" }}>
+          <b>{filtradas.length}</b> {filtradas.length === 1 ? "item" : "itens"} · total <b>{moeda(soma)}</b>
+          {somaPaga !== soma ? ` · pago ${moeda(somaPaga)}` : ""}
+          {procurando && <> · <button type="button" onClick={limpar} style={{ background: "none", border: "none", padding: 0, color: "#0474f4", cursor: "pointer", fontFamily: "inherit", fontSize: 12.5 }}>limpar filtros</button></>}
+        </div>
+        <button type="button" onClick={baixar} disabled={!filtradas.length || !!baixando}
+          style={{ background: "#0474f4", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 12.5, fontWeight: 600,
+            cursor: filtradas.length ? "pointer" : "default", opacity: filtradas.length ? 1 : 0.5, fontFamily: "inherit" }}>
+          {baixando || "Baixar Excel"}
+        </button>
+      </div>
+
+      {!filtradas.length ? (
+        <div style={{ border: "1px dashed rgba(38,36,33,0.2)", borderRadius: 12, padding: 24, textAlign: "center", color: "#6b7280", fontSize: 13 }}>
+          {linhas.length ? "Nada com esses filtros." : "Nenhum item lançado ainda."}
+        </div>
+      ) : isMobile ? (
+        <div style={{ display: "grid", gap: 8 }}>
+          {visiveis.map((l) => (
+            <div key={l.id} style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, padding: 12, background: "#fff" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", minWidth: 0 }}>{l.item || "—"}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>{moeda(l.total)}</div>
+              </div>
+              <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 3 }}>
+                {[l.fornecedor, l.nota ? "nota " + l.nota : "", l.ref ? "ref " + l.ref : "", l.pago ? diaBR(l.pagoEm) : "vence " + diaBR(l.vencimento)].filter(Boolean).join(" · ")}
+              </div>
+              <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>
+                {[l.quantidade ? `${num(l.quantidade)} ${l.unidade}`.trim() + (l.unitario != null ? ` × ${num(l.unitario, 2)}` : "") : "", l.etapa, l.grupo, l.conta, !obraFixa ? l.obra : ""].filter(Boolean).join(" · ")}
+                {l.papeis ? " · 📎" : ""}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ overflowX: "auto", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, background: "#fff" }}>
+          <div style={{ minWidth: largura }}>
+            <div style={{ display: "grid", gridTemplateColumns: grade, gap: 8, padding: "8px 12px", borderBottom: "1px solid rgba(38,36,33,0.1)",
+              fontSize: 10.5, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.3, position: "sticky", top: 0, background: "#fff" }}>
+              {COLS.map(([k, rot]) => <span key={k} style={{ textAlign: direita.indexOf(k) >= 0 ? "right" : "left" }}>{rot}</span>)}
+            </div>
+            {visiveis.map((l) => (
+              <div key={l.id} style={{ display: "grid", gridTemplateColumns: grade, gap: 8, padding: "7px 12px", borderBottom: "1px solid rgba(38,36,33,0.05)",
+                fontSize: 12, color: "#374151", alignItems: "baseline" }}>
+                {COLS.map(([k]) => (
+                  <span key={k} title={typeof l[k] === "string" ? l[k] : undefined}
+                    style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      textAlign: direita.indexOf(k) >= 0 ? "right" : "left", fontVariantNumeric: "tabular-nums",
+                      color: k === "item" || k === "total" ? "#111827" : undefined, fontWeight: k === "total" ? 600 : 400 }}>
+                    {celula(l, k)}
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {filtradas.length > limite && (
+        <div style={{ textAlign: "center", marginTop: 10 }}>
+          <button type="button" onClick={() => setLimite(limite + 300)} style={{ border: "1.5px solid rgba(38,36,33,0.16)", background: "#fff",
+            borderRadius: 10, padding: "7px 14px", fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>
+            Mostrar mais ({filtradas.length - limite} restantes) — o Excel baixa todos
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -41492,6 +41776,19 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     );
   }
 
+  // ── Base de dados da obra: uma linha por item, como a planilha ──
+  if (view === "baseObra" && obraSelecionada) {
+    return (
+      <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+        <button onClick={() => setView("detalheObra")} style={{ ...C.btnGhost, marginBottom: 12, fontSize: 12 }}>← Voltar</button>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Base de dados</div>
+        <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2, marginBottom: 14 }}>{obraAtual.nome} · cada item de cada nota, com etapa, conta e datas</div>
+        <BaseDeDados obras={[obraAtual]} clientes={data.clientes || []} prestadores={prestadores}
+          insumos={insumosDoCatalogo(data)} isMobile={isMobile} obraFixa nomeDoArquivo={"base " + (obraAtual.nome || "obra")} />
+      </div>
+    );
+  }
+
   if (view === "detalheObra" && obraSelecionada) {
     return (
       <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
@@ -41556,6 +41853,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 return r.total === 1 ? "1 cotação" : `${r.total} cotações`;
               })()}
             </div>
+          </button>
+          <button onClick={() => setView("baseObra")}
+            style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Base de dados</div>
+            <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>Item a item das notas · baixar em Excel</div>
           </button>
           <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Documentos será implementado em breve.", tipo: "aviso" }); }}
             style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fafafa", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
@@ -58405,7 +58707,7 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
       {/* Conteúdo */}
       {aba === "dados"    && renderDados()}
       {aba === "equipe"   && renderEquipe()}
-      {["financeiro", "extrato", "lancamentos", "cartoes", "importar", "fechamento"].includes(aba) && perm.podeGerenciarUsuarios && (
+      {["financeiro", "extrato", "lancamentos", "cartoes", "importar", "fechamento", "base"].includes(aba) && perm.podeGerenciarUsuarios && (
         <FinanceiroEscritorio data={data} save={save} onReload={onReload}
           vista={peloMenu ? (aba === "financeiro" ? "resumo" : aba) : null}
           aoIrPara={(destino) => { setAba(destino); if (aoTrocarAba) aoTrocarAba(destino); }} />
@@ -65496,6 +65798,9 @@ function IconeMaster({ nome, tamanho = 18, cor = "currentColor" }) {
     case "feedback":
       // Balão de chat outline
       return (<svg {...props}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>);
+    case "tabela":
+      // Planilha: grade com linha de cabeçalho
+      return (<svg {...props}><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="14.5" x2="21" y2="14.5"/><line x1="9" y1="4" x2="9" y2="20"/></svg>);
     case "cartao":
       // Credit card outline
       return (<svg {...props}><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg>);
@@ -67048,6 +67353,7 @@ export default function ModuloClientesFornecedores() {
         { k:"escritorio:cartoes",     icon:"cartao",     label:"Cartões" },
         { k:"escritorio:fechamento",  icon:"check",      label:"Fechamento" },
         { k:"escritorio:importar",    icon:"copy",       label:"Importar" },
+        { k:"escritorio:base",        icon:"tabela",        label:"Base de dados" },
       ] : []),
       { k:"escritorio:dados",   icon:"empresas",   label:"Cadastro" },
       { k:"escritorio:equipe",  icon:"usuarios",   label:"Equipe" },

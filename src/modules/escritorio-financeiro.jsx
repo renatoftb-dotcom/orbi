@@ -4421,6 +4421,17 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         </>
       )}
 
+      {!["resumo", "fechamento"].includes(vista) && aba === "base" && (
+        <div style={{ ...S.card, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Base de dados</div>
+          <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2, marginBottom: 14 }}>Todas as obras · cada item de cada nota, com etapa, conta e datas</div>
+          <BaseDeDados obras={(data || {}).obras || []} clientes={(data || {}).clientes || []}
+            prestadores={(data || {}).fornecedores || []}
+            insumos={typeof insumosDoCatalogo === "function" ? insumosDoCatalogo(data) : []}
+            isMobile={typeof window !== "undefined" && window.innerWidth < 768} nomeDoArquivo="base de dados" />
+        </div>
+      )}
+
       {!["resumo", "fechamento"].includes(vista) && aba === "cartoes" && (
         <CartoesEscritorio data={data} save={save} isMobile={typeof window !== "undefined" && window.innerWidth < 768}
           podeEditar={!!perm.podeEditar} dialogo={dialogo}

@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -2699,6 +2699,43 @@ teste("nota paga nao vira conta de loja; pedido a pagar continua sob a loja", ()
   assert.ok(loja, "o pedido a pagar continua sob a loja");
   assert.deepStrictEqual(loja.pedidoIds, ["p2"]);
   assert.strictEqual(modulo.rotuloDoPedido(loja.pedidos[0]), "Pedido 777");
+});
+
+teste("base de dados: uma linha por item, com tudo que a planilha tem", () => {
+  const obras = [{ id: "o1", nome: "Jacarezinho Módulo 1", clienteId: "c1", contasPagar: [
+    { id: "a", numeroDoc: "0173", numeroNota: "8623", prestadorId: "rc", descricao: "Areia Fina", insumoCodigo: "ARE-1",
+      quantidade: 2, unidade: "m3", valor: 260, valorPago: 260, pago: true, pagoEm: "2026-09-29", vencimento: "2026-09-29",
+      contaId: "material", etapa: "fundacao", registros: [{ ato: "criada", em: "2026-10-04T03:31:00Z" }], comprovante: { url: "u" } },
+    { id: "b", numeroDoc: "0051", doc: "4098", favorecido: "Krona", descricao: "Tubo 40mm", quantidade: 4, unidade: "Unidades",
+      valor: 137.45, valorPago: 137.45, pago: true, pagoEm: "2026-07-08", grupoMaterial: "Tubulação PVC", contaId: "material", etapa: "esgoto_pluvial",
+      importadoEm: "2026-09-20T10:00:00Z" },
+    { id: "c", numeroDoc: "0180", favorecido: "Ourifer", descricao: "Fita crepe", valor: 12, vencimento: "2026-10-28", pago: false, contaId: "material" },
+  ] }];
+  const L = modulo.linhasDaBase(obras, { clientes: [{ id: "c1", nome: "Jacarezinho Mod 1" }], prestadores: [{ id: "rc", nome: "Rei do Cimento" }],
+    insumos: [{ codigo: "ARE-1", nome: "Areia Fina", grupo: "Areia e pedra" }], etapas: [{ id: "fundacao", nome: "Fundação" }],
+    planoContas: [{ id: "material", nome: "Material" }] });
+  assert.deepStrictEqual(L.map((l) => l.id), ["c", "a", "b"], "mais recente primeiro");
+  const a = L.find((l) => l.id === "a");
+  assert.strictEqual(a.fornecedor, "Rei do Cimento");
+  assert.strictEqual(a.nota, "8623");
+  assert.strictEqual(a.unitario, 130);
+  assert.strictEqual(a.grupo, "Areia e pedra", "sem grupo na conta, vem do catálogo");
+  assert.strictEqual(a.etapa, "Fundação");
+  assert.strictEqual(a.conta, "Material");
+  assert.strictEqual(a.entradaEm, "2026-10-04");
+  assert.strictEqual(a.papeis, 1);
+  const b = L.find((l) => l.id === "b");
+  assert.strictEqual(b.nota, "4098", "a planilha antiga traz o nº do papel");
+  assert.strictEqual(b.entradaEm, "2026-09-20");
+  assert.strictEqual(L.find((l) => l.id === "c").unitario, null);
+  assert.deepStrictEqual(modulo.filtrarBase(L, { situacao: "pago" }).map((l) => l.id), ["a", "b"]);
+  assert.deepStrictEqual(modulo.filtrarBase(L, { grupo: "Tubulação PVC" }).map((l) => l.id), ["b"]);
+  assert.deepStrictEqual(modulo.filtrarBase(L, { de: "2026-09-01", ate: "2026-09-30" }).map((l) => l.id), ["a"]);
+  assert.deepStrictEqual(modulo.filtrarBase(L, { texto: "krona" }).map((l) => l.id), ["b"]);
+  const t = modulo.tabelaDaBase(L);
+  assert.strictEqual(t[0][5], "Item");
+  assert.strictEqual(t.length, 4);
+  assert.strictEqual(t[2][t[0].indexOf("Situação")], "Pago");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

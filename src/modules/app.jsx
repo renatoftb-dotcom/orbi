@@ -32,6 +32,9 @@ function IconeMaster({ nome, tamanho = 18, cor = "currentColor" }) {
     case "feedback":
       // Balão de chat outline
       return (<svg {...props}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>);
+    case "tabela":
+      // Planilha: grade com linha de cabeçalho
+      return (<svg {...props}><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="14.5" x2="21" y2="14.5"/><line x1="9" y1="4" x2="9" y2="20"/></svg>);
     case "cartao":
       // Credit card outline
       return (<svg {...props}><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg>);
@@ -1584,6 +1587,7 @@ export default function ModuloClientesFornecedores() {
         { k:"escritorio:cartoes",     icon:"cartao",     label:"Cartões" },
         { k:"escritorio:fechamento",  icon:"check",      label:"Fechamento" },
         { k:"escritorio:importar",    icon:"copy",       label:"Importar" },
+        { k:"escritorio:base",        icon:"tabela",        label:"Base de dados" },
       ] : []),
       { k:"escritorio:dados",   icon:"empresas",   label:"Cadastro" },
       { k:"escritorio:equipe",  icon:"usuarios",   label:"Equipe" },

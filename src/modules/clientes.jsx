@@ -5864,6 +5864,19 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     );
   }
 
+  // ── Base de dados da obra: uma linha por item, como a planilha ──
+  if (view === "baseObra" && obraSelecionada) {
+    return (
+      <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+        <button onClick={() => setView("detalheObra")} style={{ ...C.btnGhost, marginBottom: 12, fontSize: 12 }}>← Voltar</button>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Base de dados</div>
+        <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2, marginBottom: 14 }}>{obraAtual.nome} · cada item de cada nota, com etapa, conta e datas</div>
+        <BaseDeDados obras={[obraAtual]} clientes={data.clientes || []} prestadores={prestadores}
+          insumos={insumosDoCatalogo(data)} isMobile={isMobile} obraFixa nomeDoArquivo={"base " + (obraAtual.nome || "obra")} />
+      </div>
+    );
+  }
+
   if (view === "detalheObra" && obraSelecionada) {
     return (
       <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
@@ -5928,6 +5941,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 return r.total === 1 ? "1 cotação" : `${r.total} cotações`;
               })()}
             </div>
+          </button>
+          <button onClick={() => setView("baseObra")}
+            style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Base de dados</div>
+            <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>Item a item das notas · baixar em Excel</div>
           </button>
           <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Documentos será implementado em breve.", tipo: "aviso" }); }}
             style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fafafa", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
