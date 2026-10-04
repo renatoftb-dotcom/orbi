@@ -2121,31 +2121,61 @@ function destinoVisivelDoCusto(contaId, obra, cliente, opcoes) {
 // Os papéis da transação, cada um abrindo numa aba. É o mesmo componente
 // na conta a pagar, no extrato do escritório e na fatura do cartão — o
 // papel anexado na contabilização tem que ser achado de qualquer ponta.
-function LinksDeAnexo({ transacao, compacto }) {
+function LinksDeAnexo({ transacao, compacto, aoTrocar, aoTirar, ocupado }) {
   // O arquivo abre no visor do VICKE, não por link cru: o storage guarda o
   // PDF sem extensão, e o navegador baixava um arquivo com nome de código
   // que o computador não sabe abrir. O visor reembala como PDF e o "Baixar"
   // de lá sai com o nome certo.
+  // Com aoTrocar/aoTirar, cada papel ganha "trocar" e "tirar" — o papel em
+  // branco ou errado se corrige ali mesmo, sem refazer a conta.
   const [vendo, setVendo] = useState(null);
+  const [tirando, setTirando] = useState(null);
+  const trocandoRef = useRef(null);
+  const entrada = useRef(null);
   const lista = anexosDaTransacao(transacao).filter((a) => a && a.url);
   if (!lista.length) return null;
+  const chave = (a, i) => a.public_id || a.url || String(i);
+  const acao = { background: "none", border: "none", padding: 0, fontSize: 11, color: "#6b7280", cursor: ocupado ? "default" : "pointer", textDecoration: "underline", fontFamily: "inherit" };
   return (
     <span style={{ display: "inline-flex", gap: compacto ? 6 : 10, flexWrap: "wrap", alignItems: "center" }}>
       {vendo && typeof VisorProposta === "function" && (
         <VisorProposta anexo={vendo} aoFechar={() => setVendo(null)} />
       )}
+      {aoTrocar && (
+        <input ref={entrada} type="file" accept="application/pdf,image/*" style={{ display: "none" }}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f && trocandoRef.current) aoTrocar(trocandoRef.current, f); }} />
+      )}
       {lista.map((a, i) => (
-        <a key={a.public_id || a.url || i} href={a.url} target="_blank" rel="noopener noreferrer"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (typeof VisorProposta === "function") { e.preventDefault(); setVendo(a); }
-          }}
-          title={a.nome || rotuloDoAnexo(a, i)}
-          style={{ fontSize: compacto ? 11 : 11.5, color: "#0474f4", textDecoration: "none",
-            whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 3 }}>
-          <span aria-hidden="true">{"\u{1F4CE}"}</span>
-          {compacto ? rotuloDoAnexo(a, i) : rotuloDoAnexo(a, i) + (a.nome ? " · " + a.nome : "")}
-        </a>
+        <span key={chave(a, i)} style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          <a href={a.url} target="_blank" rel="noopener noreferrer"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (typeof VisorProposta === "function") { e.preventDefault(); setVendo(a); }
+            }}
+            title={a.nome || rotuloDoAnexo(a, i)}
+            style={{ fontSize: compacto ? 11 : 11.5, color: "#0474f4", textDecoration: "none",
+              whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 3 }}>
+            <span aria-hidden="true">{"\u{1F4CE}"}</span>
+            {compacto ? rotuloDoAnexo(a, i) : rotuloDoAnexo(a, i) + (a.nome ? " · " + a.nome : "")}
+          </a>
+          {aoTrocar && tirando !== chave(a, i) && (
+            <button type="button" style={acao} disabled={!!ocupado}
+              onClick={(e) => { e.stopPropagation(); trocandoRef.current = a; entrada.current && entrada.current.click(); }}>trocar</button>
+          )}
+          {aoTirar && (tirando === chave(a, i) ? (
+            <span style={{ fontSize: 11, color: "#b91c1c" }}>
+              tirar este papel?{" "}
+              <button type="button" style={{ ...acao, color: "#b91c1c" }} disabled={!!ocupado}
+                onClick={(e) => { e.stopPropagation(); setTirando(null); aoTirar(a); }}>sim</button>
+              {" · "}
+              <button type="button" style={acao} onClick={(e) => { e.stopPropagation(); setTirando(null); }}>não</button>
+            </span>
+          ) : (
+            <button type="button" style={acao} disabled={!!ocupado}
+              onClick={(e) => { e.stopPropagation(); setTirando(chave(a, i)); }}>tirar</button>
+          ))}
+        </span>
       ))}
     </span>
   );

@@ -6559,8 +6559,10 @@ function PapeisEmLote({ obra, prestadores, isMobile, aoAnexar, aoFechar }) {
       const lidos = ls.map((l) => {
         if (l.estado !== "lido") return null;
         if (l.mexido) {
+          // O que a pessoa (ou a planilha) escolheu escolhe primeiro: a IA
+          // não pode tomar essa conta para outro papel.
           const c = candidatoDe(l, l.escolha);
-          return { papel: l.ficha.papel, casamento: { seguro: true, candidatos: c ? [c] : [] } };
+          return { papel: l.ficha.papel, casamento: { seguro: true, candidatos: c ? [{ ...c, pontos: 1000 }] : [] } };
         }
         return { papel: l.ficha.papel, casamento: l.casamento };
       });

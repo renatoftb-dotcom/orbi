@@ -2404,6 +2404,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Contas a pagar: formulário da conta avulsa em edição.
   const [formConta, setFormConta] = useState(null);
   const [loteDePapeis, setLoteDePapeis] = useState(false);
+  const [buscaContas, setBuscaContas] = useState("");
+  const [papelContas, setPapelContas] = useState("todos");
+  const [contaFiltro, setContaFiltro] = useState("");
+  const [etapaFiltro, setEtapaFiltro] = useState("");
+  const [papelOcupado, setPapelOcupado] = useState("");
+  const [erroPapel, setErroPapel] = useState("");
+  const obraAtualRef = useRef(null);
   // Contas a pagar: como agrupar, o que mostrar e quais grupos estão fechados.
   const [visaoContas, setVisaoContas] = useState("mes");
   // Abre em "A pagar": é o que a tela é. O gráfico segue o mesmo filtro —
@@ -2522,6 +2529,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Para ler qualquer coisa da obra (contas, cronograma, estimativa) use
   // `obraAtual`, o registro fresco da coleção; a cópia do estado é só reserva.
   const obraAtual = obraSelecionada ? (obras.find(o => o.id === obraSelecionada.id) || obraSelecionada) : null;
+  obraAtualRef.current = obraAtual;
   const contasDaObra = (obraAtual && obraAtual.contasPagar) || [];
   // Tudo que uma baixa provoca FORA das contas: o preço do catálogo aprende,
   // e o extrato do escritório recebe o lançamento. Mora numa função só
@@ -4257,7 +4265,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const doMes = mesSelecionado
       ? contasDaObra.filter(c => String(c.vencimento || "").slice(0, 7) === mesSelecionado)
       : contasDaObra;
-    const lista = filtrarContas(doMes, filtroContas, hojeIso);
+    const nomeEtapa = (id) => (((typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).find(x => x.id === id) || {}).nome || "");
+    const lista = buscarContas(filtrarContas(doMes, filtroContas, hojeIso),
+      { texto: buscaContas, papel: papelContas, contaId: contaFiltro, etapa: etapaFiltro },
+      { nomePrestador, nomeConta, nomeEtapa });
+    const procurando = !!(buscaContas.trim() || papelContas !== "todos" || contaFiltro || etapaFiltro);
+    const contasUsadas = [...new Set(contasDaObra.map(c => c.contaId).filter(Boolean))]
+      .map(id => ({ valor: id, rotulo: nomeConta(id) })).sort((a, b) => a.rotulo.localeCompare(b.rotulo));
+    const etapasUsadas = [...new Set(contasDaObra.map(c => c.etapa).filter(Boolean))]
+      .map(id => ({ valor: id, rotulo: nomeEtapa(id) || id })).sort((a, b) => a.rotulo.localeCompare(b.rotulo));
     const grupos = agruparContas(lista, visaoContas, { hoje: hojeIso, nomePrestador, nomeContrato });
     // Os anéis somam a obra INTEIRA, não a lista filtrada: "pago de total"
     // precisa dos dois lados, e o filtro padrão esconde justamente as pagas —
@@ -4268,7 +4284,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       : grupos;
     const mesAtual = hojeIso.slice(0, 7);
     const abertoPadrao = (g) => (visaoContas === "mes" ? g.chave >= mesAtual : true);
-    const fechado = (g) => (gruposFechados[`${visaoContas}:${g.chave}`] ?? !abertoPadrao(g));
+    // Procurando, os grupos abrem: achar e não mostrar seria achar à toa.
+    const fechado = (g) => (procurando ? false : (gruposFechados[`${visaoContas}:${g.chave}`] ?? !abertoPadrao(g)));
     const alternarGrupo = (g) => setGruposFechados({ ...gruposFechados, [`${visaoContas}:${g.chave}`]: !fechado(g) });
 
     // Os quadros do topo são o filtro da lista: clicar em "A pagar" mostra só
@@ -4674,6 +4691,27 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <span style={{ fontSize: 11.5, color: "#6b7280", marginRight: 2 }}>Agrupar por</span>
           {VISOES_CONTAS.map(v => chip(visaoContas === v.id, v.nome, () => setVisaoContas(v.id)))}
         </div>
+
+        {/* Procurar e filtrar: uma caixa para ref, fornecedor, descrição,
+            valor, nº da nota ou nome do papel; e os filtros de lado. */}
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0,2fr) auto minmax(0,1fr) minmax(0,1fr)", gap: 8, alignItems: "center", marginBottom: 8 }}>
+          <input style={{ ...C.input, margin: 0 }} value={buscaContas} onChange={e => setBuscaContas(e.target.value)}
+            placeholder="Procurar: ref, fornecedor, descrição, valor, nº da nota, papel…" aria-label="Procurar nas contas" />
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {FILTROS_PAPEL.map(f => chip(papelContas === f.id, f.nome, () => setPapelContas(f.id)))}
+          </div>
+          <SelectBusca style={C.input} value={contaFiltro} onChange={v => setContaFiltro(v || "")} vazio="Todas as contas contábeis"
+            placeholder="Procurar conta…" opcoes={[{ valor: "", rotulo: "Todas as contas contábeis" }, ...contasUsadas]} />
+          <SelectBusca style={C.input} value={etapaFiltro} onChange={v => setEtapaFiltro(v || "")} vazio="Todas as etapas"
+            placeholder="Procurar etapa…" opcoes={[{ valor: "", rotulo: "Todas as etapas" }, ...etapasUsadas]} />
+        </div>
+        {procurando && (
+          <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 12 }}>
+            {lista.length} conta(s) encontrada(s){" · "}
+            <button type="button" onClick={() => { setBuscaContas(""); setPapelContas("todos"); setContaFiltro(""); setEtapaFiltro(""); }}
+              style={{ background: "none", border: "none", padding: 0, color: AZUL_VK, cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>limpar a busca</button>
+          </div>
+        )}
 
         {(filtroContas !== FILTRO_CONTAS_PADRAO || mesSelecionado) && (
           <div data-vk-mantem-mes="1" style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 16 }}>
@@ -5175,10 +5213,22 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                       ))}
                                     {/* O papel anexado na contabilização mora aqui, na conta:
                                         abre direto, sem ir procurar em pasta. */}
-                                    {anexosDaTransacao(c).length > 0 && (
+                                    {(anexosDaTransacao(c).length > 0 || perm.podeGerenciarObra) && (
                                       <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>
                                         <span style={{ color: "#6b7280" }}>Papéis: </span>
-                                        <LinksDeAnexo transacao={c} />
+                                        <LinksDeAnexo transacao={c} ocupado={papelOcupado === c.id}
+                                          aoTrocar={perm.podeGerenciarObra ? (a, f) => mexerNoPapel(c, "trocar", a, f) : undefined}
+                                          aoTirar={perm.podeGerenciarObra ? (a) => mexerNoPapel(c, "tirar", a, null) : undefined} />
+                                        {perm.podeGerenciarObra && (
+                                          <label onClick={e => e.stopPropagation()} style={{ marginLeft: 10, fontSize: 11, color: AZUL_VK, cursor: papelOcupado ? "default" : "pointer" }}>
+                                            {papelOcupado === c.id ? "enviando…" : "＋ papel"}
+                                            <input type="file" accept="application/pdf,image/*" style={{ display: "none" }} disabled={!!papelOcupado}
+                                              onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) mexerNoPapel(c, "anexar", null, f); }} />
+                                          </label>
+                                        )}
+                                        {erroPapel && papelOcupado === "" && erroPapel.indexOf(c.id + ":") === 0 && (
+                                          <div style={{ color: "#b91c1c", fontSize: 11 }}>{erroPapel.slice(c.id.length + 1)}</div>
+                                        )}
                                       </div>
                                     )}
                                     {/* O histórico é a resposta para "quem mexeu nisso?" — a
@@ -5408,6 +5458,42 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!novas.length) return { erro: "Nenhum item com valor." };
     gravarContas([...contas, ...novas], obraAtual.id);
     return { gravado: true, quantas: novas.length };
+  }
+
+  // Trocar, tirar ou pôr um papel numa conta já lançada. O papel é da
+  // compra, não do item: vale para todas as contas que já o têm (trocar,
+  // tirar) ou para todas da mesma referência (pôr).
+  async function mexerNoPapel(conta, acao, antigo, arquivo) {
+    if (!perm.podeGerenciarObra || !conta) return;
+    setErroPapel(""); setPapelOcupado(conta.id);
+    try {
+      let novo = null;
+      if (arquivo) {
+        const up = await enviarAnexo(arquivo, "comprovante_pagamento");
+        novo = { ...up, tipo: (antigo && antigo.tipo) || "comprovante" };
+      }
+      const obra = obraAtualRef.current;
+      if (!obra) return;
+      const mesmo = (a) => !!antigo && !!a && (antigo.public_id ? a.public_id === antigo.public_id : a.url === antigo.url);
+      const alvo = (c) => (acao === "anexar"
+        ? (conta.numeroDoc ? c.numeroDoc === conta.numeroDoc : c.id === conta.id)
+        : anexosDaTransacao(c).some(mesmo));
+      const quem = quemSou();
+      const novas = (obra.contasPagar || []).map((c) => {
+        if (!c || !alvo(c)) return c;
+        let lista = anexosDaTransacao(c);
+        if (acao === "tirar") lista = lista.filter((a) => !mesmo(a));
+        else if (acao === "trocar") lista = lista.map((a) => (mesmo(a) ? novo : a));
+        else lista = lista.concat([novo]);
+        const ato = acao === "tirar" ? "comprovanteRemovido" : (novo && novo.tipo === "nota" ? "nota" : "comprovante");
+        return registrarAto(comAnexos(c, lista), ato, quem, undefined, ((acao === "tirar" ? antigo : novo) || {}).nome || "");
+      });
+      gravarContas(novas, obra.id);
+    } catch (e) {
+      setErroPapel(conta.id + ":O papel não subiu: " + ((e && e.message) || "erro"));
+    } finally {
+      setPapelOcupado("");
+    }
   }
 
   // Papéis em lote: cada papel já subiu; aqui ele entra na lista de anexos

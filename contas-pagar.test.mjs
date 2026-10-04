@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -2658,6 +2658,30 @@ teste("lote: planilha de ligacao arquivo;ref", () => {
   assert.strictEqual(modulo.numeroDoArquivo("4113 - nota.pdf"), "4113");
   assert.strictEqual(modulo.numeroDoArquivo("04113.pdf"), "4113");
   assert.strictEqual(modulo.numeroDoArquivo("nota.pdf"), "");
+});
+
+teste("procurar contas: ref, fornecedor, valor, papel e filtros", () => {
+  const cs = [
+    { id: "1", numeroDoc: "0049", descricao: "Formas metálicas", favorecido: "Pantanal Aço", valor: 2541, contaId: "material", etapa: "fundacao", anexos: [{ nome: "4096.pdf" }] },
+    { id: "2", numeroDoc: "0056", descricao: "Pedágio", favorecido: "Pedágio Jacarezinho", valor: 12.8, contaId: "outros", etapa: "" },
+    { id: "3", numeroDoc: "0173", descricao: "AREIA FINA", prestadorId: "rc", valor: 260, contaId: "material", etapa: "fundacao", numeroNota: "8623", comprovante: { nome: "nf.pdf" } },
+  ];
+  const op = { nomePrestador: (id) => (id === "rc" ? "Rei do Cimento" : ""), nomeConta: (id) => (id === "material" ? "Material" : "Outros") };
+  const ids = (f) => modulo.buscarContas(cs, f, op).map((c) => c.id).join(",");
+  assert.strictEqual(ids({ texto: "0049" }), "1");
+  assert.strictEqual(ids({ texto: "pantanal aco" }), "1", "sem acento casa");
+  assert.strictEqual(ids({ texto: "12,80" }), "2");
+  assert.strictEqual(ids({ texto: "2.541,00" }), "1");
+  assert.strictEqual(ids({ texto: "4096" }), "1", "pelo nome do papel");
+  assert.strictEqual(ids({ texto: "rei cimento" }), "3", "pelo nome do prestador");
+  assert.strictEqual(ids({ texto: "8623" }), "3");
+  assert.strictEqual(ids({ texto: "reidocimento" }), "3", "nome colado tambem acha");
+  assert.strictEqual(ids({ papel: "sem" }), "2");
+  assert.strictEqual(ids({ papel: "com" }), "1,3");
+  assert.strictEqual(ids({ contaId: "material", texto: "fundacao" }), "", "etapa so por id, nao por texto sem nomeEtapa");
+  assert.strictEqual(ids({ contaId: "material", etapa: "fundacao" }), "1,3");
+  assert.strictEqual(ids({}), "1,2,3");
+  assert.strictEqual(modulo.temPapel(cs[1]), false);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

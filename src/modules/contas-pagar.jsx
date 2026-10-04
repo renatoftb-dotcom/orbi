@@ -2566,6 +2566,52 @@ function filtrarContas(contas, filtro, hoje) {
   if (filtro === "vencidas") return lista.filter((c) => situacaoConta(c, hoje) === "vencido");
   return lista;
 }
+// ── Procurar e filtrar as contas ────────────────────────────────
+// Uma caixa só: cada palavra digitada tem que aparecer em algum lugar da
+// conta — ref, descrição, fornecedor, conta contábil, etapa, nº da nota,
+// valor ("12,80" ou "12.8") ou o nome do papel anexado ("4113.pdf").
+// Os filtros de lado (papel, conta, etapa) se somam à busca.
+function cpSemAcento(t) {
+  return String(t == null ? "" : t).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+function textoDeBuscaDaConta(c, op) {
+  const o = op || {};
+  const x = c || {};
+  const v = Number(x.valorPago) || Number(x.valor) || 0;
+  const valores = v > 0 ? [v.toFixed(2), v.toFixed(2).replace(".", ","), String(v), String(v).replace(".", ","),
+    v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })] : [];
+  const anexos = (Array.isArray(x.anexos) ? x.anexos : []).concat(x.comprovante ? [x.comprovante] : []);
+  return cpSemAcento([
+    x.numeroDoc, x.numeroDoc ? "ref " + x.numeroDoc : "", x.descricao, x.favorecido,
+    o.nomePrestador ? o.nomePrestador(x.prestadorId) : "", o.nomeConta ? o.nomeConta(x.contaId) : "",
+    o.nomeEtapa ? o.nomeEtapa(x.etapa) : "", x.numeroNota, x.numeroNota ? "nota " + x.numeroNota : "",
+    x.observacao, ...valores, ...anexos.map((a) => (a && a.nome) || ""),
+  ].filter(Boolean).join(" | "));
+}
+const FILTROS_PAPEL = [
+  { id: "todos", nome: "Todos" },
+  { id: "com", nome: "Com papel" },
+  { id: "sem", nome: "Sem papel" },
+];
+function temPapel(c) {
+  return (Array.isArray((c || {}).anexos) && c.anexos.some(Boolean)) || !!(c || {}).comprovante;
+}
+function buscarContas(contas, filtro, op) {
+  const f = filtro || {};
+  const termos = cpSemAcento(f.texto || "").split(/\s+/).filter(Boolean);
+  return (contas || []).filter((c) => {
+    if (!c) return false;
+    if (f.papel === "com" && !temPapel(c)) return false;
+    if (f.papel === "sem" && temPapel(c)) return false;
+    if (f.contaId && c.contaId !== f.contaId) return false;
+    if (f.etapa && c.etapa !== f.etapa) return false;
+    if (!termos.length) return true;
+    const t = textoDeBuscaDaConta(c, op);
+    const junto = t.replace(/\s+/g, "");
+    return termos.every((w) => t.indexOf(w) >= 0 || junto.indexOf(w) >= 0);
+  });
+}
+
 const MESES_CP = ["janeiro", "fevereiro", "março", "abril", "maio", "junho",
   "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 function rotuloMes(chave) {
