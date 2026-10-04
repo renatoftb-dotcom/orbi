@@ -824,12 +824,61 @@ function casarItemDaEntrada(item, insumos, indice) {
   return { ...it, sugestao: sugestaoDoCatalogo(it.descricao, indice) };
 }
 
+// ── Texto que chega gritando ────────────────────────────────────
+// Nota fiscal e cupom escrevem tudo em maiúsculas: "AREIA FINA", "CIMENTO
+// CP II 50KG". No VICKE o item aparece como gente escreve: "Areia Fina",
+// "Cimento CP II 50kg". Só mexe no texto que está TODO em maiúsculas — o
+// que já veio escrito com cuidado fica como está. Siglas (PVC, CP, II, NBR,
+// LTDA vira Ltda), medidas ("50KG" → "50kg", "10X10" → "10x10", "18L",
+// "220V") e as palavrinhas de ligação ("de", "com", "para") têm regra
+// própria.
+const COT_SIGLAS = ["PVC", "CPVC", "PPR", "PEAD", "PEX", "CP", "CA", "CA50", "CA60", "NBR", "ABNT", "LED", "MDF", "MDP", "OSB",
+  "EPS", "PU", "PVA", "ARI", "DN", "PN", "TV", "AC", "DC", "USB", "RJ", "RJ45", "SA", "ME", "EPP", "MEI", "CNPJ", "CPF",
+  "NF", "NFE", "NFSE", "ICMS", "IPI", "ISS", "ART", "RRT", "CAU", "CREA", "IPTU", "ITBI", "IAT", "ONR", "EPI", "GLP", "HD", "PP", "PE",
+  "II", "III", "IV", "VI", "VII", "VIII", "IX", "XI", "XII", "BWG", "FCK", "DIN", "SN", "EPR", "SAE", "NR", "TIG", "MIG",
+  "CPF", "CBUQ", "CCA", "UV", "WC", "PCD", "LTD"];
+const COT_LIGACAO = ["de", "da", "do", "das", "dos", "e", "com", "para", "em", "no", "na", "nos", "nas", "a", "o", "as", "os", "p/", "c/", "s/"];
+const COT_UNIDADES_SOLTAS = ["X", "M", "MM", "CM", "KG", "G", "M2", "M3", "MT", "MTS", "UN", "UND", "UNID", "PC", "PCS", "CX", "SC", "RL"];
+function textoSemCaixaAlta(texto) {
+  const t = String(texto == null ? "" : texto);
+  const letras = t.replace(/[^A-Za-zÀ-ÖØ-öø-ÿ]/g, "");
+  if (letras.length < 2) return t;
+  const maiusculas = letras.replace(/[^A-ZÀ-ÖØ-Þ]/g, "").length;
+  if (maiusculas / letras.length < 0.85) return t;
+  let primeira = true;
+  return t.replace(/\S+/g, (palavra) => {
+    const ehPrimeira = primeira; primeira = false;
+    // pontuação em volta ("(CP" / "II)") não conta para a regra
+    const m = palavra.match(/^([^0-9A-Za-zÀ-ÖØ-öø-ÿ]*)(.*?)([^0-9A-Za-zÀ-ÖØ-öø-ÿ/]*)$/);
+    const [, antes, miolo, depois] = m || ["", "", palavra, ""];
+    if (!miolo) return palavra;
+    const limpo = miolo.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    let novo;
+    if (COT_SIGLAS.indexOf(limpo) >= 0) novo = miolo;
+    else if (limpo === "MPA") novo = "MPa";
+    else if (/^[CPS]\//i.test(miolo)) novo = miolo.toLowerCase(); // c/6mt, p/ 50kg
+    else if (limpo.length === 1 && limpo !== "E" && COT_UNIDADES_SOLTAS.indexOf(limpo) < 0) novo = miolo; // a sigla de uma letra: "S A", "C"
+    else if (/\d/.test(miolo) && !/^\d/.test(miolo)) novo = miolo; // código: Q138, M10, DN100
+    else if (/\d/.test(miolo)) {
+      // medida: número com unidade colada. Volts, watts, amperes e litro
+      // ficam em maiúscula; o resto, minúscula; o "x" de 10x10 também.
+      novo = miolo.toLowerCase()
+        .replace(/(\d)(v|w|a|l|kva|hp)$/i, (_, n, u) => n + u.toUpperCase())
+        .replace(/(\d)x(\d)/g, "$1x$2");
+    } else if (!ehPrimeira && COT_UNIDADES_SOLTAS.indexOf(limpo) >= 0) novo = miolo.toLowerCase();
+    else if (!ehPrimeira && COT_LIGACAO.indexOf(miolo.toLowerCase()) >= 0) novo = miolo.toLowerCase();
+    else novo = miolo.charAt(0).toUpperCase() + miolo.slice(1).toLowerCase();
+    return antes + novo + depois;
+  });
+}
+
 function itensDaEntrada(bruto, tipo, insumos) {
   const crus = tipo === "orcamento" ? (((bruto || {}).itens) || []) : (bruto || []);
   const indice = indiceDoCatalogo(insumos || []);
   const unidades = unidadesDoCatalogo(insumos || []);
   return crus
     .map((c) => itemDaEntrada(c, tipo))
+    .map((x) => ({ ...x, descricao: textoSemCaixaAlta(x.descricao) }))
     .filter((x) => x.descricao)
     .map((x) => ({ ...x, unidade: unidadeNoPadrao(x.unidade, unidades) }))
     .map((x) => casarItemDaEntrada(x, insumos, indice))
@@ -1210,7 +1259,7 @@ function fichaDaEntradaPelaIA(documentos) {
   const idTransacao = comprovantes.map((d) => String(d.chave || "").trim()).find((c) => /^E[0-9A-Za-z]{20,}$/.test(c)) || "";
   const papel = {
     tipo, tipoIA: principal.tipo, lidoPelaIA: true,
-    lidoComo: principal.emitente || (pago && pago.emitente) || "",
+    lidoComo: textoSemCaixaAlta(principal.emitente || (pago && pago.emitente) || ""),
     cnpj: principal.cnpj || "",
     ehNota: tipo === "nota" || tipo === "nfse",
     numeroNota: (tipo === "nota" || tipo === "nfse") ? String(principal.numero || "") : "",
@@ -1225,7 +1274,7 @@ function fichaDaEntradaPelaIA(documentos) {
       : principal.tipo === "lista_material" ? "lista" : "",
     formaLida: forma,
     chave: chaveNf, idTransacao,
-    descricao: principal.descricao || (pago && pago.descricao) || "",
+    descricao: textoSemCaixaAlta(principal.descricao || (pago && pago.descricao) || ""),
   };
   // Papel sem tabela (comprovante, recibo, nota de serviço): um item só,
   // com o valor do papel. A conta contábil fica para a pessoa.
@@ -7451,7 +7500,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
           numeroPedido: o.numeroPedido || (o.ehNota ? "" : o.numero) || "",
           numeroNota: o.numeroNota || "", ehNota: !!o.ehNota, emitido: o.emitido || "",
           vencimento: o.vencimento || "", desconto: o.desconto || "", total: o.total || 0,
-          lidoComo: o.fornecedor || "" };
+          lidoComo: textoSemCaixaAlta(o.fornecedor || "") };
         setPapel(novoPapel);
         // O emitente da nota costuma já estar no cadastro: pelo nome.
         const doPapel = !ctx.loja && o.fornecedor ? prestadorDoComprovante(prestadores || [], o.fornecedor) : null;
@@ -7508,7 +7557,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     // O comprovante e a nota de serviço também viram itens — um só, com o
     // valor do papel. A conta contábil fica em branco de propósito: é a
     // única coisa que nem o papel nem a frase sabem.
-    const p = { tipo: comp.notaDeServico ? "nfse" : "comprovante", lidoComo: comp.favorecido || "",
+    const p = { tipo: comp.notaDeServico ? "nfse" : "comprovante", lidoComo: textoSemCaixaAlta(comp.favorecido || ""),
       documento: comp.documento || "",
       numeroNota: comp.notaDeServico ? String(comp.documento || "").replace(/\D/g, "").replace(/^0+/, "") : "",
       valor, emitido: comp.emitidoEm || "", pagoEm: comp.pagoEm || "" };
@@ -7516,7 +7565,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     setLojaId(achado ? achado.id : "");
     setPapel(p);
     setItens([{ ...(typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio() : {}),
-      descricao: comp.descricao || "", bruto: valor || "", contaId: "" }]);
+      descricao: textoSemCaixaAlta(comp.descricao || ""), bruto: valor || "", contaId: "" }]);
     iniciarSituacao(p);
   }
 

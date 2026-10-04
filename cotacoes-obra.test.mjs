@@ -92,7 +92,7 @@ const modulo = new Function(`
            prestadorDaNotaDeServico, discriminacaoDaNotaDeServico, dadosDaNotaDeServico,
            numeroDaNotaDeServico, entradaUnicaPronta, situacaoPadraoDaEntrada, previaDosBoletos,
            comContaPadraoDaEntrada, tipoDoAnexoDaEntrada, SITUACOES_DA_ENTRADA,
-           fichaDaEntradaPelaIA, tipoDoPapelPelaIA };
+           fichaDaEntradaPelaIA, tipoDoPapelPelaIA, textoSemCaixaAlta };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -3522,6 +3522,33 @@ teste("IA: sem situação lida, vale a regra da obra", () => {
   assert.strictEqual(M.situacaoPadraoDaEntrada({ tipo: "nota", situacaoLida: "a_pagar" }, "empreendimento"), "apagar");
   assert.strictEqual(M.tipoDoPapelPelaIA("nota_servico"), "nfse");
   assert.strictEqual(M.tipoDoPapelPelaIA("cupom"), "pedido");
+});
+
+
+teste("texto em caixa alta vira texto de gente; o resto fica como veio", () => {
+  const T = M.textoSemCaixaAlta;
+  assert.strictEqual(T("AREIA FINA"), "Areia Fina");
+  assert.strictEqual(T("CIMENTO CP II 50KG"), "Cimento CP II 50kg");
+  assert.strictEqual(T("TUBO PVC ESGOTO 100MM"), "Tubo PVC Esgoto 100mm");
+  assert.strictEqual(T("MALHA POP Q138 4.2MM 10X10"), "Malha Pop Q138 4.2mm 10x10");
+  assert.strictEqual(T("VEDA CONCRETO BALDE 18L"), "Veda Concreto Balde 18L");
+  assert.strictEqual(T("FURADEIRA DE IMPACTO 710W 220V"), "Furadeira de Impacto 710W 220V");
+  assert.strictEqual(T("CONSTRU FACIL ACABAMENTO LTDA"), "Constru Facil Acabamento Ltda");
+  assert.strictEqual(T("REI DO CIMENTO | C E SANTANA COMERCIAL ME"), "Rei do Cimento | C e Santana Comercial ME");
+  assert.strictEqual(T("TÁBUA DE PINUS (3,00 M)"), "Tábua de Pinus (3,00 m)");
+  assert.strictEqual(T("PARAFUSO SEXTAVADO M10 X 50"), "Parafuso Sextavado M10 x 50");
+  assert.strictEqual(T("Areia Fina"), "Areia Fina", "já escrito com cuidado fica");
+  assert.strictEqual(T("Tubo PVC 40mm"), "Tubo PVC 40mm");
+  assert.strictEqual(T(""), "");
+  assert.strictEqual(T(null), "");
+});
+
+teste("a leitura entrega o item já em texto de gente", () => {
+  const f = M.fichaDaEntradaPelaIA([{ tipo: "nota_produto", emitente: "REI DO CIMENTO LTDA", valor: 260, situacao: "pago",
+    itens: [{ descricao: "AREIA FINA", quantidade: 2, unidade: "M3", total: 260 }] }]);
+  assert.strictEqual(f.papel.lidoComo, "Rei do Cimento Ltda");
+  const itens = M.itensDaEntrada({ itens: f.itens }, "orcamento", []);
+  assert.strictEqual(itens[0].descricao, "Areia Fina");
 });
 
 
