@@ -31101,7 +31101,8 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       if (!onLancarEntrada) return { erro: "Lançamento indisponível nesta tela." };
       const r = onLancarEntrada({ ...(lancamento || {}), obraId: obra.id }, anexo || null) || {};
       if (r.erro) { setErro(r.erro); return r; }
-      setEntradaAberta(false);
+      // A Entrada fica aberta e limpa: quem lança uma nota quase sempre tem
+      // a próxima na mão. A confirmação aparece lá mesmo.
       return r;
     }
     // A despesa também se resolve sem trocar de tela: não há formulário
@@ -31110,8 +31111,6 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     if (destino === "despesa") {
       if (!onLancarDespesa) return { erro: "Lançamento indisponível nesta tela." };
       const r = onLancarDespesa({ ...(despesa || {}), obraId: obra.id }) || {};
-      if (r.erro) return r;
-      setEntradaAberta(false);
       return r;
     }
     setEntradaAberta(false);
@@ -31274,7 +31273,12 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       {entradaAberta && (
         <EntradaDaObra data={data} save={save} isMobile={isMobile} dinheiro={dinheiro}
           obraPadrao={obra} usuario={usuario}
-          aoFechar={() => setEntradaAberta(false)} aoSeguir={seguirDaEntrada} />
+          aoFechar={() => {
+            setEntradaAberta(false);
+            // Aberta pelo card "Entrada" da obra: fechar volta para a obra,
+            // não para a lista de cotações que ficou por baixo.
+            if (abrirEntrada && typeof onVoltar === "function") onVoltar();
+          }} aoSeguir={seguirDaEntrada} />
       )}
 
       {formPedido && (
@@ -33332,6 +33336,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const [arquivo, setArquivo] = useState(null);
   const [lendo, setLendo] = useState(false);
   const [progresso, setProgresso] = useState(null);
+  const [lancado, setLancado] = useState("");
   const [aviso, setAviso] = useState("");
   const [itens, setItens] = useState(null);
   const [destino, setDestino] = useState("");
@@ -33546,6 +33551,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   }
 
   async function ler(arq) {
+    setLancado("");
     if (lendo) return;
     const alvo = arq || arquivo;
     if (!alvo && !String(texto).trim()) { setAviso("Cole a lista ou escolha um arquivo."); return; }
@@ -33784,7 +33790,14 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
       r = aoSeguir({ destino: "lancar", obraId, lancamento, anexo }) || {};
     }
     if (r.erro) { setAviso(r.erro); return; }
-    if (embutido) limpar();
+    // Lançou: a Entrada volta limpa, pronta para o próximo papel, e diz o
+    // que entrou — sem fechar e cair na tela de cotações.
+    const fmt = dinheiro || ((v) => (typeof fmtMoedaCtr === "function" ? fmtMoedaCtr(v) : "R$ " + Number(v || 0).toFixed(2)));
+    const valor = fmt(r.valor != null ? r.valor : totalDaEntrada);
+    limpar();
+    setLancado(["Lançado" + (situacao === "apagar" ? " a pagar" : " pago"),
+      r.ref ? "ref " + r.ref : "", r.quantas ? (r.quantas === 1 ? "1 conta" : r.quantas + " contas") : "",
+      valor, "está no contas a pagar da obra"].filter(Boolean).join(" · "));
   }
 
 
@@ -33868,6 +33881,15 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
         <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 12 }}>
           Nota, pedido ou lista para cotar — entra tudo por aqui. Primeiro a lista; depois você diz o que é.
         </div>
+        {lancado && !itens && (
+          <div role="status" style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between",
+            border: "1px solid #bfdbfe", background: "#eff6ff", color: "#0b4fb3", borderRadius: 10,
+            padding: "8px 12px", fontSize: 12.5, marginBottom: 12 }}>
+            <span><b>✓</b> {lancado}. Pode mandar o próximo papel.</span>
+            <button type="button" onClick={() => setLancado("")} aria-label="Fechar aviso"
+              style={{ background: "none", border: "none", color: "#0b4fb3", cursor: "pointer", fontSize: 15, padding: 0 }}>×</button>
+          </div>
+        )}
 
         <div style={rolagem}>
           {!itens ? (
@@ -41022,7 +41044,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       anexo, cartao, planoDoCartao: pagamentoNoCartao });
     if (!novas.length) return { erro: "Nenhum item com valor." };
     gravarContas([...contas, ...novas], obraAtual.id);
-    return { gravado: true, quantas: novas.length };
+    return { gravado: true, quantas: novas.length, ref: numeroDoc,
+      valor: Math.round(novas.reduce((t, c) => t + (Number(c.valor) || 0), 0) * 100) / 100 };
   }
 
   // Trocar, tirar ou pôr um papel numa conta já lançada. O papel é da

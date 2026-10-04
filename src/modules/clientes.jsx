@@ -5493,7 +5493,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       anexo, cartao, planoDoCartao: pagamentoNoCartao });
     if (!novas.length) return { erro: "Nenhum item com valor." };
     gravarContas([...contas, ...novas], obraAtual.id);
-    return { gravado: true, quantas: novas.length };
+    return { gravado: true, quantas: novas.length, ref: numeroDoc,
+      valor: Math.round(novas.reduce((t, c) => t + (Number(c.valor) || 0), 0) * 100) / 100 };
   }
 
   // Trocar, tirar ou pôr um papel numa conta já lançada. O papel é da
