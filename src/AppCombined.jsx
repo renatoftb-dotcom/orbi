@@ -26026,6 +26026,33 @@ function tabelaDaBase(linhas) {
   })));
 }
 
+// O formato do relatório em Excel: tipo e formato de cada coluna e a
+// largura pelo maior conteúdo (o título conta, em negrito). Texto muito
+// longo para em 60 — a descrição inteira continua na célula.
+const BASE_FORMATOS = {
+  "Valor total nota": ["moeda", '"R$" #,##0.00'], "Preço": ["moeda", '"R$" #,##0.00'], "Valor": ["moeda", '"R$" #,##0.00'],
+  "Quantidade": ["numero", "#,##0.###"], "Período Contábil": ["mes", "mm/yyyy"], "Data do lançamento": ["data", "dd/mm/yyyy"],
+  "Vencimento": ["data", "dd/mm/yyyy"], "Entrada no sistema": ["data", "dd/mm/yyyy"],
+};
+function planilhaDaBase(tabela) {
+  const cab = (tabela || [])[0] || [];
+  const linhas = (tabela || []).slice(1);
+  const moeda = (v) => "R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const colunas = cab.map((titulo, j) => {
+    const [tipo, formato] = BASE_FORMATOS[titulo] || ["texto", ""];
+    let maior = Math.ceil(String(titulo).length * 1.15);
+    for (const l of linhas) {
+      const v = l[j];
+      if (v === "" || v == null) continue;
+      const t = tipo === "data" ? "00/00/0000" : tipo === "mes" ? "00/0000" : tipo === "moeda" ? moeda(v)
+        : tipo === "numero" ? Number(v).toLocaleString("pt-BR") : String(v);
+      if (t.length > maior) maior = t.length;
+    }
+    return { titulo, tipo, formato, largura: Math.min(60, maior + 3) };
+  });
+  return { colunas, linhas };
+}
+
 // ── Procurar e filtrar as contas ────────────────────────────────
 // Uma caixa só: cada palavra digitada tem que aparecer em algum lugar da
 // conta — ref, descrição, fornecedor, conta contábil, etapa, nº da nota,
@@ -26341,18 +26368,18 @@ function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid
 // A planilha de controle dentro do VICKE: uma linha por item, as colunas
 // de sempre, os filtros por cima e o botão de baixar em Excel. Na obra
 // mostra só a obra; no escritório, todas.
-let cpCargaXlsx = null;
-function carregarXlsx() {
-  if (typeof window !== "undefined" && window.XLSX) return Promise.resolve(window.XLSX);
-  if (cpCargaXlsx) return cpCargaXlsx;
-  cpCargaXlsx = new Promise((ok, falha) => {
+let cpCargaExcel = null;
+function carregarExcelJS() {
+  if (typeof window !== "undefined" && window.ExcelJS) return Promise.resolve(window.ExcelJS);
+  if (cpCargaExcel) return cpCargaExcel;
+  cpCargaExcel = new Promise((ok, falha) => {
     const s = document.createElement("script");
-    s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-    s.onload = () => (window.XLSX ? ok(window.XLSX) : falha(new Error("sem XLSX")));
-    s.onerror = () => { cpCargaXlsx = null; falha(new Error("não carregou")); };
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js";
+    s.onload = () => (window.ExcelJS ? ok(window.ExcelJS) : falha(new Error("sem ExcelJS")));
+    s.onerror = () => { cpCargaExcel = null; falha(new Error("não carregou")); };
     document.head.appendChild(s);
   });
-  return cpCargaXlsx;
+  return cpCargaExcel;
 }
 
 function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMobile, obraFixa, nomeDoArquivo }) {
@@ -26389,45 +26416,50 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   async function baixar() {
     setBaixando("Montando a planilha…");
     const tabela = tabelaDaBase(filtradas);
-    const cab = tabela[0];
+    const plan = planilhaDaBase(tabela);
     const nome = (nomeDoArquivo || "base-de-dados").replace(/[^\w-]+/g, "-").toLowerCase() + "-" + new Date().toISOString().slice(0, 10);
+    const salvar = (blob, arquivo) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = arquivo; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    };
     try {
-      const X = await carregarXlsx();
-      const ws = X.utils.aoa_to_sheet(tabela);
-      // datas como número de série do Excel (sem fuso, sem hora escondida)
-      const serie = (iso) => { const m = String(iso || "").match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);
-        return m ? Math.round((Date.UTC(+m[1], +m[2] - 1, m[3] ? +m[3] : 1) - Date.UTC(1899, 11, 30)) / 86400000) : null; };
-      const formatos = { "Período Contábil": "mm/yyyy", "Data do lançamento": "dd/mm/yyyy", "Vencimento": "dd/mm/yyyy",
-        "Entrada no sistema": "dd/mm/yyyy", "Valor total nota": '"R$" #,##0.00', "Preço": '"R$" #,##0.00', "Valor": '"R$" #,##0.00' };
-      cab.forEach((titulo, j) => {
-        const fmt = formatos[titulo];
-        if (!fmt) return;
-        const data = fmt.indexOf("yy") >= 0;
-        for (let i = 1; i < tabela.length; i++) {
-          const ref = X.utils.encode_cell({ r: i, c: j });
-          const v = tabela[i][j];
-          if (v === "" || v == null) { delete ws[ref]; continue; }
-          ws[ref] = data ? { t: "n", v: serie(v), z: fmt } : { t: "n", v: Number(v), z: fmt };
-        }
+      const E = await carregarExcelJS();
+      const wb = new E.Workbook();
+      wb.creator = "VICKE";
+      // relatório: títulos em negrito, linha de títulos congelada, colunas
+      // na largura do conteúdo, filtro no cabeçalho
+      const ws = wb.addWorksheet("Base de dados", { views: [{ state: "frozen", xSplit: 0, ySplit: 1, activeCell: "A2" }] });
+      ws.columns = plan.colunas.map((c) => ({ header: c.titulo, key: c.titulo, width: c.largura }));
+      const fonte = { name: "Century Gothic", size: 10 };
+      plan.linhas.forEach((linha) => {
+        const r = ws.addRow(linha.map((v, j) => {
+          const tipo = plan.colunas[j].tipo;
+          if (v === "" || v == null) return null;
+          if (tipo === "data" || tipo === "mes") {
+            const m = String(v).match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);
+            return m ? new Date(Date.UTC(+m[1], +m[2] - 1, m[3] ? +m[3] : 1)) : v;
+          }
+          return v;
+        }));
+        r.font = fonte;
       });
-      const larguras = { "Ref": 8, "Nome Cliente": 26, "Projeto / obra": 20, "Unidade negócio": 18, "Fornecedor": 30,
-        "Descrição Lançamento": 36, "Conta contábil": 26, "Nota / Comprovante": 14, "Valor total nota": 16, "Período Contábil": 12,
-        "Data do lançamento": 14, "Nome Insumo (catálogo)": 44, "Unidade": 10, "Quantidade": 11, "Preço": 13, "Valor": 14,
-        "Etapa": 28, "Grupo Materiais": 22, "Situação": 10, "Vencimento": 12, "Entrada no sistema": 14 };
-      ws["!cols"] = cab.map((c) => ({ wch: larguras[c] || 14 }));
-      ws["!autofilter"] = { ref: X.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: tabela.length - 1, c: cab.length - 1 } }) };
-      const wb = X.utils.book_new();
-      X.utils.book_append_sheet(wb, ws, "Base de dados");
-      X.writeFile(wb, nome + ".xlsx");
+      plan.colunas.forEach((c, j) => { if (c.formato) ws.getColumn(j + 1).numFmt = c.formato; });
+      const cab = ws.getRow(1);
+      cab.font = { ...fonte, bold: true, color: { argb: "FFFFFFFF" } };
+      cab.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0474F4" } };
+      cab.alignment = { vertical: "middle" };
+      cab.height = 20;
+      ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: plan.colunas.length } };
+      const buf = await wb.xlsx.writeBuffer();
+      salvar(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), nome + ".xlsx");
       setBaixando("");
     } catch (e) {
       // sem a biblioteca: CSV com ponto e vírgula, que o Excel brasileiro abre
       const esc = (v) => { const t = typeof v === "number" ? String(v).replace(".", ",") : String(v == null ? "" : v); return /[;"\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
       const csv = "\ufeff" + tabela.map((l) => l.map(esc).join(";")).join("\r\n");
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-      a.download = nome + ".csv"; document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      salvar(new Blob([csv], { type: "text/csv;charset=utf-8" }), nome + ".csv");
       setBaixando("");
     }
   }

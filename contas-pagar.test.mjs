@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -2781,6 +2781,15 @@ teste("base de dados: uma linha por item, nas colunas da planilha do escritório
   assert.strictEqual(t.length, 9);
   assert.strictEqual(t[5][t[0].indexOf("Situação")], "Pago");
   assert.strictEqual(t[1][t[0].indexOf("Quantidade")], "");
+  const p = modulo.planilhaDaBase(t);
+  const col = (n) => p.colunas.find((c) => c.titulo === n);
+  assert.strictEqual(col("Ref").largura, "0173".length + 3, "Ref: o conteúdo manda");
+  assert.strictEqual(col("Valor").tipo, "moeda");
+  assert.strictEqual(col("Valor").largura, "R$ 9.142,86".length + 3, "a largura do maior valor formatado");
+  assert.strictEqual(col("Data do lançamento").formato, "dd/mm/yyyy");
+  assert.strictEqual(col("Período Contábil").tipo, "mes");
+  assert.ok(col("Descrição Lançamento").largura >= "Obra Civil — Parcela 11/14 (quinzenal)".length);
+  assert.ok(p.colunas.every((c) => c.largura <= 60), "texto longo para em 60");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
