@@ -2783,13 +2783,16 @@ teste("base de dados: uma linha por item, nas colunas da planilha do escritório
   assert.strictEqual(t[1][t[0].indexOf("Quantidade")], "");
   const p = modulo.planilhaDaBase(t);
   const col = (n) => p.colunas.find((c) => c.titulo === n);
-  assert.strictEqual(col("Ref").largura, "0173".length + 3, "Ref: o conteúdo manda");
-  assert.strictEqual(col("Valor").tipo, "moeda");
-  assert.strictEqual(col("Valor").largura, "R$ 9.142,86".length + 3, "a largura do maior valor formatado");
-  assert.strictEqual(col("Data do lançamento").formato, "dd/mm/yyyy");
-  assert.strictEqual(col("Período Contábil").tipo, "mes");
-  assert.ok(col("Descrição Lançamento").largura >= "Obra Civil — Parcela 11/14 (quinzenal)".length);
-  assert.ok(p.colunas.every((c) => c.largura <= 60), "texto longo para em 60");
+  assert.strictEqual(p.colunas.length, 18, "o relatório tem as 18 colunas do modelo");
+  assert.strictEqual(p.linhas[0].length, 18);
+  assert.strictEqual(col("Ref").alinhar, "center");
+  assert.strictEqual(col("Descrição Lançamento").alinhar, "", "descrição fica à esquerda");
+  assert.strictEqual(col("Valor").formato, '"R$"\\ #,##0.00');
+  assert.strictEqual(col("Período Contábil").formato, "[$-416]mmm\\-yy;@");
+  assert.strictEqual(col("Data do lançamento").formato, "[$-416]d\\-mmm\\-yy;@");
+  assert.ok(col("Fornecedor").largura > col("Ref").largura);
+  assert.ok(col("Descrição Lançamento").largura >= 30);
+  assert.ok(p.colunas.every((c) => c.largura <= 45), "texto longo para em 45");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

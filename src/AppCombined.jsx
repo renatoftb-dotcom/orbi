@@ -26026,29 +26026,51 @@ function tabelaDaBase(linhas) {
   })));
 }
 
-// O formato do relatório em Excel: tipo e formato de cada coluna e a
-// largura pelo maior conteúdo (o título conta, em negrito). Texto muito
-// longo para em 60 — a descrição inteira continua na célula.
-const BASE_FORMATOS = {
-  "Valor total nota": ["moeda", '"R$" #,##0.00'], "Preço": ["moeda", '"R$" #,##0.00'], "Valor": ["moeda", '"R$" #,##0.00'],
-  "Quantidade": ["numero", "#,##0.###"], "Período Contábil": ["mes", "mm/yyyy"], "Data do lançamento": ["data", "dd/mm/yyyy"],
-  "Vencimento": ["data", "dd/mm/yyyy"], "Entrada no sistema": ["data", "dd/mm/yyyy"],
-};
+// O relatório em Excel, no modelo do escritório (FORMATAR BASE): as 18
+// colunas da planilha, Century Gothic 8 nos dados e 10 em negrito branco no
+// título azul, várias colunas centralizadas, os formatos de moeda, mês
+// ("jul-27"), data ("5-ago-26") e quantidade contábil, e a largura de cada
+// coluna pelo maior conteúdo (o título conta). Texto longo para em 45 — a
+// descrição inteira continua na célula.
+const CP_MOEDA_XL = '"R$"\\ #,##0.00';
+const BASE_RELATORIO = [
+  ["Ref", "texto", "", "center"], ["Nome Cliente", "texto", "", "center"], ["Projeto / obra", "texto", "", "center"],
+  ["Unidade negócio", "texto", "", "center"], ["Fornecedor", "texto", "", "center"], ["Descrição Lançamento", "texto", "", ""],
+  ["Conta contábil", "texto", "", "center"], ["Nota / Comprovante", "texto", "", ""], ["Valor total nota", "moeda", CP_MOEDA_XL, ""],
+  ["Período Contábil", "mes", "[$-416]mmm\\-yy;@", "center"], ["Data do lançamento", "data", "[$-416]d\\-mmm\\-yy;@", "center"],
+  ["Nome Insumo (catálogo)", "texto", "", ""], ["Unidade", "texto", "", "center"],
+  ["Quantidade", "numero", '_-* #,##0.00_-;\\-* #,##0.00_-;_-* "-"??_-;_-@_-', ""], ["Preço", "moeda", CP_MOEDA_XL, ""],
+  ["Valor", "moeda", CP_MOEDA_XL, ""], ["Etapa", "texto", "", "center"], ["Grupo Materiais", "texto", "", "center"],
+];
+// largura aproximada do texto na fonte (maiúscula é mais larga)
+function cpLarguraDoTexto(t) {
+  let w = 0;
+  for (const ch of String(t)) {
+    if (ch === " ") w += 0.45;
+    else if (/[A-ZÀ-Ý]/.test(ch)) w += 1.2;
+    else if (/[a-zß-ÿ0-9]/.test(ch)) w += 0.85;
+    else w += 0.5;
+  }
+  return w;
+}
 function planilhaDaBase(tabela) {
   const cab = (tabela || [])[0] || [];
-  const linhas = (tabela || []).slice(1);
-  const moeda = (v) => "R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const colunas = cab.map((titulo, j) => {
-    const [tipo, formato] = BASE_FORMATOS[titulo] || ["texto", ""];
-    let maior = Math.ceil(String(titulo).length * 1.15);
+  const meses = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  const br = (v, casas) => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+  const idx = BASE_RELATORIO.map(([t]) => cab.indexOf(t));
+  const linhas = (tabela || []).slice(1).map((l) => idx.map((j) => (j >= 0 ? l[j] : "")));
+  const colunas = BASE_RELATORIO.map(([titulo, tipo, formato, alinhar], k) => {
+    let maior = cpLarguraDoTexto(titulo) * 1.25 + 2.5;
     for (const l of linhas) {
-      const v = l[j];
+      const v = l[k];
       if (v === "" || v == null) continue;
-      const t = tipo === "data" ? "00/00/0000" : tipo === "mes" ? "00/0000" : tipo === "moeda" ? moeda(v)
-        : tipo === "numero" ? Number(v).toLocaleString("pt-BR") : String(v);
-      if (t.length > maior) maior = t.length;
+      const m = String(v).match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);
+      const t = tipo === "moeda" ? "R$ " + br(v, 2) : tipo === "numero" ? " " + br(v, 2) + " "
+        : tipo === "mes" && m ? meses[+m[2] - 1] + "-" + m[1].slice(2)
+        : tipo === "data" && m ? +m[3] + "-" + meses[+m[2] - 1] + "-" + m[1].slice(2) : String(v);
+      maior = Math.max(maior, cpLarguraDoTexto(t) * 1.08 + 2);
     }
-    return { titulo, tipo, formato, largura: Math.min(60, maior + 3) };
+    return { titulo, tipo, formato, alinhar, largura: Math.round(Math.min(45, maior) * 100) / 100 };
   });
   return { colunas, linhas };
 }
@@ -26432,7 +26454,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       // na largura do conteúdo, filtro no cabeçalho
       const ws = wb.addWorksheet("Base de dados", { views: [{ state: "frozen", xSplit: 0, ySplit: 1, activeCell: "A2" }] });
       ws.columns = plan.colunas.map((c) => ({ header: c.titulo, key: c.titulo, width: c.largura }));
-      const fonte = { name: "Century Gothic", size: 10 };
+      const fonte = { name: "Century Gothic", size: 8 };
       plan.linhas.forEach((linha) => {
         const r = ws.addRow(linha.map((v, j) => {
           const tipo = plan.colunas[j].tipo;
@@ -26443,15 +26465,22 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
           }
           return v;
         }));
-        r.font = fonte;
+        r.height = 10.8;
+        r.eachCell({ includeEmpty: true }, (cel, j) => {
+          const c = plan.colunas[j - 1];
+          cel.font = fonte;
+          if (c.formato) cel.numFmt = c.formato;
+          if (c.alinhar) cel.alignment = { horizontal: c.alinhar };
+        });
       });
-      plan.colunas.forEach((c, j) => { if (c.formato) ws.getColumn(j + 1).numFmt = c.formato; });
       const cab = ws.getRow(1);
-      cab.font = { ...fonte, bold: true, color: { argb: "FFFFFFFF" } };
-      cab.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0474F4" } };
-      cab.alignment = { vertical: "middle" };
-      cab.height = 20;
-      ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: plan.colunas.length } };
+      cab.height = 19.95;
+      cab.eachCell((cel) => {
+        cel.font = { name: "Century Gothic", size: 10, bold: true, color: { argb: "FFFFFFFF" } };
+        cel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF366092" } };
+        cel.alignment = { horizontal: "center", vertical: "middle" };
+      });
+      ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, plan.linhas.length + 1), column: plan.colunas.length } };
       const buf = await wb.xlsx.writeBuffer();
       salvar(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), nome + ".xlsx");
       setBaixando("");
