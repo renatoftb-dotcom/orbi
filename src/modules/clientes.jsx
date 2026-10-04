@@ -4832,8 +4832,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <label style={C.label}>Unidade</label>
-                  <input style={C.input} value={formConta.unidade || ""}
-                    onChange={e => setFormConta({ ...formConta, unidade: e.target.value })} placeholder="un" />
+                  <CampoUnidadeDoItem valor={formConta.unidade || ""} estilo={C.input}
+                    unidades={typeof unidadesDoCatalogo === "function" ? unidadesDoCatalogo(insumosDoCatalogo(data)) : []}
+                    insumo={formConta.insumoCodigo ? insumosDoCatalogo(data).find(m => m && m.codigo === formConta.insumoCodigo) : null}
+                    aoMudar={v => setFormConta({ ...formConta, unidade: v })} />
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <label style={C.label}>Preço unitário</label>

@@ -1042,7 +1042,7 @@ const SITUACOES_DA_ENTRADA = [
   { id: "pago", nome: "Pago", resumo: "O dinheiro já saiu: entra baixado, na data do pagamento, à vista ou no cartão." },
 ];
 
-const COLS_ENTRADA = "minmax(0,2.2fr) 62px 52px 92px 100px minmax(0,1.3fr) minmax(0,1.3fr) 24px";
+const COLS_ENTRADA = "minmax(0,2.2fr) 62px 84px 92px 100px minmax(0,1.3fr) minmax(0,1.3fr) 24px";
 
 // Empreendimento é do escritório: quem paga é ele, e o papel chega depois
 // do dinheiro — entra pago (dá para trocar para cotação). Obra de cliente
@@ -7981,7 +7981,9 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                           <input style={{ ...cel, textAlign: "right" }} inputMode="decimal" value={it.quantidade == null ? "" : it.quantidade}
                             onChange={(e) => mexerQtdOuUnit(i, { quantidade: e.target.value })} placeholder="0" /></div>
                         <div style={{ minWidth: 0 }}>{mini("Unidade")}
-                          <input style={cel} value={it.unidade || ""} onChange={(e) => mexerItem(i, { unidade: e.target.value })} placeholder="un" /></div>
+                          <CampoUnidadeDoItem valor={it.unidade || ""} unidades={unidades} estilo={cel} semAviso={!isMobile}
+                            insumo={it.insumoCodigo ? (insumos || []).find((y) => y && (y.codigo === it.insumoCodigo || y.id === it.insumoCodigo)) : null}
+                            aoMudar={(v) => mexerItem(i, { unidade: v })} /></div>
                         <div style={{ minWidth: 0 }}>{mini("Unitário")}
                           <CampoCtrNum tipo="moeda" style={{ ...cel, textAlign: "right" }} valor={it.unitario}
                             onChange={(v) => mexerQtdOuUnit(i, { unitario: v })} /></div>
@@ -8005,6 +8007,10 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                           )}
                         </div>
                       </div>
+                      {!isMobile && it.insumoCodigo && typeof divergenciaDeUnidade === "function" && (
+                        <AvisoDeUnidade prefixo={`Unidade ${it.unidade || "—"}: `} aoMudar={(v) => mexerItem(i, { unidade: v })}
+                          div={divergenciaDeUnidade(it.unidade, (insumos || []).find((y) => y && (y.codigo === it.insumoCodigo || y.id === it.insumoCodigo)))} />
+                      )}
                       {situacao && situacao !== "cotacao" && faltas.length > 0 && (
                         <div style={{ fontSize: 11, color: "#b45309", marginTop: 4 }}>{frasesDasFaltas(faltas)}</div>
                       )}
@@ -8666,21 +8672,9 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
               ? divergenciaDeUnidade(it.unidade, (insumos || []).find((x) => x && x.codigo === it.insumoCodigo))
               : null;
             const campoUnidade = (
-              <div>
-                <input value={it.unidade} placeholder="Unidades"
-                  style={{ ...celStyle, borderColor: divUn ? "#b45309" : celStyle.borderColor,
-                    background: divUn ? "#fff7ed" : celStyle.background }}
-                  onChange={(e) => mexerItem(i, { unidade: e.target.value })} />
-                {divUn && (
-                  <div style={{ fontSize: 10.5, color: "#b45309", marginTop: 2, lineHeight: 1.3 }}>
-                    catálogo: {divUn.doCatalogo}{" "}
-                    <button type="button" onClick={() => mexerItem(i, { unidade: divUn.doCatalogo })}
-                      style={{ background: "none", border: "none", padding: 0, color: "#b45309",
-                        cursor: "pointer", fontFamily: "inherit", fontSize: 10.5,
-                        textDecoration: "underline", fontWeight: 600 }}>usar</button>
-                  </div>
-                )}
-              </div>
+              <CampoUnidadeDoItem valor={it.unidade || ""} unidades={unidades} estilo={celStyle}
+                insumo={it.insumoCodigo ? (insumos || []).find((x) => x && x.codigo === it.insumoCodigo) : null}
+                aoMudar={(v) => mexerItem(i, { unidade: v })} />
             );
             const campoUnitario = (
               <CampoCtrNum tipo="moeda" valor={it.unitario} style={celStyle} placeholder="0,00"
@@ -8781,6 +8775,39 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
         </div>
       </div>
     </div>
+  );
+}
+
+// A unidade do item é escolhida da lista do catálogo (Unidades, Mts, m3,
+// m2, Kg, Lts…), não digitada. E quando o item está casado com o catálogo e
+// a unidade da nota é outra — areia fina em "Mts" quando o catálogo vende em
+// m3 —, o aviso aparece na hora, com a troca a um clique: R$ 130 o metro e
+// R$ 130 o metro cúbico são compras muito diferentes.
+function CampoUnidadeDoItem({ valor, unidades, insumo, aoMudar, estilo, semAviso }) {
+  const divUn = typeof divergenciaDeUnidade === "function" && insumo ? divergenciaDeUnidade(valor, insumo) : null;
+  const est = estilo || COT_ESTILO.input;
+  return (
+    <div style={{ minWidth: 0 }}>
+      <CampoUnidade valor={valor} unidades={unidades} aoMudar={aoMudar}
+        estilo={divUn ? { ...est, borderColor: "#d97706", background: "#fff7ed" } : est} />
+      {divUn && !semAviso && (
+        <AvisoDeUnidade div={divUn} aoMudar={aoMudar} />
+      )}
+    </div>
+  );
+}
+
+// O aviso sozinho: na linha estreita da tabela ele vai para baixo da linha
+// inteira, em vez de espremer a coluna da unidade.
+function AvisoDeUnidade({ div, aoMudar, prefixo }) {
+  if (!div) return null;
+  return (
+        <div style={{ fontSize: 10.5, color: "#b45309", marginTop: 2, lineHeight: 1.3 }}>
+          {prefixo || ""}o catálogo usa <b>{div.doCatalogo}</b>{" · "}
+          <button type="button" onClick={() => aoMudar(div.doCatalogo)}
+            style={{ background: "none", border: "none", padding: 0, color: "#b45309", cursor: "pointer",
+              fontFamily: "inherit", fontSize: 10.5, textDecoration: "underline", fontWeight: 600 }}>usar {div.doCatalogo}</button>
+        </div>
   );
 }
 

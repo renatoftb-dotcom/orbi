@@ -2710,8 +2710,10 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={S.rot}>Unidade</div>
-                    <input style={S.input} value={it.unidade}
-                      onChange={(e) => mexerItem(i, { unidade: e.target.value })} placeholder="un" />
+                    <CampoUnidadeDoItem valor={it.unidade || ""} estilo={S.input}
+                      unidades={typeof unidadesDoCatalogo === "function" ? unidadesDoCatalogo(insumos || []) : []}
+                      insumo={it.insumoCodigo ? (insumos || []).find((m) => m && m.codigo === it.insumoCodigo) : null}
+                      aoMudar={(v) => mexerItem(i, { unidade: v })} />
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={S.rot}>Preço unitário</div>
