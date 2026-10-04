@@ -3080,6 +3080,15 @@ const api = {
       return api.ia._ler("/api/ia/ler-pedido", fd, "do pedido", aoProgresso);
     },
 
+    // Qualquer papel de despesa: nota, comprovante, cupom, recibo, foto.
+    // Volta { documentos: [...] } — um por papel achado no arquivo.
+    lerDocumento: async (arquivo, aoProgresso, texto) => {
+      const fd = new FormData();
+      if (arquivo) fd.append("arquivo", arquivo);
+      if (texto) fd.append("texto", texto);
+      return api.ia._ler("/api/ia/ler-documento", fd, "do papel", aoProgresso);
+    },
+
     lerOrcamento: async (arquivo, itens, aoProgresso) => {
       const fd = new FormData();
       fd.append("arquivo", arquivo);
@@ -24052,6 +24061,7 @@ function contasDaEntrada(lanc, op) {
         quantidade: q, unidade: String(it.unidade || "").trim(),
         valor, vencimento: venc,
         pago: false, pagoEm: "", valorPago: "", observacao: String(l.observacao || "").trim(),
+        chaveNota: String(l.chaveNota || "").replace(/\D/g, ""), idTransacao: String(l.idTransacao || "").trim().toUpperCase(),
       };
       c = registrarAto(c, "criada", o.quem || "", agora);
       if (pago) {
@@ -24066,6 +24076,153 @@ function contasDaEntrada(lanc, op) {
     }
   }
   return fora;
+}
+
+// O mesmo papel não pode entrar duas vezes — nem nesta obra, nem em outra.
+// A chave da NF-e (44 dígitos) e o ID do Pix (E2E) são únicos no país:
+// achou um igual, é o mesmo papel. Devolve onde ele já está, ou null.
+function papelJaLancado(obras, papel) {
+  const p = papel || {};
+  const chave = String(p.chaveNota || "").replace(/\D/g, "");
+  const idt = String(p.idTransacao || "").trim().toUpperCase();
+  const temChave = chave.length === 44, temId = idt.length >= 20;
+  if (!temChave && !temId) return null;
+  for (const o of obras || []) {
+    for (const c of (o && o.contasPagar) || []) {
+      if (!c) continue;
+      const porChave = temChave && String(c.chaveNota || "").replace(/\D/g, "") === chave;
+      const porId = temId && String(c.idTransacao || "").trim().toUpperCase() === idt;
+      if (porChave || porId) {
+        return { obraId: o.id, obraNome: o.nome || o.titulo || "", ref: c.numeroDoc || "", por: porChave ? "chave" : "pix" };
+      }
+    }
+  }
+  return null;
+}
+
+// ── Papéis em lote: de qual lançamento é este papel ─────────────
+// A obra já tem as contas; os papéis (nota, Pix, boleto) chegaram depois,
+// numa pasta. Cada papel procura o seu lançamento pela referência (o
+// numeroDoc, que junta os itens de uma compra): o mesmo valor, o mesmo
+// fornecedor, a data perto. Nota dividida em etapas vira duas ou três refs
+// seguidas do mesmo fornecedor — a soma delas também é candidata. Chave da
+// NF-e ou ID do Pix iguais encerram a conversa. O que não for seguro fica
+// para a pessoa escolher; nada é anexado sem ela confirmar.
+const CP_PALAVRAS_VAZIAS = ["ltda", "eireli", "me", "epp", "sa", "comercio", "comercial", "de", "da", "do", "das", "dos", "e",
+  "materiais", "material", "construcao", "construcoes", "industria", "servicos", "servico", "cia", "filial", "loja"];
+function cpPalavrasDoNome(nome) {
+  return String(nome || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w.length >= 3 && CP_PALAVRAS_VAZIAS.indexOf(w) < 0);
+}
+function cpDiasEntre(a, b) {
+  const da = Date.parse(String(a || "").slice(0, 10)), db = Date.parse(String(b || "").slice(0, 10));
+  if (!(da > 0) || !(db > 0)) return null;
+  return Math.round(Math.abs(da - db) / 86400000);
+}
+function cpMesmoNome(a, b) {
+  const pa = cpPalavrasDoNome(a), pb = cpPalavrasDoNome(b);
+  return pa.some((w) => pb.some((x) => x === w || (Math.min(w.length, x.length) >= 5 && (x.startsWith(w) || w.startsWith(x)))));
+}
+
+function gruposDeContasPorRef(contas, prestadores) {
+  const nomeDe = (id) => ((prestadores || []).find((p) => p && p.id === id) || {}).nome || "";
+  const mapa = new Map();
+  for (const c of contas || []) {
+    if (!c) continue;
+    const ref = String(c.numeroDoc || c.pedidoId || c.id);
+    if (!mapa.has(ref)) mapa.set(ref, []);
+    mapa.get(ref).push(c);
+  }
+  const red = (x) => Math.round(x * 100) / 100;
+  return [...mapa.entries()].map(([ref, cs]) => {
+    const c0 = cs[0];
+    return {
+      ref, contaIds: cs.map((c) => c.id),
+      valor: red(cs.reduce((t, c) => t + (Number(c.valorPago) || Number(c.valor) || 0), 0)),
+      prestadorId: c0.prestadorId || "", favorecido: nomeDe(c0.prestadorId) || c0.favorecido || "",
+      data: String(c0.pagoEm || c0.vencimento || "").slice(0, 10),
+      numeroNota: String(c0.numeroNota || "").replace(/^0+/, ""),
+      chaveNota: String(c0.chaveNota || ""), idTransacao: String(c0.idTransacao || "").toUpperCase(),
+      descricao: cs.map((c) => c.descricao).filter(Boolean).slice(0, 2).join(" + "),
+      anexos: cs.reduce((t, c) => t + (Array.isArray(c.anexos) ? c.anexos.length : 0) + (c.comprovante ? 1 : 0), 0),
+    };
+  }).sort((a, b) => (Number(a.ref) || 0) - (Number(b.ref) || 0) || a.ref.localeCompare(b.ref));
+}
+
+function casarPapelComContas(papel, grupos, opcoes) {
+  const p = papel || {}, op = opcoes || {};
+  const valor = Math.round((Number(p.valor) || Number(p.total) || 0) * 100) / 100;
+  const data = String(p.pagoEm || p.vencimento || p.emitido || "").slice(0, 10);
+  const numero = String(p.numeroNota || p.numeroPedido || "").replace(/^0+/, "");
+  const chave = String(p.chave || "").replace(/\D/g, ""), idt = String(p.idTransacao || "").toUpperCase();
+  const lista = grupos || [];
+  const pontuar = (gs, soma) => {
+    const vg = Math.round(gs.reduce((t, g) => t + g.valor, 0) * 100) / 100;
+    const base = { refs: gs.map((g) => g.ref), contaIds: [].concat(...gs.map((g) => g.contaIds)), valor: vg,
+      favorecido: gs[0].favorecido, data: gs[0].data, descricao: gs.map((g) => g.descricao).join(" + ") };
+    if ((chave.length === 44 && gs.some((g) => g.chaveNota === chave)) || (idt && gs.some((g) => g.idTransacao === idt))) {
+      return { ...base, pontos: 200, motivos: ["mesmo papel (chave/ID)"] };
+    }
+    let pontos = 0; const motivos = [];
+    if (valor > 0 && Math.abs(vg - valor) < 0.01) { pontos += soma ? 40 : 50; motivos.push(soma ? "soma das refs" : "mesmo valor"); }
+    if (numero && gs.some((g) => g.numeroNota && g.numeroNota === numero)) { pontos += 30; motivos.push("mesmo nº"); }
+    if (p.lidoComo && cpMesmoNome(p.lidoComo, gs.map((g) => g.favorecido).join(" "))) { pontos += 20; motivos.push("mesmo fornecedor"); }
+    const d = cpDiasEntre(data, gs[0].data);
+    if (d != null) {
+      if (d === 0) { pontos += 15; motivos.push("mesma data"); }
+      else if (d <= 3) { pontos += 10; motivos.push(d + " dia(s) de diferença"); }
+      else if (d <= 10) { pontos += 5; motivos.push(d + " dias de diferença"); }
+      else if (d > 60) pontos -= 5;
+    }
+    return { ...base, pontos, motivos };
+  };
+  const candidatos = [];
+  for (const g of lista) {
+    const c = pontuar([g], false);
+    if (c.pontos >= 200 || c.motivos.indexOf("mesmo valor") >= 0 || c.motivos.indexOf("mesmo nº") >= 0) candidatos.push(c);
+  }
+  // Nota dividida em etapas: 2 a 4 refs seguidas do mesmo fornecedor.
+  if (valor > 0 && !candidatos.some((c) => c.motivos.indexOf("mesmo valor") >= 0)) {
+    const mesmo = (a, b) => (a.prestadorId && a.prestadorId === b.prestadorId)
+      || (!!a.favorecido && cpPalavrasDoNome(a.favorecido).join(" ") === cpPalavrasDoNome(b.favorecido).join(" "));
+    for (let i = 0; i < lista.length; i++) {
+      for (let n = 2; n <= 5 && i + n <= lista.length; n++) {
+        const gs = lista.slice(i, i + n);
+        if (!gs.every((g) => mesmo(g, gs[0]))) break;
+        const c = pontuar(gs, true);
+        if (c.motivos.indexOf("soma das refs") >= 0) candidatos.push(c);
+      }
+    }
+  }
+  candidatos.sort((a, b) => b.pontos - a.pontos || cpDiasEntre(data, a.data) - cpDiasEntre(data, b.data));
+  const top = candidatos.slice(0, op.max || 12);
+  const [a, b] = top;
+  // Empate de valor e fornecedor (os pedágios de 12,80): não há como saber
+  // qual é qual — tanto faz para a conta, mas a pessoa confirma.
+  const empate = !!a && !!b && a.pontos < 200 && Math.abs(a.valor - b.valor) < 0.01 && b.pontos >= a.pontos - 15;
+  const seguro = !!a && (a.pontos >= 200 || (a.pontos >= 50 && !empate && (!b || a.pontos - b.pontos >= 20)));
+  return { candidatos: top, seguro, empate };
+}
+
+// No lote, cada conta recebe UM papel de cada espécie (a nota e o
+// comprovante podem ir juntos; dois comprovantes não). Quem tem casamento
+// seguro escolhe primeiro; os empates vão sendo distribuídos pela data,
+// sem repetir conta.
+function distribuirPapeisDoLote(lidos) {
+  const tomadas = { comprovante: new Set(), nota: new Set() };
+  const especie = (l) => ((l.papel || {}).tipo === "comprovante" ? "comprovante" : "nota");
+  const ordem = (lidos || []).map((l, i) => ({ l, i })).filter((x) => x.l && x.l.casamento)
+    .sort((x, y) => (y.l.casamento.seguro - x.l.casamento.seguro) || (((y.l.casamento.candidatos[0] || {}).pontos || 0) - ((x.l.casamento.candidatos[0] || {}).pontos || 0)));
+  const saida = (lidos || []).map(() => null);
+  for (const { l, i } of ordem) {
+    const t = tomadas[especie(l)];
+    const livre = l.casamento.candidatos.find((c) => !c.refs.some((r) => t.has(r)));
+    if (!livre) { saida[i] = { escolhido: null, marcado: false }; continue; }
+    livre.refs.forEach((r) => t.add(r));
+    const primeiro = l.casamento.candidatos[0] === livre;
+    saida[i] = { escolhido: livre, marcado: l.casamento.seguro && primeiro };
+  }
+  return saida;
 }
 
 // A conta contábil é quase sempre a mesma no pedido inteiro ("Material").
@@ -26877,7 +27034,12 @@ const COLS_ENTRADA = "minmax(0,2.2fr) 62px 52px 92px 100px minmax(0,1.3fr) minma
 // não tem padrão: pago ou a pagar é a pergunta que importa ali. Comprovante
 // é prova de que o dinheiro saiu, então é pago, sempre.
 function situacaoPadraoDaEntrada(papel, tipoDaObra) {
-  if (papel && papel.tipo === "comprovante") return "pago";
+  if (papel && papel.tipo === "comprovante") return papel.situacaoLida === "agendado" ? "apagar" : "pago";
+  // O que o papel diz manda: pago, agendado/a pagar, ou lista para cotar.
+  const lida = (papel || {}).situacaoLida;
+  if (lida === "pago") return "pago";
+  if (lida === "agendado" || lida === "a_pagar") return "apagar";
+  if (lida === "lista") return "cotacao";
   return tipoDaObra === "empreendimento" ? "pago" : "";
 }
 
@@ -26945,6 +27107,11 @@ function entradaUnicaPronta(e, obras, obraId) {
 
 function rotuloDoPapelDaEntrada(papel, itens) {
   const p = papel || {};
+  if (p.lidoPelaIA && p.tipoIA) {
+    const nome = COT_NOME_DO_TIPO[p.tipoIA] || "papel";
+    const fem = /^(nota|guia|lista)/.test(nome);
+    return nome.charAt(0).toUpperCase() + nome.slice(1) + (fem ? " lida" : " lido") + " pela IA";
+  }
   if (p.tipo === "comprovante") return "Comprovante de pagamento lido";
   if (p.tipo === "nfse") return "Nota fiscal de serviço lida";
   if (p.ehNota) return "Nota fiscal lida";
@@ -26969,6 +27136,87 @@ function rotuloDoAnexoDaEntrada(papel) {
 // troca o que não for (frete, serviço); o que veio escolhido fica.
 function comContaPadraoDaEntrada(lista, padrao) {
   return (lista || []).map((x) => (x && !x.contaId && padrao ? { ...x, contaId: padrao } : x));
+}
+
+// ── A leitura da IA vira a ficha da Entrada ─────────────────────
+// A IA devolve um item por PAPEL achado no arquivo. Um arquivo comum tem um
+// só; mas a nota pode vir com o print do Pix junto, ou duas notas numa foto.
+// Aqui os papéis viram UMA ficha: os itens saem da nota (ou do cupom, do
+// pedido); a data e o jeito de pagar saem do comprovante, quando há um.
+// O que não fecha vira aviso à vista — nunca correção calada.
+const COT_TIPOS_COM_ITENS = ["nota_produto", "nota_servico", "cupom", "pedido_orcamento", "lista_material", "recibo", "contrato"];
+const COT_TIPOS_COMPROVANTE = ["comprovante_pix", "comprovante_boleto", "comprovante_ted", "comprovante_cartao", "guia_imposto"];
+
+function tipoDoPapelPelaIA(t) {
+  if (t === "nota_produto") return "nota";
+  if (t === "nota_servico") return "nfse";
+  if (COT_TIPOS_COMPROVANTE.indexOf(t) >= 0) return "comprovante";
+  if (t === "lista_material") return "lista";
+  return "pedido";
+}
+
+const COT_NOME_DO_TIPO = {
+  nota_produto: "nota fiscal", nota_servico: "nota de serviço", cupom: "cupom", pedido_orcamento: "pedido",
+  comprovante_pix: "comprovante de Pix", comprovante_boleto: "comprovante de boleto", comprovante_ted: "comprovante de TED",
+  comprovante_cartao: "comprovante da maquininha", guia_imposto: "guia de imposto", recibo: "recibo",
+  contrato: "contrato", lista_material: "lista de material", outro: "papel",
+};
+
+function fichaDaEntradaPelaIA(documentos) {
+  const docs = (documentos || []).filter(Boolean);
+  if (!docs.length) return null;
+  const avisos = [];
+  const comItens = docs.filter((d) => COT_TIPOS_COM_ITENS.indexOf(d.tipo) >= 0);
+  const comprovantes = docs.filter((d) => COT_TIPOS_COMPROVANTE.indexOf(d.tipo) >= 0);
+  const principal = comItens[0] || comprovantes[0] || docs[0];
+  const pago = comprovantes.find((d) => d.situacao === "pago") || (principal.situacao === "pago" ? principal : null);
+  const agendado = docs.find((d) => d.situacao === "agendado") || null;
+  if (docs.length > 1) {
+    avisos.push(`Este arquivo tem ${docs.length} papéis: ${docs.map((d) => COT_NOME_DO_TIPO[d.tipo] || "papel").join(" + ")}. `
+      + "Os itens vêm " + (comItens.length ? "da " + (COT_NOME_DO_TIPO[principal.tipo] || "nota") : "do comprovante")
+      + (pago && pago !== principal ? "; a data e a forma do pagamento, do comprovante." : "."));
+  }
+  if (comItens.length > 1) avisos.push(`Há ${comItens.length} notas/cupons no arquivo — só a primeira entrou. Lance as outras separadas.`);
+  if (agendado && !pago) avisos.push("O comprovante é de AGENDAMENTO — o dinheiro ainda não saiu. Entra como a pagar, com o vencimento agendado.");
+  const valorPago = pago ? (Number(pago.valor) || 0) : 0;
+  const total = Number(principal.valor) || 0;
+  if (pago && pago !== principal && valorPago > 0 && total > 0 && Math.abs(valorPago - total) >= 0.01) {
+    avisos.push(`O valor pago (${valorPago.toFixed(2).replace(".", ",")}) é diferente do total da ${COT_NOME_DO_TIPO[principal.tipo] || "nota"} (${total.toFixed(2).replace(".", ",")}). Confira os itens.`);
+  }
+  const forma = (pago || principal).forma || "";
+  if (forma === "credito") avisos.push("Pago no crédito. Se foi no cartão do escritório, marque “Cartão de crédito” em Como foi pago.");
+
+  const itensLidos = (principal.itens || []).map((l) => ({
+    descricao: l.descricao || "", quantidade: Number(l.quantidade) || "", unidade: l.unidade || "",
+    unitario: Number(l.unitario) || "", total: Number(l.total) || (Number(l.quantidade) * Number(l.unitario)) || 0,
+  })).filter((l) => l.descricao);
+  const tipo = tipoDoPapelPelaIA(principal.tipo);
+  const chaveNf = docs.map((d) => String(d.chave || "").replace(/\D/g, "")).find((c) => c.length === 44) || "";
+  const idTransacao = comprovantes.map((d) => String(d.chave || "").trim()).find((c) => /^E[0-9A-Za-z]{20,}$/.test(c)) || "";
+  const papel = {
+    tipo, tipoIA: principal.tipo, lidoPelaIA: true,
+    lidoComo: principal.emitente || (pago && pago.emitente) || "",
+    cnpj: principal.cnpj || "",
+    ehNota: tipo === "nota" || tipo === "nfse",
+    numeroNota: (tipo === "nota" || tipo === "nfse") ? String(principal.numero || "") : "",
+    numeroPedido: (tipo === "nota" || tipo === "nfse") ? "" : String(principal.numero || ""),
+    emitido: principal.emissao || "",
+    vencimento: (agendado && agendado.vencimento) || principal.vencimento || "",
+    pagoEm: (pago && (pago.pagamento || pago.emissao)) || "",
+    total: valorPago > 0 && !itensLidos.length ? valorPago : (total || valorPago),
+    valor: valorPago || total,
+    desconto: Number(principal.desconto) || 0,
+    situacaoLida: pago ? "pago" : agendado ? "agendado" : principal.situacao === "a_pagar" ? "a_pagar"
+      : principal.tipo === "lista_material" ? "lista" : "",
+    formaLida: forma,
+    chave: chaveNf, idTransacao,
+    descricao: principal.descricao || (pago && pago.descricao) || "",
+  };
+  // Papel sem tabela (comprovante, recibo, nota de serviço): um item só,
+  // com o valor do papel. A conta contábil fica para a pessoa.
+  const itens = itensLidos.length ? itensLidos
+    : [{ descricao: papel.descricao || "", quantidade: "", unidade: "", unitario: "", total: papel.valor || papel.total || 0 }];
+  return { papel, itens, avisos, documentos: docs };
 }
 
 // ── O papel que não é nota: o comprovante ──────────────────────
@@ -32257,6 +32505,310 @@ function useIaDisponivel() {
   return disp;
 }
 
+// ── Papéis em lote ──────────────────────────────────────────────
+// A obra já está lançada; os papéis (notas, Pix, boletos) estão numa pasta.
+// Aqui eles entram de uma vez: a IA lê cada um, o VICKE procura o lançamento
+// pelo valor, fornecedor e data, e a pessoa confere antes de anexar. Só vão
+// marcados os casamentos seguros — empate (os pedágios de 12,80) e o que não
+// achou par ficam para a pessoa decidir. A leitura pode ser baixada (JSON),
+// que é como se mede quanto a IA acerta.
+const LOTE_SIMULTANEAS = 2;
+const LOTE_POR_GRAVACAO = 8;
+function loteChave(c) { return c && c.refs ? c.refs.join("+") : ""; }
+function loteDiaBR(iso) { const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : ""; }
+
+function PapeisEmLote({ obra, prestadores, isMobile, aoAnexar, aoFechar }) {
+  const E = COT_ESTILO;
+  const iaDisponivel = useIaDisponivel();
+  const moeda = (v) => (typeof fmtMoedaCtr === "function" ? fmtMoedaCtr(v) : "R$ " + Number(v || 0).toFixed(2));
+  const grupos = useMemo(() => gruposDeContasPorRef((obra || {}).contasPagar || [], prestadores || []), [obra, prestadores]);
+  const gruposRef = useRef(grupos); gruposRef.current = grupos;
+  const aoAnexarRef = useRef(aoAnexar); aoAnexarRef.current = aoAnexar;
+  const [linhas, setLinhas] = useState([]);
+  const linhasRef = useRef([]);
+  const [rodando, setRodando] = useState(false);
+  const [anexando, setAnexando] = useState(false);
+  const [aviso, setAviso] = useState("");
+  const entrada = useRef(null);
+  const seq = useRef(0);
+  const atualizar = (fn) => { linhasRef.current = fn(linhasRef.current); setLinhas(linhasRef.current); };
+  const mudar = (id, patch) => atualizar((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+  const esperar = (ms) => new Promise((z) => setTimeout(z, ms));
+
+  // O que a pessoa escolheu à mão fica; o resto se redistribui a cada leitura.
+  function redistribuir() {
+    atualizar((ls) => {
+      const lidos = ls.map((l) => {
+        if (l.estado !== "lido") return null;
+        if (l.mexido) {
+          const c = candidatoDe(l, l.escolha);
+          return { papel: l.ficha.papel, casamento: { seguro: true, candidatos: c ? [c] : [] } };
+        }
+        return { papel: l.ficha.papel, casamento: l.casamento };
+      });
+      const d = distribuirPapeisDoLote(lidos);
+      return ls.map((l, i) => (l.estado !== "lido" || l.mexido ? l
+        : { ...l, escolha: d[i] && d[i].escolhido ? loteChave(d[i].escolhido) : "", marcado: !!(d[i] && d[i].marcado) }));
+    });
+  }
+
+  function candidatoDe(l, chave) {
+    if (!chave) return null;
+    const c = ((l.casamento || {}).candidatos || []).find((x) => loteChave(x) === chave);
+    if (c) return c;
+    const g = gruposRef.current.find((x) => x.ref === chave);
+    return g ? { refs: [g.ref], contaIds: g.contaIds, valor: g.valor, favorecido: g.favorecido, data: g.data, descricao: g.descricao, pontos: 0, motivos: ["escolhida à mão"] } : null;
+  }
+
+  function escolherArquivos(lista) {
+    const novos = [...(lista || [])].map((arquivo) => ({ id: "l" + (++seq.current), arquivo, estado: "fila", erro: "",
+      ficha: null, documentos: null, casamento: null, escolha: "", marcado: false, mexido: false }));
+    if (novos.length) atualizar((ls) => ls.concat(novos));
+  }
+
+  async function lerUm(id) {
+    const l = linhasRef.current.find((x) => x.id === id);
+    if (!l) return;
+    mudar(id, { estado: "lendo", erro: "" });
+    try {
+      const r = await api.ia.lerDocumento(l.arquivo, null, "");
+      const documentos = (r && r.documentos) || [];
+      const ficha = fichaDaEntradaPelaIA(documentos);
+      if (!ficha) { mudar(id, { estado: "erro", erro: "A IA não achou papel de despesa aqui.", documentos }); return; }
+      mudar(id, { estado: "lido", ficha, documentos, casamento: casarPapelComContas(ficha.papel, gruposRef.current) });
+      redistribuir();
+    } catch (e) {
+      mudar(id, { estado: "erro", erro: (typeof avisoDaIA === "function" ? avisoDaIA(e) : "") || e.message || "A IA não leu." });
+    }
+  }
+
+  async function lerTodos() {
+    if (rodando) return;
+    setRodando(true); setAviso("");
+    const fila = linhasRef.current.filter((l) => l.estado === "fila" || l.estado === "erro").map((l) => l.id);
+    let k = 0;
+    const trabalhador = async () => { while (k < fila.length) { const id = fila[k++]; await lerUm(id); } };
+    await Promise.all(Array.from({ length: LOTE_SIMULTANEAS }, trabalhador));
+    setRodando(false);
+  }
+
+  function gravar(pacote) {
+    const r = (aoAnexarRef.current && aoAnexarRef.current(pacote)) || {};
+    const ids = new Set(pacote.map((p) => p.linhaId));
+    if (r.erro) { atualizar((ls) => ls.map((l) => (ids.has(l.id) ? { ...l, erro: r.erro } : l))); return false; }
+    atualizar((ls) => ls.map((l) => (ids.has(l.id) ? { ...l, estado: "anexado", marcado: false, erro: "" } : l)));
+    return true;
+  }
+
+  async function anexarMarcados() {
+    if (anexando) return;
+    const alvo = linhasRef.current.filter((l) => l.estado === "lido" && l.marcado && l.escolha);
+    if (!alvo.length) return;
+    setAnexando(true); setAviso("");
+    let pacote = [], feitos = 0;
+    for (const l of alvo) {
+      let up = null, pausas = 0;
+      while (!up) {
+        try {
+          setAviso(`Enviando ${feitos + 1} de ${alvo.length}…`);
+          up = await enviarAnexo(l.arquivo, "comprovante_pagamento");
+        } catch (e) {
+          if (e && e.status === 429 && pausas < 20) {
+            pausas++;
+            setAviso(`O servidor pediu uma pausa nos envios — retomo em 1 minuto (${feitos} de ${alvo.length} enviados). Deixe esta tela aberta.`);
+            await esperar(60000);
+            continue;
+          }
+          mudar(l.id, { erro: "O papel não subiu: " + ((e && e.message) || "erro") });
+          break;
+        }
+      }
+      if (!up) continue;
+      feitos++;
+      const c = candidatoDe(l, l.escolha);
+      const pp = l.ficha.papel;
+      pacote.push({ linhaId: l.id, contaIds: (c && c.contaIds) || [], refs: (c && c.refs) || [],
+        anexo: { ...up, tipo: tipoDoAnexoDaEntrada(pp) }, chaveNota: pp.chave || "", idTransacao: pp.idTransacao || "" });
+      if (pacote.length >= LOTE_POR_GRAVACAO) { gravar(pacote); pacote = []; await esperar(300); }
+    }
+    if (pacote.length) gravar(pacote);
+    setAviso(feitos === alvo.length ? `${feitos} papel(éis) anexado(s).` : `${feitos} de ${alvo.length} anexados — veja os que ficaram com erro.`);
+    setAnexando(false);
+  }
+
+  function baixarLeituras() {
+    const saida = linhasRef.current.map((l) => {
+      const c = candidatoDe(l, l.escolha);
+      return { arquivo: (l.arquivo || {}).name || "", estado: l.estado, erro: l.erro || "",
+        documentos: l.documentos || [], papel: l.ficha ? l.ficha.papel : null, avisos: l.ficha ? l.ficha.avisos : [],
+        seguro: !!(l.casamento && l.casamento.seguro), empate: !!(l.casamento && l.casamento.empate),
+        candidatos: ((l.casamento || {}).candidatos || []).slice(0, 4).map((x) => ({ refs: x.refs, valor: x.valor, pontos: x.pontos, motivos: x.motivos })),
+        escolhido: c ? c.refs : [], marcado: !!l.marcado };
+    });
+    const blob = new Blob([JSON.stringify({ obra: (obra || {}).nome || "", em: new Date().toISOString(), papeis: saida }, null, 1)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `leituras-${String((obra || {}).nome || "obra").replace(/[^\w-]+/g, "-").toLowerCase()}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  const conta = (f) => linhas.filter(f).length;
+  const nFila = conta((l) => l.estado === "fila" || l.estado === "erro");
+  const nLidos = conta((l) => l.estado === "lido");
+  const nMarcados = conta((l) => l.estado === "lido" && l.marcado && l.escolha);
+  const nAnexados = conta((l) => l.estado === "anexado");
+  const nLendo = conta((l) => l.estado === "lendo");
+
+  const situacaoDe = (l) => {
+    if (l.estado === "fila") return selo("#6b7280", "Na fila");
+    if (l.estado === "lendo") return selo("#0474f4", "Lendo…");
+    if (l.estado === "erro") return selo("#dc2626", "Erro");
+    if (l.estado === "anexado") return selo("#0474f4", "Anexado");
+    if (!l.escolha) return selo("#6b7280", "Sem par");
+    if (l.mexido) return selo("#0474f4", "Escolhida");
+    if (l.casamento && l.casamento.seguro && l.marcado) return selo("#059669", "Seguro");
+    return selo("#d97706", l.casamento && l.casamento.empate ? "Empate — confira" : "Confira");
+  };
+
+  const rotuloDoCandidato = (c) => `ref ${c.refs.join("+")} · ${c.favorecido || "—"} · ${moeda(c.valor)}${c.data ? " · " + loteDiaBR(c.data) : ""}`;
+  const opcoesDe = (l) => {
+    const sug = ((l.casamento || {}).candidatos || []);
+    const usados = new Set(sug.map(loteChave));
+    return [
+      { valor: "", rotulo: "— não anexar —" },
+      ...(sug.length ? [{ grupo: "Sugeridas", opcoes: sug.map((c) => ({ valor: loteChave(c), rotulo: rotuloDoCandidato(c), extra: (c.descricao || "") + " " + c.motivos.join(" ") })) }] : []),
+      { grupo: "Todas as contas da obra", opcoes: grupos.filter((g) => !usados.has(g.ref)).map((g) => ({ valor: g.ref,
+        rotulo: rotuloDoCandidato({ refs: [g.ref], favorecido: g.favorecido, valor: g.valor, data: g.data }) + (g.anexos ? ` · 📎${g.anexos}` : ""), extra: g.descricao })) },
+    ];
+  };
+
+  const lido = (l) => {
+    if (!l.ficha) return <span style={{ color: l.estado === "erro" ? "#dc2626" : "#6b7280" }}>{l.erro || (l.estado === "lendo" ? "A IA está lendo…" : "")}</span>;
+    const p = l.ficha.papel;
+    const nome = COT_NOME_DO_TIPO[p.tipoIA] || "papel";
+    return (
+      <span>
+        <b style={{ color: "#111827" }}>{nome.charAt(0).toUpperCase() + nome.slice(1)}</b>
+        {` · ${p.lidoComo || "?"} · ${moeda(p.valor || p.total)}`}
+        {(p.pagoEm || p.vencimento || p.emitido) ? ` · ${loteDiaBR(p.pagoEm || p.vencimento || p.emitido)}` : ""}
+        {(p.numeroNota || p.numeroPedido) ? ` · nº ${p.numeroNota || p.numeroPedido}` : ""}
+        {l.ficha.avisos.length > 0 && <span style={{ display: "block", color: "#b45309", fontSize: 11 }}>{l.ficha.avisos[0]}</span>}
+        {l.erro && <span style={{ display: "block", color: "#dc2626", fontSize: 11 }}>{l.erro}</span>}
+      </span>
+    );
+  };
+
+  const motivosDe = (l) => {
+    const c = candidatoDe(l, l.escolha);
+    return c && c.motivos && c.motivos.length ? c.motivos.join(" · ") : "";
+  };
+
+  const marcar = (l, v) => mudar(l.id, { marcado: v });
+  const escolher = (l, v) => mudar(l.id, { escolha: v, mexido: true, marcado: !!v });
+  const tirar = (l) => atualizar((ls) => ls.filter((x) => x.id !== l.id));
+  const podeMarcar = (l) => l.estado === "lido" && !!l.escolha && !anexando;
+  const COLS = "28px minmax(0,1.2fr) minmax(0,2fr) minmax(0,2.2fr) 120px";
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", zIndex: 60, display: "flex", alignItems: isMobile ? "stretch" : "flex-start", justifyContent: "center", overflowY: "auto", padding: isMobile ? 0 : "32px 16px" }}>
+      <div style={{ background: "#fff", borderRadius: isMobile ? 0 : 16, width: "100%", maxWidth: 1180, padding: isMobile ? 16 : 22, boxSizing: "border-box", minHeight: isMobile ? "100%" : "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Papéis em lote</div>
+            <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2 }}>
+              Notas, comprovantes e boletos de {(obra || {}).nome || "obra"}. A IA lê cada papel e procura o lançamento pelo valor, fornecedor e data — nada é anexado sem você marcar.
+            </div>
+          </div>
+          <button style={E.btnSec} onClick={aoFechar} disabled={anexando}>Fechar</button>
+        </div>
+
+        {iaDisponivel === false && (
+          <div style={{ ...E.quadro, background: "#fffbeb", borderColor: "#fcd34d", color: "#92400e", fontSize: 12.5, marginBottom: 12 }}>
+            A leitura por IA não está disponível nesta conta agora — sem ela o lote não lê os papéis.
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+          <input ref={entrada} type="file" multiple accept="application/pdf,image/*" style={{ display: "none" }}
+            onChange={(e) => { escolherArquivos(e.target.files); e.target.value = ""; }} />
+          <button style={E.btnSec} onClick={() => entrada.current && entrada.current.click()} disabled={anexando}>Escolher arquivos</button>
+          <button style={{ ...E.btn, background: "#0474f4", opacity: (!nFila || rodando || iaDisponivel === false) ? 0.5 : 1 }}
+            disabled={!nFila || rodando || iaDisponivel === false} onClick={lerTodos}>
+            {rodando ? `Lendo… (${nLidos + nAnexados} de ${linhas.length})` : `Ler com a IA${nFila ? ` (${nFila})` : ""}`}
+          </button>
+          <span style={{ fontSize: 12, color: "#4b5563" }}>
+            {linhas.length} arquivo(s) · {nLidos + nAnexados} lido(s){nLendo ? ` · ${nLendo} lendo` : ""} · {nAnexados} anexado(s)
+          </span>
+        </div>
+        {rodando && <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 10 }}>Cada papel leva uns 20 a 40 segundos, dois por vez. Deixe esta tela aberta até terminar.</div>}
+
+        {linhas.length === 0 ? (
+          <div style={{ ...E.quadro, textAlign: "center", color: "#6b7280", fontSize: 12.5, padding: 28 }}>
+            Escolha os arquivos (PDF ou foto) — pode ser a pasta inteira de uma vez.
+          </div>
+        ) : (
+          <div style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12 }}>
+            {!isMobile && (
+              <div style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, padding: "8px 12px", fontSize: 10.5, fontWeight: 700, color: "#6b7280", letterSpacing: 0.4, textTransform: "uppercase", borderBottom: "1px solid rgba(38,36,33,0.1)" }}>
+                <span /><span>Arquivo</span><span>O que a IA leu</span><span>Lançamento</span><span>Situação</span>
+              </div>
+            )}
+            {linhas.map((l) => {
+              const caixa = (
+                <input type="checkbox" checked={!!l.marcado} disabled={!podeMarcar(l)} onChange={(e) => marcar(l, e.target.checked)}
+                  style={{ width: 16, height: 16, accentColor: "#0474f4" }} aria-label="Anexar este papel" />
+              );
+              const seletor = l.estado === "lido" || l.estado === "anexado" ? (
+                <div>
+                  <SelectBusca style={{ ...E.input, padding: "6px 9px", fontSize: 12 }} value={l.escolha || ""} disabled={l.estado === "anexado" || anexando}
+                    onChange={(v) => escolher(l, v)} placeholder="Procurar ref, fornecedor, valor…" vazio="— não anexar —" opcoes={opcoesDe(l)} />
+                  {motivosDe(l) && <div style={{ fontSize: 10.5, color: "#6b7280", marginTop: 3 }}>{motivosDe(l)}</div>}
+                </div>
+              ) : <span />;
+              const nome = (
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={(l.arquivo || {}).name}>{(l.arquivo || {}).name}</div>
+                  {(l.estado === "fila" || l.estado === "erro") && !rodando && (
+                    <button onClick={() => tirar(l)} style={{ background: "none", border: "none", padding: 0, color: "#6b7280", fontSize: 11, cursor: "pointer", textDecoration: "underline" }}>tirar da lista</button>
+                  )}
+                </div>
+              );
+              return isMobile ? (
+                <div key={l.id} style={{ padding: 12, borderBottom: "1px solid rgba(38,36,33,0.08)" }}>
+                  <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 6 }}>
+                    {caixa}
+                    <div style={{ flex: 1, minWidth: 0 }}>{nome}</div>
+                    {situacaoDe(l)}
+                  </div>
+                  <div style={{ fontSize: 12, color: "#374151", marginBottom: 8 }}>{lido(l)}</div>
+                  {seletor}
+                </div>
+              ) : (
+                <div key={l.id} style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, padding: "10px 12px", alignItems: "start", borderBottom: "1px solid rgba(38,36,33,0.08)", fontSize: 12, color: "#374151" }}>
+                  <div style={{ paddingTop: 3 }}>{caixa}</div>
+                  {nome}
+                  <div>{lido(l)}</div>
+                  {seletor}
+                  <div>{situacaoDe(l)}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {aviso && <div style={{ fontSize: 12, color: "#374151", marginTop: 10 }}>{aviso}</div>}
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 14 }}>
+          <button style={E.btnSec} onClick={baixarLeituras} disabled={!(nLidos + nAnexados) && !conta((l) => l.estado === "erro")}>Baixar leituras (JSON)</button>
+          <button style={{ ...E.btn, opacity: (!nMarcados || anexando || rodando) ? 0.5 : 1 }} disabled={!nMarcados || anexando || rodando} onClick={anexarMarcados}>
+            {anexando ? "Anexando…" : `Anexar os marcados${nMarcados ? ` (${nMarcados})` : ""}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── A Entrada, pronta para pendurar em qualquer tela ────────
 // A caixa em si (PainelEntrada) não conhece `data` nem `save`: recebe listas.
 // Este invólucro faz a ligação, e é ele que as duas portas usam — a de dentro
@@ -32561,6 +33113,9 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const [pagamento, setPagamento] = useState({ data: "", forma: "avista", cartaoId: "", parcelas: 1 });
   const [apagar, setApagar] = useState({ vencimento: "", parcelas: "1", intervalo: "30" });
   const [parcelaId, setParcelaId] = useState("");
+  // O que a leitura avisou: arquivo com dois papéis, agendamento, valor
+  // pago diferente da nota. Fica no topo da tela até ler outro papel.
+  const [avisosDaLeitura, setAvisosDaLeitura] = useState([]);
   // O que o papel disse no cabeçalho: número, emissão, vencimento, total, emitente.
   const [papel, setPapel] = useState(null);
 
@@ -32755,6 +33310,19 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
       // Comprovante antes de tudo: é outro papel, com outra saída. Decidir
       // isto depois de tentar achar a tabela de itens só daria o erro
       // errado — "não achei a tabela" num papel que nunca teve tabela.
+      // Arquivo (PDF, foto, print) vai primeiro para a IA, que lê qualquer
+      // papel — 3 em cada 4 papéis de obra são imagem, e o leitor próprio
+      // só lê PDF com texto. Sem IA, ou se ela falhar, o leitor próprio entra.
+      if (alvo && iaDisponivel && api && api.ia && typeof api.ia.lerDocumento === "function") {
+        try {
+          const r = await api.ia.lerDocumento(alvo, (pr) => setProgresso(pr), String(paraLer || "").trim());
+          const ficha = fichaDaEntradaPelaIA(r && r.documentos);
+          if (ficha) { aplicarFichaDaIA(ficha, ctx); return; }
+          setAvisosDaLeitura(["A IA não achou papel de despesa neste arquivo — tentei o leitor do VICKE."]);
+        } catch (e) {
+          setAvisosDaLeitura([(typeof avisoDaIA === "function" ? avisoDaIA(e) : "") || "A IA não leu agora — usei o leitor do VICKE."]);
+        }
+      }
       const linhasDoComprovante = ehPdf(alvo) ? await linhasDoPdf(alvo) : String(paraLer || texto || "").split("\n");
       const comp = dadosDoComprovante(linhasDoComprovante);
       if (comp) {
@@ -32829,6 +33397,23 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // o cadastro; e o prestador que a própria frase disse ("paguei o Zé").
   // A conta contábil fica em branco de propósito — é a única coisa que nem o
   // papel nem a frase sabem, e chutá-la é errar o P&L em silêncio.
+  // A ficha da IA na tela: o fornecedor casado com o cadastro pelo nome, os
+  // itens casados com o catálogo pelo mesmo caminho da nota lida aqui, e a
+  // situação que o papel disse.
+  function aplicarFichaDaIA(ficha, ctx) {
+    const p = ficha.papel;
+    const achado = (ctx && ctx.loja) || prestadorDoComprovante(prestadores || [], p.lidoComo) || null;
+    const contaPadrao = (p.tipo === "nota" || p.tipo === "pedido" || p.tipo === "lista") ? "material" : "";
+    const lidos = itensDaEntrada({ itens: ficha.itens }, "orcamento", insumos || []);
+    setDespesa(null); setDestino("");
+    setLojaId(achado ? achado.id : "");
+    setPapel(p);
+    setItens(comContaPadraoDaEntrada(lidos.length ? lidos : [{ ...(typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio() : {}),
+      descricao: ficha.itens[0].descricao || "", bruto: ficha.itens[0].total || "" }], contaPadrao));
+    setAvisosDaLeitura(ficha.avisos || []);
+    iniciarSituacao(p);
+  }
+
   function abrirDespesaLida(comp, ctx) {
     const achado = prestadorDoComprovante(prestadores || [], comp.favorecido)
       || (ctx && ctx.loja) || null;
@@ -32850,7 +33435,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
 
 
   function limpar() {
-    situacaoTocada.current = false; setSituacao(""); setParcelaId("");
+    situacaoTocada.current = false; setSituacao(""); setParcelaId(""); setAvisosDaLeitura([]);
     setTexto(""); setArquivo(null); setItens(null); setPapel(null); setDespesa(null);
     setDestino(""); setLojaId(""); setObraId(""); setAviso(""); setReconhecido(null);
     setLojasMarcadas({}); setBuscaLoja(""); setFila(null); setEnviado(null);
@@ -32937,6 +33522,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
       };
       const lancamento = { situacao, prestadorId: lojaId, favorecido: fav.nome || pp.lidoComo || "",
         numeroNota: pp.numeroNota || pp.numeroPedido || "", emitido: pp.emitido || "",
+        chaveNota: pp.chave || "", idTransacao: pp.idTransacao || "",
         itens: rateados.map((x) => ({ descricao: nomeDe(x), insumoCodigo: x.insumoCodigo || "",
           grupoMaterial: x.grupoMaterial || "", quantidade: x.quantidade, unidade: x.unidade || "",
           total: x.valor, etapa: x.etapa || "", contaId: x.contaId || "" })),
@@ -33117,6 +33703,12 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                 <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0474f4", marginBottom: 4 }}>
                   {rotuloDoPapelDaEntrada(papel, itens)}
                 </div>
+                {avisosDaLeitura.length > 0 && (
+                  <div style={{ margin: "4px 0 6px", padding: "8px 10px", borderRadius: 10, background: "#fffbeb",
+                    border: "1px solid rgba(245,158,11,0.45)", display: "grid", gap: 4 }}>
+                    {avisosDaLeitura.map((a, i) => <div key={i} style={{ fontSize: 11.5, color: "#92400e" }}>{a}</div>)}
+                  </div>
+                )}
                 {papel && papel.tipo === "nfse" && (
                   <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 4 }}>
                     A data veio da emissão da nota. Se o pagamento foi em outro dia, troque abaixo — é ela que
@@ -33553,7 +34145,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
           {!embutido && <button type="button" style={E.btnSec} onClick={aoFechar}>Fechar</button>}
           {itens && (
             <button type="button" style={E.btnSec}
-              onClick={() => { situacaoTocada.current = false; setSituacao(""); setParcelaId("");
+              onClick={() => { situacaoTocada.current = false; setSituacao(""); setParcelaId(""); setAvisosDaLeitura([]);
                 setItens(null); setDespesa(null); setPapel(null); setDestino(""); setObraId(""); setAviso(""); setReconhecido(null); }}>Ler de novo</button>
           )}
           {embutido && !itens && String(texto).trim() !== "" && (
@@ -37059,6 +37651,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [contratoSalvoEm, setContratoSalvoEm] = useState(0);
   // Contas a pagar: formulário da conta avulsa em edição.
   const [formConta, setFormConta] = useState(null);
+  const [loteDePapeis, setLoteDePapeis] = useState(false);
   // Contas a pagar: como agrupar, o que mostrar e quais grupos estão fechados.
   const [visaoContas, setVisaoContas] = useState("mes");
   // Abre em "A pagar": é o que a tela é. O gráfico segue o mesmo filtro —
@@ -39448,11 +40041,19 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         ) : (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
             <button style={C.btnSec} onClick={() => setFormConta(contaAvulsaVazia(obraSelecionada.id))}>＋ Nova conta</button>
+            {perm.podeGerenciarObra && (
+              <button style={C.btnSec} onClick={() => setLoteDePapeis(true)}>Papéis em lote</button>
+            )}
             {alvosRecalibraveis.length > 0 && (
               <button style={C.btnSec} onClick={() => abrirRecalibragem(alvosRecalibraveis[0].id)}>Recalibrar</button>
             )}
           </div>
         ))}
+
+        {loteDePapeis && obraAtual && (
+          <PapeisEmLote obra={obraAtual} prestadores={prestadores} isMobile={isMobile}
+            aoAnexar={anexarPapeisEmLote} aoFechar={() => setLoteDePapeis(false)} />
+        )}
 
         {/* Recalibragem: a obra não começou na data registrada no contrato —
             muda-se a data do primeiro pagamento e as parcelas em aberto andam
@@ -40040,6 +40641,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (nota && (l || {}).prestadorId && contas.some(c => c && c.numeroNota === nota && c.prestadorId === l.prestadorId)) {
       return { erro: `A nota nº ${nota} desse fornecedor já está lançada nesta obra.` };
     }
+    const ja = typeof papelJaLancado === "function" ? papelJaLancado(data.obras || [], l) : null;
+    if (ja) {
+      const ondeJa = ja.obraId === obraAtual.id ? "nesta obra" : `em ${ja.obraNome || "outra obra"}`;
+      return { erro: `${ja.por === "chave" ? "Essa nota (mesma chave)" : "Esse Pix (mesmo ID)"} já está lançado ${ondeJa}${ja.ref ? ` — ref ${ja.ref}` : ""}.` };
+    }
     const pg = (l || {}).pagamento || {};
     const cartao = l.situacao === "pago" && pg.forma === "cartao"
       ? cartaoPorId(cartoesDoEscritorio(data), pg.cartaoId) : null;
@@ -40050,6 +40656,38 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!novas.length) return { erro: "Nenhum item com valor." };
     gravarContas([...contas, ...novas], obraAtual.id);
     return { gravado: true, quantas: novas.length };
+  }
+
+  // Papéis em lote: cada papel já subiu; aqui ele entra na lista de anexos
+  // das contas da referência escolhida. A chave da nota e o ID do Pix vão
+  // junto — é o que impede o mesmo papel de entrar duas vezes depois.
+  function anexarPapeisEmLote(pacote) {
+    if (!obraAtual) return { erro: "Obra não encontrada." };
+    if (!perm.podeGerenciarObra) return { erro: "Sem permissão para anexar nesta obra." };
+    const quem = quemSou();
+    const porConta = new Map();
+    for (const p of pacote || []) for (const id of p.contaIds || []) {
+      if (!porConta.has(id)) porConta.set(id, []);
+      porConta.get(id).push(p);
+    }
+    if (!porConta.size) return { erro: "Nenhuma conta escolhida." };
+    const contas = obraAtual.contasPagar || [];
+    const novas = contas.map((c) => {
+      const ps = c && porConta.get(c.id);
+      if (!ps) return c;
+      let lista = anexosDaTransacao(c);
+      let n = c;
+      for (const p of ps) {
+        if (!p.anexo || lista.some((a) => a && a.public_id && a.public_id === p.anexo.public_id)) continue;
+        lista = lista.concat([p.anexo]);
+        n = registrarAto(n, p.anexo.tipo === "nota" ? "nota" : "comprovante", quem, undefined, p.anexo.nome || "");
+        if (p.chaveNota && !n.chaveNota) n = { ...n, chaveNota: p.chaveNota };
+        if (p.idTransacao && !n.idTransacao) n = { ...n, idTransacao: p.idTransacao };
+      }
+      return comAnexos(n, lista);
+    });
+    gravarContas(novas, obraAtual.id);
+    return { gravado: true };
   }
 
   function lancarDespesaDaEntrada(d) {

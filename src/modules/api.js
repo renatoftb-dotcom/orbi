@@ -278,6 +278,15 @@ const api = {
       return api.ia._ler("/api/ia/ler-pedido", fd, "do pedido", aoProgresso);
     },
 
+    // Qualquer papel de despesa: nota, comprovante, cupom, recibo, foto.
+    // Volta { documentos: [...] } — um por papel achado no arquivo.
+    lerDocumento: async (arquivo, aoProgresso, texto) => {
+      const fd = new FormData();
+      if (arquivo) fd.append("arquivo", arquivo);
+      if (texto) fd.append("texto", texto);
+      return api.ia._ler("/api/ia/ler-documento", fd, "do papel", aoProgresso);
+    },
+
     lerOrcamento: async (arquivo, itens, aoProgresso) => {
       const fd = new FormData();
       fd.append("arquivo", arquivo);

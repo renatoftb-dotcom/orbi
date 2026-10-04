@@ -895,6 +895,7 @@ function contasDaEntrada(lanc, op) {
         quantidade: q, unidade: String(it.unidade || "").trim(),
         valor, vencimento: venc,
         pago: false, pagoEm: "", valorPago: "", observacao: String(l.observacao || "").trim(),
+        chaveNota: String(l.chaveNota || "").replace(/\D/g, ""), idTransacao: String(l.idTransacao || "").trim().toUpperCase(),
       };
       c = registrarAto(c, "criada", o.quem || "", agora);
       if (pago) {
@@ -909,6 +910,153 @@ function contasDaEntrada(lanc, op) {
     }
   }
   return fora;
+}
+
+// O mesmo papel não pode entrar duas vezes — nem nesta obra, nem em outra.
+// A chave da NF-e (44 dígitos) e o ID do Pix (E2E) são únicos no país:
+// achou um igual, é o mesmo papel. Devolve onde ele já está, ou null.
+function papelJaLancado(obras, papel) {
+  const p = papel || {};
+  const chave = String(p.chaveNota || "").replace(/\D/g, "");
+  const idt = String(p.idTransacao || "").trim().toUpperCase();
+  const temChave = chave.length === 44, temId = idt.length >= 20;
+  if (!temChave && !temId) return null;
+  for (const o of obras || []) {
+    for (const c of (o && o.contasPagar) || []) {
+      if (!c) continue;
+      const porChave = temChave && String(c.chaveNota || "").replace(/\D/g, "") === chave;
+      const porId = temId && String(c.idTransacao || "").trim().toUpperCase() === idt;
+      if (porChave || porId) {
+        return { obraId: o.id, obraNome: o.nome || o.titulo || "", ref: c.numeroDoc || "", por: porChave ? "chave" : "pix" };
+      }
+    }
+  }
+  return null;
+}
+
+// ── Papéis em lote: de qual lançamento é este papel ─────────────
+// A obra já tem as contas; os papéis (nota, Pix, boleto) chegaram depois,
+// numa pasta. Cada papel procura o seu lançamento pela referência (o
+// numeroDoc, que junta os itens de uma compra): o mesmo valor, o mesmo
+// fornecedor, a data perto. Nota dividida em etapas vira duas ou três refs
+// seguidas do mesmo fornecedor — a soma delas também é candidata. Chave da
+// NF-e ou ID do Pix iguais encerram a conversa. O que não for seguro fica
+// para a pessoa escolher; nada é anexado sem ela confirmar.
+const CP_PALAVRAS_VAZIAS = ["ltda", "eireli", "me", "epp", "sa", "comercio", "comercial", "de", "da", "do", "das", "dos", "e",
+  "materiais", "material", "construcao", "construcoes", "industria", "servicos", "servico", "cia", "filial", "loja"];
+function cpPalavrasDoNome(nome) {
+  return String(nome || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w.length >= 3 && CP_PALAVRAS_VAZIAS.indexOf(w) < 0);
+}
+function cpDiasEntre(a, b) {
+  const da = Date.parse(String(a || "").slice(0, 10)), db = Date.parse(String(b || "").slice(0, 10));
+  if (!(da > 0) || !(db > 0)) return null;
+  return Math.round(Math.abs(da - db) / 86400000);
+}
+function cpMesmoNome(a, b) {
+  const pa = cpPalavrasDoNome(a), pb = cpPalavrasDoNome(b);
+  return pa.some((w) => pb.some((x) => x === w || (Math.min(w.length, x.length) >= 5 && (x.startsWith(w) || w.startsWith(x)))));
+}
+
+function gruposDeContasPorRef(contas, prestadores) {
+  const nomeDe = (id) => ((prestadores || []).find((p) => p && p.id === id) || {}).nome || "";
+  const mapa = new Map();
+  for (const c of contas || []) {
+    if (!c) continue;
+    const ref = String(c.numeroDoc || c.pedidoId || c.id);
+    if (!mapa.has(ref)) mapa.set(ref, []);
+    mapa.get(ref).push(c);
+  }
+  const red = (x) => Math.round(x * 100) / 100;
+  return [...mapa.entries()].map(([ref, cs]) => {
+    const c0 = cs[0];
+    return {
+      ref, contaIds: cs.map((c) => c.id),
+      valor: red(cs.reduce((t, c) => t + (Number(c.valorPago) || Number(c.valor) || 0), 0)),
+      prestadorId: c0.prestadorId || "", favorecido: nomeDe(c0.prestadorId) || c0.favorecido || "",
+      data: String(c0.pagoEm || c0.vencimento || "").slice(0, 10),
+      numeroNota: String(c0.numeroNota || "").replace(/^0+/, ""),
+      chaveNota: String(c0.chaveNota || ""), idTransacao: String(c0.idTransacao || "").toUpperCase(),
+      descricao: cs.map((c) => c.descricao).filter(Boolean).slice(0, 2).join(" + "),
+      anexos: cs.reduce((t, c) => t + (Array.isArray(c.anexos) ? c.anexos.length : 0) + (c.comprovante ? 1 : 0), 0),
+    };
+  }).sort((a, b) => (Number(a.ref) || 0) - (Number(b.ref) || 0) || a.ref.localeCompare(b.ref));
+}
+
+function casarPapelComContas(papel, grupos, opcoes) {
+  const p = papel || {}, op = opcoes || {};
+  const valor = Math.round((Number(p.valor) || Number(p.total) || 0) * 100) / 100;
+  const data = String(p.pagoEm || p.vencimento || p.emitido || "").slice(0, 10);
+  const numero = String(p.numeroNota || p.numeroPedido || "").replace(/^0+/, "");
+  const chave = String(p.chave || "").replace(/\D/g, ""), idt = String(p.idTransacao || "").toUpperCase();
+  const lista = grupos || [];
+  const pontuar = (gs, soma) => {
+    const vg = Math.round(gs.reduce((t, g) => t + g.valor, 0) * 100) / 100;
+    const base = { refs: gs.map((g) => g.ref), contaIds: [].concat(...gs.map((g) => g.contaIds)), valor: vg,
+      favorecido: gs[0].favorecido, data: gs[0].data, descricao: gs.map((g) => g.descricao).join(" + ") };
+    if ((chave.length === 44 && gs.some((g) => g.chaveNota === chave)) || (idt && gs.some((g) => g.idTransacao === idt))) {
+      return { ...base, pontos: 200, motivos: ["mesmo papel (chave/ID)"] };
+    }
+    let pontos = 0; const motivos = [];
+    if (valor > 0 && Math.abs(vg - valor) < 0.01) { pontos += soma ? 40 : 50; motivos.push(soma ? "soma das refs" : "mesmo valor"); }
+    if (numero && gs.some((g) => g.numeroNota && g.numeroNota === numero)) { pontos += 30; motivos.push("mesmo nº"); }
+    if (p.lidoComo && cpMesmoNome(p.lidoComo, gs.map((g) => g.favorecido).join(" "))) { pontos += 20; motivos.push("mesmo fornecedor"); }
+    const d = cpDiasEntre(data, gs[0].data);
+    if (d != null) {
+      if (d === 0) { pontos += 15; motivos.push("mesma data"); }
+      else if (d <= 3) { pontos += 10; motivos.push(d + " dia(s) de diferença"); }
+      else if (d <= 10) { pontos += 5; motivos.push(d + " dias de diferença"); }
+      else if (d > 60) pontos -= 5;
+    }
+    return { ...base, pontos, motivos };
+  };
+  const candidatos = [];
+  for (const g of lista) {
+    const c = pontuar([g], false);
+    if (c.pontos >= 200 || c.motivos.indexOf("mesmo valor") >= 0 || c.motivos.indexOf("mesmo nº") >= 0) candidatos.push(c);
+  }
+  // Nota dividida em etapas: 2 a 4 refs seguidas do mesmo fornecedor.
+  if (valor > 0 && !candidatos.some((c) => c.motivos.indexOf("mesmo valor") >= 0)) {
+    const mesmo = (a, b) => (a.prestadorId && a.prestadorId === b.prestadorId)
+      || (!!a.favorecido && cpPalavrasDoNome(a.favorecido).join(" ") === cpPalavrasDoNome(b.favorecido).join(" "));
+    for (let i = 0; i < lista.length; i++) {
+      for (let n = 2; n <= 5 && i + n <= lista.length; n++) {
+        const gs = lista.slice(i, i + n);
+        if (!gs.every((g) => mesmo(g, gs[0]))) break;
+        const c = pontuar(gs, true);
+        if (c.motivos.indexOf("soma das refs") >= 0) candidatos.push(c);
+      }
+    }
+  }
+  candidatos.sort((a, b) => b.pontos - a.pontos || cpDiasEntre(data, a.data) - cpDiasEntre(data, b.data));
+  const top = candidatos.slice(0, op.max || 12);
+  const [a, b] = top;
+  // Empate de valor e fornecedor (os pedágios de 12,80): não há como saber
+  // qual é qual — tanto faz para a conta, mas a pessoa confirma.
+  const empate = !!a && !!b && a.pontos < 200 && Math.abs(a.valor - b.valor) < 0.01 && b.pontos >= a.pontos - 15;
+  const seguro = !!a && (a.pontos >= 200 || (a.pontos >= 50 && !empate && (!b || a.pontos - b.pontos >= 20)));
+  return { candidatos: top, seguro, empate };
+}
+
+// No lote, cada conta recebe UM papel de cada espécie (a nota e o
+// comprovante podem ir juntos; dois comprovantes não). Quem tem casamento
+// seguro escolhe primeiro; os empates vão sendo distribuídos pela data,
+// sem repetir conta.
+function distribuirPapeisDoLote(lidos) {
+  const tomadas = { comprovante: new Set(), nota: new Set() };
+  const especie = (l) => ((l.papel || {}).tipo === "comprovante" ? "comprovante" : "nota");
+  const ordem = (lidos || []).map((l, i) => ({ l, i })).filter((x) => x.l && x.l.casamento)
+    .sort((x, y) => (y.l.casamento.seguro - x.l.casamento.seguro) || (((y.l.casamento.candidatos[0] || {}).pontos || 0) - ((x.l.casamento.candidatos[0] || {}).pontos || 0)));
+  const saida = (lidos || []).map(() => null);
+  for (const { l, i } of ordem) {
+    const t = tomadas[especie(l)];
+    const livre = l.casamento.candidatos.find((c) => !c.refs.some((r) => t.has(r)));
+    if (!livre) { saida[i] = { escolhido: null, marcado: false }; continue; }
+    livre.refs.forEach((r) => t.add(r));
+    const primeiro = l.casamento.candidatos[0] === livre;
+    saida[i] = { escolhido: livre, marcado: l.casamento.seguro && primeiro };
+  }
+  return saida;
 }
 
 // A conta contábil é quase sempre a mesma no pedido inteiro ("Material").

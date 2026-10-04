@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -2567,6 +2567,86 @@ teste("a conferencia nao chama de furo o que a regra dispensa", () => {
   const c = modulo.conferenciaDaLigacao(obra, []);
   assert.ok(!c.furos.some(f => /sem etapa/.test(f.titulo)), JSON.stringify(c.furos.map(f => f.titulo)));
   assert.ok(!c.furos.some(f => /sem item/.test(f.titulo)), "frete nao tem item");
+});
+
+teste("o mesmo papel nao entra duas vezes: chave da nota ou ID do Pix", () => {
+  const chave = "35260912345678000190550010000086231000008623";
+  const contas = modulo.contasDaEntrada({ situacao: "pago", pagamento: { data: "2026-09-29" },
+    chaveNota: "3526 0912 3456 7800 0190 5500 1000 0086 2310 0000 8623", idTransacao: "e00000000202609291530abcdefgh1234",
+    itens: [{ descricao: "Cimento", quantidade: 8, total: 304, contaId: "material" }] }, { obraId: "o1", numeroDoc: "0200" });
+  assert.strictEqual(contas[0].chaveNota, chave);
+  assert.strictEqual(contas[0].idTransacao, "E00000000202609291530ABCDEFGH1234");
+  const obras = [{ id: "o0", nome: "Outra", contasPagar: [] }, { id: "o1", nome: "Jacarezinho M1", contasPagar: contas }];
+  const porChave = modulo.papelJaLancado(obras, { chaveNota: chave });
+  assert.deepStrictEqual(porChave, { obraId: "o1", obraNome: "Jacarezinho M1", ref: "0200", por: "chave" });
+  const porPix = modulo.papelJaLancado(obras, { idTransacao: "E00000000202609291530abcdEFGH1234" });
+  assert.strictEqual(porPix.por, "pix");
+  assert.strictEqual(modulo.papelJaLancado(obras, { chaveNota: "123" }), null, "chave incompleta nao trava nada");
+  assert.strictEqual(modulo.papelJaLancado(obras, {}), null);
+  assert.strictEqual(modulo.papelJaLancado([{ id: "x", contasPagar: [{ chaveNota: "" }] }], { chaveNota: "" }), null);
+});
+
+// ── Papéis em lote ──
+const CONTAS_LOTE = [
+  { id: "a", numeroDoc: "0049", valor: 2541, pago: true, pagoEm: "2026-07-08", favorecido: "Pantanal Aço", descricao: "Formas" },
+  { id: "b", numeroDoc: "0056", valor: 12.8, pago: true, pagoEm: "2026-07-14", favorecido: "Pedágio Jacarezinho" },
+  { id: "c", numeroDoc: "0057", valor: 12.8, pago: true, pagoEm: "2026-07-14", favorecido: "Pedágio Jacarezinho" },
+  { id: "d1", numeroDoc: "0105", valor: 315, pago: true, pagoEm: "2026-09-22", favorecido: "CONSTRU FACIL ACABAMENTO LTDA" },
+  { id: "d2", numeroDoc: "0106", valor: 528, pago: true, pagoEm: "2026-09-22", favorecido: "CONSTRU FACIL ACABAMENTO LTDA" },
+  { id: "d3", numeroDoc: "0107", valor: 26.8, pago: true, pagoEm: "2026-09-22", favorecido: "CONSTRU FACIL ACABAMENTO LTDA" },
+  { id: "e1", numeroDoc: "0173", pedidoId: "p", valor: 260, pago: true, pagoEm: "2026-09-29", prestadorId: "rc", numeroNota: "8623", chaveNota: "4".repeat(44) },
+  { id: "e2", numeroDoc: "0173", pedidoId: "p", valor: 44, pago: true, pagoEm: "2026-09-29", prestadorId: "rc", numeroNota: "8623" },
+];
+const GRUPOS_LOTE = modulo.gruposDeContasPorRef(CONTAS_LOTE, [{ id: "rc", nome: "Rei do Cimento" }]);
+
+teste("lote: as contas se juntam pela referencia", () => {
+  const g = GRUPOS_LOTE.find((x) => x.ref === "0173");
+  assert.strictEqual(g.valor, 304);
+  assert.deepStrictEqual(g.contaIds, ["e1", "e2"]);
+  assert.strictEqual(g.favorecido, "Rei do Cimento");
+});
+
+teste("lote: valor unico e fornecedor parecido e casamento seguro", () => {
+  const r = modulo.casarPapelComContas({ tipo: "comprovante", valor: 2541, pagoEm: "2026-07-22", lidoComo: "PANTANAL SOLUÇÕES EM FERRO" }, GRUPOS_LOTE);
+  assert.strictEqual(r.seguro, true);
+  assert.deepStrictEqual(r.candidatos[0].refs, ["0049"]);
+});
+
+teste("lote: chave da nota igual encerra a conversa", () => {
+  const r = modulo.casarPapelComContas({ tipo: "nota", valor: 999, chave: "4".repeat(44) }, GRUPOS_LOTE);
+  assert.strictEqual(r.seguro, true);
+  assert.deepStrictEqual(r.candidatos[0].refs, ["0173"]);
+});
+
+teste("lote: nota dividida em etapas casa com a soma das refs seguidas", () => {
+  const r = modulo.casarPapelComContas({ tipo: "nota", valor: 869.8, pagoEm: "2026-08-18", lidoComo: "CONSTRU FACIL ACABAMENTO" }, GRUPOS_LOTE);
+  assert.deepStrictEqual(r.candidatos[0].refs, ["0105", "0106", "0107"]);
+});
+
+teste("lote: pedagios iguais empatam e nao vao marcados; cada um ganha uma conta", () => {
+  const p1 = { tipo: "comprovante", valor: 12.8, pagoEm: "2026-07-04", lidoComo: "EPR LITORAL PIONEIRO" };
+  const lidos = [p1, { ...p1 }].map((papel) => ({ papel, casamento: modulo.casarPapelComContas(papel, GRUPOS_LOTE) }));
+  assert.strictEqual(lidos[0].casamento.seguro, false);
+  assert.strictEqual(lidos[0].casamento.empate, true);
+  const d = modulo.distribuirPapeisDoLote(lidos);
+  assert.notStrictEqual(d[0].escolhido.refs[0], d[1].escolhido.refs[0]);
+  assert.strictEqual(d[0].marcado, false);
+});
+
+teste("lote: nota e comprovante da mesma compra vao para a mesma conta", () => {
+  const nota = { tipo: "nota", valor: 2541, lidoComo: "Pantanal" }, pix = { tipo: "comprovante", valor: 2541, lidoComo: "Pantanal" };
+  const lidos = [nota, pix].map((papel) => ({ papel, casamento: modulo.casarPapelComContas(papel, GRUPOS_LOTE) }));
+  const d = modulo.distribuirPapeisDoLote(lidos);
+  assert.deepStrictEqual(d[0].escolhido.refs, ["0049"]);
+  assert.deepStrictEqual(d[1].escolhido.refs, ["0049"]);
+  const dois = modulo.distribuirPapeisDoLote([lidos[1], { ...lidos[1] }]);
+  assert.strictEqual(dois[1].escolhido, null, "dois comprovantes do mesmo valor nao disputam a mesma conta");
+});
+
+teste("lote: sem valor parecido nao ha candidato", () => {
+  const r = modulo.casarPapelComContas({ valor: 7206, lidoComo: "Daniel Tonet" }, GRUPOS_LOTE);
+  assert.strictEqual(r.candidatos.length, 0);
+  assert.strictEqual(r.seguro, false);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

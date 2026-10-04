@@ -2403,6 +2403,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [contratoSalvoEm, setContratoSalvoEm] = useState(0);
   // Contas a pagar: formulário da conta avulsa em edição.
   const [formConta, setFormConta] = useState(null);
+  const [loteDePapeis, setLoteDePapeis] = useState(false);
   // Contas a pagar: como agrupar, o que mostrar e quais grupos estão fechados.
   const [visaoContas, setVisaoContas] = useState("mes");
   // Abre em "A pagar": é o que a tela é. O gráfico segue o mesmo filtro —
@@ -4792,11 +4793,19 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         ) : (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
             <button style={C.btnSec} onClick={() => setFormConta(contaAvulsaVazia(obraSelecionada.id))}>＋ Nova conta</button>
+            {perm.podeGerenciarObra && (
+              <button style={C.btnSec} onClick={() => setLoteDePapeis(true)}>Papéis em lote</button>
+            )}
             {alvosRecalibraveis.length > 0 && (
               <button style={C.btnSec} onClick={() => abrirRecalibragem(alvosRecalibraveis[0].id)}>Recalibrar</button>
             )}
           </div>
         ))}
+
+        {loteDePapeis && obraAtual && (
+          <PapeisEmLote obra={obraAtual} prestadores={prestadores} isMobile={isMobile}
+            aoAnexar={anexarPapeisEmLote} aoFechar={() => setLoteDePapeis(false)} />
+        )}
 
         {/* Recalibragem: a obra não começou na data registrada no contrato —
             muda-se a data do primeiro pagamento e as parcelas em aberto andam
@@ -5384,6 +5393,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (nota && (l || {}).prestadorId && contas.some(c => c && c.numeroNota === nota && c.prestadorId === l.prestadorId)) {
       return { erro: `A nota nº ${nota} desse fornecedor já está lançada nesta obra.` };
     }
+    const ja = typeof papelJaLancado === "function" ? papelJaLancado(data.obras || [], l) : null;
+    if (ja) {
+      const ondeJa = ja.obraId === obraAtual.id ? "nesta obra" : `em ${ja.obraNome || "outra obra"}`;
+      return { erro: `${ja.por === "chave" ? "Essa nota (mesma chave)" : "Esse Pix (mesmo ID)"} já está lançado ${ondeJa}${ja.ref ? ` — ref ${ja.ref}` : ""}.` };
+    }
     const pg = (l || {}).pagamento || {};
     const cartao = l.situacao === "pago" && pg.forma === "cartao"
       ? cartaoPorId(cartoesDoEscritorio(data), pg.cartaoId) : null;
@@ -5394,6 +5408,38 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!novas.length) return { erro: "Nenhum item com valor." };
     gravarContas([...contas, ...novas], obraAtual.id);
     return { gravado: true, quantas: novas.length };
+  }
+
+  // Papéis em lote: cada papel já subiu; aqui ele entra na lista de anexos
+  // das contas da referência escolhida. A chave da nota e o ID do Pix vão
+  // junto — é o que impede o mesmo papel de entrar duas vezes depois.
+  function anexarPapeisEmLote(pacote) {
+    if (!obraAtual) return { erro: "Obra não encontrada." };
+    if (!perm.podeGerenciarObra) return { erro: "Sem permissão para anexar nesta obra." };
+    const quem = quemSou();
+    const porConta = new Map();
+    for (const p of pacote || []) for (const id of p.contaIds || []) {
+      if (!porConta.has(id)) porConta.set(id, []);
+      porConta.get(id).push(p);
+    }
+    if (!porConta.size) return { erro: "Nenhuma conta escolhida." };
+    const contas = obraAtual.contasPagar || [];
+    const novas = contas.map((c) => {
+      const ps = c && porConta.get(c.id);
+      if (!ps) return c;
+      let lista = anexosDaTransacao(c);
+      let n = c;
+      for (const p of ps) {
+        if (!p.anexo || lista.some((a) => a && a.public_id && a.public_id === p.anexo.public_id)) continue;
+        lista = lista.concat([p.anexo]);
+        n = registrarAto(n, p.anexo.tipo === "nota" ? "nota" : "comprovante", quem, undefined, p.anexo.nome || "");
+        if (p.chaveNota && !n.chaveNota) n = { ...n, chaveNota: p.chaveNota };
+        if (p.idTransacao && !n.idTransacao) n = { ...n, idTransacao: p.idTransacao };
+      }
+      return comAnexos(n, lista);
+    });
+    gravarContas(novas, obraAtual.id);
+    return { gravado: true };
   }
 
   function lancarDespesaDaEntrada(d) {

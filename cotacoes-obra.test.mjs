@@ -91,7 +91,8 @@ const modulo = new Function(`
            ehNotaDeServico, valorDaNotaDeServico, emissaoDaNotaDeServico,
            prestadorDaNotaDeServico, discriminacaoDaNotaDeServico, dadosDaNotaDeServico,
            numeroDaNotaDeServico, entradaUnicaPronta, situacaoPadraoDaEntrada, previaDosBoletos,
-           comContaPadraoDaEntrada, tipoDoAnexoDaEntrada, SITUACOES_DA_ENTRADA };
+           comContaPadraoDaEntrada, tipoDoAnexoDaEntrada, SITUACOES_DA_ENTRADA,
+           fichaDaEntradaPelaIA, tipoDoPapelPelaIA };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -3447,6 +3448,80 @@ teste("a nota da Canroberto entra na competência dela, não na de hoje", () => 
   const r = M.interpretarOrcamento(comCabecalho);
   assert.strictEqual(r.emitido, "2026-09-29",
     "é esta data que vira pagoEm no “pagamento já feito”, e dela sai a competência");
+});
+
+
+// ── A leitura da IA vira a ficha da Entrada ─────────────────────
+const NOTA_IA = { tipo: "nota_produto", emitente: "CANROBERTO MATERIAIS LTDA", cnpj: "12.345.678/0001-90",
+  numero: "8623", chave: "3526 0912 3456 7800 0190 5500 1000 0086 2310 0000 8623", emissao: "2026-09-29",
+  situacao: "nao_se_aplica", forma: "nao_informado", valor: 304, desconto: 0, descricao: "",
+  itens: [{ descricao: "CIMENTO CP II 50KG", quantidade: 8, unidade: "SC", unitario: 38, total: 304 }] };
+const PIX_IA = { tipo: "comprovante_pix", emitente: "CANROBERTO MATERIAIS LTDA", chave: "E00000000202609291530abcdEFGH1234",
+  emissao: "2026-09-30", pagamento: "2026-09-29", situacao: "pago", forma: "pix", valor: 304, itens: [] };
+
+teste("IA: nota sozinha vira ficha de nota com itens, número e chave", () => {
+  const f = M.fichaDaEntradaPelaIA([NOTA_IA]);
+  assert.strictEqual(f.papel.tipo, "nota");
+  assert.strictEqual(f.papel.lidoPelaIA, true);
+  assert.strictEqual(f.papel.numeroNota, "8623");
+  assert.strictEqual(f.papel.chave.length, 44);
+  assert.strictEqual(f.papel.emitido, "2026-09-29");
+  assert.strictEqual(f.papel.situacaoLida, "");
+  assert.strictEqual(f.itens.length, 1);
+  assert.strictEqual(f.itens[0].total, 304);
+  assert.deepStrictEqual(f.avisos, []);
+});
+
+teste("IA: nota + Pix no mesmo arquivo — itens da nota, data do pagamento do Pix", () => {
+  const f = M.fichaDaEntradaPelaIA([PIX_IA, NOTA_IA]);
+  assert.strictEqual(f.papel.tipo, "nota", "os itens mandam: a nota é o papel principal");
+  assert.strictEqual(f.papel.situacaoLida, "pago");
+  assert.strictEqual(f.papel.pagoEm, "2026-09-29", "a data do pagamento, não a da impressão");
+  assert.strictEqual(f.papel.idTransacao, "E00000000202609291530abcdEFGH1234");
+  assert.strictEqual(f.papel.chave.length, 44);
+  assert.ok(f.avisos.some((a) => /2 papéis/.test(a)), JSON.stringify(f.avisos));
+  assert.strictEqual(M.situacaoPadraoDaEntrada(f.papel, "cliente"), "pago");
+});
+
+teste("IA: valor pago diferente do total da nota vira aviso", () => {
+  const f = M.fichaDaEntradaPelaIA([NOTA_IA, { ...PIX_IA, valor: 300 }]);
+  assert.ok(f.avisos.some((a) => /diferente do total/.test(a)), JSON.stringify(f.avisos));
+  assert.strictEqual(f.itens[0].total, 304, "os itens não são mexidos calados");
+});
+
+teste("IA: Pix agendado entra a pagar, com o vencimento agendado", () => {
+  const f = M.fichaDaEntradaPelaIA([{ ...PIX_IA, situacao: "agendado", pagamento: "", vencimento: "2026-10-15" }]);
+  assert.strictEqual(f.papel.tipo, "comprovante");
+  assert.strictEqual(f.papel.situacaoLida, "agendado");
+  assert.strictEqual(f.papel.vencimento, "2026-10-15");
+  assert.ok(f.avisos.some((a) => /AGENDAMENTO/.test(a)));
+  assert.strictEqual(M.situacaoPadraoDaEntrada(f.papel, "empreendimento"), "apagar",
+    "mesmo no empreendimento: o dinheiro ainda não saiu");
+});
+
+teste("IA: comprovante sozinho vira um item com o valor pago", () => {
+  const f = M.fichaDaEntradaPelaIA([{ ...PIX_IA, descricao: "Frete areia" }]);
+  assert.strictEqual(f.itens.length, 1);
+  assert.strictEqual(f.itens[0].total, 304);
+  assert.strictEqual(f.itens[0].descricao, "Frete areia");
+  assert.strictEqual(f.papel.chave, "", "ID do Pix não é chave de nota");
+});
+
+teste("IA: lista de material vira cotação; sem documento não há ficha", () => {
+  const f = M.fichaDaEntradaPelaIA([{ tipo: "lista_material", situacao: "nao_se_aplica", valor: 0,
+    itens: [{ descricao: "Areia média", quantidade: 3, unidade: "m3" }] }]);
+  assert.strictEqual(f.papel.tipo, "lista");
+  assert.strictEqual(M.situacaoPadraoDaEntrada(f.papel, "cliente"), "cotacao");
+  assert.strictEqual(M.fichaDaEntradaPelaIA([]), null);
+  assert.strictEqual(M.fichaDaEntradaPelaIA(null), null);
+});
+
+teste("IA: sem situação lida, vale a regra da obra", () => {
+  assert.strictEqual(M.situacaoPadraoDaEntrada({ tipo: "nota" }, "empreendimento"), "pago");
+  assert.strictEqual(M.situacaoPadraoDaEntrada({ tipo: "nota" }, "cliente"), "");
+  assert.strictEqual(M.situacaoPadraoDaEntrada({ tipo: "nota", situacaoLida: "a_pagar" }, "empreendimento"), "apagar");
+  assert.strictEqual(M.tipoDoPapelPelaIA("nota_servico"), "nfse");
+  assert.strictEqual(M.tipoDoPapelPelaIA("cupom"), "pedido");
 });
 
 
