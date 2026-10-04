@@ -26310,7 +26310,7 @@ function tabelaDaBase(linhas) {
 // descrição inteira continua na célula.
 const CP_MOEDA_XL = '"R$"\\ #,##0.00';
 const BASE_RELATORIO = [
-  ["Ref", "numeroTexto", "0000", "center"], ["Nome Cliente", "texto", "", "center"], ["Projeto / obra", "texto", "", "center"],
+  ["Ref", "numeroTexto", "0", "center"], ["Nome Cliente", "texto", "", "center"], ["Projeto / obra", "texto", "", "center"],
   ["Unidade negócio", "texto", "", "center"], ["Fornecedor", "texto", "", "center"], ["Descrição Lançamento", "texto", "", ""],
   ["Conta contábil", "texto", "", "center"], ["Nota / Comprovante", "numeroTexto", "0", "center"], ["Valor total nota", "moeda", CP_MOEDA_XL, ""],
   ["Período Contábil", "mes", "[$-416]mmm\\-yy;@", "center"], ["Data do lançamento", "data", "[$-416]d\\-mmm\\-yy;@", "center"],
@@ -26753,8 +26753,8 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
         const r = ws.addRow(linha.map((v, j) => {
           const tipo = plan.colunas[j].tipo;
           if (v === "" || v == null) return null;
-          // número guardado como texto ("4224", "0194") vai como número, para
-          // o Excel não marcar a célula; o formato mantém os zeros da Ref
+          // número guardado como texto ("4224", "0194") vai como número puro
+          // (4224, 194): o Excel reconhece, ordena e filtra como sequência
           if (tipo === "numeroTexto") return /^\d{1,9}$/.test(String(v).trim()) ? Number(String(v).trim()) : v;
           if (tipo === "data" || tipo === "mes") {
             const m = String(v).match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);

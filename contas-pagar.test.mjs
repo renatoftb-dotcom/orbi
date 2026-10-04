@@ -2800,7 +2800,7 @@ teste("base de dados: uma linha por item, nas colunas da planilha do escritório
   assert.strictEqual(col("Ref").alinhar, "center");
   assert.strictEqual(col("Nota / Comprovante").alinhar, "center", "nota centralizada");
   assert.strictEqual(col("Nota / Comprovante").tipo, "numeroTexto", "nota vai como número");
-  assert.strictEqual(col("Ref").formato, "0000", "a Ref como número mantém os zeros");
+  assert.strictEqual(col("Ref").formato, "0", "a Ref sai como número puro, sem o zero na frente");
   assert.strictEqual(col("Descrição Lançamento").alinhar, "", "descrição fica à esquerda");
   assert.strictEqual(col("Valor").formato, '"R$"\\ #,##0.00');
   assert.strictEqual(col("Período Contábil").formato, "[$-416]mmm\\-yy;@");
