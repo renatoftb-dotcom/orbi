@@ -957,18 +957,72 @@ function lancamentosDaBaixa(obra, cliente, contasPagas, opcoes) {
   return Object.assign({}, r, { modo });
 }
 
-// Conta que saiu da obra leva o lançamento dela junto. Relançar um pedido
-// pago apaga as contas antigas e cria outras, com ids novos — e o lançamento
-// velho ficava órfão no extrato, somando duas vezes o mesmo dinheiro no
-// Investido do empreendimento. Quem some da obra some do extrato.
-function semLancamentosDasContas(lancamentos, obraId, contasRemovidas) {
+// ── A transação é UMA, vista de dois lados ──────────────────────
+// O lançamento do escritório nasce da conta da obra e aponta para ela em
+// `origem`: a conta (tipo "conta"), o pedido inteiro (tipo "pedido", com a
+// chave pedido|conta|data — a nota vira uma linha só no extrato) ou o
+// número do papel (tipo "doc", o que veio da planilha antiga). Saber quem
+// está ligado a quem é o que permite excluir de um lado e o outro ir junto.
+function ligaContaAoLancamento(l, obraId, conta) {
+  const o = (l && l.origem) || {};
+  const c = conta || {};
+  if (!o.obraId || o.obraId !== obraId || !c.id) return false;
+  if (o.tipo === "conta") return o.refId === c.id;
+  if (o.tipo === "pedido") return !!c.pedidoId && String(o.refId || "").split("|")[0] === c.pedidoId;
+  if (o.tipo === "doc") return !!c.doc && String(o.refId || "") === String(c.doc);
+  return false;
+}
+
+function lancamentosLigadosAsContas(lancamentos, obraId, contas) {
+  const cs = (contas || []).filter(Boolean);
+  if (!cs.length) return [];
+  return (lancamentos || []).filter((l) => l && cs.some((c) => ligaContaAoLancamento(l, obraId, c)));
+}
+
+// O caminho de volta: as contas da obra que um lançamento representa. O
+// pedido leva os itens da mesma nota, conta contábil e data — exatamente o
+// recorte que virou aquela linha no extrato.
+function contasLigadasAoLancamento(obra, l) {
+  const o = (l && l.origem) || {};
+  const ob = obra || {};
+  if (!o.obraId || o.obraId !== ob.id) return [];
+  const contas = (ob.contasPagar || []).filter(Boolean);
+  if (o.tipo === "conta") return contas.filter((c) => c.id === o.refId);
+  if (o.tipo === "doc") return contas.filter((c) => c.doc && String(c.doc) === String(o.refId));
+  if (o.tipo === "pedido") {
+    const [ped, contaId, data] = String(o.refId || "").split("|");
+    return contas.filter((c) => c.pedidoId === ped
+      && (!contaId || (c.contaId || "") === contaId)
+      && (!data || String(c.pagoEm || c.vencimento || "").slice(0, 10) === data));
+  }
+  return [];
+}
+
+// Conta que saiu da obra (ou deixou de ser paga) leva o lançamento dela
+// junto. Relançar um pedido pago apaga as contas antigas e cria outras, com
+// ids novos — e o lançamento velho ficava órfão no extrato, somando duas
+// vezes o mesmo dinheiro no Investido do empreendimento. Quem some da obra
+// some do extrato. Vale para o pedido agrupado (uma linha por nota) e para
+// o lançamento antigo ligado pelo número do papel — antes só a conta solta
+// saía, e a nota apagada continuava no extrato.
+//
+// Se só PARTE da nota saiu, a linha da nota sai inteira e `reenviar` diz
+// quais contas pagas ficaram dela: quem chama manda essas de novo pela
+// ponte, com o valor certo.
+function semLancamentosDasContas(lancamentos, obraId, contasRemovidas, contasDepois) {
   const fora = {};
   for (const c of contasRemovidas || []) {
     if (c && c.id) fora[idDaPonte(obraId, "conta", c.id)] = true;
   }
-  if (!Object.keys(fora).length) return { lancamentos: lancamentos || [], removidos: 0 };
+  const ligados = lancamentosLigadosAsContas(lancamentos, obraId, contasRemovidas);
+  for (const l of ligados) fora[l.id] = true;
+  if (!Object.keys(fora).length) return { lancamentos: lancamentos || [], removidos: 0, reenviar: [] };
   const ficam = (lancamentos || []).filter((l) => !(l && fora[l.id]));
-  return { lancamentos: ficam, removidos: (lancamentos || []).length - ficam.length };
+  const saiu = (lancamentos || []).filter((l) => l && fora[l.id]);
+  const idsFora = new Set((contasRemovidas || []).map((c) => c && c.id));
+  const reenviar = (contasDepois || []).filter((c) => c && c.pago && !idsFora.has(c.id)
+    && saiu.some((l) => ligaContaAoLancamento(l, obraId, c)));
+  return { lancamentos: ficam, removidos: (lancamentos || []).length - ficam.length, reenviar };
 }
 
 function motivoDeIgnorar(contaId, modo, opcoes) {
@@ -3930,16 +3984,36 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       return;
     }
     const daFatura = ((l.origem || {}).tipo === "fatura");
+    // Veio de uma obra: a conta de lá é a mesma transação, e sai junto.
+    const origem = l.origem || {};
+    const obra = origem.obraId ? (((data || {}).obras || []).find((o) => o && o.id === origem.obraId) || null) : null;
+    const contasJuntas = obra ? contasLigadasAoLancamento(obra, l) : [];
+    const entradaJunta = obra && origem.tipo === "entrada" ? (obra.entradas || []).find((e) => e && e.id === origem.refId) : null;
+    const refs = [...new Set(contasJuntas.map((c) => c.numeroDoc).filter(Boolean))];
     const ok = await dialogo.confirmar({
       titulo: daFatura ? "Excluir a linha da fatura?" : "Excluir este lançamento?",
       mensagem: `${contaEscritorio(l.contaId)?.nome || "Lançamento"} · ${efDinheiro(l.valor)} · ${mesAnoPorExtenso(l.competencia)}`
         + (daFatura ? `. A fatura de ${mesAnoPorExtenso(l.origem.competencia)} volta a ficar ABERTA em Cartões — as compras dela continuam lá, `
           + "e dá para editar e fechar de novo." : "")
-        + (compraNoCartaoDoEscritorio(l) ? ". A compra sai também das faturas abertas do cartão." : ""),
+        + (compraNoCartaoDoEscritorio(l) ? ". A compra sai também das faturas abertas do cartão." : "")
+        + (contasJuntas.length ? `. Sai também da obra ${obra.nome || ""}: ${contasJuntas.length === 1 ? "1 conta" : contasJuntas.length + " contas"}`
+          + (refs.length ? ` (ref ${refs.join(", ")})` : "") + " — é a mesma transação." : "")
+        + (entradaJunta ? `. Sai também a entrada da obra ${obra.nome || ""} — é a mesma transação.` : ""),
       confirmar: "Excluir", destrutivo: true,
     });
     if (!ok) return;
-    gravar(lancs.filter((x) => x.id !== l.id));
+    const novos = lancs.filter((x) => x.id !== l.id);
+    if (obra && (contasJuntas.length || entradaJunta)) {
+      const fora = new Set(contasJuntas.map((c) => c.id));
+      const obras = ((data || {}).obras || []).map((o) => (o && o.id === obra.id ? {
+        ...o,
+        contasPagar: (o.contasPagar || []).filter((c) => !(c && fora.has(c.id))),
+        entradas: entradaJunta ? (o.entradas || []).filter((e) => !(e && e.id === entradaJunta.id)) : o.entradas,
+      } : o));
+      save({ ...data, obras, lancamentos: [...outrosLancamentos, ...novos] }).catch(console.error);
+      return;
+    }
+    gravar(novos);
   }
 
   // Arquivo solto: lê a planilha (ou CSV), joga as linhas na caixa e já

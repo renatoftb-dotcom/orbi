@@ -2557,17 +2557,20 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const desfeitas = typeof contasQueDeixaramDeSerPagas === "function"
       ? contasQueDeixaramDeSerPagas(contasAntes, contasDepois) : [];
     const limpo = (typeof semLancamentosDasContas === "function" && obraDepois)
-      ? semLancamentosDasContas(lancsAgora, obraDepois.id, desfeitas)
-      : { lancamentos: lancsAgora, removidos: 0 };
+      ? semLancamentosDasContas(lancsAgora, obraDepois.id, desfeitas, contasDepois)
+      : { lancamentos: lancsAgora, removidos: 0, reenviar: [] };
 
     const pagas = contasRecemPagas(contasAntes, contasDepois);
-    if (!pagas.length) {
+    // Saiu parte de uma nota: a linha dela no extrato saiu inteira, e o que
+    // sobrou pago da nota volta pela ponte com o valor novo.
+    const paraPonte = pagas.concat((limpo.reenviar || []).filter(c => !pagas.some(p => p && p.id === c.id)));
+    if (!paraPonte.length) {
       return { extras: limpo.removidos ? { lancamentos: limpo.lancamentos } : null };
     }
 
     const r = aplicarComprasNoCatalogo(data.materiais, pagas);
     const ponte = (typeof lancamentosDaBaixa === "function" && obraDepois)
-      ? lancamentosDaBaixa(obraDepois, cliente, pagas, {
+      ? lancamentosDaBaixa(obraDepois, cliente, paraPonte, {
           fechamentos: typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {},
           lancamentos: limpo.lancamentos,
         })
@@ -2702,8 +2705,36 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       tipo: "aviso" });
     return true;
   };
+  // A conta e o lançamento do escritório são a mesma transação: se o mês
+  // dela já foi conferido com o banco no escritório, ela não sai nem muda
+  // daqui — sairia de lá também, e o saldo fechado mudaria.
+  const travouNoMesFechado = (lista, acao) => {
+    if (typeof lancamentosLigadosAsContas !== "function") return false;
+    const porObra = {};
+    for (const c of lista || []) { const id = (c && c.obraId) || (obraAtual && obraAtual.id); if (id) (porObra[id] = porObra[id] || []).push(c); }
+    const fech = typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {};
+    const lancs = typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : [];
+    const meses = [...new Set(Object.entries(porObra).flatMap(([obraId, cs]) => lancamentosLigadosAsContas(lancs, obraId, cs))
+      .map(l => l.competencia).filter(m => m && bloqueioPorMesFechado(m, fech)))].sort();
+    if (!meses.length) return false;
+    dialogo.alertar({ titulo: "Mês fechado no escritório", tipo: "aviso",
+      mensagem: "Esta transação está no extrato do escritório em "
+        + meses.map(x => typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso(x) : x).join(", ")
+        + ", mês já conferido com o banco. Reabra o mês no Fechamento do escritório antes de " + acao + "." });
+    return true;
+  };
+  const vaiJuntoNoEscritorio = (lista) => {
+    if (typeof lancamentosLigadosAsContas !== "function") return "";
+    const lancs = typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : [];
+    const obraId = ((lista || [])[0] || {}).obraId || (obraAtual && obraAtual.id);
+    const ligados = lancamentosLigadosAsContas(lancs, obraId, lista);
+    if (!ligados.length) return "";
+    const total = ligados.reduce((t, l) => t + (Number(l.valor) || 0), 0);
+    return ` O lançamento no extrato do escritório (${fmtMoedaCtr(total)}) sai junto.`;
+  };
   const confirmarDesfazer = async (lista) => {
     if (travouNaFatura(lista, "desfazer o pagamento")) return false;
+    if (travouNoMesFechado(lista, "desfazer o pagamento")) return false;
     return dialogo.confirmar({
       titulo: "Desfazer o pagamento?",
       mensagem: "A conta volta a ficar a pagar (em aberto), com o vencimento que ela tem — se já passou, aparece vencida. "
@@ -2750,6 +2781,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!obra) return;
     const ids = linha.pedidoIds || [linha.pedidoId];
     if (travouNaFatura((obra.contasPagar || []).filter(c => c && ids.indexOf(c.pedidoId) >= 0), "apagar o pedido")) return;
+    if (travouNoMesFechado((obra.contasPagar || []).filter(c => c && ids.indexOf(c.pedidoId) >= 0), "apagar o pedido")) return;
     const sai = ids.reduce((a, id) => {
       const r = resumoDoQueSai(obra.contasPagar || [], id);
       return { quantas: a.quantas + r.quantas, valor: a.valor + r.valor,
@@ -2758,12 +2790,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!sai.quantas) return;
     const nome = linha.numeroLoja || linha.numeroPedido || "";
     const ok = await dialogo.confirmar({
-      titulo: `Apagar o pedido ${nome}?`,
+      titulo: `Apagar ${(typeof rotuloDoPedido === "function" ? rotuloDoPedido(linha) : "Pedido " + nome).trim().replace(/^Nota/, "a nota").replace(/^Pedido/, "o pedido")}?`,
       mensagem: [
         sai.quantas === 1 ? "Sai 1 conta a pagar" : `Saem ${sai.quantas} contas a pagar`,
         `, no total de ${fmtMoedaCtr(sai.valor)}.`,
         sai.pagas ? ` ${sai.pagas === 1 ? "Uma delas j\u00e1 estava baixada" : `${sai.pagas} delas j\u00e1 estavam baixadas`}`
           + `, ent\u00e3o o realizado da obra cai ${fmtMoedaCtr(sai.valorPago)}.` : "",
+        vaiJuntoNoEscritorio((obra.contasPagar || []).filter(c => c && c.pago && ids.indexOf(c.pedidoId) >= 0)),
         " Isto n\u00e3o tem volta.",
       ].join(""),
       confirmar: "Apagar pedido",
@@ -4332,7 +4365,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                     onClick={() => setContasAbertas({ ...contasAbertas, [L.chave]: !abertaP })}>
                                     <div style={{ fontSize: 13, color: "#111827", fontWeight: 600, ...umaLinha }}>
                                       <span style={{ color: "#6b7280", fontWeight: 400, marginRight: 4 }}>{abertaP ? "▾" : "▸"}</span>
-                                      Pedido {L.numeroLoja || L.numeroPedido}
+                                      {rotuloDoPedido(L).trim()}
                                     </div>
                                     <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2, ...umaLinha }}>
                                       {[(recuado || semNomeDaLoja) ? "" : L.favorecido, L.contas.length === 1 ? "1 item" : `${L.contas.length} itens`,
@@ -4344,7 +4377,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                           if (cs.length === 1) return "conta " + nomeConta(cs[0]);
                                           return "contas " + cs.map(nomeConta).filter(Boolean).join(" e ");
                                         })(),
-                                        L.numeroNota ? "NF " + L.numeroNota : "",
+                                        L.numeroNota && !pedidoEhNotaPaga(L) ? "NF " + L.numeroNota : "",
                                         L.parcial ? "parcialmente pago" : ""].filter(Boolean).join(" · ")}
                                     </div>
                                   </div>
@@ -5264,7 +5297,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                     (c.origem === "avulsa")
                                       ? { rotulo: "Excluir", destrutivo: true, onClick: () => {
                                           if (travouNaFatura([c], "excluir")) return;
-                                          dialogo.confirmar({ titulo: "Excluir conta?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Excluir", destrutivo: true })
+                                          if (travouNoMesFechado([c], "excluir")) return;
+                                          dialogo.confirmar({ titulo: "Excluir conta?", mensagem: "Esta ação não pode ser desfeita." + vaiJuntoNoEscritorio([c]), confirmar: "Excluir", destrutivo: true })
                                             .then(ok => { if (ok) gravarContas(contasDaObra.filter(x => x.id !== c.id)); }); } } : null,
                                   ]} />
                                 </div>

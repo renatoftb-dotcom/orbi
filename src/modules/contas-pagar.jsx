@@ -1238,6 +1238,23 @@ function linhasDePedido(contas) {
 //
 // A exceção é a lista já separada por fornecedor: ali o nome da loja é o
 // cabeçalho do grupo, e repeti-lo logo abaixo só gasta uma linha.
+// Compra que já entrou paga não é conta de loja: não há o que acumular nem
+// cobrança a esperar. É uma nota — os itens juntos, sem o nível da loja
+// por cima. Conta de loja é só para o que entra a pagar.
+function pedidoEhNotaPaga(l) {
+  const x = l || {};
+  return x.tipo === "pedido" && !!x.pago && !x.cotacaoId
+    && (x.contas || []).every((c) => c && (c.origem || "avulsa") === "avulsa" && !c.cotacaoId);
+}
+function rotuloDoPedido(l) {
+  const x = l || {};
+  if (pedidoEhNotaPaga(x)) {
+    const n = x.numeroNota || ((x.contas || [])[0] || {}).doc || "";
+    return n ? "Nota " + n : "Nota";
+  }
+  return "Pedido " + (x.numeroLoja || x.numeroPedido || "");
+}
+
 function linhasDeLoja(contas, opcoes) {
   const o = opcoes || {};
   const linhas = linhasDePedido(contas);
@@ -1246,7 +1263,7 @@ function linhasDeLoja(contas, opcoes) {
   const saida = [];
   const porLoja = new Map();
   for (const l of linhas) {
-    if (l.tipo !== "pedido") { saida.push(l); continue; }
+    if (l.tipo !== "pedido" || pedidoEhNotaPaga(l)) { saida.push(l); continue; }
     const chave = String(l.prestadorId || l.favorecido || "sem-loja");
     if (!porLoja.has(chave)) {
       const loja = { tipo: "loja", chave: "loja:" + chave, lojaChave: chave,

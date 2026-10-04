@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -2682,6 +2682,23 @@ teste("procurar contas: ref, fornecedor, valor, papel e filtros", () => {
   assert.strictEqual(ids({ contaId: "material", etapa: "fundacao" }), "1,3");
   assert.strictEqual(ids({}), "1,2,3");
   assert.strictEqual(modulo.temPapel(cs[1]), false);
+});
+
+teste("nota paga nao vira conta de loja; pedido a pagar continua sob a loja", () => {
+  const it = (id, ped, extra) => ({ id, pedidoId: ped, prestadorId: "rc", favorecido: "Rei do Cimento", valor: 10, vencimento: "2026-09-29", origem: "avulsa", ...extra });
+  const contas = [
+    it("a", "p1", { pago: true, pagoEm: "2026-09-29", valorPago: 10, numeroNota: "8623" }),
+    it("b", "p1", { pago: true, pagoEm: "2026-09-29", valorPago: 10, numeroNota: "8623" }),
+    it("c", "p2", { origem: "cotacao", cotacaoId: "loja1", numeroLoja: "777" }),
+    it("d", "p3", { pago: true, pagoEm: "2026-09-24", valorPago: 10, doc: "4204" }),
+  ];
+  const linhas = modulo.linhasDeLoja(contas);
+  const notas = linhas.filter((l) => l.tipo === "pedido");
+  assert.deepStrictEqual(notas.map((l) => modulo.rotuloDoPedido(l)), ["Nota 8623", "Nota 4204"]);
+  const loja = linhas.find((l) => l.tipo === "loja");
+  assert.ok(loja, "o pedido a pagar continua sob a loja");
+  assert.deepStrictEqual(loja.pedidoIds, ["p2"]);
+  assert.strictEqual(modulo.rotuloDoPedido(loja.pedidos[0]), "Pedido 777");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

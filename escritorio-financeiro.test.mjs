@@ -32,7 +32,7 @@ const M = new Function(src + `
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
            competenciasDoCartao,
            faturasFechadas, faturaParaFechar, lancamentosParaResultado, mesAnoPorExtenso, efDiaBR, fechadasDaCompra, compraEditada, compraMexeuNoDinheiro, faturaAjustada,
-           lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas,
+           lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas, ligaContaAoLancamento, lancamentosLigadosAsContas, contasLigadasAoLancamento,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
            obrasDoLancamento, validarLancamentoNaObra, destinoVisivelDoCusto,
            efValorDoCampo, anexosDaTransacao, comAnexos,
@@ -1487,6 +1487,53 @@ teste("conta que sai da obra leva o lançamento dela junto", () => {
   const r = M.semLancamentosDasContas(antigo, "ob1", [{ id: "k1" }]);
   assert.strictEqual(r.lancamentos.length, 0);
   assert.strictEqual(r.removidos, 1);
+});
+
+teste("apagar a nota inteira leva a linha agrupada do extrato (o caso do pedido 8623)", () => {
+  const itens = ["a", "b", "c"].map((id) => ({ ...conta(id, "material", 100), pedidoId: "mzil9s0", obraId: "ob1" }));
+  const lancs = M.lancamentosDaBaixa(OBRA, EMP, itens, { ...OPC }).lancamentos;
+  assert.strictEqual(lancs.length, 1, "uma nota, uma linha");
+  assert.strictEqual(lancs[0].origem.tipo, "pedido");
+  const r = M.semLancamentosDasContas(lancs, "ob1", itens, []);
+  assert.strictEqual(r.lancamentos.length, 0, "antes só a conta solta saía; a nota ficava órfã");
+  assert.strictEqual(r.removidos, 1);
+});
+
+teste("saiu PARTE da nota: a linha sai e o que sobrou volta pela ponte com o valor novo", () => {
+  const itens = ["a", "b", "c"].map((id) => ({ ...conta(id, "material", 100), pedidoId: "p1", obraId: "ob1" }));
+  const lancs = M.lancamentosDaBaixa(OBRA, EMP, itens, { ...OPC }).lancamentos;
+  const r = M.semLancamentosDasContas(lancs, "ob1", [itens[0]], itens.slice(1));
+  assert.strictEqual(r.lancamentos.length, 0);
+  assert.deepStrictEqual(r.reenviar.map((c) => c.id), ["b", "c"]);
+  const de_novo = M.lancamentosDaBaixa(OBRA, EMP, r.reenviar, { ...OPC, lancamentos: r.lancamentos }).lancamentos;
+  assert.strictEqual(de_novo.length, 1);
+  assert.strictEqual(de_novo[0].valor, 200);
+});
+
+teste("lançamento antigo ligado pelo número do papel também sai junto", () => {
+  const l = { id: "imp_1", tipo: "escritorio", valor: 621.69, competencia: "2026-09", origem: { obraId: "ob1", tipo: "doc", refId: "4204" } };
+  const contas = [{ id: "x1", doc: "4204", pago: true, obraId: "ob1" }, { id: "x2", doc: "4204", pago: true }, { id: "x3", doc: "4205", pago: true }];
+  assert.strictEqual(M.ligaContaAoLancamento(l, "ob1", contas[0]), true);
+  assert.strictEqual(M.ligaContaAoLancamento(l, "ob2", contas[0]), false, "outra obra não");
+  assert.strictEqual(M.ligaContaAoLancamento(l, "ob1", contas[2]), false);
+  assert.deepStrictEqual(M.contasLigadasAoLancamento({ id: "ob1", contasPagar: contas }, l).map((c) => c.id), ["x1", "x2"]);
+  const r = M.semLancamentosDasContas([l], "ob1", [contas[0]], contas.slice(1));
+  assert.strictEqual(r.removidos, 1);
+  assert.deepStrictEqual(r.reenviar.map((c) => c.id), ["x2"]);
+});
+
+teste("do escritório para a obra: o pedido devolve só os itens daquela linha", () => {
+  const obra = { id: "ob1", contasPagar: [
+    { id: "a", pedidoId: "p1", contaId: "material", pagoEm: "2026-09-29" },
+    { id: "b", pedidoId: "p1", contaId: "material", pagoEm: "2026-09-29" },
+    { id: "c", pedidoId: "p1", contaId: "frete", pagoEm: "2026-09-29" },
+    { id: "d", pedidoId: "p2", contaId: "material", pagoEm: "2026-09-29" },
+  ] };
+  const l = { origem: { obraId: "ob1", tipo: "pedido", refId: "p1|material|2026-09-29" } };
+  assert.deepStrictEqual(M.contasLigadasAoLancamento(obra, l).map((c) => c.id), ["a", "b"]);
+  assert.deepStrictEqual(M.contasLigadasAoLancamento(obra, { origem: { obraId: "ob1", tipo: "conta", refId: "d" } }).map((c) => c.id), ["d"]);
+  assert.deepStrictEqual(M.contasLigadasAoLancamento(obra, { origem: { obraId: "outra", tipo: "conta", refId: "d" } }), []);
+  assert.deepStrictEqual(M.contasLigadasAoLancamento(obra, {}), []);
 });
 
 teste("conta de OUTRA obra com o mesmo id não é tocada", () => {
