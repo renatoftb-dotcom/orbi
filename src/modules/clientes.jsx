@@ -2629,7 +2629,18 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const gravarContas = (novasContas, obraId) => {
     const alvo = obraId || (obraSelecionada && obraSelecionada.id);
     if (!alvo) return;
-    gravarObras(obras.map(o => o.id === alvo ? { ...o, contasPagar: novasContas } : o));
+    // O número do papel nasce na baixa: a transação que acabou de ser paga
+    // (ou de ganhar um papel) recebe o próximo número da série, e o arquivo
+    // anexado passa a se chamar por ele. O que já estava gravado não mexe.
+    let contasFinais = novasContas;
+    if (typeof numerarPapeisDasPagas === "function") {
+      const antes = new Map((((obras || []).find(o => o && o.id === alvo) || {}).contasPagar || []).filter(Boolean).map(c => [c.id, c]));
+      const qtdPapeis = (c) => (Array.isArray(c.anexos) ? c.anexos.filter(Boolean).length : 0) + (c.comprovante ? 1 : 0);
+      const agora = (c) => { const a = antes.get(c.id); return !a || (c.pago && !a.pago) || qtdPapeis(c) !== qtdPapeis(a); };
+      const lancs = typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : [];
+      contasFinais = numerarPapeisDasPagas(novasContas, proximoNumeroDePapel(obras, lancs), agora).contas;
+    }
+    gravarObras(obras.map(o => o.id === alvo ? { ...o, contasPagar: contasFinais } : o));
   };
   // Contas geradas por uma versão antiga das regras de vencimento (ex.: as
   // mensais que andavam de 30 em 30 dias, escorregando o dia do mês) se
@@ -5438,6 +5449,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       const contas = numerarContas(contasDaCotacao({ ...dados, numeroPedido: pedido.numero, pedido }, uid),
         obras, lancamentosDoEscritorio(data));
       if (!contas.length) return { erro: "O pedido está sem itens com valor." };
+      // regra da base: nenhum item sem etapa
+      if (contas.some(c => c && !c.etapa)) return { erro: "Falta a etapa da obra em algum item. Escolha a etapa antes de lançar." };
       const lista = baseCotacoes.map(c => c.id !== dados.cotacaoId ? c : ({
         ...c,
         pedidos: jaExiste
@@ -5476,6 +5489,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const novas = numerarContas(contasDaCotacao({ ...dados, numeroPedido }, uid),
       obras, lancamentosDoEscritorio(data));
     if (!novas.length) return { erro: "A proposta escolhida está sem valor." };
+    // regra da base: nenhum item sem etapa — a etapa vem da cotação
+    if (novas.some(c => c && !c.etapa)) return { erro: "Escolha a etapa da obra nesta cotação antes de lançar." };
     const cotacoes = (obraAtual.cotacoes || []).map(c => c.id !== dados.cotacaoId ? c : ({
       ...c,
       numeroPedido,

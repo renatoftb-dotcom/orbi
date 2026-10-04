@@ -2593,6 +2593,80 @@ function filtrarContas(contas, filtro, hoje) {
 // grupo. É daqui que se filtra, soma e exporta.
 const CP_UNIDADES_NEGOCIO = { escritorio: "Escritório", projetos: "Projetos", gestao_obras: "Gestão de obras", empreendimento: "Empreendimento" };
 
+// ── O número do papel ───────────────────────────────────────────
+// Toda transação paga tem um número de papel — o mesmo da sequência dos
+// arquivos do escritório (3274, 3275 … 4214). Ele nasce na baixa, vai para
+// o campo "Nota / Comprovante" (`doc`) e dá nome ao arquivo anexado: o
+// comprovante da Ref 0185 pago hoje vira "4215.jpg", e é por 4215 que se
+// acha o papel na pasta e a linha na base.
+//
+// O próximo é o maior da série + 1. Um número solto bem acima da série (o
+// nº de uma nota digitado no campo do documento, como 8623) não puxa a
+// sequência: vale o maior número que tem outro a menos de 500 abaixo.
+function proximoNumeroDePapel(obras, lancamentos) {
+  const vistos = new Set();
+  const olhar = (v) => { const t = String(v == null ? "" : v).trim(); if (/^\d{3,6}$/.test(t)) vistos.add(+t); };
+  for (const o of obras || []) for (const c of (o && o.contasPagar) || []) if (c) olhar(c.doc);
+  for (const l of lancamentos || []) if (l) olhar(l.documento);
+  const ns = [...vistos].sort((a, b) => a - b);
+  if (!ns.length) return 1;
+  for (let i = ns.length - 1; i >= 1; i--) if (ns[i] - ns[i - 1] <= 500) return ns[i] + 1;
+  return ns[ns.length - 1] + 1;
+}
+
+// O nome do arquivo segue o número: "4215.pdf"; o segundo papel da mesma
+// transação, "4215-2.jpg". Nome que já é um número (o papel que veio da
+// pasta, "4098.pdf") fica como está.
+function cpNomeDoPapel(numero, ordem, nomeAntigo) {
+  const m = String(nomeAntigo || "").match(/\.([A-Za-z0-9]{2,5})$/);
+  return String(numero) + (ordem > 0 ? "-" + (ordem + 1) : "") + (m ? "." + m[1].toLowerCase() : "");
+}
+function cpNomeJaENumero(nome) {
+  return /^\d{3,6}(-\d+)?(\.[A-Za-z0-9]{2,5})?$/.test(String(nome || "").trim());
+}
+
+// Numera as transações pagas que ainda não têm papel e dá o nome do número
+// aos arquivos delas. `elegivel(c)` diz quais contas podem ganhar número
+// agora (na gravação do dia a dia, só as que acabaram de ser pagas ou de
+// receber um papel). Devolve as contas e o próximo número livre.
+function numerarPapeisDasPagas(contas, proximo, elegivel) {
+  const lista = (contas || []).slice();
+  let n = Number(proximo) || 1;
+  const pode = typeof elegivel === "function" ? elegivel : () => true;
+  const chave = (c) => String(c.numeroDoc || c.pedidoId || c.id);
+  const grupos = {};
+  lista.forEach((c, i) => { if (c && c.pago) (grupos[chave(c)] = grupos[chave(c)] || []).push(i); });
+  for (const k of Object.keys(grupos)) {
+    const idx = grupos[k];
+    if (!idx.some((i) => pode(lista[i]))) continue;
+    const comDoc = idx.map((i) => lista[i]).find((c) => String(c.doc || "").trim());
+    let numero = comDoc ? String(comDoc.doc).trim() : "";
+    if (!numero) { numero = String(n); n++; }
+    // os papéis da transação, na ordem em que aparecem, com o nome novo
+    const nomes = new Map();
+    const chaveDoPapel = (a) => (a && (a.public_id || a.url || a.nome)) || "";
+    for (const i of idx) {
+      const c = lista[i];
+      const papeis = (Array.isArray(c.anexos) ? c.anexos.filter(Boolean) : []).concat(c.comprovante ? [c.comprovante] : []);
+      for (const a of papeis) {
+        const kp = chaveDoPapel(a);
+        if (!kp || nomes.has(kp)) continue;
+        nomes.set(kp, cpNomeJaENumero(a.nome) ? a.nome : cpNomeDoPapel(numero, nomes.size, a.nome));
+      }
+    }
+    const renomear = (a) => { if (!a) return a; const nv = nomes.get(chaveDoPapel(a)); return nv && nv !== a.nome ? { ...a, nome: nv } : a; };
+    for (const i of idx) {
+      const c = lista[i];
+      let x = c;
+      if (!String(c.doc || "").trim()) x = { ...x, doc: numero };
+      if (Array.isArray(c.anexos) && c.anexos.length) x = { ...x, anexos: c.anexos.map(renomear) };
+      if (c.comprovante) x = { ...x, comprovante: renomear(c.comprovante) };
+      lista[i] = x;
+    }
+  }
+  return { contas: lista, proximo: n };
+}
+
 // O lançamento do escritório que representa esta conta (a ponte grava a
 // origem: a conta, o pedido inteiro ou o papel da planilha antiga).
 function cpLancamentoDaConta(lancamentos, obraId, c) {
@@ -2672,26 +2746,41 @@ function linhasDaBase(obras, opcoes) {
         : red(irmas.reduce((t, x) => t + valorDe(x), 0));
       const pagoEm = c.pago ? dia(c.pagoEm) : "";
       const vencimento = dia(c.vencimento);
-      const competencia = String((lanc && lanc.competencia) || c.competencia || (pagoEm || vencimento).slice(0, 7) || "").slice(0, 7);
+      // o período contábil é o do vencimento; a data do lançamento é a do
+      // pagamento e, enquanto não paga, a do vencimento
+      const competencia = String((vencimento || pagoEm).slice(0, 7) || c.competencia || (lanc && lanc.competencia) || "").slice(0, 7);
+      const dataLanc = pagoEm || vencimento;
       const regs = (c.registros || []).filter((r) => r && r.em);
       const criada = regs.find((r) => r.ato === "criada");
       const primeiro = regs.map((r) => dia(r.em)).sort()[0] || "";
       const entradaEm = dia((criada && criada.em) || c.importadoEm || c.lancadoEm || (cot && cot.lancadoEm)
         || (ctr && (ctr.criadoEm || ctr.criadaEm || ctr.dataAssinatura)) || primeiro);
       const un = String(c.unidade || "").trim();
+      // Regras para não ficar em branco. Parcela de contrato: o serviço é o
+      // item, 1 unidade, preço = valor, etapa e grupo "Prestadores de
+      // serviços". Sem quantidade: 1 unidade pelo valor. Sem insumo: o grupo
+      // (ou "Outros"), como na planilha do escritório.
+      const PREST = "Prestadores de serviços";
+      const ehContrato = !!c.contratoId;
+      const semQtd = !(qtd > 0);
+      let insumoFinal = insumoNome;
+      if (ehContrato && !ins) insumoFinal = String(c.servico || (ctr && (ctr.servico || ctr.descricaoServico)) || "Serviço").trim();
+      const grupoFinal = c.grupoMaterial || (ins && ins.grupo) || (ehContrato ? PREST : "");
+      if (!insumoFinal) insumoFinal = grupoFinal || "Outros";
+      const etapaNome = nomeDe(o.etapas, c.etapa) || c.etapa || (ehContrato ? PREST : "");
       saida.push({
         id: c.id, obraId: ob.id, obra: ob.nome || "", cliente,
         unidadeNegocio: CP_UNIDADES_NEGOCIO[(lanc && lanc.unidadeId) || unidadeDaObra] || "",
-        ref: c.numeroDoc || "", nota: String(c.numeroNota || c.doc || ""), arquivo: String(c.doc || ""),
+        ref: c.numeroDoc || "", nota: String(c.doc || c.numeroNota || ""), arquivo: String(c.doc || ""),
         fornecedor: c.favorecido || nomeDe(o.prestadores, c.prestadorId) || "",
-        descricaoLanc, item: desc, insumoCodigo: c.insumoCodigo || "", insumo: ins ? ins.nome : "", insumoNome,
-        quantidade: qtd > 0 ? qtd : null, unidade: grafia[un.toLowerCase()] || un,
-        unitario: qtd > 0 ? Math.round((total / qtd) * 10000) / 10000 : null,
+        descricaoLanc, item: desc, insumoCodigo: c.insumoCodigo || "", insumo: ins ? ins.nome : "", insumoNome: insumoFinal,
+        quantidade: semQtd ? 1 : qtd, unidade: semQtd ? (grafia[un.toLowerCase()] || un || "Unidades") : (grafia[un.toLowerCase()] || un || "Unidades"),
+        unitario: semQtd ? total : Math.round((total / qtd) * 10000) / 10000,
         total, valorNota,
-        grupo: c.grupoMaterial || (ins && ins.grupo) || "",
-        etapaId: c.etapa || "", etapa: nomeDe(o.etapas, c.etapa) || c.etapa || "",
+        grupo: grupoFinal,
+        etapaId: c.etapa || (ehContrato ? "prestadores" : ""), etapa: etapaNome,
         contaId: c.contaId || "", conta: nomeDe(o.planoContas, c.contaId) || c.contaId || "",
-        pago: !!c.pago, pagoEm, vencimento, competencia, entradaEm,
+        pago: !!c.pago, pagoEm, vencimento, competencia, dataLanc, entradaEm,
         noEscritorio: !!lanc,
         origem: c.origem || "", papeis: (Array.isArray(c.anexos) ? c.anexos.filter(Boolean).length : 0) + (c.comprovante ? 1 : 0),
         conta_: c,
@@ -2722,7 +2811,7 @@ const BASE_COLUNAS = [
   ["ref", "Ref"], ["cliente", "Nome Cliente"], ["obra", "Projeto / obra"], ["unidadeNegocio", "Unidade negócio"],
   ["fornecedor", "Fornecedor"], ["descricaoLanc", "Descrição Lançamento"], ["conta", "Conta contábil"],
   ["nota", "Nota / Comprovante"], ["valorNota", "Valor total nota"], ["competencia", "Período Contábil"],
-  ["pagoEm", "Data do lançamento"], ["insumoNome", "Nome Insumo (catálogo)"], ["unidade", "Unidade"],
+  ["dataLanc", "Data do lançamento"], ["insumoNome", "Nome Insumo (catálogo)"], ["unidade", "Unidade"],
   ["quantidade", "Quantidade"], ["unitario", "Preço"], ["total", "Valor"], ["etapa", "Etapa"], ["grupo", "Grupo Materiais"],
   ["situacao", "Situação"], ["vencimento", "Vencimento"], ["entradaEm", "Entrada no sistema"],
 ];

@@ -372,7 +372,7 @@ function fontesDasContasPagas(contas) {
     valor: valorDe(c), data: dataDe(c),
     descricao: c.descricao || "",
     fornecedor: c.favorecido || "", fornecedorId: c.prestadorId || "",
-    documento: c.numeroNota || c.numeroLoja || "",
+    documento: c.doc || c.numeroNota || c.numeroLoja || "",
     numeroDoc: c.numeroDoc || "",
     anexos: anexosDaTransacao(c),
   });
@@ -405,7 +405,7 @@ function fontesDasContasPagas(contas) {
       data: dataDe(p),
       descricao: (rotulo ? "Pedido " + rotulo : "Pedido") + " \u2014 " + itens.length + " itens",
       fornecedor: p.favorecido || "", fornecedorId: p.prestadorId || "",
-      documento: p.numeroNota || p.numeroLoja || "",
+      documento: p.doc || p.numeroNota || p.numeroLoja || "",
       numeroDoc: p.numeroDoc || "",
       anexos: anexos,
       // Os ids que ESTES itens teriam tido um a um. O que já atravessou

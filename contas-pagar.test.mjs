@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -2752,13 +2752,20 @@ teste("base de dados: uma linha por item, nas colunas da planilha do escritório
   assert.strictEqual(b.unidade, "Unidades", "a grafia do catálogo");
   assert.strictEqual(b.insumoNome, "Tubo 40mm");
   const c = L.find((l) => l.id === "c");
-  assert.strictEqual(c.unitario, null);
-  assert.strictEqual(c.quantidade, null, "sem quantidade fica em branco, não zero");
+  assert.strictEqual(c.quantidade, 1, "sem quantidade: 1 unidade pelo valor");
+  assert.strictEqual(c.unidade, "Unidades");
+  assert.strictEqual(c.unitario, 12);
   assert.strictEqual(c.pagoEm, "");
+  assert.strictEqual(c.dataLanc, "2026-10-28", "a pagar: a data é o vencimento");
   assert.strictEqual(c.competencia, "2026-10");
+  assert.strictEqual(c.insumoNome, "Outros", "sem insumo nem grupo: Outros");
   const d = L.find((l) => l.id === "d");
   assert.strictEqual(d.descricaoLanc, "Obra Civil — Parcela 11/14 (quinzenal)");
-  assert.strictEqual(d.insumoNome, "");
+  assert.strictEqual(d.insumoNome, "Obra Civil", "a parcela de contrato tem o serviço como item");
+  assert.strictEqual(d.etapa, "Prestadores de serviços");
+  assert.strictEqual(d.grupo, "Prestadores de serviços");
+  assert.strictEqual(d.quantidade, 1);
+  assert.strictEqual(d.unitario, 9142.86);
   assert.strictEqual(d.entradaEm, "2026-08-01", "a parcela entrou com o contrato");
   const e = L.find((l) => l.id === "e");
   assert.strictEqual(e.descricaoLanc, "Aço Vergalhões");
@@ -2780,7 +2787,8 @@ teste("base de dados: uma linha por item, nas colunas da planilha do escritório
     "Unidade", "Quantidade", "Preço", "Valor", "Etapa", "Grupo Materiais"]);
   assert.strictEqual(t.length, 9);
   assert.strictEqual(t[5][t[0].indexOf("Situação")], "Pago");
-  assert.strictEqual(t[1][t[0].indexOf("Quantidade")], "");
+  assert.strictEqual(t[1][t[0].indexOf("Quantidade")], 1);
+  assert.strictEqual(t[1][t[0].indexOf("Data do lançamento")], "2026-11-26");
   const p = modulo.planilhaDaBase(t);
   const col = (n) => p.colunas.find((c) => c.titulo === n);
   assert.strictEqual(p.colunas.length, 18, "o relatório tem as 18 colunas do modelo");
@@ -2793,6 +2801,34 @@ teste("base de dados: uma linha por item, nas colunas da planilha do escritório
   assert.ok(col("Fornecedor").largura > col("Ref").largura);
   assert.ok(col("Descrição Lançamento").largura >= 30);
   assert.ok(p.colunas.every((c) => c.largura <= 45), "texto longo para em 45");
+});
+
+teste("número do papel: segue a série dos arquivos e dá nome ao arquivo", () => {
+  const obras = [{ id: "o1", contasPagar: [3274, 3275, 3276, 4213, 4214].map((n) => ({ id: "x" + n, doc: String(n) })) }];
+  const lancs = [{ documento: "4210" }, { documento: "8623" }, { documento: "" }, { documento: "NF 12" }];
+  assert.strictEqual(modulo.proximoNumeroDePapel(obras, lancs), 4215, "o 8623 solto não puxa a série");
+  const contas = [
+    { id: "a", numeroDoc: "0180", pedidoId: "p1", pago: true, anexos: [{ public_id: "k1", nome: "WhatsApp Image 2026.jpeg" }] },
+    { id: "b", numeroDoc: "0180", pedidoId: "p1", pago: true, anexos: [{ public_id: "k1", nome: "WhatsApp Image 2026.jpeg" }, { public_id: "k2", nome: "nota.PDF" }] },
+    { id: "c", numeroDoc: "0185", pago: true, comprovante: { url: "u", nome: "image.png" } },
+    { id: "d", numeroDoc: "0051", doc: "4098", pago: true, anexos: [{ public_id: "k9", nome: "4098.pdf" }, { public_id: "k8", nome: "foto.jpg" }] },
+    { id: "e", numeroDoc: "0190", pago: false },
+    { id: "f", numeroDoc: "0191", pago: true },
+  ];
+  const r = modulo.numerarPapeisDasPagas(contas, 4215, (c) => c.id !== "f");
+  const por = (id) => r.contas.find((c) => c.id === id);
+  assert.strictEqual(por("a").doc, "4215", "a transação inteira leva um número só");
+  assert.strictEqual(por("b").doc, "4215");
+  assert.strictEqual(por("a").anexos[0].nome, "4215.jpeg");
+  assert.strictEqual(por("b").anexos[1].nome, "4215-2.pdf", "o segundo papel da mesma transação");
+  assert.strictEqual(por("c").doc, "4216");
+  assert.strictEqual(por("c").comprovante.nome, "4216.png");
+  assert.strictEqual(por("d").doc, "4098", "quem já tem número fica com ele");
+  assert.strictEqual(por("d").anexos[0].nome, "4098.pdf");
+  assert.strictEqual(por("d").anexos[1].nome, "4098-2.jpg");
+  assert.strictEqual(por("e").doc, undefined, "a pagar não ganha número");
+  assert.strictEqual(por("f").doc, undefined, "fora da gravação de agora não mexe");
+  assert.strictEqual(r.proximo, 4217);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
