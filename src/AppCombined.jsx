@@ -24204,6 +24204,25 @@ function casarPapelComContas(papel, grupos, opcoes) {
   return { candidatos: top, seguro, empate };
 }
 
+// A planilha de ligação diz, para cada arquivo, a referência do lançamento:
+// "4113;0062+0063+0064". O arquivo é achado pelo número no começo do nome
+// ("4113.pdf", "4113 - nota.pdf"). Linha que não se entende é ignorada.
+function numeroDoArquivo(nome) {
+  const m = String(nome || "").match(/^\s*(\d{3,})/);
+  return m ? String(Number(m[1])) : "";
+}
+function ligacaoDoCsv(texto) {
+  const mapa = new Map();
+  for (const linha of String(texto || "").split(/\r?\n/)) {
+    const partes = linha.split(/[;,\t]/).map((x) => x.trim());
+    const num = numeroDoArquivo(partes[0]);
+    const refs = String(partes[1] || "").split("+").map((r) => r.replace(/\D/g, "")).filter(Boolean)
+      .map((r) => r.padStart(4, "0"));
+    if (num && refs.length) mapa.set(num, refs);
+  }
+  return mapa;
+}
+
 // No lote, cada conta recebe UM papel de cada espécie (a nota e o
 // comprovante podem ir juntos; dois comprovantes não). Quem tem casamento
 // seguro escolhe primeiro; os empates vão sendo distribuídos pela data,
@@ -32530,6 +32549,9 @@ function PapeisEmLote({ obra, prestadores, isMobile, aoAnexar, aoFechar }) {
   const [anexando, setAnexando] = useState(false);
   const [aviso, setAviso] = useState("");
   const entrada = useRef(null);
+  const entradaCsv = useRef(null);
+  const ligacao = useRef(null);
+  const [nLigados, setNLigados] = useState(0);
   const seq = useRef(0);
   const atualizar = (fn) => { linhasRef.current = fn(linhasRef.current); setLinhas(linhasRef.current); };
   const mudar = (id, patch) => atualizar((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
@@ -32555,15 +32577,52 @@ function PapeisEmLote({ obra, prestadores, isMobile, aoAnexar, aoFechar }) {
   function candidatoDe(l, chave) {
     if (!chave) return null;
     const c = ((l.casamento || {}).candidatos || []).find((x) => loteChave(x) === chave);
-    if (c) return c;
-    const g = gruposRef.current.find((x) => x.ref === chave);
-    return g ? { refs: [g.ref], contaIds: g.contaIds, valor: g.valor, favorecido: g.favorecido, data: g.data, descricao: g.descricao, pontos: 0, motivos: ["escolhida à mão"] } : null;
+    if (c && !l.planilha) return c;
+    const gs = chave.split("+").map((r) => gruposRef.current.find((x) => x.ref === r));
+    if (!gs.length || gs.some((g) => !g)) return null;
+    return { refs: gs.map((g) => g.ref), contaIds: [].concat(...gs.map((g) => g.contaIds)),
+      valor: Math.round(gs.reduce((t, g) => t + g.valor, 0) * 100) / 100, favorecido: gs[0].favorecido, data: gs[0].data,
+      descricao: gs.map((g) => g.descricao).join(" + "), pontos: 0, motivos: [l.planilha ? "pela planilha" : "escolhida à mão"] };
+  }
+
+  function prontoParaAnexar(l) {
+    if (!l.marcado || !l.escolha) return false;
+    return l.estado === "lido" || (l.planilha && (l.estado === "fila" || l.estado === "erro"));
+  }
+
+  // A planilha manda: o arquivo vai para a ref que ela diz, leia a IA o que
+  // ler. Arquivo que a planilha não cita fica de fora, desmarcado.
+  function aplicarLigacao() {
+    const mapa = ligacao.current;
+    if (!mapa) return;
+    atualizar((ls) => ls.map((l) => {
+      if (l.estado === "anexado") return l;
+      const refs = mapa.get(numeroDoArquivo((l.arquivo || {}).name));
+      if (!refs) return l.planilha ? { ...l, planilha: false, escolha: "", marcado: false, mexido: false, foraDaPlanilha: true } : { ...l, foraDaPlanilha: true, marcado: false };
+      const existe = refs.every((r) => gruposRef.current.some((g) => g.ref === r));
+      if (!existe) return { ...l, planilha: false, foraDaPlanilha: false, erro: `A planilha aponta a ref ${refs.join("+")}, que não existe nesta obra.` };
+      return { ...l, planilha: true, foraDaPlanilha: false, mexido: true, escolha: refs.join("+"), marcado: true };
+    }));
+    setNLigados(linhasRef.current.filter((l) => l.planilha).length);
+  }
+
+  function lerCsv(arquivo) {
+    if (!arquivo) return;
+    const leitor = new FileReader();
+    leitor.onload = () => {
+      const mapa = ligacaoDoCsv(String(leitor.result || ""));
+      if (!mapa.size) { setAviso("Não achei linhas “arquivo;ref” nessa planilha."); return; }
+      ligacao.current = mapa;
+      aplicarLigacao();
+      setAviso(`Planilha de ligação: ${mapa.size} arquivo(s) com referência.`);
+    };
+    leitor.readAsText(arquivo, "utf-8");
   }
 
   function escolherArquivos(lista) {
     const novos = [...(lista || [])].map((arquivo) => ({ id: "l" + (++seq.current), arquivo, estado: "fila", erro: "",
       ficha: null, documentos: null, casamento: null, escolha: "", marcado: false, mexido: false }));
-    if (novos.length) atualizar((ls) => ls.concat(novos));
+    if (novos.length) { atualizar((ls) => ls.concat(novos)); aplicarLigacao(); }
   }
 
   async function lerUm(id) {
@@ -32602,7 +32661,7 @@ function PapeisEmLote({ obra, prestadores, isMobile, aoAnexar, aoFechar }) {
 
   async function anexarMarcados() {
     if (anexando) return;
-    const alvo = linhasRef.current.filter((l) => l.estado === "lido" && l.marcado && l.escolha);
+    const alvo = linhasRef.current.filter(prontoParaAnexar);
     if (!alvo.length) return;
     setAnexando(true); setAviso("");
     let pacote = [], feitos = 0;
@@ -32626,9 +32685,9 @@ function PapeisEmLote({ obra, prestadores, isMobile, aoAnexar, aoFechar }) {
       if (!up) continue;
       feitos++;
       const c = candidatoDe(l, l.escolha);
-      const pp = l.ficha.papel;
+      const pp = l.ficha ? l.ficha.papel : null;
       pacote.push({ linhaId: l.id, contaIds: (c && c.contaIds) || [], refs: (c && c.refs) || [],
-        anexo: { ...up, tipo: tipoDoAnexoDaEntrada(pp) }, chaveNota: pp.chave || "", idTransacao: pp.idTransacao || "" });
+        anexo: { ...up, tipo: pp ? tipoDoAnexoDaEntrada(pp) : "comprovante" }, chaveNota: (pp && pp.chave) || "", idTransacao: (pp && pp.idTransacao) || "" });
       if (pacote.length >= LOTE_POR_GRAVACAO) { gravar(pacote); pacote = []; await esperar(300); }
     }
     if (pacote.length) gravar(pacote);
@@ -32643,7 +32702,7 @@ function PapeisEmLote({ obra, prestadores, isMobile, aoAnexar, aoFechar }) {
         documentos: l.documentos || [], papel: l.ficha ? l.ficha.papel : null, avisos: l.ficha ? l.ficha.avisos : [],
         seguro: !!(l.casamento && l.casamento.seguro), empate: !!(l.casamento && l.casamento.empate),
         candidatos: ((l.casamento || {}).candidatos || []).slice(0, 4).map((x) => ({ refs: x.refs, valor: x.valor, pontos: x.pontos, motivos: x.motivos })),
-        escolhido: c ? c.refs : [], marcado: !!l.marcado };
+        escolhido: c ? c.refs : [], pelaPlanilha: !!l.planilha, marcado: !!l.marcado };
     });
     const blob = new Blob([JSON.stringify({ obra: (obra || {}).nome || "", em: new Date().toISOString(), papeis: saida }, null, 1)], { type: "application/json" });
     const a = document.createElement("a");
@@ -32656,11 +32715,20 @@ function PapeisEmLote({ obra, prestadores, isMobile, aoAnexar, aoFechar }) {
   const conta = (f) => linhas.filter(f).length;
   const nFila = conta((l) => l.estado === "fila" || l.estado === "erro");
   const nLidos = conta((l) => l.estado === "lido");
-  const nMarcados = conta((l) => l.estado === "lido" && l.marcado && l.escolha);
+  const nMarcados = conta(prontoParaAnexar);
   const nAnexados = conta((l) => l.estado === "anexado");
   const nLendo = conta((l) => l.estado === "lendo");
 
+  const valorDiverge = (l) => {
+    const c = l.ficha && candidatoDe(l, l.escolha);
+    const v = l.ficha ? (Number(l.ficha.papel.valor) || Number(l.ficha.papel.total) || 0) : 0;
+    return c && v > 0 && Math.abs(v - c.valor) >= 0.01 ? v : 0;
+  };
   const situacaoDe = (l) => {
+    if (l.estado === "anexado") return selo("#0474f4", "Anexado");
+    if (l.estado === "lendo") return selo("#0474f4", "Lendo…");
+    if (l.planilha) return valorDiverge(l) ? selo("#d97706", "Planilha · valor ≠") : selo("#0474f4", "Planilha");
+    if (l.foraDaPlanilha && l.estado !== "erro") return selo("#6b7280", "Fora da planilha");
     if (l.estado === "fila") return selo("#6b7280", "Na fila");
     if (l.estado === "lendo") return selo("#0474f4", "Lendo…");
     if (l.estado === "erro") return selo("#dc2626", "Erro");
@@ -32673,7 +32741,9 @@ function PapeisEmLote({ obra, prestadores, isMobile, aoAnexar, aoFechar }) {
 
   const rotuloDoCandidato = (c) => `ref ${c.refs.join("+")} · ${c.favorecido || "—"} · ${moeda(c.valor)}${c.data ? " · " + loteDiaBR(c.data) : ""}`;
   const opcoesDe = (l) => {
-    const sug = ((l.casamento || {}).candidatos || []);
+    let sug = ((l.casamento || {}).candidatos || []);
+    const atual = l.escolha && !sug.some((c) => loteChave(c) === l.escolha) ? candidatoDe(l, l.escolha) : null;
+    if (atual) sug = [atual].concat(sug);
     const usados = new Set(sug.map(loteChave));
     return [
       { valor: "", rotulo: "— não anexar —" },
@@ -32701,13 +32771,20 @@ function PapeisEmLote({ obra, prestadores, isMobile, aoAnexar, aoFechar }) {
 
   const motivosDe = (l) => {
     const c = candidatoDe(l, l.escolha);
-    return c && c.motivos && c.motivos.length ? c.motivos.join(" · ") : "";
+    let t = c && c.motivos && c.motivos.length ? c.motivos.join(" · ") : "";
+    if (l.planilha && l.casamento) {
+      const ia = (l.casamento.candidatos || [])[0];
+      t += ia ? (loteChave(ia) === l.escolha ? " · a IA achou a mesma" : ` · a IA sugeria ref ${loteChave(ia)}`) : " · a IA não achou par";
+    }
+    const v = valorDiverge(l);
+    if (v) t += ` · o papel diz ${moeda(v)}, o lançamento ${moeda(c.valor)}`;
+    return t;
   };
 
   const marcar = (l, v) => mudar(l.id, { marcado: v });
-  const escolher = (l, v) => mudar(l.id, { escolha: v, mexido: true, marcado: !!v });
+  const escolher = (l, v) => mudar(l.id, { escolha: v, mexido: true, marcado: !!v, planilha: false });
   const tirar = (l) => atualizar((ls) => ls.filter((x) => x.id !== l.id));
-  const podeMarcar = (l) => l.estado === "lido" && !!l.escolha && !anexando;
+  const podeMarcar = (l) => (l.estado === "lido" || (l.planilha && (l.estado === "fila" || l.estado === "erro"))) && !!l.escolha && !anexando;
   const COLS = "28px minmax(0,1.2fr) minmax(0,2fr) minmax(0,2.2fr) 120px";
 
   return (
@@ -32733,12 +32810,18 @@ function PapeisEmLote({ obra, prestadores, isMobile, aoAnexar, aoFechar }) {
           <input ref={entrada} type="file" multiple accept="application/pdf,image/*" style={{ display: "none" }}
             onChange={(e) => { escolherArquivos(e.target.files); e.target.value = ""; }} />
           <button style={E.btnSec} onClick={() => entrada.current && entrada.current.click()} disabled={anexando}>Escolher arquivos</button>
+          <input ref={entradaCsv} type="file" accept=".csv,.txt,text/csv,text/plain" style={{ display: "none" }}
+            onChange={(e) => { lerCsv(e.target.files && e.target.files[0]); e.target.value = ""; }} />
+          <button style={E.btnSec} onClick={() => entradaCsv.current && entradaCsv.current.click()} disabled={anexando}
+            title="Arquivo CSV com “arquivo;ref” por linha — ex.: 4113;0062+0063+0064">
+            {nLigados ? `Planilha de ligação (${nLigados})` : "Usar planilha de ligação"}
+          </button>
           <button style={{ ...E.btn, background: "#0474f4", opacity: (!nFila || rodando || iaDisponivel === false) ? 0.5 : 1 }}
             disabled={!nFila || rodando || iaDisponivel === false} onClick={lerTodos}>
             {rodando ? `Lendo… (${nLidos + nAnexados} de ${linhas.length})` : `Ler com a IA${nFila ? ` (${nFila})` : ""}`}
           </button>
           <span style={{ fontSize: 12, color: "#4b5563" }}>
-            {linhas.length} arquivo(s) · {nLidos + nAnexados} lido(s){nLendo ? ` · ${nLendo} lendo` : ""} · {nAnexados} anexado(s)
+            {linhas.length} arquivo(s) · {conta((l) => !!l.ficha)} lido(s) pela IA{nLendo ? ` · ${nLendo} lendo` : ""} · {nAnexados} anexado(s)
           </span>
         </div>
         {rodando && <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 10 }}>Cada papel leva uns 20 a 40 segundos, dois por vez. Deixe esta tela aberta até terminar.</div>}
@@ -32759,7 +32842,7 @@ function PapeisEmLote({ obra, prestadores, isMobile, aoAnexar, aoFechar }) {
                 <input type="checkbox" checked={!!l.marcado} disabled={!podeMarcar(l)} onChange={(e) => marcar(l, e.target.checked)}
                   style={{ width: 16, height: 16, accentColor: "#0474f4" }} aria-label="Anexar este papel" />
               );
-              const seletor = l.estado === "lido" || l.estado === "anexado" ? (
+              const seletor = l.estado === "lido" || l.estado === "anexado" || l.planilha ? (
                 <div>
                   <SelectBusca style={{ ...E.input, padding: "6px 9px", fontSize: 12 }} value={l.escolha || ""} disabled={l.estado === "anexado" || anexando}
                     onChange={(v) => escolher(l, v)} placeholder="Procurar ref, fornecedor, valor…" vazio="— não anexar —" opcoes={opcoesDe(l)} />

@@ -1038,6 +1038,25 @@ function casarPapelComContas(papel, grupos, opcoes) {
   return { candidatos: top, seguro, empate };
 }
 
+// A planilha de ligação diz, para cada arquivo, a referência do lançamento:
+// "4113;0062+0063+0064". O arquivo é achado pelo número no começo do nome
+// ("4113.pdf", "4113 - nota.pdf"). Linha que não se entende é ignorada.
+function numeroDoArquivo(nome) {
+  const m = String(nome || "").match(/^\s*(\d{3,})/);
+  return m ? String(Number(m[1])) : "";
+}
+function ligacaoDoCsv(texto) {
+  const mapa = new Map();
+  for (const linha of String(texto || "").split(/\r?\n/)) {
+    const partes = linha.split(/[;,\t]/).map((x) => x.trim());
+    const num = numeroDoArquivo(partes[0]);
+    const refs = String(partes[1] || "").split("+").map((r) => r.replace(/\D/g, "")).filter(Boolean)
+      .map((r) => r.padStart(4, "0"));
+    if (num && refs.length) mapa.set(num, refs);
+  }
+  return mapa;
+}
+
 // No lote, cada conta recebe UM papel de cada espécie (a nota e o
 // comprovante podem ir juntos; dois comprovantes não). Quem tem casamento
 // seguro escolhe primeiro; os empates vão sendo distribuídos pela data,

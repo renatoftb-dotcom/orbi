@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -2647,6 +2647,17 @@ teste("lote: sem valor parecido nao ha candidato", () => {
   const r = modulo.casarPapelComContas({ valor: 7206, lidoComo: "Daniel Tonet" }, GRUPOS_LOTE);
   assert.strictEqual(r.candidatos.length, 0);
   assert.strictEqual(r.seguro, false);
+});
+
+teste("lote: planilha de ligacao arquivo;ref", () => {
+  const m = modulo.ligacaoDoCsv("arquivo;ref\n4113;0062+0063+0064\r\n4209,166\n\nlixo\n3274\t0001");
+  assert.deepStrictEqual(m.get("4113"), ["0062", "0063", "0064"]);
+  assert.deepStrictEqual(m.get("4209"), ["0166"]);
+  assert.deepStrictEqual(m.get("3274"), ["0001"]);
+  assert.strictEqual(m.size, 3);
+  assert.strictEqual(modulo.numeroDoArquivo("4113 - nota.pdf"), "4113");
+  assert.strictEqual(modulo.numeroDoArquivo("04113.pdf"), "4113");
+  assert.strictEqual(modulo.numeroDoArquivo("nota.pdf"), "");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
