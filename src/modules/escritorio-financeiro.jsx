@@ -4424,11 +4424,11 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       {!["resumo", "fechamento"].includes(vista) && aba === "base" && (
         <div style={{ ...S.card, minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Base de dados</div>
-          <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2, marginBottom: 14 }}>Todas as obras · cada item de cada nota, com etapa, conta e datas</div>
+          <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2, marginBottom: 14 }}>O que entrou no extrato do escritório · as compras das obras abertas item a item</div>
           <BaseDeDados obras={(data || {}).obras || []} clientes={(data || {}).clientes || []}
             prestadores={(data || {}).fornecedores || []}
             insumos={typeof insumosDoCatalogo === "function" ? insumosDoCatalogo(data) : []}
-            lancamentos={lancamentosDoEscritorio(data)}
+            lancamentos={lancamentosDoEscritorio(data)} doEscritorio
             completar={perm.podeEditar !== false ? { data, save, quem: typeof nomeDeQuem === "function" ? nomeDeQuem(perm && perm.usuario) : "" } : null}
             isMobile={typeof window !== "undefined" && window.innerWidth < 768} nomeDoArquivo="base de dados" />
         </div>

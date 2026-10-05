@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -2921,6 +2921,37 @@ teste("filtro pelo título da coluna, como no Excel", () => {
   const v = modulo.valoresDaColuna(relat, "Fornecedor", { Valor: ["R$ 13,95", "R$ 70,00"] });
   assert.deepStrictEqual(v.map((x) => [x.texto, x.n]), [["OURIFER", 1], ["", 1]], "só o que passa nos outros filtros");
   assert.deepStrictEqual(modulo.valoresDaColuna(relat, "Ref", {}).map((x) => x.texto), ["11", "21", "180", "194"]);
+});
+
+teste("base do escritório: só o que entrou no extrato", () => {
+  const obras = [
+    { id: "cob", nome: "Reforma Loja Cobop", clientePagaDireto: true, contasPagar: [
+      { id: "x1", numeroDoc: "0174", descricao: "Aço", valor: 3063.73, valorPago: 3063.73, pago: true, pagoEm: "2026-10-01" }] },
+    { id: "m1", nome: "Módulo 1", contasPagar: [
+      { id: "a", numeroDoc: "0173", pedidoId: "p", descricao: "Areia Fina", valor: 260, valorPago: 260, pago: true, pagoEm: "2026-09-29", quantidade: 2, unidade: "m3" },
+      { id: "b", numeroDoc: "0173", pedidoId: "p", descricao: "Prego", valor: 44, valorPago: 44, pago: true, pagoEm: "2026-09-29" },
+      { id: "c", numeroDoc: "0190", descricao: "Ainda a pagar", valor: 10, pago: false, vencimento: "2026-11-01" }] },
+  ];
+  const lancs = [
+    { id: "L1", tipo: "escritorio", origem: { obraId: "m1", tipo: "pedido", refId: "p|material|2026-09-29" }, valor: 304, descricao: "Pedido 8623", competencia: "2026-09" },
+    { id: "L2", tipo: "escritorio", contaId: "aluguel", unidadeId: "escritorio", descricao: "Aluguel sala", fornecedor: "Imobiliária", valor: -2500,
+      lancadoEm: "2026-09-10", competencia: "2026-09", documento: "4199", cliente: "ESCRITÓRIO" },
+  ];
+  const L = modulo.linhasDoEscritorio(obras, lancs, {
+    contaDoEscritorio: (id) => (id === "aluguel" ? { nome: "Aluguel", grupo: "despesas" } : null),
+    grupoDoEscritorio: (id) => (id === "despesas" ? { titulo: "DESPESAS ESCRITÓRIO", sinal: -1 } : null) });
+  assert.deepStrictEqual(L.map((l) => l.id).sort(), ["a", "b", "lanc:L2"], "Cobop e a conta a pagar não entram");
+  const al = L.find((l) => l.id === "lanc:L2");
+  assert.strictEqual(al.total, 2500, "sem valor negativo");
+  assert.strictEqual(al.sinal, -1, "mas sabe que é saída");
+  assert.strictEqual(al.insumoNome, "Aluguel");
+  assert.strictEqual(al.conta, "Aluguel");
+  assert.strictEqual(al.grupo, "Despesas escritório");
+  assert.strictEqual(al.unidadeNegocio, "Escritório");
+  assert.strictEqual(al.nota, "4199");
+  assert.strictEqual(al.competencia, "2026-09");
+  assert.strictEqual(L.find((l) => l.id === "a").valorNota, 304, "o item da obra leva o total do lançamento");
+  assert.deepStrictEqual(modulo.filtrarBase(L, { texto: "aluguel" }).map((l) => l.id), ["lanc:L2"]);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

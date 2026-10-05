@@ -2978,6 +2978,56 @@ function linhasDaBase(obras, opcoes) {
     || String(b.ref).localeCompare(String(a.ref)));
 }
 
+// A base do escritório é o extrato do escritório: entra só o que entrou
+// lá. O lançamento que veio de uma obra (a ponte grava a origem) abre nos
+// itens da obra — a nota com as suas linhas; o lançamento do próprio
+// escritório (aluguel, salário, receita de projeto) é uma linha só, com a
+// conta contábil fazendo as vezes do item. Obra cujo cliente paga direto
+// (Reforma Loja Cobop) não passa pelo extrato e não aparece.
+function linhasDoEscritorio(obras, lancamentos, opcoes) {
+  const o = opcoes || {};
+  const saida = [];
+  const usadas = new Set();
+  const porId = new Map((obras || []).filter(Boolean).map((ob) => [ob.id, ob]));
+  const titulo = (t) => { const x = String(t || "").toLowerCase(); return x ? x.charAt(0).toUpperCase() + x.slice(1) : ""; };
+  for (const l of lancamentos || []) {
+    if (!l || (l.tipo && l.tipo !== "escritorio")) continue;
+    const ob = l.origem && l.origem.obraId ? porId.get(l.origem.obraId) : null;
+    // entrada ou saída no extrato: o grupo da conta diz; sem conta, o sinal do valor
+    const contaL = (typeof o.contaDoEscritorio === "function" && o.contaDoEscritorio(l.contaId)) || null;
+    const grupoL = contaL && typeof o.grupoDoEscritorio === "function" ? o.grupoDoEscritorio(contaL.grupo) : null;
+    const sinal = grupoL && grupoL.sinal ? (grupoL.sinal < 0 ? -1 : 1) : (Number(l.valor) < 0 ? -1 : 1);
+    const contas = ob ? (ob.contasPagar || []).filter((c) => c && !usadas.has(ob.id + "|" + c.id) && cpLancamentoDaConta([l], ob.id, c)) : [];
+    if (contas.length) {
+      contas.forEach((c) => usadas.add(ob.id + "|" + c.id));
+      for (const r of linhasDaBase([{ ...ob, contasPagar: contas }], { ...o, lancamentos: [l] })) saida.push({ ...r, lancId: l.id, sinal });
+      continue;
+    }
+    const conta = (typeof o.contaDoEscritorio === "function" && o.contaDoEscritorio(l.contaId)) || null;
+    const grupo = conta && typeof o.grupoDoEscritorio === "function" ? o.grupoDoEscritorio(conta.grupo) : null;
+    const valor = Math.round(Math.abs(Number(l.valor) || 0) * 100) / 100;
+    const dia = String(l.lancadoEm || "").slice(0, 10);
+    const nomeConta = (conta && conta.nome) || l.contaOriginal || l.contaId || "";
+    const pseudo = { id: "lanc:" + l.id, numeroDoc: l.numeroDoc || "", descricao: l.descricao || "", favorecido: l.fornecedor || "",
+      numeroNota: l.documento || "", valor, valorPago: valor, pago: true, pagoEm: dia, vencimento: dia, contaId: l.contaId || "",
+      observacao: [nomeConta, l.cliente, l.projeto].filter(Boolean).join(" "), anexos: Array.isArray(l.anexos) ? l.anexos : [] };
+    saida.push({
+      id: pseudo.id, lancId: l.id, obraId: l.obraId || l.empreendimentoId || "", obra: l.projeto || "", cliente: l.cliente || "",
+      unidadeNegocio: CP_UNIDADES_NEGOCIO[l.unidadeId] || l.unidadeOriginal || "",
+      ref: l.numeroDoc || "", nota: String(l.documento || ""), arquivo: "",
+      fornecedor: l.fornecedor || "", descricaoLanc: l.descricao || "", item: l.descricao || "",
+      insumoCodigo: "", insumo: "", insumoNome: nomeConta || "Outros",
+      quantidade: 1, unidade: "Unidades", unitario: valor, total: valor, valorNota: valor,
+      grupo: titulo(grupo && grupo.titulo) || "Outros", etapaId: "outros", etapa: "Outros",
+      contaId: l.contaId || "", conta: nomeConta,
+      pago: true, pagoEm: dia, vencimento: dia, competencia: String(l.competencia || dia.slice(0, 7)).slice(0, 7),
+      dataLanc: dia, entradaEm: dia, origem: "escritorio", papeis: pseudo.anexos.filter(Boolean).length, conta_: pseudo, sinal,
+    });
+  }
+  return saida.sort((a, b) => (b.pagoEm || b.vencimento).localeCompare(a.pagoEm || a.vencimento)
+    || String(b.ref).localeCompare(String(a.ref)));
+}
+
 function filtrarBase(linhas, filtro, op) {
   const f = filtro || {};
   const contas = buscarContas(linhas.map((l) => l.conta_), f, op);
@@ -3458,7 +3508,7 @@ function carregarExcelJS() {
   return cpCargaExcel;
 }
 
-function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMobile, obraFixa, nomeDoArquivo, completar }) {
+function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMobile, obraFixa, nomeDoArquivo, completar, doEscritorio }) {
   // "Completar a base": o que as regras preenchem no que já está gravado,
   // listado para conferir; só grava no clique de quem confere.
   const [conferindo, setConferindo] = useState(false);
@@ -3511,12 +3561,19 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   const [baixando, setBaixando] = useState("");
   const etapas = typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [];
   const plano = typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [];
-  const linhas = useMemo(() => linhasDaBase(obras || [], { clientes, prestadores, insumos, lancamentos, etapas, planoContas: plano }),
-    [obras, clientes, prestadores, insumos, lancamentos]);
+  const linhas = useMemo(() => {
+    const op0 = { clientes, prestadores, insumos, lancamentos, etapas, planoContas: plano };
+    if (!doEscritorio) return linhasDaBase(obras || [], op0);
+    // no escritório, só o que entrou no extrato
+    return linhasDoEscritorio(obras || [], lancamentos || [], { ...op0,
+      contaDoEscritorio: typeof contaEscritorio === "function" ? contaEscritorio : null,
+      grupoDoEscritorio: typeof grupoEscritorio === "function" ? grupoEscritorio : null });
+  }, [obras, clientes, prestadores, insumos, lancamentos, doEscritorio]);
   const nomeDe = (lista, id) => ((lista || []).find((x) => x && x.id === id) || {}).nome || "";
   const op = { nomePrestador: (id) => nomeDe(prestadores, id), nomeConta: (id) => nomeDe(plano, id), nomeEtapa: (id) => nomeDe(etapas, id) };
-  const filtradasBase = filtrarBase(linhas, { texto, obraId, contaId, etapa, grupo, papel, situacao, de, ate }, op);
-  const relat = planilhaDaBase(tabelaDaBase(filtradasBase));
+  const filtradasBase = useMemo(() => filtrarBase(linhas, { texto, obraId, contaId, etapa, grupo, papel, situacao, de, ate }, op),
+    [linhas, texto, obraId, contaId, etapa, grupo, papel, situacao, de, ate]);
+  const relat = useMemo(() => planilhaDaBase(tabelaDaBase(filtradasBase)), [filtradasBase]);
   const idxFinal = filtrarPorColunas(relat, colFiltros, ordemCol);
   const filtradas = idxFinal.map((i) => filtradasBase[i]);
   const celulasDe = idxFinal.map((i) => relat.linhas[i]);
@@ -3644,8 +3701,14 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
         <div style={{ fontSize: 12.5, color: "#374151" }}>
-          <b>{filtradas.length}</b> {filtradas.length === 1 ? "item" : "itens"} · total <b>{moeda(soma)}</b>
-          {somaPaga !== soma ? ` · pago ${moeda(somaPaga)}` : ""}
+          <b>{filtradas.length}</b> {filtradas.length === 1 ? "item" : "itens"}
+          {doEscritorio ? (<>
+            {" · entradas "}<b>{moeda(red(filtradas.filter((l) => l.sinal > 0).reduce((t, l) => t + l.total, 0)))}</b>
+            {" · saídas "}<b>{moeda(red(filtradas.filter((l) => !(l.sinal > 0)).reduce((t, l) => t + l.total, 0)))}</b>
+          </>) : (<>
+            {" · total "}<b>{moeda(soma)}</b>
+            {somaPaga !== soma ? ` · pago ${moeda(somaPaga)}` : ""}
+          </>)}
           {procurando && <> · <button type="button" onClick={limpar} style={{ background: "none", border: "none", padding: 0, color: "#0474f4", cursor: "pointer", fontFamily: "inherit", fontSize: 12.5 }}>limpar filtros</button></>}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
