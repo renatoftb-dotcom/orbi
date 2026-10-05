@@ -50,7 +50,7 @@ const modulo = new Function(`
            linhaFinalExtrato, fechoEstimativaPL, plDaObra, progressoCusto,
            prestadoresDoPL, CONTAS_PRESTADOR_EXTRA,
            aneisDosGrupos, visaoUsaAnel, VISOES_CONTAS_EM_ANEL,
-           removerOrfasDeContrato, assinaturaContas, folhaDeComprovantes,
+           removerOrfasDeContrato, assinaturaContas, folhaDeComprovantes, arquivosDaFolha, cpPapeisDaConta,
            recalibrarContrato, previaRecalibragem, primeiroVencimentoContrato,
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
@@ -2984,6 +2984,35 @@ teste("o desconto do pedido aparece para quem paga: tabela, desconto e total", (
   assert.strictEqual(modulo.descontoDasContas(antigas, []), null, "sem pedido e sem tabela, nada a dizer");
   const semDesc = modulo.contasDoPedidoDaLoja({ obraId: "o1" }, { ...ped, desconto: 0 }, () => "x" + (++n));
   assert.strictEqual(modulo.descontoDasContas(semDesc, []), null);
+});
+
+teste("folha da loja: um pagamento por linha, com comprovante e nota fiscal", () => {
+  const pix = { url: "http://x/pix", public_id: "pix", nome: "4225.png", formato: "png", resourceType: "image" };
+  const nf = { url: "http://x/nf", public_id: "nf", nome: "4225-2.pdf", formato: "pdf", resourceType: "raw", tipo: "nota" };
+  const ped = { url: "http://x/ped", public_id: "ped", nome: "pedido.png", tipo: "pedido" };
+  // a nota entrou depois pelo "+ papel": o comprovante da baixa foi para a lista de anexos
+  const itens = [1, 2, 3, 4, 5, 6].map((n) => ({ id: "i" + n, pedidoId: "p1", numeroLoja: "24787-120", numeroDoc: "0201",
+    descricao: "Item " + n, valor: 100, valorPago: 100, pago: true, pagoEm: "2026-11-02", anexos: [pix, nf, ped] }));
+  const f = modulo.folhaDeComprovantes(itens, "Ourifer");
+  assert.strictEqual(f.linhas.length, 1, "seis itens pagos juntos são um pagamento");
+  const l = f.linhas[0];
+  assert.strictEqual(l.titulo, "Pedido 24787-120 · 6 itens");
+  assert.strictEqual(l.valor, 600);
+  assert.strictEqual(l.comprovante.public_id, "pix", "o comprovante continua valendo depois que a nota entra");
+  assert.strictEqual(f.semComprovante, 0);
+  assert.deepStrictEqual(l.papeis.map((a) => a.rotulo), ["Comprovante", "Nota fiscal"], "o papel do pedido não vai para a loja");
+  assert.strictEqual(f.notas, 1);
+  const arq = modulo.arquivosDaFolha(f);
+  assert.deepStrictEqual(arq.map((a) => a.nome), ["4225.png", "4225-2.pdf"]);
+});
+
+teste("arquivos da folha: nome repetido não sobrescreve outro no zip", () => {
+  const a = { url: "u1", public_id: "a", nome: "comprovante.png" };
+  const b = { url: "u2", public_id: "b", nome: "comprovante.png" };
+  const f = modulo.folhaDeComprovantes([
+    { id: "1", pago: true, valor: 10, pagoEm: "2026-01-01", comprovante: a },
+    { id: "2", pago: true, valor: 20, pagoEm: "2026-01-02", comprovante: b }], "Loja");
+  assert.deepStrictEqual(modulo.arquivosDaFolha(f).map((x) => x.nome), ["comprovante.png", "comprovante (2).png"]);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

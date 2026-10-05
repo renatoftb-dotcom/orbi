@@ -3328,24 +3328,78 @@ function agruparContas(contas, visao, ctx) {
 // Só entra conta paga: comprovante de conta em aberto não existe. Conta paga
 // SEM comprovante entra na lista também, e a folha a mostra como pendência —
 // esconder faria a folha parecer completa quando não está.
+// Os papéis de uma conta, separados pelo que são. O comprovante da baixa
+// pode estar no campo próprio (`comprovante`) ou já ter ido para a lista de
+// anexos — é o que acontece quando um segundo papel entra depois. Nos dois
+// casos ele é comprovante; nota é só o que veio marcado como nota.
+function cpPapeisDaConta(c) {
+  const x = c || {};
+  const lista = (Array.isArray(x.anexos) ? x.anexos.filter(Boolean) : []);
+  const todos = x.comprovante ? [x.comprovante].concat(lista) : lista;
+  const vistos = new Set();
+  const r = { comprovantes: [], notas: [] };
+  for (const a of todos) {
+    const k = (a && (a.public_id || a.url)) || "";
+    if (!k || vistos.has(k)) continue;
+    vistos.add(k);
+    const t = a.tipo || "";
+    if (t === "nota") r.notas.push(a);
+    else if (t === "boleto" || t === "pedido" || t === "proposta") continue;
+    else r.comprovantes.push(a);
+  }
+  return r;
+}
+
+const cpEhPdf = (a) => !!a && (a.formato === "pdf" || a.resourceType === "raw" || /\.pdf$/i.test(String(a.nome || "")));
+
 function folhaDeComprovantes(contas, titulo) {
   const red = (x) => Math.round(x * 100) / 100;
   const pagas = (contas || []).filter((c) => c && c.pago);
-  const linhas = pagas.map((c) => {
-    const a = c.comprovante || null;
-    const ehPdf = !!a && (a.formato === "pdf" || a.resourceType === "raw");
+  // Uma linha por PAGAMENTO, não por item: o pedido de seis itens pago com
+  // um Pix só é um pagamento, com um comprovante — repeti-lo seis vezes
+  // fazia a loja conferir o mesmo papel seis vezes.
+  const grupos = new Map();
+  for (const c of pagas) {
+    const k = String(c.numeroDoc || c.pedidoId || c.id);
+    if (!grupos.has(k)) grupos.set(k, []);
+    grupos.get(k).push(c);
+  }
+  const nomeDoTitulo = String(titulo || "").trim().toLowerCase();
+  const linhas = [...grupos.values()].map((cs) => {
+    const c0 = cs[0];
+    const vistos = new Set();
+    const comprovantes = [], notas = [];
+    for (const c of cs) {
+      const p = cpPapeisDaConta(c);
+      for (const a of p.comprovantes) { const k = a.public_id || a.url; if (!vistos.has(k)) { vistos.add(k); comprovantes.push(a); } }
+      for (const a of p.notas) { const k = a.public_id || a.url; if (!vistos.has(k)) { vistos.add(k); notas.push(a); } }
+    }
+    const a = comprovantes[0] || null;
+    const ehPdf = cpEhPdf(a);
     // A folha inteira já é de um fornecedor: repetir o nome dele no título e
     // no apoio de cada pagamento é dizer a mesma coisa três vezes.
-    const nomeDoTitulo = String(titulo || "").trim().toLowerCase();
-    const apoioBruto = typeof apoioCurtoConta === "function" ? apoioCurtoConta(c) : (c.favorecido || "");
+    const apoioBruto = typeof apoioCurtoConta === "function" ? apoioCurtoConta(c0) : (c0.favorecido || "");
+    const numeroDoPedido = String(c0.numeroLoja || c0.numeroPedido || "").trim();
+    const tituloDoItem = String(c0.descricao || "").trim()
+      || (typeof tituloConta === "function" ? tituloConta(c0) : "Pagamento");
+    const titulo1 = cs.length > 1
+      ? (numeroDoPedido ? `Pedido ${numeroDoPedido}` : tituloDoItem) + ` · ${cs.length} itens`
+      : tituloDoItem;
+    const pagoEm = cs.map((c) => c.pagoEm || "").filter(Boolean).sort()[0] || "";
+    const rotular = (x, rotulo) => ({ ...x, rotulo, ehPdf: cpEhPdf(x) });
     return {
-      id: c.id,
-      titulo: String(c.descricao || "").trim()
-        || (typeof tituloConta === "function" ? tituloConta(c) : "Pagamento"),
+      id: c0.id,
+      contaIds: cs.map((c) => c.id),
+      titulo: titulo1,
       apoio: String(apoioBruto || "").trim().toLowerCase() === nomeDoTitulo ? "" : apoioBruto,
-      pagoEm: c.pagoEm || "",
-      valor: red(Number(c.valorPago) || Number(c.valor) || 0),
+      pagoEm,
+      valor: red(cs.reduce((t, c) => t + (Number(c.valorPago) || Number(c.valor) || 0), 0)),
       comprovante: a,
+      comprovantes,
+      notas,
+      // todos os papéis da linha, na ordem em que a loja confere: o que pagou
+      // e o que ela emitiu
+      papeis: comprovantes.map((x) => rotular(x, "Comprovante")).concat(notas.map((x) => rotular(x, "Nota fiscal"))),
       // PDF não dá para desenhar na folha junto das fotos: a impressão do
       // navegador não embute arquivo de outro domínio. Vai listado, com o
       // link, e a folha diz que ele é um anexo à parte.
@@ -3360,12 +3414,48 @@ function folhaDeComprovantes(contas, titulo) {
     comImagem: linhas.filter((l) => l.temImagem).length,
     emPdf: linhas.filter((l) => l.ehPdf).length,
     semComprovante: linhas.filter((l) => !l.comprovante).length,
+    notas: linhas.reduce((t, l) => t + l.notas.length, 0),
     periodo: {
       de: (linhas.find((l) => l.pagoEm) || {}).pagoEm || "",
       ate: (linhas.filter((l) => l.pagoEm).pop() || {}).pagoEm || "",
     },
     vazio: linhas.length === 0,
   };
+}
+
+// Os arquivos para baixar de uma vez (o .zip que vai para a loja conferir):
+// cada papel uma vez, com nome que não se repete — o número do papel já
+// vem no nome; o que vier igual ganha (2), (3).
+function arquivosDaFolha(folha) {
+  const usados = new Map();
+  const r = [];
+  for (const [i, l] of ((folha || {}).linhas || []).entries()) {
+    for (const a of l.papeis || []) {
+      if (!a || !a.url) continue;
+      let nome = String(a.nome || "").trim();
+      if (!nome) nome = `${String(i + 1).padStart(2, "0")} ${a.rotulo || "papel"}${a.ehPdf ? ".pdf" : ""}`;
+      nome = nome.replace(/[\\/:*?"<>|]+/g, "-");
+      const n = (usados.get(nome) || 0) + 1;
+      usados.set(nome, n);
+      if (n > 1) nome = nome.replace(/(\.[^.]+)?$/, (ext) => ` (${n})${ext || ""}`);
+      r.push({ url: a.url, nome, rotulo: a.rotulo, pagamento: l.titulo });
+    }
+  }
+  return r;
+}
+
+let cpCargaZip = null;
+function carregarJSZip() {
+  if (typeof window !== "undefined" && window.JSZip) return Promise.resolve(window.JSZip);
+  if (cpCargaZip) return cpCargaZip;
+  cpCargaZip = new Promise((ok, falha) => {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
+    s.onload = () => (window.JSZip ? ok(window.JSZip) : falha(new Error("sem JSZip")));
+    s.onerror = () => { cpCargaZip = null; falha(new Error("não carregou")); };
+    document.head.appendChild(s);
+  });
+  return cpCargaZip;
 }
 
 // ── Anéis por grupo (fornecedor, contrato) ──────────────────────

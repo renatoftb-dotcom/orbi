@@ -26565,24 +26565,78 @@ function agruparContas(contas, visao, ctx) {
 // Só entra conta paga: comprovante de conta em aberto não existe. Conta paga
 // SEM comprovante entra na lista também, e a folha a mostra como pendência —
 // esconder faria a folha parecer completa quando não está.
+// Os papéis de uma conta, separados pelo que são. O comprovante da baixa
+// pode estar no campo próprio (`comprovante`) ou já ter ido para a lista de
+// anexos — é o que acontece quando um segundo papel entra depois. Nos dois
+// casos ele é comprovante; nota é só o que veio marcado como nota.
+function cpPapeisDaConta(c) {
+  const x = c || {};
+  const lista = (Array.isArray(x.anexos) ? x.anexos.filter(Boolean) : []);
+  const todos = x.comprovante ? [x.comprovante].concat(lista) : lista;
+  const vistos = new Set();
+  const r = { comprovantes: [], notas: [] };
+  for (const a of todos) {
+    const k = (a && (a.public_id || a.url)) || "";
+    if (!k || vistos.has(k)) continue;
+    vistos.add(k);
+    const t = a.tipo || "";
+    if (t === "nota") r.notas.push(a);
+    else if (t === "boleto" || t === "pedido" || t === "proposta") continue;
+    else r.comprovantes.push(a);
+  }
+  return r;
+}
+
+const cpEhPdf = (a) => !!a && (a.formato === "pdf" || a.resourceType === "raw" || /\.pdf$/i.test(String(a.nome || "")));
+
 function folhaDeComprovantes(contas, titulo) {
   const red = (x) => Math.round(x * 100) / 100;
   const pagas = (contas || []).filter((c) => c && c.pago);
-  const linhas = pagas.map((c) => {
-    const a = c.comprovante || null;
-    const ehPdf = !!a && (a.formato === "pdf" || a.resourceType === "raw");
+  // Uma linha por PAGAMENTO, não por item: o pedido de seis itens pago com
+  // um Pix só é um pagamento, com um comprovante — repeti-lo seis vezes
+  // fazia a loja conferir o mesmo papel seis vezes.
+  const grupos = new Map();
+  for (const c of pagas) {
+    const k = String(c.numeroDoc || c.pedidoId || c.id);
+    if (!grupos.has(k)) grupos.set(k, []);
+    grupos.get(k).push(c);
+  }
+  const nomeDoTitulo = String(titulo || "").trim().toLowerCase();
+  const linhas = [...grupos.values()].map((cs) => {
+    const c0 = cs[0];
+    const vistos = new Set();
+    const comprovantes = [], notas = [];
+    for (const c of cs) {
+      const p = cpPapeisDaConta(c);
+      for (const a of p.comprovantes) { const k = a.public_id || a.url; if (!vistos.has(k)) { vistos.add(k); comprovantes.push(a); } }
+      for (const a of p.notas) { const k = a.public_id || a.url; if (!vistos.has(k)) { vistos.add(k); notas.push(a); } }
+    }
+    const a = comprovantes[0] || null;
+    const ehPdf = cpEhPdf(a);
     // A folha inteira já é de um fornecedor: repetir o nome dele no título e
     // no apoio de cada pagamento é dizer a mesma coisa três vezes.
-    const nomeDoTitulo = String(titulo || "").trim().toLowerCase();
-    const apoioBruto = typeof apoioCurtoConta === "function" ? apoioCurtoConta(c) : (c.favorecido || "");
+    const apoioBruto = typeof apoioCurtoConta === "function" ? apoioCurtoConta(c0) : (c0.favorecido || "");
+    const numeroDoPedido = String(c0.numeroLoja || c0.numeroPedido || "").trim();
+    const tituloDoItem = String(c0.descricao || "").trim()
+      || (typeof tituloConta === "function" ? tituloConta(c0) : "Pagamento");
+    const titulo1 = cs.length > 1
+      ? (numeroDoPedido ? `Pedido ${numeroDoPedido}` : tituloDoItem) + ` · ${cs.length} itens`
+      : tituloDoItem;
+    const pagoEm = cs.map((c) => c.pagoEm || "").filter(Boolean).sort()[0] || "";
+    const rotular = (x, rotulo) => ({ ...x, rotulo, ehPdf: cpEhPdf(x) });
     return {
-      id: c.id,
-      titulo: String(c.descricao || "").trim()
-        || (typeof tituloConta === "function" ? tituloConta(c) : "Pagamento"),
+      id: c0.id,
+      contaIds: cs.map((c) => c.id),
+      titulo: titulo1,
       apoio: String(apoioBruto || "").trim().toLowerCase() === nomeDoTitulo ? "" : apoioBruto,
-      pagoEm: c.pagoEm || "",
-      valor: red(Number(c.valorPago) || Number(c.valor) || 0),
+      pagoEm,
+      valor: red(cs.reduce((t, c) => t + (Number(c.valorPago) || Number(c.valor) || 0), 0)),
       comprovante: a,
+      comprovantes,
+      notas,
+      // todos os papéis da linha, na ordem em que a loja confere: o que pagou
+      // e o que ela emitiu
+      papeis: comprovantes.map((x) => rotular(x, "Comprovante")).concat(notas.map((x) => rotular(x, "Nota fiscal"))),
       // PDF não dá para desenhar na folha junto das fotos: a impressão do
       // navegador não embute arquivo de outro domínio. Vai listado, com o
       // link, e a folha diz que ele é um anexo à parte.
@@ -26597,12 +26651,48 @@ function folhaDeComprovantes(contas, titulo) {
     comImagem: linhas.filter((l) => l.temImagem).length,
     emPdf: linhas.filter((l) => l.ehPdf).length,
     semComprovante: linhas.filter((l) => !l.comprovante).length,
+    notas: linhas.reduce((t, l) => t + l.notas.length, 0),
     periodo: {
       de: (linhas.find((l) => l.pagoEm) || {}).pagoEm || "",
       ate: (linhas.filter((l) => l.pagoEm).pop() || {}).pagoEm || "",
     },
     vazio: linhas.length === 0,
   };
+}
+
+// Os arquivos para baixar de uma vez (o .zip que vai para a loja conferir):
+// cada papel uma vez, com nome que não se repete — o número do papel já
+// vem no nome; o que vier igual ganha (2), (3).
+function arquivosDaFolha(folha) {
+  const usados = new Map();
+  const r = [];
+  for (const [i, l] of ((folha || {}).linhas || []).entries()) {
+    for (const a of l.papeis || []) {
+      if (!a || !a.url) continue;
+      let nome = String(a.nome || "").trim();
+      if (!nome) nome = `${String(i + 1).padStart(2, "0")} ${a.rotulo || "papel"}${a.ehPdf ? ".pdf" : ""}`;
+      nome = nome.replace(/[\\/:*?"<>|]+/g, "-");
+      const n = (usados.get(nome) || 0) + 1;
+      usados.set(nome, n);
+      if (n > 1) nome = nome.replace(/(\.[^.]+)?$/, (ext) => ` (${n})${ext || ""}`);
+      r.push({ url: a.url, nome, rotulo: a.rotulo, pagamento: l.titulo });
+    }
+  }
+  return r;
+}
+
+let cpCargaZip = null;
+function carregarJSZip() {
+  if (typeof window !== "undefined" && window.JSZip) return Promise.resolve(window.JSZip);
+  if (cpCargaZip) return cpCargaZip;
+  cpCargaZip = new Promise((ok, falha) => {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
+    s.onload = () => (window.JSZip ? ok(window.JSZip) : falha(new Error("sem JSZip")));
+    s.onerror = () => { cpCargaZip = null; falha(new Error("não carregou")); };
+    document.head.appendChild(s);
+  });
+  return cpCargaZip;
 }
 
 // ── Anéis por grupo (fornecedor, contrato) ──────────────────────
@@ -38718,6 +38808,39 @@ const CP_COMPROV_PRINT_CSS = `
 
 function FolhaComprovantes({ folha, obraNome, escritorioNome, fmtBRL, aoFechar }) {
   const alvo = useRef(null);
+  const [zip, setZip] = useState(null); // { fazendo, msg, erro }
+  const arquivos = typeof arquivosDaFolha === "function" ? arquivosDaFolha(folha) : [];
+  // Todos os papéis da folha num .zip — o que vai para a loja conferir. Cada
+  // arquivo é baixado do armazenamento e entra com o nome que já tem (o
+  // número do papel); o que não baixar fica listado, sem travar o resto.
+  async function baixarZip() {
+    if (!arquivos.length) return;
+    setZip({ fazendo: true, msg: "Juntando " + arquivos.length + " arquivos…" });
+    try {
+      const JSZip = await carregarJSZip();
+      const z = new JSZip();
+      const falharam = [];
+      for (const a of arquivos) {
+        try {
+          const r = await fetch(a.url);
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          z.file(a.nome, await r.blob());
+        } catch (e) { falharam.push(a.nome); }
+      }
+      if (falharam.length === arquivos.length) throw new Error("nenhum arquivo baixou");
+      const blob = await z.generateAsync({ type: "blob" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = ("Comprovantes e notas - " + (folha.titulo || "fornecedor")).replace(/[\\/:*?"<>|]+/g, "-") + ".zip";
+      document.body.appendChild(link); link.click();
+      setTimeout(() => { try { URL.revokeObjectURL(link.href); link.remove(); } catch (e) {} }, 1500);
+      setZip(falharam.length
+        ? { erro: true, msg: `Zip baixado sem ${falharam.length === 1 ? "1 arquivo" : falharam.length + " arquivos"}: ${falharam.join(", ")}.` }
+        : { msg: `Zip baixado com ${arquivos.length === 1 ? "1 arquivo" : arquivos.length + " arquivos"}.` });
+    } catch (e) {
+      setZip({ erro: true, msg: "Não consegui montar o zip (" + ((e && e.message) || "erro") + ")." });
+    }
+  }
   useEffect(() => {
     const tag = document.createElement("style");
     tag.setAttribute("data-vk-comprov-print", "1");
@@ -38759,8 +38882,16 @@ function FolhaComprovantes({ folha, obraNome, escritorioNome, fmtBRL, aoFechar }
       style={{ position: "fixed", inset: 0, background: "#fff", zIndex: 9100, overflowY: "auto", padding: "20px 22px" }}>
       <div data-vk-so-tela="1" style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginBottom: 14, position: "sticky", top: 0, background: "#fff", paddingBottom: 8 }}>
         <button type="button" style={C.btnSec} onClick={aoFechar}>Fechar</button>
+        {arquivos.length > 0 && (
+          <button type="button" data-vk-baixar-zip="1" style={C.btnSec} disabled={!!(zip && zip.fazendo)} onClick={baixarZip}>
+            {zip && zip.fazendo ? "Juntando…" : `Baixar todos (ZIP) · ${arquivos.length}`}
+          </button>
+        )}
         <button type="button" style={C.btn} onClick={() => { try { window.print(); } catch (e) {} }}>Imprimir / salvar PDF</button>
       </div>
+      {zip && zip.msg && (
+        <div data-vk-so-tela="1" style={{ maxWidth: 880, margin: "0 auto 10px", fontSize: 12, color: zip.erro ? "#b45309" : "#15803d" }}>{zip.msg}</div>
+      )}
 
       <div style={{ maxWidth: 880, margin: "0 auto" }}>
         <div style={{ borderBottom: "1.5px solid rgba(38,36,33,0.16)", paddingBottom: 10, marginBottom: 16 }}>
@@ -38774,6 +38905,7 @@ function FolhaComprovantes({ folha, obraNome, escritorioNome, fmtBRL, aoFechar }
             <div><div style={rotulo}>Comprovantes</div><div style={{ fontSize: 13, fontWeight: 600 }}>
               {folha.comImagem} na folha{folha.emPdf ? ` · ${folha.emPdf} em PDF` : ""}{folha.semComprovante ? ` · ${folha.semComprovante} sem` : ""}
             </div></div>
+            {folha.notas > 0 && <div><div style={rotulo}>Notas fiscais</div><div style={{ fontSize: 13, fontWeight: 600 }}>{folha.notas}</div></div>}
           </div>
         </div>
 
@@ -38789,18 +38921,22 @@ function FolhaComprovantes({ folha, obraNome, escritorioNome, fmtBRL, aoFechar }
                 <div style={{ fontSize: 11.5, color: "#4b5563" }}>pago em {dataBR(l.pagoEm)}</div>
               </div>
             </div>
-            {l.temImagem ? (
-              <img src={l.comprovante.url} alt={`Comprovante ${i + 1}`}
-                style={{ display: "block", maxWidth: "100%", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 6 }} />
-            ) : l.ehPdf ? (
-              <div style={{ fontSize: 11.5, color: "#4b5563", background: "#fafafa", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 8, padding: "8px 10px" }}>
-                Comprovante em PDF ({l.comprovante.nome || "arquivo"}) — vai como anexo à parte, o navegador não o imprime junto das fotos.
-              </div>
-            ) : (
-              <div style={{ fontSize: 11.5, color: "#b45309", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "8px 10px" }}>
+            {!l.comprovante && (
+              <div style={{ fontSize: 11.5, color: "#b45309", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
                 Sem comprovante anexado.
               </div>
             )}
+            {(l.papeis || []).map((a, k) => a.ehPdf ? (
+              <div key={(a.public_id || a.url) + k} style={{ fontSize: 11.5, color: "#4b5563", background: "#fafafa", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
+                {a.rotulo} em PDF ({a.nome || "arquivo"}) — vai como anexo à parte (está no zip), o navegador não o imprime junto das fotos.
+              </div>
+            ) : (
+              <div key={(a.public_id || a.url) + k} style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 10.5, color: "#6b7280", marginBottom: 3 }}>{a.rotulo}{a.nome ? " · " + a.nome : ""}</div>
+                <img src={a.url} alt={`${a.rotulo} ${i + 1}`}
+                  style={{ display: "block", maxWidth: "100%", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 6 }} />
+              </div>
+            ))}
           </div>
         ))}
         <div style={{ fontSize: 10.5, color: "#6b7280", marginTop: 8 }}>
@@ -39611,6 +39747,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [contaFiltro, setContaFiltro] = useState("");
   const [etapaFiltro, setEtapaFiltro] = useState("");
   const [papelOcupado, setPapelOcupado] = useState("");
+  // "＋ papel" pergunta o que o papel é (nota, comprovante, boleto) antes de
+  // abrir o arquivo: guarda de qual conta é a pergunta aberta.
+  const [tipoPapelDe, setTipoPapelDe] = useState("");
   const [erroPapel, setErroPapel] = useState("");
   const obraAtualRef = useRef(null);
   // Contas a pagar: como agrupar, o que mostrar e quais grupos estão fechados.
@@ -41576,6 +41715,35 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // Os papéis da nota são da compra, não de um item: aparecem uma vez, na
     // linha da nota — antes só apareciam abrindo o detalhe de um item
     // solto, e a nota agrupada parecia não ter papel nenhum.
+    // O "＋ papel": primeiro diz o que é, depois escolhe o arquivo. Sem isto
+    // a nota fiscal que chega depois do pagamento entrava como um segundo
+    // "Comprovante", e a folha da loja não a reconhecia como nota.
+    const novoPapel = (chave, aoArquivo) => {
+      if (papelOcupado === chave) return <span style={{ marginLeft: 10, fontSize: 11, color: "#6b7280" }}>enviando…</span>;
+      if (tipoPapelDe !== chave) return (
+        <button type="button" data-vk-novo-papel="1" disabled={!!papelOcupado}
+          onClick={e => { e.stopPropagation(); setTipoPapelDe(chave); }}
+          style={{ marginLeft: 10, background: "none", border: "none", padding: 0, fontSize: 11, color: AZUL_VK,
+            cursor: papelOcupado ? "default" : "pointer", fontFamily: "inherit" }}>＋ papel</button>
+      );
+      return (
+        <span data-vk-mantem-mes="1" onClick={e => e.stopPropagation()}
+          style={{ marginLeft: 10, display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap", fontSize: 11 }}>
+          <span style={{ color: "#6b7280" }}>o papel é</span>
+          {[["nota", "nota fiscal"], ["comprovante", "comprovante"], ["boleto", "boleto"]].map(([t, r]) => (
+            <label key={t} data-vk-tipo-papel={t}
+              style={{ color: AZUL_VK, cursor: "pointer", border: "1px solid rgba(4,116,244,0.35)", borderRadius: 999,
+                padding: isMobile ? "6px 10px" : "1px 8px", background: "#fff" }}>
+              {r}
+              <input type="file" accept="application/pdf,image/*" style={{ display: "none" }}
+                onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; setTipoPapelDe(""); if (f) aoArquivo(f, t); }} />
+            </label>
+          ))}
+          <button type="button" title="Cancelar" onClick={() => setTipoPapelDe("")}
+            style={{ background: "none", border: "none", padding: "0 4px", color: "#9ca3af", cursor: "pointer", fontSize: 14, fontFamily: "inherit" }}>×</button>
+        </span>
+      );
+    };
     const papeisDoPedido = (L) => {
       const vistos = new Set(), lista = [];
       for (const c of (L && L.contas) || []) {
@@ -41737,13 +41905,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                         <LinksDeAnexo transacao={{ anexos: papeisDoPedido(L) }} ocupado={papelOcupado === L.contas[0].id}
                                           aoTrocar={perm.podeGerenciarObra ? (a, f) => mexerNoPapel(L.contas[0], "trocar", a, f) : undefined}
                                           aoTirar={perm.podeGerenciarObra ? (a) => mexerNoPapel(L.contas[0], "tirar", a, null) : undefined} />
-                                        {perm.podeGerenciarObra && (
-                                          <label onClick={e => e.stopPropagation()} style={{ marginLeft: 10, fontSize: 11, color: AZUL_VK, cursor: papelOcupado ? "default" : "pointer" }}>
-                                            {papelOcupado === L.contas[0].id ? "enviando…" : "＋ papel"}
-                                            <input type="file" accept="application/pdf,image/*" style={{ display: "none" }} disabled={!!papelOcupado}
-                                              onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) mexerNoPapel(L.contas[0], "anexar", null, f, L.contas.map(c => c.id)); }} />
-                                          </label>
-                                        )}
+                                        {perm.podeGerenciarObra && novoPapel(L.contas[0].id,
+                                          (f, tipo) => mexerNoPapel(L.contas[0], "anexar", null, f, L.contas.map(c => c.id), tipo))}
                                         {erroPapel && erroPapel.indexOf(L.contas[0].id + ":") === 0 && (
                                           <div style={{ color: "#b91c1c", fontSize: 11 }}>{erroPapel.slice(L.contas[0].id.length + 1)}</div>
                                         )}
@@ -42527,13 +42690,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                         <LinksDeAnexo transacao={c} ocupado={papelOcupado === c.id}
                                           aoTrocar={perm.podeGerenciarObra ? (a, f) => mexerNoPapel(c, "trocar", a, f) : undefined}
                                           aoTirar={perm.podeGerenciarObra ? (a) => mexerNoPapel(c, "tirar", a, null) : undefined} />
-                                        {perm.podeGerenciarObra && (
-                                          <label onClick={e => e.stopPropagation()} style={{ marginLeft: 10, fontSize: 11, color: AZUL_VK, cursor: papelOcupado ? "default" : "pointer" }}>
-                                            {papelOcupado === c.id ? "enviando…" : "＋ papel"}
-                                            <input type="file" accept="application/pdf,image/*" style={{ display: "none" }} disabled={!!papelOcupado}
-                                              onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) mexerNoPapel(c, "anexar", null, f); }} />
-                                          </label>
-                                        )}
+                                        {perm.podeGerenciarObra && novoPapel(c.id, (f, tipo) => mexerNoPapel(c, "anexar", null, f, undefined, tipo))}
                                         {erroPapel && papelOcupado === "" && erroPapel.indexOf(c.id + ":") === 0 && (
                                           <div style={{ color: "#b91c1c", fontSize: 11 }}>{erroPapel.slice(c.id.length + 1)}</div>
                                         )}
@@ -42778,14 +42935,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Trocar, tirar ou pôr um papel numa conta já lançada. O papel é da
   // compra, não do item: vale para todas as contas que já o têm (trocar,
   // tirar) ou para todas da mesma referência (pôr).
-  async function mexerNoPapel(conta, acao, antigo, arquivo, idsAlvo) {
+  async function mexerNoPapel(conta, acao, antigo, arquivo, idsAlvo, tipo) {
     if (!perm.podeGerenciarObra || !conta) return;
     setErroPapel(""); setPapelOcupado(conta.id);
     try {
       let novo = null;
       if (arquivo) {
         const up = await enviarAnexo(arquivo, "comprovante_pagamento");
-        novo = { ...up, tipo: (antigo && antigo.tipo) || "comprovante" };
+        novo = { ...up, tipo: tipo || (antigo && antigo.tipo) || "comprovante" };
       }
       const obra = obraAtualRef.current;
       if (!obra) return;
