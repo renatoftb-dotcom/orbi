@@ -27088,11 +27088,16 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
         const todosMarcados = lista.every((v) => marcado(v.texto));
         const numerico = ["moeda", "numero", "numeroTexto", "data", "mes"].indexOf(col.tipo) >= 0;
         const ordenar = (dir) => { setOrdemCol({ titulo: menuCol.titulo, dir }); setMenuCol(null); };
+        const podeAplicar = busca ? lista.some((v) => marcado(v.texto)) : menuCol.marcados.length > 0;
         const aplicar = () => {
           const nv = { ...colFiltros };
+          // como no Excel: com algo digitado na busca, o OK fica só com o que
+          // a busca achou (e está marcado); sem busca, vale o que está marcado
+          const escolhidos = busca ? lista.map((v) => v.texto).filter(marcado) : menuCol.marcados.slice();
+          if (!escolhidos.length) return;
           // marcar tudo é o mesmo que não filtrar
-          if (todos.every((v) => marcado(v.texto))) delete nv[menuCol.titulo];
-          else nv[menuCol.titulo] = menuCol.marcados.slice();
+          if (todos.every((v) => escolhidos.indexOf(v.texto) >= 0)) delete nv[menuCol.titulo];
+          else nv[menuCol.titulo] = escolhidos;
           setColFiltros(nv); setLimite(300); setMenuCol(null);
         };
         const opcao = { all: "unset", cursor: "pointer", display: "block", padding: "6px 10px", borderRadius: 8, fontSize: 12.5, color: "#111827", fontFamily: "inherit" };
@@ -27106,7 +27111,9 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
               <button type="button" style={opcao} onClick={() => ordenar(1)}>{numerico ? "Ordenar do menor para o maior" : "Ordenar de A a Z"}</button>
               <button type="button" style={opcao} onClick={() => ordenar(-1)}>{numerico ? "Ordenar do maior para o menor" : "Ordenar de Z a A"}</button>
               <div style={{ borderTop: "1px solid rgba(38,36,33,0.08)", margin: "6px 0" }} />
-              <input autoFocus value={menuCol.busca} onChange={(e) => setMenuCol({ ...menuCol, busca: e.target.value })}
+              <input autoFocus value={menuCol.busca}
+                // como no Excel: ao digitar, tudo o que a busca acha já vem marcado
+                onChange={(e) => setMenuCol({ ...menuCol, busca: e.target.value, marcados: e.target.value ? todos.map((v) => v.texto) : menuCol.marcados })}
                 onKeyDown={(e) => { if (e.key === "Enter") aplicar(); if (e.key === "Escape") setMenuCol(null); }}
                 placeholder="Procurar…" aria-label={"Procurar em " + menuCol.titulo}
                 style={{ ...input, padding: "6px 9px", fontSize: 12.5, marginBottom: 6 }} />
@@ -27136,9 +27143,9 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
                 <div style={{ display: "flex", gap: 6 }}>
                   <button type="button" onClick={() => setMenuCol(null)} style={{ background: "#fff", color: "#374151", border: "1.5px solid rgba(38,36,33,0.16)",
                     borderRadius: 9, padding: "5px 12px", fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>Cancelar</button>
-                  <button type="button" onClick={aplicar} disabled={!menuCol.marcados.length}
+                  <button type="button" onClick={aplicar} disabled={!podeAplicar}
                     style={{ background: "#0474f4", color: "#fff", border: "none", borderRadius: 9, padding: "6px 14px", fontSize: 12.5, fontWeight: 600,
-                      cursor: menuCol.marcados.length ? "pointer" : "default", opacity: menuCol.marcados.length ? 1 : 0.5, fontFamily: "inherit" }}>OK</button>
+                      cursor: podeAplicar ? "pointer" : "default", opacity: podeAplicar ? 1 : 0.5, fontFamily: "inherit" }}>OK</button>
                 </div>
               </div>
             </div>
