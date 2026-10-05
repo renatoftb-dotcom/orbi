@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, textoDaCelula, alinhamentoDaCelula,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -2905,6 +2905,22 @@ teste("a tela da base mostra cada célula como o Excel", () => {
   assert.strictEqual(T("", { tipo: "moeda" }), "");
   assert.strictEqual(modulo.alinhamentoDaCelula({ tipo: "moeda", alinhar: "" }), "right");
   assert.strictEqual(modulo.alinhamentoDaCelula({ tipo: "texto", alinhar: "center" }), "center");
+});
+
+teste("filtro pelo título da coluna, como no Excel", () => {
+  const relat = { colunas: [{ titulo: "Ref", tipo: "numeroTexto" }, { titulo: "Fornecedor", tipo: "texto" }, { titulo: "Valor", tipo: "moeda" }],
+    linhas: [["0194", "Padovan", 10833.37], ["0021", "OURIFER", 13.95], ["0180", "OURIFER", 485.4], ["0011", "", 70]] };
+  const F = modulo.filtrarPorColunas;
+  assert.deepStrictEqual(F(relat, {}, null), [0, 1, 2, 3]);
+  assert.deepStrictEqual(F(relat, { Fornecedor: ["OURIFER"] }, null), [1, 2]);
+  assert.deepStrictEqual(F(relat, { Fornecedor: [""] }, null), [3], "(Vazias)");
+  assert.deepStrictEqual(F(relat, {}, { titulo: "Valor", dir: -1 }), [0, 2, 3, 1], "maior valor primeiro");
+  assert.deepStrictEqual(F(relat, {}, { titulo: "Ref", dir: 1 }), [3, 1, 2, 0], "ref como número");
+  assert.deepStrictEqual(F(relat, {}, { titulo: "Fornecedor", dir: 1 }), [1, 2, 0, 3], "vazias no fim");
+  assert.deepStrictEqual(F(relat, { Fornecedor: ["OURIFER"] }, { titulo: "Valor", dir: 1 }), [1, 2]);
+  const v = modulo.valoresDaColuna(relat, "Fornecedor", { Valor: ["R$ 13,95", "R$ 70,00"] });
+  assert.deepStrictEqual(v.map((x) => [x.texto, x.n]), [["OURIFER", 1], ["", 1]], "só o que passa nos outros filtros");
+  assert.deepStrictEqual(modulo.valoresDaColuna(relat, "Ref", {}).map((x) => x.texto), ["11", "21", "180", "194"]);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

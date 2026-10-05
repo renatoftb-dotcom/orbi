@@ -26341,6 +26341,54 @@ function alinhamentoDaCelula(coluna) {
   return ["moeda", "numero"].indexOf(c.tipo) >= 0 ? "right" : "left";
 }
 
+// O filtro do título da coluna, como o do Excel: em cada coluna, os
+// valores (como aparecem na tela) que ficam; e a ordem por uma coluna.
+// Devolve os índices das linhas que passam, já na ordem.
+function filtrarPorColunas(relat, filtros, ordem) {
+  const r = relat || { colunas: [], linhas: [] };
+  const cols = r.colunas || [];
+  const j = (t) => cols.findIndex((c) => c.titulo === t);
+  const ativos = Object.keys(filtros || {}).filter((t) => Array.isArray(filtros[t]) && j(t) >= 0);
+  const idx = (r.linhas || []).map((_, i) => i).filter((i) => ativos.every((t) =>
+    filtros[t].indexOf(textoDaCelula(r.linhas[i][j(t)], cols[j(t)])) >= 0));
+  const k = ordem ? j(ordem.titulo) : -1;
+  if (k >= 0) {
+    const c = cols[k];
+    const numerico = ["moeda", "numero", "numeroTexto"].indexOf(c.tipo) >= 0;
+    const vazio = (v) => v === "" || v == null;
+    idx.sort((a, b) => {
+      const va = r.linhas[a][k], vb = r.linhas[b][k];
+      if (vazio(va) || vazio(vb)) return vazio(va) === vazio(vb) ? a - b : (vazio(va) ? 1 : -1);
+      const d = numerico && !isNaN(Number(va)) && !isNaN(Number(vb)) ? Number(va) - Number(vb)
+        : String(va).localeCompare(String(vb), "pt-BR", { numeric: true, sensitivity: "base" });
+      return d * (ordem.dir < 0 ? -1 : 1) || a - b;
+    });
+  }
+  return idx;
+}
+// Os valores de uma coluna para a lista do filtro, com quantas linhas têm
+// cada um — contando só as linhas que passam nos filtros das outras colunas.
+function valoresDaColuna(relat, titulo, filtros) {
+  const r = relat || { colunas: [], linhas: [] };
+  const j = (r.colunas || []).findIndex((c) => c.titulo === titulo);
+  if (j < 0) return [];
+  const outros = { ...(filtros || {}) };
+  delete outros[titulo];
+  const conta = new Map();
+  const ordemCrua = new Map();
+  for (const i of filtrarPorColunas(r, outros, null)) {
+    const v = r.linhas[i][j];
+    const t = textoDaCelula(v, r.colunas[j]);
+    conta.set(t, (conta.get(t) || 0) + 1);
+    if (!ordemCrua.has(t)) ordemCrua.set(t, v);
+  }
+  const numerico = ["moeda", "numero", "numeroTexto"].indexOf(r.colunas[j].tipo) >= 0;
+  return [...conta.entries()].map(([texto, n]) => ({ texto, n, cru: ordemCrua.get(texto) }))
+    .sort((a, b) => (a.texto === "" ? 1 : b.texto === "" ? -1
+      : numerico && !isNaN(Number(a.cru)) && !isNaN(Number(b.cru)) ? Number(a.cru) - Number(b.cru)
+        : String(a.cru).localeCompare(String(b.cru), "pt-BR", { numeric: true, sensitivity: "base" })));
+}
+
 // largura aproximada do texto na fonte (maiúscula é mais larga)
 function cpLarguraDoTexto(t) {
   let w = 0;
@@ -26710,6 +26758,10 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   // a linha clicada fica marcada em azul claro, para não perder o fio ao
   // correr os olhos pela linha comprida; outro clique desmarca
   const [linhaMarcada, setLinhaMarcada] = useState("");
+  // filtro e ordem pelo título da coluna, como no Excel
+  const [colFiltros, setColFiltros] = useState({});
+  const [ordemCol, setOrdemCol] = useState(null);
+  const [menuCol, setMenuCol] = useState(null); // { titulo, x, y, busca, marcados }
   // a caixa da grade vai até o pé da janela, para a barra lateral aparecer
   const gradeRef = useRef(null);
   const [alturaGrade, setAlturaGrade] = useState(0);
@@ -26756,7 +26808,11 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
     [obras, clientes, prestadores, insumos, lancamentos]);
   const nomeDe = (lista, id) => ((lista || []).find((x) => x && x.id === id) || {}).nome || "";
   const op = { nomePrestador: (id) => nomeDe(prestadores, id), nomeConta: (id) => nomeDe(plano, id), nomeEtapa: (id) => nomeDe(etapas, id) };
-  const filtradas = filtrarBase(linhas, { texto, obraId, contaId, etapa, grupo, papel, situacao, de, ate }, op);
+  const filtradasBase = filtrarBase(linhas, { texto, obraId, contaId, etapa, grupo, papel, situacao, de, ate }, op);
+  const relat = planilhaDaBase(tabelaDaBase(filtradasBase));
+  const idxFinal = filtrarPorColunas(relat, colFiltros, ordemCol);
+  const filtradas = idxFinal.map((i) => filtradasBase[i]);
+  const celulasDe = idxFinal.map((i) => relat.linhas[i]);
   const red = (x) => Math.round(x * 100) / 100;
   const soma = red(filtradas.reduce((t, l) => t + l.total, 0));
   const somaPaga = red(filtradas.filter((l) => l.pago).reduce((t, l) => t + l.total, 0));
@@ -26766,8 +26822,10 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   const num = (v, casas) => (v == null || v === "" ? "—" : Number(v).toLocaleString("pt-BR", { minimumFractionDigits: casas || 0, maximumFractionDigits: casas == null ? 3 : casas }));
   const diaBR = (iso) => { const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : ""; };
   const mesBR = (ym) => { const m = String(ym || "").match(/^(\d{4})-(\d{2})/); return m ? `${m[2]}/${m[1]}` : ""; };
-  const procurando = !!(texto.trim() || obraId || contaId || etapa || grupo || papel !== "todos" || situacao || de || ate);
-  const limpar = () => { setTexto(""); setObraId(""); setContaId(""); setEtapa(""); setGrupo(""); setPapel("todos"); setSituacao(""); setDe(""); setAte(""); };
+  const procurando = !!(texto.trim() || obraId || contaId || etapa || grupo || papel !== "todos" || situacao || de || ate
+    || Object.keys(colFiltros).length || ordemCol);
+  const limpar = () => { setTexto(""); setObraId(""); setContaId(""); setEtapa(""); setGrupo(""); setPapel("todos"); setSituacao(""); setDe(""); setAte("");
+    setColFiltros({}); setOrdemCol(null); setMenuCol(null); };
 
   async function baixar() {
     setBaixando("Montando a planilha…");
@@ -26841,7 +26899,6 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   // do maior conteúdo (com teto, para texto longo não esticar a coluna — o
   // texto inteiro aparece ao passar o mouse). Na obra, cliente e obra já
   // estão no título da tela.
-  const relat = planilhaDaBase(tabelaDaBase(filtradas));
   const ocultas = obraFixa ? ["Nome Cliente", "Projeto / obra"] : [];
   const COLS = relat.colunas.map((c, j) => ({ ...c, j, px: Math.max(56, Math.round(c.largura * 7.2)) }))
     .filter((c) => ocultas.indexOf(c.titulo) < 0);
@@ -26977,7 +27034,28 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
             <div style={{ display: "grid", gridTemplateColumns: grade, gap: 10, padding: "8px 12px", borderBottom: "1px solid rgba(38,36,33,0.1)",
               fontSize: 10.5, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.3, position: "sticky", top: 0, background: "#fff", zIndex: 2,
               boxShadow: "0 1px 0 rgba(38,36,33,0.1)" }}>
-              {COLS.map((c) => <span key={c.titulo} title={c.titulo} style={{ textAlign: alinhamentoDaCelula(c), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.titulo}</span>)}
+              {COLS.map((c) => {
+                const ativo = !!colFiltros[c.titulo] || (ordemCol && ordemCol.titulo === c.titulo);
+                const al = alinhamentoDaCelula(c);
+                return (
+                  <button key={c.titulo} type="button" title={"Filtrar ou ordenar por " + c.titulo}
+                    onClick={(e) => {
+                      if (menuCol && menuCol.titulo === c.titulo) { setMenuCol(null); return; }
+                      const r = e.currentTarget.getBoundingClientRect();
+                      const vals = valoresDaColuna(relat, c.titulo, colFiltros).map((v) => v.texto);
+                      setMenuCol({ titulo: c.titulo, x: Math.min(r.left, window.innerWidth - 290), y: r.bottom + 4, busca: "",
+                        marcados: colFiltros[c.titulo] ? colFiltros[c.titulo].slice() : vals });
+                    }}
+                    style={{ all: "unset", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, minWidth: 0,
+                      justifyContent: al === "center" ? "center" : al === "right" ? "flex-end" : "flex-start",
+                      color: ativo ? "#0474f4" : undefined, fontFamily: "inherit" }}>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.titulo}</span>
+                    <span style={{ fontSize: 9, flexShrink: 0 }}>
+                      {ordemCol && ordemCol.titulo === c.titulo ? (ordemCol.dir > 0 ? "▲" : "▼") : ""}{colFiltros[c.titulo] ? "⏷" : "▾"}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
             {visiveis.map((l, i) => (
               <div key={l.id} data-vk-base-linha="1" onClick={() => setLinhaMarcada(linhaMarcada === l.id ? "" : l.id)}
@@ -26986,7 +27064,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
                   fontSize: 12, color: "#374151", alignItems: "baseline", cursor: "pointer",
                   background: linhaMarcada === l.id ? "#dbeafe" : undefined }}>
                 {COLS.map((c) => {
-                  const t = textoDaCelula(relat.linhas[i][c.j], c);
+                  const t = textoDaCelula(celulasDe[i][c.j], c);
                   return (
                     <span key={c.titulo} title={t.length > 12 ? t : undefined}
                       style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
@@ -27001,6 +27079,72 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
           </div>
         </div>
       )}
+      {menuCol && (() => {
+        const col = relat.colunas.find((c) => c.titulo === menuCol.titulo) || {};
+        const todos = valoresDaColuna(relat, menuCol.titulo, colFiltros);
+        const busca = cpSemAcento(menuCol.busca || "");
+        const lista = todos.filter((v) => !busca || cpSemAcento(v.texto || "(vazias)").indexOf(busca) >= 0);
+        const marcado = (t) => menuCol.marcados.indexOf(t) >= 0;
+        const todosMarcados = lista.every((v) => marcado(v.texto));
+        const numerico = ["moeda", "numero", "numeroTexto", "data", "mes"].indexOf(col.tipo) >= 0;
+        const ordenar = (dir) => { setOrdemCol({ titulo: menuCol.titulo, dir }); setMenuCol(null); };
+        const aplicar = () => {
+          const nv = { ...colFiltros };
+          // marcar tudo é o mesmo que não filtrar
+          if (todos.every((v) => marcado(v.texto))) delete nv[menuCol.titulo];
+          else nv[menuCol.titulo] = menuCol.marcados.slice();
+          setColFiltros(nv); setLimite(300); setMenuCol(null);
+        };
+        const opcao = { all: "unset", cursor: "pointer", display: "block", padding: "6px 10px", borderRadius: 8, fontSize: 12.5, color: "#111827", fontFamily: "inherit" };
+        return (
+          <>
+            <div onClick={() => setMenuCol(null)} style={{ position: "fixed", inset: 0, zIndex: 999 }} />
+            <div data-vk-base-filtro="1" style={{ position: "fixed", left: Math.max(8, menuCol.x), top: Math.min(menuCol.y, window.innerHeight - 420),
+              width: 280, maxWidth: "calc(100vw - 16px)", zIndex: 1000, background: "#fff", border: "1px solid rgba(38,36,33,0.16)", borderRadius: 12,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.14)", padding: 8, fontSize: 12.5 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.3, padding: "4px 10px 6px" }}>{menuCol.titulo}</div>
+              <button type="button" style={opcao} onClick={() => ordenar(1)}>{numerico ? "Ordenar do menor para o maior" : "Ordenar de A a Z"}</button>
+              <button type="button" style={opcao} onClick={() => ordenar(-1)}>{numerico ? "Ordenar do maior para o menor" : "Ordenar de Z a A"}</button>
+              <div style={{ borderTop: "1px solid rgba(38,36,33,0.08)", margin: "6px 0" }} />
+              <input autoFocus value={menuCol.busca} onChange={(e) => setMenuCol({ ...menuCol, busca: e.target.value })}
+                onKeyDown={(e) => { if (e.key === "Enter") aplicar(); if (e.key === "Escape") setMenuCol(null); }}
+                placeholder="Procurar…" aria-label={"Procurar em " + menuCol.titulo}
+                style={{ ...input, padding: "6px 9px", fontSize: 12.5, marginBottom: 6 }} />
+              <div style={{ maxHeight: 220, overflowY: "auto", border: "1px solid rgba(38,36,33,0.08)", borderRadius: 8, padding: "4px 0" }}>
+                <label style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 10px", cursor: "pointer", fontWeight: 600 }}>
+                  <input type="checkbox" checked={todosMarcados} onChange={() => {
+                    const ts = lista.map((v) => v.texto);
+                    setMenuCol({ ...menuCol, marcados: todosMarcados ? menuCol.marcados.filter((t) => ts.indexOf(t) < 0)
+                      : [...new Set(menuCol.marcados.concat(ts))] });
+                  }} />
+                  {busca ? "(Selecionar o que achou)" : "(Selecionar tudo)"}
+                </label>
+                {lista.map((v) => (
+                  <label key={v.texto} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 10px", cursor: "pointer" }}>
+                    <input type="checkbox" checked={marcado(v.texto)} onChange={() => setMenuCol({ ...menuCol,
+                      marcados: marcado(v.texto) ? menuCol.marcados.filter((t) => t !== v.texto) : menuCol.marcados.concat([v.texto]) })} />
+                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={v.texto}>{v.texto || "(Vazias)"}</span>
+                    <span style={{ color: "#9ca3af", fontSize: 11 }}>{v.n}</span>
+                  </label>
+                ))}
+                {!lista.length && <div style={{ padding: "6px 10px", color: "#9ca3af" }}>Nada com esse texto.</div>}
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 8 }}>
+                <button type="button" onClick={() => { const nv = { ...colFiltros }; delete nv[menuCol.titulo]; setColFiltros(nv);
+                  if (ordemCol && ordemCol.titulo === menuCol.titulo) setOrdemCol(null); setMenuCol(null); }}
+                  style={{ ...opcao, color: "#0474f4", display: "inline-block" }}>Limpar</button>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button type="button" onClick={() => setMenuCol(null)} style={{ background: "#fff", color: "#374151", border: "1.5px solid rgba(38,36,33,0.16)",
+                    borderRadius: 9, padding: "5px 12px", fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>Cancelar</button>
+                  <button type="button" onClick={aplicar} disabled={!menuCol.marcados.length}
+                    style={{ background: "#0474f4", color: "#fff", border: "none", borderRadius: 9, padding: "6px 14px", fontSize: 12.5, fontWeight: 600,
+                      cursor: menuCol.marcados.length ? "pointer" : "default", opacity: menuCol.marcados.length ? 1 : 0.5, fontFamily: "inherit" }}>OK</button>
+                </div>
+              </div>
+            </div>
+          </>
+        );
+      })()}
       {filtradas.length > limite && (
         <div style={{ textAlign: "center", marginTop: 10 }}>
           <button type="button" onClick={() => setLimite(limite + 300)} style={{ border: "1.5px solid rgba(38,36,33,0.16)", background: "#fff",
