@@ -1086,12 +1086,139 @@ function entradaPronta(destino, lojaId, itens, obras, obraId) {
 // A situação é o que antes era "o que é este papel": cotação (pedir preço),
 // a pagar (vira conta com vencimento) ou pago (o dinheiro já saiu).
 const SITUACOES_DA_ENTRADA = [
-  { id: "cotacao", nome: "Cotação", resumo: "Pedir preço: a lista vai para as lojas no WhatsApp e fica na obra esperando as propostas." },
+  { id: "cotacao", nome: "Cotação", resumo: "Comparar preços: guarda a proposta que já veio com preço, ou pede preço às lojas no WhatsApp." },
   { id: "apagar", nome: "A pagar", resumo: "Vira conta a pagar com vencimento — um boleto ou várias parcelas." },
   { id: "pago", nome: "Pago", resumo: "O dinheiro já saiu: entra baixado, na data do pagamento, à vista ou no cartão." },
 ];
 
 const COLS_ENTRADA = "minmax(0,2.2fr) 62px 84px 92px 100px minmax(0,1.3fr) minmax(0,1.3fr) 24px";
+
+// ── Cotação: a proposta que já chega com preço ──────────────────
+// Um papel de loja COM preço não é pedido de preço: é a resposta. Ele vai
+// para a cotação da obra como proposta daquela loja, ao lado das outras,
+// para comparar e escolher — sem WhatsApp no meio. Sem preço, a lista é
+// pergunta, e aí sim vai para as lojas.
+const MODOS_DA_COTACAO_NA_ENTRADA = [
+  { id: "proposta", nome: "Guardar a proposta", resumo: "Já veio com preço: fica na cotação da obra, ao lado das outras lojas, para comparar e escolher." },
+  { id: "pedir", nome: "Pedir preço às lojas", resumo: "A lista vai sem preço pelo WhatsApp; as respostas entram na mesma cotação." },
+];
+
+function entradaTemPreco(itens) {
+  return (itens || []).some((it) => brutoDoItem(it) > 0);
+}
+
+function modoPadraoDaCotacao(itens) {
+  return entradaTemPreco(itens) ? "proposta" : "pedir";
+}
+
+// As cotações que ainda recebem proposta: abertas, com lista, que não são
+// conta de loja e que ainda não viraram conta nem contrato. A mais nova
+// primeiro — quase sempre é nela que a próxima loja entra.
+function cotacoesParaGuardarProposta(cotacoes) {
+  return (cotacoes || [])
+    .filter((c) => c && c.id && !c.contaLoja && (c.status || "aberta") === "aberta"
+      && !c.lancadoEm && !c.contaGeradaId && temListaDeItens(c))
+    .slice()
+    .sort((a, b) => String(b.criadaEm || b.criadoEm || "").localeCompare(String(a.criadaEm || a.criadoEm || "")));
+}
+
+function cotChaveDoItem(x) {
+  return cotSemAcento(String((x && x.descricao) || "")).replace(/\s+/g, " ").trim();
+}
+
+// O item da cotação que é o mesmo da lista: pelo código do catálogo, e na
+// falta dele pela descrição. Cada item da cotação casa uma vez só — dois
+// discos diferentes no mesmo papel não podem virar um preço só.
+function itemCotadoDaEntrada(lista, it, usados) {
+  const cod = String((it && (it.insumoCodigo || it.codigo)) || "");
+  const livre = (c) => c && !usados.has(c.id);
+  if (cod) {
+    const porCodigo = lista.find((c) => livre(c) && c.codigo === cod && cotChaveDoItem(c) === cotChaveDoItem(it))
+      || lista.find((c) => livre(c) && c.codigo === cod);
+    if (porCodigo) return porCodigo;
+  }
+  const chave = cotChaveDoItem(it);
+  if (!chave) return null;
+  return lista.find((c) => livre(c) && cotChaveDoItem(c) === chave && !(cod && c.codigo && c.codigo !== cod)) || null;
+}
+
+// A cotação que mais se parece com a lista: a que tem mais itens em comum.
+// Nenhuma em comum → nenhuma sugerida (nasce cotação nova).
+function cotacaoSugeridaParaProposta(cotacoes, itens) {
+  let melhor = null, pontos = 0;
+  for (const c of cotacoesParaGuardarProposta(cotacoes)) {
+    const usados = new Set();
+    let n = 0;
+    for (const it of itens || []) {
+      const achado = itemCotadoDaEntrada(itensDaCotacao(c), it, usados);
+      if (achado) { usados.add(achado.id); n++; }
+    }
+    if (n > pontos) { melhor = c; pontos = n; }
+  }
+  return melhor;
+}
+
+// A proposta montada a partir da lista com preço. Devolve a cotação inteira
+// já com ela: itens que a cotação não tinha entram na lista (sem preço para
+// as outras lojas, que aparecem como "faltando"), e a mesma loja de novo
+// SUBSTITUI a proposta anterior dela em vez de virar duas.
+// `d`: { cotacao?, obraId, titulo?, itens, loja, papel?, desconto?, anexo?, hojeIso? }
+function propostaDaEntrada(d) {
+  const x = d || {};
+  const loja = x.loja || {};
+  const hoje = String(x.hojeIso || new Date().toISOString()).slice(0, 10);
+  const papel = x.papel || {};
+  const cot0 = x.cotacao || { ...cotacaoVazia(x.obraId || ""),
+    titulo: String(x.titulo || "").trim() || tituloDaListaRapida(x.itens, hoje) };
+  const lista = itensDaCotacao(cot0).slice();
+  const usados = new Set();
+  const precos = {};
+  let novos = 0;
+  for (const it of x.itens || []) {
+    if (!it || !(String(it.descricao || "").trim() || it.insumoCodigo)) continue;
+    const bruto = brutoDoItem(it);
+    const q = numeroDoCampo(it.quantidade);
+    let alvo = itemCotadoDaEntrada(lista, it, usados);
+    if (!alvo) {
+      alvo = { ...itemCotacaoVazio(), codigo: it.insumoCodigo || "", descricao: String(it.descricao || "").trim(),
+        unidade: it.unidade || "", quantidade: q > 0 ? it.quantidade : (bruto > 0 ? 1 : "") };
+      if (it.etapa) alvo.etapa = it.etapa;
+      if (it.contaId) alvo.contaId = it.contaId;
+      lista.push(alvo);
+      novos++;
+    }
+    usados.add(alvo.id);
+    const qAlvo = quantidadeDoItem(alvo);
+    const u = numeroDoCampo(it.unitario);
+    const unit = q > 0 ? (u > 0 ? u : unitarioDoTotal(bruto, q)) : (qAlvo > 0 ? unitarioDoTotal(bruto, qAlvo) : bruto);
+    if (unit > 0) precos[alvo.id] = unit;
+  }
+  // A cotação nova herda etapa e conta da lista quando a lista é de uma só.
+  let cot = { ...cot0, itens: lista };
+  if (!x.cotacao) {
+    const etapas = Array.from(new Set((x.itens || []).map((it) => it && it.etapa).filter(Boolean)));
+    const contas = Array.from(new Set((x.itens || []).map((it) => it && it.contaId).filter(Boolean)));
+    if (etapas.length >= 1) cot.etapaId = etapas[0];
+    if (contas.length === 1) cot.contaId = contas[0];
+  }
+  const anterior = loja.id ? propostasDaCotacao(cot).find((p) => p.fornecedorId === loja.id) || null : null;
+  const numero = String(papel.numeroNota || papel.numeroPedido || "").trim();
+  const desconto = numeroDoCampo(x.desconto);
+  let prop = { ...(anterior || propostaVazia()),
+    fornecedorId: loja.id || "", favorecido: loja.nome || papel.lidoComo || "",
+    precos, totalFechado: "",
+    observacao: numero ? ((papel.numeroNota ? "Nota nº " : "Pedido nº ") + numero) : ((anterior && anterior.observacao) || ""),
+    anexo: x.anexo || (anterior && anterior.anexo) || null,
+    recebidaEm: String(papel.emitido || "").slice(0, 10) || hoje };
+  const bruto = totalDosItens(cot, prop);
+  if (desconto > 0 && bruto > desconto) prop.totalFechado = Math.round((bruto - desconto) * 100) / 100;
+  prop = { ...prop, valor: valorDaProposta(cot, prop) };
+  const propostas = anterior
+    ? propostasDaCotacao(cot).map((p) => (p.id === anterior.id ? prop : p))
+    : propostasDaCotacao(cot).concat([prop]);
+  cot = { ...cot, propostas };
+  return { cotacao: cot, proposta: prop, novos, substituiu: !!anterior, nova: !x.cotacao };
+}
 
 // Empreendimento é do escritório: quem paga é ele, e o papel chega depois
 // do dinheiro — entra pago (dá para trocar para cotação). Obra de cliente
@@ -6999,6 +7126,37 @@ function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinhe
     };
   }
 
+  // A lista que chegou com preço é resposta de loja: vira proposta numa
+  // cotação da obra (a escolhida, ou uma nova), para comparar com as outras.
+  // Grava aqui mesmo, como o envio às lojas — não há tela adiante.
+  function guardarPropostaDaEntrada(carga) {
+    const todas = (data || {}).obras || [];
+    const alvo = todas.find((o) => o && o.id === (carga.obraId || (obraPadrao || {}).id));
+    if (!alvo) return { erro: "Escolha a obra." };
+    const loja = prestadores.find((f) => f && f.id === carga.lojaId);
+    if (!loja) return { erro: "Escolha o fornecedor — é dele a proposta." };
+    const cotacoes = alvo.cotacoes || [];
+    const existente = carga.cotacaoId ? cotacoes.find((c) => c && c.id === carga.cotacaoId) : null;
+    if (carga.cotacaoId && !existente) return { erro: "Essa cotação não está mais na obra. Escolha outra." };
+    const r = propostaDaEntrada({ cotacao: existente, obraId: alvo.id, titulo: carga.titulo,
+      itens: carga.itens, loja, papel: carga.papel, desconto: carga.desconto, anexo: carga.anexo });
+    const quem = typeof nomeDeQuem === "function" ? nomeDeQuem(usuario) : "";
+    const agora = new Date().toISOString();
+    const prop = { ...r.proposta, salvoPor: quem, salvoEm: agora,
+      criadoPor: r.proposta.criadoPor || quem, criadoEm: r.proposta.criadoEm || agora };
+    const cot = carimbar({ ...r.cotacao, propostas: r.cotacao.propostas.map((p) => (p.id === prop.id ? prop : p)) },
+      usuario, r.nova);
+    const cotacoesNovas = r.nova ? cotacoes.concat([cot]) : cotacoes.map((c) => (c.id === cot.id ? cot : c));
+    save({ ...data, obras: todas.map((o) => (o.id === alvo.id ? { ...o, cotacoes: cotacoesNovas } : o)) });
+    return { cotacaoId: cot.id, titulo: cot.titulo || "", obraNome: alvo.nome || "",
+      valor: prop.valor, substituiu: r.substituiu, propostas: cot.propostas.length };
+  }
+
+  const cotacoesDaObraDe = (id) => {
+    const alvo = ((data || {}).obras || []).find((o) => o && o.id === (id || (obraPadrao || {}).id));
+    return (alvo && alvo.cotacoes) || [];
+  };
+
   // A loja nova nasce com o mínimo: nome e telefone. O resto do cadastro é
   // de Prestadores de Serviços — exigir CNPJ aqui mandaria de volta para o
   // "anota num papel e cadastra depois" que esta tela veio desfazer.
@@ -7030,7 +7188,9 @@ function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinhe
 
   const seguir = (carga) => (carga && carga.destino === "mandar")
     ? mandarDaEntrada(carga)
-    : (aoSeguir ? aoSeguir(carga) : undefined);
+    : (carga && carga.destino === "proposta")
+      ? guardarPropostaDaEntrada(carga)
+      : (aoSeguir ? aoSeguir(carga) : undefined);
 
   // Empreendimento ou obra de cliente — é o que decide a situação de partida.
   const tipoDaObra = (id) => {
@@ -7047,7 +7207,7 @@ function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinhe
       aoCadastrarInsumo={(campos) => cadastrarInsumoNoCatalogo(data, save, campos)}
       aoCriarLoja={criarLoja}
       aoAprender={(pares) => aprenderApelidosNoCatalogo(data, save, pares)}
-      aoVerContas={contasDaObraDe}
+      aoVerContas={contasDaObraDe} aoListarCotacoes={cotacoesDaObraDe}
       cartoes={typeof cartoesDoEscritorio === "function" ? cartoesDoEscritorio(data) : []}
       tipoDaObra={tipoDaObra} obraPadraoId={(obraPadrao || {}).id || ""}
       aoFechar={aoFechar} aoSeguir={seguir} />
@@ -7214,7 +7374,7 @@ function textoDoLancado(r, situacao, dinheiro, totalPadrao) {
 
 function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile, dinheiro,
   obras, embutido, aoCadastrarInsumo, aoCriarLoja, aoAprender, aoVerContas, aoFechar, aoSeguir, cartoes,
-  tipoDaObra, obraPadraoId, confirmacao }) {
+  tipoDaObra, obraPadraoId, confirmacao, aoListarCotacoes }) {
   const E = COT_ESTILO;
   const P = cotPainel(isMobile, 940);
   const [texto, setTexto] = useState("");
@@ -7249,6 +7409,16 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const [buscaLoja, setBuscaLoja] = useState("");
   const [lojasMarcadas, setLojasMarcadas] = useState({});
   const [fila, setFila] = useState(null);      // { lojas, i } — uma conversa por vez
+  // Cotação tem dois sentidos: guardar a proposta que já veio com preço, ou
+  // pedir preço às lojas. Vazio = o que a lista diz (com preço → guardar).
+  const [modoCotacao, setModoCotacao] = useState("");
+  // Em qual cotação a proposta entra: "" = a sugerida, "nova" = abrir outra.
+  const [cotacaoDestino, setCotacaoDestino] = useState("");
+  const [tituloNova, setTituloNova] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  // A cotação da última proposta guardada: a próxima loja quase sempre vai
+  // para a mesma, e ela tem que vir escolhida.
+  const ultimaCotacao = useRef("");
   const [enviado, setEnviado] = useState(null); // { quantas, obraNome }
   // A loja que ainda não existe entra aqui, sem sair da Entrada: quem está
   // com a nota na mão não pode ser mandado para o cadastro de prestadores e
@@ -7338,6 +7508,25 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // As contas da obra escolhida, para achar parcela de contrato em aberto do
   // fornecedor que acabou de receber.
   const contasDaObraEscolhida = (typeof aoVerContas === "function" ? aoVerContas(obraId) : []) || [];
+  const modo = modoCotacao || modoPadraoDaCotacao(itens);
+  const guardaProposta = situacao === "cotacao" && modo === "proposta";
+  const pedePreco = situacao === "cotacao" && modo === "pedir";
+  const cotacoesAbertas = guardaProposta && typeof aoListarCotacoes === "function"
+    ? cotacoesParaGuardarProposta(aoListarCotacoes(obraEfetivaId) || []) : [];
+  const cotacaoSugerida = guardaProposta
+    ? (cotacoesAbertas.find((c) => c.id === ultimaCotacao.current) || cotacaoSugeridaParaProposta(cotacoesAbertas, itens))
+    : null;
+  const destinoId = cotacaoDestino === "nova" ? ""
+    : (cotacaoDestino && cotacoesAbertas.some((c) => c.id === cotacaoDestino) ? cotacaoDestino : ((cotacaoSugerida || {}).id || ""));
+  const cotacaoDestinoObj = destinoId ? cotacoesAbertas.find((c) => c.id === destinoId) || null : null;
+  const lojaDaProposta = (prestadores || []).find((f) => f && f.id === lojaId) || null;
+  const jaTemPropostaDaLoja = !!(cotacaoDestinoObj && lojaId
+    && propostasDaCotacao(cotacaoDestinoObj).some((p) => p.fornecedorId === lojaId));
+  const motivoDaProposta = !guardaProposta ? ""
+    : (pedeObra && !obraId) ? "Escolha a obra."
+    : !lojaId ? "Escolha o fornecedor — é dele a proposta."
+    : !entradaTemPreco(itens) ? "A lista está sem preço. Para pedir preço, use “Pedir preço às lojas”."
+    : "";
   const parcelasDoFavorecido = situacao === "pago" ? parcelasEmAbertoDoPrestador(contasDaObraEscolhida, lojaId) : [];
   const parcelaSugerida = parcelaQueCasa(parcelasDoFavorecido, totalDaEntrada);
   const prova = itens
@@ -7593,6 +7782,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     setTexto(""); setArquivo(null); setItens(null); setPapel(null); setDespesa(null);
     setDestino(""); setLojaId(""); setObraId(""); setAviso(""); setReconhecido(null);
     setLojasMarcadas({}); setBuscaLoja(""); setFila(null); setEnviado(null);
+    setModoCotacao(""); setCotacaoDestino(""); setTituloNova("");
   }
 
   // As lojas com telefone, filtradas pela busca; sem telefone aparecem
@@ -7653,8 +7843,34 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     } finally { setEnviandoComprov(false); }
   }
 
+  async function guardarProposta() {
+    if (motivoDaProposta) { setAviso(motivoDaProposta); return; }
+    setAviso("");
+    // O papel da loja fica com a proposta: é ele que se abre na hora de
+    // comparar. Não subir não impede de guardar — o preço é o que importa.
+    let anexo = null;
+    if (arquivo) {
+      setGuardando(true);
+      try { anexo = await enviarAnexoProposta(arquivo); }
+      catch (e) { setAviso("O papel não subiu (" + (e.message || "erro") + ") — a proposta foi guardada sem ele."); }
+      finally { setGuardando(false); }
+    }
+    const r = aoSeguir({ destino: "proposta", obraId, itens, papel, lojaId,
+      desconto: descontoDoPapel, cotacaoId: destinoId,
+      titulo: String(tituloNova || "").trim() || tituloDaListaRapida(itens, new Date().toISOString().slice(0, 10)),
+      anexo }) || {};
+    if (r.erro) { setAviso(r.erro); return; }
+    ultimaCotacao.current = r.cotacaoId || "";
+    const nome = (lojaDaProposta && lojaDaProposta.nome) || "a loja";
+    limpar();
+    setLancadoErro(false);
+    setLancado(`Proposta de ${nome} (${dinheiro(r.valor || 0)}) ${r.substituiu ? "atualizada" : "guardada"} na cotação “${r.titulo || ""}”`
+      + (r.obraNome ? ` da obra ${r.obraNome}` : "")
+      + ` — ${r.propostas === 1 ? "1 proposta" : `${r.propostas} propostas`} para comparar`);
+  }
+
   async function seguir() {
-    if (situacao === "cotacao") { mandarParaAsLojas(); return; }
+    if (situacao === "cotacao") { if (modo === "proposta") await guardarProposta(); else mandarParaAsLojas(); return; }
     if (!prova.ok) { setAviso(prova.motivo); return; }
     const fav = (prestadores || []).find((f) => f && f.id === lojaId) || {};
     const pp = papel || {};
@@ -7957,10 +8173,13 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                 </div>
               )}
 
-              {/* De onde e de quem */}
+              {/* De onde e de quem. Pedindo preço, "de quem" ainda não
+                  existe — são as lojas lá embaixo; o fornecedor aqui em cima
+                  contradiria a lista. */}
+              {(!pedePreco || pedeObra) && (
               <div style={cartao}>
                 <div style={{ display: "grid", gap: 10,
-                  gridTemplateColumns: isMobile ? "1fr" : (pedeObra ? "1.3fr 1.3fr 0.7fr 0.8fr" : "2fr 0.7fr 0.8fr") }}>
+                  gridTemplateColumns: isMobile || pedePreco ? "1fr" : (pedeObra ? "1.3fr 1.3fr 0.7fr 0.8fr" : "2fr 0.7fr 0.8fr") }}>
                   {pedeObra && (
                     <div style={{ minWidth: 0 }}>
                       <label style={E.label}>Obra</label>
@@ -7970,8 +8189,9 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                           (obras || []).map((o) => ({ valor: o.id, rotulo: o.nome, grupo: o.clienteNome || "" })))} />
                     </div>
                   )}
+                  {!pedePreco && (<>
                   <div style={{ minWidth: 0 }}>
-                    <label style={E.label}>Fornecedor</label>
+                    <label style={E.label}>{guardaProposta ? "Fornecedor da proposta" : "Fornecedor"}</label>
                     <SelectBusca style={E.input} value={lojaId} onChange={(v) => { setLojaId(v); setParcelaId(""); }}
                       placeholder="Procurar fornecedor…" criarRotulo="cadastrar"
                       aoCriar={aoCriarLoja ? ((termo) => abrirCadastroDeLoja(termo || (papel && papel.lidoComo) || "",
@@ -7995,9 +8215,11 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                     <input type="date" style={E.input} value={(papel && papel.emitido) || ""}
                       onChange={(e) => mexerPapel({ emitido: e.target.value })} />
                   </div>
+                  </>)}
                 </div>
-                {blocoCadastroRapido}
+                {!pedePreco && blocoCadastroRapido}
               </div>
+              )}
 
               {/* Os itens: cada um com o que a regra da transação pede. */}
               <div style={cartao}>
@@ -8271,8 +8493,66 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
 
                 {situacao === "cotacao" && (
                   <div style={{ marginTop: 12 }}>
-                    {blocoLojas}
-                    {aoSeguir && (
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 6 }}>O que fazer com a lista</div>
+                    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8, marginBottom: 12 }}>
+                      {MODOS_DA_COTACAO_NA_ENTRADA.map((m) => {
+                        const on = modo === m.id;
+                        return (
+                          <button key={m.id} type="button" data-vk-modo-cotacao={m.id}
+                            onClick={() => { setModoCotacao(m.id); setAviso(""); }}
+                            style={{ textAlign: "left", cursor: "pointer", fontFamily: "inherit",
+                              borderWidth: on ? 1.5 : 1, borderStyle: "solid",
+                              borderColor: on ? "#0474f4" : "rgba(38,36,33,0.16)",
+                              background: on ? "#eef5ff" : "#fff", borderRadius: 10, padding: "8px 12px" }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 700, color: on ? "#0474f4" : "#111827" }}>{m.nome}</div>
+                            <div style={{ fontSize: 11, color: "#4b5563", marginTop: 2, lineHeight: 1.35 }}>{m.resumo}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {guardaProposta && (
+                      <div data-vk-guardar-proposta="1">
+                        <label style={E.label}>Em qual cotação</label>
+                        <SelectBusca style={E.input} value={destinoId || "nova"}
+                          onChange={(v) => setCotacaoDestino(v || "nova")}
+                          placeholder="Procurar cotação…"
+                          opcoes={[{ valor: "nova", rotulo: "＋ Nova cotação" }].concat(cotacoesAbertas.map((c) => {
+                            const n = propostasDaCotacao(c).length;
+                            return { valor: c.id, rotulo: (c.titulo || "Sem nome") + " · " + (n === 1 ? "1 proposta" : n + " propostas") };
+                          }))} />
+                        {!destinoId && (
+                          <div style={{ marginTop: 8 }}>
+                            <label style={E.label}>Nome da cotação</label>
+                            <input style={E.input} value={tituloNova}
+                              placeholder={tituloDaListaRapida(itens, new Date().toISOString().slice(0, 10))}
+                              onChange={(e) => setTituloNova(e.target.value)} />
+                          </div>
+                        )}
+                        <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8, lineHeight: 1.5 }}>
+                          {lojaDaProposta ? <b style={{ color: "#111827" }}>{lojaDaProposta.nome}</b> : "A loja"}
+                          {" entra como proposta de "}<b style={{ color: "#111827" }}>{dinheiro(totalDaEntrada)}</b>
+                          {destinoId
+                            ? ", ao lado das outras lojas. Item que a cotação ainda não tem entra na lista."
+                            : ". As próximas lojas entram nesta mesma cotação para comparar."}
+                          {" Nada vai para contas a pagar: isso só acontece quando você escolher a proposta."}
+                        </div>
+                        {jaTemPropostaDaLoja && (
+                          <div style={{ fontSize: 11.5, color: "#b45309", marginTop: 4 }}>
+                            {lojaDaProposta ? lojaDaProposta.nome : "Essa loja"} já tem proposta nesta cotação — esta substitui a anterior.
+                          </div>
+                        )}
+                        {arquivo && (
+                          <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 4 }}>
+                            {"\u{1F4CE}"} {arquivo.name} — fica anexado à proposta.
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {pedePreco && blocoLojas}
+                    {pedePreco && blocoCadastroRapido}
+                    {pedePreco && aoSeguir && (
                       <button type="button" onClick={() => { const r = aoSeguir({ destino: "cotacao", obraId, itens, papel }); if (r && r.erro) setAviso(r.erro); }}
                         style={{ background: "none", border: "none", padding: 0, marginTop: 8, color: "#0474f4", cursor: "pointer",
                           fontSize: 11.5, fontFamily: "inherit", textDecoration: "underline" }}>
@@ -8316,6 +8596,9 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
         {/* O botão desabilitado sem dizer por quê é uma porta trancada sem
             placa. Com a regra da transação há mais o que faltar, e o que
             falta tem que estar escrito ao lado de quem vai clicar. */}
+        {itens && guardaProposta && motivoDaProposta && (
+          <div style={{ fontSize: 12, color: "#b45309", marginTop: 12, textAlign: "right" }}>{motivoDaProposta}</div>
+        )}
         {itens && situacao !== "cotacao" && !prova.ok && prova.motivo && (
           <div style={{ fontSize: 12, color: "#b45309", marginTop: 12, textAlign: "right" }}>{prova.motivo}</div>
         )}
@@ -8324,12 +8607,20 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
           {itens && (
             <button type="button" style={E.btnSec}
               onClick={() => { situacaoTocada.current = false; setSituacao(""); setParcelaId(""); setAvisosDaLeitura([]);
-                setItens(null); setDespesa(null); setPapel(null); setDestino(""); setObraId(""); setAviso(""); setReconhecido(null); }}>Ler de novo</button>
+                setItens(null); setDespesa(null); setPapel(null); setDestino(""); setObraId(""); setAviso(""); setReconhecido(null);
+                setModoCotacao(""); setCotacaoDestino(""); setTituloNova(""); }}>Ler de novo</button>
           )}
           {embutido && !itens && String(texto).trim() !== "" && (
             <button type="button" style={E.btnSec} onClick={limpar}>Limpar</button>
           )}
-          {itens && situacao === "cotacao" ? (
+          {itens && guardaProposta ? (
+            <button type="button" onClick={seguir} data-vk-botao-proposta="1"
+              style={{ ...E.btn, opacity: !motivoDaProposta && !guardando ? 1 : 0.45,
+                cursor: !motivoDaProposta && !guardando ? "pointer" : "not-allowed" }}
+              disabled={!!motivoDaProposta || guardando}>
+              {guardando ? "Anexando o papel…" : `Guardar proposta · ${dinheiro(totalDaEntrada)}`}
+            </button>
+          ) : itens && situacao === "cotacao" ? (
             <button type="button" onClick={seguir}
               style={{ ...E.btn, opacity: marcadasIds.length ? 1 : 0.45,
                 cursor: marcadasIds.length ? "pointer" : "not-allowed" }}

@@ -92,7 +92,9 @@ const modulo = new Function(`
            prestadorDaNotaDeServico, discriminacaoDaNotaDeServico, dadosDaNotaDeServico,
            numeroDaNotaDeServico, entradaUnicaPronta, situacaoPadraoDaEntrada, previaDosBoletos,
            comContaPadraoDaEntrada, tipoDoAnexoDaEntrada, SITUACOES_DA_ENTRADA,
-           fichaDaEntradaPelaIA, tipoDoPapelPelaIA, textoSemCaixaAlta };
+           fichaDaEntradaPelaIA, tipoDoPapelPelaIA, textoSemCaixaAlta,
+           entradaTemPreco, modoPadraoDaCotacao, cotacoesParaGuardarProposta, cotacaoSugeridaParaProposta,
+           propostaDaEntrada, MODOS_DA_COTACAO_NA_ENTRADA };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -3549,6 +3551,88 @@ teste("a leitura entrega o item já em texto de gente", () => {
   assert.strictEqual(f.papel.lidoComo, "Rei do Cimento Ltda");
   const itens = M.itensDaEntrada({ itens: f.itens }, "orcamento", []);
   assert.strictEqual(itens[0].descricao, "Areia Fina");
+});
+
+
+// ── Cotação na Entrada: a lista que já chega com preço ──────────
+const LOJA_OURIFER = { id: "f-our", nome: "Ourifer" };
+const listaOurifer = () => [
+  { descricao: "Tábuas 30cm", insumoCodigo: "MAD-030", quantidade: 60, unidade: "Unidades", unitario: 38.9, bruto: 2334, etapa: "fundacao", contaId: "material" },
+  { descricao: "Sarrafos 5cm", insumoCodigo: "MAD-005", quantidade: 50, unidade: "Unidades", unitario: 5.9, bruto: 295, etapa: "fundacao", contaId: "material" },
+  { descricao: "Disco Corte Inox", insumoCodigo: "DIS-001", quantidade: 2, unidade: "Unidades", unitario: 2.5, bruto: 5, etapa: "fundacao", contaId: "material" },
+  { descricao: "Disco Serra Circular", insumoCodigo: "DIS-001", quantidade: 3, unidade: "Unidades", unitario: 21.5, bruto: 64.5, etapa: "fundacao", contaId: "material" },
+];
+
+teste("lista com preço vira proposta; sem preço, pedido às lojas", () => {
+  assert.strictEqual(M.modoPadraoDaCotacao(listaOurifer()), "proposta");
+  assert.strictEqual(M.modoPadraoDaCotacao([{ descricao: "Cimento", quantidade: 10 }]), "pedir");
+  assert.strictEqual(M.entradaTemPreco([]), false);
+  assert.deepStrictEqual(M.MODOS_DA_COTACAO_NA_ENTRADA.map((m) => m.id), ["proposta", "pedir"]);
+});
+
+teste("proposta da Entrada abre cotação nova com a lista e os preços da loja", () => {
+  const r = M.propostaDaEntrada({ obraId: "o1", itens: listaOurifer(), loja: LOJA_OURIFER,
+    papel: { numeroPedido: "24787-120", emitido: "2026-10-02" }, hojeIso: "2026-10-05" });
+  assert.strictEqual(r.nova, true);
+  assert.strictEqual(r.substituiu, false);
+  assert.strictEqual(r.cotacao.obraId, "o1");
+  assert.strictEqual(r.cotacao.itens.length, 4, "os dois discos ficam separados mesmo com o mesmo código");
+  assert.strictEqual(r.cotacao.etapaId, "fundacao");
+  assert.strictEqual(r.cotacao.contaId, "material");
+  assert.ok(r.cotacao.titulo.length > 0);
+  assert.strictEqual(r.cotacao.propostas.length, 1);
+  const p = r.proposta;
+  assert.strictEqual(p.fornecedorId, "f-our");
+  assert.strictEqual(p.favorecido, "Ourifer");
+  assert.strictEqual(p.valor, 2698.5);
+  assert.strictEqual(p.observacao, "Pedido nº 24787-120");
+  assert.strictEqual(p.recebidaEm, "2026-10-02");
+  const disco = r.cotacao.itens.find((i) => i.descricao === "Disco Serra Circular");
+  assert.strictEqual(M.precoUnitario(p, disco.id), 21.5);
+});
+
+teste("segunda loja entra na mesma cotação e a comparação fica lado a lado", () => {
+  const a = M.propostaDaEntrada({ obraId: "o1", itens: listaOurifer(), loja: LOJA_OURIFER, hojeIso: "2026-10-05" }).cotacao;
+  const outra = [
+    { descricao: "Tábuas 30cm", insumoCodigo: "MAD-030", quantidade: 60, unitario: 36, bruto: 2160 },
+    { descricao: "Prego 18x27", insumoCodigo: "PRE-1827", quantidade: 10, unitario: 15, bruto: 150 },
+  ];
+  const sug = M.cotacaoSugeridaParaProposta([a], outra);
+  assert.strictEqual(sug && sug.id, a.id);
+  const r = M.propostaDaEntrada({ cotacao: a, itens: outra, loja: { id: "f-2", nome: "Rei do Cimento" } });
+  assert.strictEqual(r.nova, false);
+  assert.strictEqual(r.novos, 1, "o prego entra na lista");
+  assert.strictEqual(r.cotacao.itens.length, 5);
+  assert.strictEqual(r.cotacao.propostas.length, 2);
+  const tabua = r.cotacao.itens.find((i) => i.codigo === "MAD-030");
+  assert.strictEqual(M.precoUnitario(r.proposta, tabua.id), 36);
+  assert.strictEqual(M.itensSemPreco(r.cotacao, r.proposta).length, 3, "o que essa loja não cotou aparece faltando");
+});
+
+teste("a mesma loja de novo substitui a proposta dela", () => {
+  const a = M.propostaDaEntrada({ obraId: "o1", itens: listaOurifer(), loja: LOJA_OURIFER }).cotacao;
+  const nova = listaOurifer().map((x) => ({ ...x, unitario: x.unitario * 2, bruto: x.bruto * 2 }));
+  const r = M.propostaDaEntrada({ cotacao: a, itens: nova, loja: LOJA_OURIFER });
+  assert.strictEqual(r.substituiu, true);
+  assert.strictEqual(r.cotacao.propostas.length, 1);
+  assert.strictEqual(r.cotacao.itens.length, 4);
+  assert.strictEqual(r.proposta.valor, 5397);
+});
+
+teste("desconto do papel vira total fechado da proposta", () => {
+  const r = M.propostaDaEntrada({ obraId: "o1", itens: listaOurifer(), loja: LOJA_OURIFER, desconto: 98.5 });
+  assert.strictEqual(r.proposta.totalFechado, 2600);
+  assert.strictEqual(r.proposta.valor, 2600);
+});
+
+teste("só cotação aberta, com lista, que não é conta de loja nem já lançada recebe proposta", () => {
+  const base = (m) => ({ ...M.cotacaoVazia("o1"), itens: [M.itemCotacaoVazio()], ...m });
+  const ok = base({ criadaEm: "2026-10-01" });
+  const maisNova = base({ criadaEm: "2026-10-03" });
+  const lista = M.cotacoesParaGuardarProposta([ok, maisNova, base({ contaLoja: true }), base({ status: "decidida" }),
+    base({ lancadoEm: "2026-10-02" }), { ...M.cotacaoVazia("o1"), itens: [] }, null]);
+  assert.deepStrictEqual(lista.map((c) => c.id), [maisNova.id, ok.id]);
+  assert.strictEqual(M.cotacaoSugeridaParaProposta([ok], [{ descricao: "Nada a ver" }]), null);
 });
 
 
