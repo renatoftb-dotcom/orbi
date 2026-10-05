@@ -3680,7 +3680,8 @@ function cotacaoDeOrigemDasContas(obra, contas) {
 // O papel que a loja escolhida mandou — é ele que justifica o preço pago.
 function papelDaPropostaEscolhida(cot) {
   const esc = propostaEscolhida(cot);
-  return esc && esc.anexo && esc.anexo.url ? { ...esc.anexo, tipo: "proposta" } : null;
+  // aparece como "Pedido": é o papel do pedido que a loja mandou com o preço
+  return esc && esc.anexo && esc.anexo.url ? { ...esc.anexo, tipo: "pedido" } : null;
 }
 
 // O resumo que o cliente vê: quem cotou, por quanto, quem levou e quanto se

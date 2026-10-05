@@ -4519,6 +4519,20 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                         </>
                                       );
                                     })()}
+                                    {/* Os itens já vêm com o desconto distribuído: sem esta linha,
+                                        a soma de tabela do papel e o total a pagar não batem e
+                                        quem paga fica sem saber por quê. */}
+                                    {(() => {
+                                      const d = descontoDasContas(L.contas, obraAtual.cotacoes || []);
+                                      if (!d) return null;
+                                      return (
+                                        <div data-vk-desconto-pedido="1" style={{ fontSize: 10.5, color: "#6b7280", padding: "6px 0 0",
+                                          borderTop: "1px solid rgba(38,36,33,0.05)" }}>
+                                          Valor de tabela {fmtMoedaCtr(d.bruto)} · desconto negociado de {fmtMoedaCtr(d.desconto)} ({String(d.pct).replace(".", ",")}%)
+                                          {" "}· a pagar {fmtMoedaCtr(d.total)}. O desconto já está distribuído nos itens.
+                                        </div>
+                                      );
+                                    })()}
                                     {(papeisDoPedido(L).length > 0 || perm.podeGerenciarObra || cotacaoDeOrigemDasContas(obraAtual, L.contas)) && (
                                       <div data-vk-mantem-mes="1" style={{ fontSize: 11.5, color: "#4b5563", padding: "8px 0 2px", borderTop: "1px solid rgba(38,36,33,0.05)" }}>
                                         <span style={{ color: "#6b7280" }}>Papéis: </span>

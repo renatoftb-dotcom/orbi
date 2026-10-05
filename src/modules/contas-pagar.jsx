@@ -833,9 +833,40 @@ function contasDoPedidoDaLoja(dados, pedido, novoId) {
     quantidade: cpNumero(i.quantidade) || 0,
     unidade: String(i.unidade || "").trim(),
     valor: i.valor,
+    // o preço de tabela, quando o desconto do pedido mexeu no item
+    ...(Math.abs(brutoDoItem(i) - i.valor) >= 0.005 ? { valorTabela: brutoDoItem(i) } : {}),
     vencimento: venc,
     pago: false, pagoEm: "", valorPago: "", observacao: d.observacao || "",
   }));
+}
+
+// ── O desconto do pedido, visto da conta a pagar ────────────────
+// Os itens chegam ao contas a pagar já com o desconto distribuído, e a soma
+// deles não bate com o valor de tabela do papel. Isto devolve as duas pontas
+// para a tela dizer, em letra pequena, de onde vem a diferença.
+// Procura no próprio item (valorTabela) e, para pedido antigo, no pedido
+// guardado na conta da loja. Sem desconto → null.
+function descontoDasContas(contas, cotacoes) {
+  const red = (x) => Math.round(x * 100) / 100;
+  const cs = (contas || []).filter(Boolean);
+  if (!cs.length) return null;
+  const total = red(cs.reduce((t, c) => t + cpNumero(c.valor), 0));
+  let bruto = 0;
+  if (cs.some((c) => cpNumero(c.valorTabela) > 0)) {
+    bruto = red(cs.reduce((t, c) => t + (cpNumero(c.valorTabela) || cpNumero(c.valor)), 0));
+  } else {
+    const pid = cs[0].pedidoId;
+    if (!pid) return null;
+    for (const cot of cotacoes || []) {
+      const ped = ((cot && cot.pedidos) || []).find((p) => p && p.id === pid);
+      if (!ped) continue;
+      if (cpNumero(ped.desconto) > 0) bruto = brutoDoPedido(ped);
+      break;
+    }
+  }
+  const desconto = red(bruto - total);
+  if (!(bruto > 0) || desconto < 0.01) return null;
+  return { bruto, total, desconto, pct: Math.round((desconto / bruto) * 1000) / 10 };
 }
 
 // ── A Entrada vira contas a pagar ───────────────────────

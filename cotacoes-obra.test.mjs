@@ -3690,7 +3690,7 @@ teste("a conta a pagar acha a cotação de onde veio, direto ou pelo pedido na l
     "pedido feito direto na loja não tem cotação");
   const papel = M.papelDaPropostaEscolhida(orig);
   assert.strictEqual(papel.url, "u1");
-  assert.strictEqual(papel.tipo, "proposta");
+  assert.strictEqual(papel.tipo, "pedido");
   const r = M.resumoDaCotacao(orig, []);
   assert.strictEqual(r.propostas.length, 2);
   assert.strictEqual(r.escolhida.nome, "Ourifer");

@@ -24070,9 +24070,40 @@ function contasDoPedidoDaLoja(dados, pedido, novoId) {
     quantidade: cpNumero(i.quantidade) || 0,
     unidade: String(i.unidade || "").trim(),
     valor: i.valor,
+    // o preço de tabela, quando o desconto do pedido mexeu no item
+    ...(Math.abs(brutoDoItem(i) - i.valor) >= 0.005 ? { valorTabela: brutoDoItem(i) } : {}),
     vencimento: venc,
     pago: false, pagoEm: "", valorPago: "", observacao: d.observacao || "",
   }));
+}
+
+// ── O desconto do pedido, visto da conta a pagar ────────────────
+// Os itens chegam ao contas a pagar já com o desconto distribuído, e a soma
+// deles não bate com o valor de tabela do papel. Isto devolve as duas pontas
+// para a tela dizer, em letra pequena, de onde vem a diferença.
+// Procura no próprio item (valorTabela) e, para pedido antigo, no pedido
+// guardado na conta da loja. Sem desconto → null.
+function descontoDasContas(contas, cotacoes) {
+  const red = (x) => Math.round(x * 100) / 100;
+  const cs = (contas || []).filter(Boolean);
+  if (!cs.length) return null;
+  const total = red(cs.reduce((t, c) => t + cpNumero(c.valor), 0));
+  let bruto = 0;
+  if (cs.some((c) => cpNumero(c.valorTabela) > 0)) {
+    bruto = red(cs.reduce((t, c) => t + (cpNumero(c.valorTabela) || cpNumero(c.valor)), 0));
+  } else {
+    const pid = cs[0].pedidoId;
+    if (!pid) return null;
+    for (const cot of cotacoes || []) {
+      const ped = ((cot && cot.pedidos) || []).find((p) => p && p.id === pid);
+      if (!ped) continue;
+      if (cpNumero(ped.desconto) > 0) bruto = brutoDoPedido(ped);
+      break;
+    }
+  }
+  const desconto = red(bruto - total);
+  if (!(bruto > 0) || desconto < 0.01) return null;
+  return { bruto, total, desconto, pct: Math.round((desconto / bruto) * 1000) / 10 };
 }
 
 // ── A Entrada vira contas a pagar ───────────────────────
@@ -30922,7 +30953,8 @@ function cotacaoDeOrigemDasContas(obra, contas) {
 // O papel que a loja escolhida mandou — é ele que justifica o preço pago.
 function papelDaPropostaEscolhida(cot) {
   const esc = propostaEscolhida(cot);
-  return esc && esc.anexo && esc.anexo.url ? { ...esc.anexo, tipo: "proposta" } : null;
+  // aparece como "Pedido": é o papel do pedido que a loja mandou com o preço
+  return esc && esc.anexo && esc.anexo.url ? { ...esc.anexo, tipo: "pedido" } : null;
 }
 
 // O resumo que o cliente vê: quem cotou, por quanto, quem levou e quanto se
@@ -41682,6 +41714,20 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                             );
                                           })}
                                         </>
+                                      );
+                                    })()}
+                                    {/* Os itens já vêm com o desconto distribuído: sem esta linha,
+                                        a soma de tabela do papel e o total a pagar não batem e
+                                        quem paga fica sem saber por quê. */}
+                                    {(() => {
+                                      const d = descontoDasContas(L.contas, obraAtual.cotacoes || []);
+                                      if (!d) return null;
+                                      return (
+                                        <div data-vk-desconto-pedido="1" style={{ fontSize: 10.5, color: "#6b7280", padding: "6px 0 0",
+                                          borderTop: "1px solid rgba(38,36,33,0.05)" }}>
+                                          Valor de tabela {fmtMoedaCtr(d.bruto)} · desconto negociado de {fmtMoedaCtr(d.desconto)} ({String(d.pct).replace(".", ",")}%)
+                                          {" "}· a pagar {fmtMoedaCtr(d.total)}. O desconto já está distribuído nos itens.
+                                        </div>
                                       );
                                     })()}
                                     {(papeisDoPedido(L).length > 0 || perm.podeGerenciarObra || cotacaoDeOrigemDasContas(obraAtual, L.contas)) && (

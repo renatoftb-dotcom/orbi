@@ -27,7 +27,7 @@ const modulo = new Function(`
              return cp.slice(0, cp.lastIndexOf("// ═", i)); })()}
   return { recalibrarPedido, previaDoPedido, contasDoPedido, docDaConta, diasEntreIso,
            pedidoVazio, itemDoPedidoVazio, brutoDoItem, brutoDoPedido, totalDoPedido,
-           itensRateados, contasDoPedidoDaLoja, validarPedido, chaveDoDocumento, pedidosPendentes, baixarPedidos,
+           itensRateados, contasDoPedidoDaLoja, descontoDasContas, validarPedido, chaveDoDocumento, pedidosPendentes, baixarPedidos,
            podeMexerNoPedido, removerContasDoPedido, linhasDePedido, linhasDeLoja,
            contasDoPedidoDeConta, unitarioDaConta, apagarPedidoInteiro, resumoDoQueSai,
            pixDoPagamento, pixResumido, TIPOS_PIX, nomeDoTipoPix,
@@ -2960,6 +2960,30 @@ teste("base do escritório: uma linha por transação do extrato", () => {
   const pl = modulo.planilhaDaBase(t, modulo.BASE_RELATORIO_ESCRITORIO);
   assert.strictEqual(pl.colunas.length, 12);
   assert.deepStrictEqual(modulo.filtrarBase(L, { texto: "aluguel" }).map((l) => l.id), ["lanc:L2"]);
+});
+
+teste("o desconto do pedido aparece para quem paga: tabela, desconto e total", () => {
+  const ped = { id: "p1", desconto: 343.5, vencimento: "2026-11-02", itens: [
+    { descricao: "Tábua", quantidade: 60, unitario: 38.9, bruto: 2334 },
+    { descricao: "Sarrafo", quantidade: 50, unitario: 5.9, bruto: 295 },
+    { descricao: "Arame", quantidade: 20, unitario: 14.8, bruto: 296 },
+    { descricao: "Prego", quantidade: 10, unitario: 14.9, bruto: 149 },
+    { descricao: "Disco", quantidade: 2, unitario: 2.5, bruto: 5 },
+    { descricao: "Lâmina", quantidade: 3, unitario: 21.5, bruto: 64.5 }] };
+  let n = 0;
+  const contas = modulo.contasDoPedidoDaLoja({ obraId: "o1", cotacaoId: "l1" }, ped, () => "c" + (++n));
+  const d = modulo.descontoDasContas(contas, []);
+  assert.strictEqual(d.bruto, 3143.5);
+  assert.strictEqual(d.total, 2800);
+  assert.strictEqual(d.desconto, 343.5);
+  assert.strictEqual(d.pct, 10.9);
+  // pedido antigo, sem valorTabela nas contas: lê do pedido guardado na conta da loja
+  const antigas = contas.map(({ valorTabela, ...c }) => ({ ...c, pedidoId: "p1" }));
+  const d2 = modulo.descontoDasContas(antigas, [{ id: "l1", contaLoja: true, pedidos: [ped] }]);
+  assert.strictEqual(d2.desconto, 343.5);
+  assert.strictEqual(modulo.descontoDasContas(antigas, []), null, "sem pedido e sem tabela, nada a dizer");
+  const semDesc = modulo.contasDoPedidoDaLoja({ obraId: "o1" }, { ...ped, desconto: 0 }, () => "x" + (++n));
+  assert.strictEqual(modulo.descontoDasContas(semDesc, []), null);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
