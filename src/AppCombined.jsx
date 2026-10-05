@@ -12254,7 +12254,7 @@ function PainelFinanceiroEscritorio({ lancs, linhas, fechamentos, filtro, aoFilt
         <EFSeletor rotulo="Unidade de negócio" valor={filtro.unidadeId} aoTrocar={(v) => aoFiltrar({ ...filtro, unidadeId: v })}
           opcoes={[["", "Todas"], ...UNIDADES_NEGOCIO.map((u) => [u.id, u.nome])]} />
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button style={S.btnSec} onClick={() => aoIr("lancamentos")}>Lançamento</button>
+          <button style={S.btnSec} onClick={() => aoIr("base")}>Base de dados</button>
           <button style={S.btnSec} onClick={() => aoIr("extrato")}>Extrato</button>
           <button style={S.btn} onClick={() => aoIr("fechamento")}>Fechamento</button>
         </div>
@@ -13048,8 +13048,11 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   // `vista` vem do menu lateral: cada item abre direto a sua tela e o
   // cabeçalho de abas some. Sem ela (Escritório aberto pelo caminho antigo),
   // as abas continuam aparecendo.
-  const [aba, setAba] = useState(["resumo", "fechamento"].includes(vista) ? "extrato" : (vista || "extrato"));
-  useEffect(() => { if (vista && !["resumo", "fechamento"].includes(vista)) setAba(vista); }, [vista]);
+  // "Lançamentos" virou a Base de dados: quem chega pelo nome antigo cai nela
+  const abaDaVista = (v) => (v === "lancamentos" ? "base" : v);
+  const [aba, setAbaCrua] = useState(["resumo", "fechamento"].includes(vista) ? "extrato" : (abaDaVista(vista) || "extrato"));
+  const setAba = (v) => setAbaCrua(abaDaVista(v));
+  useEffect(() => { if (vista && !["resumo", "fechamento"].includes(vista)) setAbaCrua(abaDaVista(vista)); }, [vista]);
   const [form, setForm] = useState(null);
   const [texto, setTexto] = useState("");
   const [lido, setLido] = useState(null);
@@ -13348,8 +13351,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       valor: String(Math.abs(Number(movimento.valor) || 0)).replace(".", ","),
       cliente: "", projeto: "", fornecedor: "", observacao: "",
     });
-    setAba("lancamentos");
-    if (aoIrPara) aoIrPara("lancamentos");
+    setAba("base");
+    if (aoIrPara) aoIrPara("base");
   }
 
   // "Não passou pela conta": tira da fila sem apagar o lançamento.
@@ -13452,20 +13455,6 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     }
   }
 
-  const filtrados = (() => {
-    const t = efSemAcento(busca);
-    // Dentro do mês, o mais novo na frente. Ordenar só por competência fazia
-    // o lançamento recém-criado cair no meio de uma dúzia de outros do mesmo
-    // mês — e quem acabou de lançar conclui que não entrou.
-    const quando = (l) => String((l && (l.criadoEm || l.lancadoEm)) || "");
-    const lista = lancs.slice().sort((a, b) =>
-      String(b.competencia).localeCompare(String(a.competencia))
-      || quando(b).localeCompare(quando(a)));
-    if (!t) return lista.slice(0, 300);
-    return lista.filter((l) => efSemAcento([l.numeroDoc, l.documento, l.descricao, l.fornecedor, l.cliente, l.projeto,
-      (contaEscritorio(l.contaId) || {}).nome].join(" ")).indexOf(t) >= 0).slice(0, 300);
-  })();
-
   const ultimo = linhas[linhas.length - 1];
   const fechados = linhas.filter((l) => l.mes <= "2026-08");
   const u12 = fechados.slice(-12);
@@ -13475,7 +13464,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     <div style={S.wrap}>
       {!vista && (
         <div style={S.abas}>
-          {[["extrato", "Extrato"], ["lancamentos", `Lançamentos (${lancs.length})`], ["cartoes", "Cartões"], ["importar", "Importar"]].map(([k, r]) => (
+          {[["extrato", "Extrato"], ["base", `Base de dados (${lancs.length})`], ["cartoes", "Cartões"], ["importar", "Importar"]].map(([k, r]) => (
             <button key={k} style={S.aba(aba === k)} onClick={() => setAba(k)}>{r}</button>
           ))}
         </div>
@@ -13534,16 +13523,16 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         </>
       )}
 
-      {!["resumo", "fechamento"].includes(vista) && aba === "lancamentos" && (
-        <>
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <input style={{ ...S.input, maxWidth: 320 }} value={busca} placeholder="Buscar por descrição, fornecedor, cliente…"
-              onChange={(e) => setBusca(e.target.value)} />
+      {!["resumo", "fechamento"].includes(vista) && aba === "base" && (
+        <div style={{ ...S.card, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Base de dados</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap", marginTop: 2, marginBottom: 14 }}>
+            <div style={{ fontSize: 12, color: "#4b5563" }}>Todos os lançamentos do escritório, uma linha por transação · o item a item das notas fica na base de cada obra</div>
             {perm.podeEditar && !form && (
               <button style={S.btn} onClick={() => setForm({})}>+ Novo lançamento</button>
             )}
           </div>
-          {form && <FormLancamentoEscritorio fechamentos={fechamentos} clientes={(data || {}).clientes || []}
+          {form && <div style={{ marginBottom: 14 }}><FormLancamentoEscritorio fechamentos={fechamentos} clientes={(data || {}).clientes || []}
             obras={(data || {}).obras || []}
             prestadores={((data || {}).fornecedores || []).filter((x) => x && x.ativo !== false)}
             insumos={((data || {}).materiais || []).filter((x) => x && x.ativo !== false)}
@@ -13551,110 +13540,19 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             aoCadastrarInsumo={(campos) => typeof cadastrarInsumoNoCatalogo === "function"
               ? cadastrarInsumoNoCatalogo(data, save, campos) : null}
             aoCriarPrestador={criarPrestadorDoLancamento}
-            inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} />}
+            inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} /></div>}
           {vendoComprovante && typeof VisorProposta === "function" && (
             <VisorProposta anexo={vendoComprovante} aoFechar={() => setVendoComprovante(null)} />
           )}
-          <div style={S.quadro}>
-            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
-              <thead>
-                <tr style={{ color: "#6b7280", textAlign: "left" }}>
-                  {["Ref.", "Competência", "Conta", "Unidade", "Cliente / obra", "Descrição", "Valor", ""].map((h, i) => (
-                    <th key={h + i} style={{ padding: "7px 12px", fontSize: 11, textTransform: "uppercase", letterSpacing: .4,
-                      borderBottom: "1px solid rgba(38,36,33,0.12)", textAlign: i === 6 ? "right" : "left" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtrados.map((l) => {
-                  const c = contaEscritorio(l.contaId);
-                  const u = UNIDADES_NEGOCIO.find((x) => x.id === l.unidadeId);
-                  return (
-                    <tr key={l.id} style={{ borderTop: "1px solid rgba(38,36,33,0.06)" }}>
-                      <td style={{ padding: "7px 12px", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums",
-                        color: l.numeroDoc ? "#111827" : "#9ca3af" }}>{l.numeroDoc || "—"}</td>
-                      <td style={{ padding: "7px 12px", whiteSpace: "nowrap" }}>{mesAnoPorExtenso(l.competencia)}</td>
-                      <td style={{ padding: "7px 12px" }}>{c ? c.nome : <span style={{ color: "#b45309" }}>{l.contaOriginal || "sem conta"}</span>}</td>
-                      <td style={{ padding: "7px 12px", color: "#6b7280" }}>{u ? u.nome : l.unidadeOriginal || "—"}</td>
-                      <td style={{ padding: "7px 12px", color: "#6b7280" }}>{[l.cliente, l.projeto].filter(Boolean).join(" · ") || "—"}</td>
-                      <td style={{ padding: "7px 12px" }}>
-                        {(l.origem || {}).tipo === "fatura" && (l.linhas || []).length ? (
-                          <button type="button" onClick={() => setFaturaAberta(faturaAberta === l.id ? null : l.id)}
-                            style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: "inherit",
-                              fontSize: 12.5, color: "#111827", textAlign: "left" }}>
-                            <span style={{ color: "#6b7280", marginRight: 4 }}>{faturaAberta === l.id ? "▾" : "▸"}</span>
-                            {l.descricao}
-                          </button>
-                        ) : (l.descricao || l.fornecedor || "—")}
-                        {faturaAberta === l.id && (
-                          <div style={{ marginTop: 6, paddingLeft: 12, borderLeft: "2px solid rgba(38,36,33,0.10)",
-                            display: "grid", gap: 4 }}>
-                            {(l.linhas || []).map((x, i) => (
-                              <div key={i} style={{ fontSize: 11.5, color: "#4b5563", display: "flex", gap: 8,
-                                flexWrap: "wrap", alignItems: "baseline" }}>
-                                <span style={{ color: "#111827" }}>{x.descricao || "—"}</span>
-                                <span>{[x.obra || "Escritório", x.fornecedor, x.de > 1 ? x.parcela + "/" + x.de : "",
-                                  x.destinoContaId && contaEscritorio(x.destinoContaId) ? "no resultado: " + contaEscritorio(x.destinoContaId).nome : ""]
-                                  .filter(Boolean).join(" · ")}</span>
-                                <span style={{ fontVariantNumeric: "tabular-nums" }}>{efDinheiro(x.valor)}</span>
-                                <LinksDeAnexo transacao={x} compacto />
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {/* O clipe diz, de relance, qual linha tem papel e qual
-                            não tem — é o que se procura numa prestação de
-                            contas. Com mais de um, ele traz a conta. */}
-                        {(() => {
-                          const papeis = anexosDaTransacao(l).filter((a) => a && a.url);
-                          if (!papeis.length) return null;
-                          return (
-                            <button type="button"
-                              title={papeis.length === 1 ? "Ver o documento: " + (papeis[0].nome || "")
-                                : "Ver os " + papeis.length + " documentos"}
-                              onClick={() => setVendoComprovante(papeis[0])}
-                              style={{ marginLeft: 6, border: "none", background: "none", padding: 0, cursor: "pointer",
-                                color: "#0474f4", fontSize: 12.5, fontFamily: "inherit" }}>
-                              {"\u{1F4CE}"}{papeis.length > 1 ? " " + papeis.length : ""}
-                            </button>
-                          );
-                        })()}
-                        {compraNoCartaoDoEscritorio(l) && (
-                          <div style={{ fontSize: 11, color: "#6b7280" }}>
-                            no cartão — sai do banco na fatura de {[...new Set((l.parcelasCartao || []).map((x) => x.competencia))].map(mesAnoPorExtenso).join(", ")}
-                          </div>
-                        )}
-                      </td>
-                      <td style={{ padding: "7px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{efDinheiro(l.valor)}</td>
-                      <td style={{ padding: "7px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
-                        {perm.podeEditar && (
-                          <button style={{ ...S.btnSec, padding: "4px 9px" }} onClick={() => setForm(l)}>Editar</button>
-                        )}
-                        {perm.podeExcluir && (
-                          <button style={{ ...S.btnSec, padding: "4px 9px", marginLeft: 6, color: "#dc2626" }}
-                            onClick={() => excluirLancamento(l)}>Excluir</button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {filtrados.length >= 300 && (
-            <div style={{ fontSize: 11.5, color: "#6b7280" }}>Mostrando os 300 mais recentes. Use a busca para achar o resto.</div>
-          )}
-        </>
-      )}
-
-      {!["resumo", "fechamento"].includes(vista) && aba === "base" && (
-        <div style={{ ...S.card, minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Base de dados</div>
-          <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2, marginBottom: 14 }}>O que entrou no extrato do escritório · as compras das obras abertas item a item</div>
           <BaseDeDados obras={(data || {}).obras || []} clientes={(data || {}).clientes || []}
             prestadores={(data || {}).fornecedores || []}
             insumos={typeof insumosDoCatalogo === "function" ? insumosDoCatalogo(data) : []}
             lancamentos={lancamentosDoEscritorio(data)} doEscritorio
+            acoes={{
+              editar: perm.podeEditar ? (l) => { setForm(l); if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); } : null,
+              excluir: perm.podeExcluir ? (l) => excluirLancamento(l) : null,
+              verPapel: (a) => setVendoComprovante(a),
+            }}
             completar={perm.podeEditar !== false ? { data, save, quem: typeof nomeDeQuem === "function" ? nomeDeQuem(perm && perm.usuario) : "" } : null}
             isMobile={typeof window !== "undefined" && window.innerWidth < 768} nomeDoArquivo="base de dados" />
         </div>
@@ -26271,54 +26169,51 @@ function linhasDaBase(obras, opcoes) {
     || String(b.ref).localeCompare(String(a.ref)));
 }
 
-// A base do escritório é o extrato do escritório: entra só o que entrou
-// lá. O lançamento que veio de uma obra (a ponte grava a origem) abre nos
-// itens da obra — a nota com as suas linhas; o lançamento do próprio
-// escritório (aluguel, salário, receita de projeto) é uma linha só, com a
-// conta contábil fazendo as vezes do item. Obra cujo cliente paga direto
-// (Reforma Loja Cobop) não passa pelo extrato e não aparece.
+// A base do escritório é o extrato do escritório: uma linha por
+// transação — todo lançamento que entrou lá, do próprio escritório ou vindo
+// de uma obra pela ponte. O item a item das notas fica na base da obra.
+// Obra cujo cliente paga direto (Reforma Loja Cobop) não passa pelo extrato
+// e não aparece. É também aqui que se lança, edita e exclui (a tela
+// "Lançamentos" virou esta).
 function linhasDoEscritorio(obras, lancamentos, opcoes) {
   const o = opcoes || {};
-  const saida = [];
-  const usadas = new Set();
   const porId = new Map((obras || []).filter(Boolean).map((ob) => [ob.id, ob]));
   const titulo = (t) => { const x = String(t || "").toLowerCase(); return x ? x.charAt(0).toUpperCase() + x.slice(1) : ""; };
+  const saida = [];
   for (const l of lancamentos || []) {
     if (!l || (l.tipo && l.tipo !== "escritorio")) continue;
-    const ob = l.origem && l.origem.obraId ? porId.get(l.origem.obraId) : null;
-    // entrada ou saída no extrato: o grupo da conta diz; sem conta, o sinal do valor
-    const contaL = (typeof o.contaDoEscritorio === "function" && o.contaDoEscritorio(l.contaId)) || null;
-    const grupoL = contaL && typeof o.grupoDoEscritorio === "function" ? o.grupoDoEscritorio(contaL.grupo) : null;
-    const sinal = grupoL && grupoL.sinal ? (grupoL.sinal < 0 ? -1 : 1) : (Number(l.valor) < 0 ? -1 : 1);
-    const contas = ob ? (ob.contasPagar || []).filter((c) => c && !usadas.has(ob.id + "|" + c.id) && cpLancamentoDaConta([l], ob.id, c)) : [];
-    if (contas.length) {
-      contas.forEach((c) => usadas.add(ob.id + "|" + c.id));
-      for (const r of linhasDaBase([{ ...ob, contasPagar: contas }], { ...o, lancamentos: [l] })) saida.push({ ...r, lancId: l.id, sinal });
-      continue;
-    }
     const conta = (typeof o.contaDoEscritorio === "function" && o.contaDoEscritorio(l.contaId)) || null;
     const grupo = conta && typeof o.grupoDoEscritorio === "function" ? o.grupoDoEscritorio(conta.grupo) : null;
+    // entrada ou saída no extrato: o grupo da conta diz; sem conta, o sinal do valor
+    const sinal = grupo && grupo.sinal ? (grupo.sinal < 0 ? -1 : 1) : (Number(l.valor) < 0 ? -1 : 1);
     const valor = Math.round(Math.abs(Number(l.valor) || 0) * 100) / 100;
     const dia = String(l.lancadoEm || "").slice(0, 10);
+    const ob = l.origem && l.origem.obraId ? porId.get(l.origem.obraId) : null;
     const nomeConta = (conta && conta.nome) || l.contaOriginal || l.contaId || "";
+    const obraNome = l.projeto || (ob && ob.nome) || "";
+    const obraId = (l.origem && l.origem.obraId) || l.obraId || l.empreendimentoId || (obraNome ? "p:" + cpSemAcento(obraNome) : "");
+    const anexos = (Array.isArray(l.anexos) ? l.anexos : []).filter(Boolean).concat(l.comprovante ? [l.comprovante] : []);
     const pseudo = { id: "lanc:" + l.id, numeroDoc: l.numeroDoc || "", descricao: l.descricao || "", favorecido: l.fornecedor || "",
       numeroNota: l.documento || "", valor, valorPago: valor, pago: true, pagoEm: dia, vencimento: dia, contaId: l.contaId || "",
-      observacao: [nomeConta, l.cliente, l.projeto].filter(Boolean).join(" "), anexos: Array.isArray(l.anexos) ? l.anexos : [] };
+      observacao: [nomeConta, l.cliente, obraNome, l.observacao].filter(Boolean).join(" "), anexos };
     saida.push({
-      id: pseudo.id, lancId: l.id, obraId: l.obraId || l.empreendimentoId || "", obra: l.projeto || "", cliente: l.cliente || "",
+      id: pseudo.id, lancId: l.id, lanc_: l, obraId, obra: obraNome, cliente: l.cliente || "",
       unidadeNegocio: CP_UNIDADES_NEGOCIO[l.unidadeId] || l.unidadeOriginal || "",
       ref: l.numeroDoc || "", nota: String(l.documento || ""), arquivo: "",
       fornecedor: l.fornecedor || "", descricaoLanc: l.descricao || "", item: l.descricao || "",
+      emitirNota: l.emitirNota ? "Sim" : "Não",
       insumoCodigo: "", insumo: "", insumoNome: nomeConta || "Outros",
       quantidade: 1, unidade: "Unidades", unitario: valor, total: valor, valorNota: valor,
-      grupo: titulo(grupo && grupo.titulo) || "Outros", etapaId: "outros", etapa: "Outros",
+      grupo: titulo(grupo && grupo.titulo), etapaId: "", etapa: "",
       contaId: l.contaId || "", conta: nomeConta,
       pago: true, pagoEm: dia, vencimento: dia, competencia: String(l.competencia || dia.slice(0, 7)).slice(0, 7),
-      dataLanc: dia, entradaEm: dia, origem: "escritorio", papeis: pseudo.anexos.filter(Boolean).length, conta_: pseudo, sinal,
+      dataLanc: dia, entradaEm: dia, origem: "escritorio", papeis: anexos.length, conta_: pseudo, sinal,
     });
   }
-  return saida.sort((a, b) => (b.pagoEm || b.vencimento).localeCompare(a.pagoEm || a.vencimento)
-    || String(b.ref).localeCompare(String(a.ref)));
+  // como era na tela de lançamentos: competência mais nova primeiro e, no
+  // mês, o lançado por último na frente — quem acabou de lançar o vê no topo
+  const quando = (r) => String((r.lanc_ && (r.lanc_.criadoEm || r.lanc_.lancadoEm)) || "");
+  return saida.sort((a, b) => String(b.competencia).localeCompare(String(a.competencia)) || quando(b).localeCompare(quando(a)));
 }
 
 function filtrarBase(linhas, filtro, op) {
@@ -26344,8 +26239,17 @@ const BASE_COLUNAS = [
   ["quantidade", "Quantidade"], ["unitario", "Preço"], ["total", "Valor"], ["etapa", "Etapa"], ["grupo", "Grupo Materiais"],
   ["situacao", "Situação"], ["vencimento", "Vencimento"], ["entradaEm", "Entrada no sistema"],
 ];
-function tabelaDaBase(linhas) {
-  return [BASE_COLUNAS.map((c) => c[1])].concat((linhas || []).map((l) => BASE_COLUNAS.map(([k]) => {
+// A base do escritório: as colunas da planilha BASE DE DADOS ESCRITÓRIO —
+// uma linha por transação.
+const BASE_COLUNAS_ESCRITORIO = [
+  ["ref", "Ref"], ["cliente", "Nome Cliente"], ["unidadeNegocio", "Unidade negócio"], ["obra", "Projeto / obra"],
+  ["fornecedor", "Fornecedor"], ["descricaoLanc", "Descrição Lançamento"], ["conta", "Conta contábil"],
+  ["nota", "Nota / Comprovante"], ["emitirNota", "Emitir nota fiscal"], ["valorNota", "Valor total nota"],
+  ["competencia", "Período Contábil"], ["dataLanc", "Data do lançamento"],
+];
+function tabelaDaBase(linhas, colunas) {
+  const cols = colunas || BASE_COLUNAS;
+  return [cols.map((c) => c[1])].concat((linhas || []).map((l) => cols.map(([k]) => {
     if (k === "situacao") return l.pago ? "Pago" : "A pagar";
     const v = l[k];
     return v == null ? "" : v;
@@ -26450,13 +26354,21 @@ function cpLarguraDoTexto(t) {
   }
   return w;
 }
-function planilhaDaBase(tabela) {
+const BASE_RELATORIO_ESCRITORIO = [
+  ["Ref", "numeroTexto", "0", "center"], ["Nome Cliente", "texto", "", "center"], ["Unidade negócio", "texto", "", "center"],
+  ["Projeto / obra", "texto", "", "center"], ["Fornecedor", "texto", "", "center"], ["Descrição Lançamento", "texto", "", ""],
+  ["Conta contábil", "texto", "", "center"], ["Nota / Comprovante", "numeroTexto", "0", "center"], ["Emitir nota fiscal", "texto", "", "center"],
+  ["Valor total nota", "moeda", CP_MOEDA_XL, ""], ["Período Contábil", "mes", "[$-416]mmm\\-yy;@", "center"],
+  ["Data do lançamento", "data", "[$-416]d\\-mmm\\-yy;@", "center"],
+];
+function planilhaDaBase(tabela, especificacao) {
+  const SPEC = especificacao || BASE_RELATORIO;
   const cab = (tabela || [])[0] || [];
   const meses = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
   const br = (v, casas) => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
-  const idx = BASE_RELATORIO.map(([t]) => cab.indexOf(t));
+  const idx = SPEC.map(([t]) => cab.indexOf(t));
   const linhas = (tabela || []).slice(1).map((l) => idx.map((j) => (j >= 0 ? l[j] : "")));
-  const colunas = BASE_RELATORIO.map(([titulo, tipo, formato, alinhar], k) => {
+  const colunas = SPEC.map(([titulo, tipo, formato, alinhar], k) => {
     let maior = cpLarguraDoTexto(titulo) * 1.25 + 2.5;
     for (const l of linhas) {
       const v = l[k];
@@ -26801,7 +26713,10 @@ function carregarExcelJS() {
   return cpCargaExcel;
 }
 
-function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMobile, obraFixa, nomeDoArquivo, completar, doEscritorio }) {
+function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMobile, obraFixa, nomeDoArquivo, completar, doEscritorio, acoes }) {
+  // no escritório a linha é a transação, com as colunas da planilha do escritório
+  const COLS_TAB = doEscritorio ? BASE_COLUNAS_ESCRITORIO : BASE_COLUNAS;
+  const COLS_REL = doEscritorio ? BASE_RELATORIO_ESCRITORIO : BASE_RELATORIO;
   // "Completar a base": o que as regras preenchem no que já está gravado,
   // listado para conferir; só grava no clique de quem confere.
   const [conferindo, setConferindo] = useState(false);
@@ -26866,7 +26781,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   const op = { nomePrestador: (id) => nomeDe(prestadores, id), nomeConta: (id) => nomeDe(plano, id), nomeEtapa: (id) => nomeDe(etapas, id) };
   const filtradasBase = useMemo(() => filtrarBase(linhas, { texto, obraId, contaId, etapa, grupo, papel, situacao, de, ate }, op),
     [linhas, texto, obraId, contaId, etapa, grupo, papel, situacao, de, ate]);
-  const relat = useMemo(() => planilhaDaBase(tabelaDaBase(filtradasBase)), [filtradasBase]);
+  const relat = useMemo(() => planilhaDaBase(tabelaDaBase(filtradasBase, COLS_TAB), COLS_REL), [filtradasBase, doEscritorio]);
   const idxFinal = filtrarPorColunas(relat, colFiltros, ordemCol);
   const filtradas = idxFinal.map((i) => filtradasBase[i]);
   const celulasDe = idxFinal.map((i) => relat.linhas[i]);
@@ -26886,8 +26801,8 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
 
   async function baixar() {
     setBaixando("Montando a planilha…");
-    const tabela = tabelaDaBase(filtradas);
-    const plan = planilhaDaBase(tabela);
+    const tabela = tabelaDaBase(filtradas, COLS_TAB);
+    const plan = planilhaDaBase(tabela, COLS_REL);
     const nome = (nomeDoArquivo || "base-de-dados").replace(/[^\w-]+/g, "-").toLowerCase() + "-" + new Date().toISOString().slice(0, 10);
     const salvar = (blob, arquivo) => {
       const a = document.createElement("a");
@@ -26959,31 +26874,70 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   const ocultas = obraFixa ? ["Nome Cliente", "Projeto / obra"] : [];
   const COLS = relat.colunas.map((c, j) => ({ ...c, j, px: Math.max(56, Math.round(c.largura * 7.2)) }))
     .filter((c) => ocultas.indexOf(c.titulo) < 0);
-  const grade = COLS.map((c) => c.px + "px").join(" ");
-  const largura = COLS.reduce((t, c) => t + c.px, 0) + COLS.length * 10 + 24;
+  const comAcoes = !!(acoes && (acoes.editar || acoes.excluir || acoes.verPapel));
+  const grade = COLS.map((c) => c.px + "px").join(" ") + (comAcoes ? " 132px" : "");
+  const largura = COLS.reduce((t, c) => t + c.px, 0) + (comAcoes ? 142 : 0) + COLS.length * 10 + 24;
+  // os botões da transação (no escritório): ver o papel, editar, excluir
+  const botoesDaLinha = (l) => {
+    const lanc = l.lanc_;
+    if (!comAcoes || !lanc) return null;
+    const papeis = ((l.conta_ && l.conta_.anexos) || []).filter((a) => a && a.url);
+    const b = { border: "none", background: "none", padding: "0 3px", cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: "#0474f4" };
+    return (
+      <span style={{ display: "inline-flex", gap: 4, justifyContent: "flex-end", whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
+        {acoes.verPapel && papeis.length > 0 && (
+          <button type="button" style={b} title={papeis.length === 1 ? "Ver o documento: " + (papeis[0].nome || "") : "Ver os " + papeis.length + " documentos"}
+            onClick={() => acoes.verPapel(papeis[0], lanc)}>{"\u{1F4CE}"}{papeis.length > 1 ? papeis.length : ""}</button>
+        )}
+        {acoes.editar && <button type="button" style={b} onClick={() => acoes.editar(lanc)}>Editar</button>}
+        {acoes.excluir && <button type="button" style={{ ...b, color: "#dc2626" }} onClick={() => acoes.excluir(lanc)}>Excluir</button>}
+      </span>
+    );
+  };
+  // a fatura do cartão guarda as compras dentro dela: aparecem ao marcar a linha
+  const linhasDaFaturaMarcada = (l) => {
+    const lanc = l.lanc_;
+    if (!lanc || linhaMarcada !== l.id || !(lanc.linhas || []).length) return null;
+    return (
+      <div style={{ gridColumn: "1 / -1", margin: "4px 0 2px", padding: "6px 10px", borderLeft: "2px solid #93c5fd", background: "#f8fbff",
+        display: "grid", gap: 3 }} onClick={(e) => e.stopPropagation()}>
+        {lanc.linhas.map((x, k) => (
+          <div key={k} style={{ fontSize: 11.5, color: "#374151", display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ color: "#111827" }}>{x.descricao || "—"}</span>
+            <span>{[x.obra || "Escritório", x.fornecedor, x.de > 1 ? x.parcela + "/" + x.de : ""].filter(Boolean).join(" · ")}</span>
+            <span style={{ fontVariantNumeric: "tabular-nums" }}>{moeda(Math.abs(Number(x.valor) || 0))}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
   const visiveis = filtradas.slice(0, limite);
 
   return (
     <div style={{ minWidth: 0, maxWidth: "100%" }}>
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : (obraFixa ? "minmax(0,2fr) repeat(3, minmax(0,1fr))" : "minmax(0,2fr) repeat(4, minmax(0,1fr))"), gap: 8, marginBottom: 8 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : (doEscritorio ? "minmax(0,2fr) repeat(2, minmax(0,1fr))" : obraFixa ? "minmax(0,2fr) repeat(3, minmax(0,1fr))" : "minmax(0,2fr) repeat(4, minmax(0,1fr))"), gap: 8, marginBottom: 8 }}>
         <input style={input} value={texto} onChange={(e) => setTexto(e.target.value)} aria-label="Procurar na base"
-          placeholder="Procurar: item, fornecedor, nota, ref, valor…" />
+          placeholder={doEscritorio ? "Procurar: descrição, fornecedor, cliente, conta, nota, ref, valor…" : "Procurar: item, fornecedor, nota, ref, valor…"} />
         {!obraFixa && (
           <SelectBusca style={input} value={obraId} onChange={(v) => setObraId(v || "")} vazio="Todas as obras" placeholder="Procurar obra…"
             opcoes={[{ valor: "", rotulo: "Todas as obras" }].concat(unicos("obraId", "obra"))} />
         )}
+        {!doEscritorio && (<>
         <SelectBusca style={input} value={etapa} onChange={(v) => setEtapa(v || "")} vazio="Todas as etapas" placeholder="Procurar etapa…"
           opcoes={[{ valor: "", rotulo: "Todas as etapas" }].concat(unicos("etapaId", "etapa"))} />
         <SelectBusca style={input} value={grupo} onChange={(v) => setGrupo(v || "")} vazio="Todos os grupos" placeholder="Procurar grupo…"
           opcoes={[{ valor: "", rotulo: "Todos os grupos" }].concat(unicos("grupo"))} />
+        </>)}
         <SelectBusca style={input} value={contaId} onChange={(v) => setContaId(v || "")} vazio="Todas as contas" placeholder="Procurar conta…"
           opcoes={[{ valor: "", rotulo: "Todas as contas" }].concat(unicos("contaId", "conta"))} />
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+        {!doEscritorio && (<>
         {chip(situacao === "", "Tudo", () => setSituacao(""))}
         {chip(situacao === "pago", "Pago", () => setSituacao("pago"))}
         {chip(situacao === "apagar", "A pagar", () => setSituacao("apagar"))}
         <span style={{ width: 8 }} />
+        </>)}
         {chip(papel === "com", "Com papel", () => setPapel(papel === "com" ? "todos" : "com"))}
         {chip(papel === "sem", "Sem papel", () => setPapel(papel === "sem" ? "todos" : "sem"))}
         <span style={{ display: isMobile ? "grid" : "inline-flex", gridTemplateColumns: "auto minmax(0,1fr) auto minmax(0,1fr)", width: isMobile ? "100%" : undefined,
@@ -27067,7 +27021,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
               style={{ border: `1px solid ${linhaMarcada === l.id ? "#93c5fd" : "rgba(38,36,33,0.12)"}`, borderRadius: 12, padding: 12,
                 background: linhaMarcada === l.id ? "#dbeafe" : "#fff", cursor: "pointer" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", minWidth: 0 }}>{l.insumoNome || l.descricaoLanc || "—"}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", minWidth: 0 }}>{(doEscritorio ? l.descricaoLanc : l.insumoNome) || l.descricaoLanc || "—"}</div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>{moeda(l.total)}</div>
               </div>
               <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 3 }}>
@@ -27076,9 +27030,13 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
                   l.pago ? diaBR(l.pagoEm) : "vence " + diaBR(l.vencimento)].filter(Boolean).join(" · ")}
               </div>
               <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>
-                {[l.quantidade ? `${num(l.quantidade)} ${l.unidade}`.trim() + (l.unitario != null ? ` × ${num(l.unitario, 2)}` : "") : "", l.etapa, l.grupo, l.conta,
-                  l.unidadeNegocio, !obraFixa ? [l.cliente, l.obra].filter(Boolean).join(" / ") : ""].filter(Boolean).join(" · ")}
+                {(doEscritorio
+                  ? [l.conta, l.unidadeNegocio, [l.cliente, l.obra].filter(Boolean).join(" / "), "competência " + mesBR(l.competencia)]
+                  : [l.quantidade ? `${num(l.quantidade)} ${l.unidade}`.trim() + (l.unitario != null ? ` × ${num(l.unitario, 2)}` : "") : "", l.etapa, l.grupo, l.conta,
+                    l.unidadeNegocio, !obraFixa ? [l.cliente, l.obra].filter(Boolean).join(" / ") : ""]).filter(Boolean).join(" · ")}
               </div>
+              {comAcoes && <div style={{ marginTop: 6, display: "flex", justifyContent: "flex-end" }}>{botoesDaLinha(l)}</div>}
+              {linhasDaFaturaMarcada(l)}
             </div>
           ))}
         </div>
@@ -27119,6 +27077,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
                   </button>
                 );
               })}
+              {comAcoes && <span />}
             </div>
             {visiveis.map((l, i) => (
               <div key={l.id} data-vk-base-linha="1" onClick={() => setLinhaMarcada(linhaMarcada === l.id ? "" : l.id)}
@@ -27128,15 +27087,18 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
                   background: linhaMarcada === l.id ? "#dbeafe" : undefined }}>
                 {COLS.map((c) => {
                   const t = textoDaCelula(celulasDe[i][c.j], c);
+                  const destaque = c.titulo === "Valor" || (doEscritorio && c.titulo === "Valor total nota");
                   return (
                     <span key={c.titulo} title={t.length > 12 ? t : undefined}
                       style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                         textAlign: alinhamentoDaCelula(c), fontVariantNumeric: "tabular-nums",
-                        color: c.titulo === "Valor" ? "#111827" : undefined, fontWeight: c.titulo === "Valor" ? 600 : 400 }}>
+                        color: destaque ? (doEscritorio && l.sinal > 0 ? "#047857" : "#111827") : undefined, fontWeight: destaque ? 600 : 400 }}>
                       {t}
                     </span>
                   );
                 })}
+                {comAcoes && botoesDaLinha(l)}
+                {linhasDaFaturaMarcada(l)}
               </div>
             ))}
           </div>
@@ -68134,11 +68096,10 @@ export default function ModuloClientesFornecedores() {
       ...(permMenu.podeGerenciarUsuarios ? [
         { k:"escritorio:financeiro",  icon:"financeiro", label:"Financeiro" },
         { k:"escritorio:extrato",     icon:"cub",        label:"Extrato" },
-        { k:"escritorio:lancamentos", icon:"editar",     label:"Lançamentos" },
+        { k:"escritorio:base",        icon:"tabela",     label:"Base de dados" },
         { k:"escritorio:cartoes",     icon:"cartao",     label:"Cartões" },
         { k:"escritorio:fechamento",  icon:"check",      label:"Fechamento" },
         { k:"escritorio:importar",    icon:"copy",       label:"Importar" },
-        { k:"escritorio:base",        icon:"tabela",        label:"Base de dados" },
       ] : []),
       { k:"escritorio:dados",   icon:"empresas",   label:"Cadastro" },
       { k:"escritorio:equipe",  icon:"usuarios",   label:"Equipe" },

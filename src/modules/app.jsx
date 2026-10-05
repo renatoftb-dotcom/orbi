@@ -1583,11 +1583,10 @@ export default function ModuloClientesFornecedores() {
       ...(permMenu.podeGerenciarUsuarios ? [
         { k:"escritorio:financeiro",  icon:"financeiro", label:"Financeiro" },
         { k:"escritorio:extrato",     icon:"cub",        label:"Extrato" },
-        { k:"escritorio:lancamentos", icon:"editar",     label:"Lançamentos" },
+        { k:"escritorio:base",        icon:"tabela",     label:"Base de dados" },
         { k:"escritorio:cartoes",     icon:"cartao",     label:"Cartões" },
         { k:"escritorio:fechamento",  icon:"check",      label:"Fechamento" },
         { k:"escritorio:importar",    icon:"copy",       label:"Importar" },
-        { k:"escritorio:base",        icon:"tabela",        label:"Base de dados" },
       ] : []),
       { k:"escritorio:dados",   icon:"empresas",   label:"Cadastro" },
       { k:"escritorio:equipe",  icon:"usuarios",   label:"Equipe" },

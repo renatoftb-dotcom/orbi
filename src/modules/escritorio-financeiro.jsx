@@ -3028,7 +3028,7 @@ function PainelFinanceiroEscritorio({ lancs, linhas, fechamentos, filtro, aoFilt
         <EFSeletor rotulo="Unidade de negócio" valor={filtro.unidadeId} aoTrocar={(v) => aoFiltrar({ ...filtro, unidadeId: v })}
           opcoes={[["", "Todas"], ...UNIDADES_NEGOCIO.map((u) => [u.id, u.nome])]} />
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button style={S.btnSec} onClick={() => aoIr("lancamentos")}>Lançamento</button>
+          <button style={S.btnSec} onClick={() => aoIr("base")}>Base de dados</button>
           <button style={S.btnSec} onClick={() => aoIr("extrato")}>Extrato</button>
           <button style={S.btn} onClick={() => aoIr("fechamento")}>Fechamento</button>
         </div>
@@ -3822,8 +3822,11 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   // `vista` vem do menu lateral: cada item abre direto a sua tela e o
   // cabeçalho de abas some. Sem ela (Escritório aberto pelo caminho antigo),
   // as abas continuam aparecendo.
-  const [aba, setAba] = useState(["resumo", "fechamento"].includes(vista) ? "extrato" : (vista || "extrato"));
-  useEffect(() => { if (vista && !["resumo", "fechamento"].includes(vista)) setAba(vista); }, [vista]);
+  // "Lançamentos" virou a Base de dados: quem chega pelo nome antigo cai nela
+  const abaDaVista = (v) => (v === "lancamentos" ? "base" : v);
+  const [aba, setAbaCrua] = useState(["resumo", "fechamento"].includes(vista) ? "extrato" : (abaDaVista(vista) || "extrato"));
+  const setAba = (v) => setAbaCrua(abaDaVista(v));
+  useEffect(() => { if (vista && !["resumo", "fechamento"].includes(vista)) setAbaCrua(abaDaVista(vista)); }, [vista]);
   const [form, setForm] = useState(null);
   const [texto, setTexto] = useState("");
   const [lido, setLido] = useState(null);
@@ -4122,8 +4125,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       valor: String(Math.abs(Number(movimento.valor) || 0)).replace(".", ","),
       cliente: "", projeto: "", fornecedor: "", observacao: "",
     });
-    setAba("lancamentos");
-    if (aoIrPara) aoIrPara("lancamentos");
+    setAba("base");
+    if (aoIrPara) aoIrPara("base");
   }
 
   // "Não passou pela conta": tira da fila sem apagar o lançamento.
@@ -4226,20 +4229,6 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     }
   }
 
-  const filtrados = (() => {
-    const t = efSemAcento(busca);
-    // Dentro do mês, o mais novo na frente. Ordenar só por competência fazia
-    // o lançamento recém-criado cair no meio de uma dúzia de outros do mesmo
-    // mês — e quem acabou de lançar conclui que não entrou.
-    const quando = (l) => String((l && (l.criadoEm || l.lancadoEm)) || "");
-    const lista = lancs.slice().sort((a, b) =>
-      String(b.competencia).localeCompare(String(a.competencia))
-      || quando(b).localeCompare(quando(a)));
-    if (!t) return lista.slice(0, 300);
-    return lista.filter((l) => efSemAcento([l.numeroDoc, l.documento, l.descricao, l.fornecedor, l.cliente, l.projeto,
-      (contaEscritorio(l.contaId) || {}).nome].join(" ")).indexOf(t) >= 0).slice(0, 300);
-  })();
-
   const ultimo = linhas[linhas.length - 1];
   const fechados = linhas.filter((l) => l.mes <= "2026-08");
   const u12 = fechados.slice(-12);
@@ -4249,7 +4238,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     <div style={S.wrap}>
       {!vista && (
         <div style={S.abas}>
-          {[["extrato", "Extrato"], ["lancamentos", `Lançamentos (${lancs.length})`], ["cartoes", "Cartões"], ["importar", "Importar"]].map(([k, r]) => (
+          {[["extrato", "Extrato"], ["base", `Base de dados (${lancs.length})`], ["cartoes", "Cartões"], ["importar", "Importar"]].map(([k, r]) => (
             <button key={k} style={S.aba(aba === k)} onClick={() => setAba(k)}>{r}</button>
           ))}
         </div>
@@ -4308,16 +4297,16 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         </>
       )}
 
-      {!["resumo", "fechamento"].includes(vista) && aba === "lancamentos" && (
-        <>
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <input style={{ ...S.input, maxWidth: 320 }} value={busca} placeholder="Buscar por descrição, fornecedor, cliente…"
-              onChange={(e) => setBusca(e.target.value)} />
+      {!["resumo", "fechamento"].includes(vista) && aba === "base" && (
+        <div style={{ ...S.card, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Base de dados</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap", marginTop: 2, marginBottom: 14 }}>
+            <div style={{ fontSize: 12, color: "#4b5563" }}>Todos os lançamentos do escritório, uma linha por transação · o item a item das notas fica na base de cada obra</div>
             {perm.podeEditar && !form && (
               <button style={S.btn} onClick={() => setForm({})}>+ Novo lançamento</button>
             )}
           </div>
-          {form && <FormLancamentoEscritorio fechamentos={fechamentos} clientes={(data || {}).clientes || []}
+          {form && <div style={{ marginBottom: 14 }}><FormLancamentoEscritorio fechamentos={fechamentos} clientes={(data || {}).clientes || []}
             obras={(data || {}).obras || []}
             prestadores={((data || {}).fornecedores || []).filter((x) => x && x.ativo !== false)}
             insumos={((data || {}).materiais || []).filter((x) => x && x.ativo !== false)}
@@ -4325,110 +4314,19 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             aoCadastrarInsumo={(campos) => typeof cadastrarInsumoNoCatalogo === "function"
               ? cadastrarInsumoNoCatalogo(data, save, campos) : null}
             aoCriarPrestador={criarPrestadorDoLancamento}
-            inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} />}
+            inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} /></div>}
           {vendoComprovante && typeof VisorProposta === "function" && (
             <VisorProposta anexo={vendoComprovante} aoFechar={() => setVendoComprovante(null)} />
           )}
-          <div style={S.quadro}>
-            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
-              <thead>
-                <tr style={{ color: "#6b7280", textAlign: "left" }}>
-                  {["Ref.", "Competência", "Conta", "Unidade", "Cliente / obra", "Descrição", "Valor", ""].map((h, i) => (
-                    <th key={h + i} style={{ padding: "7px 12px", fontSize: 11, textTransform: "uppercase", letterSpacing: .4,
-                      borderBottom: "1px solid rgba(38,36,33,0.12)", textAlign: i === 6 ? "right" : "left" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtrados.map((l) => {
-                  const c = contaEscritorio(l.contaId);
-                  const u = UNIDADES_NEGOCIO.find((x) => x.id === l.unidadeId);
-                  return (
-                    <tr key={l.id} style={{ borderTop: "1px solid rgba(38,36,33,0.06)" }}>
-                      <td style={{ padding: "7px 12px", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums",
-                        color: l.numeroDoc ? "#111827" : "#9ca3af" }}>{l.numeroDoc || "—"}</td>
-                      <td style={{ padding: "7px 12px", whiteSpace: "nowrap" }}>{mesAnoPorExtenso(l.competencia)}</td>
-                      <td style={{ padding: "7px 12px" }}>{c ? c.nome : <span style={{ color: "#b45309" }}>{l.contaOriginal || "sem conta"}</span>}</td>
-                      <td style={{ padding: "7px 12px", color: "#6b7280" }}>{u ? u.nome : l.unidadeOriginal || "—"}</td>
-                      <td style={{ padding: "7px 12px", color: "#6b7280" }}>{[l.cliente, l.projeto].filter(Boolean).join(" · ") || "—"}</td>
-                      <td style={{ padding: "7px 12px" }}>
-                        {(l.origem || {}).tipo === "fatura" && (l.linhas || []).length ? (
-                          <button type="button" onClick={() => setFaturaAberta(faturaAberta === l.id ? null : l.id)}
-                            style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: "inherit",
-                              fontSize: 12.5, color: "#111827", textAlign: "left" }}>
-                            <span style={{ color: "#6b7280", marginRight: 4 }}>{faturaAberta === l.id ? "▾" : "▸"}</span>
-                            {l.descricao}
-                          </button>
-                        ) : (l.descricao || l.fornecedor || "—")}
-                        {faturaAberta === l.id && (
-                          <div style={{ marginTop: 6, paddingLeft: 12, borderLeft: "2px solid rgba(38,36,33,0.10)",
-                            display: "grid", gap: 4 }}>
-                            {(l.linhas || []).map((x, i) => (
-                              <div key={i} style={{ fontSize: 11.5, color: "#4b5563", display: "flex", gap: 8,
-                                flexWrap: "wrap", alignItems: "baseline" }}>
-                                <span style={{ color: "#111827" }}>{x.descricao || "—"}</span>
-                                <span>{[x.obra || "Escritório", x.fornecedor, x.de > 1 ? x.parcela + "/" + x.de : "",
-                                  x.destinoContaId && contaEscritorio(x.destinoContaId) ? "no resultado: " + contaEscritorio(x.destinoContaId).nome : ""]
-                                  .filter(Boolean).join(" · ")}</span>
-                                <span style={{ fontVariantNumeric: "tabular-nums" }}>{efDinheiro(x.valor)}</span>
-                                <LinksDeAnexo transacao={x} compacto />
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {/* O clipe diz, de relance, qual linha tem papel e qual
-                            não tem — é o que se procura numa prestação de
-                            contas. Com mais de um, ele traz a conta. */}
-                        {(() => {
-                          const papeis = anexosDaTransacao(l).filter((a) => a && a.url);
-                          if (!papeis.length) return null;
-                          return (
-                            <button type="button"
-                              title={papeis.length === 1 ? "Ver o documento: " + (papeis[0].nome || "")
-                                : "Ver os " + papeis.length + " documentos"}
-                              onClick={() => setVendoComprovante(papeis[0])}
-                              style={{ marginLeft: 6, border: "none", background: "none", padding: 0, cursor: "pointer",
-                                color: "#0474f4", fontSize: 12.5, fontFamily: "inherit" }}>
-                              {"\u{1F4CE}"}{papeis.length > 1 ? " " + papeis.length : ""}
-                            </button>
-                          );
-                        })()}
-                        {compraNoCartaoDoEscritorio(l) && (
-                          <div style={{ fontSize: 11, color: "#6b7280" }}>
-                            no cartão — sai do banco na fatura de {[...new Set((l.parcelasCartao || []).map((x) => x.competencia))].map(mesAnoPorExtenso).join(", ")}
-                          </div>
-                        )}
-                      </td>
-                      <td style={{ padding: "7px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{efDinheiro(l.valor)}</td>
-                      <td style={{ padding: "7px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
-                        {perm.podeEditar && (
-                          <button style={{ ...S.btnSec, padding: "4px 9px" }} onClick={() => setForm(l)}>Editar</button>
-                        )}
-                        {perm.podeExcluir && (
-                          <button style={{ ...S.btnSec, padding: "4px 9px", marginLeft: 6, color: "#dc2626" }}
-                            onClick={() => excluirLancamento(l)}>Excluir</button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {filtrados.length >= 300 && (
-            <div style={{ fontSize: 11.5, color: "#6b7280" }}>Mostrando os 300 mais recentes. Use a busca para achar o resto.</div>
-          )}
-        </>
-      )}
-
-      {!["resumo", "fechamento"].includes(vista) && aba === "base" && (
-        <div style={{ ...S.card, minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Base de dados</div>
-          <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2, marginBottom: 14 }}>O que entrou no extrato do escritório · as compras das obras abertas item a item</div>
           <BaseDeDados obras={(data || {}).obras || []} clientes={(data || {}).clientes || []}
             prestadores={(data || {}).fornecedores || []}
             insumos={typeof insumosDoCatalogo === "function" ? insumosDoCatalogo(data) : []}
             lancamentos={lancamentosDoEscritorio(data)} doEscritorio
+            acoes={{
+              editar: perm.podeEditar ? (l) => { setForm(l); if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); } : null,
+              excluir: perm.podeExcluir ? (l) => excluirLancamento(l) : null,
+              verPapel: (a) => setVendoComprovante(a),
+            }}
             completar={perm.podeEditar !== false ? { data, save, quem: typeof nomeDeQuem === "function" ? nomeDeQuem(perm && perm.usuario) : "" } : null}
             isMobile={typeof window !== "undefined" && window.innerWidth < 768} nomeDoArquivo="base de dados" />
         </div>

@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -2923,7 +2923,7 @@ teste("filtro pelo título da coluna, como no Excel", () => {
   assert.deepStrictEqual(modulo.valoresDaColuna(relat, "Ref", {}).map((x) => x.texto), ["11", "21", "180", "194"]);
 });
 
-teste("base do escritório: só o que entrou no extrato", () => {
+teste("base do escritório: uma linha por transação do extrato", () => {
   const obras = [
     { id: "cob", nome: "Reforma Loja Cobop", clientePagaDireto: true, contasPagar: [
       { id: "x1", numeroDoc: "0174", descricao: "Aço", valor: 3063.73, valorPago: 3063.73, pago: true, pagoEm: "2026-10-01" }] },
@@ -2940,7 +2940,7 @@ teste("base do escritório: só o que entrou no extrato", () => {
   const L = modulo.linhasDoEscritorio(obras, lancs, {
     contaDoEscritorio: (id) => (id === "aluguel" ? { nome: "Aluguel", grupo: "despesas" } : null),
     grupoDoEscritorio: (id) => (id === "despesas" ? { titulo: "DESPESAS ESCRITÓRIO", sinal: -1 } : null) });
-  assert.deepStrictEqual(L.map((l) => l.id).sort(), ["a", "b", "lanc:L2"], "Cobop e a conta a pagar não entram");
+  assert.deepStrictEqual(L.map((l) => l.id).sort(), ["lanc:L1", "lanc:L2"], "Cobop e a conta a pagar não entram; a compra da obra é uma linha");
   const al = L.find((l) => l.id === "lanc:L2");
   assert.strictEqual(al.total, 2500, "sem valor negativo");
   assert.strictEqual(al.sinal, -1, "mas sabe que é saída");
@@ -2950,7 +2950,15 @@ teste("base do escritório: só o que entrou no extrato", () => {
   assert.strictEqual(al.unidadeNegocio, "Escritório");
   assert.strictEqual(al.nota, "4199");
   assert.strictEqual(al.competencia, "2026-09");
-  assert.strictEqual(L.find((l) => l.id === "a").valorNota, 304, "o item da obra leva o total do lançamento");
+  const p = L.find((l) => l.id === "lanc:L1");
+  assert.strictEqual(p.valorNota, 304);
+  assert.strictEqual(p.obra, "Módulo 1", "o nome da obra vem da origem");
+  assert.strictEqual(al.emitirNota, "Não");
+  const t = modulo.tabelaDaBase(L, modulo.BASE_COLUNAS_ESCRITORIO);
+  assert.deepStrictEqual(t[0], ["Ref", "Nome Cliente", "Unidade negócio", "Projeto / obra", "Fornecedor", "Descrição Lançamento",
+    "Conta contábil", "Nota / Comprovante", "Emitir nota fiscal", "Valor total nota", "Período Contábil", "Data do lançamento"]);
+  const pl = modulo.planilhaDaBase(t, modulo.BASE_RELATORIO_ESCRITORIO);
+  assert.strictEqual(pl.colunas.length, 12);
   assert.deepStrictEqual(modulo.filtrarBase(L, { texto: "aluguel" }).map((l) => l.id), ["lanc:L2"]);
 });
 
