@@ -496,11 +496,14 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
   // mesmo dinheiro duas vezes no extrato. Fica em ignorados, com o motivo,
   // para o painel e a conferência dizerem onde ela está.
   const noCartao = (c) => !!(c && c.pago && (c.formaPagamento === "cartao" || c.cartaoId));
+  const doCliente = (id) => (o.cartoes || []).some((k) => k && k.id === id);
   for (const c of o.contasPagar || []) {
     if (!noCartao(c)) continue;
     ignorados.push({ origem: c.id, descricao: c.descricao || "",
       valor: Number(c.valorPago) || Number(c.valor) || 0,
-      motivo: "pago no cartão — entra no escritório pela fatura" });
+      motivo: doCliente(c.cartaoId)
+        ? "pago no cartão do cliente — não passa pelo escritório"
+        : "pago no cartão — entra no escritório pela fatura" });
   }
   // as contas pagas da obra — o dinheiro que saiu, uma linha por nota
   for (const fonte of fontesDasContasPagas((o.contasPagar || []).filter((c) => !noCartao(c)))) empurrar(fonte);
@@ -1961,14 +1964,46 @@ function ehEmpreendimento(cliente) {
   return !!(cliente && cliente.servicos && cliente.servicos.empreendimento);
 }
 
-// O cartão de crédito é do escritório: paga a despesa do escritório e a obra
-// do próprio escritório (empreendimento). Obra de cliente paga com o dinheiro
-// do cliente — ali o cartão nem aparece como opção.
-function cartoesDaObra(data, obra) {
+// Os cartões que pagam uma obra. Obra do escritório (empreendimento) usa os
+// cartões do escritório. Obra de cliente NUNCA usa cartão do escritório: o
+// cliente paga com o dele, cadastrado na própria obra (`obra.cartoes`). A
+// compra no cartão do cliente não atravessa para o escritório nem entra em
+// fatura do escritório — a fatura é do cliente.
+function obraEhDoEscritorio(data, obra) {
   const d = data || {};
   const cli = obra ? (d.clientes || []).find((c) => c && c.id === obra.clienteId) : null;
-  if (!ehEmpreendimento(cli)) return [];
-  return (d.escritorio || {}).cartoes || [];
+  return ehEmpreendimento(cli);
+}
+
+function cartoesDaObra(data, obra) {
+  if (!obra) return [];
+  if (obraEhDoEscritorio(data, obra)) return ((data || {}).escritorio || {}).cartoes || [];
+  return (obra.cartoes || []).filter((c) => c && c.ativo !== false);
+}
+
+// O cartão do cliente nasce na própria baixa: nome e os dois dias que
+// decidem a fatura. Marcado `doCliente` para nunca ser confundido com um
+// cartão do escritório.
+function validarCartaoDoCliente(campos) {
+  const c = campos || {};
+  if (!String(c.nome || "").trim()) return "Dê um nome ao cartão do cliente (ex.: Nubank do João).";
+  const f = Number(c.diaFechamento), v = Number(c.diaVencimento);
+  if (!(f >= 1 && f <= 31)) return "O dia de fechamento do cartão vai de 1 a 31.";
+  if (!(v >= 1 && v <= 31)) return "O dia de vencimento do cartão vai de 1 a 31.";
+  return "";
+}
+
+function cartaoDoClienteNovo(campos, novoId) {
+  const c = campos || {};
+  return {
+    id: typeof novoId === "function" ? novoId() : (typeof uid === "function" ? uid() : String(Date.now())),
+    nome: String(c.nome || "").trim(),
+    bandeira: String(c.bandeira || "").trim(),
+    diaFechamento: Number(c.diaFechamento) || 1,
+    diaVencimento: Number(c.diaVencimento) || 10,
+    ativo: true,
+    doCliente: true,
+  };
 }
 
 function empreendimentosDoData(data) {
@@ -3409,6 +3444,103 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
 // escritório, e de lá já vai e volta do banco sem precisar de rota nova.
 function cartoesDoEscritorio(data) {
   return ((data || {}).escritorio || {}).cartoes || [];
+}
+
+// ── O cartão de um pagamento ────────────────────────────────────
+// Usado na baixa do contas a pagar e na Entrada. Escolhe entre os cartões
+// da obra; em obra de cliente, cadastra o cartão do cliente ali mesmo
+// (`novoCartao`), que é gravado junto com o pagamento.
+// `valor`: { cartaoId, parcelas, novoCartao: { nome, diaFechamento, diaVencimento } | null }
+function CampoCartaoDoPagamento({ cartoes, doCliente, valor, aoMudar, total, dataCompra, isMobile, estilo, dinheiro }) {
+  const v = valor || {};
+  const lista = cartoes || [];
+  const st = estilo || {};
+  const input = st.input || { border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 10, padding: "8px 11px", fontSize: 13, width: "100%", boxSizing: "border-box", fontFamily: "inherit" };
+  const label = st.label || { fontSize: 12, color: "#4b5563", fontWeight: 500, display: "block", marginBottom: 5 };
+  const moeda = dinheiro || ((x) => (typeof fmtMoedaCtr === "function" ? fmtMoedaCtr(x) : "R$ " + Number(x || 0).toFixed(2)));
+  const mudar = (m) => aoMudar({ ...v, ...m });
+  const cadastrando = !!v.novoCartao || (doCliente && !lista.length);
+  if (!doCliente && !lista.length) {
+    return (
+      <div style={{ fontSize: 11.5, color: "#b45309", marginTop: 8 }}>
+        Nenhum cartão cadastrado. Cadastre em Escritório → Cartões.
+      </div>
+    );
+  }
+  const novo = v.novoCartao || { nome: "", diaFechamento: "", diaVencimento: "" };
+  const cartao = cadastrando
+    ? { diaFechamento: Number(novo.diaFechamento) || 0, diaVencimento: Number(novo.diaVencimento) || 0 }
+    : (cartaoPorId(lista, v.cartaoId) || lista[0]);
+  const previa = cartao && cartao.diaFechamento ? parcelasDoCartao(cartao, dataCompra, total, v.parcelas) : [];
+  const link = { background: "none", border: "none", padding: 0, color: "#0474f4", cursor: "pointer", fontFamily: "inherit", fontSize: 11.5, textDecoration: "underline" };
+  return (
+    <div data-vk-cartao-pagamento="1" style={{ marginTop: 10 }}>
+      {cadastrando ? (
+        <div style={{ border: "1px solid rgba(4,116,244,0.25)", background: "#f7fbff", borderRadius: 10, padding: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#111827", marginBottom: 6 }}>Cartão do cliente</div>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "2fr 1fr 1fr 1fr", gap: 8 }}>
+            <div style={{ gridColumn: isMobile ? "1 / -1" : "auto" }}>
+              <label style={label}>Nome do cartão</label>
+              <input style={input} value={novo.nome} placeholder="ex.: Nubank do João" data-vk-cartao-nome="1"
+                onChange={(e) => mudar({ novoCartao: { ...novo, nome: e.target.value } })} />
+            </div>
+            <div>
+              <label style={label}>Fecha dia</label>
+              <input style={input} inputMode="numeric" value={novo.diaFechamento} placeholder="25" data-vk-cartao-fecha="1"
+                onChange={(e) => mudar({ novoCartao: { ...novo, diaFechamento: e.target.value.replace(/\D/g, "").slice(0, 2) } })} />
+            </div>
+            <div>
+              <label style={label}>Vence dia</label>
+              <input style={input} inputMode="numeric" value={novo.diaVencimento} placeholder="5" data-vk-cartao-vence="1"
+                onChange={(e) => mudar({ novoCartao: { ...novo, diaVencimento: e.target.value.replace(/\D/g, "").slice(0, 2) } })} />
+            </div>
+            <div>
+              <label style={label}>Parcelas</label>
+              <input style={input} inputMode="numeric" value={v.parcelas || 1}
+                onChange={(e) => mudar({ parcelas: e.target.value.replace(/\D/g, "").slice(0, 2) })} />
+            </div>
+          </div>
+          <div style={{ fontSize: 11, color: "#4b5563", marginTop: 6 }}>
+            Fica guardado nesta obra para as próximas baixas. Não é cartão do escritório.
+            {lista.length > 0 && (
+              <button type="button" style={{ ...link, marginLeft: 8 }} onClick={() => mudar({ novoCartao: null })}>usar um cartão já cadastrado</button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: 10 }}>
+            <div>
+              <label style={label}>{doCliente ? "Cartão do cliente" : "Cartão"}</label>
+              <SelectBusca style={input} value={v.cartaoId || (lista[0] || {}).id || ""}
+                onChange={(id) => mudar({ cartaoId: id })}
+                opcoes={lista.map((c) => ({ valor: c.id, rotulo: c.nome }))} />
+            </div>
+            <div>
+              <label style={label}>Parcelas</label>
+              <input style={input} inputMode="numeric" value={v.parcelas || 1}
+                onChange={(e) => mudar({ parcelas: e.target.value.replace(/\D/g, "").slice(0, 2) })} />
+            </div>
+          </div>
+          {doCliente && (
+            <button type="button" style={{ ...link, marginTop: 6 }}
+              onClick={() => mudar({ novoCartao: { nome: "", diaFechamento: "", diaVencimento: "" } })}>＋ outro cartão do cliente</button>
+          )}
+        </>
+      )}
+      {previa.length > 0 && (
+        <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8, lineHeight: 1.6 }}>
+          Vai cair {previa.length === 1 ? "na fatura de " : "nas faturas de "}
+          <b style={{ color: "#111827" }}>
+            {previa.map((p) => (typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso(p.competencia) : p.competencia) + " (" + moeda(p.valor) + ")").join(" · ")}
+          </b>
+          {doCliente
+            ? ". O custo da obra entra nesta data; a fatura é do cliente e não passa pelo escritório."
+            : ". O custo da obra é integral hoje; o extrato do escritório só recebe a fatura, quando você fechar."}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo, quem }) {

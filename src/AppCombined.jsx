@@ -9767,11 +9767,14 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
   // mesmo dinheiro duas vezes no extrato. Fica em ignorados, com o motivo,
   // para o painel e a conferência dizerem onde ela está.
   const noCartao = (c) => !!(c && c.pago && (c.formaPagamento === "cartao" || c.cartaoId));
+  const doCliente = (id) => (o.cartoes || []).some((k) => k && k.id === id);
   for (const c of o.contasPagar || []) {
     if (!noCartao(c)) continue;
     ignorados.push({ origem: c.id, descricao: c.descricao || "",
       valor: Number(c.valorPago) || Number(c.valor) || 0,
-      motivo: "pago no cartão — entra no escritório pela fatura" });
+      motivo: doCliente(c.cartaoId)
+        ? "pago no cartão do cliente — não passa pelo escritório"
+        : "pago no cartão — entra no escritório pela fatura" });
   }
   // as contas pagas da obra — o dinheiro que saiu, uma linha por nota
   for (const fonte of fontesDasContasPagas((o.contasPagar || []).filter((c) => !noCartao(c)))) empurrar(fonte);
@@ -11232,14 +11235,46 @@ function ehEmpreendimento(cliente) {
   return !!(cliente && cliente.servicos && cliente.servicos.empreendimento);
 }
 
-// O cartão de crédito é do escritório: paga a despesa do escritório e a obra
-// do próprio escritório (empreendimento). Obra de cliente paga com o dinheiro
-// do cliente — ali o cartão nem aparece como opção.
-function cartoesDaObra(data, obra) {
+// Os cartões que pagam uma obra. Obra do escritório (empreendimento) usa os
+// cartões do escritório. Obra de cliente NUNCA usa cartão do escritório: o
+// cliente paga com o dele, cadastrado na própria obra (`obra.cartoes`). A
+// compra no cartão do cliente não atravessa para o escritório nem entra em
+// fatura do escritório — a fatura é do cliente.
+function obraEhDoEscritorio(data, obra) {
   const d = data || {};
   const cli = obra ? (d.clientes || []).find((c) => c && c.id === obra.clienteId) : null;
-  if (!ehEmpreendimento(cli)) return [];
-  return (d.escritorio || {}).cartoes || [];
+  return ehEmpreendimento(cli);
+}
+
+function cartoesDaObra(data, obra) {
+  if (!obra) return [];
+  if (obraEhDoEscritorio(data, obra)) return ((data || {}).escritorio || {}).cartoes || [];
+  return (obra.cartoes || []).filter((c) => c && c.ativo !== false);
+}
+
+// O cartão do cliente nasce na própria baixa: nome e os dois dias que
+// decidem a fatura. Marcado `doCliente` para nunca ser confundido com um
+// cartão do escritório.
+function validarCartaoDoCliente(campos) {
+  const c = campos || {};
+  if (!String(c.nome || "").trim()) return "Dê um nome ao cartão do cliente (ex.: Nubank do João).";
+  const f = Number(c.diaFechamento), v = Number(c.diaVencimento);
+  if (!(f >= 1 && f <= 31)) return "O dia de fechamento do cartão vai de 1 a 31.";
+  if (!(v >= 1 && v <= 31)) return "O dia de vencimento do cartão vai de 1 a 31.";
+  return "";
+}
+
+function cartaoDoClienteNovo(campos, novoId) {
+  const c = campos || {};
+  return {
+    id: typeof novoId === "function" ? novoId() : (typeof uid === "function" ? uid() : String(Date.now())),
+    nome: String(c.nome || "").trim(),
+    bandeira: String(c.bandeira || "").trim(),
+    diaFechamento: Number(c.diaFechamento) || 1,
+    diaVencimento: Number(c.diaVencimento) || 10,
+    ativo: true,
+    doCliente: true,
+  };
 }
 
 function empreendimentosDoData(data) {
@@ -12680,6 +12715,103 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
 // escritório, e de lá já vai e volta do banco sem precisar de rota nova.
 function cartoesDoEscritorio(data) {
   return ((data || {}).escritorio || {}).cartoes || [];
+}
+
+// ── O cartão de um pagamento ────────────────────────────────────
+// Usado na baixa do contas a pagar e na Entrada. Escolhe entre os cartões
+// da obra; em obra de cliente, cadastra o cartão do cliente ali mesmo
+// (`novoCartao`), que é gravado junto com o pagamento.
+// `valor`: { cartaoId, parcelas, novoCartao: { nome, diaFechamento, diaVencimento } | null }
+function CampoCartaoDoPagamento({ cartoes, doCliente, valor, aoMudar, total, dataCompra, isMobile, estilo, dinheiro }) {
+  const v = valor || {};
+  const lista = cartoes || [];
+  const st = estilo || {};
+  const input = st.input || { border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 10, padding: "8px 11px", fontSize: 13, width: "100%", boxSizing: "border-box", fontFamily: "inherit" };
+  const label = st.label || { fontSize: 12, color: "#4b5563", fontWeight: 500, display: "block", marginBottom: 5 };
+  const moeda = dinheiro || ((x) => (typeof fmtMoedaCtr === "function" ? fmtMoedaCtr(x) : "R$ " + Number(x || 0).toFixed(2)));
+  const mudar = (m) => aoMudar({ ...v, ...m });
+  const cadastrando = !!v.novoCartao || (doCliente && !lista.length);
+  if (!doCliente && !lista.length) {
+    return (
+      <div style={{ fontSize: 11.5, color: "#b45309", marginTop: 8 }}>
+        Nenhum cartão cadastrado. Cadastre em Escritório → Cartões.
+      </div>
+    );
+  }
+  const novo = v.novoCartao || { nome: "", diaFechamento: "", diaVencimento: "" };
+  const cartao = cadastrando
+    ? { diaFechamento: Number(novo.diaFechamento) || 0, diaVencimento: Number(novo.diaVencimento) || 0 }
+    : (cartaoPorId(lista, v.cartaoId) || lista[0]);
+  const previa = cartao && cartao.diaFechamento ? parcelasDoCartao(cartao, dataCompra, total, v.parcelas) : [];
+  const link = { background: "none", border: "none", padding: 0, color: "#0474f4", cursor: "pointer", fontFamily: "inherit", fontSize: 11.5, textDecoration: "underline" };
+  return (
+    <div data-vk-cartao-pagamento="1" style={{ marginTop: 10 }}>
+      {cadastrando ? (
+        <div style={{ border: "1px solid rgba(4,116,244,0.25)", background: "#f7fbff", borderRadius: 10, padding: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#111827", marginBottom: 6 }}>Cartão do cliente</div>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "2fr 1fr 1fr 1fr", gap: 8 }}>
+            <div style={{ gridColumn: isMobile ? "1 / -1" : "auto" }}>
+              <label style={label}>Nome do cartão</label>
+              <input style={input} value={novo.nome} placeholder="ex.: Nubank do João" data-vk-cartao-nome="1"
+                onChange={(e) => mudar({ novoCartao: { ...novo, nome: e.target.value } })} />
+            </div>
+            <div>
+              <label style={label}>Fecha dia</label>
+              <input style={input} inputMode="numeric" value={novo.diaFechamento} placeholder="25" data-vk-cartao-fecha="1"
+                onChange={(e) => mudar({ novoCartao: { ...novo, diaFechamento: e.target.value.replace(/\D/g, "").slice(0, 2) } })} />
+            </div>
+            <div>
+              <label style={label}>Vence dia</label>
+              <input style={input} inputMode="numeric" value={novo.diaVencimento} placeholder="5" data-vk-cartao-vence="1"
+                onChange={(e) => mudar({ novoCartao: { ...novo, diaVencimento: e.target.value.replace(/\D/g, "").slice(0, 2) } })} />
+            </div>
+            <div>
+              <label style={label}>Parcelas</label>
+              <input style={input} inputMode="numeric" value={v.parcelas || 1}
+                onChange={(e) => mudar({ parcelas: e.target.value.replace(/\D/g, "").slice(0, 2) })} />
+            </div>
+          </div>
+          <div style={{ fontSize: 11, color: "#4b5563", marginTop: 6 }}>
+            Fica guardado nesta obra para as próximas baixas. Não é cartão do escritório.
+            {lista.length > 0 && (
+              <button type="button" style={{ ...link, marginLeft: 8 }} onClick={() => mudar({ novoCartao: null })}>usar um cartão já cadastrado</button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: 10 }}>
+            <div>
+              <label style={label}>{doCliente ? "Cartão do cliente" : "Cartão"}</label>
+              <SelectBusca style={input} value={v.cartaoId || (lista[0] || {}).id || ""}
+                onChange={(id) => mudar({ cartaoId: id })}
+                opcoes={lista.map((c) => ({ valor: c.id, rotulo: c.nome }))} />
+            </div>
+            <div>
+              <label style={label}>Parcelas</label>
+              <input style={input} inputMode="numeric" value={v.parcelas || 1}
+                onChange={(e) => mudar({ parcelas: e.target.value.replace(/\D/g, "").slice(0, 2) })} />
+            </div>
+          </div>
+          {doCliente && (
+            <button type="button" style={{ ...link, marginTop: 6 }}
+              onClick={() => mudar({ novoCartao: { nome: "", diaFechamento: "", diaVencimento: "" } })}>＋ outro cartão do cliente</button>
+          )}
+        </>
+      )}
+      {previa.length > 0 && (
+        <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8, lineHeight: 1.6 }}>
+          Vai cair {previa.length === 1 ? "na fatura de " : "nas faturas de "}
+          <b style={{ color: "#111827" }}>
+            {previa.map((p) => (typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso(p.competencia) : p.competencia) + " (" + moeda(p.valor) + ")").join(" · ")}
+          </b>
+          {doCliente
+            ? ". O custo da obra entra nesta data; a fatura é do cliente e não passa pelo escritório."
+            : ". O custo da obra é integral hoje; o extrato do escritório só recebe a fatura, quando você fechar."}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo, quem }) {
@@ -26584,14 +26716,15 @@ function cpPapeisDaConta(c) {
   const lista = (Array.isArray(x.anexos) ? x.anexos.filter(Boolean) : []);
   const todos = x.comprovante ? [x.comprovante].concat(lista) : lista;
   const vistos = new Set();
-  const r = { comprovantes: [], notas: [] };
+  const r = { comprovantes: [], notas: [], boletos: [] };
   for (const a of todos) {
     const k = (a && (a.public_id || a.url)) || "";
     if (!k || vistos.has(k)) continue;
     vistos.add(k);
     const t = a.tipo || "";
     if (t === "nota") r.notas.push(a);
-    else if (t === "boleto" || t === "pedido" || t === "proposta") continue;
+    else if (t === "boleto") r.boletos.push(a);
+    else if (t === "pedido" || t === "proposta") continue;
     else r.comprovantes.push(a);
   }
   return r;
@@ -26615,11 +26748,12 @@ function folhaDeComprovantes(contas, titulo) {
   const linhas = [...grupos.values()].map((cs) => {
     const c0 = cs[0];
     const vistos = new Set();
-    const comprovantes = [], notas = [];
+    const comprovantes = [], notas = [], boletos = [];
     for (const c of cs) {
       const p = cpPapeisDaConta(c);
       for (const a of p.comprovantes) { const k = a.public_id || a.url; if (!vistos.has(k)) { vistos.add(k); comprovantes.push(a); } }
       for (const a of p.notas) { const k = a.public_id || a.url; if (!vistos.has(k)) { vistos.add(k); notas.push(a); } }
+      for (const a of p.boletos) { const k = a.public_id || a.url; if (!vistos.has(k)) { vistos.add(k); boletos.push(a); } }
     }
     const a = comprovantes[0] || null;
     const ehPdf = cpEhPdf(a);
@@ -26633,7 +26767,7 @@ function folhaDeComprovantes(contas, titulo) {
       ? (numeroDoPedido ? `Pedido ${numeroDoPedido}` : tituloDoItem) + ` · ${cs.length} itens`
       : tituloDoItem;
     const pagoEm = cs.map((c) => c.pagoEm || "").filter(Boolean).sort()[0] || "";
-    const rotular = (x, rotulo) => ({ ...x, rotulo, ehPdf: cpEhPdf(x) });
+    const rotular = (x, rotulo, tipoDoPapel) => ({ ...x, rotulo, tipoDoPapel, ehPdf: cpEhPdf(x) });
     return {
       id: c0.id,
       contaIds: cs.map((c) => c.id),
@@ -26644,9 +26778,13 @@ function folhaDeComprovantes(contas, titulo) {
       comprovante: a,
       comprovantes,
       notas,
-      // todos os papéis da linha, na ordem em que a loja confere: o que pagou
-      // e o que ela emitiu
-      papeis: comprovantes.map((x) => rotular(x, "Comprovante")).concat(notas.map((x) => rotular(x, "Nota fiscal"))),
+      boletos,
+      // todos os papéis da linha, na ordem em que a loja confere: o que pagou,
+      // o que ela emitiu e o boleto que ela mandou cobrar. Quem exporta
+      // escolhe quais tipos vão (ver PAPEIS_DA_FOLHA).
+      papeis: comprovantes.map((x) => rotular(x, "Comprovante", "comprovante"))
+        .concat(notas.map((x) => rotular(x, "Nota fiscal", "nota")))
+        .concat(boletos.map((x) => rotular(x, "Boleto", "boleto"))),
       // PDF não dá para desenhar na folha junto das fotos: a impressão do
       // navegador não embute arquivo de outro domínio. Vai listado, com o
       // link, e a folha diz que ele é um anexo à parte.
@@ -26662,6 +26800,7 @@ function folhaDeComprovantes(contas, titulo) {
     emPdf: linhas.filter((l) => l.ehPdf).length,
     semComprovante: linhas.filter((l) => !l.comprovante).length,
     notas: linhas.reduce((t, l) => t + l.notas.length, 0),
+    boletos: linhas.reduce((t, l) => t + l.boletos.length, 0),
     periodo: {
       de: (linhas.find((l) => l.pagoEm) || {}).pagoEm || "",
       ate: (linhas.filter((l) => l.pagoEm).pop() || {}).pagoEm || "",
@@ -26673,12 +26812,25 @@ function folhaDeComprovantes(contas, titulo) {
 // Os arquivos para baixar de uma vez (o .zip que vai para a loja conferir):
 // cada papel uma vez, com nome que não se repete — o número do papel já
 // vem no nome; o que vier igual ganha (2), (3).
-function arquivosDaFolha(folha) {
+// Os tipos de papel que a folha e o zip podem levar, e o que vai marcado de
+// saída: o que a loja confere é o que foi pago e a nota que ela emitiu.
+const PAPEIS_DA_FOLHA = [
+  { id: "comprovante", nome: "Comprovantes", padrao: true },
+  { id: "nota", nome: "Notas fiscais", padrao: true },
+  { id: "boleto", nome: "Boletos", padrao: false },
+];
+
+function papelVaiNaFolha(a, tipos) {
+  if (!tipos) return true;
+  return !!tipos[(a && a.tipoDoPapel) || "comprovante"];
+}
+
+function arquivosDaFolha(folha, tipos) {
   const usados = new Map();
   const r = [];
   for (const [i, l] of ((folha || {}).linhas || []).entries()) {
     for (const a of l.papeis || []) {
-      if (!a || !a.url) continue;
+      if (!a || !a.url || !papelVaiNaFolha(a, tipos)) continue;
       let nome = String(a.nome || "").trim();
       if (!nome) nome = `${String(i + 1).padStart(2, "0")} ${a.rotulo || "papel"}${a.ehPdf ? ".pdf" : ""}`;
       nome = nome.replace(/[\\/:*?"<>|]+/g, "-");
@@ -28651,7 +28803,11 @@ function entradaUnicaPronta(e, obras, obraId) {
   const pg = d.pagamento || {}, ap = d.apagar || {};
   if (pago) {
     if (!String(pg.data || "").trim()) return { ok: false, motivo: "Informe a data do pagamento." };
-    if (pg.forma === "cartao" && !pg.cartaoId) return { ok: false, motivo: "Escolha o cartão." };
+    if (pg.forma === "cartao" && !pg.cartaoId && !pg.novoCartao) return { ok: false, motivo: "Escolha o cartão." };
+    if (pg.forma === "cartao" && pg.novoCartao && typeof validarCartaoDoCliente === "function") {
+      const e = validarCartaoDoCliente(pg.novoCartao);
+      if (e) return { ok: false, motivo: e };
+    }
   } else if (!String(ap.vencimento || "").trim()) {
     return { ok: false, motivo: Number(ap.parcelas) > 1 ? "Informe o 1º vencimento." : "Informe o vencimento." };
   }
@@ -34676,7 +34832,14 @@ function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinhe
       aoCriarLoja={criarLoja}
       aoAprender={(pares) => aprenderApelidosNoCatalogo(data, save, pares)}
       aoVerContas={contasDaObraDe} aoListarCotacoes={cotacoesDaObraDe}
-      cartoes={typeof cartoesDoEscritorio === "function" ? cartoesDoEscritorio(data) : []}
+      cartoes={(id) => {
+        const o = ((data || {}).obras || []).find((x) => x && x.id === (id || (obraPadrao || {}).id));
+        return typeof cartoesDaObra === "function" ? cartoesDaObra(data, o) : [];
+      }}
+      cartaoDoCliente={(id) => {
+        const o = ((data || {}).obras || []).find((x) => x && x.id === (id || (obraPadrao || {}).id));
+        return !!o && typeof obraEhDoEscritorio === "function" && !obraEhDoEscritorio(data, o);
+      }}
       tipoDaObra={tipoDaObra} obraPadraoId={(obraPadrao || {}).id || ""}
       aoFechar={aoFechar} aoSeguir={seguir} />
   );
@@ -34842,7 +35005,7 @@ function textoDoLancado(r, situacao, dinheiro, totalPadrao) {
 
 function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile, dinheiro,
   obras, embutido, aoCadastrarInsumo, aoCriarLoja, aoAprender, aoVerContas, aoFechar, aoSeguir, cartoes,
-  tipoDaObra, obraPadraoId, confirmacao, aoListarCotacoes }) {
+  tipoDaObra, obraPadraoId, confirmacao, aoListarCotacoes, cartaoDoCliente }) {
   const E = COT_ESTILO;
   const P = cotPainel(isMobile, 940);
   const [texto, setTexto] = useState("");
@@ -34971,11 +35134,15 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // Cartão é do escritório: só aparece em obra do escritório (empreendimento).
   // Em obra de cliente a forma é sempre à vista / transferência, mesmo que o
   // cartão tenha ficado marcado de uma obra escolhida antes.
-  const aceitaCartao = tipoObraEfetiva === "empreendimento" && (cartoes || []).length > 0;
-  const pagamentoEfetivo = aceitaCartao ? pagamento : { ...pagamento, forma: "avista", cartaoId: "" };
+  // Os cartões que pagam ESTA obra: os do escritório em obra do escritório,
+  // os do cliente em obra de cliente (e ali dá para cadastrar o do cliente).
+  const cartoesDaEntrada = typeof cartoes === "function" ? (cartoes(obraEfetivaId) || []) : (cartoes || []);
+  const doClienteNaEntrada = typeof cartaoDoCliente === "function" ? !!cartaoDoCliente(obraEfetivaId) : false;
+  const aceitaCartao = !!obraEfetivaId && (cartoesDaEntrada.length > 0 || doClienteNaEntrada);
+  const pagamentoEfetivo = aceitaCartao ? pagamento : { ...pagamento, forma: "avista", cartaoId: "", novoCartao: null };
   const faltasDoItemDaEntrada = (it) => faltasDoItemNaEntrada(it, situacao, pagamentoEfetivo);
   const previaAPagar = situacao === "apagar" ? previaDosBoletos(totalDaEntrada, apagar) : [];
-  const cartaoDaEntrada = (cartoes || []).find((c) => c && c.id === pagamento.cartaoId) || null;
+  const cartaoDaEntrada = cartoesDaEntrada.find((c) => c && c.id === pagamento.cartaoId) || null;
   const previaCartao = situacao === "pago" && pagamentoEfetivo.forma === "cartao" && cartaoDaEntrada && typeof parcelasDoCartao === "function"
     ? parcelasDoCartao(cartaoDaEntrada, pagamento.data, totalDaEntrada, pagamento.parcelas) : [];
   // As contas da obra escolhida, para achar parcela de contrato em aberto do
@@ -35354,6 +35521,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
         favorecidoId: lojaId, favorecido: fav.nome || pp.lidoComo || "", lidoComo: pp.lidoComo || "",
         valor: totalDaEntrada, pagoEm: pagamento.data, parcelaId,
         forma: pagamentoEfetivo.forma, cartaoId: pagamentoEfetivo.cartaoId, parcelas: pagamentoEfetivo.parcelas,
+        novoCartao: pagamentoEfetivo.novoCartao || null,
         comprovante: anexo, notaDeServico: pp.tipo === "nfse", numeroNota: pp.numeroNota || "" } }) || {};
     } else {
       const rateados = typeof itensRateados === "function"
@@ -35885,12 +36053,12 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                       <div>
                         <label style={E.label}>Como foi pago</label>
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          {[["avista", "À vista / transferência"], ["cartao", "Cartão de crédito"]].filter(([k]) => aceitaCartao || k !== "cartao").map(([k, r]) => {
+                          {[["avista", "À vista / transferência"], ["cartao", doClienteNaEntrada ? "Cartão do cliente" : "Cartão de crédito"]].filter(([k]) => aceitaCartao || k !== "cartao").map(([k, r]) => {
                             const on = (pagamentoEfetivo.forma || "avista") === k;
                             return (
                               <button key={k} type="button"
                                 onClick={() => setPagamento((p) => ({ ...p, forma: k,
-                                  cartaoId: k === "cartao" ? (p.cartaoId || ((cartoes || [])[0] || {}).id || "") : "",
+                                  cartaoId: k === "cartao" ? (p.cartaoId || (cartoesDaEntrada[0] || {}).id || "") : "",
                                   parcelas: p.parcelas || 1 }))}
                                 style={{ ...E.btnSec, fontSize: 12.5, borderColor: on ? "#0474f4" : "rgba(38,36,33,0.16)",
                                   fontWeight: on ? 700 : 500, color: on ? "#111827" : "#4b5563" }}>
@@ -35901,36 +36069,12 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                         </div>
                       </div>
                     </div>
-                    {pagamentoEfetivo.forma === "cartao" && (
-                      !(cartoes || []).length ? (
-                        <div style={{ fontSize: 11.5, color: "#b45309", marginTop: 8 }}>
-                          Nenhum cartão cadastrado. Cadastre em Escritório → Cartões.
-                        </div>
-                      ) : (
-                        <>
-                          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: 10, marginTop: 10 }}>
-                            <div>
-                              <label style={E.label}>Cartão</label>
-                              <SelectBusca style={E.input} value={pagamento.cartaoId || ""}
-                                onChange={(v) => setPagamento((p) => ({ ...p, cartaoId: v }))}
-                                opcoes={(cartoes || []).map((c) => ({ valor: c.id, rotulo: c.nome }))} />
-                            </div>
-                            <div>
-                              <label style={E.label}>Parcelas</label>
-                              <input style={E.input} inputMode="numeric" value={pagamento.parcelas || 1}
-                                onChange={(e) => setPagamento((p) => ({ ...p, parcelas: e.target.value.replace(/\D/g, "").slice(0, 2) }))} />
-                            </div>
-                          </div>
-                          {previaCartao.length > 0 && (
-                            <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8, lineHeight: 1.6 }}>
-                              Cai {previaCartao.length === 1 ? "na fatura de " : "nas faturas de "}
-                              <b style={{ color: "#111827" }}>
-                                {previaCartao.map((p) => (typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso(p.competencia) : p.competencia) + " (" + dinheiro(p.valor) + ")").join(" · ")}
-                              </b>. O custo da obra é integral nesta data; o escritório recebe a fatura quando você fechar.
-                            </div>
-                          )}
-                        </>
-                      )
+                    {pagamentoEfetivo.forma === "cartao" && typeof CampoCartaoDoPagamento === "function" && (
+                      <CampoCartaoDoPagamento cartoes={cartoesDaEntrada} doCliente={doClienteNaEntrada} isMobile={isMobile}
+                        valor={{ cartaoId: pagamento.cartaoId, parcelas: pagamento.parcelas, novoCartao: pagamento.novoCartao || null }}
+                        aoMudar={(m) => setPagamento((p) => ({ ...p, ...m }))}
+                        total={totalDaEntrada} dataCompra={pagamento.data} estilo={{ input: E.input, label: E.label }}
+                        dinheiro={dinheiro} />
                     )}
                     {parcelasDoFavorecido.length > 0 && (
                       <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 12,
@@ -38824,7 +38968,12 @@ const CP_COMPROV_PRINT_CSS = `
 function FolhaComprovantes({ folha, obraNome, escritorioNome, fmtBRL, aoFechar }) {
   const alvo = useRef(null);
   const [zip, setZip] = useState(null); // { fazendo, msg, erro }
-  const arquivos = typeof arquivosDaFolha === "function" ? arquivosDaFolha(folha) : [];
+  // Quais papéis vão na folha e no zip: comprovante e nota fiscal marcados,
+  // boleto desmarcado — muda com um clique antes de imprimir ou baixar.
+  const [tipos, setTipos] = useState(() => Object.fromEntries((typeof PAPEIS_DA_FOLHA !== "undefined" ? PAPEIS_DA_FOLHA : []).map(t => [t.id, t.padrao])));
+  const arquivos = typeof arquivosDaFolha === "function" ? arquivosDaFolha(folha, tipos) : [];
+  const contagem = { comprovante: folha.linhas.reduce((t, l) => t + (l.comprovantes || []).length, 0),
+    nota: folha.notas || 0, boleto: folha.boletos || 0 };
   // Todos os papéis da folha num .zip — o que vai para a loja conferir. Cada
   // arquivo é baixado do armazenamento e entra com o nome que já tem (o
   // número do papel); o que não baixar fica listado, sem travar o resto.
@@ -38904,6 +39053,16 @@ function FolhaComprovantes({ folha, obraNome, escritorioNome, fmtBRL, aoFechar }
         )}
         <button type="button" style={C.btn} onClick={() => { try { window.print(); } catch (e) {} }}>Imprimir / salvar PDF</button>
       </div>
+      <div data-vk-so-tela="1" style={{ maxWidth: 880, margin: "0 auto 12px", display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", fontSize: 12.5 }}>
+        <span style={{ color: "#6b7280" }}>Levar na folha e no zip:</span>
+        {(typeof PAPEIS_DA_FOLHA !== "undefined" ? PAPEIS_DA_FOLHA : []).map(t => (
+          <label key={t.id} data-vk-tipo-folha={t.id} style={{ display: "inline-flex", gap: 6, alignItems: "center", cursor: "pointer",
+            color: contagem[t.id] ? "#111827" : "#9ca3af" }}>
+            <input type="checkbox" checked={!!tipos[t.id]} onChange={e => { setZip(null); setTipos(x => ({ ...x, [t.id]: e.target.checked })); }} />
+            {t.nome} ({contagem[t.id] || 0})
+          </label>
+        ))}
+      </div>
       {zip && zip.msg && (
         <div data-vk-so-tela="1" style={{ maxWidth: 880, margin: "0 auto 10px", fontSize: 12, color: zip.erro ? "#b45309" : "#15803d" }}>{zip.msg}</div>
       )}
@@ -38920,7 +39079,8 @@ function FolhaComprovantes({ folha, obraNome, escritorioNome, fmtBRL, aoFechar }
             <div><div style={rotulo}>Comprovantes</div><div style={{ fontSize: 13, fontWeight: 600 }}>
               {folha.comImagem} na folha{folha.emPdf ? ` · ${folha.emPdf} em PDF` : ""}{folha.semComprovante ? ` · ${folha.semComprovante} sem` : ""}
             </div></div>
-            {folha.notas > 0 && <div><div style={rotulo}>Notas fiscais</div><div style={{ fontSize: 13, fontWeight: 600 }}>{folha.notas}</div></div>}
+            {folha.notas > 0 && tipos.nota && <div><div style={rotulo}>Notas fiscais</div><div style={{ fontSize: 13, fontWeight: 600 }}>{folha.notas}</div></div>}
+            {folha.boletos > 0 && tipos.boleto && <div><div style={rotulo}>Boletos</div><div style={{ fontSize: 13, fontWeight: 600 }}>{folha.boletos}</div></div>}
           </div>
         </div>
 
@@ -38936,12 +39096,12 @@ function FolhaComprovantes({ folha, obraNome, escritorioNome, fmtBRL, aoFechar }
                 <div style={{ fontSize: 11.5, color: "#4b5563" }}>pago em {dataBR(l.pagoEm)}</div>
               </div>
             </div>
-            {!l.comprovante && (
+            {!l.comprovante && tipos.comprovante && (
               <div style={{ fontSize: 11.5, color: "#b45309", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
                 Sem comprovante anexado.
               </div>
             )}
-            {(l.papeis || []).map((a, k) => a.ehPdf ? (
+            {(l.papeis || []).filter(a => typeof papelVaiNaFolha !== "function" || papelVaiNaFolha(a, tipos)).map((a, k) => a.ehPdf ? (
               <div key={(a.public_id || a.url) + k} style={{ fontSize: 11.5, color: "#4b5563", background: "#fafafa", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
                 {a.rotulo} em PDF ({a.nome || "arquivo"}) — vai como anexo à parte (está no zip), o navegador não o imprime junto das fotos.
               </div>
@@ -39977,7 +40137,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
   // Toda escrita de contas da obra passa aqui — baixa de pedido, baixa em
   // lote, baixa avulsa e o que vier depois caíram todos nesta porta.
-  const gravarContas = (novasContas, obraId) => {
+  // `extra`: outros campos da mesma obra que vão na MESMA gravação (o cartão
+  // do cliente cadastrado na baixa). Gravar em duas vezes faria a segunda
+  // partir do retrato antigo e apagar a primeira.
+  const gravarContas = (novasContas, obraId, extra) => {
     const alvo = obraId || (obraSelecionada && obraSelecionada.id);
     if (!alvo) return;
     // O número do papel nasce na baixa: a transação que acabou de ser paga
@@ -39991,7 +40154,22 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       const lancs = typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : [];
       contasFinais = numerarPapeisDasPagas(novasContas, proximoNumeroDePapel(obras, lancs), agora).contas;
     }
-    gravarObras(obras.map(o => o.id === alvo ? { ...o, contasPagar: contasFinais } : o));
+    gravarObras(obras.map(o => o.id === alvo ? { ...o, ...(extra || {}), contasPagar: contasFinais } : o));
+  };
+  // O cartão de um pagamento: um dos cartões da obra (os do escritório, se a
+  // obra é do escritório; os do cliente, se é de cliente) ou o cartão do
+  // cliente digitado na própria baixa — que vai gravado junto.
+  const cartaoDoPagamento = (forma, cartaoId, novo) => {
+    if (forma !== "cartao") return { cartao: null, extra: null };
+    const lista = cartoesDaObra(data, obraAtual);
+    if (novo && obraAtual && !obraEhDoEscritorio(data, obraAtual)) {
+      const erro = validarCartaoDoCliente(novo);
+      if (erro) return { erro };
+      const c = cartaoDoClienteNovo(novo, uid);
+      return { cartao: c, extra: { cartoes: [...(obraAtual.cartoes || []), c] } };
+    }
+    const c = cartaoPorId(lista, cartaoId) || (lista.length === 1 ? lista[0] : null);
+    return c ? { cartao: c, extra: null } : { erro: "Escolha o cartão." };
   };
   // Contas geradas por uma versão antiga das regras de vencimento (ex.: as
   // mensais que andavam de 30 em 30 dias, escorregando o dia do mês) se
@@ -40201,7 +40379,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // O cartão não muda a data nem o valor da baixa — muda só POR ONDE o
     // dinheiro sai. O plano de parcelas fica gravado na conta, e é por ele
     // que a fatura encontra esta compra depois.
-    const cartao = f.forma === "cartao" ? cartaoPorId(cartoesDaObra(data, obraAtual), f.cartaoId) : null;
+    const rc = cartaoDoPagamento(f.forma, f.cartaoId, f.novoCartao);
+    if (rc.erro) { dialogo.alertar({ titulo: rc.erro, tipo: "aviso" }); return; }
+    const cartao = rc.cartao;
     const noCartao = (conta, valor) => {
       if (!cartao) return { ...conta, formaPagamento: "avista" };
       const p = pagamentoNoCartao(conta, cartao, { pagoEm: f.dataContab, valorPago: valor, parcelas: f.parcelas });
@@ -40212,7 +40392,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         { pagoEm: f.dataContab, comprovante: f.comprovante || null }, quemSou());
       const alvo = new Set((f.pedido.contas || []).map(c => c.id));
       gravarContas(r.contas.map(c => (alvo.has(c.id) ? noCartao(c, Number(c.valorPago) || Number(c.valor) || 0) : c)),
-        f.pedido.obraId);
+        f.pedido.obraId, rc.extra);
       setFormPagamento(null);
       return;
     }
@@ -40220,7 +40400,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const atualizada = noCartao(
       contaPaga(f.conta, { pagoEm: f.dataContab, valorPago: valor, comprovante: f.comprovante || null }, quemSou()),
       valor);
-    gravarContas(contasDaObra.map(c => c.id === f.conta.id ? atualizada : c), f.conta.obraId);
+    gravarContas(contasDaObra.map(c => c.id === f.conta.id ? atualizada : c), f.conta.obraId, rc.extra);
     setFormPagamento(null);
   };
   // Recalibrar: muda a data do primeiro pagamento do contrato e reescreve as
@@ -42049,59 +42229,44 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   escritório — quem atravessa é a fatura, fechada por você. O
                   custo da obra, esse sim, é integral na data de hoje: o
                   material entrou na obra agora, parcelar é decisão de caixa. */}
-              {cartoesDaObra(data, obraAtual).length > 0 && (
-                <div style={{ marginTop: 14, borderTop: "1px solid rgba(38,36,33,0.1)", paddingTop: 12 }}>
-                  <label style={C.label}>Como foi pago</label>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-                    {[["avista", "À vista / transferência"], ["cartao", "Cartão de crédito"]].map(([k, r]) => (
-                      <button key={k} type="button"
-                        onClick={() => setFormPagamento({ ...formPagamento, forma: k,
-                          cartaoId: k === "cartao" ? (formPagamento.cartaoId || (cartoesDaObra(data, obraAtual)[0] || {}).id || "") : "",
-                          parcelas: formPagamento.parcelas || 1 })}
-                        style={{ ...C.btnSec, fontSize: 12.5,
-                          borderColor: (formPagamento.forma || "avista") === k ? AZUL_VK : "rgba(38,36,33,0.16)",
-                          color: (formPagamento.forma || "avista") === k ? "#111827" : "#4b5563",
-                          fontWeight: (formPagamento.forma || "avista") === k ? 700 : 500 }}>
-                        {r}
-                      </button>
-                    ))}
+              {/* Obra do escritório paga com cartão do escritório; obra de
+                  cliente, com o cartão do cliente — cadastrado aqui mesmo,
+                  na primeira vez. Cartão do escritório nunca aparece em
+                  obra de cliente. */}
+              {(() => {
+                const cartoesAqui = cartoesDaObra(data, obraAtual);
+                const doCliente = !!obraAtual && !obraEhDoEscritorio(data, obraAtual);
+                if (!doCliente && !cartoesAqui.length) return null;
+                const total = formPagamento.pedido
+                  ? Number(formPagamento.pedido.aberto) || 0
+                  : (numeroDeCampo(formPagamento.valorPago) || Number((formPagamento.conta || {}).valor) || 0);
+                return (
+                  <div style={{ marginTop: 14, borderTop: "1px solid rgba(38,36,33,0.1)", paddingTop: 12 }}>
+                    <label style={C.label}>Como foi pago</label>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+                      {[["avista", "À vista / transferência"], ["cartao", doCliente ? "Cartão do cliente" : "Cartão de crédito"]].map(([k, r]) => (
+                        <button key={k} type="button" data-vk-forma-pagamento={k}
+                          onClick={() => setFormPagamento({ ...formPagamento, forma: k,
+                            cartaoId: k === "cartao" ? (formPagamento.cartaoId || (cartoesAqui[0] || {}).id || "") : "",
+                            parcelas: formPagamento.parcelas || 1 })}
+                          style={{ ...C.btnSec, fontSize: 12.5,
+                            borderColor: (formPagamento.forma || "avista") === k ? AZUL_VK : "rgba(38,36,33,0.16)",
+                            color: (formPagamento.forma || "avista") === k ? "#111827" : "#4b5563",
+                            fontWeight: (formPagamento.forma || "avista") === k ? 700 : 500 }}>
+                          {r}
+                        </button>
+                      ))}
+                    </div>
+                    {formPagamento.forma === "cartao" && (
+                      <CampoCartaoDoPagamento cartoes={cartoesAqui} doCliente={doCliente} isMobile={isMobile}
+                        valor={{ cartaoId: formPagamento.cartaoId, parcelas: formPagamento.parcelas, novoCartao: formPagamento.novoCartao || null }}
+                        aoMudar={(m) => setFormPagamento(f => f && ({ ...f, ...m }))}
+                        total={total} dataCompra={formPagamento.dataContab} estilo={{ input: C.input, label: C.label }}
+                        dinheiro={fmtMoedaCtr} />
+                    )}
                   </div>
-                  {formPagamento.forma === "cartao" && (() => {
-                    const cartao = cartaoPorId(cartoesDaObra(data, obraAtual), formPagamento.cartaoId) || cartoesDaObra(data, obraAtual)[0];
-                    const total = formPagamento.pedido
-                      ? Number(formPagamento.pedido.aberto) || 0
-                      : (numeroDeCampo(formPagamento.valorPago) || Number((formPagamento.conta || {}).valor) || 0);
-                    const parcelas = parcelasDoCartao(cartao, formPagamento.dataContab, total, formPagamento.parcelas);
-                    return (
-                      <>
-                        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: 12 }}>
-                          <div>
-                            <label style={C.label}>Cartão</label>
-                            <SelectBusca style={C.input} value={formPagamento.cartaoId || (cartao || {}).id || ""}
-                              onChange={(v) => setFormPagamento({ ...formPagamento, cartaoId: v })}
-                              opcoes={cartoesDaObra(data, obraAtual).map(c => ({ valor: c.id, rotulo: c.nome }))} />
-                          </div>
-                          <div>
-                            <label style={C.label}>Parcelas</label>
-                            <input style={C.input} inputMode="numeric" value={formPagamento.parcelas || 1}
-                              onChange={e => setFormPagamento({ ...formPagamento, parcelas: e.target.value })} />
-                          </div>
-                        </div>
-                        {parcelas.length > 0 && (
-                          <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8, lineHeight: 1.6 }}>
-                            Vai cair {parcelas.length === 1 ? "na fatura de " : "nas faturas de "}
-                            <b style={{ color: "#111827" }}>
-                              {parcelas.map(p => (typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso : (x) => x)(p.competencia) + " (" + fmtMoedaCtr(p.valor) + ")").join(" · ")}
-                            </b>
-                            . O custo da obra é integral hoje; o extrato do escritório só recebe a fatura, quando
-                            você fechar.
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
+                );
+              })()}
 
               <BotaoCopiarPix pix={pixDoPagamento(
                 formPagamento.pedido || formPagamento.conta,
@@ -42935,14 +43100,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       return { erro: `${ja.por === "chave" ? "Essa nota (mesma chave)" : "Esse Pix (mesmo ID)"} já está lançado ${ondeJa}${ja.ref ? ` — ref ${ja.ref}` : ""}.` };
     }
     const pg = (l || {}).pagamento || {};
-    const cartao = l.situacao === "pago" && pg.forma === "cartao"
-      ? cartaoPorId(cartoesDaObra(data, obraAtual), pg.cartaoId) : null;
-    if (l.situacao === "pago" && pg.forma === "cartao" && !cartao) return { erro: "Escolha o cartão." };
+    const rcE = l.situacao === "pago" ? cartaoDoPagamento(pg.forma, pg.cartaoId, pg.novoCartao) : { cartao: null, extra: null };
+    if (rcE.erro) return { erro: rcE.erro };
+    const cartao = rcE.cartao;
     const numeroDoc = typeof proximaReferencia === "function" ? proximaReferencia(obras, lancamentosDoEscritorio(data)) : "";
     const novas = contasDaEntrada(l, { obraId: obraAtual.id, numeroDoc, quem: quemSou(), novoId: uid,
       anexo, cartao, planoDoCartao: pagamentoNoCartao });
     if (!novas.length) return { erro: "Nenhum item com valor." };
-    gravarContas([...contas, ...novas], obraAtual.id);
+    gravarContas([...contas, ...novas], obraAtual.id, rcE.extra);
     return { gravado: true, quantas: novas.length, ref: numeroDoc,
       valor: Math.round(novas.reduce((t, c) => t + (Number(c.valor) || 0), 0) * 100) / 100 };
   }
@@ -43029,13 +43194,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       const alvo = contas.find(c => c && c.id === d.parcelaId);
       if (!alvo) return { erro: "Não achei essa parcela — ela pode ter sido baixada por outro caminho." };
       if (alvo.pago) return { erro: "Essa parcela já está baixada." };
-      const cartaoP = d.forma === "cartao" ? cartaoPorId(cartoesDaObra(data, obraAtual), d.cartaoId) : null;
+      const rcP = cartaoDoPagamento(d.forma, d.cartaoId, d.novoCartao);
+      if (rcP.erro) return { erro: rcP.erro };
+      const cartaoP = rcP.cartao;
       let pagaP = { ...contaPaga(alvo, baixa, quem), formaPagamento: cartaoP ? "cartao" : "avista" };
       if (cartaoP) {
         const plano = pagamentoNoCartao(pagaP, cartaoP, { pagoEm: d.pagoEm, valorPago: valor, parcelas: d.parcelas });
         if (plano) pagaP = { ...pagaP, ...plano };
       }
-      gravarContas(contas.map(c => c.id === alvo.id ? pagaP : c), obraAtual.id);
+      gravarContas(contas.map(c => c.id === alvo.id ? pagaP : c), obraAtual.id, rcP.extra);
       return { gravado: true, parcela: true, favorecido: alvo.favorecido || d.favorecido || "" };
     }
 
@@ -43059,13 +43226,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // Como o dinheiro saiu. No cartão o custo da obra fica nesta data, mas o
     // plano de parcelas vai junto — é por ele que a fatura acha a compra, e
     // é ele que impede a ponte de mandar a compra para o escritório agora.
-    const cartao = d.forma === "cartao" ? cartaoPorId(cartoesDaObra(data, obraAtual), d.cartaoId) : null;
+    const rcD = cartaoDoPagamento(d.forma, d.cartaoId, d.novoCartao);
+    if (rcD.erro) return { erro: rcD.erro };
+    const cartao = rcD.cartao;
     let paga = { ...contaPaga(nova, baixa, quem), formaPagamento: cartao ? "cartao" : "avista" };
     if (cartao) {
       const plano = pagamentoNoCartao(paga, cartao, { pagoEm: d.pagoEm, valorPago: valor, parcelas: d.parcelas });
       if (plano) paga = { ...paga, ...plano };
     }
-    gravarContas(contas.concat([paga]), obraAtual.id);
+    gravarContas(contas.concat([paga]), obraAtual.id, rcD.extra);
     return { gravado: true, contaId: nova.id, favorecido: d.favorecido || "", cartao: !!cartao };
   }
 

@@ -50,7 +50,7 @@ const modulo = new Function(`
            linhaFinalExtrato, fechoEstimativaPL, plDaObra, progressoCusto,
            prestadoresDoPL, CONTAS_PRESTADOR_EXTRA,
            aneisDosGrupos, visaoUsaAnel, VISOES_CONTAS_EM_ANEL,
-           removerOrfasDeContrato, assinaturaContas, folhaDeComprovantes, arquivosDaFolha, cpPapeisDaConta,
+           removerOrfasDeContrato, assinaturaContas, folhaDeComprovantes, arquivosDaFolha, cpPapeisDaConta, PAPEIS_DA_FOLHA,
            recalibrarContrato, previaRecalibragem, primeiroVencimentoContrato,
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
@@ -3013,6 +3013,19 @@ teste("arquivos da folha: nome repetido não sobrescreve outro no zip", () => {
     { id: "1", pago: true, valor: 10, pagoEm: "2026-01-01", comprovante: a },
     { id: "2", pago: true, valor: 20, pagoEm: "2026-01-02", comprovante: b }], "Loja");
   assert.deepStrictEqual(modulo.arquivosDaFolha(f).map((x) => x.nome), ["comprovante.png", "comprovante (2).png"]);
+});
+
+teste("exportar: quem exporta escolhe comprovante, nota fiscal e boleto", () => {
+  const pix = { url: "u-pix", public_id: "pix", nome: "4230.png" };
+  const nf = { url: "u-nf", public_id: "nf", nome: "4230-2.pdf", formato: "pdf", tipo: "nota" };
+  const bol = { url: "u-bol", public_id: "bol", nome: "4230-3.pdf", formato: "pdf", tipo: "boleto" };
+  const f = modulo.folhaDeComprovantes([{ id: "1", pago: true, valor: 50, pagoEm: "2026-11-01", anexos: [pix, nf, bol] }], "Loja");
+  assert.deepStrictEqual(f.linhas[0].papeis.map((a) => a.tipoDoPapel), ["comprovante", "nota", "boleto"]);
+  assert.strictEqual(f.boletos, 1);
+  const padrao = Object.fromEntries(modulo.PAPEIS_DA_FOLHA.map((t) => [t.id, t.padrao]));
+  assert.deepStrictEqual(modulo.arquivosDaFolha(f, padrao).map((a) => a.nome), ["4230.png", "4230-2.pdf"], "boleto vai desmarcado");
+  assert.deepStrictEqual(modulo.arquivosDaFolha(f, { comprovante: false, nota: true, boleto: true }).map((a) => a.nome), ["4230-2.pdf", "4230-3.pdf"]);
+  assert.strictEqual(modulo.arquivosDaFolha(f).length, 3, "sem escolha, vai tudo");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

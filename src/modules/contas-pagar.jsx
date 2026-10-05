@@ -3337,14 +3337,15 @@ function cpPapeisDaConta(c) {
   const lista = (Array.isArray(x.anexos) ? x.anexos.filter(Boolean) : []);
   const todos = x.comprovante ? [x.comprovante].concat(lista) : lista;
   const vistos = new Set();
-  const r = { comprovantes: [], notas: [] };
+  const r = { comprovantes: [], notas: [], boletos: [] };
   for (const a of todos) {
     const k = (a && (a.public_id || a.url)) || "";
     if (!k || vistos.has(k)) continue;
     vistos.add(k);
     const t = a.tipo || "";
     if (t === "nota") r.notas.push(a);
-    else if (t === "boleto" || t === "pedido" || t === "proposta") continue;
+    else if (t === "boleto") r.boletos.push(a);
+    else if (t === "pedido" || t === "proposta") continue;
     else r.comprovantes.push(a);
   }
   return r;
@@ -3368,11 +3369,12 @@ function folhaDeComprovantes(contas, titulo) {
   const linhas = [...grupos.values()].map((cs) => {
     const c0 = cs[0];
     const vistos = new Set();
-    const comprovantes = [], notas = [];
+    const comprovantes = [], notas = [], boletos = [];
     for (const c of cs) {
       const p = cpPapeisDaConta(c);
       for (const a of p.comprovantes) { const k = a.public_id || a.url; if (!vistos.has(k)) { vistos.add(k); comprovantes.push(a); } }
       for (const a of p.notas) { const k = a.public_id || a.url; if (!vistos.has(k)) { vistos.add(k); notas.push(a); } }
+      for (const a of p.boletos) { const k = a.public_id || a.url; if (!vistos.has(k)) { vistos.add(k); boletos.push(a); } }
     }
     const a = comprovantes[0] || null;
     const ehPdf = cpEhPdf(a);
@@ -3386,7 +3388,7 @@ function folhaDeComprovantes(contas, titulo) {
       ? (numeroDoPedido ? `Pedido ${numeroDoPedido}` : tituloDoItem) + ` · ${cs.length} itens`
       : tituloDoItem;
     const pagoEm = cs.map((c) => c.pagoEm || "").filter(Boolean).sort()[0] || "";
-    const rotular = (x, rotulo) => ({ ...x, rotulo, ehPdf: cpEhPdf(x) });
+    const rotular = (x, rotulo, tipoDoPapel) => ({ ...x, rotulo, tipoDoPapel, ehPdf: cpEhPdf(x) });
     return {
       id: c0.id,
       contaIds: cs.map((c) => c.id),
@@ -3397,9 +3399,13 @@ function folhaDeComprovantes(contas, titulo) {
       comprovante: a,
       comprovantes,
       notas,
-      // todos os papéis da linha, na ordem em que a loja confere: o que pagou
-      // e o que ela emitiu
-      papeis: comprovantes.map((x) => rotular(x, "Comprovante")).concat(notas.map((x) => rotular(x, "Nota fiscal"))),
+      boletos,
+      // todos os papéis da linha, na ordem em que a loja confere: o que pagou,
+      // o que ela emitiu e o boleto que ela mandou cobrar. Quem exporta
+      // escolhe quais tipos vão (ver PAPEIS_DA_FOLHA).
+      papeis: comprovantes.map((x) => rotular(x, "Comprovante", "comprovante"))
+        .concat(notas.map((x) => rotular(x, "Nota fiscal", "nota")))
+        .concat(boletos.map((x) => rotular(x, "Boleto", "boleto"))),
       // PDF não dá para desenhar na folha junto das fotos: a impressão do
       // navegador não embute arquivo de outro domínio. Vai listado, com o
       // link, e a folha diz que ele é um anexo à parte.
@@ -3415,6 +3421,7 @@ function folhaDeComprovantes(contas, titulo) {
     emPdf: linhas.filter((l) => l.ehPdf).length,
     semComprovante: linhas.filter((l) => !l.comprovante).length,
     notas: linhas.reduce((t, l) => t + l.notas.length, 0),
+    boletos: linhas.reduce((t, l) => t + l.boletos.length, 0),
     periodo: {
       de: (linhas.find((l) => l.pagoEm) || {}).pagoEm || "",
       ate: (linhas.filter((l) => l.pagoEm).pop() || {}).pagoEm || "",
@@ -3426,12 +3433,25 @@ function folhaDeComprovantes(contas, titulo) {
 // Os arquivos para baixar de uma vez (o .zip que vai para a loja conferir):
 // cada papel uma vez, com nome que não se repete — o número do papel já
 // vem no nome; o que vier igual ganha (2), (3).
-function arquivosDaFolha(folha) {
+// Os tipos de papel que a folha e o zip podem levar, e o que vai marcado de
+// saída: o que a loja confere é o que foi pago e a nota que ela emitiu.
+const PAPEIS_DA_FOLHA = [
+  { id: "comprovante", nome: "Comprovantes", padrao: true },
+  { id: "nota", nome: "Notas fiscais", padrao: true },
+  { id: "boleto", nome: "Boletos", padrao: false },
+];
+
+function papelVaiNaFolha(a, tipos) {
+  if (!tipos) return true;
+  return !!tipos[(a && a.tipoDoPapel) || "comprovante"];
+}
+
+function arquivosDaFolha(folha, tipos) {
   const usados = new Map();
   const r = [];
   for (const [i, l] of ((folha || {}).linhas || []).entries()) {
     for (const a of l.papeis || []) {
-      if (!a || !a.url) continue;
+      if (!a || !a.url || !papelVaiNaFolha(a, tipos)) continue;
       let nome = String(a.nome || "").trim();
       if (!nome) nome = `${String(i + 1).padStart(2, "0")} ${a.rotulo || "papel"}${a.ehPdf ? ".pdf" : ""}`;
       nome = nome.replace(/[\\/:*?"<>|]+/g, "-");

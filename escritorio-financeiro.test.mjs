@@ -25,7 +25,7 @@ const M = new Function(src + `
            detectarColunasTabela, movimentosDaTabela, conciliarExtrato, efEhMovimento,
            lancamentoDoExtrato, efValorDeTexto, efEhData, efLinhaDoCabecalho,
            layoutsDoEscritorio, layoutSalvo,
-           ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra,
+           ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
            fontesDasContasPagas,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
@@ -1700,6 +1700,20 @@ teste("cartão do escritório só aparece em obra do escritório (empreendimento
   assert.deepStrictEqual(M.cartoesDaObra(data, { id: "o1", clienteId: "c1" }), [], "obra de cliente paga com o dinheiro do cliente");
   assert.deepStrictEqual(M.cartoesDaObra(data, { id: "o2", clienteId: "e1" }).map((c) => c.id), ["k1"]);
   assert.deepStrictEqual(M.cartoesDaObra(data, null), []);
+});
+
+teste("cliente paga com o cartão DELE, cadastrado na obra — nunca com o do escritório", () => {
+  const data = { clientes: [{ id: "c1" }, { id: "e1", servicos: { empreendimento: true } }],
+    escritorio: { cartoes: [{ id: "k1", nome: "Sicoob" }] } };
+  const obraCli = { id: "o1", clienteId: "c1", cartoes: [{ id: "kc", nome: "Nubank do João", diaFechamento: 3, diaVencimento: 10, doCliente: true }] };
+  assert.deepStrictEqual(M.cartoesDaObra(data, obraCli).map((c) => c.id), ["kc"]);
+  assert.strictEqual(M.obraEhDoEscritorio(data, obraCli), false);
+  assert.strictEqual(M.obraEhDoEscritorio(data, { clienteId: "e1" }), true);
+  assert.ok(M.validarCartaoDoCliente({ nome: "", diaFechamento: 3, diaVencimento: 10 }));
+  assert.ok(M.validarCartaoDoCliente({ nome: "X", diaFechamento: 40, diaVencimento: 10 }));
+  assert.strictEqual(M.validarCartaoDoCliente({ nome: "Nubank", diaFechamento: "3", diaVencimento: "10" }), "");
+  const novo = M.cartaoDoClienteNovo({ nome: " Nubank ", diaFechamento: "3", diaVencimento: "10" }, () => "kn");
+  assert.deepStrictEqual([novo.id, novo.nome, novo.diaFechamento, novo.diaVencimento, novo.doCliente], ["kn", "Nubank", 3, 10, true]);
 });
 
 for (const [nome, fn] of testes) {
