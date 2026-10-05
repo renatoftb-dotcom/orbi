@@ -1565,7 +1565,7 @@ export default function ModuloClientesFornecedores() {
       { k:"projetos:etapas",     icon:"projetos-andamento",  label:"Em Andamento" },
     ]},
     { k:"obras",       icon:"obras",      label:"Obras" },
-    { k:"fornecedores", icon:"prestadores", label:"Prestadores de Serviços" },
+    { k:"fornecedores", icon:"prestadores", label:"Fornecedores" },
     { k:"insumos",     icon:"insumos",    label:"Insumos", count: data?.materiais?.length },
     ...(waPiloto ? [{ k:"whatsapp-piloto", icon:"whatsapp", label:"WhatsApp (teste)" }] : []),
     // O Financeiro voltou como módulo Escritório, no fim deste menu.

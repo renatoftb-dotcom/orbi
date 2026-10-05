@@ -4606,7 +4606,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, marginBottom: 14, background: "#fafafa" }}>
             <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", marginBottom: 3 }}>Novo prestador de serviço</div>
             <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 10 }}>
-              Só o nome é obrigatório — o resto dá para completar depois em Prestadores de Serviços. Estes são os mesmos campos do contrato, então quem cadastra aqui já serve de contratado.
+              Só o nome é obrigatório — o resto dá para completar depois em Fornecedores. Estes são os mesmos campos do contrato, então quem cadastra aqui já serve de contratado.
             </div>
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1.2fr", gap: 12, marginBottom: 12 }}>
               <div><label style={E.label}>Nome / razão social *</label>
@@ -5713,7 +5713,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   <div style={{ ...cotPainel(isMobile).rolagem, border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10 }}>
                     {!lojas.length ? (
                       <div style={{ padding: "12px 14px", fontSize: 12.5, color: "#4b5563" }}>
-                        Nenhum fornecedor com esse nome. Cadastre em Prestadores de Serviços, com o telefone.
+                        Nenhum fornecedor com esse nome. Cadastre em Fornecedores, com o telefone.
                       </div>
                     ) : lojas.map(({ fornecedor: f, envio, jaCotou, link }) => (
                       <label key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
@@ -7939,7 +7939,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                     borderRadius: 12, background: "#fff" }}>
                     {!lojasDaLista.length ? (
                       <div style={{ padding: "12px 14px", fontSize: 12.5, color: "#4b5563" }}>
-                        Nenhum fornecedor com esse nome. Cadastre em Prestadores de Serviços, com o telefone.
+                        Nenhum fornecedor com esse nome. Cadastre em Fornecedores, com o telefone.
                       </div>
                     ) : lojasDaLista.map((f) => {
                       const temZap = !!linkWhatsApp(f.telefone, "");
@@ -9444,7 +9444,7 @@ function CadastroRapidoDePrestador({ form, aoMudar, erro, aoSalvar, aoCancelar, 
       </div>
       <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>
         Só o nome é obrigatório. Sem telefone, o cadastro existe mas não recebe a lista
-        pelo WhatsApp — o resto se completa depois em Prestadores de Serviços.
+        pelo WhatsApp — o resto se completa depois em Fornecedores.
       </div>
       {erro && <div style={{ fontSize: 11.5, color: "#dc2626", marginTop: 6 }}>{erro}</div>}
       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>

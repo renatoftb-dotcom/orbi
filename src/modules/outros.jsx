@@ -1063,6 +1063,28 @@ const CATEGORIAS_PRESTADOR = [
   "Terraplanagem", "Outro",
 ];
 
+// As categorias que existem: as de fábrica e as que já foram criadas no
+// cadastro. Categoria nova não precisa de lista à parte — passa a existir
+// quando o primeiro fornecedor é salvo com ela. "Outro" fica sempre no fim.
+function categoriasDePrestador(fornecedores, extra) {
+  const chave = (s) => String(s || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const lista = CATEGORIAS_PRESTADOR.filter((c) => c !== "Outro");
+  const vistos = new Set(lista.map(chave));
+  vistos.add("outro");
+  for (const c of (fornecedores || []).map((f) => f && f.categoria).concat([extra])) {
+    const t = String(c || "").trim();
+    if (t && !vistos.has(chave(t))) { vistos.add(chave(t)); lista.push(t); }
+  }
+  return lista.sort((a, b) => a.localeCompare(b, "pt-BR")).concat(["Outro"]);
+}
+
+// O nome que a pessoa digitou, com a primeira letra maiúscula — "vidraceiro"
+// e "Vidraceiro" não podem virar duas categorias.
+function nomeDeCategoria(texto) {
+  const t = String(texto || "").trim().replace(/\s+/g, " ");
+  return t ? t.charAt(0).toLocaleUpperCase("pt-BR") + t.slice(1) : "";
+}
+
 // Paleta oficial do Vicke (grafite + cobre) — ver memória "vicke_paleta_cores".
 const PS = {
   input:  { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:12, padding:"9px 12px", fontSize:13, color:"#111827", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
@@ -1086,16 +1108,27 @@ function PrestadoresServico({ data, save }) {
     pixTipo:"cnpj", pixChave:"", pixBeneficiario:"",
   };
   const [form, setForm] = useState(emptyPrestador);
+  // Categoria nova sem nome digitado na busca: abre um campo para escrever.
+  const [novaCategoria, setNovaCategoria] = useState(null);
 
   const prestadores = data.fornecedores || [];
+  const categorias = categoriasDePrestador(prestadores, form.categoria);
+  function criarCategoria(texto) {
+    const nome = nomeDeCategoria(texto);
+    if (!nome) { setNovaCategoria(""); return; }
+    // Já existe com outra grafia? É ela.
+    const igual = categorias.find((c) => c.toLowerCase() === nome.toLowerCase());
+    setForm((f) => ({ ...f, categoria: igual || nome }));
+    setNovaCategoria(null);
+  }
   const filtrados = prestadores.filter(p => {
     const matchBusca = p.nome.toLowerCase().includes(busca.toLowerCase());
     const matchCategoria = !filtroCategoria || p.categoria === filtroCategoria;
     return matchBusca && matchCategoria;
   });
 
-  function openNew() { setForm(emptyPrestador); setView("form"); }
-  function openEdit(p) { setForm(p); setView("form"); }
+  function openNew() { setForm(emptyPrestador); setNovaCategoria(null); setView("form"); }
+  function openEdit(p) { setForm(p); setNovaCategoria(null); setView("form"); }
 
   function salvar(e) {
     e.preventDefault();
@@ -1108,7 +1141,7 @@ function PrestadoresServico({ data, save }) {
   }
 
   async function remover(id) {
-    const ok = await dialogo.confirmar({ titulo: "Remover prestador?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true });
+    const ok = await dialogo.confirmar({ titulo: "Remover fornecedor?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true });
     if (!ok) return;
     save({ ...data, fornecedores: prestadores.filter(p => p.id !== id) });
   }
@@ -1134,23 +1167,23 @@ function PrestadoresServico({ data, save }) {
     <div style={{ padding:"28px 32px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <div>
-          <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Prestadores de Serviços</h2>
+          <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Fornecedores</h2>
           <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>{prestadores.length} cadastrado{prestadores.length !== 1 ? "s" : ""}</div>
         </div>
-        <button style={PS.btn} onClick={openNew}>+ Novo prestador</button>
+        <button style={PS.btn} onClick={openNew}>+ Novo fornecedor</button>
       </div>
 
       <div style={{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap" }}>
         <input style={{ ...PS.input, maxWidth:280 }} placeholder="Buscar por nome..." value={busca} onChange={e=>setBusca(e.target.value)} />
         <Selecao style={{ ...PS.input, maxWidth:220, cursor:"pointer" }} value={filtroCategoria} onChange={e=>setFiltroCategoria(e.target.value)}>
           <option value="">Todas as categorias</option>
-          {CATEGORIAS_PRESTADOR.map(c => <option key={c} value={c}>{c}</option>)}
+          {categoriasDePrestador(prestadores).map(c => <option key={c} value={c}>{c}</option>)}
         </Selecao>
       </div>
 
       {filtrados.length === 0 ? (
         <div style={{ padding:"40px 20px", textAlign:"center", color:"#4b5563", fontSize:13, border:"1px dashed rgba(38,36,33,0.18)", borderRadius:16, background:"#fafafa" }}>
-          {prestadores.length === 0 ? "Nenhum prestador cadastrado." : "Nenhum resultado para essa busca."}{" "}
+          {prestadores.length === 0 ? "Nenhum fornecedor cadastrado." : "Nenhum resultado para essa busca."}{" "}
           {prestadores.length === 0 && <button onClick={openNew} style={{ background:"transparent", border:"none", color:"#0474f4", cursor:"pointer", padding:0, fontSize:13, fontFamily:"inherit", textDecoration:"underline" }}>Cadastrar o primeiro</button>}
         </div>
       ) : (
@@ -1190,7 +1223,7 @@ function PrestadoresServico({ data, save }) {
     <div style={{ padding:"28px 32px", maxWidth:560, fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:24 }}>
         <button style={PS.btnGhost} onClick={()=>setView("list")}>← Voltar</button>
-        <div style={{ fontSize:17, fontWeight:700, color:"#111827" }}>{form.id ? "Editar prestador" : "Novo prestador"}</div>
+        <div style={{ fontSize:17, fontWeight:700, color:"#111827" }}>{form.id ? "Editar fornecedor" : "Novo fornecedor"}</div>
       </div>
       <form onSubmit={salvar}>
         <div style={{ marginBottom:14 }}>
@@ -1209,9 +1242,21 @@ function PrestadoresServico({ data, save }) {
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
           <div>
             <label style={PS.label}>Categoria</label>
-            <Selecao style={{ ...PS.input, cursor:"pointer" }} value={form.categoria} onChange={e=>setForm({...form,categoria:e.target.value})}>
-              {CATEGORIAS_PRESTADOR.map(c => <option key={c} value={c}>{c}</option>)}
-            </Selecao>
+            <SelectBusca style={{ ...PS.input, cursor:"pointer" }} value={form.categoria}
+              onChange={v=>{ setForm({...form,categoria:v}); setNovaCategoria(null); }}
+              placeholder="Procurar categoria…" criarRotulo="nova categoria" aoCriar={criarCategoria}
+              opcoes={categorias.map(c => ({ valor:c, rotulo:c }))} />
+            {novaCategoria !== null && (
+              <div style={{ display:"flex", gap:6, marginTop:6 }}>
+                <input style={{ ...PS.input, padding:"7px 10px" }} value={novaCategoria} autoFocus
+                  placeholder="Nome da categoria" data-vk-nova-categoria="1"
+                  onChange={e=>setNovaCategoria(e.target.value)}
+                  onKeyDown={e=>{ if (e.key === "Enter") { e.preventDefault(); criarCategoria(novaCategoria); }
+                    if (e.key === "Escape") setNovaCategoria(null); }} />
+                <button type="button" style={{ ...PS.btn, padding:"7px 12px", fontSize:12 }}
+                  disabled={!novaCategoria.trim()} onClick={()=>criarCategoria(novaCategoria)}>Usar</button>
+              </div>
+            )}
           </div>
           <div>
             <label style={PS.label}>{form.tipo === "PJ" ? "CNPJ" : "CPF"}</label>
