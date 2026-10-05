@@ -4519,7 +4519,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                         </>
                                       );
                                     })()}
-                                    {(papeisDoPedido(L).length > 0 || perm.podeGerenciarObra) && (
+                                    {(papeisDoPedido(L).length > 0 || perm.podeGerenciarObra || cotacaoDeOrigemDasContas(obraAtual, L.contas)) && (
                                       <div data-vk-mantem-mes="1" style={{ fontSize: 11.5, color: "#4b5563", padding: "8px 0 2px", borderTop: "1px solid rgba(38,36,33,0.05)" }}>
                                         <span style={{ color: "#6b7280" }}>Papéis: </span>
                                         {papeisDoPedido(L).length === 0 && <span style={{ color: "#9ca3af" }}>nenhum ainda </span>}
@@ -4536,6 +4536,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                         {erroPapel && erroPapel.indexOf(L.contas[0].id + ":") === 0 && (
                                           <div style={{ color: "#b91c1c", fontSize: 11 }}>{erroPapel.slice(L.contas[0].id.length + 1)}</div>
                                         )}
+                                        <LinksDaCotacao obra={obraAtual} contas={L.contas} prestadores={prestadores} isMobile={isMobile} />
                                       </div>
                                     )}
                                   </div>
@@ -5309,7 +5310,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                       ))}
                                     {/* O papel anexado na contabilização mora aqui, na conta:
                                         abre direto, sem ir procurar em pasta. */}
-                                    {(anexosDaTransacao(c).length > 0 || perm.podeGerenciarObra) && (
+                                    {(anexosDaTransacao(c).length > 0 || perm.podeGerenciarObra || cotacaoDeOrigemDasContas(obraAtual, [c])) && (
                                       <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>
                                         <span style={{ color: "#6b7280" }}>Papéis: </span>
                                         <LinksDeAnexo transacao={c} ocupado={papelOcupado === c.id}
@@ -5325,6 +5326,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                         {erroPapel && papelOcupado === "" && erroPapel.indexOf(c.id + ":") === 0 && (
                                           <div style={{ color: "#b91c1c", fontSize: 11 }}>{erroPapel.slice(c.id.length + 1)}</div>
                                         )}
+                                        <LinksDaCotacao obra={obraAtual} contas={[c]} prestadores={prestadores} isMobile={isMobile} />
                                       </div>
                                     )}
                                     {/* O histórico é a resposta para "quem mexeu nisso?" — a
@@ -5944,11 +5946,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </button>
           <button onClick={() => setView("cotacoesObra")}
             style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Cotações</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Compras</div>
             <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>
               {(() => {
                 const r = resumoCotacoes(obraAtual.cotacoes || [], obraAtual.aprovacoesCotacao || []);
-                if (!r.total) return "Comparar preços de fornecedores";
+                if (!r.total) return "Cotações, pedidos e contas nas lojas";
                 // a frase é sempre a próxima ação de quem está olhando
                 if (perm.podeGerenciarObra && r.aEnviar) return r.aEnviar === 1 ? "1 escolha para enviar ao cliente" : `${r.aEnviar} escolhas para enviar ao cliente`;
                 if (perm.podeGerenciarObra && r.aprovadas) return r.aprovadas === 1 ? "1 pronta para virar contrato" : `${r.aprovadas} prontas para virar contrato`;

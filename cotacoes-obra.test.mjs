@@ -94,7 +94,8 @@ const modulo = new Function(`
            comContaPadraoDaEntrada, tipoDoAnexoDaEntrada, SITUACOES_DA_ENTRADA,
            fichaDaEntradaPelaIA, tipoDoPapelPelaIA, textoSemCaixaAlta,
            entradaTemPreco, modoPadraoDaCotacao, cotacoesParaGuardarProposta, cotacaoSugeridaParaProposta,
-           propostaDaEntrada, MODOS_DA_COTACAO_NA_ENTRADA, contaDeCompra };
+           propostaDaEntrada, MODOS_DA_COTACAO_NA_ENTRADA, contaDeCompra,
+           cotacaoDeOrigemDasContas, papelDaPropostaEscolhida, resumoDaCotacao };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -3659,6 +3660,42 @@ teste("o número do papel da proposta vai para o pedido na conta da loja", () =>
   const pn = M.pedidoDaCotacao(r.cotacao, nota, [], 30);
   assert.strictEqual(pn.numeroNota, "8623");
   assert.strictEqual(pn.numeroLoja, "");
+});
+
+teste("Compras: conta da loja tem aba própria, fora de abertas e fechadas", () => {
+  const cot = { ...M.cotacaoVazia("o1"), id: "c1" };
+  const loja = { ...M.cotacaoVazia("o1"), id: "l1", contaLoja: true, lojaId: "f1" };
+  const encerrada = { ...loja, id: "l2", status: "encerrada" };
+  const g = M.cotacoesPorSituacao([cot, loja, encerrada], [], []);
+  assert.deepStrictEqual(g.abertas.map((c) => c.id), ["c1"]);
+  assert.deepStrictEqual(g.lojas.map((c) => c.id), ["l1", "l2"]);
+  assert.strictEqual(g.fechadas.length, 0);
+});
+
+teste("a conta a pagar acha a cotação de onde veio, direto ou pelo pedido na loja", () => {
+  const LJ = { id: "f1", nome: "Ourifer" };
+  const itens = [{ descricao: "Tábua", quantidade: 10, unitario: 40, bruto: 400 }];
+  let a = M.propostaDaEntrada({ obraId: "o1", itens, loja: LJ, anexo: { url: "u1", public_id: "p1", nome: "pedido.png" } });
+  a = M.propostaDaEntrada({ cotacao: a.cotacao, itens: [{ ...itens[0], unitario: 45, bruto: 450 }], loja: { id: "f2", nome: "Rei" } });
+  const escolhidaId = a.cotacao.propostas.find((p) => p.fornecedorId === "f1").id;
+  const orig = { ...a.cotacao, id: "orig", escolhidaId, pedidoNaLoja: { contaLojaId: "l1", pedidoId: "ped1" } };
+  const loja = { ...M.cotacaoVazia("o1"), id: "l1", contaLoja: true, lojaId: "f1",
+    pedidos: [{ id: "ped1", cotacaoOrigemId: "orig" }] };
+  const direta = { ...a.cotacao, id: "dir", escolhidaId, contaGeradaId: "x" };
+  const obra = { cotacoes: [orig, loja, direta] };
+  assert.strictEqual((M.cotacaoDeOrigemDasContas(obra, [{ cotacaoId: "l1", pedidoId: "ped1" }]) || {}).id, "orig");
+  assert.strictEqual((M.cotacaoDeOrigemDasContas(obra, [{ cotacaoId: "dir" }]) || {}).id, "dir");
+  assert.strictEqual(M.cotacaoDeOrigemDasContas(obra, [{ cotacaoId: "" }]), null, "conta avulsa não tem cotação");
+  assert.strictEqual(M.cotacaoDeOrigemDasContas(obra, [{ cotacaoId: "l1", pedidoId: "outro" }]), null,
+    "pedido feito direto na loja não tem cotação");
+  const papel = M.papelDaPropostaEscolhida(orig);
+  assert.strictEqual(papel.url, "u1");
+  assert.strictEqual(papel.tipo, "proposta");
+  const r = M.resumoDaCotacao(orig, []);
+  assert.strictEqual(r.propostas.length, 2);
+  assert.strictEqual(r.escolhida.nome, "Ourifer");
+  assert.strictEqual(r.economia, 50);
+  assert.strictEqual(r.itens, 1);
 });
 
 for (const [nome, fn] of testes) {

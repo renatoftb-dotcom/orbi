@@ -2075,6 +2075,7 @@ function rotuloDoAnexo(a, i) {
   if (tipo === "comprovante") return "Comprovante";
   if (tipo === "boleto") return "Boleto";
   if (tipo === "pedido") return "Pedido";
+  if (tipo === "proposta") return "Proposta";
   return i === 0 ? "Comprovante" : "Anexo";
 }
 

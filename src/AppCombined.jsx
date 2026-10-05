@@ -11346,6 +11346,7 @@ function rotuloDoAnexo(a, i) {
   if (tipo === "comprovante") return "Comprovante";
   if (tipo === "boleto") return "Boleto";
   if (tipo === "pedido") return "Pedido";
+  if (tipo === "proposta") return "Proposta";
   return i === 0 ? "Comprovante" : "Anexo";
 }
 
@@ -30882,12 +30883,74 @@ function cotacaoEstaFechada(cot, aprovacoes, contratos) {
   return SITUACOES_FECHADAS.indexOf(situacaoCotacao(cot, aprovacoes, contratos).id) >= 0;
 }
 
+// Compras da obra em três montes: a cotação que ainda pede decisão, a que já
+// virou compromisso (conta, contrato, pedido na loja) e a CONTA da loja — que
+// não é cotação nenhuma: é onde os pedidos fechados se somam até a fatura.
 function cotacoesPorSituacao(cotacoes, aprovacoes, contratos) {
-  const abertas = [], fechadas = [];
+  const abertas = [], fechadas = [], lojas = [];
   for (const c of (cotacoes || []).filter((x) => x && x.id)) {
+    if (ehContaDeLoja(c)) { lojas.push(c); continue; }
     (cotacaoEstaFechada(c, aprovacoes, contratos) ? fechadas : abertas).push(c);
   }
-  return { abertas, fechadas };
+  return { abertas, fechadas, lojas };
+}
+
+// ── De onde veio a conta a pagar ────────────────────────────────
+// A conta nascida de uma cotação com propostas leva a cotação junto: é ela
+// que mostra, a quem paga, que houve concorrência. Conta de pedido na loja
+// aponta para a conta da loja; a cotação de verdade é a que virou o pedido.
+function cotacaoDeOrigemDasContas(obra, contas) {
+  const cots = ((obra || {}).cotacoes || []).filter((x) => x && x.id);
+  const comPropostas = (c) => (c && !ehContaDeLoja(c) && propostasDaCotacao(c).length ? c : null);
+  for (const c of contas || []) {
+    if (!c) continue;
+    if (c.pedidoId) {
+      const viaPedido = cots.find((x) => x.pedidoNaLoja && x.pedidoNaLoja.pedidoId === c.pedidoId);
+      if (comPropostas(viaPedido)) return viaPedido;
+    }
+    if (!c.cotacaoId) continue;
+    const cot = cots.find((x) => x.id === c.cotacaoId);
+    if (!cot) continue;
+    if (!ehContaDeLoja(cot)) { if (comPropostas(cot)) return cot; continue; }
+    const ped = (cot.pedidos || []).find((p) => p && p.id === c.pedidoId);
+    const orig = ped && ped.cotacaoOrigemId ? cots.find((x) => x.id === ped.cotacaoOrigemId) : null;
+    if (comPropostas(orig)) return orig;
+  }
+  return null;
+}
+
+// O papel que a loja escolhida mandou — é ele que justifica o preço pago.
+function papelDaPropostaEscolhida(cot) {
+  const esc = propostaEscolhida(cot);
+  return esc && esc.anexo && esc.anexo.url ? { ...esc.anexo, tipo: "proposta" } : null;
+}
+
+// O resumo que o cliente vê: quem cotou, por quanto, quem levou e quanto se
+// deixou de pagar. Só leitura — a decisão já foi tomada.
+function resumoDaCotacao(cot, prestadores) {
+  const c = cot || {};
+  const esc = propostaEscolhida(c);
+  const comLista = temListaDeItens(c);
+  const propostas = propostasOrdenadas(c).map((p) => ({
+    id: p.id,
+    nome: p.favorecido || nomeDoFornecedor(prestadores || [], p.fornecedorId) || "Fornecedor",
+    valor: valorDaProposta(c, p),
+    escolhida: !!esc && esc.id === p.id,
+    prazoDias: p.prazoDias || "",
+    condicao: p.condicaoPagamento || "",
+    faltando: comLista ? itensSemPreco(c, p).length : 0,
+  }));
+  const vals = propostas.map((p) => p.valor).filter((v) => v > 0);
+  const maior = vals.length ? Math.max(...vals) : 0;
+  const valorEsc = esc ? valorDaProposta(c, esc) : 0;
+  return {
+    titulo: c.titulo || "Cotação",
+    itens: itensDaCotacao(c).length,
+    propostas,
+    escolhida: propostas.find((p) => p.escolhida) || null,
+    economia: vals.length >= 2 && valorEsc > 0 ? Math.round((maior - valorEsc) * 100) / 100 : 0,
+    maior,
+  };
 }
 
 // Contadores do cartão da obra e do topo da tela.
@@ -31271,7 +31334,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   // à mão para consulta, fora do caminho de quem veio decidir.
   const [filtroLista, setFiltroLista] = useState("abertas");
   const grupos = cotacoesPorSituacao(cotacoes, aprovacoes, contratos);
-  const visiveis = filtroLista === "fechadas" ? grupos.fechadas : grupos.abertas;
+  const visiveis = filtroLista === "fechadas" ? grupos.fechadas : filtroLista === "lojas" ? grupos.lojas : grupos.abertas;
 
   // ── Formulário da cotação ─────────────────────────────────────
   function salvarCotacao() {
@@ -32496,7 +32559,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       <button onClick={onVoltar} style={{ background: "none", border: "none", color: "#4b5563", cursor: "pointer", fontFamily: "inherit", fontSize: 12, marginBottom: 16 }}>← Voltar</button>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
         <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Cotações</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Compras</div>
           <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2 }}>{obra.nome}</div>
         </div>
         {podeGerenciar && (
@@ -32519,8 +32582,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
 
       {cotacoes.length > 0 && (
         <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
-          {[["abertas", "Abertas", grupos.abertas.length], ["fechadas", "Fechadas", grupos.fechadas.length]].map(([k, r, n]) => (
-            <button key={k} onClick={() => setFiltroLista(k)}
+          {[["abertas", "Cotações abertas", grupos.abertas.length], ["fechadas", "Fechadas / pedidos", grupos.fechadas.length],
+            ["lojas", "Contas nas lojas", grupos.lojas.length]].map(([k, r, n]) => (
+            <button key={k} data-vk-aba-compras={k} onClick={() => setFiltroLista(k)}
               style={{ fontFamily: "inherit", fontSize: 12, padding: "5px 12px", borderRadius: 8, cursor: "pointer",
                 border: `1px solid ${filtroLista === k ? "#0474f4" : "rgba(38,36,33,0.16)"}`,
                 background: filtroLista === k ? "#eef5ff" : "#fff",
@@ -32562,8 +32626,10 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       ) : !visiveis.length ? (
         <div style={{ textAlign: "center", padding: "36px 20px", fontSize: 13, color: "#4b5563" }}>
           {filtroLista === "fechadas"
-            ? "Nenhuma cotação fechada ainda. Fecham as que viraram contrato ou conta a pagar, e as canceladas."
-            : "Nenhuma cotação em aberto — todas já viraram contrato ou conta a pagar."}
+            ? "Nenhuma cotação fechada ainda. Fecham as que viraram contrato, conta a pagar ou pedido na loja, e as canceladas."
+            : filtroLista === "lojas"
+              ? "Nenhuma conta aberta em loja. Ela nasce quando um pedido a pagar entra pela Entrada ou quando uma cotação é somada à conta da loja."
+              : "Nenhuma cotação em aberto — todas já viraram contrato, conta a pagar ou pedido na loja."}
         </div>
       ) : visiveis.map(cot => {
         const s = situacaoCotacao(cot, aprovacoes, contratos);
@@ -32638,8 +32704,20 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   if (autoria) linhas.push(["Registro", autoria]);
                   if (cot.pedidoNaLoja) {
                     const alvo = cotacoes.find((x) => x.id === cot.pedidoNaLoja.contaLojaId);
-                    linhas.push(["Virou pedido",
-                      `${cot.pedidoNaLoja.numeroLoja || cot.pedidoNaLoja.numero || ""} na conta ${(alvo || {}).titulo || "da loja"}`.trim()]);
+                    // Um clique leva à conta da loja, na aba dela, já aberta.
+                    linhas.push(["Virou pedido", (
+                      <span>
+                        {`${cot.pedidoNaLoja.numeroLoja || cot.pedidoNaLoja.numero || ""} na conta ${(alvo || {}).titulo || "da loja"}`.trim()}
+                        {alvo && (
+                          <button type="button" data-vk-ver-conta-loja="1"
+                            onClick={() => { setFiltroLista("lojas"); setAbertas((a) => ({ ...a, [alvo.id]: true })); }}
+                            style={{ background: "none", border: "none", padding: 0, marginLeft: 8, color: "#0474f4",
+                              cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 500, textDecoration: "underline" }}>
+                            ver na conta da loja
+                          </button>
+                        )}
+                      </span>
+                    )]);
                   }
                   if (!linhas.length) return null;
                   return (
@@ -35897,6 +35975,94 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                 : "Lançar"}
             </button>
           ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── A cotação vista de dentro da conta a pagar ──────────────────
+// Dois links pequenos na linha da conta: o papel da loja escolhida, e — se
+// houve concorrência — o resumo da cotação. O resumo é só leitura: é para o
+// cliente ver que foi cotado, não para decidir de novo.
+function LinksDaCotacao({ obra, contas, prestadores, isMobile }) {
+  const [vendo, setVendo] = useState(false);
+  const cot = cotacaoDeOrigemDasContas(obra, contas);
+  if (!cot) return null;
+  const papel = papelDaPropostaEscolhida(cot);
+  // o mesmo papel já anexado na conta não aparece duas vezes
+  const jaNaConta = papel && (contas || []).some((c) => (typeof anexosDaTransacao === "function" ? anexosDaTransacao(c) : [])
+    .some((a) => a && ((a.public_id && a.public_id === papel.public_id) || a.url === papel.url)));
+  const concorrencia = propostasDaCotacao(cot).length >= 2;
+  if ((!papel || jaNaConta) && !concorrencia) return null;
+  return (
+    <span data-vk-mantem-mes="1" onClick={(e) => e.stopPropagation()}
+      style={{ display: "inline-flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginLeft: 10 }}>
+      {papel && !jaNaConta && typeof LinksDeAnexo === "function" && (
+        <LinksDeAnexo compacto transacao={{ anexos: [papel] }} />
+      )}
+      {concorrencia && (
+        <button type="button" data-vk-ver-cotacao="1" onClick={() => setVendo(true)}
+          title="Ver as propostas que foram cotadas"
+          style={{ background: "none", border: "none", padding: 0, color: "#0474f4", cursor: "pointer",
+            fontFamily: "inherit", fontSize: 11, textDecoration: "underline" }}>
+          Cotações
+        </button>
+      )}
+      {vendo && <ResumoDaCotacaoModal cotacao={cot} prestadores={prestadores} isMobile={isMobile} aoFechar={() => setVendo(false)} />}
+    </span>
+  );
+}
+
+function ResumoDaCotacaoModal({ cotacao, prestadores, isMobile, aoFechar }) {
+  const r = resumoDaCotacao(cotacao, prestadores);
+  const moeda = (v) => (typeof fmtMoedaCtr === "function" ? fmtMoedaCtr(v) : "R$ " + Number(v || 0).toFixed(2));
+  const pequeno = { fontSize: 11, color: "#6b7280" };
+  return (
+    <div data-vk-resumo-cotacao="1" onClick={aoFechar}
+      style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.40)", display: "flex",
+        alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1000 }}>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ background: "#fff", borderRadius: 14, padding: isMobile ? 14 : 16, width: "100%", maxWidth: 440,
+          maxHeight: "80vh", overflowY: "auto", boxSizing: "border-box", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)",
+          textAlign: "left", cursor: "default" }}>
+        <div style={{ fontSize: 10.5, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>Cotação</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", marginTop: 2 }}>{r.titulo}</div>
+        <div style={{ ...pequeno, marginTop: 2 }}>
+          {r.propostas.length === 1 ? "1 fornecedor cotado" : `${r.propostas.length} fornecedores cotados`}
+          {r.itens > 0 ? ` · lista de ${r.itens === 1 ? "1 item" : r.itens + " itens"}` : ""}
+        </div>
+        <div style={{ marginTop: 10, borderTop: "1px solid rgba(38,36,33,0.08)" }}>
+          {r.propostas.map((p) => (
+            <div key={p.id} style={{ display: "flex", gap: 10, alignItems: "baseline", padding: "6px 0",
+              borderBottom: "1px solid rgba(38,36,33,0.06)" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11.5, color: "#111827", fontWeight: p.escolhida ? 700 : 500 }}>
+                  {p.nome}
+                  {p.escolhida && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: "#15803d",
+                    background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 999, padding: "0 6px" }}>escolhida</span>}
+                </div>
+                {(p.prazoDias || p.condicao || p.faltando > 0) && (
+                  <div style={{ ...pequeno, fontSize: 10.5 }}>
+                    {[p.prazoDias ? `prazo ${p.prazoDias} dias` : "", p.condicao,
+                      p.faltando > 0 ? `sem preço em ${p.faltando === 1 ? "1 item" : p.faltando + " itens"}` : ""].filter(Boolean).join(" · ")}
+                  </div>
+                )}
+              </div>
+              <div style={{ fontSize: 11.5, color: "#111827", fontWeight: p.escolhida ? 700 : 500, whiteSpace: "nowrap",
+                fontVariantNumeric: "tabular-nums" }}>{p.valor > 0 ? moeda(p.valor) : "—"}</div>
+            </div>
+          ))}
+        </div>
+        {r.economia > 0 && (
+          <div style={{ fontSize: 11, color: "#15803d", marginTop: 8 }}>
+            Economia de {moeda(r.economia)} em relação à proposta mais cara ({moeda(r.maior)}).
+          </div>
+        )}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+          <button type="button" onClick={aoFechar}
+            style={{ border: "1px solid rgba(38,36,33,0.16)", background: "#fff", borderRadius: 10, padding: "7px 16px",
+              fontSize: 12.5, cursor: "pointer", fontFamily: "inherit", color: "#111827" }}>Fechar</button>
         </div>
       </div>
     </div>
@@ -41518,7 +41684,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                         </>
                                       );
                                     })()}
-                                    {(papeisDoPedido(L).length > 0 || perm.podeGerenciarObra) && (
+                                    {(papeisDoPedido(L).length > 0 || perm.podeGerenciarObra || cotacaoDeOrigemDasContas(obraAtual, L.contas)) && (
                                       <div data-vk-mantem-mes="1" style={{ fontSize: 11.5, color: "#4b5563", padding: "8px 0 2px", borderTop: "1px solid rgba(38,36,33,0.05)" }}>
                                         <span style={{ color: "#6b7280" }}>Papéis: </span>
                                         {papeisDoPedido(L).length === 0 && <span style={{ color: "#9ca3af" }}>nenhum ainda </span>}
@@ -41535,6 +41701,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                         {erroPapel && erroPapel.indexOf(L.contas[0].id + ":") === 0 && (
                                           <div style={{ color: "#b91c1c", fontSize: 11 }}>{erroPapel.slice(L.contas[0].id.length + 1)}</div>
                                         )}
+                                        <LinksDaCotacao obra={obraAtual} contas={L.contas} prestadores={prestadores} isMobile={isMobile} />
                                       </div>
                                     )}
                                   </div>
@@ -42308,7 +42475,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                       ))}
                                     {/* O papel anexado na contabilização mora aqui, na conta:
                                         abre direto, sem ir procurar em pasta. */}
-                                    {(anexosDaTransacao(c).length > 0 || perm.podeGerenciarObra) && (
+                                    {(anexosDaTransacao(c).length > 0 || perm.podeGerenciarObra || cotacaoDeOrigemDasContas(obraAtual, [c])) && (
                                       <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>
                                         <span style={{ color: "#6b7280" }}>Papéis: </span>
                                         <LinksDeAnexo transacao={c} ocupado={papelOcupado === c.id}
@@ -42324,6 +42491,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                         {erroPapel && papelOcupado === "" && erroPapel.indexOf(c.id + ":") === 0 && (
                                           <div style={{ color: "#b91c1c", fontSize: 11 }}>{erroPapel.slice(c.id.length + 1)}</div>
                                         )}
+                                        <LinksDaCotacao obra={obraAtual} contas={[c]} prestadores={prestadores} isMobile={isMobile} />
                                       </div>
                                     )}
                                     {/* O histórico é a resposta para "quem mexeu nisso?" — a
@@ -42943,11 +43111,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </button>
           <button onClick={() => setView("cotacoesObra")}
             style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Cotações</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Compras</div>
             <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>
               {(() => {
                 const r = resumoCotacoes(obraAtual.cotacoes || [], obraAtual.aprovacoesCotacao || []);
-                if (!r.total) return "Comparar preços de fornecedores";
+                if (!r.total) return "Cotações, pedidos e contas nas lojas";
                 // a frase é sempre a próxima ação de quem está olhando
                 if (perm.podeGerenciarObra && r.aEnviar) return r.aEnviar === 1 ? "1 escolha para enviar ao cliente" : `${r.aEnviar} escolhas para enviar ao cliente`;
                 if (perm.podeGerenciarObra && r.aprovadas) return r.aprovadas === 1 ? "1 pronta para virar contrato" : `${r.aprovadas} prontas para virar contrato`;
