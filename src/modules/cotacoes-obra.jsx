@@ -1199,7 +1199,7 @@ function propostaDaEntrada(d) {
     const etapas = Array.from(new Set((x.itens || []).map((it) => it && it.etapa).filter(Boolean)));
     const contas = Array.from(new Set((x.itens || []).map((it) => it && it.contaId).filter(Boolean)));
     if (etapas.length >= 1) cot.etapaId = etapas[0];
-    if (contas.length === 1) cot.contaId = contas[0];
+    cot.contaId = contaDeCompra(contas.length === 1 ? contas[0] : "");
   }
   const anterior = loja.id ? propostasDaCotacao(cot).find((p) => p.fornecedorId === loja.id) || null : null;
   const numero = String(papel.numeroNota || papel.numeroPedido || "").trim();
@@ -1208,6 +1208,9 @@ function propostaDaEntrada(d) {
     fornecedorId: loja.id || "", favorecido: loja.nome || papel.lidoComo || "",
     precos, totalFechado: "",
     observacao: numero ? ((papel.numeroNota ? "Nota nº " : "Pedido nº ") + numero) : ((anterior && anterior.observacao) || ""),
+    // o número do papel vai junto: é ele que o pedido na conta da loja pede
+    numeroPedido: String(papel.numeroPedido || "").trim() || ((anterior && anterior.numeroPedido) || ""),
+    numeroNota: String(papel.numeroNota || "").trim() || ((anterior && anterior.numeroNota) || ""),
     anexo: x.anexo || (anterior && anterior.anexo) || null,
     recebidaEm: String(papel.emitido || "").slice(0, 10) || hoje };
   const bruto = totalDosItens(cot, prop);
@@ -3055,6 +3058,15 @@ function podeApagarContaDeLoja(cot, contasPagar) {
 // na compra, o padrao do insumo preenche; sem nenhum dos dois, fica em
 // branco para quem compra dizer. Em qualquer caso a etapa continua
 // editavel, item a item, na tela do pedido e na conta a pagar.
+// Compra nunca cai em conta de receita. A cotação nasce com a primeira conta
+// do plano (Depósito Recurso Próprio), e o item sem conta no catálogo herdava
+// isso no pedido — o gasto entrava na obra como dinheiro recebido.
+function contaDeCompra(contaId) {
+  const plano = typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [];
+  const c = plano.find((x) => x && x.id === contaId);
+  return c && c.grupo !== "receitas" ? c.id : "material";
+}
+
 function etapaDoItem(insumo, etapaDaCompra) {
   return etapaDaCompra || (insumo && insumo.etapaPadrao) || "";
 }
@@ -3096,7 +3108,7 @@ function pedidoDaCotacao(cot, proposta, insumos, prazoDias) {
       unitario: precoUnitario(p, it.id) || "",
       bruto,
       etapa: etapaDoItem(ins, c.etapaId),
-      contaId: contaDoItem(ins, c.contaId),
+      contaId: contaDoItem(ins, contaDeCompra(c.contaId)),
     });
   }
   if (!itens.length) {
@@ -3104,12 +3116,17 @@ function pedidoDaCotacao(cot, proposta, insumos, prazoDias) {
     if (total > 0) {
       itens.push({ ...novoItem(), descricao: c.titulo || "Compra", quantidade: 1,
         unidade: c.unidade || "vb", unitario: total, bruto: total,
-        etapa: c.etapaId || "", contaId: c.contaId || "" });
+        etapa: c.etapaId || "", contaId: contaDeCompra(c.contaId) });
     }
   }
   const d = descontoDaProposta(c, p);
+  // O número que a loja deu ao papel da proposta. Proposta guardada antes de
+  // existir o campo tem o número só na observação ("Pedido nº 24787-120").
+  const daObs = /^(Pedido|Nota) nº (.+)$/.exec(String(p.observacao || "").trim());
   return {
     ...base,
+    numeroLoja: p.numeroPedido || (daObs && daObs[1] === "Pedido" ? daObs[2] : "") || base.numeroLoja || "",
+    numeroNota: p.numeroNota || (daObs && daObs[1] === "Nota" ? daObs[2] : "") || base.numeroNota || "",
     data: hoje,
     vencimento: prazo > 0 && typeof somarDias === "function" ? somarDias(hoje, prazo) : "",
     desconto: d && d.desconto ? d.valor : 0,
@@ -7095,7 +7112,7 @@ function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinhe
     const jaExiste = carga.cotacaoId
       ? (alvo.cotacoes || []).find((c) => c && c.id === carga.cotacaoId) : null;
 
-    const lista = jaExiste || carimbar({ ...cotacaoVazia(alvo.id),
+    const lista = jaExiste || carimbar({ ...cotacaoVazia(alvo.id), contaId: "material",
       titulo: tituloDaListaRapida(carga.itens, new Date().toISOString().slice(0, 10)),
       itens: (carga.itens || []).map((it) => ({
         ...(typeof itemCotacaoVazio === "function" ? itemCotacaoVazio() : {}),
@@ -8661,6 +8678,9 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
   // O peso das palavras sai do catálogo inteiro: calcula uma vez e serve
   // para os onze itens do papel.
   const indiceCat = useMemo(() => indiceDoCatalogo(insumos || []), [insumos]);
+  // As unidades que o campo de unidade de cada item oferece. Faltava aqui:
+  // a tela do pedido caía inteira (tela branca) ao abrir com itens.
+  const unidades = useMemo(() => unidadesDoCatalogo(insumos || []), [insumos]);
   const opcoesCatalogo = useMemo(() => (insumos || [])
     .filter((i) => i && i.tipo !== "prestador" && i.ativo !== false)
     .map((i) => ({ valor: i.codigo, rotulo: i.nome, grupo: i.grupo || "", extra: (i.aliases || []).join(" ") })),

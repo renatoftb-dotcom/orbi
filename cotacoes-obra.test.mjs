@@ -94,7 +94,7 @@ const modulo = new Function(`
            comContaPadraoDaEntrada, tipoDoAnexoDaEntrada, SITUACOES_DA_ENTRADA,
            fichaDaEntradaPelaIA, tipoDoPapelPelaIA, textoSemCaixaAlta,
            entradaTemPreco, modoPadraoDaCotacao, cotacoesParaGuardarProposta, cotacaoSugeridaParaProposta,
-           propostaDaEntrada, MODOS_DA_COTACAO_NA_ENTRADA };
+           propostaDaEntrada, MODOS_DA_COTACAO_NA_ENTRADA, contaDeCompra };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -3635,6 +3635,31 @@ teste("só cotação aberta, com lista, que não é conta de loja nem já lança
   assert.strictEqual(M.cotacaoSugeridaParaProposta([ok], [{ descricao: "Nada a ver" }]), null);
 });
 
+
+teste("compra nunca cai em conta de receita", () => {
+  assert.strictEqual(M.contaDeCompra("deposito_proprio"), "material");
+  assert.strictEqual(M.contaDeCompra(""), "material");
+  assert.strictEqual(M.contaDeCompra("material"), "material");
+  const r = M.propostaDaEntrada({ obraId: "o1", itens: [{ descricao: "Cimento", quantidade: 2, unitario: 40, bruto: 80 }],
+    loja: { id: "f1", nome: "Loja" } });
+  assert.strictEqual(r.cotacao.contaId, "material", "cotação da Entrada nasce em Material");
+  const cot = { ...r.cotacao, contaId: "deposito_proprio" };
+  const ped = M.pedidoDaCotacao(cot, r.proposta, [], 30);
+  assert.strictEqual(ped.itens[0].contaId, "material", "item sem conta no catálogo não herda conta de receita");
+});
+
+teste("o número do papel da proposta vai para o pedido na conta da loja", () => {
+  const r = M.propostaDaEntrada({ obraId: "o1", itens: [{ descricao: "Cimento", quantidade: 2, unitario: 40, bruto: 80 }],
+    loja: { id: "f1", nome: "Loja" }, papel: { numeroPedido: "24787-120" } });
+  assert.strictEqual(r.proposta.numeroPedido, "24787-120");
+  assert.strictEqual(M.pedidoDaCotacao(r.cotacao, r.proposta, [], 30).numeroLoja, "24787-120");
+  const antiga = { ...r.proposta, numeroPedido: undefined, observacao: "Pedido nº 555-1" };
+  assert.strictEqual(M.pedidoDaCotacao(r.cotacao, antiga, [], 30).numeroLoja, "555-1", "proposta antiga: lê da observação");
+  const nota = { ...r.proposta, numeroPedido: undefined, observacao: "Nota nº 8623" };
+  const pn = M.pedidoDaCotacao(r.cotacao, nota, [], 30);
+  assert.strictEqual(pn.numeroNota, "8623");
+  assert.strictEqual(pn.numeroLoja, "");
+});
 
 for (const [nome, fn] of testes) {
   try { fn(); console.log("  ok   " + nome); }
