@@ -2120,6 +2120,7 @@ function rotuloDoAnexo(a, i) {
   if (tipo === "comprovante") return "Comprovante";
   if (tipo === "boleto") return "Boleto";
   if (tipo === "pedido") return "Pedido";
+  if (tipo === "entrega") return "Entregue";
   if (tipo === "proposta") return "Proposta";
   return i === 0 ? "Comprovante" : "Anexo";
 }
@@ -2256,9 +2257,10 @@ function LinksDeAnexo({ transacao, compacto, aoTrocar, aoTirar, ocupado }) {
               if (typeof VisorProposta === "function") { e.preventDefault(); setVendo(a); }
             }}
             title={a.nome || rotuloDoAnexo(a, i)}
-            style={{ fontSize: compacto ? 11 : 11.5, color: "#0474f4", textDecoration: "none",
+            style={{ fontSize: compacto ? 11 : 11.5, color: a.tipo === "entrega" ? "#15803d" : "#0474f4", textDecoration: "none",
+              fontWeight: a.tipo === "entrega" ? 600 : 400,
               whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 3 }}>
-            <span aria-hidden="true">{"\u{1F4CE}"}</span>
+            <span aria-hidden="true">{a.tipo === "entrega" ? "\u2713" : "\u{1F4CE}"}</span>
             {compacto ? rotuloDoAnexo(a, i) : rotuloDoAnexo(a, i) + (a.nome ? " · " + a.nome : "")}
           </a>
           {aoTrocar && tirando !== chave(a, i) && (

@@ -1527,7 +1527,7 @@ function FolhaComprovantes({ folha, obraNome, escritorioNome, fmtBRL, aoFechar }
   const [tipos, setTipos] = useState(() => Object.fromEntries((typeof PAPEIS_DA_FOLHA !== "undefined" ? PAPEIS_DA_FOLHA : []).map(t => [t.id, t.padrao])));
   const arquivos = typeof arquivosDaFolha === "function" ? arquivosDaFolha(folha, tipos) : [];
   const contagem = { comprovante: folha.linhas.reduce((t, l) => t + (l.comprovantes || []).length, 0),
-    nota: folha.notas || 0, boleto: folha.boletos || 0 };
+    nota: folha.notas || 0, boleto: folha.boletos || 0, entrega: folha.entregas || 0 };
   // Todos os papéis da folha num .zip — o que vai para a loja conferir. Cada
   // arquivo é baixado do armazenamento e entra com o nome que já tem (o
   // número do papel); o que não baixar fica listado, sem travar o resto.
@@ -4479,7 +4479,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <span data-vk-mantem-mes="1" onClick={e => e.stopPropagation()}
           style={{ marginLeft: 10, display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap", fontSize: 11 }}>
           <span style={{ color: "#6b7280" }}>o papel é</span>
-          {[["nota", "nota fiscal"], ["comprovante", "comprovante"], ["boleto", "boleto"]].map(([t, r]) => (
+          {[["nota", "nota fiscal"], ["comprovante", "comprovante"], ["boleto", "boleto"], ["entrega", "entrega conferida"]].map(([t, r]) => (
             <label key={t} data-vk-tipo-papel={t}
               style={{ color: AZUL_VK, cursor: "pointer", border: "1px solid rgba(4,116,244,0.35)", borderRadius: 999,
                 padding: isMobile ? "6px 10px" : "1px 8px", background: "#fff" }}>
@@ -4535,6 +4535,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                         L.numeroNota && !pedidoEhNotaPaga(L) ? "NF " + L.numeroNota : "",
                                         (() => { const n = papeisDoPedido(L).length; return n ? "\u{1F4CE} " + (n === 1 ? "1 papel" : n + " papéis") : "sem papel"; })(),
                                         L.parcial ? "parcialmente pago" : ""].filter(Boolean).join(" · ")}
+                                      {entregaConferida(L.contas) && (
+                                        <span data-vk-entregue="1" style={{ color: "#15803d", fontWeight: 600 }}> · ✓ entregue</span>
+                                      )}
                                     </div>
                                   </div>
                                   <div style={{ fontSize: 12.5, color: "#111827" }}>
@@ -5691,7 +5694,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         if (acao === "tirar") lista = lista.filter((a) => !mesmo(a));
         else if (acao === "trocar") lista = lista.map((a) => (mesmo(a) ? novo : a));
         else lista = lista.concat([novo]);
-        const ato = acao === "tirar" ? "comprovanteRemovido" : (novo && novo.tipo === "nota" ? "nota" : "comprovante");
+        const ato = acao === "tirar" ? "comprovanteRemovido" : (novo && (novo.tipo === "nota" || novo.tipo === "entrega") ? novo.tipo : "comprovante");
         return registrarAto(comAnexos(c, lista), ato, quem, undefined, ((acao === "tirar" ? antigo : novo) || {}).nome || "");
       });
       gravarContas(novas, obra.id);

@@ -50,7 +50,7 @@ const modulo = new Function(`
            linhaFinalExtrato, fechoEstimativaPL, plDaObra, progressoCusto,
            prestadoresDoPL, CONTAS_PRESTADOR_EXTRA,
            aneisDosGrupos, visaoUsaAnel, VISOES_CONTAS_EM_ANEL,
-           removerOrfasDeContrato, assinaturaContas, folhaDeComprovantes, arquivosDaFolha, cpPapeisDaConta, PAPEIS_DA_FOLHA,
+           removerOrfasDeContrato, assinaturaContas, folhaDeComprovantes, arquivosDaFolha, cpPapeisDaConta, PAPEIS_DA_FOLHA, entregaConferida,
            recalibrarContrato, previaRecalibragem, primeiroVencimentoContrato,
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
@@ -3026,6 +3026,21 @@ teste("exportar: quem exporta escolhe comprovante, nota fiscal e boleto", () => 
   assert.deepStrictEqual(modulo.arquivosDaFolha(f, padrao).map((a) => a.nome), ["4230.png", "4230-2.pdf"], "boleto vai desmarcado");
   assert.deepStrictEqual(modulo.arquivosDaFolha(f, { comprovante: false, nota: true, boleto: true }).map((a) => a.nome), ["4230-2.pdf", "4230-3.pdf"]);
   assert.strictEqual(modulo.arquivosDaFolha(f).length, 3, "sem escolha, vai tudo");
+});
+
+teste("entrega conferida: a foto assinada acende o entregue e não vira comprovante", () => {
+  const foto = { url: "u-ent", public_id: "ent", nome: "4231-2.jpg", tipo: "entrega" };
+  const pix = { url: "u-pix", public_id: "pix", nome: "4231.png" };
+  const contas = [{ id: "1", pedidoId: "p", pago: true, valor: 10, pagoEm: "2026-11-01", anexos: [pix, foto] },
+    { id: "2", pedidoId: "p", pago: true, valor: 20, pagoEm: "2026-11-01", anexos: [pix, foto] }];
+  assert.strictEqual(modulo.entregaConferida(contas).public_id, "ent");
+  assert.strictEqual(modulo.entregaConferida([{ id: "3", anexos: [pix] }]), null, "sem foto, sem entregue");
+  const f = modulo.folhaDeComprovantes(contas, "Loja");
+  assert.strictEqual(f.linhas[0].comprovantes.length, 1, "a foto da entrega não conta como comprovante");
+  assert.strictEqual(f.entregas, 1);
+  const padrao = Object.fromEntries(modulo.PAPEIS_DA_FOLHA.map((t) => [t.id, t.padrao]));
+  assert.deepStrictEqual(modulo.arquivosDaFolha(f, padrao).map((a) => a.nome), ["4231.png"], "entrega vai desmarcada");
+  assert.deepStrictEqual(modulo.arquivosDaFolha(f, { ...padrao, entrega: true }).map((a) => a.nome), ["4231.png", "4231-2.jpg"]);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

@@ -11391,6 +11391,7 @@ function rotuloDoAnexo(a, i) {
   if (tipo === "comprovante") return "Comprovante";
   if (tipo === "boleto") return "Boleto";
   if (tipo === "pedido") return "Pedido";
+  if (tipo === "entrega") return "Entregue";
   if (tipo === "proposta") return "Proposta";
   return i === 0 ? "Comprovante" : "Anexo";
 }
@@ -11527,9 +11528,10 @@ function LinksDeAnexo({ transacao, compacto, aoTrocar, aoTirar, ocupado }) {
               if (typeof VisorProposta === "function") { e.preventDefault(); setVendo(a); }
             }}
             title={a.nome || rotuloDoAnexo(a, i)}
-            style={{ fontSize: compacto ? 11 : 11.5, color: "#0474f4", textDecoration: "none",
+            style={{ fontSize: compacto ? 11 : 11.5, color: a.tipo === "entrega" ? "#15803d" : "#0474f4", textDecoration: "none",
+              fontWeight: a.tipo === "entrega" ? 600 : 400,
               whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 3 }}>
-            <span aria-hidden="true">{"\u{1F4CE}"}</span>
+            <span aria-hidden="true">{a.tipo === "entrega" ? "\u2713" : "\u{1F4CE}"}</span>
             {compacto ? rotuloDoAnexo(a, i) : rotuloDoAnexo(a, i) + (a.nome ? " · " + a.nome : "")}
           </a>
           {aoTrocar && tirando !== chave(a, i) && (
@@ -24993,6 +24995,7 @@ const CP_ATOS = {
   desfeita: "Pagamento desfeito",
   comprovante: "Comprovante anexado",
   nota: "Nota fiscal anexada",
+  entrega: "Entrega conferida (foto anexada)",
   comprovanteRemovido: "Comprovante removido",
   recalibrada: "Datas recalibradas",
 };
@@ -26716,7 +26719,7 @@ function cpPapeisDaConta(c) {
   const lista = (Array.isArray(x.anexos) ? x.anexos.filter(Boolean) : []);
   const todos = x.comprovante ? [x.comprovante].concat(lista) : lista;
   const vistos = new Set();
-  const r = { comprovantes: [], notas: [], boletos: [] };
+  const r = { comprovantes: [], notas: [], boletos: [], entregas: [] };
   for (const a of todos) {
     const k = (a && (a.public_id || a.url)) || "";
     if (!k || vistos.has(k)) continue;
@@ -26724,6 +26727,7 @@ function cpPapeisDaConta(c) {
     const t = a.tipo || "";
     if (t === "nota") r.notas.push(a);
     else if (t === "boleto") r.boletos.push(a);
+    else if (t === "entrega") r.entregas.push(a);
     else if (t === "pedido" || t === "proposta") continue;
     else r.comprovantes.push(a);
   }
@@ -26748,12 +26752,13 @@ function folhaDeComprovantes(contas, titulo) {
   const linhas = [...grupos.values()].map((cs) => {
     const c0 = cs[0];
     const vistos = new Set();
-    const comprovantes = [], notas = [], boletos = [];
+    const comprovantes = [], notas = [], boletos = [], entregas = [];
     for (const c of cs) {
       const p = cpPapeisDaConta(c);
       for (const a of p.comprovantes) { const k = a.public_id || a.url; if (!vistos.has(k)) { vistos.add(k); comprovantes.push(a); } }
       for (const a of p.notas) { const k = a.public_id || a.url; if (!vistos.has(k)) { vistos.add(k); notas.push(a); } }
       for (const a of p.boletos) { const k = a.public_id || a.url; if (!vistos.has(k)) { vistos.add(k); boletos.push(a); } }
+      for (const a of p.entregas) { const k = a.public_id || a.url; if (!vistos.has(k)) { vistos.add(k); entregas.push(a); } }
     }
     const a = comprovantes[0] || null;
     const ehPdf = cpEhPdf(a);
@@ -26779,12 +26784,14 @@ function folhaDeComprovantes(contas, titulo) {
       comprovantes,
       notas,
       boletos,
+      entregas,
       // todos os papéis da linha, na ordem em que a loja confere: o que pagou,
       // o que ela emitiu e o boleto que ela mandou cobrar. Quem exporta
       // escolhe quais tipos vão (ver PAPEIS_DA_FOLHA).
       papeis: comprovantes.map((x) => rotular(x, "Comprovante", "comprovante"))
         .concat(notas.map((x) => rotular(x, "Nota fiscal", "nota")))
-        .concat(boletos.map((x) => rotular(x, "Boleto", "boleto"))),
+        .concat(boletos.map((x) => rotular(x, "Boleto", "boleto")))
+        .concat(entregas.map((x) => rotular(x, "Entrega conferida", "entrega"))),
       // PDF não dá para desenhar na folha junto das fotos: a impressão do
       // navegador não embute arquivo de outro domínio. Vai listado, com o
       // link, e a folha diz que ele é um anexo à parte.
@@ -26801,6 +26808,7 @@ function folhaDeComprovantes(contas, titulo) {
     semComprovante: linhas.filter((l) => !l.comprovante).length,
     notas: linhas.reduce((t, l) => t + l.notas.length, 0),
     boletos: linhas.reduce((t, l) => t + l.boletos.length, 0),
+    entregas: linhas.reduce((t, l) => t + l.entregas.length, 0),
     periodo: {
       de: (linhas.find((l) => l.pagoEm) || {}).pagoEm || "",
       ate: (linhas.filter((l) => l.pagoEm).pop() || {}).pagoEm || "",
@@ -26818,7 +26826,18 @@ const PAPEIS_DA_FOLHA = [
   { id: "comprovante", nome: "Comprovantes", padrao: true },
   { id: "nota", nome: "Notas fiscais", padrao: true },
   { id: "boleto", nome: "Boletos", padrao: false },
+  { id: "entrega", nome: "Entregas conferidas", padrao: false },
 ];
+
+// A foto da entrega assinada: o material chegou e foi conferido. É ela que
+// acende o "✓ Entregue" na conta — e o cliente vê que alguém conferiu.
+function entregaConferida(contas) {
+  for (const c of contas || []) {
+    const p = cpPapeisDaConta(c);
+    if (p.entregas.length) return p.entregas[0];
+  }
+  return null;
+}
 
 function papelVaiNaFolha(a, tipos) {
   if (!tipos) return true;
@@ -38973,7 +38992,7 @@ function FolhaComprovantes({ folha, obraNome, escritorioNome, fmtBRL, aoFechar }
   const [tipos, setTipos] = useState(() => Object.fromEntries((typeof PAPEIS_DA_FOLHA !== "undefined" ? PAPEIS_DA_FOLHA : []).map(t => [t.id, t.padrao])));
   const arquivos = typeof arquivosDaFolha === "function" ? arquivosDaFolha(folha, tipos) : [];
   const contagem = { comprovante: folha.linhas.reduce((t, l) => t + (l.comprovantes || []).length, 0),
-    nota: folha.notas || 0, boleto: folha.boletos || 0 };
+    nota: folha.notas || 0, boleto: folha.boletos || 0, entrega: folha.entregas || 0 };
   // Todos os papéis da folha num .zip — o que vai para a loja conferir. Cada
   // arquivo é baixado do armazenamento e entra com o nome que já tem (o
   // número do papel); o que não baixar fica listado, sem travar o resto.
@@ -41925,7 +41944,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <span data-vk-mantem-mes="1" onClick={e => e.stopPropagation()}
           style={{ marginLeft: 10, display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap", fontSize: 11 }}>
           <span style={{ color: "#6b7280" }}>o papel é</span>
-          {[["nota", "nota fiscal"], ["comprovante", "comprovante"], ["boleto", "boleto"]].map(([t, r]) => (
+          {[["nota", "nota fiscal"], ["comprovante", "comprovante"], ["boleto", "boleto"], ["entrega", "entrega conferida"]].map(([t, r]) => (
             <label key={t} data-vk-tipo-papel={t}
               style={{ color: AZUL_VK, cursor: "pointer", border: "1px solid rgba(4,116,244,0.35)", borderRadius: 999,
                 padding: isMobile ? "6px 10px" : "1px 8px", background: "#fff" }}>
@@ -41981,6 +42000,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                         L.numeroNota && !pedidoEhNotaPaga(L) ? "NF " + L.numeroNota : "",
                                         (() => { const n = papeisDoPedido(L).length; return n ? "\u{1F4CE} " + (n === 1 ? "1 papel" : n + " papéis") : "sem papel"; })(),
                                         L.parcial ? "parcialmente pago" : ""].filter(Boolean).join(" · ")}
+                                      {entregaConferida(L.contas) && (
+                                        <span data-vk-entregue="1" style={{ color: "#15803d", fontWeight: 600 }}> · ✓ entregue</span>
+                                      )}
                                     </div>
                                   </div>
                                   <div style={{ fontSize: 12.5, color: "#111827" }}>
@@ -43137,7 +43159,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         if (acao === "tirar") lista = lista.filter((a) => !mesmo(a));
         else if (acao === "trocar") lista = lista.map((a) => (mesmo(a) ? novo : a));
         else lista = lista.concat([novo]);
-        const ato = acao === "tirar" ? "comprovanteRemovido" : (novo && novo.tipo === "nota" ? "nota" : "comprovante");
+        const ato = acao === "tirar" ? "comprovanteRemovido" : (novo && (novo.tipo === "nota" || novo.tipo === "entrega") ? novo.tipo : "comprovante");
         return registrarAto(comAnexos(c, lista), ato, quem, undefined, ((acao === "tirar" ? antigo : novo) || {}).nome || "");
       });
       gravarContas(novas, obra.id);
