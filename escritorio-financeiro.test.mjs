@@ -25,7 +25,7 @@ const M = new Function(src + `
            detectarColunasTabela, movimentosDaTabela, conciliarExtrato, efEhMovimento,
            lancamentoDoExtrato, efValorDeTexto, efEhData, efLinhaDoCabecalho,
            layoutsDoEscritorio, layoutSalvo,
-           ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento,
+           ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
            fontesDasContasPagas,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
@@ -1693,6 +1693,14 @@ teste("ajustar o valor debitado da fatura fechada", () => {
   assert.strictEqual(M.faturaAjustada(f, { valor: 0 }), null);
 });
 
+
+teste("cartão do escritório só aparece em obra do escritório (empreendimento)", () => {
+  const data = { clientes: [{ id: "c1", nome: "Cobop" }, { id: "e1", nome: "Jacarezinho", servicos: { empreendimento: true } }],
+    escritorio: { cartoes: [{ id: "k1", nome: "Sicoob" }] } };
+  assert.deepStrictEqual(M.cartoesDaObra(data, { id: "o1", clienteId: "c1" }), [], "obra de cliente paga com o dinheiro do cliente");
+  assert.deepStrictEqual(M.cartoesDaObra(data, { id: "o2", clienteId: "e1" }).map((c) => c.id), ["k1"]);
+  assert.deepStrictEqual(M.cartoesDaObra(data, null), []);
+});
 
 for (const [nome, fn] of testes) {
   try { await fn(); console.log("  ok   " + nome); }

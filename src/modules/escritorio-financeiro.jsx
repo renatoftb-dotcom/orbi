@@ -1961,6 +1961,16 @@ function ehEmpreendimento(cliente) {
   return !!(cliente && cliente.servicos && cliente.servicos.empreendimento);
 }
 
+// O cartão de crédito é do escritório: paga a despesa do escritório e a obra
+// do próprio escritório (empreendimento). Obra de cliente paga com o dinheiro
+// do cliente — ali o cartão nem aparece como opção.
+function cartoesDaObra(data, obra) {
+  const d = data || {};
+  const cli = obra ? (d.clientes || []).find((c) => c && c.id === obra.clienteId) : null;
+  if (!ehEmpreendimento(cli)) return [];
+  return (d.escritorio || {}).cartoes || [];
+}
+
 function empreendimentosDoData(data) {
   return ((data || {}).clientes || []).filter(ehEmpreendimento);
 }

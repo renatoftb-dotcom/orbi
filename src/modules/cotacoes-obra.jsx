@@ -7595,10 +7595,15 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const somaDosItens = (itens || []).reduce((t, x) => t + brutoDoItem(x), 0);
   const totalDaEntrada = Math.round((somaDosItens - descontoDoPapel) * 100) / 100;
   const papelTotal = papel ? (numeroDeCampo(papel.total) || numeroDeCampo(papel.valor) || 0) : 0;
-  const faltasDoItemDaEntrada = (it) => faltasDoItemNaEntrada(it, situacao, pagamento);
+  // Cartão é do escritório: só aparece em obra do escritório (empreendimento).
+  // Em obra de cliente a forma é sempre à vista / transferência, mesmo que o
+  // cartão tenha ficado marcado de uma obra escolhida antes.
+  const aceitaCartao = tipoObraEfetiva === "empreendimento" && (cartoes || []).length > 0;
+  const pagamentoEfetivo = aceitaCartao ? pagamento : { ...pagamento, forma: "avista", cartaoId: "" };
+  const faltasDoItemDaEntrada = (it) => faltasDoItemNaEntrada(it, situacao, pagamentoEfetivo);
   const previaAPagar = situacao === "apagar" ? previaDosBoletos(totalDaEntrada, apagar) : [];
   const cartaoDaEntrada = (cartoes || []).find((c) => c && c.id === pagamento.cartaoId) || null;
-  const previaCartao = situacao === "pago" && pagamento.forma === "cartao" && cartaoDaEntrada && typeof parcelasDoCartao === "function"
+  const previaCartao = situacao === "pago" && pagamentoEfetivo.forma === "cartao" && cartaoDaEntrada && typeof parcelasDoCartao === "function"
     ? parcelasDoCartao(cartaoDaEntrada, pagamento.data, totalDaEntrada, pagamento.parcelas) : [];
   // As contas da obra escolhida, para achar parcela de contrato em aberto do
   // fornecedor que acabou de receber.
@@ -7625,7 +7630,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const parcelasDoFavorecido = situacao === "pago" ? parcelasEmAbertoDoPrestador(contasDaObraEscolhida, lojaId) : [];
   const parcelaSugerida = parcelaQueCasa(parcelasDoFavorecido, totalDaEntrada);
   const prova = itens
-    ? entradaUnicaPronta({ situacao, prestadorId: lojaId, itens, pagamento, apagar, parcelaId }, obras, obraId)
+    ? entradaUnicaPronta({ situacao, prestadorId: lojaId, itens, pagamento: pagamentoEfetivo, apagar, parcelaId }, obras, obraId)
     : { ok: false, motivo: "" };
   // A situação de partida sai da obra e do papel — e só até a pessoa tocar.
   useEffect(() => {
@@ -7975,7 +7980,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
       r = aoSeguir({ destino: "despesa", obraId, despesa: {
         favorecidoId: lojaId, favorecido: fav.nome || pp.lidoComo || "", lidoComo: pp.lidoComo || "",
         valor: totalDaEntrada, pagoEm: pagamento.data, parcelaId,
-        forma: pagamento.forma, cartaoId: pagamento.cartaoId, parcelas: pagamento.parcelas,
+        forma: pagamentoEfetivo.forma, cartaoId: pagamentoEfetivo.cartaoId, parcelas: pagamentoEfetivo.parcelas,
         comprovante: anexo, notaDeServico: pp.tipo === "nfse", numeroNota: pp.numeroNota || "" } }) || {};
     } else {
       const rateados = typeof itensRateados === "function"
@@ -7991,7 +7996,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
         itens: rateados.map((x) => ({ descricao: nomeDe(x), insumoCodigo: x.insumoCodigo || "",
           grupoMaterial: x.grupoMaterial || "", quantidade: x.quantidade, unidade: x.unidade || "",
           total: x.valor, etapa: x.etapa || "", contaId: x.contaId || "" })),
-        pagamento, apagar };
+        pagamento: pagamentoEfetivo, apagar };
       r = aoSeguir({ destino: "lancar", obraId, lancamento, anexo }) || {};
     }
     if (r.erro) { setAviso(r.erro); return; }
@@ -8507,8 +8512,8 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                       <div>
                         <label style={E.label}>Como foi pago</label>
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          {[["avista", "À vista / transferência"], ["cartao", "Cartão de crédito"]].map(([k, r]) => {
-                            const on = (pagamento.forma || "avista") === k;
+                          {[["avista", "À vista / transferência"], ["cartao", "Cartão de crédito"]].filter(([k]) => aceitaCartao || k !== "cartao").map(([k, r]) => {
+                            const on = (pagamentoEfetivo.forma || "avista") === k;
                             return (
                               <button key={k} type="button"
                                 onClick={() => setPagamento((p) => ({ ...p, forma: k,
@@ -8523,7 +8528,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                         </div>
                       </div>
                     </div>
-                    {pagamento.forma === "cartao" && (
+                    {pagamentoEfetivo.forma === "cartao" && (
                       !(cartoes || []).length ? (
                         <div style={{ fontSize: 11.5, color: "#b45309", marginTop: 8 }}>
                           Nenhum cartão cadastrado. Cadastre em Escritório → Cartões.
