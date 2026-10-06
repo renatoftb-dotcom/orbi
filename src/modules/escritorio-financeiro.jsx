@@ -3320,7 +3320,8 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
     <div style={{ display: "grid", gap: 14 }}>
       <div style={{ ...S.card, display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap" }}>
         <EFSeletor rotulo="Mês" valor={mes} aoTrocar={aoTrocarMes}
-          opcoes={meses.map((m) => [m, efMesPorExtenso(m) + (mesEstaFechado(m, fechamentos) ? " ✓" : "")])} />
+          opcoes={meses.slice().sort((a, b) => String(b).localeCompare(String(a)))
+            .map((m) => [m, efMesPorExtenso(m) + (mesEstaFechado(m, fechamentos) ? " ✓" : "")])} />
         <div style={{ display: "grid", gap: 3 }}>
           <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>Saldo do banco</span>
           <input style={{ ...S.input, maxWidth: 160 }} inputMode="decimal" value={banco} placeholder="0,00"
