@@ -11134,6 +11134,16 @@ const EF_NAO_E_MOVIMENTO = [
   "rdc", "dep.cheque bloq", "deposito bloqueado 1d", "credito resgate", "deb fundo", "cdb",
 ];
 
+// Dinheiro que só troca de bolso: transferência entre contas do próprio
+// escritório. Não é receita nem despesa — a fila sugere "não é lançamento"
+// (sugere: quem decide é quem fecha).
+const EF_ENTRE_CONTAS = ["mesma titularidade", "mesma titular", "entre contas", "transf propria", "transferencia propria",
+  "conta propria", "mesmo titular", "ted mesma", "pix mesma"];
+function pareceEntreContas(historico) {
+  const h = efSemAcento(historico || "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ");
+  return EF_ENTRE_CONTAS.some((x) => h.indexOf(x) >= 0);
+}
+
 function efEhMovimento(historico) {
   const h = efSemAcento(historico);
   if (!h) return true;
@@ -11824,7 +11834,7 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
 
 // Formulário de um lançamento. As travas são as do validarLancamento: a
 // mensagem aparece antes de gravar, não depois.
-function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, prestadores, aoCriarPrestador, insumos, cartoes, aoCadastrarInsumo, competenciaFixa, titulo, rotuloSalvar }) {
+function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, prestadores, aoCriarPrestador, insumos, cartoes, aoCadastrarInsumo, competenciaFixa, titulo, rotuloSalvar, atalhos }) {
   const S = EF_ESTILO;
   const [f, setF] = useState(() => ({
     contaId: "", contaFonte: "", obraIdAlvo: "", fornecedorId: "", anexos: [], itens: [],
@@ -11996,9 +12006,39 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       parcelasCartao: planoCartao };
   };
 
-  const campo = (rot, filho) => <div style={{ minWidth: 0 }}><div style={S.rot}>{rot}</div>{filho}</div>;
+  const campo = (rot, filho, chave) => <div data-campo={chave} style={{ minWidth: 0 }}><div style={S.rot}>{rot}</div>{filho}</div>;
+  function salvar() {
+    setTentou(true);
+    if (todosErros.length) return;
+    if (naObra) { aoSalvar(comCartao({ ...f, naObra: true, valor: efValorDoCampo(f.valor) })); return; }
+    aoSalvar(comCartao({ ...f, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
+      tipo: "escritorio", valor: efValorDoCampo(f.valor) }));
+  }
+  // Na fila, quem lança 50 linhas não larga o teclado: Enter num campo de
+  // texto lança e abre a próxima, Esc fecha. A lista de escolha aberta e o
+  // cadastro rápido de fornecedor ficam com as teclas deles (eles marcam o
+  // evento como tratado).
+  function aoTeclar(e) {
+    if (!atalhos || e.defaultPrevented || novoPrest) return;
+    if (e.key === "Escape") { e.preventDefault(); aoCancelar(); return; }
+    if (e.key !== "Enter" || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
+    const alvo = e.target || {};
+    const tipo = String(alvo.type || "text").toLowerCase();
+    if (alvo.tagName !== "INPUT" || ["checkbox", "radio", "file", "button", "submit"].indexOf(tipo) >= 0) return;
+    e.preventDefault();
+    salvar();
+  }
+  // Aberto pela fila, o cursor já vai para onde se trabalha: a conta, se
+  // ainda falta; senão a descrição — e aí um Enter lança. É também o que
+  // deixa o Esc funcionar logo depois do "Lançar e seguir".
+  const refForm = useRef(null);
+  useEffect(() => {
+    if (!atalhos || !refForm.current) return;
+    const alvo = refForm.current.querySelector(f.contaId ? '[data-campo="descricao"] input' : '[data-campo="conta"] button');
+    if (alvo && typeof alvo.focus === "function") alvo.focus();
+  }, []);
   return (
-    <div style={{ ...S.card, borderColor: "rgba(4,116,244,0.35)", background: "#f7fbff", display: "grid", gap: 12 }}>
+    <div ref={refForm} onKeyDown={aoTeclar} style={{ ...S.card, borderColor: "rgba(4,116,244,0.35)", background: "#f7fbff", display: "grid", gap: 12 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
         <div style={{ fontSize: 13, fontWeight: 700 }}>{titulo || (inicial && inicial.id ? "Editar lançamento" : "Novo lançamento")}</div>
         {/* O número da transação: é por ele que a prestação de contas acha
@@ -12062,7 +12102,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
               );
             })}
           </Selecao>
-        ))}
+        ), "conta")}
         {campo("Valor", <input style={S.input} inputMode="decimal" value={f.valor} placeholder="0,00"
           onChange={(e) => set("valor", e.target.value)} />)}
         {/* No fechamento, a competência é o mês que se está fechando: não
@@ -12164,7 +12204,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           placeholder="o número do papel, não a forma de pagamento"
           onChange={(e) => set("documento", e.target.value)} />)}
       </div>
-      {campo("Descrição", <input style={S.input} value={f.descricao} onChange={(e) => set("descricao", e.target.value)} />)}
+      {campo("Descrição", <input style={S.input} value={f.descricao} onChange={(e) => set("descricao", e.target.value)} />, "descricao")}
       {/* ── O custo, item a item ──
           A conta a pagar sempre foi por item; é daqui que saem o custo por
           etapa e a abertura por subconta. Escolher o insumo traz unidade,
@@ -12343,15 +12383,10 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       {tentou && todosErros.length > 0 && (
         <div style={{ fontSize: 12, color: "#b91c1c" }}>{todosErros.join(" · ")}</div>
       )}
-      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center" }}>
+        {atalhos && <span style={{ fontSize: 11, color: "#9ca3af", marginRight: "auto" }}>Enter lança · Esc fecha</span>}
         <button style={EF_ESTILO.btnSec} onClick={aoCancelar}>Cancelar</button>
-        <button style={EF_ESTILO.btn} onClick={() => {
-          setTentou(true);
-          if (todosErros.length) return;
-          if (naObra) { aoSalvar(comCartao({ ...f, naObra: true, valor: efValorDoCampo(f.valor) })); return; }
-          aoSalvar(comCartao({ ...f, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
-            tipo: "escritorio", valor: efValorDoCampo(f.valor) }));
-        }}>{rotuloSalvar || "Salvar"}</button>
+        <button style={EF_ESTILO.btn} onClick={salvar}>{rotuloSalvar || "Salvar"}</button>
       </div>
     </div>
   );
@@ -12714,6 +12749,16 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
   function marcarTudo(v) {
     setMarcados(v ? Object.fromEntries(ids.map((id) => [id, true])) : {});
   }
+  // As que já têm classificação pronta (a mesma do mês passado, e que valida
+  // sozinha): todas de uma vez, numa gravada só.
+  const prontas = lista.filter((m) => { const r = fila.rapido(m); return r && r.lancamento; });
+  function lancarSugeridas() {
+    setErroLote("");
+    const r = fila.lancarSugeridas(prontas);
+    if (r && r.erro) { setErroLote(r.erro); return; }
+    if (prontas.some((m) => m.id === aberto)) setAberto("");
+    setMarcados({});
+  }
 
   const dinheiro = (m) => (
     <span style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", fontWeight: 600,
@@ -12731,6 +12776,12 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
           <div style={{ fontSize: 12, color: "#6b7280" }}>
             {lista.length} {lista.length === 1 ? "linha" : "linhas"} do banco · clique na linha para lançar
           </div>
+          {prontas.length > 1 && (
+            <button style={{ ...S.btnSec, padding: "5px 12px", fontSize: 12, color: "#0474f4", borderColor: "rgba(4,116,244,0.4)",
+              opacity: ocupado ? .45 : 1 }} disabled={!!ocupado} onClick={lancarSugeridas}>
+              ✓ Lançar as {prontas.length} sugeridas
+            </button>
+          )}
           <label style={{ marginLeft: "auto", fontSize: 12, color: "#4b5563", display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
             <input type="checkbox" checked={escolhidos.length === lista.length && lista.length > 0}
               onChange={(e) => marcarTudo(e.target.checked)} />
@@ -12739,6 +12790,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
         </div>
       )}
 
+      {erroLote && !escolhidos.length && <div style={{ fontSize: 12, color: "#b45309" }}>{erroLote}</div>}
       {escolhidos.length > 0 && (
         <div style={{ ...S.card, padding: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap",
           borderColor: "rgba(4,116,244,0.35)", background: "#f7fbff" }}>
@@ -12773,6 +12825,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
             const sug = fila.sugestao(m);
             const contaSug = sug && sug.campos && sug.campos.contaId ? contaEscritorio(sug.campos.contaId) : null;
             const aberta = aberto === m.id;
+            const entreContas = pareceEntreContas(m.historico);
             return (
               <div key={m.id} style={{ borderTop: k ? "1px solid rgba(38,36,33,0.08)" : "none",
                 background: aberta ? "#f7fbff" : "transparent" }}>
@@ -12783,6 +12836,11 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                   <div style={{ fontSize: 12, color: "#6b7280", whiteSpace: "nowrap", paddingTop: 1 }}>{dataBR(m.data)}</div>
                   <div style={{ flex: "1 1 220px", minWidth: 0 }}>
                     <div style={{ fontSize: 12.5, color: "#262421", overflowWrap: "anywhere" }}>{m.historico || m.documento || "—"}</div>
+                    {entreContas && !contaSug && (
+                      <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 2 }}>
+                        parece transferência entre contas suas — não entra no resultado
+                      </div>
+                    )}
                     {contaSug && (
                       <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 2 }}>
                         como em {dataBR(sug.de.lancadoEm) || "lançamento anterior"}: <b style={{ color: "#374151" }}>{contaSug.nome}</b>
@@ -12799,11 +12857,18 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                     )}
                     <button style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12 }}
                       onClick={(e) => { e.stopPropagation(); setAberto(aberta ? "" : m.id); }}>{aberta ? "Fechar" : "Lançar"}</button>
-                    <button style={{ background: "none", border: "none", padding: "5px 2px", fontSize: 11.5, color: "#6b7280",
-                      cursor: "pointer", textDecoration: "underline", fontFamily: "inherit" }}
-                      onClick={(e) => { e.stopPropagation(); if (aberta) setAberto(proximaDe(m.id)); fila.naoE(m); }}>
-                      Não é lançamento
-                    </button>
+                    {entreContas && !contaSug ? (
+                      <button style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#0474f4", borderColor: "rgba(4,116,244,0.4)" }}
+                        onClick={(e) => { e.stopPropagation(); if (aberta) setAberto(proximaDe(m.id)); fila.naoE(m, "transferência entre contas"); }}>
+                        ✓ Não é lançamento
+                      </button>
+                    ) : (
+                      <button style={{ background: "none", border: "none", padding: "5px 2px", fontSize: 11.5, color: "#6b7280",
+                        cursor: "pointer", textDecoration: "underline", fontFamily: "inherit" }}
+                        onClick={(e) => { e.stopPropagation(); if (aberta) setAberto(proximaDe(m.id)); fila.naoE(m); }}>
+                        Não é lançamento
+                      </button>
+                    )}
                   </div>
                 </div>
                 {aberta && (
@@ -12815,7 +12880,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                     )}
                     <FormLancamentoEscritorio key={m.id} {...fila.formProps}
                       inicial={fila.inicial(m)} competenciaFixa={fila.mes}
-                      titulo={`Lançar · ${dataBR(m.data)}`} rotuloSalvar="Lançar e seguir"
+                      titulo={`Lançar · ${dataBR(m.data)}`} rotuloSalvar="Lançar e seguir" atalhos
                       aoSalvar={(l) => lancar(m, l, true)} aoCancelar={() => setAberto("")} />
                   </div>
                 )}
@@ -12838,7 +12903,8 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                 <div key={m.id} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "7px 12px",
                   borderTop: k ? "1px solid rgba(38,36,33,0.06)" : "none" }}>
                   <span style={{ whiteSpace: "nowrap" }}>{dataBR(m.data)}</span>
-                  <span style={{ flex: "1 1 200px", color: "#4b5563", overflowWrap: "anywhere" }}>{m.historico || m.documento || "—"}</span>
+                  <span style={{ flex: "1 1 200px", color: "#4b5563", overflowWrap: "anywhere" }}>{m.historico || m.documento || "—"}
+                    {m.motivo && m.motivo !== "não é lançamento" ? <span style={{ color: "#9ca3af" }}> · {m.motivo}</span> : null}</span>
                   {dinheiro(m)}
                   <button style={{ ...S.btnSec, padding: "4px 10px", fontSize: 11.5 }} onClick={() => fila.naoE(m)}>Desfazer</button>
                 </div>
@@ -13032,6 +13098,25 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
           </div>
           <input ref={extrato.entrada} type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt" style={{ display: "none" }}
             onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; extrato.receber(f); }} />
+        </div>
+      )}
+
+      {/* Fila vazia e diferença zero: não sobra nada para fazer além de
+          fechar — a tela oferece isso no alto, em vez de esperar que se
+          procure o botão. */}
+      {extrato && extrato.resultado && !fechado && diferenca === 0
+        && !(extrato.resultado.noBancoSemPar || []).length && (
+        <div style={{ ...S.card, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap",
+          borderColor: "rgba(4,116,244,0.45)", background: "#eef5ff" }}>
+          <div style={{ display: "grid", gap: 2 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#0474f4" }}>Tudo bateu com o banco</div>
+            <div style={{ fontSize: 12.5, color: "#1e3a5f" }}>
+              Nenhuma linha do extrato falta lançar e o saldo fecha em {efDinheiro(calculado)}.
+              {conf.pendentes > 0 ? ` Ainda há ${conf.pendentes} sem conferir — dá para fechar assim mesmo.` : ""}
+            </div>
+          </div>
+          <button style={{ ...S.btn, marginLeft: "auto", opacity: ocupado ? .45 : 1 }} disabled={!!ocupado}
+            onClick={() => aoFechar(mes, saldoBanco)}>Fechar {efMesPorExtenso(mes)}</button>
         </div>
       )}
 
@@ -14017,6 +14102,26 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     return { ok: true };
   }
 
+  // Todas as que a sugestão resolve sozinha: uma gravada só (várias seguidas
+  // partiriam do mesmo retrato de `lancs` e só a última ficaria).
+  function lancarSugeridasDoExtrato(movimentos) {
+    const agora = new Date().toISOString();
+    const novos = [];
+    for (const m of movimentos || []) {
+      const r = lancamentoRapidoDoExtrato(m, mesEmConferencia, sugestaoDoExtrato(m, lancs), fechamentos);
+      if (!r.lancamento) continue;
+      const l = r.lancamento;
+      novos.push({ ...l, id: (typeof uid === "function" ? uid() : String(Date.now())) + "_" + novos.length,
+        numeroDoc: proximaReferencia((data || {}).obras || [], lancs.concat(novos)),
+        criadoEm: agora, conferido: true, conferidoEm: agora, contaBanco: "sim",
+        fornecedor: efNomeDoFornecedor(l), tipo: "escritorio" });
+    }
+    if (!novos.length) return { erro: "Nenhuma linha com sugestão pronta." };
+    gravar([...lancs, ...novos]);
+    setAviso(`${novos.length} lançamentos criados pelas sugestões.`);
+    return { ok: true };
+  }
+
   // "Não é lançamento": a linha sai da fila com o motivo, sem virar nada.
   async function naoELancamento(m, motivo) {
     const doMes = extratosGuardados[mesEmConferencia] || { movimentos: extratoParaGuardar(movimentosExtrato || []) };
@@ -14172,6 +14277,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
               lancar: lancarLinhaDoExtrato,
               rapido: (m) => lancamentoRapidoDoExtrato(m, mesEmConferencia, sugestaoDoExtrato(m, lancs), fechamentos),
               lancarVarias: lancarVariasDoExtrato,
+              lancarSugeridas: lancarSugeridasDoExtrato,
               naoE: naoELancamento,
               formProps: {
                 fechamentos, clientes: (data || {}).clientes || [], obras: (data || {}).obras || [],

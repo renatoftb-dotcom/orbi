@@ -39,7 +39,7 @@ const M = new Function(src + `
            efNomeDoFornecedor, EF_FORNECEDOR_OUTROS,
            custoDoLancamento, validarCustoEmItens,
            comIdsDosMovimentos, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
-           sugestaoDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato };`)();
+           sugestaoDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -1818,6 +1818,12 @@ teste("conciliar: o lançamento da fila casa com a SUA linha; 'não é lançamen
   assert.deepStrictEqual(r.noBancoSemPar.map((m) => m.id), [mov[0].id]);
   assert.deepStrictEqual(r.naoLancar.map((m) => m.motivo), ["transferência"]);
   assert.strictEqual(r.resumo.naoLancar, 1);
+});
+
+teste("transferência entre contas próprias é reconhecida pelo histórico", () => {
+  for (const h of ["TRANSF MESMA TITULARIDADE", "PIX EMITIDO MESMA TITULARIDADE", "Transferência entre contas", "TED MESMA TITULAR"])
+    assert.ok(M.pareceEntreContas(h), h);
+  for (const h of ["PIX EMITIDO JOSE", "DEB CONV SABESP", "", "TARIFA PIX"]) assert.ok(!M.pareceEntreContas(h), h);
 });
 
 for (const [nome, fn] of testes) {
