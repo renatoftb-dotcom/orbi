@@ -45,7 +45,7 @@ const modulo = new Function(`
   var INSUMO_GRUPOS = [];
   ${insSrc.slice(0, corteIns)}
   ${cotSrc.slice(0, cotSrc.lastIndexOf("// ═", corteCot))}
-  return { cotacaoVazia, propostaVazia, valorProposta, propostasOrdenadas, propostaPorId,
+  return { fichaDoXmlDaNfe, tipoDoArquivoDoPapel, obrasCitadasNoTexto, cotacaoVazia, propostaVazia, valorProposta, propostasOrdenadas, propostaPorId,
            propostaEscolhida, melhorProposta, economiaDaCotacao,
            aprovacaoDaCotacao, registrarAprovacaoCotacao, situacaoCotacao,
            podeGerarContrato, contratoDaCotacao, tipoDoContaId, dadosDoContratoDaCotacao,
@@ -3696,6 +3696,63 @@ teste("a conta a pagar acha a cotação de onde veio, direto ou pelo pedido na l
   assert.strictEqual(r.escolhida.nome, "Ourifer");
   assert.strictEqual(r.economia, 50);
   assert.strictEqual(r.itens, 1);
+});
+
+teste("XML da NF-e vira a ficha da nota: emitente, CNPJ, número, itens, desconto e chave", () => {
+  const xml = `<?xml version="1.0"?><nfeProc><NFe><infNFe Id="NFe35260905206161000150550010002585631000258563" versao="4.00">
+  <ide><nNF>258563</nNF><dhEmi>2026-09-01T16:31:40-03:00</dhEmi></ide>
+  <emit><CNPJ>05206161000150</CNPJ><xNome>OURIMADEIRAS CASA &amp; CONSTRUCAO EIRELI - EPP</xNome><xFant>Ourimadeiras</xFant></emit>
+  <det nItem="1"><prod><cProd>123</cProd><xProd>MANTA ASFALTICA 3MM 10M</xProd><uCom>RL</uCom><qCom>2.0000</qCom><vUnCom>249.5000</vUnCom><vProd>499.00</vProd></prod></det>
+  <det nItem="2"><prod><cProd>77</cProd><xProd>PRIMER ASFALTICO 18L</xProd><uCom>UN</uCom><qCom>1</qCom><vUnCom>200.00</vUnCom><vProd>200.00</vProd></prod></det>
+  <total><ICMSTot><vProd>699.00</vProd><vDesc>170.00</vDesc><vNF>529.00</vNF></ICMSTot></total>
+  <cobr><dup><nDup>001</nDup><dVenc>2026-09-01</dVenc></dup></cobr></infNFe></NFe></nfeProc>`;
+  const f = M.fichaDoXmlDaNfe(xml);
+  assert.strictEqual(f.papel.numeroNota, "258563");
+  assert.strictEqual(f.papel.cnpj, "05206161000150");
+  assert.strictEqual(f.papel.fantasia, "Ourimadeiras");
+  assert.ok(/Ourimadeiras Casa & Construcao/i.test(f.papel.lidoComo));
+  assert.deepStrictEqual([f.papel.valor, f.papel.total, f.papel.desconto, f.papel.emitido], [529, 699, 170, "2026-09-01"]);
+  assert.strictEqual(f.papel.chave.length, 44);
+  assert.strictEqual(f.itens.length, 2);
+  assert.deepStrictEqual([f.itens[0].quantidade, f.itens[0].unidade, f.itens[0].unitario, f.itens[0].total], [2, "RL", 249.5, 499]);
+  assert.ok(/^Manta Asfaltica 3mm/.test(f.itens[0].descricao));
+  assert.strictEqual(M.fichaDoXmlDaNfe("<html>não é nota</html>"), null);
+});
+
+teste("o tipo do arquivo decide o caminho da leitura", () => {
+  const t = (name, type) => M.tipoDoArquivoDoPapel({ name, type });
+  assert.deepStrictEqual([t("a.PDF", ""), t("x.jpeg", "image/jpeg"), t("n.xml", ""), t("n.xml", "text/xml"), t("m.txt", "text/plain"),
+    t("IMG_1.HEIC", ""), t("p.docx", "")], ["pdf", "imagem", "xml", "xml", "texto", "heic", "outro"]);
+});
+
+teste("obras citadas no histórico do banco: pelas palavras próprias do nome", () => {
+  const obras = [{ id: "a", nome: "Jacarezinho Mod 1 - L20 e 21 Q5" }, { id: "b", nome: "Jacarezinho Infraestrutura" },
+    { id: "c", nome: "Reforma Cobop" }, { id: "d", nome: "Casa Lima" }];
+  const r = M.obrasCitadasNoTexto("PIX EMITIDO OUTRA IF · Pagamento Pix 05.206.161 impermeabilizantes jacarezinho", obras);
+  assert.deepStrictEqual(r.map((o) => o.id).sort(), ["a", "b"]);
+  assert.deepStrictEqual(M.obrasCitadasNoTexto("material reforma cobop", obras).map((o) => o.id), ["c"]);
+  assert.deepStrictEqual(M.obrasCitadasNoTexto("compra casa", obras), [], "palavra comum não cita obra");
+});
+
+teste("DANFE com coluna LOTE: o nome vem da linha de cima, não o 'FAB 24/07/26'", () => {
+  const L = (...c) => ({ celulas: c, texto: c.join(" ") });
+  const linhas = [
+    L("RECEBEMOS DE 1 OURIMADEIRAS CASA & CONSTRUÇÃO EIRELI - EPP OS PRODUTOS/SERVIÇOS CONSTANTES DA NOTA FISCAL INDICADA AO LADO"),
+    L("DANFE"), L("Documento Auxiliar da Nota Fiscal Eletrônica"), L("Nº 258563"),
+    L("CNPJ"), L("05206161000150"), L("DESTINATÁRIO/REMETENTE"), L("CNPJ/CPF"), L("36122417000174"),
+    L("DATA /HORA/UTC DE EMISSÃO"), L("01/09/2026 16:31:40 -03:00"),
+    L("CODIGO", "LOTE", "CFOP", "UNID.", "QTD."),
+    L("DESCRIÇÃO DO PRODUTO/SERVIÇO", "NCM/SH", "CST", "VLR. UNIT.", "VLR. TOTAL."),
+    L("VIAPLUS 1000 18KG"),
+    L("45179", "FAB 24/07/26", "32149000", "060", "5405", "UN", "10,000", "69,90", "699,00", "0,000", ",00"),
+  ];
+  const o = M.interpretarOrcamento(linhas);
+  assert.strictEqual(o.itens.length, 1);
+  assert.strictEqual(o.itens[0].descricao, "VIAPLUS 1000 18KG");
+  assert.deepStrictEqual([o.itens[0].quantidade, o.itens[0].unitario, o.itens[0].total], [10, 69.9, 699]);
+  assert.ok(/^OURIMADEIRAS/.test(o.fornecedor), o.fornecedor);
+  assert.strictEqual(o.cnpj, "05.206.161/0001-50");
+  assert.strictEqual(o.emitido, "2026-09-01");
 });
 
 for (const [nome, fn] of testes) {

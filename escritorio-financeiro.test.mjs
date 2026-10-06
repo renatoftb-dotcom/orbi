@@ -39,7 +39,8 @@ const M = new Function(src + `
            efNomeDoFornecedor, EF_FORNECEDOR_OUTROS,
            custoDoLancamento, validarCustoEmItens,
            comIdsDosMovimentos, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
-           sugestaoDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas };`)();
+           sugestaoDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas,
+           extratosComArquivo, movimentosGuardadosDoMes, ignoradosGuardados, extratosComIgnorado };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -1824,6 +1825,35 @@ teste("transferência entre contas próprias é reconhecida pelo histórico", ()
   for (const h of ["TRANSF MESMA TITULARIDADE", "PIX EMITIDO MESMA TITULARIDADE", "Transferência entre contas", "TED MESMA TITULAR"])
     assert.ok(M.pareceEntreContas(h), h);
   for (const h of ["PIX EMITIDO JOSE", "DEB CONV SABESP", "", "TARIFA PIX"]) assert.ok(!M.pareceEntreContas(h), h);
+});
+
+teste("extrato guardado por mês do movimento, não pelo mês aberto na tela", () => {
+  // o extrato de setembro foi arrastado com outubro aberto (o que já aconteceu)
+  const antigo = { "2026-10": { origem: "Setembro 2026.xlsm", movimentos: M.extratoParaGuardar([
+    { data: "2026-09-01", valor: -529, historico: "PIX OURIMADEIRAS" }, { data: "2026-08-30", valor: -10, historico: "TARIFA" }]),
+    ignorados: { x: { motivo: "teste" } } } };
+  assert.deepStrictEqual(M.movimentosGuardadosDoMes(antigo, "2026-09").map((m) => m.valor), [-529]);
+  assert.deepStrictEqual(M.movimentosGuardadosDoMes(antigo, "2026-10"), []);
+  // o arquivo do banco de setembro chega: substitui setembro onde estiver, não mexe em agosto
+  const r = M.extratosComArquivo(antigo, [{ data: "2026-09-01", valor: -529, historico: "PIX EMITIDO OURIMADEIRAS" },
+    { data: "2026-09-02", valor: -3.2, historico: "TARIFA PIX" }], "extrato-202609.xlsx", "2026-10-06T00:00:00Z");
+  assert.deepStrictEqual(r.meses, ["2026-09"]);
+  assert.deepStrictEqual(M.movimentosGuardadosDoMes(r.extratos, "2026-09").map((m) => m.historico), ["PIX EMITIDO OURIMADEIRAS", "TARIFA PIX"]);
+  assert.deepStrictEqual(M.movimentosGuardadosDoMes(r.extratos, "2026-08").map((m) => m.valor), [-10]);
+  assert.strictEqual(r.extratos["2026-09"].origem, "extrato-202609.xlsx");
+  assert.ok(M.ignoradosGuardados(r.extratos).x, "o 'não é lançamento' fica");
+  // marcar e desmarcar
+  const id = r.extratos["2026-09"].movimentos[1].id;
+  const m1 = M.extratosComIgnorado(r.extratos, "2026-09", id, "tarifa estornada", "t");
+  assert.strictEqual(M.ignoradosGuardados(m1)[id].motivo, "tarifa estornada");
+  const m2 = M.extratosComIgnorado(m1, "2026-09", id);
+  assert.ok(!M.ignoradosGuardados(m2)[id]);
+  assert.ok(!M.ignoradosGuardados(M.extratosComIgnorado(antigo, "2026-09", "x")).x, "desmarca onde estiver guardado");
+});
+
+teste("documento do banco ('Pix', 'TED') não vira número da nota", () => {
+  assert.strictEqual(M.lancamentoDaLinhaDoExtrato({ id: "a", data: "2026-09-01", valor: -1, documento: "Pix" }, "2026-09", null).documento, "");
+  assert.strictEqual(M.lancamentoDaLinhaDoExtrato({ id: "a", data: "2026-09-01", valor: -1, documento: "000123" }, "2026-09", null).documento, "000123");
 });
 
 for (const [nome, fn] of testes) {

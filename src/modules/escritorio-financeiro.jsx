@@ -1989,6 +1989,60 @@ function extratoParaGuardar(movimentos) {
   }));
 }
 
+// O extrato guardado é por MÊS DO MOVIMENTO, não pelo mês que estava na
+// tela quando o arquivo chegou: o extrato de setembro arrastado com outubro
+// aberto continua sendo de setembro. Um arquivo novo substitui, nos meses
+// que ele cobre, tudo o que estava guardado desses meses — onde quer que
+// estivesse — e não mexe nos outros meses. O "não é lançamento" fica.
+function mesDoMovimento(m) { return String((m && m.data) || "").slice(0, 7); }
+function extratosComArquivo(extratos, movimentos, origem, agora) {
+  const atuais = (extratos && typeof extratos === "object") ? extratos : {};
+  const doArquivo = extratoParaGuardar(movimentos || []);
+  const meses = [...new Set(doArquivo.map(mesDoMovimento).filter((x) => /^\d{4}-\d{2}$/.test(x)))];
+  const novos = {};
+  for (const [k, v] of Object.entries(atuais)) {
+    const sobra = ((v && v.movimentos) || []).filter((m) => meses.indexOf(mesDoMovimento(m)) < 0);
+    novos[k] = { ...v, movimentos: sobra };
+  }
+  for (const mes of meses) {
+    novos[mes] = { ...(novos[mes] || {}), origem: origem || "", atualizadoEm: agora || new Date().toISOString(),
+      movimentos: doArquivo.filter((m) => mesDoMovimento(m) === mes), ignorados: ((novos[mes] || {}).ignorados) || {} };
+  }
+  return { extratos: novos, meses };
+}
+// As linhas do mês, de onde estiverem guardadas (sem repetir).
+function movimentosGuardadosDoMes(extratos, mes) {
+  const vistos = new Set();
+  const saida = [];
+  for (const v of Object.values(extratos || {})) {
+    for (const m of (v && v.movimentos) || []) {
+      if (!m || mesDoMovimento(m) !== String(mes) || vistos.has(m.id)) continue;
+      vistos.add(m.id); saida.push(m);
+    }
+  }
+  return saida.sort((a, b) => String(a.data).localeCompare(String(b.data)));
+}
+function ignoradosGuardados(extratos) {
+  const r = {};
+  for (const v of Object.values(extratos || {})) Object.assign(r, (v && v.ignorados) || {});
+  return r;
+}
+// Marca ou desmarca uma linha como "não é lançamento", sem duplicar a marca.
+function extratosComIgnorado(extratos, mes, id, motivo, agora) {
+  const novos = { ...(extratos || {}) };
+  let tirou = false;
+  for (const [k, v] of Object.entries(novos)) {
+    if (v && v.ignorados && v.ignorados[id]) {
+      const ig = { ...v.ignorados }; delete ig[id];
+      novos[k] = { ...v, ignorados: ig }; tirou = true;
+    }
+  }
+  if (tirou) return novos;
+  const doMes = novos[mes] || { movimentos: [] };
+  novos[mes] = { ...doMes, ignorados: { ...(doMes.ignorados || {}), [id]: { motivo: motivo || "não é lançamento", em: agora || new Date().toISOString() } } };
+  return novos;
+}
+
 // O saldo do banco no fim do mês, lido do próprio extrato: a última linha
 // "SALDO" do mês. Poupa digitar o número que o arquivo já traz.
 function saldoDoExtratoNoMes(movimentos, mes) {
@@ -2058,6 +2112,9 @@ function lancamentoDaLinhaDoExtrato(movimento, mes, sugestao) {
     valor: String(Math.abs(Number(m.valor) || 0).toFixed(2)).replace(".", ","),
     extratoId: m.id || "",
     historicoBanco: m.historico || "",
+    // "Pix", "TED", "Tarifa" na coluna do documento do banco não é número de
+    // papel: o campo é da nota ou do boleto.
+    documento: /\d/.test(String(m.documento || "")) ? String(m.documento) : "",
     cliente: "", projeto: "", fornecedor: "", observacao: "",
     ...((sugestao && sugestao.campos) || {}),
     unidadeId: ((sugestao && sugestao.campos) || {}).unidadeId || "escritorio",
@@ -2587,70 +2644,92 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   // A mesma IA da Entrada: lê foto, print e PDF de qualquer papel.
   const iaDisponivel = typeof useIaDisponivel === "function" ? useIaDisponivel() : false;
 
-  // O mesmo leitor da Entrada: nota, PIX, TED, boleto pago — por foto,
-  // print ou PDF. Preenche só o que está VAZIO — a linha veio do extrato
-  // com valor e data próprios, e sobrescrevê-los seria trocar o que o banco
-  // afirma pelo que o papel repete. O que divergir vira aviso, não correção.
-  // O papel anexado ganha o nome do que é (nota, comprovante, pedido).
-  async function lerComprovante(arquivo) {
-    setLendoComprov(true); setErroAnexo(""); setDivergencia(null); setAvisosLidos([]);
+  // ── O papel anexado vira o lançamento ──
+  // Qualquer arquivo: foto, print e PDF vão para a IA (e o PDF que ela não
+  // ler, para o leitor do VICKE); o XML da nota é lido aqui, exato. Do papel
+  // saem fornecedor (pelo CNPJ, depois pelo nome), número da nota,
+  // descrição e os itens — casados com o catálogo de insumos pelo mesmo
+  // caminho da Entrada. Só preenche o que está VAZIO: valor e data são do
+  // banco, e o que divergir vira aviso, não correção.
+  const [lida, setLida] = useState(null);        // { origem, papel, itens, casados }
+  const [progresso, setProgresso] = useState(null);
+  async function lerPapel(arquivo) {
+    setLendoComprov(true); setErroAnexo(""); setDivergencia(null); setAvisosLidos([]); setProgresso(null);
     try {
-      let d = null;
-      let tipoPapel = "comprovante";
-      if (iaDisponivel && typeof api !== "undefined" && api && api.ia && typeof api.ia.lerDocumento === "function"
-        && typeof fichaDaEntradaPelaIA === "function") {
-        try {
-          const r = await api.ia.lerDocumento(arquivo, null, "");
-          const ficha = fichaDaEntradaPelaIA(r && r.documentos);
-          if (ficha) {
-            const pa = ficha.papel || {};
-            d = { valor: Number(pa.valor || pa.total) || 0, pagoEm: pa.pagoEm || "", favorecido: pa.lidoComo || "",
-              nota: pa.numeroNota || "", descricao: pa.descricao || "" };
-            if (typeof tipoDoAnexoDaEntrada === "function") tipoPapel = tipoDoAnexoDaEntrada(pa);
-            setAvisosLidos((ficha.avisos || []).filter((x) => !/Como foi pago|^Este arquivo tem/.test(x)));
-          }
-        } catch (e) { /* a IA não leu: o leitor do VICKE tenta o PDF */ }
-      }
-      const ehPdf = /pdf$/i.test((arquivo && arquivo.type) || "") || /\.pdf$/i.test((arquivo && arquivo.name) || "");
-      if (!d && ehPdf && typeof linhasDoPdf === "function" && typeof dadosDoComprovante === "function") {
-        const c = dadosDoComprovante(await linhasDoPdf(arquivo));
-        if (c) d = { valor: typeof numeroDeCampo === "function" ? numeroDeCampo(c.valor) : 0, pagoEm: c.pagoEm || "",
-          favorecido: c.favorecido || "", nota: "", descricao: [c.favorecido, c.documento].filter(Boolean).join(" · ") };
-      }
-      if (!d) { setErroAnexo("Anexei o arquivo, mas não reconheci o papel — os campos ficam como estão."); return; }
-      const valorLido = Number(d.valor) || 0;
-      const doCadastro = d.favorecido && typeof prestadorDoComprovante === "function"
-        ? prestadorDoComprovante(prestadores || [], d.favorecido) : null;
-      setF((p) => {
-        const novo = { ...p };
-        if (valorLido > 0 && !(efValorDoCampo(p.valor) > 0)) novo.valor = valorLido.toFixed(2).replace(".", ",");
-        if (d.pagoEm && !p.lancadoEm) novo.lancadoEm = d.pagoEm;
-        if (d.pagoEm && !p.competencia) novo.competencia = d.pagoEm.slice(0, 7);
-        const semFornecedor = !p.fornecedorId && (!String(p.fornecedor || "").trim() || p.fornecedor === EF_FORNECEDOR_OUTROS);
-        if (semFornecedor && doCadastro) { novo.fornecedorId = doCadastro.id; novo.fornecedor = doCadastro.nome || ""; }
-        else if (semFornecedor && d.favorecido) novo.fornecedor = d.favorecido;
-        if (d.nota && !String(p.documento || "").trim()) novo.documento = String(d.nota);
-        if (!String(p.descricao || "").trim() || p.descricao === p.historicoBanco) {
-          novo.descricao = d.descricao || [d.favorecido].filter(Boolean).join(" · ") || p.descricao || "Pagamento";
-        }
-        // O último papel anexado, ainda sem nome, é este.
-        const lista = anexosDaTransacao(p);
-        let k = -1;
-        for (let x = lista.length - 1; x >= 0; x--) if (lista[x] && !lista[x].tipo) { k = x; break; }
-        if (k >= 0) return comAnexos(novo, lista.map((a, x) => (x === k ? { ...a, tipo: tipoPapel } : a)));
-        return novo;
-      });
-      const valorForm = efValorDoCampo(f.valor);
-      const difValor = valorLido > 0 && valorForm > 0 && Math.abs(valorLido - valorForm) >= 0.01;
-      const difData = !!(d.pagoEm && f.lancadoEm && d.pagoEm !== f.lancadoEm);
-      setDivergencia(difValor || difData
-        ? { valor: difValor ? valorLido : 0, data: difData ? d.pagoEm : "", favorecido: d.favorecido || "" }
-        : null);
+      const r = typeof lerPapelDoLancamento === "function"
+        ? await lerPapelDoLancamento(arquivo, { iaDisponivel, aoProgresso: (pr) => setProgresso(pr) })
+        : { ficha: null, erro: "Leitor indisponível." };
+      if (!r.ficha) { setErroAnexo((r.erro || "Não reconheci o papel.") + " O arquivo fica anexado do mesmo jeito."); return; }
+      aplicarFicha(r.ficha, r.origem);
+      if (r.aviso) setAvisosLidos((x) => [r.aviso].concat(x));
     } catch (e) {
-      setErroAnexo(e.message || "Não consegui ler o papel — ele fica anexado do mesmo jeito.");
+      setErroAnexo((e && e.message) || "Não consegui ler o papel — ele fica anexado do mesmo jeito.");
     } finally {
-      setLendoComprov(false);
+      setLendoComprov(false); setProgresso(null);
     }
+  }
+  function aplicarFicha(ficha, origem) {
+    const pa = (ficha && ficha.papel) || {};
+    const digitos = (x) => String(x || "").replace(/\D/g, "");
+    // O valor do PAPEL (total da nota, valor pago) — nunca a soma dos itens,
+    // que não tem o desconto do rodapé e sairia sempre "diferente do banco".
+    const valorLido = Math.round((Number(pa.valor) || 0) * 100) / 100;
+    const emitente = pa.fantasia || pa.lidoComo || "";
+    const pelaCnpj = digitos(pa.cnpj).length >= 11
+      ? (prestadores || []).find((x) => x && digitos(x.cnpjCpf) === digitos(pa.cnpj)) : null;
+    const doCadastro = pelaCnpj || (pa.lidoComo && typeof prestadorDoComprovante === "function"
+      ? (prestadorDoComprovante(prestadores || [], pa.lidoComo) || (pa.fantasia ? prestadorDoComprovante(prestadores || [], pa.fantasia) : null))
+      : null);
+    // Itens de nota, pedido ou cupom — casados com o catálogo.
+    const comItens = (ficha.itens || []).filter((x) => x && String(x.descricao || "").trim());
+    const ehDeItens = comItens.length && ["nota", "pedido", "lista"].indexOf(pa.tipo) >= 0;
+    const lidos = ehDeItens && typeof itensDaEntrada === "function"
+      ? itensDaEntrada({ itens: comItens }, "orcamento", insumos || []).map((x) => {
+          const ins = x.insumoCodigo ? (insumos || []).find((m) => m && (m.codigo === x.insumoCodigo || m.id === x.insumoCodigo)) : null;
+          return { ...x, textoLido: x.descricao,
+            etapa: x.etapa || (ins && ins.etapaPadrao) || "",
+            contaId: x.contaId || (ins && ins.contaPadrao) || "material",
+            grupoMaterial: x.grupoMaterial || (ins && ins.grupo) || "" };
+        })
+      : [];
+    const tipoPapel = pa.tipo === "comprovante" ? "comprovante" : (pa.ehNota || pa.tipo === "nfse" || pa.tipo === "nota") ? "nota"
+      : (typeof tipoDoAnexoDaEntrada === "function" ? tipoDoAnexoDaEntrada(pa) : "pedido");
+    setF((p) => {
+      const novo = { ...p };
+      if (valorLido > 0 && !(efValorDoCampo(p.valor) > 0)) novo.valor = valorLido.toFixed(2).replace(".", ",");
+      if (pa.pagoEm && !p.lancadoEm) novo.lancadoEm = pa.pagoEm;
+      if ((pa.pagoEm || pa.emitido) && !p.competencia) novo.competencia = (pa.pagoEm || pa.emitido).slice(0, 7);
+      const semFornecedor = !p.fornecedorId && (!String(p.fornecedor || "").trim() || p.fornecedor === EF_FORNECEDOR_OUTROS);
+      if (semFornecedor && doCadastro) { novo.fornecedorId = doCadastro.id; novo.fornecedor = doCadastro.nome || ""; }
+      else if (semFornecedor && emitente) novo.fornecedor = emitente;
+      const nota = pa.numeroNota || pa.numeroPedido || "";
+      if (nota && !/\d/.test(String(p.documento || ""))) novo.documento = String(nota);
+      if (!String(p.descricao || "").trim() || p.descricao === p.historicoBanco) {
+        const resumo = [emitente, pa.numeroNota ? "NF " + pa.numeroNota : "",
+          lidos.length ? (lidos.length === 1 ? lidos[0].descricao : lidos.length + " itens") : (pa.descricao || "")].filter(Boolean).join(" · ");
+        if (resumo) novo.descricao = resumo.slice(0, 160);
+      }
+      if (lidos.length && !(p.itens || []).length) novo.itens = lidos;
+      novo.notaLida = { tipo: pa.tipo || "", numero: pa.numeroNota || pa.numeroPedido || "", chave: pa.chave || "",
+        emitido: pa.emitido || "", emitente: pa.lidoComo || "", cnpj: pa.cnpj || "", valor: valorLido,
+        desconto: Number(pa.desconto) || 0, origem: origem || "" };
+      // O último papel anexado, ainda sem nome, é este.
+      const lista = anexosDaTransacao(p);
+      let k = -1;
+      for (let x = lista.length - 1; x >= 0; x--) if (lista[x] && !lista[x].tipo) { k = x; break; }
+      if (k >= 0) return comAnexos(novo, lista.map((a, x) => (x === k ? { ...a, tipo: tipoPapel } : a)));
+      return novo;
+    });
+    setLida({ origem: origem || "", papel: pa, itens: lidos.length, casados: lidos.filter((x) => x.insumoCodigo).length,
+      cadastro: doCadastro || null });
+    setAvisosLidos((ficha.avisos || []).filter((x) => !/Como foi pago|^Este arquivo tem|Confira os itens/.test(x)));
+    const valorForm = efValorDoCampo(f.valor);
+    const quando = pa.pagoEm || "";
+    const difValor = valorLido > 0 && valorForm > 0 && Math.abs(valorLido - valorForm) >= 0.01;
+    const difData = !!(quando && f.lancadoEm && quando !== f.lancadoEm);
+    setDivergencia(difValor || difData
+      ? { valor: difValor ? valorLido : 0, data: difData ? quando : "", favorecido: emitente || "" }
+      : null);
   }
   // Conta do plano da OBRA: o lançamento não nasce aqui, nasce lá — e chega
   // ao extrato do escritório pela ponte, já traduzido.
@@ -2669,6 +2748,26 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const obraAlvo = obrasDoCliente.find((o) => o && o.id === f.obraIdAlvo) || null;
   const clienteAlvo = (clientes || []).find((c) => c && c.id === f.clienteId) || null;
   const destinoDoCusto = naObra ? destinoVisivelDoCusto(f.contaId, obraAlvo, clienteAlvo, {}) : null;
+  // Nota com itens é material de obra quase sempre: a tela pergunta de qual
+  // obra — primeiro as que o histórico do banco ou o papel citam.
+  function escolherObra(o) {
+    if (!o) return;
+    const cli = (clientes || []).find((c) => c && c.id === o.clienteId) || null;
+    const emp = !!(cli && ehEmpreendimento(cli));
+    const unidade = emp ? "empreendimento" : "gestao_obras";
+    const ops = contasDoLancamento(unidade, {});
+    const mat = ops.obra.find((c) => c.id === "material") || ops.obra[0] || null;
+    setF((p) => ({ ...p, unidadeId: unidade, contaFonte: mat ? "obra" : p.contaFonte, contaId: mat ? mat.id : p.contaId,
+      clienteId: cli ? cli.id : p.clienteId, cliente: cli ? cli.nome : p.cliente,
+      empreendimentoId: emp ? cli.id : "", obraIdAlvo: o.id, projeto: o.nome || p.projeto }));
+  }
+  const textoParaObra = [f.historicoBanco, f.descricao, lida && lida.papel && lida.papel.descricao].filter(Boolean).join(" ");
+  const obrasCitadas = (!naObra && (f.itens || []).length && typeof obrasCitadasNoTexto === "function")
+    ? obrasCitadasNoTexto(textoParaObra, obras || []).slice(0, 4) : [];
+  function aceitarSugestoes() {
+    const lista = f.itens || [];
+    lista.forEach((it, i) => { if (!it.insumoCodigo && it.sugestao && it.sugestao.codigo) porInsumo(i, it.sugestao.codigo); });
+  }
 
   // ── Os itens do custo ──
   const itensDoCusto = f.itens || [];
@@ -2690,7 +2789,13 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     const ins = recemCadastrado || (insumos || []).find((x) => x && (x.codigo === codigo || x.id === codigo)) || null;
     if (!ins) { mexerItem(i, { insumoCodigo: codigo }); return; }
     const atual = itensDoCusto[i] || {};
+    // Item que veio do papel: o texto da loja vira apelido do insumo ao gravar.
+    if (atual.textoLido && (ins.codigo || ins.id)) {
+      setF((p) => ({ ...p, aprender: (p.aprender || []).filter((x) => x.descricao !== atual.textoLido)
+        .concat([{ codigo: ins.codigo || ins.id, descricao: atual.textoLido }]) }));
+    }
     mexerItem(i, {
+      sugestao: null,
       insumoCodigo: ins.codigo || ins.id || "",
       descricao: atual.descricao || ins.nome || "",
       grupoMaterial: ins.grupo || "",
@@ -2739,9 +2844,11 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   function salvar() {
     setTentou(true);
     if (todosErros.length) return;
-    if (naObra) { aoSalvar(comCartao({ ...f, naObra: true, valor: efValorDoCampo(f.valor) })); return; }
-    aoSalvar(comCartao({ ...f, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
-      tipo: "escritorio", valor: efValorDoCampo(f.valor) }));
+    const limpos = (f.itens || []).map((x) => { const y = { ...x }; delete y.sugestao; delete y.textoLido; return y; });
+    const g = { ...f, itens: limpos };
+    if (naObra) { aoSalvar(comCartao({ ...g, naObra: true, valor: efValorDoCampo(g.valor) })); return; }
+    aoSalvar(comCartao({ ...g, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
+      tipo: "escritorio", valor: efValorDoCampo(g.valor) }));
   }
   // Na fila, quem lança 50 linhas não larga o teclado: Enter num campo de
   // texto lança e abre a próxima, Esc fecha. A lista de escolha aberta e o
@@ -2946,6 +3053,12 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             <div style={{ fontSize: 11.5, color: "#6b7280" }}>
               o custo por etapa da obra sai daqui
             </div>
+            {itensDoCusto.filter((x) => !x.insumoCodigo && x.sugestao && x.sugestao.codigo).length > 1 && (
+              <button type="button" style={{ ...S.btnSec, marginLeft: "auto", padding: "4px 10px", fontSize: 11.5, color: "#0474f4",
+                borderColor: "rgba(4,116,244,0.4)" }} onClick={aceitarSugestoes}>
+                ✓ aceitar as {itensDoCusto.filter((x) => !x.insumoCodigo && x.sugestao && x.sugestao.codigo).length} sugestões
+              </button>
+            )}
           </div>
 
           {!itensDoCusto.length && (
@@ -2975,6 +3088,20 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                         onChange={(v) => porInsumo(i, v)}
                         placeholder="Procurar no catálogo…"
                         opcoes={[{ valor: "", rotulo: it.descricao || "— escolha o material —" }].concat(opcoesInsumo)} />
+                    )}
+                    {/* O que veio do papel: a aposta do catálogo a um toque, e
+                        o texto da loja à vista — é ele que vira apelido. */}
+                    {!it.insumoCodigo && it.sugestao && it.sugestao.codigo && (
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 6, fontSize: 12 }}>
+                        <span style={{ color: "#4b5563" }}>Parece <b style={{ color: "#111827" }}>{it.sugestao.nome || it.sugestao.codigo}</b></span>
+                        <button type="button" style={{ ...S.btnSec, padding: "3px 10px", fontSize: 11.5, color: "#0474f4", borderColor: "rgba(4,116,244,0.4)" }}
+                          onClick={() => porInsumo(i, it.sugestao.codigo)}>✓ é este</button>
+                      </div>
+                    )}
+                    {it.textoLido && (
+                      <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>
+                        na nota: “{it.textoLido}”{!it.insumoCodigo && !(it.sugestao && it.sugestao.codigo) ? " — não achei no catálogo; escolha ou cadastre acima" : ""}
+                      </div>
                     )}
                   </div>
                   <div style={{ minWidth: 0 }}>
@@ -3083,8 +3210,12 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             anexos={anexosDaTransacao(f)}
             categoria="comprovante_pagamento"
             lendo={lendoComprov}
-            aoLerPdf={lerComprovante}
-            leFoto={!!iaDisponivel}
+            aoLerPdf={lerPapel}
+            aoLerOutro={lerPapel}
+            leFoto={iaDisponivel !== false}
+            progresso={progresso}
+            rotuloLendo="Lendo o papel…"
+            aceita="application/pdf,image/*,.xml,text/xml,application/xml,.txt,text/plain,.eml,.html"
             aoMudar={(lista) => setF((p) => { const novo = comAnexos(p, lista);
               if (!lista.length) { setDivergencia(null); setErroAnexo(""); }
               return novo; })}
@@ -3094,7 +3225,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
         {avisosLidos.map((x, k) => <div key={k} style={{ fontSize: 12, color: "#b45309", marginTop: 6 }}>{x}</div>)}
         {divergencia && (
           <div style={{ fontSize: 12, color: "#b45309", marginTop: 6, lineHeight: 1.45 }}>
-            O comprovante não bate com esta linha:
+            O papel não bate com esta linha:
             {divergencia.valor ? ` ele diz ${efDinheiro(divergencia.valor)}` : ""}
             {divergencia.data ? ` ${divergencia.valor ? "e" : "ele diz"} pago em ${typeof dataDoDiaBR === "function" ? dataDoDiaBR(divergencia.data) : divergencia.data}` : ""}
             {divergencia.favorecido ? ` (para ${divergencia.favorecido})` : ""}.
@@ -3102,6 +3233,54 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           </div>
         )}
       </div>
+      {lida && (
+        <div style={{ fontSize: 12, lineHeight: 1.5, padding: "8px 10px", borderRadius: 10, background: "#fff",
+          border: "1px solid rgba(38,36,33,0.12)", color: "#374151" }}>
+          <b style={{ color: "#111827" }}>
+            {lida.papel.tipo === "comprovante" ? "Comprovante" : lida.papel.tipo === "nfse" ? "Nota de serviço"
+              : lida.papel.ehNota ? "Nota fiscal" : "Pedido"}{lida.papel.numeroNota || lida.papel.numeroPedido ? " " + (lida.papel.numeroNota || lida.papel.numeroPedido) : ""}
+          </b>
+          {(lida.papel.fantasia || lida.papel.lidoComo) ? " · " + (lida.papel.fantasia || lida.papel.lidoComo) : ""}
+          {lida.papel.cnpj ? " · " + String(lida.papel.cnpj).replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : ""}
+          {lida.papel.emitido ? " · emitida " + lida.papel.emitido.split("-").reverse().join("/") : ""}
+          {lida.papel.valor ? " · " + efDinheiro(lida.papel.valor) : ""}
+          {Number(lida.papel.desconto) > 0 ? ` (desconto ${efDinheiro(lida.papel.desconto)})` : ""}
+          {lida.itens ? ` · ${lida.itens} ${lida.itens === 1 ? "item" : "itens"}, ${lida.casados} no catálogo` : ""}
+          <span style={{ color: "#9ca3af" }}> — lido {lida.origem === "xml" ? "do XML" : lida.origem === "ia" ? "pela IA" : "pelo leitor do VICKE"}</span>
+          {lida.cadastro ? <span style={{ color: "#0474f4" }}> · fornecedor {lida.cadastro.nome}</span>
+            : (lida.papel.lidoComo && !f.fornecedorId && !novoPrest && (
+              <button type="button" style={{ background: "none", border: "none", padding: 0, marginLeft: 6, fontSize: 12, color: "#0474f4",
+                cursor: "pointer", textDecoration: "underline", fontFamily: "inherit" }}
+                onClick={() => { setErroPrest(""); setNovoPrest({ nome: lida.papel.fantasia || lida.papel.lidoComo, categoria: "Loja / Comércio",
+                  cnpjCpf: lida.papel.cnpj || "" }); }}>
+                + cadastrar {lida.papel.fantasia || lida.papel.lidoComo}
+              </button>
+            ))}
+        </div>
+      )}
+      {!naObra && (f.itens || []).length > 0 && (
+        <div style={{ fontSize: 12, lineHeight: 1.5, padding: "8px 10px", borderRadius: 10,
+          border: "1px solid rgba(4,116,244,0.3)", background: "#eef5ff", color: "#1e3a5f", display: "grid", gap: 6 }}>
+          <div>
+            <b>{f.itens.length} {f.itens.length === 1 ? "item" : "itens"} na nota</b>
+            {": " + f.itens.slice(0, 4).map((x) => x.descricao).join(" · ") + (f.itens.length > 4 ? " …" : "")}.
+            {" "}Se for material de obra, escolha a obra: o custo entra nela por etapa, item a item, com o catálogo.
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            {obrasCitadas.map((o) => (
+              <button key={o.id} type="button" style={{ ...S.btnSec, padding: "4px 10px", fontSize: 12, color: "#0474f4",
+                borderColor: "rgba(4,116,244,0.4)" }} onClick={() => escolherObra(o)}>{o.nome}</button>
+            ))}
+            <div style={{ minWidth: 200, flex: "1 1 200px" }}>
+              <SelectBusca style={S.input} value=""
+                onChange={(v) => escolherObra((obras || []).find((o) => o && o.id === v))}
+                placeholder="Procurar obra…"
+                opcoes={[{ valor: "", rotulo: obrasCitadas.length ? "outra obra…" : "escolher a obra…" }]
+                  .concat((obras || []).filter((o) => o && o.nome).map((o) => ({ valor: o.id, rotulo: o.nome })))} />
+            </div>
+          </div>
+        </div>
+      )}
       {noCartao && planoCartao.length > 0 && (
         <div style={{ fontSize: 12, color: "#4b5563" }}>
           Cai nas faturas de <b>{planoCartao.map((x) => `${mesAnoPorExtenso(x.competencia)} (${efDinheiro(x.valor)})`).join(" · ")}</b>.
@@ -4484,8 +4663,24 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   const anoAtual = ano || (linhas.length ? linhas[linhas.length - 1].mes.slice(0, 4) : String(new Date().getFullYear()));
 
   const outrosLancamentos = ((data || {}).lancamentos || []).filter((l) => !l || l.tipo !== "escritorio");
-  const gravar = (novosDoEscritorio) =>
-    save({ ...data, lancamentos: [...outrosLancamentos, ...novosDoEscritorio] }).catch(console.error);
+  const gravar = (novosDoEscritorio, extra) =>
+    save({ ...data, ...(extra || {}), lancamentos: [...outrosLancamentos, ...novosDoEscritorio] }).catch(console.error);
+
+  // O que a pessoa confirmou ("este item da nota é aquele insumo") vira
+  // apelido no catálogo — é assim que a próxima nota da mesma loja casa
+  // sozinha. Vai junto na gravada do lançamento, nunca numa separada.
+  function catalogoQueAprendeu(l) {
+    const pares = (l && Array.isArray(l.aprender)) ? l.aprender : [];
+    if (!pares.length || typeof comApelidoDaLoja !== "function") return {};
+    let lista = (data || {}).materiais || [];
+    let mudou = false;
+    for (const par of pares) {
+      const r = comApelidoDaLoja(lista, par.codigo, par.descricao);
+      lista = r.insumos; if (r.mudou) mudou = true;
+    }
+    return mudou ? { materiais: lista } : {};
+  }
+  const semAprender = (l) => { const x = { ...(l || {}) }; delete x.aprender; return x; };
 
   // Custo de uma obra lançado a partir do extrato. Ele NÃO vira lançamento
   // do escritório escrito à mão: vira conta a pagar na obra, já baixada, e
@@ -4546,7 +4741,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const marca = l.extratoId ? { extratoId: l.extratoId, historicoBanco: l.historicoBanco || "",
       conferido: true, conferidoEm: l.conferidoEm || new Date().toISOString() } : null;
     const daPonte = marca ? ponte.lancamentos.map((x) => ({ ...x, ...marca })) : ponte.lancamentos;
-    save({ ...data,
+    save({ ...data, ...catalogoQueAprendeu(l),
       obras: todas.map((o) => (o && o.id === obra.id ? obraNova : o)),
       lancamentos: [...outrosLancamentos, ...lancs, ...daPonte],
     }).catch(console.error);
@@ -4565,7 +4760,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     if (igual) return igual;
     const novo = typeof criarPrestadorRapido === "function"
       ? criarPrestadorRapido({ nome, telefone: String((campos || {}).telefone || "").trim(),
-          categoria: String((campos || {}).categoria || "").trim() || "Loja / Comércio" },
+          categoria: String((campos || {}).categoria || "").trim() || "Loja / Comércio",
+          ...((campos || {}).cnpjCpf ? { cnpjCpf: String(campos.cnpjCpf), tipo: String(campos.cnpjCpf).replace(/\D/g, "").length === 11 ? "PF" : "PJ" } : {}) },
           typeof uid === "function" ? uid() : String(Date.now()))
       : null;
     if (!novo) return null;
@@ -4594,7 +4790,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     // Quando entrou no sistema — é a "Data do lançamento" da base. Editar não
     // muda: o lançamento continua tendo entrado no dia em que entrou.
     const criadoEm = (antes && antes.criadoEm) || l.criadoEm || new Date().toISOString();
-    gravar([...semEle, { ...l, id, numeroDoc, criadoEm, fornecedor: efNomeDoFornecedor(l), tipo: "escritorio" }]);
+    gravar([...semEle, { ...semAprender(l), id, numeroDoc, criadoEm, fornecedor: efNomeDoFornecedor(l), tipo: "escritorio" }],
+      catalogoQueAprendeu(l));
     setForm(null);
   }
 
@@ -4715,12 +4912,17 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   // ou voltar outro dia não apaga a fila. O arquivo arrastado de novo
   // substitui as linhas; o "não é lançamento" de cada linha fica.
   const extratosGuardados = (cfgFin.extratos && typeof cfgFin.extratos === "object") ? cfgFin.extratos : {};
-  const doArquivo = (tabelaExtrato && mapaExtrato && mapaExtrato.completo)
+  const doArquivoTodos = (tabelaExtrato && mapaExtrato && mapaExtrato.completo)
     ? comIdsDosMovimentos(movimentosDaTabela(tabelaExtrato, mapaExtrato)) : null;
-  const guardadoDoMes = extratosGuardados[mesEmConferencia] || null;
-  const movimentosExtrato = doArquivo
-    || (guardadoDoMes && Array.isArray(guardadoDoMes.movimentos) && guardadoDoMes.movimentos.length ? guardadoDoMes.movimentos : null);
-  const ignoradosDoMes = (guardadoDoMes && guardadoDoMes.ignorados) || {};
+  // Do arquivo, só as linhas do mês em conferência: o extrato de setembro
+  // não entra no fechamento de outubro.
+  const doArquivo = doArquivoTodos ? doArquivoTodos.filter((m) => mesDoMovimento(m) === String(mesEmConferencia)) : null;
+  const guardadosDoMes = movimentosGuardadosDoMes(extratosGuardados, mesEmConferencia);
+  const guardadoDoMes = extratosGuardados[mesEmConferencia]
+    || (guardadosDoMes.length ? Object.values(extratosGuardados).find((v) => v && (v.movimentos || []).some((m) => mesDoMovimento(m) === String(mesEmConferencia))) : null)
+    || null;
+  const movimentosExtrato = (doArquivo && doArquivo.length) ? doArquivo : (guardadosDoMes.length ? guardadosDoMes : null);
+  const ignoradosDoMes = ignoradosGuardados(extratosGuardados);
   const conciliacao = movimentosExtrato
     ? conciliarExtrato(movimentosExtrato, lancs.filter((l) => String(l.competencia) === String(mesEmConferencia)),
         { ignorados: ignoradosDoMes })
@@ -4731,28 +4933,31 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const esc = (data || {}).escritorio || {};
     return save({ ...data, escritorio: { ...esc, financeiro: { ...cfgFin, extratos: novos } } });
   }
-  // Arquivo novo e com as colunas certas: guarda (uma vez por conteúdo).
-  const assinaturaDoArquivo = doArquivo ? doArquivo.map((m) => m.id).join("~") : "";
+  // Arquivo novo e com as colunas certas: guarda cada linha no mês dela
+  // (uma vez por conteúdo) e, se o arquivo não tem nada do mês aberto, vai
+  // para o mês dele.
+  const assinaturaDoArquivo = doArquivoTodos ? doArquivoTodos.map((m) => m.id).join("~") : "";
   const guardandoExtrato = useRef("");
   useEffect(() => {
-    if (!doArquivo || !mesEmConferencia) return;
-    const atual = guardadoDoMes && Array.isArray(guardadoDoMes.movimentos) ? guardadoDoMes.movimentos.map((m) => m.id).join("~") : "";
-    const chave = mesEmConferencia + "|" + assinaturaDoArquivo;
-    if (atual === assinaturaDoArquivo || guardandoExtrato.current === chave) return;
-    guardandoExtrato.current = chave;
-    const novos = { ...extratosGuardados, [mesEmConferencia]: {
-      origem: origemExtrato || "", movimentos: extratoParaGuardar(doArquivo),
-      ignorados: ignoradosDoMes, atualizadoEm: new Date().toISOString() } };
+    if (!doArquivoTodos || !doArquivoTodos.length) return;
+    if (guardandoExtrato.current === assinaturaDoArquivo) return;
+    guardandoExtrato.current = assinaturaDoArquivo;
+    const r = extratosComArquivo(extratosGuardados, doArquivoTodos, origemExtrato, new Date().toISOString());
+    const mesesAbertos = r.meses.filter((m) => mesesDoExtrato.includes(m) && !mesEstaFechado(m, fechamentos)).sort();
+    if (r.meses.length && !r.meses.includes(String(mesEmConferencia)) && mesesAbertos.length) {
+      setMesFecho(mesesAbertos[mesesAbertos.length - 1]);
+      setAviso(`O extrato é de ${r.meses.map((m) => efMesPorExtenso(m)).join(" e ")} — abri ${efMesPorExtenso(mesesAbertos[mesesAbertos.length - 1])}.`);
+    }
     // O mapa das colunas deste banco vai na MESMA gravada: duas seguidas
     // partiriam do mesmo retrato de `data` e a segunda apagaria a primeira.
     const novosLayouts = mapaExtrato && mapaExtrato.assinatura && !mapaExtrato.lembrado
       ? { ...layouts, [mapaExtrato.assinatura]: { colunas: mapaExtrato.colunas, visto: new Date().toISOString().slice(0, 10) } }
       : layouts;
     const esc = (data || {}).escritorio || {};
-    Promise.resolve(save({ ...data, escritorio: { ...esc, financeiro: { ...cfgFin, extratos: novos, layouts: novosLayouts } } }))
+    Promise.resolve(save({ ...data, escritorio: { ...esc, financeiro: { ...cfgFin, extratos: r.extratos, layouts: novosLayouts } } }))
       .then(() => { if (novosLayouts !== layouts) setMapaExtrato((m) => (m ? { ...m, lembrado: true } : m)); })
       .catch(console.error);
-  }, [assinaturaDoArquivo, mesEmConferencia]);
+  }, [assinaturaDoArquivo]);
 
   // Guardar o mapa para a próxima vez que este banco aparecer.
   function lembrarLayout() {
@@ -4804,7 +5009,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     if (l && l.naObra) { lancarCustoNaObra({ ...l, ...marca }); return true; }
     const id = typeof uid === "function" ? uid() : String(Date.now());
     const numeroDoc = l.numeroDoc || proximaReferencia((data || {}).obras || [], lancs);
-    gravar([...lancs, { ...l, ...marca, id, numeroDoc, criadoEm: agora, fornecedor: efNomeDoFornecedor(l), tipo: "escritorio" }]);
+    gravar([...lancs, { ...semAprender(l), ...marca, id, numeroDoc, criadoEm: agora, fornecedor: efNomeDoFornecedor(l), tipo: "escritorio" }],
+      catalogoQueAprendeu(l));
     return true;
   }
 
@@ -4853,11 +5059,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
 
   // "Não é lançamento": a linha sai da fila com o motivo, sem virar nada.
   async function naoELancamento(m, motivo) {
-    const doMes = extratosGuardados[mesEmConferencia] || { movimentos: extratoParaGuardar(movimentosExtrato || []) };
-    const ignorados = { ...(doMes.ignorados || {}) };
-    if (ignorados[m.id]) delete ignorados[m.id];
-    else ignorados[m.id] = { motivo: motivo || "não é lançamento", em: new Date().toISOString() };
-    await guardarExtratos({ ...extratosGuardados, [mesEmConferencia]: { ...doMes, ignorados } });
+    await guardarExtratos(extratosComIgnorado(extratosGuardados, mesEmConferencia, m.id, motivo, new Date().toISOString()));
   }
 
   // "Não passou pela conta": tira da fila sem apagar o lançamento.
@@ -4997,7 +5199,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             origem: origemExtrato, entrada: entradaExtrato, receber: receberExtrato,
             mapa: mapaExtrato, corrigir: corrigirColuna, resultado: conciliacao,
             lancar: lancarDoExtrato, marcarCasados: marcarCasadosDoExtrato, descartar: marcarForaDoBanco,
-            guardado: !doArquivo && guardadoDoMes ? guardadoDoMes : null,
+            guardado: !(doArquivo && doArquivo.length) && guardadoDoMes ? guardadoDoMes : null,
             saldoLido: saldoLidoDoExtrato,
             fila: {
               mes: mesEmConferencia,

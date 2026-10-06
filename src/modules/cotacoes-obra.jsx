@@ -1417,6 +1417,159 @@ function fichaDaEntradaPelaIA(documentos) {
   return { papel, itens, avisos, documentos: docs };
 }
 
+// ── Qualquer papel, para um lançamento ──────────────────────────
+// O XML da NF-e é o papel mais exato que existe: o que a loja transmitiu à
+// Sefaz, item por item, com CNPJ e chave. Lido aqui mesmo, sem IA e sem
+// custo. Devolve a mesma ficha que a IA devolve, para o resto não saber de
+// onde veio.
+function fichaDoXmlDaNfe(xml) {
+  const t = String(xml == null ? "" : xml);
+  if (!/<infNFe[\s>]/i.test(t)) return null;
+  const tag = (bloco, nome) => {
+    const m = new RegExp("<" + nome + "(?:\\s[^>]*)?>([\\s\\S]*?)</" + nome + ">", "i").exec(String(bloco || ""));
+    return m ? m[1].trim() : "";
+  };
+  const texto = (s) => String(s || "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).trim();
+  const num = (s) => { const n = Number(String(s || "").replace(",", ".")); return Number.isFinite(n) ? n : 0; };
+  const ide = tag(t, "ide"), emit = tag(t, "emit"), tot = tag(t, "ICMSTot");
+  const chave = (/Id="NFe(\d{44})"/i.exec(t) || [])[1] || (/<chNFe>(\d{44})<\/chNFe>/i.exec(t) || [])[1] || "";
+  const itens = [];
+  const re = /<det\b[^>]*>([\s\S]*?)<\/det>/gi;
+  let m;
+  while ((m = re.exec(t))) {
+    const prod = tag(m[1], "prod");
+    const descricao = textoSemCaixaAlta(texto(tag(prod, "xProd")));
+    if (!descricao) continue;
+    itens.push({ descricao, codigo: texto(tag(prod, "cProd")), quantidade: num(tag(prod, "qCom")) || "",
+      unidade: texto(tag(prod, "uCom")), unitario: num(tag(prod, "vUnCom")) || "",
+      total: Math.round(num(tag(prod, "vProd")) * 100) / 100 });
+  }
+  const numero = texto(tag(ide, "nNF")).replace(/^0+/, "");
+  const valor = Math.round(num(tag(tot, "vNF")) * 100) / 100;
+  const papel = {
+    tipo: "nota", tipoIA: "nota_produto", lidoPeloXml: true, ehNota: true,
+    lidoComo: textoSemCaixaAlta(texto(tag(emit, "xNome"))), fantasia: textoSemCaixaAlta(texto(tag(emit, "xFant"))),
+    cnpj: texto(tag(emit, "CNPJ") || tag(emit, "CPF")),
+    numeroNota: numero, numeroPedido: "",
+    emitido: (texto(tag(ide, "dhEmi")) || texto(tag(ide, "dEmi"))).slice(0, 10),
+    vencimento: texto(tag(tag(t, "dup"), "dVenc")).slice(0, 10),
+    pagoEm: "", total: Math.round(num(tag(tot, "vProd")) * 100) / 100, valor,
+    desconto: Math.round(num(tag(tot, "vDesc")) * 100) / 100,
+    situacaoLida: "", formaLida: "", chave, idTransacao: "", descricao: "",
+  };
+  return { papel, itens, avisos: [], documentos: [] };
+}
+
+// O PDF que a IA não leu (ou sem IA): o leitor do VICKE tenta, nesta ordem,
+// comprovante, nota de serviço e nota/orçamento com tabela de itens.
+function fichaDoPdfPeloLeitor(linhas) {
+  const n = (v) => (typeof v === "number" ? v : (typeof numeroDeCampo === "function" ? numeroDeCampo(v) : Number(v) || 0));
+  const comp = typeof dadosDoComprovante === "function" ? dadosDoComprovante(linhas) : null;
+  if (comp) {
+    const valor = n(comp.valor);
+    return { papel: { tipo: "comprovante", lidoComo: textoSemCaixaAlta(comp.favorecido || ""), cnpj: "", ehNota: false,
+      numeroNota: "", numeroPedido: "", emitido: "", pagoEm: comp.pagoEm || "", valor, total: valor, desconto: 0, descricao: "" },
+      itens: [], avisos: [] };
+  }
+  const nfs = typeof dadosDaNotaDeServico === "function" ? dadosDaNotaDeServico(linhas) : null;
+  if (nfs) {
+    const valor = n(nfs.valor);
+    return { papel: { tipo: "nfse", lidoComo: textoSemCaixaAlta(nfs.favorecido || ""), cnpj: "", ehNota: true,
+      numeroNota: String(nfs.documento || "").replace(/\D/g, "").replace(/^0+/, ""), numeroPedido: "",
+      emitido: nfs.emitidoEm || "", pagoEm: "", valor, total: valor, desconto: 0,
+      descricao: textoSemCaixaAlta(nfs.descricao || "") }, itens: [], avisos: [] };
+  }
+  const o = typeof interpretarOrcamento === "function" ? interpretarOrcamento(linhas) : null;
+  if (o && ((o.itens || []).length || n(o.total) > 0)) {
+    return { papel: { tipo: o.ehNota ? "nota" : "pedido", lidoComo: textoSemCaixaAlta(o.fornecedor || ""), cnpj: o.cnpj || "",
+      ehNota: !!o.ehNota, numeroNota: o.numeroNota || "", numeroPedido: o.numeroPedido || "",
+      emitido: o.emitido || "", vencimento: o.vencimento || "", pagoEm: "",
+      valor: n(o.total), total: n(o.somaItens) || n(o.total), desconto: n(o.desconto), descricao: "" },
+      itens: o.itens || [], avisos: [] };
+  }
+  return null;
+}
+
+// Que tipo de arquivo chegou — pelo nome e pelo tipo que o navegador diz.
+function tipoDoArquivoDoPapel(arquivo) {
+  const nome = String((arquivo && arquivo.name) || "").toLowerCase();
+  const tipo = String((arquivo && arquivo.type) || "").toLowerCase();
+  if (/pdf$/.test(tipo) || /\.pdf$/.test(nome)) return "pdf";
+  if (/heic|heif/.test(tipo) || /\.(heic|heif)$/.test(nome)) return "heic";
+  if (/^image\//.test(tipo) || /\.(jpe?g|png|webp|gif|bmp)$/.test(nome)) return "imagem";
+  if (/xml/.test(tipo) || /\.xml$/.test(nome)) return "xml";
+  if (/^text\//.test(tipo) || /\.(txt|csv|tsv|eml|html?)$/.test(nome)) return "texto";
+  return "outro";
+}
+
+// A porta de leitura do lançamento: qualquer arquivo que chegue. XML da
+// nota é lido aqui; foto, print e PDF vão para a IA; o PDF que ela não ler
+// passa pelo leitor do VICKE; texto (e-mail, mensagem, .txt) vai para a IA
+// como texto. Devolve { ficha, origem, erro } — nunca lança erro.
+async function lerPapelDoLancamento(arquivo, opcoes) {
+  const o = opcoes || {};
+  const tipo = tipoDoArquivoDoPapel(arquivo);
+  let erroIA = "";
+  const comIA = o.iaDisponivel !== false && typeof api !== "undefined" && api && api.ia
+    && typeof api.ia.lerDocumento === "function" && typeof fichaDaEntradaPelaIA === "function";
+  const pelaIA = async (arq, texto) => {
+    try {
+      const r = await api.ia.lerDocumento(arq, o.aoProgresso || null, texto || "");
+      const f = fichaDaEntradaPelaIA(r && r.documentos);
+      if (!f) erroIA = "a IA não achou papel de despesa aqui";
+      return f;
+    } catch (e) {
+      erroIA = (typeof avisoDaIA === "function" ? avisoDaIA(e) : "") || (e && e.message) || "a IA não respondeu";
+      return null;
+    }
+  };
+  if (tipo === "heic") return { ficha: null, erro: "Foto do iPhone em HEIC: mande como JPG (no WhatsApp ela já vai assim) ou tire um print." };
+  if (tipo === "xml" || tipo === "texto" || tipo === "outro") {
+    let texto = "";
+    try { texto = typeof arquivo.text === "function" ? await arquivo.text() : ""; } catch (e) { texto = ""; }
+    const doXml = fichaDoXmlDaNfe(texto);
+    if (doXml) return { ficha: doXml, origem: "xml" };
+    if (!texto.trim() || /\u0000/.test(texto.slice(0, 4000))) {
+      return { ficha: null, erro: "Este tipo de arquivo eu não leio. Mande PDF, foto, print, o XML da nota ou o texto." };
+    }
+    if (comIA) {
+      const f = await pelaIA(null, texto.slice(0, 20000));
+      if (f) return { ficha: f, origem: "ia" };
+    }
+    return { ficha: null, erro: erroIA ? "A IA não leu: " + erroIA + "." : "Não reconheci um papel neste texto." };
+  }
+  if (comIA) {
+    const f = await pelaIA(arquivo, "");
+    if (f) return { ficha: f, origem: "ia" };
+  }
+  if (tipo === "pdf" && typeof linhasDoPdf === "function") {
+    try {
+      const f = fichaDoPdfPeloLeitor(await linhasDoPdf(arquivo));
+      if (f) return { ficha: f, origem: "leitor", aviso: erroIA ? "A IA não leu (" + erroIA + ") — usei o leitor do VICKE." : "" };
+    } catch (e) { /* PDF que nem abre: segue para o aviso */ }
+  }
+  return { ficha: null, erro: erroIA ? "A IA não leu: " + erroIA + "." : "Não reconheci o papel." };
+}
+
+// As obras que o texto cita ("impermeabilizantes jacarezinho"): pelas
+// palavras próprias do nome da obra — não "obra", "casa", "reforma". Volta
+// em ordem de quantas palavras bateram; a tela pergunta quando há mais de uma.
+const COT_PALAVRAS_COMUNS_DE_OBRA = new Set(["obra", "obras", "casa", "casas", "reforma", "construcao", "residencia",
+  "residencial", "modulo", "lote", "lotes", "quadra", "infraestrutura", "alvara", "projeto", "empreendimento"]);
+function obrasCitadasNoTexto(texto, obras) {
+  const alvo = " " + cotSemAcento(String(texto || "")).replace(/[^a-z0-9]+/g, " ") + " ";
+  const saida = [];
+  for (const o of obras || []) {
+    if (!o || !o.nome) continue;
+    const palavras = cotSemAcento(o.nome).replace(/[^a-z0-9]+/g, " ").split(" ")
+      .filter((w) => w.length >= 4 && !/^\d+$/.test(w) && !COT_PALAVRAS_COMUNS_DE_OBRA.has(w));
+    const bate = palavras.filter((w) => alvo.indexOf(" " + w + " ") >= 0).length;
+    if (bate) saida.push({ obra: o, bate });
+  }
+  return saida.sort((a, b) => b.bate - a.bate).map((x) => x.obra);
+}
+
 // ── O papel que não é nota: o comprovante ──────────────────────
 // A nota fiscal diz o que se comprou; o comprovante diz que o dinheiro saiu.
 // Os dois chegam pela mesma caixa, e quem decide é o papel. A ordem importa:
@@ -2439,7 +2592,7 @@ function dataDaNota(texto) {
   const tudo = String(texto || "");
   const m1 = /EMISS[ÃA]O:?\s*(\d{2}\/\d{2}\/\d{4})/i.exec(tudo);
   if (m1) return dataIsoDoOrcamento(m1[1]);
-  const m2 = /DATA\s+DA\s+EMISS[ÃA]O[\s\S]{0,240}?(\d{2}\/\d{2}\/\d{4})/i.exec(tudo);
+  const m2 = /DATA\s*(?:\/\s*HORA\s*)?(?:\/\s*UTC\s*)?D[AE]\s+EMISS[ÃA]O[\s\S]{0,240}?(\d{2}\/\d{2}\/\d{4})/i.exec(tudo);
   return m2 ? dataIsoDoOrcamento(m2[1]) : "";
 }
 
@@ -2473,7 +2626,11 @@ function juntarLinhasDaDanfe(linhas) {
     // ABAIXO. Acima vale primeiro — o nome de cima de um item é sempre dele.
     // Abaixo só se a linha de cima não é nome (cabeçalho, ou a linha do
     // item anterior, que já levou o nome dela).
-    let descricao = d.descricao;
+    // A coluna LOTE ("FAB 24/07/26", "LOTE 123", "VAL 10/27") fica entre o
+    // código e o NCM, no lugar onde a descrição costuma estar: lida como
+    // nome, a manta virava "Fab 24/07/26". Com o nome numa vizinha, vale ele.
+    const ehLote = (t) => /^(FAB|FABR|LOTE|LT|VAL|VALID|VALIDADE)\b|^\d{2}\/\d{2}\/\d{2,4}$/i.test(String(t || "").trim());
+    let descricao = ehLote(d.descricao) ? "" : d.descricao;
     if (!descricao && saida.length) {
       const acima = textoDeNomeDaDanfe(saida[saida.length - 1]);
       if (acima && !saida[saida.length - 1].danfe) { descricao = acima; saida.pop(); }
@@ -2482,6 +2639,7 @@ function juntarLinhasDaDanfe(linhas) {
       const abaixo = textoDeNomeDaDanfe(lista[i + 1]);
       if (abaixo) { descricao = abaixo; i++; }
     }
+    if (!descricao) descricao = d.descricao;
     if (!descricao) { saida.push(lista[i]); continue; }
 
     const celulas = [d.codigo, descricao, d.unidade].filter(Boolean).concat(d.numeros);
@@ -2519,7 +2677,11 @@ function interpretarOrcamento(linhas) {
     const it = itemDeOrcamento(l, cab ? cab.papeis : null);
     if (it) itens.push(it);
   });
-  const cnpj = (/(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/.exec(tudo) || [])[1] || "";
+  // O CNPJ sem pontuação também vale ("05206161000150"), mas só o primeiro
+  // depois de um rótulo CNPJ e antes do destinatário — o de baixo é o nosso.
+  const cnpjSemPonto = ((/CNPJ[\s\S]{0,60}?\b(\d{14})\b/i.exec(tudo.split(/DESTINAT[ÁA]RIO/i)[0]) || [])[1] || "")
+    .replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
+  const cnpj = (/(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/.exec(tudo) || [])[1] || cnpjSemPonto;
   // o nome da loja é a primeira linha de verdade do papel — antes de
   // qualquer rótulo ("IE:", "CNPJ", "Rua", "Fone")
   let fornecedor = "";
@@ -2530,7 +2692,8 @@ function interpretarOrcamento(linhas) {
     if (iRec >= 0) {
       const mesma = String(lista[iRec].texto || "").replace(/^.*RECEBEMOS\s+DE\s*/i, "");
       const alvo = mesma.trim() ? mesma : String((lista[iRec + 1] || {}).texto || "");
-      fornecedor = alvo.replace(/\s*OS PRODUTOS.*$/i, "").replace(/\s*DATA DE RECEBIMENTO.*$/i, "").trim();
+      fornecedor = alvo.replace(/\s*OS PRODUTOS.*$/i, "").replace(/\s*DATA DE RECEBIMENTO.*$/i, "")
+        .replace(/^\d+\s+(?=[A-Za-zÀ-ÿ])/, "").trim();   // "RECEBEMOS DE 1 OURIMADEIRAS": o 1 não é do nome
     }
   }
   for (const l of fornecedor ? [] : lista.slice(0, 8)) {
@@ -3850,9 +4013,9 @@ function comprimirImagem(arquivo) {
 //
 // Texto colado não é anexo: quem copia um número e cola no campo do lado
 // não pode ver o sistema tentar subir arquivo nenhum.
-function arquivoColado(dados) {
+function arquivoColado(dados, qualquer) {
   const d = dados || {};
-  const aceita = (f) => !!f && (/^image\//.test(f.type || "") || String(f.type) === "application/pdf");
+  const aceita = (f) => !!f && (qualquer || /^image\//.test(f.type || "") || String(f.type) === "application/pdf");
   const dosArquivos = Array.from(d.files || []).filter(aceita);
   if (dosArquivos.length) return dosArquivos[0];
   for (const it of Array.from(d.items || [])) {
@@ -9649,7 +9812,7 @@ function CadastroRapidoDePrestador({ form, aoMudar, erro, aoSalvar, aoCancelar, 
 // Cada linha é o mesmo CampoAnexoProposta de sempre, com o arquivo dentro;
 // a última é ele vazio, esperando mais um. Nada de componente novo para
 // anexar: anexar já tinha dono.
-function CampoDocumentos({ anexos, aoMudar, onErro, categoria, aoLerPdf, lendo, progresso, leFoto }) {
+function CampoDocumentos({ anexos, aoMudar, onErro, categoria, aoLerPdf, lendo, progresso, leFoto, aoLerOutro, aceita, rotuloLendo }) {
   const lista = (anexos || []).filter(Boolean);
   const trocar = (i, novo) => {
     const nova = lista.slice();
@@ -9666,7 +9829,7 @@ function CampoDocumentos({ anexos, aoMudar, onErro, categoria, aoLerPdf, lendo, 
       <CampoAnexoProposta
         anexo={null} categoria={categoria}
         lendo={lendo} progresso={progresso}
-        aoLerPdf={aoLerPdf} leFoto={leFoto}
+        aoLerPdf={aoLerPdf} leFoto={leFoto} aoLerOutro={aoLerOutro} aceita={aceita} rotuloLendo={rotuloLendo}
         chamada={lista.length ? "Arraste mais um documento" : "Arraste a nota ou o comprovante aqui"}
         apoio={lista.length
           ? "nota fiscal, comprovante, boleto — tudo que sustenta este lançamento"
@@ -9679,7 +9842,7 @@ function CampoDocumentos({ anexos, aoMudar, onErro, categoria, aoLerPdf, lendo, 
   );
 }
 
-function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, chamadaToque, apoio, apoioToque, aoLerPdf, lendo, leFoto, progresso }) {
+function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, chamadaToque, apoio, apoioToque, aoLerPdf, lendo, leFoto, progresso, aoLerOutro, aceita, rotuloLendo }) {
   const [sobre, setSobre] = useState(false);
   const [enviando, setEnviando] = useState(false);
   // "Abrir" aqui era um link direto para a URL do storage. Como o arquivo
@@ -9696,6 +9859,15 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, chama
     if (!arquivo) return;
     setEnviando(true);
     onErro("");
+    // XML da nota, texto, e-mail: o armazenamento só guarda PDF e foto, mas
+    // o conteúdo se lê do mesmo jeito — quem pediu decide o que fazer.
+    const ehPdfOuFoto = /pdf$/i.test(arquivo.type || "") || /\.pdf$/i.test(arquivo.name || "") || /^image\//i.test(arquivo.type || "");
+    if (!ehPdfOuFoto && typeof aoLerOutro === "function") {
+      try { await aoLerOutro(arquivo); }
+      catch (e) { onErro(e.message || "Não consegui ler o arquivo."); }
+      finally { setEnviando(false); }
+      return;
+    }
     try {
       onTrocar(await enviarAnexo(arquivo, categoria || "proposta_cotacao"));
       // O arquivo que a loja mandou é a proposta E a fonte dos preços — um
@@ -9728,7 +9900,7 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, chama
       const temTexto = !!(e.clipboardData && typeof e.clipboardData.getData === "function"
         && String(e.clipboardData.getData("text/plain") || "").trim());
       if (digitando && temTexto) return;
-      const f = arquivoColado(e.clipboardData);
+      const f = arquivoColado(e.clipboardData, typeof aoLerOutro === "function");
       if (!f) return;
       e.preventDefault();
       // o arquivo colado vem sem nome de verdade; damos um com data
@@ -9761,7 +9933,7 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, chama
           <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", wordBreak: "break-all" }}>{anexo.nome}</div>
           <div style={{ fontSize: 11, color: "#6b7280" }}>{tamanhoLegivel(anexo.bytes)}</div>
         </div>
-        {lendo && !progresso && <div style={{ fontSize: 11.5, color: "#0474f4", fontWeight: 600 }}>lendo os preços…</div>}
+        {lendo && !progresso && <div style={{ fontSize: 11.5, color: "#0474f4", fontWeight: 600 }}>{rotuloLendo ? rotuloLendo.toLowerCase() : "lendo os preços…"}</div>}
         <button type="button" style={E.btnSec} onClick={() => setVendo(true)}>Abrir</button>
         <button style={E.btnSec} onClick={remover}>Remover</button>
         {lendo && progresso && (
@@ -9779,7 +9951,7 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, chama
       onDragLeave={() => setSobre(false)}
       onDrop={e => { e.preventDefault(); setSobre(false); receber(e.dataTransfer.files && e.dataTransfer.files[0]); }}
       onClick={() => refInput.current && refInput.current.click()}
-      onPaste={e => { const f = arquivoColado(e.clipboardData); if (f) { e.preventDefault(); receber(f); } }}
+      onPaste={e => { const f = arquivoColado(e.clipboardData, typeof aoLerOutro === "function"); if (f) { e.preventDefault(); receber(f); } }}
       tabIndex={0}
       onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); refInput.current && refInput.current.click(); } }}
       style={{
@@ -9787,11 +9959,11 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, chama
         borderRadius: 12, padding: "18px 14px", textAlign: "center", cursor: "pointer",
         background: sobre ? "#f0f7ff" : "#fafafa", transition: "all .15s ease",
       }}>
-      <input ref={refInput} type="file" accept="application/pdf,image/*" style={{ display: "none" }}
+      <input ref={refInput} type="file" accept={aceita || "application/pdf,image/*"} style={{ display: "none" }}
         onChange={e => { receber(e.target.files && e.target.files[0]); e.target.value = ""; }} />
       <div style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>
         {enviando
-          ? (lendo ? "Lendo os preços…" : "Enviando…")
+          ? (lendo ? (rotuloLendo || "Lendo os preços…") : "Enviando…")
           : (toque ? (chamadaToque || "Toque para anexar") : (chamada || "Arraste o PDF da proposta aqui"))}
       </div>
       <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>
