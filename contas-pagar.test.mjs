@@ -3099,5 +3099,23 @@ teste("planilha da obra: o item do catálogo volta pela coluna “Itens da nota 
   assert.strictEqual(r.dados.obras[1], dados.obras[1]);
 });
 
+teste("planilha da obra: sem o valor igual não liga; “Outros” vai à parte; grupo desmarcado não grava", () => {
+  const L = [{ nota: "4216", item: "Ferramentas - Vassoura c/ cabo", valor: 59.96, quantidade: 1, unidade: "Unidades" },
+             { nota: "4189", item: "Outros", valor: 12.8, quantidade: 0, unidade: "" }];
+  const dados = { lancamentos: [], obras: [{ id: "o", nome: "Obra", contasPagar: [
+      { id: "aj", doc: "4216", valor: 0.01, descricao: "ajuste planilha", pago: true },
+      { id: "pd", doc: "4189", valor: 12.8, descricao: "Pedágio", pago: true },
+      { id: "sp", valor: 5, descricao: "sem papel", pago: true, pagoEm: "2026-09-01" }] }],
+    materiais: [{ codigo: "FER-041", nome: "Ferramentas - Vassoura c/ cabo", grupo: "Ferramentas" }, { codigo: "OUT-004", nome: "Outros", grupo: "Outros" }] };
+  const r = modulo.completarBase(dados, { planilha: L });
+  assert.ok(!r.dados.obras[0].contasPagar[0].insumoCodigo, "mesmo número, valor diferente: não é o mesmo item");
+  assert.strictEqual(r.grupos.outros.length, 1);
+  assert.strictEqual(r.grupos.planilha.length, 0);
+  const s = modulo.completarBase(dados, { planilha: L, grupos: ["planilha"] });
+  assert.ok(!s.dados.obras[0].contasPagar[1].insumoCodigo, "“Outros” desmarcado não grava");
+  assert.ok(!s.dados.obras[0].contasPagar[2].doc, "número do papel desmarcado não grava");
+  assert.strictEqual(s.total, 0);
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

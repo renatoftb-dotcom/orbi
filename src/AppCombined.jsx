@@ -26963,15 +26963,17 @@ function completarBase(dados, opcoes) {
   const lancs = d.lancamentos || [];
   const materiais = (d.materiais || []).filter(Boolean);
   const ativos = materiais.filter((m) => m.ativo !== false);
-  const grupos = { papel: [], escritorio: [], planilha: [], catalogo: [], unidade: [], ajuste: [], insumos: [] };
+  const grupos = { papel: [], escritorio: [], planilha: [], outros: [], catalogo: [], unidade: [], ajuste: [], insumos: [] };
   const daPlanilha = Array.isArray(o.planilha) ? o.planilha : [];
+  // Quem confere pode deixar um grupo de fora: só os marcados são aplicados.
+  const quer = (g) => !Array.isArray(o.grupos) || o.grupos.indexOf(g) >= 0;
   const nomeObra = (ob) => ob.nome || ob.id;
   const reg = (c, det) => (typeof registrarAto === "function" ? registrarAto(c, "editada", quem, agora, det) : c);
 
   // 1. números do papel, na ordem do pagamento
   const chave = (c) => String(c.numeroDoc || c.pedidoId || c.id);
   const pend = [];
-  for (const ob of obras.filter(daVez)) {
+  for (const ob of (quer("papel") ? obras.filter(daVez) : [])) {
     const vistos = {};
     for (const c of ob.contasPagar || []) {
       if (!c || !c.pago || String(c.doc || "").trim()) continue;
@@ -27020,7 +27022,7 @@ function completarBase(dados, opcoes) {
       if (!c) return c;
       let x = c;
       // 4. ajustes combinados
-      for (const a of ajustes.contas || []) {
+      for (const a of (quer("ajuste") ? ajustes.contas || [] : [])) {
         if (a.obraId !== ob.id || a.ref !== x.numeroDoc || (a.cotacaoId && a.cotacaoId !== x.cotacaoId)) continue;
         const muda = [];
         if (a.etapa && !x.etapa) { x = { ...x, etapa: a.etapa }; muda.push("etapa " + nomeEtapa(a.etapa)); }
@@ -27036,24 +27038,30 @@ function completarBase(dados, opcoes) {
       }
       // 2a. o item que a planilha da obra diz, pelo papel e pelo valor: só
       // quando a planilha aponta UM item do catálogo para esta conta.
-      if (!x.insumoCodigo && !x.contratoId && daPlanilha.length && String(x.doc || "").trim()) {
+      if (quer("planilha") && !x.insumoCodigo && !x.contratoId && daPlanilha.length && String(x.doc || "").trim()) {
         const valor = Math.round((Number(x.valor) || 0) * 100) / 100;
         const doPapel = daPlanilha.filter((r) => r.nota === String(x.doc).trim());
+        // Papel E valor: o número sozinho não basta — a mesma numeração pode
+        // ter sido usada para coisas diferentes no VICKE e na planilha.
         const mesmas = doPapel.filter((r) => Math.abs(r.valor - valor) <= 0.02);
-        const itens = [...new Set((mesmas.length ? mesmas : (doPapel.length === 1 ? doPapel : [])).map((r) => cpChaveDoNome(r.item)))];
-        const m = itens.length === 1 ? porNome.get(itens[0]) : null;
+        const itens = [...new Set(mesmas.map((r) => cpChaveDoNome(r.item)))];
+        const m0 = itens.length === 1 ? porNome.get(itens[0]) : null;
+        // "Outros" (pedágio, taxa, gasolina) também tem item no catálogo, mas
+        // ligar a ele não diz nada novo: vai num grupo à parte.
+        const ehOutros = !!m0 && cpChaveDoNome(m0.grupo) === "outros";
+        const m = m0 && (!ehOutros || quer("outros")) ? m0 : null;
         if (m) {
-          const linha = (mesmas[0] || doPapel[0]);
+          const linha = mesmas[0];
           const muda = { insumoCodigo: m.codigo };
           if (!x.grupoMaterial || x.grupoMaterial === "Outros") muda.grupoMaterial = m.grupo || x.grupoMaterial || "";
           if (!(Number(x.quantidade) > 0) && linha.quantidade > 0) muda.quantidade = linha.quantidade;
           if (!String(x.unidade || "").trim() && (linha.unidade || m.unidade)) muda.unidade = linha.unidade || m.unidade;
           x = reg({ ...x, ...muda }, "item da planilha: " + m.codigo + " " + m.nome);
-          grupos.planilha.push({ obraId: ob.id, texto: `${nomeObra(ob)} · papel ${x.doc} · ${x.descricao || ""} · ${valor.toFixed(2).replace(".", ",")} → ${m.codigo} ${m.nome}` });
+          grupos[ehOutros ? "outros" : "planilha"].push({ obraId: ob.id, texto: `${nomeObra(ob)} · papel ${x.doc} · ${x.descricao || ""} · ${valor.toFixed(2).replace(".", ",")} → ${m.codigo} ${m.nome}` });
         }
       }
       // 2. ligar ao catálogo pelo nome
-      if (!x.insumoCodigo && !x.contratoId) {
+      if (quer("catalogo") && !x.insumoCodigo && !x.contratoId) {
         const m = porNome.get(cpChaveDoNome(x.descricao));
         if (m) {
           x = reg({ ...x, insumoCodigo: m.codigo }, "ligado ao catálogo " + m.codigo);
@@ -27062,7 +27070,7 @@ function completarBase(dados, opcoes) {
       }
       // 3. unidade com a grafia do catálogo
       const u = String(x.unidade || "").trim();
-      if (u && grafia[u.toLowerCase()] && grafia[u.toLowerCase()] !== u) {
+      if (quer("unidade") && u && grafia[u.toLowerCase()] && grafia[u.toLowerCase()] !== u) {
         const nova = grafia[u.toLowerCase()];
         x = reg({ ...x, unidade: nova }, `unidade ${u} → ${nova}`);
         grupos.unidade.push({ obraId: ob.id, texto: `${nomeObra(ob)} · Ref ${x.numeroDoc || "—"} · ${x.descricao} · ${u} → ${nova}` });
@@ -27087,7 +27095,7 @@ function completarBase(dados, opcoes) {
   // 4b. o nome no catálogo
   const materiaisNovos = materiais.map((m) => {
     const a = (ajustes.catalogo || []).find((x) => x.codigo === m.codigo);
-    if (so || !a || m.nome !== a.de) return m;
+    if (so || !quer("insumos") || !a || m.nome !== a.de) return m;
     grupos.insumos.push({ texto: `${m.codigo} · ${a.de} → ${a.para} (o nome antigo fica como apelido)` });
     return { ...m, nome: a.para, aliases: [...new Set((m.aliases || []).concat([a.de]))] };
   });
@@ -27997,6 +28005,8 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   // A planilha de controle da obra, arrastada aqui: dela volta o item do
   // catálogo ("Itens da nota fiscal") que a importação antiga não trouxe.
   const [planilhaObra, setPlanilhaObra] = useState(null);   // { nome, linhas }
+  // Os grupos que quem confere deixou de fora (desmarcados).
+  const [gruposFora, setGruposFora] = useState({ outros: true });
   const refPlanilha = useRef(null);
   async function lerPlanilhaDaObra(arquivo) {
     if (!arquivo) return;
@@ -28015,11 +28025,16 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   const pendencias = useMemo(() => (completar && completar.data
     ? completarBase(completar.data, { quem: completar.quem, obraId: completar.obraId || "", planilha: planilhaObra ? planilhaObra.linhas : null }) : null),
     [completar && completar.data, planilhaObra]);
+  const CP_GRUPOS_COMPLETAR = ["papel", "escritorio", "planilha", "outros", "catalogo", "unidade", "ajuste", "insumos"];
+  // o mesmo número no escritório só existe se o número do papel for junto
+  const gruposEscolhidos = CP_GRUPOS_COMPLETAR.filter((g) => !gruposFora[g] && !(g === "escritorio" && gruposFora.papel));
+  const totalEscolhido = pendencias ? gruposEscolhidos.reduce((t, g) => t + ((pendencias.grupos[g] || []).length), 0) : 0;
   async function gravarCompletar() {
-    if (!completar || !pendencias || !pendencias.total) return;
+    if (!completar || !pendencias || !totalEscolhido) return;
     setGravandoBase("Gravando…");
     try {
-      const r = completarBase(completar.data, { quem: completar.quem, obraId: completar.obraId || "", planilha: planilhaObra ? planilhaObra.linhas : null });
+      const r = completarBase(completar.data, { quem: completar.quem, obraId: completar.obraId || "", grupos: gruposEscolhidos,
+        planilha: planilhaObra ? planilhaObra.linhas : null });
       await completar.save(r.dados);
       setGravandoBase(`Gravado: ${r.total} ${r.total === 1 ? "ajuste" : "ajustes"}.`);
       setConferindo(false);
@@ -28266,17 +28281,25 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
           {planilhaObra && (
             <div style={{ fontSize: 12, color: "#1e3a5f", margin: "-4px 0 10px" }}>
               Planilha <b>{planilhaObra.nome}</b>: {planilhaObra.linhas.length} itens lidos,
-              {" "}{(pendencias.grupos.planilha || []).length} ligações novas ao catálogo.
+              {" "}{(pendencias.grupos.planilha || []).length} itens ligados ao catálogo
+              {(pendencias.grupos.outros || []).length ? ` e ${(pendencias.grupos.outros || []).length} “Outros”${gruposFora.outros ? " (desmarcados)" : ""}` : ""}.
             </div>
           )}
           {[["papel", "Número do papel (e nome do arquivo)"], ["escritorio", "Mesmo número no lançamento do escritório"],
-            ["planilha", "Item ligado ao catálogo pela planilha da obra"], ["catalogo", "Item ligado ao catálogo pelo nome"], ["unidade", "Unidade com a grafia do catálogo"],
+            ["planilha", "Item ligado ao catálogo pela planilha da obra"],
+            ["outros", "“Outros” da planilha ligado ao item Outros do catálogo"], ["catalogo", "Item ligado ao catálogo pelo nome"], ["unidade", "Unidade com a grafia do catálogo"],
             ["ajuste", "Ajustes combinados"], ["insumos", "Catálogo"]].map(([k, titulo]) => {
             const linhas = pendencias.grupos[k] || [];
             if (!linhas.length) return null;
             return (
-              <details key={k} open={linhas.length <= 12} style={{ marginBottom: 8 }}>
-                <summary style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", cursor: "pointer" }}>{titulo} — {linhas.length}</summary>
+              <details key={k} open={linhas.length <= 12} style={{ marginBottom: 8, opacity: gruposEscolhidos.indexOf(k) < 0 ? 0.5 : 1 }}>
+                <summary style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", cursor: "pointer" }}>
+                  <input type="checkbox" checked={gruposEscolhidos.indexOf(k) >= 0} disabled={k === "escritorio" && !!gruposFora.papel}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setGruposFora((x) => ({ ...x, [k]: !e.target.checked }))}
+                    style={{ marginRight: 6, verticalAlign: "middle" }} />
+                  {titulo} — {linhas.length}
+                </summary>
                 <div style={{ maxHeight: 260, overflowY: "auto", marginTop: 4 }}>
                   {linhas.map((l, i) => (
                     <div key={i} style={{ fontSize: 11.5, color: "#374151", padding: "3px 0", borderBottom: "1px solid rgba(38,36,33,0.06)", overflowWrap: "anywhere" }}>{l.texto}</div>
@@ -28286,9 +28309,9 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
             );
           })}
           <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-            <button type="button" onClick={gravarCompletar} disabled={!!gravandoBase && gravandoBase === "Gravando…"}
+            <button type="button" onClick={gravarCompletar} disabled={!totalEscolhido || (!!gravandoBase && gravandoBase === "Gravando…")}
               style={{ background: "#0474f4", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-              {gravandoBase === "Gravando…" ? "Gravando…" : `Gravar ${pendencias.total} ${pendencias.total === 1 ? "ajuste" : "ajustes"}`}
+              {gravandoBase === "Gravando…" ? "Gravando…" : `Gravar ${totalEscolhido} ${totalEscolhido === 1 ? "ajuste" : "ajustes"}`}
             </button>
             <button type="button" onClick={() => setConferindo(false)}
               style={{ background: "#fff", color: "#374151", border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 10, padding: "7px 14px", fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>
