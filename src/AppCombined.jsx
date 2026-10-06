@@ -12288,7 +12288,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             }}
             placeholder="Procurar fornecedor…"
             aoCriar={(termo) => { setErroPrest(""); setNovoPrest({ nome: termo || "", categoria: "Loja / Comércio" }); }}
-            criarRotulo="cadastrar"
+            criarRotulo="fornecedor"
             opcoes={[{ valor: EF_OPCAO_OUTROS, rotulo: "Outros — não identificado" }]
               .concat(f.fornecedor && !f.fornecedorId && f.fornecedor !== EF_FORNECEDOR_OUTROS
                 ? [{ valor: "", rotulo: f.fornecedor }] : [])
@@ -12296,7 +12296,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
         ))}
         {novoPrest && (
           <div style={{ gridColumn: "1 / -1" }}>
-            <CadastroRapidoDePrestador form={novoPrest} aoMudar={setNovoPrest} erro={erroPrest}
+            <CadastroRapidoDePrestador form={novoPrest} aoMudar={setNovoPrest} erro={erroPrest} fornecedores={prestadores}
               aoSalvar={() => {
                 if (!String(novoPrest.nome || "").trim()) { setErroPrest("Escreva o nome."); return; }
                 const criado = aoCriarPrestador ? aoCriarPrestador(novoPrest) : null;
@@ -36796,7 +36796,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const blocoCadastroRapido = (
     <CadastroRapidoDePrestador form={novaLoja} aoMudar={setNovaLoja} erro={erroLoja}
       aoSalvar={salvarNovaLoja} aoCancelar={() => { setNovaLoja(null); setErroLoja(""); }}
-      isMobile={isMobile} />
+      isMobile={isMobile} fornecedores={prestadores} />
   );
 
   // Obra e destino são as mesmas duas perguntas para qualquer papel — lista
@@ -37068,7 +37068,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                   <div style={{ minWidth: 0 }}>
                     <label style={E.label}>{guardaProposta ? "Fornecedor da proposta" : "Fornecedor"}</label>
                     <SelectBusca style={E.input} value={lojaId} onChange={(v) => { setLojaId(v); setParcelaId(""); }}
-                      placeholder="Procurar fornecedor…" criarRotulo="cadastrar"
+                      placeholder="Procurar fornecedor…" criarRotulo="fornecedor"
                       aoCriar={aoCriarLoja ? ((termo) => abrirCadastroDeLoja(termo || (papel && papel.lidoComo) || "",
                         papel && (papel.tipo === "nfse" || papel.tipo === "comprovante") ? "Empreiteiro" : "Loja / Comércio")) : undefined}
                       opcoes={[{ valor: "", rotulo: "— escolha o fornecedor —" }].concat(
@@ -38351,9 +38351,22 @@ function ehPonteiroDeToque() {
 // de dois lugares diferentes: a Entrada e o lançamento do escritório. Mora
 // num componente só porque escrito duas vezes viraria dois cadastros com
 // regras diferentes na primeira correção.
-function CadastroRapidoDePrestador({ form, aoMudar, erro, aoSalvar, aoCancelar, isMobile }) {
+function CadastroRapidoDePrestador({ form, aoMudar, erro, aoSalvar, aoCancelar, isMobile, fornecedores }) {
   const E = COT_ESTILO;
+  // Categoria nova sem sair daqui (como em Fornecedores): escrita na busca
+  // e "+ nova categoria", ou no campo que abre embaixo.
+  const [novaCategoria, setNovaCategoria] = useState(null);
   if (!form) return null;
+  const categorias = typeof categoriasDePrestador === "function"
+    ? categoriasDePrestador(fornecedores || [], form.categoria)
+    : (typeof CATEGORIAS_PRESTADOR !== "undefined" ? CATEGORIAS_PRESTADOR : ["Loja / Comércio"]);
+  const criarCategoria = (texto) => {
+    const nome = typeof nomeDeCategoria === "function" ? nomeDeCategoria(texto) : String(texto || "").trim();
+    if (!nome) { setNovaCategoria(""); return; }
+    const igual = categorias.find((c) => String(c).toLowerCase() === nome.toLowerCase());
+    aoMudar(Object.assign({}, form, { categoria: igual || nome }));
+    setNovaCategoria(null);
+  };
   const mexer = (campo, valor) => aoMudar(Object.assign({}, form, { [campo]: valor }));
   const noEnter = (e) => { if (e.key === "Enter") { e.preventDefault(); aoSalvar(); } };
   return (
@@ -38362,14 +38375,16 @@ function CadastroRapidoDePrestador({ form, aoMudar, erro, aoSalvar, aoCancelar, 
       <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0474f4", marginBottom: 8 }}>
         Cadastrar {form.categoria === "Loja / Comércio" ? "loja" : "prestador"}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 200px", gap: 10 }}>
-        <div>
+      {/* Quebra sozinho em tela estreita — nem toda tela que usa este bloco
+          sabe se está no celular. */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+        <div style={{ flex: isMobile ? "1 1 100%" : "2 1 220px", minWidth: 0 }}>
           <label style={E.label}>Nome *</label>
           <input style={E.input} autoFocus value={form.nome || ""}
             onChange={(e) => mexer("nome", e.target.value)} onKeyDown={noEnter}
             placeholder="ART GLASS vidros e esquadrias" />
         </div>
-        <div>
+        <div style={{ flex: isMobile ? "1 1 100%" : "1 1 160px", minWidth: 0 }}>
           <label style={E.label}>WhatsApp</label>
           <input style={E.input} value={form.telefone || ""}
             onChange={(e) => mexer("telefone", e.target.value)} onKeyDown={noEnter}
@@ -38379,10 +38394,19 @@ function CadastroRapidoDePrestador({ form, aoMudar, erro, aoSalvar, aoCancelar, 
       <div style={{ marginTop: 10 }}>
         <label style={E.label}>Categoria</label>
         <SelectBusca style={E.input} value={form.categoria}
-          onChange={(v) => mexer("categoria", v)}
-          placeholder="Procurar categoria…"
-          opcoes={(typeof CATEGORIAS_PRESTADOR !== "undefined" ? CATEGORIAS_PRESTADOR : ["Loja / Comércio"])
-            .map((c) => ({ valor: c, rotulo: c }))} />
+          onChange={(v) => { mexer("categoria", v); setNovaCategoria(null); }}
+          placeholder="Procurar categoria…" criarRotulo="nova categoria" aoCriar={criarCategoria}
+          opcoes={categorias.map((c) => ({ valor: c, rotulo: c }))} />
+        {novaCategoria !== null && (
+          <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+            <input style={E.input} value={novaCategoria} autoFocus placeholder="Nome da categoria (ex.: Concessionária)"
+              onChange={(e) => setNovaCategoria(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); criarCategoria(novaCategoria); }
+                if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setNovaCategoria(null); } }} />
+            <button type="button" style={{ ...E.btn, fontSize: 12, padding: "6px 12px" }}
+              disabled={!novaCategoria.trim()} onClick={() => criarCategoria(novaCategoria)}>Usar</button>
+          </div>
+        )}
       </div>
       <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>
         Só o nome é obrigatório. Sem telefone, o cadastro existe mas não recebe a lista

@@ -3017,7 +3017,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             }}
             placeholder="Procurar fornecedor…"
             aoCriar={(termo) => { setErroPrest(""); setNovoPrest({ nome: termo || "", categoria: "Loja / Comércio" }); }}
-            criarRotulo="cadastrar"
+            criarRotulo="fornecedor"
             opcoes={[{ valor: EF_OPCAO_OUTROS, rotulo: "Outros — não identificado" }]
               .concat(f.fornecedor && !f.fornecedorId && f.fornecedor !== EF_FORNECEDOR_OUTROS
                 ? [{ valor: "", rotulo: f.fornecedor }] : [])
@@ -3025,7 +3025,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
         ))}
         {novoPrest && (
           <div style={{ gridColumn: "1 / -1" }}>
-            <CadastroRapidoDePrestador form={novoPrest} aoMudar={setNovoPrest} erro={erroPrest}
+            <CadastroRapidoDePrestador form={novoPrest} aoMudar={setNovoPrest} erro={erroPrest} fornecedores={prestadores}
               aoSalvar={() => {
                 if (!String(novoPrest.nome || "").trim()) { setErroPrest("Escreva o nome."); return; }
                 const criado = aoCriarPrestador ? aoCriarPrestador(novoPrest) : null;
