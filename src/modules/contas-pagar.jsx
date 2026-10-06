@@ -3022,6 +3022,17 @@ function linhasDaBase(obras, opcoes) {
 // Obra cujo cliente paga direto (Reforma Loja Cobop) não passa pelo extrato
 // e não aparece. É também aqui que se lança, edita e exclui (a tela
 // "Lançamentos" virou esta).
+// O dia (aaaa-mm-dd) de um carimbo ISO no fuso local: 21h de Ourinhos já é
+// o dia seguinte em UTC, e cortar a string jogaria o lançamento para amanhã.
+function cpDiaLocal(iso) {
+  const t = String(iso || "");
+  if (!t) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const d = new Date(t);
+  if (isNaN(d)) return t.slice(0, 10);
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
 function linhasDoEscritorio(obras, lancamentos, opcoes) {
   const o = opcoes || {};
   const porId = new Map((obras || []).filter(Boolean).map((ob) => [ob.id, ob]));
@@ -3035,6 +3046,11 @@ function linhasDoEscritorio(obras, lancamentos, opcoes) {
     const sinal = grupo && grupo.sinal ? (grupo.sinal < 0 ? -1 : 1) : (Number(l.valor) < 0 ? -1 : 1);
     const valor = Math.round(Math.abs(Number(l.valor) || 0) * 100) / 100;
     const dia = String(l.lancadoEm || "").slice(0, 10);
+    // Data do lançamento = o dia em que entrou no sistema (como na base da
+    // obra), no fuso de quem olha. `lancadoEm` é o dia do movimento no
+    // banco; ele só vale aqui para o que foi importado da planilha antiga,
+    // que não tem registro de quando entrou.
+    const entrou = cpDiaLocal(l.criadoEm) || dia;
     const ob = l.origem && l.origem.obraId ? porId.get(l.origem.obraId) : null;
     const nomeConta = (conta && conta.nome) || l.contaOriginal || l.contaId || "";
     const obraNome = l.projeto || (ob && ob.nome) || "";
@@ -3054,7 +3070,7 @@ function linhasDoEscritorio(obras, lancamentos, opcoes) {
       grupo: titulo(grupo && grupo.titulo), etapaId: "", etapa: "",
       contaId: l.contaId || "", conta: nomeConta,
       pago: true, pagoEm: dia, vencimento: dia, competencia: String(l.competencia || dia.slice(0, 7)).slice(0, 7),
-      dataLanc: dia, entradaEm: dia, origem: "escritorio", papeis: anexos.length, conta_: pseudo, sinal,
+      dataLanc: entrou, entradaEm: entrou, origem: "escritorio", papeis: anexos.length, conta_: pseudo, sinal,
     });
   }
   // como era na tela de lançamentos: competência mais nova primeiro e, no

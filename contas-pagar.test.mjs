@@ -3056,5 +3056,16 @@ teste("base: pedido antigo da conta da loja não pega a data do último pedido l
   assert.strictEqual(datas["Pedido 24787-120"], "2026-10-05");
 });
 
+teste("base do escritório: data do lançamento é o dia em que entrou no sistema", () => {
+  const ls = [
+    { id: "ponte:x", tipo: "escritorio", lancadoEm: "2026-09-24", criadoEm: "2026-10-06T18:26:09.587Z", competencia: "2026-09", valor: 59.96, descricao: "Vassoura" },
+    { id: "imp_1", tipo: "escritorio", lancadoEm: "2026-09-24", competencia: "2026-09", valor: 232.86, descricao: "Conta de luz", importado: true },
+  ];
+  const L = modulo.linhasDoEscritorio([], ls, {});
+  const d = Object.fromEntries(L.map((l) => [l.descricaoLanc, [l.dataLanc, l.competencia, l.pagoEm]]));
+  assert.deepStrictEqual(d["Vassoura"], ["2026-10-06", "2026-09", "2026-09-24"], "entrou em 06/10; o movimento continua em setembro");
+  assert.deepStrictEqual(d["Conta de luz"], ["2026-09-24", "2026-09", "2026-09-24"], "importado da planilha: sem registro de entrada, vale o dia do movimento");
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

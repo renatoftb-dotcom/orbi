@@ -4112,7 +4112,10 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     // renumerado — número de papel entregue não muda.
     const numeroDoc = l.numeroDoc
       || proximaReferencia((data || {}).obras || [], lancs);
-    gravar([...semEle, { ...l, id, numeroDoc, fornecedor: efNomeDoFornecedor(l), tipo: "escritorio" }]);
+    // Quando entrou no sistema — é a "Data do lançamento" da base. Editar não
+    // muda: o lançamento continua tendo entrado no dia em que entrou.
+    const criadoEm = (antes && antes.criadoEm) || l.criadoEm || new Date().toISOString();
+    gravar([...semEle, { ...l, id, numeroDoc, criadoEm, fornecedor: efNomeDoFornecedor(l), tipo: "escritorio" }]);
     setForm(null);
   }
 
