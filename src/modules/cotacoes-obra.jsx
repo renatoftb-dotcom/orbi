@@ -9722,7 +9722,12 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, chama
       if (anexo || enviando) return;
       const alvo = e.target;
       const digitando = alvo && (alvo.tagName === "INPUT" || alvo.tagName === "TEXTAREA" || alvo.isContentEditable);
-      if (digitando) return;
+      // Num campo de texto, só o que é texto fica com o campo: arquivo
+      // copiado do Explorer (Ctrl+C no PDF) ou print, sem texto junto, é
+      // anexo — o cursor costuma estar na descrição quando se cola.
+      const temTexto = !!(e.clipboardData && typeof e.clipboardData.getData === "function"
+        && String(e.clipboardData.getData("text/plain") || "").trim());
+      if (digitando && temTexto) return;
       const f = arquivoColado(e.clipboardData);
       if (!f) return;
       e.preventDefault();
