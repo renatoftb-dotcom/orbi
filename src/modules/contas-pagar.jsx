@@ -2722,6 +2722,39 @@ const CP_AJUSTES_COMBINADOS = {
   ],
   catalogo: [{ codigo: "PRE-001", de: "Pedreiros Casa", para: "Empreiteiro" }],
 };
+// A planilha de controle da obra (a "Base de dados" do Excel): cada linha é
+// um item, com o papel em "Nota / Comprovante", o valor do item em "Valor"
+// e o insumo do catálogo em "Itens da nota fiscal". A importação antiga
+// trouxe só a descrição — é daqui que o item volta para o catálogo.
+function linhasDaPlanilhaDaObra(tabela) {
+  const linhas = (tabela || []).map((l) => (l || []).map((c) => String(c == null ? "" : c).trim()));
+  const k = (t) => cpSemAcento(t).replace(/\s+/g, " ").trim();
+  const iCab = linhas.slice(0, 20).findIndex((l) => l.some((c) => k(c) === "itens da nota fiscal"));
+  if (iCab < 0) return [];
+  const cab = linhas[iCab].map(k);
+  const col = (...nomes) => { for (const n of nomes) { const i = cab.indexOf(n); if (i >= 0) return i; } return -1; };
+  const iNota = col("nota / comprovante", "nota/comprovante", "nota");
+  const iItem = col("itens da nota fiscal");
+  const iValor = col("valor", "valor total nota");
+  const iQtd = col("quantidade");
+  const iUn = col("unidade");
+  if (iNota < 0 || iItem < 0 || iValor < 0) return [];
+  const num = (t) => {
+    let x = String(t || "").replace(/\s|R\$/g, "");
+    if (/,\d{1,2}$/.test(x)) x = x.replace(/\./g, "").replace(",", ".");
+    const n = Number(x); return Number.isFinite(n) ? n : 0;
+  };
+  const saida = [];
+  for (const l of linhas.slice(iCab + 1)) {
+    const nota = String(l[iNota] || "").replace(/\.0+$/, "").trim();
+    const item = String(l[iItem] || "").trim();
+    if (!nota || !item) continue;
+    saida.push({ nota, item, valor: Math.round(num(l[iValor]) * 100) / 100,
+      quantidade: iQtd >= 0 ? num(l[iQtd]) : 0, unidade: iUn >= 0 ? String(l[iUn] || "").trim() : "" });
+  }
+  return saida;
+}
+
 function cpChaveDoNome(t) {
   return cpSemAcento(t).replace(/[\u2013\u2014-]/g, "-").replace(/\s+/g, " ").trim();
 }
@@ -2734,17 +2767,22 @@ function completarBase(dados, opcoes) {
   const etapas = o.etapas || (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []);
   const nomeEtapa = (id) => ((etapas || []).find((e) => e && e.id === id) || {}).nome || id;
   const obras = (d.obras || []).filter(Boolean);
+  // Aberto de dentro de uma obra, mexe só nela (o catálogo fica com a base
+  // do escritório).
+  const so = o.obraId || "";
+  const daVez = (ob) => !so || ob.id === so;
   const lancs = d.lancamentos || [];
   const materiais = (d.materiais || []).filter(Boolean);
   const ativos = materiais.filter((m) => m.ativo !== false);
-  const grupos = { papel: [], escritorio: [], catalogo: [], unidade: [], ajuste: [], insumos: [] };
+  const grupos = { papel: [], escritorio: [], planilha: [], catalogo: [], unidade: [], ajuste: [], insumos: [] };
+  const daPlanilha = Array.isArray(o.planilha) ? o.planilha : [];
   const nomeObra = (ob) => ob.nome || ob.id;
   const reg = (c, det) => (typeof registrarAto === "function" ? registrarAto(c, "editada", quem, agora, det) : c);
 
   // 1. números do papel, na ordem do pagamento
   const chave = (c) => String(c.numeroDoc || c.pedidoId || c.id);
   const pend = [];
-  for (const ob of obras) {
+  for (const ob of obras.filter(daVez)) {
     const vistos = {};
     for (const c of ob.contasPagar || []) {
       if (!c || !c.pago || String(c.doc || "").trim()) continue;
@@ -2781,6 +2819,7 @@ function completarBase(dados, opcoes) {
   for (const m of ativos) { const u = String(m.unidade || "").trim(); if (u && !grafia[u.toLowerCase()]) grafia[u.toLowerCase()] = u; }
 
   const obrasNovas = obras.map((ob) => {
+    if (!daVez(ob)) return ob;
     let contas = (ob.contasPagar || []).slice();
     if (numerosPorObra[ob.id]) {
       const alvo = numerosPorObra[ob.id];
@@ -2804,6 +2843,24 @@ function completarBase(dados, opcoes) {
         if (muda.length) {
           x = reg(x, muda.join(", "));
           grupos.ajuste.push({ obraId: ob.id, texto: `${nomeObra(ob)} · Ref ${x.numeroDoc} · ${x.descricao || ""} → ${muda.join(" · ")}` });
+        }
+      }
+      // 2a. o item que a planilha da obra diz, pelo papel e pelo valor: só
+      // quando a planilha aponta UM item do catálogo para esta conta.
+      if (!x.insumoCodigo && !x.contratoId && daPlanilha.length && String(x.doc || "").trim()) {
+        const valor = Math.round((Number(x.valor) || 0) * 100) / 100;
+        const doPapel = daPlanilha.filter((r) => r.nota === String(x.doc).trim());
+        const mesmas = doPapel.filter((r) => Math.abs(r.valor - valor) <= 0.02);
+        const itens = [...new Set((mesmas.length ? mesmas : (doPapel.length === 1 ? doPapel : [])).map((r) => cpChaveDoNome(r.item)))];
+        const m = itens.length === 1 ? porNome.get(itens[0]) : null;
+        if (m) {
+          const linha = (mesmas[0] || doPapel[0]);
+          const muda = { insumoCodigo: m.codigo };
+          if (!x.grupoMaterial || x.grupoMaterial === "Outros") muda.grupoMaterial = m.grupo || x.grupoMaterial || "";
+          if (!(Number(x.quantidade) > 0) && linha.quantidade > 0) muda.quantidade = linha.quantidade;
+          if (!String(x.unidade || "").trim() && (linha.unidade || m.unidade)) muda.unidade = linha.unidade || m.unidade;
+          x = reg({ ...x, ...muda }, "item da planilha: " + m.codigo + " " + m.nome);
+          grupos.planilha.push({ obraId: ob.id, texto: `${nomeObra(ob)} · papel ${x.doc} · ${x.descricao || ""} · ${valor.toFixed(2).replace(".", ",")} → ${m.codigo} ${m.nome}` });
         }
       }
       // 2. ligar ao catálogo pelo nome
@@ -2841,7 +2898,7 @@ function completarBase(dados, opcoes) {
   // 4b. o nome no catálogo
   const materiaisNovos = materiais.map((m) => {
     const a = (ajustes.catalogo || []).find((x) => x.codigo === m.codigo);
-    if (!a || m.nome !== a.de) return m;
+    if (so || !a || m.nome !== a.de) return m;
     grupos.insumos.push({ texto: `${m.codigo} · ${a.de} → ${a.para} (o nome antigo fica como apelido)` });
     return { ...m, nome: a.para, aliases: [...new Set((m.aliases || []).concat([a.de]))] };
   });
@@ -3033,6 +3090,23 @@ function cpDiaLocal(iso) {
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 
+// O lançamento importado não tem carimbo de entrada, mas o id tem: a
+// importação gera "imp_<instante em base 36>_<linha>". É o dia em que ele
+// entrou no VICKE — o mesmo que a base da obra mostra para a conta irmã.
+function cpDiaDoIdImportado(id) {
+  const m = /^imp_([0-9a-z]{7,9})_/.exec(String(id || ""));
+  if (!m) return "";
+  const ms = parseInt(m[1], 36);
+  if (!(ms > Date.UTC(2020, 0, 1) && ms < Date.UTC(2100, 0, 1))) return "";
+  return cpDiaLocal(new Date(ms).toISOString());
+}
+// Quando o lançamento entrou no VICKE: carimbado ao gravar; importado, pelo
+// carimbo da importação. A data do movimento no banco NÃO é isso.
+function cpEntradaDoLancamento(l) {
+  const x = l || {};
+  return cpDiaLocal(x.criadoEm) || cpDiaLocal(x.importadoEm) || cpDiaDoIdImportado(x.id);
+}
+
 function linhasDoEscritorio(obras, lancamentos, opcoes) {
   const o = opcoes || {};
   const porId = new Map((obras || []).filter(Boolean).map((ob) => [ob.id, ob]));
@@ -3048,9 +3122,9 @@ function linhasDoEscritorio(obras, lancamentos, opcoes) {
     const dia = String(l.lancadoEm || "").slice(0, 10);
     // Data do lançamento = o dia em que entrou no sistema (como na base da
     // obra), no fuso de quem olha. `lancadoEm` é o dia do movimento no
-    // banco; ele só vale aqui para o que foi importado da planilha antiga,
-    // que não tem registro de quando entrou.
-    const entrou = cpDiaLocal(l.criadoEm) || dia;
+    // banco e não serve para isto; o importado da planilha antiga entrou no
+    // dia da importação, que está no id.
+    const entrou = cpEntradaDoLancamento(l) || dia;
     const ob = l.origem && l.origem.obraId ? porId.get(l.origem.obraId) : null;
     const nomeConta = (conta && conta.nome) || l.contaOriginal || l.contaId || "";
     const obraNome = l.projeto || (ob && ob.nome) || "";
@@ -3075,7 +3149,7 @@ function linhasDoEscritorio(obras, lancamentos, opcoes) {
   }
   // como era na tela de lançamentos: competência mais nova primeiro e, no
   // mês, o lançado por último na frente — quem acabou de lançar o vê no topo
-  const quando = (r) => String((r.lanc_ && (r.lanc_.criadoEm || r.lanc_.lancadoEm)) || "");
+  const quando = (r) => String((r.lanc_ && (r.lanc_.criadoEm || r.dataLanc || r.lanc_.lancadoEm)) || "");
   return saida.sort((a, b) => String(b.competencia).localeCompare(String(a.competencia)) || quando(b).localeCompare(quando(a)));
 }
 
@@ -3731,13 +3805,32 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
     return () => window.removeEventListener("resize", medir);
   });
   const [gravandoBase, setGravandoBase] = useState("");
-  const pendencias = useMemo(() => (completar && completar.data ? completarBase(completar.data, { quem: completar.quem }) : null),
-    [completar && completar.data]);
+  // A planilha de controle da obra, arrastada aqui: dela volta o item do
+  // catálogo ("Itens da nota fiscal") que a importação antiga não trouxe.
+  const [planilhaObra, setPlanilhaObra] = useState(null);   // { nome, linhas }
+  const refPlanilha = useRef(null);
+  async function lerPlanilhaDaObra(arquivo) {
+    if (!arquivo) return;
+    setGravandoBase("");
+    try {
+      if (typeof efTabelaDoArquivo !== "function") throw new Error("leitor de planilha indisponível");
+      const t = await efTabelaDoArquivo(arquivo);
+      const linhas = linhasDaPlanilhaDaObra(t.linhas);
+      if (!linhas.length) throw new Error("não achei as colunas “Nota / Comprovante”, “Valor” e “Itens da nota fiscal”");
+      setPlanilhaObra({ nome: arquivo.name, linhas });
+      setConferindo(true);
+    } catch (e) {
+      setGravandoBase("Não li a planilha: " + ((e && e.message) || "formato não reconhecido"));
+    }
+  }
+  const pendencias = useMemo(() => (completar && completar.data
+    ? completarBase(completar.data, { quem: completar.quem, obraId: completar.obraId || "", planilha: planilhaObra ? planilhaObra.linhas : null }) : null),
+    [completar && completar.data, planilhaObra]);
   async function gravarCompletar() {
     if (!completar || !pendencias || !pendencias.total) return;
     setGravandoBase("Gravando…");
     try {
-      const r = completarBase(completar.data, { quem: completar.quem });
+      const r = completarBase(completar.data, { quem: completar.quem, obraId: completar.obraId || "", planilha: planilhaObra ? planilhaObra.linhas : null });
       await completar.save(r.dados);
       setGravandoBase(`Gravado: ${r.total} ${r.total === 1 ? "ajuste" : "ajustes"}.`);
       setConferindo(false);
@@ -3948,6 +4041,18 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
           {procurando && <> · <button type="button" onClick={limpar} style={{ background: "none", border: "none", padding: 0, color: "#0474f4", cursor: "pointer", fontFamily: "inherit", fontSize: 12.5 }}>limpar filtros</button></>}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        {completar && (
+          <>
+            <input ref={refPlanilha} type="file" accept=".xlsx,.xlsm,.csv" style={{ display: "none" }}
+              onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; lerPlanilhaDaObra(f); }} />
+            <button type="button" onClick={() => refPlanilha.current && refPlanilha.current.click()}
+              title="Liga ao catálogo o item que a planilha da obra diz (coluna “Itens da nota fiscal”)"
+              style={{ background: "#fff", color: "#374151", border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 10, padding: "7px 14px", fontSize: 12.5,
+                cursor: "pointer", fontFamily: "inherit" }}>
+              Itens pela planilha da obra
+            </button>
+          </>
+        )}
         {pendencias && pendencias.total > 0 && (
           <button type="button" onClick={() => setConferindo(!conferindo)}
             style={{ background: "#fff", color: "#0474f4", border: "1.5px solid #0474f4", borderRadius: 10, padding: "7px 14px", fontSize: 12.5,
@@ -3969,8 +4074,14 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
           <div style={{ fontSize: 12, color: "#4b5563", margin: "2px 0 10px" }}>
             O que as regras preenchem no que já está gravado. Confira; nada muda até você gravar.
           </div>
+          {planilhaObra && (
+            <div style={{ fontSize: 12, color: "#1e3a5f", margin: "-4px 0 10px" }}>
+              Planilha <b>{planilhaObra.nome}</b>: {planilhaObra.linhas.length} itens lidos,
+              {" "}{(pendencias.grupos.planilha || []).length} ligações novas ao catálogo.
+            </div>
+          )}
           {[["papel", "Número do papel (e nome do arquivo)"], ["escritorio", "Mesmo número no lançamento do escritório"],
-            ["catalogo", "Item ligado ao catálogo pelo nome"], ["unidade", "Unidade com a grafia do catálogo"],
+            ["planilha", "Item ligado ao catálogo pela planilha da obra"], ["catalogo", "Item ligado ao catálogo pelo nome"], ["unidade", "Unidade com a grafia do catálogo"],
             ["ajuste", "Ajustes combinados"], ["insumos", "Catálogo"]].map(([k, titulo]) => {
             const linhas = pendencias.grupos[k] || [];
             if (!linhas.length) return null;

@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -3059,12 +3059,44 @@ teste("base: pedido antigo da conta da loja não pega a data do último pedido l
 teste("base do escritório: data do lançamento é o dia em que entrou no sistema", () => {
   const ls = [
     { id: "ponte:x", tipo: "escritorio", lancadoEm: "2026-09-24", criadoEm: "2026-10-06T18:26:09.587Z", competencia: "2026-09", valor: 59.96, descricao: "Vassoura" },
+    { id: "imp_muk7wqx3_4725", tipo: "escritorio", lancadoEm: "2026-09-23", competencia: "2026-09", valor: 529, descricao: "Impermeabilizantes", importado: true },
     { id: "imp_1", tipo: "escritorio", lancadoEm: "2026-09-24", competencia: "2026-09", valor: 232.86, descricao: "Conta de luz", importado: true },
   ];
   const L = modulo.linhasDoEscritorio([], ls, {});
   const d = Object.fromEntries(L.map((l) => [l.descricaoLanc, [l.dataLanc, l.competencia, l.pagoEm]]));
   assert.deepStrictEqual(d["Vassoura"], ["2026-10-06", "2026-09", "2026-09-24"], "entrou em 06/10; o movimento continua em setembro");
-  assert.deepStrictEqual(d["Conta de luz"], ["2026-09-24", "2026-09", "2026-09-24"], "importado da planilha: sem registro de entrada, vale o dia do movimento");
+  assert.deepStrictEqual(d["Impermeabilizantes"], ["2026-09-27", "2026-09", "2026-09-23"],
+    "importado em 27/09 (o instante está no id): é o dia em que entrou no VICKE, igual à conta irmã na base da obra");
+  assert.deepStrictEqual(d["Conta de luz"], ["2026-09-24", "2026-09", "2026-09-24"], "sem carimbo nenhum (nem no id): o dia do movimento");
+});
+
+teste("planilha da obra: o item do catálogo volta pela coluna “Itens da nota fiscal”", () => {
+  const tabela = [
+    ["#", "Cod. Cliente", "Nome Cliente", "Unidade negócio", "Projeto / obra", "Fornecedor", "Descrição Lançamento", "Conta contábil",
+      "Nota / Comprovante", "Emitir nota fiscal", "Valor total nota", "Período Contábil", "Data do lançamento", "CC do escritório",
+      "Itens da nota fiscal", "Valor", "Quantidade", "Unidade", "Etapa", "Grupo Materiais"],
+    ["6299", "202229", "Jacarezinho", "Gestão de obras", "Módulo 1", "Ourimadeiras", "Impermeabilizantes", "Material ", "4182", "Não", "529",
+      "23/09/2026", "23/09/2026", "Sim", "Impermeabilizantes - Vedatop 18KG", "529", "10", "Unidades", "Bruto - Impermeabilização", "Impermeabilizantes"],
+    ["6300", "", "", "", "", "Posto", "Pedágio", "Outros", "4189", "", "12,8", "", "", "", "Outros", "12,8", "", "", "", ""],
+  ];
+  const L = modulo.linhasDaPlanilhaDaObra(tabela);
+  assert.deepStrictEqual(L[0], { nota: "4182", item: "Impermeabilizantes - Vedatop 18KG", valor: 529, quantidade: 10, unidade: "Unidades" });
+  const dados = {
+    obras: [{ id: "xflr1rp", nome: "Jacarezinho Módulo 1", contasPagar: [
+      { id: "e8g2scs", doc: "4182", numeroDoc: "0136", valor: 529, descricao: "Impermeabilizantes", pago: true, pagoEm: "2026-09-23", importadoEm: "2026-09-27", grupoMaterial: "Impermeabilizantes" },
+      { id: "p1", doc: "4189", numeroDoc: "0140", valor: 12.8, descricao: "Pedágio", pago: true, pagoEm: "2026-09-24" },
+    ] }, { id: "outra", nome: "Outra", contasPagar: [{ id: "z", doc: "4182", valor: 529, descricao: "Impermeabilizantes", pago: true }] }],
+    lancamentos: [],
+    materiais: [{ codigo: "IMP-004", nome: "Impermeabilizantes - Vedatop 18KG", grupo: "Impermeabilizantes", unidade: "Unidades" },
+                { codigo: "OUT-001", nome: "Pedágio rodoviário", grupo: "Outros" }],
+  };
+  const r = modulo.completarBase(dados, { planilha: L, obraId: "xflr1rp", quem: "Renato", agora: "2026-10-06T21:00:00Z" });
+  const c = r.dados.obras[0].contasPagar[0];
+  assert.strictEqual(c.insumoCodigo, "IMP-004");
+  assert.strictEqual(r.grupos.planilha.length, 1);
+  assert.ok(!r.dados.obras[0].contasPagar[1].insumoCodigo, "“Outros” não é item do catálogo");
+  assert.ok(!r.dados.obras[1].contasPagar[0].insumoCodigo, "aberto da obra, não mexe nas outras");
+  assert.strictEqual(r.dados.obras[1], dados.obras[1]);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
