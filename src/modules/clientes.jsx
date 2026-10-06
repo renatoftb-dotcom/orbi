@@ -5332,7 +5332,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                           // pedidos por dentro — abertos por padrão, porque é
                           // a lista deles que se confere com a cobrança.
                           if (L.tipo === "loja") {
-                            const abertaL = contasAbertas[L.chave] === undefined ? true : !!contasAbertas[L.chave];
+                            // A mesma loja aparece em mais de um mês (outubro e
+                            // novembro): abrir uma não pode abrir a outra, então a
+                            // chave do aberto/fechado leva o grupo junto.
+                            const chaveL = String(g.chave || "") + "|" + L.chave;
+                            const abertaL = contasAbertas[chaveL] === undefined ? true : !!contasAbertas[chaveL];
                             const stL = rotuloSituacaoConta({ vencimento: L.vencimento, pago: L.pago }, hojeIso);
                             return (
                               <div key={L.chave} style={{ borderTop: "1px solid rgba(38,36,33,0.06)", background: "#fff" }}>
@@ -5340,7 +5344,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                   padding: "9px 11px", background: "#f6f8fc" }}>
                                   <div data-vk-mantem-mes="1" style={{ minWidth: 0, cursor: "pointer" }}
                                     title={abertaL ? "Fechar os pedidos" : "Ver os pedidos"}
-                                    onClick={() => setContasAbertas({ ...contasAbertas, [L.chave]: !abertaL })}>
+                                    onClick={() => setContasAbertas({ ...contasAbertas, [chaveL]: !abertaL })}>
                                     <div style={{ fontSize: 13, color: "#111827", fontWeight: 700, ...umaLinha }}>
                                       <span style={{ color: "#6b7280", fontWeight: 400, marginRight: 4 }}>{abertaL ? "\u25be" : "\u25b8"}</span>
                                       {L.favorecido || "Loja"}
