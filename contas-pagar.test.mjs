@@ -3043,5 +3043,18 @@ teste("entrega conferida: a foto assinada acende o entregue e não vira comprova
   assert.deepStrictEqual(modulo.arquivosDaFolha(f, { ...padrao, entrega: true }).map((a) => a.nome), ["4231.png", "4231-2.jpg"]);
 });
 
+teste("base: pedido antigo da conta da loja não pega a data do último pedido lançado", () => {
+  const loja = { id: "l1", contaLoja: true, titulo: "OURIFER", lancadoEm: "2026-10-05T21:14:28.573Z",
+    pedidos: [{ id: "p1", numeroLoja: "136560-109", data: "2026-09-28", lancadoEm: "2026-10-01T18:49:39.080Z" },
+      { id: "p2", numeroLoja: "24787-120", data: "2026-10-05", lancadoEm: "2026-10-05T21:14:28.573Z" }] };
+  const obra = { id: "o1", nome: "Cobop", cotacoes: [loja], contasPagar: [
+    { id: "a", cotacaoId: "l1", pedidoId: "p1", numeroLoja: "136560-109", descricao: "Cimento", valor: 100, vencimento: "2026-10-28" },
+    { id: "b", cotacaoId: "l1", pedidoId: "p2", numeroLoja: "24787-120", descricao: "Tábua", valor: 200, vencimento: "2026-11-02" }] };
+  const linhas = modulo.linhasDaBase([obra], {});
+  const datas = Object.fromEntries(linhas.map((l) => [l.descricaoLanc, l.dataLanc]));
+  assert.strictEqual(datas["Pedido 136560-109"], "2026-10-01");
+  assert.strictEqual(datas["Pedido 24787-120"], "2026-10-05");
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

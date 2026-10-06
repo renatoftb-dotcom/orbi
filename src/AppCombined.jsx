@@ -26347,7 +26347,13 @@ function linhasDaBase(obras, opcoes) {
       const regs = (c.registros || []).filter((r) => r && r.em);
       const criada = regs.find((r) => r.ato === "criada");
       const primeiro = regs.map((r) => dia(r.em)).sort()[0] || "";
-      const entradaEm = dia((criada && criada.em) || c.importadoEm || c.lancadoEm || (cot && cot.lancadoEm)
+      // Pedido na conta da loja: a data é a do PEDIDO. A conta da loja é uma
+      // cotação só, e o `lancadoEm` dela anda a cada pedido novo — usá-lo
+      // punha todos os pedidos antigos com a data do último lançado.
+      const ped = c.pedidoId && cot ? (cot.pedidos || []).find((p) => p && p.id === c.pedidoId) : null;
+      const entradaEm = dia((criada && criada.em) || c.importadoEm || c.lancadoEm
+        || (ped && (ped.lancadoEm || ped.data))
+        || (cot && !cot.contaLoja && cot.lancadoEm)
         || (ctr && (ctr.criadoEm || ctr.criadaEm || ctr.dataAssinatura)) || primeiro);
       // a data do lançamento é a da entrada no sistema
       const dataLanc = entradaEm;
