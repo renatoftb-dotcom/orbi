@@ -1869,7 +1869,8 @@ function efEhMovimento(historico) {
   return !EF_NAO_E_MOVIMENTO.some((x) => h.indexOf(x) === 0);
 }
 
-// Casa por valor, como a planilha sempre fez. A data NÃO entra na regra: no
+// Casa por valor e pelo lado (entrada com entrada, saída com saída), como a
+// planilha sempre fez. A data NÃO entra na regra: no
 // fluxo real ela é o dia em que se contabiliza, não o dia do banco, então
 // serviria só para casar errado. Com dois movimentos do mesmo valor no mês,
 // vale a ordem do extrato — o mais antigo casa primeiro, e o que sobra na
@@ -1881,8 +1882,20 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
   const tolerancia = o.tolerancia == null ? 0.01 : o.tolerancia;
   const doBanco = (movimentos || []).filter((m) => m && efEhMovimento(m.historico));
   const foraDoBanco = (movimentos || []).filter((m) => m && !efEhMovimento(m.historico));
+  // Entrada só casa com entrada, saída só com saída. Sem isto um depósito de
+  // R$ 18.000 casava com um pagamento de R$ 18.000 e os dois sumiam da
+  // conferência — cada um escondendo a falta do outro. A direção do
+  // lançamento vem do grupo da conta (e um valor negativo inverte: é estorno);
+  // sem conta classificada ela é desconhecida e casa com qualquer lado.
+  const direcaoDoLancamento = (l) => {
+    const c = contaEscritorio(l.contaId);
+    const g = c && grupoEscritorio(c.grupo);
+    const v = Number(l.valor) || 0;
+    if (!g || !v) return 0;
+    return (g.sinal < 0 ? -1 : 1) * (v < 0 ? -1 : 1);
+  };
   const candidatos = (lancamentos || []).filter((l) => !compraNoCartaoDoEscritorio(l)).map((l, i) => ({
-    l, i, abs: Math.round(Math.abs(Number(l.valor) || 0) * 100) / 100, usado: false,
+    l, i, abs: Math.round(Math.abs(Number(l.valor) || 0) * 100) / 100, usado: false, dir: direcaoDoLancamento(l),
   }));
 
   const distancia = (m, c) => {
@@ -1895,7 +1908,9 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
   const casados = [], noBancoSemPar = [];
   const emOrdem = doBanco.slice().sort((a, b) => String(a.data).localeCompare(String(b.data)));
   for (const m of emOrdem) {
-    const iguais = candidatos.filter((c) => !c.usado && Math.abs(c.abs - m.abs) <= tolerancia);
+    const dirM = Number(m.valor) < 0 ? -1 : (Number(m.valor) > 0 ? 1 : 0);
+    const iguais = candidatos.filter((c) => !c.usado && Math.abs(c.abs - m.abs) <= tolerancia
+      && (!c.dir || !dirM || c.dir === dirM));
     if (!iguais.length) { noBancoSemPar.push(m); continue; }
     const escolhido = iguais[0];
     escolhido.usado = true;

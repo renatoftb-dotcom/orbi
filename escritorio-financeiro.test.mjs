@@ -1716,6 +1716,26 @@ teste("cliente paga com o cartão DELE, cadastrado na obra — nunca com o do es
   assert.deepStrictEqual([novo.id, novo.nome, novo.diaFechamento, novo.diaVencimento, novo.doCliente], ["kn", "Nubank", 3, 10, true]);
 });
 
+teste("conciliar: entrada só casa com entrada, saída só com saída", () => {
+  const banco = [
+    { data: "2026-09-28", valor: 18000, abs: 18000, historico: "DEPOSITO EM DINHEIRO" },
+    { data: "2026-09-29", valor: -18000, abs: 18000, historico: "PIX EMITIDO" },
+  ];
+  // só o pagamento foi lançado (conta de despesa); o depósito não
+  const lancs = [{ id: "pag", valor: 18000, contaId: "parceiros", competencia: "2026-09" }];
+  const r = M.conciliarExtrato(banco, lancs);
+  assert.strictEqual(r.resumo.casados, 1);
+  assert.strictEqual(r.casados[0].extrato.valor, -18000, "o pagamento casa com a saída, não com o depósito");
+  assert.deepStrictEqual(r.noBancoSemPar.map((m) => m.valor), [18000], "o depósito fica na fila para lançar");
+  // receita casa com a entrada
+  const r2 = M.conciliarExtrato(banco, [{ id: "rec", valor: 18000, contaId: "rec_projetos", competencia: "2026-09" }]);
+  assert.strictEqual(r2.casados[0].extrato.valor, 18000);
+  // estorno (valor negativo numa despesa) é entrada
+  const r3 = M.conciliarExtrato([{ data: "2026-09-28", valor: 10833.33, abs: 10833.33, historico: "DEVOLUCAO PIX" }],
+    [{ id: "est", valor: -10833.33, contaId: "parceiros", competencia: "2026-09" }]);
+  assert.strictEqual(r3.resumo.casados, 1);
+});
+
 for (const [nome, fn] of testes) {
   try { await fn(); console.log("  ok   " + nome); }
   catch (e) { falhas++; console.log("  FALHOU " + nome + "\n         " + e.message); }
