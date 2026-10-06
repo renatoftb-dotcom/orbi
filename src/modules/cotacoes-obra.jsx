@@ -9649,7 +9649,7 @@ function CadastroRapidoDePrestador({ form, aoMudar, erro, aoSalvar, aoCancelar, 
 // Cada linha é o mesmo CampoAnexoProposta de sempre, com o arquivo dentro;
 // a última é ele vazio, esperando mais um. Nada de componente novo para
 // anexar: anexar já tinha dono.
-function CampoDocumentos({ anexos, aoMudar, onErro, categoria, aoLerPdf, lendo, progresso }) {
+function CampoDocumentos({ anexos, aoMudar, onErro, categoria, aoLerPdf, lendo, progresso, leFoto }) {
   const lista = (anexos || []).filter(Boolean);
   const trocar = (i, novo) => {
     const nova = lista.slice();
@@ -9666,7 +9666,7 @@ function CampoDocumentos({ anexos, aoMudar, onErro, categoria, aoLerPdf, lendo, 
       <CampoAnexoProposta
         anexo={null} categoria={categoria}
         lendo={lendo} progresso={progresso}
-        aoLerPdf={aoLerPdf}
+        aoLerPdf={aoLerPdf} leFoto={leFoto}
         chamada={lista.length ? "Arraste mais um documento" : "Arraste a nota ou o comprovante aqui"}
         apoio={lista.length
           ? "nota fiscal, comprovante, boleto — tudo que sustenta este lançamento"

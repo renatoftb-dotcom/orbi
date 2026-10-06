@@ -11176,9 +11176,26 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
     return Math.abs((new Date(d1) - new Date(d2)) / 86400000);
   };
 
-  const casados = [], noBancoSemPar = [];
+  const casados = [], noBancoSemPar = [], naoLancar = [];
+  const ignorados = o.ignorados || {};
   const emOrdem = doBanco.slice().sort((a, b) => String(a.data).localeCompare(String(b.data)));
+  // O lançamento que nasceu de uma linha do extrato carrega o id dela: casa
+  // com ELA, antes de qualquer comparação de valor — com dois Pix de R$ 60
+  // no mês, o que foi lançado é o que sai da fila, não o primeiro que aparece.
+  const jaCasados = new Set();
   for (const m of emOrdem) {
+    if (!m.id) continue;
+    const c = candidatos.find((x) => !x.usado && x.l.extratoId && x.l.extratoId === m.id);
+    if (!c) continue;
+    c.usado = true; jaCasados.add(m);
+    casados.push({ extrato: m, lancamento: c.l, dias: distancia(m, c) === 9999 ? null : distancia(m, c),
+      centavos: Math.round((c.abs - m.abs) * 100), ambiguo: false });
+  }
+  for (const m of emOrdem) {
+    if (jaCasados.has(m)) continue;
+    // "Não é lançamento" (transferência entre contas suas, estorno que se
+    // anula): sai da fila sem virar lançamento, com o motivo guardado.
+    if (m.id && ignorados[m.id]) { naoLancar.push({ ...m, motivo: ignorados[m.id].motivo || "" }); continue; }
     const dirM = Number(m.valor) < 0 ? -1 : (Number(m.valor) > 0 ? 1 : 0);
     const iguais = candidatos.filter((c) => !c.usado && Math.abs(c.abs - m.abs) <= tolerancia
       && (!c.dir || !dirM || c.dir === dirM));
@@ -11195,7 +11212,7 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
   const contabilizadoSemPar = candidatos.filter((c) => !c.usado).map((c) => c.l);
   const soma = (lista, f) => Math.round(lista.reduce((s, x) => s + Math.abs(Number(f(x)) || 0), 0) * 100) / 100;
   return {
-    casados, noBancoSemPar, contabilizadoSemPar, foraDoBanco,
+    casados, noBancoSemPar, contabilizadoSemPar, foraDoBanco, naoLancar,
     resumo: {
       movimentos: doBanco.length,
       lancamentos: candidatos.length,
@@ -11205,11 +11222,124 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
       valorNoBanco: soma(noBancoSemPar, (m) => m.valor),
       valorContabilizado: soma(contabilizadoSemPar, (l) => l.valor),
       ignoradas: foraDoBanco.length,
+      naoLancar: naoLancar.length,
     },
   };
 }
 
-// Um lançamento nascido de uma linha do extrato, com o que dá para saber.
+// ── A fila do extrato ───────────────────────────────────────────
+// Cada linha do banco ganha um id estável (data, valor, histórico,
+// documento e a ordem entre iguais): é ele que guarda o "não é lançamento",
+// liga o lançamento à linha de onde nasceu e deixa o extrato salvo de um
+// dia para o outro sem duplicar quando o arquivo é arrastado de novo.
+function comIdsDosMovimentos(movimentos) {
+  const vistos = {};
+  return (movimentos || []).filter(Boolean).map((m) => {
+    const base = [String(m.data || "").slice(0, 10), (Number(m.valor) || 0).toFixed(2),
+      efSemAcento(m.historico || "").replace(/\s+/g, " ").slice(0, 60), String(m.documento || "").trim()].join("|");
+    vistos[base] = (vistos[base] || 0) + 1;
+    return { ...m, id: base + "#" + vistos[base] };
+  });
+}
+
+// O que vale guardar de cada linha: o resto se refaz.
+function extratoParaGuardar(movimentos) {
+  return comIdsDosMovimentos(movimentos).map((m) => ({
+    id: m.id, data: m.data, valor: m.valor, abs: Math.round(Math.abs(Number(m.valor) || 0) * 100) / 100,
+    historico: m.historico || "", documento: m.documento || "",
+  }));
+}
+
+// O saldo do banco no fim do mês, lido do próprio extrato: a última linha
+// "SALDO" do mês. Poupa digitar o número que o arquivo já traz.
+function saldoDoExtratoNoMes(movimentos, mes) {
+  const doMes = (movimentos || []).filter((m) => m && String(m.data || "").slice(0, 7) === String(mes)
+    && /^s\s*a\s*l\s*d\s*o/.test(efSemAcento(m.historico || "")) && Number.isFinite(Number(m.valor)));
+  if (!doMes.length) return null;
+  const ultimo = doMes.slice().sort((a, b) => String(a.data).localeCompare(String(b.data)) || (a.linha || 0) - (b.linha || 0)).pop();
+  return Math.round((Number(ultimo.valor) || 0) * 100) / 100;
+}
+
+// A "assinatura" de quem recebeu ou pagou, para reconhecer a mesma linha no
+// mês seguinte: o CPF/CNPJ (mesmo mascarado, ***.144.048-**) e as palavras
+// do histórico sem números, datas e o jargão do banco.
+function documentoDoHistorico(historico) {
+  const h = String(historico || "");
+  const cnpj = /(\d{2}\.?\d{3}\.?\d{3}[\s/]?\d{4}-?\d{2})/.exec(h);
+  if (cnpj) return cnpj[1].replace(/\D/g, "");
+  const cpf = /\*{3}\.?(\d{3})\.?(\d{3})-?\*{2}/.exec(h) || /(\d{3})\.(\d{3})\.(\d{3})-(\d{2})/.exec(h);
+  return cpf ? cpf.slice(1).join("") : "";
+}
+
+const EF_PALAVRAS_DO_BANCO = new Set(["pix", "emitido", "recebido", "outra", "if", "mesma", "pagamento", "transferencia",
+  "ted", "doc", "deb", "debito", "cred", "credito", "conv", "tit", "compe", "nome", "cpf", "cnpj", "ag", "conta"]);
+function chaveDoHistorico(historico) {
+  return efSemAcento(historico || "").replace(/[^a-z\s]/g, " ").split(/\s+/)
+    .filter((w) => w.length > 1 && !EF_PALAVRAS_DO_BANCO.has(w)).join(" ").trim();
+}
+
+// O que já se lançou de uma linha igual vira a sugestão desta: a conta, a
+// unidade, o cliente/obra e o fornecedor do último lançamento com o mesmo
+// CPF/CNPJ no histórico — ou, sem documento, com o mesmo histórico.
+function sugestaoDoExtrato(movimento, lancamentos) {
+  const m = movimento || {};
+  const doc = documentoDoHistorico(m.historico);
+  const chave = chaveDoHistorico(m.historico);
+  const lado = Number(m.valor) < 0 ? -1 : 1;
+  const quando = (l) => String(l.criadoEm || l.lancadoEm || "");
+  const lista = (lancamentos || []).filter((l) => l && l.historicoBanco && l.contaId)
+    .slice().sort((a, b) => quando(b).localeCompare(quando(a)));
+  const ladoDe = (l) => {
+    const c = contaEscritorio(l.contaId); const g = c && grupoEscritorio(c.grupo);
+    return g ? (g.sinal < 0 ? -1 : 1) * ((Number(l.valor) || 0) < 0 ? -1 : 1) : 0;
+  };
+  const mesmoLado = (l) => !ladoDe(l) || ladoDe(l) === lado;
+  const achado = (doc && lista.find((l) => mesmoLado(l) && documentoDoHistorico(l.historicoBanco) === doc))
+    || (chave && lista.find((l) => mesmoLado(l) && chaveDoHistorico(l.historicoBanco) === chave))
+    || null;
+  if (!achado) return null;
+  const campos = ["contaId", "unidadeId", "cliente", "clienteId", "empreendimentoId", "projeto", "fornecedor", "fornecedorId"];
+  const r = {};
+  for (const k of campos) if (achado[k] != null && achado[k] !== "") r[k] = achado[k];
+  // O que veio de uma obra (pela ponte) se relança pela obra: a sugestão
+  // abre o formulário, nunca vira lançamento direto no plano do escritório.
+  return { campos: r, de: achado, porDocumento: !!doc && documentoDoHistorico(achado.historicoBanco) === doc,
+    daObra: !!achado.origem };
+}
+
+// O formulário de uma linha do banco, como ele abre na fila: data e valor do
+// banco, competência = o mês que está sendo fechado, e o que a última linha
+// igual ensinou. A data em que entrou no sistema é carimbada ao gravar.
+function lancamentoDaLinhaDoExtrato(movimento, mes, sugestao) {
+  const m = movimento || {};
+  const base = lancamentoDoExtrato(m);
+  return {
+    ...base,
+    competencia: /^\d{4}-\d{2}$/.test(String(mes)) ? String(mes) : base.competencia,
+    valor: String(Math.abs(Number(m.valor) || 0).toFixed(2)).replace(".", ","),
+    extratoId: m.id || "",
+    historicoBanco: m.historico || "",
+    cliente: "", projeto: "", fornecedor: "", observacao: "",
+    ...((sugestao && sugestao.campos) || {}),
+    unidadeId: ((sugestao && sugestao.campos) || {}).unidadeId || "escritorio",
+  };
+}
+
+// Um clique: a linha igual à do mês passado vai com a mesma classificação,
+// sem abrir o formulário. Só quando a sugestão basta — conta do escritório,
+// cliente/obra que a conta pede, mês aberto. Senão, devolve o porquê e a
+// tela abre o formulário.
+function lancamentoRapidoDoExtrato(movimento, mes, sugestao, fechamentos) {
+  if (!sugestao || !sugestao.campos || !sugestao.campos.contaId) return { erro: "Sem lançamento igual para copiar." };
+  if (sugestao.daObra) return { erro: "Custo de obra: confira no formulário." };
+  const base = lancamentoDaLinhaDoExtrato(movimento, mes, sugestao);
+  const l = { ...base, valor: Math.round(Math.abs(Number((movimento || {}).valor) || 0) * 100) / 100 };
+  const ehEmp = l.unidadeId === "empreendimento";
+  const erros = validarLancamentoEscritorio({ ...l, clienteId: l.clienteId || l.cliente, obraId: l.projeto,
+    empreendimentoId: ehEmp ? l.empreendimentoId : l.projeto }, { fechamentos });
+  return erros.length ? { erro: erros[0] } : { lancamento: l };
+}
+
 function lancamentoDoExtrato(movimento, extra) {
   const m = movimento || {};
   return {
@@ -11694,13 +11824,14 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
 
 // Formulário de um lançamento. As travas são as do validarLancamento: a
 // mensagem aparece antes de gravar, não depois.
-function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, prestadores, aoCriarPrestador, insumos, cartoes, aoCadastrarInsumo }) {
+function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, prestadores, aoCriarPrestador, insumos, cartoes, aoCadastrarInsumo, competenciaFixa, titulo, rotuloSalvar }) {
   const S = EF_ESTILO;
   const [f, setF] = useState(() => ({
     contaId: "", contaFonte: "", obraIdAlvo: "", fornecedorId: "", anexos: [], itens: [],
     unidadeId: "escritorio", valor: "", competencia: "", lancadoEm: "",
     cliente: "", clienteId: "", empreendimentoId: "", projeto: "", fornecedor: "", descricao: "", documento: "", contaBanco: "sim",
     ...(inicial || {}),
+    ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
     parcelas: (inicial && Array.isArray(inicial.parcelasCartao) && inicial.parcelasCartao.length) || (inicial && inicial.parcelas) || 1,
   }));
   const [tentou, setTentou] = useState(false);
@@ -11708,34 +11839,66 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const [novoPrest, setNovoPrest] = useState(null);   // { nome, categoria }
   const [erroPrest, setErroPrest] = useState("");
   const [lendoComprov, setLendoComprov] = useState(false);
+  const [avisosLidos, setAvisosLidos] = useState([]);
   // O que o comprovante disse e o lançamento já dizia diferente. Não corrige
   // nada sozinho: só põe à vista, porque na conciliação do extrato isto
   // costuma ser comprovante colado na linha errada.
   const [divergencia, setDivergencia] = useState(null);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  // A mesma IA da Entrada: lê foto, print e PDF de qualquer papel.
+  const iaDisponivel = typeof useIaDisponivel === "function" ? useIaDisponivel() : false;
 
-  // O mesmo leitor da Entrada: PIX, TED, boleto pago. Preenche só o que
-  // está VAZIO — a linha veio do extrato com valor e data próprios, e
-  // sobrescrevê-los seria trocar o que o banco afirma pelo que o papel
-  // repete. O que estiver preenchido e divergir vira aviso, não correção.
+  // O mesmo leitor da Entrada: nota, PIX, TED, boleto pago — por foto,
+  // print ou PDF. Preenche só o que está VAZIO — a linha veio do extrato
+  // com valor e data próprios, e sobrescrevê-los seria trocar o que o banco
+  // afirma pelo que o papel repete. O que divergir vira aviso, não correção.
+  // O papel anexado ganha o nome do que é (nota, comprovante, pedido).
   async function lerComprovante(arquivo) {
-    if (typeof linhasDoPdf !== "function" || typeof dadosDoComprovante !== "function") return;
-    setLendoComprov(true); setErroAnexo(""); setDivergencia(null);
+    setLendoComprov(true); setErroAnexo(""); setDivergencia(null); setAvisosLidos([]);
     try {
-      const d = dadosDoComprovante(await linhasDoPdf(arquivo));
-      if (!d) { setErroAnexo("Anexei o arquivo, mas não reconheci um comprovante de pagamento nele — os campos ficam como estão."); return; }
-      const valorLido = typeof numeroDeCampo === "function" ? numeroDeCampo(d.valor) : 0;
+      let d = null;
+      let tipoPapel = "comprovante";
+      if (iaDisponivel && typeof api !== "undefined" && api && api.ia && typeof api.ia.lerDocumento === "function"
+        && typeof fichaDaEntradaPelaIA === "function") {
+        try {
+          const r = await api.ia.lerDocumento(arquivo, null, "");
+          const ficha = fichaDaEntradaPelaIA(r && r.documentos);
+          if (ficha) {
+            const pa = ficha.papel || {};
+            d = { valor: Number(pa.valor || pa.total) || 0, pagoEm: pa.pagoEm || "", favorecido: pa.lidoComo || "",
+              nota: pa.numeroNota || "", descricao: pa.descricao || "" };
+            if (typeof tipoDoAnexoDaEntrada === "function") tipoPapel = tipoDoAnexoDaEntrada(pa);
+            setAvisosLidos((ficha.avisos || []).filter((x) => !/Como foi pago|^Este arquivo tem/.test(x)));
+          }
+        } catch (e) { /* a IA não leu: o leitor do VICKE tenta o PDF */ }
+      }
+      const ehPdf = /pdf$/i.test((arquivo && arquivo.type) || "") || /\.pdf$/i.test((arquivo && arquivo.name) || "");
+      if (!d && ehPdf && typeof linhasDoPdf === "function" && typeof dadosDoComprovante === "function") {
+        const c = dadosDoComprovante(await linhasDoPdf(arquivo));
+        if (c) d = { valor: typeof numeroDeCampo === "function" ? numeroDeCampo(c.valor) : 0, pagoEm: c.pagoEm || "",
+          favorecido: c.favorecido || "", nota: "", descricao: [c.favorecido, c.documento].filter(Boolean).join(" · ") };
+      }
+      if (!d) { setErroAnexo("Anexei o arquivo, mas não reconheci o papel — os campos ficam como estão."); return; }
+      const valorLido = Number(d.valor) || 0;
+      const doCadastro = d.favorecido && typeof prestadorDoComprovante === "function"
+        ? prestadorDoComprovante(prestadores || [], d.favorecido) : null;
       setF((p) => {
         const novo = { ...p };
-        if (valorLido > 0 && !(efValorDoCampo(p.valor) > 0)) {
-          novo.valor = String(d.valor);
-        }
+        if (valorLido > 0 && !(efValorDoCampo(p.valor) > 0)) novo.valor = valorLido.toFixed(2).replace(".", ",");
         if (d.pagoEm && !p.lancadoEm) novo.lancadoEm = d.pagoEm;
         if (d.pagoEm && !p.competencia) novo.competencia = d.pagoEm.slice(0, 7);
-        if (d.favorecido && !String(p.fornecedor || "").trim()) novo.fornecedor = d.favorecido;
-        if (!String(p.descricao || "").trim()) {
-          novo.descricao = [d.favorecido, d.documento].filter(Boolean).join(" · ") || "Pagamento";
+        const semFornecedor = !p.fornecedorId && (!String(p.fornecedor || "").trim() || p.fornecedor === EF_FORNECEDOR_OUTROS);
+        if (semFornecedor && doCadastro) { novo.fornecedorId = doCadastro.id; novo.fornecedor = doCadastro.nome || ""; }
+        else if (semFornecedor && d.favorecido) novo.fornecedor = d.favorecido;
+        if (d.nota && !String(p.documento || "").trim()) novo.documento = String(d.nota);
+        if (!String(p.descricao || "").trim() || p.descricao === p.historicoBanco) {
+          novo.descricao = d.descricao || [d.favorecido].filter(Boolean).join(" · ") || p.descricao || "Pagamento";
         }
+        // O último papel anexado, ainda sem nome, é este.
+        const lista = anexosDaTransacao(p);
+        let k = -1;
+        for (let x = lista.length - 1; x >= 0; x--) if (lista[x] && !lista[x].tipo) { k = x; break; }
+        if (k >= 0) return comAnexos(novo, lista.map((a, x) => (x === k ? { ...a, tipo: tipoPapel } : a)));
         return novo;
       });
       const valorForm = efValorDoCampo(f.valor);
@@ -11745,7 +11908,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
         ? { valor: difValor ? valorLido : 0, data: difData ? d.pagoEm : "", favorecido: d.favorecido || "" }
         : null);
     } catch (e) {
-      setErroAnexo(e.message || "Não consegui ler o comprovante — ele fica anexado do mesmo jeito.");
+      setErroAnexo(e.message || "Não consegui ler o papel — ele fica anexado do mesmo jeito.");
     } finally {
       setLendoComprov(false);
     }
@@ -11837,7 +12000,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   return (
     <div style={{ ...S.card, borderColor: "rgba(4,116,244,0.35)", background: "#f7fbff", display: "grid", gap: 12 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 13, fontWeight: 700 }}>{inicial && inicial.id ? "Editar lançamento" : "Novo lançamento"}</div>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>{titulo || (inicial && inicial.id ? "Editar lançamento" : "Novo lançamento")}</div>
         {/* O número da transação: é por ele que a prestação de contas acha
             o lançamento e os papéis dele. Sai da sequência sozinho ao
             gravar — não há o que digitar aqui. */}
@@ -11902,8 +12065,14 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
         ))}
         {campo("Valor", <input style={S.input} inputMode="decimal" value={f.valor} placeholder="0,00"
           onChange={(e) => set("valor", e.target.value)} />)}
-        {!naObra && campo("Competência", <input style={S.input} type="month" value={f.competencia}
-          onChange={(e) => set("competencia", e.target.value)} />)}
+        {/* No fechamento, a competência é o mês que se está fechando: não
+            é uma escolha, e um mês errado aqui sumiria da conferência. */}
+        {!naObra && (competenciaFixa
+          ? campo("Competência", <div style={{ ...S.input, background: "#f3f4f6", color: "#374151",
+              display: "flex", alignItems: "center", minHeight: 36 }}>
+              {efMesPorExtenso(competenciaFixa)}<span style={{ color: "#9ca3af", marginLeft: 6, fontSize: 11.5 }}>· do fechamento</span></div>)
+          : campo("Competência", <input style={S.input} type="month" value={f.competencia}
+              onChange={(e) => set("competencia", e.target.value)} />))}
         {campo("Data do pagamento", <input style={S.input} type="date" value={f.lancadoEm}
           onChange={(e) => set("lancadoEm", e.target.value)} />)}
         {campo("Como foi pago", (
@@ -12146,12 +12315,14 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             categoria="comprovante_pagamento"
             lendo={lendoComprov}
             aoLerPdf={lerComprovante}
+            leFoto={!!iaDisponivel}
             aoMudar={(lista) => setF((p) => { const novo = comAnexos(p, lista);
               if (!lista.length) { setDivergencia(null); setErroAnexo(""); }
               return novo; })}
             onErro={setErroAnexo} />
         ) : null}
         {erroAnexo && <div style={{ fontSize: 12, color: "#b45309", marginTop: 6 }}>{erroAnexo}</div>}
+        {avisosLidos.map((x, k) => <div key={k} style={{ fontSize: 12, color: "#b45309", marginTop: 6 }}>{x}</div>)}
         {divergencia && (
           <div style={{ fontSize: 12, color: "#b45309", marginTop: 6, lineHeight: 1.45 }}>
             O comprovante não bate com esta linha:
@@ -12178,8 +12349,9 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           setTentou(true);
           if (todosErros.length) return;
           if (naObra) { aoSalvar(comCartao({ ...f, naObra: true, valor: efValorDoCampo(f.valor) })); return; }
-          aoSalvar(comCartao({ ...f, tipo: "escritorio", valor: efValorDoCampo(f.valor) }));
-        }}>Salvar</button>
+          aoSalvar(comCartao({ ...f, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
+            tipo: "escritorio", valor: efValorDoCampo(f.valor) }));
+        }}>{rotuloSalvar || "Salvar"}</button>
       </div>
     </div>
   );
@@ -12490,10 +12662,200 @@ function MapaDeColunas({ mapa, aoCorrigir }) {
 }
 
 // A conferência contra o extrato: as duas filas que o fechamento precisa.
-function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcarCasados, aoDescartar, ocupado }) {
+// ── A fila do extrato ───────────────────────────────────────────
+// O que veio no banco e ainda não está na base, lançado ali mesmo: clicar na
+// linha abre o formulário embaixo dela, já com data, valor e competência do
+// fechamento; gravar tira a linha da fila e abre a seguinte. A linha igual à
+// do mês passado vai num clique; várias iguais (tarifas) vão de uma vez.
+function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
+  const S = EF_ESTILO;
+  const [aberto, setAberto] = useState("");
+  const [motivo, setMotivo] = useState({});      // id → por que não foi direto
+  const [marcados, setMarcados] = useState({});
+  const [contaLote, setContaLote] = useState("");
+  const [erroLote, setErroLote] = useState("");
+  const [verIgnorados, setVerIgnorados] = useState(false);
+  const lista = (linhas || []).filter((m) => m && m.id);
+  const ids = lista.map((m) => m.id);
+  const proximaDe = (id) => { const k = ids.indexOf(id); return ids[k + 1] || ids[k - 1] || ""; };
+  const dataBR = (d) => String(d || "").slice(0, 10).split("-").reverse().join("/");
+  const escolhidos = lista.filter((m) => marcados[m.id]);
+  const totalLote = escolhidos.reduce((s, m) => s + Math.abs(Number(m.valor) || 0), 0);
+  // A conta do lote segue o lado do dinheiro: saída só oferece despesa,
+  // entrada só receita. Misturado, oferece tudo.
+  const lados = new Set(escolhidos.map((m) => (Number(m.valor) < 0 ? -1 : 1)));
+  const contasLote = contasDoLancamento("escritorio", {}).escritorio.filter((c) => {
+    const g = grupoEscritorio(c.grupo);
+    return lados.size !== 1 || !g || g.sinal === [...lados][0];
+  });
+
+  // Do formulário, segue para a próxima linha; do "Lançar assim", não abre nada.
+  function lancar(m, l, seguir) {
+    const prox = proximaDe(m.id);
+    fila.lancar(l);
+    setMarcados((x) => { const n = { ...x }; delete n[m.id]; return n; });
+    setMotivo((x) => { const n = { ...x }; delete n[m.id]; return n; });
+    if (seguir) setAberto(prox);
+  }
+  function rapido(m) {
+    const r = fila.rapido(m);
+    if (r && r.lancamento) { lancar(m, r.lancamento, false); return; }
+    setMotivo((x) => ({ ...x, [m.id]: (r && r.erro) || "" }));
+    setAberto(m.id);
+  }
+  function lancarLote() {
+    setErroLote("");
+    if (!contaLote) { setErroLote("Escolha a conta."); return; }
+    const r = fila.lancarVarias(escolhidos, contaLote, "escritorio");
+    if (r && r.erro) { setErroLote(r.erro); return; }
+    if (escolhidos.some((m) => m.id === aberto)) setAberto("");
+    setMarcados({}); setContaLote("");
+  }
+  function marcarTudo(v) {
+    setMarcados(v ? Object.fromEntries(ids.map((id) => [id, true])) : {});
+  }
+
+  const dinheiro = (m) => (
+    <span style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", fontWeight: 600,
+      color: Number(m.valor) < 0 ? "#262421" : "#0474f4" }}>
+      {efDinheiro(Math.abs(Number(m.valor) || 0))}
+      <span style={{ fontSize: 10.5, fontWeight: 500, color: "#9ca3af", marginLeft: 5 }}>{Number(m.valor) < 0 ? "saída" : "entrada"}</span>
+    </span>
+  );
+
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      {lista.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>Falta lançar</div>
+          <div style={{ fontSize: 12, color: "#6b7280" }}>
+            {lista.length} {lista.length === 1 ? "linha" : "linhas"} do banco · clique na linha para lançar
+          </div>
+          <label style={{ marginLeft: "auto", fontSize: 12, color: "#4b5563", display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+            <input type="checkbox" checked={escolhidos.length === lista.length && lista.length > 0}
+              onChange={(e) => marcarTudo(e.target.checked)} />
+            Marcar todas
+          </label>
+        </div>
+      )}
+
+      {escolhidos.length > 0 && (
+        <div style={{ ...S.card, padding: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap",
+          borderColor: "rgba(4,116,244,0.35)", background: "#f7fbff" }}>
+          <span style={{ fontSize: 12.5 }}>
+            <b>{escolhidos.length}</b> {escolhidos.length === 1 ? "linha" : "linhas"} · {efDinheiro(totalLote)}
+          </span>
+          <Selecao style={{ ...S.input, width: "auto", minWidth: 200, flex: "1 1 200px", cursor: "pointer" }}
+            value={contaLote} onChange={(e) => setContaLote(e.target.value)}>
+            <option value="">— conta para todas —</option>
+            {GRUPOS_ESCRITORIO.map((g) => {
+              const doGrupo = contasLote.filter((c) => c.grupo === g.id);
+              if (!doGrupo.length) return null;
+              return <optgroup key={g.id} label={g.titulo}>
+                {doGrupo.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </optgroup>;
+            })}
+          </Selecao>
+          <button style={{ ...S.btn, opacity: ocupado ? .45 : 1 }} disabled={!!ocupado} onClick={lancarLote}>
+            Lançar {escolhidos.length === 1 ? "a linha" : `as ${escolhidos.length}`}
+          </button>
+          <button style={S.btnSec} onClick={() => setMarcados({})}>Limpar</button>
+          {erroLote && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b45309" }}>{erroLote}</div>}
+          <div style={{ flexBasis: "100%", fontSize: 11.5, color: "#6b7280" }}>
+            Para o que é do escritório e não pede cliente — tarifa, água, aluguel. Cada linha vira um lançamento, já conferido.
+          </div>
+        </div>
+      )}
+
+      {lista.length > 0 && (
+        <div style={{ ...S.quadro, overflow: "visible" }}>
+          {lista.map((m, k) => {
+            const sug = fila.sugestao(m);
+            const contaSug = sug && sug.campos && sug.campos.contaId ? contaEscritorio(sug.campos.contaId) : null;
+            const aberta = aberto === m.id;
+            return (
+              <div key={m.id} style={{ borderTop: k ? "1px solid rgba(38,36,33,0.08)" : "none",
+                background: aberta ? "#f7fbff" : "transparent" }}>
+                <div onClick={() => setAberto(aberta ? "" : m.id)}
+                  style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "9px 12px", cursor: "pointer", flexWrap: "wrap" }}>
+                  <input type="checkbox" checked={!!marcados[m.id]} onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setMarcados((x) => ({ ...x, [m.id]: e.target.checked }))} style={{ marginTop: 3 }} />
+                  <div style={{ fontSize: 12, color: "#6b7280", whiteSpace: "nowrap", paddingTop: 1 }}>{dataBR(m.data)}</div>
+                  <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, color: "#262421", overflowWrap: "anywhere" }}>{m.historico || m.documento || "—"}</div>
+                    {contaSug && (
+                      <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 2 }}>
+                        como em {dataBR(sug.de.lancadoEm) || "lançamento anterior"}: <b style={{ color: "#374151" }}>{contaSug.nome}</b>
+                        {sug.campos.cliente ? ` · ${sug.campos.cliente}` : ""}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    {dinheiro(m)}
+                    {contaSug && !sug.daObra && !aberta && (
+                      <button style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#0474f4", borderColor: "rgba(4,116,244,0.4)" }}
+                        disabled={!!ocupado}
+                        onClick={(e) => { e.stopPropagation(); rapido(m); }}>✓ Lançar assim</button>
+                    )}
+                    <button style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12 }}
+                      onClick={(e) => { e.stopPropagation(); setAberto(aberta ? "" : m.id); }}>{aberta ? "Fechar" : "Lançar"}</button>
+                    <button style={{ background: "none", border: "none", padding: "5px 2px", fontSize: 11.5, color: "#6b7280",
+                      cursor: "pointer", textDecoration: "underline", fontFamily: "inherit" }}
+                      onClick={(e) => { e.stopPropagation(); if (aberta) setAberto(proximaDe(m.id)); fila.naoE(m); }}>
+                      Não é lançamento
+                    </button>
+                  </div>
+                </div>
+                {aberta && (
+                  <div style={{ padding: "0 12px 12px" }}>
+                    {motivo[m.id] && (
+                      <div style={{ fontSize: 12, color: "#b45309", margin: "0 0 8px" }}>
+                        Não deu para lançar direto: {motivo[m.id]}
+                      </div>
+                    )}
+                    <FormLancamentoEscritorio key={m.id} {...fila.formProps}
+                      inicial={fila.inicial(m)} competenciaFixa={fila.mes}
+                      titulo={`Lançar · ${dataBR(m.data)}`} rotuloSalvar="Lançar e seguir"
+                      aoSalvar={(l) => lancar(m, l, true)} aoCancelar={() => setAberto("")} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {(naoLancar || []).length > 0 && (
+        <div style={{ fontSize: 12, color: "#6b7280" }}>
+          <button style={{ background: "none", border: "none", padding: 0, fontSize: 12, color: "#6b7280",
+            cursor: "pointer", textDecoration: "underline", fontFamily: "inherit" }}
+            onClick={() => setVerIgnorados((v) => !v)}>
+            {verIgnorados ? "Esconder" : "Ver"} {naoLancar.length} {naoLancar.length === 1 ? "linha marcada" : "linhas marcadas"} como “não é lançamento”
+          </button>
+          {verIgnorados && (
+            <div style={{ ...S.quadro, marginTop: 6 }}>
+              {naoLancar.map((m, k) => (
+                <div key={m.id} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "7px 12px",
+                  borderTop: k ? "1px solid rgba(38,36,33,0.06)" : "none" }}>
+                  <span style={{ whiteSpace: "nowrap" }}>{dataBR(m.data)}</span>
+                  <span style={{ flex: "1 1 200px", color: "#4b5563", overflowWrap: "anywhere" }}>{m.historico || m.documento || "—"}</span>
+                  {dinheiro(m)}
+                  <button style={{ ...S.btnSec, padding: "4px 10px", fontSize: 11.5 }} onClick={() => fila.naoE(m)}>Desfazer</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcarCasados, aoDescartar, ocupado, fila }) {
   const S = EF_ESTILO;
   if (!resultado) return null;
   const r = resultado.resumo;
+  const semConferir = (resultado.casados || []).filter((c) => c && c.lancamento && !c.lancamento.conferido).length;
   const cartao = (rot, n, apoio, cor) => (
     <div key={rot} style={{ ...S.card, display: "grid", gap: 2 }}>
       <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>{rot}</div>
@@ -12509,18 +12871,22 @@ function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcar
         {cartao("Casaram", r.casados, `de ${r.movimentos} movimentos do banco`, "#0474f4")}
         {cartao("No banco, falta lançar", r.noBanco, efDinheiro(r.valorNoBanco))}
         {cartao("Lançado, não veio no banco", r.contabilizado, efDinheiro(r.valorContabilizado))}
-        {cartao("Fora da conta", r.ignoradas, "saldo, aplicação, cheque bloqueado")}
+        {cartao("Fora da conta", r.ignoradas + (r.naoLancar || 0), "saldo, aplicação, o que não é lançamento")}
       </div>
 
-      {r.casados > 0 && (
+      {/* Só os que bateram e ainda não estão conferidos: o que nasceu da
+          fila já entra conferido e não pede mais clique. */}
+      {semConferir > 0 && (
         <div style={{ ...S.card, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", fontSize: 12.5, color: "#4b5563" }}>
-          <span>{r.casados} movimentos bateram com lançamentos já registrados.</span>
+          <span>{semConferir === 1 ? "1 movimento bateu" : `${semConferir} movimentos bateram`} com lançamentos já registrados.</span>
           <button style={{ ...S.btn, marginLeft: "auto", opacity: ocupado ? .45 : 1 }} disabled={!!ocupado}
-            onClick={aoMarcarCasados}>Marcar os {r.casados} como conferidos</button>
+            onClick={aoMarcarCasados}>{semConferir === 1 ? "Marcar como conferido" : `Marcar os ${semConferir} como conferidos`}</button>
         </div>
       )}
 
-      {resultado.noBancoSemPar.length > 0 && (
+      {fila ? (
+        <FilaDoExtrato linhas={resultado.noBancoSemPar} naoLancar={resultado.naoLancar} fila={fila} ocupado={ocupado} />
+      ) : resultado.noBancoSemPar.length > 0 && (
         <div style={{ display: "grid", gap: 6 }}>
           <div style={{ fontSize: 13, fontWeight: 700 }}>No extrato e ainda não contabilizado</div>
           <div style={S.quadro}>
@@ -12592,11 +12958,16 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
   const conf = conferenciaDoMes(lancs, mes);
   const registro = (fechamentos || {})[mes] || {};
   const fechado = mesEstaFechado(mes, fechamentos);
-  const [banco, setBanco] = useState(registro.saldoBanco == null ? "" : String(registro.saldoBanco).replace(".", ","));
+  // O saldo do banco: o que foi informado ao fechar; sem ele, o da última
+  // linha SALDO do extrato do mês — o arquivo já traz o número.
+  const saldoLido = extrato && extrato.saldoLido != null ? extrato.saldoLido : null;
+  const bancoInicial = (reg) => (reg.saldoBanco != null ? String(reg.saldoBanco).replace(".", ",")
+    : saldoLido != null ? saldoLido.toFixed(2).replace(".", ",") : "");
+  const [banco, setBanco] = useState(() => bancoInicial(registro));
   useEffect(() => {
-    const reg = (fechamentos || {})[mes] || {};
-    setBanco(reg.saldoBanco == null ? "" : String(reg.saldoBanco).replace(".", ","));
-  }, [mes, fechamentos]);
+    setBanco(bancoInicial((fechamentos || {})[mes] || {}));
+  }, [mes, fechamentos, saldoLido]);
+  const bancoDoExtrato = registro.saldoBanco == null && saldoLido != null && efNumero(banco) === saldoLido;
   const saldoBanco = efNumero(banco);
   const calculado = linha ? linha.saldoExtrato : 0;
   const diferenca = diferencaDeFechamento(calculado, saldoBanco == null ? "" : saldoBanco);
@@ -12612,6 +12983,7 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
           <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>Saldo do banco</span>
           <input style={{ ...S.input, maxWidth: 160 }} inputMode="decimal" value={banco} placeholder="0,00"
             disabled={fechado} onChange={(e) => setBanco(e.target.value)} />
+          {bancoDoExtrato && <span style={{ fontSize: 10.5, color: "#6b7280" }}>lido do extrato</span>}
         </div>
         <div style={{ display: "grid", gap: 3 }}>
           <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>Saldo calculado</span>
@@ -12653,7 +13025,9 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
               {extrato.arrastando ? "Pode soltar" : "Arraste aqui o extrato do banco"}
             </div>
             <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
-              {extrato.origem ? `Li de ${extrato.origem}` : "qualquer banco — .xlsx, .xlsm, .csv ou .ofx exportado em planilha"}
+              {extrato.origem ? `Li de ${extrato.origem}`
+                : extrato.guardado ? `Extrato guardado${extrato.guardado.origem ? ` (${extrato.guardado.origem})` : ""}, de ${String(extrato.guardado.atualizadoEm || "").slice(0, 10).split("-").reverse().join("/")} — arraste o novo para atualizar`
+                : "qualquer banco — .xlsx, .xlsm, .csv ou .ofx exportado em planilha"}
             </div>
           </div>
           <input ref={extrato.entrada} type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt" style={{ display: "none" }}
@@ -12665,7 +13039,7 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
         <ConferenciaComExtrato
           resultado={extrato.resultado} mapa={extrato.mapa} aoCorrigir={extrato.corrigir}
           aoLancar={extrato.lancar} aoMarcarCasados={extrato.marcarCasados}
-          aoDescartar={extrato.descartar} ocupado={ocupado} />
+          aoDescartar={extrato.descartar} ocupado={ocupado} fila={extrato.fila} />
       )}
 
       <div style={{ ...S.card, display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", fontSize: 12.5, color: "#4b5563" }}>
@@ -13354,9 +13728,13 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const obraNova = { ...obra, contasPagar: (obra.contasPagar || []).concat(novas) };
     const ponte = lancamentosDaBaixa(obraNova, cliente, novas,
       { fechamentos: fechamentosDoEscritorio(data), lancamentos: lancamentosDoEscritorio(data) });
+    // Vindo da fila do extrato, o que atravessa leva a marca da linha do banco.
+    const marca = l.extratoId ? { extratoId: l.extratoId, historicoBanco: l.historicoBanco || "",
+      conferido: true, conferidoEm: l.conferidoEm || new Date().toISOString() } : null;
+    const daPonte = marca ? ponte.lancamentos.map((x) => ({ ...x, ...marca })) : ponte.lancamentos;
     save({ ...data,
       obras: todas.map((o) => (o && o.id === obra.id ? obraNova : o)),
-      lancamentos: [...outrosLancamentos, ...lancs, ...ponte.lancamentos],
+      lancamentos: [...outrosLancamentos, ...lancs, ...daPonte],
     }).catch(console.error);
     setForm(null);
   }
@@ -13519,11 +13897,48 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     });
   }
 
-  const movimentosExtrato = (tabelaExtrato && mapaExtrato && mapaExtrato.completo)
-    ? movimentosDaTabela(tabelaExtrato, mapaExtrato) : null;
+  // O extrato lido fica guardado no mês: trocar de tela, fechar o navegador
+  // ou voltar outro dia não apaga a fila. O arquivo arrastado de novo
+  // substitui as linhas; o "não é lançamento" de cada linha fica.
+  const extratosGuardados = (cfgFin.extratos && typeof cfgFin.extratos === "object") ? cfgFin.extratos : {};
+  const doArquivo = (tabelaExtrato && mapaExtrato && mapaExtrato.completo)
+    ? comIdsDosMovimentos(movimentosDaTabela(tabelaExtrato, mapaExtrato)) : null;
+  const guardadoDoMes = extratosGuardados[mesEmConferencia] || null;
+  const movimentosExtrato = doArquivo
+    || (guardadoDoMes && Array.isArray(guardadoDoMes.movimentos) && guardadoDoMes.movimentos.length ? guardadoDoMes.movimentos : null);
+  const ignoradosDoMes = (guardadoDoMes && guardadoDoMes.ignorados) || {};
   const conciliacao = movimentosExtrato
-    ? conciliarExtrato(movimentosExtrato, lancs.filter((l) => String(l.competencia) === String(mesEmConferencia)))
+    ? conciliarExtrato(movimentosExtrato, lancs.filter((l) => String(l.competencia) === String(mesEmConferencia)),
+        { ignorados: ignoradosDoMes })
     : null;
+  const saldoLidoDoExtrato = movimentosExtrato ? saldoDoExtratoNoMes(movimentosExtrato, mesEmConferencia) : null;
+
+  function guardarExtratos(novos) {
+    const esc = (data || {}).escritorio || {};
+    return save({ ...data, escritorio: { ...esc, financeiro: { ...cfgFin, extratos: novos } } });
+  }
+  // Arquivo novo e com as colunas certas: guarda (uma vez por conteúdo).
+  const assinaturaDoArquivo = doArquivo ? doArquivo.map((m) => m.id).join("~") : "";
+  const guardandoExtrato = useRef("");
+  useEffect(() => {
+    if (!doArquivo || !mesEmConferencia) return;
+    const atual = guardadoDoMes && Array.isArray(guardadoDoMes.movimentos) ? guardadoDoMes.movimentos.map((m) => m.id).join("~") : "";
+    const chave = mesEmConferencia + "|" + assinaturaDoArquivo;
+    if (atual === assinaturaDoArquivo || guardandoExtrato.current === chave) return;
+    guardandoExtrato.current = chave;
+    const novos = { ...extratosGuardados, [mesEmConferencia]: {
+      origem: origemExtrato || "", movimentos: extratoParaGuardar(doArquivo),
+      ignorados: ignoradosDoMes, atualizadoEm: new Date().toISOString() } };
+    // O mapa das colunas deste banco vai na MESMA gravada: duas seguidas
+    // partiriam do mesmo retrato de `data` e a segunda apagaria a primeira.
+    const novosLayouts = mapaExtrato && mapaExtrato.assinatura && !mapaExtrato.lembrado
+      ? { ...layouts, [mapaExtrato.assinatura]: { colunas: mapaExtrato.colunas, visto: new Date().toISOString().slice(0, 10) } }
+      : layouts;
+    const esc = (data || {}).escritorio || {};
+    Promise.resolve(save({ ...data, escritorio: { ...esc, financeiro: { ...cfgFin, extratos: novos, layouts: novosLayouts } } }))
+      .then(() => { if (novosLayouts !== layouts) setMapaExtrato((m) => (m ? { ...m, lembrado: true } : m)); })
+      .catch(console.error);
+  }, [assinaturaDoArquivo, mesEmConferencia]);
 
   // Guardar o mapa para a próxima vez que este banco aparecer.
   function lembrarLayout() {
@@ -13562,6 +13977,53 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     });
     setAba("base");
     if (aoIrPara) aoIrPara("base");
+  }
+
+  // ── A fila: lançar sem sair do Fechamento ──
+  // A linha do banco vira lançamento ali mesmo: competência = o mês que está
+  // sendo fechado, conferido, ligado à linha (extratoId) e com o histórico do
+  // banco guardado — é ele que ensina a próxima linha igual.
+  function lancarLinhaDoExtrato(l) {
+    const agora = new Date().toISOString();
+    const marca = { extratoId: l.extratoId || "", historicoBanco: l.historicoBanco || "",
+      conferido: true, conferidoEm: agora, contaBanco: l.contaBanco || "sim" };
+    if (l && l.naObra) { lancarCustoNaObra({ ...l, ...marca }); return true; }
+    const id = typeof uid === "function" ? uid() : String(Date.now());
+    const numeroDoc = l.numeroDoc || proximaReferencia((data || {}).obras || [], lancs);
+    gravar([...lancs, { ...l, ...marca, id, numeroDoc, criadoEm: agora, fornecedor: efNomeDoFornecedor(l), tipo: "escritorio" }]);
+    return true;
+  }
+
+  // Várias linhas iguais de uma vez (as tarifas do mês, a conta de água):
+  // uma conta só para todas. O que a conta pedir a mais (cliente, obra)
+  // manda lançar uma a uma.
+  function lancarVariasDoExtrato(movimentos, contaId, unidadeId) {
+    const agora = new Date().toISOString();
+    let ref = null;
+    const novos = [];
+    for (const m of movimentos || []) {
+      const l = { ...lancamentoDaLinhaDoExtrato(m, mesEmConferencia, null), contaId, unidadeId,
+        valor: Math.round(Math.abs(Number(m.valor) || 0) * 100) / 100 };
+      const erros = validarLancamentoEscritorio(l, { fechamentos });
+      if (erros.length) return { erro: erros[0] + " Lance esta conta uma linha por vez." };
+      ref = proximaReferencia((data || {}).obras || [], lancs.concat(novos));
+      novos.push({ ...l, id: (typeof uid === "function" ? uid() : String(Date.now())) + "_" + novos.length,
+        numeroDoc: ref, criadoEm: agora, conferido: true, conferidoEm: agora,
+        fornecedor: efNomeDoFornecedor(l), tipo: "escritorio" });
+    }
+    if (!novos.length) return { erro: "Nenhuma linha escolhida." };
+    gravar([...lancs, ...novos]);
+    setAviso(`${novos.length} lançamentos criados em ${(contaEscritorio(contaId) || {}).nome || "conta"}.`);
+    return { ok: true };
+  }
+
+  // "Não é lançamento": a linha sai da fila com o motivo, sem virar nada.
+  async function naoELancamento(m, motivo) {
+    const doMes = extratosGuardados[mesEmConferencia] || { movimentos: extratoParaGuardar(movimentosExtrato || []) };
+    const ignorados = { ...(doMes.ignorados || {}) };
+    if (ignorados[m.id]) delete ignorados[m.id];
+    else ignorados[m.id] = { motivo: motivo || "não é lançamento", em: new Date().toISOString() };
+    await guardarExtratos({ ...extratosGuardados, [mesEmConferencia]: { ...doMes, ignorados } });
   }
 
   // "Não passou pela conta": tira da fila sem apagar o lançamento.
@@ -13701,6 +14163,25 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             origem: origemExtrato, entrada: entradaExtrato, receber: receberExtrato,
             mapa: mapaExtrato, corrigir: corrigirColuna, resultado: conciliacao,
             lancar: lancarDoExtrato, marcarCasados: marcarCasadosDoExtrato, descartar: marcarForaDoBanco,
+            guardado: !doArquivo && guardadoDoMes ? guardadoDoMes : null,
+            saldoLido: saldoLidoDoExtrato,
+            fila: {
+              mes: mesEmConferencia,
+              inicial: (m) => lancamentoDaLinhaDoExtrato(m, mesEmConferencia, sugestaoDoExtrato(m, lancs)),
+              sugestao: (m) => sugestaoDoExtrato(m, lancs),
+              lancar: lancarLinhaDoExtrato,
+              rapido: (m) => lancamentoRapidoDoExtrato(m, mesEmConferencia, sugestaoDoExtrato(m, lancs), fechamentos),
+              lancarVarias: lancarVariasDoExtrato,
+              naoE: naoELancamento,
+              formProps: {
+                fechamentos, clientes: (data || {}).clientes || [], obras: (data || {}).obras || [],
+                prestadores: ((data || {}).fornecedores || []).filter((x) => x && x.ativo !== false),
+                insumos: ((data || {}).materiais || []).filter((x) => x && x.ativo !== false),
+                cartoes: cartoesDoEscritorio(data),
+                aoCadastrarInsumo: (campos) => typeof cadastrarInsumoNoCatalogo === "function" ? cadastrarInsumoNoCatalogo(data, save, campos) : null,
+                aoCriarPrestador: criarPrestadorDoLancamento,
+              },
+            },
           }} />
       )}
 
@@ -37234,7 +37715,7 @@ function CadastroRapidoDePrestador({ form, aoMudar, erro, aoSalvar, aoCancelar, 
 // Cada linha é o mesmo CampoAnexoProposta de sempre, com o arquivo dentro;
 // a última é ele vazio, esperando mais um. Nada de componente novo para
 // anexar: anexar já tinha dono.
-function CampoDocumentos({ anexos, aoMudar, onErro, categoria, aoLerPdf, lendo, progresso }) {
+function CampoDocumentos({ anexos, aoMudar, onErro, categoria, aoLerPdf, lendo, progresso, leFoto }) {
   const lista = (anexos || []).filter(Boolean);
   const trocar = (i, novo) => {
     const nova = lista.slice();
@@ -37251,7 +37732,7 @@ function CampoDocumentos({ anexos, aoMudar, onErro, categoria, aoLerPdf, lendo, 
       <CampoAnexoProposta
         anexo={null} categoria={categoria}
         lendo={lendo} progresso={progresso}
-        aoLerPdf={aoLerPdf}
+        aoLerPdf={aoLerPdf} leFoto={leFoto}
         chamada={lista.length ? "Arraste mais um documento" : "Arraste a nota ou o comprovante aqui"}
         apoio={lista.length
           ? "nota fiscal, comprovante, boleto — tudo que sustenta este lançamento"

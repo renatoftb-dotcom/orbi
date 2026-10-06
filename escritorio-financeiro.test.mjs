@@ -37,7 +37,9 @@ const M = new Function(src + `
            obrasDoLancamento, validarLancamentoNaObra, destinoVisivelDoCusto,
            efValorDoCampo, anexosDaTransacao, comAnexos,
            efNomeDoFornecedor, EF_FORNECEDOR_OUTROS,
-           custoDoLancamento, validarCustoEmItens };`)();
+           custoDoLancamento, validarCustoEmItens,
+           comIdsDosMovimentos, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
+           sugestaoDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -1734,6 +1736,88 @@ teste("conciliar: entrada só casa com entrada, saída só com saída", () => {
   const r3 = M.conciliarExtrato([{ data: "2026-09-28", valor: 10833.33, abs: 10833.33, historico: "DEVOLUCAO PIX" }],
     [{ id: "est", valor: -10833.33, contaId: "parceiros", competencia: "2026-09" }]);
   assert.strictEqual(r3.resumo.casados, 1);
+});
+
+teste("fila do extrato: id estável por linha, e iguais não colidem", () => {
+  const a = M.comIdsDosMovimentos([
+    { data: "2026-09-10", valor: -60, historico: "PIX EMITIDO  JOSE" },
+    { data: "2026-09-10", valor: -60, historico: "PIX EMITIDO JOSE" },
+    { data: "2026-09-11", valor: 100, historico: "Depósito" },
+  ]);
+  assert.notStrictEqual(a[0].id, a[1].id, "dois Pix iguais no dia têm ids diferentes");
+  const b = M.comIdsDosMovimentos([{ data: "2026-09-10", valor: -60, historico: "PIX EMITIDO JOSE" }]);
+  assert.strictEqual(b[0].id, a[0].id, "o mesmo arquivo arrastado de novo dá o mesmo id");
+  const g = M.extratoParaGuardar(a);
+  assert.deepStrictEqual(Object.keys(g[2]).sort(), ["abs", "data", "documento", "historico", "id", "valor"]);
+  assert.strictEqual(g[0].abs, 60);
+});
+
+teste("saldo do banco lido da última linha SALDO do mês", () => {
+  const mov = [
+    { data: "2026-09-01", valor: 1000, historico: "SALDO ANTERIOR" },
+    { data: "2026-09-15", valor: -50, historico: "TARIFA" },
+    { data: "2026-09-30", valor: 950, historico: "Saldo do dia" },
+    { data: "2026-10-01", valor: 900, historico: "SALDO" },
+  ];
+  assert.strictEqual(M.saldoDoExtratoNoMes(mov, "2026-09"), 950);
+  assert.strictEqual(M.saldoDoExtratoNoMes(mov, "2026-08"), null);
+});
+
+teste("sugestão: a linha igual do mês passado ensina a conta (por CPF/CNPJ ou histórico)", () => {
+  assert.strictEqual(M.documentoDoHistorico("PIX EMITIDO ***.144.048-** JOSE"), "144048");
+  assert.strictEqual(M.documentoDoHistorico("PAG TIT 12.345.678/0001-90"), "12345678000190");
+  const lancs = [
+    { id: "a", contaId: "luz_agua_net", unidadeId: "escritorio", valor: 120, historicoBanco: "DEB CONV SABESP 0825", criadoEm: "2026-08-10T10:00:00Z", lancadoEm: "2026-08-10" },
+    { id: "b", contaId: "jardim_limpeza", unidadeId: "escritorio", valor: 200, historicoBanco: "PIX EMITIDO ***.144.048-** JOSE", criadoEm: "2026-08-12T10:00:00Z" },
+  ];
+  const s1 = M.sugestaoDoExtrato({ valor: -133.4, historico: "DEB CONV SABESP 0925" }, lancs);
+  assert.strictEqual(s1.campos.contaId, "luz_agua_net");
+  assert.strictEqual(s1.porDocumento, false);
+  const s2 = M.sugestaoDoExtrato({ valor: -200, historico: "PIX EMITIDO OUTRA IF ***.144.048-** JOSE S" }, lancs);
+  assert.strictEqual(s2.campos.contaId, "jardim_limpeza");
+  assert.strictEqual(s2.porDocumento, true);
+  assert.strictEqual(M.sugestaoDoExtrato({ valor: 200, historico: "DEB CONV SABESP" }, lancs), null, "entrada não copia uma despesa");
+  assert.strictEqual(M.sugestaoDoExtrato({ valor: -5, historico: "IOF" }, lancs), null);
+  const daPonte = M.sugestaoDoExtrato({ valor: -80, historico: "PIX LOJA X" },
+    [{ id: "p", contaId: "luz_agua_net", valor: 80, historicoBanco: "PIX LOJA X", origem: { tipo: "conta" } }]);
+  assert.strictEqual(daPonte.daObra, true);
+});
+
+teste("linha do extrato vira o formulário: competência do fechamento, data e valor do banco", () => {
+  const m = { id: "x#1", data: "2026-10-02", valor: -59.96, historico: "PIX VASSOURA" };
+  const l = M.lancamentoDaLinhaDoExtrato(m, "2026-09", { campos: { contaId: "jardim_limpeza" } });
+  assert.deepStrictEqual([l.competencia, l.lancadoEm, l.valor, l.extratoId, l.historicoBanco, l.contaId, l.unidadeId],
+    ["2026-09", "2026-10-02", "59,96", "x#1", "PIX VASSOURA", "jardim_limpeza", "escritorio"]);
+});
+
+teste("lançar assim: só com sugestão que basta e mês aberto", () => {
+  const m = { id: "t#1", data: "2026-09-05", valor: -120, historico: "DEB CONV SABESP" };
+  const ok = M.lancamentoRapidoDoExtrato(m, "2026-09", { campos: { contaId: "luz_agua_net", unidadeId: "escritorio" } }, {});
+  assert.ok(ok.lancamento);
+  assert.strictEqual(ok.lancamento.valor, 120);
+  assert.strictEqual(ok.lancamento.competencia, "2026-09");
+  assert.ok(M.lancamentoRapidoDoExtrato(m, "2026-09", null, {}).erro);
+  assert.ok(M.lancamentoRapidoDoExtrato(m, "2026-09", { campos: { contaId: "luz_agua_net" }, daObra: true }, {}).erro);
+  const fechado = M.lancamentoRapidoDoExtrato(m, "2026-09", { campos: { contaId: "luz_agua_net" } },
+    { "2026-09": { fechadoEm: "2026-10-01T00:00:00Z", saldoBanco: 1 } });
+  assert.ok(fechado.erro, "mês fechado não recebe");
+  const pedeCliente = M.lancamentoRapidoDoExtrato({ ...m, valor: 500 }, "2026-09", { campos: { contaId: "rec_projetos", unidadeId: "projetos" } }, {});
+  assert.ok(pedeCliente.erro, "conta que pede cliente abre o formulário");
+});
+
+teste("conciliar: o lançamento da fila casa com a SUA linha; 'não é lançamento' sai da fila", () => {
+  const mov = M.comIdsDosMovimentos([
+    { data: "2026-09-10", valor: -60, historico: "PIX A" },
+    { data: "2026-09-20", valor: -60, historico: "PIX B" },
+    { data: "2026-09-21", valor: -1000, historico: "TRANSF MESMA TITULARIDADE" },
+  ]).map((m) => ({ ...m, abs: Math.abs(m.valor) }));
+  const lanc = [{ id: "l", valor: 60, contaId: "jardim_limpeza", competencia: "2026-09", lancadoEm: "2026-09-10", extratoId: mov[1].id }];
+  const r = M.conciliarExtrato(mov, lanc, { ignorados: { [mov[2].id]: { motivo: "transferência" } } });
+  assert.strictEqual(r.casados.length, 1);
+  assert.strictEqual(r.casados[0].extrato.id, mov[1].id, "casa com a linha de onde nasceu, mesmo com data mais longe");
+  assert.deepStrictEqual(r.noBancoSemPar.map((m) => m.id), [mov[0].id]);
+  assert.deepStrictEqual(r.naoLancar.map((m) => m.motivo), ["transferência"]);
+  assert.strictEqual(r.resumo.naoLancar, 1);
 });
 
 for (const [nome, fn] of testes) {
