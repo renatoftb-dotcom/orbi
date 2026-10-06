@@ -2721,7 +2721,51 @@ const CP_AJUSTES_COMBINADOS = {
     { obraId: "in624qo", ref: "0179", cotacaoId: "kzzld9w", insumoCodigo: "LOC-003" },
   ],
   catalogo: [{ codigo: "PRE-001", de: "Pedreiros Casa", para: "Empreiteiro" }],
+  // o nome da planilha que é o mesmo item do catálogo (confirmado por quem usa)
+  apelidos: [{ codigo: "HID-237", apelido: "PVC -  Alimentação - Engate Flexível 40cm" }],
 };
+
+// O código do item novo: o prefixo que o grupo já usa no catálogo e o
+// próximo número dele (IMP-013 depois do IMP-012).
+function cpCodigoNovo(grupo, lista) {
+  if (typeof codigoDoGrupo === "function") {
+    const c = codigoDoGrupo(grupo, lista, typeof proximoCodigoInsumo === "function" ? proximoCodigoInsumo : null);
+    if (c) return c;
+  }
+  const g = cpSemAcento(grupo);
+  const conta = {}, maior = {};
+  for (const i of lista || []) {
+    const m = /^([A-Z]{3})-(\d{3,})$/.exec((i && i.codigo) || "");
+    if (!m) continue;
+    maior[m[1]] = Math.max(maior[m[1]] || 0, Number(m[2]));
+    if (cpSemAcento(i.grupo) === g) conta[m[1]] = (conta[m[1]] || 0) + 1;
+  }
+  const pre = Object.keys(conta).sort((a, b) => conta[b] - conta[a])[0] || "NOV";
+  return pre + "-" + String((maior[pre] || 0) + 1).padStart(3, "0");
+}
+
+// O grupo do item novo: o da planilha, se o catálogo usa esse nome; senão o
+// do item mais parecido do catálogo ("Tê 40mm" fica junto dos outros Tês).
+function cpGrupoDoNovo(nome, grupoPlanilha, grupoConta, lista) {
+  const grupos = new Set((lista || []).map((m) => cpSemAcento((m && m.grupo) || "")).filter(Boolean));
+  const deVerdade = (g) => {
+    const k = cpSemAcento(g || "");
+    if (!k || !grupos.has(k)) return "";
+    return ((lista || []).find((m) => m && cpSemAcento(m.grupo || "") === k) || {}).grupo || g;
+  };
+  if (deVerdade(grupoPlanilha)) return deVerdade(grupoPlanilha);
+  const toks = (t) => cpSemAcento(t).split(/[^a-z0-9]+/).filter((w) => w.length >= 3);
+  const alvo = toks(nome);
+  let melhor = null, nota = 0;
+  for (const m of lista || []) {
+    if (!m || !m.grupo || cpSemAcento(m.grupo) === "outros") continue;
+    const tm = toks(m.nome);
+    const n = alvo.filter((w) => tm.indexOf(w) >= 0).length / Math.max(alvo.length, tm.length, 1);
+    if (n > nota) { nota = n; melhor = m; }
+  }
+  if (melhor && nota >= 0.2) return melhor.grupo;
+  return deVerdade(grupoConta) || String(grupoPlanilha || grupoConta || "Outros").trim();
+}
 // A planilha de controle da obra (a "Base de dados" do Excel): cada linha é
 // um item, com o papel em "Nota / Comprovante", o valor do item em "Valor"
 // e o insumo do catálogo em "Itens da nota fiscal". A importação antiga
@@ -2738,6 +2782,7 @@ function linhasDaPlanilhaDaObra(tabela) {
   const iValor = col("valor", "valor total nota");
   const iQtd = col("quantidade");
   const iUn = col("unidade");
+  const iGrupo = col("grupo materiais", "grupo");
   if (iNota < 0 || iItem < 0 || iValor < 0) return [];
   const num = (t) => {
     let x = String(t || "").replace(/\s|R\$/g, "");
@@ -2750,7 +2795,8 @@ function linhasDaPlanilhaDaObra(tabela) {
     const item = String(l[iItem] || "").trim();
     if (!nota || !item) continue;
     saida.push({ nota, item, valor: Math.round(num(l[iValor]) * 100) / 100,
-      quantidade: iQtd >= 0 ? num(l[iQtd]) : 0, unidade: iUn >= 0 ? String(l[iUn] || "").trim() : "" });
+      quantidade: iQtd >= 0 ? num(l[iQtd]) : 0, unidade: iUn >= 0 ? String(l[iUn] || "").trim() : "",
+      grupo: iGrupo >= 0 ? String(l[iGrupo] || "").trim() : "" });
   }
   return saida;
 }
@@ -2774,7 +2820,7 @@ function completarBase(dados, opcoes) {
   const lancs = d.lancamentos || [];
   const materiais = (d.materiais || []).filter(Boolean);
   const ativos = materiais.filter((m) => m.ativo !== false);
-  const grupos = { papel: [], escritorio: [], planilha: [], outros: [], catalogo: [], unidade: [], ajuste: [], insumos: [] };
+  const grupos = { papel: [], escritorio: [], novos: [], planilha: [], outros: [], catalogo: [], unidade: [], ajuste: [], insumos: [] };
   const daPlanilha = Array.isArray(o.planilha) ? o.planilha : [];
   // Quem confere pode deixar um grupo de fora: só os marcados são aplicados.
   const quer = (g) => !Array.isArray(o.grupos) || o.grupos.indexOf(g) >= 0;
@@ -2819,6 +2865,47 @@ function completarBase(dados, opcoes) {
   }
   const grafia = {};
   for (const m of ativos) { const u = String(m.unidade || "").trim(); if (u && !grafia[u.toLowerCase()]) grafia[u.toLowerCase()] = u; }
+
+  // 0. o catálogo aprende com a planilha da obra: o apelido combinado e o
+  // item que a planilha usa e o catálogo ainda não tem. Vem antes de ligar,
+  // para as contas desses itens já saírem ligadas.
+  let materiaisBase = materiais.slice();
+  if (quer("novos") && daPlanilha.length) {
+    for (const a of ajustes.apelidos || []) {
+      const i = materiaisBase.findIndex((m) => m && m.codigo === a.codigo);
+      const kk = cpChaveDoNome(a.apelido);
+      if (i < 0 || !kk || !daPlanilha.some((r) => cpChaveDoNome(r.item) === kk)) continue;
+      const m = materiaisBase[i];
+      if (cpChaveDoNome(m.nome) === kk || (m.aliases || []).some((x) => cpChaveDoNome(x) === kk)) continue;
+      const novo = { ...m, aliases: (m.aliases || []).concat([String(a.apelido).trim()]) };
+      materiaisBase[i] = novo;
+      porNome.set(kk, novo);
+      grupos.novos.push({ texto: `${m.codigo} ${m.nome} ganha o apelido “${String(a.apelido).trim()}”` });
+    }
+    const faltam = new Map();
+    for (const ob of obras.filter(daVez)) for (const c of ob.contasPagar || []) {
+      if (!c || c.insumoCodigo || c.contratoId || !String(c.doc || "").trim()) continue;
+      const v = Math.round((Number(c.valor) || 0) * 100) / 100;
+      const rs = daPlanilha.filter((r) => r.nota === String(c.doc).trim() && Math.abs(r.valor - v) <= 0.02);
+      const nomes = [...new Set(rs.map((r) => cpChaveDoNome(r.item)))];
+      if (nomes.length !== 1 || !nomes[0] || nomes[0] === "outros" || porNome.has(nomes[0])) continue;
+      const f = faltam.get(nomes[0]) || { nome: String(rs[0].item).trim().replace(/\s+$/, ""), grupoPlanilha: rs[0].grupo || "",
+        grupoConta: c.grupoMaterial || "", unidade: rs[0].unidade || c.unidade || "Unidades", etapa: c.etapa || "", conta: c.contaId || "", n: 0 };
+      f.n++;
+      faltam.set(nomes[0], f);
+    }
+    for (const [kk, f] of faltam) {
+      const grupo = cpGrupoDoNovo(f.nome, f.grupoPlanilha, f.grupoConta, materiaisBase);
+      const codigo = cpCodigoNovo(grupo, materiaisBase);
+      const unidade = grafia[String(f.unidade).toLowerCase()] || f.unidade;
+      const novo = { id: typeof uid === "function" ? uid() : "ins_" + codigo, codigo, nome: f.nome, grupo, unidade, tipo: "material",
+        etapaPadrao: f.etapa || "", contaPadrao: f.conta || "", ativo: true, aliases: [f.nome],
+        precoManual: null, precoFonte: null, precoNCompras: 0, precoFatorInccAplicado: 1, observacao: "", precoAtualizadoEm: agora };
+      materiaisBase.push(novo);
+      porNome.set(kk, novo);
+      grupos.novos.push({ texto: `${codigo} · ${f.nome} · ${grupo} · ${unidade} — ${f.n} ${f.n === 1 ? "conta" : "contas"}` });
+    }
+  }
 
   const obrasNovas = obras.map((ob) => {
     if (!daVez(ob)) return ob;
@@ -2904,7 +2991,7 @@ function completarBase(dados, opcoes) {
   });
 
   // 4b. o nome no catálogo
-  const materiaisNovos = materiais.map((m) => {
+  const materiaisNovos = materiaisBase.map((m) => {
     const a = (ajustes.catalogo || []).find((x) => x.codigo === m.codigo);
     if (so || !quer("insumos") || !a || m.nome !== a.de) return m;
     grupos.insumos.push({ texto: `${m.codigo} · ${a.de} → ${a.para} (o nome antigo fica como apelido)` });
@@ -3836,7 +3923,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   const pendencias = useMemo(() => (completar && completar.data
     ? completarBase(completar.data, { quem: completar.quem, obraId: completar.obraId || "", planilha: planilhaObra ? planilhaObra.linhas : null }) : null),
     [completar && completar.data, planilhaObra]);
-  const CP_GRUPOS_COMPLETAR = ["papel", "escritorio", "planilha", "outros", "catalogo", "unidade", "ajuste", "insumos"];
+  const CP_GRUPOS_COMPLETAR = ["papel", "escritorio", "novos", "planilha", "outros", "catalogo", "unidade", "ajuste", "insumos"];
   // o mesmo número no escritório só existe se o número do papel for junto
   const gruposEscolhidos = CP_GRUPOS_COMPLETAR.filter((g) => !gruposFora[g] && !(g === "escritorio" && gruposFora.papel));
   const totalEscolhido = pendencias ? gruposEscolhidos.reduce((t, g) => t + ((pendencias.grupos[g] || []).length), 0) : 0;
@@ -4097,6 +4184,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
             </div>
           )}
           {[["papel", "Número do papel (e nome do arquivo)"], ["escritorio", "Mesmo número no lançamento do escritório"],
+            ["novos", "Catálogo: o que a planilha usa e ainda não existe"],
             ["planilha", "Item ligado ao catálogo pela planilha da obra"],
             ["outros", "“Outros” da planilha ligado ao item Outros do catálogo"], ["catalogo", "Item ligado ao catálogo pelo nome"], ["unidade", "Unidade com a grafia do catálogo"],
             ["ajuste", "Ajustes combinados"], ["insumos", "Catálogo"]].map(([k, titulo]) => {

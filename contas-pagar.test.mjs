@@ -3080,7 +3080,7 @@ teste("planilha da obra: o item do catálogo volta pela coluna “Itens da nota 
     ["6300", "", "", "", "", "Posto", "Pedágio", "Outros", "4189", "", "12,8", "", "", "", "Outros", "12,8", "", "", "", ""],
   ];
   const L = modulo.linhasDaPlanilhaDaObra(tabela);
-  assert.deepStrictEqual(L[0], { nota: "4182", item: "Impermeabilizantes - Vedatop 18KG", valor: 529, quantidade: 10, unidade: "Unidades" });
+  assert.deepStrictEqual(L[0], { nota: "4182", item: "Impermeabilizantes - Vedatop 18KG", valor: 529, quantidade: 10, unidade: "Unidades", grupo: "Impermeabilizantes" });
   const dados = {
     obras: [{ id: "xflr1rp", nome: "Jacarezinho Módulo 1", contasPagar: [
       { id: "e8g2scs", doc: "4182", numeroDoc: "0136", valor: 529, descricao: "Impermeabilizantes", pago: true, pagoEm: "2026-09-23", importadoEm: "2026-09-27", grupoMaterial: "Impermeabilizantes" },
@@ -3097,6 +3097,33 @@ teste("planilha da obra: o item do catálogo volta pela coluna “Itens da nota 
   assert.ok(!r.dados.obras[0].contasPagar[1].insumoCodigo, "“Outros” não é item do catálogo");
   assert.ok(!r.dados.obras[1].contasPagar[0].insumoCodigo, "aberto da obra, não mexe nas outras");
   assert.strictEqual(r.dados.obras[1], dados.obras[1]);
+});
+
+teste("planilha da obra: o item que falta no catálogo é cadastrado (código do grupo) e a conta já sai ligada", () => {
+  const L = [{ nota: "4181", item: "PVC - Alimentação Água Fria - Tê 40mm", valor: 37.47, quantidade: 3, unidade: "Unidades", grupo: "Tubulação PVC" },
+             { nota: "4155", item: "Impermeabilizantes - Veda Concreto 18L", valor: 428, quantidade: 1, unidade: "Unidades", grupo: "Impermeabilizantes" },
+             { nota: "4183", item: "Impermeabilizantes - Veda Concreto 18L", valor: 428, quantidade: 1, unidade: "Unidades", grupo: "Impermeabilizantes" },
+             { nota: "4181", item: "PVC -  Alimentação - Engate Flexível 40cm", valor: 369.36, quantidade: 9, unidade: "Unidades", grupo: "Tubulação PVC" }];
+  const dados = { lancamentos: [], obras: [{ id: "o", nome: "Obra", contasPagar: [
+      { id: "a", doc: "4181", valor: 37.47, descricao: "PVC - Alimentação Água Fria - Tê 40mm", etapa: "hidraulica", contaId: "material", grupoMaterial: "Tubulação PVC" },
+      { id: "b", doc: "4155", valor: 428, descricao: "Impermeabilizantes - Veda Concreto 18L", etapa: "imp_baldrame", contaId: "material" },
+      { id: "c", doc: "4183", valor: 428, descricao: "Veda Concreto", etapa: "imp_baldrame", contaId: "material" },
+      { id: "d", doc: "4181", valor: 369.36, descricao: "PVC -  Alimentação - Engate Flexível 40cm", etapa: "hidraulica", contaId: "material" }] }],
+    materiais: [{ codigo: "HID-089", nome: "PVC - Alimentação Água Fria - Tê 32mm", grupo: "Hidráulica" },
+                { codigo: "HID-237", nome: "PVC -  Alimentação - Engate 40cm", grupo: "Hidráulica", aliases: ["PVC -  Alimentação - Engate 40cm"] },
+                { codigo: "IMP-012", nome: "Impermeabilizantes - Vedalit 900ml", grupo: "Impermeabilizantes" }] };
+  const r = modulo.completarBase(dados, { planilha: L, obraId: "o", agora: "2026-10-06T22:00:00Z" });
+  const novos = r.dados.materiais.filter((m) => !dados.materiais.some((x) => x.codigo === m.codigo));
+  assert.deepStrictEqual(novos.map((m) => [m.codigo, m.nome, m.grupo, m.etapaPadrao]).sort(),
+    [["HID-238", "PVC - Alimentação Água Fria - Tê 40mm", "Hidráulica", "hidraulica"],
+     ["IMP-013", "Impermeabilizantes - Veda Concreto 18L", "Impermeabilizantes", "imp_baldrame"]]);
+  assert.ok(r.dados.materials === undefined);
+  assert.ok(r.dados.materiais.find((m) => m.codigo === "HID-237").aliases.indexOf("PVC -  Alimentação - Engate Flexível 40cm") >= 0, "o Engate Flexível vira apelido do HID-237");
+  assert.deepStrictEqual(r.dados.obras[0].contasPagar.map((c) => c.insumoCodigo), ["HID-238", "IMP-013", "IMP-013", "HID-237"]);
+  assert.strictEqual(r.grupos.novos.length, 3);
+  const sem = modulo.completarBase(dados, { planilha: L, obraId: "o", grupos: ["planilha"] });
+  assert.strictEqual(sem.dados.materiais.length, 3, "desmarcado, o catálogo não muda");
+  assert.ok(!sem.dados.obras[0].contasPagar[0].insumoCodigo);
 });
 
 teste("planilha da obra: sem o valor igual não liga; “Outros” vai à parte; grupo desmarcado não grava", () => {
