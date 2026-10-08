@@ -11643,6 +11643,15 @@ const EF_FORNECEDOR_OUTROS = "Outros";
 // Valor que o seletor usa para dizer "é Outros mesmo", distinto de "ainda
 // não mexi no campo" — são a mesma coisa no fim, mas não na tela.
 const EF_OPCAO_OUTROS = "__outros";
+// O próprio escritório como fornecedor: na receita (e no estorno dela) quem
+// presta o serviço é o escritório — não um cadastro de fornecedor.
+const EF_OPCAO_ESCRITORIO = "__escritorio";
+
+// Conta de receita do escritório pede o próprio escritório como fornecedor.
+function fornecedorPadraoDaConta(contaId, nomeEscritorio) {
+  const c = contaEscritorio(contaId);
+  return c && c.grupo === "receitas" && nomeEscritorio ? nomeEscritorio : "";
+}
 
 function efNomeDoFornecedor(l) {
   return String((l || {}).fornecedor || "").trim() || EF_FORNECEDOR_OUTROS;
@@ -11985,7 +11994,7 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
 
 // Formulário de um lançamento. As travas são as do validarLancamento: a
 // mensagem aparece antes de gravar, não depois.
-function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, prestadores, aoCriarPrestador, insumos, cartoes, aoCadastrarInsumo, competenciaFixa, titulo, rotuloSalvar, atalhos }) {
+function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, prestadores, aoCriarPrestador, insumos, cartoes, aoCadastrarInsumo, competenciaFixa, titulo, rotuloSalvar, atalhos, nomeEscritorio }) {
   const S = EF_ESTILO;
   const [f, setF] = useState(() => ({
     contaId: "", contaFonte: "", obraIdAlvo: "", fornecedorId: "", anexos: [], itens: [],
@@ -12122,6 +12131,14 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     const o = pelo || unica;
     if (o) setF((p) => ({ ...p, obraId: o.id, projeto: o.nome || p.projeto }));
   }, [f.unidadeId, f.obraId, f.clienteId, f.projeto, f.contaFonte]);
+  // Receita: o fornecedor é o próprio escritório, já escolhido — se ninguém
+  // escolheu outro.
+  useEffect(() => {
+    const padrao = fornecedorPadraoDaConta(f.contaId, nomeEscritorio);
+    if (!padrao || f.fornecedorId) return;
+    if (f.fornecedor && f.fornecedor !== EF_FORNECEDOR_OUTROS) return;
+    setF((p) => ({ ...p, fornecedor: padrao, fornecedorId: "" }));
+  }, [f.contaId]);
   const obraAlvo = obrasDoCliente.find((o) => o && o.id === f.obraIdAlvo) || null;
   const clienteAlvo = (clientes || []).find((c) => c && c.id === f.clienteId) || null;
   const destinoDoCusto = naObra ? destinoVisivelDoCusto(f.contaId, obraAlvo, clienteAlvo, {}) : null;
@@ -12438,17 +12455,20 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             /* Campo em branco já é "Outros" no fim, então ele diz isso desde
                o começo: o que está escrito ali é o que vai ser gravado. */
             value={f.fornecedorId
-              || (f.fornecedor && f.fornecedor !== EF_FORNECEDOR_OUTROS ? "" : EF_OPCAO_OUTROS)}
+              || (nomeEscritorio && f.fornecedor === nomeEscritorio ? EF_OPCAO_ESCRITORIO
+                : f.fornecedor && f.fornecedor !== EF_FORNECEDOR_OUTROS ? "" : EF_OPCAO_OUTROS)}
             onChange={(v) => {
               if (v === EF_OPCAO_OUTROS) { setF((p) => ({ ...p, fornecedorId: "", fornecedor: EF_FORNECEDOR_OUTROS })); return; }
+              if (v === EF_OPCAO_ESCRITORIO) { setF((p) => ({ ...p, fornecedorId: "", fornecedor: nomeEscritorio })); return; }
               const pr = (prestadores || []).find((x) => x && x.id === v) || null;
               setF((p) => ({ ...p, fornecedorId: v, fornecedor: pr ? pr.nome : "" }));
             }}
             placeholder="Procurar fornecedor…"
             aoCriar={(termo) => { setErroPrest(""); setNovoPrest({ nome: termo || "", categoria: "Loja / Comércio" }); }}
             criarRotulo="fornecedor"
-            opcoes={[{ valor: EF_OPCAO_OUTROS, rotulo: "Outros — não identificado" }]
-              .concat(f.fornecedor && !f.fornecedorId && f.fornecedor !== EF_FORNECEDOR_OUTROS
+            opcoes={(nomeEscritorio ? [{ valor: EF_OPCAO_ESCRITORIO, rotulo: `${nomeEscritorio} — o próprio escritório` }] : [])
+              .concat([{ valor: EF_OPCAO_OUTROS, rotulo: "Outros — não identificado" }])
+              .concat(f.fornecedor && !f.fornecedorId && f.fornecedor !== EF_FORNECEDOR_OUTROS && f.fornecedor !== nomeEscritorio
                 ? [{ valor: "", rotulo: f.fornecedor }] : [])
               .concat((prestadores || []).map((x) => ({ valor: x.id, rotulo: x.nome, grupo: x.categoria || "" })))} />
         ))}
@@ -14662,6 +14682,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
               naoE: naoELancamento,
               formProps: {
                 fechamentos, clientes: (data || {}).clientes || [], obras: (data || {}).obras || [],
+                nomeEscritorio: (((data || {}).escritorio || {}).nome || "").trim(),
                 prestadores: ((data || {}).fornecedores || []).filter((x) => x && x.ativo !== false),
                 insumos: ((data || {}).materiais || []).filter((x) => x && x.ativo !== false),
                 cartoes: cartoesDoEscritorio(data),
@@ -14710,6 +14731,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             )}
           </div>
           {form && <div style={{ marginBottom: 14 }}><FormLancamentoEscritorio fechamentos={fechamentos} clientes={(data || {}).clientes || []}
+            nomeEscritorio={(((data || {}).escritorio || {}).nome || "").trim()}
             obras={(data || {}).obras || []}
             prestadores={((data || {}).fornecedores || []).filter((x) => x && x.ativo !== false)}
             insumos={((data || {}).materiais || []).filter((x) => x && x.ativo !== false)}

@@ -39,7 +39,7 @@ const M = new Function(src + `
            efNomeDoFornecedor, EF_FORNECEDOR_OUTROS,
            custoDoLancamento, validarCustoEmItens,
            comIdsDosMovimentos, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
-           sugestaoDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao,
+           sugestaoDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao, fornecedorPadraoDaConta,
            extratosComArquivo, movimentosGuardadosDoMes, ignoradosGuardados, extratosComIgnorado };`)();
 
 const testes = [];
@@ -1908,6 +1908,14 @@ teste("Gestão de obras exige a obra; o lançamento rápido usa a obra gravada, 
   assert.ok(semObra.erro);
   const comObra = M.lancamentoRapidoDoExtrato(m, "2026-09", { campos: { contaId: "rec_gestao", unidadeId: "gestao_obras", clienteId: "c1", cliente: "Cobop", projeto: "Reforma", obraId: "o1" } }, {});
   assert.ok(comObra.lancamento, comObra.erro);
+});
+
+
+teste("Receita do escritório: o fornecedor é o próprio escritório", () => {
+  assert.strictEqual(M.fornecedorPadraoDaConta("rec_gestao", "Padovan Arquitetos"), "Padovan Arquitetos");
+  assert.strictEqual(M.fornecedorPadraoDaConta("rec_projetos", "Padovan Arquitetos"), "Padovan Arquitetos");
+  assert.strictEqual(M.fornecedorPadraoDaConta("luz_agua_net", "Padovan Arquitetos"), "");
+  assert.strictEqual(M.fornecedorPadraoDaConta("rec_gestao", ""), "");
 });
 
 for (const [nome, fn] of testes) {
