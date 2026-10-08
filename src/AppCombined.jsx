@@ -34446,10 +34446,21 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     if (!trava.pode) { setErro(trava.motivo); return; }
     const esc = propostaEscolhida(cot);
     if (!esc) { setErro("Escolha uma proposta primeiro."); return; }
-    const conta = contaDeLojaAberta(cotacoes, esc.fornecedorId);
-    if (!conta) { setErro("Esta loja não tem conta aberta nesta obra."); return; }
+    // Sem conta aberta nessa loja, ela nasce junto com este pedido — como na
+    // Entrada. A conta só é gravada quando o pedido é lançado; cancelar não
+    // deixa conta vazia para trás.
+    let conta = contaDeLojaAberta(cotacoes, esc.fornecedorId);
+    let criada = null;
+    if (!conta) {
+      const loja = prestadores.find((f) => f.id === esc.fornecedorId);
+      if (!loja) { setErro("A proposta escolhida não está ligada a um fornecedor cadastrado. Edite a proposta e escolha a loja."); return; }
+      criada = { ...cotacaoVazia(obra.id), titulo: loja.nome || esc.favorecido || "Loja", contaLoja: true,
+        lojaId: loja.id, prazoLoja: 30, contaId: cot.contaId || "material" };
+      conta = criada;
+    }
     setErro("");
-    setFormPedido({ cotacao: conta, origem: cot,
+    setFormLancamento(null);
+    setFormPedido({ cotacao: conta, origem: cot, contaNova: criada,
       pedido: pedidoDaCotacao(cot, esc, insumos, conta.prazoLoja) });
   }
 
@@ -35104,12 +35115,19 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                           à fatura dela, não abrir uma cobrança em paralelo. */}
                       {podeGerenciar && (() => {
                         const esc2 = propostaEscolhida(cot);
-                        const loja = esc2 && contaDeLojaAberta(cotacoes, esc2.fornecedorId);
-                        if (!loja || !podeLancarEmContas(cot, contratos).pode) return null;
-                        const nome = (prestadores.find((f) => f.id === loja.lojaId) || {}).nome || "loja";
-                        return (
+                        if (!esc2 || !esc2.fornecedorId || !podeLancarEmContas(cot, contratos).pode) return null;
+                        const loja = contaDeLojaAberta(cotacoes, esc2.fornecedorId);
+                        const nome = (prestadores.find((f) => f.id === esc2.fornecedorId) || {}).nome || esc2.favorecido || "loja";
+                        // Material com lista de itens e sem conta na loja: dá para
+                        // abrir a conta ali mesmo, com este pedido como o primeiro.
+                        if (!loja && !temListaDeItens(cot)) return null;
+                        return loja ? (
                           <button style={E.btn} title={`Entra como pedido na conta de ${nome} e se soma à fatura dela`}
                             onClick={() => mandarParaContaDaLoja(cot)}>Somar à conta da {nome}</button>
+                        ) : (
+                          <button style={E.btnSec} data-vk-abrir-conta-loja="1"
+                            title={`Abre a conta da ${nome} nesta obra com este pedido — as próximas compras dela se somam ali`}
+                            onClick={() => mandarParaContaDaLoja(cot)}>Abrir conta na {nome}</button>
                         );
                       })()}
                       {!trava.pode && !cot.divisaoDe && <span style={{ fontSize: 11.5, color: "#6b7280", alignSelf: "center",
@@ -35178,6 +35196,14 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         <CotacaoLancamento
           cotacao={formLancamento.cotacao}
           dados={formLancamento.dados}
+          contaDaLoja={(() => {
+            const esc3 = propostaEscolhida(formLancamento.cotacao);
+            if (!esc3 || !esc3.fornecedorId) return null;
+            const aberta = contaDeLojaAberta(cotacoes, esc3.fornecedorId);
+            return { aberta: !!aberta,
+              nome: (prestadores.find((f) => f.id === esc3.fornecedorId) || {}).nome || esc3.favorecido || "loja",
+              ir: () => mandarParaContaDaLoja(formLancamento.cotacao) };
+          })()}
           isMobile={isMobile}
           dinheiro={dinheiro}
           onConfirmar={confirmarLancamento}
@@ -35338,7 +35364,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
 // ── Lançar a cotação em contas a pagar ──────────────────────────
 // Só três perguntas: quantas parcelas, quando vence a primeira e em que
 // conta do P&L o gasto cai. O resto vem da proposta escolhida.
-function CotacaoLancamento({ cotacao, dados, dinheiro, isMobile, onConfirmar, onFechar }) {
+function CotacaoLancamento({ cotacao, dados, contaDaLoja, dinheiro, isMobile, onConfirmar, onFechar }) {
   const [f, setF] = useState(dados);
   const E = COT_ESTILO;
   const set = (k, v) => setF(x => ({ ...x, [k]: v }));
@@ -35378,7 +35404,11 @@ function CotacaoLancamento({ cotacao, dados, dinheiro, isMobile, onConfirmar, on
   const grupos = typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : [];
   // Com medição, a etapa de cada item é condição para lançar — mesma regra
   // do pedido da loja, e pela mesma razão.
-  const podeLancar = previa.length > 0;
+  // "Conta na loja" não se lança daqui: a compra entra como PEDIDO na conta
+  // da loja (número, itens, papel), e as contas saem do pedido. Antes a
+  // opção ficava marcada sem gerar nada e a tela dizia "sem valor".
+  const naLoja = f.modo === "contaLoja";
+  const podeLancar = naLoja ? !!contaDaLoja : previa.length > 0;
 
   const comSinal = f.modo === "sinalFinal" || f.modo === "sinalParcelas";
   const opcao = (m) => (
@@ -35495,7 +35525,16 @@ function CotacaoLancamento({ cotacao, dados, dinheiro, isMobile, onConfirmar, on
           <input style={E.input} value={f.observacao || ""} onChange={e => set("observacao", e.target.value)} />
         </div>
 
-        {previa.length > 0 ? (
+        {naLoja ? (
+          <div data-vk-conta-na-loja="1" style={{ fontSize: 12, color: "#1e3a8a", background: "#eef5ff", border: "1px solid rgba(4,116,244,0.22)",
+            borderRadius: 10, padding: "8px 10px", marginBottom: 16 }}>
+            {contaDaLoja
+              ? (contaDaLoja.aberta
+                ? `Esta compra entra como pedido na conta da ${contaDaLoja.nome}, que já está aberta nesta obra. Na próxima tela você confere os itens, o vencimento e anexa o papel da loja.`
+                : `A ${contaDaLoja.nome} ainda não tem conta nesta obra: ela é aberta junto com este pedido, e as próximas compras dela se somam ali. Na próxima tela você confere os itens, o vencimento e anexa o papel da loja.`)
+              : "A proposta escolhida não está ligada a uma loja cadastrada — edite a proposta e escolha o fornecedor para usar a conta na loja."}
+          </div>
+        ) : previa.length > 0 ? (
           <div style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10, padding: "8px 10px", marginBottom: 16, fontSize: 12, color: "#4b5563" }}>
             <div style={{ fontWeight: 600, color: "#111827", marginBottom: 4 }}>
               {previa.length === 1 ? "1 conta a gerar" : `${previa.length} contas a gerar`}
@@ -35518,7 +35557,9 @@ function CotacaoLancamento({ cotacao, dados, dinheiro, isMobile, onConfirmar, on
 
         <div style={{ display: "flex", gap: 10 }}>
           <button style={{ ...E.btn, opacity: podeLancar ? 1 : 0.45, cursor: podeLancar ? "pointer" : "not-allowed" }}
-            disabled={!podeLancar} onClick={() => onConfirmar({ ...f, parcelas: qtd })}>Lançar</button>
+            disabled={!podeLancar} onClick={() => (naLoja ? contaDaLoja.ir() : onConfirmar({ ...f, parcelas: qtd }))}>
+            {naLoja ? (contaDaLoja && contaDaLoja.aberta ? `Ir para o pedido na ${contaDaLoja.nome}` : `Abrir conta e ir para o pedido`) : "Lançar"}
+          </button>
           <button style={E.btnSec} onClick={onFechar}>Cancelar</button>
         </div>
       </div>
