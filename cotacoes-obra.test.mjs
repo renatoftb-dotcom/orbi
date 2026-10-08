@@ -67,7 +67,7 @@ const modulo = new Function(`
            FORA_DA_COMPRA, escolhaPorItemDaCotacao, lojaEscolhidaDoItem, temDivisao, escolherLojaDoItem,
            escolherMaisBaratoEmCada, limparDivisao, divisaoDaCotacao,
            cotacoesDaDivisao, foiDividida, cotacaoRaiz, filhasDaDivisao, podeDesfazerDivisao, desfazerDivisao,
-           cotacaoDosNaoComprados, economiaDaDivisao, anexosSemUso, totaisDaDivisao, resumoDaCotacao, cotacaoDeOrigemDasContas,
+           cotacaoDosNaoComprados, economiaDaDivisao, anexosSemUso, totaisDaDivisao, combinarTotalDaLoja, propostaComparavel, resumoDaCotacao, cotacaoDeOrigemDasContas,
            unitarioDoTotal, totalBrutoItem, valoresComDesconto, totalEfetivoItem,
            precoEfetivo, totalNegociado, descontoDaProposta,
            linkWhatsApp, enviosDaLista, envioParaLoja, registrarEnvioDaLista, lojasParaPedir,
@@ -4052,6 +4052,68 @@ teste("Divisão: desconto proporcional marcado no pedido, e ajustar a proposta a
   assert.strictEqual(M.resumoDaCotacao(r.original, [], cots).divisao.total, 4255);
   // pedido excluído fica com o valor do fechamento
   assert.strictEqual(M.totaisDaDivisao(r.original, [r.original, b]).total, r.original.divisao.total);
+});
+
+
+teste("Divisão: total combinado com a loja substitui o calculado e é rateado entre os itens dela", () => {
+  let c = M.escolherMaisBaratoEmCada(listaDividir());     // i1 B; i2, i3 A
+  c = M.combinarTotalDaLoja(c, "pA", "2.700,00");          // A: 2700 + 95 = 2795 → 2700
+  const a = M.divisaoDaCotacao(c).lojas.find((l) => l.propostaId === "pA");
+  assert.strictEqual(a.total, 2700);
+  assert.strictEqual(a.calculado, 2795);
+  assert.strictEqual(a.diferenca, 95);
+  assert.ok(a.combinado);
+  assert.strictEqual(Math.round(a.itens.reduce((s, i) => s + i.total, 0) * 100) / 100, 2700, "os itens somam o combinado");
+  assert.strictEqual(M.divisaoDaCotacao(c).total, 2700 + 1460);
+  // o pedido gerado bate centavo por centavo
+  const r = M.cotacoesDaDivisao(c, {});
+  const fa = r.filhas.find((f) => M.propostaEscolhida(f).id === "pA");
+  assert.strictEqual(M.valorDaProposta(fa, M.propostaEscolhida(fa)), 2700);
+  for (const it of fa.itens) {
+    assert.strictEqual(M.totalEfetivoItem(fa, M.propostaEscolhida(fa), it), a.itens.find((x) => x.id === it.id).total);
+  }
+  assert.strictEqual(fa.totalCombinado, true);
+  assert.strictEqual(fa.descontoProporcional, false);
+  const ped = M.pedidoDaCotacao(fa, M.propostaEscolhida(fa), [], 0);
+  assert.strictEqual(ped.desconto, 95);
+});
+
+teste("Divisão: combinado sobre loja com desconto da lista inteira tira o aviso de conferir", () => {
+  const c0 = listaDividir();
+  c0.propostas[0].totalFechado = "4.000,00";
+  let c = M.escolherLojaDoItem(c0, "i2", "pA");
+  c = M.escolherLojaDoItem(c, "i3", "pA");
+  c = M.escolherLojaDoItem(c, "i1", "pB");
+  assert.ok(M.divisaoDaCotacao(c).lojas[0].descontoParcial);
+  c = M.combinarTotalDaLoja(c, "pA", 2600);
+  const a = M.divisaoDaCotacao(c).lojas[0];
+  assert.ok(!a.descontoParcial);
+  assert.strictEqual(a.total, 2600);
+  const fa = M.cotacoesDaDivisao(c, {}).filhas.find((f) => M.propostaEscolhida(f).id === "pA");
+  assert.strictEqual(M.valorDaProposta(fa, M.propostaEscolhida(fa)), 2600);
+});
+
+teste("Divisão: mexer nos itens da loja derruba o total combinado dela; o das outras fica", () => {
+  let c = M.escolherMaisBaratoEmCada(listaDividir());
+  c = M.combinarTotalDaLoja(c, "pA", 2700);
+  c = M.combinarTotalDaLoja(c, "pB", 1400);
+  c = M.escolherLojaDoItem(c, "i3", M.FORA_DA_COMPRA);     // tira o prego da A
+  assert.deepStrictEqual(c.totalCombinadoPorLoja, { pB: 1400 });
+  c = M.combinarTotalDaLoja(c, "pB", "");
+  assert.deepStrictEqual(c.totalCombinadoPorLoja, {});
+  assert.deepStrictEqual(M.limparDivisao(M.combinarTotalDaLoja(c, "pB", 1)).totalCombinadoPorLoja, {});
+});
+
+teste("Loja que cotou só parte da lista não é a mais barata nem a base da economia", () => {
+  const c = listaDividir();
+  c.propostas[0].valor = 4315;   // A completa
+  c.propostas[1].valor = 3340;   // B sem o prego
+  c.propostas.push({ id: "pC", favorecido: "Loja C", valor: 4500, precos: { i1: 40, i2: 23.5, i3: 22 } });
+  assert.ok(!M.propostaComparavel(c, c.propostas[1]));
+  assert.strictEqual(M.melhorProposta(c).id, "pA");
+  const e = M.economiaDaCotacao(c);
+  assert.strictEqual(e.menor, 4315);
+  assert.strictEqual(e.economia, 4500 - 4315);
 });
 
 for (const [nome, fn] of testes) {

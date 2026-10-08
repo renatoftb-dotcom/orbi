@@ -28937,7 +28937,39 @@ function comEscolhaPorItem(cot, escolha) {
   const base = Object.keys(limpa).length && c.escolhidaId
     ? { ...limparEnvioAoCliente(c), escolhidaId: "", escolhidoPor: "", escolhidoEm: "" }
     : c;
-  return { ...base, escolhaPorItem: limpa };
+  // O total combinado com uma loja vale para AQUELES itens. Mexeu no que
+  // sai dela, o combinado cai — senão 3.400 fechados por três itens
+  // passariam a valer para dois, ou para quatro.
+  const antes = escolhaPorItemDaCotacao(c);
+  const itensDa = (e, pid) => Object.keys(e).filter((k) => e[k] === pid).sort().join("|");
+  const combinados = {};
+  for (const pid of Object.keys(c.totalCombinadoPorLoja || {})) {
+    if (itensDa(antes, pid) === itensDa(limpa, pid)) combinados[pid] = c.totalCombinadoPorLoja[pid];
+  }
+  return { ...base, escolhaPorItem: limpa, totalCombinadoPorLoja: combinados };
+}
+
+// "A OURIFER fechou os três itens em 3.400": o total combinado de uma loja
+// na divisão. Vazio ou zero volta ao calculado pela cotação.
+function combinarTotalDaLoja(cot, propostaId, valor) {
+  const c = cot || {};
+  const v = Math.round(numeroDoCampo(valor) * 100) / 100;
+  const combinados = { ...(c.totalCombinadoPorLoja || {}) };
+  if (v > 0) combinados[propostaId] = v;
+  else delete combinados[propostaId];
+  return { ...c, totalCombinadoPorLoja: combinados };
+}
+
+// Os itens de uma loja com um total imposto: o mesmo rateio do total
+// fechado da proposta (proporcional ao preço de tabela, sobra no último),
+// para que o pedido gerado depois bata centavo por centavo com a tela.
+function rateioDoTotalCombinado(itens, proposta, total) {
+  const sub = { itens };
+  const prop = { ...proposta, totalFechado: total };
+  const d = valoresComDesconto(sub, prop);
+  const r = {};
+  for (const it of itens) r[it.id] = d && d[it.id] != null ? d[it.id] : totalBrutoItem(sub, prop, it);
+  return r;
 }
 
 // Tocar no preço de uma loja escolhe aquela loja para o item; tocar de novo
@@ -28966,7 +28998,7 @@ function escolherMaisBaratoEmCada(cot) {
 
 function limparDivisao(cot) {
   const c = cot || {};
-  return { ...c, escolhaPorItem: {} };
+  return { ...c, escolhaPorItem: {}, totalCombinadoPorLoja: {} };
 }
 
 // O retrato da divisão: o que sai de cada loja e por quanto, o que fica fora
@@ -28986,7 +29018,7 @@ function divisaoDaCotacao(cot) {
     (porLoja[e] = porLoja[e] || []).push(it);
   }
   const lojas = propostasDaCotacao(c).filter((p) => porLoja[p.id]).map((p) => {
-    const linhas = porLoja[p.id].map((it) => ({
+    const calcLinhas = porLoja[p.id].map((it) => ({
       id: it.id,
       descricao: it.descricao || "",
       quantidade: quantidadeDoItem(it),
@@ -28994,7 +29026,15 @@ function divisaoDaCotacao(cot) {
       unitario: precoEfetivo(c, p, it),
       total: totalEfetivoItem(c, p, it),
     }));
-    const total = Math.round(linhas.reduce((a, l) => a + l.total, 0) * 100) / 100;
+    const calculado = Math.round(calcLinhas.reduce((a, l) => a + l.total, 0) * 100) / 100;
+    const combinado = Number((c.totalCombinadoPorLoja || {})[p.id]) || 0;
+    let linhas = calcLinhas;
+    if (combinado > 0) {
+      const r = rateioDoTotalCombinado(porLoja[p.id], p, combinado);
+      linhas = calcLinhas.map((l) => ({ ...l, total: r[l.id],
+        unitario: l.quantidade > 0 ? Math.round((r[l.id] / l.quantidade) * 1e6) / 1e6 : r[l.id] }));
+    }
+    const total = combinado > 0 ? combinado : calculado;
     const cotados = itens.filter((it) => precoUnitario(p, it.id) > 0).length;
     return {
       propostaId: p.id,
@@ -29002,7 +29042,11 @@ function divisaoDaCotacao(cot) {
       favorecido: p.favorecido || "",
       itens: linhas,
       total,
-      descontoParcial: !!descontoDaProposta(c, p) && linhas.length < cotados,
+      calculado,
+      combinado: combinado > 0,
+      diferenca: Math.round((calculado - total) * 100) / 100,
+      // com o total combinado, o desconto da lista inteira já não importa
+      descontoParcial: !(combinado > 0) && !!descontoDaProposta(c, p) && linhas.length < cotados,
     };
   });
   const total = Math.round(lojas.reduce((a, l) => a + l.total, 0) * 100) / 100;
@@ -29035,8 +29079,9 @@ function cotacoesDaDivisao(cot, opcoes) {
     const ids = l.itens.map((i) => i.id);
     const precos = {};
     for (const id of ids) precos[id] = (p.precos || {})[id];
-    // desconto de fechamento: a parte dele que cabe nestes itens
-    const comDesconto = !!descontoDaProposta(c, p);
+    // desconto de fechamento: a parte dele que cabe nestes itens — ou o
+    // total que se combinou com a loja na divisão
+    const comDesconto = !!descontoDaProposta(c, p) || l.combinado;
     return {
       ...cotacaoVazia(c.obraId),
       id: novoId(),
@@ -29050,6 +29095,7 @@ function cotacoesDaDivisao(cot, opcoes) {
       // o desconto veio do fechamento da lista inteira e foi rateado aqui:
       // a tela do pedido avisa, e a proposta continua editável
       descontoProporcional: !!l.descontoParcial,
+      totalCombinado: !!l.combinado,
       precisaAprovacaoCliente: false,
       escolhidaId: p.id,
       escolhidoPor: quem,
@@ -32082,8 +32128,16 @@ function lojasParaPedir(fornecedores, cot, busca) {
     });
 }
 
+// Numa lista, a loja que cotou só parte dos itens tem um total menor por
+// faltar coisa, não por ser mais barata. Ela não entra como "mais barata"
+// nem como base da economia.
+function propostaComparavel(cot, p) {
+  if (!temListaDeItens(cot) || !propostaTemPrecoPorItem(cot, p)) return true;
+  return itensSemPreco(cot, p).length === 0;
+}
+
 function melhorProposta(cot) {
-  const ord = propostasOrdenadas(cot).filter(p => valorProposta(p) > 0);
+  const ord = propostasOrdenadas(cot).filter(p => valorProposta(p) > 0 && propostaComparavel(cot, p));
   return ord[0] || null;
 }
 
@@ -32091,7 +32145,7 @@ function melhorProposta(cot) {
 // Com uma proposta só não há economia a declarar — comparar consigo mesma
 // daria zero e ocuparia espaço à toa, então devolve null.
 function economiaDaCotacao(cot) {
-  const vals = propostasDaCotacao(cot).map(valorProposta).filter(v => v > 0);
+  const vals = propostasDaCotacao(cot).filter(p => propostaComparavel(cot, p)).map(valorProposta).filter(v => v > 0);
   if (vals.length < 2) return null;
   const menor = Math.min(...vals), maior = Math.max(...vals);
   const esc = propostaEscolhida(cot);
@@ -34793,7 +34847,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                             ? { ...limparEnvioAoCliente(c), escolhidaId: "", escolhidoPor: "", escolhidoEm: "" }
                             : { ...limparEnvioAoCliente(c), escolhidaId: p.id, escolhidoPor: nomeDeQuem(usuario), escolhidoEm: new Date().toISOString(),
                                 // a loja inteira substitui a escolha item a item
-                                escolhaPorItem: {} }))}>
+                                escolhaPorItem: {}, totalCombinadoPorLoja: {} }))}>
                           {escolhida ? "Desfazer" : "Escolher"}
                         </button>
                       )}
@@ -34893,6 +34947,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                         aoEscolher: (itemId, propostaId) => trocarCotacao(cot.id, (c) => escolherLojaDoItem(c, itemId, propostaId)),
                         aoMaisBarato: () => trocarCotacao(cot.id, escolherMaisBaratoEmCada),
                         aoLimpar: () => trocarCotacao(cot.id, limparDivisao),
+                        aoCombinar: (propostaId, valor) => trocarCotacao(cot.id, (c) => combinarTotalDaLoja(c, propostaId, valor)),
                         aoFechar: () => fecharDivisao(cot),
                       } : null} />
                 )}
@@ -34904,7 +34959,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     aoNaoComprados={() => abrirNaoComprados(cot)} />
                 )}
 
-                {eco && eco.economia > 0 && (
+                {eco && eco.economia > 0 && !temDivisao(cot) && !foiDividida(cot) && (
                   <div style={{ fontSize: 12, color: "#15803d", marginBottom: 12 }}>
                     Economia de {dinheiro(eco.economia)} em relação à proposta mais cara ({dinheiro(eco.maior)}).
                   </div>
@@ -35609,6 +35664,51 @@ function BlocoDivisaoFechada({ cot, cotacoes, aprovacoes, contratos, dinheiro, i
   );
 }
 
+// O total de uma loja na divisão, editável: a loja fechou os itens dela num
+// valor redondo, e é esse valor que vai para o pedido.
+function TotalDaLojaNaDivisao({ loja, dinheiro, isMobile, aoCombinar }) {
+  const E = COT_ESTILO;
+  const [editando, setEditando] = useState(false);
+  const [valor, setValor] = useState("");
+  const l = loja;
+  const link = { background: "none", border: "none", padding: 0, color: "#0474f4", cursor: "pointer",
+    fontFamily: "inherit", fontSize: 11, textDecoration: "underline", whiteSpace: "nowrap" };
+  if (editando) {
+    const ok = () => { aoCombinar(valor); setEditando(false); };
+    return (
+      <div data-vk-editar-total-loja={l.propostaId} style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}
+        onKeyDown={(e) => { if (e.key === "Enter") ok(); if (e.key === "Escape") setEditando(false); }}>
+        <span style={{ fontSize: 10.5, color: "#6b7280" }}>Fechou em</span>
+        <CampoCtrNum tipo="moeda" valor={valor} onChange={setValor} placeholder={valorBR(l.calculado)}
+          style={{ ...E.input, width: isMobile ? 130 : 120, textAlign: "right", padding: "6px 9px" }} />
+        <span style={{ display: "flex", gap: 6 }}>
+          <button type="button" data-vk-ok-total-loja="1" onClick={ok}
+            style={{ ...E.btn, background: "#0474f4", padding: "5px 12px", fontSize: 11.5 }}>OK</button>
+          <button type="button" onClick={() => setEditando(false)}
+            style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5 }}>Cancelar</button>
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+      <span style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>{dinheiro(l.total)}</span>
+      {aoCombinar && (
+        <span style={{ display: "flex", gap: 8 }}>
+          <button type="button" data-vk-ajustar-total-loja={l.propostaId} style={link}
+            onClick={() => { setValor(l.combinado ? l.total : ""); setEditando(true); }}>
+            {l.combinado ? "editar" : "ajustar total"}
+          </button>
+          {l.combinado && (
+            <button type="button" data-vk-voltar-total-loja={l.propostaId} style={{ ...link, color: "#6b7280" }}
+              onClick={() => aoCombinar(0)}>voltar ao calculado</button>
+          )}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ── Comparar a lista loja por loja ──────────────────────────────
 // Numa lista de vinte materiais, o total de cada loja diz pouco: uma é mais
 // barata no cimento e mais cara na madeira. Aqui o melhor preço de cada item
@@ -35836,11 +35936,17 @@ function ComparativoLista({ cot, dinheiro, isMobile, divisao }) {
                 </div>
                 {l.descontoParcial && (
                   <div style={{ fontSize: 11, color: "#b45309" }}>
-                    O desconto desta loja foi dado na lista inteira — levando só parte, confirme o preço com ela.
+                    O {descontoDaProposta(cot, propostaPorId(cot, l.propostaId)).desconto ? "desconto" : "acréscimo"} desta loja foi dado na lista inteira — levando só parte, confirme o preço com ela e ajuste o total.
+                  </div>
+                )}
+                {l.combinado && (
+                  <div style={{ fontSize: 11, color: l.diferenca >= 0 ? "#15803d" : "#b45309" }}>
+                    Pela cotação sairia {dinheiro(l.calculado)} — {l.diferenca === 0 ? "mesmo valor" : `${dinheiro(Math.abs(l.diferenca))} a ${l.diferenca > 0 ? "menos" : "mais"}`}, rateado entre os itens.
                   </div>
                 )}
               </div>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>{dinheiro(l.total)}</div>
+              <TotalDaLojaNaDivisao loja={l} dinheiro={dinheiro} isMobile={isMobile}
+                aoCombinar={dv && dv.aoCombinar ? (v) => dv.aoCombinar(l.propostaId, v) : null} />
             </div>
           ))}
           {d.fora.length > 0 && (
