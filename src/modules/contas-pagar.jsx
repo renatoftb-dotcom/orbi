@@ -411,8 +411,11 @@ function sincronizarContasDoContrato(contas, contrato) {
     // documento também: é por ele que a nota e o comprovante se amarram a
     // esta parcela na prestação de contas, e um número que muda a cada
     // abertura da tela não amarra nada.
+    // O estorno também: a parcela devolvida e paga de novo é outro
+    // pagamento, e é a contagem das voltas que separa um do outro.
     return { ...nova, observacao: anterior.observacao || "", registros: anterior.registros || [],
-      ...(anterior.numeroDoc ? { numeroDoc: anterior.numeroDoc } : {}) };
+      ...(anterior.numeroDoc ? { numeroDoc: anterior.numeroDoc } : {}),
+      ...(anterior.estornos ? { estornos: anterior.estornos } : {}) };
   });
   // parcela paga que não existe mais no contrato continua na lista: o
   // dinheiro saiu, e sumir com ela esconderia um pagamento real
@@ -3214,8 +3217,11 @@ function linhasDoEscritorio(obras, lancamentos, opcoes) {
     if (!l || (l.tipo && l.tipo !== "escritorio")) continue;
     const conta = (typeof o.contaDoEscritorio === "function" && o.contaDoEscritorio(l.contaId)) || null;
     const grupo = conta && typeof o.grupoDoEscritorio === "function" ? o.grupoDoEscritorio(conta.grupo) : null;
-    // entrada ou saída no extrato: o grupo da conta diz; sem conta, o sinal do valor
-    const sinal = grupo && grupo.sinal ? (grupo.sinal < 0 ? -1 : 1) : (Number(l.valor) < 0 ? -1 : 1);
+    // entrada ou saída no extrato: o grupo da conta diz; sem conta, o sinal do valor.
+    // O estorno (valor negativo) vai no sentido contrário do grupo: a
+    // receita devolvida é dinheiro que SAIU.
+    const estorno = Number(l.valor) < 0;
+    const sinal = grupo && grupo.sinal ? (grupo.sinal < 0 ? -1 : 1) * (estorno ? -1 : 1) : (estorno ? -1 : 1);
     const valor = Math.round(Math.abs(Number(l.valor) || 0) * 100) / 100;
     const dia = String(l.lancadoEm || "").slice(0, 10);
     // Data do lançamento = o dia em que entrou no sistema (como na base da

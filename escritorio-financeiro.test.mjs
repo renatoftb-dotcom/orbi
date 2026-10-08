@@ -40,6 +40,7 @@ const M = new Function(src + `
            custoDoLancamento, validarCustoEmItens,
            comIdsDosMovimentos, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
            sugestaoDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao, fornecedorPadraoDaConta,
+           ehReceitaDaGestao, refDaParcela, parcelasDaGestao, parcelasParaEscolher, parcelaSugerida, impactoNaGestao, gestaoNaObra, desfazerGestaoNaObra, parcelaDoLancamento,
            extratosComArquivo, movimentosGuardadosDoMes, ignoradosGuardados, extratosComIgnorado };`)();
 
 const testes = [];
@@ -1906,8 +1907,11 @@ teste("Gestão de obras exige a obra; o lançamento rápido usa a obra gravada, 
   const m = { id: "g#1", data: "2026-09-10", valor: 5000, historico: "PIX RECEBIDO COBOP" };
   const semObra = M.lancamentoRapidoDoExtrato(m, "2026-09", { campos: { contaId: "rec_gestao", unidadeId: "gestao_obras", clienteId: "c1", cliente: "Cobop", projeto: "Reforma" } }, {});
   assert.ok(semObra.erro);
-  const comObra = M.lancamentoRapidoDoExtrato(m, "2026-09", { campos: { contaId: "rec_gestao", unidadeId: "gestao_obras", clienteId: "c1", cliente: "Cobop", projeto: "Reforma", obraId: "o1" } }, {});
+  const comObra = M.lancamentoRapidoDoExtrato(m, "2026-09", { campos: { contaId: "reembolsos", unidadeId: "gestao_obras", clienteId: "c1", cliente: "Cobop", projeto: "Reforma", obraId: "o1" } }, {});
   assert.ok(comObra.lancamento, comObra.erro);
+  // a receita da gestão baixa uma parcela do contrato: vai ao formulário
+  const rec = M.lancamentoRapidoDoExtrato(m, "2026-09", { campos: { contaId: "rec_gestao", unidadeId: "gestao_obras", clienteId: "c1", cliente: "Cobop", projeto: "Reforma", obraId: "o1" } }, {});
+  assert.ok(/parcela/.test(rec.erro || ""));
 });
 
 
@@ -1916,6 +1920,130 @@ teste("Receita do escritório: o fornecedor é o próprio escritório", () => {
   assert.strictEqual(M.fornecedorPadraoDaConta("rec_projetos", "Padovan Arquitetos"), "Padovan Arquitetos");
   assert.strictEqual(M.fornecedorPadraoDaConta("luz_agua_net", "Padovan Arquitetos"), "");
   assert.strictEqual(M.fornecedorPadraoDaConta("rec_gestao", ""), "");
+});
+
+
+// ── Receita da gestão ligada à parcela do contrato de gestão ────
+const obraGestaoT = () => ({
+  id: "ob1", nome: "Reforma Loja Cobop", clienteId: "c1", clientePagaDireto: true,
+  contasPagar: [
+    { id: "g:1", origem: "contrato", contratoId: "g", contaId: "taxa_admin_obra", parcela: 1, totalParcelas: 4, valor: 10833.33, vencimento: "2026-08-05", pago: true, pagoEm: "2026-08-05", valorPago: 10833.33, contabilizadoEm: "2026-08-05" },
+    { id: "g:2", origem: "contrato", contratoId: "g", contaId: "taxa_admin_obra", parcela: 2, totalParcelas: 4, valor: 10833.33, vencimento: "2026-09-05", pago: true, pagoEm: "2026-09-04", valorPago: 10833.33 },
+    { id: "g:3", origem: "contrato", contratoId: "g", contaId: "taxa_admin_obra", parcela: 3, totalParcelas: 4, valor: 18000, vencimento: "2026-10-05", pago: false, pagoEm: "", valorPago: "" },
+    { id: "g:4", origem: "contrato", contratoId: "g", contaId: "taxa_admin_obra", parcela: 4, totalParcelas: 4, valor: 10833.34, vencimento: "2026-11-05", pago: false, pagoEm: "", valorPago: "" },
+    { id: "m1", contaId: "material", valor: 50, pago: true, pagoEm: "2026-09-01", valorPago: 50 },
+  ],
+});
+
+teste("Gestão: parcelas do contrato, o pago e o percentual", () => {
+  const r = M.parcelasDaGestao(obraGestaoT(), [], "");
+  assert.deepStrictEqual(r.parcelas.map((p) => p.id), ["g:1", "g:2", "g:3", "g:4"]);
+  assert.strictEqual(r.total, 50500);
+  assert.strictEqual(r.pago, 21666.66);
+  assert.strictEqual(r.pct, 42.9);
+});
+
+teste("Gestão: receita oferece as em aberto (baixar) e as pagas sem recebimento (ligar)", () => {
+  const ob = obraGestaoT();
+  const lancs = [{ id: "x", origem: { obraId: "ob1", tipo: "conta", refId: "g:1", contaObra: "taxa_admin_obra" } }];
+  const r = M.parcelasDaGestao(ob, lancs, "");
+  const ops = M.parcelasParaEscolher(r, false);
+  assert.deepStrictEqual(ops.map((p) => p.id + ":" + p.acao), ["g:2:ligar", "g:3:baixar", "g:4:baixar"]);
+  assert.deepStrictEqual(M.parcelasParaEscolher(r, true).map((p) => p.id), ["g:1", "g:2"]);
+  // editando o próprio x, a g:1 volta a ser escolhível
+  assert.ok(M.parcelasParaEscolher(M.parcelasDaGestao(ob, lancs, "x"), false).some((p) => p.id === "g:1"));
+});
+
+teste("Gestão: sugere a parcela pelo valor só quando a resposta é clara", () => {
+  const r = M.parcelasDaGestao(obraGestaoT(), [], "");
+  assert.strictEqual(M.parcelaSugerida(r, 18000, "2026-09-28", false), "g:3");
+  // paga na obra perto da data e sem recebimento: é a mesma
+  assert.strictEqual(M.parcelaSugerida(r, 10833.33, "2026-09-04", false), "g:2");
+  // estorno de 10.833,33: duas pagas iguais — a pessoa escolhe
+  assert.strictEqual(M.parcelaSugerida(r, -10833.33, "2026-09-28", true), "");
+  assert.strictEqual(M.parcelaSugerida(r, 777, "2026-09-28", false), "");
+});
+
+teste("Gestão: receita baixa a parcela em aberto e leva a origem", () => {
+  const l = { id: "L1", unidadeId: "gestao_obras", contaId: "rec_gestao", obraId: "ob1", parcelaGestaoId: "g:3", valor: 18000, lancadoEm: "2026-09-28" };
+  const r = M.gestaoNaObra(obraGestaoT(), l, null, "Leo", "2026-10-08T10:00:00Z");
+  assert.ok(!r.erro, r.erro);
+  const p = r.obra.contasPagar.find((c) => c.id === "g:3");
+  assert.strictEqual(p.pago, true);
+  assert.strictEqual(p.pagoEm, "2026-09-28");
+  assert.strictEqual(p.valorPago, 18000);
+  assert.deepStrictEqual(r.origem, { obraId: "ob1", tipo: "conta", refId: "g:3", contaObra: "taxa_admin_obra", baixou: true });
+  assert.strictEqual(M.parcelasDaGestao(r.obra, [], "").pago, 39666.66);
+  // a ponte não manda de novo a mesma parcela
+  const ponte = M.lancamentosDaObraParaEscritorio(r.obra, { id: "c1" }, { contasPagar: [p], lancamentos: [{ ...l, origem: r.origem }], planoObra: [{ id: "taxa_admin_obra", grupo: "servicos" }] });
+  assert.strictEqual(ponte.lancamentos.length, 0);
+});
+
+teste("Gestão: receita numa parcela já paga na obra só liga, e excluir não a reabre", () => {
+  const l = { id: "L2", valor: 10833.33, lancadoEm: "2026-09-04", parcelaGestaoId: "g:2" };
+  const r = M.gestaoNaObra(obraGestaoT(), l, null, "Leo");
+  assert.strictEqual(r.origem.baixou, false);
+  assert.strictEqual(r.obra.contasPagar.find((c) => c.id === "g:2").pago, true);
+  const d = M.desfazerGestaoNaObra(r.obra, { ...l, origem: r.origem }, "Leo");
+  assert.strictEqual(d.obra.contasPagar.find((c) => c.id === "g:2").pago, true);
+});
+
+teste("Gestão: estorno reabre a parcela, e desfazer o estorno devolve o pagamento", () => {
+  const l = { id: "E1", valor: -10833.33, estorno: true, lancadoEm: "2026-09-28", parcelaGestaoId: "g:1" };
+  const r = M.gestaoNaObra(obraGestaoT(), l, null, "Leo", "2026-10-08T10:00:00Z");
+  assert.ok(!r.erro, r.erro);
+  const p = r.obra.contasPagar.find((c) => c.id === "g:1");
+  assert.strictEqual(p.pago, false);
+  assert.strictEqual(p.estornos.length, 1);
+  assert.strictEqual(p.estornos[0].antes.pagoEm, "2026-08-05");
+  assert.strictEqual(r.origem.tipo, "estorno");
+  assert.strictEqual(M.parcelasDaGestao(r.obra, [], "").pago, 10833.33);
+  // paga de novo é outro pagamento: a referência muda
+  assert.strictEqual(M.refDaParcela(p), "g:1#1");
+  // o recebimento de agosto (ligado a "g:1") não se liga mais a ela
+  assert.strictEqual(M.ligaContaAoLancamento({ origem: { obraId: "ob1", tipo: "conta", refId: "g:1" } }, "ob1", p), false);
+  const d = M.desfazerGestaoNaObra(r.obra, { ...l, origem: r.origem }, "Leo");
+  const volta = d.obra.contasPagar.find((c) => c.id === "g:1");
+  assert.strictEqual(volta.pago, true);
+  assert.strictEqual(volta.pagoEm, "2026-08-05");
+  assert.strictEqual(volta.valorPago, 10833.33);
+  assert.ok(!volta.estornos);
+});
+
+teste("Gestão: estorno de parcela em aberto é recusado; desfazer estorno de parcela paga de novo também", () => {
+  const r = M.gestaoNaObra(obraGestaoT(), { id: "E2", valor: -18000, lancadoEm: "2026-09-28", parcelaGestaoId: "g:3" }, null, "Leo");
+  assert.ok(r.erro);
+  const e = M.gestaoNaObra(obraGestaoT(), { id: "E3", valor: -10833.33, lancadoEm: "2026-09-28", parcelaGestaoId: "g:1" }, null, "Leo");
+  const paga = M.gestaoNaObra(e.obra, { id: "R3", valor: 10833.33, lancadoEm: "2026-10-01", parcelaGestaoId: "g:1" }, null, "Leo");
+  assert.strictEqual(paga.origem.refId, "g:1#1");
+  const d = M.desfazerGestaoNaObra(paga.obra, { id: "E3", origem: e.origem }, "Leo");
+  assert.ok(d.erro);
+});
+
+teste("Gestão: editar o lançamento — mesma parcela acompanha o valor; outra parcela troca", () => {
+  const l = { id: "L4", valor: 18000, lancadoEm: "2026-09-28", parcelaGestaoId: "g:3" };
+  const r = M.gestaoNaObra(obraGestaoT(), l, null, "Leo");
+  const gravado = { ...l, origem: r.origem };
+  const ed = M.gestaoNaObra(r.obra, { ...l, valor: 17500 }, gravado, "Leo");
+  assert.strictEqual(ed.obra.contasPagar.find((c) => c.id === "g:3").valorPago, 17500);
+  const troca = M.gestaoNaObra(r.obra, { ...l, valor: 10833.34, parcelaGestaoId: "g:4" }, gravado, "Leo");
+  assert.strictEqual(troca.obra.contasPagar.find((c) => c.id === "g:3").pago, false);
+  assert.strictEqual(troca.obra.contasPagar.find((c) => c.id === "g:4").pago, true);
+  assert.strictEqual(troca.origem.refId, "g:4");
+  // tirar a parcela: desfaz e o lançamento fica sem origem
+  const sem = M.gestaoNaObra(r.obra, { ...l, parcelaGestaoId: "" }, gravado, "Leo");
+  assert.strictEqual(sem.obra.contasPagar.find((c) => c.id === "g:3").pago, false);
+  assert.strictEqual(sem.origem, null);
+});
+
+teste("Gestão: o impacto no contrato antes de gravar", () => {
+  const r = M.parcelasDaGestao(obraGestaoT(), [], "");
+  const i = M.impactoNaGestao(r, "g:3", 18000, false);
+  assert.strictEqual(i.depois.pago, 39666.66);
+  assert.strictEqual(i.acao, "baixar");
+  const e = M.impactoNaGestao(r, "g:1", -10833.33, true);
+  assert.strictEqual(e.depois.pago, 10833.33);
+  assert.strictEqual(e.depois.pct, 21.5);
 });
 
 for (const [nome, fn] of testes) {

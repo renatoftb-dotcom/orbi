@@ -368,7 +368,7 @@ function fontesDasContasPagas(contas) {
   const valorDe = (c) => num(Number(c.valorPago) || Number(c.valor) || 0);
   const dataDe = (c) => String(c.pagoEm || c.vencimento || "").slice(0, 10);
   const fonteDaConta = (c) => ({
-    tipo: "conta", refId: c.id, contaId: c.contaId || "",
+    tipo: "conta", refId: refDaParcela(c), contaId: c.contaId || "",
     valor: valorDe(c), data: dataDe(c),
     descricao: c.descricao || "",
     fornecedor: c.favorecido || "", fornecedorId: c.prestadorId || "",
@@ -426,6 +426,12 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
   const ob = obra || {};
   const modo = modoDaPonte(ob, cliente);
   const jaTem = new Set((o.lancamentos || []).map((l) => l && l.id).filter(Boolean));
+  // A receita da gestão lançada no escritório e ligada à parcela não tem o
+  // id da ponte, mas é a mesma transação: a origem dela basta.
+  for (const l of o.lancamentos || []) {
+    const g = l && l.origem;
+    if (g && g.obraId && g.tipo && g.refId) jaTem.add(idDaPonte(g.obraId, g.tipo, g.refId));
+  }
   const fechamentos = o.fechamentos || {};
   const lancamentos = [], ignorados = [], bloqueados = [], existentes = [];
 
@@ -972,7 +978,7 @@ function ligaContaAoLancamento(l, obraId, conta) {
   const o = (l && l.origem) || {};
   const c = conta || {};
   if (!o.obraId || o.obraId !== obraId || !c.id) return false;
-  if (o.tipo === "conta") return o.refId === c.id;
+  if (o.tipo === "conta") return o.refId === refDaParcela(c);
   if (o.tipo === "pedido") return !!c.pedidoId && String(o.refId || "").split("|")[0] === c.pedidoId;
   if (o.tipo === "doc") return !!c.doc && String(o.refId || "") === String(c.doc);
   return false;
@@ -992,7 +998,7 @@ function contasLigadasAoLancamento(obra, l) {
   const ob = obra || {};
   if (!o.obraId || o.obraId !== ob.id) return [];
   const contas = (ob.contasPagar || []).filter(Boolean);
-  if (o.tipo === "conta") return contas.filter((c) => c.id === o.refId);
+  if (o.tipo === "conta") return contas.filter((c) => refDaParcela(c) === o.refId);
   if (o.tipo === "doc") return contas.filter((c) => c.doc && String(c.doc) === String(o.refId));
   if (o.tipo === "pedido") {
     const [ped, contaId, data] = String(o.refId || "").split("|");
@@ -2152,6 +2158,7 @@ function comSinalDeEstorno(l) {
 function lancamentoRapidoDoExtrato(movimento, mes, sugestao, fechamentos) {
   if (!sugestao || !sugestao.campos || !sugestao.campos.contaId) return { erro: "Sem lançamento igual para copiar." };
   if (sugestao.daObra) return { erro: "Custo de obra: confira no formulário." };
+  if (ehReceitaDaGestao(sugestao.campos)) return { erro: "Receita da gestão: escolha a parcela do contrato no formulário." };
   const base = lancamentoDaLinhaDoExtrato(movimento, mes, sugestao);
   const l = comSinalDeEstorno({ ...base, valor: Math.round(Math.abs(Number((movimento || {}).valor) || 0) * 100) / 100 });
   const ehEmp = l.unidadeId === "empreendimento";
@@ -2486,6 +2493,227 @@ function obrasDaGestao(obras, clientes, clienteId) {
   return (obras || []).filter((o) => o && o.id && !emp.has(o.clienteId) && (!clienteId || o.clienteId === clienteId));
 }
 
+// ══════════════════════════════════════════════════════════════
+// RECEITA DA GESTÃO = PARCELA DO CONTRATO DE GESTÃO DA OBRA
+// ══════════════════════════════════════════════════════════════
+// O honorário da gestão nasce na obra: o contrato de gestão vira parcelas
+// em contas a pagar (conta "Gerenciamento de obra"). Quando o dinheiro
+// chega no banco do escritório, é UMA dessas parcelas que foi paga — então
+// a Receita Gestão lançada aqui baixa a parcela lá, e o percentual pago do
+// contrato, o contas a pagar e a base de dados da obra andam juntos. O
+// estorno faz o caminho de volta: a parcela devolvida volta a ficar em
+// aberto, e o recebimento antigo continua no mês em que entrou.
+//
+// A parcela estornada e paga de novo é OUTRO pagamento: `estornos` conta as
+// voltas, e a referência da ligação ganha "#n". O recebimento que o estorno
+// anulou deixa de se ligar a ela, e o novo não se confunde com o antigo.
+const EF_CONTA_GESTAO_NA_OBRA = "taxa_admin_obra";
+
+function ehReceitaDaGestao(l) {
+  return !!l && l.unidadeId === "gestao_obras" && l.contaId === "rec_gestao";
+}
+
+function refDaParcela(c) {
+  const n = ((c && c.estornos) || []).length;
+  return n ? `${c.id}#${n}` : ((c && c.id) || "");
+}
+
+function efCent(v) { return Math.round((Number(v) || 0) * 100) / 100; }
+
+function ehLigacaoDaGestao(origem) {
+  const o = origem || {};
+  return !!o.obraId && (o.tipo === "estorno" || (o.tipo === "conta" && o.contaObra === EF_CONTA_GESTAO_NA_OBRA));
+}
+
+// A parcela que o lançamento recebeu (receita) ou devolveu (estorno).
+function parcelaDoLancamento(obra, l) {
+  const o = (l && l.origem) || {};
+  if (!obra || !o.obraId || o.obraId !== obra.id) return null;
+  const contas = (obra.contasPagar || []).filter(Boolean);
+  if (o.tipo === "estorno") return contas.find((c) => c.id === o.parcelaId) || null;
+  if (o.tipo === "conta" && o.contaObra === EF_CONTA_GESTAO_NA_OBRA) {
+    return contas.find((c) => refDaParcela(c) === o.refId) || null;
+  }
+  return null;
+}
+
+// As parcelas do contrato de gestão da obra, na ordem do vencimento, e o
+// quanto do contrato já foi pago. `excetoId` é o lançamento em edição: a
+// ligação dele não conta como "de outro".
+function parcelasDaGestao(obra, lancamentos, excetoId) {
+  const ob = obra || {};
+  const lancs = (lancamentos || []).filter((l) => l && l.id && l.id !== excetoId);
+  const ligadaA = (c) => {
+    const ref = refDaParcela(c);
+    const l = lancs.find((x) => {
+      const o = x.origem || {};
+      return o.obraId === ob.id && o.tipo === "conta" && o.refId === ref;
+    });
+    return l ? l.id : "";
+  };
+  const contas = (ob.contasPagar || []).filter((c) => c && c.contaId === EF_CONTA_GESTAO_NA_OBRA)
+    .slice()
+    .sort((a, b) => String(a.vencimento || "").localeCompare(String(b.vencimento || ""))
+      || (Number(a.parcela) || 0) - (Number(b.parcela) || 0));
+  const parcelas = contas.map((c, i) => ({
+    id: c.id,
+    n: Number(c.parcela) || i + 1,
+    de: Number(c.totalParcelas) || contas.length,
+    descricao: c.descricao || "",
+    vencimento: c.vencimento || "",
+    valor: efCent(c.valor),
+    pago: !!c.pago,
+    pagoEm: c.pagoEm || "",
+    valorPago: c.pago ? efCent(Number(c.valorPago) || Number(c.valor)) : 0,
+    lancamentoId: ligadaA(c),
+    estornos: ((c.estornos || []).length),
+  }));
+  const total = efCent(parcelas.reduce((s, p) => s + p.valor, 0));
+  const pago = efCent(parcelas.reduce((s, p) => s + p.valorPago, 0));
+  return { parcelas, total, pago, pct: total > 0 ? Math.round((pago / total) * 1000) / 10 : 0 };
+}
+
+// O que cada parcela pode ser neste lançamento. Receita: a em aberto é
+// baixada; a já paga na obra e sem recebimento ligado só se liga (o
+// dinheiro é o mesmo). Estorno: só a paga pode ser devolvida.
+function parcelasParaEscolher(resumo, estorno) {
+  const ps = (resumo && resumo.parcelas) || [];
+  if (estorno) return ps.filter((p) => p.pago).map((p) => ({ ...p, acao: "estornar" }));
+  return ps.filter((p) => !p.pago || !p.lancamentoId)
+    .map((p) => ({ ...p, acao: p.pago ? "ligar" : "baixar" }));
+}
+
+// A parcela que o valor e a data apontam. Só sugere quando a resposta é
+// clara; na dúvida, a pessoa escolhe.
+function parcelaSugerida(resumo, valor, dataIso, estorno) {
+  const v = efCent(Math.abs(Number(valor) || 0));
+  if (!(v > 0)) return "";
+  const ops = parcelasParaEscolher(resumo, estorno);
+  const igual = (p) => Math.abs((p.pago ? p.valorPago : p.valor) - v) < 0.01;
+  const dias = (a, b) => {
+    const x = Date.parse(String(a || "").slice(0, 10));
+    const y = Date.parse(String(b || "").slice(0, 10));
+    return Number.isFinite(x) && Number.isFinite(y) ? Math.abs(x - y) / 864e5 : Infinity;
+  };
+  if (estorno) {
+    const c = ops.filter(igual);
+    return c.length === 1 ? c[0].id : "";
+  }
+  const ligar = ops.filter((p) => p.acao === "ligar" && igual(p) && dias(p.pagoEm, dataIso) <= 10);
+  if (ligar.length === 1) return ligar[0].id;
+  const aberta = ops.find((p) => p.acao === "baixar" && igual(p));
+  return aberta ? aberta.id : "";
+}
+
+// O contrato antes e depois deste lançamento — é o que a tela mostra.
+function impactoNaGestao(resumo, parcelaId, valor, estorno) {
+  const r = resumo || { parcelas: [], total: 0, pago: 0, pct: 0 };
+  const p = (r.parcelas || []).find((x) => x.id === parcelaId);
+  if (!p) return null;
+  const v = efCent(Math.abs(Number(valor) || 0));
+  let pago = r.pago;
+  if (estorno) pago = efCent(pago - p.valorPago);
+  else if (!p.pago) pago = efCent(pago + v);
+  return { antes: { pago: r.pago, pct: r.pct }, depois: { pago, pct: r.total > 0 ? Math.round((pago / r.total) * 1000) / 10 : 0 },
+    total: r.total, acao: estorno ? "estornar" : (p.pago ? "ligar" : "baixar"), parcela: p };
+}
+
+function efAto(conta, ato, quem, agora, detalhe) {
+  return typeof registrarAto === "function" ? registrarAto(conta, ato, quem, agora, detalhe) : conta;
+}
+function efParcelaPaga(c, pagoEm, valor, quem, agora) {
+  if (typeof contaPaga === "function") return contaPaga(c, { pagoEm, valorPago: valor, comprovante: c.comprovante || null }, quem, agora);
+  return { ...c, pago: true, pagoEm, valorPago: efCent(valor), contabilizadoEm: String(agora).slice(0, 10) };
+}
+function efParcelaEmAberto(c, quem, agora) {
+  if (typeof contaEmAberto === "function") return contaEmAberto(c, quem, agora);
+  const { formaPagamento, cartaoId, parcelasCartao, ...r } = c;
+  return { ...r, pago: false, pagoEm: "", valorPago: "", contabilizadoEm: "" };
+}
+
+// Desfaz na obra o que o lançamento tinha feito: a receita que baixou a
+// parcela a reabre (a que só se ligou a uma parcela já paga na obra a
+// deixa como está); o estorno devolve a parcela ao pagamento de antes.
+function desfazerGestaoNaObra(obra, l, quem, agoraIso) {
+  const o = (l && l.origem) || {};
+  const ob = obra || {};
+  if (!ehLigacaoDaGestao(o) || o.obraId !== ob.id) return { obra: ob };
+  const agora = agoraIso || new Date().toISOString();
+  const p = parcelaDoLancamento(ob, l);
+  if (!p) return { obra: ob };
+  let nova = p;
+  if (o.tipo === "conta") {
+    if (o.baixou === false || !p.pago) return { obra: ob };
+    nova = efParcelaEmAberto(p, quem, agora);
+  } else {
+    const lista = p.estornos || [];
+    const i = lista.findIndex((e) => e && e.lancamentoId === l.id);
+    if (i < 0) return { obra: ob };
+    if (i !== lista.length - 1 || p.pago) {
+      return { obra: ob, erro: `A parcela ${p.parcela || ""} foi paga de novo depois deste estorno. Desfaça esse pagamento antes.`.replace("  ", " ") };
+    }
+    const e = lista[i];
+    const a = e.antes || {};
+    nova = efAto({ ...p, pago: true, pagoEm: a.pagoEm || e.em || "", valorPago: efCent(a.valorPago || e.valor),
+      contabilizadoEm: a.contabilizadoEm || String(agora).slice(0, 10), estornos: lista.slice(0, i) }, "paga", quem, agora, "estorno desfeito");
+    if (!nova.estornos.length) delete nova.estornos;
+  }
+  return { obra: { ...ob, contasPagar: (ob.contasPagar || []).map((c) => (c && c.id === p.id ? nova : c)) } };
+}
+
+// O lançamento `l` (já com id) recebe ou devolve a parcela `l.parcelaGestaoId`
+// da obra `l.obraId`. Devolve a obra nova e a `origem` que o lançamento
+// passa a levar. `antes` é o lançamento como estava gravado (edição): o
+// que ele tinha feito é desfeito primeiro — a menos que nada tenha mudado
+// de lugar, e aí só valor e data acompanham.
+function gestaoNaObra(obra, l, antes, quem, agoraIso) {
+  const ob0 = obra || {};
+  const lan = l || {};
+  const agora = agoraIso || new Date().toISOString();
+  const estorno = Number(lan.valor) < 0 || !!lan.estorno;
+  const valor = efCent(Math.abs(Number(lan.valor) || 0));
+  const pagoEm = String(lan.lancadoEm || "").slice(0, 10);
+  const ant = antes && ehLigacaoDaGestao(antes.origem) && antes.origem.obraId === ob0.id ? antes : null;
+  const pAntes = ant ? parcelaDoLancamento(ob0, ant) : null;
+  const tipoNovo = estorno ? "estorno" : "conta";
+  const troca = (ob, nova) => ({ ...ob, contasPagar: (ob.contasPagar || []).map((c) => (c && c.id === nova.id ? nova : c)) });
+
+  // mesma parcela, mesmo sentido: só acompanha valor e data
+  if (ant && pAntes && pAntes.id === lan.parcelaGestaoId && ant.origem.tipo === tipoNovo) {
+    if (tipoNovo === "conta") {
+      if (ant.origem.baixou === false || !pAntes.pago) return { obra: ob0, origem: ant.origem };
+      if (pAntes.pagoEm === pagoEm && efCent(pAntes.valorPago) === valor) return { obra: ob0, origem: ant.origem };
+      return { obra: troca(ob0, efAto({ ...pAntes, pagoEm, valorPago: valor }, "editada", quem, agora)), origem: ant.origem };
+    }
+    const est = (pAntes.estornos || []).map((e) => (e && e.lancamentoId === lan.id ? { ...e, em: pagoEm, valor } : e));
+    return { obra: troca(ob0, { ...pAntes, estornos: est }), origem: ant.origem };
+  }
+
+  let ob = ob0;
+  if (ant) {
+    const d = desfazerGestaoNaObra(ob, ant, quem, agora);
+    if (d.erro) return { obra: ob0, erro: d.erro };
+    ob = d.obra;
+  }
+  if (!lan.parcelaGestaoId) return { obra: ob, origem: null };
+  const p = (ob.contasPagar || []).find((c) => c && c.id === lan.parcelaGestaoId && c.contaId === EF_CONTA_GESTAO_NA_OBRA);
+  if (!p) return { obra: ob0, erro: "A parcela escolhida não está mais no contrato de gestão da obra." };
+  if (estorno) {
+    if (!p.pago) return { obra: ob0, erro: `A parcela ${p.parcela || ""} está em aberto — não há o que estornar.`.replace("  ", " ") };
+    const reg = { lancamentoId: lan.id || "", em: pagoEm, valor,
+      antes: { pagoEm: p.pagoEm || "", valorPago: efCent(Number(p.valorPago) || Number(p.valor)), contabilizadoEm: p.contabilizadoEm || "" } };
+    const aberta = efParcelaEmAberto({ ...p, estornos: [...(p.estornos || []), reg] }, quem, agora);
+    return { obra: troca(ob, aberta),
+      origem: { obraId: ob.id, tipo: "estorno", refId: p.id, parcelaId: p.id, contaObra: EF_CONTA_GESTAO_NA_OBRA } };
+  }
+  const ref = refDaParcela(p);
+  if (p.pago) {
+    return { obra: ob, origem: { obraId: ob.id, tipo: "conta", refId: ref, contaObra: EF_CONTA_GESTAO_NA_OBRA, baixou: false } };
+  }
+  return { obra: troca(ob, efParcelaPaga(p, pagoEm, valor, quem, agora)),
+    origem: { obraId: ob.id, tipo: "conta", refId: ref, contaObra: EF_CONTA_GESTAO_NA_OBRA, baixou: true } };
+}
+
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
 
 // Os papéis da transação, cada um abrindo numa aba. É o mesmo componente
@@ -2681,7 +2909,7 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
 
 // Formulário de um lançamento. As travas são as do validarLancamento: a
 // mensagem aparece antes de gravar, não depois.
-function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, prestadores, aoCriarPrestador, insumos, cartoes, aoCadastrarInsumo, competenciaFixa, titulo, rotuloSalvar, atalhos, nomeEscritorio }) {
+function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, prestadores, aoCriarPrestador, insumos, cartoes, aoCadastrarInsumo, competenciaFixa, titulo, rotuloSalvar, atalhos, nomeEscritorio, lancamentos }) {
   const S = EF_ESTILO;
   const [f, setF] = useState(() => ({
     contaId: "", contaFonte: "", obraIdAlvo: "", fornecedorId: "", anexos: [], itens: [],
@@ -2925,13 +3153,36 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   // antigo, ao editar, fica como foi gravado.
   const obraDaGestao = f.unidadeId === "gestao_obras" && f.obraId ? (obras || []).find((o) => o && o.id === f.obraId) || null : null;
   const regraBanco = f.extratoId ? "sim" : contaBancoPelaRegra(f.unidadeId, f.contaId, obraDaGestao);
+  // ── Receita da gestão: qual parcela do contrato ela é ──
+  // O dinheiro que entra é uma parcela do contrato de gestão da obra; o
+  // estorno devolve uma delas. A escolha baixa (ou reabre) a parcela em
+  // contas a pagar da obra, e o percentual pago do contrato acompanha.
+  const estornoNoForm = !!(f.sinalDoBanco && f.contaId && ehEstornoNaConta(f.contaId, f.sinalDoBanco))
+    || !!f.estorno || (!lancNovo && Number((inicial || {}).valor) < 0);
+  const resumoGestao = !naObra && ehReceitaDaGestao(f) && obraDaGestao
+    ? parcelasDaGestao(obraDaGestao, lancamentos || [], f.id || "") : null;
+  const temParcelas = !!(resumoGestao && resumoGestao.parcelas.length);
+  const opcoesParcela = temParcelas ? parcelasParaEscolher(resumoGestao, estornoNoForm) : [];
+  useEffect(() => {
+    if (!temParcelas || f.parcelaGestaoObra === obraDaGestao.id) return;
+    const gravada = inicial && inicial.origem ? parcelaDoLancamento(obraDaGestao, inicial) : null;
+    const id = gravada ? gravada.id
+      : parcelaSugerida(resumoGestao, efValorDoCampo(f.valor), f.lancadoEm, estornoNoForm);
+    setF((p) => ({ ...p, parcelaGestaoId: id, parcelaGestaoObra: obraDaGestao.id }));
+  }, [temParcelas, obraDaGestao && obraDaGestao.id, estornoNoForm]);
+  const parcelaEscolhida = temParcelas && f.parcelaGestaoId && f.parcelaGestaoId !== "nenhuma"
+    ? (resumoGestao.parcelas.find((p) => p.id === f.parcelaGestaoId) || null) : null;
+  const impactoGestao = parcelaEscolhida
+    ? impactoNaGestao(resumoGestao, parcelaEscolhida.id, efValorDoCampo(f.valor), estornoNoForm) : null;
+  const errosGestao = temParcelas && !f.parcelaGestaoId
+    ? [estornoNoForm ? "Escolha a parcela do contrato de gestão que foi devolvida." : "Escolha a parcela do contrato de gestão que foi paga."] : [];
   const cartaoEscolhido = noCartao ? cartaoPorId(cartoesAtivos, f.cartaoId) : null;
   const planoCartao = cartaoEscolhido
     ? parcelasDoCartao(cartaoEscolhido, f.lancadoEm, efValorDoCampo(f.valor), f.parcelas) : [];
   const comoFoiPago = noCartao ? "cartao" : (f.contaBanco === "nao" ? "nao" : "sim");
   const errosCartao = !noCartao ? []
     : [!cartaoEscolhido ? "Escolha o cartão." : "", !f.lancadoEm ? "Informe a data da compra." : ""].filter(Boolean);
-  const todosErros = erros.concat(errosCartao);
+  const todosErros = erros.concat(errosCartao).concat(errosGestao);
   const comCartao = (x) => {
     if (!noCartao) return { ...x, formaPagamento: naObra ? "avista" : (x.formaPagamento === "cartao" ? "" : x.formaPagamento),
       cartaoId: "", parcelasCartao: undefined };
@@ -2946,7 +3197,14 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     const limpos = (f.itens || []).map((x) => { const y = { ...x }; delete y.sugestao; delete y.textoLido; return y; });
     const g = { ...f, itens: limpos };
     if (naObra) { aoSalvar(comCartao({ ...g, naObra: true, valor: efValorDoCampo(g.valor) })); return; }
-    aoSalvar(comCartao({ ...g, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
+    // A parcela da gestão só vai quando a tela a mostrou; o lançamento que
+    // estava ligado e deixou de ser receita da gestão vai com "" (desliga).
+    const { parcelaGestaoObra, ...semObraDaParcela } = g;
+    const parcela = temParcelas ? (f.parcelaGestaoId || "")
+      : (inicial && ehLigacaoDaGestao(inicial.origem) ? "" : undefined);
+    if (parcela === undefined) delete semObraDaParcela.parcelaGestaoId;
+    else semObraDaParcela.parcelaGestaoId = parcela;
+    aoSalvar(comCartao({ ...semObraDaParcela, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
       ...(lancNovo && !noCartao ? { contaBanco: regraBanco } : {}),
       tipo: "escritorio", valor: efValorDoCampo(g.valor) }));
   }
@@ -3137,6 +3395,21 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                       grupo: ((clientes || []).find((c) => c && c.id === o.clienteId) || {}).nome || "" })))} />
               ), "obra")
             : campo("Projeto", <input style={S.input} value={f.projeto} onChange={(e) => set("projeto", e.target.value)} />)}
+        {temParcelas && campo(estornoNoForm ? "Parcela devolvida" : "Parcela da gestão", (
+          <Selecao style={{ ...S.input, cursor: "pointer" }} value={f.parcelaGestaoId || ""}
+            onChange={(e) => { const v = e.target.value; setF((p) => ({ ...p, parcelaGestaoId: v })); }}>
+            <option value="">— escolha a parcela —</option>
+            {opcoesParcela.map((p) => (
+              <option key={p.id} value={p.id}>
+                {`Parcela ${p.n}/${p.de} · ${efDinheiro(p.pago ? p.valorPago : p.valor)}`
+                  + (p.acao === "baixar" ? ` · vence ${efDiaBR(p.vencimento)}`
+                    : p.acao === "ligar" ? ` · já paga na obra em ${efDiaBR(p.pagoEm)}`
+                    : ` · paga em ${efDiaBR(p.pagoEm)}`)}
+              </option>
+            ))}
+            <option value="nenhuma">Não é parcela do contrato</option>
+          </Selecao>
+        ), "parcela-gestao")}
         {campo("Fornecedor", (
           <SelectBusca style={S.input}
             /* Campo em branco já é "Outros" no fim, então ele diz isso desde
@@ -3176,6 +3449,32 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           placeholder="o número do papel, não a forma de pagamento"
           onChange={(e) => set("documento", e.target.value)} />)}
       </div>
+      {/* O que este lançamento faz no contrato de gestão da obra, antes de
+          gravar: a parcela que baixa (ou volta a abrir) e o percentual pago. */}
+      {temParcelas && f.parcelaGestaoId && (() => {
+        const pctTxt = (v) => String(v).replace(".", ",") + "%";
+        const caixa = { fontSize: 12.5, color: "#1e3a5f", background: "#f0f7ff", border: "1px solid rgba(4,116,244,0.25)",
+          borderRadius: 10, padding: "9px 11px", lineHeight: 1.45 };
+        const obraNome = (obraDaGestao && obraDaGestao.nome) || "da obra";
+        if (f.parcelaGestaoId === "nenhuma") {
+          return <div data-vk-gestao="fora" style={caixa}>Fica fora do contrato de gestão de <b>{obraNome}</b>: as parcelas e o percentual pago não mudam.</div>;
+        }
+        if (!impactoGestao) return null;
+        const p = impactoGestao.parcela;
+        const linhaContrato = (
+          <>Contrato de gestão: pago <b>{efDinheiro(impactoGestao.antes.pago)}</b> de {efDinheiro(impactoGestao.total)} ({pctTxt(impactoGestao.antes.pct)})
+            {impactoGestao.depois.pago !== impactoGestao.antes.pago
+              ? <> → passa a <b>{efDinheiro(impactoGestao.depois.pago)}</b> ({pctTxt(impactoGestao.depois.pct)}).</> : "."}</>
+        );
+        return (
+          <div data-vk-gestao={impactoGestao.acao} style={caixa}>
+            {impactoGestao.acao === "baixar" && <>A parcela {p.n}/{p.de} fica <b>paga em {efDiaBR(f.lancadoEm) || "—"}</b> no contas a pagar de <b>{obraNome}</b>. </>}
+            {impactoGestao.acao === "ligar" && <>A parcela {p.n}/{p.de} já está paga na obra ({efDiaBR(p.pagoEm)}): este recebimento só se liga a ela. </>}
+            {impactoGestao.acao === "estornar" && <>A parcela {p.n}/{p.de} <b>volta a ficar em aberto</b> no contas a pagar de <b>{obraNome}</b>; o recebimento de {efDiaBR(p.pagoEm)} continua no mês em que entrou. </>}
+            {linhaContrato}
+          </div>
+        );
+      })()}
       {/* Saída numa conta de entrada (ou o contrário): é estorno, e a tela
           diz antes de gravar — em vez de somar receita que voltou. */}
       {!naObra && f.sinalDoBanco && f.contaId && ehEstornoNaConta(f.contaId, f.sinalDoBanco) && (() => {
@@ -3791,7 +4090,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
   // Do formulário, segue para a próxima linha; do "Lançar assim", não abre nada.
   function lancar(m, l, seguir) {
     const prox = proximaDe(m.id);
-    fila.lancar(l);
+    if (fila.lancar(l) === false) return;
     setMarcados((x) => { const n = { ...x }; delete n[m.id]; return n; });
     setMotivo((x) => { const n = { ...x }; delete n[m.id]; return n; });
     if (seguir) setAberto(prox);
@@ -4925,6 +5224,45 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     return novo;
   }
 
+  // Receita da gestão (e o estorno dela): a parcela do contrato na obra
+  // anda junto. Devolve o lançamento com a origem nova e as obras, para
+  // irem na MESMA gravada — duas seguidas partiriam do mesmo retrato de
+  // `data`, e a segunda apagaria a primeira.
+  function comGestaoNaObra(l, antes) {
+    const todas = (data || {}).obras || [];
+    const quem = typeof nomeDeQuem === "function" ? nomeDeQuem(perm && perm.usuario) : "";
+    const { parcelaGestaoId, parcelaGestaoObra, ...limpo } = l || {};
+    if (parcelaGestaoId === undefined) return { lancamento: limpo, obras: null };
+    const tinha = antes && ehLigacaoDaGestao(antes.origem) ? antes : null;
+    const alvo = ehReceitaDaGestao(limpo) && limpo.obraId && parcelaGestaoId && parcelaGestaoId !== "nenhuma" ? parcelaGestaoId : "";
+    let obras = todas;
+    const naObra = (obraId, fn) => {
+      const ob = obras.find((o) => o && o.id === obraId);
+      if (!ob) return { erro: "A obra do contrato de gestão não foi encontrada." };
+      const r = fn(ob);
+      if (!r.erro) obras = obras.map((o) => (o && o.id === obraId ? r.obra : o));
+      return r;
+    };
+    let base = tinha;
+    let origem = limpo.origem;
+    if (tinha && (!alvo || tinha.origem.obraId !== limpo.obraId)) {
+      const r = naObra(tinha.origem.obraId, (ob) => desfazerGestaoNaObra(ob, tinha, quem));
+      if (r.erro && obras.some((o) => o && o.id === tinha.origem.obraId)) return { erro: r.erro };
+      base = null; origem = undefined;
+    }
+    if (alvo) {
+      const r = naObra(limpo.obraId, (ob) => gestaoNaObra(ob, { ...limpo, parcelaGestaoId: alvo }, base, quem));
+      if (r.erro) return { erro: r.erro };
+      origem = r.origem || undefined;
+    }
+    const lancamento = { ...limpo };
+    if (origem) lancamento.origem = origem; else delete lancamento.origem;
+    return { lancamento, obras: obras === todas ? null : obras };
+  }
+  function avisarGestao(erro) {
+    dialogo.alertar({ titulo: "Parcela da gestão", mensagem: erro, tipo: "aviso" });
+  }
+
   function salvarLancamento(l) {
     if (l && l.naObra) { lancarCustoNaObra(l); return; }
     // A compra no cartão que já está numa fatura fechada só muda a
@@ -4946,8 +5284,10 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     // Quando entrou no sistema — é a "Data do lançamento" da base. Editar não
     // muda: o lançamento continua tendo entrado no dia em que entrou.
     const criadoEm = (antes && antes.criadoEm) || l.criadoEm || new Date().toISOString();
-    gravar([...semEle, { ...semAprender(l), id, numeroDoc, criadoEm, fornecedor: efNomeDoFornecedor(l), tipo: "escritorio" }],
-      catalogoQueAprendeu(l));
+    const g = comGestaoNaObra({ ...l, id }, antes);
+    if (g.erro) { avisarGestao(g.erro); return; }
+    gravar([...semEle, { ...semAprender(g.lancamento), id, numeroDoc, criadoEm, fornecedor: efNomeDoFornecedor(l), tipo: "escritorio" }],
+      { ...catalogoQueAprendeu(l), ...(g.obras ? { obras: g.obras } : {}) });
     setForm(null);
   }
 
@@ -4968,6 +5308,34 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       dialogo.alertar({ titulo: "Está numa fatura fechada", tipo: "aviso",
         mensagem: `Esta compra tem parcela na fatura de ${fechadasDela.map(mesAnoPorExtenso).join(", ")}, que já está fechada. `
           + "Reabra a fatura em Cartões (⋯ ao lado do mês) antes de excluir." });
+      return;
+    }
+    // Receita da gestão ligada a uma parcela: a parcela do contrato não sai
+    // da obra — a receita que a baixou a reabre, e o estorno excluído a
+    // devolve paga.
+    if (ehLigacaoDaGestao(l.origem)) {
+      const quem = typeof nomeDeQuem === "function" ? nomeDeQuem(perm && perm.usuario) : "";
+      const obG = (((data || {}).obras || []).find((o) => o && o.id === l.origem.obraId)) || null;
+      const pG = obG ? parcelaDoLancamento(obG, l) : null;
+      const d = obG ? desfazerGestaoNaObra(obG, l, quem) : { obra: null };
+      if (d.erro) { avisarGestao(d.erro); return; }
+      const mudou = !!(obG && d.obra && d.obra !== obG);
+      const txtParcela = pG ? `parcela ${pG.parcela || ""}${pG.totalParcelas ? "/" + pG.totalParcelas : ""}`.replace(" /", "/") : "";
+      const ok = await dialogo.confirmar({
+        titulo: "Excluir este lançamento?",
+        mensagem: `${contaEscritorio(l.contaId)?.nome || "Lançamento"} · ${Number(l.valor) < 0 ? "estorno " + efDinheiro(Math.abs(Number(l.valor))) : efDinheiro(l.valor)} · ${mesAnoPorExtenso(l.competencia)}`
+          + (mudou && l.origem.tipo === "estorno" ? `. A ${txtParcela} do contrato de gestão de ${obG.nome || "obra"} volta a ficar paga — o estorno é desfeito.` : "")
+          + (mudou && l.origem.tipo !== "estorno" ? `. A ${txtParcela} do contrato de gestão de ${obG.nome || "obra"} volta a ficar em aberto.` : ""),
+        confirmar: "Excluir", destrutivo: true,
+      });
+      if (!ok) return;
+      const novosG = lancs.filter((x) => x.id !== l.id);
+      if (mudou) {
+        save({ ...data, obras: ((data || {}).obras || []).map((o) => (o && o.id === obG.id ? d.obra : o)),
+          lancamentos: [...outrosLancamentos, ...novosG] }).catch(console.error);
+        return;
+      }
+      gravar(novosG);
       return;
     }
     const daFatura = ((l.origem || {}).tipo === "fatura");
@@ -5166,8 +5534,10 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     l = comSinalDeEstorno(l);
     const id = typeof uid === "function" ? uid() : String(Date.now());
     const numeroDoc = l.numeroDoc || proximaReferencia((data || {}).obras || [], lancs);
-    gravar([...lancs, { ...semAprender(l), ...marca, id, numeroDoc, criadoEm: agora, fornecedor: efNomeDoFornecedor(l), tipo: "escritorio" }],
-      catalogoQueAprendeu(l));
+    const g = comGestaoNaObra({ ...l, id }, null);
+    if (g.erro) { avisarGestao(g.erro); return false; }
+    gravar([...lancs, { ...semAprender(g.lancamento), ...marca, id, numeroDoc, criadoEm: agora, fornecedor: efNomeDoFornecedor(l), tipo: "escritorio" }],
+      { ...catalogoQueAprendeu(l), ...(g.obras ? { obras: g.obras } : {}) });
     return true;
   }
 
@@ -5368,7 +5738,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
               lancarSugeridas: lancarSugeridasDoExtrato,
               naoE: naoELancamento,
               formProps: {
-                fechamentos, clientes: (data || {}).clientes || [], obras: (data || {}).obras || [],
+                fechamentos, clientes: (data || {}).clientes || [], obras: (data || {}).obras || [], lancamentos: lancs,
                 nomeEscritorio: (((data || {}).escritorio || {}).nome || "").trim(),
                 prestadores: ((data || {}).fornecedores || []).filter((x) => x && x.ativo !== false),
                 insumos: ((data || {}).materiais || []).filter((x) => x && x.ativo !== false),
@@ -5419,7 +5789,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
           </div>
           {form && <div style={{ marginBottom: 14 }}><FormLancamentoEscritorio fechamentos={fechamentos} clientes={(data || {}).clientes || []}
             nomeEscritorio={(((data || {}).escritorio || {}).nome || "").trim()}
-            obras={(data || {}).obras || []}
+            obras={(data || {}).obras || []} lancamentos={lancs}
             prestadores={((data || {}).fornecedores || []).filter((x) => x && x.ativo !== false)}
             insumos={((data || {}).materiais || []).filter((x) => x && x.ativo !== false)}
             cartoes={cartoesDoEscritorio(data)}

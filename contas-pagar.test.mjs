@@ -2934,7 +2934,7 @@ teste("base do escritório: uma linha por transação do extrato", () => {
   ];
   const lancs = [
     { id: "L1", tipo: "escritorio", origem: { obraId: "m1", tipo: "pedido", refId: "p|material|2026-09-29" }, valor: 304, descricao: "Pedido 8623", competencia: "2026-09" },
-    { id: "L2", tipo: "escritorio", contaId: "aluguel", unidadeId: "escritorio", descricao: "Aluguel sala", fornecedor: "Imobiliária", valor: -2500,
+    { id: "L2", tipo: "escritorio", contaId: "aluguel", unidadeId: "escritorio", descricao: "Aluguel sala", fornecedor: "Imobiliária", valor: 2500,
       lancadoEm: "2026-09-10", competencia: "2026-09", documento: "4199", cliente: "ESCRITÓRIO" },
   ];
   const L = modulo.linhasDoEscritorio(obras, lancs, {
@@ -2944,6 +2944,12 @@ teste("base do escritório: uma linha por transação do extrato", () => {
   const al = L.find((l) => l.id === "lanc:L2");
   assert.strictEqual(al.total, 2500, "sem valor negativo");
   assert.strictEqual(al.sinal, -1, "mas sabe que é saída");
+  // o estorno vai no sentido contrário do grupo: receita devolvida é saída
+  const est = modulo.linhasDoEscritorio([], [{ id: "E", tipo: "escritorio", contaId: "rec", valor: -10833.33, competencia: "2026-09", lancadoEm: "2026-09-28" }], {
+    contaDoEscritorio: () => ({ nome: "Receita Gestão", grupo: "receitas" }),
+    grupoDoEscritorio: () => ({ titulo: "RECEITAS ESCRITÓRIO", sinal: 1 }) })[0];
+  assert.strictEqual(est.sinal, -1);
+  assert.strictEqual(est.total, 10833.33);
   assert.strictEqual(al.insumoNome, "Aluguel");
   assert.strictEqual(al.conta, "Aluguel");
   assert.strictEqual(al.grupo, "Despesas escritório");
