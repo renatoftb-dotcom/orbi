@@ -225,6 +225,49 @@ function divergenciaDeUnidade(unidadeDoItem, insumo) {
   return { daLoja: daLoja, doCatalogo: doCatalogo };
 }
 
+// Quantas unidades da LOJA cabem em UMA unidade do catálogo. A loja vende o
+// cano por metro e o catálogo conta a barra de 6 m; o vergalhão é barra de
+// 12 m; o saco de 50 kg sai por quilo. Com o fator, a troca de unidade vira
+// conversão: 3 m de cano são 0,5 barra, e o preço do metro vezes 6 é o da
+// barra — o total não muda, o quantitativo da obra fica certo.
+// O que o catálogo já registrou manda (insumo.conversoes, por unidade);
+// depois a medida escrita no nome ("Barra 6m", "Saco 50kg"); depois o padrão
+// do material. Sem nada disso, null: a tela pergunta.
+function fatorEntreUnidades(insumo, unidadeDaLoja) {
+  if (!insumo) return null;
+  var cl = unidadeCanonica(unidadeDaLoja);
+  var cc = unidadeCanonica(insumo.precoUnidade || insumo.unidade || "");
+  if (!cl || !cc || cl === cc) return null;
+  var conv = insumo.conversoes || {};
+  if (Number(conv[cl]) > 0) return { fator: Number(conv[cl]), origem: "catalogo" };
+  var nome = normalizarTexto(insumo.nome || "");
+  var num = function (x) { return Number(String(x).replace(",", ".")); };
+  if (cc === "Unidades" && cl === "Mts") {
+    var m = /(?:^|\s)(\d+(?:\s\d+)?)\s?(?:m|mt|mts|metros?)(?:\s|$)/.exec(nome);
+    if (m && num(m[1].replace(" ", ".")) > 0) return { fator: num(m[1].replace(" ", ".")), origem: "nome" };
+    if (/\b(vergalh|ca ?50|ca ?60|ferro ca|aco ca)/.test(nome)) return { fator: 12, origem: "padrao" };
+    if (/\b(tubo|cano|eletroduto|barra|perfil|metalon|calha)/.test(nome)) return { fator: 6, origem: "padrao" };
+  }
+  if (cc === "Unidades" && cl === "Kg") {
+    var k = /(\d+(?:\s\d+)?)\s?kg\b/.exec(nome);
+    if (k && num(k[1].replace(" ", ".")) > 0) return { fator: num(k[1].replace(" ", ".")), origem: "nome" };
+  }
+  return null;
+}
+
+// A conversão em si: a quantidade vai para a unidade do catálogo e o preço
+// acompanha, de modo que o total do item fica o mesmo.
+function converterParaUnidadeDoCatalogo(quantidade, unitario, fator) {
+  var f = Number(fator) || 0;
+  var q = Number(String(quantidade == null ? "" : quantidade).replace(",", ".")) || 0;
+  var u = Number(String(unitario == null ? "" : unitario).replace(",", ".")) || 0;
+  if (!(f > 0)) return null;
+  return {
+    quantidade: Math.round((q / f) * 10000) / 10000,
+    unitario: Math.round(u * f * 1e6) / 1e6,
+  };
+}
+
 
 // ═══════════════════════════════════════════════════════════════
 // CÓDIGO

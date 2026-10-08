@@ -3114,6 +3114,9 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                     <CampoUnidadeDoItem valor={it.unidade || ""} estilo={S.input}
                       unidades={typeof unidadesDoCatalogo === "function" ? unidadesDoCatalogo(insumos || []) : []}
                       insumo={it.insumoCodigo ? (insumos || []).find((m) => m && m.codigo === it.insumoCodigo) : null}
+                      quantidade={it.quantidade} unitario={it.unitario}
+                      aoConverter={(c) => mexerItem(i, { unidade: c.unidade, quantidade: String(c.quantidade).replace(".", ","),
+                        unitario: String(c.unitario).replace(".", ",") })}
                       aoMudar={(v) => mexerItem(i, { unidade: v })} />
                   </div>
                   <div style={{ minWidth: 0 }}>

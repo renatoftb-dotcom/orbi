@@ -9638,6 +9638,8 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                         <div style={{ minWidth: 0 }}>{mini("Unidade")}
                           <CampoUnidadeDoItem valor={it.unidade || ""} unidades={unidades} estilo={cel} semAviso={!isMobile}
                             insumo={it.insumoCodigo ? (insumos || []).find((y) => y && (y.codigo === it.insumoCodigo || y.id === it.insumoCodigo)) : null}
+                            quantidade={it.quantidade} unitario={it.unitario}
+                            aoConverter={(c) => mexerItem(i, { ...c, bruto: Math.round(c.quantidade * c.unitario * 100) / 100 })}
                             aoMudar={(v) => mexerItem(i, { unidade: v })} /></div>
                         <div style={{ minWidth: 0 }}>{mini("Unitário")}
                           <CampoCtrNum tipo="moeda" style={{ ...cel, textAlign: "right" }} valor={it.unitario}
@@ -9663,7 +9665,10 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                         </div>
                       </div>
                       {!isMobile && it.insumoCodigo && typeof divergenciaDeUnidade === "function" && (
-                        <AvisoDeUnidade prefixo={`Unidade ${it.unidade || "—"}: `} aoMudar={(v) => mexerItem(i, { unidade: v })}
+                        <AvisoDeUnidade aoMudar={(v) => mexerItem(i, { unidade: v })}
+                          insumo={(insumos || []).find((y) => y && (y.codigo === it.insumoCodigo || y.id === it.insumoCodigo))}
+                          quantidade={it.quantidade} unitario={it.unitario}
+                          aoConverter={(c) => mexerItem(i, { ...c, bruto: Math.round(c.quantidade * c.unitario * 100) / 100 })}
                           div={divergenciaDeUnidade(it.unidade, (insumos || []).find((y) => y && (y.codigo === it.insumoCodigo || y.id === it.insumoCodigo)))} />
                       )}
                       {situacao && situacao !== "cotacao" && faltas.length > 0 && (
@@ -10580,6 +10585,8 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
             const campoUnidade = (
               <CampoUnidadeDoItem valor={it.unidade || ""} unidades={unidades} estilo={celStyle}
                 insumo={it.insumoCodigo ? (insumos || []).find((x) => x && x.codigo === it.insumoCodigo) : null}
+                quantidade={it.quantidade} unitario={it.unitario}
+                aoConverter={(c) => mexerItem(i, { ...c, bruto: Math.round(c.quantidade * c.unitario * 100) / 100 })}
                 aoMudar={(v) => mexerItem(i, { unidade: v })} />
             );
             const campoUnitario = (
@@ -10705,7 +10712,7 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
 // a unidade da nota é outra — areia fina em "Mts" quando o catálogo vende em
 // m3 —, o aviso aparece na hora, com a troca a um clique: R$ 130 o metro e
 // R$ 130 o metro cúbico são compras muito diferentes.
-function CampoUnidadeDoItem({ valor, unidades, insumo, aoMudar, estilo, semAviso }) {
+function CampoUnidadeDoItem({ valor, unidades, insumo, aoMudar, estilo, semAviso, quantidade, unitario, aoConverter }) {
   const divUn = typeof divergenciaDeUnidade === "function" && insumo ? divergenciaDeUnidade(valor, insumo) : null;
   const est = estilo || COT_ESTILO.input;
   return (
@@ -10713,7 +10720,8 @@ function CampoUnidadeDoItem({ valor, unidades, insumo, aoMudar, estilo, semAviso
       <CampoUnidade valor={valor} unidades={unidades} aoMudar={aoMudar}
         estilo={divUn ? { ...est, borderColor: "#d97706", background: "#fff7ed" } : est} />
       {divUn && !semAviso && (
-        <AvisoDeUnidade div={divUn} aoMudar={aoMudar} />
+        <AvisoDeUnidade div={divUn} aoMudar={aoMudar} insumo={insumo}
+          quantidade={quantidade} unitario={unitario} aoConverter={aoConverter} />
       )}
     </div>
   );
@@ -10721,15 +10729,53 @@ function CampoUnidadeDoItem({ valor, unidades, insumo, aoMudar, estilo, semAviso
 
 // O aviso sozinho: na linha estreita da tabela ele vai para baixo da linha
 // inteira, em vez de espremer a coluna da unidade.
-function AvisoDeUnidade({ div, aoMudar, prefixo }) {
+function AvisoDeUnidade({ div, aoMudar, prefixo, insumo, quantidade, unitario, aoConverter }) {
+  // Trocar só o nome da unidade erra a conta: 3 m de cano não são 3 barras.
+  // Com o fator (barra de 6 m, saco de 50 kg) a troca vira conversão — a
+  // quantidade vai para a unidade do catálogo e o preço acompanha.
+  const sugerido = div && insumo && typeof fatorEntreUnidades === "function" ? fatorEntreUnidades(insumo, div.daLoja) : null;
+  // o que se digita vale; sem digitar, acompanha a sugestão do item atual
+  const [digitado, setFator] = useState(null);
+  const fator = digitado != null ? digitado : (sugerido ? String(sugerido.fator).replace(".", ",") : "");
   if (!div) return null;
-  return (
+  const f = Number(String(fator).replace(",", ".")) || 0;
+  const conv = aoConverter && f > 0 && typeof converterParaUnidadeDoCatalogo === "function"
+    ? converterParaUnidadeDoCatalogo(quantidade, unitario, f) : null;
+  const n = (v, casas) => Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: casas });
+  const bt = { background: "none", border: "none", padding: 0, color: "#b45309", cursor: "pointer",
+    fontFamily: "inherit", fontSize: 10.5, textDecoration: "underline", fontWeight: 600 };
+  if (!aoConverter) {
+    return (
         <div style={{ fontSize: 10.5, color: "#b45309", marginTop: 2, lineHeight: 1.3 }}>
           {prefixo || ""}o catálogo usa <b>{div.doCatalogo}</b>{" · "}
-          <button type="button" onClick={() => aoMudar(div.doCatalogo)}
-            style={{ background: "none", border: "none", padding: 0, color: "#b45309", cursor: "pointer",
-              fontFamily: "inherit", fontSize: 10.5, textDecoration: "underline", fontWeight: 600 }}>usar {div.doCatalogo}</button>
+          <button type="button" onClick={() => aoMudar(div.doCatalogo)} style={bt}>usar {div.doCatalogo}</button>
         </div>
+    );
+  }
+  return (
+    <div data-vk-converter-unidade="1" style={{ fontSize: 11, color: "#92400e", marginTop: 4, lineHeight: 1.45,
+      background: "#fffbeb", border: "1px solid rgba(180,83,9,0.22)", borderRadius: 8, padding: "6px 8px" }}>
+      {prefixo || ""}a loja vende em <b>{div.daLoja}</b>, o catálogo conta em <b>{div.doCatalogo}</b>.
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, margin: "0 4px", whiteSpace: "nowrap" }}>
+        1 {div.doCatalogo.replace(/s$/, "")} =
+        <input value={fator} onChange={(e) => setFator(e.target.value.replace(/[^\d,.]/g, ""))} inputMode="decimal"
+          aria-label={`Quantos ${div.daLoja} em 1 ${div.doCatalogo}`}
+          style={{ width: 44, border: "1px solid rgba(180,83,9,0.35)", borderRadius: 6, padding: "1px 4px", fontSize: 11,
+            fontFamily: "inherit", textAlign: "right", background: "#fff" }} />
+        {div.daLoja}
+      </span>
+      {conv ? (
+        <button type="button" data-vk-converter="1"
+          onClick={() => aoConverter({ unidade: div.doCatalogo, quantidade: conv.quantidade, unitario: conv.unitario })}
+          style={{ ...bt, fontSize: 11 }}>
+          converter: {n(conv.quantidade, 4)} {div.doCatalogo} a R$ {n(conv.unitario, 2)}
+        </button>
+      ) : (
+        <span>— diga quantos {div.daLoja} tem 1 {div.doCatalogo.replace(/s$/, "")}.</span>
+      )}
+      {" · "}
+      <button type="button" onClick={() => aoMudar(div.doCatalogo)} style={{ ...bt, fontWeight: 400 }}>só trocar o nome</button>
+    </div>
   );
 }
 

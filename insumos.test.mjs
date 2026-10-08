@@ -30,7 +30,7 @@ const api = new Function(
            mesesEntre, fatorIncc, precoInsumo, atualizarPrecoReferencia, comprasDoInsumo,
            previaDePrecosPorCompra, aplicarComprasNoCatalogo, contasRecemPagas,
            contasQueDeixaramDeSerPagas,
-           chaveUnidade, unidadeCanonica, mesmaUnidade, unidadeDoPreco, divergenciaDeUnidade,
+           chaveUnidade, unidadeCanonica, mesmaUnidade, unidadeDoPreco, divergenciaDeUnidade, fatorEntreUnidades, converterParaUnidadeDoCatalogo,
            migrarMateriaisParaInsumos, semearInsumos };`
 )();
 
@@ -927,6 +927,27 @@ t("listas vazias não explodem", () => {
   eq(api.contasQueDeixaramDeSerPagas([], []).length, 0);
 });
 
+
+// ── Cano por metro, catálogo por barra ──────────────────────────
+t("cano em metros com o catálogo em barra: 6 m por barra, e o total não muda", () => {
+  const TUBO = { codigo: "HID-050", nome: "PVC - Esgoto - Tubo 50mm", unidade: "Unidades" };
+  eq(api.fatorEntreUnidades(TUBO, "Mts").fator, 6);
+  eq(api.fatorEntreUnidades(TUBO, "metro").origem, "padrao");
+  const c = api.converterParaUnidadeDoCatalogo(3, "11.27", 6);
+  eq(c.quantidade, 0.5);
+  eq(c.unitario, 67.62);
+  eq(Math.round(c.quantidade * c.unitario * 100) / 100, 33.81);
+});
+
+t("a medida no nome manda; o catálogo registrado manda mais; 40mm não é 40 m", () => {
+  eq(api.fatorEntreUnidades({ nome: "Eletroduto 3/4 barra 3m", unidade: "Unidades" }, "Mts").fator, 3);
+  eq(api.fatorEntreUnidades({ nome: "Vergalhão CA-50 10mm", unidade: "Unidades" }, "Mts").fator, 12);
+  eq(api.fatorEntreUnidades({ nome: "Tubo 40mm", unidade: "Unidades", conversoes: { Mts: 3 } }, "Mts").fator, 3);
+  eq(api.fatorEntreUnidades({ nome: "Cimento CP-II 50kg", unidade: "Unidades" }, "Kg").fator, 50);
+  eq(api.fatorEntreUnidades({ nome: "Areia Fina", unidade: "m3" }, "Mts"), null);
+  eq(api.fatorEntreUnidades({ nome: "Tubo 50mm", unidade: "Unidades" }, "Unidades"), null);
+  eq(api.converterParaUnidadeDoCatalogo(3, 10, 0), null);
+});
 
 console.log("\n" + ok + " testes passaram" + (falhas.length ? ", " + falhas.length + " falharam" : ""));
 if (falhas.length) {
