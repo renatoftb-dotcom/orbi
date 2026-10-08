@@ -29047,6 +29047,9 @@ function cotacoesDaDivisao(cot, opcoes) {
       etapaId: c.etapaId || "",
       itens: itensDaCotacao(c).filter((it) => ids.indexOf(it.id) >= 0).map((it) => ({ ...it })),
       propostas: [{ ...p, precos, totalFechado: comDesconto ? l.total : "", valor: l.total }],
+      // o desconto veio do fechamento da lista inteira e foi rateado aqui:
+      // a tela do pedido avisa, e a proposta continua editável
+      descontoProporcional: !!l.descontoParcial,
       precisaAprovacaoCliente: false,
       escolhidaId: p.id,
       escolhidoPor: quem,
@@ -29152,9 +29155,22 @@ function cotacaoDosNaoComprados(cot, cotacoes, opcoes) {
   return { original: { ...c, naoCompradosId: nova.id }, nova };
 }
 
+// O valor de cada pedido COMO ESTÁ AGORA. Ajustar o desconto na proposta
+// do pedido muda o que se paga, e o retrato da divisão tem que acompanhar —
+// o valor gravado no fechamento fica só para o pedido que foi excluído.
+function totaisDaDivisao(cot, cotacoes) {
+  const dv = (cot || {}).divisao || {};
+  const filhas = (dv.filhas || []).map((f) => {
+    const x = (cotacoes || []).find((y) => y && y.id === f.cotacaoId);
+    const esc = x ? propostaEscolhida(x) : null;
+    return esc ? { ...f, total: valorDaProposta(x, esc) } : { ...f, total: Number(f.total) || 0 };
+  });
+  return { filhas, total: Math.round(filhas.reduce((a, f) => a + f.total, 0) * 100) / 100 };
+}
+
 // Quanto a divisão economizou: os mesmos itens comprados, na loja que
 // cotou todos eles pelo maior preço.
-function economiaDaDivisao(cot) {
+function economiaDaDivisao(cot, cotacoes) {
   const c = cot || {};
   const dv = c.divisao;
   if (!dv) return null;
@@ -29166,7 +29182,8 @@ function economiaDaDivisao(cot) {
     .map((p) => Math.round(itens.reduce((a, it) => a + totalEfetivoItem(c, p, it), 0) * 100) / 100);
   if (!custos.length) return null;
   const maior = Math.max(...custos);
-  const economia = Math.round((maior - (Number(dv.total) || 0)) * 100) / 100;
+  const atual = cotacoes ? totaisDaDivisao(c, cotacoes).total : (Number(dv.total) || 0);
+  const economia = Math.round((maior - atual) * 100) / 100;
   return economia > 0 ? { maior, economia } : null;
 }
 
@@ -32785,7 +32802,7 @@ function papelDaPropostaEscolhida(cot) {
 
 // O resumo que o cliente vê: quem cotou, por quanto, quem levou e quanto se
 // deixou de pagar. Só leitura — a decisão já foi tomada.
-function resumoDaCotacao(cot, prestadores) {
+function resumoDaCotacao(cot, prestadores, cotacoes) {
   const c = cot || {};
   const esc = propostaEscolhida(c);
   const comLista = temListaDeItens(c);
@@ -32805,19 +32822,20 @@ function resumoDaCotacao(cot, prestadores) {
   // quem levou o quê e o que ficou sem comprar.
   if (foiDividida(c)) {
     const nomeDo = (id) => { const it = itensDaCotacao(c).find((x) => x.id === id); return it ? it.descricao || "Item" : ""; };
-    const filhas = c.divisao.filhas;
+    const tot = cotacoes ? totaisDaDivisao(c, cotacoes) : { filhas: c.divisao.filhas, total: Number(c.divisao.total) || 0 };
+    const filhas = tot.filhas;
     const comLevou = propostas.map((p) => {
       const f = filhas.find((x) => x.propostaId === p.id);
       return { ...p, escolhida: !!f, levou: f ? { itens: (f.itens || []).length, total: Number(f.total) || 0 } : null };
     });
-    const e = economiaDaDivisao(c);
+    const e = economiaDaDivisao(c, cotacoes);
     return {
       titulo: c.titulo || "Cotação",
       itens: itensDaCotacao(c).length,
       propostas: comLevou,
       escolhida: null,
       divisao: {
-        total: Number(c.divisao.total) || 0,
+        total: tot.total,
         lojas: filhas.map((f) => ({
           nome: f.favorecido || nomeDoFornecedor(prestadores || [], (propostaPorId(c, f.propostaId) || {}).fornecedorId) || "Loja",
           itens: (f.itens || []).map(nomeDo).filter(Boolean),
@@ -32856,7 +32874,7 @@ function resumoCotacoes(cotacoes, aprovacoes, contratos) {
     // contrato, e o cartão "Aprovadas" ficava em zero com a compra já feita.
     if (s.id === "contratada" || s.id === "lancada") r.lancadas++;
     if (s.id === "dividida") {
-      const e = economiaDaDivisao(c);
+      const e = economiaDaDivisao(c, lista);
       if (e) r.economia += e.economia;
     }
     if (s.id === "aprovada" || s.id === "contratada" || s.id === "lancada") {
@@ -34635,7 +34653,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                 <div style={{ fontSize: 13.5, fontWeight: 700, color: "#111827" }}>
                   {ehContaDeLoja(cot)
                     ? dinheiro(abertoDaLoja)
-                    : foiDividida(cot) ? dinheiro(Number(cot.divisao.total) || 0)
+                    : foiDividida(cot) ? dinheiro(totaisDaDivisao(cot, cotacoes).total)
                     : esc ? dinheiro(valorProposta(esc)) : melhor ? `a partir de ${dinheiro(valorProposta(melhor))}` : "—"}
                 </div>
               </div>
@@ -34915,6 +34933,26 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     {ap.motivo ? ` — ${ap.motivo}` : ""}
                   </div>
                 )}
+
+                {cot.divisaoDe && cot.descontoProporcional && esc && (() => {
+                  const dd = descontoDaProposta(cot, esc);
+                  if (!dd || !dd.desconto) return null;
+                  const travado = !!cot.contaGeradaId || !!cot.pedidoNaLoja;
+                  return (
+                    <div data-vk-desconto-proporcional="1" style={{ fontSize: 12, color: "#92400e", background: "#fffbeb",
+                      border: "1px solid rgba(180,83,9,0.22)", borderRadius: 10, padding: "8px 10px", marginBottom: 12,
+                      display: "flex", gap: 10, alignItems: isMobile ? "stretch" : "center", flexDirection: isMobile ? "column" : "row" }}>
+                      <span style={{ flex: 1 }}>
+                        Desconto de {dinheiro(dd.valor)} ({String(dd.pct).replace(".", ",")}%) aplicado proporcionalmente nestes itens — a loja deu o desconto na lista inteira.
+                        {travado ? "" : " Se ela não mantiver, ajuste o total fechado ou os preços."}
+                      </span>
+                      {podeGerenciar && !travado && (
+                        <button type="button" data-vk-ajustar-desconto="1" style={{ ...E.btnSec, padding: "6px 12px", fontSize: 12, whiteSpace: "nowrap" }}
+                          onClick={() => { setErro(""); setFormProposta({ cotacaoId: cot.id, proposta: esc }); }}>Ajustar desconto</button>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* No celular, grade de duas colunas: botão solto em linha
                     quebrava onde calhava, e o recado do "por que está
@@ -35511,7 +35549,8 @@ function VisorProposta({ anexo, aoFechar }) {
 function BlocoDivisaoFechada({ cot, cotacoes, aprovacoes, contratos, dinheiro, isMobile, podeGerenciar, aoIr, aoDesfazer, aoNaoComprados }) {
   const E = COT_ESTILO;
   const dv = cot.divisao || {};
-  const filhas = filhasDaDivisao(cot, cotacoes);
+  const tot = totaisDaDivisao(cot, cotacoes);
+  const filhas = filhasDaDivisao(cot, cotacoes).map((f, i) => ({ ...f, total: tot.filhas[i].total }));
   const fora = itensDaCotacao(cot).filter((it) => (dv.fora || []).indexOf(it.id) >= 0);
   const nc = cot.naoCompradosId ? cotacoes.find((x) => x.id === cot.naoCompradosId) : null;
   const desfazer = podeDesfazerDivisao(cot, cotacoes, contratos);
@@ -35523,7 +35562,7 @@ function BlocoDivisaoFechada({ cot, cotacoes, aprovacoes, contratos, dinheiro, i
     <div data-vk-divisao-fechada="1" style={{ ...E.quadro, padding: 0, marginBottom: 12, overflow: "hidden" }}>
       <div style={{ background: "#f0fdf4", padding: "8px 12px", borderBottom: "1px solid rgba(21,128,61,0.18)", fontSize: 12, color: "#15803d" }}>
         <b>Dividida entre lojas</b>
-        {dv.em ? ` em ${new Date(dv.em).toLocaleDateString("pt-BR")}` : ""}{dv.por ? ` por ${nomeGravado(dv.por)}` : ""} · total {dinheiro(Number(dv.total) || 0)}
+        {dv.em ? ` em ${new Date(dv.em).toLocaleDateString("pt-BR")}` : ""}{dv.por ? ` por ${nomeGravado(dv.por)}` : ""} · total {dinheiro(tot.total)}
       </div>
       {filhas.map((f) => {
         const s = f.cotacao ? situacaoCotacao(f.cotacao, aprovacoes, contratos) : null;
@@ -38248,13 +38287,13 @@ function LinksDaCotacao({ obra, contas, prestadores, isMobile }) {
           Cotações
         </button>
       )}
-      {vendo && <ResumoDaCotacaoModal cotacao={raiz} prestadores={prestadores} isMobile={isMobile} aoFechar={() => setVendo(false)} />}
+      {vendo && <ResumoDaCotacaoModal cotacao={raiz} cotacoes={(obra || {}).cotacoes} prestadores={prestadores} isMobile={isMobile} aoFechar={() => setVendo(false)} />}
     </span>
   );
 }
 
-function ResumoDaCotacaoModal({ cotacao, prestadores, isMobile, aoFechar }) {
-  const r = resumoDaCotacao(cotacao, prestadores);
+function ResumoDaCotacaoModal({ cotacao, cotacoes, prestadores, isMobile, aoFechar }) {
+  const r = resumoDaCotacao(cotacao, prestadores, cotacoes);
   const moeda = (v) => (typeof fmtMoedaCtr === "function" ? fmtMoedaCtr(v) : "R$ " + Number(v || 0).toFixed(2));
   const pequeno = { fontSize: 11, color: "#6b7280" };
   return (

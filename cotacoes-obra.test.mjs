@@ -67,7 +67,7 @@ const modulo = new Function(`
            FORA_DA_COMPRA, escolhaPorItemDaCotacao, lojaEscolhidaDoItem, temDivisao, escolherLojaDoItem,
            escolherMaisBaratoEmCada, limparDivisao, divisaoDaCotacao,
            cotacoesDaDivisao, foiDividida, cotacaoRaiz, filhasDaDivisao, podeDesfazerDivisao, desfazerDivisao,
-           cotacaoDosNaoComprados, economiaDaDivisao, anexosSemUso, resumoDaCotacao, cotacaoDeOrigemDasContas,
+           cotacaoDosNaoComprados, economiaDaDivisao, anexosSemUso, totaisDaDivisao, resumoDaCotacao, cotacaoDeOrigemDasContas,
            unitarioDoTotal, totalBrutoItem, valoresComDesconto, totalEfetivoItem,
            precoEfetivo, totalNegociado, descontoDaProposta,
            linkWhatsApp, enviosDaLista, envioParaLoja, registrarEnvioDaLista, lojasParaPedir,
@@ -4026,6 +4026,32 @@ teste("Divisão: economia entra no resumo das cotações", () => {
   const r = M.resumoCotacoes([original, ...filhas], [], []);
   assert.strictEqual(r.economia, 180);
   assert.strictEqual(r.fechadas, 1);
+});
+
+
+teste("Divisão: desconto proporcional marcado no pedido, e ajustar a proposta atualiza o retrato", () => {
+  const c0 = listaDividir();
+  c0.propostas[0].totalFechado = "4.000,00";
+  let c = M.escolherLojaDoItem(c0, "i2", "pA");
+  c = M.escolherLojaDoItem(c, "i3", "pA");
+  c = M.escolherLojaDoItem(c, "i1", "pB");
+  let n = 0;
+  const r = M.cotacoesDaDivisao(c, { novoId: () => "g" + (++n) });
+  const a = r.filhas.find((f) => M.propostaEscolhida(f).id === "pA");
+  const b = r.filhas.find((f) => M.propostaEscolhida(f).id === "pB");
+  assert.strictEqual(a.descontoProporcional, true);
+  assert.strictEqual(b.descontoProporcional, false);
+  const antes = M.totaisDaDivisao(r.original, [r.original, ...r.filhas]).total;
+  assert.strictEqual(antes, r.original.divisao.total);
+  // a loja não manteve: tira o total fechado, volta ao preço de tabela
+  const aSem = { ...a, propostas: [{ ...a.propostas[0], totalFechado: "" }] };
+  const cots = [r.original, aSem, b];
+  const t = M.totaisDaDivisao(r.original, cots);
+  assert.strictEqual(t.filhas.find((f) => f.cotacaoId === a.id).total, 2795, "120*22,50 + 5*19");
+  assert.strictEqual(t.total, 2795 + 1460);
+  assert.strictEqual(M.resumoDaCotacao(r.original, [], cots).divisao.total, 4255);
+  // pedido excluído fica com o valor do fechamento
+  assert.strictEqual(M.totaisDaDivisao(r.original, [r.original, b]).total, r.original.divisao.total);
 });
 
 for (const [nome, fn] of testes) {
