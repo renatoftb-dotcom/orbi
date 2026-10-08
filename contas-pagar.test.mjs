@@ -149,6 +149,24 @@ teste("valor corrigido na parcela do contrato sobrevive ao recálculo da tela", 
   assert.strictEqual(modulo.contasDoContrato(ajustado)[0].valor, 700);
 });
 
+teste("saldo de gestão do mês anterior acerta a parcela seguinte e sobrevive ao recálculo", () => {
+  const ct = base({ valor: 3000, modalidade: "parcelado", parcelas: 3,
+    periodicidade: "mensais", dataInicio: "2026-09-01" });
+  const [a, b] = modulo.contasDoContrato(ct);
+  const comSaldo = { ...ct, ajustesSaldo: { [b.id]: 250 }, notasSaldo: { [b.id]: "+R$ 250,00 do saldo de set/26" } };
+  const depois = modulo.contasDoContrato(comSaldo);
+  assert.strictEqual(depois[1].valor, b.valor + 250);
+  assert.strictEqual(depois[1].notaSaldo, "+R$ 250,00 do saldo de set/26");
+  assert.ok(!depois[0].notaSaldo);
+  // o estorno lançado num mês em aberto fica na parcela quando as contas são regeradas
+  const lista = modulo.sincronizarContasDoContrato([{ ...depois[1], movimentos: [{ lancamentoId: "E", valor: -100 }] }], comSaldo);
+  assert.deepStrictEqual(lista.find((x) => x.id === b.id).movimentos, [{ lancamentoId: "E", valor: -100 }]);
+  // corrigir o valor à mão: a exceção guarda só a parte da regra
+  const aj = modulo.ajustarValores(comSaldo, [{ id: b.id, valor: 1500 }]);
+  assert.strictEqual(modulo.contasDoContrato(aj)[1].valor, 1500);
+  assert.strictEqual(a.valor, depois[0].valor);
+});
+
 teste("voltar ao valor da regra apaga a exceção", () => {
   const ct = base({ valor: 3000, modalidade: "parcelado", parcelas: 3,
     periodicidade: "mensais", dataInicio: "2026-09-01" });

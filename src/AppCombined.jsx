@@ -9825,7 +9825,8 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
         : "pago no cartão — entra no escritório pela fatura" });
   }
   // as contas pagas da obra — o dinheiro que saiu, uma linha por nota
-  for (const fonte of fontesDasContasPagas((o.contasPagar || []).filter((c) => !noCartao(c)))) empurrar(fonte);
+  // a parcela de gestão com movimentos já é do extrato: veio daqui
+  for (const fonte of fontesDasContasPagas((o.contasPagar || []).filter((c) => !noCartao(c) && !(c && Array.isArray(c.movimentos))))) empurrar(fonte);
   // as entradas da obra — o dinheiro que entrou
   for (const e of o.entradas || []) {
     if (!e) continue;
@@ -11807,42 +11808,89 @@ function obrasDaGestao(obras, clientes, clienteId) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// RECEITA DA GESTÃO = PARCELA DO CONTRATO DE GESTÃO DA OBRA
+// RECEITA DA GESTÃO = SALDO DO MÊS NO CONTRATO DE GESTÃO DA OBRA
 // ══════════════════════════════════════════════════════════════
 // O honorário da gestão nasce na obra: o contrato de gestão vira parcelas
-// em contas a pagar (conta "Gerenciamento de obra"). Quando o dinheiro
-// chega no banco do escritório, é UMA dessas parcelas que foi paga — então
-// a Receita Gestão lançada aqui baixa a parcela lá, e o percentual pago do
-// contrato, o contas a pagar e a base de dados da obra andam juntos. O
-// estorno faz o caminho de volta: a parcela devolvida volta a ficar em
-// aberto, e o recebimento antigo continua no mês em que entrou.
+// em contas a pagar (conta "Gerenciamento de obra"), uma por mês. O que
+// entra e sai no banco do escritório — o recebimento e o estorno — entra
+// no MÊS em que é lançado, na parcela daquele mês: o que já foi pago num
+// mês anterior fica onde está.
 //
-// A parcela estornada e paga de novo é OUTRO pagamento: `estornos` conta as
-// voltas, e a referência da ligação ganha "#n". O recebimento que o estorno
-// anulou deixa de se ligar a ela, e o novo não se confunde com o antigo.
+// Cada mês faz o seu saldo: o que entrou menos o que foi devolvido, contra
+// o valor da parcela. A diferença, para mais ou para menos, vai para a
+// parcela do mês seguinte, com um comentário curto dizendo de onde veio.
+// O total do contrato não muda — só a distribuição entre as parcelas.
+//
+// A parcela guarda os seus `movimentos` ({ lancamentoId, em, valor }); o
+// pagamento feito na própria obra, sem movimento, conta como um só. O
+// contrato guarda o acerto de cada parcela em `ajustesSaldo` (e a frase em
+// `notasSaldo`), para a parcela em aberto não voltar ao valor da regra
+// quando as contas são regeradas.
 const EF_CONTA_GESTAO_NA_OBRA = "taxa_admin_obra";
+const EF_MESES_CURTOS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
 function ehReceitaDaGestao(l) {
   return !!l && l.unidadeId === "gestao_obras" && l.contaId === "rec_gestao";
 }
 
+function efCent(v) { return Math.round((Number(v) || 0) * 100) / 100; }
+
+function efMesCurto(iso) {
+  const m = /^(\d{4})-(\d{2})/.exec(String(iso || ""));
+  return m ? `${EF_MESES_CURTOS[Number(m[2]) - 1]}/${m[1].slice(2)}` : "";
+}
+
+function efMoedaCurta(v) {
+  return "R$ " + Math.abs(efCent(v)).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Versão antiga da ligação (o estorno reabria a parcela): a referência
+// ganhava "#n" a cada estorno. Continua valendo para o que já foi gravado.
 function refDaParcela(c) {
   const n = ((c && c.estornos) || []).length;
   return n ? `${c.id}#${n}` : ((c && c.id) || "");
 }
 
-function efCent(v) { return Math.round((Number(v) || 0) * 100) / 100; }
-
 function ehLigacaoDaGestao(origem) {
   const o = origem || {};
-  return !!o.obraId && (o.tipo === "estorno" || (o.tipo === "conta" && o.contaObra === EF_CONTA_GESTAO_NA_OBRA));
+  return !!o.obraId && (o.tipo === "gestao" || o.tipo === "estorno"
+    || (o.tipo === "conta" && o.contaObra === EF_CONTA_GESTAO_NA_OBRA));
 }
 
-// A parcela que o lançamento recebeu (receita) ou devolveu (estorno).
+// As parcelas de gestão da obra, por contrato, na ordem do vencimento.
+function contasDaGestao(obra, contratoId) {
+  return ((obra && obra.contasPagar) || [])
+    .filter((c) => c && c.contaId === EF_CONTA_GESTAO_NA_OBRA
+      && (contratoId === undefined || (c.contratoId || "") === (contratoId || "")))
+    .slice()
+    .sort((a, b) => String(a.vencimento || "").localeCompare(String(b.vencimento || ""))
+      || (Number(a.parcela) || 0) - (Number(b.parcela) || 0));
+}
+
+// A parcela do mês: a que vence nele; sem nenhuma, a próxima; depois da
+// última, a última.
+function parcelaDoMesNaGestao(obra, competencia) {
+  const comp = String(competencia || "").slice(0, 7);
+  const todas = contasDaGestao(obra);
+  if (!todas.length || !comp) return null;
+  const mes = (c) => String(c.vencimento || "").slice(0, 7);
+  return todas.find((c) => mes(c) === comp) || todas.find((c) => mes(c) > comp) || todas[todas.length - 1];
+}
+
+// Os movimentos do mês da parcela. O pagamento feito na obra, sem
+// movimento guardado, é um movimento só.
+function movimentosDaParcela(c) {
+  if (c && Array.isArray(c.movimentos)) return c.movimentos;
+  if (c && c.pago) return [{ em: c.pagoEm || "", valor: efCent(Number(c.valorPago) || Number(c.valor)), naObra: true }];
+  return [];
+}
+
+// A parcela que o lançamento movimentou.
 function parcelaDoLancamento(obra, l) {
   const o = (l && l.origem) || {};
   if (!obra || !o.obraId || o.obraId !== obra.id) return null;
   const contas = (obra.contasPagar || []).filter(Boolean);
+  if (o.tipo === "gestao") return contas.find((c) => c.id === o.refId) || null;
   if (o.tipo === "estorno") return contas.find((c) => c.id === o.parcelaId) || null;
   if (o.tipo === "conta" && o.contaObra === EF_CONTA_GESTAO_NA_OBRA) {
     return contas.find((c) => refDaParcela(c) === o.refId) || null;
@@ -11850,96 +11898,8 @@ function parcelaDoLancamento(obra, l) {
   return null;
 }
 
-// As parcelas do contrato de gestão da obra, na ordem do vencimento, e o
-// quanto do contrato já foi pago. `excetoId` é o lançamento em edição: a
-// ligação dele não conta como "de outro".
-function parcelasDaGestao(obra, lancamentos, excetoId) {
-  const ob = obra || {};
-  const lancs = (lancamentos || []).filter((l) => l && l.id && l.id !== excetoId);
-  const ligadaA = (c) => {
-    const ref = refDaParcela(c);
-    const l = lancs.find((x) => {
-      const o = x.origem || {};
-      return o.obraId === ob.id && o.tipo === "conta" && o.refId === ref;
-    });
-    return l ? l.id : "";
-  };
-  const contas = (ob.contasPagar || []).filter((c) => c && c.contaId === EF_CONTA_GESTAO_NA_OBRA)
-    .slice()
-    .sort((a, b) => String(a.vencimento || "").localeCompare(String(b.vencimento || ""))
-      || (Number(a.parcela) || 0) - (Number(b.parcela) || 0));
-  const parcelas = contas.map((c, i) => ({
-    id: c.id,
-    n: Number(c.parcela) || i + 1,
-    de: Number(c.totalParcelas) || contas.length,
-    descricao: c.descricao || "",
-    vencimento: c.vencimento || "",
-    valor: efCent(c.valor),
-    pago: !!c.pago,
-    pagoEm: c.pagoEm || "",
-    valorPago: c.pago ? efCent(Number(c.valorPago) || Number(c.valor)) : 0,
-    lancamentoId: ligadaA(c),
-    estornos: ((c.estornos || []).length),
-  }));
-  const total = efCent(parcelas.reduce((s, p) => s + p.valor, 0));
-  const pago = efCent(parcelas.reduce((s, p) => s + p.valorPago, 0));
-  return { parcelas, total, pago, pct: total > 0 ? Math.round((pago / total) * 1000) / 10 : 0 };
-}
-
-// O que cada parcela pode ser neste lançamento. Receita: a em aberto é
-// baixada; a já paga na obra e sem recebimento ligado só se liga (o
-// dinheiro é o mesmo). Estorno: só a paga pode ser devolvida.
-function parcelasParaEscolher(resumo, estorno) {
-  const ps = (resumo && resumo.parcelas) || [];
-  if (estorno) return ps.filter((p) => p.pago).map((p) => ({ ...p, acao: "estornar" }));
-  return ps.filter((p) => !p.pago || !p.lancamentoId)
-    .map((p) => ({ ...p, acao: p.pago ? "ligar" : "baixar" }));
-}
-
-// A parcela que o valor e a data apontam. Só sugere quando a resposta é
-// clara; na dúvida, a pessoa escolhe.
-function parcelaSugerida(resumo, valor, dataIso, estorno) {
-  const v = efCent(Math.abs(Number(valor) || 0));
-  if (!(v > 0)) return "";
-  const ops = parcelasParaEscolher(resumo, estorno);
-  const igual = (p) => Math.abs((p.pago ? p.valorPago : p.valor) - v) < 0.01;
-  const dias = (a, b) => {
-    const x = Date.parse(String(a || "").slice(0, 10));
-    const y = Date.parse(String(b || "").slice(0, 10));
-    return Number.isFinite(x) && Number.isFinite(y) ? Math.abs(x - y) / 864e5 : Infinity;
-  };
-  if (estorno) {
-    const c = ops.filter(igual);
-    return c.length === 1 ? c[0].id : "";
-  }
-  // já paga na obra, sem recebimento: a de data mais perto (até um mês),
-  // se não houver empate
-  const ligar = ops.filter((p) => p.acao === "ligar" && igual(p) && dias(p.pagoEm, dataIso) <= 31)
-    .sort((a, b) => dias(a.pagoEm, dataIso) - dias(b.pagoEm, dataIso));
-  if (ligar.length === 1 || (ligar.length > 1 && dias(ligar[0].pagoEm, dataIso) < dias(ligar[1].pagoEm, dataIso))) return ligar[0].id;
-  const aberta = ops.find((p) => p.acao === "baixar" && igual(p));
-  return aberta ? aberta.id : "";
-}
-
-// O contrato antes e depois deste lançamento — é o que a tela mostra.
-function impactoNaGestao(resumo, parcelaId, valor, estorno) {
-  const r = resumo || { parcelas: [], total: 0, pago: 0, pct: 0 };
-  const p = (r.parcelas || []).find((x) => x.id === parcelaId);
-  if (!p) return null;
-  const v = efCent(Math.abs(Number(valor) || 0));
-  let pago = r.pago;
-  if (estorno) pago = efCent(pago - p.valorPago);
-  else if (!p.pago) pago = efCent(pago + v);
-  return { antes: { pago: r.pago, pct: r.pct }, depois: { pago, pct: r.total > 0 ? Math.round((pago / r.total) * 1000) / 10 : 0 },
-    total: r.total, acao: estorno ? "estornar" : (p.pago ? "ligar" : "baixar"), parcela: p };
-}
-
 function efAto(conta, ato, quem, agora, detalhe) {
   return typeof registrarAto === "function" ? registrarAto(conta, ato, quem, agora, detalhe) : conta;
-}
-function efParcelaPaga(c, pagoEm, valor, quem, agora) {
-  if (typeof contaPaga === "function") return contaPaga(c, { pagoEm, valorPago: valor, comprovante: c.comprovante || null }, quem, agora);
-  return { ...c, pago: true, pagoEm, valorPago: efCent(valor), contabilizadoEm: String(agora).slice(0, 10) };
 }
 function efParcelaEmAberto(c, quem, agora) {
   if (typeof contaEmAberto === "function") return contaEmAberto(c, quem, agora);
@@ -11947,9 +11907,81 @@ function efParcelaEmAberto(c, quem, agora) {
   return { ...r, pago: false, pagoEm: "", valorPago: "", contabilizadoEm: "" };
 }
 
-// Desfaz na obra o que o lançamento tinha feito: a receita que baixou a
-// parcela a reabre (a que só se ligou a uma parcela já paga na obra a
-// deixa como está); o estorno devolve a parcela ao pagamento de antes.
+// Refaz o saldo, mês a mês, de um contrato de gestão da obra: cada parcela
+// paga fecha no que entrou no mês dela, e a diferença para o valor
+// devido vai para a seguinte. Determinístico: pode rodar quantas vezes
+// for, depois de incluir, mudar ou tirar um movimento.
+function recalibrarGestao(obra, contratoId, quem, agoraIso) {
+  const ob = obra || {};
+  const agora = agoraIso || new Date().toISOString();
+  const ct = ((ob.contratos || []).find((x) => x && x.id === contratoId)) || null;
+  const saldoAntes = (ct && ct.ajustesSaldo) || {};
+  const lista = contasDaGestao(ob, contratoId);
+  if (!lista.length) return ob;
+  const novas = {}, ajustes = {}, notas = {};
+  let leva = 0, levaDe = "";
+  lista.forEach((c, i) => {
+    const base = efCent((Number(c.valor) || 0) - (Number(saldoAntes[c.id]) || 0));
+    const devido = efCent(base + leva);
+    const movs = movimentosDaParcela(c);
+    const soma = efCent(movs.reduce((t, m) => t + (Number(m && m.valor) || 0), 0));
+    const pagou = movs.some((m) => m && Number(m.valor) > 0);
+    const prox = lista[i + 1] || null;
+    const veio = leva ? `${leva > 0 ? "+" : "−"}${efMoedaCurta(leva)} do saldo de ${levaDe}` : "";
+    let nc = { ...c };
+    let nota = "";
+    if (pagou) {
+      const sobra = efCent(devido - soma);
+      const datas = movs.map((m) => String((m && m.em) || "")).filter(Boolean).sort();
+      const pagoEm = datas.length ? datas[datas.length - 1].slice(0, 10) : (c.pagoEm || "");
+      const partes = [veio];
+      if (Math.abs(sobra) >= 0.01) {
+        partes.push(`${soma < 0 ? "devolvido " + efMoedaCurta(soma) + " no mês" : "pago " + efMoedaCurta(soma) + " de " + efMoedaCurta(devido)} · ${sobra > 0 ? "falta" : "sobra"} ${efMoedaCurta(sobra)} → `
+          + (prox ? efMesCurto(prox.vencimento) : "sem parcela seguinte"));
+      }
+      nota = partes.filter(Boolean).join(" · ");
+      nc = { ...nc, valor: soma, valorFatura: devido, pago: true, valorPago: soma, pagoEm,
+        contabilizadoEm: c.contabilizadoEm || String(agora).slice(0, 10) };
+      if (!c.pago) nc = efAto(nc, "paga", quem, agora);
+      ajustes[c.id] = efCent(soma - base);
+      leva = sobra; levaDe = efMesCurto(pagoEm || c.vencimento);
+    } else {
+      // em aberto: recebe o saldo que veio; o estorno lançado neste mês,
+      // antes de a parcela ser paga, soma no que ela deve
+      let valor = efCent(devido - soma);
+      const partes = [veio];
+      if (soma < 0) partes.push(`estorno de ${efMoedaCurta(soma)} em ${efMesCurto((movs[movs.length - 1] || {}).em)}`);
+      let resto = 0;
+      if (valor < 0) { resto = valor; valor = 0; partes.push("coberta pelo pago a mais"); }
+      nota = partes.filter(Boolean).join(" · ");
+      if (c.pago) nc = efParcelaEmAberto(nc, quem, agora);
+      nc = { ...nc, valor };
+      delete nc.valorFatura;
+      ajustes[c.id] = efCent(valor - base);
+      leva = resto; levaDe = levaDe || efMesCurto(c.vencimento);
+    }
+    if (Math.abs(leva) >= 0.01 && !prox) nota = [nota, `saldo de ${leva > 0 ? "" : "−"}${efMoedaCurta(leva)} sem parcela seguinte`].filter(Boolean).join(" · ");
+    if (nota) nc.notaSaldo = nota; else delete nc.notaSaldo;
+    if (nota) notas[c.id] = nota;
+    if (efCent(nc.valor) !== efCent(c.valor) && c.pago === nc.pago) nc = efAto(nc, "recalibrada", quem, agora, nota);
+    novas[c.id] = nc;
+  });
+  for (const k of Object.keys(ajustes)) if (Math.abs(ajustes[k]) < 0.005) delete ajustes[k];
+  const contratos = ct ? (ob.contratos || []).map((x) => {
+    if (!x || x.id !== ct.id) return x;
+    const y = { ...x };
+    if (Object.keys(ajustes).length) y.ajustesSaldo = ajustes; else delete y.ajustesSaldo;
+    if (Object.keys(notas).length) y.notasSaldo = notas; else delete y.notasSaldo;
+    if (Math.abs(leva) >= 0.01) y.saldoGestao = efCent(leva); else delete y.saldoGestao;
+    return y;
+  }) : ob.contratos;
+  return { ...ob, contratos,
+    contasPagar: (ob.contasPagar || []).map((c) => (c && novas[c.id] ? novas[c.id] : c)) };
+}
+
+// Desfaz na obra o que o lançamento tinha feito. A forma de agora tira o
+// movimento e refaz o saldo; as antigas (a receita que baixou a parcela, o
+// estorno que a reabriu) voltam como estavam.
 function desfazerGestaoNaObra(obra, l, quem, agoraIso) {
   const o = (l && l.origem) || {};
   const ob = obra || {};
@@ -11957,94 +11989,102 @@ function desfazerGestaoNaObra(obra, l, quem, agoraIso) {
   const agora = agoraIso || new Date().toISOString();
   const p = parcelaDoLancamento(ob, l);
   if (!p) return { obra: ob };
-  let nova = p;
+  const troca = (nova) => ({ ...ob, contasPagar: (ob.contasPagar || []).map((c) => (c && c.id === p.id ? nova : c)) });
+  if (o.tipo === "gestao") {
+    const movs = (p.movimentos || []).filter((m) => m && m.lancamentoId !== l.id);
+    let nova = { ...p, movimentos: movs };
+    if (!movs.length) {
+      delete nova.movimentos;
+      if (nova.pago) nova = efParcelaEmAberto(nova, quem, agora);
+    } else if (!movs.some((m) => Number(m.valor) > 0) && nova.pago) {
+      nova = efParcelaEmAberto(nova, quem, agora);
+    }
+    return { obra: recalibrarGestao(troca(nova), p.contratoId || "", quem, agora) };
+  }
   if (o.tipo === "conta") {
     if (!p.pago) return { obra: ob };
     if (o.baixou === false) {
-      // só ligada: a parcela continua paga, com a data que tinha na obra
       if (o.pagoEmAntes == null || o.pagoEmAntes === p.pagoEm) return { obra: ob };
-      nova = efAto({ ...p, pagoEm: o.pagoEmAntes }, "editada", quem, agora);
-    } else {
-      nova = efParcelaEmAberto(p, quem, agora);
+      return { obra: troca(efAto({ ...p, pagoEm: o.pagoEmAntes }, "editada", quem, agora)) };
     }
-  } else {
-    const lista = p.estornos || [];
-    const i = lista.findIndex((e) => e && e.lancamentoId === l.id);
-    if (i < 0) return { obra: ob };
-    if (i !== lista.length - 1 || p.pago) {
-      return { obra: ob, erro: `A parcela ${p.parcela || ""} foi paga de novo depois deste estorno. Desfaça esse pagamento antes.`.replace("  ", " ") };
-    }
-    const e = lista[i];
-    const a = e.antes || {};
-    nova = efAto({ ...p, pago: true, pagoEm: a.pagoEm || e.em || "", valorPago: efCent(a.valorPago || e.valor),
-      contabilizadoEm: a.contabilizadoEm || String(agora).slice(0, 10), estornos: lista.slice(0, i) }, "paga", quem, agora, "estorno desfeito");
-    if (!nova.estornos.length) delete nova.estornos;
+    return { obra: troca(efParcelaEmAberto(p, quem, agora)) };
   }
-  return { obra: { ...ob, contasPagar: (ob.contasPagar || []).map((c) => (c && c.id === p.id ? nova : c)) } };
+  // estorno antigo: a parcela volta ao pagamento de antes
+  const lista = p.estornos || [];
+  const i = lista.findIndex((e) => e && e.lancamentoId === l.id);
+  if (i < 0) return { obra: ob };
+  if (i !== lista.length - 1 || p.pago) {
+    return { obra: ob, erro: `A parcela ${p.parcela || ""} foi paga de novo depois deste estorno. Desfaça esse pagamento antes.`.replace("  ", " ") };
+  }
+  const e = lista[i];
+  const a = e.antes || {};
+  const nova = efAto({ ...p, pago: true, pagoEm: a.pagoEm || e.em || "", valorPago: efCent(a.valorPago || e.valor),
+    contabilizadoEm: a.contabilizadoEm || String(agora).slice(0, 10), estornos: lista.slice(0, i) }, "paga", quem, agora, "estorno desfeito");
+  if (!nova.estornos.length) delete nova.estornos;
+  return { obra: troca(nova) };
 }
 
-// O lançamento `l` (já com id) recebe ou devolve a parcela `l.parcelaGestaoId`
-// da obra `l.obraId`. Devolve a obra nova e a `origem` que o lançamento
-// passa a levar. `antes` é o lançamento como estava gravado (edição): o
-// que ele tinha feito é desfeito primeiro — a menos que nada tenha mudado
-// de lugar, e aí só valor e data acompanham.
+// O lançamento `l` (com id) entra no saldo do mês dele, na parcela daquele
+// mês. `antes` é o lançamento como estava gravado: o que ele tinha feito é
+// desfeito primeiro. Devolve a obra nova e a `origem` do lançamento.
 function gestaoNaObra(obra, l, antes, quem, agoraIso) {
   const ob0 = obra || {};
   const lan = l || {};
   const agora = agoraIso || new Date().toISOString();
-  const estorno = Number(lan.valor) < 0 || !!lan.estorno;
-  const valor = efCent(Math.abs(Number(lan.valor) || 0));
-  const pagoEm = String(lan.lancadoEm || "").slice(0, 10);
-  const ant = antes && ehLigacaoDaGestao(antes.origem) && antes.origem.obraId === ob0.id ? antes : null;
-  const pAntes = ant ? parcelaDoLancamento(ob0, ant) : null;
-  const tipoNovo = estorno ? "estorno" : "conta";
-  const troca = (ob, nova) => ({ ...ob, contasPagar: (ob.contasPagar || []).map((c) => (c && c.id === nova.id ? nova : c)) });
-
-  // mesma parcela, mesmo sentido: só acompanha valor e data
-  if (ant && pAntes && pAntes.id === lan.parcelaGestaoId && ant.origem.tipo === tipoNovo) {
-    if (tipoNovo === "conta") {
-      if (!pAntes.pago) return { obra: ob0, origem: ant.origem };
-      if (ant.origem.baixou === false) {
-        if (!pagoEm || pAntes.pagoEm === pagoEm) return { obra: ob0, origem: ant.origem };
-        const origem = { ...ant.origem, pagoEmAntes: ant.origem.pagoEmAntes != null ? ant.origem.pagoEmAntes : (pAntes.pagoEm || "") };
-        return { obra: troca(ob0, efAto({ ...pAntes, pagoEm }, "editada", quem, agora, "data do banco")), origem };
-      }
-      if (pAntes.pagoEm === pagoEm && efCent(pAntes.valorPago) === valor) return { obra: ob0, origem: ant.origem };
-      return { obra: troca(ob0, efAto({ ...pAntes, pagoEm, valorPago: valor }, "editada", quem, agora)), origem: ant.origem };
-    }
-    const est = (pAntes.estornos || []).map((e) => (e && e.lancamentoId === lan.id ? { ...e, em: pagoEm, valor } : e));
-    return { obra: troca(ob0, { ...pAntes, estornos: est }), origem: ant.origem };
-  }
-
   let ob = ob0;
+  const ant = antes && ehLigacaoDaGestao(antes.origem) && antes.origem.obraId === ob0.id ? antes : null;
   if (ant) {
     const d = desfazerGestaoNaObra(ob, ant, quem, agora);
     if (d.erro) return { obra: ob0, erro: d.erro };
     ob = d.obra;
   }
-  if (!lan.parcelaGestaoId) return { obra: ob, origem: null };
-  const p = (ob.contasPagar || []).find((c) => c && c.id === lan.parcelaGestaoId && c.contaId === EF_CONTA_GESTAO_NA_OBRA);
-  if (!p) return { obra: ob0, erro: "A parcela escolhida não está mais no contrato de gestão da obra." };
-  if (estorno) {
-    if (!p.pago) return { obra: ob0, erro: `A parcela ${p.parcela || ""} está em aberto — não há o que estornar.`.replace("  ", " ") };
-    const reg = { lancamentoId: lan.id || "", em: pagoEm, valor,
-      antes: { pagoEm: p.pagoEm || "", valorPago: efCent(Number(p.valorPago) || Number(p.valor)), contabilizadoEm: p.contabilizadoEm || "" } };
-    const aberta = efParcelaEmAberto({ ...p, estornos: [...(p.estornos || []), reg] }, quem, agora);
-    return { obra: troca(ob, aberta),
-      origem: { obraId: ob.id, tipo: "estorno", refId: p.id, parcelaId: p.id, contaObra: EF_CONTA_GESTAO_NA_OBRA } };
+  const estorno = Number(lan.valor) < 0 || !!lan.estorno;
+  const valor = efCent(Math.abs(Number(lan.valor) || 0));
+  if (!(valor > 0)) return { obra: ob, origem: null };
+  const em = String(lan.lancadoEm || "").slice(0, 10);
+  const comp = String(lan.competencia || em).slice(0, 7);
+  const p = parcelaDoMesNaGestao(ob, comp);
+  if (!p) return { obra: ob, origem: null };
+  const mov = { lancamentoId: lan.id || "", em: em || `${comp}-01`, valor: estorno ? -valor : valor };
+  let movs;
+  if (!estorno && p.pago && !Array.isArray(p.movimentos) && Math.abs(efCent(Number(p.valorPago) || Number(p.valor)) - valor) < 0.01) {
+    // já baixada na obra, no mesmo valor: é esse pagamento — passa a ter a
+    // data do banco
+    movs = [mov];
+  } else {
+    movs = movimentosDaParcela(p).concat([mov]);
   }
-  const ref = refDaParcela(p);
-  if (p.pago) {
-    // Já paga na obra: o recebimento só se liga a ela. Mas o dia em que o
-    // dinheiro entrou é o do banco — a parcela marcada na obra com outra
-    // data passa para a do banco, e a de antes fica guardada para voltar.
-    const origem = { obraId: ob.id, tipo: "conta", refId: ref, contaObra: EF_CONTA_GESTAO_NA_OBRA, baixou: false };
-    if (!pagoEm || p.pagoEm === pagoEm) return { obra: ob, origem };
-    return { obra: troca(ob, efAto({ ...p, pagoEm }, "editada", quem, agora, "data do banco")),
-      origem: { ...origem, pagoEmAntes: p.pagoEm || "" } };
-  }
-  return { obra: troca(ob, efParcelaPaga(p, pagoEm, valor, quem, agora)),
-    origem: { obraId: ob.id, tipo: "conta", refId: ref, contaObra: EF_CONTA_GESTAO_NA_OBRA, baixou: true } };
+  const obraMov = { ...ob, contasPagar: (ob.contasPagar || []).map((c) => (c && c.id === p.id ? { ...c, movimentos: movs } : c)) };
+  return { obra: recalibrarGestao(obraMov, p.contratoId || "", quem, agora),
+    origem: { obraId: ob.id, tipo: "gestao", refId: p.id, contratoId: p.contratoId || "", contaObra: EF_CONTA_GESTAO_NA_OBRA } };
+}
+
+// O que a tela mostra antes de gravar: a parcela do mês e o saldo dela, a
+// parcela seguinte (antes e depois) e o pago do contrato.
+function previaDaGestao(obra, l, antes) {
+  const ob = obra || {};
+  const r = gestaoNaObra(ob, l, antes, "", "2000-01-01T00:00:00Z");
+  if (r.erro) return { erro: r.erro };
+  if (!r.origem) return null;
+  const pago = (o, cid) => efCent(contasDaGestao(o, cid).reduce((t, c) => t + movimentosDaParcela(c).reduce((s, m) => s + (Number(m.valor) || 0), 0), 0));
+  const total = (o, cid) => efCent(contasDaGestao(o, cid).reduce((t, c) => t + (Number(c.valor) || 0), 0));
+  const cid = r.origem.contratoId;
+  const depois = contasDaGestao(r.obra, cid);
+  const i = depois.findIndex((c) => c.id === r.origem.refId);
+  const p = depois[i];
+  const prox = depois.slice(i + 1).find((c) => !c.pago) || null;
+  const proxAntes = prox ? (ob.contasPagar || []).find((c) => c && c.id === prox.id) : null;
+  const pctDe = (v, t) => (t > 0 ? Math.round((v / t) * 1000) / 10 : 0);
+  const tot = total(r.obra, cid);
+  return {
+    mes: efMesCurto(l && (l.competencia || l.lancadoEm)),
+    parcela: { n: Number(p.parcela) || i + 1, de: Number(p.totalParcelas) || depois.length, pago: !!p.pago,
+      valorPago: efCent(p.valorPago), fatura: efCent(p.valorFatura != null ? p.valorFatura : p.valor), nota: p.notaSaldo || "" },
+    proxima: prox ? { n: Number(prox.parcela) || 0, vencimento: prox.vencimento || "", antes: efCent(proxAntes ? proxAntes.valor : prox.valor),
+      depois: efCent(prox.valor), nota: prox.notaSaldo || "" } : null,
+    contrato: { antes: pago(ob, cid), depois: pago(r.obra, cid), total: tot,
+      pctAntes: pctDe(pago(ob, cid), tot), pctDepois: pctDe(pago(r.obra, cid), tot) },
+  };
 }
 
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
@@ -12242,7 +12282,7 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
 
 // Formulário de um lançamento. As travas são as do validarLancamento: a
 // mensagem aparece antes de gravar, não depois.
-function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, prestadores, aoCriarPrestador, insumos, cartoes, aoCadastrarInsumo, competenciaFixa, titulo, rotuloSalvar, atalhos, nomeEscritorio, lancamentos }) {
+function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, prestadores, aoCriarPrestador, insumos, cartoes, aoCadastrarInsumo, competenciaFixa, titulo, rotuloSalvar, atalhos, nomeEscritorio }) {
   const S = EF_ESTILO;
   const [f, setF] = useState(() => ({
     contaId: "", contaFonte: "", obraIdAlvo: "", fornecedorId: "", anexos: [], itens: [],
@@ -12486,29 +12526,24 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   // antigo, ao editar, fica como foi gravado.
   const obraDaGestao = f.unidadeId === "gestao_obras" && f.obraId ? (obras || []).find((o) => o && o.id === f.obraId) || null : null;
   const regraBanco = f.extratoId ? "sim" : contaBancoPelaRegra(f.unidadeId, f.contaId, obraDaGestao);
-  // ── Receita da gestão: qual parcela do contrato ela é ──
-  // O dinheiro que entra é uma parcela do contrato de gestão da obra; o
-  // estorno devolve uma delas. A escolha baixa (ou reabre) a parcela em
-  // contas a pagar da obra, e o percentual pago do contrato acompanha.
+  // ── Receita da gestão: entra no saldo do mês do contrato ──
+  // O recebimento e o estorno entram no mês em que são lançados, na parcela
+  // daquele mês do contrato de gestão da obra; a diferença para o valor
+  // dela vai para a parcela do mês seguinte.
   const estornoNoForm = !!(f.sinalDoBanco && f.contaId && ehEstornoNaConta(f.contaId, f.sinalDoBanco))
     || !!f.estorno || (!lancNovo && Number((inicial || {}).valor) < 0);
-  const resumoGestao = !naObra && ehReceitaDaGestao(f) && obraDaGestao
-    ? parcelasDaGestao(obraDaGestao, lancamentos || [], f.id || "") : null;
-  const temParcelas = !!(resumoGestao && resumoGestao.parcelas.length);
-  const opcoesParcela = temParcelas ? parcelasParaEscolher(resumoGestao, estornoNoForm) : [];
-  useEffect(() => {
-    if (!temParcelas || f.parcelaGestaoObra === obraDaGestao.id) return;
-    const gravada = inicial && inicial.origem ? parcelaDoLancamento(obraDaGestao, inicial) : null;
-    const id = gravada ? gravada.id
-      : parcelaSugerida(resumoGestao, efValorDoCampo(f.valor), f.lancadoEm, estornoNoForm);
-    setF((p) => ({ ...p, parcelaGestaoId: id, parcelaGestaoObra: obraDaGestao.id }));
-  }, [temParcelas, obraDaGestao && obraDaGestao.id, estornoNoForm]);
-  const parcelaEscolhida = temParcelas && f.parcelaGestaoId && f.parcelaGestaoId !== "nenhuma"
-    ? (resumoGestao.parcelas.find((p) => p.id === f.parcelaGestaoId) || null) : null;
-  const impactoGestao = parcelaEscolhida
-    ? impactoNaGestao(resumoGestao, parcelaEscolhida.id, efValorDoCampo(f.valor), estornoNoForm) : null;
-  const errosGestao = temParcelas && !f.parcelaGestaoId
-    ? [estornoNoForm ? "Escolha a parcela do contrato de gestão que foi devolvida." : "Escolha a parcela do contrato de gestão que foi paga."] : [];
+  const ligadoAntes = !!(inicial && ehLigacaoDaGestao(inicial.origem));
+  const temGestao = !naObra && ehReceitaDaGestao(f) && !!obraDaGestao && contasDaGestao(obraDaGestao).length > 0;
+  // O lançamento antigo, de antes da ligação, só entra se a pessoa marcar:
+  // o pagamento dele pode já estar contado na parcela, baixado na obra.
+  const foraDaGestao = f.foraDaGestao != null ? !!f.foraDaGestao : (!lancNovo && !ligadoAntes);
+  const previaGestao = temGestao && !foraDaGestao
+    ? previaDaGestao(obraDaGestao, { id: f.id || "__novo",
+        valor: (estornoNoForm ? -1 : 1) * Math.abs(efValorDoCampo(f.valor)),
+        lancadoEm: f.lancadoEm, competencia: competenciaFixa || f.competencia || String(f.lancadoEm || "").slice(0, 7) },
+      ligadoAntes ? inicial : null)
+    : null;
+  const errosGestao = previaGestao && previaGestao.erro ? [previaGestao.erro] : [];
   const cartaoEscolhido = noCartao ? cartaoPorId(cartoesAtivos, f.cartaoId) : null;
   const planoCartao = cartaoEscolhido
     ? parcelasDoCartao(cartaoEscolhido, f.lancadoEm, efValorDoCampo(f.valor), f.parcelas) : [];
@@ -12530,13 +12565,11 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     const limpos = (f.itens || []).map((x) => { const y = { ...x }; delete y.sugestao; delete y.textoLido; return y; });
     const g = { ...f, itens: limpos };
     if (naObra) { aoSalvar(comCartao({ ...g, naObra: true, valor: efValorDoCampo(g.valor) })); return; }
-    // A parcela da gestão só vai quando a tela a mostrou; o lançamento que
-    // estava ligado e deixou de ser receita da gestão vai com "" (desliga).
-    const { parcelaGestaoObra, ...semObraDaParcela } = g;
-    const parcela = temParcelas ? (f.parcelaGestaoId || "")
-      : (inicial && ehLigacaoDaGestao(inicial.origem) ? "" : undefined);
-    if (parcela === undefined) delete semObraDaParcela.parcelaGestaoId;
-    else semObraDaParcela.parcelaGestaoId = parcela;
+    // O contrato de gestão só é mexido quando a tela o mostrou; o lançamento
+    // que estava ligado e deixou de ser receita da gestão sai do saldo.
+    const { foraDaGestao: _fora, parcelaGestaoId: _p, parcelaGestaoObra: _o, ...semObraDaParcela } = g;
+    const noContrato = temGestao ? !foraDaGestao : (ligadoAntes ? false : undefined);
+    if (noContrato !== undefined) semObraDaParcela.noContratoGestao = noContrato;
     aoSalvar(comCartao({ ...semObraDaParcela, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
       ...(lancNovo && !noCartao ? { contaBanco: regraBanco } : {}),
       tipo: "escritorio", valor: efValorDoCampo(g.valor) }));
@@ -12728,21 +12761,6 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                       grupo: ((clientes || []).find((c) => c && c.id === o.clienteId) || {}).nome || "" })))} />
               ), "obra")
             : campo("Projeto", <input style={S.input} value={f.projeto} onChange={(e) => set("projeto", e.target.value)} />)}
-        {temParcelas && campo(estornoNoForm ? "Parcela devolvida" : "Parcela da gestão", (
-          <Selecao style={{ ...S.input, cursor: "pointer" }} value={f.parcelaGestaoId || ""}
-            onChange={(e) => { const v = e.target.value; setF((p) => ({ ...p, parcelaGestaoId: v })); }}>
-            <option value="">— escolha a parcela —</option>
-            {opcoesParcela.map((p) => (
-              <option key={p.id} value={p.id}>
-                {`Parcela ${p.n}/${p.de} · ${efDinheiro(p.pago ? p.valorPago : p.valor)}`
-                  + (p.acao === "baixar" ? ` · vence ${efDiaBR(p.vencimento)}`
-                    : p.acao === "ligar" ? ` · já paga na obra em ${efDiaBR(p.pagoEm)}`
-                    : ` · paga em ${efDiaBR(p.pagoEm)}`)}
-              </option>
-            ))}
-            <option value="nenhuma">Não é parcela do contrato</option>
-          </Selecao>
-        ), "parcela-gestao")}
         {campo("Fornecedor", (
           <SelectBusca style={S.input}
             /* Campo em branco já é "Outros" no fim, então ele diz isso desde
@@ -12784,29 +12802,43 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       </div>
       {/* O que este lançamento faz no contrato de gestão da obra, antes de
           gravar: a parcela que baixa (ou volta a abrir) e o percentual pago. */}
-      {temParcelas && f.parcelaGestaoId && (() => {
+      {temGestao && (() => {
         const pctTxt = (v) => String(v).replace(".", ",") + "%";
         const caixa = { fontSize: 12.5, color: "#1e3a5f", background: "#f0f7ff", border: "1px solid rgba(4,116,244,0.25)",
-          borderRadius: 10, padding: "9px 11px", lineHeight: 1.45 };
+          borderRadius: 10, padding: "9px 11px", lineHeight: 1.5, display: "grid", gap: 4 };
         const obraNome = (obraDaGestao && obraDaGestao.nome) || "da obra";
-        if (f.parcelaGestaoId === "nenhuma") {
-          return <div data-vk-gestao="fora" style={caixa}>Fica fora do contrato de gestão de <b>{obraNome}</b>: as parcelas e o percentual pago não mudam.</div>;
-        }
-        if (!impactoGestao) return null;
-        const p = impactoGestao.parcela;
-        const linhaContrato = (
-          <>Contrato de gestão: pago <b>{efDinheiro(impactoGestao.antes.pago)}</b> de {efDinheiro(impactoGestao.total)} ({pctTxt(impactoGestao.antes.pct)})
-            {impactoGestao.depois.pago !== impactoGestao.antes.pago
-              ? <> → passa a <b>{efDinheiro(impactoGestao.depois.pago)}</b> ({pctTxt(impactoGestao.depois.pct)}).</> : "."}</>
+        const marca = (
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#4b5563", cursor: "pointer" }}>
+            <input type="checkbox" checked={!foraDaGestao} onChange={(e) => set("foraDaGestao", !e.target.checked)} />
+            Entra no saldo do contrato de gestão de {obraNome}
+          </label>
         );
+        if (foraDaGestao || !previaGestao || previaGestao.erro) {
+          return <div data-vk-gestao="fora" style={caixa}>{marca}{foraDaGestao && <span>Fora do contrato: as parcelas não mudam.</span>}</div>;
+        }
+        const pv = previaGestao;
         return (
-          <div data-vk-gestao={impactoGestao.acao} style={caixa}>
-            {impactoGestao.acao === "baixar" && <>A parcela {p.n}/{p.de} fica <b>paga em {efDiaBR(f.lancadoEm) || "—"}</b> no contas a pagar de <b>{obraNome}</b>. </>}
-            {impactoGestao.acao === "ligar" && (f.lancadoEm && p.pagoEm !== String(f.lancadoEm).slice(0, 10)
-              ? <>A parcela {p.n}/{p.de} já está paga na obra, com data de {efDiaBR(p.pagoEm)}: este recebimento se liga a ela, e a data na obra passa a <b>{efDiaBR(f.lancadoEm)}</b>, a do banco. </>
-              : <>A parcela {p.n}/{p.de} já está paga na obra ({efDiaBR(p.pagoEm)}): este recebimento só se liga a ela. </>)}
-            {impactoGestao.acao === "estornar" && <>A parcela {p.n}/{p.de} <b>volta a ficar em aberto</b> no contas a pagar de <b>{obraNome}</b>; o recebimento de {efDiaBR(p.pagoEm)} continua no mês em que entrou. </>}
-            {linhaContrato}
+          <div data-vk-gestao="saldo" style={caixa}>
+            <div>
+              Entra no saldo de <b>{pv.mes}</b> · parcela {pv.parcela.n}/{pv.parcela.de}:{" "}
+              {pv.parcela.pago && pv.parcela.valorPago < 0
+                ? <>no mês, devolvido mais do que entrou: <b>{efDinheiro(Math.abs(pv.parcela.valorPago))}</b>.</>
+                : pv.parcela.pago
+                ? <>pago no mês <b>{efDinheiro(pv.parcela.valorPago)}</b> de {efDinheiro(pv.parcela.fatura)}.</>
+                : <>em aberto, deve <b>{efDinheiro(pv.parcela.fatura)}</b>.</>}
+            </div>
+            {pv.proxima && Math.abs(pv.proxima.antes - pv.proxima.depois) >= 0.01 && (
+              <div>
+                Parcela {pv.proxima.n} ({efMesCurto(pv.proxima.vencimento)}) passa de {efDinheiro(pv.proxima.antes)} a <b>{efDinheiro(pv.proxima.depois)}</b>
+                {pv.proxima.nota ? <span style={{ color: "#4b5563" }}> — {pv.proxima.nota}</span> : null}.
+              </div>
+            )}
+            <div>
+              Contrato: pago {efDinheiro(pv.contrato.antes)} ({pctTxt(pv.contrato.pctAntes)})
+              {Math.abs(pv.contrato.depois - pv.contrato.antes) >= 0.01
+                ? <> → <b>{efDinheiro(pv.contrato.depois)}</b> ({pctTxt(pv.contrato.pctDepois)})</> : null} de {efDinheiro(pv.contrato.total)}.
+            </div>
+            {marca}
           </div>
         );
       })()}
@@ -14566,10 +14598,10 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   function comGestaoNaObra(l, antes) {
     const todas = (data || {}).obras || [];
     const quem = typeof nomeDeQuem === "function" ? nomeDeQuem(perm && perm.usuario) : "";
-    const { parcelaGestaoId, parcelaGestaoObra, ...limpo } = l || {};
-    if (parcelaGestaoId === undefined) return { lancamento: limpo, obras: null };
+    const { noContratoGestao, foraDaGestao, parcelaGestaoId, parcelaGestaoObra, ...limpo } = l || {};
+    if (noContratoGestao === undefined) return { lancamento: limpo, obras: null };
     const tinha = antes && ehLigacaoDaGestao(antes.origem) ? antes : null;
-    const alvo = ehReceitaDaGestao(limpo) && limpo.obraId && parcelaGestaoId && parcelaGestaoId !== "nenhuma" ? parcelaGestaoId : "";
+    const entra = !!(noContratoGestao && ehReceitaDaGestao(limpo) && limpo.obraId);
     let obras = todas;
     const naObra = (obraId, fn) => {
       const ob = obras.find((o) => o && o.id === obraId);
@@ -14580,13 +14612,13 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     };
     let base = tinha;
     let origem = limpo.origem;
-    if (tinha && (!alvo || tinha.origem.obraId !== limpo.obraId)) {
+    if (tinha && (!entra || tinha.origem.obraId !== limpo.obraId)) {
       const r = naObra(tinha.origem.obraId, (ob) => desfazerGestaoNaObra(ob, tinha, quem));
       if (r.erro && obras.some((o) => o && o.id === tinha.origem.obraId)) return { erro: r.erro };
       base = null; origem = undefined;
     }
-    if (alvo) {
-      const r = naObra(limpo.obraId, (ob) => gestaoNaObra(ob, { ...limpo, parcelaGestaoId: alvo }, base, quem));
+    if (entra) {
+      const r = naObra(limpo.obraId, (ob) => gestaoNaObra(ob, limpo, base, quem));
       if (r.erro) return { erro: r.erro };
       origem = r.origem || undefined;
     }
@@ -14656,11 +14688,13 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       if (d.erro) { avisarGestao(d.erro); return; }
       const mudou = !!(obG && d.obra && d.obra !== obG);
       const txtParcela = pG ? `parcela ${pG.parcela || ""}${pG.totalParcelas ? "/" + pG.totalParcelas : ""}`.replace(" /", "/") : "";
+      const doSaldo = l.origem.tipo === "gestao";
       const ok = await dialogo.confirmar({
         titulo: "Excluir este lançamento?",
         mensagem: `${contaEscritorio(l.contaId)?.nome || "Lançamento"} · ${Number(l.valor) < 0 ? "estorno " + efDinheiro(Math.abs(Number(l.valor))) : efDinheiro(l.valor)} · ${mesAnoPorExtenso(l.competencia)}`
+          + (mudou && doSaldo ? `. Sai do saldo de ${efMesCurto(l.competencia || l.lancadoEm)} do contrato de gestão de ${obG.nome || "obra"} — a ${txtParcela} e as seguintes são recalculadas.` : "")
           + (mudou && l.origem.tipo === "estorno" ? `. A ${txtParcela} do contrato de gestão de ${obG.nome || "obra"} volta a ficar paga — o estorno é desfeito.` : "")
-          + (mudou && l.origem.tipo !== "estorno" ? `. A ${txtParcela} do contrato de gestão de ${obG.nome || "obra"} volta a ficar em aberto.` : ""),
+          + (mudou && l.origem.tipo === "conta" ? `. A ${txtParcela} do contrato de gestão de ${obG.nome || "obra"} volta a ficar em aberto.` : ""),
         confirmar: "Excluir", destrutivo: true,
       });
       if (!ok) return;
@@ -25097,12 +25131,15 @@ function ajustarValores(contrato, pagamentos) {
   const daRegra = {};
   for (const l of contasDoContrato({ ...c, ajustesValor: null })) daRegra[l.id] = Math.round((Number(l.valor) || 0) * 100) / 100;
   const ajustes = { ...ajustesDeValorDoContrato(c) };
+  // o valor na tela já tem o saldo de gestão somado; a exceção guarda só a
+  // parte da regra
+  const saldo = c.ajustesSaldo || {};
   for (const d of pagamentos || []) {
     if (!d || !d.id || d.valor == null || d.valor === "") continue;
     const novo = Math.round((typeof numeroDeCampo === "function" ? numeroDeCampo(d.valor) : Number(d.valor) || 0) * 100) / 100;
     if (!(novo > 0)) continue;
     if (Math.abs((daRegra[d.id] || 0) - novo) < 0.005) delete ajustes[d.id];
-    else ajustes[d.id] = novo;
+    else ajustes[d.id] = Math.round((novo - (Number(saldo[d.id]) || 0)) * 100) / 100;
   }
   if (!Object.keys(ajustes).length) {
     const limpo = { ...c }; delete limpo.ajustesValor; return limpo;
@@ -25143,6 +25180,10 @@ function contasDoContrato(contrato) {
   const servico = typeof servicoDoContrato === "function" ? servicoDoContrato(c) : "Serviços";
   const ajustes = ajustesDoContrato(c);
   const ajustesV = ajustesDeValorDoContrato(c);
+  // O saldo de gestão do mês anterior (pago a mais ou a menos) acerta a
+  // parcela seguinte; a frase curta vai junto, para quem olha saber por quê.
+  const saldo = (c && c.ajustesSaldo) || {};
+  const notasSaldo = (c && c.notasSaldo) || {};
   return parcelasAPagar(c).map((p, idx) => ({
     id: `${c.id}:${idx + 1}`,
     origem: "contrato",
@@ -25160,7 +25201,9 @@ function contasDoContrato(contrato) {
     prestadorId: c.prestadorId || "",
     favorecido: c.nomeContratado || "",
     descricao: p.descricao,
-    valor: ajustesV[`${c.id}:${idx + 1}`] != null ? ajustesV[`${c.id}:${idx + 1}`] : p.valor,
+    valor: Math.round(((ajustesV[`${c.id}:${idx + 1}`] != null ? ajustesV[`${c.id}:${idx + 1}`] : p.valor)
+      + (Number(saldo[`${c.id}:${idx + 1}`]) || 0)) * 100) / 100,
+    ...(notasSaldo[`${c.id}:${idx + 1}`] ? { notaSaldo: notasSaldo[`${c.id}:${idx + 1}`] } : {}),
     valorAjustado: ajustesV[`${c.id}:${idx + 1}`] != null,
     vencimento: ajustes[`${c.id}:${idx + 1}`] || p.vencimento || "",
     ajustada: !!ajustes[`${c.id}:${idx + 1}`],
@@ -25198,7 +25241,8 @@ function sincronizarContasDoContrato(contas, contrato) {
     // pagamento, e é a contagem das voltas que separa um do outro.
     return { ...nova, observacao: anterior.observacao || "", registros: anterior.registros || [],
       ...(anterior.numeroDoc ? { numeroDoc: anterior.numeroDoc } : {}),
-      ...(anterior.estornos ? { estornos: anterior.estornos } : {}) };
+      ...(anterior.estornos ? { estornos: anterior.estornos } : {}),
+      ...(anterior.movimentos ? { movimentos: anterior.movimentos } : {}) };
   });
   // parcela paga que não existe mais no contrato continua na lista: o
   // dinheiro saiu, e sumir com ela esconderia um pagamento real
@@ -45953,6 +45997,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                 <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2, ...umaLinha }}>
                                   {apoio || detalhe || "—"}
                                 </div>
+                                {/* Parcela da gestão acertada pelo saldo do mês: a frase
+                                    curta diz de onde veio a diferença. */}
+                                {c.notaSaldo ? (
+                                  <div data-vk-nota-saldo="1" title={c.notaSaldo}
+                                    style={{ fontSize: 11.5, color: "#0474f4", marginTop: 2, ...umaLinha }}>{c.notaSaldo}</div>
+                                ) : null}
                                 {aberta && (
                                   <div style={{ marginTop: 8, marginBottom: 2, paddingLeft: 12, borderLeft: "2px solid rgba(38,36,33,0.10)", display: "flex", flexDirection: "column", gap: 4 }}>
                                     {detalhe && <div style={{ fontSize: 12, color: "#4b5563", whiteSpace: "pre-wrap" }}>{detalhe}</div>}
@@ -45971,12 +46021,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                       ["Vencimento", c.vencimento ? `${dataBR(c.vencimento)}${c.estimada ? " (prevista)" : ""}` : "a definir"],
                                       ["Contabilizado em", c.pago ? dataBR(c.pagoEm) : ""],
                                       ["Registrado em", c.pago ? dataBR(c.contabilizadoEm) : ""],
-                                      ["Valor pago", c.pago ? fmtMoedaCtr(Number(c.valorPago) || Number(c.valor) || 0) : ""],
+                                      ["Valor pago", c.pago ? (Number(c.valorPago) < 0 ? "devolvido " + fmtMoedaCtr(Math.abs(Number(c.valorPago)))
+                                        : fmtMoedaCtr(Number(c.valorPago) || Number(c.valor) || 0)) : ""],
                                       ["Pago", c.pago ? (c.formaPagamento === "cartao"
                                         ? "no cartão" + (c.parcelasCartao && c.parcelasCartao.length > 1 ? `, em ${c.parcelasCartao.length}x` : "")
                                           + " — faturas " + [...new Set((c.parcelasCartao || []).map(p => p.competencia))].map((typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso : (x) => x)).join(", ")
                                         : (c.formaPagamento === "avista" ? "à vista / transferência" : "")) : ""],
                                       ["Baixa dada por", c.pago ? nomeGravado((ultimoAto(c, "paga") || {}).por) : ""],
+                                      ["Saldo do mês", c.notaSaldo],
                                       ["Observação", c.observacao]].filter(([, v]) => v).map(([rot, v]) => (
                                         <div key={rot} style={{ fontSize: 11.5, color: "#4b5563" }}>
                                           <span style={{ color: "#6b7280" }}>{rot}: </span><span style={{ color: "#111827" }}>{v}</span>
@@ -46016,7 +46068,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                 {c.estimada && c.vencimento ? <div style={{ fontSize: 11, color: "#6b7280", marginTop: 1 }}>prevista</div> : null}
                               </div>
                               <div style={{ fontSize: 12, color: st.forte ? "#111827" : "#4b5563", fontWeight: st.forte ? 700 : 500 }}>{st.label}</div>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", textAlign: isMobile ? "left" : "right" }}>{fmtMoedaCtr(c.pago ? (Number(c.valorPago) || c.valor) : c.valor)}</div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", textAlign: isMobile ? "left" : "right" }}>
+                                {/* mês de gestão em que o devolvido passou do recebido */}
+                                {c.pago && Number(c.valorPago) < 0
+                                  ? <>devolvido {fmtMoedaCtr(Math.abs(Number(c.valorPago)))}</>
+                                  : fmtMoedaCtr(c.pago ? (Number(c.valorPago) || c.valor) : c.valor)}
+                              </div>
                               {perm.podeEditar ? (
                                 <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
                                   <button onClick={() => alternarPagamento(c)} style={isMobile ? C.btnLinhaToque : C.btnLinha}>{c.pago ? "Desfazer" : "Pagar"}</button>

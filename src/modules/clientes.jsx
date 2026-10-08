@@ -5392,6 +5392,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                 <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2, ...umaLinha }}>
                                   {apoio || detalhe || "—"}
                                 </div>
+                                {/* Parcela da gestão acertada pelo saldo do mês: a frase
+                                    curta diz de onde veio a diferença. */}
+                                {c.notaSaldo ? (
+                                  <div data-vk-nota-saldo="1" title={c.notaSaldo}
+                                    style={{ fontSize: 11.5, color: "#0474f4", marginTop: 2, ...umaLinha }}>{c.notaSaldo}</div>
+                                ) : null}
                                 {aberta && (
                                   <div style={{ marginTop: 8, marginBottom: 2, paddingLeft: 12, borderLeft: "2px solid rgba(38,36,33,0.10)", display: "flex", flexDirection: "column", gap: 4 }}>
                                     {detalhe && <div style={{ fontSize: 12, color: "#4b5563", whiteSpace: "pre-wrap" }}>{detalhe}</div>}
@@ -5410,12 +5416,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                       ["Vencimento", c.vencimento ? `${dataBR(c.vencimento)}${c.estimada ? " (prevista)" : ""}` : "a definir"],
                                       ["Contabilizado em", c.pago ? dataBR(c.pagoEm) : ""],
                                       ["Registrado em", c.pago ? dataBR(c.contabilizadoEm) : ""],
-                                      ["Valor pago", c.pago ? fmtMoedaCtr(Number(c.valorPago) || Number(c.valor) || 0) : ""],
+                                      ["Valor pago", c.pago ? (Number(c.valorPago) < 0 ? "devolvido " + fmtMoedaCtr(Math.abs(Number(c.valorPago)))
+                                        : fmtMoedaCtr(Number(c.valorPago) || Number(c.valor) || 0)) : ""],
                                       ["Pago", c.pago ? (c.formaPagamento === "cartao"
                                         ? "no cartão" + (c.parcelasCartao && c.parcelasCartao.length > 1 ? `, em ${c.parcelasCartao.length}x` : "")
                                           + " — faturas " + [...new Set((c.parcelasCartao || []).map(p => p.competencia))].map((typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso : (x) => x)).join(", ")
                                         : (c.formaPagamento === "avista" ? "à vista / transferência" : "")) : ""],
                                       ["Baixa dada por", c.pago ? nomeGravado((ultimoAto(c, "paga") || {}).por) : ""],
+                                      ["Saldo do mês", c.notaSaldo],
                                       ["Observação", c.observacao]].filter(([, v]) => v).map(([rot, v]) => (
                                         <div key={rot} style={{ fontSize: 11.5, color: "#4b5563" }}>
                                           <span style={{ color: "#6b7280" }}>{rot}: </span><span style={{ color: "#111827" }}>{v}</span>
@@ -5455,7 +5463,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                 {c.estimada && c.vencimento ? <div style={{ fontSize: 11, color: "#6b7280", marginTop: 1 }}>prevista</div> : null}
                               </div>
                               <div style={{ fontSize: 12, color: st.forte ? "#111827" : "#4b5563", fontWeight: st.forte ? 700 : 500 }}>{st.label}</div>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", textAlign: isMobile ? "left" : "right" }}>{fmtMoedaCtr(c.pago ? (Number(c.valorPago) || c.valor) : c.valor)}</div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", textAlign: isMobile ? "left" : "right" }}>
+                                {/* mês de gestão em que o devolvido passou do recebido */}
+                                {c.pago && Number(c.valorPago) < 0
+                                  ? <>devolvido {fmtMoedaCtr(Math.abs(Number(c.valorPago)))}</>
+                                  : fmtMoedaCtr(c.pago ? (Number(c.valorPago) || c.valor) : c.valor)}
+                              </div>
                               {perm.podeEditar ? (
                                 <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
                                   <button onClick={() => alternarPagamento(c)} style={isMobile ? C.btnLinhaToque : C.btnLinha}>{c.pago ? "Desfazer" : "Pagar"}</button>

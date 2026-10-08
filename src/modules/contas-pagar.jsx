@@ -314,12 +314,15 @@ function ajustarValores(contrato, pagamentos) {
   const daRegra = {};
   for (const l of contasDoContrato({ ...c, ajustesValor: null })) daRegra[l.id] = Math.round((Number(l.valor) || 0) * 100) / 100;
   const ajustes = { ...ajustesDeValorDoContrato(c) };
+  // o valor na tela já tem o saldo de gestão somado; a exceção guarda só a
+  // parte da regra
+  const saldo = c.ajustesSaldo || {};
   for (const d of pagamentos || []) {
     if (!d || !d.id || d.valor == null || d.valor === "") continue;
     const novo = Math.round((typeof numeroDeCampo === "function" ? numeroDeCampo(d.valor) : Number(d.valor) || 0) * 100) / 100;
     if (!(novo > 0)) continue;
     if (Math.abs((daRegra[d.id] || 0) - novo) < 0.005) delete ajustes[d.id];
-    else ajustes[d.id] = novo;
+    else ajustes[d.id] = Math.round((novo - (Number(saldo[d.id]) || 0)) * 100) / 100;
   }
   if (!Object.keys(ajustes).length) {
     const limpo = { ...c }; delete limpo.ajustesValor; return limpo;
@@ -360,6 +363,10 @@ function contasDoContrato(contrato) {
   const servico = typeof servicoDoContrato === "function" ? servicoDoContrato(c) : "Serviços";
   const ajustes = ajustesDoContrato(c);
   const ajustesV = ajustesDeValorDoContrato(c);
+  // O saldo de gestão do mês anterior (pago a mais ou a menos) acerta a
+  // parcela seguinte; a frase curta vai junto, para quem olha saber por quê.
+  const saldo = (c && c.ajustesSaldo) || {};
+  const notasSaldo = (c && c.notasSaldo) || {};
   return parcelasAPagar(c).map((p, idx) => ({
     id: `${c.id}:${idx + 1}`,
     origem: "contrato",
@@ -377,7 +384,9 @@ function contasDoContrato(contrato) {
     prestadorId: c.prestadorId || "",
     favorecido: c.nomeContratado || "",
     descricao: p.descricao,
-    valor: ajustesV[`${c.id}:${idx + 1}`] != null ? ajustesV[`${c.id}:${idx + 1}`] : p.valor,
+    valor: Math.round(((ajustesV[`${c.id}:${idx + 1}`] != null ? ajustesV[`${c.id}:${idx + 1}`] : p.valor)
+      + (Number(saldo[`${c.id}:${idx + 1}`]) || 0)) * 100) / 100,
+    ...(notasSaldo[`${c.id}:${idx + 1}`] ? { notaSaldo: notasSaldo[`${c.id}:${idx + 1}`] } : {}),
     valorAjustado: ajustesV[`${c.id}:${idx + 1}`] != null,
     vencimento: ajustes[`${c.id}:${idx + 1}`] || p.vencimento || "",
     ajustada: !!ajustes[`${c.id}:${idx + 1}`],
@@ -415,7 +424,8 @@ function sincronizarContasDoContrato(contas, contrato) {
     // pagamento, e é a contagem das voltas que separa um do outro.
     return { ...nova, observacao: anterior.observacao || "", registros: anterior.registros || [],
       ...(anterior.numeroDoc ? { numeroDoc: anterior.numeroDoc } : {}),
-      ...(anterior.estornos ? { estornos: anterior.estornos } : {}) };
+      ...(anterior.estornos ? { estornos: anterior.estornos } : {}),
+      ...(anterior.movimentos ? { movimentos: anterior.movimentos } : {}) };
   });
   // parcela paga que não existe mais no contrato continua na lista: o
   // dinheiro saiu, e sumir com ela esconderia um pagamento real
