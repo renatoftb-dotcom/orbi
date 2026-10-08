@@ -3640,6 +3640,54 @@ function contaDoItem(insumo, contaDaCompra) {
   return (insumo && insumo.contaPadrao) || contaDaCompra || "";
 }
 
+// ── O papel final da loja sobre um pedido já montado ────────────
+// O pedido que sai da cotação já vem com insumo, etapa e conta de cada
+// item. Quando chega o PDF do pedido final, os itens do papel substituem os
+// da tela — preço e quantidade são os do papel —, mas o que já foi decidido
+// não pode se perder: o item do papel que é o mesmo insumo herda etapa e
+// conta; o que não tem par (o "Tijolo Meio" que a loja separou) herda do
+// parente de mesmo nome, ou da etapa única do pedido. Sem isto, anexar o
+// papel obrigava a escolher de novo todas as etapas.
+function herdarDoPedidoAnterior(novos, anteriores) {
+  const ant = (anteriores || []).filter((a) => a && (a.insumoCodigo || a.etapa || a.contaId));
+  if (!ant.length) return novos || [];
+  const norm = (t) => cotSemAcento(String(t || "")).replace(/\s+/g, " ").trim();
+  const primeira = (t) => norm(t).split(" ").find((w) => w.length >= 3) || "";
+  const etapas = Array.from(new Set(ant.map((a) => a.etapa).filter(Boolean)));
+  const usados = new Set();
+  const acha = (teste) => {
+    let i = ant.findIndex((a, k) => !usados.has(k) && teste(a));
+    if (i < 0) i = ant.findIndex(teste);
+    if (i < 0) return null;
+    usados.add(i);
+    return ant[i];
+  };
+  return (novos || []).map((n) => {
+    const par = (n.insumoCodigo && acha((a) => a.insumoCodigo === n.insumoCodigo))
+      || (n.codigoLoja && acha((a) => a.codigoLoja && a.codigoLoja === n.codigoLoja))
+      || (norm(n.descricao) && acha((a) => norm(a.descricao) === norm(n.descricao)))
+      || null;
+    if (par) {
+      const codigo = n.insumoCodigo || par.insumoCodigo || "";
+      return { ...n,
+        insumoCodigo: codigo,
+        grupoMaterial: n.grupoMaterial || par.grupoMaterial || "",
+        // orçamento de loja muitas vezes não traz a coluna de unidade
+        unidade: n.unidade || par.unidade || "",
+        // a etapa escolhida para a compra manda sobre a padrão do catálogo
+        etapa: par.etapa || n.etapa || "",
+        contaId: par.contaId || n.contaId || "",
+        sugestao: codigo ? null : n.sugestao };
+    }
+    const pw = primeira(n.descricao);
+    const parente = pw ? ant.find((a) => a.etapa && primeira(a.descricao) === pw) : null;
+    return { ...n,
+      unidade: n.unidade || (parente && parente.unidade) || "",
+      etapa: (parente && parente.etapa) || n.etapa || (etapas.length === 1 ? etapas[0] : ""),
+      contaId: n.contaId || (parente && parente.contaId) || "" };
+  });
+}
+
 function contaDeLojaAberta(cotacoes, prestadorId) {
   if (!prestadorId) return null;
   return (cotacoes || []).find((c) => c && ehContaDeLoja(c)
@@ -3673,7 +3721,7 @@ function pedidoDaCotacao(cot, proposta, insumos, prazoDias) {
       unidade: it.unidade || (ins ? ins.unidade : "") || "",
       unitario: precoUnitario(p, it.id) || "",
       bruto,
-      etapa: etapaDoItem(ins, c.etapaId),
+      etapa: it.etapa || etapaDoItem(ins, c.etapaId),
       contaId: contaDoItem(ins, contaDeCompra(c.contaId)),
     });
   }
@@ -9777,7 +9825,12 @@ function LinksDaCotacao({ obra, contas, prestadores, isMobile }) {
   // o papel é o da loja que vendeu; a concorrência é a da cotação inteira,
   // que numa compra dividida é a original
   const raiz = cotacaoRaiz((obra || {}).cotacoes, cot) || cot;
-  const papel = papelDaPropostaEscolhida(cot);
+  const papel0 = papelDaPropostaEscolhida(cot);
+  // A conta já tem o papel do pedido final (o PDF lido na tela do pedido):
+  // o da cotação é a PROPOSTA, e chamá-lo de "Pedido" daria dois pedidos.
+  const contaTemPedido = (contas || []).some((c) => (typeof anexosDaTransacao === "function" ? anexosDaTransacao(c) : [])
+    .some((a) => a && a.tipo === "pedido"));
+  const papel = papel0 && contaTemPedido ? { ...papel0, tipo: "proposta" } : papel0;
   // o mesmo papel já anexado na conta não aparece duas vezes
   const jaNaConta = papel && (contas || []).some((c) => (typeof anexosDaTransacao === "function" ? anexosDaTransacao(c) : [])
     .some((a) => a && ((a.public_id && a.public_id === papel.public_id) || a.url === papel.url)));
@@ -10028,24 +10081,38 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
     try {
       const o = interpretarOrcamento(await linhasDoPdf(arquivo));
       if (!o.itens.length) throw new Error("Não achei a tabela de itens neste PDF. Se for foto ou digitalização, digite os itens.");
+      // O papel lido fica guardado no pedido e vai junto para as contas —
+      // sem isto, era ler aqui e anexar de novo lá no contas a pagar. Falhar
+      // o envio não perde a leitura: os itens entram, e o aviso diz.
+      let anexo = p.anexo || null;
+      try {
+        const a = await enviarAnexo(arquivo, "proposta_cotacao");
+        if (a) anexo = { ...a, tipo: "pedido" };
+      } catch (e) {
+        setAviso(`Os itens foram lidos, mas o papel não foi guardado (${e.message || "falha no envio"}). Anexe depois na conta a pagar.`);
+      }
       aoMudar({
         ...p,
+        anexo,
         numeroLoja: o.numeroPedido || o.numero || p.numeroLoja,
         data: o.emitido || p.data,
         vencimento: o.vencimento || p.vencimento,
         desconto: o.desconto || p.desconto || 0,
-        itens: o.itens.map((it) => casarItem({
+        // o que já estava decidido na tela (etapa, conta, insumo) passa
+        // para os itens do papel
+        itens: herdarDoPedidoAnterior(o.itens.map((it) => casarItem({
           ...itemDoPedidoVazio(),
           codigoLoja: it.codigo || "", descricao: it.descricao || "",
           quantidade: it.quantidade || "", unidade: it.unidade || "",
           unitario: it.unitario || "", bruto: it.total || "",
-        })),
+        })), itens),
       });
     } catch (e) {
       setAviso(e.message || "Não consegui ler este arquivo.");
     }
     setLendo(false);
   }
+  const [vendoPapel, setVendoPapel] = useState(false);
 
   const cols = isMobile ? "1fr" : "minmax(0,3fr) 70px 58px 88px 92px minmax(0,1.5fr) minmax(0,1.5fr) 30px";
   const celStyle = { ...E.input, padding: "6px 8px", fontSize: 12 };
@@ -10104,6 +10171,16 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
             );
           })()}
           {aviso && <div style={{ fontSize: 12, color: "#dc2626", marginBottom: 10 }}>{aviso}</div>}
+          {p.anexo && p.anexo.url && (
+            <div data-vk-papel-do-pedido="1" style={{ fontSize: 12, color: "#15803d", marginBottom: 10, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <span>📎 Papel do pedido guardado{p.anexo.nome ? ` — ${p.anexo.nome}` : ""}. Vai junto para as contas a pagar.</span>
+              <button type="button" onClick={() => setVendoPapel(true)}
+                style={{ background: "none", border: "none", padding: 0, color: "#0474f4", cursor: "pointer", fontFamily: "inherit", fontSize: 12, textDecoration: "underline" }}>ver</button>
+              <button type="button" onClick={() => aoMudar({ ...p, anexo: null })}
+                style={{ background: "none", border: "none", padding: 0, color: "#6b7280", cursor: "pointer", fontFamily: "inherit", fontSize: 12, textDecoration: "underline" }}>tirar</button>
+              {vendoPapel && <VisorProposta anexo={p.anexo} aoFechar={() => setVendoPapel(false)} />}
+            </div>
+          )}
 
           {/* ── o cabeçalho do papel ── */}
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(5, 1fr)", gap: 10, marginBottom: 14 }}>
@@ -10149,7 +10226,9 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
           </div>
 
           {/* ── o catálogo de uma vez só ── */}
-          {(paraCasar > 0 || sobrasDaLeitura.length > 0 || conferindo || avisoIA) && itens.length > 0 && (
+          {/* só aparece com algo dentro: sem IA, a sobra útil não tem botão
+              e a faixa ficava vazia */}
+          {(paraCasar > 0 || (sobrasUteis.length > 0 && iaDisponivel) || sobrasTortas.length > 0 || conferindo || avisoIA) && itens.length > 0 && (
             <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 10,
               border: "1px solid rgba(4,116,244,0.30)", background: "#eef5ff" }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -10376,6 +10455,22 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
                 <span style={{ fontSize: 12, color: "#4b5563" }}>Desconto <strong style={{ color: "#111827" }}>{dinheiro(bruto - total)}</strong></span>
               )}
               <span style={{ fontSize: 13, color: "#111827", fontWeight: 700 }}>A pagar {dinheiro(total)}</span>
+              {/* o papel final contra o que se fechou na cotação: bateu, não
+                  há o que conferir; não bateu, a diferença está à vista */}
+              {(() => {
+                const escO = origem ? propostaEscolhida(origem) : null;
+                const cotado = escO ? valorDaProposta(origem, escO) : 0;
+                if (!(cotado > 0)) return null;
+                const dif = Math.round((total - cotado) * 100) / 100;
+                return (
+                  <span data-vk-confere-cotacao="1" style={{ fontSize: 12, fontWeight: 600,
+                    color: Math.abs(dif) < 0.005 ? "#15803d" : "#b45309" }}>
+                    {Math.abs(dif) < 0.005
+                      ? `✓ bate com a cotação (${dinheiro(cotado)})`
+                      : `${dinheiro(Math.abs(dif))} a ${dif > 0 ? "mais" : "menos"} que o fechado na cotação (${dinheiro(cotado)})`}
+                  </span>
+                );
+              })()}
               {Math.abs(bruto - total) >= 0.005 && (
                 <span style={{ fontSize: 11, color: "#6b7280" }}>
                   o desconto é repartido pelos itens — a soma deles fecha no centavo com o que você paga

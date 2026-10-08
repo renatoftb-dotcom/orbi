@@ -3144,5 +3144,15 @@ teste("planilha da obra: sem o valor igual não liga; “Outros” vai à parte;
   assert.strictEqual(s.total, 0);
 });
 
+
+teste("o papel do pedido final vai junto para cada conta do pedido", () => {
+  let n = 0;
+  const ped = { ...pedidoOurifer(), anexo: { url: "https://x/p.pdf", public_id: "papelPed", nome: "cobop.pdf" } };
+  const contas = modulo.contasDoPedidoDaLoja({ obraId: "ob1", cotacaoId: "cot1", contaId: "material" }, ped, () => "c" + (++n));
+  assert.ok(contas.every((c) => c.anexos && c.anexos.length === 1 && c.anexos[0].public_id === "papelPed" && c.anexos[0].tipo === "pedido"));
+  const sem = modulo.contasDoPedidoDaLoja({ obraId: "ob1" }, pedidoOurifer(), () => "d" + (++n));
+  assert.ok(sem.every((c) => !c.anexos), "pedido sem papel não inventa anexo");
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

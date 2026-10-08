@@ -67,7 +67,7 @@ const modulo = new Function(`
            FORA_DA_COMPRA, escolhaPorItemDaCotacao, lojaEscolhidaDoItem, temDivisao, escolherLojaDoItem,
            escolherMaisBaratoEmCada, limparDivisao, divisaoDaCotacao,
            cotacoesDaDivisao, foiDividida, cotacaoRaiz, filhasDaDivisao, podeDesfazerDivisao, desfazerDivisao,
-           cotacaoDosNaoComprados, economiaDaDivisao, anexosSemUso, totaisDaDivisao, combinarTotalDaLoja, propostaComparavel, resumoDaCotacao, cotacaoDeOrigemDasContas,
+           cotacaoDosNaoComprados, economiaDaDivisao, anexosSemUso, totaisDaDivisao, combinarTotalDaLoja, propostaComparavel, herdarDoPedidoAnterior, resumoDaCotacao, cotacaoDeOrigemDasContas,
            unitarioDoTotal, totalBrutoItem, valoresComDesconto, totalEfetivoItem,
            precoEfetivo, totalNegociado, descontoDaProposta,
            linkWhatsApp, enviosDaLista, envioParaLoja, registrarEnvioDaLista, lojasParaPedir,
@@ -4114,6 +4114,47 @@ teste("Loja que cotou só parte da lista não é a mais barata nem a base da eco
   const e = M.economiaDaCotacao(c);
   assert.strictEqual(e.menor, 4315);
   assert.strictEqual(e.economia, 4500 - 4315);
+});
+
+
+teste("PDF do pedido final: os itens do papel herdam etapa e conta do que já estava decidido", () => {
+  const antes = [
+    { descricao: "Cimento 50kg - Supremo", insumoCodigo: "CIM-001", etapa: "fundacao", contaId: "material" },
+    { descricao: "Compound Adesivo - Vedacit", insumoCodigo: "IMP-007", etapa: "impermeabilizacao", contaId: "material" },
+    { descricao: "Tijolo 6 Furos 14x24", insumoCodigo: "TIJ-001", etapa: "alvenaria", contaId: "material" },
+  ];
+  const papel = [
+    { descricao: "CIMENTO SUPREMO CP-II 50KG", insumoCodigo: "CIM-001", etapa: "", contaId: "" },
+    { descricao: "Compound Adesivo - Vedacit", insumoCodigo: "", etapa: "", sugestao: { codigo: "IMP-007" } },
+    { descricao: "Tijolo 6 Furos 14x24", insumoCodigo: "TIJ-001", etapa: "supra" },   // catálogo dá supra
+    { descricao: "Tijolo 6 Furos Meio", insumoCodigo: "", etapa: "" },
+  ];
+  const r = M.herdarDoPedidoAnterior(papel, antes);
+  assert.deepStrictEqual(r.map((x) => x.etapa), ["fundacao", "impermeabilizacao", "alvenaria", "alvenaria"]);
+  assert.strictEqual(r[1].insumoCodigo, "IMP-007", "mesmo nome: herda o insumo");
+  assert.strictEqual(r[1].sugestao, null);
+  assert.strictEqual(r[3].insumoCodigo, "", "o tijolo meio é outro insumo — fica para casar");
+  assert.strictEqual(r[0].contaId, "material");
+  const comUn = M.herdarDoPedidoAnterior([{ descricao: "Tijolo 6 Furos 14x24", insumoCodigo: "TIJ-001", unidade: "" }, { descricao: "Tijolo Meio", unidade: "" }],
+    [{ descricao: "Tijolo 6 Furos 14x24", insumoCodigo: "TIJ-001", unidade: "Unidades", etapa: "alvenaria" }]);
+  assert.deepStrictEqual(comUn.map((x) => x.unidade), ["Unidades", "Unidades"], "papel sem coluna de unidade herda a da tela");
+});
+
+teste("PDF do pedido final: item sem parente fica com a etapa única do pedido; sem pedido anterior nada muda", () => {
+  const antes = [{ descricao: "Areia", insumoCodigo: "AGR-001", etapa: "alvenaria" }, { descricao: "Cal", insumoCodigo: "CAL-001", etapa: "alvenaria" }];
+  const r = M.herdarDoPedidoAnterior([{ descricao: "Frete", etapa: "" }], antes);
+  assert.strictEqual(r[0].etapa, "alvenaria");
+  const duas = M.herdarDoPedidoAnterior([{ descricao: "Frete", etapa: "" }], [...antes, { descricao: "Prego", etapa: "cobertura" }]);
+  assert.strictEqual(duas[0].etapa, "", "etapas diferentes: não adivinha");
+  const novos = [{ descricao: "X", etapa: "" }];
+  assert.deepStrictEqual(M.herdarDoPedidoAnterior(novos, []), novos);
+});
+
+teste("Pedido da cotação: a etapa gravada no item da cotação vai para o pedido", () => {
+  const c = { ...listaDividir(), etapaId: "geral" };
+  c.itens[0].etapa = "fundacao";
+  const ped = M.pedidoDaCotacao(c, c.propostas[0], [], 0);
+  assert.deepStrictEqual(ped.itens.map((i) => i.etapa), ["fundacao", "geral", "geral"]);
 });
 
 for (const [nome, fn] of testes) {

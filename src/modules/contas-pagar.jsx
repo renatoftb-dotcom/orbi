@@ -837,6 +837,9 @@ function contasDoPedidoDaLoja(dados, pedido, novoId) {
     ...(Math.abs(brutoDoItem(i) - i.valor) >= 0.005 ? { valorTabela: brutoDoItem(i) } : {}),
     vencimento: venc,
     pago: false, pagoEm: "", valorPago: "", observacao: d.observacao || "",
+    // o papel do pedido final da loja vai com cada conta do pedido — anexado
+    // uma vez, na tela do pedido, e não de novo no contas a pagar
+    ...(p.anexo && p.anexo.url ? { anexos: [{ ...p.anexo, tipo: p.anexo.tipo || "pedido" }] } : {}),
   }));
 }
 
