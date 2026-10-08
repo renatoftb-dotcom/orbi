@@ -29786,7 +29786,16 @@ function propostaDaEntrada(d) {
     usados.add(alvo.id);
     const qAlvo = quantidadeDoItem(alvo);
     const u = numeroDoCampo(it.unitario);
-    const unit = q > 0 ? (u > 0 ? u : unitarioDoTotal(bruto, q)) : (qAlvo > 0 ? unitarioDoTotal(bruto, qAlvo) : bruto);
+    let unit = q > 0 ? (u > 0 ? u : unitarioDoTotal(bruto, q)) : (qAlvo > 0 ? unitarioDoTotal(bruto, qAlvo) : bruto);
+    // O papel vende por milheiro ou por viagem de 5 m³, a cotação conta
+    // tijolo e m3: o preço vai para a unidade da cotação.
+    const fator = typeof fatorDeUnidade === "function"
+      ? fatorDeUnidade(alvo, { unidade: it.unidade, descricao: it.textoLido || it.descricao }) : 1;
+    if (fator > 1 && unit > 0) {
+      unit = (bruto > 0 && q > 0 && qAlvo > 0 && Math.abs(q * fator - qAlvo) <= 0.005 * qAlvo)
+        ? Math.round((bruto / qAlvo) * 1e6) / 1e6
+        : Math.round((unit / fator) * 1e6) / 1e6;
+    }
     if (unit > 0) precos[alvo.id] = unit;
   }
   // A cotação nova herda etapa e conta da lista quando a lista é de uma só.
@@ -31355,10 +31364,40 @@ function interpretarOrcamento(linhas) {
 // A loja pode ter mandado só o total da linha, sem o unitário. Com a
 // quantidade do pedido em mãos, o unitário sai da divisão — que é o que
 // interessa, porque é por unitário que o VICKE compara e lança.
-function precoDaLinha(linha, quantidade) {
+// A loja vende numa unidade e o pedido conta noutra: o tijolo sai por
+// MILHEIRO e o pedido pede 3.500 unidades; a areia sai por VIAGEM de 5 m³ e
+// o pedido pede 5 m3. Quantas unidades do pedido cabem numa unidade da loja
+// (1 quando não há o que converter).
+function fatorDeUnidade(item, linha) {
+  const ui = cotSemAcento((item || {}).unidade || "");
+  const ul = cotSemAcento((linha || {}).unidade || "");
+  const ehMil = (u) => /^(mil|milheiro|milheiros|mlh|milh)$/.test(u);
+  if (ehMil(ul) && !ehMil(ui)) return 1000;
+  const ehM3 = (u) => /^(m3|m 3|m³|metro cubico|metros cubicos|mt3)$/.test(u);
+  if (ehM3(ui) && !ehM3(ul)) {
+    const d = String((linha || {}).descricao || "").toLowerCase().replace(/(\d),(\d)/g, "$1.$2");
+    const m = /(\d+(?:\.\d+)?)\s*m\s*[3³]/.exec(d);
+    if (m && Number(m[1]) > 0) return Number(m[1]);
+  }
+  return 1;
+}
+
+function precoDaLinha(linha, quantidade, item) {
   const l = linha || {};
-  if (l.unitario > 0) return l.unitario;
+  const fator = item ? fatorDeUnidade(item, l) : 1;
   const q = Number(quantidade || l.quantidade || 0);
+  if (fator > 1) {
+    // A linha cobre exatamente o pedido (1 viagem de 5 m³ para 5 m3): vale
+    // o total da linha — sem arredondamento de unitário no meio.
+    if (l.total > 0 && l.quantidade > 0 && q > 0 && Math.abs(l.quantidade * fator - q) <= 0.005 * q) {
+      // seis casas: 3.657,56 por 3.500 tijolos é 1,045017 — com quatro, o
+      // total do item voltaria 3.657,50
+      return Math.round((l.total / q) * 1e6) / 1e6;
+    }
+    const daLoja = l.unitario > 0 ? l.unitario : (l.total > 0 && l.quantidade > 0 ? l.total / l.quantidade : 0);
+    return daLoja > 0 ? Math.round((daLoja / fator) * 1e6) / 1e6 : 0;
+  }
+  if (l.unitario > 0) return l.unitario;
   if (l.total > 0 && q > 0) return Math.round((l.total / q) * 10000) / 10000;
   return 0;
 }
@@ -31431,7 +31470,9 @@ function divergenciaDeEmbalagem(doPedido, daLoja) {
 //  - embalagem diferente não entra sozinha: fica sem preço, com o aviso e
 //    a linha sugerida, para você decidir (e, se quiser, converter);
 //  - item repetido no pedido (o mesmo material em duas linhas) leva o
-//    preço da mesma linha da loja — ela cotou uma vez, vale para as duas.
+//    preço da mesma linha da loja só quando a quantidade dela cobre os
+//    dois; senão a linha já foi para o primeiro e o segundo fica sem preço,
+//    com a sugestão — uma viagem de 5 m³ não paga também os outros 6 m³.
 function escolhasDoCasamento(casamento, orcamento) {
   const linhas = ((orcamento || {}).itens) || [];
   const escolhas = {};
@@ -31445,14 +31486,23 @@ function escolhasDoCasamento(casamento, orcamento) {
       escolhas[item.id] = { i: -1, preco: 0, sugerida: i, divergencia: dif };
       continue;
     }
-    escolhas[item.id] = { i, preco: linha ? precoDaLinha(linha, qtd) : 0 };
-    if (i >= 0 && !porChave[chave(item)]) porChave[chave(item)] = { i, linha };
+    escolhas[item.id] = { i, preco: linha ? precoDaLinha(linha, qtd, item) : 0 };
+    if (i >= 0 && !porChave[chave(item)]) porChave[chave(item)] = { i, linha, usado: qtd };
   }
   for (const { item } of (casamento || {}).casados || []) {
     const e = escolhas[item.id];
     if (e.i >= 0 || e.divergencia) continue;
     const irmao = porChave[chave(item)];
-    if (irmao) escolhas[item.id] = { i: irmao.i, preco: precoDaLinha(irmao.linha, quantidadeDoItem(item)), repetido: true };
+    if (!irmao) continue;
+    const qtd = quantidadeDoItem(item);
+    const cobre = irmao.linha.quantidade > 0 ? irmao.linha.quantidade * fatorDeUnidade(item, irmao.linha) : Infinity;
+    if (irmao.usado + qtd <= cobre + 0.005 * cobre) {
+      irmao.usado += qtd;
+      escolhas[item.id] = { i: irmao.i, preco: precoDaLinha(irmao.linha, qtd, item), repetido: true };
+    } else {
+      escolhas[item.id] = { i: -1, preco: 0, sugerida: irmao.i, repetidoFora: true,
+        precoSugerido: precoDaLinha(irmao.linha, 0, item) };
+    }
   }
   return escolhas;
 }
@@ -33510,9 +33560,15 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           const somaAtual = totalDosItens(cotDaProposta, p);
           const preenchidos = itens.length - itensSemPreco(cotDaProposta, p).length;
           const desc = descontoDaProposta(cotDaProposta, p);
+          // a última coluna é o "×" que tira o preço do item (fica não cotado)
           const cols = isMobile
-            ? "1fr 120px"
-            : (desc ? "1fr 72px 68px 118px 118px 108px" : "1fr 84px 76px 130px 130px");
+            ? "1fr 1fr 30px"
+            : (desc ? "1fr 72px 68px 118px 118px 108px 30px" : "1fr 84px 76px 130px 130px 30px");
+          const tirarPreco = (itemId) => {
+            const novo = { ...(p.precos || {}) };
+            delete novo[itemId];
+            set("precos", novo);
+          };
           return (
             <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, marginBottom: 14 }}>
               <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", marginBottom: 2 }}>Preço item a item</div>
@@ -33524,6 +33580,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   <span style={E.label}>Material</span><span style={E.label}>Qtd.</span><span style={E.label}>Un.</span>
                   <span style={E.label}>Unitário (R$)</span><span style={E.label}>Total do item (R$)</span>
                   {desc ? <span style={{ ...E.label, textAlign: "right" }}>Com desconto</span> : null}
+                  <span />
                 </div>
               )}
               {itens.map(it => {
@@ -33531,7 +33588,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                 const u = precoUnitario(p, it.id);
                 return (
                   <div key={it.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 8, marginBottom: 8, alignItems: "center" }}>
-                    <span style={{ fontSize: 12.5, color: "#111827" }}>{it.descricao || "Item"}</span>
+                    <span style={{ fontSize: 12.5, color: "#111827", ...(isMobile ? { gridColumn: "1 / -1" } : {}) }}>
+                      {it.descricao || "Item"}{isMobile && q > 0 ? <span style={{ color: "#6b7280" }}> · {qtdBR(q)} {it.unidade || ""}</span> : null}
+                    </span>
                     {!isMobile && <span style={{ fontSize: 12, color: "#4b5563" }}>{q > 0 ? qtdBR(q) : "—"}</span>}
                     {!isMobile && <span style={{ fontSize: 12, color: "#4b5563" }}>{it.unidade || "—"}</span>}
                     {/* Os dois campos são o MESMO dado por dois caminhos: o que
@@ -33548,6 +33607,12 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                         {u > 0 ? dinheiro(totalEfetivoItem(cotDaProposta, p, it)) : "—"}
                       </span>
                     )}
+                    {u > 0 ? (
+                      <button type="button" title="Tirar o preço deste item — fica como não cotado por esta loja"
+                        onClick={() => tirarPreco(it.id)}
+                        style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(38,36,33,0.16)", background: "#fff",
+                          color: "#dc2626", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0, fontFamily: "inherit" }}>×</button>
+                    ) : <span title="não cotado" style={{ fontSize: 10.5, color: "#9ca3af", textAlign: "center" }}>—</span>}
                   </div>
                 );
               })}
@@ -33699,7 +33764,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                           onChange={(e) => {
                             const i = Number(e.target.value);
                             const linha = i >= 0 ? o.itens[i] : null;
-                            trocarEscolha(item.id, { i, preco: linha ? precoDaLinha(linha, qtd) : 0 });
+                            trocarEscolha(item.id, { i, preco: linha ? precoDaLinha(linha, qtd, item) : 0, repetidoFora: false });
                           }}>
                           <option value="-1">— não veio neste orçamento —</option>
                           {o.itens.map((l, i) => (
@@ -33726,7 +33791,20 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                         )}
                         {!dif && esc.repetido && esc.i >= 0 && (
                           <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "#6b7280" }}>
-                            Este material aparece duas vezes no pedido; a loja cotou uma vez — usei o mesmo preço.
+                            Este material aparece duas vezes no pedido; a loja cotou uma vez, numa quantidade que cobre os dois — usei o mesmo preço.
+                          </div>
+                        )}
+                        {!dif && esc.repetidoFora && esc.i < 0 && esc.sugerida >= 0 && o.itens[esc.sugerida] && (
+                          <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#b45309", lineHeight: 1.45 }}>
+                            A loja cotou “{o.itens[esc.sugerida].descricao}” uma vez só, e essa linha já foi para o outro item igual
+                            do pedido — este fica como não cotado.{" "}
+                            {esc.precoSugerido > 0 && (
+                              <button type="button" onClick={() => trocarEscolha(item.id, { i: esc.sugerida, preco: esc.precoSugerido, repetidoFora: false })}
+                                style={{ color: "#0474f4", background: "none", border: "none", padding: 0, cursor: "pointer",
+                                  fontFamily: "inherit", fontSize: 11.5, fontWeight: 600 }}>
+                                É o mesmo: usar {dinheiro(esc.precoSugerido)} por {item.unidade ? item.unidade.toLowerCase().replace(/s$/, "") : "unidade"}
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>

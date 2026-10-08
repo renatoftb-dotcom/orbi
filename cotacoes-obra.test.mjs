@@ -72,7 +72,7 @@ const modulo = new Function(`
            unidadesDoCatalogo, opcoesDeUnidade, unidadeNoPadrao, itensDaEntrada,
            ehNumeroDeOrcamento, numeroDeOrcamento, itemDeOrcamento, dataIsoDoOrcamento,
            interpretarOrcamento, casarOrcamentoComItens, lojaCadastrada,
-           papelDaCelula, papeisDaTabela, precoDaLinha,
+           papelDaCelula, papeisDaTabela, precoDaLinha, fatorDeUnidade,
            orcamentoDaIA, casamentoDaIA, itensParaIA, avisoDaIA, pedidoDaIA, promoverCandidatos,
            andamentoDaLeitura, semMarca, buscarNoCatalogo, novoInsumoDoPedido, medirAssociacao,
            medidaDoTexto, palavraChave, familiasDoCatalogo, nomeNoPadrao, gruposDoCatalogo, codigoDoGrupo,
@@ -2199,8 +2199,36 @@ teste("na conferência: embalagem diferente fica sem preço, e o repetido do ped
   assert.strictEqual(e.ci.i, -1); assert.strictEqual(e.ci.preco, 0);
   assert.strictEqual(e.ci.sugerida, 0); assert.strictEqual(e.ci.divergencia.fator, 2);
   assert.strictEqual(e.a1.i, 1); assert.strictEqual(e.a1.preco, 9.4);
-  assert.strictEqual(e.a2.i, 1); assert.strictEqual(e.a2.preco, 9.4); assert.strictEqual(e.a2.repetido, true);
+  // a linha da loja é de 6 un; o pedido tem 6 + 3: a segunda não entra sozinha, fica sugerida
+  assert.strictEqual(e.a2.i, -1); assert.strictEqual(e.a2.sugerida, 1); assert.strictEqual(e.a2.repetidoFora, true);
+  assert.strictEqual(e.a2.precoSugerido, 9.4);
   assert.strictEqual(e.ar.preco, 230);
+  // linha sem quantidade (ou que cobre os dois): vale para os dois
+  const l2 = [{ descricao: "Adaptador Soldavel Bol Rosca 40mm", quantidade: 9, unitario: 9.4, total: 84.6 }];
+  const e2 = M.escolhasDoCasamento({ casados: [{ item: ad1, linha: l2[0] }, { item: ad2, linha: null }] }, { itens: l2 });
+  assert.strictEqual(e2.a2.i, 0); assert.strictEqual(e2.a2.repetido, true); assert.strictEqual(e2.a2.preco, 9.4);
+});
+
+teste("orçamento da Tocaburati: viagem de 5 m³ e milheiro viram o preço da unidade do pedido; a areia repetida não leva a mesma viagem", () => {
+  const f5 = { id: "f5", descricao: "Areia fina", quantidade: 5, unidade: "m3", codigo: "AGR-001" };
+  const f6 = { id: "f6", descricao: "Areia fina", quantidade: 6, unidade: "m3", codigo: "AGR-001" };
+  const gr = { id: "gr", descricao: "Areia grossa", quantidade: 3, unidade: "m3", codigo: "AGR-002" };
+  const tj = { id: "tj", descricao: "Tijolo 6 Furos 14x24", quantidade: 3500, unidade: "Unidades", codigo: "TIJ-001" };
+  const linhas = [
+    { descricao: "AREIA GROSSA M3", unidade: "M³", quantidade: 3, unitario: 228.01, total: 684.02 },
+    { descricao: "AREIA SALTO GDE/JACAR FINA 5M3 - VIAGEM", unidade: "UN", quantidade: 1, unitario: 684.02, total: 684.02 },
+    { descricao: "TIJOLO 6 FUROS 24CM - MILHEIRO", unidade: "MIL", quantidade: 3.5, unitario: 1045.02, total: 3657.56 },
+  ];
+  assert.strictEqual(M.fatorDeUnidade(f5, linhas[1]), 5);
+  assert.strictEqual(M.fatorDeUnidade(tj, linhas[2]), 1000);
+  assert.strictEqual(M.fatorDeUnidade(gr, linhas[0]), 1);
+  const casamento = { casados: [{ item: f5, linha: linhas[1] }, { item: f6, linha: null }, { item: gr, linha: linhas[0] }, { item: tj, linha: linhas[2] }] };
+  const e = M.escolhasDoCasamento(casamento, { itens: linhas });
+  assert.ok(Math.abs(e.f5.preco * 5 - 684.02) < 0.01, "5 m3 = a viagem inteira");
+  assert.strictEqual(e.f6.i, -1, "os outros 6 m3 não estão nesta viagem");
+  assert.ok(e.f6.repetidoFora);
+  assert.strictEqual(e.gr.preco, 228.01);
+  assert.ok(Math.abs(e.tj.preco * 3500 - 3657.56) < 0.01, "3,5 milheiros = 3.500 tijolos pelo total da linha");
 });
 
 // ── Versões da proposta de projeto ──────────────────────────────
@@ -3753,6 +3781,21 @@ teste("DANFE com coluna LOTE: o nome vem da linha de cima, não o 'FAB 24/07/26'
   assert.ok(/^OURIMADEIRAS/.test(o.fornecedor), o.fornecedor);
   assert.strictEqual(o.cnpj, "05.206.161/0001-50");
   assert.strictEqual(o.emitido, "2026-09-01");
+});
+
+teste("Entrada guardando a proposta: milheiro e viagem de 5 m³ viram o preço da unidade da cotação", () => {
+  const cot = { ...M.cotacaoVazia("o"), id: "c", itens: [
+    { id: "f5", descricao: "Areia fina", quantidade: 5, unidade: "m3", codigo: "AGR-001" },
+    { id: "f6", descricao: "Areia fina", quantidade: 6, unidade: "m3", codigo: "AGR-001" },
+    { id: "tj", descricao: "Tijolo 6 Furos 14x24", quantidade: 3500, unidade: "Unidades", codigo: "TIJ-001" }] };
+  const r = M.propostaDaEntrada({ cotacao: cot, obraId: "o", loja: { id: "toca", nome: "Tocaburati" }, itens: [
+    { descricao: "Areia Salto Gde/jacar Fina 5m3 - Viagem", insumoCodigo: "AGR-001", quantidade: 1, unidade: "Unidades", unitario: 684.02, bruto: 684.02 },
+    { descricao: "Tijolo 6 Furos 24cm - Milheiro", insumoCodigo: "TIJ-001", quantidade: 3.5, unidade: "MIL", unitario: 1045.02, bruto: 3657.56 }] });
+  const prop = (r.cotacao || r).propostas ? (r.cotacao || r).propostas.find((p) => p.fornecedorId === "toca") : r.proposta;
+  const pr = prop.precos;
+  assert.ok(Math.abs(pr.f5 * 5 - 684.02) < 0.01, "5 m3 pelo preço da viagem");
+  assert.ok(!pr.f6, "os outros 6 m3 ficam sem preço");
+  assert.ok(Math.abs(pr.tj * 3500 - 3657.56) < 0.01);
 });
 
 for (const [nome, fn] of testes) {
