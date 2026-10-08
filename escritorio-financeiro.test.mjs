@@ -2046,6 +2046,24 @@ teste("Gestão: o impacto no contrato antes de gravar", () => {
   assert.strictEqual(e.depois.pct, 21.5);
 });
 
+
+teste("Gestão: ligar a parcela já paga com outra data leva a data do banco, e desfazer devolve a antiga", () => {
+  const ob = obraGestaoT();
+  ob.contasPagar = ob.contasPagar.map((c) => (c.id === "g:3" ? { ...c, pago: true, pagoEm: "2026-10-10", valorPago: 18000 } : c));
+  const r0 = M.parcelasDaGestao(ob, [], "");
+  assert.strictEqual(M.parcelaSugerida(r0, 18000, "2026-09-28", false), "g:3");
+  const l = { id: "R18", valor: 18000, lancadoEm: "2026-09-28", parcelaGestaoId: "g:3" };
+  const r = M.gestaoNaObra(ob, l, null, "Leo");
+  const p = r.obra.contasPagar.find((c) => c.id === "g:3");
+  assert.strictEqual(p.pagoEm, "2026-09-28");
+  assert.strictEqual(r.origem.baixou, false);
+  assert.strictEqual(r.origem.pagoEmAntes, "2026-10-10");
+  const d = M.desfazerGestaoNaObra(r.obra, { ...l, origem: r.origem }, "Leo");
+  const v = d.obra.contasPagar.find((c) => c.id === "g:3");
+  assert.strictEqual(v.pago, true);
+  assert.strictEqual(v.pagoEm, "2026-10-10");
+});
+
 for (const [nome, fn] of testes) {
   try { await fn(); console.log("  ok   " + nome); }
   catch (e) { falhas++; console.log("  FALHOU " + nome + "\n         " + e.message); }

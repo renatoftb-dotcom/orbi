@@ -11912,8 +11912,11 @@ function parcelaSugerida(resumo, valor, dataIso, estorno) {
     const c = ops.filter(igual);
     return c.length === 1 ? c[0].id : "";
   }
-  const ligar = ops.filter((p) => p.acao === "ligar" && igual(p) && dias(p.pagoEm, dataIso) <= 10);
-  if (ligar.length === 1) return ligar[0].id;
+  // já paga na obra, sem recebimento: a de data mais perto (até um mês),
+  // se não houver empate
+  const ligar = ops.filter((p) => p.acao === "ligar" && igual(p) && dias(p.pagoEm, dataIso) <= 31)
+    .sort((a, b) => dias(a.pagoEm, dataIso) - dias(b.pagoEm, dataIso));
+  if (ligar.length === 1 || (ligar.length > 1 && dias(ligar[0].pagoEm, dataIso) < dias(ligar[1].pagoEm, dataIso))) return ligar[0].id;
   const aberta = ops.find((p) => p.acao === "baixar" && igual(p));
   return aberta ? aberta.id : "";
 }
@@ -11956,8 +11959,14 @@ function desfazerGestaoNaObra(obra, l, quem, agoraIso) {
   if (!p) return { obra: ob };
   let nova = p;
   if (o.tipo === "conta") {
-    if (o.baixou === false || !p.pago) return { obra: ob };
-    nova = efParcelaEmAberto(p, quem, agora);
+    if (!p.pago) return { obra: ob };
+    if (o.baixou === false) {
+      // só ligada: a parcela continua paga, com a data que tinha na obra
+      if (o.pagoEmAntes == null || o.pagoEmAntes === p.pagoEm) return { obra: ob };
+      nova = efAto({ ...p, pagoEm: o.pagoEmAntes }, "editada", quem, agora);
+    } else {
+      nova = efParcelaEmAberto(p, quem, agora);
+    }
   } else {
     const lista = p.estornos || [];
     const i = lista.findIndex((e) => e && e.lancamentoId === l.id);
@@ -11994,7 +12003,12 @@ function gestaoNaObra(obra, l, antes, quem, agoraIso) {
   // mesma parcela, mesmo sentido: só acompanha valor e data
   if (ant && pAntes && pAntes.id === lan.parcelaGestaoId && ant.origem.tipo === tipoNovo) {
     if (tipoNovo === "conta") {
-      if (ant.origem.baixou === false || !pAntes.pago) return { obra: ob0, origem: ant.origem };
+      if (!pAntes.pago) return { obra: ob0, origem: ant.origem };
+      if (ant.origem.baixou === false) {
+        if (!pagoEm || pAntes.pagoEm === pagoEm) return { obra: ob0, origem: ant.origem };
+        const origem = { ...ant.origem, pagoEmAntes: ant.origem.pagoEmAntes != null ? ant.origem.pagoEmAntes : (pAntes.pagoEm || "") };
+        return { obra: troca(ob0, efAto({ ...pAntes, pagoEm }, "editada", quem, agora, "data do banco")), origem };
+      }
       if (pAntes.pagoEm === pagoEm && efCent(pAntes.valorPago) === valor) return { obra: ob0, origem: ant.origem };
       return { obra: troca(ob0, efAto({ ...pAntes, pagoEm, valorPago: valor }, "editada", quem, agora)), origem: ant.origem };
     }
@@ -12021,7 +12035,13 @@ function gestaoNaObra(obra, l, antes, quem, agoraIso) {
   }
   const ref = refDaParcela(p);
   if (p.pago) {
-    return { obra: ob, origem: { obraId: ob.id, tipo: "conta", refId: ref, contaObra: EF_CONTA_GESTAO_NA_OBRA, baixou: false } };
+    // Já paga na obra: o recebimento só se liga a ela. Mas o dia em que o
+    // dinheiro entrou é o do banco — a parcela marcada na obra com outra
+    // data passa para a do banco, e a de antes fica guardada para voltar.
+    const origem = { obraId: ob.id, tipo: "conta", refId: ref, contaObra: EF_CONTA_GESTAO_NA_OBRA, baixou: false };
+    if (!pagoEm || p.pagoEm === pagoEm) return { obra: ob, origem };
+    return { obra: troca(ob, efAto({ ...p, pagoEm }, "editada", quem, agora, "data do banco")),
+      origem: { ...origem, pagoEmAntes: p.pagoEm || "" } };
   }
   return { obra: troca(ob, efParcelaPaga(p, pagoEm, valor, quem, agora)),
     origem: { obraId: ob.id, tipo: "conta", refId: ref, contaObra: EF_CONTA_GESTAO_NA_OBRA, baixou: true } };
@@ -12782,7 +12802,9 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
         return (
           <div data-vk-gestao={impactoGestao.acao} style={caixa}>
             {impactoGestao.acao === "baixar" && <>A parcela {p.n}/{p.de} fica <b>paga em {efDiaBR(f.lancadoEm) || "—"}</b> no contas a pagar de <b>{obraNome}</b>. </>}
-            {impactoGestao.acao === "ligar" && <>A parcela {p.n}/{p.de} já está paga na obra ({efDiaBR(p.pagoEm)}): este recebimento só se liga a ela. </>}
+            {impactoGestao.acao === "ligar" && (f.lancadoEm && p.pagoEm !== String(f.lancadoEm).slice(0, 10)
+              ? <>A parcela {p.n}/{p.de} já está paga na obra, com data de {efDiaBR(p.pagoEm)}: este recebimento se liga a ela, e a data na obra passa a <b>{efDiaBR(f.lancadoEm)}</b>, a do banco. </>
+              : <>A parcela {p.n}/{p.de} já está paga na obra ({efDiaBR(p.pagoEm)}): este recebimento só se liga a ela. </>)}
             {impactoGestao.acao === "estornar" && <>A parcela {p.n}/{p.de} <b>volta a ficar em aberto</b> no contas a pagar de <b>{obraNome}</b>; o recebimento de {efDiaBR(p.pagoEm)} continua no mês em que entrou. </>}
             {linhaContrato}
           </div>
