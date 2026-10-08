@@ -2082,7 +2082,6 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
         {/* Modal de confirmação */}
         {confirmSalvar && (
           <div
-            onClick={e => { if (e.target === e.currentTarget) setConfirmSalvar(false); }}
             style={{
               position:"fixed", inset:0, background:"rgba(0,0,0,0.4)",
               display:"flex", alignItems:"center", justifyContent:"center",

@@ -5354,7 +5354,7 @@ function MemoriaCalculo({ item, passos, onFechar }) {
   const qtd = Number(item.qtd).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
   let n = 0;
   return (
-    <div style={MEM_S.fundo} onClick={onFechar}>
+    <div style={MEM_S.fundo}>
       <div style={MEM_S.card} onClick={(e) => e.stopPropagation()}>
         <div style={MEM_S.topo}>
           <div>

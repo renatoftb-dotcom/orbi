@@ -4157,6 +4157,27 @@ teste("Pedido da cotação: a etapa gravada no item da cotação vai para o pedi
   assert.deepStrictEqual(ped.itens.map((i) => i.etapa), ["fundacao", "geral", "geral"]);
 });
 
+
+teste("Papel de entrega só com quantidade: o preço combinado da tela continua, pela quantidade do papel", () => {
+  const antes = [
+    { descricao: "Areia Grossa 1 Mt", insumoCodigo: "AGR-002", quantidade: 3, unitario: 202, bruto: 606, etapa: "supra" },
+    { descricao: "Areia Fina Lavada 1 Mt", insumoCodigo: "AGR-001", quantidade: 5, unitario: 157.6, bruto: 788, etapa: "supra" },
+  ];
+  const papel = [
+    { descricao: "Areia Grossa", insumoCodigo: "AGR-002", quantidade: 3, unitario: "", bruto: "" },
+    { descricao: "Areia Fina", insumoCodigo: "AGR-001", quantidade: 4, unitario: 0, bruto: 0 },
+  ];
+  const r = M.herdarDoPedidoAnterior(papel, antes);
+  assert.deepStrictEqual(r.map((x) => [x.unitario, x.bruto, x.etapa]), [[202, 606, "supra"], [157.6, 630.4, "supra"]]);
+  // o papel escreve mais curto e o leitor só sugeriu o insumo: casa igual
+  const curto = M.herdarDoPedidoAnterior([{ descricao: "Areia Grossa", insumoCodigo: "", quantidade: 3, sugestao: { codigo: "AGR-002" } },
+    { descricao: "Areia Fina", insumoCodigo: "", quantidade: 5 }], antes);
+  assert.deepStrictEqual(curto.map((x) => [x.insumoCodigo, x.bruto]), [["AGR-002", 606], ["AGR-001", 788]]);
+  assert.strictEqual(M.herdarDoPedidoAnterior([{ descricao: "Areia", quantidade: 1 }], antes)[0].insumoCodigo, undefined, "uma palavra só não basta");
+  const comPreco = M.herdarDoPedidoAnterior([{ ...papel[0], unitario: 210, bruto: 630 }], antes);
+  assert.strictEqual(comPreco[0].unitario, 210, "preço do papel manda quando ele traz");
+});
+
 for (const [nome, fn] of testes) {
   try { fn(); console.log("  ok   " + nome); }
   catch (e) { falhas++; console.log("  FALHOU " + nome + "\n         " + e.message); }

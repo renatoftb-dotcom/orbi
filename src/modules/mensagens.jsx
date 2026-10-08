@@ -398,7 +398,7 @@ function Mensagens({ usuario }) {
 
       {/* Modal de Responder mensagem */}
       {respondendo && (
-        <div style={S.overlay} onClick={(e) => { if (e.target === e.currentTarget && !enviandoResp) fecharResponder(); }}>
+        <div style={S.overlay}>
           <div style={S.modal} onClick={e => e.stopPropagation()}>
             <div style={S.modalHeader}>
               <h2 style={S.modalTitulo}>Responder mensagem</h2>

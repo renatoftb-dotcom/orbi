@@ -803,7 +803,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
   // Feedback positivo curto evita que o cliente fique com dúvida se foi.
   if (enviado) {
     return (
-      <div onClick={onFechar} style={{
+      <div style={{
         position:"fixed", inset:0, background:"rgba(0,0,0,0.4)",
         display:"flex", alignItems:"center", justifyContent:"center",
         zIndex:900, padding:20,
@@ -832,7 +832,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
   }
 
   return (
-    <div onClick={onFechar} style={{
+    <div style={{
       position:"fixed", inset:0, background:"rgba(0,0,0,0.4)",
       display:"flex", alignItems:"center", justifyContent:"center",
       zIndex:900, padding:20,

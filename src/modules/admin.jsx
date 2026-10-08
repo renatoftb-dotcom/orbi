@@ -207,7 +207,7 @@ function Admin({ usuario, data, save, initialTab }) {
 
       {/* Modal de confirmação — substitui o confirm() nativo */}
       {confirmManut && (
-        <div style={S.overlay} onClick={() => setConfirmManut(false)}>
+        <div style={S.overlay}>
           <div style={S.modal} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize:16, fontWeight:700, color:"#111827", marginBottom:10 }}>Executar manutenção agora?</div>
             <div style={{ fontSize:13, color:"#4b5563", marginBottom:20, lineHeight:1.6 }}>

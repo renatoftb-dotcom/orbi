@@ -1718,7 +1718,6 @@ function ModalConfirmarExclusaoMassa({ orcs, clientes, onConfirmar, onCancelar }
   const temMais = orcs.length > 10;
   return (
     <div
-      onClick={onCancelar}
       style={{
         position:"fixed", inset:0,
         background:"rgba(0,0,0,0.5)", zIndex:9999,
@@ -2283,7 +2282,6 @@ function OrcRowHeader({ showCliente = true, sort, setSort, filtrosCol, setFiltro
 function ModalNovoOrcamento({ clientes, busca, setBusca, onSelecionar, onFechar, onCadastrarNovo }) {
   return (
     <div
-      onClick={e => { if (e.target === e.currentTarget) onFechar(); }}
       style={{
         position:"fixed", inset:0, background:"rgba(0,0,0,0.4)",
         display:"flex", alignItems:"center", justifyContent:"center",
@@ -4253,7 +4251,6 @@ function PropostaVisualizer({ proposta, onFechar, onEditar, versoes, aoTrocarVer
 
   return (
     <div
-      onClick={(e) => { if (e.target === e.currentTarget) onFechar(); }}
       style={{
         position:"fixed", inset:0, background:"rgba(17,24,39,0.85)",
         zIndex:300, display:"flex", flexDirection:"column",
@@ -4466,7 +4463,6 @@ function PropostaVisualizer({ proposta, onFechar, onEditar, versoes, aoTrocarVer
       {/* Modal de confirmação ao clicar Editar */}
       {confirmEditar && (
         <div
-          onClick={() => setConfirmEditar(false)}
           style={{
             position:"fixed", inset:0, background:"rgba(0,0,0,0.5)",
             zIndex:400, display:"flex", alignItems:"center", justifyContent:"center",
@@ -9805,7 +9801,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       {/* Modal "Deseja salvar?" ao voltar com dados preenchidos */}
       {showSaveDialog && (
         <div
-          onClick={() => { setShowSaveDialog(false); pendingNavRef.current = null; }}
           style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center" }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background:"#fff", borderRadius: 16, padding:"28px 28px 20px", maxWidth:420, width:"90%", boxShadow:"0 8px 32px rgba(0,0,0,0.2)" }}>

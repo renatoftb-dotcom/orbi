@@ -3654,6 +3654,12 @@ function herdarDoPedidoAnterior(novos, anteriores) {
   const norm = (t) => cotSemAcento(String(t || "")).replace(/\s+/g, " ").trim();
   const primeira = (t) => norm(t).split(" ").find((w) => w.length >= 3) || "";
   const etapas = Array.from(new Set(ant.map((a) => a.etapa).filter(Boolean)));
+  const palavras = (t) => norm(t).split(" ").filter((w) => w.length >= 3);
+  const mesmoNomeCurto = (x, y) => {
+    const a = palavras(x), b = palavras(y);
+    const [curto, longo] = a.length <= b.length ? [a, b] : [b, a];
+    return curto.length >= 2 && curto.every((w) => longo.indexOf(w) >= 0);
+  };
   const usados = new Set();
   const acha = (teste) => {
     let i = ant.findIndex((a, k) => !usados.has(k) && teste(a));
@@ -3663,13 +3669,28 @@ function herdarDoPedidoAnterior(novos, anteriores) {
     return ant[i];
   };
   return (novos || []).map((n) => {
+    const sug = n.sugestao && n.sugestao.codigo;
     const par = (n.insumoCodigo && acha((a) => a.insumoCodigo === n.insumoCodigo))
       || (n.codigoLoja && acha((a) => a.codigoLoja && a.codigoLoja === n.codigoLoja))
       || (norm(n.descricao) && acha((a) => norm(a.descricao) === norm(n.descricao)))
+      // o papel escreve mais curto ("Areia Grossa") o que a cotação chamou
+      // de "Areia Grossa 1 Mt": as palavras de um estão todas no outro
+      || (norm(n.descricao) && acha((a) => mesmoNomeCurto(a.descricao, n.descricao)))
+      || (sug && acha((a) => a.insumoCodigo === sug))
       || null;
     if (par) {
       const codigo = n.insumoCodigo || par.insumoCodigo || "";
-      return { ...n,
+      // Papel de entrega que só traz quantidade (o "controle de entrega" da
+      // areia, com o total escrito à mão): o preço combinado continua o da
+      // tela, recalculado pela quantidade do papel. Papel sem preço não zera
+      // preço conhecido.
+      const semPreco = !(numeroDoCampo(n.unitario) > 0) && !(numeroDoCampo(n.bruto) > 0);
+      const unitAnt = numeroDoCampo(par.unitario);
+      const qtdN = numeroDoCampo(n.quantidade) || numeroDoCampo(par.quantidade);
+      const preco = semPreco && unitAnt > 0
+        ? { unitario: par.unitario, bruto: Math.round(unitAnt * qtdN * 100) / 100, quantidade: n.quantidade || par.quantidade }
+        : {};
+      return { ...n, ...preco,
         insumoCodigo: codigo,
         grupoMaterial: n.grupoMaterial || par.grupoMaterial || "",
         // orçamento de loja muitas vezes não traz a coluna de unidade
@@ -7041,7 +7062,7 @@ function VisorProposta({ anexo, aoFechar }) {
     borderBottom: "1px solid rgba(38,36,33,0.12)", flexWrap: "wrap" };
 
   return (
-    <div onClick={aoFechar}
+    <div
       style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.55)", zIndex: 9000,
         display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()}
@@ -9220,7 +9241,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const rolagem = embutido ? { } : P.rolagem;
 
   return (
-    <div style={fundo} onClick={embutido ? undefined : aoFechar}>
+    <div style={fundo}>
       <div style={moldura} onClick={embutido ? undefined : ((e) => e.stopPropagation())}>
         <div style={{ fontSize: 14.5, fontWeight: 700, color: "#111827", marginBottom: 2 }}>Entrada</div>
         <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 12 }}>
@@ -9901,7 +9922,7 @@ function ResumoDaCotacaoModal({ cotacao, cotacoes, prestadores, isMobile, aoFech
   const moeda = (v) => (typeof fmtMoedaCtr === "function" ? fmtMoedaCtr(v) : "R$ " + Number(v || 0).toFixed(2));
   const pequeno = { fontSize: 11, color: "#6b7280" };
   return (
-    <div data-vk-resumo-cotacao="1" onClick={aoFechar}
+    <div data-vk-resumo-cotacao="1"
       style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.40)", display: "flex",
         alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1000 }}>
       <div onClick={(e) => e.stopPropagation()}
@@ -10147,6 +10168,7 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
         lidos = itensDaEntrada({ itens: r.ficha.itens || [] }, "orcamento", insumos || []);
         if (!lidos.length) throw new Error("Li o papel, mas não achei itens nele. Digite os itens ou tente outro arquivo.");
         avisoLeitura = r.aviso || "";
+        cab.total = Number(pp.total) || 0;
       }
       // O papel lido fica guardado no pedido e vai junto para as contas —
       // sem isto, era ler aqui e anexar de novo lá no contas a pagar. Falhar
@@ -10158,6 +10180,16 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
       } catch (e) {
         avisoLeitura = `Os itens foram lidos, mas o papel não foi guardado (${e.message || "falha no envio"}). Anexe depois na conta a pagar.`;
       }
+      let novos = herdarDoPedidoAnterior(lidos, itens);
+      const somaNovos = novos.reduce((a, x) => a + (numeroDoCampo(x.bruto) || numeroDoCampo(x.unitario) * numeroDoCampo(x.quantidade)), 0);
+      if (!(somaNovos > 0) && cab.total > 0) {
+        if (novos.length === 1) {
+          const q = numeroDoCampo(novos[0].quantidade) || 1;
+          novos = [{ ...novos[0], bruto: cab.total, unitario: Math.round((cab.total / q) * 1e6) / 1e6 }];
+        } else if (!avisoLeitura) {
+          avisoLeitura = `O papel não traz o preço de cada item, só o total (${dinheiro(cab.total)}). Preencha o preço dos itens.`;
+        }
+      }
       if (avisoLeitura) setAviso(avisoLeitura);
       aoMudar({
         ...p,
@@ -10167,9 +10199,9 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
         data: cab.data || p.data,
         vencimento: cab.vencimento || p.vencimento,
         desconto: cab.desconto || p.desconto || 0,
-        // o que já estava decidido na tela (etapa, conta, insumo) passa
-        // para os itens do papel
-        itens: herdarDoPedidoAnterior(lidos, itens),
+        // o que já estava decidido na tela (etapa, conta, insumo, preço
+        // combinado quando o papel não traz) passa para os itens do papel
+        itens: novos,
       });
     } catch (e) {
       setAviso(e.message || "Não consegui ler este arquivo.");
@@ -10201,7 +10233,7 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
   const rotuloMini = { display: "block", fontSize: 10, fontWeight: 600, color: "#6b7280", marginBottom: 2 };
 
   return (
-    <div style={P.fundo} onClick={aoFechar}>
+    <div style={P.fundo}>
       <div style={P.cartao} onClick={(e) => e.stopPropagation()}>
         <div style={{ fontSize: 14.5, fontWeight: 700, color: "#111827", marginBottom: 2 }}>
           {editando ? `Editar pedido ${p.numeroLoja || p.numero || ""}`.trim() : "Novo pedido"}

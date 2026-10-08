@@ -972,7 +972,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
       `}</style>
 
       {/* Backdrop semi-transparente — leve pra user ainda ver as outras telas */}
-      <div onClick={onCancelar} style={{
+      <div style={{
         position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.35)",
         zIndex: 1000, transition: "opacity 0.2s",
       }} />
@@ -1789,7 +1789,6 @@ function DialogosHost() {
       {/* Modal ativo — só renderiza o último da fila (topo) */}
       {modalTopo && (
         <div
-          onClick={() => fecharModal(modalTopo.id, modalTopo.tipo === "confirm" ? false : undefined)}
           style={{
             position: "fixed", inset: 0,
             background: "rgba(0,0,0,0.4)",
