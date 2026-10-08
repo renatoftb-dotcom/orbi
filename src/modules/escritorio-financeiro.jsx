@@ -2110,6 +2110,9 @@ function lancamentoDaLinhaDoExtrato(movimento, mes, sugestao) {
     ...base,
     competencia: /^\d{4}-\d{2}$/.test(String(mes)) ? String(mes) : base.competencia,
     valor: String(Math.abs(Number(m.valor) || 0).toFixed(2)).replace(".", ","),
+    // o lado do banco (entrou ou saiu): é ele que diz se a conta escolhida
+    // recebe um lançamento comum ou um estorno
+    sinalDoBanco: Number(m.valor) < 0 ? -1 : 1,
     extratoId: m.id || "",
     historicoBanco: m.historico || "",
     // "Pix", "TED", "Tarifa" na coluna do documento do banco não é número de
@@ -2121,6 +2124,27 @@ function lancamentoDaLinhaDoExtrato(movimento, mes, sugestao) {
   };
 }
 
+// ── Estorno ─────────────────────────────────────────────────────
+// Dinheiro que SAI do banco numa conta de entrada — a receita de gestão
+// devolvida ao cliente — não é despesa nova nem receita: é estorno. Entra na
+// própria conta com valor negativo, no mês em que o dinheiro voltou; o mês
+// em que a receita entrou (já fechado) não muda. O mesmo vale ao contrário:
+// entrada numa conta de despesa (a loja devolveu) abate a despesa.
+function ehEstornoNaConta(contaId, sinalDoBanco) {
+  const c = contaEscritorio(contaId);
+  const g = c && grupoEscritorio(c.grupo);
+  if (!g || !sinalDoBanco) return false;
+  return (g.sinal < 0 ? -1 : 1) !== (Number(sinalDoBanco) < 0 ? -1 : 1);
+}
+
+function comSinalDeEstorno(l) {
+  if (!l) return l;
+  const { sinalDoBanco, ...resto } = l;
+  const v = Math.round(Math.abs(efValorDoCampo(l.valor)) * 100) / 100;
+  if (!ehEstornoNaConta(l.contaId, sinalDoBanco)) return { ...resto, valor: v };
+  return { ...resto, valor: -v, estorno: true };
+}
+
 // Um clique: a linha igual à do mês passado vai com a mesma classificação,
 // sem abrir o formulário. Só quando a sugestão basta — conta do escritório,
 // cliente/obra que a conta pede, mês aberto. Senão, devolve o porquê e a
@@ -2129,7 +2153,7 @@ function lancamentoRapidoDoExtrato(movimento, mes, sugestao, fechamentos) {
   if (!sugestao || !sugestao.campos || !sugestao.campos.contaId) return { erro: "Sem lançamento igual para copiar." };
   if (sugestao.daObra) return { erro: "Custo de obra: confira no formulário." };
   const base = lancamentoDaLinhaDoExtrato(movimento, mes, sugestao);
-  const l = { ...base, valor: Math.round(Math.abs(Number((movimento || {}).valor) || 0) * 100) / 100 };
+  const l = comSinalDeEstorno({ ...base, valor: Math.round(Math.abs(Number((movimento || {}).valor) || 0) * 100) / 100 });
   const ehEmp = l.unidadeId === "empreendimento";
   const erros = validarLancamentoEscritorio({ ...l, clienteId: l.clienteId || l.cliente, obraId: l.projeto,
     empreendimentoId: ehEmp ? l.empreendimentoId : l.projeto }, { fechamentos });
@@ -2524,6 +2548,12 @@ const EF_ESTILO = {
 };
 
 const EF_MES_CURTO = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+// Na lista, o estorno aparece como estorno — não como valor negativo solto.
+function efValorDoLancamento(l) {
+  const v = Number((l || {}).valor) || 0;
+  return v < 0 ? "estorno " + efDinheiro(-v) : efDinheiro(v);
+}
+
 function efDinheiro(v) {
   const n = Number(v) || 0;
   return (n < 0 ? "− " : "") + "R$ " + Math.abs(n).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -3050,6 +3080,22 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           placeholder="o número do papel, não a forma de pagamento"
           onChange={(e) => set("documento", e.target.value)} />)}
       </div>
+      {/* Saída numa conta de entrada (ou o contrário): é estorno, e a tela
+          diz antes de gravar — em vez de somar receita que voltou. */}
+      {!naObra && f.sinalDoBanco && f.contaId && ehEstornoNaConta(f.contaId, f.sinalDoBanco) && (() => {
+        const c = contaEscritorio(f.contaId);
+        const g = c && grupoEscritorio(c.grupo);
+        const entrada = g && g.sinal > 0;
+        const mes = f.competencia ? efMesPorExtenso(f.competencia) : "do mês";
+        return (
+          <div data-vk-estorno="1" style={{ fontSize: 12.5, color: "#92400e", background: "#fffbeb", border: "1px solid rgba(180,83,9,0.25)",
+            borderRadius: 10, padding: "9px 11px", marginBottom: 12, lineHeight: 1.45 }}>
+            <b>Estorno.</b> {entrada ? "Dinheiro que saiu do banco" : "Dinheiro que entrou no banco"} numa conta de {entrada ? "receita" : "despesa"}:
+            entra como <b>− {efDinheiro(Math.abs(efValorDoCampo(f.valor)))}</b> em <b>{c.nome}</b>, abatendo {entrada ? "a receita" : "a despesa"} de {mes}.
+            O mês em que {entrada ? "a receita entrou" : "a despesa foi paga"}, se já fechado, não muda.
+          </div>
+        );
+      })()}
       {campo("Descrição", <input style={S.input} value={f.descricao} onChange={(e) => set("descricao", e.target.value)} />, "descricao")}
       {/* ── O custo, item a item ──
           A conta a pagar sempre foi por item; é daqui que saem o custo por
@@ -3914,7 +3960,7 @@ function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcar
                     <td style={{ padding: "7px 12px" }}>{l.descricao || l.fornecedor || "—"}</td>
                     <td style={{ padding: "7px 12px", color: "#6b7280" }}>{[l.cliente, l.projeto].filter(Boolean).join(" · ")}</td>
                     <td style={{ padding: "7px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                      {efDinheiro(l.valor)}
+                      {efValorDoLancamento(l)}
                     </td>
                     <td style={{ padding: "5px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
                       <button style={S.btnSec} onClick={() => aoDescartar(l)}>Não passou pela conta</button>
@@ -4093,7 +4139,7 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
                     <td style={{ padding: "6px 12px", color: l.conferido ? "#9ca3af" : "#262421" }}>{conta ? conta.nome : "—"}</td>
                     <td style={{ padding: "6px 12px", color: "#6b7280" }}>{[l.cliente, l.projeto].filter(Boolean).join(" · ") || "—"}</td>
                     <td style={{ padding: "6px 12px", color: "#6b7280" }}>{l.descricao || l.fornecedor || "—"}</td>
-                    <td style={{ padding: "6px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{efDinheiro(l.valor)}</td>
+                    <td style={{ padding: "6px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{efValorDoLancamento(l)}</td>
                   </tr>
                 );
               })}
@@ -5020,7 +5066,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const agora = new Date().toISOString();
     const marca = { extratoId: l.extratoId || "", historicoBanco: l.historicoBanco || "",
       conferido: true, conferidoEm: agora, contaBanco: l.contaBanco || "sim" };
-    if (l && l.naObra) { lancarCustoNaObra({ ...l, ...marca }); return true; }
+    if (l && l.naObra) { const { sinalDoBanco, ...semSinal } = l; lancarCustoNaObra({ ...semSinal, ...marca }); return true; }
+    l = comSinalDeEstorno(l);
     const id = typeof uid === "function" ? uid() : String(Date.now());
     const numeroDoc = l.numeroDoc || proximaReferencia((data || {}).obras || [], lancs);
     gravar([...lancs, { ...semAprender(l), ...marca, id, numeroDoc, criadoEm: agora, fornecedor: efNomeDoFornecedor(l), tipo: "escritorio" }],
@@ -5036,8 +5083,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     let ref = null;
     const novos = [];
     for (const m of movimentos || []) {
-      const l = { ...lancamentoDaLinhaDoExtrato(m, mesEmConferencia, null), contaId, unidadeId,
-        valor: Math.round(Math.abs(Number(m.valor) || 0) * 100) / 100 };
+      const l = comSinalDeEstorno({ ...lancamentoDaLinhaDoExtrato(m, mesEmConferencia, null), contaId, unidadeId,
+        valor: Math.round(Math.abs(Number(m.valor) || 0) * 100) / 100 });
       const erros = validarLancamentoEscritorio(l, { fechamentos });
       if (erros.length) return { erro: erros[0] + " Lance esta conta uma linha por vez." };
       ref = proximaReferencia((data || {}).obras || [], lancs.concat(novos));

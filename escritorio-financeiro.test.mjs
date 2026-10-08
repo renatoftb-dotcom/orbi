@@ -39,7 +39,7 @@ const M = new Function(src + `
            efNomeDoFornecedor, EF_FORNECEDOR_OUTROS,
            custoDoLancamento, validarCustoEmItens,
            comIdsDosMovimentos, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
-           sugestaoDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas,
+           sugestaoDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno,
            extratosComArquivo, movimentosGuardadosDoMes, ignoradosGuardados, extratosComIgnorado };`)();
 
 const testes = [];
@@ -1854,6 +1854,33 @@ teste("extrato guardado por mês do movimento, não pelo mês aberto na tela", (
 teste("documento do banco ('Pix', 'TED') não vira número da nota", () => {
   assert.strictEqual(M.lancamentoDaLinhaDoExtrato({ id: "a", data: "2026-09-01", valor: -1, documento: "Pix" }, "2026-09", null).documento, "");
   assert.strictEqual(M.lancamentoDaLinhaDoExtrato({ id: "a", data: "2026-09-01", valor: -1, documento: "000123" }, "2026-09", null).documento, "000123");
+});
+
+
+teste("Estorno: saída do banco numa conta de receita entra negativa e casa com a saída", () => {
+  const m = { id: "dev#1", data: "2026-09-28", valor: -10833.33, historico: "DÉBITO DEVOLUÇÃO PIX · Devolução Pix ***.518.208-**" };
+  const f = M.lancamentoDaLinhaDoExtrato(m, "2026-09", null);
+  assert.strictEqual(f.sinalDoBanco, -1);
+  assert.ok(M.ehEstornoNaConta("rec_gestao", -1));
+  assert.ok(!M.ehEstornoNaConta("rec_gestao", 1), "entrada em receita é receita comum");
+  assert.ok(!M.ehEstornoNaConta("luz_agua_net", -1), "saída em despesa é despesa comum");
+  assert.ok(M.ehEstornoNaConta("luz_agua_net", 1), "entrada em despesa é estorno da despesa");
+  const l = M.comSinalDeEstorno({ ...f, contaId: "rec_gestao", unidadeId: "escritorio" });
+  assert.strictEqual(l.valor, -10833.33);
+  assert.strictEqual(l.estorno, true);
+  assert.strictEqual(l.competencia, "2026-09");
+  assert.ok(!("sinalDoBanco" in l));
+  const comum = M.comSinalDeEstorno({ ...f, contaId: "luz_agua_net" });
+  assert.strictEqual(comum.valor, 10833.33);
+  assert.ok(!comum.estorno);
+  // a conciliação casa o estorno com a saída do banco
+  const r = M.conciliarExtrato([m], [{ ...l, id: "e1" }]);
+  assert.strictEqual(r.casados.length, 1);
+  assert.strictEqual(r.noBancoSemPar.length, 0);
+  // e a receita do mês cai
+  const res = M.resumoDoPeriodoEscritorio([lancParaFiltro("a", "2026-09", "rec_gestao", "escritorio", 20000),
+    { ...lancParaFiltro("e1", "2026-09", "rec_gestao", "escritorio", -10833.33) }]);
+  assert.strictEqual(Math.round(res.receitas * 100) / 100, Math.round((20000 - 10833.33) * 100) / 100);
 });
 
 for (const [nome, fn] of testes) {
