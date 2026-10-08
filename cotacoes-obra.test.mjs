@@ -64,6 +64,10 @@ const modulo = new Function(`
            casamentosSeguros, numerosDoExtenso, textoComDitado, itemCotacaoVazio, itensDaCotacao, temListaDeItens, quantidadeDoItem, precoUnitario,
            propostaTemPrecoPorItem, totalDosItens, itensSemPreco, valorDaProposta,
            melhorPorItem, comparativoDaLista, textoDoPedido, qtdBR,
+           FORA_DA_COMPRA, escolhaPorItemDaCotacao, lojaEscolhidaDoItem, temDivisao, escolherLojaDoItem,
+           escolherMaisBaratoEmCada, limparDivisao, divisaoDaCotacao,
+           cotacoesDaDivisao, foiDividida, cotacaoRaiz, filhasDaDivisao, podeDesfazerDivisao, desfazerDivisao,
+           cotacaoDosNaoComprados, economiaDaDivisao, anexosSemUso, resumoDaCotacao, cotacaoDeOrigemDasContas,
            unitarioDoTotal, totalBrutoItem, valoresComDesconto, totalEfetivoItem,
            precoEfetivo, totalNegociado, descontoDaProposta,
            linkWhatsApp, enviosDaLista, envioParaLoja, registrarEnvioDaLista, lojasParaPedir,
@@ -3796,6 +3800,232 @@ teste("Entrada guardando a proposta: milheiro e viagem de 5 m³ viram o preço d
   assert.ok(Math.abs(pr.f5 * 5 - 684.02) < 0.01, "5 m3 pelo preço da viagem");
   assert.ok(!pr.f6, "os outros 6 m3 ficam sem preço");
   assert.ok(Math.abs(pr.tj * 3500 - 3657.56) < 0.01);
+});
+
+
+// ── Dividir a compra entre lojas ────────────────────────────────
+const listaDividir = () => ({
+  ...M.cotacaoVazia("o"), id: "cd", titulo: "Material da laje",
+  itens: [
+    { id: "i1", descricao: "Cimento CP-II 50kg", unidade: "sc", quantidade: "40" },
+    { id: "i2", descricao: "Tábua de pinus 30cm", unidade: "m", quantidade: "120" },
+    { id: "i3", descricao: "Prego 17x27", unidade: "kg", quantidade: "5" },
+  ],
+  propostas: [
+    { id: "pA", favorecido: "Loja A", fornecedorId: "fa", valor: "", precos: { i1: "38,00", i2: "22,50", i3: "19,00" } },
+    { id: "pB", favorecido: "Loja B", fornecedorId: "fb", valor: "", precos: { i1: "36,50", i2: "24,00" } },
+  ],
+});
+
+teste("Divisão: tocar no preço escolhe a loja do item; tocar de novo desfaz", () => {
+  let c = M.escolherLojaDoItem(listaDividir(), "i1", "pB");
+  assert.strictEqual(M.lojaEscolhidaDoItem(c, "i1"), "pB");
+  assert.ok(M.temDivisao(c));
+  c = M.escolherLojaDoItem(c, "i1", "pB");
+  assert.strictEqual(M.lojaEscolhidaDoItem(c, "i1"), "");
+  assert.ok(!M.temDivisao(c));
+});
+
+teste("Divisão: escolher por item tira a escolha de uma loja só (e o envio ao cliente)", () => {
+  const base = { ...listaDividir(), escolhidaId: "pA", escolhidoPor: "Renato", enviadaClienteEm: "2026-10-01" };
+  const c = M.escolherLojaDoItem(base, "i3", "pA");
+  assert.strictEqual(c.escolhidaId, "");
+  assert.strictEqual(c.enviadaClienteEm, "");
+  assert.deepStrictEqual(c.escolhaPorItem, { i3: "pA" });
+});
+
+teste("Divisão: loja sem preço no item, item apagado ou proposta excluída não contam", () => {
+  const c = { ...listaDividir(), escolhaPorItem: { i3: "pB", i9: "pA", i2: "pX" } };
+  assert.strictEqual(M.lojaEscolhidaDoItem(c, "i3"), "", "B não cotou o prego");
+  assert.strictEqual(M.lojaEscolhidaDoItem(c, "i2"), "", "proposta que não existe");
+  assert.ok(!M.temDivisao(c));
+  assert.deepStrictEqual(M.divisaoDaCotacao(c).semEscolha.map((i) => i.id), ["i1", "i2", "i3"]);
+});
+
+teste("Divisão: mais barato em cada item, mantendo o que foi marcado para não comprar", () => {
+  let c = M.escolherLojaDoItem(listaDividir(), "i3", M.FORA_DA_COMPRA);
+  c = M.escolherMaisBaratoEmCada(c);
+  assert.deepStrictEqual(c.escolhaPorItem, { i1: "pB", i2: "pA", i3: "fora" });
+});
+
+teste("Divisão: um grupo por loja, com total, e os itens fora à parte", () => {
+  let c = M.escolherMaisBaratoEmCada(listaDividir());   // i1 B, i2 A, i3 A
+  c = M.escolherLojaDoItem(c, "i3", M.FORA_DA_COMPRA);
+  const d = M.divisaoDaCotacao(c);
+  assert.deepStrictEqual(d.lojas.map((l) => [l.favorecido, l.itens.map((i) => i.id), l.total]),
+    [["Loja A", ["i2"], 2700], ["Loja B", ["i1"], 1460]]);
+  assert.deepStrictEqual(d.fora.map((i) => i.id), ["i3"]);
+  assert.strictEqual(d.total, 4160);
+  assert.ok(d.pronta);
+  assert.strictEqual(d.lojas[0].fornecedorId, "fa");
+});
+
+teste("Divisão: com item sem decisão ela não está pronta", () => {
+  const c = M.escolherLojaDoItem(listaDividir(), "i1", "pB");
+  const d = M.divisaoDaCotacao(c);
+  assert.ok(!d.pronta);
+  assert.deepStrictEqual(d.semEscolha.map((i) => i.id), ["i2", "i3"]);
+});
+
+teste("Divisão: tudo fora não é divisão pronta — não há o que comprar", () => {
+  let c = listaDividir();
+  for (const id of ["i1", "i2", "i3"]) c = M.escolherLojaDoItem(c, id, M.FORA_DA_COMPRA);
+  const d = M.divisaoDaCotacao(c);
+  assert.strictEqual(d.lojas.length, 0);
+  assert.ok(!d.pronta);
+});
+
+teste("Divisão: desconto de fechamento entra rateado, e a loja levando só parte sai marcada para conferir", () => {
+  const c0 = listaDividir();
+  c0.propostas[0].totalFechado = "4.000,00";          // A: 4315 → 4000
+  let c = M.escolherLojaDoItem(c0, "i2", "pA");
+  c = M.escolherLojaDoItem(c, "i3", "pA");
+  c = M.escolherLojaDoItem(c, "i1", "pB");
+  const a = M.divisaoDaCotacao(c).lojas.find((l) => l.propostaId === "pA");
+  const efetivo = M.totalEfetivoItem(c, c.propostas[0], c.itens[1]) + M.totalEfetivoItem(c, c.propostas[0], c.itens[2]);
+  assert.strictEqual(a.total, Math.round(efetivo * 100) / 100);
+  assert.ok(a.total < 2795);
+  assert.ok(a.descontoParcial);
+  const b = M.divisaoDaCotacao(c).lojas.find((l) => l.propostaId === "pB");
+  assert.ok(!b.descontoParcial, "B não deu desconto");
+});
+
+teste("Divisão: a situação da cotação diz que está dividindo", () => {
+  const c = M.escolherLojaDoItem(listaDividir(), "i1", "pB");
+  assert.strictEqual(M.situacaoCotacao(c, [], []).id, "dividindo");
+  assert.strictEqual(M.resumoCotacoes([c], [], []).abertas, 1);
+  assert.strictEqual(M.limparDivisao(c).escolhaPorItem && Object.keys(M.limparDivisao(c).escolhaPorItem).length, 0);
+});
+
+
+const divididaPronta = () => {
+  let c = M.escolherMaisBaratoEmCada(listaDividir());   // i1 B, i2 A, i3 A
+  c = M.escolherLojaDoItem(c, "i3", M.FORA_DA_COMPRA);
+  c.propostas[0].anexo = { url: "u", public_id: "papelA" };
+  let n = 0;
+  return M.cotacoesDaDivisao(c, { novoId: () => "f" + (++n), agoraIso: "2026-10-08T12:00:00Z", quem: "Renato" });
+};
+
+teste("Fechar a divisão: uma cotação por loja, já escolhida, com os itens e o papel dela", () => {
+  const r = divididaPronta();
+  assert.deepStrictEqual(r.filhas.map((f) => [f.id, f.titulo, f.itens.map((i) => i.id)]),
+    [["f1", "Material da laje — Loja A", ["i2"]], ["f2", "Material da laje — Loja B", ["i1"]]]);
+  const a = r.filhas[0];
+  assert.strictEqual(a.divisaoDe, "cd");
+  assert.strictEqual(a.precisaAprovacaoCliente, false);
+  assert.strictEqual(M.propostaEscolhida(a).id, "pA");
+  assert.deepStrictEqual(M.propostaEscolhida(a).precos, { i2: "22,50" });
+  assert.strictEqual(M.propostaEscolhida(a).anexo.public_id, "papelA");
+  assert.strictEqual(M.valorProposta(M.propostaEscolhida(a)), 2700);
+  assert.strictEqual(M.situacaoCotacao(a, [], []).id, "escolhida");
+  assert.ok(M.podeLancarEmContas(a, []).pode);
+  const d = M.dadosDoLancamento(r.filhas[1]);
+  assert.strictEqual(d.valor, 1460);
+  assert.strictEqual(d.prestadorId, "fb");
+});
+
+teste("Fechar a divisão: o pedido da filha sai só com os itens dela", () => {
+  const r = divididaPronta();
+  const ped = M.pedidoDaCotacao(r.filhas[1], M.propostaEscolhida(r.filhas[1]), [], 0);
+  assert.deepStrictEqual(ped.itens.map((i) => [i.descricao, i.bruto]), [["Cimento CP-II 50kg", 1460]]);
+  assert.strictEqual(ped.cotacaoOrigemId, "f2");
+});
+
+teste("Fechar a divisão: o desconto de fechamento vai junto, na parte que cabe à filha", () => {
+  const c0 = listaDividir();
+  c0.propostas[0].totalFechado = "4.000,00";
+  let c = M.escolherLojaDoItem(c0, "i2", "pA");
+  c = M.escolherLojaDoItem(c, "i3", "pA");
+  c = M.escolherLojaDoItem(c, "i1", "pB");
+  const total = M.divisaoDaCotacao(c).lojas[0].total;
+  const r = M.cotacoesDaDivisao(c, {});
+  const a = r.filhas.find((f) => f.divisaoDe && M.propostaEscolhida(f).id === "pA");
+  assert.strictEqual(M.valorProposta(M.propostaEscolhida(a)), total);
+  assert.ok(Math.abs(M.valorDaProposta(a, M.propostaEscolhida(a)) - total) < 0.01, "o total da filha bate com a divisão");
+  const ped = M.pedidoDaCotacao(a, M.propostaEscolhida(a), [], 0);
+  assert.ok(ped.desconto > 0);
+});
+
+teste("Fechar a divisão: a original fica dividida, fechada e travada", () => {
+  const { original } = divididaPronta();
+  assert.ok(M.foiDividida(original));
+  assert.strictEqual(M.situacaoCotacao(original, [], []).id, "dividida");
+  assert.strictEqual(M.situacaoCotacao(original, [], []).rotulo, "Dividida em 2 pedidos");
+  assert.ok(M.cotacaoEstaFechada(original, [], []));
+  assert.ok(!M.podeLancarEmContas(original, []).pode);
+  assert.ok(!M.podeGerarContrato(original, [], []).pode);
+  assert.ok(!M.podeExcluirCotacao(original).pode);
+  assert.deepStrictEqual(original.divisao.fora, ["i3"]);
+  assert.strictEqual(original.divisao.total, 4160);
+});
+
+teste("Fechar a divisão: sem estar pronta, não fecha", () => {
+  const c = M.escolherLojaDoItem(listaDividir(), "i1", "pB");
+  assert.strictEqual(M.cotacoesDaDivisao(c, {}), null);
+});
+
+teste("Divisão: a filha aponta para a original, e a conta mostra a original completa", () => {
+  const { original, filhas } = divididaPronta();
+  const cots = [original, ...filhas];
+  assert.strictEqual(M.cotacaoRaiz(cots, filhas[0]).id, "cd");
+  assert.strictEqual(M.cotacaoRaiz(cots, original).id, "cd");
+  const obra = { cotacoes: cots };
+  const deOrigem = M.cotacaoDeOrigemDasContas(obra, [{ cotacaoId: "f1" }]);
+  assert.strictEqual(deOrigem.id, "f1", "o papel sai da filha");
+  const r = M.resumoDaCotacao(M.cotacaoRaiz(cots, deOrigem), []);
+  assert.strictEqual(r.propostas.length, 2);
+  assert.deepStrictEqual(r.divisao.lojas.map((l) => [l.nome, l.itens, l.total]),
+    [["Loja A", ["Tábua de pinus 30cm"], 2700], ["Loja B", ["Cimento CP-II 50kg"], 1460]]);
+  assert.deepStrictEqual(r.divisao.naoComprados, ["Prego 17x27"]);
+  // os mesmos dois itens: A 1520+2700=4220, B 1460+2880=4340 → economia 4340-4160
+  assert.strictEqual(r.economia, 180);
+});
+
+teste("Divisão: desfazer só enquanto nenhum pedido foi lançado", () => {
+  const { original, filhas } = divididaPronta();
+  const cots = [original, ...filhas];
+  assert.ok(M.podeDesfazerDivisao(original, cots, []).pode);
+  const volta = M.desfazerDivisao(cots, "cd");
+  assert.strictEqual(volta.length, 1);
+  assert.ok(!M.foiDividida(volta[0]));
+  assert.deepStrictEqual(volta[0].escolhaPorItem, { i1: "pB", i2: "pA", i3: "fora" }, "a escolha volta como estava");
+  const lancada = [original, { ...filhas[0], contaGeradaId: "cp1" }, filhas[1]];
+  const t = M.podeDesfazerDivisao(original, lancada, []);
+  assert.ok(!t.pode);
+  assert.ok(/Loja A/.test(t.motivo));
+});
+
+teste("Divisão: filha excluída aparece como excluída no retrato", () => {
+  const { original, filhas } = divididaPronta();
+  const f = M.filhasDaDivisao(original, [original, filhas[1]]);
+  assert.strictEqual(f[0].cotacao, null);
+  assert.strictEqual(f[1].cotacao.id, "f2");
+});
+
+teste("Não comprados: viram uma cotação nova só quando se pede, uma vez só", () => {
+  const { original, filhas } = divididaPronta();
+  const cots = [original, ...filhas];
+  const r = M.cotacaoDosNaoComprados(original, cots, { id: "nc", agoraIso: "2026-10-08T12:00:00Z" });
+  assert.strictEqual(r.nova.titulo, "Material da laje — itens não comprados");
+  assert.deepStrictEqual(r.nova.itens.map((i) => i.id), ["i3"]);
+  assert.deepStrictEqual(r.nova.propostas, []);
+  assert.strictEqual(r.nova.naoCompradosDe, "cd");
+  assert.strictEqual(r.original.naoCompradosId, "nc");
+  assert.strictEqual(M.cotacaoDosNaoComprados(r.original, [...cots, r.nova], {}), null, "já existe");
+  assert.ok(M.cotacaoDosNaoComprados(r.original, cots, {}), "se a nova foi excluída, dá para abrir de novo");
+});
+
+teste("Anexo compartilhado entre original e filha não é apagado enquanto alguém usa", () => {
+  const { original, filhas } = divididaPronta();
+  assert.deepStrictEqual(M.anexosSemUso(["papelA"], [original]), []);
+  assert.deepStrictEqual(M.anexosSemUso(["papelA"], [filhas[1]]), ["papelA"]);
+});
+
+teste("Divisão: economia entra no resumo das cotações", () => {
+  const { original, filhas } = divididaPronta();
+  const r = M.resumoCotacoes([original, ...filhas], [], []);
+  assert.strictEqual(r.economia, 180);
+  assert.strictEqual(r.fechadas, 1);
 });
 
 for (const [nome, fn] of testes) {
