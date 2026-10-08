@@ -2091,7 +2091,7 @@ function sugestaoDoExtrato(movimento, lancamentos) {
     || (chave && lista.find((l) => mesmoLado(l) && chaveDoHistorico(l.historicoBanco) === chave))
     || null;
   if (!achado) return null;
-  const campos = ["contaId", "unidadeId", "cliente", "clienteId", "empreendimentoId", "projeto", "fornecedor", "fornecedorId"];
+  const campos = ["contaId", "unidadeId", "cliente", "clienteId", "empreendimentoId", "projeto", "obraId", "fornecedor", "fornecedorId"];
   const r = {};
   for (const k of campos) if (achado[k] != null && achado[k] !== "") r[k] = achado[k];
   // O que veio de uma obra (pela ponte) se relança pela obra: a sugestão
@@ -2155,7 +2155,8 @@ function lancamentoRapidoDoExtrato(movimento, mes, sugestao, fechamentos) {
   const base = lancamentoDaLinhaDoExtrato(movimento, mes, sugestao);
   const l = comSinalDeEstorno({ ...base, valor: Math.round(Math.abs(Number((movimento || {}).valor) || 0) * 100) / 100 });
   const ehEmp = l.unidadeId === "empreendimento";
-  const erros = validarLancamentoEscritorio({ ...l, clienteId: l.clienteId || l.cliente, obraId: l.projeto,
+  const erros = validarLancamentoEscritorio({ ...l, clienteId: l.clienteId || l.cliente,
+    obraId: l.unidadeId === "gestao_obras" ? l.obraId : l.projeto,
     empreendimentoId: ehEmp ? l.empreendimentoId : l.projeto }, { fechamentos });
   return erros.length ? { erro: erros[0] } : { lancamento: l };
 }
@@ -2455,6 +2456,27 @@ function destinoVisivelDoCusto(contaId, obra, cliente, opcoes) {
   return { modo: modo, conta: c ? c.nome : "" };
 }
 
+// ── Por onde o dinheiro passou: regra, não pergunta ──────────────
+// Escritório, Projetos e Empreendimento: quem paga é sempre o escritório —
+// passa pela conta dele. Gestão de obras: só a remuneração da gestão (as
+// receitas do escritório) passa pela conta; o resto da obra depende do
+// cadastro dela — cliente que paga os fornecedores direto não passa pela
+// conta do escritório.
+function contaBancoPelaRegra(unidadeId, contaId, obra) {
+  if (unidadeId !== "gestao_obras") return "sim";
+  const c = contaEscritorio(contaId);
+  const g = c && grupoEscritorio(c.grupo);
+  if (g && g.bloco === "escritorio") return "sim";
+  return obra && obra.clientePagaDireto ? "nao" : "sim";
+}
+
+// As obras que a gestão pode escolher: as do cliente quando ele já foi
+// escolhido; senão todas as de clientes (empreendimento tem unidade própria).
+function obrasDaGestao(obras, clientes, clienteId) {
+  const emp = new Set((clientes || []).filter((c) => c && ehEmpreendimento(c)).map((c) => c.id));
+  return (obras || []).filter((o) => o && o.id && !emp.has(o.clienteId) && (!clienteId || o.clienteId === clienteId));
+}
+
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
 
 // Os papéis da transação, cada um abrindo numa aba. É o mesmo componente
@@ -2660,6 +2682,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
     parcelas: (inicial && Array.isArray(inicial.parcelasCartao) && inicial.parcelasCartao.length) || (inicial && inicial.parcelas) || 1,
   }));
+  const lancNovo = !(inicial && inicial.id);
   const [tentou, setTentou] = useState(false);
   const [erroAnexo, setErroAnexo] = useState("");
   const [novoPrest, setNovoPrest] = useState(null);   // { nome, categoria }
@@ -2775,6 +2798,17 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     const unica = obrasDoCliente[0];
     setF((p) => ({ ...p, obraIdAlvo: unica.id, projeto: unica.nome || p.projeto }));
   }, [f.contaFonte, f.obraIdAlvo, f.clienteId, obrasDoCliente.length]);
+  // Gestão de obras: a obra é obrigatória e vem do cadastro. Cliente com
+  // uma obra só já a tem escolhida; lançamento copiado do mês passado traz
+  // o nome dela, e o nome acha a obra.
+  useEffect(() => {
+    if (f.unidadeId !== "gestao_obras" || f.obraId || f.contaFonte === "obra") return;
+    const lista = obrasDaGestao(obras, clientes, f.clienteId);
+    const pelo = f.projeto ? lista.find((o) => efSemAcento(String(o.nome || "")).trim().toLowerCase() === efSemAcento(String(f.projeto)).trim().toLowerCase()) : null;
+    const unica = !pelo && f.clienteId && lista.length === 1 ? lista[0] : null;
+    const o = pelo || unica;
+    if (o) setF((p) => ({ ...p, obraId: o.id, projeto: o.nome || p.projeto }));
+  }, [f.unidadeId, f.obraId, f.clienteId, f.projeto, f.contaFonte]);
   const obraAlvo = obrasDoCliente.find((o) => o && o.id === f.obraIdAlvo) || null;
   const clienteAlvo = (clientes || []).find((c) => c && c.id === f.clienteId) || null;
   const destinoDoCusto = naObra ? destinoVisivelDoCusto(f.contaId, obraAlvo, clienteAlvo, {}) : null;
@@ -2857,7 +2891,10 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
         .concat(validarCustoEmItens(efValorDoCampo(f.valor), itensDoCusto, f.obraIdAlvo).erros
           .filter((e) => !/Escolha a obra|Informe o valor pago/.test(e)))
     : validarLancamentoEscritorio({ ...f, valor: efValorDoCampo(f.valor),
-        clienteId: f.clienteId || f.cliente, obraId: f.projeto,
+        clienteId: f.clienteId || f.cliente,
+        // na gestão, a obra é escolhida da lista (o id); lançamento antigo,
+        // de antes da lista, segue valendo pelo nome
+        obraId: f.unidadeId === "gestao_obras" ? (f.obraId || (lancNovo ? "" : f.projeto)) : f.projeto,
         empreendimentoId: ehEmp ? f.empreendimentoId : f.projeto }, { fechamentos });
 
   // ── Pago no cartão ──
@@ -2866,6 +2903,11 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   // conferência com o banco e do resultado até a fatura fechar.
   const cartoesAtivos = (cartoes || []).filter((c) => c && c.ativo !== false);
   const noCartao = f.formaPagamento === "cartao";
+  // Lançamento novo: por onde o dinheiro passou sai da regra (unidade, conta
+  // e cadastro da obra) — e linha do banco passou pelo banco, sempre. O
+  // antigo, ao editar, fica como foi gravado.
+  const obraDaGestao = f.unidadeId === "gestao_obras" && f.obraId ? (obras || []).find((o) => o && o.id === f.obraId) || null : null;
+  const regraBanco = f.extratoId ? "sim" : contaBancoPelaRegra(f.unidadeId, f.contaId, obraDaGestao);
   const cartaoEscolhido = noCartao ? cartaoPorId(cartoesAtivos, f.cartaoId) : null;
   const planoCartao = cartaoEscolhido
     ? parcelasDoCartao(cartaoEscolhido, f.lancadoEm, efValorDoCampo(f.valor), f.parcelas) : [];
@@ -2888,6 +2930,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     const g = { ...f, itens: limpos };
     if (naObra) { aoSalvar(comCartao({ ...g, naObra: true, valor: efValorDoCampo(g.valor) })); return; }
     aoSalvar(comCartao({ ...g, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
+      ...(lancNovo && !noCartao ? { contaBanco: regraBanco } : {}),
       tipo: "escritorio", valor: efValorDoCampo(g.valor) }));
   }
   // Na fila, quem lança 50 linhas não larga o teclado: Enter num campo de
@@ -2991,7 +3034,26 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
               onChange={(e) => set("competencia", e.target.value)} />))}
         {campo("Data do pagamento", <input style={S.input} type="date" value={f.lancadoEm}
           onChange={(e) => set("lancadoEm", e.target.value)} />)}
-        {campo("Como foi pago", (
+        {/* Lançamento novo: o "fora da conta" não é escolha — sai da regra.
+            Sobra escolher entre a conta e o cartão do escritório. */}
+        {lancNovo && !naObra ? campo("Como foi pago", (f.unidadeId === "gestao_obras" || f.extratoId || !(cartoesAtivos.length > 0 || noCartao)) ? (
+          <div data-vk-como-pago="1" style={{ ...S.input, background: "#f3f4f6", color: "#374151", display: "flex", alignItems: "center", minHeight: 36 }}>
+            {regraBanco === "sim" ? "Conta do escritório" : "Pago pelo cliente, fora da conta"}
+          </div>
+        ) : (
+          <Selecao style={{ ...S.input, cursor: "pointer" }} value={noCartao ? "cartao" : "sim"} onChange={(e) => {
+            const v = e.target.value;
+            if (v === "cartao") {
+              setF((p) => ({ ...p, formaPagamento: "cartao", contaBanco: "nao",
+                cartaoId: p.cartaoId || (cartoesAtivos[0] ? cartoesAtivos[0].id : ""), parcelas: p.parcelas || 1 }));
+            } else {
+              setF((p) => ({ ...p, formaPagamento: "", contaBanco: "sim", cartaoId: "" }));
+            }
+          }}>
+            <option value="sim">Conta do escritório</option>
+            <option value="cartao">Cartão do escritório</option>
+          </Selecao>
+        )) : (campo("Como foi pago", (
           <Selecao style={{ ...S.input, cursor: "pointer" }} value={comoFoiPago} onChange={(e) => {
             const v = e.target.value;
             if (v === "cartao") {
@@ -3005,7 +3067,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             {(cartoesAtivos.length > 0 || noCartao) && <option value="cartao">Cartão do escritório</option>}
             <option value="nao">Fora da conta do escritório</option>
           </Selecao>
-        ))}
+        )))}
         {noCartao && campo("Cartão", (
           <Selecao style={{ ...S.input, cursor: "pointer" }} value={f.cartaoId || ""} onChange={(e) => set("cartaoId", e.target.value)}>
             <option value="">Escolha…</option>
@@ -3043,7 +3105,21 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                 opcoes={[{ valor: "", rotulo: f.clienteId ? "— escolha a obra —" : "— escolha o cliente antes —" }]
                   .concat(obrasDoCliente.map((o) => ({ valor: o.id, rotulo: o.nome || "Obra" })))} />
             ))
-          : campo("Projeto / obra", <input style={S.input} value={f.projeto} onChange={(e) => set("projeto", e.target.value)} />)}
+          : f.unidadeId === "gestao_obras"
+            ? campo("Obra", (
+                <SelectBusca style={S.input} value={f.obraId || ""}
+                  onChange={(v) => {
+                    const o = (obras || []).find((x) => x && x.id === v) || null;
+                    const cli = o ? (clientes || []).find((c) => c && c.id === o.clienteId) : null;
+                    setF((p) => ({ ...p, obraId: v, projeto: o ? o.nome || "" : "",
+                      clienteId: cli ? cli.id : p.clienteId, cliente: cli ? cli.nome : p.cliente }));
+                  }}
+                  placeholder="Procurar obra…"
+                  opcoes={[{ valor: "", rotulo: "— escolha a obra —" }].concat(obrasDaGestao(obras, clientes, f.clienteId)
+                    .map((o) => ({ valor: o.id, rotulo: o.nome || "Obra",
+                      grupo: ((clientes || []).find((c) => c && c.id === o.clienteId) || {}).nome || "" })))} />
+              ), "obra")
+            : campo("Projeto", <input style={S.input} value={f.projeto} onChange={(e) => set("projeto", e.target.value)} />)}
         {campo("Fornecedor", (
           <SelectBusca style={S.input}
             /* Campo em branco já é "Outros" no fim, então ele diz isso desde

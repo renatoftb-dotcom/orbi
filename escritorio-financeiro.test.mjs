@@ -39,7 +39,7 @@ const M = new Function(src + `
            efNomeDoFornecedor, EF_FORNECEDOR_OUTROS,
            custoDoLancamento, validarCustoEmItens,
            comIdsDosMovimentos, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
-           sugestaoDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno,
+           sugestaoDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao,
            extratosComArquivo, movimentosGuardadosDoMes, ignoradosGuardados, extratosComIgnorado };`)();
 
 const testes = [];
@@ -1881,6 +1881,33 @@ teste("Estorno: saída do banco numa conta de receita entra negativa e casa com 
   const res = M.resumoDoPeriodoEscritorio([lancParaFiltro("a", "2026-09", "rec_gestao", "escritorio", 20000),
     { ...lancParaFiltro("e1", "2026-09", "rec_gestao", "escritorio", -10833.33) }]);
   assert.strictEqual(Math.round(res.receitas * 100) / 100, Math.round((20000 - 10833.33) * 100) / 100);
+});
+
+
+teste("Por onde o dinheiro passou sai da regra: gestão só a receita passa pela conta; o resto, conforme a obra", () => {
+  assert.strictEqual(M.contaBancoPelaRegra("escritorio", "luz_agua_net", null), "sim");
+  assert.strictEqual(M.contaBancoPelaRegra("empreendimento", "emp_construcao", null), "sim");
+  assert.strictEqual(M.contaBancoPelaRegra("projetos", "rec_projetos", null), "sim");
+  const clientePaga = { id: "o1", clientePagaDireto: true }, escritorioPaga = { id: "o2", clientePagaDireto: false };
+  assert.strictEqual(M.contaBancoPelaRegra("gestao_obras", "rec_gestao", clientePaga), "sim", "a gestão é paga ao escritório");
+  assert.strictEqual(M.contaBancoPelaRegra("gestao_obras", "pagamentos_compras", clientePaga), "nao");
+  assert.strictEqual(M.contaBancoPelaRegra("gestao_obras", "pagamentos_compras", escritorioPaga), "sim");
+});
+
+teste("Obras da gestão: as do cliente escolhido, nunca as de empreendimento", () => {
+  const clientes = [{ id: "c1", nome: "Cobop" }, { id: "e1", nome: "Jacarezinho", empreendimento: true, ehEmpreendimento: true }];
+  const obras = [{ id: "o1", clienteId: "c1", nome: "Reforma Loja Cobop" }, { id: "o2", clienteId: "e1", nome: "Jacarezinho Módulo 1" }, { id: "o3", clienteId: "c9", nome: "Outra" }];
+  const todas = M.obrasDaGestao(obras, clientes, "").map((o) => o.id);
+  assert.ok(todas.includes("o1") && todas.includes("o3"));
+  assert.deepStrictEqual(M.obrasDaGestao(obras, clientes, "c1").map((o) => o.id), ["o1"]);
+});
+
+teste("Gestão de obras exige a obra; o lançamento rápido usa a obra gravada, não o nome", () => {
+  const m = { id: "g#1", data: "2026-09-10", valor: 5000, historico: "PIX RECEBIDO COBOP" };
+  const semObra = M.lancamentoRapidoDoExtrato(m, "2026-09", { campos: { contaId: "rec_gestao", unidadeId: "gestao_obras", clienteId: "c1", cliente: "Cobop", projeto: "Reforma" } }, {});
+  assert.ok(semObra.erro);
+  const comObra = M.lancamentoRapidoDoExtrato(m, "2026-09", { campos: { contaId: "rec_gestao", unidadeId: "gestao_obras", clienteId: "c1", cliente: "Cobop", projeto: "Reforma", obraId: "o1" } }, {});
+  assert.ok(comObra.lancamento, comObra.erro);
 });
 
 for (const [nome, fn] of testes) {
