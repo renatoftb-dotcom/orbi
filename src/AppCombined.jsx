@@ -12092,6 +12092,16 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       extra: (i.aliases || []).join(" ") }));
   const mexerItem = (i, muda) => setF((p) => ({ ...p,
     itens: (p.itens || []).map((x, j) => (j === i ? { ...x, ...muda } : x)) }));
+  // Mexeu na quantidade ou no preço: o total do item é refeito. O total que
+  // veio do papel só vale enquanto ninguém mexe — senão o campo mostrava um
+  // preço novo com o total antigo.
+  const mexerQtdOuPreco = (i, muda) => setF((p) => ({ ...p,
+    itens: (p.itens || []).map((x, j) => {
+      if (j !== i) return x;
+      const n = { ...x, ...muda };
+      const q = efValorDoCampo(n.quantidade), u = efValorDoCampo(n.unitario);
+      return { ...n, bruto: q > 0 && u > 0 ? Math.round(q * u * 100) / 100 : "" };
+    }) }));
   const tirarItem = (i) => setF((p) => ({ ...p, itens: (p.itens || []).filter((x, j) => j !== i) }));
   const novoItem = () => setF((p) => ({ ...p,
     itens: (p.itens || []).concat([typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio()
@@ -12419,8 +12429,10 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={S.rot}>Quantidade</div>
-                    <input style={S.input} inputMode="decimal" value={it.quantidade}
-                      onChange={(e) => mexerItem(i, { quantidade: e.target.value })} placeholder="0" />
+                    {/* número em português: vírgula no decimal, ponto no milhar —
+                        o leitor do papel entrega 6.55, e era assim que aparecia */}
+                    <CampoNumeroBR estilo={S.input} valor={it.quantidade} casas={0} maxCasas={4} placeholder="0"
+                      aoMudar={(v) => mexerQtdOuPreco(i, { quantidade: v })} />
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={S.rot}>Unidade</div>
@@ -12428,14 +12440,13 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                       unidades={typeof unidadesDoCatalogo === "function" ? unidadesDoCatalogo(insumos || []) : []}
                       insumo={it.insumoCodigo ? (insumos || []).find((m) => m && m.codigo === it.insumoCodigo) : null}
                       quantidade={it.quantidade} unitario={it.unitario}
-                      aoConverter={(c) => mexerItem(i, { unidade: c.unidade, quantidade: String(c.quantidade).replace(".", ","),
-                        unitario: String(c.unitario).replace(".", ",") })}
+                      aoConverter={(c) => mexerItem(i, { unidade: c.unidade, quantidade: c.quantidade, unitario: c.unitario })}
                       aoMudar={(v) => mexerItem(i, { unidade: v })} />
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={S.rot}>Preço unitário</div>
-                    <input style={S.input} inputMode="decimal" value={it.unitario}
-                      onChange={(e) => mexerItem(i, { unitario: e.target.value })} placeholder="0,00" />
+                    <CampoNumeroBR estilo={S.input} valor={it.unitario} casas={2} maxCasas={4} placeholder="0,00"
+                      aoMudar={(v) => mexerQtdOuPreco(i, { unitario: v })} />
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={S.rot}>Total do item</div>
@@ -15310,11 +15321,12 @@ function numeroDigitadoBR(txt) {
 // Como o número volta para o campo: milhar com ponto, decimal com vírgula.
 // `casas` é o mínimo de decimais — preço usa 2 (1.250,50), metragem usa 0
 // (200, e não 200,00).
-function textoNumeroBR(v, casas) {
-  const n = Number(v);
-  if (v === "" || v == null || !Number.isFinite(n)) return "";
+function textoNumeroBR(v, casas, maxCasas) {
+  // texto já em português ("6,55") também é número — antes virava campo vazio
+  const n = typeof v === "string" ? numeroDigitadoBR(v) : Number(v);
+  if (v === "" || v == null || n === "" || !Number.isFinite(n)) return "";
   const min = casas > 0 ? casas : 0;
-  return n.toLocaleString("pt-BR", { minimumFractionDigits: min, maximumFractionDigits: Math.max(2, min) });
+  return n.toLocaleString("pt-BR", { minimumFractionDigits: min, maximumFractionDigits: Math.max(maxCasas || 2, min) });
 }
 
 function totalPrestadores(cp, data) {
@@ -20130,9 +20142,9 @@ function MemoriaCalculo({ item, passos, onFechar }) {
 // Campo de número em pt-BR. Enquanto o usuário digita, o texto fica como ele
 // escreveu (senão "1.2" viraria "1,2" no meio da digitação e o cursor pularia);
 // ao sair do campo, volta formatado a partir do número guardado.
-function CampoNumeroBR({ valor, placeholder, disabled, estilo, casas, aoMudar }) {
+function CampoNumeroBR({ valor, placeholder, disabled, estilo, casas, maxCasas, aoMudar }) {
   const [texto, setTexto] = useState(null);
-  const mostrado = texto != null ? texto : (valor == null || valor === "" ? "" : textoNumeroBR(valor, casas));
+  const mostrado = texto != null ? texto : (valor == null || valor === "" ? "" : textoNumeroBR(valor, casas, maxCasas));
   return (
     <input style={estilo} type="text" inputMode="decimal" disabled={disabled}
       value={mostrado} placeholder={placeholder}
@@ -38277,8 +38289,8 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                             }} />
                         </div>
                         <div style={{ minWidth: 0 }}>{mini("Quantidade")}
-                          <input style={{ ...cel, textAlign: "right" }} inputMode="decimal" value={it.quantidade == null ? "" : it.quantidade}
-                            onChange={(e) => mexerQtdOuUnit(i, { quantidade: e.target.value })} placeholder="0" /></div>
+                          <CampoNumeroBR estilo={{ ...cel, textAlign: "right" }} valor={it.quantidade} casas={0} maxCasas={4} placeholder="0"
+                            aoMudar={(v) => mexerQtdOuUnit(i, { quantidade: v })} /></div>
                         <div style={{ minWidth: 0 }}>{mini("Unidade")}
                           <CampoUnidadeDoItem valor={it.unidade || ""} unidades={unidades} estilo={cel} semAviso={!isMobile}
                             insumo={it.insumoCodigo ? (insumos || []).find((y) => y && (y.codigo === it.insumoCodigo || y.id === it.insumoCodigo)) : null}
@@ -45005,8 +45017,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <label style={C.label}>Quantidade</label>
-                  <input style={C.input} inputMode="decimal" value={formConta.quantidade == null ? "" : formConta.quantidade}
-                    onChange={e => setFormConta(conciliarValorDaConta(formConta, "quantidade", e.target.value))} placeholder="0" />
+                  <CampoNumeroBR estilo={C.input} valor={formConta.quantidade} casas={0} maxCasas={4} placeholder="0"
+                    aoMudar={v => setFormConta(conciliarValorDaConta(formConta, "quantidade", v))} />
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <label style={C.label}>Unidade</label>

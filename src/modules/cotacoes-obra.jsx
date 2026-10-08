@@ -9633,8 +9633,8 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                             }} />
                         </div>
                         <div style={{ minWidth: 0 }}>{mini("Quantidade")}
-                          <input style={{ ...cel, textAlign: "right" }} inputMode="decimal" value={it.quantidade == null ? "" : it.quantidade}
-                            onChange={(e) => mexerQtdOuUnit(i, { quantidade: e.target.value })} placeholder="0" /></div>
+                          <CampoNumeroBR estilo={{ ...cel, textAlign: "right" }} valor={it.quantidade} casas={0} maxCasas={4} placeholder="0"
+                            aoMudar={(v) => mexerQtdOuUnit(i, { quantidade: v })} /></div>
                         <div style={{ minWidth: 0 }}>{mini("Unidade")}
                           <CampoUnidadeDoItem valor={it.unidade || ""} unidades={unidades} estilo={cel} semAviso={!isMobile}
                             insumo={it.insumoCodigo ? (insumos || []).find((y) => y && (y.codigo === it.insumoCodigo || y.id === it.insumoCodigo)) : null}

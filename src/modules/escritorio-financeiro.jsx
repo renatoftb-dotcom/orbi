@@ -2779,6 +2779,16 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       extra: (i.aliases || []).join(" ") }));
   const mexerItem = (i, muda) => setF((p) => ({ ...p,
     itens: (p.itens || []).map((x, j) => (j === i ? { ...x, ...muda } : x)) }));
+  // Mexeu na quantidade ou no preço: o total do item é refeito. O total que
+  // veio do papel só vale enquanto ninguém mexe — senão o campo mostrava um
+  // preço novo com o total antigo.
+  const mexerQtdOuPreco = (i, muda) => setF((p) => ({ ...p,
+    itens: (p.itens || []).map((x, j) => {
+      if (j !== i) return x;
+      const n = { ...x, ...muda };
+      const q = efValorDoCampo(n.quantidade), u = efValorDoCampo(n.unitario);
+      return { ...n, bruto: q > 0 && u > 0 ? Math.round(q * u * 100) / 100 : "" };
+    }) }));
   const tirarItem = (i) => setF((p) => ({ ...p, itens: (p.itens || []).filter((x, j) => j !== i) }));
   const novoItem = () => setF((p) => ({ ...p,
     itens: (p.itens || []).concat([typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio()
@@ -3106,8 +3116,10 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={S.rot}>Quantidade</div>
-                    <input style={S.input} inputMode="decimal" value={it.quantidade}
-                      onChange={(e) => mexerItem(i, { quantidade: e.target.value })} placeholder="0" />
+                    {/* número em português: vírgula no decimal, ponto no milhar —
+                        o leitor do papel entrega 6.55, e era assim que aparecia */}
+                    <CampoNumeroBR estilo={S.input} valor={it.quantidade} casas={0} maxCasas={4} placeholder="0"
+                      aoMudar={(v) => mexerQtdOuPreco(i, { quantidade: v })} />
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={S.rot}>Unidade</div>
@@ -3115,14 +3127,13 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                       unidades={typeof unidadesDoCatalogo === "function" ? unidadesDoCatalogo(insumos || []) : []}
                       insumo={it.insumoCodigo ? (insumos || []).find((m) => m && m.codigo === it.insumoCodigo) : null}
                       quantidade={it.quantidade} unitario={it.unitario}
-                      aoConverter={(c) => mexerItem(i, { unidade: c.unidade, quantidade: String(c.quantidade).replace(".", ","),
-                        unitario: String(c.unitario).replace(".", ",") })}
+                      aoConverter={(c) => mexerItem(i, { unidade: c.unidade, quantidade: c.quantidade, unitario: c.unitario })}
                       aoMudar={(v) => mexerItem(i, { unidade: v })} />
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={S.rot}>Preço unitário</div>
-                    <input style={S.input} inputMode="decimal" value={it.unitario}
-                      onChange={(e) => mexerItem(i, { unitario: e.target.value })} placeholder="0,00" />
+                    <CampoNumeroBR estilo={S.input} valor={it.unitario} casas={2} maxCasas={4} placeholder="0,00"
+                      aoMudar={(v) => mexerQtdOuPreco(i, { unitario: v })} />
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={S.rot}>Total do item</div>

@@ -595,11 +595,12 @@ function numeroDigitadoBR(txt) {
 // Como o número volta para o campo: milhar com ponto, decimal com vírgula.
 // `casas` é o mínimo de decimais — preço usa 2 (1.250,50), metragem usa 0
 // (200, e não 200,00).
-function textoNumeroBR(v, casas) {
-  const n = Number(v);
-  if (v === "" || v == null || !Number.isFinite(n)) return "";
+function textoNumeroBR(v, casas, maxCasas) {
+  // texto já em português ("6,55") também é número — antes virava campo vazio
+  const n = typeof v === "string" ? numeroDigitadoBR(v) : Number(v);
+  if (v === "" || v == null || n === "" || !Number.isFinite(n)) return "";
   const min = casas > 0 ? casas : 0;
-  return n.toLocaleString("pt-BR", { minimumFractionDigits: min, maximumFractionDigits: Math.max(2, min) });
+  return n.toLocaleString("pt-BR", { minimumFractionDigits: min, maximumFractionDigits: Math.max(maxCasas || 2, min) });
 }
 
 function totalPrestadores(cp, data) {
@@ -5415,9 +5416,9 @@ function MemoriaCalculo({ item, passos, onFechar }) {
 // Campo de número em pt-BR. Enquanto o usuário digita, o texto fica como ele
 // escreveu (senão "1.2" viraria "1,2" no meio da digitação e o cursor pularia);
 // ao sair do campo, volta formatado a partir do número guardado.
-function CampoNumeroBR({ valor, placeholder, disabled, estilo, casas, aoMudar }) {
+function CampoNumeroBR({ valor, placeholder, disabled, estilo, casas, maxCasas, aoMudar }) {
   const [texto, setTexto] = useState(null);
-  const mostrado = texto != null ? texto : (valor == null || valor === "" ? "" : textoNumeroBR(valor, casas));
+  const mostrado = texto != null ? texto : (valor == null || valor === "" ? "" : textoNumeroBR(valor, casas, maxCasas));
   return (
     <input style={estilo} type="text" inputMode="decimal" disabled={disabled}
       value={mostrado} placeholder={placeholder}

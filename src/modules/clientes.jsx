@@ -4999,8 +4999,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <label style={C.label}>Quantidade</label>
-                  <input style={C.input} inputMode="decimal" value={formConta.quantidade == null ? "" : formConta.quantidade}
-                    onChange={e => setFormConta(conciliarValorDaConta(formConta, "quantidade", e.target.value))} placeholder="0" />
+                  <CampoNumeroBR estilo={C.input} valor={formConta.quantidade} casas={0} maxCasas={4} placeholder="0"
+                    aoMudar={v => setFormConta(conciliarValorDaConta(formConta, "quantidade", v))} />
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <label style={C.label}>Unidade</label>
