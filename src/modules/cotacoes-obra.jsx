@@ -10116,12 +10116,38 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
     if (aoAprender && aprendidos.length) aoAprender(aprendidos);
   }
 
-  async function lerPdf(arquivo) {
-    if (!arquivo) return;
+  // O papel do pedido, venha como vier: PDF arrastado, foto, print colado
+  // (Ctrl+V). PDF passa primeiro pelo leitor do VICKE (rápido, sem custo);
+  // o que ele não lê — foto, print, PDF escaneado — vai para a IA.
+  const [progressoPapel, setProgressoPapel] = useState(null);
+  async function lerPapel(arquivo) {
+    if (!arquivo || lendo) return;
     setAviso(""); setLendo(true);
     try {
-      const o = interpretarOrcamento(await linhasDoPdf(arquivo));
-      if (!o.itens.length) throw new Error("Não achei a tabela de itens neste PDF. Se for foto ou digitalização, digite os itens.");
+      let cab = null, lidos = null, avisoLeitura = "";
+      if (tipoDoArquivoDoPapel(arquivo) === "pdf") {
+        try {
+          const o = interpretarOrcamento(await linhasDoPdf(arquivo));
+          if (o.itens.length) {
+            cab = { numero: o.numeroPedido || o.numero, data: o.emitido, vencimento: o.vencimento, desconto: o.desconto };
+            lidos = o.itens.map((it) => casarItem({
+              ...itemDoPedidoVazio(),
+              codigoLoja: it.codigo || "", descricao: it.descricao || "",
+              quantidade: it.quantidade || "", unidade: it.unidade || "",
+              unitario: it.unitario || "", bruto: it.total || "",
+            }));
+          }
+        } catch (e) { /* PDF que o leitor não abre: a IA tenta */ }
+      }
+      if (!lidos) {
+        const r = await lerPapelDoLancamento(arquivo, { iaDisponivel, aoProgresso: (pr) => setProgressoPapel(pr) });
+        if (!r.ficha) throw new Error(r.erro || "Não consegui ler este papel.");
+        const pp = r.ficha.papel || {};
+        cab = { numero: pp.numeroPedido, nota: pp.numeroNota, data: pp.emitido, vencimento: pp.vencimento, desconto: pp.desconto };
+        lidos = itensDaEntrada({ itens: r.ficha.itens || [] }, "orcamento", insumos || []);
+        if (!lidos.length) throw new Error("Li o papel, mas não achei itens nele. Digite os itens ou tente outro arquivo.");
+        avisoLeitura = r.aviso || "";
+      }
       // O papel lido fica guardado no pedido e vai junto para as contas —
       // sem isto, era ler aqui e anexar de novo lá no contas a pagar. Falhar
       // o envio não perde a leitura: os itens entram, e o aviso diz.
@@ -10130,29 +10156,42 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
         const a = await enviarAnexo(arquivo, "proposta_cotacao");
         if (a) anexo = { ...a, tipo: "pedido" };
       } catch (e) {
-        setAviso(`Os itens foram lidos, mas o papel não foi guardado (${e.message || "falha no envio"}). Anexe depois na conta a pagar.`);
+        avisoLeitura = `Os itens foram lidos, mas o papel não foi guardado (${e.message || "falha no envio"}). Anexe depois na conta a pagar.`;
       }
+      if (avisoLeitura) setAviso(avisoLeitura);
       aoMudar({
         ...p,
         anexo,
-        numeroLoja: o.numeroPedido || o.numero || p.numeroLoja,
-        data: o.emitido || p.data,
-        vencimento: o.vencimento || p.vencimento,
-        desconto: o.desconto || p.desconto || 0,
+        numeroLoja: cab.numero || p.numeroLoja,
+        numeroNota: cab.nota || p.numeroNota,
+        data: cab.data || p.data,
+        vencimento: cab.vencimento || p.vencimento,
+        desconto: cab.desconto || p.desconto || 0,
         // o que já estava decidido na tela (etapa, conta, insumo) passa
         // para os itens do papel
-        itens: herdarDoPedidoAnterior(o.itens.map((it) => casarItem({
-          ...itemDoPedidoVazio(),
-          codigoLoja: it.codigo || "", descricao: it.descricao || "",
-          quantidade: it.quantidade || "", unidade: it.unidade || "",
-          unitario: it.unitario || "", bruto: it.total || "",
-        })), itens),
+        itens: herdarDoPedidoAnterior(lidos, itens),
       });
     } catch (e) {
       setAviso(e.message || "Não consegui ler este arquivo.");
     }
-    setLendo(false);
+    setLendo(false); setProgressoPapel(null);
   }
+  // Ctrl+V com um print ou arquivo no painel aberto. Texto colado num campo
+  // segue normal — só o que é arquivo vira leitura.
+  const lerPapelRef = useRef(lerPapel);
+  lerPapelRef.current = lerPapel;
+  useEffect(() => {
+    const aoColar = (e) => {
+      const f = arquivoColado(e.clipboardData, false);
+      if (!f) return;
+      e.preventDefault();
+      const ext = String(f.type) === "application/pdf" ? "pdf" : (String(f.type || "").split("/")[1] || "png");
+      const nome = f.name && !/^image\.\w+$/i.test(f.name) ? f.name : `pedido-${new Date().toISOString().slice(0, 10)}.${ext}`;
+      lerPapelRef.current(new File([f], nome, { type: f.type }));
+    };
+    document.addEventListener("paste", aoColar);
+    return () => document.removeEventListener("paste", aoColar);
+  }, []);
   const [vendoPapel, setVendoPapel] = useState(false);
 
   const cols = isMobile ? "1fr" : "minmax(0,3fr) 70px 58px 88px 92px minmax(0,1.5fr) minmax(0,1.5fr) 30px";
@@ -10183,7 +10222,7 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
               <div
                 onDragOver={(e) => { e.preventDefault(); setSobre(true); }}
                 onDragLeave={() => setSobre(false)}
-                onDrop={(e) => { e.preventDefault(); setSobre(false); lerPdf(e.dataTransfer.files && e.dataTransfer.files[0]); }}
+                onDrop={(e) => { e.preventDefault(); setSobre(false); lerPapel(e.dataTransfer.files && e.dataTransfer.files[0]); }}
                 style={{ border: `1.5px dashed ${sobre ? "#0474f4" : "rgba(38,36,33,0.22)"}`, borderRadius: 12,
                   padding: zonaEnxuta ? "7px 10px" : "14px 16px", marginBottom: zonaEnxuta ? 10 : 14,
                   background: sobre ? "#eef5ff" : "#fafafa",
@@ -10191,22 +10230,25 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
                   display: zonaEnxuta ? "flex" : "block",
                   alignItems: "center", gap: 8 }}>
                 <div style={{ fontSize: zonaEnxuta ? 11.5 : 12.5, color: "#374151", flex: zonaEnxuta ? 1 : undefined }}>
-                  {lendo ? "Lendo o PDF…"
-                    : zonaEnxuta ? `${itens.length} ${itens.length === 1 ? "item lido" : "itens lidos"} do PDF`
-                    : ehPonteiroDeToque() ? "Toque para escolher o PDF do pedido"
-                    : "Arraste aqui o PDF do pedido da loja"}
+                  {lendo ? "Lendo o papel…"
+                    : zonaEnxuta ? (p.anexo && p.anexo.url ? "Papel do pedido anexado" : "PDF ou foto do pedido da loja")
+                    : ehPonteiroDeToque() ? "Toque para escolher o PDF ou a foto do pedido"
+                    : "Arraste, cole (Ctrl+V) ou escolha o papel do pedido da loja"}
                 </div>
-                {!zonaEnxuta && (
+                {!zonaEnxuta && !lendo && (
                   <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3 }}>
-                    número, data, vencimento e itens saem do próprio papel
+                    PDF, foto ou print — número, data, vencimento e itens saem do próprio papel
                   </div>
+                )}
+                {lendo && progressoPapel && (
+                  <div style={{ marginTop: 8, textAlign: "left" }}><BarraLeituraIA progresso={progressoPapel} /></div>
                 )}
                 <label style={{ ...E.btnSec, display: "inline-block", flexShrink: 0,
                   marginTop: zonaEnxuta ? 0 : 9, fontSize: zonaEnxuta ? 11.5 : 12,
                   padding: zonaEnxuta ? "4px 10px" : undefined }}>
-                  {zonaEnxuta ? "Trocar PDF" : "Escolher arquivo"}
-                  <input type="file" accept="application/pdf" style={{ display: "none" }}
-                    onChange={(e) => lerPdf(e.target.files && e.target.files[0])} />
+                  {zonaEnxuta ? (p.anexo && p.anexo.url ? "Trocar papel" : "Anexar papel") : "Escolher arquivo"}
+                  <input type="file" accept="application/pdf,image/*,.xml,text/xml" style={{ display: "none" }}
+                    onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; lerPapel(f); }} />
                 </label>
               </div>
             );
