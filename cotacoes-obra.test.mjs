@@ -67,7 +67,7 @@ const modulo = new Function(`
            FORA_DA_COMPRA, escolhaPorItemDaCotacao, lojaEscolhidaDoItem, temDivisao, escolherLojaDoItem,
            escolherMaisBaratoEmCada, limparDivisao, divisaoDaCotacao,
            cotacoesDaDivisao, foiDividida, cotacaoRaiz, filhasDaDivisao, podeDesfazerDivisao, desfazerDivisao,
-           cotacaoDosNaoComprados, economiaDaDivisao, anexosSemUso, totaisDaDivisao, combinarTotalDaLoja, propostaComparavel, herdarDoPedidoAnterior, resumoDaCotacao, cotacaoDeOrigemDasContas,
+           cotacaoDosNaoComprados, economiaDaDivisao, anexosSemUso, totaisDaDivisao, combinarTotalDaLoja, propostaComparavel, herdarDoPedidoAnterior, pedidosDaDivisaoALancar, pedidoDentroDaDivisao, resumoDaCotacao, cotacaoDeOrigemDasContas,
            unitarioDoTotal, totalBrutoItem, valoresComDesconto, totalEfetivoItem,
            precoEfetivo, totalNegociado, descontoDaProposta,
            linkWhatsApp, enviosDaLista, envioParaLoja, registrarEnvioDaLista, lojasParaPedir,
@@ -3950,7 +3950,7 @@ teste("Fechar a divisão: a original fica dividida, fechada e travada", () => {
   const { original } = divididaPronta();
   assert.ok(M.foiDividida(original));
   assert.strictEqual(M.situacaoCotacao(original, [], []).id, "dividida");
-  assert.strictEqual(M.situacaoCotacao(original, [], []).rotulo, "Dividida em 2 pedidos");
+  assert.strictEqual(M.situacaoCotacao(original, [], []).rotulo, "Comprada em 2 lojas");
   assert.ok(M.cotacaoEstaFechada(original, [], []));
   assert.ok(!M.podeLancarEmContas(original, []).pode);
   assert.ok(!M.podeGerarContrato(original, [], []).pode);
@@ -4176,6 +4176,28 @@ teste("Papel de entrega só com quantidade: o preço combinado da tela continua,
   assert.strictEqual(M.herdarDoPedidoAnterior([{ descricao: "Areia", quantidade: 1 }], antes)[0].insumoCodigo, undefined, "uma palavra só não basta");
   const comPreco = M.herdarDoPedidoAnterior([{ ...papel[0], unitario: 210, bruto: 630 }], antes);
   assert.strictEqual(comPreco[0].unitario, 210, "preço do papel manda quando ele traz");
+});
+
+
+teste("Compra dividida é um cartão só: os pedidos moram dentro dela; aberta enquanto falta lançar", () => {
+  const { original, filhas } = divididaPronta();
+  let cots = [original, ...filhas];
+  let g = M.cotacoesPorSituacao(cots, [], []);
+  assert.deepStrictEqual(g.abertas.map((c) => c.id), ["cd"], "os pedidos não aparecem sozinhos");
+  assert.deepStrictEqual(g.fechadas.map((c) => c.id), []);
+  assert.strictEqual(M.situacaoCotacao(original, [], [], cots).rotulo, "Dividida em 2 lojas · faltam lançar 2");
+  assert.ok(M.pedidoDentroDaDivisao(filhas[0], cots));
+  cots = [original, { ...filhas[0], pedidoNaLoja: { pedidoId: "x" } }, filhas[1]];
+  assert.strictEqual(M.pedidosDaDivisaoALancar(original, cots, []), 1);
+  assert.strictEqual(M.situacaoCotacao(original, [], [], cots).rotulo, "Dividida em 2 lojas · falta lançar 1");
+  cots = [original, { ...filhas[0], pedidoNaLoja: { pedidoId: "x" } }, { ...filhas[1], contaGeradaId: "cp9" }];
+  g = M.cotacoesPorSituacao(cots, [], []);
+  assert.deepStrictEqual(g.fechadas.map((c) => c.id), ["cd"]);
+  assert.deepStrictEqual(g.abertas, []);
+  assert.strictEqual(M.situacaoCotacao(original, [], [], cots).rotulo, "Comprada em 2 lojas");
+  // a original apagada: o pedido volta a aparecer sozinho, para não sumir
+  g = M.cotacoesPorSituacao(filhas, [], []);
+  assert.strictEqual(g.abertas.length + g.fechadas.length, 2);
 });
 
 for (const [nome, fn] of testes) {

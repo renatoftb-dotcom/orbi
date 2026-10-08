@@ -3773,13 +3773,17 @@ function pedidoDaCotacao(cot, proposta, insumos, prazoDias) {
 
 // ── Situação, em uma palavra ────────────────────────────────────
 // A ordem dos testes é a ordem do fluxo; o primeiro que casar manda.
-function situacaoCotacao(cot, aprovacoes, contratos) {
+function situacaoCotacao(cot, aprovacoes, contratos, cotacoes) {
   const c = cot || {};
   const ap = aprovacaoDaEscolha(c, aprovacoes);
   if (c.status === "cancelada")            return { id: "cancelada",  rotulo: "Cancelada",                 cor: "#6b7280" };
   if (foiDividida(c)) {
     const n = c.divisao.filhas.length;
-    return { id: "dividida", rotulo: n === 1 ? "Virou 1 pedido" : `Dividida em ${n} pedidos`, cor: "#15803d" };
+    const faltam = cotacoes ? pedidosDaDivisaoALancar(c, cotacoes, contratos) : 0;
+    if (faltam > 0) {
+      return { id: "dividindoLancar", rotulo: `Dividida em ${n} lojas · ${faltam === 1 ? "falta lançar 1" : `faltam lançar ${faltam}`}`, cor: "#0474f4" };
+    }
+    return { id: "dividida", rotulo: n === 1 ? "Comprada em 1 loja" : `Comprada em ${n} lojas`, cor: "#15803d" };
   }
   if (ehContaDeLoja(c)) {
     return c.status === "encerrada"
@@ -4280,8 +4284,25 @@ function criarPrestadorRapido(campos, novoId) {
 // Recusada pelo cliente fica em aberto de propósito: falta reescolher.
 const SITUACOES_FECHADAS = ["contratada", "lancada", "cancelada", "encerrada", "naLoja", "dividida"];
 
-function cotacaoEstaFechada(cot, aprovacoes, contratos) {
-  return SITUACOES_FECHADAS.indexOf(situacaoCotacao(cot, aprovacoes, contratos).id) >= 0;
+function cotacaoEstaFechada(cot, aprovacoes, contratos, cotacoes) {
+  return SITUACOES_FECHADAS.indexOf(situacaoCotacao(cot, aprovacoes, contratos, cotacoes).id) >= 0;
+}
+
+// Quantos pedidos de uma compra dividida ainda não viraram conta (nem
+// pedido na conta da loja, nem contrato). Pedido excluído não conta.
+function pedidosDaDivisaoALancar(cot, cotacoes, contratos) {
+  return filhasDaDivisao(cot, cotacoes).filter((f) => {
+    const x = f.cotacao;
+    return x && x.status !== "cancelada" && !x.contaGeradaId && !x.pedidoNaLoja && !contratoDaCotacao(contratos, x.id);
+  }).length;
+}
+
+// O pedido de uma divisão não aparece sozinho na lista: ele mora dentro da
+// cotação que o gerou. Uma compra, um cartão.
+function pedidoDentroDaDivisao(c, cotacoes) {
+  if (!c || !c.divisaoDe) return false;
+  const mae = (cotacoes || []).find((x) => x && x.id === c.divisaoDe);
+  return !!mae && foiDividida(mae) && ((mae.divisao.filhas || []).some((f) => f.cotacaoId === c.id));
 }
 
 // Compras da obra em três montes: a cotação que ainda pede decisão, a que já
@@ -4289,9 +4310,11 @@ function cotacaoEstaFechada(cot, aprovacoes, contratos) {
 // não é cotação nenhuma: é onde os pedidos fechados se somam até a fatura.
 function cotacoesPorSituacao(cotacoes, aprovacoes, contratos) {
   const abertas = [], fechadas = [], lojas = [];
-  for (const c of (cotacoes || []).filter((x) => x && x.id)) {
+  const todas = (cotacoes || []).filter((x) => x && x.id);
+  for (const c of todas) {
     if (ehContaDeLoja(c)) { lojas.push(c); continue; }
-    (cotacaoEstaFechada(c, aprovacoes, contratos) ? fechadas : abertas).push(c);
+    if (pedidoDentroDaDivisao(c, todas)) continue;
+    (cotacaoEstaFechada(c, aprovacoes, contratos, todas) ? fechadas : abertas).push(c);
   }
   return { abertas, fechadas, lojas };
 }
@@ -5771,7 +5794,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       lista.push(r.original, ...r.filhas);
     }
     gravarCotacoes(lista);
-    setAbertas((a) => { const n = { ...a, [cot.id]: false }; for (const f of r.filhas) n[f.id] = true; return n; });
+    setAbertas((a) => ({ ...a, [cot.id]: true }));
   }
 
   async function desfazerDivisaoDe(cot) {
@@ -5804,7 +5827,13 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   function irParaCotacao(id) {
     const alvo = cotacoes.find((c) => c.id === id);
     if (!alvo) return;
-    setFiltroLista(ehContaDeLoja(alvo) ? "lojas" : cotacaoEstaFechada(alvo, aprovacoes, contratos) ? "fechadas" : "abertas");
+    if (pedidoDentroDaDivisao(alvo, cotacoes)) {
+      const mae = cotacoes.find((c) => c.id === alvo.divisaoDe);
+      setFiltroLista(cotacaoEstaFechada(mae, aprovacoes, contratos, cotacoes) ? "fechadas" : "abertas");
+      setAbertas((a) => ({ ...a, [mae.id]: true, [id]: true }));
+      return;
+    }
+    setFiltroLista(ehContaDeLoja(alvo) ? "lojas" : cotacaoEstaFechada(alvo, aprovacoes, contratos, cotacoes) ? "fechadas" : "abertas");
     setAbertas((a) => ({ ...a, [id]: true }));
   }
 
@@ -6165,15 +6194,17 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
               ? "Nenhuma conta aberta em loja. Ela nasce quando um pedido a pagar entra pela Entrada ou quando uma cotação é somada à conta da loja."
               : "Nenhuma cotação em aberto — todas já viraram contrato, conta a pagar ou pedido na loja."}
         </div>
-      ) : visiveis.map(cot => {
-        const s = situacaoCotacao(cot, aprovacoes, contratos);
+      ) : visiveis.map(function cartaoDaCotacao(cot, _i, _l, aninhado) {
+        const s = situacaoCotacao(cot, aprovacoes, contratos, cotacoes);
         const ap = aprovacaoDaEscolha(cot, aprovacoes);
         const props = propostasOrdenadas(cot);
         const esc = propostaEscolhida(cot);
         const melhor = melhorProposta(cot);
         const eco = economiaDaCotacao(cot);
         const conta = typeof contaPorId === "function" ? contaPorId(cot.contaId) : null;
-        const aberto = !!abertas[cot.id];
+        // aninhado: o pedido de uma loja dentro da compra dividida — a linha
+        // da loja no quadro da divisão é o cabeçalho dele
+        const aberto = aninhado ? true : !!abertas[cot.id];
         const trava = podeGerarContrato(cot, aprovacoes, contratos);
         // Conta de loja mostra o que está pendurado, não o preço de uma proposta.
         const pedidosDaLoja = (cot.pedidos || []).length;
@@ -6182,7 +6213,8 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
             .filter(x => x && x.cotacaoId === cot.id && !x.pago)
             .reduce((s, x) => s + (Number(x.valor) || 0), 0) * 100) / 100;
         return (
-          <div key={cot.id} style={E.card}>
+          <div key={cot.id} style={aninhado ? { background: "#fff" } : E.card}>
+            {!aninhado && (
             <button onClick={() => setAbertas(a => ({ ...a, [cot.id]: !a[cot.id] }))}
               style={{ width: "100%", background: "none", border: "none", padding: "12px 14px", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -6200,6 +6232,12 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   `${(prestadores.find(f => f.id === cot.lojaId) || {}).nome || "sem loja"} · `
                   + (pedidosDaLoja === 1 ? "1 pedido" : `${pedidosDaLoja} pedidos`)
                   + (abertoDaLoja > 0 ? " · a pagar" : "")
+                ) : foiDividida(cot) ? (
+                  // quem levou o quê, já no cabeçalho: bater o olho e entender
+                  <>
+                    {(conta ? conta.nome + " · " : "")}
+                    {totaisDaDivisao(cot, cotacoes).filhas.map((f) => `${f.favorecido || "loja"} ${dinheiro(f.total)}`).join(" + ")}
+                  </>
                 ) : (
                   <>
                     {(conta ? conta.nome + " · " : "")}{props.length === 1 ? "1 proposta" : `${props.length} propostas`}
@@ -6208,6 +6246,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                 )}
               </div>
             </button>
+            )}
 
             {aberto && ehContaDeLoja(cot) && (
               <div style={{ borderTop: "1px solid rgba(38,36,33,0.08)", padding: isMobile ? "12px 10px" : "12px 14px" }}>
@@ -6254,7 +6293,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                       </span>
                     )]);
                   }
-                  if (cot.divisaoDe) {
+                  if (cot.divisaoDe && !aninhado) {
                     const mae = cotacoes.find((x) => x.id === cot.divisaoDe);
                     linhas.push(["Parte da divisão", (
                       <span>
@@ -6284,6 +6323,17 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   );
                 })()}
 
+                {/* compra dividida: o que importa vem primeiro — quem levou o
+                    quê e o que falta lançar; as propostas ficam embaixo */}
+                {foiDividida(cot) && (
+                  <BlocoDivisaoFechada cot={cot} cotacoes={cotacoes} aprovacoes={aprovacoes} contratos={contratos}
+                    dinheiro={dinheiro} isMobile={isMobile} podeGerenciar={podeGerenciar}
+                    aberta={(id) => !!abertas[id]}
+                    alternar={(id) => setAbertas((a) => ({ ...a, [id]: !a[id] }))}
+                    renderPedido={(x) => cartaoDaCotacao(x, 0, null, true)}
+                    aoIr={irParaCotacao} aoDesfazer={() => desfazerDivisaoDe(cot)}
+                    aoNaoComprados={() => abrirNaoComprados(cot)} />
+                )}
                 {(() => {
                   if (!props.length) {
                     return <div style={{ fontSize: 12.5, color: "#4b5563", marginBottom: 12 }}>Nenhuma proposta registrada ainda.</div>;
@@ -6436,12 +6486,6 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                       } : null} />
                 )}
 
-                {foiDividida(cot) && (
-                  <BlocoDivisaoFechada cot={cot} cotacoes={cotacoes} aprovacoes={aprovacoes} contratos={contratos}
-                    dinheiro={dinheiro} isMobile={isMobile} podeGerenciar={podeGerenciar}
-                    aoIr={irParaCotacao} aoDesfazer={() => desfazerDivisaoDe(cot)}
-                    aoNaoComprados={() => abrirNaoComprados(cot)} />
-                )}
 
                 {eco && eco.economia > 0 && !temDivisao(cot) && !foiDividida(cot) && (
                   <div style={{ fontSize: 12, color: "#15803d", marginBottom: 12 }}>
@@ -6504,7 +6548,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                       {!cot.divisaoDe && (
                         <button style={E.btnSec} onClick={() => { setErro(""); setFormProposta({ cotacaoId: cot.id, proposta: propostaVazia() }); }}>+ Registrar proposta</button>
                       )}
-                      <button style={E.btnSec} onClick={() => { setErro(""); setFormCotacao(cot); }}>Editar cotação</button>
+                      {!aninhado && <button style={E.btnSec} onClick={() => { setErro(""); setFormCotacao(cot); }}>Editar cotação</button>}
                       {s.id === "aEnviar" && ehEscritorio && (
                         <button style={E.btn} onClick={() => enviarAoCliente(cot)}>Enviar ao cliente</button>
                       )}
@@ -6554,7 +6598,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                       })()}
                       {!trava.pode && !cot.divisaoDe && <span style={{ fontSize: 11.5, color: "#6b7280", alignSelf: "center",
                         gridColumn: isMobile ? "1 / -1" : undefined }}>{trava.motivo}</span>}
-                      {podeExcluir && (
+                      {podeExcluir && !aninhado && (
                         <button style={{ ...E.btnSec, color: "#dc2626", marginLeft: isMobile ? 0 : "auto",
                           gridColumn: isMobile ? "1 / -1" : undefined }}
                           onClick={() => excluirCotacao(cot)}>Excluir cotação</button>
@@ -7113,9 +7157,10 @@ function VisorProposta({ anexo, aoFechar }) {
   );
 }
 
-// A cotação já dividida: os pedidos que saíram dela, cada um com a sua
-// situação, e o que ficou de fora — que vira cotação nova só se pedir.
-function BlocoDivisaoFechada({ cot, cotacoes, aprovacoes, contratos, dinheiro, isMobile, podeGerenciar, aoIr, aoDesfazer, aoNaoComprados }) {
+// A compra dividida, num cartão só: cada loja é uma linha — o que levou,
+// quanto, e se o pedido dela já foi lançado. Tocar na linha abre o pedido
+// ali mesmo, com os botões de lançar; nada de procurar outro cartão.
+function BlocoDivisaoFechada({ cot, cotacoes, aprovacoes, contratos, dinheiro, isMobile, podeGerenciar, aoIr, aoDesfazer, aoNaoComprados, aberta, alternar, renderPedido }) {
   const E = COT_ESTILO;
   const dv = cot.divisao || {};
   const tot = totaisDaDivisao(cot, cotacoes);
@@ -7123,41 +7168,78 @@ function BlocoDivisaoFechada({ cot, cotacoes, aprovacoes, contratos, dinheiro, i
   const fora = itensDaCotacao(cot).filter((it) => (dv.fora || []).indexOf(it.id) >= 0);
   const nc = cot.naoCompradosId ? cotacoes.find((x) => x.id === cot.naoCompradosId) : null;
   const desfazer = podeDesfazerDivisao(cot, cotacoes, contratos);
-  const nomeDo = (id) => { const it = itensDaCotacao(cot).find((x) => x.id === id); return it ? it.descricao || "Item" : ""; };
-  const nItens = (n) => `${n} ${n === 1 ? "item" : "itens"}`;
+  const itemDe = (id) => itensDaCotacao(cot).find((x) => x.id === id) || null;
+  const textoItem = (id) => {
+    const it = itemDe(id);
+    if (!it) return "";
+    const q = quantidadeDoItem(it);
+    return `${it.descricao || "Item"}${q > 0 ? ` (${qtdBR(q)}${it.unidade ? " " + it.unidade : ""})` : ""}`;
+  };
+  const faltam = pedidosDaDivisaoALancar(cot, cotacoes, contratos);
   const link = { background: "none", border: "none", padding: 0, color: "#0474f4", cursor: "pointer", fontFamily: "inherit",
     fontSize: 12, fontWeight: 500, textDecoration: "underline", whiteSpace: "nowrap" };
+  const situacaoDoPedido = (x) => {
+    if (!x) return { rotulo: "Pedido excluído", cor: "#6b7280" };
+    const s = situacaoCotacao(x, aprovacoes, contratos);
+    if (s.id === "naLoja") return { rotulo: "Na conta da loja", cor: "#15803d" };
+    if (s.id === "lancada") return { rotulo: "Em contas a pagar", cor: "#15803d" };
+    if (s.id === "contratada") return { rotulo: "Virou contrato", cor: "#15803d" };
+    if (s.id === "cancelada") return { rotulo: "Cancelado", cor: "#6b7280" };
+    return { rotulo: "Falta lançar", cor: "#b45309" };
+  };
   return (
     <div data-vk-divisao-fechada="1" style={{ ...E.quadro, padding: 0, marginBottom: 12, overflow: "hidden" }}>
-      <div style={{ background: "#f0fdf4", padding: "8px 12px", borderBottom: "1px solid rgba(21,128,61,0.18)", fontSize: 12, color: "#15803d" }}>
-        <b>Dividida entre lojas</b>
-        {dv.em ? ` em ${new Date(dv.em).toLocaleDateString("pt-BR")}` : ""}{dv.por ? ` por ${nomeGravado(dv.por)}` : ""} · total {dinheiro(tot.total)}
+      <div style={{ background: faltam ? "#eef5ff" : "#f0fdf4", padding: "9px 12px",
+        borderBottom: `1px solid ${faltam ? "rgba(4,116,244,0.18)" : "rgba(21,128,61,0.18)"}` }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: faltam ? "#0474f4" : "#15803d" }}>
+            {filhas.length === 1 ? "Comprada em 1 loja" : `Comprada em ${filhas.length} lojas`}
+            {faltam ? ` · ${faltam === 1 ? "falta lançar 1 pedido" : `faltam lançar ${faltam} pedidos`}` : ""}
+          </span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{dinheiro(tot.total)}</span>
+        </div>
+        <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
+          Cada item foi para a loja mais conveniente
+          {dv.em ? ` · dividida em ${new Date(dv.em).toLocaleDateString("pt-BR")}` : ""}{dv.por ? ` por ${nomeGravado(dv.por)}` : ""}
+        </div>
       </div>
       {filhas.map((f) => {
-        const s = f.cotacao ? situacaoCotacao(f.cotacao, aprovacoes, contratos) : null;
+        const sp = situacaoDoPedido(f.cotacao);
+        const abertaJa = !!(f.cotacao && aberta && aberta(f.cotacaoId));
         return (
-          <div key={f.cotacaoId} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "8px 12px",
-            borderTop: "1px solid rgba(38,36,33,0.06)", alignItems: isMobile ? "flex-start" : "center", flexWrap: isMobile ? "wrap" : "nowrap" }}>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{f.favorecido || "Loja"}</span>
-                {s ? selo(s.cor, s.rotulo) : selo("#6b7280", "Pedido excluído")}
+          <div key={f.cotacaoId} style={{ borderTop: "1px solid rgba(38,36,33,0.08)" }}>
+            <button type="button" data-vk-loja-da-divisao={f.cotacaoId} disabled={!f.cotacao}
+              onClick={() => f.cotacao && alternar && alternar(f.cotacaoId)}
+              style={{ width: "100%", background: abertaJa ? "#fafafa" : "#fff", border: "none", padding: "10px 12px",
+                cursor: f.cotacao ? "pointer" : "default", fontFamily: "inherit", textAlign: "left",
+                display: "flex", gap: 10, alignItems: "flex-start" }}>
+              <span aria-hidden="true" style={{ fontSize: 11, color: "#6b7280", marginTop: 3, width: 10 }}>{f.cotacao ? (abertaJa ? "▾" : "▸") : ""}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{f.favorecido || "Loja"}</span>
+                  {selo(sp.cor, sp.rotulo)}
+                </span>
+                <span style={{ display: "block", fontSize: 11.5, color: "#4b5563", marginTop: 3 }}>
+                  {(f.itens || []).map(textoItem).filter(Boolean).join(" · ")}
+                </span>
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>{dinheiro(Number(f.total) || 0)}</span>
+            </button>
+            {abertaJa && renderPedido && (
+              <div data-vk-pedido-da-divisao={f.cotacaoId} style={{ borderTop: "1px dashed rgba(38,36,33,0.14)", background: "#fff" }}>
+                {renderPedido(f.cotacao)}
               </div>
-              <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
-                {nItens((f.itens || []).length)}: {(f.itens || []).map(nomeDo).join(", ")}
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>{dinheiro(Number(f.total) || 0)}</span>
-              {f.cotacao && <button type="button" data-vk-ir-pedido={f.cotacaoId} style={link} onClick={() => aoIr(f.cotacaoId)}>abrir pedido</button>}
-            </div>
+            )}
           </div>
         );
       })}
       {fora.length > 0 && (
-        <div style={{ padding: "8px 12px", borderTop: "1px solid rgba(38,36,33,0.06)", background: "#fafafa" }}>
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: "#6b7280" }}>Não comprados · {nItens(fora.length)}</div>
-          <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>{fora.map((it) => it.descricao || "Item").join(", ")}</div>
+        <div style={{ padding: "9px 12px", borderTop: "1px solid rgba(38,36,33,0.08)", background: "#fafafa" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#6b7280" }}>Não comprados</span>
+            {selo("#6b7280", fora.length === 1 ? "1 item" : `${fora.length} itens`)}
+          </div>
+          <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>{fora.map((it) => textoItem(it.id)).join(" · ")}</div>
           {podeGerenciar && (nc ? (
             <button type="button" style={{ ...link, marginTop: 6 }} onClick={() => aoIr(nc.id)}>ver a cotação nova destes itens</button>
           ) : (
@@ -7426,6 +7508,11 @@ function ComparativoLista({ cot, dinheiro, isMobile, divisao }) {
           {cmp.ganhoDaDivisao > 0 && (
             <span style={{ color: "#15803d" }}> Comprando cada item onde está mais barato sairia {dinheiro(cmp.totalDividido)} — {dinheiro(cmp.ganhoDaDivisao)} a menos que a loja mais barata na lista inteira.</span>
           )}
+        </div>
+      )}
+      {foiDividida(cot) && (
+        <div style={{ padding: "7px 12px", borderTop: "1px solid rgba(38,36,33,0.08)", fontSize: 11.5, color: "#4b5563" }}>
+          <span style={{ color: "#0474f4", fontWeight: 700 }}>Em azul</span>, a loja de onde saiu cada item.
         </div>
       )}
       {!dv && comPreco.length > 1 && !foiDividida(cot) && (
