@@ -2456,6 +2456,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [view, setView] = useState(entradaDireta ? "detalheObra" : entradaInicial ? "cotacoesObra" : obraInicial ? "detalheObra" : "lista");
   // Pedido de abrir a caixa da Entrada vindo do card do painel da obra.
   const [abrirEntrada, setAbrirEntrada] = useState(false);
+  // a cotação que a tela de compras abre já no lugar (vinda do contrato)
+  const [cotacaoInicialId, setCotacaoInicialId] = useState("");
   const [formObra, setFormObra] = useState(null);
   const [formContrato, setFormContrato] = useState(null);
   // Gerador de contratos: `contratoGerando` é o rascunho em edição e
@@ -5893,8 +5895,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             {contratosDaObra.map(contrato => {
               const sts = statusContrato[contrato.status] || statusContrato.ativo;
               return (
-                <div key={contrato.id} style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10 }}>
-                  <div style={{ flex: 1 }}>
+                <div key={contrato.id} style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10, flexWrap: isMobile ? "wrap" : "nowrap" }}>
+                  <div style={{ flex: 1, minWidth: isMobile ? "100%" : 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>
                       {contrato.numeroContrato ? <span style={{ color: "#4b5563", fontWeight: 500 }}>{`Contrato ${contrato.numeroContrato} · `}</span> : null}
                       {contrato.nomeContratado}
@@ -5922,8 +5924,29 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                     )}
                   </div>
                   {(podeContratar || contrato.gerado) && (
-                    <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
                       {contrato.gerado && <button onClick={() => { setContratoAberto(contrato); setView("verContrato"); }} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Abrir</button>}
+                      {/* A cotação do contrato: a que ele gerou, a aberta a
+                          partir dele, ou uma nova com o contratado como
+                          primeira proposta — para pôr os concorrentes ao lado. */}
+                      {perm.podeGerenciarObra && typeof cotacaoDoContrato === "function"
+                        && contrato.tipoProfissional !== "gestaoObra" && contrato.prestadorId !== "__escritorio__" && (() => {
+                        const existente = cotacaoDoContratoExistente((obraAtual && obraAtual.cotacoes) || [], contrato);
+                        return (
+                          <button data-vk-cotacao-do-contrato="1" style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}
+                            title={existente ? "Abrir a cotação deste contrato" : "Abrir uma cotação com este contrato como primeira proposta, para comparar com outros"}
+                            onClick={() => {
+                              let id = existente && existente.id;
+                              if (!id) {
+                                const nova = cotacaoDoContrato(contrato, obraAtual.id);
+                                id = nova.id;
+                                gravarObras(obras.map(o => (o.id === obraAtual.id ? { ...o, cotacoes: [...(o.cotacoes || []), nova] } : o)));
+                              }
+                              setCotacaoInicialId(id);
+                              setView("cotacoesObra");
+                            }}>{existente ? "Ver cotação" : "Abrir cotação"}</button>
+                        );
+                      })()}
                       {podeContratar && <button onClick={() => { if (contrato.gerado) { setContratoSalvoEm(0); setContratoGerando(contrato); setView("gerarContrato"); } else setFormContrato(contrato); }} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>}
                       {perm.podeGerenciarObra && <button onClick={() => { dialogo.confirmar({ titulo: "Remover contrato?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true }).then(ok => { if (ok) {
                         const restantes = contratos.filter(c => c.id !== contrato.id);
@@ -5977,8 +6000,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         onObraAtualizada={setObraSelecionada}
         isMobile={isMobile}
         usuario={perm.usuario}
-        onVoltar={() => { setAbrirEntrada(false); setView("detalheObra"); }}
-        abrirEntrada={abrirEntrada} entradaInicial={entradaInicial}
+        onVoltar={() => { setAbrirEntrada(false); setCotacaoInicialId(""); setView("detalheObra"); }}
+        abrirEntrada={abrirEntrada} entradaInicial={entradaInicial} cotacaoInicialId={cotacaoInicialId}
         onGerarContrato={abrirContratoDaCotacao}
         onLancarContas={lancarCotacaoEmContas}
         onLancarDespesa={lancarDespesaDaEntrada}

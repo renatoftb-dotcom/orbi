@@ -45,7 +45,7 @@ const modulo = new Function(`
   var INSUMO_GRUPOS = [];
   ${insSrc.slice(0, corteIns)}
   ${cotSrc.slice(0, cotSrc.lastIndexOf("// ═", corteCot))}
-  return { fichaDoXmlDaNfe, tipoDoArquivoDoPapel, obrasCitadasNoTexto, cotacaoVazia, propostaVazia, valorProposta, propostasOrdenadas, propostaPorId,
+  return { cotacaoDoContrato, contratoDeOrigem, cotacaoDoContratoExistente, mesmoContratado, fichaDoXmlDaNfe, tipoDoArquivoDoPapel, obrasCitadasNoTexto, cotacaoVazia, propostaVazia, valorProposta, propostasOrdenadas, propostaPorId,
            propostaEscolhida, melhorProposta, economiaDaCotacao,
            aprovacaoDaCotacao, registrarAprovacaoCotacao, situacaoCotacao,
            podeGerarContrato, contratoDaCotacao, tipoDoContaId, dadosDoContratoDaCotacao,
@@ -4198,6 +4198,39 @@ teste("Compra dividida é um cartão só: os pedidos moram dentro dela; aberta e
   // a original apagada: o pedido volta a aparecer sozinho, para não sumir
   g = M.cotacoesPorSituacao(filhas, [], []);
   assert.strictEqual(g.abertas.length + g.fechadas.length, 2);
+});
+
+
+teste("contrato sem cotação: a cotação nasce com o contratado como primeira proposta, item a item, e aberta", () => {
+  const ct = { id: "258uz4m", numeroContrato: "0004", nomeContratado: "MB VIEZZER MONTAGENS INDUSTRIAIS", prestadorId: "forn_7",
+    tipoProfissional: "serralheiro", valor: 99000, objeto: "Serviços de serralheria", entradaPct: 50, prazoQtd: 120, prazoUnidade: "dias",
+    dataAssinatura: "2026-09-08", obraId: "in624qo",
+    itens: [{ descricao: "Cobertura do espaço novo", valor: 16158.55 }, { descricao: "Fachada em telha RT 10", valor: 31336.05 }, { descricao: "", valor: 0 }] };
+  const cot = M.cotacaoDoContrato(ct, "in624qo");
+  assert.strictEqual(cot.titulo, "Serralheiro — contrato 0004");
+  assert.strictEqual(cot.contratoOrigemId, "258uz4m");
+  assert.strictEqual(cot.escolhidaId, "");
+  assert.strictEqual(cot.itens.length, 2, "item vazio do contrato não entra");
+  const p = cot.propostas[0];
+  assert.strictEqual(p.fornecedorId, "forn_7");
+  assert.strictEqual(M.valorProposta(p), 47494.6);
+  assert.strictEqual(M.totalDosItens(cot, p), 47494.6);
+  assert.strictEqual(p.prazoDias, "120");
+  assert.match(p.condicaoPagamento, /50%/);
+  assert.match(p.observacao, /contrato 0004 \(08\/09\/2026\)/);
+  // não se dá por fechada: o contrato não aponta para ela
+  assert.strictEqual(M.contratoDaCotacao([ct], cot.id), null);
+  assert.strictEqual(M.contratoDeOrigem([ct], cot), ct);
+  assert.strictEqual(M.cotacaoDoContratoExistente([cot], ct), cot);
+  assert.ok(M.mesmoContratado(p, ct));
+  assert.ok(!M.mesmoContratado({ fornecedorId: "outro" }, ct));
+  assert.ok(M.mesmoContratado({ favorecido: "mb viezzer montagens industriais" }, { nomeContratado: "MB VIEZZER MONTAGENS INDUSTRIAIS" }));
+});
+
+teste("contrato sem itens: a proposta vem pelo valor do contrato", () => {
+  const cot = M.cotacaoDoContrato({ id: "c", valor: 5000, nomeContratado: "Zé", tipoProfissional: "pintor" }, "o1");
+  assert.strictEqual(cot.itens.length, 0);
+  assert.strictEqual(M.valorProposta(cot.propostas[0]), 5000);
 });
 
 for (const [nome, fn] of testes) {

@@ -33850,6 +33850,78 @@ const enviarComprovante = (arquivo) => enviarAnexo(arquivo, "comprovante_pagamen
 // "12,5 m²" continuar possível sem forçar centavos em tudo.
 
 // ══════════════════════════════════════════════════════════════
+// COTAÇÃO ABERTA A PARTIR DE UM CONTRATO
+// ══════════════════════════════════════════════════════════════
+// Contrato registrado antes das cotações (ou fora delas) não tinha onde ser
+// comparado. Abrir a cotação dele traz o contratado como a primeira
+// proposta, item a item, com os valores do contrato, e a cotação fica
+// aberta para os concorrentes. Ela lembra de onde veio (`contratoOrigemId`)
+// sem se dar por fechada: se a escolha final for o mesmo contratado, o
+// contrato que já existe continua valendo — não nasce um segundo.
+function cotBR(v) {
+  return (Math.round((Number(v) || 0) * 100) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function cotacaoDoContrato(contrato, obraId) {
+  const ct = contrato || {};
+  const cot = cotacaoVazia(obraId || ct.obraId || "");
+  const tipo = typeof tipoProfissional === "function" ? tipoProfissional(ct.tipoProfissional) : null;
+  const doCt = (ct.itens || []).filter((i) => i && (String(i.descricao || "").trim() || numeroDoCampo(i.valor) > 0));
+  const itens = doCt.map((i) => ({ ...itemCotacaoVazio(), descricao: String(i.descricao || "").trim(), unidade: "vb", quantidade: "1" }));
+  const precos = {};
+  itens.forEach((it, k) => { const v = numeroDoCampo(doCt[k].valor); if (v > 0) precos[it.id] = cotBR(v); });
+  const soma = doCt.reduce((t, i) => t + numeroDoCampo(i.valor), 0);
+  const total = soma > 0 ? soma : numeroDoCampo(ct.valor);
+  const qtd = Number(ct.prazoQtd) || 0;
+  const prazoDias = qtd ? (ct.prazoUnidade === "meses" ? qtd * 30 : ct.prazoUnidade === "semanas" ? qtd * 7 : qtd) : "";
+  const pct = numeroDoCampo(ct.entradaPct);
+  const assinado = String(ct.dataAssinatura || ct.criadoEm || "").slice(0, 10);
+  const proposta = {
+    ...propostaVazia(),
+    fornecedorId: ct.prestadorId || "",
+    favorecido: ct.nomeContratado || "",
+    valor: total > 0 ? cotBR(total) : "",
+    precos,
+    prazoDias: prazoDias ? String(prazoDias) : "",
+    condicaoPagamento: pct > 0 ? `entrada de ${String(pct).replace(".", ",")}% e saldo na conclusão` : "",
+    observacao: `Do contrato ${ct.numeroContrato || ""}`.trim() + (assinado ? ` (${assinado.split("-").reverse().join("/")})` : ""),
+    recebidaEm: assinado || (typeof dataParaIso === "function" ? dataParaIso(new Date()) : ""),
+  };
+  return {
+    ...cot,
+    titulo: `${(tipo && tipo.nome) || "Serviço"}${ct.numeroContrato ? ` — contrato ${ct.numeroContrato}` : ""}`,
+    escopo: String(ct.objeto || ct.descricaoServico || "").trim(),
+    contaId: typeof contaDoTipo === "function" ? contaDoTipo(ct.tipoProfissional) : cot.contaId,
+    itens,
+    propostas: [proposta],
+    contratoOrigemId: ct.id || "",
+  };
+}
+
+// O contrato de onde a cotação foi aberta, se ainda existe.
+function contratoDeOrigem(contratos, cot) {
+  const id = (cot || {}).contratoOrigemId;
+  if (!id) return null;
+  return (contratos || []).find((c) => c && c.id === id) || null;
+}
+
+// A cotação que já existe para o contrato: a que ele gerou ou a que foi
+// aberta a partir dele — abrir de novo criaria uma segunda.
+function cotacaoDoContratoExistente(cotacoes, contrato) {
+  const ct = contrato || {};
+  return (cotacoes || []).find((c) => c && c.status !== "cancelada"
+    && ((ct.cotacaoId && c.id === ct.cotacaoId) || (ct.id && c.contratoOrigemId === ct.id))) || null;
+}
+
+// A proposta escolhida é do mesmo contratado do contrato de origem?
+function mesmoContratado(proposta, contrato) {
+  const p = proposta || {}, ct = contrato || {};
+  if (p.fornecedorId && ct.prestadorId) return p.fornecedorId === ct.prestadorId;
+  const n = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+  return !!n(p.favorecido) && n(p.favorecido) === n(ct.nomeContratado);
+}
+
+// ══════════════════════════════════════════════════════════════
 // UI — bloco de cotações da obra
 // ══════════════════════════════════════════════════════════════
 // A MESMA tela serve o escritório e o cliente: o ambiente do cliente
@@ -33902,7 +33974,7 @@ function selo(cor, texto) {
   );
 }
 
-function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, usuario, onGerarContrato, onLancarContas, onLancarDespesa, onLancarEntrada, onDesfazerLancamento, onRecalibrarPedido, onExcluirPedido, abrirEntrada, entradaInicial }) {
+function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, usuario, onGerarContrato, onLancarContas, onLancarDespesa, onLancarEntrada, onDesfazerLancamento, onRecalibrarPedido, onExcluirPedido, abrirEntrada, entradaInicial, cotacaoInicialId }) {
   const perm = getPermissoes();
   // O módulo é o mesmo dos dois lados: o cliente cria cotação, registra a
   // proposta que recebeu do fornecedor e escolhe, como o escritório. O que
@@ -33927,6 +33999,17 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const dinheiro = (v) => (typeof fmtMoedaCtr === "function" ? fmtMoedaCtr(v) : "R$ " + Number(v || 0).toFixed(2));
 
   const [abertas, setAbertas] = useState({});
+  // Vindo do card do contrato: a cotação dele já abre na tela, no lugar.
+  useEffect(() => {
+    if (!cotacaoInicialId) return;
+    irParaCotacao(cotacaoInicialId);
+    const t = setTimeout(() => {
+      const el = typeof document !== "undefined" ? document.querySelector(`[data-vk-cotacao="${cotacaoInicialId}"]`) : null;
+      if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 150);
+    return () => clearTimeout(t);
+  }, [cotacaoInicialId]);
+
   const [formCotacao, setFormCotacao] = useState(null);
   const [formProposta, setFormProposta] = useState(null); // { cotacaoId, proposta }
   const [formDecisao, setFormDecisao] = useState(null);
@@ -35361,6 +35444,20 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     if (onGerarContrato) onGerarContrato(dados);
   }
 
+  // A cotação aberta a partir de um contrato que fica com o mesmo
+  // contratado: o contrato que já existe passa a ser o desta cotação, e ela
+  // fecha — sem um segundo contrato para o mesmo serviço.
+  async function manterContrato(cot, origem) {
+    const ok = await dialogo.confirmar({
+      titulo: `Manter o contrato ${origem.numeroContrato || ""}?`.replace(" ?", "?"),
+      mensagem: `${origem.nomeContratado || "O contratado"} continua com o contrato ${origem.numeroContrato || ""} e a cotação fecha com ele. Nada muda nas parcelas.`,
+      confirmar: "Manter contrato",
+    });
+    if (!ok) return;
+    setErro("");
+    gravar({ ...obra, contratos: contratos.map((c) => (c && c.id === origem.id ? { ...c, cotacaoId: cot.id } : c)) });
+  }
+
   // ── Lista ─────────────────────────────────────────────────────
   const quadro = (rotulo, valor, cor) => (
     <div style={E.quadro}>
@@ -35465,7 +35562,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
             .filter(x => x && x.cotacaoId === cot.id && !x.pago)
             .reduce((s, x) => s + (Number(x.valor) || 0), 0) * 100) / 100;
         return (
-          <div key={cot.id} style={aninhado ? { background: "#fff" } : E.card}>
+          <div key={cot.id} data-vk-cotacao={cot.id} style={aninhado ? { background: "#fff" } : E.card}>
             {!aninhado && (
             <button onClick={() => setAbertas(a => ({ ...a, [cot.id]: !a[cot.id] }))}
               style={{ width: "100%", background: "none", border: "none", padding: "12px 14px", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
@@ -35789,6 +35886,17 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   );
                 })()}
 
+                {(() => {
+                  const origem = contratoDeOrigem(contratos, cot);
+                  if (!origem || contratoDaCotacao(contratos, cot.id)) return null;
+                  return (
+                    <div data-vk-origem-contrato="1" style={{ fontSize: 12, color: "#4b5563", background: "#f8fafc", border: "1px solid rgba(38,36,33,0.10)",
+                      borderRadius: 10, padding: "8px 10px", marginBottom: 10, lineHeight: 1.45 }}>
+                      Aberta a partir do <b>contrato {origem.numeroContrato || ""}</b> ({origem.nomeContratado || "contratado"}, {dinheiro(numeroDoCampo(origem.valor))}).
+                      {" "}Escolhendo {origem.nomeContratado || "o mesmo"}, o contrato {origem.numeroContrato || ""} continua valendo; escolhendo outro, gere o contrato dele e remova o {origem.numeroContrato || "antigo"}.
+                    </div>
+                  );
+                })()}
                 {/* No celular, grade de duas colunas: botão solto em linha
                     quebrava onde calhava, e o recado do "por que está
                     travado" ficava espremido entre dois botões. */}
@@ -35812,11 +35920,17 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                           </button>
                         </>
                       )}
-                      {!cot.divisaoDe && (
-                        <button disabled={!trava.pode} title={trava.pode ? "" : trava.motivo}
-                          style={{ ...E.btn, opacity: trava.pode ? 1 : 0.45, cursor: trava.pode ? "pointer" : "not-allowed" }}
-                          onClick={() => gerarContrato(cot)}>Gerar contrato</button>
-                      )}
+                      {!cot.divisaoDe && (() => {
+                        const origem = contratoDeOrigem(contratos, cot);
+                        if (origem && esc && mesmoContratado(esc, origem)) {
+                          return <button style={E.btn} onClick={() => manterContrato(cot, origem)}>Manter contrato {origem.numeroContrato || ""}</button>;
+                        }
+                        return (
+                          <button disabled={!trava.pode} title={trava.pode ? "" : trava.motivo}
+                            style={{ ...E.btn, opacity: trava.pode ? 1 : 0.45, cursor: trava.pode ? "pointer" : "not-allowed" }}
+                            onClick={() => gerarContrato(cot)}>Gerar contrato</button>
+                        );
+                      })()}
                       {/* Lançar direto em contas a pagar vale para os dois: é o
                           caminho do fornecedor que entrega contra nota e não
                           assina contrato, e quem paga esse fornecedor tanto pode
@@ -43070,6 +43184,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [view, setView] = useState(entradaDireta ? "detalheObra" : entradaInicial ? "cotacoesObra" : obraInicial ? "detalheObra" : "lista");
   // Pedido de abrir a caixa da Entrada vindo do card do painel da obra.
   const [abrirEntrada, setAbrirEntrada] = useState(false);
+  // a cotação que a tela de compras abre já no lugar (vinda do contrato)
+  const [cotacaoInicialId, setCotacaoInicialId] = useState("");
   const [formObra, setFormObra] = useState(null);
   const [formContrato, setFormContrato] = useState(null);
   // Gerador de contratos: `contratoGerando` é o rascunho em edição e
@@ -46507,8 +46623,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             {contratosDaObra.map(contrato => {
               const sts = statusContrato[contrato.status] || statusContrato.ativo;
               return (
-                <div key={contrato.id} style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10 }}>
-                  <div style={{ flex: 1 }}>
+                <div key={contrato.id} style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10, flexWrap: isMobile ? "wrap" : "nowrap" }}>
+                  <div style={{ flex: 1, minWidth: isMobile ? "100%" : 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>
                       {contrato.numeroContrato ? <span style={{ color: "#4b5563", fontWeight: 500 }}>{`Contrato ${contrato.numeroContrato} · `}</span> : null}
                       {contrato.nomeContratado}
@@ -46536,8 +46652,29 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                     )}
                   </div>
                   {(podeContratar || contrato.gerado) && (
-                    <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
                       {contrato.gerado && <button onClick={() => { setContratoAberto(contrato); setView("verContrato"); }} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Abrir</button>}
+                      {/* A cotação do contrato: a que ele gerou, a aberta a
+                          partir dele, ou uma nova com o contratado como
+                          primeira proposta — para pôr os concorrentes ao lado. */}
+                      {perm.podeGerenciarObra && typeof cotacaoDoContrato === "function"
+                        && contrato.tipoProfissional !== "gestaoObra" && contrato.prestadorId !== "__escritorio__" && (() => {
+                        const existente = cotacaoDoContratoExistente((obraAtual && obraAtual.cotacoes) || [], contrato);
+                        return (
+                          <button data-vk-cotacao-do-contrato="1" style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}
+                            title={existente ? "Abrir a cotação deste contrato" : "Abrir uma cotação com este contrato como primeira proposta, para comparar com outros"}
+                            onClick={() => {
+                              let id = existente && existente.id;
+                              if (!id) {
+                                const nova = cotacaoDoContrato(contrato, obraAtual.id);
+                                id = nova.id;
+                                gravarObras(obras.map(o => (o.id === obraAtual.id ? { ...o, cotacoes: [...(o.cotacoes || []), nova] } : o)));
+                              }
+                              setCotacaoInicialId(id);
+                              setView("cotacoesObra");
+                            }}>{existente ? "Ver cotação" : "Abrir cotação"}</button>
+                        );
+                      })()}
                       {podeContratar && <button onClick={() => { if (contrato.gerado) { setContratoSalvoEm(0); setContratoGerando(contrato); setView("gerarContrato"); } else setFormContrato(contrato); }} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>}
                       {perm.podeGerenciarObra && <button onClick={() => { dialogo.confirmar({ titulo: "Remover contrato?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true }).then(ok => { if (ok) {
                         const restantes = contratos.filter(c => c.id !== contrato.id);
@@ -46591,8 +46728,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         onObraAtualizada={setObraSelecionada}
         isMobile={isMobile}
         usuario={perm.usuario}
-        onVoltar={() => { setAbrirEntrada(false); setView("detalheObra"); }}
-        abrirEntrada={abrirEntrada} entradaInicial={entradaInicial}
+        onVoltar={() => { setAbrirEntrada(false); setCotacaoInicialId(""); setView("detalheObra"); }}
+        abrirEntrada={abrirEntrada} entradaInicial={entradaInicial} cotacaoInicialId={cotacaoInicialId}
         onGerarContrato={abrirContratoDaCotacao}
         onLancarContas={lancarCotacaoEmContas}
         onLancarDespesa={lancarDespesaDaEntrada}
