@@ -5525,6 +5525,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (dados.escopo || dados.titulo) {
       novo.escopo = [{ titulo: dados.titulo || "Escopo cotado", texto: dados.escopo || "" }];
     }
+    // cotada item a item: o contrato já nasce com os itens da proposta
+    // escolhida, no texto dela e com o valor de cada um
+    if (Array.isArray(dados.itens) && dados.itens.length) {
+      novo.itens = dados.itens.map(i => ({ descricao: i.descricao || "", valor: i.valor, inicio: "", previsao: "" }));
+    }
     setContratoSalvoEm(0);
     setContratoGerando(novo);
     setView("gerarContrato");
@@ -6100,8 +6105,20 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 const r = resumoCotacoes(obraAtual.cotacoes || [], obraAtual.aprovacoesCotacao || []);
                 if (!r.total) return "Cotações, pedidos e contas nas lojas";
                 // a frase é sempre a próxima ação de quem está olhando
-                if (perm.podeGerenciarObra && r.aEnviar) return r.aEnviar === 1 ? "1 escolha para enviar ao cliente" : `${r.aEnviar} escolhas para enviar ao cliente`;
-                if (perm.podeGerenciarObra && r.aprovadas) return r.aprovadas === 1 ? "1 pronta para virar contrato" : `${r.aprovadas} prontas para virar contrato`;
+                // compra de loja vira pedido (sem esperar o cliente); serviço
+                // vira contrato — cada uma conta para o seu
+                const doContrato = typeof destinoDaCotacao === "function"
+                  ? (obraAtual.cotacoes || []).filter(c => destinoDaCotacao(c) === "contrato") : (obraAtual.cotacoes || []);
+                const aEnviar = resumoCotacoes(doContrato, obraAtual.aprovacoesCotacao || []).aEnviar;
+                if (perm.podeGerenciarObra && typeof cotacoesProntasParaPedido === "function") {
+                  const pp = cotacoesProntasParaPedido(obraAtual.cotacoes || [], contratos).length;
+                  if (pp) return pp === 1 ? "1 compra para gerar o pedido" : `${pp} compras para gerar o pedido`;
+                }
+                if (perm.podeGerenciarObra && aEnviar) return aEnviar === 1 ? "1 escolha para enviar ao cliente" : `${aEnviar} escolhas para enviar ao cliente`;
+                if (perm.podeGerenciarObra && typeof cotacoesProntasParaPedido === "function") {
+                  const pc = cotacoesProntasParaContrato(obraAtual.cotacoes || [], obraAtual.aprovacoesCotacao || [], contratos).length;
+                  if (pc) return pc === 1 ? "1 pronta para virar contrato" : `${pc} prontas para virar contrato`;
+                }
                 if (r.aguardandoCliente) return `${r.aguardandoCliente} aguardando ${perm.podeGerenciarObra ? "o cliente" : "você"}`;
                 if (r.abertas) return r.abertas === 1 ? "1 em andamento" : `${r.abertas} em andamento`;
                 return r.total === 1 ? "1 cotação" : `${r.total} cotações`;

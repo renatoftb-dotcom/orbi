@@ -45,7 +45,7 @@ const modulo = new Function(`
   var INSUMO_GRUPOS = [];
   ${insSrc.slice(0, corteIns)}
   ${cotSrc.slice(0, cotSrc.lastIndexOf("// ═", corteCot))}
-  return { cotacaoDoContrato, contratoDeOrigem, cotacaoDoContratoExistente, mesmoContratado, fichaDoXmlDaNfe, tipoDoArquivoDoPapel, obrasCitadasNoTexto, cotacaoVazia, propostaVazia, valorProposta, propostasOrdenadas, propostaPorId,
+  return { linhasDaProposta, aplicarLinhasDaProposta, itensDaProposta, descricaoNaProposta, destinoDaCotacao, cotacoesProntasParaPedido, cotacaoDoContrato, contratoDeOrigem, cotacaoDoContratoExistente, mesmoContratado, fichaDoXmlDaNfe, tipoDoArquivoDoPapel, obrasCitadasNoTexto, cotacaoVazia, propostaVazia, valorProposta, propostasOrdenadas, propostaPorId,
            propostaEscolhida, melhorProposta, economiaDaCotacao,
            aprovacaoDaCotacao, registrarAprovacaoCotacao, situacaoCotacao,
            podeGerarContrato, contratoDaCotacao, tipoDoContaId, dadosDoContratoDaCotacao,
@@ -4231,6 +4231,63 @@ teste("contrato sem itens: a proposta vem pelo valor do contrato", () => {
   const cot = M.cotacaoDoContrato({ id: "c", valor: 5000, nomeContratado: "Zé", tipoProfissional: "pintor" }, "o1");
   assert.strictEqual(cot.itens.length, 0);
   assert.strictEqual(M.valorProposta(cot.propostas[0]), 5000);
+});
+
+
+teste("pedido ou contrato: material de loja vira pedido; serviço, contrato; a escolha manual vale", () => {
+  const mat = { ...M.cotacaoVazia("o1"), contaId: "material" };
+  assert.strictEqual(M.destinoDaCotacao(mat), "pedido");
+  assert.strictEqual(M.destinoDaCotacao({ ...mat, contaId: "serralheiro" }), "contrato");
+  assert.strictEqual(M.destinoDaCotacao({ ...mat, destino: "contrato" }), "contrato");
+  assert.strictEqual(M.destinoDaCotacao({ ...mat, contratoOrigemId: "c1" }), "contrato");
+});
+
+teste("pedido já na conta da loja não fica 'pronto para virar contrato' (areia da OURIFER e da Arenito)", () => {
+  const p = { ...M.propostaVazia(), id: "p1", fornecedorId: "f1", favorecido: "OURIFER", valor: "3.400,00" };
+  const filha = { ...M.cotacaoVazia("o1"), id: "w7", contaId: "material", precisaAprovacaoCliente: false, divisaoDe: "mae",
+    propostas: [p], escolhidaId: "p1", pedidoNaLoja: { contaLojaId: "l1", pedidoId: "x" } };
+  assert.strictEqual(M.podeGerarContrato(filha, [], []).pode, false);
+  assert.deepStrictEqual(M.cotacoesProntasParaContrato([filha], [], []), []);
+  assert.deepStrictEqual(M.cotacoesProntasParaPedido([filha], []), []);
+  // a mesma compra ainda sem pedido: pronta para PEDIDO, não para contrato
+  const aberta = { ...filha, pedidoNaLoja: null, divisaoDe: "" };
+  assert.deepStrictEqual(M.cotacoesProntasParaContrato([aberta], [], []), []);
+  assert.deepStrictEqual(M.cotacoesProntasParaPedido([aberta], []).map((c) => c.id), ["w7"]);
+});
+
+
+teste("cada proposta mexe na lista do seu jeito: texto próprio, item de fora, item a mais — as outras não mudam", () => {
+  const ct = { id: "c4", numeroContrato: "0004", nomeContratado: "MB", prestadorId: "mb", tipoProfissional: "serralheiro", valor: 30000,
+    itens: [{ descricao: "Cobertura", valor: 10000 }, { descricao: "Fachada", valor: 20000 }] };
+  let cot = M.cotacaoDoContrato(ct, "o1");
+  const [cob, fach] = cot.itens;
+  const nova = { ...M.propostaVazia(), id: "pn", favorecido: "Serralheria Nova", precos: { [cob.id]: "77.760,00" } };
+  const linhas = M.linhasDaProposta(cot, nova).map((l) => (l.id === cob.id ? { ...l, descricao: "Cobertura completa com estrutura nova" }
+    : l.id === fach.id ? { ...l, fora: true } : l)).concat([{ id: "extra1", descricao: "Pintura eletrostática", unidade: "vb", quantidade: "1", propria: true }]);
+  const ap = M.aplicarLinhasDaProposta(cot, { ...nova, precos: { ...nova.precos, extra1: "5.000,00" } }, linhas);
+  cot = { ...ap.cotacao, propostas: cot.propostas.concat([{ ...ap.proposta, valor: M.totalDosItens(ap.cotacao, ap.proposta) }]) };
+  const p = cot.propostas[1];
+  // o texto próprio fica na proposta; o item da cotação não muda
+  assert.strictEqual(cob.descricao, "Cobertura");
+  assert.strictEqual(M.descricaoNaProposta(cot.itens[0], p), "Cobertura completa com estrutura nova");
+  assert.strictEqual(M.descricaoNaProposta(cot.itens[0], cot.propostas[0]), "Cobertura");
+  // a fachada não consta nela e não conta como faltando
+  assert.deepStrictEqual(M.itensSemPreco(cot, p), []);
+  assert.strictEqual(M.totalDosItens(cot, p), 82760);
+  // o item a mais é só dela: não aparece na lista da MB nem a faz "incompleta"
+  assert.strictEqual(cot.itens.find((i) => i.id === "extra1").deProposta, "pn");
+  assert.deepStrictEqual(M.itensDaProposta(cot, cot.propostas[0]).map((i) => i.descricao), ["Cobertura", "Fachada"]);
+  assert.deepStrictEqual(M.itensSemPreco(cot, cot.propostas[0]), []);
+  // escolhida a nova, o contrato nasce com os itens dela
+  const d = M.dadosDoContratoDaCotacao({ ...cot, escolhidaId: "pn" });
+  assert.deepStrictEqual(d.itens, [{ descricao: "Cobertura completa com estrutura nova", valor: 77760 }, { descricao: "Pintura eletrostática", valor: 5000 }]);
+  // tirar a proposta leva o item que só ela tinha
+  const sem = M.removerProposta(cot, "pn");
+  assert.ok(!sem.itens.some((i) => i.id === "extra1"));
+  // tirar da lista o item próprio, ao editar
+  const ap2 = M.aplicarLinhasDaProposta(cot, p, M.linhasDaProposta(cot, p).filter((l) => l.id !== "extra1"));
+  assert.ok(!ap2.cotacao.itens.some((i) => i.id === "extra1"));
+  assert.ok(!("extra1" in ap2.proposta.precos));
 });
 
 for (const [nome, fn] of testes) {

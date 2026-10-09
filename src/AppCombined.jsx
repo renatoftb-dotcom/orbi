@@ -29413,8 +29413,80 @@ function totalDosItens(cot, proposta) {
   return Math.round(total * 100) / 100;
 }
 
+// ── A lista de cada proposta ────────────────────────────────────
+// Nem toda proposta responde à mesma lista: um serralheiro descreve a
+// cobertura de outro jeito, junta dois itens num, cota um que o outro não
+// cotou. A lista da cotação continua uma só — é ela que permite comparar
+// item com item —, mas cada proposta pode:
+//  - dar o próprio texto a um item (`p.descricoes[itemId]`);
+//  - deixar um item de fora (`p.fora[itemId]`): ele não consta nela, e não
+//    conta como "faltando";
+//  - trazer itens que só ela tem (o item da cotação leva `deProposta`).
+function itemDaProposta(item, proposta) {
+  const de = (item || {}).deProposta;
+  return !de || de === (proposta || {}).id;
+}
+function itensDaProposta(cot, proposta) {
+  return itensDaCotacao(cot).filter((it) => itemDaProposta(it, proposta));
+}
+function itemForaDaProposta(proposta, itemId) {
+  return !!(((proposta || {}).fora) || {})[itemId];
+}
+function descricaoNaProposta(item, proposta) {
+  const d = String(((((proposta || {}).descricoes) || {})[(item || {}).id]) || "").trim();
+  return d || (item || {}).descricao || "";
+}
+
+// As linhas que o formulário da proposta mostra e deixa mexer.
+function linhasDaProposta(cot, proposta) {
+  return itensDaProposta(cot, proposta).map((it) => ({
+    id: it.id, descricao: descricaoNaProposta(it, proposta), unidade: it.unidade || "", quantidade: it.quantidade || "",
+    propria: !!it.deProposta, fora: itemForaDaProposta(proposta, it.id),
+  }));
+}
+
+// Grava o que o formulário mexeu na lista: o item da cotação continua o
+// mesmo para todos (o texto próprio fica na proposta); o item que só esta
+// proposta tem é dela — editar, tirar e incluir mexem nele de verdade.
+function aplicarLinhasDaProposta(cot, proposta, linhas) {
+  const c = cot || {};
+  const p = proposta || {};
+  const lista = (linhas || []).filter((l) => l && l.id);
+  const ids = new Set(lista.map((l) => l.id));
+  const daCotacao = new Map(itensDaCotacao(c).map((it) => [it.id, it]));
+  const precos = { ...(p.precos || {}) };
+  let itens = itensDaCotacao(c).filter((it) => {
+    const sai = it.deProposta && it.deProposta === p.id && !ids.has(it.id);
+    if (sai) delete precos[it.id];
+    return !sai;
+  });
+  const descricoes = {}, fora = {};
+  for (const l of lista) {
+    const texto = String(l.descricao || "").trim();
+    const it = daCotacao.get(l.id);
+    if (!it) {
+      if (!texto) continue;
+      itens = itens.concat([{ id: l.id, insumoId: "", codigo: "", descricao: texto, unidade: l.unidade || "vb",
+        quantidade: l.quantidade === "" || l.quantidade == null ? "1" : l.quantidade, deProposta: p.id }]);
+      continue;
+    }
+    if (it.deProposta === p.id) {
+      itens = itens.map((x) => (x.id === l.id ? { ...x, descricao: texto || x.descricao, unidade: l.unidade || x.unidade,
+        quantidade: l.quantidade === "" || l.quantidade == null ? x.quantidade : l.quantidade } : x));
+      continue;
+    }
+    if (texto && texto !== String(it.descricao || "").trim()) descricoes[l.id] = texto;
+    if (l.fora) { fora[l.id] = true; delete precos[l.id]; }
+  }
+  const nova = { ...p, precos };
+  if (Object.keys(descricoes).length) nova.descricoes = descricoes; else delete nova.descricoes;
+  if (Object.keys(fora).length) nova.fora = fora; else delete nova.fora;
+  return { cotacao: { ...c, itens }, proposta: nova };
+}
+
 function itensSemPreco(cot, proposta) {
-  return itensDaCotacao(cot).filter((it) => !(precoUnitario(proposta, it.id) > 0));
+  return itensDaProposta(cot, proposta)
+    .filter((it) => !itemForaDaProposta(proposta, it.id) && !(precoUnitario(proposta, it.id) > 0));
 }
 
 // O total de UM item, pelo preço de tabela.
@@ -33055,6 +33127,10 @@ function situacaoCotacao(cot, aprovacoes, contratos, cotacoes) {
                                            return { id: "coletando",  rotulo: "Aguardando propostas",      cor: "#b45309" };
   if (!c.escolhidaId && temDivisao(c))     return { id: "dividindo",  rotulo: "Dividindo entre lojas",     cor: "#0474f4" };
   if (!c.escolhidaId)                      return { id: "comparando", rotulo: "Comparando propostas",      cor: "#0474f4" };
+  // Compra de loja não espera o cliente: escolheu, o próximo passo é o
+  // pedido. Aprovação continua possível pelo menu, mas não é o caminho.
+  if (destinoDaCotacao(c) === "pedido" && !c.enviadaClienteEm)
+                                           return { id: "escolhida", rotulo: "Escolhida — falta gerar o pedido", cor: "#0474f4" };
   // Escolher não é avisar. Enquanto o escritório não manda a escolha, o
   // cliente não tem o que aprovar — e era aqui que a tela parava: dizia
   // "aguardando o cliente" sem nunca ter falado com ele.
@@ -33099,6 +33175,12 @@ function dadosDoContratoDaCotacao(cot) {
     escopo: String(c.escopo || "").trim(),
     condicaoPagamento: esc.condicaoPagamento || "",
     prazoDias: esc.prazoDias || "",
+    // cotada item a item: o contrato nasce com os itens da proposta
+    // escolhida, no texto dela e com o valor de cada um
+    itens: temListaDeItens(c) && propostaTemPrecoPorItem(c, esc)
+      ? itensDaProposta(c, esc).filter((it) => !itemForaDaProposta(esc, it.id) && precoUnitario(esc, it.id) > 0)
+        .map((it) => ({ descricao: descricaoNaProposta(it, esc), valor: totalEfetivoItem(c, esc, it) }))
+      : [],
   };
 }
 
@@ -33365,6 +33447,11 @@ function podeGerarContrato(cot, aprovacoes, contratos) {
   const c = cot || {};
   if (c.status === "cancelada")  return { pode: false, motivo: "A cotação foi cancelada." };
   if (contratoDaCotacao(contratos, c.id)) return { pode: false, motivo: "O contrato desta cotação já foi gerado." };
+  // já virou pedido na conta da loja: ofereceria um segundo destino para a
+  // mesma compra (era assim que pedido de areia aparecia "pronto para
+  // virar contrato")
+  if (ehContaDeLoja(c))          return { pode: false, motivo: "É a conta da loja — os pedidos é que são pagos." };
+  if (c.pedidoNaLoja)            return { pode: false, motivo: "Já virou pedido na conta da loja." };
   if (c.contaGeradaId)           return { pode: false, motivo: "Já foi lançada em contas a pagar pelo fluxo antigo." };
   if (foiDividida(c))            return { pode: false, motivo: "Foi dividida entre lojas — cada loja tem o seu pedido." };
   const esc = propostaEscolhida(c);
@@ -33461,6 +33548,8 @@ function removerProposta(cotacao, propostaId) {
   return {
     ...c,
     propostas: restantes,
+    // o item que só esta proposta trazia sai com ela
+    ...(Array.isArray(c.itens) ? { itens: c.itens.filter((it) => !(it && it.deProposta === propostaId)) } : {}),
     escolhidaId: c.escolhidaId === propostaId ? "" : (c.escolhidaId || ""),
   };
 }
@@ -33718,8 +33807,31 @@ function limparEnvioAoCliente(cot) {
 
 // As cotações que já podem virar contrato — é isso que o módulo de
 // contratos mostra, para o contrato nascer de onde ele é gerado.
+// ── Pedido ou contrato ──────────────────────────────────────────
+// Material de loja não assina contrato: a escolha vira PEDIDO (conta a
+// pagar, ou a conta da loja). Serviço vira CONTRATO. A conta do P&L da
+// cotação diz qual é o caso comum; `destino` guarda a exceção que alguém
+// escolheu. A tela mostra UM botão principal — o do destino — e o outro
+// caminho fica no menu.
+function destinoDaCotacao(cot) {
+  const c = cot || {};
+  if (c.destino === "pedido" || c.destino === "contrato") return c.destino;
+  if (c.contratoOrigemId) return "contrato";
+  const plano = typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [];
+  const conta = plano.find((x) => x && x.id === c.contaId);
+  return conta && conta.grupo === "materiais" ? "pedido" : "contrato";
+}
+
 function cotacoesProntasParaContrato(cotacoes, aprovacoes, contratos) {
-  return (cotacoes || []).filter(c => c && c.id && podeGerarContrato(c, aprovacoes, contratos).pode);
+  return (cotacoes || []).filter(c => c && c.id && destinoDaCotacao(c) === "contrato"
+    && podeGerarContrato(c, aprovacoes, contratos).pode);
+}
+
+// Compra escolhida que ainda não virou pedido — a próxima ação de quem
+// está olhando a obra.
+function cotacoesProntasParaPedido(cotacoes, contratos) {
+  return (cotacoes || []).filter(c => c && c.id && destinoDaCotacao(c) === "pedido" && !foiDividida(c)
+    && !!propostaEscolhida(c) && podeLancarEmContas(c, contratos).pode && !ehContaDeLoja(c));
 }
 
 // O que o cliente precisa olhar agora: escolha feita, aval pendente.
@@ -34668,11 +34780,15 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     // Salvar a proposta com o cadastro aberto jogaria fora o que já foi
     // digitado nele, sem dizer nada.
     if (novoPrestador) { setErro("Termine o cadastro do prestador — salve ou cancele — antes de salvar a proposta."); return; }
-    const { cotacaoId, proposta } = formProposta;
-    const nome = proposta.favorecido || nomeDoFornecedor(prestadores, proposta.fornecedorId);
+    const { cotacaoId, proposta: propostaDigitada, linhas } = formProposta;
+    const nome = propostaDigitada.favorecido || nomeDoFornecedor(prestadores, propostaDigitada.fornecedorId);
     if (!String(nome || "").trim()) { setErro("Diga de quem é a proposta."); return; }
     setErro("");
-    trocarCotacao(cotacaoId, c => {
+    trocarCotacao(cotacaoId, c0 => {
+      // a lista do jeito desta proposta: texto próprio, itens de fora e a mais
+      const ap = linhas ? aplicarLinhasDaProposta(c0, propostaDigitada, linhas) : { cotacao: c0, proposta: propostaDigitada };
+      const c = ap.cotacao;
+      const proposta = ap.proposta;
       const lista = c.propostas || [];
       const existe = lista.some(x => x.id === proposta.id);
       // Com preço por item, o total deixa de ser digitado e passa a ser a
@@ -34772,93 +34888,128 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         )}
         {/* Lista: a loja pode responder item a item ou só o total. Quem
             preenche item a item ganha a comparação por item; quem recebeu só
-            "R$ 3.480 tudo" deixa em branco e digita o total. */}
+            "R$ 3.480 tudo" deixa em branco e digita o total. Cada proposta
+            mexe na lista do seu jeito: texto próprio, item de fora, item a
+            mais — nem toda proposta é igual. */}
         {(() => {
           const cotDaProposta = cotacoes.find(c => c.id === formProposta.cotacaoId);
           if (!cotDaProposta || !temListaDeItens(cotDaProposta)) return null;
-          const itens = itensDaCotacao(cotDaProposta);
+          const linhas = formProposta.linhas || linhasDaProposta(cotDaProposta, p);
+          const setLinhas = (fn) => setFormProposta(f => ({ ...f,
+            linhas: fn(f.linhas || linhasDaProposta(cotDaProposta, f.proposta)) }));
+          const mexer = (id, campo, v) => setLinhas(ls => ls.map(l => (l.id === id ? { ...l, [campo]: v } : l)));
+          // as contas da tela olham a lista como vai ficar ao salvar
+          const prev = aplicarLinhasDaProposta(cotDaProposta, p, linhas);
+          const cotPrev = prev.cotacao, pPrev = prev.proposta;
           const setPreco = (itemId, v) => set("precos", { ...(p.precos || {}), [itemId]: v });
-          const somaAtual = totalDosItens(cotDaProposta, p);
-          const preenchidos = itens.length - itensSemPreco(cotDaProposta, p).length;
-          const desc = descontoDaProposta(cotDaProposta, p);
-          // a última coluna é o "×" que tira o preço do item (fica não cotado)
+          const somaAtual = totalDosItens(cotPrev, pPrev);
+          const consta = linhas.filter(l => !l.fora && String(l.descricao || "").trim());
+          const preenchidos = consta.filter(l => precoUnitario(pPrev, l.id) > 0).length;
+          const desc = descontoDaProposta(cotPrev, pPrev);
           const cols = isMobile
             ? "1fr 1fr 30px"
-            : (desc ? "1fr 72px 68px 118px 118px 108px 30px" : "1fr 84px 76px 130px 130px 30px");
-          const tirarPreco = (itemId) => {
-            const novo = { ...(p.precos || {}) };
-            delete novo[itemId];
-            set("precos", novo);
-          };
+            : (desc ? "1fr 64px 60px 112px 112px 100px 30px" : "1fr 72px 64px 124px 124px 30px");
+          const caixaTexto = { ...E.input, minHeight: 38, resize: "vertical", lineHeight: 1.35, fontFamily: "inherit" };
+          const btnLinha = { width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(38,36,33,0.16)", background: "#fff",
+            cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0, fontFamily: "inherit" };
           return (
             <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, marginBottom: 14 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", marginBottom: 2 }}>Preço item a item</div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", marginBottom: 2 }}>Itens desta proposta</div>
               <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 10 }}>
-                Preencha o unitário OU o total de cada item — um acerta o outro. O que ficar em branco entra como não cotado. Se a loja não cotou item a item e só mandou um preço pela lista inteira, deixe tudo em branco aqui e use o campo Valor lá embaixo.
+                Escreva cada item como está na proposta, tire o que ela não tem e inclua o que ela traz a mais — a lista das outras propostas não muda.
+                Preencha o unitário OU o total de cada item. Se veio só um preço pela lista inteira, deixe os preços em branco e use o campo Valor lá embaixo.
               </div>
               {!isMobile && (
                 <div style={{ display: "grid", gridTemplateColumns: cols, gap: 8, marginBottom: 4 }}>
-                  <span style={E.label}>Material</span><span style={E.label}>Qtd.</span><span style={E.label}>Un.</span>
+                  <span style={E.label}>Item</span><span style={E.label}>Qtd.</span><span style={E.label}>Un.</span>
                   <span style={E.label}>Unitário (R$)</span><span style={E.label}>Total do item (R$)</span>
                   {desc ? <span style={{ ...E.label, textAlign: "right" }}>Com desconto</span> : null}
                   <span />
                 </div>
               )}
-              {itens.map(it => {
-                const q = quantidadeDoItem(it);
-                const u = precoUnitario(p, it.id);
+              {linhas.map(l => {
+                const q = numeroDoCampo(l.quantidade);
+                const u = precoUnitario(p, l.id);
+                if (l.fora) {
+                  return (
+                    <div key={l.id} data-vk-item-fora="1" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8, padding: "6px 8px",
+                      borderRadius: 8, background: "#f9fafb", color: "#9ca3af", fontSize: 12, flexWrap: isMobile ? "wrap" : "nowrap" }}>
+                      <span style={{ flex: isMobile ? "1 1 100%" : 1, minWidth: 0, textDecoration: "line-through" }}>{l.descricao || "Item"}</span>
+                      <span style={{ flexShrink: 0 }}>não consta nesta proposta</span>
+                      <button type="button" onClick={() => mexer(l.id, "fora", false)}
+                        style={{ ...btnLinha, width: "auto", padding: "0 10px", fontSize: 12, color: "#0474f4" }}>voltar</button>
+                    </div>
+                  );
+                }
                 return (
-                  <div key={it.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 8, marginBottom: 8, alignItems: "center" }}>
-                    <span style={{ fontSize: 12.5, color: "#111827", ...(isMobile ? { gridColumn: "1 / -1" } : {}) }}>
-                      {it.descricao || "Item"}{isMobile && q > 0 ? <span style={{ color: "#6b7280" }}> · {qtdBR(q)} {it.unidade || ""}</span> : null}
-                    </span>
-                    {!isMobile && <span style={{ fontSize: 12, color: "#4b5563" }}>{q > 0 ? qtdBR(q) : "—"}</span>}
-                    {!isMobile && <span style={{ fontSize: 12, color: "#4b5563" }}>{it.unidade || "—"}</span>}
+                  <div key={l.id} data-vk-item-proposta={l.propria ? "propria" : "lista"}
+                    style={{ display: "grid", gridTemplateColumns: cols, gap: 8, marginBottom: 8, alignItems: "start" }}>
+                    <div style={isMobile ? { gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 } : {}}>
+                      <textarea rows={isMobile ? 3 : 2} style={isMobile ? { ...caixaTexto, gridColumn: "1 / -1" } : caixaTexto} value={l.descricao}
+                        placeholder="Descrição do item como está na proposta"
+                        onChange={(e) => mexer(l.id, "descricao", e.target.value)} />
+                      {isMobile && (l.propria
+                        ? <><input style={E.input} value={l.quantidade} placeholder="qtd" onChange={(e) => mexer(l.id, "quantidade", e.target.value)} />
+                            <input style={E.input} value={l.unidade} placeholder="un" onChange={(e) => mexer(l.id, "unidade", e.target.value)} /></>
+                        : <span style={{ fontSize: 12, color: "#4b5563", gridColumn: "1 / -1" }}>{q > 0 ? qtdBR(q) : "—"} {l.unidade || ""}</span>)}
+                    </div>
+                    {!isMobile && (l.propria
+                      ? <input style={E.input} value={l.quantidade} onChange={(e) => mexer(l.id, "quantidade", e.target.value)} />
+                      : <span style={{ fontSize: 12, color: "#4b5563", paddingTop: 10 }}>{q > 0 ? qtdBR(q) : "—"}</span>)}
+                    {!isMobile && (l.propria
+                      ? <input style={E.input} value={l.unidade} onChange={(e) => mexer(l.id, "unidade", e.target.value)} />
+                      : <span style={{ fontSize: 12, color: "#4b5563", paddingTop: 10 }}>{l.unidade || "—"}</span>)}
                     {/* Os dois campos são o MESMO dado por dois caminhos: o que
                         se grava é sempre o unitário, e o total do item é ele
                         vezes a quantidade. Digitar de um lado acerta o outro. */}
-                    <CampoCtrNum tipo="moeda" style={E.input} valor={(p.precos || {})[it.id]}
-                      onChange={(v) => setPreco(it.id, v)} placeholder="0,00" />
+                    <CampoCtrNum tipo="moeda" style={E.input} valor={(p.precos || {})[l.id]}
+                      onChange={(v) => setPreco(l.id, v)} placeholder="0,00" />
                     <CampoCtrNum tipo="moeda" style={{ ...E.input, opacity: q > 0 ? 1 : 0.5 }}
                       valor={u > 0 ? Math.round(u * q * 100) / 100 : ""}
-                      onChange={(v) => setPreco(it.id, unitarioDoTotal(v, q))}
+                      onChange={(v) => setPreco(l.id, unitarioDoTotal(v, q))}
                       placeholder={q > 0 ? "0,00" : "sem qtd."} />
                     {desc && !isMobile && (
-                      <span style={{ fontSize: 12.5, color: desc.desconto ? "#15803d" : "#b45309", fontWeight: 600, textAlign: "right" }}>
-                        {u > 0 ? dinheiro(totalEfetivoItem(cotDaProposta, p, it)) : "—"}
+                      <span style={{ fontSize: 12.5, color: desc.desconto ? "#15803d" : "#b45309", fontWeight: 600, textAlign: "right", paddingTop: 10 }}>
+                        {u > 0 ? dinheiro(totalEfetivoItem(cotPrev, pPrev, (itensDaCotacao(cotPrev).find(x => x.id === l.id) || { id: l.id, quantidade: l.quantidade }))) : "—"}
                       </span>
                     )}
-                    {u > 0 ? (
-                      <button type="button" title="Tirar o preço deste item — fica como não cotado por esta loja"
-                        onClick={() => tirarPreco(it.id)}
-                        style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(38,36,33,0.16)", background: "#fff",
-                          color: "#dc2626", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0, fontFamily: "inherit" }}>×</button>
-                    ) : <span title="não cotado" style={{ fontSize: 10.5, color: "#9ca3af", textAlign: "center" }}>—</span>}
+                    <button type="button" data-vk-tirar-item="1"
+                      title={l.propria ? "Tirar este item da proposta" : "Este item não consta nesta proposta"}
+                      onClick={() => {
+                        const novo = { ...(p.precos || {}) }; delete novo[l.id]; set("precos", novo);
+                        if (l.propria) setLinhas(ls => ls.filter(x => x.id !== l.id));
+                        else mexer(l.id, "fora", true);
+                      }}
+                      style={{ ...btnLinha, color: "#dc2626", marginTop: 5 }}>×</button>
                   </div>
                 );
               })}
+              <button type="button" data-vk-incluir-item="1" style={{ ...E.btnSec, marginTop: 2 }}
+                onClick={() => setLinhas(ls => ls.concat([{ ...itemCotacaoVazio(), descricao: "", unidade: "vb", quantidade: "1", propria: true, fora: false }]))}>
+                + Incluir item
+              </button>
               {preenchidos > 0 && (
-                <div style={{ borderTop: "1px solid rgba(38,36,33,0.10)", paddingTop: 10, marginTop: 4 }}>
+                <div style={{ borderTop: "1px solid rgba(38,36,33,0.10)", paddingTop: 10, marginTop: 10 }}>
                   <div style={{ fontSize: 12, color: "#111827", marginBottom: 10 }}>
-                    Soma dos itens: <strong>{dinheiro(somaAtual)}</strong> em {preenchidos} de {itens.length} {itens.length === 1 ? "item" : "itens"}
-                    {preenchidos < itens.length ? " — o resto fica como não cotado por esta loja." : "."}
+                    Soma dos itens: <strong>{dinheiro(somaAtual)}</strong> em {preenchidos} de {consta.length} {consta.length === 1 ? "item" : "itens"}
+                    {preenchidos < consta.length ? " — o resto fica como não cotado por esta proposta." : "."}
                   </div>
                   {/* "Leva tudo por 2.300" — o desconto de fechamento não
                       apaga o que a loja cotou: ele é distribuído. */}
                   <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "200px 1fr", gap: 12, alignItems: "center" }}>
                     <div>
-                      <label style={E.label}>Total fechado com a loja</label>
+                      <label style={E.label}>Total fechado</label>
                       <CampoCtrNum tipo="moeda" style={E.input} valor={p.totalFechado}
                         onChange={(v) => set("totalFechado", v)} placeholder="opcional" />
                     </div>
                     <div style={{ fontSize: 11.5, color: desc ? (desc.desconto ? "#15803d" : "#b45309") : "#4b5563" }}>
                       {desc
                         ? `${desc.desconto ? "Desconto" : "Acréscimo"} de ${dinheiro(desc.valor)} (${String(desc.pct).replace(".", ",")}%) sobre ${dinheiro(desc.bruto)} — distribuído item a item, proporcional ao valor de cada um, para fechar exatamente ${dinheiro(desc.alvo)}.`
-                        : "Se a loja fechou a lista inteira por um valor menor, digite aqui. O desconto é distribuído item a item, e os preços de tabela acima ficam guardados como estão."}
+                        : "Se fechou a lista inteira por um valor menor, digite aqui. O desconto é distribuído item a item, e os preços acima ficam guardados como estão."}
                     </div>
                   </div>
                   <div style={{ fontSize: 12, color: "#111827", marginTop: 10 }}>
-                    Total da proposta: <strong>{dinheiro(valorDaProposta(cotDaProposta, p))}</strong>
+                    Total da proposta: <strong>{dinheiro(valorDaProposta(cotPrev, pPrev))}</strong>
                   </div>
                 </div>
               )}
@@ -35903,89 +36054,90 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                 <div style={isMobile
                   ? { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }
                   : { display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {podeGerenciar && !cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && !foiDividida(cot) && (
-                    <>
-                      {!cot.divisaoDe && (
-                        <button style={E.btnSec} onClick={() => { setErro(""); setFormProposta({ cotacaoId: cot.id, proposta: propostaVazia() }); }}>+ Registrar proposta</button>
-                      )}
-                      {!aninhado && <button style={E.btnSec} onClick={() => { setErro(""); setFormCotacao(cot); }}>Editar cotação</button>}
-                      {s.id === "aEnviar" && ehEscritorio && (
-                        <button style={E.btn} onClick={() => enviarAoCliente(cot)}>Enviar ao cliente</button>
-                      )}
-                      {s.id === "aguardando" && ehEscritorio && (
-                        <>
-                          <button style={E.btnSec} onClick={() => enviarAoCliente(cot)}>Reenviar aviso</button>
-                          <button style={E.btnSec} onClick={() => { setErro(""); setFormDecisao({ cotacao: cot, status: "aprovada", registrando: true }); }}>
-                            Registrar resposta do cliente
+                  {/* Uma ação principal por vez — a do destino da cotação: compra
+                      de loja vira PEDIDO, serviço vira CONTRATO. O outro caminho
+                      e o que se usa pouco ficam no menu ···. */}
+                  {podeGerenciar && !cot.contaGeradaId && !cot.pedidoNaLoja && !contratoDaCotacao(contratos, cot.id) && !foiDividida(cot) && (() => {
+                    const destino = destinoDaCotacao(cot);
+                    const lanc = podeLancarEmContas(cot, contratos);
+                    const origem = contratoDeOrigem(contratos, cot);
+                    const manter = origem && esc && mesmoContratado(esc, origem);
+                    const lojaAberta = esc && esc.fornecedorId ? contaDeLojaAberta(cotacoes, esc.fornecedorId) : null;
+                    const nomeLoja = esc ? ((prestadores.find((f) => f.id === esc.fornecedorId) || {}).nome || esc.favorecido || "loja") : "";
+                    const gerarPedido = () => {
+                      if (!lanc.pode) { setErro(lanc.motivo); return; }
+                      if (lojaAberta) mandarParaContaDaLoja(cot); else abrirLancamento(cot);
+                    };
+                    const comLista = temListaDeItens(cot);
+                    const pedirPreco = () => { setErro(""); setPedirLojas(cot); };
+                    const novaProposta = () => { setErro(""); setFormProposta({ cotacaoId: cot.id, proposta: propostaVazia() }); };
+                    // a pergunta ao cliente é do contrato; na compra de loja ela
+                    // existe, mas não é o caminho — vai para o menu
+                    const aprovacaoNaTela = destino === "contrato" && ehEscritorio;
+                    const motivoPrincipal = !esc ? "" : destino === "pedido" ? (lanc.pode ? "" : lanc.motivo) : (manter || trava.pode ? "" : trava.motivo);
+                    const menu = [
+                      esc && !cot.divisaoDe ? { rotulo: "+ Registrar proposta", onClick: novaProposta } : null,
+                      esc && comLista && !cot.divisaoDe ? { rotulo: "Pedir preço às lojas", onClick: pedirPreco } : null,
+                      !aninhado ? { rotulo: "Editar cotação", onClick: () => { setErro(""); setFormCotacao(cot); } } : null,
+                      !aprovacaoNaTela && ehEscritorio && s.id === "aEnviar" ? { rotulo: "Enviar ao cliente", onClick: () => enviarAoCliente(cot) } : null,
+                      !aprovacaoNaTela && ehEscritorio && s.id === "aguardando" ? { rotulo: "Registrar resposta do cliente",
+                        onClick: () => { setErro(""); setFormDecisao({ cotacao: cot, status: "aprovada", registrando: true }); } } : null,
+                      esc && !cot.divisaoDe && destino === "pedido" ? { rotulo: "Gerar contrato em vez de pedido", onClick: () => gerarContrato(cot) } : null,
+                      esc && destino === "contrato" && !manter ? { rotulo: "Lançar em contas a pagar, sem contrato",
+                        onClick: () => { if (!lanc.pode) { setErro(lanc.motivo); return; } abrirLancamento(cot); } } : null,
+                      comLista ? { rotulo: "Pedido (PDF)", onClick: () => setFolhaPedido({ cot, proposta: esc }) } : null,
+                      comLista ? { rotulo: copiado === cot.id ? "Copiado ✓" : "Copiar para WhatsApp", onClick: () => copiarPedido(cot, esc) } : null,
+                      podeExcluir && !aninhado ? { rotulo: "Excluir cotação", destrutivo: true, onClick: () => excluirCotacao(cot) } : null,
+                    ];
+                    return (
+                      <>
+                        {/* antes da escolha: juntar propostas */}
+                        {!esc && !cot.divisaoDe && <button style={E.btnSec} onClick={novaProposta}>+ Registrar proposta</button>}
+                        {!esc && comLista && !cot.divisaoDe && (
+                          <button style={E.btn} onClick={pedirPreco}>
+                            Pedir preço às lojas{enviosDaLista(cot).length ? ` · ${enviosDaLista(cot).length}` : ""}
                           </button>
-                        </>
-                      )}
-                      {!cot.divisaoDe && (() => {
-                        const origem = contratoDeOrigem(contratos, cot);
-                        if (origem && esc && mesmoContratado(esc, origem)) {
-                          return <button style={E.btn} onClick={() => manterContrato(cot, origem)}>Manter contrato {origem.numeroContrato || ""}</button>;
-                        }
-                        return (
-                          <button disabled={!trava.pode} title={trava.pode ? "" : trava.motivo}
+                        )}
+                        {/* o aval do cliente, quando é contrato */}
+                        {aprovacaoNaTela && s.id === "aEnviar" && <button style={E.btn} onClick={() => enviarAoCliente(cot)}>Enviar ao cliente</button>}
+                        {aprovacaoNaTela && s.id === "aguardando" && (
+                          <>
+                            <button style={E.btnSec} onClick={() => enviarAoCliente(cot)}>Reenviar aviso</button>
+                            <button style={E.btnSec} onClick={() => { setErro(""); setFormDecisao({ cotacao: cot, status: "aprovada", registrando: true }); }}>
+                              Registrar resposta do cliente
+                            </button>
+                          </>
+                        )}
+                        {/* depois da escolha: o destino */}
+                        {esc && !cot.divisaoDe && destino === "contrato" && (manter ? (
+                          <button style={E.btn} onClick={() => manterContrato(cot, origem)}>Manter contrato {origem.numeroContrato || ""}</button>
+                        ) : (
+                          <button data-vk-acao-principal="contrato" disabled={!trava.pode} title={trava.pode ? "" : trava.motivo}
                             style={{ ...E.btn, opacity: trava.pode ? 1 : 0.45, cursor: trava.pode ? "pointer" : "not-allowed" }}
                             onClick={() => gerarContrato(cot)}>Gerar contrato</button>
-                        );
-                      })()}
-                      {/* Lançar direto em contas a pagar vale para os dois: é o
-                          caminho do fornecedor que entrega contra nota e não
-                          assina contrato, e quem paga esse fornecedor tanto pode
-                          ser o escritório quanto o cliente. */}
-                      {podeGerenciar && (() => {
-                        const tl = podeLancarEmContas(cot, contratos);
-                        return (
-                          <button disabled={!tl.pode} title={tl.pode ? "Para fornecedor que não assina contrato — não espera o aval do cliente" : tl.motivo}
-                            style={{ ...E.btnSec, opacity: tl.pode ? 1 : 0.45, cursor: tl.pode ? "pointer" : "not-allowed" }}
-                            onClick={() => abrirLancamento(cot)}>Lançar em contas a pagar</button>
-                        );
-                      })()}
-                      {/* A loja escolhida tem conta aberta? Então o normal é somar
-                          à fatura dela, não abrir uma cobrança em paralelo. */}
-                      {podeGerenciar && (() => {
-                        const esc2 = propostaEscolhida(cot);
-                        if (!esc2 || !esc2.fornecedorId || !podeLancarEmContas(cot, contratos).pode) return null;
-                        const loja = contaDeLojaAberta(cotacoes, esc2.fornecedorId);
-                        const nome = (prestadores.find((f) => f.id === esc2.fornecedorId) || {}).nome || esc2.favorecido || "loja";
-                        // Material com lista de itens e sem conta na loja: dá para
-                        // abrir a conta ali mesmo, com este pedido como o primeiro.
-                        if (!loja && !temListaDeItens(cot)) return null;
-                        return loja ? (
-                          <button style={E.btn} title={`Entra como pedido na conta de ${nome} e se soma à fatura dela`}
-                            onClick={() => mandarParaContaDaLoja(cot)}>Somar à conta da {nome}</button>
-                        ) : (
-                          <button style={E.btnSec} data-vk-abrir-conta-loja="1"
-                            title={`Abre a conta da ${nome} nesta obra com este pedido — as próximas compras dela se somam ali`}
-                            onClick={() => mandarParaContaDaLoja(cot)}>Abrir conta na {nome}</button>
-                        );
-                      })()}
-                      {!trava.pode && !cot.divisaoDe && <span style={{ fontSize: 11.5, color: "#6b7280", alignSelf: "center",
-                        gridColumn: isMobile ? "1 / -1" : undefined }}>{trava.motivo}</span>}
-                      {podeExcluir && !aninhado && (
-                        <button style={{ ...E.btnSec, color: "#dc2626", marginLeft: isMobile ? 0 : "auto",
-                          gridColumn: isMobile ? "1 / -1" : undefined }}
-                          onClick={() => excluirCotacao(cot)}>Excluir cotação</button>
-                      )}
-                    </>
-                  )}
-                  {temListaDeItens(cot) && !foiDividida(cot) && (
-                    <>
-                      {podeGerenciar && !cot.divisaoDe && (
-                        <button style={E.btn} onClick={() => { setErro(""); setPedirLojas(cot); }}>
-                          Pedir preço às lojas
-                          {enviosDaLista(cot).length ? ` · ${enviosDaLista(cot).length}` : ""}
-                        </button>
-                      )}
-                      <button style={E.btnSec} onClick={() => setFolhaPedido({ cot, proposta: propostaEscolhida(cot) })}>
-                        Pedido (PDF)
-                      </button>
-                      <button style={E.btnSec} onClick={() => copiarPedido(cot, propostaEscolhida(cot))}>
-                        {copiado === cot.id ? "Copiado ✓" : "Copiar para WhatsApp"}
-                      </button>
-                    </>
+                        ))}
+                        {esc && destino === "pedido" && (
+                          <button data-vk-acao-principal="pedido" disabled={!lanc.pode} title={lanc.pode ? "" : lanc.motivo}
+                            style={{ ...E.btn, opacity: lanc.pode ? 1 : 0.45, cursor: lanc.pode ? "pointer" : "not-allowed" }}
+                            onClick={gerarPedido}>{lojaAberta ? `Gerar pedido na conta da ${nomeLoja}` : "Gerar pedido"}</button>
+                        )}
+                        <span style={{ display: "inline-flex", alignSelf: "center" }}>
+                          <MenuDeAcoes toque={isMobile} title="Mais ações da cotação" itens={menu} />
+                        </span>
+                        {motivoPrincipal && !cot.divisaoDe && (
+                          <span style={{ fontSize: 11.5, color: "#6b7280", alignSelf: "center", gridColumn: isMobile ? "1 / -1" : undefined }}>{motivoPrincipal}</span>
+                        )}
+                      </>
+                    );
+                  })()}
+                  {/* já fechada: o papel do pedido continua à mão */}
+                  {temListaDeItens(cot) && !foiDividida(cot) && (cot.contaGeradaId || cot.pedidoNaLoja || contratoDaCotacao(contratos, cot.id)) && (
+                    <span style={{ display: "inline-flex", alignSelf: "center" }}>
+                      <MenuDeAcoes toque={isMobile} title="Mais ações da cotação" itens={[
+                        { rotulo: "Pedido (PDF)", onClick: () => setFolhaPedido({ cot, proposta: propostaEscolhida(cot) }) },
+                        { rotulo: copiado === cot.id ? "Copiado ✓" : "Copiar para WhatsApp", onClick: () => copiarPedido(cot, propostaEscolhida(cot)) },
+                      ]} />
+                    </span>
                   )}
                   {ehCliente && (s.id === "aguardando" || s.id === "aEnviar") && (
                     <>
@@ -46253,6 +46405,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (dados.escopo || dados.titulo) {
       novo.escopo = [{ titulo: dados.titulo || "Escopo cotado", texto: dados.escopo || "" }];
     }
+    // cotada item a item: o contrato já nasce com os itens da proposta
+    // escolhida, no texto dela e com o valor de cada um
+    if (Array.isArray(dados.itens) && dados.itens.length) {
+      novo.itens = dados.itens.map(i => ({ descricao: i.descricao || "", valor: i.valor, inicio: "", previsao: "" }));
+    }
     setContratoSalvoEm(0);
     setContratoGerando(novo);
     setView("gerarContrato");
@@ -46828,8 +46985,20 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 const r = resumoCotacoes(obraAtual.cotacoes || [], obraAtual.aprovacoesCotacao || []);
                 if (!r.total) return "Cotações, pedidos e contas nas lojas";
                 // a frase é sempre a próxima ação de quem está olhando
-                if (perm.podeGerenciarObra && r.aEnviar) return r.aEnviar === 1 ? "1 escolha para enviar ao cliente" : `${r.aEnviar} escolhas para enviar ao cliente`;
-                if (perm.podeGerenciarObra && r.aprovadas) return r.aprovadas === 1 ? "1 pronta para virar contrato" : `${r.aprovadas} prontas para virar contrato`;
+                // compra de loja vira pedido (sem esperar o cliente); serviço
+                // vira contrato — cada uma conta para o seu
+                const doContrato = typeof destinoDaCotacao === "function"
+                  ? (obraAtual.cotacoes || []).filter(c => destinoDaCotacao(c) === "contrato") : (obraAtual.cotacoes || []);
+                const aEnviar = resumoCotacoes(doContrato, obraAtual.aprovacoesCotacao || []).aEnviar;
+                if (perm.podeGerenciarObra && typeof cotacoesProntasParaPedido === "function") {
+                  const pp = cotacoesProntasParaPedido(obraAtual.cotacoes || [], contratos).length;
+                  if (pp) return pp === 1 ? "1 compra para gerar o pedido" : `${pp} compras para gerar o pedido`;
+                }
+                if (perm.podeGerenciarObra && aEnviar) return aEnviar === 1 ? "1 escolha para enviar ao cliente" : `${aEnviar} escolhas para enviar ao cliente`;
+                if (perm.podeGerenciarObra && typeof cotacoesProntasParaPedido === "function") {
+                  const pc = cotacoesProntasParaContrato(obraAtual.cotacoes || [], obraAtual.aprovacoesCotacao || [], contratos).length;
+                  if (pc) return pc === 1 ? "1 pronta para virar contrato" : `${pc} prontas para virar contrato`;
+                }
                 if (r.aguardandoCliente) return `${r.aguardandoCliente} aguardando ${perm.podeGerenciarObra ? "o cliente" : "você"}`;
                 if (r.abertas) return r.abertas === 1 ? "1 em andamento" : `${r.abertas} em andamento`;
                 return r.total === 1 ? "1 cotação" : `${r.total} cotações`;
