@@ -8841,6 +8841,7 @@ function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinhe
         return !!o && typeof obraEhDoEscritorio === "function" && !obraEhDoEscritorio(data, o);
       }}
       tipoDaObra={tipoDaObra} obraPadraoId={(obraPadrao || {}).id || ""}
+      aoAcharObra={(id) => ((data || {}).obras || []).find((x) => x && x.id === (id || (obraPadrao || {}).id)) || null}
       aoFechar={aoFechar} aoSeguir={seguir} />
   );
 }
@@ -8998,6 +8999,11 @@ function textoDoLancado(r, situacao, dinheiro, totalPadrao) {
   const x = r || {};
   const fmt = dinheiro || ((v) => (typeof fmtMoedaCtr === "function" ? fmtMoedaCtr(v) : "R$ " + Number(v || 0).toFixed(2)));
   const v = x.valor != null ? x.valor : totalPadrao;
+  if (x.contaLoja) {
+    return [`Pedido${x.numeroLoja ? " " + x.numeroLoja : ""} somado à conta da ${x.contaLoja}`,
+      v != null ? fmt(v) : "", x.vencimento ? "vence " + String(x.vencimento).slice(0, 10).split("-").reverse().join("/") : "",
+      x.obraNome ? "em " + x.obraNome : ""].filter(Boolean).join(" · ");
+  }
   return ["Lançado" + (situacao === "apagar" ? " a pagar" : " pago"),
     x.ref ? "ref " + x.ref : "", x.quantas ? (x.quantas === 1 ? "1 conta" : x.quantas + " contas") : "",
     v != null ? fmt(v) : "", x.obraNome ? "em " + x.obraNome : "", "está no contas a pagar da obra"].filter(Boolean).join(" · ");
@@ -9005,7 +9011,7 @@ function textoDoLancado(r, situacao, dinheiro, totalPadrao) {
 
 function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile, dinheiro,
   obras, embutido, aoCadastrarInsumo, aoCriarLoja, aoAprender, aoVerContas, aoFechar, aoSeguir, cartoes,
-  tipoDaObra, obraPadraoId, confirmacao, aoListarCotacoes, cartaoDoCliente }) {
+  tipoDaObra, obraPadraoId, confirmacao, aoListarCotacoes, cartaoDoCliente, aoAcharObra }) {
   const E = COT_ESTILO;
   const P = cotPainel(isMobile, 940);
   const [texto, setTexto] = useState("");
@@ -9066,6 +9072,9 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const situacaoTocada = useRef(false);
   const [pagamento, setPagamento] = useState({ data: "", forma: "avista", cartaoId: "", parcelas: 1 });
   const [apagar, setApagar] = useState({ vencimento: "", parcelas: "1", intervalo: "30" });
+  // a prazo numa loja com conta aberta: vai para a conta dela, salvo se a
+  // pessoa disser que não
+  const [foraDaLoja, setForaDaLoja] = useState(false);
   const [parcelaId, setParcelaId] = useState("");
   // O que a leitura avisou: arquivo com dois papéis, agendamento, valor
   // pago diferente da nota. Fica no topo da tela até ler outro papel.
@@ -9148,6 +9157,21 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // As contas da obra escolhida, para achar parcela de contrato em aberto do
   // fornecedor que acabou de receber.
   const contasDaObraEscolhida = (typeof aoVerContas === "function" ? aoVerContas(obraId) : []) || [];
+  // A loja tem conta aberta nesta obra? Então o "a pagar" é mais um pedido da
+  // conta dela — soma na fatura e paga junto com os outros.
+  const obraDaEntrada = (typeof aoAcharObra === "function" ? aoAcharObra(obraEfetivaId) : null)
+    || (obras || []).find((o) => o && o.id === obraEfetivaId) || null;
+  const contaLojaDaEntrada = situacao === "apagar" && lojaId && obraDaEntrada
+    ? contaDeLojaAberta(obraDaEntrada.cotacoes || [], lojaId) : null;
+  const comParcelas = Number(apagar.parcelas) > 1;
+  const vaiParaLoja = !!contaLojaDaEntrada && !foraDaLoja && !comParcelas;
+  const nomeDaContaLoja = contaLojaDaEntrada ? (contaLojaDaEntrada.titulo || "loja") : "";
+  const vencNaLoja = vaiParaLoja
+    ? (String(apagar.vencimento || "").slice(0, 10)
+      || (Number(contaLojaDaEntrada.prazoLoja) > 0 && typeof somarDias === "function"
+        ? somarDias(String((papel && papel.emitido) || new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString()).slice(0, 10), Number(contaLojaDaEntrada.prazoLoja))
+        : ""))
+    : "";
   const modo = modoCotacao || modoPadraoDaCotacao(itens);
   const guardaProposta = situacao === "cotacao" && modo === "proposta";
   const pedePreco = situacao === "cotacao" && modo === "pedir";
@@ -9170,7 +9194,9 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const parcelasDoFavorecido = situacao === "pago" ? parcelasEmAbertoDoPrestador(contasDaObraEscolhida, lojaId) : [];
   const parcelaSugerida = parcelaQueCasa(parcelasDoFavorecido, totalDaEntrada);
   const prova = itens
-    ? entradaUnicaPronta({ situacao, prestadorId: lojaId, itens, pagamento: pagamentoEfetivo, apagar, parcelaId }, obras, obraId)
+    // na conta da loja, o vencimento em branco é o do prazo dela
+    ? entradaUnicaPronta({ situacao, prestadorId: lojaId, itens, pagamento: pagamentoEfetivo,
+      apagar: vaiParaLoja && !apagar.vencimento ? { ...apagar, vencimento: vencNaLoja } : apagar, parcelaId }, obras, obraId)
     : { ok: false, motivo: "" };
   // A situação de partida sai da obra e do papel — e só até a pessoa tocar.
   useEffect(() => {
@@ -9183,6 +9209,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     const hoje = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
     setPagamento({ data: (p && (p.pagoEm || p.emitido)) || hoje, forma: "avista", cartaoId: "", parcelas: 1 });
     setApagar({ vencimento: (p && p.vencimento) || "", parcelas: "1", intervalo: "30" });
+    setForaDaLoja(false);
   }
   const mexerQtdOuUnit = (i, muda) => setItens((lista) => (lista || []).map((x, j) => {
     if (j !== i) return x;
@@ -9531,12 +9558,20 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
         const ins = x.insumoCodigo ? (insumos || []).find((y) => y && (y.codigo === x.insumoCodigo || y.id === x.insumoCodigo)) : null;
         return String(x.descricao || "").trim() || (ins && ins.nome) || "";
       };
+      // número do PEDIDO da loja é número do pedido; número de NOTA é da nota
+      // — um no lugar do outro fazia o pedido aparecer como "NF 24893-120"
+      // número digitado à mão, sem nota lida, indo para a conta da loja: é o
+      // número do pedido dela
+      const ehPedidoDaLoja = vaiParaLoja && !pp.numeroPedido && !pp.ehNota && pp.tipo !== "nota";
       const lancamento = { situacao, prestadorId: lojaId, favorecido: fav.nome || pp.lidoComo || "",
-        numeroNota: pp.numeroNota || pp.numeroPedido || "", emitido: pp.emitido || "",
+        numeroNota: ehPedidoDaLoja ? "" : (pp.numeroNota || (pp.numeroPedido ? "" : (pp.documento || ""))),
+        numeroLoja: pp.numeroPedido || (ehPedidoDaLoja ? (pp.numeroNota || "") : ""),
+        emitido: pp.emitido || "", desconto: descontoDoPapel,
+        contaLojaId: vaiParaLoja ? contaLojaDaEntrada.id : "",
         chaveNota: pp.chave || "", idTransacao: pp.idTransacao || "",
         itens: rateados.map((x) => ({ descricao: nomeDe(x), insumoCodigo: x.insumoCodigo || "",
           grupoMaterial: x.grupoMaterial || "", quantidade: x.quantidade, unidade: x.unidade || "",
-          total: x.valor, etapa: x.etapa || "", contaId: x.contaId || "" })),
+          total: x.valor, bruto: brutoDoItem(x), etapa: x.etapa || "", contaId: x.contaId || "" })),
         pagamento: pagamentoEfetivo, apagar };
       r = aoSeguir({ destino: "lancar", obraId, lancamento, anexo }) || {};
     }
@@ -10037,6 +10072,25 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                           onChange={(e) => setApagar((a) => ({ ...a, intervalo: e.target.value.replace(/\D/g, "").slice(0, 3) }))} />
                       </div>
                     </div>
+                    {contaLojaDaEntrada && (
+                      <div data-vk-entrada-conta-loja={vaiParaLoja ? "sim" : "nao"} style={{ marginTop: 10, borderRadius: 10, padding: "9px 11px", fontSize: 12.5, lineHeight: 1.45,
+                        background: vaiParaLoja ? "#eef5ff" : "#f9fafb", border: `1px solid ${vaiParaLoja ? "rgba(4,116,244,0.25)" : "rgba(38,36,33,0.12)"}`, color: "#1f2937" }}>
+                        {vaiParaLoja ? (
+                          <>Entra como <b>pedido{papel && papel.numeroPedido ? " " + papel.numeroPedido : ""}</b> na <b>conta da {nomeDaContaLoja}</b> — soma na fatura dela
+                            {vencNaLoja ? <>, vence <b>{dataDoDiaBR(vencNaLoja)}</b>{!apagar.vencimento && Number(contaLojaDaEntrada.prazoLoja) > 0 ? ` (prazo de ${contaLojaDaEntrada.prazoLoja} dias)` : ""}</> : null}.</>
+                        ) : comParcelas ? (
+                          <>Com parcelas, entra como conta avulsa — fora da conta da {nomeDaContaLoja}.</>
+                        ) : (
+                          <>Entra como conta avulsa — fora da conta da {nomeDaContaLoja}.</>
+                        )}
+                        {!comParcelas && (
+                          <label style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 12, color: "#4b5563", cursor: "pointer" }}>
+                            <input type="checkbox" checked={!foraDaLoja} onChange={(e) => setForaDaLoja(!e.target.checked)} />
+                            Somar na conta da {nomeDaContaLoja}
+                          </label>
+                        )}
+                      </div>
+                    )}
                     {previaAPagar.length > 1 && (
                       <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8, lineHeight: 1.6 }}>
                         {previaAPagar.length} boletos: <b style={{ color: "#111827" }}>
@@ -10257,6 +10311,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
               {enviandoComprov ? "Anexando o papel…"
                 : situacao === "pago" && parcelaId ? "Baixar a parcela"
                 : situacao === "pago" ? `Lançar pago · ${dinheiro(totalDaEntrada)}`
+                : situacao === "apagar" && vaiParaLoja ? `Lançar na conta da ${nomeDaContaLoja} · ${dinheiro(totalDaEntrada)}`
                 : situacao === "apagar" ? `Lançar a pagar · ${dinheiro(totalDaEntrada)}`
                 : "Lançar"}
             </button>

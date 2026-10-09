@@ -5678,6 +5678,27 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       const ondeJa = ja.obraId === obraAtual.id ? "nesta obra" : `em ${ja.obraNome || "outra obra"}`;
       return { erro: `${ja.por === "chave" ? "Essa nota (mesma chave)" : "Esse Pix (mesmo ID)"} já está lançado ${ondeJa}${ja.ref ? ` — ref ${ja.ref}` : ""}.` };
     }
+    // A prazo numa loja que tem conta aberta nesta obra: é mais um pedido da
+    // conta dela — soma na fatura e aparece na lista de pedidos da loja.
+    const contaLoja = l.situacao === "apagar" && l.contaLojaId
+      ? (obraAtual.cotacoes || []).find(c => c && c.id === l.contaLojaId && c.contaLoja && c.status !== "encerrada") : null;
+    if (contaLoja && typeof pedidoDaEntrada === "function") {
+      const pedido = pedidoDaEntrada(l, contaLoja.prazoLoja);
+      const nLoja = String(pedido.numeroLoja || "").replace(/\s/g, "");
+      if (nLoja && ((contaLoja.pedidos || []).some(x => x && String(x.numeroLoja || "").replace(/\s/g, "") === nLoja)
+        || contas.some(c => c && c.prestadorId === l.prestadorId && String(c.numeroLoja || "").replace(/\s/g, "") === nLoja))) {
+        return { erro: `O pedido nº ${pedido.numeroLoja} dessa loja já está lançado nesta obra.` };
+      }
+      if (anexo && anexo.url) pedido.anexo = { ...anexo, tipo: "pedido" };
+      const r = lancarCotacaoEmContas({ cotacaoId: contaLoja.id, obraId: obraAtual.id, modo: "contaLoja", pedido,
+        contaId: contaLoja.contaId || "material", prestadorId: l.prestadorId || contaLoja.lojaId || "",
+        favorecido: l.favorecido || contaLoja.titulo || "", descricao: contaLoja.titulo || "Compra",
+        lancadoEm: new Date().toISOString(), lancadoPor: quemSou() });
+      if (r && r.erro) return r;
+      return { gravado: true, quantas: r.quantas, contaLoja: contaLoja.titulo || l.favorecido || "loja",
+        numeroLoja: pedido.numeroLoja || "", vencimento: pedido.vencimento,
+        valor: Math.round(itensRateados(pedido).reduce((t, i) => t + (Number(i.valor) || 0), 0) * 100) / 100 };
+    }
     const pg = (l || {}).pagamento || {};
     const rcE = l.situacao === "pago" ? cartaoDoPagamento(pg.forma, pg.cartaoId, pg.novoCartao) : { cartao: null, extra: null };
     if (rcE.erro) return { erro: rcE.erro };

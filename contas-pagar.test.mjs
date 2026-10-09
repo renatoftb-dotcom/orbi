@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -3180,3 +3180,25 @@ teste("o papel do pedido final vai junto para cada conta do pedido", () => {
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);
+teste("Entrada a pagar de loja com conta: vira pedido da conta, com o nº do PEDIDO (não de nota) e o desconto", () => {
+  const l = { situacao: "apagar", prestadorId: "f1", numeroLoja: "24893-120", numeroNota: "", emitido: "2026-10-09", desconto: 15,
+    apagar: { vencimento: "", parcelas: "1" },
+    itens: [{ descricao: "Ferro Ca50 10,00mm - 3/8", insumoCodigo: "ACO-001", quantidade: 3, unidade: "Unidades", total: 134.7, bruto: 149.7, etapa: "fundacao", contaId: "material" }] };
+  const p = modulo.pedidoDaEntrada(l, 30);
+  assert.strictEqual(p.numeroLoja, "24893-120");
+  assert.strictEqual(p.numeroNota, "");
+  assert.strictEqual(p.vencimento, "2026-11-08", "sem vencimento no papel, vale o prazo da loja");
+  assert.strictEqual(p.itens[0].bruto, 149.7);
+  const contas = modulo.contasDoPedidoDaLoja({ obraId: "o1", cotacaoId: "loja", prestadorId: "f1", favorecido: "OURIFER" }, { ...p, numero: "0225" });
+  assert.strictEqual(contas.length, 1);
+  assert.strictEqual(contas[0].valor, 134.7);
+  assert.strictEqual(contas[0].numeroLoja, "24893-120");
+  assert.strictEqual(contas[0].numeroNota, "");
+  assert.strictEqual(modulo.pedidoDaEntrada({ ...l, apagar: { vencimento: "2026-11-05" } }, 30).vencimento, "2026-11-05");
+  // fora da conta da loja, a conta avulsa também guarda o nº do pedido no lugar certo
+  const av = modulo.contasDaEntrada(l, { obraId: "o1" });
+  assert.strictEqual(av[0].numeroLoja, "24893-120");
+  assert.strictEqual(av[0].numeroNota, "");
+});
+
+

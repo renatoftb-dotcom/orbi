@@ -933,7 +933,8 @@ function contasDaEntrada(lanc, op) {
       }
       let c = {
         id: id(), origem: "avulsa", obraId: o.obraId || l.obraId || "", contratoId: "", cotacaoId: "",
-        pedidoId, numeroNota: String(l.numeroNota || "").trim(), numeroDoc: o.numeroDoc || "",
+        pedidoId, numeroNota: String(l.numeroNota || "").trim(), numeroLoja: String(l.numeroLoja || "").trim(),
+        numeroDoc: o.numeroDoc || "",
         parcela: n > 1 ? p + 1 : 0, parcelasTotal: n > 1 ? n : 0,
         contaId: it.contaId || "", etapa: it.etapa || "", grupoMaterial: it.grupoMaterial || "",
         insumoCodigo: it.insumoCodigo || "",
@@ -957,6 +958,36 @@ function contasDaEntrada(lanc, op) {
     }
   }
   return fora;
+}
+
+// ── A Entrada a pagar de quem tem conta aberta ─────────────────
+// Comprou a prazo numa loja que tem conta nesta obra: é mais um PEDIDO da
+// conta dela — soma na fatura, aparece na lista de pedidos da loja e paga
+// junto. Lançado como conta avulsa, ele aparecia no contas a pagar ao lado
+// dos pedidos da loja mas não existia na conta dela, e o número do pedido
+// virava número de nota.
+function pedidoDaEntrada(lanc, prazoLoja) {
+  const l = lanc || {};
+  const base = pedidoVazio("");
+  const data = String(l.emitido || "").slice(0, 10) || base.data;
+  const ap = l.apagar || {};
+  const prazo = Number(prazoLoja) || 0;
+  const vencimento = String(ap.vencimento || "").slice(0, 10) || (prazo > 0 ? somarDias(data, prazo) : data);
+  return {
+    ...base, data, vencimento,
+    numeroLoja: String(l.numeroLoja || "").trim(),
+    numeroNota: String(l.numeroNota || "").trim(),
+    desconto: cpNumero(l.desconto) || 0,
+    origem: "entrada",
+    itens: (l.itens || []).map((i) => {
+      const q = cpNumero(i.quantidade);
+      const bruto = cpNumero(i.bruto) || cpNumero(i.total);
+      return { ...itemDoPedidoVazio(), descricao: String(i.descricao || "").trim(), insumoCodigo: i.insumoCodigo || "",
+        grupoMaterial: i.grupoMaterial || "", quantidade: i.quantidade, unidade: i.unidade || "",
+        unitario: q > 0 ? Math.round((bruto / q) * 10000) / 10000 : "", bruto,
+        etapa: i.etapa || "", contaId: i.contaId || "" };
+    }).filter((i) => i.bruto > 0),
+  };
 }
 
 // O mesmo papel não pode entrar duas vezes — nem nesta obra, nem em outra.
