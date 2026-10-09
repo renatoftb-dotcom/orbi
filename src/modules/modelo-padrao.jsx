@@ -817,7 +817,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
       snapshot.pdfArquivo = null;
       try {
         if (blob && typeof api !== "undefined" && api.uploads && api.uploads.send) {
-          const nomeArq = `proposta-${(clienteNome || "projeto").replace(/\s+/g, "-").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`;
+          const nomeArq = `proposta-${(clienteNome || "projeto").replace(/\s+/g, "-").toLowerCase()}-${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}.pdf`;
           const arquivo = (typeof File === "function")
             ? new File([blob], nomeArq, { type: "application/pdf" })
             : blob;

@@ -714,7 +714,7 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
   const oficios = typeof OFICIOS !== "undefined" ? OFICIOS : [];
   const salvo = obra.cronograma || {};
   const [cfg, setCfg] = useState(() => ({
-    dataInicio: salvo.dataInicio || (obra.dataInicio ? String(obra.dataInicio).slice(0, 10) : new Date().toISOString().slice(0, 10)),
+    dataInicio: salvo.dataInicio || (obra.dataInicio ? String(obra.dataInicio).slice(0, 10) : new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)),
     modo: salvo.modo || "simplificado",
     prazoAlvoMeses: salvo.prazoAlvoMeses || 0,
     equipe: { ...equipePadrao(), ...(salvo.equipe || {}) },

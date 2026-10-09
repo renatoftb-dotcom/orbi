@@ -2522,6 +2522,13 @@ function ehReceitaDaGestao(l) {
 
 function efCent(v) { return Math.round((Number(v) || 0) * 100) / 100; }
 
+// O dia de hoje no fuso de quem usa (o ISO em UTC já vira o dia seguinte
+// às 21h no Brasil). Com uma data dada, é ela.
+function efDiaLocal(agoraIso) {
+  if (agoraIso) return String(agoraIso).slice(0, 10);
+  return new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
 function efMesCurto(iso) {
   const m = /^(\d{4})-(\d{2})/.exec(String(iso || ""));
   return m ? `${EF_MESES_CURTOS[Number(m[2]) - 1]}/${m[1].slice(2)}` : "";
@@ -2628,7 +2635,7 @@ function recalibrarGestao(obra, contratoId, quem, agoraIso) {
       }
       nota = partes.filter(Boolean).join(" · ");
       nc = { ...nc, valor: soma, valorFatura: devido, pago: true, valorPago: soma, pagoEm,
-        contabilizadoEm: c.contabilizadoEm || String(agora).slice(0, 10) };
+        contabilizadoEm: c.contabilizadoEm || efDiaLocal(agoraIso) };
       if (!c.pago) nc = efAto(nc, "paga", quem, agora);
       ajustes[c.id] = efCent(soma - base);
       leva = sobra; levaDe = efMesCurto(pagoEm || c.vencimento);
@@ -2706,7 +2713,7 @@ function desfazerGestaoNaObra(obra, l, quem, agoraIso) {
   const e = lista[i];
   const a = e.antes || {};
   const nova = efAto({ ...p, pago: true, pagoEm: a.pagoEm || e.em || "", valorPago: efCent(a.valorPago || e.valor),
-    contabilizadoEm: a.contabilizadoEm || String(agora).slice(0, 10), estornos: lista.slice(0, i) }, "paga", quem, agora, "estorno desfeito");
+    contabilizadoEm: a.contabilizadoEm || efDiaLocal(agoraIso), estornos: lista.slice(0, i) }, "paga", quem, agora, "estorno desfeito");
   if (!nova.estornos.length) delete nova.estornos;
   return { obra: troca(nova) };
 }
@@ -5531,7 +5538,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     // O mapa das colunas deste banco vai na MESMA gravada: duas seguidas
     // partiriam do mesmo retrato de `data` e a segunda apagaria a primeira.
     const novosLayouts = mapaExtrato && mapaExtrato.assinatura && !mapaExtrato.lembrado
-      ? { ...layouts, [mapaExtrato.assinatura]: { colunas: mapaExtrato.colunas, visto: new Date().toISOString().slice(0, 10) } }
+      ? { ...layouts, [mapaExtrato.assinatura]: { colunas: mapaExtrato.colunas, visto: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10) } }
       : layouts;
     const esc = (data || {}).escritorio || {};
     Promise.resolve(save({ ...data, escritorio: { ...esc, financeiro: { ...cfgFin, extratos: r.extratos, layouts: novosLayouts } } }))
@@ -5543,7 +5550,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   function lembrarLayout() {
     if (!mapaExtrato || !mapaExtrato.assinatura || mapaExtrato.lembrado) return Promise.resolve();
     const esc = (data || {}).escritorio || {};
-    const novos = { ...layouts, [mapaExtrato.assinatura]: { colunas: mapaExtrato.colunas, visto: new Date().toISOString().slice(0, 10) } };
+    const novos = { ...layouts, [mapaExtrato.assinatura]: { colunas: mapaExtrato.colunas, visto: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10) } };
     return save({ ...data, escritorio: { ...esc, financeiro: { ...cfgFin, layouts: novos } } });
   }
 

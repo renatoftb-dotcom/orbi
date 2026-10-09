@@ -4563,7 +4563,7 @@ function arquivoColado(dados, qualquer) {
 function nomeDoColado(categoria, tipo) {
   const ext = String(tipo) === "application/pdf" ? "pdf" : (String(tipo || "").split("/")[1] || "png");
   const base = categoria === "comprovante_pagamento" ? "comprovante" : "proposta";
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   return `${base}-${hoje}.${ext}`;
 }
 
@@ -8421,7 +8421,7 @@ function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinhe
       ? (alvo.cotacoes || []).find((c) => c && c.id === carga.cotacaoId) : null;
 
     const lista = jaExiste || carimbar({ ...cotacaoVazia(alvo.id), contaId: "material",
-      titulo: tituloDaListaRapida(carga.itens, new Date().toISOString().slice(0, 10)),
+      titulo: tituloDaListaRapida(carga.itens, new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)),
       itens: (carga.itens || []).map((it) => ({
         ...(typeof itemCotacaoVazio === "function" ? itemCotacaoVazio() : {}),
         codigo: it.insumoCodigo || "", descricao: it.descricao || "",
@@ -8881,7 +8881,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   function iniciarSituacao(p) {
     situacaoTocada.current = false;
     setParcelaId("");
-    const hoje = new Date().toISOString().slice(0, 10);
+    const hoje = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
     setPagamento({ data: (p && (p.pagoEm || p.emitido)) || hoje, forma: "avista", cartaoId: "", parcelas: 1 });
     setApagar({ vencimento: (p && p.vencimento) || "", parcelas: "1", intervalo: "30" });
   }
@@ -9198,7 +9198,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     }
     const r = aoSeguir({ destino: "proposta", obraId, itens, papel, lojaId,
       desconto: descontoDoPapel, cotacaoId: destinoId,
-      titulo: String(tituloNova || "").trim() || tituloDaListaRapida(itens, new Date().toISOString().slice(0, 10)),
+      titulo: String(tituloNova || "").trim() || tituloDaListaRapida(itens, new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)),
       anexo }) || {};
     if (r.erro) { setAviso(r.erro); return; }
     ultimaCotacao.current = r.cotacaoId || "";
@@ -9848,7 +9848,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                           <div style={{ marginTop: 8 }}>
                             <label style={E.label}>Nome da cotação</label>
                             <input style={E.input} value={tituloNova}
-                              placeholder={tituloDaListaRapida(itens, new Date().toISOString().slice(0, 10))}
+                              placeholder={tituloDaListaRapida(itens, new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10))}
                               onChange={(e) => setTituloNova(e.target.value)} />
                           </div>
                         )}
@@ -10310,7 +10310,7 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
       if (!f) return;
       e.preventDefault();
       const ext = String(f.type) === "application/pdf" ? "pdf" : (String(f.type || "").split("/")[1] || "png");
-      const nome = f.name && !/^image\.\w+$/i.test(f.name) ? f.name : `pedido-${new Date().toISOString().slice(0, 10)}.${ext}`;
+      const nome = f.name && !/^image\.\w+$/i.test(f.name) ? f.name : `pedido-${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}.${ext}`;
       lerPapelRef.current(new File([f], nome, { type: f.type }));
     };
     document.addEventListener("paste", aoColar);

@@ -11835,6 +11835,13 @@ function ehReceitaDaGestao(l) {
 
 function efCent(v) { return Math.round((Number(v) || 0) * 100) / 100; }
 
+// O dia de hoje no fuso de quem usa (o ISO em UTC já vira o dia seguinte
+// às 21h no Brasil). Com uma data dada, é ela.
+function efDiaLocal(agoraIso) {
+  if (agoraIso) return String(agoraIso).slice(0, 10);
+  return new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
 function efMesCurto(iso) {
   const m = /^(\d{4})-(\d{2})/.exec(String(iso || ""));
   return m ? `${EF_MESES_CURTOS[Number(m[2]) - 1]}/${m[1].slice(2)}` : "";
@@ -11941,7 +11948,7 @@ function recalibrarGestao(obra, contratoId, quem, agoraIso) {
       }
       nota = partes.filter(Boolean).join(" · ");
       nc = { ...nc, valor: soma, valorFatura: devido, pago: true, valorPago: soma, pagoEm,
-        contabilizadoEm: c.contabilizadoEm || String(agora).slice(0, 10) };
+        contabilizadoEm: c.contabilizadoEm || efDiaLocal(agoraIso) };
       if (!c.pago) nc = efAto(nc, "paga", quem, agora);
       ajustes[c.id] = efCent(soma - base);
       leva = sobra; levaDe = efMesCurto(pagoEm || c.vencimento);
@@ -12019,7 +12026,7 @@ function desfazerGestaoNaObra(obra, l, quem, agoraIso) {
   const e = lista[i];
   const a = e.antes || {};
   const nova = efAto({ ...p, pago: true, pagoEm: a.pagoEm || e.em || "", valorPago: efCent(a.valorPago || e.valor),
-    contabilizadoEm: a.contabilizadoEm || String(agora).slice(0, 10), estornos: lista.slice(0, i) }, "paga", quem, agora, "estorno desfeito");
+    contabilizadoEm: a.contabilizadoEm || efDiaLocal(agoraIso), estornos: lista.slice(0, i) }, "paga", quem, agora, "estorno desfeito");
   if (!nova.estornos.length) delete nova.estornos;
   return { obra: troca(nova) };
 }
@@ -14844,7 +14851,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     // O mapa das colunas deste banco vai na MESMA gravada: duas seguidas
     // partiriam do mesmo retrato de `data` e a segunda apagaria a primeira.
     const novosLayouts = mapaExtrato && mapaExtrato.assinatura && !mapaExtrato.lembrado
-      ? { ...layouts, [mapaExtrato.assinatura]: { colunas: mapaExtrato.colunas, visto: new Date().toISOString().slice(0, 10) } }
+      ? { ...layouts, [mapaExtrato.assinatura]: { colunas: mapaExtrato.colunas, visto: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10) } }
       : layouts;
     const esc = (data || {}).escritorio || {};
     Promise.resolve(save({ ...data, escritorio: { ...esc, financeiro: { ...cfgFin, extratos: r.extratos, layouts: novosLayouts } } }))
@@ -14856,7 +14863,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   function lembrarLayout() {
     if (!mapaExtrato || !mapaExtrato.assinatura || mapaExtrato.lembrado) return Promise.resolve();
     const esc = (data || {}).escritorio || {};
-    const novos = { ...layouts, [mapaExtrato.assinatura]: { colunas: mapaExtrato.colunas, visto: new Date().toISOString().slice(0, 10) } };
+    const novos = { ...layouts, [mapaExtrato.assinatura]: { colunas: mapaExtrato.colunas, visto: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10) } };
     return save({ ...data, escritorio: { ...esc, financeiro: { ...cfgFin, layouts: novos } } });
   }
 
@@ -22670,7 +22677,7 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
   const oficios = typeof OFICIOS !== "undefined" ? OFICIOS : [];
   const salvo = obra.cronograma || {};
   const [cfg, setCfg] = useState(() => ({
-    dataInicio: salvo.dataInicio || (obra.dataInicio ? String(obra.dataInicio).slice(0, 10) : new Date().toISOString().slice(0, 10)),
+    dataInicio: salvo.dataInicio || (obra.dataInicio ? String(obra.dataInicio).slice(0, 10) : new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)),
     modo: salvo.modo || "simplificado",
     prazoAlvoMeses: salvo.prazoAlvoMeses || 0,
     equipe: { ...equipePadrao(), ...(salvo.equipe || {}) },
@@ -24096,7 +24103,7 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
     foro: "",
     cidadeAssinatura: "",
     status: "pendente",
-    dataAssinatura: new Date().toISOString().slice(0, 10), dataVencimento: "",
+    dataAssinatura: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), dataVencimento: "",
     descricaoServico: "", observacoes: "",
     criadoEm: new Date().toISOString(),
   };
@@ -26515,7 +26522,9 @@ function contaPaga(conta, dados, quem, agoraIso) {
     pago: true,
     pagoEm: d.pagoEm || "",
     valorPago: Math.round((Number(d.valorPago) || Number(c.valor) || 0) * 100) / 100,
-    contabilizadoEm: String(agora).slice(0, 10),
+    // o dia de quem está mexendo, no fuso dele: depois das 21h, o relógio
+    // UTC já está no dia seguinte
+    contabilizadoEm: agoraIso ? String(agoraIso).slice(0, 10) : new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10),
     comprovante: depois,
   };
   nova = registrarAto(nova, "paga", quem, agora);
@@ -28823,7 +28832,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
     setBaixando("Montando a planilha…");
     const tabela = tabelaDaBase(filtradas, COLS_TAB);
     const plan = planilhaDaBase(tabela, COLS_REL);
-    const nome = (nomeDoArquivo || "base-de-dados").replace(/[^\w-]+/g, "-").toLowerCase() + "-" + new Date().toISOString().slice(0, 10);
+    const nome = (nomeDoArquivo || "base-de-dados").replace(/[^\w-]+/g, "-").toLowerCase() + "-" + new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
     const salvar = (blob, arquivo) => {
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
@@ -33806,7 +33815,7 @@ function arquivoColado(dados, qualquer) {
 function nomeDoColado(categoria, tipo) {
   const ext = String(tipo) === "application/pdf" ? "pdf" : (String(tipo || "").split("/")[1] || "png");
   const base = categoria === "comprovante_pagamento" ? "comprovante" : "proposta";
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   return `${base}-${hoje}.${ext}`;
 }
 
@@ -37664,7 +37673,7 @@ function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinhe
       ? (alvo.cotacoes || []).find((c) => c && c.id === carga.cotacaoId) : null;
 
     const lista = jaExiste || carimbar({ ...cotacaoVazia(alvo.id), contaId: "material",
-      titulo: tituloDaListaRapida(carga.itens, new Date().toISOString().slice(0, 10)),
+      titulo: tituloDaListaRapida(carga.itens, new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)),
       itens: (carga.itens || []).map((it) => ({
         ...(typeof itemCotacaoVazio === "function" ? itemCotacaoVazio() : {}),
         codigo: it.insumoCodigo || "", descricao: it.descricao || "",
@@ -38124,7 +38133,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   function iniciarSituacao(p) {
     situacaoTocada.current = false;
     setParcelaId("");
-    const hoje = new Date().toISOString().slice(0, 10);
+    const hoje = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
     setPagamento({ data: (p && (p.pagoEm || p.emitido)) || hoje, forma: "avista", cartaoId: "", parcelas: 1 });
     setApagar({ vencimento: (p && p.vencimento) || "", parcelas: "1", intervalo: "30" });
   }
@@ -38441,7 +38450,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     }
     const r = aoSeguir({ destino: "proposta", obraId, itens, papel, lojaId,
       desconto: descontoDoPapel, cotacaoId: destinoId,
-      titulo: String(tituloNova || "").trim() || tituloDaListaRapida(itens, new Date().toISOString().slice(0, 10)),
+      titulo: String(tituloNova || "").trim() || tituloDaListaRapida(itens, new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)),
       anexo }) || {};
     if (r.erro) { setAviso(r.erro); return; }
     ultimaCotacao.current = r.cotacaoId || "";
@@ -39091,7 +39100,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                           <div style={{ marginTop: 8 }}>
                             <label style={E.label}>Nome da cotação</label>
                             <input style={E.input} value={tituloNova}
-                              placeholder={tituloDaListaRapida(itens, new Date().toISOString().slice(0, 10))}
+                              placeholder={tituloDaListaRapida(itens, new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10))}
                               onChange={(e) => setTituloNova(e.target.value)} />
                           </div>
                         )}
@@ -39553,7 +39562,7 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
       if (!f) return;
       e.preventDefault();
       const ext = String(f.type) === "application/pdf" ? "pdf" : (String(f.type || "").split("/")[1] || "png");
-      const nome = f.name && !/^image\.\w+$/i.test(f.name) ? f.name : `pedido-${new Date().toISOString().slice(0, 10)}.${ext}`;
+      const nome = f.name && !/^image\.\w+$/i.test(f.name) ? f.name : `pedido-${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}.${ext}`;
       lerPapelRef.current(new File([f], nome, { type: f.type }));
     };
     document.addEventListener("paste", aoColar);
@@ -41095,7 +41104,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         complemento:"", bairro:"", cidade:"", estado:"SP",
         representanteNome:"", representanteCpf:"",
         contatos:[{ id:uid(), nome:"", telefone:"", cargo:"", whatsapp:false }],
-        observacoes:"", ativo:true, desde: new Date().toISOString().slice(0,10),
+        observacoes:"", ativo:true, desde: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10),
         status:"",
         servicos:{ projeto:false, acompanhamentoObra:false, gestaoObra:false, empreendimento:false }
       });
@@ -41130,7 +41139,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     complemento:"", bairro:"", cidade:"", estado:"SP",
     representanteNome:"", representanteCpf:"",
     contatos:[{ id:uid(), nome:"", telefone:"", cargo:"", whatsapp:false }],
-    observacoes:"", ativo:true, desde: new Date().toISOString().slice(0,10),
+    observacoes:"", ativo:true, desde: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10),
     status:"",
     servicos:{ projeto:false, acompanhamentoObra:false, gestaoObra:false, empreendimento:false },
     // Só preenchido quando o cadastro é de empreendimento — é o imóvel.
@@ -43198,7 +43207,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // ── Contas a pagar ──────────────────────────────────────────
   // Também moram dentro da obra (obra.contasPagar). As de contrato são
   // geradas ao salvar o contrato; as avulsas, à mão.
-  const hojeIso = new Date().toISOString().slice(0, 10);
+  const hojeIso = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   // `obraSelecionada` é uma CÓPIA guardada no estado quando a obra foi aberta:
   // ela envelhece assim que um contrato, uma conta ou um item do P&L é salvo.
   // Para ler qualquer coisa da obra (contas, cronograma, estimativa) use
@@ -49073,7 +49082,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
       snapshot.pdfArquivo = null;
       try {
         if (blob && typeof api !== "undefined" && api.uploads && api.uploads.send) {
-          const nomeArq = `proposta-${(clienteNome || "projeto").replace(/\s+/g, "-").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`;
+          const nomeArq = `proposta-${(clienteNome || "projeto").replace(/\s+/g, "-").toLowerCase()}-${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}.pdf`;
           const arquivo = (typeof File === "function")
             ? new File([blob], nomeArq, { type: "application/pdf" })
             : blob;
@@ -71941,7 +71950,7 @@ export default function ModuloClientesFornecedores() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `vicke-backup-${new Date().toISOString().slice(0,10)}.json`;
+      a.download = `vicke-backup-${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

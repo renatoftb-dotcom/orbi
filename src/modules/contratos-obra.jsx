@@ -830,7 +830,7 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
     foro: "",
     cidadeAssinatura: "",
     status: "pendente",
-    dataAssinatura: new Date().toISOString().slice(0, 10), dataVencimento: "",
+    dataAssinatura: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), dataVencimento: "",
     descricaoServico: "", observacoes: "",
     criadoEm: new Date().toISOString(),
   };

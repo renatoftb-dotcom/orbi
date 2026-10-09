@@ -1698,7 +1698,9 @@ function contaPaga(conta, dados, quem, agoraIso) {
     pago: true,
     pagoEm: d.pagoEm || "",
     valorPago: Math.round((Number(d.valorPago) || Number(c.valor) || 0) * 100) / 100,
-    contabilizadoEm: String(agora).slice(0, 10),
+    // o dia de quem está mexendo, no fuso dele: depois das 21h, o relógio
+    // UTC já está no dia seguinte
+    contabilizadoEm: agoraIso ? String(agoraIso).slice(0, 10) : new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10),
     comprovante: depois,
   };
   nova = registrarAto(nova, "paga", quem, agora);
@@ -4006,7 +4008,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
     setBaixando("Montando a planilha…");
     const tabela = tabelaDaBase(filtradas, COLS_TAB);
     const plan = planilhaDaBase(tabela, COLS_REL);
-    const nome = (nomeDoArquivo || "base-de-dados").replace(/[^\w-]+/g, "-").toLowerCase() + "-" + new Date().toISOString().slice(0, 10);
+    const nome = (nomeDoArquivo || "base-de-dados").replace(/[^\w-]+/g, "-").toLowerCase() + "-" + new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
     const salvar = (blob, arquivo) => {
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);

@@ -490,7 +490,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         complemento:"", bairro:"", cidade:"", estado:"SP",
         representanteNome:"", representanteCpf:"",
         contatos:[{ id:uid(), nome:"", telefone:"", cargo:"", whatsapp:false }],
-        observacoes:"", ativo:true, desde: new Date().toISOString().slice(0,10),
+        observacoes:"", ativo:true, desde: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10),
         status:"",
         servicos:{ projeto:false, acompanhamentoObra:false, gestaoObra:false, empreendimento:false }
       });
@@ -525,7 +525,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     complemento:"", bairro:"", cidade:"", estado:"SP",
     representanteNome:"", representanteCpf:"",
     contatos:[{ id:uid(), nome:"", telefone:"", cargo:"", whatsapp:false }],
-    observacoes:"", ativo:true, desde: new Date().toISOString().slice(0,10),
+    observacoes:"", ativo:true, desde: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10),
     status:"",
     servicos:{ projeto:false, acompanhamentoObra:false, gestaoObra:false, empreendimento:false },
     // Só preenchido quando o cadastro é de empreendimento — é o imóvel.
@@ -2593,7 +2593,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // ── Contas a pagar ──────────────────────────────────────────
   // Também moram dentro da obra (obra.contasPagar). As de contrato são
   // geradas ao salvar o contrato; as avulsas, à mão.
-  const hojeIso = new Date().toISOString().slice(0, 10);
+  const hojeIso = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   // `obraSelecionada` é uma CÓPIA guardada no estado quando a obra foi aberta:
   // ela envelhece assim que um contrato, uma conta ou um item do P&L é salvo.
   // Para ler qualquer coisa da obra (contas, cronograma, estimativa) use
