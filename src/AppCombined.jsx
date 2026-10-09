@@ -30280,6 +30280,34 @@ function cotCasaPalavra(a, b) {
   return 0;
 }
 
+// ── A medida manda ──────────────────────────────────────────────
+// "Ferro CA50 10,00mm - 3/8" contra "Barras de CA50 8.0mm": as palavras
+// batem quase todas (ferro, CA, 50, mm — e o 8 do "3/8"), e o placar dava
+// a barra de 8mm. Mas bitola diferente é OUTRO material, não um casamento
+// incompleto. Então a medida em milímetro (ou em polegada, que a loja de
+// ferro usa: 5/16, 3/8, 1/2) é conferida à parte: se os dois lados dizem
+// uma medida e nenhuma bate, o insumo sai da disputa. Melhor nenhuma
+// sugestão do que a bitola errada.
+function cotMedidasMm(texto) {
+  // sem acento e em minúscula, mas COM a pontuação — é ela que diz 10,00 e 3/8
+  const t = String(texto || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/,/g, ".");
+  const out = [];
+  const reMm = /(\d+(?:\.\d+)?)\s*mm(?![a-z0-9²2])/g;
+  let m;
+  while ((m = reMm.exec(t))) { const v = parseFloat(m[1]); if (v > 0) out.push(v); }
+  // polegada: 1/4, 5/16, 3/8, 1/2, 5/8, 3/4 (com ou sem " ou "pol")
+  const rePol = /(?:^|[^\d.\/])(\d{1,2})\/(2|4|8|16|32)(?![\d\/])/g;
+  while ((m = rePol.exec(t))) {
+    const num = Number(m[1]), den = Number(m[2]);
+    if (num > 0 && num < den * 2) out.push(Math.round((num / den) * 25.4 * 10) / 10);
+  }
+  return out;
+}
+function cotMedidasBatem(a, b) {
+  if (!a.length || !b.length) return true;
+  return a.some((x) => b.some((y) => Math.abs(x - y) <= Math.max(0.6, Math.min(x, y) * 0.07)));
+}
+
 // O peso das palavras sai do catálogo inteiro, então se calcula uma vez e
 // serve para os onze itens do pedido.
 function indiceDoCatalogo(insumos) {
@@ -30296,7 +30324,7 @@ function indiceDoCatalogo(insumos) {
     // a loja não escreve "Elétrica" na nota.
     const identidade = partes.gaveta.map(() => false)
       .concat(partes.corpo.map((_, k) => k < COT_PALAVRAS_DE_IDENTIDADE));
-    itens.push({ insumo: i, palavras, fator, identidade });
+    itens.push({ insumo: i, palavras, fator, identidade, medidas: cotMedidasMm(i.nome) });
     for (const w of new Set(palavras)) em.set(w, (em.get(w) || 0) + 1);
   }
   const n = itens.length || 1;
@@ -30322,8 +30350,11 @@ const COT_PALAVRAS_DE_IDENTIDADE = 2;
 function casarNoCatalogo(descricao, indice, limite) {
   const ts = cotPalavrasDaLoja(descricao);
   if (!ts.length || !indice || !indice.itens.length) return [];
+  const medidas = cotMedidasMm(descricao);
   const achados = [];
   for (const it of indice.itens) {
+    // bitola diferente é outro material
+    if (!cotMedidasBatem(medidas, it.medidas || cotMedidasMm(it.insumo && it.insumo.nome))) continue;
     let num = 0, den = 0;
     for (let k = 0; k < it.palavras.length; k++) {
       const t = it.palavras[k];
@@ -30421,6 +30452,8 @@ function sugestoesDaIA(itensSemCatalogo, bruto, insumos) {
       if (escolhido < 0 && (d.indexOf(alvo) >= 0 || alvo.indexOf(d) >= 0)) escolhido = k;
     }
     if (escolhido < 0) continue;
+    // a IA também erra a bitola: medida que não bate não vira sugestão
+    if (!cotMedidasBatem(cotMedidasMm(alvos[escolhido].descricao), cotMedidasMm(ins.nome))) continue;
     usados.add(escolhido);
     saida.push({ indice: escolhido, codigo: ins.codigo || "", nome: ins.nome || "",
       grupo: ins.grupo || "", ia: true });

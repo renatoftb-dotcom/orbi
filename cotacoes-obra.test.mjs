@@ -4290,6 +4290,26 @@ teste("cada proposta mexe na lista do seu jeito: texto próprio, item de fora, i
   assert.ok(!("extra1" in ap2.proposta.precos));
 });
 
+
+teste("bitola manda: ferro de 10mm (3/8) não casa com a barra de 8mm do catálogo", () => {
+  const cat = [6.3, 8.0, 10.0, 12.5].map((d, k) => ({ codigo: "ACO-" + k, nome: `Aço - Barras de CA50 ${d.toFixed(1)}mm 12mts`, grupo: "Aço", tipo: "material" }))
+    .concat([{ codigo: "ACO-9", nome: "Aço - Barras de CA60 5.0mm 12mts", grupo: "Aço", tipo: "material" }]);
+  const idx = M.indiceDoCatalogo(cat);
+  assert.strictEqual(M.sugestaoDoCatalogo("Ferro Ca50 10,00mm - 3/8 - Br 7,404kg", idx).nome, "Aço - Barras de CA50 10.0mm 12mts");
+  assert.strictEqual(M.sugestaoDoCatalogo("Ferro CA50 5/16 barra 12m", idx).nome, "Aço - Barras de CA50 8.0mm 12mts");
+  assert.strictEqual(M.sugestaoDoCatalogo("Vergalhão CA-50 1/2 12m", idx).nome, "Aço - Barras de CA50 12.5mm 12mts");
+  // medida que não existe no catálogo: melhor nenhuma sugestão do que a errada
+  const s = M.sugestaoDoCatalogo("Ferro Ca50 16,0mm 5/8", idx);
+  assert.ok(!s || !/8\.0mm|10\.0mm|12\.5mm|6\.3mm/.test(s.nome), s && s.nome);
+});
+
+teste("a IA também não passa a bitola errada", () => {
+  const cat = [{ codigo: "A8", nome: "Aço - Barras de CA50 8.0mm 12mts" }, { codigo: "A10", nome: "Aço - Barras de CA50 10.0mm 12mts" }];
+  const alvo = [{ descricao: "Ferro Ca50 10,00mm - 3/8 - Br 7,404kg" }];
+  assert.deepStrictEqual(M.sugestoesDaIA(alvo, { itens: [{ descricao: "Ferro Ca50 10,00mm - 3/8 - Br 7,404kg", codigoInsumo: "A8" }] }, cat), []);
+  assert.strictEqual(M.sugestoesDaIA(alvo, { itens: [{ descricao: "Ferro Ca50 10,00mm - 3/8 - Br 7,404kg", codigoInsumo: "A10" }] }, cat)[0].codigo, "A10");
+});
+
 for (const [nome, fn] of testes) {
   try { fn(); console.log("  ok   " + nome); }
   catch (e) { falhas++; console.log("  FALHOU " + nome + "\n         " + e.message); }
