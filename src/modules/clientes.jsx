@@ -1966,7 +1966,7 @@ function ConferenciaDaObraView({ obra, insumos, isMobile, fmtBRL }) {
   );
 }
 
-function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcamento }) {
+function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcamento, insumos }) {
   // Acompanhar custo e apurar resultado são duas perguntas. Com a venda, o
   // terreno e os tributos na conta, o número do canteiro fica escondido; o
   // botão esconde os três e sobra o que custa construir.
@@ -1978,7 +1978,7 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
   // Duas leituras da mesma base: por conta (o que comprei) e por etapa
   // (onde a obra está). Quem está tocando a obra pensa por etapa.
   const [visao, setVisao] = useState("conta");
-  const porEtapa = plPorEtapa(itens, contasPagar, { soCusto, orcamento });
+  const porEtapa = plPorEtapa(itens, contasPagar, { soCusto, orcamento, insumos });
   // A estimativa do P&L fala por conta do plano e não sabe de etapa; quem
   // fala por etapa é o orçamento da obra. Com orçamento gerado, a coluna
   // dele entra ao lado — duas contas do mesmo gasto, e é assim que se vê
@@ -3494,7 +3494,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             entradas={entradasDaObra} data={data} isMobile={isMobile} fmtBRL={fmtBRL} />
         ) : visaoPL === "pl" ? (
           <PLDaObraView itens={itensPL} contasPagar={contasDaObra} clientePaga={!!obraAtual.clientePagaDireto}
-            isMobile={isMobile} fmtBRL={fmtBRL} orcamento={obraAtual.orcamento} />
+            isMobile={isMobile} fmtBRL={fmtBRL} orcamento={obraAtual.orcamento} insumos={data.materiais || []} />
         ) : visaoPL === "quadro" ? (
           <QuadroEstimativaPL itens={itensPL} podeEditar={perm.podeGerenciarObra} isMobile={isMobile}
             fmtBRL={fmtBRL} aoDefinir={definirEstimativa} clientePaga={!!obraAtual.clientePagaDireto} />

@@ -305,6 +305,12 @@ const ETAPA_APELIDOS_ORCAMENTO = {
   "contrapiso interno pav 1": "contrapiso_int_1",
   "massiamento contrapisos internos": "massa_contrapiso_int",
   "contrapisos externos massiamento": "massa_contrapiso_ext",
+  // as disciplinas de instalações (kits por ambiente e itens do projeto)
+  // com o nome que a obra usa
+  "hidraulica agua fria e quente": "hidraulica",
+  "eletrica e iluminacao": "eletrica",
+  "loucas e metais": "loucas_metais",
+  "outros itens do projeto": "outros",
 };
 
 // etapa "Piscina": quem decide é a subetapa
@@ -350,11 +356,56 @@ function etapaDoOrcamento(etapa, subEtapa) {
 // O que o motor emite e a obra não sabe receber. Serve para a tela dizer o
 // que está caindo em "Sem etapa" em vez de deixar a pessoa descobrir pela
 // soma que não fecha.
-function etapasDoOrcamentoSemMapa(linhas) {
+// ══════════════════════════════════════════════════════════════
+// O CATÁLOGO É A FONTE ÚNICA DA ETAPA E DO GRUPO
+// ══════════════════════════════════════════════════════════════
+// A fórmula do quantitativo calcula QUANTO; ONDE (etapa) e O QUÊ (grupo)
+// saem do catálogo de insumos — o mesmo que pré-preenche a compra. Assim a
+// linha da estimativa e a conta lançada caem exatamente no mesmo lugar.
+//   - insumo com etapa no catálogo → essa etapa, venha de que fórmula vier
+//     (a Base Registro Gaveta do kit de louças vai para Hidráulica);
+//   - insumo sem etapa no catálogo (cimento, areia, aço, Vedalit...) → a
+//     etapa da fórmula, uso a uso.
+// É lido na hora: mudou o catálogo, a estimativa acompanha, sem regerar.
+function insumoDaLinhaDoOrcamento(linha, insumos) {
+  const l = linha || {};
+  const lista = insumos || [];
+  if (!lista.length) return null;
+  if (l.insumoCodigo) {
+    const porCodigo = lista.find((x) => x && (x.codigo === l.insumoCodigo || x.id === l.insumoCodigo));
+    if (porCodigo) return porCodigo;
+  }
+  // linha sem código (prestador, serviço): o nome igual ao do catálogo liga
+  const n = normalizarNomeEtapa(l.item);
+  return n ? (lista.find((x) => x && normalizarNomeEtapa(x.nome) === n) || null) : null;
+}
+function etapaDaLinhaDoOrcamento(linha, insumos) {
+  const l = linha || {};
+  const ins = insumoDaLinhaDoOrcamento(l, insumos);
+  const doCatalogo = ins ? String(ins.etapaPadrao || "").trim() : "";
+  if (doCatalogo && ETAPAS_OBRA.some((e) => e.id === doCatalogo)) return doCatalogo;
+  return etapaDoOrcamento(l.etapa, l.subEtapa);
+}
+// A mesma leitura, com o porquê: para a tela mostrar "fórmula: Louças e
+// metais" quando o catálogo levou a linha para outra etapa.
+function origemDaEtapaDaLinha(linha, insumos) {
+  const l = linha || {};
+  const id = etapaDaLinhaDoOrcamento(l, insumos);
+  const daFormula = etapaDoOrcamento(l.etapa, l.subEtapa);
+  const e = ETAPAS_OBRA.find((x) => x.id === id) || null;
+  return { id, nome: e ? e.nome : (l.etapa || ""), ordem: e ? ETAPAS_OBRA.indexOf(e) : 900,
+    peloCatalogo: !!id && id !== daFormula, etapaDaFormula: l.etapa || "", idDaFormula: daFormula };
+}
+function grupoDaLinhaDoOrcamento(linha, insumos) {
+  const ins = insumoDaLinhaDoOrcamento(linha, insumos);
+  return grupoDoItem(ins, (linha || {}).grupoMaterial);
+}
+
+function etapasDoOrcamentoSemMapa(linhas, insumos) {
   const fora = [], vistos = {};
   for (const l of linhas || []) {
     if (!l || !l.etapa) continue;
-    if (etapaDoOrcamento(l.etapa, l.subEtapa)) continue;
+    if (etapaDaLinhaDoOrcamento(l, insumos)) continue;
     const k = String(l.etapa) + "|" + String(l.subEtapa || "");
     if (vistos[k]) { vistos[k].linhas++; continue; }
     vistos[k] = { etapa: l.etapa, subEtapa: l.subEtapa || "", linhas: 1 };

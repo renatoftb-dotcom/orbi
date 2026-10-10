@@ -9149,6 +9149,12 @@ const ETAPA_APELIDOS_ORCAMENTO = {
   "contrapiso interno pav 1": "contrapiso_int_1",
   "massiamento contrapisos internos": "massa_contrapiso_int",
   "contrapisos externos massiamento": "massa_contrapiso_ext",
+  // as disciplinas de instalações (kits por ambiente e itens do projeto)
+  // com o nome que a obra usa
+  "hidraulica agua fria e quente": "hidraulica",
+  "eletrica e iluminacao": "eletrica",
+  "loucas e metais": "loucas_metais",
+  "outros itens do projeto": "outros",
 };
 
 // etapa "Piscina": quem decide é a subetapa
@@ -9194,11 +9200,56 @@ function etapaDoOrcamento(etapa, subEtapa) {
 // O que o motor emite e a obra não sabe receber. Serve para a tela dizer o
 // que está caindo em "Sem etapa" em vez de deixar a pessoa descobrir pela
 // soma que não fecha.
-function etapasDoOrcamentoSemMapa(linhas) {
+// ══════════════════════════════════════════════════════════════
+// O CATÁLOGO É A FONTE ÚNICA DA ETAPA E DO GRUPO
+// ══════════════════════════════════════════════════════════════
+// A fórmula do quantitativo calcula QUANTO; ONDE (etapa) e O QUÊ (grupo)
+// saem do catálogo de insumos — o mesmo que pré-preenche a compra. Assim a
+// linha da estimativa e a conta lançada caem exatamente no mesmo lugar.
+//   - insumo com etapa no catálogo → essa etapa, venha de que fórmula vier
+//     (a Base Registro Gaveta do kit de louças vai para Hidráulica);
+//   - insumo sem etapa no catálogo (cimento, areia, aço, Vedalit...) → a
+//     etapa da fórmula, uso a uso.
+// É lido na hora: mudou o catálogo, a estimativa acompanha, sem regerar.
+function insumoDaLinhaDoOrcamento(linha, insumos) {
+  const l = linha || {};
+  const lista = insumos || [];
+  if (!lista.length) return null;
+  if (l.insumoCodigo) {
+    const porCodigo = lista.find((x) => x && (x.codigo === l.insumoCodigo || x.id === l.insumoCodigo));
+    if (porCodigo) return porCodigo;
+  }
+  // linha sem código (prestador, serviço): o nome igual ao do catálogo liga
+  const n = normalizarNomeEtapa(l.item);
+  return n ? (lista.find((x) => x && normalizarNomeEtapa(x.nome) === n) || null) : null;
+}
+function etapaDaLinhaDoOrcamento(linha, insumos) {
+  const l = linha || {};
+  const ins = insumoDaLinhaDoOrcamento(l, insumos);
+  const doCatalogo = ins ? String(ins.etapaPadrao || "").trim() : "";
+  if (doCatalogo && ETAPAS_OBRA.some((e) => e.id === doCatalogo)) return doCatalogo;
+  return etapaDoOrcamento(l.etapa, l.subEtapa);
+}
+// A mesma leitura, com o porquê: para a tela mostrar "fórmula: Louças e
+// metais" quando o catálogo levou a linha para outra etapa.
+function origemDaEtapaDaLinha(linha, insumos) {
+  const l = linha || {};
+  const id = etapaDaLinhaDoOrcamento(l, insumos);
+  const daFormula = etapaDoOrcamento(l.etapa, l.subEtapa);
+  const e = ETAPAS_OBRA.find((x) => x.id === id) || null;
+  return { id, nome: e ? e.nome : (l.etapa || ""), ordem: e ? ETAPAS_OBRA.indexOf(e) : 900,
+    peloCatalogo: !!id && id !== daFormula, etapaDaFormula: l.etapa || "", idDaFormula: daFormula };
+}
+function grupoDaLinhaDoOrcamento(linha, insumos) {
+  const ins = insumoDaLinhaDoOrcamento(linha, insumos);
+  return grupoDoItem(ins, (linha || {}).grupoMaterial);
+}
+
+function etapasDoOrcamentoSemMapa(linhas, insumos) {
   const fora = [], vistos = {};
   for (const l of linhas || []) {
     if (!l || !l.etapa) continue;
-    if (etapaDoOrcamento(l.etapa, l.subEtapa)) continue;
+    if (etapaDaLinhaDoOrcamento(l, insumos)) continue;
     const k = String(l.etapa) + "|" + String(l.subEtapa || "");
     if (vistos[k]) { vistos[k].linhas++; continue; }
     vistos[k] = { etapa: l.etapa, subEtapa: l.subEtapa || "", linhas: 1 };
@@ -19924,6 +19975,18 @@ function precificarETotalizar(out, data) {
     const preco = r.preco != null ? r.preco : 0;
     return { ...linha, preco, total: Math.round(linha.qtd * preco * 100) / 100, confianca: r.confianca, insumoCodigo: r.codigo, semPreco: r.preco == null };
   });
+  // A etapa da linha é a do catálogo (fonte única). Quando ele leva a linha
+  // para outra etapa que não a da fórmula, a memória diz — para ninguém
+  // procurar o registro em Louças e achá-lo em Hidráulica sem saber por quê.
+  if (typeof origemDaEtapaDaLinha === "function") {
+    const cat = (data && data.materiais) || [];
+    for (const i of itens) {
+      const o = origemDaEtapaDaLinha(i, cat);
+      if (o.peloCatalogo && Array.isArray(i.memoria)) {
+        i.memoria = i.memoria.concat([MEM.nota(`Etapa pelo catálogo de insumos: ${o.nome}. A fórmula calcula a quantidade em ${i.etapa}; quem diz a etapa é o catálogo.`)]);
+      }
+    }
+  }
 
   const somaPorTipo = (tipo) => itens.filter((i) => i.tipo === tipo).reduce((acc, i) => acc + i.total, 0);
 
@@ -21492,9 +21555,14 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
   }
 
   function exportarCSV() {
-    const linhas = [["Etapa", "Sub-etapa", "Item", "Unidade", "Qtd", "Preço", "Total"]];
+    // Etapa e grupo do catálogo (os mesmos da base de dados da obra); a
+    // etapa da fórmula ao lado, para ver onde o catálogo mudou a linha.
+    const cat = (data && data.materiais) || [];
+    const linhas = [["Etapa", "Etapa na fórmula", "Sub-etapa", "Item", "Grupo materiais", "Unidade", "Qtd", "Preço", "Total"]];
     for (const i of obra.orcamento.itens) {
-      linhas.push([i.etapa, i.subEtapa || "", i.item, i.unidade, i.qtd, i.preco, i.total]);
+      const o = typeof origemDaEtapaDaLinha === "function" ? origemDaEtapaDaLinha(i, cat) : { nome: i.etapa };
+      const g = typeof grupoDaLinhaDoOrcamento === "function" ? grupoDaLinhaDoOrcamento(i, cat) : "";
+      linhas.push([o.nome || i.etapa, i.etapa, i.subEtapa || "", i.item, g, i.unidade, i.qtd, i.preco, i.total]);
     }
     const csv = linhas.map((l) => l.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -22197,11 +22265,22 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
   const orc = obra.orcamento;
   const custoPorM2 = projetoDraft.arquitetura?.areaConstruida ? orc.totais.geral / Number(projetoDraft.arquitetura.areaConstruida) : 0;
 
+  // A etapa e o grupo de cada linha saem do CATÁLOGO (a fonte única —
+  // ver etapaDaLinhaDoOrcamento): é por ela que a estimativa casa com a
+  // conta lançada. Sem etapa no catálogo, vale a da fórmula.
+  const insumosCat = (data && data.materiais) || [];
   const itensPorEtapa = [];
-  const vistos = new Set();
+  const porChave = {};
   for (const item of orc.itens) {
-    if (!vistos.has(item.etapa)) { vistos.add(item.etapa); itensPorEtapa.push({ ordem: item.ordem, etapa: item.etapa, itens: [] }); }
-    itensPorEtapa.find((e) => e.etapa === item.etapa).itens.push(item);
+    const o = typeof origemDaEtapaDaLinha === "function" ? origemDaEtapaDaLinha(item, insumosCat)
+      : { id: "", nome: item.etapa, ordem: 900, peloCatalogo: false };
+    const chave = o.id || ("?" + item.etapa);
+    if (!porChave[chave]) {
+      porChave[chave] = { ordem: o.id ? o.ordem : 900 + (Number(item.ordem) || 0), etapa: o.nome || item.etapa, itens: [] };
+      itensPorEtapa.push(porChave[chave]);
+    }
+    const grupo = typeof grupoDaLinhaDoOrcamento === "function" ? grupoDaLinhaDoOrcamento(item, insumosCat) : "";
+    porChave[chave].itens.push({ ...item, _grupo: grupo, _daFormula: o.peloCatalogo ? o.etapaDaFormula : "" });
   }
   itensPorEtapa.sort((a, b) => a.ordem - b.ordem);
 
@@ -22326,7 +22405,14 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                       )] : []),
                       ...sub.itens.map((i, idx) => (
                       <tr key={`s${si}i${idx}`} style={{ borderTop: "1px solid #f3f4f6" }}>
-                        <td style={{ padding: "6px 14px", color: "#111827", paddingLeft: sub.mostrarTitulo ? 26 : 14 }}>{i.item}</td>
+                        <td style={{ padding: "6px 14px", color: "#111827", paddingLeft: sub.mostrarTitulo ? 26 : 14 }}>
+                          {i.item}
+                          {(i._grupo || i._daFormula) && (
+                            <div data-vk-linha-catalogo="1" style={{ fontSize: 10.5, color: "#6b7280", marginTop: 1 }}>
+                              {i._grupo}{i._grupo && i._daFormula ? " · " : ""}{i._daFormula ? `etapa pelo catálogo (fórmula: ${i._daFormula})` : ""}
+                            </div>
+                          )}
+                        </td>
                         <td style={{ padding: "6px 14px", color: "#4b5563" }}>{i.unidade}</td>
                         <td style={{ padding: "6px 14px", textAlign: "right", color: "#111827" }}>{Number(i.qtd).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}</td>
                         <td style={{ padding: "6px 14px", textAlign: "right", color: "#111827", whiteSpace: "nowrap" }} title={rotuloConfianca(i)}>
@@ -27281,12 +27367,14 @@ const itensDetalhados = (itens, contaId) =>
 // coluna própria, ao lado, em vez de virar o estimado — somar daria uma
 // obra duas vezes mais cara, e trocar faria o quadro por etapa fechar num
 // total diferente do quadro por conta.
-function estimativaPorEtapaDoOrcamento(orcamento) {
+function estimativaPorEtapaDoOrcamento(orcamento, insumos) {
   const linhas = ((orcamento || {}).itens) || [];
   const por = {};
   for (const i of linhas) {
     if (!i) continue;
-    const k = (typeof etapaDoOrcamento === "function" ? etapaDoOrcamento(i.etapa, i.subEtapa) : "") || "";
+    // a etapa do catálogo manda; sem ela, a da fórmula
+    const k = (typeof etapaDaLinhaDoOrcamento === "function" ? etapaDaLinhaDoOrcamento(i, insumos)
+      : typeof etapaDoOrcamento === "function" ? etapaDoOrcamento(i.etapa, i.subEtapa) : "") || "";
     const v = Number(i.total);
     const valor = Number.isFinite(v) && v !== 0
       ? v
@@ -27298,7 +27386,7 @@ function estimativaPorEtapaDoOrcamento(orcamento) {
 
 function plPorEtapa(itens, contasPagar, opcoes) {
   const est = {}, real = {}, contasDe = {};
-  const orc = estimativaPorEtapaDoOrcamento((opcoes || {}).orcamento);
+  const orc = estimativaPorEtapaDoOrcamento((opcoes || {}).orcamento, (opcoes || {}).insumos);
   const temOrcamento = Object.keys(orc).length > 0;
   const soCusto = !!(opcoes && opcoes.soCusto);
   // Receita e terreno nunca são etapa de obra; com soCusto os tributos
@@ -27461,7 +27549,7 @@ function conferenciaDaLigacao(obra, insumos) {
     "Estas linhas não casaram com nenhum insumo, então o orçado delas não encontra o que foi comprado.",
     semInsumo.length, semInsumo.reduce((s, i) => s + valorDaLinha(i), 0)));
 
-  const semEtapaOrc = typeof etapasDoOrcamentoSemMapa === "function" ? etapasDoOrcamentoSemMapa(linhas) : [];
+  const semEtapaOrc = typeof etapasDoOrcamentoSemMapa === "function" ? etapasDoOrcamentoSemMapa(linhas, insumos) : [];
   if (semEtapaOrc.length) furos.push(furo("Orçamento com etapa que a obra não conhece",
     "A etapa destas linhas não tem correspondente: " + semEtapaOrc.map((x) => x.etapa).join(", ") + ".",
     semEtapaOrc.reduce((s, x) => s + x.linhas, 0), 0));
@@ -43395,7 +43483,7 @@ function ConferenciaDaObraView({ obra, insumos, isMobile, fmtBRL }) {
   );
 }
 
-function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcamento }) {
+function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcamento, insumos }) {
   // Acompanhar custo e apurar resultado são duas perguntas. Com a venda, o
   // terreno e os tributos na conta, o número do canteiro fica escondido; o
   // botão esconde os três e sobra o que custa construir.
@@ -43407,7 +43495,7 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
   // Duas leituras da mesma base: por conta (o que comprei) e por etapa
   // (onde a obra está). Quem está tocando a obra pensa por etapa.
   const [visao, setVisao] = useState("conta");
-  const porEtapa = plPorEtapa(itens, contasPagar, { soCusto, orcamento });
+  const porEtapa = plPorEtapa(itens, contasPagar, { soCusto, orcamento, insumos });
   // A estimativa do P&L fala por conta do plano e não sabe de etapa; quem
   // fala por etapa é o orçamento da obra. Com orçamento gerado, a coluna
   // dele entra ao lado — duas contas do mesmo gasto, e é assim que se vê
@@ -44923,7 +45011,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             entradas={entradasDaObra} data={data} isMobile={isMobile} fmtBRL={fmtBRL} />
         ) : visaoPL === "pl" ? (
           <PLDaObraView itens={itensPL} contasPagar={contasDaObra} clientePaga={!!obraAtual.clientePagaDireto}
-            isMobile={isMobile} fmtBRL={fmtBRL} orcamento={obraAtual.orcamento} />
+            isMobile={isMobile} fmtBRL={fmtBRL} orcamento={obraAtual.orcamento} insumos={data.materiais || []} />
         ) : visaoPL === "quadro" ? (
           <QuadroEstimativaPL itens={itensPL} podeEditar={perm.podeGerenciarObra} isMobile={isMobile}
             fmtBRL={fmtBRL} aoDefinir={definirEstimativa} clientePaga={!!obraAtual.clientePagaDireto} />

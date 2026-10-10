@@ -3247,6 +3247,20 @@ teste("pedido, compra, entregas e entrada ligam a mao de obra", () => {
   assert.strictEqual(mat[0].etapa, "alvenaria");
 });
 
+teste("orçado por etapa: a etapa do catálogo manda sobre a da fórmula", () => {
+  const orcamento = { itens: [
+    { etapa: "Louças e metais", subEtapa: "Estimativa por ambientes", item: "Metal - Hidráulica - Base Registro Gaveta 3/4", insumoCodigo: "LOU-047", total: 300 },
+    { etapa: "Hidráulica (água fria e quente)", subEtapa: "Estimativa por ambientes", item: "PVC Tubo 25mm", total: 100 },
+    { etapa: "Louças e metais", subEtapa: "Estimativa por ambientes", item: "Louças - Sanitário padrão Alto", total: 900 },
+  ] };
+  const cat = [{ codigo: "LOU-047", nome: "Metal - Hidráulica - Base Registro Gaveta 3/4", etapaPadrao: "hidraulica", grupo: "Louças e metais" }];
+  const pl = modulo.plPorEtapa([], [{ id: "c", pago: true, valor: 319, valorPago: 319, contaId: "material", etapa: "hidraulica" }], { orcamento, insumos: cat });
+  const hid = pl.linhas.find((l) => l.etapaId === "hidraulica");
+  assert.strictEqual(hid.orcado, 400, "registro (pelo catálogo) + tubo");
+  assert.strictEqual(hid.realizado, 319);
+  assert.strictEqual(pl.linhas.find((l) => l.etapaId === "loucas_metais").orcado, 900);
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);
 teste("Entrada a pagar de loja com conta: vira pedido da conta, com o nº do PEDIDO (não de nota) e o desconto", () => {

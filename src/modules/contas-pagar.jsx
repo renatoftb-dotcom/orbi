@@ -2040,12 +2040,14 @@ const itensDetalhados = (itens, contaId) =>
 // coluna própria, ao lado, em vez de virar o estimado — somar daria uma
 // obra duas vezes mais cara, e trocar faria o quadro por etapa fechar num
 // total diferente do quadro por conta.
-function estimativaPorEtapaDoOrcamento(orcamento) {
+function estimativaPorEtapaDoOrcamento(orcamento, insumos) {
   const linhas = ((orcamento || {}).itens) || [];
   const por = {};
   for (const i of linhas) {
     if (!i) continue;
-    const k = (typeof etapaDoOrcamento === "function" ? etapaDoOrcamento(i.etapa, i.subEtapa) : "") || "";
+    // a etapa do catálogo manda; sem ela, a da fórmula
+    const k = (typeof etapaDaLinhaDoOrcamento === "function" ? etapaDaLinhaDoOrcamento(i, insumos)
+      : typeof etapaDoOrcamento === "function" ? etapaDoOrcamento(i.etapa, i.subEtapa) : "") || "";
     const v = Number(i.total);
     const valor = Number.isFinite(v) && v !== 0
       ? v
@@ -2057,7 +2059,7 @@ function estimativaPorEtapaDoOrcamento(orcamento) {
 
 function plPorEtapa(itens, contasPagar, opcoes) {
   const est = {}, real = {}, contasDe = {};
-  const orc = estimativaPorEtapaDoOrcamento((opcoes || {}).orcamento);
+  const orc = estimativaPorEtapaDoOrcamento((opcoes || {}).orcamento, (opcoes || {}).insumos);
   const temOrcamento = Object.keys(orc).length > 0;
   const soCusto = !!(opcoes && opcoes.soCusto);
   // Receita e terreno nunca são etapa de obra; com soCusto os tributos
@@ -2220,7 +2222,7 @@ function conferenciaDaLigacao(obra, insumos) {
     "Estas linhas não casaram com nenhum insumo, então o orçado delas não encontra o que foi comprado.",
     semInsumo.length, semInsumo.reduce((s, i) => s + valorDaLinha(i), 0)));
 
-  const semEtapaOrc = typeof etapasDoOrcamentoSemMapa === "function" ? etapasDoOrcamentoSemMapa(linhas) : [];
+  const semEtapaOrc = typeof etapasDoOrcamentoSemMapa === "function" ? etapasDoOrcamentoSemMapa(linhas, insumos) : [];
   if (semEtapaOrc.length) furos.push(furo("Orçamento com etapa que a obra não conhece",
     "A etapa destas linhas não tem correspondente: " + semEtapaOrc.map((x) => x.etapa).join(", ") + ".",
     semEtapaOrc.reduce((s, x) => s + x.linhas, 0), 0));

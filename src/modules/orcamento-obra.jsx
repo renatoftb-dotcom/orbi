@@ -4203,6 +4203,18 @@ function precificarETotalizar(out, data) {
     const preco = r.preco != null ? r.preco : 0;
     return { ...linha, preco, total: Math.round(linha.qtd * preco * 100) / 100, confianca: r.confianca, insumoCodigo: r.codigo, semPreco: r.preco == null };
   });
+  // A etapa da linha é a do catálogo (fonte única). Quando ele leva a linha
+  // para outra etapa que não a da fórmula, a memória diz — para ninguém
+  // procurar o registro em Louças e achá-lo em Hidráulica sem saber por quê.
+  if (typeof origemDaEtapaDaLinha === "function") {
+    const cat = (data && data.materiais) || [];
+    for (const i of itens) {
+      const o = origemDaEtapaDaLinha(i, cat);
+      if (o.peloCatalogo && Array.isArray(i.memoria)) {
+        i.memoria = i.memoria.concat([MEM.nota(`Etapa pelo catálogo de insumos: ${o.nome}. A fórmula calcula a quantidade em ${i.etapa}; quem diz a etapa é o catálogo.`)]);
+      }
+    }
+  }
 
   const somaPorTipo = (tipo) => itens.filter((i) => i.tipo === tipo).reduce((acc, i) => acc + i.total, 0);
 
@@ -5771,9 +5783,14 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
   }
 
   function exportarCSV() {
-    const linhas = [["Etapa", "Sub-etapa", "Item", "Unidade", "Qtd", "Preço", "Total"]];
+    // Etapa e grupo do catálogo (os mesmos da base de dados da obra); a
+    // etapa da fórmula ao lado, para ver onde o catálogo mudou a linha.
+    const cat = (data && data.materiais) || [];
+    const linhas = [["Etapa", "Etapa na fórmula", "Sub-etapa", "Item", "Grupo materiais", "Unidade", "Qtd", "Preço", "Total"]];
     for (const i of obra.orcamento.itens) {
-      linhas.push([i.etapa, i.subEtapa || "", i.item, i.unidade, i.qtd, i.preco, i.total]);
+      const o = typeof origemDaEtapaDaLinha === "function" ? origemDaEtapaDaLinha(i, cat) : { nome: i.etapa };
+      const g = typeof grupoDaLinhaDoOrcamento === "function" ? grupoDaLinhaDoOrcamento(i, cat) : "";
+      linhas.push([o.nome || i.etapa, i.etapa, i.subEtapa || "", i.item, g, i.unidade, i.qtd, i.preco, i.total]);
     }
     const csv = linhas.map((l) => l.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -6476,11 +6493,22 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
   const orc = obra.orcamento;
   const custoPorM2 = projetoDraft.arquitetura?.areaConstruida ? orc.totais.geral / Number(projetoDraft.arquitetura.areaConstruida) : 0;
 
+  // A etapa e o grupo de cada linha saem do CATÁLOGO (a fonte única —
+  // ver etapaDaLinhaDoOrcamento): é por ela que a estimativa casa com a
+  // conta lançada. Sem etapa no catálogo, vale a da fórmula.
+  const insumosCat = (data && data.materiais) || [];
   const itensPorEtapa = [];
-  const vistos = new Set();
+  const porChave = {};
   for (const item of orc.itens) {
-    if (!vistos.has(item.etapa)) { vistos.add(item.etapa); itensPorEtapa.push({ ordem: item.ordem, etapa: item.etapa, itens: [] }); }
-    itensPorEtapa.find((e) => e.etapa === item.etapa).itens.push(item);
+    const o = typeof origemDaEtapaDaLinha === "function" ? origemDaEtapaDaLinha(item, insumosCat)
+      : { id: "", nome: item.etapa, ordem: 900, peloCatalogo: false };
+    const chave = o.id || ("?" + item.etapa);
+    if (!porChave[chave]) {
+      porChave[chave] = { ordem: o.id ? o.ordem : 900 + (Number(item.ordem) || 0), etapa: o.nome || item.etapa, itens: [] };
+      itensPorEtapa.push(porChave[chave]);
+    }
+    const grupo = typeof grupoDaLinhaDoOrcamento === "function" ? grupoDaLinhaDoOrcamento(item, insumosCat) : "";
+    porChave[chave].itens.push({ ...item, _grupo: grupo, _daFormula: o.peloCatalogo ? o.etapaDaFormula : "" });
   }
   itensPorEtapa.sort((a, b) => a.ordem - b.ordem);
 
@@ -6605,7 +6633,14 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                       )] : []),
                       ...sub.itens.map((i, idx) => (
                       <tr key={`s${si}i${idx}`} style={{ borderTop: "1px solid #f3f4f6" }}>
-                        <td style={{ padding: "6px 14px", color: "#111827", paddingLeft: sub.mostrarTitulo ? 26 : 14 }}>{i.item}</td>
+                        <td style={{ padding: "6px 14px", color: "#111827", paddingLeft: sub.mostrarTitulo ? 26 : 14 }}>
+                          {i.item}
+                          {(i._grupo || i._daFormula) && (
+                            <div data-vk-linha-catalogo="1" style={{ fontSize: 10.5, color: "#6b7280", marginTop: 1 }}>
+                              {i._grupo}{i._grupo && i._daFormula ? " · " : ""}{i._daFormula ? `etapa pelo catálogo (fórmula: ${i._daFormula})` : ""}
+                            </div>
+                          )}
+                        </td>
                         <td style={{ padding: "6px 14px", color: "#4b5563" }}>{i.unidade}</td>
                         <td style={{ padding: "6px 14px", textAlign: "right", color: "#111827" }}>{Number(i.qtd).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}</td>
                         <td style={{ padding: "6px 14px", textAlign: "right", color: "#111827", whiteSpace: "nowrap" }} title={rotuloConfianca(i)}>
