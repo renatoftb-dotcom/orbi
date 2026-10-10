@@ -11610,6 +11610,20 @@ function efBrutoDoItem(i) {
   return Math.round(efValorDoCampo(it.quantidade) * efValorDoCampo(it.unitario) * 100) / 100;
 }
 
+// Pagamento de uma coisa só — o empreiteiro, a diária, o frete — não é
+// soma de itens: é um valor, numa etapa. Vira o único item do custo, igual
+// a um item digitado, sem pedir que alguém o digite. A compra de vários
+// itens continua item a item.
+function itemUnicoDoCusto(valor, etapa, contaId, descricao) {
+  const v = Math.round((Number(valor) || 0) * 100) / 100;
+  return { descricao: String(descricao || "").trim(), insumoCodigo: "", grupoMaterial: "",
+    quantidade: 1, unidade: "vb", unitario: v, bruto: v, etapa: etapa || "", contaId: contaId || "" };
+}
+function itensDoCustoOuUnico(itens, valor, etapa, contaId, descricao) {
+  if ((itens || []).some((i) => i && efBrutoDoItem(i) > 0)) return itens;
+  return Number(valor) > 0 ? [itemUnicoDoCusto(valor, etapa, contaId, descricao)] : [];
+}
+
 function custoDoLancamento(valorPago, itens) {
   const red = (x) => Math.round(x * 100) / 100;
   const comValor = (itens || []).filter((i) => i && efBrutoDoItem(i) > 0);
@@ -12460,6 +12474,12 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
 
   // ── Os itens do custo ──
   const itensDoCusto = f.itens || [];
+  // sem item: pagamento único — o valor inteiro numa etapa
+  const custoUnico = naObra && !itensDoCusto.some((i) => i && efBrutoDoItem(i) > 0);
+  const nomeContaObra = ((typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((c) => c && c.id === f.contaId) || {}).nome || "";
+  const itensEfetivos = naObra
+    ? itensDoCustoOuUnico(itensDoCusto, efValorDoCampo(f.valor), f.etapaUnica, f.contaId, f.descricao || nomeContaObra)
+    : itensDoCusto;
   const resumoCusto = naObra ? custoDoLancamento(efValorDoCampo(f.valor), itensDoCusto) : null;
   const etapasDaObra = typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [];
   const opcoesInsumo = (insumos || [])
@@ -12479,9 +12499,11 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       return { ...n, bruto: q > 0 && u > 0 ? Math.round(q * u * 100) / 100 : "" };
     }) }));
   const tirarItem = (i) => setF((p) => ({ ...p, itens: (p.itens || []).filter((x, j) => j !== i) }));
+  // o item novo já vem com a etapa do pagamento único, se ela foi escolhida
   const novoItem = () => setF((p) => ({ ...p,
-    itens: (p.itens || []).concat([typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio()
-      : { id: String(Date.now()), descricao: "", insumoCodigo: "", quantidade: "", unidade: "", unitario: "", etapa: "", contaId: "" }]) }));
+    itens: (p.itens || []).concat([{ ...(typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio()
+      : { id: String(Date.now()), descricao: "", insumoCodigo: "", quantidade: "", unidade: "", unitario: "", etapa: "", contaId: "" }),
+      ...(p.etapaUnica ? { etapa: p.etapaUnica } : {}) }]) }));
   // O insumo escolhido traz o que ele já sabe: unidade, etapa e conta
   // contábil. O que a pessoa tiver posto à mão continua valendo.
   const porInsumo = (i, codigo, recemCadastrado) => {
@@ -12513,8 +12535,9 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const doCadastro = (clientes || []).filter((c) => c && (ehEmp ? ehEmpreendimento(c) : true));
   const erros = naObra
     ? validarLancamentoNaObra({ ...f, valor: efValorDoCampo(f.valor) }, { fechamentos })
-        .concat(validarCustoEmItens(efValorDoCampo(f.valor), itensDoCusto, f.obraIdAlvo).erros
-          .filter((e) => !/Escolha a obra|Informe o valor pago/.test(e)))
+        .concat(validarCustoEmItens(efValorDoCampo(f.valor), itensEfetivos, f.obraIdAlvo).erros
+          .filter((e) => !/Escolha a obra|Informe o valor pago/.test(e))
+          .map((e) => (custoUnico && /sem etapa/.test(e) ? "Escolha a etapa da obra." : e)))
     : validarLancamentoEscritorio({ ...f, valor: efValorDoCampo(f.valor),
         clienteId: f.clienteId || f.cliente,
         // na gestão, a obra é escolhida da lista (o id); lançamento antigo,
@@ -12571,7 +12594,12 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     if (todosErros.length) return;
     const limpos = (f.itens || []).map((x) => { const y = { ...x }; delete y.sugestao; delete y.textoLido; return y; });
     const g = { ...f, itens: limpos };
-    if (naObra) { aoSalvar(comCartao({ ...g, naObra: true, valor: efValorDoCampo(g.valor) })); return; }
+    if (naObra) {
+      const { etapaUnica: _e, ...semEtapaUnica } = g;
+      aoSalvar(comCartao({ ...semEtapaUnica, naObra: true, valor: efValorDoCampo(g.valor),
+        itens: custoUnico ? itensEfetivos : limpos }));
+      return;
+    }
     // O contrato de gestão só é mexido quando a tela o mostrou; o lançamento
     // que estava ligado e deixou de ser receita da gestão sai do saldo.
     const { foraDaGestao: _fora, parcelaGestaoId: _p, parcelaGestaoObra: _o, ...semObraDaParcela } = g;
@@ -12874,7 +12902,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       {naObra && (
         <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, background: "#fff" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>O que foi comprado</div>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>{itensDoCusto.length ? "O que foi comprado" : "Onde entra na obra"}</div>
             <div style={{ fontSize: 11.5, color: "#6b7280" }}>
               o custo por etapa da obra sai daqui
             </div>
@@ -12887,9 +12915,21 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           </div>
 
           {!itensDoCusto.length && (
-            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>
-              Nenhum item ainda. Sem item, o gasto entra na obra sem etapa — e é assim que
-              o quadro por etapa fica com uma linha “Sem etapa” crescendo.
+            <div data-vk-custo-unico="1" style={{ display: "grid", gap: 10, marginBottom: 10, alignItems: "end",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={S.rot}>Etapa da obra</div>
+                <SelectBusca style={S.input} value={f.etapaUnica || ""}
+                  onChange={(v) => set("etapaUnica", v)}
+                  placeholder="Procurar etapa…"
+                  opcoes={[{ valor: "", rotulo: "— escolha a etapa —" }]
+                    .concat(etapasDaObra.map((e) => ({ valor: e.id, rotulo: e.nome || e.titulo || e.id })))} />
+              </div>
+              <div style={{ fontSize: 12, color: "#4b5563", lineHeight: 1.45, paddingBottom: 4 }}>
+                Pagamento único: <b style={{ color: "#111827" }}>{efDinheiro(efValorDoCampo(f.valor))}</b> inteiro nesta etapa
+                {nomeContaObra ? <>, conta <b style={{ color: "#111827" }}>{nomeContaObra}</b></> : null}.
+                Compra de vários itens? Detalhe item a item.
+              </div>
             </div>
           )}
 
@@ -12973,7 +13013,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           })}
 
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 4 }}>
-            <button type="button" style={S.btnSec} onClick={novoItem}>+ item</button>
+            <button type="button" style={S.btnSec} onClick={novoItem}>{itensDoCusto.length ? "+ item" : "Detalhar em itens"}</button>
             {resumoCusto && resumoCusto.itens > 0 && (
               <div style={{ fontSize: 12, color: "#4b5563" }}>
                 soma dos itens <b style={{ color: "#111827" }}>{efDinheiro(resumoCusto.bruto)}</b>

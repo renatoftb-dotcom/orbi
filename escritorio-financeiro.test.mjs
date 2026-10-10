@@ -37,7 +37,7 @@ const M = new Function(src + `
            obrasDoLancamento, validarLancamentoNaObra, destinoVisivelDoCusto,
            efValorDoCampo, anexosDaTransacao, comAnexos,
            efNomeDoFornecedor, EF_FORNECEDOR_OUTROS,
-           custoDoLancamento, validarCustoEmItens,
+           custoDoLancamento, validarCustoEmItens, itemUnicoDoCusto, itensDoCustoOuUnico,
            comIdsDosMovimentos, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
            sugestaoDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao, fornecedorPadraoDaConta,
            ehReceitaDaGestao, refDaParcela, gestaoNaObra, desfazerGestaoNaObra, parcelaDoLancamento, parcelaDoMesNaGestao, recalibrarGestao, previaDaGestao, contasDaGestao,
@@ -2047,6 +2047,21 @@ teste("Gestão: a ponte não manda de novo a parcela que tem movimentos do escri
   const r = M.gestaoNaObra(obraGestaoT(), { id: "R", valor: 12000, lancadoEm: "2026-10-09", competencia: "2026-10" }, null, "Leo");
   const ponte = M.lancamentosDaObraParaEscritorio(r.obra, { id: "c1" }, { contasPagar: [gP(r.obra, "g:3")], lancamentos: [], planoObra: [{ id: "taxa_admin_obra", grupo: "servicos" }] });
   assert.strictEqual(ponte.lancamentos.length, 0);
+});
+
+
+teste("pagamento único: sem item, o valor inteiro vira um item na etapa escolhida", () => {
+  const u = M.itensDoCustoOuUnico([], 400, "fundacao", "empreiteiro", "Empreiteiro Jacarezinho");
+  assert.strictEqual(u.length, 1);
+  assert.deepStrictEqual([u[0].quantidade, u[0].unitario, u[0].bruto, u[0].etapa, u[0].contaId], [1, 400, 400, "fundacao", "empreiteiro"]);
+  assert.ok(M.validarCustoEmItens(400, u, "o1").ok);
+  // sem etapa ainda: pede a etapa, não um item
+  const sem = M.validarCustoEmItens(400, M.itensDoCustoOuUnico([], 400, "", "empreiteiro", "x"), "o1");
+  assert.ok(sem.erros.some((e) => /sem etapa/.test(e)) && !sem.erros.some((e) => /pelo menos um item/.test(e)));
+  // compra com itens continua item a item
+  const itens = [{ descricao: "Cimento", quantidade: 2, unitario: 40, etapa: "fundacao" }];
+  assert.strictEqual(M.itensDoCustoOuUnico(itens, 80, "alvenaria", "material", "x"), itens);
+  assert.deepStrictEqual(M.itensDoCustoOuUnico([], 0, "fundacao", "empreiteiro", "x"), []);
 });
 
 for (const [nome, fn] of testes) {
