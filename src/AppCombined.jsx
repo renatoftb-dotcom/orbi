@@ -16509,6 +16509,7 @@ function paredesTerreo(cp, out) {
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA60 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca60_5mm, memoria: memoriaBitolaSimples("CA60_5MM", cp.ca60_5mmColunaTerreo, ca60_5mm, "nas colunas do térreo") });
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Arame Recozido", unidade: "KG", qtd: arameColunas, memoria: MEMB.arameDoPeso(pesoFerroColunas, arameColunasBruto, arameColunas) });
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Pregos 18x27", unidade: "KG", qtd: pregos18x27, memoria: MEMB.pregoDoArame(arameColunas, pregos18x27Bruto, pregos18x27) });
+  andaimeDaAlvenaria(cp, out, base, subParedes, cp.m2Paredes20Terreo + cp.m2Paredes15Terreo + cp.m2Paredes25Terreo, "PAREDES_TERREO", "do térreo");
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -16838,7 +16839,16 @@ function contrapisoInternoTerreo(cp, out) {
 // ═══════════════════════════════════════════════════════════════
 function vigaRespaldoLajeTerreo(cp, out) {
   const t = cp.terreo;
-  const mesesEscoras = cp.tipologia === "Sobrado" ? 2.5 : 1.5;
+  // Meses de escora pelo cronograma (planilha Base Orçamento Obra, aba VIGAS
+  // RESP. E LAJE PAV 1): no sobrado a laje do térreo fica escorada enquanto
+  // sobem as paredes do andar de cima — os meses dessa etapa ÷ 2; na térrea,
+  // os meses da própria laje. Sem cronograma, os 2,5 / 1,5 meses de antes.
+  const sobradoEsc = cp.tipologia === "Sobrado";
+  const mesesCrono = sobradoEsc ? mesesDaEtapaNoCronograma(cp, "PAREDES_PAV1") / 2 : mesesDaEtapaNoCronograma(cp, "LAJE_TERREO");
+  const mesesEscoras = mesesCrono > 0 ? mesesCrono : (sobradoEsc ? 2.5 : 1.5);
+  const origemMesesEscoras = mesesCrono > 0
+    ? (sobradoEsc ? "cronograma: meses das paredes do pav. 1 ÷ 2" : "cronograma: meses da laje do térreo")
+    : "sem cronograma: valor fixo";
   // [VBA] a string original de comparação é "Térreo" (masc.), não a "Térrea"
   // que normalizarProjeto usa para cp.tipologia — normalizado aqui só para
   // reproduzir a mesma comparação de string que CALC_TIPO_LOJE_TERREO_EDIF
@@ -16895,7 +16905,8 @@ function vigaRespaldoLajeTerreo(cp, out) {
 
   const memViga = (k) => memoriaBitolaSimples(k, ferro[k], { CA60_4MM: ca60_4mm, CA50_5MM: ca50_5mm, CA50_6MM: ca50_6mm, CA50_8MM: ca50_8mm, CA50_10MM: ca50_10mm, CA50_12MM: ca50_12mm, CA50_16MM: ca50_16mm, CA60_5MM: ca60_5mm }[k], "na viga de respaldo do térreo");
   const memEscoras = (area, bruto, valor) => [
-    MEM.nota(`Escoras alugadas por mês: ${mesesEscoras} ${mesesEscoras === 1 ? "mês" : "meses"} de escoramento (${cp.tipologia === "Sobrado" ? "sobrado: a laje fica escorada mais tempo" : "obra térrea"}).${t.tipoLoje === "Protendida" ? " Laje protendida usa 0,6 escora por m², menos que a treliçada." : ""}`),
+    MEM.nota(`Escoras alugadas por mês: ${mesesEscoras} ${mesesEscoras === 1 ? "mês" : "meses"} de escoramento (${sobradoEsc ? "sobrado: a laje do térreo fica escorada enquanto sobem as paredes do andar de cima" : "obra térrea: o tempo da própria laje"}).${t.tipoLoje === "Protendida" ? " Laje protendida usa 0,6 escora por m², menos que a treliçada." : ""}`),
+    MEM.dado("Meses de escora", mesesEscoras, "meses", origemMesesEscoras),
     MEM.dado("Área da laje", area, "m²", "bloco Laje Térreo"),
     MEM.conta("Escoras, com 10% de perda", t.tipoLoje === "Protendida" ? "área × 0,60 × meses × 1,10" : "área × meses × 1,10", [["área", area], ["meses", mesesEscoras]], bruto, "escoras"),
     MEM.teto(bruto, valor, "escoras"),
@@ -16975,6 +16986,7 @@ function vigaRespaldoLajeTerreo(cp, out) {
   ] });
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Maciça Térreo", item: "Locação Ferramentas - Escoras", unidade: "Unidade", qtd: escorasLojeMacica, memoria: [
     MEM.nota(`Escoras da laje maciça: ${mesesEscoras} ${mesesEscoras === 1 ? "mês" : "meses"} de aluguel, uma por m².`),
+    MEM.dado("Meses de escora", mesesEscoras, "meses", origemMesesEscoras),
     MEM.dado("Área de laje maciça no térreo", t.areaLojeMacica, "m²", "bloco Laje (forro)"),
     MEM.conta("Escoras, com 10% de perda", "área × meses × 1,10", [["área", t.areaLojeMacica], ["meses", mesesEscoras]], escorasLojeMacicaBruto, "escoras"),
     MEM.teto(escorasLojeMacicaBruto, escorasLojeMacica, "escoras"),
@@ -17079,6 +17091,7 @@ function paredesPav1(cp, out) {
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA60 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca60_5mm, memoria: memoriaBitolaSimples("CA60_5MM", ferro.CA60_5MM, ca60_5mm, "nas colunas do pav. 1") });
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Arame Recozido", unidade: "KG", qtd: arameColunas, memoria: MEMB.arameDoPeso(pesoFerroColunas, arameColunasBruto, arameColunas) });
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Pregos 18x27", unidade: "KG", qtd: pregos18x27, memoria: MEMB.pregoDoArame(arameColunas, pregos18x27Bruto, pregos18x27) });
+  andaimeDaAlvenaria(cp, out, base, subParedes, numOrZero(p1.m2Parede20) + numOrZero(p1.m2Parede15) + numOrZero(p1.m2Parede25), "PAREDES_PAV1", "do pav. 1");
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -17124,16 +17137,20 @@ function vigaRespaldoLajePav1(cp, out) {
 
   const qtdLojeBruto = p1.areaLoje * PERDA;
   const qtdLoje = teto(qtdLojeBruto);
-  // [VBA] meses de escora fixo em 1.5 aqui (não usa a variável de meses do
-  // módulo do Térreo) — preservado literalmente.
-  const qtdEscorasBruto = p1.tipoLoje === "Protendida" ? p1.areaLoje * 0.6 * 1.5 * PERDA : p1.areaLoje * 1.5 * PERDA;
+  // Meses de escora da laje de cima: os meses da própria laje no cronograma
+  // (a de baixo espera as paredes do andar; esta, só a cura). Sem
+  // cronograma, o 1,5 mês fixo do VBA original.
+  const mesesCronoP1 = mesesDaEtapaNoCronograma(cp, "LAJE_PAV1");
+  const mesesEscP1 = mesesCronoP1 > 0 ? mesesCronoP1 : 1.5;
+  const origemEscP1 = mesesCronoP1 > 0 ? "cronograma: meses da laje do pav. 1" : "sem cronograma: valor fixo";
+  const qtdEscorasBruto = p1.tipoLoje === "Protendida" ? p1.areaLoje * 0.6 * mesesEscP1 * PERDA : p1.areaLoje * mesesEscP1 * PERDA;
   const qtdEscoras = teto(qtdEscorasBruto);
 
   const lojeMacicaBruto = p1.areaLojeMacica * 0.15 * PERDA;
   const lojeMacica = teto(lojeMacicaBruto);
   const maderiteLojeMacicaBruto = p1.areaLojeMacica / 2.42 * PERDA;
   const maderiteLojeMacica = teto(maderiteLojeMacicaBruto);
-  const escorasLojeMacicaBruto = p1.areaLojeMacica * 1.5 * PERDA;
+  const escorasLojeMacicaBruto = p1.areaLojeMacica * mesesEscP1 * PERDA;
   const escorasLojeMacica = teto(escorasLojeMacicaBruto);
 
   // O VBA original usava aqui a área de laje do TÉRREO para o massiamento do
@@ -17200,9 +17217,10 @@ function vigaRespaldoLajePav1(cp, out) {
     MEM.teto(qtdLojeBruto, qtdLoje, "m²"),
   ] });
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Pav 1", item: "Locação Ferramentas - Escoras", unidade: "Unidade", qtd: qtdEscoras, memoria: [
-    MEM.nota(`Escoras da laje do pav. 1: 1,5 mês de aluguel.${p1.tipoLoje === "Protendida" ? " Laje protendida usa 0,6 escora por m², menos que a treliçada." : ""}`),
+    MEM.nota(`Escoras da laje do pav. 1: ${mesesEscP1} ${mesesEscP1 === 1 ? "mês" : "meses"} de aluguel.${p1.tipoLoje === "Protendida" ? " Laje protendida usa 0,6 escora por m², menos que a treliçada." : ""}`),
+    MEM.dado("Meses de escora", mesesEscP1, "meses", origemEscP1),
     MEM.dado("Área da laje do pav. 1", p1.areaLoje, "m²", "bloco Laje Pav. 1"),
-    MEM.conta("Escoras, com 10% de perda", p1.tipoLoje === "Protendida" ? "área × 0,60 × 1,50 × 1,10" : "área × 1,50 × 1,10", [["área", p1.areaLoje]], qtdEscorasBruto, "escoras"),
+    MEM.conta("Escoras, com 10% de perda", p1.tipoLoje === "Protendida" ? "área × 0,60 × meses × 1,10" : "área × meses × 1,10", [["área", p1.areaLoje], ["meses", mesesEscP1]], qtdEscorasBruto, "escoras"),
     MEM.teto(qtdEscorasBruto, qtdEscoras, "escoras"),
   ] });
   if (p1.areaLoje > 0 || lojeMacica > 0) {
@@ -17225,9 +17243,10 @@ function vigaRespaldoLajePav1(cp, out) {
     MEM.teto(maderiteLojeMacicaBruto, maderiteLojeMacica, "chapas", "Arredonda para cima (chapa inteira)"),
   ] });
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Maciça Pav 1", item: "Locação Ferramentas - Escoras", unidade: "Unidade", qtd: escorasLojeMacica, memoria: [
-    MEM.nota("Escoras da laje maciça do pav. 1: 1,5 mês de aluguel, uma por m²."),
+    MEM.nota(`Escoras da laje maciça do pav. 1: ${mesesEscP1} ${mesesEscP1 === 1 ? "mês" : "meses"} de aluguel, uma por m².`),
+    MEM.dado("Meses de escora", mesesEscP1, "meses", origemEscP1),
     MEM.dado("Área de laje maciça no pav. 1", p1.areaLojeMacica, "m²", "bloco Laje Pav. 1"),
-    MEM.conta("Escoras, com 10% de perda", "área × 1,50 × 1,10", [["área", p1.areaLojeMacica]], escorasLojeMacicaBruto, "escoras"),
+    MEM.conta("Escoras, com 10% de perda", "área × meses × 1,10", [["área", p1.areaLojeMacica], ["meses", mesesEscP1]], escorasLojeMacicaBruto, "escoras"),
     MEM.teto(escorasLojeMacicaBruto, escorasLojeMacica, "escoras"),
   ] });
   emitir(out, { ordem: ORD.contrapisoInterno, tipo: "Bruto", etapa: "Contrapiso Interno Pav 1", subEtapa: "Massiamento contrap Pav 1", item: "Sacos de cimento 50kg", unidade: "Unidade", qtd: cimentoMassiam, memoria: [
@@ -17599,6 +17618,23 @@ function chapiscoReboco(cp, out) {
     MEM.conta("Baldes, com 10% de perda", "cimento × 0,30 ÷ 18 × 1,10", [["cimento", cimentoTotal]], vedalitBruto, "baldes"),
     MEM.teto(vedalitBruto, vedalit, "baldes", "Arredonda para cima (balde fechado)"),
   ] });
+  // Andaimes — a regra da planilha Base Orçamento Obra (aba CHAPISCO E
+  // REBOCO): 5 peças a cada 100 m² de parede, alugadas pelos meses em que o
+  // chapisco e reboco fica aberto no cronograma. Sem cronograma, os 3 meses
+  // de duração-base da etapa.
+  const mesesReboco = mesesDaEtapaNoCronograma(cp, "REBOCO");
+  const mesesAndaime = mesesReboco > 0 ? mesesReboco : 3;
+  const andaimesBruto = m2 * 0.05 * mesesAndaime;
+  const andaimes = teto(andaimesBruto);
+  if (andaimes > 0) {
+    emitir(out, { ...base, item: "Locação Ferramentas - Andaimes", unidade: "Unidades", qtd: andaimes, memoria: [
+      MEM.nota("Andaime alugado por peça e por mês: 5 peças a cada 100 m² de parede, enquanto o chapisco e reboco está aberto."),
+      memParedes,
+      MEM.dado("Meses de chapisco e reboco", mesesAndaime, "meses", mesesReboco > 0 ? "cronograma da obra (cada mês que a etapa toca)" : "sem cronograma: duração-base da etapa"),
+      MEM.conta("Peças × meses", "área × 0,05 × meses", [["área", m2], ["meses", mesesAndaime]], andaimesBruto, "peças·mês"),
+      MEM.teto(andaimesBruto, andaimes, "peças·mês", "Arredonda para cima (peça inteira)"),
+    ] });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -20593,8 +20629,48 @@ function agruparPorSubEtapa(itens) {
 // gerarOrcamentoObra — função pura, sem React, sem side-effect. Espelha a
 // ordem de execução de A_GERAR_ORCAMENTO.bas.
 // ═══════════════════════════════════════════════════════════════
+// ── O tempo que as etapas ficam abertas ─────────────────────────
+// Escoras e andaimes são aluguel: custam peça × mês. Quantos meses, quem diz
+// é o cronograma da obra (o mesmo do bloco Cronograma), como na planilha
+// Base Orçamento Obra, que contava os meses da etapa na aba CRONOGRAMA
+// ESTIMADO. Conta-se cada mês que a etapa toca, inteiro — mês começado é
+// mês de aluguel pago.
+function cronogramaDoOrcamento(projeto, data) {
+  if (typeof gerarCronogramaObra !== "function") return null;
+  try { return gerarCronogramaObra(projeto, null, data || {}, {}); } catch (e) { return null; }
+}
+// Andaime da alvenaria, por pavimento: 5 peças a cada 100 m² de parede do
+// pavimento (a mesma taxa do reboco), alugadas pela METADE do prazo das
+// paredes daquele pavimento no cronograma — a primeira metade da alvenaria
+// se levanta do chão; o andaime entra quando a parede passa da altura do
+// pedreiro. Sem cronograma, metade da duração-base (2 meses → 1 mês).
+function andaimeDaAlvenaria(cp, out, base, subEtapa, m2Parede, etapaCrono, rotulo) {
+  const m = mesesDaEtapaNoCronograma(cp, etapaCrono);
+  const meses = m > 0 ? m / 2 : 1;
+  const bruto = numOrZero(m2Parede) * 0.05 * meses;
+  const qtd = teto(bruto);
+  if (!(qtd > 0)) return;
+  emitir(out, { ...base, subEtapa, item: "Locação Ferramentas - Andaimes", unidade: "Unidades", qtd, memoria: [
+    MEM.nota(`Andaime da alvenaria ${rotulo}: 5 peças a cada 100 m² de parede, alugadas pela metade do prazo das paredes — a primeira metade sobe do chão.`),
+    MEM.dado(`Parede ${rotulo}`, numOrZero(m2Parede), "m²", "blocos de parede do pavimento"),
+    MEM.dado("Meses de andaime", meses, "meses", m > 0 ? `cronograma: ${m} ${m === 1 ? "mês" : "meses"} de paredes ÷ 2` : "sem cronograma: metade da duração-base"),
+    MEM.conta("Peças × meses", "parede × 0,05 × meses", [["parede", numOrZero(m2Parede)], ["meses", meses]], bruto, "peças·mês"),
+    MEM.teto(bruto, qtd, "peças·mês", "Arredonda para cima (peça inteira)"),
+  ] });
+}
+function mesesDaEtapaNoCronograma(cp, etapaId) {
+  const c = cp && cp._cronograma;
+  const lista = (c && c.ativo && c.ativo.etapas) || [];
+  const e = lista.find((x) => x && x.id === etapaId);
+  const dpm = typeof DIAS_UTEIS_MES !== "undefined" ? DIAS_UTEIS_MES : 21;
+  if (!e || !(Number(e.fim) > Number(e.inicio))) return 0;
+  return Math.floor((Number(e.fim) - 1e-9) / dpm) - Math.floor(Number(e.inicio) / dpm) + 1;
+}
+
 function gerarOrcamentoObra(projeto, data) {
   const cp = normalizarProjeto(projeto);
+  cp._dataCronograma = data || null;
+  cp._cronograma = cronogramaDoOrcamento(projeto, data);
   const out = [];
 
   // Reforma: o que se derruba vem antes de tudo o que se levanta.

@@ -52,7 +52,7 @@ const modulo = new Function(`
     taxaGestaoObra, emitir, precoDoInsumo,
     paredesTerreo, pintura, prestadores,
     normalizarProjeto, gerarOrcamentoObra, precificarETotalizar,
-    locacaoCanteiro, mesesDeObra, prazoParametricoMeses,
+    locacaoCanteiro, mesesDeObra, prazoParametricoMeses, gerarCronogramaObra, mesesDaEtapaNoCronograma, normalizarProjeto,
     calcularEsquadria, metrosPorRegra, barrasPalhetas, ESQUADRIAS_CATALOGO,
     vidroEsquadria, acessoriosEsquadria, ESQUADRIAS_FAMILIAS, ESQUADRIAS_ACESSORIOS,
     interpretarListaColada, ETAPAS_PROJETO,
@@ -1778,6 +1778,53 @@ teste("digitar 1.250,50 no preço dá o mesmo total que 1250.5", () => {
   const l = linha(cp, "equipePedreiros");
   assert.strictEqual(l.preco, 1250.5);
   assert.strictEqual(l.total, 250100);
+});
+
+// ── Aluguel pelo tempo da etapa: andaimes e escoras ─────────────
+teste("andaimes: 5 peças por 100 m² de parede × meses do chapisco e reboco no cronograma", () => {
+  const proj = { tipologia: "Sobrado", arquitetura: { areaConstruida: 260, m2ParedesTotal: 420 },
+    terreo: { area: 130, areaLoje: 120, tipoLoje: "Treliça", perimetroLoje: 50, perimetroParedes: 48 },
+    pav1: { area: 130, areaLoje: 120, tipoLoje: "Treliça", perimetroLoje: 46, perimetroParedes: 44 } };
+  const r = modulo.gerarOrcamentoObra(proj, { materiais: [] });
+  const cp = modulo.normalizarProjeto(proj);
+  cp._cronograma = modulo.gerarCronogramaObra(proj, null, { materiais: [] }, {});
+  const meses = modulo.mesesDaEtapaNoCronograma(cp, "REBOCO");
+  assert.ok(meses >= 2 && meses <= 6, "meses de reboco: " + meses);
+  const and = r.itens.find((i) => i.item === "Locação Ferramentas - Andaimes" && i.subEtapa === "Chapisco e Reboco");
+  assert.ok(and, "a linha de andaimes existe");
+  assert.strictEqual(and.qtd, Math.ceil(420 * 0.05 * meses - 1e-9));
+  assert.strictEqual(and.etapa, "Chapisco e Reboco");
+  assert.ok(and.memoria.some((m) => JSON.stringify(m).includes("cronograma")), "a memória diz de onde vieram os meses");
+  // escoras da laje do térreo no sobrado: meses das paredes do andar de cima ÷ 2
+  const mesesEsc = modulo.mesesDaEtapaNoCronograma(cp, "PAREDES_PAV1") / 2;
+  const esc = r.itens.find((i) => i.item === "Locação Ferramentas - Escoras" && i.subEtapa === "Laje Térreo");
+  assert.strictEqual(esc.qtd, Math.ceil(120 * mesesEsc * 1.1 - 1e-9));
+});
+
+teste("andaime da alvenaria por pavimento: metade do prazo das paredes de cada pavimento", () => {
+  const proj = { tipologia: "Sobrado", arquitetura: { areaConstruida: 260, m2ParedesTotal: 420 },
+    terreo: { area: 130, m2Parede20: 180, m2Parede15: 20, m2Parede25: 10, perimetroParedes: 48 },
+    pav1: { area: 130, m2Parede20: 160, m2Parede15: 15, m2Parede25: 8, perimetroParedes: 44 } };
+  const r = modulo.gerarOrcamentoObra(proj, { materiais: [] });
+  const cp = modulo.normalizarProjeto(proj);
+  cp._cronograma = modulo.gerarCronogramaObra(proj, null, { materiais: [] }, {});
+  const t = r.itens.find((i) => i.item === "Locação Ferramentas - Andaimes" && i.subEtapa === "Paredes Pav. Térreo");
+  const p = r.itens.find((i) => i.item === "Locação Ferramentas - Andaimes" && i.subEtapa === "Paredes Pav 1");
+  assert.ok(t && p, "um andaime por pavimento");
+  assert.strictEqual(t.qtd, Math.ceil(210 * 0.05 * modulo.mesesDaEtapaNoCronograma(cp, "PAREDES_TERREO") / 2 - 1e-9));
+  assert.strictEqual(p.qtd, Math.ceil(183 * 0.05 * modulo.mesesDaEtapaNoCronograma(cp, "PAREDES_PAV1") / 2 - 1e-9));
+  assert.strictEqual(t.etapa, "Supra estrutura e paredes");
+  // térrea: só o do térreo
+  const r2 = modulo.gerarOrcamentoObra({ ...proj, tipologia: "Térrea" }, { materiais: [] });
+  assert.strictEqual(r2.itens.filter((i) => i.item === "Locação Ferramentas - Andaimes" && /Paredes/.test(i.subEtapa)).length, 1);
+});
+
+teste("sem parede não há andaime; mês começado conta inteiro", () => {
+  const r = modulo.gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 100 } }, { materiais: [] });
+  assert.ok(!r.itens.some((i) => i.item === "Locação Ferramentas - Andaimes"));
+  const cp = { _cronograma: { ativo: { etapas: [{ id: "X", inicio: 20, fim: 23 }] } } };
+  assert.strictEqual(modulo.mesesDaEtapaNoCronograma(cp, "X"), 2, "dia 20 a 23 cruza a virada do mês (21 dias úteis)");
+  assert.strictEqual(modulo.mesesDaEtapaNoCronograma(cp, "Y"), 0);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
