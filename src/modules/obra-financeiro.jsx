@@ -490,6 +490,59 @@ function trocarContaComPadrao(obj, novaConta) {
   return comPadraoDaConta(r);
 }
 
+// ── Item do catálogo → etapa/grupo padrão. O insumo que tem etapa definida
+// no catálogo (cimento → alvenaria, disco de corte → ferramentas) leva essa
+// etapa e o grupo dele para a conta, em qualquer obra, empreendimento ou
+// cliente. Mesma regra: só preenche o que está em branco — a etapa escolhida
+// na compra (o concreto que foi para a laje) manda.
+function comPadraoDoInsumo(obj, insumos) {
+  if (!obj || typeof obj !== "object" || !obj.insumoCodigo) return obj;
+  const ins = (insumos || []).find((m) => m && (m.codigo === obj.insumoCodigo || m.id === obj.insumoCodigo));
+  if (!ins) return obj;
+  const vazio = (v) => String(v == null ? "" : v).trim() === "";
+  const poeEtapa = vazio(obj.etapa) && vazio(obj.etapaId) && !vazio(ins.etapaPadrao);
+  const poeGrupo = vazio(obj.grupoMaterial) && !vazio(ins.grupo);
+  if (!poeEtapa && !poeGrupo) return obj;
+  const r = { ...obj };
+  if (poeEtapa) r.etapa = ins.etapaPadrao;
+  if (poeGrupo) r.grupoMaterial = ins.grupo;
+  return r;
+}
+
+// Catálogo primeiro (é mais específico), depois a conta (mão de obra).
+function ligarAoCatalogo(obj, insumos) {
+  return comPadraoDaConta(comPadraoDoInsumo(obj, insumos));
+}
+
+// A rede de segurança da gravação: toda conta NOVA ou MEXIDA, de toda obra
+// que está sendo gravada, passa pela regra — venha de onde vier (obra,
+// Entrada, pedido, contrato, extrato do escritório). Conta que não mudou não
+// é tocada, e obra que não mudou não é regravada.
+function ligarObrasAoCatalogo(novas, antigas, insumos) {
+  if (!Array.isArray(novas)) return novas;
+  const porId = new Map((antigas || []).filter(Boolean).map((o) => [o.id, o]));
+  let mudou = false;
+  const lista = novas.map((o) => {
+    if (!o || !Array.isArray(o.contasPagar)) return o;
+    const a = porId.get(o.id);
+    if (a === o) return o;
+    const antes = new Map(((a && a.contasPagar) || []).filter(Boolean).map((c) => [c.id, c]));
+    let mexeu = false;
+    const contas = o.contasPagar.map((c) => {
+      if (!c) return c;
+      const velha = antes.get(c.id);
+      if (velha === c || (velha && JSON.stringify(velha) === JSON.stringify(c))) return c;
+      const l = ligarAoCatalogo(c, insumos);
+      if (l !== c) mexeu = true;
+      return l;
+    });
+    if (!mexeu) return o;
+    mudou = true;
+    return { ...o, contasPagar: contas };
+  });
+  return mudou ? lista : novas;
+}
+
 // ── Helpers puros sobre a taxonomia — o resto do módulo (cálculo, UI,
 // formulário) vai depender destes dois. ──
 

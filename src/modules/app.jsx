@@ -1320,6 +1320,12 @@ export default function ModuloClientesFornecedores() {
     const oldData = dataRef.current || data;
     if (typeof newData === "function") newData = newData(oldData);
     if (!newData) return;
+    // Tudo ligado: a conta nova ou mexida leva a etapa/grupo do item do
+    // catálogo e da conta do plano (obra-financeiro.jsx), venha de onde vier.
+    if (typeof ligarObrasAoCatalogo === "function" && Array.isArray(newData.obras)) {
+      const obrasLigadas = ligarObrasAoCatalogo(newData.obras, oldData && oldData.obras, newData.materiais);
+      if (obrasLigadas !== newData.obras) newData = { ...newData, obras: obrasLigadas };
+    }
     setData(newData);
     dataRef.current = newData; // mantém ref em sync imediato pra callbacks subsequentes
     savingRef.current = true;

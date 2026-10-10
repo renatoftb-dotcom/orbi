@@ -14,7 +14,7 @@ const M = new Function(`
     return isNaN(n) ? 0 : n;
   }
   ${mod("obra-financeiro.jsx")}
-  return { exigenciasDaTransacao, faltasDaTransacao, frasesDasFaltas };
+  return { exigenciasDaTransacao, faltasDaTransacao, frasesDasFaltas, comPadraoDoInsumo, ligarAoCatalogo, ligarObrasAoCatalogo };
 `)();
 
 let passou = 0, falhou = 0;
@@ -99,6 +99,41 @@ teste("a frase que a tela mostra", () => {
   assert.strictEqual(M.frasesDasFaltas(["a etapa"]), "Falta a etapa.");
   assert.strictEqual(M.frasesDasFaltas(["o item do catálogo", "a quantidade", "a etapa"]),
     "Falta o item do catálogo, a quantidade e a etapa.");
+});
+
+const CAT = [{ codigo: "CIM-1", nome: "Cimento", etapaPadrao: "alvenaria", grupo: "Cimento e argamassa" },
+  { id: "DSC-1", nome: "Disco de corte", etapaPadrao: "ferramentas", grupo: "Ferramentas" },
+  { codigo: "SEM-1", nome: "Sem etapa", grupo: "Diversos" }];
+
+teste("item do catalogo traz etapa e grupo, so no que esta em branco", () => {
+  const a = M.comPadraoDoInsumo({ insumoCodigo: "CIM-1", etapa: "", grupoMaterial: "" }, CAT);
+  assert.strictEqual(a.etapa, "alvenaria");
+  assert.strictEqual(a.grupoMaterial, "Cimento e argamassa");
+  const b = M.comPadraoDoInsumo({ insumoCodigo: "DSC-1", etapa: "fundacao" }, CAT);
+  assert.strictEqual(b.etapa, "fundacao", "a etapa escolhida na compra manda");
+  assert.strictEqual(b.grupoMaterial, "Ferramentas");
+  const c = M.comPadraoDoInsumo({ insumoCodigo: "SEM-1", etapa: "" }, CAT);
+  assert.strictEqual(c.etapa, "", "catalogo sem etapa nao inventa etapa");
+  const d = { insumoCodigo: "NAO-EXISTE", etapa: "" };
+  assert.strictEqual(M.comPadraoDoInsumo(d, CAT), d);
+  // mao de obra sem insumo cai na regra da conta
+  assert.strictEqual(M.ligarAoCatalogo({ contaId: "empreiteiro", etapa: "" }, CAT).etapa, "prestadores");
+});
+
+teste("na gravacao, so a conta nova ou mexida e ligada; obra parada nao muda", () => {
+  const velha = { id: "v", insumoCodigo: "CIM-1", etapa: "", valor: 10 };
+  const o1 = { id: "o1", contasPagar: [velha] };
+  const o2 = { id: "o2", contasPagar: [{ id: "x", insumoCodigo: "CIM-1", etapa: "" }] };
+  const antigas = [o1, o2];
+  const nova = { id: "n", insumoCodigo: "CIM-1", etapa: "", valor: 20 };
+  const novas = [{ ...o1, contasPagar: [velha, nova] }, o2];
+  const r = M.ligarObrasAoCatalogo(novas, antigas, CAT);
+  assert.strictEqual(r[1], o2, "obra que nao mudou nao e tocada");
+  assert.strictEqual(r[0].contasPagar[0], velha, "conta antiga intacta");
+  assert.strictEqual(r[0].contasPagar[1].etapa, "alvenaria");
+  // nada a ligar: devolve a mesma lista
+  const iguais = [{ ...o1, contasPagar: [velha, { id: "m", contaId: "material", etapa: "fundacao" }] }];
+  assert.strictEqual(M.ligarObrasAoCatalogo(iguais, antigas, CAT), iguais);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
