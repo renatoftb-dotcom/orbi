@@ -11614,14 +11614,25 @@ function efBrutoDoItem(i) {
 // soma de itens: é um valor, numa etapa. Vira o único item do custo, igual
 // a um item digitado, sem pedir que alguém o digite. A compra de vários
 // itens continua item a item.
-function itemUnicoDoCusto(valor, etapa, contaId, descricao) {
+function itemUnicoDoCusto(valor, etapa, contaId, descricao, grupoMaterial) {
   const v = Math.round((Number(valor) || 0) * 100) / 100;
-  return { descricao: String(descricao || "").trim(), insumoCodigo: "", grupoMaterial: "",
+  return { descricao: String(descricao || "").trim(), insumoCodigo: "", grupoMaterial: grupoMaterial || "",
     quantidade: 1, unidade: "vb", unitario: v, bruto: v, etapa: etapa || "", contaId: contaId || "" };
 }
-function itensDoCustoOuUnico(itens, valor, etapa, contaId, descricao) {
+function itensDoCustoOuUnico(itens, valor, etapa, contaId, descricao, grupoMaterial) {
   if ((itens || []).some((i) => i && efBrutoDoItem(i) > 0)) return itens;
-  return Number(valor) > 0 ? [itemUnicoDoCusto(valor, etapa, contaId, descricao)] : [];
+  return Number(valor) > 0 ? [itemUnicoDoCusto(valor, etapa, contaId, descricao, grupoMaterial)] : [];
+}
+
+// A conta de mão de obra já diz onde o custo entra. Na base do escritório,
+// empreiteiro, pedreiro, ajudante… vão para a etapa "Prestadores de
+// serviços", grupo "Prestadores de serviços" — é o mesmo vínculo que o
+// catálogo faz pelo grupo do insumo. Vem preenchido; dá para trocar.
+const EF_PADRAO_MAO_DE_OBRA = { etapa: "prestadores", grupoMaterial: "Prestadores de serviços" };
+function padraoDaContaDaObra(contaId, plano) {
+  const lista = plano || (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []);
+  const c = lista.find((x) => x && x.id === contaId);
+  return c && c.grupo === "maoDeObra" ? { ...EF_PADRAO_MAO_DE_OBRA } : { etapa: "", grupoMaterial: "" };
 }
 
 function custoDoLancamento(valorPago, itens) {
@@ -12477,8 +12488,12 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   // sem item: pagamento único — o valor inteiro numa etapa
   const custoUnico = naObra && !itensDoCusto.some((i) => i && efBrutoDoItem(i) > 0);
   const nomeContaObra = ((typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((c) => c && c.id === f.contaId) || {}).nome || "";
+  // conta de mão de obra: etapa e grupo "Prestadores de serviços" já vêm
+  const padraoConta = naObra ? padraoDaContaDaObra(f.contaId) : { etapa: "", grupoMaterial: "" };
+  const etapaUnicaEfetiva = f.etapaUnica != null ? f.etapaUnica : padraoConta.etapa;
   const itensEfetivos = naObra
-    ? itensDoCustoOuUnico(itensDoCusto, efValorDoCampo(f.valor), f.etapaUnica, f.contaId, f.descricao || nomeContaObra)
+    ? itensDoCustoOuUnico(itensDoCusto, efValorDoCampo(f.valor), etapaUnicaEfetiva, f.contaId, f.descricao || nomeContaObra,
+      etapaUnicaEfetiva && etapaUnicaEfetiva === padraoConta.etapa ? padraoConta.grupoMaterial : "")
     : itensDoCusto;
   const resumoCusto = naObra ? custoDoLancamento(efValorDoCampo(f.valor), itensDoCusto) : null;
   const etapasDaObra = typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [];
@@ -12503,7 +12518,10 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const novoItem = () => setF((p) => ({ ...p,
     itens: (p.itens || []).concat([{ ...(typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio()
       : { id: String(Date.now()), descricao: "", insumoCodigo: "", quantidade: "", unidade: "", unitario: "", etapa: "", contaId: "" }),
-      ...(p.etapaUnica ? { etapa: p.etapaUnica } : {}) }]) }));
+      ...((p.etapaUnica != null ? p.etapaUnica : padraoConta.etapa)
+        ? { etapa: p.etapaUnica != null ? p.etapaUnica : padraoConta.etapa } : {}),
+      ...(padraoConta.grupoMaterial && (p.etapaUnica == null || p.etapaUnica === padraoConta.etapa)
+        ? { grupoMaterial: padraoConta.grupoMaterial } : {}) }]) }));
   // O insumo escolhido traz o que ele já sabe: unidade, etapa e conta
   // contábil. O que a pessoa tiver posto à mão continua valendo.
   const porInsumo = (i, codigo, recemCadastrado) => {
@@ -12919,7 +12937,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
               gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
               <div style={{ minWidth: 0 }}>
                 <div style={S.rot}>Etapa da obra</div>
-                <SelectBusca style={S.input} value={f.etapaUnica || ""}
+                <SelectBusca style={S.input} value={etapaUnicaEfetiva || ""}
                   onChange={(v) => set("etapaUnica", v)}
                   placeholder="Procurar etapa…"
                   opcoes={[{ valor: "", rotulo: "— escolha a etapa —" }]
@@ -12927,7 +12945,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
               </div>
               <div style={{ fontSize: 12, color: "#4b5563", lineHeight: 1.45, paddingBottom: 4 }}>
                 Pagamento único: <b style={{ color: "#111827" }}>{efDinheiro(efValorDoCampo(f.valor))}</b> inteiro nesta etapa
-                {nomeContaObra ? <>, conta <b style={{ color: "#111827" }}>{nomeContaObra}</b></> : null}.
+                {nomeContaObra ? <>, conta <b style={{ color: "#111827" }}>{nomeContaObra}</b></> : null}
+                {padraoConta.etapa && etapaUnicaEfetiva === padraoConta.etapa ? <>, grupo <b style={{ color: "#111827" }}>{padraoConta.grupoMaterial}</b> (o padrão da conta)</> : null}.
                 Compra de vários itens? Detalhe item a item.
               </div>
             </div>

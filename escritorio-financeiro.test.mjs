@@ -37,7 +37,7 @@ const M = new Function(src + `
            obrasDoLancamento, validarLancamentoNaObra, destinoVisivelDoCusto,
            efValorDoCampo, anexosDaTransacao, comAnexos,
            efNomeDoFornecedor, EF_FORNECEDOR_OUTROS,
-           custoDoLancamento, validarCustoEmItens, itemUnicoDoCusto, itensDoCustoOuUnico,
+           custoDoLancamento, validarCustoEmItens, itemUnicoDoCusto, itensDoCustoOuUnico, padraoDaContaDaObra,
            comIdsDosMovimentos, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
            sugestaoDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao, fornecedorPadraoDaConta,
            ehReceitaDaGestao, refDaParcela, gestaoNaObra, desfazerGestaoNaObra, parcelaDoLancamento, parcelaDoMesNaGestao, recalibrarGestao, previaDaGestao, contasDaGestao,
@@ -2062,6 +2062,15 @@ teste("pagamento único: sem item, o valor inteiro vira um item na etapa escolhi
   const itens = [{ descricao: "Cimento", quantidade: 2, unitario: 40, etapa: "fundacao" }];
   assert.strictEqual(M.itensDoCustoOuUnico(itens, 80, "alvenaria", "material", "x"), itens);
   assert.deepStrictEqual(M.itensDoCustoOuUnico([], 0, "fundacao", "empreiteiro", "x"), []);
+});
+
+
+teste("conta de mão de obra já traz etapa e grupo 'Prestadores de serviços'", () => {
+  const plano = [{ id: "empreiteiro", grupo: "maoDeObra" }, { id: "material", grupo: "materiais" }];
+  assert.deepStrictEqual(M.padraoDaContaDaObra("empreiteiro", plano), { etapa: "prestadores", grupoMaterial: "Prestadores de serviços" });
+  assert.deepStrictEqual(M.padraoDaContaDaObra("material", plano), { etapa: "", grupoMaterial: "" });
+  const u = M.itensDoCustoOuUnico([], 400, "prestadores", "empreiteiro", "Empreiteiro", "Prestadores de serviços");
+  assert.deepStrictEqual([u[0].etapa, u[0].grupoMaterial], ["prestadores", "Prestadores de serviços"]);
 });
 
 for (const [nome, fn] of testes) {
