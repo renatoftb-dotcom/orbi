@@ -9292,6 +9292,48 @@ function frasesDasFaltas(faltas) {
   return "Falta " + f.slice(0, -1).join(", ") + " e " + f[f.length - 1] + ".";
 }
 
+// ── Conta → etapa/grupo padrão. Mão de obra (empreiteiro, pedreiro,
+// eletricista...) entra sempre na etapa "Prestadores de serviços" e no
+// grupo "Prestadores de serviços". Vale para TODA porta de entrada da
+// contabilidade (contrato, pedido, conta avulsa, entrada, extrato do
+// escritório): a conta escolhida já traz a etapa e o grupo, e a pessoa
+// só mexe se quiser outra coisa. ──
+const PADRAO_MAO_DE_OBRA = { etapa: "prestadores", grupoMaterial: "Prestadores de serviços" };
+
+function padraoDaContaObra(contaId) {
+  const c = (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((x) => x && x.id === contaId);
+  return c && c.grupo === "maoDeObra" ? { ...PADRAO_MAO_DE_OBRA } : { etapa: "", grupoMaterial: "" };
+}
+
+// Preenche o que está em branco. Nunca troca o que a pessoa escolheu.
+// O grupo só entra quando a etapa é a do padrão (etapa "Fundação" com
+// grupo "Prestadores" não faz sentido sozinho).
+function comPadraoDaConta(obj) {
+  if (!obj || typeof obj !== "object") return obj;
+  const p = padraoDaContaObra(obj.contaId);
+  if (!p.etapa) return obj;
+  const vazio = (v) => String(v == null ? "" : v).trim() === "";
+  const etapaVazia = vazio(obj.etapa) && vazio(obj.etapaId);
+  const etapa = etapaVazia ? p.etapa : obj.etapa;
+  const pedeGrupo = vazio(obj.grupoMaterial) && etapa === p.etapa;
+  if (!etapaVazia && !pedeGrupo) return obj;
+  const r = { ...obj };
+  if (etapaVazia) r.etapa = p.etapa;
+  if (pedeGrupo) r.grupoMaterial = p.grupoMaterial;
+  return r;
+}
+
+// Troca de conta numa tela: o que era o padrão da conta antiga (ou estava
+// vazio) passa a ser o padrão da nova; o que a pessoa escolheu à mão fica.
+function trocarContaComPadrao(obj, novaConta) {
+  const o = obj || {};
+  const antes = padraoDaContaObra(o.contaId);
+  const r = { ...o, contaId: novaConta };
+  if (antes.etapa && r.etapa === antes.etapa) r.etapa = "";
+  if (antes.grupoMaterial && r.grupoMaterial === antes.grupoMaterial) r.grupoMaterial = "";
+  return comPadraoDaConta(r);
+}
+
 // ── Helpers puros sobre a taxonomia — o resto do módulo (cálculo, UI,
 // formulário) vai depender destes dois. ──
 
@@ -11630,6 +11672,8 @@ function itensDoCustoOuUnico(itens, valor, etapa, contaId, descricao, grupoMater
 // catálogo faz pelo grupo do insumo. Vem preenchido; dá para trocar.
 const EF_PADRAO_MAO_DE_OBRA = { etapa: "prestadores", grupoMaterial: "Prestadores de serviços" };
 function padraoDaContaDaObra(contaId, plano) {
+  // mesma regra de obra-financeiro (padraoDaContaObra) — uma fonte só
+  if (!plano && typeof padraoDaContaObra === "function") return padraoDaContaObra(contaId);
   const lista = plano || (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []);
   const c = lista.find((x) => x && x.id === contaId);
   return c && c.grupo === "maoDeObra" ? { ...EF_PADRAO_MAO_DE_OBRA } : { etapa: "", grupoMaterial: "" };
@@ -25250,7 +25294,8 @@ function contasDoContrato(contrato) {
   // parcela seguinte; a frase curta vai junto, para quem olha saber por quê.
   const saldo = (c && c.ajustesSaldo) || {};
   const notasSaldo = (c && c.notasSaldo) || {};
-  return parcelasAPagar(c).map((p, idx) => ({
+  const ligar = typeof comPadraoDaConta === "function" ? comPadraoDaConta : (x) => x;
+  return parcelasAPagar(c).map((p, idx) => ligar({
     id: `${c.id}:${idx + 1}`,
     origem: "contrato",
     contratoId: c.id,
@@ -25262,7 +25307,8 @@ function contasDoContrato(contrato) {
     contaId: contaDoTipo(c.tipoProfissional),
     // O contrato que é de UMA etapa (o serralheiro do portão, o pintor)
     // passa a etapa para as parcelas. O de obra civil, que atravessa a obra,
-    // fica em branco — a regra da transação sabe disso.
+    // fica em branco aqui e recebe o padrão da conta: mão de obra entra
+    // em "Prestadores de serviços" (comPadraoDaConta).
     etapa: c.etapa || "",
     prestadorId: c.prestadorId || "",
     favorecido: c.nomeContratado || "",
@@ -25297,7 +25343,10 @@ function sincronizarContasDoContrato(contas, contrato) {
     // parcela paga guarda o pagamento (data, valor, competência), mas a
     // CLASSIFICAÇÃO acompanha o contrato: mudou a conta do plano, o extrato
     // do mês passado passa a mostrá-la no lugar certo
-    if (anterior.pago) return { ...anterior, contaId: nova.contaId, servico: nova.servico, favorecido: nova.favorecido };
+    if (anterior.pago) {
+      const paga = { ...anterior, contaId: nova.contaId, servico: nova.servico, favorecido: nova.favorecido };
+      return typeof comPadraoDaConta === "function" ? comPadraoDaConta(paga) : paga;
+    }
     // A parcela em aberto é reescrita pela regra do contrato, mas o que
     // alguém anotou ou registrou nela não é da regra — fica. O número de
     // documento também: é por ele que a nota e o comprovante se amarram a
@@ -25592,12 +25641,16 @@ function valorDaEntrega(e) {
 // data própria, e o fornecedor recebe na entrega. Uma conta por linha, com o
 // nome da entrega na descrição — é assim que a obra reconhece o pagamento
 // quando o caminhão chega.
+// Toda conta que nasce aqui passa pela mesma regra: a conta do plano traz
+// a etapa e o grupo padrão (mão de obra → "Prestadores de serviços").
+function cpLigar(c) { return typeof comPadraoDaConta === "function" ? comPadraoDaConta(c) : c; }
+
 function contasDasEntregas(dados, novoId) {
   const d = dados || {};
   const id = typeof novoId === "function" ? novoId : (typeof uid === "function" ? uid : () => String(Date.now()));
   const hoje = dataParaIso(new Date());
   const linhas = (d.entregas || []).filter((e) => e && valorDaEntrega(e) > 0);
-  return linhas.map((e, i) => ({
+  return linhas.map((e, i) => cpLigar({
     id: id(),
     origem: CP_ORIGEM_COTACAO,
     obraId: d.obraId || "",
@@ -25607,6 +25660,7 @@ function contasDasEntregas(dados, novoId) {
     parcela: linhas.length > 1 ? i + 1 : 0,
     parcelasTotal: linhas.length > 1 ? linhas.length : 0,
     contaId: d.contaId || (typeof PLANO_CONTAS !== "undefined" && PLANO_CONTAS[0] ? PLANO_CONTAS[0].id : "material"),
+    etapa: d.etapa || d.etapaId || "",
     prestadorId: d.prestadorId || "",
     favorecido: d.favorecido || "",
     descricao: [String(d.descricao || "Compra").trim(), String(e.descricao || "").trim()].filter(Boolean).join(" — ")
@@ -25707,7 +25761,7 @@ function contasDoPedidoDaLoja(dados, pedido, novoId) {
   const id = typeof novoId === "function" ? novoId : (typeof uid === "function" ? uid : () => String(Date.now()));
   const venc = String(p.vencimento || "").slice(0, 10) || dataParaIso(new Date());
   const padrao = d.contaId || (typeof PLANO_CONTAS !== "undefined" && PLANO_CONTAS[0] ? PLANO_CONTAS[0].id : "material");
-  return itensRateados(p).map((i) => ({
+  return itensRateados(p).map((i) => cpLigar({
     id: id(),
     origem: CP_ORIGEM_COTACAO,
     obraId: d.obraId || "",
@@ -25828,6 +25882,7 @@ function contasDaEntrada(lanc, op) {
         pago: false, pagoEm: "", valorPago: "", observacao: String(l.observacao || "").trim(),
         chaveNota: String(l.chaveNota || "").replace(/\D/g, ""), idTransacao: String(l.idTransacao || "").trim().toUpperCase(),
       };
+      c = cpLigar(c);
       c = registrarAto(c, "criada", o.quem || "", agora);
       if (pago) {
         c = contaPaga(c, { pagoEm: primeiro, valorPago: valor, comprovante: o.anexo || null }, o.quem || "", agora);
@@ -26367,7 +26422,7 @@ function modoLancamento(id) { return MODOS_LANCAMENTO.find((m) => m.id === id) |
 
 // Uma conta, do jeito que o lançamento monta todas.
 function contaDaCompra(d, novoId, dados) {
-  return {
+  return cpLigar({
     id: novoId(),
     origem: CP_ORIGEM_COTACAO,
     obraId: dados.obraId || "",
@@ -26387,7 +26442,7 @@ function contaDaCompra(d, novoId, dados) {
     valor: Math.round((Number(d.valor) || 0) * 100) / 100,
     vencimento: d.vencimento,
     pago: false, pagoEm: "", valorPago: "", observacao: dados.observacao || "",
-  };
+  });
 }
 
 function contasDaCotacao(dados, novoId) {
@@ -31039,6 +31094,8 @@ function situacaoPadraoDaEntrada(papel, tipoDaObra) {
 function faltasDoItemNaEntrada(it, situacao, pagamento) {
   if (typeof faltasDaTransacao !== "function") return [];
   const pago = situacao === "pago";
+  // a conta traz a etapa padrão (mão de obra → Prestadores), como na gravação
+  if (typeof comPadraoDaConta === "function") it = comPadraoDaConta(it || {});
   return faltasDaTransacao({ obraId: "-", contaId: (it || {}).contaId, valor: brutoDoItem(it), vencimento: "-",
     pago, favorecido: "-", insumoCodigo: (it || {}).insumoCodigo, quantidade: (it || {}).quantidade,
     etapa: (it || {}).etapa, formaPagamento: pago ? (((pagamento || {}).forma) || "avista") : "" });
@@ -39328,7 +39385,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                             placeholder="Procurar etapa…"
                             opcoes={[{ valor: "", rotulo: "— etapa —" }].concat(etapasDaEntrada.map((e) => ({ valor: e.id, rotulo: e.nome })))} /></div>
                         <div style={{ minWidth: 0, gridColumn: isMobile ? "1 / -1" : "auto" }}>{mini("Conta contábil")}
-                          <SelectBusca style={cel} value={it.contaId || ""} onChange={(v) => mexerItem(i, { contaId: v })}
+                          <SelectBusca style={cel} value={it.contaId || ""} onChange={(v) => mexerItem(i, typeof trocarContaComPadrao === "function" ? trocarContaComPadrao(it, v) : { contaId: v })}
                             placeholder="Procurar conta…"
                             opcoes={[{ valor: "", rotulo: "— conta —" }].concat(
                               contasDeDespesa.map((c) => ({ valor: c.id, rotulo: c.nome, grupo: c.grupo || "" })))} /></div>
@@ -40302,7 +40359,7 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
             );
             const campoConta = (
               <SelectBusca style={celStyle} value={it.contaId || ""}
-                onChange={(v) => mexerItem(i, { contaId: v })} placeholder="Procurar conta…"
+                onChange={(v) => mexerItem(i, typeof trocarContaComPadrao === "function" ? trocarContaComPadrao(it, v) : { contaId: v })} placeholder="Procurar conta…"
                 opcoes={[{ valor: "", rotulo: "Material (padrão)" }].concat(
                   grupos.filter((g) => g.id !== "receitas").map((g) => ({
                     grupo: g.titulo,
@@ -43835,7 +43892,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     setFormConta(completa);
   };
   const salvarContaAvulsa = () => {
-    const f = formConta;
+    // a conta do plano já diz a etapa e o grupo (mão de obra → Prestadores)
+    const f = typeof comPadraoDaConta === "function" ? comPadraoDaConta(formConta) : formConta;
     if (!f.descricao?.trim()) { dialogo.alertar({ titulo: "Informe a descrição da conta", tipo: "aviso" }); return; }
     if (!(Number(f.valor) > 0)) { dialogo.alertar({ titulo: "Informe um valor maior que zero", tipo: "aviso" }); return; }
     // A mesma régua de todas as portas: conta que entra torta aqui
@@ -45999,7 +46057,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               <div><label style={C.label}>Vencimento</label><input style={C.input} type="date" value={formConta.vencimento || ""} onChange={e => setFormConta({ ...formConta, vencimento: e.target.value })} /></div>
               <div>
                 <label style={C.label}>Conta</label>
-                <Selecao style={{ ...C.input, cursor: "pointer" }} value={formConta.contaId} onChange={e => setFormConta({ ...formConta, contaId: e.target.value })}>
+                <Selecao style={{ ...C.input, cursor: "pointer" }} value={formConta.contaId} onChange={e => setFormConta(typeof trocarContaComPadrao === "function"
+                  ? trocarContaComPadrao(formConta, e.target.value) : { ...formConta, contaId: e.target.value })}>
                   {GRUPOS_PL.filter(g => g.id !== "receitas").map(g => (
                     <optgroup key={g.id} label={g.titulo}>
                       {PLANO_CONTAS.filter(c => c.grupo === g.id).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
@@ -46865,7 +46924,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     }
 
     const q = numeroDeCampo(d.quantidade) || 0;
-    const nova = numerarContas([registrarAto({ ...contaAvulsaVazia(obraAtual.id),
+    const ligarConta = typeof comPadraoDaConta === "function" ? comPadraoDaConta : (x) => x;
+    const nova = numerarContas([registrarAto(ligarConta({ ...contaAvulsaVazia(obraAtual.id),
       contaId: d.contaId || "material",
       prestadorId: d.prestadorId || d.favorecidoId || "",
       favorecido: d.favorecido || "",
@@ -46879,7 +46939,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       etapa: d.etapa || "",
       grupoMaterial: d.grupoMaterial || "",
       numeroNota: d.documento || "",
-      valor, vencimento: d.pagoEm }, "criada", quem)],
+      valor, vencimento: d.pagoEm }), "criada", quem)],
       obras, lancamentosDoEscritorio(data))[0];
     // Como o dinheiro saiu. No cartão o custo da obra fica nesta data, mas o
     // plano de parcelas vai junto — é por ele que a fatura acha a compra, e

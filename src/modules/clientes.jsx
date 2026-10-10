@@ -2777,7 +2777,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     setFormConta(completa);
   };
   const salvarContaAvulsa = () => {
-    const f = formConta;
+    // a conta do plano já diz a etapa e o grupo (mão de obra → Prestadores)
+    const f = typeof comPadraoDaConta === "function" ? comPadraoDaConta(formConta) : formConta;
     if (!f.descricao?.trim()) { dialogo.alertar({ titulo: "Informe a descrição da conta", tipo: "aviso" }); return; }
     if (!(Number(f.valor) > 0)) { dialogo.alertar({ titulo: "Informe um valor maior que zero", tipo: "aviso" }); return; }
     // A mesma régua de todas as portas: conta que entra torta aqui
@@ -4941,7 +4942,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               <div><label style={C.label}>Vencimento</label><input style={C.input} type="date" value={formConta.vencimento || ""} onChange={e => setFormConta({ ...formConta, vencimento: e.target.value })} /></div>
               <div>
                 <label style={C.label}>Conta</label>
-                <Selecao style={{ ...C.input, cursor: "pointer" }} value={formConta.contaId} onChange={e => setFormConta({ ...formConta, contaId: e.target.value })}>
+                <Selecao style={{ ...C.input, cursor: "pointer" }} value={formConta.contaId} onChange={e => setFormConta(typeof trocarContaComPadrao === "function"
+                  ? trocarContaComPadrao(formConta, e.target.value) : { ...formConta, contaId: e.target.value })}>
                   {GRUPOS_PL.filter(g => g.id !== "receitas").map(g => (
                     <optgroup key={g.id} label={g.titulo}>
                       {PLANO_CONTAS.filter(c => c.grupo === g.id).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
@@ -5807,7 +5809,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     }
 
     const q = numeroDeCampo(d.quantidade) || 0;
-    const nova = numerarContas([registrarAto({ ...contaAvulsaVazia(obraAtual.id),
+    const ligarConta = typeof comPadraoDaConta === "function" ? comPadraoDaConta : (x) => x;
+    const nova = numerarContas([registrarAto(ligarConta({ ...contaAvulsaVazia(obraAtual.id),
       contaId: d.contaId || "material",
       prestadorId: d.prestadorId || d.favorecidoId || "",
       favorecido: d.favorecido || "",
@@ -5821,7 +5824,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       etapa: d.etapa || "",
       grupoMaterial: d.grupoMaterial || "",
       numeroNota: d.documento || "",
-      valor, vencimento: d.pagoEm }, "criada", quem)],
+      valor, vencimento: d.pagoEm }), "criada", quem)],
       obras, lancamentosDoEscritorio(data))[0];
     // Como o dinheiro saiu. No cartão o custo da obra fica nesta data, mas o
     // plano de parcelas vai junto — é por ele que a fatura acha a compra, e

@@ -2317,6 +2317,8 @@ function itensDoCustoOuUnico(itens, valor, etapa, contaId, descricao, grupoMater
 // catálogo faz pelo grupo do insumo. Vem preenchido; dá para trocar.
 const EF_PADRAO_MAO_DE_OBRA = { etapa: "prestadores", grupoMaterial: "Prestadores de serviços" };
 function padraoDaContaDaObra(contaId, plano) {
+  // mesma regra de obra-financeiro (padraoDaContaObra) — uma fonte só
+  if (!plano && typeof padraoDaContaObra === "function") return padraoDaContaObra(contaId);
   const lista = plano || (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []);
   const c = lista.find((x) => x && x.id === contaId);
   return c && c.grupo === "maoDeObra" ? { ...EF_PADRAO_MAO_DE_OBRA } : { etapa: "", grupoMaterial: "" };

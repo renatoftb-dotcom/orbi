@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -2573,7 +2573,8 @@ teste("parcela de contrato leva a etapa quando o contrato e de uma etapa so", ()
     etapa: "portoes" };
   assert.ok(modulo.contasDoContrato(ct).every(c => c.etapa === "portoes"));
   const civil = { ...ct, etapa: "" };
-  assert.ok(modulo.contasDoContrato(civil).every(c => c.etapa === ""), "obra civil fica em branco");
+  // sem etapa no contrato, a conta de mao de obra leva para Prestadores de servicos
+  assert.ok(modulo.contasDoContrato(civil).every(c => c.etapa === "prestadores"), "mao de obra entra em Prestadores");
 });
 
 teste("a conferencia nao chama de furo o que a regra dispensa", () => {
@@ -3176,6 +3177,74 @@ teste("o papel do pedido final vai junto para cada conta do pedido", () => {
   assert.ok(contas.every((c) => c.anexos && c.anexos.length === 1 && c.anexos[0].public_id === "papelPed" && c.anexos[0].tipo === "pedido"));
   const sem = modulo.contasDoPedidoDaLoja({ obraId: "ob1" }, pedidoOurifer(), () => "d" + (++n));
   assert.ok(sem.every((c) => !c.anexos), "pedido sem papel não inventa anexo");
+});
+
+
+// ── Conta → etapa/grupo: tudo ligado, em todas as portas ───────
+teste("mao de obra traz etapa e grupo Prestadores; material nao", () => {
+  assert.deepStrictEqual(modulo.padraoDaContaObra("empreiteiro"), { etapa: "prestadores", grupoMaterial: "Prestadores de serviços" });
+  assert.deepStrictEqual(modulo.padraoDaContaObra("material"), { etapa: "", grupoMaterial: "" });
+  assert.deepStrictEqual(modulo.padraoDaContaObra("taxa_admin_obra"), { etapa: "", grupoMaterial: "" });
+});
+
+teste("comPadraoDaConta so preenche o que esta em branco", () => {
+  const a = modulo.comPadraoDaConta({ contaId: "pedreiros", etapa: "", grupoMaterial: "" });
+  assert.strictEqual(a.etapa, "prestadores");
+  assert.strictEqual(a.grupoMaterial, "Prestadores de serviços");
+  const b = modulo.comPadraoDaConta({ contaId: "pedreiros", etapa: "fundacao", grupoMaterial: "" });
+  assert.strictEqual(b.etapa, "fundacao", "etapa escolhida fica");
+  assert.strictEqual(b.grupoMaterial, "", "grupo so entra junto com a etapa padrao");
+  const c = { contaId: "material", etapa: "" };
+  assert.strictEqual(modulo.comPadraoDaConta(c), c);
+});
+
+teste("trocar a conta troca o padrao, mas nao o que foi escolhido a mao", () => {
+  const emp = modulo.trocarContaComPadrao({ contaId: "material", etapa: "", grupoMaterial: "" }, "empreiteiro");
+  assert.strictEqual(emp.etapa, "prestadores");
+  assert.strictEqual(emp.grupoMaterial, "Prestadores de serviços");
+  const volta = modulo.trocarContaComPadrao(emp, "material");
+  assert.strictEqual(volta.etapa, "");
+  assert.strictEqual(volta.grupoMaterial, "");
+  const mao = modulo.trocarContaComPadrao({ contaId: "material", etapa: "alvenaria", grupoMaterial: "Blocos" }, "pedreiros");
+  assert.strictEqual(mao.etapa, "alvenaria");
+  assert.strictEqual(mao.grupoMaterial, "Blocos");
+});
+
+teste("parcelas do contrato do empreiteiro nascem em Prestadores de servicos", () => {
+  const ct = { id: "k9", obraId: "o1", nomeContratado: "ADRIANO", tipoProfissional: "empreiteiro",
+    valor: 10000, modalidade: "parcelado", parcelas: 2, periodicidade: "mensal", dataInicio: "2026-10-05" };
+  const cs = modulo.contasDoContrato(ct);
+  assert.ok(cs.length >= 2);
+  for (const c of cs) {
+    assert.strictEqual(c.etapa, "prestadores");
+    assert.strictEqual(c.grupoMaterial, "Prestadores de serviços");
+  }
+  // contrato de uma etapa so continua na etapa dele
+  const so = modulo.contasDoContrato({ ...ct, etapa: "esquadrias" });
+  assert.strictEqual(so[0].etapa, "esquadrias");
+  // parcela ja paga, gravada sem etapa, ganha a etapa na ressincronia (so preenche)
+  const paga = { ...cs[0], etapa: "", grupoMaterial: "", pago: true, pagoEm: "2026-10-05", valorPago: 5000 };
+  const depois = modulo.sincronizarContasDoContrato([paga, ...cs.slice(1)], ct);
+  const p1 = depois.find(c => c.id === paga.id);
+  assert.strictEqual(p1.pago, true);
+  assert.strictEqual(p1.etapa, "prestadores");
+});
+
+teste("pedido, compra, entregas e entrada ligam a mao de obra", () => {
+  const ped = modulo.contasDoPedidoDaLoja({ obraId: "o1", contaId: "eletricista" },
+    { id: "p1", vencimento: "2026-10-10", itens: [{ descricao: "Instalação", quantidade: 1, unitario: 500, bruto: 500 }] });
+  assert.strictEqual(ped[0].etapa, "prestadores");
+  const cot = modulo.contasDaCotacao({ obraId: "o1", contaId: "pintor", valor: 900, descricao: "Pintura", primeiroVencimento: "2026-10-10" });
+  assert.ok(cot.length >= 1);
+  assert.ok(cot.every(c => c.etapa === "prestadores" && c.grupoMaterial === "Prestadores de serviços"));
+  const ent = modulo.contasDaEntrada({ situacao: "apagar", prestadorId: "f1", favorecido: "ADRIANO",
+    apagar: { vencimento: "2026-10-28", parcelas: 1 },
+    itens: [{ descricao: "Empreiteiro", contaId: "empreiteiro", total: 400 }] }, { obraId: "o1" });
+  assert.strictEqual(ent[0].etapa, "prestadores");
+  assert.strictEqual(ent[0].grupoMaterial, "Prestadores de serviços");
+  const mat = modulo.contasDaEntrada({ situacao: "apagar", prestadorId: "f1", apagar: { vencimento: "2026-10-28" },
+    itens: [{ descricao: "Cimento", contaId: "material", total: 40, etapa: "alvenaria" }] }, { obraId: "o1" });
+  assert.strictEqual(mat[0].etapa, "alvenaria");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

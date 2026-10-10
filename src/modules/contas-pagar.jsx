@@ -367,7 +367,8 @@ function contasDoContrato(contrato) {
   // parcela seguinte; a frase curta vai junto, para quem olha saber por quê.
   const saldo = (c && c.ajustesSaldo) || {};
   const notasSaldo = (c && c.notasSaldo) || {};
-  return parcelasAPagar(c).map((p, idx) => ({
+  const ligar = typeof comPadraoDaConta === "function" ? comPadraoDaConta : (x) => x;
+  return parcelasAPagar(c).map((p, idx) => ligar({
     id: `${c.id}:${idx + 1}`,
     origem: "contrato",
     contratoId: c.id,
@@ -379,7 +380,8 @@ function contasDoContrato(contrato) {
     contaId: contaDoTipo(c.tipoProfissional),
     // O contrato que é de UMA etapa (o serralheiro do portão, o pintor)
     // passa a etapa para as parcelas. O de obra civil, que atravessa a obra,
-    // fica em branco — a regra da transação sabe disso.
+    // fica em branco aqui e recebe o padrão da conta: mão de obra entra
+    // em "Prestadores de serviços" (comPadraoDaConta).
     etapa: c.etapa || "",
     prestadorId: c.prestadorId || "",
     favorecido: c.nomeContratado || "",
@@ -414,7 +416,10 @@ function sincronizarContasDoContrato(contas, contrato) {
     // parcela paga guarda o pagamento (data, valor, competência), mas a
     // CLASSIFICAÇÃO acompanha o contrato: mudou a conta do plano, o extrato
     // do mês passado passa a mostrá-la no lugar certo
-    if (anterior.pago) return { ...anterior, contaId: nova.contaId, servico: nova.servico, favorecido: nova.favorecido };
+    if (anterior.pago) {
+      const paga = { ...anterior, contaId: nova.contaId, servico: nova.servico, favorecido: nova.favorecido };
+      return typeof comPadraoDaConta === "function" ? comPadraoDaConta(paga) : paga;
+    }
     // A parcela em aberto é reescrita pela regra do contrato, mas o que
     // alguém anotou ou registrou nela não é da regra — fica. O número de
     // documento também: é por ele que a nota e o comprovante se amarram a
@@ -709,12 +714,16 @@ function valorDaEntrega(e) {
 // data própria, e o fornecedor recebe na entrega. Uma conta por linha, com o
 // nome da entrega na descrição — é assim que a obra reconhece o pagamento
 // quando o caminhão chega.
+// Toda conta que nasce aqui passa pela mesma regra: a conta do plano traz
+// a etapa e o grupo padrão (mão de obra → "Prestadores de serviços").
+function cpLigar(c) { return typeof comPadraoDaConta === "function" ? comPadraoDaConta(c) : c; }
+
 function contasDasEntregas(dados, novoId) {
   const d = dados || {};
   const id = typeof novoId === "function" ? novoId : (typeof uid === "function" ? uid : () => String(Date.now()));
   const hoje = dataParaIso(new Date());
   const linhas = (d.entregas || []).filter((e) => e && valorDaEntrega(e) > 0);
-  return linhas.map((e, i) => ({
+  return linhas.map((e, i) => cpLigar({
     id: id(),
     origem: CP_ORIGEM_COTACAO,
     obraId: d.obraId || "",
@@ -724,6 +733,7 @@ function contasDasEntregas(dados, novoId) {
     parcela: linhas.length > 1 ? i + 1 : 0,
     parcelasTotal: linhas.length > 1 ? linhas.length : 0,
     contaId: d.contaId || (typeof PLANO_CONTAS !== "undefined" && PLANO_CONTAS[0] ? PLANO_CONTAS[0].id : "material"),
+    etapa: d.etapa || d.etapaId || "",
     prestadorId: d.prestadorId || "",
     favorecido: d.favorecido || "",
     descricao: [String(d.descricao || "Compra").trim(), String(e.descricao || "").trim()].filter(Boolean).join(" — ")
@@ -824,7 +834,7 @@ function contasDoPedidoDaLoja(dados, pedido, novoId) {
   const id = typeof novoId === "function" ? novoId : (typeof uid === "function" ? uid : () => String(Date.now()));
   const venc = String(p.vencimento || "").slice(0, 10) || dataParaIso(new Date());
   const padrao = d.contaId || (typeof PLANO_CONTAS !== "undefined" && PLANO_CONTAS[0] ? PLANO_CONTAS[0].id : "material");
-  return itensRateados(p).map((i) => ({
+  return itensRateados(p).map((i) => cpLigar({
     id: id(),
     origem: CP_ORIGEM_COTACAO,
     obraId: d.obraId || "",
@@ -945,6 +955,7 @@ function contasDaEntrada(lanc, op) {
         pago: false, pagoEm: "", valorPago: "", observacao: String(l.observacao || "").trim(),
         chaveNota: String(l.chaveNota || "").replace(/\D/g, ""), idTransacao: String(l.idTransacao || "").trim().toUpperCase(),
       };
+      c = cpLigar(c);
       c = registrarAto(c, "criada", o.quem || "", agora);
       if (pago) {
         c = contaPaga(c, { pagoEm: primeiro, valorPago: valor, comprovante: o.anexo || null }, o.quem || "", agora);
@@ -1484,7 +1495,7 @@ function modoLancamento(id) { return MODOS_LANCAMENTO.find((m) => m.id === id) |
 
 // Uma conta, do jeito que o lançamento monta todas.
 function contaDaCompra(d, novoId, dados) {
-  return {
+  return cpLigar({
     id: novoId(),
     origem: CP_ORIGEM_COTACAO,
     obraId: dados.obraId || "",
@@ -1504,7 +1515,7 @@ function contaDaCompra(d, novoId, dados) {
     valor: Math.round((Number(d.valor) || 0) * 100) / 100,
     vencimento: d.vencimento,
     pago: false, pagoEm: "", valorPago: "", observacao: dados.observacao || "",
-  };
+  });
 }
 
 function contasDaCotacao(dados, novoId) {

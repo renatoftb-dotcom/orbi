@@ -448,6 +448,48 @@ function frasesDasFaltas(faltas) {
   return "Falta " + f.slice(0, -1).join(", ") + " e " + f[f.length - 1] + ".";
 }
 
+// ── Conta → etapa/grupo padrão. Mão de obra (empreiteiro, pedreiro,
+// eletricista...) entra sempre na etapa "Prestadores de serviços" e no
+// grupo "Prestadores de serviços". Vale para TODA porta de entrada da
+// contabilidade (contrato, pedido, conta avulsa, entrada, extrato do
+// escritório): a conta escolhida já traz a etapa e o grupo, e a pessoa
+// só mexe se quiser outra coisa. ──
+const PADRAO_MAO_DE_OBRA = { etapa: "prestadores", grupoMaterial: "Prestadores de serviços" };
+
+function padraoDaContaObra(contaId) {
+  const c = (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((x) => x && x.id === contaId);
+  return c && c.grupo === "maoDeObra" ? { ...PADRAO_MAO_DE_OBRA } : { etapa: "", grupoMaterial: "" };
+}
+
+// Preenche o que está em branco. Nunca troca o que a pessoa escolheu.
+// O grupo só entra quando a etapa é a do padrão (etapa "Fundação" com
+// grupo "Prestadores" não faz sentido sozinho).
+function comPadraoDaConta(obj) {
+  if (!obj || typeof obj !== "object") return obj;
+  const p = padraoDaContaObra(obj.contaId);
+  if (!p.etapa) return obj;
+  const vazio = (v) => String(v == null ? "" : v).trim() === "";
+  const etapaVazia = vazio(obj.etapa) && vazio(obj.etapaId);
+  const etapa = etapaVazia ? p.etapa : obj.etapa;
+  const pedeGrupo = vazio(obj.grupoMaterial) && etapa === p.etapa;
+  if (!etapaVazia && !pedeGrupo) return obj;
+  const r = { ...obj };
+  if (etapaVazia) r.etapa = p.etapa;
+  if (pedeGrupo) r.grupoMaterial = p.grupoMaterial;
+  return r;
+}
+
+// Troca de conta numa tela: o que era o padrão da conta antiga (ou estava
+// vazio) passa a ser o padrão da nova; o que a pessoa escolheu à mão fica.
+function trocarContaComPadrao(obj, novaConta) {
+  const o = obj || {};
+  const antes = padraoDaContaObra(o.contaId);
+  const r = { ...o, contaId: novaConta };
+  if (antes.etapa && r.etapa === antes.etapa) r.etapa = "";
+  if (antes.grupoMaterial && r.grupoMaterial === antes.grupoMaterial) r.grupoMaterial = "";
+  return comPadraoDaConta(r);
+}
+
 // ── Helpers puros sobre a taxonomia — o resto do módulo (cálculo, UI,
 // formulário) vai depender destes dois. ──
 

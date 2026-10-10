@@ -1697,6 +1697,8 @@ function situacaoPadraoDaEntrada(papel, tipoDaObra) {
 function faltasDoItemNaEntrada(it, situacao, pagamento) {
   if (typeof faltasDaTransacao !== "function") return [];
   const pago = situacao === "pago";
+  // a conta traz a etapa padrão (mão de obra → Prestadores), como na gravação
+  if (typeof comPadraoDaConta === "function") it = comPadraoDaConta(it || {});
   return faltasDaTransacao({ obraId: "-", contaId: (it || {}).contaId, valor: brutoDoItem(it), vencimento: "-",
     pago, favorecido: "-", insumoCodigo: (it || {}).insumoCodigo, quantidade: (it || {}).quantidade,
     etapa: (it || {}).etapa, formaPagamento: pago ? (((pagamento || {}).forma) || "avista") : "" });
@@ -9986,7 +9988,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                             placeholder="Procurar etapa…"
                             opcoes={[{ valor: "", rotulo: "— etapa —" }].concat(etapasDaEntrada.map((e) => ({ valor: e.id, rotulo: e.nome })))} /></div>
                         <div style={{ minWidth: 0, gridColumn: isMobile ? "1 / -1" : "auto" }}>{mini("Conta contábil")}
-                          <SelectBusca style={cel} value={it.contaId || ""} onChange={(v) => mexerItem(i, { contaId: v })}
+                          <SelectBusca style={cel} value={it.contaId || ""} onChange={(v) => mexerItem(i, typeof trocarContaComPadrao === "function" ? trocarContaComPadrao(it, v) : { contaId: v })}
                             placeholder="Procurar conta…"
                             opcoes={[{ valor: "", rotulo: "— conta —" }].concat(
                               contasDeDespesa.map((c) => ({ valor: c.id, rotulo: c.nome, grupo: c.grupo || "" })))} /></div>
@@ -10960,7 +10962,7 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
             );
             const campoConta = (
               <SelectBusca style={celStyle} value={it.contaId || ""}
-                onChange={(v) => mexerItem(i, { contaId: v })} placeholder="Procurar conta…"
+                onChange={(v) => mexerItem(i, typeof trocarContaComPadrao === "function" ? trocarContaComPadrao(it, v) : { contaId: v })} placeholder="Procurar conta…"
                 opcoes={[{ valor: "", rotulo: "Material (padrão)" }].concat(
                   grupos.filter((g) => g.id !== "receitas").map((g) => ({
                     grupo: g.titulo,

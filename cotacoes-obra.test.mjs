@@ -3221,6 +3221,14 @@ teste("a mensagem rápida e a da cotação dizem a mesma coisa", () => {
 const IT = (x) => ({ descricao: "Veda concreto", insumoCodigo: "VED-1", quantidade: "1", unidade: "BD", bruto: 428,
   etapa: "fundacao", contaId: "material", ...x });
 
+teste("Entrada: conta de mão de obra já traz a etapa Prestadores (não trava por falta de etapa)", () => {
+  const base = { situacao: "pago", prestadorId: "f1", pagamento: { data: "2026-09-28", forma: "avista" },
+    itens: [{ descricao: "Empreiteiro", bruto: 400, contaId: "empreiteiro", etapa: "" }] };
+  assert.deepStrictEqual(M.entradaUnicaPronta(base, [], ""), { ok: true, motivo: "" });
+  // material sem etapa continua cobrado
+  assert.match(M.entradaUnicaPronta({ ...base, itens: [IT({ etapa: "" })] }, [], "").motivo, /Falta a etapa/);
+});
+
 teste("situação de partida: empreendimento entra pago; cliente pergunta; comprovante é pago", () => {
   assert.strictEqual(M.situacaoPadraoDaEntrada({ tipo: "nota" }, "empreendimento"), "pago");
   assert.strictEqual(M.situacaoPadraoDaEntrada({ tipo: "nota" }, "cliente"), "");
