@@ -39,7 +39,7 @@ const M = new Function(src + `
            efNomeDoFornecedor, EF_FORNECEDOR_OUTROS,
            custoDoLancamento, validarCustoEmItens, itemUnicoDoCusto, itensDoCustoOuUnico, padraoDaContaDaObra,
            comIdsDosMovimentos, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
-           sugestaoDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao, fornecedorPadraoDaConta,
+           sugestaoDoExtrato, palpiteDoExtrato, sugestaoCompletaDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao, fornecedorPadraoDaConta,
            ehReceitaDaGestao, refDaParcela, gestaoNaObra, desfazerGestaoNaObra, parcelaDoLancamento, parcelaDoMesNaGestao, recalibrarGestao, previaDaGestao, contasDaGestao,
            extratosComArquivo, movimentosGuardadosDoMes, ignoradosGuardados, extratosComIgnorado };`)();
 
@@ -2071,6 +2071,84 @@ teste("conta de mão de obra já traz etapa e grupo 'Prestadores de serviços'",
   assert.deepStrictEqual(M.padraoDaContaDaObra("material", plano), { etapa: "", grupoMaterial: "" });
   const u = M.itensDoCustoOuUnico([], 400, "prestadores", "empreiteiro", "Empreiteiro", "Prestadores de serviços");
   assert.deepStrictEqual([u[0].etapa, u[0].grupoMaterial], ["prestadores", "Prestadores de serviços"]);
+});
+
+// ── O palpite da fila do extrato ───────────────────────────────
+const PLANO_PX = [{ id: "empreiteiro", nome: "Empreiteiro", grupo: "maoDeObra" }, { id: "pedreiros", nome: "Pedreiros", grupo: "maoDeObra" },
+  { id: "material", nome: "Material", grupo: "materiais" }, { id: "agua", nome: "Água", grupo: "consumo" },
+  { id: "frete", nome: "Frete", grupo: "logistica" }, { id: "venda_imovel", nome: "Venda do imóvel", grupo: "receitas" }];
+const CLI_PX = [{ id: "c1", nome: "Jacarezinho Módulo 1", servicos: { empreendimento: true } }, { id: "c2", nome: "Jacarezinho Módulo 2", servicos: { empreendimento: true } },
+  { id: "c3", nome: "Cobop" }];
+const CPX = (contaId, favorecido, d) => ({ id: contaId + favorecido + d, contaId, favorecido, valor: 100, pago: true, pagoEm: d });
+const OBRAS_PX = [
+  { id: "m1", clienteId: "c1", nome: "Jacarezinho Módulo 1", contasPagar: [
+    CPX("empreiteiro", "Carlos Trindade - Empreiteiro", "2026-08-23"), CPX("empreiteiro", "Carlos Trindade - Empreiteiro", "2026-09-23"),
+    CPX("empreiteiro", "Carlos Trindade - Empreiteiro", "2026-09-24"), CPX("empreiteiro", "Outros", "2026-07-14"),
+    CPX("agua", "SANEPAR", "2026-07-01"), CPX("agua", "SANEPAR", "2026-08-01"), CPX("agua", "SANEPAR", "2026-09-01")] },
+  { id: "m2", clienteId: "c2", nome: "Jacarezinho Módulo 2", contasPagar: [CPX("material", "Krona", "2026-09-30")] },
+  { id: "cb", clienteId: "c3", nome: "Reforma Loja Cobop", contasPagar: [CPX("empreiteiro", "Zé Pedreiro", "2026-09-01"), CPX("empreiteiro", "Zé Pedreiro", "2026-09-15")] },
+];
+const FORN_PX = [{ id: "1un49r0", nome: "Carlos Trindade" }, { id: "san", nome: "SANEPAR" }, { id: "ng", nome: "NG Materiais Construção" }, { id: "out", nome: "Outros" }];
+const CTX_PX = { obras: OBRAS_PX, clientes: CLI_PX, fornecedores: FORN_PX, plano: PLANO_PX };
+
+teste("palpite: “empreiteiro Jacarezinho” → conta Empreiteiro, Módulo 1, Carlos Trindade", () => {
+  const p = M.palpiteDoExtrato({ valor: -400, historico: "PIX EMITIDO OUTRA IF · Pagamento Pix ***.144.048-** empreiteiro Jacarezinho" }, CTX_PX);
+  assert.ok(p && p.naObra);
+  assert.deepStrictEqual([p.campos.unidadeId, p.campos.contaFonte, p.campos.contaId, p.campos.empreendimentoId, p.campos.obraIdAlvo, p.campos.fornecedorId, p.campos.fornecedor],
+    ["empreendimento", "obra", "empreiteiro", "c1", "m1", "1un49r0", "Carlos Trindade"]);
+  assert.ok(p.motivos.some((x) => /empreiteiro/.test(x) && /extrato/.test(x)));
+  assert.ok(p.motivos.some((x) => /3 de 4 pagamentos de Empreiteiro nesta obra/.test(x)), p.motivos.join(" | "));
+});
+
+teste("palpite: fornecedor pelo nome traz a conta e a obra em que ele costuma entrar", () => {
+  const p = M.palpiteDoExtrato({ valor: -81, historico: "DEB CONV SANEPAR 0925" }, CTX_PX);
+  assert.deepStrictEqual([p.campos.contaId, p.campos.obraIdAlvo, p.campos.fornecedorId], ["agua", "m1", "san"]);
+});
+
+teste("palpite: sem pista não inventa; entrada não é palpitada; obra de cliente vira gestão de obras", () => {
+  assert.strictEqual(M.palpiteDoExtrato({ valor: -10, historico: "TARIFA PACOTE" }, CTX_PX), null);
+  assert.strictEqual(M.palpiteDoExtrato({ valor: 400, historico: "PIX RECEBIDO empreiteiro Jacarezinho" }, CTX_PX), null);
+  const c = M.palpiteDoExtrato({ valor: -300, historico: "PIX empreiteiro Cobop" }, CTX_PX);
+  assert.deepStrictEqual([c.campos.unidadeId, c.campos.obraIdAlvo, c.campos.empreendimentoId, c.campos.fornecedor], ["gestao_obras", "cb", "", "Zé Pedreiro"]);
+  assert.strictEqual(c.campos.fornecedorId, undefined, "fora do cadastro, só o nome");
+  // duas obras citadas e nenhuma decide: não escolhe obra (e sem obra, não monta custo de obra)
+  const amb = M.palpiteDoExtrato({ valor: -50, historico: "PIX frete Jacarezinho" }, CTX_PX);
+  assert.ok(!amb || !amb.campos.obraIdAlvo);
+});
+
+teste("palpite: item do catálogo citado diz a conta; o nome inteiro da obra decide entre módulos", () => {
+  const ctx = { ...CTX_PX, insumos: [{ codigo: "AR1", nome: "Areia Média" }, { codigo: "VB1", nome: "Locação Ferramentas - Vibrador", contaPadrao: "frete" }] };
+  const a = M.palpiteDoExtrato({ valor: -300, historico: "PIX 82.007.253 0001-51 arame areia jacarezinho modulo 2" }, ctx);
+  assert.deepStrictEqual([a.campos.contaId, a.campos.obraIdAlvo], ["material", "m2"]);
+  assert.ok(a.motivos.some((x) => /areia/.test(x) && /catálogo/.test(x)), a.motivos.join(" | "));
+  const v = M.palpiteDoExtrato({ valor: -90, historico: "PIX vibrador Jacarezinho Módulo 1" }, ctx);
+  assert.deepStrictEqual([v.campos.contaId, v.campos.obraIdAlvo], ["frete", "m1"], "a conta padrão do item manda");
+  // sem obra citada, o catálogo não chuta (retirada de sócio não é material)
+  assert.strictEqual(M.palpiteDoExtrato({ valor: -500, historico: "PIX areia Renato" }, ctx), null);
+});
+
+teste("documento do Pix que já foi de dois fornecedores não identifica ninguém", () => {
+  const lancs = [
+    { id: "e", contaId: "emp_construcao", unidadeId: "empreendimento", valor: 30, fornecedor: "Energiar", historicoBanco: "PIX EMITIDO OUTRA IF · Pagamento Pix ***.144.048-** Energiar", criadoEm: "2026-09-25T10:00:00Z" },
+    { id: "n", contaId: "emp_construcao", unidadeId: "empreendimento", valor: 60, fornecedor: "NG Materiais Construção", historicoBanco: "PIX EMITIDO OUTRA IF · Pagamento Pix ***.144.048-** NG", criadoEm: "2026-09-26T10:00:00Z" },
+  ];
+  assert.strictEqual(M.sugestaoDoExtrato({ valor: -400, historico: "PIX EMITIDO OUTRA IF · Pagamento Pix ***.144.048-** empreiteiro Jacarezinho" }, lancs), null);
+  const s = M.sugestaoCompletaDoExtrato({ valor: -400, historico: "PIX EMITIDO OUTRA IF · Pagamento Pix ***.144.048-** empreiteiro Jacarezinho" }, lancs, CTX_PX);
+  assert.strictEqual(s.palpite, true);
+  assert.strictEqual(s.campos.contaId, "empreiteiro");
+  assert.strictEqual(s.campos.fornecedor, "Carlos Trindade");
+  // e o lançar-assim (um clique) não usa palpite
+  const r = M.lancamentoRapidoDoExtrato({ id: "x", data: "2026-09-28", valor: -400, historico: "x" }, "2026-09", M.sugestaoDoExtrato({ valor: -400, historico: "x" }, lancs), {});
+  assert.ok(r.erro);
+});
+
+teste("a linha igual manda; o palpite só completa o fornecedor que faltava", () => {
+  const lancs = [{ id: "a", contaId: "luz_agua_net", unidadeId: "escritorio", valor: 120, historicoBanco: "DEB CONV SANEPAR 0825", criadoEm: "2026-08-10T10:00:00Z" }];
+  const s = M.sugestaoCompletaDoExtrato({ valor: -133.4, historico: "DEB CONV SANEPAR 0925" }, lancs, CTX_PX);
+  assert.strictEqual(s.campos.contaId, "luz_agua_net");
+  assert.strictEqual(s.campos.unidadeId, "escritorio");
+  assert.strictEqual(s.campos.fornecedorId, "san");
+  assert.ok(!s.palpite);
 });
 
 for (const [nome, fn] of testes) {

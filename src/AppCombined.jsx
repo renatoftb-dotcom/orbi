@@ -11502,7 +11502,12 @@ function sugestaoDoExtrato(movimento, lancamentos) {
     return g ? (g.sinal < 0 ? -1 : 1) * ((Number(l.valor) || 0) < 0 ? -1 : 1) : 0;
   };
   const mesmoLado = (l) => !ladoDe(l) || ladoDe(l) === lado;
-  const achado = (doc && lista.find((l) => mesmoLado(l) && documentoDoHistorico(l.historicoBanco) === doc))
+  // O CPF mascarado do Pix às vezes é o de quem PAGA (o próprio titular), e
+  // aparece igual em pagamentos a lojas diferentes. Documento que já foi de
+  // mais de um fornecedor não identifica ninguém: não vale como pista.
+  const comDoc = doc ? lista.filter((l) => mesmoLado(l) && documentoDoHistorico(l.historicoBanco) === doc) : [];
+  const docUnico = new Set(comDoc.map((l) => efSemAcento(l.fornecedorId || l.fornecedor || l.contaId))).size === 1;
+  const achado = (docUnico && comDoc[0])
     || (chave && lista.find((l) => mesmoLado(l) && chaveDoHistorico(l.historicoBanco) === chave))
     || null;
   if (!achado) return null;
@@ -11513,6 +11518,242 @@ function sugestaoDoExtrato(movimento, lancamentos) {
   // abre o formulário, nunca vira lançamento direto no plano do escritório.
   return { campos: r, de: achado, porDocumento: !!doc && documentoDoHistorico(achado.historicoBanco) === doc,
     daObra: !!achado.origem };
+}
+
+// ── O palpite: quando não há linha igual para copiar ────────────
+// Lê o histórico do banco e o que já foi lançado (no escritório e nas
+// obras) e propõe o resto do lançamento, com o porquê de cada campo:
+//  - a CONTA da obra pela palavra no extrato ("empreiteiro", "pedreiro",
+//    "frete", "eletricista"...);
+//  - a OBRA pelo nome citado ("Jacarezinho"); citada mais de uma, fica a
+//    que tem pagamentos dessa conta (ou desse fornecedor);
+//  - o FORNECEDOR pelo nome no extrato ("SANEPAR") ou, sem nome, pelo
+//    histórico: quem recebe quase todos os pagamentos dessa conta nessa obra;
+//  - e o caminho de volta: fornecedor conhecido traz a conta e a obra em
+//    que ele costuma entrar.
+// Só propõe. Nada disso lança sozinho: o formulário abre preenchido e a
+// pessoa confere.
+const EF_PALAVRAS_GENERICAS = new Set(["material", "materiais", "outros", "outras", "diversos", "taxas", "servicos",
+  "adicionais", "construcao", "comercio", "ltda", "loja", "casa", "obra", "obras", "equipamentos", "geral", "compra",
+  "compras", "pagamento", "pagamentos", "empresa", "industria", "distribuidora", "mercado", "deposito", "modulo",
+  "lotes", "infraestrutura", "alvara", "reforma", "eireli", "epp", "me", "sa", "aluguel", "locacao", "receita",
+  "conta", "contas", "vale", "sobre", "escritorio", "reembolso", "reembolsos", "retirada", "transf"]);
+function efPalavras(t, min) {
+  return efSemAcento(t).replace(/[^a-z0-9]+/g, " ").split(" ")
+    .filter((w) => w.length >= (min || 4) && !/^\d+$/.test(w) && !EF_PALAVRAS_GENERICAS.has(w));
+}
+function efTextoTem(alvo, w) {
+  if (alvo.indexOf(" " + w + " ") >= 0) return true;
+  // singular/plural: "pedreiros" no plano, "pedreiro" no extrato
+  if (w.endsWith("s") && alvo.indexOf(" " + w.slice(0, -1) + " ") >= 0) return true;
+  return alvo.indexOf(" " + w + "s ") >= 0;
+}
+// O favorecido gravado na conta ("Carlos Trindade - Empreiteiro") é o
+// fornecedor do cadastro ("Carlos Trindade")?
+function efMesmoFornecedor(nomeCadastro, favorecido) {
+  const a = efPalavras(nomeCadastro, 3);
+  if (!a.length) return false;
+  const alvo = " " + efSemAcento(favorecido).replace(/[^a-z0-9]+/g, " ") + " ";
+  return a.every((w) => alvo.indexOf(" " + w + " ") >= 0);
+}
+function efDominante(contagem, minimo, ignorar) {
+  const todos = Object.entries(contagem);
+  const total = todos.reduce((t, x) => t + x[1], 0);
+  // o que não pode ganhar ("Outros") ainda conta no total
+  const lista = todos.filter((x) => x[0] !== ignorar).sort((x, y) => y[1] - x[1]);
+  if (!lista.length || lista[0][1] < (minimo || 2) || lista[0][1] / total < 0.6) return null;
+  return { chave: lista[0][0], vezes: lista[0][1], total };
+}
+
+function efSemCategoria(nome) {
+  const t = String(nome || "");
+  const i = t.indexOf(" - ");
+  return i > 0 ? t.slice(i + 3) : t;
+}
+const EF_DF_CACHE = typeof WeakMap !== "undefined" ? new WeakMap() : null;
+function efFrequenciaNoCatalogo(insumos) {
+  if (EF_DF_CACHE && EF_DF_CACHE.has(insumos)) return EF_DF_CACHE.get(insumos);
+  const df = new Map();
+  for (const ins of insumos || []) {
+    if (!ins) continue;
+    for (const w of new Set(efPalavras(ins.nome, 5))) df.set(w, (df.get(w) || 0) + 1);
+  }
+  if (EF_DF_CACHE) EF_DF_CACHE.set(insumos, df);
+  return df;
+}
+
+function palpiteDoExtrato(movimento, ctx) {
+  const m = movimento || {}, c = ctx || {};
+  if (!(Number(m.valor) < 0)) return null;      // por ora, só o que SAI (custos)
+  const texto = String(m.historico || "");
+  const alvo = " " + efSemAcento(texto).replace(/[^a-z0-9]+/g, " ") + " ";
+  const obras = (c.obras || []).filter((o) => o && o.id);
+  const clientes = c.clientes || [];
+  const fornecedores = (c.fornecedores || []).filter((f) => f && f.nome && f.ativo !== false);
+  const plano = (c.plano || (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []))
+    .filter((x) => x && x.grupo !== "receitas" && x.grupo !== "excluidas");
+  const motivos = [];
+
+  // 1. o fornecedor pelo CNPJ/CPF inteiro no extrato, ou pelo nome escrito
+  let forn = null;
+  let melhor = 0;
+  const docs = (texto.match(/\d[\d.\/\s-]{9,20}\d/g) || []).map((x) => x.replace(/\D/g, "")).filter((x) => x.length === 11 || x.length === 14);
+  if (docs.length) {
+    const doDoc = fornecedores.filter((f) => docs.indexOf(String(f.cnpjCpf || "").replace(/\D/g, "")) >= 0);
+    if (doDoc.length === 1) { forn = doDoc[0]; motivos.push(`fornecedor ${forn.nome}: o CNPJ/CPF do extrato é o do cadastro`); }
+  }
+  for (const f of forn ? [] : fornecedores) {
+    if (f.nome === EF_FORNECEDOR_OUTROS) continue;
+    const ws = efPalavras(f.nome, 4).slice(0, 3);
+    if (!ws.length || !ws.every((w) => efTextoTem(alvo, w))) continue;
+    const peso = ws.join("").length;
+    if (peso > melhor) { melhor = peso; forn = f; }
+  }
+  if (forn && !motivos.length) motivos.push(`fornecedor ${forn.nome}: o nome está no extrato`);
+
+  // contas gravadas nas obras, para contar o histórico
+  const contasDe = (o) => (o.contasPagar || []).filter(Boolean);
+  // obras citadas pelo nome; o nome inteiro ("Jacarezinho Módulo 1") vale
+  // mais que uma palavra dele ("Jacarezinho", que é de seis obras)
+  const citadas = obras.map((o) => {
+    const inteiro = efSemAcento(o.nome).replace(/[^a-z0-9]+/g, " ").trim();
+    const bate = efPalavras(o.nome, 4).filter((w) => efTextoTem(alvo, w)).length;
+    return { o, bate: bate + (bate && inteiro && alvo.indexOf(" " + inteiro + " ") >= 0 ? 10 : 0) };
+  }).filter((x) => x.bate > 0);
+
+  // 2. a conta da obra pela palavra. Mais de uma palavra bate ("conta de
+  // água da casa dos pedreiros")? Fica a conta que essas obras já usam;
+  // empate, a palavra mais longa.
+  const candidatas = [];
+  for (const ct of plano) {
+    const w = efPalavras(ct.nome, 4).find((x) => efTextoTem(alvo, x));
+    if (w) candidatas.push({ ct, w });
+  }
+  const baseHist = citadas.length ? citadas.map((x) => x.o) : obras;
+  const usos = (ct) => baseHist.reduce((t, o) => t + contasDe(o).filter((x) => x.contaId === ct.id).length, 0);
+  candidatas.sort((a, b) => (usos(b.ct) - usos(a.ct)) || (b.w.length - a.w.length));
+  let conta = candidatas.length ? candidatas[0].ct : null;
+  if (conta) motivos.push(`conta ${conta.nome}: a palavra “${candidatas[0].w}” está no extrato`);
+  const ehDoForn = (x, f) => !!f && (x.prestadorId === f.id || efMesmoFornecedor(f.nome, x.favorecido));
+
+  // 3. fornecedor conhecido, conta não: a conta em que ele costuma entrar
+  if (forn && !conta) {
+    const cont = {};
+    for (const o of obras) for (const x of contasDe(o)) if (ehDoForn(x, forn) && x.contaId) cont[x.contaId] = (cont[x.contaId] || 0) + 1;
+    const d = efDominante(cont, 2);
+    const ct = d && plano.find((x) => x.id === d.chave);
+    if (ct) { conta = ct; motivos.push(`conta ${ct.nome}: ${d.vezes} de ${d.total} pagamentos a ${forn.nome}`); }
+  }
+
+  // 3b. nem palavra de conta nem fornecedor: o item do catálogo citado
+  // ("cimento", "areia", "vibrador") diz a conta — a do item, ou Material
+  // Só com obra citada no extrato (uma retirada de sócio não é material de
+  // obra), e só com palavra que distingue o item: o prefixo de categoria
+  // ("Elétrica - ", "Ferramentas - ") e a palavra que aparece em muitos
+  // itens não dizem nada.
+  if (!conta && citadas.length && (c.insumos || []).length) {
+    const deObra = new Set(obras.flatMap((o) => efPalavras(o.nome, 4)));
+    const df = efFrequenciaNoCatalogo(c.insumos);
+    let achou = null; melhor = 0;
+    for (const ins of c.insumos) {
+      if (!ins || ins.ativo === false) continue;
+      for (const nome of [efSemCategoria(ins.nome)].concat(ins.aliases || [])) {
+        const ws = efPalavras(nome, 5).filter((w) => !deObra.has(w) && !EF_PALAVRAS_DO_BANCO.has(w) && (df.get(w) || 0) <= 12);
+        const bate = ws.filter((w) => efTextoTem(alvo, w));
+        const peso = bate.join("").length;
+        if (peso > melhor) { melhor = peso; achou = { ins, w: bate[0] }; }
+      }
+    }
+    const ct = achou && plano.find((x) => x.id === (achou.ins.contaPadrao || "material"));
+    if (ct) { conta = ct; motivos.push(`conta ${ct.nome}: “${achou.w}” é do item ${achou.ins.nome} do catálogo`); }
+  }
+
+  // 4. a obra: citada no extrato; entre as citadas, a que tem essa conta
+  const pontos = (o) => {
+    const cs = contasDe(o);
+    return {
+      conta: conta ? cs.filter((x) => x.contaId === conta.id).length : 0,
+      forn: forn ? cs.filter((x) => ehDoForn(x, forn)).length : 0,
+      ultima: cs.reduce((u, x) => { const d = String(x.pagoEm || x.vencimento || ""); return d > u ? d : u; }, ""),
+    };
+  };
+  // o nome inteiro citado manda; depois, o histórico
+  const ordem = (a, b) => (Math.floor(b.bate / 10) - Math.floor(a.bate / 10)) || (b.p.forn - a.p.forn) || (b.p.conta - a.p.conta)
+    || (b.bate - a.bate) || b.p.ultima.localeCompare(a.p.ultima);
+  let obra = null;
+  if (citadas.length) {
+    const lista = citadas.map((x) => ({ ...x, p: pontos(x.o) })).sort(ordem);
+    const [a, b] = lista;
+    const decide = !b || a.bate > b.bate || a.p.forn > b.p.forn || a.p.conta > b.p.conta;
+    if (decide) {
+      obra = a.o;
+      const pq = a.p.forn ? `é onde estão os pagamentos a ${forn.nome}`
+        : a.p.conta ? `é onde estão os pagamentos de ${conta.nome}` : "o nome está no extrato";
+      motivos.push(`obra ${obra.nome}: ${citadas.length > 1 ? "citada no extrato e " : ""}${pq}`);
+    }
+  } else if (forn || conta) {
+    // nenhuma citada: a obra onde esse fornecedor (ou essa conta) mais aparece
+    const cont = {};
+    for (const o of obras) { const p = pontos(o); const n = forn ? p.forn : 0; if (n) cont[o.id] = n; }
+    const d = efDominante(cont, 2);
+    if (d) { obra = obras.find((o) => o.id === d.chave); motivos.push(`obra ${obra.nome}: ${d.vezes} de ${d.total} pagamentos a ${forn.nome}`); }
+  }
+
+  // 5. conta e obra conhecidas, fornecedor não: quem recebe essa conta nessa obra
+  let fornTexto = "";
+  if (!forn && conta) {
+    const fonte = obra ? [obra] : obras;
+    const cont = {};
+    for (const o of fonte) for (const x of contasDe(o)) {
+      if (x.contaId !== conta.id) continue;
+      const nome = String(x.favorecido || "").trim() || (fornecedores.find((f) => f.id === x.prestadorId) || {}).nome || "";
+      if (nome) cont[nome] = (cont[nome] || 0) + 1;
+    }
+    const d = efDominante(cont, 2, EF_FORNECEDOR_OUTROS);
+    if (d) {
+      forn = fornecedores.find((f) => efMesmoFornecedor(f.nome, d.chave)) || null;
+      if (!forn) fornTexto = d.chave;
+      motivos.push(`fornecedor ${forn ? forn.nome : d.chave}: ${d.vezes} de ${d.total} pagamentos de ${conta.nome}${obra ? " nesta obra" : ""}`);
+    }
+  }
+
+  const campos = {};
+  if (obra && conta) {
+    const cli = clientes.find((x) => x && x.id === obra.clienteId) || null;
+    const emp = typeof ehEmpreendimento === "function" ? ehEmpreendimento(cli) : !!(cli && cli.servicos && cli.servicos.empreendimento);
+    Object.assign(campos, {
+      unidadeId: emp ? "empreendimento" : "gestao_obras", contaFonte: "obra", contaId: conta.id,
+      clienteId: cli ? cli.id : "", cliente: cli ? cli.nome : "", empreendimentoId: emp && cli ? cli.id : "",
+      obraIdAlvo: obra.id, projeto: obra.nome || "",
+    });
+  }
+  if (forn) { campos.fornecedorId = forn.id; campos.fornecedor = forn.nome; }
+  else if (fornTexto) campos.fornecedor = fornTexto;
+  if (!Object.keys(campos).length) return null;
+  return { campos, motivos, naObra: campos.contaFonte === "obra" };
+}
+
+// A sugestão que a fila mostra e o formulário abre: a linha igual do mês
+// passado manda; o palpite completa o que ela não diz — ou propõe tudo,
+// quando não há linha igual (ou a igual veio de uma obra pela ponte, que não
+// diz a conta da obra). O "✓ Lançar assim" continua só para a linha igual.
+function sugestaoCompletaDoExtrato(movimento, lancamentos, ctx) {
+  const exato = sugestaoDoExtrato(movimento, lancamentos);
+  const p = palpiteDoExtrato(movimento, { ...(ctx || {}), lancamentos });
+  if (!p) return exato;
+  if (exato && !exato.daObra) {
+    const campos = { ...exato.campos };
+    const doForn = !campos.fornecedorId && !(campos.fornecedor && campos.fornecedor !== EF_FORNECEDOR_OUTROS);
+    if (doForn && (p.campos.fornecedorId || p.campos.fornecedor)) {
+      if (p.campos.fornecedorId) campos.fornecedorId = p.campos.fornecedorId;
+      campos.fornecedor = p.campos.fornecedor;
+      return { ...exato, campos, motivos: p.motivos.filter((x) => /^fornecedor /.test(x)) };
+    }
+    return exato;
+  }
+  const campos = p.naObra ? { ...p.campos } : { ...((exato && exato.campos) || {}), ...p.campos };
+  return { campos, de: exato ? exato.de : null, porDocumento: false, daObra: p.naObra || !!(exato && exato.daObra),
+    palpite: true, motivos: p.motivos };
 }
 
 // O formulário de uma linha do banco, como ele abre na fila: data e valor do
@@ -12411,7 +12652,7 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
 
 // Formulário de um lançamento. As travas são as do validarLancamento: a
 // mensagem aparece antes de gravar, não depois.
-function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, prestadores, aoCriarPrestador, insumos, cartoes, aoCadastrarInsumo, competenciaFixa, titulo, rotuloSalvar, atalhos, nomeEscritorio }) {
+function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, prestadores, aoCriarPrestador, insumos, cartoes, aoCadastrarInsumo, competenciaFixa, titulo, rotuloSalvar, atalhos, nomeEscritorio, motivos }) {
   const S = EF_ESTILO;
   const [f, setF] = useState(() => ({
     contaId: "", contaFonte: "", obraIdAlvo: "", fornecedorId: "", anexos: [], itens: [],
@@ -12758,6 +12999,15 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           {f.numeroDoc ? <>referência <b style={{ color: "#111827" }}>{f.numeroDoc}</b></> : "a referência sai ao gravar"}
         </div>
       </div>
+      {/* O porquê de cada campo que veio preenchido sem linha igual para
+          copiar — para conferir antes de lançar, não para lançar no escuro. */}
+      {lancNovo && (motivos || []).length > 0 && (
+        <div data-vk-palpite-form="1" style={{ fontSize: 12, color: "#1e3a8a", background: "#eef5ff", border: "1px solid rgba(4,116,244,0.22)",
+          borderRadius: 10, padding: "8px 10px", lineHeight: 1.5 }}>
+          <b>Pré-preenchido pelo histórico</b> — confira antes de lançar:
+          {(motivos || []).map((x, i) => <div key={i}>· {x}</div>)}
+        </div>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
         gap: 12, alignItems: "end" }}>
         {/* A unidade vem PRIMEIRO porque é ela que decide quais contas
@@ -13734,7 +13984,14 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                         parece transferência entre contas suas — não entra no resultado
                       </div>
                     )}
-                    {contaSug && (
+                    {sug && sug.palpite && (
+                      <div data-vk-palpite="1" style={{ fontSize: 11.5, color: "#6b7280", marginTop: 2 }}>
+                        sugestão: <b style={{ color: "#374151" }}>{[
+                          sug.campos.contaFonte === "obra" ? ((typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((x) => x.id === sug.campos.contaId) || {}).nome : (contaSug && contaSug.nome),
+                          sug.campos.projeto, sug.campos.fornecedor].filter(Boolean).join(" · ")}</b>
+                      </div>
+                    )}
+                    {contaSug && !(sug && sug.palpite) && (
                       <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 2 }}>
                         como em {dataBR(sug.de.lancadoEm) || "lançamento anterior"}: <b style={{ color: "#374151" }}>{contaSug.nome}</b>
                         {sug.campos.cliente ? ` · ${sug.campos.cliente}` : ""}
@@ -13772,7 +14029,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                       </div>
                     )}
                     <FormLancamentoEscritorio key={m.id} {...fila.formProps}
-                      inicial={fila.inicial(m)} competenciaFixa={fila.mes}
+                      inicial={fila.inicial(m)} competenciaFixa={fila.mes} motivos={(sug && sug.motivos) || []}
                       titulo={`Lançar · ${dataBR(m.data)}`} rotuloSalvar="Lançar e seguir" atalhos
                       aoSalvar={(l) => lancar(m, l, true)} aoCancelar={() => setAberto("")} />
                   </div>
@@ -14629,6 +14886,10 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   const [mesFecho, setMesFecho] = useState("");
 
   const lancs = lancamentosDoEscritorio(data);
+  // o que o palpite da fila do extrato lê: obras (com as contas), clientes
+  // e o cadastro de fornecedores
+  const ctxDoPalpite = { obras: (data || {}).obras || [], clientes: (data || {}).clientes || [], fornecedores: (data || {}).fornecedores || [],
+    insumos: (data || {}).materiais || [] };
   const cfgFin = ((data || {}).escritorio || {}).financeiro || {};
   const saldoAbertura = Number(cfgFin.saldoAbertura) || 0;
   const linhas = extratoEscritorio(lancs, { saldoAbertura });
@@ -15262,8 +15523,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             saldoLido: saldoLidoDoExtrato,
             fila: {
               mes: mesEmConferencia,
-              inicial: (m) => lancamentoDaLinhaDoExtrato(m, mesEmConferencia, sugestaoDoExtrato(m, lancs)),
-              sugestao: (m) => sugestaoDoExtrato(m, lancs),
+              inicial: (m) => lancamentoDaLinhaDoExtrato(m, mesEmConferencia, sugestaoCompletaDoExtrato(m, lancs, ctxDoPalpite)),
+              sugestao: (m) => sugestaoCompletaDoExtrato(m, lancs, ctxDoPalpite),
               lancar: lancarLinhaDoExtrato,
               rapido: (m) => lancamentoRapidoDoExtrato(m, mesEmConferencia, sugestaoDoExtrato(m, lancs), fechamentos),
               lancarVarias: lancarVariasDoExtrato,
