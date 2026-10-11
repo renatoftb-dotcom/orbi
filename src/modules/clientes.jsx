@@ -3192,9 +3192,34 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (r && r.erro) { dialogo.alertar({ titulo: r.erro, tipo: "aviso" }); return; }
     setPedidoEditando(null);
   };
+  // Prorrogar uma parcela de contrato: só ela muda. A parcela é refeita pela
+  // regra do contrato a cada abertura da tela, então a data nova fica
+  // anotada NO CONTRATO como exceção (a mesma do Recalibrar "uma a uma") —
+  // as outras parcelas seguem nas datas combinadas.
+  const abrirProrrogarParcela = (c) => {
+    setEditVenc({ obraId: c.obraId || (obraAtual && obraAtual.id), contratoId: c.contratoId,
+      titulo: [tituloCurtoConta(c), c.favorecido || ((prestadores.find(x => x && x.id === c.prestadorId) || {}).nome || "")].filter(Boolean).join(" · "),
+      contaIds: [c.id], pedidoIds: [], itens: 1, pagos: 0, vencimento: c.vencimento || hojeIso, antes: c.vencimento || "" });
+  };
   const salvarVencimento = () => {
     const f = editVenc; if (!f) return;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(f.vencimento || ""))) { dialogo.alertar({ titulo: "Escolha a data de vencimento", tipo: "aviso" }); return; }
+    if (f.contratoId) {
+      const alvo = ((obraAtual && obraAtual.contratos) || []).find(x => x && x.id === f.contratoId);
+      if (!alvo) { dialogo.alertar({ titulo: "Contrato não encontrado", mensagem: "Use o Recalibrar para mudar esta parcela.", tipo: "aviso" }); return; }
+      const agora = new Date().toISOString();
+      const ajustado = { ...ajustarVencimentos(alvo, [{ id: f.contaIds[0], vencimento: f.vencimento }]), recalibradoPor: quemSou(), recalibradoEm: agora };
+      const contratosNovos = (obraAtual.contratos || []).map(x => (x && x.id === alvo.id ? ajustado : x));
+      const antesPorId = {};
+      for (const c of contasDaObra) if (c) antesPorId[c.id] = c.vencimento;
+      const contasNovas = sincronizarContasDaObra(contasDaObra, contratosNovos).map(c => {
+        if (!c || c.pago || !antesPorId[c.id] || antesPorId[c.id] === c.vencimento) return c;
+        return registrarAto(c, "recalibrada", quemSou(), agora, `${dataDoDia(antesPorId[c.id])} → ${dataDoDia(c.vencimento)} (prorrogada)`);
+      });
+      gravarObras(obras.map(o => o.id === obraAtual.id ? { ...o, contratos: contratosNovos, contasPagar: contasNovas } : o));
+      setEditVenc(null);
+      return;
+    }
     const obra = (obras || []).find(o => o && o.id === f.obraId);
     if (!obra) { setEditVenc(null); return; }
     const atualizada = { ...obra,
@@ -5058,8 +5083,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               <input style={C.input} type="date" autoFocus value={editVenc.vencimento}
                 onChange={e => setEditVenc({ ...editVenc, vencimento: e.target.value })} />
               <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8, lineHeight: 1.5 }}>
-                {editVenc.itens === 1 ? "O item em aberto passa" : `Os ${editVenc.itens} itens em aberto passam`} a vencer nesta data
-                {editVenc.pagos ? ` — ${editVenc.pagos === 1 ? "o já pago fica" : `os ${editVenc.pagos} já pagos ficam`} como está.` : "."}
+                {editVenc.contratoId
+                  ? "Só esta parcela muda — as outras do contrato continuam nas datas combinadas. A data nova fica anotada no contrato."
+                  : <>{editVenc.itens === 1 ? "O item em aberto passa" : `Os ${editVenc.itens} itens em aberto passam`} a vencer nesta data
+                    {editVenc.pagos ? ` — ${editVenc.pagos === 1 ? "o já pago fica" : `os ${editVenc.pagos} já pagos ficam`} como está.` : "."}</>}
               </div>
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
                 <button onClick={() => setEditVenc(null)} style={C.btnSec}>Cancelar</button>
@@ -5726,8 +5753,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                               {perm.podeEditar && (
                                 <div data-vk-mantem-mes="1" data-vk-menu-canto="1" onClick={e => e.stopPropagation()} style={{ position: "absolute", top: 3, right: 4 }}>
                                   <MenuDeAcoes semBorda toque={isMobile} title="Mais ações da conta" itens={[
-                                    c.origem === "contrato" ? { rotulo: "Editar — muda no contrato", desativado: true }
-                                      : c.pago ? { rotulo: "Editar — desfaça o pagamento antes", desativado: true }
+                                    c.pago ? { rotulo: "Editar — desfaça o pagamento antes", desativado: true }
+                                      : c.origem === "contrato" ? { rotulo: "Editar vencimento", onClick: () => abrirProrrogarParcela(c) }
                                       : { rotulo: "Editar", onClick: () => abrirEdicaoDaConta(c) },
                                     c.origem === "contrato" ? { rotulo: "Excluir — muda no contrato", desativado: true }
                                       : c.origem === "cotacao" ? { rotulo: "Excluir — veio da cotação", desativado: true }
