@@ -5862,11 +5862,15 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
     // Etapa e grupo do catálogo (os mesmos da base de dados da obra); a
     // etapa da fórmula ao lado, para ver onde o catálogo mudou a linha.
     const cat = (data && data.materiais) || [];
-    const linhas = [["Etapa", "Etapa na fórmula", "Sub-etapa", "Item", "Grupo materiais", "Unidade", "Qtd", "Preço", "Total"]];
+    const linhas = [["Macro-etapa", "Etapa", "Etapa na fórmula", "Sub-etapa", "Código", "Item", "Grupo materiais", "Conta padrão", "Unidade", "Qtd", "Preço", "Total"]];
+    const plano = typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [];
     for (const i of obra.orcamento.itens) {
       const o = typeof origemDaEtapaDaLinha === "function" ? origemDaEtapaDaLinha(i, cat) : { nome: i.etapa };
       const g = typeof grupoDaLinhaDoOrcamento === "function" ? grupoDaLinhaDoOrcamento(i, cat) : "";
-      linhas.push([o.nome || i.etapa, i.etapa, i.subEtapa || "", i.item, g, i.unidade, i.qtd, i.preco, i.total]);
+      const ins = typeof insumoDaLinhaDoOrcamento === "function" ? insumoDaLinhaDoOrcamento(i, cat) : null;
+      const conta = ins && ins.contaPadrao ? ((plano.find((c) => c.id === ins.contaPadrao) || {}).nome || ins.contaPadrao) : "";
+      const macro = o.id && typeof macroDaEtapaObra === "function" ? macroDaEtapaObra(o.id) : "";
+      linhas.push([macro, o.nome || i.etapa, i.etapa, i.subEtapa || "", (ins && ins.codigo) || i.insumoCodigo || "", i.item, g, conta, i.unidade, i.qtd, i.preco, i.total]);
     }
     const csv = linhas.map((l) => l.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -6580,7 +6584,8 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
       : { id: "", nome: item.etapa, ordem: 900, peloCatalogo: false };
     const chave = o.id || ("?" + item.etapa);
     if (!porChave[chave]) {
-      porChave[chave] = { ordem: o.id ? o.ordem : 900 + (Number(item.ordem) || 0), etapa: o.nome || item.etapa, itens: [] };
+      porChave[chave] = { ordem: o.id ? o.ordem : 900 + (Number(item.ordem) || 0), etapa: o.nome || item.etapa,
+        macro: o.id && typeof macroDaEtapaObra === "function" ? macroDaEtapaObra(o.id) : "", itens: [] };
       itensPorEtapa.push(porChave[chave]);
     }
     const grupo = typeof grupoDaLinhaDoOrcamento === "function" ? grupoDaLinhaDoOrcamento(item, insumosCat) : "";
@@ -6683,7 +6688,12 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             <div key={grupo.etapa} style={{ marginBottom: 8, border: "1px solid rgba(38,36,33,0.1)", borderRadius: 10, overflow: "hidden" }}>
               <button type="button" onClick={() => toggleEtapa(grupo.etapa)}
                 style={{ width: "100%", display: "flex", justifyContent: "space-between", padding: "10px 14px", background: "#f9fafb", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>{grupo.etapa}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", textAlign: "left" }}>
+                  {grupo.macro && grupo.macro !== grupo.etapa && (
+                    <span style={{ fontWeight: 500, color: "#6b7280" }}>{grupo.macro} › </span>
+                  )}
+                  {grupo.etapa}
+                </span>
                 <span style={{ fontSize: 12, color: "#4b5563" }}>{formatoBRL(subtotal)} {colapsado ? "▼" : "▲"}</span>
               </button>
               {!colapsado && (

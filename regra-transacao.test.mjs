@@ -117,7 +117,8 @@ teste("item do catalogo traz etapa e grupo, so no que esta em branco", () => {
   const d = { insumoCodigo: "NAO-EXISTE", etapa: "" };
   assert.strictEqual(M.comPadraoDoInsumo(d, CAT), d);
   // mao de obra sem insumo cai na regra da conta
-  assert.strictEqual(M.ligarAoCatalogo({ contaId: "empreiteiro", etapa: "" }, CAT).etapa, "prestadores");
+  assert.strictEqual(M.ligarAoCatalogo({ contaId: "empreiteiro", etapa: "" }, CAT).etapa, "prest_empreiteiro");
+  assert.strictEqual(M.ligarAoCatalogo({ contaId: "pedreiros", etapa: "" }, CAT).etapa, "prestadores");
 });
 
 teste("na gravacao, so a conta nova ou mexida e ligada; obra parada nao muda", () => {

@@ -47,6 +47,10 @@ const PLANO_CONTAS = [
   { id: "aluguel_equip",      nome: "Aluguel de ferramentas e equipamentos", grupo: "materiais" },
   { id: "combustivel",        nome: "Combustível",                       grupo: "materiais" },
   { id: "compra_ferramentas", nome: "Compra de ferramentas",             grupo: "materiais" },
+  // Equipamento que fica na obra (boiler, aquecedor, bomba, filtro de
+  // piscina, sauna, churrasqueira): não é material de construção nem
+  // ferramenta. Conta pedida na revisão do catálogo (out/26).
+  { id: "equipamentos",       nome: "Equipamentos",                      grupo: "materiais" },
   { id: "agua",               nome: "Conta de água",                     grupo: "materiais" },
   { id: "energia",            nome: "Energia elétrica",                  grupo: "materiais" },
   { id: "instalacoes_obra",   nome: "Instalações da obra",               grupo: "materiais" },
@@ -143,7 +147,7 @@ const ETAPAS_OBRA = [
   { id:"pre_obra",            nome:"Instalações pré-obra e projetos",  macro:"Pré-obra" },
   { id:"poste_padrao",        nome:"Poste padrão",                     macro:"Pré-obra" },
   { id:"terraplanagem",       nome:"Terraplanagem",                    macro:"Terraplanagem e demolições" },
-  { id:"demolicoes",          nome:"Demolições e entulhos",            macro:"Terraplanagem e demolições" },
+  { id:"demolicoes",          nome:"Demolições e entulhos",            macro:"Demolições e entulhos" },
   { id:"arrimos",             nome:"Arrimos",                          macro:"Arrimos" },
   { id:"imp_arrimo",          nome:"Impermeabilização de arrimo",      macro:"Impermeabilizações" },
   // O gabarito — o cavalete de tábuas que guarda os eixos das paredes até a
@@ -155,10 +159,14 @@ const ETAPAS_OBRA = [
   // linha genérica, e sem ela o gasto caía em "Outros".
   { id:"impermeabilizacao",   nome:"Impermeabilização",                macro:"Impermeabilizações" },
   { id:"contrapiso_int_1",    nome:"Contrapiso interno pav. 1",        macro:"Contrapisos" },
-  { id:"supra_paredes_1",     nome:"Supraestrutura e paredes pav. 1",  macro:"Supraestrutura e paredes" },
-  { id:"laje_1",              nome:"Laje pav. 1",                      macro:"Lajes" },
-  { id:"supra_paredes_2",     nome:"Supraestrutura e paredes pav. 2",  macro:"Supraestrutura e paredes" },
-  { id:"laje_2",              nome:"Laje pav. 2",                      macro:"Lajes" },
+  // Por pavimento. Os ids _1/_2 são de antes e ficam (são chave gravada);
+  // o nome segue a planilha: _1 é o Térreo, _2 o Pav 1, _3 o Pav 2.
+  { id:"supra_paredes_1",     nome:"Supraestrutura e paredes Térreo",  macro:"Supraestrutura e paredes", familia:"supra_paredes", pavimento:1 },
+  { id:"laje_1",              nome:"Laje Térreo",                      macro:"Lajes", familia:"laje", pavimento:1 },
+  { id:"supra_paredes_2",     nome:"Supraestrutura e paredes Pav 1",   macro:"Supraestrutura e paredes", familia:"supra_paredes", pavimento:2 },
+  { id:"laje_2",              nome:"Laje Pav 1",                       macro:"Lajes", familia:"laje", pavimento:2 },
+  { id:"supra_paredes_3",     nome:"Supraestrutura e paredes Pav 2",   macro:"Supraestrutura e paredes", familia:"supra_paredes", pavimento:3 },
+  { id:"laje_3",              nome:"Laje Pav 2",                       macro:"Lajes", familia:"laje", pavimento:3 },
   { id:"coberturas",          nome:"Coberturas",                       macro:"Coberturas" },
   { id:"imp_perimetro",       nome:"Impermeabilização perímetro de paredes", macro:"Impermeabilizações" },
   { id:"imp_areas_molhadas",  nome:"Impermeabilização de áreas molhadas",    macro:"Impermeabilizações" },
@@ -166,16 +174,19 @@ const ETAPAS_OBRA = [
   { id:"eletrica",            nome:"Elétrica",                         macro:"Elétrica" },
   { id:"hidraulica",          nome:"Hidráulica",                       macro:"Hidráulica" },
   { id:"esgoto_pluvial",      nome:"Esgoto e pluvial",                 macro:"Hidráulica" },
+  // bases de registro: vão para a parede junto com o cano, não com a louça
+  { id:"metais",              nome:"Metais",                           macro:"Hidráulica" },
   { id:"contrapiso_ext",      nome:"Contrapisos externos",             macro:"Contrapisos" },
   { id:"massa_contrapiso_int",nome:"Massiamento de contrapisos internos",    macro:"Contrapisos" },
   { id:"massa_contrapiso_ext",nome:"Massiamento de contrapisos externos",    macro:"Contrapisos" },
   { id:"muros",               nome:"Muros",                            macro:"Muros" },
+  { id:"cercas",              nome:"Cercas",                           macro:"Cercas" },
   { id:"portoes",             nome:"Portões",                          macro:"Portões" },
   { id:"pisos_revest",        nome:"Pisos e revestimentos",            macro:"Pisos e revestimentos" },
   { id:"forros",              nome:"Forros",                           macro:"Forros" },
   { id:"pintura",             nome:"Pintura",                          macro:"Pintura" },
   { id:"soleiras_peitoris",   nome:"Soleiras e peitoris",              macro:"Granito" },
-  { id:"bancadas",            nome:"Bancadas",                         macro:"Granito" },
+  { id:"bancadas",            nome:"Bancadas Pedra",                   macro:"Granito" },
   { id:"portas_internas",     nome:"Portas internas",                  macro:"Portas e esquadrias" },
   { id:"esquadrias",          nome:"Esquadrias",                       macro:"Portas e esquadrias" },
   { id:"vidros_plasticos",    nome:"Vidros e plásticos",               macro:"Vidros e plásticos" },
@@ -184,6 +195,7 @@ const ETAPAS_OBRA = [
   { id:"marcenaria",          nome:"Marcenaria",                       macro:"Marcenaria" },
   { id:"calcadas",            nome:"Calçadas",                         macro:"Calçadas" },
   { id:"aquecimento",         nome:"Aquecimento e pressurização",      macro:"Aquecimento e pressurização" },
+  { id:"equipamentos_sistemas", nome:"Equipamentos e sistemas",        macro:"Equipamentos e sistemas" },
   { id:"piscina_equip",       nome:"Piscina — filtro, hidro e aquecimento", macro:"Piscina" },
   { id:"piscina_fundacao",    nome:"Piscina — fundação",               macro:"Piscina" },
   { id:"piscina_supra",       nome:"Piscina — supraestrutura e paredes", macro:"Piscina" },
@@ -196,10 +208,130 @@ const ETAPAS_OBRA = [
   { id:"locacao_equip",       nome:"Locação de equipamentos",          macro:"Locação de equipamentos" },
   // Ferramenta comprada para a obra tem etapa própria na planilha do
   // escritório; sem ela o gasto caía em "Outros".
-  { id:"ferramentas",         nome:"Ferramentas",                      macro:"Locação de equipamentos" },
+  { id:"ferramentas",         nome:"Ferramentas",                      macro:"Ferramentas" },
+  // Prestadores: a etapa genérica fica para a mão de obra que não tem
+  // ofício próprio (pedreiro avulso, ajudante, encarregado). Os ofícios do
+  // catálogo têm etapa própria — é o que põe o empreiteiro orçado e o
+  // empreiteiro pago na mesma linha.
   { id:"prestadores",         nome:"Prestadores de serviços",          macro:"Prestadores de serviços" },
+  { id:"prest_empreiteiro",   nome:"Empreiteiro",                      macro:"Prestadores de serviços" },
+  { id:"prest_pintor",        nome:"Pintor",                           macro:"Prestadores de serviços" },
+  { id:"prest_eletricista",   nome:"Eletricista",                      macro:"Prestadores de serviços" },
+  { id:"prest_encanador",     nome:"Encanador",                        macro:"Prestadores de serviços" },
+  { id:"prest_carpinteiro",   nome:"Carpinteiro",                      macro:"Prestadores de serviços" },
+  { id:"prest_impermeabilizador", nome:"Impermeabilizador",            macro:"Prestadores de serviços" },
+  { id:"prest_marceneiro_portas", nome:"Marceneiro Portas Internas",   macro:"Prestadores de serviços" },
+  { id:"prest_instalacao_portas", nome:"Instalação Portas Internas",   macro:"Prestadores de serviços" },
+  { id:"prest_serralheiro",   nome:"Serralheiro",                      macro:"Prestadores de serviços" },
+  { id:"prest_instalador_ar", nome:"Instalador AR",                    macro:"Prestadores de serviços" },
+  { id:"prest_instalador_aquecedores", nome:"Instalador Aquecedores",  macro:"Prestadores de serviços" },
+  { id:"prest_instalador_piscina", nome:"Instalador Equip. Piscina",   macro:"Prestadores de serviços" },
+  { id:"prest_gestao_obra",   nome:"Gestão Obra",                      macro:"Prestadores de serviços" },
+  { id:"deposito_reembolsos", nome:"Depósito & Reembolsos",            macro:"Depósito & Reembolsos" },
   { id:"outros",              nome:"Outros",                           macro:"Outros" },
 ];
+
+// ══════════════════════════════════════════════════════════════
+// ETAPA POR PAVIMENTO
+// ══════════════════════════════════════════════════════════════
+// Tijolo, canaleta, bloco e laje não têm UMA etapa: o mesmo tijolo sobe a
+// parede do térreo e a do Pav 1. No catálogo eles levam a FAMÍLIA
+// ("supra_paredes", "laje") e o pavimento se decide no uso:
+//   - no orçamento, quem sabe é a fórmula ("Paredes Pav. Térreo");
+//   - no lançamento, a pessoa escolhe o pavimento.
+const PAVIMENTOS_OBRA = [
+  { n: 1, nome: "Térreo" },
+  { n: 2, nome: "Pav 1" },
+  { n: 3, nome: "Pav 2" },
+];
+const ETAPAS_POR_PAVIMENTO = [
+  { id: "supra_paredes", nome: "Supraestrutura e paredes", macro: "Supraestrutura e paredes" },
+  { id: "laje",          nome: "Laje",                     macro: "Lajes" },
+];
+
+function familiaDeEtapa(id) {
+  return ETAPAS_POR_PAVIMENTO.find((f) => f.id === id) || null;
+}
+// As etapas de uma família, do térreo para cima.
+function etapasDaFamilia(familiaId) {
+  return ETAPAS_OBRA.filter((e) => e.familia === familiaId)
+    .slice().sort((a, b) => (a.pavimento || 0) - (b.pavimento || 0));
+}
+function etapaDaFamiliaNoPavimento(familiaId, pavimento) {
+  return (etapasDaFamilia(familiaId).find((e) => e.pavimento === pavimento) || {}).id || "";
+}
+function nomeDoPavimento(n) {
+  return (PAVIMENTOS_OBRA.find((p) => p.n === n) || {}).nome || "";
+}
+// Vale no catálogo: uma etapa da obra ou uma família por pavimento.
+function etapaDoCatalogoValida(id) {
+  const k = String(id || "").trim();
+  return !!k && (ETAPAS_OBRA.some((e) => e.id === k) || !!familiaDeEtapa(k));
+}
+function nomeDaEtapaObra(id) {
+  if (!id) return "";
+  const e = ETAPAS_OBRA.find((x) => x.id === id);
+  if (e) return e.nome;
+  const f = familiaDeEtapa(id);
+  return f ? f.nome + " (por pavimento)" : String(id);
+}
+function macroDaEtapaObra(id) {
+  const e = ETAPAS_OBRA.find((x) => x.id === id);
+  if (e) return e.macro || "";
+  const f = familiaDeEtapa(id);
+  return f ? f.macro : "";
+}
+// As etapas que o CATÁLOGO aceita: as da obra, com cada família por
+// pavimento logo antes do térreo dela ("Supraestrutura e paredes (por
+// pavimento)", depois Térreo, Pav 1, Pav 2).
+function etapasDoCatalogo() {
+  const out = [], postas = {};
+  ETAPAS_OBRA.forEach((e) => {
+    if (e.familia && !postas[e.familia]) {
+      const f = familiaDeEtapa(e.familia);
+      if (f) out.push({ id: f.id, nome: f.nome + " (por pavimento)", macro: f.macro, porPavimento: true });
+      postas[e.familia] = true;
+    }
+    out.push(e);
+  });
+  return out;
+}
+// A etapa que o insumo FIXA no lançamento: a do catálogo, menos quando é
+// uma família por pavimento (aí quem diz é quem lança).
+function etapaFixaDoInsumo(insumo) {
+  const e = insumo ? String(insumo.etapaPadrao || "").trim() : "";
+  return e && !familiaDeEtapa(e) ? e : "";
+}
+// A família do insumo, quando ele é "por pavimento".
+function familiaDoInsumo(insumo) {
+  return insumo ? familiaDeEtapa(String(insumo.etapaPadrao || "").trim()) : null;
+}
+
+// As opções do campo Etapa num lançamento, agrupadas pela macro-etapa.
+// Insumo por pavimento: os pavimentos dele vêm primeiro, num grupo próprio
+// ("Escolha o pavimento"), e as demais etapas continuam lá embaixo — o
+// tijolo que foi para a churrasqueira também se lança.
+function opcoesDeEtapaDoLancamento(insumo, rotuloVazio) {
+  const fam = familiaDoInsumo(insumo);
+  const vazio = rotuloVazio == null ? [] : [{ valor: "", rotulo: rotuloVazio, grupo: "" }];
+  const daFamilia = fam ? etapasDaFamilia(fam.id) : [];
+  const ids = {};
+  daFamilia.forEach((e) => { ids[e.id] = true; });
+  const topo = daFamilia.map((e) => ({ valor: e.id,
+    rotulo: nomeDoPavimento(e.pavimento) + " — " + fam.nome, grupo: "Escolha o pavimento" }));
+  const resto = ETAPAS_OBRA.filter((e) => !ids[e.id])
+    .map((e) => ({ valor: e.id, rotulo: e.nome, grupo: e.macro || "" }));
+  return vazio.concat(topo, resto);
+}
+// A etapa gravada não é do pavimento (o insumo é por pavimento e a etapa
+// está vazia ou é de outra família): a tela pede o pavimento.
+function faltaPavimento(insumo, etapaId) {
+  const fam = familiaDoInsumo(insumo);
+  if (!fam) return false;
+  const e = String(etapaId || "").trim();
+  return !e;
+}
+
 
 // ══════════════════════════════════════════════════════════════
 // GRUPO DE MATERIAL — UM VOCABULÁRIO SÓ
@@ -214,8 +346,9 @@ const ETAPAS_OBRA = [
 // diz "Louças e metais"; "Tubulação PVC" era uma terceira "Hidráulica".
 // `grupoCanonico` traduz na leitura — nada é reescrito no banco.
 const GRUPOS_MATERIAL = [
-  "Aço", "Areia e pedra", "Argamassas", "Calhas e rufos", "Cimento", "Concreto",
-  "Elétrica e iluminação", "Entulhos", "Equipamentos e sistemas", "Esquadrias",
+  "Aço", "Água", "Areia e pedra", "Argamassas", "Calhas e rufos", "Cercas", "Cimento", "Concreto",
+  "Demolições e entulhos", "Depósito & Reembolsos",
+  "Elétrica e iluminação", "Equipamentos e sistemas", "Esquadrias",
   "Ferramentas", "Fixação", "Forros e gesso", "Hidráulica", "Impermeabilizantes",
   "Lajes", "Locação de equipamentos", "Louças e metais", "Madeira de caixaria",
   "Madeira de estrutura", "Marcenaria", "Pisos e revestimentos",
@@ -232,7 +365,8 @@ const GRUPO_APELIDOS = {
   "metais": "Louças e metais",
   "tubulacao pvc": "Hidráulica",
   "granito": "Pisos e revestimentos",
-  "entulho": "Entulhos",
+  "entulho": "Demolições e entulhos",
+  "entulhos": "Demolições e entulhos",
 };
 
 function grupoCanonico(nome) {
@@ -288,7 +422,7 @@ function normalizarNomeEtapa(s) {
 function pavimentoDaSubEtapa(subEtapa) {
   const s = normalizarNomeEtapa(subEtapa);
   if (/\bterreo\b/.test(s)) return 1;
-  if (/\bpav\s*2\b/.test(s)) return 3;      // não existe hoje, mas não se inventa
+  if (/\bpav\s*2\b/.test(s)) return 3;      // o Pav 2 (sobrado de três andares)
   if (/\bpav\s*1\b/.test(s)) return 2;
   return 1;                                  // sem dizer, é o térreo
 }
@@ -334,10 +468,10 @@ function etapaDoOrcamento(etapa, subEtapa) {
   // Piscina e as etapas por pavimento não se resolvem pelo nome
   if (n === "piscina") return ETAPA_PISCINA_POR_SUB[normalizarNomeEtapa(subEtapa)] || "";
   if (n === "supra estrutura e paredes") {
-    return pavimentoDaSubEtapa(subEtapa) >= 2 ? "supra_paredes_2" : "supra_paredes_1";
+    return etapaDaFamiliaNoPavimento("supra_paredes", Math.min(3, pavimentoDaSubEtapa(subEtapa))) || "supra_paredes_1";
   }
   if (n === "viga respaldo e laje") {
-    return pavimentoDaSubEtapa(subEtapa) >= 2 ? "laje_2" : "laje_1";
+    return etapaDaFamiliaNoPavimento("laje", Math.min(3, pavimentoDaSubEtapa(subEtapa))) || "laje_1";
   }
 
   const apelido = ETAPA_APELIDOS_ORCAMENTO[n];
@@ -384,7 +518,16 @@ function etapaDaLinhaDoOrcamento(linha, insumos) {
   const ins = insumoDaLinhaDoOrcamento(l, insumos);
   const doCatalogo = ins ? String(ins.etapaPadrao || "").trim() : "";
   if (doCatalogo && ETAPAS_OBRA.some((e) => e.id === doCatalogo)) return doCatalogo;
-  return etapaDoOrcamento(l.etapa, l.subEtapa);
+  const daFormula = etapaDoOrcamento(l.etapa, l.subEtapa);
+  // Por pavimento: o catálogo diz a família, a fórmula diz o pavimento. Se a
+  // fórmula usa o insumo fora da família (o tijolinho da piscina), vale a
+  // fórmula; se ela não disser etapa nenhuma, o pavimento sai da subetapa.
+  const fam = familiaDeEtapa(doCatalogo);
+  if (fam) {
+    if (daFormula) return daFormula;
+    return etapaDaFamiliaNoPavimento(fam.id, Math.min(3, pavimentoDaSubEtapa(l.subEtapa))) || "";
+  }
+  return daFormula;
 }
 // A mesma leitura, com o porquê: para a tela mostrar "fórmula: Louças e
 // metais" quando o catálogo levou a linha para outra etapa.
@@ -506,10 +649,26 @@ function frasesDasFaltas(faltas) {
 // escritório): a conta escolhida já traz a etapa e o grupo, e a pessoa
 // só mexe se quiser outra coisa. ──
 const PADRAO_MAO_DE_OBRA = { etapa: "prestadores", grupoMaterial: "Prestadores de serviços" };
+// O ofício que tem etapa própria (revisão do catálogo, out/26) leva a
+// conta para ela: o empreiteiro pago cai na mesma etapa do empreiteiro
+// orçado. Os demais (pedreiro avulso, ajudante, encarregado, gesseiro...)
+// continuam na etapa genérica de prestadores.
+const ETAPA_DA_CONTA_MAO_DE_OBRA = {
+  empreiteiro: "prest_empreiteiro",
+  pintor: "prest_pintor",
+  eletricista: "prest_eletricista",
+  encanador: "prest_encanador",
+  carpinteiro: "prest_carpinteiro",
+  impermeabilizacao: "prest_impermeabilizador",
+  marceneiro: "prest_marceneiro_portas",
+  serralheiro: "prest_serralheiro",
+  instalador_ar: "prest_instalador_ar",
+};
 
 function padraoDaContaObra(contaId) {
   const c = (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((x) => x && x.id === contaId);
-  return c && c.grupo === "maoDeObra" ? { ...PADRAO_MAO_DE_OBRA } : { etapa: "", grupoMaterial: "" };
+  if (!c || c.grupo !== "maoDeObra") return { etapa: "", grupoMaterial: "" };
+  return { ...PADRAO_MAO_DE_OBRA, etapa: ETAPA_DA_CONTA_MAO_DE_OBRA[c.id] || PADRAO_MAO_DE_OBRA.etapa };
 }
 
 // Preenche o que está em branco. Nunca troca o que a pessoa escolheu.
@@ -551,13 +710,51 @@ function comPadraoDoInsumo(obj, insumos) {
   const ins = (insumos || []).find((m) => m && (m.codigo === obj.insumoCodigo || m.id === obj.insumoCodigo));
   if (!ins) return obj;
   const vazio = (v) => String(v == null ? "" : v).trim() === "";
-  const poeEtapa = vazio(obj.etapa) && vazio(obj.etapaId) && !vazio(ins.etapaPadrao);
+  // insumo por pavimento: a família não é etapa — o pavimento quem diz é
+  // quem lança, e a etapa fica em branco até ele dizer
+  const etapaFixa = vazio(ins.etapaPadrao) || familiaDeEtapa(String(ins.etapaPadrao).trim()) ? "" : ins.etapaPadrao;
+  const poeEtapa = vazio(obj.etapa) && vazio(obj.etapaId) && !!etapaFixa;
   const poeGrupo = vazio(obj.grupoMaterial) && !vazio(ins.grupo);
-  if (!poeEtapa && !poeGrupo) return obj;
+  const poeConta = vazio(obj.contaId) && !vazio(ins.contaPadrao);
+  if (!poeEtapa && !poeGrupo && !poeConta) return obj;
   const r = { ...obj };
-  if (poeEtapa) r.etapa = ins.etapaPadrao;
+  if (poeEtapa) r.etapa = etapaFixa;
   if (poeGrupo) r.grupoMaterial = ins.grupo;
+  if (poeConta) r.contaId = ins.contaPadrao;
   return r;
+}
+
+// O que muda num lançamento quando a pessoa ESCOLHE um item do catálogo:
+// a conta, a etapa e o grupo passam a ser os do item. O que ela tinha
+// escolhido à mão antes do item é trocado — é o gesto de escolher o item
+// que manda (é ele que liga a compra à linha do orçamento). Insumo por
+// pavimento: a etapa só fica se já for de um dos pavimentos dele.
+function padraoAoEscolherInsumo(insumo, atual) {
+  const a = atual || {};
+  if (!insumo) return {};
+  const vazio = (v) => String(v == null ? "" : v).trim() === "";
+  const muda = {};
+  if (!vazio(insumo.contaPadrao)) muda.contaId = insumo.contaPadrao;
+  if (!vazio(insumo.grupo)) muda.grupoMaterial = insumo.grupo;
+  const fam = familiaDoInsumo(insumo);
+  if (fam) {
+    const ok = etapasDaFamilia(fam.id).some((e) => e.id === (a.etapa || a.etapaId));
+    if (!ok) muda.etapa = "";
+  } else if (!vazio(insumo.etapaPadrao) && etapaDoCatalogoValida(insumo.etapaPadrao)) {
+    muda.etapa = insumo.etapaPadrao;
+  }
+  return muda;
+}
+
+// O lançamento depois de escolher o item: código, descrição e unidade (só o
+// que estava em branco) e o padrão do item (conta, etapa, grupo).
+function lancamentoComInsumo(atual, insumo) {
+  const f = atual || {};
+  if (!insumo) return f;
+  return { ...f, insumoCodigo: insumo.codigo || insumo.id || "",
+    descricao: f.descricao || insumo.nome || "",
+    unidade: f.unidade || insumo.unidade || "",
+    ...padraoAoEscolherInsumo(insumo, f) };
 }
 
 // Catálogo primeiro (é mais específico), depois a conta (mão de obra).

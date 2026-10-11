@@ -6825,6 +6825,11 @@ var INSUMO_GRUPOS = [
   { prefixo: "FOR", nome: "Forros e gesso" },
   { prefixo: "EQP", nome: "Equipamentos e sistemas" },
   { prefixo: "OUT", nome: "Outros" },
+  // grupos que nasceram na revisão do catálogo (out/26)
+  { prefixo: "CER", nome: "Cercas" },
+  { prefixo: "AGU", nome: "Água" },
+  { prefixo: "DEM", nome: "Demolições e entulhos" },
+  { prefixo: "DEP", nome: "Depósito & Reembolsos" },
 ];
 
 var INSUMO_UNIDADES = [
@@ -7650,13 +7655,16 @@ var SUGESTOES_POR_GRUPO = {
   "Forros": "forros",
   "Esquadrias": "esquadrias",
   "Portas e fechaduras": "portas_internas",
-  "Tijolos e canaletas": "supra_paredes_1",
-  "Lajes": "laje_1",
-  "Trilhos e capas de laje": "laje_1",
+  // por pavimento: o catálogo guarda a família, o pavimento vem no uso
+  "Tijolos e canaletas": "supra_paredes",
+  "Lajes": "laje",
+  "Trilhos e capas de laje": "laje",
   "Impermeabilizantes": "impermeabilizacao",
   "Granito": "soleiras_peitoris",
   "Marcenaria": "marcenaria",
   "Entulhos": "demolicoes",
+  "Demolições e entulhos": "demolicoes",
+  "Cercas": "cercas",
   // Ferramenta comprada e equipamento alugado têm etapa própria na planilha
   // do escritório, e o grupo serve a ela e a mais nenhuma — não há o que
   // chutar aqui. Sem estas três linhas, toda compra de ferramenta chegava ao
@@ -7688,7 +7696,8 @@ function sugestoesDeEtapa(insumos) {
   });
   var fora = Object.keys(por).map(function (id) {
     var e = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).find(function (x) { return x.id === id; });
-    return { etapaId: id, nome: e ? e.nome : id, itens: por[id].itens, quantos: por[id].itens.length };
+    var nome = e ? e.nome : (typeof nomeDaEtapaObra === "function" ? nomeDaEtapaObra(id) : id);
+    return { etapaId: id, nome: nome, itens: por[id].itens, quantos: por[id].itens.length };
   });
   fora.sort(function (a, b) { return b.quantos - a.quantos; });
   var total = fora.reduce(function (s, g) { return s + g.quantos; }, 0);
@@ -7938,7 +7947,7 @@ function InsumoForm({ insumo, insumos, onSalvar, onCancelar, isMobile }) {
           <SelectBusca style={INS_S.input} value={f.etapaPadrao || ""}
             onChange={v => set("etapaPadrao", v)} placeholder="Procurar etapa…"
             opcoes={[{ valor: "", rotulo: "— decide na compra —" }].concat(
-              (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(function (et) {
+              (typeof etapasDoCatalogo === "function" ? etapasDoCatalogo() : (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [])).map(function (et) {
                 return { valor: et.id, rotulo: et.nome, grupo: et.macro || "" };
               }))} />
         </div>
@@ -8451,7 +8460,7 @@ function Insumos({ data, save }) {
     if (exportando) return;
     setExportando(true);
     var plan = linhasDoCatalogoParaExportar(filtrados.map(function (x) { return x.i; }), {
-      etapas: typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [],
+      etapas: (typeof etapasDoCatalogo === "function" ? etapasDoCatalogo() : (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [])),
       contas: typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [],
     });
     var hoje = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -8754,7 +8763,7 @@ function Insumos({ data, save }) {
             placeholder="Procurar etapa…"
             opcoes={[{ valor: "", rotulo: "Qualquer etapa" },
                      { valor: "__sem__", rotulo: "— sem etapa padrão —" }].concat(
-              (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(function (et) {
+              (typeof etapasDoCatalogo === "function" ? etapasDoCatalogo() : (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [])).map(function (et) {
                 return { valor: et.id, rotulo: et.nome, grupo: et.macro || "" };
               }))} />
         </div>
@@ -8891,7 +8900,7 @@ function Insumos({ data, save }) {
               <SelectBusca style={Object.assign({}, INS_S.input, { width: "auto", minWidth: 220 })}
                 value={etapaLote} onChange={v => setEtapaLote(v)} placeholder="Procurar etapa…"
                 opcoes={[{ valor: "", rotulo: "— tirar a etapa —" }].concat(
-                  (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(function (et) {
+                  (typeof etapasDoCatalogo === "function" ? etapasDoCatalogo() : (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [])).map(function (et) {
                     return { valor: et.id, rotulo: et.nome, grupo: et.macro || "" };
                   }))} />
               <button style={INS_S.btn} onClick={aplicarEtapaEmLote}>Aplicar</button>
@@ -8955,7 +8964,7 @@ function Insumos({ data, save }) {
                           <td style={{ padding: "10px 12px", color: x.i.etapaPadrao ? "#111827" : "#9ca3af" }}>
                             {(function () {
                               if (!x.i.etapaPadrao) return "—";
-                              var et = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [])
+                              var et = (typeof etapasDoCatalogo === "function" ? etapasDoCatalogo() : (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []))
                                 .find(function (e) { return e.id === x.i.etapaPadrao; });
                               return et ? et.nome : x.i.etapaPadrao;
                             })()}
@@ -9045,6 +9054,10 @@ const PLANO_CONTAS = [
   { id: "aluguel_equip",      nome: "Aluguel de ferramentas e equipamentos", grupo: "materiais" },
   { id: "combustivel",        nome: "Combustível",                       grupo: "materiais" },
   { id: "compra_ferramentas", nome: "Compra de ferramentas",             grupo: "materiais" },
+  // Equipamento que fica na obra (boiler, aquecedor, bomba, filtro de
+  // piscina, sauna, churrasqueira): não é material de construção nem
+  // ferramenta. Conta pedida na revisão do catálogo (out/26).
+  { id: "equipamentos",       nome: "Equipamentos",                      grupo: "materiais" },
   { id: "agua",               nome: "Conta de água",                     grupo: "materiais" },
   { id: "energia",            nome: "Energia elétrica",                  grupo: "materiais" },
   { id: "instalacoes_obra",   nome: "Instalações da obra",               grupo: "materiais" },
@@ -9141,7 +9154,7 @@ const ETAPAS_OBRA = [
   { id:"pre_obra",            nome:"Instalações pré-obra e projetos",  macro:"Pré-obra" },
   { id:"poste_padrao",        nome:"Poste padrão",                     macro:"Pré-obra" },
   { id:"terraplanagem",       nome:"Terraplanagem",                    macro:"Terraplanagem e demolições" },
-  { id:"demolicoes",          nome:"Demolições e entulhos",            macro:"Terraplanagem e demolições" },
+  { id:"demolicoes",          nome:"Demolições e entulhos",            macro:"Demolições e entulhos" },
   { id:"arrimos",             nome:"Arrimos",                          macro:"Arrimos" },
   { id:"imp_arrimo",          nome:"Impermeabilização de arrimo",      macro:"Impermeabilizações" },
   // O gabarito — o cavalete de tábuas que guarda os eixos das paredes até a
@@ -9153,10 +9166,14 @@ const ETAPAS_OBRA = [
   // linha genérica, e sem ela o gasto caía em "Outros".
   { id:"impermeabilizacao",   nome:"Impermeabilização",                macro:"Impermeabilizações" },
   { id:"contrapiso_int_1",    nome:"Contrapiso interno pav. 1",        macro:"Contrapisos" },
-  { id:"supra_paredes_1",     nome:"Supraestrutura e paredes pav. 1",  macro:"Supraestrutura e paredes" },
-  { id:"laje_1",              nome:"Laje pav. 1",                      macro:"Lajes" },
-  { id:"supra_paredes_2",     nome:"Supraestrutura e paredes pav. 2",  macro:"Supraestrutura e paredes" },
-  { id:"laje_2",              nome:"Laje pav. 2",                      macro:"Lajes" },
+  // Por pavimento. Os ids _1/_2 são de antes e ficam (são chave gravada);
+  // o nome segue a planilha: _1 é o Térreo, _2 o Pav 1, _3 o Pav 2.
+  { id:"supra_paredes_1",     nome:"Supraestrutura e paredes Térreo",  macro:"Supraestrutura e paredes", familia:"supra_paredes", pavimento:1 },
+  { id:"laje_1",              nome:"Laje Térreo",                      macro:"Lajes", familia:"laje", pavimento:1 },
+  { id:"supra_paredes_2",     nome:"Supraestrutura e paredes Pav 1",   macro:"Supraestrutura e paredes", familia:"supra_paredes", pavimento:2 },
+  { id:"laje_2",              nome:"Laje Pav 1",                       macro:"Lajes", familia:"laje", pavimento:2 },
+  { id:"supra_paredes_3",     nome:"Supraestrutura e paredes Pav 2",   macro:"Supraestrutura e paredes", familia:"supra_paredes", pavimento:3 },
+  { id:"laje_3",              nome:"Laje Pav 2",                       macro:"Lajes", familia:"laje", pavimento:3 },
   { id:"coberturas",          nome:"Coberturas",                       macro:"Coberturas" },
   { id:"imp_perimetro",       nome:"Impermeabilização perímetro de paredes", macro:"Impermeabilizações" },
   { id:"imp_areas_molhadas",  nome:"Impermeabilização de áreas molhadas",    macro:"Impermeabilizações" },
@@ -9164,16 +9181,19 @@ const ETAPAS_OBRA = [
   { id:"eletrica",            nome:"Elétrica",                         macro:"Elétrica" },
   { id:"hidraulica",          nome:"Hidráulica",                       macro:"Hidráulica" },
   { id:"esgoto_pluvial",      nome:"Esgoto e pluvial",                 macro:"Hidráulica" },
+  // bases de registro: vão para a parede junto com o cano, não com a louça
+  { id:"metais",              nome:"Metais",                           macro:"Hidráulica" },
   { id:"contrapiso_ext",      nome:"Contrapisos externos",             macro:"Contrapisos" },
   { id:"massa_contrapiso_int",nome:"Massiamento de contrapisos internos",    macro:"Contrapisos" },
   { id:"massa_contrapiso_ext",nome:"Massiamento de contrapisos externos",    macro:"Contrapisos" },
   { id:"muros",               nome:"Muros",                            macro:"Muros" },
+  { id:"cercas",              nome:"Cercas",                           macro:"Cercas" },
   { id:"portoes",             nome:"Portões",                          macro:"Portões" },
   { id:"pisos_revest",        nome:"Pisos e revestimentos",            macro:"Pisos e revestimentos" },
   { id:"forros",              nome:"Forros",                           macro:"Forros" },
   { id:"pintura",             nome:"Pintura",                          macro:"Pintura" },
   { id:"soleiras_peitoris",   nome:"Soleiras e peitoris",              macro:"Granito" },
-  { id:"bancadas",            nome:"Bancadas",                         macro:"Granito" },
+  { id:"bancadas",            nome:"Bancadas Pedra",                   macro:"Granito" },
   { id:"portas_internas",     nome:"Portas internas",                  macro:"Portas e esquadrias" },
   { id:"esquadrias",          nome:"Esquadrias",                       macro:"Portas e esquadrias" },
   { id:"vidros_plasticos",    nome:"Vidros e plásticos",               macro:"Vidros e plásticos" },
@@ -9182,6 +9202,7 @@ const ETAPAS_OBRA = [
   { id:"marcenaria",          nome:"Marcenaria",                       macro:"Marcenaria" },
   { id:"calcadas",            nome:"Calçadas",                         macro:"Calçadas" },
   { id:"aquecimento",         nome:"Aquecimento e pressurização",      macro:"Aquecimento e pressurização" },
+  { id:"equipamentos_sistemas", nome:"Equipamentos e sistemas",        macro:"Equipamentos e sistemas" },
   { id:"piscina_equip",       nome:"Piscina — filtro, hidro e aquecimento", macro:"Piscina" },
   { id:"piscina_fundacao",    nome:"Piscina — fundação",               macro:"Piscina" },
   { id:"piscina_supra",       nome:"Piscina — supraestrutura e paredes", macro:"Piscina" },
@@ -9194,10 +9215,130 @@ const ETAPAS_OBRA = [
   { id:"locacao_equip",       nome:"Locação de equipamentos",          macro:"Locação de equipamentos" },
   // Ferramenta comprada para a obra tem etapa própria na planilha do
   // escritório; sem ela o gasto caía em "Outros".
-  { id:"ferramentas",         nome:"Ferramentas",                      macro:"Locação de equipamentos" },
+  { id:"ferramentas",         nome:"Ferramentas",                      macro:"Ferramentas" },
+  // Prestadores: a etapa genérica fica para a mão de obra que não tem
+  // ofício próprio (pedreiro avulso, ajudante, encarregado). Os ofícios do
+  // catálogo têm etapa própria — é o que põe o empreiteiro orçado e o
+  // empreiteiro pago na mesma linha.
   { id:"prestadores",         nome:"Prestadores de serviços",          macro:"Prestadores de serviços" },
+  { id:"prest_empreiteiro",   nome:"Empreiteiro",                      macro:"Prestadores de serviços" },
+  { id:"prest_pintor",        nome:"Pintor",                           macro:"Prestadores de serviços" },
+  { id:"prest_eletricista",   nome:"Eletricista",                      macro:"Prestadores de serviços" },
+  { id:"prest_encanador",     nome:"Encanador",                        macro:"Prestadores de serviços" },
+  { id:"prest_carpinteiro",   nome:"Carpinteiro",                      macro:"Prestadores de serviços" },
+  { id:"prest_impermeabilizador", nome:"Impermeabilizador",            macro:"Prestadores de serviços" },
+  { id:"prest_marceneiro_portas", nome:"Marceneiro Portas Internas",   macro:"Prestadores de serviços" },
+  { id:"prest_instalacao_portas", nome:"Instalação Portas Internas",   macro:"Prestadores de serviços" },
+  { id:"prest_serralheiro",   nome:"Serralheiro",                      macro:"Prestadores de serviços" },
+  { id:"prest_instalador_ar", nome:"Instalador AR",                    macro:"Prestadores de serviços" },
+  { id:"prest_instalador_aquecedores", nome:"Instalador Aquecedores",  macro:"Prestadores de serviços" },
+  { id:"prest_instalador_piscina", nome:"Instalador Equip. Piscina",   macro:"Prestadores de serviços" },
+  { id:"prest_gestao_obra",   nome:"Gestão Obra",                      macro:"Prestadores de serviços" },
+  { id:"deposito_reembolsos", nome:"Depósito & Reembolsos",            macro:"Depósito & Reembolsos" },
   { id:"outros",              nome:"Outros",                           macro:"Outros" },
 ];
+
+// ══════════════════════════════════════════════════════════════
+// ETAPA POR PAVIMENTO
+// ══════════════════════════════════════════════════════════════
+// Tijolo, canaleta, bloco e laje não têm UMA etapa: o mesmo tijolo sobe a
+// parede do térreo e a do Pav 1. No catálogo eles levam a FAMÍLIA
+// ("supra_paredes", "laje") e o pavimento se decide no uso:
+//   - no orçamento, quem sabe é a fórmula ("Paredes Pav. Térreo");
+//   - no lançamento, a pessoa escolhe o pavimento.
+const PAVIMENTOS_OBRA = [
+  { n: 1, nome: "Térreo" },
+  { n: 2, nome: "Pav 1" },
+  { n: 3, nome: "Pav 2" },
+];
+const ETAPAS_POR_PAVIMENTO = [
+  { id: "supra_paredes", nome: "Supraestrutura e paredes", macro: "Supraestrutura e paredes" },
+  { id: "laje",          nome: "Laje",                     macro: "Lajes" },
+];
+
+function familiaDeEtapa(id) {
+  return ETAPAS_POR_PAVIMENTO.find((f) => f.id === id) || null;
+}
+// As etapas de uma família, do térreo para cima.
+function etapasDaFamilia(familiaId) {
+  return ETAPAS_OBRA.filter((e) => e.familia === familiaId)
+    .slice().sort((a, b) => (a.pavimento || 0) - (b.pavimento || 0));
+}
+function etapaDaFamiliaNoPavimento(familiaId, pavimento) {
+  return (etapasDaFamilia(familiaId).find((e) => e.pavimento === pavimento) || {}).id || "";
+}
+function nomeDoPavimento(n) {
+  return (PAVIMENTOS_OBRA.find((p) => p.n === n) || {}).nome || "";
+}
+// Vale no catálogo: uma etapa da obra ou uma família por pavimento.
+function etapaDoCatalogoValida(id) {
+  const k = String(id || "").trim();
+  return !!k && (ETAPAS_OBRA.some((e) => e.id === k) || !!familiaDeEtapa(k));
+}
+function nomeDaEtapaObra(id) {
+  if (!id) return "";
+  const e = ETAPAS_OBRA.find((x) => x.id === id);
+  if (e) return e.nome;
+  const f = familiaDeEtapa(id);
+  return f ? f.nome + " (por pavimento)" : String(id);
+}
+function macroDaEtapaObra(id) {
+  const e = ETAPAS_OBRA.find((x) => x.id === id);
+  if (e) return e.macro || "";
+  const f = familiaDeEtapa(id);
+  return f ? f.macro : "";
+}
+// As etapas que o CATÁLOGO aceita: as da obra, com cada família por
+// pavimento logo antes do térreo dela ("Supraestrutura e paredes (por
+// pavimento)", depois Térreo, Pav 1, Pav 2).
+function etapasDoCatalogo() {
+  const out = [], postas = {};
+  ETAPAS_OBRA.forEach((e) => {
+    if (e.familia && !postas[e.familia]) {
+      const f = familiaDeEtapa(e.familia);
+      if (f) out.push({ id: f.id, nome: f.nome + " (por pavimento)", macro: f.macro, porPavimento: true });
+      postas[e.familia] = true;
+    }
+    out.push(e);
+  });
+  return out;
+}
+// A etapa que o insumo FIXA no lançamento: a do catálogo, menos quando é
+// uma família por pavimento (aí quem diz é quem lança).
+function etapaFixaDoInsumo(insumo) {
+  const e = insumo ? String(insumo.etapaPadrao || "").trim() : "";
+  return e && !familiaDeEtapa(e) ? e : "";
+}
+// A família do insumo, quando ele é "por pavimento".
+function familiaDoInsumo(insumo) {
+  return insumo ? familiaDeEtapa(String(insumo.etapaPadrao || "").trim()) : null;
+}
+
+// As opções do campo Etapa num lançamento, agrupadas pela macro-etapa.
+// Insumo por pavimento: os pavimentos dele vêm primeiro, num grupo próprio
+// ("Escolha o pavimento"), e as demais etapas continuam lá embaixo — o
+// tijolo que foi para a churrasqueira também se lança.
+function opcoesDeEtapaDoLancamento(insumo, rotuloVazio) {
+  const fam = familiaDoInsumo(insumo);
+  const vazio = rotuloVazio == null ? [] : [{ valor: "", rotulo: rotuloVazio, grupo: "" }];
+  const daFamilia = fam ? etapasDaFamilia(fam.id) : [];
+  const ids = {};
+  daFamilia.forEach((e) => { ids[e.id] = true; });
+  const topo = daFamilia.map((e) => ({ valor: e.id,
+    rotulo: nomeDoPavimento(e.pavimento) + " — " + fam.nome, grupo: "Escolha o pavimento" }));
+  const resto = ETAPAS_OBRA.filter((e) => !ids[e.id])
+    .map((e) => ({ valor: e.id, rotulo: e.nome, grupo: e.macro || "" }));
+  return vazio.concat(topo, resto);
+}
+// A etapa gravada não é do pavimento (o insumo é por pavimento e a etapa
+// está vazia ou é de outra família): a tela pede o pavimento.
+function faltaPavimento(insumo, etapaId) {
+  const fam = familiaDoInsumo(insumo);
+  if (!fam) return false;
+  const e = String(etapaId || "").trim();
+  return !e;
+}
+
 
 // ══════════════════════════════════════════════════════════════
 // GRUPO DE MATERIAL — UM VOCABULÁRIO SÓ
@@ -9212,8 +9353,9 @@ const ETAPAS_OBRA = [
 // diz "Louças e metais"; "Tubulação PVC" era uma terceira "Hidráulica".
 // `grupoCanonico` traduz na leitura — nada é reescrito no banco.
 const GRUPOS_MATERIAL = [
-  "Aço", "Areia e pedra", "Argamassas", "Calhas e rufos", "Cimento", "Concreto",
-  "Elétrica e iluminação", "Entulhos", "Equipamentos e sistemas", "Esquadrias",
+  "Aço", "Água", "Areia e pedra", "Argamassas", "Calhas e rufos", "Cercas", "Cimento", "Concreto",
+  "Demolições e entulhos", "Depósito & Reembolsos",
+  "Elétrica e iluminação", "Equipamentos e sistemas", "Esquadrias",
   "Ferramentas", "Fixação", "Forros e gesso", "Hidráulica", "Impermeabilizantes",
   "Lajes", "Locação de equipamentos", "Louças e metais", "Madeira de caixaria",
   "Madeira de estrutura", "Marcenaria", "Pisos e revestimentos",
@@ -9230,7 +9372,8 @@ const GRUPO_APELIDOS = {
   "metais": "Louças e metais",
   "tubulacao pvc": "Hidráulica",
   "granito": "Pisos e revestimentos",
-  "entulho": "Entulhos",
+  "entulho": "Demolições e entulhos",
+  "entulhos": "Demolições e entulhos",
 };
 
 function grupoCanonico(nome) {
@@ -9286,7 +9429,7 @@ function normalizarNomeEtapa(s) {
 function pavimentoDaSubEtapa(subEtapa) {
   const s = normalizarNomeEtapa(subEtapa);
   if (/\bterreo\b/.test(s)) return 1;
-  if (/\bpav\s*2\b/.test(s)) return 3;      // não existe hoje, mas não se inventa
+  if (/\bpav\s*2\b/.test(s)) return 3;      // o Pav 2 (sobrado de três andares)
   if (/\bpav\s*1\b/.test(s)) return 2;
   return 1;                                  // sem dizer, é o térreo
 }
@@ -9332,10 +9475,10 @@ function etapaDoOrcamento(etapa, subEtapa) {
   // Piscina e as etapas por pavimento não se resolvem pelo nome
   if (n === "piscina") return ETAPA_PISCINA_POR_SUB[normalizarNomeEtapa(subEtapa)] || "";
   if (n === "supra estrutura e paredes") {
-    return pavimentoDaSubEtapa(subEtapa) >= 2 ? "supra_paredes_2" : "supra_paredes_1";
+    return etapaDaFamiliaNoPavimento("supra_paredes", Math.min(3, pavimentoDaSubEtapa(subEtapa))) || "supra_paredes_1";
   }
   if (n === "viga respaldo e laje") {
-    return pavimentoDaSubEtapa(subEtapa) >= 2 ? "laje_2" : "laje_1";
+    return etapaDaFamiliaNoPavimento("laje", Math.min(3, pavimentoDaSubEtapa(subEtapa))) || "laje_1";
   }
 
   const apelido = ETAPA_APELIDOS_ORCAMENTO[n];
@@ -9382,7 +9525,16 @@ function etapaDaLinhaDoOrcamento(linha, insumos) {
   const ins = insumoDaLinhaDoOrcamento(l, insumos);
   const doCatalogo = ins ? String(ins.etapaPadrao || "").trim() : "";
   if (doCatalogo && ETAPAS_OBRA.some((e) => e.id === doCatalogo)) return doCatalogo;
-  return etapaDoOrcamento(l.etapa, l.subEtapa);
+  const daFormula = etapaDoOrcamento(l.etapa, l.subEtapa);
+  // Por pavimento: o catálogo diz a família, a fórmula diz o pavimento. Se a
+  // fórmula usa o insumo fora da família (o tijolinho da piscina), vale a
+  // fórmula; se ela não disser etapa nenhuma, o pavimento sai da subetapa.
+  const fam = familiaDeEtapa(doCatalogo);
+  if (fam) {
+    if (daFormula) return daFormula;
+    return etapaDaFamiliaNoPavimento(fam.id, Math.min(3, pavimentoDaSubEtapa(l.subEtapa))) || "";
+  }
+  return daFormula;
 }
 // A mesma leitura, com o porquê: para a tela mostrar "fórmula: Louças e
 // metais" quando o catálogo levou a linha para outra etapa.
@@ -9504,10 +9656,26 @@ function frasesDasFaltas(faltas) {
 // escritório): a conta escolhida já traz a etapa e o grupo, e a pessoa
 // só mexe se quiser outra coisa. ──
 const PADRAO_MAO_DE_OBRA = { etapa: "prestadores", grupoMaterial: "Prestadores de serviços" };
+// O ofício que tem etapa própria (revisão do catálogo, out/26) leva a
+// conta para ela: o empreiteiro pago cai na mesma etapa do empreiteiro
+// orçado. Os demais (pedreiro avulso, ajudante, encarregado, gesseiro...)
+// continuam na etapa genérica de prestadores.
+const ETAPA_DA_CONTA_MAO_DE_OBRA = {
+  empreiteiro: "prest_empreiteiro",
+  pintor: "prest_pintor",
+  eletricista: "prest_eletricista",
+  encanador: "prest_encanador",
+  carpinteiro: "prest_carpinteiro",
+  impermeabilizacao: "prest_impermeabilizador",
+  marceneiro: "prest_marceneiro_portas",
+  serralheiro: "prest_serralheiro",
+  instalador_ar: "prest_instalador_ar",
+};
 
 function padraoDaContaObra(contaId) {
   const c = (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((x) => x && x.id === contaId);
-  return c && c.grupo === "maoDeObra" ? { ...PADRAO_MAO_DE_OBRA } : { etapa: "", grupoMaterial: "" };
+  if (!c || c.grupo !== "maoDeObra") return { etapa: "", grupoMaterial: "" };
+  return { ...PADRAO_MAO_DE_OBRA, etapa: ETAPA_DA_CONTA_MAO_DE_OBRA[c.id] || PADRAO_MAO_DE_OBRA.etapa };
 }
 
 // Preenche o que está em branco. Nunca troca o que a pessoa escolheu.
@@ -9549,13 +9717,51 @@ function comPadraoDoInsumo(obj, insumos) {
   const ins = (insumos || []).find((m) => m && (m.codigo === obj.insumoCodigo || m.id === obj.insumoCodigo));
   if (!ins) return obj;
   const vazio = (v) => String(v == null ? "" : v).trim() === "";
-  const poeEtapa = vazio(obj.etapa) && vazio(obj.etapaId) && !vazio(ins.etapaPadrao);
+  // insumo por pavimento: a família não é etapa — o pavimento quem diz é
+  // quem lança, e a etapa fica em branco até ele dizer
+  const etapaFixa = vazio(ins.etapaPadrao) || familiaDeEtapa(String(ins.etapaPadrao).trim()) ? "" : ins.etapaPadrao;
+  const poeEtapa = vazio(obj.etapa) && vazio(obj.etapaId) && !!etapaFixa;
   const poeGrupo = vazio(obj.grupoMaterial) && !vazio(ins.grupo);
-  if (!poeEtapa && !poeGrupo) return obj;
+  const poeConta = vazio(obj.contaId) && !vazio(ins.contaPadrao);
+  if (!poeEtapa && !poeGrupo && !poeConta) return obj;
   const r = { ...obj };
-  if (poeEtapa) r.etapa = ins.etapaPadrao;
+  if (poeEtapa) r.etapa = etapaFixa;
   if (poeGrupo) r.grupoMaterial = ins.grupo;
+  if (poeConta) r.contaId = ins.contaPadrao;
   return r;
+}
+
+// O que muda num lançamento quando a pessoa ESCOLHE um item do catálogo:
+// a conta, a etapa e o grupo passam a ser os do item. O que ela tinha
+// escolhido à mão antes do item é trocado — é o gesto de escolher o item
+// que manda (é ele que liga a compra à linha do orçamento). Insumo por
+// pavimento: a etapa só fica se já for de um dos pavimentos dele.
+function padraoAoEscolherInsumo(insumo, atual) {
+  const a = atual || {};
+  if (!insumo) return {};
+  const vazio = (v) => String(v == null ? "" : v).trim() === "";
+  const muda = {};
+  if (!vazio(insumo.contaPadrao)) muda.contaId = insumo.contaPadrao;
+  if (!vazio(insumo.grupo)) muda.grupoMaterial = insumo.grupo;
+  const fam = familiaDoInsumo(insumo);
+  if (fam) {
+    const ok = etapasDaFamilia(fam.id).some((e) => e.id === (a.etapa || a.etapaId));
+    if (!ok) muda.etapa = "";
+  } else if (!vazio(insumo.etapaPadrao) && etapaDoCatalogoValida(insumo.etapaPadrao)) {
+    muda.etapa = insumo.etapaPadrao;
+  }
+  return muda;
+}
+
+// O lançamento depois de escolher o item: código, descrição e unidade (só o
+// que estava em branco) e o padrão do item (conta, etapa, grupo).
+function lancamentoComInsumo(atual, insumo) {
+  const f = atual || {};
+  if (!insumo) return f;
+  return { ...f, insumoCodigo: insumo.codigo || insumo.id || "",
+    descricao: f.descricao || insumo.nome || "",
+    unidade: f.unidade || insumo.unidade || "",
+    ...padraoAoEscolherInsumo(insumo, f) };
 }
 
 // Catálogo primeiro (é mais específico), depois a conta (mão de obra).
@@ -12925,8 +13131,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       ? itensDaEntrada({ itens: comItens }, "orcamento", insumos || []).map((x) => {
           const ins = x.insumoCodigo ? (insumos || []).find((m) => m && (m.codigo === x.insumoCodigo || m.id === x.insumoCodigo)) : null;
           return { ...x, textoLido: x.descricao,
-            etapa: x.etapa || (ins && ins.etapaPadrao) || "",
-            contaId: x.contaId || (ins && ins.contaPadrao) || "material",
+            etapa: x.etapa || (typeof etapaFixaDoInsumo === "function" ? etapaFixaDoInsumo(ins) : (ins && ins.etapaPadrao)) || "",
+            contaId: (ins && ins.contaPadrao) || x.contaId || "material",
             grupoMaterial: x.grupoMaterial || (ins && ins.grupo) || "" };
         })
       : [];
@@ -13082,8 +13288,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       descricao: atual.descricao || ins.nome || "",
       grupoMaterial: ins.grupo || "",
       unidade: atual.unidade || ins.unidade || "",
-      etapa: atual.etapa || ins.etapaPadrao || "",
-      contaId: atual.contaId || ins.contaPadrao || f.contaId || "",
+      etapa: (typeof etapaFixaDoInsumo === "function" ? etapaFixaDoInsumo(ins) : (ins && ins.etapaPadrao)) || (typeof familiaDoInsumo === "function" && familiaDoInsumo(ins) ? "" : atual.etapa) || "",
+      contaId: ins.contaPadrao || atual.contaId || f.contaId || "",
       unitario: atual.unitario || (ins.precoReferencia > 0 ? ins.precoReferencia : ""),
     });
   };
@@ -13492,7 +13698,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                 <SelectBusca style={S.input} value={etapaUnicaEfetiva || ""}
                   onChange={(v) => set("etapaUnica", v)}
                   placeholder="Procurar etapa…"
-                  opcoes={[{ valor: "", rotulo: "— escolha a etapa —" }]
+                  opcoes={typeof opcoesDeEtapaDoLancamento === "function" ? opcoesDeEtapaDoLancamento(null, "— escolha a etapa —")
+                    : [{ valor: "", rotulo: "— escolha a etapa —" }]
                     .concat(etapasDaObra.map((e) => ({ valor: e.id, rotulo: e.nome || e.titulo || e.id })))} />
               </div>
               <div style={{ fontSize: 12, color: "#4b5563", lineHeight: 1.45, paddingBottom: 4 }}>
@@ -13566,14 +13773,21 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                     <div style={{ ...S.input, background: "#f9fafb", fontVariantNumeric: "tabular-nums",
                       display: "flex", alignItems: "center", minHeight: 36 }}>{efDinheiro(bruto)}</div>
                   </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={S.rot}>Etapa</div>
-                    <SelectBusca style={S.input} value={it.etapa}
-                      onChange={(v) => mexerItem(i, { etapa: v })}
-                      placeholder="Procurar etapa…"
-                      opcoes={[{ valor: "", rotulo: "— escolha a etapa —" }]
-                        .concat(etapasDaObra.map((e) => ({ valor: e.id, rotulo: e.nome || e.titulo || e.id })))} />
-                  </div>
+                  {(() => {
+                    const insEt = it.insumoCodigo ? (insumos || []).find((m) => m && (m.codigo === it.insumoCodigo || m.id === it.insumoCodigo)) : null;
+                    const pedePav = typeof faltaPavimento === "function" && faltaPavimento(insEt, it.etapa);
+                    return (
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ ...S.rot, color: pedePav ? "#b45309" : S.rot.color }}>{pedePav ? "Etapa — escolha o pavimento" : "Etapa"}</div>
+                        <SelectBusca style={pedePav ? { ...S.input, borderColor: "#f59e0b" } : S.input} value={it.etapa}
+                          onChange={(v) => mexerItem(i, { etapa: v })}
+                          placeholder={pedePav ? "Térreo, Pav 1 ou Pav 2…" : "Procurar etapa…"}
+                          opcoes={typeof opcoesDeEtapaDoLancamento === "function" ? opcoesDeEtapaDoLancamento(insEt, "— escolha a etapa —")
+                            : [{ valor: "", rotulo: "— escolha a etapa —" }]
+                            .concat(etapasDaObra.map((e) => ({ valor: e.id, rotulo: e.nome || e.titulo || e.id })))} />
+                      </div>
+                    );
+                  })()}
                   <div style={{ minWidth: 0, display: "flex", alignItems: "flex-end" }}>
                     <button type="button" style={{ ...S.btnSec, color: "#dc2626" }}
                       onClick={() => tirarItem(i)}>Tirar</button>
@@ -21788,11 +22002,15 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
     // Etapa e grupo do catálogo (os mesmos da base de dados da obra); a
     // etapa da fórmula ao lado, para ver onde o catálogo mudou a linha.
     const cat = (data && data.materiais) || [];
-    const linhas = [["Etapa", "Etapa na fórmula", "Sub-etapa", "Item", "Grupo materiais", "Unidade", "Qtd", "Preço", "Total"]];
+    const linhas = [["Macro-etapa", "Etapa", "Etapa na fórmula", "Sub-etapa", "Código", "Item", "Grupo materiais", "Conta padrão", "Unidade", "Qtd", "Preço", "Total"]];
+    const plano = typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [];
     for (const i of obra.orcamento.itens) {
       const o = typeof origemDaEtapaDaLinha === "function" ? origemDaEtapaDaLinha(i, cat) : { nome: i.etapa };
       const g = typeof grupoDaLinhaDoOrcamento === "function" ? grupoDaLinhaDoOrcamento(i, cat) : "";
-      linhas.push([o.nome || i.etapa, i.etapa, i.subEtapa || "", i.item, g, i.unidade, i.qtd, i.preco, i.total]);
+      const ins = typeof insumoDaLinhaDoOrcamento === "function" ? insumoDaLinhaDoOrcamento(i, cat) : null;
+      const conta = ins && ins.contaPadrao ? ((plano.find((c) => c.id === ins.contaPadrao) || {}).nome || ins.contaPadrao) : "";
+      const macro = o.id && typeof macroDaEtapaObra === "function" ? macroDaEtapaObra(o.id) : "";
+      linhas.push([macro, o.nome || i.etapa, i.etapa, i.subEtapa || "", (ins && ins.codigo) || i.insumoCodigo || "", i.item, g, conta, i.unidade, i.qtd, i.preco, i.total]);
     }
     const csv = linhas.map((l) => l.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -22506,7 +22724,8 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
       : { id: "", nome: item.etapa, ordem: 900, peloCatalogo: false };
     const chave = o.id || ("?" + item.etapa);
     if (!porChave[chave]) {
-      porChave[chave] = { ordem: o.id ? o.ordem : 900 + (Number(item.ordem) || 0), etapa: o.nome || item.etapa, itens: [] };
+      porChave[chave] = { ordem: o.id ? o.ordem : 900 + (Number(item.ordem) || 0), etapa: o.nome || item.etapa,
+        macro: o.id && typeof macroDaEtapaObra === "function" ? macroDaEtapaObra(o.id) : "", itens: [] };
       itensPorEtapa.push(porChave[chave]);
     }
     const grupo = typeof grupoDaLinhaDoOrcamento === "function" ? grupoDaLinhaDoOrcamento(item, insumosCat) : "";
@@ -22609,7 +22828,12 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             <div key={grupo.etapa} style={{ marginBottom: 8, border: "1px solid rgba(38,36,33,0.1)", borderRadius: 10, overflow: "hidden" }}>
               <button type="button" onClick={() => toggleEtapa(grupo.etapa)}
                 style={{ width: "100%", display: "flex", justifyContent: "space-between", padding: "10px 14px", background: "#f9fafb", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>{grupo.etapa}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", textAlign: "left" }}>
+                  {grupo.macro && grupo.macro !== grupo.etapa && (
+                    <span style={{ fontWeight: 500, color: "#6b7280" }}>{grupo.macro} › </span>
+                  )}
+                  {grupo.etapa}
+                </span>
                 <span style={{ fontSize: 12, color: "#4b5563" }}>{formatoBRL(subtotal)} {colapsado ? "▼" : "▲"}</span>
               </button>
               {!colapsado && (
@@ -27760,6 +27984,170 @@ function plPorInsumo(orcamento, contasPagar, insumos) {
   }).sort((a, b) => (b.orcado || b.realizado) - (a.orcado || a.realizado));
 }
 
+// ══════════════════════════════════════════════════════════════
+// ORÇADO × REALIZADO, ITEM A ITEM — macro-etapa → etapa → item
+// ══════════════════════════════════════════════════════════════
+// O mesmo quadro de quem orça e de quem paga: cada linha é UM item numa
+// etapa — o tijolo do Térreo e o tijolo do Pav 1 são duas linhas, porque o
+// catálogo diz que tijolo é por pavimento e a fórmula diz qual.
+//   - a etapa do orçado é a do catálogo (ou a da fórmula, para o insumo
+//     sem etapa); a do realizado é a gravada na conta;
+//   - material casa pelo código do insumo, na etapa;
+//   - mão de obra casa pela CONTA (empreiteiro com empreiteiro), em
+//     qualquer etapa: o orçamento tem cinco linhas de pedreiro (casa, muro,
+//     arrimo, piscina, pavimentação) e o pagamento é um só, ao empreiteiro;
+//   - conta paga sem item (frete, aluguel, caçamba avulsa) aparece como a
+//     própria conta, na etapa dela — some do confronto em quantidade, mas
+//     não do dinheiro.
+// Quantidade comprada em outra unidade (metro de cano, quilo de prego) é
+// convertida para a do catálogo quando o fator é conhecido.
+// `opcoes.porEtapa === false` junta o item de todas as etapas numa linha.
+function orcadoXRealizadoPorItem(obra, insumos, opcoes) {
+  const o = obra || {};
+  const op = opcoes || {};
+  const porEtapa = op.porEtapa !== false;
+  const linhasOrc = ((o.orcamento || {}).itens) || [];
+  const contas = (o.contasPagar || []).filter(Boolean);
+  const lista = insumos || [];
+  const red = (x) => Math.round(x * 100) / 100;
+  const redQ = (x) => Math.round(x * 1000) / 1000;
+  const plano = typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [];
+  const etapas = typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [];
+  const contaDe = (id) => plano.find((c) => c && c.id === id) || null;
+  const ehMaoDeObra = (contaId) => { const c = contaDe(contaId); return !!c && c.grupo === "maoDeObra"; };
+  const fora = (contaId) => {
+    const c = contaDe(contaId);
+    // receita, terreno e reembolso não são custo de construir
+    return !!c && ["receitas", "terreno", "excluidas"].indexOf(c.grupo) >= 0;
+  };
+  const insDe = (codigo) => (codigo ? lista.find((x) => x && (x.codigo === codigo || x.id === codigo)) || null : null);
+  const valorDaLinha = (l) => {
+    const v = Number(l.total);
+    return Number.isFinite(v) && v !== 0 ? v : (Number(l.qtd) || 0) * (Number(l.preco) || 0);
+  };
+  const linhas = {};
+  const pegar = (chave, etapaId, base) => {
+    // mão de obra e conta sem item já vêm com a chave pronta; material leva a etapa
+    const k = chave.indexOf("conta:") === 0 || !porEtapa ? chave : chave + "@" + etapaId;
+    if (!linhas[k]) {
+      linhas[k] = { chave: k, etapaId: etapaId || "", insumoCodigo: "", contaId: "", nome: "", unidade: "", grupo: "",
+        qtdOrcada: 0, orcado: 0, qtdRealizada: 0, realizado: 0, aPagar: 0, notas: 0, linhasOrcamento: 0, ...base };
+    }
+    return linhas[k];
+  };
+
+  for (const l of linhasOrc) {
+    if (!l) continue;
+    const ins = typeof insumoDaLinhaDoOrcamento === "function" ? insumoDaLinhaDoOrcamento(l, lista) : insDe(l.insumoCodigo);
+    const etapaId = (typeof etapaDaLinhaDoOrcamento === "function" ? etapaDaLinhaDoOrcamento(l, lista)
+      : (typeof etapaDoOrcamento === "function" ? etapaDoOrcamento(l.etapa, l.subEtapa) : "")) || "";
+    const contaMO = ins && ins.contaPadrao && ehMaoDeObra(ins.contaPadrao) ? ins.contaPadrao : "";
+    let r;
+    if (contaMO) {
+      const c = contaDe(contaMO);
+      r = pegar("conta:" + contaMO, etapaId, { contaId: contaMO, nome: c ? c.nome : contaMO, grupo: (ins && ins.grupo) || "" });
+    } else if (ins) {
+      r = pegar("ins:" + (ins.codigo || ins.id), etapaId, { insumoCodigo: ins.codigo || ins.id, nome: ins.nome || l.item || "",
+        unidade: ins.unidade || l.unidade || "", grupo: typeof grupoDoItem === "function" ? grupoDoItem(ins, l.grupoMaterial) : (ins.grupo || "") });
+    } else {
+      const n = String(l.item || "").trim();
+      r = pegar("linha:" + n.toLowerCase(), etapaId, { nome: n, unidade: l.unidade || "", grupo: l.grupoMaterial || "" });
+    }
+    r.orcado = red(r.orcado + valorDaLinha(l));
+    if (!contaMO) r.qtdOrcada = redQ(r.qtdOrcada + (Number(l.qtd) || 0));
+    r.linhasOrcamento++;
+  }
+
+  for (const c of contas) {
+    if (fora(c.contaId)) continue;
+    const ins = insDe(c.insumoCodigo);
+    const etapaId = c.etapa || c.etapaId || "";
+    const contaMO = ehMaoDeObra(c.contaId) ? c.contaId
+      : (ins && ins.contaPadrao && ehMaoDeObra(ins.contaPadrao) ? ins.contaPadrao : "");
+    let r;
+    if (contaMO) {
+      const cc = contaDe(contaMO);
+      r = pegar("conta:" + contaMO, etapaId, { contaId: contaMO, nome: cc ? cc.nome : contaMO, grupo: "Prestadores de serviços" });
+    } else if (ins) {
+      r = pegar("ins:" + (ins.codigo || ins.id), etapaId, { insumoCodigo: ins.codigo || ins.id, nome: ins.nome || "",
+        unidade: ins.unidade || c.unidade || "", grupo: typeof grupoDoItem === "function" ? grupoDoItem(ins, c.grupoMaterial) : (ins.grupo || "") });
+    } else {
+      const cc = contaDe(c.contaId);
+      r = pegar("conta:" + (c.contaId || "?") + (porEtapa ? "@" + etapaId : ""), etapaId, { contaId: c.contaId || "",
+        nome: (cc ? cc.nome : (c.descricao || "Sem conta")) + " (sem item)", grupo: c.grupoMaterial || "" });
+    }
+    const valor = (Number(c.valorPago) || Number(c.valor)) || 0;
+    if (c.pago) {
+      r.realizado = red(r.realizado + valor);
+      r.notas++;
+      if (!contaMO) {
+        let q = Number(c.quantidade) || 0;
+        if (q && ins && c.unidade && typeof mesmaUnidade === "function" && mesmaUnidade(c.unidade, ins.unidade) === false
+          && typeof fatorEntreUnidades === "function") {
+          const f = fatorEntreUnidades(ins, c.unidade);
+          if (f && f.fator > 0) q = q / f.fator;
+        }
+        r.qtdRealizada = redQ(r.qtdRealizada + q);
+      }
+    } else {
+      r.aPagar = red(r.aPagar + valor);
+    }
+  }
+
+  // mão de obra: a linha fica na etapa do orçado; sem orçado, na do pago
+  const ordemEtapa = (id) => { const i = etapas.findIndex((e) => e.id === id); return i < 0 ? 990 : i; };
+  const etapaInfo = (id) => {
+    const e = etapas.find((x) => x.id === id);
+    return e ? { nome: e.nome, macro: e.macro || e.nome, pavimento: e.pavimento || null }
+      : { nome: id ? id : "Sem etapa", macro: id ? id : "Sem etapa", pavimento: null };
+  };
+  const itens = Object.keys(linhas).map((k) => {
+    const r = linhas[k];
+    return { ...r,
+      saldo: red(r.orcado - r.realizado),
+      saldoQtd: redQ(r.qtdOrcada - r.qtdRealizada),
+      pct: r.orcado > 0 ? Math.round((r.realizado / r.orcado) * 1000) / 10 : null };
+  });
+
+  const macros = [];
+  const porMacro = {};
+  const porEtapaDe = {};
+  for (const it of itens) {
+    const id = porEtapa ? it.etapaId : "";
+    const info = porEtapa ? etapaInfo(id) : { nome: "Todas as etapas", macro: "Todas as etapas", pavimento: null };
+    if (!porMacro[info.macro]) {
+      porMacro[info.macro] = { macro: info.macro, ordem: porEtapa ? ordemEtapa(id) : 0, orcado: 0, realizado: 0, aPagar: 0, etapas: [] };
+      macros.push(porMacro[info.macro]);
+    }
+    const m = porMacro[info.macro];
+    m.ordem = Math.min(m.ordem, porEtapa ? ordemEtapa(id) : 0);
+    const ke = info.macro + "|" + id;
+    if (!porEtapaDe[ke]) {
+      porEtapaDe[ke] = { etapaId: id, nome: info.nome, pavimento: info.pavimento, ordem: porEtapa ? ordemEtapa(id) : 0,
+        orcado: 0, realizado: 0, aPagar: 0, itens: [] };
+      m.etapas.push(porEtapaDe[ke]);
+    }
+    const e = porEtapaDe[ke];
+    e.itens.push(it);
+    e.orcado = red(e.orcado + it.orcado); e.realizado = red(e.realizado + it.realizado); e.aPagar = red(e.aPagar + it.aPagar);
+    m.orcado = red(m.orcado + it.orcado); m.realizado = red(m.realizado + it.realizado); m.aPagar = red(m.aPagar + it.aPagar);
+  }
+  macros.sort((a, b) => a.ordem - b.ordem);
+  for (const m of macros) {
+    m.saldo = red(m.orcado - m.realizado);
+    m.etapas.sort((a, b) => a.ordem - b.ordem);
+    for (const e of m.etapas) {
+      e.saldo = red(e.orcado - e.realizado);
+      e.itens.sort((a, b) => (b.orcado || b.realizado) - (a.orcado || a.realizado));
+    }
+  }
+  const soma = (campo) => red(itens.reduce((s, x) => s + (Number(x[campo]) || 0), 0));
+  return { macros, itens,
+    totais: { orcado: soma("orcado"), realizado: soma("realizado"), aPagar: soma("aPagar"),
+      saldo: red(soma("orcado") - soma("realizado")) },
+    temOrcamento: linhasOrc.length > 0 };
+}
+
 // Onde a corrente arrebenta nesta obra. Cada buraco vem com quantas linhas
 // e quanto dinheiro estão fora — um aviso sem número não faz ninguém mexer.
 function conferenciaDaLigacao(obra, insumos) {
@@ -31292,8 +31680,11 @@ function casarItemDaEntrada(item, insumos, indice) {
     if (r && r.insumo) {
       return { ...it, insumoCodigo: r.insumo.codigo || "", grupoMaterial: r.insumo.grupo || "",
         unidade: it.unidade || r.insumo.unidade || "",
-        etapa: it.etapa || r.insumo.etapaPadrao || "",
-        contaId: it.contaId || r.insumo.contaPadrao || "", sugestao: null };
+        etapa: it.etapa || "",
+        contaId: it.contaId || "",
+        ...(typeof padraoAoEscolherInsumo === "function" ? padraoAoEscolherInsumo(r.insumo, it)
+          : { etapa: it.etapa || r.insumo.etapaPadrao || "", contaId: it.contaId || r.insumo.contaPadrao || "" }),
+        sugestao: null };
     }
   }
   return { ...it, sugestao: sugestaoDoCatalogo(it.descricao, indice) };
@@ -33770,7 +34161,7 @@ function contaDeCompra(contaId) {
 }
 
 function etapaDoItem(insumo, etapaDaCompra) {
-  return etapaDaCompra || (insumo && insumo.etapaPadrao) || "";
+  return etapaDaCompra || (typeof etapaFixaDoInsumo === "function" ? etapaFixaDoInsumo(insumo) : (insumo && insumo.etapaPadrao)) || "";
 }
 function contaDoItem(insumo, contaDaCompra) {
   return (insumo && insumo.contaPadrao) || contaDaCompra || "";
@@ -39150,14 +39541,18 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const indiceCat = useMemo(() => indiceDoCatalogo(insumos || []), [insumos]);
   const mexerItem = (i, muda) => setItens((lista) => (lista || []).map((x, j) => (j === i ? { ...x, ...muda } : x)));
   // O insumo escolhido traz consigo o que ele já sabe: unidade, etapa e conta.
-  // O que a pessoa já tinha posto à mão continua valendo.
+  // Conta e etapa do catálogo são fixas — o item é que liga a compra ao
+  // orçado. Item sem etapa no catálogo fica com a que a pessoa pôs; item
+  // por pavimento pede o pavimento.
   const comInsumoDaEntrada = (it, ins) => ({
     ...it,
     insumoCodigo: ins.codigo || ins.id || "",
     grupoMaterial: ins.grupo || "",
     unidade: it.unidade || ins.unidade || "",
-    etapa: it.etapa || ins.etapaPadrao || "",
-    contaId: it.contaId || ins.contaPadrao || "",
+    etapa: it.etapa || "",
+    contaId: it.contaId || "",
+    ...(typeof padraoAoEscolherInsumo === "function" ? padraoAoEscolherInsumo(ins, it)
+      : { etapa: it.etapa || ins.etapaPadrao || "", contaId: it.contaId || ins.contaPadrao || "" }),
     sugestao: null,
   });
   const resumo = itens ? resumoDaEntrada(itens) : null;
@@ -39940,7 +40335,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                         onChange={(v) => { if (v) setItens((l) => (l || []).map((x) => ({ ...x, etapa: v }))); }}
                         placeholder="Procurar etapa…"
                         opcoes={[{ valor: "", rotulo: "Mesma etapa para todos…" }].concat(
-                          etapasDaEntrada.map((e) => ({ valor: e.id, rotulo: e.nome })))} />
+                          etapasDaEntrada.map((e) => ({ valor: e.id, rotulo: e.nome, grupo: e.macro || "" })))} />
                     </div>
                   )}
                 </div>
@@ -40012,10 +40407,17 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                         <div style={{ minWidth: 0 }}>{mini("Total")}
                           <CampoCtrNum tipo="moeda" style={{ ...cel, textAlign: "right", fontWeight: 600 }} valor={brutoDoItem(it) || ""}
                             onChange={(v) => mexerTotal(i, v)} /></div>
-                        <div style={{ minWidth: 0, gridColumn: isMobile ? "1 / -1" : "auto" }}>{mini("Etapa")}
-                          <SelectBusca style={cel} value={it.etapa || ""} onChange={(v) => mexerItem(i, { etapa: v })}
-                            placeholder="Procurar etapa…"
-                            opcoes={[{ valor: "", rotulo: "— etapa —" }].concat(etapasDaEntrada.map((e) => ({ valor: e.id, rotulo: e.nome })))} /></div>
+                        {(() => {
+                          const insEt = it.insumoCodigo ? (insumos || []).find((y) => y && (y.codigo === it.insumoCodigo || y.id === it.insumoCodigo)) : null;
+                          const pedePav = typeof faltaPavimento === "function" && faltaPavimento(insEt, it.etapa);
+                          return (
+                            <div style={{ minWidth: 0, gridColumn: isMobile ? "1 / -1" : "auto" }}>{mini(pedePav ? "Etapa — pavimento?" : "Etapa")}
+                              <SelectBusca style={pedePav ? { ...cel, borderColor: "#f59e0b" } : cel} value={it.etapa || ""} onChange={(v) => mexerItem(i, { etapa: v })}
+                                placeholder={pedePav ? "Térreo, Pav 1 ou Pav 2…" : "Procurar etapa…"}
+                                opcoes={typeof opcoesDeEtapaDoLancamento === "function" ? opcoesDeEtapaDoLancamento(insEt, "— etapa —")
+                                  : [{ valor: "", rotulo: "— etapa —" }].concat(etapasDaEntrada.map((e) => ({ valor: e.id, rotulo: e.nome })))} /></div>
+                          );
+                        })()}
                         <div style={{ minWidth: 0, gridColumn: isMobile ? "1 / -1" : "auto" }}>{mini("Conta contábil")}
                           <SelectBusca style={cel} value={it.contaId || ""} onChange={(v) => mexerItem(i, typeof trocarContaComPadrao === "function" ? trocarContaComPadrao(it, v) : { contaId: v })}
                             placeholder="Procurar conta…"
@@ -40512,12 +40914,15 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
 
   // O nome que a loja usa vira o insumo do catálogo — e o grupo do insumo é
   // o grupo de material da subconta, de graça.
-  // A etapa já escolhida à mão manda: o insumo só preenche o que está vazio.
+  // Conta e etapa do catálogo são fixas; item sem etapa no catálogo fica
+  // com a etapa posta à mão; item por pavimento pede o pavimento.
   function comInsumo(item, ins) {
     return { ...item, insumoCodigo: ins.codigo || "", grupoMaterial: ins.grupo || item.grupoMaterial || "",
       unidade: item.unidade || ins.unidade || "",
-      etapa: item.etapa || ins.etapaPadrao || "",
-      contaId: item.contaId || ins.contaPadrao || "",
+      etapa: item.etapa || "",
+      contaId: item.contaId || "",
+      ...(typeof padraoAoEscolherInsumo === "function" ? padraoAoEscolherInsumo(ins, item)
+        : { etapa: item.etapa || ins.etapaPadrao || "", contaId: item.contaId || ins.contaPadrao || "" }),
       sugestao: null };
   }
 
@@ -40982,11 +41387,14 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
               <CampoCtrNum tipo="moeda" valor={it.bruto} style={celStyle} placeholder="0,00"
                 onChange={(v) => mexerItem(i, { bruto: v })} />
             );
+            const insEtapa = it.insumoCodigo ? (insumos || []).find((y) => y && (y.codigo === it.insumoCodigo || y.id === it.insumoCodigo)) : null;
+            const pedePavimento = typeof faltaPavimento === "function" && faltaPavimento(insEtapa, it.etapa);
             const campoEtapa = (
               <SelectBusca style={{ ...celStyle, borderColor: it.etapa ? "rgba(38,36,33,0.16)" : "#dc2626" }}
                 value={it.etapa || ""} onChange={(v) => mexerItem(i, { etapa: v })}
-                placeholder="Procurar etapa…"
-                opcoes={[{ valor: "", rotulo: "— etapa —" }].concat(
+                placeholder={pedePavimento ? "Térreo, Pav 1 ou Pav 2…" : "Procurar etapa…"}
+                opcoes={typeof opcoesDeEtapaDoLancamento === "function" ? opcoesDeEtapaDoLancamento(insEtapa, "— etapa —")
+                  : [{ valor: "", rotulo: "— etapa —" }].concat(
                   etapas.map((et) => ({ valor: et.id, rotulo: et.nome, grupo: et.macro || "" })))} />
             );
             const campoConta = (
@@ -41019,7 +41427,7 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
                     <div><span style={rotuloMini}>Total</span>{campoTotal}</div>
                   </div>
                   <div style={{ marginTop: 8 }}>
-                    <span style={Object.assign({}, rotuloMini, { color: it.etapa ? "#6b7280" : "#dc2626" })}>Etapa *</span>
+                    <span style={Object.assign({}, rotuloMini, { color: it.etapa ? "#6b7280" : "#dc2626" })}>{pedePavimento ? "Etapa * — escolha o pavimento" : "Etapa *"}</span>
                     {campoEtapa}
                   </div>
                   <div style={{ marginTop: 8 }}>
@@ -43623,7 +44031,7 @@ function BotaoCopiarPix({ pix, compacto }) {
 // O número que importa não é quanto a obra gastou — é quanto do que ela
 // gastou dá para rastrear até o item que foi orçado. O resto some do
 // confronto e volta como surpresa no fechamento.
-function ConferenciaDaObraView({ obra, insumos, isMobile, fmtBRL }) {
+function ConferenciaDaObraView({ obra, insumos, isMobile, fmtBRL, aoVerItens }) {
   const c = conferenciaDaLigacao(obra, insumos);
   const porInsumo = plPorInsumo(obra && obra.orcamento, (obra && obra.contasPagar) || [], insumos);
   const qtd = (n) => (!n ? "—" : String(Math.round(n * 1000) / 1000).replace(".", ","));
@@ -43678,37 +44086,251 @@ function ConferenciaDaObraView({ obra, insumos, isMobile, fmtBRL }) {
       )}
 
       {porInsumo.length > 0 && (
-        <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, overflow: "hidden" }}>
-          <div style={{ padding: "12px 14px 2px" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>Orçado × consumido, item a item</div>
-            <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3, marginBottom: 8 }}>
-              O confronto em quantidade, que o quadro por conta e o por etapa não dão — os dois somam
-              reais e perdem o m³.
+        <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding: "12px 14px",
+          display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>Orçado × realizado, item a item</div>
+            <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>
+              {porInsumo.length} itens com orçado ou compra — por macro-etapa, etapa e pavimento, em reais e em quantidade.
             </div>
           </div>
-          <div style={{ ...grade, padding: "8px 14px", borderBottom: "1px solid rgba(38,36,33,0.10)" }}>
-            <span style={cab}>Item</span>
-            <span style={{ ...cab, textAlign: "right" }}>Orçado</span>
-            {!isMobile && <span style={{ ...cab, textAlign: "right" }}>R$ orçado</span>}
-            <span style={{ ...cab, textAlign: "right" }}>Consumido</span>
-            {!isMobile && <span style={{ ...cab, textAlign: "right" }}>R$ pago</span>}
-            {!isMobile && <span style={{ ...cab, textAlign: "right" }}>Saldo</span>}
-          </div>
-          {porInsumo.map((r) => (
-            <div key={r.insumoCodigo} style={{ ...grade, padding: "7px 14px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
-              <span style={{ fontSize: 12.5, color: "#111827", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {r.nome || r.insumoCodigo}
-                <span style={{ fontSize: 10.5, color: "#9ca3af" }}> · {r.insumoCodigo}</span>
-              </span>
-              <span style={{ ...celula, color: "#6b7280" }}>{qtd(r.qtdOrcada)} {r.unidade}</span>
-              {!isMobile && <span style={{ ...celula, color: "#6b7280" }}>{num(r.orcado)}</span>}
-              <span style={{ ...celula, color: "#111827" }}>{qtd(r.qtdRealizada)} {r.unidade}</span>
-              {!isMobile && <span style={{ ...celula, color: "#111827" }}>{num(r.realizado)}</span>}
-              {!isMobile && <span style={{ ...celula, color: r.saldo < -0.005 ? "#dc2626" : "#6b7280" }}>{num(r.saldo)}</span>}
+          {aoVerItens && (
+            <button type="button" onClick={aoVerItens}
+              style={{ fontFamily: "inherit", fontSize: 12.5, padding: "7px 14px", borderRadius: 10, cursor: "pointer",
+                border: "1px solid " + AZUL_VK, background: "#eef5ff", color: AZUL_VK, fontWeight: 600 }}>
+              Ver item a item
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Orçado × realizado, item a item ─────────────────────────────
+// A mesma árvore do orçamento: macro-etapa → etapa (com o pavimento) →
+// item. Cada linha confronta o que a fórmula orçou com o que foi pago, em
+// reais e em quantidade. Mão de obra casa pela conta; conta paga sem item
+// aparece como a própria conta, para o dinheiro não sumir.
+function OrcadoXRealizadoView({ obra, insumos, isMobile, fmtBRL }) {
+  const [porEtapa, setPorEtapa] = useState(true);
+  const [filtro, setFiltro] = useState("todos");   // todos | diferenca | semOrcado | semPago
+  const [busca, setBusca] = useState("");
+  const [abertas, setAbertas] = useState({});
+  const [todasAbertas, setTodasAbertas] = useState(false);
+  const [exportando, setExportando] = useState(false);
+  const r = useMemo(() => (typeof orcadoXRealizadoPorItem === "function"
+    ? orcadoXRealizadoPorItem(obra, insumos, { porEtapa }) : { macros: [], itens: [], totais: {} }), [obra, insumos, porEtapa]);
+  const norm = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const termo = norm(busca.trim());
+  const passa = (it) => {
+    if (termo && norm(it.nome).indexOf(termo) < 0 && norm(it.insumoCodigo).indexOf(termo) < 0) return false;
+    if (filtro === "diferenca") return Math.abs(it.saldo) >= 0.01 && it.realizado > 0;
+    if (filtro === "semOrcado") return !(it.orcado > 0) && (it.realizado > 0 || it.aPagar > 0);
+    if (filtro === "semPago") return it.orcado > 0 && !(it.realizado > 0);
+    return true;
+  };
+  const filtrando = !!termo || filtro !== "todos";
+  const macros = r.macros.map((m) => ({ ...m, etapas: m.etapas.map((e) => ({ ...e, itens: e.itens.filter(passa) }))
+    .filter((e) => e.itens.length) })).filter((m) => m.etapas.length);
+  const qtd = (n) => (!n ? "—" : (Math.round(n * 1000) / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 3 }));
+  const num = (v) => (Math.abs(v || 0) < 0.005 ? "—" : fmtBRL(v));
+  const corSaldo = (v) => (v < -0.005 ? "#dc2626" : "#4b5563");
+  const cab = { fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600 };
+  const celula = { fontSize: 12.5, textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
+  const grade = {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "minmax(0,1fr) 84px 84px" : "minmax(200px,1fr) 104px 112px 104px 112px 112px",
+    gap: 8, alignItems: "center",
+  };
+  const botao = (ativo) => ({ fontFamily: "inherit", fontSize: 12, padding: "5px 12px", borderRadius: 8, cursor: "pointer",
+    border: `1px solid ${ativo ? AZUL_VK : "rgba(38,36,33,0.16)"}`, background: ativo ? "#eef5ff" : "#fff",
+    color: ativo ? AZUL_VK : "#4b5563", fontWeight: ativo ? 600 : 500 });
+  const chaveEtapa = (m, e) => m.macro + "|" + e.etapaId;
+  const aberta = (m, e) => filtrando || todasAbertas || !!abertas[chaveEtapa(m, e)];
+
+  async function exportar() {
+    if (exportando) return;
+    setExportando(true);
+    const cols = [
+      { t: "Macro-etapa", w: 24 }, { t: "Etapa", w: 30 }, { t: "Item", w: 44 }, { t: "Código", w: 11 }, { t: "Unidade", w: 10 },
+      { t: "Qtd orçada", w: 11, f: "General" }, { t: "R$ orçado", w: 14, f: '"R$" #,##0.00' },
+      { t: "Qtd paga", w: 11, f: "General" }, { t: "R$ pago", w: 14, f: '"R$" #,##0.00' },
+      { t: "R$ a pagar", w: 13, f: '"R$" #,##0.00' }, { t: "Saldo R$", w: 14, f: '"R$" #,##0.00;[Red]-"R$" #,##0.00' },
+      { t: "Saldo qtd", w: 11, f: "General" }, { t: "% gasto", w: 9, f: "0.0%" },
+    ];
+    const linhas = [];
+    macros.forEach((m) => m.etapas.forEach((e) => e.itens.forEach((it) => linhas.push([
+      m.macro, e.nome, it.nome, it.insumoCodigo || "", it.unidade || "",
+      it.qtdOrcada || null, it.orcado || null, it.qtdRealizada || null, it.realizado || null, it.aPagar || null,
+      null, null, null]))));
+    const hoje = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const nome = "orcado-x-realizado-" + String((obra && obra.nome) || "obra").replace(/[^\w-]+/g, "-").toLowerCase() + "-" + hoje;
+    const baixar = (blob, arquivo) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = arquivo; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    };
+    try {
+      if (typeof carregarExcelJS !== "function") throw new Error("sem ExcelJS");
+      const E = await carregarExcelJS();
+      const wb = new E.Workbook(); wb.creator = "VICKE";
+      const ws = wb.addWorksheet("Orçado x realizado", { views: [{ state: "frozen", xSplit: 3, ySplit: 1, activeCell: "D2" }] });
+      ws.columns = cols.map((c) => ({ header: c.t, key: c.t, width: c.w }));
+      linhas.forEach((l, k) => {
+        const n = k + 2;
+        const row = ws.addRow(l);
+        // saldo e % são fórmula: mexeu no número, a conta acompanha
+        row.getCell(11).value = { formula: `IFERROR(G${n},0)-IFERROR(I${n},0)` };
+        row.getCell(12).value = { formula: `IF(AND(ISNUMBER(F${n}),ISNUMBER(H${n})),F${n}-H${n},"")` };
+        row.getCell(13).value = { formula: `IF(N(G${n})>0,N(I${n})/G${n},"")` };
+        row.eachCell({ includeEmpty: true }, (cel, j) => { cel.font = { name: "Arial", size: 10 }; if (cols[j - 1].f) cel.numFmt = cols[j - 1].f; });
+      });
+      const tot = ws.addRow(["Total", "", "", "", "", null, null, null, null, null, null, null, null]);
+      const ult = linhas.length + 1, nt = linhas.length + 2;
+      ["G", "I", "J", "K"].forEach((L) => { tot.getCell(L).value = { formula: `SUM(${L}2:${L}${ult})` }; });
+      tot.getCell("M").value = { formula: `IF(G${nt}>0,I${nt}/G${nt},"")` };
+      tot.eachCell({ includeEmpty: true }, (cel, j) => { cel.font = { name: "Arial", size: 10, bold: true }; if (cols[j - 1].f) cel.numFmt = cols[j - 1].f; });
+      const cabRow = ws.getRow(1); cabRow.height = 22;
+      cabRow.eachCell((cel) => {
+        cel.font = { name: "Arial", size: 10, bold: true, color: { argb: "FFFFFFFF" } };
+        cel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0474F4" } };
+        cel.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+      });
+      ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, linhas.length + 1), column: cols.length } };
+      const buf = await wb.xlsx.writeBuffer();
+      baixar(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), nome + ".xlsx");
+    } catch (e) {
+      const esc = (v) => { const t = typeof v === "number" ? String(v).replace(".", ",") : String(v == null ? "" : v); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+      const csv = "﻿" + [cols.map((c) => c.t)].concat(linhas.map((l) => {
+        const x = l.slice(); x[10] = Math.round(((x[6] || 0) - (x[8] || 0)) * 100) / 100; return x;
+      })).map((l) => l.map(esc).join(";")).join("\r\n");
+      baixar(new Blob([csv], { type: "text/csv;charset=utf-8" }), nome + ".csv");
+    }
+    setExportando(false);
+  }
+
+  if (!r.itens.length) {
+    return (
+      <div style={{ padding: 24, textAlign: "center", color: "#4b5563", fontSize: 12.5,
+        border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa", marginBottom: 16 }}>
+        Nada orçado nem pago ainda. Gere o orçamento da obra; o que for pago em contas a pagar aparece aqui, item a item.
+      </div>
+    );
+  }
+  const t = r.totais;
+  return (
+    <div data-vk-orcado-realizado="1" style={{ marginBottom: 16 }}>
+      <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding: isMobile ? 14 : "16px 18px", marginBottom: 14 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: "#111827" }}>Orçado × realizado, item a item</div>
+        <div style={{ fontSize: 12, color: "#4b5563", marginTop: 3 }}>
+          O mesmo item, na mesma etapa e no mesmo pavimento, dos dois lados. Etapa, grupo e conta vêm do catálogo.
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0,1fr))", gap: 12, marginTop: 12 }}>
+          {[["Orçado", t.orcado, "#111827"], ["Pago", t.realizado, "#111827"], ["A pagar", t.aPagar, "#4b5563"],
+            [t.saldo < 0 ? "Passou em" : "Saldo", Math.abs(t.saldo || 0), t.saldo < -0.005 ? "#dc2626" : "#111827"]].map(([rot, v, cor]) => (
+            <div key={rot}>
+              <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4 }}>{rot}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: cor, fontVariantNumeric: "tabular-nums" }}>{num(v)}</div>
             </div>
           ))}
         </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+        <button onClick={() => setPorEtapa(true)} style={botao(porEtapa)}>Por etapa</button>
+        <button onClick={() => setPorEtapa(false)} style={botao(!porEtapa)} title="Junta o item de todas as etapas numa linha">Só por item</button>
+        <span style={{ width: 8 }} />
+        {[["todos", "Todos"], ["diferenca", "Com diferença"], ["semOrcado", "Pago sem orçado"], ["semPago", "Orçado sem pago"]].map(([v, rot]) => (
+          <button key={v} onClick={() => setFiltro(v)} style={botao(filtro === v)}>{rot}</button>
+        ))}
+        <button onClick={exportar} disabled={exportando} data-vk-exportar-orcado-realizado="1"
+          style={{ ...botao(false), marginLeft: isMobile ? 0 : "auto" }}>{exportando ? "Gerando…" : "Exportar Excel"}</button>
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+        <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Procurar item ou código…"
+          style={{ ...C.input, flex: 1, minWidth: 180 }} />
+        {porEtapa && !filtrando && (
+          <button onClick={() => { setTodasAbertas(!todasAbertas); setAbertas({}); }} style={botao(todasAbertas)}>
+            {todasAbertas ? "Fechar etapas" : "Abrir todas"}
+          </button>
+        )}
+      </div>
+
+      {!macros.length && (
+        <div style={{ fontSize: 12.5, color: "#4b5563", padding: "8px 2px 16px" }}>Nenhum item com esse filtro.</div>
       )}
+      {macros.map((m) => (
+        <div key={m.macro} style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
+          <div style={{ ...grade, padding: "10px 12px", background: "#f8fafc", borderBottom: "1px solid rgba(38,36,33,0.10)" }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#111827", minWidth: 0 }}>{m.macro}</span>
+            {!isMobile && <span />}
+            <span style={{ ...celula, fontWeight: 700, color: "#111827" }}>{num(m.orcado)}</span>
+            {!isMobile && <span />}
+            <span style={{ ...celula, fontWeight: 700, color: "#111827" }}>{num(m.realizado)}</span>
+            {!isMobile && <span style={{ ...celula, fontWeight: 700, color: corSaldo(m.saldo) }}>{num(m.saldo)}</span>}
+          </div>
+          {m.etapas.map((e) => {
+            const ab = !porEtapa || aberta(m, e);
+            const mostraEtapa = porEtapa;
+            return (
+              <div key={e.etapaId || "sem"}>
+                {mostraEtapa && (
+                  <button type="button" onClick={() => setAbertas((a) => ({ ...a, [chaveEtapa(m, e)]: !a[chaveEtapa(m, e)] }))}
+                    style={{ ...grade, width: "100%", textAlign: "left", background: "#fff", border: "none",
+                      borderTop: "1px solid rgba(38,36,33,0.08)", padding: "8px 12px", cursor: "pointer", fontFamily: "inherit" }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", minWidth: 0 }}>
+                      <span style={{ color: "#9ca3af", marginRight: 6 }}>{ab ? "▾" : "▸"}</span>{e.nome}
+                      <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}> · {e.itens.length} {e.itens.length === 1 ? "item" : "itens"}</span>
+                    </span>
+                    {!isMobile && <span />}
+                    <span style={{ ...celula, color: "#4b5563" }}>{num(e.orcado)}</span>
+                    {!isMobile && <span />}
+                    <span style={{ ...celula, color: "#4b5563" }}>{num(e.realizado)}</span>
+                    {!isMobile && <span style={{ ...celula, color: corSaldo(e.saldo) }}>{num(e.saldo)}</span>}
+                  </button>
+                )}
+                {(ab || !mostraEtapa) && (
+                  <div>
+                    {!isMobile && (
+                      <div style={{ ...grade, padding: "6px 12px 4px 30px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+                        <span style={cab}>Item</span>
+                        <span style={{ ...cab, textAlign: "right" }}>Qtd orçada</span>
+                        <span style={{ ...cab, textAlign: "right" }}>R$ orçado</span>
+                        <span style={{ ...cab, textAlign: "right" }}>Qtd paga</span>
+                        <span style={{ ...cab, textAlign: "right" }}>R$ pago</span>
+                        <span style={{ ...cab, textAlign: "right" }}>Saldo</span>
+                      </div>
+                    )}
+                    {e.itens.map((it) => (
+                      <div key={it.chave} style={{ ...grade, padding: isMobile ? "7px 12px" : "6px 12px 6px 30px", borderTop: "1px solid rgba(38,36,33,0.05)" }}>
+                        <span style={{ fontSize: 12.5, color: "#111827", minWidth: 0 }}>
+                          <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "normal" : "nowrap" }}>
+                            {it.nome || it.insumoCodigo}
+                            {it.insumoCodigo && <span style={{ fontSize: 10.5, color: "#9ca3af" }}> · {it.insumoCodigo}</span>}
+                          </span>
+                          {isMobile && (
+                            <span style={{ display: "block", fontSize: 11, color: "#6b7280", marginTop: 2 }}>
+                              {it.qtdOrcada || it.qtdRealizada ? `${qtd(it.qtdOrcada)} → ${qtd(it.qtdRealizada)} ${it.unidade || ""}` : ""}
+                              {Math.abs(it.saldo) >= 0.01 && <span style={{ color: corSaldo(it.saldo) }}>{(it.qtdOrcada || it.qtdRealizada) ? " · " : ""}saldo {num(it.saldo)}</span>}
+                            </span>
+                          )}
+                          {it.aPagar > 0 && <span style={{ display: "block", fontSize: 10.5, color: "#b45309" }}>a pagar {fmtBRL(it.aPagar)}</span>}
+                        </span>
+                        {!isMobile && <span style={{ ...celula, color: "#6b7280" }}>{qtd(it.qtdOrcada)} {it.qtdOrcada ? it.unidade : ""}</span>}
+                        <span style={{ ...celula, color: "#6b7280" }}>{num(it.orcado)}</span>
+                        {!isMobile && <span style={{ ...celula, color: "#111827" }}>{qtd(it.qtdRealizada)} {it.qtdRealizada ? it.unidade : ""}</span>}
+                        <span style={{ ...celula, color: "#111827" }}>{num(it.realizado)}</span>
+                        {!isMobile && <span style={{ ...celula, color: corSaldo(it.saldo) }}>{num(it.saldo)}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }
@@ -45225,7 +45847,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         {/* Toggle de visão — quebra linha no celular: sem isto a última aba
             fica fora da tela, inalcançável, e ninguém descobre que existe */}
         <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-          {[["pl", "P&L"], ["quadro", "Preencher"], ["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"], ["ligacao", "Confer\u00eancia"], ["escritorio", "Para o escrit\u00f3rio"]].map(([v, l]) => (
+          {[["pl", "P&L"], ["quadro", "Preencher"], ["itens", "Item a item"], ["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"], ["ligacao", "Confer\u00eancia"], ["escritorio", "Para o escrit\u00f3rio"]].map(([v, l]) => (
             <button key={v} onClick={() => setVisaoPL(v)}
               style={{ border: visaoPL === v ? `1.5px solid ${AZUL_VK}` : "1px solid rgba(38,36,33,0.16)", background: "#fff", color: visaoPL === v ? "#111827" : "#4b5563", borderRadius: 20, padding: "6px 16px", fontSize: 12.5, fontWeight: visaoPL === v ? 700 : 500, cursor: "pointer", fontFamily: "inherit" }}>
               {l}
@@ -45233,9 +45855,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           ))}
         </div>
 
-        {visaoPL === "ligacao" ? (
-          <ConferenciaDaObraView obra={{ ...obraAtual, contasPagar: contasDaObra }}
+        {visaoPL === "itens" ? (
+          <OrcadoXRealizadoView obra={{ ...obraAtual, contasPagar: contasDaObra }}
             insumos={data.materiais || []} isMobile={isMobile} fmtBRL={fmtBRL} />
+        ) : visaoPL === "ligacao" ? (
+          <ConferenciaDaObraView obra={{ ...obraAtual, contasPagar: contasDaObra }}
+            insumos={data.materiais || []} isMobile={isMobile} fmtBRL={fmtBRL} aoVerItens={() => setVisaoPL("itens")} />
         ) : visaoPL === "escritorio" ? (
           <PonteEscritorioView obra={obraAtual} cliente={cliente} contasPagar={contasDaObra}
             entradas={entradasDaObra} data={data} isMobile={isMobile} fmtBRL={fmtBRL} />
@@ -45581,7 +46206,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <SelectBusca style={C.input} value={g.etapa || ""}
             onChange={(v) => setG("etapa", v)}
             placeholder="Procurar etapa…"
-            opcoes={[{ valor: "", rotulo: "— várias etapas (obra civil, empreitada geral) —" }].concat(
+            opcoes={typeof opcoesDeEtapaDoLancamento === "function"
+              ? opcoesDeEtapaDoLancamento(null, "— várias etapas (obra civil, empreitada geral) —")
+              : [{ valor: "", rotulo: "— várias etapas (obra civil, empreitada geral) —" }].concat(
               (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(e => ({ valor: e.id, rotulo: e.nome })))} />
           <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>
             Contrato de uma etapa só — o portão, a pintura, a impermeabilização — leva a etapa para as parcelas.
@@ -46726,20 +47353,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                       aoCadastrar={(campos) => typeof cadastrarInsumoNoCatalogo === "function"
                         ? cadastrarInsumoNoCatalogo(data, save, campos) : null}
                       aoLimpar={() => setFormConta(f => ({ ...f, insumoCodigo: "" }))}
-                      aoEscolher={(ins) => setFormConta(f => ({ ...f, insumoCodigo: ins.codigo || ins.id || "",
-                        descricao: f.descricao || ins.nome || "",
-                        grupoMaterial: ins.grupo || f.grupoMaterial || "",
-                        unidade: f.unidade || ins.unidade || "",
-                        etapa: f.etapa || ins.etapaPadrao || "" }))} />
+                      aoEscolher={(ins) => setFormConta(f => lancamentoComInsumo(f, ins))} />
                   ) : (
                   <SelectBusca style={C.input} value={formConta.insumoCodigo || ""}
                     onChange={(v) => {
                       const ins = (data.materiais || []).find(x => x && (x.codigo === v || x.id === v)) || null;
-                      setFormConta(f => ({ ...f, insumoCodigo: v,
-                        descricao: f.descricao || (ins && ins.nome) || "",
-                        grupoMaterial: (ins && ins.grupo) || f.grupoMaterial || "",
-                        unidade: f.unidade || (ins && ins.unidade) || "",
-                        etapa: f.etapa || (ins && ins.etapaPadrao) || "" }));
+                      setFormConta(f => (ins ? lancamentoComInsumo(f, ins) : { ...f, insumoCodigo: v }));
                     }}
                     placeholder="Procurar no catálogo…"
                     opcoes={[{ valor: "", rotulo: "— sem item do catálogo —" }].concat(
@@ -46765,14 +47384,24 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   <CampoCtrNum tipo="moeda" style={C.input} valor={formConta.unitario}
                     onChange={v => setFormConta(conciliarValorDaConta(formConta, "unitario", v))} placeholder="0,00" />
                 </div>
-                <div style={{ minWidth: 0 }}>
-                  <label style={C.label}>Etapa</label>
-                  <SelectBusca style={C.input} value={formConta.etapa || ""}
-                    onChange={(v) => setFormConta(f => ({ ...f, etapa: v }))}
-                    placeholder="Procurar etapa…"
-                    opcoes={[{ valor: "", rotulo: "— sem etapa —" }].concat(
-                      (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(e => ({ valor: e.id, rotulo: e.nome || e.id })))} />
-                </div>
+                {(() => {
+                  // Insumo por pavimento (tijolo, laje): os pavimentos vêm no
+                  // topo da lista e o campo avisa até alguém escolher.
+                  const insEtapa = formConta.insumoCodigo ? (data.materiais || []).find(m => m && m.codigo === formConta.insumoCodigo) : null;
+                  const pedePav = typeof faltaPavimento === "function" && faltaPavimento(insEtapa, formConta.etapa);
+                  return (
+                    <div style={{ minWidth: 0 }}>
+                      <label style={{ ...C.label, color: pedePav ? "#b45309" : C.label.color }}>{pedePav ? "Etapa — escolha o pavimento" : "Etapa"}</label>
+                      <SelectBusca style={pedePav ? { ...C.input, borderColor: "#f59e0b" } : C.input} value={formConta.etapa || ""}
+                        onChange={(v) => setFormConta(f => ({ ...f, etapa: v }))}
+                        placeholder={pedePav ? "Térreo, Pav 1 ou Pav 2…" : "Procurar etapa…"}
+                        opcoes={typeof opcoesDeEtapaDoLancamento === "function"
+                          ? opcoesDeEtapaDoLancamento(insEtapa, "— sem etapa —")
+                          : [{ valor: "", rotulo: "— sem etapa —" }].concat(
+                            (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(e => ({ valor: e.id, rotulo: e.nome || e.id })))} />
+                    </div>
+                  );
+                })()}
               </div>
               {numeroDeCampo(formConta.quantidade) > 0 && numeroDeCampo(formConta.unitario) > 0 && (
                 <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8 }}>

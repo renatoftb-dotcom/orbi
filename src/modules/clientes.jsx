@@ -1876,7 +1876,7 @@ function BotaoCopiarPix({ pix, compacto }) {
 // O número que importa não é quanto a obra gastou — é quanto do que ela
 // gastou dá para rastrear até o item que foi orçado. O resto some do
 // confronto e volta como surpresa no fechamento.
-function ConferenciaDaObraView({ obra, insumos, isMobile, fmtBRL }) {
+function ConferenciaDaObraView({ obra, insumos, isMobile, fmtBRL, aoVerItens }) {
   const c = conferenciaDaLigacao(obra, insumos);
   const porInsumo = plPorInsumo(obra && obra.orcamento, (obra && obra.contasPagar) || [], insumos);
   const qtd = (n) => (!n ? "—" : String(Math.round(n * 1000) / 1000).replace(".", ","));
@@ -1931,37 +1931,251 @@ function ConferenciaDaObraView({ obra, insumos, isMobile, fmtBRL }) {
       )}
 
       {porInsumo.length > 0 && (
-        <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, overflow: "hidden" }}>
-          <div style={{ padding: "12px 14px 2px" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>Orçado × consumido, item a item</div>
-            <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3, marginBottom: 8 }}>
-              O confronto em quantidade, que o quadro por conta e o por etapa não dão — os dois somam
-              reais e perdem o m³.
+        <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding: "12px 14px",
+          display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>Orçado × realizado, item a item</div>
+            <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>
+              {porInsumo.length} itens com orçado ou compra — por macro-etapa, etapa e pavimento, em reais e em quantidade.
             </div>
           </div>
-          <div style={{ ...grade, padding: "8px 14px", borderBottom: "1px solid rgba(38,36,33,0.10)" }}>
-            <span style={cab}>Item</span>
-            <span style={{ ...cab, textAlign: "right" }}>Orçado</span>
-            {!isMobile && <span style={{ ...cab, textAlign: "right" }}>R$ orçado</span>}
-            <span style={{ ...cab, textAlign: "right" }}>Consumido</span>
-            {!isMobile && <span style={{ ...cab, textAlign: "right" }}>R$ pago</span>}
-            {!isMobile && <span style={{ ...cab, textAlign: "right" }}>Saldo</span>}
-          </div>
-          {porInsumo.map((r) => (
-            <div key={r.insumoCodigo} style={{ ...grade, padding: "7px 14px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
-              <span style={{ fontSize: 12.5, color: "#111827", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {r.nome || r.insumoCodigo}
-                <span style={{ fontSize: 10.5, color: "#9ca3af" }}> · {r.insumoCodigo}</span>
-              </span>
-              <span style={{ ...celula, color: "#6b7280" }}>{qtd(r.qtdOrcada)} {r.unidade}</span>
-              {!isMobile && <span style={{ ...celula, color: "#6b7280" }}>{num(r.orcado)}</span>}
-              <span style={{ ...celula, color: "#111827" }}>{qtd(r.qtdRealizada)} {r.unidade}</span>
-              {!isMobile && <span style={{ ...celula, color: "#111827" }}>{num(r.realizado)}</span>}
-              {!isMobile && <span style={{ ...celula, color: r.saldo < -0.005 ? "#dc2626" : "#6b7280" }}>{num(r.saldo)}</span>}
+          {aoVerItens && (
+            <button type="button" onClick={aoVerItens}
+              style={{ fontFamily: "inherit", fontSize: 12.5, padding: "7px 14px", borderRadius: 10, cursor: "pointer",
+                border: "1px solid " + AZUL_VK, background: "#eef5ff", color: AZUL_VK, fontWeight: 600 }}>
+              Ver item a item
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Orçado × realizado, item a item ─────────────────────────────
+// A mesma árvore do orçamento: macro-etapa → etapa (com o pavimento) →
+// item. Cada linha confronta o que a fórmula orçou com o que foi pago, em
+// reais e em quantidade. Mão de obra casa pela conta; conta paga sem item
+// aparece como a própria conta, para o dinheiro não sumir.
+function OrcadoXRealizadoView({ obra, insumos, isMobile, fmtBRL }) {
+  const [porEtapa, setPorEtapa] = useState(true);
+  const [filtro, setFiltro] = useState("todos");   // todos | diferenca | semOrcado | semPago
+  const [busca, setBusca] = useState("");
+  const [abertas, setAbertas] = useState({});
+  const [todasAbertas, setTodasAbertas] = useState(false);
+  const [exportando, setExportando] = useState(false);
+  const r = useMemo(() => (typeof orcadoXRealizadoPorItem === "function"
+    ? orcadoXRealizadoPorItem(obra, insumos, { porEtapa }) : { macros: [], itens: [], totais: {} }), [obra, insumos, porEtapa]);
+  const norm = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const termo = norm(busca.trim());
+  const passa = (it) => {
+    if (termo && norm(it.nome).indexOf(termo) < 0 && norm(it.insumoCodigo).indexOf(termo) < 0) return false;
+    if (filtro === "diferenca") return Math.abs(it.saldo) >= 0.01 && it.realizado > 0;
+    if (filtro === "semOrcado") return !(it.orcado > 0) && (it.realizado > 0 || it.aPagar > 0);
+    if (filtro === "semPago") return it.orcado > 0 && !(it.realizado > 0);
+    return true;
+  };
+  const filtrando = !!termo || filtro !== "todos";
+  const macros = r.macros.map((m) => ({ ...m, etapas: m.etapas.map((e) => ({ ...e, itens: e.itens.filter(passa) }))
+    .filter((e) => e.itens.length) })).filter((m) => m.etapas.length);
+  const qtd = (n) => (!n ? "—" : (Math.round(n * 1000) / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 3 }));
+  const num = (v) => (Math.abs(v || 0) < 0.005 ? "—" : fmtBRL(v));
+  const corSaldo = (v) => (v < -0.005 ? "#dc2626" : "#4b5563");
+  const cab = { fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600 };
+  const celula = { fontSize: 12.5, textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
+  const grade = {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "minmax(0,1fr) 84px 84px" : "minmax(200px,1fr) 104px 112px 104px 112px 112px",
+    gap: 8, alignItems: "center",
+  };
+  const botao = (ativo) => ({ fontFamily: "inherit", fontSize: 12, padding: "5px 12px", borderRadius: 8, cursor: "pointer",
+    border: `1px solid ${ativo ? AZUL_VK : "rgba(38,36,33,0.16)"}`, background: ativo ? "#eef5ff" : "#fff",
+    color: ativo ? AZUL_VK : "#4b5563", fontWeight: ativo ? 600 : 500 });
+  const chaveEtapa = (m, e) => m.macro + "|" + e.etapaId;
+  const aberta = (m, e) => filtrando || todasAbertas || !!abertas[chaveEtapa(m, e)];
+
+  async function exportar() {
+    if (exportando) return;
+    setExportando(true);
+    const cols = [
+      { t: "Macro-etapa", w: 24 }, { t: "Etapa", w: 30 }, { t: "Item", w: 44 }, { t: "Código", w: 11 }, { t: "Unidade", w: 10 },
+      { t: "Qtd orçada", w: 11, f: "General" }, { t: "R$ orçado", w: 14, f: '"R$" #,##0.00' },
+      { t: "Qtd paga", w: 11, f: "General" }, { t: "R$ pago", w: 14, f: '"R$" #,##0.00' },
+      { t: "R$ a pagar", w: 13, f: '"R$" #,##0.00' }, { t: "Saldo R$", w: 14, f: '"R$" #,##0.00;[Red]-"R$" #,##0.00' },
+      { t: "Saldo qtd", w: 11, f: "General" }, { t: "% gasto", w: 9, f: "0.0%" },
+    ];
+    const linhas = [];
+    macros.forEach((m) => m.etapas.forEach((e) => e.itens.forEach((it) => linhas.push([
+      m.macro, e.nome, it.nome, it.insumoCodigo || "", it.unidade || "",
+      it.qtdOrcada || null, it.orcado || null, it.qtdRealizada || null, it.realizado || null, it.aPagar || null,
+      null, null, null]))));
+    const hoje = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const nome = "orcado-x-realizado-" + String((obra && obra.nome) || "obra").replace(/[^\w-]+/g, "-").toLowerCase() + "-" + hoje;
+    const baixar = (blob, arquivo) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = arquivo; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    };
+    try {
+      if (typeof carregarExcelJS !== "function") throw new Error("sem ExcelJS");
+      const E = await carregarExcelJS();
+      const wb = new E.Workbook(); wb.creator = "VICKE";
+      const ws = wb.addWorksheet("Orçado x realizado", { views: [{ state: "frozen", xSplit: 3, ySplit: 1, activeCell: "D2" }] });
+      ws.columns = cols.map((c) => ({ header: c.t, key: c.t, width: c.w }));
+      linhas.forEach((l, k) => {
+        const n = k + 2;
+        const row = ws.addRow(l);
+        // saldo e % são fórmula: mexeu no número, a conta acompanha
+        row.getCell(11).value = { formula: `IFERROR(G${n},0)-IFERROR(I${n},0)` };
+        row.getCell(12).value = { formula: `IF(AND(ISNUMBER(F${n}),ISNUMBER(H${n})),F${n}-H${n},"")` };
+        row.getCell(13).value = { formula: `IF(N(G${n})>0,N(I${n})/G${n},"")` };
+        row.eachCell({ includeEmpty: true }, (cel, j) => { cel.font = { name: "Arial", size: 10 }; if (cols[j - 1].f) cel.numFmt = cols[j - 1].f; });
+      });
+      const tot = ws.addRow(["Total", "", "", "", "", null, null, null, null, null, null, null, null]);
+      const ult = linhas.length + 1, nt = linhas.length + 2;
+      ["G", "I", "J", "K"].forEach((L) => { tot.getCell(L).value = { formula: `SUM(${L}2:${L}${ult})` }; });
+      tot.getCell("M").value = { formula: `IF(G${nt}>0,I${nt}/G${nt},"")` };
+      tot.eachCell({ includeEmpty: true }, (cel, j) => { cel.font = { name: "Arial", size: 10, bold: true }; if (cols[j - 1].f) cel.numFmt = cols[j - 1].f; });
+      const cabRow = ws.getRow(1); cabRow.height = 22;
+      cabRow.eachCell((cel) => {
+        cel.font = { name: "Arial", size: 10, bold: true, color: { argb: "FFFFFFFF" } };
+        cel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0474F4" } };
+        cel.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+      });
+      ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, linhas.length + 1), column: cols.length } };
+      const buf = await wb.xlsx.writeBuffer();
+      baixar(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), nome + ".xlsx");
+    } catch (e) {
+      const esc = (v) => { const t = typeof v === "number" ? String(v).replace(".", ",") : String(v == null ? "" : v); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+      const csv = "﻿" + [cols.map((c) => c.t)].concat(linhas.map((l) => {
+        const x = l.slice(); x[10] = Math.round(((x[6] || 0) - (x[8] || 0)) * 100) / 100; return x;
+      })).map((l) => l.map(esc).join(";")).join("\r\n");
+      baixar(new Blob([csv], { type: "text/csv;charset=utf-8" }), nome + ".csv");
+    }
+    setExportando(false);
+  }
+
+  if (!r.itens.length) {
+    return (
+      <div style={{ padding: 24, textAlign: "center", color: "#4b5563", fontSize: 12.5,
+        border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa", marginBottom: 16 }}>
+        Nada orçado nem pago ainda. Gere o orçamento da obra; o que for pago em contas a pagar aparece aqui, item a item.
+      </div>
+    );
+  }
+  const t = r.totais;
+  return (
+    <div data-vk-orcado-realizado="1" style={{ marginBottom: 16 }}>
+      <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding: isMobile ? 14 : "16px 18px", marginBottom: 14 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: "#111827" }}>Orçado × realizado, item a item</div>
+        <div style={{ fontSize: 12, color: "#4b5563", marginTop: 3 }}>
+          O mesmo item, na mesma etapa e no mesmo pavimento, dos dois lados. Etapa, grupo e conta vêm do catálogo.
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0,1fr))", gap: 12, marginTop: 12 }}>
+          {[["Orçado", t.orcado, "#111827"], ["Pago", t.realizado, "#111827"], ["A pagar", t.aPagar, "#4b5563"],
+            [t.saldo < 0 ? "Passou em" : "Saldo", Math.abs(t.saldo || 0), t.saldo < -0.005 ? "#dc2626" : "#111827"]].map(([rot, v, cor]) => (
+            <div key={rot}>
+              <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4 }}>{rot}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: cor, fontVariantNumeric: "tabular-nums" }}>{num(v)}</div>
             </div>
           ))}
         </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+        <button onClick={() => setPorEtapa(true)} style={botao(porEtapa)}>Por etapa</button>
+        <button onClick={() => setPorEtapa(false)} style={botao(!porEtapa)} title="Junta o item de todas as etapas numa linha">Só por item</button>
+        <span style={{ width: 8 }} />
+        {[["todos", "Todos"], ["diferenca", "Com diferença"], ["semOrcado", "Pago sem orçado"], ["semPago", "Orçado sem pago"]].map(([v, rot]) => (
+          <button key={v} onClick={() => setFiltro(v)} style={botao(filtro === v)}>{rot}</button>
+        ))}
+        <button onClick={exportar} disabled={exportando} data-vk-exportar-orcado-realizado="1"
+          style={{ ...botao(false), marginLeft: isMobile ? 0 : "auto" }}>{exportando ? "Gerando…" : "Exportar Excel"}</button>
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+        <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Procurar item ou código…"
+          style={{ ...C.input, flex: 1, minWidth: 180 }} />
+        {porEtapa && !filtrando && (
+          <button onClick={() => { setTodasAbertas(!todasAbertas); setAbertas({}); }} style={botao(todasAbertas)}>
+            {todasAbertas ? "Fechar etapas" : "Abrir todas"}
+          </button>
+        )}
+      </div>
+
+      {!macros.length && (
+        <div style={{ fontSize: 12.5, color: "#4b5563", padding: "8px 2px 16px" }}>Nenhum item com esse filtro.</div>
       )}
+      {macros.map((m) => (
+        <div key={m.macro} style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
+          <div style={{ ...grade, padding: "10px 12px", background: "#f8fafc", borderBottom: "1px solid rgba(38,36,33,0.10)" }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#111827", minWidth: 0 }}>{m.macro}</span>
+            {!isMobile && <span />}
+            <span style={{ ...celula, fontWeight: 700, color: "#111827" }}>{num(m.orcado)}</span>
+            {!isMobile && <span />}
+            <span style={{ ...celula, fontWeight: 700, color: "#111827" }}>{num(m.realizado)}</span>
+            {!isMobile && <span style={{ ...celula, fontWeight: 700, color: corSaldo(m.saldo) }}>{num(m.saldo)}</span>}
+          </div>
+          {m.etapas.map((e) => {
+            const ab = !porEtapa || aberta(m, e);
+            const mostraEtapa = porEtapa;
+            return (
+              <div key={e.etapaId || "sem"}>
+                {mostraEtapa && (
+                  <button type="button" onClick={() => setAbertas((a) => ({ ...a, [chaveEtapa(m, e)]: !a[chaveEtapa(m, e)] }))}
+                    style={{ ...grade, width: "100%", textAlign: "left", background: "#fff", border: "none",
+                      borderTop: "1px solid rgba(38,36,33,0.08)", padding: "8px 12px", cursor: "pointer", fontFamily: "inherit" }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", minWidth: 0 }}>
+                      <span style={{ color: "#9ca3af", marginRight: 6 }}>{ab ? "▾" : "▸"}</span>{e.nome}
+                      <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}> · {e.itens.length} {e.itens.length === 1 ? "item" : "itens"}</span>
+                    </span>
+                    {!isMobile && <span />}
+                    <span style={{ ...celula, color: "#4b5563" }}>{num(e.orcado)}</span>
+                    {!isMobile && <span />}
+                    <span style={{ ...celula, color: "#4b5563" }}>{num(e.realizado)}</span>
+                    {!isMobile && <span style={{ ...celula, color: corSaldo(e.saldo) }}>{num(e.saldo)}</span>}
+                  </button>
+                )}
+                {(ab || !mostraEtapa) && (
+                  <div>
+                    {!isMobile && (
+                      <div style={{ ...grade, padding: "6px 12px 4px 30px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+                        <span style={cab}>Item</span>
+                        <span style={{ ...cab, textAlign: "right" }}>Qtd orçada</span>
+                        <span style={{ ...cab, textAlign: "right" }}>R$ orçado</span>
+                        <span style={{ ...cab, textAlign: "right" }}>Qtd paga</span>
+                        <span style={{ ...cab, textAlign: "right" }}>R$ pago</span>
+                        <span style={{ ...cab, textAlign: "right" }}>Saldo</span>
+                      </div>
+                    )}
+                    {e.itens.map((it) => (
+                      <div key={it.chave} style={{ ...grade, padding: isMobile ? "7px 12px" : "6px 12px 6px 30px", borderTop: "1px solid rgba(38,36,33,0.05)" }}>
+                        <span style={{ fontSize: 12.5, color: "#111827", minWidth: 0 }}>
+                          <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "normal" : "nowrap" }}>
+                            {it.nome || it.insumoCodigo}
+                            {it.insumoCodigo && <span style={{ fontSize: 10.5, color: "#9ca3af" }}> · {it.insumoCodigo}</span>}
+                          </span>
+                          {isMobile && (
+                            <span style={{ display: "block", fontSize: 11, color: "#6b7280", marginTop: 2 }}>
+                              {it.qtdOrcada || it.qtdRealizada ? `${qtd(it.qtdOrcada)} → ${qtd(it.qtdRealizada)} ${it.unidade || ""}` : ""}
+                              {Math.abs(it.saldo) >= 0.01 && <span style={{ color: corSaldo(it.saldo) }}>{(it.qtdOrcada || it.qtdRealizada) ? " · " : ""}saldo {num(it.saldo)}</span>}
+                            </span>
+                          )}
+                          {it.aPagar > 0 && <span style={{ display: "block", fontSize: 10.5, color: "#b45309" }}>a pagar {fmtBRL(it.aPagar)}</span>}
+                        </span>
+                        {!isMobile && <span style={{ ...celula, color: "#6b7280" }}>{qtd(it.qtdOrcada)} {it.qtdOrcada ? it.unidade : ""}</span>}
+                        <span style={{ ...celula, color: "#6b7280" }}>{num(it.orcado)}</span>
+                        {!isMobile && <span style={{ ...celula, color: "#111827" }}>{qtd(it.qtdRealizada)} {it.qtdRealizada ? it.unidade : ""}</span>}
+                        <span style={{ ...celula, color: "#111827" }}>{num(it.realizado)}</span>
+                        {!isMobile && <span style={{ ...celula, color: corSaldo(it.saldo) }}>{num(it.saldo)}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }
@@ -3478,7 +3692,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         {/* Toggle de visão — quebra linha no celular: sem isto a última aba
             fica fora da tela, inalcançável, e ninguém descobre que existe */}
         <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-          {[["pl", "P&L"], ["quadro", "Preencher"], ["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"], ["ligacao", "Confer\u00eancia"], ["escritorio", "Para o escrit\u00f3rio"]].map(([v, l]) => (
+          {[["pl", "P&L"], ["quadro", "Preencher"], ["itens", "Item a item"], ["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"], ["ligacao", "Confer\u00eancia"], ["escritorio", "Para o escrit\u00f3rio"]].map(([v, l]) => (
             <button key={v} onClick={() => setVisaoPL(v)}
               style={{ border: visaoPL === v ? `1.5px solid ${AZUL_VK}` : "1px solid rgba(38,36,33,0.16)", background: "#fff", color: visaoPL === v ? "#111827" : "#4b5563", borderRadius: 20, padding: "6px 16px", fontSize: 12.5, fontWeight: visaoPL === v ? 700 : 500, cursor: "pointer", fontFamily: "inherit" }}>
               {l}
@@ -3486,9 +3700,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           ))}
         </div>
 
-        {visaoPL === "ligacao" ? (
-          <ConferenciaDaObraView obra={{ ...obraAtual, contasPagar: contasDaObra }}
+        {visaoPL === "itens" ? (
+          <OrcadoXRealizadoView obra={{ ...obraAtual, contasPagar: contasDaObra }}
             insumos={data.materiais || []} isMobile={isMobile} fmtBRL={fmtBRL} />
+        ) : visaoPL === "ligacao" ? (
+          <ConferenciaDaObraView obra={{ ...obraAtual, contasPagar: contasDaObra }}
+            insumos={data.materiais || []} isMobile={isMobile} fmtBRL={fmtBRL} aoVerItens={() => setVisaoPL("itens")} />
         ) : visaoPL === "escritorio" ? (
           <PonteEscritorioView obra={obraAtual} cliente={cliente} contasPagar={contasDaObra}
             entradas={entradasDaObra} data={data} isMobile={isMobile} fmtBRL={fmtBRL} />
@@ -3834,7 +4051,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <SelectBusca style={C.input} value={g.etapa || ""}
             onChange={(v) => setG("etapa", v)}
             placeholder="Procurar etapa…"
-            opcoes={[{ valor: "", rotulo: "— várias etapas (obra civil, empreitada geral) —" }].concat(
+            opcoes={typeof opcoesDeEtapaDoLancamento === "function"
+              ? opcoesDeEtapaDoLancamento(null, "— várias etapas (obra civil, empreitada geral) —")
+              : [{ valor: "", rotulo: "— várias etapas (obra civil, empreitada geral) —" }].concat(
               (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(e => ({ valor: e.id, rotulo: e.nome })))} />
           <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>
             Contrato de uma etapa só — o portão, a pintura, a impermeabilização — leva a etapa para as parcelas.
@@ -4979,20 +5198,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                       aoCadastrar={(campos) => typeof cadastrarInsumoNoCatalogo === "function"
                         ? cadastrarInsumoNoCatalogo(data, save, campos) : null}
                       aoLimpar={() => setFormConta(f => ({ ...f, insumoCodigo: "" }))}
-                      aoEscolher={(ins) => setFormConta(f => ({ ...f, insumoCodigo: ins.codigo || ins.id || "",
-                        descricao: f.descricao || ins.nome || "",
-                        grupoMaterial: ins.grupo || f.grupoMaterial || "",
-                        unidade: f.unidade || ins.unidade || "",
-                        etapa: f.etapa || ins.etapaPadrao || "" }))} />
+                      aoEscolher={(ins) => setFormConta(f => lancamentoComInsumo(f, ins))} />
                   ) : (
                   <SelectBusca style={C.input} value={formConta.insumoCodigo || ""}
                     onChange={(v) => {
                       const ins = (data.materiais || []).find(x => x && (x.codigo === v || x.id === v)) || null;
-                      setFormConta(f => ({ ...f, insumoCodigo: v,
-                        descricao: f.descricao || (ins && ins.nome) || "",
-                        grupoMaterial: (ins && ins.grupo) || f.grupoMaterial || "",
-                        unidade: f.unidade || (ins && ins.unidade) || "",
-                        etapa: f.etapa || (ins && ins.etapaPadrao) || "" }));
+                      setFormConta(f => (ins ? lancamentoComInsumo(f, ins) : { ...f, insumoCodigo: v }));
                     }}
                     placeholder="Procurar no catálogo…"
                     opcoes={[{ valor: "", rotulo: "— sem item do catálogo —" }].concat(
@@ -5018,14 +5229,24 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   <CampoCtrNum tipo="moeda" style={C.input} valor={formConta.unitario}
                     onChange={v => setFormConta(conciliarValorDaConta(formConta, "unitario", v))} placeholder="0,00" />
                 </div>
-                <div style={{ minWidth: 0 }}>
-                  <label style={C.label}>Etapa</label>
-                  <SelectBusca style={C.input} value={formConta.etapa || ""}
-                    onChange={(v) => setFormConta(f => ({ ...f, etapa: v }))}
-                    placeholder="Procurar etapa…"
-                    opcoes={[{ valor: "", rotulo: "— sem etapa —" }].concat(
-                      (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(e => ({ valor: e.id, rotulo: e.nome || e.id })))} />
-                </div>
+                {(() => {
+                  // Insumo por pavimento (tijolo, laje): os pavimentos vêm no
+                  // topo da lista e o campo avisa até alguém escolher.
+                  const insEtapa = formConta.insumoCodigo ? (data.materiais || []).find(m => m && m.codigo === formConta.insumoCodigo) : null;
+                  const pedePav = typeof faltaPavimento === "function" && faltaPavimento(insEtapa, formConta.etapa);
+                  return (
+                    <div style={{ minWidth: 0 }}>
+                      <label style={{ ...C.label, color: pedePav ? "#b45309" : C.label.color }}>{pedePav ? "Etapa — escolha o pavimento" : "Etapa"}</label>
+                      <SelectBusca style={pedePav ? { ...C.input, borderColor: "#f59e0b" } : C.input} value={formConta.etapa || ""}
+                        onChange={(v) => setFormConta(f => ({ ...f, etapa: v }))}
+                        placeholder={pedePav ? "Térreo, Pav 1 ou Pav 2…" : "Procurar etapa…"}
+                        opcoes={typeof opcoesDeEtapaDoLancamento === "function"
+                          ? opcoesDeEtapaDoLancamento(insEtapa, "— sem etapa —")
+                          : [{ valor: "", rotulo: "— sem etapa —" }].concat(
+                            (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(e => ({ valor: e.id, rotulo: e.nome || e.id })))} />
+                    </div>
+                  );
+                })()}
               </div>
               {numeroDeCampo(formConta.quantidade) > 0 && numeroDeCampo(formConta.unitario) > 0 && (
                 <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8 }}>

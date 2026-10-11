@@ -1263,8 +1263,11 @@ function casarItemDaEntrada(item, insumos, indice) {
     if (r && r.insumo) {
       return { ...it, insumoCodigo: r.insumo.codigo || "", grupoMaterial: r.insumo.grupo || "",
         unidade: it.unidade || r.insumo.unidade || "",
-        etapa: it.etapa || r.insumo.etapaPadrao || "",
-        contaId: it.contaId || r.insumo.contaPadrao || "", sugestao: null };
+        etapa: it.etapa || "",
+        contaId: it.contaId || "",
+        ...(typeof padraoAoEscolherInsumo === "function" ? padraoAoEscolherInsumo(r.insumo, it)
+          : { etapa: it.etapa || r.insumo.etapaPadrao || "", contaId: it.contaId || r.insumo.contaPadrao || "" }),
+        sugestao: null };
     }
   }
   return { ...it, sugestao: sugestaoDoCatalogo(it.descricao, indice) };
@@ -3741,7 +3744,7 @@ function contaDeCompra(contaId) {
 }
 
 function etapaDoItem(insumo, etapaDaCompra) {
-  return etapaDaCompra || (insumo && insumo.etapaPadrao) || "";
+  return etapaDaCompra || (typeof etapaFixaDoInsumo === "function" ? etapaFixaDoInsumo(insumo) : (insumo && insumo.etapaPadrao)) || "";
 }
 function contaDoItem(insumo, contaDaCompra) {
   return (insumo && insumo.contaPadrao) || contaDaCompra || "";
@@ -9121,14 +9124,18 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const indiceCat = useMemo(() => indiceDoCatalogo(insumos || []), [insumos]);
   const mexerItem = (i, muda) => setItens((lista) => (lista || []).map((x, j) => (j === i ? { ...x, ...muda } : x)));
   // O insumo escolhido traz consigo o que ele já sabe: unidade, etapa e conta.
-  // O que a pessoa já tinha posto à mão continua valendo.
+  // Conta e etapa do catálogo são fixas — o item é que liga a compra ao
+  // orçado. Item sem etapa no catálogo fica com a que a pessoa pôs; item
+  // por pavimento pede o pavimento.
   const comInsumoDaEntrada = (it, ins) => ({
     ...it,
     insumoCodigo: ins.codigo || ins.id || "",
     grupoMaterial: ins.grupo || "",
     unidade: it.unidade || ins.unidade || "",
-    etapa: it.etapa || ins.etapaPadrao || "",
-    contaId: it.contaId || ins.contaPadrao || "",
+    etapa: it.etapa || "",
+    contaId: it.contaId || "",
+    ...(typeof padraoAoEscolherInsumo === "function" ? padraoAoEscolherInsumo(ins, it)
+      : { etapa: it.etapa || ins.etapaPadrao || "", contaId: it.contaId || ins.contaPadrao || "" }),
     sugestao: null,
   });
   const resumo = itens ? resumoDaEntrada(itens) : null;
@@ -9911,7 +9918,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                         onChange={(v) => { if (v) setItens((l) => (l || []).map((x) => ({ ...x, etapa: v }))); }}
                         placeholder="Procurar etapa…"
                         opcoes={[{ valor: "", rotulo: "Mesma etapa para todos…" }].concat(
-                          etapasDaEntrada.map((e) => ({ valor: e.id, rotulo: e.nome })))} />
+                          etapasDaEntrada.map((e) => ({ valor: e.id, rotulo: e.nome, grupo: e.macro || "" })))} />
                     </div>
                   )}
                 </div>
@@ -9983,10 +9990,17 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                         <div style={{ minWidth: 0 }}>{mini("Total")}
                           <CampoCtrNum tipo="moeda" style={{ ...cel, textAlign: "right", fontWeight: 600 }} valor={brutoDoItem(it) || ""}
                             onChange={(v) => mexerTotal(i, v)} /></div>
-                        <div style={{ minWidth: 0, gridColumn: isMobile ? "1 / -1" : "auto" }}>{mini("Etapa")}
-                          <SelectBusca style={cel} value={it.etapa || ""} onChange={(v) => mexerItem(i, { etapa: v })}
-                            placeholder="Procurar etapa…"
-                            opcoes={[{ valor: "", rotulo: "— etapa —" }].concat(etapasDaEntrada.map((e) => ({ valor: e.id, rotulo: e.nome })))} /></div>
+                        {(() => {
+                          const insEt = it.insumoCodigo ? (insumos || []).find((y) => y && (y.codigo === it.insumoCodigo || y.id === it.insumoCodigo)) : null;
+                          const pedePav = typeof faltaPavimento === "function" && faltaPavimento(insEt, it.etapa);
+                          return (
+                            <div style={{ minWidth: 0, gridColumn: isMobile ? "1 / -1" : "auto" }}>{mini(pedePav ? "Etapa — pavimento?" : "Etapa")}
+                              <SelectBusca style={pedePav ? { ...cel, borderColor: "#f59e0b" } : cel} value={it.etapa || ""} onChange={(v) => mexerItem(i, { etapa: v })}
+                                placeholder={pedePav ? "Térreo, Pav 1 ou Pav 2…" : "Procurar etapa…"}
+                                opcoes={typeof opcoesDeEtapaDoLancamento === "function" ? opcoesDeEtapaDoLancamento(insEt, "— etapa —")
+                                  : [{ valor: "", rotulo: "— etapa —" }].concat(etapasDaEntrada.map((e) => ({ valor: e.id, rotulo: e.nome })))} /></div>
+                          );
+                        })()}
                         <div style={{ minWidth: 0, gridColumn: isMobile ? "1 / -1" : "auto" }}>{mini("Conta contábil")}
                           <SelectBusca style={cel} value={it.contaId || ""} onChange={(v) => mexerItem(i, typeof trocarContaComPadrao === "function" ? trocarContaComPadrao(it, v) : { contaId: v })}
                             placeholder="Procurar conta…"
@@ -10483,12 +10497,15 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
 
   // O nome que a loja usa vira o insumo do catálogo — e o grupo do insumo é
   // o grupo de material da subconta, de graça.
-  // A etapa já escolhida à mão manda: o insumo só preenche o que está vazio.
+  // Conta e etapa do catálogo são fixas; item sem etapa no catálogo fica
+  // com a etapa posta à mão; item por pavimento pede o pavimento.
   function comInsumo(item, ins) {
     return { ...item, insumoCodigo: ins.codigo || "", grupoMaterial: ins.grupo || item.grupoMaterial || "",
       unidade: item.unidade || ins.unidade || "",
-      etapa: item.etapa || ins.etapaPadrao || "",
-      contaId: item.contaId || ins.contaPadrao || "",
+      etapa: item.etapa || "",
+      contaId: item.contaId || "",
+      ...(typeof padraoAoEscolherInsumo === "function" ? padraoAoEscolherInsumo(ins, item)
+        : { etapa: item.etapa || ins.etapaPadrao || "", contaId: item.contaId || ins.contaPadrao || "" }),
       sugestao: null };
   }
 
@@ -10953,11 +10970,14 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
               <CampoCtrNum tipo="moeda" valor={it.bruto} style={celStyle} placeholder="0,00"
                 onChange={(v) => mexerItem(i, { bruto: v })} />
             );
+            const insEtapa = it.insumoCodigo ? (insumos || []).find((y) => y && (y.codigo === it.insumoCodigo || y.id === it.insumoCodigo)) : null;
+            const pedePavimento = typeof faltaPavimento === "function" && faltaPavimento(insEtapa, it.etapa);
             const campoEtapa = (
               <SelectBusca style={{ ...celStyle, borderColor: it.etapa ? "rgba(38,36,33,0.16)" : "#dc2626" }}
                 value={it.etapa || ""} onChange={(v) => mexerItem(i, { etapa: v })}
-                placeholder="Procurar etapa…"
-                opcoes={[{ valor: "", rotulo: "— etapa —" }].concat(
+                placeholder={pedePavimento ? "Térreo, Pav 1 ou Pav 2…" : "Procurar etapa…"}
+                opcoes={typeof opcoesDeEtapaDoLancamento === "function" ? opcoesDeEtapaDoLancamento(insEtapa, "— etapa —")
+                  : [{ valor: "", rotulo: "— etapa —" }].concat(
                   etapas.map((et) => ({ valor: et.id, rotulo: et.nome, grupo: et.macro || "" })))} />
             );
             const campoConta = (
@@ -10990,7 +11010,7 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
                     <div><span style={rotuloMini}>Total</span>{campoTotal}</div>
                   </div>
                   <div style={{ marginTop: 8 }}>
-                    <span style={Object.assign({}, rotuloMini, { color: it.etapa ? "#6b7280" : "#dc2626" })}>Etapa *</span>
+                    <span style={Object.assign({}, rotuloMini, { color: it.etapa ? "#6b7280" : "#dc2626" })}>{pedePavimento ? "Etapa * — escolha o pavimento" : "Etapa *"}</span>
                     {campoEtapa}
                   </div>
                   <div style={{ marginTop: 8 }}>

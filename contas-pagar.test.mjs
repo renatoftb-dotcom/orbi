@@ -64,7 +64,10 @@ const modulo = new Function(`
            grupoCanonico, grupoDoItem, subcontasDaConta, GRUPOS_MATERIAL,
            detalheDaEdicaoDaConta,
            pagamentosEmAberto, ajustarVencimentos, limparAjustes, ajustesDoContrato,
-           previaAjusteContrato, proximoNumeroDoc };
+           previaAjusteContrato, proximoNumeroDoc,
+           orcadoXRealizadoPorItem, etapaDaLinhaDoOrcamento, opcoesDeEtapaDoLancamento, faltaPavimento,
+           padraoAoEscolherInsumo, lancamentoComInsumo, comPadraoDoInsumo, etapasDoCatalogo, nomeDaEtapaObra,
+           macroDaEtapaObra, etapaFixaDoInsumo, ETAPAS_OBRA };
 `)();
 
 let passou = 0, falhou = 0;
@@ -2573,8 +2576,8 @@ teste("parcela de contrato leva a etapa quando o contrato e de uma etapa so", ()
     etapa: "portoes" };
   assert.ok(modulo.contasDoContrato(ct).every(c => c.etapa === "portoes"));
   const civil = { ...ct, etapa: "" };
-  // sem etapa no contrato, a conta de mao de obra leva para Prestadores de servicos
-  assert.ok(modulo.contasDoContrato(civil).every(c => c.etapa === "prestadores"), "mao de obra entra em Prestadores");
+  // sem etapa no contrato, a conta de mao de obra leva para a etapa do oficio (serralheiro)
+  assert.ok(modulo.contasDoContrato(civil).every(c => c.etapa === "prest_serralheiro"), "mao de obra entra na etapa do oficio");
 });
 
 teste("a conferencia nao chama de furo o que a regra dispensa", () => {
@@ -3182,7 +3185,9 @@ teste("o papel do pedido final vai junto para cada conta do pedido", () => {
 
 // ── Conta → etapa/grupo: tudo ligado, em todas as portas ───────
 teste("mao de obra traz etapa e grupo Prestadores; material nao", () => {
-  assert.deepStrictEqual(modulo.padraoDaContaObra("empreiteiro"), { etapa: "prestadores", grupoMaterial: "Prestadores de serviços" });
+  assert.deepStrictEqual(modulo.padraoDaContaObra("empreiteiro"), { etapa: "prest_empreiteiro", grupoMaterial: "Prestadores de serviços" });
+  // oficio sem etapa propria fica na etapa generica
+  assert.deepStrictEqual(modulo.padraoDaContaObra("pedreiros"), { etapa: "prestadores", grupoMaterial: "Prestadores de serviços" });
   assert.deepStrictEqual(modulo.padraoDaContaObra("material"), { etapa: "", grupoMaterial: "" });
   assert.deepStrictEqual(modulo.padraoDaContaObra("taxa_admin_obra"), { etapa: "", grupoMaterial: "" });
 });
@@ -3200,7 +3205,9 @@ teste("comPadraoDaConta so preenche o que esta em branco", () => {
 
 teste("trocar a conta troca o padrao, mas nao o que foi escolhido a mao", () => {
   const emp = modulo.trocarContaComPadrao({ contaId: "material", etapa: "", grupoMaterial: "" }, "empreiteiro");
-  assert.strictEqual(emp.etapa, "prestadores");
+  assert.strictEqual(emp.etapa, "prest_empreiteiro");
+  // trocar de um oficio para outro troca a etapa do oficio
+  assert.strictEqual(modulo.trocarContaComPadrao(emp, "pintor").etapa, "prest_pintor");
   assert.strictEqual(emp.grupoMaterial, "Prestadores de serviços");
   const volta = modulo.trocarContaComPadrao(emp, "material");
   assert.strictEqual(volta.etapa, "");
@@ -3216,7 +3223,7 @@ teste("parcelas do contrato do empreiteiro nascem em Prestadores de servicos", (
   const cs = modulo.contasDoContrato(ct);
   assert.ok(cs.length >= 2);
   for (const c of cs) {
-    assert.strictEqual(c.etapa, "prestadores");
+    assert.strictEqual(c.etapa, "prest_empreiteiro");
     assert.strictEqual(c.grupoMaterial, "Prestadores de serviços");
   }
   // contrato de uma etapa so continua na etapa dele
@@ -3227,20 +3234,20 @@ teste("parcelas do contrato do empreiteiro nascem em Prestadores de servicos", (
   const depois = modulo.sincronizarContasDoContrato([paga, ...cs.slice(1)], ct);
   const p1 = depois.find(c => c.id === paga.id);
   assert.strictEqual(p1.pago, true);
-  assert.strictEqual(p1.etapa, "prestadores");
+  assert.strictEqual(p1.etapa, "prest_empreiteiro");
 });
 
 teste("pedido, compra, entregas e entrada ligam a mao de obra", () => {
   const ped = modulo.contasDoPedidoDaLoja({ obraId: "o1", contaId: "eletricista" },
     { id: "p1", vencimento: "2026-10-10", itens: [{ descricao: "Instalação", quantidade: 1, unitario: 500, bruto: 500 }] });
-  assert.strictEqual(ped[0].etapa, "prestadores");
+  assert.strictEqual(ped[0].etapa, "prest_eletricista");
   const cot = modulo.contasDaCotacao({ obraId: "o1", contaId: "pintor", valor: 900, descricao: "Pintura", primeiroVencimento: "2026-10-10" });
   assert.ok(cot.length >= 1);
-  assert.ok(cot.every(c => c.etapa === "prestadores" && c.grupoMaterial === "Prestadores de serviços"));
+  assert.ok(cot.every(c => c.etapa === "prest_pintor" && c.grupoMaterial === "Prestadores de serviços"));
   const ent = modulo.contasDaEntrada({ situacao: "apagar", prestadorId: "f1", favorecido: "ADRIANO",
     apagar: { vencimento: "2026-10-28", parcelas: 1 },
     itens: [{ descricao: "Empreiteiro", contaId: "empreiteiro", total: 400 }] }, { obraId: "o1" });
-  assert.strictEqual(ent[0].etapa, "prestadores");
+  assert.strictEqual(ent[0].etapa, "prest_empreiteiro");
   assert.strictEqual(ent[0].grupoMaterial, "Prestadores de serviços");
   const mat = modulo.contasDaEntrada({ situacao: "apagar", prestadorId: "f1", apagar: { vencimento: "2026-10-28" },
     itens: [{ descricao: "Cimento", contaId: "material", total: 40, etapa: "alvenaria" }] }, { obraId: "o1" });
@@ -3259,6 +3266,105 @@ teste("orçado por etapa: a etapa do catálogo manda sobre a da fórmula", () =>
   assert.strictEqual(hid.orcado, 400, "registro (pelo catálogo) + tubo");
   assert.strictEqual(hid.realizado, 319);
   assert.strictEqual(pl.linhas.find((l) => l.etapaId === "loucas_metais").orcado, 900);
+});
+
+
+// ── catálogo como fonte: pavimento, conta padrão, orçado × realizado item a item ──
+const CAT_PAV = [
+  { codigo: "TIJ-001", nome: "Cerâmicas - Tijolo - Bloco 6 Furos", unidade: "Unidades", grupo: "Tijolos e canaletas", etapaPadrao: "supra_paredes", contaPadrao: "material" },
+  { codigo: "LAJ-004", nome: "Laje Pré Moldada Treliça Piso", unidade: "m2", grupo: "Lajes", etapaPadrao: "laje", contaPadrao: "material" },
+  { codigo: "LOU-047", nome: "Metal - Hidráulica - Base Registro Gaveta 3/4", unidade: "Unidades", grupo: "Louças e metais", etapaPadrao: "metais", contaPadrao: "material" },
+  { codigo: "CIM-001", nome: "Sacos de cimento 50kg", unidade: "Unidades", grupo: "Cimento", etapaPadrao: "", contaPadrao: "material" },
+  { codigo: "EQP-004", nome: "Boiler Pressurizado 500L", unidade: "Unidades", grupo: "Equipamentos e sistemas", etapaPadrao: "aquecimento", contaPadrao: "equipamentos" },
+  { codigo: "PRE-001", nome: "Empreiteiro", unidade: "m2", grupo: "Prestadores de serviços", etapaPadrao: "prest_empreiteiro", contaPadrao: "empreiteiro", tipo: "prestador" },
+  { codigo: "PRE-010", nome: "Pedreiros Muro Divisa", unidade: "m2", grupo: "Prestadores de serviços", etapaPadrao: "prest_empreiteiro", contaPadrao: "empreiteiro", tipo: "prestador" },
+];
+
+teste("taxonomia: Térreo/Pav 1/Pav 2, etapas novas e a família por pavimento no catálogo", () => {
+  const ids = modulo.ETAPAS_OBRA.map((e) => e.id);
+  for (const id of ["supra_paredes_3", "laje_3", "metais", "cercas", "equipamentos_sistemas", "deposito_reembolsos", "prest_empreiteiro"])
+    assert.ok(ids.includes(id), id);
+  assert.strictEqual(modulo.nomeDaEtapaObra("supra_paredes_1"), "Supraestrutura e paredes Térreo");
+  assert.strictEqual(modulo.nomeDaEtapaObra("laje_2"), "Laje Pav 1");
+  assert.strictEqual(modulo.nomeDaEtapaObra("supra_paredes"), "Supraestrutura e paredes (por pavimento)");
+  assert.strictEqual(modulo.macroDaEtapaObra("ferramentas"), "Ferramentas");
+  assert.strictEqual(modulo.macroDaEtapaObra("demolicoes"), "Demolições e entulhos");
+  assert.strictEqual(modulo.macroDaEtapaObra("bancadas"), "Granito");
+  const cat = modulo.etapasDoCatalogo().map((e) => e.id);
+  assert.ok(cat.indexOf("supra_paredes") === cat.indexOf("supra_paredes_1") - 1, "família logo antes do térreo");
+  assert.ok(modulo.PLANO_CONTAS.some((c) => c.id === "equipamentos" && c.grupo === "materiais"));
+});
+
+teste("orçamento: tijolo por pavimento segue o pavimento da fórmula; fora da família, a fórmula", () => {
+  const e = (etapa, subEtapa, codigo) => modulo.etapaDaLinhaDoOrcamento({ etapa, subEtapa, insumoCodigo: codigo }, CAT_PAV);
+  assert.strictEqual(e("Supra estrutura e paredes", "Paredes Pav. Térreo", "TIJ-001"), "supra_paredes_1");
+  assert.strictEqual(e("Supra estrutura e paredes", "Paredes Pav 1", "TIJ-001"), "supra_paredes_2");
+  assert.strictEqual(e("Supra estrutura e paredes", "Paredes Pav 2", "TIJ-001"), "supra_paredes_3");
+  assert.strictEqual(e("Viga Respaldo e Laje", "Laje Pav 1", "LAJ-004"), "laje_2");
+  assert.strictEqual(e("Piscina", "Paredes", "TIJ-001"), "piscina_supra", "o tijolo da piscina fica na piscina");
+  assert.strictEqual(e("Louças e metais", "Estimativa por ambientes", "LOU-047"), "metais", "etapa fixa do catálogo manda");
+  assert.strictEqual(e("Fundação", "Brocas", "CIM-001"), "fundacao", "sem etapa: a da fórmula");
+});
+
+teste("lançamento: escolher o item fixa conta, etapa e grupo; por pavimento pede o pavimento", () => {
+  const boiler = modulo.lancamentoComInsumo({ contaId: "material", etapa: "fundacao" }, CAT_PAV[4]);
+  assert.strictEqual(boiler.contaId, "equipamentos");
+  assert.strictEqual(boiler.etapa, "aquecimento");
+  assert.strictEqual(boiler.grupoMaterial, "Equipamentos e sistemas");
+  const tij = modulo.lancamentoComInsumo({ contaId: "", etapa: "fundacao" }, CAT_PAV[0]);
+  assert.strictEqual(tij.etapa, "", "etapa de outra família sai: falta o pavimento");
+  assert.ok(modulo.faltaPavimento(CAT_PAV[0], tij.etapa));
+  const tij2 = modulo.lancamentoComInsumo({ etapa: "supra_paredes_2" }, CAT_PAV[0]);
+  assert.strictEqual(tij2.etapa, "supra_paredes_2", "pavimento já escolhido fica");
+  assert.ok(!modulo.faltaPavimento(CAT_PAV[0], "supra_paredes_2"));
+  const cim = modulo.lancamentoComInsumo({ etapa: "laje_1" }, CAT_PAV[3]);
+  assert.strictEqual(cim.etapa, "laje_1", "insumo sem etapa: fica a de quem lança");
+  const ops = modulo.opcoesDeEtapaDoLancamento(CAT_PAV[0], "— etapa —");
+  assert.deepStrictEqual(ops.slice(1, 4).map((o) => o.valor), ["supra_paredes_1", "supra_paredes_2", "supra_paredes_3"]);
+  assert.strictEqual(ops[1].rotulo, "Térreo — Supraestrutura e paredes");
+  assert.strictEqual(ops[1].grupo, "Escolha o pavimento");
+  // a família nunca vira etapa gravada
+  assert.strictEqual(modulo.comPadraoDoInsumo({ insumoCodigo: "TIJ-001", etapa: "" }, CAT_PAV).etapa, "");
+  assert.strictEqual(modulo.comPadraoDoInsumo({ insumoCodigo: "EQP-004", etapa: "", contaId: "" }, CAT_PAV).contaId, "equipamentos");
+  assert.strictEqual(modulo.etapaFixaDoInsumo(CAT_PAV[1]), "");
+});
+
+teste("orçado × realizado item a item: pavimento, conversão e mão de obra pela conta", () => {
+  const obra = {
+    orcamento: { itens: [
+      { etapa: "Supra estrutura e paredes", subEtapa: "Paredes Pav. Térreo", item: "Tijolo", insumoCodigo: "TIJ-001", qtd: 3000, preco: 0.85, total: 2550, unidade: "Unidades" },
+      { etapa: "Supra estrutura e paredes", subEtapa: "Paredes Pav 1", item: "Tijolo", insumoCodigo: "TIJ-001", qtd: 2000, preco: 0.85, total: 1700, unidade: "Unidades" },
+      { etapa: "Prestadores de serviços", subEtapa: "Prestadores de serviços", item: "Empreiteiro", qtd: 100, preco: 1000, total: 100000 },
+      { etapa: "Prestadores de serviços", subEtapa: "Prestadores de serviços", item: "Pedreiros Muro Divisa", qtd: 100, preco: 59, total: 5900 },
+    ] },
+    contasPagar: [
+      { id: "a", pago: true, valorPago: 2700, contaId: "material", insumoCodigo: "TIJ-001", etapa: "supra_paredes_1", quantidade: 3100, unidade: "Unidades" },
+      { id: "b", pago: false, valor: 900, contaId: "material", insumoCodigo: "TIJ-001", etapa: "supra_paredes_2", quantidade: 1000, unidade: "Unidades" },
+      { id: "c", pago: true, valorPago: 40000, contaId: "empreiteiro", etapa: "prestadores" },
+      { id: "d", pago: true, valorPago: 350, contaId: "frete", etapa: "supra_paredes_1" },
+      { id: "e", pago: true, valorPago: 5000, contaId: "deposito_proprio" },
+    ],
+  };
+  const r = modulo.orcadoXRealizadoPorItem(obra, CAT_PAV);
+  const supra = r.macros.find((m) => m.macro === "Supraestrutura e paredes");
+  assert.ok(supra, JSON.stringify(r.macros.map((m) => m.macro)));
+  const ter = supra.etapas.find((e) => e.etapaId === "supra_paredes_1");
+  const pav1 = supra.etapas.find((e) => e.etapaId === "supra_paredes_2");
+  const tijT = ter.itens.find((i) => i.insumoCodigo === "TIJ-001");
+  assert.strictEqual(tijT.orcado, 2550); assert.strictEqual(tijT.realizado, 2700);
+  assert.strictEqual(tijT.qtdOrcada, 3000); assert.strictEqual(tijT.qtdRealizada, 3100); assert.strictEqual(tijT.saldo, -150);
+  assert.ok(ter.itens.some((i) => /Frete \(sem item\)/.test(i.nome) && i.realizado === 350), "conta sem item aparece");
+  const tijP = pav1.itens.find((i) => i.insumoCodigo === "TIJ-001");
+  assert.strictEqual(tijP.realizado, 0); assert.strictEqual(tijP.aPagar, 900);
+  const prest = r.macros.find((m) => m.macro === "Prestadores de serviços");
+  const emp = prest.etapas.flatMap((e) => e.itens).find((i) => i.contaId === "empreiteiro");
+  assert.strictEqual(emp.orcado, 105900, "as linhas de pedreiro e o empreiteiro somam na conta");
+  assert.strictEqual(emp.realizado, 40000, "pago na etapa genérica casa assim mesmo");
+  assert.strictEqual(emp.etapaId, "prest_empreiteiro");
+  assert.strictEqual(r.totais.realizado, 43050, "receita fora do custo");
+  const junto = modulo.orcadoXRealizadoPorItem(obra, CAT_PAV, { porEtapa: false });
+  const tij = junto.itens.find((i) => i.insumoCodigo === "TIJ-001");
+  assert.strictEqual(tij.orcado, 4250);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

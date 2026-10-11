@@ -3312,8 +3312,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       ? itensDaEntrada({ itens: comItens }, "orcamento", insumos || []).map((x) => {
           const ins = x.insumoCodigo ? (insumos || []).find((m) => m && (m.codigo === x.insumoCodigo || m.id === x.insumoCodigo)) : null;
           return { ...x, textoLido: x.descricao,
-            etapa: x.etapa || (ins && ins.etapaPadrao) || "",
-            contaId: x.contaId || (ins && ins.contaPadrao) || "material",
+            etapa: x.etapa || (typeof etapaFixaDoInsumo === "function" ? etapaFixaDoInsumo(ins) : (ins && ins.etapaPadrao)) || "",
+            contaId: (ins && ins.contaPadrao) || x.contaId || "material",
             grupoMaterial: x.grupoMaterial || (ins && ins.grupo) || "" };
         })
       : [];
@@ -3469,8 +3469,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       descricao: atual.descricao || ins.nome || "",
       grupoMaterial: ins.grupo || "",
       unidade: atual.unidade || ins.unidade || "",
-      etapa: atual.etapa || ins.etapaPadrao || "",
-      contaId: atual.contaId || ins.contaPadrao || f.contaId || "",
+      etapa: (typeof etapaFixaDoInsumo === "function" ? etapaFixaDoInsumo(ins) : (ins && ins.etapaPadrao)) || (typeof familiaDoInsumo === "function" && familiaDoInsumo(ins) ? "" : atual.etapa) || "",
+      contaId: ins.contaPadrao || atual.contaId || f.contaId || "",
       unitario: atual.unitario || (ins.precoReferencia > 0 ? ins.precoReferencia : ""),
     });
   };
@@ -3879,7 +3879,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                 <SelectBusca style={S.input} value={etapaUnicaEfetiva || ""}
                   onChange={(v) => set("etapaUnica", v)}
                   placeholder="Procurar etapa…"
-                  opcoes={[{ valor: "", rotulo: "— escolha a etapa —" }]
+                  opcoes={typeof opcoesDeEtapaDoLancamento === "function" ? opcoesDeEtapaDoLancamento(null, "— escolha a etapa —")
+                    : [{ valor: "", rotulo: "— escolha a etapa —" }]
                     .concat(etapasDaObra.map((e) => ({ valor: e.id, rotulo: e.nome || e.titulo || e.id })))} />
               </div>
               <div style={{ fontSize: 12, color: "#4b5563", lineHeight: 1.45, paddingBottom: 4 }}>
@@ -3953,14 +3954,21 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                     <div style={{ ...S.input, background: "#f9fafb", fontVariantNumeric: "tabular-nums",
                       display: "flex", alignItems: "center", minHeight: 36 }}>{efDinheiro(bruto)}</div>
                   </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={S.rot}>Etapa</div>
-                    <SelectBusca style={S.input} value={it.etapa}
-                      onChange={(v) => mexerItem(i, { etapa: v })}
-                      placeholder="Procurar etapa…"
-                      opcoes={[{ valor: "", rotulo: "— escolha a etapa —" }]
-                        .concat(etapasDaObra.map((e) => ({ valor: e.id, rotulo: e.nome || e.titulo || e.id })))} />
-                  </div>
+                  {(() => {
+                    const insEt = it.insumoCodigo ? (insumos || []).find((m) => m && (m.codigo === it.insumoCodigo || m.id === it.insumoCodigo)) : null;
+                    const pedePav = typeof faltaPavimento === "function" && faltaPavimento(insEt, it.etapa);
+                    return (
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ ...S.rot, color: pedePav ? "#b45309" : S.rot.color }}>{pedePav ? "Etapa — escolha o pavimento" : "Etapa"}</div>
+                        <SelectBusca style={pedePav ? { ...S.input, borderColor: "#f59e0b" } : S.input} value={it.etapa}
+                          onChange={(v) => mexerItem(i, { etapa: v })}
+                          placeholder={pedePav ? "Térreo, Pav 1 ou Pav 2…" : "Procurar etapa…"}
+                          opcoes={typeof opcoesDeEtapaDoLancamento === "function" ? opcoesDeEtapaDoLancamento(insEt, "— escolha a etapa —")
+                            : [{ valor: "", rotulo: "— escolha a etapa —" }]
+                            .concat(etapasDaObra.map((e) => ({ valor: e.id, rotulo: e.nome || e.titulo || e.id })))} />
+                      </div>
+                    );
+                  })()}
                   <div style={{ minWidth: 0, display: "flex", alignItems: "flex-end" }}>
                     <button type="button" style={{ ...S.btnSec, color: "#dc2626" }}
                       onClick={() => tirarItem(i)}>Tirar</button>

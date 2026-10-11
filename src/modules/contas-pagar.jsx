@@ -2203,6 +2203,170 @@ function plPorInsumo(orcamento, contasPagar, insumos) {
   }).sort((a, b) => (b.orcado || b.realizado) - (a.orcado || a.realizado));
 }
 
+// ══════════════════════════════════════════════════════════════
+// ORÇADO × REALIZADO, ITEM A ITEM — macro-etapa → etapa → item
+// ══════════════════════════════════════════════════════════════
+// O mesmo quadro de quem orça e de quem paga: cada linha é UM item numa
+// etapa — o tijolo do Térreo e o tijolo do Pav 1 são duas linhas, porque o
+// catálogo diz que tijolo é por pavimento e a fórmula diz qual.
+//   - a etapa do orçado é a do catálogo (ou a da fórmula, para o insumo
+//     sem etapa); a do realizado é a gravada na conta;
+//   - material casa pelo código do insumo, na etapa;
+//   - mão de obra casa pela CONTA (empreiteiro com empreiteiro), em
+//     qualquer etapa: o orçamento tem cinco linhas de pedreiro (casa, muro,
+//     arrimo, piscina, pavimentação) e o pagamento é um só, ao empreiteiro;
+//   - conta paga sem item (frete, aluguel, caçamba avulsa) aparece como a
+//     própria conta, na etapa dela — some do confronto em quantidade, mas
+//     não do dinheiro.
+// Quantidade comprada em outra unidade (metro de cano, quilo de prego) é
+// convertida para a do catálogo quando o fator é conhecido.
+// `opcoes.porEtapa === false` junta o item de todas as etapas numa linha.
+function orcadoXRealizadoPorItem(obra, insumos, opcoes) {
+  const o = obra || {};
+  const op = opcoes || {};
+  const porEtapa = op.porEtapa !== false;
+  const linhasOrc = ((o.orcamento || {}).itens) || [];
+  const contas = (o.contasPagar || []).filter(Boolean);
+  const lista = insumos || [];
+  const red = (x) => Math.round(x * 100) / 100;
+  const redQ = (x) => Math.round(x * 1000) / 1000;
+  const plano = typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [];
+  const etapas = typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [];
+  const contaDe = (id) => plano.find((c) => c && c.id === id) || null;
+  const ehMaoDeObra = (contaId) => { const c = contaDe(contaId); return !!c && c.grupo === "maoDeObra"; };
+  const fora = (contaId) => {
+    const c = contaDe(contaId);
+    // receita, terreno e reembolso não são custo de construir
+    return !!c && ["receitas", "terreno", "excluidas"].indexOf(c.grupo) >= 0;
+  };
+  const insDe = (codigo) => (codigo ? lista.find((x) => x && (x.codigo === codigo || x.id === codigo)) || null : null);
+  const valorDaLinha = (l) => {
+    const v = Number(l.total);
+    return Number.isFinite(v) && v !== 0 ? v : (Number(l.qtd) || 0) * (Number(l.preco) || 0);
+  };
+  const linhas = {};
+  const pegar = (chave, etapaId, base) => {
+    // mão de obra e conta sem item já vêm com a chave pronta; material leva a etapa
+    const k = chave.indexOf("conta:") === 0 || !porEtapa ? chave : chave + "@" + etapaId;
+    if (!linhas[k]) {
+      linhas[k] = { chave: k, etapaId: etapaId || "", insumoCodigo: "", contaId: "", nome: "", unidade: "", grupo: "",
+        qtdOrcada: 0, orcado: 0, qtdRealizada: 0, realizado: 0, aPagar: 0, notas: 0, linhasOrcamento: 0, ...base };
+    }
+    return linhas[k];
+  };
+
+  for (const l of linhasOrc) {
+    if (!l) continue;
+    const ins = typeof insumoDaLinhaDoOrcamento === "function" ? insumoDaLinhaDoOrcamento(l, lista) : insDe(l.insumoCodigo);
+    const etapaId = (typeof etapaDaLinhaDoOrcamento === "function" ? etapaDaLinhaDoOrcamento(l, lista)
+      : (typeof etapaDoOrcamento === "function" ? etapaDoOrcamento(l.etapa, l.subEtapa) : "")) || "";
+    const contaMO = ins && ins.contaPadrao && ehMaoDeObra(ins.contaPadrao) ? ins.contaPadrao : "";
+    let r;
+    if (contaMO) {
+      const c = contaDe(contaMO);
+      r = pegar("conta:" + contaMO, etapaId, { contaId: contaMO, nome: c ? c.nome : contaMO, grupo: (ins && ins.grupo) || "" });
+    } else if (ins) {
+      r = pegar("ins:" + (ins.codigo || ins.id), etapaId, { insumoCodigo: ins.codigo || ins.id, nome: ins.nome || l.item || "",
+        unidade: ins.unidade || l.unidade || "", grupo: typeof grupoDoItem === "function" ? grupoDoItem(ins, l.grupoMaterial) : (ins.grupo || "") });
+    } else {
+      const n = String(l.item || "").trim();
+      r = pegar("linha:" + n.toLowerCase(), etapaId, { nome: n, unidade: l.unidade || "", grupo: l.grupoMaterial || "" });
+    }
+    r.orcado = red(r.orcado + valorDaLinha(l));
+    if (!contaMO) r.qtdOrcada = redQ(r.qtdOrcada + (Number(l.qtd) || 0));
+    r.linhasOrcamento++;
+  }
+
+  for (const c of contas) {
+    if (fora(c.contaId)) continue;
+    const ins = insDe(c.insumoCodigo);
+    const etapaId = c.etapa || c.etapaId || "";
+    const contaMO = ehMaoDeObra(c.contaId) ? c.contaId
+      : (ins && ins.contaPadrao && ehMaoDeObra(ins.contaPadrao) ? ins.contaPadrao : "");
+    let r;
+    if (contaMO) {
+      const cc = contaDe(contaMO);
+      r = pegar("conta:" + contaMO, etapaId, { contaId: contaMO, nome: cc ? cc.nome : contaMO, grupo: "Prestadores de serviços" });
+    } else if (ins) {
+      r = pegar("ins:" + (ins.codigo || ins.id), etapaId, { insumoCodigo: ins.codigo || ins.id, nome: ins.nome || "",
+        unidade: ins.unidade || c.unidade || "", grupo: typeof grupoDoItem === "function" ? grupoDoItem(ins, c.grupoMaterial) : (ins.grupo || "") });
+    } else {
+      const cc = contaDe(c.contaId);
+      r = pegar("conta:" + (c.contaId || "?") + (porEtapa ? "@" + etapaId : ""), etapaId, { contaId: c.contaId || "",
+        nome: (cc ? cc.nome : (c.descricao || "Sem conta")) + " (sem item)", grupo: c.grupoMaterial || "" });
+    }
+    const valor = (Number(c.valorPago) || Number(c.valor)) || 0;
+    if (c.pago) {
+      r.realizado = red(r.realizado + valor);
+      r.notas++;
+      if (!contaMO) {
+        let q = Number(c.quantidade) || 0;
+        if (q && ins && c.unidade && typeof mesmaUnidade === "function" && mesmaUnidade(c.unidade, ins.unidade) === false
+          && typeof fatorEntreUnidades === "function") {
+          const f = fatorEntreUnidades(ins, c.unidade);
+          if (f && f.fator > 0) q = q / f.fator;
+        }
+        r.qtdRealizada = redQ(r.qtdRealizada + q);
+      }
+    } else {
+      r.aPagar = red(r.aPagar + valor);
+    }
+  }
+
+  // mão de obra: a linha fica na etapa do orçado; sem orçado, na do pago
+  const ordemEtapa = (id) => { const i = etapas.findIndex((e) => e.id === id); return i < 0 ? 990 : i; };
+  const etapaInfo = (id) => {
+    const e = etapas.find((x) => x.id === id);
+    return e ? { nome: e.nome, macro: e.macro || e.nome, pavimento: e.pavimento || null }
+      : { nome: id ? id : "Sem etapa", macro: id ? id : "Sem etapa", pavimento: null };
+  };
+  const itens = Object.keys(linhas).map((k) => {
+    const r = linhas[k];
+    return { ...r,
+      saldo: red(r.orcado - r.realizado),
+      saldoQtd: redQ(r.qtdOrcada - r.qtdRealizada),
+      pct: r.orcado > 0 ? Math.round((r.realizado / r.orcado) * 1000) / 10 : null };
+  });
+
+  const macros = [];
+  const porMacro = {};
+  const porEtapaDe = {};
+  for (const it of itens) {
+    const id = porEtapa ? it.etapaId : "";
+    const info = porEtapa ? etapaInfo(id) : { nome: "Todas as etapas", macro: "Todas as etapas", pavimento: null };
+    if (!porMacro[info.macro]) {
+      porMacro[info.macro] = { macro: info.macro, ordem: porEtapa ? ordemEtapa(id) : 0, orcado: 0, realizado: 0, aPagar: 0, etapas: [] };
+      macros.push(porMacro[info.macro]);
+    }
+    const m = porMacro[info.macro];
+    m.ordem = Math.min(m.ordem, porEtapa ? ordemEtapa(id) : 0);
+    const ke = info.macro + "|" + id;
+    if (!porEtapaDe[ke]) {
+      porEtapaDe[ke] = { etapaId: id, nome: info.nome, pavimento: info.pavimento, ordem: porEtapa ? ordemEtapa(id) : 0,
+        orcado: 0, realizado: 0, aPagar: 0, itens: [] };
+      m.etapas.push(porEtapaDe[ke]);
+    }
+    const e = porEtapaDe[ke];
+    e.itens.push(it);
+    e.orcado = red(e.orcado + it.orcado); e.realizado = red(e.realizado + it.realizado); e.aPagar = red(e.aPagar + it.aPagar);
+    m.orcado = red(m.orcado + it.orcado); m.realizado = red(m.realizado + it.realizado); m.aPagar = red(m.aPagar + it.aPagar);
+  }
+  macros.sort((a, b) => a.ordem - b.ordem);
+  for (const m of macros) {
+    m.saldo = red(m.orcado - m.realizado);
+    m.etapas.sort((a, b) => a.ordem - b.ordem);
+    for (const e of m.etapas) {
+      e.saldo = red(e.orcado - e.realizado);
+      e.itens.sort((a, b) => (b.orcado || b.realizado) - (a.orcado || a.realizado));
+    }
+  }
+  const soma = (campo) => red(itens.reduce((s, x) => s + (Number(x[campo]) || 0), 0));
+  return { macros, itens,
+    totais: { orcado: soma("orcado"), realizado: soma("realizado"), aPagar: soma("aPagar"),
+      saldo: red(soma("orcado") - soma("realizado")) },
+    temOrcamento: linhasOrc.length > 0 };
+}
+
 // Onde a corrente arrebenta nesta obra. Cada buraco vem com quantas linhas
 // e quanto dinheiro estão fora — um aviso sem número não faz ninguém mexer.
 function conferenciaDaLigacao(obra, insumos) {

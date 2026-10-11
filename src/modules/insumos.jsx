@@ -46,6 +46,11 @@ var INSUMO_GRUPOS = [
   { prefixo: "FOR", nome: "Forros e gesso" },
   { prefixo: "EQP", nome: "Equipamentos e sistemas" },
   { prefixo: "OUT", nome: "Outros" },
+  // grupos que nasceram na revisão do catálogo (out/26)
+  { prefixo: "CER", nome: "Cercas" },
+  { prefixo: "AGU", nome: "Água" },
+  { prefixo: "DEM", nome: "Demolições e entulhos" },
+  { prefixo: "DEP", nome: "Depósito & Reembolsos" },
 ];
 
 var INSUMO_UNIDADES = [
@@ -871,13 +876,16 @@ var SUGESTOES_POR_GRUPO = {
   "Forros": "forros",
   "Esquadrias": "esquadrias",
   "Portas e fechaduras": "portas_internas",
-  "Tijolos e canaletas": "supra_paredes_1",
-  "Lajes": "laje_1",
-  "Trilhos e capas de laje": "laje_1",
+  // por pavimento: o catálogo guarda a família, o pavimento vem no uso
+  "Tijolos e canaletas": "supra_paredes",
+  "Lajes": "laje",
+  "Trilhos e capas de laje": "laje",
   "Impermeabilizantes": "impermeabilizacao",
   "Granito": "soleiras_peitoris",
   "Marcenaria": "marcenaria",
   "Entulhos": "demolicoes",
+  "Demolições e entulhos": "demolicoes",
+  "Cercas": "cercas",
   // Ferramenta comprada e equipamento alugado têm etapa própria na planilha
   // do escritório, e o grupo serve a ela e a mais nenhuma — não há o que
   // chutar aqui. Sem estas três linhas, toda compra de ferramenta chegava ao
@@ -909,7 +917,8 @@ function sugestoesDeEtapa(insumos) {
   });
   var fora = Object.keys(por).map(function (id) {
     var e = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).find(function (x) { return x.id === id; });
-    return { etapaId: id, nome: e ? e.nome : id, itens: por[id].itens, quantos: por[id].itens.length };
+    var nome = e ? e.nome : (typeof nomeDaEtapaObra === "function" ? nomeDaEtapaObra(id) : id);
+    return { etapaId: id, nome: nome, itens: por[id].itens, quantos: por[id].itens.length };
   });
   fora.sort(function (a, b) { return b.quantos - a.quantos; });
   var total = fora.reduce(function (s, g) { return s + g.quantos; }, 0);
@@ -1159,7 +1168,7 @@ function InsumoForm({ insumo, insumos, onSalvar, onCancelar, isMobile }) {
           <SelectBusca style={INS_S.input} value={f.etapaPadrao || ""}
             onChange={v => set("etapaPadrao", v)} placeholder="Procurar etapa…"
             opcoes={[{ valor: "", rotulo: "— decide na compra —" }].concat(
-              (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(function (et) {
+              (typeof etapasDoCatalogo === "function" ? etapasDoCatalogo() : (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [])).map(function (et) {
                 return { valor: et.id, rotulo: et.nome, grupo: et.macro || "" };
               }))} />
         </div>
@@ -1672,7 +1681,7 @@ function Insumos({ data, save }) {
     if (exportando) return;
     setExportando(true);
     var plan = linhasDoCatalogoParaExportar(filtrados.map(function (x) { return x.i; }), {
-      etapas: typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [],
+      etapas: (typeof etapasDoCatalogo === "function" ? etapasDoCatalogo() : (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [])),
       contas: typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [],
     });
     var hoje = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -1975,7 +1984,7 @@ function Insumos({ data, save }) {
             placeholder="Procurar etapa…"
             opcoes={[{ valor: "", rotulo: "Qualquer etapa" },
                      { valor: "__sem__", rotulo: "— sem etapa padrão —" }].concat(
-              (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(function (et) {
+              (typeof etapasDoCatalogo === "function" ? etapasDoCatalogo() : (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [])).map(function (et) {
                 return { valor: et.id, rotulo: et.nome, grupo: et.macro || "" };
               }))} />
         </div>
@@ -2112,7 +2121,7 @@ function Insumos({ data, save }) {
               <SelectBusca style={Object.assign({}, INS_S.input, { width: "auto", minWidth: 220 })}
                 value={etapaLote} onChange={v => setEtapaLote(v)} placeholder="Procurar etapa…"
                 opcoes={[{ valor: "", rotulo: "— tirar a etapa —" }].concat(
-                  (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(function (et) {
+                  (typeof etapasDoCatalogo === "function" ? etapasDoCatalogo() : (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [])).map(function (et) {
                     return { valor: et.id, rotulo: et.nome, grupo: et.macro || "" };
                   }))} />
               <button style={INS_S.btn} onClick={aplicarEtapaEmLote}>Aplicar</button>
@@ -2176,7 +2185,7 @@ function Insumos({ data, save }) {
                           <td style={{ padding: "10px 12px", color: x.i.etapaPadrao ? "#111827" : "#9ca3af" }}>
                             {(function () {
                               if (!x.i.etapaPadrao) return "—";
-                              var et = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [])
+                              var et = (typeof etapasDoCatalogo === "function" ? etapasDoCatalogo() : (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []))
                                 .find(function (e) { return e.id === x.i.etapaPadrao; });
                               return et ? et.nome : x.i.etapaPadrao;
                             })()}
