@@ -3003,6 +3003,20 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     setFormConta(completa);
   };
   const salvarContaAvulsa = () => {
+    // Só a data mudou: é uma prorrogação, não uma conta nova. Grava a data e
+    // pronto — sem cobrar o que a conta já não tinha (item do catálogo,
+    // quantidade), que é para quando se mexe no que foi comprado.
+    const guardada0 = formConta && contasDaObra.find(c => c && c.id === formConta.id);
+    if (guardada0 && /^\d{4}-\d{2}-\d{2}$/.test(String(formConta.vencimento || "")) && formConta.vencimento !== guardada0.vencimento) {
+      const semData = (x) => { const y = { ...(x || {}) }; delete y.vencimento; return JSON.stringify(y); };
+      if (semData(abrirEdicaoDaConta(guardada0, true)) === semData(formConta)) {
+        const nova = registrarAto({ ...guardada0, vencimento: formConta.vencimento }, "editada", quemSou(), undefined,
+          `vencimento ${guardada0.vencimento || "\u2014"} \u2192 ${formConta.vencimento}`);
+        gravarContas(contasDaObra.map(c => (c && c.id === nova.id ? nova : c)), guardada0.obraId);
+        setFormConta(null);
+        return;
+      }
+    }
     // a conta do plano já diz a etapa e o grupo (mão de obra → Prestadores)
     const f = typeof comPadraoDaConta === "function" ? comPadraoDaConta(formConta) : formConta;
     if (!f.descricao?.trim()) { dialogo.alertar({ titulo: "Informe a descrição da conta", tipo: "aviso" }); return; }
@@ -5275,10 +5289,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
         )}
 
-        {/* Nova conta avulsa */}
-        {perm.podeEditar && (formConta ? (
-          <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, marginBottom: 16, background: "#fafafa" }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 10 }}>{contasDaObra.some(c => c.id === formConta.id) ? "Editar conta" : "Nova conta"}</div>
+        {/* Nova conta e editar conta: numa janela por cima da lista. Antes o
+            formulário abria no alto da página — quem clicava em Editar numa
+            conta de novembro, lá embaixo, não via nada acontecer. */}
+        {perm.podeEditar && formConta && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: isMobile ? 8 : 16 }}>
+          <div data-vk-ui="1" data-vk-form-conta="1" onClick={e => e.stopPropagation()}
+            style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: isMobile ? 14 : 18, background: "#fff", width: "100%", maxWidth: 820,
+              maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 12 }}>{contasDaObra.some(c => c.id === formConta.id) ? "Editar conta" : "Nova conta"}</div>
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
               <div><label style={C.label}>Descrição *</label><input style={C.input} value={formConta.descricao} onChange={e => setFormConta({ ...formConta, descricao: e.target.value })} placeholder="ex.: caçamba de entulho" /></div>
               {/* O valor é o que o fornecedor cobrou; mexer nele refaz o
@@ -5388,7 +5407,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               <button style={C.btn} onClick={salvarContaAvulsa}>Salvar conta</button>
             </div>
           </div>
-        ) : (
+          </div>
+        )}
+        {perm.podeEditar && (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
             <button style={C.btnSec} onClick={() => setFormConta(contaAvulsaVazia(obraSelecionada.id))}>＋ Nova conta</button>
             {perm.podeGerenciarObra && (
@@ -5398,7 +5419,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               <button style={C.btnSec} onClick={() => abrirRecalibragem(alvosRecalibraveis[0].id)}>Recalibrar</button>
             )}
           </div>
-        ))}
+        )}
 
         {loteDePapeis && obraAtual && (
           <PapeisEmLote obra={obraAtual} prestadores={prestadores} isMobile={isMobile}
