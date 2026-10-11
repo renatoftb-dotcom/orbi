@@ -22,7 +22,7 @@ const M = new Function(src + `
            resumoEscritorio, efMesPorExtenso, filtrarLancamentosEscritorio, resumoDoPeriodoEscritorio,
            fechamentosDoEscritorio, mesEstaFechado, ultimoMesFechado, conferenciaDoMes,
            diferencaDeFechamento, bloqueioPorMesFechado,
-           detectarColunasTabela, movimentosDaTabela, conciliarExtrato, efEhMovimento,
+           detectarColunasTabela, movimentosDaTabela, conciliarExtrato, efEhMovimento, casamentoCerto, conferidosPeloExtrato, pistasDoCasamento,
            lancamentoDoExtrato, efValorDeTexto, efEhData, efLinhaDoCabecalho,
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
@@ -2149,6 +2149,74 @@ teste("a linha igual manda; o palpite só completa o fornecedor que faltava", ()
   assert.strictEqual(s.campos.unidadeId, "escritorio");
   assert.strictEqual(s.campos.fornecedorId, "san");
   assert.ok(!s.palpite);
+});
+
+
+// ── casamento com certeza: o que não tem com o que confundir entra conferido ──
+teste("casamento: valor único é certo; valor repetido sem pista é dúvida", () => {
+  const banco = [
+    { id: "b1", data: "2026-09-10", valor: -120, historico: "PIX EMITIDO OUTRA IF · Pagamento Pix 11.222.333 0001-44" },
+    { id: "b2", data: "2026-09-14", valor: -80, historico: "PIX EMITIDO OUTRA IF · Pagamento Pix 34.030.843 0001-60" },
+    { id: "b3", data: "2026-09-22", valor: -80, historico: "PIX EMITIDO OUTRA IF · Pagamento Pix 18.203.857 0001-10" },
+  ];
+  const lancs = [
+    { id: "l1", valor: 120, contaId: "parceiros", competencia: "2026-09", descricao: "Cimento" },
+    { id: "l2", valor: 80, contaId: "parceiros", competencia: "2026-09", descricao: "Vibrador concreto fundação", fornecedor: "Locadora Alfa" },
+    { id: "l3", valor: 80, contaId: "parceiros", competencia: "2026-09", descricao: "Concretagem fundação", fornecedor: "Concreteira Beta" },
+  ];
+  const r = M.conciliarExtrato(banco, lancs);
+  const par = (id) => r.casados.find((c) => c.extrato.id === id);
+  assert.strictEqual(par("b1").certeza, "unico");
+  assert.strictEqual(par("b2").certeza, "duvida");
+  assert.strictEqual(par("b3").certeza, "duvida");
+  assert.strictEqual(par("b2").alternativas.length, 1, "a outra opção vem para a pessoa trocar");
+  assert.strictEqual(r.resumo.certos, 1); assert.strictEqual(r.resumo.duvidas, 2);
+  // o CNPJ no cadastro do fornecedor desempata — e troca o par que a ordem faria
+  const forn = [{ id: "fa", nome: "Locadora Alfa", cnpjCpf: "18.203.857/0001-10" }, { id: "fb", nome: "Concreteira Beta", cnpjCpf: "34.030.843/0001-60" }];
+  const r2 = M.conciliarExtrato(banco, lancs, { fornecedores: forn });
+  const p2 = (id) => r2.casados.find((c) => c.extrato.id === id);
+  assert.strictEqual(p2("b2").lancamento.id, "l3"); assert.strictEqual(p2("b2").certeza, "desempate");
+  assert.strictEqual(p2("b3").lancamento.id, "l2"); assert.strictEqual(p2("b3").certeza, "desempate");
+});
+
+teste("casamento: o que se aprendeu no histórico desempata; lançamentos iguais são equivalentes", () => {
+  const banco = [
+    { id: "x1", data: "2026-09-14", valor: -400, historico: "PIX EMITIDO OUTRA IF · Pagamento Pix ***.144.048-**" },
+    { id: "x2", data: "2026-09-28", valor: -10833.33, historico: "DÉBITO DEVOLUÇÃO PIX · Devolução Pix ***.518.208-**" },
+    { id: "x3", data: "2026-09-28", valor: -10833.33, historico: "DÉBITO DEVOLUÇÃO PIX · Devolução Pix ***.518.208-**" },
+  ];
+  const historico = [{ id: "h", fornecedor: "Danieli Costa Trindade", historicoBanco: "Pagamento Pix ***.144.048-**", competencia: "2026-08" }];
+  const lancs = [
+    { id: "e1", valor: 400, contaId: "parceiros", competencia: "2026-09", descricao: "Empreiteiro", fornecedor: "Outro" },
+    { id: "e2", valor: 400, contaId: "parceiros", competencia: "2026-09", descricao: "Empreiteiro", fornecedor: "Danieli Costa Trindade" },
+    { id: "d1", valor: 10833.33, contaId: "parceiros", competencia: "2026-09", descricao: "DÉBITO DEVOLUÇÃO PIX" },
+    { id: "d2", valor: 10833.33, contaId: "parceiros", competencia: "2026-09", descricao: "DÉBITO DEVOLUÇÃO PIX" },
+  ];
+  const r = M.conciliarExtrato(banco, lancs, { historico });
+  const par = (id) => r.casados.find((c) => c.extrato.id === id);
+  assert.strictEqual(par("x1").lancamento.id, "e2"); assert.strictEqual(par("x1").certeza, "desempate");
+  assert.strictEqual(par("x2").certeza, "equivalente"); assert.strictEqual(par("x3").certeza, "equivalente");
+  assert.ok(M.casamentoCerto(par("x2")));
+  // sobrou o e1: lançado e não veio no banco
+  assert.deepStrictEqual(r.contabilizadoSemPar.map((l) => l.id), ["e1"]);
+});
+
+teste("conferência: o certo conta como conferido pelo extrato e é gravado ligado à linha", () => {
+  const banco = [{ id: "b1", data: "2026-09-10", valor: -120, historico: "PIX EMITIDO · Pagamento Pix 11.222.333 0001-44" }];
+  const lancs = [{ id: "l1", valor: 120, contaId: "parceiros", competencia: "2026-09", descricao: "Cimento" },
+    { id: "l9", valor: 55, contaId: "parceiros", competencia: "2026-09", descricao: "Não veio no banco" }];
+  const r = M.conciliarExtrato(banco, lancs);
+  const certos = new Set(r.casados.filter(M.casamentoCerto).map((c) => c.lancamento.id));
+  const c = M.conferenciaDoMes(lancs, "2026-09", { certos });
+  assert.strictEqual(c.conferidos, 1); assert.strictEqual(c.peloExtrato, 1); assert.strictEqual(c.pendentes, 1);
+  assert.strictEqual(c.valorPendente, 55);
+  assert.ok(c.lancamentos.find((l) => l.id === "l1")._peloExtrato);
+  const g = M.conferidosPeloExtrato(r, "2026-10-01T00:00:00Z");
+  assert.strictEqual(g.length, 1);
+  assert.strictEqual(g[0].conferido, true); assert.strictEqual(g[0].extratoId, "b1");
+  assert.strictEqual(g[0].conferidoPor, "extrato"); assert.ok(/11\.222\.333/.test(g[0].historicoBanco));
+  // sem certos, nada muda no comportamento antigo
+  assert.strictEqual(M.conferenciaDoMes(lancs, "2026-09").conferidos, 0);
 });
 
 for (const [nome, fn] of testes) {

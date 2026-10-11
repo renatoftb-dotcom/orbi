@@ -1628,20 +1628,39 @@ function ultimoMesFechado(fechamentos) {
 
 // Como está a conferência de um mês: quantos lançamentos já foram marcados
 // como vistos no extrato do banco, e quanto ainda falta conferir.
-function conferenciaDoMes(lancamentos, mes) {
+// `opcoes.certos`: ids dos lançamentos que o extrato casou sem dúvida — contam
+// como conferidos (pelo extrato) mesmo antes de gravados; a gravação vem no
+// fechamento do mês.
+function conferenciaDoMes(lancamentos, mes, opcoes) {
+  const certos = (opcoes && opcoes.certos) || null;
   // A compra no cartão não aparece no banco — quem aparece é a fatura.
   const doMes = (lancamentos || []).filter((l) => l && String(l.competencia) === String(mes)
     && !compraNoCartaoDoEscritorio(l));
-  const conferidos = doMes.filter((l) => l.conferido);
+  const pelo = (l) => !l.conferido && !!certos && certos.has(l.id);
+  const visto = (l) => !!l.conferido || pelo(l);
+  const conferidos = doMes.filter(visto);
   const soma = (lista) => efCentavos(lista.reduce((s, l) => s + (Number(l.valor) || 0), 0));
   return {
     total: doMes.length,
     conferidos: conferidos.length,
     pendentes: doMes.length - conferidos.length,
+    peloExtrato: doMes.filter(pelo).length,
     valorConferido: soma(conferidos),
-    valorPendente: soma(doMes.filter((l) => !l.conferido)),
-    lancamentos: doMes,
+    valorPendente: soma(doMes.filter((l) => !visto(l))),
+    lancamentos: doMes.map((l) => (pelo(l) ? { ...l, _peloExtrato: true } : l)),
   };
+}
+
+// Os lançamentos que o extrato casou com certeza, prontos para gravar como
+// conferidos: ligados à linha do banco (extratoId) e com o histórico dela,
+// que é o que ensina o próximo casamento.
+function conferidosPeloExtrato(resultado, agora) {
+  const quando = agora || new Date().toISOString();
+  return ((resultado && resultado.casados) || [])
+    .filter((c) => casamentoCerto(c) && c.lancamento && !c.lancamento.conferido)
+    .map((c) => ({ ...c.lancamento, conferido: true, conferidoEm: quando, conferidoPor: "extrato",
+      extratoId: c.lancamento.extratoId || c.extrato.id || "",
+      historicoBanco: c.lancamento.historicoBanco || c.extrato.historico || "" }));
 }
 
 // Diferença entre o que o extrato do VICKE diz e o que o banco diz.
@@ -1935,26 +1954,95 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
     if (!c) continue;
     c.usado = true; jaCasados.add(m);
     casados.push({ extrato: m, lancamento: c.l, dias: distancia(m, c) === 9999 ? null : distancia(m, c),
-      centavos: Math.round((c.abs - m.abs) * 100), ambiguo: false });
+      centavos: Math.round((c.abs - m.abs) * 100), ambiguo: false, certeza: "vinculo", pontos: 0, alternativas: [] });
   }
+  // Os demais casam por valor e lado — mas, quando o mesmo valor aparece
+  // mais de uma vez, a escolha não é mais "o primeiro da lista": ganha o par
+  // que tem PISTA (o CPF/CNPJ do histórico é o do fornecedor; o nome do
+  // histórico está no lançamento). Sem pista nenhuma, vale a ordem de antes
+  // (o mais antigo casa primeiro). E cada par sai com o grau de certeza:
+  //   vinculo     — o lançamento nasceu desta linha;
+  //   unico       — um valor só, dos dois lados: não tem com o que confundir;
+  //   desempate   — havia outro do mesmo valor, mas a pista decidiu;
+  //   equivalente — havia outro, mas trocar não muda nada (dois lançamentos
+  //                 iguais para duas linhas iguais);
+  //   duvida      — sobrou para a pessoa olhar.
+  const livres = [];
   for (const m of emOrdem) {
     if (jaCasados.has(m)) continue;
     // "Não é lançamento" (transferência entre contas suas, estorno que se
     // anula): sai da fila sem virar lançamento, com o motivo guardado.
     if (m.id && ignorados[m.id]) { naoLancar.push({ ...m, motivo: ignorados[m.id].motivo || "" }); continue; }
-    const dirM = Number(m.valor) < 0 ? -1 : (Number(m.valor) > 0 ? 1 : 0);
-    const iguais = candidatos.filter((c) => !c.usado && Math.abs(c.abs - m.abs) <= tolerancia
-      && (!c.dir || !dirM || c.dir === dirM));
-    if (!iguais.length) { noBancoSemPar.push(m); continue; }
-    const escolhido = iguais[0];
-    escolhido.usado = true;
+    livres.push(m);
+  }
+  const dirDe = (m) => (Number(m.valor) < 0 ? -1 : (Number(m.valor) > 0 ? 1 : 0));
+  const absDe = (m) => (m.abs != null ? Number(m.abs) : Math.round(Math.abs(Number(m.valor) || 0) * 100) / 100);
+  const compativel = (m, c) => !c.usado && Math.abs(c.abs - absDe(m)) <= tolerancia
+    && (!c.dir || !dirDe(m) || c.dir === dirDe(m));
+  const pistas = typeof pistasDoCasamento === "function" ? pistasDoCasamento(lancamentos, o) : null;
+  const pares = [];
+  livres.forEach((m, im) => {
+    candidatos.forEach((c) => {
+      if (!compativel(m, c)) return;
+      pares.push({ m, im, c, pontos: pistas ? pistas.pontos(m, c.l) : 0 });
+    });
+  });
+  // mais pista primeiro; empatado, a ordem de antes (extrato, depois lista)
+  pares.sort((a, b) => (b.pontos - a.pontos) || (a.im - b.im) || (a.c.i - b.c.i));
+  const doMov = new Map();
+  for (const p of pares) {
+    if (p.c.usado || doMov.has(p.m)) continue;
+    p.c.usado = true;
+    doMov.set(p.m, p);
+  }
+  // as alternativas de cada par: outros lançamentos que serviam a esta linha
+  // e outras linhas que serviam a este lançamento
+  const igualLanc = (a, b) => ["contaId", "descricao", "obraId", "projeto", "cliente", "fornecedor", "unidadeId"]
+    .every((k) => efSemAcento(a[k] || "") === efSemAcento(b[k] || ""))
+    && Math.abs(Math.abs(Number(a.valor) || 0) - Math.abs(Number(b.valor) || 0)) <= tolerancia;
+  const igualMov = (a, b) => efSemAcento(a.historico || "") === efSemAcento(b.historico || "")
+    && Math.abs((Number(a.valor) || 0) - (Number(b.valor) || 0)) <= tolerancia;
+  // A certeza é medida contra TROCAS: dar a esta linha outro lançamento (e
+  // ao dono dele, este) tem de custar pista. Trocar com quem é igual não
+  // custa nada, mas também não muda nada — é "equivalente".
+  const pontosDe = (m, c) => { const x = pares.find((y) => y.m === m && y.c === c); return x ? x.pontos : null; };
+  const donoDe = new Map(); doMov.forEach((p, m) => donoDe.set(p.c, m));
+  for (const m of livres) {
+    const p = doMov.get(m);
+    if (!p) { noBancoSemPar.push(m); continue; }
+    const outrosLanc = pares.filter((x) => x.m === m && x.c !== p.c);
+    const outrasLinhas = pares.filter((x) => x.c === p.c && x.m !== m);
+    let certeza = "unico";
+    if (outrosLanc.length || outrasLinhas.length) {
+      const trocas = [];
+      for (const x of outrosLanc) {
+        const dono = donoDe.get(x.c);
+        if (!dono) { trocas.push({ ganho: p.pontos - x.pontos, igual: igualLanc(x.c.l, p.c.l) }); continue; }
+        const volta = pontosDe(dono, p.c);
+        if (volta == null) continue;                 // o dono não aceita este lançamento: não há troca
+        trocas.push({ ganho: p.pontos + doMov.get(dono).pontos - x.pontos - volta,
+          igual: igualLanc(x.c.l, p.c.l) || igualMov(dono, m) });
+      }
+      for (const x of outrasLinhas) {
+        if (!doMov.get(x.m)) trocas.push({ ganho: p.pontos - x.pontos, igual: igualMov(x.m, m) });
+      }
+      const arriscadas = trocas.filter((t) => t.ganho < 3);
+      if (!arriscadas.length) certeza = trocas.length ? "desempate" : "unico";
+      else if (arriscadas.every((t) => t.igual)) certeza = "equivalente";
+      else certeza = "duvida";
+    }
     casados.push({
-      extrato: m, lancamento: escolhido.l,
-      dias: distancia(m, escolhido) === 9999 ? null : distancia(m, escolhido),
-      centavos: Math.round((escolhido.abs - m.abs) * 100),
-      ambiguo: iguais.length > 1,
+      extrato: m, lancamento: p.c.l,
+      dias: distancia(m, p.c) === 9999 ? null : distancia(m, p.c),
+      centavos: Math.round((p.c.abs - absDe(m)) * 100),
+      ambiguo: outrosLanc.length > 0 || outrasLinhas.length > 0,
+      certeza, pontos: p.pontos,
+      // as outras opções para a pessoa trocar o par, quando há dúvida
+      alternativas: certeza === "duvida" ? outrosLanc.map((x) => x.c.l) : [],
     });
   }
+  // a fila sai na ordem do extrato, como antes
+  noBancoSemPar.sort((a, b) => String(a.data).localeCompare(String(b.data)));
   const contabilizadoSemPar = candidatos.filter((c) => !c.usado).map((c) => c.l);
   const soma = (lista, f) => Math.round(lista.reduce((s, x) => s + Math.abs(Number(f(x)) || 0), 0) * 100) / 100;
   return {
@@ -1969,6 +2057,68 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
       valorContabilizado: soma(contabilizadoSemPar, (l) => l.valor),
       ignoradas: foraDoBanco.length,
       naoLancar: naoLancar.length,
+      certos: casados.filter((c) => c.certeza !== "duvida").length,
+      duvidas: casados.filter((c) => c.certeza === "duvida").length,
+    },
+  };
+}
+
+// Um par é certo quando não há com o que confundir, quando a pista decidiu
+// ou quando trocar não mudaria nada. Esses entram conferidos sozinhos.
+function casamentoCerto(c) {
+  return !!c && c.certeza !== "duvida";
+}
+
+// ── Pistas para desempatar o casamento ──────────────────────────
+// O banco escreve pouco: "Pagamento Pix 34.030.843 0001-60" ou
+// "Pix ***.144.048-**". Três jeitos de reconhecer de quem é:
+//   1. o CPF/CNPJ do fornecedor no cadastro;
+//   2. o que já se aprendeu: linhas antigas com esse documento foram
+//      lançadas para esse fornecedor (só vale se foi sempre o mesmo);
+//   3. palavras do histórico que estão no lançamento (o nome de quem pagou).
+// A data não entra: no lançamento é o dia em que se contabilizou.
+function pistasDoCasamento(lancamentos, opcoes) {
+  const o = opcoes || {};
+  const so = (t) => String(t || "").replace(/\D/g, "");
+  const nome = (t) => efSemAcento(t || "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  const docsDoFornecedor = {};
+  for (const f of o.fornecedores || []) {
+    const d = so(f && (f.cnpjCpf || f.cnpj || f.cpf || f.documento));
+    if (!d) continue;
+    if (f.id) docsDoFornecedor["id:" + f.id] = d;
+    if (f.nome) docsDoFornecedor["nome:" + nome(f.nome)] = d;
+  }
+  // documento do histórico → fornecedores já lançados com ele
+  const aprendido = {};
+  for (const l of o.historico || lancamentos || []) {
+    if (!l || !l.historicoBanco) continue;
+    const d = documentoDoHistorico(l.historicoBanco);
+    const quem = nome(l.fornecedor || "");
+    if (!d || !quem) continue;
+    (aprendido[d] = aprendido[d] || new Set()).add(quem);
+  }
+  const genericas = new Set(["pagamento", "recebimento", "transferencia", "outra", "emitido", "recebido", "pix", "debito", "credito",
+    "conv", "ltda", "comercio", "servicos", "servico", "materiais", "material", "construcao", "obra", "obras", "de", "da", "do", "e"]);
+  return {
+    pontos(m, l) {
+      if (!m || !l) return 0;
+      let p = 0;
+      const doc = documentoDoHistorico(m.historico);
+      if (doc) {
+        if (l.historicoBanco && documentoDoHistorico(l.historicoBanco) === doc) p += 10;
+        const dCad = docsDoFornecedor["id:" + (l.fornecedorId || "")] || docsDoFornecedor["nome:" + nome(l.fornecedor)] || "";
+        if (dCad && (dCad.indexOf(doc) >= 0 || doc.indexOf(dCad) >= 0)) p += 10;
+        const ja = aprendido[doc];
+        if (ja && ja.size === 1 && ja.has(nome(l.fornecedor))) p += 8;
+      }
+      const palavrasM = new Set(chaveDoHistorico(m.historico).split(" ").filter((w) => w.length >= 4 && !genericas.has(w)));
+      if (palavrasM.size) {
+        const texto = " " + nome([l.fornecedor, l.descricao, l.cliente, l.projeto].join(" ")) + " ";
+        let achadas = 0;
+        palavrasM.forEach((w) => { if (texto.indexOf(" " + w + " ") >= 0) achadas++; });
+        p += Math.min(6, achadas * 3);
+      }
+      return p;
     },
   };
 }
@@ -4667,11 +4817,15 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
   );
 }
 
-function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcarCasados, aoDescartar, ocupado, fila }) {
+function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcarCasados, aoConfirmarPar, aoDescartar, ocupado, fila }) {
   const S = EF_ESTILO;
+  const [escolha, setEscolha] = useState({});
   if (!resultado) return null;
   const r = resultado.resumo;
-  const semConferir = (resultado.casados || []).filter((c) => c && c.lancamento && !c.lancamento.conferido).length;
+  const casados = (resultado.casados || []).filter((c) => c && c.lancamento);
+  const certosAbertos = casados.filter((c) => casamentoCerto(c) && !c.lancamento.conferido).length;
+  const duvidas = casados.filter((c) => !casamentoCerto(c) && !c.lancamento.conferido);
+  const dia = (d) => String(d || "").slice(0, 10).split("-").reverse().join("/");
   const cartao = (rot, n, apoio, cor) => (
     <div key={rot} style={{ ...S.card, display: "grid", gap: 2 }}>
       <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>{rot}</div>
@@ -4690,13 +4844,57 @@ function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcar
         {cartao("Fora da conta", r.ignoradas + (r.naoLancar || 0), "saldo, aplicação, o que não é lançamento")}
       </div>
 
-      {/* Só os que bateram e ainda não estão conferidos: o que nasceu da
-          fila já entra conferido e não pede mais clique. */}
-      {semConferir > 0 && (
-        <div style={{ ...S.card, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", fontSize: 12.5, color: "#4b5563" }}>
-          <span>{semConferir === 1 ? "1 movimento bateu" : `${semConferir} movimentos bateram`} com lançamentos já registrados.</span>
-          <button style={{ ...S.btn, marginLeft: "auto", opacity: ocupado ? .45 : 1 }} disabled={!!ocupado}
-            onClick={aoMarcarCasados}>{semConferir === 1 ? "Marcar como conferido" : `Marcar os ${semConferir} como conferidos`}</button>
+      {/* O que casou sem dúvida não pede clique: conta como conferido e é
+          gravado assim no fechamento do mês. Só a dúvida vem para a pessoa. */}
+      {certosAbertos > 0 && (
+        <div data-vk-certos="1" style={{ ...S.card, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", fontSize: 12.5, color: "#4b5563" }}>
+          <span><strong style={{ color: "#0474f4" }}>{certosAbertos}</strong> {certosAbertos === 1 ? "lançamento casou" : "lançamentos casaram"} com o banco sem dúvida
+            — já contam como conferidos e ficam gravados assim quando você fechar o mês.</span>
+        </div>
+      )}
+      {duvidas.length > 0 && (
+        <div data-vk-duvidas="1" style={{ ...S.card, display: "grid", gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>
+              {duvidas.length === 1 ? "1 casamento em dúvida" : `${duvidas.length} casamentos em dúvida`}
+            </div>
+            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+              O mesmo valor aparece mais de uma vez e o banco não diz de quem é. Confira o par — ou troque pelo lançamento certo.
+            </div>
+          </div>
+          {duvidas.map((c) => {
+            const m = c.extrato;
+            const opcoes = [c.lancamento].concat(c.alternativas || []);
+            const idEscolhido = escolha[m.id] || c.lancamento.id;
+            const escolhido = opcoes.find((l) => l.id === idEscolhido) || c.lancamento;
+            const rot = (l) => [l.descricao || l.fornecedor || "—", [l.cliente, l.projeto].filter(Boolean).join(" · "),
+              l.lancadoEm ? "lançado " + dia(l.lancadoEm) : ""].filter(Boolean).join(" — ");
+            return (
+              <div key={m.id || m.historico + m.data} style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, padding: "10px 12px",
+                display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", alignItems: "center" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>No banco · {dia(m.data)}</div>
+                  <div style={{ fontSize: 12.5, color: "#262421", wordBreak: "break-word" }}>{m.historico || "—"}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{efDinheiro(Math.abs(m.valor))}</div>
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>É este lançamento?</div>
+                  {opcoes.length > 1 ? (
+                    <select value={idEscolhido} onChange={(e) => setEscolha((x) => ({ ...x, [m.id]: e.target.value }))}
+                      style={{ ...S.input, width: "100%", fontSize: 12.5 }}>
+                      {opcoes.map((l) => <option key={l.id} value={l.id}>{rot(l)}</option>)}
+                    </select>
+                  ) : (
+                    <div style={{ fontSize: 12.5 }}>{rot(escolhido)}</div>
+                  )}
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button style={{ ...S.btn, opacity: ocupado ? .45 : 1 }} disabled={!!ocupado || !aoConfirmarPar}
+                    onClick={() => aoConfirmarPar && aoConfirmarPar(m, escolhido)}>Confirmar</button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -4771,7 +4969,9 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
   const [soPendentes, setSoPendentes] = useState(true);
   const meses = (linhas || []).map((l) => l.mes);
   const linha = (linhas || []).find((l) => l.mes === mes);
-  const conf = conferenciaDoMes(lancs, mes);
+  const certos = useMemo(() => new Set(((extrato && extrato.resultado && extrato.resultado.casados) || [])
+    .filter((c) => casamentoCerto(c) && c.lancamento).map((c) => c.lancamento.id)), [extrato && extrato.resultado]);
+  const conf = conferenciaDoMes(lancs, mes, { certos });
   const registro = (fechamentos || {})[mes] || {};
   const fechado = mesEstaFechado(mes, fechamentos);
   // O saldo do banco: o que foi informado ao fechar; sem ele, o da última
@@ -4873,19 +5073,22 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
       {extrato && extrato.resultado && (
         <ConferenciaComExtrato
           resultado={extrato.resultado} mapa={extrato.mapa} aoCorrigir={extrato.corrigir}
-          aoLancar={extrato.lancar} aoMarcarCasados={extrato.marcarCasados}
+          aoLancar={extrato.lancar} aoMarcarCasados={extrato.marcarCasados} aoConfirmarPar={extrato.confirmarPar}
           aoDescartar={extrato.descartar} ocupado={ocupado} fila={extrato.fila} />
       )}
 
       <div style={{ ...S.card, display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", fontSize: 12.5, color: "#4b5563" }}>
-        <span><strong style={{ color: "#262421" }}>{conf.conferidos}</strong> de {conf.total} conferidos</span>
+        <span><strong style={{ color: "#262421" }}>{conf.conferidos}</strong> de {conf.total} conferidos
+          {conf.peloExtrato > 0 && <span style={{ color: "#6b7280" }}> ({conf.peloExtrato} pelo extrato)</span>}</span>
         {conf.pendentes > 0 && <span>Falta conferir {efDinheiro(conf.valorPendente)} em {conf.pendentes} lançamentos</span>}
         {fechado && <span style={{ color: "#0474f4" }}>Mês fechado em {String(registro.fechadoEm || "").slice(0, 10).split("-").reverse().join("/")}</span>}
         <label style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
           <input type="checkbox" checked={soPendentes} onChange={(e) => setSoPendentes(e.target.checked)} />
           Mostrar só o que falta conferir
         </label>
-        {!fechado && conf.total > 0 && (
+        {/* Com o extrato conferindo sozinho, "desmarcar todos" só desfaria a
+            parte gravada e confundiria: some quando há conferidos pelo extrato. */}
+        {!fechado && conf.total > 0 && (conf.pendentes > 0 || !conf.peloExtrato) && (
           <button style={S.btnSec} disabled={!!ocupado}
             onClick={() => aoMarcarTodos(mes, conf.pendentes > 0)}>
             {conf.pendentes > 0 ? "Marcar todos como conferidos" : "Desmarcar todos"}
@@ -4896,6 +5099,10 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
       {!conf.total ? (
         <div style={{ ...S.card, textAlign: "center", color: "#6b7280", fontSize: 13 }}>
           Nenhum lançamento em {efMesPorExtenso(mes)}.
+        </div>
+      ) : soPendentes && !conf.pendentes ? (
+        <div style={{ ...S.card, textAlign: "center", color: "#6b7280", fontSize: 13 }}>
+          Nada falta conferir em {efMesPorExtenso(mes)}.
         </div>
       ) : (
         <div style={{ ...S.quadro, maxHeight: 520 }}>
@@ -4910,13 +5117,18 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
               </tr>
             </thead>
             <tbody>
-              {conf.lancamentos.filter((l) => !soPendentes || !l.conferido).map((l) => {
+              {conf.lancamentos.filter((l) => !soPendentes || !(l.conferido || l._peloExtrato)).map((l) => {
                 const conta = contaEscritorio(l.contaId);
                 return (
-                  <tr key={l.id} style={{ borderTop: "1px solid rgba(38,36,33,0.06)", background: l.conferido ? "#f8fafc" : "transparent" }}>
-                    <td style={{ padding: "6px 12px" }}>
-                      <input type="checkbox" checked={!!l.conferido} disabled={fechado || !!ocupado}
-                        onChange={() => aoMarcar(l)} style={{ cursor: fechado ? "default" : "pointer" }} />
+                  <tr key={l.id} style={{ borderTop: "1px solid rgba(38,36,33,0.06)", background: (l.conferido || l._peloExtrato) ? "#f8fafc" : "transparent" }}>
+                    <td style={{ padding: "6px 12px", whiteSpace: "nowrap" }}>
+                      {l._peloExtrato ? (
+                        <span title="Casou com o banco sem dúvida — fica conferido ao fechar o mês"
+                          style={{ fontSize: 10.5, color: "#0474f4", fontWeight: 600 }}>✓ extrato</span>
+                      ) : (
+                        <input type="checkbox" checked={!!l.conferido} disabled={fechado || !!ocupado}
+                          onChange={() => aoMarcar(l)} style={{ cursor: fechado ? "default" : "pointer" }} />
+                      )}
                     </td>
                     <td style={{ padding: "6px 12px", color: l.conferido ? "#9ca3af" : "#262421" }}>{conta ? conta.nome : "—"}</td>
                     <td style={{ padding: "6px 12px", color: "#6b7280" }}>{[l.cliente, l.projeto].filter(Boolean).join(" · ") || "—"}</td>
@@ -5842,7 +6054,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   const ignoradosDoMes = ignoradosGuardados(extratosGuardados);
   const conciliacao = movimentosExtrato
     ? conciliarExtrato(movimentosExtrato, lancs.filter((l) => String(l.competencia) === String(mesEmConferencia)),
-        { ignorados: ignoradosDoMes })
+        { ignorados: ignoradosDoMes, fornecedores: (data && data.fornecedores) || [], historico: lancs })
     : null;
   const saldoLidoDoExtrato = movimentosExtrato ? saldoDoExtratoNoMes(movimentosExtrato, mesEmConferencia) : null;
 
@@ -6026,8 +6238,26 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     return save({ ...data, escritorio: { ...esc, financeiro: { ...cfgFin, fechamentos: novos } } });
   }
 
+  // Confirmar um par em dúvida: liga o lançamento à linha do banco e marca
+  // conferido. Com a ligação gravada, o próximo casamento já sabe.
+  async function confirmarParDoExtrato(m, l) {
+    if (!m || !l) return;
+    const novo = { ...l, conferido: true, conferidoEm: new Date().toISOString(), conferidoPor: "extrato",
+      extratoId: m.id || l.extratoId || "", historicoBanco: m.historico || l.historicoBanco || "" };
+    setOcupado("Confirmando…");
+    try {
+      await api.lancamentos.batch([novo]);
+      setOcupado("");
+      if (onReload) await onReload();
+    } catch (e) {
+      setOcupado("");
+      setAviso("Não consegui confirmar: " + ((e && e.message) || "falha no envio"));
+    }
+  }
+
   async function fecharMes(mes, saldoBanco) {
-    const conf = conferenciaDoMes(lancs, mes);
+    const certosDoMes = mes === mesEmConferencia && conciliacao ? conferidosPeloExtrato(conciliacao) : [];
+    const conf = conferenciaDoMes(lancs, mes, { certos: new Set(certosDoMes.map((l) => l.id)) });
     if (conf.pendentes) {
       const seguir = await dialogo.confirmar({
         titulo: `Fechar ${efMesPorExtenso(mes)} com ${conf.pendentes} sem conferir?`,
@@ -6036,7 +6266,21 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       });
       if (!seguir) return;
     }
+    // o que casou sem dúvida vai gravado como conferido, junto com o fecho
+    if (certosDoMes.length) {
+      setOcupado(`Gravando ${certosDoMes.length} conferidos pelo extrato…`);
+      try {
+        const lote = 400;
+        for (let i = 0; i < certosDoMes.length; i += lote) await api.lancamentos.batch(certosDoMes.slice(i, i + lote));
+        setOcupado("");
+      } catch (e) {
+        setOcupado("");
+        setAviso("Não consegui gravar os conferidos: " + ((e && e.message) || "falha no envio") + ". O mês não foi fechado.");
+        return;
+      }
+    }
     await guardarFechamentos({ ...fechamentos, [mes]: { saldoBanco: Number(saldoBanco) || 0, fechadoEm: new Date().toISOString() } });
+    if (certosDoMes.length && onReload) await onReload();
     setAviso(`${efMesPorExtenso(mes)} fechado.`);
   }
 
@@ -6118,7 +6362,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             arrastando: arrastandoExtrato, setArrastando: setArrastandoExtrato,
             origem: origemExtrato, entrada: entradaExtrato, receber: receberExtrato,
             mapa: mapaExtrato, corrigir: corrigirColuna, resultado: conciliacao,
-            lancar: lancarDoExtrato, marcarCasados: marcarCasadosDoExtrato, descartar: marcarForaDoBanco,
+            lancar: lancarDoExtrato, marcarCasados: marcarCasadosDoExtrato, confirmarPar: confirmarParDoExtrato, descartar: marcarForaDoBanco,
             guardado: !(doArquivo && doArquivo.length) && guardadoDoMes ? guardadoDoMes : null,
             saldoLido: saldoLidoDoExtrato,
             fila: {
