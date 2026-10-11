@@ -2658,6 +2658,13 @@ function PonteEscritorioView({ obra, cliente, contasPagar, entradas, data, isMob
   );
 }
 
+// A janela de edição do pedido (a das cotações), aberta de contas a pagar.
+// Pergunta se a IA está disponível só quando abre — não a cada obra aberta.
+function PainelPedidoDaObra(props) {
+  const ia = typeof useIaDisponivel === "function" ? useIaDisponivel() : false;
+  return <PainelPedidoLoja {...props} iaDisponivel={!!ia} />;
+}
+
 function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaObra, entradaInicial, aoTerminarEntrada }) {
   const perm = getPermissoes();
   // Chegando com uma Entrada já lida (veio da lista de Obras), a tela abre
@@ -2732,6 +2739,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [formPagamento, setFormPagamento] = useState(null);
   // Trocar o vencimento de um pedido (ou de todos os da loja): só a data.
   const [editVenc, setEditVenc] = useState(null);
+  // O pedido da conta da loja, aberto em contas a pagar na mesma janela de
+  // edição da tela de cotações: itens, número, vencimento, papel.
+  const [pedidoEditando, setPedidoEditando] = useState(null);   // { cotacao, pedido }
   const [folhaComprov, setFolhaComprov] = useState(null); // { titulo, contas } quando aberta
   // O que a baixa fez no preço do catálogo: { aplicados, pendencias, semCodigo }.
   // Dar baixa muda o preço de referência do insumo, e isso não pode acontecer
@@ -3150,6 +3160,37 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       pedidoIds: linha.pedidoIds || (linha.pedidoId ? [linha.pedidoId] : []),
       contaIds: abertas.map(c => c.id), itens: abertas.length, pagos: (linha.contas || []).length - abertas.length,
       vencimento: linha.vencimento || hojeIso });
+  };
+  // Editar o pedido: a janela completa, a mesma das cotações. Pedido que não
+  // está numa conta de loja (sem a ficha dele guardada) só tem a data para
+  // mudar — ou, com um item só, a conta dele.
+  const abrirEditarPedido = (L) => {
+    const cots = (obraAtual && obraAtual.cotacoes) || [];
+    const cot = cots.find(c => c && c.id === L.cotacaoId && (c.pedidos || []).some(x => x && x.id === L.pedidoId))
+      || cots.find(c => c && (c.pedidos || []).some(x => x && x.id === L.pedidoId));
+    const ped = cot ? (cot.pedidos || []).find(x => x && x.id === L.pedidoId) : null;
+    if (cot && ped) {
+      const trava = podeMexerNoPedido(obraAtual.contasPagar || [], ped.id);
+      if (!trava.pode) { dialogo.alertar({ titulo: "Não dá para editar agora", mensagem: trava.motivo, tipo: "aviso" }); return; }
+      setPedidoEditando({ cotacao: cot, pedido: { ...ped } });
+      return;
+    }
+    if ((L.contas || []).length === 1) { abrirEdicaoDaConta(L.contas[0]); return; }
+    abrirEditarVencimento(L, `${rotuloDoPedido(L).trim()} · ${L.favorecido || "Loja"}`);
+  };
+  const salvarPedidoEditado = (pedido) => {
+    const f = pedidoEditando; if (!f) return;
+    const cot = f.cotacao;
+    const loja = prestadores.find(x => x && x.id === cot.lojaId) || {};
+    const comBaixa = pedido.jaPago ? { ...pedido, pagoEm: pedido.pagoEm || pedido.vencimento || pedido.data || "" } : pedido;
+    const r = lancarCotacaoEmContas({
+      cotacaoId: cot.id, obraId: cot.obraId || (obraAtual && obraAtual.id), modo: "contaLoja", pedido: comBaixa,
+      contaNova: null, contaId: cot.contaId || "material",
+      prestadorId: loja.id || "", favorecido: loja.nome || "", descricao: cot.titulo || "Compra",
+      lancadoEm: new Date().toISOString(), lancadoPor: quemSou(),
+    });
+    if (r && r.erro) { dialogo.alertar({ titulo: r.erro, tipo: "aviso" }); return; }
+    setPedidoEditando(null);
   };
   const salvarVencimento = () => {
     const f = editVenc; if (!f) return;
@@ -4764,8 +4805,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                   {perm.podeEditar && (
                                     <div data-vk-mantem-mes="1" data-vk-menu-canto="1" onClick={e => e.stopPropagation()} style={{ position: "absolute", top: 3, right: 4 }}>
                                       <MenuDeAcoes semBorda toque={isMobile} title="Mais ações do pedido" itens={[
-                                        { rotulo: L.pago ? "Editar vencimento — já pago" : "Editar vencimento", desativado: !!L.pago,
-                                          onClick: () => abrirEditarVencimento(L, `${rotuloDoPedido(L).trim()} · ${L.favorecido || "Loja"}`) },
+                                        L.pagos ? { rotulo: "Editar — desfaça o pagamento antes", desativado: true }
+                                          : { rotulo: "Editar", onClick: () => abrirEditarPedido(L) },
                                         { rotulo: "Excluir", destrutivo: true, onClick: () => apagarPedidoDeContas(L) },
                                       ]} />
                                     </div>
@@ -4996,6 +5037,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             escritorioNome={(data.escritorio || {}).nome || ""}
             fmtBRL={fmtMoedaCtr}
             aoFechar={() => setFolhaComprov(null)} />
+        )}
+
+        {pedidoEditando && typeof PainelPedidoLoja === "function" && (
+          <PainelPedidoDaObra cotacao={pedidoEditando.cotacao} pedido={pedidoEditando.pedido}
+            insumos={insumosDoCatalogo(data)} isMobile={isMobile} dinheiro={fmtMoedaCtr} editando
+            aoMudar={(p) => setPedidoEditando({ ...pedidoEditando, pedido: p })}
+            aoAprender={typeof aprenderApelidosNoCatalogo === "function" ? (pares) => aprenderApelidosNoCatalogo(data, save, pares) : undefined}
+            aoFechar={() => setPedidoEditando(null)} aoLancar={salvarPedidoEditado} />
         )}
 
         {editVenc && (

@@ -2746,6 +2746,9 @@ function MenuDeAcoes(props) {
       <button ref={refBotao} type="button" aria-haspopup="menu" aria-expanded={aberto ? "true" : "false"}
         title={props.title || "Mais ações"}
         onClick={function (e) { e.stopPropagation(); if (aberto) fechar(); else abrir(); }}
+        /* sem borda: o clique do mouse não deixa o contorno de foco no lugar
+           da borda que se tirou (pelo teclado, o foco continua aparecendo) */
+        onMouseDown={props.semBorda ? function (e) { e.preventDefault(); } : undefined}
         style={{
           // semBorda: os três pontinhos discretos, no canto da linha — sem
           // caixa em volta disputando com o botão da ação principal.
