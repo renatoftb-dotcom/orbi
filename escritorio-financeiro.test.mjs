@@ -41,7 +41,7 @@ const M = new Function(src + `
            comIdsDosMovimentos, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
            sugestaoDoExtrato, palpiteDoExtrato, sugestaoCompletaDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao, fornecedorPadraoDaConta,
            ehReceitaDaGestao, refDaParcela, gestaoNaObra, desfazerGestaoNaObra, parcelaDoLancamento, parcelaDoMesNaGestao, recalibrarGestao, previaDaGestao, contasDaGestao,
-           extratosComArquivo, movimentosGuardadosDoMes, ignoradosGuardados, extratosComIgnorado };`)();
+           extratosComArquivo, movimentosGuardadosDoMes, ignoradosGuardados, extratosComIgnorado, efLinhasDoHtml, efLinhasDoOfx, saldoDoExtratoNoMes, efTabelaDoArquivo };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -2217,6 +2217,74 @@ teste("conferência: o certo conta como conferido pelo extrato e é gravado liga
   assert.strictEqual(g[0].conferidoPor, "extrato"); assert.ok(/11\.222\.333/.test(g[0].historicoBanco));
   // sem certos, nada muda no comportamento antigo
   assert.strictEqual(M.conferenciaDoMes(lancs, "2026-09").conferidos, 0);
+});
+
+
+// ── extrato do banco em HTML (Sicoob) e OFX ──
+const HTML_SICOOB = `<html><body><table><tr><td><strong>Conta:</strong></td><td>3.893-8 / LEO PADOVAN</td></tr></table>
+<div class="titulo-tabela">LANÇAMENTOS</div><table class="home-extrato-exportar-table-html"><thead><tr><th>DATA</th><th>DOCUMENTO</th><th>DESCRIÇÃO</th><th>VALOR</th></tr></thead><tbody>
+<tr><td>09/10/2026</td><td>Pix</td><td><strong>PIX EMITIDO OUTRA IF</strong><br><span style="white-space: pre-line;">Pagamento Pix
+***.144.048-**
+empreiteiro jacarezinho
+</span></td><td class="text-right"> 400,00D</td></tr>
+<tr><td>07/10/2026</td><td>Pix</td><td><strong>PIX RECEBIDO - OUTRA IF</strong><br><span>Recebimento Pix
+36.122.417 0001-74</span></td><td> 1.800,00C</td></tr>
+<tr><td>07/10/2026</td><td></td><td>SALDO DO DIA</td><td>2.369,64C</td></tr>
+<tr><td>30/09/2026</td><td></td><td>SALDO BLOQUEADO ANTERIOR</td><td>0,00*</td></tr>
+<tr><td>30/09/2026</td><td></td><td>SALDO ANTERIOR</td><td>7.778,19C</td></tr>
+</tbody></table><div class="titulo-tabela">LANÇAMENTOS FUTUROS</div><table><tr><th>DATA</th><th>DOCUMENTO</th><th>DESCRIÇÃO</th><th>VALOR</th></tr>
+<tr><td>20/10/2026</td><td>2211822</td><td><strong>DÉB.TIT.COMPE EFETIVADO</strong><br>Casa alugada jacarezinho</td><td>710,00D</td></tr></table>
+<div>RESUMO</div><table><tr><td>Saldo em conta:</td><td>168,49C</td></tr></table></body></html>`;
+
+teste("extrato HTML do Sicoob: lançamentos com lado C/D, sem os futuros nem o bloqueado", async () => {
+  const linhas = M.efLinhasDoHtml(HTML_SICOOB);
+  assert.deepStrictEqual(linhas[0], ["DATA", "DOCUMENTO", "DESCRIÇÃO", "VALOR"]);
+  assert.strictEqual(linhas.length, 5, JSON.stringify(linhas));
+  assert.strictEqual(linhas[1][2], "PIX EMITIDO OUTRA IF · Pagamento Pix ***.144.048-** empreiteiro jacarezinho");
+  assert.ok(!linhas.some((l) => /Casa alugada/.test(l.join(" "))), "futuro fica fora");
+  assert.ok(!linhas.some((l) => /BLOQUEADO/.test(l.join(" "))));
+  assert.strictEqual(M.efValorDeTexto("400,00D"), -400);
+  assert.strictEqual(M.efValorDeTexto("1.800,00C"), 1800);
+  assert.strictEqual(M.efValorDeTexto("0,00*"), 0);
+  // o caminho inteiro: arquivo → colunas → movimentos
+  const t = await M.efTabelaDoArquivo({ name: "extrato.html", text: async () => HTML_SICOOB });
+  const mapa = M.detectarColunasTabela(t.linhas);
+  assert.ok(mapa.completo, JSON.stringify(mapa.colunas));
+  const movs = M.comIdsDosMovimentos(M.movimentosDaTabela(t.linhas, mapa));
+  assert.deepStrictEqual(movs.filter((m) => M.efEhMovimento(m.historico)).map((m) => m.valor).sort((a, b) => a - b), [-400, 1800]);
+  assert.strictEqual(M.saldoDoExtratoNoMes(movs, "2026-10"), 2369.64);
+  assert.strictEqual(M.saldoDoExtratoNoMes(movs, "2026-09"), 7778.19);
+});
+
+teste("extrato novo com o SALDO ANTERIOR do mês passado não apaga o mês passado", () => {
+  const set = { "2026-09": { origem: "planilha", movimentos: [
+    { id: "a", data: "2026-09-10", valor: -50, historico: "PIX EMITIDO X" },
+    { id: "s", data: "2026-09-30", valor: 7778.19, historico: "SALDO DO DIA" }], ignorados: { a: { motivo: "x" } } } };
+  const out = [{ data: "2026-10-09", valor: -400, historico: "PIX EMITIDO Y" },
+    { data: "2026-09-30", valor: 7778.19, historico: "SALDO ANTERIOR" }];
+  const r = M.extratosComArquivo(set, M.comIdsDosMovimentos(out), "out.html", "2026-10-11T00:00:00Z");
+  assert.deepStrictEqual(r.meses, ["2026-10"]);
+  assert.strictEqual(r.extratos["2026-09"].movimentos.length, 3, "setembro fica e ganha o saldo anterior");
+  assert.strictEqual(r.extratos["2026-09"].origem, "planilha");
+  assert.ok(r.extratos["2026-09"].ignorados.a);
+  assert.strictEqual(r.extratos["2026-10"].movimentos.length, 1);
+});
+
+teste("extrato OFX: valor com sinal, histórico NAME+MEMO e o saldo final", async () => {
+  const ofx = `OFXHEADER:100
+DATA:OFXSGML
+<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><BANKTRANLIST>
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261009120000[-3:BRT]<TRNAMT>-400.00<FITID>abc1<CHECKNUM>Pix<NAME>PIX EMITIDO OUTRA IF<MEMO>Pagamento Pix ***.144.048-** empreiteiro</STMTTRN>
+<STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20261007<TRNAMT>1800.00<FITID>abc2<MEMO>PIX RECEBIDO 36.122.417 0001-74</STMTTRN>
+</BANKTRANLIST><LEDGERBAL><BALAMT>168.49<DTASOF>20261013</LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`;
+  const linhas = M.efLinhasDoOfx(ofx);
+  assert.deepStrictEqual(linhas[1], ["09/10/2026", "Pix", "PIX EMITIDO OUTRA IF · Pagamento Pix ***.144.048-** empreiteiro", "-400,00"]);
+  assert.deepStrictEqual(linhas[2], ["07/10/2026", "abc2", "PIX RECEBIDO 36.122.417 0001-74", "1800,00"]);
+  assert.deepStrictEqual(linhas[3], ["13/10/2026", "", "SALDO DO DIA", "168,49"]);
+  const t = await M.efTabelaDoArquivo({ name: "extrato.ofx", text: async () => ofx });
+  const mapa = M.detectarColunasTabela(t.linhas);
+  const movs = M.movimentosDaTabela(t.linhas, mapa);
+  assert.deepStrictEqual(movs.map((m) => m.valor), [-400, 1800, 168.49]);
 });
 
 for (const [nome, fn] of testes) {

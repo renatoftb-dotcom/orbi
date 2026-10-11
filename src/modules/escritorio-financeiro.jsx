@@ -1679,6 +1679,94 @@ function bloqueioPorMesFechado(competencia, fechamentos) {
 
 
 
+// ── Extrato exportado em HTML (Sicoob e afins) ──────────────────
+// A página traz várias tabelas: o cabeçalho da conta, LANÇAMENTOS,
+// LANÇAMENTOS FUTUROS e o RESUMO. Valem as linhas com data e valor das
+// tabelas de lançamento — os FUTUROS ficam de fora, porque ainda não
+// passaram pelo banco (entram no extrato do mês em que acontecerem).
+// Dentro da célula, a quebra de linha vira " · " e o resto um espaço:
+// "PIX EMITIDO OUTRA IF · Pagamento Pix 53.859.112 0001-69 cimento".
+function efTextoDaCelulaHtml(html) {
+  const ent = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+  return String(html || "")
+    .replace(/<br\s*\/?>/gi, "\u0001")
+    .replace(/<\/(strong|b|div|p)>/gi, "\u0001")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi, (m, e) => {
+      if (e[0] === "#") return String.fromCharCode(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10));
+      return ent[e.toLowerCase()] != null ? ent[e.toLowerCase()] : m;
+    })
+    .split("\u0001").map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean).join(" · ");
+}
+function efLinhasDoHtml(html) {
+  const h = String(html || "").replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, "");
+  const saida = [];
+  const re = /<table[\s\S]*?<\/table>/gi;
+  let m, fim = 0;
+  while ((m = re.exec(h))) {
+    // o título que vem antes da tabela (o texto entre a anterior e esta)
+    const antes = efTextoDaCelulaHtml(h.slice(fim, m.index)).toUpperCase();
+    fim = m.index + m[0].length;
+    if (/FUTURO/.test(antes.slice(-80))) continue;
+    const linhas = [];
+    const reTr = /<tr[\s\S]*?<\/tr>/gi;
+    let tr;
+    while ((tr = reTr.exec(m[0]))) {
+      const celulas = [];
+      const reTd = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
+      let td;
+      while ((td = reTd.exec(tr[0]))) celulas.push(efTextoDaCelulaHtml(td[1]));
+      if (celulas.some((c) => c !== "")) linhas.push(celulas);
+    }
+    // só tabela de lançamento: tem linha com data E valor em centavos
+    // "SALDO BLOQUEADO" é cheque a compensar, não saldo da conta: fica fora
+    const comDado = linhas.filter((l) => l.some(efEhData) && l.some((c) => /\d,\d{2}/.test(c) && efValorDeTexto(c) != null)
+      && !l.some((c) => /SALDO BLOQUEADO/i.test(c)));
+    if (!comDado.length) continue;
+    // o cabeçalho entra uma vez só, para o reconhecimento das colunas
+    const cab = linhas.find((l) => !l.some(efEhData) && l.length >= 3);
+    if (cab && !saida.length) saida.push(cab);
+    comDado.forEach((l) => saida.push(l));
+  }
+  return saida;
+}
+
+// ── Extrato em OFX ──────────────────────────────────────────────
+// Cada <STMTTRN> é um lançamento: data (DTPOSTED), valor já com sinal
+// (TRNAMT), o código do banco (FITID/CHECKNUM) e o histórico (NAME/MEMO). O
+// saldo final (LEDGERBAL) vira uma linha "SALDO DO DIA", que é como o
+// fechamento lê o saldo do banco. Vale para o OFX antigo (SGML, sem
+// fechar as tags) e o novo (XML).
+function efLinhasDoOfx(texto) {
+  const t = String(texto || "");
+  const campo = (bloco, nome) => {
+    const r = new RegExp("<" + nome + ">([^<\\r\\n]*)", "i").exec(bloco);
+    return r ? r[1].trim() : "";
+  };
+  const data = (d) => (/^\d{8}/.test(d) ? `${d.slice(6, 8)}/${d.slice(4, 6)}/${d.slice(0, 4)}` : "");
+  const valor = (v) => {
+    const n = Number(String(v || "").replace(",", "."));
+    return v !== "" && Number.isFinite(n) ? (n < 0 ? "-" : "") + Math.abs(n).toFixed(2).replace(".", ",") : "";
+  };
+  const linhas = [["Data", "Documento", "Histórico", "Valor"]];
+  const re = /<STMTTRN>([\s\S]*?)(?=<\/STMTTRN>|<STMTTRN>|<\/BANKTRANLIST>)/gi;
+  let m;
+  while ((m = re.exec(t))) {
+    const b = m[1];
+    const hist = [campo(b, "NAME"), campo(b, "MEMO")].filter(Boolean)
+      .filter((x, i, a) => a.indexOf(x) === i).join(" · ");
+    const doc = campo(b, "CHECKNUM") || campo(b, "REFNUM") || campo(b, "FITID");
+    linhas.push([data(campo(b, "DTPOSTED")), doc, hist || campo(b, "TRNTYPE"), valor(campo(b, "TRNAMT"))]);
+  }
+  const saldo = /<LEDGERBAL>([\s\S]*?)(?=<\/LEDGERBAL>|<AVAILBAL>|<\/STMTRS>)/i.exec(t);
+  if (saldo && linhas.length > 1) {
+    const d = data(campo(saldo[1], "DTASOF"));
+    const v = valor(campo(saldo[1], "BALAMT"));
+    if (d && v) linhas.push([d, "", "SALDO DO DIA", v]);
+  }
+  return linhas.length > 1 ? linhas : [];
+}
+
 // Arquivo solto → a tabela crua, sem supor formato. É o que o
 // reconhecimento de colunas precisa para olhar o conteúdo.
 async function efTabelaDoArquivo(arquivo) {
@@ -1692,7 +1780,18 @@ async function efTabelaDoArquivo(arquivo) {
     return { linhas: escolhida.linhas, aba: escolhida.nome, abas: (abas || []).map((a) => a.nome) };
   }
   if (/\.(xls|numbers|ods)$/.test(nome)) throw new Error("Esse formato não abre aqui. Salve como .xlsx ou .csv.");
-  const texto = efCsvParaTsv(await arquivo.text());
+  const bruto = await arquivo.text();
+  if (/\.ofx$/.test(nome) || /<OFX>|OFXHEADER/i.test(bruto.slice(0, 2000))) {
+    const linhas = efLinhasDoOfx(bruto);
+    if (!linhas.length) throw new Error("Não achei lançamentos nesse OFX.");
+    return { linhas, aba: "OFX", abas: [] };
+  }
+  if (/\.html?$/.test(nome) || /^\s*(<!doctype html|<html|<table)/i.test(bruto.slice(0, 500))) {
+    const linhas = efLinhasDoHtml(bruto);
+    if (!linhas.length) throw new Error("Não achei a tabela de lançamentos nesse HTML.");
+    return { linhas, aba: "HTML", abas: [] };
+  }
+  const texto = efCsvParaTsv(bruto);
   return { linhas: texto.split(/\r?\n/).filter((l) => l.trim() !== "").map((l) => l.split("\t")), aba: "", abas: [] };
 }
 
@@ -1712,7 +1811,13 @@ function efEhData(t) {
 function efValorDeTexto(t) {
   let s = String(t == null ? "" : t).replace(/\s|R\$| /gi, "").trim();
   if (!s) return null;
-  const negativo = /^\(.*\)$/.test(s) || s.indexOf("-") >= 0;
+  // O Sicoob (e outros) escrevem o lado no fim: "108,02D" é saída,
+  // "763,50C" é entrada; o "*" marca saldo bloqueado.
+  let lado = 0;
+  const cd = /^([\d.,]+)([CD])\*?$/i.exec(s);
+  if (cd) { s = cd[1]; lado = cd[2].toUpperCase() === "D" ? -1 : 1; }
+  else if (/^[\d.,]+\*$/.test(s)) s = s.slice(0, -1);
+  const negativo = lado < 0 || /^\(.*\)$/.test(s) || s.indexOf("-") >= 0;
   s = s.replace(/[()]/g, "").replace(/-/g, "");
   if (!/^[\d.,]+$/.test(s)) return null;
   const virgula = s.lastIndexOf(","), ponto = s.lastIndexOf(".");
@@ -2155,7 +2260,13 @@ function mesDoMovimento(m) { return String((m && m.data) || "").slice(0, 7); }
 function extratosComArquivo(extratos, movimentos, origem, agora) {
   const atuais = (extratos && typeof extratos === "object") ? extratos : {};
   const doArquivo = extratoParaGuardar(movimentos || []);
-  const meses = [...new Set(doArquivo.map(mesDoMovimento).filter((x) => /^\d{4}-\d{2}$/.test(x)))];
+  // Só substitui o mês que o arquivo traz de verdade (com movimento). O
+  // extrato de outubro começa com o "SALDO ANTERIOR" de 30/09: essa linha
+  // sozinha não pode apagar o setembro inteiro que já estava guardado —
+  // ela só se junta a ele.
+  const valido = (x) => /^\d{4}-\d{2}$/.test(x);
+  const meses = [...new Set(doArquivo.filter((m) => efEhMovimento(m.historico)).map(mesDoMovimento).filter(valido))];
+  const soSaldo = [...new Set(doArquivo.map(mesDoMovimento).filter(valido))].filter((x) => meses.indexOf(x) < 0);
   const novos = {};
   for (const [k, v] of Object.entries(atuais)) {
     const sobra = ((v && v.movimentos) || []).filter((m) => meses.indexOf(mesDoMovimento(m)) < 0);
@@ -2164,6 +2275,13 @@ function extratosComArquivo(extratos, movimentos, origem, agora) {
   for (const mes of meses) {
     novos[mes] = { ...(novos[mes] || {}), origem: origem || "", atualizadoEm: agora || new Date().toISOString(),
       movimentos: doArquivo.filter((m) => mesDoMovimento(m) === mes), ignorados: ((novos[mes] || {}).ignorados) || {} };
+  }
+  for (const mes of soSaldo) {
+    const ja = new Set(Object.values(novos).flatMap((v) => ((v && v.movimentos) || []).map((m) => m.id)));
+    const juntar = doArquivo.filter((m) => mesDoMovimento(m) === mes && !ja.has(m.id));
+    if (!juntar.length) continue;
+    const atual = novos[mes] || { origem: origem || "", atualizadoEm: agora || new Date().toISOString(), movimentos: [], ignorados: {} };
+    novos[mes] = { ...atual, movimentos: ((atual.movimentos) || []).concat(juntar) };
   }
   return { extratos: novos, meses };
 }
@@ -2204,7 +2322,8 @@ function extratosComIgnorado(extratos, mes, id, motivo, agora) {
 // "SALDO" do mês. Poupa digitar o número que o arquivo já traz.
 function saldoDoExtratoNoMes(movimentos, mes) {
   const doMes = (movimentos || []).filter((m) => m && String(m.data || "").slice(0, 7) === String(mes)
-    && /^s\s*a\s*l\s*d\s*o/.test(efSemAcento(m.historico || "")) && Number.isFinite(Number(m.valor)));
+    && /^s\s*a\s*l\s*d\s*o/.test(efSemAcento(m.historico || "")) && !/bloquead/.test(efSemAcento(m.historico || ""))
+    && Number.isFinite(Number(m.valor)));
   if (!doMes.length) return null;
   const ultimo = doMes.slice().sort((a, b) => String(a.data).localeCompare(String(b.data)) || (a.linha || 0) - (b.linha || 0)).pop();
   return Math.round((Number(ultimo.valor) || 0) * 100) / 100;
@@ -5043,10 +5162,10 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
             <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
               {extrato.origem ? `Li de ${extrato.origem}`
                 : extrato.guardado ? `Extrato guardado${extrato.guardado.origem ? ` (${extrato.guardado.origem})` : ""}, de ${String(extrato.guardado.atualizadoEm || "").slice(0, 10).split("-").reverse().join("/")} — arraste o novo para atualizar`
-                : "qualquer banco — .xlsx, .xlsm, .csv ou .ofx exportado em planilha"}
+                : "qualquer banco — OFX, HTML, .xlsx, .xlsm ou .csv"}
             </div>
           </div>
-          <input ref={extrato.entrada} type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt" style={{ display: "none" }}
+          <input ref={extrato.entrada} type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt,.ofx,.html,.htm" style={{ display: "none" }}
             onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; extrato.receber(f); }} />
         </div>
       )}
@@ -6050,7 +6169,10 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   const guardadoDoMes = extratosGuardados[mesEmConferencia]
     || (guardadosDoMes.length ? Object.values(extratosGuardados).find((v) => v && (v.movimentos || []).some((m) => mesDoMovimento(m) === String(mesEmConferencia))) : null)
     || null;
-  const movimentosExtrato = (doArquivo && doArquivo.length) ? doArquivo : (guardadosDoMes.length ? guardadosDoMes : null);
+  // O arquivo só vale para este mês se trouxer movimento dele: o extrato de
+  // outubro tem o "SALDO ANTERIOR" de 30/09, e isso não é o setembro.
+  const arquivoServe = !!(doArquivo && doArquivo.some((m) => efEhMovimento(m.historico)));
+  const movimentosExtrato = arquivoServe ? doArquivo : (guardadosDoMes.length ? guardadosDoMes : null);
   const ignoradosDoMes = ignoradosGuardados(extratosGuardados);
   const conciliacao = movimentosExtrato
     ? conciliarExtrato(movimentosExtrato, lancs.filter((l) => String(l.competencia) === String(mesEmConferencia)),
@@ -6363,7 +6485,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             origem: origemExtrato, entrada: entradaExtrato, receber: receberExtrato,
             mapa: mapaExtrato, corrigir: corrigirColuna, resultado: conciliacao,
             lancar: lancarDoExtrato, marcarCasados: marcarCasadosDoExtrato, confirmarPar: confirmarParDoExtrato, descartar: marcarForaDoBanco,
-            guardado: !(doArquivo && doArquivo.length) && guardadoDoMes ? guardadoDoMes : null,
+            guardado: !arquivoServe && guardadoDoMes ? guardadoDoMes : null,
             saldoLido: saldoLidoDoExtrato,
             fila: {
               mes: mesEmConferencia,
