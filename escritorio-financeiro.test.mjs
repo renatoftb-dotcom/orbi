@@ -2278,13 +2278,34 @@ DATA:OFXSGML
 <STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20261007<TRNAMT>1800.00<FITID>abc2<MEMO>PIX RECEBIDO 36.122.417 0001-74</STMTTRN>
 </BANKTRANLIST><LEDGERBAL><BALAMT>168.49<DTASOF>20261013</LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`;
   const linhas = M.efLinhasDoOfx(ofx);
-  assert.deepStrictEqual(linhas[1], ["09/10/2026", "Pix", "PIX EMITIDO OUTRA IF · Pagamento Pix ***.144.048-** empreiteiro", "-400,00"]);
+  assert.deepStrictEqual(linhas[1], ["09/10/2026", "Pix", "Pagamento Pix ***.144.048-** empreiteiro · PIX EMITIDO OUTRA IF", "-400,00"]);
   assert.deepStrictEqual(linhas[2], ["07/10/2026", "abc2", "PIX RECEBIDO 36.122.417 0001-74", "1800,00"]);
   assert.deepStrictEqual(linhas[3], ["13/10/2026", "", "SALDO DO DIA", "168,49"]);
   const t = await M.efTabelaDoArquivo({ name: "extrato.ofx", text: async () => ofx });
   const mapa = M.detectarColunasTabela(t.linhas);
   const movs = M.movimentosDaTabela(t.linhas, mapa);
   assert.deepStrictEqual(movs.map((m) => m.valor), [-400, 1800, 168.49]);
+});
+
+
+teste("OFX do Sicoob: tipo no MEMO vem primeiro (igual ao HTML), CHECKNUM 0 não é documento, RDC fica fora, cp1252", async () => {
+  const ofx = "OFXHEADER:100\r\nDATA:OFXSGML\r\nCHARSET:1252\r\n<OFX><BANKTRANLIST>\r\n" +
+    "<STMTTRN>\r\n<TRNTYPE>DEBIT</TRNTYPE>\r\n<DTPOSTED>20261009120000[-3:BRT]</DTPOSTED>\r\n<TRNAMT>-400.00</TRNAMT>\r\n<FITID>20261009400001</FITID>\r\n<CHECKNUM>0</CHECKNUM>\r\n<REFNUM>Pix</REFNUM>\r\n<MEMO>PIX EMITIDO OUTRA IF</MEMO>\r\n<NAME>Pagamento Pix ***.144.048-** empreiteiro jacarezinho</NAME>\r\n</STMTTRN>\r\n" +
+    "<STMTTRN>\r\n<TRNTYPE>DEBIT</TRNTYPE>\r\n<DTPOSTED>20261007120000[-3:BRT]</DTPOSTED>\r\n<TRNAMT>-779.18</TRNAMT>\r\n<FITID>x</FITID>\r\n<CHECKNUM>2299269</CHECKNUM>\r\n<REFNUM>2299269</REFNUM>\r\n<MEMO>DÉB.TIT.COMPE EFETIVADO</MEMO>\r\n<NAME>Escritorio de contabilidade</NAME>\r\n</STMTTRN>\r\n" +
+    "<STMTTRN>\r\n<TRNTYPE>CREDIT</TRNTYPE>\r\n<DTPOSTED>20261005120000[-3:BRT]</DTPOSTED>\r\n<TRNAMT>5000.00</TRNAMT>\r\n<FITID>y</FITID>\r\n<CHECKNUM>47120</CHECKNUM>\r\n<REFNUM>47120</REFNUM>\r\n<MEMO>RESGATE RDC</MEMO>\r\n</STMTTRN>\r\n" +
+    "</BANKTRANLIST><LEDGERBAL>\r\n<BALAMT>168.49</BALAMT>\r\n<DTASOF>20261013120000[-3:BRT]</DTASOF>\r\n</LEDGERBAL></OFX>";
+  // o arquivo como o banco manda: bytes em Windows-1252
+  const bytes = Uint8Array.from(Array.from(ofx).map((c) => (c === "É" ? 0xC9 : c.charCodeAt(0))));
+  const t = await M.efTabelaDoArquivo({ name: "extrato.ofx", arrayBuffer: async () => bytes.buffer, text: async () => "" });
+  assert.deepStrictEqual(t.linhas[1], ["09/10/2026", "Pix", "PIX EMITIDO OUTRA IF · Pagamento Pix ***.144.048-** empreiteiro jacarezinho", "-400,00"]);
+  assert.deepStrictEqual(t.linhas[2], ["07/10/2026", "2299269", "DÉB.TIT.COMPE EFETIVADO · Escritorio de contabilidade", "-779,18"]);
+  const movs = M.comIdsDosMovimentos(M.movimentosDaTabela(t.linhas, M.detectarColunasTabela(t.linhas)));
+  assert.strictEqual(movs.filter((m) => M.efEhMovimento(m.historico)).length, 2, "resgate RDC fica fora da conta");
+  assert.strictEqual(M.saldoDoExtratoNoMes(movs, "2026-10"), 168.49);
+  // a mesma linha lida do HTML tem o mesmo id
+  const html = M.comIdsDosMovimentos(M.movimentosDaTabela(M.efLinhasDoHtml(HTML_SICOOB), M.detectarColunasTabela(M.efLinhasDoHtml(HTML_SICOOB))));
+  const idHtml = html.find((m) => m.valor === -400).id, idOfx = movs.find((m) => m.valor === -400).id;
+  assert.strictEqual(idOfx, idHtml);
 });
 
 for (const [nome, fn] of testes) {

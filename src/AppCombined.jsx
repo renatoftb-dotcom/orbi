@@ -11572,9 +11572,14 @@ function efLinhasDoOfx(texto) {
   let m;
   while ((m = re.exec(t))) {
     const b = m[1];
-    const hist = [campo(b, "NAME"), campo(b, "MEMO")].filter(Boolean)
+    // O Sicoob põe o TIPO no MEMO ("PIX EMITIDO OUTRA IF", "RESGATE RDC") e
+    // o detalhe no NAME. Tipo primeiro: o histórico sai igual ao do HTML
+    // (a mesma linha não duplica se um mês vier num formato e depois no
+    // outro) e "RESGATE RDC" continua sendo reconhecido como fora da conta.
+    const hist = [campo(b, "MEMO"), campo(b, "NAME")].filter(Boolean)
       .filter((x, i, a) => a.indexOf(x) === i).join(" · ");
-    const doc = campo(b, "CHECKNUM") || campo(b, "REFNUM") || campo(b, "FITID");
+    const cheque = campo(b, "CHECKNUM");
+    const doc = (cheque && cheque !== "0" ? cheque : "") || campo(b, "REFNUM") || campo(b, "FITID");
     linhas.push([data(campo(b, "DTPOSTED")), doc, hist || campo(b, "TRNTYPE"), valor(campo(b, "TRNAMT"))]);
   }
   const saldo = /<LEDGERBAL>([\s\S]*?)(?=<\/LEDGERBAL>|<AVAILBAL>|<\/STMTRS>)/i.exec(t);
@@ -11599,7 +11604,19 @@ async function efTabelaDoArquivo(arquivo) {
     return { linhas: escolhida.linhas, aba: escolhida.nome, abas: (abas || []).map((a) => a.nome) };
   }
   if (/\.(xls|numbers|ods)$/.test(nome)) throw new Error("Esse formato não abre aqui. Salve como .xlsx ou .csv.");
-  const bruto = await arquivo.text();
+  // OFX de banco brasileiro vem em Windows-1252 (CHARSET:1252): lido como
+  // UTF-8, "DÉB.TIT" viraria "D�B.TIT".
+  let bruto;
+  if (typeof arquivo.arrayBuffer === "function" && typeof TextDecoder !== "undefined") {
+    const buf = await arquivo.arrayBuffer();
+    bruto = new TextDecoder("utf-8").decode(buf);
+    const cabeca = bruto.slice(0, 600);
+    if (/CHARSET:\s*(1252|ISO-?8859-?1)|encoding="(windows-1252|iso-8859-1)"/i.test(cabeca) || (/\.ofx$/.test(nome) && bruto.indexOf("\uFFFD") >= 0)) {
+      bruto = new TextDecoder("windows-1252").decode(buf);
+    }
+  } else {
+    bruto = await arquivo.text();
+  }
   if (/\.ofx$/.test(nome) || /<OFX>|OFXHEADER/i.test(bruto.slice(0, 2000))) {
     const linhas = efLinhasDoOfx(bruto);
     if (!linhas.length) throw new Error("Não achei lançamentos nesse OFX.");
