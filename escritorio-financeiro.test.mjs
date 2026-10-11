@@ -40,7 +40,7 @@ const M = new Function(src + `
            custoDoLancamento, validarCustoEmItens, itemUnicoDoCusto, itensDoCustoOuUnico, padraoDaContaDaObra,
            comIdsDosMovimentos, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
            sugestaoDoExtrato, palpiteDoExtrato, sugestaoCompletaDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao, fornecedorPadraoDaConta,
-           ehReceitaDaGestao, refDaParcela, gestaoNaObra, desfazerGestaoNaObra, parcelaDoLancamento, parcelaDoMesNaGestao, recalibrarGestao, previaDaGestao, contasDaGestao,
+           ehReceitaDaGestao, contaEhEntradaEscritorio, rotuloDoPapelLido, refDaParcela, gestaoNaObra, desfazerGestaoNaObra, parcelaDoLancamento, parcelaDoMesNaGestao, recalibrarGestao, previaDaGestao, contasDaGestao,
            extratosComArquivo, movimentosGuardadosDoMes, ignoradosGuardados, extratosComIgnorado, efLinhasDoHtml, efLinhasDoOfx, saldoDoExtratoNoMes, efTabelaDoArquivo };`)();
 
 const testes = [];
@@ -1967,7 +1967,7 @@ teste("Gestão: setembro do Cobop — dois estornos e 18 mil no mês; agosto fic
   assert.match(p2.notaSaldo, /falta R\$ 3\.666,66 → out\/26/);
   // outubro recebe a falta, com o comentário
   assert.strictEqual(gP(ob, "g:3").valor, 14499.99);
-  assert.match(gP(ob, "g:3").notaSaldo, /^\+R\$ 3\.666,66 do saldo de set\/26$/);
+  assert.match(gP(ob, "g:3").notaSaldo, /^soma R\$ 3\.666,66 que faltou em set\/26$/);
   assert.strictEqual(gP(ob, "g:4").valor, 10833.33);
   // o contrato não muda de tamanho; o acerto fica guardado nele
   assert.strictEqual(somaGestao(ob), 43333.32);
@@ -1980,7 +1980,37 @@ teste("Gestão: pago a mais abate a parcela seguinte", () => {
   assert.strictEqual(gP(r.obra, "g:3").valorPago, 12000);
   assert.match(gP(r.obra, "g:3").notaSaldo, /sobra R\$ 1\.166,67 → nov\/26/);
   assert.strictEqual(gP(r.obra, "g:4").valor, 9666.66);
-  assert.match(gP(r.obra, "g:4").notaSaldo, /^−R\$ 1\.166,67 do saldo de out\/26$/);
+  assert.match(gP(r.obra, "g:4").notaSaldo, /^desconta R\$ 1\.166,67 pago a mais em out\/26$/);
+});
+
+teste("Gestão: o cheque anexado à receita fica também na parcela da obra — e sai com o lançamento", () => {
+  const cheque = { url: "https://x/cheque.jpg", nome: "cheque.jpg", tipo: "comprovante" };
+  const ob0 = obraGestaoT();
+  ob0.contasPagar = ob0.contasPagar.map((c) => (c.id === "g:3" ? { ...c, anexos: [{ url: "https://x/boleto.pdf", nome: "boleto.pdf" }] } : c));
+  const l = { id: "R", valor: 18000, lancadoEm: "2026-10-10", competencia: "2026-10", anexos: [cheque] };
+  const r = M.gestaoNaObra(ob0, l, null, "Leo");
+  const p3 = gP(r.obra, "g:3");
+  assert.strictEqual(p3.pago, true);
+  assert.strictEqual(p3.pagoEm, "2026-10-10");
+  assert.deepStrictEqual(p3.anexos.map((a) => a.nome), ["boleto.pdf", "cheque.jpg"]);
+  assert.strictEqual(p3.anexos[1].lancamentoId, "R");
+  // a parcela seguinte não ganha o papel
+  assert.ok(!gP(r.obra, "g:4").anexos);
+  // excluir o lançamento: o cheque sai, o boleto da obra fica
+  const d = M.desfazerGestaoNaObra(r.obra, { ...l, origem: r.origem }, "Leo");
+  assert.deepStrictEqual(gP(d.obra, "g:3").anexos.map((a) => a.nome), ["boleto.pdf"]);
+  assert.strictEqual(gP(d.obra, "g:3").pago, false);
+});
+
+teste("Receita: o papel é comprovante do recebimento — cheque se diz cheque, nunca pedido", () => {
+  assert.strictEqual(M.contaEhEntradaEscritorio("rec_gestao"), true);
+  assert.strictEqual(M.contaEhEntradaEscritorio(""), false);
+  const despesa = M.PLANO_CONTAS_ESCRITORIO.find((c) => { const g = M.grupoEscritorio(c.grupo); return g && g.sinal < 0; });
+  assert.strictEqual(M.contaEhEntradaEscritorio(despesa.id), false);
+  assert.strictEqual(M.rotuloDoPapelLido({ tipo: "pedido" }, true, "Cheque Sicoob no valor de dezoito mil reais"), "Cheque");
+  assert.strictEqual(M.rotuloDoPapelLido({ tipo: "pedido" }, true, ""), "Comprovante do recebimento");
+  assert.strictEqual(M.rotuloDoPapelLido({ tipo: "pedido" }, false, "cimento"), "Pedido");
+  assert.strictEqual(M.rotuloDoPapelLido({ tipo: "nota", ehNota: true }, false, ""), "Nota fiscal");
 });
 
 teste("Gestão: recebimento igual ao já baixado na obra é o mesmo pagamento — não soma duas vezes", () => {

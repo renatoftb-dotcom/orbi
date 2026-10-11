@@ -3074,6 +3074,28 @@ function ehReceitaDaGestao(l) {
   return !!l && l.unidadeId === "gestao_obras" && l.contaId === "rec_gestao";
 }
 
+// Conta de entrada do escritório (receita): o papel anexado é o
+// comprovante do que entrou — cheque, PIX, depósito —, nunca nota de compra
+// com itens para lançar em obra.
+function contaEhEntradaEscritorio(contaId) {
+  const c = contaEscritorio(contaId);
+  const g = c && grupoEscritorio(c.grupo);
+  return !!(g && g.sinal > 0);
+}
+
+// O nome do papel lido, como a pessoa o reconhece. Cheque se diz cheque;
+// numa receita, o papel é o comprovante do recebimento — a IA às vezes o
+// lê como "pedido", e a tela dizia "Pedido 85".
+function rotuloDoPapelLido(papel, entrada, textoExtra) {
+  const pa = papel || {};
+  const texto = [pa.descricao, pa.lidoComo, pa.fantasia, textoExtra].filter(Boolean).join(" ");
+  if (/\bcheques?\b/i.test(texto)) return "Cheque";
+  if (pa.tipo === "comprovante") return "Comprovante";
+  if (entrada) return "Comprovante do recebimento";
+  if (pa.tipo === "nfse") return "Nota de serviço";
+  return pa.ehNota ? "Nota fiscal" : "Pedido";
+}
+
 function efCent(v) { return Math.round((Number(v) || 0) * 100) / 100; }
 
 // O dia de hoje no fuso de quem usa (o ISO em UTC já vira o dia seguinte
@@ -3175,7 +3197,8 @@ function recalibrarGestao(obra, contratoId, quem, agoraIso) {
     const soma = efCent(movs.reduce((t, m) => t + (Number(m && m.valor) || 0), 0));
     const pagou = movs.some((m) => m && Number(m.valor) > 0);
     const prox = lista[i + 1] || null;
-    const veio = leva ? `${leva > 0 ? "+" : "−"}${efMoedaCurta(leva)} do saldo de ${levaDe}` : "";
+    const veio = leva ? (leva > 0 ? `soma ${efMoedaCurta(leva)} que faltou em ${levaDe}`
+      : `desconta ${efMoedaCurta(leva)} pago a mais em ${levaDe}`) : "";
     let nc = { ...c };
     let nota = "";
     if (pagou) {
@@ -3211,6 +3234,13 @@ function recalibrarGestao(obra, contratoId, quem, agoraIso) {
     if (Math.abs(leva) >= 0.01 && !prox) nota = [nota, `saldo de ${leva > 0 ? "" : "−"}${efMoedaCurta(leva)} sem parcela seguinte`].filter(Boolean).join(" · ");
     if (nota) nc.notaSaldo = nota; else delete nc.notaSaldo;
     if (nota) notas[c.id] = nota;
+    // Os papéis dos recebimentos (o cheque, o comprovante do PIX) ficam
+    // também na parcela da obra: quem abre a conta da obra vê o papel.
+    // Os que vieram de lançamento levam o id dele e saem junto com ele.
+    const dosMovs = [];
+    movs.forEach((m) => ((m && m.anexos) || []).forEach((a) => { if (a) dosMovs.push({ ...a, lancamentoId: m.lancamentoId || "" }); }));
+    const juntos = (Array.isArray(c.anexos) ? c.anexos : []).filter((a) => a && !a.lancamentoId).concat(dosMovs);
+    if (juntos.length) nc.anexos = juntos; else delete nc.anexos;
     if (efCent(nc.valor) !== efCent(c.valor) && c.pago === nc.pago) nc = efAto(nc, "recalibrada", quem, agora, nota);
     novas[c.id] = nc;
   });
@@ -3293,7 +3323,9 @@ function gestaoNaObra(obra, l, antes, quem, agoraIso) {
   const comp = String(lan.competencia || em).slice(0, 7);
   const p = parcelaDoMesNaGestao(ob, comp);
   if (!p) return { obra: ob, origem: null };
-  const mov = { lancamentoId: lan.id || "", em: em || `${comp}-01`, valor: estorno ? -valor : valor };
+  const papeis = anexosDaTransacao(lan).filter((a) => a && (a.url || a.public_id));
+  const mov = { lancamentoId: lan.id || "", em: em || `${comp}-01`, valor: estorno ? -valor : valor,
+    ...(papeis.length ? { anexos: papeis.map((a) => ({ ...a })) } : {}) };
   let movs;
   if (!estorno && p.pago && !Array.isArray(p.movimentos) && Math.abs(efCent(Number(p.valorPago) || Number(p.valor)) - valor) < 0.01) {
     // já baixada na obra, no mesmo valor: é esse pagamento — passa a ter a
@@ -3611,7 +3643,12 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       : null);
     // Itens de nota, pedido ou cupom — casados com o catálogo.
     const comItens = (ficha.itens || []).filter((x) => x && String(x.descricao || "").trim());
-    const ehDeItens = comItens.length && ["nota", "pedido", "lista"].indexOf(pa.tipo) >= 0;
+    // Numa receita o papel é o comprovante do que entrou: sem itens, sem
+    // pergunta de obra para material.
+    const entrada = f.contaFonte !== "obra" && contaEhEntradaEscritorio(f.contaId);
+    const textoDosItens = comItens.map((x) => x.descricao).join(" ");
+    const rotulo = rotuloDoPapelLido(pa, entrada, textoDosItens);
+    const ehDeItens = !entrada && rotulo !== "Cheque" && comItens.length && ["nota", "pedido", "lista"].indexOf(pa.tipo) >= 0;
     const lidos = ehDeItens && typeof itensDaEntrada === "function"
       ? itensDaEntrada({ itens: comItens }, "orcamento", insumos || []).map((x) => {
           const ins = x.insumoCodigo ? (insumos || []).find((m) => m && (m.codigo === x.insumoCodigo || m.id === x.insumoCodigo)) : null;
@@ -3621,21 +3658,24 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             grupoMaterial: x.grupoMaterial || (ins && ins.grupo) || "" };
         })
       : [];
-    const tipoPapel = pa.tipo === "comprovante" ? "comprovante" : (pa.ehNota || pa.tipo === "nfse" || pa.tipo === "nota") ? "nota"
+    const tipoPapel = (entrada || rotulo === "Cheque" || pa.tipo === "comprovante") ? "comprovante" : (pa.ehNota || pa.tipo === "nfse" || pa.tipo === "nota") ? "nota"
       : (typeof tipoDoAnexoDaEntrada === "function" ? tipoDoAnexoDaEntrada(pa) : "pedido");
     setF((p) => {
       const novo = { ...p };
       if (valorLido > 0 && !(efValorDoCampo(p.valor) > 0)) novo.valor = valorLido.toFixed(2).replace(".", ",");
       if (pa.pagoEm && !p.lancadoEm) novo.lancadoEm = pa.pagoEm;
       if ((pa.pagoEm || pa.emitido) && !p.competencia) novo.competencia = (pa.pagoEm || pa.emitido).slice(0, 7);
-      const semFornecedor = !p.fornecedorId && (!String(p.fornecedor || "").trim() || p.fornecedor === EF_FORNECEDOR_OUTROS);
+      // receita: quem presta o serviço é o escritório — o nome do banco ou
+      // de quem assinou o cheque não vira fornecedor
+      const semFornecedor = !entrada && !p.fornecedorId && (!String(p.fornecedor || "").trim() || p.fornecedor === EF_FORNECEDOR_OUTROS);
       if (semFornecedor && doCadastro) { novo.fornecedorId = doCadastro.id; novo.fornecedor = doCadastro.nome || ""; }
       else if (semFornecedor && emitente) novo.fornecedor = emitente;
       const nota = pa.numeroNota || pa.numeroPedido || "";
       if (nota && !/\d/.test(String(p.documento || ""))) novo.documento = String(nota);
       if (!String(p.descricao || "").trim() || p.descricao === p.historicoBanco) {
         const resumo = [emitente, pa.numeroNota ? "NF " + pa.numeroNota : "",
-          lidos.length ? (lidos.length === 1 ? lidos[0].descricao : lidos.length + " itens") : (pa.descricao || "")].filter(Boolean).join(" · ");
+          lidos.length ? (lidos.length === 1 ? lidos[0].descricao : lidos.length + " itens")
+            : (pa.descricao || (comItens.length === 1 ? comItens[0].descricao : ""))].filter(Boolean).join(" · ");
         if (resumo) novo.descricao = resumo.slice(0, 160);
       }
       if (lidos.length && !(p.itens || []).length) novo.itens = lidos;
@@ -3649,8 +3689,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       if (k >= 0) return comAnexos(novo, lista.map((a, x) => (x === k ? { ...a, tipo: tipoPapel } : a)));
       return novo;
     });
-    setLida({ origem: origem || "", papel: pa, itens: lidos.length, casados: lidos.filter((x) => x.insumoCodigo).length,
-      cadastro: doCadastro || null });
+    setLida({ origem: origem || "", papel: pa, rotulo, itens: lidos.length, casados: lidos.filter((x) => x.insumoCodigo).length,
+      cadastro: entrada ? null : (doCadastro || null) });
     setAvisosLidos((ficha.avisos || []).filter((x) => !/Como foi pago|^Este arquivo tem|Confira os itens/.test(x)));
     const valorForm = efValorDoCampo(f.valor);
     const quando = pa.pagoEm || "";
@@ -3710,8 +3750,15 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       empreendimentoId: emp ? cli.id : "", obraIdAlvo: o.id, projeto: o.nome || p.projeto }));
   }
   const textoParaObra = [f.historicoBanco, f.descricao, lida && lida.papel && lida.papel.descricao].filter(Boolean).join(" ");
-  const obrasCitadas = (!naObra && (f.itens || []).length && typeof obrasCitadasNoTexto === "function")
-    ? obrasCitadasNoTexto(textoParaObra, obras || []).slice(0, 4) : [];
+  const entradaNoForm = !naObra && contaEhEntradaEscritorio(f.contaId);
+  const obraJaEscolhida = f.obraId ? (obras || []).find((o) => o && o.id === f.obraId) || null : null;
+  const obrasCitadas = (() => {
+    if (naObra || entradaNoForm || !(f.itens || []).length) return [];
+    const citadas = typeof obrasCitadasNoTexto === "function" ? obrasCitadasNoTexto(textoParaObra, obras || []) : [];
+    // a obra já escolhida no lançamento vem primeiro: é ela, quase sempre
+    const lista = obraJaEscolhida ? [obraJaEscolhida].concat(citadas.filter((o) => o && o.id !== obraJaEscolhida.id)) : citadas;
+    return lista.slice(0, 4);
+  })();
   function aceitarSugestoes() {
     const lista = f.itens || [];
     lista.forEach((it, i) => { if (!it.insumoCodigo && it.sugestao && it.sugestao.codigo) porInsumo(i, it.sugestao.codigo); });
@@ -3845,7 +3892,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     setTentou(true);
     if (todosErros.length) return;
     const limpos = (f.itens || []).map((x) => { const y = { ...x }; delete y.sugestao; delete y.textoLido; return y; });
-    const g = { ...f, itens: limpos };
+    const g = { ...f, itens: entradaNoForm ? [] : limpos };
     if (naObra) {
       const { etapaUnica: _e, ...semEtapaUnica } = g;
       aoSalvar(comCartao({ ...semEtapaUnica, naObra: true, valor: efValorDoCampo(g.valor),
@@ -4123,6 +4170,20 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                 ? <>pago no mês <b>{efDinheiro(pv.parcela.valorPago)}</b> de {efDinheiro(pv.parcela.fatura)}.</>
                 : <>em aberto, deve <b>{efDinheiro(pv.parcela.fatura)}</b>.</>}
             </div>
+            {(() => {
+              // O outro lado da mesma transação: a conta da obra do cliente.
+              const nomeNaObra = (((typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((c) => c && c.id === EF_CONTA_GESTAO_NA_OBRA)) || {}).nome || "Gestão de obra";
+              const papeis = anexosDaTransacao(f).length;
+              const oPapel = !papeis ? "" : lida && lida.rotulo === "Cheque" && papeis === 1 ? "o cheque" : papeis === 1 ? "o comprovante" : `os ${papeis} papéis`;
+              const dia = String(f.lancadoEm || "").slice(0, 10).split("-").reverse().join("/");
+              return (
+                <div data-vk-gestao-obra="1">
+                  Na obra <b>{obraNome}</b>, conta <b>{nomeNaObra}</b>: a parcela {pv.parcela.n}/{pv.parcela.de}{" "}
+                  {pv.parcela.pago ? <>fica <b>paga</b>{dia ? ` em ${dia}` : ""}</> : "continua em aberto"}
+                  {oPapel ? <>, com {oPapel} anexado{papeis > 1 ? "s" : ""}</> : null}.
+                </div>
+              );
+            })()}
             {pv.proxima && Math.abs(pv.proxima.antes - pv.proxima.depois) >= 0.01 && (
               <div>
                 Parcela {pv.proxima.n} ({efMesCurto(pv.proxima.vencimento)}) passa de {efDinheiro(pv.proxima.antes)} a <b>{efDinheiro(pv.proxima.depois)}</b>
@@ -4376,18 +4437,17 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
         <div style={{ fontSize: 12, lineHeight: 1.5, padding: "8px 10px", borderRadius: 10, background: "#fff",
           border: "1px solid rgba(38,36,33,0.12)", color: "#374151" }}>
           <b style={{ color: "#111827" }}>
-            {lida.papel.tipo === "comprovante" ? "Comprovante" : lida.papel.tipo === "nfse" ? "Nota de serviço"
-              : lida.papel.ehNota ? "Nota fiscal" : "Pedido"}{lida.papel.numeroNota || lida.papel.numeroPedido ? " " + (lida.papel.numeroNota || lida.papel.numeroPedido) : ""}
+            {lida.rotulo || rotuloDoPapelLido(lida.papel, entradaNoForm)}{lida.papel.numeroNota || lida.papel.numeroPedido ? " " + (lida.papel.numeroNota || lida.papel.numeroPedido) : ""}
           </b>
           {(lida.papel.fantasia || lida.papel.lidoComo) ? " · " + (lida.papel.fantasia || lida.papel.lidoComo) : ""}
           {lida.papel.cnpj ? " · " + String(lida.papel.cnpj).replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : ""}
-          {lida.papel.emitido ? " · emitida " + lida.papel.emitido.split("-").reverse().join("/") : ""}
+          {lida.papel.emitido ? (lida.rotulo === "Cheque" || /^Comprovante/.test(lida.rotulo || "") ? " · de " : " · emitida ") + lida.papel.emitido.split("-").reverse().join("/") : ""}
           {lida.papel.valor ? " · " + efDinheiro(lida.papel.valor) : ""}
           {Number(lida.papel.desconto) > 0 ? ` (desconto ${efDinheiro(lida.papel.desconto)})` : ""}
           {lida.itens ? ` · ${lida.itens} ${lida.itens === 1 ? "item" : "itens"}, ${lida.casados} no catálogo` : ""}
           <span style={{ color: "#9ca3af" }}> — lido {lida.origem === "xml" ? "do XML" : lida.origem === "ia" ? "pela IA" : "pelo leitor do VICKE"}</span>
           {lida.cadastro ? <span style={{ color: "#0474f4" }}> · fornecedor {lida.cadastro.nome}</span>
-            : (lida.papel.lidoComo && !f.fornecedorId && !novoPrest && (
+            : (lida.papel.lidoComo && !entradaNoForm && !f.fornecedorId && !novoPrest && (
               <button type="button" style={{ background: "none", border: "none", padding: 0, marginLeft: 6, fontSize: 12, color: "#0474f4",
                 cursor: "pointer", textDecoration: "underline", fontFamily: "inherit" }}
                 onClick={() => { setErroPrest(""); setNovoPrest({ nome: lida.papel.fantasia || lida.papel.lidoComo, categoria: "Loja / Comércio",
@@ -4397,7 +4457,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             ))}
         </div>
       )}
-      {!naObra && (f.itens || []).length > 0 && (
+      {!naObra && !entradaNoForm && (f.itens || []).length > 0 && (
         <div style={{ fontSize: 12, lineHeight: 1.5, padding: "8px 10px", borderRadius: 10,
           border: "1px solid rgba(4,116,244,0.3)", background: "#eef5ff", color: "#1e3a5f", display: "grid", gap: 6 }}>
           <div>
