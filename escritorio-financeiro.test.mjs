@@ -27,7 +27,7 @@ const M = new Function(src + `
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
-           fontesDasContasPagas,
+           fontesDasContasPagas, arquivoDoColar,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
            competenciasDoCartao,
@@ -2306,6 +2306,14 @@ teste("OFX do Sicoob: tipo no MEMO vem primeiro (igual ao HTML), CHECKNUM 0 não
   const html = M.comIdsDosMovimentos(M.movimentosDaTabela(M.efLinhasDoHtml(HTML_SICOOB), M.detectarColunasTabela(M.efLinhasDoHtml(HTML_SICOOB))));
   const idHtml = html.find((m) => m.valor === -400).id, idOfx = movs.find((m) => m.valor === -400).id;
   assert.strictEqual(idOfx, idHtml);
+});
+
+teste("colar arquivo: pega o arquivo do Ctrl+V e ignora texto", () => {
+  const f = { name: "extrato.ofx" };
+  assert.strictEqual(M.arquivoDoColar({ files: [f] }), f);
+  assert.strictEqual(M.arquivoDoColar({ files: [], items: [{ kind: "file", getAsFile: () => f }] }), f);
+  assert.strictEqual(M.arquivoDoColar({ files: [], items: [{ kind: "string", getAsFile: () => null }] }), null);
+  assert.strictEqual(M.arquivoDoColar(null), null);
 });
 
 for (const [nome, fn] of testes) {

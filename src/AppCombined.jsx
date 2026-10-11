@@ -13154,6 +13154,24 @@ function previaDaGestao(obra, l, antes) {
   };
 }
 
+// Ctrl+V de um arquivo copiado no Explorer/Finder: o navegador entrega o
+// arquivo no evento de colar. Só interessa o primeiro arquivo — texto colado
+// (um número no campo de saldo, por exemplo) segue o caminho normal.
+function arquivoDoColar(dados) {
+  if (!dados) return null;
+  const arquivos = dados.files;
+  if (arquivos && arquivos.length) return arquivos[0];
+  const itens = dados.items || [];
+  for (let i = 0; i < itens.length; i++) {
+    const it = itens[i];
+    if (it && it.kind === "file" && typeof it.getAsFile === "function") {
+      const f = it.getAsFile();
+      if (f) return f;
+    }
+  }
+  return null;
+}
+
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
 
 // Os papéis da transação, cada um abrindo numa aba. É o mesmo componente
@@ -14943,6 +14961,22 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
   const calculado = linha ? linha.saldoExtrato : 0;
   const diferenca = diferencaDeFechamento(calculado, saldoBanco == null ? "" : saldoBanco);
   const podeFechar = !fechado && diferenca === 0 && !ocupado;
+  // Colar o extrato: com a tela de fechamento aberta, um Ctrl+V de arquivo
+  // em qualquer ponto dela entra como se tivesse sido arrastado.
+  const receberRef = useRef(null);
+  receberRef.current = extrato && extrato.receber;
+  const temExtrato = !!extrato;
+  useEffect(() => {
+    if (!temExtrato || typeof window === "undefined") return undefined;
+    const aoColar = (e) => {
+      const f = arquivoDoColar(e.clipboardData);
+      if (!f || !receberRef.current) return;
+      e.preventDefault();
+      receberRef.current(f);
+    };
+    window.addEventListener("paste", aoColar);
+    return () => window.removeEventListener("paste", aoColar);
+  }, [temExtrato]);
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
@@ -14993,11 +15027,11 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
               borderRadius: 14, padding: "20px 16px", textAlign: "center", cursor: "pointer",
             }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: extrato.arrastando ? "#0474f4" : "#262421" }}>
-              {extrato.arrastando ? "Pode soltar" : "Arraste aqui o extrato do banco"}
+              {extrato.arrastando ? "Pode soltar" : "Arraste, cole (Ctrl+V) ou clique para escolher o extrato"}
             </div>
             <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
               {extrato.origem ? `Li de ${extrato.origem}`
-                : extrato.guardado ? `Extrato guardado${extrato.guardado.origem ? ` (${extrato.guardado.origem})` : ""}, de ${String(extrato.guardado.atualizadoEm || "").slice(0, 10).split("-").reverse().join("/")} — arraste o novo para atualizar`
+                : extrato.guardado ? `Extrato guardado${extrato.guardado.origem ? ` (${extrato.guardado.origem})` : ""}, de ${String(extrato.guardado.atualizadoEm || "").slice(0, 10).split("-").reverse().join("/")} — traga o novo para atualizar`
                 : "qualquer banco — OFX, HTML, .xlsx, .xlsm ou .csv"}
             </div>
           </div>
