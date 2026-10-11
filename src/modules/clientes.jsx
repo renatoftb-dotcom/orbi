@@ -2730,6 +2730,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [formEscritorio, setFormEscritorio] = useState(null);
   // Baixa de conta: telinha com a data de contabilização e o valor pago.
   const [formPagamento, setFormPagamento] = useState(null);
+  // Trocar o vencimento de um pedido (ou de todos os da loja): só a data.
+  const [editVenc, setEditVenc] = useState(null);
   const [folhaComprov, setFolhaComprov] = useState(null); // { titulo, contas } quando aberta
   // O que a baixa fez no preço do catálogo: { aplicados, pendencias, semCodigo }.
   // Dar baixa muda o preço de referência do insumo, e isso não pode acontecer
@@ -3103,7 +3105,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   //
   // Serve também para o pedido que ficou sem cotação dona: até aqui ele não
   // aparecia em tela nenhuma que soubesse apagá-lo.
-  const apagarPedidoDeContas = async (linha) => {
+  const apagarPedidoDeContas = async (linha, tituloPronto) => {
     const obra = (obras || []).find(o => o && o.id === linha.obraId);
     if (!obra) return;
     const ids = linha.pedidoIds || [linha.pedidoId];
@@ -3117,7 +3119,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!sai.quantas) return;
     const nome = linha.numeroLoja || linha.numeroPedido || "";
     const ok = await dialogo.confirmar({
-      titulo: `Apagar ${(typeof rotuloDoPedido === "function" ? rotuloDoPedido(linha) : "Pedido " + nome).trim().replace(/^Nota/, "a nota").replace(/^Pedido/, "o pedido")}?`,
+      titulo: tituloPronto || `Apagar ${(typeof rotuloDoPedido === "function" ? rotuloDoPedido(linha) : "Pedido " + nome).trim().replace(/^Nota/, "a nota").replace(/^Pedido/, "o pedido")}?`,
       mensagem: [
         sai.quantas === 1 ? "Sai 1 conta a pagar" : `Saem ${sai.quantas} contas a pagar`,
         `, no total de ${fmtMoedaCtr(sai.valor)}.`,
@@ -3126,7 +3128,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         vaiJuntoNoEscritorio((obra.contasPagar || []).filter(c => c && c.pago && ids.indexOf(c.pedidoId) >= 0)),
         " Isto n\u00e3o tem volta.",
       ].join(""),
-      confirmar: "Apagar pedido",
+      confirmar: ids.length > 1 ? `Apagar os ${ids.length} pedidos` : "Apagar pedido",
       destrutivo: true,
     });
     if (!ok) return;
@@ -3138,6 +3140,28 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const atualizada = { ...obra, contasPagar: contas, cotacoes };
     gravarObras(obras.map(o => o.id === obra.id ? atualizada : o));
     if (obraAtual && obraAtual.id === obra.id) setObraSelecionada(atualizada);
+  };
+
+  // O vencimento combinado com a loja mudou: só os itens em aberto mudam.
+  const abrirEditarVencimento = (linha, titulo) => {
+    const abertas = (linha.contas || []).filter(c => c && !c.pago);
+    if (!abertas.length) { dialogo.alertar({ titulo: "Já está pago", mensagem: "Não há item em aberto para mudar o vencimento.", tipo: "aviso" }); return; }
+    setEditVenc({ obraId: linha.obraId || (obraAtual && obraAtual.id), titulo,
+      pedidoIds: linha.pedidoIds || (linha.pedidoId ? [linha.pedidoId] : []),
+      contaIds: abertas.map(c => c.id), itens: abertas.length, pagos: (linha.contas || []).length - abertas.length,
+      vencimento: linha.vencimento || hojeIso });
+  };
+  const salvarVencimento = () => {
+    const f = editVenc; if (!f) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(f.vencimento || ""))) { dialogo.alertar({ titulo: "Escolha a data de vencimento", tipo: "aviso" }); return; }
+    const obra = (obras || []).find(o => o && o.id === f.obraId);
+    if (!obra) { setEditVenc(null); return; }
+    const atualizada = { ...obra,
+      contasPagar: comVencimentoNovo(obra.contasPagar || [], f.contaIds, f.vencimento, quemSou()),
+      cotacoes: cotacoesComVencimento(obra.cotacoes || [], f.pedidoIds, f.vencimento) };
+    gravarObras(obras.map(o => o.id === obra.id ? atualizada : o));
+    if (obraAtual && obraAtual.id === obra.id) setObraSelecionada(atualizada);
+    setEditVenc(null);
   };
 
   // Confirma a baixa: a despesa entra no mês da data de contabilização
@@ -4736,7 +4760,16 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                             };
                             return (
                               <div key={L.chave} style={{ borderTop: "1px solid rgba(38,36,33,0.06)", background: "#fff" }}>
-                                <div style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, alignItems: "center", padding: "9px 11px" }}>
+                                <div style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, alignItems: "center", padding: "9px 40px 9px 11px", position: "relative" }}>
+                                  {perm.podeEditar && (
+                                    <div data-vk-mantem-mes="1" data-vk-menu-canto="1" onClick={e => e.stopPropagation()} style={{ position: "absolute", top: 3, right: 4 }}>
+                                      <MenuDeAcoes semBorda toque={isMobile} title="Mais ações do pedido" itens={[
+                                        { rotulo: L.pago ? "Editar vencimento — já pago" : "Editar vencimento", desativado: !!L.pago,
+                                          onClick: () => abrirEditarVencimento(L, `${rotuloDoPedido(L).trim()} · ${L.favorecido || "Loja"}`) },
+                                        { rotulo: "Excluir", destrutivo: true, onClick: () => apagarPedidoDeContas(L) },
+                                      ]} />
+                                    </div>
+                                  )}
                                   <div data-vk-mantem-mes="1" style={{ minWidth: 0, cursor: "pointer", paddingLeft: recuado ? 18 : 0 }}
                                     title={abertaP ? "Fechar itens" : "Ver os itens"}
                                     onClick={() => setContasAbertas({ ...contasAbertas, [L.chave]: !abertaP })}>
@@ -4774,9 +4807,6 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                       <button onClick={() => alternarPagamentoPedido(L)} style={isMobile ? C.btnLinhaToque : C.btnLinha}>
                                         {L.pago ? "Desfazer" : "Pagar"}
                                       </button>
-                                      <MenuDeAcoes compacto toque={isMobile} title="Mais ações do pedido" itens={[
-                                        { rotulo: "Excluir", destrutivo: true, onClick: () => apagarPedidoDeContas(L) },
-                                      ]} />
                                     </div>
                                   ) : <div />}
                                 </div>
@@ -4966,6 +4996,28 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             escritorioNome={(data.escritorio || {}).nome || ""}
             fmtBRL={fmtMoedaCtr}
             aoFechar={() => setFolhaComprov(null)} />
+        )}
+
+        {editVenc && (
+          <div onClick={() => setEditVenc(null)} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }}>
+            <div data-vk-ui="1" data-vk-editar-vencimento="1" onClick={e => e.stopPropagation()}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); salvarVencimento(); } if (e.key === "Escape") setEditVenc(null); }}
+              style={{ background: "#fff", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: 18, width: "100%", maxWidth: 380, boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Vencimento</div>
+              <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 14 }}>{editVenc.titulo}</div>
+              <label style={C.label}>Vence em</label>
+              <input style={C.input} type="date" autoFocus value={editVenc.vencimento}
+                onChange={e => setEditVenc({ ...editVenc, vencimento: e.target.value })} />
+              <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8, lineHeight: 1.5 }}>
+                {editVenc.itens === 1 ? "O item em aberto passa" : `Os ${editVenc.itens} itens em aberto passam`} a vencer nesta data
+                {editVenc.pagos ? ` — ${editVenc.pagos === 1 ? "o já pago fica" : `os ${editVenc.pagos} já pagos ficam`} como está.` : "."}
+              </div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+                <button onClick={() => setEditVenc(null)} style={C.btnSec}>Cancelar</button>
+                <button onClick={salvarVencimento} style={C.btn}>Salvar</button>
+              </div>
+            </div>
+          </div>
         )}
 
         {formPagamento && (
@@ -5505,7 +5557,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <>
             {/* Cabeçalho das colunas */}
             {!isMobile && (
-              <div style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, padding: "0 11px 6px", borderBottom: "1.5px solid rgba(38,36,33,0.14)", fontSize: 11.5, color: "#4b5563", fontWeight: 600 }}>
+              <div style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, padding: "0 40px 6px 11px", borderBottom: "1.5px solid rgba(38,36,33,0.14)", fontSize: 11.5, color: "#4b5563", fontWeight: 600 }}>
                 <div>Documento</div>
                 <div>Vencimento</div>
                 <div>Status</div>
@@ -5564,7 +5616,18 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                             return (
                               <div key={L.chave} style={{ borderTop: "1px solid rgba(38,36,33,0.06)", background: "#fff" }}>
                                 <div style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, alignItems: "center",
-                                  padding: "9px 11px", background: "#f6f8fc" }}>
+                                  padding: "9px 40px 9px 11px", background: "#f6f8fc", position: "relative" }}>
+                                  {perm.podeEditar && (
+                                    <div data-vk-mantem-mes="1" data-vk-menu-canto="1" onClick={e => e.stopPropagation()} style={{ position: "absolute", top: 3, right: 4 }}>
+                                      <MenuDeAcoes semBorda toque={isMobile} title="Mais ações da loja" itens={[
+                                        { rotulo: L.pedidosEmAberto ? `Editar vencimento${L.pedidos.length > 1 ? " dos " + L.pedidos.length + " pedidos" : ""}` : "Editar vencimento — já pago",
+                                          desativado: !L.pedidosEmAberto,
+                                          onClick: () => abrirEditarVencimento(L, `${L.pedidos.length === 1 ? "1 pedido" : L.pedidos.length + " pedidos"} · ${L.favorecido || "Loja"}`) },
+                                        { rotulo: L.pedidos.length > 1 ? `Excluir os ${L.pedidos.length} pedidos` : "Excluir", destrutivo: true,
+                                          onClick: () => apagarPedidoDeContas(L, L.pedidos.length > 1 ? `Apagar os ${L.pedidos.length} pedidos da ${L.favorecido || "loja"}?` : undefined) },
+                                      ]} />
+                                    </div>
+                                  )}
                                   <div data-vk-mantem-mes="1" style={{ minWidth: 0, cursor: "pointer" }}
                                     title={abertaL ? "Fechar os pedidos" : "Ver os pedidos"}
                                     onClick={() => setContasAbertas({ ...contasAbertas, [chaveL]: !abertaL })}>
@@ -5605,7 +5668,29 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                           const dataBR = (iso) => iso ? new Date(iso + "T12:00:00").toLocaleDateString("pt-BR") : "";
                           return (
                             <div key={c.id} style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, alignItems: "center",
-                              padding: "9px 11px", borderTop: "1px solid rgba(38,36,33,0.06)", background: "#fff" }}>
+                              padding: "9px 40px 9px 11px", borderTop: "1px solid rgba(38,36,33,0.06)", background: "#fff", position: "relative" }}>
+                              {/* Parcela de contrato é regerada pela regra a cada
+                                  abertura da tela — editá-la aqui não duraria um
+                                  render; ela muda no contrato (ou pelo Recalibrar).
+                                  Paga não se edita: desfaz-se a baixa antes. As
+                                  duas opções aparecem sempre, e dizem por que não. */}
+                              {perm.podeEditar && (
+                                <div data-vk-mantem-mes="1" data-vk-menu-canto="1" onClick={e => e.stopPropagation()} style={{ position: "absolute", top: 3, right: 4 }}>
+                                  <MenuDeAcoes semBorda toque={isMobile} title="Mais ações da conta" itens={[
+                                    c.origem === "contrato" ? { rotulo: "Editar — muda no contrato", desativado: true }
+                                      : c.pago ? { rotulo: "Editar — desfaça o pagamento antes", desativado: true }
+                                      : { rotulo: "Editar", onClick: () => abrirEdicaoDaConta(c) },
+                                    c.origem === "contrato" ? { rotulo: "Excluir — muda no contrato", desativado: true }
+                                      : c.origem === "cotacao" ? { rotulo: "Excluir — veio da cotação", desativado: true }
+                                      : c.origem === "escritorio" ? { rotulo: "Excluir — lançada no escritório", desativado: true }
+                                      : { rotulo: "Excluir", destrutivo: true, onClick: () => {
+                                          if (travouNaFatura([c], "excluir")) return;
+                                          if (travouNoMesFechado([c], "excluir")) return;
+                                          dialogo.confirmar({ titulo: "Excluir conta?", mensagem: "Esta ação não pode ser desfeita." + vaiJuntoNoEscritorio([c]), confirmar: "Excluir", destrutivo: true })
+                                            .then(ok => { if (ok) gravarContas(contasDaObra.filter(x => x.id !== c.id)); }); } },
+                                  ]} />
+                                </div>
+                              )}
                               <div data-vk-mantem-mes="1" style={{ minWidth: 0, cursor: "pointer" }}
                                 title={aberta ? "Fechar detalhes" : "Ver detalhes"}
                                 onClick={() => setContasAbertas({ ...contasAbertas, [c.id]: !aberta })}>
@@ -5697,20 +5782,6 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                               {perm.podeEditar ? (
                                 <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
                                   <button onClick={() => alternarPagamento(c)} style={isMobile ? C.btnLinhaToque : C.btnLinha}>{c.pago ? "Desfazer" : "Pagar"}</button>
-                                  {/* Parcela de contrato é regerada pela regra a cada
-                                      abertura da tela — editá-la aqui não duraria um
-                                      render; ela se corrige pelo Recalibrar. O resto
-                                      é linha concreta e se edita. */}
-                                  <MenuDeAcoes compacto toque={isMobile} title="Mais ações da conta" itens={[
-                                    (c.origem !== "contrato" && !c.pago)
-                                      ? { rotulo: "Editar", onClick: () => abrirEdicaoDaConta(c) } : null,
-                                    (c.origem === "avulsa")
-                                      ? { rotulo: "Excluir", destrutivo: true, onClick: () => {
-                                          if (travouNaFatura([c], "excluir")) return;
-                                          if (travouNoMesFechado([c], "excluir")) return;
-                                          dialogo.confirmar({ titulo: "Excluir conta?", mensagem: "Esta ação não pode ser desfeita." + vaiJuntoNoEscritorio([c]), confirmar: "Excluir", destrutivo: true })
-                                            .then(ok => { if (ok) gravarContas(contasDaObra.filter(x => x.id !== c.id)); }); } } : null,
-                                  ]} />
                                 </div>
                               ) : <div />}
                             </div>

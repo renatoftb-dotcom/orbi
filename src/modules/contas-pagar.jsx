@@ -1407,6 +1407,31 @@ function apagarPedidoInteiro(contasPagar, pedidoId) {
   return (contasPagar || []).filter((c) => !(c && c.pedidoId === pedidoId));
 }
 
+// ── Trocar o vencimento de um pedido (ou de todos os da loja) ──
+// A loja combinou outra data: os itens EM ABERTO passam a vencer nela; o
+// que já foi pago fica como está. Cada item guarda no histórico de onde
+// para onde foi. O pedido na cotação (que também tem vencimento) acompanha,
+// para as duas telas não dizerem datas diferentes.
+function comVencimentoNovo(contasPagar, contaIds, vencimento, quem, agoraIso) {
+  const alvo = new Set(contaIds || []);
+  const novo = String(vencimento || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(novo)) return contasPagar || [];
+  return (contasPagar || []).map((c) => {
+    if (!c || !alvo.has(c.id) || c.pago || c.vencimento === novo) return c;
+    const antes = c.vencimento || "";
+    return registrarAto({ ...c, vencimento: novo }, "editada", quem, agoraIso, "vencimento " + (antes || "\u2014") + " \u2192 " + novo);
+  });
+}
+function cotacoesComVencimento(cotacoes, pedidoIds, vencimento) {
+  const ids = new Set(pedidoIds || []);
+  const novo = String(vencimento || "").slice(0, 10);
+  if (!ids.size || !novo) return cotacoes;
+  return (cotacoes || []).map((c) => {
+    if (!c || !(c.pedidos || []).some((x) => x && ids.has(x.id))) return c;
+    return { ...c, pedidos: c.pedidos.map((x) => (x && ids.has(x.id) && !x.pago ? { ...x, vencimento: novo } : x)) };
+  });
+}
+
 // O que a pessoa precisa ler antes de confirmar: quantas contas somem, de
 // quanto, e quanto disso já estava baixado — porque essa parte sai do
 // realizado da obra e mexe no P&L do mês.

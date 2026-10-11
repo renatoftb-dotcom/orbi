@@ -2747,10 +2747,13 @@ function MenuDeAcoes(props) {
         title={props.title || "Mais ações"}
         onClick={function (e) { e.stopPropagation(); if (aberto) fechar(); else abrir(); }}
         style={{
-          background: aberto ? "rgba(38,36,33,0.06)" : "#fff",
-          color: "#4b5563", border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 10,
-          width: toque ? 44 : (props.compacto ? 32 : 36),
-          height: toque ? 44 : (props.compacto ? 30 : 34),
+          // semBorda: os três pontinhos discretos, no canto da linha — sem
+          // caixa em volta disputando com o botão da ação principal.
+          background: aberto ? "rgba(38,36,33,0.06)" : (props.semBorda ? "transparent" : "#fff"),
+          color: props.semBorda ? "#6b7280" : "#4b5563",
+          border: props.semBorda ? "none" : "1.5px solid rgba(38,36,33,0.16)", borderRadius: props.semBorda ? 8 : 10,
+          width: toque ? 44 : (props.semBorda ? 28 : props.compacto ? 32 : 36),
+          height: toque ? (props.semBorda ? 36 : 44) : (props.semBorda ? 22 : props.compacto ? 30 : 34),
           display: "inline-flex", alignItems: "center", justifyContent: "center",
           fontSize: 15, lineHeight: 1, cursor: "pointer", fontFamily: "inherit", padding: 0,
           flexShrink: 0,

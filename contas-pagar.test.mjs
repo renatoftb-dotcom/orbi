@@ -29,7 +29,7 @@ const modulo = new Function(`
            pedidoVazio, itemDoPedidoVazio, brutoDoItem, brutoDoPedido, totalDoPedido,
            itensRateados, contasDoPedidoDaLoja, descontoDasContas, validarPedido, chaveDoDocumento, pedidosPendentes, baixarPedidos,
            podeMexerNoPedido, removerContasDoPedido, linhasDePedido, linhasDeLoja,
-           contasDoPedidoDeConta, unitarioDaConta, apagarPedidoInteiro, resumoDoQueSai,
+           contasDoPedidoDeConta, unitarioDaConta, apagarPedidoInteiro, resumoDoQueSai, comVencimentoNovo, cotacoesComVencimento,
            pixDoPagamento, pixResumido, TIPOS_PIX, nomeDoTipoPix,
            MODOS_LANCAMENTO, modoLancamento,
            contasDaCotacao, contasDeCotacao,
@@ -3391,3 +3391,22 @@ teste("Entrada a pagar de loja com conta: vira pedido da conta, com o nº do PED
 });
 
 
+
+teste("Vencimento do pedido: os itens em aberto mudam, o pago fica, o histórico diz de onde para onde", () => {
+  const contas = [
+    { id: "a", pedidoId: "p1", vencimento: "2026-10-28", valor: 10 },
+    { id: "b", pedidoId: "p1", vencimento: "2026-10-28", valor: 5, pago: true, pagoEm: "2026-10-01" },
+    { id: "c", pedidoId: "p2", vencimento: "2026-10-28", valor: 7 },
+  ];
+  const r = modulo.comVencimentoNovo(contas, ["a", "b"], "2026-11-10", "Renato", "2026-10-11T12:00:00Z");
+  assert.strictEqual(r[0].vencimento, "2026-11-10");
+  assert.strictEqual(r[0].registros.slice(-1)[0].detalhe, "vencimento 2026-10-28 → 2026-11-10");
+  assert.strictEqual(r[1], contas[1]);          // pago: intocado
+  assert.strictEqual(r[2], contas[2]);          // fora da lista
+  assert.strictEqual(modulo.comVencimentoNovo(contas, ["a"], "", "R"), contas); // sem data: nada muda
+  const cot = [{ id: "k", pedidos: [{ id: "p1", vencimento: "2026-10-28" }, { id: "p9", vencimento: "2026-10-01" }] }, { id: "z", pedidos: [] }];
+  const rc = modulo.cotacoesComVencimento(cot, ["p1"], "2026-11-10");
+  assert.strictEqual(rc[0].pedidos[0].vencimento, "2026-11-10");
+  assert.strictEqual(rc[0].pedidos[1].vencimento, "2026-10-01");
+  assert.strictEqual(rc[1], cot[1]);
+});
