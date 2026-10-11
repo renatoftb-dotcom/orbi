@@ -31,7 +31,7 @@ const api = new Function(
            previaDePrecosPorCompra, aplicarComprasNoCatalogo, contasRecemPagas,
            contasQueDeixaramDeSerPagas,
            chaveUnidade, unidadeCanonica, mesmaUnidade, unidadeDoPreco, divergenciaDeUnidade, fatorEntreUnidades, converterParaUnidadeDoCatalogo,
-           migrarMateriaisParaInsumos, semearInsumos };`
+           migrarMateriaisParaInsumos, semearInsumos, linhasDoCatalogoParaExportar };`
 )();
 
 // ── mini runner ──────────────────────────────────────────────
@@ -947,6 +947,39 @@ t("a medida no nome manda; o catálogo registrado manda mais; 40mm não é 40 m"
   eq(api.fatorEntreUnidades({ nome: "Areia Fina", unidade: "m3" }, "Mts"), null);
   eq(api.fatorEntreUnidades({ nome: "Tubo 50mm", unidade: "Unidades" }, "Unidades"), null);
   eq(api.converterParaUnidadeDoCatalogo(3, 10, 0), null);
+});
+
+// ── exportar catálogo ─────────────────────────────────────────
+t("exportar: ordem da obra, nomes no lugar dos ids, sem etapa no fim e marcado", () => {
+  const ETS = [{ id: "fundacao", nome: "Fundação", macro: "Fundação" }, { id: "eletrica", nome: "Elétrica", macro: "Elétrica" }];
+  const CTS = [{ id: "material", nome: "Material" }];
+  const hoje = new Date().toISOString().slice(0, 10);
+  const r = api.linhasDoCatalogoParaExportar([
+    { codigo: "ELE-002", nome: "Fio", grupo: "Elétrica", unidade: "Mts", etapaPadrao: "eletrica", precoReferencia: 3, precoData: hoje, precoNCompras: 5, aliases: ["Fio", "Cabo 2,5"] },
+    { codigo: "ACO-001", nome: "Aço 10mm", grupo: "Aço", unidade: "Unidades", etapaPadrao: "", precoReferencia: 39.22, precoData: hoje },
+    { codigo: "LOC-003", nome: "Perfuração", grupo: "Locação", unidade: "Mts", etapaPadrao: "fundacao", contaPadrao: "material", precoManual: 12.2, tipo: "prestador" },
+    { codigo: "ELE-001", nome: "Poste", grupo: "Elétrica", unidade: "Unidades", etapaPadrao: "eletrica" },
+  ], { etapas: ETS, contas: CTS });
+  eq(r.linhas.map((l) => l[0]).join(","), "LOC-003,ELE-001,ELE-002,ACO-001");
+  eq(r.semEtapa.join(","), "false,false,false,true");
+  eq(r.colunas.length, r.linhas[0].length);
+  const [perf, poste, fio, aco] = r.linhas;
+  eq(perf[5], "Fundação"); eq(perf[6], "Fundação"); eq(perf[7], "Material"); eq(perf[2], "Prestador");
+  eq(perf[8], 12.2); eq(perf[9], "manual");
+  eq(poste[8], null); eq(poste[9], "sem preço");
+  eq(fio[18], "Cabo 2,5");           // o próprio nome não se repete nos apelidos
+  eq(fio[9], "alta");
+  eq(aco[5], "(sem etapa)");
+});
+
+t("exportar: etapa com id que a taxonomia não conhece aparece pelo id, antes dos sem etapa", () => {
+  const r = api.linhasDoCatalogoParaExportar([
+    { codigo: "B", nome: "b", etapaPadrao: "" },
+    { codigo: "A", nome: "a", etapaPadrao: "etapa_velha" },
+  ], { etapas: [], contas: [] });
+  eq(r.linhas[0][0], "A"); eq(r.linhas[0][5], "etapa_velha");
+  eq(r.linhas[1][5], "(sem etapa)");
+  eq(api.linhasDoCatalogoParaExportar(null).linhas.length, 0);
 });
 
 console.log("\n" + ok + " testes passaram" + (falhas.length ? ", " + falhas.length + " falharam" : ""));

@@ -939,6 +939,83 @@ function definirEtapaPadraoEmLote(insumos, chaves, etapaId) {
   return { insumos: lista, mudados: mudados };
 }
 
+// ── Exportar o catálogo para planilha ──────────────────────────
+// Uma fotografia do catálogo para abrir no Excel: o mesmo preço que a
+// estimativa usa (precoInsumo), a etapa e a conta pelo nome, e o que vem de
+// trás desse preço (data, fonte, INCC, compras). A ordem é a da obra — etapa,
+// depois grupo e código —, e quem não tem etapa vai para o fim marcado, que é
+// a lista de trabalho de quem está ligando o catálogo às etapas.
+// `opts.etapas` e `opts.contas` são as listas da taxonomia (ETAPAS_OBRA e
+// PLANO_CONTAS); ficam como parâmetro para a função seguir pura.
+var EXPORT_CATALOGO_CONF = { alta: "alta", media: "média", baixa: "baixa", obsoleta: "obsoleta", sem_preco: "sem preço", manual: "manual" };
+var EXPORT_CATALOGO_FONTE = { compra: "compra", compra_corrigida: "compra corrigida (INCC)", mercado: "mercado", cotacao: "cotação" };
+var EXPORT_CATALOGO_COLUNAS = [
+  { titulo: "Código", largura: 11 },
+  { titulo: "Insumo", largura: 46 },
+  { titulo: "Tipo", largura: 10 },
+  { titulo: "Grupo", largura: 22 },
+  { titulo: "Unidade", largura: 10 },
+  { titulo: "Etapa padrão", largura: 30 },
+  { titulo: "Macro-etapa", largura: 24 },
+  { titulo: "Conta padrão", largura: 20 },
+  { titulo: "Preço atual (orçamento)", largura: 14, tipo: "moeda" },
+  { titulo: "Confiança", largura: 11 },
+  { titulo: "Preço de referência", largura: 13, tipo: "moeda" },
+  { titulo: "Data do preço", largura: 12, tipo: "data" },
+  { titulo: "Fonte do preço", largura: 20 },
+  { titulo: "Fator INCC aplicado", largura: 11, tipo: "fator" },
+  { titulo: "Nº de compras", largura: 10, tipo: "inteiro" },
+  { titulo: "Preço manual", largura: 11, tipo: "moeda" },
+  { titulo: "Último preço pago", largura: 12, tipo: "moeda" },
+  { titulo: "Base de cálculo", largura: 16 },
+  { titulo: "Apelidos", largura: 40 },
+  { titulo: "Observação", largura: 50 },
+];
+
+function linhasDoCatalogoParaExportar(insumos, opts) {
+  opts = opts || {};
+  var etapas = {};
+  (opts.etapas || []).forEach(function (e, i) { etapas[e.id] = { nome: e.nome, macro: e.macro || "", ordem: i }; });
+  var contas = {};
+  (opts.contas || []).forEach(function (c) { contas[c.id] = c.nome; });
+  var num = function (v) { return v == null || v === "" || !isFinite(Number(v)) ? null : Number(v); };
+  var itens = (insumos || []).filter(Boolean).map(function (i) {
+    var p = precoInsumo(i, opts.ate);
+    var etId = i.etapaPadrao || "";
+    var et = etId ? etapas[etId] : null;
+    var nomeIns = String(i.nome || "");
+    var apelidos = (i.aliases || []).filter(function (a) { return a && normalizarTexto(a) !== normalizarTexto(nomeIns); });
+    return {
+      semEtapa: !etId,
+      ordem: et ? et.ordem : (etId ? 9998 : 9999),
+      grupo: i.grupo || "",
+      codigo: i.codigo || "",
+      valores: [
+        i.codigo || "", nomeIns, i.tipo === "prestador" ? "Prestador" : "Material", i.grupo || "", i.unidade || "",
+        et ? et.nome : (etId || "(sem etapa)"), et ? et.macro : "",
+        i.contaPadrao ? (contas[i.contaPadrao] || i.contaPadrao) : "",
+        num(p.preco), EXPORT_CATALOGO_CONF[p.confianca] || p.confianca || "",
+        num(i.precoReferencia), i.precoData ? String(i.precoData).slice(0, 10) : "",
+        EXPORT_CATALOGO_FONTE[i.precoFonte] || i.precoFonte || "",
+        num(i.precoFatorInccAplicado) == null ? 1 : num(i.precoFatorInccAplicado),
+        num(i.precoNCompras) || 0, num(i.precoManual), num(i.ultimoPreco),
+        i.baseCalculo || "", apelidos.join(" | "), i.observacao || "",
+      ],
+    };
+  });
+  itens.sort(function (a, b) {
+    if (a.ordem !== b.ordem) return a.ordem - b.ordem;
+    var g = a.grupo.localeCompare(b.grupo, "pt-BR");
+    if (g !== 0) return g;
+    return a.codigo.localeCompare(b.codigo, "pt-BR");
+  });
+  return {
+    colunas: EXPORT_CATALOGO_COLUNAS,
+    linhas: itens.map(function (x) { return x.valores; }),
+    semEtapa: itens.map(function (x) { return x.semEtapa; }),
+  };
+}
+
 // UI
 // ═══════════════════════════════════════════════════════════════
 
@@ -1586,6 +1663,76 @@ function Insumos({ data, save }) {
     return r;
   }, [enriquecidos]);
 
+  // Baixa o que está na lista: sem filtro, o catálogo inteiro; com filtro,
+  // só o que sobrou nele. Sem a biblioteca do Excel (sem internet para o
+  // CDN), sai um CSV com ponto e vírgula, que o Excel brasileiro abre.
+  var [exportando, setExportando] = useState(false);
+  var temFiltro = !!(busca.trim() || filtroGrupo || filtroConf || filtroEtapa);
+  async function exportarCatalogo() {
+    if (exportando) return;
+    setExportando(true);
+    var plan = linhasDoCatalogoParaExportar(filtrados.map(function (x) { return x.i; }), {
+      etapas: typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [],
+      contas: typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [],
+    });
+    var hoje = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    var nome = "catalogo-insumos" + (temFiltro ? "-filtrado" : "") + "-" + hoje;
+    var baixarArquivo = function (blob, arquivo) {
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = arquivo; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+    };
+    try {
+      if (typeof carregarExcelJS !== "function") throw new Error("sem ExcelJS");
+      var E = await carregarExcelJS();
+      var wb = new E.Workbook();
+      wb.creator = "VICKE";
+      var ws = wb.addWorksheet("Catálogo", { views: [{ state: "frozen", xSplit: 2, ySplit: 1, activeCell: "C2" }] });
+      ws.columns = plan.colunas.map(function (c) { return { header: c.titulo, key: c.titulo, width: c.largura }; });
+      var fonte = { name: "Arial", size: 10 };
+      var amarelo = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF4CC" } };
+      plan.linhas.forEach(function (linha, k) {
+        var r = ws.addRow(linha.map(function (v, j) {
+          if (v === "" || v == null) return null;
+          if (plan.colunas[j].tipo === "data") {
+            var m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+            return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : v;
+          }
+          return v;
+        }));
+        r.eachCell({ includeEmpty: true }, function (cel, j) {
+          var c = plan.colunas[j - 1];
+          cel.font = fonte;
+          if (c.tipo === "moeda") cel.numFmt = '"R$" #,##0.00';
+          else if (c.tipo === "data") cel.numFmt = "dd/mm/yyyy";
+          else if (c.tipo === "fator") cel.numFmt = "0.0000";
+          else if (c.tipo === "inteiro") cel.numFmt = "0";
+          if (plan.semEtapa[k]) cel.fill = amarelo;
+        });
+      });
+      var cab = ws.getRow(1);
+      cab.height = 32;
+      cab.eachCell(function (cel) {
+        cel.font = { name: "Arial", size: 10, bold: true, color: { argb: "FFFFFFFF" } };
+        cel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0474F4" } };
+        cel.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+      });
+      ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, plan.linhas.length + 1), column: plan.colunas.length } };
+      var buf = await wb.xlsx.writeBuffer();
+      baixarArquivo(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), nome + ".xlsx");
+    } catch (e) {
+      var esc = function (v) {
+        var t = typeof v === "number" ? String(v).replace(".", ",") : String(v == null ? "" : v);
+        return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+      };
+      var csv = "\ufeff" + [plan.colunas.map(function (c) { return c.titulo; })].concat(plan.linhas)
+        .map(function (l) { return l.map(esc).join(";"); }).join("\r\n");
+      baixarArquivo(new Blob([csv], { type: "text/csv;charset=utf-8" }), nome + ".csv");
+    }
+    setExportando(false);
+  }
+
   function salvarInsumo(novo) {
     var lista = insumos.slice();
     var idx = lista.findIndex(x => x.id === novo.id || (novo.codigo && x.codigo === novo.codigo));
@@ -1758,6 +1905,13 @@ function Insumos({ data, save }) {
               Catálogo de materiais e serviços. É daqui que a estimativa lê preço e é aqui que as compras o atualizam.
             </div>
           </div>
+          {insumos.length > 0 && (
+            <button style={INS_S.btnSec} disabled={exportando || filtrados.length === 0} onClick={exportarCatalogo}
+              data-vk-exportar-catalogo="1"
+              title={temFiltro ? "baixa só os " + filtrados.length + " insumos do filtro" : "baixa o catálogo inteiro"}>
+              {exportando ? "Gerando…" : (temFiltro ? "Exportar Excel (" + filtrados.length + ")" : "Exportar Excel")}
+            </button>
+          )}
           {perm.podeAlterarConfig && typeof COMPOSICOES_SEED !== "undefined" && (
             <button style={INS_S.btnSec} onClick={() => setView("composicoes")}>Composições (kits por ambiente)</button>
           )}
