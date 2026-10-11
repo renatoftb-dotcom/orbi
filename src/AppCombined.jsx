@@ -13186,6 +13186,46 @@ function previaDaGestao(obra, l, antes) {
   };
 }
 
+// ── Campo de valor em reais, formatado enquanto se digita ──────────
+// A tela mostra 18.000,50; o que vai para o formulário é "18000,50" — sem
+// ponto de milhar, que o leitor de número (numeroDeCampo, efNumero) leria
+// como decimal quando não há vírgula. Os pontos são da tela: quem digita
+// só põe os números e, se quiser centavos, a vírgula.
+function valorBRDigitado(texto, opcoes) {
+  const bruto = String(texto == null ? "" : texto);
+  const neg = !!(opcoes && opcoes.negativo) && /^\s*-/.test(bruto);
+  let t = bruto.replace(/[^\d,]/g, "");
+  const i = t.indexOf(",");
+  if (i >= 0) t = t.slice(0, i + 1) + t.slice(i + 1).replace(/,/g, "").slice(0, 2);
+  t = t.replace(/^0+(?=\d)/, "");
+  if (t.charAt(0) === ",") t = "0" + t;
+  return (neg ? "-" : "") + t;
+}
+// O valor que já estava no formulário (número, "18000,00", "18.000,00").
+// Sem vírgula, o ponto é decimal — a mesma leitura do resto do sistema.
+function valorBRDeFora(v) {
+  if (v == null || v === "") return "";
+  if (typeof v === "number") return Number.isFinite(v) ? valorBRDigitado(String(v).replace(".", ","), { negativo: true }) : "";
+  const s = String(v).replace(/r\$/i, "").replace(/\s/g, "");
+  return valorBRDigitado(s.indexOf(",") >= 0 ? s.replace(/\./g, "") : s.replace(".", ","), { negativo: true });
+}
+function valorBRNaTela(canon) {
+  const s = String(canon || "");
+  const neg = s.charAt(0) === "-";
+  const partes = (neg ? s.slice(1) : s).split(",");
+  const inteira = (partes[0] || "").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return (neg ? "-" : "") + inteira + (partes.length > 1 ? "," + partes[1] : "");
+}
+// Ao sair do campo: sempre com os centavos.
+function valorBRCompleto(canon) {
+  const s = String(canon || "");
+  if (!s || s === "-") return "";
+  const neg = s.charAt(0) === "-";
+  const partes = (neg ? s.slice(1) : s).split(",");
+  if (!partes[0] && !partes[1]) return "";
+  return (neg ? "-" : "") + (partes[0] || "0") + "," + String(partes[1] || "").padEnd(2, "0").slice(0, 2);
+}
+
 // Ctrl+V de um arquivo copiado no Explorer/Finder: o navegador entrega o
 // arquivo no evento de colar. Só interessa o primeiro arquivo — texto colado
 // (um número no campo de saldo, por exemplo) segue o caminho normal.
@@ -13483,7 +13523,9 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       const novo = { ...p };
       if (valorLido > 0 && !(efValorDoCampo(p.valor) > 0)) novo.valor = valorLido.toFixed(2).replace(".", ",");
       if (pa.pagoEm && !p.lancadoEm) novo.lancadoEm = pa.pagoEm;
-      if ((pa.pagoEm || pa.emitido) && !p.competencia) novo.competencia = (pa.pagoEm || pa.emitido).slice(0, 7);
+      // numa receita, a data do papel (a do cheque) não é o mês do recebimento
+      const dataDoPapel = pa.pagoEm || (entrada ? "" : pa.emitido);
+      if (dataDoPapel && !p.competencia) novo.competencia = dataDoPapel.slice(0, 7);
       // receita: quem presta o serviço é o escritório — o nome do banco ou
       // de quem assinou o cheque não vira fornecedor
       const semFornecedor = !entrada && !p.fornecedorId && (!String(p.fornecedor || "").trim() || p.fornecedor === EF_FORNECEDOR_OUTROS);
@@ -13825,8 +13867,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             })}
           </Selecao>
         ), "conta")}
-        {campo("Valor", <input style={S.input} inputMode="decimal" value={f.valor} placeholder="0,00"
-          onChange={(e) => set("valor", e.target.value)} />)}
+        {campo("Valor", <CampoValorBR style={S.input} valor={f.valor} placeholder="0,00"
+          aoMudar={(v) => set("valor", v)} />)}
         {/* No fechamento, a competência é o mês que se está fechando: não
             é uma escolha, e um mês errado aqui sumiria da conferência. */}
         {!naObra && (competenciaFixa
@@ -14995,6 +15037,51 @@ function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcar
 // ── Fechamento do mês ───────────────────────────────────────────
 // Conferência item a item contra o extrato do banco. Enquanto a diferença
 // não zera, o mês não fecha; depois de fechado, não entra lançamento nele.
+// O campo de valor da tela: pontos de milhar e vírgula aparecem enquanto
+// se digita; o cursor fica onde estava, contado pelos números.
+function CampoValorBR({ valor, aoMudar, negativo, style, onBlur, ...resto }) {
+  const ref = useRef(null);
+  const cursor = useRef(null);
+  const canon = valorBRDeFora(valor);
+  const tela = valorBRNaTela(canon);
+  const conta = (t) => (String(t).match(/[\d,-]/g) || []).length;
+  useEffect(() => {
+    const el = ref.current;
+    if (cursor.current == null || !el || (typeof document !== "undefined" && document.activeElement !== el)) { cursor.current = null; return; }
+    const alvo = cursor.current;
+    cursor.current = null;
+    let pos = 0, n = 0;
+    while (pos < el.value.length && n < alvo) { if (/[\d,-]/.test(el.value.charAt(pos))) n++; pos++; }
+    try { el.setSelectionRange(pos, pos); } catch (e) { /* campo sem seleção */ }
+  });
+  return (
+    <input ref={ref} {...resto} style={style} type="text" inputMode="decimal" value={tela}
+      onChange={(e) => {
+        const bruto = e.target.value;
+        const sel = e.target.selectionStart == null ? bruto.length : e.target.selectionStart;
+        let novo = valorBRDigitado(bruto, { negativo });
+        let antes = conta(valorBRDigitado(bruto.slice(0, sel), { negativo }));
+        // Apagar só o ponto de milhar não mudaria nada (ele volta): apaga o
+        // número ao lado dele, como a pessoa esperava.
+        const tipo = (e.nativeEvent && e.nativeEvent.inputType) || "";
+        if (novo === canon && bruto.length === tela.length - 1 && /^delete/.test(tipo)) {
+          const k = tipo === "deleteContentForward" ? antes : antes - 1;
+          if (k >= 0 && k < canon.length && /\d/.test(canon.charAt(k))) {
+            novo = valorBRDigitado(canon.slice(0, k) + canon.slice(k + 1), { negativo });
+            antes = k;
+          }
+        }
+        cursor.current = Math.min(antes, conta(novo));
+        aoMudar(novo);
+      }}
+      onBlur={(e) => {
+        const completo = valorBRCompleto(valorBRDigitado(e.target.value, { negativo }));
+        if (completo !== canon) aoMudar(completo);
+        if (onBlur) onBlur(e);
+      }} />
+  );
+}
+
 function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes, aoMarcar, aoMarcarTodos, aoFechar, aoReabrir, ocupado, extrato }) {
   const S = EF_ESTILO;
   // A conferência é feita ao longo do mês, com o extrato parcial: por isso
@@ -15046,8 +15133,8 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
             .map((m) => [m, efMesPorExtenso(m) + (mesEstaFechado(m, fechamentos) ? " ✓" : "")])} />
         <div style={{ display: "grid", gap: 3 }}>
           <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>Saldo do banco</span>
-          <input style={{ ...S.input, maxWidth: 160 }} inputMode="decimal" value={banco} placeholder="0,00"
-            disabled={fechado} onChange={(e) => setBanco(e.target.value)} />
+          <CampoValorBR style={{ ...S.input, maxWidth: 160 }} valor={banco} placeholder="0,00" negativo
+            disabled={fechado} aoMudar={setBanco} />
           {bancoDoExtrato && <span style={{ fontSize: 10.5, color: "#6b7280" }}>lido do extrato</span>}
         </div>
         <div style={{ display: "grid", gap: 3 }}>
@@ -15636,7 +15723,7 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo, quem }) 
                       <div style={{ minWidth: 0 }}><div style={S.rot}>Data da compra</div>
                         <input style={inp} type="date" disabled={bloq} value={editando.data} onChange={(e) => mexe("data", e.target.value)} /></div>
                       <div style={{ minWidth: 0 }}><div style={S.rot}>Valor total da compra</div>
-                        <input style={inp} inputMode="decimal" disabled={bloq} value={editando.valor} onChange={(e) => mexe("valor", e.target.value)} /></div>
+                        <CampoValorBR style={inp} disabled={bloq} valor={editando.valor} aoMudar={(v) => mexe("valor", v)} /></div>
                       <div style={{ minWidth: 0 }}><div style={S.rot}>Parcelas</div>
                         <input style={inp} inputMode="numeric" disabled={bloq} value={editando.parcelas}
                           onChange={(e) => mexe("parcelas", e.target.value.replace(/\D/g, "").slice(0, 2))} /></div>
@@ -15671,8 +15758,8 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo, quem }) 
                   </div>
                   <div style={{ display: "grid", gap: 10, gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", alignItems: "end", maxWidth: 520 }}>
                     <div style={{ minWidth: 0 }}><div style={S.rot}>Valor debitado</div>
-                      <input style={S.input} inputMode="decimal" value={editFatura.valor}
-                        onChange={(e) => setEditFatura({ ...editFatura, valor: e.target.value })} /></div>
+                      <CampoValorBR style={S.input} valor={editFatura.valor}
+                        aoMudar={(v) => setEditFatura({ ...editFatura, valor: v })} /></div>
                     <div style={{ minWidth: 0 }}><div style={S.rot}>Data do débito</div>
                       <input style={S.input} type="date" value={editFatura.data}
                         onChange={(e) => setEditFatura({ ...editFatura, data: e.target.value })} /></div>

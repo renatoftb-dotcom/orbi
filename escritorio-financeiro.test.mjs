@@ -27,7 +27,7 @@ const M = new Function(src + `
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
-           fontesDasContasPagas, arquivoDoColar,
+           fontesDasContasPagas, arquivoDoColar, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
            competenciasDoCartao,
@@ -2344,6 +2344,35 @@ teste("colar arquivo: pega o arquivo do Ctrl+V e ignora texto", () => {
   assert.strictEqual(M.arquivoDoColar({ files: [], items: [{ kind: "file", getAsFile: () => f }] }), f);
   assert.strictEqual(M.arquivoDoColar({ files: [], items: [{ kind: "string", getAsFile: () => null }] }), null);
   assert.strictEqual(M.arquivoDoColar(null), null);
+});
+
+teste("Campo de valor: pontos e vírgula na tela, número limpo no formulário", () => {
+  const passo = (t) => M.valorBRNaTela(M.valorBRDigitado(t));
+  assert.strictEqual(passo("1"), "1");
+  assert.strictEqual(passo("1800"), "1.800");
+  assert.strictEqual(passo("1.8000"), "18.000");       // o ponto da tela não conta
+  assert.strictEqual(passo("18.000,"), "18.000,");
+  assert.strictEqual(passo("18.000,509"), "18.000,50"); // duas casas
+  assert.strictEqual(passo("1234567,8"), "1.234.567,8");
+  assert.strictEqual(M.valorBRDigitado("18.000,50"), "18000,50");
+  assert.strictEqual(M.efValorDoCampo(M.valorBRDigitado("18.000,50")), 18000.5);
+  assert.strictEqual(M.efValorDoCampo(M.valorBRDigitado("18.000")), 18000);
+  assert.strictEqual(M.valorBRDigitado(",5"), "0,5");
+  assert.strictEqual(M.valorBRDigitado("007"), "7");
+  assert.strictEqual(M.valorBRDigitado("-150,3"), "150,3");
+  assert.strictEqual(M.valorBRDigitado("-150,3", { negativo: true }), "-150,3");
+  assert.strictEqual(M.valorBRNaTela("-12345,6"), "-12.345,6");
+  // ao sair: centavos
+  assert.strictEqual(M.valorBRCompleto("18000"), "18000,00");
+  assert.strictEqual(M.valorBRCompleto("18000,5"), "18000,50");
+  assert.strictEqual(M.valorBRCompleto(""), "");
+  assert.strictEqual(M.valorBRCompleto("-"), "");
+  // o que já estava gravado
+  assert.strictEqual(M.valorBRDeFora(18000.5), "18000,5");
+  assert.strictEqual(M.valorBRDeFora("18000,00"), "18000,00");
+  assert.strictEqual(M.valorBRDeFora("R$ 18.000,00"), "18000,00");
+  assert.strictEqual(M.valorBRDeFora("1234.56"), "1234,56");
+  assert.strictEqual(M.valorBRDeFora(-168.49), "-168,49");
 });
 
 for (const [nome, fn] of testes) {
