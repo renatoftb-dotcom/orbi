@@ -2526,6 +2526,11 @@ function SelectBusca(props) {
 
       {aberto && caixa && (
         <div ref={refPainel} tabIndex={-1} onKeyDown={comBusca ? undefined : aoTeclar}
+          /* A lista mora dentro do <label> de quem a usa (o "Mês" do
+             fechamento, por exemplo). Sem isto, o clique numa opção também
+             "clicava" o rótulo, que reabria a lista na mesma hora — ela
+             parecia não fechar depois da escolha. */
+          onClick={function (ev) { ev.preventDefault(); }}
           style={{
             position: "fixed", zIndex: 4200, left: caixa.esquerda, width: caixa.largura,
             top: caixa.topo != null ? caixa.topo : undefined,

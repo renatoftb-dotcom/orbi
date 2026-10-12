@@ -2530,6 +2530,11 @@ function SelectBusca(props) {
 
       {aberto && caixa && (
         <div ref={refPainel} tabIndex={-1} onKeyDown={comBusca ? undefined : aoTeclar}
+          /* A lista mora dentro do <label> de quem a usa (o "Mês" do
+             fechamento, por exemplo). Sem isto, o clique numa opção também
+             "clicava" o rótulo, que reabria a lista na mesma hora — ela
+             parecia não fechar depois da escolha. */
+          onClick={function (ev) { ev.preventDefault(); }}
           style={{
             position: "fixed", zIndex: 4200, left: caixa.esquerda, width: caixa.largura,
             top: caixa.topo != null ? caixa.topo : undefined,
@@ -9878,6 +9883,11 @@ const GRUPOS_ESCRITORIO = [
   { id: "emp_saidas",      titulo: "INVESTIMENTO EM EMPREENDIMENTO", sinal: -1, resultado: false, bloco: "empreendimento" },
   { id: "socios",          titulo: "RETIRADAS E OUTROS",   sinal: -1, resultado: false, bloco: "socios" },
   { id: "socios_entradas", titulo: "DEVOLUÇÕES E APORTES", sinal: +1, resultado: false, bloco: "socios" },
+  // O banco debita e devolve: boleto estornado, débito em duplicidade
+  // devolvido. As duas pontas entram na mesma conta — o débito como saída,
+  // o crédito como estorno — e se anulam. Mexe no saldo do banco no dia,
+  // nunca no resultado.
+  { id: "ajustes_bancarios", titulo: "ESTORNOS E AJUSTES BANCÁRIOS", sinal: -1, resultado: false, bloco: "ajustes" },
 ];
 
 // ── Plano de contas ─────────────────────────────────────────────
@@ -9939,6 +9949,10 @@ const PLANO_CONTAS_ESCRITORIO = [
   { id: "emprestimos",       nome: "Empréstimos",            grupo: "socios",          unidades: ["escritorio"], apelidos: ["Empréstimos"] },
   { id: "adiant_socio",      nome: "Adiantamento a sócio",   grupo: "socios",          unidades: ["escritorio"], apelidos: [] },
   { id: "reemb_socio",       nome: "Reembolso de sócio",     grupo: "socios_entradas", unidades: ["escritorio"], apelidos: [] },
+
+  // ── estornos do banco (não é resultado; débito e crédito se anulam) ──
+  { id: "estornos_bancarios", nome: "Estornos bancários",    grupo: "ajustes_bancarios", unidades: ["escritorio"],
+    apelidos: ["Estornos bancários", "Estorno bancário", "Estorno de boleto"] },
 ];
 
 // ── Texto sem acento e sem caixa, para casar apelido ────────────
@@ -9995,8 +10009,15 @@ function validarLancamentoEscritorio(l, opcoes) {
     const nomes = conta.unidades.map((id) => (UNIDADES_NEGOCIO.find((u) => u.id === id) || {}).nome).filter(Boolean);
     erros.push(`A conta “${conta.nome}” não é do Escritório: escolha ${nomes.join(" ou ")}.`);
   }
-  if (unidade && unidade.exigeCliente && !lan.clienteId) erros.push("Informe o cliente.");
-  if (unidade && unidade.exigeObra && !lan.obraId) erros.push("Informe a obra.");
+  // Obra encerrada (ou ajuste de obra antiga, de antes do cadastro): quem
+  // lança marca e assume. Não pede cliente e obra do cadastro — pede o nome,
+  // escrito, para o lançamento não ficar sem dono na base.
+  if (lan.obraEncerrada && unidade && (unidade.exigeCliente || unidade.exigeObra)) {
+    if (!String(lan.cliente || "").trim() && !String(lan.projeto || "").trim()) erros.push("Escreva o cliente ou a obra antiga.");
+  } else {
+    if (unidade && unidade.exigeCliente && !lan.clienteId) erros.push("Informe o cliente.");
+    if (unidade && unidade.exigeObra && !lan.obraId) erros.push("Informe a obra.");
+  }
   if (unidade && unidade.exigeEmpreendimento && !lan.empreendimentoId) erros.push("Informe o empreendimento.");
   return erros;
 }
@@ -10056,7 +10077,10 @@ function extratoEscritorio(lancamentos, opcoes) {
     const saldoEmpreendimento = g("emp_entradas") - g("emp_saidas");
     const socios = g("socios") - g("socios_entradas");
     const paraInvestimento = saldoEscritorio - socios;
-    saldo = saldo + saldoGestao + paraInvestimento + saldoEmpreendimento;
+    // débito e crédito estornado se anulam no mês; o que sobrar (estorno
+    // que só volta no mês seguinte) mexe no saldo enquanto não volta
+    const ajustes = g("ajustes_bancarios");
+    saldo = saldo + saldoGestao + paraInvestimento + saldoEmpreendimento - ajustes;
     const contas = {}; for (const k in linha.contas) contas[k] = efCentavos(linha.contas[k]);
     const grupos = {}; for (const k in linha.grupos) grupos[k] = efCentavos(linha.grupos[k]);
     return {
@@ -10067,6 +10091,7 @@ function extratoEscritorio(lancamentos, opcoes) {
       saldoEscritorio: efCentavos(saldoEscritorio),
       saldoEmpreendimento: efCentavos(saldoEmpreendimento),
       retiradas: efCentavos(socios),
+      ajustes: efCentavos(ajustes),
       paraInvestimento: efCentavos(paraInvestimento),
       saldoExtrato: efCentavos(saldo),
     };
@@ -13388,6 +13413,7 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
     { titulo: "Escritório", grupos: ["receitas", "despesas"], saldo: "saldoEscritorio", rotulo: "Resultado do escritório" },
     { titulo: "Empreendimentos", grupos: ["emp_aportes", "emp_entradas", "emp_saidas"], saldo: "saldoEmpreendimento", rotulo: "Saldo de empreendimentos" },
     { titulo: "Sócios", grupos: ["socios", "socios_entradas"], saldo: "retiradas", rotulo: "Retiradas e empréstimos" },
+    { titulo: "Estornos bancários", grupos: ["ajustes_bancarios"], saldo: "ajustes", rotulo: "Em aberto com o banco" },
   ];
   const soma = (f) => doAno.reduce((s, m) => s + (f(m) || 0), 0);
   const cel = (v) => (!v ? <span style={{ color: "#d1d5db" }}>—</span>
@@ -13615,7 +13641,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   // uma obra só já a tem escolhida; lançamento copiado do mês passado traz
   // o nome dela, e o nome acha a obra.
   useEffect(() => {
-    if (f.unidadeId !== "gestao_obras" || f.obraId || f.contaFonte === "obra") return;
+    if (f.unidadeId !== "gestao_obras" || f.obraId || f.contaFonte === "obra" || f.obraEncerrada) return;
     const lista = obrasDaGestao(obras, clientes, f.clienteId);
     const pelo = f.projeto ? lista.find((o) => efSemAcento(String(o.nome || "")).trim().toLowerCase() === efSemAcento(String(f.projeto)).trim().toLowerCase()) : null;
     const unica = !pelo && f.clienteId && lista.length === 1 ? lista[0] : null;
@@ -13728,13 +13754,16 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   // Empreendimento é cliente com tique: quando a unidade é Empreendimento, a
   // lista de escolha só traz esses, e o id escolhido vale pelos dois campos.
   const ehEmp = f.unidadeId === "empreendimento";
+  const unidadeDoForm = UNIDADES_NEGOCIO.find((u) => u.id === f.unidadeId) || null;
+  const podeObraAntiga = f.contaFonte !== "obra" && !ehEmp && !!unidadeDoForm && (unidadeDoForm.exigeCliente || unidadeDoForm.exigeObra);
+  const obraAntiga = podeObraAntiga && !!f.obraEncerrada;
   const doCadastro = (clientes || []).filter((c) => c && (ehEmp ? ehEmpreendimento(c) : true));
   const erros = naObra
     ? validarLancamentoNaObra({ ...f, valor: efValorDoCampo(f.valor) }, { fechamentos })
         .concat(validarCustoEmItens(efValorDoCampo(f.valor), itensEfetivos, f.obraIdAlvo).erros
           .filter((e) => !/Escolha a obra|Informe o valor pago/.test(e))
           .map((e) => (custoUnico && /sem etapa/.test(e) ? "Escolha a etapa da obra." : e)))
-    : validarLancamentoEscritorio({ ...f, valor: efValorDoCampo(f.valor),
+    : validarLancamentoEscritorio({ ...f, valor: efValorDoCampo(f.valor), obraEncerrada: obraAntiga,
         clienteId: f.clienteId || f.cliente,
         // na gestão, a obra é escolhida da lista (o id); lançamento antigo,
         // de antes da lista, segue valendo pelo nome
@@ -13799,6 +13828,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     // O contrato de gestão só é mexido quando a tela o mostrou; o lançamento
     // que estava ligado e deixou de ser receita da gestão sai do saldo.
     const { foraDaGestao: _fora, parcelaGestaoId: _p, parcelaGestaoObra: _o, ...semObraDaParcela } = g;
+    if (obraAntiga) { semObraDaParcela.obraEncerrada = true; semObraDaParcela.clienteId = ""; semObraDaParcela.obraId = ""; }
+    else delete semObraDaParcela.obraEncerrada;
     const noContrato = temGestao ? !foraDaGestao : (ligadoAntes ? false : undefined);
     if (noContrato !== undefined) semObraDaParcela.noContratoGestao = noContrato;
     aoSalvar(comCartao({ ...semObraDaParcela, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
@@ -13957,7 +13988,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
         ))}
         {noCartao && campo("Parcelas", <input style={S.input} inputMode="numeric" value={f.parcelas}
           onChange={(e) => set("parcelas", e.target.value.replace(/\D/g, "").slice(0, 2))} />)}
-        {campo(ehEmp ? "Empreendimento" : "Cliente", (
+        {obraAntiga ? campo("Cliente", <input style={S.input} value={f.cliente || ""} placeholder="como está na base antiga"
+          onChange={(e) => setF((p) => ({ ...p, cliente: e.target.value, clienteId: "" }))} />) : campo(ehEmp ? "Empreendimento" : "Cliente", (
           <Selecao style={{ ...S.input, cursor: "pointer" }}
             value={f.clienteId || ""}
             onChange={(e) => {
@@ -13977,7 +14009,10 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             “É um empreendimento do escritório”.
           </div>
         )}
-        {naObra
+        {obraAntiga
+          ? campo("Obra", <input style={S.input} value={f.projeto || ""} placeholder="como está na base antiga"
+              onChange={(e) => setF((p) => ({ ...p, projeto: e.target.value, obraId: "" }))} />)
+          : naObra
           ? campo("Obra que recebe o custo", (
               <SelectBusca style={S.input} value={f.obraIdAlvo}
                 onChange={(v) => setF((p) => ({ ...p, obraIdAlvo: v,
@@ -14040,6 +14075,17 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           placeholder="o número do papel, não a forma de pagamento"
           onChange={(e) => set("documento", e.target.value)} />)}
       </div>
+      {/* Obra encerrada: a obra antiga não está no cadastro (ou já fechou) e
+          o lançamento é um acerto dela — um estorno, uma devolução. Marcado,
+          cliente e obra viram texto e a trava de "informe a obra" sai. */}
+      {podeObraAntiga && (
+        <label data-vk-obra-encerrada="1" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#4b5563", cursor: "pointer", marginTop: -4 }}>
+          <input type="checkbox" checked={!!f.obraEncerrada}
+            onChange={(e) => { const v = e.target.checked;
+              setF((p) => ({ ...p, obraEncerrada: v, ...(v ? { clienteId: "", obraId: "" } : {}) })); }} />
+          Obra encerrada / ajuste de obra antiga — lançar sem cliente e obra do cadastro
+        </label>
+      )}
       {/* O que este lançamento faz no contrato de gestão da obra, antes de
           gravar: a parcela que baixa (ou volta a abrir) e o percentual pago. */}
       {temGestao && (() => {
