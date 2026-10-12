@@ -2769,6 +2769,8 @@ function palpiteDoExtrato(movimento, ctx) {
 // quando não há linha igual (ou a igual veio de uma obra pela ponte, que não
 // diz a conta da obra). O "✓ Lançar assim" continua só para a linha igual.
 function sugestaoCompletaDoExtrato(movimento, lancamentos, ctx) {
+  const est = sugestaoDeEstorno(movimento, lancamentos, ctx);
+  if (est) return est;
   const exato = sugestaoDoExtrato(movimento, lancamentos);
   const p = palpiteDoExtrato(movimento, { ...(ctx || {}), lancamentos });
   if (!p) return exato;
@@ -2828,6 +2830,9 @@ function comSinalDeEstorno(l) {
   if (!l) return l;
   const { sinalDoBanco, ...resto } = l;
   const v = Math.round(Math.abs(efValorDoCampo(l.valor)) * 100) / 100;
+  // já passou por aqui (o sinal do banco saiu e o estorno ficou negativo):
+  // uma segunda passada não pode desfazer o estorno
+  if (sinalDoBanco == null && l.estorno && efValorDoCampo(l.valor) < 0) return { ...resto, valor: -v, estorno: true };
   if (!ehEstornoNaConta(l.contaId, sinalDoBanco)) return { ...resto, valor: v };
   return { ...resto, valor: -v, estorno: true };
 }
@@ -3576,6 +3581,122 @@ function arquivoDoColar(dados) {
     }
   }
   return null;
+}
+
+// ── Estorno no extrato: achar o lançamento original ─────────────
+// "ESTORNO PIX EMITIDO · Estorno Pix 76.966.860/0001-46" é o banco
+// devolvendo um pagamento. O original é a saída do MESMO valor, antes, de
+// preferência com o mesmo documento (CNPJ/CPF) no histórico do banco ou no
+// cadastro do fornecedor. Achado, o estorno vai para a mesma conta, unidade,
+// cliente/obra e fornecedor — e, se o original nasceu numa obra, para a
+// mesma conta e etapa da obra.
+function ehLinhaDeEstorno(historico) { return /^estorno\b/.test(efSemAcento(historico)); }
+function ladoNoBancoDoLancamento(l) {
+  const c = contaEscritorio(l && l.contaId); const g = c && grupoEscritorio(c.grupo);
+  return g ? (g.sinal < 0 ? -1 : 1) * ((Number(l.valor) || 0) < 0 ? -1 : 1) : 0;
+}
+function originalDoEstorno(movimento, lancamentos, opcoes) {
+  const m = movimento || {};
+  if (!ehLinhaDeEstorno(m.historico)) return null;
+  const valor = efCentavos(Math.abs(Number(m.valor) || 0));
+  if (!(valor > 0)) return null;
+  const ladoOriginal = Number(m.valor) > 0 ? -1 : 1;     // o crédito estorna uma saída
+  const ate = String(m.data || "").slice(0, 10);
+  const desde = (() => { const d = new Date(ate + "T12:00:00Z"); if (isNaN(d)) return ""; d.setUTCDate(d.getUTCDate() - 180); return d.toISOString().slice(0, 10); })();
+  const doc = documentoDoHistorico(m.historico);
+  const digitos = (x) => String(x || "").replace(/\D/g, "");
+  const fornPorId = new Map(((opcoes && opcoes.fornecedores) || []).filter(Boolean).map((f) => [f.id, f]));
+  const jaEstornados = new Set((lancamentos || []).map((l) => l && l.estornoDe).filter(Boolean));
+  const dataDe = (l) => String(l.lancadoEm || "").slice(0, 10);
+  const cands = (lancamentos || []).filter((l) => l && !l.estorno && !jaEstornados.has(l.id)
+    && Math.abs(efCentavos(Math.abs(Number(l.valor) || 0)) - valor) < 0.01
+    && ladoNoBancoDoLancamento(l) === ladoOriginal
+    && dataDe(l) && (!ate || dataDe(l) <= ate) && (!desde || dataDe(l) >= desde));
+  if (!cands.length) return null;
+  const pontos = (l) => {
+    let p = 0;
+    if (doc && documentoDoHistorico(l.historicoBanco) === doc) p += 10;
+    const f = l.fornecedorId ? fornPorId.get(l.fornecedorId) : null;
+    if (doc && f && digitos(f.cnpjCpf) === doc) p += 6;
+    if (/pix/i.test(m.historico || "") && /pix/i.test(l.historicoBanco || "")) p += 1;
+    return p;
+  };
+  const lista = cands.map((l) => ({ l, p: pontos(l) }))
+    .sort((a, b) => (b.p - a.p) || dataDe(b.l).localeCompare(dataDe(a.l)));
+  const [a, b] = lista;
+  // Empate sem pista (dois pagamentos do mesmo valor): se os empatados têm a
+  // MESMA classificação — três taxas iguais da prefeitura na mesma obra —,
+  // qualquer um serve e o estorno sai igual. Se diferem, não se chuta.
+  if (b && a.p === b.p && a.p < 6) {
+    const chave = (l) => [l.contaId, l.unidadeId, l.clienteId || l.cliente, l.projeto, l.obraId, l.empreendimentoId,
+      efSemAcento(l.fornecedor), (l.origem || {}).obraId, (l.origem || {}).contaObra].map((x) => String(x || "")).join("|");
+    const empatados = lista.filter((x) => x.p === a.p);
+    if (empatados.some((x) => chave(x.l) !== chave(a.l))) return null;
+  }
+  return { lancamento: a.l, porDocumento: a.p >= 6 };
+}
+// A sugestão do estorno: os campos do original. Original que nasceu numa
+// obra volta para a obra, na mesma conta e etapa (item a item, se eram
+// vários) — e a tela grava como estorno.
+function sugestaoDeEstorno(movimento, lancamentos, ctx) {
+  const c = ctx || {};
+  const achado = originalDoEstorno(movimento, lancamentos, c);
+  if (!achado) return null;
+  const o = achado.lancamento;
+  const dia = String(o.lancadoEm || "").slice(0, 10).split("-").reverse().join("/");
+  const nomeConta = (contaEscritorio(o.contaId) || {}).nome || o.contaId;
+  const motivos = [`estorno do lançamento de ${dia}: ${nomeConta}${o.fornecedor ? " · " + o.fornecedor : ""}${o.projeto ? " · " + o.projeto : ""}`
+    + (achado.porDocumento ? " (mesmo CNPJ/CPF)" : " (mesmo valor)")];
+  const desc = "Estorno — " + String(o.descricao || nomeConta).replace(/^estorno\s*[—-]\s*/i, "");
+  const origem = o.origem || {};
+  const obra = origem.obraId ? ((c.obras || []).find((x) => x && x.id === origem.obraId) || null) : null;
+  const contasDaObra = obra ? contasLigadasAoLancamento(obra, o) : [];
+  if (obra && contasDaObra.length) {
+    const cli = (c.clientes || []).find((x) => x && x.id === obra.clienteId) || null;
+    const emp = ehEmpreendimento(cli);
+    const c0 = contasDaObra[0];
+    const campos = {
+      unidadeId: emp ? "empreendimento" : "gestao_obras", contaFonte: "obra", contaId: c0.contaId,
+      clienteId: cli ? cli.id : "", cliente: cli ? cli.nome : "", empreendimentoId: emp && cli ? cli.id : "",
+      obraIdAlvo: obra.id, projeto: obra.nome || "", fornecedor: o.fornecedor || "", fornecedorId: o.fornecedorId || "",
+      descricao: desc, estornoDe: o.id,
+    };
+    if (contasDaObra.length === 1) campos.etapaUnica = c0.etapa || "";
+    else campos.itens = contasDaObra.map((x) => ({ descricao: x.descricao || "", insumoCodigo: x.insumoCodigo || "",
+      grupoMaterial: x.grupoMaterial || "", quantidade: Math.abs(Number(x.quantidade) || 1), unidade: x.unidade || "vb",
+      unitario: Math.abs(Number(x.unitario) || 0), bruto: efCentavos(Math.abs(Number(x.valorPago) || Number(x.valor) || 0)),
+      etapa: x.etapa || "", contaId: x.contaId || c0.contaId }));
+    return { campos, de: o, estorno: true, daObra: true, naObra: true, motivos };
+  }
+  const campos = { descricao: desc, estornoDe: o.id };
+  for (const k of ["contaId", "unidadeId", "cliente", "clienteId", "empreendimentoId", "projeto", "obraId", "fornecedor", "fornecedorId", "obraEncerrada"]) {
+    if (o[k] != null && o[k] !== "") campos[k] = o[k];
+  }
+  return { campos, de: o, estorno: true, daObra: false, motivos };
+}
+// O lançamento pronto do estorno, para gravar sem abrir o formulário.
+function lancamentoDoEstornoDoExtrato(movimento, mes, sug, fechamentos) {
+  if (!sug || !sug.estorno) return { erro: "Sem o lançamento original." };
+  const base = lancamentoDaLinhaDoExtrato(movimento, mes, sug);
+  const valor = efCentavos(Math.abs(Number((movimento || {}).valor) || 0));
+  if (sug.naObra) {
+    const c = sug.campos;
+    const nomeConta = ((typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((x) => x && x.id === c.contaId) || {}).nome || "";
+    const itens = (c.itens && c.itens.length) ? c.itens : itensDoCustoOuUnico([], valor, c.etapaUnica || "", c.contaId, c.descricao || nomeConta, "");
+    if (!itens.length || itens.some((i) => !i.etapa)) return { erro: "Estorno de obra: confira a etapa no formulário." };
+    const { etapaUnica, sinalDoBanco, ...resto } = base;
+    const trava = bloqueioPorMesFechado(String(base.lancadoEm || "").slice(0, 7), fechamentos);
+    if (trava) return { erro: trava };
+    return { lancamento: { ...resto, valor, itens, naObra: true, estornoNaObra: true } };
+  }
+  const l = comSinalDeEstorno({ ...base, valor });
+  const ehEmp = l.unidadeId === "empreendimento";
+  // o original pode ser da base antiga (obra pelo nome, sem cadastro): o
+  // estorno espelha o original e vale pelo mesmo nome
+  const erros = validarLancamentoEscritorio({ ...l, clienteId: l.clienteId || l.cliente,
+    obraId: l.unidadeId === "gestao_obras" ? (l.obraId || l.projeto) : l.projeto,
+    empreendimentoId: ehEmp ? l.empreendimentoId : l.projeto }, { fechamentos });
+  return erros.length ? { erro: erros[0] } : { lancamento: l };
 }
 
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
@@ -5252,7 +5373,12 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                           sug.campos.projeto, sug.campos.fornecedor].filter(Boolean).join(" · ")}</b>
                       </div>
                     )}
-                    {contaSug && !(sug && sug.palpite) && (
+                    {sug && sug.estorno && (
+                      <div data-vk-estorno-achado="1" style={{ fontSize: 11.5, color: "#047857", marginTop: 2 }}>
+                        ↺ {(sug.motivos || [])[0]} — volta para a mesma conta, como estorno
+                      </div>
+                    )}
+                    {contaSug && !(sug && (sug.palpite || sug.estorno)) && (
                       <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 2 }}>
                         como em {dataBR(sug.de.lancadoEm) || "lançamento anterior"}: <b style={{ color: "#374151" }}>{contaSug.nome}</b>
                         {sug.campos.cliente ? ` · ${sug.campos.cliente}` : ""}
@@ -5261,7 +5387,11 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                   </div>
                   <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
                     {dinheiro(m)}
-                    {contaSug && !sug.daObra && !aberta && (
+                    {sug && sug.estorno && !aberta ? (
+                      <button data-vk-lancar-estorno="1" style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#047857", borderColor: "rgba(4,120,87,0.45)" }}
+                        disabled={!!ocupado}
+                        onClick={(e) => { e.stopPropagation(); rapido(m); }}>✓ Lançar estorno</button>
+                    ) : contaSug && !sug.daObra && !aberta && (
                       <button style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#0474f4", borderColor: "rgba(4,116,244,0.4)" }}
                         disabled={!!ocupado}
                         onClick={(e) => { e.stopPropagation(); rapido(m); }}>✓ Lançar assim</button>
@@ -6519,7 +6649,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const marca = l.extratoId ? { extratoId: l.extratoId, historicoBanco: l.historicoBanco || "",
       conferido: true, conferidoEm: l.conferidoEm || new Date().toISOString() } : null;
     const daPonte = (marca ? ponte.lancamentos.map((x) => ({ ...x, ...marca })) : ponte.lancamentos)
-      .map((x) => (est ? { ...x, estorno: true } : x));
+      .map((x) => (est ? { ...x, estorno: true, ...(l.estornoDe ? { estornoDe: l.estornoDe } : {}) } : x));
     save({ ...data, ...catalogoQueAprendeu(l),
       obras: todas.map((o) => (o && o.id === obra.id ? obraNova : o)),
       lancamentos: [...outrosLancamentos, ...lancs, ...daPonte],
@@ -7114,7 +7244,12 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
               inicial: (m) => lancamentoDaLinhaDoExtrato(m, mesEmConferencia, sugestaoCompletaDoExtrato(m, lancs, ctxDoPalpite)),
               sugestao: (m) => sugestaoCompletaDoExtrato(m, lancs, ctxDoPalpite),
               lancar: lancarLinhaDoExtrato,
-              rapido: (m) => lancamentoRapidoDoExtrato(m, mesEmConferencia, sugestaoDoExtrato(m, lancs), fechamentos),
+              rapido: (m) => {
+                // o estorno com o original achado vai direto, até o de obra
+                const est = sugestaoDeEstorno(m, lancs, ctxDoPalpite);
+                if (est) return lancamentoDoEstornoDoExtrato(m, mesEmConferencia, est, fechamentos);
+                return lancamentoRapidoDoExtrato(m, mesEmConferencia, sugestaoDoExtrato(m, lancs), fechamentos);
+              },
               lancarVarias: lancarVariasDoExtrato,
               lancarSugeridas: lancarSugeridasDoExtrato,
               naoE: naoELancamento,

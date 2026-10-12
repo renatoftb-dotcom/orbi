@@ -27,7 +27,7 @@ const M = new Function(src + `
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
-           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
+           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
            competenciasDoCartao,
@@ -2502,6 +2502,60 @@ teste("Débitos × créditos: o que não passa no extrato entra nos dois lados; 
   // aplicação pelo caminho dela (números da planilha de dezembro)
   assert.deepStrictEqual(M.rendimentoPelaAplicacao(391301.31, 33000, 85964.76, 362206.36), { principal: 338336.55, rendimento: 23869.81 });
   assert.strictEqual(M.rendimentoPelaAplicacao(null, 1, 1, 1), null);
+});
+
+teste("Estorno no extrato: acha o PIX original e volta para a mesma conta", () => {
+  const est = { id: "x1", data: "2026-03-10", valor: 298.1, historico: "ESTORNO PIX EMITIDO · Estorno Pix 76.966.860/0001-46" };
+  assert.strictEqual(M.ehLinhaDeEstorno(est.historico), true);
+  assert.strictEqual(M.ehLinhaDeEstorno("PIX EMITIDO OUTRA IF"), false);
+  const lancs = [
+    // mesmo valor, outro fornecedor, sem pista — perde para o do CNPJ
+    { id: "a", contaId: "utensilios", unidadeId: "escritorio", valor: 298.1, competencia: "2026-02", lancadoEm: "2026-02-25", historicoBanco: "PIX EMITIDO OUTRA IF · Kalunga" },
+    { id: "o", contaId: "pagamentos_compras", unidadeId: "gestao_obras", valor: 298.1, competencia: "2026-02", lancadoEm: "2026-02-23",
+      clienteId: "c1", cliente: "Cliente X", obraId: "ob1", projeto: "Obra X", fornecedor: "Pão de Açucar", fornecedorId: "f1",
+      historicoBanco: "PIX EMITIDO OUTRA IF · Pagamento Pix · 76.966.860 0001-46", descricao: "Compras" },
+    // depois do estorno: não é o original
+    { id: "d", contaId: "pagamentos_compras", unidadeId: "gestao_obras", valor: 298.1, competencia: "2026-03", lancadoEm: "2026-03-20" },
+  ];
+  const r = M.originalDoEstorno(est, lancs, {});
+  assert.strictEqual(r.lancamento.id, "o"); assert.strictEqual(r.porDocumento, true);
+  const sug = M.sugestaoDeEstorno(est, lancs, {});
+  assert.strictEqual(sug.estorno, true); assert.strictEqual(sug.campos.contaId, "pagamentos_compras");
+  assert.strictEqual(sug.campos.clienteId, "c1"); assert.strictEqual(sug.campos.estornoDe, "o");
+  assert.match(sug.motivos[0], /^estorno do lançamento de 23\/02\/2026: Pagamentos e compras · Pão de Açucar/);
+  const pronto = M.lancamentoDoEstornoDoExtrato(est, "2026-03", sug, {});
+  assert.ok(pronto.lancamento, pronto.erro);
+  assert.strictEqual(pronto.lancamento.valor, -298.1); assert.strictEqual(pronto.lancamento.estorno, true);
+  assert.strictEqual(pronto.lancamento.contaId, "pagamentos_compras"); assert.strictEqual(pronto.lancamento.competencia, "2026-03");
+  // a tela passa de novo pelo sinal ao gravar: o estorno continua negativo
+  assert.strictEqual(M.comSinalDeEstorno(pronto.lancamento).valor, -298.1);
+  // já estornado: não acha de novo
+  assert.strictEqual(M.originalDoEstorno(est, lancs.concat([{ id: "e", estornoDe: "o", contaId: "pagamentos_compras", valor: -298.1, lancadoEm: "2026-03-10" }]), {}).lancamento.id, "a");
+  // dois iguais sem pista nenhuma: não chuta
+  const ambiguo = [{ id: "p", contaId: "utensilios", valor: 50, lancadoEm: "2026-03-01" }, { id: "q", contaId: "utensilios", valor: 50, lancadoEm: "2026-03-02" }];
+  assert.strictEqual(M.originalDoEstorno({ data: "2026-03-10", valor: 50, historico: "ESTORNO PIX" }, ambiguo.concat([{ id: "z", contaId: "luz_agua_net", valor: 50, lancadoEm: "2026-03-03" }]), {}), null);
+  // empatados com a MESMA classificação (três taxas iguais da prefeitura): qualquer um serve
+  const iguais = [1, 2, 3].map((i) => ({ id: "t" + i, contaId: "pagamentos_compras", unidadeId: "gestao_obras", cliente: "Jacarezinho Mod 3 a 4",
+    projeto: "Módulo 3 a 4", fornecedor: "Prefeitura Jacarezinho", valor: 298.1, lancadoEm: "2026-03-06" }));
+  const r3 = M.originalDoEstorno({ data: "2026-03-10", valor: 298.1, historico: "ESTORNO PIX EMITIDO" }, iguais, {});
+  assert.ok(r3 && r3.lancamento.fornecedor === "Prefeitura Jacarezinho");
+});
+
+teste("Estorno de custo de obra: volta para a obra, mesma conta e etapa", () => {
+  const obra = { id: "ob3", nome: "Jacarezinho Módulo 3", clienteId: "e3",
+    contasPagar: [{ id: "k1", contaId: "outras_taxas", etapa: "pre_obra", valor: 298.1, valorPago: 298.1, pago: true, pagoEm: "2026-02-23", descricao: "Taxa" }] };
+  const cli = { id: "e3", nome: "Jacarezinho Módulo 3", servicos: { empreendimento: true } };
+  const ponte = { id: "pt", contaId: "emp_taxas", unidadeId: "empreendimento", valor: 298.1, lancadoEm: "2026-02-23",
+    historicoBanco: "PIX EMITIDO · 76.966.860/0001-46", origem: { obraId: "ob3", tipo: "conta", refId: "k1", contaObra: "outras_taxas" } };
+  const est = { id: "x1", data: "2026-03-10", valor: 298.1, historico: "ESTORNO PIX EMITIDO · Estorno Pix 76.966.860/0001-46" };
+  const sug = M.sugestaoDeEstorno(est, [ponte], { obras: [obra], clientes: [cli] });
+  assert.strictEqual(sug.naObra, true);
+  assert.deepStrictEqual([sug.campos.unidadeId, sug.campos.contaFonte, sug.campos.contaId, sug.campos.obraIdAlvo, sug.campos.etapaUnica],
+    ["empreendimento", "obra", "outras_taxas", "ob3", "pre_obra"]);
+  const pronto = M.lancamentoDoEstornoDoExtrato(est, "2026-03", sug, {});
+  assert.ok(pronto.lancamento, pronto.erro);
+  assert.strictEqual(pronto.lancamento.naObra, true); assert.strictEqual(pronto.lancamento.estornoNaObra, true);
+  assert.strictEqual(pronto.lancamento.itens[0].etapa, "pre_obra"); assert.strictEqual(pronto.lancamento.valor, 298.1);
 });
 
 for (const [nome, fn] of testes) {
