@@ -3344,7 +3344,10 @@ function parcelaDoLancamento(obra, l) {
   if (o.tipo === "gestao") return contas.find((c) => c.id === o.refId) || null;
   if (o.tipo === "estorno") return contas.find((c) => c.id === o.parcelaId) || null;
   if (o.tipo === "conta" && o.contaObra === EF_CONTA_GESTAO_NA_OBRA) {
-    return contas.find((c) => refDaParcela(c) === o.refId) || null;
+    // a referência guarda o "#n" do estorno que havia quando atravessou; se o
+    // estorno foi desfeito depois, a parcela é a mesma pelo id
+    return contas.find((c) => refDaParcela(c) === o.refId)
+      || contas.find((c) => c.id === String(o.refId || "").split("#")[0]) || null;
   }
   return null;
 }
@@ -7027,6 +7030,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       const ok = await dialogo.confirmar({
         titulo: "Excluir este lançamento?",
         mensagem: `${contaEscritorio(l.contaId)?.nome || "Lançamento"} · ${Number(l.valor) < 0 ? "estorno " + efDinheiro(Math.abs(Number(l.valor))) : efDinheiro(l.valor)} · ${mesAnoPorExtenso(l.competencia)}`
+          + (!pG ? `. Atenção: ele é da gestão de ${(obG && obG.nome) || "uma obra"}, mas a parcela dele não foi encontrada no contrato — nada muda na obra; confira lá depois.` : "")
           + (mudou && doSaldo ? `. Sai do saldo de ${efMesCurto(l.competencia || l.lancadoEm)} do contrato de gestão de ${obG.nome || "obra"} — a ${txtParcela} e as seguintes são recalculadas.` : "")
           + (mudou && l.origem.tipo === "estorno" ? `. A ${txtParcela} do contrato de gestão de ${obG.nome || "obra"} volta a ficar paga — o estorno é desfeito.` : "")
           + (mudou && l.origem.tipo === "conta" ? `. A ${txtParcela} do contrato de gestão de ${obG.nome || "obra"} volta a ficar em aberto.` : ""),
@@ -7064,7 +7068,9 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         + (compraNoCartaoDoEscritorio(l) ? ". A compra sai também das faturas abertas do cartão." : "")
         + (contasJuntas.length ? `. Sai também da obra ${obra.nome || ""}: ${contasJuntas.length === 1 ? "1 conta" : contasJuntas.length + " contas"}`
           + (refs.length ? ` (ref ${refs.join(", ")})` : "") + " — é a mesma transação." : "")
-        + (entradaJunta ? `. Sai também a entrada da obra ${obra.nome || ""} — é a mesma transação.` : ""),
+        + (entradaJunta ? `. Sai também a entrada da obra ${obra.nome || ""} — é a mesma transação.` : "")
+        + (origem.obraId && !contasJuntas.length && !entradaJunta
+          ? `. Atenção: ele aponta para ${obra ? "a obra " + (obra.nome || "") : "uma obra"}, mas a conta de lá não foi encontrada — nada muda na obra; confira lá depois.` : ""),
       confirmar: "Excluir", destrutivo: true,
     });
     if (!ok) return;

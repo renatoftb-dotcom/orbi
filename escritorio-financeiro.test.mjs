@@ -27,7 +27,7 @@ const M = new Function(src + `
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
-           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
+           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
            competenciasDoCartao,
@@ -2634,6 +2634,13 @@ teste("Conferência: sobrou sem linha do banco, mas o gêmeo (mesma conta e valo
   // valor diferente não é gêmeo
   const r2 = M.conciliarExtrato(movs, [ponte, { ...antigo, valor: 500 }], { mes: "2026-08" });
   assert.deepStrictEqual(Object.keys(r2.duplicados), []);
+});
+
+teste("Parcela de gestão: a ponte que guardou o #n de um estorno já desfeito ainda acha a parcela", () => {
+  const obra = { id: "ob", contasPagar: [{ id: "ct:1", contaId: "taxa_admin_obra", pago: true, valor: 10833.33 }] };
+  const l = { id: "p", origem: { obraId: "ob", tipo: "conta", refId: "ct:1#1", contaObra: "taxa_admin_obra" } };
+  assert.strictEqual((M.parcelaDoLancamento(obra, l) || {}).id, "ct:1");
+  assert.strictEqual(M.parcelaDoLancamento(obra, { ...l, origem: { ...l.origem, refId: "ct:2" } }), null);
 });
 
 for (const [nome, fn] of testes) {
