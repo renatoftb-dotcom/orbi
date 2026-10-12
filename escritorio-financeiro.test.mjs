@@ -2375,6 +2375,57 @@ teste("Campo de valor: pontos e vírgula na tela, número limpo no formulário",
   assert.strictEqual(M.valorBRDeFora(-168.49), "-168,49");
 });
 
+teste("Estornos bancários: boleto debitado e estornado se anulam — saldo do dia volta, resultado não muda", () => {
+  const c = M.contaEscritorio("estornos_bancarios");
+  assert.ok(c && M.grupoEscritorio(c.grupo).resultado === false);
+  // o débito entra como saída; o crédito, na mesma conta, como estorno
+  const deb = M.comSinalDeEstorno({ contaId: "estornos_bancarios", valor: "1187,00", sinalDoBanco: -1 });
+  const cred = M.comSinalDeEstorno({ contaId: "estornos_bancarios", valor: "1187,00", sinalDoBanco: 1 });
+  assert.strictEqual(deb.valor, 1187); assert.ok(!deb.estorno);
+  assert.strictEqual(cred.valor, -1187); assert.strictEqual(cred.estorno, true);
+  const base = [{ id: "r", contaId: "rec_projetos", unidadeId: "escritorio", valor: 5000, competencia: "2026-01" }];
+  const sem = M.extratoEscritorio(base, { de: "2026-01", ate: "2026-02" });
+  const com = M.extratoEscritorio(base.concat([
+    { id: "d", contaId: "estornos_bancarios", unidadeId: "escritorio", valor: 1187, competencia: "2026-01" },
+    { id: "e", contaId: "estornos_bancarios", unidadeId: "escritorio", valor: -1187, competencia: "2026-01", estorno: true },
+  ]), { de: "2026-01", ate: "2026-02" });
+  assert.strictEqual(com[0].saldoExtrato, sem[0].saldoExtrato);
+  assert.strictEqual(com[0].saldoEscritorio, sem[0].saldoEscritorio);
+  assert.strictEqual(com[0].ajustes, 0);
+  // estorno que só volta no mês seguinte: o saldo de janeiro fica 1.187 menor, fevereiro volta
+  const atraso = M.extratoEscritorio(base.concat([
+    { id: "d", contaId: "estornos_bancarios", unidadeId: "escritorio", valor: 1187, competencia: "2026-01" },
+    { id: "e", contaId: "estornos_bancarios", unidadeId: "escritorio", valor: -1187, competencia: "2026-02", estorno: true },
+  ]), { de: "2026-01", ate: "2026-02" });
+  assert.strictEqual(atraso[0].saldoExtrato, sem[0].saldoExtrato - 1187);
+  assert.strictEqual(atraso[1].saldoExtrato, sem[1].saldoExtrato);
+  assert.strictEqual(atraso[0].saldoEscritorio, sem[0].saldoEscritorio);
+  // na conferência, cada ponta casa com a sua linha do extrato
+  const movs = [
+    { data: "2026-01-12", valor: -1187, abs: 1187, historico: "DÉB.TIT.COMPE EFETIVADO", documento: "1987703" },
+    { data: "2026-01-12", valor: 1187, abs: 1187, historico: "ESTORNO DÉB.TIT.COMPE EFETIVADO", documento: "1987703" },
+  ];
+  const r = M.conciliarExtrato(movs, [
+    { id: "d", contaId: "estornos_bancarios", unidadeId: "escritorio", valor: 1187, competencia: "2026-01", lancadoEm: "2026-01-12" },
+    { id: "e", contaId: "estornos_bancarios", unidadeId: "escritorio", valor: -1187, estorno: true, competencia: "2026-01", lancadoEm: "2026-01-12" },
+  ]);
+  assert.strictEqual(r.resumo.casados, 2);
+  const lado = (id) => r.casados.find((x) => x.lancamento.id === id).extrato.valor;
+  assert.strictEqual(lado("d"), -1187);
+  assert.strictEqual(lado("e"), 1187);
+});
+
+teste("Obra encerrada: sem cliente e obra do cadastro, mas com o nome escrito", () => {
+  const base = { contaId: "pagamentos_compras", unidadeId: "gestao_obras", valor: -1187, competencia: "2026-01" };
+  const sem = M.validarLancamentoEscritorio(base);
+  assert.ok(sem.includes("Informe o cliente.") && sem.includes("Informe a obra."));
+  const marcado = M.validarLancamentoEscritorio({ ...base, obraEncerrada: true });
+  assert.deepStrictEqual(marcado, ["Escreva o cliente ou a obra antiga."]);
+  assert.deepStrictEqual(M.validarLancamentoEscritorio({ ...base, obraEncerrada: true, cliente: "Residencial Villa Toscana", projeto: "Vila Matilde" }), []);
+  // no escritório a marca não muda nada
+  assert.deepStrictEqual(M.validarLancamentoEscritorio({ contaId: "utensilios", unidadeId: "escritorio", valor: 10, competencia: "2026-01", obraEncerrada: true }), []);
+});
+
 for (const [nome, fn] of testes) {
   try { await fn(); console.log("  ok   " + nome); }
   catch (e) { falhas++; console.log("  FALHOU " + nome + "\n         " + e.message); }
