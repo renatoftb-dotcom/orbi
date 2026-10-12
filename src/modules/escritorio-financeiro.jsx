@@ -3533,6 +3533,24 @@ function efDinheiro(v) {
 // com cada bloco somando só o que é dele.
 function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
   const S = EF_ESTILO;
+  // O quadro rola dentro de uma caixa que termina no pé da janela: a barra
+  // de rolagem para o lado fica sempre à vista (não lá embaixo, depois da
+  // última linha), e os meses no alto e os nomes das contas à esquerda
+  // ficam presos enquanto se rola — como "congelar painéis" no Excel.
+  const caixaRef = useRef(null);
+  const [alturaCaixa, setAlturaCaixa] = useState(0);
+  useEffect(() => {
+    const medir = () => {
+      const g = caixaRef.current;
+      if (!g || typeof window === "undefined") return;
+      const topo = g.getBoundingClientRect().top;
+      const alt = Math.max(280, Math.round(window.innerHeight - Math.max(topo, 0) - 16));
+      setAlturaCaixa((a) => (Math.abs(a - alt) > 2 ? alt : a));
+    };
+    medir();
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  });
   const anos = [...new Set(linhas.map((l) => l.mes.slice(0, 4)))];
   const doAno = linhas.filter((l) => l.mes.startsWith(ano));
   if (!doAno.length) {
@@ -3550,7 +3568,14 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
   const cel = (v) => (!v ? <span style={{ color: "#d1d5db" }}>—</span>
     : <span style={v < 0 ? { color: "#b91c1c" } : undefined}>{efDinheiro(v)}</span>);
   const td = { padding: "7px 12px", textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
-  const tdNome = { ...td, textAlign: "left", position: "sticky", left: 0, background: "#fff", minWidth: 230 };
+  // no celular a coluna dos nomes não pode comer a tela: até 42% da largura,
+  // e o nome comprido quebra a linha em vez de empurrar os meses para fora
+  const tdNome = { ...td, textAlign: "left", position: "sticky", left: 0, background: "#fff", minWidth: "min(230px, 42vw)",
+    maxWidth: "max(230px, 42vw)", whiteSpace: "normal", zIndex: 1,
+    boxShadow: "1px 0 0 rgba(38,36,33,0.10)" };
+  // título dos meses: preso no alto; o canto (preso nos dois sentidos) por cima de tudo
+  const th = { ...td, fontSize: 11, textTransform: "uppercase", letterSpacing: .4, position: "sticky", top: 0, background: "#fff", zIndex: 2,
+    boxShadow: "0 1px 0 rgba(38,36,33,0.12)" };
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
@@ -3559,17 +3584,22 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
           <button key={a} style={S.aba(a === ano)} onClick={() => aoTrocarAno(a)}>{a}</button>
         ))}
       </div>
-      <div style={S.quadro}>
-        <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
+      <div ref={caixaRef} data-vk-extrato-quadro="1" style={{ ...S.quadro, maxHeight: alturaCaixa || "calc(100vh - 140px)", overscrollBehavior: "contain" }}>
+        <style>{`[data-vk-extrato-quadro="1"]::-webkit-scrollbar{width:12px;height:12px}
+[data-vk-extrato-quadro="1"]::-webkit-scrollbar-track{background:#f3f4f6}
+[data-vk-extrato-quadro="1"]::-webkit-scrollbar-thumb{background:#9ca3af;border-radius:8px;border:3px solid #f3f4f6}
+[data-vk-extrato-quadro="1"]::-webkit-scrollbar-thumb:hover{background:#6b7280}`}</style>
+        <table style={{ borderCollapse: "separate", borderSpacing: 0, width: "100%", fontSize: 12.5 }}>
           <thead>
             <tr style={{ color: "#6b7280" }}>
-              <th style={{ ...tdNome, fontSize: 11, textTransform: "uppercase", letterSpacing: .4, borderBottom: "1px solid rgba(38,36,33,0.12)" }}></th>
+              <th style={{ ...th, ...tdNome, fontSize: 11, textTransform: "uppercase", letterSpacing: .4, top: 0, zIndex: 3,
+                boxShadow: "1px 1px 0 rgba(38,36,33,0.12)" }}></th>
               {doAno.map((m) => (
-                <th key={m.mes} style={{ ...td, fontSize: 11, textTransform: "uppercase", letterSpacing: .4, borderBottom: "1px solid rgba(38,36,33,0.12)" }}>
+                <th key={m.mes} style={th}>
                   {EF_MES_CURTO[Number(m.mes.slice(5)) - 1]}
                 </th>
               ))}
-              <th style={{ ...td, fontSize: 11, textTransform: "uppercase", letterSpacing: .4, borderBottom: "1px solid rgba(38,36,33,0.12)" }}>Ano</th>
+              <th style={th}>Ano</th>
             </tr>
           </thead>
           <tbody>

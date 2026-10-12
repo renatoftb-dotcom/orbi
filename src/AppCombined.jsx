@@ -13358,6 +13358,24 @@ function efDinheiro(v) {
 // com cada bloco somando só o que é dele.
 function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
   const S = EF_ESTILO;
+  // O quadro rola dentro de uma caixa que termina no pé da janela: a barra
+  // de rolagem para o lado fica sempre à vista (não lá embaixo, depois da
+  // última linha), e os meses no alto e os nomes das contas à esquerda
+  // ficam presos enquanto se rola — como "congelar painéis" no Excel.
+  const caixaRef = useRef(null);
+  const [alturaCaixa, setAlturaCaixa] = useState(0);
+  useEffect(() => {
+    const medir = () => {
+      const g = caixaRef.current;
+      if (!g || typeof window === "undefined") return;
+      const topo = g.getBoundingClientRect().top;
+      const alt = Math.max(280, Math.round(window.innerHeight - Math.max(topo, 0) - 16));
+      setAlturaCaixa((a) => (Math.abs(a - alt) > 2 ? alt : a));
+    };
+    medir();
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  });
   const anos = [...new Set(linhas.map((l) => l.mes.slice(0, 4)))];
   const doAno = linhas.filter((l) => l.mes.startsWith(ano));
   if (!doAno.length) {
@@ -13375,7 +13393,14 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
   const cel = (v) => (!v ? <span style={{ color: "#d1d5db" }}>—</span>
     : <span style={v < 0 ? { color: "#b91c1c" } : undefined}>{efDinheiro(v)}</span>);
   const td = { padding: "7px 12px", textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
-  const tdNome = { ...td, textAlign: "left", position: "sticky", left: 0, background: "#fff", minWidth: 230 };
+  // no celular a coluna dos nomes não pode comer a tela: até 42% da largura,
+  // e o nome comprido quebra a linha em vez de empurrar os meses para fora
+  const tdNome = { ...td, textAlign: "left", position: "sticky", left: 0, background: "#fff", minWidth: "min(230px, 42vw)",
+    maxWidth: "max(230px, 42vw)", whiteSpace: "normal", zIndex: 1,
+    boxShadow: "1px 0 0 rgba(38,36,33,0.10)" };
+  // título dos meses: preso no alto; o canto (preso nos dois sentidos) por cima de tudo
+  const th = { ...td, fontSize: 11, textTransform: "uppercase", letterSpacing: .4, position: "sticky", top: 0, background: "#fff", zIndex: 2,
+    boxShadow: "0 1px 0 rgba(38,36,33,0.12)" };
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
@@ -13384,17 +13409,22 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
           <button key={a} style={S.aba(a === ano)} onClick={() => aoTrocarAno(a)}>{a}</button>
         ))}
       </div>
-      <div style={S.quadro}>
-        <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
+      <div ref={caixaRef} data-vk-extrato-quadro="1" style={{ ...S.quadro, maxHeight: alturaCaixa || "calc(100vh - 140px)", overscrollBehavior: "contain" }}>
+        <style>{`[data-vk-extrato-quadro="1"]::-webkit-scrollbar{width:12px;height:12px}
+[data-vk-extrato-quadro="1"]::-webkit-scrollbar-track{background:#f3f4f6}
+[data-vk-extrato-quadro="1"]::-webkit-scrollbar-thumb{background:#9ca3af;border-radius:8px;border:3px solid #f3f4f6}
+[data-vk-extrato-quadro="1"]::-webkit-scrollbar-thumb:hover{background:#6b7280}`}</style>
+        <table style={{ borderCollapse: "separate", borderSpacing: 0, width: "100%", fontSize: 12.5 }}>
           <thead>
             <tr style={{ color: "#6b7280" }}>
-              <th style={{ ...tdNome, fontSize: 11, textTransform: "uppercase", letterSpacing: .4, borderBottom: "1px solid rgba(38,36,33,0.12)" }}></th>
+              <th style={{ ...th, ...tdNome, fontSize: 11, textTransform: "uppercase", letterSpacing: .4, top: 0, zIndex: 3,
+                boxShadow: "1px 1px 0 rgba(38,36,33,0.12)" }}></th>
               {doAno.map((m) => (
-                <th key={m.mes} style={{ ...td, fontSize: 11, textTransform: "uppercase", letterSpacing: .4, borderBottom: "1px solid rgba(38,36,33,0.12)" }}>
+                <th key={m.mes} style={th}>
                   {EF_MES_CURTO[Number(m.mes.slice(5)) - 1]}
                 </th>
               ))}
-              <th style={{ ...td, fontSize: 11, textTransform: "uppercase", letterSpacing: .4, borderBottom: "1px solid rgba(38,36,33,0.12)" }}>Ano</th>
+              <th style={th}>Ano</th>
             </tr>
           </thead>
           <tbody>
@@ -30666,6 +30696,21 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   const comAcoes = !!(acoes && (acoes.editar || acoes.excluir || acoes.verPapel));
   const grade = COLS.map((c) => c.px + "px").join(" ") + (comAcoes ? " 132px" : "");
   const largura = COLS.reduce((t, c) => t + c.px, 0) + (comAcoes ? 142 : 0) + COLS.length * 10 + 24;
+  // Os títulos da linha ficam presos à esquerda ao rolar para o lado, como
+  // o "congelar painéis" do Excel: a referência e, no escritório, o cliente.
+  // Cada coluna presa cobre também o respiro à esquerda dela (o padding da
+  // linha ou o vão da grade), senão o texto das outras aparece por baixo.
+  const FIXAS = ["Ref", "Nome Cliente"];
+  const fixas = [];
+  for (const c of COLS) { if (FIXAS.indexOf(c.titulo) < 0) break; fixas.push(c); }
+  const estiloFixa = (k, fundo) => {
+    if (k >= fixas.length) return null;
+    let esquerda = 0;
+    for (let i = 0; i < k; i++) esquerda += (i === 0 ? 12 : 10) + fixas[i].px;
+    const respiro = k === 0 ? 12 : 10;
+    return { position: "sticky", left: esquerda, zIndex: 1, background: fundo, marginLeft: -respiro, paddingLeft: respiro,
+      boxShadow: k === fixas.length - 1 ? "1px 0 0 rgba(38,36,33,0.10)" : undefined };
+  };
   // os botões da transação (no escritório): ver o papel, editar, excluir
   const botoesDaLinha = (l) => {
     const lanc = l.lanc_;
@@ -30866,16 +30911,19 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
 [data-vk-base-grade="1"]::-webkit-scrollbar-track{background:#f3f4f6;border-radius:0 0 12px 12px}
 [data-vk-base-grade="1"]::-webkit-scrollbar-thumb{background:#9ca3af;border-radius:8px;border:3px solid #f3f4f6}
 [data-vk-base-grade="1"]::-webkit-scrollbar-thumb:hover{background:#6b7280}
-[data-vk-base-linha="1"]:hover{background:#f3f7fd}`}</style>
+[data-vk-base-linha="1"]:hover{background:#f3f7fd}
+[data-vk-base-linha="1"]:hover>[data-vk-base-fixa="1"]{background:#f3f7fd !important}
+[data-vk-base-linha="1"][aria-selected="true"]>[data-vk-base-fixa="1"]{background:#dbeafe !important}`}</style>
           <div style={{ minWidth: largura }}>
             <div style={{ display: "grid", gridTemplateColumns: grade, gap: 10, padding: "8px 12px", borderBottom: "1px solid rgba(38,36,33,0.1)",
               fontSize: 10.5, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.3, position: "sticky", top: 0, background: "#fff", zIndex: 2,
               boxShadow: "0 1px 0 rgba(38,36,33,0.1)" }}>
-              {COLS.map((c) => {
+              {COLS.map((c, k) => {
                 const ativo = !!colFiltros[c.titulo] || (ordemCol && ordemCol.titulo === c.titulo);
                 const al = alinhamentoDaCelula(c);
+                const fixa = estiloFixa(k, "#fff");
                 return (
-                  <button key={c.titulo} type="button" title={"Filtrar ou ordenar por " + c.titulo}
+                  <button key={c.titulo} type="button" title={"Filtrar ou ordenar por " + c.titulo} data-vk-base-fixa={fixa ? "1" : undefined}
                     onClick={(e) => {
                       if (menuCol && menuCol.titulo === c.titulo) { setMenuCol(null); return; }
                       const r = e.currentTarget.getBoundingClientRect();
@@ -30885,7 +30933,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
                     }}
                     style={{ all: "unset", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, minWidth: 0,
                       justifyContent: al === "center" ? "center" : al === "right" ? "flex-end" : "flex-start",
-                      color: ativo ? "#0474f4" : undefined, fontFamily: "inherit" }}>
+                      color: ativo ? "#0474f4" : undefined, fontFamily: "inherit", ...(fixa || {}), ...(fixa ? { zIndex: 3, alignSelf: "stretch" } : {}) }}>
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.titulo}</span>
                     <span style={{ fontSize: 9, flexShrink: 0 }}>
                       {ordemCol && ordemCol.titulo === c.titulo ? (ordemCol.dir > 0 ? "▲" : "▼") : ""}{colFiltros[c.titulo] ? "⏷" : "▾"}
@@ -30901,14 +30949,16 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
                 style={{ display: "grid", gridTemplateColumns: grade, gap: 10, padding: "7px 12px", borderBottom: "1px solid rgba(38,36,33,0.05)",
                   fontSize: 12, color: "#374151", alignItems: "baseline", cursor: "pointer",
                   background: linhaMarcada === l.id ? "#dbeafe" : undefined }}>
-                {COLS.map((c) => {
+                {COLS.map((c, k) => {
                   const t = textoDaCelula(celulasDe[i][c.j], c);
                   const destaque = c.titulo === "Valor" || (doEscritorio && c.titulo === "Valor total nota");
+                  const fixa = estiloFixa(k, linhaMarcada === l.id ? "#dbeafe" : "#fff");
                   return (
-                    <span key={c.titulo} title={t.length > 12 ? t : undefined}
+                    <span key={c.titulo} title={t.length > 12 ? t : undefined} data-vk-base-fixa={fixa ? "1" : undefined}
                       style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                         textAlign: alinhamentoDaCelula(c), fontVariantNumeric: "tabular-nums",
-                        color: destaque ? (doEscritorio && l.sinal > 0 ? "#047857" : "#111827") : undefined, fontWeight: destaque ? 600 : 400 }}>
+                        color: destaque ? (doEscritorio && l.sinal > 0 ? "#047857" : "#111827") : undefined, fontWeight: destaque ? 600 : 400,
+                        ...(fixa || {}), ...(fixa ? { alignSelf: "stretch", paddingTop: 7, paddingBottom: 7, marginTop: -7, marginBottom: -7 } : {}) }}>
                       {t}
                     </span>
                   );
