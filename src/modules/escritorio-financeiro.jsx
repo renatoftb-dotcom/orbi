@@ -5458,7 +5458,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
   );
 }
 
-function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcarCasados, aoConfirmarPar, aoDescartar, ocupado, fila }) {
+function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcarCasados, aoConfirmarPar, aoDescartar, aoExcluir, ocupado, fila }) {
   const S = EF_ESTILO;
   const [escolha, setEscolha] = useState({});
   if (!resultado) return null;
@@ -5570,26 +5570,31 @@ function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcar
       {resultado.contabilizadoSemPar.length > 0 && (
         <div style={{ display: "grid", gap: 6 }}>
           <div style={{ fontSize: 13, fontWeight: 700 }}>Contabilizado e não apareceu no extrato</div>
-          <div style={S.quadro}>
-            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
-              <tbody>
-                {resultado.contabilizadoSemPar.map((l) => (
-                  <tr key={l.id} style={{ borderTop: "1px solid rgba(38,36,33,0.06)" }}>
-                    <td style={{ padding: "7px 12px", color: "#6b7280", whiteSpace: "nowrap" }}>
-                      {(contaEscritorio(l.contaId) || {}).nome || "—"}
-                    </td>
-                    <td style={{ padding: "7px 12px" }}>{l.descricao || l.fornecedor || "—"}</td>
-                    <td style={{ padding: "7px 12px", color: "#6b7280" }}>{[l.cliente, l.projeto].filter(Boolean).join(" · ")}</td>
-                    <td style={{ padding: "7px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                      {efValorDoLancamento(l)}
-                    </td>
-                    <td style={{ padding: "5px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
-                      <button style={S.btnSec} onClick={() => aoDescartar(l)}>Não passou pela conta</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* Uma linha por lançamento que quebra no celular: o que é (conta,
+              descrição, cliente) em cima, valor e ações embaixo — a tabela
+              larga escondia, no celular, justamente qual era o lançamento. */}
+          <div style={{ ...S.quadro, overflow: "visible" }}>
+            {resultado.contabilizadoSemPar.map((l, i) => (
+              <div key={l.id} data-vk-sem-par style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 12px",
+                padding: "8px 12px", borderTop: i ? "1px solid rgba(38,36,33,0.06)" : "none", fontSize: 12.5 }}>
+                <div style={{ flex: "1 1 260px", minWidth: 0, display: "flex", flexWrap: "wrap", gap: "2px 12px" }}>
+                  <span style={{ color: "#6b7280", minWidth: 130 }}>{(contaEscritorio(l.contaId) || {}).nome || "—"}</span>
+                  <span style={{ flex: "1 1 160px", minWidth: 0 }}>{l.descricao || l.fornecedor || "—"}</span>
+                  <span style={{ color: "#6b7280", flex: "1 1 160px", minWidth: 0 }}>{[l.cliente, l.projeto].filter(Boolean).join(" · ")}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <span style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", marginRight: 6 }}>{efValorDoLancamento(l)}</span>
+                  <button style={S.btnSec} onClick={() => aoDescartar(l)}>Não passou pela conta</button>
+                  {/* Lançado por engano: sai da base ali mesmo. A exclusão é a
+                      mesma da Base de dados — trava de mês fechado, a conta da
+                      obra que é a mesma transação sai junto, e pede confirmação. */}
+                  {aoExcluir && (
+                    <button data-vk-excluir-sem-par style={{ ...S.btnSec, color: "#b91c1c" }} disabled={!!ocupado}
+                      onClick={() => aoExcluir(l)}>Excluir</button>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
           <div style={{ fontSize: 11.5, color: "#6b7280" }}>
             Pode ser compra parcelada a vencer, pagamento agendado ou algo que não passa pela conta do escritório.
@@ -5916,7 +5921,7 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
         <ConferenciaComExtrato
           resultado={extrato.resultado} mapa={extrato.mapa} aoCorrigir={extrato.corrigir}
           aoLancar={extrato.lancar} aoMarcarCasados={extrato.marcarCasados} aoConfirmarPar={extrato.confirmarPar}
-          aoDescartar={extrato.descartar} ocupado={ocupado} fila={extrato.fila} />
+          aoDescartar={extrato.descartar} aoExcluir={extrato.excluir} ocupado={ocupado} fila={extrato.fila} />
       )}
 
       <div style={{ ...S.card, display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", fontSize: 12.5, color: "#4b5563" }}>
@@ -7235,7 +7240,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             arrastando: arrastandoExtrato, setArrastando: setArrastandoExtrato,
             origem: origemExtrato, entrada: entradaExtrato, receber: receberExtrato,
             mapa: mapaExtrato, corrigir: corrigirColuna, resultado: conciliacao,
-            lancar: lancarDoExtrato, marcarCasados: marcarCasadosDoExtrato, confirmarPar: confirmarParDoExtrato, descartar: marcarForaDoBanco,
+            lancar: lancarDoExtrato, marcarCasados: marcarCasadosDoExtrato, confirmarPar: confirmarParDoExtrato, descartar: marcarForaDoBanco, excluir: perm.podeExcluir ? excluirLancamento : null,
             guardado: !arquivoServe && guardadoDoMes ? guardadoDoMes : null,
             saldoLido: saldoLidoDoExtrato,
             checagem: movimentosExtrato ? checagemDebitoCredito(movimentosExtrato, lancs, mesEmConferencia) : null,
