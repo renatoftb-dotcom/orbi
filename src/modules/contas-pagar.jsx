@@ -4141,6 +4141,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   const [menuCol, setMenuCol] = useState(null); // { titulo, x, y, busca, marcados }
   // a caixa da grade vai até o pé da janela, para a barra lateral aparecer
   const gradeRef = useRef(null);
+  if (typeof useArrastarParaRolar === "function") useArrastarParaRolar(gradeRef);
   const [alturaGrade, setAlturaGrade] = useState(0);
   useEffect(() => {
     const medir = () => {

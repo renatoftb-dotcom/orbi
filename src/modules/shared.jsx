@@ -2688,6 +2688,68 @@ function Selecao(props) {
 // O painel é position:fixed, medido a partir do botão, pela mesma razão do
 // SelectBusca: dentro de uma tabela com overflow, um painel absoluto seria
 // cortado pela borda do card.
+// ── Arrastar a tabela com o mouse ───────────────────────────────
+// Clicar e arrastar rola a caixa para os lados e para cima/baixo, como a
+// "mãozinha" de um PDF. Cuidados para não atrapalhar o resto:
+//   · só mouse — no celular o dedo já rola sozinho;
+//   · só começa depois de 6px de movimento: clique parado continua clique
+//     (abrir linha, ordenar coluna);
+//   · não começa em botão, link, campo, caixa de marcar ou menu;
+//   · o clique que encerra um arraste é engolido (não abre nada sem querer);
+//   · para SELECIONAR texto (copiar um valor), segure Alt enquanto arrasta —
+//     ou dê dois cliques na palavra.
+function useArrastarParaRolar(ref) {
+  // liga uma vez por elemento: re-render no meio do arraste não perde o gesto
+  const estado = useRef({ el: null, soltar: null });
+  useEffect(() => () => { if (estado.current.soltar) estado.current.soltar(); }, []);
+  useEffect(() => {
+    const el = (ref && ref.current) || null;
+    if (estado.current.el === el) return;
+    if (estado.current.soltar) estado.current.soltar();
+    estado.current = { el, soltar: null };
+    if (!el || typeof window === "undefined") return;
+    let ini = null, arrastando = false, fim = 0;
+    const interativo = (t) => !!(t && t.closest && t.closest("button, a, input, select, textarea, label, [role=button], [contenteditable=true], [data-vk-sem-arraste]"));
+    const down = (e) => {
+      if (e.button !== 0 || e.pointerType === "touch" || e.pointerType === "pen" || e.altKey || interativo(e.target)) return;
+      ini = { x: e.clientX, y: e.clientY, l: el.scrollLeft, t: el.scrollTop }; arrastando = false;
+    };
+    const move = (e) => {
+      if (!ini) return;
+      const dx = e.clientX - ini.x, dy = e.clientY - ini.y;
+      if (!arrastando) {
+        if (Math.abs(dx) + Math.abs(dy) < 6) return;
+        arrastando = true;
+        el.style.cursor = "grabbing"; el.style.userSelect = "none";
+        try { window.getSelection().removeAllRanges(); } catch (_) { /* nada */ }
+      }
+      el.scrollLeft = ini.l - dx; el.scrollTop = ini.t - dy;
+      e.preventDefault();
+    };
+    const up = () => {
+      if (!ini) return;
+      ini = null;
+      if (arrastando) { fim = Date.now(); arrastando = false; }
+      el.style.cursor = "grab"; el.style.userSelect = "";
+    };
+    const clique = (e) => { if (Date.now() - fim < 250) { e.stopPropagation(); e.preventDefault(); } };
+    el.style.cursor = "grab";
+    el.addEventListener("pointerdown", down);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    el.addEventListener("click", clique, true);
+    estado.current.soltar = () => {
+      el.style.cursor = "";
+      el.removeEventListener("pointerdown", down);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      el.removeEventListener("click", clique, true);
+    };
+  });
+}
+
 function MenuDeAcoes(props) {
   const itens = (props.itens || []).filter(Boolean);
   // No celular o dedo precisa de alvo: o botao e cada linha do menu passam

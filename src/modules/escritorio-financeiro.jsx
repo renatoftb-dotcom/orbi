@@ -3999,6 +3999,7 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos }) {
   // última linha), e os meses no alto e os nomes das contas à esquerda
   // ficam presos enquanto se rola — como "congelar painéis" no Excel.
   const caixaRef = useRef(null);
+  if (typeof useArrastarParaRolar === "function") useArrastarParaRolar(caixaRef);
   const [alturaCaixa, setAlturaCaixa] = useState(0);
   useEffect(() => {
     const medir = () => {
