@@ -2643,6 +2643,28 @@ teste("Parcela de gestão: a ponte que guardou o #n de um estorno já desfeito a
   assert.strictEqual(M.parcelaDoLancamento(obra, { ...l, origem: { ...l.origem, refId: "ct:2" } }), null);
 });
 
+teste("Conferência: saída que sobrou com entrada do mesmo valor sem lançamento no banco — sinal invertido (reembolso)", () => {
+  const movs = [{ id: "d", data: "2026-08-11", valor: -57.47, historico: "DÉB.CONV.PREFEITURA" },
+    { id: "c", data: "2026-08-11", valor: 57.47, historico: "PIX RECEBIDO - OUTRA IF · Recebimento Pix DAYANE GIACON SALARO" }];
+  const pago = { id: "a", contaId: "pagamentos_compras", unidadeId: "gestao_obras", valor: 57.47, competencia: "2026-08", lancadoEm: "2026-08-11", contaBanco: "sim" };
+  const errado = { id: "b", contaId: "pagamentos_compras", unidadeId: "projetos", valor: 57.47, competencia: "2026-08", lancadoEm: "2026-08-23", contaBanco: "sim" };
+  const r = M.conciliarExtrato(movs, [pago, errado], { mes: "2026-08" });
+  assert.deepStrictEqual(r.contabilizadoSemPar.map((l) => l.id), ["b"]);
+  assert.strictEqual(r.invertidos.b.extrato.id, "c");
+  assert.strictEqual(r.duplicados.b.lancamento.id, "a");      // também tem gêmeo — a tela mostra o invertido
+});
+teste("Já está na obra: a planilha da obra registra semanas depois do banco (até 45 dias à frente)", () => {
+  const cli = { id: "e1", nome: "Jacarezinho Módulo 1", servicos: { empreendimento: true } };
+  const obra = { id: "ob1", nome: "Jacarezinho Módulo 1", clienteId: "e1", contasPagar: [
+    { id: "k", contaId: "frete", descricao: "Pedágio rodovia obra", valor: 12.8, valorPago: 12.8, pago: true, pagoEm: "2026-09-22", numeroDoc: "0098" }] };
+  const plano = PLANO_OBRA_T.concat([]);
+  const m = { id: "x", data: "2026-08-28", valor: -12.8, historico: "PIX EMITIDO OUTRA IF · Pagamento Pix 51.137.031 0001-20" };
+  const sug = M.contaDaObraParaALinha(m, [], { obras: [obra], clientes: [cli], planoObra: plano });
+  assert.ok(sug && sug.contas[0].id === "k");
+  // 25 dias ANTES do banco já não serve
+  assert.strictEqual(M.contaDaObraParaALinha({ ...m, data: "2026-10-17" }, [], { obras: [obra], clientes: [cli], planoObra: plano }), null);
+});
+
 for (const [nome, fn] of testes) {
   try { await fn(); console.log("  ok   " + nome); }
   catch (e) { falhas++; console.log("  FALHOU " + nome + "\n         " + e.message); }

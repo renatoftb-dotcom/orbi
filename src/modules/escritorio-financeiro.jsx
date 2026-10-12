@@ -2260,9 +2260,20 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
       && Math.round(Math.abs(Number(c.lancamento.valor) || 0) * 100) === v);
     if (gemeo) duplicados[l.id] = { lancamento: gemeo.lancamento, extrato: gemeo.extrato };
   }
+  // Sinal invertido: sobrou uma SAÍDA e o banco tem uma ENTRADA do mesmo valor
+  // ainda sem lançamento (ou o contrário) — o reembolso lançado como pagamento.
+  const invertidos = {};
+  for (const l of contabilizadoSemPar) {
+    const v = Math.round(Math.abs(Number(l && l.valor) || 0) * 100);
+    const c = contaEscritorio(l && l.contaId); const g = c && grupoEscritorio(c.grupo);
+    if (!g) continue;
+    const lado = (g.sinal < 0 ? -1 : 1) * ((Number(l.valor) || 0) < 0 ? -1 : 1);
+    const oposta = noBancoSemPar.find((m) => Math.round(Math.abs(Number(m.valor) || 0) * 100) === v && (Number(m.valor) < 0 ? -1 : 1) === -lado);
+    if (oposta) invertidos[l.id] = { extrato: oposta };
+  }
   const soma = (lista, f) => Math.round(lista.reduce((s, x) => s + Math.abs(Number(f(x)) || 0), 0) * 100) / 100;
   return {
-    casados, noBancoSemPar, contabilizadoSemPar, foraDoBanco, naoLancar, duplicados,
+    casados, noBancoSemPar, contabilizadoSemPar, foraDoBanco, naoLancar, duplicados, invertidos,
     resumo: {
       movimentos: doBanco.length,
       lancamentos: candidatos.length,
@@ -3805,14 +3816,18 @@ function efPalavrasDaLinha(t) { return new Set(efSemAcento(t).split(/[^a-z0-9]+/
 function contasIguaisNaObra(obra, valor, dia, lancamentos, janela) {
   const ob = obra || {};
   const v = efCentavos(Math.abs(Number(valor) || 0));
-  const lim = janela == null ? 20 : janela;
+  // a planilha da obra costuma registrar semanas DEPOIS do banco (a data é a
+  // do lançamento, não a do pagamento): aceita até `depois` dias à frente e
+  // `antes` dias para trás
+  const j = typeof janela === "object" && janela ? janela : { antes: janela == null ? 20 : janela, depois: janela == null ? 45 : janela };
   const achadas = [];
   const fontes = fontesDasContasPagas((ob.contasPagar || []).filter((c) => c && !c.estorno
     && !(c.formaPagamento === "cartao" || c.cartaoId) && !Array.isArray(c.movimentos)));
   for (const fonte of fontes) {
     if (Math.abs(efCentavos(fonte.valor) - v) >= 0.01) continue;
     const dias = efDias(fonte.data, dia);
-    if (!(dias <= lim)) continue;
+    const depois = String(fonte.data || "").slice(0, 10) >= String(dia || "").slice(0, 10);
+    if (!(dias <= (depois ? j.depois : j.antes))) continue;
     const contas = contasLigadasAoLancamento(ob, { origem: { obraId: ob.id, tipo: fonte.tipo, refId: fonte.refId } });
     if (!contas.length) continue;
     const id = idDaPonte(ob.id, fonte.tipo, fonte.refId);
@@ -3832,7 +3847,7 @@ function contaDaObraParaALinha(movimento, lancamentos, ctx) {
     if (!ob) continue;
     const cli = (c.clientes || []).find((x) => x && x.id === ob.clienteId) || null;
     const modo = modoDaPonte(ob, cli);
-    for (const a of contasIguaisNaObra(ob, m.valor, m.data, lancamentos, 20)) {
+    for (const a of contasIguaisNaObra(ob, m.valor, m.data, lancamentos, { antes: 20, depois: 45 })) {
       if (!destinoNoEscritorio(a.fonte.contaId, modo, c)) continue;   // não passa pelo escritório
       const desc = efPalavrasDaLinha(a.fonte.descricao + " " + (a.fonte.fornecedor || "") + " " + (ob.nome || ""));
       let texto = 0; for (const w of desc) if (hist.has(w)) texto++;
@@ -4442,7 +4457,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   // ligar (na fila do extrato, "Ligar à obra"); lançar de novo só marcando
   // que é outro pagamento.
   const iguaisNaObra = (lancNovo && naObra && !estornoNaObra && obraAlvo && efValorDoCampo(f.valor) > 0 && f.lancadoEm)
-    ? contasIguaisNaObra(obraAlvo, efValorDoCampo(f.valor), f.lancadoEm, lancamentos || [], 20) : [];
+    ? contasIguaisNaObra(obraAlvo, efValorDoCampo(f.valor), f.lancadoEm, lancamentos || [], { antes: 20, depois: 45 }) : [];
   const errosDobro = iguaisNaObra.length && !outroPagamento
     ? ["Já existe essa conta paga na obra — marque “é outro pagamento” para lançar de novo."] : [];
   const todosErros = erros.concat(errosCartao).concat(errosGestao).concat(errosDuasPontas).concat(errosDobro);
@@ -5796,7 +5811,18 @@ function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcar
                   <span style={{ color: "#6b7280", minWidth: 130 }}>{(contaEscritorio(l.contaId) || {}).nome || "—"}</span>
                   <span style={{ flex: "1 1 160px", minWidth: 0 }}>{l.descricao || l.fornecedor || "—"}</span>
                   <span style={{ color: "#6b7280", flex: "1 1 160px", minWidth: 0 }}>{[l.cliente, l.projeto].filter(Boolean).join(" · ")}</span>
-                  {(resultado.duplicados || {})[l.id] && (() => {
+                  {(resultado.invertidos || {})[l.id] && (() => {
+                    const m = resultado.invertidos[l.id].extrato;
+                    const entrada = Number(m.valor) > 0;
+                    return (
+                      <span data-vk-invertido style={{ flexBasis: "100%", fontSize: 11.5, color: "#b45309" }}>
+                        ⚠ sinal invertido? O banco tem uma {entrada ? "entrada" : "saída"} do mesmo valor em {String(m.data || "").slice(0, 10).split("-").reverse().join("/")} ainda
+                        sem lançamento ({String(m.historico || "").slice(0, 70)}). Se for {entrada ? "o reembolso deste pagamento" : "o pagamento desta entrada"}, edite
+                        este lançamento para {entrada ? "uma conta de entrada (Reembolsos)" : "uma conta de saída"} — não exclua.
+                      </span>
+                    );
+                  })()}
+                  {(resultado.duplicados || {})[l.id] && !(resultado.invertidos || {})[l.id] && (() => {
                     const g = resultado.duplicados[l.id];
                     const d = (x) => String(x || "").slice(0, 10).split("-").reverse().join("/");
                     const ligado = !!(g.lancamento.origem && g.lancamento.origem.obraId);
