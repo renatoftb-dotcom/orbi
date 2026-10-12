@@ -27,7 +27,7 @@ const M = new Function(src + `
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
-           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
+           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
            competenciasDoCartao,
@@ -2587,6 +2587,38 @@ teste("Duas pontas: estorno de original da base antiga acha a conta na obra e li
   const copia = { campos: { contaId: "emp_taxas", unidadeId: "empreendimento", clienteId: "e1", empreendimentoId: "e1" } };
   assert.ok(/obra no VICKE/.test(M.lancamentoRapidoDoExtrato(linha, "2026-04", copia, {}, [obra]).erro || ""));
   assert.ok(!/obra no VICKE/.test(M.lancamentoRapidoDoExtrato(linha, "2026-04", copia, {}, []).erro || ""));
+});
+
+teste("Já está na obra: linha do banco acha a conta paga na obra sem lançamento no escritório e liga (sem lançar de novo)", () => {
+  const cli = { id: "e1", nome: "Jacarezinho Módulo 1", servicos: { empreendimento: true } };
+  const obra = { id: "ob1", nome: "Jacarezinho Módulo 1", clienteId: "e1", contasPagar: [
+    { id: "k1", contaId: "empreiteiro", etapa: "fundacao", descricao: "Pintura formas metálicas", favorecido: "Paulo Serralheiro",
+      valor: 1500, valorPago: 1500, pago: true, pagoEm: "2026-07-27", numeroDoc: "0059", doc: "4109" },
+    { id: "k2", contaId: "empreiteiro", descricao: "Limpeza mato", valor: 1500, valorPago: 1500, pago: true, pagoEm: "2026-09-24", numeroDoc: "0151" }] };
+  const ligado = { id: "l2", contaId: "emp_construcao", valor: 1500, origem: { obraId: "ob1", tipo: "conta", refId: "k2" } };
+  const m = { id: "x", data: "2026-07-21", valor: -1500, historico: "PIX EMITIDO OUTRA IF · Pagamento Pix ***.469.198-** pintura formas metalicas Jacarezinho" };
+  const ctx = { obras: [obra], clientes: [cli], planoObra: PLANO_OBRA_T };
+  const sug = M.contaDaObraParaALinha(m, [ligado], ctx);
+  assert.ok(sug && sug.jaNaObra); assert.deepStrictEqual(sug.contas.map((c) => c.id), ["k1"]);
+  assert.match(sug.motivos[0], /já está na obra Jacarezinho Módulo 1: Pintura formas metálicas · Paulo Serralheiro · paga em 27\/07\/2026/);
+  const r = M.lancamentoDaLigacaoComObra(m, "2026-07", sug, {}, [ligado]);
+  assert.ok(r.lancamento, r.erro);
+  assert.strictEqual(r.lancamento.id, "ponte:ob1:conta:k1");
+  assert.deepStrictEqual([r.lancamento.contaId, r.lancamento.unidadeId, r.lancamento.valor, r.lancamento.competencia, r.lancamento.lancadoEm, r.lancamento.numeroDoc],
+    ["emp_construcao", "empreendimento", 1500, "2026-07", "2026-07-21", "0059"]);
+  assert.deepStrictEqual(r.lancamento.ligarObra, { obraId: "ob1", contaIds: ["k1"] });
+  assert.strictEqual(r.lancamento.extratoId, "x");
+  // já ligada: some da sugestão
+  assert.strictEqual(M.contaDaObraParaALinha(m, [ligado, r.lancamento], ctx), null);
+  // longe da data (mais de 20 dias) não é a mesma
+  assert.strictEqual(M.contaDaObraParaALinha({ ...m, data: "2026-06-01" }, [ligado], ctx), null);
+  // entrada no banco não procura custo
+  assert.strictEqual(M.contaDaObraParaALinha({ ...m, valor: 1500 }, [ligado], ctx), null);
+  // dois iguais sem pista no histórico: não escolhe
+  const dois = { ...obra, contasPagar: [obra.contasPagar[0], { ...obra.contasPagar[0], id: "k3", descricao: "Outro serviço", favorecido: "" }] };
+  assert.strictEqual(M.contaDaObraParaALinha({ ...m, historico: "PIX EMITIDO" }, [], { ...ctx, obras: [dois] }), null);
+  // o formulário usa a mesma busca para travar o custo em dobro
+  assert.strictEqual(M.contasIguaisNaObra(obra, 1500, "2026-07-21", [ligado], 20).length, 1);
 });
 
 for (const [nome, fn] of testes) {
