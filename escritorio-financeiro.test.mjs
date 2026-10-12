@@ -27,7 +27,7 @@ const M = new Function(src + `
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
-           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
+           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
            competenciasDoCartao,
@@ -2556,6 +2556,37 @@ teste("Estorno de custo de obra: volta para a obra, mesma conta e etapa", () => 
   assert.ok(pronto.lancamento, pronto.erro);
   assert.strictEqual(pronto.lancamento.naObra, true); assert.strictEqual(pronto.lancamento.estornoNaObra, true);
   assert.strictEqual(pronto.lancamento.itens[0].etapa, "pre_obra"); assert.strictEqual(pronto.lancamento.valor, 298.1);
+});
+
+teste("Duas pontas: estorno de original da base antiga acha a conta na obra e liga; sem a conta, não estorna só de um lado", () => {
+  const obra = { id: "ob1", nome: "Jacarezinho Módulo 1", clienteId: "e1",
+    contasPagar: [{ id: "k1", contaId: "outras_taxas", etapa: "pre_obra", valor: 662.97, valorPago: 662.97, pago: true, pagoEm: "2026-03-06", doc: "4039", descricao: "IPTU 2026" }] };
+  const cli = { id: "e1", nome: "Jacarezinho Módulo 1", servicos: { empreendimento: true } };
+  const orig = { id: "o1", contaId: "emp_taxas", unidadeId: "empreendimento", clienteId: "e1", empreendimentoId: "e1", valor: 662.97,
+    lancadoEm: "2026-03-06", documento: "4039", descricao: "IPTU 2026", fornecedor: "Prefeitura" };
+  const est = { id: "x", data: "2026-03-10", valor: 662.97, historico: "ESTORNO PIX EMITIDO · Estorno Pix 76.966.860/0001-46" };
+  const sug = M.sugestaoDeEstorno(est, [orig], { obras: [obra], clientes: [cli] });
+  assert.strictEqual(sug.naObra, true); assert.ok(!sug.bloqueio);
+  assert.deepStrictEqual(sug.campos.ligarOriginal, { id: "o1", origem: { obraId: "ob1", tipo: "conta", refId: "k1", contaObra: "outras_taxas" } });
+  const pronto = M.lancamentoDoEstornoDoExtrato(est, "2026-03", sug, {});
+  assert.ok(pronto.lancamento && pronto.lancamento.estornoNaObra && pronto.lancamento.ligarOriginal);
+  // a conta já é de outro lançamento: não serve
+  const outro = { id: "o2", contaId: "emp_taxas", valor: 662.97, origem: { obraId: "ob1", tipo: "conta", refId: "k1" } };
+  assert.strictEqual(M.contasDaObraSemLigacao(orig, [obra], [orig, outro]).length, 0);
+  // a obra existe mas não tem a conta: bloqueia o estorno rápido e abre no caminho da obra
+  const vazia = { ...obra, contasPagar: [] };
+  const sug2 = M.sugestaoDeEstorno(est, [orig], { obras: [vazia], clientes: [cli] });
+  assert.ok(sug2.bloqueio && /só no escritório/.test(sug2.bloqueio));
+  assert.deepStrictEqual([sug2.campos.contaFonte, sug2.campos.obraIdAlvo, sug2.campos.unidadeId], ["obra", "ob1", "empreendimento"]);
+  assert.ok(M.lancamentoDoEstornoDoExtrato(est, "2026-03", sug2, {}).erro);
+  // sem obra no VICKE (gestão antiga): estorna só no escritório, como antes
+  const sug3 = M.sugestaoDeEstorno(est, [orig], { obras: [], clientes: [cli] });
+  assert.ok(!sug3.bloqueio && !sug3.naObra);
+  // "Lançar assim" de custo antigo só do escritório para cliente com obra: não
+  const linha = { id: "y", data: "2026-04-02", valor: -100, historico: "PIX EMITIDO" };
+  const copia = { campos: { contaId: "emp_taxas", unidadeId: "empreendimento", clienteId: "e1", empreendimentoId: "e1" } };
+  assert.ok(/obra no VICKE/.test(M.lancamentoRapidoDoExtrato(linha, "2026-04", copia, {}, [obra]).erro || ""));
+  assert.ok(!/obra no VICKE/.test(M.lancamentoRapidoDoExtrato(linha, "2026-04", copia, {}, []).erro || ""));
 });
 
 for (const [nome, fn] of testes) {

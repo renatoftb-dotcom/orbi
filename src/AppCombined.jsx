@@ -12671,9 +12671,16 @@ function comSinalDeEstorno(l) {
 // sem abrir o formulário. Só quando a sugestão basta — conta do escritório,
 // cliente/obra que a conta pede, mês aberto. Senão, devolve o porquê e a
 // tela abre o formulário.
-function lancamentoRapidoDoExtrato(movimento, mes, sugestao, fechamentos) {
+function lancamentoRapidoDoExtrato(movimento, mes, sugestao, fechamentos, obras) {
   if (!sugestao || !sugestao.campos || !sugestao.campos.contaId) return { erro: "Sem lançamento igual para copiar." };
   if (sugestao.daObra) return { erro: "Custo de obra: confira no formulário." };
+  // Regra das duas pontas: copiar um custo antigo só do escritório para um
+  // cliente que hoje tem obra no VICKE deixaria a obra sem a conta.
+  const cs = sugestao.campos;
+  if ((cs.unidadeId === "gestao_obras" || cs.unidadeId === "empreendimento") && EF_CONTAS_COM_PONTA_NA_OBRA.indexOf(cs.contaId) >= 0
+    && obrasDoDonoDoLancamento(cs, obras || []).length) {
+    return { erro: "Este cliente tem obra no VICKE: escolha a conta em “Custo de uma obra” para entrar no escritório e na obra, ligado." };
+  }
   if (ehReceitaDaGestao(sugestao.campos)) return { erro: "Receita da gestão: escolha a parcela do contrato no formulário." };
   const base = lancamentoDaLinhaDoExtrato(movimento, mes, sugestao);
   const l = comSinalDeEstorno({ ...base, valor: Math.round(Math.abs(Number((movimento || {}).valor) || 0) * 100) / 100 });
@@ -12975,6 +12982,10 @@ function contasDoLancamento(unidadeId, opcoes) {
     .map((c) => ({ valor: valorDaConta(c.id, "obra"), id: c.id, nome: c.nome, grupo: c.grupo, fonte: "obra" }));
   return { obra: obra, escritorio: escritorio };
 }
+
+// Contas do escritório que, para um cliente/empreendimento com obra no VICKE,
+// têm a outra ponta na obra: o custo nasce lá e atravessa.
+const EF_CONTAS_COM_PONTA_NA_OBRA = ["pagamentos_compras", "emp_terreno", "emp_construcao", "emp_taxas"];
 
 // As obras entre as quais o custo pode cair.
 function obrasDoLancamento(data, clienteId) {
@@ -13468,6 +13479,35 @@ function originalDoEstorno(movimento, lancamentos, opcoes) {
 // A sugestão do estorno: os campos do original. Original que nasceu numa
 // obra volta para a obra, na mesma conta e etapa (item a item, se eram
 // vários) — e a tela grava como estorno.
+// A conta da obra que é a outra ponta de um lançamento da base antiga, que
+// veio sem ligação: o mesmo papel (doc = documento) ou o mesmo valor pago no
+// mesmo dia — e que nenhum outro lançamento já reclame para si.
+function contasDaObraSemLigacao(o, obras, lancamentos) {
+  const dia = String((o && o.lancadoEm) || "").slice(0, 10);
+  const valor = efCentavos(Math.abs(Number(o && o.valor) || 0));
+  const achadas = [];
+  for (const ob of obras || []) {
+    if (!ob) continue;
+    for (const k of (ob.contasPagar || [])) {
+      if (!k || !k.pago || k.estorno) continue;
+      const v = efCentavos(Math.abs(Number(k.valorPago) || Number(k.valor) || 0));
+      const mesmoPapel = !!o.documento && String(k.doc || "") === String(o.documento);
+      const mesmoDia = Math.abs(v - valor) < 0.01 && String(k.pagoEm || "").slice(0, 10) === dia;
+      if (!mesmoPapel && !mesmoDia) continue;
+      if (lancamentosLigadosAsContas(lancamentos, ob.id, [k]).length) continue;
+      achadas.push({ ob, k });
+    }
+  }
+  return achadas;
+}
+// As obras do dono do lançamento (cliente da gestão ou empreendimento).
+function obrasDoDonoDoLancamento(o, obras) {
+  const origem = (o && o.origem) || {};
+  if (origem.obraId) return (obras || []).filter((x) => x && x.id === origem.obraId);
+  const dono = (o && (o.empreendimentoId || o.clienteId)) || "";
+  return dono ? (obras || []).filter((x) => x && x.clienteId === dono) : [];
+}
+
 function sugestaoDeEstorno(movimento, lancamentos, ctx) {
   const c = ctx || {};
   const achado = originalDoEstorno(movimento, lancamentos, c);
@@ -13479,8 +13519,39 @@ function sugestaoDeEstorno(movimento, lancamentos, ctx) {
     + (achado.porDocumento ? " (mesmo CNPJ/CPF)" : " (mesmo valor)")];
   const desc = "Estorno — " + String(o.descricao || nomeConta).replace(/^estorno\s*[—-]\s*/i, "");
   const origem = o.origem || {};
-  const obra = origem.obraId ? ((c.obras || []).find((x) => x && x.id === origem.obraId) || null) : null;
-  const contasDaObra = obra ? contasLigadasAoLancamento(obra, o) : [];
+  let obra = origem.obraId ? ((c.obras || []).find((x) => x && x.id === origem.obraId) || null) : null;
+  let contasDaObra = obra ? contasLigadasAoLancamento(obra, o) : [];
+  // Regra das duas pontas: o que existe no escritório E na obra/empreendimento
+  // estorna nas duas. Original de obra que não está ligado (veio da base
+  // antiga) procura a conta dele na obra — mesmo papel, ou mesmo valor no
+  // mesmo dia — e, achando uma só, liga junto com o estorno. Não achando,
+  // não estorna só de um lado: manda para o formulário, já no caminho da obra.
+  let ligarOriginal = null;
+  const ladoDeObra = o.unidadeId === "gestao_obras" || o.unidadeId === "empreendimento" || !!origem.obraId;
+  if (ladoDeObra && !(obra && contasDaObra.length)) {
+    const dono = o.empreendimentoId || o.clienteId || "";
+    const obrasDele = origem.obraId ? (obra ? [obra] : [])
+      : (dono ? (c.obras || []).filter((x) => x && x.clienteId === dono) : []);
+    if (obrasDele.length || origem.obraId) {
+      const candidatas = contasDaObraSemLigacao(o, obrasDele, lancamentos);
+      if (candidatas.length === 1) {
+        obra = candidatas[0].ob; contasDaObra = [candidatas[0].k];
+        ligarOriginal = { id: o.id, origem: { obraId: obra.id, tipo: "conta", refId: candidatas[0].k.id, contaObra: candidatas[0].k.contaId } };
+      } else {
+        const ob0 = obrasDele.length === 1 ? obrasDele[0] : null;
+        const cli = (c.clientes || []).find((x) => x && x.id === ((ob0 && ob0.clienteId) || dono)) || null;
+        const emp = ehEmpreendimento(cli) || o.unidadeId === "empreendimento";
+        const nomes = obrasDele.map((x) => x.nome).filter(Boolean).join(", ") || "da obra";
+        return { campos: { unidadeId: emp ? "empreendimento" : "gestao_obras", contaFonte: "obra", contaId: "",
+            clienteId: cli ? cli.id : (o.clienteId || ""), cliente: cli ? cli.nome : (o.cliente || ""), empreendimentoId: emp ? (cli ? cli.id : dono) : "",
+            obraIdAlvo: ob0 ? ob0.id : "", projeto: ob0 ? (ob0.nome || "") : (o.projeto || ""),
+            fornecedor: o.fornecedor || "", fornecedorId: o.fornecedorId || "", descricao: desc, estornoDe: o.id },
+          de: o, estorno: true, daObra: true, naObra: true, motivos,
+          bloqueio: `O lançamento original está só no escritório — a obra ${nomes} não tem a conta dele ligada. `
+            + "Escolha a conta e a etapa da obra para o estorno sair nas duas bases." };
+      }
+    }
+  }
   if (obra && contasDaObra.length) {
     const cli = (c.clientes || []).find((x) => x && x.id === obra.clienteId) || null;
     const emp = ehEmpreendimento(cli);
@@ -13489,7 +13560,7 @@ function sugestaoDeEstorno(movimento, lancamentos, ctx) {
       unidadeId: emp ? "empreendimento" : "gestao_obras", contaFonte: "obra", contaId: c0.contaId,
       clienteId: cli ? cli.id : "", cliente: cli ? cli.nome : "", empreendimentoId: emp && cli ? cli.id : "",
       obraIdAlvo: obra.id, projeto: obra.nome || "", fornecedor: o.fornecedor || "", fornecedorId: o.fornecedorId || "",
-      descricao: desc, estornoDe: o.id,
+      descricao: desc, estornoDe: o.id, ...(ligarOriginal ? { ligarOriginal } : {}),
     };
     if (contasDaObra.length === 1) campos.etapaUnica = c0.etapa || "";
     else campos.itens = contasDaObra.map((x) => ({ descricao: x.descricao || "", insumoCodigo: x.insumoCodigo || "",
@@ -13507,6 +13578,7 @@ function sugestaoDeEstorno(movimento, lancamentos, ctx) {
 // O lançamento pronto do estorno, para gravar sem abrir o formulário.
 function lancamentoDoEstornoDoExtrato(movimento, mes, sug, fechamentos) {
   if (!sug || !sug.estorno) return { erro: "Sem o lançamento original." };
+  if (sug.bloqueio) return { erro: sug.bloqueio };
   const base = lancamentoDaLinhaDoExtrato(movimento, mes, sug);
   const valor = efCentavos(Math.abs(Number((movimento || {}).valor) || 0));
   if (sug.naObra) {
@@ -14087,7 +14159,14 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const comoFoiPago = noCartao ? "cartao" : (f.contaBanco === "nao" ? "nao" : "sim");
   const errosCartao = !noCartao ? []
     : [!cartaoEscolhido ? "Escolha o cartão." : "", !f.lancadoEm ? "Informe a data da compra." : ""].filter(Boolean);
-  const todosErros = erros.concat(errosCartao).concat(errosGestao);
+  // Regra das duas pontas: cliente/empreendimento com obra no VICKE não
+  // recebe custo só no escritório — vai pela conta da obra, que lança nos
+  // dois lados ligados (e o estorno, quando vier, sai dos dois).
+  const errosDuasPontas = (lancNovo && !naObra && (f.unidadeId === "gestao_obras" || f.unidadeId === "empreendimento")
+    && EF_CONTAS_COM_PONTA_NA_OBRA.indexOf(f.contaId) >= 0 && obrasDoCliente.length > 0)
+    ? [`${obrasDoCliente.length === 1 ? "A obra " + (obrasDoCliente[0].nome || "") + " está" : "As obras deste cliente estão"} no VICKE: escolha a conta em “Custo de uma obra” — assim entra no escritório e na obra, ligado.`]
+    : [];
+  const todosErros = erros.concat(errosCartao).concat(errosGestao).concat(errosDuasPontas);
   const comCartao = (x) => {
     if (!noCartao) return { ...x, formaPagamento: naObra ? "avista" : (x.formaPagamento === "cartao" ? "" : x.formaPagamento),
       cartaoId: "", parcelasCartao: undefined };
@@ -15106,7 +15185,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
   }
   // As que já têm classificação pronta (a mesma do mês passado, e que valida
   // sozinha): todas de uma vez, numa gravada só.
-  const prontas = lista.filter((m) => { const r = fila.rapido(m); return r && r.lancamento; });
+  const prontas = lista.filter((m) => { const r = fila.rapido(m); return r && r.lancamento && !r.lancamento.naObra; });
   function lancarSugeridas() {
     setErroLote("");
     const r = fila.lancarSugeridas(prontas);
@@ -15203,9 +15282,14 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                           sug.campos.projeto, sug.campos.fornecedor].filter(Boolean).join(" · ")}</b>
                       </div>
                     )}
-                    {sug && sug.estorno && (
+                    {sug && sug.estorno && !sug.bloqueio && (
                       <div data-vk-estorno-achado="1" style={{ fontSize: 11.5, color: "#047857", marginTop: 2 }}>
-                        ↺ {(sug.motivos || [])[0]} — volta para a mesma conta, como estorno
+                        ↺ {(sug.motivos || [])[0]} — volta para a mesma conta, como estorno{sug.naObra ? ", no escritório e na obra" : ""}
+                      </div>
+                    )}
+                    {sug && sug.estorno && sug.bloqueio && (
+                      <div data-vk-estorno-sem-ligacao="1" style={{ fontSize: 11.5, color: "#b45309", marginTop: 2 }}>
+                        ↺ {(sug.motivos || [])[0]}. {sug.bloqueio}
                       </div>
                     )}
                     {contaSug && !(sug && (sug.palpite || sug.estorno)) && (
@@ -15217,7 +15301,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                   </div>
                   <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
                     {dinheiro(m)}
-                    {sug && sug.estorno && !aberta ? (
+                    {sug && sug.estorno && !sug.bloqueio && !aberta ? (
                       <button data-vk-lancar-estorno="1" style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#047857", borderColor: "rgba(4,120,87,0.45)" }}
                         disabled={!!ocupado}
                         onClick={(e) => { e.stopPropagation(); rapido(m); }}>✓ Lançar estorno</button>
@@ -16485,9 +16569,13 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       conferido: true, conferidoEm: l.conferidoEm || new Date().toISOString() } : null;
     const daPonte = (marca ? ponte.lancamentos.map((x) => ({ ...x, ...marca })) : ponte.lancamentos)
       .map((x) => (est ? { ...x, estorno: true, ...(l.estornoDe ? { estornoDe: l.estornoDe } : {}) } : x));
+    // Original da base antiga achado na obra pelo estorno: fica ligado à conta
+    // dele agora — as duas pontas passam a ser a mesma transação.
+    const lig = l.ligarOriginal;
+    const lancsLigados = lig && lig.id ? lancs.map((x) => (x && x.id === lig.id ? { ...x, origem: lig.origem } : x)) : lancs;
     save({ ...data, ...catalogoQueAprendeu(l),
       obras: todas.map((o) => (o && o.id === obra.id ? obraNova : o)),
-      lancamentos: [...outrosLancamentos, ...lancs, ...daPonte],
+      lancamentos: [...outrosLancamentos, ...lancsLigados, ...daPonte],
     }).catch(console.error);
     setForm(null);
   }
@@ -16648,9 +16736,16 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const daFatura = ((l.origem || {}).tipo === "fatura");
     // Veio de uma obra: a conta de lá é a mesma transação, e sai junto.
     const origem = l.origem || {};
-    const obra = origem.obraId ? (((data || {}).obras || []).find((o) => o && o.id === origem.obraId) || null) : null;
-    const contasJuntas = obra ? contasLigadasAoLancamento(obra, l) : [];
+    let obra = origem.obraId ? (((data || {}).obras || []).find((o) => o && o.id === origem.obraId) || null) : null;
+    let contasJuntas = obra ? contasLigadasAoLancamento(obra, l) : [];
     const entradaJunta = obra && origem.tipo === "entrada" ? (obra.entradas || []).find((e) => e && e.id === origem.refId) : null;
+    // Regra das duas pontas: lançamento da base antiga, sem ligação, cuja
+    // conta existe na obra (mesmo papel ou mesmo valor no mesmo dia) sai junto
+    // com ela — senão a obra ficaria com um custo que o escritório não tem.
+    if (!contasJuntas.length && !entradaJunta && (l.unidadeId === "gestao_obras" || l.unidadeId === "empreendimento")) {
+      const achadas = contasDaObraSemLigacao(l, obrasDoDonoDoLancamento(l, (data || {}).obras || []), lancs);
+      if (achadas.length === 1) { obra = achadas[0].ob; contasJuntas = [achadas[0].k]; }
+    }
     const refs = [...new Set(contasJuntas.map((c) => c.numeroDoc).filter(Boolean))];
     const ok = await dialogo.confirmar({
       titulo: daFatura ? "Excluir a linha da fatura?" : "Excluir este lançamento?",
@@ -16876,12 +16971,22 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
 
   // Todas as que a sugestão resolve sozinha: uma gravada só (várias seguidas
   // partiriam do mesmo retrato de `lancs` e só a última ficaria).
+  // Um clique na linha do banco: o estorno com o original achado vai direto,
+  // até o de obra (nas duas pontas); senão, a linha igual do mês passado.
+  function rapidoDoExtrato(m) {
+    const est = sugestaoDeEstorno(m, lancs, ctxDoPalpite);
+    if (est) return lancamentoDoEstornoDoExtrato(m, mesEmConferencia, est, fechamentos);
+    return lancamentoRapidoDoExtrato(m, mesEmConferencia, sugestaoDoExtrato(m, lancs), fechamentos, (data || {}).obras || []);
+  }
+
   function lancarSugeridasDoExtrato(movimentos) {
     const agora = new Date().toISOString();
     const novos = [];
     for (const m of movimentos || []) {
-      const r = lancamentoRapidoDoExtrato(m, mesEmConferencia, sugestaoDoExtrato(m, lancs), fechamentos);
-      if (!r.lancamento) continue;
+      // o mesmo caminho do botão da linha — o estorno com o original achado
+      // vai como estorno; o que entra numa obra fica para lançar um a um
+      const r = rapidoDoExtrato(m);
+      if (!r.lancamento || r.lancamento.naObra) continue;
       const l = r.lancamento;
       novos.push({ ...l, id: (typeof uid === "function" ? uid() : String(Date.now())) + "_" + novos.length,
         numeroDoc: proximaReferencia((data || {}).obras || [], lancs.concat(novos)),
@@ -17079,12 +17184,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
               inicial: (m) => lancamentoDaLinhaDoExtrato(m, mesEmConferencia, sugestaoCompletaDoExtrato(m, lancs, ctxDoPalpite)),
               sugestao: (m) => sugestaoCompletaDoExtrato(m, lancs, ctxDoPalpite),
               lancar: lancarLinhaDoExtrato,
-              rapido: (m) => {
-                // o estorno com o original achado vai direto, até o de obra
-                const est = sugestaoDeEstorno(m, lancs, ctxDoPalpite);
-                if (est) return lancamentoDoEstornoDoExtrato(m, mesEmConferencia, est, fechamentos);
-                return lancamentoRapidoDoExtrato(m, mesEmConferencia, sugestaoDoExtrato(m, lancs), fechamentos);
-              },
+              rapido: rapidoDoExtrato,
               lancarVarias: lancarVariasDoExtrato,
               lancarSugeridas: lancarSugeridasDoExtrato,
               naoE: naoELancamento,
