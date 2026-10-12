@@ -2621,6 +2621,21 @@ teste("Já está na obra: linha do banco acha a conta paga na obra sem lançamen
   assert.strictEqual(M.contasIguaisNaObra(obra, 1500, "2026-07-21", [ligado], 20).length, 1);
 });
 
+teste("Conferência: sobrou sem linha do banco, mas o gêmeo (mesma conta e valor) já casou — provável duplicado", () => {
+  const movs = [{ id: "m1", data: "2026-08-05", valor: 10833.33, historico: "PIX RECEBIDO - OUTRA IF · Recebimento Pix ALEXANDRE" }];
+  const ponte = { id: "p1", contaId: "rec_gestao", unidadeId: "gestao_obras", valor: 10833.33, competencia: "2026-08", lancadoEm: "2026-08-05",
+    descricao: "Parcela 1/12 (mensal)", origem: { obraId: "ob", tipo: "conta", refId: "x:1" }, contaBanco: "sim" };
+  const antigo = { id: "a1", contaId: "rec_gestao", unidadeId: "gestao_obras", valor: 10833.33, competencia: "2026-08", lancadoEm: "2026-08-23",
+    descricao: "Taxa de gestão de obra", contaBanco: "sim" };
+  const r = M.conciliarExtrato(movs, [ponte, antigo], { mes: "2026-08" });
+  assert.strictEqual(r.casados.length, 1); assert.strictEqual(r.casados[0].lancamento.id, "p1");
+  assert.deepStrictEqual(r.contabilizadoSemPar.map((l) => l.id), ["a1"]);
+  assert.strictEqual(r.duplicados.a1.lancamento.id, "p1");
+  // valor diferente não é gêmeo
+  const r2 = M.conciliarExtrato(movs, [ponte, { ...antigo, valor: 500 }], { mes: "2026-08" });
+  assert.deepStrictEqual(Object.keys(r2.duplicados), []);
+});
+
 for (const [nome, fn] of testes) {
   try { await fn(); console.log("  ok   " + nome); }
   catch (e) { falhas++; console.log("  FALHOU " + nome + "\n         " + e.message); }

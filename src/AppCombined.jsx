@@ -12080,9 +12080,19 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
   // a fila sai na ordem do extrato, como antes
   noBancoSemPar.sort((a, b) => String(a.data).localeCompare(String(b.data)));
   const contabilizadoSemPar = candidatos.filter((c) => !c.usado).map((c) => c.l);
+  // Provável duplicado: sobrou sem linha do banco, mas há outro lançamento na
+  // MESMA conta e do mesmo valor que já casou — uma entrada no banco, dois
+  // lançamentos (a base antiga importada e a ponte da obra, por exemplo).
+  const duplicados = {};
+  for (const l of contabilizadoSemPar) {
+    const v = Math.round(Math.abs(Number(l && l.valor) || 0) * 100);
+    const gemeo = casados.find((c) => c.lancamento && c.lancamento.id !== l.id && c.lancamento.contaId === l.contaId
+      && Math.round(Math.abs(Number(c.lancamento.valor) || 0) * 100) === v);
+    if (gemeo) duplicados[l.id] = { lancamento: gemeo.lancamento, extrato: gemeo.extrato };
+  }
   const soma = (lista, f) => Math.round(lista.reduce((s, x) => s + Math.abs(Number(f(x)) || 0), 0) * 100) / 100;
   return {
-    casados, noBancoSemPar, contabilizadoSemPar, foraDoBanco, naoLancar,
+    casados, noBancoSemPar, contabilizadoSemPar, foraDoBanco, naoLancar, duplicados,
     resumo: {
       movimentos: doBanco.length,
       lancamentos: candidatos.length,
@@ -15613,6 +15623,17 @@ function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcar
                   <span style={{ color: "#6b7280", minWidth: 130 }}>{(contaEscritorio(l.contaId) || {}).nome || "—"}</span>
                   <span style={{ flex: "1 1 160px", minWidth: 0 }}>{l.descricao || l.fornecedor || "—"}</span>
                   <span style={{ color: "#6b7280", flex: "1 1 160px", minWidth: 0 }}>{[l.cliente, l.projeto].filter(Boolean).join(" · ")}</span>
+                  {(resultado.duplicados || {})[l.id] && (() => {
+                    const g = resultado.duplicados[l.id];
+                    const d = (x) => String(x || "").slice(0, 10).split("-").reverse().join("/");
+                    const ligado = !!(g.lancamento.origem && g.lancamento.origem.obraId);
+                    return (
+                      <span data-vk-duplicado style={{ flexBasis: "100%", fontSize: 11.5, color: "#b45309" }}>
+                        ⚠ provável duplicado: “{g.lancamento.descricao || "lançamento"}” ({d(g.lancamento.lancadoEm)}), do mesmo valor e na mesma conta,
+                        já casou com a linha do banco de {d(g.extrato.data)}.{ligado ? " Aquele está ligado à obra — exclua este." : ""}
+                      </span>
+                    );
+                  })()}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto", flexWrap: "wrap", justifyContent: "flex-end" }}>
                   <span style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", marginRight: 6 }}>{efValorDoLancamento(l)}</span>
