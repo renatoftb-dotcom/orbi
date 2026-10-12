@@ -14431,7 +14431,20 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
         </div>
       )}
       {tentou && todosErros.length > 0 && (
-        <div style={{ fontSize: 12, color: "#b91c1c" }}>{todosErros.join(" · ")}</div>
+        <div style={{ fontSize: 12, color: "#b91c1c" }}>
+          {todosErros.join(" · ")}
+          {/* A trava de cliente e obra fica no pé; a saída dela (obra
+              encerrada) mora lá em cima, junto dos campos. O atalho fica aqui,
+              onde o olho já está. */}
+          {podeObraAntiga && !obraAntiga && todosErros.some((e) => /Informe o cliente|Informe a obra/.test(e)) && (
+            <button type="button" data-vk-obra-encerrada-atalho="1"
+              onClick={() => setF((p) => ({ ...p, obraEncerrada: true, clienteId: "", obraId: "" }))}
+              style={{ background: "none", border: "none", padding: 0, marginLeft: 8, fontSize: 12, color: "#0474f4",
+                cursor: "pointer", textDecoration: "underline", fontFamily: "inherit" }}>
+              É obra encerrada / ajuste de obra antiga?
+            </button>
+          )}
+        </div>
       )}
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center" }}>
         {atalhos && <span style={{ fontSize: 11, color: "#9ca3af", marginRight: "auto" }}>Enter lança · Esc fecha</span>}
