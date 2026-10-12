@@ -27,7 +27,7 @@ const M = new Function(src + `
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
-           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
+           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
            competenciasDoCartao,
@@ -2471,6 +2471,37 @@ teste("Receita financeira do mês: banco + aplicação − calculado; o lançame
   assert.strictEqual(M.rendimentoLancadoNoMes([ex], "2026-01"), ex);
   const aj = M.lancamentoDoRendimento("2026-01", 50, ex);
   assert.strictEqual(aj.id, "r"); assert.strictEqual(aj.valor, 2350);
+});
+
+teste("Débitos × créditos: o que não passa no extrato entra nos dois lados; sinal invertido aparece", () => {
+  const movs = [
+    { data: "2025-12-02", valor: -1000, historico: "PIX EMITIDO OUTRA IF" },
+    { data: "2025-12-03", valor: 500, historico: "PIX RECEBIDO - OUTRA IF" },
+    { data: "2025-12-05", valor: -33000, historico: "APLICAÇÃO RDC" },
+    { data: "2025-12-06", valor: 1480, historico: "RESGATE RDC" },
+    { data: "2025-12-06", valor: 227.9, historico: "SALDO DO DIA" },
+    { data: "2025-11-30", valor: -99, historico: "PIX EMITIDO OUTRA IF" },   // outro mês
+  ];
+  const l = (id, contaId, valor, extra) => ({ id, contaId, valor, competencia: "2025-12", unidadeId: "escritorio", ...(extra || {}) });
+  const base = [l("a", "utensilios", 1000), l("b", "rec_projetos", 500),
+    // comissão recebida e repassada, fora do extrato: os dois lados
+    l("c", "rec_gestao", 5385.63), l("d", "pagamentos_compras", 5385.63),
+    // rendimento da aplicação não entra na conta
+    l("r", "rec_financeira", 21119.81, { descricao: "Receita de aplicação financeira" })];
+  const r = M.checagemDebitoCredito(movs, base, "2025-12");
+  assert.deepStrictEqual([r.extrato.debitos, r.extrato.creditos, r.extrato.aplicacoes, r.extrato.resgates], [1000, 500, 33000, 1480]);
+  assert.deepStrictEqual([r.base.saidas, r.base.entradas, r.base.rendimento], [6385.63, 5885.63, 21119.81]);
+  assert.strictEqual(r.bate, true); assert.strictEqual(r.foraDoExtrato, 5385.63);
+  // a despesa de 1.000 lançada como receita: as diferenças se afastam 2.000
+  const inv = M.checagemDebitoCredito(movs, base.map((x) => (x.id === "a" ? { ...x, contaId: "rec_projetos" } : x)), "2025-12");
+  assert.strictEqual(inv.bate, false); assert.strictEqual(Math.abs(inv.desvio), 2000);
+  assert.deepStrictEqual(inv.suspeitos.map((x) => x.id), ["a"]);
+  // estorno (valor negativo) vai para o outro lado, como no banco
+  const est = M.checagemDebitoCredito([{ data: "2025-12-09", valor: 90, historico: "ESTORNO" }], [l("e", "utensilios", -90)], "2025-12");
+  assert.strictEqual(est.bate, true); assert.strictEqual(est.base.entradas, 90);
+  // aplicação pelo caminho dela (números da planilha de dezembro)
+  assert.deepStrictEqual(M.rendimentoPelaAplicacao(391301.31, 33000, 85964.76, 362206.36), { principal: 338336.55, rendimento: 23869.81 });
+  assert.strictEqual(M.rendimentoPelaAplicacao(null, 1, 1, 1), null);
 });
 
 for (const [nome, fn] of testes) {

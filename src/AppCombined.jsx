@@ -12188,6 +12188,75 @@ function extratoParaGuardar(movimentos) {
 // que ele cobre, tudo o que estava guardado desses meses — onde quer que
 // estivesse — e não mexe nos outros meses. O "não é lançamento" fica.
 function mesDoMovimento(m) { return String((m && m.data) || "").slice(0, 7); }
+
+// ── Débitos × créditos do mês (o "check" da planilha de análise) ─
+// Soma os débitos e os créditos do extrato da conta (sem as idas e vindas da
+// aplicação, que ficam à parte) e as saídas e entradas contabilizadas no
+// mês. O que foi contabilizado e não passou pelo extrato (comissão recebida
+// e repassada, por exemplo) aparece nos DOIS lados com o mesmo valor — as
+// duas diferenças têm que ser iguais. Diferenças desiguais querem dizer
+// lançamento faltando ou com o sinal invertido: um valor V do lado errado
+// afasta as duas diferenças em 2V.
+function efEhAplicacaoFinanceira(historico) {
+  const h = efSemAcento(historico);
+  return /\brdc\b|^aplicacao|^resgate|credito resgate|\bcdb\b|deb fundo/.test(h);
+}
+function ehRendimentoDaAplicacao(l) {
+  if (!l || l.contaId !== "rec_financeira") return false;
+  return (l.origem && l.origem.tipo === "rendimento") || l.contaBanco === "nao" || /aplica|rendimento|renda fixa/i.test(String(l.descricao || ""));
+}
+function checagemDebitoCredito(movimentos, lancamentos, mes) {
+  const c = (v) => efCentavos(v);
+  const ext = { debitos: 0, creditos: 0, aplicacoes: 0, resgates: 0, linhas: 0 };
+  for (const m of movimentos || []) {
+    if (!m || mesDoMovimento(m) !== String(mes)) continue;
+    const v = Number(m.valor) || 0;
+    if (!v) continue;
+    if (!efEhMovimento(m.historico)) {
+      if (efEhAplicacaoFinanceira(m.historico)) { if (v < 0) ext.aplicacoes -= v; else ext.resgates += v; }
+      continue;
+    }
+    ext.linhas++;
+    if (v < 0) ext.debitos -= v; else ext.creditos += v;
+  }
+  const base = { saidas: 0, entradas: 0, rendimento: 0, linhas: 0 };
+  const lista = [];
+  for (const l of lancamentos || []) {
+    if (!l || String(l.competencia) !== String(mes)) continue;
+    if (compraNoCartaoDoEscritorio(l)) continue;           // no banco quem aparece é a fatura
+    const v = Number(l.valor) || 0;
+    if (!v) continue;
+    if (ehRendimentoDaAplicacao(l)) { base.rendimento += v; continue; }
+    const conta = contaEscritorio(l.contaId);
+    const g = conta && grupoEscritorio(conta.grupo);
+    const sinalConta = g && g.sinal ? g.sinal : 1;
+    const entra = (sinalConta > 0) === (v > 0);           // estorno (valor negativo) vai ao contrário
+    base.linhas++;
+    if (entra) base.entradas += Math.abs(v); else base.saidas += Math.abs(v);
+    lista.push({ l, entra, valor: c(Math.abs(v)) });
+  }
+  for (const k in ext) ext[k] = k === "linhas" ? ext[k] : c(ext[k]);
+  for (const k in base) base[k] = k === "linhas" ? base[k] : c(base[k]);
+  const difDebito = c(base.saidas - ext.debitos);
+  const difCredito = c(base.entradas - ext.creditos);
+  const desvio = c(difCredito - difDebito);
+  const bate = Math.abs(desvio) < 0.01;
+  // um valor do lado errado: entrou como saída (ou o contrário) — afasta 2V
+  const metade = c(Math.abs(desvio) / 2);
+  const suspeitos = bate ? [] : lista.filter((x) => Math.abs(x.valor - metade) < 0.01 || Math.abs(x.valor - Math.abs(desvio)) < 0.01)
+    .map((x) => ({ ...x.l, _lado: x.entra ? "entrada" : "saída" }));
+  return { extrato: ext, base, difDebito, difCredito, desvio, bate,
+    foraDoExtrato: bate ? difDebito : null, suspeitos };
+}
+
+// A aplicação pelo caminho dela: o saldo anterior + o que foi aplicado − o
+// que foi resgatado é o que estaria lá sem rendimento; o informado menos
+// isso é o rendimento. Tem que bater com banco + aplicação − calculado.
+function rendimentoPelaAplicacao(saldoAnterior, aplicacoes, resgates, saldoAtual) {
+  if (saldoAnterior == null || saldoAtual == null) return null;
+  const principal = efCentavos(Number(saldoAnterior) + (Number(aplicacoes) || 0) - (Number(resgates) || 0));
+  return { principal, rendimento: efCentavos(Number(saldoAtual) - principal) };
+}
 function extratosComArquivo(extratos, movimentos, origem, agora) {
   const atuais = (extratos && typeof extratos === "object") ? extratos : {};
   const doArquivo = extratoParaGuardar(movimentos || []);
@@ -15437,6 +15506,66 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
         </div>
       )}
 
+      {/* O "check" da planilha de análise: débitos × saídas e créditos ×
+          entradas. As duas diferenças têm que ser iguais — o que foi
+          contabilizado fora do extrato entra nos dois lados. */}
+      {extrato && extrato.checagem && (() => {
+        const ch = extrato.checagem;
+        const ant = (() => { const [a, m] = String(mes).split("-").map(Number); const d = new Date(Date.UTC(a, m - 2, 1)); return d.toISOString().slice(0, 7); })();
+        const aplAnterior = saldoAplicacaoDoMes(fechamentos, ant);
+        const pelaAplicacao = rendimentoPelaAplicacao(aplAnterior, ch.extrato.aplicacoes, ch.extrato.resgates, aplicacaoAtual);
+        const th = { textAlign: "right", fontSize: 10, textTransform: "uppercase", letterSpacing: .3, color: "#6b7280", fontWeight: 600, padding: "4px 6px", whiteSpace: "nowrap" };
+        const td = { textAlign: "right", padding: "6px 6px", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
+        const tdN = { ...td, textAlign: "left", color: "#374151" };
+        const efNum = (v) => (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const cor = ch.bate ? "#0474f4" : "#b45309";
+        return (
+          <div data-vk-checagem="1" style={{ ...S.card, display: "grid", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>Débitos × créditos do mês</div>
+              <div style={{ fontSize: 12, color: cor, fontWeight: 600 }}>
+                {ch.bate
+                  ? (Math.abs(ch.foraDoExtrato) >= 0.01
+                    ? `✓ bate — ${efDinheiro(Math.abs(ch.foraDoExtrato))} contabilizado fora do extrato, nos dois lados`
+                    : "✓ bate — tudo o que foi contabilizado passou pelo extrato")
+                  : `✗ não bate — as diferenças se afastam ${efDinheiro(Math.abs(ch.desvio))}`}
+              </div>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              {/* valores sem "R$" (dito no título da coluna): cabe no celular */}
+              <table style={{ borderCollapse: "collapse", fontSize: 12.5 }}>
+                <thead><tr><th style={{ ...th, textAlign: "left", paddingLeft: 0 }}>R$</th><th style={th}>Extrato</th><th style={th}>Contabilizado</th><th style={th}>Diferença</th></tr></thead>
+                <tbody>
+                  <tr><td style={{ ...tdN, paddingLeft: 0 }}>Débitos</td><td style={td}>{efNum(ch.extrato.debitos)}</td><td style={td}>{efNum(ch.base.saidas)}</td>
+                    <td style={{ ...td, fontWeight: 700, color: cor }}>{efNum(Math.abs(ch.difDebito))}</td></tr>
+                  <tr><td style={{ ...tdN, paddingLeft: 0 }}>Créditos</td><td style={td}>{efNum(ch.extrato.creditos)}</td><td style={td}>{efNum(ch.base.entradas)}</td>
+                    <td style={{ ...td, fontWeight: 700, color: cor }}>{efNum(Math.abs(ch.difCredito))}</td></tr>
+                </tbody>
+              </table>
+            </div>
+            {!ch.bate && (
+              <div style={{ fontSize: 12, color: "#92400e", lineHeight: 1.5 }}>
+                Falta lançamento ou tem valor com o sinal invertido. Um valor do lado errado afasta as diferenças em duas vezes ele:
+                procure um lançamento de <b>{efDinheiro(Math.abs(ch.desvio) / 2)}</b>
+                {ch.suspeitos.length ? <> — no mês: {ch.suspeitos.slice(0, 6).map((l, i) => (
+                  <span key={i}>{i ? " · " : ""}<b>{l.descricao || "sem descrição"}</b> ({contaEscritorio(l.contaId)?.nome || l.contaId}, entrou como {l._lado})</span>
+                ))}</> : "."}
+              </div>
+            )}
+            <div style={{ fontSize: 12, color: "#4b5563", lineHeight: 1.6 }}>
+              <b>Aplicação no extrato:</b> aplicado {efDinheiro(ch.extrato.aplicacoes)} · resgatado {efDinheiro(ch.extrato.resgates)}
+              {pelaAplicacao
+                ? <> · {efMesPorExtenso(ant, true)} {efDinheiro(aplAnterior)} + aplicado − resgatado = <b>{efDinheiro(pelaAplicacao.principal)}</b>;
+                    informado {efDinheiro(aplicacaoAtual)} → rendimento <b style={{ color: "#047857" }}>{efDinheiro(pelaAplicacao.rendimento)}</b>
+                    {diferenca != null && comAplicacao && Math.abs(pelaAplicacao.rendimento - (diferenca + (ch.base.rendimento || 0))) >= 0.01
+                      ? <span style={{ color: "#b45309" }}> (não bate com banco + aplicação − calculado: confira)</span> : null}</>
+                : aplicacaoAtual == null ? " · informe o saldo da aplicação do mês" : ` · informe a aplicação de ${efMesPorExtenso(ant)} para conferir o rendimento por ela`}
+              {ch.base.rendimento ? <> · receita financeira lançada no mês: {efDinheiro(ch.base.rendimento)}</> : null}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Fila vazia e diferença zero: não sobra nada para fazer além de
           fechar — a tela oferece isso no alto, em vez de esperar que se
           procure o botão. */}
@@ -16773,6 +16902,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             lancar: lancarDoExtrato, marcarCasados: marcarCasadosDoExtrato, confirmarPar: confirmarParDoExtrato, descartar: marcarForaDoBanco,
             guardado: !arquivoServe && guardadoDoMes ? guardadoDoMes : null,
             saldoLido: saldoLidoDoExtrato,
+            checagem: movimentosExtrato ? checagemDebitoCredito(movimentosExtrato, lancs, mesEmConferencia) : null,
             fila: {
               mes: mesEmConferencia,
               inicial: (m) => lancamentoDaLinhaDoExtrato(m, mesEmConferencia, sugestaoCompletaDoExtrato(m, lancs, ctxDoPalpite)),
