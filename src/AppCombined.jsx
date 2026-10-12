@@ -13784,6 +13784,9 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   // Conta do plano da OBRA: o lançamento não nasce aqui, nasce lá — e chega
   // ao extrato do escritório pela ponte, já traduzido.
   const naObra = f.contaFonte === "obra";
+  // Crédito do banco numa conta de custo da obra (PIX estornado, loja que
+  // devolveu): é estorno — abate o custo, não soma.
+  const estornoNaObra = naObra && Number(f.sinalDoBanco) > 0;
   const opcoesConta = contasDoLancamento(f.unidadeId, {});
   const obrasDoCliente = obrasDoLancamento({ obras: obras || [] }, f.clienteId);
   // Cliente com uma obra só não é uma escolha: é a resposta. Perguntar
@@ -13979,7 +13982,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     const g = { ...f, itens: entradaNoForm ? [] : limpos };
     if (naObra) {
       const { etapaUnica: _e, ...semEtapaUnica } = g;
-      aoSalvar(comCartao({ ...semEtapaUnica, naObra: true, valor: efValorDoCampo(g.valor),
+      aoSalvar(comCartao({ ...semEtapaUnica, naObra: true, valor: efValorDoCampo(g.valor), estornoNaObra,
         itens: custoUnico ? itensEfetivos : limpos }));
       return;
     }
@@ -14057,8 +14060,12 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                 obraIdAlvo: aindaVale && p.contaFonte === "obra" ? p.obraIdAlvo : "" };
             });
           }}>
-            {UNIDADES_NEGOCIO.filter((u) => unidadesOk.includes(u.id)).map((u) => (
-              <option key={u.id} value={u.id}>{u.nome}</option>
+            {/* Todas as unidades, sempre. Antes a lista vinha cortada pela conta
+                já escolhida (a sugestão "Reembolsos" escondia Empreendimento e
+                Escritório); trocar para uma unidade em que a conta não vale
+                limpa a conta, e escolhe-se a dela. */}
+            {UNIDADES_NEGOCIO.map((u) => (
+              <option key={u.id} value={u.id}>{u.nome}{unidadesOk.includes(u.id) ? "" : " · troca a conta"}</option>
             ))}
           </Selecao>
         ))}
@@ -14482,6 +14489,12 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           border: "1px solid rgba(4,116,244,0.35)", background: "#eef5ff", color: "#1e3a5f" }}>
           {!obraAlvo ? (
             <>Escolha o cliente e a obra: este custo nasce na obra, e é de lá que ele atravessa para o extrato do escritório.</>
+          ) : destinoDoCusto && destinoDoCusto.conta && estornoNaObra ? (
+            <span data-vk-estorno-obra="1">
+              <b>Estorno.</b> Dinheiro que entrou no banco numa conta de custo da obra: entra em <b>{(obraAlvo.nome || "obra")}</b> como
+              <b> − {efDinheiro(Math.abs(efValorDoCampo(f.valor)))}</b> em <b>{nomeContaObra || "a conta"}</b>, abatendo o custo (na etapa escolhida),
+              e no extrato do escritório como estorno em <b>{destinoDoCusto.conta}</b> — entrada, como no banco.
+            </span>
           ) : destinoDoCusto && destinoDoCusto.conta ? (
             <>
               Entra em <b>{(obraAlvo.nome || "obra")}</b> como custo, e aparece no extrato do
@@ -15519,6 +15532,13 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
         const tdN = { ...td, textAlign: "left", color: "#374151" };
         const efNum = (v) => (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         const cor = ch.bate ? "#0474f4" : "#b45309";
+        // O que ainda está na fila "falta lançar" explica a diferença? Então
+        // não é sinal invertido: é lançar o que falta.
+        const pend = ((extrato.resultado && extrato.resultado.noBancoSemPar) || []).filter((m) => m && efEhMovimento(m.historico));
+        const pendDeb = efCentavos(pend.filter((m) => Number(m.valor) < 0).reduce((t, m) => t - Number(m.valor), 0));
+        const pendCred = efCentavos(pend.filter((m) => Number(m.valor) > 0).reduce((t, m) => t + Number(m.valor), 0));
+        const restoDesvio = efCentavos((ch.difCredito + pendCred) - (ch.difDebito + pendDeb));
+        const faltaExplica = !ch.bate && pend.length > 0 && Math.abs(restoDesvio) < 0.01;
         return (
           <div data-vk-checagem="1" style={{ ...S.card, display: "grid", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
@@ -15528,6 +15548,7 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
                   ? (Math.abs(ch.foraDoExtrato) >= 0.01
                     ? `✓ bate — ${efDinheiro(Math.abs(ch.foraDoExtrato))} contabilizado fora do extrato, nos dois lados`
                     : "✓ bate — tudo o que foi contabilizado passou pelo extrato")
+                  : faltaExplica ? `falta lançar ${pend.length === 1 ? "1 linha" : pend.length + " linhas"} do extrato`
                   : `✗ não bate — as diferenças se afastam ${efDinheiro(Math.abs(ch.desvio))}`}
               </div>
             </div>
@@ -15543,7 +15564,13 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
                 </tbody>
               </table>
             </div>
-            {!ch.bate && (
+            {faltaExplica && (
+              <div style={{ fontSize: 12, color: "#4b5563", lineHeight: 1.5 }}>
+                A diferença é o que ainda falta lançar do extrato ({pend.length === 1 ? "1 linha" : pend.length + " linhas"}
+                {pendCred ? `, ${efDinheiro(pendCred)} em créditos` : ""}{pendDeb ? `, ${efDinheiro(pendDeb)} em débitos` : ""}) — lançando, o check fecha.
+              </div>
+            )}
+            {!ch.bate && !faltaExplica && (
               <div style={{ fontSize: 12, color: "#92400e", lineHeight: 1.5 }}>
                 Falta lançamento ou tem valor com o sinal invertido. Um valor do lado errado afasta as diferenças em duas vezes ele:
                 procure um lançamento de <b>{efDinheiro(Math.abs(ch.desvio) / 2)}</b>
@@ -16297,7 +16324,15 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     // No cartão, cada conta leva o seu plano de parcelas: a fatura acha
     // por ele, e a ponte não manda a compra sozinha para o extrato.
     const cartaoDoCusto = l.formaPagamento === "cartao" ? cartaoPorId(cartoesDoEscritorio(data), l.cartaoId) : null;
-    const novas = contasDoPapel.map((c) => {
+    // Estorno (crédito do banco numa conta de custo): as contas nascem com
+    // valor e quantidade negativos — o custo da etapa cai — e a ponte leva o
+    // valor negativo ao escritório, que é o estorno de lá.
+    const est = !!l.estornoNaObra;
+    const contasDoLancamento = est ? contasDoPapel.map((c) => ({ ...c, estorno: true,
+      valor: -Math.abs(Number(c.valor) || 0),
+      ...(c.quantidade != null && c.quantidade !== "" ? { quantidade: -Math.abs(Number(c.quantidade) || 0) } : {}),
+      descricao: /^estorno/i.test(String(c.descricao || "")) ? c.descricao : ("Estorno — " + (c.descricao || "")).trim() })) : contasDoPapel;
+    const novas = contasDoLancamento.map((c) => {
       let paga = contaPaga(registrarAto({ ...c, numeroDoc: numeroDoc }, "criada", quem),
         { pagoEm: l.lancadoEm, valorPago: Number(c.valor) || 0 }, quem);
       const plano = cartaoDoCusto
@@ -16313,7 +16348,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     // Vindo da fila do extrato, o que atravessa leva a marca da linha do banco.
     const marca = l.extratoId ? { extratoId: l.extratoId, historicoBanco: l.historicoBanco || "",
       conferido: true, conferidoEm: l.conferidoEm || new Date().toISOString() } : null;
-    const daPonte = marca ? ponte.lancamentos.map((x) => ({ ...x, ...marca })) : ponte.lancamentos;
+    const daPonte = (marca ? ponte.lancamentos.map((x) => ({ ...x, ...marca })) : ponte.lancamentos)
+      .map((x) => (est ? { ...x, estorno: true } : x));
     save({ ...data, ...catalogoQueAprendeu(l),
       obras: todas.map((o) => (o && o.id === obra.id ? obraNova : o)),
       lancamentos: [...outrosLancamentos, ...lancs, ...daPonte],
