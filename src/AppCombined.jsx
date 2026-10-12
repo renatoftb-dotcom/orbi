@@ -13850,10 +13850,14 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos }) {
     </div>;
   }
   const blocos = [
-    { titulo: "Gestão de obras — dinheiro do cliente", grupos: ["gestao_entradas", "gestao_saidas"], saldo: "saldoGestao", rotulo: "Saldo da gestão" },
-    { titulo: "Escritório", grupos: ["receitas", "despesas"], saldo: "saldoEscritorio", rotulo: "Resultado do escritório" },
-    { titulo: "Empreendimentos", grupos: ["emp_aportes", "emp_entradas", "emp_saidas"], saldo: "saldoEmpreendimento", rotulo: "Saldo de empreendimentos" },
-    { titulo: "Sócios", grupos: ["socios", "socios_entradas"], saldo: "retiradas", rotulo: "Retiradas e empréstimos" },
+    { titulo: "Gestão de obras — dinheiro do cliente", grupos: ["gestao_entradas", "gestao_saidas"], saldo: "saldoGestao", rotulo: "Saldo da gestão",
+      totais: { gestao_entradas: "Total entradas da gestão", gestao_saidas: "Total saídas da gestão" } },
+    { titulo: "Escritório", grupos: ["receitas", "despesas"], saldo: "saldoEscritorio", rotulo: "Resultado do escritório",
+      totais: { receitas: "Total receitas do escritório", despesas: "Total custo do escritório" } },
+    { titulo: "Empreendimentos", grupos: ["emp_aportes", "emp_entradas", "emp_saidas"], saldo: "saldoEmpreendimento", rotulo: "Saldo de empreendimentos",
+      totais: { emp_aportes: "Total aportes", emp_entradas: "Total vendas", emp_saidas: "Total investido" } },
+    { titulo: "Sócios", grupos: ["socios", "socios_entradas"], saldo: "retiradas", rotulo: "Retiradas e empréstimos",
+      totais: { socios: "Total retiradas e empréstimos", socios_entradas: "Total devoluções e aportes" } },
     { titulo: "Estornos bancários", grupos: ["ajustes_bancarios"], saldo: "ajustes", rotulo: "Em aberto com o banco" },
   ];
   const soma = (f) => doAno.reduce((s, m) => s + (f(m) || 0), 0);
@@ -13906,14 +13910,34 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos }) {
                     {doAno.map((m) => <td key={m.mes} style={{ ...td, background: "#f5f7fa", borderTop: "1px solid rgba(38,36,33,0.12)" }} />)}
                     <td style={{ ...td, background: "#f5f7fa", borderTop: "1px solid rgba(38,36,33,0.12)" }} />
                   </tr>
-                  {usadas.map((c) => {
-                    const sinal = (grupoEscritorio(c.grupo) || {}).sinal;
+                  {/* Conta a conta, e o total de cada grupo logo abaixo das
+                      contas dele: entradas e saídas da gestão, receitas e
+                      custo do escritório — o que a planilha somava. */}
+                  {b.grupos.map((g, _i, todos) => {
+                    const doGrupo = usadas.filter((c) => c.grupo === g);
+                    if (!doGrupo.length) return null;
+                    const sinal = (grupoEscritorio(g) || {}).sinal;
+                    // com um grupo só no bloco, o total repetiria o saldo logo abaixo
+                    const gruposComConta = todos.filter((x) => usadas.some((c) => c.grupo === x)).length;
+                    const total = gruposComConta > 1 && b.totais && b.totais[g];
+                    const tdTot = { ...td, fontWeight: 600, borderTop: "1px dashed rgba(38,36,33,0.18)" };
                     return (
-                      <tr key={c.id}>
-                        <td style={{ ...tdNome, paddingLeft: 26, color: "#6b7280" }}>{sinal < 0 ? "− " : "+ "}{c.nome}</td>
-                        {doAno.map((m) => <td key={m.mes} style={td}>{cel(m.contas[c.id] || 0)}</td>)}
-                        <td style={td}>{cel(soma((m) => m.contas[c.id] || 0))}</td>
-                      </tr>
+                      <Fragment key={g}>
+                        {doGrupo.map((c) => (
+                          <tr key={c.id}>
+                            <td style={{ ...tdNome, paddingLeft: 26, color: "#6b7280" }}>{sinal < 0 ? "− " : "+ "}{c.nome}</td>
+                            {doAno.map((m) => <td key={m.mes} style={td}>{cel(m.contas[c.id] || 0)}</td>)}
+                            <td style={td}>{cel(soma((m) => m.contas[c.id] || 0))}</td>
+                          </tr>
+                        ))}
+                        {total && (
+                          <tr data-vk-total-grupo={g}>
+                            <td style={{ ...tdNome, ...tdTot, textAlign: "left", paddingLeft: 26, color: "#374151" }}>{total}</td>
+                            {doAno.map((m) => <td key={m.mes} style={tdTot}>{cel((m.grupos || {})[g] || 0)}</td>)}
+                            <td style={tdTot}>{cel(soma((m) => (m.grupos || {})[g] || 0))}</td>
+                          </tr>
+                        )}
+                      </Fragment>
                     );
                   })}
                   <tr>
