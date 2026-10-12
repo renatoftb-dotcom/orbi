@@ -3676,25 +3676,28 @@ function originalDoEstorno(movimento, lancamentos, opcoes) {
 // obra volta para a obra, na mesma conta e etapa (item a item, se eram
 // vários) — e a tela grava como estorno.
 // A conta da obra que é a outra ponta de um lançamento da base antiga, que
-// veio sem ligação: o mesmo papel (doc = documento) ou o mesmo valor pago no
-// mesmo dia — e que nenhum outro lançamento já reclame para si.
+// veio sem ligação: o mesmo papel (doc = documento) ou o mesmo valor pago até
+// 3 dias de diferença — e que nenhum outro lançamento já reclame para si.
 function contasDaObraSemLigacao(o, obras, lancamentos) {
   const dia = String((o && o.lancadoEm) || "").slice(0, 10);
   const valor = efCentavos(Math.abs(Number(o && o.valor) || 0));
-  const achadas = [];
+  const achadas = [], peloPapel = [];
   for (const ob of obras || []) {
     if (!ob) continue;
     for (const k of (ob.contasPagar || [])) {
       if (!k || !k.pago || k.estorno) continue;
       const v = efCentavos(Math.abs(Number(k.valorPago) || Number(k.valor) || 0));
       const mesmoPapel = !!o.documento && String(k.doc || "") === String(o.documento);
-      const mesmoDia = Math.abs(v - valor) < 0.01 && String(k.pagoEm || "").slice(0, 10) === dia;
+      // mesmo valor no mesmo dia — ou até 3 dias de diferença (a obra anota o
+      // dia em que lançou, o escritório o dia do banco)
+      const mesmoDia = Math.abs(v - valor) < 0.01 && efDias(String(k.pagoEm || "").slice(0, 10), dia) <= 3;
       if (!mesmoPapel && !mesmoDia) continue;
       if (lancamentosLigadosAsContas(lancamentos, ob.id, [k]).length) continue;
-      achadas.push({ ob, k });
+      (mesmoPapel ? peloPapel : achadas).push({ ob, k });
     }
   }
-  return achadas;
+  // o mesmo papel decide: duas RRTs iguais no mesmo dia se separam pelo número
+  return peloPapel.length ? peloPapel : achadas;
 }
 // As obras do dono do lançamento (cliente da gestão ou empreendimento).
 function obrasDoDonoDoLancamento(o, obras) {
@@ -3884,6 +3887,38 @@ function lancamentoDaLigacaoComObra(movimento, mes, sug, fechamentos, lancamento
   return { lancamento: { ...l, competencia, lancadoEm: String(m.data || l.lancadoEm).slice(0, 10),
     extratoId: m.id || "", historicoBanco: m.historico || "",
     ligarObra: { obraId: sug.obra.id, contaIds: sug.contas.map((c) => c.id) } } };
+}
+
+// ── Investido no empreendimento: o custo da obra inteira ─────────
+// O escritório só vê o que passou pela conta dele. O empreendimento custou
+// mais: compra no cartão, boleto pago por fora, aporte de sócio. O investido
+// é o que o escritório tem (o banco manda) MAIS as contas pagas na obra que
+// não têm lançamento no escritório — nem ligado, nem achável pelo papel ou
+// pelo valor no dia (base antiga ainda sem ligação não conta duas vezes).
+function investidoDoEmpreendimento(cliente, obras, lancamentos, opcoes) {
+  const o = opcoes || {};
+  const id = (cliente && cliente.id) || "";
+  const pelaConta = resultadoEmpreendimento(lancamentos, id, o).investido;
+  const obrasDele = (obras || []).filter((x) => x && x.clienteId === id);
+  // as contas da obra que a base antiga do escritório já tem, sem ligação
+  const achadas = new Set();
+  for (const l of lancamentos || []) {
+    if (!l || l.empreendimentoId !== id || (l.origem && l.origem.obraId)) continue;
+    const c = contaEscritorio(l.contaId);
+    if (!c || c.grupo !== "emp_saidas") continue;
+    const a = contasDaObraSemLigacao(l, obrasDele, lancamentos);
+    if (a.length === 1) achadas.add(a[0].k.id);
+  }
+  let foraDaConta = 0;
+  for (const ob of obrasDele) {
+    for (const k of ob.contasPagar || []) {
+      if (!k || !k.pago || achadas.has(k.id)) continue;
+      if (EF_GRUPOS_CUSTO_OBRA.indexOf(ponteGrupoDaConta(k.contaId, o)) < 0) continue;
+      if (lancamentosLigadosAsContas(lancamentos, ob.id, [k]).length) continue;
+      foraDaConta = efCentavos(foraDaConta + (Number(k.valorPago) || Number(k.valor) || 0));
+    }
+  }
+  return { pelaConta, foraDaConta, total: efCentavos(pelaConta + foraDaConta) };
 }
 
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
@@ -5253,11 +5288,22 @@ function EmpreendimentosQuadro({ data, lancs, aoFiltrar }) {
           <tbody>
             {lista.map((c) => {
               // "Em andamento" desmarcado no cadastro = empreendimento fechado.
-              const r = resultadoEmpreendimento(lancs, c.id, { concluido: c.ativo === false });
+              const r0 = resultadoEmpreendimento(lancs, c.id, { concluido: c.ativo === false });
+              const inv = investidoDoEmpreendimento(c, (data || {}).obras || [], lancs);
+              // o resultado da venda é contra o custo inteiro, não só o que passou pela conta
+              const r = { ...r0, investido: inv.total, resultado: r0.resultado == null ? null : efCentavos(r0.vendido - inv.total) };
               return (
                 <tr key={c.id} style={{ borderTop: "1px solid rgba(38,36,33,0.06)" }}>
                   <td style={{ padding: "7px 12px" }}>{c.nome}</td>
-                  <td style={{ padding: "7px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{efDinheiro(r.investido)}</td>
+                  <td style={{ padding: "7px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                    {efDinheiro(r.investido)}
+                    {inv.foraDaConta !== 0 && (
+                      <div data-vk-investido-partes style={{ fontSize: 11, color: "#6b7280", marginTop: 2, lineHeight: 1.35 }}>
+                        <span style={{ whiteSpace: "nowrap" }}>{efDinheiro(inv.pelaConta)} pela conta</span>{" · "}
+                        <span style={{ whiteSpace: "nowrap" }}>{efDinheiro(inv.foraDaConta)} por fora</span>
+                      </div>
+                    )}
+                  </td>
                   <td style={{ padding: "7px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
                     {r.recebido ? efDinheiro(r.recebido) : "—"}
                   </td>
@@ -5276,7 +5322,8 @@ function EmpreendimentosQuadro({ data, lancs, aoFiltrar }) {
         </table>
       </div>
       <div style={{ fontSize: 11.5, color: "#6b7280" }}>
-        O investido não entra no resultado do mês. Enquanto houver unidade por vender, o que entra é
+        Investido é o custo da obra inteira: o que passou pela conta do escritório mais o que foi pago na obra por fora
+        (cartão, boleto de outra conta) e ainda não tem lançamento aqui. O investido não entra no resultado do mês. Enquanto houver unidade por vender, o que entra é
         recebimento, não lucro — o resultado é apurado quando você desmarca “Em andamento” no cadastro.
       </div>
     </div>

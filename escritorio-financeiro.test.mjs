@@ -27,7 +27,7 @@ const M = new Function(src + `
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
-           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
+           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
            competenciasDoCartao,
@@ -2663,6 +2663,35 @@ teste("Já está na obra: a planilha da obra registra semanas depois do banco (a
   assert.ok(sug && sug.contas[0].id === "k");
   // 25 dias ANTES do banco já não serve
   assert.strictEqual(M.contaDaObraParaALinha({ ...m, data: "2026-10-17" }, [], { obras: [obra], clientes: [cli], planoObra: plano }), null);
+});
+
+teste("Investido do empreendimento: o que passou pela conta + o pago na obra por fora, sem contar duas vezes a base antiga", () => {
+  const cli = { id: "e1", nome: "Jacarezinho Módulo 1", servicos: { empreendimento: true } };
+  const obra = { id: "ob1", clienteId: "e1", contasPagar: [
+    { id: "k1", contaId: "material", valor: 1000, valorPago: 1000, pago: true, pagoEm: "2026-07-01" },              // ligada
+    { id: "k2", contaId: "material", valor: 7200, valorPago: 7200, pago: true, pagoEm: "2026-09-23" },              // só na obra (cartão)
+    { id: "k3", contaId: "impostos", valor: 496.74, valorPago: 496.74, pago: true, pagoEm: "2025-05-07", doc: "3429" }, // base antiga sem ligação
+    { id: "k4", contaId: "deposito_proprio", valor: 5000, valorPago: 5000, pago: true, pagoEm: "2026-09-24" },      // entrada: não é custo
+    { id: "k5", contaId: "material", valor: 300, pago: false }] };                                                    // não paga
+  const lancs = [
+    { id: "a", contaId: "emp_construcao", empreendimentoId: "e1", valor: 1000, competencia: "2026-07", lancadoEm: "2026-07-01", origem: { obraId: "ob1", tipo: "conta", refId: "k1" } },
+    { id: "b", contaId: "emp_taxas", empreendimentoId: "e1", unidadeId: "empreendimento", valor: 496.74, competencia: "2025-05", lancadoEm: "2025-05-07", documento: "3429" },
+    { id: "c", contaId: "emp_taxas", empreendimentoId: "e1", valor: 1438.29, competencia: "2026-04", lancadoEm: "2026-04-16" }];  // só no escritório
+  const r = M.investidoDoEmpreendimento(cli, [obra], lancs, { planoObra: PLANO_OBRA_T });
+  assert.deepStrictEqual(r, { pelaConta: 2935.03, foraDaConta: 7200, total: 10135.03 });
+});
+
+teste("Base antiga sem ligação: duas contas iguais no mesmo dia se separam pelo número do papel", () => {
+  const obra = { id: "ob", contasPagar: [
+    { id: "r1", contaId: "outras_taxas", valor: 125.4, valorPago: 125.4, pago: true, pagoEm: "2025-05-21", doc: "3446" },
+    { id: "r2", contaId: "outras_taxas", valor: 125.4, valorPago: 125.4, pago: true, pagoEm: "2025-05-21", doc: "3447" }] };
+  const l = { id: "x", valor: 125.4, lancadoEm: "2025-05-21", documento: "3447" };
+  assert.deepStrictEqual(M.contasDaObraSemLigacao(l, [obra], []).map((a) => a.k.id), ["r2"]);
+  // sem papel: as duas servem, e quem chama não escolhe
+  assert.strictEqual(M.contasDaObraSemLigacao({ ...l, documento: "" }, [obra], []).length, 2);
+  // valor igual com 1 dia de diferença ainda é a mesma
+  assert.strictEqual(M.contasDaObraSemLigacao({ id: "c", valor: 780, lancadoEm: "2026-09-23" },
+    [{ id: "o2", contasPagar: [{ id: "c1", valor: 780, valorPago: 780, pago: true, pagoEm: "2026-09-24" }] }], []).length, 1);
 });
 
 for (const [nome, fn] of testes) {
