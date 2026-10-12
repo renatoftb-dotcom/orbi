@@ -11486,6 +11486,34 @@ function comSaldoAplicacao(fechamentos, mes, valor) {
   return f;
 }
 
+// ── Receita financeira apurada no mês ───────────────────────────
+// As idas e vindas da aplicação (RDC) ficam fora da conta, então o dinheiro
+// aplicado continua dentro do saldo calculado: ele é "conta + aplicação",
+// sem o rendimento. O que o escritório tem de fato (banco + aplicação) menos
+// o calculado é o rendimento do mês — a receita financeira. Antes era
+// apurada uma vez por ano, em dezembro; de dez/2025 em diante, todo mês.
+function receitaFinanceiraDoMes(saldoCalculado, saldoBanco, saldoAplicacao) {
+  if (saldoBanco == null || saldoAplicacao == null || saldoBanco === "" || saldoAplicacao === "") return null;
+  return efCentavos((Number(saldoBanco) || 0) + (Number(saldoAplicacao) || 0) - (Number(saldoCalculado) || 0));
+}
+// O lançamento que zera a diferença: Receita Financeira no último dia do
+// mês, fora da conta corrente (o rendimento nasce dentro da aplicação, não
+// passa pelo extrato), já conferido. Se o mês já tem o seu, ele é ajustado
+// em vez de nascer outro.
+function lancamentoDoRendimento(mes, valor, existente) {
+  const [a, m] = String(mes).split("-").map(Number);
+  const ultimo = new Date(Date.UTC(a, m, 0)).getUTCDate();
+  const nome = efMesPorExtenso(mes);
+  if (existente) return { ...existente, valor: efCentavos((Number(existente.valor) || 0) + (Number(valor) || 0)) };
+  return { contaId: "rec_financeira", unidadeId: "escritorio", competencia: mes,
+    lancadoEm: `${mes}-${String(ultimo).padStart(2, "0")}`, valor: efCentavos(valor),
+    descricao: `Receita de aplicação financeira — rendimento de ${nome}`, fornecedor: "Aplicação financeira",
+    contaBanco: "nao", conferido: true, conferidoPor: "aplicacao", origem: { tipo: "rendimento", mes } };
+}
+function rendimentoLancadoNoMes(lancamentos, mes) {
+  return (lancamentos || []).find((l) => l && l.origem && l.origem.tipo === "rendimento" && String(l.competencia) === String(mes)) || null;
+}
+
 // O saldo do banco informado no mês (gravado ao sair do campo ou no fecho).
 function saldoBancoDoMes(fechamentos, mes) {
   const r = (fechamentos || {})[String(mes)];
@@ -15238,7 +15266,7 @@ function CampoValorBR({ valor, aoMudar, negativo, style, onBlur, ...resto }) {
   );
 }
 
-function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes, aoMarcar, aoMarcarTodos, aoFechar, aoReabrir, ocupado, extrato, aoGuardarAplicacao, aoGuardarBanco }) {
+function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes, aoMarcar, aoMarcarTodos, aoFechar, aoReabrir, ocupado, extrato, aoGuardarAplicacao, aoGuardarBanco, aoLancarRendimento }) {
   const S = EF_ESTILO;
   // A conferência é feita ao longo do mês, com o extrato parcial: por isso
   // a tela abre mostrando só o que ainda falta bater.
@@ -15266,10 +15294,17 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
   const bancoDoExtrato = registro.saldoBanco == null && saldoLido != null && efNumero(banco) === saldoLido;
   const saldoBanco = efNumero(banco);
   const calculado = linha ? linha.saldoExtrato : 0;
-  const diferenca = diferencaDeFechamento(calculado, saldoBanco == null ? "" : saldoBanco);
-  const podeFechar = !fechado && diferenca === 0 && !ocupado;
   const aplicacaoGravada = saldoAplicacaoDoMes(fechamentos, mes);
   const [aplicacao, setAplicacao] = useState(aplicacaoGravada == null ? "" : aplicacaoGravada.toFixed(2).replace(".", ","));
+  // Com a aplicação informada, a régua é banco + aplicação: a diferença
+  // para o calculado é a receita financeira do mês.
+  const aplicacaoAtual = efNumero(aplicacao);
+  const rendimentoDoMes = rendimentoLancadoNoMes(lancs, mes);
+  const comAplicacao = aplicacaoAtual != null;
+  const diferenca = comAplicacao
+    ? receitaFinanceiraDoMes(calculado, saldoBanco, aplicacaoAtual)
+    : diferencaDeFechamento(calculado, saldoBanco == null ? "" : saldoBanco);
+  const podeFechar = !fechado && diferenca === 0 && !ocupado;
   useEffect(() => {
     setAplicacao(aplicacaoGravada == null ? "" : aplicacaoGravada.toFixed(2).replace(".", ","));
   }, [mes, aplicacaoGravada]);
@@ -15329,11 +15364,13 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
                 }} />
             ), bancoDoExtrato ? "lido do extrato" : "")}
             {bloco("calculado", "Saldo calculado", <div style={numero}>{efDinheiro(calculado)}</div>)}
-            {bloco("diferenca", "Diferença", (
-              <div style={{ ...numero, color: diferenca === 0 ? "#0474f4" : (diferenca == null ? "#6b7280" : "#b45309") }}>
+            {bloco("diferenca", comAplicacao ? "Receita financeira" : "Diferença", (
+              <div style={{ ...numero, color: diferenca === 0 ? "#0474f4" : (diferenca == null ? "#6b7280" : comAplicacao && diferenca > 0 ? "#047857" : "#b45309") }}>
                 {diferenca == null ? "informe o saldo" : efDinheiro(diferenca)}
               </div>
-            ))}
+            ), comAplicacao && diferenca != null
+              ? (diferenca > 0 ? "banco + aplicação − calculado" : diferenca < 0 ? "calculado maior: confira os lançamentos" : rendimentoDoMes ? "rendimento lançado" : "")
+              : "")}
             {/* A aplicação não entra na conferência com o banco: é outro saldo,
                 informado à mão, e grava ao sair do campo — sem fechar o mês. */}
             {aoGuardarAplicacao && bloco("aplicacao", "Saldo da aplicação", (
@@ -15352,6 +15389,14 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
             {bloco("acao", "", (
               <div style={{ ...caixa, display: "flex", gap: 8, alignItems: "center" }}>
                 {ocupado && <span style={{ fontSize: 12, color: "#6b7280" }}>{ocupado}</span>}
+                {/* O rendimento apurado vira lançamento em Receita Financeira:
+                    com ele, o calculado chega em banco + aplicação e o mês fecha. */}
+                {!fechado && comAplicacao && diferenca > 0 && aoLancarRendimento && (
+                  <button data-vk-lancar-rendimento="1" style={{ ...S.btn, ...caixa, background: "#047857", borderColor: "#047857" }}
+                    disabled={!!ocupado} onClick={() => aoLancarRendimento(mes, diferenca)}>
+                    Lançar receita financeira
+                  </button>
+                )}
                 {fechado ? (
                   <button style={{ ...S.btnSec, ...caixa }} onClick={() => aoReabrir(mes)}>Reabrir mês</button>
                 ) : (
@@ -16207,6 +16252,22 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     dialogo.alertar({ titulo: "Parcela da gestão", mensagem: erro, tipo: "aviso" });
   }
 
+  // Receita financeira do mês (rendimento da aplicação): um lançamento por
+  // mês, ajustado se já existir. Pergunta antes, com o valor e o mês.
+  async function lancarRendimento(mes, valor) {
+    if (!(valor > 0)) return;
+    const existente = rendimentoLancadoNoMes(lancs, mes);
+    const ok = await dialogo.confirmar({
+      titulo: `Lançar a receita financeira de ${efMesPorExtenso(mes)}?`,
+      mensagem: existente
+        ? `O rendimento já lançado no mês (${efDinheiro(existente.valor)}) passa a ${efDinheiro(efCentavos(Number(existente.valor) + valor))}.`
+        : `Entra ${efDinheiro(valor)} em Receita Financeira (Escritório), no último dia do mês, fora da conta corrente — o rendimento nasce dentro da aplicação. Com ele, o calculado chega em banco + aplicação.`,
+      confirmar: "Lançar",
+    });
+    if (!ok) return;
+    salvarLancamento(lancamentoDoRendimento(mes, valor, existente));
+  }
+
   function salvarLancamento(l) {
     if (l && l.naObra) { lancarCustoNaObra(l); return; }
     // A compra no cartão que já está numa fatura fechada só muda a
@@ -16704,6 +16765,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
           aoFechar={fecharMes} aoReabrir={reabrirMes} ocupado={ocupado}
           aoGuardarAplicacao={(mes, v) => guardarFechamentos(comSaldoAplicacao(fechamentos, mes, v)).catch(console.error)}
           aoGuardarBanco={(mes, v) => guardarFechamentos(comSaldoBanco(fechamentos, mes, v)).catch(console.error)}
+          aoLancarRendimento={lancarRendimento}
           extrato={{
             arrastando: arrastandoExtrato, setArrastando: setArrastandoExtrato,
             origem: origemExtrato, entrada: entradaExtrato, receber: receberExtrato,

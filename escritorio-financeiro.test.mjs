@@ -27,7 +27,7 @@ const M = new Function(src + `
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
-           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
+           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
            competenciasDoCartao,
@@ -2446,6 +2446,31 @@ teste("Saldo do banco digitado: grava no mês sem fechar; total = banco + aplica
   assert.strictEqual(M.mesEstaFechado("2025-12", f), false);
   assert.strictEqual(Math.round((M.saldoBancoDoMes(f, "2025-12") + M.saldoAplicacaoDoMes(f, "2025-12")) * 100) / 100, 362434.26);
   assert.deepStrictEqual(M.comSaldoBanco(f, "2025-12", "")["2025-12"], { saldoAplicacao: 362206.36 });
+});
+
+teste("Receita financeira do mês: banco + aplicação − calculado; o lançamento zera a diferença", () => {
+  // dezembro/2025: a apuração anual já fechou a conta
+  assert.strictEqual(M.receitaFinanceiraDoMes(362434.26, 227.9, 362206.36), 0);
+  assert.strictEqual(M.receitaFinanceiraDoMes(100000, 500, 101800), 2300);
+  assert.strictEqual(M.receitaFinanceiraDoMes(100000, null, 101800), null);
+  assert.strictEqual(M.receitaFinanceiraDoMes(100000, 500, null), null);
+  const l = M.lancamentoDoRendimento("2026-01", 2300);
+  assert.strictEqual(l.contaId, "rec_financeira"); assert.strictEqual(l.unidadeId, "escritorio");
+  assert.strictEqual(l.lancadoEm, "2026-01-31"); assert.strictEqual(l.competencia, "2026-01");
+  assert.strictEqual(l.contaBanco, "nao"); assert.strictEqual(l.conferido, true);
+  assert.deepStrictEqual(M.validarLancamentoEscritorio(l), []);
+  assert.strictEqual(M.lancamentoDoRendimento("2026-02", 1).lancadoEm, "2026-02-28");
+  // com ele, o calculado chega em banco + aplicação
+  const base = [{ id: "a", contaId: "rec_projetos", unidadeId: "escritorio", valor: 1000, competencia: "2026-01" }];
+  const antes = M.extratoEscritorio(base, { saldoAbertura: 99000 })[0].saldoExtrato;
+  const depois = M.extratoEscritorio(base.concat([{ ...l, id: "r" }]), { saldoAbertura: 99000 })[0].saldoExtrato;
+  assert.strictEqual(M.receitaFinanceiraDoMes(antes, 500, 101800), 2300);
+  assert.strictEqual(M.receitaFinanceiraDoMes(depois, 500, 101800), 0);
+  // já lançado: ajusta o mesmo, não cria outro
+  const ex = { ...l, id: "r" };
+  assert.strictEqual(M.rendimentoLancadoNoMes([ex], "2026-01"), ex);
+  const aj = M.lancamentoDoRendimento("2026-01", 50, ex);
+  assert.strictEqual(aj.id, "r"); assert.strictEqual(aj.valor, 2350);
 });
 
 for (const [nome, fn] of testes) {
