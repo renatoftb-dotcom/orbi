@@ -27,7 +27,7 @@ const M = new Function(src + `
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
-           fontesDasContasPagas, arquivoDoColar, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
+           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
            competenciasDoCartao,
@@ -2424,6 +2424,20 @@ teste("Obra encerrada: sem cliente e obra do cadastro, mas com o nome escrito", 
   assert.deepStrictEqual(M.validarLancamentoEscritorio({ ...base, obraEncerrada: true, cliente: "Residencial Villa Toscana", projeto: "Vila Matilde" }), []);
   // no escritório a marca não muda nada
   assert.deepStrictEqual(M.validarLancamentoEscritorio({ contaId: "utensilios", unidadeId: "escritorio", valor: 10, competencia: "2026-01", obraEncerrada: true }), []);
+});
+
+teste("Saldo da aplicação: grava por mês sem fechar, e o fechamento não apaga", () => {
+  let f = M.comSaldoAplicacao({}, "2026-09", 152340.5);
+  assert.strictEqual(M.saldoAplicacaoDoMes(f, "2026-09"), 152340.5);
+  assert.strictEqual(M.mesEstaFechado("2026-09", f), false);
+  assert.strictEqual(M.saldoAplicacaoDoMes(f, "2026-10"), null);
+  // mês já com fechamento: guarda junto, sem mexer no saldo do banco
+  f = M.comSaldoAplicacao({ "2026-08": { saldoBanco: 100, fechadoEm: "2026-09-02" } }, "2026-08", 0);
+  assert.deepStrictEqual(f["2026-08"], { saldoBanco: 100, fechadoEm: "2026-09-02", saldoAplicacao: 0 });
+  assert.strictEqual(M.saldoAplicacaoDoMes(f, "2026-08"), 0);
+  // apagar o campo tira só ele; registro vazio sai
+  assert.deepStrictEqual(M.comSaldoAplicacao(f, "2026-08", "")["2026-08"], { saldoBanco: 100, fechadoEm: "2026-09-02" });
+  assert.deepStrictEqual(M.comSaldoAplicacao(M.comSaldoAplicacao({}, "2026-07", 5), "2026-07", null), {});
 });
 
 for (const [nome, fn] of testes) {

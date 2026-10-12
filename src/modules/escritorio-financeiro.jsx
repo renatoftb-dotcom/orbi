@@ -1636,6 +1636,26 @@ function fechamentosDoEscritorio(data) {
   return (f && typeof f === "object") ? f : {};
 }
 
+// ── Saldo da aplicação (investimento) ──────────────────────────
+// O dinheiro aplicado (RDC) não passa pelo extrato da conta: as aplicações
+// e os resgates ficam fora da conta. O saldo dele é informado à mão, mês a
+// mês, e mora no mesmo registro do fechamento — sem precisar fechar o mês.
+// Não mexe no saldo da conta nem no resultado: é para ver o total.
+function saldoAplicacaoDoMes(fechamentos, mes) {
+  const r = (fechamentos || {})[String(mes)];
+  const v = r && r.saldoAplicacao;
+  return v == null || v === "" || !Number.isFinite(Number(v)) ? null : efCentavos(Number(v));
+}
+function comSaldoAplicacao(fechamentos, mes, valor) {
+  const f = { ...(fechamentos || {}) };
+  const reg = { ...(f[String(mes)] || {}) };
+  const n = valor == null || valor === "" ? null : Number(valor);
+  if (n == null || !Number.isFinite(n)) delete reg.saldoAplicacao;
+  else reg.saldoAplicacao = efCentavos(n);
+  if (Object.keys(reg).length) f[String(mes)] = reg; else delete f[String(mes)];
+  return f;
+}
+
 function mesEstaFechado(mes, fechamentos) {
   const f = (fechamentos || {})[String(mes)];
   return !!(f && f.fechadoEm);
@@ -3551,7 +3571,7 @@ function efDinheiro(v) {
 
 // O extrato: blocos em linhas, meses em colunas. Mesma leitura da planilha,
 // com cada bloco somando só o que é dele.
-function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
+function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos }) {
   const S = EF_ESTILO;
   // O quadro rola dentro de uma caixa que termina no pé da janela: a barra
   // de rolagem para o lado fica sempre à vista (não lá embaixo, depois da
@@ -3662,6 +3682,28 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno }) {
                 {cel(doAno[doAno.length - 1].saldoExtrato)}
               </td>
             </tr>
+            {/* A aplicação, informada no Fechamento: fora da conta, então
+                fora do saldo do extrato — somada só no total disponível. */}
+            {doAno.some((m) => saldoAplicacaoDoMes(fechamentos, m.mes) != null) && (() => {
+              const apl = (m) => saldoAplicacaoDoMes(fechamentos, m.mes);
+              // na coluna do ano, o último mês que tem a aplicação informada
+              const ult = doAno.slice().reverse().find((m) => apl(m) != null);
+              const vazio = <span style={{ color: "#d1d5db" }}>—</span>;
+              return (
+                <>
+                  <tr data-vk-linha-aplicacao="1">
+                    <td style={{ ...tdNome, color: "#4b5563" }}>Aplicação (investimento)</td>
+                    {doAno.map((m) => <td key={m.mes} style={td}>{apl(m) == null ? vazio : cel(apl(m))}</td>)}
+                    <td style={td}>{apl(ult) == null ? vazio : cel(apl(ult))}</td>
+                  </tr>
+                  <tr data-vk-linha-total="1">
+                    <td style={{ ...tdNome, fontWeight: 700 }}>Total disponível</td>
+                    {doAno.map((m) => <td key={m.mes} style={{ ...td, fontWeight: 700 }}>{apl(m) == null ? vazio : cel(efCentavos(m.saldoExtrato + apl(m)))}</td>)}
+                    <td style={{ ...td, fontWeight: 700 }}>{apl(ult) == null ? vazio : cel(efCentavos(ult.saldoExtrato + apl(ult)))}</td>
+                  </tr>
+                </>
+              );
+            })()}
           </tbody>
         </table>
       </div>
@@ -5347,7 +5389,7 @@ function CampoValorBR({ valor, aoMudar, negativo, style, onBlur, ...resto }) {
   );
 }
 
-function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes, aoMarcar, aoMarcarTodos, aoFechar, aoReabrir, ocupado, extrato }) {
+function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes, aoMarcar, aoMarcarTodos, aoFechar, aoReabrir, ocupado, extrato, aoGuardarAplicacao }) {
   const S = EF_ESTILO;
   // A conferência é feita ao longo do mês, com o extrato parcial: por isso
   // a tela abre mostrando só o que ainda falta bater.
@@ -5373,6 +5415,11 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
   const calculado = linha ? linha.saldoExtrato : 0;
   const diferenca = diferencaDeFechamento(calculado, saldoBanco == null ? "" : saldoBanco);
   const podeFechar = !fechado && diferenca === 0 && !ocupado;
+  const aplicacaoGravada = saldoAplicacaoDoMes(fechamentos, mes);
+  const [aplicacao, setAplicacao] = useState(aplicacaoGravada == null ? "" : aplicacaoGravada.toFixed(2).replace(".", ","));
+  useEffect(() => {
+    setAplicacao(aplicacaoGravada == null ? "" : aplicacaoGravada.toFixed(2).replace(".", ","));
+  }, [mes, aplicacaoGravada]);
   // Colar o extrato: com a tela de fechamento aberta, um Ctrl+V de arquivo
   // em qualquer ponto dela entra como se tivesse sido arrastado.
   const receberRef = useRef(null);
@@ -5413,6 +5460,22 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
             {diferenca == null ? "informe o saldo" : efDinheiro(diferenca)}
           </div>
         </div>
+        {/* A aplicação não entra na conferência com o banco: é outro saldo,
+            informado à mão, e grava ao sair do campo — sem fechar o mês. */}
+        {aoGuardarAplicacao && (
+          <div data-vk-aplicacao="1" style={{ display: "grid", gap: 3, paddingLeft: 14, borderLeft: "1px solid rgba(38,36,33,0.12)" }}>
+            <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>Saldo da aplicação</span>
+            <CampoValorBR style={{ ...S.input, maxWidth: 160 }} valor={aplicacao} placeholder="0,00" disabled={fechado}
+              aoMudar={setAplicacao}
+              onBlur={(e) => {
+                const v = efNumero(valorBRCompleto(valorBRDigitado(e.target.value)));
+                if (v !== aplicacaoGravada) aoGuardarAplicacao(mes, v == null ? "" : v);
+              }} />
+            <span style={{ fontSize: 10.5, color: "#6b7280" }}>
+              {aplicacaoGravada != null ? <>conta + aplicação: <b style={{ color: "#111827" }}>{efDinheiro(efCentavos(calculado + aplicacaoGravada))}</b></> : "investimento · informe no fim do mês"}
+            </span>
+          </div>
+        )}
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
           {ocupado && <span style={{ fontSize: 12, color: "#6b7280" }}>{ocupado}</span>}
           {fechado ? (
@@ -6683,7 +6746,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         return;
       }
     }
-    await guardarFechamentos({ ...fechamentos, [mes]: { saldoBanco: Number(saldoBanco) || 0, fechadoEm: new Date().toISOString() } });
+    await guardarFechamentos({ ...fechamentos, [mes]: { ...(fechamentos[mes] || {}), saldoBanco: Number(saldoBanco) || 0, fechadoEm: new Date().toISOString() } });
     if (certosDoMes.length && onReload) await onReload();
     setAviso(`${efMesPorExtenso(mes)} fechado.`);
   }
@@ -6762,6 +6825,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
           mes={mesEmConferencia} aoTrocarMes={setMesFecho}
           aoMarcar={marcarConferido} aoMarcarTodos={marcarMesInteiro}
           aoFechar={fecharMes} aoReabrir={reabrirMes} ocupado={ocupado}
+          aoGuardarAplicacao={(mes, v) => guardarFechamentos(comSaldoAplicacao(fechamentos, mes, v)).catch(console.error)}
           extrato={{
             arrastando: arrastandoExtrato, setArrastando: setArrastandoExtrato,
             origem: origemExtrato, entrada: entradaExtrato, receber: receberExtrato,
@@ -6813,7 +6877,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
                   </div>
                 ))}
               </div>
-              <ExtratoEscritorioQuadro linhas={linhas} ano={anoAtual} aoTrocarAno={setAno} />
+              <ExtratoEscritorioQuadro linhas={linhas} ano={anoAtual} aoTrocarAno={setAno} fechamentos={fechamentos} />
             </>
           )}
         </>
