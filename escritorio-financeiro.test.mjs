@@ -27,7 +27,7 @@ const M = new Function(src + `
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
-           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
+           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
            competenciasDoCartao,
@@ -2438,6 +2438,14 @@ teste("Saldo da aplicação: grava por mês sem fechar, e o fechamento não apag
   // apagar o campo tira só ele; registro vazio sai
   assert.deepStrictEqual(M.comSaldoAplicacao(f, "2026-08", "")["2026-08"], { saldoBanco: 100, fechadoEm: "2026-09-02" });
   assert.deepStrictEqual(M.comSaldoAplicacao(M.comSaldoAplicacao({}, "2026-07", 5), "2026-07", null), {});
+});
+
+teste("Saldo do banco digitado: grava no mês sem fechar; total = banco + aplicação", () => {
+  let f = M.comSaldoAplicacao({}, "2025-12", 362206.36);
+  f = M.comSaldoBanco(f, "2025-12", 227.9);
+  assert.strictEqual(M.mesEstaFechado("2025-12", f), false);
+  assert.strictEqual(Math.round((M.saldoBancoDoMes(f, "2025-12") + M.saldoAplicacaoDoMes(f, "2025-12")) * 100) / 100, 362434.26);
+  assert.deepStrictEqual(M.comSaldoBanco(f, "2025-12", "")["2025-12"], { saldoAplicacao: 362206.36 });
 });
 
 for (const [nome, fn] of testes) {

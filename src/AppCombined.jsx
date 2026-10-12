@@ -11486,6 +11486,22 @@ function comSaldoAplicacao(fechamentos, mes, valor) {
   return f;
 }
 
+// O saldo do banco informado no mês (gravado ao sair do campo ou no fecho).
+function saldoBancoDoMes(fechamentos, mes) {
+  const r = (fechamentos || {})[String(mes)];
+  const v = r && r.saldoBanco;
+  return v == null || v === "" || !Number.isFinite(Number(v)) ? null : efCentavos(Number(v));
+}
+function comSaldoBanco(fechamentos, mes, valor) {
+  const f = { ...(fechamentos || {}) };
+  const reg = { ...(f[String(mes)] || {}) };
+  const n = valor == null || valor === "" ? null : Number(valor);
+  if (n == null || !Number.isFinite(n)) delete reg.saldoBanco;
+  else reg.saldoBanco = efCentavos(n);
+  if (Object.keys(reg).length) f[String(mes)] = reg; else delete f[String(mes)];
+  return f;
+}
+
 function mesEstaFechado(mes, fechamentos) {
   const f = (fechamentos || {})[String(mes)];
   return !!(f && f.fechadoEm);
@@ -13526,10 +13542,13 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos }) {
                     {doAno.map((m) => <td key={m.mes} style={td}>{apl(m) == null ? vazio : cel(apl(m))}</td>)}
                     <td style={td}>{apl(ult) == null ? vazio : cel(apl(ult))}</td>
                   </tr>
+                  {/* conta corrente (o saldo do banco informado) + aplicação */}
                   <tr data-vk-linha-total="1">
-                    <td style={{ ...tdNome, fontWeight: 700 }}>Total disponível</td>
-                    {doAno.map((m) => <td key={m.mes} style={{ ...td, fontWeight: 700 }}>{apl(m) == null ? vazio : cel(efCentavos(m.saldoExtrato + apl(m)))}</td>)}
-                    <td style={{ ...td, fontWeight: 700 }}>{apl(ult) == null ? vazio : cel(efCentavos(ult.saldoExtrato + apl(ult)))}</td>
+                    <td style={{ ...tdNome, fontWeight: 700 }}>Total disponível <span style={{ fontWeight: 400, color: "#6b7280" }}>(banco + aplicação)</span></td>
+                    {doAno.map((m) => { const bco = saldoBancoDoMes(fechamentos, m.mes);
+                      return <td key={m.mes} style={{ ...td, fontWeight: 700 }}>{apl(m) == null || bco == null ? vazio : cel(efCentavos(bco + apl(m)))}</td>; })}
+                    <td style={{ ...td, fontWeight: 700 }}>{(() => { const bco = ult ? saldoBancoDoMes(fechamentos, ult.mes) : null;
+                      return !ult || bco == null ? vazio : cel(efCentavos(bco + apl(ult))); })()}</td>
                   </tr>
                 </>
               );
@@ -15219,7 +15238,7 @@ function CampoValorBR({ valor, aoMudar, negativo, style, onBlur, ...resto }) {
   );
 }
 
-function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes, aoMarcar, aoMarcarTodos, aoFechar, aoReabrir, ocupado, extrato, aoGuardarAplicacao }) {
+function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes, aoMarcar, aoMarcarTodos, aoFechar, aoReabrir, ocupado, extrato, aoGuardarAplicacao, aoGuardarBanco }) {
   const S = EF_ESTILO;
   // A conferência é feita ao longo do mês, com o extrato parcial: por isso
   // a tela abre mostrando só o que ainda falta bater.
@@ -15234,12 +15253,16 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
   // O saldo do banco: o que foi informado ao fechar; sem ele, o da última
   // linha SALDO do extrato do mês — o arquivo já traz o número.
   const saldoLido = extrato && extrato.saldoLido != null ? extrato.saldoLido : null;
-  const bancoInicial = (reg) => (reg.saldoBanco != null ? String(reg.saldoBanco).replace(".", ",")
+  const bancoInicial = (reg) => (reg.saldoBanco != null && reg.saldoBanco !== "" ? Number(reg.saldoBanco).toFixed(2).replace(".", ",")
     : saldoLido != null ? saldoLido.toFixed(2).replace(".", ",") : "");
   const [banco, setBanco] = useState(() => bancoInicial(registro));
+  // Volta ao gravado só quando muda o mês ou o saldo gravado/lido — não a
+  // cada gravação do registro (a aplicação grava nele e apagava o saldo do
+  // banco que estava sendo digitado).
+  const saldoBancoGravado = ((fechamentos || {})[mes] || {}).saldoBanco;
   useEffect(() => {
     setBanco(bancoInicial((fechamentos || {})[mes] || {}));
-  }, [mes, fechamentos, saldoLido]);
+  }, [mes, saldoBancoGravado, saldoLido]);
   const bancoDoExtrato = registro.saldoBanco == null && saldoLido != null && efNumero(banco) === saldoLido;
   const saldoBanco = efNumero(banco);
   const calculado = linha ? linha.saldoExtrato : 0;
@@ -15269,53 +15292,77 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
-      <div style={{ ...S.card, display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap" }}>
-        <EFSeletor rotulo="Mês" valor={mes} aoTrocar={aoTrocarMes}
-          opcoes={meses.slice().sort((a, b) => String(b).localeCompare(String(a)))
-            .map((m) => [m, efMesPorExtenso(m) + (mesEstaFechado(m, fechamentos) ? " ✓" : "")])} />
-        <div style={{ display: "grid", gap: 3 }}>
-          <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>Saldo do banco</span>
-          <CampoValorBR style={{ ...S.input, maxWidth: 160 }} valor={banco} placeholder="0,00" negativo
-            disabled={fechado} aoMudar={setBanco} />
-          {bancoDoExtrato && <span style={{ fontSize: 10.5, color: "#6b7280" }}>lido do extrato</span>}
-        </div>
-        <div style={{ display: "grid", gap: 3 }}>
-          <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>Saldo calculado</span>
-          <div style={{ fontSize: 16, fontWeight: 700, fontVariantNumeric: "tabular-nums", padding: "6px 0" }}>{efDinheiro(calculado)}</div>
-        </div>
-        <div style={{ display: "grid", gap: 3 }}>
-          <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>Diferença</span>
-          <div style={{ fontSize: 16, fontWeight: 700, fontVariantNumeric: "tabular-nums", padding: "6px 0",
-            color: diferenca === 0 ? "#0474f4" : (diferenca == null ? "#6b7280" : "#b45309") }}>
-            {diferenca == null ? "informe o saldo" : efDinheiro(diferenca)}
+      {/* Todos os blocos com a mesma régua: rótulo, campo (38px) e uma linha
+          de apoio embaixo. Assim os campos e os números ficam sempre na mesma
+          altura, tenham ou não a linha de apoio. */}
+      {(() => {
+        const rot = { fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280", lineHeight: "14px", height: 14, whiteSpace: "nowrap" };
+        const apoio = { fontSize: 10.5, color: "#6b7280", lineHeight: "14px", minHeight: 14, whiteSpace: "nowrap" };
+        const caixa = { height: 38, boxSizing: "border-box" };
+        const numero = { ...caixa, display: "flex", alignItems: "center", fontSize: 16, fontWeight: 700, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
+        const bloco = (chave, rotulo, controle, linhaDeApoio, extra) => (
+          <div key={chave} data-vk-bloco-fecho={chave} style={{ display: "grid", gridTemplateRows: "14px 38px auto", gap: 4, ...(extra || {}) }}>
+            <span style={rot}>{rotulo}</span>
+            {controle}
+            <span style={apoio}>{linhaDeApoio || "\u00a0"}</span>
           </div>
-        </div>
-        {/* A aplicação não entra na conferência com o banco: é outro saldo,
-            informado à mão, e grava ao sair do campo — sem fechar o mês. */}
-        {aoGuardarAplicacao && (
-          <div data-vk-aplicacao="1" style={{ display: "grid", gap: 3, paddingLeft: 14, borderLeft: "1px solid rgba(38,36,33,0.12)" }}>
-            <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>Saldo da aplicação</span>
-            <CampoValorBR style={{ ...S.input, maxWidth: 160 }} valor={aplicacao} placeholder="0,00" disabled={fechado}
-              aoMudar={setAplicacao}
-              onBlur={(e) => {
-                const v = efNumero(valorBRCompleto(valorBRDigitado(e.target.value)));
-                if (v !== aplicacaoGravada) aoGuardarAplicacao(mes, v == null ? "" : v);
-              }} />
-            <span style={{ fontSize: 10.5, color: "#6b7280" }}>
-              {aplicacaoGravada != null ? <>conta + aplicação: <b style={{ color: "#111827" }}>{efDinheiro(efCentavos(calculado + aplicacaoGravada))}</b></> : "investimento · informe no fim do mês"}
-            </span>
+        );
+        const totalComBanco = aplicacaoGravada != null && saldoBanco != null ? efCentavos(saldoBanco + aplicacaoGravada) : null;
+        return (
+          <div style={{ ...S.card, display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+            {bloco("mes", "Mês", (
+              <Selecao value={mes} onChange={(e) => aoTrocarMes(e.target.value)}
+                style={{ ...S.input, ...caixa, padding: "7px 10px", width: 190, cursor: "pointer" }}>
+                {meses.slice().sort((a, b) => String(b).localeCompare(String(a)))
+                  .map((m) => <option key={m} value={m}>{efMesPorExtenso(m) + (mesEstaFechado(m, fechamentos) ? " ✓" : "")}</option>)}
+              </Selecao>
+            ))}
+            {bloco("banco", "Saldo do banco", (
+              <CampoValorBR style={{ ...S.input, ...caixa, width: 150 }} valor={banco} placeholder="0,00" negativo
+                disabled={fechado} aoMudar={setBanco}
+                onBlur={(e) => {
+                  // grava o saldo digitado no mês (sem fechar): é ele que soma
+                  // com a aplicação no total do Extrato
+                  if (!aoGuardarBanco || fechado) return;
+                  const v = efNumero(valorBRCompleto(valorBRDigitado(e.target.value, { negativo: true })));
+                  if (v !== saldoBancoGravado) aoGuardarBanco(mes, v == null ? "" : v);
+                }} />
+            ), bancoDoExtrato ? "lido do extrato" : "")}
+            {bloco("calculado", "Saldo calculado", <div style={numero}>{efDinheiro(calculado)}</div>)}
+            {bloco("diferenca", "Diferença", (
+              <div style={{ ...numero, color: diferenca === 0 ? "#0474f4" : (diferenca == null ? "#6b7280" : "#b45309") }}>
+                {diferenca == null ? "informe o saldo" : efDinheiro(diferenca)}
+              </div>
+            ))}
+            {/* A aplicação não entra na conferência com o banco: é outro saldo,
+                informado à mão, e grava ao sair do campo — sem fechar o mês. */}
+            {aoGuardarAplicacao && bloco("aplicacao", "Saldo da aplicação", (
+              <CampoValorBR style={{ ...S.input, ...caixa, width: 150 }} valor={aplicacao} placeholder="0,00" disabled={fechado}
+                aoMudar={setAplicacao}
+                onBlur={(e) => {
+                  const v = efNumero(valorBRCompleto(valorBRDigitado(e.target.value)));
+                  if (v !== aplicacaoGravada) aoGuardarAplicacao(mes, v == null ? "" : v);
+                }} />
+            ), aplicacaoGravada == null ? "investimento · fim do mês" : "", { paddingLeft: 16, borderLeft: "1px solid rgba(38,36,33,0.12)" })}
+            {/* O total é o que o escritório tem: a conta corrente (o saldo do
+                banco) mais o que está aplicado. */}
+            {aoGuardarAplicacao && aplicacaoGravada != null && bloco("total", "Conta + aplicação", (
+              <div data-vk-total-disponivel="1" style={numero}>{totalComBanco == null ? <span style={{ fontSize: 13, fontWeight: 500, color: "#6b7280" }}>informe o saldo do banco</span> : efDinheiro(totalComBanco)}</div>
+            ))}
+            {bloco("acao", "", (
+              <div style={{ ...caixa, display: "flex", gap: 8, alignItems: "center" }}>
+                {ocupado && <span style={{ fontSize: 12, color: "#6b7280" }}>{ocupado}</span>}
+                {fechado ? (
+                  <button style={{ ...S.btnSec, ...caixa }} onClick={() => aoReabrir(mes)}>Reabrir mês</button>
+                ) : (
+                  <button style={{ ...S.btn, ...caixa, opacity: podeFechar ? 1 : .45 }} disabled={!podeFechar}
+                    onClick={() => aoFechar(mes, saldoBanco)}>Fechar {efMesPorExtenso(mes, true)}</button>
+                )}
+              </div>
+            ), "", { marginLeft: "auto" })}
           </div>
-        )}
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
-          {ocupado && <span style={{ fontSize: 12, color: "#6b7280" }}>{ocupado}</span>}
-          {fechado ? (
-            <button style={S.btnSec} onClick={() => aoReabrir(mes)}>Reabrir mês</button>
-          ) : (
-            <button style={{ ...S.btn, opacity: podeFechar ? 1 : .45 }} disabled={!podeFechar}
-              onClick={() => aoFechar(mes, saldoBanco)}>Fechar {efMesPorExtenso(mes, true)}</button>
-          )}
-        </div>
-      </div>
+        );
+      })()}
 
       {/* Trazer o extrato do banco: o arquivo vem como o banco manda e o
           reconhecimento das colunas é por conteúdo. */}
@@ -16656,6 +16703,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
           aoMarcar={marcarConferido} aoMarcarTodos={marcarMesInteiro}
           aoFechar={fecharMes} aoReabrir={reabrirMes} ocupado={ocupado}
           aoGuardarAplicacao={(mes, v) => guardarFechamentos(comSaldoAplicacao(fechamentos, mes, v)).catch(console.error)}
+          aoGuardarBanco={(mes, v) => guardarFechamentos(comSaldoBanco(fechamentos, mes, v)).catch(console.error)}
           extrato={{
             arrastando: arrastandoExtrato, setArrastando: setArrastandoExtrato,
             origem: origemExtrato, entrada: entradaExtrato, receber: receberExtrato,
