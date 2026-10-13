@@ -13879,6 +13879,13 @@ function investidoDoEmpreendimento(cliente, obras, lancamentos, opcoes) {
 // no banco. Quando cai, a parcela inteira é Receita Projetos; a parte da
 // engenharia é também custo de Parceiros e fica na reserva até pagar o
 // engenheiro. Recebida = há lançamento ligado à parcela (origem "projeto").
+// Como a parcela aparece nas descrições: "pagamento único antecipado",
+// "parcela 2/4", "etapa 1/4 · Estudo Preliminar".
+function rotuloDaParcelaDeProjeto(tipo, numero, total, nome) {
+  if (total === 1) return tipo === "antecipado" ? "pagamento único antecipado" : "pagamento único";
+  if (tipo === "etapas") return `etapa ${numero}/${total}${nome ? " · " + nome : ""}`;
+  return `parcela ${numero}/${total}`;
+}
 function parcelasDosProjetos(orcamentos, clientes, lancamentos) {
   const out = [];
   const recebidos = new Map();
@@ -13896,12 +13903,14 @@ function parcelasDosProjetos(orcamentos, clientes, lancamentos) {
     const eng = f.inclEng === false ? 0 : efCentavos(Number(f.valorEngFechado) || 0);
     const fracEng = total > 0 ? Math.min(1, Math.max(0, eng / total)) : 0;
     const cli = (clientes || []).find((c) => c && c.id === o.clienteId) || null;
+    const tipo = (f.condicao && f.condicao.tipo) || "";
     ps.forEach((p, i) => {
       const numero = Number(p.numero) || i + 1;
       const valor = efCentavos(p.valor);
       const engParte = efCentavos(valor * fracEng);
       const l = recebidos.get(o.id + "|" + numero) || null;
-      out.push({ orcId: o.id, numero, totalParcelas: ps.length, nome: p.nome || `Parcela ${numero}`, valor, data: String(p.data || "").slice(0, 10),
+      out.push({ orcId: o.id, numero, totalParcelas: ps.length, nome: p.nome || `Parcela ${numero}`,
+        rotulo: rotuloDaParcelaDeProjeto(tipo, numero, ps.length, p.nome), valor, data: String(p.data || "").slice(0, 10),
         arq: efCentavos(valor - engParte), eng: engParte, clienteId: o.clienteId || "", cliente: (cli && cli.nome) || "",
         referencia: o.referencia || "", recebida: !!l, lancamentoId: l ? l.id : "" });
     });
@@ -13927,7 +13936,7 @@ function parcelaDeProjetoParaALinha(movimento, lancamentos, ctx) {
   const p = a.p;
   return { parcelaProjeto: p, daObra: false,
     campos: { unidadeId: "projetos", contaId: "rec_projetos", clienteId: p.clienteId, cliente: p.cliente, projeto: p.referencia,
-      descricao: `${p.nome} — ${p.referencia || p.cliente}` },
+      descricao: `Recebimento de projeto — ${p.rotulo}` },
     motivos: [`parcela ${p.numero}/${p.totalParcelas} do projeto ${p.cliente}${p.referencia ? " · " + p.referencia : ""}`] };
 }
 // O recebimento: a linha inteira em Receita Projetos (é o que o banco
@@ -13983,14 +13992,14 @@ function lancamentosDoRecebimento(movimento, mes, sug, fechamentos) {
     competencia, lancadoEm: String(m.data || "").slice(0, 10), fornecedor: "" };
   const orig = (parte) => ({ tipo: "projeto", orcId: p.orcId, parcela: p.numero, parte });
   const principal = { ...comum, contaId: "rec_projetos", valor, contaBanco: "sim",
-    descricao: `${p.nome} — ${p.referencia || p.cliente}`, origem: orig("recebido"),
+    descricao: `Recebimento de projeto — ${p.rotulo}`, origem: orig("recebido"),
     extratoId: m.id || "", historicoBanco: m.historico || "" };
   const eng = efCentavos(Math.min(p.eng, valor));
   const extras = eng > 0 ? [
     { ...comum, contaId: "parceiros", valor: eng, contaBanco: "nao", conferido: true,
-      descricao: `Engenharia (parceiro) — ${p.nome} ${p.referencia || p.cliente}`, origem: orig("eng-custo") },
+      descricao: `Custo da engenharia (parceiro) — ${p.rotulo}`, origem: orig("eng-custo") },
     { ...comum, contaId: "res_engenharia", valor: eng, contaBanco: "nao", conferido: true,
-      descricao: `Reserva engenharia — ${p.nome} ${p.referencia || p.cliente}`, origem: orig("eng-reserva") },
+      descricao: `Reserva para pagar a engenharia — ${p.rotulo}`, origem: orig("eng-reserva") },
   ] : [];
   return { lancamento: { ...principal, recebimentoExtras: extras } };
 }
@@ -15494,7 +15503,7 @@ function ProjetosAReceberQuadro({ data, lancs }) {
               <div style={{ flex: "1 1 220px", minWidth: 0 }}>
                 <div>{p.cliente || "—"}{p.referencia ? <span style={{ color: "#6b7280" }}> · {p.referencia}</span> : null}</div>
                 <div style={{ fontSize: 11.5, color: "#6b7280" }}>
-                  {p.nome} ({p.numero}/{p.totalParcelas}){p.eng > 0 ? ` · ${efDinheiro(p.eng)} é engenharia (custo de parceiro, guardado na reserva)` : ""}
+                  {p.rotulo.charAt(0).toUpperCase() + p.rotulo.slice(1)}{p.eng > 0 ? ` · ${efDinheiro(p.eng)} é engenharia (custo de parceiro, guardado na reserva)` : ""}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 14, alignItems: "baseline", marginLeft: "auto" }}>

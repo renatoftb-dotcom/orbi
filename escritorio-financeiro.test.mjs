@@ -27,7 +27,7 @@ const M = new Function(src + `
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
-           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
+           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
            competenciasDoCartao,
@@ -2739,6 +2739,10 @@ teste("Projeto ganho já pago (antecipado): lança receita e reserva na hora; o 
   assert.deepStrictEqual(ls.map((l) => [l.contaId, l.valor, l.contaBanco, l.origem.parte]),
     [["rec_projetos", 15000, "sim", "recebido"], ["parceiros", 5083.85, "nao", "eng-custo"], ["res_engenharia", 5083.85, "nao", "eng-reserva"]]);
   assert.deepStrictEqual(ls.map((l) => l.parDe), [undefined, "id1", "id1"]);
+  assert.deepStrictEqual(ls.map((l) => l.descricao), ["Recebimento de projeto — pagamento único antecipado",
+    "Custo da engenharia (parceiro) — pagamento único antecipado", "Reserva para pagar a engenharia — pagamento único antecipado"]);
+  assert.deepStrictEqual([M.rotuloDaParcelaDeProjeto("parcelado", 2, 4, "2ª Parcela"), M.rotuloDaParcelaDeProjeto("etapas", 1, 4, "Estudo Preliminar"),
+    M.rotuloDaParcelaDeProjeto("parcelado", 1, 1, "1ª Parcela")], ["parcela 2/4", "etapa 1/4 · Estudo Preliminar", "pagamento único"]);
   assert.deepStrictEqual([ls[0].lancadoEm, ls[0].competencia, ls[0].clienteId, ls[0].extratoId], ["2026-10-13", "2026-10", "g1", undefined]);
   assert.ok(ls.every((l) => l.numeroDoc === ls[0].numeroDoc && l.tipo === "escritorio" && !("recebimentoExtras" in l)));
   // sai do a receber; a linha do banco não é sugerida como parcela de novo
