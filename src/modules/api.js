@@ -112,6 +112,14 @@ const api = {
     delete:     (id)        => del(`/api/orcamentos/${id}`),
   },
 
+  // Briefing do cliente (formulário por link). O preenchimento pelo cliente
+  // é público e fica em briefing.jsx; aqui, o lado do escritório.
+  briefings: {
+    list:  ()             => get("/api/briefings"),
+    criar: (orcId)        => post("/api/briefings", { orcId }),
+    acao:  (token, acao)  => put(`/api/briefings/${encodeURIComponent(token)}`, { acao }),
+  },
+
   receitas: {
     list:           (filtros)    => get(`/api/receitas${filtros ? `?${new URLSearchParams(filtros)}` : ""}`),
     save:           (r)          => post("/api/receitas", r),

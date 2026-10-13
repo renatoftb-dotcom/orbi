@@ -55,6 +55,19 @@ function Etapas({ data, save }) {
   // (regra do React: ordem dos hooks deve ser constante entre renders)
   const [filtro, setFiltro] = useState("todos"); // "todos" | "meus" | "atrasados"
   const [busca, setBusca] = useState("");
+  // Briefing do cliente: um por projeto (orçamento), lido do backend à parte
+  // — o cliente responde por link e o que ele grava não vem no loadAllData.
+  const [briefings, setBriefings] = useState({});      // orcId → briefing
+  const [briefingDe, setBriefingDe] = useState(null);  // projeto com o painel aberto
+  useEffect(() => {
+    let vivo = true;
+    const carregar = () => api.briefings.list()
+      .then((lista) => { if (vivo) setBriefings(Object.fromEntries((lista || []).map((b) => [b.orcId, b]))); })
+      .catch(() => {});
+    carregar();
+    const t = setInterval(carregar, 60000);
+    return () => { vivo = false; clearInterval(t); };
+  }, []);
 
   // Defensive: guard pra quando data ainda não carregou
   if (!data) {
@@ -153,10 +166,26 @@ function Etapas({ data, save }) {
         {ETAPAS_COLS.map(col => {
           const cards = projetosDaColuna(col.key);
           return (
-            <KanbanColumn key={col.key} col={col} cards={cards} clientes={clientes} onFinalizar={finalizarProjeto} />
+            <KanbanColumn key={col.key} col={col} cards={cards} clientes={clientes} onFinalizar={finalizarProjeto}
+              briefings={briefings} onBriefing={setBriefingDe} />
           );
         })}
       </div>
+
+      {briefingDe && (
+        <BriefingDoProjeto
+          projeto={briefingDe}
+          cliente={clientes.find(c => c.id === briefingDe.clienteId) || null}
+          briefing={briefings[briefingDe.orcId] || null}
+          aoMudar={(b) => setBriefings((x) => ({ ...x, [b.orcId]: b }))}
+          aoFechar={() => setBriefingDe(null)}
+          aoAvancar={(briefingDe.colunaEtapa || "briefing") === "briefing" ? () => {
+            const novos = projetos.map(p => p.id === briefingDe.id ? { ...p, colunaEtapa: "preliminar" } : p);
+            save({ ...data, projetos: novos }).catch(console.error);
+            setBriefingDe(null);
+          } : null}
+        />
+      )}
 
       {/* Estado vazio global */}
       {projetos.length === 0 && (
@@ -194,7 +223,7 @@ function FilterPill({ label, count, active, onClick, countColor }) {
 }
 
 // ─── Coluna do Kanban ──────────────────────────────────────
-function KanbanColumn({ col, cards, clientes, onFinalizar }) {
+function KanbanColumn({ col, cards, clientes, onFinalizar, briefings, onBriefing }) {
   const wait = col.wait;
   return (
     <div style={{
@@ -225,7 +254,8 @@ function KanbanColumn({ col, cards, clientes, onFinalizar }) {
             Nenhum projeto
           </div>
         ) : cards.map(card => (
-          <ProjetoCard key={card.id} projeto={card} clientes={clientes} col={col} onFinalizar={onFinalizar} />
+          <ProjetoCard key={card.id} projeto={card} clientes={clientes} col={col} onFinalizar={onFinalizar}
+            briefing={(briefings || {})[card.orcId] || null} onBriefing={onBriefing} />
         ))}
       </div>
     </div>
@@ -233,7 +263,7 @@ function KanbanColumn({ col, cards, clientes, onFinalizar }) {
 }
 
 // ─── Card de projeto ───────────────────────────────────────
-function ProjetoCard({ projeto, clientes, col, onFinalizar }) {
+function ProjetoCard({ projeto, clientes, col, onFinalizar, briefing, onBriefing }) {
   const cliente = clientes.find(c => c.id === projeto.clienteId);
   const nomeCli = cliente?.nome || projeto.clienteNome || "—";
   const ref = projeto.referencia || "";
@@ -282,6 +312,17 @@ function ProjetoCard({ projeto, clientes, col, onFinalizar }) {
 
       {/* Footer: responsável(is) + prazo */}
       <CardFooter projeto={projeto} col={col} dias={dias} atrasado={atrasado} />
+
+      {/* Briefing do cliente — sempre à mão no card */}
+      {onBriefing && projeto.orcId && (
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, flexWrap:"wrap", borderTop:"1px solid #f3f4f6", paddingTop:8 }}>
+          <BriefingStatusChip briefing={briefing} />
+          <button data-br-abrir onClick={(e) => { e.stopPropagation(); onBriefing(projeto); }}
+            style={{ background:"#fff", border:"1.5px solid #0474f4", color:"#0474f4", borderRadius:6, padding:"4px 10px", fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+            {briefing ? "Ver briefing" : "Enviar briefing"}
+          </button>
+        </div>
+      )}
 
       {/* Botão Finalizar (só na coluna Engenharia) */}
       {isEngenharia && onFinalizar && (

@@ -14,6 +14,9 @@ const ORDER = [
   "shared.jsx",
   "api.js",
   "outros.jsx",
+  // briefing.jsx: o formulário de briefing do cliente (rota pública
+  // /briefing/{token}) e o painel do escritório, aberto pelo card em Etapas.
+  "briefing.jsx",
   // insumos-seed.jsx + insumos.jsx vêm antes de obra-financeiro.jsx e de
   // orcamento-obra.jsx: o catálogo de insumos é a fonte de preço da
   // estimativa (precoInsumo) e a chave (insumo.codigo) que liga estimado e

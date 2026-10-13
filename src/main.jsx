@@ -140,10 +140,18 @@ function AvisoDeVersaoNova() {
 
 const path = window.location.pathname || "";
 const isRenderRoute = path.startsWith("/render-pdf/");
+// /briefing/{token}: o formulário de briefing que o cliente preenche por
+// link, sem login (BriefingPublico, em src/modules/briefing.jsx).
+const isBriefingRoute = path.startsWith("/briefing/");
 
 // Componente wrapper — captura window.RenderPdfRoute como variável local
 // pra JSX poder usar.
 function RouteSwitch() {
+  if (isBriefingRoute) {
+    const BriefingPublico = window.BriefingPublico;
+    if (!BriefingPublico) return <div style={{ padding: 20, fontFamily: 'sans-serif' }}>Não foi possível abrir o briefing. Recarregue a página.</div>;
+    return <GuardaDeTela><BriefingPublico /></GuardaDeTela>;
+  }
   if (isRenderRoute) {
     const RenderPdfRoute = window.RenderPdfRoute;
     if (!RenderPdfRoute) {
