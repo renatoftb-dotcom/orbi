@@ -3407,7 +3407,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
                     {jaRecebida && (
                       <div style={{ fontSize:11.5, color:"#4b5563", marginTop:6, paddingLeft:22, lineHeight:1.45 }}>
                         Lança agora no financeiro do escritório, em {fmtData(p0.data) || "—"}: {fmtBRL(v0)} entrando na conta como Receita de projetos
-                        {eng0 > 0 ? <>, e {fmtBRL(eng0)} da engenharia indo para a Reserva engenharia (a repassar)</> : null}.
+                        {eng0 > 0 ? <>; {fmtBRL(eng0)} da engenharia entra como custo em Parceiros Arquitetos e Engenheiros e fica guardado na Reserva engenharia até pagar o engenheiro</> : null}.
                         Quando o extrato chegar, o PIX casa com este lançamento.
                       </div>
                     )}

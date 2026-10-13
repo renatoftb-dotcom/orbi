@@ -9987,9 +9987,10 @@ const GRUPOS_ESCRITORIO = [
   // o crédito como estorno — e se anulam. Mexe no saldo do banco no dia,
   // nunca no resultado.
   { id: "ajustes_bancarios", titulo: "ESTORNOS E AJUSTES BANCÁRIOS", sinal: -1, resultado: false, bloco: "ajustes" },
-  // Dinheiro recebido que não é do escritório: a parte da engenharia que veio
-  // junto com o projeto fica guardada até ser paga ao engenheiro. Entra como
-  // reserva (não é receita) e sai como estorno da reserva quando paga.
+  // Dinheiro guardado para pagar alguém: a parte da engenharia que veio junto
+  // com o projeto. No recebimento ela é receita (o projeto inteiro) e custo
+  // de parceiro — e o dinheiro fica aqui até ser pago ao engenheiro, quando
+  // sai como estorno da reserva (sem custo de novo).
   { id: "reservas", titulo: "RESERVAS A REPASSAR", sinal: +1, resultado: false, bloco: "reservas" },
 ];
 
@@ -12806,7 +12807,7 @@ function comSinalDeEstorno(l) {
 // sem abrir o formulário. Só quando a sugestão basta — conta do escritório,
 // cliente/obra que a conta pede, mês aberto. Senão, devolve o porquê e a
 // tela abre o formulário.
-function lancamentoRapidoDoExtrato(movimento, mes, sugestao, fechamentos, obras) {
+function lancamentoRapidoDoExtrato(movimento, mes, sugestao, fechamentos, obras, lancamentos) {
   if (!sugestao || !sugestao.campos || !sugestao.campos.contaId) return { erro: "Sem lançamento igual para copiar." };
   if (sugestao.daObra) return { erro: "Custo de obra: confira no formulário." };
   // Regra das duas pontas: copiar um custo antigo só do escritório para um
@@ -12823,7 +12824,16 @@ function lancamentoRapidoDoExtrato(movimento, mes, sugestao, fechamentos, obras)
   const erros = validarLancamentoEscritorio({ ...l, clienteId: l.clienteId || l.cliente,
     obraId: l.unidadeId === "gestao_obras" ? l.obraId : l.projeto,
     empreendimentoId: ehEmp ? l.empreendimentoId : l.projeto }, { fechamentos });
-  return erros.length ? { erro: erros[0] } : { lancamento: l };
+  if (erros.length) return { erro: erros[0] };
+  // Engenheiro de um cliente com engenharia guardada: paga da reserva (o
+  // custo já entrou no recebimento). Se passa da reserva, decide no formulário.
+  if (lancamentos) {
+    const daReserva = comoPagamentoDaReserva(l, lancamentos);
+    if (daReserva) return { lancamento: daReserva };
+    const saldo = l.contaId === "parceiros" && !l.estorno ? saldoDaReservaEngenharia(lancamentos, l.clienteId) : 0;
+    if (saldo > 0) return { erro: `Passa da reserva da engenharia deste cliente (${saldo.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}): confira no formulário.` };
+  }
+  return { lancamento: l };
 }
 
 function lancamentoDoExtrato(movimento, extra) {
@@ -13867,8 +13877,8 @@ function investidoDoEmpreendimento(cliente, obras, lancamentos, opcoes) {
 // O orçamento ganho guarda o que foi fechado: valor, desconto e a condição
 // (antecipado, parcelado, por etapas), com cada parcela, valor e data. Isso
 // é o "a receber" do escritório — e nada vira receita antes do dinheiro cair
-// no banco. Quando cai, a parte da arquitetura é Receita Projetos; a parte
-// da engenharia não é do escritório: vai para a reserva, até pagar o
+// no banco. Quando cai, a parcela inteira é Receita Projetos; a parte da
+// engenharia é também custo de Parceiros e fica na reserva até pagar o
 // engenheiro. Recebida = há lançamento ligado à parcela (origem "projeto").
 function parcelasDosProjetos(orcamentos, clientes, lancamentos) {
   const out = [];
@@ -13922,8 +13932,34 @@ function parcelaDeProjetoParaALinha(movimento, lancamentos, ctx) {
     motivos: [`parcela ${p.numero}/${p.totalParcelas} do projeto ${p.cliente}${p.referencia ? " · " + p.referencia : ""}`] };
 }
 // O recebimento: a linha inteira em Receita Projetos (é o que o banco
-// mostra) e, se o projeto tem engenharia, a parte dela sai da receita e vai
-// para a reserva — um par fora do banco, que não muda o saldo.
+// mostra) e, se o projeto tem engenharia, a parte dela entra como custo em
+// Parceiros e como dinheiro guardado na reserva — um par fora do banco, que
+// não muda o saldo.
+// ── Engenharia: custo reconhecido no recebimento, pago pela reserva ──
+// O projeto recebido entra inteiro em Receita de projetos; a parte da
+// engenharia vira, no mesmo dia, custo em "Parceiros Arquitetos e
+// Engenheiros" e dinheiro guardado na Reserva engenharia (os dois fora da
+// conta). Quando o engenheiro é pago, o dinheiro sai da RESERVA — o custo já
+// foi reconhecido; lançar em Parceiros de novo contaria duas vezes.
+function saldoDaReservaEngenharia(lancamentos, clienteId) {
+  if (!clienteId) return 0;
+  let t = 0;
+  for (const l of lancamentos || []) if (l && l.contaId === "res_engenharia" && l.clienteId === clienteId) t += Number(l.valor) || 0;
+  return efCentavos(t);
+}
+// Saída em Parceiros de um cliente que tem engenharia guardada: vira saída da
+// reserva (valor negativo na conta da reserva, pela conta do banco). Só
+// quando cabe na reserva; senão volta igual e a tela avisa.
+function comoPagamentoDaReserva(l, lancamentos) {
+  if (!l || l.contaId !== "parceiros" || l.estorno) return null;
+  const v = efCentavos(Math.abs(efValorDoCampo(l.valor)));
+  const saldo = saldoDaReservaEngenharia(lancamentos, l.clienteId);
+  if (!(v > 0) || !(saldo > 0) || v > saldo + 0.005) return null;
+  const { sinalDoBanco: _s, ...resto } = l;
+  return { ...resto, contaId: "res_engenharia", valor: -v, estorno: true, pagoDaReserva: true,
+    descricao: l.descricao || "Pagamento da engenharia (da reserva)" };
+}
+
 function lancamentosDoRecebimento(movimento, mes, sug, fechamentos) {
   const m = movimento || {};
   const p = sug && sug.parcelaProjeto;
@@ -13940,8 +13976,8 @@ function lancamentosDoRecebimento(movimento, mes, sug, fechamentos) {
     extratoId: m.id || "", historicoBanco: m.historico || "" };
   const eng = efCentavos(Math.min(p.eng, valor));
   const extras = eng > 0 ? [
-    { ...comum, contaId: "rec_projetos", valor: -eng, estorno: true, contaBanco: "nao", conferido: true,
-      descricao: `Engenharia vai para a reserva — ${p.nome} ${p.referencia || p.cliente}`, origem: orig("eng-sai") },
+    { ...comum, contaId: "parceiros", valor: eng, contaBanco: "nao", conferido: true,
+      descricao: `Engenharia (parceiro) — ${p.nome} ${p.referencia || p.cliente}`, origem: orig("eng-custo") },
     { ...comum, contaId: "res_engenharia", valor: eng, contaBanco: "nao", conferido: true,
       descricao: `Reserva engenharia — ${p.nome} ${p.referencia || p.cliente}`, origem: orig("eng-reserva") },
   ] : [];
@@ -14296,6 +14332,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const lancNovo = !(inicial && inicial.id);
   const [tentou, setTentou] = useState(false);
   const [outroPagamento, setOutroPagamento] = useState(false);
+  const [pagarDaReserva, setPagarDaReserva] = useState(true);
   const [erroAnexo, setErroAnexo] = useState("");
   const [novoPrest, setNovoPrest] = useState(null);   // { nome, categoria }
   const [erroPrest, setErroPrest] = useState("");
@@ -14606,7 +14643,14 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     ? contasIguaisNaObra(obraAlvo, efValorDoCampo(f.valor), f.lancadoEm, lancamentos || [], { antes: 20, depois: 45 }) : [];
   const errosDobro = iguaisNaObra.length && !outroPagamento
     ? ["Já existe essa conta paga na obra — marque “é outro pagamento” para lançar de novo."] : [];
-  const todosErros = erros.concat(errosCartao).concat(errosGestao).concat(errosDuasPontas).concat(errosDobro);
+  // Engenheiro pago de um cliente que tem engenharia guardada na reserva: o
+  // custo já entrou quando o projeto foi recebido — o pagamento sai da reserva.
+  const saldoReservaCli = (lancNovo && !naObra && !noCartao && f.contaId === "parceiros" && !estornoNoForm)
+    ? saldoDaReservaEngenharia(lancamentos || [], f.clienteId) : 0;
+  const usaReserva = saldoReservaCli > 0 && pagarDaReserva;
+  const errosReserva = usaReserva && efValorDoCampo(f.valor) > saldoReservaCli + 0.005
+    ? [`Passa da reserva da engenharia deste cliente (${efDinheiro(saldoReservaCli)}): lance em duas partes ou desmarque “pagar da reserva”.`] : [];
+  const todosErros = erros.concat(errosCartao).concat(errosGestao).concat(errosDuasPontas).concat(errosDobro).concat(errosReserva);
   const comCartao = (x) => {
     if (!noCartao) return { ...x, formaPagamento: naObra ? "avista" : (x.formaPagamento === "cartao" ? "" : x.formaPagamento),
       cartaoId: "", parcelasCartao: undefined };
@@ -14633,9 +14677,10 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     else delete semObraDaParcela.obraEncerrada;
     const noContrato = temGestao ? !foraDaGestao : (ligadoAntes ? false : undefined);
     if (noContrato !== undefined) semObraDaParcela.noContratoGestao = noContrato;
-    aoSalvar(comCartao({ ...semObraDaParcela, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
+    const pronto = comCartao({ ...semObraDaParcela, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
       ...(lancNovo && !noCartao ? { contaBanco: regraBanco } : {}),
-      tipo: "escritorio", valor: efValorDoCampo(g.valor) }));
+      tipo: "escritorio", valor: efValorDoCampo(g.valor) });
+    aoSalvar((usaReserva && comoPagamentoDaReserva(pronto, lancamentos || [])) || pronto);
   }
   // Na fila, quem lança 50 linhas não larga o teclado: Enter num campo de
   // texto lança e abre a próxima, Esc fecha. A lista de escolha aberta e o
@@ -15152,6 +15197,16 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           )}
         </div>
       )}
+      {saldoReservaCli > 0 && (
+        <label data-vk-paga-reserva="1" style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12.5, lineHeight: 1.5, cursor: "pointer",
+          color: "#1e3a8a", background: "#eff6ff", border: "1px solid rgba(4,116,244,0.3)", borderRadius: 10, padding: "9px 11px" }}>
+          <input type="checkbox" checked={pagarDaReserva} onChange={(e) => setPagarDaReserva(e.target.checked)} style={{ marginTop: 3, accentColor: "#0474f4", flexShrink: 0 }} />
+          <span>
+            <b>Pagar da reserva da engenharia</b> — este cliente tem <b>{efDinheiro(saldoReservaCli)}</b> guardados. O custo do engenheiro já entrou em
+            Parceiros quando o projeto foi recebido; o pagamento sai da reserva, sem contar o custo de novo.
+          </span>
+        </label>
+      )}
       {iguaisNaObra.length > 0 && (
         <div data-vk-dobro-obra="1" style={{ fontSize: 12.5, color: "#92400e", background: "#fffbeb", border: "1px solid rgba(180,83,9,0.3)",
           borderRadius: 10, padding: "9px 11px", lineHeight: 1.5 }}>
@@ -15428,7 +15483,7 @@ function ProjetosAReceberQuadro({ data, lancs }) {
               <div style={{ flex: "1 1 220px", minWidth: 0 }}>
                 <div>{p.cliente || "—"}{p.referencia ? <span style={{ color: "#6b7280" }}> · {p.referencia}</span> : null}</div>
                 <div style={{ fontSize: 11.5, color: "#6b7280" }}>
-                  {p.nome} ({p.numero}/{p.totalParcelas}){p.eng > 0 ? ` · ${efDinheiro(p.arq)} projeto + ${efDinheiro(p.eng)} engenharia (reserva)` : ""}
+                  {p.nome} ({p.numero}/{p.totalParcelas}){p.eng > 0 ? ` · ${efDinheiro(p.eng)} é engenharia (custo de parceiro, guardado na reserva)` : ""}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 14, alignItems: "baseline", marginLeft: "auto" }}>
@@ -15802,7 +15857,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                     {sug && sug.parcelaProjeto && (
                       <div data-vk-parcela-projeto="1" style={{ fontSize: 11.5, color: "#0474f4", marginTop: 2 }}>
                         ⇠ {(sug.motivos || [])[0]} — {sug.parcelaProjeto.eng > 0
-                          ? `${efDinheiro(Math.max(0, Number(m.valor) - Math.min(sug.parcelaProjeto.eng, Number(m.valor))))} receita de projeto + ${efDinheiro(Math.min(sug.parcelaProjeto.eng, Number(m.valor)))} reserva da engenharia`
+                          ? `${efDinheiro(Number(m.valor))} receita de projeto · ${efDinheiro(Math.min(sug.parcelaProjeto.eng, Number(m.valor)))} de engenharia em Parceiros, guardado na reserva`
                           : "receita de projeto"}
                       </div>
                     )}
@@ -17495,7 +17550,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       conferido: true, conferidoEm: agora, contaBanco: l.contaBanco || "sim" };
     if (l && l.naObra) { const { sinalDoBanco, ...semSinal } = l; lancarCustoNaObra({ ...semSinal, ...marca }); return true; }
     // Parcela de projeto recebida: a linha inteira em Receita Projetos e,
-    // havendo engenharia, o par que leva a parte dela para a reserva.
+    // havendo engenharia, o custo do parceiro e a reserva que vai pagá-lo.
     if (l && Array.isArray(l.recebimentoExtras)) {
       const { recebimentoExtras, sinalDoBanco: _s, ...semExtras } = l;
       const base = typeof uid === "function" ? uid() : String(Date.now());
@@ -17562,7 +17617,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     if (naObra) return lancamentoDaLigacaoComObra(m, mesEmConferencia, naObra, fechamentos, lancs);
     const parcelaProj = parcelaDeProjetoParaALinha(m, lancs, ctxDoPalpite);
     if (parcelaProj) return lancamentosDoRecebimento(m, mesEmConferencia, parcelaProj, fechamentos);
-    return lancamentoRapidoDoExtrato(m, mesEmConferencia, sugestaoDoExtrato(m, lancs), fechamentos, (data || {}).obras || []);
+    return lancamentoRapidoDoExtrato(m, mesEmConferencia, sugestaoDoExtrato(m, lancs), fechamentos, (data || {}).obras || [], lancs);
   }
 
   function lancarSugeridasDoExtrato(movimentos) {
@@ -59674,7 +59729,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
                     {jaRecebida && (
                       <div style={{ fontSize:11.5, color:"#4b5563", marginTop:6, paddingLeft:22, lineHeight:1.45 }}>
                         Lança agora no financeiro do escritório, em {fmtData(p0.data) || "—"}: {fmtBRL(v0)} entrando na conta como Receita de projetos
-                        {eng0 > 0 ? <>, e {fmtBRL(eng0)} da engenharia indo para a Reserva engenharia (a repassar)</> : null}.
+                        {eng0 > 0 ? <>; {fmtBRL(eng0)} da engenharia entra como custo em Parceiros Arquitetos e Engenheiros e fica guardado na Reserva engenharia até pagar o engenheiro</> : null}.
                         Quando o extrato chegar, o PIX casa com este lançamento.
                       </div>
                     )}
