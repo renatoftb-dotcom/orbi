@@ -2380,9 +2380,22 @@ function ModalNovoOrcamento({ clientes, busca, setBusca, onSelecionar, onFechar,
 //   - Marca orçamento como ganho + valorFechado + condicaoFechada
 //   - Cria projeto no Kanban Etapas (coluna Briefing)
 //   - onConfirmar(ganhoData) — o pai decide como gravar (lançamentos etc.)
-// ─── Input numérico no formato brasileiro (1.234,56) ───
-// Guarda o valor em Number no estado do pai, mas exibe e aceita
-// digitação no padrão pt-BR (ponto separador de milhar, vírgula decimal).
+// Máscara pt-BR enquanto digita: "15000,5" → "15.000,5". A vírgula é o decimal
+// (o ponto digitado sem vírgula vira vírgula); os pontos de milhar são postos sozinhos.
+function mascaraNumBR(raw, decimais = 2) {
+  const s = String(raw == null ? "" : raw).replace(/[^\d,]/g, "");
+  if (!s) return "";
+  const iv = s.indexOf(",");
+  const temVirgula = iv >= 0 && decimais > 0;
+  let inteiro = (iv >= 0 ? s.slice(0, iv) : s).replace(/^0+(?=\d)/, "");
+  const dec = iv >= 0 ? s.slice(iv + 1).replace(/,/g, "").slice(0, decimais) : "";
+  if (!inteiro) inteiro = "0";
+  inteiro = inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return temVirgula ? inteiro + "," + dec : inteiro;
+}
+
+// Input numérico no formato brasileiro (1.234,56), formatado enquanto digita.
+// Guarda o valor em Number no estado do pai.
 function NumBR({ valor, onChange, onFocus: onFocusExt, onBlur: onBlurExt, min, max, decimais = 2, style = {}, ...rest }) {
   const fmt = (n) => {
     if (n == null || isNaN(n)) return "";
@@ -2395,6 +2408,8 @@ function NumBR({ valor, onChange, onFocus: onFocusExt, onBlur: onBlurExt, min, m
   };
   const [txt, setTxt] = useState(fmt(valor));
   const focadoRef = useRef(false);
+  const inputRef = useRef(null);
+  const cursorRef = useRef(null);
 
   // Sincroniza quando o valor muda por fora — MAS SÓ SE NÃO TIVER FOCO.
   // Evita conflito com digitação em andamento (o cursor pular, valor sobrescrito).
@@ -2404,6 +2419,16 @@ function NumBR({ valor, onChange, onFocus: onFocusExt, onBlur: onBlurExt, min, m
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valor]);
 
+  // Depois de reformatar, devolve o cursor ao mesmo dígito em que estava
+  useEffect(() => {
+    const el = inputRef.current, alvo = cursorRef.current;
+    if (!el || alvo == null || document.activeElement !== el) return;
+    cursorRef.current = null;
+    let pos = 0, vistos = 0;
+    while (pos < txt.length && vistos < alvo) { if (/[\d,]/.test(txt[pos])) vistos++; pos++; }
+    try { el.setSelectionRange(pos, pos); } catch (e) {}
+  });
+
   function parseBR(s) {
     if (s == null) return 0;
     const limpo = String(s).replace(/\./g, "").replace(",", ".").replace(/[^\d.-]/g, "");
@@ -2412,9 +2437,25 @@ function NumBR({ valor, onChange, onFocus: onFocusExt, onBlur: onBlurExt, min, m
   }
 
   function handleChange(e) {
-    const raw = e.target.value;
-    setTxt(raw);
-    let n = parseBR(raw);
+    let raw = e.target.value;
+    let cur = e.target.selectionStart == null ? raw.length : e.target.selectionStart;
+    const digitos = (x) => x.replace(/\D/g, "");
+    // Ponto digitado sem vírgula no campo = vírgula decimal
+    if (raw.length === txt.length + 1 && raw[cur - 1] === "." && !raw.includes(",") && decimais > 0) {
+      raw = raw.slice(0, cur - 1) + "," + raw.slice(cur);
+    }
+    // Backspace sobre um ponto de milhar apaga o dígito antes dele
+    if (raw.length === txt.length - 1 && digitos(raw) === digitos(txt) && raw.replace(/\./g, "") === txt.replace(/\./g, "") && cur > 0) {
+      raw = raw.slice(0, cur - 1) + raw.slice(cur);
+      cur -= 1;
+    }
+    const novo = mascaraNumBR(raw, decimais);
+    cursorRef.current = (raw.slice(0, cur).match(/[\d,]/g) || []).length;
+    // zeros à esquerda removidos pela máscara não contam
+    const zerosFora = (raw.replace(/[^\d,]/g, "").match(/^0+(?=\d)/) || [""])[0].length;
+    cursorRef.current = Math.max(0, cursorRef.current - Math.min(zerosFora, cursorRef.current));
+    setTxt(novo);
+    let n = parseBR(novo);
     if (min != null && n < min) n = min;
     if (max != null && n > max) n = max;
     onChange(n);
@@ -2434,6 +2475,7 @@ function NumBR({ valor, onChange, onFocus: onFocusExt, onBlur: onBlurExt, min, m
 
   return (
     <input
+      ref={inputRef}
       type="text"
       inputMode="decimal"
       value={txt}
@@ -3062,6 +3104,16 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
         .modal-ganho-date::-webkit-calendar-picker-indicator:hover {
           opacity: 1;
         }
+        @media (max-width: 480px) {
+          .mg-parc { grid-template-columns: 26px minmax(0,1fr) minmax(0,1.3fr) 18px !important; }
+          .mg-parc .mg-pnome { display: none; }
+          .mg-etp { grid-template-columns: minmax(0,1.3fr) minmax(0,0.7fr) 70px 14px !important; margin-bottom: 12px !important; }
+          .mg-etp > :nth-child(1) { grid-column: 1 / 3; grid-row: 1; }
+          .mg-etp > :nth-child(2) { grid-column: 3; grid-row: 1; }
+          .mg-etp > :nth-child(3) { grid-column: 1; grid-row: 2; }
+          .mg-etp > :nth-child(4) { grid-column: 2 / 5; grid-row: 2; }
+          .mg-etp > :nth-child(5) { grid-column: 4; grid-row: 1; }
+        }
       `}</style>
       <div style={{ background:"#fff", borderRadius: 16, width:"100%", maxWidth:540, maxHeight:"calc(100vh - 60px)", overflowY:"auto", boxShadow:"0 10px 40px rgba(0,0,0,0.2)" }}>
 
@@ -3287,9 +3339,9 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
                 {parcelas.map((p, i) => {
                   const pct = totalFechado > 0 ? (p.valor / totalFechado) * 100 : 0;
                   return (
-                  <div key={i} style={{
+                  <div key={i} className={modoEtapas ? "mg-etp" : "mg-parc"} style={{
                     display:"grid",
-                    gridTemplateColumns: modoEtapas ? "1fr 56px 90px 105px 18px" : "100px 100px 105px 18px",
+                    gridTemplateColumns: modoEtapas ? "minmax(0,1fr) 68px 96px 118px 18px" : "100px 100px 105px 18px",
                     gap:5, alignItems:"center", marginBottom:6,
                   }}>
                     {modoEtapas ? (
@@ -3298,7 +3350,9 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
                         placeholder="Descrição"
                         style={{ ...INPUT_STYLE, fontSize:12, padding:"5px 8px" }} />
                     ) : (
-                      <span style={{ fontSize:11.5, color:"#6b7280", fontWeight:500 }}>{p.nome}</span>
+                      <span style={{ fontSize:11.5, color:"#6b7280", fontWeight:500 }}>
+                        {(() => { const m = /^(\S+)(\s.+)$/.exec(p.nome || ""); return m ? <>{m[1]}<span className="mg-pnome">{m[2]}</span></> : p.nome; })()}
+                      </span>
                     )}
                     {modoEtapas && (
                       <div style={{ display:"flex", alignItems:"center", gap:2 }}>
