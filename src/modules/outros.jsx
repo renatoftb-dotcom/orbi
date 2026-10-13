@@ -153,7 +153,7 @@ function Etapas({ data, save }) {
         {ETAPAS_COLS.map(col => {
           const cards = projetosDaColuna(col.key);
           return (
-            <KanbanColumn key={col.key} col={col} cards={cards} clientes={clientes} />
+            <KanbanColumn key={col.key} col={col} cards={cards} clientes={clientes} onFinalizar={finalizarProjeto} />
           );
         })}
       </div>
@@ -194,7 +194,7 @@ function FilterPill({ label, count, active, onClick, countColor }) {
 }
 
 // ─── Coluna do Kanban ──────────────────────────────────────
-function KanbanColumn({ col, cards, clientes }) {
+function KanbanColumn({ col, cards, clientes, onFinalizar }) {
   const wait = col.wait;
   return (
     <div style={{
@@ -225,7 +225,7 @@ function KanbanColumn({ col, cards, clientes }) {
             Nenhum projeto
           </div>
         ) : cards.map(card => (
-          <ProjetoCard key={card.id} projeto={card} clientes={clientes} col={col} onFinalizar={finalizarProjeto} />
+          <ProjetoCard key={card.id} projeto={card} clientes={clientes} col={col} onFinalizar={onFinalizar} />
         ))}
       </div>
     </div>
@@ -275,7 +275,7 @@ function ProjetoCard({ projeto, clientes, col, onFinalizar }) {
       {/* Meta: área + valor */}
       {(area > 0 || valor > 0) && (
         <div style={{ display:"flex", gap:10, fontSize:11, color:"#4b5563", marginTop:2 }}>
-          {area > 0 && <span><strong style={{ color:"#111827", fontWeight:600 }}>{area}</strong> m²</span>}
+          {area > 0 && <span><strong style={{ color:"#111827", fontWeight:600 }}>{Number(area).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}</strong> m²</span>}
           {valor > 0 && <span>R$ <strong style={{ color:"#111827", fontWeight:600 }}>{brlCurto(valor)}</strong></span>}
         </div>
       )}
