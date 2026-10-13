@@ -1323,9 +1323,18 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
         versaoFechada: fechada ? (typeof rotuloDaVersao === "function" ? rotuloDaVersao(props, iVer) : fechada.versao) : "",
         fechadoEm: agora },
     } : o);
+    // Parcela que o cliente já pagou: entra agora no financeiro do escritório.
+    const recebido = typeof lancamentosComGanhoRecebido === "function"
+      ? lancamentosComGanhoRecebido(data, novos.find(o => o.id === orc.id)) : { novos: [] };
+    if (recebido.erro) {
+      if (typeof dialogo !== "undefined" && dialogo.alertar) dialogo.alertar({ titulo: "Não deu para lançar o recebimento", mensagem: recebido.erro, tipo: "aviso" });
+      return;
+    }
+    const comRecebido = recebido.novos && recebido.novos.length;
     setGanhando(null);
-    if (typeof toast !== "undefined" && toast.sucesso) toast.sucesso("Orçamento marcado como ganho");
-    gravar(novos, { projetos: novosProjetos });
+    if (typeof toast !== "undefined" && toast.sucesso) toast.sucesso(comRecebido
+      ? "Orçamento ganho · recebimento lançado no financeiro do escritório" : "Orçamento marcado como ganho");
+    gravar(novos, { projetos: novosProjetos, ...(comRecebido ? { lancamentos: recebido.lancamentos } : {}) });
   }
 
   return (

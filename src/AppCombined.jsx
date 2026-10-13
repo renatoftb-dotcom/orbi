@@ -12073,7 +12073,10 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
     if (!g || !v) return 0;
     return (g.sinal < 0 ? -1 : 1) * (v < 0 ? -1 : 1);
   };
-  const candidatos = (lancamentos || []).filter((l) => !compraNoCartaoDoEscritorio(l)).map((l, i) => ({
+  // O que não passou pela conta (contaBanco "nao": a parte da engenharia que
+  // vai para a reserva, o rendimento da aplicação, o marcado "fora da conta")
+  // não tem linha no banco para casar — nem deve aparecer como faltando nele.
+  const candidatos = (lancamentos || []).filter((l) => !compraNoCartaoDoEscritorio(l) && !(l && l.contaBanco === "nao")).map((l, i) => ({
     l, i, abs: Math.round(Math.abs(Number(l.valor) || 0) * 100) / 100, usado: false, dir: direcaoDoLancamento(l),
   }));
 
@@ -13943,6 +13946,51 @@ function lancamentosDoRecebimento(movimento, mes, sug, fechamentos) {
       descricao: `Reserva engenharia — ${p.nome} ${p.referencia || p.cliente}`, origem: orig("eng-reserva") },
   ] : [];
   return { lancamento: { ...principal, recebimentoExtras: extras } };
+}
+
+// Projeto ganho com parcela JÁ RECEBIDA (o antecipado que caiu na conta no
+// dia do fechamento): os mesmos lançamentos do "Receber parcela" da fila —
+// a parcela inteira em Receita de projetos, pela conta, e a parte da
+// engenharia indo para a reserva —, sem esperar o extrato. Quando o extrato
+// chegar, a linha do PIX casa com o lançamento pelo valor.
+//   orc         o orçamento já com status "ganho" e o fechamento
+//   numeros     as parcelas recebidas (1, 2…)
+//   ctx         { clientes, lancamentos, fechamentos, novoId(), numeroDoc(lista), agora }
+function lancamentosDoGanhoRecebido(orc, numeros, ctx) {
+  const c = ctx || {};
+  const quais = new Set((numeros || []).map(Number));
+  if (!orc || !quais.size) return { lancamentos: [] };
+  const lancs = (c.lancamentos || []).slice();
+  const parcelas = parcelasDosProjetos([orc], c.clientes, lancs).filter((p) => quais.has(p.numero) && !p.recebida);
+  const novos = [];
+  for (const p of parcelas) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(p.data)) return { erro: `A ${p.nome} está sem data — informe o dia em que o cliente pagou.` };
+    const r = lancamentosDoRecebimento({ id: "", data: p.data, valor: p.valor, historico: "" }, p.data.slice(0, 7), { parcelaProjeto: p }, c.fechamentos);
+    if (r.erro) return { erro: r.erro };
+    const { recebimentoExtras, extratoId: _e, historicoBanco: _h, ...principal } = r.lancamento;
+    const agora = c.agora || new Date().toISOString();
+    const id = typeof c.novoId === "function" ? c.novoId() : String(Date.now());
+    const numeroDoc = typeof c.numeroDoc === "function" ? c.numeroDoc(lancs.concat(novos)) : "";
+    novos.push({ ...principal, id, numeroDoc, criadoEm: agora },
+      ...recebimentoExtras.map((x, i) => ({ ...x, id: id + "_" + (i + 1), numeroDoc, criadoEm: agora, conferidoEm: agora })));
+  }
+  return { lancamentos: novos };
+}
+// O mesmo, a partir do data inteiro — é o que as telas de "Marcar como Ganho"
+// chamam. Devolve a lista de lançamentos já com os novos (ou o erro).
+function lancamentosComGanhoRecebido(data, orcGanho) {
+  const d = data || {};
+  const atuais = d.lancamentos || [];
+  const ps = ((orcGanho && orcGanho.fechamento && orcGanho.fechamento.condicao) || {}).parcelas || [];
+  const numeros = ps.map((p, i) => (p && p.recebida ? Number(p.numero) || i + 1 : 0)).filter(Boolean);
+  if (!numeros.length) return { lancamentos: atuais, novos: [] };
+  const r = lancamentosDoGanhoRecebido(orcGanho, numeros, {
+    clientes: d.clientes || [], lancamentos: atuais, fechamentos: fechamentosDoEscritorio(d),
+    novoId: typeof uid === "function" ? uid : undefined,
+    numeroDoc: typeof proximaReferencia === "function" ? (lista) => proximaReferencia(d.obras || [], lista) : undefined,
+  });
+  if (r.erro) return { erro: r.erro };
+  return { lancamentos: atuais.concat(r.lancamentos), novos: r.lancamentos };
 }
 
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
@@ -45301,9 +45349,18 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
         versaoFechada: fechada ? (typeof rotuloDaVersao === "function" ? rotuloDaVersao(props, iVer) : fechada.versao) : "",
         fechadoEm: agora },
     } : o);
+    // Parcela que o cliente já pagou: entra agora no financeiro do escritório.
+    const recebido = typeof lancamentosComGanhoRecebido === "function"
+      ? lancamentosComGanhoRecebido(data, novos.find(o => o.id === orc.id)) : { novos: [] };
+    if (recebido.erro) {
+      if (typeof dialogo !== "undefined" && dialogo.alertar) dialogo.alertar({ titulo: "Não deu para lançar o recebimento", mensagem: recebido.erro, tipo: "aviso" });
+      return;
+    }
+    const comRecebido = recebido.novos && recebido.novos.length;
     setGanhando(null);
-    if (typeof toast !== "undefined" && toast.sucesso) toast.sucesso("Orçamento marcado como ganho");
-    gravar(novos, { projetos: novosProjetos });
+    if (typeof toast !== "undefined" && toast.sucesso) toast.sucesso(comRecebido
+      ? "Orçamento ganho · recebimento lançado no financeiro do escritório" : "Orçamento marcado como ganho");
+    gravar(novos, { projetos: novosProjetos, ...(comRecebido ? { lancamentos: recebido.lancamentos } : {}) });
   }
 
   return (
@@ -56480,12 +56537,24 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         : o
     );
 
+    // Parcela que o cliente já pagou: entra agora no financeiro do escritório
+    // (receita de projetos + reserva da engenharia), sem esperar o extrato.
+    const recebido = typeof lancamentosComGanhoRecebido === "function"
+      ? lancamentosComGanhoRecebido(data, novosOrc.find(o => o.id === orc.id)) : { novos: [] };
+    if (recebido.erro) {
+      dialogo.alertar({ titulo: "Não deu para lançar o recebimento", mensagem: recebido.erro, tipo: "aviso" });
+      return;
+    }
+
     // Fecha modal e mostra toast IMEDIATAMENTE — não aguarda save()
     setOrcGanho(null);
-    toast.sucesso("Orçamento marcado como ganho");
+    toast.sucesso(recebido.novos && recebido.novos.length
+      ? "Orçamento ganho · recebimento lançado no financeiro do escritório"
+      : "Orçamento marcado como ganho");
 
     // Save em background. Falha silenciosa via toast de erro.
-    save({ ...data, orcamentosProjeto: novosOrc, projetos: novosProjetos })
+    save({ ...data, orcamentosProjeto: novosOrc, projetos: novosProjetos,
+      ...(recebido.novos && recebido.novos.length ? { lancamentos: recebido.lancamentos } : {}) })
       .catch(e => {
         console.error("Erro ao salvar orçamento ganho:", e);
         toast.erro("Erro ao salvar — tente novamente");
@@ -58618,8 +58687,8 @@ function NumBR({ valor, onChange, onFocus: onFocusExt, onBlur: onBlurExt, min, m
   };
   const [txt, setTxt] = useState(fmt(valor));
   const focadoRef = useRef(false);
-  const inputRef = useRef(null);
-  const cursorRef = useRef(null);
+  const anteriorRef = useRef(txt);   // último texto que o campo mostrou
+  anteriorRef.current = focadoRef.current ? anteriorRef.current : txt;
 
   // Sincroniza quando o valor muda por fora — MAS SÓ SE NÃO TIVER FOCO.
   // Evita conflito com digitação em andamento (o cursor pular, valor sobrescrito).
@@ -58628,16 +58697,6 @@ function NumBR({ valor, onChange, onFocus: onFocusExt, onBlur: onBlurExt, min, m
     setTxt(fmt(valor));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valor]);
-
-  // Depois de reformatar, devolve o cursor ao mesmo dígito em que estava
-  useEffect(() => {
-    const el = inputRef.current, alvo = cursorRef.current;
-    if (!el || alvo == null || document.activeElement !== el) return;
-    cursorRef.current = null;
-    let pos = 0, vistos = 0;
-    while (pos < txt.length && vistos < alvo) { if (/[\d,]/.test(txt[pos])) vistos++; pos++; }
-    try { el.setSelectionRange(pos, pos); } catch (e) {}
-  });
 
   function parseBR(s) {
     if (s == null) return 0;
@@ -58648,6 +58707,7 @@ function NumBR({ valor, onChange, onFocus: onFocusExt, onBlur: onBlurExt, min, m
 
   function handleChange(e) {
     let raw = e.target.value;
+    const txt = anteriorRef.current;
     let cur = e.target.selectionStart == null ? raw.length : e.target.selectionStart;
     const digitos = (x) => x.replace(/\D/g, "");
     // Ponto digitado sem vírgula no campo = vírgula decimal
@@ -58660,10 +58720,15 @@ function NumBR({ valor, onChange, onFocus: onFocusExt, onBlur: onBlurExt, min, m
       cur -= 1;
     }
     const novo = mascaraNumBR(raw, decimais);
-    cursorRef.current = (raw.slice(0, cur).match(/[\d,]/g) || []).length;
-    // zeros à esquerda removidos pela máscara não contam
+    // Devolve o cursor ao mesmo dígito (já no DOM, sem esperar o React)
+    let alvo = (raw.slice(0, cur).match(/[\d,]/g) || []).length;
     const zerosFora = (raw.replace(/[^\d,]/g, "").match(/^0+(?=\d)/) || [""])[0].length;
-    cursorRef.current = Math.max(0, cursorRef.current - Math.min(zerosFora, cursorRef.current));
+    alvo = Math.max(0, alvo - Math.min(zerosFora, alvo));
+    let pos = 0, vistos = 0;
+    while (pos < novo.length && vistos < alvo) { if (/[\d,]/.test(novo[pos])) vistos++; pos++; }
+    e.target.value = novo;
+    anteriorRef.current = novo;
+    try { e.target.setSelectionRange(pos, pos); } catch (err) {}
     setTxt(novo);
     let n = parseBR(novo);
     if (min != null && n < min) n = min;
@@ -58685,7 +58750,6 @@ function NumBR({ valor, onChange, onFocus: onFocusExt, onBlur: onBlurExt, min, m
 
   return (
     <input
-      ref={inputRef}
       type="text"
       inputMode="decimal"
       value={txt}
@@ -58809,6 +58873,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
   const [inclEng, setInclEng]             = useState(baseEng > 0);
   const [etapas, setEtapas]               = useState([]);                // preenchido no useEffect
   const [modoEtapas, setModoEtapas]       = useState(false);
+  const [jaRecebida, setJaRecebida]       = useState(false);   // 1ª parcela já caiu na conta
   const [totalFechado, setTotalFechado]   = useState(0);
   const [parcelas, setParcelas]           = useState([]);
   const [editandoTotal, setEditandoTotal] = useState(false);
@@ -59281,6 +59346,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
           nome: p.nome,
           valor: Math.round((parseFloat(p.valor) || 0) * 100) / 100,
           data: p.data,
+          ...(i === 0 && jaRecebida ? { recebida: true } : {}),
         })),
       },
     };
@@ -59591,6 +59657,30 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
                   </button>
                 )}
               </div>
+
+              {/* Já recebida: o cliente pagou no fechamento (antecipado, entrada) */}
+              {parcelas.length > 0 && (() => {
+                const p0 = parcelas[0];
+                const v0 = Math.round((parseFloat(p0.valor) || 0) * 100) / 100;
+                const eng0 = inclEng && totalFechado > 0 ? Math.round(v0 * (fecEng / totalFechado) * 100) / 100 : 0;
+                return (
+                  <div data-vk-ja-recebida style={{ marginTop:10, padding:"9px 10px", border:"1px solid " + (jaRecebida ? "#86efac" : "#e5e7eb"),
+                    background: jaRecebida ? "#f0fdf4" : "#fff", borderRadius:7 }}>
+                    <label style={{ display:"flex", alignItems:"flex-start", gap:8, cursor:"pointer", fontSize:12.5, color:"#262421", fontWeight:600 }}>
+                      <input type="checkbox" checked={jaRecebida} onChange={e => setJaRecebida(e.target.checked)}
+                        style={{ marginTop:2, accentColor:"#0474f4", flexShrink:0 }} />
+                      <span>{parcelas.length === 1 ? "O cliente já pagou — o dinheiro está na conta" : `A ${p0.nome || "1ª parcela"} já foi paga — o dinheiro está na conta`}</span>
+                    </label>
+                    {jaRecebida && (
+                      <div style={{ fontSize:11.5, color:"#4b5563", marginTop:6, paddingLeft:22, lineHeight:1.45 }}>
+                        Lança agora no financeiro do escritório, em {fmtData(p0.data) || "—"}: {fmtBRL(v0)} entrando na conta como Receita de projetos
+                        {eng0 > 0 ? <>, e {fmtBRL(eng0)} da engenharia indo para a Reserva engenharia (a repassar)</> : null}.
+                        Quando o extrato chegar, o PIX casa com este lançamento.
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Alerta de diferença entre soma e total fechado */}
               {temDiferenca && parcelas.length > 1 && !editandoTotal && !editandoDesconto && !editandoImposto && (

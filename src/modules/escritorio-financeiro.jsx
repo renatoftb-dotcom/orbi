@@ -2144,7 +2144,10 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
     if (!g || !v) return 0;
     return (g.sinal < 0 ? -1 : 1) * (v < 0 ? -1 : 1);
   };
-  const candidatos = (lancamentos || []).filter((l) => !compraNoCartaoDoEscritorio(l)).map((l, i) => ({
+  // O que não passou pela conta (contaBanco "nao": a parte da engenharia que
+  // vai para a reserva, o rendimento da aplicação, o marcado "fora da conta")
+  // não tem linha no banco para casar — nem deve aparecer como faltando nele.
+  const candidatos = (lancamentos || []).filter((l) => !compraNoCartaoDoEscritorio(l) && !(l && l.contaBanco === "nao")).map((l, i) => ({
     l, i, abs: Math.round(Math.abs(Number(l.valor) || 0) * 100) / 100, usado: false, dir: direcaoDoLancamento(l),
   }));
 
@@ -4014,6 +4017,51 @@ function lancamentosDoRecebimento(movimento, mes, sug, fechamentos) {
       descricao: `Reserva engenharia — ${p.nome} ${p.referencia || p.cliente}`, origem: orig("eng-reserva") },
   ] : [];
   return { lancamento: { ...principal, recebimentoExtras: extras } };
+}
+
+// Projeto ganho com parcela JÁ RECEBIDA (o antecipado que caiu na conta no
+// dia do fechamento): os mesmos lançamentos do "Receber parcela" da fila —
+// a parcela inteira em Receita de projetos, pela conta, e a parte da
+// engenharia indo para a reserva —, sem esperar o extrato. Quando o extrato
+// chegar, a linha do PIX casa com o lançamento pelo valor.
+//   orc         o orçamento já com status "ganho" e o fechamento
+//   numeros     as parcelas recebidas (1, 2…)
+//   ctx         { clientes, lancamentos, fechamentos, novoId(), numeroDoc(lista), agora }
+function lancamentosDoGanhoRecebido(orc, numeros, ctx) {
+  const c = ctx || {};
+  const quais = new Set((numeros || []).map(Number));
+  if (!orc || !quais.size) return { lancamentos: [] };
+  const lancs = (c.lancamentos || []).slice();
+  const parcelas = parcelasDosProjetos([orc], c.clientes, lancs).filter((p) => quais.has(p.numero) && !p.recebida);
+  const novos = [];
+  for (const p of parcelas) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(p.data)) return { erro: `A ${p.nome} está sem data — informe o dia em que o cliente pagou.` };
+    const r = lancamentosDoRecebimento({ id: "", data: p.data, valor: p.valor, historico: "" }, p.data.slice(0, 7), { parcelaProjeto: p }, c.fechamentos);
+    if (r.erro) return { erro: r.erro };
+    const { recebimentoExtras, extratoId: _e, historicoBanco: _h, ...principal } = r.lancamento;
+    const agora = c.agora || new Date().toISOString();
+    const id = typeof c.novoId === "function" ? c.novoId() : String(Date.now());
+    const numeroDoc = typeof c.numeroDoc === "function" ? c.numeroDoc(lancs.concat(novos)) : "";
+    novos.push({ ...principal, id, numeroDoc, criadoEm: agora },
+      ...recebimentoExtras.map((x, i) => ({ ...x, id: id + "_" + (i + 1), numeroDoc, criadoEm: agora, conferidoEm: agora })));
+  }
+  return { lancamentos: novos };
+}
+// O mesmo, a partir do data inteiro — é o que as telas de "Marcar como Ganho"
+// chamam. Devolve a lista de lançamentos já com os novos (ou o erro).
+function lancamentosComGanhoRecebido(data, orcGanho) {
+  const d = data || {};
+  const atuais = d.lancamentos || [];
+  const ps = ((orcGanho && orcGanho.fechamento && orcGanho.fechamento.condicao) || {}).parcelas || [];
+  const numeros = ps.map((p, i) => (p && p.recebida ? Number(p.numero) || i + 1 : 0)).filter(Boolean);
+  if (!numeros.length) return { lancamentos: atuais, novos: [] };
+  const r = lancamentosDoGanhoRecebido(orcGanho, numeros, {
+    clientes: d.clientes || [], lancamentos: atuais, fechamentos: fechamentosDoEscritorio(d),
+    novoId: typeof uid === "function" ? uid : undefined,
+    numeroDoc: typeof proximaReferencia === "function" ? (lista) => proximaReferencia(d.obras || [], lista) : undefined,
+  });
+  if (r.erro) return { erro: r.erro };
+  return { lancamentos: atuais.concat(r.lancamentos), novos: r.lancamentos };
 }
 
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
