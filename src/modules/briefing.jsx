@@ -43,7 +43,7 @@ const BR_DOC = [
 ];
 
 const BR_AMB_RES = [
-  ["sala_estar", "Sala de estar"], ["sala_jantar", "Sala de jantar"], ["sala_tv", "Sala de TV / íntima"],
+  ["hall", "Hall de entrada"], ["sala_estar", "Sala de estar"], ["sala_jantar", "Sala de jantar"], ["sala_tv", "Sala de TV / íntima"],
   ["cozinha", "Cozinha"], ["despensa", "Despensa"], ["lavabo", "Lavabo"], ["lavanderia", "Lavanderia / área de serviço"],
   ["home_office", "Home office"], ["closet", "Closet"], ["quarto_hospedes", "Quarto de hóspedes"],
   ["dependencia", "Dependência de serviço"], ["deposito", "Depósito"], ["varanda", "Varanda / terraço"],
@@ -51,7 +51,8 @@ const BR_AMB_RES = [
   ["brinquedoteca", "Brinquedoteca"], ["adega", "Adega"], ["espaco_pet", "Espaço pet"],
 ];
 const BR_AMB_LOTE = [
-  ["garagem", "Garagem"], ["piscina", "Piscina"], ["jardim", "Jardim / horta"], ["edicula", "Edícula"], ["quintal", "Quintal"],
+  ["garagem", "Garagem"], ["piscina", "Piscina"], ["lavabo_lazer", "Lavabo da área de lazer"], ["sauna", "Sauna"], ["mezanino", "Mezanino"],
+  ["jardim", "Jardim / horta"], ["edicula", "Edícula"], ["quintal", "Quintal"],
 ];
 const BR_AMB_PC = [
   ["recepcao", "Recepção / espera"], ["vendas", "Área de vendas ou atendimento"], ["provador", "Provador"],
@@ -73,16 +74,27 @@ const BR_ORCAMENTO = {
   PC: ["Até R$ 100 mil", "R$ 100 a 300 mil", "R$ 300 a 600 mil", "Acima de R$ 600 mil"],
 };
 
+// Fotos dos estilos: Unsplash (licença Unsplash — uso livre, sem atribuição obrigatória;
+// créditos mantidos aqui por cortesia). Arquivos em public/briefing/, 640×420.
+//   contemporaneo: Alef Morais — https://unsplash.com/photos/d2hYqpR0YS0
+//   minimalista: Pixasquare — https://unsplash.com/photos/4ojhpgKpS68
+//   tropical: Alef Morais — https://unsplash.com/photos/u2l_e5YS548
+//   rustico: Hanna Lazar — https://unsplash.com/photos/jSvnwYvJ48c
+//   industrial: ULISES RAMIREZ — https://unsplash.com/photos/tqCfLSHgaIo
+//   classico: Nikita — https://unsplash.com/photos/7RQwfRBD_m4
+//   escandinavo: Clay Banks — https://unsplash.com/photos/UTWRDWMMaag
+//   natural: Spacejoy — https://unsplash.com/photos/mweDhudGmIc
+//   mediterraneo: Frames For Your Heart — https://unsplash.com/photos/_KP6mk2Iz8k
 const BR_ESTILOS = [
-  { v: "contemporaneo", t: "Contemporâneo", d: "linhas retas, grandes vãos, materiais atuais" },
-  { v: "minimalista", t: "Minimalista", d: "pouco elemento, cores neutras, tudo guardado" },
-  { v: "tropical", t: "Moderno brasileiro", d: "madeira, cobogó, varandas, verde por perto" },
-  { v: "rustico", t: "Rústico / campo", d: "madeira aparente, pedra, aconchego de fazenda" },
-  { v: "industrial", t: "Industrial", d: "concreto, metal, tijolo, instalações à mostra" },
-  { v: "classico", t: "Clássico", d: "molduras, simetria, acabamentos nobres" },
-  { v: "escandinavo", t: "Escandinavo", d: "claro, madeira clara, simples e acolhedor" },
-  { v: "natural", t: "Natural / boho", d: "fibras, texturas, plantas, tons terrosos" },
-  { v: "mediterraneo", t: "Mediterrâneo", d: "branco, arcos, cal, azul, luz forte" },
+  { v: "contemporaneo", img: "/briefing/estilo-contemporaneo.jpg", t: "Contemporâneo", d: "linhas retas, grandes vãos, materiais atuais" },
+  { v: "minimalista", img: "/briefing/estilo-minimalista.jpg", t: "Minimalista", d: "pouco elemento, cores neutras, tudo guardado" },
+  { v: "tropical", img: "/briefing/estilo-tropical.jpg", t: "Moderno brasileiro", d: "madeira, cobogó, varandas, verde por perto" },
+  { v: "rustico", img: "/briefing/estilo-rustico.jpg", t: "Rústico / campo", d: "madeira aparente, pedra, aconchego de fazenda" },
+  { v: "industrial", img: "/briefing/estilo-industrial.jpg", t: "Industrial", d: "concreto, metal, tijolo, instalações à mostra" },
+  { v: "classico", img: "/briefing/estilo-classico.jpg", t: "Clássico", d: "molduras, simetria, acabamentos nobres" },
+  { v: "escandinavo", img: "/briefing/estilo-escandinavo.jpg", t: "Escandinavo", d: "claro, madeira clara, simples e acolhedor" },
+  { v: "natural", img: "/briefing/estilo-natural.jpg", t: "Natural / boho", d: "fibras, texturas, plantas, tons terrosos" },
+  { v: "mediterraneo", img: "/briefing/estilo-mediterraneo.jpg", t: "Mediterrâneo", d: "branco, arcos, cal, azul, luz forte" },
 ];
 
 // Atalhos de visibilidade. t = { tipo, uso } — r = respostas.
@@ -193,13 +205,16 @@ const BRIEFING_SECOES = [
 
   { id: "imovel", titulo: "Terreno ou imóvel", telas: [
     { perguntas: [
+      { id: "endereco_obra", tipo: "texto", rotulo: "Endereço da obra", auto: "street-address" },
       // CN
       { id: "terreno_proprio", tipo: "unica", rotulo: "O terreno já é seu?", obrig: true, mostrar: (t) => t.tipo === "CN",
         opcoes: [{ v: "sim", t: "Sim" }, { v: "negociacao", t: "Em negociação" }, { v: "procurando", t: "Ainda procurando" }] },
       { id: "condominio", tipo: "unica", rotulo: "Fica em condomínio ou loteamento fechado com regras próprias de construção?", obrig: true, mostrar: (t) => t.tipo === "CN",
         opcoes: [{ v: "sim", t: "Sim" }, { v: "nao", t: "Não" }, BR_NAO_SEI] },
       { id: "pavimentos", tipo: "unica", rotulo: "Quantos pavimentos aceita?", obrig: true, mostrar: (t) => t.tipo === "CN",
-        opcoes: [{ v: "terrea", t: "Só térrea" }, { v: "terrea_sobrado", t: "Térrea ou sobrado" }, { v: "tres", t: "Três ou mais" }, { v: "tanto_faz", t: "Sem preferência" }] },
+        opcoes: [{ v: "terrea", t: "Só térrea" }, { v: "terrea_mezanino", t: "Térrea com mezanino" }, { v: "terrea_sobrado", t: "Térrea ou sobrado" }, { v: "tres", t: "Três ou mais" }, { v: "tanto_faz", t: "Sem preferência" }] },
+      { id: "terreno_dimensoes", tipo: "texto", rotulo: "Medidas do terreno, se souber", mostrar: (t) => t.tipo === "CN", ajuda: "Ex.: 12 × 30 m. Se já tiver levantamento topográfico, pode pular." },
+      { id: "terreno_esquina", tipo: "unica", rotulo: "O terreno é de esquina?", mostrar: (t) => t.tipo === "CN", opcoes: [{ v: "sim", t: "Sim" }, { v: "nao", t: "Não" }] },
       { id: "vistas", tipo: "texto", rotulo: "Há vistas a valorizar ou a esconder, ruídos, árvores que deseja manter?", mostrar: (t) => t.tipo === "CN" || t.tipo === "RA" },
       { id: "privacidade", tipo: "unica", rotulo: "A casa deve ser aberta para a rua ou mais reservada?", mostrar: (t) => t.tipo === "CN",
         opcoes: [{ v: "aberta", t: "Aberta" }, { v: "equilibrio", t: "Equilíbrio" }, { v: "reservada", t: "Reservada" }] },
@@ -265,33 +280,34 @@ const BRIEFING_SECOES = [
       { id: "programa", tipo: "escala", rotulo: "Para cada ambiente que você deseja no projeto, marque o quanto ele é importante", obrig: true, niveis: BR_PRIORIDADE,
         ajuda: "O que ficar sem marcar conta como \"não precisa\".", itensPor: (t) => brAmbientesDoTipo(t.tipo), outro: true, minMarcados: 1 },
     ] },
-    { titulo: "Detalhes dos ambientes", perguntas: [
+    { titulo: "Detalhes dos ambientes", nota: "Só para os ambientes que você marcou. Tudo opcional — responda o que já souber.", perguntas: [
       { id: "amb_sala_estar_lugares", grupo: "Sala de estar", tipo: "numero", rotulo: "Quantos lugares para sentar?", mostrar: (t, r) => brTemPrioridade(r, "sala_estar"), min: 0 },
       { id: "amb_sala_estar_tv", grupo: "Sala de estar", tipo: "unica", rotulo: "TV na sala?", mostrar: (t, r) => brTemPrioridade(r, "sala_estar"), opcoes: [{ v: "sim", t: "Sim" }, { v: "nao", t: "Não" }] },
       { id: "amb_sala_jantar_lugares", grupo: "Sala de jantar", tipo: "numero", rotulo: "Quantos lugares à mesa?", mostrar: (t, r) => brTemPrioridade(r, "sala_jantar"), min: 0 },
+      { id: "amb_sala_jantar_moveis", grupo: "Sala de jantar", tipo: "multipla", rotulo: "Também na sala de jantar", mostrar: (t, r) => brTemPrioridade(r, "sala_jantar"),
+        opcoes: [{ v: "aparador", t: "Aparador / buffet" }, { v: "cristaleira", t: "Cristaleira" }, { v: "adega", t: "Adega / bar" }] },
       { id: "amb_cozinha_tipo", grupo: "Cozinha", tipo: "unica", rotulo: "A cozinha deve ser", mostrar: (t, r) => brTemPrioridade(r, "cozinha"),
         opcoes: [{ v: "aberta", t: "Aberta" }, { v: "semiaberta", t: "Semiaberta" }, { v: "fechada", t: "Fechada" }] },
       { id: "amb_cozinha_ilha", grupo: "Cozinha", tipo: "unica", rotulo: "Ilha ou bancada para refeições?", mostrar: (t, r) => brTemPrioridade(r, "cozinha"),
         opcoes: [{ v: "ilha", t: "Ilha" }, { v: "bancada", t: "Bancada" }, { v: "nao", t: "Não" }] },
       { id: "amb_cozinha_equip", grupo: "Cozinha", tipo: "multipla", rotulo: "Equipamentos", mostrar: (t, r) => brTemPrioridade(r, "cozinha"), outro: true,
-        opcoes: [{ v: "cooktop", t: "Cooktop" }, { v: "forno", t: "Forno de embutir" }, { v: "micro", t: "Micro-ondas de embutir" }, { v: "coifa", t: "Coifa" }, { v: "lava_loucas", t: "Lava-louças" },
-          { v: "geladeira_grande", t: "Geladeira grande / duplex" }, { v: "adega", t: "Adega climatizada" }, { v: "filtro", t: "Filtro" }, { v: "reciclagem", t: "Lixeira de reciclagem" }] },
+        opcoes: [{ v: "fogao", t: "Fogão" }, { v: "cooktop", t: "Cooktop" }, { v: "cinco_bocas", t: "5 bocas ou mais" }, { v: "forno", t: "Forno de embutir" }, { v: "micro", t: "Micro-ondas de embutir" },
+          { v: "coifa", t: "Coifa" }, { v: "lava_loucas", t: "Lava-louças" }, { v: "geladeira_grande", t: "Geladeira side-by-side / duplex" }, { v: "freezer", t: "Freezer" },
+          { v: "cuba_dupla", t: "Cuba dupla" }, { v: "adega", t: "Adega climatizada" }, { v: "filtro", t: "Filtro" }, { v: "reciclagem", t: "Lixeira de reciclagem" }] },
       { id: "amb_gourmet_churrasqueira", grupo: "Área gourmet", tipo: "unica", rotulo: "Churrasqueira", mostrar: (t, r) => brTemPrioridade(r, "gourmet"),
-        opcoes: [{ v: "carvao", t: "A carvão" }, { v: "eletrica", t: "Elétrica" }, { v: "gas", t: "A gás" }, { v: "nao", t: "Sem churrasqueira" }] },
+        opcoes: [{ v: "carvao", t: "A carvão (alvenaria)" }, { v: "coifa", t: "Gourmet com coifa e grill" }, { v: "eletrica", t: "Elétrica" }, { v: "gas", t: "A gás" }, { v: "nao", t: "Sem churrasqueira" }] },
       { id: "amb_gourmet_lugares", grupo: "Área gourmet", tipo: "numero", rotulo: "Quantas pessoas sentadas?", mostrar: (t, r) => brTemPrioridade(r, "gourmet"), min: 0 },
-      { id: "amb_suite_closet", grupo: "Suíte principal", tipo: "unica", rotulo: "Closet para", mostrar: (t, r) => brRes(t) && Number(r.suites) > 0,
-        opcoes: [{ v: "1", t: "1 pessoa" }, { v: "2", t: "2 pessoas" }, { v: "nao", t: "Sem closet" }] },
-      { id: "amb_suite_cama", grupo: "Suíte principal", tipo: "unica", rotulo: "Tamanho da cama", mostrar: (t, r) => brRes(t) && Number(r.suites) > 0,
-        opcoes: [{ v: "casal", t: "Casal" }, { v: "queen", t: "Queen" }, { v: "king", t: "King" }] },
-      { id: "amb_suite_extras", grupo: "Suíte principal", tipo: "multipla", rotulo: "No banheiro da suíte", mostrar: (t, r) => brRes(t) && Number(r.suites) > 0,
-        opcoes: [{ v: "banheira", t: "Banheira" }, { v: "duas_cubas", t: "Duas cubas" }, { v: "ducha_dupla", t: "Ducha dupla" }] },
+      { id: "amb_gourmet_extras", grupo: "Área gourmet", tipo: "multipla", rotulo: "Também na área gourmet", mostrar: (t, r) => brTemPrioridade(r, "gourmet"),
+        opcoes: [{ v: "forno_pizza", t: "Forno de pizza" }, { v: "forno_lenha", t: "Forno a lenha" }, { v: "fogao_lenha", t: "Fogão a lenha" }, { v: "cooktop", t: "Fogão / cooktop" },
+          { v: "geladeira", t: "Geladeira / cervejeira" }, { v: "tv", t: "TV" }, { v: "banheiro", t: "Banheiro com chuveiro" }] },
       { id: "amb_office_pessoas", grupo: "Home office", tipo: "numero", rotulo: "Para quantas pessoas?", mostrar: (t, r) => brTemPrioridade(r, "home_office"), min: 0 },
       { id: "amb_office_extras", grupo: "Home office", tipo: "multipla", rotulo: "Precisa de", mostrar: (t, r) => brTemPrioridade(r, "home_office"),
         opcoes: [{ v: "acustica", t: "Isolamento acústico" }, { v: "clientes", t: "Receber clientes" }, { v: "hospedes", t: "Servir também de quarto de hóspedes" }] },
       { id: "amb_lavanderia_local", grupo: "Lavanderia", tipo: "unica", rotulo: "Onde fica melhor?", mostrar: (t, r) => brTemPrioridade(r, "lavanderia"),
         opcoes: [{ v: "cozinha", t: "Perto da cozinha" }, { v: "quartos", t: "Perto dos quartos" }, { v: "externa", t: "Externa" }] },
-      { id: "amb_lavanderia_secagem", grupo: "Lavanderia", tipo: "multipla", rotulo: "Secagem", mostrar: (t, r) => brTemPrioridade(r, "lavanderia"),
-        opcoes: [{ v: "varal_int", t: "Varal interno" }, { v: "varal_ext", t: "Varal externo" }, { v: "secadora", t: "Secadora" }] },
+      { id: "amb_lavanderia_secagem", grupo: "Lavanderia", tipo: "multipla", rotulo: "O que precisa ter", mostrar: (t, r) => brTemPrioridade(r, "lavanderia"),
+        opcoes: [{ v: "tanque", t: "Tanque" }, { v: "maquina", t: "Máquina de lavar / lava e seca" }, { v: "secadora", t: "Secadora" }, { v: "varal_int", t: "Varal interno" },
+          { v: "varal_ext", t: "Varal externo" }, { v: "armario", t: "Armário" }] },
       { id: "amb_garagem_coberta", grupo: "Garagem", tipo: "unica", rotulo: "Coberta ou descoberta?", mostrar: (t, r) => brTemPrioridade(r, "garagem"),
         opcoes: [{ v: "coberta", t: "Coberta" }, { v: "descoberta", t: "Descoberta" }, { v: "parte", t: "Parte coberta" }] },
       { id: "amb_garagem_guardar", grupo: "Garagem", tipo: "multipla", rotulo: "Guardar também", mostrar: (t, r) => brTemPrioridade(r, "garagem"),
@@ -300,12 +316,38 @@ const BRIEFING_SECOES = [
         opcoes: [{ v: "lazer", t: "Lazer" }, { v: "raia", t: "Nadar (raia)" }, { v: "infantil", t: "Crianças" }] },
       { id: "amb_piscina_aquecida", grupo: "Piscina", tipo: "unica", rotulo: "Aquecida?", mostrar: (t, r) => brTemPrioridade(r, "piscina"),
         opcoes: [{ v: "sim", t: "Sim" }, { v: "nao", t: "Não" }, BR_NAO_SEI] },
+      { id: "amb_piscina_extras", grupo: "Piscina", tipo: "multipla", rotulo: "Também na piscina", mostrar: (t, r) => brTemPrioridade(r, "piscina"),
+        opcoes: [{ v: "spa", t: "Spa / hidro" }, { v: "prainha", t: "Prainha" }, { v: "deck", t: "Deck de madeira" }, { v: "cascata", t: "Cascata" }, { v: "espelho", t: "Espelho d'água" }] },
       { id: "amb_pc_estacoes", grupo: "Estações de trabalho", tipo: "numero", rotulo: "Quantas estações?", mostrar: (t, r) => brTemPrioridade(r, "estacoes"), min: 0 },
       { id: "amb_pc_salas", grupo: "Salas de atendimento", tipo: "numero", rotulo: "Quantas salas?", mostrar: (t, r) => brTemPrioridade(r, "salas_atend"), min: 0 },
     ] },
+    { titulo: "Detalhes dos quartos", perguntas: [
+      { id: "amb_suite_closet", grupo: "Suíte principal", tipo: "unica", rotulo: "Closet para", mostrar: (t, r) => brRes(t) && Number(r.suites) > 0,
+        opcoes: [{ v: "1", t: "1 pessoa" }, { v: "2", t: "2 pessoas" }, { v: "nao", t: "Sem closet" }] },
+      { id: "amb_closet_portas", grupo: "Suíte principal", tipo: "numero", rotulo: "Quantas portas tem o guarda-roupa que vocês usam hoje?", min: 0,
+        mostrar: (t, r) => brRes(t) && Number(r.suites) > 0 && r.amb_suite_closet !== "nao", ajuda: "Serve de referência para o tamanho do closet." },
+      { id: "amb_suite_cama", grupo: "Suíte principal", tipo: "unica", rotulo: "Tamanho da cama", mostrar: (t, r) => brRes(t) && Number(r.suites) > 0,
+        opcoes: [{ v: "casal", t: "Casal (1,40 m)" }, { v: "queen", t: "Queen (1,60 m)" }, { v: "king", t: "King (1,93 m ou mais)" }] },
+      { id: "amb_suite_moveis", grupo: "Suíte principal", tipo: "multipla", rotulo: "No quarto", mostrar: (t, r) => brRes(t) && Number(r.suites) > 0,
+        opcoes: [{ v: "comoda", t: "Cômoda" }, { v: "penteadeira", t: "Penteadeira" }, { v: "poltrona", t: "Poltrona de leitura" }, { v: "tv", t: "TV" }, { v: "home_office", t: "Cantinho de trabalho" }] },
+      { id: "amb_suite_extras", grupo: "Suíte principal", tipo: "multipla", rotulo: "No banheiro da suíte", mostrar: (t, r) => brRes(t) && Number(r.suites) > 0,
+        opcoes: [{ v: "duas_cubas", t: "Duas cubas" }, { v: "ducha_dupla", t: "Dois chuveiros" }, { v: "banheira", t: "Banheira" }, { v: "vaso_separado", t: "Vaso em área separada" }, { v: "ducha_higienica", t: "Ducha higiênica / bidê" }] },
+      { id: "amb_quartos_camas", grupo: "Outros quartos", tipo: "multipla", rotulo: "Que camas vão nos outros quartos?", mostrar: (t, r) => brRes(t) && Number(r.quartos) > 1,
+        opcoes: [{ v: "solteiro", t: "Solteiro" }, { v: "dois_solteiros", t: "Duas de solteiro" }, { v: "beliche", t: "Beliche / bicama" }, { v: "casal", t: "Casal" }, { v: "queen", t: "Queen" }] },
+      { id: "amb_quartos_extras", grupo: "Outros quartos", tipo: "multipla", rotulo: "Os outros quartos terão", mostrar: (t, r) => brRes(t) && Number(r.quartos) > 1,
+        opcoes: [{ v: "suite", t: "Banheiro próprio (suíte)" }, { v: "closet", t: "Closet" }, { v: "estudo", t: "Bancada de estudo" }, { v: "tv", t: "TV" }] },
+    ] },
+    { titulo: "Como os ambientes se relacionam", perguntas: [
+      { id: "integracao", tipo: "unica", rotulo: "Os ambientes sociais devem ser integrados?", mostrar: brRes,
+        opcoes: [{ v: "tudo", t: "Tudo integrado (salas e cozinha)" }, { v: "salas", t: "Só as salas integradas" }, { v: "cozinha_jantar", t: "Cozinha integrada à sala de jantar" }, { v: "separados", t: "Ambientes separados" }] },
+      { id: "gourmet_relacao", tipo: "multipla", rotulo: "A área gourmet deve ser", mostrar: (t, r) => brTemPrioridade(r, "gourmet"),
+        opcoes: [{ v: "integrada", t: "Integrada com a casa" }, { v: "separada", t: "Separada da casa" }, { v: "perto_cozinha", t: "Perto da cozinha" }, { v: "aberta", t: "Aberta" }, { v: "fechada_vidro", t: "Fechada com vidro" }, { v: "mais_usada", t: "O ambiente mais usado da casa" }] },
+      { id: "ambiencia", tipo: "multipla", rotulo: "Que tipo de ambiente vocês gostam?", mostrar: brRes,
+        opcoes: [{ v: "abertos", t: "Abertos e integrados" }, { v: "reservados", t: "Mais reservados e privados" }, { v: "vidro", t: "Claros, com muito vidro" }, { v: "jardim_interno", t: "Com jardim interno" }, { v: "verde", t: "Muito verde por perto" }] },
+      { id: "juntos_separados", tipo: "texto", rotulo: "Há ambientes que precisam ficar juntos ou bem separados?", ajuda: "Ex.: \"quarto do bebê perto da suíte\", \"home office longe da sala\"." },
+    ] },
     { titulo: "Prioridades", perguntas: [
       { id: "top3", tipo: "rank3", rotulo: "Das coisas que você marcou, quais são as 3 mais importantes?", obrig: true, ajuda: "Toque na ordem: a primeira é a mais importante." },
-      { id: "juntos_separados", tipo: "texto", rotulo: "Há ambientes que precisam ficar juntos ou bem separados?", ajuda: "Ex.: \"quarto do bebê perto da suíte\", \"home office longe da sala\"." },
       { id: "padrao", tipo: "unica", rotulo: "Padrão de acabamento esperado", obrig: true,
         opcoes: [{ v: "economico", t: "Econômico" }, { v: "medio", t: "Médio" }, { v: "alto", t: "Alto" }, { v: "muito_alto", t: "Muito alto" }] },
       { id: "area_imaginada", tipo: "numero", rotulo: "Você tem ideia da área total que imagina? (m²)", mostrar: (t) => t.tipo !== "AP", min: 0, decimal: true, ajuda: "Deixe em branco se não souber." },
@@ -338,16 +380,36 @@ const BRIEFING_SECOES = [
   { id: "estilo", titulo: "Estilo", telas: [
     { perguntas: [
       { id: "estilos", tipo: "multipla", rotulo: "Quais estilos mais combinam com você?", obrig: true, opcoes: BR_ESTILOS, cartoes: true, max: 4, ajuda: "Escolha até 4." },
-      { id: "estilos_nao", tipo: "multipla", rotulo: "E algum que você não gostaria de jeito nenhum?", opcoes: BR_ESTILOS, max: 4 },
-      { id: "palavras", tipo: "texto", rotulo: "Três palavras para a sensação que o espaço deve transmitir" },
+      { id: "estilos_nao", tipo: "multipla", rotulo: "E algum que você não gostaria de jeito nenhum?", opcoes: BR_ESTILOS.map((o) => ({ v: o.v, t: o.t })), max: 4, excluirDe: "estilos" },
+      { id: "percepcao", tipo: "multipla", rotulo: "Como você quer que o imóvel seja percebido?", max: 3, ajuda: "Escolha até 3.",
+        opcoes: [{ v: "sofisticado", t: "Sofisticado" }, { v: "aconchegante", t: "Aconchegante" }, { v: "discreto", t: "Discreto" }, { v: "imponente", t: "Imponente" },
+          { v: "moderno", t: "Inovador" }, { v: "tradicional", t: "Tradicional" }, { v: "urbano", t: "Urbano" }, { v: "natural", t: "Natural" }] },
     ] },
     { perguntas: [
-      { id: "materiais_gosta", tipo: "multipla", rotulo: "Materiais e cores que você adora", outro: true,
-        opcoes: [{ v: "madeira", t: "Madeira" }, { v: "pedra", t: "Pedra" }, { v: "concreto", t: "Concreto aparente" }, { v: "tijolo", t: "Tijolo" }, { v: "metal", t: "Metal" }, { v: "vidro", t: "Vidro" },
-          { v: "branco", t: "Branco" }, { v: "neutros", t: "Tons neutros" }, { v: "terrosos", t: "Tons terrosos" }, { v: "vivas", t: "Cores vivas" }, { v: "escuros", t: "Tons escuros" }] },
-      { id: "materiais_evita", tipo: "multipla", rotulo: "E os que você evita", outro: true,
+      { id: "paleta", tipo: "multipla", rotulo: "Quais paletas de cor mais combinam com você?", max: 2, ajuda: "Escolha até 2. É só para entender seu gosto.", paleta: true,
+        opcoes: [{ v: "claros", t: "Neutros claros", cores: ["#f5f1ea", "#e4ddd1", "#c9bfae", "#ffffff"] },
+          { v: "terrosos", t: "Terrosos", cores: ["#c68b59", "#a0603d", "#e3c9a8", "#6b4f3a"] },
+          { v: "pb", t: "Preto e branco", cores: ["#111111", "#ffffff", "#8a8a8a", "#d6d6d6"] },
+          { v: "madeira_verde", t: "Madeira e verde", cores: ["#9c6b43", "#5f7f52", "#d9c7a7", "#2f4a33"] },
+          { v: "concreto", t: "Cinzas e concreto", cores: ["#9a9a95", "#c8c7c2", "#5d5d5a", "#e9e8e4"] },
+          { v: "vivas", t: "Cores vivas", cores: ["#1f6fb2", "#e8b228", "#d4553b", "#2e9c79"] }] },
+      { id: "materiais_gosta", tipo: "multipla", rotulo: "Materiais que você adora", outro: true,
+        opcoes: [{ v: "madeira", t: "Madeira" }, { v: "ripado", t: "Painel ripado" }, { v: "pedra", t: "Pedra natural" }, { v: "concreto", t: "Concreto / cimento queimado" }, { v: "tijolo", t: "Tijolo" },
+          { v: "vazado", t: "Elemento vazado (cobogó)" }, { v: "corten", t: "Aço corten" }, { v: "metal", t: "Metal" }, { v: "vidro", t: "Vidro" }, { v: "molduras", t: "Molduras clássicas" }] },
+      { id: "materiais_evita", tipo: "multipla", rotulo: "E os que você evita", outro: true, excluirDe: "materiais_gosta",
         opcoes: [{ v: "madeira", t: "Madeira" }, { v: "pedra", t: "Pedra" }, { v: "concreto", t: "Concreto aparente" }, { v: "tijolo", t: "Tijolo" }, { v: "metal", t: "Metal" }, { v: "vidro", t: "Vidro" },
           { v: "branco", t: "Branco total" }, { v: "vivas", t: "Cores vivas" }, { v: "escuros", t: "Tons escuros" }] },
+    ] },
+    { titulo: "A linguagem da casa", nota: "Tudo opcional — marque só o que já tiver opinião.", perguntas: [
+      { id: "elementos", tipo: "multipla", rotulo: "Elementos que você gostaria de ter", mostrar: (t) => t.tipo === "CN" || t.tipo === "RA",
+        opcoes: [{ v: "pergolado", t: "Pergolado" }, { v: "varanda", t: "Varanda" }, { v: "sacada", t: "Sacada" }, { v: "marquise", t: "Marquise" }, { v: "portico", t: "Pórtico de entrada" },
+          { v: "espelho_agua", t: "Espelho d'água" }, { v: "jardim_interno", t: "Jardim interno" }, { v: "pe_direito", t: "Pé-direito duplo" }] },
+      { id: "esquadrias", tipo: "unica", rotulo: "Janelas e portas de preferência",
+        opcoes: [{ v: "aluminio", t: "Alumínio" }, { v: "pvc", t: "PVC" }, { v: "madeira", t: "Madeira" }, { v: "tanto_faz", t: "Sem preferência" }] },
+      { id: "piso_interno", tipo: "unica", rotulo: "Piso interno",
+        opcoes: [{ v: "porcelanato", t: "Porcelanato em tudo" }, { v: "misto", t: "Porcelanato no social, madeira nos quartos" }, { v: "madeira", t: "Madeira / vinílico, porcelanato só nas áreas molhadas" }, BR_NAO_SEI] },
+      { id: "paisagismo", tipo: "unica", rotulo: "Paisagismo", mostrar: (t) => t.tipo === "CN" || t.tipo === "RA",
+        opcoes: [{ v: "alto", t: "Mais alto (árvores, privacidade)" }, { v: "baixo", t: "Mais baixo (gramado, forrações)" }, { v: "misto", t: "Misto" }, { v: "minimo", t: "O mínimo de manutenção" }] },
       { id: "links_referencia", tipo: "links", rotulo: "Links de referência", ajuda: "Pinterest, Instagram, sites — um por linha." },
       { id: "nao_pode_faltar", tipo: "texto", rotulo: "O que não pode faltar de jeito nenhum?" },
       { id: "marca_cores", tipo: "texto", rotulo: "Valores da marca e cores do logotipo", mostrar: (t) => t.tipo === "PC" },
@@ -462,7 +524,11 @@ const BR_DICAS = {
   decisor: "Quem aprova as decisões do projeto. Se forem duas pessoas, cite as duas.",
   participacao: "Define com que frequência o escritório vai te consultar durante o projeto.",
   estilos: "Não precisa saber o nome certo — escolha pelo que a descrição lembra.",
-  palavras: "Ex.: aconchegante, claro, prático, sofisticado.",
+  percepcao: "A primeira impressão de quem chega. Ajuda a definir fachada, entrada e proporções.",
+  paleta: "Não precisa ser exatamente estas cores — é para entender se você prefere tons claros, terrosos, contrastantes…",
+  integracao: "Integrar amplia o espaço e a convivência; separar dá mais privacidade e controle de cheiro e barulho.",
+  elementos: "Elementos que mudam o desenho da fachada e das áreas externas.",
+  piso_interno: "Define parte do custo e do conforto (madeira e vinílico são mais quentes; porcelanato, mais fácil de limpar).",
   links_referencia: "Pastas do Pinterest ou posts do Instagram com imagens de que você gosta.",
   agua_quente: "Se não souber, o escritório indica a melhor opção para o seu caso.",
   sustentabilidade: "Essencial: não pode faltar. Desejável: se couber no orçamento. Não precisa: pode ficar de fora.",
@@ -720,6 +786,8 @@ function BrPergunta({ p, t, r, valor, mudar, erro }) {
     );
   } else if (p.tipo === "multipla") {
     const x = valor || {}, sel = x.sel || [];
+    // "o que evita" não oferece o que já foi escolhido como "o que gosta"
+    const jaEscolhidos = p.excluirDe ? (((r || {})[p.excluirDe] || {}).sel || []) : [];
     const tocar = (v) => {
       let n = sel.indexOf(v) >= 0 ? sel.filter((y) => y !== v) : sel.concat([v]);
       if (p.max && n.length > p.max) return;
@@ -728,10 +796,20 @@ function BrPergunta({ p, t, r, valor, mudar, erro }) {
     };
     corpo = (
       <div>
-        <div style={{ display: p.cartoes ? "grid" : "flex", gridTemplateColumns: "1fr", flexWrap: "wrap", gap: 8 }}>
-          {opcoesDaPergunta(p, t).map((o) => (
-            <button key={o.v} type="button" role="checkbox" aria-checked={sel.indexOf(o.v) >= 0} style={brS.chip(sel.indexOf(o.v) >= 0)} onClick={() => tocar(o.v)}>
-              {sel.indexOf(o.v) >= 0 ? "✓ " : ""}{o.t}{o.d && <div style={{ fontSize: 12.5, color: "#6b7280", fontWeight: 400, marginTop: 2 }}>{o.d}</div>}
+        <div style={{ display: p.cartoes ? "grid" : "flex", flexWrap: "wrap", gap: 8,
+          gridTemplateColumns: opcoesDaPergunta(p, t).some((o) => o.img) ? "repeat(auto-fill, minmax(150px, 1fr))" : "1fr" }}>
+          {opcoesDaPergunta(p, t).filter((o) => jaEscolhidos.indexOf(o.v) < 0 || sel.indexOf(o.v) >= 0).map((o) => (
+            <button key={o.v} type="button" role="checkbox" aria-checked={sel.indexOf(o.v) >= 0}
+              style={{ ...brS.chip(sel.indexOf(o.v) >= 0), ...(o.img ? { padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "flex-start", alignItems: "stretch" } : {}) }} onClick={() => tocar(o.v)}>
+              {o.img && <img src={o.img} alt="" loading="lazy" style={{ display: "block", width: "100%", aspectRatio: "16 / 10.5", objectFit: "cover", background: "#eef0f3" }} />}
+              <div style={o.img ? { padding: "10px 14px" } : null}>
+                {o.cores && (
+                  <div aria-hidden="true" style={{ display: "flex", marginBottom: 6, borderRadius: 6, overflow: "hidden", border: "1px solid #e5e7eb", width: 120 }}>
+                    {o.cores.map((c) => <span key={c} style={{ flex: 1, height: 22, background: c }} />)}
+                  </div>
+                )}
+                {sel.indexOf(o.v) >= 0 ? "✓ " : ""}{o.t}{o.d && <div style={{ fontSize: 12.5, color: "#6b7280", fontWeight: 400, marginTop: 2 }}>{o.d}</div>}
+              </div>
             </button>
           ))}
         </div>
