@@ -2738,6 +2738,7 @@ teste("Projeto ganho já pago (antecipado): lança receita e reserva na hora; o 
   const ls = r.lancamentos;
   assert.deepStrictEqual(ls.map((l) => [l.contaId, l.valor, l.contaBanco, l.origem.parte]),
     [["rec_projetos", 15000, "sim", "recebido"], ["parceiros", 5083.85, "nao", "eng-custo"], ["res_engenharia", 5083.85, "nao", "eng-reserva"]]);
+  assert.deepStrictEqual(ls.map((l) => l.parDe), [undefined, "id1", "id1"]);
   assert.deepStrictEqual([ls[0].lancadoEm, ls[0].competencia, ls[0].clienteId, ls[0].extratoId], ["2026-10-13", "2026-10", "g1", undefined]);
   assert.ok(ls.every((l) => l.numeroDoc === ls[0].numeroDoc && l.tipo === "escritorio" && !("recebimentoExtras" in l)));
   // sai do a receber; a linha do banco não é sugerida como parcela de novo
@@ -2768,7 +2769,7 @@ teste("Projeto ganho já pago (antecipado): lança receita e reserva na hora; o 
   assert.ok(fechado.erro);
 });
 
-teste("Engenheiro pago: sai da reserva (o custo já entrou no recebimento), sem custo em dobro; passando da reserva, vai ao formulário", () => {
+teste("Engenheiro pago: sai da reserva (o custo já entrou no recebimento), sem custo em dobro; só o que passa da reserva é custo em Parceiros", () => {
   const rec = [
     { id: "r1", tipo: "escritorio", contaId: "rec_projetos", valor: 15000, competencia: "2026-10", lancadoEm: "2026-10-13", clienteId: "g1", contaBanco: "sim" },
     { id: "r2", tipo: "escritorio", contaId: "parceiros", valor: 5083.85, competencia: "2026-10", lancadoEm: "2026-10-13", clienteId: "g1", contaBanco: "nao" },
@@ -2779,7 +2780,24 @@ teste("Engenheiro pago: sai da reserva (o custo já entrou no recebimento), sem 
   const pg = { tipo: "escritorio", unidadeId: "projetos", contaId: "parceiros", valor: 3000, competencia: "2026-11", lancadoEm: "2026-11-05", clienteId: "g1", contaBanco: "sim", descricao: "PIX ENG FULANO", sinalDoBanco: -1 };
   const r = M.comoPagamentoDaReserva(pg, rec);
   assert.deepStrictEqual([r.contaId, r.valor, r.estorno, r.contaBanco, "sinalDoBanco" in r], ["res_engenharia", -3000, true, "sim", false]);
-  assert.strictEqual(M.comoPagamentoDaReserva({ ...pg, valor: 6000 }, rec), null);          // passa da reserva
+  // passa da reserva: a linha do banco inteira em Parceiros e o par fora do banco tira a parte da reserva
+  const p6 = M.comoPagamentoDaReserva({ ...pg, valor: 6000 }, rec);
+  assert.deepStrictEqual([p6.contaId, p6.valor, p6.contaBanco, p6.pagoDaReserva], ["parceiros", 6000, "sim", 5083.85]);
+  assert.deepStrictEqual(p6.recebimentoExtras.map((x) => [x.contaId, x.valor, x.contaBanco, x.clienteId, x.competencia]),
+    [["parceiros", -5083.85, "nao", "g1", "2026-11"], ["res_engenharia", -5083.85, "nao", "g1", "2026-11"]]);
+  const com6 = rec.concat([{ ...p6, id: "p6", recebimentoExtras: undefined }, ...p6.recebimentoExtras.map((x, i) => ({ ...x, id: "p6_" + i, parDe: "p6" }))]);
+  const n6 = M.extratoEscritorio(com6, { saldoAbertura: 0 }).find((x) => x.mes === "2026-11");
+  // custo novo só 916,15; reserva zera; o banco cai os 6.000
+  assert.deepStrictEqual([n6.contas.parceiros, n6.saldoEscritorio, n6.saldoReservas, n6.saldoExtrato], [916.15, -916.15, -5083.85, 15000 - 6000]);
+  assert.strictEqual(M.saldoDaReservaEngenharia(com6, "g1"), 0);
+  // a conferência casa a linha de 6.000 com o pagamento e não acusa os pares
+  const c6 = M.conciliarExtrato([{ id: "b6", data: "2026-11-05", valor: -6000, historico: "PIX ENG" }], com6.filter((x) => x.competencia === "2026-11"), {});
+  assert.deepStrictEqual([c6.casados.length, c6.contabilizadoSemPar.length], [1, 0]);
+  // e o débito/crédito do mês bate com o banco (os pares fora do banco não contam)
+  const ck = M.checagemDebitoCredito([{ id: "b6", data: "2026-11-05", valor: -6000, historico: "PIX ENG" }], com6, "2026-11");
+  assert.deepStrictEqual([ck.base.saidas, ck.base.entradas, ck.bate, ck.difDebito], [6000, 0, true, 0]);
+  const ckOut = M.checagemDebitoCredito([{ id: "b0", data: "2026-10-13", valor: 15000, historico: "PIX GUSTAVO" }], rec, "2026-10");
+  assert.deepStrictEqual([ckOut.base.entradas, ckOut.base.saidas, ckOut.bate, ckOut.difCredito], [15000, 0, true, 0]);
   assert.strictEqual(M.comoPagamentoDaReserva({ ...pg, clienteId: "outro" }, rec), null);   // cliente sem reserva
   assert.strictEqual(M.comoPagamentoDaReserva({ ...pg, contaId: "marketing" }, rec), null);
   // depois de pago: resultado de novembro sem custo; saldo cai 3.000; a reserva fica com 2.083,85
@@ -2796,7 +2814,7 @@ teste("Engenheiro pago: sai da reserva (o custo já entrou no recebimento), sem 
   assert.ok(q.lancamento, q.erro);
   assert.deepStrictEqual([q.lancamento.contaId, q.lancamento.valor], ["res_engenharia", -3000]);
   const q2 = M.lancamentoRapidoDoExtrato({ id: "b2", data: "2026-11-05", valor: -9000, historico: "PIX ENG" }, "2026-11", sug, {}, [], rec);
-  assert.ok(q2.erro && /reserva/.test(q2.erro));
+  assert.deepStrictEqual([q2.lancamento.contaId, q2.lancamento.valor, q2.lancamento.recebimentoExtras.length], ["parceiros", 9000, 2]);
   // sem a lista (chamadas antigas), nada muda
   assert.strictEqual(M.lancamentoRapidoDoExtrato({ id: "b1", data: "2026-11-05", valor: -3000, historico: "PIX ENG" }, "2026-11", sug, {}, []).lancamento.contaId, "parceiros");
 });

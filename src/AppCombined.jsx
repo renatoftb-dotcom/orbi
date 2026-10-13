@@ -12359,6 +12359,7 @@ function checagemDebitoCredito(movimentos, lancamentos, mes) {
     const v = Number(l.valor) || 0;
     if (!v) continue;
     if (ehRendimentoDaAplicacao(l)) { base.rendimento += v; continue; }
+    if (l.contaBanco === "nao") continue;                  // não passou pelo banco (custo e reserva da engenharia)
     const conta = contaEscritorio(l.contaId);
     const g = conta && grupoEscritorio(conta.grupo);
     const sinalConta = g && g.sinal ? g.sinal : 1;
@@ -12826,12 +12827,10 @@ function lancamentoRapidoDoExtrato(movimento, mes, sugestao, fechamentos, obras,
     empreendimentoId: ehEmp ? l.empreendimentoId : l.projeto }, { fechamentos });
   if (erros.length) return { erro: erros[0] };
   // Engenheiro de um cliente com engenharia guardada: paga da reserva (o
-  // custo já entrou no recebimento). Se passa da reserva, decide no formulário.
+  // custo já entrou no recebimento); o que passar dela é custo em Parceiros.
   if (lancamentos) {
     const daReserva = comoPagamentoDaReserva(l, lancamentos);
     if (daReserva) return { lancamento: daReserva };
-    const saldo = l.contaId === "parceiros" && !l.estorno ? saldoDaReservaEngenharia(lancamentos, l.clienteId) : 0;
-    if (saldo > 0) return { erro: `Passa da reserva da engenharia deste cliente (${saldo.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}): confira no formulário.` };
   }
   return { lancamento: l };
 }
@@ -13947,17 +13946,29 @@ function saldoDaReservaEngenharia(lancamentos, clienteId) {
   for (const l of lancamentos || []) if (l && l.contaId === "res_engenharia" && l.clienteId === clienteId) t += Number(l.valor) || 0;
   return efCentavos(t);
 }
-// Saída em Parceiros de um cliente que tem engenharia guardada: vira saída da
-// reserva (valor negativo na conta da reserva, pela conta do banco). Só
-// quando cabe na reserva; senão volta igual e a tela avisa.
+// Saída em Parceiros de um cliente que tem engenharia guardada:
+//   cabe na reserva  → vira saída da reserva (valor negativo na conta dela,
+//                      pela conta do banco) — nada de custo de novo;
+//   passa da reserva → o pagamento fica em Parceiros (é a linha do banco,
+//                      inteira) e um par fora do banco tira dele a parte que
+//                      a reserva cobre: só o que passou é custo novo.
 function comoPagamentoDaReserva(l, lancamentos) {
   if (!l || l.contaId !== "parceiros" || l.estorno) return null;
   const v = efCentavos(Math.abs(efValorDoCampo(l.valor)));
   const saldo = saldoDaReservaEngenharia(lancamentos, l.clienteId);
-  if (!(v > 0) || !(saldo > 0) || v > saldo + 0.005) return null;
+  if (!(v > 0) || !(saldo > 0)) return null;
   const { sinalDoBanco: _s, ...resto } = l;
-  return { ...resto, contaId: "res_engenharia", valor: -v, estorno: true, pagoDaReserva: true,
-    descricao: l.descricao || "Pagamento da engenharia (da reserva)" };
+  if (v <= saldo + 0.005) {
+    return { ...resto, contaId: "res_engenharia", valor: -v, estorno: true, pagoDaReserva: v,
+      descricao: l.descricao || "Pagamento da engenharia (da reserva)" };
+  }
+  const comum = { tipo: "escritorio", unidadeId: l.unidadeId, clienteId: l.clienteId, cliente: l.cliente, projeto: l.projeto,
+    competencia: l.competencia, lancadoEm: l.lancadoEm, fornecedor: l.fornecedor || "", contaBanco: "nao", conferido: true, estorno: true };
+  const nome = l.descricao || "Pagamento da engenharia";
+  return { ...resto, valor: v, pagoDaReserva: saldo, recebimentoExtras: [
+    { ...comum, contaId: "parceiros", valor: -saldo, descricao: `Parte paga pela reserva — ${nome}` },
+    { ...comum, contaId: "res_engenharia", valor: -saldo, descricao: `Reserva engenharia usada — ${nome}` },
+  ] };
 }
 
 function lancamentosDoRecebimento(movimento, mes, sug, fechamentos) {
@@ -14008,7 +14019,7 @@ function lancamentosDoGanhoRecebido(orc, numeros, ctx) {
     const id = typeof c.novoId === "function" ? c.novoId() : String(Date.now());
     const numeroDoc = typeof c.numeroDoc === "function" ? c.numeroDoc(lancs.concat(novos)) : "";
     novos.push({ ...principal, id, numeroDoc, criadoEm: agora },
-      ...recebimentoExtras.map((x, i) => ({ ...x, id: id + "_" + (i + 1), numeroDoc, criadoEm: agora, conferidoEm: agora })));
+      ...recebimentoExtras.map((x, i) => ({ ...x, id: id + "_" + (i + 1), parDe: id, numeroDoc, criadoEm: agora, conferidoEm: agora })));
   }
   return { lancamentos: novos };
 }
@@ -14648,9 +14659,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const saldoReservaCli = (lancNovo && !naObra && !noCartao && f.contaId === "parceiros" && !estornoNoForm)
     ? saldoDaReservaEngenharia(lancamentos || [], f.clienteId) : 0;
   const usaReserva = saldoReservaCli > 0 && pagarDaReserva;
-  const errosReserva = usaReserva && efValorDoCampo(f.valor) > saldoReservaCli + 0.005
-    ? [`Passa da reserva da engenharia deste cliente (${efDinheiro(saldoReservaCli)}): lance em duas partes ou desmarque “pagar da reserva”.`] : [];
-  const todosErros = erros.concat(errosCartao).concat(errosGestao).concat(errosDuasPontas).concat(errosDobro).concat(errosReserva);
+  const excedeReserva = usaReserva ? efCentavos(Math.max(0, efValorDoCampo(f.valor) - saldoReservaCli)) : 0;
+  const todosErros = erros.concat(errosCartao).concat(errosGestao).concat(errosDuasPontas).concat(errosDobro);
   const comCartao = (x) => {
     if (!noCartao) return { ...x, formaPagamento: naObra ? "avista" : (x.formaPagamento === "cartao" ? "" : x.formaPagamento),
       cartaoId: "", parcelasCartao: undefined };
@@ -15204,6 +15214,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           <span>
             <b>Pagar da reserva da engenharia</b> — este cliente tem <b>{efDinheiro(saldoReservaCli)}</b> guardados. O custo do engenheiro já entrou em
             Parceiros quando o projeto foi recebido; o pagamento sai da reserva, sem contar o custo de novo.
+            {excedeReserva > 0 && <> Passa da reserva: <b>{efDinheiro(saldoReservaCli)}</b> saem dela e só <b>{efDinheiro(excedeReserva)}</b> entram como custo novo em Parceiros.</>}
           </span>
         </label>
       )}
@@ -17268,6 +17279,18 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
 
   function salvarLancamento(l) {
     if (l && l.naObra) { lancarCustoNaObra(l); return; }
+    // Lançamento novo que vem com pares fora do banco (o pagamento do
+    // engenheiro que passa da reserva): grava os dois juntos, ligados.
+    if (l && !l.id && Array.isArray(l.recebimentoExtras)) {
+      const { recebimentoExtras, sinalDoBanco: _s, ...semExtras } = l;
+      const agora = new Date().toISOString();
+      const base = typeof uid === "function" ? uid() : String(Date.now());
+      const numeroDoc = l.numeroDoc || proximaReferencia((data || {}).obras || [], lancs);
+      gravar([...lancs, { ...semExtras, id: base, numeroDoc, criadoEm: agora, fornecedor: efNomeDoFornecedor(l), tipo: "escritorio" },
+        ...recebimentoExtras.map((x, i) => ({ ...x, id: base + "_" + (i + 1), parDe: base, numeroDoc, criadoEm: agora, conferidoEm: agora }))]);
+      setForm(null);
+      return;
+    }
     // A compra no cartão que já está numa fatura fechada só muda a
     // descrição por aqui; o dinheiro dela está conferido com o banco.
     const antes = l.id ? lancs.find((x) => x && x.id === l.id) : null;
@@ -17358,6 +17381,10 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       if (achadas.length === 1) { obra = achadas[0].ob; contasJuntas = [achadas[0].k]; }
     }
     const refs = [...new Set(contasJuntas.map((c) => c.numeroDoc).filter(Boolean))];
+    // Pares lançados juntos (recebimento do projeto, pagamento da engenharia):
+    // são a mesma transação — saem todos, nunca só um lado.
+    const idPrincipal = l.parDe || l.id;
+    const paresJuntos = lancs.filter((x) => x && x.id !== l.id && (x.id === idPrincipal || x.parDe === idPrincipal));
     const ok = await dialogo.confirmar({
       titulo: daFatura ? "Excluir a linha da fatura?" : "Excluir este lançamento?",
       mensagem: `${contaEscritorio(l.contaId)?.nome || "Lançamento"} · ${efDinheiro(l.valor)} · ${mesAnoPorExtenso(l.competencia)}`
@@ -17367,12 +17394,14 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         + (contasJuntas.length ? `. Sai também da obra ${obra.nome || ""}: ${contasJuntas.length === 1 ? "1 conta" : contasJuntas.length + " contas"}`
           + (refs.length ? ` (ref ${refs.join(", ")})` : "") + " — é a mesma transação." : "")
         + (entradaJunta ? `. Sai também a entrada da obra ${obra.nome || ""} — é a mesma transação.` : "")
+        + (paresJuntos.length ? `. Saem junto ${paresJuntos.length === 1 ? "1 lançamento ligado" : paresJuntos.length + " lançamentos ligados"} (${paresJuntos.map((x) => (contaEscritorio(x.contaId) || {}).nome || "lançamento").join(", ")}) — é a mesma transação.` : "")
         + (origem.obraId && !contasJuntas.length && !entradaJunta
           ? `. Atenção: ele aponta para ${obra ? "a obra " + (obra.nome || "") : "uma obra"}, mas a conta de lá não foi encontrada — nada muda na obra; confira lá depois.` : ""),
       confirmar: "Excluir", destrutivo: true,
     });
     if (!ok) return;
-    const novos = lancs.filter((x) => x.id !== l.id);
+    const saem = new Set([l.id, ...paresJuntos.map((x) => x.id)]);
+    const novos = lancs.filter((x) => !saem.has(x.id));
     if (obra && (contasJuntas.length || entradaJunta)) {
       const fora = new Set(contasJuntas.map((c) => c.id));
       const obras = ((data || {}).obras || []).map((o) => (o && o.id === obra.id ? {
@@ -17556,7 +17585,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       const base = typeof uid === "function" ? uid() : String(Date.now());
       const numeroDoc = proximaReferencia((data || {}).obras || [], lancs);
       const novos = [{ ...semExtras, ...marca, id: base, numeroDoc, criadoEm: agora },
-        ...recebimentoExtras.map((x, i) => ({ ...x, id: base + "_" + (i + 1), numeroDoc, criadoEm: agora, conferidoEm: agora }))];
+        ...recebimentoExtras.map((x, i) => ({ ...x, id: base + "_" + (i + 1), parDe: base, numeroDoc, criadoEm: agora, conferidoEm: agora }))];
       gravar([...lancs, ...novos]);
       return true;
     }
