@@ -251,14 +251,18 @@ const BRIEFING_SECOES = [
   ] },
 
   { id: "programa", titulo: "Ambientes", telas: [
-    { perguntas: [
-      { id: "quartos", tipo: "numero", rotulo: "Quantos quartos?", obrig: (t) => t.tipo === "CN" || t.tipo === "RA", mostrar: brRes, min: 0 },
-      { id: "suites", tipo: "numero", rotulo: "Destes, quantas suítes?", mostrar: brRes, min: 0 },
-      { id: "banheiros", tipo: "numero", rotulo: "Quantos banheiros, sem contar lavabo?", mostrar: brRes, min: 0 },
-      { id: "vagas", tipo: "numero", rotulo: "Quantas vagas de carro?", obrig: (t) => t.tipo === "CN" || t.tipo === "RA", mostrar: brRes, min: 0 },
+    { titulo: "O que você deseja no projeto",
+      nota: (t) => t.tipo === "RA" || t.tipo === "AP"
+        ? "Pense no imóvel depois da reforma: conte o total, somando o que já existe e vai continuar com o que será construído."
+        : "Pense no imóvel que vocês querem — não no lugar onde moram hoje.",
+      perguntas: [
+      { id: "quartos", tipo: "numero", rotulo: "Quantos quartos você deseja?", obrig: (t) => t.tipo === "CN" || t.tipo === "RA", mostrar: brRes, min: 0 },
+      { id: "suites", tipo: "numero", rotulo: "Destes, quantas suítes você deseja?", mostrar: brRes, min: 0 },
+      { id: "banheiros", tipo: "numero", rotulo: "Quantos banheiros você deseja, sem contar lavabo?", mostrar: brRes, min: 0 },
+      { id: "vagas", tipo: "numero", rotulo: "Quantas vagas de carro você deseja?", obrig: (t) => t.tipo === "CN" || t.tipo === "RA", mostrar: brRes, min: 0 },
     ] },
-    { titulo: "O que a casa precisa ter", perguntas: [
-      { id: "programa", tipo: "escala", rotulo: "Para cada ambiente, marque o quanto ele é importante", obrig: true, niveis: BR_PRIORIDADE,
+    { titulo: "Ambientes que você deseja", nota: "Marque pensando no projeto que você deseja, não no imóvel de hoje.", perguntas: [
+      { id: "programa", tipo: "escala", rotulo: "Para cada ambiente que você deseja no projeto, marque o quanto ele é importante", obrig: true, niveis: BR_PRIORIDADE,
         ajuda: "O que ficar sem marcar conta como \"não precisa\".", itensPor: (t) => brAmbientesDoTipo(t.tipo), outro: true, minMarcados: 1 },
     ] },
     { titulo: "Detalhes dos ambientes", perguntas: [
@@ -402,7 +406,8 @@ const BRIEFING_SECOES = [
       { id: "preocupacao", tipo: "texto", rotulo: "Qual sua maior preocupação com este projeto ou com a obra?" },
       { id: "faltou", tipo: "textolongo", rotulo: "Tem algo importante que não perguntamos?" },
       { id: "facilidade", tipo: "unica", rotulo: "Este questionário foi fácil de responder?",
-        opcoes: [{ v: "1", t: "1" }, { v: "2", t: "2" }, { v: "3", t: "3" }, { v: "4", t: "4" }, { v: "5", t: "5" }], linha: true },
+        opcoes: [{ v: "1", t: "1" }, { v: "2", t: "2" }, { v: "3", t: "3" }, { v: "4", t: "4" }, { v: "5", t: "5" }], linha: true,
+        extremos: ["Muito difícil", "Muito fácil"] },
     ] },
   ] },
 ];
@@ -497,7 +502,7 @@ function textoDaResposta(p, v, t, r) {
   if (brVazio(v) && p.tipo !== "consentimento") return "";
   const rot = (lista, x) => { const o = lista.find((y) => y.v === x); return o ? o.t : String(x); };
   switch (p.tipo) {
-    case "unica": return rot(opcoesDaPergunta(p, t), v);
+    case "unica": return p.extremos ? `${v} de ${opcoesDaPergunta(p, t).length} (1 = ${p.extremos[0].toLowerCase()}, ${opcoesDaPergunta(p, t).length} = ${p.extremos[1].toLowerCase()})` : rot(opcoesDaPergunta(p, t), v);
     case "multipla": {
       const x = v || {}, partes = (x.sel || []).map((s) => rot(opcoesDaPergunta(p, t), s));
       if (!brVazio(x.outro)) partes.push(x.outro);
@@ -604,13 +609,20 @@ function BrPergunta({ p, t, r, valor, mudar, erro }) {
   } else if (p.tipo === "unica") {
     const opc = opcoesDaPergunta(p, t);
     corpo = (
-      <div role="radiogroup" style={{ display: p.cartoes ? "grid" : "flex", gridTemplateColumns: "1fr", flexWrap: "wrap", gap: 8 }}>
-        {opc.map((o) => (
-          <button key={o.v} type="button" role="radio" aria-checked={valor === o.v} style={{ ...brS.chip(valor === o.v), ...(p.linha ? { minWidth: 52, textAlign: "center" } : {}) }}
-            onClick={() => mudar(valor === o.v && !obrig ? "" : o.v)}>
-            {o.t}{o.d && <div style={{ fontSize: 12.5, color: "#6b7280", fontWeight: 400, marginTop: 2 }}>{o.d}</div>}
-          </button>
-        ))}
+      <div style={{ display: "inline-block", maxWidth: "100%" }}>
+        <div role="radiogroup" style={{ display: p.cartoes ? "grid" : "flex", gridTemplateColumns: "1fr", flexWrap: "wrap", gap: 8 }}>
+          {opc.map((o) => (
+            <button key={o.v} type="button" role="radio" aria-checked={valor === o.v} style={{ ...brS.chip(valor === o.v), ...(p.linha ? { minWidth: 52, textAlign: "center" } : {}) }}
+              onClick={() => mudar(valor === o.v && !obrig ? "" : o.v)}>
+              {o.t}{o.d && <div style={{ fontSize: 12.5, color: "#6b7280", fontWeight: 400, marginTop: 2 }}>{o.d}</div>}
+            </button>
+          ))}
+        </div>
+        {p.extremos && (
+          <div data-br-extremos style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "#6b7280", marginTop: 6 }}>
+            <span>{p.extremos[0]}</span><span>{p.extremos[1]}</span>
+          </div>
+        )}
       </div>
     );
   } else if (p.tipo === "multipla") {
@@ -926,7 +938,8 @@ function BriefingPublico({ token: tokenProp }) {
       <BrCabecalho ctx={ctx} />
       <div style={brS.caixa} ref={topo}>
         <div style={{ fontSize: 13, color: "#6b7280", margin: "14px 0 4px" }}>Seção {tela.nSecao} de {tela.totalSecoes}{tela.secao.opcional ? " · opcional" : ""}</div>
-        <h1 style={{ fontSize: 21, margin: "0 0 18px" }}>{tela.tela.titulo || tela.secao.titulo}</h1>
+        <h1 style={{ fontSize: 21, margin: tela.tela.nota ? "0 0 8px" : "0 0 18px" }}>{tela.tela.titulo || tela.secao.titulo}</h1>
+        {tela.tela.nota && <p data-br-nota style={{ fontSize: 14.5, color: "#374151", lineHeight: 1.5, background: "#eef5ff", border: "1px solid #cfe1ff", borderRadius: 10, padding: "10px 12px", margin: "0 0 20px" }}>{typeof tela.tela.nota === "function" ? tela.tela.nota(t) : tela.tela.nota}</p>}
         {tela.perguntas.map((p) => {
           const cab = p.grupo && p.grupo !== grupoAnterior ? <div key={p.id + "_g"} style={{ fontSize: 13, fontWeight: 700, color: BR_AZUL, textTransform: "uppercase", letterSpacing: 0.5, margin: "6px 0 10px" }}>{p.grupo}</div> : null;
           grupoAnterior = p.grupo || "";
