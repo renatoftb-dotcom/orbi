@@ -3435,6 +3435,10 @@ async function loadAllData(estado = null) {
     obras,
     lancamentos,
     orcamentosProjeto,
+    // Os projetos em andamento (Etapas) nascem do orçamento ganho e moram
+    // nele (orc.projeto) — não há tabela própria. Sem isto, o projeto criado
+    // no "Ganho" sumia ao recarregar a página.
+    projetos: projetosDosOrcamentos(orcamentosProjeto),
     receitasFinanceiro,
     // escritorio já vem com { ...dados, logo } do backend
     escritorio: escritorio || {},
@@ -3462,6 +3466,37 @@ function _mudadosERemovidos(novos, velhos) {
   return { mudados, removidos };
 }
 
+// ── Projetos (Etapas) guardados dentro do orçamento ganho ──────────
+function projetosDosOrcamentos(orcs) {
+  return (orcs || []).filter(o => o && o.status === "ganho" && !(o.projeto && o.projeto.finalizado)).map(o => ({
+    id: "PRJ-" + o.id,
+    orcId: o.id,
+    clienteId: o.clienteId,
+    tipo: o.tipo, subtipo: o.subtipo, padrao: o.padrao, tamanho: o.tamanho,
+    referencia: o.referencia || "",
+    areaTotal: (o.resultado && o.resultado.areaTotal) || 0,
+    colunaEtapa: "briefing",
+    criadoEm: o.ganhoEm || "",
+    ...(o.projeto || {}),
+  }));
+}
+// O que a tela mudou nos projetos volta para o orçamento de onde ele veio:
+// coluna, prazo e o resto; projeto que saiu da lista (finalizado, foi para
+// Obras) fica marcado como finalizado no orçamento.
+const PRJ_DERIVADOS = ["orcId", "clienteId", "tipo", "subtipo", "padrao", "tamanho", "referencia", "areaTotal"];
+function orcamentosComProjetos(orcs, projetos) {
+  if (!Array.isArray(projetos)) return orcs || [];
+  const porOrc = new Map(projetos.filter(p => p && p.orcId).map(p => [p.orcId, p]));
+  return (orcs || []).map(o => {
+    if (!o || o.status !== "ganho") return o;
+    const p = porOrc.get(o.id);
+    if (!p) return o.projeto && o.projeto.finalizado ? o : { ...o, projeto: { ...(o.projeto || {}), finalizado: true } };
+    const proprio = {};
+    Object.keys(p).forEach(k => { if (PRJ_DERIVADOS.indexOf(k) < 0) proprio[k] = p[k]; });
+    return { ...o, projeto: proprio };
+  });
+}
+
 async function saveAllData(newData, oldData = {}) {
   const tasks = [];
 
@@ -3485,9 +3520,11 @@ async function saveAllData(newData, oldData = {}) {
   fornsNovos.forEach(f => tasks.push(api.fornecedores.save(f)));
   fornsRemovidos.forEach(f => tasks.push(api.fornecedores.delete(f.id)));
 
-  // Orçamentos
-  const orcsNovos = (newData.orcamentosProjeto || []).filter(
-    o => !oldData.orcamentosProjeto?.find(a => a.id === o.id && JSON.stringify(a) === JSON.stringify(o))
+  // Orçamentos (com o projeto de Etapas dentro do ganho)
+  const orcsNovosTodos = orcamentosComProjetos(newData.orcamentosProjeto, newData.projetos);
+  const orcsVelhosTodos = orcamentosComProjetos(oldData.orcamentosProjeto, oldData.projetos);
+  const orcsNovos = orcsNovosTodos.filter(
+    o => !orcsVelhosTodos.find(a => a.id === o.id && JSON.stringify(a) === JSON.stringify(o))
   );
   const orcsRemovidos = (oldData.orcamentosProjeto || []).filter(
     a => !newData.orcamentosProjeto?.find(o => o.id === a.id)
@@ -9950,6 +9987,10 @@ const GRUPOS_ESCRITORIO = [
   // o crédito como estorno — e se anulam. Mexe no saldo do banco no dia,
   // nunca no resultado.
   { id: "ajustes_bancarios", titulo: "ESTORNOS E AJUSTES BANCÁRIOS", sinal: -1, resultado: false, bloco: "ajustes" },
+  // Dinheiro recebido que não é do escritório: a parte da engenharia que veio
+  // junto com o projeto fica guardada até ser paga ao engenheiro. Entra como
+  // reserva (não é receita) e sai como estorno da reserva quando paga.
+  { id: "reservas", titulo: "RESERVAS A REPASSAR", sinal: +1, resultado: false, bloco: "reservas" },
 ];
 
 // ── Plano de contas ─────────────────────────────────────────────
@@ -10013,6 +10054,8 @@ const PLANO_CONTAS_ESCRITORIO = [
   { id: "reemb_socio",       nome: "Reembolso de sócio",     grupo: "socios_entradas", unidades: ["escritorio"], apelidos: [] },
 
   // ── estornos do banco (não é resultado; débito e crédito se anulam) ──
+  { id: "res_engenharia", nome: "Reserva engenharia (a repassar)", grupo: "reservas", unidades: ["projetos", "escritorio"],
+    apelidos: ["Reserva engenharia"] },
   { id: "estornos_bancarios", nome: "Estornos bancários",    grupo: "ajustes_bancarios", unidades: ["escritorio"],
     apelidos: ["Estornos bancários", "Estorno bancário", "Estorno de boleto"] },
 ];
@@ -10142,7 +10185,8 @@ function extratoEscritorio(lancamentos, opcoes) {
     // débito e crédito estornado se anulam no mês; o que sobrar (estorno
     // que só volta no mês seguinte) mexe no saldo enquanto não volta
     const ajustes = g("ajustes_bancarios");
-    saldo = saldo + saldoGestao + paraInvestimento + saldoEmpreendimento - ajustes;
+    const saldoReservas = g("reservas");
+    saldo = saldo + saldoGestao + paraInvestimento + saldoEmpreendimento - ajustes + saldoReservas;
     const contas = {}; for (const k in linha.contas) contas[k] = efCentavos(linha.contas[k]);
     const grupos = {}; for (const k in linha.grupos) grupos[k] = efCentavos(linha.grupos[k]);
     return {
@@ -10152,6 +10196,7 @@ function extratoEscritorio(lancamentos, opcoes) {
       saldoGestao: efCentavos(saldoGestao),
       saldoEscritorio: efCentavos(saldoEscritorio),
       saldoEmpreendimento: efCentavos(saldoEmpreendimento),
+      saldoReservas: efCentavos(saldoReservas),
       retiradas: efCentavos(socios),
       ajustes: efCentavos(ajustes),
       paraInvestimento: efCentavos(paraInvestimento),
@@ -12686,6 +12731,8 @@ function sugestaoCompletaDoExtrato(movimento, lancamentos, ctx) {
   if (est) return est;
   const naObra = contaDaObraParaALinha(movimento, lancamentos, ctx);
   if (naObra) return naObra;
+  const parcelaProj = parcelaDeProjetoParaALinha(movimento, lancamentos, ctx);
+  if (parcelaProj) return parcelaProj;
   const exato = sugestaoDoExtrato(movimento, lancamentos);
   const p = palpiteDoExtrato(movimento, { ...(ctx || {}), lancamentos });
   if (!p) return exato;
@@ -13813,6 +13860,91 @@ function investidoDoEmpreendimento(cliente, obras, lancamentos, opcoes) {
   return { pelaConta, foraDaConta, total: efCentavos(pelaConta + foraDaConta) };
 }
 
+// ── Projetos ganhos: o que falta receber ─────────────────────────
+// O orçamento ganho guarda o que foi fechado: valor, desconto e a condição
+// (antecipado, parcelado, por etapas), com cada parcela, valor e data. Isso
+// é o "a receber" do escritório — e nada vira receita antes do dinheiro cair
+// no banco. Quando cai, a parte da arquitetura é Receita Projetos; a parte
+// da engenharia não é do escritório: vai para a reserva, até pagar o
+// engenheiro. Recebida = há lançamento ligado à parcela (origem "projeto").
+function parcelasDosProjetos(orcamentos, clientes, lancamentos) {
+  const out = [];
+  const recebidos = new Map();
+  for (const l of lancamentos || []) {
+    const o = l && l.origem;
+    if (!o || o.tipo !== "projeto" || o.parte !== "recebido") continue;
+    recebidos.set(o.orcId + "|" + o.parcela, l);
+  }
+  for (const o of orcamentos || []) {
+    if (!o || o.status !== "ganho" || !o.fechamento) continue;
+    const f = o.fechamento;
+    const ps = ((f.condicao && f.condicao.parcelas) || []).filter((p) => p && Number(p.valor) > 0);
+    if (!ps.length) continue;
+    const total = efCentavos(Number(f.valorTotalFechado) || ps.reduce((t, p) => t + Number(p.valor), 0));
+    const eng = f.inclEng === false ? 0 : efCentavos(Number(f.valorEngFechado) || 0);
+    const fracEng = total > 0 ? Math.min(1, Math.max(0, eng / total)) : 0;
+    const cli = (clientes || []).find((c) => c && c.id === o.clienteId) || null;
+    ps.forEach((p, i) => {
+      const numero = Number(p.numero) || i + 1;
+      const valor = efCentavos(p.valor);
+      const engParte = efCentavos(valor * fracEng);
+      const l = recebidos.get(o.id + "|" + numero) || null;
+      out.push({ orcId: o.id, numero, totalParcelas: ps.length, nome: p.nome || `Parcela ${numero}`, valor, data: String(p.data || "").slice(0, 10),
+        arq: efCentavos(valor - engParte), eng: engParte, clienteId: o.clienteId || "", cliente: (cli && cli.nome) || "",
+        referencia: o.referencia || "", recebida: !!l, lancamentoId: l ? l.id : "" });
+    });
+  }
+  return out;
+}
+// A linha de crédito do banco que é uma parcela de projeto a receber: o
+// mesmo valor; com duas parcelas iguais, decide o nome do cliente no
+// histórico e depois a data mais perto do vencimento.
+function parcelaDeProjetoParaALinha(movimento, lancamentos, ctx) {
+  const m = movimento || {};
+  if (!(Number(m.valor) > 0)) return null;
+  const c = ctx || {};
+  const v = efCentavos(Number(m.valor));
+  const hist = efPalavrasDaLinha(m.historico);
+  const cands = parcelasDosProjetos(c.orcamentos, c.clientes, lancamentos)
+    .filter((p) => !p.recebida && Math.abs(p.valor - v) < 0.01)
+    .map((p) => { let t = 0; for (const w of efPalavrasDaLinha(p.cliente)) if (hist.has(w)) t++; return { p, t, d: p.data ? efDias(p.data, m.data) : 999 }; })
+    .sort((a, b) => (b.t - a.t) || (a.d - b.d));
+  if (!cands.length) return null;
+  const [a, b] = cands;
+  if (b && b.t === a.t && b.d === a.d) return null;
+  const p = a.p;
+  return { parcelaProjeto: p, daObra: false,
+    campos: { unidadeId: "projetos", contaId: "rec_projetos", clienteId: p.clienteId, cliente: p.cliente, projeto: p.referencia,
+      descricao: `${p.nome} — ${p.referencia || p.cliente}` },
+    motivos: [`parcela ${p.numero}/${p.totalParcelas} do projeto ${p.cliente}${p.referencia ? " · " + p.referencia : ""}`] };
+}
+// O recebimento: a linha inteira em Receita Projetos (é o que o banco
+// mostra) e, se o projeto tem engenharia, a parte dela sai da receita e vai
+// para a reserva — um par fora do banco, que não muda o saldo.
+function lancamentosDoRecebimento(movimento, mes, sug, fechamentos) {
+  const m = movimento || {};
+  const p = sug && sug.parcelaProjeto;
+  if (!p) return { erro: "Sem parcela de projeto." };
+  const competencia = /^\d{4}-\d{2}$/.test(String(mes)) ? String(mes) : String(m.data || "").slice(0, 7);
+  const trava = bloqueioPorMesFechado(competencia, fechamentos);
+  if (trava) return { erro: trava };
+  const valor = efCentavos(Math.abs(Number(m.valor) || 0));
+  const comum = { tipo: "escritorio", unidadeId: "projetos", clienteId: p.clienteId, cliente: p.cliente, projeto: p.referencia,
+    competencia, lancadoEm: String(m.data || "").slice(0, 10), fornecedor: "" };
+  const orig = (parte) => ({ tipo: "projeto", orcId: p.orcId, parcela: p.numero, parte });
+  const principal = { ...comum, contaId: "rec_projetos", valor, contaBanco: "sim",
+    descricao: `${p.nome} — ${p.referencia || p.cliente}`, origem: orig("recebido"),
+    extratoId: m.id || "", historicoBanco: m.historico || "" };
+  const eng = efCentavos(Math.min(p.eng, valor));
+  const extras = eng > 0 ? [
+    { ...comum, contaId: "rec_projetos", valor: -eng, estorno: true, contaBanco: "nao", conferido: true,
+      descricao: `Engenharia vai para a reserva — ${p.nome} ${p.referencia || p.cliente}`, origem: orig("eng-sai") },
+    { ...comum, contaId: "res_engenharia", valor: eng, contaBanco: "nao", conferido: true,
+      descricao: `Reserva engenharia — ${p.nome} ${p.referencia || p.cliente}`, origem: orig("eng-reserva") },
+  ] : [];
+  return { lancamento: { ...principal, recebimentoExtras: extras } };
+}
+
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
 
 // Os papéis da transação, cada um abrindo numa aba. É o mesmo componente
@@ -13957,6 +14089,7 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos }) {
     { titulo: "Sócios", grupos: ["socios", "socios_entradas"], saldo: "retiradas", rotulo: "Retiradas e empréstimos",
       totais: { socios: "Retiradas e empréstimos", socios_entradas: "Devoluções e aportes" } },
     { titulo: "Estornos bancários", grupos: ["ajustes_bancarios"], saldo: "ajustes", rotulo: "Em aberto com o banco" },
+    { titulo: "Reservas", grupos: ["reservas"], saldo: "saldoReservas", rotulo: "Reserva a repassar (engenharia)" },
   ];
   const soma = (f) => doAno.reduce((s, m) => s + (f(m) || 0), 0);
   const cel = (v) => (!v ? <span style={{ color: "#d1d5db" }}>—</span>
@@ -15222,6 +15355,51 @@ function EmpreendimentosQuadro({ data, lancs, aoFiltrar }) {
   );
 }
 
+// Projetos ganhos com parcela ainda por receber: o "a receber" do
+// escritório. Some sozinho quando a parcela é recebida pela fila do extrato.
+function ProjetosAReceberQuadro({ data, lancs }) {
+  const S = EF_ESTILO;
+  const pend = parcelasDosProjetos((data || {}).orcamentosProjeto, (data || {}).clientes, lancs)
+    .filter((p) => !p.recebida).sort((a, b) => String(a.data).localeCompare(String(b.data)));
+  if (!pend.length) return null;
+  const hoje = new Date().toISOString().slice(0, 10);
+  const total = efCentavos(pend.reduce((t, p) => t + p.valor, 0));
+  const td = { padding: "7px 12px", fontSize: 12.5 };
+  return (
+    <div data-vk-a-receber style={{ display: "grid", gap: 6 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 6 }}>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>Projetos a receber</div>
+        <div style={{ fontSize: 12, color: "#4b5563" }}>{pend.length} parcela{pend.length > 1 ? "s" : ""} · <b>{efDinheiro(total)}</b></div>
+      </div>
+      <div style={S.quadro}>
+        {pend.map((p, i) => {
+          const vencida = p.data && p.data < hoje;
+          return (
+            <div key={p.orcId + "|" + p.numero} style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "center",
+              borderTop: i ? "1px solid rgba(38,36,33,0.06)" : "none", ...td }}>
+              <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+                <div>{p.cliente || "—"}{p.referencia ? <span style={{ color: "#6b7280" }}> · {p.referencia}</span> : null}</div>
+                <div style={{ fontSize: 11.5, color: "#6b7280" }}>
+                  {p.nome} ({p.numero}/{p.totalParcelas}){p.eng > 0 ? ` · ${efDinheiro(p.arq)} projeto + ${efDinheiro(p.eng)} engenharia (reserva)` : ""}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 14, alignItems: "baseline", marginLeft: "auto" }}>
+                <div style={{ fontSize: 12, color: vencida ? "#b91c1c" : "#6b7280", whiteSpace: "nowrap" }}>
+                  {p.data ? (vencida ? "venceu " : "vence ") + p.data.split("-").reverse().join("/") : "sem data"}
+                </div>
+                <div style={{ fontVariantNumeric: "tabular-nums", fontWeight: 600, whiteSpace: "nowrap", minWidth: 100, textAlign: "right" }}>{efDinheiro(p.valor)}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 11.5, color: "#6b7280" }}>
+        Vem dos orçamentos marcados como Ganho. Quando o dinheiro cai no banco, a linha do extrato já sugere a parcela — “✓ Receber parcela”.
+      </div>
+    </div>
+  );
+}
+
 // ── Painel do financeiro ────────────────────────────────────────
 // A tela de entrada: filtro em cima, os números do recorte no meio e o
 // caminho para lançar, ver o extrato e fechar o mês.
@@ -15351,6 +15529,8 @@ function PainelFinanceiroEscritorio({ lancs, linhas, fechamentos, filtro, aoFilt
           <EmpreendimentosQuadro data={dadosDoPainel} lancs={lancs}
             aoFiltrar={() => aoFiltrar({ ...filtro, unidadeId: "empreendimento" })} />
 
+          <ProjetosAReceberQuadro data={dadosDoPainel} lancs={lancs} />
+
           <div style={S.quadro}>
             <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
               <tbody>
@@ -15469,7 +15649,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
   }
   // As que já têm classificação pronta (a mesma do mês passado, e que valida
   // sozinha): todas de uma vez, numa gravada só.
-  const prontas = lista.filter((m) => { const r = fila.rapido(m); return r && r.lancamento && !r.lancamento.naObra && !r.lancamento.ligarObra; });
+  const prontas = lista.filter((m) => { const r = fila.rapido(m); return r && r.lancamento && !r.lancamento.naObra && !r.lancamento.ligarObra && !r.lancamento.recebimentoExtras; });
   function lancarSugeridas() {
     setErroLote("");
     const r = fila.lancarSugeridas(prontas);
@@ -15571,6 +15751,13 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                         ↺ {(sug.motivos || [])[0]} — volta para a mesma conta, como estorno{sug.naObra ? ", no escritório e na obra" : ""}
                       </div>
                     )}
+                    {sug && sug.parcelaProjeto && (
+                      <div data-vk-parcela-projeto="1" style={{ fontSize: 11.5, color: "#0474f4", marginTop: 2 }}>
+                        ⇠ {(sug.motivos || [])[0]} — {sug.parcelaProjeto.eng > 0
+                          ? `${efDinheiro(Math.max(0, Number(m.valor) - Math.min(sug.parcelaProjeto.eng, Number(m.valor))))} receita de projeto + ${efDinheiro(Math.min(sug.parcelaProjeto.eng, Number(m.valor)))} reserva da engenharia`
+                          : "receita de projeto"}
+                      </div>
+                    )}
                     {sug && sug.jaNaObra && (
                       <div data-vk-ja-na-obra="1" style={{ fontSize: 11.5, color: "#0474f4", marginTop: 2 }}>
                         ⇄ {(sug.motivos || [])[0]} — liga as duas pontas, sem lançar de novo
@@ -15581,7 +15768,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                         ↺ {(sug.motivos || [])[0]}. {sug.bloqueio}
                       </div>
                     )}
-                    {contaSug && !(sug && (sug.palpite || sug.estorno)) && (
+                    {contaSug && !(sug && (sug.palpite || sug.estorno || sug.parcelaProjeto)) && (
                       <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 2 }}>
                         como em {dataBR(sug.de.lancadoEm) || "lançamento anterior"}: <b style={{ color: "#374151" }}>{contaSug.nome}</b>
                         {sug.campos.cliente ? ` · ${sug.campos.cliente}` : ""}
@@ -15590,7 +15777,11 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                   </div>
                   <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
                     {dinheiro(m)}
-                    {sug && sug.jaNaObra && !aberta ? (
+                    {sug && sug.parcelaProjeto && !aberta ? (
+                      <button data-vk-receber-parcela="1" style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#0474f4", borderColor: "rgba(4,116,244,0.4)" }}
+                        disabled={!!ocupado}
+                        onClick={(e) => { e.stopPropagation(); rapido(m); }}>✓ Receber parcela</button>
+                    ) : sug && sug.jaNaObra && !aberta ? (
                       <button data-vk-ligar-obra="1" style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#0474f4", borderColor: "rgba(4,116,244,0.4)" }}
                         disabled={!!ocupado}
                         onClick={(e) => { e.stopPropagation(); rapido(m); }}>✓ Ligar à obra</button>
@@ -16777,6 +16968,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   // o que o palpite da fila do extrato lê: obras (com as contas), clientes
   // e o cadastro de fornecedores
   const ctxDoPalpite = { obras: (data || {}).obras || [], clientes: (data || {}).clientes || [], fornecedores: (data || {}).fornecedores || [],
+    orcamentos: (data || {}).orcamentosProjeto || [],
     insumos: (data || {}).materiais || [] };
   const cfgFin = ((data || {}).escritorio || {}).financeiro || {};
   const saldoAbertura = Number(cfgFin.saldoAbertura) || 0;
@@ -17254,6 +17446,17 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const marca = { extratoId: l.extratoId || "", historicoBanco: l.historicoBanco || "",
       conferido: true, conferidoEm: agora, contaBanco: l.contaBanco || "sim" };
     if (l && l.naObra) { const { sinalDoBanco, ...semSinal } = l; lancarCustoNaObra({ ...semSinal, ...marca }); return true; }
+    // Parcela de projeto recebida: a linha inteira em Receita Projetos e,
+    // havendo engenharia, o par que leva a parte dela para a reserva.
+    if (l && Array.isArray(l.recebimentoExtras)) {
+      const { recebimentoExtras, sinalDoBanco: _s, ...semExtras } = l;
+      const base = typeof uid === "function" ? uid() : String(Date.now());
+      const numeroDoc = proximaReferencia((data || {}).obras || [], lancs);
+      const novos = [{ ...semExtras, ...marca, id: base, numeroDoc, criadoEm: agora },
+        ...recebimentoExtras.map((x, i) => ({ ...x, id: base + "_" + (i + 1), numeroDoc, criadoEm: agora, conferidoEm: agora }))];
+      gravar([...lancs, ...novos]);
+      return true;
+    }
     // A conta já estava paga na obra: liga, não lança de novo. A conta passa
     // a constar como paga pela conta do escritório, e o lançamento é o da
     // ponte — mesmo id e mesma referência da conta.
@@ -17309,6 +17512,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     if (est) return lancamentoDoEstornoDoExtrato(m, mesEmConferencia, est, fechamentos);
     const naObra = contaDaObraParaALinha(m, lancs, ctxDoPalpite);
     if (naObra) return lancamentoDaLigacaoComObra(m, mesEmConferencia, naObra, fechamentos, lancs);
+    const parcelaProj = parcelaDeProjetoParaALinha(m, lancs, ctxDoPalpite);
+    if (parcelaProj) return lancamentosDoRecebimento(m, mesEmConferencia, parcelaProj, fechamentos);
     return lancamentoRapidoDoExtrato(m, mesEmConferencia, sugestaoDoExtrato(m, lancs), fechamentos, (data || {}).obras || []);
   }
 
@@ -17319,7 +17524,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       // o mesmo caminho do botão da linha — o estorno com o original achado
       // vai como estorno; o que entra numa obra fica para lançar um a um
       const r = rapidoDoExtrato(m);
-      if (!r.lancamento || r.lancamento.naObra || r.lancamento.ligarObra) continue;
+      if (!r.lancamento || r.lancamento.naObra || r.lancamento.ligarObra || r.lancamento.recebimentoExtras) continue;
       const l = r.lancamento;
       novos.push({ ...l, id: (typeof uid === "function" ? uid() : String(Date.now())) + "_" + novos.length,
         numeroDoc: proximaReferencia((data || {}).obras || [], lancs.concat(novos)),

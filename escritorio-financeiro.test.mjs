@@ -27,7 +27,7 @@ const M = new Function(src + `
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
-           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
+           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, lancamentosDoRecebimento, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
            competenciasDoCartao,
@@ -2692,6 +2692,38 @@ teste("Base antiga sem ligação: duas contas iguais no mesmo dia se separam pel
   // valor igual com 1 dia de diferença ainda é a mesma
   assert.strictEqual(M.contasDaObraSemLigacao({ id: "c", valor: 780, lancadoEm: "2026-09-23" },
     [{ id: "o2", contasPagar: [{ id: "c1", valor: 780, valorPago: 780, pago: true, pagoEm: "2026-09-24" }] }], []).length, 1);
+});
+
+teste("Projeto ganho: parcela a receber, recebida pela linha do banco; engenharia vai para a reserva sem mexer no saldo", () => {
+  const cli = { id: "g1", nome: "Gustavo (Santa Cruz)" };
+  const orc = { id: "ORC-0088", clienteId: "g1", referencia: "Ampliação fundo residência", status: "ganho",
+    fechamento: { valorTotalFechado: 16000, valorArqFechado: 12000, valorEngFechado: 4000, inclEng: true,
+      condicao: { tipo: "antecipado", parcelas: [{ numero: 1, nome: "Antecipado", valor: 16000, data: "2026-10-10" }] } } };
+  const ps = M.parcelasDosProjetos([orc, { ...orc, id: "X", status: "aberto" }], [cli], []);
+  assert.strictEqual(ps.length, 1);
+  assert.deepStrictEqual([ps[0].arq, ps[0].eng, ps[0].recebida], [12000, 4000, false]);
+  const m = { id: "b1", data: "2026-10-11", valor: 16000, historico: "PIX RECEBIDO - OUTRA IF · Recebimento Pix GUSTAVO SILVA" };
+  const ctx = { orcamentos: [orc], clientes: [cli] };
+  const sug = M.parcelaDeProjetoParaALinha(m, [], ctx);
+  assert.ok(sug && sug.parcelaProjeto.orcId === "ORC-0088");
+  assert.strictEqual(M.parcelaDeProjetoParaALinha({ ...m, valor: -16000 }, [], ctx), null);     // saída não é recebimento
+  assert.strictEqual(M.parcelaDeProjetoParaALinha({ ...m, valor: 15000 }, [], ctx), null);      // outro valor
+  const r = M.lancamentosDoRecebimento(m, "2026-10", sug, {});
+  const l = r.lancamento;
+  assert.deepStrictEqual([l.contaId, l.unidadeId, l.valor, l.extratoId, l.origem.parte, l.competencia], ["rec_projetos", "projetos", 16000, "b1", "recebido", "2026-10"]);
+  const [a, b] = l.recebimentoExtras;
+  assert.deepStrictEqual([a.contaId, a.valor, a.contaBanco, b.contaId, b.valor, b.contaBanco], ["rec_projetos", -4000, "nao", "res_engenharia", 4000, "nao"]);
+  // depois de recebida, não sugere de novo e sai do a receber
+  const lancs = [{ ...l, id: "r1" }, { ...a, id: "r2" }, { ...b, id: "r3" }];
+  assert.strictEqual(M.parcelaDeProjetoParaALinha(m, lancs, ctx), null);
+  assert.strictEqual(M.parcelasDosProjetos([orc], [cli], lancs)[0].recebida, true);
+  // no extrato: receita 12.000, reserva 4.000, saldo +16.000 (o que caiu no banco)
+  const ext = M.extratoEscritorio(lancs, { saldoAbertura: 0 });
+  const out = ext.find((x) => x.mes === "2026-10");
+  assert.deepStrictEqual([out.contas.rec_projetos, out.saldoReservas, out.saldoExtrato], [12000, 4000, 16000]);
+  // sem engenharia: só a receita
+  const so = M.lancamentosDoRecebimento(m, "2026-10", { parcelaProjeto: { ...sug.parcelaProjeto, eng: 0 } }, {});
+  assert.strictEqual(so.lancamento.recebimentoExtras.length, 0);
 });
 
 for (const [nome, fn] of testes) {

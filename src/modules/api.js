@@ -561,6 +561,10 @@ async function loadAllData(estado = null) {
     obras,
     lancamentos,
     orcamentosProjeto,
+    // Os projetos em andamento (Etapas) nascem do orçamento ganho e moram
+    // nele (orc.projeto) — não há tabela própria. Sem isto, o projeto criado
+    // no "Ganho" sumia ao recarregar a página.
+    projetos: projetosDosOrcamentos(orcamentosProjeto),
     receitasFinanceiro,
     // escritorio já vem com { ...dados, logo } do backend
     escritorio: escritorio || {},
@@ -588,6 +592,37 @@ function _mudadosERemovidos(novos, velhos) {
   return { mudados, removidos };
 }
 
+// ── Projetos (Etapas) guardados dentro do orçamento ganho ──────────
+function projetosDosOrcamentos(orcs) {
+  return (orcs || []).filter(o => o && o.status === "ganho" && !(o.projeto && o.projeto.finalizado)).map(o => ({
+    id: "PRJ-" + o.id,
+    orcId: o.id,
+    clienteId: o.clienteId,
+    tipo: o.tipo, subtipo: o.subtipo, padrao: o.padrao, tamanho: o.tamanho,
+    referencia: o.referencia || "",
+    areaTotal: (o.resultado && o.resultado.areaTotal) || 0,
+    colunaEtapa: "briefing",
+    criadoEm: o.ganhoEm || "",
+    ...(o.projeto || {}),
+  }));
+}
+// O que a tela mudou nos projetos volta para o orçamento de onde ele veio:
+// coluna, prazo e o resto; projeto que saiu da lista (finalizado, foi para
+// Obras) fica marcado como finalizado no orçamento.
+const PRJ_DERIVADOS = ["orcId", "clienteId", "tipo", "subtipo", "padrao", "tamanho", "referencia", "areaTotal"];
+function orcamentosComProjetos(orcs, projetos) {
+  if (!Array.isArray(projetos)) return orcs || [];
+  const porOrc = new Map(projetos.filter(p => p && p.orcId).map(p => [p.orcId, p]));
+  return (orcs || []).map(o => {
+    if (!o || o.status !== "ganho") return o;
+    const p = porOrc.get(o.id);
+    if (!p) return o.projeto && o.projeto.finalizado ? o : { ...o, projeto: { ...(o.projeto || {}), finalizado: true } };
+    const proprio = {};
+    Object.keys(p).forEach(k => { if (PRJ_DERIVADOS.indexOf(k) < 0) proprio[k] = p[k]; });
+    return { ...o, projeto: proprio };
+  });
+}
+
 async function saveAllData(newData, oldData = {}) {
   const tasks = [];
 
@@ -611,9 +646,11 @@ async function saveAllData(newData, oldData = {}) {
   fornsNovos.forEach(f => tasks.push(api.fornecedores.save(f)));
   fornsRemovidos.forEach(f => tasks.push(api.fornecedores.delete(f.id)));
 
-  // Orçamentos
-  const orcsNovos = (newData.orcamentosProjeto || []).filter(
-    o => !oldData.orcamentosProjeto?.find(a => a.id === o.id && JSON.stringify(a) === JSON.stringify(o))
+  // Orçamentos (com o projeto de Etapas dentro do ganho)
+  const orcsNovosTodos = orcamentosComProjetos(newData.orcamentosProjeto, newData.projetos);
+  const orcsVelhosTodos = orcamentosComProjetos(oldData.orcamentosProjeto, oldData.projetos);
+  const orcsNovos = orcsNovosTodos.filter(
+    o => !orcsVelhosTodos.find(a => a.id === o.id && JSON.stringify(a) === JSON.stringify(o))
   );
   const orcsRemovidos = (oldData.orcamentosProjeto || []).filter(
     a => !newData.orcamentosProjeto?.find(o => o.id === a.id)
