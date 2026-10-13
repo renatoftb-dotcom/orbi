@@ -5581,6 +5581,70 @@ const BRIEFING_SECOES = [
   ] },
 ];
 
+// ── Dicas (ícone "i" no canto de cada pergunta) ──────────────────
+// Uma frase do que preencher e por que importa — só onde a pergunta pode
+// gerar dúvida (termo técnico, "para que serve", o que contar). Perguntas
+// óbvias (nome, gosta/incomoda, cores) ficam sem, para o ícone não virar ruído.
+const BR_DICAS = {
+  tipo: "Já marcamos pelo que foi contratado. Corrija se não for o seu caso.",
+  escopo: "Reforma muda o que já existe; ampliação aumenta a área construída.",
+  uso: "Muda as próximas perguntas: para alugar ou vender, não perguntamos sobre a rotina da família.",
+  motivos: "Pode marcar mais de um. Mostra ao arquiteto o que é sucesso para vocês.",
+  sucesso: "Ex.: \"a família inteira cabe na mesa\", \"a casa fica fresca sem ar-condicionado\".",
+  permanencia: "Quem fica pouco tempo costuma priorizar a revenda; quem fica muito, conforto e durabilidade.",
+  moradores_qtd: "Conte quem mora o ano todo, incluindo as crianças.",
+  moradores: "A faixa etária ajuda a pensar quartos, segurança e acessibilidade. Não precisa do nome.",
+  funcionario: "Define se o projeto precisa de dependência, banheiro de serviço ou área de apoio.",
+  pets: "Influencia piso, quintal, portões e onde os animais ficam.",
+  visitas_freq: "Define o tamanho da sala, da mesa e da área gourmet.",
+  visitas_qtd: "Pense nas ocasiões mais cheias que acontecem com alguma frequência.",
+  cozinham: "Quem cozinha todo dia precisa de mais bancada, armazenamento e exaustão.",
+  trabalho_casa: "Conte quem trabalha em casa pelo menos alguns dias por semana.",
+  hobbies: "Coisas que precisam de lugar para guardar ou de espaço para usar.",
+  dia_tipico: "Horários, quem sai cedo, onde a família passa mais tempo. Escreva do seu jeito.",
+  condominio: "Condomínios costumam ter regras de recuo, altura e fachada que o projeto precisa seguir.",
+  pavimentos: "Casa térrea facilita a acessibilidade; sobrado aproveita melhor terrenos pequenos.",
+  idade_imovel: "Imóveis mais antigos costumam precisar de revisão de elétrica, hidráulica e telhado.",
+  averbada: "Averbada = a área construída está registrada na matrícula, no cartório. Se não souber, marque \"Não sei\" — o escritório verifica.",
+  problemas: "Tudo o que você já percebeu: manchas, rachaduras, disjuntor que cai, telhado que pinga…",
+  manter: "Ex.: um piso que você gosta, uma árvore, um ambiente que deve continuar igual.",
+  situacao_ap: "Contrapiso = entregue sem piso e sem acabamento.",
+  restricoes_ap: "Regras do condomínio que limitam a obra. O escritório confirma no regulamento.",
+  durante_obra: "Muda o planejamento: a ordem dos serviços e a proteção dos ambientes em uso.",
+  funcionando_obra: "Se sim, a obra é planejada em etapas, com horários e áreas isoladas.",
+  licencas: "AVCB/CLCB é o certificado dos bombeiros. Vigilância Sanitária vale para alimentação, saúde e estética.",
+  documentos: "Matrícula: certidão do cartório de imóveis. Habite-se: documento da prefeitura que libera o uso do imóvel. Se não souber, marque \"Não sei o que é\".",
+  links_imovel: "Um link de pasta compartilhada com fotos dos ambientes, das fachadas e do terreno.",
+  quartos: "Conte todos os quartos, incluindo as suítes.",
+  vagas: "Vagas de carro cobertas ou descobertas, no total.",
+  programa: "Essencial: não pode faltar. Desejável: se couber no orçamento. Não precisa: pode ficar de fora.",
+  top3: "O que mais importa para vocês se for preciso escolher.",
+  padrao: "Econômico: materiais simples e duráveis. Médio: bom custo-benefício. Alto: materiais nobres. Muito alto: exclusivos e sob medida.",
+  area_imaginada: "Área construída total do imóvel. Se não souber, deixe em branco.",
+  investimento: "Valor da obra (material e mão de obra), sem os honorários do projeto. Serve para o projeto caber no seu bolso.",
+  inclui_moveis: "Marcenaria e móveis costumam ser uma parte grande do custo total.",
+  recurso: "Financiamento e programas habitacionais têm exigências que o projeto precisa atender.",
+  se_estourar: "Ajuda o escritório a propor os ajustes do jeito que você prefere.",
+  inicio_obra: "O mês aproximado. Se não souber, marque \"Não sei\".",
+  data_limite: "Ex.: fim do aluguel atual, casamento, inauguração.",
+  data_rigidez: "Rígida = não pode passar dessa data.",
+  decisor: "Quem aprova as decisões do projeto. Se forem duas pessoas, cite as duas.",
+  participacao: "Define com que frequência o escritório vai te consultar durante o projeto.",
+  estilos: "Não precisa saber o nome certo — escolha pelo que a descrição lembra.",
+  palavras: "Ex.: aconchegante, claro, prático, sofisticado.",
+  links_referencia: "Pastas do Pinterest ou posts do Instagram com imagens de que você gosta.",
+  agua_quente: "Se não souber, o escritório indica a melhor opção para o seu caso.",
+  sustentabilidade: "Essencial: não pode faltar. Desejável: se couber no orçamento. Não precisa: pode ficar de fora.",
+  tecnologia: "Mesmo o que for só desejável já fica previsto na tubulação e na elétrica.",
+  ampliar_futuro: "Deixar previsto evita quebra-quebra depois (ex.: estrutura para um segundo andar).",
+  baixa_manutencao: "Ex.: porcelanato em vez de madeira no piso externo.",
+  ramo: "Conte o que o negócio faz — ajuda a entender os fluxos e as exigências legais.",
+  pico: "Quantos clientes ao mesmo tempo no momento mais cheio do dia.",
+  marca: "Franquias costumam ter manual com cores, materiais e layout obrigatórios.",
+  fluxo: "Ex.: o cliente entra, espera, é atendido, paga e sai; a mercadoria chega pelos fundos e vai para o estoque.",
+  equipamentos: "Equipamentos que pedem instalação elétrica, hidráulica ou exaustão especial.",
+};
+
 // ── Regras (puras) ───────────────────────────────────────────────
 // Tipo de projeto a partir do orçamento: o subtipo "Reforma" vira RA; tipo
 // comercial vira PC; apartamento/interiores vira AP; o resto é casa nova.
@@ -5752,10 +5816,39 @@ const brS = {
   erro: { fontSize: 13, color: "#b91c1c", marginTop: 6 },
 };
 
+// O "i" no canto da pergunta: passa o mouse (ou toca, no celular) e aparece
+// a explicação. Fecha ao sair, ao tocar de novo ou ao tocar fora.
+function BrDica({ texto }) {
+  const [aberta, setAberta] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!aberta) return;
+    const fora = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberta(false); };
+    document.addEventListener("pointerdown", fora);
+    return () => document.removeEventListener("pointerdown", fora);
+  }, [aberta]);
+  return (
+    <span ref={ref} data-br-dica style={{ position: "absolute", top: 0, right: 0 }}
+      onPointerEnter={(e) => { if (e.pointerType === "mouse") setAberta(true); }}
+      onPointerLeave={(e) => { if (e.pointerType === "mouse") setAberta(false); }}>
+      <button type="button" aria-label="O que preencher" aria-expanded={aberta} onClick={(e) => setAberta((x) => (e.nativeEvent && e.nativeEvent.pointerType === "mouse") ? true : !x)}
+        style={{ width: 26, height: 26, borderRadius: 13, border: "1.5px solid #c7d2fe", background: aberta ? BR_AZUL : "#fff", color: aberta ? "#fff" : BR_AZUL,
+          fontSize: 13, fontWeight: 700, fontFamily: "Georgia, serif", fontStyle: "italic", cursor: "pointer", padding: 0, lineHeight: "22px" }}>i</button>
+      {aberta && (
+        <span role="tooltip" style={{ position: "absolute", top: 32, right: 0, zIndex: 20, width: "min(280px, 78vw)", background: "#111827", color: "#fff",
+          fontSize: 13, lineHeight: 1.45, fontWeight: 400, padding: "9px 11px", borderRadius: 10, boxShadow: "0 6px 20px rgba(0,0,0,0.18)", textAlign: "left" }}>
+          {texto}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function BrPergunta({ p, t, r, valor, mudar, erro }) {
   const obrig = brObrigatoria(p, t);
+  const dica = p.dica || BR_DICAS[p.id];
   const rotulo = (
-    <label style={brS.rotulo}>{obrig && <span style={{ color: "#b91c1c" }} aria-hidden="true">* </span>}{p.rotulo}{!obrig && p.tipo !== "consentimento" && <span style={{ color: "#9ca3af", fontWeight: 400 }}> (opcional)</span>}</label>
+    <label style={{ ...brS.rotulo, ...(dica ? { paddingRight: 36 } : {}) }}>{obrig && <span style={{ color: "#b91c1c" }} aria-hidden="true">* </span>}{p.rotulo}{!obrig && p.tipo !== "consentimento" && <span style={{ color: "#9ca3af", fontWeight: 400 }}> (opcional)</span>}</label>
   );
   const ajuda = p.ajuda ? <div style={brS.ajuda}>{p.ajuda}</div> : null;
   let corpo = null;
@@ -5885,7 +5978,8 @@ function BrPergunta({ p, t, r, valor, mudar, erro }) {
     return <div data-br-pergunta={p.id} style={{ marginBottom: 26 }}>{ajuda}{corpo}</div>;
   }
   return (
-    <div data-br-pergunta={p.id} style={{ marginBottom: 26 }}>
+    <div data-br-pergunta={p.id} style={{ marginBottom: 26, position: "relative" }}>
+      {dica && <BrDica texto={dica} />}
       {rotulo}{ajuda}{corpo}
       {erro && <div style={brS.erro} role="alert">{erro}</div>}
     </div>

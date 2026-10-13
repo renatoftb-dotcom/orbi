@@ -11,7 +11,7 @@ const arquivo = readFileSync(join(raiz, "src", "modules", "briefing.jsx"), "utf8
 const corte = arquivo.indexOf("// UI — daqui para baixo");
 if (corte < 0) throw new Error("Marcador de início da UI não encontrado em briefing.jsx");
 const M = new Function(arquivo.slice(0, corte) + `
-  return { BRIEFING_SECOES, tipoBriefingDoProjeto, contextoDoBriefing, telasDoBriefing, pendenciasDaTela, pendenciasDoBriefing,
+  return { BR_DICAS, BRIEFING_SECOES, tipoBriefingDoProjeto, contextoDoBriefing, telasDoBriefing, pendenciasDaTela, pendenciasDoBriefing,
            resumoDoBriefing, opcoesDoRank, faltaNaPergunta, textoDaResposta };`)();
 
 const testes = [];
@@ -119,6 +119,15 @@ teste("Pendências do briefing inteiro apontam a seção de cada falta", () => {
   assert.ok(p.length > 5);
   assert.ok(p.some((x) => x.id === "ramo" && x.secao === "Negócio e equipe"));
   assert.ok(p.every((x) => x.chave && x.rotulo));
+});
+
+teste("Toda dica aponta para uma pergunta que existe, e é curta", () => {
+  const todas = [];
+  M.BRIEFING_SECOES.forEach((s) => s.telas.forEach((t) => t.perguntas.forEach((p) => todas.push(p.id))));
+  for (const k of Object.keys(M.BR_DICAS)) {
+    assert.ok(todas.includes(k), "dica sem pergunta: " + k);
+    assert.ok(M.BR_DICAS[k].length <= 160, "dica longa: " + k);
+  }
 });
 
 for (const [nome, fn] of testes) {
