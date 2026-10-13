@@ -86,15 +86,15 @@ const BR_ORCAMENTO = {
 //   natural: Spacejoy — https://unsplash.com/photos/mweDhudGmIc
 //   mediterraneo: Frames For Your Heart — https://unsplash.com/photos/_KP6mk2Iz8k
 const BR_ESTILOS = [
-  { v: "contemporaneo", img: "/briefing/estilo-contemporaneo.jpg", t: "Contemporâneo", d: "linhas retas, grandes vãos, materiais atuais" },
-  { v: "minimalista", img: "/briefing/estilo-minimalista.jpg", t: "Minimalista", d: "pouco elemento, cores neutras, tudo guardado" },
-  { v: "tropical", img: "/briefing/estilo-tropical.jpg", t: "Moderno brasileiro", d: "madeira, cobogó, varandas, verde por perto" },
-  { v: "rustico", img: "/briefing/estilo-rustico.jpg", t: "Rústico / campo", d: "madeira aparente, pedra, aconchego de fazenda" },
-  { v: "industrial", img: "/briefing/estilo-industrial.jpg", t: "Industrial", d: "concreto, metal, tijolo, instalações à mostra" },
-  { v: "classico", img: "/briefing/estilo-classico.jpg", t: "Clássico", d: "molduras, simetria, acabamentos nobres" },
-  { v: "escandinavo", img: "/briefing/estilo-escandinavo.jpg", t: "Escandinavo", d: "claro, madeira clara, simples e acolhedor" },
-  { v: "natural", img: "/briefing/estilo-natural.jpg", t: "Natural / boho", d: "fibras, texturas, plantas, tons terrosos" },
-  { v: "mediterraneo", img: "/briefing/estilo-mediterraneo.jpg", t: "Mediterrâneo", d: "branco, arcos, cal, azul, luz forte" },
+  { v: "contemporaneo", img: "/briefing/estilo-contemporaneo.jpg", imgGrande: "/briefing/estilo-contemporaneo-g.jpg", t: "Contemporâneo", d: "linhas retas, grandes vãos, materiais atuais" },
+  { v: "minimalista", img: "/briefing/estilo-minimalista.jpg", imgGrande: "/briefing/estilo-minimalista-g.jpg", t: "Minimalista", d: "pouco elemento, cores neutras, tudo guardado" },
+  { v: "tropical", img: "/briefing/estilo-tropical.jpg", imgGrande: "/briefing/estilo-tropical-g.jpg", t: "Moderno brasileiro", d: "madeira, cobogó, varandas, verde por perto" },
+  { v: "rustico", img: "/briefing/estilo-rustico.jpg", imgGrande: "/briefing/estilo-rustico-g.jpg", t: "Rústico / campo", d: "madeira aparente, pedra, aconchego de fazenda" },
+  { v: "industrial", img: "/briefing/estilo-industrial.jpg", imgGrande: "/briefing/estilo-industrial-g.jpg", t: "Industrial", d: "concreto, metal, tijolo, instalações à mostra" },
+  { v: "classico", img: "/briefing/estilo-classico.jpg", imgGrande: "/briefing/estilo-classico-g.jpg", t: "Clássico", d: "molduras, simetria, acabamentos nobres" },
+  { v: "escandinavo", img: "/briefing/estilo-escandinavo.jpg", imgGrande: "/briefing/estilo-escandinavo-g.jpg", t: "Escandinavo", d: "claro, madeira clara, simples e acolhedor" },
+  { v: "natural", img: "/briefing/estilo-natural.jpg", imgGrande: "/briefing/estilo-natural-g.jpg", t: "Natural / boho", d: "fibras, texturas, plantas, tons terrosos" },
+  { v: "mediterraneo", img: "/briefing/estilo-mediterraneo.jpg", imgGrande: "/briefing/estilo-mediterraneo-g.jpg", t: "Mediterrâneo", d: "branco, arcos, cal, azul, luz forte" },
 ];
 
 // Atalhos de visibilidade. t = { tipo, uso } — r = respostas.
@@ -379,7 +379,7 @@ const BRIEFING_SECOES = [
 
   { id: "estilo", titulo: "Estilo", telas: [
     { perguntas: [
-      { id: "estilos", tipo: "multipla", rotulo: "Quais estilos mais combinam com você?", obrig: true, opcoes: BR_ESTILOS, cartoes: true, max: 4, ajuda: "Escolha até 4." },
+      { id: "estilos", tipo: "multipla", rotulo: "Quais estilos mais combinam com você?", obrig: true, opcoes: BR_ESTILOS, cartoes: true, max: 4, ajuda: "Escolha até 4. Toque na lupa para ver a foto grande." },
       { id: "estilos_nao", tipo: "multipla", rotulo: "E algum que você não gostaria de jeito nenhum?", opcoes: BR_ESTILOS.map((o) => ({ v: o.v, t: o.t })), max: 4, excluirDe: "estilos" },
       { id: "percepcao", tipo: "multipla", rotulo: "Como você quer que o imóvel seja percebido?", max: 3, ajuda: "Escolha até 3.",
         opcoes: [{ v: "sofisticado", t: "Sofisticado" }, { v: "aconchegante", t: "Aconchegante" }, { v: "discreto", t: "Discreto" }, { v: "imponente", t: "Imponente" },
@@ -741,7 +741,68 @@ function BrDica({ texto }) {
   );
 }
 
+// Foto grande dos cartões com imagem: setas (ou arrastar no celular) passam
+// para a próxima, Esc fecha, e dá para escolher/desmarcar dali mesmo.
+function BrAmpliar({ opcoes, indice, setIndice, sel, max, tocar }) {
+  const o = opcoes[indice];
+  const fecharRef = useRef(null);
+  const toque = useRef(null);
+  const n = opcoes.length;
+  const ir = (d) => setIndice((i) => (i + d + n) % n);
+  useEffect(() => {
+    const antes = document.activeElement;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    if (fecharRef.current) fecharRef.current.focus();
+    const tecla = (e) => {
+      if (e.key === "Escape") setIndice(-1);
+      else if (e.key === "ArrowRight") ir(1);
+      else if (e.key === "ArrowLeft") ir(-1);
+    };
+    document.addEventListener("keydown", tecla);
+    return () => {
+      document.removeEventListener("keydown", tecla);
+      document.body.style.overflow = overflow;
+      if (antes && antes.focus) antes.focus();
+    };
+  }, []);
+  if (!o) return null;
+  const escolhido = sel.indexOf(o.v) >= 0;
+  const cheio = !escolhido && max && sel.length >= max;
+  const seta = (lado) => ({ position: "absolute", top: "50%", [lado]: 8, marginTop: -22, width: 44, height: 44, borderRadius: 22, border: "none",
+    background: "rgba(255,255,255,0.16)", color: "#fff", fontSize: 26, lineHeight: "44px", cursor: "pointer", padding: 0, fontFamily: "inherit" });
+  return (
+    <div data-br-ampliar role="dialog" aria-modal="true" aria-label={o.t}
+      onClick={(e) => { if (e.target === e.currentTarget) setIndice(-1); }}
+      style={{ position: "fixed", inset: 0, zIndex: 300, background: "#0c0e12", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        padding: "56px 12px calc(16px + env(safe-area-inset-bottom))", boxSizing: "border-box" }}>
+      <button ref={fecharRef} type="button" aria-label="Fechar" onClick={() => setIndice(-1)}
+        style={{ position: "absolute", top: 10, right: 10, width: 44, height: 44, borderRadius: 22, border: "none", background: "rgba(255,255,255,0.16)", color: "#fff",
+          fontSize: 24, lineHeight: "44px", cursor: "pointer", padding: 0 }}>×</button>
+      <div style={{ position: "absolute", top: 22, left: 16, color: "rgba(255,255,255,0.7)", fontSize: 13.5 }}>{indice + 1} de {n}</div>
+      <div style={{ position: "relative", width: "100%", maxWidth: 1100, flex: "1 1 auto", minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+        onTouchStart={(e) => { toque.current = e.touches[0].clientX; }}
+        onTouchEnd={(e) => { const x0 = toque.current; toque.current = null; if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 50) ir(dx < 0 ? 1 : -1); }}
+        onClick={(e) => { if (e.target === e.currentTarget) setIndice(-1); }}>
+        <img key={o.v} src={o.imgGrande || o.img} alt={o.t} style={{ display: "block", maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8, background: "#1f2329" }} />
+        {n > 1 && <button type="button" aria-label="Anterior" onClick={() => ir(-1)} style={seta("left")}>‹</button>}
+        {n > 1 && <button type="button" aria-label="Próxima" onClick={() => ir(1)} style={seta("right")}>›</button>}
+      </div>
+      <div style={{ width: "100%", maxWidth: 640, color: "#fff", textAlign: "center", paddingTop: 14, flex: "0 0 auto" }}>
+        <div style={{ fontSize: 18, fontWeight: 600 }}>{o.t}</div>
+        {o.d && <div style={{ fontSize: 14, color: "rgba(255,255,255,0.75)", marginTop: 3 }}>{o.d}</div>}
+        <button type="button" data-br-ampliar-escolher onClick={() => tocar(o.v)} disabled={cheio}
+          style={{ ...brS.btn, marginTop: 12, minWidth: 220, background: escolhido ? "#fff" : BR_AZUL, color: escolhido ? "#0b4fb3" : "#fff", opacity: cheio ? 0.5 : 1, cursor: cheio ? "default" : "pointer" }}>
+          {escolhido ? "✓ Escolhido · desmarcar" : "Escolher este"}
+        </button>
+        {cheio && <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginTop: 6 }}>Você já escolheu {max}. Desmarque um para trocar.</div>}
+      </div>
+    </div>
+  );
+}
+
 function BrPergunta({ p, t, r, valor, mudar, erro }) {
+  const [zoom, setZoom] = useState(-1);
   const obrig = brObrigatoria(p, t);
   const dica = p.dica || BR_DICAS[p.id];
   const rotulo = (
@@ -794,13 +855,16 @@ function BrPergunta({ p, t, r, valor, mudar, erro }) {
       if (v === "nenhum" && n.indexOf("nenhum") >= 0) n = ["nenhum"]; else n = n.filter((y) => y !== "nenhum" || v === "nenhum");
       mudar({ ...x, sel: n });
     };
+    const visiveis = opcoesDaPergunta(p, t).filter((o) => jaEscolhidos.indexOf(o.v) < 0 || sel.indexOf(o.v) >= 0);
+    const comFotos = visiveis.filter((o) => o.img);
     corpo = (
       <div>
         <div style={{ display: p.cartoes ? "grid" : "flex", flexWrap: "wrap", gap: 8,
-          gridTemplateColumns: opcoesDaPergunta(p, t).some((o) => o.img) ? "repeat(auto-fill, minmax(150px, 1fr))" : "1fr" }}>
-          {opcoesDaPergunta(p, t).filter((o) => jaEscolhidos.indexOf(o.v) < 0 || sel.indexOf(o.v) >= 0).map((o) => (
+          gridTemplateColumns: comFotos.length ? "repeat(auto-fill, minmax(150px, 1fr))" : "1fr" }}>
+          {visiveis.map((o) => {
+            const cartao = (
             <button key={o.v} type="button" role="checkbox" aria-checked={sel.indexOf(o.v) >= 0}
-              style={{ ...brS.chip(sel.indexOf(o.v) >= 0), ...(o.img ? { padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "flex-start", alignItems: "stretch" } : {}) }} onClick={() => tocar(o.v)}>
+              style={{ ...brS.chip(sel.indexOf(o.v) >= 0), ...(o.img ? { padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "flex-start", alignItems: "stretch", width: "100%", height: "100%" } : {}) }} onClick={() => tocar(o.v)}>
               {o.img && <img src={o.img} alt="" loading="lazy" style={{ display: "block", width: "100%", aspectRatio: "16 / 10.5", objectFit: "cover", background: "#eef0f3" }} />}
               <div style={o.img ? { padding: "10px 14px" } : null}>
                 {o.cores && (
@@ -811,9 +875,27 @@ function BrPergunta({ p, t, r, valor, mudar, erro }) {
                 {sel.indexOf(o.v) >= 0 ? "✓ " : ""}{o.t}{o.d && <div style={{ fontSize: 12.5, color: "#6b7280", fontWeight: 400, marginTop: 2 }}>{o.d}</div>}
               </div>
             </button>
-          ))}
+            );
+            if (!o.img) return cartao;
+            // a lupa fica por cima da foto, fora do botão do cartão: ampliar não marca nem desmarca
+            return (
+              <div key={o.v} style={{ position: "relative" }}>
+                {cartao}
+                <button type="button" data-br-lupa={o.v} aria-label={"Ver foto grande: " + o.t} onClick={() => setZoom(comFotos.indexOf(o))}
+                  style={{ position: "absolute", top: 6, right: 6, width: 36, height: 36, borderRadius: 18, border: "none", background: "rgba(17,24,39,0.62)",
+                    color: "#fff", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+                    <circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5 21 21M10.5 7.5v6M7.5 10.5h6" />
+                  </svg>
+                </button>
+              </div>
+            );
+          })}
         </div>
         {p.outro && <input style={{ ...brS.input, marginTop: 10 }} placeholder="Outro (opcional)" value={x.outro || ""} onChange={(e) => mudar({ ...x, outro: e.target.value })} />}
+        {zoom >= 0 && comFotos.length > 0 && (
+          <BrAmpliar opcoes={comFotos} indice={Math.min(zoom, comFotos.length - 1)} setIndice={setZoom} sel={sel} max={p.max} tocar={tocar} />
+        )}
       </div>
     );
   } else if (p.tipo === "escala") {
