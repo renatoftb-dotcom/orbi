@@ -177,7 +177,11 @@ function Etapas({ data, save }) {
           projeto={briefingDe}
           cliente={clientes.find(c => c.id === briefingDe.clienteId) || null}
           briefing={briefings[briefingDe.orcId] || null}
-          aoMudar={(b) => setBriefings((x) => ({ ...x, [b.orcId]: b }))}
+          aoMudar={(b) => setBriefings((x) => {
+            const n = { ...x };
+            if (b && b.removido) delete n[b.orcId]; else if (b) n[b.orcId] = b;
+            return n;
+          })}
           aoFechar={() => setBriefingDe(null)}
           aoAvancar={(briefingDe.colunaEtapa || "briefing") === "briefing" ? () => {
             const novos = projetos.map(p => p.id === briefingDe.id ? { ...p, colunaEtapa: "preliminar" } : p);

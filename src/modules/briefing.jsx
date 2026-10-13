@@ -1199,9 +1199,9 @@ function BriefingDoProjeto({ projeto, cliente, briefing, aoMudar, aoFechar, aoAv
   async function acao(qual) {
     if (qual === "zerar") {
       const ok = await dialogo.confirmar({
-        titulo: "Apagar as respostas deste briefing?",
-        mensagem: "Todas as respostas do cliente serão apagadas e o formulário volta ao começo. O link continua o mesmo. Não dá para desfazer.",
-        confirmar: "Apagar respostas", destrutivo: true,
+        titulo: "Apagar este briefing?",
+        mensagem: "As respostas são apagadas, o link atual deixa de funcionar e o projeto volta a \"Briefing não enviado\". Para mandar ao cliente, gere um link novo. Não dá para desfazer.",
+        confirmar: "Apagar briefing", destrutivo: true,
       });
       if (!ok) return;
     }
@@ -1272,7 +1272,7 @@ function BriefingDoProjeto({ projeto, cliente, briefing, aoMudar, aoFechar, aoAv
         </div>
         {b && (
           <div style={{ background: "#fff", borderTop: "1px solid #e5e7eb", borderRadius: "0 0 16px 16px", padding: "12px 16px", display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            {temResposta && <button style={{ ...btn, color: "#b91c1c", marginRight: "auto" }} disabled={!!ocupado} onClick={() => acao("zerar")} data-br-zerar>{ocupado === "zerar" ? "Apagando…" : "Apagar respostas"}</button>}
+            <button style={{ ...btn, color: "#b91c1c", marginRight: "auto" }} disabled={!!ocupado} onClick={() => acao("zerar")} data-br-zerar>{ocupado === "zerar" ? "Apagando…" : "Apagar briefing"}</button>
             {temResposta && <button style={btn} onClick={() => window.print()}>Imprimir</button>}
             {b.status === "validado"
               ? <button style={btn} disabled={!!ocupado} onClick={() => acao("reabrir")} data-br-reabrir>{ocupado === "reabrir" ? "Reabrindo…" : "Reabrir para o cliente"}</button>
