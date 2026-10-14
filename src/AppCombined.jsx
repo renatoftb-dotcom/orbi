@@ -5247,28 +5247,127 @@ const BR_ORCAMENTO = {
   PC: ["Até R$ 100 mil", "R$ 100 a 300 mil", "R$ 300 a 600 mil", "Acima de R$ 600 mil"],
 };
 
-// Fotos dos estilos: Unsplash (licença Unsplash — uso livre, sem atribuição obrigatória;
-// créditos mantidos aqui por cortesia). Arquivos em public/briefing/, 640×420.
-//   contemporaneo: Alef Morais — https://unsplash.com/photos/d2hYqpR0YS0
-//   minimalista: Pixasquare — https://unsplash.com/photos/4ojhpgKpS68
-//   tropical: Alef Morais — https://unsplash.com/photos/u2l_e5YS548
-//   rustico: Hanna Lazar — https://unsplash.com/photos/jSvnwYvJ48c
-//   industrial: ULISES RAMIREZ — https://unsplash.com/photos/tqCfLSHgaIo
-//   classico: Nikita — https://unsplash.com/photos/7RQwfRBD_m4
-//   escandinavo: Clay Banks — https://unsplash.com/photos/UTWRDWMMaag
-//   natural: Spacejoy — https://unsplash.com/photos/mweDhudGmIc
-//   mediterraneo: Frames For Your Heart — https://unsplash.com/photos/_KP6mk2Iz8k
+// Galeria dos estilos: 8 fotos por estilo, a 1ª é a capa do cartão. Unsplash e Pexels,
+// ambos de uso livre (crédito mantido por cortesia e mostrado na foto ampliada).
+// A pequena (480×320) é servida do site: public/briefing/g/{estilo}-{n}.jpg. A grande vem
+// direto do Unsplash/Pexels só quando o cliente amplia; se falhar, fica a pequena.
+// Cada linha: [fonte (u = Unsplash, p = Pexels), id da foto, autor, url da grande].
+const BR_GALERIA = {
+  contemporaneo: [
+    ["u", "4vioYQ9Nn9Y", "Arthur BAUDRY", "https://images.unsplash.com/photo-1748063578185-3d68121b11ff?w=1400&q=72&fm=jpg"],
+    ["u", "d2hYqpR0YS0", "Alef Morais", "https://images.unsplash.com/photo-1766603636700-e9d80473f40f?w=1400&q=72&fm=jpg"],
+    ["u", "0n94KqRz6rQ", "juan verdaguer aguerrebehere", "https://images.unsplash.com/photo-1633354747567-e0682586f082?w=1400&q=72&fm=jpg"],
+    ["u", "WaC-JFfF21M", "Salman Saqib", "https://images.unsplash.com/photo-1706808849780-7a04fbac83ef?w=1400&q=72&fm=jpg"],
+    ["u", "08uIUe2a9XY", "André François McKenzie", "https://images.unsplash.com/photo-1627141234469-24711efb373c?w=1400&q=72&fm=jpg"],
+    ["u", "URD4NdWyd60", "Salman Saqib", "https://images.unsplash.com/photo-1706808849777-96e0d7be3bb7?w=1400&q=72&fm=jpg"],
+    ["p", "8134817", "Max Vakhtbovych", "https://images.pexels.com/photos/8134817/pexels-photo-8134817.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["p", "28586224", "Jonathan Borba", "https://images.pexels.com/photos/28586224/pexels-photo-28586224.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+  ],
+  minimalista: [
+    ["u", "YhXZhD0ATD0", "Pham Nhat", "https://images.unsplash.com/photo-1789720868551-7461cb16fe07?w=1400&q=72&fm=jpg"],
+    ["u", "4ojhpgKpS68", "Pixasquare", "https://images.unsplash.com/photo-1523217582562-09d0def993a6?w=1400&q=72&fm=jpg"],
+    ["u", "F-slnkFvcag", "POOJAN THANEKAR", "https://images.unsplash.com/photo-1756706718604-ef4af3970e33?w=1400&q=72&fm=jpg"],
+    ["u", "olIi_yUXHW8", "nad Assa", "https://images.unsplash.com/photo-1790213680570-79cb3f02d4d2?w=1400&q=72&fm=jpg"],
+    ["u", "xZPJOHI52t8", "Salvus", "https://images.unsplash.com/photo-1779089042981-038ee31d348e?w=1400&q=72&fm=jpg"],
+    ["u", "vIbxvHj9m9g", "Prydumano Design", "https://images.unsplash.com/photo-1724582586529-62622e50c0b3?w=1400&q=72&fm=jpg"],
+    ["u", "-jk2BBoQxSk", "POOJAN THANEKAR", "https://images.unsplash.com/photo-1745429523617-0d837856ca35?w=1400&q=72&fm=jpg"],
+    ["p", "6342356", "ROMAN ODINTSOV", "https://images.pexels.com/photos/6342356/pexels-photo-6342356.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+  ],
+  tropical: [
+    ["p", "35361410", "Alef Morais", "https://images.pexels.com/photos/35361410/pexels-photo-35361410.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["u", "u2l_e5YS548", "Alef Morais", "https://images.unsplash.com/photo-1760067538022-8ef8739b1b18?w=1400&q=72&fm=jpg"],
+    ["p", "15141467", "Matheus Bertelli", "https://images.pexels.com/photos/15141467/pexels-photo-15141467.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["p", "34277692", "Alef Morais", "https://images.pexels.com/photos/34277692/pexels-photo-34277692.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["p", "35361404", "Alef Morais", "https://images.pexels.com/photos/35361404/pexels-photo-35361404.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["p", "35361412", "Alef Morais", "https://images.pexels.com/photos/35361412/pexels-photo-35361412.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["p", "37833141", "Kenneth Dave Asto", "https://images.pexels.com/photos/37833141/pexels-photo-37833141.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["u", "Zq31XfOeZ7M", "Larissa Cohen", "https://images.unsplash.com/photo-1749433157410-357a3311e921?w=1400&q=72&fm=jpg"],
+  ],
+  rustico: [
+    ["u", "Q0OitqGyVWA", "Clay Banks", "https://images.unsplash.com/photo-1787625380403-8c21fb2b3f8a?w=1400&q=72&fm=jpg"],
+    ["p", "9056673", "Matheus Bertelli", "https://images.pexels.com/photos/9056673/pexels-photo-9056673.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["u", "G8kRVwlZK3Q", "Clay Banks", "https://images.unsplash.com/photo-1783388629507-bc39279781ed?w=1400&q=72&fm=jpg"],
+    ["u", "3qaMytIyx0c", "Clay Banks", "https://images.unsplash.com/photo-1774095120121-e2fcb529cc2b?w=1400&q=72&fm=jpg"],
+    ["p", "25313617", "Jose Manuel Alvarez", "https://images.pexels.com/photos/25313617/pexels-photo-25313617.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["p", "9056674", "Matheus Bertelli", "https://images.pexels.com/photos/9056674/pexels-photo-9056674.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["u", "JbLev8Y0xUQ", "Clay Banks", "https://images.unsplash.com/photo-1754415266974-404a215e6c62?w=1400&q=72&fm=jpg"],
+    ["u", "jSvnwYvJ48c", "Hanna Lazar", "https://images.unsplash.com/photo-1789540770496-2ff2c5d17f4e?w=1400&q=72&fm=jpg"],
+  ],
+  industrial: [
+    ["u", "tqCfLSHgaIo", "ULISES RAMIREZ", "https://images.unsplash.com/photo-1783990349147-906f62b882c1?w=1400&q=72&fm=jpg"],
+    ["u", "8o6Z2j1XX6U", "Kai Damm-Jonas", "https://images.unsplash.com/photo-1773069459487-3d2d7bb4532e?w=1400&q=72&fm=jpg"],
+    ["p", "7045921", "Max Vakhtbovych", "https://images.pexels.com/photos/7045921/pexels-photo-7045921.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["p", "29252614", "Mateusz Pielech", "https://images.pexels.com/photos/29252614/pexels-photo-29252614.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["p", "7214736", "Max Vakhtbovych", "https://images.pexels.com/photos/7214736/pexels-photo-7214736.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["p", "7031834", "Max Vakhtbovych", "https://images.pexels.com/photos/7031834/pexels-photo-7031834.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["u", "wdlFqI0s_Kg", "Szcze hoo", "https://images.unsplash.com/photo-1785917835430-f1617b7d68ff?w=1400&q=72&fm=jpg"],
+    ["p", "9551380", "Алексей Вечерин", "https://images.pexels.com/photos/9551380/pexels-photo-9551380.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+  ],
+  classico: [
+    ["p", "8082209", "Max Vakhtbovych", "https://images.pexels.com/photos/8082209/pexels-photo-8082209.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["u", "3b5uYZIIoc0", "Home Makers Interior", "https://images.unsplash.com/photo-1742541656775-5fc717774c02?w=1400&q=72&fm=jpg"],
+    ["u", "7RQwfRBD_m4", "Nikita", "https://images.unsplash.com/photo-1760684535431-3c4db770af69?w=1400&q=72&fm=jpg"],
+    ["u", "0HTR6VYVNIo", "Vasilis Caravitis", "https://images.unsplash.com/photo-1772376014280-fdf601728805?w=1400&q=72&fm=jpg"],
+    ["u", "EQvUkUyB6Ao", "andy chiu", "https://images.unsplash.com/photo-1772112334897-7e249a9ad811?w=1400&q=72&fm=jpg"],
+    ["p", "6489441", "Lucas George Wendt", "https://images.pexels.com/photos/6489441/pexels-photo-6489441.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["p", "8306281", "Samer Daboul", "https://images.pexels.com/photos/8306281/pexels-photo-8306281.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["u", "oaITdLL7bD4", "Spl Interiors", "https://images.unsplash.com/photo-1745301558339-44eb3217d5da?w=1400&q=72&fm=jpg"],
+  ],
+  escandinavo: [
+    ["u", "Wvyuj889ZLs", "Taitopia Render", "https://images.unsplash.com/photo-1693382464188-1ed395d8d3e1?w=1400&q=72&fm=jpg"],
+    ["u", "UTWRDWMMaag", "Clay Banks", "https://images.unsplash.com/photo-1723748972084-4124765e0a55?w=1400&q=72&fm=jpg"],
+    ["u", "77JACslA8G0", "Katja Rooke", "https://images.unsplash.com/photo-1605774337664-7a846e9cdf17?w=1400&q=72&fm=jpg"],
+    ["u", "Xpf6n2SqWEI", "Taitopia Render", "https://images.unsplash.com/photo-1693382464372-fad822e7b38c?w=1400&q=72&fm=jpg"],
+    ["u", "Cmq9Sy5PW18", "JALG TV Stand", "https://images.unsplash.com/photo-1698675610962-2e4ee6a71d31?w=1400&q=72&fm=jpg"],
+    ["p", "9565782", "Taryn Elliott", "https://images.pexels.com/photos/9565782/pexels-photo-9565782.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["p", "7836572", "Stanislav Kondratiev", "https://images.pexels.com/photos/7836572/pexels-photo-7836572.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["u", "qPHpk6G9nik", "Prydumano Design", "https://images.unsplash.com/photo-1724582586413-6b69e1c94a17?w=1400&q=72&fm=jpg"],
+  ],
+  natural: [
+    ["u", "85pCvDWDMmI", "Spacejoy", "https://images.unsplash.com/photo-1617103996702-96ff29b1c467?w=1400&q=72&fm=jpg"],
+    ["p", "29068740", "Jonathan Borba", "https://images.pexels.com/photos/29068740/pexels-photo-29068740.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["u", "mweDhudGmIc", "Spacejoy", "https://images.unsplash.com/photo-1615875882968-3e393f78765a?w=1400&q=72&fm=jpg"],
+    ["p", "2959595", "Wendy Wei", "https://images.pexels.com/photos/2959595/pexels-photo-2959595.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["p", "15124841", "Tuğba Kobal Yılmaz", "https://images.pexels.com/photos/15124841/pexels-photo-15124841.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["u", "hWwP4LTGEQA", "Spacejoy", "https://images.unsplash.com/photo-1615876234886-fd9a39fda97f?w=1400&q=72&fm=jpg"],
+    ["u", "1POHQ5n8v4U", "Anne K", "https://images.unsplash.com/photo-1734470795253-927d9c1ef9a8?w=1400&q=72&fm=jpg"],
+    ["p", "12933002", "Samet Korkmaz", "https://images.pexels.com/photos/12933002/pexels-photo-12933002.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+  ],
+  mediterraneo: [
+    ["u", "SxJWiB1uaQ4", "Francesco Ungaro", "https://images.unsplash.com/photo-1748004872585-85230032c932?w=1400&q=72&fm=jpg"],
+    ["u", "_KP6mk2Iz8k", "Frames For Your Heart", "https://images.unsplash.com/photo-1598635031829-4bfae29d33eb?w=1400&q=72&fm=jpg"],
+    ["u", "WXZHofR4b8w", "Lucas Gallone", "https://images.unsplash.com/photo-1751240261977-c13c03555d93?w=1400&q=72&fm=jpg"],
+    ["p", "33336430", "Ezgi Kaya", "https://images.pexels.com/photos/33336430/pexels-photo-33336430.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["p", "5667901", "ROMAN ODINTSOV", "https://images.pexels.com/photos/5667901/pexels-photo-5667901.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+    ["u", "1yPRZ5Avn9c", "Kenny", "https://images.unsplash.com/photo-1702753918328-62e3fcae4255?w=1400&q=72&fm=jpg"],
+    ["u", "ky_LLxmq72k", "set.sj", "https://images.unsplash.com/photo-1747992803768-667e89216165?w=1400&q=72&fm=jpg"],
+    ["p", "29041775", "Raymond Petrik", "https://images.pexels.com/photos/29041775/pexels-photo-29041775.jpeg?auto=compress&cs=tinysrgb&w=1400"],
+  ],
+};
 const BR_ESTILOS = [
-  { v: "contemporaneo", img: "/briefing/estilo-contemporaneo.jpg", imgGrande: "/briefing/estilo-contemporaneo-g.jpg", t: "Contemporâneo", d: "linhas retas, grandes vãos, materiais atuais" },
-  { v: "minimalista", img: "/briefing/estilo-minimalista.jpg", imgGrande: "/briefing/estilo-minimalista-g.jpg", t: "Minimalista", d: "pouco elemento, cores neutras, tudo guardado" },
-  { v: "tropical", img: "/briefing/estilo-tropical.jpg", imgGrande: "/briefing/estilo-tropical-g.jpg", t: "Moderno brasileiro", d: "madeira, cobogó, varandas, verde por perto" },
-  { v: "rustico", img: "/briefing/estilo-rustico.jpg", imgGrande: "/briefing/estilo-rustico-g.jpg", t: "Rústico / campo", d: "madeira aparente, pedra, aconchego de fazenda" },
-  { v: "industrial", img: "/briefing/estilo-industrial.jpg", imgGrande: "/briefing/estilo-industrial-g.jpg", t: "Industrial", d: "concreto, metal, tijolo, instalações à mostra" },
-  { v: "classico", img: "/briefing/estilo-classico.jpg", imgGrande: "/briefing/estilo-classico-g.jpg", t: "Clássico", d: "molduras, simetria, acabamentos nobres" },
-  { v: "escandinavo", img: "/briefing/estilo-escandinavo.jpg", imgGrande: "/briefing/estilo-escandinavo-g.jpg", t: "Escandinavo", d: "claro, madeira clara, simples e acolhedor" },
-  { v: "natural", img: "/briefing/estilo-natural.jpg", imgGrande: "/briefing/estilo-natural-g.jpg", t: "Natural / boho", d: "fibras, texturas, plantas, tons terrosos" },
-  { v: "mediterraneo", img: "/briefing/estilo-mediterraneo.jpg", imgGrande: "/briefing/estilo-mediterraneo-g.jpg", t: "Mediterrâneo", d: "branco, arcos, cal, azul, luz forte" },
+  { v: "contemporaneo", img: "/briefing/g/contemporaneo-1.jpg", t: "Contemporâneo", d: "linhas retas, grandes vãos, materiais atuais" },
+  { v: "minimalista", img: "/briefing/g/minimalista-1.jpg", t: "Minimalista", d: "pouco elemento, cores neutras, tudo guardado" },
+  { v: "tropical", img: "/briefing/g/tropical-1.jpg", t: "Moderno brasileiro", d: "madeira, cobogó, varandas, verde por perto" },
+  { v: "rustico", img: "/briefing/g/rustico-1.jpg", t: "Rústico / campo", d: "madeira aparente, pedra, aconchego de fazenda" },
+  { v: "industrial", img: "/briefing/g/industrial-1.jpg", t: "Industrial", d: "concreto, metal, tijolo, instalações à mostra" },
+  { v: "classico", img: "/briefing/g/classico-1.jpg", t: "Clássico", d: "molduras, simetria, acabamentos nobres" },
+  { v: "escandinavo", img: "/briefing/g/escandinavo-1.jpg", t: "Escandinavo", d: "claro, madeira clara, simples e acolhedor" },
+  { v: "natural", img: "/briefing/g/natural-1.jpg", t: "Natural / boho", d: "fibras, texturas, plantas, tons terrosos" },
+  { v: "mediterraneo", img: "/briefing/g/mediterraneo-1.jpg", t: "Mediterrâneo", d: "branco, arcos, cal, azul, luz forte" },
 ];
+const BR_FOTOS_POR_ESTILO = 8;
+// As fotos de um estilo, prontas para a tela. id = "{estilo}-{n}" (é o que fica gravado).
+function fotosDoEstilo(k) {
+  return (BR_GALERIA[k] || []).map(([fonte, , autor, grande], i) => ({
+    id: k + "-" + (i + 1), estilo: k, n: i + 1, img: `/briefing/g/${k}-${i + 1}.jpg`, grande,
+    credito: autor + " / " + (fonte === "u" ? "Unsplash" : "Pexels"),
+  }));
+}
+function fotoDaGaleria(id) {
+  const m = /^([a-z]+)-(\d+)$/.exec(String(id || ""));
+  return m ? fotosDoEstilo(m[1])[Number(m[2]) - 1] || null : null;
+}
+function nomeDoEstilo(k) { const o = BR_ESTILOS.find((x) => x.v === k); return o ? o.t : k; }
 
 // Atalhos de visibilidade. t = { tipo, uso } — r = respostas.
 const brRes = (t) => t.tipo !== "PC";
@@ -5552,8 +5651,11 @@ const BRIEFING_SECOES = [
 
   { id: "estilo", titulo: "Estilo", telas: [
     { perguntas: [
-      { id: "estilos", tipo: "multipla", rotulo: "Quais estilos mais combinam com você?", obrig: true, opcoes: BR_ESTILOS, cartoes: true, max: 4, ajuda: "Escolha até 4. Toque na lupa para ver a foto grande." },
-      { id: "estilos_nao", tipo: "multipla", rotulo: "E algum que você não gostaria de jeito nenhum?", opcoes: BR_ESTILOS.map((o) => ({ v: o.v, t: o.t })), max: 4, excluirDe: "estilos" },
+      { id: "estilo", tipo: "unica", rotulo: "Qual estilo mais combina com você?", obrig: true, opcoes: BR_ESTILOS, cartoes: true,
+        ajuda: "Escolha o principal. Logo abaixo você vê mais fotos dele e dos outros estilos." },
+      { id: "estilo_fotos", tipo: "galeria", rotulo: "Agora escolha as 3 fotos que você mais gosta, em ordem", obrig: true, max: 3, mostrar: (t, r) => !!r.estilo,
+        ajuda: "Toque na favorita primeiro: ela vira a 1ª. Pode trocar de estilo nas abas e misturar." },
+      { id: "estilos_nao", tipo: "multipla", rotulo: "E algum estilo que você não gostaria de jeito nenhum?", opcoes: BR_ESTILOS.map((o) => ({ v: o.v, t: o.t })), max: 4, excluirDe: "estilo" },
       { id: "percepcao", tipo: "multipla", rotulo: "Como você quer que o imóvel seja percebido?", max: 3, ajuda: "Escolha até 3.",
         opcoes: [{ v: "sofisticado", t: "Sofisticado" }, { v: "aconchegante", t: "Aconchegante" }, { v: "discreto", t: "Discreto" }, { v: "imponente", t: "Imponente" },
           { v: "moderno", t: "Inovador" }, { v: "tradicional", t: "Tradicional" }, { v: "urbano", t: "Urbano" }, { v: "natural", t: "Natural" }] },
@@ -5696,7 +5798,8 @@ const BR_DICAS = {
   data_rigidez: "Rígida = não pode passar dessa data.",
   decisor: "Quem aprova as decisões do projeto. Se forem duas pessoas, cite as duas.",
   participacao: "Define com que frequência o escritório vai te consultar durante o projeto.",
-  estilos: "Não precisa saber o nome certo — escolha pelo que a descrição lembra.",
+  estilo: "Não precisa saber o nome certo — escolha pela foto e pelo que a descrição lembra.",
+  estilo_fotos: "Vale o conjunto da foto: luz, materiais, clima. A ordem mostra ao arquiteto o que pesa mais para você.",
   percepcao: "A primeira impressão de quem chega. Ajuda a definir fachada, entrada e proporções.",
   paleta: "Não precisa ser exatamente estas cores — é para entender se você prefere tons claros, terrosos, contrastantes…",
   integracao: "Integrar amplia o espaço e a convivência; separar dá mais privacidade e controle de cheiro e barulho.",
@@ -5775,6 +5878,10 @@ function faltaNaPergunta(p, t, r) {
     const x = v || {};
     return (Array.isArray(x.sel) && x.sel.length) || !brVazio(x.outro) ? "" : "Escolha ao menos uma opção.";
   }
+  if (p.tipo === "galeria") {
+    const n = (Array.isArray(v) ? v : []).filter(fotoDaGaleria).length, max = p.max || 3;
+    return n >= max ? "" : (n ? `Falta${max - n > 1 ? "m" : ""} ${max - n} foto${max - n > 1 ? "s" : ""}.` : `Escolha ${max} fotos.`);
+  }
   return brVazio(v) ? "Esta pergunta é obrigatória." : "";
 }
 function pendenciasDaTela(tela, r, tipoPadrao) {
@@ -5815,6 +5922,7 @@ function textoDaResposta(p, v, t, r) {
     case "mes": return v === "nao_sei" ? "Não sei" : String(v).split("-").reverse().join("/");
     case "consentimento": return v === true ? "Autorizado" : "";
     case "links": return String(v).split(/\s+/).filter(Boolean).join("\n");
+    case "galeria": return (v || []).map(fotoDaGaleria).filter(Boolean).map((f, i) => `${i + 1}. ${nomeDoEstilo(f.estilo)} · foto ${f.n}`).join("  ");
     case "rank3": {
       const opc = opcoesDoRank(t, r);
       return (v || []).map((x, i) => `${i + 1}. ${rot(opc, x)}`).join("  ");
@@ -5843,7 +5951,8 @@ function resumoDoBriefing(respostas, tipoPadrao) {
     tl.perguntas.forEach((p) => {
       if (p.id === "programa") return;            // vai para o quadro do programa
       const txt = textoDaResposta(p, r[p.id], t, r);
-      if (txt) s.itens.push({ id: p.id, rotulo: (p.grupo ? p.grupo + " · " : "") + p.rotulo, valor: txt });
+      if (txt) s.itens.push({ id: p.id, rotulo: (p.grupo ? p.grupo + " · " : "") + p.rotulo, valor: txt,
+        ...(p.tipo === "galeria" ? { fotos: (r[p.id] || []).filter(fotoDaGaleria) } : {}) });
     });
   });
   const prog = r.programa || {};
@@ -5916,7 +6025,7 @@ function BrDica({ texto }) {
 
 // Foto grande dos cartões com imagem: setas (ou arrastar no celular) passam
 // para a próxima, Esc fecha, e dá para escolher/desmarcar dali mesmo.
-function BrAmpliar({ opcoes, indice, setIndice, sel, max, tocar }) {
+function BrAmpliar({ opcoes, indice, setIndice, sel, max, tocar, rotuloEscolher }) {
   const o = opcoes[indice];
   const fecharRef = useRef(null);
   const toque = useRef(null);
@@ -5957,7 +6066,7 @@ function BrAmpliar({ opcoes, indice, setIndice, sel, max, tocar }) {
         onTouchStart={(e) => { toque.current = e.touches[0].clientX; }}
         onTouchEnd={(e) => { const x0 = toque.current; toque.current = null; if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 50) ir(dx < 0 ? 1 : -1); }}
         onClick={(e) => { if (e.target === e.currentTarget) setIndice(-1); }}>
-        <img key={o.v} src={o.imgGrande || o.img} alt={o.t} style={{ display: "block", maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8, background: "#1f2329" }} />
+        <img key={o.v} src={o.imgGrande || o.img} alt={o.t} onError={(e) => { if (o.img && e.currentTarget.src.indexOf(o.img) < 0) e.currentTarget.src = o.img; }} style={{ display: "block", maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8, background: "#1f2329" }} />
         {n > 1 && <button type="button" aria-label="Anterior" onClick={() => ir(-1)} style={seta("left")}>‹</button>}
         {n > 1 && <button type="button" aria-label="Próxima" onClick={() => ir(1)} style={seta("right")}>›</button>}
       </div>
@@ -5966,10 +6075,94 @@ function BrAmpliar({ opcoes, indice, setIndice, sel, max, tocar }) {
         {o.d && <div style={{ fontSize: 14, color: "rgba(255,255,255,0.75)", marginTop: 3 }}>{o.d}</div>}
         <button type="button" data-br-ampliar-escolher onClick={() => tocar(o.v)} disabled={cheio}
           style={{ ...brS.btn, marginTop: 12, minWidth: 220, background: escolhido ? "#fff" : BR_AZUL, color: escolhido ? "#0b4fb3" : "#fff", opacity: cheio ? 0.5 : 1, cursor: cheio ? "default" : "pointer" }}>
-          {escolhido ? "✓ Escolhido · desmarcar" : "Escolher este"}
+          {rotuloEscolher ? rotuloEscolher(escolhido, sel.indexOf(o.v)) : (escolhido ? "✓ Escolhido · desmarcar" : "Escolher este")}
         </button>
         {cheio && <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginTop: 6 }}>Você já escolheu {max}. Desmarque um para trocar.</div>}
       </div>
+    </div>
+  );
+}
+
+const brLupa = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+    <circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5 21 21M10.5 7.5v6M7.5 10.5h6" />
+  </svg>
+);
+const brBotaoLupa = { position: "absolute", top: 6, right: 6, width: 36, height: 36, borderRadius: 18, border: "none", background: "rgba(17,24,39,0.62)",
+  color: "#fff", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" };
+const brSelo = { position: "absolute", top: 6, left: 6, minWidth: 28, height: 28, borderRadius: 14, background: BR_AZUL, color: "#fff", fontSize: 14, fontWeight: 700,
+  display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 4px rgba(0,0,0,0.3)", pointerEvents: "none" };
+
+// As 3 fotos favoritas, em ordem: abas por estilo (começa no escolhido), toque marca 1ª, 2ª, 3ª;
+// tocar de novo tira e as outras sobem. A lupa amplia sem marcar.
+function BrGaleria({ p, r, valor, mudar }) {
+  const sel = (Array.isArray(valor) ? valor : []).filter(fotoDaGaleria);
+  const max = p.max || 3;
+  const principal = (r || {}).estilo || BR_ESTILOS[0].v;
+  const [aba, setAba] = useState(principal);
+  const [zoom, setZoom] = useState(-1);
+  const [aviso, setAviso] = useState("");
+  const anterior = useRef(principal);
+  useEffect(() => { if (principal !== anterior.current) { anterior.current = principal; setAba(principal); } }, [principal]);
+  const abas = [principal].concat(BR_ESTILOS.map((o) => o.v).filter((v) => v !== principal));
+  const fotos = fotosDoEstilo(aba);
+  const tocar = (id) => {
+    if (sel.indexOf(id) >= 0) { mudar(sel.filter((x) => x !== id)); setAviso(""); return; }
+    if (sel.length >= max) { setAviso(`Você já escolheu ${max}. Toque numa escolhida para tirar.`); return; }
+    mudar(sel.concat([id])); setAviso("");
+  };
+  return (
+    <div data-br-galeria>
+      <div data-br-favoritas style={{ display: "grid", gridTemplateColumns: `repeat(${max}, 1fr)`, gap: 8, marginBottom: 12 }}>
+        {Array.from({ length: max }).map((_, i) => {
+          const f = fotoDaGaleria(sel[i]);
+          return f ? (
+            <button key={i} type="button" onClick={() => tocar(f.id)} aria-label={`Tirar a ${i + 1}ª: ${nomeDoEstilo(f.estilo)}, foto ${f.n}`}
+              style={{ position: "relative", padding: 0, border: `2px solid ${BR_AZUL}`, borderRadius: 10, overflow: "hidden", background: "#eef0f3", cursor: "pointer", aspectRatio: "3 / 2" }}>
+              <img src={f.img} alt="" style={{ display: "block", width: "100%", height: "100%", objectFit: "cover" }} />
+              <span style={{ ...brSelo, top: 4, left: 4, minWidth: 24, height: 24, fontSize: 13 }}>{i + 1}</span>
+              <span aria-hidden="true" style={{ position: "absolute", top: 4, right: 4, width: 22, height: 22, borderRadius: 11, background: "rgba(17,24,39,0.62)", color: "#fff", fontSize: 15, lineHeight: "22px" }}>×</span>
+            </button>
+          ) : (
+            <div key={i} style={{ border: "1.5px dashed #c7cdd6", borderRadius: 10, aspectRatio: "3 / 2", display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#9ca3af", fontSize: 13, background: "#fff" }}>{i + 1}ª</div>
+          );
+        })}
+      </div>
+      <div role="tablist" aria-label="Estilos" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 6, WebkitOverflowScrolling: "touch" }}>
+        {abas.map((k) => {
+          const n = sel.filter((id) => id.indexOf(k + "-") === 0).length;
+          return (
+            <button key={k} type="button" role="tab" aria-selected={aba === k} data-br-aba={k} onClick={() => { setAba(k); setZoom(-1); }}
+              style={{ ...brS.chip(aba === k), minHeight: 36, padding: "6px 12px", fontSize: 13.5, whiteSpace: "nowrap", flex: "0 0 auto" }}>
+              {nomeDoEstilo(k)}{n > 0 && <span style={{ marginLeft: 6, background: BR_AZUL, color: "#fff", borderRadius: 9, padding: "0 6px", fontSize: 12 }}>{n}</span>}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
+        {fotos.map((f, i) => {
+          const pos = sel.indexOf(f.id);
+          return (
+            <div key={f.id} style={{ position: "relative" }}>
+              <button type="button" data-br-foto={f.id} aria-pressed={pos >= 0} onClick={() => tocar(f.id)}
+                aria-label={pos >= 0 ? `${pos + 1}ª favorita — tocar para tirar` : `${nomeDoEstilo(f.estilo)}, foto ${f.n}`}
+                style={{ display: "block", width: "100%", padding: 0, borderRadius: 10, overflow: "hidden", background: "#eef0f3", cursor: "pointer",
+                  border: `2px solid ${pos >= 0 ? BR_AZUL : "#d1d5db"}`, boxShadow: pos >= 0 ? `0 0 0 2px ${BR_AZUL}` : "none" }}>
+                <img src={f.img} alt="" loading="lazy" style={{ display: "block", width: "100%", aspectRatio: "3 / 2", objectFit: "cover", opacity: pos < 0 && sel.length >= max ? 0.55 : 1 }} />
+              </button>
+              {pos >= 0 && <span style={brSelo}>{pos + 1}</span>}
+              <button type="button" data-br-lupa={f.id} aria-label={`Ver foto grande: ${nomeDoEstilo(f.estilo)}, foto ${f.n}`} onClick={() => setZoom(i)} style={brBotaoLupa}>{brLupa}</button>
+            </div>
+          );
+        })}
+      </div>
+      {aviso && <div role="status" style={{ ...brS.erro, marginTop: 8 }}>{aviso}</div>}
+      {zoom >= 0 && (
+        <BrAmpliar opcoes={fotos.map((f) => ({ v: f.id, t: `${nomeDoEstilo(f.estilo)} · foto ${f.n}`, d: "Foto: " + f.credito, img: f.img, imgGrande: f.grande }))}
+          indice={Math.min(zoom, fotos.length - 1)} setIndice={setZoom} sel={sel} max={max} tocar={tocar}
+          rotuloEscolher={(escolhido, pos) => (escolhido ? `✓ ${pos + 1}ª favorita · tirar` : `Escolher como ${sel.length + 1}ª`)} />
+      )}
     </div>
   );
 }
@@ -5999,6 +6192,27 @@ function BrPergunta({ p, t, r, valor, mudar, erro }) {
         {p.naoSei !== false && <button type="button" style={brS.chip(naoSei)} onClick={() => mudar(naoSei ? "" : "nao_sei")}>Não sei</button>}
       </div>
     );
+  } else if (p.tipo === "unica" && opcoesDaPergunta(p, t).some((o) => o.img)) {
+    // cartões com foto (estilo): um só
+    corpo = (
+      <div role="radiogroup" style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
+        {opcoesDaPergunta(p, t).map((o) => {
+          const on = valor === o.v;
+          return (
+            <button key={o.v} type="button" role="radio" aria-checked={on} data-br-opcao={o.v} onClick={() => mudar(on && !obrig ? "" : o.v)}
+              style={{ ...brS.chip(on), padding: 0, overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "flex-start", alignItems: "stretch",
+                ...(on ? { boxShadow: `0 0 0 2px ${BR_AZUL}` } : {}) }}>
+              <img src={o.img} alt="" loading="lazy" style={{ display: "block", width: "100%", aspectRatio: "3 / 2", objectFit: "cover", background: "#eef0f3" }} />
+              <div style={{ padding: "9px 12px" }}>
+                {on ? "✓ " : ""}{o.t}{o.d && <div style={{ fontSize: 12.5, color: "#6b7280", fontWeight: 400, marginTop: 2 }}>{o.d}</div>}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    );
+  } else if (p.tipo === "galeria") {
+    corpo = <BrGaleria p={p} r={r} valor={valor} mudar={mudar} />;
   } else if (p.tipo === "unica") {
     const opc = opcoesDaPergunta(p, t);
     corpo = (
@@ -6021,7 +6235,8 @@ function BrPergunta({ p, t, r, valor, mudar, erro }) {
   } else if (p.tipo === "multipla") {
     const x = valor || {}, sel = x.sel || [];
     // "o que evita" não oferece o que já foi escolhido como "o que gosta"
-    const jaEscolhidos = p.excluirDe ? (((r || {})[p.excluirDe] || {}).sel || []) : [];
+    const ex = p.excluirDe ? (r || {})[p.excluirDe] : null;
+    const jaEscolhidos = typeof ex === "string" && ex ? [ex] : ((ex || {}).sel || []);
     const tocar = (v) => {
       let n = sel.indexOf(v) >= 0 ? sel.filter((y) => y !== v) : sel.concat([v]);
       if (p.max && n.length > p.max) return;
@@ -6057,9 +6272,7 @@ function BrPergunta({ p, t, r, valor, mudar, erro }) {
                 <button type="button" data-br-lupa={o.v} aria-label={"Ver foto grande: " + o.t} onClick={() => setZoom(comFotos.indexOf(o))}
                   style={{ position: "absolute", top: 6, right: 6, width: 36, height: 36, borderRadius: 18, border: "none", background: "rgba(17,24,39,0.62)",
                     color: "#fff", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
-                    <circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5 21 21M10.5 7.5v6M7.5 10.5h6" />
-                  </svg>
+                  {brLupa}
                 </button>
               </div>
             );
@@ -6408,7 +6621,20 @@ function BrResumoBlocos({ res, aoAlterar }) {
           {s.itens.map((x) => (
             <div key={x.id} style={{ padding: "6px 0", borderTop: "1px solid #f3f4f6", fontSize: 14 }}>
               <div style={{ color: "#6b7280", fontSize: 12.5 }}>{x.rotulo}</div>
-              <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{x.valor}</div>
+              {x.fotos && x.fotos.length ? (
+                <div data-br-resumo-fotos style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 160px))", gap: 8, marginTop: 4 }}>
+                  {x.fotos.map((id, i) => { const f = fotoDaGaleria(id); return f && (
+                    <a key={id} href={f.grande} target="_blank" rel="noopener noreferrer" title={`${nomeDoEstilo(f.estilo)} · foto ${f.n} — ${f.credito}`}
+                      style={{ position: "relative", display: "block", borderRadius: 8, overflow: "hidden", border: "1px solid #e5e7eb", textDecoration: "none" }}>
+                      <img src={f.img} alt={`${i + 1}ª: ${nomeDoEstilo(f.estilo)}`} style={{ display: "block", width: "100%", aspectRatio: "3 / 2", objectFit: "cover" }} />
+                      <span style={{ ...brSelo, top: 4, left: 4, minWidth: 22, height: 22, fontSize: 12 }}>{i + 1}</span>
+                      <span style={{ display: "block", fontSize: 11.5, color: "#374151", padding: "3px 6px", background: "#fff" }}>{nomeDoEstilo(f.estilo)}</span>
+                    </a>
+                  ); })}
+                </div>
+              ) : (
+                <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{x.valor}</div>
+              )}
             </div>
           ))}
         </div>

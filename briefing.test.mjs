@@ -11,7 +11,7 @@ const arquivo = readFileSync(join(raiz, "src", "modules", "briefing.jsx"), "utf8
 const corte = arquivo.indexOf("// UI — daqui para baixo");
 if (corte < 0) throw new Error("Marcador de início da UI não encontrado em briefing.jsx");
 const M = new Function(arquivo.slice(0, corte) + `
-  return { BR_DICAS, BRIEFING_SECOES, tipoBriefingDoProjeto, contextoDoBriefing, telasDoBriefing, pendenciasDaTela, pendenciasDoBriefing,
+  return { BR_DICAS, BR_ESTILOS, BR_GALERIA, fotosDoEstilo, fotoDaGaleria, BRIEFING_SECOES, tipoBriefingDoProjeto, contextoDoBriefing, telasDoBriefing, pendenciasDaTela, pendenciasDoBriefing,
            resumoDoBriefing, opcoesDoRank, faltaNaPergunta, textoDaResposta };`)();
 
 const testes = [];
@@ -97,7 +97,7 @@ teste("Top 3 vem dos ambientes marcados; resumo separa o programa e aponta pend�
     moradores: [{ apelido: "eu", faixa: "30–59" }, { apelido: "esposa", faixa: "30–59", em_casa: "sim" }, { apelido: "filha", faixa: "6–12" }],
     programa: { cozinha: "essencial", gourmet: "essencial", piscina: "desejavel", academia: "dispensavel", _outro: "ateliê" },
     top3: ["gourmet", "cozinha", "outro:ateliê"], investimento: "nao_sei", documentos: { planta: "depois", habite_se: "nao_tenho", matricula: "tenho" },
-    data_rigidez: "rigida", data_limite: "2027-06", estilos: { sel: ["tropical", "minimalista"] } };
+    data_rigidez: "rigida", data_limite: "2027-06", estilo: "tropical", estilo_fotos: ["tropical-1", "rustico-3", "tropical-4"] };
   const opc = M.opcoesDoRank({ tipo: "RA" }, r).map((x) => x.v);
   assert.deepStrictEqual(opc, ["cozinha", "gourmet", "piscina", "outro:ateliê"]);
   const res = M.resumoDoBriefing(r);
@@ -106,7 +106,9 @@ teste("Top 3 vem dos ambientes marcados; resumo separa o programa e aponta pend�
   assert.strictEqual(item("top3").valor, "1. Área gourmet / churrasqueira  2. Cozinha  3. ateliê");
   assert.strictEqual(item("motivos").valor, "Mais espaço, Modernizar");
   assert.ok(/1\) eu · 30–59\n2\) esposa · 30–59 · Sim\n3\) filha · 6–12/.test(item("moradores").valor));
-  assert.strictEqual(item("estilos").valor, "Moderno brasileiro, Minimalista");
+  assert.strictEqual(item("estilo").valor, "Moderno brasileiro");
+  assert.strictEqual(item("estilo_fotos").valor, "1. Moderno brasileiro · foto 1  2. Rústico / campo · foto 3  3. Moderno brasileiro · foto 4");
+  assert.deepStrictEqual(item("estilo_fotos").fotos, ["tropical-1", "rustico-3", "tropical-4"]);
   assert.ok(/Tenho: Matrícula/.test(item("documentos").valor) && /Envio depois: Planta/.test(item("documentos").valor));
   assert.ok(res.atencao.some((x) => /Documento a receber: planta/.test(x)));
   assert.ok(res.atencao.some((x) => /Orçamento da obra ainda indefinido/.test(x)));
@@ -128,6 +130,37 @@ teste("Toda dica aponta para uma pergunta que existe, e é curta", () => {
     assert.ok(todas.includes(k), "dica sem pergunta: " + k);
     assert.ok(M.BR_DICAS[k].length <= 160, "dica longa: " + k);
   }
+});
+
+teste("Galeria: 8 fotos em cada estilo, capa = 1ª foto, ids únicos e a grande vem de Unsplash/Pexels", () => {
+  const vistos = new Set();
+  for (const e of M.BR_ESTILOS) {
+    const fotos = M.fotosDoEstilo(e.v);
+    assert.strictEqual(fotos.length, 8, e.v);
+    assert.strictEqual(e.img, fotos[0].img);
+    for (const f of fotos) {
+      assert.ok(!vistos.has(f.id)); vistos.add(f.id);
+      assert.ok(/^https:\/\/images\.(unsplash|pexels)\.com\//.test(f.grande), f.id);
+      assert.ok(/ \/ (Unsplash|Pexels)$/.test(f.credito) && f.credito.length > 10, f.id);
+      assert.deepStrictEqual(M.fotoDaGaleria(f.id), f);
+    }
+    // a mesma foto não aparece em dois estilos
+    const ids = M.BR_GALERIA[e.v].map((x) => x[1]);
+    ids.forEach((id) => assert.ok(!Object.keys(M.BR_GALERIA).some((k) => k !== e.v && M.BR_GALERIA[k].some((x) => x[1] === id)), id));
+  }
+  assert.strictEqual(M.fotoDaGaleria("tropical-9"), null);
+  assert.strictEqual(M.fotoDaGaleria("lixo"), null);
+});
+
+teste("Estilo: as 3 fotos só aparecem depois do estilo; obrigatórias, e foto inválida não conta", () => {
+  assert.ok(!ids(M.telasDoBriefing({ tipo: "CN" })).includes("estilo_fotos"));
+  const telas = M.telasDoBriefing({ tipo: "CN", estilo: "rustico" });
+  const p = telas.flatMap((t) => t.perguntas).find((x) => x.id === "estilo_fotos");
+  assert.ok(p);
+  assert.strictEqual(M.faltaNaPergunta(p, { tipo: "CN" }, {}), "Escolha 3 fotos.");
+  assert.strictEqual(M.faltaNaPergunta(p, { tipo: "CN" }, { estilo_fotos: ["rustico-1", "lixo-2"] }), "Faltam 2 fotos.");
+  assert.strictEqual(M.faltaNaPergunta(p, { tipo: "CN" }, { estilo_fotos: ["rustico-1", "natural-2"] }), "Falta 1 foto.");
+  assert.strictEqual(M.faltaNaPergunta(p, { tipo: "CN" }, { estilo_fotos: ["rustico-1", "natural-2", "rustico-8"] }), "");
 });
 
 for (const [nome, fn] of testes) {
