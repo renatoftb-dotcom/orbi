@@ -1932,12 +1932,17 @@ teste("a leitura da IA liga cada linha ao item que ela indicou", () => {
   assert.strictEqual(o.somaItens, 573);
 });
 
-teste("id que não existe no pedido não casa nada, e a linha sobra", () => {
+teste("id que não existe no pedido não vale — mas o nome igual ainda liga a linha", () => {
   const o = M.orcamentoDaIA({ ...lidoPelaIA, itens: [{ ...lidoPelaIA.itens[0], itemDoPedido: "inventado" },
                                                        lidoPelaIA.itens[1]] });
   const cm = M.casamentoDaIA(pedidoDoPdf, o);
-  assert.strictEqual(cm.achados, 1);
-  assert.strictEqual(cm.sobrando.length, 1);
+  assert.strictEqual(cm.achados, 2, "Tijolo 8 furos 9x19x19 ↔ Tijolo 8 Furos 9x19x19 pelo nome");
+  assert.strictEqual(cm.sobrando.length, 0);
+  // linha que não se parece com nada, e sem a IA apontar, sobra
+  const o2 = M.orcamentoDaIA({ ...lidoPelaIA, itens: [{ descricao: "Frete", quantidade: 1, unitario: 80, total: 80, itemDoPedido: null }, lidoPelaIA.itens[1]] });
+  const cm2 = M.casamentoDaIA(pedidoDoPdf, o2);
+  assert.strictEqual(cm2.achados, 1);
+  assert.strictEqual(cm2.sobrando[0].descricao, "Frete");
 });
 
 teste("IA que não ligou nada cai na associação por palavras", () => {
@@ -3873,9 +3878,9 @@ teste("Releitura da Alumisantos: linhas escritas de outro jeito caem no mesmo v�
   const cot2 = { ...cot, itens: cot.itens.map((x) => x.id === "i4" ? { ...x, largura: 1, altura: 2.2 } : x) };
   const r2 = M.resumoDaPropostaNaEntrada(cot2, linhas, d, {});
   assert.strictEqual(r2.grupos[3].largura, 1);
-  // dois itens com o mesmo código: dúvida, não casa
+  // dois itens com o mesmo código: decidem as outras pistas (4 folhas, nome)
   const cot3 = { ...cot, itens: cot.itens.concat([it("i7", "Porta de correr PC1 - outra", 1)]) };
-  assert.strictEqual(M.destinosDasLinhas(cot3, [linhas[1]])[0].slice(0, 2), "n:");
+  assert.strictEqual(M.destinosDasLinhas(cot3, [linhas[1]])[0], "c:i2");
 });
 
 teste("Papel sem cotação aberta do assunto: a nova ganha o nome e a etapa do assunto", () => {
@@ -3966,6 +3971,33 @@ teste("Engevidros 7004: a porta de 9.900 (5500 x 2100, sem ID Planta) cai em 'PC
   // sem pista nenhuma, não inventa
   const cotD = { ...M.cotacaoVazia("o1"), itens: semMedida };
   assert.strictEqual(acha(cotD).linha, null);
+});
+
+teste("Similaridade: sem medida gravada, folhas + tipo + nome da outra loja desfazem a troca da IA", () => {
+  const cot = { ...M.cotacaoVazia("o1"), itens: [
+      { id: "i1", descricao: "J1 - Vitrines Existente (Vidros)", quantidade: 3, unidade: "Unidades" },
+      { id: "i4", descricao: "PC2 - Porta acesso estoque", quantidade: 1, unidade: "Unidades" },
+      { id: "i5", descricao: "PC2_1 - Vidros Escritório Alexandre", quantidade: 1, unidade: "Unidades" }],
+    propostas: [{ id: "pl", favorecido: "Alumisantos", precos: { i1: 10397.78, i4: 3766.96, i5: 11186.23 },
+      linhasDoPapel: [
+        { descricao: "Vitrines existentes vidro", total: 31193.34, destino: "n:Vitrines existentes vidro" },
+        { descricao: "Porta de Correr - 1 Folha com Vidro - Trilho Côncavo", total: 3766.96, destino: "n:Porta de Correr - 1 Folha com Vidro" },
+        { descricao: "Porta de Correr - 3 Folhas - Aba Simples, Fecho Tetra", total: 11186.23, destino: "n:Porta de Correr - 3 Folhas" }] }] };
+  const orc = M.orcamentoDaIA({ itens: [
+    { descricao: "Quadro fixo X módulos horizontais por X módulos verticais. Linha Gold III. (Item LG-FIX01, ID Planta J1)", quantidade: 3, unitario: 7500, total: 22500, itemDoPedido: "i1" },
+    { descricao: "Porta de correr 3 folhas (todas móveis) c/ baguete, s/ travessa, concha c/ trava ou chave", quantidade: 1, unitario: 9900, total: 9900, itemDoPedido: "i4" },
+    { descricao: "Porta única de correr atrás da parede, sem travessa e com fechadura", quantidade: 1, unitario: 2800, total: 2800, itemDoPedido: "i5" }] });
+  const cm = M.casamentoDaIA(cot, orc);
+  const de = (id) => cm.casados.find((c) => c.item.id === id);
+  assert.strictEqual(de("i1").linha.total, 22500);
+  assert.ok(de("i1").motivos.indexOf("código J1") >= 0, JSON.stringify(de("i1").motivos));
+  assert.strictEqual(de("i4").linha.total, 2800, JSON.stringify(cm.casados.map((c) => [c.item.id, c.linha && c.linha.total, c.motivos])));
+  assert.strictEqual(de("i5").linha.total, 9900);
+  assert.ok(de("i5").motivos.indexOf("3 folhas") >= 0);
+  // ID Planta diferente veta, mesmo com a IA apontando
+  const vet = M.orcamentoDaIA({ itens: [{ descricao: "Quadro fixo (ID Planta J2)", quantidade: 3, unitario: 1, total: 3, itemDoPedido: "i1" }] });
+  assert.strictEqual(M.casamentoDaIA(cot, vet).casados.find((c) => c.item.id === "i1").linha, null);
+  assert.strictEqual(M.codigoDoVao({ descricao: "Quadro fixo. (Item LG-FIX01, ID Planta J1)" }), "J1");
 });
 
 teste("Entrada: linha com a medida de um único item cai nele, mesmo com nome diferente", () => {

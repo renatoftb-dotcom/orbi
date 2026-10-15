@@ -1593,11 +1593,21 @@ function cotChaveDoItem(x) {
 // O código do vão no projeto (J1, J2, PC1, PC2_1, P3, V12): a vidraçaria
 // escreve a linha cada vez de um jeito, mas o código da planta é o mesmo.
 // Só vale em linha de vão — em insumo, "CA50" ou "M10" não é código de vão.
-function codigoDoVao(x) {
+// "ID Planta: J1" é o código dito com todas as letras — vale antes de
+// qualquer outro (o "LG-FIX01" ao lado é o modelo do fabricante, não o vão).
+function codigosDoVao(x) {
   const t = String((x && x.descricao) || "");
-  if (!COT_PALAVRAS_DE_VAO.test(cotSemAcento(t))) return "";
-  const m = /(?:^|[^A-Za-z0-9_])([A-Za-z]{1,3}\d{1,3}(?:_\d{1,2})?)(?![A-Za-z0-9_])/.exec(t);
-  return m ? m[1].toUpperCase() : "";
+  const planta = /id\s*(?:da\s*)?planta\s*:?\s*([A-Za-z]{1,3}\d{1,3}(?:_\d{1,2})?)(?![A-Za-z0-9])/i.exec(t);
+  if (planta) return { codigos: [planta[1].toUpperCase()], explicito: true };
+  if (!COT_PALAVRAS_DE_VAO.test(cotSemAcento(t))) return { codigos: [], explicito: false };
+  const re = /(?:^|[^A-Za-z0-9_])([A-Za-z]{1,3}\d{1,3}(?:_\d{1,2})?)(?![A-Za-z0-9_])/g;
+  const codigos = [];
+  let m;
+  while ((m = re.exec(t))) codigos.push(m[1].toUpperCase());
+  return { codigos, explicito: false };
+}
+function codigoDoVao(x) {
+  return codigosDoVao(x).codigos[0] || "";
 }
 
 // O item da cotação que é o mesmo da lista: pelo código do catálogo, e na
@@ -1721,7 +1731,7 @@ const ENTRADA_FORA = "fora";
 // Medida do vão ou da peça (largura × altura, em metros). Proposta de
 // esquadria e vidro vem assim; lista de insumo (cimento, cal, tábua 30cm)
 // não tem — e não pode ganhar: o "30cm x 3mts" da tábua não é vão.
-const COT_PALAVRAS_DE_VAO = /\b(porta|janela|vidro|vitrine|fachada|esquadria|box|guarda|portao|basculante|maxim|pele de vidro|espelho|veneziana|caixilho|divisoria|grade|alcapao|claraboia)/;
+const COT_PALAVRAS_DE_VAO = /\b(porta|janela|vidro|vitrine|fachada|esquadria|box|guarda|portao|basculante|maxim|pele de vidro|espelho|veneziana|caixilho|divisoria|grade|alcapao|claraboia|quadro fixo|fixo|folhas?|pivotante|camarao)/;
 function emMetrosDoPapel(v, un) {
   const n = typeof v === "number" ? v : parseFloat(String(v || "").replace(",", "."));
   if (!(n > 0)) return 0;
@@ -1765,19 +1775,34 @@ function destinosDasLinhas(cot, linhas) {
   const lista = itensDaCotacao(cot);
   const existe = (k) => /^c:/.test(k || "") && lista.some((c) => c.id === k.slice(2));
   const usados = new Set();
-  (linhas || []).forEach((l) => { if (l && l.itemManual && existe(l.item)) usados.add(l.item.slice(2)); });
-  return (linhas || []).map((l) => {
-    if (!l) return ENTRADA_FORA;
-    if (l.itemManual && l.item && (l.item === ENTRADA_FORA || /^n:/.test(l.item) || existe(l.item))) return l.item;
-    // texto que esta loja já usou para um item: vale mesmo que outra linha já
-    // tenha caído nele — é assim que um item juntado (duas linhas) casa de novo
+  const ls = linhas || [];
+  const res = ls.map(() => null);
+  ls.forEach((l, i) => {
+    if (!l) { res[i] = ENTRADA_FORA; return; }
+    if (l.itemManual && l.item && (l.item === ENTRADA_FORA || /^n:/.test(l.item) || existe(l.item))) {
+      res[i] = l.item;
+      if (existe(l.item)) usados.add(l.item.slice(2));
+    }
+  });
+  // texto que esta loja já usou para um item: vale mesmo que outra linha já
+  // tenha caído nele — é assim que um item juntado (duas linhas) casa de novo
+  ls.forEach((l, i) => {
+    if (res[i] != null) return;
     const chave = cotChaveDoItem(l);
     const peloTexto = chave ? lista.find((c) => (c.textosDasLojas || []).some((t) => cotChaveDoItem({ descricao: t }) === chave)) : null;
-    if (peloTexto) return "c:" + peloTexto.id;
-    const achado = itemCotadoDaEntrada(lista, l, usados);
-    if (achado) { usados.add(achado.id); return "c:" + achado.id; }
-    return "n:" + (String(l.descricao || "").trim() || "Item");
+    if (peloTexto) { res[i] = "c:" + peloTexto.id; usados.add(peloTexto.id); }
   });
+  // o resto: a melhor combinação de todas as linhas com todos os itens
+  // livres, pela soma das pistas (código, medida, folhas, tipo, nome…)
+  const resto = ls.map((_, i) => i).filter((i) => res[i] == null);
+  const livres = lista.filter((c) => !usados.has(c.id));
+  if (resto.length && livres.length && cot) {
+    const ctxs = livres.map((it) => ({ nomes: nomesDasLojasDoItem(cot, it), itemComMedida: itemComMedidaConhecida(cot, it) }));
+    const par = melhorAtribuicao(livres.length, resto.length,
+      (a, b) => similaridadeItemLinha(cot, livres[a], ls[resto[b]], ctxs[a]).pontos, COT_CORTE_SIMILARIDADE_ENTRADA);
+    par.forEach((b, a) => { if (b >= 0) res[resto[b]] = "c:" + livres[a].id; });
+  }
+  return res.map((d, i) => d != null ? d : "n:" + (String((ls[i] || {}).descricao || "").trim() || "Item"));
 }
 
 // O que a proposta vira na cotação, para a pessoa conferir antes de guardar:
@@ -3811,12 +3836,6 @@ function orcamentoDaIA(bruto) {
   };
 }
 
-// Casamento a partir do que a IA indicou. Se ela não ligou nenhuma linha a
-// nenhum item (pedido sem lista, ou resposta incompleta), vale a associação
-// por palavras do leitor — melhor um palpite conferível que a tela vazia.
-// O que a leitura deixou sem linha ainda tem três pistas de esquadria: o
-// código da planta (J1, PC2_1), a medida do vão e o jeito que outra loja já
-// escreveu o mesmo item. Cada uma só liga quando aponta UMA linha livre.
 // Os nomes que as lojas já deram a este item: os guardados nele e as linhas
 // de papel que outras propostas ligaram a ele. Sobrevive a renomear o item.
 // As linhas de papel (de outras propostas) que caíram neste item. Proposta
@@ -3861,94 +3880,180 @@ function itemComMedidaConhecida(cot, it) {
   }
   return it;
 }
-function completarCasamentoPeloVao(cot, orcamento, casamento) {
-  const doPdf = ((orcamento || {}).itens) || [];
-  const cm0 = casamento || { casados: [], sobrando: [], achados: 0 };
-  // A leitura ligou uma linha de OUTRA medida, sem código da planta que
-  // confirme, e há no papel uma linha com a medida exata deste item: a
-  // medida vence — a linha errada volta para a lista e pode cair no dono.
-  const temVao = (x) => { const m = medidasDaLinha(x); return !!(m && m.largura > 0 && m.altura > 0); };
-  // Inclui a TROCA: a leitura pôs a porta de 5,50 no item de 0,90 e a de
-  // 0,90 no de 5,50 — cada item puxa a linha da sua medida, e quem a tinha
-  // sem medida que confirme fica livre para pegar a que sobrou.
-  const lista = cm0.casados.map((c) => ({ ...c }));
-  const dono = new Map();
-  lista.forEach((c) => { if (c.linha) dono.set(c.linha, c); });
-  const confirma = (c, l) => {
-    const cod = codigoDoVao(c.item);
-    if (cod && codigoDoVao(l) === cod) return true;
-    const m = itemComMedidaConhecida(cot, c.item);
-    return temVao(m) && temVao(l) && mesmoVao(m, l);
-  };
-  for (const c of lista) {
-    const itMed = itemComMedidaConhecida(cot, c.item);
-    if (!temVao(itMed)) continue;
-    if (c.linha && confirma(c, c.linha)) continue;
-    const exatas = doPdf.filter((l) => mesmoVao(itMed, l));
-    if (exatas.length !== 1 || exatas[0] === c.linha) continue;
-    const y = exatas[0];
-    const b = dono.get(y);
-    if (b && b !== c && confirma(b, y)) continue;
-    const velha = c.linha;
-    if (velha) dono.delete(velha);
-    if (b && b !== c) {
-      // troca: quem perdeu fica com a linha que era deste — a não ser que a
-      // medida dele diga que não é a dele
-      const mb = itemComMedidaConhecida(cot, b.item);
-      if (velha && !(temVao(mb) && temVao(velha) && !mesmoVao(mb, velha))) { b.linha = velha; b.score = 0.5; dono.set(velha, b); }
-      else { b.linha = null; b.score = 0; }
-    }
-    c.linha = y; c.score = 0.5; c.pelaMedida = true;
-    dono.set(y, c);
+
+// ── Item da cotação × linha do papel: quanto se parecem ─────────
+// Nenhuma pista sozinha decide. Cada uma soma (ou tira) pontos, e o par só
+// fica ligado se o total passar do corte. Pistas, da mais forte à mais fraca:
+//   código da planta (J1, PC2_1)  — igual soma muito; "ID Planta" diferente veta
+//   medida do vão (largura × altura) — igual soma muito; diferente tira muito
+//   número de folhas ("3 folhas", "porta única")
+//   tipo da peça (porta de correr, de abrir, fixo, janela, box, guarda-corpo…)
+//   o que a IA indicou
+//   o texto: o nome do item e os nomes que outras lojas já deram a ele
+//   código do catálogo, quantidade, espessura do vidro, preço das outras lojas
+const COT_TIPOS_DE_PECA = [
+  ["porta de correr", /porta[^,.;]{0,25}\bcorrer\b|\bde correr\b/],
+  ["porta de abrir", /porta[^,.;]{0,25}\babrir\b|\bde abrir\b/],
+  ["porta pivotante", /pivotante/],
+  ["porta camarão", /camarao/],
+  ["fixo", /quadro fixo|\bfixo\b|vitrine|pele de vidro|fachada/],
+  ["janela", /janela|basculante|maxim|veneziana/],
+  ["box", /\bbox\b/],
+  ["guarda-corpo", /guarda[ -]?corpo/],
+  ["espelho", /espelho/],
+  ["revestimento", /\bacm\b|revestimento|kynar/],
+];
+function tipoDaPeca(texto) {
+  const t = cotSemAcento(texto || "");
+  const achado = COT_TIPOS_DE_PECA.find(([, re]) => re.test(t));
+  return achado ? achado[0] : "";
+}
+function folhasDaPeca(texto) {
+  const t = cotSemAcento(texto || "");
+  const m = /(\d+)\s*folhas?\b/.exec(t);
+  if (m) return Number(m[1]);
+  if (/\b(uma|1) folha\b|porta unica|folha unica|\bunica de correr\b/.test(t)) return 1;
+  return 0;
+}
+function espessuraDoVidro(texto) {
+  const m = /(\d{1,2})\s*mm\b/.exec(cotSemAcento(texto || ""));
+  return m ? Number(m[1]) : 0;
+}
+function similaridadeItemLinha(cot, item, linha, extra) {
+  const it = item || {}, l = linha || {};
+  const ctx = extra || {};
+  let pontos = 0;
+  const motivos = [];
+  const nomes = [it.descricao || ""].concat(ctx.nomes || nomesDasLojasDoItem(cot, it));
+  const textoItem = nomes.join(" · ");
+  // código da planta
+  const ci = codigosDoVao(it), cl = codigosDoVao(l);
+  const comum = ci.codigos.find((c) => cl.codigos.indexOf(c) >= 0);
+  if (comum) { pontos += 0.6; motivos.push("código " + comum); }
+  else if (cl.explicito && ci.codigos.length) { pontos -= 0.8; motivos.push("código diferente"); }
+  // medida do vão
+  const mi = medidasDaLinha(ctx.itemComMedida || itemComMedidaConhecida(cot, it)), ml = medidasDaLinha(l);
+  if (mi && ml && mi.largura > 0 && mi.altura > 0 && ml.largura > 0 && ml.altura > 0) {
+    const perto = (a, b, f) => Math.abs(a - b) <= Math.max(0.015, f * Math.max(a, b));
+    if (perto(mi.largura, ml.largura, 0) && perto(mi.altura, ml.altura, 0)) { pontos += 0.45; motivos.push("medida"); }
+    else if (perto(mi.largura, ml.altura, 0) && perto(mi.altura, ml.largura, 0)) { pontos += 0.3; motivos.push("medida (invertida)"); }
+    else if (perto(mi.largura, ml.largura, 0.05) && perto(mi.altura, ml.altura, 0.05)) { pontos += 0.2; motivos.push("medida parecida"); }
+    else { pontos -= 0.5; motivos.push("medida diferente"); }
   }
-  const cm = { ...cm0, casados: lista };
-  const usadas = new Set(cm.casados.filter((c) => c.linha).map((c) => c.linha));
-  const livres = () => doPdf.filter((l) => !usadas.has(l));
-  const casados = cm.casados.map((c) => {
-    if (c.linha) return c;
-    const it = c.item;
-    const unica = (lst) => (lst.length === 1 ? lst[0] : null);
-    const cod = codigoDoVao(it);
-    let linha = cod ? unica(livres().filter((l) => codigoDoVao(l) === cod)) : null;
-    const itMed = itemComMedidaConhecida(cot, it);
-    if (!linha) linha = unica(livres().filter((l) => mesmoVao(itMed, l)));
-    const nomes = linha ? [] : nomesDasLojasDoItem(cot, it);
-    if (!linha && nomes.length) {
-      let melhor = null, empate = false;
-      for (const l of livres()) {
-        const sc = Math.max(...nomes.map((t) => Math.max(scoreAssociacao(t, l.descricao), scoreAssociacao(l.descricao, t))));
-        if (sc < COT_CORTE_ASSOCIACAO) continue;
-        if (!melhor || sc > melhor.sc + 0.001) { melhor = { l, sc }; empate = false; }
-        else if (Math.abs(sc - melhor.sc) <= 0.001) empate = true;
-      }
-      if (melhor && !empate) linha = melhor.l;
+  // folhas e tipo — do item vale o nome dele e o que as outras lojas escreveram
+  const fi = folhasDaPeca(textoItem), fl = folhasDaPeca(l.descricao);
+  if (fi && fl) {
+    if (fi === fl) { pontos += 0.2; motivos.push(fi === 1 ? "1 folha" : fi + " folhas"); }
+    else { pontos -= 0.5; motivos.push("folhas diferentes"); }
+  }
+  const ti = tipoDaPeca(textoItem), tl = tipoDaPeca(l.descricao);
+  if (ti && tl) {
+    if (ti === tl) { pontos += 0.1; motivos.push(ti); }
+    else { pontos -= 0.15; }
+  }
+  const ei = espessuraDoVidro(textoItem), el = espessuraDoVidro(l.descricao);
+  if (ei && el && ei !== el && /vidro|temperado|laminado/.test(cotSemAcento(textoItem + " " + l.descricao))) pontos -= 0.1;
+  // a IA
+  if (l.itemDoPedido != null && String(l.itemDoPedido) === String(it.id)) { pontos += 0.45; motivos.push("IA"); }
+  // código do catálogo
+  const cod = String(it.codigo || it.insumoCodigo || ""), codL = String(l.insumoCodigo || l.codigoInsumo || "");
+  if (cod && codL && cod === codL) { pontos += 0.6; motivos.push("catálogo"); }
+  // texto
+  let sc = 0;
+  for (const n of nomes) {
+    if (!n) continue;
+    sc = Math.max(sc, scoreAssociacao(n, l.descricao || ""), scoreAssociacao(l.descricao || "", n));
+  }
+  if (sc >= COT_CORTE_ASSOCIACAO) { pontos += 0.35 + 0.3 * (sc - COT_CORTE_ASSOCIACAO) / (1 - COT_CORTE_ASSOCIACAO); motivos.push("nome"); }
+  else pontos += sc * 0.4;
+  // quantidade
+  const qi = quantidadeDoItem(it), ql = numeroDoCampo(l.quantidade);
+  if (qi > 0 && ql > 0 && (mi || ml)) {
+    if (Math.abs(qi - ql) < 0.001) { pontos += 0.05; } else { pontos -= 0.1; motivos.push("quantidade diferente"); }
+  }
+  // preço das outras lojas para este item (pista fraca)
+  if (ctx.precoDeReferencia > 0) {
+    const tot = numeroDoCampo(l.total) || numeroDoCampo(l.unitario) * (ql || 1);
+    const ref = ctx.precoDeReferencia * (qi || 1);
+    if (tot > 0) {
+      const r = tot / ref;
+      if (r >= 0.5 && r <= 2) pontos += 0.05;
+      else if (r < 0.25 || r > 4) pontos -= 0.1;
     }
-    if (!linha) return c;
-    usadas.add(linha);
-    return { ...c, linha, score: 0.5, pelaMedida: true };
+  }
+  return { pontos: Math.round(pontos * 1000) / 1000, motivos };
+}
+
+// O melhor casamento para TODOS ao mesmo tempo (algoritmo húngaro): é o que
+// resolve a troca — o PC2 não fica com a porta de 5,50 só porque chegou
+// primeiro. Par abaixo do corte não liga.
+function melhorAtribuicao(nItens, nLinhas, pontosDe, corte) {
+  const n = Math.max(nItens, nLinhas);
+  if (!n) return [];
+  const val = [];
+  for (let i = 0; i < n; i++) {
+    val.push([]);
+    for (let j = 0; j < n; j++) {
+      const p = i < nItens && j < nLinhas ? pontosDe(i, j) : 0;
+      val[i].push(p >= corte ? p : 0);
+    }
+  }
+  // húngaro clássico, minimizando o custo = maior − valor
+  const INF = 1e9, u = new Array(n + 1).fill(0), v = new Array(n + 1).fill(0);
+  const p = new Array(n + 1).fill(0), way = new Array(n + 1).fill(0);
+  for (let i = 1; i <= n; i++) {
+    p[0] = i; let j0 = 0;
+    const minv = new Array(n + 1).fill(INF), usado = new Array(n + 1).fill(false);
+    do {
+      usado[j0] = true;
+      const i0 = p[j0]; let delta = INF, j1 = 0;
+      for (let j = 1; j <= n; j++) {
+        if (usado[j]) continue;
+        const cur = (10 - val[i0 - 1][j - 1]) - u[i0] - v[j];
+        if (cur < minv[j]) { minv[j] = cur; way[j] = j0; }
+        if (minv[j] < delta) { delta = minv[j]; j1 = j; }
+      }
+      for (let j = 0; j <= n; j++) {
+        if (usado[j]) { u[p[j]] += delta; v[j] -= delta; } else minv[j] -= delta;
+      }
+      j0 = j1;
+    } while (p[j0] !== 0);
+    do { const j1 = way[j0]; p[j0] = p[j1]; j0 = j1; } while (j0);
+  }
+  const par = new Array(nItens).fill(-1);
+  for (let j = 1; j <= n; j++) {
+    const i = p[j] - 1, jj = j - 1;
+    if (i >= 0 && i < nItens && jj < nLinhas && val[i][jj] > 0) par[i] = jj;
+  }
+  return par;
+}
+
+const COT_CORTE_SIMILARIDADE = 0.35;
+// Na Entrada a linha sem par vira item novo da cotação — ligar errado ali
+// esconde a linha num item que não é dela, então o corte é mais alto.
+const COT_CORTE_SIMILARIDADE_ENTRADA = 0.45;
+function casamentoPorSimilaridade(cot, orcamento, corte) {
+  const itens = itensDaCotacao(cot);
+  const doPdf = ((orcamento || {}).itens) || [];
+  const ctxs = itens.map((it) => {
+    const outras = propostasDaCotacao(cot).map((p) => Number(((p && p.precos) || {})[it.id]) || 0).filter((v) => v > 0).sort((a, b) => a - b);
+    return { nomes: nomesDasLojasDoItem(cot, it), itemComMedida: itemComMedidaConhecida(cot, it),
+      precoDeReferencia: outras.length ? outras[Math.floor(outras.length / 2)] : 0 };
   });
-  return { ...cm, casados, sobrando: doPdf.filter((l) => !usadas.has(l)), achados: casados.filter((c) => c.linha).length };
+  const sims = itens.map((it, i) => doPdf.map((l) => similaridadeItemLinha(cot, it, l, ctxs[i])));
+  const par = melhorAtribuicao(itens.length, doPdf.length, (i, j) => sims[i][j].pontos, corte || COT_CORTE_SIMILARIDADE);
+  const usadas = new Set();
+  const casados = itens.map((it, i) => {
+    const j = par[i];
+    if (j < 0) return { item: it, linha: null, score: 0, motivos: [] };
+    usadas.add(j);
+    return { item: it, linha: doPdf[j], score: sims[i][j].pontos, motivos: sims[i][j].motivos };
+  });
+  return { casados, sobrando: doPdf.filter((_, j) => !usadas.has(j)), achados: casados.filter((c) => c.linha).length };
 }
 
 function casamentoDaIA(cot, orcamento) {
-  return completarCasamentoPeloVao(cot, orcamento, casamentoDaIASo(cot, orcamento));
-}
-function casamentoDaIASo(cot, orcamento) {
-  const itens = itensDaCotacao(cot);
-  const ids = {};
-  for (const it of itens) ids[String(it.id)] = 1;
-  const porItem = {};
-  for (const l of (orcamento || {}).itens || []) {
-    if (l.itemDoPedido && ids[l.itemDoPedido] && !porItem[l.itemDoPedido]) porItem[l.itemDoPedido] = l;
-  }
-  if (!Object.keys(porItem).length) return casarOrcamentoComItens(cot, orcamento);
-  const usadas = new Set(Object.values(porItem));
-  const casados = itens.map((it) => ({ item: it, linha: porItem[String(it.id)] || null, score: porItem[String(it.id)] ? 1 : 0 }));
-  return {
-    casados,
-    sobrando: ((orcamento || {}).itens || []).filter((l) => !usadas.has(l)),
-    achados: casados.filter((c) => c.linha).length,
-  };
+  return casamentoPorSimilaridade(cot, orcamento);
 }
 
 // O que mandar para a IA sobre o pedido: o suficiente para ela reconhecer
@@ -6022,7 +6127,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         return;
       }
       const orcamento = interpretarOrcamento(linhas);
-      const casamento = completarCasamentoPeloVao(cotacao, orcamento, casarOrcamentoComItens(cotacao, orcamento));
+      const casamento = casamentoPorSimilaridade(cotacao, orcamento);
       // Mesmo sem reconhecer a tabela a conferência abre: cada loja escreve
       // o orçamento de um jeito, e é lá que você aponta a linha certa ou
       // digita o preço — melhor que devolver um erro e nada mais.
@@ -6437,6 +6542,12 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     const vaoLinha = linhaEsc ? vaoDe(linhaEsc) : null;
                     const naoBate = !!(vaoItem && vaoLinha && !mesmoVao({ ...vaoItem, quantidade: qtd }, { ...vaoLinha, quantidade: linhaEsc.quantidade }));
                     const iCerta = naoBate ? o.itens.findIndex((l) => vaoDe(l) && mesmoVao({ ...vaoItem, quantidade: qtd }, l)) : -1;
+                    // as pistas que ligam (ou desmentem) esta linha a este item,
+                    // e as linhas do papel na ordem de parecença com o item
+                    const simDe = (l) => similaridadeItemLinha(cotOrc || { itens: [] }, item, l);
+                    const pistas = linhaEsc ? simDe(linhaEsc).motivos : [];
+                    const ruins = /diferente/;
+                    const ordem = o.itens.map((l, i) => ({ l, i, p: simDe(l).pontos })).sort((a, b) => b.p - a.p || a.i - b.i);
                     return (
                       <div key={item.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 10,
                         padding: "9px 12px", borderTop: "1px solid rgba(38,36,33,0.06)", alignItems: "center",
@@ -6453,7 +6564,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                         <Selecao style={{ ...E.input, cursor: "pointer" }} value={String(esc.i)}
                           onChange={(e) => apontarLinha(item, Number(e.target.value))}>
                           <option value="-1">— não veio neste orçamento —</option>
-                          {o.itens.map((l, i) => (
+                          {ordem.map(({ l, i }) => (
                             <option key={i} value={String(i)}>
                               {vaoDe(l) ? textoVao(vaoDe(l)) + " · " : ""}{l.descricao}{precoDaLinha(l, 0) > 0 ? ` · ${dinheiro(precoDaLinha(l, 0))}` : ""}
                             </option>
@@ -6465,6 +6576,16 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                           <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4, lineHeight: 1.4, overflowWrap: "anywhere" }}>
                             {vaoLinha ? <strong style={{ color: naoBate ? "#b45309" : "#374151", fontWeight: 600 }}>{textoVao(vaoLinha)} · </strong> : null}
                             {o.itens[esc.i].descricao}
+                          </div>
+                        )}
+                        {pistas.length > 0 && (
+                          <div data-vk-pistas={item.id} style={{ fontSize: 10.5, marginTop: 3, lineHeight: 1.4 }}>
+                            <span style={{ color: "#9ca3af" }}>pistas: </span>
+                            {pistas.map((m, k) => (
+                              <span key={k} style={{ color: ruins.test(m) ? "#b45309" : "#4b5563", fontWeight: ruins.test(m) ? 600 : 400 }}>
+                                {k ? " · " : ""}{m}
+                              </span>
+                            ))}
                           </div>
                         )}
                         {esc.trocadoCom && (
