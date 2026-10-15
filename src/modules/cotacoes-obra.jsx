@@ -6211,7 +6211,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           const soma = Math.round(comPreco.reduce((a, { item }) =>
             a + (escolhas[item.id].preco * quantidadeDoItem(item)), 0) * 100) / 100;
           const desconto = o.total > 0 && Math.abs(o.total - soma) > 0.01;
-          const cols = isMobile ? "1fr" : "1fr 1.2fr 110px";
+          const cols = isMobile ? "minmax(0,1fr)" : "minmax(0,1fr) minmax(0,1.2fr) 110px";
           const PN = cotPainel(isMobile, 780);
           return (
             <div style={PN.fundo}>
@@ -6273,6 +6273,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                         {/* A setinha com TODAS as linhas do PDF: quando a
                             associação erra — e com tanto formato diferente
                             ela erra — apontar a linha certa é um clique. */}
+                        <div style={{ minWidth: 0 }}>
                         <Selecao style={{ ...E.input, cursor: "pointer" }} value={String(esc.i)}
                           onChange={(e) => {
                             const i = Number(e.target.value);
@@ -6286,6 +6287,14 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                             </option>
                           ))}
                         </Selecao>
+                        {/* o começo das linhas da vidraçaria é igual ("Quadro fixo X
+                            módulos…"); o que distingue vem no fim — a linha inteira aqui */}
+                        {esc.i >= 0 && o.itens[esc.i] && (
+                          <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4, lineHeight: 1.4, overflowWrap: "anywhere" }}>
+                            {o.itens[esc.i].descricao}
+                          </div>
+                        )}
+                        </div>
                         <CampoNumeroBR estilo={E.input} valor={esc.preco || ""} casas={2} placeholder="0,00"
                           aoMudar={(v) => trocarEscolha(item.id, { preco: v })} />
                         {dif && (

@@ -2499,6 +2499,11 @@ function SelectBusca(props) {
   }
 
   const estiloBotao = Object.assign({}, props.style || SB_CAMPO, {
+    // Dentro de grade (1fr), o botão crescia até caber o rótulo inteiro — um
+    // texto comprido de orçamento empurrava a linha para fora da tela. Com
+    // mínimo 0 ele obedece a coluna e corta com reticências.
+    minWidth: props.style && props.style.minWidth != null ? props.style.minWidth : 0,
+    maxWidth: props.style && props.style.maxWidth != null ? props.style.maxWidth : "100%",
     cursor: props.disabled ? "default" : "pointer",
     textAlign: "left",
     display: "flex",
