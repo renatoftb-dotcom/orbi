@@ -98,7 +98,7 @@ const modulo = new Function(`
            comContaPadraoDaEntrada, tipoDoAnexoDaEntrada, SITUACOES_DA_ENTRADA,
            fichaDaEntradaPelaIA, tipoDoPapelPelaIA, textoSemCaixaAlta,
            entradaTemPreco, modoPadraoDaCotacao, cotacoesParaGuardarProposta, cotacaoSugeridaParaProposta,
-           propostaDaEntrada, MODOS_DA_COTACAO_NA_ENTRADA, contaDeCompra, destinosDasLinhas, resumoDaPropostaNaEntrada, medidasDaLinha, areaDaMedida, fichaDaEntradaPelaIA, situacaoPadraoDaEntrada, codigoDoVao, assuntoDoPapel,
+           propostaDaEntrada, MODOS_DA_COTACAO_NA_ENTRADA, contaDeCompra, destinosDasLinhas, resumoDaPropostaNaEntrada, medidasDaLinha, areaDaMedida, fichaDaEntradaPelaIA, situacaoPadraoDaEntrada, codigoDoVao, assuntoDoPapel, textoDaMedidaDoItem, precoDoM2DoItem,
            cotacaoDeOrigemDasContas, papelDaPropostaEscolhida, resumoDaCotacao };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
@@ -3883,6 +3883,25 @@ teste("Papel sem cotação aberta do assunto: a nova ganha o nome e a etapa do a
     { nome: "Esquadrias", etapaId: "esquadrias" });
   assert.strictEqual(M.assuntoDoPapel([{ descricao: "Disjuntor 20A" }, { descricao: "Cabo 2,5mm" }, { descricao: "Tomada 10A" }]).nome, "Elétrica");
   assert.strictEqual(M.assuntoDoPapel([{ descricao: "Cimento CP II" }, { descricao: "Areia média" }]), null, "insumo solto: sem assunto, nome pelas linhas");
+});
+
+teste("Ler os itens de uma proposta guardada só pelo total: troca ESSA proposta, mesmo com duas da mesma loja", () => {
+  const cot = { ...M.cotacaoVazia("o1"), id: "esq", titulo: "Esquadrias", itens: [{ id: "i1", descricao: "J1 - Vitrines existentes", quantidade: 3, unidade: "un" }],
+    propostas: [{ id: "e1", fornecedorId: "f7", favorecido: "CASA DOS VIDROS", valor: 39184, precos: {}, anexo: { url: "u1" } },
+      { id: "e4", fornecedorId: "f7", favorecido: "ENGEVIDROS", valor: 65600, precos: {}, anexo: { url: "u4" } }] };
+  const linhas = [{ descricao: "Vitrine J1 vidro temperado", quantidade: 3, unidade: "un", bruto: 30000, largura: 3.05, altura: 3.4 }];
+  const p = M.propostaDaEntrada({ cotacao: cot, obraId: "o1", itens: linhas, porItemDaCotacao: true, loja: { id: "f7", nome: "Engevidros" }, propostaId: "e4" });
+  assert.strictEqual(p.substituiu, true);
+  assert.strictEqual(p.cotacao.propostas.length, 2);
+  const e4 = p.cotacao.propostas.find((x) => x.id === "e4");
+  assert.strictEqual(e4.anexo.url, "u4", "o papel continua o mesmo");
+  assert.strictEqual(e4.precos.i1, 10000);
+  assert.strictEqual(p.cotacao.propostas.find((x) => x.id === "e1").valor, 39184, "a outra proposta da mesma loja não mexe");
+  assert.strictEqual(p.cotacao.itens[0].largura, 3.05, "J1 sem medida ganha a do papel");
+  // a tabela de preço por item mostra a medida e o R$/m²
+  assert.strictEqual(M.textoDaMedidaDoItem(p.cotacao.itens[0]), "3,05 × 3,40 m · 31,11 m²");
+  assert.strictEqual(M.precoDoM2DoItem(p.cotacao.itens[0], 10000), 964.32);
+  assert.strictEqual(M.textoDaMedidaDoItem({ descricao: "Cimento", quantidade: 10 }), "");
 });
 
 teste("Lista colada: vírgula entre dígitos é decimal, não separa item (medida 3,05 x 3,40)", () => {

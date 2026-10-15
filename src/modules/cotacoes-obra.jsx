@@ -1732,6 +1732,20 @@ function areaDaMedida(md, quantidade) {
   const q = numeroDoCampo(quantidade) > 0 ? numeroDoCampo(quantidade) : 1;
   return Math.round(md.largura * md.altura * q * 100) / 100;
 }
+// A medida do item como a comparação mostra: "3,05 × 3,40 m · 31,11 m²".
+// Sem largura E altura não diz nada — meia medida confunde mais que ajuda.
+function textoDaMedidaDoItem(it) {
+  const md = medidasDaLinha(it);
+  if (!md || !(md.largura > 0) || !(md.altura > 0)) return "";
+  const n = (v) => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+  return `${n(md.largura)} × ${n(md.altura)} m · ${n(areaDaMedida(md, quantidadeDoItem(it)))} m²`;
+}
+// O preço de uma peça dividido pela área dela: é como vidraçaria se compara.
+function precoDoM2DoItem(it, unitario) {
+  const md = medidasDaLinha(it);
+  if (!md || !(md.largura > 0) || !(md.altura > 0) || !(unitario > 0)) return 0;
+  return Math.round((unitario / (md.largura * md.altura)) * 100) / 100;
+}
 function destinosDasLinhas(cot, linhas) {
   const lista = itensDaCotacao(cot);
   const existe = (k) => /^c:/.test(k || "") && lista.some((c) => c.id === k.slice(2));
@@ -1903,7 +1917,10 @@ function propostaDaEntrada(d) {
     if (etapas.length >= 1) cot.etapaId = etapas[0];
     cot.contaId = contaDeCompra(contas.length === 1 ? contas[0] : "");
   }
-  const anterior = loja.id ? propostasDaCotacao(cot).find((p) => p.fornecedorId === loja.id) || null : null;
+  // releitura do PDF de uma proposta já guardada: é ELA que se troca, mesmo
+  // que tenha sido lançada sem fornecedor do cadastro
+  const anterior = (x.propostaId ? propostasDaCotacao(cot).find((p) => p.id === x.propostaId) : null)
+    || (loja.id ? propostasDaCotacao(cot).find((p) => p.fornecedorId === loja.id) : null) || null;
   const numero = String(papel.numeroNota || papel.numeroPedido || "").trim();
   const desconto = numeroDoCampo(x.desconto);
   let prop = { ...(anterior || propostaVazia()),
@@ -1938,7 +1955,10 @@ function propostaDaEntradaNaCotacao(x, cot0, hoje) {
     }
     cot.contaId = contaDeCompra(x.contaId || "");
   }
-  const anterior = loja.id ? propostasDaCotacao(cot).find((p) => p.fornecedorId === loja.id) || null : null;
+  // releitura do PDF de uma proposta já guardada: é ELA que se troca, mesmo
+  // que tenha sido lançada sem fornecedor do cadastro
+  const anterior = (x.propostaId ? propostasDaCotacao(cot).find((p) => p.id === x.propostaId) : null)
+    || (loja.id ? propostasDaCotacao(cot).find((p) => p.fornecedorId === loja.id) : null) || null;
   const numero = String(papel.numeroNota || papel.numeroPedido || "").trim();
   const desconto = numeroDoCampo(x.desconto);
   const somaLinhas = Math.round(r.linhas.reduce((t, it) => t + brutoDoItem(it), 0) * 100) / 100;
@@ -5233,6 +5253,33 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const refArquivoPedido = useRef(null);
   const [orcamentoLido, setOrcamentoLido] = useState(null);  // { orcamento, casamento }
   const [entradaAberta, setEntradaAberta] = useState(false);
+  // "ler os itens" de uma proposta guardada só pelo total: busca o PDF dela
+  // e abre a Entrada já lendo, na cotação e na loja certas.
+  const [inicioEntrada, setInicioEntrada] = useState(null);
+  const [buscandoPapel, setBuscandoPapel] = useState("");   // id da proposta
+  async function lerItensDaProposta(cot, p) {
+    if (buscandoPapel || !p || !p.anexo || !p.anexo.url) return;
+    setErro(""); setBuscandoPapel(p.id);
+    try {
+      const r = await fetch(p.anexo.url);
+      if (!r.ok) throw new Error(r.status === 404 ? "o arquivo não está mais no storage" : "o storage respondeu " + r.status);
+      const bruto = await r.blob();
+      const cabeca = new Uint8Array(await bruto.slice(0, 5).arrayBuffer());
+      const ehPdf = String.fromCharCode.apply(null, Array.from(cabeca)).indexOf("%PDF") === 0;
+      const tipo = ehPdf ? "application/pdf" : (bruto.type || "application/octet-stream");
+      const base = String(p.anexo.nome || p.anexo.nomeOriginal || ("proposta-" + (p.favorecido || "loja"))).replace(/\.pdf$/i, "");
+      const arquivo = new File([bruto], ehPdf ? base + ".pdf" : (p.anexo.nome || base), { type: tipo });
+      const fornecedores = (data.fornecedores || []).filter((f) => f && f.ativo !== false);
+      const loja = (p.fornecedorId && fornecedores.find((f) => f.id === p.fornecedorId))
+        || (typeof prestadorDoComprovante === "function" ? prestadorDoComprovante(fornecedores, p.favorecido || "") : null) || null;
+      setInicioEntrada({ arquivo, cotacaoId: cot.id, propostaId: p.id, lojaId: loja ? loja.id : "" });
+      setEntradaAberta(true);
+    } catch (e) {
+      setErro("Não consegui abrir o PDF desta proposta (" + (e.message || "erro") + "). Abra pela Entrada e anexe o arquivo de novo.");
+    } finally {
+      setBuscandoPapel("");
+    }
+  }
   // A Entrada pode ter começado fora daqui. Vinda da lista de Obras ela chega
   // com a lista já lida e a obra já escolhida (`entradaInicial`) e cai direto
   // na porta de saída; vinda do card do painel da obra, só pede para abrir a
@@ -6753,10 +6800,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       )}
 
       {entradaAberta && (
-        <EntradaDaObra data={data} save={save} isMobile={isMobile} dinheiro={dinheiro}
-          obraPadrao={obra} usuario={usuario}
+        <EntradaDaObra key={inicioEntrada ? "rel-" + inicioEntrada.propostaId : "livre"}
+          data={data} save={save} isMobile={isMobile} dinheiro={dinheiro}
+          obraPadrao={obra} usuario={usuario} inicio={inicioEntrada}
           aoFechar={() => {
-            setEntradaAberta(false);
+            setEntradaAberta(false); setInicioEntrada(null);
             // Aberta pelo card "Entrada" da obra: fechar volta para a obra,
             // não para a lista de cotações que ficou por baixo.
             if (abrirEntrada && typeof onVoltar === "function") onVoltar();
@@ -6958,6 +7006,18 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                           style={{ fontSize: isMobile ? 12 : 11, color: "#0474f4", background: "none", border: "none", padding: 0,
                             cursor: "pointer", fontFamily: "inherit", display: "inline-block", marginTop: 3, textAlign: "left" }}>
                           📎 {p.anexo.formato === "pdf" || p.anexo.resourceType === "raw" ? "Ver proposta (PDF)" : "Ver proposta"}
+                        </button>
+                      )}
+                      {/* discreto: lê o papel de novo e monta os itens na cotação */}
+                      {p.anexo && p.anexo.url && iaDisponivel && ehEscritorio && cotacaoRecebeProposta(cot) && (
+                        <button type="button" data-vk-ler-itens={p.id} disabled={!!buscandoPapel}
+                          title="A IA lê este PDF e monta os itens da cotação com o preço desta loja — você confere antes de guardar"
+                          onClick={() => lerItensDaProposta(cot, p)}
+                          style={{ fontSize: isMobile ? 12 : 11, color: "#6b7280", background: "none", border: "none", padding: 0,
+                            cursor: buscandoPapel ? "default" : "pointer", fontFamily: "inherit", display: "inline-block", marginTop: 3,
+                            marginLeft: 10, textAlign: "left", textDecoration: "underline", textUnderlineOffset: 2 }}>
+                          {buscandoPapel === p.id ? "abrindo o PDF…"
+                            : Object.keys(p.precos || {}).some((k) => Number(p.precos[k]) > 0) ? "ler de novo" : "ler os itens"}
                         </button>
                       )}
                     </>
@@ -7938,7 +7998,8 @@ function ComparativoLista({ cot, dinheiro, isMobile, divisao }) {
         </div>
         {cmp.itens.map((it) => (
           <div key={it.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "6px 12px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
-            <span style={{ fontSize: 12.5, color: "#111827" }}>{it.descricao || "Item"}</span>
+            <span style={{ fontSize: 12.5, color: "#111827" }}>{it.descricao || "Item"}
+              {textoDaMedidaDoItem(it) && <span style={{ display: "block", fontSize: 11, color: "#6b7280" }}>{textoDaMedidaDoItem(it)}</span>}</span>
             <span style={{ fontSize: 12, color: "#4b5563" }}>
               {quantidadeDoItem(it) > 0 ? `${qtdBR(quantidadeDoItem(it))} ${it.unidade || ""}`.trim() : "—"}
             </span>
@@ -7974,6 +8035,7 @@ function ComparativoLista({ cot, dinheiro, isMobile, divisao }) {
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
               <span style={{ fontSize: 12.5, color: fora ? "#9ca3af" : "#111827", textDecoration: fora ? "line-through" : "none", minWidth: 0 }}>
                 {it.descricao || "Item"}
+                {textoDaMedidaDoItem(it) && <span style={{ display: "block", fontSize: 11, color: "#6b7280", textDecoration: "none" }}>{textoDaMedidaDoItem(it)}</span>}
               </span>
               <span style={{ fontSize: 12, color: "#6b7280", whiteSpace: "nowrap" }}>{qtdTexto(it)}</span>
             </div>
@@ -7992,6 +8054,7 @@ function ComparativoLista({ cot, dinheiro, isMobile, divisao }) {
                       borderRadius: 999, padding: "6px 11px", fontSize: 12, fontWeight: marcada || ganhou ? 700 : 500,
                       cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
                     {marcada ? "✓ " : ""}{l.favorecido || "Loja"} · {dinheiro(u)}
+                    {precoDoM2DoItem(it, u) > 0 && <span style={{ fontWeight: 400, opacity: 0.75 }}> · {dinheiro(precoDoM2DoItem(it, u))}/m²</span>}
                   </button>
                 );
               })}
@@ -8030,6 +8093,7 @@ function ComparativoLista({ cot, dinheiro, isMobile, divisao }) {
                 <td style={{ ...td, color: fora ? "#9ca3af" : td.color, textDecoration: fora ? "line-through" : "none" }}>
                   {it.descricao || "Item"}
                   {it.unidade ? <span style={{ color: "#6b7280" }}> · {it.unidade}</span> : null}
+                  {textoDaMedidaDoItem(it) && <div style={{ fontSize: 11, color: "#6b7280", textDecoration: "none" }}>{textoDaMedidaDoItem(it)}</div>}
                 </td>
                 <td style={{ ...td, textAlign: "right", color: "#4b5563" }}>
                   {quantidadeDoItem(it) > 0 ? qtdBR(quantidadeDoItem(it)) : "—"}
@@ -8044,6 +8108,7 @@ function ComparativoLista({ cot, dinheiro, isMobile, divisao }) {
                     return (
                       <td key={l.propostaId} style={{ ...td, textAlign: "right", color: cor, fontWeight: ganhou || marcada ? 700 : 400 }}>
                         {u > 0 ? dinheiro(u) : "—"}
+                        {precoDoM2DoItem(it, u) > 0 && <div style={{ fontSize: 10.5, fontWeight: 400, color: "#6b7280" }}>{dinheiro(precoDoM2DoItem(it, u))}/m²</div>}
                       </td>
                     );
                   }
@@ -8056,6 +8121,7 @@ function ComparativoLista({ cot, dinheiro, isMobile, divisao }) {
                           background: marcada ? "#eaf3ff" : "transparent", color: cor, fontWeight: ganhou || marcada ? 700 : 400,
                           borderRadius: 8, padding: "4px 6px", fontSize: 12, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
                         {marcada ? "✓ " : ""}{dinheiro(u)}
+                        {precoDoM2DoItem(it, u) > 0 && <div style={{ fontSize: 10.5, fontWeight: 400, color: "#6b7280" }}>{dinheiro(precoDoM2DoItem(it, u))}/m²</div>}
                       </button>
                     </td>
                   );
@@ -9015,7 +9081,7 @@ function PapeisEmLote({ obra, prestadores, isMobile, aoAnexar, aoFechar }) {
 // A caixa em si (PainelEntrada) não conhece `data` nem `save`: recebe listas.
 // Este invólucro faz a ligação, e é ele que as duas portas usam — a de dentro
 // da obra e a da lista de Obras. Uma fiação só.
-function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinheiro, embutido, aoFechar, aoSeguir, confirmacao }) {
+function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinheiro, embutido, aoFechar, aoSeguir, confirmacao, inicio }) {
   const insumos = insumosDoCatalogo(data);
   const prestadores = ((data || {}).fornecedores || []).filter((f) => f && f.ativo !== false);
   const iaDisponivel = useIaDisponivel();
@@ -9082,7 +9148,7 @@ function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinhe
     const r = propostaDaEntrada({ cotacao: existente, obraId: alvo.id, titulo: carga.titulo,
       itens: carga.itens, loja, papel: carga.papel, desconto: carga.desconto, anexo: carga.anexo,
       porItemDaCotacao: !!carga.porItemDaCotacao, destinos: carga.destinos, qtdNovos: carga.qtdNovos,
-      soTotal: !!carga.soTotal, etapaId: carga.etapaId, contaId: carga.contaId });
+      soTotal: !!carga.soTotal, etapaId: carga.etapaId, contaId: carga.contaId, propostaId: carga.propostaId || "" });
     const quem = typeof nomeDeQuem === "function" ? nomeDeQuem(usuario) : "";
     const agora = new Date().toISOString();
     const prop = { ...r.proposta, salvoPor: quem, salvoEm: agora,
@@ -9161,6 +9227,7 @@ function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinhe
       }}
       tipoDaObra={tipoDaObra} obraPadraoId={(obraPadrao || {}).id || ""}
       aoAcharObra={(id) => ((data || {}).obras || []).find((x) => x && x.id === (id || (obraPadrao || {}).id)) || null}
+      inicio={inicio}
       aoFechar={aoFechar} aoSeguir={seguir} />
   );
 }
@@ -9330,7 +9397,7 @@ function textoDoLancado(r, situacao, dinheiro, totalPadrao) {
 
 function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile, dinheiro,
   obras, embutido, aoCadastrarInsumo, aoCriarLoja, aoAprender, aoVerContas, aoFechar, aoSeguir, cartoes,
-  tipoDaObra, obraPadraoId, confirmacao, aoListarCotacoes, cartaoDoCliente, aoAcharObra }) {
+  tipoDaObra, obraPadraoId, confirmacao, aoListarCotacoes, cartaoDoCliente, aoAcharObra, inicio }) {
   const E = COT_ESTILO;
   const P = cotPainel(isMobile, 940);
   const [texto, setTexto] = useState("");
@@ -9396,6 +9463,10 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // A situação do lançamento e o que cada uma pede.
   const [situacao, setSituacao] = useState("");
   const situacaoTocada = useRef(false);
+  // Releitura do PDF de uma proposta já guardada (botão "ler os itens" da
+  // cotação): o papel, a loja, a cotação e a proposta já são sabidos — a
+  // Entrada só lê e monta a tabela para conferir.
+  const inicioRef = useRef(inicio || null);
   const [pagamento, setPagamento] = useState({ data: "", forma: "avista", cartaoId: "", parcelas: 1 });
   const [apagar, setApagar] = useState({ vencimento: "", parcelas: "1", intervalo: "30" });
   // a prazo numa loja com conta aberta: vai para a conta dela, salvo se a
@@ -9556,6 +9627,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // A situação de partida sai da obra e do papel — e só até a pessoa tocar.
   useEffect(() => {
     if (!itens || situacaoTocada.current) return;
+    if (inicioRef.current) { setSituacao("cotacao"); return; }
     setSituacao(situacaoPadraoDaEntrada(papel, tipoObraEfetiva));
   }, [itens ? 1 : 0, papel ? papel.tipo : "", tipoObraEfetiva]);
   function iniciarSituacao(p) {
@@ -9655,7 +9727,30 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     ler(f);
   }
 
-  async function ler(arq) {
+  // Veio do "ler os itens" de uma proposta: começa lendo, já na cotação dela.
+  // A IA ainda está sendo consultada quando a caixa abre: espera ela dizer
+  // que está no ar (o botão só aparece quando está) — sem resposta em
+  // poucos segundos, lê com o leitor do VICKE mesmo.
+  const inicioLido = useRef(false);
+  useEffect(() => {
+    const ini = inicioRef.current;
+    if (!ini || !ini.arquivo || inicioLido.current) return;
+    const comecar = () => {
+      if (inicioLido.current) return;
+      inicioLido.current = true;
+      setArquivo(ini.arquivo);
+      setCotacaoDestino(ini.cotacaoId || "");
+      setModoCotacao("proposta");
+      situacaoTocada.current = true; setSituacao("cotacao");
+      ler(ini.arquivo, (prestadores || []).find((f) => f && f.id === ini.lojaId) || null);
+    };
+    setArquivo(ini.arquivo);
+    if (iaDisponivel) { comecar(); return; }
+    const t = setTimeout(comecar, 4000);
+    return () => clearTimeout(t);
+  }, [iaDisponivel]);
+
+  async function ler(arq, lojaFixa) {
     setLancado("");
     if (lendo) return;
     const alvo = arq || arquivo;
@@ -9663,7 +9758,8 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     setLendo(true); setAviso(""); setProgresso(null);
     // Antes de procurar material, ouve o que a frase disse sobre obra e loja
     // — e tira esses pedaços do texto, para não virarem item fantasma.
-    const ctx = contextoDaEntrada(texto, obras || [], lojas);
+    const ctx0 = contextoDaEntrada(texto, obras || [], lojas);
+    const ctx = lojaFixa ? { ...ctx0, loja: lojaFixa } : ctx0;
     const paraLer = ctx.trechos.length ? ctx.textoLimpo : texto;
     if (ctx.obra) setObraId(ctx.obra.id);
     if (ctx.loja) { setLojaId(ctx.loja.id); setLojasMarcadas({ [ctx.loja.id]: true }); }
@@ -9801,6 +9897,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
 
   function limpar() {
     situacaoTocada.current = false; setSituacao(""); setParcelaId(""); setAvisosDaLeitura([]);
+    inicioRef.current = null;
     setTexto(""); setArquivo(null); setItens(null); setPapel(null); setDespesa(null);
     setDestino(""); setLojaId(""); setObraId(""); setAviso(""); setReconhecido(null);
     setLojasMarcadas({}); setBuscaLoja(""); setFila(null); setEnviado(null);
@@ -9872,7 +9969,9 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     // O papel da loja fica com a proposta: é ele que se abre na hora de
     // comparar. Não subir não impede de guardar — o preço é o que importa.
     let anexo = null;
-    if (arquivo) {
+    // releitura: o papel já está na proposta — subir de novo seria cópia
+    const releitura = inicioRef.current && inicioRef.current.propostaId ? inicioRef.current : null;
+    if (arquivo && !(releitura && arquivo === releitura.arquivo)) {
       setGuardando(true);
       try { anexo = await enviarAnexoProposta(arquivo); }
       catch (e) { setAviso("O papel não subiu (" + (e.message || "erro") + ") — a proposta foi guardada sem ele."); }
@@ -9882,6 +9981,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
       desconto: descontoDoPapel, cotacaoId: destinoId,
       porItemDaCotacao: true, destinos: destinosEntrada, qtdNovos, soTotal,
       etapaId: destinoId ? "" : etapaDaNova, contaId: destinoId ? "" : contaNova,
+      propostaId: releitura && destinoId === releitura.cotacaoId ? releitura.propostaId : "",
       titulo: String(tituloNova || "").trim() || tituloPadraoDaNova,
       anexo }) || {};
     if (r.erro) { setAviso(r.erro); return; }
@@ -10518,8 +10618,8 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                         </div>
                         {comMedidas && (g.existente ? (
                           <>
-                            <div style={{ fontSize: 12, color: "#4b5563", textAlign: "right" }}>{g.largura ? String(g.largura).replace(".", ",") : "—"}</div>
-                            <div style={{ fontSize: 12, color: "#4b5563", textAlign: "right" }}>{g.altura ? String(g.altura).replace(".", ",") : "—"}</div>
+                            <div style={{ fontSize: 12, color: "#4b5563", textAlign: "right" }}>{g.largura ? Number(g.largura).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 3 }) : "—"}</div>
+                            <div style={{ fontSize: 12, color: "#4b5563", textAlign: "right" }}>{g.altura ? Number(g.altura).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 3 }) : "—"}</div>
                           </>
                         ) : (
                           <>
