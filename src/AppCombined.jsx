@@ -17903,6 +17903,15 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
   const certos = useMemo(() => new Set(((extrato && extrato.resultado && extrato.resultado.casados) || [])
     .filter((c) => casamentoCerto(c) && c.lancamento).map((c) => c.lancamento.id)), [extrato && extrato.resultado]);
   const conf = conferenciaDoMes(lancs, mes, { certos });
+  // O lançamento que casou com o banco, mas em dúvida: a confirmação também
+  // fica na linha dele aqui, não só no quadro lá de cima.
+  const duvidaDe = useMemo(() => {
+    const m = {};
+    for (const c of ((extrato && extrato.resultado && extrato.resultado.casados) || [])) {
+      if (c && c.lancamento && !casamentoCerto(c) && !c.lancamento.conferido) m[c.lancamento.id] = c;
+    }
+    return m;
+  }, [extrato && extrato.resultado]);
   const registro = (fechamentos || {})[mes] || {};
   const fechado = mesEstaFechado(mes, fechamentos);
   // O saldo do banco: o que foi informado ao fechar; sem ele, o da última
@@ -18219,7 +18228,21 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
                     </td>
                     <td style={{ padding: "6px 12px", color: l.conferido ? "#9ca3af" : "#262421" }}>{conta ? conta.nome : "—"}</td>
                     <td style={{ padding: "6px 12px", color: "#6b7280" }}>{[l.cliente, l.projeto].filter(Boolean).join(" · ") || "—"}</td>
-                    <td style={{ padding: "6px 12px", color: "#6b7280" }}>{l.descricao || l.fornecedor || "—"}</td>
+                    <td style={{ padding: "6px 12px", color: "#6b7280" }}>{l.descricao || l.fornecedor || "—"}
+                      {duvidaDe[l.id] && !l.conferido && (
+                        <div data-vk-par-na-linha={l.id} style={{ fontSize: 11.5, color: "#b45309", marginTop: 3, lineHeight: 1.4 }}>
+                          No banco em {String(duvidaDe[l.id].extrato.data || "").slice(0, 10).split("-").reverse().join("/")}
+                          {duvidaDe[l.id].extrato.historico ? ` (${String(duvidaDe[l.id].extrato.historico).slice(0, 40)})` : ""}
+                          {duvidaDe[l.id].marcadoForaDaConta ? " — estava marcado “não passou pela conta”." : "."}{" "}
+                          {extrato && extrato.confirmarPar && !fechado && (
+                            <button type="button" disabled={!!ocupado} onClick={() => extrato.confirmarPar(duvidaDe[l.id].extrato, l)}
+                              style={{ color: "#0474f4", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 11.5, fontWeight: 600 }}>
+                              É este — confirmar
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
                     <td style={{ padding: "6px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{efValorDoLancamento(l)}</td>
                   </tr>
                 );
