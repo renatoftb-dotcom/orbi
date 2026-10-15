@@ -35618,13 +35618,20 @@ function modoPadraoDaCotacao(itens) {
   return entradaTemPreco(itens) ? "proposta" : "pedir";
 }
 
-// As cotações que ainda recebem proposta: abertas, com lista, que não são
-// conta de loja e que ainda não viraram conta nem contrato. A mais nova
-// primeiro — quase sempre é nela que a próxima loja entra.
+// As cotações que ainda recebem proposta: as mesmas que a tela mostra como
+// "Aguardando propostas" ou "Comparando propostas". Fica de fora o que já
+// andou: proposta escolhida, divisão entre lojas (a mãe e as partes), pedido
+// na loja, conta gerada, conta de loja. Cotação sem lista de itens recebe
+// também — a proposta entra pelo total ou monta a lista. A mais nova
+// primeiro: quase sempre é nela que a próxima loja entra.
+function cotacaoRecebeProposta(c) {
+  return !!(c && c.id && !c.contaLoja && (c.status || "aberta") === "aberta"
+    && !c.lancadoEm && !c.contaGeradaId && !c.escolhidaId && !c.divisaoDe && !c.pedidoNaLoja
+    && !foiDividida(c) && !temDivisao(c));
+}
 function cotacoesParaGuardarProposta(cotacoes) {
   return (cotacoes || [])
-    .filter((c) => c && c.id && !c.contaLoja && (c.status || "aberta") === "aberta"
-      && !c.lancadoEm && !c.contaGeradaId && temListaDeItens(c))
+    .filter(cotacaoRecebeProposta)
     .slice()
     .sort((a, b) => String(b.criadaEm || b.criadoEm || "").localeCompare(String(a.criadaEm || a.criadoEm || "")));
 }
@@ -35652,8 +35659,9 @@ function itemCotadoDaEntrada(lista, it, usados) {
 // A cotação que mais se parece com a lista: a que tem mais itens em comum.
 // Nenhuma em comum → nenhuma sugerida (nasce cotação nova).
 function cotacaoSugeridaParaProposta(cotacoes, itens) {
+  const abertas = cotacoesParaGuardarProposta(cotacoes);
   let melhor = null, pontos = 0;
-  for (const c of cotacoesParaGuardarProposta(cotacoes)) {
+  for (const c of abertas) {
     const usados = new Set();
     let n = 0;
     for (const it of itens || []) {
@@ -35662,7 +35670,37 @@ function cotacaoSugeridaParaProposta(cotacoes, itens) {
     }
     if (n > pontos) { melhor = c; pontos = n; }
   }
-  return melhor;
+  if (melhor) return melhor;
+  // Nenhum item casou (cotação sem lista, ou lista de outro jeito): vale o
+  // assunto. Só sugere quando UMA cotação bate — na dúvida, nova cotação.
+  const batem = abertas.filter((c) => assuntoDaCotacaoBate(c, itens));
+  return batem.length === 1 ? batem[0] : null;
+}
+
+// Palavras de cada assunto: o papel da vidraçaria fala "fachada", "porta de
+// correr", "vidro"; a cotação se chama "Esquadrias". Sem isto não casam.
+const COT_ASSUNTOS = [
+  ["esquadria", "vidro", "vidraca", "porta de correr", "janela", "fachada", "pele de vidro", "aluminio", "blindex", "temperado", "guarda corpo", "box", "acm"],
+  ["eletric", "fio ", "cabo ", "disjuntor", "tomada", "interruptor", "quadro de distribuicao", "luminaria", "eletroduto"],
+  ["gesso", "drywall", "forro", "sanca", "placa st", "montante", "guia "],
+  ["serralh", "estrutura metalica", "portao", "grade", "metalon", "chapa", "perfil u"],
+  ["hidraul", "tubo", "conexao", "registro", "esgoto", "pvc", "caixa d agua"],
+  ["pintur", "tinta", "massa corrida", "selador", "textura"],
+  ["marcenar", "armario", "mdf", "gabinete"],
+  ["impermeab", "manta", "vedacit"],
+];
+function assuntoDaCotacaoBate(cot, itens) {
+  const c = cot || {};
+  const etapa = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).find((e) => e && e.id === c.etapaId);
+  const daCotacao = cotSemAcento([c.titulo, etapa && etapa.nome, c.escopo].filter(Boolean).join(" "));
+  const doPapel = " " + cotSemAcento((itens || []).map((it) => it && it.descricao).filter(Boolean).join(" ")) + " ";
+  if (!daCotacao.trim() || !doPapel.trim()) return false;
+  for (const grupo of COT_ASSUNTOS) {
+    const cotNoGrupo = grupo.some((p) => daCotacao.indexOf(p.trim()) >= 0);
+    if (cotNoGrupo && grupo.some((p) => doPapel.indexOf(p) >= 0)) return true;
+  }
+  // palavra comprida do nome da cotação dentro do papel ("caixaria", "telhado")
+  return daCotacao.split(" ").filter((w) => w.length >= 6).some((w) => doPapel.indexOf(w.slice(0, -1)) >= 0);
 }
 
 // A proposta montada a partir da lista com preço. Devolve a cotação inteira
@@ -44289,8 +44327,15 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                           onChange={(v) => setCotacaoDestino(v || "nova")}
                           placeholder="Procurar cotação…"
                           opcoes={[{ valor: "nova", rotulo: "＋ Nova cotação" }].concat(cotacoesAbertas.map((c) => {
+                            // o mesmo que o cartão da cotação diz: nome · conta · propostas · a partir de
                             const n = propostasDaCotacao(c).length;
-                            return { valor: c.id, rotulo: (c.titulo || "Sem nome") + " · " + (n === 1 ? "1 proposta" : n + " propostas") };
+                            const conta = typeof contaPorId === "function" ? contaPorId(c.contaId) : null;
+                            const melhor = melhorProposta(c);
+                            const brl = (v) => "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            const nomeConta = conta && conta.nome && cotSemAcento(conta.nome) !== cotSemAcento(c.titulo) ? conta.nome : "";
+                            return { valor: c.id, rotulo: [c.titulo || "Sem nome", nomeConta,
+                              n ? (n === 1 ? "1 proposta" : n + " propostas") : "sem proposta",
+                              melhor ? "a partir de " + brl(valorProposta(melhor)) : ""].filter(Boolean).join(" · ") };
                           }))} />
                         {!destinoId && (
                           <div style={{ marginTop: 8 }}>

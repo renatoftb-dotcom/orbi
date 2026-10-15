@@ -3666,14 +3666,31 @@ teste("desconto do papel vira total fechado da proposta", () => {
   assert.strictEqual(r.proposta.valor, 2600);
 });
 
-teste("só cotação aberta, com lista, que não é conta de loja nem já lançada recebe proposta", () => {
+teste("recebe proposta só o que a tela mostra como aguardando ou comparando — com ou sem lista de itens", () => {
   const base = (m) => ({ ...M.cotacaoVazia("o1"), itens: [M.itemCotacaoVazio()], ...m });
   const ok = base({ criadaEm: "2026-10-01" });
   const maisNova = base({ criadaEm: "2026-10-03" });
-  const lista = M.cotacoesParaGuardarProposta([ok, maisNova, base({ contaLoja: true }), base({ status: "decidida" }),
-    base({ lancadoEm: "2026-10-02" }), { ...M.cotacaoVazia("o1"), itens: [] }, null]);
-  assert.deepStrictEqual(lista.map((c) => c.id), [maisNova.id, ok.id]);
+  // Esquadrias, Eletricista, Gesso: criadas como linha única, sem lista — recebem também
+  const semLista = { ...M.cotacaoVazia("o1"), itens: [], criadaEm: "2026-10-02", titulo: "Esquadrias" };
+  const fora = [base({ contaLoja: true }), base({ status: "decidida" }), base({ lancadoEm: "2026-10-02" }),
+    base({ escolhidaId: "p1" }),                                        // já escolheu
+    base({ divisaoDe: "mae" }),                                         // parte de uma divisão (— OURIFER, — Arenito)
+    base({ divisao: { filhas: ["a", "b"] } }),                          // a mãe da divisão
+    base({ pedidoNaLoja: { contaLojaId: "x" } }), base({ contaGeradaId: "c1" })];
+  const lista = M.cotacoesParaGuardarProposta([ok, maisNova, semLista, ...fora, null]);
+  assert.deepStrictEqual(lista.map((c) => c.id), [maisNova.id, semLista.id, ok.id]);
   assert.strictEqual(M.cotacaoSugeridaParaProposta([ok], [{ descricao: "Nada a ver" }]), null);
+});
+
+teste("sem item que case, a sugestão vai pelo assunto — e só quando uma cotação bate", () => {
+  const cot = (titulo) => ({ ...M.cotacaoVazia("o1"), itens: [], titulo });
+  const esq = cot("Esquadrias"), ele = cot("Eletricista"), ges = cot("Gesso");
+  const papel = [{ descricao: "J1 - FACHADA ESTRUTURAL GRID (JUNTA SECA VIDRO E VIDRO HORIZONTAL)" }, { descricao: "PC1 - PORTA DE CORRER 4 FOLHAS LINHA GOLD" }];
+  assert.strictEqual(M.cotacaoSugeridaParaProposta([esq, ele, ges], papel), esq);
+  assert.strictEqual(M.cotacaoSugeridaParaProposta([ele, ges], papel), null);
+  // duas cotações do mesmo assunto: na dúvida, não sugere
+  assert.strictEqual(M.cotacaoSugeridaParaProposta([esq, cot("Vidros do escritório")], papel), null);
+  assert.strictEqual(M.cotacaoSugeridaParaProposta([esq, ele, ges], [{ descricao: "Disjuntor bipolar 40A" }]), ele);
 });
 
 
