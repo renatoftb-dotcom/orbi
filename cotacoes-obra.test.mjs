@@ -98,7 +98,7 @@ const modulo = new Function(`
            comContaPadraoDaEntrada, tipoDoAnexoDaEntrada, SITUACOES_DA_ENTRADA,
            fichaDaEntradaPelaIA, tipoDoPapelPelaIA, textoSemCaixaAlta,
            entradaTemPreco, modoPadraoDaCotacao, cotacoesParaGuardarProposta, cotacaoSugeridaParaProposta,
-           propostaDaEntrada, MODOS_DA_COTACAO_NA_ENTRADA, contaDeCompra, destinosDasLinhas, resumoDaPropostaNaEntrada,
+           propostaDaEntrada, MODOS_DA_COTACAO_NA_ENTRADA, contaDeCompra, destinosDasLinhas, resumoDaPropostaNaEntrada, medidasDaLinha, areaDaMedida, fichaDaEntradaPelaIA, situacaoPadraoDaEntrada,
            cotacaoDeOrigemDasContas, papelDaPropostaEscolhida, resumoDaCotacao };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
@@ -3784,6 +3784,39 @@ teste("Entrada só o total: proposta pelo valor, sem preço por item e sem mexer
   assert.strictEqual(n.nova, true);
   assert.strictEqual(n.cotacao.etapaId, "esquadrias");
   assert.strictEqual(n.cotacao.titulo, "Esquadrias");
+});
+
+teste("Medida só em linha de vão: esquadria tem largura × altura; insumo não ganha medida", () => {
+  assert.deepStrictEqual(M.medidasDaLinha({ descricao: "Vitrine loja nova 10,98 x 4,19" }), { largura: 10.98, altura: 4.19 });
+  assert.deepStrictEqual(M.medidasDaLinha({ descricao: "PORTA DE CORRER 4 FOLHAS L 2500 x A 3600 mm" }), { largura: 2.5, altura: 3.6 });
+  assert.deepStrictEqual(M.medidasDaLinha({ descricao: "Janela basculante 60x60 cm" }), { largura: 0.6, altura: 0.6 });
+  assert.strictEqual(M.medidasDaLinha({ descricao: "Tábua de pinus 30cm x 3mts" }), null, "tábua não é vão");
+  assert.strictEqual(M.medidasDaLinha({ descricao: "Cimento CP II 50kg" }), null);
+  assert.deepStrictEqual(M.medidasDaLinha({ descricao: "J1 Fachada", largura: 3.05, altura: 3.4 }), { largura: 3.05, altura: 3.4 }, "a da IA vale primeiro");
+  assert.strictEqual(M.areaDaMedida({ largura: 3.05, altura: 3.4 }, 3), 31.11);
+});
+
+teste("Papel lido como proposta pela IA abre em cotação, com as medidas nas linhas", () => {
+  const f = M.fichaDaEntradaPelaIA([{ tipo: "proposta", emitente: "Alumisantos", valor: 173856.13, itens: [
+    { descricao: "J1 - Fachada estrutural", quantidade: 3, unidade: "un", unitario: 10397.78, total: 31193.34, largura: 3.05, altura: 3.4 },
+    { descricao: "ACM", quantidade: 1, unidade: "un", unitario: 73200, total: 73200, largura: 0, altura: 0 }] }]);
+  assert.strictEqual(M.situacaoPadraoDaEntrada(f.papel, "cliente"), "cotacao");
+  assert.strictEqual(f.itens[0].largura, 3.05);
+  assert.strictEqual(f.itens[1].largura, undefined);
+  const cot = { ...M.cotacaoVazia("o1"), itens: [] };
+  const r = M.resumoDaPropostaNaEntrada(cot, f.itens.map((x) => ({ ...x, bruto: x.total })), null, {});
+  assert.strictEqual(r.grupos[0].largura, 3.05);
+  assert.strictEqual(r.grupos[0].area, 31.11);
+  const p = M.propostaDaEntrada({ cotacao: cot, obraId: "o1", itens: f.itens.map((x) => ({ ...x, bruto: x.total })), porItemDaCotacao: true, loja: { id: "f9", nome: "Alumisantos" } });
+  assert.strictEqual(p.cotacao.itens[0].largura, 3.05);
+  assert.strictEqual(p.cotacao.itens[1].largura, undefined, "ACM sem medida");
+});
+
+teste("Lista colada: vírgula entre dígitos é decimal, não separa item (medida 3,05 x 3,40)", () => {
+  const r = M.interpretarPedido("3 un Vitrine loja nova 3,05 x 3,40\n20 sacos de cimento, 10 de cal e 2,5 m3 de areia", []);
+  const termos = r.map((x) => x.termo || x.descricao);
+  assert.strictEqual(r.length, 4, JSON.stringify(termos));
+  assert.ok(/3,05 x 3,40/.test(termos[0]), termos[0]);
 });
 
 teste("compra nunca cai em conta de receita", () => {

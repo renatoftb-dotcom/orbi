@@ -35602,6 +35602,8 @@ const COLS_ENTRADA = "minmax(0,2.2fr) 62px 84px 92px 100px minmax(0,1.3fr) minma
 // Proposta para a cotação: sem catálogo, etapa nem conta — a coluna que
 // importa é para qual item da cotação a linha vai.
 const COLS_ENTRADA_COT = "62px 84px 100px 110px minmax(0,2fr) 24px";
+// …e quando o papel traz vão (esquadria, vidro): largura e altura antes.
+const COLS_ENTRADA_COT_MED = "66px 66px 56px 70px 96px 104px minmax(0,2fr) 24px";
 
 // ── Cotação: a proposta que já chega com preço ──────────────────
 // Um papel de loja COM preço não é pedido de preço: é a resposta. Ele vai
@@ -35718,6 +35720,36 @@ function assuntoDaCotacaoBate(cot, itens) {
 // Sem escolha feita à mão vale a sugestão: o item que casa pela descrição;
 // sem casamento, um item novo com o texto da linha.
 const ENTRADA_FORA = "fora";
+
+// Medida do vão ou da peça (largura × altura, em metros). Proposta de
+// esquadria e vidro vem assim; lista de insumo (cimento, cal, tábua 30cm)
+// não tem — e não pode ganhar: o "30cm x 3mts" da tábua não é vão.
+const COT_PALAVRAS_DE_VAO = /\b(porta|janela|vidro|vitrine|fachada|esquadria|box|guarda|portao|basculante|maxim|pele de vidro|espelho|veneziana|caixilho|divisoria|grade|alcapao|claraboia)/;
+function emMetrosDoPapel(v, un) {
+  const n = typeof v === "number" ? v : parseFloat(String(v || "").replace(",", "."));
+  if (!(n > 0)) return 0;
+  const m = un === "mm" ? n / 1000 : un === "cm" ? n / 100 : un === "m" ? n : (n >= 1000 ? n / 1000 : n > 30 ? n / 100 : n);
+  return Math.round(m * 1000) / 1000;
+}
+function medidasDaLinha(it) {
+  const x = it || {};
+  const l = numeroDoCampo(x.largura), a = numeroDoCampo(x.altura);
+  if (l > 0 || a > 0) return { largura: l > 0 ? l : 0, altura: a > 0 ? a : 0 };
+  const t = cotSemAcento(x.descricao || "");
+  if (!COT_PALAVRAS_DE_VAO.test(t)) return null;
+  const m = /(?:\bl(?:arg(?:ura)?)?\.?\s*[:=]?\s*)?(\d+(?:[.,]\d+)?)\s*(mm|cm|m)?\s*[x×*]\s*(?:a(?:lt(?:ura)?)?\.?\s*[:=]?\s*)?(\d+(?:[.,]\d+)?)\s*(mm|cm|m)?/i
+    .exec(String(x.descricao || ""));
+  if (!m) return null;
+  const un = (m[2] || m[4] || "").toLowerCase();
+  const largura = emMetrosDoPapel(m[1], m[2] ? m[2].toLowerCase() : un);
+  const altura = emMetrosDoPapel(m[3], m[4] ? m[4].toLowerCase() : un);
+  return largura > 0 && altura > 0 ? { largura, altura } : null;
+}
+function areaDaMedida(md, quantidade) {
+  if (!md || !(md.largura > 0) || !(md.altura > 0)) return 0;
+  const q = numeroDoCampo(quantidade) > 0 ? numeroDoCampo(quantidade) : 1;
+  return Math.round(md.largura * md.altura * q * 100) / 100;
+}
 function destinosDasLinhas(cot, linhas) {
   const lista = itensDaCotacao(cot);
   const existe = (k) => /^c:/.test(k || "") && lista.some((c) => c.id === k.slice(2));
@@ -35757,7 +35789,9 @@ function resumoDaPropostaNaEntrada(cot, linhas, destinos, qtdNovos) {
       const q = ((qtdNovos || {})[nome]) || {};
       g = { chave: k, nome, existente, linhas: [], total: 0,
         quantidade: existente ? existente.quantidade : (q.quantidade != null && q.quantidade !== "" ? q.quantidade : null),
-        unidade: existente ? existente.unidade : (q.unidade || null) };
+        unidade: existente ? existente.unidade : (q.unidade || null),
+        largura: existente ? (numeroDoCampo(existente.largura) || 0) : (q.largura != null ? numeroDoCampo(q.largura) : null),
+        altura: existente ? (numeroDoCampo(existente.altura) || 0) : (q.altura != null ? numeroDoCampo(q.altura) : null) };
       grupos.push(g);
     }
     g.linhas.push(i);
@@ -35769,7 +35803,12 @@ function resumoDaPropostaNaEntrada(cot, linhas, destinos, qtdNovos) {
     const l0 = (linhas || [])[g.linhas[0]] || {};
     if (g.quantidade == null) g.quantidade = g.linhas.length === 1 && numeroDoCampo(l0.quantidade) > 0 ? l0.quantidade : 1;
     if (!g.unidade) g.unidade = (g.linhas.length === 1 && l0.unidade) || "un";
+    // a medida de uma linha só vai para o item; juntadas, quem diz é a pessoa
+    const md = g.linhas.length === 1 ? medidasDaLinha(l0) : null;
+    if (g.largura == null) g.largura = md ? md.largura : 0;
+    if (g.altura == null) g.altura = md ? md.altura : 0;
   }
+  for (const g of grupos) g.area = areaDaMedida({ largura: g.largura, altura: g.altura }, g.quantidade);
   const cobertos = new Set(grupos.filter((g) => g.existente).map((g) => g.existente.id));
   const naoCotados = lista.filter((c) => !cobertos.has(c.id));
   return { grupos, naoCotados, fora: Math.round(fora * 100) / 100, soma: Math.round(soma * 100) / 100,
@@ -35795,7 +35834,8 @@ function propostaDaEntradaPorItem(x, cot0) {
       if (!alvo) {
         const l0 = linhas[g.linhas[0]] || {};
         alvo = { ...itemCotacaoVazio(), descricao: nome, quantidade: g.quantidade, unidade: g.unidade,
-          codigo: g.linhas.length === 1 ? (l0.insumoCodigo || "") : "" };
+          codigo: g.linhas.length === 1 ? (l0.insumoCodigo || "") : "",
+          ...(g.largura > 0 ? { largura: g.largura } : {}), ...(g.altura > 0 ? { altura: g.altura } : {}) };
         lista.push(alvo);
         novos++;
       }
@@ -35944,7 +35984,7 @@ function situacaoPadraoDaEntrada(papel, tipoDaObra) {
   const lida = (papel || {}).situacaoLida;
   if (lida === "pago") return "pago";
   if (lida === "agendado" || lida === "a_pagar") return "apagar";
-  if (lida === "lista") return "cotacao";
+  if (lida === "lista" || lida === "proposta") return "cotacao";
   return tipoDaObra === "empreendimento" ? "pago" : "";
 }
 
@@ -36055,7 +36095,7 @@ function comContaPadraoDaEntrada(lista, padrao) {
 // Aqui os papéis viram UMA ficha: os itens saem da nota (ou do cupom, do
 // pedido); a data e o jeito de pagar saem do comprovante, quando há um.
 // O que não fecha vira aviso à vista — nunca correção calada.
-const COT_TIPOS_COM_ITENS = ["nota_produto", "nota_servico", "cupom", "pedido_orcamento", "lista_material", "recibo", "contrato"];
+const COT_TIPOS_COM_ITENS = ["nota_produto", "nota_servico", "cupom", "pedido_orcamento", "lista_material", "proposta", "recibo", "contrato"];
 const COT_TIPOS_COMPROVANTE = ["comprovante_pix", "comprovante_boleto", "comprovante_ted", "comprovante_cartao", "guia_imposto"];
 
 function tipoDoPapelPelaIA(t) {
@@ -36070,7 +36110,7 @@ const COT_NOME_DO_TIPO = {
   nota_produto: "nota fiscal", nota_servico: "nota de serviço", cupom: "cupom", pedido_orcamento: "pedido",
   comprovante_pix: "comprovante de Pix", comprovante_boleto: "comprovante de boleto", comprovante_ted: "comprovante de TED",
   comprovante_cartao: "comprovante da maquininha", guia_imposto: "guia de imposto", recibo: "recibo",
-  contrato: "contrato", lista_material: "lista de material", outro: "papel",
+  contrato: "contrato", lista_material: "lista de material", proposta: "proposta", outro: "papel",
 };
 
 function fichaDaEntradaPelaIA(documentos) {
@@ -36100,6 +36140,9 @@ function fichaDaEntradaPelaIA(documentos) {
   const itensLidos = (principal.itens || []).map((l) => ({
     descricao: l.descricao || "", quantidade: Number(l.quantidade) || "", unidade: l.unidade || "",
     unitario: Number(l.unitario) || "", total: Number(l.total) || (Number(l.quantidade) * Number(l.unitario)) || 0,
+    // medida do vão/peça (esquadria, vidro…): só vem quando o papel tem
+    ...(Number(l.largura) > 0 ? { largura: Number(l.largura) } : {}),
+    ...(Number(l.altura) > 0 ? { altura: Number(l.altura) } : {}),
   })).filter((l) => l.descricao);
   const tipo = tipoDoPapelPelaIA(principal.tipo);
   const chaveNf = docs.map((d) => String(d.chave || "").replace(/\D/g, "")).find((c) => c.length === 44) || "";
@@ -36118,7 +36161,7 @@ function fichaDaEntradaPelaIA(documentos) {
     valor: valorPago || total,
     desconto: Number(principal.desconto) || 0,
     situacaoLida: pago ? "pago" : agendado ? "agendado" : principal.situacao === "a_pagar" ? "a_pagar"
-      : principal.tipo === "lista_material" ? "lista" : "",
+      : principal.tipo === "lista_material" ? "lista" : principal.tipo === "proposta" ? "proposta" : "",
     formaLida: forma,
     chave: chaveNf, idTransacao,
     descricao: textoSemCaixaAlta(principal.descricao || (pago && pago.descricao) || ""),
@@ -36890,9 +36933,10 @@ function interpretarPedido(texto, insumos) {
   // O recado nem sempre vem em lista. Muitas vezes é uma frase só: "compra
   // 30 sacos de cimento, 40 tábuas de 30, 25 pregos 17x21 e 20 quilos de
   // arame". Vírgula, ponto e vírgula e o "e" que liga os itens separam tão
-  // bem quanto a quebra de linha.
+  // bem quanto a quebra de linha. Vírgula ENTRE DÍGITOS não: é decimal
+  // ("vitrine 3,05 x 3,40", "areia 2,5 m3") — cortar ali quebrava a medida.
   const linhas = String(texto == null ? "" : texto)
-    .split(/\r?\n|[;,]|\s+e\s+|\s+\+\s+/i)
+    .split(/\r?\n|;|(?<!\d),|,(?!\d)|\s+e\s+|\s+\+\s+/i)
     .map((l) => l.trim())
     .filter(Boolean);
   const saida = [];
@@ -43333,6 +43377,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // Proposta no jeito da cotação: "só o total", a quantidade dos itens novos
   // ({ nome: { quantidade, unidade } }), e etapa/conta de uma cotação nova.
   const [soTotal, setSoTotal] = useState(false);
+  const [medidasLigadas, setMedidasLigadas] = useState(false);
   const [qtdNovos, setQtdNovos] = useState({});
   const [etapaNova, setEtapaNova] = useState("");
   const [contaNova, setContaNova] = useState("");
@@ -43474,6 +43519,9 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // Guardando proposta, a tabela vira a da cotação: cada linha do papel
   // aponta para um item dela (ou junta com outra, ou fica de fora).
   const modoItens = !!itens && guardaProposta;
+  // Colunas de medida só quando o papel tem vão (ou a pessoa liga): lista de
+  // insumo segue linha a linha, sem largura nem altura.
+  const comMedidas = modoItens && (medidasLigadas || (itens || []).some((x) => !!medidasDaLinha(x)));
   const destinosEntrada = modoItens ? destinosDasLinhas(cotacaoDestinoObj, itens) : [];
   const resumoCot = modoItens && !soTotal ? resumoDaPropostaNaEntrada(cotacaoDestinoObj, itens, destinosEntrada, qtdNovos) : null;
   const totalDaProposta = !modoItens ? totalDaEntrada
@@ -43754,7 +43802,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     setDestino(""); setLojaId(""); setObraId(""); setAviso(""); setReconhecido(null);
     setLojasMarcadas({}); setBuscaLoja(""); setFila(null); setEnviado(null);
     setModoCotacao(""); setCotacaoDestino(""); setTituloNova("");
-    setSoTotal(false); setQtdNovos({}); setEtapaNova(""); setContaNova("");
+    setSoTotal(false); setQtdNovos({}); setEtapaNova(""); setContaNova(""); setMedidasLigadas(false);
   }
 
   // As lojas com telefone, filtradas pela busca; sem telefone aparecem
@@ -44213,10 +44261,18 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                   <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>
                     {itens.length === 1 ? "1 item" : `${itens.length} itens`}
                   </div>
+                  {modoItens && !soTotal && !(itens || []).some((x) => !!medidasDaLinha(x)) && (
+                    <button type="button" data-vk-medidas onClick={() => setMedidasLigadas((v) => !v)}
+                      title="Largura e altura de cada item (esquadria, vidro)"
+                      style={{ ...E.btnSec, marginLeft: "auto", fontSize: 12, padding: "5px 12px",
+                        color: medidasLigadas ? "#fff" : "#4b5563", background: medidasLigadas ? "#4b5563" : "#fff", fontWeight: 600 }}>
+                      {medidasLigadas ? "✓ Medidas" : "＋ Medidas"}
+                    </button>
+                  )}
                   {modoItens && (
                     <button type="button" data-vk-so-total onClick={() => setSoTotal((v) => !v)}
                       title="A proposta entra pelo valor total, sem preço por item"
-                      style={{ ...E.btnSec, marginLeft: "auto", fontSize: 12, padding: "5px 12px",
+                      style={{ ...E.btnSec, marginLeft: modoItens && !soTotal && !(itens || []).some((x) => !!medidasDaLinha(x)) ? 0 : "auto", fontSize: 12, padding: "5px 12px",
                         color: soTotal ? "#fff" : "#0474f4", background: soTotal ? "#0474f4" : "#fff",
                         borderColor: soTotal ? "#0474f4" : "rgba(4,116,244,0.35)", fontWeight: 600 }}>
                       {soTotal ? "✓ Só o total" : "Só o total"}
@@ -44245,8 +44301,9 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                   </div>
                 )}
                 {modoItens && !soTotal && !isMobile && (
-                  <div style={{ display: "grid", gridTemplateColumns: COLS_ENTRADA_COT, gap: 6, fontSize: 10, fontWeight: 600,
+                  <div style={{ display: "grid", gridTemplateColumns: comMedidas ? COLS_ENTRADA_COT_MED : COLS_ENTRADA_COT, gap: 6, fontSize: 10, fontWeight: 600,
                     color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, padding: "0 0 4px" }}>
+                    {comMedidas && <><span style={{ textAlign: "right" }}>Larg. (m)</span><span style={{ textAlign: "right" }}>Alt. (m)</span></>}
                     <span style={{ textAlign: "right" }}>Qtd</span><span>Un</span>
                     <span style={{ textAlign: "right" }}>Unitário</span><span style={{ textAlign: "right" }}>Total</span>
                     <span>Vai para o item da cotação</span><span />
@@ -44276,7 +44333,20 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                         <input style={{ ...celC, width: "100%", boxSizing: "border-box", marginBottom: 5, background: "#fbfbfa",
                           color: k === ENTRADA_FORA ? "#9ca3af" : "#111827" }} value={it.descricao || ""}
                           placeholder="Como veio no papel" onChange={(e) => mexerItem(i, { descricao: e.target.value })} />
-                        <div style={{ display: "grid", gap: 6, alignItems: "end", gridTemplateColumns: isMobile ? "1fr 1fr" : COLS_ENTRADA_COT }}>
+                        <div style={{ display: "grid", gap: 6, alignItems: "end", gridTemplateColumns: isMobile ? "1fr 1fr" : (comMedidas ? COLS_ENTRADA_COT_MED : COLS_ENTRADA_COT) }}>
+                          {comMedidas && (() => {
+                            const md = medidasDaLinha(it) || {};
+                            return (
+                              <>
+                                <div style={{ minWidth: 0 }}>{miniC("Largura (m)")}
+                                  <CampoNumeroBR estilo={{ ...celC, textAlign: "right" }} valor={md.largura || ""} casas={2} maxCasas={3} placeholder="—"
+                                    aoMudar={(v) => mexerItem(i, { largura: v, altura: it.altura != null && it.altura !== "" ? it.altura : (md.altura || "") })} /></div>
+                                <div style={{ minWidth: 0 }}>{miniC("Altura (m)")}
+                                  <CampoNumeroBR estilo={{ ...celC, textAlign: "right" }} valor={md.altura || ""} casas={2} maxCasas={3} placeholder="—"
+                                    aoMudar={(v) => mexerItem(i, { altura: v, largura: it.largura != null && it.largura !== "" ? it.largura : (md.largura || "") })} /></div>
+                              </>
+                            );
+                          })()}
                           <div style={{ minWidth: 0 }}>{miniC("Quantidade")}
                             <CampoNumeroBR estilo={{ ...celC, textAlign: "right" }} valor={it.quantidade} casas={0} maxCasas={4} placeholder="0"
                               aoMudar={(v) => mexerQtdOuUnit(i, { quantidade: v })} /></div>
@@ -44429,7 +44499,8 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                     {resumoCot.grupos.map((g, gi) => (
                       <div key={gi} style={{ display: "grid", gap: 6, alignItems: "center", padding: "5px 0",
                         borderTop: gi ? "1px solid rgba(38,36,33,0.06)" : "none",
-                        gridTemplateColumns: isMobile ? "1fr 70px 96px" : "minmax(0,1fr) 70px 92px 120px" }}>
+                        gridTemplateColumns: isMobile ? (comMedidas ? "1fr 1fr 1fr" : "1fr 70px 96px")
+                          : (comMedidas ? "minmax(0,1fr) 64px 64px 60px 80px 120px" : "minmax(0,1fr) 70px 92px 120px") }}>
                         <div style={{ minWidth: 0, gridColumn: isMobile ? "1 / -1" : "auto" }}>
                           {g.existente ? (
                             <div style={{ fontSize: 12.5, color: "#111827" }}>{g.nome}
@@ -44442,6 +44513,19 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                             {g.linhas.length === 1 ? "1 linha do papel" : `${g.linhas.length} linhas do papel juntas`}
                           </div>
                         </div>
+                        {comMedidas && (g.existente ? (
+                          <>
+                            <div style={{ fontSize: 12, color: "#4b5563", textAlign: "right" }}>{g.largura ? String(g.largura).replace(".", ",") : "—"}</div>
+                            <div style={{ fontSize: 12, color: "#4b5563", textAlign: "right" }}>{g.altura ? String(g.altura).replace(".", ",") : "—"}</div>
+                          </>
+                        ) : (
+                          <>
+                            <CampoNumeroBR estilo={{ ...E.input, padding: "5px 8px", fontSize: 12.5, textAlign: "right" }} valor={g.largura || ""} casas={2} maxCasas={3} placeholder="larg."
+                              aoMudar={(v) => setQtdNovos((q) => ({ ...q, [g.nome]: { ...(q[g.nome] || {}), largura: v } }))} />
+                            <CampoNumeroBR estilo={{ ...E.input, padding: "5px 8px", fontSize: 12.5, textAlign: "right" }} valor={g.altura || ""} casas={2} maxCasas={3} placeholder="alt."
+                              aoMudar={(v) => setQtdNovos((q) => ({ ...q, [g.nome]: { ...(q[g.nome] || {}), altura: v } }))} />
+                          </>
+                        ))}
                         {g.existente ? (
                           <>
                             <div style={{ fontSize: 12, color: "#4b5563", textAlign: "right" }}>{String(g.quantidade || "—")}</div>
@@ -44457,6 +44541,11 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                         )}
                         <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", textAlign: "right", gridColumn: isMobile ? "1 / -1" : "auto" }}>
                           {dinheiro(g.total)}
+                          {comMedidas && g.area > 0 && (
+                            <div style={{ fontSize: 10.5, fontWeight: 400, color: "#6b7280" }}>
+                              {String(g.area).replace(".", ",")} m² · {dinheiro(Math.round((g.total / g.area) * 100) / 100)}/m²
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
