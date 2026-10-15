@@ -44008,6 +44008,12 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     : Math.round((((resumoCot ? resumoCot.naCotacao : somaDosItens)) - descontoDoPapel) * 100) / 100;
   // A linha aponta para outro item: escolha da pessoa, não volta a ser sugestão.
   const apontarLinha = (i, k) => mexerItem(i, { item: k, itemManual: true });
+  // Tirar um item da proposta pelo resumo: as linhas do papel dele ficam
+  // "fora da proposta" (não entram no preço nem criam item) — e voltam com um clique.
+  const tirarDoResumo = (idx) => setItens((lista) => (lista || []).map((x, j) =>
+    (idx.indexOf(j) >= 0 ? { ...x, item: ENTRADA_FORA, itemManual: true } : x)));
+  const voltarOsDeFora = () => setItens((lista) => (lista || []).map((x, j) =>
+    (destinosEntrada[j] === ENTRADA_FORA ? { ...x, item: "", itemManual: false } : x)));
   // Renomear um item novo é renomear todas as linhas que caem nele.
   const renomearNovo = (chave, nome) => {
     setItens((l) => (l || []).map((x, j) => (destinosEntrada[j] === chave ? { ...x, item: "n:" + nome, itemManual: true } : x)));
@@ -44768,7 +44774,9 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
               <div style={cartao}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
                   <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>
-                    {itens.length === 1 ? "1 item" : `${itens.length} itens`}
+                    {modoItens && !soTotal
+                      ? <>Linhas do papel · {itens.length}<span style={{ fontWeight: 400, color: "#6b7280", fontSize: 11.5 }}> — como a loja escreveu: preço e o item da cotação em que cada uma cai</span></>
+                      : (itens.length === 1 ? "1 item" : `${itens.length} itens`)}
                   </div>
                   {modoItens && !soTotal && !(itens || []).some((x) => !!medidasDaLinha(x)) && (
                     <button type="button" data-vk-medidas onClick={() => setMedidasLigadas((v) => !v)}
@@ -44996,21 +45004,23 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                     )}
                   </div>
                 </div>
-                {resumoCot && resumoCot.grupos.length > 0 && (
+                {resumoCot && (resumoCot.grupos.length > 0 || destinosEntrada.some((d) => d === ENTRADA_FORA)) && (
                   <div data-vk-resumo-cot style={{ marginTop: 12, padding: "10px 12px", borderRadius: 12, background: "#fafaf9",
                     border: "1px solid rgba(38,36,33,0.10)" }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: "#111827", marginBottom: 2 }}>
                       Como fica na cotação{cotacaoDestinoObj ? ` “${cotacaoDestinoObj.titulo || ""}”` : ""}
                     </div>
                     <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 8 }}>
-                      Um item por linha da sua planilha. Para juntar linhas do papel num item só, escolha o mesmo item nas duas.
+                      O resultado: os itens da cotação com o preço desta loja — um por linha da sua planilha. Para juntar linhas do papel num item só,
+                      escolha o mesmo item nas duas; o × tira o item desta proposta.
                     </div>
                     {resumoCot.grupos.map((g, gi) => (
                       <div key={gi} style={{ display: "grid", gap: 6, alignItems: "center", padding: "5px 0",
                         borderTop: gi ? "1px solid rgba(38,36,33,0.06)" : "none",
                         gridTemplateColumns: isMobile ? (comMedidas ? "1fr 1fr 1fr" : "1fr 70px 96px")
-                          : (comMedidas ? "minmax(0,1fr) 64px 64px 60px 80px 120px" : "minmax(0,1fr) 70px 92px 120px") }}>
-                        <div style={{ minWidth: 0, gridColumn: isMobile ? "1 / -1" : "auto" }}>
+                          : (comMedidas ? "minmax(0,1fr) 64px 64px 60px 80px 120px 24px" : "minmax(0,1fr) 70px 92px 120px 24px") }}>
+                        <div style={{ minWidth: 0, gridColumn: isMobile ? "1 / -1" : "auto", display: isMobile ? "flex" : "block", gap: 8, alignItems: "flex-start" }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
                           {g.existente ? (
                             <div style={{ fontSize: 12.5, color: "#111827" }}>{g.nome}
                               <span style={{ fontSize: 10.5, color: "#15803d", marginLeft: 6 }}>já na cotação</span></div>
@@ -45021,6 +45031,11 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                           <div style={{ fontSize: 10.5, color: "#9ca3af", marginTop: 2 }}>
                             {g.linhas.length === 1 ? "1 linha do papel" : `${g.linhas.length} linhas do papel juntas`}
                           </div>
+                        </div>
+                        {isMobile && (
+                          <button type="button" data-vk-tirar-resumo={gi} title="Tirar este item da proposta" onClick={() => tirarDoResumo(g.linhas)}
+                            style={{ background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: 18, padding: "2px 4px", fontFamily: "inherit" }}>×</button>
+                        )}
                         </div>
                         {comMedidas && (g.existente ? (
                           <>
@@ -45056,8 +45071,22 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                             </div>
                           )}
                         </div>
+                        {!isMobile && (
+                          <button type="button" data-vk-tirar-resumo={gi} title="Tirar este item da proposta" onClick={() => tirarDoResumo(g.linhas)}
+                            style={{ background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: 16, padding: 0, fontFamily: "inherit" }}>×</button>
+                        )}
                       </div>
                     ))}
+                    {resumoCot.fora > 0 || destinosEntrada.some((d) => d === ENTRADA_FORA) ? (
+                      <div data-vk-fora-resumo style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6, borderTop: "1px dashed rgba(38,36,33,0.14)", paddingTop: 6 }}>
+                        Fora da proposta: {(() => { const n = destinosEntrada.filter((d) => d === ENTRADA_FORA).length; return n === 1 ? "1 linha" : n + " linhas"; })()}
+                        {resumoCot.fora > 0 ? ` · ${dinheiro(resumoCot.fora)}` : ""} — não entram no preço nem na cotação.{" "}
+                        <button type="button" onClick={voltarOsDeFora}
+                          style={{ color: "#0474f4", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 11.5, fontWeight: 600 }}>
+                          voltar com elas
+                        </button>
+                      </div>
+                    ) : null}
                     {resumoCot.naoCotados.length > 0 && (
                       <div style={{ fontSize: 11.5, color: "#b45309", marginTop: 6 }}>
                         Esta loja não cotou: {resumoCot.naoCotados.map((c) => c.descricao).join(", ")}
