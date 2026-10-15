@@ -98,7 +98,7 @@ const modulo = new Function(`
            comContaPadraoDaEntrada, tipoDoAnexoDaEntrada, SITUACOES_DA_ENTRADA,
            fichaDaEntradaPelaIA, tipoDoPapelPelaIA, textoSemCaixaAlta,
            entradaTemPreco, modoPadraoDaCotacao, cotacoesParaGuardarProposta, cotacaoSugeridaParaProposta,
-           propostaDaEntrada, MODOS_DA_COTACAO_NA_ENTRADA, contaDeCompra, destinosDasLinhas, resumoDaPropostaNaEntrada, medidasDaLinha, areaDaMedida, fichaDaEntradaPelaIA, situacaoPadraoDaEntrada,
+           propostaDaEntrada, MODOS_DA_COTACAO_NA_ENTRADA, contaDeCompra, destinosDasLinhas, resumoDaPropostaNaEntrada, medidasDaLinha, areaDaMedida, fichaDaEntradaPelaIA, situacaoPadraoDaEntrada, codigoDoVao, assuntoDoPapel,
            cotacaoDeOrigemDasContas, papelDaPropostaEscolhida, resumoDaCotacao };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
@@ -3831,6 +3831,58 @@ teste("Medidas sobrevivem ao caminho real da tela: ficha da IA → itens da Entr
   const it2 = M.itensDaEntrada(o, "orcamento", []);
   assert.strictEqual(it2[0].largura, 1.2);
   assert.strictEqual(it2[1].largura, undefined, "cimento segue sem medida");
+});
+
+teste("Releitura da Alumisantos: linhas escritas de outro jeito caem no mesmo vão pelo código (J1, PC2_1) e trazem a medida", () => {
+  const it = (id, descricao, quantidade) => ({ id, descricao, quantidade, unidade: "un" });
+  const cot = { ...M.cotacaoVazia("o1"), id: "esq", titulo: "Esquadrias", etapaId: "esquadrias", itens: [
+    it("i1", "FACHADA ESTRUTURAL GRID (JUNTA SECA VIDRO E VIDRO HORIZONTAL) - J1 - Área de Vendas", 1),
+    it("i2", "PORTA DE CORRER - 4 FOLHAS - LINHA GOLD - PC1 - Hall de Entrada", 1),
+    it("i3", "FACHADA ESTRUTURAL GRID (JUNTA SECA VIDRO E VIDRO HORIZONTAL) - J2 - Showroom Gourmet", 1),
+    it("i4", "PORTA DE CORRER - 1 FOLHA COM VIDRO - LINHA GOLD-AS - PC2 - Ante Camara", 1),
+    it("i5", "PORTA DE CORRER - 3 FOLHAS - LINHA GOLD-AS - PC2_1 - Ante Camara", 1),
+    it("i6", "REVESTIMENTO ACM KYNAR PRETO FOSCO 61m² - Fachada", 1)],
+    propostas: [{ id: "pa", fornecedorId: "f9", favorecido: "Alumisantos", valor: 173856.13, precos: {}, soTotal: true }] };
+  const linhas = [
+    { descricao: "Fachada Estrutural Grid - Junta Seca - J1 - Área de Vendas", quantidade: 1, unidade: "un", bruto: 40000, largura: 6.2, altura: 3.4 },
+    { descricao: "Porta de Correr - 4 Folhas - Linha Gold - PC1", quantidade: 1, unidade: "un", bruto: 22000, largura: 4, altura: 2.5 },
+    { descricao: "Fachada Estrutural Grid - J2 - Showroom", quantidade: 1, unidade: "un", bruto: 23703, largura: 5, altura: 3 },
+    { descricao: "Porta de Correr - 1 Folha com Vidro - Trilho Côncavo - Linha Gold-as - PC2", quantidade: 1, unidade: "un", bruto: 3766.96, largura: 0.9, altura: 2.1 },
+    { descricao: "Porta de Correr - 3 Folhas - Aba Simples, Fecho Tetra, Trilho Individual Perimetral - PC2_1", quantidade: 1, unidade: "un", bruto: 11186.23, largura: 5.5, altura: 2.1 },
+    { descricao: "REVESTIMENTO ACM KYNAR PRETO FOSCO 61m² - Fachada", quantidade: 1, unidade: "un", bruto: 73200 }];
+  assert.strictEqual(M.codigoDoVao(linhas[4]), "PC2_1");
+  assert.strictEqual(M.codigoDoVao(linhas[3]), "PC2");
+  assert.strictEqual(M.codigoDoVao(linhas[5]), "", "61m² não é código");
+  assert.strictEqual(M.codigoDoVao({ descricao: "Ferro CA50 10mm" }), "", "insumo não tem código de vão");
+  const d = M.destinosDasLinhas(cot, linhas);
+  assert.deepStrictEqual(d, ["c:i1", "c:i2", "c:i3", "c:i4", "c:i5", "c:i6"]);
+  const r = M.resumoDaPropostaNaEntrada(cot, linhas, d, {});
+  assert.strictEqual(r.naoCotados.length, 0, "nenhum item fica como 'não cotou'");
+  assert.strictEqual(r.grupos[3].largura, 0.9);
+  assert.strictEqual(r.grupos[3].area, 1.89);
+  assert.strictEqual(r.grupos[5].largura, 0, "ACM segue sem medida");
+  const p = M.propostaDaEntrada({ cotacao: cot, obraId: "o1", itens: linhas, porItemDaCotacao: true, destinos: d, loja: { id: "f9", nome: "Alumisantos" } });
+  assert.strictEqual(p.cotacao.itens.length, 6, "sem item repetido");
+  const i5 = p.cotacao.itens.find((x) => x.id === "i5");
+  assert.strictEqual(i5.largura, 5.5); assert.strictEqual(i5.altura, 2.1);
+  assert.strictEqual(p.cotacao.propostas.length, 1, "a proposta da Alumisantos é trocada, não duplicada");
+  // a sugestão de cotação agora acha pelos itens em comum
+  const outra = { ...M.cotacaoVazia("o1"), id: "ele", titulo: "Eletricista", itens: [] };
+  assert.strictEqual(M.cotacaoSugeridaParaProposta([outra, cot], linhas).id, "esq");
+  // item que já tem medida não é trocado pela da linha
+  const cot2 = { ...cot, itens: cot.itens.map((x) => x.id === "i4" ? { ...x, largura: 1, altura: 2.2 } : x) };
+  const r2 = M.resumoDaPropostaNaEntrada(cot2, linhas, d, {});
+  assert.strictEqual(r2.grupos[3].largura, 1);
+  // dois itens com o mesmo código: dúvida, não casa
+  const cot3 = { ...cot, itens: cot.itens.concat([it("i7", "Porta de correr PC1 - outra", 1)]) };
+  assert.strictEqual(M.destinosDasLinhas(cot3, [linhas[1]])[0].slice(0, 2), "n:");
+});
+
+teste("Papel sem cotação aberta do assunto: a nova ganha o nome e a etapa do assunto", () => {
+  assert.deepStrictEqual(M.assuntoDoPapel([{ descricao: "Fachada estrutural grid J1" }, { descricao: "Porta de correr 4 folhas" }]),
+    { nome: "Esquadrias", etapaId: "esquadrias" });
+  assert.strictEqual(M.assuntoDoPapel([{ descricao: "Disjuntor 20A" }, { descricao: "Cabo 2,5mm" }, { descricao: "Tomada 10A" }]).nome, "Elétrica");
+  assert.strictEqual(M.assuntoDoPapel([{ descricao: "Cimento CP II" }, { descricao: "Areia média" }]), null, "insumo solto: sem assunto, nome pelas linhas");
 });
 
 teste("Lista colada: vírgula entre dígitos é decimal, não separa item (medida 3,05 x 3,40)", () => {

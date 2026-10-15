@@ -1590,6 +1590,16 @@ function cotChaveDoItem(x) {
   return cotSemAcento(String((x && x.descricao) || "")).replace(/\s+/g, " ").trim();
 }
 
+// O código do vão no projeto (J1, J2, PC1, PC2_1, P3, V12): a vidraçaria
+// escreve a linha cada vez de um jeito, mas o código da planta é o mesmo.
+// Só vale em linha de vão — em insumo, "CA50" ou "M10" não é código de vão.
+function codigoDoVao(x) {
+  const t = String((x && x.descricao) || "");
+  if (!COT_PALAVRAS_DE_VAO.test(cotSemAcento(t))) return "";
+  const m = /(?:^|[^A-Za-z0-9_])([A-Za-z]{1,3}\d{1,3}(?:_\d{1,2})?)(?![A-Za-z0-9_])/.exec(t);
+  return m ? m[1].toUpperCase() : "";
+}
+
 // O item da cotação que é o mesmo da lista: pelo código do catálogo, e na
 // falta dele pela descrição. Cada item da cotação casa uma vez só — dois
 // discos diferentes no mesmo papel não podem virar um preço só.
@@ -1606,7 +1616,15 @@ function itemCotadoDaEntrada(lista, it, usados) {
   return lista.find((c) => livre(c) && cotChaveDoItem(c) === chave && !(cod && c.codigo && c.codigo !== cod))
     // o texto que uma loja já usou para este item (guardado quando a linha foi ligada a ele)
     || lista.find((c) => livre(c) && (c.textosDasLojas || []).some((t) => cotChaveDoItem({ descricao: t }) === chave))
+    || itemPeloCodigoDoVao(lista, it, livre)
     || null;
+}
+// Mesmo código de vão, e só um item da cotação com ele — dois "J1" é dúvida.
+function itemPeloCodigoDoVao(lista, it, livre) {
+  const cod = codigoDoVao(it);
+  if (!cod) return null;
+  const com = lista.filter((c) => codigoDoVao(c) === cod);
+  return com.length === 1 && livre(com[0]) ? com[0] : null;
 }
 
 // A cotação que mais se parece com a lista: a que tem mais itens em comum.
@@ -1642,6 +1660,25 @@ const COT_ASSUNTOS = [
   ["marcenar", "armario", "mdf", "gabinete"],
   ["impermeab", "manta", "vedacit"],
 ];
+// O nome e a etapa de cada assunto, na ordem de COT_ASSUNTOS: é o que a
+// cotação nova ganha quando o papel não cai em nenhuma aberta.
+const COT_NOMES_DOS_ASSUNTOS = [
+  ["Esquadrias", "esquadrias"], ["Elétrica", "eletrica"], ["Gesso e drywall", "forros"], ["Serralheria", ""],
+  ["Hidráulica", "hidraulica"], ["Pintura", "pintura"], ["Marcenaria", "marcenaria"], ["Impermeabilização", "impermeabilizacao"],
+];
+function assuntoDoPapel(itens) {
+  const doPapel = " " + cotSemAcento((itens || []).map((it) => it && it.descricao).filter(Boolean).join(" ")) + " ";
+  if (!doPapel.trim()) return null;
+  let melhor = -1, pontos = 0;
+  COT_ASSUNTOS.forEach((g, i) => {
+    const n = g.filter((p) => doPapel.indexOf(p) >= 0).length;
+    if (n > pontos) { pontos = n; melhor = i; }
+  });
+  if (melhor < 0) return null;
+  const [nome, etapaId] = COT_NOMES_DOS_ASSUNTOS[melhor];
+  const temEtapa = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).some((e) => e && e.id === etapaId);
+  return { nome, etapaId: temEtapa ? etapaId : "" };
+}
 function assuntoDaCotacaoBate(cot, itens) {
   const c = cot || {};
   const etapa = (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).find((e) => e && e.id === c.etapaId);
@@ -1744,7 +1781,15 @@ function resumoDaPropostaNaEntrada(cot, linhas, destinos, qtdNovos) {
   });
   // item novo de uma linha só herda a quantidade dela; juntado vira 1
   for (const g of grupos) {
-    if (g.existente) continue;
+    if (g.existente) {
+      // o item já estava na cotação, mas sem medida (veio de uma leitura
+      // sem largura/altura): a medida desta linha passa a ser a dele
+      if (!(g.largura > 0) && !(g.altura > 0) && g.linhas.length === 1) {
+        const md = medidasDaLinha((linhas || [])[g.linhas[0]] || {});
+        if (md) { g.largura = md.largura; g.altura = md.altura; g.medidaNova = true; }
+      }
+      continue;
+    }
     const l0 = (linhas || [])[g.linhas[0]] || {};
     if (g.quantidade == null) g.quantidade = g.linhas.length === 1 && numeroDoCampo(l0.quantidade) > 0 ? l0.quantidade : 1;
     if (!g.unidade) g.unidade = (g.linhas.length === 1 && l0.unidade) || "un";
@@ -1783,6 +1828,11 @@ function propostaDaEntradaPorItem(x, cot0) {
           ...(g.largura > 0 ? { largura: g.largura } : {}), ...(g.altura > 0 ? { altura: g.altura } : {}) };
         lista.push(alvo);
         novos++;
+      }
+      if (g.existente && g.medidaNova && !(numeroDoCampo(alvo.largura) > 0) && !(numeroDoCampo(alvo.altura) > 0)) {
+        alvo = { ...alvo, ...(g.largura > 0 ? { largura: g.largura } : {}), ...(g.altura > 0 ? { altura: g.altura } : {}) };
+        const id = alvo.id;
+        lista = lista.map((c) => (c.id === id ? alvo : c));
       }
       // o jeito que a loja escreveu fica no item: o próximo papel igual casa sozinho
       const textos = g.linhas.map((i) => String((linhas[i] || {}).descricao || "").trim())
@@ -9466,6 +9516,12 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // Guardando proposta, a tabela vira a da cotação: cada linha do papel
   // aponta para um item dela (ou junta com outra, ou fica de fora).
   const modoItens = !!itens && guardaProposta;
+  // Cotação nova: o nome e a etapa saem do assunto das linhas ("fachada",
+  // "porta de correr" → Esquadrias). "-" é a pessoa ter dito "escolher depois".
+  const assuntoEntrada = modoItens ? assuntoDoPapel(itens) : null;
+  const etapaDaNova = etapaNova === "-" ? "" : (etapaNova || (assuntoEntrada && assuntoEntrada.etapaId) || "");
+  const tituloPadraoDaNova = (assuntoEntrada && assuntoEntrada.nome)
+    || tituloDaListaRapida(itens, new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10));
   // Colunas de medida só quando o papel tem vão (ou a pessoa liga): lista de
   // insumo segue linha a linha, sem largura nem altura.
   const comMedidas = modoItens && (medidasLigadas || (itens || []).some((x) => !!medidasDaLinha(x)));
@@ -9825,8 +9881,8 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     const r = aoSeguir({ destino: "proposta", obraId, itens, papel, lojaId,
       desconto: descontoDoPapel, cotacaoId: destinoId,
       porItemDaCotacao: true, destinos: destinosEntrada, qtdNovos, soTotal,
-      etapaId: destinoId ? "" : etapaNova, contaId: destinoId ? "" : contaNova,
-      titulo: String(tituloNova || "").trim() || tituloDaListaRapida(itens, new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)),
+      etapaId: destinoId ? "" : etapaDaNova, contaId: destinoId ? "" : contaNova,
+      titulo: String(tituloNova || "").trim() || tituloPadraoDaNova,
       anexo }) || {};
     if (r.erro) { setAviso(r.erro); return; }
     ultimaCotacao.current = r.cotacaoId || "";
@@ -10686,13 +10742,13 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                           <div style={{ marginTop: 8 }}>
                             <label style={E.label}>Nome da cotação</label>
                             <input style={E.input} value={tituloNova}
-                              placeholder={tituloDaListaRapida(itens, new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10))}
+                              placeholder={tituloPadraoDaNova}
                               onChange={(e) => setTituloNova(e.target.value)} />
                             {/* etapa e conta são da cotação inteira — nas linhas não importam */}
                             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8, marginTop: 8 }}>
                               <div style={{ minWidth: 0 }}>
                                 <label style={E.label}>Etapa da obra</label>
-                                <SelectBusca style={E.input} value={etapaNova} onChange={(v) => setEtapaNova(v || "")} placeholder="Procurar etapa…"
+                                <SelectBusca style={E.input} value={etapaDaNova} onChange={(v) => setEtapaNova(v || "-")} placeholder="Procurar etapa…"
                                   opcoes={[{ valor: "", rotulo: "— escolher depois —" }].concat(etapasDaEntrada.map((e) => ({ valor: e.id, rotulo: e.nome, grupo: e.macro || "" })))} />
                               </div>
                               <div style={{ minWidth: 0 }}>
