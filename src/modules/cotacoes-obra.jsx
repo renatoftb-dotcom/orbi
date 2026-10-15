@@ -1240,7 +1240,10 @@ function itemDaEntrada(cru, tipo) {
   if (tipo === "orcamento") {
     return { descricao: String(c.descricao || "").trim(), quantidade: c.quantidade || "",
       unidade: c.unidade || "", unitario: c.unitario || "", bruto: c.total || "",
-      codigoLoja: c.codigo || "" };
+      codigoLoja: c.codigo || "",
+      // medida do vão (esquadria, vidro): segue até a tabela da cotação
+      ...(Number(c.largura) > 0 ? { largura: Number(c.largura) } : {}),
+      ...(Number(c.altura) > 0 ? { altura: Number(c.altura) } : {}) };
   }
   // lista (IA ou leitor por regras): tem o que se pede, não o que se paga
   const ins = c.insumo || null;
@@ -2002,7 +2005,7 @@ function rotuloDoPapelDaEntrada(papel, itens) {
   const p = papel || {};
   if (p.lidoPelaIA && p.tipoIA) {
     const nome = COT_NOME_DO_TIPO[p.tipoIA] || "papel";
-    const fem = /^(nota|guia|lista)/.test(nome);
+    const fem = /^(nota|guia|lista|proposta)/.test(nome);
     return nome.charAt(0).toUpperCase() + nome.slice(1) + (fem ? " lida" : " lido") + " pela IA";
   }
   if (p.tipo === "comprovante") return "Comprovante de pagamento lido";
@@ -3702,6 +3705,8 @@ function orcamentoDaIA(bruto) {
     unitario: Number(l.unitario) > 0 ? Number(l.unitario) : 0,
     total: Number(l.total) > 0 ? Number(l.total) : 0,
     itemDoPedido: l.itemDoPedido == null ? null : String(l.itemDoPedido),
+    ...(Number(l.largura) > 0 ? { largura: Number(l.largura) } : {}),
+    ...(Number(l.altura) > 0 ? { altura: Number(l.altura) } : {}),
   })).filter((l) => l.descricao && (l.unitario > 0 || l.total > 0));
   const somaItens = Math.round(itens.reduce((a, l) =>
     a + (l.total > 0 ? l.total : l.unitario * l.quantidade), 0) * 100) / 100;

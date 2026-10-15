@@ -3812,6 +3812,27 @@ teste("Papel lido como proposta pela IA abre em cotação, com as medidas nas li
   assert.strictEqual(p.cotacao.itens[1].largura, undefined, "ACM sem medida");
 });
 
+teste("Medidas sobrevivem ao caminho real da tela: ficha da IA → itens da Entrada → proposta", () => {
+  const f = M.fichaDaEntradaPelaIA([{ tipo: "proposta", emitente: "Alumisantos", valor: 104393.34, itens: [
+    { descricao: "J1 - FACHADA ESTRUTURAL GRID", quantidade: 3, unidade: "un", unitario: 10397.78, total: 31193.34, largura: 3.05, altura: 3.4 },
+    { descricao: "ACM", quantidade: 1, unidade: "un", unitario: 73200, total: 73200 }] }]);
+  const itens = M.itensDaEntrada({ itens: f.itens }, "orcamento", []);
+  assert.strictEqual(itens[0].largura, 3.05, "itemDaEntrada não pode perder a largura");
+  assert.strictEqual(itens[0].altura, 3.4);
+  assert.strictEqual(itens[1].largura, undefined);
+  assert.deepStrictEqual(M.medidasDaLinha(itens[0]), { largura: 3.05, altura: 3.4 });
+  const cot = { ...M.cotacaoVazia("o1"), itens: [] };
+  const p = M.propostaDaEntrada({ cotacao: cot, obraId: "o1", itens, porItemDaCotacao: true, loja: { id: "f9", nome: "Alumisantos" } });
+  assert.strictEqual(p.cotacao.itens[0].largura, 3.05);
+  assert.strictEqual(p.cotacao.itens[0].altura, 3.4);
+  // e pelo leitor de orçamento da IA (quando o leitor por regras não acha itens)
+  const o = M.orcamentoDaIA({ itens: [{ descricao: "Vidro temperado 8mm", quantidade: 2, unidade: "un", unitario: 900, total: 1800, largura: 1.2, altura: 2.1 },
+    { descricao: "Cimento CP II", quantidade: 10, unidade: "sc", unitario: 40, total: 400, largura: 0, altura: 0 }] });
+  const it2 = M.itensDaEntrada(o, "orcamento", []);
+  assert.strictEqual(it2[0].largura, 1.2);
+  assert.strictEqual(it2[1].largura, undefined, "cimento segue sem medida");
+});
+
 teste("Lista colada: vírgula entre dígitos é decimal, não separa item (medida 3,05 x 3,40)", () => {
   const r = M.interpretarPedido("3 un Vitrine loja nova 3,05 x 3,40\n20 sacos de cimento, 10 de cal e 2,5 m3 de areia", []);
   const termos = r.map((x) => x.termo || x.descricao);
