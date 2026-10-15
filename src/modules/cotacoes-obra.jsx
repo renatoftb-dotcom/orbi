@@ -6410,11 +6410,36 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         })()}
 
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 14, marginBottom: 14 }}>
-          <div>
-            <label style={E.label}>Valor</label>
-            <CampoCtrNum tipo="moeda" style={E.input} valor={p.valor}
-              onChange={(v) => set("valor", v)} placeholder="12.500,00" />
-          </div>
+          {(() => {
+            // Com preço por item, o valor É a soma dos itens (com o total
+            // fechado, se houver) — é o que se grava ao salvar. Mostrar o
+            // número antigo num campo editável só confundia.
+            const cotDaProposta = cotacoes.find(c => c.id === formProposta.cotacaoId);
+            let automatico = null;
+            if (cotDaProposta && temListaDeItens(cotDaProposta)) {
+              const prev = aplicarLinhasDaProposta(cotDaProposta, p, formProposta.linhas || linhasDaProposta(cotDaProposta, p));
+              if (propostaTemPrecoPorItem(prev.cotacao, prev.proposta)) automatico = totalNegociado(prev.cotacao, prev.proposta);
+            }
+            if (automatico != null) {
+              return (
+                <div data-vk-valor-automatico="1">
+                  <label style={E.label}>Valor</label>
+                  <div style={{ ...E.input, background: "#f3f4f6", color: "#111827", fontWeight: 600, display: "flex", alignItems: "center" }}
+                    title="Soma dos itens acima (com o total fechado, se houver). Para mudar, mexa nos preços ou no Total fechado.">
+                    {dinheiro(automatico)}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: "#6b7280", marginTop: 3 }}>soma dos itens — muda junto com eles</div>
+                </div>
+              );
+            }
+            return (
+              <div>
+                <label style={E.label}>Valor</label>
+                <CampoCtrNum tipo="moeda" style={E.input} valor={p.valor}
+                  onChange={(v) => set("valor", v)} placeholder="12.500,00" />
+              </div>
+            );
+          })()}
           <div>
             <label style={E.label}>Prazo de entrega (dias)</label>
             <CampoCtrNum tipo="inteiro" style={E.input} valor={p.prazoDias}
