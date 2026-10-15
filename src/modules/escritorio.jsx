@@ -772,6 +772,53 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
   );
 
   // ── ABA EQUIPE ──────────────────────────────────────────────
+  // O cadastro de membro mora fora das abas: abre tanto pela Equipe quanto
+  // pelo "Cadastrar membro" da busca no modal de usuário.
+  const renderModalMembro = () => (
+    <>
+      {novoMembro && (
+        <div style={{ ...E.overlay, zIndex: 10001 }}>
+          <div style={E.modal}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+              <div style={E.modalTitulo}>{equipe.some(m => m.id === novoMembro.id) ? "Editar membro" : "Novo membro"}</div>
+              <button onClick={() => setNovoMembro(null)} style={{ background:"none", border:"none", color:"#4b5563", fontSize:20, cursor:"pointer" }}>×</button>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:20 }}>
+              {[["Nome completo","nome"],["Cargo","cargo"],["E-mail","email"],["Telefone","telefone"],["CAU / CREA","cau"],["CPF","cpf"]].map(([lbl,key]) => (
+                <div key={key} style={E.campo}>
+                  <label style={E.label}>{lbl}</label>
+                  <input style={E.input} value={novoMembro[key]||""} onChange={e => setNovoMembro(m => ({...m,[key]:e.target.value}))} />
+                </div>
+              ))}
+            </div>
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+              <button style={E.btnSec} onClick={() => setNovoMembro(null)}>Cancelar</button>
+              <button style={E.btn} onClick={() => {
+                if (!novoMembro.nome?.trim()) return;
+                const existe = equipe.find(m => m.id === novoMembro.id);
+                const novaEquipe = existe
+                  ? equipe.map(m => m.id === novoMembro.id ? novoMembro : m)
+                  : [...equipe, novoMembro];
+                setEquipe(novaEquipe);
+                save({ ...data, escritorio: { ...form, equipe: novaEquipe, responsaveis } });
+                // Item 7: se há um modal de usuário aberto e este é membro NOVO
+                // (não edição), auto-seleciona o membro recém-criado no dropdown.
+                // Fluxo: usuário clica "+ novo membro" → preenche → Adicionar →
+                // membro fica selecionado direto, sem precisar voltar e escolher.
+                if (novoUsuario && !existe) {
+                  setNovoUsuario(u => ({ ...u, membro_id: novoMembro.id }));
+                }
+                setNovoMembro(null);
+              }}>
+                {equipe.find(m => m.id === novoMembro.id) ? "Salvar" : "Adicionar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
   const renderEquipe = () => (
     <div style={E.body}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
@@ -812,46 +859,6 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
 
       {/* Modal membro — zIndex elevado pra ficar acima do modal de usuário
           quando ambos estão abertos (item 7: cria membro de dentro do modal usuário) */}
-      {novoMembro && (
-        <div style={{ ...E.overlay, zIndex: 10001 }}>
-          <div style={E.modal}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
-              <div style={E.modalTitulo}>{novoMembro.nome ? "Editar membro" : "Novo membro"}</div>
-              <button onClick={() => setNovoMembro(null)} style={{ background:"none", border:"none", color:"#4b5563", fontSize:20, cursor:"pointer" }}>×</button>
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:20 }}>
-              {[["Nome completo","nome"],["Cargo","cargo"],["E-mail","email"],["Telefone","telefone"],["CAU / CREA","cau"],["CPF","cpf"]].map(([lbl,key]) => (
-                <div key={key} style={E.campo}>
-                  <label style={E.label}>{lbl}</label>
-                  <input style={E.input} value={novoMembro[key]||""} onChange={e => setNovoMembro(m => ({...m,[key]:e.target.value}))} />
-                </div>
-              ))}
-            </div>
-            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
-              <button style={E.btnSec} onClick={() => setNovoMembro(null)}>Cancelar</button>
-              <button style={E.btn} onClick={() => {
-                if (!novoMembro.nome?.trim()) return;
-                const existe = equipe.find(m => m.id === novoMembro.id);
-                const novaEquipe = existe
-                  ? equipe.map(m => m.id === novoMembro.id ? novoMembro : m)
-                  : [...equipe, novoMembro];
-                setEquipe(novaEquipe);
-                save({ ...data, escritorio: { ...form, equipe: novaEquipe, responsaveis } });
-                // Item 7: se há um modal de usuário aberto e este é membro NOVO
-                // (não edição), auto-seleciona o membro recém-criado no dropdown.
-                // Fluxo: usuário clica "+ novo membro" → preenche → Adicionar →
-                // membro fica selecionado direto, sem precisar voltar e escolher.
-                if (novoUsuario && !existe) {
-                  setNovoUsuario(u => ({ ...u, membro_id: novoMembro.id }));
-                }
-                setNovoMembro(null);
-              }}>
-                {equipe.find(m => m.id === novoMembro.id) ? "Salvar" : "Adicionar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 
@@ -1068,6 +1075,8 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
                   <label style={E.label}>Vincular a membro da equipe</label>
                   <div style={{ display:"flex", gap:8, alignItems:"center" }}>
                     <Selecao style={{ ...E.select, flex:1 }} value={novoUsuario.membro_id}
+                      criarRotulo="membro"
+                      aoCriar={(termo) => setNovoMembro({ ...emptyMembro, id: uid(), nome: termo || "" })}
                       onChange={e => {
                         const valor = e.target.value;
                         // Opção especial __novo: abre o modal de novo membro sem fechar
@@ -1084,7 +1093,6 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
                       {equipe.map(m => (
                         <option key={m.id} value={m.id}>{m.nome}{m.cargo ? ` (${m.cargo})` : ""}</option>
                       ))}
-                      <option value="__novo">+ Cadastrar novo membro…</option>
                     </Selecao>
                   </div>
                   {equipe.length === 0 && (
@@ -1307,6 +1315,7 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
           aoIrPara={(destino) => { setAba(destino); if (aoTrocarAba) aoTrocarAba(destino); }} />
       )}
       {aba === "usuarios" && perm.podeGerenciarUsuarios && renderUsuarios()}
+      {renderModalMembro()}
       {aba === "sistema"  && renderSistema()}
     </div>
   );

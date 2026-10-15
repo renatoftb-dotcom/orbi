@@ -727,10 +727,10 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
           setBusca={setBuscaCliente}
           onSelecionar={abrirNovoOrcamento}
           onFechar={() => { setModalNovoAberto(false); setBuscaCliente(""); }}
-          onCadastrarNovo={() => {
+          onCadastrarNovo={(nome) => {
             setModalNovoAberto(false);
             setBuscaCliente("");
-            if (onCadastrarCliente) onCadastrarCliente();
+            if (onCadastrarCliente) onCadastrarCliente(nome || "");
           }}
         />
       )}
@@ -2292,6 +2292,9 @@ function OrcRowHeader({ showCliente = true, sort, setSort, filtrosCol, setFiltro
 
 // ─── Modal de Novo Orçamento (escolha de cliente) ──
 function ModalNovoOrcamento({ clientes, busca, setBusca, onSelecionar, onFechar, onCadastrarNovo }) {
+  // Busca por telefone não é nome: só leva para o cadastro o que tem letra.
+  const digitado = String(busca || "").trim();
+  const nomeDigitado = /[a-zà-ú]/i.test(digitado) ? digitado : "";
   return (
     <div
       style={{
@@ -2316,13 +2319,29 @@ function ModalNovoOrcamento({ clientes, busca, setBusca, onSelecionar, onFechar,
             onChange={e => setBusca(e.target.value)}
             placeholder="Buscar cliente por nome ou telefone…"
             autoFocus
+            onKeyDown={e => { if (e.key === "Enter" && clientes.length === 0 && String(busca || "").trim()) { e.preventDefault(); onCadastrarNovo(nomeDigitado); } }}
             style={{
-              width:"100%", padding:"9px 12px",
+              width:"100%", boxSizing:"border-box", padding:"9px 12px",
               border:"2px solid #d1d5db", borderRadius:7,
               fontSize:13, color:"#262421", fontFamily:"inherit",
               outline:"none", background:"#fff",
             }}
           />
+          {/* Cadastrar fica logo abaixo da busca: quem não achou o cliente não
+              precisa rolar a lista. Com o nome digitado, ele já vai preenchido. */}
+          <button
+            data-tutorial-id="modal-cadastrar-novo-cliente"
+            onClick={() => onCadastrarNovo(nomeDigitado)}
+            style={{
+              width:"100%", boxSizing:"border-box", marginTop:8, padding:"9px 14px",
+              border: clientes.length === 0 && busca ? "1px solid #0474f4" : "1px dashed #d1d5db", borderRadius:7,
+              background: clientes.length === 0 && busca ? "#eef5ff" : "#fff",
+              fontSize:13, color:"#0474f4", fontWeight:600, textAlign:"left",
+              fontFamily:"inherit", cursor:"pointer",
+            }}
+          >
+            {nomeDigitado ? `+ Cadastrar “${nomeDigitado}” como novo cliente` : "+ Cadastrar novo cliente"}
+          </button>
           <div style={{
             marginTop:12, maxHeight:280, overflowY:"auto",
             border:"1px solid #f3f4f6", borderRadius:7,
@@ -2349,29 +2368,6 @@ function ModalNovoOrcamento({ clientes, busca, setBusca, onSelecionar, onFechar,
               </div>
             ))}
           </div>
-          <div style={{
-            display:"flex", alignItems:"center", gap:12, margin:"16px 0",
-            color:"#9ca3af", fontSize:11, textTransform:"uppercase", letterSpacing:0.8,
-          }}>
-            <div style={{ flex:1, height:1, background:"#f3f4f6" }} />
-            ou
-            <div style={{ flex:1, height:1, background:"#f3f4f6" }} />
-          </div>
-          <button
-            data-tutorial-id="modal-cadastrar-novo-cliente"
-            onClick={onCadastrarNovo}
-            style={{
-              width:"100%", padding:"10px 14px",
-              border:"1px dashed #d1d5db", borderRadius:7, background:"#fff",
-              fontSize:13, color:"#374151", fontWeight:500,
-              fontFamily:"inherit", cursor:"pointer",
-              display:"flex", alignItems:"center", justifyContent:"center", gap:6,
-            }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor="#262421"; e.currentTarget.style.color="#262421"; e.currentTarget.style.background="#fafafa"; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor="#d1d5db"; e.currentTarget.style.color="#374151"; e.currentTarget.style.background="#fff"; }}
-          >
-            + Cadastrar novo cliente
-          </button>
         </div>
       </div>
     </div>

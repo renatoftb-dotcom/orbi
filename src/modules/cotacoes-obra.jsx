@@ -5030,6 +5030,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   // ── Formulário da cotação ─────────────────────────────────────
   function salvarCotacao() {
     const f = formCotacao;
+    if (novoPrestador) { setErro("Termine o cadastro da loja — salve ou cancele — antes de salvar a cotação."); return; }
     if (!String(f.titulo || "").trim()) { setErro("Dê um nome à cotação (ex.: Esquadrias de alumínio)."); return; }
     if (f.contaLoja && !f.lojaId) { setErro("Escolha a loja desta conta."); return; }
     setErro("");
@@ -5037,6 +5038,68 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     const marcada = carimbar(f, usuario, !existe);
     gravarCotacoes(existe ? cotacoes.map(c => (c.id === f.id ? marcada : c)) : cotacoes.concat([marcada]));
     setFormCotacao(null);
+  }
+
+  // Cadastro rápido de prestador/loja: o mesmo formulário serve à proposta
+  // recebida e à conta na loja. Quem abre pela busca já chega com o nome que
+  // digitou; ao salvar, o novo entra escolhido no campo de onde veio.
+  function blocoNovoPrestador() {
+    if (!novoPrestador) return null;
+    return (
+
+          <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, marginBottom: 14, background: "#fafafa" }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", marginBottom: 3 }}>Novo prestador de serviço</div>
+            <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 10 }}>
+              Só o nome é obrigatório — o resto dá para completar depois em Fornecedores. Estes são os mesmos campos do contrato, então quem cadastra aqui já serve de contratado.
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1.2fr", gap: 12, marginBottom: 12 }}>
+              <div><label style={E.label}>Nome / razão social *</label>
+                <input style={E.input} value={novoPrestador.nome} onChange={e => setNovoPrestador({ ...novoPrestador, nome: e.target.value })} placeholder="MB Viezzer Serralheria" /></div>
+              <div><label style={E.label}>Pessoa</label>
+                <Selecao style={E.input} value={novoPrestador.tipo} onChange={e => setNovoPrestador({ ...novoPrestador, tipo: e.target.value })}>
+                  <option value="PJ">Jurídica</option><option value="PF">Física</option>
+                </Selecao></div>
+              <div><label style={E.label}>{novoPrestador.tipo === "PF" ? "CPF" : "CNPJ"}</label>
+                <input style={E.input} value={novoPrestador.cnpjCpf} onChange={e => setNovoPrestador({ ...novoPrestador, cnpjCpf: e.target.value })} /></div>
+              <div><label style={E.label}>Categoria</label>
+                <Selecao style={E.input} value={novoPrestador.categoria} onChange={e => setNovoPrestador({ ...novoPrestador, categoria: e.target.value })}>
+                  {(typeof CATEGORIAS_PRESTADOR !== "undefined" ? CATEGORIAS_PRESTADOR : ["Outro"]).map(c => <option key={c} value={c}>{c}</option>)}
+                </Selecao></div>
+              <div><label style={E.label}>Telefone</label>
+                <input style={E.input} value={novoPrestador.telefone} onChange={e => setNovoPrestador({ ...novoPrestador, telefone: e.target.value })} /></div>
+              <div><label style={E.label}>E-mail</label>
+                <input style={E.input} value={novoPrestador.email} onChange={e => setNovoPrestador({ ...novoPrestador, email: e.target.value })} /></div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 2fr 0.8fr", gap: 12, marginBottom: 12 }}>
+              <div><label style={E.label}>CEP</label>
+                <input style={E.input} value={novoPrestador.cep} placeholder="00000-000"
+                  onChange={e => { setNovoPrestador({ ...novoPrestador, cep: e.target.value }); buscarCepPrestador(e.target.value); }} /></div>
+              <div><label style={E.label}>Logradouro</label>
+                <input style={E.input} value={novoPrestador.logradouro} onChange={e => setNovoPrestador({ ...novoPrestador, logradouro: e.target.value })} /></div>
+              <div><label style={E.label}>Número</label>
+                <input style={E.input} value={novoPrestador.numero} onChange={e => setNovoPrestador({ ...novoPrestador, numero: e.target.value })} /></div>
+              <div><label style={E.label}>Bairro</label>
+                <input style={E.input} value={novoPrestador.bairro} onChange={e => setNovoPrestador({ ...novoPrestador, bairro: e.target.value })} /></div>
+              <div><label style={E.label}>Cidade</label>
+                <input style={E.input} value={novoPrestador.cidade} onChange={e => setNovoPrestador({ ...novoPrestador, cidade: e.target.value })} /></div>
+              <div><label style={E.label}>UF</label>
+                <input style={E.input} maxLength={2} value={novoPrestador.estado} onChange={e => setNovoPrestador({ ...novoPrestador, estado: e.target.value.toUpperCase().slice(0, 2) })} /></div>
+            </div>
+            {novoPrestador.tipo === "PJ" && (
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div><label style={E.label}>Representante legal</label>
+                  <input style={E.input} value={novoPrestador.representanteNome} placeholder="quem assina pela empresa"
+                    onChange={e => setNovoPrestador({ ...novoPrestador, representanteNome: e.target.value })} /></div>
+                <div><label style={E.label}>CPF do representante</label>
+                  <input style={E.input} value={novoPrestador.representanteCpf} onChange={e => setNovoPrestador({ ...novoPrestador, representanteCpf: e.target.value })} /></div>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 10 }}>
+              <button style={E.btn} onClick={salvarNovoPrestador}>Salvar prestador</button>
+              <button style={E.btnSec} onClick={() => { setNovoPrestador(null); setErro(""); }}>Cancelar</button>
+            </div>
+          </div>
+    );
   }
 
   if (formCotacao) {
@@ -5070,8 +5133,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: 14, marginBottom: 14 }}>
             <div>
               <label style={E.label}>Loja</label>
-              <SelectBusca style={E.input} value={formCotacao.lojaId || ""}
-                onChange={v => set("lojaId", v)} placeholder="Procurar loja…"
+              <SelectBusca style={E.input} value={formCotacao.lojaId || ""} disabled={!!novoPrestador}
+                onChange={v => set("lojaId", v)} placeholder="Procurar loja…" criarRotulo="loja"
+                aoCriar={(termo) => { setErro(""); setNovoPrestador({ ...prestadorRapidoVazio(), nome: termo || "", categoria: "Loja / Comércio" }); }}
                 opcoes={[{ valor: "", rotulo: "— escolha a loja —" }].concat(
                   prestadores.map(function (f) {
                     return { valor: f.id, rotulo: f.nome, extra: f.categoria || "" };
@@ -5084,6 +5148,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
             </div>
           </div>
         )}
+        {formCotacao.contaLoja && blocoNovoPrestador()}
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: 14, marginBottom: 14 }}>
           <div>
             <label style={E.label}>O que está sendo cotado</label>
@@ -5125,7 +5190,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   {iaDisponivel ? "Colar ou anexar o pedido" : "Colar o pedido do pedreiro"}
                 </button>
               </div>
-              <SeletorInsumo insumos={insumos} aoEscolher={addInsumo} isMobile={isMobile} />
+              <SeletorInsumo insumos={insumos} aoEscolher={addInsumo} aoCadastrar={cadastrarInsumoDoPedido} isMobile={isMobile} />
               {itens.length > 0 && (
                 <div style={{ marginTop: 12 }}>
                   {!isMobile && (
@@ -5416,8 +5481,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     if (!registro) { setErro("Diga o nome do prestador."); return; }
     setErro("");
     save({ ...data, fornecedores: [...(data.fornecedores || []), registro] });
-    // já entra escolhido na proposta — é para isso que o usuário veio aqui
-    setFormProposta(f => f && ({ ...f, proposta: { ...f.proposta, fornecedorId: registro.id, favorecido: registro.nome } }));
+    // já entra escolhido no campo de onde veio — é para isso que o usuário veio aqui
+    if (formCotacao) setFormCotacao(f => f && ({ ...f, lojaId: registro.id }));
+    else setFormProposta(f => f && ({ ...f, proposta: { ...f.proposta, fornecedorId: registro.id, favorecido: registro.nome } }));
     setNovoPrestador(null);
   }
 
@@ -5601,6 +5667,8 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           <div>
             <label style={E.label}>Fornecedor cadastrado</label>
             <Selecao style={E.input} value={p.fornecedorId} disabled={!!novoPrestador}
+              criarRotulo="fornecedor"
+              aoCriar={(termo) => { setErro(""); setNovoPrestador({ ...prestadorRapidoVazio(), nome: termo || "" }); }}
               onChange={e => {
                 const id = e.target.value;
                 // "cadastrar" não é um fornecedor: abre o cadastro e o select
@@ -5610,7 +5678,6 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
               }}>
               <option value="">— nenhum —</option>
               {prestadores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
-              <option value="__novo__">＋ Cadastrar prestador</option>
             </Selecao>
           </div>
           <div>
@@ -5618,60 +5685,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
             <input style={E.input} value={p.favorecido} onChange={e => set("favorecido", e.target.value)} placeholder="MB Viezzer Serralheria" />
           </div>
         </div>
-        {novoPrestador && (
-          <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, marginBottom: 14, background: "#fafafa" }}>
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", marginBottom: 3 }}>Novo prestador de serviço</div>
-            <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 10 }}>
-              Só o nome é obrigatório — o resto dá para completar depois em Fornecedores. Estes são os mesmos campos do contrato, então quem cadastra aqui já serve de contratado.
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1.2fr", gap: 12, marginBottom: 12 }}>
-              <div><label style={E.label}>Nome / razão social *</label>
-                <input style={E.input} value={novoPrestador.nome} onChange={e => setNovoPrestador({ ...novoPrestador, nome: e.target.value })} placeholder="MB Viezzer Serralheria" /></div>
-              <div><label style={E.label}>Pessoa</label>
-                <Selecao style={E.input} value={novoPrestador.tipo} onChange={e => setNovoPrestador({ ...novoPrestador, tipo: e.target.value })}>
-                  <option value="PJ">Jurídica</option><option value="PF">Física</option>
-                </Selecao></div>
-              <div><label style={E.label}>{novoPrestador.tipo === "PF" ? "CPF" : "CNPJ"}</label>
-                <input style={E.input} value={novoPrestador.cnpjCpf} onChange={e => setNovoPrestador({ ...novoPrestador, cnpjCpf: e.target.value })} /></div>
-              <div><label style={E.label}>Categoria</label>
-                <Selecao style={E.input} value={novoPrestador.categoria} onChange={e => setNovoPrestador({ ...novoPrestador, categoria: e.target.value })}>
-                  {(typeof CATEGORIAS_PRESTADOR !== "undefined" ? CATEGORIAS_PRESTADOR : ["Outro"]).map(c => <option key={c} value={c}>{c}</option>)}
-                </Selecao></div>
-              <div><label style={E.label}>Telefone</label>
-                <input style={E.input} value={novoPrestador.telefone} onChange={e => setNovoPrestador({ ...novoPrestador, telefone: e.target.value })} /></div>
-              <div><label style={E.label}>E-mail</label>
-                <input style={E.input} value={novoPrestador.email} onChange={e => setNovoPrestador({ ...novoPrestador, email: e.target.value })} /></div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 2fr 0.8fr", gap: 12, marginBottom: 12 }}>
-              <div><label style={E.label}>CEP</label>
-                <input style={E.input} value={novoPrestador.cep} placeholder="00000-000"
-                  onChange={e => { setNovoPrestador({ ...novoPrestador, cep: e.target.value }); buscarCepPrestador(e.target.value); }} /></div>
-              <div><label style={E.label}>Logradouro</label>
-                <input style={E.input} value={novoPrestador.logradouro} onChange={e => setNovoPrestador({ ...novoPrestador, logradouro: e.target.value })} /></div>
-              <div><label style={E.label}>Número</label>
-                <input style={E.input} value={novoPrestador.numero} onChange={e => setNovoPrestador({ ...novoPrestador, numero: e.target.value })} /></div>
-              <div><label style={E.label}>Bairro</label>
-                <input style={E.input} value={novoPrestador.bairro} onChange={e => setNovoPrestador({ ...novoPrestador, bairro: e.target.value })} /></div>
-              <div><label style={E.label}>Cidade</label>
-                <input style={E.input} value={novoPrestador.cidade} onChange={e => setNovoPrestador({ ...novoPrestador, cidade: e.target.value })} /></div>
-              <div><label style={E.label}>UF</label>
-                <input style={E.input} maxLength={2} value={novoPrestador.estado} onChange={e => setNovoPrestador({ ...novoPrestador, estado: e.target.value.toUpperCase().slice(0, 2) })} /></div>
-            </div>
-            {novoPrestador.tipo === "PJ" && (
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: 12, marginBottom: 12 }}>
-                <div><label style={E.label}>Representante legal</label>
-                  <input style={E.input} value={novoPrestador.representanteNome} placeholder="quem assina pela empresa"
-                    onChange={e => setNovoPrestador({ ...novoPrestador, representanteNome: e.target.value })} /></div>
-                <div><label style={E.label}>CPF do representante</label>
-                  <input style={E.input} value={novoPrestador.representanteCpf} onChange={e => setNovoPrestador({ ...novoPrestador, representanteCpf: e.target.value })} /></div>
-              </div>
-            )}
-            <div style={{ display: "flex", gap: 10 }}>
-              <button style={E.btn} onClick={salvarNovoPrestador}>Salvar prestador</button>
-              <button style={E.btnSec} onClick={() => { setNovoPrestador(null); setErro(""); }}>Cancelar</button>
-            </div>
-          </div>
-        )}
+        {blocoNovoPrestador()}
         {/* Lista: a loja pode responder item a item ou só o total. Quem
             preenche item a item ganha a comparação por item; quem recebeu só
             "R$ 3.480 tudo" deixa em branco e digita o total. Cada proposta
@@ -6460,7 +6474,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           isMobile={isMobile} dinheiro={dinheiro} editando={!!formPedido.editando}
           origem={formPedido.origem}
           aoMudar={(p) => setFormPedido({ ...formPedido, pedido: p })}
-          aoAprender={aprenderApelidos} iaDisponivel={!!iaDisponivel}
+          aoAprender={aprenderApelidos} iaDisponivel={!!iaDisponivel} aoCadastrarInsumo={cadastrarInsumoDoPedido}
           aoFechar={() => setFormPedido(null)} aoLancar={lancarPedido} />
       )}
 
@@ -7948,7 +7962,7 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
   const E = COT_ESTILO;
   const [aberto, setAberto] = useState(false);
   const [termo, setTermo] = useState("");
-  const [marcado, setMarcado] = useState(0);
+  const [marcado, setMarcado] = useState(-1);
   const [novo, setNovo] = useState(null);      // { nome, grupo, unidade } quando cadastrando
   const campo = useRef(null);
   const lista = useRef(null);
@@ -7966,14 +7980,18 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
   const familias = (aberto || novo) ? familiasDoCatalogo(palavraChave(baseDoNome), escrito, insumos) : [];
   const medidaDe = (f) => medidaDoTexto(termo, f ? f.sep : "x") || medidaDoTexto(escrito, f ? f.sep : "x");
   const nomePadrao = familias.length ? nomeNoPadrao(familias[0].familia, medidaDe(familias[0])) : nomeSugerido;
+  // Cadastrar fica no topo da lista: quem não achou não rola até o fim.
+  // O marcado começa no primeiro item achado (Enter escolhe ele); sem nada
+  // achado, começa no cadastrar. -1 = "o padrão do momento".
   const opcoes = [
-    ...achados.map((i) => ({ tipo: "item", i })),
     { tipo: "novo" },
+    ...achados.map((i) => ({ tipo: "item", i })),
     ...(aoDeixarFora ? [{ tipo: "fora" }] : []),
   ];
+  const marcadoEf = marcado >= 0 ? Math.min(marcado, opcoes.length - 1) : (achados.length ? 1 : 0);
   // Na última linha a lista abria abaixo da dobra: rola o painel até ela.
   const abrir = () => {
-    setAberto(true); setTermo(""); setMarcado(0);
+    setAberto(true); setTermo(""); setMarcado(-1);
     setTimeout(() => {
       if (campo.current) campo.current.focus({ preventScroll: true });
       if (lista.current && lista.current.scrollIntoView) lista.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -8017,7 +8035,7 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
     : (x.rotuloVazio || `Fora do catálogo — “${x.termo}”`);
   const linha = (conteudo, k, extra) => (
     <div key={k} onMouseDown={(e) => { e.preventDefault(); usar(opcoes[k]); }} onMouseEnter={() => setMarcado(k)}
-      style={{ padding: "8px 11px", cursor: "pointer", background: k === marcado ? "#eef5ff" : "#fff",
+      style={{ padding: "8px 11px", cursor: "pointer", background: k === marcadoEf ? "#eef5ff" : "#fff",
         borderTop: k ? "1px solid rgba(38,36,33,0.06)" : "none", ...extra }}>{conteudo}</div>
   );
 
@@ -8122,12 +8140,12 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
   return (
     <div>
       <input ref={campo} style={E.input} value={termo} placeholder="Digite para buscar — luva, cabo, cimento…"
-        onChange={(e) => { setTermo(e.target.value); setMarcado(0); }}
+        onChange={(e) => { setTermo(e.target.value); setMarcado(-1); }}
         onBlur={() => setTimeout(fechar, 150)}
         onKeyDown={(e) => {
-          if (e.key === "ArrowDown") { e.preventDefault(); setMarcado((m) => Math.min(m + 1, opcoes.length - 1)); }
-          if (e.key === "ArrowUp") { e.preventDefault(); setMarcado((m) => Math.max(m - 1, 0)); }
-          if (e.key === "Enter") { e.preventDefault(); usar(opcoes[marcado]); }
+          if (e.key === "ArrowDown") { e.preventDefault(); setMarcado(Math.min(marcadoEf + 1, opcoes.length - 1)); }
+          if (e.key === "ArrowUp") { e.preventDefault(); setMarcado(Math.max(marcadoEf - 1, 0)); }
+          if (e.key === "Enter") { e.preventDefault(); usar(opcoes[marcadoEf]); }
           if (e.key === "Escape") { e.preventDefault(); fechar(); }
         }} />
       {/* A lista abre embaixo do campo, empurrando o resto — e não por cima:
@@ -8139,14 +8157,14 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
             ? (achados.length ? `${achados.length}${achados.length === 60 ? "+" : ""} no catálogo` : "Nada no catálogo com isso")
             : (achados.length ? "Mais parecidos com o que ele escreveu" : "Digite para buscar no catálogo")}
         </div>
+        {linha(<span data-cat-criar="1" style={{ fontSize: 12.5, color: "#0474f4", fontWeight: 600 }}>
+          ＋ {nomePadrao ? <>Cadastrar “{nomePadrao}” no catálogo</> : "Cadastrar item novo no catálogo"}</span>,
+          0, { borderBottom: "1px solid rgba(38,36,33,0.10)" })}
         {achados.map((i, k) => linha(
           <>
             <div style={{ fontSize: 12.5, color: "#111827" }}>{i.nome}</div>
             <div style={{ fontSize: 11, color: "#6b7280" }}>{[i.codigo, i.grupo, i.unidade].filter(Boolean).join(" · ")}</div>
-          </>, k))}
-        {linha(<span style={{ fontSize: 12.5, color: "#0474f4", fontWeight: 600 }}>
-          ＋ {nomePadrao ? <>Cadastrar “{nomePadrao}” no catálogo</> : "Cadastrar item novo no catálogo"}</span>,
-          achados.length)}
+          </>, k + 1))}
         {aoDeixarFora && linha(<span style={{ fontSize: 12, color: "#4b5563" }}>Deixar fora do catálogo, como “{x.termo}”</span>,
           achados.length + 1)}
       </div>
@@ -9622,9 +9640,17 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                     onChange={(e) => setBuscaLoja(e.target.value)} />
                   <div style={{ maxHeight: 190, overflowY: "auto", border: "1px solid rgba(38,36,33,0.12)",
                     borderRadius: 12, background: "#fff" }}>
+                    {/* Cadastrar no topo: digitou e não achou, o link já está ali. */}
+                    <button type="button" data-vk-cadastrar-loja onClick={() => abrirCadastroDeLoja(buscaLoja)}
+                      style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 12px", border: "none",
+                        borderBottom: "1px solid rgba(38,36,33,0.10)", cursor: "pointer", fontFamily: "inherit",
+                        fontSize: 12.5, fontWeight: 600, color: "#0474f4",
+                        background: buscaLoja.trim() && !lojasDaLista.length ? "#eef5ff" : "#fff" }}>
+                      {buscaLoja.trim() ? `＋ Cadastrar “${buscaLoja.trim()}”` : "＋ Cadastrar loja"}
+                    </button>
                     {!lojasDaLista.length ? (
                       <div style={{ padding: "12px 14px", fontSize: 12.5, color: "#4b5563" }}>
-                        Nenhum fornecedor com esse nome. Cadastre em Fornecedores, com o telefone.
+                        Nenhum fornecedor com esse nome — use o cadastrar aí em cima.
                       </div>
                     ) : lojasDaLista.map((f) => {
                       const temZap = !!linkWhatsApp(f.telefone, "");
@@ -9646,11 +9672,6 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                     })}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
-                    <button type="button" onClick={() => abrirCadastroDeLoja(buscaLoja)}
-                      style={{ ...E.btnSec, fontSize: 11.5, padding: "5px 12px", color: "#0474f4",
-                        borderColor: "rgba(4,116,244,0.35)", fontWeight: 600 }}>
-                      ＋ Cadastrar loja
-                    </button>
                     <span style={{ fontSize: 11.5, color: "#6b7280" }}>
                       Cada conversa abre com a lista já escrita — quem aperta enviar é você, lá no WhatsApp.
                     </span>
@@ -10462,7 +10483,8 @@ function ResumoDaCotacaoModal({ cotacao, cotacoes, prestadores, isMobile, aoFech
   );
 }
 
-function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editando, origem, aoMudar, aoFechar, aoLancar, aoAprender, iaDisponivel }) {
+function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editando, origem, aoMudar, aoFechar, aoLancar, aoAprender, aoCadastrarInsumo, iaDisponivel }) {
+  const [criandoInsumo, setCriandoInsumo] = useState(null); // { i, nome } quando cadastrando no catálogo
   const E = COT_ESTILO;
   const p = pedido;
   const P = cotPainel(isMobile, 980);
@@ -10909,11 +10931,19 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
             );
             const elo = { background: "none", border: "none", padding: 0, fontFamily: "inherit",
               fontSize: 10.5, color: "#6b7280", cursor: "pointer", textDecoration: "underline" };
-            const linhaCatalogo = procurando === i ? (
+            const linhaCatalogo = criandoInsumo && criandoInsumo.i === i ? (
+              <div style={{ marginTop: 4 }}>
+                <NovoInsumoRapido inicial={{ nome: criandoInsumo.nome }} insumos={insumos} isMobile={isMobile} escrito={it.descricao}
+                  aoCancelar={() => setCriandoInsumo(null)} aoCadastrar={aoCadastrarInsumo}
+                  aoUsar={(ins) => { setCriandoInsumo(null); mexerItem(i, comInsumo(itens[i], ins)); }} />
+              </div>
+            ) : procurando === i ? (
               <div style={{ marginTop: 3 }}>
                 <SelectBusca style={{ ...celStyle, fontSize: 11.5 }} value={it.insumoCodigo || ""}
                   abrirAoMontar placeholder="Procurar no catálogo…" vazio="— escolher do catálogo —"
                   opcoes={opcoesCatalogo} aoFechar={() => setProcurando(-1)}
+                  criarRotulo="item no catálogo"
+                  aoCriar={aoCadastrarInsumo ? ((termo) => { setProcurando(-1); setCriandoInsumo({ i, nome: termo || it.descricao || "" }); }) : undefined}
                   onChange={(v) => { setProcurando(-1); aplicarInsumo(i, v); }} />
               </div>
             ) : (
@@ -11170,16 +11200,70 @@ function CampoUnidade({ valor, unidades, aoMudar, estilo }) {
   );
 }
 
+// ── Cadastro rápido de um item do catálogo ─────────────────────
+// Nome, grupo e unidade — o mínimo para o item entrar no catálogo no padrão
+// dele. Se o nome já existe, oferece usar o que existe em vez de duplicar.
+function NovoInsumoRapido({ inicial, insumos, isMobile, aoCadastrar, aoUsar, aoCancelar, escrito }) {
+  const E = COT_ESTILO;
+  const semAcento = (t) => (typeof normalizarTexto === "function"
+    ? normalizarTexto(t)
+    : String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+  const [novo, setNovo] = useState(() => {
+    const nome = String((inicial || {}).nome || "").trim();
+    const g = (inicial || {}).grupo || (typeof grupoInferido === "function" && nome ? grupoInferido(nome) : "Outros");
+    return { nome, grupo: g === "Prestadores de serviços" ? "Outros" : g, unidade: (inicial || {}).unidade || "Unidades" };
+  });
+  const grupos = typeof INSUMO_GRUPOS !== "undefined" ? INSUMO_GRUPOS : [];
+  const unidades = typeof INSUMO_UNIDADES !== "undefined" ? INSUMO_UNIDADES : ["Unidades"];
+  const nomeOk = String(novo.nome || "").trim();
+  const jaExiste = nomeOk ? (insumos || []).find((i) => i && i.tipo !== "prestador" && semAcento(i.nome) === semAcento(nomeOk)) : null;
+  const rot = { fontSize: 11, fontWeight: 600, color: "#4b5563", marginBottom: 3 };
+  return (
+    <div data-vk-novo-insumo style={{ border: "1px solid rgba(4,116,244,0.35)", borderRadius: 10, padding: 10, background: "#f7fbff", display: "grid", gap: 8 }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "#111827" }}>Cadastrar no catálogo</div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1.2fr 1fr", gap: 8 }}>
+        <div style={{ minWidth: 0 }}><div style={rot}>Nome</div>
+          <input style={E.input} value={novo.nome} autoFocus onChange={(e) => setNovo({ ...novo, nome: e.target.value })} /></div>
+        <div style={{ minWidth: 0 }}><div style={rot}>Grupo</div>
+          <SelectBusca style={E.input} value={novo.grupo} onChange={(v) => setNovo({ ...novo, grupo: v })} placeholder="Procurar grupo…"
+            opcoes={grupos.map((g) => ({ valor: g.nome, rotulo: g.nome }))} /></div>
+        <div style={{ minWidth: 0 }}><div style={rot}>Unidade</div>
+          <SelectBusca style={E.input} value={novo.unidade} onChange={(v) => setNovo({ ...novo, unidade: v })} placeholder="Procurar unidade…"
+            opcoes={unidades} /></div>
+      </div>
+      {jaExiste && (
+        <div style={{ fontSize: 11.5, color: "#92400e" }}>
+          Já existe “{jaExiste.nome}” no catálogo.{" "}
+          <button type="button" style={{ background: "none", border: "none", color: "#0474f4", fontWeight: 600, cursor: "pointer", padding: 0, fontFamily: "inherit", fontSize: 11.5 }}
+            onClick={() => aoUsar && aoUsar(jaExiste)}>Usar o que existe</button>
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button type="button" style={E.btnSec} onClick={aoCancelar}>Cancelar</button>
+        <button type="button" style={{ ...E.btn, opacity: nomeOk && !jaExiste ? 1 : 0.45 }} disabled={!nomeOk || !!jaExiste}
+          onClick={() => {
+            const r = aoCadastrar ? aoCadastrar({ nome: nomeOk, grupo: novo.grupo, unidade: novo.unidade,
+              escrito: escrito && semAcento(escrito) !== semAcento(nomeOk) ? escrito : "" }) : null;
+            if (r && aoUsar) aoUsar(r);
+          }}>
+          Cadastrar e usar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Escolher insumo da lista, sem sair do formulário ────────────
 // Montar um pedido de loja é escolher vinte coisas em sequência. Um <select>
 // com 200 opções, ou um formulário por item, matam isso. Aqui se digita
 // "cimen", aparecem as opções, Enter põe na lista e o campo já está limpo
 // para o próximo.
-function SeletorInsumo({ insumos, aoEscolher, isMobile }) {
+function SeletorInsumo({ insumos, aoEscolher, aoCadastrar, isMobile }) {
   const E = COT_ESTILO;
   const [termo, setTermo] = useState("");
   const [aberto, setAberto] = useState(false);
-  const [marcado, setMarcado] = useState(0);
+  const [marcado, setMarcado] = useState(-1);   // -1 = o padrão do momento
+  const [novo, setNovo] = useState(null);       // { nome, grupo, unidade } quando cadastrando
   // Sem acento também acha: ninguém digita "tábua" nem "cerâmica" com acento
   // no meio de um pedido de vinte itens.
   const semAcento = (t) => (typeof normalizarTexto === "function"
@@ -11193,44 +11277,62 @@ function SeletorInsumo({ insumos, aoEscolher, isMobile }) {
       return busca.split(/\s+/).every((t) => alvo.indexOf(t) >= 0);
     })
     .slice(0, 8);
+  // Cadastrar fica no topo: digitou e não achou, o link já está ali.
+  const comCriar = !!aoCadastrar && !!busca;
+  const opcoes = (comCriar ? [{ tipo: "novo" }] : []).concat(achados.map((i) => ({ tipo: "item", i })));
+  const marcadoEf = marcado >= 0 ? Math.min(marcado, opcoes.length - 1) : (comCriar && achados.length ? 1 : 0);
 
   const escolher = (ins) => {
     if (!ins) return;
     aoEscolher(ins);
-    setTermo(""); setAberto(false); setMarcado(0);
+    setTermo(""); setAberto(false); setMarcado(-1);
   };
+  const comecarCadastro = () => { setNovo({ nome: termo.trim() }); setAberto(false); };
+  const usar = (o) => { if (!o) return; if (o.tipo === "novo") comecarCadastro(); else escolher(o.i); };
+
+  if (novo) {
+    return <NovoInsumoRapido inicial={novo} insumos={insumos} isMobile={isMobile} aoCancelar={() => setNovo(null)}
+      aoUsar={(ins) => { setNovo(null); escolher(ins); }} aoCadastrar={aoCadastrar} />;
+  }
 
   return (
     <div style={{ position: "relative" }}>
       <input style={E.input} value={termo} placeholder="Digite para achar o material — cimento, prego, tábua…"
-        onChange={(e) => { setTermo(e.target.value); setAberto(true); setMarcado(0); }}
+        onChange={(e) => { setTermo(e.target.value); setAberto(true); setMarcado(-1); }}
         onFocus={() => setAberto(true)}
         onBlur={() => setTimeout(() => setAberto(false), 150)}
         onKeyDown={(e) => {
-          if (!achados.length) return;
-          if (e.key === "ArrowDown") { e.preventDefault(); setMarcado((m) => Math.min(m + 1, achados.length - 1)); }
-          if (e.key === "ArrowUp") { e.preventDefault(); setMarcado((m) => Math.max(m - 1, 0)); }
-          if (e.key === "Enter") { e.preventDefault(); escolher(achados[marcado]); }
+          if (!opcoes.length) return;
+          if (e.key === "ArrowDown") { e.preventDefault(); setMarcado(Math.min(marcadoEf + 1, opcoes.length - 1)); }
+          if (e.key === "ArrowUp") { e.preventDefault(); setMarcado(Math.max(marcadoEf - 1, 0)); }
+          if (e.key === "Enter") { e.preventDefault(); usar(opcoes[marcadoEf]); }
           if (e.key === "Escape") setAberto(false);
         }} />
-      {aberto && achados.length > 0 && (
+      {aberto && opcoes.length > 0 && (
         <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 40, background: "#fff",
           border: "1px solid rgba(38,36,33,0.16)", borderRadius: 10, marginTop: 4, overflow: "hidden",
           boxShadow: "0 14px 34px -14px rgba(17,24,39,0.35)" }}>
-          {achados.map((i, k) => (
-            <div key={i.codigo || i.id || k} onMouseDown={(e) => { e.preventDefault(); escolher(i); }}
-              onMouseEnter={() => setMarcado(k)}
-              style={{ padding: "7px 11px", cursor: "pointer", background: k === marcado ? "#eef5ff" : "#fff",
-                borderTop: k ? "1px solid rgba(38,36,33,0.06)" : "none" }}>
-              <div style={{ fontSize: 12.5, color: "#111827" }}>{i.nome}</div>
-              <div style={{ fontSize: 11, color: "#6b7280" }}>
-                {[i.codigo, i.grupo, i.unidade].filter(Boolean).join(" · ")}
-              </div>
+          {opcoes.map((o, k) => (
+            <div key={o.tipo === "novo" ? "__novo" : (o.i.codigo || o.i.id || k)} onMouseDown={(e) => { e.preventDefault(); usar(o); }}
+              onMouseEnter={() => setMarcado(k)} data-cat-criar={o.tipo === "novo" ? "1" : undefined}
+              style={{ padding: "7px 11px", cursor: "pointer", background: k === marcadoEf ? "#eef5ff" : "#fff",
+                borderTop: k ? "1px solid rgba(38,36,33,0.06)" : "none",
+                borderBottom: o.tipo === "novo" && achados.length ? "1px solid rgba(38,36,33,0.10)" : "none" }}>
+              {o.tipo === "novo" ? (
+                <span style={{ fontSize: 12.5, color: "#0474f4", fontWeight: 600 }}>＋ Cadastrar “{termo.trim()}” no catálogo</span>
+              ) : (
+                <>
+                  <div style={{ fontSize: 12.5, color: "#111827" }}>{o.i.nome}</div>
+                  <div style={{ fontSize: 11, color: "#6b7280" }}>
+                    {[o.i.codigo, o.i.grupo, o.i.unidade].filter(Boolean).join(" · ")}
+                  </div>
+                </>
+              )}
             </div>
           ))}
         </div>
       )}
-      {busca && !achados.length && (
+      {busca && !achados.length && !aoCadastrar && (
         <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 4 }}>
           Nenhum insumo com esse nome. Dá para pôr o item à mão na linha abaixo.
         </div>

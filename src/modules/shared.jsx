@@ -2453,6 +2453,12 @@ function SelectBusca(props) {
     if (props.onChange) props.onChange(o.valor, o);
   }
 
+  function criar() {
+    const q = String(termo || "").trim();
+    fechar();
+    if (props.aoCriar) props.aoCriar(q);
+  }
+
   function aoTeclar(e) {
     if (e.key === "Escape") {
       e.preventDefault(); fechar();
@@ -2475,6 +2481,7 @@ function SelectBusca(props) {
       e.preventDefault();
       const o = visiveis[marcado];
       if (o) escolher(o);
+      else if (props.aoCriar && visiveis.length === 0) criar();
       return;
     }
     if (e.key === "Tab") { fechar(); return; }
@@ -2554,10 +2561,28 @@ function SelectBusca(props) {
                 }} />
             </div>
           )}
+          {/* Cadastrar fica no topo, logo abaixo da busca: quem não achou não
+              precisa rolar a lista inteira até o fim para criar. Quando a busca
+              não acha nada, ela fica destacada e o Enter cadastra. */}
+          {props.aoCriar && (
+            <div data-sb-criar="1" role="button"
+              onMouseDown={function (ev) { ev.preventDefault(); }}
+              onClick={criar}
+              style={{
+                padding: "9px 12px", fontSize: 12.5, cursor: "pointer", flexShrink: 0,
+                borderBottom: "1px solid rgba(38,36,33,0.10)",
+                background: visiveis.length === 0 ? "#eef5ff" : "#fff",
+                color: "#0474f4", fontWeight: 600,
+              }}>
+              {rotuloDeCriar(termo, props.criarRotulo)}
+            </div>
+          )}
           <div style={{ overflowY: "auto", flex: 1 }}>
             {visiveis.length === 0 && (
               <div style={{ padding: "12px 12px", fontSize: 12.5, color: "#9ca3af" }}>
-                nada com esse nome
+                {props.aoCriar && String(termo || "").trim()
+                  ? "nada com esse nome — use o cadastrar aí em cima"
+                  : "nada com esse nome"}
               </div>
             )}
             {visiveis.map(function (o, i) {
@@ -2592,18 +2617,6 @@ function SelectBusca(props) {
               </div>
             )}
           </div>
-          {props.aoCriar && (
-            <div onMouseDown={function (ev) { ev.preventDefault(); }}
-              onClick={function () { const q = termo; fechar(); props.aoCriar(String(q || "").trim()); }}
-              style={{
-                padding: "9px 12px", fontSize: 12.5, cursor: "pointer", flexShrink: 0,
-                borderTop: "1px solid rgba(38,36,33,0.10)",
-                background: visiveis.length === 0 ? "#eef5ff" : "#fff",
-                color: "#0474f4", fontWeight: 600,
-              }}>
-              {rotuloDeCriar(termo, props.criarRotulo)}
-            </div>
-          )}
         </div>
       )}
     </>
@@ -2674,6 +2687,7 @@ function Selecao(props) {
       disabled={props.disabled} vazio={props.vazio} placeholder={props.placeholder}
       minimoParaBusca={props.minimoParaBusca} semBusca={props.semBusca}
       abrirAoMontar={props.autoFocus}
+      aoCriar={props.aoCriar} criarRotulo={props.criarRotulo}
       aoFechar={function () { if (!escolheu.current && props.onBlur) props.onBlur({ target: { value: valor } }); }}
       onChange={aoEscolher} />
   );

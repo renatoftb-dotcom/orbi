@@ -2093,7 +2093,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "home" && !isMaster && <HomeMenu setAba={setAba} data={data} tentarTrocar={tentarTrocar} isMaster={isMaster} />}
           {aba === "clientes"               && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} abrirCadastroNovo={cadastroNovoCliente} onCadastroNovoAberto={() => setCadastroNovoCliente(false)} onClienteSalvoVoltarOrcamento={(c) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: null, modo: "editar" })} />}
           {aba === "projetos:etapas"        && <Etapas key={projetosKey} data={data} save={save} />}
-          {aba === "projetos:orcamentos"    && <TesteOrcamento key={orcamentosKey} data={{ ...data, _usuario: usuario }} save={save} onCadastrarCliente={() => { setAba("clientes"); setClientesKey(n=>n+1); setCadastroNovoCliente(true); }} />}
+          {aba === "projetos:orcamentos"    && <TesteOrcamento key={orcamentosKey} data={{ ...data, _usuario: usuario }} save={save} onCadastrarCliente={(nome) => { setAba("clientes"); setClientesKey(n=>n+1); setCadastroNovoCliente(nome || true); }} />}
           {aba === "obras"                  && <Obras key={obrasKey} data={data} save={save} />}
           {aba === "financeiro"             && <Financeiro key={financeiroKey} data={data} save={save} />}
           {aba === "fornecedores"           && <PrestadoresServico key={fornecedoresKey} data={data} save={save} />}

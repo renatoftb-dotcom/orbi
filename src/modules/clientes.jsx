@@ -485,8 +485,9 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   useEffect(() => {
     if (abrirCadastroNovo) {
       // Inline (emptyCliente é declarado mais abaixo, não dá pra referenciar aqui)
+      // Veio da busca do Novo Orçamento com o nome digitado: já entra preenchido.
       setForm({
-        tipo:"PF", nome:"", cpfCnpj:"", email:"", cep:"", logradouro:"", numero:"",
+        tipo:"PF", nome: typeof abrirCadastroNovo === "string" ? abrirCadastroNovo : "", cpfCnpj:"", email:"", cep:"", logradouro:"", numero:"",
         complemento:"", bairro:"", cidade:"", estado:"SP",
         representanteNome:"", representanteCpf:"",
         contatos:[{ id:uid(), nome:"", telefone:"", cargo:"", whatsapp:false }],
@@ -2738,6 +2739,31 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [obraSelecionada, setObraSelecionada] = useState(obraInicial || null);
   // Planejamento (P&L estimado) — protótipo iterativo, ver conversa.
   const [formItemPL, setFormItemPL] = useState(null);
+  // Cadastro rápido de prestador/loja a partir da busca de um campo (item da
+  // estimativa ou conta a pagar): { form, destino, erro }.
+  const [prestRapido, setPrestRapido] = useState(null);
+  const abrirPrestRapido = (destino, termo) => setPrestRapido({ destino, erro: "",
+    form: { nome: termo || "", telefone: "", categoria: destino === "conta" ? "Loja / Comércio" : "Outro" } });
+  const salvarPrestRapido = () => {
+    const pr = prestRapido;
+    const nome = String((pr.form || {}).nome || "").trim();
+    if (!nome) { setPrestRapido({ ...pr, erro: "Diga o nome." }); return; }
+    const registro = typeof criarPrestadorRapido === "function"
+      ? { ...criarPrestadorRapido(pr.form, uid()), origem: "obra" }
+      : { tipo: "PJ", ...pr.form, nome, id: uid(), ativo: true, criadoEm: new Date().toISOString(), origem: "obra" };
+    save({ ...data, fornecedores: [...(data.fornecedores || []), registro] });
+    if (pr.destino === "itemPL") setFormItemPL(f => f && ({ ...f, prestadorId: registro.id }));
+    if (pr.destino === "conta") setFormConta(f => f && ({ ...f, prestadorId: registro.id, favorecido: registro.nome }));
+    setPrestRapido(null);
+  };
+  // fechou o formulário de onde o cadastro veio: o cadastro fecha junto
+  useEffect(() => {
+    if (prestRapido && ((prestRapido.destino === "itemPL" && !formItemPL) || (prestRapido.destino === "conta" && !formConta))) setPrestRapido(null);
+  }, [formItemPL, formConta, prestRapido]);
+  const blocoPrestRapido = (destino) => prestRapido && prestRapido.destino === destino && typeof CadastroRapidoDePrestador === "function" ? (
+    <CadastroRapidoDePrestador form={prestRapido.form} erro={prestRapido.erro} isMobile={isMobile} fornecedores={data.fornecedores || []}
+      aoMudar={(form) => setPrestRapido(p => p && ({ ...p, form }))} aoSalvar={salvarPrestRapido} aoCancelar={() => setPrestRapido(null)} />
+  ) : null;
   // O Planejamento abre no P&L: a pergunta de todo dia é quanto foi estimado
   // e quanto já saiu, não o formulário de preencher.
   const [visaoPL, setVisaoPL] = useState("pl"); // "pl" | "quadro" | "conta" | "prestador" | "extrato"
@@ -3721,10 +3747,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             </div>
             <div>
               <label style={C.label}>Prestador de serviço (opcional)</label>
-              <Selecao style={{ ...C.input, cursor: "pointer" }} value={formItemPL.prestadorId || ""} onChange={e => setFormItemPL({ ...formItemPL, prestadorId: e.target.value })}>
+              <Selecao style={{ ...C.input, cursor: "pointer" }} value={formItemPL.prestadorId || ""} onChange={e => setFormItemPL({ ...formItemPL, prestadorId: e.target.value })}
+                disabled={!!(prestRapido && prestRapido.destino === "itemPL")} criarRotulo="prestador" aoCriar={(termo) => abrirPrestRapido("itemPL", termo)}>
                 <option value="">— Nenhum —</option>
                 {prestadores.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
               </Selecao>
+              {blocoPrestRapido("itemPL")}
             </div>
             <div>
               <label style={C.label}>Valor estimado (R$) *</label>
@@ -4177,7 +4205,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <div>
             <label style={C.label}>2. Prestador (contratado)</label>
             <div style={{ display: "flex", gap: 8 }}>
-              <Selecao style={{ ...C.input, cursor: "pointer", flex: 1 }} value={g.prestadorId} disabled={!tipoP} onChange={e => setG("prestadorId", e.target.value)}>
+              <Selecao style={{ ...C.input, cursor: "pointer", flex: 1 }} value={g.prestadorId} disabled={!tipoP} onChange={e => setG("prestadorId", e.target.value)}
+                criarRotulo="prestador"
+                aoCriar={(termo) => setNovoPrestador({ nome: termo || "", tipo: "PJ", categoria: (tipoP && tipoP.categorias[0]) || "Outro", cnpjCpf: "", cep: "", logradouro: "", numero: "", bairro: "", cidade: "", estado: "SP", representanteNome: "", representanteCpf: "", telefone: "", email: "" })}>
                 <option value="">{!tipoP ? "— escolha o tipo primeiro —" : prestadoresDisponiveis.length ? "— escolher um prestador cadastrado —" : `— nenhum ${tipoP.nome.toLowerCase()} cadastrado —`}</option>
                 {prestadoresDisponiveis.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
               </Selecao>
@@ -5328,10 +5358,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               </div>
               <div>
                 <label style={C.label}>Favorecido</label>
-                <Selecao style={{ ...C.input, cursor: "pointer" }} value={formConta.prestadorId || ""} onChange={e => setFormConta({ ...formConta, prestadorId: e.target.value, favorecido: (prestadores.find(p => p.id === e.target.value) || {}).nome || "" })}>
+                <Selecao style={{ ...C.input, cursor: "pointer" }} value={formConta.prestadorId || ""} onChange={e => setFormConta({ ...formConta, prestadorId: e.target.value, favorecido: (prestadores.find(p => p.id === e.target.value) || {}).nome || "" })}
+                  disabled={!!(prestRapido && prestRapido.destino === "conta")} criarRotulo="fornecedor" aoCriar={(termo) => abrirPrestRapido("conta", termo)}>
                   <option value="">— sem prestador —</option>
                   {prestadores.filter(p => p.ativo !== false).map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
                 </Selecao>
+                {blocoPrestRapido("conta")}
               </div>
               <div><label style={C.label}>Observação</label><input style={C.input} value={formConta.observacao || ""} onChange={e => setFormConta({ ...formConta, observacao: e.target.value })} /></div>
             </div>
