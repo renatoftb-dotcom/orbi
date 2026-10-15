@@ -2856,6 +2856,8 @@ function lancamentoDaLinhaDoExtrato(movimento, mes, sugestao) {
     cliente: "", projeto: "", fornecedor: "", observacao: "",
     ...((sugestao && sugestao.campos) || {}),
     unidadeId: ((sugestao && sugestao.campos) || {}).unidadeId || "escritorio",
+    // receita não tem fornecedor, nem quando a linha igual de antes tinha
+    ...(contaDeEntradaNoEscritorio(((sugestao && sugestao.campos) || {}).contaId) ? { fornecedor: "", fornecedorId: "" } : {}),
   };
 }
 
@@ -3120,7 +3122,28 @@ function fornecedorPadraoDaConta(contaId, nomeEscritorio) {
   return c && c.grupo === "receitas" && nomeEscritorio ? nomeEscritorio : "";
 }
 
+// Conta de entrada (receita, venda, aporte, reserva): dinheiro que CHEGA não
+// tem fornecedor — quem paga é o cliente, que já tem campo próprio.
+function contaDeEntradaNoEscritorio(contaId) {
+  const c = contaEscritorio(contaId);
+  const g = c && grupoEscritorio(c.grupo);
+  return !!(g && g.sinal > 0);
+}
+function semFornecedorNaEntrada(l) {
+  if (!l || !contaDeEntradaNoEscritorio(l.contaId)) return l;
+  return { ...l, fornecedor: "", fornecedorId: "" };
+}
+
+// Item do custo que ninguém preencheu: sem descrição, sem catálogo, sem preço.
+function itemDoCustoEmBranco(x) {
+  if (!x) return true;
+  return !String(x.descricao || "").trim() && !x.insumoCodigo && !(Number(String(x.bruto || "").replace(/\./g, "").replace(",", ".")) > 0)
+    && !(Number(String(x.unitario || "").replace(/\./g, "").replace(",", ".")) > 0);
+}
+
 function efNomeDoFornecedor(l) {
+  // entrada não tem fornecedor: não vira "Outros" ao gravar
+  if (l && contaDeEntradaNoEscritorio(l.contaId)) return "";
   return String((l || {}).fornecedor || "").trim() || EF_FORNECEDOR_OUTROS;
 }
 
@@ -4520,7 +4543,9 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             : (pa.descricao || (comItens.length === 1 ? comItens[0].descricao : ""))].filter(Boolean).join(" · ");
         if (resumo) novo.descricao = resumo.slice(0, 160);
       }
-      if (lidos.length && !(p.itens || []).length) novo.itens = lidos;
+      // a linha em branco (aberta no "+ item" e não preenchida) não segura
+      // os itens do papel: só o que a pessoa já escreveu é que fica
+      if (lidos.length && (p.itens || []).every(itemDoCustoEmBranco)) novo.itens = lidos;
       novo.notaLida = { tipo: pa.tipo || "", numero: pa.numeroNota || pa.numeroPedido || "", chave: pa.chave || "",
         emitido: pa.emitido || "", emitente: pa.lidoComo || "", cnpj: pa.cnpj || "", valor: valorLido,
         desconto: Number(pa.desconto) || 0, origem: origem || "" };
@@ -4531,7 +4556,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       if (k >= 0) return comAnexos(novo, lista.map((a, x) => (x === k ? { ...a, tipo: tipoPapel } : a)));
       return novo;
     });
-    setLida({ origem: origem || "", papel: pa, rotulo, itens: lidos.length, casados: lidos.filter((x) => x.insumoCodigo).length,
+    setLida({ origem: origem || "", papel: pa, rotulo, itens: lidos.length, casados: lidos.filter((x) => x.insumoCodigo).length, lidos,
       cadastro: entrada ? null : (doCadastro || null) });
     setAvisosLidos((ficha.avisos || []).filter((x) => !/Como foi pago|^Este arquivo tem|Confira os itens/.test(x)));
     const valorForm = efValorDoCampo(f.valor);
@@ -4570,14 +4595,9 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     const o = pelo || unica;
     if (o) setF((p) => ({ ...p, obraId: o.id, projeto: o.nome || p.projeto }));
   }, [f.unidadeId, f.obraId, f.clienteId, f.projeto, f.contaFonte]);
-  // Receita: o fornecedor é o próprio escritório, já escolhido — se ninguém
-  // escolheu outro.
-  useEffect(() => {
-    const padrao = fornecedorPadraoDaConta(f.contaId, nomeEscritorio);
-    if (!padrao || f.fornecedorId) return;
-    if (f.fornecedor && f.fornecedor !== EF_FORNECEDOR_OUTROS) return;
-    setF((p) => ({ ...p, fornecedor: padrao, fornecedorId: "" }));
-  }, [f.contaId]);
+  // Receita (e toda conta de entrada) não tem fornecedor: o campo some e o
+  // lançamento grava sem ele.
+  const entradaSemFornecedor = !naObra && contaDeEntradaNoEscritorio(f.contaId);
   const obraAlvo = obrasDoCliente.find((o) => o && o.id === f.obraIdAlvo) || null;
   const clienteAlvo = (clientes || []).find((c) => c && c.id === f.clienteId) || null;
   const destinoDoCusto = naObra ? destinoVisivelDoCusto(f.contaId, obraAlvo, clienteAlvo, {}) : null;
@@ -4775,9 +4795,9 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     else delete semObraDaParcela.obraEncerrada;
     const noContrato = temGestao ? !foraDaGestao : (ligadoAntes ? false : undefined);
     if (noContrato !== undefined) semObraDaParcela.noContratoGestao = noContrato;
-    const pronto = comCartao({ ...semObraDaParcela, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
+    const pronto = semFornecedorNaEntrada(comCartao({ ...semObraDaParcela, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
       ...(lancNovo && !noCartao ? { contaBanco: regraBanco } : {}),
-      tipo: "escritorio", valor: efValorDoCampo(g.valor) });
+      tipo: "escritorio", valor: efValorDoCampo(g.valor) }));
     aoSalvar((usaReserva && comoPagamentoDaReserva(pronto, lancamentos || [])) || pronto);
   }
   // Na fila, quem lança 50 linhas não larga o teclado: Enter num campo de
@@ -4984,7 +5004,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                       grupo: ((clientes || []).find((c) => c && c.id === o.clienteId) || {}).nome || "" })))} />
               ), "obra")
             : campo("Projeto", <input style={S.input} value={f.projeto} onChange={(e) => set("projeto", e.target.value)} />)}
-        {campo("Fornecedor", (
+        {!entradaSemFornecedor && campo("Fornecedor", (
           <SelectBusca style={S.input}
             /* Campo em branco já é "Outros" no fim, então ele diz isso desde
                o começo: o que está escrito ali é o que vai ser gravado. */
@@ -5236,6 +5256,14 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
 
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 4 }}>
             <button type="button" style={S.btnSec} onClick={novoItem}>{itensDoCusto.length ? "+ item" : "Detalhar em itens"}</button>
+            {/* os itens que o papel trouxe e não estão na lista (ela já tinha
+                coisa escrita quando o papel foi lido): um clique traz */}
+            {lida && (lida.lidos || []).length > 0 && !itensDoCusto.some((x) => x && x.textoLido) && (
+              <button type="button" data-vk-itens-do-papel style={{ ...S.btnSec, color: "#0474f4" }}
+                onClick={() => setF((p) => ({ ...p, itens: (p.itens || []).filter((x) => !itemDoCustoEmBranco(x)).concat(lida.lidos) }))}>
+                Trazer {lida.lidos.length === 1 ? "o item" : `os ${lida.lidos.length} itens`} do papel
+              </button>
+            )}
             {resumoCusto && resumoCusto.itens > 0 && (
               <div style={{ fontSize: 12, color: "#4b5563" }}>
                 soma dos itens <b style={{ color: "#111827" }}>{efDinheiro(resumoCusto.bruto)}</b>

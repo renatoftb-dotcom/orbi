@@ -1043,6 +1043,9 @@ function cotMedidasMm(texto) {
   const reMm = /(\d+(?:\.\d+)?)\s*mm(?![a-z0-9²2])/g;
   let m;
   while ((m = reMm.exec(t))) { const v = parseFloat(m[1]); if (v > 0) out.push(v); }
+  // "110x22,23mm" (disco: diâmetro × furo): o mm do fim vale para os dois
+  const reParMm = /(\d+(?:\.\d+)?)\s*[x×*]\s*\d+(?:\.\d+)?\s*mm(?![a-z0-9²2])/g;
+  while ((m = reParMm.exec(t))) { const v = parseFloat(m[1]); if (v > 0 && out.indexOf(v) < 0) out.push(v); }
   // polegada: 1/4, 5/16, 3/8, 1/2, 5/8, 3/4 (com ou sem " ou "pol")
   const rePol = /(?:^|[^\d.\/])(\d{1,2})\/(2|4|8|16|32)(?![\d\/])/g;
   while ((m = rePol.exec(t))) {

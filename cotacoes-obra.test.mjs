@@ -4656,6 +4656,19 @@ teste("a IA também não passa a bitola errada", () => {
   assert.strictEqual(M.sugestoesDaIA(alvo, { itens: [{ descricao: "Ferro Ca50 10,00mm - 3/8 - Br 7,404kg", codigoInsumo: "A10" }] }, cat)[0].codigo, "A10");
 });
 
+teste("disco 110x22,23mm: o mm do fim vale para o diâmetro — casa com o Disco Diamantado Turbo 110mm", () => {
+  const cat = [{ codigo: "DISC-01", nome: "Disco Diamantado Turbo 110mm", unidade: "un" }, { codigo: "DF", nome: "Disco Ferro 115mm" },
+    { codigo: "DM", nome: "Disco Madeira 110mm" }];
+  const idx = M.indiceDoCatalogo(cat);
+  const s = M.sugestaoDoCatalogo("Disco Diam.turbo 110x22,23mm", idx);
+  assert.ok(s, "acha sugestão");
+  assert.strictEqual(s.codigo, "DISC-01");
+  const it = M.itensDaEntrada({ itens: [{ descricao: "DISCO DIAM.TURBO 110X22,23MM", quantidade: 1, total: 27.4 }] }, "orcamento", cat)[0];
+  assert.ok(it.insumoCodigo === "DISC-01" || (it.sugestao && it.sugestao.codigo === "DISC-01"), JSON.stringify(it.sugestao));
+  // bitola diferente continua não casando
+  assert.strictEqual(M.sugestaoDoCatalogo("Disco Diam.turbo 180x22,23mm", idx), null);
+});
+
 for (const [nome, fn] of testes) {
   try { fn(); console.log("  ok   " + nome); }
   catch (e) { falhas++; console.log("  FALHOU " + nome + "\n         " + e.message); }

@@ -39,7 +39,7 @@ const M = new Function(src + `
            efNomeDoFornecedor, EF_FORNECEDOR_OUTROS,
            custoDoLancamento, validarCustoEmItens, itemUnicoDoCusto, itensDoCustoOuUnico, padraoDaContaDaObra,
            comIdsDosMovimentos, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
-           sugestaoDoExtrato, palpiteDoExtrato, sugestaoCompletaDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao, fornecedorPadraoDaConta,
+           sugestaoDoExtrato, palpiteDoExtrato, sugestaoCompletaDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao, fornecedorPadraoDaConta, contaDeEntradaNoEscritorio, semFornecedorNaEntrada,
            ehReceitaDaGestao, contaEhEntradaEscritorio, rotuloDoPapelLido, refDaParcela, gestaoNaObra, desfazerGestaoNaObra, parcelaDoLancamento, parcelaDoMesNaGestao, recalibrarGestao, previaDaGestao, contasDaGestao,
            extratosComArquivo, movimentosGuardadosDoMes, ignoradosGuardados, extratosComIgnorado, efLinhasDoHtml, efLinhasDoOfx, saldoDoExtratoNoMes, efTabelaDoArquivo };`)();
 
@@ -2844,6 +2844,18 @@ teste("parcela da planilha antiga marcada 'não passou pela conta' e ainda não 
   const r2 = M.conciliarExtrato([banco[0]], [parcela, normal]);
   assert.strictEqual(r2.casados[0].lancamento.id, "N1");
   assert.ok(!r2.contabilizadoSemPar.some((l) => l.id === "HP"), "o 'não' que sobrou não vira 'lançado e não veio no banco'");
+});
+
+teste("receita não tem fornecedor: some do lançamento, também quando vem da linha igual de antes", () => {
+  assert.strictEqual(M.contaDeEntradaNoEscritorio("rec_projetos"), true);
+  assert.strictEqual(M.contaDeEntradaNoEscritorio("emp_construcao"), false);
+  assert.deepStrictEqual(M.semFornecedorNaEntrada({ contaId: "rec_projetos", fornecedor: "Outros", fornecedorId: "f1" }),
+    { contaId: "rec_projetos", fornecedor: "", fornecedorId: "" });
+  assert.strictEqual(M.semFornecedorNaEntrada({ contaId: "emp_construcao", fornecedor: "AGROMETAL" }).fornecedor, "AGROMETAL");
+  const l = M.lancamentoDaLinhaDoExtrato({ id: "x", data: "2026-10-02", valor: 1000, historico: "PIX RECEBIDO" }, "2026-10",
+    { campos: { contaId: "rec_projetos", unidadeId: "projetos", fornecedor: "Outros", fornecedorId: "f9" } });
+  assert.strictEqual(l.fornecedor, "");
+  assert.strictEqual(l.fornecedorId, "");
 });
 
 for (const [nome, fn] of testes) {
