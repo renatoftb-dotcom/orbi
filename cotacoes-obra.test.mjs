@@ -3904,6 +3904,61 @@ teste("Ler os itens de uma proposta guardada só pelo total: troca ESSA proposta
   assert.strictEqual(M.textoDaMedidaDoItem({ descricao: "Cimento", quantidade: 10 }), "");
 });
 
+teste("Engevidros 7004: a porta de 9.900 (5500 x 2100, sem ID Planta) cai em 'PC2_1 - Vidros Escritório Alexandre'", () => {
+  const it = (id, descricao, quantidade, extra) => ({ id, descricao, quantidade, unidade: "Unidades", ...(extra || {}) });
+  const base = [
+    it("i1", "J1 - Vitrines Existente (Vidros)", 3, { largura: 3.05, altura: 3.4 }),
+    it("i2", "PC1 - Porta de correr 4 folhas", 1),
+    it("i3", "J2 - Vitrine Loja Nova", 1),
+    it("i4", "PC2 - Porta acesso estoque", 1),
+    it("i6", "ACM - REVESTIMENTO ACM KYNAR PRETO FOSCO 61m² - Fachada", 1)];
+  const L = (d, q, t, l, a, i) => ({ descricao: d, quantidade: q, unidade: "un", unitario: t / q, total: t, largura: l, altura: a, itemDoPedido: i });
+  const orc = M.orcamentoDaIA({ itens: [
+    L("Porta de correr 4 folhas sendo as 4 de correr (Item LG-PC400, ID Planta PC1) - VCT: Temperado INCOLOR - 8mm", 1, 10100, 2.5, 3.6, "i2"),
+    L("Quadro fixo X módulos horizontais por X módulos verticais. Linha Gold III. (Item LG-FIX01, ID Planta J1)", 3, 22500, 3.05, 3.4, "i1"),
+    L("Quadro fixo X módulos horizontais por X módulos verticais. Linha Gold III. (Item LG-FIX01, ID Planta J2)", 1, 33000, 10.98, 4.18, "i3"),
+    L("Porta de correr 3 folhas (todas móveis) c/ baguete, s/ travessa, concha c/ trava ou chave. Linha Gold III.", 1, 9900, 5.5, 2.1, null),
+    L("Porta única de correr atrás da parede, sem travessa e com fechadura (LG-PCS)", 1, 2800, 0.9, 2.1, "i4")] });
+  assert.strictEqual(orc.itens[3].largura, 5.5);
+  const acha = (cot) => M.casamentoDaIA(cot, orc).casados.find((c) => c.item.id === "i5");
+  // A: o item tem a medida gravada
+  const cotA = { ...M.cotacaoVazia("o1"), itens: base.concat([it("i5", "PC2_1 - Vidros Escritório Alexandre", 1, { largura: 5.5, altura: 2.1 })]) };
+  assert.strictEqual(acha(cotA).linha.total, 9900);
+  assert.strictEqual(M.casamentoDaIA(cotA, orc).sobrando.length, 0);
+  const esc = M.escolhasDoCasamento(M.casamentoDaIA(cotA, orc), orc);
+  assert.strictEqual(esc.i5.preco, 9900);
+  // B: sem medida no item, mas a Alumisantos guardou a linha dela com medida apontando para ele
+  const semMedida = base.concat([it("i5", "PC2_1 - Vidros Escritório Alexandre", 1)]);
+  const alu = { id: "pa", fornecedorId: "fa", favorecido: "Alumisantos", precos: { i5: 11186.23 },
+    linhasDoPapel: [{ descricao: "Porta de Correr - 3 Folhas - Aba Simples, Fecho Tetra - Linha Gold-as - Ante Camara", quantidade: 1, total: 11186.23, destino: "c:i5", largura: 5.5, altura: 2.1 }] };
+  const cotB = { ...M.cotacaoVazia("o1"), itens: semMedida, propostas: [alu] };
+  assert.strictEqual(acha(cotB).linha.total, 9900);
+  // C: nem medida — o nome que a outra loja deu ao item ("Porta de correr 3 folhas") é a pista
+  const cotC = { ...M.cotacaoVazia("o1"), itens: semMedida, propostas: [{ ...alu, linhasDoPapel: [{ ...alu.linhasDoPapel[0], largura: undefined, altura: undefined }] }] };
+  assert.strictEqual(acha(cotC).linha.total, 9900);
+  // a IA recebe a medida e os outros nomes do item
+  const paraIA = M.itensParaIA(cotB).find((x) => x.id === "i5");
+  assert.strictEqual(paraIA.largura, 5.5);
+  assert.ok(/3 Folhas/.test(paraIA.outrosNomes[0]));
+  // a leitura ligou o PC2_1 à porta de 0,90 x 2,10 (de outra medida, sem código): a medida exata vence
+  const errada = { ...orc, itens: orc.itens.map((l) => l.total === 2800 ? { ...l, itemDoPedido: "i5" } : l.total === 9900 ? { ...l, itemDoPedido: null } : l) };
+  const cotE = { ...cotA, itens: cotA.itens.map((x) => x.id === "i4" ? { ...x, largura: 0.9, altura: 2.1 } : x) };
+  const cmE = M.casamentoDaIA(cotE, errada);
+  assert.strictEqual(cmE.casados.find((c) => c.item.id === "i5").linha.total, 9900);
+  assert.strictEqual(cmE.casados.find((c) => c.item.id === "i4").linha.total, 2800, "a porta de 2.800 volta para o dono pela medida");
+  // sem pista nenhuma, não inventa
+  const cotD = { ...M.cotacaoVazia("o1"), itens: semMedida };
+  assert.strictEqual(acha(cotD).linha, null);
+});
+
+teste("Entrada: linha com a medida de um único item cai nele, mesmo com nome diferente", () => {
+  const cot = { ...M.cotacaoVazia("o1"), itens: [{ id: "i5", descricao: "Vidros Escritório Alexandre", quantidade: 1, unidade: "un", largura: 5.5, altura: 2.1 },
+    { id: "i4", descricao: "Porta acesso estoque", quantidade: 1, unidade: "un", largura: 0.9, altura: 2.1 }] };
+  const d = M.destinosDasLinhas(cot, [{ descricao: "Porta de correr 3 folhas c/ baguete", quantidade: 1, largura: 5.5, altura: 2.1, bruto: 9900 },
+    { descricao: "Porta única de correr atrás da parede", quantidade: 1, largura: 0.9, altura: 2.1, bruto: 2800 }]);
+  assert.deepStrictEqual(d, ["c:i5", "c:i4"]);
+});
+
 teste("Lista colada: vírgula entre dígitos é decimal, não separa item (medida 3,05 x 3,40)", () => {
   const r = M.interpretarPedido("3 un Vitrine loja nova 3,05 x 3,40\n20 sacos de cimento, 10 de cal e 2,5 m3 de areia", []);
   const termos = r.map((x) => x.termo || x.descricao);

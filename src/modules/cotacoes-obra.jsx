@@ -1617,7 +1617,22 @@ function itemCotadoDaEntrada(lista, it, usados) {
     // o texto que uma loja já usou para este item (guardado quando a linha foi ligada a ele)
     || lista.find((c) => livre(c) && (c.textosDasLojas || []).some((t) => cotChaveDoItem({ descricao: t }) === chave))
     || itemPeloCodigoDoVao(lista, it, livre)
+    || itemPelaMedidaDoVao(lista, it, livre)
     || null;
+}
+// Mesma medida de vão (1,5 cm de folga: 5500 mm é 5,50 m), e a mesma
+// quantidade quando os dois dizem. É o que liga "Porta de correr 3 folhas
+// 5500 x 2100" ao item que se chama "Vidros Escritório Alexandre".
+function mesmoVao(a, b) {
+  const ma = medidasDaLinha(a), mb = medidasDaLinha(b);
+  if (!ma || !mb || !(ma.largura > 0 && ma.altura > 0 && mb.largura > 0 && mb.altura > 0)) return false;
+  if (Math.abs(ma.largura - mb.largura) > 0.015 || Math.abs(ma.altura - mb.altura) > 0.015) return false;
+  const qa = numeroDoCampo(a && a.quantidade), qb = numeroDoCampo(b && b.quantidade);
+  return !(qa > 0 && qb > 0 && Math.abs(qa - qb) > 0.001);
+}
+function itemPelaMedidaDoVao(lista, it, livre) {
+  const com = lista.filter((c) => mesmoVao(c, it));
+  return com.length === 1 && livre(com[0]) ? com[0] : null;
 }
 // Mesmo código de vão, e só um item da cotação com ele — dois "J1" é dúvida.
 function itemPeloCodigoDoVao(lista, it, livre) {
@@ -1966,8 +1981,12 @@ function propostaDaEntradaNaCotacao(x, cot0, hoje) {
     fornecedorId: loja.id || "", favorecido: loja.nome || papel.lidoComo || "",
     precos: x.soTotal ? {} : r.precos, totalFechado: "",
     // as linhas como vieram no papel, e para onde cada uma foi: é a conferência de depois
-    linhasDoPapel: r.linhas.map((it, i) => ({ descricao: String(it.descricao || "").trim(), quantidade: it.quantidade || "",
-      unidade: it.unidade || "", total: brutoDoItem(it), destino: x.soTotal ? "total" : r.destinos[i] })),
+    linhasDoPapel: r.linhas.map((it, i) => {
+      const md = medidasDaLinha(it);
+      return { descricao: String(it.descricao || "").trim(), quantidade: it.quantidade || "",
+        unidade: it.unidade || "", total: brutoDoItem(it), destino: x.soTotal ? "total" : r.destinos[i],
+        ...(md && md.largura > 0 && md.altura > 0 ? { largura: md.largura, altura: md.altura } : {}) };
+    }),
     soTotal: !!x.soTotal,
     observacao: numero ? ((papel.numeroNota ? "Nota nº " : "Pedido nº ") + numero) : ((anterior && anterior.observacao) || ""),
     numeroPedido: String(papel.numeroPedido || "").trim() || ((anterior && anterior.numeroPedido) || ""),
@@ -3791,7 +3810,88 @@ function orcamentoDaIA(bruto) {
 // Casamento a partir do que a IA indicou. Se ela não ligou nenhuma linha a
 // nenhum item (pedido sem lista, ou resposta incompleta), vale a associação
 // por palavras do leitor — melhor um palpite conferível que a tela vazia.
+// O que a leitura deixou sem linha ainda tem três pistas de esquadria: o
+// código da planta (J1, PC2_1), a medida do vão e o jeito que outra loja já
+// escreveu o mesmo item. Cada uma só liga quando aponta UMA linha livre.
+// Os nomes que as lojas já deram a este item: os guardados nele e as linhas
+// de papel que outras propostas ligaram a ele. Sobrevive a renomear o item.
+function nomesDasLojasDoItem(cot, it) {
+  const nomes = [...((it && it.textosDasLojas) || [])];
+  for (const p of propostasDaCotacao(cot)) {
+    for (const l of (p && p.linhasDoPapel) || []) {
+      if (l && l.destino === "c:" + it.id && l.descricao) nomes.push(l.descricao);
+    }
+  }
+  const vistos = new Set();
+  return nomes.map((t) => String(t || "").trim()).filter((t) => {
+    const k = cotSemAcento(t);
+    if (!k || vistos.has(k) || k === cotSemAcento(it.descricao || "")) return false;
+    vistos.add(k); return true;
+  });
+}
+// O item sem medida gravada ainda pode ter a medida que outra loja escreveu
+// no papel dela (guardada na linha do papel daquela proposta).
+function itemComMedidaConhecida(cot, it) {
+  const md = medidasDaLinha(it);
+  if (md && md.largura > 0 && md.altura > 0) return it;
+  for (const p of propostasDaCotacao(cot)) {
+    for (const l of (p && p.linhasDoPapel) || []) {
+      if (l && l.destino === "c:" + it.id && Number(l.largura) > 0 && Number(l.altura) > 0) {
+        return { ...it, largura: Number(l.largura), altura: Number(l.altura) };
+      }
+    }
+  }
+  return it;
+}
+function completarCasamentoPeloVao(cot, orcamento, casamento) {
+  const doPdf = ((orcamento || {}).itens) || [];
+  const cm0 = casamento || { casados: [], sobrando: [], achados: 0 };
+  // A leitura ligou uma linha de OUTRA medida, sem código da planta que
+  // confirme, e há no papel uma linha com a medida exata deste item: a
+  // medida vence — a linha errada volta para a lista e pode cair no dono.
+  const temVao = (x) => { const m = medidasDaLinha(x); return !!(m && m.largura > 0 && m.altura > 0); };
+  const usadas0 = new Set(cm0.casados.filter((c) => c.linha).map((c) => c.linha));
+  const cm = { ...cm0, casados: cm0.casados.map((c) => {
+    if (!c.linha) return c;
+    const itMed = itemComMedidaConhecida(cot, c.item);
+    if (!temVao(itMed) || !temVao(c.linha) || mesmoVao(itMed, c.linha)) return c;
+    const cod = codigoDoVao(c.item);
+    if (cod && codigoDoVao(c.linha) === cod) return c;
+    const exata = doPdf.filter((l) => l !== c.linha && !usadas0.has(l) && mesmoVao(itMed, l));
+    return exata.length === 1 ? { ...c, linha: null, score: 0 } : c;
+  }) };
+  const usadas = new Set(cm.casados.filter((c) => c.linha).map((c) => c.linha));
+  const livres = () => doPdf.filter((l) => !usadas.has(l));
+  const casados = cm.casados.map((c) => {
+    if (c.linha) return c;
+    const it = c.item;
+    const unica = (lst) => (lst.length === 1 ? lst[0] : null);
+    const cod = codigoDoVao(it);
+    let linha = cod ? unica(livres().filter((l) => codigoDoVao(l) === cod)) : null;
+    const itMed = itemComMedidaConhecida(cot, it);
+    if (!linha) linha = unica(livres().filter((l) => mesmoVao(itMed, l)));
+    const nomes = linha ? [] : nomesDasLojasDoItem(cot, it);
+    if (!linha && nomes.length) {
+      let melhor = null, empate = false;
+      for (const l of livres()) {
+        const sc = Math.max(...nomes.map((t) => Math.max(scoreAssociacao(t, l.descricao), scoreAssociacao(l.descricao, t))));
+        if (sc < COT_CORTE_ASSOCIACAO) continue;
+        if (!melhor || sc > melhor.sc + 0.001) { melhor = { l, sc }; empate = false; }
+        else if (Math.abs(sc - melhor.sc) <= 0.001) empate = true;
+      }
+      if (melhor && !empate) linha = melhor.l;
+    }
+    if (!linha) return c;
+    usadas.add(linha);
+    return { ...c, linha, score: 0.5, pelaMedida: true };
+  });
+  return { ...cm, casados, sobrando: doPdf.filter((l) => !usadas.has(l)), achados: casados.filter((c) => c.linha).length };
+}
+
 function casamentoDaIA(cot, orcamento) {
+  return completarCasamentoPeloVao(cot, orcamento, casamentoDaIASo(cot, orcamento));
+}
+function casamentoDaIASo(cot, orcamento) {
   const itens = itensDaCotacao(cot);
   const ids = {};
   for (const it of itens) ids[String(it.id)] = 1;
@@ -3812,9 +3912,13 @@ function casamentoDaIA(cot, orcamento) {
 // O que mandar para a IA sobre o pedido: o suficiente para ela reconhecer
 // cada item, e nada além disso.
 function itensParaIA(cot) {
-  return itensDaCotacao(cot).map((it) => ({
-    id: it.id, descricao: it.descricao || "", quantidade: quantidadeDoItem(it), unidade: it.unidade || "",
-  }));
+  return itensDaCotacao(cot).map((it) => {
+    const md = medidasDaLinha(itemComMedidaConhecida(cot, it));
+    const outros = nomesDasLojasDoItem(cot, it).slice(-3);
+    return { id: it.id, descricao: it.descricao || "", quantidade: quantidadeDoItem(it), unidade: it.unidade || "",
+      ...(md && md.largura > 0 && md.altura > 0 ? { largura: md.largura, altura: md.altura } : {}),
+      ...(outros.length ? { outrosNomes: outros } : {}) };
+  });
 }
 
 // Frase para a tela quando a IA não leu. Token vencido e crédito esgotado
@@ -5876,7 +5980,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         return;
       }
       const orcamento = interpretarOrcamento(linhas);
-      const casamento = casarOrcamentoComItens(cotacao, orcamento);
+      const casamento = completarCasamentoPeloVao(cotacao, orcamento, casarOrcamentoComItens(cotacao, orcamento));
       // Mesmo sem reconhecer a tabela a conferência abre: cada loja escreve
       // o orçamento de um jeito, e é lá que você aponta a linha certa ou
       // digita o preço — melhor que devolver um erro e nada mais.
