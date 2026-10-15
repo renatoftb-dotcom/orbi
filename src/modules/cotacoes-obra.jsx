@@ -1843,6 +1843,7 @@ function propostaDaEntradaPorItem(x, cot0) {
   let lista = itensDaCotacao(cot0).slice();
   const precos = {};
   let novos = 0;
+  const finais = destinos.slice();
   if (!x.soTotal) {
     const r = resumoDaPropostaNaEntrada(cot0, linhas, destinos, x.qtdNovos);
     for (const g of r.grupos) {
@@ -1874,9 +1875,12 @@ function propostaDaEntradaPorItem(x, cot0) {
       }
       const q = quantidadeDoItem(alvo);
       if (g.total > 0) precos[alvo.id] = q > 0 ? Math.round((g.total / q) * 1e6) / 1e6 : g.total;
+      // a linha do papel guarda o item em que caiu de fato (o novo já com id):
+      // é por ela que a próxima loja descobre como este item já foi escrito
+      for (const i of g.linhas) finais[i] = "c:" + alvo.id;
     }
   }
-  return { lista, precos, novos, destinos, linhas };
+  return { lista, precos, novos, destinos: finais, linhas };
 }
 
 // A proposta montada a partir da lista com preço. Devolve a cotação inteira
@@ -3815,13 +3819,31 @@ function orcamentoDaIA(bruto) {
 // escreveu o mesmo item. Cada uma só liga quando aponta UMA linha livre.
 // Os nomes que as lojas já deram a este item: os guardados nele e as linhas
 // de papel que outras propostas ligaram a ele. Sobrevive a renomear o item.
+// As linhas de papel (de outras propostas) que caíram neste item. Proposta
+// guardada antes de a linha levar o id do item diz "n:<nome da época>": aí
+// vale o nome, ou o preço — a linha cujo total é o preço do item × a
+// quantidade, quando só uma da proposta bate.
+function linhasDoPapelDoItem(cot, it) {
+  const achadas = [];
+  if (!it) return achadas;
+  const q = quantidadeDoItem(it) || 1;
+  for (const p of propostasDaCotacao(cot)) {
+    const ls = ((p && p.linhasDoPapel) || []).filter(Boolean);
+    const diretas = ls.filter((l) => l.destino === "c:" + it.id);
+    if (diretas.length) { achadas.push(...diretas); continue; }
+    const legado = ls.filter((l) => /^n:/.test(l.destino || ""));
+    const peloNome = legado.filter((l) => cotSemAcento(l.destino.slice(2)) === cotSemAcento(it.descricao || ""));
+    if (peloNome.length) { achadas.push(...peloNome); continue; }
+    const preco = Number(((p && p.precos) || {})[it.id]) || 0;
+    if (!(preco > 0)) continue;
+    const pelaConta = legado.filter((l) => Math.abs((Number(l.total) || 0) - preco * q) <= 0.05);
+    if (pelaConta.length === 1) achadas.push(pelaConta[0]);
+  }
+  return achadas;
+}
 function nomesDasLojasDoItem(cot, it) {
   const nomes = [...((it && it.textosDasLojas) || [])];
-  for (const p of propostasDaCotacao(cot)) {
-    for (const l of (p && p.linhasDoPapel) || []) {
-      if (l && l.destino === "c:" + it.id && l.descricao) nomes.push(l.descricao);
-    }
-  }
+  for (const l of linhasDoPapelDoItem(cot, it)) if (l.descricao) nomes.push(l.descricao);
   const vistos = new Set();
   return nomes.map((t) => String(t || "").trim()).filter((t) => {
     const k = cotSemAcento(t);
@@ -3834,12 +3856,8 @@ function nomesDasLojasDoItem(cot, it) {
 function itemComMedidaConhecida(cot, it) {
   const md = medidasDaLinha(it);
   if (md && md.largura > 0 && md.altura > 0) return it;
-  for (const p of propostasDaCotacao(cot)) {
-    for (const l of (p && p.linhasDoPapel) || []) {
-      if (l && l.destino === "c:" + it.id && Number(l.largura) > 0 && Number(l.altura) > 0) {
-        return { ...it, largura: Number(l.largura), altura: Number(l.altura) };
-      }
-    }
+  for (const l of linhasDoPapelDoItem(cot, it)) {
+    if (Number(l.largura) > 0 && Number(l.altura) > 0) return { ...it, largura: Number(l.largura), altura: Number(l.altura) };
   }
   return it;
 }
@@ -3850,16 +3868,40 @@ function completarCasamentoPeloVao(cot, orcamento, casamento) {
   // confirme, e há no papel uma linha com a medida exata deste item: a
   // medida vence — a linha errada volta para a lista e pode cair no dono.
   const temVao = (x) => { const m = medidasDaLinha(x); return !!(m && m.largura > 0 && m.altura > 0); };
-  const usadas0 = new Set(cm0.casados.filter((c) => c.linha).map((c) => c.linha));
-  const cm = { ...cm0, casados: cm0.casados.map((c) => {
-    if (!c.linha) return c;
-    const itMed = itemComMedidaConhecida(cot, c.item);
-    if (!temVao(itMed) || !temVao(c.linha) || mesmoVao(itMed, c.linha)) return c;
+  // Inclui a TROCA: a leitura pôs a porta de 5,50 no item de 0,90 e a de
+  // 0,90 no de 5,50 — cada item puxa a linha da sua medida, e quem a tinha
+  // sem medida que confirme fica livre para pegar a que sobrou.
+  const lista = cm0.casados.map((c) => ({ ...c }));
+  const dono = new Map();
+  lista.forEach((c) => { if (c.linha) dono.set(c.linha, c); });
+  const confirma = (c, l) => {
     const cod = codigoDoVao(c.item);
-    if (cod && codigoDoVao(c.linha) === cod) return c;
-    const exata = doPdf.filter((l) => l !== c.linha && !usadas0.has(l) && mesmoVao(itMed, l));
-    return exata.length === 1 ? { ...c, linha: null, score: 0 } : c;
-  }) };
+    if (cod && codigoDoVao(l) === cod) return true;
+    const m = itemComMedidaConhecida(cot, c.item);
+    return temVao(m) && temVao(l) && mesmoVao(m, l);
+  };
+  for (const c of lista) {
+    const itMed = itemComMedidaConhecida(cot, c.item);
+    if (!temVao(itMed)) continue;
+    if (c.linha && confirma(c, c.linha)) continue;
+    const exatas = doPdf.filter((l) => mesmoVao(itMed, l));
+    if (exatas.length !== 1 || exatas[0] === c.linha) continue;
+    const y = exatas[0];
+    const b = dono.get(y);
+    if (b && b !== c && confirma(b, y)) continue;
+    const velha = c.linha;
+    if (velha) dono.delete(velha);
+    if (b && b !== c) {
+      // troca: quem perdeu fica com a linha que era deste — a não ser que a
+      // medida dele diga que não é a dele
+      const mb = itemComMedidaConhecida(cot, b.item);
+      if (velha && !(temVao(mb) && temVao(velha) && !mesmoVao(mb, velha))) { b.linha = velha; b.score = 0.5; dono.set(velha, b); }
+      else { b.linha = null; b.score = 0; }
+    }
+    c.linha = y; c.score = 0.5; c.pelaMedida = true;
+    dono.set(y, c);
+  }
+  const cm = { ...cm0, casados: lista };
   const usadas = new Set(cm.casados.filter((c) => c.linha).map((c) => c.linha));
   const livres = () => doPdf.filter((l) => !usadas.has(l));
   const casados = cm.casados.map((c) => {
@@ -5952,7 +5994,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         const orcamento = orcamentoDaIA(r && r.orcamento);
         const casamento = casamentoDaIA(cotacao, orcamento);
         const escolhas = escolhasDoCasamento(casamento, orcamento);
-        setOrcamentoLido({ orcamento, casamento, escolhas, nome: arquivo.name || "", leitor: "ia" });
+        setOrcamentoLido({ orcamento, casamento, escolhas, nome: arquivo.name || "", leitor: "ia", cot: cotacao });
         setLendoPdf(false);
         return;
       } catch (e) {
@@ -5985,7 +6027,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       // o orçamento de um jeito, e é lá que você aponta a linha certa ou
       // digita o preço — melhor que devolver um erro e nada mais.
       const escolhas = escolhasDoCasamento(casamento, orcamento);
-      setOrcamentoLido({ orcamento, casamento, escolhas, nome: arquivo.name || "", leitor: "regras",
+      setOrcamentoLido({ orcamento, casamento, escolhas, nome: arquivo.name || "", leitor: "regras", cot: cotacao,
         aviso: aviso ? aviso + " Li o PDF com o leitor do VICKE." : "" });
     } catch (e) {
       setErro(e && e.message ? e.message : "Não consegui ler esse PDF.");
@@ -6311,6 +6353,29 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           const dia = (iso) => (iso ? new Date(iso + "T12:00:00").toLocaleDateString("pt-BR") : "");
           const trocarEscolha = (id, mudanca) => setOrcamentoLido((x) => x && ({
             ...x, escolhas: { ...(x.escolhas || {}), [id]: { ...((x.escolhas || {})[id] || {}), ...mudanca } } }));
+          // Reclassificar: apontar para um item a linha que está em outro
+          // TROCA as duas — o outro fica com a linha que era deste. Sem isso a
+          // mesma porta ficava em dois itens e a soma dobrava.
+          const apontarLinha = (item, i) => setOrcamentoLido((x) => {
+            if (!x) return x;
+            const esc = { ...(x.escolhas || {}) };
+            const atual = esc[item.id] || { i: -1 };
+            const linha = i >= 0 ? o.itens[i] : null;
+            const outroId = i >= 0 ? Object.keys(esc).find((id) => id !== item.id && esc[id] && esc[id].i === i && !esc[id].repetido) : null;
+            esc[item.id] = { ...atual, i, preco: linha ? precoDaLinha(linha, quantidadeDoItem(item), item) : 0, repetidoFora: false, trocadoCom: "" };
+            if (outroId) {
+              const outro = (cm.casados.find((c) => c.item.id === outroId) || {}).item;
+              const velha = atual.i >= 0 ? o.itens[atual.i] : null;
+              esc[outroId] = { ...esc[outroId], i: velha ? atual.i : -1,
+                preco: velha && outro ? precoDaLinha(velha, quantidadeDoItem(outro), outro) : 0,
+                trocadoCom: item.descricao || "outro item" };
+            }
+            return { ...x, escolhas: esc };
+          });
+          const cotOrc = orcamentoLido.cot || null;
+          const n2 = (v) => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+          const vaoDe = (x) => { const m = medidasDaLinha(x); return m && m.largura > 0 && m.altura > 0 ? m : null; };
+          const textoVao = (m) => (m ? `${n2(m.largura)} × ${n2(m.altura)} m` : "");
           const comPreco = cm.casados.filter(({ item }) => ((escolhas[item.id] || {}).preco || 0) > 0);
           const soma = Math.round(comPreco.reduce((a, { item }) =>
             a + (escolhas[item.id].preco * quantidadeDoItem(item)), 0) * 100) / 100;
@@ -6366,28 +6431,31 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     const dif = linhaVista ? divergenciaDeEmbalagem(item.descricao, linhaVista.descricao) : null;
                     const unit = linhaVista ? precoDaLinha(linhaVista, 0) : 0;
                     const convertido = dif && dif.fator > 0 && unit > 0 ? Math.round(unit * dif.fator * 100) / 100 : 0;
+                    // medida do item (gravada nele ou no papel de outra loja) × medida da linha
+                    const vaoItem = vaoDe(cotOrc ? itemComMedidaConhecida(cotOrc, item) : item);
+                    const linhaEsc = esc.i >= 0 ? o.itens[esc.i] : null;
+                    const vaoLinha = linhaEsc ? vaoDe(linhaEsc) : null;
+                    const naoBate = !!(vaoItem && vaoLinha && !mesmoVao({ ...vaoItem, quantidade: qtd }, { ...vaoLinha, quantidade: linhaEsc.quantidade }));
+                    const iCerta = naoBate ? o.itens.findIndex((l) => vaoDe(l) && mesmoVao({ ...vaoItem, quantidade: qtd }, l)) : -1;
                     return (
                       <div key={item.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 10,
                         padding: "9px 12px", borderTop: "1px solid rgba(38,36,33,0.06)", alignItems: "center",
                         background: dif ? "#fffaf0" : undefined }}>
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontSize: 12.5, color: "#111827" }}>{item.descricao || "Item"}</div>
-                          <div style={{ fontSize: 11, color: "#6b7280" }}>{qtdBR(qtd)} {item.unidade || ""}</div>
+                          <div style={{ fontSize: 11, color: "#6b7280" }}>{qtdBR(qtd)} {item.unidade || ""}
+                            {vaoItem ? <span> · {textoVao(vaoItem)}</span> : null}</div>
                         </div>
                         {/* A setinha com TODAS as linhas do PDF: quando a
                             associação erra — e com tanto formato diferente
                             ela erra — apontar a linha certa é um clique. */}
                         <div style={{ minWidth: 0 }}>
                         <Selecao style={{ ...E.input, cursor: "pointer" }} value={String(esc.i)}
-                          onChange={(e) => {
-                            const i = Number(e.target.value);
-                            const linha = i >= 0 ? o.itens[i] : null;
-                            trocarEscolha(item.id, { i, preco: linha ? precoDaLinha(linha, qtd, item) : 0, repetidoFora: false });
-                          }}>
+                          onChange={(e) => apontarLinha(item, Number(e.target.value))}>
                           <option value="-1">— não veio neste orçamento —</option>
                           {o.itens.map((l, i) => (
                             <option key={i} value={String(i)}>
-                              {l.descricao}{precoDaLinha(l, 0) > 0 ? ` · ${dinheiro(precoDaLinha(l, 0))}` : ""}
+                              {vaoDe(l) ? textoVao(vaoDe(l)) + " · " : ""}{l.descricao}{precoDaLinha(l, 0) > 0 ? ` · ${dinheiro(precoDaLinha(l, 0))}` : ""}
                             </option>
                           ))}
                         </Selecao>
@@ -6395,7 +6463,23 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                             módulos…"); o que distingue vem no fim — a linha inteira aqui */}
                         {esc.i >= 0 && o.itens[esc.i] && (
                           <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4, lineHeight: 1.4, overflowWrap: "anywhere" }}>
+                            {vaoLinha ? <strong style={{ color: naoBate ? "#b45309" : "#374151", fontWeight: 600 }}>{textoVao(vaoLinha)} · </strong> : null}
                             {o.itens[esc.i].descricao}
+                          </div>
+                        )}
+                        {esc.trocadoCom && (
+                          <div style={{ fontSize: 11, color: "#0474f4", marginTop: 3 }}>trocada com “{esc.trocadoCom}”</div>
+                        )}
+                        {naoBate && (
+                          <div data-vk-medida-nao-bate={item.id} style={{ fontSize: 11.5, color: "#b45309", marginTop: 4, lineHeight: 1.45 }}>
+                            A medida não bate: o item é {textoVao(vaoItem)}.{" "}
+                            {iCerta >= 0 && (
+                              <button type="button" onClick={() => apontarLinha(item, iCerta)}
+                                style={{ color: "#0474f4", background: "none", border: "none", padding: 0, cursor: "pointer",
+                                  fontFamily: "inherit", fontSize: 11.5, fontWeight: 600 }}>
+                                Usar a linha de {textoVao(vaoDe(o.itens[iCerta]))} ({dinheiro(precoDaLinha(o.itens[iCerta], 0))})
+                              </button>
+                            )}
                           </div>
                         )}
                         </div>

@@ -3946,6 +3946,23 @@ teste("Engevidros 7004: a porta de 9.900 (5500 x 2100, sem ID Planta) cai em 'PC
   const cmE = M.casamentoDaIA(cotE, errada);
   assert.strictEqual(cmE.casados.find((c) => c.item.id === "i5").linha.total, 9900);
   assert.strictEqual(cmE.casados.find((c) => c.item.id === "i4").linha.total, 2800, "a porta de 2.800 volta para o dono pela medida");
+  // a leitura TROCOU as duas portas (9.900 no PC2, 2.800 no PC2_1): cada item puxa a linha da sua medida
+  const trocada = { ...orc, itens: orc.itens.map((l) => l.total === 2800 ? { ...l, itemDoPedido: "i5" } : l.total === 9900 ? { ...l, itemDoPedido: "i4" } : l) };
+  const cmT = M.casamentoDaIA(cotE, trocada);
+  assert.strictEqual(cmT.casados.find((c) => c.item.id === "i5").linha.total, 9900, "PC2_1 fica com a de 5,50 x 2,10");
+  assert.strictEqual(cmT.casados.find((c) => c.item.id === "i4").linha.total, 2800, "PC2 fica com a de 0,90 x 2,10");
+  // só um dos dois com medida conhecida: ainda assim desfaz a troca
+  const cotF = { ...cotA };
+  const cmF = M.casamentoDaIA(cotF, trocada);
+  assert.strictEqual(cmF.casados.find((c) => c.item.id === "i5").linha.total, 9900);
+  assert.strictEqual(cmF.casados.find((c) => c.item.id === "i4").linha.total, 2800, "o PC2 pega a que sobrou pela palavra 'porta'… ou fica com a livre");
+  // proposta antiga: a linha do papel diz "n:<nome da época>" — o preço do item acha a linha
+  const legado = { id: "pl", fornecedorId: "fa", favorecido: "Alumisantos", precos: { i5: 11186.23, i4: 3766.96 },
+    linhasDoPapel: [{ descricao: "Porta de Correr - 3 Folhas - Aba Simples", total: 11186.23, destino: "n:Porta de Correr - 3 Folhas - Aba Simples" },
+      { descricao: "Porta de Correr - 1 Folha com Vidro", total: 3766.96, destino: "n:Porta de Correr - 1 Folha com Vidro" }] };
+  const cotG = { ...M.cotacaoVazia("o1"), itens: semMedida, propostas: [legado] };
+  assert.deepStrictEqual(M.itensParaIA(cotG).find((x) => x.id === "i5").outrosNomes, ["Porta de Correr - 3 Folhas - Aba Simples"]);
+  assert.deepStrictEqual(M.itensParaIA(cotG).find((x) => x.id === "i4").outrosNomes, ["Porta de Correr - 1 Folha com Vidro"]);
   // sem pista nenhuma, não inventa
   const cotD = { ...M.cotacaoVazia("o1"), itens: semMedida };
   assert.strictEqual(acha(cotD).linha, null);
