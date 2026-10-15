@@ -2823,6 +2823,29 @@ teste("Engenheiro pago: sai da reserva (o custo já entrou no recebimento), sem 
   assert.strictEqual(M.lancamentoRapidoDoExtrato({ id: "b1", data: "2026-11-05", valor: -3000, historico: "PIX ENG" }, "2026-11", sug, {}, []).lancamento.contaId, "parceiros");
 });
 
+teste("parcela da planilha antiga marcada 'não passou pela conta' e ainda não conferida casa com o débito — como dúvida", () => {
+  const parcela = { id: "HP", contaId: "emp_construcao", unidadeId: "empreendimento", competencia: "2026-10", valor: 1886.67,
+    descricao: "Hidráulica e Elétrica - Parcela", contaBanco: "nao", importado: true };
+  const reserva = { id: "RS", contaId: "emp_construcao", competencia: "2026-10", valor: 500, contaBanco: "nao", conferido: true };
+  const banco = [{ id: "b1", data: "2026-10-05", valor: -1886.67, historico: "DÉB.TIT.COMPE EFETIVADO" },
+    { id: "b2", data: "2026-10-06", valor: -500, historico: "PIX ENVIADO" }];
+  const r = M.conciliarExtrato(banco, [parcela, reserva]);
+  const par = r.casados.find((c) => c.lancamento.id === "HP");
+  assert.ok(par, "a parcela casa com o débito");
+  assert.strictEqual(par.extrato.id, "b1");
+  assert.strictEqual(par.certeza, "duvida", "contradiz a marcação: quem decide é a pessoa");
+  assert.strictEqual(par.marcadoForaDaConta, true);
+  assert.ok(!r.noBancoSemPar.some((m) => m.id === "b1"), "o débito sai do 'falta lançar'");
+  assert.ok(!r.casados.some((c) => c.lancamento.id === "RS"), "o 'não' já conferido (reserva) continua fora");
+  assert.ok(r.noBancoSemPar.some((m) => m.id === "b2"));
+  assert.strictEqual(M.conferidosPeloExtrato(r).length, 0, "dúvida não entra conferida sozinha");
+  // com um lançamento normal do mesmo valor, ele tem a preferência
+  const normal = { id: "N1", contaId: "emp_construcao", competencia: "2026-10", valor: 1886.67, descricao: "outra" };
+  const r2 = M.conciliarExtrato([banco[0]], [parcela, normal]);
+  assert.strictEqual(r2.casados[0].lancamento.id, "N1");
+  assert.ok(!r2.contabilizadoSemPar.some((l) => l.id === "HP"), "o 'não' que sobrou não vira 'lançado e não veio no banco'");
+});
+
 for (const [nome, fn] of testes) {
   try { await fn(); console.log("  ok   " + nome); }
   catch (e) { falhas++; console.log("  FALHOU " + nome + "\n         " + e.message); }

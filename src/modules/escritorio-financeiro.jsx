@@ -2148,8 +2148,14 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
   // O que não passou pela conta (contaBanco "nao": a parte da engenharia que
   // vai para a reserva, o rendimento da aplicação, o marcado "fora da conta")
   // não tem linha no banco para casar — nem deve aparecer como faltando nele.
-  const candidatos = (lancamentos || []).filter((l) => !compraNoCartaoDoEscritorio(l) && !(l && l.contaBanco === "nao")).map((l, i) => ({
+  // Exceção: marcado "não passou pela conta" mas AINDA NÃO conferido — o
+  // caso da compra parcelada da planilha antiga, em que as parcelas a vencer
+  // vieram com "não" e depois foram debitadas. Ele ainda pode ter a linha do
+  // banco: entra por último, e o par que fizer vem como dúvida, para a
+  // pessoa confirmar (e a confirmação corrige o "não").
+  const candidatos = (lancamentos || []).filter((l) => !compraNoCartaoDoEscritorio(l) && !(l && l.contaBanco === "nao" && l.conferido)).map((l, i) => ({
     l, i, abs: Math.round(Math.abs(Number(l.valor) || 0) * 100) / 100, usado: false, dir: direcaoDoLancamento(l),
+    nao: !!(l && l.contaBanco === "nao"),
   }));
 
   const distancia = (m, c) => {
@@ -2206,7 +2212,7 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
     });
   });
   // mais pista primeiro; empatado, a ordem de antes (extrato, depois lista)
-  pares.sort((a, b) => (b.pontos - a.pontos) || (a.im - b.im) || (a.c.i - b.c.i));
+  pares.sort((a, b) => (Number(a.c.nao) - Number(b.c.nao)) || (b.pontos - a.pontos) || (a.im - b.im) || (a.c.i - b.c.i));
   const doMov = new Map();
   for (const p of pares) {
     if (p.c.usado || doMov.has(p.m)) continue;
@@ -2249,19 +2255,21 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
       else if (arriscadas.every((t) => t.igual)) certeza = "equivalente";
       else certeza = "duvida";
     }
+    // marcado "não passou pela conta": casa, mas quem decide é a pessoa
+    if (p.c.nao) certeza = "duvida";
     casados.push({
       extrato: m, lancamento: p.c.l,
       dias: distancia(m, p.c) === 9999 ? null : distancia(m, p.c),
       centavos: Math.round((p.c.abs - absDe(m)) * 100),
       ambiguo: outrosLanc.length > 0 || outrasLinhas.length > 0,
-      certeza, pontos: p.pontos,
+      certeza, pontos: p.pontos, marcadoForaDaConta: p.c.nao,
       // as outras opções para a pessoa trocar o par, quando há dúvida
       alternativas: certeza === "duvida" ? outrosLanc.map((x) => x.c.l) : [],
     });
   }
   // a fila sai na ordem do extrato, como antes
   noBancoSemPar.sort((a, b) => String(a.data).localeCompare(String(b.data)));
-  const contabilizadoSemPar = candidatos.filter((c) => !c.usado).map((c) => c.l);
+  const contabilizadoSemPar = candidatos.filter((c) => !c.usado && !c.nao).map((c) => c.l);
   // Provável duplicado: sobrou sem linha do banco, mas há outro lançamento na
   // MESMA conta e do mesmo valor que já casou — uma entrada no banco, dois
   // lançamentos (a base antiga importada e a ponte da obra, por exemplo).
@@ -2288,7 +2296,7 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
     casados, noBancoSemPar, contabilizadoSemPar, foraDoBanco, naoLancar, duplicados, invertidos,
     resumo: {
       movimentos: doBanco.length,
-      lancamentos: candidatos.length,
+      lancamentos: candidatos.filter((c) => !c.nao || c.usado).length,
       casados: casados.length,
       noBanco: noBancoSemPar.length,
       contabilizado: contabilizadoSemPar.length,
@@ -6092,7 +6100,9 @@ function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcar
               {duvidas.length === 1 ? "1 casamento em dúvida" : `${duvidas.length} casamentos em dúvida`}
             </div>
             <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-              O mesmo valor aparece mais de uma vez e o banco não diz de quem é. Confira o par — ou troque pelo lançamento certo.
+              {duvidas.every((c) => c.marcadoForaDaConta)
+                ? "O banco tem a linha, mas o lançamento está marcado como “não passou pela conta”. Confira o par."
+                : "O mesmo valor aparece mais de uma vez e o banco não diz de quem é. Confira o par — ou troque pelo lançamento certo."}
             </div>
           </div>
           {duvidas.map((c) => {
@@ -6112,6 +6122,11 @@ function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcar
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>É este lançamento?</div>
+                  {c.marcadoForaDaConta && escolhido.id === c.lancamento.id && (
+                    <div data-vk-marcado-fora style={{ fontSize: 11.5, color: "#b45309", marginBottom: 4, lineHeight: 1.4 }}>
+                      Está marcado como “não passou pela conta” (parcela a vencer da planilha antiga, provavelmente). Confirmar liga à linha do banco e corrige para “passou”.
+                    </div>
+                  )}
                   {opcoes.length > 1 ? (
                     <select value={idEscolhido} onChange={(e) => setEscolha((x) => ({ ...x, [m.id]: e.target.value }))}
                       style={{ ...S.input, width: "100%", fontSize: 12.5 }}>
@@ -7802,8 +7817,11 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   // conferido. Com a ligação gravada, o próximo casamento já sabe.
   async function confirmarParDoExtrato(m, l) {
     if (!m || !l) return;
+    // a linha do banco é a prova de que passou pela conta: o "não" da
+    // planilha antiga (parcela a vencer) deixa de valer
     const novo = { ...l, conferido: true, conferidoEm: new Date().toISOString(), conferidoPor: "extrato",
-      extratoId: m.id || l.extratoId || "", historicoBanco: m.historico || l.historicoBanco || "" };
+      extratoId: m.id || l.extratoId || "", historicoBanco: m.historico || l.historicoBanco || "",
+      ...(l.contaBanco === "nao" ? { contaBanco: "sim" } : {}) };
     setOcupado("Confirmando…");
     try {
       await api.lancamentos.batch([novo]);
