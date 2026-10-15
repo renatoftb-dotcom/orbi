@@ -10712,7 +10712,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
                   <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>
                     {modoItens && !soTotal
-                      ? <>Linhas do papel · {itens.length}<span style={{ fontWeight: 400, color: "#6b7280", fontSize: 11.5 }}> — como a loja escreveu: preço e o item da cotação em que cada uma cai</span></>
+                      ? <>Linhas do orçamento original · {itens.length}<span style={{ fontWeight: 400, color: "#6b7280", fontSize: 11.5 }}> — como a loja escreveu: preço e o item da cotação em que cada uma cai</span></>
                       : (itens.length === 1 ? "1 item" : `${itens.length} itens`)}
                   </div>
                   {modoItens && !soTotal && !(itens || []).some((x) => !!medidasDaLinha(x)) && (
