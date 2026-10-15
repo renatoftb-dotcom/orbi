@@ -98,7 +98,7 @@ const modulo = new Function(`
            comContaPadraoDaEntrada, tipoDoAnexoDaEntrada, SITUACOES_DA_ENTRADA,
            fichaDaEntradaPelaIA, tipoDoPapelPelaIA, textoSemCaixaAlta,
            entradaTemPreco, modoPadraoDaCotacao, cotacoesParaGuardarProposta, cotacaoSugeridaParaProposta,
-           propostaDaEntrada, MODOS_DA_COTACAO_NA_ENTRADA, contaDeCompra,
+           propostaDaEntrada, MODOS_DA_COTACAO_NA_ENTRADA, contaDeCompra, destinosDasLinhas, resumoDaPropostaNaEntrada,
            cotacaoDeOrigemDasContas, papelDaPropostaEscolhida, resumoDaCotacao };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
@@ -3693,6 +3693,98 @@ teste("sem item que case, a sugestão vai pelo assunto — e só quando uma cota
   assert.strictEqual(M.cotacaoSugeridaParaProposta([esq, ele, ges], [{ descricao: "Disjuntor bipolar 40A" }]), ele);
 });
 
+
+// ── Proposta na Entrada ligada aos itens da cotação (Esquadrias/Alumisantos) ──
+const linhasAlumisantos = () => [
+  { descricao: "J1 - FACHADA ESTRUTURAL GRID - Área de Vendas", quantidade: 3, unidade: "Unidades", unitario: 10397.78, bruto: 31193.34 },
+  { descricao: "PC1 - PORTA DE CORRER 4 FOLHAS LINHA GOLD - Hall de Entrada", quantidade: 1, unidade: "Unidades", unitario: 13721.69, bruto: 13721.69 },
+  { descricao: "J2 - FACHADA ESTRUTURAL GRID - Showroom Gourmet", quantidade: 1, unidade: "Unidades", unitario: 40787.91, bruto: 40787.91 },
+  { descricao: "PC2 - PORTA DE CORRER 1 FOLHA - Ante Camara", quantidade: 1, unidade: "Unidades", unitario: 3766.96, bruto: 3766.96, item: "n:Vidro Escritório Alexandre", itemManual: true },
+  { descricao: "PC2_1 - PORTA DE CORRER 3 FOLHAS - Ante Camara", quantidade: 1, unidade: "Unidades", unitario: 7419.27, bruto: 7419.27, item: "n:Vidro Escritório Alexandre", itemManual: true },
+  { descricao: "ACM - REVESTIMENTO ACM - Fachada", quantidade: 1, unidade: "Unidades", unitario: 73200, bruto: 73200 },
+  { descricao: "Frete", quantidade: 1, unidade: "", unitario: 500, bruto: 500, item: "fora", itemManual: true },
+];
+const esquadriasSemLista = () => ({ ...M.cotacaoVazia("o1"), id: "esq", titulo: "Esquadrias", contaId: "material", itens: [],
+  propostas: [{ ...M.propostaVazia(), id: "pc", fornecedorId: "f1", favorecido: "CASA DOS VIDROS", valor: 39184 }] });
+
+teste("Entrada por item: sem escolha, cada linha vira item novo; à mão, linhas juntam e frete fica fora", () => {
+  const cot = esquadriasSemLista();
+  const l = linhasAlumisantos();
+  const d = M.destinosDasLinhas(cot, l);
+  assert.strictEqual(d[0], "n:J1 - FACHADA ESTRUTURAL GRID - Área de Vendas");
+  assert.strictEqual(d[3], "n:Vidro Escritório Alexandre");
+  assert.strictEqual(d[6], "fora");
+  const r = M.resumoDaPropostaNaEntrada(cot, l, d, {});
+  assert.strictEqual(r.grupos.length, 5);
+  const vidro = r.grupos.find((g) => g.nome === "Vidro Escritório Alexandre");
+  assert.deepStrictEqual(vidro.linhas, [3, 4]);
+  assert.strictEqual(vidro.total, 11186.23);
+  assert.strictEqual(vidro.quantidade, 1, "juntado vira 1");
+  assert.strictEqual(r.grupos[0].quantidade, 3, "linha sozinha herda a quantidade");
+  assert.strictEqual(r.fora, 500);
+  assert.strictEqual(r.naCotacao, 170089.17);
+});
+
+teste("Entrada por item: guarda na cotação sem lista — monta os itens, preço por item, as outras propostas ficam", () => {
+  const l = linhasAlumisantos();
+  const cot0 = esquadriasSemLista();
+  const r = M.propostaDaEntrada({ cotacao: cot0, obraId: "o1", itens: l, porItemDaCotacao: true,
+    destinos: M.destinosDasLinhas(cot0, l), qtdNovos: { "J2 - FACHADA ESTRUTURAL GRID - Showroom Gourmet": { quantidade: 1, unidade: "un" } },
+    loja: { id: "f9", nome: "Alumisantos" } });
+  assert.strictEqual(r.cotacao.itens.length, 5);
+  assert.strictEqual(r.novos, 5);
+  assert.strictEqual(r.proposta.valor, 170089.17);
+  const j1 = r.cotacao.itens[0];
+  assert.strictEqual(r.proposta.precos[j1.id], 10397.78);
+  const vidro = r.cotacao.itens.find((i) => i.descricao === "Vidro Escritório Alexandre");
+  assert.strictEqual(r.proposta.precos[vidro.id], 11186.23);
+  assert.ok(vidro.textosDasLojas.some((t) => /PC2_1/.test(t)), "o texto da loja fica no item");
+  assert.strictEqual(r.proposta.linhasDoPapel.length, 7);
+  assert.strictEqual(r.proposta.linhasDoPapel[6].destino, "fora");
+  assert.strictEqual(r.cotacao.propostas.length, 2);
+  assert.strictEqual(r.cotacao.propostas[0].valor, 39184, "Casa dos Vidros continua pelo total");
+  // o mesmo papel de novo (ou outro com o mesmo texto) casa sozinho com os itens
+  const d2 = M.destinosDasLinhas(r.cotacao, linhasAlumisantos().map((x) => ({ ...x, item: undefined, itemManual: false })));
+  assert.strictEqual(d2[4], "c:" + vidro.id);
+  assert.strictEqual(d2[0], "c:" + j1.id);
+});
+
+teste("Entrada por item: na cotação com lista, linha aponta item existente; o que a loja não cotou aparece", () => {
+  const l = linhasAlumisantos();
+  const r1 = M.propostaDaEntrada({ cotacao: esquadriasSemLista(), obraId: "o1", itens: l, porItemDaCotacao: true, loja: { id: "f9", nome: "Alumisantos" } });
+  const cot = r1.cotacao;
+  const [vit, porta] = cot.itens;
+  const brn = [{ descricao: "Vitrines existentes", quantidade: 3, bruto: 19909, item: "c:" + vit.id, itemManual: true },
+    { descricao: "Porta 4 folhas", quantidade: 1, bruto: 12380.82, item: "c:" + porta.id, itemManual: true }];
+  const res = M.resumoDaPropostaNaEntrada(cot, brn, M.destinosDasLinhas(cot, brn), {});
+  assert.strictEqual(res.grupos.length, 2);
+  assert.ok(res.grupos[0].existente);
+  assert.strictEqual(res.naoCotados.length, cot.itens.length - 2);
+  const r2 = M.propostaDaEntrada({ cotacao: cot, obraId: "o1", itens: brn, porItemDaCotacao: true, loja: { id: "f2", nome: "BRN DOORS" } });
+  assert.strictEqual(r2.cotacao.itens.length, cot.itens.length, "nenhum item novo");
+  assert.strictEqual(r2.proposta.precos[vit.id], Math.round(19909 / 3 * 1e6) / 1e6);
+  assert.strictEqual(r2.proposta.valor, 32289.82);
+  // "novo" com o nome de um item que já existe é o mesmo item
+  const r3 = M.propostaDaEntrada({ cotacao: cot, obraId: "o1", porItemDaCotacao: true, loja: { id: "f3", nome: "ART" },
+    itens: [{ descricao: "x", quantidade: 1, bruto: 100, item: "n:" + vit.descricao.toUpperCase(), itemManual: true }] });
+  assert.strictEqual(r3.cotacao.itens.length, cot.itens.length);
+});
+
+teste("Entrada só o total: proposta pelo valor, sem preço por item e sem mexer na lista", () => {
+  const cot0 = esquadriasSemLista();
+  const r = M.propostaDaEntrada({ cotacao: cot0, obraId: "o1", itens: linhasAlumisantos(), soTotal: true, desconto: 89.17,
+    loja: { id: "f9", nome: "Alumisantos" } });
+  assert.strictEqual(r.cotacao.itens.length, 0);
+  assert.deepStrictEqual(r.proposta.precos, {});
+  assert.strictEqual(r.proposta.soTotal, true);
+  assert.strictEqual(r.proposta.valor, 170500);
+  // cotação nova pelo total: etapa e conta vêm do que a pessoa escolheu
+  const n = M.propostaDaEntrada({ obraId: "o1", itens: linhasAlumisantos(), soTotal: true, titulo: "Esquadrias",
+    etapaId: "esquadrias", contaId: "material", loja: { id: "f9", nome: "Alumisantos" } });
+  assert.strictEqual(n.nova, true);
+  assert.strictEqual(n.cotacao.etapaId, "esquadrias");
+  assert.strictEqual(n.cotacao.titulo, "Esquadrias");
+});
 
 teste("compra nunca cai em conta de receita", () => {
   assert.strictEqual(M.contaDeCompra("deposito_proprio"), "material");

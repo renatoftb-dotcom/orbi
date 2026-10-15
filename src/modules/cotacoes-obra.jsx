@@ -1541,6 +1541,9 @@ const SITUACOES_DA_ENTRADA = [
 ];
 
 const COLS_ENTRADA = "minmax(0,2.2fr) 62px 84px 92px 100px minmax(0,1.3fr) minmax(0,1.3fr) 24px";
+// Proposta para a cotação: sem catálogo, etapa nem conta — a coluna que
+// importa é para qual item da cotação a linha vai.
+const COLS_ENTRADA_COT = "62px 84px 100px 110px minmax(0,2fr) 24px";
 
 // ── Cotação: a proposta que já chega com preço ──────────────────
 // Um papel de loja COM preço não é pedido de preço: é a resposta. Ele vai
@@ -1595,7 +1598,10 @@ function itemCotadoDaEntrada(lista, it, usados) {
   }
   const chave = cotChaveDoItem(it);
   if (!chave) return null;
-  return lista.find((c) => livre(c) && cotChaveDoItem(c) === chave && !(cod && c.codigo && c.codigo !== cod)) || null;
+  return lista.find((c) => livre(c) && cotChaveDoItem(c) === chave && !(cod && c.codigo && c.codigo !== cod))
+    // o texto que uma loja já usou para este item (guardado quando a linha foi ligada a ele)
+    || lista.find((c) => livre(c) && (c.textosDasLojas || []).some((t) => cotChaveDoItem({ descricao: t }) === chave))
+    || null;
 }
 
 // A cotação que mais se parece com a lista: a que tem mais itens em comum.
@@ -1645,6 +1651,112 @@ function assuntoDaCotacaoBate(cot, itens) {
   return daCotacao.split(" ").filter((w) => w.length >= 6).some((w) => doPapel.indexOf(w.slice(0, -1)) >= 0);
 }
 
+// ── Proposta na Entrada, no jeito da cotação ─────────────────────
+// Cada linha do papel aponta para um item da cotação:
+//   "c:<id>"   item que a cotação já tem
+//   "n:<nome>" item novo — linhas com o mesmo nome somam num item só (é o
+//              "juntar": as portas da ante-câmara viram "Vidro Escritório")
+//   "fora"     fora da proposta (frete à parte, opcional, o que não se compara)
+// Sem escolha feita à mão vale a sugestão: o item que casa pela descrição;
+// sem casamento, um item novo com o texto da linha.
+const ENTRADA_FORA = "fora";
+function destinosDasLinhas(cot, linhas) {
+  const lista = itensDaCotacao(cot);
+  const existe = (k) => /^c:/.test(k || "") && lista.some((c) => c.id === k.slice(2));
+  const usados = new Set();
+  (linhas || []).forEach((l) => { if (l && l.itemManual && existe(l.item)) usados.add(l.item.slice(2)); });
+  return (linhas || []).map((l) => {
+    if (!l) return ENTRADA_FORA;
+    if (l.itemManual && l.item && (l.item === ENTRADA_FORA || /^n:/.test(l.item) || existe(l.item))) return l.item;
+    // texto que esta loja já usou para um item: vale mesmo que outra linha já
+    // tenha caído nele — é assim que um item juntado (duas linhas) casa de novo
+    const chave = cotChaveDoItem(l);
+    const peloTexto = chave ? lista.find((c) => (c.textosDasLojas || []).some((t) => cotChaveDoItem({ descricao: t }) === chave)) : null;
+    if (peloTexto) return "c:" + peloTexto.id;
+    const achado = itemCotadoDaEntrada(lista, l, usados);
+    if (achado) { usados.add(achado.id); return "c:" + achado.id; }
+    return "n:" + (String(l.descricao || "").trim() || "Item");
+  });
+}
+
+// O que a proposta vira na cotação, para a pessoa conferir antes de guardar:
+// um grupo por item (na ordem em que aparecem no papel), o que ficou de
+// fora, e os itens da cotação que esta loja não cotou.
+function resumoDaPropostaNaEntrada(cot, linhas, destinos, qtdNovos) {
+  const lista = itensDaCotacao(cot);
+  const dest = destinos || destinosDasLinhas(cot, linhas);
+  const grupos = [];
+  let fora = 0, soma = 0;
+  (linhas || []).forEach((l, i) => {
+    const b = brutoDoItem(l);
+    soma += b;
+    const k = dest[i];
+    if (k === ENTRADA_FORA) { fora += b; return; }
+    let g = grupos.find((x) => x.chave === k);
+    if (!g) {
+      const existente = /^c:/.test(k) ? lista.find((c) => c.id === k.slice(2)) || null : null;
+      const nome = existente ? existente.descricao : k.slice(2);
+      const q = ((qtdNovos || {})[nome]) || {};
+      g = { chave: k, nome, existente, linhas: [], total: 0,
+        quantidade: existente ? existente.quantidade : (q.quantidade != null && q.quantidade !== "" ? q.quantidade : null),
+        unidade: existente ? existente.unidade : (q.unidade || null) };
+      grupos.push(g);
+    }
+    g.linhas.push(i);
+    g.total = Math.round((g.total + b) * 100) / 100;
+  });
+  // item novo de uma linha só herda a quantidade dela; juntado vira 1
+  for (const g of grupos) {
+    if (g.existente) continue;
+    const l0 = (linhas || [])[g.linhas[0]] || {};
+    if (g.quantidade == null) g.quantidade = g.linhas.length === 1 && numeroDoCampo(l0.quantidade) > 0 ? l0.quantidade : 1;
+    if (!g.unidade) g.unidade = (g.linhas.length === 1 && l0.unidade) || "un";
+  }
+  const cobertos = new Set(grupos.filter((g) => g.existente).map((g) => g.existente.id));
+  const naoCotados = lista.filter((c) => !cobertos.has(c.id));
+  return { grupos, naoCotados, fora: Math.round(fora * 100) / 100, soma: Math.round(soma * 100) / 100,
+    naCotacao: Math.round((soma - fora) * 100) / 100 };
+}
+
+// A proposta da Entrada quando a pessoa disse linha → item (ou "só o total").
+function propostaDaEntradaPorItem(x, cot0) {
+  const linhas = (x.itens || []).filter((it) => it && (String(it.descricao || "").trim() || brutoDoItem(it) > 0));
+  const destinos = x.soTotal ? [] : (x.destinos && x.destinos.length === (x.itens || []).length
+    ? (x.itens || []).map((it, i) => ({ it, k: x.destinos[i] })).filter((p) => linhas.indexOf(p.it) >= 0).map((p) => p.k)
+    : destinosDasLinhas(cot0, linhas));
+  let lista = itensDaCotacao(cot0).slice();
+  const precos = {};
+  let novos = 0;
+  if (!x.soTotal) {
+    const r = resumoDaPropostaNaEntrada(cot0, linhas, destinos, x.qtdNovos);
+    for (const g of r.grupos) {
+      let alvo = g.existente ? lista.find((c) => c.id === g.existente.id) : null;
+      const nome = String(g.nome || "").trim() || String((linhas[g.linhas[0]] || {}).descricao || "Item").trim();
+      // "novo" com o nome de um item que a cotação já tem é o mesmo item
+      if (!alvo) alvo = lista.find((c) => cotChaveDoItem(c) === cotChaveDoItem({ descricao: nome })) || null;
+      if (!alvo) {
+        const l0 = linhas[g.linhas[0]] || {};
+        alvo = { ...itemCotacaoVazio(), descricao: nome, quantidade: g.quantidade, unidade: g.unidade,
+          codigo: g.linhas.length === 1 ? (l0.insumoCodigo || "") : "" };
+        lista.push(alvo);
+        novos++;
+      }
+      // o jeito que a loja escreveu fica no item: o próximo papel igual casa sozinho
+      const textos = g.linhas.map((i) => String((linhas[i] || {}).descricao || "").trim())
+        .filter((t) => t && cotChaveDoItem({ descricao: t }) !== cotChaveDoItem(alvo));
+      if (textos.length) {
+        const todos = Array.from(new Set([...(alvo.textosDasLojas || []), ...textos])).slice(-12);
+        alvo = { ...alvo, textosDasLojas: todos };
+        const id = alvo.id;
+        lista = lista.map((c) => (c.id === id ? alvo : c));
+      }
+      const q = quantidadeDoItem(alvo);
+      if (g.total > 0) precos[alvo.id] = q > 0 ? Math.round((g.total / q) * 1e6) / 1e6 : g.total;
+    }
+  }
+  return { lista, precos, novos, destinos, linhas };
+}
+
 // A proposta montada a partir da lista com preço. Devolve a cotação inteira
 // já com ela: itens que a cotação não tinha entram na lista (sem preço para
 // as outras lojas, que aparecem como "faltando"), e a mesma loja de novo
@@ -1657,6 +1769,7 @@ function propostaDaEntrada(d) {
   const papel = x.papel || {};
   const cot0 = x.cotacao || { ...cotacaoVazia(x.obraId || ""),
     titulo: String(x.titulo || "").trim() || tituloDaListaRapida(x.itens, hoje) };
+  if (x.porItemDaCotacao || x.soTotal) return propostaDaEntradaNaCotacao(x, cot0, hoje);
   const lista = itensDaCotacao(cot0).slice();
   const usados = new Set();
   const precos = {};
@@ -1717,6 +1830,50 @@ function propostaDaEntrada(d) {
     : propostasDaCotacao(cot).concat([prop]);
   cot = { ...cot, propostas };
   return { cotacao: cot, proposta: prop, novos, substituiu: !!anterior, nova: !x.cotacao };
+}
+
+function propostaDaEntradaNaCotacao(x, cot0, hoje) {
+  const loja = x.loja || {};
+  const papel = x.papel || {};
+  const r = propostaDaEntradaPorItem(x, cot0);
+  let cot = { ...cot0, itens: r.lista };
+  if (!x.cotacao) {
+    if (x.etapaId) cot.etapaId = x.etapaId;
+    else {
+      const etapas = Array.from(new Set(r.linhas.map((it) => it && it.etapa).filter(Boolean)));
+      if (etapas.length) cot.etapaId = etapas[0];
+    }
+    cot.contaId = contaDeCompra(x.contaId || "");
+  }
+  const anterior = loja.id ? propostasDaCotacao(cot).find((p) => p.fornecedorId === loja.id) || null : null;
+  const numero = String(papel.numeroNota || papel.numeroPedido || "").trim();
+  const desconto = numeroDoCampo(x.desconto);
+  const somaLinhas = Math.round(r.linhas.reduce((t, it) => t + brutoDoItem(it), 0) * 100) / 100;
+  let prop = { ...(anterior || propostaVazia()),
+    fornecedorId: loja.id || "", favorecido: loja.nome || papel.lidoComo || "",
+    precos: x.soTotal ? {} : r.precos, totalFechado: "",
+    // as linhas como vieram no papel, e para onde cada uma foi: é a conferência de depois
+    linhasDoPapel: r.linhas.map((it, i) => ({ descricao: String(it.descricao || "").trim(), quantidade: it.quantidade || "",
+      unidade: it.unidade || "", total: brutoDoItem(it), destino: x.soTotal ? "total" : r.destinos[i] })),
+    soTotal: !!x.soTotal,
+    observacao: numero ? ((papel.numeroNota ? "Nota nº " : "Pedido nº ") + numero) : ((anterior && anterior.observacao) || ""),
+    numeroPedido: String(papel.numeroPedido || "").trim() || ((anterior && anterior.numeroPedido) || ""),
+    numeroNota: String(papel.numeroNota || "").trim() || ((anterior && anterior.numeroNota) || ""),
+    anexo: x.anexo || (anterior && anterior.anexo) || null,
+    recebidaEm: String(papel.emitido || "").slice(0, 10) || hoje };
+  if (x.soTotal) {
+    // só o total: entra pelo valor, sem preço por item (fica fora da comparação item a item)
+    prop.valor = Math.round(Math.max(0, somaLinhas - (desconto > 0 ? desconto : 0)) * 100) / 100;
+  } else {
+    const bruto = totalDosItens(cot, prop);
+    if (desconto > 0 && bruto > desconto) prop.totalFechado = Math.round((bruto - desconto) * 100) / 100;
+    prop = { ...prop, valor: valorDaProposta(cot, prop) };
+  }
+  const propostas = anterior
+    ? propostasDaCotacao(cot).map((p) => (p.id === anterior.id ? prop : p))
+    : propostasDaCotacao(cot).concat([prop]);
+  cot = { ...cot, propostas };
+  return { cotacao: cot, proposta: prop, novos: r.novos, substituiu: !!anterior, nova: !x.cotacao };
 }
 
 // Empreendimento é do escritório: quem paga é ele, e o papel chega depois
@@ -8824,7 +8981,9 @@ function EntradaDaObra({ data, save, obras, obraPadrao, usuario, isMobile, dinhe
     const existente = carga.cotacaoId ? cotacoes.find((c) => c && c.id === carga.cotacaoId) : null;
     if (carga.cotacaoId && !existente) return { erro: "Essa cotação não está mais na obra. Escolha outra." };
     const r = propostaDaEntrada({ cotacao: existente, obraId: alvo.id, titulo: carga.titulo,
-      itens: carga.itens, loja, papel: carga.papel, desconto: carga.desconto, anexo: carga.anexo });
+      itens: carga.itens, loja, papel: carga.papel, desconto: carga.desconto, anexo: carga.anexo,
+      porItemDaCotacao: !!carga.porItemDaCotacao, destinos: carga.destinos, qtdNovos: carga.qtdNovos,
+      soTotal: !!carga.soTotal, etapaId: carga.etapaId, contaId: carga.contaId });
     const quem = typeof nomeDeQuem === "function" ? nomeDeQuem(usuario) : "";
     const agora = new Date().toISOString();
     const prop = { ...r.proposta, salvoPor: quem, salvoEm: agora,
@@ -9113,6 +9272,12 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // Em qual cotação a proposta entra: "" = a sugerida, "nova" = abrir outra.
   const [cotacaoDestino, setCotacaoDestino] = useState("");
   const [tituloNova, setTituloNova] = useState("");
+  // Proposta no jeito da cotação: "só o total", a quantidade dos itens novos
+  // ({ nome: { quantidade, unidade } }), e etapa/conta de uma cotação nova.
+  const [soTotal, setSoTotal] = useState(false);
+  const [qtdNovos, setQtdNovos] = useState({});
+  const [etapaNova, setEtapaNova] = useState("");
+  const [contaNova, setContaNova] = useState("");
   const [guardando, setGuardando] = useState(false);
   // A cotação da última proposta guardada: a próxima loja quase sempre vai
   // para a mesma, e ela tem que vir escolhida.
@@ -9248,6 +9413,21 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const destinoId = cotacaoDestino === "nova" ? ""
     : (cotacaoDestino && cotacoesAbertas.some((c) => c.id === cotacaoDestino) ? cotacaoDestino : ((cotacaoSugerida || {}).id || ""));
   const cotacaoDestinoObj = destinoId ? cotacoesAbertas.find((c) => c.id === destinoId) || null : null;
+  // Guardando proposta, a tabela vira a da cotação: cada linha do papel
+  // aponta para um item dela (ou junta com outra, ou fica de fora).
+  const modoItens = !!itens && guardaProposta;
+  const destinosEntrada = modoItens ? destinosDasLinhas(cotacaoDestinoObj, itens) : [];
+  const resumoCot = modoItens && !soTotal ? resumoDaPropostaNaEntrada(cotacaoDestinoObj, itens, destinosEntrada, qtdNovos) : null;
+  const totalDaProposta = !modoItens ? totalDaEntrada
+    : Math.round((((resumoCot ? resumoCot.naCotacao : somaDosItens)) - descontoDoPapel) * 100) / 100;
+  // A linha aponta para outro item: escolha da pessoa, não volta a ser sugestão.
+  const apontarLinha = (i, k) => mexerItem(i, { item: k, itemManual: true });
+  // Renomear um item novo é renomear todas as linhas que caem nele.
+  const renomearNovo = (chave, nome) => {
+    setItens((l) => (l || []).map((x, j) => (destinosEntrada[j] === chave ? { ...x, item: "n:" + nome, itemManual: true } : x)));
+    const antigo = chave.slice(2);
+    setQtdNovos((q) => { const n = { ...q }; if (n[antigo]) { n[nome] = n[antigo]; delete n[antigo]; } return n; });
+  };
   const lojaDaProposta = (prestadores || []).find((f) => f && f.id === lojaId) || null;
   const jaTemPropostaDaLoja = !!(cotacaoDestinoObj && lojaId
     && propostasDaCotacao(cotacaoDestinoObj).some((p) => p.fornecedorId === lojaId));
@@ -9255,6 +9435,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     : (pedeObra && !obraId) ? "Escolha a obra."
     : !lojaId ? "Escolha o fornecedor — é dele a proposta."
     : !entradaTemPreco(itens) ? "A lista está sem preço. Para pedir preço, use “Pedir preço às lojas”."
+    : (resumoCot && !resumoCot.grupos.some((g) => g.total > 0)) ? "Nenhuma linha ficou num item da cotação. Ligue ao menos uma, ou use “Só o total”."
     : "";
   const parcelasDoFavorecido = situacao === "pago" ? parcelasEmAbertoDoPrestador(contasDaObraEscolhida, lojaId) : [];
   const parcelaSugerida = parcelaQueCasa(parcelasDoFavorecido, totalDaEntrada);
@@ -9515,6 +9696,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     setDestino(""); setLojaId(""); setObraId(""); setAviso(""); setReconhecido(null);
     setLojasMarcadas({}); setBuscaLoja(""); setFila(null); setEnviado(null);
     setModoCotacao(""); setCotacaoDestino(""); setTituloNova("");
+    setSoTotal(false); setQtdNovos({}); setEtapaNova(""); setContaNova("");
   }
 
   // As lojas com telefone, filtradas pela busca; sem telefone aparecem
@@ -9589,6 +9771,8 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     }
     const r = aoSeguir({ destino: "proposta", obraId, itens, papel, lojaId,
       desconto: descontoDoPapel, cotacaoId: destinoId,
+      porItemDaCotacao: true, destinos: destinosEntrada, qtdNovos, soTotal,
+      etapaId: destinoId ? "" : etapaNova, contaId: destinoId ? "" : contaNova,
       titulo: String(tituloNova || "").trim() || tituloDaListaRapida(itens, new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)),
       anexo }) || {};
     if (r.erro) { setAviso(r.erro); return; }
@@ -9971,7 +10155,16 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                   <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>
                     {itens.length === 1 ? "1 item" : `${itens.length} itens`}
                   </div>
-                  {itens.length > 1 && (
+                  {modoItens && (
+                    <button type="button" data-vk-so-total onClick={() => setSoTotal((v) => !v)}
+                      title="A proposta entra pelo valor total, sem preço por item"
+                      style={{ ...E.btnSec, marginLeft: "auto", fontSize: 12, padding: "5px 12px",
+                        color: soTotal ? "#fff" : "#0474f4", background: soTotal ? "#0474f4" : "#fff",
+                        borderColor: soTotal ? "#0474f4" : "rgba(4,116,244,0.35)", fontWeight: 600 }}>
+                      {soTotal ? "✓ Só o total" : "Só o total"}
+                    </button>
+                  )}
+                  {!modoItens && itens.length > 1 && (
                     <div style={{ minWidth: isMobile ? "100%" : 240, marginLeft: isMobile ? 0 : "auto" }}>
                       <SelectBusca style={{ ...E.input, padding: "6px 10px", fontSize: 12 }} value=""
                         onChange={(v) => { if (v) setItens((l) => (l || []).map((x) => ({ ...x, etapa: v }))); }}
@@ -9981,7 +10174,27 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                     </div>
                   )}
                 </div>
-                {!isMobile && (
+                {modoItens && soTotal && (
+                  <div data-vk-so-total-caixa style={{ padding: "10px 12px", borderRadius: 10, background: "#f7fbff",
+                    border: "1px solid rgba(4,116,244,0.25)", fontSize: 12.5, color: "#374151", lineHeight: 1.5 }}>
+                    A proposta entra pelo total: <b style={{ color: "#111827" }}>{dinheiro(totalDaProposta)}</b>
+                    {" "}({itens.length === 1 ? "1 linha do papel" : `${itens.length} linhas do papel`}). Fica fora da comparação
+                    item a item — dá para detalhar depois.{" "}
+                    <button type="button" onClick={() => setSoTotal(false)}
+                      style={{ background: "none", border: "none", padding: 0, color: "#0474f4", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", fontSize: 12.5 }}>
+                      Detalhar por item
+                    </button>
+                  </div>
+                )}
+                {modoItens && !soTotal && !isMobile && (
+                  <div style={{ display: "grid", gridTemplateColumns: COLS_ENTRADA_COT, gap: 6, fontSize: 10, fontWeight: 600,
+                    color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, padding: "0 0 4px" }}>
+                    <span style={{ textAlign: "right" }}>Qtd</span><span>Un</span>
+                    <span style={{ textAlign: "right" }}>Unitário</span><span style={{ textAlign: "right" }}>Total</span>
+                    <span>Vai para o item da cotação</span><span />
+                  </div>
+                )}
+                {!modoItens && !isMobile && (
                   <div style={{ display: "grid", gridTemplateColumns: COLS_ENTRADA, gap: 6, fontSize: 10, fontWeight: 600,
                     color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, padding: "0 0 4px" }}>
                     <span>Item do catálogo</span><span style={{ textAlign: "right" }}>Qtd</span><span>Un</span>
@@ -9989,7 +10202,50 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                     <span>Etapa</span><span>Conta</span><span />
                   </div>
                 )}
-                {itens.map((it, i) => {
+                {!(modoItens && soTotal) && itens.map((it, i) => {
+                  if (modoItens) {
+                    const celC = { ...E.input, padding: "6px 8px", fontSize: 12.5 };
+                    const miniC = (t) => isMobile ? <span style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#6b7280", marginBottom: 2 }}>{t}</span> : null;
+                    const k = destinosEntrada[i];
+                    const novosNomes = Array.from(new Set(destinosEntrada.filter((d) => /^n:/.test(d)).map((d) => d.slice(2))));
+                    const opcoesItem = [].concat(
+                      itensDaCotacao(cotacaoDestinoObj).map((c) => ({ valor: "c:" + c.id, grupo: "Itens da cotação",
+                        rotulo: c.descricao + (numeroDoCampo(c.quantidade) > 0 ? ` · ${c.quantidade} ${c.unidade || ""}`.trimEnd() : "") })),
+                      novosNomes.map((n) => ({ valor: "n:" + n, rotulo: n, grupo: "Itens novos (desta proposta)" })),
+                      [{ valor: ENTRADA_FORA, rotulo: "Fora da proposta (frete, opcional…)", grupo: "Não comparar" }]);
+                    return (
+                      <div key={it.id || i} data-vk-linha-cot={i} style={{ padding: "8px 0", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+                        <input style={{ ...celC, width: "100%", boxSizing: "border-box", marginBottom: 5, background: "#fbfbfa",
+                          color: k === ENTRADA_FORA ? "#9ca3af" : "#111827" }} value={it.descricao || ""}
+                          placeholder="Como veio no papel" onChange={(e) => mexerItem(i, { descricao: e.target.value })} />
+                        <div style={{ display: "grid", gap: 6, alignItems: "end", gridTemplateColumns: isMobile ? "1fr 1fr" : COLS_ENTRADA_COT }}>
+                          <div style={{ minWidth: 0 }}>{miniC("Quantidade")}
+                            <CampoNumeroBR estilo={{ ...celC, textAlign: "right" }} valor={it.quantidade} casas={0} maxCasas={4} placeholder="0"
+                              aoMudar={(v) => mexerQtdOuUnit(i, { quantidade: v })} /></div>
+                          <div style={{ minWidth: 0 }}>{miniC("Unidade")}
+                            <input style={celC} value={it.unidade || ""} placeholder="un" onChange={(e) => mexerItem(i, { unidade: e.target.value })} /></div>
+                          <div style={{ minWidth: 0 }}>{miniC("Unitário")}
+                            <CampoCtrNum tipo="moeda" style={{ ...celC, textAlign: "right" }} valor={it.unitario}
+                              onChange={(v) => mexerQtdOuUnit(i, { unitario: v })} /></div>
+                          <div style={{ minWidth: 0 }}>{miniC("Total")}
+                            <CampoCtrNum tipo="moeda" style={{ ...celC, textAlign: "right", fontWeight: 600 }} valor={brutoDoItem(it) || ""}
+                              onChange={(v) => mexerTotal(i, v)} /></div>
+                          <div style={{ minWidth: 0, gridColumn: isMobile ? "1 / -1" : "auto" }}>{miniC("Vai para o item da cotação")}
+                            <SelectBusca style={{ ...celC, color: k === ENTRADA_FORA ? "#6b7280" : "#111827",
+                              background: /^n:/.test(k) ? "#f7fbff" : "#fff" }} value={k} placeholder="Procurar item…"
+                              criarRotulo="item novo" aoCriar={(termo) => apontarLinha(i, "n:" + (termo || it.descricao || "Item"))}
+                              onChange={(v) => { if (v) apontarLinha(i, v); }} opcoes={opcoesItem} /></div>
+                          <div style={{ textAlign: isMobile ? "left" : "center", gridColumn: isMobile ? "1 / -1" : "auto" }}>
+                            {itens.length > 1 && (
+                              <button type="button" title="Tirar esta linha" onClick={() => setItens((l) => (l || []).filter((_, j) => j !== i))}
+                                style={{ background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: 16,
+                                  padding: isMobile ? "2px 0" : 0, fontFamily: "inherit" }}>{isMobile ? "× tirar linha" : "×"}</button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
                   const casado = it.insumoCodigo
                     ? (insumos || []).find((y) => y && (y.codigo === it.insumoCodigo || y.id === it.insumoCodigo)) || null
                     : null;
@@ -10091,8 +10347,11 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                   <button type="button" style={{ ...E.btnSec, fontSize: 12, padding: "5px 12px", color: "#0474f4",
                     borderColor: "rgba(4,116,244,0.35)", fontWeight: 600 }} onClick={novoItemDaEntrada}>＋ Item</button>
                   <div style={{ marginLeft: "auto", textAlign: "right" }}>
+                    {resumoCot && resumoCot.fora > 0 && (
+                      <div style={{ fontSize: 11.5, color: "#6b7280" }}>soma do papel {dinheiro(resumoCot.soma)} · fora da proposta {dinheiro(resumoCot.fora)}</div>
+                    )}
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
-                      Total {dinheiro(totalDaEntrada)}
+                      Total {dinheiro(modoItens ? totalDaProposta : totalDaEntrada)}
                       {descontoDoPapel > 0 ? <span style={{ fontWeight: 400, color: "#6b7280" }}> (com desconto de {dinheiro(descontoDoPapel)})</span> : null}
                     </div>
                     {papelTotal > 0 && Math.abs(papelTotal - totalDaEntrada) >= 0.01 && (
@@ -10100,6 +10359,56 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                     )}
                   </div>
                 </div>
+                {resumoCot && resumoCot.grupos.length > 0 && (
+                  <div data-vk-resumo-cot style={{ marginTop: 12, padding: "10px 12px", borderRadius: 12, background: "#fafaf9",
+                    border: "1px solid rgba(38,36,33,0.10)" }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#111827", marginBottom: 2 }}>
+                      Como fica na cotação{cotacaoDestinoObj ? ` “${cotacaoDestinoObj.titulo || ""}”` : ""}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 8 }}>
+                      Um item por linha da sua planilha. Para juntar linhas do papel num item só, escolha o mesmo item nas duas.
+                    </div>
+                    {resumoCot.grupos.map((g, gi) => (
+                      <div key={gi} style={{ display: "grid", gap: 6, alignItems: "center", padding: "5px 0",
+                        borderTop: gi ? "1px solid rgba(38,36,33,0.06)" : "none",
+                        gridTemplateColumns: isMobile ? "1fr 70px 96px" : "minmax(0,1fr) 70px 92px 120px" }}>
+                        <div style={{ minWidth: 0, gridColumn: isMobile ? "1 / -1" : "auto" }}>
+                          {g.existente ? (
+                            <div style={{ fontSize: 12.5, color: "#111827" }}>{g.nome}
+                              <span style={{ fontSize: 10.5, color: "#15803d", marginLeft: 6 }}>já na cotação</span></div>
+                          ) : (
+                            <input style={{ ...E.input, padding: "5px 8px", fontSize: 12.5 }} value={g.nome}
+                              title="Nome do item na cotação (o de vocês)" onChange={(e) => renomearNovo(g.chave, e.target.value)} />
+                          )}
+                          <div style={{ fontSize: 10.5, color: "#9ca3af", marginTop: 2 }}>
+                            {g.linhas.length === 1 ? "1 linha do papel" : `${g.linhas.length} linhas do papel juntas`}
+                          </div>
+                        </div>
+                        {g.existente ? (
+                          <>
+                            <div style={{ fontSize: 12, color: "#4b5563", textAlign: "right" }}>{String(g.quantidade || "—")}</div>
+                            <div style={{ fontSize: 12, color: "#4b5563" }}>{g.unidade || ""}</div>
+                          </>
+                        ) : (
+                          <>
+                            <CampoNumeroBR estilo={{ ...E.input, padding: "5px 8px", fontSize: 12.5, textAlign: "right" }} valor={g.quantidade} casas={0} maxCasas={4}
+                              aoMudar={(v) => setQtdNovos((q) => ({ ...q, [g.nome]: { ...(q[g.nome] || {}), quantidade: v, unidade: (q[g.nome] || {}).unidade || g.unidade } }))} />
+                            <input style={{ ...E.input, padding: "5px 8px", fontSize: 12.5 }} value={g.unidade || ""}
+                              onChange={(e) => { const u = e.target.value; setQtdNovos((q) => ({ ...q, [g.nome]: { ...(q[g.nome] || {}), unidade: u, quantidade: (q[g.nome] || {}).quantidade != null ? q[g.nome].quantidade : g.quantidade } })); }} />
+                          </>
+                        )}
+                        <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", textAlign: "right", gridColumn: isMobile ? "1 / -1" : "auto" }}>
+                          {dinheiro(g.total)}
+                        </div>
+                      </div>
+                    ))}
+                    {resumoCot.naoCotados.length > 0 && (
+                      <div style={{ fontSize: 11.5, color: "#b45309", marginTop: 6 }}>
+                        Esta loja não cotou: {resumoCot.naoCotados.map((c) => c.descricao).join(", ")}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* A situação: é ela que decide o que o lançamento vira. */}
@@ -10285,13 +10594,27 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                             <input style={E.input} value={tituloNova}
                               placeholder={tituloDaListaRapida(itens, new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10))}
                               onChange={(e) => setTituloNova(e.target.value)} />
+                            {/* etapa e conta são da cotação inteira — nas linhas não importam */}
+                            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8, marginTop: 8 }}>
+                              <div style={{ minWidth: 0 }}>
+                                <label style={E.label}>Etapa da obra</label>
+                                <SelectBusca style={E.input} value={etapaNova} onChange={(v) => setEtapaNova(v || "")} placeholder="Procurar etapa…"
+                                  opcoes={[{ valor: "", rotulo: "— escolher depois —" }].concat(etapasDaEntrada.map((e) => ({ valor: e.id, rotulo: e.nome, grupo: e.macro || "" })))} />
+                              </div>
+                              <div style={{ minWidth: 0 }}>
+                                <label style={E.label}>Conta do P&L</label>
+                                <SelectBusca style={E.input} value={contaNova || "material"} onChange={(v) => setContaNova(v || "")} placeholder="Procurar conta…"
+                                  opcoes={contasDeDespesa.map((c) => ({ valor: c.id, rotulo: c.nome, grupo: c.grupo || "" }))} />
+                              </div>
+                            </div>
                           </div>
                         )}
                         <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8, lineHeight: 1.5 }}>
                           {lojaDaProposta ? <b style={{ color: "#111827" }}>{lojaDaProposta.nome}</b> : "A loja"}
-                          {" entra como proposta de "}<b style={{ color: "#111827" }}>{dinheiro(totalDaEntrada)}</b>
+                          {" entra como proposta de "}<b style={{ color: "#111827" }}>{dinheiro(totalDaProposta)}</b>
+                          {soTotal ? " pelo total, sem detalhe por item" : ""}
                           {destinoId
-                            ? ", ao lado das outras lojas. Item que a cotação ainda não tem entra na lista."
+                            ? ", ao lado das outras lojas." + (soTotal ? "" : " Item que a cotação ainda não tem entra na lista.")
                             : ". As próximas lojas entram nesta mesma cotação para comparar."}
                           {" Nada vai para contas a pagar: isso só acontece quando você escolher a proposta."}
                         </div>
@@ -10376,7 +10699,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
               style={{ ...E.btn, opacity: !motivoDaProposta && !guardando ? 1 : 0.45,
                 cursor: !motivoDaProposta && !guardando ? "pointer" : "not-allowed" }}
               disabled={!!motivoDaProposta || guardando}>
-              {guardando ? "Anexando o papel…" : `Guardar proposta · ${dinheiro(totalDaEntrada)}`}
+              {guardando ? "Anexando o papel…" : `Guardar proposta · ${dinheiro(totalDaProposta)}`}
             </button>
           ) : itens && situacao === "cotacao" ? (
             <button type="button" onClick={seguir}
