@@ -78991,11 +78991,18 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     }
     return null;
   };
+  // diferença, em coordenadas de tela, entre um ponto do desenho e o cursor
+  const desvioCliente = (pt, e) => {
+    const c = planRef.current, v = vista.current; if (!c || !v) return { x: 0, y: 0 };
+    const r = c.getBoundingClientRect(), k = c.width / r.width;
+    return { x: (pt.x * v.s + v.ox) / k + r.left - e.clientX, y: (pt.y * v.s + v.oy) / k + r.top - e.clientY };
+  };
   const arrastarAlca = (e, g) => {
     const al = g.grip, orig = g.orig;
     if (al.tipo === "mover") {
       if (!sel.includes(al.chave)) setSel(al.chaves);
-      const pc = pontoDoCursor(e, { base: al.ancora }); setHover(pc);
+      const off = al.off || { x: 0, y: 0 };
+      const pc = pontoDoCursor({ clientX: e.clientX + off.x, clientY: e.clientY + off.y, shiftKey: e.shiftKey }, { base: al.ancora }); setHover(pc);
       const r = deslocar(orig, al.chaves, pc.x - al.ancora.x, pc.y - al.ancora.y);
       setParedes(r.paredes); setAreas(r.areas);
       return;
@@ -79036,7 +79043,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           const pm = paraMundoLivre(d), idx = +k.slice(1);
           const cands = k[0] === "p" ? [paredes[idx].a, paredes[idx].b] : (areas[idx].pts || []);
           const ancoraPt = cands.reduce((m, q) => (Math.hypot(q.x - pm.x, q.y - pm.y) < Math.hypot(m.x - pm.x, m.y - pm.y) ? q : m), cands[0]);
-          gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: { tipo: "mover", chave: k, chaves, ancora: ancoraPt }, orig: { paredes, areas } };
+          gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: { tipo: "mover", chave: k, chaves, ancora: ancoraPt, off: desvioCliente(ancoraPt, e) }, orig: { paredes, areas } };
           e.currentTarget.setPointerCapture(e.pointerId); return;
         }
       }
@@ -79051,7 +79058,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const idx = k ? +k.slice(1) : -1;
       if (k && (k[0] === "p" || (areas[idx] && areas[idx].tipo === "separador"))) {
         const pm = paraMundoLivre(d), cands = k[0] === "p" ? [paredes[idx].a, paredes[idx].b] : areas[idx].pts;
-        g.candMover = { tipo: "mover", chave: k, chaves: [k], ancora: cands.reduce((m, q) => (Math.hypot(q.x - pm.x, q.y - pm.y) < Math.hypot(m.x - pm.x, m.y - pm.y) ? q : m), cands[0]) };
+        const anc = cands.reduce((m, q) => (Math.hypot(q.x - pm.x, q.y - pm.y) < Math.hypot(m.x - pm.x, m.y - pm.y) ? q : m), cands[0]);
+        g.candMover = { tipo: "mover", chave: k, chaves: [k], ancora: anc, off: desvioCliente(anc, e) };
       }
     }
     // toque longo (celular) = botão direito
