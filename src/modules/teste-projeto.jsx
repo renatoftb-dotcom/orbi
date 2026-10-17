@@ -69,8 +69,64 @@ const TP_AREA_TIPOS = {
   contrapiso: { nome: "Contrapiso", esp: 0.05, cor3d: 0xcfc6b4 },
   laje: { nome: "Laje", esp: 0.10, cor3d: 0xbfc5cc },
   telhado: { nome: "Telhado", esp: 0, cor3d: 0xb5562f },
+  terreno: { nome: "Terreno", esp: 0, cor3d: 0xcfe8c4 },
 };
-const tpEhPoli = (f) => f === "contrapiso" || f === "laje" || f === "telhado";
+const tpEhPoli = (f) => f === "contrapiso" || f === "laje" || f === "telhado" || f === "terreno";
+// Área exata da união de polígonos (contorno simples): fatias verticais entre
+// todos os x de vértices e cruzamentos de arestas; dentro de cada fatia o
+// comprimento coberto varia linearmente, então largura × comprimento no meio.
+function tpCruzaSeg(a, b, c, d) {
+  const r = { x: b.x - a.x, y: b.y - a.y }, s = { x: d.x - c.x, y: d.y - c.y }, den = r.x * s.y - r.y * s.x;
+  if (Math.abs(den) < 1e-12) return null;
+  const t = ((c.x - a.x) * s.y - (c.y - a.y) * s.x) / den, u = ((c.x - a.x) * r.y - (c.y - a.y) * r.x) / den;
+  return t > 0 && t < 1 && u > 0 && u < 1 ? { x: a.x + r.x * t, y: a.y + r.y * t } : null;
+}
+function tpUniaoArea(polys) {
+  polys = (polys || []).filter((p) => p && p.length >= 3);
+  if (!polys.length) return 0;
+  const arestas = [];
+  polys.forEach((P) => P.forEach((a, i) => arestas.push([a, P[(i + 1) % P.length]])));
+  const xs = new Set();
+  polys.forEach((P) => P.forEach((p) => xs.add(p.x)));
+  for (let i = 0; i < arestas.length; i++) for (let j = i + 1; j < arestas.length; j++) { const q = tpCruzaSeg(arestas[i][0], arestas[i][1], arestas[j][0], arestas[j][1]); if (q) xs.add(q.x); }
+  const X = [...xs].sort((a, b) => a - b);
+  let area = 0;
+  for (let k = 0; k + 1 < X.length; k++) {
+    const x0 = X[k], x1 = X[k + 1]; if (x1 - x0 < 1e-9) continue;
+    const xm = (x0 + x1) / 2, ints = [];
+    for (const P of polys) {
+      const ys = [];
+      for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length]; if ((a.x <= xm && b.x > xm) || (b.x <= xm && a.x > xm)) ys.push(a.y + (xm - a.x) * (b.y - a.y) / (b.x - a.x)); }
+      ys.sort((m, n) => m - n);
+      for (let i = 0; i + 1 < ys.length; i += 2) ints.push([ys[i], ys[i + 1]]);
+    }
+    ints.sort((m, n) => m[0] - n[0]);
+    let len = 0, cs = null, ce = null;
+    for (const [s0, e0] of ints) { if (cs === null) { cs = s0; ce = e0; } else if (s0 <= ce) ce = Math.max(ce, e0); else { len += ce - cs; cs = s0; ce = e0; } }
+    if (cs !== null) len += ce - cs;
+    area += len * (x1 - x0);
+  }
+  return area;
+}
+// área de A dentro da união U: A + U − (A ∪ U)
+const tpAreaDentro = (A, U) => (U.length ? Math.max(0, tpUniaoArea([A]) + tpUniaoArea(U) - tpUniaoArea([A, ...U])) : 0);
+
+// Interno × externo: área coberta = laje + telhado (contorno desenhado, sem o
+// beiral). É a área construída. Contrapiso dentro dela é piso interno; fora,
+// piso externo (calçada, área de serviço descoberta).
+function tpAnaliseAreas(areas) {
+  const ok = (a) => a.pts && a.pts.length >= 3;
+  const cob = areas.filter((a) => ok(a) && (a.tipo === "laje" || a.tipo === "telhado")).map((a) => a.pts);
+  const cps = areas.filter((a) => ok(a) && a.tipo === "contrapiso").map((a) => a.pts);
+  const ter = areas.filter((a) => ok(a) && a.tipo === "terreno").map((a) => a.pts);
+  const coberta = tpUniaoArea(cob);
+  const pisoTotal = tpUniaoArea(cps);
+  const pisoInterno = cob.length && cps.length ? Math.max(0, pisoTotal + coberta - tpUniaoArea([...cps, ...cob])) : 0;
+  const terreno = tpUniaoArea(ter);
+  const ocupada = tpUniaoArea([...cob, ...cps]);
+  return { coberta, pisoInterno, pisoExterno: Math.max(0, pisoTotal - pisoInterno), terreno,
+    taxaOcupacao: terreno ? coberta / terreno : 0, permeavel: terreno ? Math.max(0, terreno - ocupada) : 0, temCobertura: cob.length > 0 };
+}
 
 // ───────────── Telhado (como no Revit: contorno + inclinação por lado) ─────────────
 // Cada lado do contorno define ou não inclinação (%). Lado inclinado = água;
@@ -175,7 +231,9 @@ function tpEnvoltoria(pts) {
 }
 function tpDesenhoParaObra(paredes, areas) {
   const r2 = (x) => Math.round(x * 100) / 100;
-  const pisos = areas.filter((a) => (a.tipo === "contrapiso" || a.tipo === "laje") && a.pts && a.pts.length >= 3);
+  // casa = área coberta (laje/telhado); sem cobertura, contrapiso; sem nada, envoltória das paredes
+  const cobertos = areas.filter((a) => (a.tipo === "laje" || a.tipo === "telhado") && a.pts && a.pts.length >= 3);
+  const pisos = cobertos.length ? cobertos : areas.filter((a) => a.tipo === "contrapiso" && a.pts && a.pts.length >= 3);
   const casco = tpEnvoltoria(paredes.flatMap((w) => [w.a, w.b]));
   const fora = (p) => (pisos.length ? !pisos.some((a) => tpDentroPoli(p, a.pts)) : !(casco.length >= 3 && tpDentroPoli(p, casco)));
   let m2Int = 0, m2Ext = 0, m15 = 0, m20 = 0, m25 = 0, perim = 0, nExt = 0;
@@ -191,7 +249,8 @@ function tpDesenhoParaObra(paredes, areas) {
   }
   const soma = (tipo, f) => areas.filter((a) => a.tipo === tipo && a.pts && a.pts.length >= 3).reduce((s, a) => s + f(a), 0);
   const areaCp = soma("contrapiso", (a) => tpAreaPoli(a.pts)), areaLj = soma("laje", (a) => tpAreaPoli(a.pts)), perLj = soma("laje", (a) => tpPerimPoli(a.pts));
-  const areaConstruida = areaCp || areaLj;
+  const an = tpAnaliseAreas(areas);
+  const areaConstruida = an.temCobertura ? an.coberta : areaCp;
   const cobertura = areas.filter((a) => a.tipo === "telhado" && a.pts && a.pts.length >= 3).map((a) => {
     const g = tpTelhadoGeo(a), aguas = g.lados.filter((L) => L.inclina && L.s > 0);
     const maior = g.lados.reduce((m, L) => (L.l > m.l ? L : m), g.lados[0]);
@@ -208,13 +267,15 @@ function tpDesenhoParaObra(paredes, areas) {
   const projeto = {
     tipologia: "Térrea",
     arquitetura: { areaConstruida: r2(areaConstruida), m2ParedesInternas: r2(m2Int), m2ParedesExternas: r2(m2Ext), m2ParedesTotal: r2(m2Int + m2Ext) },
+    ...(an.pisoExterno > 0 ? { externa: { pavimentacao: r2(an.pisoExterno) } } : {}),
     terreo: { area: r2(areaConstruida), m2Parede15: r2(m15), m2Parede20: r2(m20), m2Parede25: r2(m25), perimetroParedes: r2(perim),
       ...(areaLj ? { areaLoje: r2(areaLj), perimetroLoje: r2(perLj), tipoLoje: "Treliça" } : {}) },
     ...(cobertura.length ? { cobertura } : {}),
   };
   const linhas = [
     ["Tipologia", "Térrea"],
-    ["Área construída", tpFmt(areaConstruida) + " m²" + (areaCp ? " (contrapiso)" : areaLj ? " (laje)" : "")],
+    ["Área construída", tpFmt(areaConstruida) + " m²" + (an.temCobertura ? " (área coberta)" : areaCp ? " (contrapiso)" : "")],
+    ...(an.pisoExterno > 0 ? [["Pavimentação externa", tpFmt(an.pisoExterno) + " m² (contrapiso fora da cobertura)"]] : []),
     ["Parede interna", tpFmt(m2Int) + " m²"],
     ["Parede externa", `${tpFmt(m2Ext)} m² (${nExt} parede${nExt === 1 ? "" : "s"})`],
     ["Por espessura", `15 cm: ${tpFmt(m15)} · 20 cm: ${tpFmt(m20)} · 25 cm: ${tpFmt(m25)} m²`],
@@ -233,6 +294,7 @@ function tpMesclarProjetoObra(ant, conv, projetoId) {
     arquitetura: { ...(ant.arquitetura || {}), ...conv.projeto.arquitetura },
     terreo: { ...(ant.terreo || {}), ...conv.projeto.terreo },
     ...(conv.projeto.cobertura ? { cobertura: conv.projeto.cobertura } : {}),
+    ...(conv.projeto.externa ? { externa: { ...(ant.externa || {}), ...conv.projeto.externa } } : {}),
     origemDesenho: { projetoId } };
 }
 // "assinatura" dos campos do desenho, para só gravar quando algo mudou
@@ -240,7 +302,7 @@ function tpAssinaturaDesenho(pr) {
   pr = pr || {};
   const a = pr.arquitetura || {}, t = pr.terreo || {};
   return JSON.stringify([pr.tipologia, a.areaConstruida, a.m2ParedesInternas, a.m2ParedesExternas, a.m2ParedesTotal,
-    t.area, t.m2Parede15, t.m2Parede20, t.m2Parede25, t.perimetroParedes, t.areaLoje, t.perimetroLoje, t.tipoLoje, pr.cobertura || null]);
+    t.area, t.m2Parede15, t.m2Parede20, t.m2Parede25, t.perimetroParedes, t.areaLoje, t.perimetroLoje, t.tipoLoje, pr.cobertura || null, (pr.externa || {}).pavimentacao || 0]);
 }
 
 // Editor em tela cheia. Elementos: paredes (segmentos) e áreas (contrapiso e
@@ -532,11 +594,22 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const marcadas = new Set(sel);
     const caminho = (pts) => { ctx.beginPath(); pts.forEach((p, k) => { const [x, y] = T(p); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.closePath(); };
 
+    // terreno: verde claro, por baixo de tudo
+    areas.forEach((a, i) => {
+      if (a.tipo !== "terreno" || !a.pts || a.pts.length < 3) return;
+      const marc = marcadas.has("a" + i);
+      caminho(a.pts); ctx.fillStyle = marc ? "rgba(4,116,244,0.10)" : "#e3f3dc"; ctx.fill();
+      ctx.strokeStyle = marc ? TP_AZUL : "#6aa84f"; ctx.lineWidth = (marc ? 2.5 : 1.5) * dpr; ctx.setLineDash([12 * dpr, 4 * dpr]); ctx.stroke(); ctx.setLineDash([]);
+      const b0 = a.pts.reduce((m, q) => (q.y < m.y ? q : m), a.pts[0]); const [tx, ty] = T(b0);
+      ctx.font = `600 ${11 * dpr}px system-ui, sans-serif`; ctx.textAlign = "left"; ctx.fillStyle = marc ? TP_AZUL : "#4d7c3a";
+      ctx.fillText(`Terreno ${tpFmt(tpAreaPoli(a.pts))} m²`, tx + 6 * dpr, ty + 16 * dpr);
+    });
+    const cobPts = areas.filter((a) => (a.tipo === "laje" || a.tipo === "telhado") && a.pts && a.pts.length >= 3).map((a) => a.pts);
     // áreas: contrapiso (hachura) por baixo, laje (tracejado) por cima
     const ordem = areas.map((a, i) => i).sort((i, j) => (areas[i].tipo === "laje") - (areas[j].tipo === "laje"));
     for (const i of ordem) {
       const a = areas[i], marc = marcadas.has("a" + i);
-      if (!a.pts || a.pts.length < 3 || a.tipo === "telhado") continue;
+      if (!a.pts || a.pts.length < 3 || a.tipo === "telhado" || a.tipo === "terreno") continue;
       caminho(a.pts);
       if (a.tipo === "laje") {
         ctx.fillStyle = marc ? "rgba(4,116,244,0.14)" : "rgba(107,143,199,0.07)"; ctx.fill();
@@ -553,7 +626,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const [cx, cy] = T(tpCentro(a.pts));
       ctx.font = `600 ${11 * dpr}px system-ui, sans-serif`; ctx.textAlign = "center";
       ctx.fillStyle = marc ? TP_AZUL : (a.tipo === "laje" ? "#4b6aa0" : "#8a7a58");
-      ctx.fillText(`${TP_AREA_TIPOS[a.tipo].nome} ${tpFmt(tpAreaPoli(a.pts))} m²`, cx, cy + (a.tipo === "laje" ? 14 * dpr : 0));
+      let nomeA = TP_AREA_TIPOS[a.tipo].nome;
+      if (a.tipo === "contrapiso" && cobPts.length) nomeA = tpAreaDentro(a.pts, cobPts) >= tpAreaPoli(a.pts) / 2 ? "Piso interno" : "Piso externo";
+      ctx.fillText(`${nomeA} ${tpFmt(tpAreaPoli(a.pts))} m²`, cx, cy + (a.tipo === "laje" ? 14 * dpr : 0));
     }
 
     // telhados: contorno com beiral (tracejado), linhas de cumeeira e espigão,
@@ -655,7 +730,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const tam = Math.max(12, Math.ceil(Math.max(b.x1 - b.x0, b.y1 - b.y0) + 6));
     const grade = new THREE.GridHelper(tam, tam, 0xd1d5db, 0xeef0f3); grade.position.y = -0.001; T.group.add(grade);
     const marcadas = new Set(sel);
-    const contorno = (g, mesh, cor) => { const e = new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: cor })); e.position.copy(mesh.position); e.rotation.copy(mesh.rotation); T.group.add(e); };
+    const contorno = (g, mesh, cor) => { const e = new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: cor })); e.position.copy(mesh.position); e.rotation.copy(mesh.rotation); e.scale.copy(mesh.scale); T.group.add(e); };
     areas.forEach((a, i) => {
       if (!a.pts || a.pts.length < 3 || a.tipo === "telhado") return;
       const shape = new THREE.Shape(a.pts.map((p) => new THREE.Vector2(p.x - cx, -(p.y - cz))));
@@ -663,7 +738,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const marc = marcadas.has("a" + i);
       const mat = new THREE.MeshLambertMaterial({ color: marc ? 0x8dbbff : TP_AREA_TIPOS[a.tipo].cor3d, transparent: a.tipo === "laje" && !marc, opacity: a.tipo === "laje" && !marc ? 0.85 : 1 });
       const mesh = new THREE.Mesh(g, mat);
-      mesh.rotation.x = -Math.PI / 2; mesh.position.y = a.cota || 0;
+      mesh.rotation.x = -Math.PI / 2; mesh.position.y = a.tipo === "terreno" ? -0.03 : (a.cota || 0);
+      if (a.tipo === "terreno") { mesh.scale.z = 0.02 / Math.max(0.01, a.esp || 0.05); mesh.material.color.set(marc ? 0x8dbbff : 0xcfe8c4); }
       mesh.userData.chave = "a" + i; T.group.add(mesh);
       contorno(g, mesh, marc ? 0x0474f4 : 0x6b7280);
     });
@@ -807,7 +883,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (!ctrl && !e.altKey) {
         const t = tecla.toLowerCase();
         if (t === "z" || t === "f") { ajustar(); return; } // ZF no Revit / F no SketchUp
-        const f = { v: "selecionar", p: "parede", c: "contrapiso", l: "laje", t: "telhado", h: "mover" }[t];
+        const f = { v: "selecionar", p: "parede", c: "contrapiso", l: "laje", t: "telhado", r: "terreno", h: "mover" }[t];
         if (f) trocarFerramenta(f);
       }
     };
@@ -1021,6 +1097,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const somaArea = (tipo, f) => areas.filter((a) => a.tipo === tipo).reduce((s, a) => s + f(a), 0);
   const areaCp = somaArea("contrapiso", (a) => tpAreaPoli(a.pts)), volCp = somaArea("contrapiso", (a) => tpAreaPoli(a.pts) * (a.esp || 0));
   const areaLj = somaArea("laje", (a) => tpAreaPoli(a.pts)), volLj = somaArea("laje", (a) => tpAreaPoli(a.pts) * (a.esp || 0));
+  const analise = useMemo(() => tpAnaliseAreas(areas), [areas]);
   const telProj = somaArea("telhado", (a) => geoTelhado(a).areaProjecao), telReal = somaArea("telhado", (a) => geoTelhado(a).areaReal);
   const comum = (lista, f) => { if (!lista.length) return null; const v0 = f(lista[0]); return lista.every((x) => Math.abs(f(x) - v0) < 1e-9) ? v0 : null; };
 
@@ -1042,6 +1119,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     { id: "contrapiso", rotulo: "Contrapiso", dica: "Contrapiso (C): clique os cantos e feche no primeiro ponto" },
     { id: "laje", rotulo: "Laje", dica: "Laje (L): clique os cantos e feche no primeiro ponto" },
     { id: "telhado", rotulo: "Telhado", dica: "Telhado (T): contorno; inclinação definida em cada lado" },
+    { id: "terreno", rotulo: "Terreno", dica: "Terreno (R): clique os vértices do lote e feche no primeiro ponto" },
     { id: "mover", rotulo: "Mover", dica: "Mover a vista (H)" },
   ];
   const MODOS = [{ id: "planta", rotulo: "Planta" }, { id: "ambos", rotulo: "Planta + 3D" }, { id: "3d", rotulo: "3D" }];
@@ -1054,7 +1132,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     ? (sel.length ? `${sel.length} selecionado${sel.length === 1 ? "" : "s"}. Ctrl soma, Shift tira, setas movem, Delete exclui, Esc limpa.` : "Clique ou arraste uma área (esq.→dir.: inteiro dentro; dir.→esq.: o que tocar). Ctrl soma, Shift tira. Tecla ? mostra os atalhos.")
     : ferramenta === "mover" ? "Arraste para mover a vista."
     : ferramenta === "parede" ? (inicio ? "Clique para fechar o trecho ou digite o comprimento e Enter. Shift trava em 90°. Enter encerra." : "Clique para iniciar uma parede. Arraste para mover a vista.")
-    : (poli.length ? `${poli.length} ponto${poli.length === 1 ? "" : "s"}. Clique no primeiro ponto (ou Enter) para fechar; Esc cancela.` : (ferramenta === "telhado" ? "Clique nos cantos do telhado (contorno na linha das paredes; o beiral é somado depois) e feche no primeiro ponto." : `Clique nos cantos ${ferramenta === "laje" ? "da laje" : "do contrapiso"} e feche no primeiro ponto.`));
+    : (poli.length ? `${poli.length} ponto${poli.length === 1 ? "" : "s"}. Clique no primeiro ponto (ou Enter) para fechar; Esc cancela.` : (ferramenta === "terreno" ? "Clique nos vértices do lote (divisas) e feche no primeiro ponto." : ferramenta === "telhado" ? "Clique nos cantos do telhado (contorno na linha das paredes; o beiral é somado depois) e feche no primeiro ponto." : `Clique nos cantos ${ferramenta === "laje" ? "da laje" : "do contrapiso"} e feche no primeiro ponto.`));
 
   // ---------- propriedades ----------
   const propriedades = sel.length > 0 && (
@@ -1221,7 +1299,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         <div style={linhaQ}><span>Paredes</span><span style={numQ}>{paredes.length} · {tpFmt(L)} m</span></div>
         <div style={linhaQ}><span>Área de parede</span><span style={numQ}>{tpFmt(A)} m²</span></div>
         <div style={linhaQ}><span>Reboco 2 faces</span><span style={numQ}>{tpFmt(A * 2)} m²</span></div>
+        <div style={linhaQ}><span>Área construída (coberta)</span><span style={numQ}>{tpFmt(analise.coberta)} m²</span></div>
         <div style={linhaQ}><span>Contrapiso</span><span style={numQ}>{tpFmt(areaCp)} m² · {tpFmt(volCp)} m³</span></div>
+        {analise.temCobertura && areaCp > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>interno · externo</span><span style={numQ}>{tpFmt(analise.pisoInterno)} · {tpFmt(analise.pisoExterno)} m²</span></div>}
+        {analise.terreno > 0 && <div style={linhaQ}><span>Terreno</span><span style={numQ}>{tpFmt(analise.terreno)} m²</span></div>}
+        {analise.terreno > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>Taxa de ocupação</span><span style={numQ}>{tpFmt(analise.taxaOcupacao * 100, 1)}%</span></div>}
+        {analise.terreno > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>Área livre (sem piso nem cobertura)</span><span style={numQ}>{tpFmt(analise.permeavel)} m²</span></div>}
         <div style={linhaQ}><span>Telhado (projeção · real)</span><span style={numQ}>{tpFmt(telProj)} · {tpFmt(telReal)} m²</span></div>
         <div style={linhaQ}><span>Laje</span><span style={numQ}>{tpFmt(areaLj)} m² · {tpFmt(volLj)} m³</span></div>
       </div>
@@ -1240,7 +1323,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         ))}
       </div>
       {poli.length >= 3 && (
-        <button onClick={finalizarPoli} style={{ ...btn, minHeight: 32, padding: "4px 10px", fontSize: 12.5, background: TP_AZUL, borderColor: TP_AZUL, color: "#fff", pointerEvents: "auto" }}>Fechar {ferramenta === "laje" ? "laje" : ferramenta === "telhado" ? "telhado" : "contrapiso"}</button>
+        <button onClick={finalizarPoli} style={{ ...btn, minHeight: 32, padding: "4px 10px", fontSize: 12.5, background: TP_AZUL, borderColor: TP_AZUL, color: "#fff", pointerEvents: "auto" }}>Fechar {ferramenta === "laje" ? "laje" : ferramenta === "telhado" ? "telhado" : ferramenta === "terreno" ? "terreno" : "contrapiso"}</button>
       )}
     </div>
   );
@@ -1407,6 +1490,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               {item("Inserir contrapiso", "C", () => trocarFerramenta("contrapiso"))}
               {item("Inserir laje", "L", () => trocarFerramenta("laje"))}
               {item("Inserir telhado", "T", () => trocarFerramenta("telhado"))}
+              {item("Desenhar terreno", "R", () => trocarFerramenta("terreno"))}
               {linha("l3")}
               {item("Ajustar à tela", null, ajustar, { desativado: modo === "3d" })}
             </div>
