@@ -1360,7 +1360,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // Com uma ferramenta de desenho ativa e nenhum traço em andamento, apertar
     // em cima de uma parede ou linha de separação e ARRASTAR move o elemento
     // (sem precisar trocar para Selecionar). Só clicar continua desenhando.
-    if (e.button === 0 && ferramenta !== "selecionar" && ferramenta !== "mover" && ferramenta !== "ambiente" && !inicio && !poli.length && !ancora) {
+    if (e.button === 0 && ferramenta !== "selecionar" && ferramenta !== "mover" && ferramenta !== "ambiente" && !poli.length && !ancora) {
       const k = elementoNoPonto(d);
       const idx = k ? +k.slice(1) : -1;
       if (k && (k[0] === "p" || (areas[idx] && areas[idx].tipo === "separador"))) {
@@ -1382,7 +1382,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     if (g) {
       const lim = (g.grip ? 3 : 6) * (window.devicePixelRatio || 1);
       if (!g.moveu && Math.hypot(d.x - g.x0, d.y - g.y0) > lim) { g.moveu = true; clearTimeout(g.timer); }
-      if (!g.grip && g.candMover && g.moveu && !g.panear) { g.grip = g.candMover; g.orig = { paredes, areas }; setSel([g.candMover.chave]); }
+      if (!g.grip && g.candMover && g.moveu && !g.panear) { g.grip = g.candMover; g.orig = { paredes, areas }; setSel([g.candMover.chave]); setInicio(null); }
       if (g.grip) { if (g.moveu) arrastarAlca(e, g); return; }
       if (g.menu) return;
       if (g.moveu) {
@@ -1440,7 +1440,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (p2.x === inicio.x && p2.y === inicio.y) return;
       const novaLinha = { tipo: "separador", pts: [inicio, p2] };
       mudar(null, [...areas, novaLinha]);
-      setInicio(p2);
+      // Linha de separação é um trecho só, de parede a parede. Não continua
+      // encadeada: antes o traço seguia "vivo" a partir da ponta, e o próximo
+      // clique (por exemplo, ao tentar arrastar a linha) criava outra linha.
+      setInicio(null);
       if (dividir && areas[dividir.ai] && areas[dividir.ai].tipo === "ambiente") {
         const amb = areas[dividir.ai], seps = [...separadoresAtuais(), { a: inicio, b: p2 }];
         const detA = tpDetectarAmbiente(paredes, amb.ponto, seps);
@@ -1573,7 +1576,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
   const desenhoAtivo = ferramenta === "parede" || tpEhPoli(ferramenta);
   const status = (ferramenta === "separador" && dividir) ? `Dividindo "${(areas[dividir.ai] || {}).nome || "ambiente"}": clique de uma parede até a outra (pode quebrar a linha). Esc cancela.`
-    : ferramenta === "separador" ? (inicio ? "Clique o fim da linha (pode continuar encadeando). Esc ou Enter encerra." : "Separador: linha que divide ambientes sem parede. Clique de uma parede até a outra.")
+    : ferramenta === "separador" ? (inicio ? "Clique o fim da linha. Esc cancela." : "Separador: linha que divide ambientes sem parede. Clique de uma parede até a outra.")
     : ferramenta === "ambiente" ? "Clique dentro de um cômodo fechado por paredes para criar o ambiente (nome e área)."
     : digitado ? `Comprimento: ${digitado} m — Enter confirma, Esc apaga.`
     : (desenhoAtivo && modoTraco === "retangulo") ? (ancora && ancora.ret
@@ -1777,6 +1780,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           )}
         </>
       )}
+      <button style={{ ...btn, marginTop: 8, fontSize: 12.5 }} title="Copia o desenho deste projeto (paredes, áreas, ambientes) para colar na conversa de suporte e reproduzir um problema"
+        onClick={() => {
+          const txt = JSON.stringify({ v: 1, nome: projeto.nome, paredes, areas });
+          const ok = () => avisar("Dados do projeto copiados. Cole na conversa de suporte.");
+          try { navigator.clipboard.writeText(txt).then(ok, () => { window.prompt("Copie o texto abaixo:", txt); }); } catch (err) { window.prompt("Copie o texto abaixo:", txt); }
+        }}>Copiar dados do projeto (suporte)</button>
       <button style={{ ...btn, marginTop: 8, fontSize: 12.5 }} onClick={() => setVerAtalhos(true)}>Atalhos de teclado e mouse <span style={{ color: "#9ca3af" }}>(?)</span></button>
 
       {areas.some((a) => a.tipo === "ambiente") && (
