@@ -77948,6 +77948,24 @@ function tpDesenhoParaObra(paredes, areas) {
   return { projeto, linhas };
 }
 
+// Junta no projeto da obra só os campos que vêm do desenho. Padrão, cômodos,
+// esquadrias, fundação, prestadores etc. ficam como estavam.
+function tpMesclarProjetoObra(ant, conv, projetoId) {
+  ant = ant || {};
+  return { ...ant, tipologia: conv.projeto.tipologia,
+    arquitetura: { ...(ant.arquitetura || {}), ...conv.projeto.arquitetura },
+    terreo: { ...(ant.terreo || {}), ...conv.projeto.terreo },
+    ...(conv.projeto.cobertura ? { cobertura: conv.projeto.cobertura } : {}),
+    origemDesenho: { projetoId } };
+}
+// "assinatura" dos campos do desenho, para só gravar quando algo mudou
+function tpAssinaturaDesenho(pr) {
+  pr = pr || {};
+  const a = pr.arquitetura || {}, t = pr.terreo || {};
+  return JSON.stringify([pr.tipologia, a.areaConstruida, a.m2ParedesInternas, a.m2ParedesExternas, a.m2ParedesTotal,
+    t.area, t.m2Parede15, t.m2Parede20, t.m2Parede25, t.perimetroParedes, t.areaLoje, t.perimetroLoje, t.tipoLoje, pr.cobertura || null]);
+}
+
 // Editor em tela cheia. Elementos: paredes (segmentos) e áreas (contrapiso e
 // laje, polígonos). Seleção compartilhada entre planta e 3D: chaves "p3"
 // (parede 3) e "a1" (área 1). Ferramentas: Selecionar, Parede, Contrapiso,
@@ -77974,6 +77992,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const [digitado, setDigitado] = useState("");  // comprimento digitado durante o traço
   const [verAtalhos, setVerAtalhos] = useState(false);
   const [obraId, setObraId] = useState(projeto.obraId || null);
+  const [sincronizar, setSincronizar] = useState(projeto.sincronizar !== false);
+  const [ultimaSinc, setUltimaSinc] = useState(null);
   const [painelObra, setPainelObra] = useState(null); // null, confirmar ou feito
   const historico = useRef([]);
   const futuro = useRef([]);                     // para Refazer
@@ -77989,8 +78009,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
   useEffect(() => {
     if (primeiraVez.current) { primeiraVez.current = false; return; }
-    onAlterar({ ...projeto, obraId, paredes, areas, atualizadoEm: new Date().toISOString() });
-  }, [paredes, areas, obraId]);
+    onAlterar({ ...projeto, obraId, sincronizar, paredes, areas, atualizadoEm: new Date().toISOString() });
+  }, [paredes, areas, obraId, sincronizar]);
 
   useEffect(() => {
     const antes = document.body.style.overflow; document.body.style.overflow = "hidden";
@@ -78068,6 +78088,27 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // Obra ligada a este projeto (criada pelo botão "Orçamento de obra")
   const obraLigada = obraId && data && Array.isArray(data.obras) ? data.obras.find((o) => o.id === obraId) : null;
   const podeOrcar = !!(data && save && projeto.clienteId && typeof gerarOrcamentoObra === "function");
+  // Sincronização: com a obra ligada, os campos do orçamento de obra que o
+  // desenho gera (paredes, área, laje, telhado) são gravados sozinhos, 1,5 s
+  // depois da última alteração e ao sair do editor. O orçamento em si só é
+  // recalculado no botão (fica marcado como desatualizado na obra).
+  const sincronizarAgora = useRef(null);
+  sincronizarAgora.current = () => {
+    if (!sincronizar || !obraLigada || !data || !save) return;
+    const conv = tpDesenhoParaObra(paredes, areas);
+    if (tpAssinaturaDesenho(conv.projeto) === tpAssinaturaDesenho(obraLigada.projeto)) return;
+    const atualizada = { ...obraLigada, projeto: tpMesclarProjetoObra(obraLigada.projeto, conv, projeto.id) };
+    save({ ...data, obras: (data.obras || []).map((o) => (o.id === atualizada.id ? atualizada : o)) });
+    setUltimaSinc(new Date());
+  };
+  const sincPendente = useRef(false);
+  useEffect(() => {
+    if (!sincronizar || !obraLigada) return;
+    sincPendente.current = true;
+    const t = setTimeout(() => { sincPendente.current = false; sincronizarAgora.current(); }, 1500);
+    return () => clearTimeout(t);
+  }, [paredes, areas, obraId, sincronizar, !!obraLigada]);
+  useEffect(() => () => { if (sincPendente.current) sincronizarAgora.current(); }, []);
   const gerarObra = () => {
     const conv = tpDesenhoParaObra(paredes, areas);
     const base = obraLigada || {
@@ -78075,14 +78116,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       status: "planejamento", dataInicio: "", dataFim: "", responsavel: "", descricao: "Criada a partir do Projetar.", ativo: true, clientePagaDireto: false,
       enderecoProprio: false, cep: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", estado: "",
     };
-    const ant = base.projeto || {};
-    // só os campos que vêm do desenho mudam; padrão, cômodos, esquadrias,
-    // fundação, prestadores etc. ficam como estavam (ou em branco, na obra nova)
-    const projetoObra = { ...ant, tipologia: conv.projeto.tipologia,
-      arquitetura: { ...(ant.arquitetura || {}), ...conv.projeto.arquitetura },
-      terreo: { ...(ant.terreo || {}), ...conv.projeto.terreo },
-      ...(conv.projeto.cobertura ? { cobertura: conv.projeto.cobertura } : {}),
-      origemDesenho: { projetoId: projeto.id, em: new Date().toISOString() } };
+    const projetoObra = tpMesclarProjetoObra(base.projeto, conv, projeto.id);
     const r = gerarOrcamentoObra(projetoObra, data);
     const orcamento = { geradoEm: new Date().toISOString(), versao: ((base.orcamento && base.orcamento.versao) || 0) + 1,
       itens: r.itens.map(({ memoria, ...i }) => i), totais: r.totais, qualidade: r.qualidade, avisos: r.avisos };
@@ -78889,8 +78923,18 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             {obraLigada ? "Atualizar orçamento da obra" : "Gerar orçamento de obra"}
           </button>
           <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6, lineHeight: 1.4 }}>
-            {obraLigada ? `Ligado à obra "${obraLigada.nome}". Atualiza paredes, laje e telhado com o desenho atual.` : `Cria a obra "${projeto.nome}" em ${nomeCliente || "o cliente"} com o orçamento calculado pelo desenho.`}
+            {obraLigada ? `Ligado à obra "${obraLigada.nome}". O botão recalcula o orçamento com o desenho atual.` : `Cria a obra "${projeto.nome}" em ${nomeCliente || "o cliente"} com o orçamento calculado pelo desenho.`}
           </div>
+          {obraLigada && (
+            <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12.5, color: "#374151", marginTop: 8, cursor: "pointer", lineHeight: 1.4 }}>
+              <input type="checkbox" id="tp-sinc" checked={sincronizar} onChange={(e) => setSincronizar(e.target.checked)} style={{ marginTop: 2 }} />
+              <span>Preencher sozinho os campos da obra com o desenho
+                <span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>
+                  {sincronizar ? (ultimaSinc ? `Atualizado às ${ultimaSinc.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "Paredes, área construída, laje e telhado") : "Desligado: só pelo botão"}
+                </span>
+              </span>
+            </label>
+          )}
         </>
       )}
       <button style={{ ...btn, marginTop: 8, fontSize: 12.5 }} onClick={() => setVerAtalhos(true)}>Atalhos de teclado e mouse <span style={{ color: "#9ca3af" }}>(?)</span></button>
