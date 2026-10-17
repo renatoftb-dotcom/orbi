@@ -77910,6 +77910,21 @@ function tpDetectarAmbiente(paredes, p, separadores) {
   const pts = limpa.map((q) => ({ x: r3(perto(q.x, xs)), y: r3(perto(q.y, ys)) }));
   return { pts, area: tpAreaPoli(pts) };
 }
+// Numeração automática: dois ou mais ambientes com o mesmo nome viram
+// "Suíte 01", "Suíte 02"... na ordem em que foram criados; sobrando um só,
+// volta ao nome simples. Vale para qualquer nome (Quarto, WC, Varanda...).
+function tpBaseNomeAmbiente(nome) { return String(nome || "Ambiente").replace(/\s+\d{1,3}$/, "").trim() || "Ambiente"; }
+function tpNumerarAmbientes(areas) {
+  const grupos = new Map();
+  areas.forEach((a, i) => { if (a.tipo !== "ambiente") return; const b = tpBaseNomeAmbiente(a.nome), k = b.toLocaleLowerCase("pt-BR"); if (!grupos.has(k)) grupos.set(k, { base: b, idx: [] }); grupos.get(k).idx.push(i); });
+  let mudou = false;
+  const out = areas.slice();
+  for (const { base, idx } of grupos.values()) idx.forEach((i, n) => {
+    const nome = idx.length > 1 ? `${base} ${String(n + 1).padStart(2, "0")}` : base;
+    if (out[i].nome !== nome) { out[i] = { ...out[i], nome }; mudou = true; }
+  });
+  return mudou ? out : areas;
+}
 const TP_NOMES_AMBIENTE = ["Sala", "Cozinha", "Suíte", "Quarto", "WC", "Banheiro", "Lavanderia", "Varanda", "Garagem", "Circulação", "Closet", "Escritório", "Área gourmet", "Despensa"];
 
 // Interno × externo: área coberta = laje + telhado (contorno desenhado, sem o
@@ -78196,7 +78211,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     if (historico.current.length > 200) historico.current.shift();
     futuro.current = [];
     if (novasParedes) setParedes(novasParedes);
-    if (novasAreas) setAreas(novasAreas);
+    if (novasAreas) setAreas(tpNumerarAmbientes(novasAreas));
     if (!manterSel) setSel([]);
   };
   const selP = sel.filter((k) => k[0] === "p").map((k) => +k.slice(1)).filter((i) => paredes[i]);
@@ -79272,7 +79287,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               <div style={{ gridColumn: "1 / -1" }}>
                 <label htmlFor="tp-amb-nome" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>Nome</label>
-                <input id="tp-amb-nome" key={"amb" + ai} defaultValue={a.nome || ""}
+                <input id="tp-amb-nome" key={"amb" + ai + (a.nome || "")} defaultValue={a.nome || ""}
                   onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== a.nome) editarAreas([ai], (x) => ({ ...x, nome: v })); }}
                   onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
                   style={{ width: "100%", boxSizing: "border-box", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, fontFamily: "inherit" }} />
