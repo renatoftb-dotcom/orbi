@@ -78234,10 +78234,18 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     else setSel(chaves);
   };
   // setas movem a seleção (0,10 m; com Shift, 1,00 m)
+  const deslocar = (base, chaves, dx, dy) => {
+    const fp = new Set(chaves.filter((k) => k[0] === "p").map((k) => +k.slice(1))), fa = new Set(chaves.filter((k) => k[0] === "a").map((k) => +k.slice(1)));
+    const mv = (q) => ({ x: r3(q.x + dx), y: r3(q.y + dy) });
+    return {
+      paredes: base.paredes.map((w, i) => (fp.has(i) ? { ...w, a: mv(w.a), b: mv(w.b) } : w)),
+      areas: base.areas.map((a, i) => (fa.has(i) ? { ...a, pts: (a.pts || []).map(mv), ...(a.ponto ? { ponto: mv(a.ponto) } : {}) } : a)),
+    };
+  };
   const moverSelecao = (dx, dy) => {
     if (!sel.length) return;
-    const fp = new Set(selP), fa = new Set(selA), mv = (q) => ({ x: r3(q.x + dx), y: r3(q.y + dy) });
-    mudar(paredes.map((w, i) => (fp.has(i) ? { ...w, a: mv(w.a), b: mv(w.b) } : w)), areas.map((a, i) => (fa.has(i) ? { ...a, pts: a.pts.map(mv) } : a)), true);
+    const r = deslocar({ paredes, areas }, sel, dx, dy);
+    mudar(r.paredes, r.areas, true);
   };
   const trocarFerramenta = (f) => { setDividir(null); setFerramenta(f); setInicio(null); setPoli([]); setDigitado(""); setAncora(null); if (f !== "selecionar" && f !== "mover") { setSel([]); ultimaFerramenta.current = f; } };
   // Nível do apoio do telhado: automático = topo do que está embaixo dele
@@ -78966,6 +78974,13 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   };
   const arrastarAlca = (e, g) => {
     const al = g.grip, orig = g.orig;
+    if (al.tipo === "mover") {
+      if (!sel.includes(al.chave)) setSel(al.chaves);
+      const pc = pontoDoCursor(e, { base: al.ancora }); setHover(pc);
+      const r = deslocar(orig, al.chaves, pc.x - al.ancora.x, pc.y - al.ancora.y);
+      setParedes(r.paredes); setAreas(r.areas);
+      return;
+    }
     if (al.tipo === "vertice") {
       const pts0 = orig.areas[al.ai].pts;
       const pc = pontoDoCursor(e, { ignorar: { area: al.ai, vertices: [al.k] }, base: pts0[(al.k - 1 + pts0.length) % pts0.length] });
@@ -78991,6 +79006,21 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     if (e.button === 0 && ferramenta === "selecionar") {
       const al = alcaNoPonto(d);
       if (al) { gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: al, orig: { paredes, areas } }; e.currentTarget.setPointerCapture(e.pointerId); return; }
+      // Arrastar uma parede ou linha de separação (ou uma área já selecionada)
+      // move o elemento — e o que estiver selecionado junto. Os ambientes em
+      // volta refazem a área sozinhos. Ctrl/Shift continuam sendo seleção.
+      if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        const k = elementoNoPonto(d);
+        const linha = k && (k[0] === "p" || (areas[+k.slice(1)] && areas[+k.slice(1)].tipo === "separador"));
+        if (k && (linha || sel.includes(k))) {
+          const chaves = sel.includes(k) ? sel : [k];
+          const pm = paraMundoLivre(d), idx = +k.slice(1);
+          const cands = k[0] === "p" ? [paredes[idx].a, paredes[idx].b] : (areas[idx].pts || []);
+          const ancoraPt = cands.reduce((m, q) => (Math.hypot(q.x - pm.x, q.y - pm.y) < Math.hypot(m.x - pm.x, m.y - pm.y) ? q : m), cands[0]);
+          gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: { tipo: "mover", chave: k, chaves, ancora: ancoraPt }, orig: { paredes, areas } };
+          e.currentTarget.setPointerCapture(e.pointerId); return;
+        }
+      }
     }
     if (e.button === 1) { const agora = Date.now(); if (agora - meioClique.current < 350) { ajustar(); meioClique.current = 0; return; } meioClique.current = agora; }
     const g = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, panear: e.button === 1 || e.button === 2 || ferramenta === "mover", direito: e.button === 2, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, menu: false };
@@ -79024,6 +79054,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     clearTimeout(g.timer);
     if (g.grip) {
       if (g.moveu) { historico.current.push(g.orig); if (historico.current.length > 200) historico.current.shift(); futuro.current = []; }
+      else if (g.grip.tipo === "mover") aplicarSelecao([g.grip.chave], g); // só clicou: seleciona
       setHover(null); return;
     }
     if (g.menu) return;
