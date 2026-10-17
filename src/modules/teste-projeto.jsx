@@ -27,13 +27,14 @@ function tpCarregarThree() {
   return _tpThreePromise;
 }
 
-function TesteProjeto() {
+function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
   const planRef = useRef(null), v3dRef = useRef(null);
-  const [paredes, setParedes] = useState([
-    { a: { x: 2, y: 2 }, b: { x: 8, y: 2 }, t: 0.14, h: 2.8 },
-    { a: { x: 8, y: 2 }, b: { x: 8, y: 6.5 }, t: 0.14, h: 2.8 },
-    { a: { x: 8, y: 6.5 }, b: { x: 2, y: 6.5 }, t: 0.14, h: 2.8 },
-  ]);
+  const [paredes, setParedes] = useState(() => (Array.isArray(projeto.paredes) ? projeto.paredes : []));
+  const primeiraVez = useRef(true);
+  useEffect(() => {
+    if (primeiraVez.current) { primeiraVez.current = false; return; }
+    onAlterar({ ...projeto, paredes, atualizadoEm: new Date().toISOString() });
+  }, [paredes]);
   const [inicio, setInicio] = useState(null);
   const [hover, setHover] = useState(null);
   const [esp, setEsp] = useState("14");
@@ -195,8 +196,10 @@ function TesteProjeto() {
         }
       `}</style>
       <div>
-        <div style={{ fontSize: 22, fontWeight: 700, color: "#111827" }}>Teste Projeto</div>
-        <div style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>
+        <button style={{ ...btn, border: "none", background: "transparent", padding: "4px 0", minHeight: 0, color: TP_AZUL }} onClick={onVoltar}>← Projetos</button>
+        <div style={{ fontSize: 22, fontWeight: 700, color: "#111827", marginTop: 4 }}>{projeto.nome}</div>
+        <div style={{ fontSize: 13, color: "#374151", marginTop: 2 }}>Cliente: {nomeCliente || "—"}</div>
+        <div style={{ fontSize: 13, color: "#6b7280", marginTop: 6 }}>
           {inicio
             ? "Clique para fechar este trecho. A próxima parede começa no mesmo ponto. \"Finalizar traço\" ou Esc encerra."
             : "Clique na planta para marcar o início da parede."}
@@ -232,7 +235,144 @@ function TesteProjeto() {
         <div style={card}><div style={lbl}>Blocos 14×19×39</div><div style={val}>{blocos.toLocaleString("pt-BR")} un</div></div>
         <div style={card}><div style={lbl}>Reboco 2 faces</div><div style={val}>{tpFmt(A * 2)} m²</div></div>
       </div>
-      <div style={{ fontSize: 12, color: "#9ca3af" }}>Teste isolado: nada é salvo. Blocos a 12,5 un/m² + 5% de perda, sem descontar portas e janelas.</div>
+      <div style={{ fontSize: 12, color: "#9ca3af" }}>Teste: o desenho fica salvo só neste navegador, ainda não vai para o servidor. Blocos a 12,5 un/m² + 5% de perda, sem descontar portas e janelas.</div>
+    </div>
+  );
+}
+
+
+// ───────────────────────────────────────────────────────────────
+// Lista de projetos + novo projeto (nome + cliente). Fase de teste:
+// guardado no localStorage deste navegador, separado por empresa — nada
+// é gravado no servidor nem no cadastro do cliente.
+// ───────────────────────────────────────────────────────────────
+function tpChave(empresaId) { return "vicke-teste-projetos-" + (empresaId || "x"); }
+function tpLer(empresaId) {
+  try { const v = JSON.parse(localStorage.getItem(tpChave(empresaId)) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+function tpGravar(empresaId, lista) {
+  try { localStorage.setItem(tpChave(empresaId), JSON.stringify(lista)); } catch {}
+}
+
+function TesteProjeto({ data, usuario }) {
+  const empresaId = usuario?.empresa_id;
+  const [projetos, setProjetos] = useState(() => tpLer(empresaId));
+  const [abertoId, setAbertoId] = useState(null);
+  const [novo, setNovo] = useState(null);       // { nome, clienteId } enquanto o formulário está aberto
+  const [excluir, setExcluir] = useState(null); // projeto aguardando confirmação
+  const [busca, setBusca] = useState("");
+
+  const clientes = (data?.clientes || []).slice().sort((a, b) => String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR"));
+  const nomeCliente = (id) => (clientes.find((c) => c.id === id) || {}).nome || "";
+  const salvarLista = (lista) => { setProjetos(lista); tpGravar(empresaId, lista); };
+
+  const aberto = projetos.find((p) => p.id === abertoId);
+  if (aberto) {
+    return (
+      <TpEditor key={aberto.id} projeto={aberto} nomeCliente={nomeCliente(aberto.clienteId)}
+        onAlterar={(p) => salvarLista(tpLer(empresaId).map((x) => (x.id === p.id ? p : x)))}
+        onVoltar={() => { setProjetos(tpLer(empresaId)); setAbertoId(null); }} />
+    );
+  }
+
+  const criar = () => {
+    const nome = String(novo.nome || "").trim();
+    if (!nome || !novo.clienteId) return;
+    const agora = new Date().toISOString();
+    const p = { id: "tp_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), nome, clienteId: novo.clienteId, paredes: [], criadoEm: agora, atualizadoEm: agora };
+    salvarLista([p, ...projetos]);
+    setNovo(null); setAbertoId(p.id);
+  };
+
+  const filtrados = projetos.filter((p) => {
+    const q = busca.trim().toLowerCase();
+    return !q || p.nome.toLowerCase().includes(q) || nomeCliente(p.clienteId).toLowerCase().includes(q);
+  });
+  const dataBR = (iso) => { try { return new Date(iso).toLocaleDateString("pt-BR"); } catch { return ""; } };
+
+  const btn = { padding: "8px 14px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 14, fontWeight: 500, cursor: "pointer", minHeight: 38 };
+  const btnAzul = { ...btn, background: TP_AZUL, borderColor: TP_AZUL, color: "#fff" };
+  const lbl = { display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 4 };
+  const inp = { width: "100%", boxSizing: "border-box", padding: "9px 10px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, background: "#fff" };
+  const fundo = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 };
+  const caixa = { background: "#fff", borderRadius: 12, padding: 20, width: "100%", maxWidth: 440, boxShadow: "0 10px 30px rgba(0,0,0,0.2)" };
+
+  return (
+    <div style={{ maxWidth: 1000, margin: "0 auto", display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
+        <div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: "#111827" }}>Teste Projeto</div>
+          <div style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>Projetos desenhados no VICKE. Fase de teste.</div>
+        </div>
+        <button style={btnAzul} onClick={() => setNovo({ nome: "", clienteId: "" })}>+ Novo projeto</button>
+      </div>
+
+      {projetos.length > 0 && (
+        <input style={inp} placeholder="Buscar por projeto ou cliente" value={busca} onChange={(e) => setBusca(e.target.value)} />
+      )}
+
+      {projetos.length === 0 ? (
+        <div style={{ background: "#fff", border: "1px dashed #d1d5db", borderRadius: 12, padding: "36px 20px", textAlign: "center" }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "#111827" }}>Nenhum projeto ainda</div>
+          <div style={{ fontSize: 13, color: "#6b7280", margin: "6px 0 14px" }}>Crie um projeto, escolha o cliente e comece a traçar as paredes.</div>
+          <button style={btnAzul} onClick={() => setNovo({ nome: "", clienteId: "" })}>+ Novo projeto</button>
+        </div>
+      ) : (
+        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden" }}>
+          {filtrados.map((p, i) => (
+            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderTop: i ? "1px solid #f0f2f5" : "none" }}>
+              <button onClick={() => setAbertoId(p.id)} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer" }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nome}</div>
+                <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+                  {nomeCliente(p.clienteId) || "Cliente não encontrado"} · {(p.paredes || []).length} parede{(p.paredes || []).length === 1 ? "" : "s"} · {dataBR(p.atualizadoEm)}
+                </div>
+              </button>
+              <button style={{ ...btn, padding: "6px 10px", minHeight: 32, fontSize: 13 }} onClick={() => setAbertoId(p.id)}>Abrir</button>
+              <button style={{ ...btn, padding: "6px 10px", minHeight: 32, fontSize: 13, color: "#b91c1c" }} onClick={() => setExcluir(p)}>Excluir</button>
+            </div>
+          ))}
+          {filtrados.length === 0 && <div style={{ padding: 16, fontSize: 13, color: "#6b7280" }}>Nenhum projeto com esse nome ou cliente.</div>}
+        </div>
+      )}
+
+      {novo && (
+        <div style={fundo}>
+          <div style={caixa} role="dialog" aria-modal="true">
+            <div style={{ fontSize: 17, fontWeight: 700, color: "#111827", marginBottom: 14 }}>Novo projeto</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <label style={lbl} htmlFor="tp-novo-nome">Nome do projeto</label>
+                <input id="tp-novo-nome" style={inp} autoFocus placeholder="Ex.: Residência Silva" value={novo.nome} onChange={(e) => setNovo({ ...novo, nome: e.target.value })} />
+              </div>
+              <div>
+                <label style={lbl} htmlFor="tp-novo-cliente">Cliente</label>
+                <select id="tp-novo-cliente" style={inp} value={novo.clienteId} onChange={(e) => setNovo({ ...novo, clienteId: e.target.value })}>
+                  <option value="">Escolha o cliente</option>
+                  {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select>
+                {clientes.length === 0 && <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>Nenhum cliente cadastrado. Cadastre em Clientes primeiro.</div>}
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
+              <button style={btn} onClick={() => setNovo(null)}>Cancelar</button>
+              <button style={{ ...btnAzul, opacity: String(novo.nome || "").trim() && novo.clienteId ? 1 : 0.5 }} disabled={!String(novo.nome || "").trim() || !novo.clienteId} onClick={criar}>Criar e projetar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {excluir && (
+        <div style={fundo}>
+          <div style={caixa} role="dialog" aria-modal="true">
+            <div style={{ fontSize: 17, fontWeight: 700, color: "#111827" }}>Excluir projeto?</div>
+            <div style={{ fontSize: 14, color: "#374151", margin: "8px 0 18px" }}>"{excluir.nome}" e todo o desenho serão apagados deste navegador.</div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button style={btn} onClick={() => setExcluir(null)}>Cancelar</button>
+              <button style={{ ...btn, background: "#b91c1c", borderColor: "#b91c1c", color: "#fff" }} onClick={() => { salvarLista(projetos.filter((p) => p.id !== excluir.id)); setExcluir(null); }}>Excluir</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

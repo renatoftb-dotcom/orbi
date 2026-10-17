@@ -2103,7 +2103,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "fornecedores"           && <PrestadoresServico key={fornecedoresKey} data={data} save={save} />}
           {aba === "insumos"                && <Insumos data={data} save={save} />}
           {aba === "whatsapp-piloto" && waPiloto && <WhatsappPiloto data={data} usuario={usuario} />}
-          {aba === "teste-projeto" && <TesteProjeto />}
+          {aba === "teste-projeto" && <TesteProjeto data={data} usuario={usuario} />}
           {typeof aba === "string" && aba.indexOf("escritorio") === 0 && <Escritorio key={escritorioKey} abaInicial={aba.indexOf(":") > 0 ? aba.slice(aba.indexOf(":") + 1) : "dados"} data={data} save={save} onReload={loadData} aoTrocarAba={(k) => setAba("escritorio:" + k)} />}
           {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} setUsuario={setUsuario} />}
           {/* Sub-abas do menu Master — Admin recebe initialTab pra abrir direto na aba certa */}
