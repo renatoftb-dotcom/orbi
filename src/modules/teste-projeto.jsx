@@ -1379,6 +1379,16 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 // guardado no localStorage deste navegador, separado por empresa — nada
 // é gravado no servidor nem no cadastro do cliente.
 // ───────────────────────────────────────────────────────────────
+// Obra criada junto com o projeto: mesmo nome, mesmo cliente, ainda sem
+// orçamento — o botão "Atualizar orçamento da obra" do editor preenche.
+function tpObraDoProjeto(p) {
+  return {
+    id: "obra_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), clienteId: p.clienteId, nome: p.nome,
+    status: "planejamento", dataInicio: "", dataFim: "", responsavel: "", descricao: "Criada a partir do Projetar.", ativo: true, clientePagaDireto: false,
+    enderecoProprio: false, cep: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", estado: "",
+    projetoDesenhoId: p.id,
+  };
+}
 function tpChave(empresaId) { return "vicke-teste-projetos-" + (empresaId || "x"); }
 function tpLer(empresaId) {
   try { const v = JSON.parse(localStorage.getItem(tpChave(empresaId)) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; }
@@ -1413,6 +1423,10 @@ function TesteProjeto({ data, usuario, save }) {
     if (!nome || !novo.clienteId) return;
     const agora = new Date().toISOString();
     const p = { id: "tp_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), nome, clienteId: novo.clienteId, paredes: [], criadoEm: agora, atualizadoEm: agora };
+    if (novo.criarObra !== false && data && save) {
+      const obra = tpObraDoProjeto(p); p.obraId = obra.id;
+      save({ ...data, obras: [...(data.obras || []), obra] });
+    }
     salvarLista([p, ...projetos]);
     setNovo(null); setAbertoId(p.id);
   };
@@ -1437,7 +1451,7 @@ function TesteProjeto({ data, usuario, save }) {
           <div style={{ fontSize: 22, fontWeight: 700, color: "#111827" }}>Projetar</div>
           <div style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>Projetos desenhados no VICKE. Fase de teste.</div>
         </div>
-        <button style={btnAzul} onClick={() => setNovo({ nome: "", clienteId: "" })}>+ Novo projeto</button>
+        <button style={btnAzul} onClick={() => setNovo({ nome: "", clienteId: "", criarObra: true })}>+ Novo projeto</button>
       </div>
 
       {projetos.length > 0 && (
@@ -1448,7 +1462,7 @@ function TesteProjeto({ data, usuario, save }) {
         <div style={{ background: "#fff", border: "1px dashed #d1d5db", borderRadius: 12, padding: "36px 20px", textAlign: "center" }}>
           <div style={{ fontSize: 15, fontWeight: 600, color: "#111827" }}>Nenhum projeto ainda</div>
           <div style={{ fontSize: 13, color: "#6b7280", margin: "6px 0 14px" }}>Crie um projeto, escolha o cliente e comece a traçar as paredes.</div>
-          <button style={btnAzul} onClick={() => setNovo({ nome: "", clienteId: "" })}>+ Novo projeto</button>
+          <button style={btnAzul} onClick={() => setNovo({ nome: "", clienteId: "", criarObra: true })}>+ Novo projeto</button>
         </div>
       ) : (
         <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden" }}>
@@ -1485,6 +1499,10 @@ function TesteProjeto({ data, usuario, save }) {
                 </select>
                 {clientes.length === 0 && <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>Nenhum cliente cadastrado. Cadastre em Clientes primeiro.</div>}
               </div>
+              <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, color: "#374151", cursor: "pointer", lineHeight: 1.4 }}>
+                <input type="checkbox" id="tp-novo-obra" checked={novo.criarObra !== false} onChange={(e) => setNovo({ ...novo, criarObra: e.target.checked })} style={{ marginTop: 2 }} />
+                <span>Criar também a obra <strong>{String(novo.nome || "").trim() || "com o nome do projeto"}</strong> nas Obras do cliente, para o orçamento de obra</span>
+              </label>
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
               <button style={btn} onClick={() => setNovo(null)}>Cancelar</button>
@@ -1526,6 +1544,7 @@ function TpProjetosDoCliente({ cliente, data, save }) {
   const [todos, setTodos] = useState(() => tpLer(empresaId));
   const [abertoId, setAbertoId] = useState(null);
   const [novoNome, setNovoNome] = useState(null);  // string enquanto a janela está aberta
+  const [criarObra, setCriarObra] = useState(true);
   const [excluir, setExcluir] = useState(null);
   if (empresaId !== TP_EMPRESA_PILOTO || !cliente) return null;
 
@@ -1551,6 +1570,10 @@ function TpProjetosDoCliente({ cliente, data, save }) {
     const nome = String(novoNome || "").trim(); if (!nome) return;
     const agora = new Date().toISOString();
     const p = { id: "tp_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), nome, clienteId: cliente.id, paredes: [], criadoEm: agora, atualizadoEm: agora };
+    if (criarObra && data && save) {
+      const obra = tpObraDoProjeto(p); p.obraId = obra.id;
+      save({ ...data, obras: [...(data.obras || []), obra] });
+    }
     salvarLista([p, ...tpLer(empresaId)]);
     setNovoNome(null); setAbertoId(p.id);
   };
@@ -1584,6 +1607,10 @@ function TpProjetosDoCliente({ cliente, data, save }) {
             <input id="tp-cli-nome" autoFocus value={novoNome} onChange={(e) => setNovoNome(e.target.value)} placeholder="Ex.: Residência Silva"
               onKeyDown={(e) => { if (e.key === "Enter") criar(); }}
               style={{ width: "100%", boxSizing: "border-box", padding: "9px 10px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14 }} />
+            <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, color: "#374151", cursor: "pointer", lineHeight: 1.4, marginTop: 12 }}>
+              <input type="checkbox" id="tp-cli-obra" checked={criarObra} onChange={(e) => setCriarObra(e.target.checked)} style={{ marginTop: 2 }} />
+              <span>Criar também a obra <strong>{String(novoNome || "").trim() || "com o nome do projeto"}</strong> nas Obras deste cliente, para o orçamento de obra</span>
+            </label>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
               <button style={btn} onClick={() => setNovoNome(null)}>Cancelar</button>
               <button style={{ ...btnAzul, opacity: String(novoNome).trim() ? 1 : 0.5 }} disabled={!String(novoNome).trim()} onClick={criar}>Criar e projetar</button>
