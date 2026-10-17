@@ -1577,7 +1577,7 @@ export default function ModuloClientesFornecedores() {
     { k:"fornecedores", icon:"prestadores", label:"Fornecedores" },
     { k:"insumos",     icon:"insumos",    label:"Insumos", count: data?.materiais?.length },
     ...(waPiloto ? [{ k:"whatsapp-piloto", icon:"whatsapp", label:"WhatsApp (teste)" }] : []),
-    ...(usuario?.empresa_id === "emp_padovan-arquitetos_moebj62t" ? [{ k:"teste-projeto", icon:"teste-projeto", label:"Teste Projeto" }] : []),
+    ...(usuario?.empresa_id === "emp_padovan-arquitetos_moebj62t" ? [{ k:"teste-projeto", icon:"teste-projeto", label:"Projetar" }] : []),
     // O Financeiro voltou como módulo Escritório, no fim deste menu.
     // O importador de nota fiscal foi apagado: estava fora do menu desde a
     // Sprint 3 e chamava a API da Anthropic direto do navegador, sem chave.

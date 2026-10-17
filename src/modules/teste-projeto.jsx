@@ -1276,7 +1276,7 @@ function TesteProjeto({ data, usuario }) {
     <div style={{ maxWidth: 1000, margin: "0 auto", display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
         <div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: "#111827" }}>Teste Projeto</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: "#111827" }}>Projetar</div>
           <div style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>Projetos desenhados no VICKE. Fase de teste.</div>
         </div>
         <button style={btnAzul} onClick={() => setNovo({ nome: "", clienteId: "" })}>+ Novo projeto</button>
@@ -1355,7 +1355,7 @@ function TesteProjeto({ data, usuario }) {
 // ───────────────────────────────────────────────────────────────
 // Dentro do cliente (aba Projetos): os desenhos daquele cliente, com
 // abrir, excluir e novo desenho já vinculado a ele. Mesmo armazenamento
-// da tela Teste Projeto (localStorage por empresa) — um projeto criado
+// da tela Projetar (localStorage por empresa) — um projeto criado
 // lá aparece aqui e vice-versa. Só aparece para a empresa piloto.
 // ───────────────────────────────────────────────────────────────
 const TP_EMPRESA_PILOTO = "emp_padovan-arquitetos_moebj62t";
