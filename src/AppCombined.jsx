@@ -79039,6 +79039,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     }
     if (e.button === 1) { const agora = Date.now(); if (agora - meioClique.current < 350) { ajustar(); meioClique.current = 0; return; } meioClique.current = agora; }
     const g = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, panear: e.button === 1 || e.button === 2 || ferramenta === "mover", direito: e.button === 2, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, menu: false };
+    // Com uma ferramenta de desenho ativa e nenhum traço em andamento, apertar
+    // em cima de uma parede ou linha de separação e ARRASTAR move o elemento
+    // (sem precisar trocar para Selecionar). Só clicar continua desenhando.
+    if (e.button === 0 && ferramenta !== "selecionar" && ferramenta !== "mover" && ferramenta !== "ambiente" && !inicio && !poli.length && !ancora) {
+      const k = elementoNoPonto(d);
+      const idx = k ? +k.slice(1) : -1;
+      if (k && (k[0] === "p" || (areas[idx] && areas[idx].tipo === "separador"))) {
+        const pm = paraMundoLivre(d), cands = k[0] === "p" ? [paredes[idx].a, paredes[idx].b] : areas[idx].pts;
+        g.candMover = { tipo: "mover", chave: k, chaves: [k], ancora: cands.reduce((m, q) => (Math.hypot(q.x - pm.x, q.y - pm.y) < Math.hypot(m.x - pm.x, m.y - pm.y) ? q : m), cands[0]) };
+      }
+    }
     // toque longo (celular) = botão direito
     if (e.pointerType === "touch") {
       const cx = e.clientX, cy = e.clientY;
@@ -79052,6 +79063,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     if (g) {
       const lim = (g.grip ? 3 : 6) * (window.devicePixelRatio || 1);
       if (!g.moveu && Math.hypot(d.x - g.x0, d.y - g.y0) > lim) { g.moveu = true; clearTimeout(g.timer); }
+      if (!g.grip && g.candMover && g.moveu && !g.panear) { g.grip = g.candMover; g.orig = { paredes, areas }; setSel([g.candMover.chave]); }
       if (g.grip) { if (g.moveu) arrastarAlca(e, g); return; }
       if (g.menu) return;
       if (g.moveu) {
