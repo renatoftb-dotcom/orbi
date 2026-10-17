@@ -43,6 +43,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
   const [menuAberto, setMenuAberto] = useState(false);
   const [confirmarLimpar, setConfirmarLimpar] = useState(false);
+  const [ferramenta, setFerramenta] = useState(() => (Array.isArray(projeto.paredes) && projeto.paredes.length ? "selecionar" : "parede")); // selecionar | parede | mover
+  const [sel, setSel] = useState([]);      // índices das paredes selecionadas
+  const [caixa, setCaixa] = useState(null); // retângulo de seleção em px do canvas { x0, y0, x1, y1 }
+  const historico = useRef([]);            // estados anteriores, para Desfazer
   const [erro3d, setErro3d] = useState("");
   const [, forcar] = useState(0);
   const three = useRef(null);
@@ -51,6 +55,19 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
 
   const espM = Math.max(0.05, (parseFloat(String(esp).replace(",", ".")) || 14) / 100);
   const altM = Math.max(1, parseFloat(String(alt).replace(",", ".")) || 2.8);
+
+  // Toda alteração feita pelo usuário passa por aqui: guarda o estado anterior
+  // para o Desfazer e limpa a seleção (os índices mudam).
+  const mudar = (novas) => {
+    historico.current.push(paredes);
+    if (historico.current.length > 200) historico.current.shift();
+    setParedes(novas); setSel([]);
+  };
+  const excluirSelecao = () => {
+    if (!sel.length) return;
+    const fora = new Set(sel);
+    mudar(paredes.filter((_, i) => !fora.has(i)));
+  };
 
   useEffect(() => {
     if (primeiraVez.current) { primeiraVez.current = false; return; }
@@ -104,9 +121,16 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
     const todas = inicio && hover && (hover.x !== inicio.x || hover.y !== inicio.y)
       ? [...paredes, { a: inicio, b: hover, t: espM, fantasma: true }] : paredes;
     ctx.lineCap = "square";
-    for (const w of todas) {
+    const marcadas = new Set(sel);
+    todas.forEach((w, i) => {
+      if (!marcadas.has(i)) return;
       const [ax, ay] = T(w.a), [bx, by] = T(w.b);
-      ctx.strokeStyle = w.fantasma ? TP_AZUL : "#374151"; ctx.globalAlpha = w.fantasma ? 0.6 : 1;
+      ctx.strokeStyle = "rgba(4,116,244,0.25)"; ctx.lineWidth = Math.max(2, w.t * v.s) + 10 * dpr;
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    });
+    for (const [i, w] of todas.entries()) {
+      const [ax, ay] = T(w.a), [bx, by] = T(w.b);
+      ctx.strokeStyle = w.fantasma || marcadas.has(i) ? TP_AZUL : "#374151"; ctx.globalAlpha = w.fantasma ? 0.6 : 1;
       ctx.lineWidth = Math.max(2, w.t * v.s);
       ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); ctx.globalAlpha = 1;
       let ang = Math.atan2(by - ay, bx - ax); if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
@@ -116,8 +140,20 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
       ctx.fillText(tpFmt(tpLen(w)) + " m", 0, -(w.t * v.s / 2 + 6 * dpr)); ctx.restore();
     }
     const ponto = (p, r) => { const [x, y] = T(p); ctx.fillStyle = TP_AZUL; ctx.beginPath(); ctx.arc(x, y, r * dpr, 0, 7); ctx.fill(); };
-    if (hover) ponto(hover, 3);
+    if (hover && ferramenta === "parede") ponto(hover, 3);
     if (inicio) ponto(inicio, 5);
+    // extremidades das selecionadas
+    for (const i of sel) { const w = paredes[i]; if (!w) continue; for (const p of [w.a, w.b]) { const [x, y] = T(p); ctx.fillStyle = "#fff"; ctx.strokeStyle = TP_AZUL; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.rect(x - 4 * dpr, y - 4 * dpr, 8 * dpr, 8 * dpr); ctx.fill(); ctx.stroke(); } }
+    // retângulo de seleção: da esquerda para a direita pega só o que está
+    // inteiro dentro (azul, contínuo); da direita para a esquerda pega tudo
+    // que a área toca (verde, tracejado) — mesma convenção do AutoCAD/Revit.
+    if (caixa) {
+      const cruzando = caixa.x1 < caixa.x0;
+      const x = Math.min(caixa.x0, caixa.x1), y = Math.min(caixa.y0, caixa.y1), w = Math.abs(caixa.x1 - caixa.x0), h = Math.abs(caixa.y1 - caixa.y0);
+      ctx.fillStyle = cruzando ? "rgba(22,163,74,0.08)" : "rgba(4,116,244,0.08)"; ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = cruzando ? "#16a34a" : TP_AZUL; ctx.lineWidth = 1.5 * dpr; ctx.setLineDash(cruzando ? [6 * dpr, 4 * dpr] : []);
+      ctx.strokeRect(x, y, w, h); ctx.setLineDash([]);
+    }
     // escala gráfica
     const m = v.s >= 60 * dpr ? 1 : (v.s >= 25 * dpr ? 2 : 5);
     ctx.fillStyle = "#374151"; ctx.fillRect(16 * dpr, H - 20 * dpr, m * v.s, 3 * dpr);
@@ -192,9 +228,25 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
     return () => { vivo = false; if (three.current) { three.current.renderer.dispose(); three.current = null; } };
   }, []);
 
-  useEffect(() => { desenharPlanta(); }, [paredes, inicio, hover, espM]);
+  useEffect(() => { desenharPlanta(); }, [paredes, inicio, hover, espM, sel, caixa, ferramenta]);
   useEffect(() => { desenhar3d(); }, [paredes]);
-  useEffect(() => { const k = (e) => { if (e.key === "Escape") setInicio(null); if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); desfazer(); } }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); });
+  useEffect(() => {
+    const k = (e) => {
+      const tag = (e.target && e.target.tagName) || "";
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "Escape") { setInicio(null); setSel([]); setCaixa(null); }
+      else if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) { e.preventDefault(); desfazer(); }
+      else if ((e.ctrlKey || e.metaKey) && (e.key === "a" || e.key === "A")) { e.preventDefault(); setFerramenta("selecionar"); setInicio(null); setSel(paredes.map((_, i) => i)); }
+      else if (e.key === "Delete" || e.key === "Backspace") { if (sel.length) { e.preventDefault(); excluirSelecao(); } }
+      else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        const t = e.key.toLowerCase();
+        if (t === "v") { setFerramenta("selecionar"); setInicio(null); }
+        else if (t === "p") { setFerramenta("parede"); setSel([]); }
+        else if (t === "h") { setFerramenta("mover"); setInicio(null); }
+      }
+    };
+    window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
+  });
 
   // roda do mouse: zoom na planta (no cursor) e no 3D
   useEffect(() => {
@@ -205,25 +257,85 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
     return () => { p && p.removeEventListener("wheel", wp); t && t.removeEventListener("wheel", wt); };
   });
 
-  // planta: clique marca ponto, arrastar move a vista
+  // planta — depende da ferramenta:
+  //  Parede:     clique marca ponto; arrastar move a vista.
+  //  Selecionar: clique numa parede seleciona (Shift soma); arrastar desenha
+  //              o retângulo de seleção; clique no vazio limpa.
+  //  Mover:      arrastar move a vista (útil no celular).
+  //  Botão do meio ou direito do mouse sempre move a vista.
   const gesto = useRef(null);
-  const planDown = (e) => { const d = devPx(e); gesto.current = { x: d.x, y: d.y, moveu: false }; e.currentTarget.setPointerCapture(e.pointerId); };
+  const paraMundoLivre = (d) => { const v = vista.current; return { x: (d.x - v.ox) / v.s, y: (d.y - v.oy) / v.s }; };
+  const distSeg = (p, a, b) => {
+    const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
+    const t = l2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0;
+    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+  };
+  const paredeNoPonto = (d) => {
+    const v = vista.current, p = paraMundoLivre(d), tol = 7 * (window.devicePixelRatio || 1) / v.s;
+    let melhor = -1, menor = Infinity;
+    paredes.forEach((w, i) => { const dd = distSeg(p, w.a, w.b); if (dd <= Math.max(w.t / 2, tol) && dd < menor) { menor = dd; melhor = i; } });
+    return melhor;
+  };
+  const segCruzaRet = (a, b, r) => {
+    const dentro = (p) => p.x >= r.x0 && p.x <= r.x1 && p.y >= r.y0 && p.y <= r.y1;
+    if (dentro(a) || dentro(b)) return true;
+    const cr = (p1, p2, p3, p4) => {
+      const d = (p, q, s2) => (q.x - p.x) * (s2.y - p.y) - (q.y - p.y) * (s2.x - p.x);
+      const d1 = d(p3, p4, p1), d2 = d(p3, p4, p2), d3 = d(p1, p2, p3), d4 = d(p1, p2, p4);
+      return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
+    };
+    const c = [{ x: r.x0, y: r.y0 }, { x: r.x1, y: r.y0 }, { x: r.x1, y: r.y1 }, { x: r.x0, y: r.y1 }];
+    for (let k = 0; k < 4; k++) if (cr(a, b, c[k], c[(k + 1) % 4])) return true;
+    return false;
+  };
+  const planDown = (e) => {
+    const d = devPx(e);
+    const panear = e.button === 1 || e.button === 2 || ferramenta === "mover";
+    gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, panear, shift: e.shiftKey };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
   const planMove = (e) => {
     const g = gesto.current, d = devPx(e);
     if (g) {
       const dpr = window.devicePixelRatio || 1;
-      if (!g.moveu && Math.hypot(d.x - g.x, d.y - g.y) > 6 * dpr) g.moveu = true;
-      if (g.moveu) { const v = vista.current; vista.current = { ...v, ox: v.ox + d.x - g.x, oy: v.oy + d.y - g.y }; g.x = d.x; g.y = d.y; desenharPlanta(); return; }
+      if (!g.moveu && Math.hypot(d.x - g.x0, d.y - g.y0) > 6 * dpr) g.moveu = true;
+      if (g.moveu) {
+        if (g.panear || ferramenta === "parede") {
+          const v = vista.current; vista.current = { ...v, ox: v.ox + d.x - g.x, oy: v.oy + d.y - g.y }; g.x = d.x; g.y = d.y; desenharPlanta(); return;
+        }
+        setCaixa({ x0: g.x0, y0: g.y0, x1: d.x, y1: d.y }); return;
+      }
     }
-    setHover(paraMundo(e));
+    if (ferramenta === "parede") setHover(paraMundo(e));
   };
   const planUp = (e) => {
     const g = gesto.current; gesto.current = null;
-    if (!g || g.moveu) return;
+    if (!g) return;
+    if (g.moveu) {
+      if (!g.panear && ferramenta === "selecionar" && caixa) {
+        const a = paraMundoLivre({ x: caixa.x0, y: caixa.y0 }), b = paraMundoLivre({ x: caixa.x1, y: caixa.y1 });
+        const r = { x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) };
+        const cruzando = caixa.x1 < caixa.x0;
+        const dentro = (p) => p.x >= r.x0 && p.x <= r.x1 && p.y >= r.y0 && p.y <= r.y1;
+        const achadas = [];
+        paredes.forEach((w, i) => { if (cruzando ? segCruzaRet(w.a, w.b, r) : (dentro(w.a) && dentro(w.b))) achadas.push(i); });
+        setSel(g.shift ? Array.from(new Set([...sel, ...achadas])) : achadas);
+      }
+      setCaixa(null); return;
+    }
+    if (g.panear) return;
+    if (ferramenta === "selecionar") {
+      const i = paredeNoPonto(devPx(e));
+      if (i < 0) { if (!g.shift) setSel([]); return; }
+      if (g.shift) setSel(sel.includes(i) ? sel.filter((x) => x !== i) : [...sel, i]);
+      else setSel([i]);
+      return;
+    }
+    if (ferramenta !== "parede") return;
     const p = paraMundo(e); setHover(p);
     if (!inicio) { setInicio(p); return; }
     if (p.x === inicio.x && p.y === inicio.y) return;
-    setParedes((ps) => [...ps, { a: inicio, b: p, t: espM, h: altM }]);
+    mudar([...paredes, { a: inicio, b: p, t: espM, h: altM }]);
     setInicio(p);
   };
 
@@ -238,12 +350,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
   };
 
   function desfazer() {
-    setParedes((ps) => {
-      if (!ps.length) return ps;
-      const ult = ps[ps.length - 1];
-      setInicio((i) => (i ? ult.a : null));
-      return ps.slice(0, -1);
-    });
+    const anterior = historico.current.pop();
+    if (!anterior) return;
+    // desfazendo o último trecho de um traço em andamento, o traço continua
+    // do início desse trecho
+    const removida = paredes.length === anterior.length + 1 ? paredes[paredes.length - 1] : null;
+    if (inicio && removida && removida.b.x === inicio.x && removida.b.y === inicio.y) setInicio(removida.a);
+    else setInicio(null);
+    setParedes(anterior); setSel([]);
   }
 
   const L = paredes.reduce((s, w) => s + tpLen(w), 0);
@@ -262,6 +376,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
   const ctrl = { width: 34, height: 34, borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer", fontSize: 16, fontWeight: 600, color: "#374151", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit" };
 
   const mostraPlanta = modo !== "3d", mostra3d = modo !== "planta";
+  const FERRAMENTAS = [
+    { id: "selecionar", rotulo: "Selecionar", dica: "Selecionar (V) — clique ou arraste uma área" },
+    { id: "parede", rotulo: "Parede", dica: "Parede (P) — clique ponto a ponto" },
+    { id: "mover", rotulo: "Mover", dica: "Mover a vista (H)" },
+  ];
   const MODOS = [{ id: "planta", rotulo: "Planta" }, { id: "ambos", rotulo: "Planta + 3D" }, { id: "3d", rotulo: "3D" }];
 
   const menu = (
@@ -275,6 +394,25 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
         <div style={{ fontSize: 16, fontWeight: 700, color: "#111827", lineHeight: 1.25, wordBreak: "break-word" }}>{projeto.nome}</div>
         <div style={{ fontSize: 12.5, color: "#6b7280", marginTop: 3 }}>{nomeCliente || "Sem cliente"}</div>
       </div>
+
+      <div style={secao}>Ferramenta</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+        {FERRAMENTAS.map((f) => (
+          <button key={f.id} title={f.dica} onClick={() => { setFerramenta(f.id); if (f.id !== "parede") setInicio(null); if (f.id === "parede") setSel([]); if (isMobile) setMenuAberto(false); }}
+            style={{ ...btn, padding: "8px 4px", fontSize: 12.5, borderColor: ferramenta === f.id ? TP_AZUL : "#e5e7eb", background: ferramenta === f.id ? "#eef5ff" : "#fff", color: ferramenta === f.id ? TP_AZUL : "#111827", fontWeight: ferramenta === f.id ? 600 : 500 }}>
+            {f.rotulo}
+          </button>
+        ))}
+      </div>
+      {sel.length > 0 && (
+        <div style={{ marginTop: 10, background: "#eef5ff", border: "1px solid #cfe2ff", borderRadius: 8, padding: 10 }}>
+          <div style={{ fontSize: 12.5, color: "#1e3a8a", fontWeight: 600 }}>{sel.length} parede{sel.length === 1 ? "" : "s"} selecionada{sel.length === 1 ? "" : "s"}</div>
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            <button style={{ ...btn, flex: 1, minHeight: 32, padding: "4px 8px", fontSize: 12.5, background: "#b91c1c", borderColor: "#b91c1c", color: "#fff" }} onClick={excluirSelecao}>Excluir</button>
+            <button style={{ ...btn, flex: 1, minHeight: 32, padding: "4px 8px", fontSize: 12.5 }} onClick={() => setSel([])}>Limpar seleção</button>
+          </div>
+        </div>
+      )}
 
       <div style={secao}>Visualização</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
@@ -302,7 +440,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
             Apagar todas as paredes deste projeto?
             <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
               <button style={{ ...btn, minHeight: 30, padding: "4px 10px", fontSize: 12.5 }} onClick={() => setConfirmarLimpar(false)}>Cancelar</button>
-              <button style={{ ...btn, minHeight: 30, padding: "4px 10px", fontSize: 12.5, background: "#b91c1c", borderColor: "#b91c1c", color: "#fff" }} onClick={() => { setParedes([]); setInicio(null); setConfirmarLimpar(false); }}>Apagar</button>
+              <button style={{ ...btn, minHeight: 30, padding: "4px 10px", fontSize: 12.5, background: "#b91c1c", borderColor: "#b91c1c", color: "#fff" }} onClick={() => { mudar([]); setInicio(null); setConfirmarLimpar(false); }}>Apagar</button>
             </div>
           </div>
         )}
@@ -330,7 +468,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
           {isMobile && <button aria-label="Abrir menu do projeto" onClick={() => setMenuAberto(true)} style={{ ...ctrl, fontSize: 18 }}>☰</button>}
           <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "nowrap" : "normal" }}>
             {isMobile && <strong style={{ color: "#111827", marginRight: 6 }}>{projeto.nome}</strong>}
-            {inicio ? "Clique para fechar o trecho. Esc ou “Finalizar traço” encerra." : "Clique na planta para iniciar uma parede. Arraste para mover a vista."}
+            {ferramenta === "selecionar"
+              ? (sel.length ? `${sel.length} selecionada${sel.length === 1 ? "" : "s"}. Delete exclui, Esc limpa.` : "Clique numa parede ou arraste uma área: da esquerda para a direita pega o que está inteiro dentro; da direita para a esquerda, o que a área tocar.")
+              : ferramenta === "mover" ? "Arraste para mover a vista."
+              : inicio ? "Clique para fechar o trecho. Esc ou “Finalizar traço” encerra." : "Clique na planta para iniciar uma parede. Arraste para mover a vista."}
           </div>
           {isMobile && (
             <div style={{ display: "flex", gap: 4 }}>
@@ -343,8 +484,24 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
           paddingBottom: "env(safe-area-inset-bottom, 0px)", paddingRight: "env(safe-area-inset-right, 0px)" }}>
           <div ref={planBox} style={{ ...pane, display: mostraPlanta ? "block" : "none" }}>
             <span style={tag}>Planta baixa · grade 0,50 m</span>
-            <canvas ref={planRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none", cursor: "crosshair" }}
+            <canvas ref={planRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none", cursor: ferramenta === "mover" ? "grab" : ferramenta === "selecionar" ? "default" : "crosshair" }}
+              onContextMenu={(e) => e.preventDefault()}
               onPointerDown={planDown} onPointerMove={planMove} onPointerUp={planUp} onPointerLeave={() => { if (!inicio && !gesto.current) setHover(null); }} />
+            <div style={{ position: "absolute", left: 12, top: 34, display: "flex", gap: 4, zIndex: 1, background: "rgba(255,255,255,0.92)", borderRadius: 10, padding: 3, border: "1px solid #e5e7eb" }}>
+              {FERRAMENTAS.map((f) => (
+                <button key={f.id} title={f.dica} onClick={() => { setFerramenta(f.id); if (f.id !== "parede") setInicio(null); if (f.id === "parede") setSel([]); }}
+                  style={{ border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 12.5, cursor: "pointer", fontFamily: "inherit", background: ferramenta === f.id ? TP_AZUL : "transparent", color: ferramenta === f.id ? "#fff" : "#374151", fontWeight: 600 }}>
+                  {f.rotulo}
+                </button>
+              ))}
+            </div>
+            {sel.length > 0 && (
+              <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: 14, display: "flex", gap: 6, zIndex: 1, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 6, boxShadow: "0 4px 14px rgba(0,0,0,0.12)", alignItems: "center", whiteSpace: "nowrap" }}>
+                <span style={{ fontSize: 12.5, color: "#374151", padding: "0 6px", fontWeight: 600 }}>{sel.length} selecionada{sel.length === 1 ? "" : "s"}</span>
+                <button onClick={excluirSelecao} style={{ ...btn, minHeight: 30, padding: "4px 10px", fontSize: 12.5, background: "#b91c1c", borderColor: "#b91c1c", color: "#fff" }}>Excluir</button>
+                <button onClick={() => setSel([])} aria-label="Limpar seleção" style={{ ...btn, minHeight: 30, padding: "4px 10px", fontSize: 12.5 }}>✕</button>
+              </div>
+            )}
             <div style={{ position: "absolute", right: 12, bottom: 12, display: "flex", flexDirection: "column", gap: 6, zIndex: 1 }}>
               <button aria-label="Aproximar" style={ctrl} onClick={() => zoom(1.25)}>+</button>
               <button aria-label="Afastar" style={ctrl} onClick={() => zoom(1 / 1.25)}>−</button>
