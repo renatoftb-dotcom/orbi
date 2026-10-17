@@ -493,62 +493,18 @@ function Obras({ data, save }) {
   // O que a Entrada daqui lançou numa obra: a obra abre só o tempo de
   // gravar e a página volta para a Entrada, que mostra isto.
   const [confirmacaoEntrada, setConfirmacaoEntrada] = useState(null);
-  const [busca, setBusca] = useState("");
-  const [buscaFocada, setBuscaFocada] = useState(false);
   const perm = typeof getPermissoes === "function" ? getPermissoes() : { podeGerenciarObra: true };
 
   function nomeCliente(clienteId) {
     return clientes.find(c => c.id === clienteId)?.nome || "—";
   }
 
-  async function concluirObra(obra) {
-    const ok = await dialogo.confirmar({
-      titulo: `Concluir obra de ${nomeCliente(obra.clienteId)}?`,
-      mensagem: "A obra será marcada como concluída e o cliente começará a contar 3 meses para inativação automática (se não tiver outro serviço ativo).",
-      confirmar: "Concluir",
-    });
-    if (!ok) return;
-    const agora = new Date().toISOString();
-    const novasObras = obras.map(o =>
-      o.id === obra.id ? { ...o, status: "concluida", concluidaEm: agora } : o
-    );
-    save({ ...data, obras: novasObras }).catch(console.error);
-  }
-
-  async function reabrirObra(obra) {
-    const ok = await dialogo.confirmar({
-      titulo: "Reabrir esta obra?",
-      mensagem: "Ela voltará para 'Em andamento'.",
-      confirmar: "Reabrir",
-    });
-    if (!ok) return;
-    const novasObras = obras.map(o =>
-      o.id === obra.id ? { ...o, status: "em_andamento", concluidaEm: null } : o
-    );
-    save({ ...data, obras: novasObras }).catch(console.error);
-  }
-
-  async function excluirObra(obra) {
-    const ok = await dialogo.confirmar({
-      titulo: `Excluir obra de ${nomeCliente(obra.clienteId)}?`,
-      mensagem: "Esta ação não pode ser desfeita.",
-      confirmar: "Excluir",
-      destrutivo: true,
-    });
-    if (!ok) return;
-    const novasObras = obras.filter(o => o.id !== obra.id);
-    save({ ...data, obras: novasObras }).catch(console.error);
-  }
-
+  // Concluir e excluir moram dentro da obra (status no cadastro, Excluir
+  // lá dentro): a lista é só para escolher qual abrir.
   const obrasFiltradas = obras.filter(o => {
     if (filtro === "andamento" && o.status === "concluida") return false;
     if (filtro === "concluidas" && o.status !== "concluida") return false;
-    const termo = semAcento(busca);
-    if (!termo) return true;
-    const alvo = semAcento([o.nome, o.referencia, nomeCliente(o.clienteId), o.cidade].filter(Boolean).join(" "));
-    // Cada palavra digitada tem que aparecer: "cobop reforma" acha a obra
-    // mesmo com o cliente e o nome em pontas opostas da linha.
-    return termo.split(/\s+/).every(w => alvo.indexOf(w) >= 0);
+    return true;
   });
 
   const totais = {
@@ -578,15 +534,6 @@ function Obras({ data, save }) {
     setEntradaPendente(carga);
     setObraAbertaId(alvo);
     return (carga.destino === "lancar" || carga.destino === "despesa") ? { pendente: true } : undefined;
-  }
-
-  // A busca compara sem acento e sem caixa, pelo nome da obra, pelo cliente e
-  // pela referência — é por qualquer um dos três que se procura uma obra.
-  // Declarada como function de propósito: `obrasFiltradas` usa isto algumas
-  // linhas ACIMA, e um const aí morreria na zona morta temporal — tela branca.
-  function semAcento(s) {
-    return String(s == null ? "" : s)
-      .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
   }
 
   // Obra aberta: mesma tela da obra que existe dentro do cliente
@@ -626,109 +573,46 @@ function Obras({ data, save }) {
           embutido aoSeguir={seguirDaEntradaDeObras} confirmacao={confirmacaoEntrada} />
       )}
 
-      {/* Busca dinâmica: filtra enquanto se digita, sem botão nenhum. */}
-      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12,
-        border: "1.5px solid " + (buscaFocada ? "rgba(4,116,244,0.55)" : "rgba(38,36,33,0.12)"),
-        borderRadius: 999, background:"#fff", padding: isMobile ? "8px 14px" : "9px 16px",
-        transition: "border-color .15s, box-shadow .15s",
-        boxShadow: buscaFocada ? "0 0 0 4px rgba(4,116,244,0.10)" : "none" }}>
-        <span style={{ color: buscaFocada ? "#0474f4" : "#9ca3af", display:"flex", flexShrink:0 }}>
-          <IconeLupa tamanho={17} />
-        </span>
-        <input value={busca} onChange={(e) => setBusca(e.target.value)}
-          onFocus={() => setBuscaFocada(true)} onBlur={() => setBuscaFocada(false)}
-          placeholder="Procurar obra pelo nome ou pelo cliente…"
-          style={{ flex:1, minWidth:0, border:"none", outline:"none", background:"transparent",
-            fontFamily:"inherit", fontSize: isMobile ? 16 : 14, color:"#111827" }} />
-        {busca && (
-          <button type="button" onClick={() => setBusca("")} title="Limpar"
-            style={{ border:"none", background:"none", color:"#9ca3af", cursor:"pointer",
-              fontFamily:"inherit", fontSize:16, lineHeight:1, padding:0 }}>×</button>
-        )}
-      </div>
-
-      {/* Filtros */}
-      <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
-        <button onClick={() => setFiltro("andamento")} style={pillStyle(filtro==="andamento")}>
-          Em andamento {totais.andamento > 0 && <span style={{ opacity:0.7, marginLeft:4 }}>{totais.andamento}</span>}
-        </button>
-        <button onClick={() => setFiltro("concluidas")} style={pillStyle(filtro==="concluidas")}>
-          Concluídas {totais.concluidas > 0 && <span style={{ opacity:0.7, marginLeft:4 }}>{totais.concluidas}</span>}
-        </button>
-        <button onClick={() => setFiltro("todas")} style={pillStyle(filtro==="todas")}>
-          Todas {totais.todas > 0 && <span style={{ opacity:0.7, marginLeft:4 }}>{totais.todas}</span>}
-        </button>
-      </div>
-
-      {/* Lista */}
-      {obrasFiltradas.length === 0 ? (
-        <div style={{
-          marginTop: 20, padding: "48px 24px", textAlign: "center",
-          border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 14, background: "#fafafa",
-        }}>
-          <div style={{ color:"#4b5563", fontSize:13 }}>
-            {busca ? `Nenhuma obra para “${busca}”.` : (
-              <>
-                {filtro === "andamento" && "Nenhuma obra em andamento."}
-                {filtro === "concluidas" && "Nenhuma obra concluída ainda."}
-                {filtro === "todas" && "Nenhuma obra cadastrada."}
-              </>
-            )}
+      {/* Lista de seleção: alfabética pelo cliente e pela obra, sempre na
+          mesma ordem; a busca filtra enquanto se digita. */}
+      <ListaDeSelecao isMobile={isMobile} nomeDoItem={["obra", "obras"]}
+        placeholder={isMobile ? "Procurar obra ou cliente…" : "Procurar obra pelo nome, cliente ou cidade…"}
+        itens={obrasFiltradas.map(obra => {
+          const cliente = nomeCliente(obra.clienteId);
+          const nomeObra = obra.nome || obra.referencia || "Obra";
+          const igual = String(nomeObra).trim().toLowerCase() === String(cliente).trim().toLowerCase();
+          const concluida = obra.status === "concluida";
+          return {
+            id: obra.id, titulo: cliente, subtitulo: igual ? "" : nomeObra,
+            busca: [nomeObra, obra.referencia, obra.cidade].filter(Boolean).join(" "),
+            etiqueta: concluida ? "Concluída" : "", corEtiqueta: "#16a34a", fundoEtiqueta: "#f0fdf4",
+            apagado: !clientes.some(c => c.id === obra.clienteId),
+          };
+        })}
+        aoEscolher={(it) => setObraAbertaId(it.id)}
+        topo={
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <button onClick={() => setFiltro("andamento")} style={pillStyle(filtro==="andamento")}>
+              Em andamento {totais.andamento > 0 && <span style={{ opacity:0.7, marginLeft:4 }}>{totais.andamento}</span>}
+            </button>
+            <button onClick={() => setFiltro("concluidas")} style={pillStyle(filtro==="concluidas")}>
+              Concluídas {totais.concluidas > 0 && <span style={{ opacity:0.7, marginLeft:4 }}>{totais.concluidas}</span>}
+            </button>
+            <button onClick={() => setFiltro("todas")} style={pillStyle(filtro==="todas")}>
+              Todas {totais.todas > 0 && <span style={{ opacity:0.7, marginLeft:4 }}>{totais.todas}</span>}
+            </button>
           </div>
-          {!busca && (
-            <div style={{ color:"#4b5563", fontSize:12, marginTop:6, maxWidth:440, margin:"6px auto 0" }}>
-              Obras aparecem aqui automaticamente quando um projeto é finalizado na etapa <strong style={{ color:"#4b5563" }}>Engenharia</strong> do Kanban de Projetos.
+        }
+        vazio={
+          <>
+            {filtro === "andamento" && "Nenhuma obra em andamento."}
+            {filtro === "concluidas" && "Nenhuma obra concluída ainda."}
+            {filtro === "todas" && "Nenhuma obra cadastrada."}
+            <div style={{ fontSize:12, marginTop:6, maxWidth:440, margin:"6px auto 0" }}>
+              Obras aparecem aqui automaticamente quando um projeto é finalizado na etapa <strong>Engenharia</strong> do Kanban de Projetos.
             </div>
-          )}
-        </div>
-      ) : (
-        <div style={{ display:"flex", flexDirection:"column", gap:8, maxWidth:960 }}>
-          {obrasFiltradas.map(obra => {
-            const concluida = obra.status === "concluida";
-            const podeAbrir = clientes.some(c => c.id === obra.clienteId);
-
-            return (
-              <div key={obra.id} role={podeAbrir ? "button" : undefined} tabIndex={podeAbrir ? 0 : undefined}
-                onClick={() => podeAbrir && setObraAbertaId(obra.id)}
-                onKeyDown={(e) => { if (podeAbrir && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setObraAbertaId(obra.id); } }}
-                style={{
-                  background: concluida ? "#fafafa" : "#fff",
-                  border:"1px solid rgba(38,36,33,0.14)", borderRadius:9,
-                  padding:"12px 16px", cursor: podeAbrir ? "pointer" : "default",
-                  display:"grid", gridTemplateColumns:"1fr auto", gap:16, alignItems:"center",
-                }}>
-                <div style={{ minWidth:0, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-                  <div style={{ fontSize:14, fontWeight:600, color:"#111827" }}>{nomeCliente(obra.clienteId)}</div>
-                  <div style={{ fontSize:13, color:"#4b5563" }}>{obra.nome || obra.referencia || "Obra"}</div>
-                  {concluida && (
-                    <span style={{ fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5, padding:"2px 7px", borderRadius:4, background:"#f0fdf4", color:"#16a34a" }}>
-                      Concluída
-                    </span>
-                  )}
-                </div>
-                <div style={{ display:"flex", gap:6 }} onClick={(e) => e.stopPropagation()}>
-                  {!concluida && (
-                    <button onClick={() => concluirObra(obra)}
-                      style={{ fontSize:11.5, color:"#16a34a", background:"#fff", border:"1px solid #bbf7d0", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit", fontWeight:500 }}>
-                      ✓ Concluir
-                    </button>
-                  )}
-                  {concluida && (
-                    <button onClick={() => reabrirObra(obra)}
-                      style={{ fontSize:11.5, color:"#4b5563", background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit" }}>
-                      Reabrir
-                    </button>
-                  )}
-                  <button onClick={() => excluirObra(obra)}
-                    style={{ fontSize:11.5, color:"#dc2626", background:"#fff", border:"1px solid #fecaca", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit" }}>
-                    Excluir
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+          </>
+        } />
     </PageContainer>
   );
 }

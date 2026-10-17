@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- main.jsx é a entrada, não há fast refresh a preservar aqui */
-import { StrictMode, Component, useEffect, useState } from 'react'
+import { StrictMode, Component } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.jsx'
 
@@ -10,10 +10,11 @@ import App from './App.jsx'
 // situações também terminavam em tela branca, sem dizer nada:
 //
 // 1. Aba aberta durante um deploy: ela continua com a versão antiga, que
-//    pode tropeçar em dado gravado pela nova. Aqui se compara, de tempos em
-//    tempos e ao voltar para a aba, o script que está rodando com o que o
-//    servidor publica; mudou, aparece "Saiu uma versão nova — Atualizar".
-//    Não recarrega sozinho: pode haver um formulário pela metade.
+//    pode tropeçar em dado gravado pela nova. Quem avisa é o VersionWatcher
+//    (shared.jsx, montado pelo app em todas as telas, login incluído):
+//    "Nova versão disponível — Atualizar". Um aviso só — havia um segundo
+//    aqui, e os dois apareciam juntos. Não recarrega sozinho: pode haver um
+//    formulário pela metade.
 // 2. Erro numa tela: o React desmonta tudo e sobra o branco. O
 //    GuardaDeTela segura o erro, mostra o que houve e oferece recarregar.
 //    Se o erro veio de versão velha (o servidor já publicou outra),
@@ -80,38 +81,6 @@ class GuardaDeTela extends Component {
   }
 }
 
-function AvisoDeVersaoNova() {
-  const [nova, setNova] = useState(false)
-  useEffect(() => {
-    const atual = scriptRodando()
-    if (!atual) return undefined
-    let vivo = true
-    const checar = () => {
-      scriptPublicado().then((v) => { if (vivo && v && v !== atual) setNova(true) }).catch(() => {})
-    }
-    const aoVoltar = () => { if (document.visibilityState === 'visible') checar() }
-    const id = setInterval(checar, 5 * 60 * 1000)
-    document.addEventListener('visibilitychange', aoVoltar)
-    window.addEventListener('focus', aoVoltar)
-    return () => {
-      vivo = false
-      clearInterval(id)
-      document.removeEventListener('visibilitychange', aoVoltar)
-      window.removeEventListener('focus', aoVoltar)
-    }
-  }, [])
-  if (!nova) return null
-  return (
-    <div data-vk-versao-nova="1" style={{ position: 'fixed', left: 16, right: 16, bottom: 16, zIndex: 3000, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
-      <div style={{ pointerEvents: 'auto', background: '#111827', color: '#fff', borderRadius: 12, padding: '10px 12px 10px 16px', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', boxShadow: '0 12px 30px -12px rgba(17,24,39,0.5)', fontFamily: 'Inter, system-ui, sans-serif', fontSize: 13, maxWidth: 520 }}>
-        <span>Saiu uma versão nova do Vicke. Salve o que estiver fazendo e atualize.</span>
-        <button type="button" onClick={() => location.reload()}
-          style={{ border: 'none', borderRadius: 9, padding: '7px 14px', background: '#0474f4', color: '#fff', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>Atualizar</button>
-      </div>
-    </div>
-  )
-}
-
 // ═══════════════════════════════════════════════════════════════
 // ROTEAMENTO DE NÍVEL ZERO
 //
@@ -168,7 +137,6 @@ function RouteSwitch() {
   return (
     <GuardaDeTela>
       <App />
-      <AvisoDeVersaoNova />
     </GuardaDeTela>
   );
 }

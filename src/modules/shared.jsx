@@ -2881,3 +2881,155 @@ function MenuDeAcoes(props) {
     </>
   );
 }
+
+// ═══════════════════════════════════════════════════════════════
+// LISTA DE SELEÇÃO — obras, clientes: escolher um e abrir
+// ═══════════════════════════════════════════════════════════════
+// A ordem é alfabética e não muda: nem por status, nem por data, nem por
+// uso. Quem procura "Cobop" encontra sempre no mesmo lugar. A busca filtra
+// enquanto se digita, sem acento e sem caixa, palavra por palavra.
+
+// ── ListaDeSelecao: parte pura ─────────────────────────
+function cmpListaDeSelecao(a, b) {
+  return String(a == null ? "" : a).localeCompare(String(b == null ? "" : b), "pt-BR", { sensitivity: "base", numeric: true });
+}
+
+function ordemDaListaDeSelecao(itens) {
+  return (Array.isArray(itens) ? itens : []).filter(Boolean).slice().sort(function (a, b) {
+    return cmpListaDeSelecao(a.titulo, b.titulo) || cmpListaDeSelecao(a.subtitulo, b.subtitulo)
+      || cmpListaDeSelecao(String(a.id), String(b.id));
+  });
+}
+
+function filtrarListaDeSelecao(itens, termo) {
+  const t = buscaNormal(termo);
+  if (!t) return itens || [];
+  const palavras = t.split(" ");
+  return (itens || []).filter(function (it) {
+    const alvo = buscaNormal([it.titulo, it.subtitulo, it.etiqueta, it.busca].filter(Boolean).join(" "));
+    return palavras.every(function (w) { return alvo.indexOf(w) >= 0; });
+  });
+}
+
+function letraDaListaDeSelecao(titulo) {
+  const l = buscaNormal(titulo).charAt(0).toUpperCase();
+  return /[A-Z]/.test(l) ? l : "#";
+}
+
+function iniciaisDaListaDeSelecao(titulo) {
+  const p = String(titulo || "").trim().split(/\s+/).filter(function (w) { return /[A-Za-zÀ-ÿ0-9]/.test(w.charAt(0)); });
+  return p.slice(0, 2).map(function (w) { return w.charAt(0); }).join("").toUpperCase() || "·";
+}
+// ── ListaDeSelecao: fim da parte pura ─────────────────
+
+// itens: [{ id, titulo, subtitulo?, etiqueta?, busca?, apagado?, acoes? }]
+function ListaDeSelecao({ itens, aoEscolher, placeholder, vazio, isMobile, topo, nomeDoItem }) {
+  const [busca, setBusca] = useState("");
+  const [focada, setFocada] = useState(false);
+  const [ativo, setAtivo] = useState(-1);
+  const refBusca = useRef(null);
+  const ordenados = useMemo(function () { return ordemDaListaDeSelecao(itens); }, [itens]);
+  const vistos = filtrarListaDeSelecao(ordenados, busca);
+  const procurando = !!buscaNormal(busca);
+  useEffect(function () { setAtivo(procurando && vistos.length ? 0 : -1); }, [busca]);
+  useEffect(function () {
+    if (!isMobile && refBusca.current) { try { refBusca.current.focus({ preventScroll: true }); } catch (e) { /* sem foco */ } }
+  }, []);
+  function escolher(it) { if (it && !it.apagado && aoEscolher) aoEscolher(it); }
+  function teclas(e) {
+    if (e.key === "ArrowDown") { e.preventDefault(); setAtivo(function (i) { return Math.min(vistos.length - 1, i + 1); }); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setAtivo(function (i) { return Math.max(0, i - 1); }); }
+    else if (e.key === "Enter") { if (ativo >= 0 && vistos[ativo]) { e.preventDefault(); escolher(vistos[ativo]); } }
+    else if (e.key === "Escape") { setBusca(""); }
+  }
+  useEffect(function () {
+    if (ativo < 0) return;
+    const el = document.querySelector('[data-vk-lista-idx="' + ativo + '"]');
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
+  }, [ativo]);
+  const nome = nomeDoItem || ["item", "itens"];
+  let letraAnterior = "";
+  return (
+    <div data-vk-lista-selecao style={{ maxWidth: 960, minWidth: 0 }}>
+      {/* A moldura é a da pílula: o campo de dentro não ganha a borda, o
+          halo nem a altura mínima que a regra geral dos campos dá. */}
+      <style>{`
+        [data-vk-lista-selecao] input[data-vk-lista-busca],
+        [data-vk-lista-selecao] input[data-vk-lista-busca]:hover,
+        [data-vk-lista-selecao] input[data-vk-lista-busca]:focus {
+          border: none !important; box-shadow: none !important; outline: none !important; min-height: 0 !important;
+        }`}</style>
+      <div onClick={function () { if (refBusca.current) refBusca.current.focus(); }}
+        style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, cursor: "text",
+        border: "1.5px solid " + (focada ? "rgba(4,116,244,0.55)" : "rgba(38,36,33,0.14)"),
+        borderRadius: 999, background: "#fff", padding: isMobile ? "12px 16px" : "11px 18px",
+        transition: "border-color .15s, box-shadow .15s",
+        boxShadow: focada ? "0 0 0 4px rgba(4,116,244,0.10)" : "0 1px 2px rgba(38,36,33,0.04)" }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+          style={{ color: focada ? "#0474f4" : "#9ca3af", flexShrink: 0 }}><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>
+        <input ref={refBusca} data-vk-lista-busca value={busca} onChange={function (e) { setBusca(e.target.value); }}
+          onFocus={function () { setFocada(true); }} onBlur={function () { setFocada(false); }} onKeyDown={teclas}
+          placeholder={placeholder || "Procurar…"}
+          style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
+            fontFamily: "inherit", fontSize: isMobile ? 16 : 14.5, color: "#111827" }} />
+        {busca ? (
+          <button type="button" onClick={function () { setBusca(""); if (refBusca.current) refBusca.current.focus(); }} title="Limpar"
+            style={{ border: "none", background: "rgba(38,36,33,0.06)", color: "#4b5563", cursor: "pointer", fontFamily: "inherit",
+              fontSize: 14, lineHeight: 1, width: 24, height: 24, borderRadius: 999, flexShrink: 0 }}>×</button>
+        ) : null}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+        <div style={{ minWidth: 0 }}>{topo || null}</div>
+        <div data-vk-lista-contagem style={{ fontSize: 12, color: "#6b7280" }}>
+          {procurando ? vistos.length + " de " + ordenados.length : ordenados.length} {ordenados.length === 1 ? nome[0] : nome[1]}
+        </div>
+      </div>
+      {vistos.length === 0 ? (
+        <div style={{ padding: "40px 20px", textAlign: "center", border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 14,
+          background: "#fafafa", color: "#4b5563", fontSize: 13 }}>
+          {procurando ? <>Nada encontrado para “{busca.trim()}”.</> : (vazio || "Nada por aqui ainda.")}
+        </div>
+      ) : (
+        <div style={{ background: "#fff", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 14, overflow: "hidden" }}>
+          {vistos.map(function (it, i) {
+            const letra = letraDaListaDeSelecao(it.titulo);
+            const cabeca = !procurando && letra !== letraAnterior;
+            letraAnterior = letra;
+            const marcado = i === ativo;
+            return (
+              <Fragment key={it.id}>
+                {cabeca && (
+                  <div data-vk-lista-letra style={{ padding: "7px 16px 5px", fontSize: 11, fontWeight: 700, letterSpacing: 0.6,
+                    color: "#0474f4", background: "#f7f9fc", borderTop: i > 0 ? "1px solid rgba(38,36,33,0.08)" : "none" }}>{letra}</div>
+                )}
+                <div data-vk-lista-item data-vk-lista-idx={i} role="button" tabIndex={-1}
+                  onClick={function () { escolher(it); }} onMouseEnter={function () { setAtivo(i); }}
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: isMobile ? "12px 14px" : "11px 16px",
+                    minHeight: 52, boxSizing: "border-box", cursor: it.apagado ? "default" : "pointer",
+                    borderTop: !cabeca && i > 0 ? "1px solid rgba(38,36,33,0.06)" : "none",
+                    background: marcado && !it.apagado ? "rgba(4,116,244,0.06)" : "#fff", opacity: it.apagado ? 0.55 : 1 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 999, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 12, fontWeight: 700, background: marcado ? "rgba(4,116,244,0.14)" : "#eef5ff", color: "#0474f4" }}>
+                    {iniciaisDaListaDeSelecao(it.titulo)}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "#111827", overflowWrap: "anywhere", lineHeight: 1.3 }}>{it.titulo}</div>
+                    {it.subtitulo ? (
+                      <div style={{ fontSize: 12.5, color: "#6b7280", marginTop: 1, overflowWrap: "anywhere", lineHeight: 1.3 }}>{it.subtitulo}</div>
+                    ) : null}
+                  </div>
+                  {it.etiqueta ? (
+                    <span style={{ fontSize: 11, fontWeight: 600, color: it.corEtiqueta || "#4b5563", background: it.fundoEtiqueta || "#f3f4f6",
+                      borderRadius: 999, padding: "3px 9px", flexShrink: 0, whiteSpace: "nowrap" }}>{it.etiqueta}</span>
+                  ) : null}
+                  {it.acoes ? <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={function (e) { e.stopPropagation(); }}>{it.acoes}</div> : null}
+                  {!it.apagado && <span aria-hidden style={{ color: marcado ? "#0474f4" : "#c4c9d2", fontSize: 18, lineHeight: 1, flexShrink: 0 }}>›</span>}
+                </div>
+              </Fragment>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

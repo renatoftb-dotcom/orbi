@@ -2955,9 +2955,18 @@ function ListaDeSelecao({ itens, aoEscolher, placeholder, vazio, isMobile, topo,
   let letraAnterior = "";
   return (
     <div data-vk-lista-selecao style={{ maxWidth: 960, minWidth: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12,
+      {/* A moldura é a da pílula: o campo de dentro não ganha a borda, o
+          halo nem a altura mínima que a regra geral dos campos dá. */}
+      <style>{`
+        [data-vk-lista-selecao] input[data-vk-lista-busca],
+        [data-vk-lista-selecao] input[data-vk-lista-busca]:hover,
+        [data-vk-lista-selecao] input[data-vk-lista-busca]:focus {
+          border: none !important; box-shadow: none !important; outline: none !important; min-height: 0 !important;
+        }`}</style>
+      <div onClick={function () { if (refBusca.current) refBusca.current.focus(); }}
+        style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, cursor: "text",
         border: "1.5px solid " + (focada ? "rgba(4,116,244,0.55)" : "rgba(38,36,33,0.14)"),
-        borderRadius: 999, background: "#fff", padding: isMobile ? "10px 14px" : "11px 18px",
+        borderRadius: 999, background: "#fff", padding: isMobile ? "12px 16px" : "11px 18px",
         transition: "border-color .15s, box-shadow .15s",
         boxShadow: focada ? "0 0 0 4px rgba(4,116,244,0.10)" : "0 1px 2px rgba(38,36,33,0.04)" }}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
@@ -3008,9 +3017,9 @@ function ListaDeSelecao({ itens, aoEscolher, placeholder, vazio, isMobile, topo,
                     {iniciaisDaListaDeSelecao(it.titulo)}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.titulo}</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "#111827", overflowWrap: "anywhere", lineHeight: 1.3 }}>{it.titulo}</div>
                     {it.subtitulo ? (
-                      <div style={{ fontSize: 12.5, color: "#6b7280", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.subtitulo}</div>
+                      <div style={{ fontSize: 12.5, color: "#6b7280", marginTop: 1, overflowWrap: "anywhere", lineHeight: 1.3 }}>{it.subtitulo}</div>
                     ) : null}
                   </div>
                   {it.etiqueta ? (
@@ -48032,15 +48041,13 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   // A tela de entrada dos clientes: alfabética e sempre na mesma ordem, com
   // a busca no alto. O Kanban (por situação) continua a um clique.
   if (view === "list") {
+    // Na linha, só o nome completo. CPF/CNPJ, cidade, contato e obra
+    // continuam valendo na busca, sem ocupar a lista.
     const itensLista = data.clientes.map(c => {
-      const tel = c.contatos?.find(ct=>ct.whatsapp)?.telefone||c.contatos?.[0]?.telefone||"";
       const obrasDoCli = (data.obras || []).filter(o => o && o.clienteId === c.id).map(o => o.nome || o.referencia || "");
       return {
-        id: c.id, titulo: c.nome, subtitulo: [c.cpfCnpj, c.cidade].filter(Boolean).join(" · "),
-        // Só o inativo leva etiqueta: "Ativo" em todo mundo é ruído.
-        etiqueta: colunaDoCliente(c) === "inativos" ? "Inativo" : "",
-        busca: [c.email, (c.contatos || []).map(ct => ct && ct.nome).join(" "), obrasDoCli.join(" ")].filter(Boolean).join(" "),
-        acoes: tel ? <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#111827", textDecoration:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"4px 10px" }}>WA</a> : null,
+        id: c.id, titulo: c.nome,
+        busca: [c.cpfCnpj, c.cidade, c.email, (c.contatos || []).map(ct => ct && ct.nome).join(" "), obrasDoCli.join(" ")].filter(Boolean).join(" "),
         cliente: c,
       };
     });

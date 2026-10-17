@@ -24,8 +24,15 @@ const c = src.indexOf(ABRE2), d = src.indexOf(FECHA2);
 if (c < 0 || d < 0) throw new Error("Marcadores da parte pura da Selecao n\u00e3o encontrados em shared.jsx");
 const puro2 = src.slice(c, d);
 
-const api = new Function(puro + "\n" + puro2 + `
-  return { buscaNormal, opcoesNormalizadas, filtrarOpcoes, textoDeFilhos, opcoesDosFilhos, rotuloDeCriar };`)();
+const ABRE3 = "// \u2500\u2500 ListaDeSelecao: parte pura";
+const FECHA3 = "// \u2500\u2500 ListaDeSelecao: fim da parte pura";
+const e3 = src.indexOf(ABRE3), f3 = src.indexOf(FECHA3);
+if (e3 < 0 || f3 < 0) throw new Error("Marcadores da parte pura da ListaDeSelecao n\u00e3o encontrados em shared.jsx");
+const puro3 = src.slice(e3, f3);
+
+const api = new Function(puro + "\n" + puro2 + "\n" + puro3 + `
+  return { buscaNormal, opcoesNormalizadas, filtrarOpcoes, textoDeFilhos, opcoesDosFilhos, rotuloDeCriar,
+    ordemDaListaDeSelecao, filtrarListaDeSelecao, letraDaListaDeSelecao, iniciaisDaListaDeSelecao };`)();
 
 let ok = 0; const falhas = [];
 function t(nome, fn) {
@@ -213,6 +220,45 @@ t("as opções lidas alimentam o filtro normalmente", () => {
 });
 
 // ── resultado ─────────────────────────────────
+
+// ── ListaDeSelecao ─────────────────────────────
+
+t("lista de seleção: ordem alfabética fixa, sem acento, número natural", () => {
+  const { ordemDaListaDeSelecao: ordem } = api;
+  const l = ordem([
+    { id: "4", titulo: "Jacarezinho Módulo 10" }, { id: "1", titulo: "COBOP COMÉRCIO" },
+    { id: "3", titulo: "Jacarezinho Módulo 2" }, { id: "2", titulo: "Ângela Souza" },
+    { id: "5", titulo: "Márcio Viezzer", subtitulo: "Obra Teste" }, { id: "6", titulo: "márcio viezzer", subtitulo: "Casa" },
+  ]);
+  eq(l.map(x => x.titulo + (x.subtitulo ? "/" + x.subtitulo : "")),
+    ["Ângela Souza", "COBOP COMÉRCIO", "Jacarezinho Módulo 2", "Jacarezinho Módulo 10", "márcio viezzer/Casa", "Márcio Viezzer/Obra Teste"]);
+});
+
+t("lista de seleção: a ordem não depende da ordem de entrada", () => {
+  const { ordemDaListaDeSelecao: ordem } = api;
+  const base = [{ id: "a", titulo: "Beta" }, { id: "b", titulo: "Alfa" }, { id: "c", titulo: "Alfa" }];
+  eq(ordem(base).map(x => x.id), ordem(base.slice().reverse()).map(x => x.id));
+});
+
+t("lista de seleção: busca palavra por palavra no título, subtítulo e extras", () => {
+  const { filtrarListaDeSelecao: filtrar } = api;
+  const l = [
+    { id: "1", titulo: "COBOP COMÉRCIO DE BOMBAS", subtitulo: "Reforma Loja Cobop" },
+    { id: "2", titulo: "Alexandre Pimentel", subtitulo: "", busca: "Royal Park Prime Ourinhos" },
+  ];
+  eq(filtrar(l, "cobop reforma").map(x => x.id), ["1"]);
+  eq(filtrar(l, "comercio").map(x => x.id), ["1"]);
+  eq(filtrar(l, "royal ourinhos").map(x => x.id), ["2"]);
+  eq(filtrar(l, "").map(x => x.id), ["1", "2"]);
+  eq(filtrar(l, "xyz").length, 0);
+});
+
+t("lista de seleção: letra do grupo e iniciais", () => {
+  eq(api.letraDaListaDeSelecao("Ângela"), "A");
+  eq(api.letraDaListaDeSelecao("3D Studio"), "#");
+  eq(api.iniciaisDaListaDeSelecao("Jacarezinho Módulo 1"), "JM");
+  eq(api.iniciaisDaListaDeSelecao(""), "·");
+});
 
 if (falhas.length) {
   console.log("\n❌ " + falhas.length + " falha(s):\n");

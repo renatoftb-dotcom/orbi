@@ -889,15 +889,13 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   // A tela de entrada dos clientes: alfabética e sempre na mesma ordem, com
   // a busca no alto. O Kanban (por situação) continua a um clique.
   if (view === "list") {
+    // Na linha, só o nome completo. CPF/CNPJ, cidade, contato e obra
+    // continuam valendo na busca, sem ocupar a lista.
     const itensLista = data.clientes.map(c => {
-      const tel = c.contatos?.find(ct=>ct.whatsapp)?.telefone||c.contatos?.[0]?.telefone||"";
       const obrasDoCli = (data.obras || []).filter(o => o && o.clienteId === c.id).map(o => o.nome || o.referencia || "");
       return {
-        id: c.id, titulo: c.nome, subtitulo: [c.cpfCnpj, c.cidade].filter(Boolean).join(" · "),
-        // Só o inativo leva etiqueta: "Ativo" em todo mundo é ruído.
-        etiqueta: colunaDoCliente(c) === "inativos" ? "Inativo" : "",
-        busca: [c.email, (c.contatos || []).map(ct => ct && ct.nome).join(" "), obrasDoCli.join(" ")].filter(Boolean).join(" "),
-        acoes: tel ? <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#111827", textDecoration:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"4px 10px" }}>WA</a> : null,
+        id: c.id, titulo: c.nome,
+        busca: [c.cpfCnpj, c.cidade, c.email, (c.contatos || []).map(ct => ct && ct.nome).join(" "), obrasDoCli.join(" ")].filter(Boolean).join(" "),
         cliente: c,
       };
     });
