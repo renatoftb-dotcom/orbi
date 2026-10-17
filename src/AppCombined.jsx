@@ -15002,6 +15002,9 @@ function refDaParcela(c) {
 
 function ehLigacaoDaGestao(origem) {
   const o = origem || {};
+  // a conta avulsa de gestão (obra sem contrato) é uma transação comum de
+  // duas pontas: excluir um lado apaga o outro, não reabre parcela
+  if (o.avulsa) return false;
   return !!o.obraId && (o.tipo === "gestao" || o.tipo === "estorno"
     || (o.tipo === "conta" && o.contaObra === EF_CONTA_GESTAO_NA_OBRA));
 }
@@ -16400,6 +16403,15 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     || !!f.estorno || (!lancNovo && Number((inicial || {}).valor) < 0);
   const ligadoAntes = !!(inicial && ehLigacaoDaGestao(inicial.origem));
   const temGestao = !naObra && ehReceitaDaGestao(f) && !!obraDaGestao && contasDaGestao(obraDaGestao).length > 0;
+  // Obra SEM contrato de gestão: sem parcela, a receita ficaria só no
+  // escritório — a obra não veria o custo do gerenciamento. A tela avisa e
+  // oferece lançar dos dois lados: uma conta paga de "Gerenciamento de obra"
+  // na obra, ligada a este lançamento.
+  const jaLigadoNaObra = !!(inicial && inicial.origem && inicial.origem.obraId);
+  const gestaoSemContrato = !naObra && ehReceitaDaGestao(f) && !!obraDaGestao && contasDaGestao(obraDaGestao).length === 0
+    && !jaLigadoNaObra && !(f.sinalDoBanco && ehEstornoNaConta(f.contaId, f.sinalDoBanco)) && !f.estorno
+    && !(!lancNovo && Number((inicial || {}).valor) < 0);
+  const gestaoAvulsa = gestaoSemContrato && f.gestaoAvulsa !== false;
   // O lançamento antigo, de antes da ligação, só entra se a pessoa marcar:
   // o pagamento dele pode já estar contado na parcela, baixado na obra.
   const foraDaGestao = f.foraDaGestao != null ? !!f.foraDaGestao : (!lancNovo && !ligadoAntes);
@@ -16464,8 +16476,10 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     else delete semObraDaParcela.obraEncerrada;
     const noContrato = temGestao ? !foraDaGestao : (ligadoAntes ? false : undefined);
     if (noContrato !== undefined) semObraDaParcela.noContratoGestao = noContrato;
-    const pronto = semFornecedorNaEntrada(comCartao({ ...semObraDaParcela, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
+    const { gestaoAvulsa: _ga, ...semMarcaAvulsa } = semObraDaParcela;
+    const pronto = semFornecedorNaEntrada(comCartao({ ...semMarcaAvulsa, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
       ...(lancNovo && !noCartao ? { contaBanco: regraBanco } : {}),
+      ...(gestaoAvulsa ? { gestaoAvulsaNaObra: true } : {}),
       tipo: "escritorio", valor: efValorDoCampo(g.valor) }));
     aoSalvar((usaReserva && comoPagamentoDaReserva(pronto, lancamentos || [])) || pronto);
   }
@@ -16738,6 +16752,22 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           Obra encerrada / ajuste de obra antiga — lançar sem cliente e obra do cadastro
         </label>
       )}
+      {gestaoSemContrato && (() => {
+        const obraNome = (obraDaGestao && obraDaGestao.nome) || "a obra";
+        const dia = String(f.lancadoEm || "").slice(0, 10).split("-").reverse().join("/");
+        return (
+          <div data-vk-gestao-sem-contrato style={{ fontSize: 12.5, color: "#1e3a5f", background: "#f0f7ff", border: "1px solid rgba(4,116,244,0.25)",
+            borderRadius: 10, padding: "9px 11px", lineHeight: 1.5, display: "grid", gap: 6, marginBottom: 12 }}>
+            <div><b>{obraNome}</b> não tem contrato de gestão — sem ele, esta receita fica só no escritório e a obra não vê o custo do gerenciamento.</div>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 6, cursor: "pointer" }}>
+              <input type="checkbox" checked={gestaoAvulsa} onChange={(e) => set("gestaoAvulsa", e.target.checked)} style={{ marginTop: 3 }} />
+              <span>Lançar também na obra: conta <b>Gerenciamento de obra</b> paga{efValorDoCampo(f.valor) > 0 ? <> de <b>{efDinheiro(efValorDoCampo(f.valor))}</b></> : null}{dia ? ` em ${dia}` : ""},
+                ligada a este lançamento — excluir um lado apaga o outro.</span>
+            </label>
+            <div style={{ fontSize: 11.5, color: "#4b5563" }}>Para acompanhar mês a mês (parcelas e saldo), crie o contrato de gestão na obra: os próximos recebimentos entram nele.</div>
+          </div>
+        );
+      })()}
       {/* O que este lançamento faz no contrato de gestão da obra, antes de
           gravar: a parcela que baixa (ou volta a abrir) e o percentual pago. */}
       {temGestao && (() => {
@@ -18961,6 +18991,24 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   //
   // Obras e lançamentos vão na MESMA gravada: duas seguidas partem do mesmo
   // retrato antigo de `data`, e a segunda apaga o que a primeira escreveu.
+  // Receita da gestão de obra SEM contrato: vira conta paga de
+  // "Gerenciamento de obra" na obra, e o lançamento do escritório nasce dela
+  // pela ponte (Receita Gestão), ligado — as duas pontas da mesma transação.
+  // Editando um lançamento que já existia, ele é substituído pelo ligado,
+  // com a mesma referência e a mesma marca do extrato.
+  function lancarGestaoAvulsaNaObra(l, marca) {
+    const { gestaoAvulsaNaObra: _g, sinalDoBanco: _s, noContratoGestao: _n, ...resto } = l || {};
+    const valor = Math.round(Math.abs(Number(resto.valor) || 0) * 100) / 100;
+    if (!(valor > 0) || !resto.obraId) return false;
+    const nomeEsc = String(((data || {}).escritorio || {}).nome || "").trim() || "Escritório";
+    lancarCustoNaObra({ ...resto, ...(marca || {}), naObra: true, obraIdAlvo: resto.obraId, contaId: EF_CONTA_GESTAO_NA_OBRA,
+      itens: [itemUnicoDoCusto(valor, "", EF_CONTA_GESTAO_NA_OBRA, "Gerenciamento de obra", "")],
+      fornecedor: nomeEsc, fornecedorId: "", valor, formaPagamento: "", estornoNaObra: false,
+      gestaoAvulsa: { descricao: String(resto.descricao || "").trim(), substitui: resto.id || "", numeroDoc: resto.numeroDoc || "",
+        criadoEm: resto.criadoEm || "" } });
+    return true;
+  }
+
   function lancarCustoNaObra(l) {
     const todas = (data || {}).obras || [];
     const obra = todas.find((o) => o && o.id === l.obraIdAlvo);
@@ -18989,7 +19037,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     // Um papel, um número. A nota tem dez itens e dez contas, mas é UMA
     // transação: dar dez referências faria a prestação de contas procurar
     // dez papéis que não existem.
-    const numeroDoc = proximaReferencia(todas, lancamentosDoEscritorio(data));
+    const av = l.gestaoAvulsa || null;
+    const numeroDoc = (av && av.numeroDoc) || proximaReferencia(todas, lancamentosDoEscritorio(data));
     const papeis = anexosDaTransacao(l);
     // No cartão, cada conta leva o seu plano de parcelas: a fatura acha
     // por ele, e a ponte não manda a compra sozinha para o extrato.
@@ -19019,11 +19068,17 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const marca = l.extratoId ? { extratoId: l.extratoId, historicoBanco: l.historicoBanco || "",
       conferido: true, conferidoEm: l.conferidoEm || new Date().toISOString() } : null;
     const daPonte = (marca ? ponte.lancamentos.map((x) => ({ ...x, ...marca })) : ponte.lancamentos)
-      .map((x) => (est ? { ...x, estorno: true, ...(l.estornoDe ? { estornoDe: l.estornoDe } : {}) } : x));
+      .map((x) => (est ? { ...x, estorno: true, ...(l.estornoDe ? { estornoDe: l.estornoDe } : {}) } : x))
+      // gestão avulsa: o lançamento leva a descrição que a pessoa escreveu e
+      // a marca de que a conta da obra não é parcela de contrato
+      .map((x) => (av ? { ...x, origem: { ...(x.origem || {}), avulsa: true },
+        ...(av.descricao ? { descricao: av.descricao } : {}), ...(av.criadoEm ? { criadoEm: av.criadoEm } : {}) } : x));
     // Original da base antiga achado na obra pelo estorno: fica ligado à conta
     // dele agora — as duas pontas passam a ser a mesma transação.
     const lig = l.ligarOriginal;
-    const lancsLigados = lig && lig.id ? lancs.map((x) => (x && x.id === lig.id ? { ...x, origem: lig.origem } : x)) : lancs;
+    const lancsLigados0 = lig && lig.id ? lancs.map((x) => (x && x.id === lig.id ? { ...x, origem: lig.origem } : x)) : lancs;
+    // o lançamento que existia (editado para ligar à obra) dá lugar ao ligado
+    const lancsLigados = av && av.substitui && daPonte.length ? lancsLigados0.filter((x) => x && x.id !== av.substitui) : lancsLigados0;
     save({ ...data, ...catalogoQueAprendeu(l),
       obras: todas.map((o) => (o && o.id === obra.id ? obraNova : o)),
       lancamentos: [...outrosLancamentos, ...lancsLigados, ...daPonte],
@@ -19123,6 +19178,12 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
 
   function salvarLancamento(l) {
     if (l && l.naObra) { lancarCustoNaObra(l); return; }
+    if (l && l.gestaoAvulsaNaObra) {
+      const antes = l.id ? lancs.find((x) => x && x.id === l.id) : null;
+      const marca = antes && antes.extratoId ? { extratoId: antes.extratoId, historicoBanco: antes.historicoBanco || "",
+        conferido: !!antes.conferido, conferidoEm: antes.conferidoEm || "" } : null;
+      if (lancarGestaoAvulsaNaObra({ ...l, numeroDoc: l.numeroDoc || (antes && antes.numeroDoc) || "", criadoEm: (antes && antes.criadoEm) || "" }, marca)) return;
+    }
     // Lançamento novo que vem com pares fora do banco (o pagamento do
     // engenheiro que passa da reserva): grava os dois juntos, ligados.
     if (l && !l.id && Array.isArray(l.recebimentoExtras)) {
@@ -19422,6 +19483,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const marca = { extratoId: l.extratoId || "", historicoBanco: l.historicoBanco || "",
       conferido: true, conferidoEm: agora, contaBanco: l.contaBanco || "sim" };
     if (l && l.naObra) { const { sinalDoBanco, ...semSinal } = l; lancarCustoNaObra({ ...semSinal, ...marca }); return true; }
+    if (l && l.gestaoAvulsaNaObra && lancarGestaoAvulsaNaObra(l, marca)) return true;
     // Parcela de projeto recebida: a linha inteira em Receita Projetos e,
     // havendo engenharia, o custo do parceiro e a reserva que vai pagá-lo.
     if (l && Array.isArray(l.recebimentoExtras)) {
@@ -77626,6 +77688,250 @@ function WhatsappPiloto({ data, usuario }) {
 
 
 // ════════════════════════════════════════════════════════════
+// teste-projeto.jsx
+// ════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// TESTE PROJETO — protótipo de traço de parede (planta + 3D + quantitativo)
+// ═══════════════════════════════════════════════════════════════
+// Módulo isolado de teste: não lê nem grava nada no backend. O usuário
+// clica na planta para marcar pontos; cada trecho vira uma parede com
+// espessura e altura. O 3D é desenhado com Three.js, carregado sob demanda
+// do cdnjs (só quando a tela abre — não entra no bundle). Quantitativo
+// simples: comprimento, área, blocos 14x19x39 (12,5/m² + 5%) e reboco 2 faces.
+
+const TP_AZUL = "#0474f4";
+const TP_MUNDO = 12;   // largura da planta em metros
+const TP_GRADE = 0.5;  // snap
+const tpFmt = (v, d = 2) => Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d });
+const tpLen = (w) => Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y);
+
+let _tpThreePromise = null;
+function tpCarregarThree() {
+  if (typeof window !== "undefined" && window.THREE) return Promise.resolve(window.THREE);
+  if (_tpThreePromise) return _tpThreePromise;
+  _tpThreePromise = new Promise((ok, erro) => {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+    s.onload = () => ok(window.THREE);
+    s.onerror = () => { _tpThreePromise = null; erro(new Error("Não foi possível carregar o 3D.")); };
+    document.head.appendChild(s);
+  });
+  return _tpThreePromise;
+}
+
+function TesteProjeto() {
+  const planRef = useRef(null), v3dRef = useRef(null);
+  const [paredes, setParedes] = useState([
+    { a: { x: 2, y: 2 }, b: { x: 8, y: 2 }, t: 0.14, h: 2.8 },
+    { a: { x: 8, y: 2 }, b: { x: 8, y: 6.5 }, t: 0.14, h: 2.8 },
+    { a: { x: 8, y: 6.5 }, b: { x: 2, y: 6.5 }, t: 0.14, h: 2.8 },
+  ]);
+  const [inicio, setInicio] = useState(null);
+  const [hover, setHover] = useState(null);
+  const [esp, setEsp] = useState("14");
+  const [alt, setAlt] = useState("2,80");
+  const [erro3d, setErro3d] = useState("");
+  const three = useRef(null); // { renderer, scene, camera, group, theta, phi, dist }
+
+  const espM = Math.max(0.05, (parseFloat(String(esp).replace(",", ".")) || 14) / 100);
+  const altM = Math.max(1, parseFloat(String(alt).replace(",", ".")) || 2.8);
+
+  // ---------- planta ----------
+  const escala = () => planRef.current.width / TP_MUNDO;
+  const snap = (v) => Math.round(v / TP_GRADE) * TP_GRADE;
+  const paraMundo = (e) => {
+    const c = planRef.current, r = c.getBoundingClientRect(), s = escala(), k = c.width / r.width;
+    return { x: snap((e.clientX - r.left) * k / s), y: snap((e.clientY - r.top) * k / s) };
+  };
+
+  const desenharPlanta = () => {
+    const c = planRef.current; if (!c) return;
+    const ctx = c.getContext("2d"), s = escala(), W = c.width, H = c.height, dpr = window.devicePixelRatio || 1;
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, W, H);
+    for (let x = 0; x <= TP_MUNDO + 1e-6; x += TP_GRADE) { ctx.strokeStyle = x % 1 === 0 ? "#dfe3e8" : "#f0f2f5"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x * s, 0); ctx.lineTo(x * s, H); ctx.stroke(); }
+    for (let y = 0; y <= H / s + 1e-6; y += TP_GRADE) { ctx.strokeStyle = y % 1 === 0 ? "#dfe3e8" : "#f0f2f5"; ctx.beginPath(); ctx.moveTo(0, y * s); ctx.lineTo(W, y * s); ctx.stroke(); }
+    const todas = inicio && hover && (hover.x !== inicio.x || hover.y !== inicio.y)
+      ? [...paredes, { a: inicio, b: hover, t: espM, fantasma: true }] : paredes;
+    ctx.lineCap = "square";
+    for (const w of todas) {
+      ctx.strokeStyle = w.fantasma ? TP_AZUL : "#374151";
+      ctx.globalAlpha = w.fantasma ? 0.6 : 1;
+      ctx.lineWidth = Math.max(2, w.t * s);
+      ctx.beginPath(); ctx.moveTo(w.a.x * s, w.a.y * s); ctx.lineTo(w.b.x * s, w.b.y * s); ctx.stroke();
+      ctx.globalAlpha = 1;
+      const mx = (w.a.x + w.b.x) / 2 * s, my = (w.a.y + w.b.y) / 2 * s;
+      let ang = Math.atan2(w.b.y - w.a.y, w.b.x - w.a.x); if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
+      ctx.save(); ctx.translate(mx, my); ctx.rotate(ang);
+      ctx.font = `600 ${12 * dpr}px system-ui, sans-serif`; ctx.textAlign = "center";
+      ctx.fillStyle = w.fantasma ? TP_AZUL : "#6b7280";
+      ctx.fillText(tpFmt(tpLen(w)) + " m", 0, -(w.t * s / 2 + 6 * dpr)); ctx.restore();
+    }
+    const ponto = (p, r) => { ctx.fillStyle = TP_AZUL; ctx.beginPath(); ctx.arc(p.x * s, p.y * s, r * dpr, 0, 7); ctx.fill(); };
+    if (hover) ponto(hover, 3);
+    if (inicio) ponto(inicio, 5);
+  };
+
+  // ---------- 3D ----------
+  const desenhar3d = () => {
+    const T = three.current; if (!T || !window.THREE) return;
+    const THREE = window.THREE;
+    while (T.group.children.length) { const m = T.group.children.pop(); m.geometry.dispose(); m.material.dispose(); }
+    T.group.add(new THREE.GridHelper(TP_MUNDO, TP_MUNDO, 0xd1d5db, 0xeef0f3));
+    for (const w of paredes) {
+      const L = tpLen(w); if (!L) continue;
+      const g = new THREE.BoxGeometry(L + w.t, w.h, w.t); // +t fecha os cantos
+      const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: 0xe5e1d8 }));
+      m.position.set((w.a.x + w.b.x) / 2 - TP_MUNDO / 2, w.h / 2, (w.a.y + w.b.y) / 2 - TP_MUNDO * 0.375);
+      m.rotation.y = -Math.atan2(w.b.y - w.a.y, w.b.x - w.a.x);
+      T.group.add(m);
+      const e = new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: 0x4b5563 }));
+      e.position.copy(m.position); e.rotation.copy(m.rotation); T.group.add(e);
+    }
+    T.camera.position.set(T.dist * Math.sin(T.phi) * Math.cos(T.theta), T.dist * Math.cos(T.phi), T.dist * Math.sin(T.phi) * Math.sin(T.theta));
+    T.camera.lookAt(0, 1, 0);
+    T.renderer.render(T.scene, T.camera);
+  };
+
+  const redimensionar = () => {
+    for (const c of [planRef.current, v3dRef.current]) {
+      if (!c) continue;
+      const r = c.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+      c.width = Math.max(1, Math.round(r.width * dpr)); c.height = Math.max(1, Math.round(r.height * dpr));
+    }
+    const T = three.current;
+    if (T) { T.renderer.setSize(v3dRef.current.width, v3dRef.current.height, false); T.camera.aspect = v3dRef.current.width / v3dRef.current.height; T.camera.updateProjectionMatrix(); }
+    desenharPlanta(); desenhar3d();
+  };
+
+  useEffect(() => {
+    let vivo = true;
+    tpCarregarThree().then((THREE) => {
+      if (!vivo || !v3dRef.current) return;
+      const renderer = new THREE.WebGLRenderer({ canvas: v3dRef.current, antialias: true });
+      const scene = new THREE.Scene(); scene.background = new THREE.Color(0xffffff);
+      const camera = new THREE.PerspectiveCamera(40, 4 / 3, 0.1, 200);
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x888877, 0.9));
+      const sol = new THREE.DirectionalLight(0xffffff, 0.6); sol.position.set(6, 12, 4); scene.add(sol);
+      const group = new THREE.Group(); scene.add(group);
+      three.current = { renderer, scene, camera, group, theta: -0.7, phi: 0.9, dist: 16 };
+      redimensionar();
+    }).catch((e) => vivo && setErro3d(e.message));
+    window.addEventListener("resize", redimensionar);
+    return () => {
+      vivo = false; window.removeEventListener("resize", redimensionar);
+      if (three.current) { three.current.renderer.dispose(); three.current = null; }
+    };
+  }, []);
+
+  useEffect(() => { desenharPlanta(); }, [paredes, inicio, hover, espM]);
+  useEffect(() => { desenhar3d(); }, [paredes]);
+  useEffect(() => {
+    const k = (e) => {
+      if (e.key === "Escape") setInicio(null);
+      if ((e.ctrlKey || e.metaKey) && e.key === "z") desfazer();
+    };
+    window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
+  });
+
+  // rotação do 3D por arraste / zoom pela roda
+  const drag = useRef(null);
+  const v3dDown = (e) => { drag.current = { x: e.clientX, y: e.clientY }; e.currentTarget.setPointerCapture(e.pointerId); };
+  const v3dMove = (e) => {
+    const T = three.current; if (!drag.current || !T) return;
+    T.theta -= (e.clientX - drag.current.x) * 0.01;
+    T.phi = Math.min(1.5, Math.max(0.15, T.phi - (e.clientY - drag.current.y) * 0.01));
+    drag.current = { x: e.clientX, y: e.clientY }; desenhar3d();
+  };
+  useEffect(() => {
+    const c = v3dRef.current; if (!c) return;
+    const w = (e) => { const T = three.current; if (!T) return; e.preventDefault(); T.dist = Math.min(40, Math.max(5, T.dist + e.deltaY * 0.01)); desenhar3d(); };
+    c.addEventListener("wheel", w, { passive: false }); return () => c.removeEventListener("wheel", w);
+  });
+
+  const planDown = (e) => {
+    const p = paraMundo(e); setHover(p);
+    if (!inicio) { setInicio(p); return; }
+    if (p.x === inicio.x && p.y === inicio.y) return;
+    setParedes((ps) => [...ps, { a: inicio, b: p, t: espM, h: altM }]);
+    setInicio(p);
+  };
+  function desfazer() {
+    setParedes((ps) => {
+      if (!ps.length) return ps;
+      const ult = ps[ps.length - 1];
+      setInicio((i) => (i ? ult.a : null));
+      return ps.slice(0, -1);
+    });
+  }
+
+  const L = paredes.reduce((s, w) => s + tpLen(w), 0);
+  const A = paredes.reduce((s, w) => s + tpLen(w) * w.h, 0);
+  const blocos = Math.ceil(A * 12.5 * 1.05);
+
+  const btn = { padding: "8px 14px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 14, fontWeight: 500, cursor: "pointer", minHeight: 38 };
+  const lbl = { fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", color: "#6b7280", marginBottom: 4 };
+  const inp = { width: 84, padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, fontVariantNumeric: "tabular-nums" };
+  const pane = { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden", position: "relative", minWidth: 0 };
+  const tag = { position: "absolute", top: 8, left: 10, fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", color: "#9ca3af", pointerEvents: "none" };
+  const card = { padding: "10px 14px", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10 };
+  const val = { fontSize: 20, fontWeight: 600, fontVariantNumeric: "tabular-nums", marginTop: 4, color: "#111827" };
+
+  return (
+    <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", flexDirection: "column", gap: 12 }}>
+      <style>{`
+        [data-vk-tp-views]{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        [data-vk-tp-quant]{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+        @media (max-width: 767px){
+          [data-vk-tp-views]{grid-template-columns:1fr}
+          [data-vk-tp-quant]{grid-template-columns:1fr 1fr}
+        }
+      `}</style>
+      <div>
+        <div style={{ fontSize: 22, fontWeight: 700, color: "#111827" }}>Teste Projeto</div>
+        <div style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>
+          {inicio
+            ? "Clique para fechar este trecho. A próxima parede começa no mesmo ponto. \"Finalizar traço\" ou Esc encerra."
+            : "Clique na planta para marcar o início da parede."}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end" }}>
+        <div><div style={lbl}>Espessura (cm)</div><input id="tp-esp" style={inp} inputMode="decimal" value={esp} onChange={(e) => setEsp(e.target.value)} /></div>
+        <div><div style={lbl}>Altura (m)</div><input id="tp-alt" style={inp} inputMode="decimal" value={alt} onChange={(e) => setAlt(e.target.value)} /></div>
+        <button style={{ ...btn, background: TP_AZUL, borderColor: TP_AZUL, color: "#fff" }} onClick={() => setInicio(null)}>Finalizar traço</button>
+        <button style={btn} onClick={desfazer}>Desfazer</button>
+        <button style={btn} onClick={() => { setParedes([]); setInicio(null); }}>Limpar</button>
+      </div>
+
+      <div data-vk-tp-views>
+        <div style={pane}>
+          <span style={tag}>Planta · grade 0,50 m</span>
+          <canvas ref={planRef} style={{ display: "block", width: "100%", aspectRatio: "4 / 3", touchAction: "none", cursor: "crosshair" }}
+            onPointerDown={planDown} onPointerMove={(e) => setHover(paraMundo(e))} onPointerLeave={() => !inicio && setHover(null)} />
+        </div>
+        <div style={pane}>
+          <span style={tag}>3D · arraste para girar</span>
+          <canvas ref={v3dRef} style={{ display: "block", width: "100%", aspectRatio: "4 / 3", touchAction: "none" }}
+            onPointerDown={v3dDown} onPointerMove={v3dMove} onPointerUp={() => (drag.current = null)} />
+          {erro3d && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#6b7280", fontSize: 13, padding: 16, textAlign: "center" }}>{erro3d} Verifique a conexão e abra a tela de novo.</div>}
+        </div>
+      </div>
+
+      <div data-vk-tp-quant>
+        <div style={card}><div style={lbl}>Paredes</div><div style={val}>{paredes.length}</div></div>
+        <div style={card}><div style={lbl}>Comprimento</div><div style={val}>{tpFmt(L)} m</div></div>
+        <div style={card}><div style={lbl}>Área de parede</div><div style={val}>{tpFmt(A)} m²</div></div>
+        <div style={card}><div style={lbl}>Blocos 14×19×39</div><div style={val}>{blocos.toLocaleString("pt-BR")} un</div></div>
+        <div style={card}><div style={lbl}>Reboco 2 faces</div><div style={val}>{tpFmt(A * 2)} m²</div></div>
+      </div>
+      <div style={{ fontSize: 12, color: "#9ca3af" }}>Teste isolado: nada é salvo. Blocos a 12,5 un/m² + 5% de perda, sem descontar portas e janelas.</div>
+    </div>
+  );
+}
+
+
+// ════════════════════════════════════════════════════════════
 // app.jsx
 // ════════════════════════════════════════════════════════════
 
@@ -77724,6 +78030,9 @@ function IconeMaster({ nome, tamanho = 18, cor = "currentColor" }) {
     case "insumos":
       // Caixa/pacote — catálogo de insumos
       return (<svg {...props}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>);
+    case "teste-projeto":
+      // Régua/esquadro — protótipo de traço de parede
+      return (<svg {...props}><path d="M3 21V3l18 18z"/><path d="M7 17v-4l4 4z"/></svg>);
     case "whatsapp":
       // Balão de conversa redondo — teste do WhatsApp
       return (<svg {...props}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>);
@@ -79205,6 +79514,7 @@ export default function ModuloClientesFornecedores() {
     { k:"fornecedores", icon:"prestadores", label:"Fornecedores" },
     { k:"insumos",     icon:"insumos",    label:"Insumos", count: data?.materiais?.length },
     ...(waPiloto ? [{ k:"whatsapp-piloto", icon:"whatsapp", label:"WhatsApp (teste)" }] : []),
+    ...(usuario?.empresa_id === "emp_padovan-arquitetos_moebj62t" ? [{ k:"teste-projeto", icon:"teste-projeto", label:"Teste Projeto" }] : []),
     // O Financeiro voltou como módulo Escritório, no fim deste menu.
     // O importador de nota fiscal foi apagado: estava fora do menu desde a
     // Sprint 3 e chamava a API da Anthropic direto do navegador, sem chave.
@@ -79730,6 +80040,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "fornecedores"           && <PrestadoresServico key={fornecedoresKey} data={data} save={save} />}
           {aba === "insumos"                && <Insumos data={data} save={save} />}
           {aba === "whatsapp-piloto" && waPiloto && <WhatsappPiloto data={data} usuario={usuario} />}
+          {aba === "teste-projeto" && <TesteProjeto />}
           {typeof aba === "string" && aba.indexOf("escritorio") === 0 && <Escritorio key={escritorioKey} abaInicial={aba.indexOf(":") > 0 ? aba.slice(aba.indexOf(":") + 1) : "dados"} data={data} save={save} onReload={loadData} aoTrocarAba={(k) => setAba("escritorio:" + k)} />}
           {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} setUsuario={setUsuario} />}
           {/* Sub-abas do menu Master — Admin recebe initialTab pra abrir direto na aba certa */}

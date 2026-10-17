@@ -93,6 +93,9 @@ function IconeMaster({ nome, tamanho = 18, cor = "currentColor" }) {
     case "insumos":
       // Caixa/pacote — catálogo de insumos
       return (<svg {...props}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>);
+    case "teste-projeto":
+      // Régua/esquadro — protótipo de traço de parede
+      return (<svg {...props}><path d="M3 21V3l18 18z"/><path d="M7 17v-4l4 4z"/></svg>);
     case "whatsapp":
       // Balão de conversa redondo — teste do WhatsApp
       return (<svg {...props}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>);
@@ -1574,6 +1577,7 @@ export default function ModuloClientesFornecedores() {
     { k:"fornecedores", icon:"prestadores", label:"Fornecedores" },
     { k:"insumos",     icon:"insumos",    label:"Insumos", count: data?.materiais?.length },
     ...(waPiloto ? [{ k:"whatsapp-piloto", icon:"whatsapp", label:"WhatsApp (teste)" }] : []),
+    ...(usuario?.empresa_id === "emp_padovan-arquitetos_moebj62t" ? [{ k:"teste-projeto", icon:"teste-projeto", label:"Teste Projeto" }] : []),
     // O Financeiro voltou como módulo Escritório, no fim deste menu.
     // O importador de nota fiscal foi apagado: estava fora do menu desde a
     // Sprint 3 e chamava a API da Anthropic direto do navegador, sem chave.
@@ -2099,6 +2103,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "fornecedores"           && <PrestadoresServico key={fornecedoresKey} data={data} save={save} />}
           {aba === "insumos"                && <Insumos data={data} save={save} />}
           {aba === "whatsapp-piloto" && waPiloto && <WhatsappPiloto data={data} usuario={usuario} />}
+          {aba === "teste-projeto" && <TesteProjeto />}
           {typeof aba === "string" && aba.indexOf("escritorio") === 0 && <Escritorio key={escritorioKey} abaInicial={aba.indexOf(":") > 0 ? aba.slice(aba.indexOf(":") + 1) : "dados"} data={data} save={save} onReload={loadData} aoTrocarAba={(k) => setAba("escritorio:" + k)} />}
           {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} setUsuario={setUsuario} />}
           {/* Sub-abas do menu Master — Admin recebe initialTab pra abrir direto na aba certa */}

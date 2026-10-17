@@ -83,6 +83,9 @@ const ORDER = [
   // whatsapp-piloto.jsx: tela do teste grátis da WhatsApp Cloud API (só a
   // empresa piloto). Antes de app.jsx, que monta o menu e a aba.
   "whatsapp-piloto.jsx",
+  // teste-projeto.jsx: protótipo isolado de traço de parede (planta + 3D +
+  // quantitativo). Só no menu da Padovan. Antes de app.jsx, que monta a aba.
+  "teste-projeto.jsx",
   "app.jsx",
   // Rota standalone /render-pdf/:uuid pra Puppeteer capturar PDFs.
   // Tem que vir DEPOIS de orcamento-teste.jsx (pra ter PropostaPreview disponível)
