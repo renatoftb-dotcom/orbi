@@ -590,7 +590,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const abrirMenuCtx = (clientX, clientY, chave, mundo) => {
     if (chave && !sel.includes(chave)) { setSel([chave]); if (ferramenta !== "selecionar" && ferramenta !== "mover") trocarFerramenta("selecionar"); }
     const W = window.innerWidth, H = window.innerHeight;
-    setMenuCtx({ x: Math.max(8, Math.min(clientX, W - 236)), y: Math.max(8, Math.min(clientY, H - 380)), t: Date.now(), mundo: mundo || null });
+    setMenuCtx({ x: Math.max(8, Math.min(clientX, W - 268)), y: Math.max(8, Math.min(clientY, H - 470)), t: Date.now(), mundo: mundo || null });
   };
   const avisar = (txt) => { setAviso(txt); clearTimeout(avisar.t); avisar.t = setTimeout(() => setAviso(""), 3500); };
   // Clique dentro de um cômodo: acha o espaço fechado pelas paredes e pede o nome
@@ -1670,7 +1670,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   );
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 2000, display: "flex", background: "#e5e7eb", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
+    <div onContextMenu={(e) => { const tg = (e.target && e.target.tagName) || ""; if (tg !== "INPUT" && tg !== "TEXTAREA") e.preventDefault(); }}
+      style={{ position: "fixed", inset: 0, zIndex: 2000, display: "flex", background: "#e5e7eb", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
       {menu}
       {isMobile && menuAberto && <div onClick={() => setMenuAberto(false)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.3)", zIndex: 2 }} />}
       <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", position: "relative" }}>
@@ -1829,21 +1830,21 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const item = (rotulo, atalho, acao, opts = {}) => (
           <button key={rotulo} role="menuitem" disabled={opts.desativado}
             onClick={() => { setMenuCtx(null); acao(); }}
-            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, width: "100%", border: "none", background: "transparent", padding: "8px 12px", borderRadius: 6, fontSize: 13.5, fontFamily: "inherit", textAlign: "left",
-              cursor: opts.desativado ? "default" : "pointer", color: opts.desativado ? "#9ca3af" : (opts.perigo ? "#b91c1c" : "#111827"), fontWeight: opts.perigo ? 600 : 500 }}
-            onMouseEnter={(e) => { if (!opts.desativado) e.currentTarget.style.background = opts.perigo ? "#fef2f2" : "#f3f4f6"; }}
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 24, width: "100%", border: "none", background: "transparent", padding: "0 20px", height: 34, borderRadius: 0, fontSize: 14, fontFamily: "inherit", textAlign: "left",
+              cursor: opts.desativado ? "default" : "pointer", color: opts.desativado ? "#9aa0a6" : (opts.perigo ? "#c5221f" : "#202124"), fontWeight: 400 }}
+            onMouseEnter={(e) => { if (!opts.desativado) e.currentTarget.style.background = "#f1f3f4"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
-            <span>{rotulo}</span>{atalho && <span style={{ fontSize: 11.5, color: "#9ca3af" }}>{atalho}</span>}
+            <span>{rotulo}</span>{atalho && <span style={{ fontSize: 13, color: "#5f6368" }}>{atalho}</span>}
           </button>
         );
-        const linha = (k) => <div key={k} style={{ height: 1, background: "#eef0f3", margin: "4px 6px" }} />;
+        const linha = (k) => <div key={k} style={{ height: 1, background: "#dadce0", margin: "6px 0" }} />;
         return (
           <>
             {/* No Windows o evento "contextmenu" chega DEPOIS de soltar o botão direito —
                 ou seja, depois de o menu abrir, já em cima desta camada. Ignorar os
                 primeiros 400 ms evita que o próprio clique que abriu o feche. */}
             <div onPointerDown={() => { if (Date.now() - menuCtx.t > 150) setMenuCtx(null); }} onContextMenu={(e) => { e.preventDefault(); if (Date.now() - menuCtx.t > 400) setMenuCtx(null); }} style={{ position: "fixed", inset: 0, zIndex: 9 }} />
-            <div role="menu" style={{ position: "fixed", left: menuCtx.x, top: menuCtx.y, zIndex: 10, width: 228, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", padding: 4 }}>
+            <div role="menu" onContextMenu={(e) => e.preventDefault()} style={{ position: "fixed", left: menuCtx.x, top: menuCtx.y, zIndex: 10, width: 260, background: "#fff", border: "none", borderRadius: 12, boxShadow: "0 2px 6px rgba(60,64,67,0.15), 0 8px 24px rgba(60,64,67,0.2)", padding: "8px 0", overflow: "hidden" }}>
               {desenhando && item("Finalizar traço", "Enter", finalizar)}
               {desenhando && linha("l0")}
               {sel.length > 0 && item(`Excluir${sel.length > 1 ? ` (${sel.length})` : ""}`, "Delete", excluirSelecao, { perigo: true })}
