@@ -27,122 +27,207 @@ function tpCarregarThree() {
   return _tpThreePromise;
 }
 
+// Editor em tela cheia: o menu lateral vira o menu do projeto (voltar ao
+// menu principal, visualização, parede, quantitativo). A planta tem zoom
+// (roda do mouse ou botões) e arraste para mover; clique sem arrastar
+// marca ponto. Visualização: só planta, planta + 3D lado a lado, só 3D.
 function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
   const planRef = useRef(null), v3dRef = useRef(null);
+  const planBox = useRef(null), v3dBox = useRef(null);
   const [paredes, setParedes] = useState(() => (Array.isArray(projeto.paredes) ? projeto.paredes : []));
-  const primeiraVez = useRef(true);
-  useEffect(() => {
-    if (primeiraVez.current) { primeiraVez.current = false; return; }
-    onAlterar({ ...projeto, paredes, atualizadoEm: new Date().toISOString() });
-  }, [paredes]);
   const [inicio, setInicio] = useState(null);
   const [hover, setHover] = useState(null);
   const [esp, setEsp] = useState("14");
   const [alt, setAlt] = useState("2,80");
+  const [modo, setModo] = useState("ambos"); // planta | ambos | 3d
+  const [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
+  const [menuAberto, setMenuAberto] = useState(false);
+  const [confirmarLimpar, setConfirmarLimpar] = useState(false);
   const [erro3d, setErro3d] = useState("");
-  const three = useRef(null); // { renderer, scene, camera, group, theta, phi, dist }
+  const [, forcar] = useState(0);
+  const three = useRef(null);
+  const vista = useRef(null); // { s: px por metro (device px), ox, oy }
+  const primeiraVez = useRef(true);
 
   const espM = Math.max(0.05, (parseFloat(String(esp).replace(",", ".")) || 14) / 100);
   const altM = Math.max(1, parseFloat(String(alt).replace(",", ".")) || 2.8);
 
-  // ---------- planta ----------
-  const escala = () => planRef.current.width / TP_MUNDO;
-  const snap = (v) => Math.round(v / TP_GRADE) * TP_GRADE;
-  const paraMundo = (e) => {
-    const c = planRef.current, r = c.getBoundingClientRect(), s = escala(), k = c.width / r.width;
-    return { x: snap((e.clientX - r.left) * k / s), y: snap((e.clientY - r.top) * k / s) };
+  useEffect(() => {
+    if (primeiraVez.current) { primeiraVez.current = false; return; }
+    onAlterar({ ...projeto, paredes, atualizadoEm: new Date().toISOString() });
+  }, [paredes]);
+
+  // trava a rolagem da página enquanto o editor ocupa a tela
+  useEffect(() => {
+    const antes = document.body.style.overflow; document.body.style.overflow = "hidden";
+    const r = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", r);
+    return () => { document.body.style.overflow = antes; window.removeEventListener("resize", r); };
+  }, []);
+
+  // ---------- vista da planta ----------
+  const limites = (ws) => {
+    if (!ws.length) return { x0: 0, y0: 0, x1: 12, y1: 9 };
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const w of ws) for (const p of [w.a, w.b]) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
+    return { x0, y0, x1: Math.max(x1, x0 + 1), y1: Math.max(y1, y0 + 1) };
   };
+  const ajustar = () => {
+    const c = planRef.current; if (!c || !c.width) return;
+    const b = limites(paredes), m = 1.5;
+    const s = Math.min(c.width / (b.x1 - b.x0 + 2 * m), c.height / (b.y1 - b.y0 + 2 * m));
+    vista.current = { s, ox: c.width / 2 - ((b.x0 + b.x1) / 2) * s, oy: c.height / 2 - ((b.y0 + b.y1) / 2) * s };
+    desenharPlanta();
+  };
+  const zoom = (fator, cx, cy) => {
+    const c = planRef.current, v = vista.current; if (!c || !v) return;
+    const px = cx == null ? c.width / 2 : cx, py = cy == null ? c.height / 2 : cy;
+    const s2 = Math.min(400 * (window.devicePixelRatio || 1), Math.max(4, v.s * fator));
+    const wx = (px - v.ox) / v.s, wy = (py - v.oy) / v.s;
+    vista.current = { s: s2, ox: px - wx * s2, oy: py - wy * s2 };
+    desenharPlanta();
+  };
+  const devPx = (e) => { const c = planRef.current, r = c.getBoundingClientRect(), k = c.width / r.width; return { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k }; };
+  const snap = (v) => Math.round(v / TP_GRADE) * TP_GRADE;
+  const paraMundo = (e) => { const v = vista.current, d = devPx(e); return { x: snap((d.x - v.ox) / v.s), y: snap((d.y - v.oy) / v.s) }; };
 
   const desenharPlanta = () => {
-    const c = planRef.current; if (!c) return;
-    const ctx = c.getContext("2d"), s = escala(), W = c.width, H = c.height, dpr = window.devicePixelRatio || 1;
+    const c = planRef.current, v = vista.current; if (!c || !v || !c.width) return;
+    const ctx = c.getContext("2d"), W = c.width, H = c.height, dpr = window.devicePixelRatio || 1;
     ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, W, H);
-    for (let x = 0; x <= TP_MUNDO + 1e-6; x += TP_GRADE) { ctx.strokeStyle = x % 1 === 0 ? "#dfe3e8" : "#f0f2f5"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x * s, 0); ctx.lineTo(x * s, H); ctx.stroke(); }
-    for (let y = 0; y <= H / s + 1e-6; y += TP_GRADE) { ctx.strokeStyle = y % 1 === 0 ? "#dfe3e8" : "#f0f2f5"; ctx.beginPath(); ctx.moveTo(0, y * s); ctx.lineTo(W, y * s); ctx.stroke(); }
+    const passo = v.s * TP_GRADE < 8 * dpr ? 1 : TP_GRADE;
+    const xA = Math.floor(-v.ox / v.s), xB = Math.ceil((W - v.ox) / v.s), yA = Math.floor(-v.oy / v.s), yB = Math.ceil((H - v.oy) / v.s);
+    ctx.lineWidth = 1;
+    for (let x = xA; x <= xB; x += passo) { const sx = Math.round(x * v.s + v.ox) + 0.5; ctx.strokeStyle = Math.abs(x % 5) < 1e-6 ? "#cfd5dc" : (Math.abs(x % 1) < 1e-6 ? "#e3e7ec" : "#f1f3f6"); ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, H); ctx.stroke(); }
+    for (let y = yA; y <= yB; y += passo) { const sy = Math.round(y * v.s + v.oy) + 0.5; ctx.strokeStyle = Math.abs(y % 5) < 1e-6 ? "#cfd5dc" : (Math.abs(y % 1) < 1e-6 ? "#e3e7ec" : "#f1f3f6"); ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(W, sy); ctx.stroke(); }
+    const T = (p) => [p.x * v.s + v.ox, p.y * v.s + v.oy];
     const todas = inicio && hover && (hover.x !== inicio.x || hover.y !== inicio.y)
       ? [...paredes, { a: inicio, b: hover, t: espM, fantasma: true }] : paredes;
     ctx.lineCap = "square";
     for (const w of todas) {
-      ctx.strokeStyle = w.fantasma ? TP_AZUL : "#374151";
-      ctx.globalAlpha = w.fantasma ? 0.6 : 1;
-      ctx.lineWidth = Math.max(2, w.t * s);
-      ctx.beginPath(); ctx.moveTo(w.a.x * s, w.a.y * s); ctx.lineTo(w.b.x * s, w.b.y * s); ctx.stroke();
-      ctx.globalAlpha = 1;
-      const mx = (w.a.x + w.b.x) / 2 * s, my = (w.a.y + w.b.y) / 2 * s;
-      let ang = Math.atan2(w.b.y - w.a.y, w.b.x - w.a.x); if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
-      ctx.save(); ctx.translate(mx, my); ctx.rotate(ang);
+      const [ax, ay] = T(w.a), [bx, by] = T(w.b);
+      ctx.strokeStyle = w.fantasma ? TP_AZUL : "#374151"; ctx.globalAlpha = w.fantasma ? 0.6 : 1;
+      ctx.lineWidth = Math.max(2, w.t * v.s);
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); ctx.globalAlpha = 1;
+      let ang = Math.atan2(by - ay, bx - ax); if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
+      ctx.save(); ctx.translate((ax + bx) / 2, (ay + by) / 2); ctx.rotate(ang);
       ctx.font = `600 ${12 * dpr}px system-ui, sans-serif`; ctx.textAlign = "center";
       ctx.fillStyle = w.fantasma ? TP_AZUL : "#6b7280";
-      ctx.fillText(tpFmt(tpLen(w)) + " m", 0, -(w.t * s / 2 + 6 * dpr)); ctx.restore();
+      ctx.fillText(tpFmt(tpLen(w)) + " m", 0, -(w.t * v.s / 2 + 6 * dpr)); ctx.restore();
     }
-    const ponto = (p, r) => { ctx.fillStyle = TP_AZUL; ctx.beginPath(); ctx.arc(p.x * s, p.y * s, r * dpr, 0, 7); ctx.fill(); };
+    const ponto = (p, r) => { const [x, y] = T(p); ctx.fillStyle = TP_AZUL; ctx.beginPath(); ctx.arc(x, y, r * dpr, 0, 7); ctx.fill(); };
     if (hover) ponto(hover, 3);
     if (inicio) ponto(inicio, 5);
+    // escala gráfica
+    const m = v.s >= 60 * dpr ? 1 : (v.s >= 25 * dpr ? 2 : 5);
+    ctx.fillStyle = "#374151"; ctx.fillRect(16 * dpr, H - 20 * dpr, m * v.s, 3 * dpr);
+    ctx.font = `500 ${11 * dpr}px system-ui, sans-serif`; ctx.textAlign = "left";
+    ctx.fillText(m + " m", 16 * dpr, H - 26 * dpr);
   };
 
   // ---------- 3D ----------
   const desenhar3d = () => {
-    const T = three.current; if (!T || !window.THREE) return;
+    const T = three.current, c = v3dRef.current; if (!T || !window.THREE || !c || !c.width) return;
     const THREE = window.THREE;
     while (T.group.children.length) { const m = T.group.children.pop(); m.geometry.dispose(); m.material.dispose(); }
-    T.group.add(new THREE.GridHelper(TP_MUNDO, TP_MUNDO, 0xd1d5db, 0xeef0f3));
+    const b = limites(paredes), cx = (b.x0 + b.x1) / 2, cz = (b.y0 + b.y1) / 2;
+    const tam = Math.max(12, Math.ceil(Math.max(b.x1 - b.x0, b.y1 - b.y0) + 6));
+    T.group.add(new THREE.GridHelper(tam, tam, 0xd1d5db, 0xeef0f3));
     for (const w of paredes) {
       const L = tpLen(w); if (!L) continue;
-      const g = new THREE.BoxGeometry(L + w.t, w.h, w.t); // +t fecha os cantos
+      const g = new THREE.BoxGeometry(L + w.t, w.h, w.t);
       const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: 0xe5e1d8 }));
-      m.position.set((w.a.x + w.b.x) / 2 - TP_MUNDO / 2, w.h / 2, (w.a.y + w.b.y) / 2 - TP_MUNDO * 0.375);
+      m.position.set((w.a.x + w.b.x) / 2 - cx, w.h / 2, (w.a.y + w.b.y) / 2 - cz);
       m.rotation.y = -Math.atan2(w.b.y - w.a.y, w.b.x - w.a.x);
       T.group.add(m);
       const e = new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: 0x4b5563 }));
       e.position.copy(m.position); e.rotation.copy(m.rotation); T.group.add(e);
     }
+    T.camera.aspect = c.width / c.height; T.camera.updateProjectionMatrix();
     T.camera.position.set(T.dist * Math.sin(T.phi) * Math.cos(T.theta), T.dist * Math.cos(T.phi), T.dist * Math.sin(T.phi) * Math.sin(T.theta));
     T.camera.lookAt(0, 1, 0);
     T.renderer.render(T.scene, T.camera);
   };
 
-  const redimensionar = () => {
-    for (const c of [planRef.current, v3dRef.current]) {
-      if (!c) continue;
-      const r = c.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
-      c.width = Math.max(1, Math.round(r.width * dpr)); c.height = Math.max(1, Math.round(r.height * dpr));
-    }
-    const T = three.current;
-    if (T) { T.renderer.setSize(v3dRef.current.width, v3dRef.current.height, false); T.camera.aspect = v3dRef.current.width / v3dRef.current.height; T.camera.updateProjectionMatrix(); }
-    desenharPlanta(); desenhar3d();
-  };
+  // dimensiona cada canvas pelo seu quadro (muda com a visualização e a janela).
+  // O observador vive o tempo todo, então chama sempre as funções do render atual.
+  const atual = useRef({});
+  atual.current = { ajustar, desenharPlanta, desenhar3d };
+  useEffect(() => {
+    const ajustarCanvas = (canvas) => {
+      if (!canvas) return false;
+      const r = canvas.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+      const w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
+      if (!w || !h || (canvas.width === w && canvas.height === h)) return false;
+      canvas.width = w; canvas.height = h; return true;
+    };
+    const ro = new ResizeObserver(() => {
+      const c = planRef.current, antes = c ? { w: c.width, h: c.height } : null;
+      if (ajustarCanvas(planRef.current)) {
+        if (!vista.current || !antes || !antes.w) atual.current.ajustar();
+        else { const v = vista.current; vista.current = { ...v, ox: v.ox + (c.width - antes.w) / 2, oy: v.oy + (c.height - antes.h) / 2 }; atual.current.desenharPlanta(); }
+      }
+      if (ajustarCanvas(v3dRef.current) && three.current) { three.current.renderer.setSize(v3dRef.current.width, v3dRef.current.height, false); atual.current.desenhar3d(); }
+    });
+    if (planBox.current) ro.observe(planBox.current);
+    if (v3dBox.current) ro.observe(v3dBox.current);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     let vivo = true;
     tpCarregarThree().then((THREE) => {
       if (!vivo || !v3dRef.current) return;
       const renderer = new THREE.WebGLRenderer({ canvas: v3dRef.current, antialias: true });
+      if (v3dRef.current.width) renderer.setSize(v3dRef.current.width, v3dRef.current.height, false);
       const scene = new THREE.Scene(); scene.background = new THREE.Color(0xffffff);
-      const camera = new THREE.PerspectiveCamera(40, 4 / 3, 0.1, 200);
+      const camera = new THREE.PerspectiveCamera(40, 4 / 3, 0.1, 400);
       scene.add(new THREE.HemisphereLight(0xffffff, 0x888877, 0.9));
       const sol = new THREE.DirectionalLight(0xffffff, 0.6); sol.position.set(6, 12, 4); scene.add(sol);
       const group = new THREE.Group(); scene.add(group);
-      three.current = { renderer, scene, camera, group, theta: -0.7, phi: 0.9, dist: 16 };
-      redimensionar();
+      const b = limites(paredes);
+      three.current = { renderer, scene, camera, group, theta: -0.7, phi: 0.9, dist: Math.max(14, Math.max(b.x1 - b.x0, b.y1 - b.y0) * 1.6) };
+      desenhar3d();
     }).catch((e) => vivo && setErro3d(e.message));
-    window.addEventListener("resize", redimensionar);
-    return () => {
-      vivo = false; window.removeEventListener("resize", redimensionar);
-      if (three.current) { three.current.renderer.dispose(); three.current = null; }
-    };
+    return () => { vivo = false; if (three.current) { three.current.renderer.dispose(); three.current = null; } };
   }, []);
 
   useEffect(() => { desenharPlanta(); }, [paredes, inicio, hover, espM]);
   useEffect(() => { desenhar3d(); }, [paredes]);
+  useEffect(() => { const k = (e) => { if (e.key === "Escape") setInicio(null); if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); desfazer(); } }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); });
+
+  // roda do mouse: zoom na planta (no cursor) e no 3D
   useEffect(() => {
-    const k = (e) => {
-      if (e.key === "Escape") setInicio(null);
-      if ((e.ctrlKey || e.metaKey) && e.key === "z") desfazer();
-    };
-    window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
+    const p = planRef.current, t = v3dRef.current;
+    const wp = (e) => { e.preventDefault(); const d = devPx(e); zoom(e.deltaY < 0 ? 1.15 : 1 / 1.15, d.x, d.y); };
+    const wt = (e) => { const T = three.current; if (!T) return; e.preventDefault(); T.dist = Math.min(150, Math.max(4, T.dist * (e.deltaY < 0 ? 0.9 : 1.1))); desenhar3d(); };
+    p && p.addEventListener("wheel", wp, { passive: false }); t && t.addEventListener("wheel", wt, { passive: false });
+    return () => { p && p.removeEventListener("wheel", wp); t && t.removeEventListener("wheel", wt); };
   });
 
-  // rotação do 3D por arraste / zoom pela roda
+  // planta: clique marca ponto, arrastar move a vista
+  const gesto = useRef(null);
+  const planDown = (e) => { const d = devPx(e); gesto.current = { x: d.x, y: d.y, moveu: false }; e.currentTarget.setPointerCapture(e.pointerId); };
+  const planMove = (e) => {
+    const g = gesto.current, d = devPx(e);
+    if (g) {
+      const dpr = window.devicePixelRatio || 1;
+      if (!g.moveu && Math.hypot(d.x - g.x, d.y - g.y) > 6 * dpr) g.moveu = true;
+      if (g.moveu) { const v = vista.current; vista.current = { ...v, ox: v.ox + d.x - g.x, oy: v.oy + d.y - g.y }; g.x = d.x; g.y = d.y; desenharPlanta(); return; }
+    }
+    setHover(paraMundo(e));
+  };
+  const planUp = (e) => {
+    const g = gesto.current; gesto.current = null;
+    if (!g || g.moveu) return;
+    const p = paraMundo(e); setHover(p);
+    if (!inicio) { setInicio(p); return; }
+    if (p.x === inicio.x && p.y === inicio.y) return;
+    setParedes((ps) => [...ps, { a: inicio, b: p, t: espM, h: altM }]);
+    setInicio(p);
+  };
+
+  // 3D: arrastar gira
   const drag = useRef(null);
   const v3dDown = (e) => { drag.current = { x: e.clientX, y: e.clientY }; e.currentTarget.setPointerCapture(e.pointerId); };
   const v3dMove = (e) => {
@@ -151,19 +236,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
     T.phi = Math.min(1.5, Math.max(0.15, T.phi - (e.clientY - drag.current.y) * 0.01));
     drag.current = { x: e.clientX, y: e.clientY }; desenhar3d();
   };
-  useEffect(() => {
-    const c = v3dRef.current; if (!c) return;
-    const w = (e) => { const T = three.current; if (!T) return; e.preventDefault(); T.dist = Math.min(40, Math.max(5, T.dist + e.deltaY * 0.01)); desenhar3d(); };
-    c.addEventListener("wheel", w, { passive: false }); return () => c.removeEventListener("wheel", w);
-  });
 
-  const planDown = (e) => {
-    const p = paraMundo(e); setHover(p);
-    if (!inicio) { setInicio(p); return; }
-    if (p.x === inicio.x && p.y === inicio.y) return;
-    setParedes((ps) => [...ps, { a: inicio, b: p, t: espM, h: altM }]);
-    setInicio(p);
-  };
   function desfazer() {
     setParedes((ps) => {
       if (!ps.length) return ps;
@@ -177,69 +250,118 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
   const A = paredes.reduce((s, w) => s + tpLen(w) * w.h, 0);
   const blocos = Math.ceil(A * 12.5 * 1.05);
 
-  const btn = { padding: "8px 14px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 14, fontWeight: 500, cursor: "pointer", minHeight: 38 };
-  const lbl = { fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", color: "#6b7280", marginBottom: 4 };
-  const inp = { width: 84, padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, fontVariantNumeric: "tabular-nums" };
-  const pane = { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden", position: "relative", minWidth: 0 };
-  const tag = { position: "absolute", top: 8, left: 10, fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", color: "#9ca3af", pointerEvents: "none" };
-  const card = { padding: "10px 14px", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10 };
-  const val = { fontSize: 20, fontWeight: 600, fontVariantNumeric: "tabular-nums", marginTop: 4, color: "#111827" };
+  // ---------- estilos ----------
+  const btn = { padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 13.5, fontWeight: 500, cursor: "pointer", minHeight: 36, fontFamily: "inherit" };
+  const secao = { fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "#9ca3af", margin: "18px 0 8px" };
+  const lbl = { fontSize: 12, color: "#4b5563", marginBottom: 4 };
+  const inp = { width: "100%", boxSizing: "border-box", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, fontVariantNumeric: "tabular-nums", fontFamily: "inherit" };
+  const linhaQ = { display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "6px 0", borderBottom: "1px solid #f0f2f5", fontSize: 13 };
+  const numQ = { fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" };
+  const pane = { position: "relative", background: "#fff", minWidth: 0, minHeight: 0, overflow: "hidden" };
+  const tag = { position: "absolute", top: 10, left: 12, fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", color: "#9ca3af", pointerEvents: "none", zIndex: 1 };
+  const ctrl = { width: 34, height: 34, borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer", fontSize: 16, fontWeight: 600, color: "#374151", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit" };
 
-  return (
-    <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", flexDirection: "column", gap: 12 }}>
-      <style>{`
-        [data-vk-tp-views]{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-        [data-vk-tp-quant]{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
-        @media (max-width: 767px){
-          [data-vk-tp-views]{grid-template-columns:1fr}
-          [data-vk-tp-quant]{grid-template-columns:1fr 1fr}
-        }
-      `}</style>
-      <div>
-        <button style={{ ...btn, border: "none", background: "transparent", padding: "4px 0", minHeight: 0, color: TP_AZUL }} onClick={onVoltar}>← Projetos</button>
-        <div style={{ fontSize: 22, fontWeight: 700, color: "#111827", marginTop: 4 }}>{projeto.nome}</div>
-        <div style={{ fontSize: 13, color: "#374151", marginTop: 2 }}>Cliente: {nomeCliente || "—"}</div>
-        <div style={{ fontSize: 13, color: "#6b7280", marginTop: 6 }}>
-          {inicio
-            ? "Clique para fechar este trecho. A próxima parede começa no mesmo ponto. \"Finalizar traço\" ou Esc encerra."
-            : "Clique na planta para marcar o início da parede."}
-        </div>
+  const mostraPlanta = modo !== "3d", mostra3d = modo !== "planta";
+  const MODOS = [{ id: "planta", rotulo: "Planta" }, { id: "ambos", rotulo: "Planta + 3D" }, { id: "3d", rotulo: "3D" }];
+
+  const menu = (
+    <aside style={{ width: isMobile ? "min(86vw, 300px)" : 268, flexShrink: 0, background: "#fff", borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", height: "100%", boxSizing: "border-box",
+      paddingTop: "max(14px, env(safe-area-inset-top, 0px))", paddingBottom: "max(14px, env(safe-area-inset-bottom, 0px))", paddingLeft: "max(16px, env(safe-area-inset-left, 0px))", paddingRight: 16, overflowY: "auto",
+      ...(isMobile ? { position: "absolute", top: 0, left: 0, bottom: 0, zIndex: 3, boxShadow: "4px 0 20px rgba(0,0,0,0.15)", transform: menuAberto ? "none" : "translateX(-105%)", transition: "transform .2s ease" } : {}) }}>
+      <button onClick={onVoltar} style={{ ...btn, border: "none", background: "#f3f4f6", textAlign: "left", display: "flex", alignItems: "center", gap: 8 }}>
+        <span aria-hidden="true">←</span> Menu principal
+      </button>
+      <div style={{ marginTop: 16 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#111827", lineHeight: 1.25, wordBreak: "break-word" }}>{projeto.nome}</div>
+        <div style={{ fontSize: 12.5, color: "#6b7280", marginTop: 3 }}>{nomeCliente || "Sem cliente"}</div>
       </div>
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end" }}>
+      <div style={secao}>Visualização</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
+        {MODOS.map((m) => (
+          <button key={m.id} onClick={() => { setModo(m.id); if (isMobile) setMenuAberto(false); }}
+            style={{ ...btn, textAlign: "left", borderColor: modo === m.id ? TP_AZUL : "#e5e7eb", background: modo === m.id ? "#eef5ff" : "#fff", color: modo === m.id ? TP_AZUL : "#111827", fontWeight: modo === m.id ? 600 : 500 }}>
+            {m.rotulo}
+          </button>
+        ))}
+      </div>
+
+      <div style={secao}>Parede</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
         <div><div style={lbl}>Espessura (cm)</div><input id="tp-esp" style={inp} inputMode="decimal" value={esp} onChange={(e) => setEsp(e.target.value)} /></div>
         <div><div style={lbl}>Altura (m)</div><input id="tp-alt" style={inp} inputMode="decimal" value={alt} onChange={(e) => setAlt(e.target.value)} /></div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
         <button style={{ ...btn, background: TP_AZUL, borderColor: TP_AZUL, color: "#fff" }} onClick={() => setInicio(null)}>Finalizar traço</button>
-        <button style={btn} onClick={desfazer}>Desfazer</button>
-        <button style={btn} onClick={() => { setParedes([]); setInicio(null); }}>Limpar</button>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+          <button style={btn} onClick={desfazer}>Desfazer</button>
+          <button style={btn} onClick={() => setConfirmarLimpar(true)}>Limpar</button>
+        </div>
+        {confirmarLimpar && (
+          <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: 10, fontSize: 12.5, color: "#7f1d1d" }}>
+            Apagar todas as paredes deste projeto?
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <button style={{ ...btn, minHeight: 30, padding: "4px 10px", fontSize: 12.5 }} onClick={() => setConfirmarLimpar(false)}>Cancelar</button>
+              <button style={{ ...btn, minHeight: 30, padding: "4px 10px", fontSize: 12.5, background: "#b91c1c", borderColor: "#b91c1c", color: "#fff" }} onClick={() => { setParedes([]); setInicio(null); setConfirmarLimpar(false); }}>Apagar</button>
+            </div>
+          </div>
+        )}
       </div>
 
-      <div data-vk-tp-views>
-        <div style={pane}>
-          <span style={tag}>Planta · grade 0,50 m</span>
-          <canvas ref={planRef} style={{ display: "block", width: "100%", aspectRatio: "4 / 3", touchAction: "none", cursor: "crosshair" }}
-            onPointerDown={planDown} onPointerMove={(e) => setHover(paraMundo(e))} onPointerLeave={() => !inicio && setHover(null)} />
-        </div>
-        <div style={pane}>
-          <span style={tag}>3D · arraste para girar</span>
-          <canvas ref={v3dRef} style={{ display: "block", width: "100%", aspectRatio: "4 / 3", touchAction: "none" }}
-            onPointerDown={v3dDown} onPointerMove={v3dMove} onPointerUp={() => (drag.current = null)} />
-          {erro3d && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#6b7280", fontSize: 13, padding: 16, textAlign: "center" }}>{erro3d} Verifique a conexão e abra a tela de novo.</div>}
-        </div>
+      <div style={secao}>Quantitativo</div>
+      <div>
+        <div style={linhaQ}><span>Paredes</span><span style={numQ}>{paredes.length}</span></div>
+        <div style={linhaQ}><span>Comprimento</span><span style={numQ}>{tpFmt(L)} m</span></div>
+        <div style={linhaQ}><span>Área de parede</span><span style={numQ}>{tpFmt(A)} m²</span></div>
+        <div style={linhaQ}><span>Blocos 14×19×39</span><span style={numQ}>{blocos.toLocaleString("pt-BR")} un</span></div>
+        <div style={linhaQ}><span>Reboco 2 faces</span><span style={numQ}>{tpFmt(A * 2)} m²</span></div>
       </div>
+      <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 10, lineHeight: 1.4 }}>Teste: salvo só neste navegador. Blocos a 12,5 un/m² + 5%, sem descontar aberturas.</div>
+    </aside>
+  );
 
-      <div data-vk-tp-quant>
-        <div style={card}><div style={lbl}>Paredes</div><div style={val}>{paredes.length}</div></div>
-        <div style={card}><div style={lbl}>Comprimento</div><div style={val}>{tpFmt(L)} m</div></div>
-        <div style={card}><div style={lbl}>Área de parede</div><div style={val}>{tpFmt(A)} m²</div></div>
-        <div style={card}><div style={lbl}>Blocos 14×19×39</div><div style={val}>{blocos.toLocaleString("pt-BR")} un</div></div>
-        <div style={card}><div style={lbl}>Reboco 2 faces</div><div style={val}>{tpFmt(A * 2)} m²</div></div>
-      </div>
-      <div style={{ fontSize: 12, color: "#9ca3af" }}>Teste: o desenho fica salvo só neste navegador, ainda não vai para o servidor. Blocos a 12,5 un/m² + 5% de perda, sem descontar portas e janelas.</div>
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 2000, display: "flex", background: "#e5e7eb", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
+      {menu}
+      {isMobile && menuAberto && <div onClick={() => setMenuAberto(false)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.3)", zIndex: 2 }} />}
+      <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#fff", borderBottom: "1px solid #e5e7eb",
+          paddingTop: isMobile ? "max(8px, env(safe-area-inset-top, 0px))" : 8, paddingBottom: 8, paddingLeft: isMobile ? "max(12px, env(safe-area-inset-left, 0px))" : 14, paddingRight: "max(12px, env(safe-area-inset-right, 0px))" }}>
+          {isMobile && <button aria-label="Abrir menu do projeto" onClick={() => setMenuAberto(true)} style={{ ...ctrl, fontSize: 18 }}>☰</button>}
+          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "nowrap" : "normal" }}>
+            {isMobile && <strong style={{ color: "#111827", marginRight: 6 }}>{projeto.nome}</strong>}
+            {inicio ? "Clique para fechar o trecho. Esc ou “Finalizar traço” encerra." : "Clique na planta para iniciar uma parede. Arraste para mover a vista."}
+          </div>
+          {isMobile && (
+            <div style={{ display: "flex", gap: 4 }}>
+              {MODOS.map((m) => <button key={m.id} onClick={() => setModo(m.id)} style={{ ...btn, minHeight: 30, padding: "4px 8px", fontSize: 12, borderColor: modo === m.id ? TP_AZUL : "#e5e7eb", color: modo === m.id ? TP_AZUL : "#374151", background: modo === m.id ? "#eef5ff" : "#fff" }}>{m.id === "ambos" ? "2" : m.rotulo}</button>)}
+            </div>
+          )}
+        </div>
+        <div style={{ flex: 1, minHeight: 0, display: "grid", gap: 1, background: "#e5e7eb",
+          gridTemplateColumns: modo === "ambos" && !isMobile ? "1fr 1fr" : "1fr", gridTemplateRows: modo === "ambos" && isMobile ? "1fr 1fr" : "1fr",
+          paddingBottom: "env(safe-area-inset-bottom, 0px)", paddingRight: "env(safe-area-inset-right, 0px)" }}>
+          <div ref={planBox} style={{ ...pane, display: mostraPlanta ? "block" : "none" }}>
+            <span style={tag}>Planta baixa · grade 0,50 m</span>
+            <canvas ref={planRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none", cursor: "crosshair" }}
+              onPointerDown={planDown} onPointerMove={planMove} onPointerUp={planUp} onPointerLeave={() => { if (!inicio && !gesto.current) setHover(null); }} />
+            <div style={{ position: "absolute", right: 12, bottom: 12, display: "flex", flexDirection: "column", gap: 6, zIndex: 1 }}>
+              <button aria-label="Aproximar" style={ctrl} onClick={() => zoom(1.25)}>+</button>
+              <button aria-label="Afastar" style={ctrl} onClick={() => zoom(1 / 1.25)}>−</button>
+              <button aria-label="Ajustar à tela" title="Ajustar à tela" style={{ ...ctrl, fontSize: 13 }} onClick={ajustar}>⤢</button>
+            </div>
+          </div>
+          <div ref={v3dBox} style={{ ...pane, display: mostra3d ? "block" : "none" }}>
+            <span style={tag}>3D · arraste para girar</span>
+            <canvas ref={v3dRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none" }}
+              onPointerDown={v3dDown} onPointerMove={v3dMove} onPointerUp={() => (drag.current = null)} />
+            {erro3d && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#6b7280", fontSize: 13, padding: 16, textAlign: "center" }}>{erro3d} Verifique a conexão e abra o projeto de novo.</div>}
+          </div>
+        </div>
+      </main>
     </div>
   );
 }
-
 
 // ───────────────────────────────────────────────────────────────
 // Lista de projetos + novo projeto (nome + cliente). Fase de teste:
@@ -408,11 +530,9 @@ function TpProjetosDoCliente({ cliente }) {
 
   if (aberto) {
     return (
-      <div style={{ marginTop: 20, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16, padding: 16 }}>
-        <TpEditor key={aberto.id} projeto={aberto} nomeCliente={cliente.nome}
-          onAlterar={(p) => salvarLista(tpLer(empresaId).map((x) => (x.id === p.id ? p : x)))}
-          onVoltar={() => { setTodos(tpLer(empresaId)); setAbertoId(null); }} />
-      </div>
+      <TpEditor key={aberto.id} projeto={aberto} nomeCliente={cliente.nome}
+        onAlterar={(p) => salvarLista(tpLer(empresaId).map((x) => (x.id === p.id ? p : x)))}
+        onVoltar={() => { setTodos(tpLer(empresaId)); setAbertoId(null); }} />
     );
   }
 
