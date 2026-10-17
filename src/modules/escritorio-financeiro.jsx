@@ -3391,6 +3391,9 @@ function refDaParcela(c) {
 
 function ehLigacaoDaGestao(origem) {
   const o = origem || {};
+  // a conta avulsa de gestão (obra sem contrato) é uma transação comum de
+  // duas pontas: excluir um lado apaga o outro, não reabre parcela
+  if (o.avulsa) return false;
   return !!o.obraId && (o.tipo === "gestao" || o.tipo === "estorno"
     || (o.tipo === "conta" && o.contaObra === EF_CONTA_GESTAO_NA_OBRA));
 }
@@ -4789,6 +4792,15 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     || !!f.estorno || (!lancNovo && Number((inicial || {}).valor) < 0);
   const ligadoAntes = !!(inicial && ehLigacaoDaGestao(inicial.origem));
   const temGestao = !naObra && ehReceitaDaGestao(f) && !!obraDaGestao && contasDaGestao(obraDaGestao).length > 0;
+  // Obra SEM contrato de gestão: sem parcela, a receita ficaria só no
+  // escritório — a obra não veria o custo do gerenciamento. A tela avisa e
+  // oferece lançar dos dois lados: uma conta paga de "Gerenciamento de obra"
+  // na obra, ligada a este lançamento.
+  const jaLigadoNaObra = !!(inicial && inicial.origem && inicial.origem.obraId);
+  const gestaoSemContrato = !naObra && ehReceitaDaGestao(f) && !!obraDaGestao && contasDaGestao(obraDaGestao).length === 0
+    && !jaLigadoNaObra && !(f.sinalDoBanco && ehEstornoNaConta(f.contaId, f.sinalDoBanco)) && !f.estorno
+    && !(!lancNovo && Number((inicial || {}).valor) < 0);
+  const gestaoAvulsa = gestaoSemContrato && f.gestaoAvulsa !== false;
   // O lançamento antigo, de antes da ligação, só entra se a pessoa marcar:
   // o pagamento dele pode já estar contado na parcela, baixado na obra.
   const foraDaGestao = f.foraDaGestao != null ? !!f.foraDaGestao : (!lancNovo && !ligadoAntes);
@@ -4853,8 +4865,10 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     else delete semObraDaParcela.obraEncerrada;
     const noContrato = temGestao ? !foraDaGestao : (ligadoAntes ? false : undefined);
     if (noContrato !== undefined) semObraDaParcela.noContratoGestao = noContrato;
-    const pronto = semFornecedorNaEntrada(comCartao({ ...semObraDaParcela, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
+    const { gestaoAvulsa: _ga, ...semMarcaAvulsa } = semObraDaParcela;
+    const pronto = semFornecedorNaEntrada(comCartao({ ...semMarcaAvulsa, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
       ...(lancNovo && !noCartao ? { contaBanco: regraBanco } : {}),
+      ...(gestaoAvulsa ? { gestaoAvulsaNaObra: true } : {}),
       tipo: "escritorio", valor: efValorDoCampo(g.valor) }));
     aoSalvar((usaReserva && comoPagamentoDaReserva(pronto, lancamentos || [])) || pronto);
   }
@@ -5127,6 +5141,22 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           Obra encerrada / ajuste de obra antiga — lançar sem cliente e obra do cadastro
         </label>
       )}
+      {gestaoSemContrato && (() => {
+        const obraNome = (obraDaGestao && obraDaGestao.nome) || "a obra";
+        const dia = String(f.lancadoEm || "").slice(0, 10).split("-").reverse().join("/");
+        return (
+          <div data-vk-gestao-sem-contrato style={{ fontSize: 12.5, color: "#1e3a5f", background: "#f0f7ff", border: "1px solid rgba(4,116,244,0.25)",
+            borderRadius: 10, padding: "9px 11px", lineHeight: 1.5, display: "grid", gap: 6, marginBottom: 12 }}>
+            <div><b>{obraNome}</b> não tem contrato de gestão — sem ele, esta receita fica só no escritório e a obra não vê o custo do gerenciamento.</div>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 6, cursor: "pointer" }}>
+              <input type="checkbox" checked={gestaoAvulsa} onChange={(e) => set("gestaoAvulsa", e.target.checked)} style={{ marginTop: 3 }} />
+              <span>Lançar também na obra: conta <b>Gerenciamento de obra</b> paga{efValorDoCampo(f.valor) > 0 ? <> de <b>{efDinheiro(efValorDoCampo(f.valor))}</b></> : null}{dia ? ` em ${dia}` : ""},
+                ligada a este lançamento — excluir um lado apaga o outro.</span>
+            </label>
+            <div style={{ fontSize: 11.5, color: "#4b5563" }}>Para acompanhar mês a mês (parcelas e saldo), crie o contrato de gestão na obra: os próximos recebimentos entram nele.</div>
+          </div>
+        );
+      })()}
       {/* O que este lançamento faz no contrato de gestão da obra, antes de
           gravar: a parcela que baixa (ou volta a abrir) e o percentual pago. */}
       {temGestao && (() => {
@@ -7350,6 +7380,24 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   //
   // Obras e lançamentos vão na MESMA gravada: duas seguidas partem do mesmo
   // retrato antigo de `data`, e a segunda apaga o que a primeira escreveu.
+  // Receita da gestão de obra SEM contrato: vira conta paga de
+  // "Gerenciamento de obra" na obra, e o lançamento do escritório nasce dela
+  // pela ponte (Receita Gestão), ligado — as duas pontas da mesma transação.
+  // Editando um lançamento que já existia, ele é substituído pelo ligado,
+  // com a mesma referência e a mesma marca do extrato.
+  function lancarGestaoAvulsaNaObra(l, marca) {
+    const { gestaoAvulsaNaObra: _g, sinalDoBanco: _s, noContratoGestao: _n, ...resto } = l || {};
+    const valor = Math.round(Math.abs(Number(resto.valor) || 0) * 100) / 100;
+    if (!(valor > 0) || !resto.obraId) return false;
+    const nomeEsc = String(((data || {}).escritorio || {}).nome || "").trim() || "Escritório";
+    lancarCustoNaObra({ ...resto, ...(marca || {}), naObra: true, obraIdAlvo: resto.obraId, contaId: EF_CONTA_GESTAO_NA_OBRA,
+      itens: [itemUnicoDoCusto(valor, "", EF_CONTA_GESTAO_NA_OBRA, "Gerenciamento de obra", "")],
+      fornecedor: nomeEsc, fornecedorId: "", valor, formaPagamento: "", estornoNaObra: false,
+      gestaoAvulsa: { descricao: String(resto.descricao || "").trim(), substitui: resto.id || "", numeroDoc: resto.numeroDoc || "",
+        criadoEm: resto.criadoEm || "" } });
+    return true;
+  }
+
   function lancarCustoNaObra(l) {
     const todas = (data || {}).obras || [];
     const obra = todas.find((o) => o && o.id === l.obraIdAlvo);
@@ -7378,7 +7426,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     // Um papel, um número. A nota tem dez itens e dez contas, mas é UMA
     // transação: dar dez referências faria a prestação de contas procurar
     // dez papéis que não existem.
-    const numeroDoc = proximaReferencia(todas, lancamentosDoEscritorio(data));
+    const av = l.gestaoAvulsa || null;
+    const numeroDoc = (av && av.numeroDoc) || proximaReferencia(todas, lancamentosDoEscritorio(data));
     const papeis = anexosDaTransacao(l);
     // No cartão, cada conta leva o seu plano de parcelas: a fatura acha
     // por ele, e a ponte não manda a compra sozinha para o extrato.
@@ -7408,11 +7457,17 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const marca = l.extratoId ? { extratoId: l.extratoId, historicoBanco: l.historicoBanco || "",
       conferido: true, conferidoEm: l.conferidoEm || new Date().toISOString() } : null;
     const daPonte = (marca ? ponte.lancamentos.map((x) => ({ ...x, ...marca })) : ponte.lancamentos)
-      .map((x) => (est ? { ...x, estorno: true, ...(l.estornoDe ? { estornoDe: l.estornoDe } : {}) } : x));
+      .map((x) => (est ? { ...x, estorno: true, ...(l.estornoDe ? { estornoDe: l.estornoDe } : {}) } : x))
+      // gestão avulsa: o lançamento leva a descrição que a pessoa escreveu e
+      // a marca de que a conta da obra não é parcela de contrato
+      .map((x) => (av ? { ...x, origem: { ...(x.origem || {}), avulsa: true },
+        ...(av.descricao ? { descricao: av.descricao } : {}), ...(av.criadoEm ? { criadoEm: av.criadoEm } : {}) } : x));
     // Original da base antiga achado na obra pelo estorno: fica ligado à conta
     // dele agora — as duas pontas passam a ser a mesma transação.
     const lig = l.ligarOriginal;
-    const lancsLigados = lig && lig.id ? lancs.map((x) => (x && x.id === lig.id ? { ...x, origem: lig.origem } : x)) : lancs;
+    const lancsLigados0 = lig && lig.id ? lancs.map((x) => (x && x.id === lig.id ? { ...x, origem: lig.origem } : x)) : lancs;
+    // o lançamento que existia (editado para ligar à obra) dá lugar ao ligado
+    const lancsLigados = av && av.substitui && daPonte.length ? lancsLigados0.filter((x) => x && x.id !== av.substitui) : lancsLigados0;
     save({ ...data, ...catalogoQueAprendeu(l),
       obras: todas.map((o) => (o && o.id === obra.id ? obraNova : o)),
       lancamentos: [...outrosLancamentos, ...lancsLigados, ...daPonte],
@@ -7512,6 +7567,12 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
 
   function salvarLancamento(l) {
     if (l && l.naObra) { lancarCustoNaObra(l); return; }
+    if (l && l.gestaoAvulsaNaObra) {
+      const antes = l.id ? lancs.find((x) => x && x.id === l.id) : null;
+      const marca = antes && antes.extratoId ? { extratoId: antes.extratoId, historicoBanco: antes.historicoBanco || "",
+        conferido: !!antes.conferido, conferidoEm: antes.conferidoEm || "" } : null;
+      if (lancarGestaoAvulsaNaObra({ ...l, numeroDoc: l.numeroDoc || (antes && antes.numeroDoc) || "", criadoEm: (antes && antes.criadoEm) || "" }, marca)) return;
+    }
     // Lançamento novo que vem com pares fora do banco (o pagamento do
     // engenheiro que passa da reserva): grava os dois juntos, ligados.
     if (l && !l.id && Array.isArray(l.recebimentoExtras)) {
@@ -7811,6 +7872,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const marca = { extratoId: l.extratoId || "", historicoBanco: l.historicoBanco || "",
       conferido: true, conferidoEm: agora, contaBanco: l.contaBanco || "sim" };
     if (l && l.naObra) { const { sinalDoBanco, ...semSinal } = l; lancarCustoNaObra({ ...semSinal, ...marca }); return true; }
+    if (l && l.gestaoAvulsaNaObra && lancarGestaoAvulsaNaObra(l, marca)) return true;
     // Parcela de projeto recebida: a linha inteira em Receita Projetos e,
     // havendo engenharia, o custo do parceiro e a reserva que vai pagá-lo.
     if (l && Array.isArray(l.recebimentoExtras)) {

@@ -39,7 +39,7 @@ const M = new Function(src + `
            efNomeDoFornecedor, EF_FORNECEDOR_OUTROS,
            custoDoLancamento, validarCustoEmItens, itemUnicoDoCusto, itensDoCustoOuUnico, padraoDaContaDaObra,
            comIdsDosMovimentos, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
-           sugestaoDoExtrato, palpiteDoExtrato, sugestaoCompletaDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao, fornecedorPadraoDaConta, contaDeEntradaNoEscritorio, semFornecedorNaEntrada, clienteRapidoDoLancamento,
+           sugestaoDoExtrato, palpiteDoExtrato, sugestaoCompletaDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao, fornecedorPadraoDaConta, contaDeEntradaNoEscritorio, semFornecedorNaEntrada, clienteRapidoDoLancamento, ehLigacaoDaGestao,
            ehReceitaDaGestao, contaEhEntradaEscritorio, rotuloDoPapelLido, refDaParcela, gestaoNaObra, desfazerGestaoNaObra, parcelaDoLancamento, parcelaDoMesNaGestao, recalibrarGestao, previaDaGestao, contasDaGestao,
            extratosComArquivo, movimentosGuardadosDoMes, ignoradosGuardados, extratosComIgnorado, efLinhasDoHtml, efLinhasDoOfx, saldoDoExtratoNoMes, efTabelaDoArquivo };`)();
 
@@ -2870,6 +2870,28 @@ teste("cliente novo de dentro do lançamento: nome obrigatório, serviço pela u
   const pj = M.clienteRapidoDoLancamento({ nome: "Cobop", cpfCnpj: "12.345.678/0001-90" }, "gestao_obras", "c2");
   assert.strictEqual(pj.tipo, "PJ");
   assert.strictEqual(pj.servicos.gestaoObra, true);
+});
+
+teste("gestão sem contrato: a conta paga de Gerenciamento na obra vira Receita Gestão ligada, e excluir apaga os dois lados", () => {
+  const cli = { id: "cA", nome: "Alexandre Pimentel", servicos: { gestaoObra: true } };
+  const ob = { id: "rp", nome: "Royal Park Prime", clienteId: "cA", contasPagar: [] };
+  const conta = { id: "g1", contaId: "taxa_admin_obra", pago: true, pagoEm: "2026-10-07", valor: 1800, valorPago: 1800,
+    descricao: "Gerenciamento de obra", favorecido: "Padovan", numeroDoc: "0201" };
+  const obNova = { ...ob, contasPagar: [conta] };
+  const r = M.lancamentosDaBaixa(obNova, cli, [conta], { ...OPC });
+  assert.strictEqual(r.lancamentos.length, 1);
+  const l = { ...r.lancamentos[0], origem: { ...r.lancamentos[0].origem, avulsa: true } };
+  assert.strictEqual(l.contaId, "rec_gestao");
+  assert.strictEqual(l.unidadeId, "gestao_obras");
+  assert.strictEqual(l.valor, 1800);
+  assert.strictEqual(l.competencia, "2026-10");
+  // não é parcela de contrato: segue o caminho comum de duas pontas
+  assert.strictEqual(M.ehLigacaoDaGestao(l.origem), false);
+  assert.strictEqual(M.ehLigacaoDaGestao(r.lancamentos[0].origem), true, "sem a marca, seria tratado como parcela");
+  assert.deepStrictEqual(M.contasLigadasAoLancamento(obNova, l).map((c) => c.id), ["g1"]);
+  // a ponte não cria de novo
+  const outra = M.lancamentosDaBaixa(obNova, cli, [conta], { ...OPC, lancamentos: [l] });
+  assert.strictEqual(outra.lancamentos.length, 0);
 });
 
 for (const [nome, fn] of testes) {
