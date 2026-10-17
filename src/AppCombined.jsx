@@ -77873,7 +77873,7 @@ function tpTelhadoGeo(t) {
   const areaProjecao = tpAreaPoli(contorno);
   const areaReal = facetas.reduce((s, f) => s + tpAreaPoli(f.pts) * Math.sqrt(1 + f.s * f.s), 0);
   const cumeeira = Math.max(cota, ...facetas.flatMap((f) => f.pts.map(z)));
-  return { lados, contorno, facetas, z, convexo, areaProjecao, areaReal, cumeeira };
+  return { lados, contorno, facetas, z, convexo, areaProjecao, areaReal, cumeeira, cota };
 }
 
 // Editor em tela cheia. Elementos: paredes (segmentos) e áreas (contrapiso e
@@ -77975,10 +77975,26 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
     mudar(paredes.map((w, i) => (fp.has(i) ? { ...w, a: mv(w.a), b: mv(w.b) } : w)), areas.map((a, i) => (fa.has(i) ? { ...a, pts: a.pts.map(mv) } : a)), true);
   };
   const trocarFerramenta = (f) => { setFerramenta(f); setInicio(null); setPoli([]); setDigitado(""); if (f !== "selecionar" && f !== "mover") { setSel([]); ultimaFerramenta.current = f; } };
+  // Nível do apoio do telhado: automático = topo do que está embaixo dele
+  // (laje: nível + espessura; parede: altura). Só vale o digitado depois que o
+  // usuário muda o campo (cotaManual), como o "deslocamento da base" do Revit.
+  const apoioTelhado = (a) => {
+    if (a.cotaManual) return a.cota || 0;
+    const pts = a.pts || []; let topo = 0, achou = false;
+    for (const l of areas) {
+      if (l.tipo !== "laje" || !l.pts || l.pts.length < 3) continue;
+      if (tpDentroPoli(tpCentro(l.pts), pts)) { topo = Math.max(topo, (l.cota || 0) + (l.esp || 0)); achou = true; }
+    }
+    for (const w of paredes) {
+      if (tpDentroPoli({ x: (w.a.x + w.b.x) / 2, y: (w.a.y + w.b.y) / 2 }, pts)) { topo = Math.max(topo, w.h || 0); achou = true; }
+    }
+    return achou ? r3(topo) : (a.cota != null ? a.cota : altM);
+  };
+  const geoTelhado = (a) => tpTelhadoGeo({ ...a, cota: apoioTelhado(a) });
   const finalizarPoli = () => {
     if (poli.length >= 3 && ferramenta === "telhado") {
       const tel = TP_TELHAS[0];
-      mudar(null, [...areas, { tipo: "telhado", pts: poli, cota: altM, beiral: 0.6, telha: tel.id, lados: poli.map(() => ({ inclina: true, pct: tel.pct })) }]);
+      mudar(null, [...areas, { tipo: "telhado", pts: poli, cota: null, cotaManual: false, beiral: 0.6, telha: tel.id, lados: poli.map(() => ({ inclina: true, pct: tel.pct })) }]);
     } else if (poli.length >= 3 && tpEhPoli(ferramenta)) {
       const t = TP_AREA_TIPOS[ferramenta];
       mudar(null, [...areas, { tipo: ferramenta, pts: poli, esp: t.esp, cota: ferramenta === "laje" ? altM : 0 }]);
@@ -78132,7 +78148,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
     // seta de caimento com a porcentagem em cada água
     areas.forEach((a, i) => {
       if (a.tipo !== "telhado" || !a.pts || a.pts.length < 3) return;
-      const marc = marcadas.has("a" + i), g = tpTelhadoGeo(a), cor = marc ? TP_AZUL : "#9a4a26";
+      const marc = marcadas.has("a" + i), g = geoTelhado(a), cor = marc ? TP_AZUL : "#9a4a26";
       caminho(g.contorno); ctx.fillStyle = marc ? "rgba(4,116,244,0.08)" : "rgba(181,86,47,0.06)"; ctx.fill();
       ctx.setLineDash([10 * dpr, 4 * dpr, 2 * dpr, 4 * dpr]); ctx.strokeStyle = cor; ctx.lineWidth = (marc ? 2.5 : 1.5) * dpr; ctx.stroke(); ctx.setLineDash([]);
       ctx.strokeStyle = cor; ctx.lineWidth = 1 * dpr;
@@ -78243,7 +78259,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
     // (lados sem inclinação) fecham a empena na linha do contorno
     areas.forEach((a, i) => {
       if (a.tipo !== "telhado" || !a.pts || a.pts.length < 3) return;
-      const g = tpTelhadoGeo(a), marc = marcadas.has("a" + i);
+      const g = geoTelhado(a), marc = marcadas.has("a" + i);
       const pos = [];
       const V = (p, zz) => [p.x - cx, zz, p.y - cz];
       for (const f of g.facetas) for (let k = 1; k + 1 < f.pts.length; k++) pos.push(...V(f.pts[0], g.z(f.pts[0])), ...V(f.pts[k], g.z(f.pts[k])), ...V(f.pts[k + 1], g.z(f.pts[k + 1])));
@@ -78256,7 +78272,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
       const emp = [];
       for (const L of g.lados) {
         if (L.inclina && L.s > 0) continue;
-        const N = 24, cotaBase = a.cota || 0;
+        const N = 24, cotaBase = g.cota;
         for (let k = 0; k < N; k++) {
           const p0 = { x: L.a.x + (L.b.x - L.a.x) * k / N, y: L.a.y + (L.b.y - L.a.y) * k / N }, p1 = { x: L.a.x + (L.b.x - L.a.x) * (k + 1) / N, y: L.a.y + (L.b.y - L.a.y) * (k + 1) / N };
           const z0 = g.z(p0), z1 = g.z(p1);
@@ -78593,7 +78609,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
   const somaArea = (tipo, f) => areas.filter((a) => a.tipo === tipo).reduce((s, a) => s + f(a), 0);
   const areaCp = somaArea("contrapiso", (a) => tpAreaPoli(a.pts)), volCp = somaArea("contrapiso", (a) => tpAreaPoli(a.pts) * (a.esp || 0));
   const areaLj = somaArea("laje", (a) => tpAreaPoli(a.pts)), volLj = somaArea("laje", (a) => tpAreaPoli(a.pts) * (a.esp || 0));
-  const telProj = somaArea("telhado", (a) => tpTelhadoGeo(a).areaProjecao), telReal = somaArea("telhado", (a) => tpTelhadoGeo(a).areaReal);
+  const telProj = somaArea("telhado", (a) => geoTelhado(a).areaProjecao), telReal = somaArea("telhado", (a) => geoTelhado(a).areaReal);
   const comum = (lista, f) => { if (!lista.length) return null; const v0 = f(lista[0]); return lista.every((x) => Math.abs(f(x) - v0) < 1e-9) ? v0 : null; };
 
   // ---------- estilos ----------
@@ -78646,7 +78662,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
           </div>
         )}
         {selA.length === 1 && !selP.length && areas[selA[0]].tipo === "telhado" && (() => {
-          const ai = selA[0], a = areas[ai], g = tpTelhadoGeo(a);
+          const ai = selA[0], a = areas[ai], g = geoTelhado(a);
           const mudarLado = (k, patch) => editarAreas([ai], (x) => ({ ...x, lados: x.pts.map((_, j) => ({ inclina: true, pct: tpTelha(x.telha).pct, ...((x.lados || [])[j] || {}), ...(j === k ? patch : {}) })) }));
           return (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -78662,7 +78678,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
                 </button>
               </div>
               <TpCampo id="tp-t-beiral" rotulo="Beiral (cm)" casas={0} min={-0.0001} valor={Math.round((a.beiral || 0) * 100)} onConfirmar={(v) => editarAreas([ai], (x) => ({ ...x, beiral: v / 100 }))} />
-              <TpCampo id="tp-a-cota" rotulo="Nível do apoio (m)" min={-0.0001} valor={a.cota || 0} onConfirmar={(v) => editarAreas([ai], (x) => ({ ...x, cota: v }))} />
+              <div style={{ minWidth: 0 }}>
+                <TpCampo id="tp-a-cota" rotulo="Nível do apoio (m)" min={-0.0001} valor={g.cota} onConfirmar={(v) => editarAreas([ai], (x) => ({ ...x, cota: v, cotaManual: true }))} />
+                {a.cotaManual
+                  ? <button style={{ border: "none", background: "none", color: TP_AZUL, fontSize: 11.5, padding: "3px 0 0", cursor: "pointer", fontFamily: "inherit" }} onClick={() => editarAreas([ai], (x) => ({ ...x, cotaManual: false }))}>Voltar ao automático</button>
+                  : <div style={{ fontSize: 11, color: "#6b7280", paddingTop: 3 }}>automático: topo da laje/paredes</div>}
+              </div>
               <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#4b5563", marginTop: 2 }}>Lados (o número aparece na planta)</div>
               <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 6 }}>
                 {g.lados.map((L, k) => (
