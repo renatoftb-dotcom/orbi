@@ -481,7 +481,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const abrirMenuCtx = (clientX, clientY, chave) => {
     if (chave && !sel.includes(chave)) { setSel([chave]); if (ferramenta !== "selecionar" && ferramenta !== "mover") trocarFerramenta("selecionar"); }
     const W = window.innerWidth, H = window.innerHeight;
-    setMenuCtx({ x: Math.max(8, Math.min(clientX, W - 236)), y: Math.max(8, Math.min(clientY, H - 340)) });
+    setMenuCtx({ x: Math.max(8, Math.min(clientX, W - 236)), y: Math.max(8, Math.min(clientY, H - 340)), t: Date.now() });
   };
   const editarPropriedades = () => {
     if (isMobile) { setMenuAberto(true); return; }
@@ -1473,7 +1473,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const linha = (k) => <div key={k} style={{ height: 1, background: "#eef0f3", margin: "4px 6px" }} />;
         return (
           <>
-            <div onPointerDown={() => setMenuCtx(null)} onContextMenu={(e) => { e.preventDefault(); setMenuCtx(null); }} style={{ position: "fixed", inset: 0, zIndex: 9 }} />
+            {/* No Windows o evento "contextmenu" chega DEPOIS de soltar o botão direito —
+                ou seja, depois de o menu abrir, já em cima desta camada. Ignorar os
+                primeiros 400 ms evita que o próprio clique que abriu o feche. */}
+            <div onPointerDown={() => { if (Date.now() - menuCtx.t > 150) setMenuCtx(null); }} onContextMenu={(e) => { e.preventDefault(); if (Date.now() - menuCtx.t > 400) setMenuCtx(null); }} style={{ position: "fixed", inset: 0, zIndex: 9 }} />
             <div role="menu" style={{ position: "fixed", left: menuCtx.x, top: menuCtx.y, zIndex: 10, width: 228, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", padding: 4 }}>
               {desenhando && item("Finalizar traço", "Enter", finalizar)}
               {desenhando && linha("l0")}
