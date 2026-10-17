@@ -78588,7 +78588,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
       g.x = e.clientX; g.y = e.clientY; desenhar3d(); return;
     }
     T.theta -= (e.clientX - g.x) * 0.01;
-    T.phi = Math.min(1.5, Math.max(0.15, T.phi - (e.clientY - g.y) * 0.01));
+    T.phi = Math.min(Math.PI - 0.05, Math.max(0.05, T.phi - (e.clientY - g.y) * 0.01)); // deixa passar do horizonte: dá para olhar de baixo
     g.x = e.clientX; g.y = e.clientY; desenhar3d();
   };
   const v3dUp = (e) => {
