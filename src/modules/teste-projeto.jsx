@@ -305,6 +305,32 @@ function tpAssinaturaDesenho(pr) {
     t.area, t.m2Parede15, t.m2Parede20, t.m2Parede25, t.perimetroParedes, t.areaLoje, t.perimetroLoje, t.tipoLoje, pr.cobertura || null, (pr.externa || {}).pavimentacao || 0]);
 }
 
+// Arco por 3 pontos (início, fim e um ponto da curva), devolvido como
+// trechos retos curtos (~40 cm) — é assim que parede curva e contorno curvo
+// entram no quantitativo. Pontos alinhados = reta.
+function tpArco3(p0, p2, pm) {
+  const r3 = (x) => Math.round(x * 1000) / 1000;
+  const ax = p0.x, ay = p0.y, bx = pm.x, by = pm.y, cx = p2.x, cy = p2.y;
+  const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+  if (Math.abs(d) < 1e-9) return { pts: [{ x: p2.x, y: p2.y }], r: 0, L: Math.hypot(cx - ax, cy - ay) };
+  const ux = ((ax * ax + ay * ay) * (by - cy) + (bx * bx + by * by) * (cy - ay) + (cx * cx + cy * cy) * (ay - by)) / d;
+  const uy = ((ax * ax + ay * ay) * (cx - bx) + (bx * bx + by * by) * (ax - cx) + (cx * cx + cy * cy) * (bx - ax)) / d;
+  const r = Math.hypot(ax - ux, ay - uy), ang = (q) => Math.atan2(q.y - uy, q.x - ux);
+  const norm = (a) => { while (a < 0) a += 2 * Math.PI; while (a >= 2 * Math.PI) a -= 2 * Math.PI; return a; };
+  const a0 = ang(p0), s1 = norm(ang(p2) - a0), sm = norm(ang(pm) - a0);
+  const sweep = sm < s1 ? s1 : s1 - 2 * Math.PI;
+  const L = Math.abs(sweep) * r, n = Math.max(6, Math.ceil(L / 0.4));
+  const pts = [];
+  for (let k = 1; k <= n; k++) { const a = a0 + sweep * k / n; pts.push({ x: r3(ux + r * Math.cos(a)), y: r3(uy + r * Math.sin(a)) }); }
+  pts[pts.length - 1] = { x: p2.x, y: p2.y };
+  return { pts, r, L };
+}
+const TP_MODOS_TRACO = [
+  { id: "linha", rotulo: "Linha", dica: "Linha: ponto a ponto" },
+  { id: "retangulo", rotulo: "Retângulo", dica: "Retângulo: dois cantos opostos" },
+  { id: "arco", rotulo: "Arco", dica: "Arco: início, fim e um ponto da curva" },
+];
+
 // Editor em tela cheia. Elementos: paredes (segmentos) e áreas (contrapiso e
 // laje, polígonos). Seleção compartilhada entre planta e 3D: chaves "p3"
 // (parede 3) e "a1" (área 1). Ferramentas: Selecionar, Parede, Contrapiso,
@@ -330,6 +356,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const [menuCtx, setMenuCtx] = useState(null); // menu do botão direito { x, y }
   const [digitado, setDigitado] = useState("");  // comprimento digitado durante o traço
   const [verAtalhos, setVerAtalhos] = useState(false);
+  const [modoTraco, setModoTraco] = useState("linha"); // linha | retangulo | arco
+  const [ancora, setAncora] = useState(null);          // { ret: p } ou { arcoIni: p, arcoFim: p }
   const [obraId, setObraId] = useState(projeto.obraId || null);
   const [sincronizar, setSincronizar] = useState(projeto.sincronizar !== false);
   const [ultimaSinc, setUltimaSinc] = useState(null);
@@ -407,7 +435,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const fp = new Set(selP), fa = new Set(selA), mv = (q) => ({ x: r3(q.x + dx), y: r3(q.y + dy) });
     mudar(paredes.map((w, i) => (fp.has(i) ? { ...w, a: mv(w.a), b: mv(w.b) } : w)), areas.map((a, i) => (fa.has(i) ? { ...a, pts: a.pts.map(mv) } : a)), true);
   };
-  const trocarFerramenta = (f) => { setFerramenta(f); setInicio(null); setPoli([]); setDigitado(""); if (f !== "selecionar" && f !== "mover") { setSel([]); ultimaFerramenta.current = f; } };
+  const trocarFerramenta = (f) => { setFerramenta(f); setInicio(null); setPoli([]); setDigitado(""); setAncora(null); if (f !== "selecionar" && f !== "mover") { setSel([]); ultimaFerramenta.current = f; } };
   // Nível do apoio do telhado: automático = topo do que está embaixo dele
   // (laje: nível + espessura; parede: altura). Só vale o digitado depois que o
   // usuário muda o campo (cotaManual), como o "deslocamento da base" do Revit.
@@ -465,17 +493,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     setObraId(obraNova.id);
     setPainelObra("feito");
   };
-  const finalizarPoli = () => {
-    if (poli.length >= 3 && ferramenta === "telhado") {
+  const criarArea = (pts) => {
+    if (pts.length >= 3 && ferramenta === "telhado") {
       const tel = TP_TELHAS[0];
-      mudar(null, [...areas, { tipo: "telhado", pts: poli, cota: null, cotaManual: false, beiral: 0.6, telha: tel.id, lados: poli.map(() => ({ inclina: true, pct: tel.pct })) }]);
-    } else if (poli.length >= 3 && tpEhPoli(ferramenta)) {
+      mudar(null, [...areas, { tipo: "telhado", pts, cota: null, cotaManual: false, beiral: 0.6, telha: tel.id, lados: pts.map(() => ({ inclina: true, pct: tel.pct })) }]);
+    } else if (pts.length >= 3 && tpEhPoli(ferramenta)) {
       const t = TP_AREA_TIPOS[ferramenta];
-      mudar(null, [...areas, { tipo: ferramenta, pts: poli, esp: t.esp, cota: ferramenta === "laje" ? altM : 0 }]);
+      mudar(null, [...areas, { tipo: ferramenta, pts, esp: t.esp, cota: ferramenta === "laje" ? altM : 0 }]);
     }
-    setPoli([]);
   };
-  const finalizar = () => { if (poli.length) finalizarPoli(); setInicio(null); };
+  const finalizarPoli = () => { criarArea(poli); setPoli([]); setAncora(null); };
+  const finalizar = () => { if (poli.length) finalizarPoli(); setInicio(null); setAncora(null); };
   // Botão direito (ou toque longo no celular): seleciona o que está embaixo,
   // se ainda não estiver selecionado, e abre o menu de ações no cursor.
   const abrirMenuCtx = (clientX, clientY, chave) => {
@@ -518,7 +546,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // Ponto do traço: ímã nas pontas de paredes e áreas (vence a grade, para
   // fechar cantos com medidas digitadas) e, com Shift, trava na horizontal
   // ou vertical a partir do ponto anterior (ortogonal).
-  const baseTraco = () => (ferramenta === "parede" ? inicio : (poli.length ? poli[poli.length - 1] : null));
+  const baseTraco = () => (ancora && ancora.ret ? ancora.ret : ancora && ancora.arcoFim ? null : ferramenta === "parede" ? inicio : (poli.length ? poli[poli.length - 1] : null));
   // Pontos de ímã. Além do eixo (pontas), cada parede oferece os cantos das
   // suas faces: nas pontas soltas, os 4 cantos do retângulo; onde duas paredes
   // se encontram, o cruzamento das faces — que dá a quina de fora e a de
@@ -563,6 +591,22 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     let p = ima ? { x: r3(ima.x), y: r3(ima.y), ima: true } : { x: snap(livre.x), y: snap(livre.y) };
     const base = opts.base !== undefined ? opts.base : baseTraco();
     if (base && e.shiftKey) p = Math.abs(p.x - base.x) >= Math.abs(p.y - base.y) ? { x: p.x, y: base.y } : { x: base.x, y: p.y };
+    else if (!ima) {
+      // linhas de alinhamento (como no Revit): se o cursor passa na mesma
+      // vertical ou horizontal de um ponto já desenhado, gruda nela e mostra
+      // um tracejado até esse ponto
+      const tolA = 8 * (window.devicePixelRatio || 1) / v.s;
+      const refs = [...pontosIma(opts.ignorar), ...(inicio ? [inicio] : []), ...(ancora && ancora.ret ? [ancora.ret] : []), ...(ancora && ancora.arcoIni ? [ancora.arcoIni, ancora.arcoFim] : [])];
+      let gx = null, gy = null, dx = tolA, dy = tolA;
+      for (const q of refs) {
+        const ex = Math.abs(q.x - livre.x), ey = Math.abs(q.y - livre.y);
+        if (ex < dx && Math.abs(q.y - livre.y) > 1e-6) { dx = ex; gx = q; }
+        if (ey < dy && Math.abs(q.x - livre.x) > 1e-6) { dy = ey; gy = q; }
+      }
+      if (gx || gy) {
+        p = { x: gx ? r3(gx.x) : p.x, y: gy ? r3(gy.y) : p.y, guias: [...(gx ? [gx] : []), ...(gy ? [gy] : [])] };
+      }
+    }
     return p;
   };
   const limpo = (p) => ({ x: p.x, y: p.y });
@@ -593,6 +637,18 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const T = (p) => [p.x * v.s + v.ox, p.y * v.s + v.oy];
     const marcadas = new Set(sel);
     const caminho = (pts) => { ctx.beginPath(); pts.forEach((p, k) => { const [x, y] = T(p); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.closePath(); };
+    // etiqueta de medida (fundo branco, texto azul) no meio de um segmento
+    const etiqueta = (a, b, texto, cor) => {
+      const [ax, ay] = T(a), [bx, by] = T(b);
+      if (Math.hypot(bx - ax, by - ay) < 18 * dpr) return;
+      let ang = Math.atan2(by - ay, bx - ax); if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
+      ctx.save(); ctx.translate((ax + bx) / 2, (ay + by) / 2); ctx.rotate(ang);
+      ctx.font = `600 ${12 * dpr}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      const w = ctx.measureText(texto).width + 10 * dpr;
+      ctx.fillStyle = "rgba(255,255,255,0.95)"; ctx.fillRect(-w / 2, -22 * dpr, w, 16 * dpr);
+      ctx.fillStyle = cor || TP_AZUL; ctx.fillText(texto, 0, -14 * dpr); ctx.restore(); ctx.textBaseline = "alphabetic";
+    };
+    const angulo = (a, b) => { const g = Math.round(((Math.atan2(-(b.y - a.y), b.x - a.x) * 180 / Math.PI) + 360) % 360); return g % 90 === 0 ? "" : ` · ${g}°`; };
 
     // terreno: verde claro, por baixo de tudo
     areas.forEach((a, i) => {
@@ -663,7 +719,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
     // polígono em desenho
     if (poli.length) {
-      const pts = hover ? [...poli, hover] : poli;
+      const pts = hover && modoTraco === "linha" ? [...poli, hover] : poli;
       ctx.beginPath(); pts.forEach((p, k) => { const [x, y] = T(p); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
       ctx.strokeStyle = TP_AZUL; ctx.lineWidth = 2 * dpr; ctx.setLineDash([6 * dpr, 4 * dpr]); ctx.stroke(); ctx.setLineDash([]);
       if (pts.length >= 3) { caminho(pts); ctx.fillStyle = "rgba(4,116,244,0.08)"; ctx.fill(); }
@@ -671,7 +727,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     }
 
     // paredes
-    const todas = inicio && hover && (hover.x !== inicio.x || hover.y !== inicio.y)
+    const todas = modoTraco === "linha" && inicio && hover && (hover.x !== inicio.x || hover.y !== inicio.y)
       ? [...paredes, { a: inicio, b: hover, t: espM, fantasma: true }] : paredes;
     ctx.lineCap = "square";
     todas.forEach((w, i) => {
@@ -689,9 +745,48 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       ctx.save(); ctx.translate((ax + bx) / 2, (ay + by) / 2); ctx.rotate(ang);
       ctx.font = `600 ${12 * dpr}px system-ui, sans-serif`; ctx.textAlign = "center";
       ctx.fillStyle = w.fantasma || marc ? TP_AZUL : "#6b7280";
-      ctx.fillText(tpFmt(tpLen(w)) + " m", 0, -(w.t * v.s / 2 + 6 * dpr)); ctx.restore();
+      if (!w.fantasma) ctx.fillText(tpFmt(tpLen(w)) + " m", 0, -(w.t * v.s / 2 + 6 * dpr)); ctx.restore();
+      if (w.fantasma) etiqueta(w.a, w.b, `${tpFmt(tpLen(w))} m${angulo(w.a, w.b)}`);
     });
     const ponto = (p, r) => { const [x, y] = T(p); ctx.fillStyle = TP_AZUL; ctx.beginPath(); ctx.arc(x, y, r * dpr, 0, 7); ctx.fill(); };
+    // linhas de alinhamento
+    if (hover && hover.guias) {
+      ctx.save(); ctx.strokeStyle = "#0ea5e9"; ctx.lineWidth = 1 * dpr; ctx.setLineDash([5 * dpr, 4 * dpr]);
+      const [hx, hy] = T(hover);
+      for (const q of hover.guias) { const [qx, qy] = T(q); ctx.beginPath(); ctx.moveTo(qx, qy); ctx.lineTo(hx, hy); ctx.stroke(); ctx.setLineDash([]); ctx.strokeRect(qx - 3 * dpr, qy - 3 * dpr, 6 * dpr, 6 * dpr); ctx.setLineDash([5 * dpr, 4 * dpr]); }
+      ctx.restore();
+      ctx.strokeStyle = "#0ea5e9"; ctx.lineWidth = 1.5 * dpr; ctx.beginPath(); ctx.moveTo(hx - 5 * dpr, hy - 5 * dpr); ctx.lineTo(hx + 5 * dpr, hy + 5 * dpr); ctx.moveTo(hx + 5 * dpr, hy - 5 * dpr); ctx.lineTo(hx - 5 * dpr, hy + 5 * dpr); ctx.stroke();
+    }
+    // prévia do retângulo, com as duas medidas
+    if (ancora && ancora.ret && hover) {
+      const a = ancora.ret, c = [a, { x: hover.x, y: a.y }, hover, { x: a.x, y: hover.y }];
+      caminho(c); ctx.fillStyle = "rgba(4,116,244,0.06)"; ctx.fill(); ctx.strokeStyle = TP_AZUL; ctx.lineWidth = Math.max(1.5 * dpr, ferramenta === "parede" ? espM * v.s : 0); ctx.globalAlpha = ferramenta === "parede" ? 0.5 : 1; ctx.setLineDash(ferramenta === "parede" ? [] : [6 * dpr, 4 * dpr]); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+      etiqueta(c[0], c[1], tpFmt(Math.abs(hover.x - a.x)) + " m"); etiqueta(c[1], c[2], tpFmt(Math.abs(hover.y - a.y)) + " m");
+      const [ax, ay] = T(a); ctx.fillStyle = TP_AZUL; ctx.beginPath(); ctx.arc(ax, ay, 5 * dpr, 0, 7); ctx.fill();
+    }
+    // prévia do arco: corda até o 2º clique, depois a curva passando pelo cursor
+    if (modoTraco === "arco" && hover && (ferramenta === "parede" || tpEhPoli(ferramenta))) {
+      if (ancora && ancora.arcoFim) {
+        const arc = tpArco3(ancora.arcoIni, ancora.arcoFim, hover), pts = [ancora.arcoIni, ...arc.pts];
+        ctx.beginPath(); pts.forEach((q, k) => { const [x, y] = T(q); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+        ctx.strokeStyle = TP_AZUL; ctx.globalAlpha = 0.6; ctx.lineWidth = Math.max(2 * dpr, ferramenta === "parede" ? espM * v.s : 0); ctx.stroke(); ctx.globalAlpha = 1;
+        etiqueta(ancora.arcoIni, ancora.arcoFim, arc.r ? `R ${tpFmt(arc.r)} m · arco ${tpFmt(arc.L)} m` : `${tpFmt(arc.L)} m`);
+      } else {
+        const ini = ferramenta === "parede" ? inicio : poli[poli.length - 1];
+        if (ini) etiqueta(ini, hover, `${tpFmt(Math.hypot(hover.x - ini.x, hover.y - ini.y))} m${angulo(ini, hover)} — clique o fim`);
+      }
+    }
+    // medida dinâmica do trecho em desenho (polígonos no modo linha)
+    if (modoTraco === "linha" && poli.length && hover) {
+      const u = poli[poli.length - 1];
+      etiqueta(u, hover, `${tpFmt(Math.hypot(hover.x - u.x, hover.y - u.y))} m${angulo(u, hover)}`);
+      if (poli.length >= 2) etiqueta(hover, poli[0], tpFmt(Math.hypot(poli[0].x - hover.x, poli[0].y - hover.y)) + " m", "#6b7280");
+    }
+    // arrastando alça de uma área: medida de todos os lados
+    if (gesto.current && gesto.current.grip && gesto.current.moveu && gesto.current.grip.ai != null) {
+      const ar = areas[gesto.current.grip.ai];
+      if (ar && ar.pts) ar.pts.forEach((q, k) => { const r = ar.pts[(k + 1) % ar.pts.length]; etiqueta(q, r, tpFmt(Math.hypot(r.x - q.x, r.y - q.y)) + " m"); });
+    }
     if (hover && (ferramenta !== "selecionar" || (gesto.current && gesto.current.grip)) && ferramenta !== "mover") {
       if (hover.ima) { const [x, y] = T(hover); ctx.strokeStyle = "#16a34a"; ctx.lineWidth = 2 * dpr; ctx.strokeRect(x - 6 * dpr, y - 6 * dpr, 12 * dpr, 12 * dpr); }
       else ponto(hover, 3);
@@ -841,7 +936,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     return () => { vivo = false; if (three.current) { three.current.renderer.dispose(); three.current = null; } };
   }, []);
 
-  useEffect(() => { desenharPlanta(); }, [paredes, areas, inicio, poli, hover, espM, sel, caixa, ferramenta]);
+  useEffect(() => { desenharPlanta(); }, [paredes, areas, inicio, poli, hover, espM, sel, caixa, ferramenta, ancora, modoTraco]);
   useEffect(() => { desenhar3d(); }, [paredes, areas, sel]);
 
   useEffect(() => {
@@ -849,7 +944,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const tag = (e.target && e.target.tagName) || "";
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       const ctrl = e.ctrlKey || e.metaKey, tecla = e.key;
-      const desenhando = (ferramenta === "parede" && inicio) || (tpEhPoli(ferramenta) && poli.length);
+      const desenhando = modoTraco === "linha" && ((ferramenta === "parede" && inicio) || (tpEhPoli(ferramenta) && poli.length));
       // números durante o traço = comprimento do próximo trecho
       if (desenhando && !ctrl && /^[0-9.,]$/.test(tecla)) { e.preventDefault(); setDigitado((d) => (d + tecla).slice(0, 10)); return; }
       if (digitado && tecla === "Backspace") { e.preventDefault(); setDigitado((d) => d.slice(0, -1)); return; }
@@ -858,6 +953,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         if (verAtalhos) { setVerAtalhos(false); return; }
         if (menuCtx) { setMenuCtx(null); return; }
         if (digitado) { setDigitado(""); return; }
+        if (ancora) { setAncora(null); return; }
         if (inicio || poli.length) { setInicio(null); setPoli([]); return; }
         setSel([]); setCaixa(null);
         if (ferramenta !== "selecionar") trocarFerramenta("selecionar");
@@ -1039,6 +1135,30 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     }
     const pc = pontoDoCursor(e); setHover(pc); setDigitado("");
     const p = limpo(pc);
+    const ehAreaTool = tpEhPoli(ferramenta);
+    if ((ferramenta === "parede" || ehAreaTool) && modoTraco === "retangulo") {
+      if (!ancora || !ancora.ret) { setAncora({ ret: p }); return; }
+      const a = ancora.ret;
+      if (Math.abs(p.x - a.x) < 1e-6 || Math.abs(p.y - a.y) < 1e-6) return;
+      const cantos = [a, { x: p.x, y: a.y }, p, { x: a.x, y: p.y }];
+      if (ferramenta === "parede") mudar([...paredes, ...cantos.map((q, k) => ({ a: q, b: cantos[(k + 1) % 4], t: espM, h: altM }))]);
+      else criarArea(cantos);
+      setAncora(null); setInicio(null); setPoli([]);
+      return;
+    }
+    if ((ferramenta === "parede" || ehAreaTool) && modoTraco === "arco") {
+      const ini = ferramenta === "parede" ? inicio : poli[poli.length - 1];
+      if (!ini) { if (ferramenta === "parede") setInicio(p); else setPoli([p]); return; }
+      if (!ancora || !ancora.arcoFim) { if (p.x === ini.x && p.y === ini.y) return; setAncora({ arcoIni: ini, arcoFim: p }); return; }
+      const arc = tpArco3(ancora.arcoIni, ancora.arcoFim, p);
+      if (ferramenta === "parede") {
+        let ant = ancora.arcoIni; const novas = [];
+        for (const q of arc.pts) { novas.push({ a: ant, b: q, t: espM, h: altM }); ant = q; }
+        mudar([...paredes, ...novas]); setInicio(ancora.arcoFim);
+      } else setPoli([...poli, ...arc.pts]);
+      setAncora(null);
+      return;
+    }
     if (ferramenta === "parede") {
       if (!inicio) { setInicio(p); return; }
       if (p.x === inicio.x && p.y === inicio.y) return;
@@ -1125,7 +1245,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const MODOS = [{ id: "planta", rotulo: "Planta" }, { id: "ambos", rotulo: "Planta + 3D" }, { id: "3d", rotulo: "3D" }];
   const mostraPlanta = modo !== "3d", mostra3d = modo !== "planta";
 
+  const desenhoAtivo = ferramenta === "parede" || tpEhPoli(ferramenta);
   const status = digitado ? `Comprimento: ${digitado} m — Enter confirma, Esc apaga.`
+    : (desenhoAtivo && modoTraco === "retangulo") ? (ancora && ancora.ret ? "Clique o canto oposto do retângulo. Esc cancela." : "Retângulo: clique o primeiro canto.")
+    : (desenhoAtivo && modoTraco === "arco") ? (ancora && ancora.arcoFim ? "Mova para curvar e clique um ponto da curva. Esc cancela." : ((ferramenta === "parede" ? inicio : poli.length) ? "Arco: clique o ponto final." : "Arco: clique o ponto inicial."))
     : (selA.length === 1 && !selP.length && ferramenta === "selecionar") ? "Editar contorno: arraste os quadrados (cantos) ou as bolinhas (lados). O cursor gruda nas quinas das paredes (quadrado verde)."
     : (selP.length === 1 && !selA.length && ferramenta === "selecionar") ? "Arraste os quadrados das pontas para esticar ou girar a parede. Delete exclui."
     : ferramenta === "selecionar"
@@ -1322,6 +1445,21 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           </button>
         ))}
       </div>
+      {(ferramenta === "parede" || tpEhPoli(ferramenta)) && (
+        <div style={{ display: "flex", gap: 2, background: "rgba(255,255,255,0.94)", borderRadius: 10, padding: 3, border: "1px solid #e5e7eb", pointerEvents: "auto" }}>
+          {TP_MODOS_TRACO.map((m) => (
+            <button key={m.id} title={m.dica} onClick={() => { setModoTraco(m.id); setAncora(null); setDigitado(""); if (m.id === "retangulo") { setInicio(null); } }}
+              style={{ border: "none", borderRadius: 7, padding: isMobile ? "6px 7px" : "6px 10px", fontSize: isMobile ? 12 : 12.5, cursor: "pointer", fontFamily: "inherit", background: modoTraco === m.id ? "#111827" : "transparent", color: modoTraco === m.id ? "#fff" : "#374151", fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                {m.id === "linha" && <path d="M2 12 L6 4 L12 7" />}
+                {m.id === "retangulo" && <rect x="2" y="3" width="10" height="8" />}
+                {m.id === "arco" && <path d="M2 11 Q7 1 12 11" />}
+              </svg>
+              {m.rotulo}
+            </button>
+          ))}
+        </div>
+      )}
       {poli.length >= 3 && (
         <button onClick={finalizarPoli} style={{ ...btn, minHeight: 32, padding: "4px 10px", fontSize: 12.5, background: TP_AZUL, borderColor: TP_AZUL, color: "#fff", pointerEvents: "auto" }}>Fechar {ferramenta === "laje" ? "laje" : ferramenta === "telhado" ? "telhado" : ferramenta === "terreno" ? "terreno" : "contrapiso"}</button>
       )}
