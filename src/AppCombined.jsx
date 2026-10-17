@@ -78330,6 +78330,39 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   };
   const limpo = (p) => ({ x: p.x, y: p.y });
   // comprimento digitado + Enter: cria o trecho na direção do cursor
+  // Retângulo com medidas digitadas: a 1ª medida vai no sentido em que o
+  // cursor está indo (de lado = largura, para cima/baixo = comprimento), a 2ª
+  // no outro eixo, para o lado onde o cursor estiver. Ex.: 10 Enter 20 Enter.
+  const numDigitado = (t) => { t = String(t || "").trim(); const n = parseFloat(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t); return n > 0 ? n : null; };
+  const cantoRet = (txt) => {
+    const a = ancora.ret, h = hover || a, dx = h.x - a.x, dy = h.y - a.y;
+    const sx = dx < 0 ? -1 : 1, sy = dy < 0 ? -1 : 1, val = numDigitado(txt);
+    let cx = h.x, cy = h.y;
+    const eixo1 = ancora.d1 ? ancora.d1.eixo : (Math.abs(dx) >= Math.abs(dy) ? "x" : "y");
+    if (ancora.d1) {
+      if (eixo1 === "x") { cx = a.x + ancora.d1.v; if (val) cy = a.y + sy * val; } else { cy = a.y + ancora.d1.v; if (val) cx = a.x + sx * val; }
+    } else if (val) { if (eixo1 === "x") cx = a.x + sx * val; else cy = a.y + sy * val; }
+    return { x: r3(cx), y: r3(cy), eixo1 };
+  };
+  const concluirRet = (p) => {
+    const a = ancora.ret;
+    if (Math.abs(p.x - a.x) < 1e-6 || Math.abs(p.y - a.y) < 1e-6) return false;
+    const cantos = [a, { x: p.x, y: a.y }, { x: p.x, y: p.y }, { x: a.x, y: p.y }];
+    if (ferramenta === "parede") mudar([...paredes, ...cantos.map((q, k) => ({ a: q, b: cantos[(k + 1) % 4], t: espM, h: altM }))]);
+    else criarArea(cantos);
+    setAncora(null); setInicio(null); setPoli([]); setDigitado("");
+    return true;
+  };
+  const aplicarDigitadoRet = () => {
+    const val = numDigitado(digitado); setDigitado("");
+    if (!val || !ancora || !ancora.ret) return;
+    if (!ancora.d1) {
+      const a = ancora.ret, h = hover || a, dx = h.x - a.x, dy = h.y - a.y, eixo = Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
+      setAncora({ ...ancora, d1: { eixo, v: (eixo === "x" ? (dx < 0 ? -1 : 1) : (dy < 0 ? -1 : 1)) * val } });
+      return;
+    }
+    concluirRet(cantoRet(String(val)));
+  };
   const aplicarDigitado = () => {
     const t = digitado.trim(); setDigitado("");
     const Ld = parseFloat(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t);
@@ -78478,9 +78511,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     }
     // prévia do retângulo, com as duas medidas
     if (ancora && ancora.ret && hover) {
-      const a = ancora.ret, c = [a, { x: hover.x, y: a.y }, hover, { x: a.x, y: hover.y }];
+      const a = ancora.ret, h = cantoRet(digitado), c = [a, { x: h.x, y: a.y }, h, { x: a.x, y: h.y }];
       caminho(c); ctx.fillStyle = "rgba(4,116,244,0.06)"; ctx.fill(); ctx.strokeStyle = TP_AZUL; ctx.lineWidth = Math.max(1.5 * dpr, ferramenta === "parede" ? espM * v.s : 0); ctx.globalAlpha = ferramenta === "parede" ? 0.5 : 1; ctx.setLineDash(ferramenta === "parede" ? [] : [6 * dpr, 4 * dpr]); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
-      etiqueta(c[0], c[1], tpFmt(Math.abs(hover.x - a.x)) + " m"); etiqueta(c[1], c[2], tpFmt(Math.abs(hover.y - a.y)) + " m");
+      const fixoX = ancora.d1 && ancora.d1.eixo === "x", fixoY = ancora.d1 && ancora.d1.eixo === "y";
+      etiqueta(c[0], c[1], tpFmt(Math.abs(h.x - a.x)) + " m" + (fixoX ? " ✓" : ""), fixoX ? "#16a34a" : undefined);
+      etiqueta(c[1], c[2], tpFmt(Math.abs(h.y - a.y)) + " m" + (fixoY ? " ✓" : ""), fixoY ? "#16a34a" : undefined);
       const [ax, ay] = T(a); ctx.fillStyle = TP_AZUL; ctx.beginPath(); ctx.arc(ax, ay, 5 * dpr, 0, 7); ctx.fill();
     }
     // prévia do arco: corda até o 2º clique, depois a curva passando pelo cursor
@@ -78663,7 +78698,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const tag = (e.target && e.target.tagName) || "";
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       const ctrl = e.ctrlKey || e.metaKey, tecla = e.key;
-      const desenhando = modoTraco === "linha" && ((ferramenta === "parede" && inicio) || (tpEhPoli(ferramenta) && poli.length));
+      const desenhando = (modoTraco === "linha" && ((ferramenta === "parede" && inicio) || (tpEhPoli(ferramenta) && poli.length)))
+        || (modoTraco === "retangulo" && ancora && ancora.ret && (ferramenta === "parede" || tpEhPoli(ferramenta)));
       // números durante o traço = comprimento do próximo trecho
       if (desenhando && !ctrl && /^[0-9.,]$/.test(tecla)) { e.preventDefault(); setDigitado((d) => (d + tecla).slice(0, 10)); return; }
       if (digitado && tecla === "Backspace") { e.preventDefault(); setDigitado((d) => d.slice(0, -1)); return; }
@@ -78679,7 +78715,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         return;
       }
       if (tecla === "Enter") {
-        if (digitado) aplicarDigitado();
+        if (digitado && modoTraco === "retangulo" && ancora && ancora.ret) aplicarDigitadoRet();
+        else if (digitado) aplicarDigitado();
         else if (desenhando) finalizar();
         else if (ferramenta === "selecionar" || ferramenta === "mover") trocarFerramenta(ultimaFerramenta.current); // repete o último comando
         return;
@@ -78857,12 +78894,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const ehAreaTool = tpEhPoli(ferramenta);
     if ((ferramenta === "parede" || ehAreaTool) && modoTraco === "retangulo") {
       if (!ancora || !ancora.ret) { setAncora({ ret: p }); return; }
-      const a = ancora.ret;
-      if (Math.abs(p.x - a.x) < 1e-6 || Math.abs(p.y - a.y) < 1e-6) return;
-      const cantos = [a, { x: p.x, y: a.y }, p, { x: a.x, y: p.y }];
-      if (ferramenta === "parede") mudar([...paredes, ...cantos.map((q, k) => ({ a: q, b: cantos[(k + 1) % 4], t: espM, h: altM }))]);
-      else criarArea(cantos);
-      setAncora(null); setInicio(null); setPoli([]);
+      concluirRet(ancora.d1 ? cantoRet("") : p);
       return;
     }
     if ((ferramenta === "parede" || ehAreaTool) && modoTraco === "arco") {
@@ -78966,7 +78998,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
   const desenhoAtivo = ferramenta === "parede" || tpEhPoli(ferramenta);
   const status = digitado ? `Comprimento: ${digitado} m — Enter confirma, Esc apaga.`
-    : (desenhoAtivo && modoTraco === "retangulo") ? (ancora && ancora.ret ? "Clique o canto oposto do retângulo. Esc cancela." : "Retângulo: clique o primeiro canto.")
+    : (desenhoAtivo && modoTraco === "retangulo") ? (ancora && ancora.ret
+        ? (ancora.d1 ? `1ª medida ${tpFmt(Math.abs(ancora.d1.v))} m fixada. Digite a 2ª e Enter, ou clique para escolher o lado.` : "Aponte o cursor para o lado e digite a 1ª medida + Enter (ou clique o canto oposto). Esc cancela.")
+        : "Retângulo: clique o primeiro canto.")
     : (desenhoAtivo && modoTraco === "arco") ? (ancora && ancora.arcoFim ? "Mova para curvar e clique um ponto da curva. Esc cancela." : ((ferramenta === "parede" ? inicio : poli.length) ? "Arco: clique o ponto final." : "Arco: clique o ponto inicial."))
     : (selA.length === 1 && !selP.length && ferramenta === "selecionar") ? "Editar contorno: arraste os quadrados (cantos) ou as bolinhas (lados). O cursor gruda nas quinas das paredes (quadrado verde)."
     : (selP.length === 1 && !selA.length && ferramenta === "selecionar") ? "Arraste os quadrados das pontas para esticar ou girar a parede. Delete exclui."
@@ -79214,7 +79248,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             {barraFerramentas}
             {digitado && (
               <div style={{ position: "absolute", left: "50%", top: 74, transform: "translateX(-50%)", zIndex: 1, background: "#111827", color: "#fff", borderRadius: 8, padding: "6px 12px", fontSize: 14, fontWeight: 600, fontVariantNumeric: "tabular-nums", boxShadow: "0 4px 12px rgba(0,0,0,0.2)" }}>
-                {digitado} m <span style={{ fontWeight: 400, opacity: 0.7, fontSize: 12, marginLeft: 6 }}>Enter</span>
+                {modoTraco === "retangulo" && ancora && ancora.ret ? (ancora.d1 ? "2ª medida: " : "1ª medida: ") : ""}{digitado} m <span style={{ fontWeight: 400, opacity: 0.7, fontSize: 12, marginLeft: 6 }}>Enter</span>
               </div>
             )}
             <div style={{ position: "absolute", right: 12, bottom: 12, display: "flex", flexDirection: "column", gap: 6, zIndex: 1 }}>
