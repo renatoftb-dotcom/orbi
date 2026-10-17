@@ -16447,7 +16447,10 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const gestaoSemContrato = !naObra && ehReceitaDaGestao(f) && !!obraDaGestao && contasDaGestao(obraDaGestao).length === 0
     && !jaLigadoNaObra && !(f.sinalDoBanco && ehEstornoNaConta(f.contaId, f.sinalDoBanco)) && !f.estorno
     && !(!lancNovo && Number((inicial || {}).valor) < 0);
-  const gestaoAvulsa = gestaoSemContrato && f.gestaoAvulsa !== false;
+  // Não é pergunta: honorário é custo da obra nos dois cadastros — com o
+  // cliente pagando direto ou com o dinheiro passando pelo escritório (é a
+  // mesma regra da ponte, destinoNoEscritorio). Vai para a obra sempre.
+  const gestaoAvulsa = gestaoSemContrato;
   // O lançamento antigo, de antes da ligação, só entra se a pessoa marcar:
   // o pagamento dele pode já estar contado na parcela, baixado na obra.
   const foraDaGestao = f.foraDaGestao != null ? !!f.foraDaGestao : (!lancNovo && !ligadoAntes);
@@ -16788,22 +16791,6 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           Obra encerrada / ajuste de obra antiga — lançar sem cliente e obra do cadastro
         </label>
       )}
-      {gestaoSemContrato && (() => {
-        const obraNome = (obraDaGestao && obraDaGestao.nome) || "a obra";
-        const dia = String(f.lancadoEm || "").slice(0, 10).split("-").reverse().join("/");
-        return (
-          <div data-vk-gestao-sem-contrato style={{ fontSize: 12.5, color: "#1e3a5f", background: "#f0f7ff", border: "1px solid rgba(4,116,244,0.25)",
-            borderRadius: 10, padding: "9px 11px", lineHeight: 1.5, display: "grid", gap: 6, marginBottom: 12 }}>
-            <div><b>{obraNome}</b> não tem contrato de gestão — sem ele, esta receita fica só no escritório e a obra não vê o custo do gerenciamento.</div>
-            <label style={{ display: "flex", alignItems: "flex-start", gap: 6, cursor: "pointer" }}>
-              <input type="checkbox" checked={gestaoAvulsa} onChange={(e) => set("gestaoAvulsa", e.target.checked)} style={{ marginTop: 3 }} />
-              <span>Lançar também na obra: conta <b>Gerenciamento de obra</b> paga{efValorDoCampo(f.valor) > 0 ? <> de <b>{efDinheiro(efValorDoCampo(f.valor))}</b></> : null}{dia ? ` em ${dia}` : ""},
-                ligada a este lançamento — excluir um lado apaga o outro.</span>
-            </label>
-            <div style={{ fontSize: 11.5, color: "#4b5563" }}>Para acompanhar mês a mês (parcelas e saldo), crie o contrato de gestão na obra: os próximos recebimentos entram nele.</div>
-          </div>
-        );
-      })()}
       {/* O que este lançamento faz no contrato de gestão da obra, antes de
           gravar: a parcela que baixa (ou volta a abrir) e o percentual pago. */}
       {temGestao && (() => {
