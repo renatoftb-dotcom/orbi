@@ -37,7 +37,7 @@ function TpCampo({ id, rotulo, valor, casas = 2, onConfirmar, min = 0, somenteLe
   const confirmar = () => {
     const t = String(txt).trim();
     const n = parseFloat(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t);
-    if (isFinite(n) && n > min && (valor == null || Math.abs(n - valor) > 1e-9)) { onConfirmar(n); setTxt(fmt(n)); }
+    if (isFinite(n) && n > min && (valor == null || Math.abs(n - valor) > 1e-9)) { const r = onConfirmar(n); setTxt(fmt(r === false ? valor : n)); }
     else setTxt(fmt(valor));
   };
   return (
@@ -365,8 +365,18 @@ function tpDesenhoParaObra(paredes, areas) {
       inclinacao: aguas.length ? Math.round(aguas.reduce((s, L) => s + L.s, 0) / aguas.length * 100) / 100 : 0,
     };
   });
+  // Esquadrias: de alumínio vão para a lista do orçamento (agrupadas pelo
+  // quadro: família, folhas, medidas, quantidade). Porta de madeira é contada
+  // pelos Cômodos da obra (kit de porta) e não entra aqui; vão livre também não.
+  const quadro = tpQuadroEsquadrias(paredes);
+  const temAberturas = paredes.some((w) => (w.ab || []).length);
+  const esquadrias = quadro.grupos.filter((g) => g.familia && g.mat !== "madeira")
+    .map((g) => ({ familia: g.familia, linha: "GOLD", folhas: g.folhas, qtd: g.qtd, largura: r2(g.larg), altura: r2(g.alt) }));
+  const nMadeira = quadro.grupos.filter((g) => g.mat === "madeira").reduce((s, g) => s + g.qtd, 0);
+  const areaAb = tpAreaAberturas(paredes);
   const projeto = {
     tipologia: "Térrea",
+    ...(temAberturas ? { esquadrias } : {}),
     arquitetura: { areaConstruida: r2(areaConstruida), m2ParedesInternas: r2(m2Int), m2ParedesExternas: r2(m2Ext), m2ParedesTotal: r2(m2Int + m2Ext) },
     ...(an.pisoExterno > 0 ? { externa: { pavimentacao: r2(an.pisoExterno) } } : {}),
     terreo: { area: r2(areaConstruida), m2Parede15: r2(m15), m2Parede20: r2(m20), m2Parede25: r2(m25), perimetroParedes: r2(perim),
@@ -383,6 +393,11 @@ function tpDesenhoParaObra(paredes, areas) {
     ["Perímetro de paredes", tpFmt(perim) + " m"],
     ...(areaLj ? [["Laje (treliçada)", `${tpFmt(areaLj)} m² · perímetro ${tpFmt(perLj)} m`]] : []),
     ...cobertura.map((c, k) => [`Telhado ${cobertura.length > 1 ? k + 1 : ""}`.trim(), `${tpTelha(c.tipo).rotulo}, ${tpFmt(c.comprimento)} × ${tpFmt(c.largura)} m, ${c.aguas} água${c.aguas === 1 ? "" : "s"}, ${tpFmt(c.inclinacao * 100, 0)}%`]),
+    ...(temAberturas ? [
+      ["Esquadrias de alumínio", esquadrias.length ? quadro.grupos.filter((g) => g.familia && g.mat !== "madeira").map((g) => `${g.codigo}: ${g.qtd}× ${g.rot} ${tpFmt(g.larg)} × ${tpFmt(g.alt)}`).join(" · ") : "nenhuma"],
+      ...(nMadeira ? [["Portas de madeira", `${nMadeira} (entram pelos Cômodos da obra, kit de porta)`]] : []),
+      ["Aberturas nas paredes", `${tpFmt(areaAb)} m² (o m² de parede segue bruto)`],
+    ] : []),
   ];
   return { projeto, linhas };
 }
@@ -396,14 +411,17 @@ function tpMesclarProjetoObra(ant, conv, projetoId) {
     terreo: { ...(ant.terreo || {}), ...conv.projeto.terreo },
     ...(conv.projeto.cobertura ? { cobertura: conv.projeto.cobertura } : {}),
     ...(conv.projeto.externa ? { externa: { ...(ant.externa || {}), ...conv.projeto.externa } } : {}),
-    origemDesenho: { projetoId } };
+    // esquadrias: o desenho passa a mandar na lista quando tem portas/janelas;
+    // se depois apagar todas, limpa só o que ele mesmo tinha escrito
+    ...(conv.projeto.esquadrias ? { esquadrias: conv.projeto.esquadrias } : ((ant.origemDesenho || {}).esquadrias ? { esquadrias: [] } : {})),
+    origemDesenho: { projetoId, esquadrias: !!conv.projeto.esquadrias } };
 }
 // "assinatura" dos campos do desenho, para só gravar quando algo mudou
 function tpAssinaturaDesenho(pr) {
   pr = pr || {};
   const a = pr.arquitetura || {}, t = pr.terreo || {};
   return JSON.stringify([pr.tipologia, a.areaConstruida, a.m2ParedesInternas, a.m2ParedesExternas, a.m2ParedesTotal,
-    t.area, t.m2Parede15, t.m2Parede20, t.m2Parede25, t.perimetroParedes, t.areaLoje, t.perimetroLoje, t.tipoLoje, pr.cobertura || null, (pr.externa || {}).pavimentacao || 0]);
+    t.area, t.m2Parede15, t.m2Parede20, t.m2Parede25, t.perimetroParedes, t.areaLoje, t.perimetroLoje, t.tipoLoje, pr.cobertura || null, (pr.externa || {}).pavimentacao || 0, pr.esquadrias || null]);
 }
 
 // Arco por 3 pontos (início, fim e um ponto da curva), devolvido como
@@ -426,6 +444,81 @@ function tpArco3(p0, p2, pm) {
   pts[pts.length - 1] = { x: p2.x, y: p2.y };
   return { pts, r, L };
 }
+// ───────────── Portas, janelas e vãos (elementos hospedados na parede) ─────────────
+// Como no Revit/ArchiCAD: a esquadria mora dentro da parede (w.ab), guardada
+// pela posição do centro ao longo do eixo (x, metros a partir da ponta "a").
+// Mover a parede leva a esquadria junto; excluir a parede exclui as dela.
+// lado = para que lado da parede a porta abre (+1/−1 na normal); mao = em
+// que ombreira fica a dobradiça. Família/folhas casam com o catálogo de
+// esquadrias do orçamento de obra (orcamento-obra.jsx).
+const TP_ESQ = [
+  { id: "porta_giro", rotulo: "Porta de giro", curto: "Porta", cat: "P", familia: "PORTA_GIRO", folhas: 1, larg: 0.80, alt: 2.10, peit: 0, mat: "madeira" },
+  { id: "porta_giro2", rotulo: "Porta de giro 2 folhas", curto: "Porta 2 folhas", cat: "P", familia: "PORTA_GIRO", folhas: 2, larg: 1.40, alt: 2.10, peit: 0, mat: "madeira" },
+  { id: "porta_correr", rotulo: "Porta de correr", curto: "Porta de correr", cat: "P", familia: "PORTA_CORRER", folhas: 2, larg: 2.00, alt: 2.10, peit: 0, mat: "aluminio" },
+  { id: "janela_correr", rotulo: "Janela de correr", curto: "Janela", cat: "J", familia: "JANELA_CORRER", folhas: 2, larg: 1.20, alt: 1.20, peit: 1.00, mat: "aluminio" },
+  { id: "maxim_ar", rotulo: "Janela maxim-ar", curto: "Maxim-ar", cat: "J", familia: "MAXIM_AR", folhas: 1, larg: 0.60, alt: 0.60, peit: 1.50, mat: "aluminio" },
+  { id: "fixo", rotulo: "Vidro fixo", curto: "Fixo", cat: "J", familia: "QUADRO_FIXO", folhas: 1, larg: 1.00, alt: 1.00, peit: 1.00, mat: "aluminio" },
+  { id: "vao", rotulo: "Vão livre", curto: "Vão", cat: "V", familia: null, folhas: 0, larg: 0.90, alt: 2.10, peit: 0, mat: null },
+];
+const tpEsq = (id) => TP_ESQ.find((t) => t.id === id) || TP_ESQ[0];
+const tpGiro = (tipo) => tipo === "porta_giro" || tipo === "porta_giro2";
+function tpDistSeg(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
+  const t = l2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0;
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+// Onde termina o "vão útil" da parede em cada ponta: se outra parede chega
+// ali (canto ou T), a face dela; ponta solta, o próprio eixo.
+function tpFacesPonta(paredes, i) {
+  const w = paredes[i]; let fa = 0, fb = 0;
+  paredes.forEach((v, j) => {
+    if (j === i || !tpLen(v)) return;
+    if (tpDistSeg(w.a, v.a, v.b) < 1e-3) fa = Math.max(fa, (v.t || 0) / 2);
+    if (tpDistSeg(w.b, v.a, v.b) < 1e-3) fb = Math.max(fb, (v.t || 0) / 2);
+  });
+  return { fa, fb };
+}
+// Esquadrias que cabem na parede (se a parede encolheu, a que sobrou fica de fora do desenho)
+const tpAbsVisiveis = (w) => { const L = tpLen(w); return (w.ab || []).filter((o) => o.x - o.larg / 2 >= -1e-6 && o.x + o.larg / 2 <= L + 1e-6); };
+// Trechos cheios da parede ao longo do eixo (de −t/2 a L+t/2, como o canto quadrado), sem os vãos
+function tpTrechosParede(w) {
+  const L = tpLen(w), h = (w.t || 0) / 2;
+  const vs = tpAbsVisiveis(w).map((o) => [o.x - o.larg / 2, o.x + o.larg / 2]).sort((p, q) => p[0] - q[0]);
+  const out = []; let s = -h;
+  for (const [e0, e1] of vs) { if (e0 > s + 1e-6) out.push([s, e0]); s = Math.max(s, e1); }
+  if (L + h > s + 1e-6) out.push([s, L + h]);
+  return out;
+}
+// Motivo de não caber (ou null): passa da ponta, encosta em outra, mais alta que a parede
+function tpValidarAbertura(paredes, i, ab, ignorarId) {
+  const w = paredes[i]; if (!w) return "Parede não encontrada";
+  const L = tpLen(w), { fa, fb } = tpFacesPonta(paredes, i);
+  if (ab.larg > L - fa - fb + 1e-6) return "A parede é curta para essa largura";
+  if (ab.x - ab.larg / 2 < fa - 1e-6 || ab.x + ab.larg / 2 > L - fb + 1e-6) return "Passa da ponta da parede";
+  for (const o of (w.ab || [])) if (o.id !== ignorarId && Math.abs(o.x - ab.x) < (o.larg + ab.larg) / 2 - 1e-6) return "Encosta em outra abertura";
+  if ((ab.peit || 0) + ab.alt > (w.h || 0) + 1e-6) return "Mais alta que a parede";
+  return null;
+}
+function tpAcharAbertura(paredes, id) {
+  for (let i = 0; i < paredes.length; i++) { const ab = paredes[i].ab || []; for (let k = 0; k < ab.length; k++) if (ab[k].id === id) return { i, k, o: ab[k], w: paredes[i] }; }
+  return null;
+}
+// Quadro de esquadrias: mesmo tipo + material + medidas = mesmo código (P1,
+// J1, V1...), na ordem em que aparecem. É o que vai para a etiqueta da planta.
+function tpQuadroEsquadrias(paredes) {
+  const r2 = (x) => Math.round((x || 0) * 100) / 100;
+  const grupos = [], mapa = new Map(), codigoDe = new Map(), cont = { P: 0, J: 0, V: 0 };
+  paredes.forEach((w) => [...tpAbsVisiveis(w)].sort((a, b) => a.x - b.x).forEach((o) => {
+    const t = tpEsq(o.tipo), mat = t.mat ? (o.mat || t.mat) : null;
+    const k = [t.id, mat, r2(o.larg), r2(o.alt), r2(o.peit)].join("|");
+    let g = mapa.get(k);
+    if (!g) { cont[t.cat]++; g = { codigo: t.cat + cont[t.cat], tipo: t.id, rot: t.rotulo, mat, larg: o.larg, alt: o.alt, peit: o.peit || 0, qtd: 0, ids: [], familia: t.familia, folhas: t.folhas }; mapa.set(k, g); grupos.push(g); }
+    g.qtd++; g.ids.push(o.id); codigoDe.set(o.id, g.codigo);
+  }));
+  return { grupos, codigoDe };
+}
+const tpAreaAberturas = (paredes) => paredes.reduce((s, w) => s + tpAbsVisiveis(w).reduce((t, o) => t + o.larg * Math.max(0, Math.min(o.alt, (w.h || 0) - (o.peit || 0))), 0), 0);
+
 const TP_MODOS_TRACO = [
   { id: "linha", rotulo: "Linha", dica: "Linha: ponto a ponto" },
   { id: "retangulo", rotulo: "Retângulo", dica: "Retângulo: dois cantos opostos" },
@@ -466,6 +559,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const [sincronizar, setSincronizar] = useState(projeto.sincronizar !== false);
   const [ultimaSinc, setUltimaSinc] = useState(null);
   const [painelObra, setPainelObra] = useState(null); // null, confirmar ou feito
+  const [tipoEsq, setTipoEsq] = useState("porta_giro");  // tipo da próxima porta/janela
+  const [dimsEsq, setDimsEsq] = useState(() => Object.fromEntries(TP_ESQ.map((t) => [t.id, { larg: t.larg, alt: t.alt, peit: t.peit, mat: t.mat }])));
+  const [maoEsq, setMaoEsq] = useState(1);               // Espaço troca a ombreira da dobradiça
+  const [previaEsq, setPreviaEsq] = useState(null);      // esquadria fantasma sob o cursor
   const historico = useRef([]);
   const futuro = useRef([]);                     // para Refazer
   const ultimaFerramenta = useRef("parede");     // Enter sem nada ativo repete
@@ -501,11 +598,27 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   };
   const selP = sel.filter((k) => k[0] === "p").map((k) => +k.slice(1)).filter((i) => paredes[i]);
   const selA = sel.filter((k) => k[0] === "a").map((k) => +k.slice(1)).filter((i) => areas[i]);
+  const selO = sel.filter((k) => k[0] === "o").map((k) => tpAcharAbertura(paredes, k.slice(1))).filter(Boolean);
+  const todasChaves = () => [...paredes.map((_, i) => "p" + i), ...areas.map((_, i) => "a" + i), ...paredes.flatMap((w) => (w.ab || []).map((o) => "o" + o.id))];
   const excluirSelecao = () => {
     if (!sel.length) return;
-    const fp = new Set(selP), fa = new Set(selA);
-    mudar(paredes.filter((_, i) => !fp.has(i)), areas.filter((_, i) => !fa.has(i)));
+    const fp = new Set(selP), fa = new Set(selA), fo = new Set(selO.map((x) => x.o.id));
+    mudar(paredes.filter((_, i) => !fp.has(i)).map((w) => ((w.ab || []).some((o) => fo.has(o.id)) ? { ...w, ab: w.ab.filter((o) => !fo.has(o.id)) } : w)), areas.filter((_, i) => !fa.has(i)));
   };
+  // Edita esquadrias por id; se alguma não couber mais, não muda nada e avisa
+  const editarAberturas = (ids, fn) => {
+    const s = new Set(ids); let erro = null;
+    const novas = paredes.map((w, i) => {
+      if (!(w.ab || []).some((o) => s.has(o.id))) return w;
+      const ab = w.ab.map((o) => (s.has(o.id) ? fn(o, w) : o));
+      const tmp = paredes.slice(); tmp[i] = { ...w, ab };
+      for (const o of ab) if (s.has(o.id)) { const m = tpValidarAbertura(tmp, i, o, o.id); if (m) erro = m; }
+      return { ...w, ab };
+    });
+    if (erro) { avisar(erro + ". Nada foi alterado."); return false; }
+    mudar(novas, null, true); return true;
+  };
+  const inverterAberturas = (campo) => { if (selO.length) editarAberturas(selO.map((x) => x.o.id), (o) => ({ ...o, [campo]: -(o[campo] || 1) })); };
   const editarParedes = (idx, fn) => { const s = new Set(idx); mudar(paredes.map((w, i) => (s.has(i) ? fn(w) : w)), null, true); };
   const editarAreas = (idx, fn) => { const s = new Set(idx); mudar(null, areas.map((a, i) => (s.has(i) ? fn(a) : a)), true); };
   const mudarComprimento = (i, L) => editarParedes([i], (w) => {
@@ -545,9 +658,22 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const moverSelecao = (dx, dy) => {
     if (!sel.length) return;
     const r = deslocar({ paredes, areas }, sel, dx, dy);
-    mudar(r.paredes, r.areas, true);
+    // porta/janela selecionada anda ao longo da própria parede (a seta
+    // perpendicular à parede não faz nada); se a parede também está
+    // selecionada, ela já foi junto
+    const ids = new Set(selO.map((x) => x.o.id)), fp = new Set(selP);
+    let ps = r.paredes;
+    if (ids.size) ps = ps.map((w, i) => {
+      if (fp.has(i) || !(w.ab || []).some((o) => ids.has(o.id))) return w;
+      const L = tpLen(w) || 1, d = dx * (w.b.x - w.a.x) / L + dy * (w.b.y - w.a.y) / L;
+      if (Math.abs(d) < 1e-9) return w;
+      const ab = w.ab.map((o) => (ids.has(o.id) ? { ...o, x: r3(o.x + d) } : o));
+      const tmp = ps.slice(); tmp[i] = { ...w, ab };
+      return ab.some((o) => ids.has(o.id) && tpValidarAbertura(tmp, i, o, o.id)) ? w : { ...w, ab };
+    });
+    mudar(ps, r.areas, true);
   };
-  const trocarFerramenta = (f) => { setDividir(null); setFerramenta(f); setInicio(null); setPoli([]); setDigitado(""); setAncora(null); if (f !== "selecionar" && f !== "mover") { setSel([]); ultimaFerramenta.current = f; } };
+  const trocarFerramenta = (f) => { setDividir(null); setFerramenta(f); setPreviaEsq(null); setInicio(null); setPoli([]); setDigitado(""); setAncora(null); if (f !== "selecionar" && f !== "mover") { setSel([]); ultimaFerramenta.current = f; } };
   // Nível do apoio do telhado: automático = topo do que está embaixo dele
   // (laje: nível + espessura; parede: altura). Só vale o digitado depois que o
   // usuário muda o campo (cotaManual), como o "deslocamento da base" do Revit.
@@ -575,8 +701,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   sincronizarAgora.current = () => {
     if (!sincronizar || !obraLigada || !data || !save) return;
     const conv = tpDesenhoParaObra(paredes, areas);
-    if (tpAssinaturaDesenho(conv.projeto) === tpAssinaturaDesenho(obraLigada.projeto)) return;
-    const atualizada = { ...obraLigada, projeto: tpMesclarProjetoObra(obraLigada.projeto, conv, projeto.id) };
+    const mesclado = tpMesclarProjetoObra(obraLigada.projeto, conv, projeto.id);
+    if (tpAssinaturaDesenho(mesclado) === tpAssinaturaDesenho(obraLigada.projeto)) return;
+    const atualizada = { ...obraLigada, projeto: mesclado };
     save({ ...data, obras: (data.obras || []).map((o) => (o.id === atualizada.id ? atualizada : o)) });
     setUltimaSinc(new Date());
   };
@@ -658,7 +785,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   };
   const editarPropriedades = () => {
     if (isMobile) { setMenuAberto(true); return; }
-    setTimeout(() => { const el = document.getElementById("tp-p-comp") || document.getElementById("tp-p-alt") || document.getElementById("tp-a-esp"); if (el) { el.focus(); el.select && el.select(); } }, 50);
+    setTimeout(() => { const el = document.getElementById("tp-o-larg") || document.getElementById("tp-p-comp") || document.getElementById("tp-p-alt") || document.getElementById("tp-a-esp"); if (el) { el.focus(); el.select && el.select(); } }, 50);
   };
 
   // ---------- vista da planta ----------
@@ -755,6 +882,49 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     return p;
   };
   const limpo = (p) => ({ x: p.x, y: p.y });
+  // ---------- portas e janelas ----------
+  // Parede embaixo do cursor e posição do centro da esquadria ao longo dela:
+  // grade de 5 cm, ímã no meio da parede e a 10 cm da face da parede vizinha
+  // (a "boneca" de sempre), e nunca passa das faces. A porta abre para o lado
+  // em que o cursor está, como no Revit.
+  const hospedar = (pt, larg, ps = paredes) => {
+    const v = vista.current; if (!v) return null;
+    const px = (window.devicePixelRatio || 1) / v.s, tol = 12 * px;
+    let best = -1, dmin = Infinity;
+    ps.forEach((w, i) => { if (!tpLen(w)) return; const d = tpDistSeg(pt, w.a, w.b); if (d <= Math.max((w.t || 0) / 2 + 0.05, tol) && d < dmin) { dmin = d; best = i; } });
+    if (best < 0) return null;
+    const w = ps[best], L = tpLen(w), ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
+    const proj = (pt.x - w.a.x) * ux + (pt.y - w.a.y) * uy, lado = ((pt.x - w.a.x) * -uy + (pt.y - w.a.y) * ux) >= 0 ? 1 : -1;
+    const { fa, fb } = tpFacesPonta(ps, best);
+    let x = Math.round(proj / 0.05) * 0.05;
+    const imas = [L / 2, fa + larg / 2 + 0.10, L - fb - larg / 2 - 0.10];
+    for (const m of imas) if (Math.abs(proj - m) < 10 * px) { x = m; break; }
+    x = Math.max(fa + larg / 2, Math.min(L - fb - larg / 2, x));
+    return { i: best, x: r3(x), lado, proj, L, fa, fb };
+  };
+  const previaEsqEm = (pt, mao = maoEsq) => {
+    const dm = dimsEsq[tipoEsq] || tpEsq(tipoEsq);
+    const h = hospedar(pt, dm.larg); if (!h) return null;
+    const ab = { x: h.x, larg: dm.larg, alt: dm.alt, peit: dm.peit || 0 };
+    return { ...h, tipo: tipoEsq, ...ab, mao, mat: dm.mat, motivo: tpValidarAbertura(paredes, h.i, ab, null) };
+  };
+  const colocarEsquadria = (p) => {
+    if (!p) { avisar("Clique em cima de uma parede."); return; }
+    if (p.motivo) { avisar(p.motivo + "."); return; }
+    const t = tpEsq(p.tipo), id = "e" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    const o = { id, tipo: t.id, x: p.x, larg: p.larg, alt: p.alt, peit: p.peit, lado: p.lado, mao: p.mao, ...(t.mat ? { mat: p.mat || t.mat } : {}) };
+    mudar(paredes.map((w, i) => (i === p.i ? { ...w, ab: [...(w.ab || []), o] } : w)), null, true);
+    setSel(["o" + id]); setPreviaEsq(null);
+  };
+  // número digitado + Enter: distância da esquadria até a face da parede do
+  // lado em que o cursor está
+  const aplicarDigitadoEsq = () => {
+    const d = numDigitado(digitado); setDigitado("");
+    const p = previaEsq; if (d == null || !p) return;
+    const x = p.proj < p.L / 2 ? p.fa + d + p.larg / 2 : p.L - p.fb - d - p.larg / 2;
+    const ab = { x: r3(x), larg: p.larg, alt: p.alt, peit: p.peit };
+    colocarEsquadria({ ...p, x: ab.x, motivo: tpValidarAbertura(paredes, p.i, ab, null) });
+  };
   // comprimento digitado + Enter: cria o trecho na direção do cursor
   // Retângulo com medidas digitadas: a 1ª medida vai no sentido em que o
   // cursor está indo (de lado = largura, para cima/baixo = comprimento), a 2ª
@@ -936,18 +1106,23 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // paredes
     const todas = modoTraco === "linha" && inicio && hover && (hover.x !== inicio.x || hover.y !== inicio.y)
       ? [...paredes, { a: inicio, b: hover, t: espM, fantasma: true }] : paredes;
-    ctx.lineCap = "square";
-    todas.forEach((w, i) => {
-      if (!marcadas.has("p" + i)) return;
-      const [ax, ay] = T(w.a), [bx, by] = T(w.b);
-      ctx.strokeStyle = "rgba(4,116,244,0.25)"; ctx.lineWidth = Math.max(2, w.t * v.s) + 10 * dpr;
-      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
-    });
+    // cada parede é desenhada em trechos (sem os vãos das portas e janelas);
+    // as pontas avançam meia espessura, como o canto quadrado de antes
+    const trechos = (w, extra, cor) => {
+      const L = tpLen(w); if (!L) return;
+      const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
+      ctx.strokeStyle = cor; ctx.lineWidth = Math.max(2, w.t * v.s) + extra;
+      for (const [s0, s1] of tpTrechosParede(w)) {
+        const [x0, y0] = T({ x: w.a.x + ux * s0, y: w.a.y + uy * s0 }), [x1, y1] = T({ x: w.a.x + ux * s1, y: w.a.y + uy * s1 });
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      }
+    };
+    ctx.lineCap = "butt";
+    todas.forEach((w, i) => { if (marcadas.has("p" + i)) trechos(w, 10 * dpr, "rgba(4,116,244,0.25)"); });
     todas.forEach((w, i) => {
       const [ax, ay] = T(w.a), [bx, by] = T(w.b), marc = marcadas.has("p" + i);
-      ctx.strokeStyle = w.fantasma || marc ? TP_AZUL : "#374151"; ctx.globalAlpha = w.fantasma ? 0.6 : 1;
-      ctx.lineWidth = Math.max(2, w.t * v.s);
-      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.globalAlpha = w.fantasma ? 0.6 : 1;
+      trechos(w, 0, w.fantasma || marc ? TP_AZUL : "#374151"); ctx.globalAlpha = 1;
       let ang = Math.atan2(by - ay, bx - ax); if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
       ctx.save(); ctx.translate((ax + bx) / 2, (ay + by) / 2); ctx.rotate(ang);
       ctx.font = `600 ${12 * dpr}px system-ui, sans-serif`; ctx.textAlign = "center";
@@ -955,6 +1130,82 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (!w.fantasma) ctx.fillText(tpFmt(tpLen(w)) + " m", 0, -(w.t * v.s / 2 + 6 * dpr)); ctx.restore();
       if (w.fantasma) etiqueta(w.a, w.b, `${tpFmt(tpLen(w))} m${angulo(w.a, w.b)}`);
     });
+    // portas, janelas e vãos: símbolo de planta (NBR 6492 / convenção usual)
+    // porta de giro: folha a 90° + arco; correr: folhas sobrepostas; janela:
+    // linhas das faces + vidro; maxim-ar: projeção da folha tracejada; vão:
+    // verga tracejada. Código do quadro (P1, J1...) do outro lado da abertura.
+    const desenharEsq = (w, o, cor, opts = {}) => {
+      const L = tpLen(w); if (!L) return;
+      const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, nx = -uy, ny = ux, h = (w.t || 0) / 2, ld = o.lado || 1, md = o.mao || 1;
+      const P = (s, n) => ({ x: w.a.x + ux * s + nx * n, y: w.a.y + uy * s + ny * n });
+      const e0 = o.x - o.larg / 2, e1 = o.x + o.larg / 2;
+      const seg = (p, q, lw, dash) => { const [x0, y0] = T(p), [x1, y1] = T(q); ctx.lineWidth = lw * dpr; ctx.setLineDash(dash || []); ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); ctx.setLineDash([]); };
+      const vaoPoli = [P(e0, -h), P(e1, -h), P(e1, h), P(e0, h)];
+      if (opts.limpar) { ctx.fillStyle = "#fff"; caminho(vaoPoli); ctx.fill(); }
+      if (opts.marc) { ctx.fillStyle = "rgba(4,116,244,0.18)"; caminho(vaoPoli); ctx.fill(); }
+      ctx.strokeStyle = cor; ctx.lineCap = "butt";
+      seg(P(e0, -h), P(e0, h), 1.2); seg(P(e1, -h), P(e1, h), 1.2); // ombreiras
+      if (tpGiro(o.tipo)) {
+        const dois = o.tipo === "porta_giro2", r = dois ? o.larg / 2 : o.larg;
+        const folhas = dois ? [[e0, 1], [e1, -1]] : [[md > 0 ? e0 : e1, md > 0 ? 1 : -1]];
+        for (const [s, dir] of folhas) {
+          const base = h * ld;
+          seg(P(s, base), P(s, base + ld * r), 2.2);
+          ctx.lineWidth = 1 * dpr; ctx.beginPath();
+          for (let k = 0; k <= 24; k++) { const an = (k / 24) * Math.PI / 2; const [x, y] = T(P(s + dir * r * Math.cos(an), base + ld * r * Math.sin(an))); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+          ctx.stroke();
+        }
+      } else if (o.tipo === "porta_correr" || o.tipo === "janela_correr") {
+        const janela = o.tipo === "janela_correr", k = h * 0.35, sb = 0.05;
+        if (janela) { seg(P(e0, -h), P(e1, -h), 1); seg(P(e0, h), P(e1, h), 1); }
+        const a1 = md > 0 ? [e0, o.x + sb] : [o.x - sb, e1], a2 = md > 0 ? [o.x - sb, e1] : [e0, o.x + sb];
+        seg(P(a1[0], k), P(a1[1], k), janela ? 1.6 : 3); seg(P(a2[0], -k), P(a2[1], -k), janela ? 1.6 : 3);
+      } else if (o.tipo === "maxim_ar" || o.tipo === "fixo") {
+        seg(P(e0, -h), P(e1, -h), 1); seg(P(e0, h), P(e1, h), 1); seg(P(e0, 0), P(e1, 0), 1.6);
+        if (o.tipo === "maxim_ar") { const q = Math.min(0.3, o.larg * 0.4); seg(P(e0, h * ld), P(o.x, ld * (h + q)), 1, [4 * dpr, 3 * dpr]); seg(P(o.x, ld * (h + q)), P(e1, h * ld), 1, [4 * dpr, 3 * dpr]); }
+      } else { seg(P(e0, -h), P(e1, -h), 1, [5 * dpr, 4 * dpr]); seg(P(e0, h), P(e1, h), 1, [5 * dpr, 4 * dpr]); }
+      if (opts.codigo) {
+        // lado da etiqueta: porta do lado oposto ao giro; janela/vão do lado
+        // oposto à medida da parede. Se cair do lado da medida perto do meio da
+        // parede, vai mais para fora para não encavalar com ela.
+        const [sax, say] = T(w.a), [sbx, sby] = T(w.b);
+        let ang = Math.atan2(sby - say, sbx - sax); if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
+        const ladoMedida = nx * Math.sin(ang) - ny * Math.cos(ang) > 0 ? 1 : -1;
+        const sg = tpGiro(o.tipo) ? -ld : -ladoMedida;
+        const longe = sg === ladoMedida && Math.abs(o.x - L / 2) < o.larg / 2 + 0.8;
+        const offPx = h * v.s + (longe ? 34 : 13) * dpr;
+        const [cx0, cy0] = T(P(o.x, 0)), tx = cx0 + nx * sg * offPx, ty = cy0 + ny * sg * offPx;
+        ctx.font = `700 ${10.5 * dpr}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        const wd = ctx.measureText(opts.codigo).width + 8 * dpr;
+        ctx.fillStyle = "rgba(255,255,255,0.95)"; ctx.fillRect(tx - wd / 2, ty - 8 * dpr, wd, 16 * dpr);
+        ctx.fillStyle = cor; ctx.fillText(opts.codigo, tx, ty); ctx.textBaseline = "alphabetic";
+      }
+      // cotas temporárias até as faces das paredes vizinhas (como no Revit)
+      if (opts.cotas) {
+        const off = -ld * (h + 0.5), dA = e0 - (opts.fa || 0), dB = (L - (opts.fb || 0)) - e1;
+        ctx.strokeStyle = "#0ea5e9";
+        for (const [s0, s1, d] of [[opts.fa || 0, e0, dA], [e1, L - (opts.fb || 0), dB]]) {
+          if (d < 0.005) continue;
+          seg(P(s0, off), P(s1, off), 1); seg(P(s0, off - 0.08), P(s0, off + 0.08), 1); seg(P(s1, off - 0.08), P(s1, off + 0.08), 1);
+          etiqueta(P(s0, off), P(s1, off), tpFmt(d) + " m", "#0284c7");
+        }
+        ctx.strokeStyle = cor;
+      }
+    };
+    const quadroPl = tpQuadroEsquadrias(paredes);
+    paredes.forEach((w, i) => {
+      const vis = tpAbsVisiveis(w); if (!vis.length) return;
+      const fc = tpFacesPonta(paredes, i);
+      vis.forEach((o) => {
+        const marc = marcadas.has("o" + o.id) || marcadas.has("p" + i);
+        desenharEsq(w, o, marc ? TP_AZUL : "#111827", { marc: marcadas.has("o" + o.id), codigo: quadroPl.codigoDe.get(o.id), cotas: marcadas.has("o" + o.id) && sel.length === 1, fa: fc.fa, fb: fc.fb });
+      });
+    });
+    if (ferramenta === "esquadria" && previaEsq && paredes[previaEsq.i]) {
+      ctx.globalAlpha = 0.9;
+      desenharEsq(paredes[previaEsq.i], previaEsq, previaEsq.motivo ? "#dc2626" : TP_AZUL, { limpar: true, cotas: true, fa: previaEsq.fa, fb: previaEsq.fb });
+      ctx.globalAlpha = 1;
+    }
     const ponto = (p, r) => { const [x, y] = T(p); ctx.fillStyle = TP_AZUL; ctx.beginPath(); ctx.arc(x, y, r * dpr, 0, 7); ctx.fill(); };
     // linhas de alinhamento
     if (hover && hover.guias) {
@@ -1078,15 +1329,41 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         mesh.userData.chave = "a" + i; T.group.add(mesh);
       }
     });
+    // Parede = vista de frente (contorno com os recortes das portas, furos das
+    // janelas) extrudada na espessura. Porta e vão recortam a base; janela é furo.
     paredes.forEach((w, i) => {
       const L = tpLen(w); if (!L) return;
-      const g = new THREE.BoxGeometry(L + w.t, w.h, w.t);
-      const marc = marcadas.has("p" + i);
+      const marc = marcadas.has("p" + i), h = w.t / 2, H = w.h, rot = -Math.atan2(w.b.y - w.a.y, w.b.x - w.a.x);
+      const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
+      const vis = [...tpAbsVisiveis(w)].sort((p, q) => p.x - q.x);
+      const topoDe = (o) => Math.min(H - 0.02, (o.peit || 0) + o.alt);
+      const contornoV = [new THREE.Vector2(-h, 0)];
+      const furos = [];
+      for (const o of vis) {
+        const e0 = o.x - o.larg / 2, e1 = o.x + o.larg / 2, z0 = o.peit || 0, z1 = topoDe(o);
+        if (z1 <= z0 + 1e-3) continue;
+        if (z0 < 0.005) contornoV.push(new THREE.Vector2(e0, 0), new THREE.Vector2(e0, z1), new THREE.Vector2(e1, z1), new THREE.Vector2(e1, 0));
+        else furos.push(new THREE.Path([new THREE.Vector2(e0, z0), new THREE.Vector2(e1, z0), new THREE.Vector2(e1, z1), new THREE.Vector2(e0, z1)]));
+      }
+      contornoV.push(new THREE.Vector2(L + h, 0), new THREE.Vector2(L + h, H), new THREE.Vector2(-h, H));
+      const shape = new THREE.Shape(contornoV); shape.holes.push(...furos);
+      const g = new THREE.ExtrudeGeometry(shape, { depth: w.t, bevelEnabled: false }); g.translate(0, 0, -h);
       const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: marc ? 0x8dbbff : 0xe5e1d8 }));
-      mesh.position.set((w.a.x + w.b.x) / 2 - cx, w.h / 2, (w.a.y + w.b.y) / 2 - cz);
-      mesh.rotation.y = -Math.atan2(w.b.y - w.a.y, w.b.x - w.a.x);
+      mesh.position.set(w.a.x - cx, 0, w.a.y - cz); mesh.rotation.y = rot;
       mesh.userData.chave = "p" + i; T.group.add(mesh);
       contorno(g, mesh, marc ? 0x0474f4 : 0x4b5563);
+      // folha / vidro dentro do vão (fechado), clicável
+      for (const o of vis) {
+        const t = tpEsq(o.tipo); if (t.cat === "V") continue;
+        const z0 = o.peit || 0, z1 = topoDe(o); if (z1 <= z0 + 1e-3) continue;
+        const mo = marcadas.has("o" + o.id), madeira = (o.mat || t.mat) === "madeira";
+        const gg = new THREE.BoxGeometry(o.larg, z1 - z0, madeira ? 0.04 : 0.02);
+        const mt = new THREE.MeshLambertMaterial({ color: mo ? 0x8dbbff : (madeira ? 0xa47148 : 0x9cc9f0), transparent: !madeira && !mo, opacity: !madeira && !mo ? 0.5 : 1 });
+        const m2 = new THREE.Mesh(gg, mt);
+        m2.position.set(w.a.x + ux * o.x - cx, (z0 + z1) / 2, w.a.y + uy * o.x - cz); m2.rotation.y = rot;
+        m2.userData.chave = "o" + o.id; T.group.add(m2);
+        contorno(gg, m2, mo ? 0x0474f4 : (madeira ? 0x5b3a1e : 0x4b5563));
+      }
     });
     T.camera.aspect = c.width / c.height; T.camera.updateProjectionMatrix();
     const alvo = T.alvo || { x: 0, y: 1, z: 0 };
@@ -1145,7 +1422,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     return () => { vivo = false; if (three.current) { three.current.renderer.dispose(); three.current = null; } };
   }, []);
 
-  useEffect(() => { desenharPlanta(); }, [paredes, areas, inicio, poli, hover, espM, sel, caixa, ferramenta, ancora, modoTraco]);
+  useEffect(() => { desenharPlanta(); }, [paredes, areas, inicio, poli, hover, espM, sel, caixa, ferramenta, ancora, modoTraco, previaEsq]);
   // ambiente acompanha as paredes: mexeu numa parede, o contorno e a área se refazem
   useEffect(() => {
     if (!areas.some((a) => a.tipo === "ambiente" && a.ponto)) return;
@@ -1173,7 +1450,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       const ctrl = e.ctrlKey || e.metaKey, tecla = e.key;
       const desenhando = (modoTraco === "linha" && ((ferramenta === "parede" && inicio) || (tpEhPoli(ferramenta) && poli.length)))
-        || (modoTraco === "retangulo" && ancora && ancora.ret && (ferramenta === "parede" || tpEhPoli(ferramenta)));
+        || (modoTraco === "retangulo" && ancora && ancora.ret && (ferramenta === "parede" || tpEhPoli(ferramenta)))
+        || (ferramenta === "esquadria" && !!previaEsq);
       // números durante o traço = comprimento do próximo trecho
       if (desenhando && !ctrl && /^[0-9.,]$/.test(tecla)) { e.preventDefault(); setDigitado((d) => (d + tecla).slice(0, 10)); return; }
       if (digitado && tecla === "Backspace") { e.preventDefault(); setDigitado((d) => d.slice(0, -1)); return; }
@@ -1190,7 +1468,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         return;
       }
       if (tecla === "Enter") {
-        if (digitado && modoTraco === "retangulo" && ancora && ancora.ret) aplicarDigitadoRet();
+        if (digitado && ferramenta === "esquadria") aplicarDigitadoEsq();
+        else if (desenhando && ferramenta === "esquadria") colocarEsquadria(previaEsq);
+        else if (digitado && modoTraco === "retangulo" && ancora && ancora.ret) aplicarDigitadoRet();
         else if (digitado) aplicarDigitado();
         else if (desenhando) finalizar();
         else if (ferramenta === "selecionar" || ferramenta === "mover") trocarFerramenta(ultimaFerramenta.current); // repete o último comando
@@ -1198,7 +1478,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       }
       if (ctrl && (tecla === "z" || tecla === "Z")) { e.preventDefault(); if (e.shiftKey) refazer(); else desfazer(); return; }
       if (ctrl && (tecla === "y" || tecla === "Y")) { e.preventDefault(); refazer(); return; }
-      if (ctrl && (tecla === "a" || tecla === "A")) { e.preventDefault(); trocarFerramenta("selecionar"); setSel([...paredes.map((_, i) => "p" + i), ...areas.map((_, i) => "a" + i)]); return; }
+      if (ctrl && (tecla === "a" || tecla === "A")) { e.preventDefault(); trocarFerramenta("selecionar"); setSel(todasChaves()); return; }
+      // Espaço: inverte a mão da porta (na colocação ou as selecionadas); Shift+Espaço, o lado
+      if (tecla === " " && !ctrl) {
+        if (ferramenta === "esquadria") { e.preventDefault(); const m = -maoEsq; setMaoEsq(m); setPreviaEsq((p) => (p ? { ...p, mao: m } : p)); return; }
+        if (selO.length) { e.preventDefault(); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); inverterAberturas(e.shiftKey ? "lado" : "mao"); return; }
+      }
       if (tecla === "Delete" || tecla === "Backspace") { if (sel.length) { e.preventDefault(); excluirSelecao(); } return; }
       if (sel.length && tecla.startsWith("Arrow")) {
         e.preventDefault();
@@ -1210,6 +1495,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (!ctrl && !e.altKey) {
         const t = tecla.toLowerCase();
         if (t === "z" || t === "f") { ajustar(); return; } // ZF no Revit / F no SketchUp
+        if (t === "d" || t === "j") { trocarFerramenta("esquadria"); setTipoEsq(t === "d" ? "porta_giro" : "janela_correr"); return; } // DR / WN no Revit
         const f = { v: "selecionar", p: "parede", c: "contrapiso", l: "laje", t: "telhado", r: "terreno", a: "ambiente", s: "separador", h: "mover" }[t];
         if (f) trocarFerramenta(f);
       }
@@ -1238,6 +1524,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const elementoNoPonto = (d) => {
     const v = vista.current, p = paraMundoLivre(d), tol = 7 * (window.devicePixelRatio || 1) / v.s;
     let melhor = null, menor = Infinity;
+    // porta/janela primeiro (está dentro da parede); a porta de giro pega
+    // também o quarto de círculo da folha
+    for (const w of paredes) {
+      const L = tpLen(w); if (!L || !(w.ab || []).length) continue;
+      const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, pr = (p.x - w.a.x) * ux + (p.y - w.a.y) * uy, pn = -(p.x - w.a.x) * uy + (p.y - w.a.y) * ux;
+      for (const o of tpAbsVisiveis(w)) {
+        if (Math.abs(pr - o.x) > o.larg / 2) continue;
+        const prof = tpGiro(o.tipo) ? (o.tipo === "porta_giro2" ? o.larg / 2 : o.larg) : 0, s = pn * (o.lado || 1);
+        if (Math.abs(pn) <= Math.max(w.t / 2, tol) || (prof && s >= 0 && s <= w.t / 2 + prof)) return "o" + o.id;
+      }
+    }
     paredes.forEach((w, i) => { const dd = distSeg(p, w.a, w.b); if (dd <= Math.max(w.t / 2, tol) && dd < menor) { menor = dd; melhor = "p" + i; } });
     if (melhor) return melhor;
     areas.forEach((a, i) => { if (a.tipo === "separador" && a.pts && a.pts.length === 2) { const dd = distSeg(p, a.pts[0], a.pts[1]); if (dd <= tol && dd < menor) { menor = dd; melhor = "a" + i; } } });
@@ -1295,6 +1592,21 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   };
   const arrastarAlca = (e, g) => {
     const al = g.grip, orig = g.orig;
+    if (al.tipo === "abertura") {
+      // arrasta ao longo da parede; passando para outra parede, muda de parede
+      // (como no Revit). Posição que não cabe: fica onde estava no quadro anterior.
+      if (!sel.includes(al.chave)) setSel([al.chave]);
+      const off = al.off || { x: 0, y: 0 };
+      const pt = paraMundoLivre(devPx({ clientX: e.clientX + off.x, clientY: e.clientY + off.y }));
+      const loc = tpAcharAbertura(orig.paredes, al.id); if (!loc) return;
+      const h = hospedar(pt, loc.o.larg, orig.paredes); if (!h) return;
+      let ps = orig.paredes.map((w, i) => (i === loc.i ? { ...w, ab: w.ab.filter((q) => q.id !== al.id) } : w));
+      const novo = { ...loc.o, x: h.x, lado: h.i === loc.i ? loc.o.lado : h.lado };
+      if (tpValidarAbertura(ps, h.i, novo, al.id)) return;
+      ps = ps.map((w, i) => (i === h.i ? { ...w, ab: [...(w.ab || []), novo] } : w));
+      setParedes(ps);
+      return;
+    }
     if (al.tipo === "mover") {
       if (!sel.includes(al.chave)) setSel(al.chaves);
       const off = al.off || { x: 0, y: 0 };
@@ -1342,7 +1654,15 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const w0 = orig.paredes[al.pi], outra = al.fim === "a" ? w0.b : w0.a;
       const pc = pontoDoCursor(e, { ignorar: { parede: al.pi }, base: outra });
       setHover(pc);
-      const novasP = orig.paredes.map((w, i) => (i === al.pi ? { ...w, [al.fim]: limpo(pc) } : w));
+      // portas/janelas ficam no mesmo lugar da planta quando se mexe a ponta "a"
+      // (a posição delas é medida a partir dessa ponta)
+      const novaW = (w) => {
+        const nw = { ...w, [al.fim]: limpo(pc) };
+        if (al.fim !== "a" || !(w.ab || []).length) return nw;
+        const L0 = tpLen(w) || 1, L1 = tpLen(nw) || 1, u0 = { x: (w.b.x - w.a.x) / L0, y: (w.b.y - w.a.y) / L0 }, u1 = { x: (nw.b.x - nw.a.x) / L1, y: (nw.b.y - nw.a.y) / L1 };
+        return { ...nw, ab: w.ab.map((o) => { const c = { x: w.a.x + u0.x * o.x, y: w.a.y + u0.y * o.x }; return { ...o, x: r3((c.x - nw.a.x) * u1.x + (c.y - nw.a.y) * u1.y) }; }) };
+      };
+      const novasP = orig.paredes.map((w, i) => (i === al.pi ? novaW(w) : w));
       setParedes(novasP); setAreas(comAmbientes(novasP, orig.areas));
     }
   };
@@ -1356,6 +1676,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       // volta refazem a área sozinhos. Ctrl/Shift continuam sendo seleção.
       if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
         const k = elementoNoPonto(d);
+        if (k && k[0] === "o") {
+          const loc = tpAcharAbertura(paredes, k.slice(1));
+          if (loc) {
+            const L = tpLen(loc.w) || 1, c = { x: loc.w.a.x + (loc.w.b.x - loc.w.a.x) / L * loc.o.x, y: loc.w.a.y + (loc.w.b.y - loc.w.a.y) / L * loc.o.x };
+            gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: { tipo: "abertura", chave: k, id: loc.o.id, off: desvioCliente(c, e) }, orig: { paredes, areas } };
+            e.currentTarget.setPointerCapture(e.pointerId); return;
+          }
+        }
         const linha = k && (k[0] === "p" || (areas[+k.slice(1)] && areas[+k.slice(1)].tipo === "separador"));
         if (k && (linha || sel.includes(k))) {
           const chaves = sel.includes(k) ? sel : [k];
@@ -1372,7 +1700,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // Com uma ferramenta de desenho ativa e nenhum traço em andamento, apertar
     // em cima de uma parede ou linha de separação e ARRASTAR move o elemento
     // (sem precisar trocar para Selecionar). Só clicar continua desenhando.
-    if (e.button === 0 && ferramenta !== "selecionar" && ferramenta !== "mover" && ferramenta !== "ambiente" && !poli.length && !ancora) {
+    if (e.button === 0 && ferramenta !== "selecionar" && ferramenta !== "mover" && ferramenta !== "ambiente" && ferramenta !== "esquadria" && !poli.length && !ancora) {
       const k = elementoNoPonto(d);
       const idx = k ? +k.slice(1) : -1;
       if (k && (k[0] === "p" || (areas[idx] && areas[idx].tipo === "separador"))) {
@@ -1405,6 +1733,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       }
     }
     if (ferramenta === "parede" || ferramenta === "separador" || tpEhPoli(ferramenta)) setHover(pontoDoCursor(e));
+    if (ferramenta === "esquadria") setPreviaEsq(previaEsqEm(paraMundoLivre(d)));
   };
   const planUp = (e) => {
     const g = gesto.current; gesto.current = null;
@@ -1412,7 +1741,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     clearTimeout(g.timer);
     if (g.grip) {
       if (g.moveu) { historico.current.push(g.orig); if (historico.current.length > 200) historico.current.shift(); futuro.current = []; }
-      else if (g.grip.tipo === "mover") aplicarSelecao([g.grip.chave], g); // só clicou: seleciona
+      else if (g.grip.tipo === "mover" || g.grip.tipo === "abertura") aplicarSelecao([g.grip.chave], g); // só clicou: seleciona
       setHover(null); return;
     }
     if (g.menu) return;
@@ -1425,6 +1754,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const dentro = (p) => p.x >= r.x0 && p.x <= r.x1 && p.y >= r.y0 && p.y <= r.y1;
         const achadas = [];
         paredes.forEach((w, i) => { if (cruzando ? segCruzaRet(w.a, w.b, r) : (dentro(w.a) && dentro(w.b))) achadas.push("p" + i); });
+        paredes.forEach((w) => { const L = tpLen(w); if (L) for (const o of tpAbsVisiveis(w)) if (dentro({ x: w.a.x + (w.b.x - w.a.x) / L * o.x, y: w.a.y + (w.b.y - w.a.y) / L * o.x })) achadas.push("o" + o.id); });
         areas.forEach((ar, i) => {
           const pts = ar.pts || [];
           if (ar.tipo === "separador" && pts.length === 2) { if (cruzando ? segCruzaRet(pts[0], pts[1], r) : (dentro(pts[0]) && dentro(pts[1]))) achadas.push("a" + i); return; }
@@ -1446,6 +1776,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       return;
     }
     if (ferramenta === "ambiente") { inserirAmbienteEm(paraMundoLivre(devPx(e))); return; }
+    if (ferramenta === "esquadria") { setDigitado(""); colocarEsquadria(previaEsqEm(paraMundoLivre(devPx(e)))); return; }
     if (ferramenta === "separador") {
       const p2 = limpo(pontoDoCursor(e)); setHover(pontoDoCursor(e));
       if (!inicio) { setInicio(p2); return; }
@@ -1553,6 +1884,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // ---------- números ----------
   const L = paredes.reduce((s, w) => s + tpLen(w), 0);
   const A = paredes.reduce((s, w) => s + tpLen(w) * w.h, 0);
+  const quadro = useMemo(() => tpQuadroEsquadrias(paredes), [paredes]);
+  const areaAberturas = useMemo(() => tpAreaAberturas(paredes), [paredes]);
   const somaArea = (tipo, f) => areas.filter((a) => a.tipo === tipo).reduce((s, a) => s + f(a), 0);
   const areaCp = somaArea("contrapiso", (a) => tpAreaPoli(a.pts)), volCp = somaArea("contrapiso", (a) => tpAreaPoli(a.pts) * (a.esp || 0));
   const areaLj = somaArea("laje", (a) => tpAreaPoli(a.pts)), volLj = somaArea("laje", (a) => tpAreaPoli(a.pts) * (a.esp || 0));
@@ -1581,6 +1914,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     { id: "terreno", rotulo: "Terreno", dica: "Terreno (R): clique os vértices do lote e feche no primeiro ponto" },
     { id: "ambiente", rotulo: "Ambiente", dica: "Ambiente (A): clique dentro de um cômodo fechado por paredes" },
     { id: "separador", rotulo: "Separador", dica: "Separador de ambiente (S): linha que divide ambientes sem parede, como cozinha integrada" },
+    { id: "esquadria", rotulo: "Porta/Janela", dica: "Porta (D), janela (J) e vão: passe o cursor na parede e clique. Espaço inverte a mão" },
     { id: "mover", rotulo: "Mover", dica: "Mover a vista (H)" },
   ];
   const MODOS = [{ id: "planta", rotulo: "Planta" }, { id: "ambos", rotulo: "Planta + 3D" }, { id: "3d", rotulo: "3D" }];
@@ -1590,12 +1924,20 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const status = (ferramenta === "separador" && dividir) ? `Dividindo "${(areas[dividir.ai] || {}).nome || "ambiente"}": clique de uma parede até a outra (pode quebrar a linha). Esc cancela.`
     : ferramenta === "separador" ? (inicio ? "Clique o fim da linha. Esc cancela." : "Separador: linha que divide ambientes sem parede. Clique de uma parede até a outra.")
     : ferramenta === "ambiente" ? "Clique dentro de um cômodo fechado por paredes para criar o ambiente (nome e área)."
+    : ferramenta === "esquadria" ? (() => {
+        const t = tpEsq(tipoEsq), dm = dimsEsq[tipoEsq] || t, nome = `${t.rotulo} ${tpFmt(dm.larg)} × ${tpFmt(dm.alt)}`;
+        if (digitado) return `Distância até a face da parede: ${digitado} m — Enter coloca, Esc apaga.`;
+        if (!previaEsq) return `${nome}: passe o cursor sobre uma parede.`;
+        if (previaEsq.motivo) return `${previaEsq.motivo}. Mova para outro ponto da parede.`;
+        return `${nome}: clique para colocar${tpGiro(tipoEsq) ? " (abre para o lado do cursor; Espaço troca a mão)" : ""}. Ou digite a distância até a parede e Enter.`;
+      })()
     : digitado ? `Comprimento: ${digitado} m — Enter confirma, Esc apaga.`
     : (desenhoAtivo && modoTraco === "retangulo") ? (ancora && ancora.ret
         ? (ancora.d1 ? `1ª medida ${tpFmt(Math.abs(ancora.d1.v))} m fixada. Digite a 2ª e Enter, ou clique para escolher o lado.` : "Aponte o cursor para o lado e digite a 1ª medida + Enter (ou clique o canto oposto). Esc cancela.")
         : "Retângulo: clique o primeiro canto.")
     : (desenhoAtivo && modoTraco === "arco") ? (ancora && ancora.arcoFim ? "Mova para curvar e clique um ponto da curva. Esc cancela." : ((ferramenta === "parede" ? inicio : poli.length) ? "Arco: clique o ponto final." : "Arco: clique o ponto inicial."))
     : (selA.length === 1 && !selP.length && ferramenta === "selecionar") ? "Editar contorno: arraste os quadrados (cantos) ou as bolinhas (lados). O cursor gruda nas quinas das paredes (quadrado verde)."
+    : (selO.length === 1 && sel.length === 1 && ferramenta === "selecionar") ? "Arraste a esquadria ao longo da parede (ou para outra parede). Setas: 10 cm. Espaço inverte a mão, Shift+Espaço o lado. Delete exclui."
     : (selP.length === 1 && !selA.length && ferramenta === "selecionar") ? "Arraste os quadrados das pontas para esticar ou girar a parede. Delete exclui."
     : ferramenta === "selecionar"
     ? (sel.length ? `${sel.length} selecionado${sel.length === 1 ? "" : "s"}. Ctrl soma, Shift tira, setas movem, Delete exclui, Esc limpa.` : "Clique ou arraste uma área (esq.→dir.: inteiro dentro; dir.→esq.: o que tocar). Ctrl soma, Shift tira. Tecla ? mostra os atalhos.")
@@ -1609,10 +1951,58 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       <div style={secao}>Propriedades</div>
       <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 10, padding: 10 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", marginBottom: 8 }}>
-          {selP.length && !selA.length ? (selP.length === 1 ? "Parede" : `${selP.length} paredes`)
+          {selO.length && sel.length === selO.length ? (selO.length === 1 ? `${tpEsq(selO[0].o.tipo).rotulo} · ${quadro.codigoDe.get(selO[0].o.id) || ""}` : `${selO.length} esquadrias`)
+            : selP.length && !selA.length && sel.length === selP.length ? (selP.length === 1 ? "Parede" : `${selP.length} paredes`)
             : selA.length && !selP.length ? (selA.length === 1 ? TP_AREA_TIPOS[areas[selA[0]].tipo].nome : `${selA.length} áreas`)
             : `${sel.length} elementos`}
         </div>
+        {selO.length > 0 && sel.length === selO.length && (() => {
+          const ids = selO.map((x) => x.o.id), um = selO.length === 1 ? selO[0] : null;
+          const tipoComum = comum(selO, (x) => TP_ESQ.indexOf(tpEsq(x.o.tipo)));
+          const t = tipoComum != null ? TP_ESQ[tipoComum] : null;
+          const fc = um ? tpFacesPonta(paredes, um.i) : null, Lw = um ? tpLen(um.w) : 0;
+          const dA = um ? um.o.x - um.o.larg / 2 - fc.fa : 0, dB = um ? (Lw - fc.fb) - (um.o.x + um.o.larg / 2) : 0;
+          const madeiraSel = comum(selO, (x) => ((x.o.mat || tpEsq(x.o.tipo).mat) === "madeira" ? 1 : 0)) === 1;
+          const selStyle = { width: "100%", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit", background: "#fff" };
+          return (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label htmlFor="tp-o-tipo" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>Tipo</label>
+                <select id="tp-o-tipo" value={t ? t.id : ""} style={selStyle}
+                  onChange={(e) => { const n = tpEsq(e.target.value); editarAberturas(ids, (o) => ({ ...o, tipo: n.id, larg: n.larg, alt: n.alt, peit: n.peit, ...(n.mat ? { mat: n.mat } : { mat: undefined }) })); }}>
+                  {!t && <option value="">vários</option>}
+                  {TP_ESQ.map((x) => <option key={x.id} value={x.id}>{x.rotulo}</option>)}
+                </select>
+              </div>
+              <TpCampo id="tp-o-larg" rotulo="Largura (m)" valor={comum(selO, (x) => x.o.larg)} onConfirmar={(v) => editarAberturas(ids, (o) => ({ ...o, larg: v }))} />
+              <TpCampo id="tp-o-alt" rotulo="Altura (m)" valor={comum(selO, (x) => x.o.alt)} onConfirmar={(v) => editarAberturas(ids, (o) => ({ ...o, alt: v }))} />
+              <TpCampo id="tp-o-peit" rotulo="Peitoril (m)" min={-0.0001} valor={comum(selO, (x) => x.o.peit || 0)} somenteLeitura={!!t && t.cat !== "J"} onConfirmar={(v) => editarAberturas(ids, (o) => ({ ...o, peit: v }))} />
+              {t && t.mat && tpGiro(t.id) ? (
+                <div style={{ minWidth: 0 }}>
+                  <label htmlFor="tp-o-mat" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>Material</label>
+                  <select id="tp-o-mat" value={madeiraSel ? "madeira" : "aluminio"} style={selStyle} onChange={(e) => editarAberturas(ids, (o) => ({ ...o, mat: e.target.value }))}>
+                    <option value="madeira">Madeira</option><option value="aluminio">Alumínio</option>
+                  </select>
+                </div>
+              ) : <TpCampo id="tp-o-area" rotulo="Área do vão (m²)" valor={comum(selO, (x) => x.o.larg * x.o.alt)} somenteLeitura onConfirmar={() => {}} />}
+              {um && <TpCampo id="tp-o-da" rotulo="Até a parede (lado A)" min={-0.0001} valor={Math.max(0, dA)} onConfirmar={(v) => editarAberturas(ids, (o) => ({ ...o, x: r3(fc.fa + v + o.larg / 2) }))} />}
+              {um && <TpCampo id="tp-o-db" rotulo="Até a parede (lado B)" min={-0.0001} valor={Math.max(0, dB)} onConfirmar={(v) => editarAberturas(ids, (o) => ({ ...o, x: r3(Lw - fc.fb - v - o.larg / 2) }))} />}
+              {t && t.cat !== "V" && t.id !== "fixo" && (
+                <div style={{ gridColumn: "1 / -1", display: "flex", gap: 6 }}>
+                  <button style={{ ...btn, flex: 1, minHeight: 30, padding: "4px 8px", fontSize: 12.5 }} title="Espaço" onClick={() => inverterAberturas("mao")}>Inverter mão</button>
+                  <button style={{ ...btn, flex: 1, minHeight: 30, padding: "4px 8px", fontSize: 12.5 }} title="Shift + Espaço" onClick={() => inverterAberturas("lado")}>Inverter lado</button>
+                </div>
+              )}
+              <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#4b5563", lineHeight: 1.4 }}>
+                {madeiraSel
+                  ? "Porta de madeira: no orçamento entra pelos Cômodos da obra (kit de porta)."
+                  : t && t.cat === "V" ? "Vão livre: abre a parede, sem esquadria. Entra no desconto de aberturas."
+                  : "Alumínio: vai para as esquadrias do orçamento de obra (linha Gold), agrupada pelo código do quadro."}
+                {" "}Arraste na planta para mudar de posição ou de parede.
+              </div>
+            </div>
+          );
+        })()}
         {selP.length > 0 && !selA.length && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             {selP.length === 1 && <div style={{ gridColumn: "1 / -1" }}><TpCampo id="tp-p-comp" rotulo="Comprimento (m)" valor={tpLen(paredes[selP[0]])} onConfirmar={(v) => mudarComprimento(selP[0], v)} /></div>}
@@ -1736,7 +2126,55 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         ))}
       </div>
 
+      {ferramenta === "esquadria" && (() => {
+        const t = tpEsq(tipoEsq), dm = dimsEsq[tipoEsq] || t;
+        const setDm = (patch) => setDimsEsq((d) => ({ ...d, [tipoEsq]: { ...(d[tipoEsq] || t), ...patch } }));
+        return (
+          <>
+            <div style={secao}>Nova esquadria</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+              {TP_ESQ.map((x) => (
+                <button key={x.id} onClick={() => setTipoEsq(x.id)}
+                  style={{ ...btn, padding: "6px 6px", fontSize: 12, minHeight: 32, borderColor: tipoEsq === x.id ? TP_AZUL : "#e5e7eb", background: tipoEsq === x.id ? "#eef5ff" : "#fff", color: tipoEsq === x.id ? TP_AZUL : "#111827", fontWeight: tipoEsq === x.id ? 600 : 500 }}>{x.curto}</button>
+              ))}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+              <TpCampo id="tp-ne-larg" rotulo="Largura (m)" valor={dm.larg} onConfirmar={(v) => setDm({ larg: v })} />
+              <TpCampo id="tp-ne-alt" rotulo="Altura (m)" valor={dm.alt} onConfirmar={(v) => setDm({ alt: v })} />
+              {t.cat === "J" && <TpCampo id="tp-ne-peit" rotulo="Peitoril (m)" min={-0.0001} valor={dm.peit} onConfirmar={(v) => setDm({ peit: v })} />}
+              {tpGiro(t.id) && (
+                <div style={{ minWidth: 0 }}>
+                  <label htmlFor="tp-ne-mat" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>Material</label>
+                  <select id="tp-ne-mat" value={dm.mat || "madeira"} onChange={(e) => setDm({ mat: e.target.value })} style={{ width: "100%", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit", background: "#fff" }}>
+                    <option value="madeira">Madeira</option><option value="aluminio">Alumínio</option>
+                  </select>
+                </div>
+              )}
+            </div>
+            <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6, lineHeight: 1.4 }}>Passe na parede e clique. Gruda no meio da parede e a 10 cm do canto; digite a distância até a parede + Enter para medida exata.</div>
+          </>
+        );
+      })()}
+
       {propriedades}
+
+      {quadro.grupos.length > 0 && (
+        <>
+          <div style={secao}>Quadro de esquadrias</div>
+          <div>
+            {quadro.grupos.map((g) => (
+              <button key={g.codigo} onClick={() => { trocarFerramenta("selecionar"); setSel(g.ids.map((id) => "o" + id)); }}
+                style={{ ...linhaQ, width: "100%", background: "none", border: "none", borderBottom: "1px solid #f0f2f5", cursor: "pointer", fontFamily: "inherit", textAlign: "left", alignItems: "flex-start" }}>
+                <span style={{ minWidth: 0 }}>
+                  <strong style={{ color: "#111827" }}>{g.codigo}</strong> {g.rot}{g.mat === "madeira" ? " (madeira)" : ""}
+                  <span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>{tpFmt(g.larg)} × {tpFmt(g.alt)} m{g.peit ? ` · peitoril ${tpFmt(g.peit)}` : ""}</span>
+                </span>
+                <span style={numQ}>{g.qtd} un</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       <div style={secao}>Visualização</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
@@ -1817,8 +2255,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       <div style={secao}>Quantitativo</div>
       <div>
         <div style={linhaQ}><span>Paredes</span><span style={numQ}>{paredes.length} · {tpFmt(L)} m</span></div>
-        <div style={linhaQ}><span>Área de parede</span><span style={numQ}>{tpFmt(A)} m²</span></div>
-        <div style={linhaQ}><span>Reboco 2 faces</span><span style={numQ}>{tpFmt(A * 2)} m²</span></div>
+        <div style={linhaQ}><span>Área de parede{areaAberturas > 0 ? " (bruta)" : ""}</span><span style={numQ}>{tpFmt(A)} m²</span></div>
+        {areaAberturas > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>aberturas · líquida</span><span style={numQ}>{tpFmt(areaAberturas)} · {tpFmt(A - areaAberturas)} m²</span></div>}
+        <div style={linhaQ}><span>Reboco 2 faces</span><span style={numQ}>{tpFmt((A - areaAberturas) * 2)} m²</span></div>
         <div style={linhaQ}><span>Área construída (coberta)</span><span style={numQ}>{tpFmt(analise.coberta)} m²</span></div>
         <div style={linhaQ}><span>Contrapiso</span><span style={numQ}>{tpFmt(areaCp)} m² · {tpFmt(volCp)} m³</span></div>
         {analise.temCobertura && areaCp > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>interno · externo</span><span style={numQ}>{tpFmt(analise.pisoInterno)} · {tpFmt(analise.pisoExterno)} m²</span></div>}
@@ -1857,6 +2296,16 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           ))}
         </div>
       )}
+      {ferramenta === "esquadria" && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 2, background: "rgba(255,255,255,0.94)", borderRadius: 10, padding: 3, border: "1px solid #e5e7eb", pointerEvents: "auto" }}>
+          {TP_ESQ.map((x) => (
+            <button key={x.id} title={x.rotulo} onClick={() => setTipoEsq(x.id)}
+              style={{ border: "none", borderRadius: 7, padding: isMobile ? "6px 7px" : "6px 10px", fontSize: isMobile ? 12 : 12.5, cursor: "pointer", fontFamily: "inherit", background: tipoEsq === x.id ? "#111827" : "transparent", color: tipoEsq === x.id ? "#fff" : "#374151", fontWeight: 600 }}>
+              {x.curto}
+            </button>
+          ))}
+        </div>
+      )}
       {poli.length >= 3 && (
         <button onClick={finalizarPoli} style={{ ...btn, minHeight: 32, padding: "4px 10px", fontSize: 12.5, background: TP_AZUL, borderColor: TP_AZUL, color: "#fff", pointerEvents: "auto" }}>Fechar {ferramenta === "laje" ? "laje" : ferramenta === "telhado" ? "telhado" : ferramenta === "terreno" ? "terreno" : "contrapiso"}</button>
       )}
@@ -1889,14 +2338,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             <span style={tag}>Planta baixa · grade 0,50 m</span>
             <canvas ref={planRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none", cursor: ferramenta === "mover" ? "grab" : ferramenta === "selecionar" ? "default" : "crosshair" }}
               onContextMenu={(e) => e.preventDefault()} onDoubleClick={() => { if (poli.length >= 3) finalizarPoli(); }}
-              onPointerDown={planDown} onPointerMove={(e) => { planMove(e); if (!gesto.current && ferramenta === "selecionar") e.currentTarget.style.cursor = alcaNoPonto(devPx(e)) ? "move" : "default"; }} onPointerUp={planUp} onPointerLeave={() => { if (!inicio && !poli.length && !gesto.current) setHover(null); }} />
+              onPointerDown={planDown} onPointerMove={(e) => { planMove(e); if (!gesto.current && ferramenta === "selecionar") e.currentTarget.style.cursor = alcaNoPonto(devPx(e)) ? "move" : "default"; }} onPointerUp={planUp} onPointerLeave={() => { if (!inicio && !poli.length && !gesto.current) setHover(null); if (!gesto.current) setPreviaEsq(null); }} />
             {barraFerramentas}
             {aviso && (
               <div role="status" style={{ position: "absolute", left: "50%", bottom: 64, transform: "translateX(-50%)", zIndex: 2, maxWidth: "min(460px, 90%)", background: "#111827", color: "#fff", borderRadius: 8, padding: "8px 12px", fontSize: 13, lineHeight: 1.4, boxShadow: "0 4px 12px rgba(0,0,0,0.2)" }}>{aviso}</div>
             )}
             {digitado && (
               <div style={{ position: "absolute", left: "50%", top: 74, transform: "translateX(-50%)", zIndex: 1, background: "#111827", color: "#fff", borderRadius: 8, padding: "6px 12px", fontSize: 14, fontWeight: 600, fontVariantNumeric: "tabular-nums", boxShadow: "0 4px 12px rgba(0,0,0,0.2)" }}>
-                {modoTraco === "retangulo" && ancora && ancora.ret ? (ancora.d1 ? "2ª medida: " : "1ª medida: ") : ""}{digitado} m <span style={{ fontWeight: 400, opacity: 0.7, fontSize: 12, marginLeft: 6 }}>Enter</span>
+                {ferramenta === "esquadria" ? "Até a parede: " : modoTraco === "retangulo" && ancora && ancora.ret ? (ancora.d1 ? "2ª medida: " : "1ª medida: ") : ""}{digitado} m <span style={{ fontWeight: 400, opacity: 0.7, fontSize: 12, marginLeft: 6 }}>Enter</span>
               </div>
             )}
             <div style={{ position: "absolute", right: 12, bottom: 12, display: "flex", flexDirection: "column", gap: 6, zIndex: 1 }}>
@@ -2000,7 +2449,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             </div>
             {[
               ["Seleção", [["Clique", "seleciona (substitui)"], ["Ctrl + clique / área", "soma à seleção"], ["Shift + clique / área", "tira da seleção"], ["Arrastar esq. → dir.", "pega o que está inteiro dentro"], ["Arrastar dir. → esq.", "pega o que a área tocar"], ["Ctrl + A", "seleciona tudo"], ["Setas", "movem a seleção 0,10 m (Shift: 1,00 m)"], ["Delete", "exclui a seleção"], ["Botão direito", "menu de ações (no celular: toque longo)"]]],
-              ["Desenho", [["P / C / L", "parede / contrapiso / laje"], ["V", "selecionar"], ["Digitar número + Enter", "trecho com esse comprimento, na direção do cursor"], ["Shift (desenhando)", "trava em 0° / 90°"], ["Pontas existentes", "o cursor gruda nelas (ímã)"], ["Enter", "encerra o traço; sem traço, repete o último comando"], ["Esc", "cancela em camadas: número → traço → seleção"]]],
+              ["Desenho", [["P / C / L", "parede / contrapiso / laje"], ["V", "selecionar"], ["Digitar número + Enter", "trecho com esse comprimento, na direção do cursor"], ["Shift (desenhando)", "trava em 0° / 90°"], ["Pontas existentes", "o cursor gruda nelas (ímã)"], ["D / J", "porta / janela: passe na parede e clique"], ["Espaço", "inverte a mão da porta (Shift+Espaço: o lado)"], ["Enter", "encerra o traço; sem traço, repete o último comando"], ["Esc", "cancela em camadas: número → traço → seleção"]]],
               ["Vista", [["Rodinha", "zoom no cursor"], ["Arrastar com rodinha ou botão direito", "move a vista (planta e 3D)"], ["Duplo clique na rodinha / Z / F", "ajustar à tela"], ["Arrastar no 3D", "gira"], ["H", "ferramenta mover"]]],
               ["Histórico", [["Ctrl + Z", "desfazer"], ["Ctrl + Y / Ctrl + Shift + Z", "refazer"]]],
             ].map(([titulo, linhas]) => (
@@ -2044,17 +2493,21 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               {sel.length > 0 && item(`Excluir${sel.length > 1 ? ` (${sel.length})` : ""}`, "Delete", excluirSelecao, { perigo: true })}
               {sel.length > 0 && item("Editar propriedades", null, editarPropriedades, { desativado: selP.length > 0 && selA.length > 0 })}
               {selA.length === 1 && !selP.length && item("Editar contorno", null, () => { setFerramenta("selecionar"); if (modo === "3d") setModo("ambos"); })}
+              {selO.length > 0 && item("Inverter mão", "Espaço", () => inverterAberturas("mao"))}
+              {selO.length > 0 && item("Inverter lado de abertura", "Shift+Espaço", () => inverterAberturas("lado"))}
               {sel.length > 0 && item("Limpar seleção", "Esc", () => setSel([]))}
               {sel.length > 0 && linha("l1")}
               {item("Desfazer", "Ctrl+Z", desfazer, { desativado: !historico.current.length })}
               {item("Refazer", "Ctrl+Y", refazer, { desativado: !futuro.current.length })}
-              {item("Selecionar tudo", "Ctrl+A", () => { trocarFerramenta("selecionar"); setSel([...paredes.map((_, i) => "p" + i), ...areas.map((_, i) => "a" + i)]); }, { desativado: !paredes.length && !areas.length })}
+              {item("Selecionar tudo", "Ctrl+A", () => { trocarFerramenta("selecionar"); setSel(todasChaves()); }, { desativado: !paredes.length && !areas.length })}
               {linha("l2")}
               {item("Desenhar parede", "P", () => trocarFerramenta("parede"))}
               {item("Inserir contrapiso", "C", () => trocarFerramenta("contrapiso"))}
               {item("Inserir laje", "L", () => trocarFerramenta("laje"))}
               {item("Inserir telhado", "T", () => trocarFerramenta("telhado"))}
               {item("Desenhar terreno", "R", () => trocarFerramenta("terreno"))}
+              {item("Inserir porta", "D", () => { trocarFerramenta("esquadria"); setTipoEsq("porta_giro"); })}
+              {item("Inserir janela", "J", () => { trocarFerramenta("esquadria"); setTipoEsq("janela_correr"); })}
               {menuCtx.mundo && item("Inserir ambiente aqui", "A", () => inserirAmbienteEm(menuCtx.mundo))}
               {selA.length === 1 && !selP.length && areas[selA[0]].tipo === "ambiente" && item("Dividir ambiente", null, () => { const ai = selA[0]; setFerramenta("separador"); setInicio(null); setDividir({ ai }); avisar(`Dividir "${areas[ai].nome || "ambiente"}": desenhe a linha de uma parede até a outra.`); })}
               {item("Separador de ambiente", "S", () => trocarFerramenta("separador"))}
