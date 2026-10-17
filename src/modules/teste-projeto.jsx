@@ -1282,6 +1282,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const r = c.getBoundingClientRect(), k = c.width / r.width;
     return { x: (pt.x * v.s + v.ox) / k + r.left - e.clientX, y: (pt.y * v.s + v.oy) / k + r.top - e.clientY };
   };
+  // Recalcula os ambientes para um par (paredes, áreas) — usado no próprio
+  // quadro do arraste, para nunca aparecer o contorno antigo nem por um instante.
+  const comAmbientes = (ps, ars) => {
+    if (!ars.some((a) => a.tipo === "ambiente" && a.ponto)) return ars;
+    const seps = ars.filter((a) => a.tipo === "separador" && a.pts && a.pts.length === 2).map((a) => ({ a: a.pts[0], b: a.pts[1] }));
+    return ars.map((a) => {
+      if (a.tipo !== "ambiente" || !a.ponto) return a;
+      const det = tpDetectarAmbiente(ps, a.ponto, seps);
+      return det && !det.aberto ? { ...a, pts: det.pts, aberto: false } : { ...a, aberto: true };
+    });
+  };
   const arrastarAlca = (e, g) => {
     const al = g.grip, orig = g.orig;
     if (al.tipo === "mover") {
@@ -1311,14 +1322,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         });
       }
       const r = deslocar({ paredes: orig.paredes, areas: areasBase }, al.chaves, dx, dy);
-      setParedes(r.paredes); setAreas(r.areas);
+      setParedes(r.paredes); setAreas(comAmbientes(r.paredes, r.areas));
       return;
     }
     if (al.tipo === "vertice") {
       const pts0 = orig.areas[al.ai].pts;
       const pc = pontoDoCursor(e, { ignorar: { area: al.ai, vertices: [al.k] }, base: pts0[(al.k - 1 + pts0.length) % pts0.length] });
       setHover(pc);
-      setAreas(orig.areas.map((a, i) => (i === al.ai ? { ...a, pts: a.pts.map((q, k) => (k === al.k ? limpo(pc) : q)) } : a)));
+      setAreas(comAmbientes(orig.paredes, orig.areas.map((a, i) => (i === al.ai ? { ...a, pts: a.pts.map((q, k) => (k === al.k ? limpo(pc) : q)) } : a))));
     } else if (al.tipo === "lado") {
       const pts0 = orig.areas[al.ai].pts, k2 = (al.k + 1) % pts0.length, a = pts0[al.k], b = pts0[k2];
       const l = Math.hypot(b.x - a.x, b.y - a.y) || 1, nx = -(b.y - a.y) / l, ny = (b.x - a.x) / l;
@@ -1326,12 +1337,13 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       setHover(pc);
       const off = (pc.x - a.x) * nx + (pc.y - a.y) * ny; // o lado anda só na perpendicular a ele mesmo
       const novo = (q) => ({ x: r3(q.x + nx * off), y: r3(q.y + ny * off) });
-      setAreas(orig.areas.map((ar, i) => (i === al.ai ? { ...ar, pts: ar.pts.map((q, k) => (k === al.k || k === k2 ? novo(pts0[k]) : q)) } : ar)));
+      setAreas(comAmbientes(orig.paredes, orig.areas.map((ar, i) => (i === al.ai ? { ...ar, pts: ar.pts.map((q, k) => (k === al.k || k === k2 ? novo(pts0[k]) : q)) } : ar))));
     } else if (al.tipo === "ponta") {
       const w0 = orig.paredes[al.pi], outra = al.fim === "a" ? w0.b : w0.a;
       const pc = pontoDoCursor(e, { ignorar: { parede: al.pi }, base: outra });
       setHover(pc);
-      setParedes(orig.paredes.map((w, i) => (i === al.pi ? { ...w, [al.fim]: limpo(pc) } : w)));
+      const novasP = orig.paredes.map((w, i) => (i === al.pi ? { ...w, [al.fim]: limpo(pc) } : w));
+      setParedes(novasP); setAreas(comAmbientes(novasP, orig.areas));
     }
   };
   const planDown = (e) => {
