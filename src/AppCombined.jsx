@@ -77851,7 +77851,11 @@ function tpDetectarAmbiente(paredes, p, separadores) {
   const xs = [], ys = [];
   for (const w of ws) {
     // separador (linha sem parede, ex.: cozinha integrada) = barreira de 1,5 célula
-    const L = tpLen(w), ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, nx = -uy, ny = ux, h = w.separador ? passo * 0.75 : (w.t || 0) / 2, hl = L / 2 + h;
+    // As pontas do separador avançam 15 cm além do desenhado: a linha costuma
+    // terminar na face de uma parede (ímã), e se ali houver outra linha no eixo
+    // (vão fechado por separador) sobrava uma fresta de alguns cm e o cômodo
+    // vazava para o vizinho só em certas posições.
+    const L = tpLen(w), ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, nx = -uy, ny = ux, h = w.separador ? passo * 0.75 : (w.t || 0) / 2, hl = L / 2 + (w.separador ? 0.15 : h);
     const cx = (w.a.x + w.b.x) / 2, cy = (w.a.y + w.b.y) / 2;
     const cantos = [[hl, h], [hl, -h], [-hl, h], [-hl, -h]].map(([a, b]) => ({ x: cx + ux * a + nx * b, y: cy + uy * a + ny * b }));
     const i0 = Math.max(0, Math.floor((Math.min(...cantos.map((q) => q.x)) - x0) / passo)), i1 = Math.min(W - 1, Math.ceil((Math.max(...cantos.map((q) => q.x)) - x0) / passo));
@@ -79003,7 +79007,29 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (!sel.includes(al.chave)) setSel(al.chaves);
       const off = al.off || { x: 0, y: 0 };
       const pc = pontoDoCursor({ clientX: e.clientX + off.x, clientY: e.clientY + off.y, shiftKey: e.shiftKey }, { base: al.ancora }); setHover(pc);
-      const r = deslocar(orig, al.chaves, pc.x - al.ancora.x, pc.y - al.ancora.y);
+      let dx = pc.x - al.ancora.x, dy = pc.y - al.ancora.y;
+      // Linha de separação sozinha anda só na perpendicular a ela mesma: as
+      // pontas continuam encostadas nas mesmas paredes (o ímã/alinhamento podia
+      // empurrá-la uns centímetros de lado e abrir uma fresta, e aí o cômodo
+      // "vazava" para o vizinho em certas posições).
+      const so = al.chaves.length === 1 && al.chaves[0][0] === "a" ? orig.areas[+al.chaves[0].slice(1)] : null;
+      let areasBase = orig.areas;
+      if (so && so.tipo === "separador" && so.pts && so.pts.length === 2) {
+        const [a0, b0] = so.pts, l = Math.hypot(b0.x - a0.x, b0.y - a0.y) || 1, nx = -(b0.y - a0.y) / l, ny = (b0.x - a0.x) / l;
+        const dn = dx * nx + dy * ny; dx = nx * dn; dy = ny * dn;
+        // ambiente cujo ponto de referência ficaria do outro lado (ou em cima) da
+        // linha leva o ponto junto, para continuar do lado em que estava
+        const lado = (q, desl) => (q.x - (a0.x + desl * nx)) * nx + (q.y - (a0.y + desl * ny)) * ny;
+        areasBase = orig.areas.map((a) => {
+          if (a.tipo !== "ambiente" || !a.ponto) return a;
+          const antes = lado(a.ponto, 0); if (Math.abs(antes) < 1e-9) return a;
+          const depois = lado(a.ponto, dn), sinal = antes > 0 ? 1 : -1;
+          if (depois * sinal >= 0.2) return a;
+          const empurra = sinal * 0.2 - depois;
+          return { ...a, ponto: { x: r3(a.ponto.x + nx * empurra), y: r3(a.ponto.y + ny * empurra) } };
+        });
+      }
+      const r = deslocar({ paredes: orig.paredes, areas: areasBase }, al.chaves, dx, dy);
       setParedes(r.paredes); setAreas(r.areas);
       return;
     }
