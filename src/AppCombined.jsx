@@ -78875,7 +78875,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       mudou = true; return { ...a, pts, aberto };
     });
     if (mudou) setAreas(novas);
-  }, [paredes, JSON.stringify(areas.filter((a) => a.tipo === "separador").map((a) => a.pts))]);
+    // Depende também do contorno atual dos ambientes: durante um arraste cada
+    // quadro reaplica o estado de origem (com o contorno antigo); se o último
+    // quadro repetir a posição, só as linhas não mudariam e o contorno velho
+    // ficaria. Com esta chave, qualquer contorno desatualizado é refeito.
+  }, [paredes, JSON.stringify(areas.filter((a) => a.tipo === "separador").map((a) => a.pts)), JSON.stringify(areas.filter((a) => a.tipo === "ambiente").map((a) => [a.ponto, a.pts]))]);
   useEffect(() => { desenhar3d(); }, [paredes, areas, sel]);
 
   useEffect(() => {
