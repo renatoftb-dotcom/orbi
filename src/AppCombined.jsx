@@ -77789,6 +77789,7 @@ const TP_AREA_TIPOS = {
   laje: { nome: "Laje", esp: 0.10, cor3d: 0xbfc5cc },
   telhado: { nome: "Telhado", esp: 0, cor3d: 0xb5562f },
   terreno: { nome: "Terreno", esp: 0, cor3d: 0xcfe8c4 },
+  ambiente: { nome: "Ambiente", esp: 0, cor3d: 0xffffff },
 };
 const tpEhPoli = (f) => f === "contrapiso" || f === "laje" || f === "telhado" || f === "terreno";
 // Área exata da união de polígonos (contorno simples): fatias verticais entre
@@ -77829,6 +77830,84 @@ function tpUniaoArea(polys) {
 }
 // área de A dentro da união U: A + U − (A ∪ U)
 const tpAreaDentro = (A, U) => (U.length ? Math.max(0, tpUniaoArea([A]) + tpUniaoArea(U) - tpUniaoArea([A, ...U])) : 0);
+
+// Ambiente (como o "Ambiente" do Revit): clica dentro de um cômodo e o
+// sistema acha o espaço fechado pelas paredes. Faz isso numa grade de 2 cm:
+// marca as paredes como bloqueio, inunda a partir do clique e, se a mancha
+// não escapar para fora, contorna as células e acerta os cantos nas faces
+// das paredes. Devolve null (clicou em parede) ou { aberto: true }.
+function tpDetectarAmbiente(paredes, p) {
+  const ws = (paredes || []).filter((w) => tpLen(w) > 0);
+  if (!ws.length) return { aberto: true };
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const w of ws) for (const q of [w.a, w.b]) { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); }
+  const m = 0.6; x0 -= m; y0 -= m; x1 += m; y1 += m;
+  if (p.x <= x0 || p.x >= x1 || p.y <= y0 || p.y >= y1) return { aberto: true };
+  let passo = 0.02;
+  while (((x1 - x0) / passo) * ((y1 - y0) / passo) > 3e6) passo *= 1.5;
+  const W = Math.ceil((x1 - x0) / passo), H = Math.ceil((y1 - y0) / passo);
+  const cel = new Uint8Array(W * H); // 1 = parede, 2 = ambiente
+  const xs = [], ys = [];
+  for (const w of ws) {
+    const L = tpLen(w), ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, nx = -uy, ny = ux, h = (w.t || 0) / 2, hl = L / 2 + h;
+    const cx = (w.a.x + w.b.x) / 2, cy = (w.a.y + w.b.y) / 2;
+    const cantos = [[hl, h], [hl, -h], [-hl, h], [-hl, -h]].map(([a, b]) => ({ x: cx + ux * a + nx * b, y: cy + uy * a + ny * b }));
+    const i0 = Math.max(0, Math.floor((Math.min(...cantos.map((q) => q.x)) - x0) / passo)), i1 = Math.min(W - 1, Math.ceil((Math.max(...cantos.map((q) => q.x)) - x0) / passo));
+    const j0 = Math.max(0, Math.floor((Math.min(...cantos.map((q) => q.y)) - y0) / passo)), j1 = Math.min(H - 1, Math.ceil((Math.max(...cantos.map((q) => q.y)) - y0) / passo));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const qx = x0 + (i + 0.5) * passo - cx, qy = y0 + (j + 0.5) * passo - cy;
+      if (Math.abs(qx * ux + qy * uy) <= hl && Math.abs(qx * nx + qy * ny) <= h) cel[j * W + i] = 1;
+    }
+    // faces das paredes alinhadas aos eixos, para acertar os cantos
+    if (Math.abs(uy) < 1e-6) { ys.push(cy + h, cy - h); xs.push(cx + hl, cx - hl); }
+    else if (Math.abs(ux) < 1e-6) { xs.push(cx + h, cx - h); ys.push(cy + hl, cy - hl); }
+  }
+  const si = Math.floor((p.x - x0) / passo), sj = Math.floor((p.y - y0) / passo);
+  if (cel[sj * W + si] === 1) return null;
+  const pilha = [sj * W + si]; cel[sj * W + si] = 2;
+  while (pilha.length) {
+    const k = pilha.pop(), i = k % W, j = (k - i) / W;
+    if (i === 0 || j === 0 || i === W - 1 || j === H - 1) return { aberto: true };
+    for (const n of [k - 1, k + 1, k - W, k + W]) if (cel[n] === 0) { cel[n] = 2; pilha.push(n); }
+  }
+  // arestas da borda da mancha (sentido fixo), encadeadas em laços
+  const prox = new Map(), chave = (i, j) => j * (W + 1) + i;
+  const add = (a, b) => { const l = prox.get(a); if (l) l.push(b); else prox.set(a, [b]); };
+  const dentro = (i, j) => i >= 0 && j >= 0 && i < W && j < H && cel[j * W + i] === 2;
+  for (let j = 1; j < H - 1; j++) for (let i = 1; i < W - 1; i++) {
+    if (cel[j * W + i] !== 2) continue;
+    if (!dentro(i, j - 1)) add(chave(i, j), chave(i + 1, j));
+    if (!dentro(i + 1, j)) add(chave(i + 1, j), chave(i + 1, j + 1));
+    if (!dentro(i, j + 1)) add(chave(i + 1, j + 1), chave(i, j + 1));
+    if (!dentro(i - 1, j)) add(chave(i, j + 1), chave(i, j));
+  }
+  let melhor = null, maior = -1;
+  while (prox.size) {
+    const ini = prox.keys().next().value, laco = [];
+    let at = ini, guarda = 0;
+    do {
+      laco.push(at);
+      const l = prox.get(at); if (!l) break;
+      const nx = l.pop(); if (!l.length) prox.delete(at);
+      at = nx;
+    } while (at !== ini && ++guarda < 1e6);
+    const pts = laco.map((k) => ({ x: x0 + (k % (W + 1)) * passo, y: y0 + Math.floor(k / (W + 1)) * passo }));
+    const ar = tpAreaPoli(pts);
+    if (ar > maior) { maior = ar; melhor = pts; }
+  }
+  if (!melhor || melhor.length < 3) return { aberto: true };
+  // tira os pontos alinhados (fica só a quina) e acerta nas faces das paredes
+  const limpa = [];
+  for (let k = 0; k < melhor.length; k++) {
+    const a = melhor[(k - 1 + melhor.length) % melhor.length], b = melhor[k], c = melhor[(k + 1) % melhor.length];
+    if (Math.abs((b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)) > 1e-12) limpa.push(b);
+  }
+  const perto = (v, lista) => { let best = v, d = passo * 1.6; for (const c of lista) { const dd = Math.abs(c - v); if (dd < d) { d = dd; best = c; } } return best; };
+  const r3 = (x) => Math.round(x * 1000) / 1000;
+  const pts = limpa.map((q) => ({ x: r3(perto(q.x, xs)), y: r3(perto(q.y, ys)) }));
+  return { pts, area: tpAreaPoli(pts) };
+}
+const TP_NOMES_AMBIENTE = ["Sala", "Cozinha", "Suíte", "Quarto", "WC", "Banheiro", "Lavanderia", "Varanda", "Garagem", "Circulação", "Closet", "Escritório", "Área gourmet", "Despensa"];
 
 // Interno × externo: área coberta = laje + telhado (contorno desenhado, sem o
 // beiral). É a área construída. Contrapiso dentro dela é piso interno; fora,
@@ -78075,6 +78154,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const [menuCtx, setMenuCtx] = useState(null); // menu do botão direito { x, y }
   const [digitado, setDigitado] = useState("");  // comprimento digitado durante o traço
   const [verAtalhos, setVerAtalhos] = useState(false);
+  const [aviso, setAviso] = useState("");
+  const [novoAmbiente, setNovoAmbiente] = useState(null); // { pts, ponto, nome }
   const [modoTraco, setModoTraco] = useState("linha"); // linha | retangulo | arco
   const [ancora, setAncora] = useState(null);          // { ret: p } ou { arcoIni: p, arcoFim: p }
   const [obraId, setObraId] = useState(projeto.obraId || null);
@@ -78225,10 +78306,27 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const finalizar = () => { if (poli.length) finalizarPoli(); setInicio(null); setAncora(null); };
   // Botão direito (ou toque longo no celular): seleciona o que está embaixo,
   // se ainda não estiver selecionado, e abre o menu de ações no cursor.
-  const abrirMenuCtx = (clientX, clientY, chave) => {
+  const abrirMenuCtx = (clientX, clientY, chave, mundo) => {
     if (chave && !sel.includes(chave)) { setSel([chave]); if (ferramenta !== "selecionar" && ferramenta !== "mover") trocarFerramenta("selecionar"); }
     const W = window.innerWidth, H = window.innerHeight;
-    setMenuCtx({ x: Math.max(8, Math.min(clientX, W - 236)), y: Math.max(8, Math.min(clientY, H - 340)), t: Date.now() });
+    setMenuCtx({ x: Math.max(8, Math.min(clientX, W - 236)), y: Math.max(8, Math.min(clientY, H - 380)), t: Date.now(), mundo: mundo || null });
+  };
+  const avisar = (txt) => { setAviso(txt); clearTimeout(avisar.t); avisar.t = setTimeout(() => setAviso(""), 3500); };
+  // Clique dentro de um cômodo: acha o espaço fechado pelas paredes e pede o nome
+  const inserirAmbienteEm = (pt) => {
+    const ja = areas.findIndex((a) => a.tipo === "ambiente" && a.pts && tpDentroPoli(pt, a.pts));
+    if (ja >= 0) { setSel(["a" + ja]); avisar(`Já existe o ambiente "${areas[ja].nome || "sem nome"}" aqui. Mude o nome em Propriedades.`); return; }
+    const det = tpDetectarAmbiente(paredes, pt);
+    if (!det) { avisar("Clique dentro do cômodo, não em cima da parede."); return; }
+    if (det.aberto) { avisar("Esse espaço não está fechado por paredes. Feche o cômodo (ou desenhe a parede que falta) e clique de novo."); return; }
+    setNovoAmbiente({ pts: det.pts, ponto: { x: r3(pt.x), y: r3(pt.y) }, nome: "" });
+  };
+  const confirmarAmbiente = (nome) => {
+    const n = String(nome || "").trim() || "Ambiente";
+    const idx = areas.length;
+    mudar(null, [...areas, { tipo: "ambiente", nome: n, ponto: novoAmbiente.ponto, pts: novoAmbiente.pts }]);
+    setNovoAmbiente(null);
+    setTimeout(() => setSel(["a" + idx]), 0);
   };
   const editarPropriedades = () => {
     if (isMobile) { setMenuAberto(true); return; }
@@ -78417,7 +78515,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const ordem = areas.map((a, i) => i).sort((i, j) => (areas[i].tipo === "laje") - (areas[j].tipo === "laje"));
     for (const i of ordem) {
       const a = areas[i], marc = marcadas.has("a" + i);
-      if (!a.pts || a.pts.length < 3 || a.tipo === "telhado" || a.tipo === "terreno") continue;
+      if (!a.pts || a.pts.length < 3 || a.tipo === "telhado" || a.tipo === "terreno" || a.tipo === "ambiente") continue;
       caminho(a.pts);
       if (a.tipo === "laje") {
         ctx.fillStyle = marc ? "rgba(4,116,244,0.14)" : "rgba(107,143,199,0.07)"; ctx.fill();
@@ -78467,6 +78565,22 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const [cx, cy] = T(tpCentro(a.pts));
       ctx.fillStyle = cor; ctx.fillText(`Telhado ${tpFmt(g.areaProjecao)} m²`, cx, cy + 22 * dpr);
       if (!g.convexo) { ctx.fillStyle = "#b45309"; ctx.fillText("contorno com canto para dentro: divida em dois telhados", cx, cy + 38 * dpr); }
+    });
+
+    // ambientes: contorno pontilhado discreto, nome e área no ponto clicado
+    areas.forEach((a, i) => {
+      if (a.tipo !== "ambiente" || !a.pts || a.pts.length < 3) return;
+      const marc = marcadas.has("a" + i);
+      caminho(a.pts);
+      if (marc) { ctx.fillStyle = "rgba(4,116,244,0.10)"; ctx.fill(); }
+      ctx.strokeStyle = marc ? TP_AZUL : "rgba(17,24,39,0.25)"; ctx.lineWidth = (marc ? 2 : 1) * dpr; ctx.setLineDash([2 * dpr, 3 * dpr]); ctx.stroke(); ctx.setLineDash([]);
+      const [lx, ly] = T(a.ponto || tpCentro(a.pts));
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.font = `700 ${13 * dpr}px system-ui, sans-serif`; ctx.fillStyle = marc ? TP_AZUL : "#111827";
+      ctx.fillText(a.nome || "Ambiente", lx, ly - 8 * dpr);
+      ctx.font = `500 ${11.5 * dpr}px system-ui, sans-serif`; ctx.fillStyle = a.aberto ? "#b45309" : (marc ? TP_AZUL : "#4b5563");
+      ctx.fillText(a.aberto ? "não fechado" : `${tpFmt(tpAreaPoli(a.pts))} m²`, lx, ly + 8 * dpr);
+      ctx.textBaseline = "alphabetic";
     });
 
     // polígono em desenho
@@ -78548,9 +78662,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     if (inicio) ponto(inicio, 5);
     const quadradinho = (p) => { const [x, y] = T(p); ctx.fillStyle = "#fff"; ctx.strokeStyle = TP_AZUL; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.rect(x - 4 * dpr, y - 4 * dpr, 8 * dpr, 8 * dpr); ctx.fill(); ctx.stroke(); };
     for (const i of selP) { quadradinho(paredes[i].a); quadradinho(paredes[i].b); }
-    for (const i of selA) areas[i].pts.forEach(quadradinho);
+    for (const i of selA) if (areas[i].tipo !== "ambiente") areas[i].pts.forEach(quadradinho);
     // editar contorno: com uma área só selecionada, bolinhas no meio de cada lado
-    if (selA.length === 1 && !selP.length) {
+    if (selA.length === 1 && !selP.length && areas[selA[0]].tipo !== "ambiente") {
       const pts = areas[selA[0]].pts;
       pts.forEach((q, k) => { const r = pts[(k + 1) % pts.length]; const [x, y] = T({ x: (q.x + r.x) / 2, y: (q.y + r.y) / 2 }); ctx.fillStyle = TP_AZUL; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.arc(x, y, 6 * dpr, 0, 7); ctx.fill(); ctx.stroke(); });
     }
@@ -78581,7 +78695,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const marcadas = new Set(sel);
     const contorno = (g, mesh, cor) => { const e = new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: cor })); e.position.copy(mesh.position); e.rotation.copy(mesh.rotation); e.scale.copy(mesh.scale); T.group.add(e); };
     areas.forEach((a, i) => {
-      if (!a.pts || a.pts.length < 3 || a.tipo === "telhado") return;
+      if (!a.pts || a.pts.length < 3 || a.tipo === "telhado" || a.tipo === "ambiente") return;
       const shape = new THREE.Shape(a.pts.map((p) => new THREE.Vector2(p.x - cx, -(p.y - cz))));
       const g = new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.01, a.esp || 0.05), bevelEnabled: false });
       const marc = marcadas.has("a" + i);
@@ -78691,6 +78805,20 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   }, []);
 
   useEffect(() => { desenharPlanta(); }, [paredes, areas, inicio, poli, hover, espM, sel, caixa, ferramenta, ancora, modoTraco]);
+  // ambiente acompanha as paredes: mexeu numa parede, o contorno e a área se refazem
+  useEffect(() => {
+    if (!areas.some((a) => a.tipo === "ambiente" && a.ponto)) return;
+    let mudou = false;
+    const novas = areas.map((a) => {
+      if (a.tipo !== "ambiente" || !a.ponto) return a;
+      const det = tpDetectarAmbiente(paredes, a.ponto);
+      const pts = det && !det.aberto ? det.pts : a.pts;
+      const aberto = !det || !!det.aberto;
+      if (JSON.stringify(pts) === JSON.stringify(a.pts) && !!a.aberto === aberto) return a;
+      mudou = true; return { ...a, pts, aberto };
+    });
+    if (mudou) setAreas(novas);
+  }, [paredes]);
   useEffect(() => { desenhar3d(); }, [paredes, areas, sel]);
 
   useEffect(() => {
@@ -78735,7 +78863,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (!ctrl && !e.altKey) {
         const t = tecla.toLowerCase();
         if (t === "z" || t === "f") { ajustar(); return; } // ZF no Revit / F no SketchUp
-        const f = { v: "selecionar", p: "parede", c: "contrapiso", l: "laje", t: "telhado", r: "terreno", h: "mover" }[t];
+        const f = { v: "selecionar", p: "parede", c: "contrapiso", l: "laje", t: "telhado", r: "terreno", a: "ambiente", h: "mover" }[t];
         if (f) trocarFerramenta(f);
       }
     };
@@ -78787,7 +78915,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const v = vista.current; if (!v) return null;
     const tol = 10 * (window.devicePixelRatio || 1);
     const perto = (q) => Math.hypot(q.x * v.s + v.ox - d.x, q.y * v.s + v.oy - d.y) <= tol;
-    if (selA.length === 1 && !selP.length) {
+    if (selA.length === 1 && !selP.length && areas[selA[0]].tipo !== "ambiente") {
       const ai = selA[0], pts = areas[ai].pts;
       for (let k = 0; k < pts.length; k++) if (perto(pts[k])) return { tipo: "vertice", ai, k };
       for (let k = 0; k < pts.length; k++) { const r = pts[(k + 1) % pts.length]; if (perto({ x: (pts[k].x + r.x) / 2, y: (pts[k].y + r.y) / 2 })) return { tipo: "lado", ai, k }; }
@@ -78832,7 +78960,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // toque longo (celular) = botão direito
     if (e.pointerType === "touch") {
       const cx = e.clientX, cy = e.clientY;
-      g.timer = setTimeout(() => { if (gesto.current === g && !g.moveu) { g.menu = true; abrirMenuCtx(cx, cy, elementoNoPonto(d)); } }, 550);
+      g.timer = setTimeout(() => { if (gesto.current === g && !g.moveu) { g.menu = true; abrirMenuCtx(cx, cy, elementoNoPonto(d), paraMundoLivre(d)); } }, 550);
     }
     gesto.current = g;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -78862,7 +78990,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       setHover(null); return;
     }
     if (g.menu) return;
-    if (g.direito && !g.moveu) { abrirMenuCtx(e.clientX, e.clientY, elementoNoPonto(devPx(e))); return; }
+    if (g.direito && !g.moveu) { abrirMenuCtx(e.clientX, e.clientY, elementoNoPonto(devPx(e)), paraMundoLivre(devPx(e))); return; }
     if (g.moveu) {
       if (!g.panear && ferramenta === "selecionar" && caixa) {
         const a = paraMundoLivre({ x: caixa.x0, y: caixa.y0 }), b = paraMundoLivre({ x: caixa.x1, y: caixa.y1 });
@@ -78889,6 +79017,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       aplicarSelecao([k], g);
       return;
     }
+    if (ferramenta === "ambiente") { inserirAmbienteEm(paraMundoLivre(devPx(e))); return; }
     const pc = pontoDoCursor(e); setHover(pc); setDigitado("");
     const p = limpo(pc);
     const ehAreaTool = tpEhPoli(ferramenta);
@@ -78991,13 +79120,15 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     { id: "laje", rotulo: "Laje", dica: "Laje (L): clique os cantos e feche no primeiro ponto" },
     { id: "telhado", rotulo: "Telhado", dica: "Telhado (T): contorno; inclinação definida em cada lado" },
     { id: "terreno", rotulo: "Terreno", dica: "Terreno (R): clique os vértices do lote e feche no primeiro ponto" },
+    { id: "ambiente", rotulo: "Ambiente", dica: "Ambiente (A): clique dentro de um cômodo fechado por paredes" },
     { id: "mover", rotulo: "Mover", dica: "Mover a vista (H)" },
   ];
   const MODOS = [{ id: "planta", rotulo: "Planta" }, { id: "ambos", rotulo: "Planta + 3D" }, { id: "3d", rotulo: "3D" }];
   const mostraPlanta = modo !== "3d", mostra3d = modo !== "planta";
 
   const desenhoAtivo = ferramenta === "parede" || tpEhPoli(ferramenta);
-  const status = digitado ? `Comprimento: ${digitado} m — Enter confirma, Esc apaga.`
+  const status = ferramenta === "ambiente" ? "Clique dentro de um cômodo fechado por paredes para criar o ambiente (nome e área)."
+    : digitado ? `Comprimento: ${digitado} m — Enter confirma, Esc apaga.`
     : (desenhoAtivo && modoTraco === "retangulo") ? (ancora && ancora.ret
         ? (ancora.d1 ? `1ª medida ${tpFmt(Math.abs(ancora.d1.v))} m fixada. Digite a 2ª e Enter, ou clique para escolher o lado.` : "Aponte o cursor para o lado e digite a 1ª medida + Enter (ou clique o canto oposto). Esc cancela.")
         : "Retângulo: clique o primeiro canto.")
@@ -79027,6 +79158,30 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             <TpCampo id="tp-p-esp" rotulo="Espessura (cm)" casas={0} valor={comum(selP, (i) => Math.round(paredes[i].t * 100))} onConfirmar={(v) => editarParedes(selP, (w) => ({ ...w, t: v / 100 }))} />
           </div>
         )}
+        {selA.length === 1 && !selP.length && areas[selA[0]].tipo === "ambiente" && (() => {
+          const ai = selA[0], a = areas[ai];
+          return (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label htmlFor="tp-amb-nome" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>Nome</label>
+                <input id="tp-amb-nome" key={"amb" + ai} defaultValue={a.nome || ""}
+                  onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== a.nome) editarAreas([ai], (x) => ({ ...x, nome: v })); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                  style={{ width: "100%", boxSizing: "border-box", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, fontFamily: "inherit" }} />
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
+                  {TP_NOMES_AMBIENTE.slice(0, 9).map((n) => (
+                    <button key={n} onClick={() => editarAreas([ai], (x) => ({ ...x, nome: n }))} style={{ border: "1px solid #e5e7eb", background: a.nome === n ? "#eef5ff" : "#fff", color: a.nome === n ? TP_AZUL : "#374151", borderRadius: 999, padding: "3px 9px", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>{n}</button>
+                  ))}
+                </div>
+              </div>
+              <TpCampo id="tp-amb-area" rotulo="Área (m²)" valor={tpAreaPoli(a.pts)} somenteLeitura onConfirmar={() => {}} />
+              <TpCampo id="tp-amb-per" rotulo="Perímetro (m)" valor={tpPerimPoli(a.pts)} somenteLeitura onConfirmar={() => {}} />
+              <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: a.aberto ? "#92400e" : "#4b5563", lineHeight: 1.4 }}>
+                {a.aberto ? "As paredes em volta não fecham mais este cômodo; a área mostrada é a última válida." : "Área pela face interna das paredes. Mexeu nas paredes, ela se refaz sozinha."}
+              </div>
+            </div>
+          );
+        })()}
         {selA.length === 1 && !selP.length && areas[selA[0]].tipo === "telhado" && (() => {
           const ai = selA[0], a = areas[ai], g = geoTelhado(a);
           const mudarLado = (k, patch) => editarAreas([ai], (x) => ({ ...x, lados: x.pts.map((_, j) => ({ inclina: true, pct: tpTelha(x.telha).pct, ...((x.lados || [])[j] || {}), ...(j === k ? patch : {}) })) }));
@@ -79073,7 +79228,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             </div>
           );
         })()}
-        {selA.length > 0 && !selP.length && !(selA.length === 1 && areas[selA[0]].tipo === "telhado") && (
+        {selA.length > 0 && !selP.length && !(selA.length === 1 && (areas[selA[0]].tipo === "telhado" || areas[selA[0]].tipo === "ambiente")) && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             {selA.length === 1 && <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#4b5563", lineHeight: 1.4, background: "#eef5ff", borderRadius: 6, padding: "6px 8px" }}>Para mudar o contorno, arraste na planta os quadrados (cantos) ou as bolinhas (lados).</div>}
             {selA.length === 1 && <TpCampo id="tp-a-area" rotulo="Área (m²)" valor={tpAreaPoli(areas[selA[0]].pts)} somenteLeitura onConfirmar={() => {}} />}
@@ -79170,6 +79325,20 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       )}
       <button style={{ ...btn, marginTop: 8, fontSize: 12.5 }} onClick={() => setVerAtalhos(true)}>Atalhos de teclado e mouse <span style={{ color: "#9ca3af" }}>(?)</span></button>
 
+      {areas.some((a) => a.tipo === "ambiente") && (
+        <>
+          <div style={secao}>Ambientes</div>
+          <div>
+            {areas.map((a, i) => (a.tipo === "ambiente" ? (
+              <button key={i} onClick={() => { trocarFerramenta("selecionar"); setSel(["a" + i]); }} style={{ ...linhaQ, width: "100%", background: "none", border: "none", borderBottom: "1px solid #f0f2f5", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                <span>{a.nome || "Ambiente"}</span><span style={numQ}>{a.aberto ? "não fechado" : `${tpFmt(tpAreaPoli(a.pts))} m²`}</span>
+              </button>
+            ) : null))}
+            <div style={{ ...linhaQ, fontWeight: 600 }}><span>Área útil</span><span style={numQ}>{tpFmt(areas.filter((a) => a.tipo === "ambiente" && !a.aberto).reduce((t, a) => t + tpAreaPoli(a.pts), 0))} m²</span></div>
+          </div>
+        </>
+      )}
+
       <div style={secao}>Quantitativo</div>
       <div>
         <div style={linhaQ}><span>Paredes</span><span style={numQ}>{paredes.length} · {tpFmt(L)} m</span></div>
@@ -79246,6 +79415,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               onContextMenu={(e) => e.preventDefault()} onDoubleClick={() => { if (poli.length >= 3) finalizarPoli(); }}
               onPointerDown={planDown} onPointerMove={(e) => { planMove(e); if (!gesto.current && ferramenta === "selecionar") e.currentTarget.style.cursor = alcaNoPonto(devPx(e)) ? "move" : "default"; }} onPointerUp={planUp} onPointerLeave={() => { if (!inicio && !poli.length && !gesto.current) setHover(null); }} />
             {barraFerramentas}
+            {aviso && (
+              <div role="status" style={{ position: "absolute", left: "50%", bottom: 64, transform: "translateX(-50%)", zIndex: 2, maxWidth: "min(460px, 90%)", background: "#111827", color: "#fff", borderRadius: 8, padding: "8px 12px", fontSize: 13, lineHeight: 1.4, boxShadow: "0 4px 12px rgba(0,0,0,0.2)" }}>{aviso}</div>
+            )}
             {digitado && (
               <div style={{ position: "absolute", left: "50%", top: 74, transform: "translateX(-50%)", zIndex: 1, background: "#111827", color: "#fff", borderRadius: 8, padding: "6px 12px", fontSize: 14, fontWeight: 600, fontVariantNumeric: "tabular-nums", boxShadow: "0 4px 12px rgba(0,0,0,0.2)" }}>
                 {modoTraco === "retangulo" && ancora && ancora.ret ? (ancora.d1 ? "2ª medida: " : "1ª medida: ") : ""}{digitado} m <span style={{ fontWeight: 400, opacity: 0.7, fontSize: 12, marginLeft: 6 }}>Enter</span>
@@ -79321,6 +79493,28 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         );
       })()}
 
+      {novoAmbiente && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 20, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div role="dialog" aria-modal="true" style={{ background: "#fff", borderRadius: 12, width: "100%", maxWidth: 420, padding: 20, boxShadow: "0 10px 30px rgba(0,0,0,0.25)" }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: "#111827" }}>Novo ambiente</div>
+            <div style={{ fontSize: 13, color: "#4b5563", margin: "4px 0 12px" }}>Área: <strong>{tpFmt(tpAreaPoli(novoAmbiente.pts))} m²</strong> · perímetro {tpFmt(tpPerimPoli(novoAmbiente.pts))} m</div>
+            <label htmlFor="tp-amb-novo" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 4 }}>Nome</label>
+            <input id="tp-amb-novo" autoFocus value={novoAmbiente.nome} placeholder="Ex.: Suíte" onChange={(e) => setNovoAmbiente({ ...novoAmbiente, nome: e.target.value })}
+              onKeyDown={(e) => { if (e.key === "Enter") confirmarAmbiente(novoAmbiente.nome); if (e.key === "Escape") setNovoAmbiente(null); }}
+              style={{ width: "100%", boxSizing: "border-box", padding: "9px 10px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, fontFamily: "inherit" }} />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+              {TP_NOMES_AMBIENTE.map((n) => (
+                <button key={n} onClick={() => confirmarAmbiente(n)} style={{ border: "1px solid #e5e7eb", background: "#fff", color: "#374151", borderRadius: 999, padding: "5px 11px", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>{n}</button>
+              ))}
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+              <button style={btn} onClick={() => setNovoAmbiente(null)}>Cancelar</button>
+              <button style={{ ...btn, background: TP_AZUL, borderColor: TP_AZUL, color: "#fff" }} onClick={() => confirmarAmbiente(novoAmbiente.nome)}>Criar ambiente</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {verAtalhos && (
         <div style={{ position: "fixed", inset: 0, zIndex: 20, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
           <div role="dialog" aria-modal="true" style={{ background: "#fff", borderRadius: 12, width: "100%", maxWidth: 560, maxHeight: "85vh", overflowY: "auto", padding: 20, boxShadow: "0 10px 30px rgba(0,0,0,0.25)" }}>
@@ -79385,6 +79579,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               {item("Inserir laje", "L", () => trocarFerramenta("laje"))}
               {item("Inserir telhado", "T", () => trocarFerramenta("telhado"))}
               {item("Desenhar terreno", "R", () => trocarFerramenta("terreno"))}
+              {menuCtx.mundo && item("Inserir ambiente aqui", "A", () => inserirAmbienteEm(menuCtx.mundo))}
               {linha("l3")}
               {item("Ajustar à tela", null, ajustar, { desativado: modo === "3d" })}
             </div>
