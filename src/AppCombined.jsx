@@ -2886,6 +2886,149 @@ function MenuDeAcoes(props) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+// LISTA DE SELEÇÃO — obras, clientes: escolher um e abrir
+// ═══════════════════════════════════════════════════════════════
+// A ordem é alfabética e não muda: nem por status, nem por data, nem por
+// uso. Quem procura "Cobop" encontra sempre no mesmo lugar. A busca filtra
+// enquanto se digita, sem acento e sem caixa, palavra por palavra.
+
+// ── ListaDeSelecao: parte pura ─────────────────────────
+function cmpListaDeSelecao(a, b) {
+  return String(a == null ? "" : a).localeCompare(String(b == null ? "" : b), "pt-BR", { sensitivity: "base", numeric: true });
+}
+
+function ordemDaListaDeSelecao(itens) {
+  return (Array.isArray(itens) ? itens : []).filter(Boolean).slice().sort(function (a, b) {
+    return cmpListaDeSelecao(a.titulo, b.titulo) || cmpListaDeSelecao(a.subtitulo, b.subtitulo)
+      || cmpListaDeSelecao(String(a.id), String(b.id));
+  });
+}
+
+function filtrarListaDeSelecao(itens, termo) {
+  const t = buscaNormal(termo);
+  if (!t) return itens || [];
+  const palavras = t.split(" ");
+  return (itens || []).filter(function (it) {
+    const alvo = buscaNormal([it.titulo, it.subtitulo, it.etiqueta, it.busca].filter(Boolean).join(" "));
+    return palavras.every(function (w) { return alvo.indexOf(w) >= 0; });
+  });
+}
+
+function letraDaListaDeSelecao(titulo) {
+  const l = buscaNormal(titulo).charAt(0).toUpperCase();
+  return /[A-Z]/.test(l) ? l : "#";
+}
+
+function iniciaisDaListaDeSelecao(titulo) {
+  const p = String(titulo || "").trim().split(/\s+/).filter(function (w) { return /[A-Za-zÀ-ÿ0-9]/.test(w.charAt(0)); });
+  return p.slice(0, 2).map(function (w) { return w.charAt(0); }).join("").toUpperCase() || "·";
+}
+// ── ListaDeSelecao: fim da parte pura ─────────────────
+
+// itens: [{ id, titulo, subtitulo?, etiqueta?, busca?, apagado?, acoes? }]
+function ListaDeSelecao({ itens, aoEscolher, placeholder, vazio, isMobile, topo, nomeDoItem }) {
+  const [busca, setBusca] = useState("");
+  const [focada, setFocada] = useState(false);
+  const [ativo, setAtivo] = useState(-1);
+  const refBusca = useRef(null);
+  const ordenados = useMemo(function () { return ordemDaListaDeSelecao(itens); }, [itens]);
+  const vistos = filtrarListaDeSelecao(ordenados, busca);
+  const procurando = !!buscaNormal(busca);
+  useEffect(function () { setAtivo(procurando && vistos.length ? 0 : -1); }, [busca]);
+  useEffect(function () {
+    if (!isMobile && refBusca.current) { try { refBusca.current.focus({ preventScroll: true }); } catch (e) { /* sem foco */ } }
+  }, []);
+  function escolher(it) { if (it && !it.apagado && aoEscolher) aoEscolher(it); }
+  function teclas(e) {
+    if (e.key === "ArrowDown") { e.preventDefault(); setAtivo(function (i) { return Math.min(vistos.length - 1, i + 1); }); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setAtivo(function (i) { return Math.max(0, i - 1); }); }
+    else if (e.key === "Enter") { if (ativo >= 0 && vistos[ativo]) { e.preventDefault(); escolher(vistos[ativo]); } }
+    else if (e.key === "Escape") { setBusca(""); }
+  }
+  useEffect(function () {
+    if (ativo < 0) return;
+    const el = document.querySelector('[data-vk-lista-idx="' + ativo + '"]');
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
+  }, [ativo]);
+  const nome = nomeDoItem || ["item", "itens"];
+  let letraAnterior = "";
+  return (
+    <div data-vk-lista-selecao style={{ maxWidth: 960, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12,
+        border: "1.5px solid " + (focada ? "rgba(4,116,244,0.55)" : "rgba(38,36,33,0.14)"),
+        borderRadius: 999, background: "#fff", padding: isMobile ? "10px 14px" : "11px 18px",
+        transition: "border-color .15s, box-shadow .15s",
+        boxShadow: focada ? "0 0 0 4px rgba(4,116,244,0.10)" : "0 1px 2px rgba(38,36,33,0.04)" }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+          style={{ color: focada ? "#0474f4" : "#9ca3af", flexShrink: 0 }}><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>
+        <input ref={refBusca} data-vk-lista-busca value={busca} onChange={function (e) { setBusca(e.target.value); }}
+          onFocus={function () { setFocada(true); }} onBlur={function () { setFocada(false); }} onKeyDown={teclas}
+          placeholder={placeholder || "Procurar…"}
+          style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent",
+            fontFamily: "inherit", fontSize: isMobile ? 16 : 14.5, color: "#111827" }} />
+        {busca ? (
+          <button type="button" onClick={function () { setBusca(""); if (refBusca.current) refBusca.current.focus(); }} title="Limpar"
+            style={{ border: "none", background: "rgba(38,36,33,0.06)", color: "#4b5563", cursor: "pointer", fontFamily: "inherit",
+              fontSize: 14, lineHeight: 1, width: 24, height: 24, borderRadius: 999, flexShrink: 0 }}>×</button>
+        ) : null}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+        <div style={{ minWidth: 0 }}>{topo || null}</div>
+        <div data-vk-lista-contagem style={{ fontSize: 12, color: "#6b7280" }}>
+          {procurando ? vistos.length + " de " + ordenados.length : ordenados.length} {ordenados.length === 1 ? nome[0] : nome[1]}
+        </div>
+      </div>
+      {vistos.length === 0 ? (
+        <div style={{ padding: "40px 20px", textAlign: "center", border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 14,
+          background: "#fafafa", color: "#4b5563", fontSize: 13 }}>
+          {procurando ? <>Nada encontrado para “{busca.trim()}”.</> : (vazio || "Nada por aqui ainda.")}
+        </div>
+      ) : (
+        <div style={{ background: "#fff", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 14, overflow: "hidden" }}>
+          {vistos.map(function (it, i) {
+            const letra = letraDaListaDeSelecao(it.titulo);
+            const cabeca = !procurando && letra !== letraAnterior;
+            letraAnterior = letra;
+            const marcado = i === ativo;
+            return (
+              <Fragment key={it.id}>
+                {cabeca && (
+                  <div data-vk-lista-letra style={{ padding: "7px 16px 5px", fontSize: 11, fontWeight: 700, letterSpacing: 0.6,
+                    color: "#0474f4", background: "#f7f9fc", borderTop: i > 0 ? "1px solid rgba(38,36,33,0.08)" : "none" }}>{letra}</div>
+                )}
+                <div data-vk-lista-item data-vk-lista-idx={i} role="button" tabIndex={-1}
+                  onClick={function () { escolher(it); }} onMouseEnter={function () { setAtivo(i); }}
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: isMobile ? "12px 14px" : "11px 16px",
+                    minHeight: 52, boxSizing: "border-box", cursor: it.apagado ? "default" : "pointer",
+                    borderTop: !cabeca && i > 0 ? "1px solid rgba(38,36,33,0.06)" : "none",
+                    background: marcado && !it.apagado ? "rgba(4,116,244,0.06)" : "#fff", opacity: it.apagado ? 0.55 : 1 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 999, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 12, fontWeight: 700, background: marcado ? "rgba(4,116,244,0.14)" : "#eef5ff", color: "#0474f4" }}>
+                    {iniciaisDaListaDeSelecao(it.titulo)}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.titulo}</div>
+                    {it.subtitulo ? (
+                      <div style={{ fontSize: 12.5, color: "#6b7280", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.subtitulo}</div>
+                    ) : null}
+                  </div>
+                  {it.etiqueta ? (
+                    <span style={{ fontSize: 11, fontWeight: 600, color: it.corEtiqueta || "#4b5563", background: it.fundoEtiqueta || "#f3f4f6",
+                      borderRadius: 999, padding: "3px 9px", flexShrink: 0, whiteSpace: "nowrap" }}>{it.etiqueta}</span>
+                  ) : null}
+                  {it.acoes ? <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={function (e) { e.stopPropagation(); }}>{it.acoes}</div> : null}
+                  {!it.apagado && <span aria-hidden style={{ color: marcado ? "#0474f4" : "#c4c9d2", fontSize: 18, lineHeight: 1, flexShrink: 0 }}>›</span>}
+                </div>
+              </Fragment>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 // ════════════════════════════════════════════════════════════
 // api.js
@@ -4099,62 +4242,18 @@ function Obras({ data, save }) {
   // O que a Entrada daqui lançou numa obra: a obra abre só o tempo de
   // gravar e a página volta para a Entrada, que mostra isto.
   const [confirmacaoEntrada, setConfirmacaoEntrada] = useState(null);
-  const [busca, setBusca] = useState("");
-  const [buscaFocada, setBuscaFocada] = useState(false);
   const perm = typeof getPermissoes === "function" ? getPermissoes() : { podeGerenciarObra: true };
 
   function nomeCliente(clienteId) {
     return clientes.find(c => c.id === clienteId)?.nome || "—";
   }
 
-  async function concluirObra(obra) {
-    const ok = await dialogo.confirmar({
-      titulo: `Concluir obra de ${nomeCliente(obra.clienteId)}?`,
-      mensagem: "A obra será marcada como concluída e o cliente começará a contar 3 meses para inativação automática (se não tiver outro serviço ativo).",
-      confirmar: "Concluir",
-    });
-    if (!ok) return;
-    const agora = new Date().toISOString();
-    const novasObras = obras.map(o =>
-      o.id === obra.id ? { ...o, status: "concluida", concluidaEm: agora } : o
-    );
-    save({ ...data, obras: novasObras }).catch(console.error);
-  }
-
-  async function reabrirObra(obra) {
-    const ok = await dialogo.confirmar({
-      titulo: "Reabrir esta obra?",
-      mensagem: "Ela voltará para 'Em andamento'.",
-      confirmar: "Reabrir",
-    });
-    if (!ok) return;
-    const novasObras = obras.map(o =>
-      o.id === obra.id ? { ...o, status: "em_andamento", concluidaEm: null } : o
-    );
-    save({ ...data, obras: novasObras }).catch(console.error);
-  }
-
-  async function excluirObra(obra) {
-    const ok = await dialogo.confirmar({
-      titulo: `Excluir obra de ${nomeCliente(obra.clienteId)}?`,
-      mensagem: "Esta ação não pode ser desfeita.",
-      confirmar: "Excluir",
-      destrutivo: true,
-    });
-    if (!ok) return;
-    const novasObras = obras.filter(o => o.id !== obra.id);
-    save({ ...data, obras: novasObras }).catch(console.error);
-  }
-
+  // Concluir e excluir moram dentro da obra (status no cadastro, Excluir
+  // lá dentro): a lista é só para escolher qual abrir.
   const obrasFiltradas = obras.filter(o => {
     if (filtro === "andamento" && o.status === "concluida") return false;
     if (filtro === "concluidas" && o.status !== "concluida") return false;
-    const termo = semAcento(busca);
-    if (!termo) return true;
-    const alvo = semAcento([o.nome, o.referencia, nomeCliente(o.clienteId), o.cidade].filter(Boolean).join(" "));
-    // Cada palavra digitada tem que aparecer: "cobop reforma" acha a obra
-    // mesmo com o cliente e o nome em pontas opostas da linha.
-    return termo.split(/\s+/).every(w => alvo.indexOf(w) >= 0);
+    return true;
   });
 
   const totais = {
@@ -4184,15 +4283,6 @@ function Obras({ data, save }) {
     setEntradaPendente(carga);
     setObraAbertaId(alvo);
     return (carga.destino === "lancar" || carga.destino === "despesa") ? { pendente: true } : undefined;
-  }
-
-  // A busca compara sem acento e sem caixa, pelo nome da obra, pelo cliente e
-  // pela referência — é por qualquer um dos três que se procura uma obra.
-  // Declarada como function de propósito: `obrasFiltradas` usa isto algumas
-  // linhas ACIMA, e um const aí morreria na zona morta temporal — tela branca.
-  function semAcento(s) {
-    return String(s == null ? "" : s)
-      .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
   }
 
   // Obra aberta: mesma tela da obra que existe dentro do cliente
@@ -4232,109 +4322,46 @@ function Obras({ data, save }) {
           embutido aoSeguir={seguirDaEntradaDeObras} confirmacao={confirmacaoEntrada} />
       )}
 
-      {/* Busca dinâmica: filtra enquanto se digita, sem botão nenhum. */}
-      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12,
-        border: "1.5px solid " + (buscaFocada ? "rgba(4,116,244,0.55)" : "rgba(38,36,33,0.12)"),
-        borderRadius: 999, background:"#fff", padding: isMobile ? "8px 14px" : "9px 16px",
-        transition: "border-color .15s, box-shadow .15s",
-        boxShadow: buscaFocada ? "0 0 0 4px rgba(4,116,244,0.10)" : "none" }}>
-        <span style={{ color: buscaFocada ? "#0474f4" : "#9ca3af", display:"flex", flexShrink:0 }}>
-          <IconeLupa tamanho={17} />
-        </span>
-        <input value={busca} onChange={(e) => setBusca(e.target.value)}
-          onFocus={() => setBuscaFocada(true)} onBlur={() => setBuscaFocada(false)}
-          placeholder="Procurar obra pelo nome ou pelo cliente…"
-          style={{ flex:1, minWidth:0, border:"none", outline:"none", background:"transparent",
-            fontFamily:"inherit", fontSize: isMobile ? 16 : 14, color:"#111827" }} />
-        {busca && (
-          <button type="button" onClick={() => setBusca("")} title="Limpar"
-            style={{ border:"none", background:"none", color:"#9ca3af", cursor:"pointer",
-              fontFamily:"inherit", fontSize:16, lineHeight:1, padding:0 }}>×</button>
-        )}
-      </div>
-
-      {/* Filtros */}
-      <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
-        <button onClick={() => setFiltro("andamento")} style={pillStyle(filtro==="andamento")}>
-          Em andamento {totais.andamento > 0 && <span style={{ opacity:0.7, marginLeft:4 }}>{totais.andamento}</span>}
-        </button>
-        <button onClick={() => setFiltro("concluidas")} style={pillStyle(filtro==="concluidas")}>
-          Concluídas {totais.concluidas > 0 && <span style={{ opacity:0.7, marginLeft:4 }}>{totais.concluidas}</span>}
-        </button>
-        <button onClick={() => setFiltro("todas")} style={pillStyle(filtro==="todas")}>
-          Todas {totais.todas > 0 && <span style={{ opacity:0.7, marginLeft:4 }}>{totais.todas}</span>}
-        </button>
-      </div>
-
-      {/* Lista */}
-      {obrasFiltradas.length === 0 ? (
-        <div style={{
-          marginTop: 20, padding: "48px 24px", textAlign: "center",
-          border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 14, background: "#fafafa",
-        }}>
-          <div style={{ color:"#4b5563", fontSize:13 }}>
-            {busca ? `Nenhuma obra para “${busca}”.` : (
-              <>
-                {filtro === "andamento" && "Nenhuma obra em andamento."}
-                {filtro === "concluidas" && "Nenhuma obra concluída ainda."}
-                {filtro === "todas" && "Nenhuma obra cadastrada."}
-              </>
-            )}
+      {/* Lista de seleção: alfabética pelo cliente e pela obra, sempre na
+          mesma ordem; a busca filtra enquanto se digita. */}
+      <ListaDeSelecao isMobile={isMobile} nomeDoItem={["obra", "obras"]}
+        placeholder={isMobile ? "Procurar obra ou cliente…" : "Procurar obra pelo nome, cliente ou cidade…"}
+        itens={obrasFiltradas.map(obra => {
+          const cliente = nomeCliente(obra.clienteId);
+          const nomeObra = obra.nome || obra.referencia || "Obra";
+          const igual = String(nomeObra).trim().toLowerCase() === String(cliente).trim().toLowerCase();
+          const concluida = obra.status === "concluida";
+          return {
+            id: obra.id, titulo: cliente, subtitulo: igual ? "" : nomeObra,
+            busca: [nomeObra, obra.referencia, obra.cidade].filter(Boolean).join(" "),
+            etiqueta: concluida ? "Concluída" : "", corEtiqueta: "#16a34a", fundoEtiqueta: "#f0fdf4",
+            apagado: !clientes.some(c => c.id === obra.clienteId),
+          };
+        })}
+        aoEscolher={(it) => setObraAbertaId(it.id)}
+        topo={
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <button onClick={() => setFiltro("andamento")} style={pillStyle(filtro==="andamento")}>
+              Em andamento {totais.andamento > 0 && <span style={{ opacity:0.7, marginLeft:4 }}>{totais.andamento}</span>}
+            </button>
+            <button onClick={() => setFiltro("concluidas")} style={pillStyle(filtro==="concluidas")}>
+              Concluídas {totais.concluidas > 0 && <span style={{ opacity:0.7, marginLeft:4 }}>{totais.concluidas}</span>}
+            </button>
+            <button onClick={() => setFiltro("todas")} style={pillStyle(filtro==="todas")}>
+              Todas {totais.todas > 0 && <span style={{ opacity:0.7, marginLeft:4 }}>{totais.todas}</span>}
+            </button>
           </div>
-          {!busca && (
-            <div style={{ color:"#4b5563", fontSize:12, marginTop:6, maxWidth:440, margin:"6px auto 0" }}>
-              Obras aparecem aqui automaticamente quando um projeto é finalizado na etapa <strong style={{ color:"#4b5563" }}>Engenharia</strong> do Kanban de Projetos.
+        }
+        vazio={
+          <>
+            {filtro === "andamento" && "Nenhuma obra em andamento."}
+            {filtro === "concluidas" && "Nenhuma obra concluída ainda."}
+            {filtro === "todas" && "Nenhuma obra cadastrada."}
+            <div style={{ fontSize:12, marginTop:6, maxWidth:440, margin:"6px auto 0" }}>
+              Obras aparecem aqui automaticamente quando um projeto é finalizado na etapa <strong>Engenharia</strong> do Kanban de Projetos.
             </div>
-          )}
-        </div>
-      ) : (
-        <div style={{ display:"flex", flexDirection:"column", gap:8, maxWidth:960 }}>
-          {obrasFiltradas.map(obra => {
-            const concluida = obra.status === "concluida";
-            const podeAbrir = clientes.some(c => c.id === obra.clienteId);
-
-            return (
-              <div key={obra.id} role={podeAbrir ? "button" : undefined} tabIndex={podeAbrir ? 0 : undefined}
-                onClick={() => podeAbrir && setObraAbertaId(obra.id)}
-                onKeyDown={(e) => { if (podeAbrir && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setObraAbertaId(obra.id); } }}
-                style={{
-                  background: concluida ? "#fafafa" : "#fff",
-                  border:"1px solid rgba(38,36,33,0.14)", borderRadius:9,
-                  padding:"12px 16px", cursor: podeAbrir ? "pointer" : "default",
-                  display:"grid", gridTemplateColumns:"1fr auto", gap:16, alignItems:"center",
-                }}>
-                <div style={{ minWidth:0, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-                  <div style={{ fontSize:14, fontWeight:600, color:"#111827" }}>{nomeCliente(obra.clienteId)}</div>
-                  <div style={{ fontSize:13, color:"#4b5563" }}>{obra.nome || obra.referencia || "Obra"}</div>
-                  {concluida && (
-                    <span style={{ fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5, padding:"2px 7px", borderRadius:4, background:"#f0fdf4", color:"#16a34a" }}>
-                      Concluída
-                    </span>
-                  )}
-                </div>
-                <div style={{ display:"flex", gap:6 }} onClick={(e) => e.stopPropagation()}>
-                  {!concluida && (
-                    <button onClick={() => concluirObra(obra)}
-                      style={{ fontSize:11.5, color:"#16a34a", background:"#fff", border:"1px solid #bbf7d0", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit", fontWeight:500 }}>
-                      ✓ Concluir
-                    </button>
-                  )}
-                  {concluida && (
-                    <button onClick={() => reabrirObra(obra)}
-                      style={{ fontSize:11.5, color:"#4b5563", background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit" }}>
-                      Reabrir
-                    </button>
-                  )}
-                  <button onClick={() => excluirObra(obra)}
-                    style={{ fontSize:11.5, color:"#dc2626", background:"#fff", border:"1px solid #fecaca", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit" }}>
-                    Excluir
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+          </>
+        } />
     </PageContainer>
   );
 }
@@ -47563,7 +47590,9 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   // Ordem dos hooks deve ser constante entre renders (regra do React).
   const perm = getPermissoes();
   const [abrindoOrcamento, setAbrindoOrcamento] = useState(false);
-  const [view, setView]               = useState("kanban");
+  const [view, setView]               = useState("list");
+  // Para onde o "Voltar" leva: a lista (padrão) ou o Kanban, se foi ele o escolhido.
+  const [telaInicial, setTelaInicial] = useState("list");
   const [sel, setSel]                 = useState(null);
   const [busca, setBusca]             = useState("");
   const [dragId, setDragId]           = useState(null);
@@ -47705,7 +47734,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       onClienteSalvoVoltarOrcamento(clienteFinal);
       return;
     }
-    setView("kanban");
+    setView(telaInicial);
   }
 
   async function removeCliente(id) {
@@ -47739,7 +47768,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       clientes: data.clientes.filter(c => c.id !== id),
       orcamentosProjeto: novosOrcs,
     });
-    setView("kanban");
+    setView(telaInicial);
   }
 
   function moverCliente(id, novaColuna) {
@@ -47950,7 +47979,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           </div>
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
             <input style={{ ...C.input, width:220 }} placeholder="Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} />
-            <button style={C.btnSec} onClick={() => setView("list")}>Lista</button>
+            <button style={C.btnSec} onClick={() => { setTelaInicial("list"); setView("list"); }}>Lista</button>
             {perm.podeEditar && <button style={C.btn} onClick={openNew}>+ Novo cliente</button>}
           </div>
         </div>
@@ -48000,46 +48029,36 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   }
 
   // ── LISTA ───────────────────────────────────────────────────
+  // A tela de entrada dos clientes: alfabética e sempre na mesma ordem, com
+  // a busca no alto. O Kanban (por situação) continua a um clique.
   if (view === "list") {
-    const filtrados = data.clientes.filter(c => {
-      const b = busca.toLowerCase();
-      return !b || c.nome.toLowerCase().includes(b) || (c.cpfCnpj||"").includes(b) || (c.cidade||"").toLowerCase().includes(b);
-    }).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+    const itensLista = data.clientes.map(c => {
+      const tel = c.contatos?.find(ct=>ct.whatsapp)?.telefone||c.contatos?.[0]?.telefone||"";
+      const obrasDoCli = (data.obras || []).filter(o => o && o.clienteId === c.id).map(o => o.nome || o.referencia || "");
+      return {
+        id: c.id, titulo: c.nome, subtitulo: [c.cpfCnpj, c.cidade].filter(Boolean).join(" · "),
+        // Só o inativo leva etiqueta: "Ativo" em todo mundo é ruído.
+        etiqueta: colunaDoCliente(c) === "inativos" ? "Inativo" : "",
+        busca: [c.email, (c.contatos || []).map(ct => ct && ct.nome).join(" "), obrasDoCli.join(" ")].filter(Boolean).join(" "),
+        acoes: tel ? <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#111827", textDecoration:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"4px 10px" }}>WA</a> : null,
+        cliente: c,
+      };
+    });
     return (
       <div data-vk-ui="1" style={{ padding: isMobile ? "16px" : "28px 32px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, flexWrap:"wrap", gap:8 }}>
-          <div style={{ fontSize:18, fontWeight:700, color:"#111827" }}>Clientes</div>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-            <input style={{ ...C.input, width: isMobile ? "100%" : 220 }} placeholder="Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} />
-            {!isMobile && <button style={C.btnSec} onClick={()=>setView("kanban")}>Kanban</button>}
-            {perm.podeEditar && <button style={C.btn} onClick={openNew}>+ Novo</button>}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14, gap:8, maxWidth:960 }}>
+          <div style={{ minWidth:0 }}>
+            <div style={{ fontSize:18, fontWeight:700, color:"#111827" }}>Clientes</div>
+          </div>
+          <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+            {!isMobile && <button style={C.btnSec} onClick={()=>{ setTelaInicial("kanban"); setView("kanban"); }}>Kanban</button>}
+            {perm.podeEditar && <button style={C.btn} onClick={openNew}>{isMobile ? "+ Novo" : "+ Novo cliente"}</button>}
           </div>
         </div>
-        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {filtrados.map(c => {
-            const iniciais = c.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase();
-            const corAv = c.tipo==="PJ"?"#7c3aed":"#2563eb";
-            const col = COLUNAS.find(x=>x.key===colunaDoCliente(c)) || COLUNAS[0];
-            const tel = c.contatos?.find(ct=>ct.whatsapp)?.telefone||c.contatos?.[0]?.telefone||"";
-            return (
-              <div key={c.id} style={{ background:"#fff", border:"1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding:"14px 16px", display:"flex", alignItems:"center", gap:14, cursor:"pointer", transition:"border-color 0.15s, box-shadow 0.15s" }}
-                onMouseEnter={e=>{ e.currentTarget.style.borderColor=AZUL_VK; e.currentTarget.style.boxShadow="0 0 0 3px rgba(4,116,244,0.12)"; }}
-                onMouseLeave={e=>{ e.currentTarget.style.borderColor="rgba(38,36,33,0.14)"; e.currentTarget.style.boxShadow="none"; }}
-                onClick={()=>openDetail(c)}>
-                <div style={{ width:40, height:40, borderRadius: 14, background:corAv+"15", color:corAv, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, flexShrink:0 }}>{iniciais}</div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:14, fontWeight:600, color:"#111827" }}>{c.nome}</div>
-                  <div style={{ fontSize:12, color:"#4b5563" }}>{c.cpfCnpj}{c.cidade?` · ${c.cidade}`:""}</div>
-                </div>
-                <div style={{ display:"flex", gap:6, alignItems:"center" }} onClick={e=>e.stopPropagation()}>
-                  <span style={{ fontSize:12, color:"#111827", fontWeight:600 }}>{col.label}</span>
-                  {tel && <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#111827", textDecoration:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"4px 10px" }}>WA</a>}
-                  <button onClick={()=>openEdit(c)} style={{ fontSize:12, color:"#4b5563", background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>Editar</button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <ListaDeSelecao isMobile={isMobile} itens={itensLista} nomeDoItem={["cliente", "clientes"]}
+          placeholder={isMobile ? "Procurar cliente…" : "Procurar cliente pelo nome, CPF/CNPJ, cidade ou obra…"}
+          aoEscolher={(it) => openDetail(it.cliente)}
+          vazio="Nenhum cliente cadastrado." />
       </div>
     );
   }
@@ -48069,7 +48088,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         <div style={{ maxWidth:900, margin:"0 auto" }}>
           {/* Header */}
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:24, flexWrap:"wrap" }}>
-            <button style={{ background:"none", border:"none", color:VKD.inkSoft, cursor:"pointer", fontFamily:"inherit", fontSize:13 }} onClick={()=>{ setView("kanban"); setAbaCliente("cadastro"); }}>← Voltar</button>
+            <button style={{ background:"none", border:"none", color:VKD.inkSoft, cursor:"pointer", fontFamily:"inherit", fontSize:13 }} onClick={()=>{ setView(telaInicial); setAbaCliente("cadastro"); }}>← Voltar</button>
           </div>
 
           {/* Cliente Info — só o nome */}
@@ -48133,7 +48152,11 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         )}
 
         {abaCliente === "projetos" && (
-          <ProjetosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc, modo) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc, modo); }} />
+          <>
+            <ProjetosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc, modo) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc, modo); }} />
+            {/* Teste Projeto (teste-projeto.jsx): desenhos deste cliente — só a empresa piloto vê */}
+            {typeof TpProjetosDoCliente === "function" && <TpProjetosDoCliente key={cliente.id} cliente={cliente} />}
+          </>
         )}
 
         {abaCliente === "obras" && (
@@ -48181,7 +48204,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       `}</style>
       <div style={{ maxWidth:640, margin:"0 auto", background:"#fff", borderRadius:16, padding: isMobile ? "22px 18px 26px" : "28px 26px 32px", boxShadow:"0 18px 50px -28px rgba(38,36,33,0.35)" }}>
         <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:8 }}>
-          <button style={FC.btnGhost} onClick={()=>setView("kanban")}>← Voltar</button>
+          <button style={FC.btnGhost} onClick={()=>setView(telaInicial)}>← Voltar</button>
         </div>
         <div style={{ fontFamily:"'Inter', system-ui, sans-serif", fontSize:24, fontWeight:800, letterSpacing:"-0.02em", color:VK.grafite, margin:"0 0 8px" }}>{form.id ? (ehEmp ? "Editar empreendimento" : "Editar cliente") : (ehEmp ? "Novo empreendimento" : "Novo cliente")}</div>
         {/* Cliente final ou empreendimento do escritório. Não é um detalhe do
@@ -48332,7 +48355,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           <textarea className="vk-fc-input" style={{...FC.input, height:"auto", padding:"12px 14px", resize:"vertical"}} value={form.observacoes} onChange={e=>setForm({...form,observacoes:e.target.value})} rows={3} />
         </div>
         <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
-          <button style={FC.btnSec} onClick={()=>setView("kanban")}>Cancelar</button>
+          <button style={FC.btnSec} onClick={()=>setView(telaInicial)}>Cancelar</button>
           <button data-tutorial-id="cliente-salvar" style={FC.btn} onClick={saveCliente}>{form.id ? "Salvar alterações" : (ehEmp ? "Cadastrar empreendimento" : "Cadastrar cliente")}</button>
         </div>
       </div>
@@ -78062,6 +78085,106 @@ function TesteProjeto({ data, usuario }) {
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
               <button style={btn} onClick={() => setExcluir(null)}>Cancelar</button>
               <button style={{ ...btn, background: "#b91c1c", borderColor: "#b91c1c", color: "#fff" }} onClick={() => { salvarLista(projetos.filter((p) => p.id !== excluir.id)); setExcluir(null); }}>Excluir</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────
+// Dentro do cliente (aba Projetos): os desenhos daquele cliente, com
+// abrir, excluir e novo desenho já vinculado a ele. Mesmo armazenamento
+// da tela Teste Projeto (localStorage por empresa) — um projeto criado
+// lá aparece aqui e vice-versa. Só aparece para a empresa piloto.
+// ───────────────────────────────────────────────────────────────
+const TP_EMPRESA_PILOTO = "emp_padovan-arquitetos_moebj62t";
+function tpEmpresaAtual() {
+  try { return (JSON.parse(localStorage.getItem("vicke-user") || "{}") || {}).empresa_id || ""; } catch { return ""; }
+}
+
+function TpProjetosDoCliente({ cliente }) {
+  const empresaId = tpEmpresaAtual();
+  const [todos, setTodos] = useState(() => tpLer(empresaId));
+  const [abertoId, setAbertoId] = useState(null);
+  const [novoNome, setNovoNome] = useState(null);  // string enquanto a janela está aberta
+  const [excluir, setExcluir] = useState(null);
+  if (empresaId !== TP_EMPRESA_PILOTO || !cliente) return null;
+
+  const salvarLista = (lista) => { setTodos(lista); tpGravar(empresaId, lista); };
+  const meus = todos.filter((p) => p.clienteId === cliente.id);
+  const aberto = meus.find((p) => p.id === abertoId);
+
+  const btn = { padding: "8px 14px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 14, fontWeight: 500, cursor: "pointer", minHeight: 38, fontFamily: "inherit" };
+  const btnAzul = { ...btn, background: TP_AZUL, borderColor: TP_AZUL, color: "#fff" };
+  const fundo = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 };
+  const caixa = { background: "#fff", borderRadius: 12, padding: 20, width: "100%", maxWidth: 440, boxShadow: "0 10px 30px rgba(0,0,0,0.2)" };
+  const dataBR = (iso) => { try { return new Date(iso).toLocaleDateString("pt-BR"); } catch { return ""; } };
+
+  if (aberto) {
+    return (
+      <div style={{ marginTop: 20, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16, padding: 16 }}>
+        <TpEditor key={aberto.id} projeto={aberto} nomeCliente={cliente.nome}
+          onAlterar={(p) => salvarLista(tpLer(empresaId).map((x) => (x.id === p.id ? p : x)))}
+          onVoltar={() => { setTodos(tpLer(empresaId)); setAbertoId(null); }} />
+      </div>
+    );
+  }
+
+  const criar = () => {
+    const nome = String(novoNome || "").trim(); if (!nome) return;
+    const agora = new Date().toISOString();
+    const p = { id: "tp_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), nome, clienteId: cliente.id, paredes: [], criadoEm: agora, atualizadoEm: agora };
+    salvarLista([p, ...tpLer(empresaId)]);
+    setNovoNome(null); setAbertoId(p.id);
+  };
+
+  return (
+    <div style={{ marginTop: 20, background: "#fff", border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, padding: 16 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between", marginBottom: meus.length ? 10 : 0 }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Projetos desenhados <span style={{ fontSize: 11, fontWeight: 600, color: TP_AZUL, background: "#eef5ff", borderRadius: 999, padding: "2px 8px", marginLeft: 6 }}>teste</span></div>
+          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{meus.length ? `${meus.length} projeto${meus.length === 1 ? "" : "s"}` : "Nenhum desenho para este cliente ainda."}</div>
+        </div>
+        <button style={btnAzul} onClick={() => setNovoNome("")}>+ Novo projeto</button>
+      </div>
+      {meus.map((p, i) => (
+        <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderTop: "1px solid #f0f2f5" }}>
+          <button onClick={() => setAbertoId(p.id)} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nome}</div>
+            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{(p.paredes || []).length} parede{(p.paredes || []).length === 1 ? "" : "s"} · {dataBR(p.atualizadoEm)}</div>
+          </button>
+          <button style={{ ...btn, padding: "6px 10px", minHeight: 32, fontSize: 13 }} onClick={() => setAbertoId(p.id)}>Abrir</button>
+          <button style={{ ...btn, padding: "6px 10px", minHeight: 32, fontSize: 13, color: "#b91c1c" }} onClick={() => setExcluir(p)}>Excluir</button>
+        </div>
+      ))}
+
+      {novoNome !== null && (
+        <div style={fundo}>
+          <div style={caixa} role="dialog" aria-modal="true">
+            <div style={{ fontSize: 17, fontWeight: 700, color: "#111827" }}>Novo projeto</div>
+            <div style={{ fontSize: 13, color: "#6b7280", margin: "4px 0 14px" }}>Cliente: {cliente.nome}</div>
+            <label htmlFor="tp-cli-nome" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 4 }}>Nome do projeto</label>
+            <input id="tp-cli-nome" autoFocus value={novoNome} onChange={(e) => setNovoNome(e.target.value)} placeholder="Ex.: Residência Silva"
+              onKeyDown={(e) => { if (e.key === "Enter") criar(); }}
+              style={{ width: "100%", boxSizing: "border-box", padding: "9px 10px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14 }} />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
+              <button style={btn} onClick={() => setNovoNome(null)}>Cancelar</button>
+              <button style={{ ...btnAzul, opacity: String(novoNome).trim() ? 1 : 0.5 }} disabled={!String(novoNome).trim()} onClick={criar}>Criar e projetar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {excluir && (
+        <div style={fundo}>
+          <div style={caixa} role="dialog" aria-modal="true">
+            <div style={{ fontSize: 17, fontWeight: 700, color: "#111827" }}>Excluir projeto?</div>
+            <div style={{ fontSize: 14, color: "#374151", margin: "8px 0 18px" }}>"{excluir.nome}" e todo o desenho serão apagados deste navegador.</div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button style={btn} onClick={() => setExcluir(null)}>Cancelar</button>
+              <button style={{ ...btn, background: "#b91c1c", borderColor: "#b91c1c", color: "#fff" }} onClick={() => { salvarLista(tpLer(empresaId).filter((p) => p.id !== excluir.id)); setExcluir(null); }}>Excluir</button>
             </div>
           </div>
         </div>

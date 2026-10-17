@@ -376,3 +376,103 @@ function TesteProjeto({ data, usuario }) {
     </div>
   );
 }
+
+// ───────────────────────────────────────────────────────────────
+// Dentro do cliente (aba Projetos): os desenhos daquele cliente, com
+// abrir, excluir e novo desenho já vinculado a ele. Mesmo armazenamento
+// da tela Teste Projeto (localStorage por empresa) — um projeto criado
+// lá aparece aqui e vice-versa. Só aparece para a empresa piloto.
+// ───────────────────────────────────────────────────────────────
+const TP_EMPRESA_PILOTO = "emp_padovan-arquitetos_moebj62t";
+function tpEmpresaAtual() {
+  try { return (JSON.parse(localStorage.getItem("vicke-user") || "{}") || {}).empresa_id || ""; } catch { return ""; }
+}
+
+function TpProjetosDoCliente({ cliente }) {
+  const empresaId = tpEmpresaAtual();
+  const [todos, setTodos] = useState(() => tpLer(empresaId));
+  const [abertoId, setAbertoId] = useState(null);
+  const [novoNome, setNovoNome] = useState(null);  // string enquanto a janela está aberta
+  const [excluir, setExcluir] = useState(null);
+  if (empresaId !== TP_EMPRESA_PILOTO || !cliente) return null;
+
+  const salvarLista = (lista) => { setTodos(lista); tpGravar(empresaId, lista); };
+  const meus = todos.filter((p) => p.clienteId === cliente.id);
+  const aberto = meus.find((p) => p.id === abertoId);
+
+  const btn = { padding: "8px 14px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 14, fontWeight: 500, cursor: "pointer", minHeight: 38, fontFamily: "inherit" };
+  const btnAzul = { ...btn, background: TP_AZUL, borderColor: TP_AZUL, color: "#fff" };
+  const fundo = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 };
+  const caixa = { background: "#fff", borderRadius: 12, padding: 20, width: "100%", maxWidth: 440, boxShadow: "0 10px 30px rgba(0,0,0,0.2)" };
+  const dataBR = (iso) => { try { return new Date(iso).toLocaleDateString("pt-BR"); } catch { return ""; } };
+
+  if (aberto) {
+    return (
+      <div style={{ marginTop: 20, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16, padding: 16 }}>
+        <TpEditor key={aberto.id} projeto={aberto} nomeCliente={cliente.nome}
+          onAlterar={(p) => salvarLista(tpLer(empresaId).map((x) => (x.id === p.id ? p : x)))}
+          onVoltar={() => { setTodos(tpLer(empresaId)); setAbertoId(null); }} />
+      </div>
+    );
+  }
+
+  const criar = () => {
+    const nome = String(novoNome || "").trim(); if (!nome) return;
+    const agora = new Date().toISOString();
+    const p = { id: "tp_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), nome, clienteId: cliente.id, paredes: [], criadoEm: agora, atualizadoEm: agora };
+    salvarLista([p, ...tpLer(empresaId)]);
+    setNovoNome(null); setAbertoId(p.id);
+  };
+
+  return (
+    <div style={{ marginTop: 20, background: "#fff", border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, padding: 16 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between", marginBottom: meus.length ? 10 : 0 }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Projetos desenhados <span style={{ fontSize: 11, fontWeight: 600, color: TP_AZUL, background: "#eef5ff", borderRadius: 999, padding: "2px 8px", marginLeft: 6 }}>teste</span></div>
+          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{meus.length ? `${meus.length} projeto${meus.length === 1 ? "" : "s"}` : "Nenhum desenho para este cliente ainda."}</div>
+        </div>
+        <button style={btnAzul} onClick={() => setNovoNome("")}>+ Novo projeto</button>
+      </div>
+      {meus.map((p, i) => (
+        <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderTop: "1px solid #f0f2f5" }}>
+          <button onClick={() => setAbertoId(p.id)} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nome}</div>
+            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{(p.paredes || []).length} parede{(p.paredes || []).length === 1 ? "" : "s"} · {dataBR(p.atualizadoEm)}</div>
+          </button>
+          <button style={{ ...btn, padding: "6px 10px", minHeight: 32, fontSize: 13 }} onClick={() => setAbertoId(p.id)}>Abrir</button>
+          <button style={{ ...btn, padding: "6px 10px", minHeight: 32, fontSize: 13, color: "#b91c1c" }} onClick={() => setExcluir(p)}>Excluir</button>
+        </div>
+      ))}
+
+      {novoNome !== null && (
+        <div style={fundo}>
+          <div style={caixa} role="dialog" aria-modal="true">
+            <div style={{ fontSize: 17, fontWeight: 700, color: "#111827" }}>Novo projeto</div>
+            <div style={{ fontSize: 13, color: "#6b7280", margin: "4px 0 14px" }}>Cliente: {cliente.nome}</div>
+            <label htmlFor="tp-cli-nome" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 4 }}>Nome do projeto</label>
+            <input id="tp-cli-nome" autoFocus value={novoNome} onChange={(e) => setNovoNome(e.target.value)} placeholder="Ex.: Residência Silva"
+              onKeyDown={(e) => { if (e.key === "Enter") criar(); }}
+              style={{ width: "100%", boxSizing: "border-box", padding: "9px 10px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14 }} />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
+              <button style={btn} onClick={() => setNovoNome(null)}>Cancelar</button>
+              <button style={{ ...btnAzul, opacity: String(novoNome).trim() ? 1 : 0.5 }} disabled={!String(novoNome).trim()} onClick={criar}>Criar e projetar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {excluir && (
+        <div style={fundo}>
+          <div style={caixa} role="dialog" aria-modal="true">
+            <div style={{ fontSize: 17, fontWeight: 700, color: "#111827" }}>Excluir projeto?</div>
+            <div style={{ fontSize: 14, color: "#374151", margin: "8px 0 18px" }}>"{excluir.nome}" e todo o desenho serão apagados deste navegador.</div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button style={btn} onClick={() => setExcluir(null)}>Cancelar</button>
+              <button style={{ ...btn, background: "#b91c1c", borderColor: "#b91c1c", color: "#fff" }} onClick={() => { salvarLista(tpLer(empresaId).filter((p) => p.id !== excluir.id)); setExcluir(null); }}>Excluir</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

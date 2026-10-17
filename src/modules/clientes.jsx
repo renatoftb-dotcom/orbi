@@ -447,7 +447,9 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   // Ordem dos hooks deve ser constante entre renders (regra do React).
   const perm = getPermissoes();
   const [abrindoOrcamento, setAbrindoOrcamento] = useState(false);
-  const [view, setView]               = useState("kanban");
+  const [view, setView]               = useState("list");
+  // Para onde o "Voltar" leva: a lista (padrão) ou o Kanban, se foi ele o escolhido.
+  const [telaInicial, setTelaInicial] = useState("list");
   const [sel, setSel]                 = useState(null);
   const [busca, setBusca]             = useState("");
   const [dragId, setDragId]           = useState(null);
@@ -589,7 +591,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       onClienteSalvoVoltarOrcamento(clienteFinal);
       return;
     }
-    setView("kanban");
+    setView(telaInicial);
   }
 
   async function removeCliente(id) {
@@ -623,7 +625,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       clientes: data.clientes.filter(c => c.id !== id),
       orcamentosProjeto: novosOrcs,
     });
-    setView("kanban");
+    setView(telaInicial);
   }
 
   function moverCliente(id, novaColuna) {
@@ -834,7 +836,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           </div>
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
             <input style={{ ...C.input, width:220 }} placeholder="Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} />
-            <button style={C.btnSec} onClick={() => setView("list")}>Lista</button>
+            <button style={C.btnSec} onClick={() => { setTelaInicial("list"); setView("list"); }}>Lista</button>
             {perm.podeEditar && <button style={C.btn} onClick={openNew}>+ Novo cliente</button>}
           </div>
         </div>
@@ -884,46 +886,36 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   }
 
   // ── LISTA ───────────────────────────────────────────────────
+  // A tela de entrada dos clientes: alfabética e sempre na mesma ordem, com
+  // a busca no alto. O Kanban (por situação) continua a um clique.
   if (view === "list") {
-    const filtrados = data.clientes.filter(c => {
-      const b = busca.toLowerCase();
-      return !b || c.nome.toLowerCase().includes(b) || (c.cpfCnpj||"").includes(b) || (c.cidade||"").toLowerCase().includes(b);
-    }).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+    const itensLista = data.clientes.map(c => {
+      const tel = c.contatos?.find(ct=>ct.whatsapp)?.telefone||c.contatos?.[0]?.telefone||"";
+      const obrasDoCli = (data.obras || []).filter(o => o && o.clienteId === c.id).map(o => o.nome || o.referencia || "");
+      return {
+        id: c.id, titulo: c.nome, subtitulo: [c.cpfCnpj, c.cidade].filter(Boolean).join(" · "),
+        // Só o inativo leva etiqueta: "Ativo" em todo mundo é ruído.
+        etiqueta: colunaDoCliente(c) === "inativos" ? "Inativo" : "",
+        busca: [c.email, (c.contatos || []).map(ct => ct && ct.nome).join(" "), obrasDoCli.join(" ")].filter(Boolean).join(" "),
+        acoes: tel ? <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#111827", textDecoration:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"4px 10px" }}>WA</a> : null,
+        cliente: c,
+      };
+    });
     return (
       <div data-vk-ui="1" style={{ padding: isMobile ? "16px" : "28px 32px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, flexWrap:"wrap", gap:8 }}>
-          <div style={{ fontSize:18, fontWeight:700, color:"#111827" }}>Clientes</div>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-            <input style={{ ...C.input, width: isMobile ? "100%" : 220 }} placeholder="Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} />
-            {!isMobile && <button style={C.btnSec} onClick={()=>setView("kanban")}>Kanban</button>}
-            {perm.podeEditar && <button style={C.btn} onClick={openNew}>+ Novo</button>}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14, gap:8, maxWidth:960 }}>
+          <div style={{ minWidth:0 }}>
+            <div style={{ fontSize:18, fontWeight:700, color:"#111827" }}>Clientes</div>
+          </div>
+          <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+            {!isMobile && <button style={C.btnSec} onClick={()=>{ setTelaInicial("kanban"); setView("kanban"); }}>Kanban</button>}
+            {perm.podeEditar && <button style={C.btn} onClick={openNew}>{isMobile ? "+ Novo" : "+ Novo cliente"}</button>}
           </div>
         </div>
-        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {filtrados.map(c => {
-            const iniciais = c.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase();
-            const corAv = c.tipo==="PJ"?"#7c3aed":"#2563eb";
-            const col = COLUNAS.find(x=>x.key===colunaDoCliente(c)) || COLUNAS[0];
-            const tel = c.contatos?.find(ct=>ct.whatsapp)?.telefone||c.contatos?.[0]?.telefone||"";
-            return (
-              <div key={c.id} style={{ background:"#fff", border:"1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding:"14px 16px", display:"flex", alignItems:"center", gap:14, cursor:"pointer", transition:"border-color 0.15s, box-shadow 0.15s" }}
-                onMouseEnter={e=>{ e.currentTarget.style.borderColor=AZUL_VK; e.currentTarget.style.boxShadow="0 0 0 3px rgba(4,116,244,0.12)"; }}
-                onMouseLeave={e=>{ e.currentTarget.style.borderColor="rgba(38,36,33,0.14)"; e.currentTarget.style.boxShadow="none"; }}
-                onClick={()=>openDetail(c)}>
-                <div style={{ width:40, height:40, borderRadius: 14, background:corAv+"15", color:corAv, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, flexShrink:0 }}>{iniciais}</div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:14, fontWeight:600, color:"#111827" }}>{c.nome}</div>
-                  <div style={{ fontSize:12, color:"#4b5563" }}>{c.cpfCnpj}{c.cidade?` · ${c.cidade}`:""}</div>
-                </div>
-                <div style={{ display:"flex", gap:6, alignItems:"center" }} onClick={e=>e.stopPropagation()}>
-                  <span style={{ fontSize:12, color:"#111827", fontWeight:600 }}>{col.label}</span>
-                  {tel && <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#111827", textDecoration:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"4px 10px" }}>WA</a>}
-                  <button onClick={()=>openEdit(c)} style={{ fontSize:12, color:"#4b5563", background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>Editar</button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <ListaDeSelecao isMobile={isMobile} itens={itensLista} nomeDoItem={["cliente", "clientes"]}
+          placeholder={isMobile ? "Procurar cliente…" : "Procurar cliente pelo nome, CPF/CNPJ, cidade ou obra…"}
+          aoEscolher={(it) => openDetail(it.cliente)}
+          vazio="Nenhum cliente cadastrado." />
       </div>
     );
   }
@@ -953,7 +945,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         <div style={{ maxWidth:900, margin:"0 auto" }}>
           {/* Header */}
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:24, flexWrap:"wrap" }}>
-            <button style={{ background:"none", border:"none", color:VKD.inkSoft, cursor:"pointer", fontFamily:"inherit", fontSize:13 }} onClick={()=>{ setView("kanban"); setAbaCliente("cadastro"); }}>← Voltar</button>
+            <button style={{ background:"none", border:"none", color:VKD.inkSoft, cursor:"pointer", fontFamily:"inherit", fontSize:13 }} onClick={()=>{ setView(telaInicial); setAbaCliente("cadastro"); }}>← Voltar</button>
           </div>
 
           {/* Cliente Info — só o nome */}
@@ -1017,7 +1009,11 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         )}
 
         {abaCliente === "projetos" && (
-          <ProjetosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc, modo) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc, modo); }} />
+          <>
+            <ProjetosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc, modo) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc, modo); }} />
+            {/* Teste Projeto (teste-projeto.jsx): desenhos deste cliente — só a empresa piloto vê */}
+            {typeof TpProjetosDoCliente === "function" && <TpProjetosDoCliente key={cliente.id} cliente={cliente} />}
+          </>
         )}
 
         {abaCliente === "obras" && (
@@ -1065,7 +1061,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       `}</style>
       <div style={{ maxWidth:640, margin:"0 auto", background:"#fff", borderRadius:16, padding: isMobile ? "22px 18px 26px" : "28px 26px 32px", boxShadow:"0 18px 50px -28px rgba(38,36,33,0.35)" }}>
         <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:8 }}>
-          <button style={FC.btnGhost} onClick={()=>setView("kanban")}>← Voltar</button>
+          <button style={FC.btnGhost} onClick={()=>setView(telaInicial)}>← Voltar</button>
         </div>
         <div style={{ fontFamily:"'Inter', system-ui, sans-serif", fontSize:24, fontWeight:800, letterSpacing:"-0.02em", color:VK.grafite, margin:"0 0 8px" }}>{form.id ? (ehEmp ? "Editar empreendimento" : "Editar cliente") : (ehEmp ? "Novo empreendimento" : "Novo cliente")}</div>
         {/* Cliente final ou empreendimento do escritório. Não é um detalhe do
@@ -1216,7 +1212,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           <textarea className="vk-fc-input" style={{...FC.input, height:"auto", padding:"12px 14px", resize:"vertical"}} value={form.observacoes} onChange={e=>setForm({...form,observacoes:e.target.value})} rows={3} />
         </div>
         <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
-          <button style={FC.btnSec} onClick={()=>setView("kanban")}>Cancelar</button>
+          <button style={FC.btnSec} onClick={()=>setView(telaInicial)}>Cancelar</button>
           <button data-tutorial-id="cliente-salvar" style={FC.btn} onClick={saveCliente}>{form.id ? "Salvar alterações" : (ehEmp ? "Cadastrar empreendimento" : "Cadastrar cliente")}</button>
         </div>
       </div>
