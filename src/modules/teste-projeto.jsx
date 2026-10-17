@@ -68,7 +68,90 @@ function tpDentroPoli(p, pts) {
 const TP_AREA_TIPOS = {
   contrapiso: { nome: "Contrapiso", esp: 0.05, cor3d: 0xcfc6b4 },
   laje: { nome: "Laje", esp: 0.10, cor3d: 0xbfc5cc },
+  telhado: { nome: "Telhado", esp: 0, cor3d: 0xb5562f },
 };
+const tpEhPoli = (f) => f === "contrapiso" || f === "laje" || f === "telhado";
+
+// ───────────── Telhado (como no Revit: contorno + inclinação por lado) ─────────────
+// Cada lado do contorno define ou não inclinação (%). Lado inclinado = água;
+// lado sem inclinação = oitão (empena). A superfície é o mínimo dos planos
+// das águas: z(p) = nível + inclinação × distância até a linha do lado
+// (positiva para dentro). Isso dá certo para contornos convexos — retângulo
+// de 1, 2, 3 ou 4 águas, em L divide-se em dois telhados, como no Revit.
+// O nível vale na linha do contorno desenhado; o beiral estende para fora
+// e desce pela própria inclinação.
+const TP_TELHAS = [
+  { id: "Telha Barro Portuguesa", rotulo: "Cerâmica portuguesa", pct: 30, cor: 0xb5562f },
+  { id: "Telha Barro Americana", rotulo: "Cerâmica americana", pct: 30, cor: 0xb5562f },
+  { id: "Telha Americana Concreto", rotulo: "Concreto americana", pct: 30, cor: 0x8a8f96 },
+  { id: "Telha Plana Concreto", rotulo: "Concreto plana", pct: 30, cor: 0x8a8f96 },
+  { id: "Telha Fibrocimento 6mm", rotulo: "Fibrocimento 6 mm", pct: 15, cor: 0xb9bcb8 },
+  { id: "Telha Fibrocimento 8mm", rotulo: "Fibrocimento 8 mm", pct: 15, cor: 0xb9bcb8 },
+  { id: "Telha Metálica Termoacústica", rotulo: "Metálica termoacústica", pct: 10, cor: 0x9aa3ad },
+  { id: "Telha Metálica Simples", rotulo: "Metálica simples", pct: 10, cor: 0x9aa3ad },
+];
+const tpTelha = (id) => TP_TELHAS.find((t) => t.id === id) || TP_TELHAS[0];
+function tpConvexo(pts) {
+  let sinal = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length], c = pts[(i + 2) % pts.length];
+    const cr = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+    if (Math.abs(cr) < 1e-9) continue;
+    const s = cr > 0 ? 1 : -1;
+    if (!sinal) sinal = s; else if (s !== sinal) return false;
+  }
+  return true;
+}
+// recorta um polígono convexo pelo semiplano f(p) <= 0 (f linear)
+function tpRecortar(pts, f) {
+  const out = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length], fa = f(a), fb = f(b);
+    if (fa <= 1e-9) out.push(a);
+    if ((fa < -1e-9 && fb > 1e-9) || (fa > 1e-9 && fb < -1e-9)) { const t = fa / (fa - fb); out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }); }
+  }
+  return out;
+}
+function tpTelhadoGeo(t) {
+  const pts = t.pts || [], n = pts.length, cota = t.cota || 0, beiral = Math.max(0, t.beiral || 0);
+  const cen = tpCentro(pts);
+  const lados = pts.map((a, k) => {
+    const b = pts[(k + 1) % n], l = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    let nx = -(b.y - a.y) / l, ny = (b.x - a.x) / l;
+    if ((cen.x - a.x) * nx + (cen.y - a.y) * ny < 0) { nx = -nx; ny = -ny; } // normal para dentro
+    const cfg = (t.lados || [])[k] || {};
+    const inclina = cfg.inclina !== false;
+    return { a, b, l, nx, ny, inclina, s: inclina ? Math.max(0, Number(cfg.pct != null ? cfg.pct : tpTelha(t.telha).pct)) / 100 : 0 };
+  });
+  const convexo = n >= 3 && tpConvexo(pts);
+  // contorno com beiral: cada lado sai "beiral" para fora; vértices = cruzamento dos lados vizinhos
+  let contorno = pts;
+  if (convexo && beiral > 0) {
+    contorno = lados.map((L, k) => {
+      const P = lados[(k - 1 + n) % n];
+      const p1 = { x: P.a.x - P.nx * beiral, y: P.a.y - P.ny * beiral }, d1 = { x: P.b.x - P.a.x, y: P.b.y - P.a.y };
+      const p2 = { x: L.a.x - L.nx * beiral, y: L.a.y - L.ny * beiral }, d2 = { x: L.b.x - L.a.x, y: L.b.y - L.a.y };
+      const den = d1.x * d2.y - d1.y * d2.x;
+      if (Math.abs(den) < 1e-12) return p2;
+      const u = ((p2.x - p1.x) * d2.y - (p2.y - p1.y) * d2.x) / den;
+      return { x: p1.x + d1.x * u, y: p1.y + d1.y * u };
+    });
+  }
+  const aguas = lados.map((L, k) => ({ ...L, k })).filter((L) => L.inclina && L.s > 0);
+  const zDo = (L, p) => cota + L.s * ((p.x - L.a.x) * L.nx + (p.y - L.a.y) * L.ny);
+  const z = (p) => (convexo && aguas.length ? Math.min(...aguas.map((L) => zDo(L, p))) : cota);
+  let facetas = [];
+  if (!convexo || !aguas.length) facetas = [{ pts: contorno, s: 0, k: -1 }];
+  else for (const L of aguas) {
+    let pol = contorno;
+    for (const M of aguas) { if (M === L || pol.length < 3) continue; pol = tpRecortar(pol, (p) => zDo(L, p) - zDo(M, p)); }
+    if (pol.length >= 3 && tpAreaPoli(pol) > 1e-6) facetas.push({ pts: pol, s: L.s, k: L.k });
+  }
+  const areaProjecao = tpAreaPoli(contorno);
+  const areaReal = facetas.reduce((s, f) => s + tpAreaPoli(f.pts) * Math.sqrt(1 + f.s * f.s), 0);
+  const cumeeira = Math.max(cota, ...facetas.flatMap((f) => f.pts.map(z)));
+  return { lados, contorno, facetas, z, convexo, areaProjecao, areaReal, cumeeira };
+}
 
 // Editor em tela cheia. Elementos: paredes (segmentos) e áreas (contrapiso e
 // laje, polígonos). Seleção compartilhada entre planta e 3D: chaves "p3"
@@ -170,7 +253,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
   };
   const trocarFerramenta = (f) => { setFerramenta(f); setInicio(null); setPoli([]); setDigitado(""); if (f !== "selecionar" && f !== "mover") { setSel([]); ultimaFerramenta.current = f; } };
   const finalizarPoli = () => {
-    if (poli.length >= 3 && (ferramenta === "contrapiso" || ferramenta === "laje")) {
+    if (poli.length >= 3 && ferramenta === "telhado") {
+      const tel = TP_TELHAS[0];
+      mudar(null, [...areas, { tipo: "telhado", pts: poli, cota: altM, beiral: 0.6, telha: tel.id, lados: poli.map(() => ({ inclina: true, pct: tel.pct })) }]);
+    } else if (poli.length >= 3 && tpEhPoli(ferramenta)) {
       const t = TP_AREA_TIPOS[ferramenta];
       mudar(null, [...areas, { tipo: ferramenta, pts: poli, esp: t.esp, cota: ferramenta === "laje" ? altM : 0 }]);
     }
@@ -299,7 +385,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
     const ordem = areas.map((a, i) => i).sort((i, j) => (areas[i].tipo === "laje") - (areas[j].tipo === "laje"));
     for (const i of ordem) {
       const a = areas[i], marc = marcadas.has("a" + i);
-      if (!a.pts || a.pts.length < 3) continue;
+      if (!a.pts || a.pts.length < 3 || a.tipo === "telhado") continue;
       caminho(a.pts);
       if (a.tipo === "laje") {
         ctx.fillStyle = marc ? "rgba(4,116,244,0.14)" : "rgba(107,143,199,0.07)"; ctx.fill();
@@ -318,6 +404,36 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
       ctx.fillStyle = marc ? TP_AZUL : (a.tipo === "laje" ? "#4b6aa0" : "#8a7a58");
       ctx.fillText(`${TP_AREA_TIPOS[a.tipo].nome} ${tpFmt(tpAreaPoli(a.pts))} m²`, cx, cy + (a.tipo === "laje" ? 14 * dpr : 0));
     }
+
+    // telhados: contorno com beiral (tracejado), linhas de cumeeira e espigão,
+    // seta de caimento com a porcentagem em cada água
+    areas.forEach((a, i) => {
+      if (a.tipo !== "telhado" || !a.pts || a.pts.length < 3) return;
+      const marc = marcadas.has("a" + i), g = tpTelhadoGeo(a), cor = marc ? TP_AZUL : "#9a4a26";
+      caminho(g.contorno); ctx.fillStyle = marc ? "rgba(4,116,244,0.08)" : "rgba(181,86,47,0.06)"; ctx.fill();
+      ctx.setLineDash([10 * dpr, 4 * dpr, 2 * dpr, 4 * dpr]); ctx.strokeStyle = cor; ctx.lineWidth = (marc ? 2.5 : 1.5) * dpr; ctx.stroke(); ctx.setLineDash([]);
+      ctx.strokeStyle = cor; ctx.lineWidth = 1 * dpr;
+      for (const f of g.facetas) { caminho(f.pts); ctx.stroke(); }
+      if (g.contorno !== a.pts) { caminho(a.pts); ctx.strokeStyle = marc ? "rgba(4,116,244,0.5)" : "rgba(154,74,38,0.35)"; ctx.setLineDash([3 * dpr, 3 * dpr]); ctx.stroke(); ctx.setLineDash([]); }
+      ctx.font = `600 ${11 * dpr}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      g.lados.forEach((L, k) => {
+        const m = { x: (L.a.x + L.b.x) / 2, y: (L.a.y + L.b.y) / 2 };
+        if (marc) { const [nx, ny] = T({ x: m.x - L.nx * 0.35, y: m.y - L.ny * 0.35 }); ctx.fillStyle = TP_AZUL; ctx.beginPath(); ctx.arc(nx, ny, 8 * dpr, 0, 7); ctx.fill(); ctx.fillStyle = "#fff"; ctx.fillText(String(k + 1), nx, ny); }
+        if (!L.inclina || !L.s) return;
+        // seta apontando para baixo (para o lado), do meio da água até perto da borda
+        const p0 = { x: m.x + L.nx * 1.1, y: m.y + L.ny * 1.1 }, p1 = { x: m.x + L.nx * 0.35, y: m.y + L.ny * 0.35 };
+        const [x0, y0] = T(p0), [x1, y1] = T(p1), ang = Math.atan2(y1 - y0, x1 - x0);
+        ctx.strokeStyle = cor; ctx.fillStyle = cor; ctx.lineWidth = 1.5 * dpr;
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x1 - 7 * dpr * Math.cos(ang - 0.45), y1 - 7 * dpr * Math.sin(ang - 0.45)); ctx.lineTo(x1 - 7 * dpr * Math.cos(ang + 0.45), y1 - 7 * dpr * Math.sin(ang + 0.45)); ctx.closePath(); ctx.fill();
+        const [tx, ty] = T({ x: m.x + L.nx * 1.45, y: m.y + L.ny * 1.45 });
+        ctx.fillText(`${tpFmt(L.s * 100, 0)}%`, tx, ty);
+      });
+      ctx.textBaseline = "alphabetic";
+      const [cx, cy] = T(tpCentro(a.pts));
+      ctx.fillStyle = cor; ctx.fillText(`Telhado ${tpFmt(g.areaProjecao)} m²`, cx, cy + 22 * dpr);
+      if (!g.convexo) { ctx.fillStyle = "#b45309"; ctx.fillText("contorno com canto para dentro: divida em dois telhados", cx, cy + 38 * dpr); }
+    });
 
     // polígono em desenho
     if (poli.length) {
@@ -390,7 +506,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
     const marcadas = new Set(sel);
     const contorno = (g, mesh, cor) => { const e = new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: cor })); e.position.copy(mesh.position); e.rotation.copy(mesh.rotation); T.group.add(e); };
     areas.forEach((a, i) => {
-      if (!a.pts || a.pts.length < 3) return;
+      if (!a.pts || a.pts.length < 3 || a.tipo === "telhado") return;
       const shape = new THREE.Shape(a.pts.map((p) => new THREE.Vector2(p.x - cx, -(p.y - cz))));
       const g = new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.01, a.esp || 0.05), bevelEnabled: false });
       const marc = marcadas.has("a" + i);
@@ -399,6 +515,37 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
       mesh.rotation.x = -Math.PI / 2; mesh.position.y = a.cota || 0;
       mesh.userData.chave = "a" + i; T.group.add(mesh);
       contorno(g, mesh, marc ? 0x0474f4 : 0x6b7280);
+    });
+    // telhados: cada água é um polígono plano levantado por z(p); oitões
+    // (lados sem inclinação) fecham a empena na linha do contorno
+    areas.forEach((a, i) => {
+      if (a.tipo !== "telhado" || !a.pts || a.pts.length < 3) return;
+      const g = tpTelhadoGeo(a), marc = marcadas.has("a" + i);
+      const pos = [];
+      const V = (p, zz) => [p.x - cx, zz, p.y - cz];
+      for (const f of g.facetas) for (let k = 1; k + 1 < f.pts.length; k++) pos.push(...V(f.pts[0], g.z(f.pts[0])), ...V(f.pts[k], g.z(f.pts[k])), ...V(f.pts[k + 1], g.z(f.pts[k + 1])));
+      if (pos.length) {
+        const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); geo.computeVertexNormals();
+        const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: marc ? 0x8dbbff : tpTelha(a.telha).cor, side: THREE.DoubleSide }));
+        mesh.userData.chave = "a" + i; T.group.add(mesh);
+        const lin = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 1), new THREE.LineBasicMaterial({ color: marc ? 0x0474f4 : 0x5b2a14 })); T.group.add(lin);
+      }
+      const emp = [];
+      for (const L of g.lados) {
+        if (L.inclina && L.s > 0) continue;
+        const N = 24, cotaBase = a.cota || 0;
+        for (let k = 0; k < N; k++) {
+          const p0 = { x: L.a.x + (L.b.x - L.a.x) * k / N, y: L.a.y + (L.b.y - L.a.y) * k / N }, p1 = { x: L.a.x + (L.b.x - L.a.x) * (k + 1) / N, y: L.a.y + (L.b.y - L.a.y) * (k + 1) / N };
+          const z0 = g.z(p0), z1 = g.z(p1);
+          if (z0 <= cotaBase + 1e-4 && z1 <= cotaBase + 1e-4) continue;
+          emp.push(...V(p0, cotaBase), ...V(p1, cotaBase), ...V(p1, z1), ...V(p0, cotaBase), ...V(p1, z1), ...V(p0, z0));
+        }
+      }
+      if (emp.length) {
+        const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(emp, 3)); geo.computeVertexNormals();
+        const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: marc ? 0x8dbbff : 0xe5e1d8, side: THREE.DoubleSide }));
+        mesh.userData.chave = "a" + i; T.group.add(mesh);
+      }
     });
     paredes.forEach((w, i) => {
       const L = tpLen(w); if (!L) return;
@@ -475,7 +622,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
       const tag = (e.target && e.target.tagName) || "";
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       const ctrl = e.ctrlKey || e.metaKey, tecla = e.key;
-      const desenhando = (ferramenta === "parede" && inicio) || ((ferramenta === "contrapiso" || ferramenta === "laje") && poli.length);
+      const desenhando = (ferramenta === "parede" && inicio) || (tpEhPoli(ferramenta) && poli.length);
       // números durante o traço = comprimento do próximo trecho
       if (desenhando && !ctrl && /^[0-9.,]$/.test(tecla)) { e.preventDefault(); setDigitado((d) => (d + tecla).slice(0, 10)); return; }
       if (digitado && tecla === "Backspace") { e.preventDefault(); setDigitado((d) => d.slice(0, -1)); return; }
@@ -509,7 +656,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
       if (!ctrl && !e.altKey) {
         const t = tecla.toLowerCase();
         if (t === "z" || t === "f") { ajustar(); return; } // ZF no Revit / F no SketchUp
-        const f = { v: "selecionar", p: "parede", c: "contrapiso", l: "laje", h: "mover" }[t];
+        const f = { v: "selecionar", p: "parede", c: "contrapiso", l: "laje", t: "telhado", h: "mover" }[t];
         if (f) trocarFerramenta(f);
       }
     };
@@ -625,7 +772,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
         setCaixa({ x0: g.x0, y0: g.y0, x1: d.x, y1: d.y }); return;
       }
     }
-    if (ferramenta === "parede" || ferramenta === "contrapiso" || ferramenta === "laje") setHover(pontoDoCursor(e));
+    if (ferramenta === "parede" || tpEhPoli(ferramenta)) setHover(pontoDoCursor(e));
   };
   const planUp = (e) => {
     const g = gesto.current; gesto.current = null;
@@ -672,7 +819,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
       setInicio(p);
       return;
     }
-    if (ferramenta === "contrapiso" || ferramenta === "laje") {
+    if (tpEhPoli(ferramenta)) {
       if (poli.length >= 3 && p.x === poli[0].x && p.y === poli[0].y) { finalizarPoli(); return; }
       const ult = poli[poli.length - 1];
       if (ult && ult.x === p.x && ult.y === p.y) return;
@@ -723,6 +870,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
   const somaArea = (tipo, f) => areas.filter((a) => a.tipo === tipo).reduce((s, a) => s + f(a), 0);
   const areaCp = somaArea("contrapiso", (a) => tpAreaPoli(a.pts)), volCp = somaArea("contrapiso", (a) => tpAreaPoli(a.pts) * (a.esp || 0));
   const areaLj = somaArea("laje", (a) => tpAreaPoli(a.pts)), volLj = somaArea("laje", (a) => tpAreaPoli(a.pts) * (a.esp || 0));
+  const telProj = somaArea("telhado", (a) => tpTelhadoGeo(a).areaProjecao), telReal = somaArea("telhado", (a) => tpTelhadoGeo(a).areaReal);
   const comum = (lista, f) => { if (!lista.length) return null; const v0 = f(lista[0]); return lista.every((x) => Math.abs(f(x) - v0) < 1e-9) ? v0 : null; };
 
   // ---------- estilos ----------
@@ -742,6 +890,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
     { id: "parede", rotulo: "Parede", dica: "Parede (P): clique ponto a ponto" },
     { id: "contrapiso", rotulo: "Contrapiso", dica: "Contrapiso (C): clique os cantos e feche no primeiro ponto" },
     { id: "laje", rotulo: "Laje", dica: "Laje (L): clique os cantos e feche no primeiro ponto" },
+    { id: "telhado", rotulo: "Telhado", dica: "Telhado (T): contorno; inclinação definida em cada lado" },
     { id: "mover", rotulo: "Mover", dica: "Mover a vista (H)" },
   ];
   const MODOS = [{ id: "planta", rotulo: "Planta" }, { id: "ambos", rotulo: "Planta + 3D" }, { id: "3d", rotulo: "3D" }];
@@ -754,7 +903,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
     ? (sel.length ? `${sel.length} selecionado${sel.length === 1 ? "" : "s"}. Ctrl soma, Shift tira, setas movem, Delete exclui, Esc limpa.` : "Clique ou arraste uma área (esq.→dir.: inteiro dentro; dir.→esq.: o que tocar). Ctrl soma, Shift tira. Tecla ? mostra os atalhos.")
     : ferramenta === "mover" ? "Arraste para mover a vista."
     : ferramenta === "parede" ? (inicio ? "Clique para fechar o trecho ou digite o comprimento e Enter. Shift trava em 90°. Enter encerra." : "Clique para iniciar uma parede. Arraste para mover a vista.")
-    : (poli.length ? `${poli.length} ponto${poli.length === 1 ? "" : "s"}. Clique no primeiro ponto (ou Enter) para fechar; Esc cancela.` : `Clique nos cantos do ${ferramenta === "laje" ? "laje" : "contrapiso"} e feche no primeiro ponto.`).replace("do laje", "da laje");
+    : (poli.length ? `${poli.length} ponto${poli.length === 1 ? "" : "s"}. Clique no primeiro ponto (ou Enter) para fechar; Esc cancela.` : (ferramenta === "telhado" ? "Clique nos cantos do telhado (contorno na linha das paredes; o beiral é somado depois) e feche no primeiro ponto." : `Clique nos cantos ${ferramenta === "laje" ? "da laje" : "do contrapiso"} e feche no primeiro ponto.`));
 
   // ---------- propriedades ----------
   const propriedades = sel.length > 0 && (
@@ -773,7 +922,48 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
             <TpCampo id="tp-p-esp" rotulo="Espessura (cm)" casas={0} valor={comum(selP, (i) => Math.round(paredes[i].t * 100))} onConfirmar={(v) => editarParedes(selP, (w) => ({ ...w, t: v / 100 }))} />
           </div>
         )}
-        {selA.length > 0 && !selP.length && (
+        {selA.length === 1 && !selP.length && areas[selA[0]].tipo === "telhado" && (() => {
+          const ai = selA[0], a = areas[ai], g = tpTelhadoGeo(a);
+          const mudarLado = (k, patch) => editarAreas([ai], (x) => ({ ...x, lados: x.pts.map((_, j) => ({ inclina: true, pct: tpTelha(x.telha).pct, ...((x.lados || [])[j] || {}), ...(j === k ? patch : {}) })) }));
+          return (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label htmlFor="tp-t-telha" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>Telha</label>
+                <select id="tp-t-telha" value={tpTelha(a.telha).id} onChange={(e) => editarAreas([ai], (x) => ({ ...x, telha: e.target.value }))}
+                  style={{ width: "100%", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit", background: "#fff" }}>
+                  {TP_TELHAS.map((t) => <option key={t.id} value={t.id}>{t.rotulo} · {t.pct}%</option>)}
+                </select>
+                <button style={{ ...btn, minHeight: 28, padding: "3px 8px", fontSize: 12, marginTop: 6, width: "100%" }}
+                  onClick={() => editarAreas([ai], (x) => ({ ...x, lados: x.pts.map((_, j) => ({ ...((x.lados || [])[j] || { inclina: true }), pct: tpTelha(x.telha).pct })) }))}>
+                  Usar {tpTelha(a.telha).pct}% nos lados inclinados
+                </button>
+              </div>
+              <TpCampo id="tp-t-beiral" rotulo="Beiral (cm)" casas={0} min={-0.0001} valor={Math.round((a.beiral || 0) * 100)} onConfirmar={(v) => editarAreas([ai], (x) => ({ ...x, beiral: v / 100 }))} />
+              <TpCampo id="tp-a-cota" rotulo="Nível do apoio (m)" min={-0.0001} valor={a.cota || 0} onConfirmar={(v) => editarAreas([ai], (x) => ({ ...x, cota: v }))} />
+              <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#4b5563", marginTop: 2 }}>Lados (o número aparece na planta)</div>
+              <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 6 }}>
+                {g.lados.map((L, k) => (
+                  <div key={k} style={{ display: "grid", gridTemplateColumns: "22px 1fr 76px", gap: 6, alignItems: "center" }}>
+                    <span style={{ width: 20, height: 20, borderRadius: 10, background: TP_AZUL, color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{k + 1}</span>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "#111827", cursor: "pointer", minWidth: 0 }}>
+                      <input type="checkbox" id={"tp-t-l" + k} checked={L.inclina} onChange={(e) => mudarLado(k, { inclina: e.target.checked })} />
+                      <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tpFmt(L.l)} m · {L.inclina ? "água" : "oitão"}</span>
+                    </label>
+                    {L.inclina
+                      ? <TpCampo id={"tp-t-p" + k} rotulo="" casas={0} valor={L.s * 100} onConfirmar={(v) => mudarLado(k, { pct: v })} />
+                      : <span style={{ fontSize: 12, color: "#9ca3af", textAlign: "center" }}>—</span>}
+                  </div>
+                ))}
+              </div>
+              <TpCampo id="tp-t-proj" rotulo="Projeção (m²)" valor={g.areaProjecao} somenteLeitura onConfirmar={() => {}} />
+              <TpCampo id="tp-t-real" rotulo="Telhado real (m²)" valor={g.areaReal} somenteLeitura onConfirmar={() => {}} />
+              <TpCampo id="tp-t-cume" rotulo="Altura da cumeeira (m)" valor={g.cumeeira} somenteLeitura onConfirmar={() => {}} />
+              {!g.convexo && <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 6, padding: "6px 8px" }}>O contorno tem canto para dentro (em L, em U). Divida em dois telhados retangulares, como no Revit; por enquanto ele aparece plano.</div>}
+              <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#4b5563", lineHeight: 1.4 }}>Marque os lados que têm água. Todos marcados = 4 águas; dois opostos = 2 águas com oitões; um só = 1 água. O contorno muda arrastando os cantos e lados na planta.</div>
+            </div>
+          );
+        })()}
+        {selA.length > 0 && !selP.length && !(selA.length === 1 && areas[selA[0]].tipo === "telhado") && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             {selA.length === 1 && <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#4b5563", lineHeight: 1.4, background: "#eef5ff", borderRadius: 6, padding: "6px 8px" }}>Para mudar o contorno, arraste na planta os quadrados (cantos) ou as bolinhas (lados).</div>}
             {selA.length === 1 && <TpCampo id="tp-a-area" rotulo="Área (m²)" valor={tpAreaPoli(areas[selA[0]].pts)} somenteLeitura onConfirmar={() => {}} />}
@@ -855,6 +1045,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
         <div style={linhaQ}><span>Área de parede</span><span style={numQ}>{tpFmt(A)} m²</span></div>
         <div style={linhaQ}><span>Reboco 2 faces</span><span style={numQ}>{tpFmt(A * 2)} m²</span></div>
         <div style={linhaQ}><span>Contrapiso</span><span style={numQ}>{tpFmt(areaCp)} m² · {tpFmt(volCp)} m³</span></div>
+        <div style={linhaQ}><span>Telhado (projeção · real)</span><span style={numQ}>{tpFmt(telProj)} · {tpFmt(telReal)} m²</span></div>
         <div style={linhaQ}><span>Laje</span><span style={numQ}>{tpFmt(areaLj)} m² · {tpFmt(volLj)} m³</span></div>
       </div>
       <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 10, lineHeight: 1.4 }}>Teste: salvo só neste navegador. Medidas brutas, sem descontar aberturas; os materiais virão do motor do orçamento de obra.</div>
@@ -872,7 +1063,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
         ))}
       </div>
       {poli.length >= 3 && (
-        <button onClick={finalizarPoli} style={{ ...btn, minHeight: 32, padding: "4px 10px", fontSize: 12.5, background: TP_AZUL, borderColor: TP_AZUL, color: "#fff", pointerEvents: "auto" }}>Fechar {ferramenta === "laje" ? "laje" : "contrapiso"}</button>
+        <button onClick={finalizarPoli} style={{ ...btn, minHeight: 32, padding: "4px 10px", fontSize: 12.5, background: TP_AZUL, borderColor: TP_AZUL, color: "#fff", pointerEvents: "auto" }}>Fechar {ferramenta === "laje" ? "laje" : ferramenta === "telhado" ? "telhado" : "contrapiso"}</button>
       )}
     </div>
   );
@@ -992,6 +1183,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
               {item("Desenhar parede", "P", () => trocarFerramenta("parede"))}
               {item("Inserir contrapiso", "C", () => trocarFerramenta("contrapiso"))}
               {item("Inserir laje", "L", () => trocarFerramenta("laje"))}
+              {item("Inserir telhado", "T", () => trocarFerramenta("telhado"))}
               {linha("l3")}
               {item("Ajustar à tela", null, ajustar, { desativado: modo === "3d" })}
             </div>
