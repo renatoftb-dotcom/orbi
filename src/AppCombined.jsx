@@ -78309,8 +78309,16 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const abrirMenuCtx = (clientX, clientY, chave, mundo) => {
     if (chave && !sel.includes(chave)) { setSel([chave]); if (ferramenta !== "selecionar" && ferramenta !== "mover") trocarFerramenta("selecionar"); }
     const W = window.innerWidth, H = window.innerHeight;
-    setMenuCtx({ x: Math.max(8, Math.min(clientX, W - 268)), y: Math.max(8, Math.min(clientY, H - 470)), t: Date.now(), mundo: mundo || null });
+    setMenuCtx({ x: Math.max(8, Math.min(clientX, W - 268)), y: clientY, cy: clientY, t: Date.now(), mundo: mundo || null });
   };
+  const menuRef = useRef(null);
+  useEffect(() => { // menu fica invisível até ser medido, então não pisca
+    const el = menuRef.current; if (!menuCtx || !el || menuCtx.medido) return;
+    const H = window.innerHeight, h = el.offsetHeight, folga = 8, cy = menuCtx.cy;
+    let y = cy;
+    if (cy + h > H - folga) y = cy - h >= folga ? cy - h : Math.max(folga, H - folga - h);
+    setMenuCtx({ ...menuCtx, y, maxH: H - 2 * folga, medido: true });
+  }, [menuCtx]);
   const avisar = (txt) => { setAviso(txt); clearTimeout(avisar.t); avisar.t = setTimeout(() => setAviso(""), 3500); };
   // Clique dentro de um cômodo: acha o espaço fechado pelas paredes e pede o nome
   const inserirAmbienteEm = (pt) => {
@@ -79563,7 +79571,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 ou seja, depois de o menu abrir, já em cima desta camada. Ignorar os
                 primeiros 400 ms evita que o próprio clique que abriu o feche. */}
             <div onPointerDown={() => { if (Date.now() - menuCtx.t > 150) setMenuCtx(null); }} onContextMenu={(e) => { e.preventDefault(); if (Date.now() - menuCtx.t > 400) setMenuCtx(null); }} style={{ position: "fixed", inset: 0, zIndex: 9 }} />
-            <div role="menu" onContextMenu={(e) => e.preventDefault()} style={{ position: "fixed", left: menuCtx.x, top: menuCtx.y, zIndex: 10, width: 260, background: "#fff", border: "none", borderRadius: 12, boxShadow: "0 2px 6px rgba(60,64,67,0.15), 0 8px 24px rgba(60,64,67,0.2)", padding: "8px 0", overflow: "hidden" }}>
+            <div role="menu" ref={menuRef} onContextMenu={(e) => e.preventDefault()} style={{ position: "fixed", left: menuCtx.x, top: menuCtx.y, zIndex: 10, width: 260, maxHeight: menuCtx.maxH || "calc(100vh - 16px)", overflowY: "auto", visibility: menuCtx.medido ? "visible" : "hidden", background: "#fff", border: "none", borderRadius: 12, boxShadow: "0 2px 6px rgba(60,64,67,0.15), 0 8px 24px rgba(60,64,67,0.2)", padding: "8px 0" }}>
               {desenhando && item("Finalizar traço", "Enter", finalizar)}
               {desenhando && linha("l0")}
               {sel.length > 0 && item(`Excluir${sel.length > 1 ? ` (${sel.length})` : ""}`, "Delete", excluirSelecao, { perigo: true })}
