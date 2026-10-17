@@ -92,6 +92,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
   const [sel, setSel] = useState([]);
   const [caixa, setCaixa] = useState(null);
   const [erro3d, setErro3d] = useState("");
+  const [menuCtx, setMenuCtx] = useState(null); // menu do botão direito { x, y }
   const historico = useRef([]);
   const three = useRef(null);
   const vista = useRef(null);
@@ -151,6 +152,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
     setPoli([]);
   };
   const finalizar = () => { if (poli.length) finalizarPoli(); setInicio(null); };
+  // Botão direito (ou toque longo no celular): seleciona o que está embaixo,
+  // se ainda não estiver selecionado, e abre o menu de ações no cursor.
+  const abrirMenuCtx = (clientX, clientY, chave) => {
+    if (chave && !sel.includes(chave)) { setSel([chave]); if (ferramenta !== "selecionar" && ferramenta !== "mover") trocarFerramenta("selecionar"); }
+    const W = window.innerWidth, H = window.innerHeight;
+    setMenuCtx({ x: Math.max(8, Math.min(clientX, W - 236)), y: Math.max(8, Math.min(clientY, H - 340)) });
+  };
+  const editarPropriedades = () => {
+    if (isMobile) { setMenuAberto(true); return; }
+    setTimeout(() => { const el = document.getElementById("tp-p-comp") || document.getElementById("tp-p-alt") || document.getElementById("tp-a-esp"); if (el) { el.focus(); el.select && el.select(); } }, 50);
+  };
 
   // ---------- vista da planta ----------
   const limites = () => {
@@ -364,7 +376,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
     const k = (e) => {
       const tag = (e.target && e.target.tagName) || "";
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      if (e.key === "Escape") { setInicio(null); setPoli([]); setSel([]); setCaixa(null); }
+      if (e.key === "Escape") { if (menuCtx) { setMenuCtx(null); return; } setInicio(null); setPoli([]); setSel([]); setCaixa(null); }
       else if (e.key === "Enter") finalizar();
       else if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) { e.preventDefault(); desfazer(); }
       else if ((e.ctrlKey || e.metaKey) && (e.key === "a" || e.key === "A")) { e.preventDefault(); trocarFerramenta("selecionar"); setSel([...paredes.map((_, i) => "p" + i), ...areas.map((_, i) => "a" + i)]); }
@@ -418,13 +430,20 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
   };
   const planDown = (e) => {
     const d = devPx(e);
-    gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, panear: e.button === 1 || e.button === 2 || ferramenta === "mover", shift: e.shiftKey };
+    const g = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, panear: e.button === 1 || e.button === 2 || ferramenta === "mover", direito: e.button === 2, shift: e.shiftKey, menu: false };
+    // toque longo (celular) = botão direito
+    if (e.pointerType === "touch") {
+      const cx = e.clientX, cy = e.clientY;
+      g.timer = setTimeout(() => { if (gesto.current === g && !g.moveu) { g.menu = true; abrirMenuCtx(cx, cy, elementoNoPonto(d)); } }, 550);
+    }
+    gesto.current = g;
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const planMove = (e) => {
     const g = gesto.current, d = devPx(e);
     if (g) {
-      if (!g.moveu && Math.hypot(d.x - g.x0, d.y - g.y0) > 6 * (window.devicePixelRatio || 1)) g.moveu = true;
+      if (!g.moveu && Math.hypot(d.x - g.x0, d.y - g.y0) > 6 * (window.devicePixelRatio || 1)) { g.moveu = true; clearTimeout(g.timer); }
+      if (g.menu) return;
       if (g.moveu) {
         if (g.panear || ferramenta !== "selecionar") {
           const v = vista.current; vista.current = { ...v, ox: v.ox + d.x - g.x, oy: v.oy + d.y - g.y }; g.x = d.x; g.y = d.y; desenharPlanta(); return;
@@ -437,6 +456,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
   const planUp = (e) => {
     const g = gesto.current; gesto.current = null;
     if (!g) return;
+    clearTimeout(g.timer);
+    if (g.menu) return;
+    if (g.direito && !g.moveu) { abrirMenuCtx(e.clientX, e.clientY, elementoNoPonto(devPx(e))); return; }
     if (g.moveu) {
       if (!g.panear && ferramenta === "selecionar" && caixa) {
         const a = paraMundoLivre({ x: caixa.x0, y: caixa.y0 }), b = paraMundoLivre({ x: caixa.x1, y: caixa.y1 });
@@ -482,18 +504,25 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
 
   // ---------- gestos do 3D: arrastar gira, clique seleciona ----------
   const drag = useRef(null);
-  const v3dDown = (e) => { drag.current = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, moveu: false, shift: e.shiftKey }; e.currentTarget.setPointerCapture(e.pointerId); };
+  const v3dDown = (e) => {
+    const g = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, moveu: false, shift: e.shiftKey, direito: e.button === 2, menu: false };
+    if (e.pointerType === "touch") { const cx = e.clientX, cy = e.clientY, ev = { clientX: cx, clientY: cy }; g.timer = setTimeout(() => { if (drag.current === g && !g.moveu) { g.menu = true; abrirMenuCtx(cx, cy, pegar3d(ev)); } }, 550); }
+    drag.current = g; e.currentTarget.setPointerCapture(e.pointerId);
+  };
   const v3dMove = (e) => {
     const T = three.current, g = drag.current; if (!g || !T) return;
-    if (!g.moveu && Math.hypot(e.clientX - g.x0, e.clientY - g.y0) > 5) g.moveu = true;
-    if (!g.moveu) return;
+    if (!g.moveu && Math.hypot(e.clientX - g.x0, e.clientY - g.y0) > 5) { g.moveu = true; clearTimeout(g.timer); }
+    if (!g.moveu || g.menu) return;
     T.theta -= (e.clientX - g.x) * 0.01;
     T.phi = Math.min(1.5, Math.max(0.15, T.phi - (e.clientY - g.y) * 0.01));
     g.x = e.clientX; g.y = e.clientY; desenhar3d();
   };
   const v3dUp = (e) => {
     const g = drag.current; drag.current = null;
-    if (!g || g.moveu) return;
+    if (!g) return;
+    clearTimeout(g.timer);
+    if (g.moveu || g.menu) return;
+    if (g.direito) { abrirMenuCtx(e.clientX, e.clientY, pegar3d(e)); return; }
     const k = pegar3d(e);
     if (ferramenta !== "selecionar" && ferramenta !== "mover") trocarFerramenta("selecionar");
     if (!k) { if (!g.shift) setSel([]); return; }
@@ -691,6 +720,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
           <div ref={v3dBox} style={{ ...pane, display: mostra3d ? "block" : "none" }}>
             <span style={tag}>3D · arraste para girar, clique para selecionar</span>
             <canvas ref={v3dRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none" }}
+              onContextMenu={(e) => e.preventDefault()}
               onPointerDown={v3dDown} onPointerMove={v3dMove} onPointerUp={v3dUp} />
             {erro3d && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#6b7280", fontSize: 13, padding: 16, textAlign: "center" }}>{erro3d} Verifique a conexão e abra o projeto de novo.</div>}
           </div>
@@ -704,6 +734,42 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
           </div>
         )}
       </main>
+
+      {menuCtx && (() => {
+        const desenhando = !!inicio || poli.length > 0;
+        const item = (rotulo, atalho, acao, opts = {}) => (
+          <button key={rotulo} role="menuitem" disabled={opts.desativado}
+            onClick={() => { setMenuCtx(null); acao(); }}
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, width: "100%", border: "none", background: "transparent", padding: "8px 12px", borderRadius: 6, fontSize: 13.5, fontFamily: "inherit", textAlign: "left",
+              cursor: opts.desativado ? "default" : "pointer", color: opts.desativado ? "#9ca3af" : (opts.perigo ? "#b91c1c" : "#111827"), fontWeight: opts.perigo ? 600 : 500 }}
+            onMouseEnter={(e) => { if (!opts.desativado) e.currentTarget.style.background = opts.perigo ? "#fef2f2" : "#f3f4f6"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+            <span>{rotulo}</span>{atalho && <span style={{ fontSize: 11.5, color: "#9ca3af" }}>{atalho}</span>}
+          </button>
+        );
+        const linha = (k) => <div key={k} style={{ height: 1, background: "#eef0f3", margin: "4px 6px" }} />;
+        return (
+          <>
+            <div onPointerDown={() => setMenuCtx(null)} onContextMenu={(e) => { e.preventDefault(); setMenuCtx(null); }} style={{ position: "fixed", inset: 0, zIndex: 9 }} />
+            <div role="menu" style={{ position: "fixed", left: menuCtx.x, top: menuCtx.y, zIndex: 10, width: 228, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", padding: 4 }}>
+              {desenhando && item("Finalizar traço", "Enter", finalizar)}
+              {desenhando && linha("l0")}
+              {sel.length > 0 && item(`Excluir${sel.length > 1 ? ` (${sel.length})` : ""}`, "Delete", excluirSelecao, { perigo: true })}
+              {sel.length > 0 && item("Editar propriedades", null, editarPropriedades, { desativado: selP.length > 0 && selA.length > 0 })}
+              {sel.length > 0 && item("Limpar seleção", "Esc", () => setSel([]))}
+              {sel.length > 0 && linha("l1")}
+              {item("Desfazer", "Ctrl+Z", desfazer, { desativado: !historico.current.length })}
+              {item("Selecionar tudo", "Ctrl+A", () => { trocarFerramenta("selecionar"); setSel([...paredes.map((_, i) => "p" + i), ...areas.map((_, i) => "a" + i)]); }, { desativado: !paredes.length && !areas.length })}
+              {linha("l2")}
+              {item("Desenhar parede", "P", () => trocarFerramenta("parede"))}
+              {item("Inserir contrapiso", "C", () => trocarFerramenta("contrapiso"))}
+              {item("Inserir laje", "L", () => trocarFerramenta("laje"))}
+              {linha("l3")}
+              {item("Ajustar à tela", null, ajustar, { desativado: modo === "3d" })}
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }
