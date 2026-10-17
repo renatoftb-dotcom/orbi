@@ -3122,6 +3122,29 @@ function fornecedorPadraoDaConta(contaId, nomeEscritorio) {
   return c && c.grupo === "receitas" && nomeEscritorio ? nomeEscritorio : "";
 }
 
+// ── Cliente novo de dentro do lançamento ────────────────────────
+// O mínimo para o lançamento ter dono: nome, e se houver, documento e
+// WhatsApp. O serviço marcado segue a unidade do lançamento (Projetos →
+// projeto, Gestão → gestão de obra); o resto do cadastro se completa depois
+// em Clientes. Empreendimento não nasce aqui: ele precisa da obra junto.
+function clienteRapidoDoLancamento(campos, unidadeId, id) {
+  const c = campos || {};
+  const nome = String(c.nome || "").trim();
+  if (!nome) return null;
+  const doc = String(c.cpfCnpj || "").trim();
+  const digitos = doc.replace(/\D/g, "");
+  const hoje = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  return {
+    id, tipo: digitos.length === 14 ? "PJ" : "PF", nome, cpfCnpj: doc, email: "",
+    cep: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", estado: "SP",
+    representanteNome: "", representanteCpf: "",
+    contatos: [{ id: id + "_c", nome: "", telefone: String(c.telefone || "").trim(), cargo: "", whatsapp: !!String(c.telefone || "").trim() }],
+    observacoes: "", ativo: true, desde: hoje, status: "",
+    servicos: { projeto: unidadeId === "projetos", acompanhamentoObra: false, gestaoObra: unidadeId === "gestao_obras", empreendimento: false },
+    criadoEm: new Date().toISOString(), origem: "lancamento",
+  };
+}
+
 // Conta de entrada (receita, venda, aporte, reserva): dinheiro que CHEGA não
 // tem fornecedor — quem paga é o cliente, que já tem campo próprio.
 function contaDeEntradaNoEscritorio(contaId) {
@@ -4441,7 +4464,40 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos }) {
 
 // Formulário de um lançamento. As travas são as do validarLancamento: a
 // mensagem aparece antes de gravar, não depois.
-function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, lancamentos, prestadores, aoCriarPrestador, insumos, cartoes, aoCadastrarInsumo, competenciaFixa, titulo, rotuloSalvar, atalhos, nomeEscritorio, motivos }) {
+function CadastroRapidoDeCliente({ form, aoMudar, erro, aoSalvar, aoCancelar }) {
+  const S = EF_ESTILO;
+  if (!form) return null;
+  const mexer = (k, v) => aoMudar({ ...form, [k]: v });
+  const noEnter = (e) => { if (e.key === "Enter") { e.preventDefault(); aoSalvar(); } };
+  const rot = { fontSize: 11.5, color: "#4b5563", fontWeight: 600, marginBottom: 4 };
+  return (
+    <div data-vk-cliente-rapido style={{ marginTop: 4, padding: 12, borderRadius: 12, border: "1.5px solid #0474f4", background: "#f7fbff" }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0474f4", marginBottom: 8 }}>Cadastrar cliente</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+        <div style={{ flex: "2 1 220px", minWidth: 0 }}>
+          <div style={rot}>Nome *</div>
+          <input style={S.input} autoFocus value={form.nome || ""} onChange={(e) => mexer("nome", e.target.value)} onKeyDown={noEnter} />
+        </div>
+        <div style={{ flex: "1 1 170px", minWidth: 0 }}>
+          <div style={rot}>CPF / CNPJ</div>
+          <input style={S.input} value={form.cpfCnpj || ""} onChange={(e) => mexer("cpfCnpj", e.target.value)} onKeyDown={noEnter} placeholder="opcional" />
+        </div>
+        <div style={{ flex: "1 1 170px", minWidth: 0 }}>
+          <div style={rot}>WhatsApp</div>
+          <input style={S.input} value={form.telefone || ""} onChange={(e) => mexer("telefone", e.target.value)} onKeyDown={noEnter} placeholder="(14) 99999-9999" />
+        </div>
+      </div>
+      <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>Só o nome é obrigatório — o resto do cadastro se completa depois em Clientes.</div>
+      {erro && <div style={{ fontSize: 11.5, color: "#dc2626", marginTop: 6 }}>{erro}</div>}
+      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        <button type="button" style={{ ...S.btn, fontSize: 12, padding: "6px 14px" }} onClick={aoSalvar}>Cadastrar e usar</button>
+        <button type="button" style={{ ...S.btnSec, fontSize: 12, padding: "6px 14px" }} onClick={aoCancelar}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, lancamentos, prestadores, aoCriarPrestador, aoCriarCliente, insumos, cartoes, aoCadastrarInsumo, competenciaFixa, titulo, rotuloSalvar, atalhos, nomeEscritorio, motivos }) {
   const S = EF_ESTILO;
   const [f, setF] = useState(() => ({
     contaId: "", contaFonte: "", obraIdAlvo: "", fornecedorId: "", anexos: [], itens: [],
@@ -4457,6 +4513,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const [pagarDaReserva, setPagarDaReserva] = useState(true);
   const [erroAnexo, setErroAnexo] = useState("");
   const [novoPrest, setNovoPrest] = useState(null);   // { nome, categoria }
+  const [novoCli, setNovoCli] = useState(null);       // { nome, cpfCnpj, telefone }
+  const [erroCli, setErroCli] = useState("");
   const [erroPrest, setErroPrest] = useState("");
   const [lendoComprov, setLendoComprov] = useState(false);
   const [avisosLidos, setAvisosLidos] = useState([]);
@@ -4960,6 +5018,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           onChange={(e) => setF((p) => ({ ...p, cliente: e.target.value, clienteId: "" }))} />) : campo(ehEmp ? "Empreendimento" : "Cliente", (
           <Selecao style={{ ...S.input, cursor: "pointer" }}
             value={f.clienteId || ""}
+            aoCriar={!ehEmp && aoCriarCliente ? (termo) => { setErroCli(""); setNovoCli({ nome: termo || "", cpfCnpj: "", telefone: "" }); } : undefined}
+            criarRotulo="cliente"
             onChange={(e) => {
               const c = doCadastro.find((x) => x.id === e.target.value);
               setF((p) => ({ ...p, clienteId: e.target.value, cliente: c ? c.nome : "",
@@ -4971,6 +5031,19 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             ))}
           </Selecao>
         ))}
+        {novoCli && (
+          <div style={{ gridColumn: "1 / -1" }}>
+            <CadastroRapidoDeCliente form={novoCli} aoMudar={setNovoCli} erro={erroCli}
+              aoSalvar={() => {
+                if (!String(novoCli.nome || "").trim()) { setErroCli("Escreva o nome."); return; }
+                const criado = aoCriarCliente ? aoCriarCliente(novoCli, f.unidadeId) : null;
+                if (!criado) { setErroCli("Não consegui cadastrar agora."); return; }
+                setF((p) => ({ ...p, clienteId: criado.id, cliente: criado.nome || "", empreendimentoId: "" }));
+                setNovoCli(null); setErroCli("");
+              }}
+              aoCancelar={() => { setNovoCli(null); setErroCli(""); }} />
+          </div>
+        )}
         {ehEmp && !doCadastro.length && (
           <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#b45309" }}>
             Nenhum empreendimento cadastrado ainda. Abra Clientes, cadastre o empreendimento e marque
@@ -7350,6 +7423,20 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   // O fornecedor que ainda não existe entra sem sair da tela — quem está
   // conciliando o extrato não pode ser mandado para o cadastro e ter que
   // recomeçar a classificação quando voltar.
+  // Cliente novo de dentro do lançamento: mesmo nome já cadastrado é o mesmo
+  // cliente (não duplica).
+  function criarClienteDoLancamento(campos, unidadeId) {
+    const todos = (data || {}).clientes || [];
+    const nome = String((campos || {}).nome || "").trim();
+    if (!nome) return null;
+    const igual = todos.find((x) => x && efSemAcento(x.nome) === efSemAcento(nome));
+    if (igual) return igual;
+    const novo = clienteRapidoDoLancamento(campos, unidadeId, typeof uid === "function" ? uid() : String(Date.now()));
+    if (!novo) return null;
+    save({ ...data, clientes: todos.concat([novo]) }).catch(console.error);
+    return novo;
+  }
+
   function criarPrestadorDoLancamento(campos) {
     const todos = (data || {}).fornecedores || [];
     const nome = String((campos || {}).nome || "").trim();
@@ -8015,6 +8102,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
                 cartoes: cartoesDoEscritorio(data),
                 aoCadastrarInsumo: (campos) => typeof cadastrarInsumoNoCatalogo === "function" ? cadastrarInsumoNoCatalogo(data, save, campos) : null,
                 aoCriarPrestador: criarPrestadorDoLancamento,
+                aoCriarCliente: criarClienteDoLancamento,
               },
             },
           }} />
@@ -8066,6 +8154,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             aoCadastrarInsumo={(campos) => typeof cadastrarInsumoNoCatalogo === "function"
               ? cadastrarInsumoNoCatalogo(data, save, campos) : null}
             aoCriarPrestador={criarPrestadorDoLancamento}
+            aoCriarCliente={criarClienteDoLancamento}
             inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} /></div>}
           {vendoComprovante && typeof VisorProposta === "function" && (
             <VisorProposta anexo={vendoComprovante} aoFechar={() => setVendoComprovante(null)} />

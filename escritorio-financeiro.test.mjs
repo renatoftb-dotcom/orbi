@@ -39,7 +39,7 @@ const M = new Function(src + `
            efNomeDoFornecedor, EF_FORNECEDOR_OUTROS,
            custoDoLancamento, validarCustoEmItens, itemUnicoDoCusto, itensDoCustoOuUnico, padraoDaContaDaObra,
            comIdsDosMovimentos, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
-           sugestaoDoExtrato, palpiteDoExtrato, sugestaoCompletaDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao, fornecedorPadraoDaConta, contaDeEntradaNoEscritorio, semFornecedorNaEntrada,
+           sugestaoDoExtrato, palpiteDoExtrato, sugestaoCompletaDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao, fornecedorPadraoDaConta, contaDeEntradaNoEscritorio, semFornecedorNaEntrada, clienteRapidoDoLancamento,
            ehReceitaDaGestao, contaEhEntradaEscritorio, rotuloDoPapelLido, refDaParcela, gestaoNaObra, desfazerGestaoNaObra, parcelaDoLancamento, parcelaDoMesNaGestao, recalibrarGestao, previaDaGestao, contasDaGestao,
            extratosComArquivo, movimentosGuardadosDoMes, ignoradosGuardados, extratosComIgnorado, efLinhasDoHtml, efLinhasDoOfx, saldoDoExtratoNoMes, efTabelaDoArquivo };`)();
 
@@ -2856,6 +2856,20 @@ teste("receita não tem fornecedor: some do lançamento, também quando vem da l
     { campos: { contaId: "rec_projetos", unidadeId: "projetos", fornecedor: "Outros", fornecedorId: "f9" } });
   assert.strictEqual(l.fornecedor, "");
   assert.strictEqual(l.fornecedorId, "");
+});
+
+teste("cliente novo de dentro do lançamento: nome obrigatório, serviço pela unidade, PJ pelo CNPJ", () => {
+  assert.strictEqual(M.clienteRapidoDoLancamento({ nome: "  " }, "projetos", "x"), null);
+  const c = M.clienteRapidoDoLancamento({ nome: " Alexandre ", telefone: "(14) 99999-0000" }, "projetos", "c1");
+  assert.strictEqual(c.nome, "Alexandre");
+  assert.strictEqual(c.tipo, "PF");
+  assert.strictEqual(c.ativo, true);
+  assert.strictEqual(c.servicos.projeto, true);
+  assert.strictEqual(c.servicos.gestaoObra, false);
+  assert.strictEqual(c.contatos[0].telefone, "(14) 99999-0000");
+  const pj = M.clienteRapidoDoLancamento({ nome: "Cobop", cpfCnpj: "12.345.678/0001-90" }, "gestao_obras", "c2");
+  assert.strictEqual(pj.tipo, "PJ");
+  assert.strictEqual(pj.servicos.gestaoObra, true);
 });
 
 for (const [nome, fn] of testes) {
