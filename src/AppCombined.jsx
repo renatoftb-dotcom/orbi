@@ -77943,17 +77943,53 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
   // fechar cantos com medidas digitadas) e, com Shift, trava na horizontal
   // ou vertical a partir do ponto anterior (ortogonal).
   const baseTraco = () => (ferramenta === "parede" ? inicio : (poli.length ? poli[poli.length - 1] : null));
-  const pontoDoCursor = (e) => {
+  // Pontos de ímã. Além do eixo (pontas), cada parede oferece os cantos das
+  // suas faces: nas pontas soltas, os 4 cantos do retângulo; onde duas paredes
+  // se encontram, o cruzamento das faces — que dá a quina de fora e a de
+  // dentro. É isso que deixa a laje ir até a face externa da parede.
+  const pontosIma = (ign = {}) => {
+    const out = [];
+    const faces = paredes.map((w, i) => {
+      const l = tpLen(w); if (!l) return null;
+      const ux = (w.b.x - w.a.x) / l, uy = (w.b.y - w.a.y) / l, nx = -uy, ny = ux, h = (w.t || 0) / 2;
+      return { i, w, ux, uy, nx, ny, h };
+    }).filter(Boolean);
+    const mesmo = (p, q) => Math.abs(p.x - q.x) < 1e-6 && Math.abs(p.y - q.y) < 1e-6;
+    for (const f of faces) {
+      if (f.i === ign.parede) continue;
+      const { w, ux, uy, nx, ny, h } = f;
+      out.push(w.a, w.b);
+      for (const [pt, sgn] of [[w.a, -1], [w.b, 1]]) {
+        const solta = !faces.some((g) => g.i !== f.i && g.i !== ign.parede && (mesmo(g.w.a, pt) || mesmo(g.w.b, pt)));
+        if (solta) for (const lado of [1, -1]) out.push({ x: pt.x + sgn * ux * h + lado * nx * h, y: pt.y + sgn * uy * h + lado * ny * h });
+      }
+    }
+    const cruzar = (p1, d1, p2, d2) => { const den = d1.x * d2.y - d1.y * d2.x; if (Math.abs(den) < 1e-9) return null; const t = ((p2.x - p1.x) * d2.y - (p2.y - p1.y) * d2.x) / den; return { x: p1.x + d1.x * t, y: p1.y + d1.y * t }; };
+    for (let a = 0; a < faces.length; a++) for (let b = a + 1; b < faces.length; b++) {
+      const f = faces[a], g = faces[b];
+      if (f.i === ign.parede || g.i === ign.parede) continue;
+      if (![f.w.a, f.w.b].some((p) => mesmo(p, g.w.a) || mesmo(p, g.w.b))) continue;
+      for (const lf of [1, -1]) for (const lg of [1, -1]) {
+        const q = cruzar({ x: f.w.a.x + lf * f.nx * f.h, y: f.w.a.y + lf * f.ny * f.h }, { x: f.ux, y: f.uy }, { x: g.w.a.x + lg * g.nx * g.h, y: g.w.a.y + lg * g.ny * g.h }, { x: g.ux, y: g.uy });
+        if (q) out.push(q);
+      }
+    }
+    areas.forEach((a, ai) => (a.pts || []).forEach((q, k) => { if (!(ign.area === ai && (ign.vertices || []).includes(k))) out.push(q); }));
+    out.push(...poli);
+    return out;
+  };
+  const pontoDoCursor = (e, opts = {}) => {
     const v = vista.current, d = devPx(e), livre = paraMundoLivre(d), tol = 10 * (window.devicePixelRatio || 1) / v.s;
     let ima = null, menor = Infinity;
-    for (const q of [...paredes.flatMap((w) => [w.a, w.b]), ...areas.flatMap((a) => a.pts || []), ...poli]) {
+    for (const q of pontosIma(opts.ignorar)) {
       const dd = Math.hypot(q.x - livre.x, q.y - livre.y); if (dd < tol && dd < menor) { menor = dd; ima = q; }
     }
-    let p = ima ? { x: ima.x, y: ima.y } : { x: snap(livre.x), y: snap(livre.y) };
-    const base = baseTraco();
+    let p = ima ? { x: r3(ima.x), y: r3(ima.y), ima: true } : { x: snap(livre.x), y: snap(livre.y) };
+    const base = opts.base !== undefined ? opts.base : baseTraco();
     if (base && e.shiftKey) p = Math.abs(p.x - base.x) >= Math.abs(p.y - base.y) ? { x: p.x, y: base.y } : { x: base.x, y: p.y };
     return p;
   };
+  const limpo = (p) => ({ x: p.x, y: p.y });
   // comprimento digitado + Enter: cria o trecho na direção do cursor
   const aplicarDigitado = () => {
     const t = digitado.trim(); setDigitado("");
@@ -78037,11 +78073,19 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
       ctx.fillText(tpFmt(tpLen(w)) + " m", 0, -(w.t * v.s / 2 + 6 * dpr)); ctx.restore();
     });
     const ponto = (p, r) => { const [x, y] = T(p); ctx.fillStyle = TP_AZUL; ctx.beginPath(); ctx.arc(x, y, r * dpr, 0, 7); ctx.fill(); };
-    if (hover && ferramenta !== "selecionar" && ferramenta !== "mover") ponto(hover, 3);
+    if (hover && (ferramenta !== "selecionar" || (gesto.current && gesto.current.grip)) && ferramenta !== "mover") {
+      if (hover.ima) { const [x, y] = T(hover); ctx.strokeStyle = "#16a34a"; ctx.lineWidth = 2 * dpr; ctx.strokeRect(x - 6 * dpr, y - 6 * dpr, 12 * dpr, 12 * dpr); }
+      else ponto(hover, 3);
+    }
     if (inicio) ponto(inicio, 5);
     const quadradinho = (p) => { const [x, y] = T(p); ctx.fillStyle = "#fff"; ctx.strokeStyle = TP_AZUL; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.rect(x - 4 * dpr, y - 4 * dpr, 8 * dpr, 8 * dpr); ctx.fill(); ctx.stroke(); };
     for (const i of selP) { quadradinho(paredes[i].a); quadradinho(paredes[i].b); }
     for (const i of selA) areas[i].pts.forEach(quadradinho);
+    // editar contorno: com uma área só selecionada, bolinhas no meio de cada lado
+    if (selA.length === 1 && !selP.length) {
+      const pts = areas[selA[0]].pts;
+      pts.forEach((q, k) => { const r = pts[(k + 1) % pts.length]; const [x, y] = T({ x: (q.x + r.x) / 2, y: (q.y + r.y) / 2 }); ctx.fillStyle = TP_AZUL; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.arc(x, y, 6 * dpr, 0, 7); ctx.fill(); ctx.stroke(); });
+    }
 
     // retângulo de seleção (esq→dir: inteiro dentro; dir→esq: o que tocar)
     if (caixa) {
@@ -78234,8 +78278,52 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
     for (let k = 0; k < 4; k++) if (cr(a, b, c[k], c[(k + 1) % 4])) return true;
     return false;
   };
+  // Alças: cantos (quadrados) e lados (bolinhas) da área selecionada; pontas da
+  // parede selecionada. Arrastar edita o contorno.
+  const alcaNoPonto = (d) => {
+    const v = vista.current; if (!v) return null;
+    const tol = 10 * (window.devicePixelRatio || 1);
+    const perto = (q) => Math.hypot(q.x * v.s + v.ox - d.x, q.y * v.s + v.oy - d.y) <= tol;
+    if (selA.length === 1 && !selP.length) {
+      const ai = selA[0], pts = areas[ai].pts;
+      for (let k = 0; k < pts.length; k++) if (perto(pts[k])) return { tipo: "vertice", ai, k };
+      for (let k = 0; k < pts.length; k++) { const r = pts[(k + 1) % pts.length]; if (perto({ x: (pts[k].x + r.x) / 2, y: (pts[k].y + r.y) / 2 })) return { tipo: "lado", ai, k }; }
+    }
+    if (selP.length === 1 && !selA.length) {
+      const pi = selP[0], w = paredes[pi];
+      if (perto(w.a)) return { tipo: "ponta", pi, fim: "a" };
+      if (perto(w.b)) return { tipo: "ponta", pi, fim: "b" };
+    }
+    return null;
+  };
+  const arrastarAlca = (e, g) => {
+    const al = g.grip, orig = g.orig;
+    if (al.tipo === "vertice") {
+      const pts0 = orig.areas[al.ai].pts;
+      const pc = pontoDoCursor(e, { ignorar: { area: al.ai, vertices: [al.k] }, base: pts0[(al.k - 1 + pts0.length) % pts0.length] });
+      setHover(pc);
+      setAreas(orig.areas.map((a, i) => (i === al.ai ? { ...a, pts: a.pts.map((q, k) => (k === al.k ? limpo(pc) : q)) } : a)));
+    } else if (al.tipo === "lado") {
+      const pts0 = orig.areas[al.ai].pts, k2 = (al.k + 1) % pts0.length, a = pts0[al.k], b = pts0[k2];
+      const l = Math.hypot(b.x - a.x, b.y - a.y) || 1, nx = -(b.y - a.y) / l, ny = (b.x - a.x) / l;
+      const pc = pontoDoCursor(e, { ignorar: { area: al.ai, vertices: [al.k, k2] }, base: null });
+      setHover(pc);
+      const off = (pc.x - a.x) * nx + (pc.y - a.y) * ny; // o lado anda só na perpendicular a ele mesmo
+      const novo = (q) => ({ x: r3(q.x + nx * off), y: r3(q.y + ny * off) });
+      setAreas(orig.areas.map((ar, i) => (i === al.ai ? { ...ar, pts: ar.pts.map((q, k) => (k === al.k || k === k2 ? novo(pts0[k]) : q)) } : ar)));
+    } else if (al.tipo === "ponta") {
+      const w0 = orig.paredes[al.pi], outra = al.fim === "a" ? w0.b : w0.a;
+      const pc = pontoDoCursor(e, { ignorar: { parede: al.pi }, base: outra });
+      setHover(pc);
+      setParedes(orig.paredes.map((w, i) => (i === al.pi ? { ...w, [al.fim]: limpo(pc) } : w)));
+    }
+  };
   const planDown = (e) => {
     const d = devPx(e);
+    if (e.button === 0 && ferramenta === "selecionar") {
+      const al = alcaNoPonto(d);
+      if (al) { gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: al, orig: { paredes, areas } }; e.currentTarget.setPointerCapture(e.pointerId); return; }
+    }
     if (e.button === 1) { const agora = Date.now(); if (agora - meioClique.current < 350) { ajustar(); meioClique.current = 0; return; } meioClique.current = agora; }
     const g = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, panear: e.button === 1 || e.button === 2 || ferramenta === "mover", direito: e.button === 2, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, menu: false };
     // toque longo (celular) = botão direito
@@ -78249,7 +78337,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
   const planMove = (e) => {
     const g = gesto.current, d = devPx(e);
     if (g) {
-      if (!g.moveu && Math.hypot(d.x - g.x0, d.y - g.y0) > 6 * (window.devicePixelRatio || 1)) { g.moveu = true; clearTimeout(g.timer); }
+      const lim = (g.grip ? 3 : 6) * (window.devicePixelRatio || 1);
+      if (!g.moveu && Math.hypot(d.x - g.x0, d.y - g.y0) > lim) { g.moveu = true; clearTimeout(g.timer); }
+      if (g.grip) { if (g.moveu) arrastarAlca(e, g); return; }
       if (g.menu) return;
       if (g.moveu) {
         if (g.panear || ferramenta !== "selecionar") {
@@ -78264,6 +78354,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
     const g = gesto.current; gesto.current = null;
     if (!g) return;
     clearTimeout(g.timer);
+    if (g.grip) {
+      if (g.moveu) { historico.current.push(g.orig); if (historico.current.length > 200) historico.current.shift(); futuro.current = []; }
+      setHover(null); return;
+    }
     if (g.menu) return;
     if (g.direito && !g.moveu) { abrirMenuCtx(e.clientX, e.clientY, elementoNoPonto(devPx(e))); return; }
     if (g.moveu) {
@@ -78292,7 +78386,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
       aplicarSelecao([k], g);
       return;
     }
-    const p = pontoDoCursor(e); setHover(p); setDigitado("");
+    const pc = pontoDoCursor(e); setHover(pc); setDigitado("");
+    const p = limpo(pc);
     if (ferramenta === "parede") {
       if (!inicio) { setInicio(p); return; }
       if (p.x === inicio.x && p.y === inicio.y) return;
@@ -78376,6 +78471,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
   const mostraPlanta = modo !== "3d", mostra3d = modo !== "planta";
 
   const status = digitado ? `Comprimento: ${digitado} m — Enter confirma, Esc apaga.`
+    : (selA.length === 1 && !selP.length && ferramenta === "selecionar") ? "Editar contorno: arraste os quadrados (cantos) ou as bolinhas (lados). O cursor gruda nas quinas das paredes (quadrado verde)."
+    : (selP.length === 1 && !selA.length && ferramenta === "selecionar") ? "Arraste os quadrados das pontas para esticar ou girar a parede. Delete exclui."
     : ferramenta === "selecionar"
     ? (sel.length ? `${sel.length} selecionado${sel.length === 1 ? "" : "s"}. Ctrl soma, Shift tira, setas movem, Delete exclui, Esc limpa.` : "Clique ou arraste uma área (esq.→dir.: inteiro dentro; dir.→esq.: o que tocar). Ctrl soma, Shift tira. Tecla ? mostra os atalhos.")
     : ferramenta === "mover" ? "Arraste para mover a vista."
@@ -78401,6 +78498,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
         )}
         {selA.length > 0 && !selP.length && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            {selA.length === 1 && <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#4b5563", lineHeight: 1.4, background: "#eef5ff", borderRadius: 6, padding: "6px 8px" }}>Para mudar o contorno, arraste na planta os quadrados (cantos) ou as bolinhas (lados).</div>}
             {selA.length === 1 && <TpCampo id="tp-a-area" rotulo="Área (m²)" valor={tpAreaPoli(areas[selA[0]].pts)} somenteLeitura onConfirmar={() => {}} />}
             {selA.length === 1 && <TpCampo id="tp-a-per" rotulo="Perímetro (m)" valor={tpPerimPoli(areas[selA[0]].pts)} somenteLeitura onConfirmar={() => {}} />}
             <TpCampo id="tp-a-esp" rotulo="Espessura (cm)" casas={0} valor={comum(selA, (i) => Math.round((areas[i].esp || 0) * 100))} onConfirmar={(v) => editarAreas(selA, (a) => ({ ...a, esp: v / 100 }))} />
@@ -78527,7 +78625,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
             <span style={tag}>Planta baixa · grade 0,50 m</span>
             <canvas ref={planRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none", cursor: ferramenta === "mover" ? "grab" : ferramenta === "selecionar" ? "default" : "crosshair" }}
               onContextMenu={(e) => e.preventDefault()} onDoubleClick={() => { if (poli.length >= 3) finalizarPoli(); }}
-              onPointerDown={planDown} onPointerMove={planMove} onPointerUp={planUp} onPointerLeave={() => { if (!inicio && !poli.length && !gesto.current) setHover(null); }} />
+              onPointerDown={planDown} onPointerMove={(e) => { planMove(e); if (!gesto.current && ferramenta === "selecionar") e.currentTarget.style.cursor = alcaNoPonto(devPx(e)) ? "move" : "default"; }} onPointerUp={planUp} onPointerLeave={() => { if (!inicio && !poli.length && !gesto.current) setHover(null); }} />
             {barraFerramentas}
             {digitado && (
               <div style={{ position: "absolute", left: "50%", top: 74, transform: "translateX(-50%)", zIndex: 1, background: "#111827", color: "#fff", borderRadius: 8, padding: "6px 12px", fontSize: 14, fontWeight: 600, fontVariantNumeric: "tabular-nums", boxShadow: "0 4px 12px rgba(0,0,0,0.2)" }}>
@@ -78607,6 +78705,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
               {desenhando && linha("l0")}
               {sel.length > 0 && item(`Excluir${sel.length > 1 ? ` (${sel.length})` : ""}`, "Delete", excluirSelecao, { perigo: true })}
               {sel.length > 0 && item("Editar propriedades", null, editarPropriedades, { desativado: selP.length > 0 && selA.length > 0 })}
+              {selA.length === 1 && !selP.length && item("Editar contorno", null, () => { setFerramenta("selecionar"); if (modo === "3d") setModo("ambos"); })}
               {sel.length > 0 && item("Limpar seleção", "Esc", () => setSel([]))}
               {sel.length > 0 && linha("l1")}
               {item("Desfazer", "Ctrl+Z", desfazer, { desativado: !historico.current.length })}
