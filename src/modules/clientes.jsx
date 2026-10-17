@@ -1010,7 +1010,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           <>
             <ProjetosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc, modo) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc, modo); }} />
             {/* Projetar (teste-projeto.jsx): desenhos deste cliente — só a empresa piloto vê */}
-            {typeof TpProjetosDoCliente === "function" && <TpProjetosDoCliente key={cliente.id} cliente={cliente} />}
+            {typeof TpProjetosDoCliente === "function" && <TpProjetosDoCliente key={cliente.id} cliente={cliente} data={data} save={save} />}
           </>
         )}
 

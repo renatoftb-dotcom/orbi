@@ -48162,7 +48162,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           <>
             <ProjetosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc, modo) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc, modo); }} />
             {/* Projetar (teste-projeto.jsx): desenhos deste cliente — só a empresa piloto vê */}
-            {typeof TpProjetosDoCliente === "function" && <TpProjetosDoCliente key={cliente.id} cliente={cliente} />}
+            {typeof TpProjetosDoCliente === "function" && <TpProjetosDoCliente key={cliente.id} cliente={cliente} data={data} save={save} />}
           </>
         )}
 
@@ -77876,11 +77876,83 @@ function tpTelhadoGeo(t) {
   return { lados, contorno, facetas, z, convexo, areaProjecao, areaReal, cumeeira, cota };
 }
 
+// ───────────── Desenho → dados do orçamento de obra ─────────────
+// Traduz o que foi desenhado nos campos que o motor (orcamento-obra.jsx,
+// normalizarProjeto) já lê. Só obra térrea por enquanto.
+//  - parede externa: a que tem um dos lados fora da casa (fora de qualquer
+//    contrapiso/laje; sem eles, fora do contorno convexo das paredes)
+//  - m² de parede = comprimento do eixo × altura (bruto, sem descontar vãos)
+//  - espessura: até 16,5 cm conta como 15; até 22,5 como 20; acima, 25
+//  - perímetro de paredes = soma dos comprimentos (térreo)
+//  - área construída = contrapiso (ou laje, se não houver contrapiso)
+//  - telhado: comprimento × largura do retângulo que envolve o contorno com
+//    beiral, nº de águas = lados inclinados, inclinação média em fração
+function tpEnvoltoria(pts) {
+  const P = [...pts].sort((a, b) => a.x - b.x || a.y - b.y);
+  if (P.length < 3) return P;
+  const cr = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lo = [], hi = [];
+  for (const p of P) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  for (const p of [...P].reverse()) { while (hi.length >= 2 && cr(hi[hi.length - 2], hi[hi.length - 1], p) <= 0) hi.pop(); hi.push(p); }
+  return lo.slice(0, -1).concat(hi.slice(0, -1));
+}
+function tpDesenhoParaObra(paredes, areas) {
+  const r2 = (x) => Math.round(x * 100) / 100;
+  const pisos = areas.filter((a) => (a.tipo === "contrapiso" || a.tipo === "laje") && a.pts && a.pts.length >= 3);
+  const casco = tpEnvoltoria(paredes.flatMap((w) => [w.a, w.b]));
+  const fora = (p) => (pisos.length ? !pisos.some((a) => tpDentroPoli(p, a.pts)) : !(casco.length >= 3 && tpDentroPoli(p, casco)));
+  let m2Int = 0, m2Ext = 0, m15 = 0, m20 = 0, m25 = 0, perim = 0, nExt = 0;
+  for (const w of paredes) {
+    const L = tpLen(w); if (!L) continue;
+    const m2 = L * (w.h || 0), nx = -(w.b.y - w.a.y) / L, ny = (w.b.x - w.a.x) / L, d = (w.t || 0) / 2 + 0.15;
+    const mx = (w.a.x + w.b.x) / 2, my = (w.a.y + w.b.y) / 2;
+    const externa = fora({ x: mx + nx * d, y: my + ny * d }) || fora({ x: mx - nx * d, y: my - ny * d });
+    if (externa) { m2Ext += m2; nExt++; } else m2Int += m2;
+    const cm = (w.t || 0) * 100;
+    if (cm <= 16.5) m15 += m2; else if (cm <= 22.5) m20 += m2; else m25 += m2;
+    perim += L;
+  }
+  const soma = (tipo, f) => areas.filter((a) => a.tipo === tipo && a.pts && a.pts.length >= 3).reduce((s, a) => s + f(a), 0);
+  const areaCp = soma("contrapiso", (a) => tpAreaPoli(a.pts)), areaLj = soma("laje", (a) => tpAreaPoli(a.pts)), perLj = soma("laje", (a) => tpPerimPoli(a.pts));
+  const areaConstruida = areaCp || areaLj;
+  const cobertura = areas.filter((a) => a.tipo === "telhado" && a.pts && a.pts.length >= 3).map((a) => {
+    const g = tpTelhadoGeo(a), aguas = g.lados.filter((L) => L.inclina && L.s > 0);
+    const maior = g.lados.reduce((m, L) => (L.l > m.l ? L : m), g.lados[0]);
+    const ux = (maior.b.x - maior.a.x) / maior.l, uy = (maior.b.y - maior.a.y) / maior.l;
+    const pu = g.contorno.map((q) => q.x * ux + q.y * uy), pn = g.contorno.map((q) => -q.x * uy + q.y * ux);
+    return {
+      tipo: tpTelha(a.telha).id,
+      comprimento: r2(Math.max(...pu) - Math.min(...pu)),
+      largura: r2(Math.max(...pn) - Math.min(...pn)),
+      aguas: Math.min(4, aguas.length),
+      inclinacao: aguas.length ? Math.round(aguas.reduce((s, L) => s + L.s, 0) / aguas.length * 100) / 100 : 0,
+    };
+  });
+  const projeto = {
+    tipologia: "Térrea",
+    arquitetura: { areaConstruida: r2(areaConstruida), m2ParedesInternas: r2(m2Int), m2ParedesExternas: r2(m2Ext), m2ParedesTotal: r2(m2Int + m2Ext) },
+    terreo: { area: r2(areaConstruida), m2Parede15: r2(m15), m2Parede20: r2(m20), m2Parede25: r2(m25), perimetroParedes: r2(perim),
+      ...(areaLj ? { areaLoje: r2(areaLj), perimetroLoje: r2(perLj), tipoLoje: "Treliça" } : {}) },
+    ...(cobertura.length ? { cobertura } : {}),
+  };
+  const linhas = [
+    ["Tipologia", "Térrea"],
+    ["Área construída", tpFmt(areaConstruida) + " m²" + (areaCp ? " (contrapiso)" : areaLj ? " (laje)" : "")],
+    ["Parede interna", tpFmt(m2Int) + " m²"],
+    ["Parede externa", `${tpFmt(m2Ext)} m² (${nExt} parede${nExt === 1 ? "" : "s"})`],
+    ["Por espessura", `15 cm: ${tpFmt(m15)} · 20 cm: ${tpFmt(m20)} · 25 cm: ${tpFmt(m25)} m²`],
+    ["Perímetro de paredes", tpFmt(perim) + " m"],
+    ...(areaLj ? [["Laje (treliçada)", `${tpFmt(areaLj)} m² · perímetro ${tpFmt(perLj)} m`]] : []),
+    ...cobertura.map((c, k) => [`Telhado ${cobertura.length > 1 ? k + 1 : ""}`.trim(), `${tpTelha(c.tipo).rotulo}, ${tpFmt(c.comprimento)} × ${tpFmt(c.largura)} m, ${c.aguas} água${c.aguas === 1 ? "" : "s"}, ${tpFmt(c.inclinacao * 100, 0)}%`]),
+  ];
+  return { projeto, linhas };
+}
+
 // Editor em tela cheia. Elementos: paredes (segmentos) e áreas (contrapiso e
 // laje, polígonos). Seleção compartilhada entre planta e 3D: chaves "p3"
 // (parede 3) e "a1" (área 1). Ferramentas: Selecionar, Parede, Contrapiso,
 // Laje, Mover. Propriedades do que estiver selecionado no menu lateral.
-function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
+function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const planRef = useRef(null), v3dRef = useRef(null);
   const planBox = useRef(null), v3dBox = useRef(null);
   const [paredes, setParedes] = useState(() => (Array.isArray(projeto.paredes) ? projeto.paredes : []));
@@ -77901,6 +77973,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
   const [menuCtx, setMenuCtx] = useState(null); // menu do botão direito { x, y }
   const [digitado, setDigitado] = useState("");  // comprimento digitado durante o traço
   const [verAtalhos, setVerAtalhos] = useState(false);
+  const [obraId, setObraId] = useState(projeto.obraId || null);
+  const [painelObra, setPainelObra] = useState(null); // null, confirmar ou feito
   const historico = useRef([]);
   const futuro = useRef([]);                     // para Refazer
   const ultimaFerramenta = useRef("parede");     // Enter sem nada ativo repete
@@ -77915,8 +77989,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
 
   useEffect(() => {
     if (primeiraVez.current) { primeiraVez.current = false; return; }
-    onAlterar({ ...projeto, paredes, areas, atualizadoEm: new Date().toISOString() });
-  }, [paredes, areas]);
+    onAlterar({ ...projeto, obraId, paredes, areas, atualizadoEm: new Date().toISOString() });
+  }, [paredes, areas, obraId]);
 
   useEffect(() => {
     const antes = document.body.style.overflow; document.body.style.overflow = "hidden";
@@ -77991,6 +78065,33 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
     return achou ? r3(topo) : (a.cota != null ? a.cota : altM);
   };
   const geoTelhado = (a) => tpTelhadoGeo({ ...a, cota: apoioTelhado(a) });
+  // Obra ligada a este projeto (criada pelo botão "Orçamento de obra")
+  const obraLigada = obraId && data && Array.isArray(data.obras) ? data.obras.find((o) => o.id === obraId) : null;
+  const podeOrcar = !!(data && save && projeto.clienteId && typeof gerarOrcamentoObra === "function");
+  const gerarObra = () => {
+    const conv = tpDesenhoParaObra(paredes, areas);
+    const base = obraLigada || {
+      id: "obra_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), clienteId: projeto.clienteId, nome: projeto.nome,
+      status: "planejamento", dataInicio: "", dataFim: "", responsavel: "", descricao: "Criada a partir do Projetar.", ativo: true, clientePagaDireto: false,
+      enderecoProprio: false, cep: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", estado: "",
+    };
+    const ant = base.projeto || {};
+    // só os campos que vêm do desenho mudam; padrão, cômodos, esquadrias,
+    // fundação, prestadores etc. ficam como estavam (ou em branco, na obra nova)
+    const projetoObra = { ...ant, tipologia: conv.projeto.tipologia,
+      arquitetura: { ...(ant.arquitetura || {}), ...conv.projeto.arquitetura },
+      terreo: { ...(ant.terreo || {}), ...conv.projeto.terreo },
+      ...(conv.projeto.cobertura ? { cobertura: conv.projeto.cobertura } : {}),
+      origemDesenho: { projetoId: projeto.id, em: new Date().toISOString() } };
+    const r = gerarOrcamentoObra(projetoObra, data);
+    const orcamento = { geradoEm: new Date().toISOString(), versao: ((base.orcamento && base.orcamento.versao) || 0) + 1,
+      itens: r.itens.map(({ memoria, ...i }) => i), totais: r.totais, qualidade: r.qualidade, avisos: r.avisos };
+    const obraNova = { ...base, projeto: projetoObra, orcamento, projetoDesenhoId: projeto.id };
+    const obras = Array.isArray(data.obras) ? data.obras : [];
+    save({ ...data, obras: obraLigada ? obras.map((o) => (o.id === obraNova.id ? obraNova : o)) : [...obras, obraNova] });
+    setObraId(obraNova.id);
+    setPainelObra("feito");
+  };
   const finalizarPoli = () => {
     if (poli.length >= 3 && ferramenta === "telhado") {
       const tel = TP_TELHAS[0];
@@ -78781,6 +78882,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
         )}
       </div>
 
+      {podeOrcar && (
+        <>
+          <div style={secao}>Orçamento de obra</div>
+          <button style={{ ...btn, background: "#111827", borderColor: "#111827", color: "#fff" }} onClick={() => setPainelObra("confirmar")}>
+            {obraLigada ? "Atualizar orçamento da obra" : "Gerar orçamento de obra"}
+          </button>
+          <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6, lineHeight: 1.4 }}>
+            {obraLigada ? `Ligado à obra "${obraLigada.nome}". Atualiza paredes, laje e telhado com o desenho atual.` : `Cria a obra "${projeto.nome}" em ${nomeCliente || "o cliente"} com o orçamento calculado pelo desenho.`}
+          </div>
+        </>
+      )}
       <button style={{ ...btn, marginTop: 8, fontSize: 12.5 }} onClick={() => setVerAtalhos(true)}>Atalhos de teclado e mouse <span style={{ color: "#9ca3af" }}>(?)</span></button>
 
       <div style={secao}>Quantitativo</div>
@@ -78868,6 +78980,52 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar }) {
         )}
       </main>
 
+      {painelObra && (() => {
+        const conv = tpDesenhoParaObra(paredes, areas);
+        const vazio = !paredes.length && !areas.length;
+        return (
+          <div style={{ position: "fixed", inset: 0, zIndex: 20, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+            <div role="dialog" aria-modal="true" style={{ background: "#fff", borderRadius: 12, width: "100%", maxWidth: 520, maxHeight: "85vh", overflowY: "auto", padding: 20, boxShadow: "0 10px 30px rgba(0,0,0,0.25)" }}>
+              {painelObra === "feito" ? (
+                <>
+                  <div style={{ fontSize: 17, fontWeight: 700, color: "#111827" }}>Orçamento gerado</div>
+                  <div style={{ fontSize: 14, color: "#374151", margin: "8px 0 16px", lineHeight: 1.5 }}>
+                    A obra <strong>{(obraLigada && obraLigada.nome) || projeto.nome}</strong> está em Clientes → {nomeCliente} → Obras, já com o orçamento calculado.
+                    Complete lá o que o desenho ainda não tem (padrão, cômodos, esquadrias, fundação, prestadores) e clique em Recalcular.
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}><button style={btn} onClick={() => setPainelObra(null)}>Fechar</button></div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 17, fontWeight: 700, color: "#111827" }}>{obraLigada ? "Atualizar orçamento da obra" : "Gerar orçamento de obra"}</div>
+                  <div style={{ fontSize: 13.5, color: "#374151", margin: "6px 0 12px", lineHeight: 1.5 }}>
+                    {obraLigada
+                      ? <>Vai atualizar a obra <strong>{obraLigada.nome}</strong> com estes valores e recalcular o orçamento. O resto dos dados da obra fica como está.</>
+                      : <>Vai criar a obra <strong>{projeto.nome}</strong> em <strong>{nomeCliente}</strong>, com estes valores, e calcular o orçamento:</>}
+                  </div>
+                  <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, overflow: "hidden" }}>
+                    {conv.linhas.map(([k, v], i) => (
+                      <div key={k + i} style={{ display: "flex", gap: 12, padding: "7px 10px", fontSize: 13, borderTop: i ? "1px solid #f0f2f5" : "none" }}>
+                        <span style={{ flex: "0 0 42%", color: "#4b5563" }}>{k}</span><span style={{ color: "#111827", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 12, color: "#6b7280", marginTop: 10, lineHeight: 1.45 }}>
+                    Medidas brutas (sem descontar portas e janelas), parede externa identificada pelo contorno da casa. Por enquanto só obra térrea.
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+                    <button style={btn} onClick={() => setPainelObra(null)}>Cancelar</button>
+                    <button style={{ ...btn, background: TP_AZUL, borderColor: TP_AZUL, color: "#fff", opacity: vazio ? 0.5 : 1 }} disabled={vazio} onClick={gerarObra}>
+                      {obraLigada ? "Atualizar e recalcular" : "Criar obra e orçamento"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {verAtalhos && (
         <div style={{ position: "fixed", inset: 0, zIndex: 20, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
           <div role="dialog" aria-modal="true" style={{ background: "#fff", borderRadius: 12, width: "100%", maxWidth: 560, maxHeight: "85vh", overflowY: "auto", padding: 20, boxShadow: "0 10px 30px rgba(0,0,0,0.25)" }}>
@@ -78952,7 +79110,7 @@ function tpGravar(empresaId, lista) {
   try { localStorage.setItem(tpChave(empresaId), JSON.stringify(lista)); } catch {}
 }
 
-function TesteProjeto({ data, usuario }) {
+function TesteProjeto({ data, usuario, save }) {
   const empresaId = usuario?.empresa_id;
   const [projetos, setProjetos] = useState(() => tpLer(empresaId));
   const [abertoId, setAbertoId] = useState(null);
@@ -78967,7 +79125,7 @@ function TesteProjeto({ data, usuario }) {
   const aberto = projetos.find((p) => p.id === abertoId);
   if (aberto) {
     return (
-      <TpEditor key={aberto.id} projeto={aberto} nomeCliente={nomeCliente(aberto.clienteId)}
+      <TpEditor key={aberto.id} projeto={aberto} nomeCliente={nomeCliente(aberto.clienteId)} data={data} save={save}
         onAlterar={(p) => salvarLista(tpLer(empresaId).map((x) => (x.id === p.id ? p : x)))}
         onVoltar={() => { setProjetos(tpLer(empresaId)); setAbertoId(null); }} />
     );
@@ -79086,7 +79244,7 @@ function tpEmpresaAtual() {
   try { return (JSON.parse(localStorage.getItem("vicke-user") || "{}") || {}).empresa_id || ""; } catch { return ""; }
 }
 
-function TpProjetosDoCliente({ cliente }) {
+function TpProjetosDoCliente({ cliente, data, save }) {
   const empresaId = tpEmpresaAtual();
   const [todos, setTodos] = useState(() => tpLer(empresaId));
   const [abertoId, setAbertoId] = useState(null);
@@ -79106,7 +79264,7 @@ function TpProjetosDoCliente({ cliente }) {
 
   if (aberto) {
     return (
-      <TpEditor key={aberto.id} projeto={aberto} nomeCliente={cliente.nome}
+      <TpEditor key={aberto.id} projeto={aberto} nomeCliente={cliente.nome} data={data} save={save}
         onAlterar={(p) => salvarLista(tpLer(empresaId).map((x) => (x.id === p.id ? p : x)))}
         onVoltar={() => { setTodos(tpLer(empresaId)); setAbertoId(null); }} />
     );
@@ -81283,7 +81441,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "fornecedores"           && <PrestadoresServico key={fornecedoresKey} data={data} save={save} />}
           {aba === "insumos"                && <Insumos data={data} save={save} />}
           {aba === "whatsapp-piloto" && waPiloto && <WhatsappPiloto data={data} usuario={usuario} />}
-          {aba === "teste-projeto" && <TesteProjeto data={data} usuario={usuario} />}
+          {aba === "teste-projeto" && <TesteProjeto data={data} usuario={usuario} save={save} />}
           {typeof aba === "string" && aba.indexOf("escritorio") === 0 && <Escritorio key={escritorioKey} abaInicial={aba.indexOf(":") > 0 ? aba.slice(aba.indexOf(":") + 1) : "dados"} data={data} save={save} onReload={loadData} aoTrocarAba={(k) => setAba("escritorio:" + k)} />}
           {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} setUsuario={setUsuario} />}
           {/* Sub-abas do menu Master — Admin recebe initialTab pra abrir direto na aba certa */}
