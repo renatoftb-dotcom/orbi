@@ -80018,19 +80018,13 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         if (melhor) ligadasSel.set(j, { i: si, fim: melhor.f });
       });
     }
-    // cota de ambiente encostada na parede, do lado do comprimento dela: o
-    // comprimento sai (a cota já mede ali e os dois números ficariam um em cima do outro)
-    const linhasCotaAmb = areas.filter((a) => a.tipo === "cota" && a.amb && a.pts && a.pts.length === 2).map((a) => a.pts);
+    // comprimento da parede que cai dentro de um ambiente já definido sai: o
+    // ambiente tem as cotas internas dele (o de fora da casa continua)
+    const ambsFechados = areas.filter((a) => a.tipo === "ambiente" && !a.aberto && a.pts && a.pts.length >= 3).map((a) => a.pts);
     const tapadoPorCota = (w, ang) => {
-      if (!linhasCotaAmb.length) return false;
-      const mx = (w.a.x + w.b.x) / 2 + Math.sin(ang) * (w.t / 2 + 12 * dpr / v.s), my = (w.a.y + w.b.y) / 2 - Math.cos(ang) * (w.t / 2 + 12 * dpr / v.s);
-      const L = tpLen(w) || 1, ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
-      return linhasCotaAmb.some(([p, q]) => {
-        const l = Math.hypot(q.x - p.x, q.y - p.y) || 1, cx = (q.x - p.x) / l, cy = (q.y - p.y) / l;
-        if (Math.abs(ux * cy - uy * cx) > 0.05) return false;
-        const sp = (mx - p.x) * cx + (my - p.y) * cy, dn = Math.abs((mx - p.x) * -cy + (my - p.y) * cx);
-        return dn < 0.25 + 14 * dpr / v.s && sp > -0.2 && sp < l + 0.2;
-      });
+      if (!ambsFechados.length) return false;
+      const d0 = w.t / 2 + 12 * dpr / v.s, mx = (w.a.x + w.b.x) / 2 + Math.sin(ang) * d0, my = (w.a.y + w.b.y) / 2 - Math.cos(ang) * d0;
+      return ambsFechados.some((pts) => tpDentroPoli({ x: mx, y: my }, pts));
     };
     todas.forEach((w, i) => {
       const [ax, ay] = T(w.a), [bx, by] = T(w.b), marc = marcadas.has("p" + i);
