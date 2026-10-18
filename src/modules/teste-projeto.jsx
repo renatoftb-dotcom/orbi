@@ -2462,7 +2462,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         // parede; dá para arrastar (rotOff, em metros ao longo/para fora).
         // janela: código à esquerda e a fração (larg x alt sobre o peitoril);
         // porta e vão: código em cima e larg x alt embaixo (peitoril só se tiver)
-        const porta = String(o.tipo).startsWith("porta") || o.tipo === "vao", peit = o.peit || 0, cod = String(opts.codigo).toLowerCase();
+        const porta = String(o.tipo).startsWith("porta") || o.tipo === "vao", peit = o.peit || 0, cod = String(opts.codigo).toUpperCase();
         const l1 = `${tpFmt(o.larg)}x${tpFmt(o.alt)}`, l2 = !porta || peit > 0.005 ? tpFmt(peit) : null;
         const fC = `600 ${11.5 * dpr}px system-ui, sans-serif`, fN = `500 ${11.5 * dpr}px system-ui, sans-serif`;
         ctx.font = fC; const cw = ctx.measureText(cod).width;
@@ -2470,16 +2470,20 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const gap = 5 * dpr, Wt = porta ? Math.max(cw, fw) : cw + gap + fw, Ht = porta ? (l2 ? 39 : 27) * dpr : (l2 ? 27 : 13) * dpr, ro = o.rotOff || { ds: 0, dn: 0 };
         // texto de parede vertical lê de baixo para cima
         let angT = Math.atan2(sby - say, sbx - sax); if (angT >= Math.PI / 2 - 1e-3) angT -= Math.PI; else if (angT < -Math.PI / 2 - 1e-3) angT += Math.PI;
-        const offPx = h * v.s + (longe ? 30 : 6) * dpr + Ht / 2 + ro.dn * v.s, ca = Math.cos(angT), sa = Math.sin(angT);
+        // colado na esquadria (o fundo branco cobre o que estiver embaixo)
+        const offPx = h * v.s + 5 * dpr + Ht / 2 + ro.dn * v.s, ca = Math.cos(angT), sa = Math.sin(angT);
         const [cx0, cy0] = T(P(o.x, 0)), tx = cx0 + nx * sg * offPx + ca * ro.ds * v.s, ty = cy0 + ny * sg * offPx + sa * ro.ds * v.s;
         ctx.save(); ctx.translate(tx, ty); ctx.rotate(angT); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
-        const escreve = (t, x, y, f) => { ctx.font = f; ctx.strokeStyle = "rgba(255,255,255,0.95)"; ctx.lineWidth = 3.5 * dpr; ctx.strokeText(t, x, y); ctx.fillStyle = cor; ctx.fillText(t, x, y); };
+        const escreve = (t, x, y, f) => { ctx.font = f; ctx.fillStyle = cor; ctx.fillText(t, x, y); };
         const fracao = (xF, y0) => {
           if (!l2) { escreve(l1, xF, y0, fN); return; }
           escreve(l1, xF, y0 - 7 * dpr, fN); escreve(l2, xF, y0 + 7.5 * dpr, fN);
           ctx.strokeStyle = cor; ctx.lineWidth = 1 * dpr; ctx.beginPath(); ctx.moveTo(xF - fw / 2, y0 + 0.5 * dpr); ctx.lineTo(xF + fw / 2, y0 + 0.5 * dpr); ctx.stroke();
         };
-        if (opts.marc) { ctx.fillStyle = "rgba(4,116,244,0.10)"; ctx.fillRect(-Wt / 2 - 3 * dpr, -Ht / 2 - 3 * dpr, Wt + 6 * dpr, Ht + 6 * dpr); }
+        // fundo branco da anotação (com a seleção, um azul bem claro)
+        { const pd = 3 * dpr, x0 = -Wt / 2 - pd, y0 = -Ht / 2 - pd + 1 * dpr, ww = Wt + 2 * pd, hh = Ht + 2 * pd - 2 * dpr, rr = Math.min(7 * dpr, hh / 2);
+          ctx.fillStyle = opts.marc ? "#e8f1fe" : "#ffffff"; ctx.beginPath();
+          if (ctx.roundRect) ctx.roundRect(x0, y0, ww, hh, rr); else ctx.rect(x0, y0, ww, hh); ctx.fill(); }
         if (porta) { escreve(cod, 0, -Ht / 2 + 6.5 * dpr, fC); fracao(0, -Ht / 2 + (l2 ? 26 : 19.5) * dpr); }
         else { escreve(cod, -Wt / 2 + cw / 2, 0.5 * dpr, fC); fracao(-Wt / 2 + cw + gap + fw / 2, 0); }
         ctx.restore(); ctx.textBaseline = "alphabetic"; ctx.textAlign = "start";
