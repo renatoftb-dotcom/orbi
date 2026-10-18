@@ -78893,7 +78893,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       ctx.fillStyle = marc ? TP_AZUL : (a.tipo === "laje" ? "#4b6aa0" : "#b65b3d");
       let nomeA = TP_AREA_TIPOS[a.tipo].nome;
       if (a.tipo === "contrapiso" && cobPts.length) nomeA = tpAreaDentro(a.pts, cobPts) >= tpAreaPoli(a.pts) / 2 ? "Piso interno" : "Piso externo";
-      ctx.fillText(`${nomeA} ${tpFmt(tpAreaPoli(a.pts))} m²`, cx, cy + (a.tipo === "laje" ? 14 * dpr : 0));
+      // sem anotação de laje e piso interno (como na prancha); só aparece selecionado.
+      // O piso externo continua com o nome e a área.
+      if (marc || nomeA === "Piso externo") ctx.fillText(`${nomeA} ${tpFmt(tpAreaPoli(a.pts))} m²`, cx, cy + (a.tipo === "laje" ? 14 * dpr : 0));
     }
 
     // "ÁREA EXTERNA x m²" (terreno sem piso nem cobertura) no ponto mais livre
@@ -78928,7 +78930,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // telhados: contorno com beiral (tracejado), linhas de cumeeira e espigão,
     // seta de caimento com a porcentagem em cada água
     areas.forEach((a, i) => {
-      if (a.tipo !== "telhado" || !a.pts || a.pts.length < 3) return;
+      // planta baixa: o telhado fica escondido (contorno, águas, setas e
+      // anotação); aparece só quando selecionado ou sendo editado
+      if (a.tipo !== "telhado" || !a.pts || a.pts.length < 3 || !marcadas.has("a" + i)) return;
       const marc = marcadas.has("a" + i), g = geoTelhado(a), cor = marc ? TP_AZUL : "#9a4a26";
       caminho(g.contorno); ctx.fillStyle = marc ? "rgba(4,116,244,0.08)" : "rgba(181,86,47,0.06)"; ctx.fill();
       ctx.setLineDash([10 * dpr, 4 * dpr, 2 * dpr, 4 * dpr]); ctx.strokeStyle = cor; ctx.lineWidth = (marc ? 2.5 : 1.5) * dpr; ctx.stroke(); ctx.setLineDash([]);
