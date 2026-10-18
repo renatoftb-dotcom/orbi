@@ -78761,27 +78761,98 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     };
     const angulo = (a, b) => { const g = Math.round(((Math.atan2(-(b.y - a.y), b.x - a.x) * 180 / Math.PI) + 360) % 360); return g % 90 === 0 ? "" : ` · ${g}°`; };
 
-    // terreno: verde claro, por baixo de tudo
+    // ---- texturas (padrão da prancha), todas presas ao desenho ----
+    const hsh = (i, j, k, n) => { const t = Math.sin(i * 127.1 + j * 311.7 + k * 74.7 + n * 19.3) * 43758.5453; return t - Math.floor(t); };
+    const caixaDe = (pts) => { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const q of pts) { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); } return { x0, y0, x1, y1 }; };
+    // pontinhos brancos miúdos (grama, terra)
+    const granulado = (pts, cel, n, cor) => {
+      const b = caixaDe(pts), i0 = Math.floor(b.x0 / cel), i1 = Math.ceil(b.x1 / cel), j0 = Math.floor(b.y0 / cel), j1 = Math.ceil(b.y1 / cel);
+      if (v.s * 0.03 < 1.5 * dpr || (i1 - i0) * (j1 - j0) > 6000) return;
+      ctx.strokeStyle = cor; ctx.lineWidth = Math.max(0.8 * dpr, 0.006 * v.s); ctx.beginPath();
+      for (let i = i0; i < i1; i++) for (let j = j0; j < j1; j++) for (let k = 0; k < n; k++) {
+        const cx = (i + hsh(i, j, k, 1)) * cel, cy = (j + hsh(i, j, k, 2)) * cel, an = hsh(i, j, k, 3) * Math.PI, l = 0.012 + 0.012 * hsh(i, j, k, 4);
+        const [ax, ay] = T({ x: cx, y: cy }), [bx, by] = T({ x: cx + Math.cos(an) * l, y: cy + Math.sin(an) * l });
+        ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+      }
+      ctx.stroke();
+    };
+    // pedra irregular (cacos): células de Voronoi com sementes sorteadas,
+    // cantos arredondados e contorno cinza claro sobre fundo branco
+    const pedras = (pts, marc) => {
+      ctx.save(); caminho(pts); ctx.clip();
+      ctx.fillStyle = marc ? "rgba(4,116,244,0.10)" : "#ffffff"; ctx.fill();
+      const C = 0.28, b = caixaDe(pts), i0 = Math.floor(b.x0 / C) - 1, i1 = Math.ceil(b.x1 / C) + 1, j0 = Math.floor(b.y0 / C) - 1, j1 = Math.ceil(b.y1 / C) + 1;
+      if (C * v.s >= 7 * dpr && (i1 - i0) * (j1 - j0) < 6000) {
+        const semente = (i, j) => ({ x: (i + 0.15 + 0.7 * hsh(i, j, 0, 5)) * C, y: (j + 0.15 + 0.7 * hsh(i, j, 0, 6)) * C });
+        ctx.strokeStyle = marc ? "rgba(4,116,244,0.35)" : "#d6d6d6"; ctx.lineWidth = Math.max(1 * dpr, 0.02 * v.s); ctx.lineJoin = "round";
+        for (let i = i0; i < i1; i++) for (let j = j0; j < j1; j++) {
+          const p = semente(i, j); let pol = [{ x: p.x - 1.6 * C, y: p.y - 1.6 * C }, { x: p.x + 1.6 * C, y: p.y - 1.6 * C }, { x: p.x + 1.6 * C, y: p.y + 1.6 * C }, { x: p.x - 1.6 * C, y: p.y + 1.6 * C }];
+          for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
+            if (!di && !dj) continue;
+            const q = semente(i + di, j + dj), m = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
+            pol = tpRecortar(pol, (z) => (z.x - m.x) * (q.x - p.x) + (z.y - m.y) * (q.y - p.y));
+          }
+          if (pol.length < 3) continue;
+          pol = pol.map((z) => ({ x: p.x + (z.x - p.x) * 0.9, y: p.y + (z.y - p.y) * 0.9 }));
+          const mid = (a, c) => T({ x: (a.x + c.x) / 2, y: (a.y + c.y) / 2 });
+          ctx.beginPath(); const m0 = mid(pol[0], pol[1]); ctx.moveTo(m0[0], m0[1]);
+          for (let k = 1; k <= pol.length; k++) { const vtx = T(pol[k % pol.length]), mm = mid(pol[k % pol.length], pol[(k + 1) % pol.length]); ctx.quadraticCurveTo(vtx[0], vtx[1], mm[0], mm[1]); }
+          ctx.closePath(); ctx.stroke();
+        }
+        ctx.lineJoin = "miter";
+      }
+      ctx.restore();
+    };
+    // deck de madeira: ripas de 10 cm no sentido escolhido
+    const deck = (pts, ang, marc) => {
+      ctx.save(); caminho(pts); ctx.clip();
+      ctx.fillStyle = marc ? "rgba(4,116,244,0.15)" : "#c98b4f"; ctx.fill();
+      const b = caixaDe(pts), c = { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 }, R = Math.hypot(b.x1 - b.x0, b.y1 - b.y0) / 2 + 0.2;
+      const dx = Math.cos(ang || 0), dy = Math.sin(ang || 0), nx = -dy, ny = dx;
+      if (0.1 * v.s >= 3 * dpr) {
+        ctx.strokeStyle = marc ? "rgba(4,116,244,0.5)" : "#8f5a2a"; ctx.lineWidth = Math.max(0.8 * dpr, 0.006 * v.s); ctx.beginPath();
+        for (let t = -Math.ceil(R / 0.1) * 0.1; t <= R; t += 0.1) {
+          const ox = c.x + nx * t, oy = c.y + ny * t, [ax, ay] = T({ x: ox - dx * R, y: oy - dy * R }), [bx, by] = T({ x: ox + dx * R, y: oy + dy * R });
+          ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    };
+    // símbolo de nível (círculo em quartos, preto e branco) nos cantos do lote
+    const marcoNivel = (q) => {
+      const [x, y] = T(q), r = 6 * dpr;
+      ctx.fillStyle = "#fff"; ctx.strokeStyle = "#000"; ctx.lineWidth = 1 * dpr;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#000";
+      for (const a0 of [Math.PI, 0]) { ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, r, a0, a0 + Math.PI / 2); ctx.closePath(); ctx.fill(); }
+    };
+    // terreno: grama (verde-sálvia com pontinhos brancos), divisa em linha
+    // preta fina e marco de nível em cada canto
     areas.forEach((a, i) => {
       if (a.tipo !== "terreno" || !a.pts || a.pts.length < 3) return;
       const marc = marcadas.has("a" + i);
-      caminho(a.pts); ctx.fillStyle = marc ? "rgba(4,116,244,0.10)" : "#e3f3dc"; ctx.fill();
-      ctx.strokeStyle = marc ? TP_AZUL : "#6aa84f"; ctx.lineWidth = (marc ? 2.5 : 1.5) * dpr; ctx.setLineDash([12 * dpr, 4 * dpr]); ctx.stroke(); ctx.setLineDash([]);
+      ctx.save(); caminho(a.pts); ctx.clip();
+      ctx.fillStyle = marc ? "#bcd3e8" : "#c7d3c0"; ctx.fill();
+      granulado(a.pts, 0.5, 22, "rgba(255,255,255,0.9)");
+      ctx.restore();
+      caminho(a.pts); ctx.strokeStyle = marc ? TP_AZUL : "#000"; ctx.lineWidth = (marc ? 2.5 : 1.2) * dpr; ctx.stroke();
+      a.pts.forEach(marcoNivel);
       const b0 = a.pts.reduce((m, q) => (q.y < m.y ? q : m), a.pts[0]); const [tx, ty] = T(b0);
-      ctx.font = `600 ${11 * dpr}px system-ui, sans-serif`; ctx.textAlign = "left"; ctx.fillStyle = marc ? TP_AZUL : "#4d7c3a";
-      ctx.fillText(`Terreno ${tpFmt(tpAreaPoli(a.pts))} m²`, tx + 6 * dpr, ty + 16 * dpr);
+      ctx.font = `600 ${11 * dpr}px system-ui, sans-serif`; ctx.textAlign = "left"; ctx.fillStyle = marc ? TP_AZUL : "#b65b3d";
+      ctx.fillText(`Terreno ${tpFmt(tpAreaPoli(a.pts))} m²`, tx + 12 * dpr, ty + 18 * dpr);
     });
     const cobPts = areas.filter((a) => (a.tipo === "laje" || a.tipo === "telhado") && a.pts && a.pts.length >= 3).map((a) => a.pts);
     // Piso interno (padrão da prancha): porcelanato cinza bem claro com
     // rejunte branco a cada 0,90 m e pontinhos brancos de granilite. Tudo
     // ancorado no desenho (não "escorrega" ao mover a vista). Vai nos
     // ambientes fechados e no contrapiso que está debaixo da cobertura.
-    const pisoInterno = (pts, marc) => {
+    const pisoInterno = (pts, marc, base = "#ebe8e5", P0 = 0.9) => {
       ctx.save(); caminho(pts); ctx.clip();
-      ctx.fillStyle = marc ? "rgba(4,116,244,0.10)" : "#ebe8e5"; ctx.fill();
+      ctx.fillStyle = marc ? "rgba(4,116,244,0.10)" : base; ctx.fill();
       let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
       for (const q of pts) { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); }
-      const P0 = 0.9, i0 = Math.floor(x0 / P0), i1 = Math.ceil(x1 / P0), j0 = Math.floor(y0 / P0), j1 = Math.ceil(y1 / P0);
+      const i0 = Math.floor(x0 / P0), i1 = Math.ceil(x1 / P0), j0 = Math.floor(y0 / P0), j1 = Math.ceil(y1 / P0);
       if (v.s * 0.05 >= 2 * dpr && (i1 - i0) * (j1 - j0) < 2500) { // granilite: só com zoom suficiente
         ctx.strokeStyle = "rgba(255,255,255,0.95)"; ctx.lineWidth = Math.max(0.8 * dpr, 0.008 * v.s); ctx.beginPath();
         for (let i = i0; i < i1; i++) for (let j = j0; j < j1; j++) for (let k = 0; k < 18; k++) {
@@ -78811,22 +78882,49 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       } else if (cpInterno(a)) {
         caminho(a.pts); ctx.strokeStyle = marc ? TP_AZUL : "#b8a98a"; ctx.lineWidth = (marc ? 2.5 : 1) * dpr; ctx.stroke();
       } else {
-        ctx.fillStyle = marc ? "rgba(4,116,244,0.12)" : "#f4efe4"; ctx.fill();
-        ctx.save(); caminho(a.pts); ctx.clip();
-        ctx.strokeStyle = marc ? "rgba(4,116,244,0.35)" : "#dccfb3"; ctx.lineWidth = 1 * dpr;
-        const pas = 9 * dpr;
-        for (let k = -H; k < W + H; k += pas) { ctx.beginPath(); ctx.moveTo(k, 0); ctx.lineTo(k + H, H); ctx.stroke(); }
-        ctx.restore();
-        caminho(a.pts); ctx.strokeStyle = marc ? TP_AZUL : "#b8a98a"; ctx.lineWidth = (marc ? 2.5 : 1) * dpr; ctx.stroke();
+        // piso externo: acabamento escolhido (pedra irregular é o padrão)
+        if (a.acab === "deck") deck(a.pts, a.angRipa || 0, marc);
+        else if (a.acab === "porcelanato") pisoInterno(a.pts, marc, "#dcd8d2", 0.6);
+        else pedras(a.pts, marc);
+        caminho(a.pts); ctx.strokeStyle = marc ? TP_AZUL : "#8a8a8a"; ctx.lineWidth = (marc ? 2.5 : 1) * dpr; ctx.stroke();
       }
       const [cx, cy] = T(tpCentro(a.pts));
       ctx.font = `600 ${11 * dpr}px system-ui, sans-serif`; ctx.textAlign = "center";
-      ctx.fillStyle = marc ? TP_AZUL : (a.tipo === "laje" ? "#4b6aa0" : "#8a7a58");
+      ctx.fillStyle = marc ? TP_AZUL : (a.tipo === "laje" ? "#4b6aa0" : "#b65b3d");
       let nomeA = TP_AREA_TIPOS[a.tipo].nome;
       if (a.tipo === "contrapiso" && cobPts.length) nomeA = tpAreaDentro(a.pts, cobPts) >= tpAreaPoli(a.pts) / 2 ? "Piso interno" : "Piso externo";
       ctx.fillText(`${nomeA} ${tpFmt(tpAreaPoli(a.pts))} m²`, cx, cy + (a.tipo === "laje" ? 14 * dpr : 0));
     }
 
+    // "ÁREA EXTERNA x m²" (terreno sem piso nem cobertura) no ponto mais livre
+    // do gramado: amostra uma grade e fica com o ponto mais longe das bordas
+    const terrenos = areas.filter((a) => a.tipo === "terreno" && a.pts && a.pts.length >= 3);
+    if (terrenos.length) {
+      const an = tpAnaliseAreas(areas);
+      if (an.permeavel > 0.5) {
+        const ocup = areas.filter((a) => ["laje", "telhado", "contrapiso"].includes(a.tipo) && a.pts && a.pts.length >= 3).map((a) => a.pts);
+        const bordas = [...terrenos.map((t) => t.pts), ...ocup];
+        let melhor = null, folga = -1;
+        for (const t of terrenos) {
+          const b = caixaDe(t.pts), passo = Math.max(0.25, Math.sqrt(tpAreaPoli(t.pts)) / 45);
+          for (let x = b.x0 + passo / 2; x < b.x1; x += passo) for (let y = b.y0 + passo / 2; y < b.y1; y += passo) {
+            const q = { x, y };
+            if (!tpDentroPoli(q, t.pts) || ocup.some((o) => tpDentroPoli(q, o))) continue;
+            let d = Infinity;
+            for (const P of bordas) for (let k = 0; k < P.length; k++) d = Math.min(d, tpDistSeg(q, P[k], P[(k + 1) % P.length]));
+            for (const w of paredes) d = Math.min(d, tpDistSeg(q, w.a, w.b));
+            if (d > folga) { folga = d; melhor = q; }
+          }
+        }
+        if (melhor && folga * v.s > 30 * dpr) {
+          const [lx, ly] = T(melhor);
+          ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#b65b3d";
+          ctx.font = `500 ${12 * dpr}px system-ui, sans-serif`; ctx.fillText("ÁREA EXTERNA", lx, ly - 7 * dpr);
+          ctx.font = `400 ${11 * dpr}px system-ui, sans-serif`; ctx.fillText(`${tpFmt(an.permeavel)} m²`, lx, ly + 8 * dpr);
+          ctx.textBaseline = "alphabetic";
+        }
+      }
+    }
     // telhados: contorno com beiral (tracejado), linhas de cumeeira e espigão,
     // seta de caimento com a porcentagem em cada água
     areas.forEach((a, i) => {
@@ -79144,7 +79242,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const mat = new THREE.MeshLambertMaterial({ color: marc ? 0x8dbbff : TP_AREA_TIPOS[a.tipo].cor3d, transparent: a.tipo === "laje" && !marc, opacity: a.tipo === "laje" && !marc ? 0.85 : 1 });
       const mesh = new THREE.Mesh(g, mat);
       mesh.rotation.x = -Math.PI / 2; mesh.position.y = a.tipo === "terreno" ? -0.03 : (a.cota || 0);
-      if (a.tipo === "terreno") { mesh.scale.z = 0.02 / Math.max(0.01, a.esp || 0.05); mesh.material.color.set(marc ? 0x8dbbff : 0xcfe8c4); }
+      if (a.tipo === "terreno") { mesh.scale.z = 0.02 / Math.max(0.01, a.esp || 0.05); mesh.material.color.set(marc ? 0x8dbbff : 0xc7d3c0); }
+      if (a.tipo === "contrapiso" && a.acab && !marc) mesh.material.color.set({ pedra: 0xf0f0ee, deck: 0x9c6b43, porcelanato: 0xdcd8d2 }[a.acab] || TP_AREA_TIPOS.contrapiso.cor3d);
       mesh.userData.chave = "a" + i; T.group.add(mesh);
       contorno(g, mesh, marc ? 0x0474f4 : 0x6b7280);
     });
@@ -79965,6 +80064,24 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             {selA.length === 1 && <TpCampo id="tp-a-per" rotulo="Perímetro (m)" valor={tpPerimPoli(areas[selA[0]].pts)} somenteLeitura onConfirmar={() => {}} />}
             <TpCampo id="tp-a-esp" rotulo="Espessura (cm)" casas={0} valor={comum(selA, (i) => Math.round((areas[i].esp || 0) * 100))} onConfirmar={(v) => editarAreas(selA, (a) => ({ ...a, esp: v / 100 }))} />
             <TpCampo id="tp-a-cota" rotulo="Nível (m)" min={-0.0001} valor={comum(selA, (i) => areas[i].cota || 0)} onConfirmar={(v) => editarAreas(selA, (a) => ({ ...a, cota: v }))} />
+            {selA.every((i) => areas[i].tipo === "contrapiso") && (() => {
+              const ac = comum(selA, (i) => ["pedra", "deck", "porcelanato"].indexOf(areas[i].acab || "pedra"));
+              const atual = ac == null ? "" : ["pedra", "deck", "porcelanato"][ac];
+              return (
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label htmlFor="tp-a-acab" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>Acabamento (piso externo)</label>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <select id="tp-a-acab" value={atual} onChange={(e) => editarAreas(selA, (a) => ({ ...a, acab: e.target.value }))}
+                      style={{ flex: 1, minWidth: 0, padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit", background: "#fff" }}>
+                      {ac == null && <option value="">vários</option>}
+                      <option value="pedra">Pedra irregular</option><option value="deck">Deck de madeira</option><option value="porcelanato">Porcelanato externo</option>
+                    </select>
+                    {atual === "deck" && <button style={{ ...btn, minHeight: 34, padding: "4px 10px", fontSize: 12.5 }} title="Girar o sentido das ripas em 90°" onClick={() => editarAreas(selA, (a) => ({ ...a, angRipa: (a.angRipa || 0) ? 0 : Math.PI / 2 }))}>Girar ripas</button>}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4, lineHeight: 1.4 }}>Vale para o contrapiso fora da cobertura; dentro da casa ele aparece como piso interno.</div>
+                </div>
+              );
+            })()}
           </div>
         )}
         <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
