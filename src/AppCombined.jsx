@@ -77742,6 +77742,9 @@ function WhatsappPiloto({ data, usuario }) {
 // espessura e altura. O 3D é desenhado com Three.js, carregado sob demanda
 // do cdnjs (só quando a tela abre — não entra no bundle). Quantitativo
 // simples: comprimento, área, blocos 14x19x39 (12,5/m² + 5%) e reboco 2 faces.
+// arraste sem atraso: a planta é redesenhada no mesmo quadro do movimento
+import { useLayoutEffect as tpUseLayoutEffect } from "react";
+import { flushSync as tpFlushSync } from "react-dom";
 
 const TP_AZUL = "#0474f4";
 const TP_MUNDO = 12;   // largura da planta em metros
@@ -78360,6 +78363,64 @@ function tpAssinaturaDesenho(pr) {
 // Arco por 3 pontos (início, fim e um ponto da curva), devolvido como
 // trechos retos curtos (~40 cm) — é assim que parede curva e contorno curvo
 // entram no quantitativo. Pontos alinhados = reta.
+// Pontas em canto (exatamente duas paredes terminando no mesmo ponto): o
+// canto é desenhado em meia-esquadria, para que triângulos, ângulos e curvas
+// pareçam uma parede só (antes cada trecho terminava em quadrado e o canto
+// fazia "dente" ou ponta). Devolve, por parede, o vizinho de cada ponta.
+function tpCantosMitra(paredes) {
+  const mapa = new Map(), chave = (q) => Math.round(q.x * 200) + "|" + Math.round(q.y * 200);
+  paredes.forEach((w, i) => { if (!tpLen(w)) return; for (const f of ["a", "b"]) { const k = chave(w[f]); if (!mapa.has(k)) mapa.set(k, []); mapa.get(k).push({ i, f }); } });
+  const out = paredes.map(() => ({ a: null, b: null }));
+  for (const lista of mapa.values()) {
+    if (lista.length !== 2 || lista[0].i === lista[1].i) continue;
+    const [p, q] = lista;
+    // outra parede passando pelo meio desse ponto (T) desfaz a meia-esquadria
+    const pt = paredes[p.i][p.f];
+    if (paredes.some((w, j) => j !== p.i && j !== q.i && tpLen(w) && tpDistSeg(pt, w.a, w.b) < (w.t || 0) / 2)) continue;
+    out[p.i][p.f] = { j: q.i, f: q.f }; out[q.i][q.f] = { j: p.i, f: p.f };
+  }
+  return out;
+}
+// Na ponta fim da parede w (vizinha o, ponta fo), onde as faces n = −h e n = +h
+// de w cortam as faces correspondentes de o: devolve [s(−h), s(+h)] ao longo de w.
+function tpPontaMitra(w, fim, o, fo, h, ho) {
+  const L = tpLen(w), u = { x: (w.b.x - w.a.x) / L, y: (w.b.y - w.a.y) / L }, nv = { x: -u.y, y: u.x };
+  const P = w[fim], sP = fim === "a" ? 0 : L, d = fim === "a" ? u : { x: -u.x, y: -u.y };
+  const Lo = tpLen(o), q = fo === "a" ? o.b : o.a, e = { x: (q.x - P.x) / Lo, y: (q.y - P.y) / Lo }, m = { x: -e.y, y: e.x };
+  const cr = u.x * e.y - u.y * e.x;
+  const ladoIn = Math.sign(e.x * nv.x + e.y * nv.y) || 1, kIn = Math.sign(d.x * m.x + d.y * m.y) || 1;
+  const res = [-h, h].map((n0) => {
+    if (Math.abs(cr) < 0.03) return sP; // praticamente em linha: corte reto no ponto
+    const k = (Math.sign(n0) === ladoIn ? kIn : -kIn) * ho;
+    const D = { x: P.x + m.x * k - w.a.x - nv.x * n0, y: P.y + m.y * k - w.a.y - nv.y * n0 };
+    let sx = (D.x * e.y - D.y * e.x) / cr;
+    const lim = 4 * Math.max(h, ho); // ângulo muito fechado: não deixa a ponta disparar
+    if (sx < sP - lim) sx = sP - lim; if (sx > sP + lim) sx = sP + lim;
+    return sx;
+  });
+  return res;
+}
+// Trechos curtos encadeados quase em linha (curva feita pelo Arco, ou
+// paredes com w.curva igual): uma "curva" só, com uma medida só.
+function tpGruposCurva(paredes) {
+  const cm = tpCantosMitra(paredes), grupo = paredes.map(() => -1);
+  const parece = (i, j) => {
+    const a = paredes[i], b = paredes[j];
+    if (a.curva != null && a.curva === b.curva) return true;
+    const La = tpLen(a), Lb = tpLen(b); if (!La || !Lb || La > 1.2 || Lb > 1.2 || Math.abs(La - Lb) > 0.02) return false;
+    const c = Math.abs(((a.b.x - a.a.x) * (b.b.y - b.a.y) - (a.b.y - a.a.y) * (b.b.x - b.a.x)) / La / Lb);
+    return c > 0.01 && c < 0.6; // dobra pequena (até ~37°), mas não reta
+  };
+  let g = 0;
+  paredes.forEach((_, i) => {
+    if (grupo[i] >= 0) return;
+    const fila = [i], membros = [i]; grupo[i] = g;
+    while (fila.length) { const k = fila.pop(); for (const f of ["a", "b"]) { const v = cm[k][f]; if (v && grupo[v.j] < 0 && parece(k, v.j)) { grupo[v.j] = g; fila.push(v.j); membros.push(v.j); } } }
+    if (membros.length < 3 && !membros.some((m) => paredes[m].curva != null)) membros.forEach((m) => { grupo[m] = -1; });
+    else g++;
+  });
+  return grupo;
+}
 function tpArco3(p0, p2, pm) {
   const r3 = (x) => Math.round(x * 1000) / 1000;
   const ax = p0.x, ay = p0.y, bx = pm.x, by = pm.y, cx = p2.x, cy = p2.y;
@@ -78770,7 +78831,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     setParedes(prox.paredes); setAreas(prox.areas); setSel([]); setInicio(null);
   }
   // seleção: Ctrl soma, Shift tira, sem tecla substitui (convenção Revit)
-  const aplicarSelecao = (chaves, g) => {
+  const aplicarSelecao = (chaves0, g) => {
+    // um trecho de curva seleciona a curva inteira
+    const gc = chaves0.some((k) => k[0] === "p") ? tpGruposCurva(paredes) : null;
+    const chaves = gc ? Array.from(new Set(chaves0.flatMap((k) => { if (k[0] !== "p") return [k]; const gi = gc[+k.slice(1)]; return gi >= 0 ? gc.map((x, j) => (x === gi ? "p" + j : null)).filter(Boolean) : [k]; }))) : chaves0;
     if (g.ctrl) setSel(Array.from(new Set([...sel, ...chaves])));
     else if (g.shift) { const fora = new Set(chaves); setSel(sel.filter((k) => !fora.has(k))); }
     else setSel(chaves);
@@ -79109,6 +79173,35 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     setHover({ x: r3(p.x + ux * 0.5), y: r3(p.y + uy * 0.5) }); // mantém a direção para o próximo
   };
 
+  // imagem de uma peça de porcelanato com o granilite, por zoom (cache)
+  const granCache = useRef(null);
+  const padraoGranilite = (ctx, P0, s, dpr) => {
+    const c0 = granCache.current, chave = P0 + "|" + s.toFixed(2) + "|" + dpr;
+    if (c0 && c0.chave === chave) return c0.r;
+    let r = null;
+    try {
+      const lado = P0 * s, n = Math.min(2048, Math.ceil(lado));
+      if (n >= 8 && typeof document !== "undefined") {
+        const cv = document.createElement("canvas"); cv.width = n; cv.height = n;
+        const g = cv.getContext("2d");
+        if (g) {
+          const esc = n / P0; // px da imagem por metro
+          g.strokeStyle = "rgba(255,255,255,0.75)"; g.lineWidth = Math.max(0.7 * dpr, 0.006 * esc); g.lineCap = "round"; g.beginPath();
+          const qtd = Math.round(110 * P0 * P0);
+          for (let k = 0; k < qtd; k++) {
+            const hsh = (m) => { const t = Math.sin(k * 74.7 + m * 19.3 + 3.1) * 43758.5453; return t - Math.floor(t); };
+            const cx = hsh(1) * n, cy = hsh(2) * n, an = hsh(3) * Math.PI, l = (hsh(4) < 0.45 ? 0.002 : 0.01 + 0.014 * hsh(5)) * esc;
+            g.moveTo(cx, cy); g.lineTo(cx + Math.cos(an) * l, cy + Math.sin(an) * l);
+          }
+          g.stroke();
+          const pat = ctx.createPattern(cv, "repeat");
+          if (pat && pat.setTransform) r = { pat, k: lado / n };
+        }
+      }
+    } catch (err) { r = null; }
+    granCache.current = { chave, r };
+    return r;
+  };
   const desenharPlanta = () => {
     const c = planRef.current, v = vista.current; if (!c || !v || !c.width) return;
     const ctx = c.getContext("2d"), W = c.width, H = c.height, dpr = window.devicePixelRatio || 1;
@@ -79222,19 +79315,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
       for (const q of pts) { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); }
       const i0 = Math.floor(x0 / P0), i1 = Math.ceil(x1 / P0), j0 = Math.floor(y0 / P0), j1 = Math.ceil(y1 / P0);
-      // granilite só nas peças que estão na tela e com zoom suficiente para ver o grão
-      const vx0 = -v.ox / v.s, vy0 = -v.oy / v.s, vx1 = (c.width - v.ox) / v.s, vy1 = (c.height - v.oy) / v.s;
-      const gi0 = Math.max(i0, Math.floor(vx0 / P0)), gi1 = Math.min(i1, Math.ceil(vx1 / P0)), gj0 = Math.max(j0, Math.floor(vy0 / P0)), gj1 = Math.min(j1, Math.ceil(vy1 / P0));
-      const porPeca = Math.round(110 * P0 * P0); // ~110 grãos por m²
-      if (v.s >= 40 * dpr && gi1 > gi0 && gj1 > gj0 && (gi1 - gi0) * (gj1 - gj0) * porPeca < 120000) {
-        ctx.strokeStyle = "rgba(255,255,255,0.75)"; ctx.lineWidth = Math.max(0.7 * dpr, 0.006 * v.s); ctx.lineCap = "round"; ctx.beginPath();
-        for (let i = gi0; i < gi1; i++) for (let j = gj0; j < gj1; j++) for (let k = 0; k < porPeca; k++) {
-          const hsh = (n) => { const t = Math.sin(i * 127.1 + j * 311.7 + k * 74.7 + n * 19.3) * 43758.5453; return t - Math.floor(t); };
-          const cx = (i + hsh(1)) * P0, cy = (j + hsh(2)) * P0, an = hsh(3) * Math.PI, l = hsh(4) < 0.45 ? 0.002 : 0.01 + 0.014 * hsh(5); // pontinho ou tracinho
-          const [ax, ay] = T({ x: cx, y: cy }), [bx, by] = T({ x: cx + Math.cos(an) * l, y: cy + Math.sin(an) * l });
-          ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
-        }
-        ctx.stroke(); ctx.lineCap = "butt";
+      // granilite: uma peça desenhada uma vez numa imagem (refeita só quando o
+      // zoom muda) e repetida como padrão preso ao desenho — barato no arraste
+      const gp = v.s >= 40 * dpr ? padraoGranilite(ctx, P0, v.s, dpr) : null;
+      if (gp) {
+        try { gp.pat.setTransform(new DOMMatrix([gp.k, 0, 0, gp.k, v.ox, v.oy])); ctx.fillStyle = gp.pat; const [px0, py0] = T({ x: x0, y: y0 }), [px1, py1] = T({ x: x1, y: y1 }); ctx.fillRect(px0, py0, px1 - px0, py1 - py0); } catch (err) { /* sem padrão neste navegador */ }
       }
       ctx.strokeStyle = "rgba(255,255,255,0.9)"; ctx.lineWidth = Math.max(0.6 * dpr, 0.004 * v.s); ctx.beginPath();
       for (let i = i0; i <= i1; i++) { const [ax, ay] = T({ x: i * P0, y: y0 }), [bx, by] = T({ x: i * P0, y: y1 }); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); }
@@ -79411,12 +79496,26 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // uma parede cobre o preto da outra no encontro, e só sobra o contorno de fora.
     const penaDe = (w) => Math.max(1.3 * dpr, Math.min(0.25 * (w.t || 0) * v.s, 3.5 * dpr));
     const pena = 2 * dpr;
-    const quadros = (w, recuo = 0) => {
+    const cantos = tpCantosMitra(paredes);
+    const quadros = (w, recuo = 0, wi = paredes.indexOf(w)) => {
       const L = tpLen(w); if (!L) return [];
       const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, nx = -uy, ny = ux, h = (w.t || 0) / 2 - recuo;
       if (h <= 0) return [];
-      return tpTrechosParede(w).map(([s0, s1]) => [s0 + recuo, s1 - recuo]).filter(([s0, s1]) => s1 > s0)
-        .map(([s0, s1]) => [[s0, -h], [s1, -h], [s1, h], [s0, h]].map(([sa, sn]) => T({ x: w.a.x + ux * sa + nx * sn, y: w.a.y + uy * sa + ny * sn })));
+      const hw = (w.t || 0) / 2;
+      // ponta em canto: meia-esquadria (sem recuo ao longo do eixo, para o
+      // cinza das duas paredes se encontrar sem linha preta no meio)
+      const mitra = (fim) => {
+        const c = wi >= 0 && cantos[wi] ? cantos[wi][fim] : null; if (!c) return null;
+        const o = paredes[c.j], ro = recuo ? penaDe(o) / v.s : 0;
+        return tpPontaMitra(w, fim, o, c.f, h, (o.t || 0) / 2 - ro);
+      };
+      const mA = mitra("a"), mB = mitra("b");
+      return tpTrechosParede(w).map(([s0, s1]) => {
+        const iniA = Math.abs(s0 + hw) < 1e-6, fimB = Math.abs(s1 - L - hw) < 1e-6;
+        const a0 = iniA && mA ? mA : [s0 + recuo, s0 + recuo], b0 = fimB && mB ? mB : [s1 - recuo, s1 - recuo];
+        if (b0[0] <= a0[0] && b0[1] <= a0[1]) return null;
+        return [[a0[0], -h], [b0[0], -h], [b0[1], h], [a0[1], h]].map(([sa, sn]) => T({ x: w.a.x + ux * sa + nx * sn, y: w.a.y + uy * sa + ny * sn }));
+      }).filter(Boolean);
     };
     const quadro = (q) => { ctx.beginPath(); q.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); };
     // seleção: halo azul por baixo
@@ -79428,6 +79527,16 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     paredes.forEach((w, i) => { ctx.fillStyle = marcadas.has("p" + i) ? "#5b8fd6" : "#555555"; quadros(w, penaDe(w) / v.s).forEach((q) => { quadro(q); ctx.fill(); }); });
     // parede em desenho (fantasma): azul translúcido, sem união
     todas.forEach((w) => { if (!w.fantasma) return; ctx.globalAlpha = 0.55; ctx.fillStyle = TP_AZUL; quadros(w).forEach((q) => { quadro(q); ctx.fill(); }); ctx.globalAlpha = 1; });
+    // curvas: uma medida só (comprimento total), no trecho do meio
+    const gruposCurva = tpGruposCurva(paredes), rotuloCurva = new Map();
+    { const por = new Map(); gruposCurva.forEach((g, i) => { if (g < 0) return; if (!por.has(g)) por.set(g, []); por.get(g).push(i); });
+      for (const ms of por.values()) {
+        // ordena pela corrente (de uma ponta solta até a outra)
+        const set = new Set(ms); let ini = ms.find((i) => ["a", "b"].some((f) => !cantos[i][f] || !set.has(cantos[i][f].j))) ?? ms[0];
+        const ord = [], vis = new Set(); let cur = ini;
+        while (cur != null && !vis.has(cur)) { vis.add(cur); ord.push(cur); const nx = ["a", "b"].map((f) => cantos[cur][f]).find((c) => c && set.has(c.j) && !vis.has(c.j)); cur = nx ? nx.j : null; }
+        rotuloCurva.set(ord[Math.floor(ord.length / 2)] ?? ms[0], ms.reduce((t, i) => t + tpLen(paredes[i]), 0));
+      } }
     // paredes com uma ponta encostada na parede selecionada (sozinha)
     const ligadasSel = new Map();
     if (sel.length === 1 && sel[0][0] === "p" && (ferramenta === "selecionar" || ferramenta === "mover")) {
@@ -79451,12 +79560,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       ctx.font = `600 ${12 * dpr}px system-ui, sans-serif`; ctx.textAlign = "center";
       ctx.fillStyle = w.fantasma || marc ? TP_AZUL : "#6b7280";
       // a selecionada sozinha mostra o comprimento na cota temporária (clicável)
-      const soCota = marc && sel.length === 1 && (ferramenta === "selecionar" || ferramenta === "mover");
+      const soCota = (marc && sel.length === 1 && (ferramenta === "selecionar" || ferramenta === "mover")) || (gruposCurva[i] >= 0 && !rotuloCurva.has(i));
       // parede ligada na selecionada: a medida dela fica azul e clicável —
       // digitar o novo comprimento desloca a parede selecionada
       const lig = !w.fantasma && ligadasSel.get(i);
       if (lig) ctx.fillStyle = "#0284c7";
-      if (!w.fantasma && !soCota) ctx.fillText(tpFmt(tpLen(w)) + " m", 0, -(w.t * v.s / 2 + pena + 6 * dpr)); ctx.restore();
+      if (!w.fantasma && !soCota) ctx.fillText(rotuloCurva.has(i) ? `curva ${tpFmt(rotuloCurva.get(i))} m` : tpFmt(tpLen(w)) + " m", 0, -(w.t * v.s / 2 + pena + 6 * dpr)); ctx.restore();
       if (lig) { const yy = w.t * v.s / 2 + pena + 10 * dpr; cotasClic.current.push({ x: (ax + bx) / 2 + yy * Math.sin(ang), y: (ay + by) / 2 - yy * Math.cos(ang), r: 26 * dpr, parede: { tipo: "lig", i: lig.i, j: i, fim: lig.fim }, d: tpLen(w) }); }
       if (w.fantasma) etiqueta(w.a, w.b, `${tpFmt(tpLen(w))} m${angulo(w.a, w.b)}`);
     });
@@ -79753,6 +79862,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     });
     // Parede = vista de frente (contorno com os recortes das portas, furos das
     // janelas) extrudada na espessura. Porta e vão recortam a base; janela é furo.
+    const cantos3 = tpCantosMitra(paredes);
     paredes.forEach((w, i) => {
       const L = tpLen(w); if (!L) return;
       const marc = marcadas.has("p" + i), h = w.t / 2, H = w.h, rot = -Math.atan2(w.b.y - w.a.y, w.b.x - w.a.x);
@@ -79770,10 +79880,34 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       contornoV.push(new THREE.Vector2(L + h, 0), new THREE.Vector2(L + h, H), new THREE.Vector2(-h, H));
       const shape = new THREE.Shape(contornoV); shape.holes.push(...furos);
       const g = new THREE.ExtrudeGeometry(shape, { depth: w.t, bevelEnabled: false }); g.translate(0, 0, -h);
+      // canto com outra parede: corta a ponta em meia-esquadria (igual à planta);
+      // em curva / quase em linha, some a aresta da emenda (parece uma peça só)
+      const pontas = [];
+      for (const [fim, x0] of [["a", -h], ["b", L + h]]) {
+        const c = cantos3[i] && cantos3[i][fim]; if (!c) continue;
+        const o = paredes[c.j], [sm, sp] = tpPontaMitra(w, fim, o, c.f, h, (o.t || 0) / 2);
+        const Lo = tpLen(o), uo = { x: (o.b.x - o.a.x) / Lo, y: (o.b.y - o.a.y) / Lo };
+        const suave = Math.abs(ux * uo.y - uy * uo.x) < 0.5; // dobra pequena
+        pontas.push({ x0, sx: (z) => sm + (z + h) / (2 * h || 1) * (sp - sm), suave });
+      }
+      if (pontas.length) {
+        const pos = g.attributes.position;
+        for (let k = 0; k < pos.count; k++) { const x = pos.getX(k), z = pos.getZ(k); for (const pn of pontas) if (Math.abs(x - pn.x0) < 1e-5) pos.setX(k, pn.sx(z)); }
+        pos.needsUpdate = true; g.computeVertexNormals();
+      }
       const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: marc ? 0x8dbbff : 0xe5e1d8 }));
       mesh.position.set(w.a.x - cx, 0, w.a.y - cz); mesh.rotation.y = rot;
       mesh.userData.chave = "p" + i; T.group.add(mesh);
-      contorno(g, mesh, marc ? 0x0474f4 : 0x4b5563);
+      const suaves = pontas.filter((pn) => pn.suave);
+      if (!suaves.length) contorno(g, mesh, marc ? 0x0474f4 : 0x4b5563);
+      else {
+        // contorno sem as arestas da emenda (as que ficam inteiras na face cortada)
+        const eg = new THREE.EdgesGeometry(g), ep = eg.attributes.position, nas = (x, z) => suaves.some((pn) => Math.abs(x - pn.sx(z)) < 1e-4);
+        const fica = [];
+        for (let k = 0; k < ep.count; k += 2) { if (nas(ep.getX(k), ep.getZ(k)) && nas(ep.getX(k + 1), ep.getZ(k + 1))) continue; fica.push(ep.getX(k), ep.getY(k), ep.getZ(k), ep.getX(k + 1), ep.getY(k + 1), ep.getZ(k + 1)); }
+        const fg = new THREE.BufferGeometry(); fg.setAttribute("position", new THREE.Float32BufferAttribute(fica, 3));
+        const e = new THREE.LineSegments(fg, new THREE.LineBasicMaterial({ color: marc ? 0x0474f4 : 0x4b5563 })); e.position.copy(mesh.position); e.rotation.copy(mesh.rotation); T.group.add(e);
+      }
       // folha / vidro dentro do vão (fechado), clicável
       for (const o of vis) {
         const t = tpEsq(o.tipo); if (t.cat === "V") continue;
@@ -79844,7 +79978,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     return () => { vivo = false; if (three.current) { three.current.renderer.dispose(); three.current = null; } };
   }, []);
 
-  useEffect(() => { desenharPlanta(); }, [paredes, areas, inicio, poli, hover, espM, sel, caixa, ferramenta, ancora, modoTraco, previaEsq, editNome]);
+  // desenha antes da tela pintar (no mesmo quadro da mudança), não depois
+  tpUseLayoutEffect(() => { desenharPlanta(); }, [paredes, areas, inicio, poli, hover, espM, sel, caixa, ferramenta, ancora, modoTraco, previaEsq, editNome]);
   // ambiente acompanha as paredes: mexeu numa parede, o contorno e a área se refazem
   useEffect(() => {
     if (!areas.some((a) => a.tipo === "ambiente" && a.ponto)) return;
@@ -79871,7 +80006,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const tempo3d = useRef(null);
   useEffect(() => {
     if (gesto.current && gesto.current.moveu) {
-      if (!tempo3d.current) tempo3d.current = setTimeout(() => { tempo3d.current = null; atual.current.desenhar3d(); }, 140);
+      if (!tempo3d.current) tempo3d.current = setTimeout(() => { tempo3d.current = null; atual.current.desenhar3d(); }, 250);
       return;
     }
     clearTimeout(tempo3d.current); tempo3d.current = null; desenhar3d();
@@ -80020,6 +80155,20 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // refeitos (detectar um cômodo é caro; num arraste isso roda a cada quadro)
   const comAmbientes = (ps, ars, perto) => {
     if (!ars.some((a) => a.tipo === "ambiente" && a.ponto)) return ars;
+    // No arraste, achar o contorno dos cômodos é o passo mais caro: refaz no
+    // máximo a cada ~120 ms (e sempre ao soltar). Entre um e outro, os
+    // ambientes ficam com o último contorno calculado.
+    const g = gesto.current, agora = performance.now();
+    if (g && g.moveu && !g.forcarAmb && g.ambUlt && agora - g.tAmb < 120) {
+      const out = ars.map((a, i) => { const u = g.ambUlt[i]; return a.tipo === "ambiente" && u && u.tipo === "ambiente" ? { ...a, pts: u.pts, aberto: u.aberto } : a; });
+      ambientesFeitos.current = { ps, out };
+      return out;
+    }
+    const out0 = comAmbientesJa(ps, ars, perto);
+    if (g && g.moveu) { g.ambUlt = out0; g.tAmb = agora; }
+    return out0;
+  };
+  const comAmbientesJa = (ps, ars, perto) => {
     const seps = ars.filter((a) => a.tipo === "separador" && a.pts && a.pts.length === 2).map((a) => ({ a: a.pts[0], b: a.pts[1] }));
     let caixa = null;
     if (perto && perto.length) {
@@ -80342,7 +80491,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         // eventos do que a tela consegue desenhar)
         if (g.moveu) {
           g.ultimo = { clientX: e.clientX, clientY: e.clientY, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey };
-          if (!g.raf) g.raf = requestAnimationFrame(() => { g.raf = 0; if (gesto.current === g && g.ultimo) arrastarAlca(g.ultimo, g); });
+          // processa no quadro seguinte e renderiza na hora (flushSync): o
+          // elemento é desenhado no mesmo quadro em que a tela vai pintar,
+          // sem esperar o React agendar (antes ficava 1–2 quadros atrás do cursor)
+          if (!g.raf) g.raf = requestAnimationFrame(() => { g.raf = 0; if (gesto.current === g && g.ultimo) { const ev = g.ultimo; try { tpFlushSync(() => arrastarAlca(ev, g)); } catch (err) { arrastarAlca(ev, g); } } });
         }
         return;
       }
@@ -80364,7 +80516,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     if (g.grip) {
       // movimento que ainda esperava o próximo quadro: aplica já, para a
       // posição final ser exatamente onde o botão foi solto
-      if (g.raf) { cancelAnimationFrame(g.raf); g.raf = 0; if (g.ultimo) arrastarAlca(g.ultimo, g); }
+      if (g.raf) { cancelAnimationFrame(g.raf); g.raf = 0; }
+      // posição final com tudo recalculado (ambientes e análise)
+      if (g.moveu && g.ultimo) { g.forcarAmb = true; arrastarAlca(g.ultimo, g); }
       if (g.moveu) { historico.current.push(g.orig); if (historico.current.length > 200) historico.current.shift(); futuro.current = []; }
       else if (g.grip.tipo === "mover" || g.grip.tipo === "abertura") aplicarSelecao([g.grip.chave], g); // só clicou: seleciona
       else if (g.grip.tipo === "rotulo" && g.grip.ja) abrirEditNome(g.grip.ai, e); // clicou no nome já selecionado: edita
@@ -80449,7 +80603,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const arc = tpArco3(ancora.arcoIni, ancora.arcoFim, p);
       if (ferramenta === "parede") {
         let ant = ancora.arcoIni; const novas = [];
-        for (const q of arc.pts) { novas.push({ a: ant, b: q, t: espM, h: altM }); ant = q; }
+        const idCurva = Date.now().toString(36);
+        for (const q of arc.pts) { novas.push({ a: ant, b: q, t: espM, h: altM, ...(arc.pts.length > 1 ? { curva: idCurva } : {}) }); ant = q; }
         mudar([...paredes, ...novas]); setInicio(ancora.arcoFim);
       } else setPoli([...poli, ...arc.pts]);
       setAncora(null);
@@ -80513,7 +80668,15 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const quadro = useMemo(() => tpQuadroEsquadrias(paredes), [paredes]);
   const areaAberturas = useMemo(() => tpAreaAberturas(paredes), [paredes]);
   const somaArea = (tipo, f) => areas.filter((a) => a.tipo === tipo).reduce((s, a) => s + f(a), 0);
-  const analise = useMemo(() => tpAnaliseAreas(areas, paredes), [areas, paredes]);
+  // análise das áreas (pegada da casa etc.): no arraste refeita no máximo a
+  // cada ~150 ms; parado, sempre na hora
+  const analiseCache = useRef(null);
+  const analise = (() => {
+    const c0 = analiseCache.current, agora = performance.now();
+    if (c0 && c0.ar === areas && c0.ps === paredes) return c0.r;
+    if (c0 && gesto.current && gesto.current.moveu && agora - c0.t < 150) return c0.r;
+    const r = tpAnaliseAreas(areas, paredes); analiseCache.current = { ar: areas, ps: paredes, r, t: agora }; return r;
+  })();
   // área real da peça: no contrapiso que envolve a casa, sem a casa (pegada)
   const cobPtsC = areas.filter((a) => (a.tipo === "laje" || a.tipo === "telhado") && a.pts && a.pts.length >= 3).map((a) => a.pts);
   const furadoArea = (a) => a.tipo === "contrapiso" && a.pts && a.pts.length >= 3 && tpTipoContrapiso(a.pts, analise.pegada, cobPtsC) === "furado";
