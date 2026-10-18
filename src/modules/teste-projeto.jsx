@@ -977,8 +977,10 @@ const tpCotasNovas = (amb) => ["h", "v"].map((eixo) => { const g = tpCotaAmbient
 function tpAtualizarCotas(ars) {
   if (!ars.some((a) => a.tipo === "cota" && a.amb)) return ars;
   let mudou = false; const out = [];
-  for (const a of ars) {
+  for (let a of ars) {
     if (a.tipo !== "cota" || !a.amb) { out.push(a); continue; }
+    // cotas feitas com a distância padrão antiga (30 cm / 5 cm): encostam na parede (2,5 cm)
+    if (a.desl === -0.3 || a.desl === -0.05) { a = { ...a, desl: -0.025 }; mudou = true; }
     const amb = ars.find((x) => x.tipo === "ambiente" && x.id === a.amb);
     if (!amb) { mudou = true; continue; }
     const g = tpCotaAmbiente(amb.pts, a.eixo, a.desl);
