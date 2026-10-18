@@ -598,6 +598,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const meioClique = useRef(0);                  // duplo clique da rodinha = ajustar
   const three = useRef(null);
   const vista = useRef(null);
+  const iconeEq = useRef(null);
+  const cotasClic = useRef([]);                  // cotas clicáveis da esquadria selecionada (px do canvas)
+  const [editCota, setEditCota] = useState(null); // { x, y, lado, id, txt } cota sendo digitada                  // ícone "EQ" (centralizar) da esquadria selecionada, em px do canvas
   const primeiraVez = useRef(true);
 
   const espM = Math.max(0.05, (parseFloat(String(esp).replace(",", ".")) || 14) / 100);
@@ -646,6 +649,15 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     });
     if (erro) { avisar(erro + ". Nada foi alterado."); return false; }
     mudar(novas, null, true); return true;
+  };
+  // cota clicada + medida digitada: põe a esquadria a essa distância da parede daquele lado
+  const aplicarCota = (ec) => {
+    setEditCota(null);
+    const v = numDigitado(ec.txt) ?? (String(ec.txt).trim().match(/^0+([.,]0*)?$/) ? 0 : null);
+    if (v == null) return;
+    const loc = tpAcharAbertura(paredes, ec.id); if (!loc) return;
+    const viz = tpVizinhos(paredes, loc.i, loc.o.x - loc.o.larg / 2, loc.o.x + loc.o.larg / 2);
+    editarAberturas([ec.id], (o) => ({ ...o, x: r3(ec.lado === "antes" ? viz.antes + v + o.larg / 2 : viz.depois - v - o.larg / 2) }));
   };
   const inverterAberturas = (campo) => { if (selO.length) editarAberturas(selO.map((x) => x.o.id), (o) => ({ ...o, [campo]: -(o[campo] || 1) })); };
   const editarParedes = (idx, fn) => { const s = new Set(idx); mudar(paredes.map((w, i) => (s.has(i) ? fn(w) : w)), null, true); };
@@ -1007,6 +1019,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const c = planRef.current, v = vista.current; if (!c || !v || !c.width) return;
     const ctx = c.getContext("2d"), W = c.width, H = c.height, dpr = window.devicePixelRatio || 1;
     ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, W, H);
+    iconeEq.current = null; cotasClic.current = [];
     const passo = v.s * TP_GRADE < 8 * dpr ? 1 : TP_GRADE;
     const xA = Math.floor(-v.ox / v.s), xB = Math.ceil((W - v.ox) / v.s), yA = Math.floor(-v.oy / v.s), yB = Math.ceil((H - v.oy) / v.s);
     ctx.lineWidth = 1;
@@ -1220,6 +1233,22 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           if (d < 0.005) continue;
           seg(P(s0, off), P(s1, off), 1); seg(P(s0, off - 0.08), P(s0, off + 0.08), 1); seg(P(s1, off - 0.08), P(s1, off + 0.08), 1);
           etiqueta(P(s0, off), P(s1, off), tpFmt(d) + " m", "#0284c7");
+          if (opts.eq && Math.hypot(T(P(s1, off))[0] - T(P(s0, off))[0], T(P(s1, off))[1] - T(P(s0, off))[1]) >= 18 * dpr) { // posição do rótulo (o mesmo cálculo da etiqueta) para clicar e digitar
+            const [ax, ay] = T(P(s0, off)), [bx, by] = T(P(s1, off));
+            let an = Math.atan2(by - ay, bx - ax); if (an > Math.PI / 2 || an < -Math.PI / 2) an += Math.PI;
+            cotasClic.current.push({ x: (ax + bx) / 2 + 14 * dpr * Math.sin(an), y: (ay + by) / 2 - 14 * dpr * Math.cos(an), r: 22 * dpr, lado: s0 === viz.antes ? "antes" : "depois", id: o.id, d });
+          }
+        }
+        // ícone "EQ" (como no Revit): no vão da linha de cota, no meio da
+        // esquadria; clicar centraliza entre as duas paredes mais próximas
+        if (opts.eq) {
+          const [ix, iy] = T(P(o.x, off)), r = 11 * dpr, centrada = Math.abs(dA - dB) < 0.005;
+          ctx.fillStyle = centrada ? "#e0f2fe" : "#fff"; ctx.strokeStyle = "#0284c7"; ctx.lineWidth = 1.5 * dpr;
+          ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(ix - r, iy - r * 0.8, 2 * r, 1.6 * r, 4 * dpr); else ctx.rect(ix - r, iy - r * 0.8, 2 * r, 1.6 * r);
+          ctx.fill(); ctx.stroke();
+          ctx.font = `700 ${10 * dpr}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#0284c7";
+          ctx.fillText("EQ", ix, iy + 0.5 * dpr); ctx.textBaseline = "alphabetic";
+          iconeEq.current = { x: ix, y: iy, r: r + 3 * dpr, id: o.id, x0: r3((viz.antes + viz.depois) / 2), centrada };
         }
         ctx.strokeStyle = cor;
       }
@@ -1229,7 +1258,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const vis = tpAbsVisiveis(w); if (!vis.length) return;
       vis.forEach((o) => {
         const marc = marcadas.has("o" + o.id) || marcadas.has("p" + i);
-        desenharEsq(w, o, marc ? TP_AZUL : "#111827", { marc: marcadas.has("o" + o.id), codigo: quadroPl.codigoDe.get(o.id), cotas: marcadas.has("o" + o.id) && sel.length === 1, i });
+        desenharEsq(w, o, marc ? TP_AZUL : "#111827", { marc: marcadas.has("o" + o.id), codigo: quadroPl.codigoDe.get(o.id), cotas: marcadas.has("o" + o.id) && sel.length === 1, eq: marcadas.has("o" + o.id) && sel.length === 1, i });
       });
     });
     if (ferramenta === "esquadria" && previaEsq && paredes[previaEsq.i]) {
@@ -1700,6 +1729,21 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const planDown = (e) => {
     const d = devPx(e);
     if (e.button === 0 && ferramenta === "selecionar") {
+      const eq = iconeEq.current;
+      if (eq && Math.abs(d.x - eq.x) <= eq.r && Math.abs(d.y - eq.y) <= eq.r) {
+        if (eq.centrada) avisar("Já está centralizada entre as paredes.");
+        else if (editarAberturas([eq.id], (o) => ({ ...o, x: eq.x0 }))) avisar("Centralizada entre as paredes mais próximas.");
+        return;
+      }
+      const cq = cotasClic.current.find((q) => Math.abs(d.x - q.x) <= q.r && Math.abs(d.y - q.y) <= q.r * 0.6);
+      if (cq) {
+        const rc = planRef.current.getBoundingClientRect(), k = planRef.current.width / rc.width;
+        // sem o preventDefault, o mousedown que vem depois tira o foco do campo e ele fecha;
+        // o campo fica sempre dentro da planta (senão o quadro rola para mostrá-lo)
+        e.preventDefault();
+        setEditCota({ x: Math.max(44, Math.min(rc.width - 44, cq.x / k)), y: Math.max(18, Math.min(rc.height - 18, cq.y / k)), lado: cq.lado, id: cq.id, txt: tpFmt(cq.d), t: Date.now() });
+        return;
+      }
       const al = alcaNoPonto(d);
       if (al) { gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: al, orig: { paredes, areas } }; e.currentTarget.setPointerCapture(e.pointerId); return; }
       // Arrastar uma parede ou linha de separação (ou uma área já selecionada)
@@ -1968,7 +2012,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         : "Retângulo: clique o primeiro canto.")
     : (desenhoAtivo && modoTraco === "arco") ? (ancora && ancora.arcoFim ? "Mova para curvar e clique um ponto da curva. Esc cancela." : ((ferramenta === "parede" ? inicio : poli.length) ? "Arco: clique o ponto final." : "Arco: clique o ponto inicial."))
     : (selA.length === 1 && !selP.length && ferramenta === "selecionar") ? "Editar contorno: arraste os quadrados (cantos) ou as bolinhas (lados). O cursor gruda nas quinas das paredes (quadrado verde)."
-    : (selO.length === 1 && sel.length === 1 && ferramenta === "selecionar") ? "Arraste a esquadria ao longo da parede (ou para outra parede). Setas: 10 cm. Espaço inverte a mão, Shift+Espaço o lado. Delete exclui."
+    : (selO.length === 1 && sel.length === 1 && ferramenta === "selecionar") ? "Arraste para mover (até para outra parede). Clique na cota para digitar a medida; EQ centraliza. Espaço inverte a mão."
     : (selP.length === 1 && !selA.length && ferramenta === "selecionar") ? "Arraste os quadrados das pontas para esticar ou girar a parede. Delete exclui."
     : ferramenta === "selecionar"
     ? (sel.length ? `${sel.length} selecionado${sel.length === 1 ? "" : "s"}. Ctrl soma, Shift tira, setas movem, Delete exclui, Esc limpa.` : "Clique ou arraste uma área (esq.→dir.: inteiro dentro; dir.→esq.: o que tocar). Ctrl soma, Shift tira. Tecla ? mostra os atalhos.")
@@ -2018,6 +2062,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               ) : <TpCampo id="tp-o-area" rotulo="Área do vão (m²)" valor={comum(selO, (x) => x.o.larg * x.o.alt)} somenteLeitura onConfirmar={() => {}} />}
               {um && <TpCampo id="tp-o-da" rotulo="Até a parede (lado A)" min={-0.0001} valor={Math.max(0, dA)} onConfirmar={(v) => editarAberturas(ids, (o) => ({ ...o, x: r3(viz.antes + v + o.larg / 2) }))} />}
               {um && <TpCampo id="tp-o-db" rotulo="Até a parede (lado B)" min={-0.0001} valor={Math.max(0, dB)} onConfirmar={(v) => editarAberturas(ids, (o) => ({ ...o, x: r3(viz.depois - v - o.larg / 2) }))} />}
+              {um && (
+                <button style={{ ...btn, gridColumn: "1 / -1", minHeight: 30, padding: "4px 8px", fontSize: 12.5 }} disabled={Math.abs(dA - dB) < 0.005}
+                  onClick={() => editarAberturas(ids, (o) => ({ ...o, x: r3((viz.antes + viz.depois) / 2) }))}>
+                  {Math.abs(dA - dB) < 0.005 ? "Centralizada entre as paredes" : "Centralizar entre as paredes (EQ)"}
+                </button>
+              )}
               {t && t.cat !== "V" && t.id !== "fixo" && (
                 <div style={{ gridColumn: "1 / -1", display: "flex", gap: 6 }}>
                   <button style={{ ...btn, flex: 1, minHeight: 30, padding: "4px 8px", fontSize: 12.5 }} title="Espaço" onClick={() => inverterAberturas("mao")}>Inverter mão</button>
@@ -2369,8 +2419,15 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             <span style={tag}>Planta baixa · grade 0,50 m</span>
             <canvas ref={planRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none", cursor: ferramenta === "mover" ? "grab" : ferramenta === "selecionar" ? "default" : "crosshair" }}
               onContextMenu={(e) => e.preventDefault()} onDoubleClick={() => { if (poli.length >= 3) finalizarPoli(); }}
-              onPointerDown={planDown} onPointerMove={(e) => { planMove(e); if (!gesto.current && ferramenta === "selecionar") e.currentTarget.style.cursor = alcaNoPonto(devPx(e)) ? "move" : "default"; }} onPointerUp={planUp} onPointerLeave={() => { if (!inicio && !poli.length && !gesto.current) setHover(null); if (!gesto.current) setPreviaEsq(null); }} />
+              onPointerDown={planDown} onPointerMove={(e) => { planMove(e); if (!gesto.current && ferramenta === "selecionar") { const dd = devPx(e), eq = iconeEq.current; e.currentTarget.style.cursor = (eq && Math.abs(dd.x - eq.x) <= eq.r && Math.abs(dd.y - eq.y) <= eq.r) || cotasClic.current.some((q) => Math.abs(dd.x - q.x) <= q.r && Math.abs(dd.y - q.y) <= q.r * 0.6) ? "pointer" : alcaNoPonto(dd) ? "move" : "default"; } }} onPointerUp={planUp} onPointerLeave={() => { if (!inicio && !poli.length && !gesto.current) setHover(null); if (!gesto.current) setPreviaEsq(null); }} />
             {barraFerramentas}
+            {editCota && (
+              <input ref={(el) => { if (el && document.activeElement !== el) { el.focus({ preventScroll: true }); el.select(); } }} inputMode="decimal" aria-label="Distância até a parede (m)" value={editCota.txt}
+                onChange={(e) => setEditCota({ ...editCota, txt: e.target.value })}
+                onKeyDown={(e) => { if (e.key === "Enter") aplicarCota(editCota); if (e.key === "Escape") setEditCota(null); e.stopPropagation(); }}
+                onBlur={(e) => { if (Date.now() - editCota.t < 300) { const el = e.currentTarget; setTimeout(() => el.focus({ preventScroll: true }), 0); return; } setEditCota(null); }}
+                style={{ position: "absolute", left: editCota.x, top: editCota.y, transform: "translate(-50%, -50%)", zIndex: 3, width: 72, padding: "3px 6px", border: "2px solid #0284c7", outline: "none", borderRadius: 6, fontSize: 13, fontWeight: 600, textAlign: "center", color: "#0284c7", fontVariantNumeric: "tabular-nums", fontFamily: "inherit", boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }} />
+            )}
             {aviso && (
               <div role="status" style={{ position: "absolute", left: "50%", bottom: 64, transform: "translateX(-50%)", zIndex: 2, maxWidth: "min(460px, 90%)", background: "#111827", color: "#fff", borderRadius: 8, padding: "8px 12px", fontSize: 13, lineHeight: 1.4, boxShadow: "0 4px 12px rgba(0,0,0,0.2)" }}>{aviso}</div>
             )}
