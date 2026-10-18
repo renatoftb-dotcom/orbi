@@ -78717,23 +78717,45 @@ function tpCotaAmbiente(pts, eixo, desl) {
 const tpSegsSep = (ars) => ars.filter((a) => a.tipo === "separador" && a.pts && a.pts.length === 2).map((a) => a.pts);
 // Também foge de lado com vão (porta/abertura do cômodo) ou recorte que deixa
 // o trecho medido curto: escolhe o lado em que a medida pega o cômodo inteiro.
-function tpLadoCota(pts, eixo, seps) {
+// Ponto ruim para a cota: em cima de linha de separação ou de uma porta/
+// janela (vão e área de giro da folha) — a cota prioriza parede cheia
+function tpRuimCota(q, seps, paredes) {
+  if (seps.some(([a, b]) => tpDistSeg(q, a, b) < 0.12)) return true;
+  for (const w of paredes || []) {
+    const ab = w.ab; if (!ab || !ab.length) continue;
+    const L = tpLen(w); if (!L) continue;
+    const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, sv = (q.x - w.a.x) * ux + (q.y - w.a.y) * uy, nv = -(q.x - w.a.x) * uy + (q.y - w.a.y) * ux, h = (w.t || 0) / 2;
+    for (const o of ab) {
+      if (sv < o.x - o.larg / 2 - 0.05 || sv > o.x + o.larg / 2 + 0.05) continue;
+      if (Math.abs(nv) < h + 0.15) return true;
+      if (tpGiro(o.tipo) && nv * (o.lado || 1) > 0 && Math.abs(nv) < h + (o.tipo === "porta_giro2" ? o.larg / 2 : o.larg)) return true;
+    }
+  }
+  return false;
+}
+// fração do trecho (ou só de um pedaço dele, de f0 a f1) que é ruim
+function tpRuimFracao(p, q, seps, paredes, f0 = 0, f1 = 1) {
+  let r = 0; const N = 16;
+  for (let k = 0; k <= N; k++) { const t = f0 + (f1 - f0) * k / N; if (tpRuimCota({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t }, seps, paredes)) r++; }
+  return r / (N + 1);
+}
+// Lado da cota: o que fica junto de parede cheia (sem linha de separação nem
+// vão); empate: de baixo / da direita. Também foge de recorte que deixa a medida curta.
+function tpLadoCota(pts, eixo, seps, paredes) {
   const cands = [-0.025, 0.025].map((desl) => {
     const g = tpCotaAmbiente(pts, eixo, desl); if (!g) return { desl, ok: false };
-    const [p, q] = g.pts, m = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
-    const sep = seps.some(([a, b]) => tpDistSeg(m, a, b) < 0.08);
-    return { desl, ok: true, sep, cheio: g.vao >= 0.9 * g.cheio - 1e-6, vao: g.vao };
-  });
-  const achar = (f) => cands.find(f);
-  const c = achar((x) => x.ok && !x.sep && x.cheio) || achar((x) => x.ok && x.cheio) || achar((x) => x.ok && !x.sep)
-    || cands.filter((x) => x.ok).sort((a, b) => b.vao - a.vao)[0];
-  return c ? c.desl : -0.025;
+    const ruim = tpRuimFracao(g.pts[0], g.pts[1], seps, paredes);
+    return { desl, ok: true, nota: ruim + (g.vao >= 0.9 * g.cheio - 1e-6 ? 0 : 1), vao: g.vao };
+  }).filter((x) => x.ok);
+  if (!cands.length) return -0.025;
+  cands.sort((a, b) => a.nota - b.nota || (a.desl < 0 ? -1 : 1));
+  return cands[0].desl;
 }
 const TP_DESL_PADRAO = [-0.3, -0.05, -0.025, 0.025];
 // As duas cotas que entram junto com um ambiente novo
-const tpCotasNovas = (amb, ars) => ["h", "v"].map((eixo) => { const desl = tpLadoCota(amb.pts, eixo, tpSegsSep(ars || [])), g = tpCotaAmbiente(amb.pts, eixo, desl); return g ? { tipo: "cota", amb: amb.id, eixo, desl, pts: g.pts } : null; }).filter(Boolean);
+const tpCotasNovas = (amb, ars, paredes) => ["h", "v"].map((eixo) => { const desl = tpLadoCota(amb.pts, eixo, tpSegsSep(ars || []), paredes), g = tpCotaAmbiente(amb.pts, eixo, desl); return g ? { tipo: "cota", amb: amb.id, eixo, desl, pts: g.pts } : null; }).filter(Boolean);
 // Cotas de ambiente acompanham o contorno dele; ambiente apagado leva as cotas
-function tpAtualizarCotas(ars) {
+function tpAtualizarCotas(ars, paredes) {
   if (!ars.some((a) => a.tipo === "cota" && a.amb)) return ars;
   let mudou = false; const out = [];
   for (let a of ars) {
@@ -78742,7 +78764,7 @@ function tpAtualizarCotas(ars) {
     // cota no lugar padrão (não arrastada): encosta a 2,5 cm da parede e foge
     // da linha de separação (inclusive as feitas antes com 30 cm / 5 cm)
     if (amb && a.pos == null && TP_DESL_PADRAO.includes(a.desl)) {
-      const d = tpLadoCota(amb.pts, a.eixo, tpSegsSep(ars));
+      const d = tpLadoCota(amb.pts, a.eixo, tpSegsSep(ars), paredes);
       if (d !== a.desl) { a = { ...a, desl: d }; mudou = true; }
     }
     if (!amb) { mudou = true; continue; }
@@ -78937,6 +78959,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const planBox = useRef(null), v3dBox = useRef(null);
   const [paredes, setParedes] = useState(() => (Array.isArray(projeto.paredes) ? projeto.paredes : []));
   const [areas, setAreas] = useState(() => (Array.isArray(projeto.areas) ? projeto.areas : []));
+  const [escala, setEscala] = useState(() => (+projeto.escala > 0 ? +projeto.escala : 50)); // escala da planta (1:50): tamanho das anotações
   const [inicio, setInicio] = useState(null);
   const [poli, setPoli] = useState([]);      // pontos do contrapiso/laje em desenho
   const [hover, setHover] = useState(null);
@@ -78996,11 +79019,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const gravarPendente = useRef(null);
   useEffect(() => {
     if (primeiraVez.current) { primeiraVez.current = false; return; }
-    const dados = { ...projeto, obraId, sincronizar, paredes, areas, atualizadoEm: new Date().toISOString() };
+    const dados = { ...projeto, obraId, sincronizar, paredes, areas, escala, atualizadoEm: new Date().toISOString() };
     gravarPendente.current = () => { gravarPendente.current = null; onAlterar(dados); };
     const t = setTimeout(() => gravarPendente.current && gravarPendente.current(), 400);
     return () => clearTimeout(t);
-  }, [paredes, areas, obraId, sincronizar]);
+  }, [paredes, areas, obraId, sincronizar, escala]);
   useEffect(() => {
     const sair = () => gravarPendente.current && gravarPendente.current();
     window.addEventListener("beforeunload", sair);
@@ -79032,7 +79055,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const fl = new Set(sel.filter((k) => k[0] === "l").map((k) => +k.slice(1)));
     if (fl.size && sel.every((k) => k[0] === "l")) { mudar(paredes.map((w, i) => (fl.has(i) ? { ...w, semCota: true } : w))); setSel([]); return; }
     const fp = new Set(selP), fa = new Set(selA), fo = new Set(selO.map((x) => x.o.id));
-    mudar(paredes.filter((_, i) => !fp.has(i)).map((w) => ((w.ab || []).some((o) => fo.has(o.id)) ? { ...w, ab: w.ab.filter((o) => !fo.has(o.id)) } : w)), tpAtualizarCotas(areas.filter((_, i) => !fa.has(i))));
+    mudar(paredes.filter((_, i) => !fp.has(i)).map((w) => ((w.ab || []).some((o) => fo.has(o.id)) ? { ...w, ab: w.ab.filter((o) => !fo.has(o.id)) } : w)), tpAtualizarCotas(areas.filter((_, i) => !fa.has(i)), paredes));
   };
   // Edita esquadrias por id; se alguma não couber mais, não muda nada e avisa
   const editarAberturas = (ids, fn) => {
@@ -79289,7 +79312,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const n = String(nome || "").trim() || "Ambiente";
     const idx = areas.length;
     const amb = { tipo: "ambiente", id: tpNovoIdAmb(), nome: n, ponto: novoAmbiente.ponto, pts: novoAmbiente.pts };
-    mudar(null, [...areas, amb, ...tpCotasNovas(amb, areas)]);
+    mudar(null, [...areas, amb, ...tpCotasNovas(amb, areas, paredes)]);
     setNovoAmbiente(null);
     setTimeout(() => setSel(["a" + idx]), 0);
   };
@@ -79536,6 +79559,22 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     for (let y = yA; y <= yB; y += passo) { const sy = Math.round(y * v.s + v.oy) + 0.5; ctx.strokeStyle = corGrade(y); ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(W, sy); ctx.stroke(); }
     const T = (p) => [p.x * v.s + v.ox, p.y * v.s + v.oy];
     const marcadas = new Set(sel);
+    // ---- anotações em escala de prancha (como no Revit) ----
+    // tamanho = mm de papel na escala da planta (1:50 → 3 mm = 15 cm no
+    // desenho); na tela fica travado entre um mínimo e um máximo legível.
+    // Nível de detalhe: afastando, somem primeiro as cotas e comprimentos,
+    // depois as medidas das esquadrias (fica o código), por último a área.
+    const anotPx = (mm) => mm / 1000 * escala * v.s;
+    const fonteAnot = (mm, mn, mx) => Math.max(mn * dpr, Math.min(mx * dpr, anotPx(mm)));
+    const nivelAnot = anotPx(2.5) / dpr;
+    const lodCotas = nivelAnot >= 5.6, lodEsqMed = nivelAnot >= 5.6, lodEsqCod = nivelAnot >= 3.8, lodArea = nivelAnot >= 3.2;
+    // anotações não se sobrepõem: a de menor prioridade sai (nome do ambiente >
+    // esquadria > cota do ambiente > comprimento da parede)
+    const ocupadas = [];
+    const caixaRot = (cx, cy, ang, hw, hh) => { const c = Math.abs(Math.cos(ang)), sn = Math.abs(Math.sin(ang)), ex = c * hw + sn * hh, ey = sn * hw + c * hh; return { x0: cx - ex, x1: cx + ex, y0: cy - ey, y1: cy + ey }; };
+    const bate = (b) => ocupadas.some((o) => b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0);
+    const ocupar = (b) => { ocupadas.push(b); };
+    const adiados = [];
     const caminho = (pts) => { ctx.beginPath(); pts.forEach((p, k) => { const [x, y] = T(p); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.closePath(); };
     // etiqueta de medida (fundo branco, texto azul) no meio de um segmento
     const etiqueta = (a, b, texto, cor) => {
@@ -79641,8 +79680,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       // sem linha de borda nem símbolo nos cantos; o contorno só aparece selecionado (para editar)
       if (marc) { caminho(a.pts); ctx.strokeStyle = TP_AZUL; ctx.lineWidth = 2.5 * dpr; ctx.stroke(); }
       const b0 = a.pts.reduce((m, q) => (q.y < m.y ? q : m), a.pts[0]); const [tx, ty] = T(b0);
-      ctx.font = `600 ${11 * dpr}px system-ui, sans-serif`; ctx.textAlign = "left"; ctx.fillStyle = marc ? TP_AZUL : "#b65b3d";
-      ctx.fillText(`Terreno ${tpFmt(tpAreaPoli(a.pts))} m²`, tx + 12 * dpr, ty + 18 * dpr);
+      { const fT = fonteAnot(3, 7, 13), kT = fT / (11 * dpr);
+        ctx.font = `600 ${fT}px system-ui, sans-serif`; ctx.textAlign = "left"; ctx.fillStyle = marc ? TP_AZUL : "#b65b3d";
+        if (lodArea || marc) ctx.fillText(`Terreno ${tpFmt(tpAreaPoli(a.pts))} m²`, tx + 12 * dpr * kT, ty + 18 * dpr * kT); ctx.textAlign = "start"; }
     });
     const cobPts = areas.filter((a) => (a.tipo === "laje" || a.tipo === "telhado") && a.pts && a.pts.length >= 3).map((a) => a.pts);
     // Piso interno (padrão da prancha): porcelanato cinza bem claro, peça
@@ -79719,7 +79759,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       }
       const furadoCp = a.tipo === "contrapiso" && tipoCp(a) === "furado";
       const [cx, cy] = T(furadoCp ? (pontoLivre(a.pts, pegada) || tpCentro(a.pts)) : tpCentro(a.pts));
-      ctx.font = `600 ${11 * dpr}px system-ui, sans-serif`; ctx.textAlign = "center";
+      ctx.font = `600 ${fonteAnot(3, 7, 13)}px system-ui, sans-serif`; ctx.textAlign = "center";
       ctx.fillStyle = marc ? TP_AZUL : (a.tipo === "laje" ? "#4b6aa0" : "#b65b3d");
       let nomeA = TP_AREA_TIPOS[a.tipo].nome;
       if (a.tipo === "contrapiso") nomeA = cpInterno(a) ? "Piso interno" : "Piso externo";
@@ -79752,8 +79792,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         if (melhor && folga * v.s > 30 * dpr) {
           const [lx, ly] = T(melhor);
           ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#b65b3d";
-          ctx.font = `500 ${12 * dpr}px system-ui, sans-serif`; ctx.fillText("ÁREA EXTERNA", lx, ly - 7 * dpr);
-          ctx.font = `400 ${11 * dpr}px system-ui, sans-serif`; ctx.fillText(`${tpFmt(an.permeavel)} m²`, lx, ly + 8 * dpr);
+          const f1 = fonteAnot(3.2, 7, 14), f2 = fonteAnot(3, 7, 13), dyE = (f1 + f2) * 0.32;
+          ctx.font = `500 ${f1}px system-ui, sans-serif`; ctx.fillText("ÁREA EXTERNA", lx, ly - dyE);
+          if (lodArea) { ctx.font = `400 ${f2}px system-ui, sans-serif`; ctx.fillText(`${tpFmt(an.permeavel)} m²`, lx, ly + dyE); }
           ctx.textBaseline = "alphabetic";
         }
       }
@@ -79812,19 +79853,22 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (marc || a.aberto) { ctx.strokeStyle = marc ? TP_AZUL : "rgba(17,24,39,0.25)"; ctx.lineWidth = (marc ? 2 : 1) * dpr; ctx.setLineDash([2 * dpr, 3 * dpr]); ctx.stroke(); ctx.setLineDash([]); }
       let [lx, ly] = T(tpRotuloAmb(a));
       const txtNome = a.nome || "Ambiente", txtArea = a.aberto ? "não fechado" : `${tpFmt(tpAreaPoli(a.pts))} m²`;
+      // tamanho em escala de prancha (nome 3,5 mm, área 3 mm), travado na tela
+      const fN = fonteAnot(3.5, 8, 16), fA = fonteAnot(3, 7, 14), comArea = lodArea || marc || a.aberto;
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.font = `600 ${13 * dpr}px system-ui, sans-serif`; const wN = ctx.measureText(txtNome).width;
-      ctx.font = `500 ${11.5 * dpr}px system-ui, sans-serif`; const wA = ctx.measureText(txtArea).width;
-      const meia = Math.max(wN, wA) / 2 + 6 * dpr;
+      ctx.font = `600 ${fN}px system-ui, sans-serif`; const wN = ctx.measureText(txtNome).width;
+      ctx.font = `500 ${fA}px system-ui, sans-serif`; const wA = comArea ? ctx.measureText(txtArea).width : 0;
+      const meia = Math.max(wN, wA) / 2 + 6 * dpr, dy = comArea ? (fN + fA) * 0.33 : 0;
+      const y0r = -dy - fN * 0.7 - 3 * dpr, y1r = (comArea ? dy + fA * 0.7 : fN * 0.7) + 3 * dpr, alt = y1r - y0r;
       // dois ambientes no mesmo espaço (ex.: apagou a parede entre eles): um nome não cobre o outro
-      for (let k = 0; k < 6 && rotulosClic.current.some((q) => lx - meia < q.x1 && lx + meia > q.x0 && ly - 18 * dpr < q.y1 && ly + 17 * dpr > q.y0); k++) ly += 36 * dpr;
-      rotulosClic.current.push({ ai: i, x0: lx - meia, x1: lx + meia, y0: ly - 18 * dpr, y1: ly + 17 * dpr, yNome: ly - 8 * dpr });
+      for (let k = 0; k < 6 && rotulosClic.current.some((q) => lx - meia < q.x1 && lx + meia > q.x0 && ly + y0r < q.y1 && ly + y1r > q.y0); k++) ly += alt + 2 * dpr;
+      rotulosClic.current.push({ ai: i, x0: lx - meia, x1: lx + meia, y0: ly + y0r, y1: ly + y1r, yNome: ly - dy });
+      ocupar({ x0: lx - meia + 4 * dpr, x1: lx + meia - 4 * dpr, y0: ly + y0r, y1: ly + y1r });
       // selecionado: moldura discreta mostrando que o nome pode ser arrastado e editado
-      if (marc && !(editNome && editNome.ai === i)) { ctx.strokeStyle = "rgba(4,116,244,0.55)"; ctx.lineWidth = 1 * dpr; ctx.setLineDash([3 * dpr, 2 * dpr]); ctx.strokeRect(lx - meia, ly - 18 * dpr, 2 * meia, 35 * dpr); ctx.setLineDash([]); }
-      ctx.font = `600 ${13 * dpr}px system-ui, sans-serif`; ctx.fillStyle = marc ? TP_AZUL : "#b65b3d";
-      if (!(editNome && editNome.ai === i)) ctx.fillText(txtNome, lx, ly - 8 * dpr);
-      ctx.font = `500 ${11.5 * dpr}px system-ui, sans-serif`; ctx.fillStyle = a.aberto ? "#b45309" : (marc ? TP_AZUL : "#b65b3d");
-      ctx.fillText(txtArea, lx, ly + 8 * dpr);
+      if (marc && !(editNome && editNome.ai === i)) { ctx.strokeStyle = "rgba(4,116,244,0.55)"; ctx.lineWidth = 1 * dpr; ctx.setLineDash([3 * dpr, 2 * dpr]); ctx.strokeRect(lx - meia, ly + y0r, 2 * meia, alt); ctx.setLineDash([]); }
+      ctx.font = `600 ${fN}px system-ui, sans-serif`; ctx.fillStyle = marc ? TP_AZUL : "#b65b3d";
+      if (!(editNome && editNome.ai === i)) ctx.fillText(txtNome, lx, ly - dy);
+      if (comArea) { ctx.font = `500 ${fA}px system-ui, sans-serif`; ctx.fillStyle = a.aberto ? "#b45309" : (marc ? TP_AZUL : "#b65b3d"); ctx.fillText(txtArea, lx, ly + dy); }
       ctx.textBaseline = "alphabetic";
     });
 
@@ -80074,8 +80118,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     todas.forEach((w, i) => {
       const [ax, ay] = T(w.a), [bx, by] = T(w.b), marc = marcadas.has("p" + i);
       let ang = Math.atan2(by - ay, bx - ax); if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
+      const fL = fonteAnot(3, 7, 14), kL = fL / (12 * dpr);
       ctx.save(); ctx.translate((ax + bx) / 2, (ay + by) / 2); ctx.rotate(ang);
-      ctx.font = `600 ${12 * dpr}px system-ui, sans-serif`; ctx.textAlign = "center";
+      ctx.font = `600 ${fL}px system-ui, sans-serif`; ctx.textAlign = "center";
       ctx.fillStyle = w.fantasma || marc ? TP_AZUL : "#6b7280";
       // a selecionada sozinha mostra o comprimento na cota temporária (clicável)
       const soCota = (marc && sel.length === 1 && (ferramenta === "selecionar" || ferramenta === "mover")) || (gruposCurva[i] >= 0 && !rotuloCurva.has(i));
@@ -80087,14 +80132,24 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const txtL = rotuloCurva.has(i) ? `curva ${tpFmt(rotuloCurva.get(i))} m` : tpFmt(tpLen(w)) + " m", twL = ctx.measureText(txtL).width;
       const dsl = w.cotaDesl || null, selL = marcadas.has("l" + i);
       if (selL) ctx.fillStyle = TP_AZUL;
-      const yL = -(w.t * v.s / 2 + pena + 6 * dpr) - (dsl ? dsl.dn * v.s : 0), xL = dsl ? dsl.ds * v.s : 0;
-      if (!w.fantasma && !soCota && !w.semCota && (lig || marc || selL || dsl || !tapadoPorCota(w, ang, twL / 2 / v.s, null))) {
-        if (selL) { ctx.save(); ctx.fillStyle = "rgba(4,116,244,0.12)"; ctx.fillRect(xL - twL / 2 - 3 * dpr, yL - 12 * dpr, twL + 6 * dpr, 16 * dpr); ctx.restore(); }
-        ctx.fillText(txtL, xL, yL);
-        const cxw = (ax + bx) / 2, cyw = (ay + by) / 2, ca = Math.cos(ang), sa = Math.sin(ang), yc = yL - 4 * dpr;
-        rotulosParede.current.push({ i, x: cxw + ca * xL - sa * yc, y: cyw + sa * xL + ca * yc, ang, meia: twL / 2 + 3 * dpr });
-      }
+      const yL = -(w.t * v.s / 2 + pena + 6 * dpr * kL) - (dsl ? dsl.dn * v.s : 0), xL = dsl ? dsl.ds * v.s : 0;
+      const forte = lig || marc || selL;
       ctx.restore();
+      if (!w.fantasma && !soCota && !w.semCota && (forte || ((lodCotas || dsl) && (dsl || !tapadoPorCota(w, ang, twL / 2 / v.s, null))))) {
+        const cor0 = selL ? TP_AZUL : lig ? "#0284c7" : (w.fantasma || marc ? TP_AZUL : "#6b7280");
+        const cxw = (ax + bx) / 2, cyw = (ay + by) / 2, ca = Math.cos(ang), sa = Math.sin(ang), yc = yL - 4 * dpr * kL;
+        const pcx = cxw + ca * xL - sa * yc, pcy = cyw + sa * xL + ca * yc;
+        // desenha depois das esquadrias e das cotas: se encavalar com elas, sai
+        adiados.push(() => {
+          const cx = caixaRot(pcx, pcy, ang, twL / 2 + 2 * dpr, fL * 0.55);
+          if (!forte && bate(cx)) return;
+          ocupar(cx);
+          ctx.save(); ctx.translate(cxw, cyw); ctx.rotate(ang); ctx.font = `600 ${fL}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.fillStyle = cor0;
+          if (selL) { ctx.save(); ctx.fillStyle = "rgba(4,116,244,0.12)"; ctx.fillRect(xL - twL / 2 - 3 * dpr, yL - fL, twL + 6 * dpr, fL * 1.33); ctx.restore(); }
+          ctx.fillText(txtL, xL, yL); ctx.restore(); ctx.textAlign = "start";
+          rotulosParede.current.push({ i, x: pcx, y: pcy, ang, meia: twL / 2 + 3 * dpr });
+        });
+      }
       if (lig) { const yy = w.t * v.s / 2 + pena + 10 * dpr; cotasClic.current.push({ x: (ax + bx) / 2 + yy * Math.sin(ang), y: (ay + by) / 2 - yy * Math.cos(ang), r: 26 * dpr, parede: { tipo: "lig", i: lig.i, j: i, fim: lig.fim }, d: tpLen(w) }); }
       if (w.fantasma) etiqueta(w.a, w.b, `${tpFmt(tpLen(w))} m${angulo(w.a, w.b)}`);
     });
@@ -80199,31 +80254,47 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         // janela: código à esquerda e a fração (larg x alt sobre o peitoril);
         // porta e vão: código em cima e larg x alt embaixo (peitoril só se tiver)
         const porta = String(o.tipo).startsWith("porta") || o.tipo === "vao", peit = o.peit || 0, cod = String(opts.codigo).toUpperCase();
-        const l1 = `${tpFmt(o.larg)}x${tpFmt(o.alt)}`, l2 = !porta || peit > 0.005 ? tpFmt(peit) : null;
-        const fC = `600 ${11.5 * dpr}px system-ui, sans-serif`, fN = `500 ${11.5 * dpr}px system-ui, sans-serif`;
-        ctx.font = fC; const cw = ctx.measureText(cod).width;
-        ctx.font = fN; const fw = Math.max(ctx.measureText(l1).width, l2 ? ctx.measureText(l2).width : 0);
-        const gap = 5 * dpr, Wt = porta ? Math.max(cw, fw) : cw + gap + fw, Ht = porta ? (l2 ? 39 : 27) * dpr : (l2 ? 27 : 13) * dpr, ro = o.rotOff || { ds: 0, dn: 0 };
+        // tamanho em escala de prancha (3 mm) travado na tela; U = "1 px" do rótulo
+        const fE = fonteAnot(3, 7, 14), U = fE / 11.5;
+        const fC = `600 ${fE}px system-ui, sans-serif`, fN = `500 ${fE}px system-ui, sans-serif`;
+        const ro = o.rotOff || { ds: 0, dn: 0 };
         // texto de parede vertical lê de baixo para cima
         let angT = Math.atan2(sby - say, sbx - sax); if (angT >= Math.PI / 2 - 1e-3) angT -= Math.PI; else if (angT < -Math.PI / 2 - 1e-3) angT += Math.PI;
-        // colado na esquadria (o fundo branco cobre o que estiver embaixo)
-        const offPx = h * v.s + 5 * dpr + Ht / 2 + ro.dn * v.s, ca = Math.cos(angT), sa = Math.sin(angT);
-        const [cx0, cy0] = T(P(o.x, 0)), tx = cx0 + nx * sg * offPx + ca * ro.ds * v.s, ty = cy0 + ny * sg * offPx + sa * ro.ds * v.s;
-        ctx.save(); ctx.translate(tx, ty); ctx.rotate(angT); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
-        const escreve = (t, x, y, f) => { ctx.font = f; ctx.fillStyle = cor; ctx.fillText(t, x, y); };
-        const fracao = (xF, y0) => {
-          if (!l2) { escreve(l1, xF, y0, fN); return; }
-          escreve(l1, xF, y0 - 7 * dpr, fN); escreve(l2, xF, y0 + 7.5 * dpr, fN);
-          ctx.strokeStyle = cor; ctx.lineWidth = 1 * dpr; ctx.beginPath(); ctx.moveTo(xF - fw / 2, y0 + 0.5 * dpr); ctx.lineTo(xF + fw / 2, y0 + 0.5 * dpr); ctx.stroke();
+        const ca = Math.cos(angT), sa = Math.sin(angT), [cx0, cy0] = T(P(o.x, 0));
+        // monta o rótulo (completo ou só o código), colado na esquadria
+        const montar = (soCod) => {
+          const l1 = soCod ? null : `${tpFmt(o.larg)}x${tpFmt(o.alt)}`, l2 = soCod ? null : (!porta || peit > 0.005 ? tpFmt(peit) : null);
+          ctx.font = fC; const cw = ctx.measureText(cod).width;
+          ctx.font = fN; const fw = l1 ? Math.max(ctx.measureText(l1).width, l2 ? ctx.measureText(l2).width : 0) : 0;
+          const gap = l1 ? 5 * U : 0, Wt = porta ? Math.max(cw, fw) : cw + gap + fw;
+          const Ht = (porta ? (l1 ? (l2 ? 39 : 27) : 13) : (l2 ? 27 : 13)) * U;
+          const offPx = h * v.s + 5 * U + Ht / 2 + ro.dn * v.s;
+          const tx = cx0 + nx * sg * offPx + ca * ro.ds * v.s, ty = cy0 + ny * sg * offPx + sa * ro.ds * v.s;
+          return { l1, l2, cw, fw, gap, Wt, Ht, tx, ty, caixa: caixaRot(tx, ty, angT, Wt / 2 + 3 * U, Ht / 2 + 2 * U) };
         };
-        // fundo branco da anotação (com a seleção, um azul bem claro)
-        { const pd = 3 * dpr, x0 = -Wt / 2 - pd, y0 = -Ht / 2 - pd + 1 * dpr, ww = Wt + 2 * pd, hh = Ht + 2 * pd - 2 * dpr, rr = Math.min(7 * dpr, hh / 2);
-          ctx.fillStyle = opts.marc ? "#e8f1fe" : "#ffffff"; ctx.beginPath();
-          if (ctx.roundRect) ctx.roundRect(x0, y0, ww, hh, rr); else ctx.rect(x0, y0, ww, hh); ctx.fill(); }
-        if (porta) { escreve(cod, 0, -Ht / 2 + 6.5 * dpr, fC); fracao(0, -Ht / 2 + (l2 ? 26 : 19.5) * dpr); }
-        else { escreve(cod, -Wt / 2 + cw / 2, 0.5 * dpr, fC); fracao(-Wt / 2 + cw + gap + fw / 2, 0); }
-        ctx.restore(); ctx.textBaseline = "alphabetic"; ctx.textAlign = "start";
-        if (opts.i != null) rotulosEsq.current.push({ id: o.id, x: tx, y: ty, ang: angT, meiaW: Wt / 2 + 3 * dpr, meiaH: Ht / 2 + 3 * dpr, n: { x: nx * sg, y: ny * sg } });
+        let R = (!lodEsqCod && !opts.marc) ? null : montar(!lodEsqMed && !opts.marc);
+        // encavalou com outra anotação: tenta só o código; se ainda bater, sai
+        if (R && !opts.marc && bate(R.caixa)) { R = R.l1 ? montar(true) : R; if (bate(R.caixa)) R = null; }
+        if (R) {
+          ocupar(R.caixa);
+          const { l1, l2, cw, fw, gap, Wt, Ht, tx, ty } = R;
+          ctx.save(); ctx.translate(tx, ty); ctx.rotate(angT); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+          const escreve = (t, x, y, f) => { ctx.font = f; ctx.fillStyle = cor; ctx.fillText(t, x, y); };
+          const fracao = (xF, y0) => {
+            if (!l1) return;
+            if (!l2) { escreve(l1, xF, y0, fN); return; }
+            escreve(l1, xF, y0 - 7 * U, fN); escreve(l2, xF, y0 + 7.5 * U, fN);
+            ctx.strokeStyle = cor; ctx.lineWidth = Math.max(0.8 * dpr, 1 * U); ctx.beginPath(); ctx.moveTo(xF - fw / 2, y0 + 0.5 * U); ctx.lineTo(xF + fw / 2, y0 + 0.5 * U); ctx.stroke();
+          };
+          // fundo branco da anotação (com a seleção, um azul bem claro)
+          { const pd = 3 * U, x0 = -Wt / 2 - pd, y0 = -Ht / 2 - pd + 1 * U, ww = Wt + 2 * pd, hh = Ht + 2 * pd - 2 * U, rr = Math.min(7 * U, hh / 2);
+            ctx.fillStyle = opts.marc ? "#e8f1fe" : "#ffffff"; ctx.beginPath();
+            if (ctx.roundRect) ctx.roundRect(x0, y0, ww, hh, rr); else ctx.rect(x0, y0, ww, hh); ctx.fill(); }
+          if (porta) { escreve(cod, 0, -Ht / 2 + 6.5 * U, fC); fracao(0, -Ht / 2 + (l2 ? 26 : 19.5) * U); }
+          else { escreve(cod, l1 ? -Wt / 2 + cw / 2 : 0, 0.5 * U, fC); fracao(-Wt / 2 + cw + gap + fw / 2, 0); }
+          ctx.restore(); ctx.textBaseline = "alphabetic"; ctx.textAlign = "start";
+          if (opts.i != null) rotulosEsq.current.push({ id: o.id, x: tx, y: ty, ang: angT, meiaW: Wt / 2 + 3 * U, meiaH: Ht / 2 + 3 * U, n: { x: nx * sg, y: ny * sg } });
+        }
       }
       // cotas temporárias até as faces das paredes vizinhas (como no Revit)
       if (opts.cotas) {
@@ -80285,15 +80356,19 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const [ax, ay] = T(A), [bx, by] = T(B), L = Math.hypot(bx - ax, by - ay); if (L < 4 * dpr) return null;
       const cor = marc ? TP_AZUL : "#2b2b2b", ux = (bx - ax) / L, uy = (by - ay) / L, pas = 3 * dpr;
       if (so) {
-        const txt = tpFmt(Math.hypot(B.x - A.x, B.y - A.y));
-        ctx.font = `500 ${11.5 * dpr}px system-ui, sans-serif`; const tw = ctx.measureText(txt).width;
+        if (!lodCotas && !marc) return null; // de longe a cota interna some (nível de detalhe)
+        const txt = tpFmt(Math.hypot(B.x - A.x, B.y - A.y)), fT = fonteAnot(3, 7, 14), kT = fT / (11.5 * dpr);
+        ctx.font = `500 ${fT}px system-ui, sans-serif`; const tw = ctx.measureText(txt).width;
         const folga = Math.min(0.5, (tw / 2 + 10 * dpr) / L);
         const fr = so.pos != null ? Math.max(folga, Math.min(1 - folga, so.pos)) : (so.canto === "ini" ? folga : 1 - folga);
         let ang = Math.atan2(uy, ux); if (ang >= Math.PI / 2 - 1e-3 || ang < -Math.PI / 2 - 1e-3) ang -= Math.PI; if (ang < -Math.PI) ang += 2 * Math.PI;
         // o pé do número fica na linha (a 2,5 cm da face): "deitado" na parede
-        const dist = 4.6 * dpr + Math.max(0, 2 * dpr - 0.025 * v.s), cx = ax + (bx - ax) * fr + lado.x * dist, cy = ay + (by - ay) * fr + lado.y * dist;
+        const dist = 4.6 * dpr * kT + Math.max(0, 2 * dpr - 0.025 * v.s), cx = ax + (bx - ax) * fr + lado.x * dist, cy = ay + (by - ay) * fr + lado.y * dist;
+        const cxT = caixaRot(cx, cy, ang, tw / 2 + 1 * dpr, fT * 0.45);
+        if (!marc && bate(cxT)) return null; // encavalou com nome/esquadria: sai
+        ocupar(cxT);
         ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang); ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        if (marc) { ctx.fillStyle = "rgba(4,116,244,0.12)"; ctx.fillRect(-tw / 2 - 3 * dpr, -8 * dpr, tw + 6 * dpr, 16 * dpr); }
+        if (marc) { ctx.fillStyle = "rgba(4,116,244,0.12)"; ctx.fillRect(-tw / 2 - 3 * dpr, -fT * 0.7, tw + 6 * dpr, fT * 1.4); }
         ctx.fillStyle = cor; ctx.fillText(txt, 0, 0.5 * dpr); ctx.restore(); ctx.textBaseline = "alphabetic"; ctx.textAlign = "start";
         const tc = { x: (cx - v.ox) / v.s, y: (cy - v.oy) / v.s };
         return { A: tc, B: tc, tc, r: (tw / 2 + 2 * dpr) / v.s, fr };
@@ -80304,7 +80379,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const tk = 4.5 * dpr, rx = (ux - uy) * Math.SQRT1_2 * tk, ry = (ux + uy) * Math.SQRT1_2 * tk;
       ctx.lineWidth = 1.7 * dpr; ctx.beginPath(); for (const [x, y] of [[ax, ay], [bx, by]]) { ctx.moveTo(x - rx, y - ry); ctx.lineTo(x + rx, y + ry); } ctx.stroke();
       const txt = tpFmt(Math.hypot(B.x - A.x, B.y - A.y));
-      ctx.font = `500 ${11.5 * dpr}px system-ui, sans-serif`; const tw = ctx.measureText(txt).width;
+      ctx.font = `500 ${fonteAnot(3, 7, 14)}px system-ui, sans-serif`; const tw = ctx.measureText(txt).width;
       if (L < 16 * dpr) return { A, B, tc: { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 }, r: 0 };
       let ang = Math.atan2(uy, ux); if (ang > Math.PI / 2 + 1e-3 || ang < -Math.PI / 2 + 1e-3) ang += Math.PI;
       const dist = 9 * dpr, cx = (ax + bx) / 2 + lado.x * dist, cy = (ay + by) / 2 + lado.y * dist;
@@ -80322,7 +80397,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         // do lado da parede da outra cota; a da profundidade na ponta longe
         // da parede da largura (padrão: embaixo à direita e em cima à direita)
         const irma = ars.find((x) => x !== a && x.tipo === "cota" && x.amb === a.amb && x.eixo !== a.eixo);
-        const dI = irma ? irma.desl : -0.025, canto = a.eixo === "v" ? (dI < 0 ? "ini" : "fim") : (dI < 0 ? "fim" : "ini");
+        const dI = irma ? irma.desl : -0.025; let canto = a.eixo === "v" ? (dI < 0 ? "ini" : "fim") : (dI < 0 ? "fim" : "ini");
+        // ponta com porta/janela ou linha de separação: o número vai para a outra ponta
+        { const sp = tpSegsSep(ars), rI = tpRuimFracao(p, q, sp, paredes, 0.06, 0.3), rF = tpRuimFracao(p, q, sp, paredes, 0.7, 0.94);
+          if (canto === "ini" && rI > 0 && rF < rI) canto = "fim"; else if (canto === "fim" && rF > 0 && rI < rF) canto = "ini"; }
         return { A: p, B: q, lado: g ? g.dentro : { x: nx, y: ny }, ext: null, so: { canto, pos: a.pos } };
       }
       const off = offTmp != null ? offTmp : (a.off || 0), A = { x: p.x + nx * off, y: p.y + ny * off }, B = { x: q.x + nx * off, y: q.y + ny * off };
@@ -80337,6 +80415,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const r = cotaDes(gc.A, gc.B, gc.lado, marcadas.has("a" + i), gc.ext, gc.so);
       if (r) cotasDes.current.push({ ...r, ai: i });
     });
+    for (const f of adiados) f();
     if (ferramenta === "cota" && hover) {
       if (ancora && ancora.cotaB) {
         const p = ancora.cotaA, q = ancora.cotaB, l = Math.hypot(q.x - p.x, q.y - p.y) || 1, off = (hover.x - p.x) * -(q.y - p.y) / l + (hover.y - p.y) * (q.x - p.x) / l;
@@ -80661,7 +80740,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   }, []);
 
   // desenha antes da tela pintar (no mesmo quadro da mudança), não depois
-  tpUseLayoutEffect(() => { desenharPlanta(); }, [paredes, areas, inicio, poli, hover, espM, sel, caixa, ferramenta, ancora, modoTraco, previaEsq, editNome]);
+  tpUseLayoutEffect(() => { desenharPlanta(); }, [paredes, areas, inicio, poli, hover, espM, sel, caixa, ferramenta, ancora, modoTraco, previaEsq, editNome, escala]);
   // ambiente acompanha as paredes: mexeu numa parede, o contorno e a área se refazem
   useEffect(() => {
     if (!areas.some((a) => a.tipo === "ambiente" && a.ponto)) return;
@@ -80682,7 +80761,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (sepMudou && a.rotulo) { const { rotulo, ...resto } = a; return { ...resto, pts, aberto }; }
       return { ...a, pts, aberto };
     });
-    const comCotas = tpAtualizarCotas(novas);
+    const comCotas = tpAtualizarCotas(novas, paredes);
     if (mudou || comCotas !== novas) setAreas(comCotas);
     // Depende também do contorno atual dos ambientes: durante um arraste cada
     // quadro reaplica o estado de origem (com o contorno antigo); se o último
@@ -80867,7 +80946,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // ambientes ficam com o último contorno calculado.
     const g = gesto.current, agora = performance.now();
     if (g && g.moveu && !g.forcarAmb && g.ambUlt && agora - g.tAmb < 120) {
-      const out = tpAtualizarCotas(ars.map((a, i) => { const u = g.ambUlt[i]; return a.tipo === "ambiente" && u && u.tipo === "ambiente" ? { ...a, pts: u.pts, aberto: u.aberto } : a; }));
+      const out = tpAtualizarCotas(ars.map((a, i) => { const u = g.ambUlt[i]; return a.tipo === "ambiente" && u && u.tipo === "ambiente" ? { ...a, pts: u.pts, aberto: u.aberto } : a; }), ps);
       ambientesFeitos.current = { ps, out };
       return out;
     }
@@ -80892,7 +80971,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (a.tipo !== "ambiente" || !a.ponto || longe(a)) return a;
       const det = tpDetectarAmbiente(ps, a.ponto, seps);
       return det && !det.aberto ? { ...a, pts: det.pts, aberto: false } : { ...a, aberto: true };
-    }), out = tpAtualizarCotas(out1);
+    }), out = tpAtualizarCotas(out1, ps);
     ambientesFeitos.current = { ps, out };
     return out;
   };
@@ -81674,7 +81753,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               </div>
               {!(a.id && areas.some((x) => x.tipo === "cota" && x.amb === a.id)) && (
                 <button style={{ ...btn, gridColumn: "1 / -1", minHeight: 30, padding: "4px 8px", fontSize: 12.5 }}
-                  onClick={() => { const id = a.id || tpNovoIdAmb(), am = { ...a, id }; mudar(null, [...areas.map((x, i) => (i === ai ? am : x)), ...tpCotasNovas(am, areas)]); }}>
+                  onClick={() => { const id = a.id || tpNovoIdAmb(), am = { ...a, id }; mudar(null, [...areas.map((x, i) => (i === ai ? am : x)), ...tpCotasNovas(am, areas, paredes)]); }}>
                   Inserir cotas do ambiente
                 </button>
               )}
@@ -81857,6 +81936,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             {m.rotulo}
           </button>
         ))}
+      </div>
+
+      <div style={{ marginTop: 8 }}>
+        <label htmlFor="tp-escala" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>Escala da planta (tamanho das anotações)</label>
+        <select id="tp-escala" value={String(escala)} onChange={(e) => setEscala(+e.target.value)}
+          style={{ width: "100%", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit", background: "#fff" }}>
+          {[20, 25, 50, 75, 100, 200].map((n) => <option key={n} value={n}>1:{n}</option>)}
+        </select>
       </div>
 
       <div style={secao}>Nova parede</div>
