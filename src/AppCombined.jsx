@@ -78977,6 +78977,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const alcasEsq = useRef([]);                     // quadradinhos das pontas da esquadria selecionada (px do canvas)
   const ambientesFeitos = useRef(null);
   const sepAnterior = useRef(null);               // linhas de separação da última vez (nome volta ao centro se mudarem)          // último par (paredes → ambientes) já calculado no arraste
+  const pegCache = useRef(null);                  // contorno da casa da última planta desenhada
   const rotulosEsq = useRef([]);                  // rótulos das esquadrias (código + medidas), px do canvas
   const rotulosParede = useRef([]);              // comprimentos das paredes na planta (px do canvas): selecionar, arrastar, apagar
   const rotulosClic = useRef([]);                // nomes dos ambientes na planta (px do canvas): clicar e arrastar move, clicar de novo edita
@@ -79852,6 +79853,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // geometria só do desenho: pontas encostadas pela face vão até o eixo da
     // outra parede (canto e T fecham certinho, com meia-esquadria e arredondado)
     const pD = tpParedesDesenho(paredes);
+    // contorno da casa (face de fora das paredes): esquadria em parede de
+    // periferia leva o rótulo pelo lado de fora
+    if (!pegCache.current || pegCache.current.ps !== paredes) { let pg = []; try { pg = tpPegadaConstruida(pD) || []; } catch (err) { pg = []; } pegCache.current = { ps: paredes, pg }; }
+    const pegCasa = pegCache.current.pg, naCasa = (q) => pegCasa.some((P) => P && P.length >= 3 && tpDentroPoli(q, P));
     const cantos = tpCantosMitra(pD), juncoes = tpJuncoes(pD);
     const quadros = (w, recuo = 0, wi = pD.indexOf(w)) => {
       const L = tpLen(w); if (!L) return [];
@@ -80182,7 +80187,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         let ang = Math.atan2(sby - say, sbx - sax); if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
         const ladoMedida = nx * Math.sin(ang) - ny * Math.cos(ang) > 0 ? 1 : -1;
         // porta de giro: do lado em que abre (dentro do arco); correr, vão e janela: do lado oposto à medida
-        const sg = tpGiro(o.tipo) ? ld : -ladoMedida;
+        let sg = tpGiro(o.tipo) ? ld : -ladoMedida;
+        if (pegCasa.length) {
+          const tq = h + 0.3, qA = P(o.x, tq), qB = P(o.x, -tq), dA = naCasa(qA), dB = naCasa(qB);
+          if (dA !== dB) sg = dA ? -1 : 1; // parede de periferia: lado de fora
+        }
         const longe = sg === ladoMedida && Math.abs(o.x - L / 2) < o.larg / 2 + 0.8;
         // padrão de prancha: código e, ao lado, a fração largura x altura
         // sobre o peitoril (porta e vão: só largura x altura). Deitado na
