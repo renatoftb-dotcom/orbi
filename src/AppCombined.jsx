@@ -78772,7 +78772,34 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       ctx.fillText(`Terreno ${tpFmt(tpAreaPoli(a.pts))} m²`, tx + 6 * dpr, ty + 16 * dpr);
     });
     const cobPts = areas.filter((a) => (a.tipo === "laje" || a.tipo === "telhado") && a.pts && a.pts.length >= 3).map((a) => a.pts);
-    // áreas: contrapiso (hachura) por baixo, laje (tracejado) por cima
+    // Piso interno (padrão da prancha): porcelanato cinza bem claro com
+    // rejunte branco a cada 0,90 m e pontinhos brancos de granilite. Tudo
+    // ancorado no desenho (não "escorrega" ao mover a vista). Vai nos
+    // ambientes fechados e no contrapiso que está debaixo da cobertura.
+    const pisoInterno = (pts, marc) => {
+      ctx.save(); caminho(pts); ctx.clip();
+      ctx.fillStyle = marc ? "rgba(4,116,244,0.10)" : "#ebe8e5"; ctx.fill();
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const q of pts) { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); }
+      const P0 = 0.9, i0 = Math.floor(x0 / P0), i1 = Math.ceil(x1 / P0), j0 = Math.floor(y0 / P0), j1 = Math.ceil(y1 / P0);
+      if (v.s * 0.05 >= 2 * dpr && (i1 - i0) * (j1 - j0) < 2500) { // granilite: só com zoom suficiente
+        ctx.strokeStyle = "rgba(255,255,255,0.95)"; ctx.lineWidth = Math.max(0.8 * dpr, 0.008 * v.s); ctx.beginPath();
+        for (let i = i0; i < i1; i++) for (let j = j0; j < j1; j++) for (let k = 0; k < 18; k++) {
+          const hsh = (n) => { const t = Math.sin(i * 127.1 + j * 311.7 + k * 74.7 + n * 19.3) * 43758.5453; return t - Math.floor(t); };
+          const cx = (i + hsh(1)) * P0, cy = (j + hsh(2)) * P0, an = hsh(3) * Math.PI, l = 0.025 + 0.02 * hsh(4);
+          const [ax, ay] = T({ x: cx, y: cy }), [bx, by] = T({ x: cx + Math.cos(an) * l, y: cy + Math.sin(an) * l });
+          ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+        }
+        ctx.stroke();
+      }
+      ctx.strokeStyle = "#ffffff"; ctx.lineWidth = Math.max(1 * dpr, 0.012 * v.s); ctx.beginPath();
+      for (let i = i0; i <= i1; i++) { const [ax, ay] = T({ x: i * P0, y: y0 }), [bx, by] = T({ x: i * P0, y: y1 }); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); }
+      for (let j = j0; j <= j1; j++) { const [ax, ay] = T({ x: x0, y: j * P0 }), [bx, by] = T({ x: x1, y: j * P0 }); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); }
+      ctx.stroke(); ctx.restore();
+    };
+    const cpInterno = (a) => !cobPts.length || tpAreaDentro(a.pts, cobPts) >= tpAreaPoli(a.pts) / 2;
+    areas.forEach((a, i) => { if (a.pts && a.pts.length >= 3 && ((a.tipo === "contrapiso" && cpInterno(a)) || (a.tipo === "ambiente" && !a.aberto))) pisoInterno(a.pts, marcadas.has("a" + i)); });
+    // áreas: contrapiso externo (hachura) por baixo, laje (tracejado) por cima
     const ordem = areas.map((a, i) => i).sort((i, j) => (areas[i].tipo === "laje") - (areas[j].tipo === "laje"));
     for (const i of ordem) {
       const a = areas[i], marc = marcadas.has("a" + i);
@@ -78781,6 +78808,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (a.tipo === "laje") {
         ctx.fillStyle = marc ? "rgba(4,116,244,0.14)" : "rgba(107,143,199,0.07)"; ctx.fill();
         ctx.setLineDash([8 * dpr, 5 * dpr]); ctx.strokeStyle = marc ? TP_AZUL : "#6b8fc7"; ctx.lineWidth = (marc ? 2.5 : 1.5) * dpr; ctx.stroke(); ctx.setLineDash([]);
+      } else if (cpInterno(a)) {
+        caminho(a.pts); ctx.strokeStyle = marc ? TP_AZUL : "#b8a98a"; ctx.lineWidth = (marc ? 2.5 : 1) * dpr; ctx.stroke();
       } else {
         ctx.fillStyle = marc ? "rgba(4,116,244,0.12)" : "#f4efe4"; ctx.fill();
         ctx.save(); caminho(a.pts); ctx.clip();
@@ -78846,8 +78875,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (a.tipo !== "ambiente" || !a.pts || a.pts.length < 3) return;
       const marc = marcadas.has("a" + i);
       caminho(a.pts);
-      if (marc) { ctx.fillStyle = "rgba(4,116,244,0.10)"; ctx.fill(); }
-      ctx.strokeStyle = marc ? TP_AZUL : "rgba(17,24,39,0.25)"; ctx.lineWidth = (marc ? 2 : 1) * dpr; ctx.setLineDash([2 * dpr, 3 * dpr]); ctx.stroke(); ctx.setLineDash([]);
+      // sem seleção o piso já mostra o cômodo; o contorno só aparece selecionado (ou se não fechou)
+      if (marc || a.aberto) { ctx.strokeStyle = marc ? TP_AZUL : "rgba(17,24,39,0.25)"; ctx.lineWidth = (marc ? 2 : 1) * dpr; ctx.setLineDash([2 * dpr, 3 * dpr]); ctx.stroke(); ctx.setLineDash([]); }
       const [lx, ly] = T(a.ponto || tpCentro(a.pts));
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.font = `600 ${13 * dpr}px system-ui, sans-serif`; ctx.fillStyle = marc ? TP_AZUL : "#b65b3d";
@@ -78925,17 +78954,42 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const fora = -ld, ef = Math.min(0.025, h * 0.4);
       ctx.strokeStyle = traco;
       if (tpGiro(o.tipo)) {
-        const dois = o.tipo === "porta_giro2", r = dois ? o.larg / 2 : o.larg;
-        const folhas = dois ? [[e0, 1], [e1, -1]] : [[md > 0 ? e0 : e1, md > 0 ? 1 : -1]];
+        // padrão de detalhamento: piso passa pelo vão, batente com rebaixo
+        // (perfil em degrau, branco com contorno preto) nas duas ombreiras,
+        // folha aberta a 90° como retângulo branco de contorno preto e giro
+        // tracejado preto da ponta da folha até o batente do outro lado
+        if (normal) ret(e0, e1, -h, h, "#ebe8e5", 0);
+        const bt = Math.min(0.05, o.larg * 0.07), dois = o.tipo === "porta_giro2", H2 = h + 0.01;
+        const batente = (s0, dir) => { // s0 = face da ombreira; dir = para dentro do vão
+          const deg = -ld * H2 * 0.15; // o rebaixo fica do lado em que a porta abre
+          const pts = [[0, -ld * H2], [bt, -ld * H2], [bt, deg], [bt * 0.45, deg], [bt * 0.45, ld * H2], [0, ld * H2]]
+            .map(([a, n]) => P(s0 + dir * a, n));
+          caminho(pts); ctx.fillStyle = normal ? "#fff" : claro; ctx.fill(); ctx.strokeStyle = traco; ctx.lineWidth = 1 * dpr; ctx.stroke();
+        };
+        batente(e0, 1); batente(e1, -1);
+        const luz = o.larg - 2 * bt * 0.45, r = dois ? luz / 2 : luz, fl = Math.min(0.035, r * 0.05);
+        const folhas = dois ? [[e0 + bt * 0.45, 1], [e1 - bt * 0.45, -1]] : [[md > 0 ? e0 + bt * 0.45 : e1 - bt * 0.45, md > 0 ? 1 : -1]];
         for (const [sh, dir] of folhas) {
-          ret(Math.min(sh, sh + dir * r), Math.max(sh, sh + dir * r), -ef, ef, claro, 1);
-          ctx.strokeStyle = fraco; ctx.lineWidth = 1 * dpr; ctx.setLineDash([5 * dpr, 4 * dpr]); ctx.beginPath();
-          for (let k = 0; k <= 24; k++) { const an = (k / 24) * Math.PI / 2; const [x, y] = T(P(sh + dir * r * Math.cos(an), ld * r * Math.sin(an))); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+          caminho([P(sh, ld * h * 0.15), P(sh + dir * fl, ld * h * 0.15), P(sh + dir * fl, ld * (h * 0.15 + r)), P(sh, ld * (h * 0.15 + r))]);
+          ctx.fillStyle = normal ? "#fff" : claro; ctx.fill(); ctx.strokeStyle = traco; ctx.lineWidth = 1 * dpr; ctx.stroke();
+          ctx.strokeStyle = normal ? "#1f1f1f" : cor; ctx.lineWidth = 1 * dpr; ctx.setLineDash([5 * dpr, 4 * dpr]); ctx.beginPath();
+          for (let k = 0; k <= 32; k++) { const an = (k / 32) * Math.PI / 2; const [x, y] = T(P(sh + dir * r * Math.sin(an), ld * (h * 0.15 + r * Math.cos(an)))); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
           ctx.stroke(); ctx.setLineDash([]);
         }
       } else if (o.tipo === "porta_correr") {
-        const sb = 0.05, a1 = md > 0 ? [e0, o.x + sb] : [o.x - sb, e1], a2 = md > 0 ? [o.x - sb, e1] : [e0, o.x + sb];
-        ret(a1[0], a1[1], 0, 2 * ef, claro, 1); ret(a2[0], a2[1], -2 * ef, 0, claro, 1);
+        // caixilho branco com as linhas finas das faces, duas folhas escuras
+        // sobrepostas no meio e as peças pretas (puxador/roldana) nas pontas
+        ret(e0, e1, -h * 0.7, h * 0.7, normal ? "#fff" : claro, 0);
+        ctx.strokeStyle = normal ? "#8a8a8a" : cor;
+        seg(P(e0, -h * 0.7), P(e1, -h * 0.7), 0.8); seg(P(e0, h * 0.7), P(e1, h * 0.7), 0.8);
+        seg(P(e0, -h * 0.45), P(e1, -h * 0.45), 0.6); seg(P(e0, h * 0.45), P(e1, h * 0.45), 0.6);
+        const sb = 0.06, fol = Math.min(0.035, h * 0.35), q = Math.min(0.05, h * 0.5);
+        const a1 = md > 0 ? [e0 + 0.03, o.x + sb] : [o.x - sb, e1 - 0.03], a2 = md > 0 ? [o.x - sb, e1 - 0.03] : [e0 + 0.03, o.x + sb];
+        const escuro = normal ? "#2f2f2f" : cor, pecaCor = normal ? "#000" : cor;
+        for (const [[sa, sbb], nn] of [[a1, h * 0.12], [a2, -h * 0.12]]) {
+          caminho([P(sa, nn - fol / 2), P(sbb, nn - fol / 2), P(sbb, nn + fol / 2), P(sa, nn + fol / 2)]); ctx.fillStyle = escuro; ctx.fill();
+          for (const pp of [sa, sbb]) { caminho([P(pp - q / 2, nn - q / 2), P(pp + q / 2, nn - q / 2), P(pp + q / 2, nn + q / 2), P(pp - q / 2, nn + q / 2)]); ctx.fillStyle = pecaCor; ctx.fill(); }
+        }
       } else if (o.tipo === "janela_correr" || o.tipo === "maxim_ar" || o.tipo === "fixo") {
         ret(e0, e1, -h * 0.45, h * 0.45, claro, 0);                 // vidro / caixilho
         seg(P(e0, -h), P(e1, -h), 0.8); seg(P(e0, h), P(e1, h), 0.8); // faces
