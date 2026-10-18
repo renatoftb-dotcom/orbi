@@ -685,6 +685,59 @@ function tpGruposCurva(paredes) {
   });
   return grupo;
 }
+// Curvas desenhadas lisas (como no Revit): os trechos de uma curva viram
+// uma faixa só, seguindo o círculo que passa pelos pontos. Cada curva traz a
+// função banda(hIn, recuoPonta) → polígono (pontos do desenho) da parede com
+// meia espessura hIn; nas pontas, meia-esquadria com a parede vizinha.
+function tpCurvasLisas(paredes, cantos = tpCantosMitra(paredes), grupos = tpGruposCurva(paredes)) {
+  const por = new Map();
+  grupos.forEach((g, i) => { if (g < 0) return; if (!por.has(g)) por.set(g, []); por.get(g).push(i); });
+  const out = [];
+  for (const ms of por.values()) {
+    if (ms.some((i) => (paredes[i].ab || []).length)) continue; // com porta/janela: fica em trechos
+    const set = new Set(ms);
+    const solta = (i) => ["a", "b"].find((f) => !cantos[i][f] || !set.has(cantos[i][f].j));
+    const i0 = ms.find((i) => solta(i)); if (i0 == null) continue; // círculo fechado: fica em trechos
+    // corrente ordenada: [{ i, ini }] — o trecho i vai de w[ini] até a outra ponta
+    const ord = []; let cur = i0, ini = solta(i0); const vis = new Set();
+    while (cur != null && !vis.has(cur)) {
+      vis.add(cur); ord.push({ i: cur, ini });
+      const fimOp = ini === "a" ? "b" : "a", c = cantos[cur][fimOp];
+      if (c && set.has(c.j) && !vis.has(c.j)) { cur = c.j; ini = c.f; } else cur = null;
+    }
+    if (ord.length !== ms.length) continue;
+    const pts = [paredes[ord[0].i][ord[0].ini], ...ord.map((o) => paredes[o.i][o.ini === "a" ? "b" : "a"])];
+    const P0 = pts[0], Pn = pts[pts.length - 1], Pm = pts[Math.floor(pts.length / 2)];
+    const ax = P0.x, ay = P0.y, bx = Pm.x, by = Pm.y, cx = Pn.x, cy = Pn.y;
+    const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by)); if (Math.abs(d) < 1e-9) continue;
+    const ox = ((ax * ax + ay * ay) * (by - cy) + (bx * bx + by * by) * (cy - ay) + (cx * cx + cy * cy) * (ay - by)) / d;
+    const oy = ((ax * ax + ay * ay) * (cx - bx) + (bx * bx + by * by) * (ax - cx) + (cx * cx + cy * cy) * (bx - ax)) / d;
+    const r = Math.hypot(ax - ox, ay - oy);
+    if (pts.some((q) => Math.abs(Math.hypot(q.x - ox, q.y - oy) - r) > Math.max(0.02, r * 0.03))) continue; // não é um arco
+    const ang = (q) => Math.atan2(q.y - oy, q.x - ox);
+    let sw = 0; for (let k = 1; k < pts.length; k++) { let da = ang(pts[k]) - ang(pts[k - 1]); while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI; sw += da; }
+    const a0 = ang(P0), t = paredes[ord[0].i].t || 0;
+    // pontas: a meia-esquadria do trecho da ponta com a parede vizinha (fora da curva)
+    const ponta = (o, fim, hIn, recuo) => {
+      const w = paredes[o.i], L = tpLen(w), u = { x: (w.b.x - w.a.x) / L, y: (w.b.y - w.a.y) / L }, nv = { x: -u.y, y: u.x };
+      const c = cantos[o.i][fim], P = w[fim];
+      let sm, sp;
+      if (c && !set.has(c.j)) { const viz = paredes[c.j]; [sm, sp] = tpPontaMitra(w, fim, viz, c.f, hIn, (viz.t || 0) / 2 - recuo); }
+      else { const s0 = fim === "a" ? recuo : L - recuo; sm = s0; sp = s0; }
+      const pM = { x: w.a.x + u.x * sm - nv.x * hIn, y: w.a.y + u.y * sm - nv.y * hIn }, pP = { x: w.a.x + u.x * sp + nv.x * hIn, y: w.a.y + u.y * sp + nv.y * hIn };
+      const dm = Math.hypot(pM.x - ox, pM.y - oy), dp = Math.hypot(pP.x - ox, pP.y - oy);
+      return dm > dp ? { fora: pM, dentro: pP } : { fora: pP, dentro: pM };
+    };
+    const banda = (hIn, recuo = 0) => {
+      const ini = ponta(ord[0], ord[0].ini, hIn, recuo), last = ord[ord.length - 1], fim = ponta(last, last.ini === "a" ? "b" : "a", hIn, recuo);
+      const n = Math.max(12, Math.ceil(Math.abs(sw) / (Math.PI / 90)));
+      const arco = (rr) => { const q = []; for (let k = 1; k < n; k++) { const a = a0 + sw * k / n; q.push({ x: ox + rr * Math.cos(a), y: oy + rr * Math.sin(a) }); } return q; };
+      return [ini.fora, ...arco(r + hIn), fim.fora, fim.dentro, ...arco(r - hIn).reverse(), ini.dentro];
+    };
+    out.push({ membros: ms, set, t, r, banda, ord });
+  }
+  return out;
+}
 function tpArco3(p0, p2, pm) {
   const r3 = (x) => Math.round(x * 1000) / 1000;
   const ax = p0.x, ay = p0.y, bx = pm.x, by = pm.y, cx = p2.x, cy = p2.y;
@@ -696,7 +749,7 @@ function tpArco3(p0, p2, pm) {
   const norm = (a) => { while (a < 0) a += 2 * Math.PI; while (a >= 2 * Math.PI) a -= 2 * Math.PI; return a; };
   const a0 = ang(p0), s1 = norm(ang(p2) - a0), sm = norm(ang(pm) - a0);
   const sweep = sm < s1 ? s1 : s1 - 2 * Math.PI;
-  const L = Math.abs(sweep) * r, n = Math.max(6, Math.ceil(L / 0.4));
+  const L = Math.abs(sweep) * r, n = Math.max(8, Math.ceil(L / 0.25));
   const pts = [];
   for (let k = 1; k <= n; k++) { const a = a0 + sweep * k / n; pts.push({ x: r3(ux + r * Math.cos(a)), y: r3(uy + r * Math.sin(a)) }); }
   pts[pts.length - 1] = { x: p2.x, y: p2.y };
@@ -1784,11 +1837,18 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const quadro = (q) => { ctx.beginPath(); q.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); };
     // seleção: halo azul por baixo
     ctx.lineJoin = "round";
-    paredes.forEach((w, i) => { if (!marcadas.has("p" + i)) return; ctx.strokeStyle = "rgba(4,116,244,0.28)"; ctx.lineWidth = 12 * dpr; quadros(w).forEach((q) => { quadro(q); ctx.stroke(); }); });
+    // curvas lisas: desenhadas como uma faixa só (os trechos delas saem do laço)
+    const lisas = tpCurvasLisas(paredes, cantos), naCurva = new Set(lisas.flatMap((c) => c.membros));
+    const bandaPx = (c, recuo) => c.banda(c.t / 2 - recuo, recuo).map(T);
+    const curvaMarc = (c) => c.membros.some((i) => marcadas.has("p" + i));
+    paredes.forEach((w, i) => { if (!marcadas.has("p" + i) || naCurva.has(i)) return; ctx.strokeStyle = "rgba(4,116,244,0.28)"; ctx.lineWidth = 12 * dpr; quadros(w).forEach((q) => { quadro(q); ctx.stroke(); }); });
+    lisas.forEach((c) => { if (!curvaMarc(c)) return; ctx.strokeStyle = "rgba(4,116,244,0.28)"; ctx.lineWidth = 12 * dpr; quadro(bandaPx(c, 0)); ctx.stroke(); });
     ctx.lineJoin = "miter";
     ctx.fillStyle = "#000";
-    paredes.forEach((w) => quadros(w).forEach((q) => { quadro(q); ctx.fill(); }));
-    paredes.forEach((w, i) => { ctx.fillStyle = marcadas.has("p" + i) ? "#5b8fd6" : "#555555"; quadros(w, penaDe(w) / v.s).forEach((q) => { quadro(q); ctx.fill(); }); });
+    paredes.forEach((w, i) => { if (!naCurva.has(i)) quadros(w).forEach((q) => { quadro(q); ctx.fill(); }); });
+    lisas.forEach((c) => { quadro(bandaPx(c, 0)); ctx.fill(); });
+    paredes.forEach((w, i) => { if (naCurva.has(i)) return; ctx.fillStyle = marcadas.has("p" + i) ? "#5b8fd6" : "#555555"; quadros(w, penaDe(w) / v.s).forEach((q) => { quadro(q); ctx.fill(); }); });
+    lisas.forEach((c) => { const w0 = paredes[c.membros[0]]; ctx.fillStyle = curvaMarc(c) ? "#5b8fd6" : "#555555"; quadro(bandaPx(c, penaDe(w0) / v.s)); ctx.fill(); });
     // parede em desenho (fantasma): azul translúcido, sem união
     todas.forEach((w) => { if (!w.fantasma) return; ctx.globalAlpha = 0.55; ctx.fillStyle = TP_AZUL; quadros(w).forEach((q) => { quadro(q); ctx.fill(); }); ctx.globalAlpha = 1; });
     // curvas: uma medida só (comprimento total), no trecho do meio
@@ -2042,7 +2102,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     }
     if (inicio) ponto(inicio, 5);
     const quadradinho = (p) => { const [x, y] = T(p); ctx.fillStyle = "#fff"; ctx.strokeStyle = TP_AZUL; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.rect(x - 4 * dpr, y - 4 * dpr, 8 * dpr, 8 * dpr); ctx.fill(); ctx.stroke(); };
-    for (const i of selP) { quadradinho(paredes[i].a); quadradinho(paredes[i].b); }
+    { // emendas internas de uma curva não ganham quadradinho (só as pontas dela)
+      const gcS = tpGruposCurva(paredes), cmS = tpCantosMitra(paredes);
+      for (const i of selP) for (const f of ["a", "b"]) { if (gcS[i] >= 0 && cmS[i][f] && gcS[cmS[i][f].j] === gcS[i]) continue; quadradinho(paredes[i][f]); }
+    }
     for (const i of selA) if (areas[i].tipo !== "ambiente") areas[i].pts.forEach(quadradinho);
     // editar contorno: com uma área só selecionada, bolinhas no meio de cada lado
     if (selA.length === 1 && !selP.length && areas[selA[0]].tipo !== "ambiente") {
@@ -2127,8 +2190,19 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // Parede = vista de frente (contorno com os recortes das portas, furos das
     // janelas) extrudada na espessura. Porta e vão recortam a base; janela é furo.
     const cantos3 = tpCantosMitra(paredes);
+    // curva lisa: uma peça só, a faixa da planta levantada na altura da parede
+    const lisas3 = tpCurvasLisas(paredes, cantos3), naCurva3 = new Set(lisas3.flatMap((c) => c.membros));
+    lisas3.forEach((c) => {
+      const w0 = paredes[c.membros[0]], marc = c.membros.some((i) => marcadas.has("p" + i));
+      const pts = c.banda(c.t / 2, 0).map((q) => new THREE.Vector2(q.x - cx, -(q.y - cz)));
+      const g = new THREE.ExtrudeGeometry(new THREE.Shape(pts), { depth: w0.h || 2.8, bevelEnabled: false, curveSegments: 1 });
+      const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: marc ? 0x8dbbff : 0xe5e1d8 }));
+      mesh.rotation.x = -Math.PI / 2; mesh.userData.chave = "p" + c.membros[0]; T.group.add(mesh);
+      const e = new THREE.LineSegments(new THREE.EdgesGeometry(g, 25), new THREE.LineBasicMaterial({ color: marc ? 0x0474f4 : 0x4b5563 }));
+      e.rotation.copy(mesh.rotation); T.group.add(e);
+    });
     paredes.forEach((w, i) => {
-      const L = tpLen(w); if (!L) return;
+      const L = tpLen(w); if (!L || naCurva3.has(i)) return;
       const marc = marcadas.has("p" + i), h = w.t / 2, H = w.h, rot = -Math.atan2(w.b.y - w.a.y, w.b.x - w.a.x);
       const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
       const vis = [...tpAbsVisiveis(w)].sort((p, q) => p.x - q.x);
@@ -2461,8 +2535,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const v = vista.current; if (!v) return null;
     const tol = 10 * (window.devicePixelRatio || 1), p = paraMundoLivre(d);
     let melhor = null, menor = Infinity;
+    // emenda entre dois trechos da mesma curva não é ponta (puxar ali quebraria a curva)
+    const gc = tpGruposCurva(paredes), cm = tpCantosMitra(paredes);
     paredes.forEach((w, i) => {
       for (const fim of ["a", "b"]) {
+        if (gc[i] >= 0 && cm[i][fim] && gc[cm[i][fim].j] === gc[i]) continue;
         const q = w[fim]; if (Math.hypot(q.x * v.s + v.ox - d.x, q.y * v.s + v.oy - d.y) > tol) continue;
         const dd = distSeg(p, w.a, w.b) + (sel.includes("p" + i) ? -1 : 0);
         if (dd < menor) { menor = dd; melhor = { tipo: "ponta", pi: i, fim, chave: "p" + i }; }
