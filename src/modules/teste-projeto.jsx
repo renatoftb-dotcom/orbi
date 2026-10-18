@@ -1320,7 +1320,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const zoom = (fator, cx, cy) => {
     const c = planRef.current, v = vista.current; if (!c || !v) return;
     const px = cx == null ? c.width / 2 : cx, py = cy == null ? c.height / 2 : cy;
-    const s2 = Math.min(400 * (window.devicePixelRatio || 1), Math.max(4, v.s * fator));
+    // zoom máximo: ~30 px por centímetro (dá para ver o detalhe da borda e da esquadria)
+    const s2 = Math.min(3000 * (window.devicePixelRatio || 1), Math.max(4, v.s * fator));
     const wx = (px - v.ox) / v.s, wy = (py - v.oy) / v.s;
     vista.current = { s: s2, ox: px - wx * s2, oy: py - wy * s2 };
     desenharPlanta();
@@ -1502,14 +1503,16 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     if (c0 && c0.chave === chave) return c0.r;
     let r = null;
     try {
-      const lado = P0 * s, n = Math.min(2048, Math.ceil(lado));
+      // de muito perto a peça passaria de 2048 px: o padrão repete numa fração
+      // da peça (sem aumentar/borrar o grão)
+      const m = Math.max(1, Math.ceil(P0 * s / 2048)), Pp = P0 / m, lado = Pp * s, n = Math.ceil(lado);
       if (n >= 8 && typeof document !== "undefined") {
         const cv = document.createElement("canvas"); cv.width = n; cv.height = n;
         const g = cv.getContext("2d");
         if (g) {
-          const esc = n / P0; // px da imagem por metro
-          g.strokeStyle = "rgba(255,255,255,0.75)"; g.lineWidth = Math.max(0.7 * dpr, 0.006 * esc); g.lineCap = "round"; g.beginPath();
-          const qtd = Math.round(110 * P0 * P0);
+          const esc = n / Pp; // px da imagem por metro
+          g.strokeStyle = "rgba(255,255,255,0.75)"; g.lineWidth = Math.max(0.7 * dpr, Math.min(0.006 * esc, 2.5 * dpr)); g.lineCap = "round"; g.beginPath();
+          const qtd = Math.round(110 * Pp * Pp);
           for (let k = 0; k < qtd; k++) {
             const hsh = (m) => { const t = Math.sin(k * 74.7 + m * 19.3 + 3.1) * 43758.5453; return t - Math.floor(t); };
             const cx = hsh(1) * n, cy = hsh(2) * n, an = hsh(3) * Math.PI, l = (hsh(4) < 0.45 ? 0.002 : 0.01 + 0.014 * hsh(5)) * esc;
@@ -1558,7 +1561,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const granulado = (pts, cel, n, cor) => {
       const b = caixaDe(pts), i0 = Math.floor(b.x0 / cel), i1 = Math.ceil(b.x1 / cel), j0 = Math.floor(b.y0 / cel), j1 = Math.ceil(b.y1 / cel);
       if (v.s * 0.03 < 1.5 * dpr || (i1 - i0) * (j1 - j0) > 6000) return;
-      ctx.strokeStyle = cor; ctx.lineWidth = Math.max(0.8 * dpr, 0.006 * v.s); ctx.beginPath();
+      ctx.strokeStyle = cor; ctx.lineWidth = Math.max(0.8 * dpr, Math.min(0.006 * v.s, 2.5 * dpr)); ctx.beginPath(); // traço fino mesmo de muito perto
       for (let i = i0; i < i1; i++) for (let j = j0; j < j1; j++) for (let k = 0; k < n; k++) {
         const cx = (i + hsh(i, j, k, 1)) * cel, cy = (j + hsh(i, j, k, 2)) * cel, an = hsh(i, j, k, 3) * Math.PI, l = 0.012 + 0.012 * hsh(i, j, k, 4);
         const [ax, ay] = T({ x: cx, y: cy }), [bx, by] = T({ x: cx + Math.cos(an) * l, y: cy + Math.sin(an) * l });
