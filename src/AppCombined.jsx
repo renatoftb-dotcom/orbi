@@ -77809,7 +77809,11 @@ function tpPontoRotulo(pts) {
     const q = { x: x0 + (x1 - x0) * i / N, y: y0 + (y1 - y0) * j / N };
     if (!tpDentroPoli(q, pts)) continue; const d = dBorda(q); if (d > dm) { dm = d; melhor = q; }
   }
-  const c = tpCentro(pts);
+  // centro da ÁREA (não a média dos cantos: um lado com muitos cantos —
+  // porta, encontro de parede, separação — puxava o nome para lá)
+  let A = 0, cx = 0, cy = 0;
+  for (let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[(i + 1) % pts.length], k = p.x * q.y - q.x * p.y; A += k; cx += (p.x + q.x) * k; cy += (p.y + q.y) * k; }
+  const c = Math.abs(A) > 1e-9 ? { x: cx / (3 * A), y: cy / (3 * A) } : tpCentro(pts);
   if (tpDentroPoli(c, pts) && (!melhor || dBorda(c) >= 0.7 * dm)) return c;
   return melhor || c;
 }
