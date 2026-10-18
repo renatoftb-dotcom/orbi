@@ -212,20 +212,117 @@ function tpNumerarAmbientes(areas) {
 }
 const TP_NOMES_AMBIENTE = ["Sala", "Cozinha", "Suíte", "Quarto", "WC", "Banheiro", "Lavanderia", "Varanda", "Garagem", "Circulação", "Closet", "Escritório", "Área gourmet", "Despensa"];
 
+// Pegada construída: o espaço ocupado pela casa (paredes + tudo o que elas
+// fecham), visto de fora. Grade de 2 cm: as paredes bloqueiam, inunda a partir
+// da borda; o que a água não alcança é a casa. Devolve os contornos externos
+// (acertados nas faces de fora das paredes). Só entra contorno que fecha
+// cômodo de verdade (paredes soltas não viram "casa").
+function tpPegadaConstruida(paredes) {
+  const ws = (paredes || []).filter((w) => tpLen(w) > 0);
+  if (ws.length < 3) return [];
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const w of ws) for (const q of [w.a, w.b]) { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); }
+  const m = 0.6; x0 -= m; y0 -= m; x1 += m; y1 += m;
+  let passo = 0.03; // os cantos são acertados nas faces depois, então a grade pode ser mais grossa
+  while (((x1 - x0) / passo) * ((y1 - y0) / passo) > 1.5e6) passo *= 1.5;
+  const W = Math.ceil((x1 - x0) / passo), H = Math.ceil((y1 - y0) / passo);
+  const cel = new Uint8Array(W * H); // 1 = parede, 2 = fora
+  const xs = [], ys = [];
+  for (const w of ws) {
+    const L = tpLen(w), ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, nx = -uy, ny = ux, h = (w.t || 0) / 2, hl = L / 2 + h;
+    const cx = (w.a.x + w.b.x) / 2, cy = (w.a.y + w.b.y) / 2;
+    const cantos = [[hl, h], [hl, -h], [-hl, h], [-hl, -h]].map(([a, b]) => ({ x: cx + ux * a + nx * b, y: cy + uy * a + ny * b }));
+    const i0 = Math.max(0, Math.floor((Math.min(...cantos.map((q) => q.x)) - x0) / passo)), i1 = Math.min(W - 1, Math.ceil((Math.max(...cantos.map((q) => q.x)) - x0) / passo));
+    const j0 = Math.max(0, Math.floor((Math.min(...cantos.map((q) => q.y)) - y0) / passo)), j1 = Math.min(H - 1, Math.ceil((Math.max(...cantos.map((q) => q.y)) - y0) / passo));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const qx = x0 + (i + 0.5) * passo - cx, qy = y0 + (j + 0.5) * passo - cy;
+      if (Math.abs(qx * ux + qy * uy) <= hl && Math.abs(qx * nx + qy * ny) <= h + passo * 0.5) cel[j * W + i] = 1;
+    }
+    if (Math.abs(uy) < 1e-6) { ys.push(cy + h, cy - h); xs.push(cx + hl, cx - hl); }
+    else if (Math.abs(ux) < 1e-6) { xs.push(cx + h, cx - h); ys.push(cy + hl, cy - hl); }
+  }
+  const pilha = [];
+  for (let i = 0; i < W; i++) for (const j of [0, H - 1]) if (!cel[j * W + i]) { cel[j * W + i] = 2; pilha.push(j * W + i); }
+  for (let j = 0; j < H; j++) for (const i of [0, W - 1]) if (!cel[j * W + i]) { cel[j * W + i] = 2; pilha.push(j * W + i); }
+  while (pilha.length) {
+    const k = pilha.pop(), i = k % W;
+    for (const n of [i > 0 ? k - 1 : -1, i < W - 1 ? k + 1 : -1, k - W, k + W]) if (n >= 0 && n < W * H && cel[n] === 0) { cel[n] = 2; pilha.push(n); }
+  }
+  const casa = (i, j) => i >= 0 && j >= 0 && i < W && j < H && cel[j * W + i] !== 2;
+  const prox = new Map(), chave = (i, j) => j * (W + 1) + i;
+  const add = (a, b) => { const l = prox.get(a); if (l) l.push(b); else prox.set(a, [b]); };
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    if (!casa(i, j)) continue;
+    if (!casa(i, j - 1)) add(chave(i, j), chave(i + 1, j));
+    if (!casa(i + 1, j)) add(chave(i + 1, j), chave(i + 1, j + 1));
+    if (!casa(i, j + 1)) add(chave(i + 1, j + 1), chave(i, j + 1));
+    if (!casa(i - 1, j)) add(chave(i, j + 1), chave(i, j));
+  }
+  const perto = (v, lista) => { let best = v, d = passo * 1.6; for (const c of lista) { const dd = Math.abs(c - v); if (dd < d) { d = dd; best = c; } } return best; };
+  const r3 = (x) => Math.round(x * 1000) / 1000;
+  const laços = [];
+  while (prox.size) {
+    const ini = prox.keys().next().value, laco = [];
+    let at = ini, guarda = 0;
+    do { laco.push(at); const l = prox.get(at); if (!l) break; const nx = l.pop(); if (!l.length) prox.delete(at); at = nx; } while (at !== ini && ++guarda < 2e6);
+    const pts = laco.map((k) => ({ x: x0 + (k % (W + 1)) * passo, y: y0 + Math.floor(k / (W + 1)) * passo }));
+    const limpa = [];
+    for (let k = 0; k < pts.length; k++) {
+      const a = pts[(k - 1 + pts.length) % pts.length], b = pts[k], c = pts[(k + 1) % pts.length];
+      if (Math.abs((b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)) > 1e-12) limpa.push(b);
+    }
+    if (limpa.length < 3) continue;
+    // acerta nas faces e tira os pontos que ficaram repetidos ou alinhados
+    let pol = limpa.map((q) => ({ x: r3(perto(q.x, xs)), y: r3(perto(q.y, ys)) }));
+    for (let mudou = true; mudou && pol.length >= 3;) {
+      mudou = false;
+      for (let k = 0; k < pol.length && pol.length >= 3; k++) {
+        const a = pol[(k - 1 + pol.length) % pol.length], b = pol[k], c = pol[(k + 1) % pol.length];
+        const igual = Math.abs(a.x - b.x) < 1e-9 && Math.abs(a.y - b.y) < 1e-9;
+        if (igual || Math.abs((b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)) < 1e-9) { pol.splice(k, 1); mudou = true; k--; }
+      }
+    }
+    if (pol.length < 3) continue;
+    const A = tpAreaPoli(pol);
+    // só conta se fecha cômodo: área bem maior que a das paredes dentro dele
+    const tiras = ws.filter((w) => tpDentroPoli({ x: (w.a.x + w.b.x) / 2, y: (w.a.y + w.b.y) / 2 }, pol)).reduce((s, w) => s + tpLen(w) * (w.t || 0), 0);
+    if (A >= 2 && A > tiras * 1.5) laços.push(pol);
+  }
+  return laços;
+}
+// Contrapiso: interno (dentro da casa), externo, ou externo "furado" — o que
+// envolve a casa (calçada em volta, quintal): vira uma peça só, com a casa
+// recortada pela face de fora das paredes. Sem casa fechada, decide pela
+// cobertura (laje/telhado); sem nada, é interno.
+function tpTipoContrapiso(pts, pegada, cob) {
+  const A = tpAreaPoli(pts);
+  if (pegada && pegada.length) {
+    const d = tpAreaDentro(pts, pegada), fora = A - d;
+    if (fora < 0.5 || fora < A * 0.1) return "interno"; // dentro da casa (pode passar um pouco da face)
+    return d > 0.3 ? "furado" : "externo";
+  }
+  if (cob && cob.length) return tpAreaDentro(pts, cob) >= A / 2 ? "interno" : "externo";
+  return "interno";
+}
 // Interno × externo: área coberta = laje + telhado (contorno desenhado, sem o
-// beiral). É a área construída. Contrapiso dentro dela é piso interno; fora,
-// piso externo (calçada, área de serviço descoberta).
-function tpAnaliseAreas(areas) {
+// beiral). É a área construída. Contrapiso dentro da casa é piso interno;
+// fora, piso externo (calçada, área de serviço descoberta). O contrapiso que
+// envolve a casa conta só a parte de fora dela.
+function tpAnaliseAreas(areas, paredes) {
   const ok = (a) => a.pts && a.pts.length >= 3;
   const cob = areas.filter((a) => ok(a) && (a.tipo === "laje" || a.tipo === "telhado")).map((a) => a.pts);
-  const cps = areas.filter((a) => ok(a) && a.tipo === "contrapiso").map((a) => a.pts);
+  const cpsAll = areas.filter((a) => ok(a) && a.tipo === "contrapiso").map((a) => a.pts);
   const ter = areas.filter((a) => ok(a) && a.tipo === "terreno").map((a) => a.pts);
+  const pegada = paredes && (cpsAll.length || ter.length) ? tpPegadaConstruida(paredes) : [];
   const coberta = tpUniaoArea(cob);
-  const pisoTotal = tpUniaoArea(cps);
-  const pisoInterno = cob.length && cps.length ? Math.max(0, pisoTotal + coberta - tpUniaoArea([...cps, ...cob])) : 0;
+  const tipos = cpsAll.map((p) => tpTipoContrapiso(p, pegada, cob));
+  const internos = cpsAll.filter((_, k) => tipos[k] === "interno"), externos = cpsAll.filter((_, k) => tipos[k] === "externo");
+  const furados = cpsAll.filter((_, k) => tipos[k] === "furado");
+  const pisoInterno = tpUniaoArea(internos);
+  const pisoExterno = tpUniaoArea(externos) + furados.reduce((s, p) => s + Math.max(0, tpAreaPoli(p) - tpAreaDentro(p, pegada)), 0);
   const terreno = tpUniaoArea(ter);
-  const ocupada = tpUniaoArea([...cob, ...cps]);
-  return { coberta, pisoInterno, pisoExterno: Math.max(0, pisoTotal - pisoInterno), terreno,
+  const ocupada = tpUniaoArea([...cob, ...cpsAll, ...pegada]);
+  return { coberta, pisoInterno, pisoExterno, terreno, pegada,
     taxaOcupacao: terreno ? coberta / terreno : 0, permeavel: terreno ? Math.max(0, terreno - ocupada) : 0, temCobertura: cob.length > 0 };
 }
 
@@ -336,7 +433,10 @@ function tpDesenhoParaObra(paredes, areas) {
   const cobertos = areas.filter((a) => (a.tipo === "laje" || a.tipo === "telhado") && a.pts && a.pts.length >= 3);
   const pisos = cobertos.length ? cobertos : areas.filter((a) => a.tipo === "contrapiso" && a.pts && a.pts.length >= 3);
   const casco = tpEnvoltoria(paredes.flatMap((w) => [w.a, w.b]));
-  const fora = (p) => (pisos.length ? !pisos.some((a) => tpDentroPoli(p, a.pts)) : !(casco.length >= 3 && tpDentroPoli(p, casco)));
+  // com a casa fechada, a pegada (face de fora das paredes) decide o que é fora
+  const pegadaCasa = tpPegadaConstruida(paredes);
+  const fora = (p) => (pegadaCasa.length ? !pegadaCasa.some((P) => tpDentroPoli(p, P))
+    : pisos.length ? !pisos.some((a) => tpDentroPoli(p, a.pts)) : !(casco.length >= 3 && tpDentroPoli(p, casco)));
   let m2Int = 0, m2Ext = 0, m15 = 0, m20 = 0, m25 = 0, perim = 0, nExt = 0;
   for (const w of paredes) {
     const L = tpLen(w); if (!L) continue;
@@ -350,8 +450,10 @@ function tpDesenhoParaObra(paredes, areas) {
   }
   const soma = (tipo, f) => areas.filter((a) => a.tipo === tipo && a.pts && a.pts.length >= 3).reduce((s, a) => s + f(a), 0);
   const areaCp = soma("contrapiso", (a) => tpAreaPoli(a.pts)), areaLj = soma("laje", (a) => tpAreaPoli(a.pts)), perLj = soma("laje", (a) => tpPerimPoli(a.pts));
-  const an = tpAnaliseAreas(areas);
-  const areaConstruida = an.temCobertura ? an.coberta : areaCp;
+  const an = tpAnaliseAreas(areas, paredes);
+  // sem cobertura: a pegada das paredes (casa fechada); sem ela, o contrapiso interno
+  const areaPegada = tpUniaoArea(an.pegada || []);
+  const areaConstruida = an.temCobertura ? an.coberta : (areaPegada > 0 ? areaPegada : an.pisoInterno);
   const cobertura = areas.filter((a) => a.tipo === "telhado" && a.pts && a.pts.length >= 3).map((a) => {
     const g = tpTelhadoGeo(a), aguas = g.lados.filter((L) => L.inclina && L.s > 0);
     const maior = g.lados.reduce((m, L) => (L.l > m.l ? L : m), g.lados[0]);
@@ -385,8 +487,8 @@ function tpDesenhoParaObra(paredes, areas) {
   };
   const linhas = [
     ["Tipologia", "Térrea"],
-    ["Área construída", tpFmt(areaConstruida) + " m²" + (an.temCobertura ? " (área coberta)" : areaCp ? " (contrapiso)" : "")],
-    ...(an.pisoExterno > 0 ? [["Pavimentação externa", tpFmt(an.pisoExterno) + " m² (contrapiso fora da cobertura)"]] : []),
+    ["Área construída", tpFmt(areaConstruida) + " m²" + (an.temCobertura ? " (área coberta)" : areaPegada > 0 ? " (pela face externa das paredes)" : an.pisoInterno ? " (contrapiso)" : "")],
+    ...(an.pisoExterno > 0 ? [["Pavimentação externa", tpFmt(an.pisoExterno) + " m² (contrapiso fora da casa)"]] : []),
     ["Parede interna", tpFmt(m2Int) + " m²"],
     ["Parede externa", `${tpFmt(m2Ext)} m² (${nExt} parede${nExt === 1 ? "" : "s"})`],
     ["Por espessura", `15 cm: ${tpFmt(m15)} · 20 cm: ${tpFmt(m20)} · 25 cm: ${tpFmt(m25)} m²`],
@@ -1150,7 +1252,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (a.tipo !== "terreno" || !a.pts || a.pts.length < 3) return;
       const marc = marcadas.has("a" + i);
       ctx.save(); caminho(a.pts); ctx.clip();
-      ctx.fillStyle = marc ? "#bcd3e8" : "#c7d3c0"; ctx.fill();
+      // a grama não entra na casa (pegada: face de fora das paredes)
+      const peg = analise.pegada || [];
+      if (peg.length) { ctx.beginPath(); ctx.rect(0, 0, W, H); for (const P of peg) P.forEach((q, k) => { const [x, y] = T(q); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.clip("evenodd"); }
+      caminho(a.pts); ctx.fillStyle = marc ? "#bcd3e8" : "#c7d3c0"; ctx.fill();
       granulado(a.pts, 0.5, 22, "rgba(255,255,255,0.9)");
       ctx.restore();
       // sem linha de borda nem símbolo nos cantos; o contorno só aparece selecionado (para editar)
@@ -1185,7 +1290,25 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       for (let j = j0; j <= j1; j++) { const [ax, ay] = T({ x: x0, y: j * P0 }), [bx, by] = T({ x: x1, y: j * P0 }); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); }
       ctx.stroke(); ctx.restore();
     };
-    const cpInterno = (a) => !cobPts.length || tpAreaDentro(a.pts, cobPts) >= tpAreaPoli(a.pts) / 2;
+    const pegada = analise.pegada || [];
+    const tipoCp = (a) => tpTipoContrapiso(a.pts, pegada, cobPts);
+    const cpInterno = (a) => tipoCp(a) === "interno";
+    // recorte da casa (face de fora das paredes) sobre o piso externo que a envolve
+    const semCasa = (fn) => {
+      ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H);
+      for (const P of pegada) P.forEach((q, k) => { const [x, y] = T(q); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+      ctx.clip("evenodd"); fn(); ctx.restore();
+    };
+    // ponto mais livre de um polígono, fora dos furos (para o rótulo)
+    const pontoLivre = (pts, furos) => {
+      const b = caixaDe(pts), passo = Math.max(0.2, Math.sqrt(tpAreaPoli(pts)) / 40); let melhor = null, folga = -1;
+      for (let x = b.x0 + passo / 2; x < b.x1; x += passo) for (let y = b.y0 + passo / 2; y < b.y1; y += passo) {
+        const q = { x, y }; if (!tpDentroPoli(q, pts) || furos.some((f) => tpDentroPoli(q, f))) continue;
+        let d = Infinity; for (const P of [pts, ...furos]) for (let k = 0; k < P.length; k++) d = Math.min(d, tpDistSeg(q, P[k], P[(k + 1) % P.length]));
+        if (d > folga) { folga = d; melhor = q; }
+      }
+      return melhor;
+    };
     areas.forEach((a, i) => { if (a.pts && a.pts.length >= 3 && ((a.tipo === "contrapiso" && cpInterno(a)) || (a.tipo === "ambiente" && !a.aberto))) pisoInterno(a.pts, marcadas.has("a" + i)); });
     // áreas: contrapiso externo (hachura) por baixo, laje (tracejado) por cima
     const ordem = areas.map((a, i) => i).sort((i, j) => (areas[i].tipo === "laje") - (areas[j].tipo === "laje"));
@@ -1199,27 +1322,29 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       } else if (cpInterno(a)) {
         caminho(a.pts); ctx.strokeStyle = marc ? TP_AZUL : "#b8a98a"; ctx.lineWidth = (marc ? 2.5 : 1) * dpr; ctx.stroke();
       } else {
-        // piso externo: acabamento escolhido (pedra irregular é o padrão)
-        if (a.acab === "deck") deck(a.pts, a.angRipa || 0, marc);
-        else if (a.acab === "porcelanato") pisoInterno(a.pts, marc, "#dcd8d2", 0.6);
-        else pedras(a.pts, marc);
+        // piso externo: acabamento escolhido (pedra irregular é o padrão); o
+        // que envolve a casa fica recortado na face de fora das paredes
+        const textura = () => { if (a.acab === "deck") deck(a.pts, a.angRipa || 0, marc); else if (a.acab === "porcelanato") pisoInterno(a.pts, marc, "#dcd8d2", 0.6); else pedras(a.pts, marc); };
+        if (tipoCp(a) === "furado") semCasa(textura); else textura();
         caminho(a.pts); ctx.strokeStyle = marc ? TP_AZUL : "#8a8a8a"; ctx.lineWidth = (marc ? 2.5 : 1) * dpr; ctx.stroke();
       }
-      const [cx, cy] = T(tpCentro(a.pts));
+      const furadoCp = a.tipo === "contrapiso" && tipoCp(a) === "furado";
+      const [cx, cy] = T(furadoCp ? (pontoLivre(a.pts, pegada) || tpCentro(a.pts)) : tpCentro(a.pts));
       ctx.font = `600 ${11 * dpr}px system-ui, sans-serif`; ctx.textAlign = "center";
       ctx.fillStyle = marc ? TP_AZUL : (a.tipo === "laje" ? "#4b6aa0" : "#b65b3d");
       let nomeA = TP_AREA_TIPOS[a.tipo].nome;
-      if (a.tipo === "contrapiso" && cobPts.length) nomeA = tpAreaDentro(a.pts, cobPts) >= tpAreaPoli(a.pts) / 2 ? "Piso interno" : "Piso externo";
+      if (a.tipo === "contrapiso") nomeA = cpInterno(a) ? "Piso interno" : "Piso externo";
+      const areaRot = furadoCp ? Math.max(0, tpAreaPoli(a.pts) - tpAreaDentro(a.pts, pegada)) : tpAreaPoli(a.pts);
       // sem anotação de laje e piso interno (como na prancha); só aparece selecionado.
-      // O piso externo continua com o nome e a área.
-      if (marc || nomeA === "Piso externo") ctx.fillText(`${nomeA} ${tpFmt(tpAreaPoli(a.pts))} m²`, cx, cy + (a.tipo === "laje" ? 14 * dpr : 0));
+      // O piso externo continua com o nome e a área (no que envolve a casa, sem a casa).
+      if (marc || nomeA === "Piso externo") ctx.fillText(`${nomeA} ${tpFmt(areaRot)} m²`, cx, cy + (a.tipo === "laje" ? 14 * dpr : 0));
     }
 
     // "ÁREA EXTERNA x m²" (terreno sem piso nem cobertura) no ponto mais livre
     // do gramado: amostra uma grade e fica com o ponto mais longe das bordas
     const terrenos = areas.filter((a) => a.tipo === "terreno" && a.pts && a.pts.length >= 3);
     if (terrenos.length) {
-      const an = tpAnaliseAreas(areas);
+      const an = analise;
       if (an.permeavel > 0.5) {
         const ocup = areas.filter((a) => ["laje", "telhado", "contrapiso"].includes(a.tipo) && a.pts && a.pts.length >= 3).map((a) => a.pts);
         const bordas = [...terrenos.map((t) => t.pts), ...ocup];
@@ -1558,6 +1683,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     areas.forEach((a, i) => {
       if (!a.pts || a.pts.length < 3 || a.tipo === "telhado" || a.tipo === "ambiente") return;
       const shape = new THREE.Shape(a.pts.map((p) => new THREE.Vector2(p.x - cx, -(p.y - cz))));
+      // piso externo que envolve a casa: furo na pegada (face de fora das paredes)
+      if (a.tipo === "contrapiso") {
+        const peg = analise.pegada || [], cob = areas.filter((x) => (x.tipo === "laje" || x.tipo === "telhado") && x.pts && x.pts.length >= 3).map((x) => x.pts);
+        if (tpTipoContrapiso(a.pts, peg, cob) === "furado") for (const P of peg) if (P.every((q) => tpDentroPoli(q, a.pts))) shape.holes.push(new THREE.Path(P.map((q) => new THREE.Vector2(q.x - cx, -(q.y - cz)))));
+      }
       const g = new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.01, a.esp || 0.05), bevelEnabled: false });
       const marc = marcadas.has("a" + i);
       const mat = new THREE.MeshLambertMaterial({ color: marc ? 0x8dbbff : TP_AREA_TIPOS[a.tipo].cor3d, transparent: a.tipo === "laje" && !marc, opacity: a.tipo === "laje" && !marc ? 0.85 : 1 });
@@ -2284,7 +2414,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const somaArea = (tipo, f) => areas.filter((a) => a.tipo === tipo).reduce((s, a) => s + f(a), 0);
   const areaCp = somaArea("contrapiso", (a) => tpAreaPoli(a.pts)), volCp = somaArea("contrapiso", (a) => tpAreaPoli(a.pts) * (a.esp || 0));
   const areaLj = somaArea("laje", (a) => tpAreaPoli(a.pts)), volLj = somaArea("laje", (a) => tpAreaPoli(a.pts) * (a.esp || 0));
-  const analise = useMemo(() => tpAnaliseAreas(areas), [areas]);
+  const analise = useMemo(() => tpAnaliseAreas(areas, paredes), [areas, paredes]);
   const telProj = somaArea("telhado", (a) => geoTelhado(a).areaProjecao), telReal = somaArea("telhado", (a) => geoTelhado(a).areaReal);
   const comum = (lista, f) => { if (!lista.length) return null; const v0 = f(lista[0]); return lista.every((x) => Math.abs(f(x) - v0) < 1e-9) ? v0 : null; };
 
