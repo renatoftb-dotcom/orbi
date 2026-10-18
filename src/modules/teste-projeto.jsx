@@ -1131,9 +1131,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       ctx.strokeStyle = marc ? TP_AZUL : "rgba(17,24,39,0.25)"; ctx.lineWidth = (marc ? 2 : 1) * dpr; ctx.setLineDash([2 * dpr, 3 * dpr]); ctx.stroke(); ctx.setLineDash([]);
       const [lx, ly] = T(a.ponto || tpCentro(a.pts));
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.font = `700 ${13 * dpr}px system-ui, sans-serif`; ctx.fillStyle = marc ? TP_AZUL : "#111827";
+      ctx.font = `600 ${13 * dpr}px system-ui, sans-serif`; ctx.fillStyle = marc ? TP_AZUL : "#b65b3d";
       ctx.fillText(a.nome || "Ambiente", lx, ly - 8 * dpr);
-      ctx.font = `500 ${11.5 * dpr}px system-ui, sans-serif`; ctx.fillStyle = a.aberto ? "#b45309" : (marc ? TP_AZUL : "#4b5563");
+      ctx.font = `500 ${11.5 * dpr}px system-ui, sans-serif`; ctx.fillStyle = a.aberto ? "#b45309" : (marc ? TP_AZUL : "#b65b3d");
       ctx.fillText(a.aberto ? "não fechado" : `${tpFmt(tpAreaPoli(a.pts))} m²`, lx, ly + 8 * dpr);
       ctx.textBaseline = "alphabetic";
     });
@@ -1150,28 +1150,38 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // paredes
     const todas = modoTraco === "linha" && inicio && hover && (hover.x !== inicio.x || hover.y !== inicio.y)
       ? [...paredes, { a: inicio, b: hover, t: espM, fantasma: true }] : paredes;
-    // cada parede é desenhada em trechos (sem os vãos das portas e janelas);
-    // as pontas avançam meia espessura, como o canto quadrado de antes
-    const trechos = (w, extra, cor) => {
-      const L = tpLen(w); if (!L) return;
-      const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
-      ctx.strokeStyle = cor; ctx.lineWidth = Math.max(2, w.t * v.s) + extra;
-      for (const [s0, s1] of tpTrechosParede(w)) {
-        const [x0, y0] = T({ x: w.a.x + ux * s0, y: w.a.y + uy * s0 }), [x1, y1] = T({ x: w.a.x + ux * s1, y: w.a.y + uy * s1 });
-        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
-      }
+    // Paredes no padrão de corte (como a prancha do escritório, Revit):
+    // preenchimento cinza #555 e contorno preto grosso nas faces, fechando as
+    // pontas também nos vãos de porta e janela. A "união" nos cantos e T sai de
+    // duas passadas: primeiro todos os trechos em preto (espessura cheia),
+    // depois o cinza de cada trecho recuado da espessura da pena — o cinza de
+    // uma parede cobre o preto da outra no encontro, e só sobra o contorno de fora.
+    const penaDe = (w) => Math.max(1.3 * dpr, Math.min(0.25 * (w.t || 0) * v.s, 3.5 * dpr));
+    const pena = 2 * dpr;
+    const quadros = (w, recuo = 0) => {
+      const L = tpLen(w); if (!L) return [];
+      const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, nx = -uy, ny = ux, h = (w.t || 0) / 2 - recuo;
+      if (h <= 0) return [];
+      return tpTrechosParede(w).map(([s0, s1]) => [s0 + recuo, s1 - recuo]).filter(([s0, s1]) => s1 > s0)
+        .map(([s0, s1]) => [[s0, -h], [s1, -h], [s1, h], [s0, h]].map(([sa, sn]) => T({ x: w.a.x + ux * sa + nx * sn, y: w.a.y + uy * sa + ny * sn })));
     };
-    ctx.lineCap = "butt";
-    todas.forEach((w, i) => { if (marcadas.has("p" + i)) trechos(w, 10 * dpr, "rgba(4,116,244,0.25)"); });
+    const quadro = (q) => { ctx.beginPath(); q.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); };
+    // seleção: halo azul por baixo
+    ctx.lineJoin = "round";
+    paredes.forEach((w, i) => { if (!marcadas.has("p" + i)) return; ctx.strokeStyle = "rgba(4,116,244,0.28)"; ctx.lineWidth = 12 * dpr; quadros(w).forEach((q) => { quadro(q); ctx.stroke(); }); });
+    ctx.lineJoin = "miter";
+    ctx.fillStyle = "#000";
+    paredes.forEach((w) => quadros(w).forEach((q) => { quadro(q); ctx.fill(); }));
+    paredes.forEach((w, i) => { ctx.fillStyle = marcadas.has("p" + i) ? "#5b8fd6" : "#555555"; quadros(w, penaDe(w) / v.s).forEach((q) => { quadro(q); ctx.fill(); }); });
+    // parede em desenho (fantasma): azul translúcido, sem união
+    todas.forEach((w) => { if (!w.fantasma) return; ctx.globalAlpha = 0.55; ctx.fillStyle = TP_AZUL; quadros(w).forEach((q) => { quadro(q); ctx.fill(); }); ctx.globalAlpha = 1; });
     todas.forEach((w, i) => {
       const [ax, ay] = T(w.a), [bx, by] = T(w.b), marc = marcadas.has("p" + i);
-      ctx.globalAlpha = w.fantasma ? 0.6 : 1;
-      trechos(w, 0, w.fantasma || marc ? TP_AZUL : "#374151"); ctx.globalAlpha = 1;
       let ang = Math.atan2(by - ay, bx - ax); if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
       ctx.save(); ctx.translate((ax + bx) / 2, (ay + by) / 2); ctx.rotate(ang);
       ctx.font = `600 ${12 * dpr}px system-ui, sans-serif`; ctx.textAlign = "center";
       ctx.fillStyle = w.fantasma || marc ? TP_AZUL : "#6b7280";
-      if (!w.fantasma) ctx.fillText(tpFmt(tpLen(w)) + " m", 0, -(w.t * v.s / 2 + 6 * dpr)); ctx.restore();
+      if (!w.fantasma) ctx.fillText(tpFmt(tpLen(w)) + " m", 0, -(w.t * v.s / 2 + pena + 6 * dpr)); ctx.restore();
       if (w.fantasma) etiqueta(w.a, w.b, `${tpFmt(tpLen(w))} m${angulo(w.a, w.b)}`);
     });
     // portas, janelas e vãos: símbolo de planta (NBR 6492 / convenção usual)
@@ -1185,29 +1195,36 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const e0 = o.x - o.larg / 2, e1 = o.x + o.larg / 2;
       const seg = (p, q, lw, dash) => { const [x0, y0] = T(p), [x1, y1] = T(q); ctx.lineWidth = lw * dpr; ctx.setLineDash(dash || []); ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); ctx.setLineDash([]); };
       const vaoPoli = [P(e0, -h), P(e1, -h), P(e1, h), P(e0, h)];
-      if (opts.limpar) { ctx.fillStyle = "#fff"; caminho(vaoPoli); ctx.fill(); }
+      if (opts.limpar) { const pp = dpr / v.s; ctx.fillStyle = "#fff"; caminho([P(e0, -h - pp), P(e1, -h - pp), P(e1, h + pp), P(e0, h + pp)]); ctx.fill(); }
       if (opts.marc) { ctx.fillStyle = "rgba(4,116,244,0.18)"; caminho(vaoPoli); ctx.fill(); }
       ctx.strokeStyle = cor; ctx.lineCap = "butt";
-      seg(P(e0, -h), P(e0, h), 1.2); seg(P(e1, -h), P(e1, h), 1.2); // ombreiras
+      // padrão da prancha: folha de porta fechada (retângulo cinza claro) com
+      // giro tracejado; janela com vidro cinza claro dentro da parede e
+      // peitoril do lado de fora (lado oposto ao que a esquadria "abre")
+      const normal = cor === "#111827", traco = normal ? "#000" : cor, claro = normal ? "#d9d9d9" : "rgba(4,116,244,0.18)", fraco = normal ? "#9a9a9a" : cor;
+      const ret = (sa, sb, na, nb, fill, lw) => { caminho([P(sa, na), P(sb, na), P(sb, nb), P(sa, nb)]); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (lw) { ctx.strokeStyle = traco; ctx.lineWidth = lw * dpr; ctx.stroke(); } };
+      const fora = -ld, ef = Math.min(0.025, h * 0.4);
+      ctx.strokeStyle = traco;
       if (tpGiro(o.tipo)) {
         const dois = o.tipo === "porta_giro2", r = dois ? o.larg / 2 : o.larg;
         const folhas = dois ? [[e0, 1], [e1, -1]] : [[md > 0 ? e0 : e1, md > 0 ? 1 : -1]];
-        for (const [s, dir] of folhas) {
-          const base = h * ld;
-          seg(P(s, base), P(s, base + ld * r), 2.2);
-          ctx.lineWidth = 1 * dpr; ctx.beginPath();
-          for (let k = 0; k <= 24; k++) { const an = (k / 24) * Math.PI / 2; const [x, y] = T(P(s + dir * r * Math.cos(an), base + ld * r * Math.sin(an))); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
-          ctx.stroke();
+        for (const [sh, dir] of folhas) {
+          ret(Math.min(sh, sh + dir * r), Math.max(sh, sh + dir * r), -ef, ef, claro, 1);
+          ctx.strokeStyle = fraco; ctx.lineWidth = 1 * dpr; ctx.setLineDash([5 * dpr, 4 * dpr]); ctx.beginPath();
+          for (let k = 0; k <= 24; k++) { const an = (k / 24) * Math.PI / 2; const [x, y] = T(P(sh + dir * r * Math.cos(an), ld * r * Math.sin(an))); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+          ctx.stroke(); ctx.setLineDash([]);
         }
-      } else if (o.tipo === "porta_correr" || o.tipo === "janela_correr") {
-        const janela = o.tipo === "janela_correr", k = h * 0.35, sb = 0.05;
-        if (janela) { seg(P(e0, -h), P(e1, -h), 1); seg(P(e0, h), P(e1, h), 1); }
-        const a1 = md > 0 ? [e0, o.x + sb] : [o.x - sb, e1], a2 = md > 0 ? [o.x - sb, e1] : [e0, o.x + sb];
-        seg(P(a1[0], k), P(a1[1], k), janela ? 1.6 : 3); seg(P(a2[0], -k), P(a2[1], -k), janela ? 1.6 : 3);
-      } else if (o.tipo === "maxim_ar" || o.tipo === "fixo") {
-        seg(P(e0, -h), P(e1, -h), 1); seg(P(e0, h), P(e1, h), 1); seg(P(e0, 0), P(e1, 0), 1.6);
-        if (o.tipo === "maxim_ar") { const q = Math.min(0.3, o.larg * 0.4); seg(P(e0, h * ld), P(o.x, ld * (h + q)), 1, [4 * dpr, 3 * dpr]); seg(P(o.x, ld * (h + q)), P(e1, h * ld), 1, [4 * dpr, 3 * dpr]); }
-      } else { seg(P(e0, -h), P(e1, -h), 1, [5 * dpr, 4 * dpr]); seg(P(e0, h), P(e1, h), 1, [5 * dpr, 4 * dpr]); }
+      } else if (o.tipo === "porta_correr") {
+        const sb = 0.05, a1 = md > 0 ? [e0, o.x + sb] : [o.x - sb, e1], a2 = md > 0 ? [o.x - sb, e1] : [e0, o.x + sb];
+        ret(a1[0], a1[1], 0, 2 * ef, claro, 1); ret(a2[0], a2[1], -2 * ef, 0, claro, 1);
+      } else if (o.tipo === "janela_correr" || o.tipo === "maxim_ar" || o.tipo === "fixo") {
+        ret(e0, e1, -h * 0.45, h * 0.45, claro, 0);                 // vidro / caixilho
+        seg(P(e0, -h), P(e1, -h), 0.8); seg(P(e0, h), P(e1, h), 0.8); // faces
+        if (o.tipo === "janela_correr") { const sb = 0.05; seg(P(e0, h * 0.15), P(o.x + sb, h * 0.15), 1.4); seg(P(o.x - sb, -h * 0.15), P(e1, -h * 0.15), 1.4); }
+        else seg(P(e0, 0), P(e1, 0), 1.4);
+        ret(e0 - 0.03, e1 + 0.03, fora * h, fora * (h + 0.035), normal ? "#7a7a76" : claro, 0.8); // peitoril
+        if (o.tipo === "maxim_ar") { const q = Math.min(0.3, o.larg * 0.4); ctx.strokeStyle = fraco; seg(P(e0, -fora * h), P(o.x, -fora * (h + q)), 1, [4 * dpr, 3 * dpr]); seg(P(o.x, -fora * (h + q)), P(e1, -fora * h), 1, [4 * dpr, 3 * dpr]); }
+      } else { ctx.strokeStyle = fraco; seg(P(e0, -h), P(e1, -h), 1, [5 * dpr, 4 * dpr]); seg(P(e0, h), P(e1, h), 1, [5 * dpr, 4 * dpr]); }
       if (opts.codigo) {
         // lado da etiqueta: porta do lado oposto ao giro; janela/vão do lado
         // oposto à medida da parede. Se cair do lado da medida perto do meio da
