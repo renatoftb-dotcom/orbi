@@ -1831,7 +1831,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const anotPx = (mm) => mm / 1000 * escala * v.s;
     const fonteAnot = (mm, mn, mx) => Math.max(mn * dpr, Math.min(mx * dpr, anotPx(mm)));
     const nivelAnot = anotPx(2.5) / dpr;
-    const lodCotas = nivelAnot >= 5.6, lodEsqMed = nivelAnot >= 5.6, lodEsqCod = nivelAnot >= 3.8, lodArea = nivelAnot >= 3.2;
+    const lodCotas = nivelAnot >= 5.6, lodEsqMed = nivelAnot >= 5.6, lodEsqCod = nivelAnot >= 3.8, lodArea = nivelAnot >= 3.2, lodNomes = nivelAnot >= 2.4;
     // anotações não se sobrepõem: a de menor prioridade sai (nome do ambiente >
     // esquadria > cota do ambiente > comprimento da parede)
     const ocupadas = [];
@@ -1946,7 +1946,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const b0 = a.pts.reduce((m, q) => (q.y < m.y ? q : m), a.pts[0]); const [tx, ty] = T(b0);
       { const fT = fonteAnot(3, 7, 13), kT = fT / (11 * dpr);
         ctx.font = `600 ${fT}px system-ui, sans-serif`; ctx.textAlign = "left"; ctx.fillStyle = marc ? TP_AZUL : "#b65b3d";
-        if (lodArea || marc) ctx.fillText(`Terreno ${tpFmt(tpAreaPoli(a.pts))} m²`, tx + 12 * dpr * kT, ty + 18 * dpr * kT); ctx.textAlign = "start"; }
+        if ((lodArea && lodNomes) || marc) ctx.fillText(`Terreno ${tpFmt(tpAreaPoli(a.pts))} m²`, tx + 12 * dpr * kT, ty + 18 * dpr * kT); ctx.textAlign = "start"; }
     });
     const cobPts = areas.filter((a) => (a.tipo === "laje" || a.tipo === "telhado") && a.pts && a.pts.length >= 3).map((a) => a.pts);
     // Piso interno (padrão da prancha): porcelanato cinza bem claro, peça
@@ -2030,7 +2030,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const areaRot = furadoCp ? Math.max(0, tpAreaPoli(a.pts) - tpAreaDentro(a.pts, pegada)) : tpAreaPoli(a.pts);
       // sem anotação de laje e piso interno (como na prancha); só aparece selecionado.
       // O piso externo continua com o nome e a área (no que envolve a casa, sem a casa).
-      if (marc || nomeA === "Piso externo") ctx.fillText(`${nomeA} ${tpFmt(areaRot)} m²`, cx, cy + (a.tipo === "laje" ? 14 * dpr : 0));
+      if (marc || (nomeA === "Piso externo" && lodNomes)) ctx.fillText(`${nomeA} ${tpFmt(areaRot)} m²`, cx, cy + (a.tipo === "laje" ? 14 * dpr : 0));
     }
 
     // "ÁREA EXTERNA x m²" (terreno sem piso nem cobertura) no ponto mais livre
@@ -2053,7 +2053,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             if (d > folga) { folga = d; melhor = q; }
           }
         }
-        if (melhor && folga * v.s > 30 * dpr) {
+        if (melhor && folga * v.s > 30 * dpr && lodNomes) {
           const [lx, ly] = T(melhor);
           ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#b65b3d";
           const f1 = fonteAnot(3.2, 7, 14), f2 = fonteAnot(3, 7, 13), dyE = (f1 + f2) * 0.32;
@@ -2115,6 +2115,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       caminho(a.pts);
       // sem seleção o piso já mostra o cômodo; o contorno só aparece selecionado (ou se não fechou)
       if (marc || a.aberto) { ctx.strokeStyle = marc ? TP_AZUL : "rgba(17,24,39,0.25)"; ctx.lineWidth = (marc ? 2 : 1) * dpr; ctx.setLineDash([2 * dpr, 3 * dpr]); ctx.stroke(); ctx.setLineDash([]); }
+      // bem de longe o nome some (não dá para ler e sairia do desenho)
+      if (!lodNomes && !marc) return;
       let [lx, ly] = T(tpRotuloAmb(a));
       const txtNome = a.nome || "Ambiente", txtArea = a.aberto ? "não fechado" : `${tpFmt(tpAreaPoli(a.pts))} m²`;
       // tamanho em escala de prancha (nome 3,5 mm, área 3 mm), travado na tela
@@ -2124,8 +2126,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       ctx.font = `500 ${fA}px system-ui, sans-serif`; const wA = comArea ? ctx.measureText(txtArea).width : 0;
       const meia = Math.max(wN, wA) / 2 + 6 * dpr, dy = comArea ? (fN + fA) * 0.33 : 0;
       const y0r = -dy - fN * 0.7 - 3 * dpr, y1r = (comArea ? dy + fA * 0.7 : fN * 0.7) + 3 * dpr, alt = y1r - y0r;
-      // dois ambientes no mesmo espaço (ex.: apagou a parede entre eles): um nome não cobre o outro
-      for (let k = 0; k < 6 && rotulosClic.current.some((q) => lx - meia < q.x1 && lx + meia > q.x0 && ly + y0r < q.y1 && ly + y1r > q.y0); k++) ly += alt + 2 * dpr;
+      // nome mais largo que o cômodo na tela: não cabe, sai (selecionado aparece)
+      { const bx = caixaDe(a.pts); if (!marc && Math.max(wN, wA) > (bx.x1 - bx.x0) * v.s * 1.05) return; }
+      // dois ambientes no mesmo espaço (ex.: apagou a parede entre eles): um nome
+      // não cobre o outro — desce, mas só enquanto continuar dentro do cômodo
+      const dentroTela = (yy) => tpDentroPoli({ x: (lx - v.ox) / v.s, y: (yy - v.oy) / v.s }, a.pts);
+      const bateNome = (yy) => rotulosClic.current.some((q) => lx - meia < q.x1 && lx + meia > q.x0 && yy + y0r < q.y1 && yy + y1r > q.y0);
+      for (let k = 0; k < 6 && bateNome(ly) && dentroTela(ly + alt + 2 * dpr); k++) ly += alt + 2 * dpr;
+      if (!marc && bateNome(ly)) return;
       rotulosClic.current.push({ ai: i, x0: lx - meia, x1: lx + meia, y0: ly + y0r, y1: ly + y1r, yNome: ly - dy });
       ocupar({ x0: lx - meia + 4 * dpr, x1: lx + meia - 4 * dpr, y0: ly + y0r, y1: ly + y1r });
       // selecionado: moldura discreta mostrando que o nome pode ser arrastado e editado
