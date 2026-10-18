@@ -1072,7 +1072,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     desenharPlanta();
   };
   const devPx = (e) => { const c = planRef.current, r = c.getBoundingClientRect(), k = c.width / r.width; return { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k }; };
-  const snap = (v) => Math.round(v / TP_GRADE) * TP_GRADE;
+  // grade de encaixe acompanha o zoom (mais perto = passo menor), no máximo 0,50 m
+  const snap = (v) => { const p = vista.current ? Math.min(TP_GRADE, passoZoom()) : TP_GRADE; return Math.round(Math.round(v / p) * p * 1000) / 1000; };
   const paraMundo = (e) => { const v = vista.current, d = devPx(e); return { x: snap((d.x - v.ox) / v.s), y: snap((d.y - v.oy) / v.s) }; };
   const paraMundoLivre = (d) => { const v = vista.current; return { x: (d.x - v.ox) / v.s, y: (d.y - v.oy) / v.s }; };
   // Ponto do traço: ímã nas pontas de paredes e áreas (vence a grade, para
@@ -1113,7 +1114,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     }
     // ambiente não serve de ímã: o contorno dele é calculado das paredes e
     // anda junto com elas num arraste (puxava a ponta para a posição anterior)
-    areas.forEach((a, ai) => { if (a.tipo !== "ambiente") (a.pts || []).forEach((q, k) => { if (!(ign.area === ai && (ign.vertices || []).includes(k))) out.push(q); }); });
+    areas.forEach((a, ai) => { if (a.tipo !== "ambiente" && !(ign.areas && ign.areas.includes(ai))) (a.pts || []).forEach((q, k) => { if (!(ign.area === ai && (ign.vertices || []).includes(k))) out.push(q); }); });
     out.push(...poli);
     return out;
   };
@@ -2113,13 +2114,66 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // Valor ao longo de um eixo com ímã ESTÁVEL: gruda num ponto/alinhamento
   // e só solta quando o cursor se afasta mais de 12 px dele (antes o ímã
   // ligava e desligava a cada pixel e a ponta pulava para lá e para cá).
-  const eixoEstavel = (g, chave, tCursor, tIma) => {
+  // Passo da grade de arraste conforme o zoom: o menor valor "redondo" que
+  // ainda fica com uns 6 px na tela (afastado anda de 25/50 cm; bem perto, de 1 cm)
+  const passoZoom = () => {
+    const px = vista.current.s / (window.devicePixelRatio || 1);
+    for (const p of [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1]) if (p * px >= 6) return p;
+    return 1;
+  };
+  // Ímãs vindos do cursor (ponta grudada ou pontos de alinhamento), medidos
+  // ao longo da direção d a partir de ref. Do alinhamento vale só o ponto-guia
+  // (a outra coordenada do cursor é da grade, não é ímã).
+  const imasDoCursor = (pc, ref, d) => [
+    ...(pc.ima ? [(pc.x - ref.x) * d.x + (pc.y - ref.y) * d.y] : []),
+    // só a guia que está alinhada com o cursor NESTA direção
+    ...((pc.guias || []).filter((q) => Math.abs((q.x - pc.x) * d.x + (q.y - pc.y) * d.y) < 1e-6).map((q) => (q.x - ref.x) * d.x + (q.y - ref.y) * d.y)),
+  ];
+  // tIma: um valor ou uma lista de valores-ímã (faces e eixos de paredes, pontas...)
+  // base: posição absoluta do zero do eixo (para a grade cair em valores
+  // redondos da planta, ex.: y = 6,00, e não "1 m a partir de onde estava")
+  const eixoEstavel = (g, chave, tCursor, tIma, base = 0) => {
     const px = vista.current.s / (window.devicePixelRatio || 1);
     const atual = g[chave];
     if (atual != null && Math.abs(tCursor - atual) * px < 12) return atual;
-    if (tIma != null && Math.abs(tCursor - tIma) * px < 8) { g[chave] = tIma; return tIma; }
+    const lista = Array.isArray(tIma) ? tIma : tIma != null ? [tIma] : [];
+    let melhor = null, dmin = 8 / px;
+    for (const t of lista) { const d = Math.abs(tCursor - t); if (d < dmin) { dmin = d; melhor = t; } }
+    if (melhor != null) { g[chave] = melhor; return melhor; }
     g[chave] = null;
-    return Math.round(tCursor / 0.05) * 0.05;
+    const p = passoZoom();
+    return Math.round(((Math.round((tCursor + base) / p) * p) - base) * 1000) / 1000;
+  };
+  // Linhas de paredes PARALELAS a uma direção (eixo e as duas faces), como
+  // distâncias ao longo da normal n a partir de "ref": é onde uma linha que
+  // anda de lado deve poder parar (alinhada com a face ou o eixo da parede)
+  const linhasParalelas = (n, ref, ps, ignorar = []) => {
+    const out = [];
+    ps.forEach((w, i) => {
+      const L = tpLen(w); if (!L || ignorar.includes(i)) return;
+      const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
+      if (Math.abs(ux * n.x + uy * n.y) > 0.02) return; // não é paralela
+      const d = (w.a.x - ref.x) * n.x + (w.a.y - ref.y) * n.y, h = (w.t || 0) / 2;
+      out.push(d, d - h, d + h);
+    });
+    return out;
+  };
+  // Onde as paredes que CRUZAM uma linha (origem + u·t) a cortam — eixo e as
+  // duas faces —, para a ponta que estica parar na face/eixo de outra parede
+  const cortesNoEixo = (o, u, ps, ignorar = []) => {
+    const out = [];
+    ps.forEach((w, i) => {
+      const L = tpLen(w); if (!L || ignorar.includes(i)) return;
+      const vx = (w.b.x - w.a.x) / L, vy = (w.b.y - w.a.y) / L, den = u.x * vy - u.y * vx;
+      if (Math.abs(den) < 0.2) return;
+      const nx = -vy, ny = vx, h = (w.t || 0) / 2;
+      for (const off of [0, -h, h]) {
+        const ax = w.a.x + nx * off, ay = w.a.y + ny * off;
+        const t = ((ax - o.x) * vy - (ay - o.y) * vx) / den, tv = ((ax - o.x) * u.y - (ay - o.y) * u.x) / den;
+        if (tv > -0.3 && tv < L + 0.3) out.push(t);
+      }
+    });
+    return out;
   };
   const arrastarAlca = (e, g) => {
     const al = g.grip, orig = g.orig;
@@ -2145,7 +2199,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const mv = al.chaves.filter((k) => k[0] === "p").map((k) => +k.slice(1));
         g.ligMover = [...mv, ...orig.paredes.map((w, j) => (!mv.includes(j) && ["a", "b"].some((f) => mv.some((i) => tpDistSeg(w[f], orig.paredes[i].a, orig.paredes[i].b) < 2e-3)) ? j : -1)).filter((j) => j >= 0)];
       }
-      const pc = pontoDoCursor({ clientX: e.clientX + off.x, clientY: e.clientY + off.y, shiftKey: e.shiftKey }, { base: al.ancora, ignorar: { paredes: g.ligMover } }); setHover(pc);
+      const pc = pontoDoCursor({ clientX: e.clientX + off.x, clientY: e.clientY + off.y, shiftKey: e.shiftKey }, { base: al.ancora, ignorar: { paredes: g.ligMover, areas: al.chaves.filter((k) => k[0] === "a").map((k) => +k.slice(1)) } }); setHover(pc);
       let dx = pc.x - al.ancora.x, dy = pc.y - al.ancora.y;
       // Linha de separação sozinha anda só na perpendicular a ela mesma: as
       // pontas continuam encostadas nas mesmas paredes (o ímã/alinhamento podia
@@ -2159,15 +2213,23 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const l = tpLen(pw), nx = -(pw.b.y - pw.a.y) / l, ny = (pw.b.x - pw.a.x) / l;
         const livre = paraMundoLivre(devPx({ clientX: e.clientX + off.x, clientY: e.clientY + off.y }));
         const nCur = (livre.x - al.ancora.x) * nx + (livre.y - al.ancora.y) * ny;
-        const nIma = pc.ima || pc.guias ? (pc.x - al.ancora.x) * nx + (pc.y - al.ancora.y) * ny : null;
-        const dn = eixoEstavel(g, "snapN", nCur, nIma);
+        const nIma = [...imasDoCursor(pc, al.ancora, { x: nx, y: ny }), ...linhasParalelas({ x: nx, y: ny }, al.ancora, orig.paredes, g.ligMover)];
+        const dn = eixoEstavel(g, "snapN", nCur, nIma, al.ancora.x * nx + al.ancora.y * ny);
         dx = nx * dn; dy = ny * dn;
         setHover({ x: r3(al.ancora.x + dx), y: r3(al.ancora.y + dy) });
       }
       let areasBase = orig.areas;
       if (so && so.tipo === "separador" && so.pts && so.pts.length === 2) {
         const [a0, b0] = so.pts, l = Math.hypot(b0.x - a0.x, b0.y - a0.y) || 1, nx = -(b0.y - a0.y) / l, ny = (b0.x - a0.x) / l;
-        const dn = dx * nx + dy * ny; dx = nx * dn; dy = ny * dn;
+        // anda pela grade do zoom (perto = passos pequenos) e gruda nas faces e
+        // eixos das paredes paralelas e nas outras linhas de separação
+        const livreS = paraMundoLivre(devPx({ clientX: e.clientX + off.x, clientY: e.clientY + off.y }));
+        const nCurS = (livreS.x - al.ancora.x) * nx + (livreS.y - al.ancora.y) * ny;
+        const outrasSep = orig.areas.filter((x) => x !== so && x.tipo === "separador" && x.pts && x.pts.length === 2).map((x) => ({ a: x.pts[0], b: x.pts[1], t: 0 }));
+        const imas = [...imasDoCursor(pc, al.ancora, { x: nx, y: ny }), ...linhasParalelas({ x: nx, y: ny }, al.ancora, [...orig.paredes, ...outrasSep])];
+        const dn = e.shiftKey ? dx * nx + dy * ny : eixoEstavel(g, "snapS", nCurS, imas, al.ancora.x * nx + al.ancora.y * ny);
+        dx = nx * dn; dy = ny * dn;
+        setHover({ x: r3(al.ancora.x + dx), y: r3(al.ancora.y + dy), ...(g.snapS != null ? { ima: true } : {}) });
         // ambiente cujo ponto de referência ficaria do outro lado (ou em cima) da
         // linha leva o ponto junto, para continuar do lado em que estava
         const lado = (q, desl) => (q.x - (a0.x + desl * nx)) * nx + (q.y - (a0.y + desl * ny)) * ny;
@@ -2215,8 +2277,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       else if (!g.giroLivre && perpPx > 25) g.giroLivre = true;
       if (!g.giroLivre && !e.shiftKey) {
         const tCur = (livre.x - outra.x) * ux + (livre.y - outra.y) * uy;
-        const tIma = pc.ima || pc.guias ? (pc.x - outra.x) * ux + (pc.y - outra.y) * uy : null;
-        const t = Math.max(0.05, eixoEstavel(g, "snapT", tCur, tIma));
+        const tIma = [...imasDoCursor(pc, outra, { x: ux, y: uy }), ...cortesNoEixo(outra, { x: ux, y: uy }, orig.paredes, [al.pi, ...(g.ligPonta || [])])];
+        const t = Math.max(0.05, eixoEstavel(g, "snapT", tCur, tIma, outra.x * ux + outra.y * uy));
         pc = { x: r3(outra.x + ux * t), y: r3(outra.y + uy * t), ...(pc.ima ? { ima: true } : {}) };
       }
       setHover(pc);
