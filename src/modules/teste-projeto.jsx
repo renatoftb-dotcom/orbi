@@ -843,11 +843,24 @@ function tpCurvasLisas(paredes, cantos = tpCantosMitra(paredes), grupos = tpGrup
     const ponta = (o, fim, hIn, recuo) => {
       const w = paredes[o.i], L = tpLen(w), u = { x: (w.b.x - w.a.x) / L, y: (w.b.y - w.a.y) / L }, nv = { x: -u.y, y: u.x };
       const c = cantos[o.i][fim], P = w[fim], jx = juncoes[o.i] && juncoes[o.i][fim];
-      let sm, sp, no = null;
-      if (c && !set.has(c.j)) { const viz = paredes[c.j]; [sm, sp] = tpPontaMitra(w, fim, viz, c.f, hIn, (viz.t || 0) / 2 - recuo); }
-      else if (jx && jx.tipo === "no") { [sm, sp] = tpCorteNo(paredes, o.i, fim, jx.viz, (k) => (k === o.i ? hIn : (paredes[k].t || 0) / 2 - recuo)); no = P; }
-      else { const s0 = fim === "a" ? recuo : L - recuo; sm = s0; sp = s0; }
-      const pM = { x: w.a.x + u.x * sm - nv.x * hIn, y: w.a.y + u.y * sm - nv.y * hIn }, pP = { x: w.a.x + u.x * sp + nv.x * hIn, y: w.a.y + u.y * sp + nv.y * hIn };
+      let sm, sp, no = null, eM = nv, eP = nv; // eM/eP: direção da linha em que cada ponta está (face da vizinha)
+      if (c && !set.has(c.j)) {
+        const viz = paredes[c.j]; [sm, sp] = tpPontaMitra(w, fim, viz, c.f, hIn, (viz.t || 0) / 2 - recuo);
+        const q = c.f === "a" ? viz.b : viz.a, Lv = Math.hypot(q.x - P.x, q.y - P.y) || 1; eM = eP = { x: (q.x - P.x) / Lv, y: (q.y - P.y) / Lv };
+      } else if (jx && jx.tipo === "no") {
+        const cs = tpCorteNo(paredes, o.i, fim, jx.viz, (k) => (k === o.i ? hIn : (paredes[k].t || 0) / 2 - recuo)); [sm, sp] = cs; no = P;
+        if (fim === "a") { eM = cs.cw.e; eP = cs.ccw.e; } else { eM = cs.ccw.e; eP = cs.cw.e; }
+      } else { const s0 = fim === "a" ? recuo : L - recuo; sm = s0; sp = s0; }
+      let pM = { x: w.a.x + u.x * sm - nv.x * hIn, y: w.a.y + u.y * sm - nv.y * hIn }, pP = { x: w.a.x + u.x * sp + nv.x * hIn, y: w.a.y + u.y * sp + nv.y * hIn };
+      // leva a ponta para cima do arco (o corte foi feito no trecho reto): sem degrauzinho no encontro
+      const noArco = (Q, e) => {
+        const R = Math.abs(Math.hypot(Q.x - ox, Q.y - oy) - (r + hIn)) < Math.abs(Math.hypot(Q.x - ox, Q.y - oy) - (r - hIn)) ? r + hIn : r - hIn;
+        const fx = Q.x - ox, fy = Q.y - oy, b = fx * e.x + fy * e.y, cc = fx * fx + fy * fy - R * R, disc = b * b - cc;
+        if (disc < 0) return Q;
+        const t1 = -b + Math.sqrt(disc), t2 = -b - Math.sqrt(disc), t = Math.abs(t1) < Math.abs(t2) ? t1 : t2;
+        return Math.abs(t) > 4 * (hIn + 0.01) ? Q : { x: Q.x + e.x * t, y: Q.y + e.y * t };
+      };
+      pM = noArco(pM, eM); pP = noArco(pP, eP);
       const dm = Math.hypot(pM.x - ox, pM.y - oy), dp = Math.hypot(pP.x - ox, pP.y - oy);
       return dm > dp ? { fora: pM, dentro: pP, no } : { fora: pP, dentro: pM, no };
     };
@@ -2080,6 +2093,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           // (< 180°), a borda preta vira do lado do miolo → o cinza ganha a curvinha
           // (o lado horário só quando a vizinha é uma parede que passa direto: ela não conta o canto)
           for (const [cc, lado] of [[cs.ccw, 1], ...(cs.cw.passa ? [[cs.cw, -1]] : [])]) {
+          // com curva lisa no encontro a faixa dela é desenhada pelo arco (não pelo trecho reto): sem curvinha
+          if (naCurva.has(i) || naCurva.has(cc.j)) continue;
           if (temP2 && cc.gap < Math.PI - 0.05 && cc.gap > 0.2) {
             const o = pD[cc.j], hi = h - penaDe(w) / v.s, ho = (o.t || 0) / 2 - penaDe(o) / v.s;
             if (hi * v.s > 2 * dpr && ho * v.s > 2 * dpr) {
