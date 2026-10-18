@@ -78492,6 +78492,59 @@ function tpSeguirLigadas(origPs, novasPs, movidas, dx, dy) {
   });
   return { ps, seguiram };
 }
+// Cotas temporárias de uma parede selecionada (como no Revit). Tudo no
+// sistema da parede: s ao longo do eixo (0 = ponta a, L = ponta b) e n na
+// normal (esquerda do sentido a→b).
+//  - comp: comprimento da parede;
+//  - vao: de uma ponta solta até a face da próxima parede que cruza o eixo;
+//  - perp: vão livre (face a face) até a parede paralela mais próxima de cada lado.
+// presa.a / presa.b = a ponta encosta (canto ou T) em outra parede.
+function tpCotasParede(paredes, i) {
+  const w = paredes[i]; if (!w) return null;
+  const L = tpLen(w); if (L < 1e-6) return null;
+  const u = { x: (w.b.x - w.a.x) / L, y: (w.b.y - w.a.y) / L }, nr = { x: -u.y, y: u.x }, t = w.t || 0;
+  const S = (q) => (q.x - w.a.x) * u.x + (q.y - w.a.y) * u.y, N = (q) => (q.x - w.a.x) * nr.x + (q.y - w.a.y) * nr.y;
+  const presa = { a: false, b: false }, vaos = { a: null, b: null }, perp = { "1": null, "-1": null };
+  paredes.forEach((o, j) => {
+    if (j === i) return;
+    const Lj = tpLen(o); if (Lj < 1e-6) return;
+    const uj = { x: (o.b.x - o.a.x) / Lj, y: (o.b.y - o.a.y) / Lj }, tj = o.t || 0;
+    const cr = u.x * uj.y - u.y * uj.x;
+    if (Math.abs(cr) < 0.02) {
+      // paralela: vão livre se as duas se enxergam (trechos sobrepostos no eixo)
+      const sa = S(o.a), sb = S(o.b), lo = Math.max(0, Math.min(sa, sb)), hi = Math.min(L, Math.max(sa, sb));
+      const dn = (N(o.a) + N(o.b)) / 2;
+      if (Math.abs(dn) < (t + tj) / 2 - 0.001) {
+        // na mesma linha (parede que continua depois de um vão): vão até a ponta dela
+        for (const [fim, e] of [["b", Math.min(sa, sb) - L], ["a", -Math.max(sa, sb)]]) {
+          if (Math.abs(e) <= 0.005) presa[fim] = true;
+          else if (e > 0 && (!vaos[fim] || e < vaos[fim].d)) vaos[fim] = { tipo: "vao", fim, j, d: e, eixo: e };
+        }
+        return;
+      }
+      if (hi - lo < 0.05) return;
+      const gap = Math.abs(dn) - t / 2 - tj / 2;
+      if (gap < 0.005) return;
+      const lado = dn > 0 ? "1" : "-1";
+      if (!perp[lado] || gap < perp[lado].d) perp[lado] = { tipo: "perp", lado: +lado, j, d: gap, s: (lo + hi) / 2, n0: +lado * t / 2, n1: dn - +lado * tj / 2 };
+      return;
+    }
+    // cruza o eixo: onde o eixo desta parede encontra o eixo da outra
+    const sEnc = ((o.a.x - w.a.x) * uj.y - (o.a.y - w.a.y) * uj.x) / cr;
+    const r = ((o.a.x - w.a.x) * u.y - (o.a.y - w.a.y) * u.x) / cr;
+    const folga = tj / 2 + t / 2 / Math.abs(cr) + 0.01; // a outra precisa chegar até a faixa desta parede
+    if (r < -folga || r > Lj + folga) return;
+    const meia = tj / 2 / Math.abs(cr);
+    for (const [fim, e] of [["b", sEnc - L], ["a", -sEnc]]) {
+      if (Math.abs(e) <= meia + 0.005) { presa[fim] = true; continue; }
+      if (e > 0 && (!vaos[fim] || e - meia < vaos[fim].d)) vaos[fim] = { tipo: "vao", fim, j, d: e - meia, eixo: e };
+    }
+  });
+  const out = [{ tipo: "comp", d: L }];
+  for (const fim of ["a", "b"]) if (!presa[fim] && vaos[fim]) out.push(vaos[fim]);
+  for (const k of ["1", "-1"]) if (perp[k]) out.push(perp[k]);
+  return { L, u, nr, t, presa, cotas: out };
+}
 // Quadro de esquadrias: mesmo tipo + material + medidas = mesmo código (P1,
 // J1, V1...), na ordem em que aparecem. É o que vai para a etiqueta da planta.
 function tpQuadroEsquadrias(paredes) {
@@ -78643,9 +78696,42 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     setEditCota(null);
     const v = numDigitado(ec.txt) ?? (String(ec.txt).trim().match(/^0+([.,]0*)?$/) ? 0 : null);
     if (v == null) return;
+    if (ec.parede) { aplicarCotaParede(ec.parede, v); return; }
     const loc = tpAcharAbertura(paredes, ec.id); if (!loc) return;
     const viz = tpVizinhos(paredes, loc.i, loc.o.x - loc.o.larg / 2, loc.o.x + loc.o.larg / 2);
     editarAberturas([ec.id], (o) => ({ ...o, x: r3(ec.lado === "antes" ? viz.antes + v + o.larg / 2 : viz.depois - v - o.larg / 2) }));
+  };
+  // cota de parede digitada: só a parede selecionada anda ou estica (as
+  // paredes ligadas nela acompanham, como no arraste)
+  const aplicarCotaParede = (info, v) => {
+    const i = info.i, w = paredes[i], cp = tpCotasParede(paredes, i); if (!w || !cp) return;
+    const { u, nr } = cp;
+    const esticar = (fim, novo) => {
+      const p0 = w[fim], q = { x: r3(novo.x), y: r3(novo.y) };
+      const outro = fim === "a" ? w.b : w.a; if (Math.hypot(q.x - outro.x, q.y - outro.y) < 0.05) { avisar("A parede ficaria curta demais."); return; }
+      const ps = paredes.map((x, j) => {
+        if (j === i) return tpComPonta(x, fim, q);
+        let nx = x; for (const f of ["a", "b"]) if (Math.hypot(x[f].x - p0.x, x[f].y - p0.y) < 2e-3) nx = tpComPonta(nx, f, q);
+        return nx;
+      });
+      mudar(ps, null, true);
+    };
+    if (info.tipo === "comp") {
+      const fim = !cp.presa.b ? "b" : !cp.presa.a ? "a" : "b";
+      esticar(fim, fim === "b" ? { x: w.a.x + u.x * v, y: w.a.y + u.y * v } : { x: w.b.x - u.x * v, y: w.b.y - u.y * v });
+      return;
+    }
+    if (info.tipo === "vao") {
+      const c = cp.cotas.find((x) => x.tipo === "vao" && x.fim === info.fim); if (!c) return;
+      const ext = v < 0.005 ? c.eixo : c.d - v; // 0 = encosta e liga na outra parede
+      esticar(info.fim, info.fim === "b" ? { x: w.b.x + u.x * ext, y: w.b.y + u.y * ext } : { x: w.a.x - u.x * ext, y: w.a.y - u.y * ext });
+      return;
+    }
+    const c = cp.cotas.find((x) => x.tipo === "perp" && x.lado === info.lado); if (!c) return;
+    const m = info.lado * (c.d - v), dx = r3(nr.x * m), dy = r3(nr.y * m);
+    if (!dx && !dy) return;
+    const movida = paredes.map((x, j) => (j === i ? { ...x, a: { x: r3(x.a.x + dx), y: r3(x.a.y + dy) }, b: { x: r3(x.b.x + dx), y: r3(x.b.y + dy) } } : x));
+    mudar(tpSeguirLigadas(paredes, movida, new Set([i]), dx, dy).ps, null, true);
   };
   const inverterAberturas = (campo) => { if (selO.length) editarAberturas(selO.map((x) => x.o.id), (o) => ({ ...o, [campo]: -(o[campo] || 1) })); };
   const editarParedes = (idx, fn) => { const s = new Set(idx); mudar(paredes.map((w, i) => (s.has(i) ? fn(w) : w)), null, true); };
@@ -79329,7 +79415,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       ctx.save(); ctx.translate((ax + bx) / 2, (ay + by) / 2); ctx.rotate(ang);
       ctx.font = `600 ${12 * dpr}px system-ui, sans-serif`; ctx.textAlign = "center";
       ctx.fillStyle = w.fantasma || marc ? TP_AZUL : "#6b7280";
-      if (!w.fantasma) ctx.fillText(tpFmt(tpLen(w)) + " m", 0, -(w.t * v.s / 2 + pena + 6 * dpr)); ctx.restore();
+      // a selecionada sozinha mostra o comprimento na cota temporária (clicável)
+      const soCota = marc && sel.length === 1 && (ferramenta === "selecionar" || ferramenta === "mover");
+      if (!w.fantasma && !soCota) ctx.fillText(tpFmt(tpLen(w)) + " m", 0, -(w.t * v.s / 2 + pena + 6 * dpr)); ctx.restore();
       if (w.fantasma) etiqueta(w.a, w.b, `${tpFmt(tpLen(w))} m${angulo(w.a, w.b)}`);
     });
     // portas, janelas e vãos: símbolo de planta (NBR 6492 / convenção usual)
@@ -79451,6 +79539,44 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         desenharEsq(w, o, marc ? TP_AZUL : "#111827", { marc: marcadas.has("o" + o.id), codigo: quadroPl.codigoDe.get(o.id), cotas: marcadas.has("o" + o.id) && sel.length === 1, eq: marcadas.has("o" + o.id) && sel.length === 1, i });
       });
     });
+    // parede selecionada sozinha: cotas temporárias (comprimento, vão até a
+    // próxima parede na ponta solta e vão livre até as paralelas). Clicar no
+    // número e digitar move ou estica a parede selecionada.
+    if (sel.length === 1 && sel[0][0] === "p" && paredes[+sel[0].slice(1)] && (ferramenta === "selecionar" || ferramenta === "mover")) {
+      const pi = +sel[0].slice(1), w = paredes[pi], cp = tpCotasParede(paredes, pi);
+      if (cp) {
+        const { u, nr, t } = cp, km = dpr / v.s; // metros por px de tela
+        const P = (sx, sn) => ({ x: w.a.x + u.x * sx + nr.x * sn, y: w.a.y + u.y * sx + nr.y * sn });
+        const pp = cp.cotas.filter((c) => c.tipo === "perp"), tem = (l) => pp.find((c) => c.lado === l);
+        const lc = !tem(1) ? 1 : !tem(-1) ? -1 : (tem(1).d >= tem(-1).d ? 1 : -1);
+        const nOff = lc * (t / 2 + 26 * km);
+        const azul = "#0284c7";
+        const linha = (p, q, larg = 1) => { const [ax, ay] = T(p), [bx, by] = T(q); ctx.lineWidth = larg * dpr; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); };
+        const traco = (p, dir) => { const [x, y] = T(p), k = 4 * dpr; const dx = (dir.x - dir.y) * k / Math.SQRT2, dy = (dir.y + dir.x) * k / Math.SQRT2; ctx.lineWidth = 1.4 * dpr; ctx.beginPath(); ctx.moveTo(x - dx, y - dy); ctx.lineTo(x + dx, y + dy); ctx.stroke(); };
+        const cota = (p, q, d, info) => {
+          ctx.strokeStyle = "#0ea5e9"; linha(p, q); const L2 = Math.hypot(q.x - p.x, q.y - p.y) || 1, dir = { x: (q.x - p.x) / L2, y: (q.y - p.y) / L2 };
+          ctx.strokeStyle = azul; traco(p, dir); traco(q, dir);
+          etiqueta(p, q, tpFmt(d) + " m", azul);
+          const [ax, ay] = T(p), [bx, by] = T(q);
+          if (Math.hypot(bx - ax, by - ay) < 18 * dpr) return;
+          let an = Math.atan2(by - ay, bx - ax); if (an > Math.PI / 2 || an < -Math.PI / 2) an += Math.PI;
+          cotasClic.current.push({ x: (ax + bx) / 2 + 14 * dpr * Math.sin(an), y: (ay + by) / 2 - 14 * dpr * Math.cos(an), r: 22 * dpr, parede: { i: pi, ...info }, d });
+        };
+        const chamada = (sx, n0, n1) => { ctx.strokeStyle = "rgba(14,165,233,0.7)"; linha(P(sx, n0), P(sx, n1), 0.8); };
+        for (const c of cp.cotas) {
+          if (c.tipo === "comp") {
+            chamada(0, lc * (t / 2 + 4 * km), nOff + lc * 6 * km); chamada(cp.L, lc * (t / 2 + 4 * km), nOff + lc * 6 * km);
+            cota(P(0, nOff), P(cp.L, nOff), cp.L, { tipo: "comp" });
+          } else if (c.tipo === "vao") {
+            const s0 = c.fim === "b" ? cp.L : -c.d, s1 = c.fim === "b" ? cp.L + c.d : 0;
+            chamada(c.fim === "b" ? s1 : s0, nOff * 0.4, nOff + lc * 6 * km);
+            cota(P(s0, nOff), P(s1, nOff), c.d, { tipo: "vao", fim: c.fim });
+          } else {
+            cota(P(c.s, c.n0), P(c.s, c.n1), c.d, { tipo: "perp", lado: c.lado });
+          }
+        }
+      }
+    }
     if (ferramenta === "esquadria" && previaEsq && paredes[previaEsq.i]) {
       ctx.globalAlpha = 0.9;
       desenharEsq(paredes[previaEsq.i], previaEsq, previaEsq.motivo ? "#dc2626" : TP_AZUL, { limpar: true, cotas: true, i: previaEsq.i });
@@ -80100,7 +80226,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         // sem o preventDefault, o mousedown que vem depois tira o foco do campo e ele fecha;
         // o campo fica sempre dentro da planta (senão o quadro rola para mostrá-lo)
         e.preventDefault();
-        setEditCota({ x: Math.max(44, Math.min(rc.width - 44, cq.x / k)), y: Math.max(18, Math.min(rc.height - 18, cq.y / k)), lado: cq.lado, id: cq.id, txt: tpFmt(cq.d), t: Date.now() });
+        setEditCota({ x: Math.max(44, Math.min(rc.width - 44, cq.x / k)), y: Math.max(18, Math.min(rc.height - 18, cq.y / k)), lado: cq.lado, id: cq.id, parede: cq.parede, txt: tpFmt(cq.d), t: Date.now() });
         return;
       }
       // nome do ambiente: apertar e arrastar move o nome; clicar de novo nele
@@ -80842,7 +80968,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 style={{ position: "absolute", left: editNome.x, top: editNome.y, transform: "translate(-50%, -50%)", zIndex: 3, width: 130, padding: "3px 6px", border: "2px solid " + TP_AZUL, outline: "none", borderRadius: 6, fontSize: 13, fontWeight: 600, textAlign: "center", color: TP_AZUL, fontFamily: "inherit", boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }} />
             )}
             {editCota && (
-              <input ref={(el) => { if (el && document.activeElement !== el) { el.focus({ preventScroll: true }); el.select(); } }} inputMode="decimal" aria-label="Distância até a parede (m)" value={editCota.txt}
+              <input ref={(el) => { if (el && document.activeElement !== el) { el.focus({ preventScroll: true }); el.select(); } }} inputMode="decimal" aria-label={editCota.parede ? (editCota.parede.tipo === "comp" ? "Comprimento da parede (m)" : "Distância até a parede (m)") : "Distância até a parede (m)"} value={editCota.txt}
                 onChange={(e) => setEditCota({ ...editCota, txt: e.target.value })}
                 onKeyDown={(e) => { if (e.key === "Enter") aplicarCota(editCota); if (e.key === "Escape") setEditCota(null); e.stopPropagation(); }}
                 onBlur={(e) => { if (Date.now() - editCota.t < 300) { const el = e.currentTarget; setTimeout(() => el.focus({ preventScroll: true }), 0); return; } setEditCota(null); }}
