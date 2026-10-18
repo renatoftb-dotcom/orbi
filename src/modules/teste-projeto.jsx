@@ -659,8 +659,8 @@ function tpParedesDesenho(paredes) {
     let nw = w;
     for (const fim of ["a", "b"]) {
       const P = w[fim]; let melhor = null;
-      // já ligada certinho na ponta de outra parede: fica como está
-      if (paredes.some((o, j) => j !== i && tpLen(o) && (Math.hypot(o.a.x - P.x, o.a.y - P.y) < 1e-3 || Math.hypot(o.b.x - P.x, o.b.y - P.y) < 1e-3))) continue;
+      // já ligada certinho na ponta ou no eixo de outra parede (canto ou T exato): fica como está
+      if (paredes.some((o, j) => j !== i && tpLen(o) && (Math.hypot(o.a.x - P.x, o.a.y - P.y) < 1e-3 || Math.hypot(o.b.x - P.x, o.b.y - P.y) < 1e-3 || tpDistSeg(P, o.a, o.b) < 1e-3))) continue;
       // perto da ponta de outra parede (canto já formado por elas): vai para essa ponta
       paredes.forEach((o, j) => {
         if (j === i || !tpLen(o)) return;
@@ -834,7 +834,7 @@ function tpGruposCurva(paredes) {
 // uma faixa só, seguindo o círculo que passa pelos pontos. Cada curva traz a
 // função banda(hIn, recuoPonta) → polígono (pontos do desenho) da parede com
 // meia espessura hIn; nas pontas, meia-esquadria com a parede vizinha.
-function tpCurvasLisas(paredes, cantos = tpCantosMitra(paredes), grupos = tpGruposCurva(paredes), juncoes = tpJuncoes(paredes)) {
+function tpCurvasLisas(paredes, cantos = tpCantosMitra(paredes), grupos = tpGruposCurva(paredes), juncoes = tpJuncoes(paredes), orig = paredes) {
   const por = new Map();
   grupos.forEach((g, i) => { if (g < 0) return; if (!por.has(g)) por.set(g, []); por.get(g).push(i); });
   const out = [], pares = tpParesPonta(paredes);
@@ -851,7 +851,8 @@ function tpCurvasLisas(paredes, cantos = tpCantosMitra(paredes), grupos = tpGrup
       if (c && set.has(c.j) && !vis.has(c.j)) { cur = c.j; ini = c.f; } else cur = null;
     }
     if (ord.length !== ms.length) continue;
-    const pts = [paredes[ord[0].i][ord[0].ini], ...ord.map((o) => paredes[o.i][o.ini === "a" ? "b" : "a"])];
+    // círculo pelos pontos do desenho original (as pontas ajustadas no encontro não entortam o arco)
+    const pts = [orig[ord[0].i][ord[0].ini], ...ord.map((o) => orig[o.i][o.ini === "a" ? "b" : "a"])];
     const P0 = pts[0], Pn = pts[pts.length - 1], Pm = pts[Math.floor(pts.length / 2)];
     const ax = P0.x, ay = P0.y, bx = Pm.x, by = Pm.y, cx = Pn.x, cy = Pn.y;
     const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by)); if (Math.abs(d) < 1e-9) continue;
@@ -860,8 +861,12 @@ function tpCurvasLisas(paredes, cantos = tpCantosMitra(paredes), grupos = tpGrup
     const r = Math.hypot(ax - ox, ay - oy);
     if (pts.some((q) => Math.abs(Math.hypot(q.x - ox, q.y - oy) - r) > Math.max(0.02, r * 0.03))) continue; // não é um arco
     const ang = (q) => Math.atan2(q.y - oy, q.x - ox);
-    let sw = 0; for (let k = 1; k < pts.length; k++) { let da = ang(pts[k]) - ang(pts[k - 1]); while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI; sw += da; }
-    const a0 = ang(P0), t = paredes[ord[0].i].t || 0;
+    const difA = (a, b) => { let da = a - b; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI; return da; };
+    let sw = 0; for (let k = 1; k < pts.length; k++) sw += difA(ang(pts[k]), ang(pts[k - 1]));
+    // as pontas do desenho podem ter sido levadas ao encontro: o arco vai até a projeção delas
+    const Q0 = paredes[ord[0].i][ord[0].ini], last0 = ord[ord.length - 1], Qn = paredes[last0.i][last0.ini === "a" ? "b" : "a"];
+    const a0 = ang(Q0); sw = sw - difA(ang(Q0), ang(P0)) + difA(ang(Qn), ang(Pn));
+    const t = paredes[ord[0].i].t || 0;
     // pontas: a meia-esquadria do trecho da ponta com a parede vizinha (fora da curva)
     const ponta = (o, fim, hIn, recuo) => {
       const w = paredes[o.i], L = tpLen(w), u = { x: (w.b.x - w.a.x) / L, y: (w.b.y - w.a.y) / L }, nv = { x: -u.y, y: u.x };
@@ -881,7 +886,9 @@ function tpCurvasLisas(paredes, cantos = tpCantosMitra(paredes), grupos = tpGrup
         const fx = Q.x - ox, fy = Q.y - oy, b = fx * e.x + fy * e.y, cc = fx * fx + fy * fy - R * R, disc = b * b - cc;
         if (disc < 0) return Q;
         const t1 = -b + Math.sqrt(disc), t2 = -b - Math.sqrt(disc), t = Math.abs(t1) < Math.abs(t2) ? t1 : t2;
-        return Math.abs(t) > 4 * (hIn + 0.01) ? Q : { x: Q.x + e.x * t, y: Q.y + e.y * t };
+        // só ajusta pouquinho (a diferença entre arco e trecho reto); se a linha da
+        // vizinha quase tangencia o arco, o encontro ficaria longe — mantém o corte reto
+        return Math.abs(t) > 0.5 * hIn ? Q : { x: Q.x + e.x * t, y: Q.y + e.y * t };
       };
       // guarda também o ponto do corte reto: é ele que encosta na parede vizinha
       // (sem ele abria uma fissura entre a faixa e a vizinha)
@@ -2057,7 +2064,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // seleção: halo azul por baixo
     ctx.lineJoin = "round";
     // curvas lisas: desenhadas como uma faixa só (os trechos delas saem do laço)
-    const lisas = tpCurvasLisas(pD, cantos), naCurva = new Set(lisas.flatMap((c) => c.membros));
+    // grupos de curva pelo desenho original (o ajuste das pontas no encontro não quebra a curva)
+    const lisas = tpCurvasLisas(pD, cantos, tpGruposCurva(paredes)), naCurva = new Set(lisas.flatMap((c) => c.membros));
     const bandaPx = (c, recuo) => c.banda(c.t / 2 - recuo, recuo).map(T);
     const curvaMarc = (c) => c.membros.some((i) => marcadas.has("p" + i));
     pD.forEach((w, i) => { if (!marcadas.has("p" + i) || naCurva.has(i)) return; ctx.strokeStyle = "rgba(4,116,244,0.28)"; ctx.lineWidth = 12 * dpr; quadros(w).forEach((q) => { quadro(q); ctx.stroke(); }); });
@@ -2534,7 +2542,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const pD3 = tpParedesDesenho(paredes); // pontas pela face levadas ao eixo (igual à planta)
     const cantos3 = tpCantosMitra(pD3), juncoes3 = tpJuncoes(pD3);
     // curva lisa: uma peça só, a faixa da planta levantada na altura da parede
-    const lisas3 = tpCurvasLisas(pD3, cantos3), naCurva3 = new Set(lisas3.flatMap((c) => c.membros));
+    const lisas3 = tpCurvasLisas(pD3, cantos3, tpGruposCurva(paredes)), naCurva3 = new Set(lisas3.flatMap((c) => c.membros));
     lisas3.forEach((c) => {
       const w0 = pD3[c.membros[0]], marc = c.membros.some((i) => marcadas.has("p" + i));
       const pts = c.banda(c.t / 2, 0).map((q) => new THREE.Vector2(q.x - cx, -(q.y - cz)));
