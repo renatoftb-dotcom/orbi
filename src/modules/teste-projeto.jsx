@@ -701,10 +701,21 @@ function tpJuncoes(ps) {
   return ps.map((w, i) => {
     const r = { a: null, b: null }; if (!tpLen(w)) return r;
     for (const f of ["a", "b"]) {
-      const lista = mapa.get(chave(w[f])) || [];
-      if (lista.length >= 3) { r[f] = { tipo: "no", viz: lista.filter((x) => x.i !== i) }; continue; }
+      const lista = mapa.get(chave(w[f])) || [], P = w[f];
+      // braços em volta do ponto: as outras pontas que chegam ali e, se uma
+      // parede passa direto pelo ponto, os dois lados dela
+      const dirDe = (q) => { const L = Math.hypot(q.x - P.x, q.y - P.y) || 1; return { x: (q.x - P.x) / L, y: (q.y - P.y) / L }; };
+      const bracos = lista.filter((x) => x.i !== i).map((x) => ({ i: x.i, e: dirDe(x.f === "a" ? ps[x.i].b : ps[x.i].a) }));
+      ps.forEach((o, k) => {
+        if (k === i || lista.some((x) => x.i === k) || !tpLen(o)) return;
+        if (tpDistSeg(P, o.a, o.b) >= (o.t || 0) / 2 + 0.01) return;
+        if (Math.hypot(P.x - o.a.x, P.y - o.a.y) <= (o.t || 0) / 2 || Math.hypot(P.x - o.b.x, P.y - o.b.y) <= (o.t || 0) / 2) return;
+        const Lo = tpLen(o), uo = { x: (o.b.x - o.a.x) / Lo, y: (o.b.y - o.a.y) / Lo };
+        // parede que passa: corta no EIXO dela (o cinza se junta, sem a linha preta da face)
+        bracos.push({ i: k, e: uo, passa: true }, { i: k, e: { x: -uo.x, y: -uo.y }, passa: true });
+      });
+      if (bracos.length >= 2) { r[f] = { tipo: "no", viz: bracos }; continue; }
       if (lista.length === 2) continue; // canto de duas: meia-esquadria
-      const P = w[f];
       const j = ps.findIndex((o, k) => k !== i && tpLen(o) && tpDistSeg(P, o.a, o.b) < (o.t || 0) / 2 + 0.01
         && Math.hypot(P.x - o.a.x, P.y - o.a.y) > (o.t || 0) / 2 && Math.hypot(P.x - o.b.x, P.y - o.b.y) > (o.t || 0) / 2);
       if (j >= 0) r[f] = { tipo: "t", j };
@@ -717,22 +728,24 @@ function tpJuncoes(ps) {
 function tpCorteNo(ps, i, fim, viz, hDe) {
   const w = ps[i], L = tpLen(w), u = { x: (w.b.x - w.a.x) / L, y: (w.b.y - w.a.y) / L }, P = w[fim];
   const d = fim === "a" ? u : { x: -u.x, y: -u.y };
-  const todos = [{ j: i, e: d }, ...viz.map(({ i: j, f }) => { const o = ps[j], q = f === "a" ? o.b : o.a, Lo = Math.hypot(q.x - P.x, q.y - P.y) || 1; return { j, e: { x: (q.x - P.x) / Lo, y: (q.y - P.y) / Lo } }; })];
+  const todos = [{ j: i, e: d, eu: true }, ...viz.map(({ i: j, e, passa }) => ({ j, e, passa }))];
   todos.forEach((x) => { x.ang = Math.atan2(x.e.y, x.e.x); });
   todos.sort((p, q) => p.ang - q.ang);
-  const k = todos.findIndex((x) => x.j === i), ccw = todos[(k + 1) % todos.length], cw = todos[(k - 1 + todos.length) % todos.length];
-  const hi = hDe(i), lim = 4 * Math.max(hi, hDe(ccw.j), hDe(cw.j));
+  const k = todos.findIndex((x) => x.eu), ccw = todos[(k + 1) % todos.length], cw = todos[(k - 1 + todos.length) % todos.length];
+  const hi = hDe(i), hv = (x) => (x.passa ? 0 : hDe(x.j)), lim = 4 * Math.max(hi, hDe(ccw.j), hDe(cw.j));
   const corta = (n1, e, n2) => { // P+n1+d·t = P+n2+e·r
     const cr = d.x * e.y - d.y * e.x; if (Math.abs(cr) < 0.05) return 0;
     const D = { x: n2.x - n1.x, y: n2.y - n1.y }; return Math.max(-lim, Math.min(lim, (D.x * e.y - D.y * e.x) / cr));
   };
   const nL = { x: -d.y, y: d.x };
-  const tL = corta({ x: nL.x * hi, y: nL.y * hi }, ccw.e, { x: ccw.e.y * hDe(ccw.j), y: -ccw.e.x * hDe(ccw.j) });
-  const tR = corta({ x: -nL.x * hi, y: -nL.y * hi }, cw.e, { x: -cw.e.y * hDe(cw.j), y: cw.e.x * hDe(cw.j) });
+  const tL = corta({ x: nL.x * hi, y: nL.y * hi }, ccw.e, { x: ccw.e.y * hv(ccw), y: -ccw.e.x * hv(ccw) });
+  const tR = corta({ x: -nL.x * hi, y: -nL.y * hi }, cw.e, { x: -cw.e.y * hv(cw), y: cw.e.x * hv(cw) });
   const res = fim === "a" ? [tR, tL] : [L - tL, L - tR];
   // vão até a vizinha do lado direito (sentido horário): > 180° = quina de fora ali
   let gap = todos[k].ang - cw.ang; while (gap <= 0) gap += 2 * Math.PI;
-  res.cw = { e: cw.e, gap };
+  res.cw = { e: cw.e, gap, j: cw.j, passa: !!cw.passa };
+  let gapCcw = ccw.ang - todos[k].ang; while (gapCcw <= 0) gapCcw += 2 * Math.PI;
+  res.ccw = { e: ccw.e, gap: gapCcw, j: ccw.j, passa: !!ccw.passa };
   return res;
 }
 // T: as faces desta parede cortadas no eixo da parede que passa (sem a ponta
@@ -2046,6 +2059,25 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           // nó de várias paredes: arredonda só a quina de fora (vão maior que 180°)
           const cs = tpCorteNo(pD, i, fim, jx.viz, (k) => (pD[k].t || 0) / 2);
           if (cs.cw.gap > Math.PI + 0.05) quina(cortes, fim === "a" ? ptS(cs[0], -h) : ptS(cs[1], h), dIn, cs.cw.e, rpx);
+          // canto do lado anti-horário (cada canto contado uma vez): se fecha
+          // (< 180°), a borda preta vira do lado do miolo → o cinza ganha a curvinha
+          // (o lado horário só quando a vizinha é uma parede que passa direto: ela não conta o canto)
+          for (const [cc, lado] of [[cs.ccw, 1], ...(cs.cw.passa ? [[cs.cw, -1]] : [])]) {
+          if (temP2 && cc.gap < Math.PI - 0.05 && cc.gap > 0.2) {
+            const o = pD[cc.j], hi = h - penaDe(w) / v.s, ho = (o.t || 0) / 2 - penaDe(o) / v.s;
+            if (hi * v.s > 2 * dpr && ho * v.s > 2 * dpr) {
+              const nL = { x: -dIn.y * lado, y: dIn.x * lado }, e = cc.e, nRe = { x: e.y * lado, y: -e.x * lado };
+              const n1 = { x: nL.x * hi, y: nL.y * hi }, n2 = { x: nRe.x * ho, y: nRe.y * ho };
+              const crx = dIn.x * e.y - dIn.y * e.x;
+              if (Math.abs(crx) > 0.05) {
+                const D = { x: n2.x - n1.x, y: n2.y - n1.y }, tt = (D.x * e.y - D.y * e.x) / crx;
+                const G = { x: P.x + n1.x + dIn.x * tt, y: P.y + n1.y + dIn.y * tt };
+                const pth = new Path2D(), antes = temCanto; quina(pth, G, dIn, e, rpx); temCanto = antes || temCanto;
+                miolos.push({ pth, cor: (marcadas.has("p" + i) || marcadas.has("p" + cc.j)) ? "#5b8fd6" : TP_NUCLEO });
+              }
+            }
+          }
+          }
           continue;
         }
         const tq = pD.findIndex((x, j) => j !== i && tpLen(x) && tpDistSeg(P, x.a, x.b) < (x.t || 0) / 2 + 0.01);
