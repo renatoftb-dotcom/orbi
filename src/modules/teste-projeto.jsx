@@ -1849,8 +1849,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     }
     if (selP.length === 1 && !selA.length) {
       const pi = selP[0], w = paredes[pi];
-      if (perto(w.a)) return { tipo: "ponta", pi, fim: "a" };
-      if (perto(w.b)) return { tipo: "ponta", pi, fim: "b" };
+      // quadradinho branco da parede selecionada: mexe SÓ esta parede (desliga
+      // do canto); apertar na ponta sem selecionar leva as paredes ligadas junto
+      if (perto(w.a)) return { tipo: "ponta", pi, fim: "a", solta: true };
+      if (perto(w.b)) return { tipo: "ponta", pi, fim: "b", solta: true };
     }
     return null;
   };
@@ -1996,7 +1998,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       setAreas(comAmbientes(orig.paredes, orig.areas.map((ar, i) => (i === al.ai ? { ...ar, pts: ar.pts.map((q, k) => (k === al.k || k === k2 ? novo(pts0[k]) : q)) } : ar))));
     } else if (al.tipo === "ponta") {
       const w0 = orig.paredes[al.pi], outra = al.fim === "a" ? w0.b : w0.a;
-      if (!g.ligPonta) g.ligPonta = orig.paredes.map((w, i) => (i !== al.pi && ["a", "b"].some((f) => Math.hypot(w[f].x - w0[al.fim].x, w[f].y - w0[al.fim].y) < 2e-3) ? i : -1)).filter((i) => i >= 0);
+      if (!g.ligPonta) g.ligPonta = al.solta ? [] : orig.paredes.map((w, i) => (i !== al.pi && ["a", "b"].some((f) => Math.hypot(w[f].x - w0[al.fim].x, w[f].y - w0[al.fim].y) < 2e-3) ? i : -1)).filter((i) => i >= 0);
       let pc = pontoDoCursor(e, { ignorar: { parede: al.pi, paredes: g.ligPonta }, base: outra });
       // Esticar/encolher: a ponta anda na direção da própria parede (sem a
       // grade de 0,50 m puxar para o lado — era isso que fazia a parede
@@ -2019,7 +2021,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const p0 = w0[al.fim], ligadas = [];
       const novasP = orig.paredes.map((w, i) => {
         if (i === al.pi) return tpComPonta(w, al.fim, limpo(pc));
-        if (e.altKey) return w;
+        if (e.altKey || al.solta) return w;
         let nw = w;
         for (const fim of ["a", "b"]) if (Math.hypot(w[fim].x - p0.x, w[fim].y - p0.y) < 2e-3) nw = tpComPonta(nw, fim, limpo(pc));
         if (nw !== w) ligadas.push(i);
@@ -2331,7 +2333,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     : (desenhoAtivo && modoTraco === "arco") ? (ancora && ancora.arcoFim ? "Mova para curvar e clique um ponto da curva. Esc cancela." : ((ferramenta === "parede" ? inicio : poli.length) ? "Arco: clique o ponto final." : "Arco: clique o ponto inicial."))
     : (selA.length === 1 && !selP.length && ferramenta === "selecionar") ? "Editar contorno: arraste os quadrados (cantos) ou as bolinhas (lados). O cursor gruda nas quinas das paredes (quadrado verde)."
     : (selO.length === 1 && sel.length === 1 && ferramenta === "selecionar") ? "Arraste para mover (até para outra parede). Clique na cota para digitar a medida; EQ centraliza. Espaço inverte a mão."
-    : (selP.length === 1 && !selA.length && ferramenta === "selecionar") ? "Arraste os quadrados das pontas para esticar ou girar a parede. Delete exclui."
+    : (selP.length === 1 && !selA.length && ferramenta === "selecionar") ? "Quadradinho branco: estica só esta parede (solta do canto). Sem selecionar, arrastar a ponta leva as paredes ligadas. Delete exclui."
     : ferramenta === "selecionar"
     ? (sel.length ? `${sel.length} selecionado${sel.length === 1 ? "" : "s"}. Ctrl soma, Shift tira, setas movem, Delete exclui, Esc limpa.` : "Clique ou arraste uma área (esq.→dir.: inteiro dentro; dir.→esq.: o que tocar). Ctrl soma, Shift tira. Tecla ? mostra os atalhos.")
     : ferramenta === "mover" ? "Arraste para mover a vista."
