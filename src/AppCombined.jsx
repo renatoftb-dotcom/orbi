@@ -79426,6 +79426,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       return melhor;
     };
     areas.forEach((a, i) => { if (a.pts && a.pts.length >= 3 && ((a.tipo === "contrapiso" && cpInterno(a)) || (a.tipo === "ambiente" && !a.aberto))) pisoInterno(a.pts, marcadas.has("a" + i)); });
+    // contorno de área sem os lados que correm junto da face de uma parede
+    // (essas linhas apareciam nas quinas arredondadas)
+    const contornoLivre = (pts) => {
+      ctx.beginPath();
+      for (let k = 0; k < pts.length; k++) {
+        const a = pts[k], b = pts[(k + 1) % pts.length], L = Math.hypot(b.x - a.x, b.y - a.y); if (!L) continue;
+        const naParede = [0.25, 0.5, 0.75].every((f) => { const q = { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }; return paredes.some((w) => tpLen(w) && tpDistSeg(q, w.a, w.b) <= (w.t || 0) / 2 + 0.03); });
+        if (naParede) continue;
+        const [ax, ay] = T(a), [bx, by] = T(b); ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+      }
+    };
     // áreas: contrapiso externo (hachura) por baixo, laje (tracejado) por cima
     const ordem = areas.map((a, i) => i).sort((i, j) => (areas[i].tipo === "laje") - (areas[j].tipo === "laje"));
     for (const i of ordem) {
@@ -79435,15 +79446,16 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (a.tipo === "laje") {
         // sem véu azul por cima do piso (deixava o porcelanato acinzentado); só selecionada
         if (marc) { ctx.fillStyle = "rgba(4,116,244,0.14)"; ctx.fill(); }
+        if (!marc) contornoLivre(a.pts);
         ctx.setLineDash([8 * dpr, 5 * dpr]); ctx.strokeStyle = marc ? TP_AZUL : "#6b8fc7"; ctx.lineWidth = (marc ? 2.5 : 1.5) * dpr; ctx.stroke(); ctx.setLineDash([]);
       } else if (cpInterno(a)) {
-        caminho(a.pts); ctx.strokeStyle = marc ? TP_AZUL : "#b8a98a"; ctx.lineWidth = (marc ? 2.5 : 1) * dpr; ctx.stroke();
+        if (marc) caminho(a.pts); else contornoLivre(a.pts); ctx.strokeStyle = marc ? TP_AZUL : "#b8a98a"; ctx.lineWidth = (marc ? 2.5 : 1) * dpr; ctx.stroke();
       } else {
         // piso externo: acabamento escolhido (pedra irregular é o padrão); o
         // que envolve a casa fica recortado na face de fora das paredes
         const textura = () => { if (a.acab === "deck") deck(a.pts, a.angRipa || 0, marc); else if (a.acab === "porcelanato") pisoInterno(a.pts, marc, "#dcd8d2", 0.6); else pedras(a.pts, marc); };
         if (tipoCp(a) === "furado") semCasa(textura); else textura();
-        caminho(a.pts); ctx.strokeStyle = marc ? TP_AZUL : "#8a8a8a"; ctx.lineWidth = (marc ? 2.5 : 1) * dpr; ctx.stroke();
+        if (marc) caminho(a.pts); else contornoLivre(a.pts); ctx.strokeStyle = marc ? TP_AZUL : "#8a8a8a"; ctx.lineWidth = (marc ? 2.5 : 1) * dpr; ctx.stroke();
       }
       const furadoCp = a.tipo === "contrapiso" && tipoCp(a) === "furado";
       const [cx, cy] = T(furadoCp ? (pontoLivre(a.pts, pegada) || tpCentro(a.pts)) : tpCentro(a.pts));
@@ -79621,7 +79633,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const c = d1.x * d2.x + d1.y * d2.y, th = Math.acos(Math.max(-1, Math.min(1, c)));
       if (th > 2.9 || th < 0.2 || rpx < 0.8) return;
       const [ox, oy] = T(O), tt = rpx / Math.tan(th / 2);
-      alvo.moveTo(ox, oy); alvo.lineTo(ox + d1.x * tt, oy + d1.y * tt); alvo.arcTo(ox, oy, ox + d2.x * tt, oy + d2.y * tt, rpx); alvo.closePath(); temCanto = true;
+      // a figura passa 2 px para fora das faces: sem fio de borda (antialias) nas retas
+      const fx = 2 * dpr;
+      alvo.moveTo(ox + d1.x * tt - d2.x * fx, oy + d1.y * tt - d2.y * fx); alvo.lineTo(ox + d1.x * tt, oy + d1.y * tt);
+      alvo.arcTo(ox, oy, ox + d2.x * tt, oy + d2.y * tt, rpx);
+      alvo.lineTo(ox + d2.x * tt - d1.x * fx, oy + d2.y * tt - d1.y * fx); alvo.lineTo(ox - (d1.x + d2.x) * fx, oy - (d1.y + d2.y) * fx); alvo.closePath(); temCanto = true;
     };
     paredes.forEach((w, i) => {
       const L = tpLen(w); if (!L) return;
