@@ -23333,7 +23333,11 @@ function vaosAutomaticos(projeto) {
   const tipos = typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : [];
   const amb = migrarAmbientes(p.ambientes || {});
   let portasInternas = 0;
-  for (const t of tipos) if (((t.kits || {}).PORTAS || []).length) portasInternas += Math.max(0, Math.round(numOrZero(amb[t.id])));
+  // Projeto desenhado no Projetar: as portas internas são as desenhadas (não
+  // mais 1 por cômodo com kit de porta)
+  const pd = p.portasDesenho;
+  if (pd && typeof pd === "object") portasInternas = Math.max(0, Math.round(numOrZero(pd.interna) + numOrZero(pd.banheiro)));
+  else for (const t of tipos) if (((t.kits || {}).PORTAS || []).length) portasInternas += Math.max(0, Math.round(numOrZero(amb[t.id])));
   let metrosPortasExternas = 0, metrosJanelas = 0;
   for (const e of (Array.isArray(p.esquadrias) ? p.esquadrias : [])) {
     const m = numOrZero(e && e.qtd) * numOrZero(e && e.largura);
@@ -23835,6 +23839,7 @@ function instalacoesPorAmbiente(cp, out, data) {
     algumAmbiente = true;
     for (const disc of Object.keys(t.kits || {})) {
       if (doProjeto[disc]) continue;
+      if (disc === "PORTAS" && cp.portasDesenho) continue; // portas vêm do desenho (abaixo)
       for (const kitId of t.kits[disc] || []) {
         const base = kits[kitId];
         if (!base) {
@@ -23847,17 +23852,24 @@ function instalacoesPorAmbiente(cp, out, data) {
     }
     if (!doProjeto.ELETRICA) for (const p of pontosDef) totalPontos[p.id] += numOrZero(t.pontos && t.pontos[p.id]) * n;
   }
-  if (!algumAmbiente) return;
+  // Portas internas desenhadas no Projetar: kit de porta por porta desenhada
+  // (porta de banheiro = a que dá para WC/lavabo)
+  const pdz = cp.portasDesenho;
+  if (pdz && !doProjeto.PORTAS) {
+    if (pdz.interna > 0) aplicarKit(escolherKit(kits, "PORTA_INTERNA", inst.padrao), pdz.interna, "PORTAS", `Portas internas desenhadas no projeto (${numMem(pdz.interna)}×)`);
+    if (pdz.banheiro > 0) aplicarKit(escolherKit(kits, "PORTA_BANHEIRO", inst.padrao), pdz.banheiro, "PORTAS", `Portas de banheiro desenhadas no projeto (${numMem(pdz.banheiro)}×)`);
+  }
+  if (!algumAmbiente && !(pdz && (pdz.interna > 0 || pdz.banheiro > 0))) return;
 
-  if (!doProjeto.ELETRICA) {
+  if (algumAmbiente && !doProjeto.ELETRICA) {
     for (const p of pontosDef) aplicarKit(escolherKit(kits, p.kit, inst.padrao), totalPontos[p.id], "ELETRICA", `${p.nome} (${numMem(totalPontos[p.id])} pontos somados nos cômodos)`);
     aplicarKit(escolherKit(kits, "ELETRICA_POR_OBRA", inst.padrao), 1, "ELETRICA", "Uma vez por obra (quadro, entrada e aterramento)");
     const luz = numOrZero(totalPontos.iluminacao) + numOrZero(totalPontos.iluminacaoParalela);
     if (luz > 0) add("ELETRICA", "Elétrica - Disjuntor Unipolar 10A - 10kA", teto(luz / 8), "Unidades", `Um circuito de iluminação a cada 8 pontos de luz (${numMem(luz)} pontos)`);
     if (totalPontos.tomadaGeral > 0) add("ELETRICA", "Elétrica - Disjuntor Unipolar 20A - 10kA", teto(totalPontos.tomadaGeral / 6), "Unidades", `Um circuito de tomadas a cada 6 tomadas de uso geral (${numMem(totalPontos.tomadaGeral)} tomadas)`);
   }
-  if (!doProjeto.ESGOTO) aplicarKit(escolherKit(kits, "ESGOTO_POR_OBRA", inst.padrao), 1, "ESGOTO", "Uma vez por obra (caixas, ramal de saída e ventilação)");
-  if (!doProjeto.AQUECIMENTO) {
+  if (algumAmbiente && !doProjeto.ESGOTO) aplicarKit(escolherKit(kits, "ESGOTO_POR_OBRA", inst.padrao), 1, "ESGOTO", "Uma vez por obra (caixas, ramal de saída e ventilação)");
+  if (algumAmbiente && !doProjeto.AQUECIMENTO) {
     const sis = sistemas.find((x) => x.id === inst.aquecimento);
     if (sis && sis.kit) aplicarKit(escolherKit(kits, sis.kit, inst.padrao), 1, "AQUECIMENTO", `Sistema de aquecimento escolhido: ${sis.nome || inst.aquecimento}`);
     if (inst.pressurizador) aplicarKit(escolherKit(kits, "PRESSURIZADOR", inst.padrao), 1, "AQUECIMENTO", "Pressurizador marcado no bloco Instalações");
@@ -24165,6 +24177,11 @@ function normalizarProjeto(projeto) {
       largura: numOrZero(e && e.largura),
       altura: numOrZero(e && e.altura),
     })),
+
+    // cp.portasDesenho — portas internas contadas no desenho do Projetar
+    // ({ interna, banheiro }); ausente = conta pelos cômodos (kit de porta)
+    portasDesenho: p.portasDesenho && typeof p.portasDesenho === "object"
+      ? { interna: Math.max(0, Math.round(numOrZero(p.portasDesenho.interna))), banheiro: Math.max(0, Math.round(numOrZero(p.portasDesenho.banheiro))) } : null,
 
     // cp.ambientes / cp.instalacoes — estimativa por kits (instalacoesPorAmbiente)
     ambientes: (() => { const m = migrarAmbientes(ambientesIn); for (const k of Object.keys(m)) m[k] = numOrZero(m[k]); return m; })(),
@@ -78131,7 +78148,7 @@ function tpTelhadoGeo(t) {
 // normalizarProjeto) já lê. Só obra térrea por enquanto.
 //  - parede externa: a que tem um dos lados fora da casa (fora de qualquer
 //    contrapiso/laje; sem eles, fora do contorno convexo das paredes)
-//  - m² de parede = comprimento do eixo × altura (bruto, sem descontar vãos)
+//  - m² de parede = comprimento do eixo × altura menos portas e janelas (líquido)
 //  - espessura: até 16,5 cm conta como 15; até 22,5 como 20; acima, 25
 //  - perímetro de paredes = soma dos comprimentos (térreo)
 //  - área construída = contrapiso (ou laje, se não houver contrapiso)
@@ -78146,6 +78163,50 @@ function tpEnvoltoria(pts) {
   for (const p of [...P].reverse()) { while (hi.length >= 2 && cr(hi[hi.length - 2], hi[hi.length - 1], p) <= 0) hi.pop(); hi.push(p); }
   return lo.slice(0, -1).concat(hi.slice(0, -1));
 }
+// Nome do ambiente desenhado → tipo de cômodo do orçamento de obra
+// (AMBIENTES_TIPOS em composicoes-seed.jsx). Sem acento, minúsculo, sem o número.
+const TP_AMBIENTE_PARA_COMODO = [
+  [/^suite master|^suite principal/, "suiteMaster"], [/^suite/, "suite"],
+  [/^(wc|banheiro) (da )?suite master/, "wcSuiteMaster"], [/^(wc|banheiro) (da )?suite/, "wcSuite"],
+  [/^(wc|banheiro|bwc)/, "wc"], [/^lavabo (do )?lazer/, "lavaboLazer"], [/^lavabo/, "lavabo"],
+  [/^(quarto|dormitorio)/, "dormitorio"], [/^cozinha/, "cozinha"],
+  [/^(lavanderia|area de servico|servico)/, "lavanderia"],
+  [/^(sala de jantar|jantar)/, "salaJantar"], [/^(sala tv|sala de tv|tv|sala intima)/, "salaTV"], [/^(sala|living|estar)/, "living"],
+  [/^(varanda|area gourmet|espaco gourmet|gourmet|area de lazer|lazer|churrasqueira)/, "areaLazer"],
+  [/^garagem/, "garagem"], [/^(circulacao|corredor|hall)/, "hallEntrada"],
+  [/^closet (da )?suite/, "closetSuite"], [/^closet/, "closet"], [/^(escritorio|home office)/, "escritorio"],
+  [/^(despensa|deposito|dispensa)/, "deposito"], [/^jardim/, "jardim"], [/^academia/, "academia"],
+  [/^brinquedoteca/, "brinquedoteca"], [/^sauna/, "sauna"], [/^escada/, "escada"], [/^louceiro/, "louceiro"],
+];
+function tpComodoDoNome(nome) {
+  const n = tpBaseNomeAmbiente(nome).toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  for (const [re, id] of TP_AMBIENTE_PARA_COMODO) if (re.test(n)) return id;
+  return null;
+}
+// Ambientes desenhados → cômodos da obra: quantidade por tipo e as medidas
+// (retângulo de mesma área e perímetro, média dos do mesmo tipo)
+function tpComodosDoDesenho(paredes, areas) {
+  const amb = areas.filter((a) => a.tipo === "ambiente" && a.pts && a.pts.length >= 3);
+  const grupos = new Map(), soltos = [];
+  for (const a of amb) {
+    const id = tpComodoDoNome(a.nome);
+    if (!id) { soltos.push(a.nome || "Ambiente"); continue; }
+    const g = grupos.get(id) || { n: 0, A: 0, P: 0, nomes: [] };
+    g.n++; g.A += tpAreaPoli(a.pts); g.P += tpPerimPoli(a.pts); g.nomes.push(a.nome);
+    grupos.set(id, g);
+  }
+  const alts = paredes.map((w) => w.h || 0).filter((h) => h > 0);
+  const peDireito = alts.length ? Math.round(alts.reduce((s, h) => s + h, 0) / alts.length * 100) / 100 : 2.8;
+  const ambientes = {}, comodosCfg = {}, r2 = (x) => Math.round(x * 100) / 100;
+  for (const [id, g] of grupos) {
+    const A = g.A / g.n, s = g.P / g.n / 2, disc = Math.max(0, s * s - 4 * A);
+    let L = (s + Math.sqrt(disc)) / 2, W = (s - Math.sqrt(disc)) / 2;
+    if (!(W > 0.3)) { L = Math.sqrt(A); W = L; } // forma estranha: quadrado de mesma área
+    ambientes[id] = g.n;
+    comodosCfg[id] = { L: r2(L), W: r2(W), peDireito };
+  }
+  return { ambientes, comodosCfg, grupos, soltos, temAmbientes: amb.length > 0 };
+}
 function tpDesenhoParaObra(paredes, areas) {
   const r2 = (x) => Math.round(x * 100) / 100;
   // casa = área coberta (laje/telhado); sem cobertura, contrapiso; sem nada, envoltória das paredes
@@ -78157,12 +78218,27 @@ function tpDesenhoParaObra(paredes, areas) {
   const fora = (p) => (pegadaCasa.length ? !pegadaCasa.some((P) => tpDentroPoli(p, P))
     : pisos.length ? !pisos.some((a) => tpDentroPoli(p, a.pts)) : !(casco.length >= 3 && tpDentroPoli(p, casco)));
   let m2Int = 0, m2Ext = 0, m15 = 0, m20 = 0, m25 = 0, perim = 0, nExt = 0;
+  // portas de madeira desenhadas: internas (kit de porta) e de banheiro (a
+  // que dá para WC/lavabo); as de parede externa ficam de fora do kit
+  const portas = { interna: 0, banheiro: 0, externa: 0 };
+  const BANHO = new Set(["wc", "wcSuite", "wcSuiteMaster", "lavabo", "lavaboLazer"]);
+  const ambs = areas.filter((a) => a.tipo === "ambiente" && a.pts && a.pts.length >= 3);
   for (const w of paredes) {
     const L = tpLen(w); if (!L) continue;
-    const m2 = L * (w.h || 0), nx = -(w.b.y - w.a.y) / L, ny = (w.b.x - w.a.x) / L, d = (w.t || 0) / 2 + 0.15;
+    // m² LÍQUIDO: comprimento no eixo × altura menos os vãos de portas/janelas
+    const vaos = tpAbsVisiveis(w).reduce((t, o) => t + o.larg * Math.max(0, Math.min(o.alt, (w.h || 0) - (o.peit || 0))), 0);
+    const m2 = Math.max(0, L * (w.h || 0) - vaos), nx = -(w.b.y - w.a.y) / L, ny = (w.b.x - w.a.x) / L, d = (w.t || 0) / 2 + 0.15;
     const mx = (w.a.x + w.b.x) / 2, my = (w.a.y + w.b.y) / 2;
     const externa = fora({ x: mx + nx * d, y: my + ny * d }) || fora({ x: mx - nx * d, y: my - ny * d });
     if (externa) { m2Ext += m2; nExt++; } else m2Int += m2;
+    for (const o of tpAbsVisiveis(w)) {
+      const te = tpEsq(o.tipo);
+      if (!tpGiro(te.id) || (o.mat || te.mat) !== "madeira") continue;
+      if (externa) { portas.externa++; continue; }
+      const c = { x: w.a.x + (w.b.x - w.a.x) / L * o.x, y: w.a.y + (w.b.y - w.a.y) / L * o.x }, dd = (w.t || 0) / 2 + 0.3;
+      const banho = [1, -1].some((sg) => { const q = { x: c.x + nx * dd * sg, y: c.y + ny * dd * sg }; const a = ambs.find((am) => tpDentroPoli(q, am.pts)); return a && BANHO.has(tpComodoDoNome(a.nome)); });
+      if (banho) portas.banheiro++; else portas.interna++;
+    }
     const cm = (w.t || 0) * 100;
     if (cm <= 16.5) m15 += m2; else if (cm <= 22.5) m20 += m2; else m25 += m2;
     perim += L;
@@ -78171,7 +78247,7 @@ function tpDesenhoParaObra(paredes, areas) {
   const areaCp = soma("contrapiso", (a) => tpAreaPoli(a.pts)), areaLj = soma("laje", (a) => tpAreaPoli(a.pts)), perLj = soma("laje", (a) => tpPerimPoli(a.pts));
   const an = tpAnaliseAreas(areas, paredes);
   // sem cobertura: a pegada das paredes (casa fechada); sem ela, o contrapiso interno
-  const areaPegada = tpUniaoArea(an.pegada || []);
+  const areaPegada = tpUniaoArea((an.pegada && an.pegada.length) ? an.pegada : pegadaCasa);
   const areaConstruida = an.temCobertura ? an.coberta : (areaPegada > 0 ? areaPegada : an.pisoInterno);
   const cobertura = areas.filter((a) => a.tipo === "telhado" && a.pts && a.pts.length >= 3).map((a) => {
     const g = tpTelhadoGeo(a), aguas = g.lados.filter((L) => L.inclina && L.s > 0);
@@ -78193,11 +78269,13 @@ function tpDesenhoParaObra(paredes, areas) {
   const temAberturas = paredes.some((w) => (w.ab || []).length);
   const esquadrias = quadro.grupos.filter((g) => g.familia && g.mat !== "madeira")
     .map((g) => ({ familia: g.familia, linha: "GOLD", folhas: g.folhas, qtd: g.qtd, largura: r2(g.larg), altura: r2(g.alt) }));
-  const nMadeira = quadro.grupos.filter((g) => g.mat === "madeira").reduce((s, g) => s + g.qtd, 0);
   const areaAb = tpAreaAberturas(paredes);
+  const com = tpComodosDoDesenho(paredes, areas);
   const projeto = {
     tipologia: "Térrea",
     ...(temAberturas ? { esquadrias } : {}),
+    ...(com.temAmbientes ? { ambientes: com.ambientes, comodosCfg: com.comodosCfg } : {}),
+    ...(temAberturas ? { portasDesenho: { interna: portas.interna, banheiro: portas.banheiro } } : {}),
     arquitetura: { areaConstruida: r2(areaConstruida), m2ParedesInternas: r2(m2Int), m2ParedesExternas: r2(m2Ext), m2ParedesTotal: r2(m2Int + m2Ext) },
     ...(an.pisoExterno > 0 ? { externa: { pavimentacao: r2(an.pisoExterno) } } : {}),
     terreo: { area: r2(areaConstruida), m2Parede15: r2(m15), m2Parede20: r2(m20), m2Parede25: r2(m25), perimetroParedes: r2(perim),
@@ -78214,10 +78292,15 @@ function tpDesenhoParaObra(paredes, areas) {
     ["Perímetro de paredes", tpFmt(perim) + " m"],
     ...(areaLj ? [["Laje (treliçada)", `${tpFmt(areaLj)} m² · perímetro ${tpFmt(perLj)} m`]] : []),
     ...cobertura.map((c, k) => [`Telhado ${cobertura.length > 1 ? k + 1 : ""}`.trim(), `${tpTelha(c.tipo).rotulo}, ${tpFmt(c.comprimento)} × ${tpFmt(c.largura)} m, ${c.aguas} água${c.aguas === 1 ? "" : "s"}, ${tpFmt(c.inclinacao * 100, 0)}%`]),
+    ...(com.temAmbientes ? [
+      ["Cômodos", [...com.grupos.entries()].map(([id, g]) => `${g.n}× ${(typeof NOME_AMBIENTE === "function" ? NOME_AMBIENTE(id) : id)} (${tpFmt(com.comodosCfg[id].L)} × ${tpFmt(com.comodosCfg[id].W)} m)`).join(" · ") || "nenhum reconhecido"],
+      ...(com.soltos.length ? [["Sem tipo de cômodo", `${com.soltos.join(", ")} (não entram; renomeie para um tipo conhecido)`]] : []),
+    ] : []),
     ...(temAberturas ? [
       ["Esquadrias de alumínio", esquadrias.length ? quadro.grupos.filter((g) => g.familia && g.mat !== "madeira").map((g) => `${g.codigo}: ${g.qtd}× ${g.rot} ${tpFmt(g.larg)} × ${tpFmt(g.alt)}`).join(" · ") : "nenhuma"],
-      ...(nMadeira ? [["Portas de madeira", `${nMadeira} (entram pelos Cômodos da obra, kit de porta)`]] : []),
-      ["Aberturas nas paredes", `${tpFmt(areaAb)} m² (o m² de parede segue bruto)`],
+      ["Portas internas (madeira)", `${portas.interna + portas.banheiro} — ${portas.interna} interna${portas.interna === 1 ? "" : "s"} + ${portas.banheiro} de banheiro (kit de porta por porta desenhada)`],
+      ...(portas.externa ? [["Porta de madeira em parede externa", `${portas.externa} (não entra no kit de porta interna; lance na obra)`]] : []),
+      ["Aberturas nas paredes", `${tpFmt(areaAb)} m² (já descontadas do m² de parede)`],
     ] : []),
   ];
   return { projeto, linhas };
@@ -78235,14 +78318,23 @@ function tpMesclarProjetoObra(ant, conv, projetoId) {
     // esquadrias: o desenho passa a mandar na lista quando tem portas/janelas;
     // se depois apagar todas, limpa só o que ele mesmo tinha escrito
     ...(conv.projeto.esquadrias ? { esquadrias: conv.projeto.esquadrias } : ((ant.origemDesenho || {}).esquadrias ? { esquadrias: [] } : {})),
-    origemDesenho: { projetoId, esquadrias: !!conv.projeto.esquadrias } };
+    // cômodos: com ambientes desenhados, o desenho manda na quantidade e nas
+    // medidas (comprimento, largura, pé-direito); o resto do que foi editado
+    // no cômodo (revestimento, bancada) fica
+    ...(conv.projeto.ambientes ? {
+      ambientes: conv.projeto.ambientes,
+      comodosCfg: Object.entries(conv.projeto.comodosCfg).reduce((acc, [id, c]) => ({ ...acc, [id]: { ...((ant.comodosCfg || {})[id] || {}), ...c } }), { ...(ant.comodosCfg || {}) }),
+    } : ((ant.origemDesenho || {}).ambientes ? { ambientes: {} } : {})),
+    ...(conv.projeto.portasDesenho ? { portasDesenho: conv.projeto.portasDesenho } : ((ant.origemDesenho || {}).portas ? { portasDesenho: null } : {})),
+    origemDesenho: { projetoId, esquadrias: !!conv.projeto.esquadrias, ambientes: !!conv.projeto.ambientes, portas: !!conv.projeto.portasDesenho } };
 }
 // "assinatura" dos campos do desenho, para só gravar quando algo mudou
 function tpAssinaturaDesenho(pr) {
   pr = pr || {};
   const a = pr.arquitetura || {}, t = pr.terreo || {};
   return JSON.stringify([pr.tipologia, a.areaConstruida, a.m2ParedesInternas, a.m2ParedesExternas, a.m2ParedesTotal,
-    t.area, t.m2Parede15, t.m2Parede20, t.m2Parede25, t.perimetroParedes, t.areaLoje, t.perimetroLoje, t.tipoLoje, pr.cobertura || null, (pr.externa || {}).pavimentacao || 0, pr.esquadrias || null]);
+    t.area, t.m2Parede15, t.m2Parede20, t.m2Parede25, t.perimetroParedes, t.areaLoje, t.perimetroLoje, t.tipoLoje, pr.cobertura || null, (pr.externa || {}).pavimentacao || 0, pr.esquadrias || null, pr.ambientes || null, pr.portasDesenho || null,
+    pr.ambientes ? Object.keys(pr.ambientes).sort().map((id) => { const c = (pr.comodosCfg || {})[id] || {}; return [id, c.L, c.W, c.peDireito]; }) : null]);
 }
 
 // Arco por 3 pontos (início, fim e um ponto da curva), devolvido como
@@ -80500,7 +80592,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               <input type="checkbox" id="tp-sinc" checked={sincronizar} onChange={(e) => setSincronizar(e.target.checked)} style={{ marginTop: 2 }} />
               <span>Preencher sozinho os campos da obra com o desenho
                 <span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>
-                  {sincronizar ? (ultimaSinc ? `Atualizado às ${ultimaSinc.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "Paredes, área construída, laje e telhado") : "Desligado: só pelo botão"}
+                  {sincronizar ? (ultimaSinc ? `Atualizado às ${ultimaSinc.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "Paredes, área, laje, telhado, cômodos, portas e esquadrias") : "Desligado: só pelo botão"}
                 </span>
               </span>
             </label>
@@ -80544,7 +80636,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         <div style={linhaQ}><span>Telhado (projeção · real)</span><span style={numQ}>{tpFmt(telProj)} · {tpFmt(telReal)} m²</span></div>
         <div style={linhaQ}><span>Laje</span><span style={numQ}>{tpFmt(areaLj)} m² · {tpFmt(volLj)} m³</span></div>
       </div>
-      <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 10, lineHeight: 1.4 }}>Teste: salvo só neste navegador. Para o orçamento de obra segue indo o m² de parede bruto, como antes; o desconto das aberturas aparece acima.</div>
+      <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 10, lineHeight: 1.4 }}>Teste: salvo só neste navegador. Para o orçamento de obra vai o m² de parede líquido (descontando portas e janelas).</div>
     </aside>
   );
 
@@ -80687,7 +80779,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                     ))}
                   </div>
                   <div style={{ fontSize: 12, color: "#6b7280", marginTop: 10, lineHeight: 1.45 }}>
-                    Medidas brutas (sem descontar portas e janelas), parede externa identificada pelo contorno da casa. Por enquanto só obra térrea.
+                    Parede em m² líquido (descontando portas e janelas), parede externa identificada pelo contorno da casa. Cômodos pelos ambientes desenhados e portas internas pelas portas desenhadas. Por enquanto só obra térrea.
                   </div>
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
                     <button style={btn} onClick={() => setPainelObra(null)}>Cancelar</button>

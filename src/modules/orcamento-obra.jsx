@@ -3341,7 +3341,11 @@ function vaosAutomaticos(projeto) {
   const tipos = typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : [];
   const amb = migrarAmbientes(p.ambientes || {});
   let portasInternas = 0;
-  for (const t of tipos) if (((t.kits || {}).PORTAS || []).length) portasInternas += Math.max(0, Math.round(numOrZero(amb[t.id])));
+  // Projeto desenhado no Projetar: as portas internas são as desenhadas (não
+  // mais 1 por cômodo com kit de porta)
+  const pd = p.portasDesenho;
+  if (pd && typeof pd === "object") portasInternas = Math.max(0, Math.round(numOrZero(pd.interna) + numOrZero(pd.banheiro)));
+  else for (const t of tipos) if (((t.kits || {}).PORTAS || []).length) portasInternas += Math.max(0, Math.round(numOrZero(amb[t.id])));
   let metrosPortasExternas = 0, metrosJanelas = 0;
   for (const e of (Array.isArray(p.esquadrias) ? p.esquadrias : [])) {
     const m = numOrZero(e && e.qtd) * numOrZero(e && e.largura);
@@ -3843,6 +3847,7 @@ function instalacoesPorAmbiente(cp, out, data) {
     algumAmbiente = true;
     for (const disc of Object.keys(t.kits || {})) {
       if (doProjeto[disc]) continue;
+      if (disc === "PORTAS" && cp.portasDesenho) continue; // portas vêm do desenho (abaixo)
       for (const kitId of t.kits[disc] || []) {
         const base = kits[kitId];
         if (!base) {
@@ -3855,17 +3860,24 @@ function instalacoesPorAmbiente(cp, out, data) {
     }
     if (!doProjeto.ELETRICA) for (const p of pontosDef) totalPontos[p.id] += numOrZero(t.pontos && t.pontos[p.id]) * n;
   }
-  if (!algumAmbiente) return;
+  // Portas internas desenhadas no Projetar: kit de porta por porta desenhada
+  // (porta de banheiro = a que dá para WC/lavabo)
+  const pdz = cp.portasDesenho;
+  if (pdz && !doProjeto.PORTAS) {
+    if (pdz.interna > 0) aplicarKit(escolherKit(kits, "PORTA_INTERNA", inst.padrao), pdz.interna, "PORTAS", `Portas internas desenhadas no projeto (${numMem(pdz.interna)}×)`);
+    if (pdz.banheiro > 0) aplicarKit(escolherKit(kits, "PORTA_BANHEIRO", inst.padrao), pdz.banheiro, "PORTAS", `Portas de banheiro desenhadas no projeto (${numMem(pdz.banheiro)}×)`);
+  }
+  if (!algumAmbiente && !(pdz && (pdz.interna > 0 || pdz.banheiro > 0))) return;
 
-  if (!doProjeto.ELETRICA) {
+  if (algumAmbiente && !doProjeto.ELETRICA) {
     for (const p of pontosDef) aplicarKit(escolherKit(kits, p.kit, inst.padrao), totalPontos[p.id], "ELETRICA", `${p.nome} (${numMem(totalPontos[p.id])} pontos somados nos cômodos)`);
     aplicarKit(escolherKit(kits, "ELETRICA_POR_OBRA", inst.padrao), 1, "ELETRICA", "Uma vez por obra (quadro, entrada e aterramento)");
     const luz = numOrZero(totalPontos.iluminacao) + numOrZero(totalPontos.iluminacaoParalela);
     if (luz > 0) add("ELETRICA", "Elétrica - Disjuntor Unipolar 10A - 10kA", teto(luz / 8), "Unidades", `Um circuito de iluminação a cada 8 pontos de luz (${numMem(luz)} pontos)`);
     if (totalPontos.tomadaGeral > 0) add("ELETRICA", "Elétrica - Disjuntor Unipolar 20A - 10kA", teto(totalPontos.tomadaGeral / 6), "Unidades", `Um circuito de tomadas a cada 6 tomadas de uso geral (${numMem(totalPontos.tomadaGeral)} tomadas)`);
   }
-  if (!doProjeto.ESGOTO) aplicarKit(escolherKit(kits, "ESGOTO_POR_OBRA", inst.padrao), 1, "ESGOTO", "Uma vez por obra (caixas, ramal de saída e ventilação)");
-  if (!doProjeto.AQUECIMENTO) {
+  if (algumAmbiente && !doProjeto.ESGOTO) aplicarKit(escolherKit(kits, "ESGOTO_POR_OBRA", inst.padrao), 1, "ESGOTO", "Uma vez por obra (caixas, ramal de saída e ventilação)");
+  if (algumAmbiente && !doProjeto.AQUECIMENTO) {
     const sis = sistemas.find((x) => x.id === inst.aquecimento);
     if (sis && sis.kit) aplicarKit(escolherKit(kits, sis.kit, inst.padrao), 1, "AQUECIMENTO", `Sistema de aquecimento escolhido: ${sis.nome || inst.aquecimento}`);
     if (inst.pressurizador) aplicarKit(escolherKit(kits, "PRESSURIZADOR", inst.padrao), 1, "AQUECIMENTO", "Pressurizador marcado no bloco Instalações");
@@ -4173,6 +4185,11 @@ function normalizarProjeto(projeto) {
       largura: numOrZero(e && e.largura),
       altura: numOrZero(e && e.altura),
     })),
+
+    // cp.portasDesenho — portas internas contadas no desenho do Projetar
+    // ({ interna, banheiro }); ausente = conta pelos cômodos (kit de porta)
+    portasDesenho: p.portasDesenho && typeof p.portasDesenho === "object"
+      ? { interna: Math.max(0, Math.round(numOrZero(p.portasDesenho.interna))), banheiro: Math.max(0, Math.round(numOrZero(p.portasDesenho.banheiro))) } : null,
 
     // cp.ambientes / cp.instalacoes — estimativa por kits (instalacoesPorAmbiente)
     ambientes: (() => { const m = migrarAmbientes(ambientesIn); for (const k of Object.keys(m)) m[k] = numOrZero(m[k]); return m; })(),
