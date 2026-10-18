@@ -77836,6 +77836,7 @@ const TP_AREA_TIPOS = {
   ambiente: { nome: "Ambiente", esp: 0, cor3d: 0xffffff },
   separador: { nome: "Separador de ambiente", esp: 0, cor3d: 0xffffff },
   cota: { nome: "Cota", esp: 0, cor3d: 0xffffff },
+  escada: { nome: "Escada", esp: 0, cor3d: 0xd6d3cd },
 };
 const tpEhPoli = (f) => f === "contrapiso" || f === "laje" || f === "telhado" || f === "terreno";
 // Área exata da união de polígonos (contorno simples): fatias verticais entre
@@ -78334,6 +78335,35 @@ function tpDesenhoParaObra(paredes, areas) {
   return { projeto, linhas };
 }
 
+// Vários pavimentos: o térreo vai para "terreo", o primeiro de cima para
+// "pav1" (tipologia Sobrado, como o orçamento de obra já trata); esquadrias,
+// portas e cômodos somam todos os pavimentos; telhado de todos.
+function tpDesenhoParaObraPavs(lista) {
+  if (!lista || lista.length <= 1) { const d = (lista && lista[0]) || { paredes: [], areas: [] }; return tpDesenhoParaObra(d.paredes || [], d.areas || []); }
+  const r2 = (x) => Math.round(x * 100) / 100;
+  const cs = lista.map((d) => tpDesenhoParaObra(d.paredes || [], d.areas || []));
+  const todos = tpDesenhoParaObra(lista.flatMap((d) => d.paredes || []), lista.flatMap((d) => d.areas || []));
+  const c0 = cs[0].projeto, c1 = cs[1].projeto, soma = (f) => r2(cs.reduce((t, c) => t + (+f(c.projeto) || 0), 0));
+  const projeto = {
+    ...c0,
+    tipologia: "Sobrado",
+    ...(todos.projeto.esquadrias ? { esquadrias: todos.projeto.esquadrias } : {}),
+    ...(todos.projeto.ambientes ? { ambientes: todos.projeto.ambientes, comodosCfg: todos.projeto.comodosCfg } : {}),
+    ...(todos.projeto.portasDesenho ? { portasDesenho: todos.projeto.portasDesenho } : {}),
+    arquitetura: { areaConstruida: soma((p) => p.arquitetura.areaConstruida), m2ParedesInternas: soma((p) => p.arquitetura.m2ParedesInternas), m2ParedesExternas: soma((p) => p.arquitetura.m2ParedesExternas), m2ParedesTotal: soma((p) => p.arquitetura.m2ParedesTotal) },
+    pav1: { ...c1.terreo },
+    ...(todos.projeto.cobertura ? { cobertura: todos.projeto.cobertura } : {}),
+  };
+  const linhas = [
+    ["Tipologia", `Sobrado (${lista.length} pavimentos)`],
+    ...lista.map((d, k) => [`${d.nome || (k ? "Pavimento " + k : "Térreo")}`, `${tpFmt(cs[k].projeto.terreo.area)} m² · paredes ${tpFmt(cs[k].projeto.arquitetura.m2ParedesTotal)} m²`]),
+    ["Área construída (total)", tpFmt(projeto.arquitetura.areaConstruida) + " m²"],
+    ["Paredes (total)", `${tpFmt(projeto.arquitetura.m2ParedesTotal)} m² — internas ${tpFmt(projeto.arquitetura.m2ParedesInternas)} · externas ${tpFmt(projeto.arquitetura.m2ParedesExternas)}`],
+    ...cs[0].linhas.filter(([k]) => k === "Pavimentação externa" || String(k).startsWith("Laje")),
+    ...todos.linhas.filter(([k]) => !["Tipologia", "Área construída", "Pavimentação externa", "Parede interna", "Parede externa", "Por espessura", "Perímetro de paredes"].includes(k) && !String(k).startsWith("Laje")),
+  ];
+  return { projeto, linhas };
+}
 // Junta no projeto da obra só os campos que vêm do desenho. Padrão, cômodos,
 // esquadrias, fundação, prestadores etc. ficam como estavam.
 function tpMesclarProjetoObra(ant, conv, projetoId) {
@@ -78341,6 +78371,7 @@ function tpMesclarProjetoObra(ant, conv, projetoId) {
   return { ...ant, tipologia: conv.projeto.tipologia,
     arquitetura: { ...(ant.arquitetura || {}), ...conv.projeto.arquitetura },
     terreo: { ...(ant.terreo || {}), ...conv.projeto.terreo },
+    ...(conv.projeto.pav1 ? { pav1: { ...(ant.pav1 || {}), ...conv.projeto.pav1 } } : {}),
     ...(conv.projeto.cobertura ? { cobertura: conv.projeto.cobertura } : {}),
     ...(conv.projeto.externa ? { externa: { ...(ant.externa || {}), ...conv.projeto.externa } } : {}),
     // esquadrias: o desenho passa a mandar na lista quando tem portas/janelas;
@@ -78360,7 +78391,8 @@ function tpMesclarProjetoObra(ant, conv, projetoId) {
 function tpAssinaturaDesenho(pr) {
   pr = pr || {};
   const a = pr.arquitetura || {}, t = pr.terreo || {};
-  return JSON.stringify([pr.tipologia, a.areaConstruida, a.m2ParedesInternas, a.m2ParedesExternas, a.m2ParedesTotal,
+  const p1 = pr.pav1 || {};
+  return JSON.stringify([pr.tipologia, p1.area, p1.m2Parede15, p1.m2Parede20, p1.m2Parede25, p1.perimetroParedes, p1.areaLoje, a.areaConstruida, a.m2ParedesInternas, a.m2ParedesExternas, a.m2ParedesTotal,
     t.area, t.m2Parede15, t.m2Parede20, t.m2Parede25, t.perimetroParedes, t.areaLoje, t.perimetroLoje, t.tipoLoje, pr.cobertura || null, (pr.externa || {}).pavimentacao || 0, pr.esquadrias || null, pr.ambientes || null, pr.portasDesenho || null,
     pr.ambientes ? Object.keys(pr.ambientes).sort().map((id) => { const c = (pr.comodosCfg || {})[id] || {}; return [id, c.L, c.W, c.peDireito]; }) : null]);
 }
@@ -78774,6 +78806,75 @@ function tpAtualizarCotas(ars, paredes) {
   }
   return mudou ? out : ars;
 }
+// Paredes de periferia (um lado dentro da casa, o outro fora) — o pavimento
+// novo nasce com elas (sem portas/janelas), como base para desenhar o miolo
+function tpParedesExternas(ps) {
+  if (!ps || !ps.length) return [];
+  let peg = []; try { peg = tpPegadaConstruida(tpParedesDesenho(ps)) || []; } catch (e) { peg = []; }
+  if (!peg.length) return [];
+  const dentro = (q) => peg.some((P) => P && P.length >= 3 && tpDentroPoli(q, P));
+  return ps.filter((w) => {
+    const L = tpLen(w); if (!L) return false;
+    const nx = -(w.b.y - w.a.y) / L, ny = (w.b.x - w.a.x) / L, d = (w.t || 0.14) / 2 + 0.3;
+    let fora = 0, den = 0;
+    for (const f of [0.25, 0.5, 0.75]) {
+      const m = { x: w.a.x + (w.b.x - w.a.x) * f, y: w.a.y + (w.b.y - w.a.y) * f };
+      const A = dentro({ x: m.x + nx * d, y: m.y + ny * d }), B = dentro({ x: m.x - nx * d, y: m.y - ny * d });
+      if (A !== B) fora++; else den++;
+    }
+    return fora > den;
+  });
+}
+// ---- Escada ----
+// Paramétrica: pé do 1º degrau no ponto (x, y), subindo na direção ang;
+// largura, desnível (altura) e forma (reta, L, U, caracol). Degraus pela
+// fórmula de Blondel: espelho ~17,5 cm (altura / nº inteiro), piso = 63 − 2e
+// (entre 25 e 32 cm). L e U têm patamar no meio; giro 1 = vira à direita.
+const TP_ESCADA_FORMAS = [{ id: "reta", rotulo: "Reta" }, { id: "L", rotulo: "Em L" }, { id: "U", rotulo: "Em U" }, { id: "caracol", rotulo: "Caracol" }];
+function tpEscadaGeo(e) {
+  const H = Math.max(0.3, +e.altura || 2.9), L = Math.max(0.6, +e.largura || 0.9), n = Math.max(2, Math.round(H / 0.175)), esp = H / n;
+  const piso = Math.max(0.25, Math.min(0.32, 0.63 - 2 * esp)), T = n - 1; // pisos (o último espelho chega no pavimento de cima)
+  const ang = +e.ang || 0, u = { x: Math.cos(ang), y: Math.sin(ang) }, g = (e.giro || 1) >= 0 ? 1 : -1, v = { x: -u.y * g, y: u.x * g };
+  const P = (s, t) => ({ x: e.x + u.x * s + v.x * t, y: e.y + u.y * s + v.y * t });
+  const degraus = [], patamares = [], caminho = [];
+  const ret = (s0, s1, t0, t1) => [P(s0, t0), P(s1, t0), P(s1, t1), P(s0, t1)];
+  const forma = e.forma || "reta";
+  if (forma === "caracol") {
+    // centro em (x, y); raio = largura + 10 cm de pilar; passo medido a 2/3 do raio
+    const R = L + 0.1, rc = 0.1, dth = piso / (R * 0.66), th0 = ang;
+    for (let k = 0; k < T; k++) {
+      const a0 = th0 + g * dth * k, a1 = th0 + g * dth * (k + 1), pts = [];
+      const N = 6; for (let j = 0; j <= N; j++) { const a = a0 + (a1 - a0) * j / N; pts.push({ x: e.x + Math.cos(a) * R, y: e.y + Math.sin(a) * R }); }
+      for (let j = N; j >= 0; j--) { const a = a0 + (a1 - a0) * j / N; pts.push({ x: e.x + Math.cos(a) * rc, y: e.y + Math.sin(a) * rc }); }
+      degraus.push({ pts, z: (k + 1) * esp });
+      const am = (a0 + a1) / 2; caminho.push({ x: e.x + Math.cos(am) * R * 0.6, y: e.y + Math.sin(am) * R * 0.6 });
+    }
+    const voltas = Math.abs(dth * T) / (2 * Math.PI);
+    return { n, esp, piso, T, forma, degraus, patamares, caminho, centro: { x: e.x, y: e.y }, R, voltas, comp: R * 2, larg: R * 2,
+      contorno: Array.from({ length: 24 }, (_, j) => ({ x: e.x + Math.cos(j / 24 * 2 * Math.PI) * R, y: e.y + Math.sin(j / 24 * 2 * Math.PI) * R })) };
+  }
+  if (forma === "reta") {
+    for (let k = 0; k < T; k++) { degraus.push({ pts: ret(k * piso, (k + 1) * piso, -L / 2, L / 2), z: (k + 1) * esp }); caminho.push(P((k + 0.5) * piso, 0)); }
+    return { n, esp, piso, T, forma, degraus, patamares, caminho, comp: T * piso, larg: L, contorno: ret(0, T * piso, -L / 2, L / 2) };
+  }
+  // L e U: 1º lance, patamar (um nível), 2º lance
+  const a = Math.ceil((T - 1) / 2), b = Math.max(0, T - 1 - a), sA = a * piso;
+  for (let k = 0; k < a; k++) { degraus.push({ pts: ret(k * piso, (k + 1) * piso, -L / 2, L / 2), z: (k + 1) * esp }); caminho.push(P((k + 0.5) * piso, 0)); }
+  const zP = (a + 1) * esp;
+  if (forma === "L") {
+    patamares.push({ pts: ret(sA, sA + L, -L / 2, L / 2), z: zP }); caminho.push(P(sA + L / 2, 0));
+    for (let k = 0; k < b; k++) { degraus.push({ pts: ret(sA, sA + L, L / 2 + k * piso, L / 2 + (k + 1) * piso), z: zP + (k + 1) * esp }); caminho.push(P(sA + L / 2, L / 2 + (k + 0.5) * piso)); }
+    return { n, esp, piso, T, forma, degraus, patamares, caminho, comp: sA + L, larg: L + b * piso,
+      contorno: [P(0, -L / 2), P(sA + L, -L / 2), P(sA + L, L / 2 + b * piso), P(sA, L / 2 + b * piso), P(sA, L / 2), P(0, L / 2)] };
+  }
+  // U: patamar atravessa os dois lances (vão de 10 cm entre eles); 2º lance volta
+  const gap = 0.1, t2 = L + gap; // eixo do 2º lance
+  patamares.push({ pts: ret(sA, sA + L, -L / 2, L / 2 + t2), z: zP }); caminho.push(P(sA + L / 2, 0), P(sA + L / 2, t2));
+  for (let k = 0; k < b; k++) { degraus.push({ pts: ret(sA - (k + 1) * piso, sA - k * piso, t2 - L / 2, t2 + L / 2), z: zP + (k + 1) * esp }); caminho.push(P(sA - (k + 0.5) * piso, t2)); }
+  const s2 = sA - b * piso;
+  return { n, esp, piso, T, forma, degraus, patamares, caminho, comp: Math.max(sA, sA - s2) + L, larg: 2 * L + gap,
+    contorno: [P(Math.min(0, s2), -L / 2), P(sA + L, -L / 2), P(sA + L, t2 + L / 2), P(Math.min(0, s2), t2 + L / 2)] };
+}
 const tpNovoIdAmb = () => "amb" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const tpFolhas = (o) => (o.folhas != null && !tpGiro(o.tipo) ? o.folhas : tpEsq(o.tipo).folhas);
 const tpGiro = (tipo) => tipo === "porta_giro" || tipo === "porta_giro2";
@@ -78957,8 +79058,21 @@ const TP_MODOS_TRACO = [
 function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const planRef = useRef(null), v3dRef = useRef(null);
   const planBox = useRef(null), v3dBox = useRef(null);
-  const [paredes, setParedes] = useState(() => (Array.isArray(projeto.paredes) ? projeto.paredes : []));
-  const [areas, setAreas] = useState(() => (Array.isArray(projeto.areas) ? projeto.areas : []));
+  // Pavimentos: lista (id, nome, nível) e o desenho de cada um. O pavimento
+  // ativo fica em paredes/areas (o editor inteiro trabalha nele); os outros
+  // ficam guardados em dadosPav. O térreo continua também em projeto.paredes/areas.
+  const pavIni = useRef(null);
+  if (!pavIni.current) {
+    const L = Array.isArray(projeto.pavimentos) && projeto.pavimentos.length
+      ? [...projeto.pavimentos].sort((a, b) => (a.nivel || 0) - (b.nivel || 0))
+      : [{ id: "t", nome: "Térreo", nivel: 0, paredes: projeto.paredes, areas: projeto.areas }];
+    pavIni.current = L.map((p) => ({ ...p, paredes: Array.isArray(p.paredes) ? p.paredes : [], areas: Array.isArray(p.areas) ? p.areas : [] }));
+  }
+  const [pavimentos, setPavimentos] = useState(() => pavIni.current.map(({ paredes, areas, ...m }) => ({ ...m, nivel: +m.nivel || 0 })));
+  const [dadosPav, setDadosPav] = useState(() => Object.fromEntries(pavIni.current.map((p) => [p.id, { paredes: p.paredes, areas: p.areas }])));
+  const [pavAtivo, setPavAtivo] = useState(() => pavIni.current[0].id);
+  const [paredes, setParedes] = useState(() => pavIni.current[0].paredes);
+  const [areas, setAreas] = useState(() => pavIni.current[0].areas);
   const [escala, setEscala] = useState(() => (+projeto.escala > 0 ? +projeto.escala : 50)); // escala da planta (1:50): tamanho das anotações
   const [inicio, setInicio] = useState(null);
   const [poli, setPoli] = useState([]);      // pontos do contrapiso/laje em desenho
@@ -78985,6 +79099,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const [sincronizar, setSincronizar] = useState(projeto.sincronizar !== false);
   const [ultimaSinc, setUltimaSinc] = useState(null);
   const [painelObra, setPainelObra] = useState(null); // null, confirmar ou feito
+  const [confirmarPav, setConfirmarPav] = useState(null);
+  const [novaEscada, setNovaEscada] = useState({ forma: "reta", largura: 0.9, giro: 1 }); // opções da próxima escada // id do pavimento a excluir (confirmação)
   const [tipoEsq, setTipoEsq] = useState("porta_giro");  // tipo da próxima porta/janela
   const [dimsEsq, setDimsEsq] = useState(() => Object.fromEntries(TP_ESQ.map((t) => [t.id, { larg: t.larg, alt: t.alt, peit: t.peit, mat: t.mat }])));
   const [maoEsq, setMaoEsq] = useState(1);               // Espaço troca a ombreira da dobradiça
@@ -79019,11 +79135,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const gravarPendente = useRef(null);
   useEffect(() => {
     if (primeiraVez.current) { primeiraVez.current = false; return; }
-    const dados = { ...projeto, obraId, sincronizar, paredes, areas, escala, atualizadoEm: new Date().toISOString() };
+    const lista = [...pavimentos].sort((a, b) => a.nivel - b.nivel).map((p) => ({ ...p, ...(p.id === pavAtivo ? { paredes, areas } : (dadosPav[p.id] || { paredes: [], areas: [] })) }));
+    const terreo = lista[0] || { paredes, areas };
+    const dados = { ...projeto, obraId, sincronizar, paredes: terreo.paredes, areas: terreo.areas, escala, atualizadoEm: new Date().toISOString() };
+    if (lista.length > 1) dados.pavimentos = lista; else delete dados.pavimentos;
     gravarPendente.current = () => { gravarPendente.current = null; onAlterar(dados); };
     const t = setTimeout(() => gravarPendente.current && gravarPendente.current(), 400);
     return () => clearTimeout(t);
-  }, [paredes, areas, obraId, sincronizar, escala]);
+  }, [paredes, areas, obraId, sincronizar, escala, pavimentos, dadosPav, pavAtivo]);
   useEffect(() => {
     const sair = () => gravarPendente.current && gravarPendente.current();
     window.addEventListener("beforeunload", sair);
@@ -79181,7 +79300,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const mv = (q) => ({ x: r3(q.x + dx), y: r3(q.y + dy) });
     return {
       paredes: base.paredes.map((w, i) => (fp.has(i) ? { ...w, a: mv(w.a), b: mv(w.b) } : w)),
-      areas: base.areas.map((a, i) => (fa.has(i) ? { ...a, pts: (a.pts || []).map(mv), ...(a.ponto ? { ponto: mv(a.ponto) } : {}), ...(a.rotulo ? { rotulo: mv(a.rotulo) } : {}) } : a)),
+      areas: base.areas.map((a, i) => (fa.has(i) ? (a.tipo === "escada" ? { ...a, ...mv({ x: a.x, y: a.y }) } : { ...a, pts: (a.pts || []).map(mv), ...(a.ponto ? { ponto: mv(a.ponto) } : {}), ...(a.rotulo ? { rotulo: mv(a.rotulo) } : {}) }) : a)),
     };
   };
   const moverSelecao = (dx, dy) => {
@@ -79206,6 +79325,47 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   };
   useEffect(() => { setHover(null); }, [ferramenta]);
   const trocarFerramenta = (f) => { setDividir(null); setFerramenta(f); setPreviaEsq(null); setInicio(null); setPoli([]); setDigitado(""); setAncora(null); if (f !== "selecionar" && f !== "mover") { setSel([]); ultimaFerramenta.current = f; } };
+  // ---- pavimentos ----
+  const pavsOrd = [...pavimentos].sort((a, b) => a.nivel - b.nivel);
+  const pavAt = pavimentos.find((p) => p.id === pavAtivo) || pavsOrd[0];
+  const dadosDe = (id) => (id === pavAtivo ? { paredes, areas } : (dadosPav[id] || { paredes: [], areas: [] }));
+  // pavimento logo abaixo do ativo (referência em cinza na planta)
+  const pavAbaixo = (() => { const k = pavsOrd.findIndex((p) => p.id === pavAtivo); return k > 0 ? pavsOrd[k - 1] : null; })();
+  const irParaPav = (id) => {
+    if (id === pavAtivo || !pavimentos.some((p) => p.id === id)) return;
+    const novos = { ...dadosPav, [pavAtivo]: { paredes, areas } };
+    const d = novos[id] || { paredes: [], areas: [] };
+    setDadosPav(novos); setPavAtivo(id); setParedes(d.paredes); setAreas(d.areas);
+    setSel([]); setInicio(null); setPoli([]); setAncora(null); setDividir(null);
+    historico.current = []; futuro.current = []; sepAnterior.current = null; ambientesFeitos.current = null;
+  };
+  const novoPavimento = () => {
+    const topo = pavsOrd[pavsOrd.length - 1], dT = dadosDe(topo.id);
+    const hMax = Math.max(0, ...dT.paredes.map((w) => w.h || 0)) || altM;
+    const esLaje = Math.max(0.1, ...dT.areas.filter((a) => a.tipo === "laje").map((a) => a.esp || 0.1));
+    const nivel = r3(topo.nivel + hMax + esLaje);
+    const id = "pav" + Date.now().toString(36);
+    const nome = pavsOrd.length === 1 ? "Superior" : `Pavimento ${pavsOrd.length}`;
+    // nasce com as paredes de periferia do pavimento de baixo (sem portas/janelas)
+    const ext = tpParedesExternas(dT.paredes).map(({ ab, cotaDesl, semCota, ...w }) => ({ ...w }));
+    setPavimentos([...pavimentos, { id, nome, nivel }]);
+    setDadosPav({ ...dadosPav, [pavAtivo]: { paredes, areas }, [id]: { paredes: ext, areas: [] } });
+    setPavAtivo(id); setParedes(ext); setAreas([]);
+    setSel([]); setInicio(null); setPoli([]); setAncora(null); setDividir(null);
+    historico.current = []; futuro.current = []; sepAnterior.current = null; ambientesFeitos.current = null;
+    avisar(`${nome} criado no nível ${tpFmt(nivel)} m${ext.length ? `, com ${ext.length} parede${ext.length > 1 ? "s" : ""} de periferia copiada${ext.length > 1 ? "s" : ""}` : ""}.`);
+  };
+  const alturaEscada = () => { const k = pavsOrd.findIndex((p) => p.id === pavAtivo), acima = pavsOrd[k + 1]; return acima ? r3(acima.nivel - pavAt.nivel) : r3(altM + 0.1); };
+  const editarPav = (id, mud) => setPavimentos(pavimentos.map((p) => (p.id === id ? { ...p, ...mud } : p)));
+  const excluirPav = (id) => {
+    if (pavsOrd[0].id === id) return; // o térreo não sai
+    const resto = pavimentos.filter((p) => p.id !== id), { [id]: _fora, ...dRest } = dadosPav;
+    if (id === pavAtivo) {
+      const alvo = [...resto].sort((a, b) => a.nivel - b.nivel)[0], d = dRest[alvo.id] || { paredes: [], areas: [] };
+      setPavAtivo(alvo.id); setParedes(d.paredes); setAreas(d.areas); setSel([]); historico.current = []; futuro.current = [];
+    }
+    setPavimentos(resto); setDadosPav(dRest);
+  };
   // Nível do apoio do telhado: automático = topo do que está embaixo dele
   // (laje: nível + espessura; parede: altura). Só vale o digitado depois que o
   // usuário muda o campo (cotaManual), como o "deslocamento da base" do Revit.
@@ -79232,7 +79392,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const sincronizarAgora = useRef(null);
   sincronizarAgora.current = () => {
     if (!sincronizar || !obraLigada || !data || !save) return;
-    const conv = tpDesenhoParaObra(paredes, areas);
+    const conv = tpDesenhoParaObraPavs(pavsOrd.map((p) => ({ ...dadosDe(p.id), nome: p.nome })));
     const mesclado = tpMesclarProjetoObra(obraLigada.projeto, conv, projeto.id);
     if (tpAssinaturaDesenho(mesclado) === tpAssinaturaDesenho(obraLigada.projeto)) return;
     const atualizada = { ...obraLigada, projeto: mesclado };
@@ -79245,10 +79405,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     sincPendente.current = true;
     const t = setTimeout(() => { sincPendente.current = false; sincronizarAgora.current(); }, 1500);
     return () => clearTimeout(t);
-  }, [paredes, areas, obraId, sincronizar, !!obraLigada]);
+  }, [paredes, areas, obraId, sincronizar, !!obraLigada, dadosPav, pavimentos]);
   useEffect(() => () => { if (sincPendente.current) sincronizarAgora.current(); }, []);
   const gerarObra = () => {
-    const conv = tpDesenhoParaObra(paredes, areas);
+    const conv = tpDesenhoParaObraPavs(pavsOrd.map((p) => ({ ...dadosDe(p.id), nome: p.nome })));
     const base = obraLigada || {
       id: "obra_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), clienteId: projeto.clienteId, nome: projeto.nome,
       status: "planejamento", dataInicio: "", dataFim: "", responsavel: "", descricao: "Criada a partir do Projetar.", ativo: true, clientePagaDireto: false,
@@ -79323,7 +79483,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
   // ---------- vista da planta ----------
   const limites = () => {
-    const pts = [...paredes.flatMap((w) => [w.a, w.b]), ...areas.flatMap((a) => a.pts)];
+    const pts = [...paredes.flatMap((w) => [w.a, w.b]), ...areas.flatMap((a) => a.pts || (a.tipo === "escada" ? tpEscadaGeo(a).contorno : []))];
     if (!pts.length) return { x0: 0, y0: 0, x1: 12, y1: 9 };
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const p of pts) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
@@ -79353,7 +79513,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // Ponto do traço: ímã nas pontas de paredes e áreas (vence a grade, para
   // fechar cantos com medidas digitadas) e, com Shift, trava na horizontal
   // ou vertical a partir do ponto anterior (ortogonal).
-  const baseTraco = () => (ancora && ancora.ret ? ancora.ret : ancora && ancora.arcoFim ? null : (ferramenta === "parede" || ferramenta === "separador" || ferramenta === "cota") ? inicio : (poli.length ? poli[poli.length - 1] : null));
+  const baseTraco = () => (ancora && ancora.ret ? ancora.ret : ancora && ancora.arcoFim ? null : (ferramenta === "parede" || ferramenta === "separador" || ferramenta === "cota" || ferramenta === "escada") ? inicio : (poli.length ? poli[poli.length - 1] : null));
   // Pontos de ímã. Além do eixo (pontas), cada parede oferece os cantos das
   // suas faces: nas pontas soltas, os 4 cantos do retângulo; onde duas paredes
   // se encontram, o cruzamento das faces — que dá a quina de fora e a de
@@ -79386,6 +79546,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         if (q) out.push(q);
       }
     }
+    // pontas das paredes do pavimento de baixo também atraem (alinhar com ele)
+    if (pavAbaixo) for (const w of ((dadosPav[pavAbaixo.id] || {}).paredes || [])) out.push(w.a, w.b);
     // ambiente não serve de ímã: o contorno dele é calculado das paredes e
     // anda junto com elas num arraste (puxava a ponta para a posição anterior)
     areas.forEach((a, ai) => { if (a.tipo !== "ambiente" && a.tipo !== "cota" && !(ign.areas && ign.areas.includes(ai))) (a.pts || []).forEach((q, k) => { if (!(ign.area === ai && (ign.vertices || []).includes(k))) out.push(q); }); });
@@ -79893,6 +80055,62 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const [fx, fy] = T(poli[0]); ctx.strokeStyle = TP_AZUL; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.arc(fx, fy, 7 * dpr, 0, 7); ctx.stroke();
     }
 
+    // escadas: degraus, linha de corte a 1,20 m (acima dela tracejado), linha
+    // de percurso com bolinha no início e seta no fim, "SOBE"; no pavimento de
+    // cima a mesma escada aparece inteira com "DESCE"
+    const desenharEscada = (e, marc, desce, fantasma) => {
+      const g = tpEscadaGeo(e), CORTE = 1.2, cor = fantasma || marc ? TP_AZUL : "#374151";
+      const tudo = [...g.degraus, ...g.patamares];
+      // fundo claro (tapa a grade do piso)
+      caminho(g.contorno); ctx.fillStyle = marc ? "rgba(4,116,244,0.08)" : (fantasma ? "rgba(4,116,244,0.06)" : "rgba(255,255,255,0.9)"); ctx.fill();
+      ctx.strokeStyle = cor; ctx.lineWidth = 1 * dpr;
+      for (const d of tudo) {
+        const acima = !desce && d.z > CORTE + 1e-6;
+        ctx.setLineDash(acima ? [4 * dpr, 3 * dpr] : []); caminho(d.pts); ctx.stroke();
+      }
+      ctx.setLineDash([]); ctx.lineWidth = 1.4 * dpr; caminho(g.contorno); ctx.stroke();
+      // linha de corte (traço quebrado na diagonal) no primeiro degrau acima de 1,20 m
+      if (!desce) {
+        const k = g.degraus.findIndex((d) => d.z > CORTE + 1e-6);
+        if (k > 0 && g.forma !== "caracol") {
+          const q = g.degraus[k].pts, [x0, y0] = T(q[0]), [x1, y1] = T(q[2]);
+          ctx.strokeStyle = cor; ctx.lineWidth = 1.2 * dpr; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+        }
+      }
+      // linha de percurso
+      if (g.caminho.length >= 2) {
+        const pts = desce ? [...g.caminho].reverse() : g.caminho;
+        ctx.strokeStyle = cor; ctx.lineWidth = 1 * dpr; ctx.beginPath(); pts.forEach((q, k) => { const [x, y] = T(q); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.stroke();
+        const [sx, sy] = T(pts[0]); ctx.beginPath(); ctx.arc(sx, sy, 3 * dpr, 0, 7); ctx.fillStyle = cor; ctx.fill();
+        const [ax2, ay2] = T(pts[pts.length - 2]), [bx2, by2] = T(pts[pts.length - 1]), an = Math.atan2(by2 - ay2, bx2 - ax2), aL = 8 * dpr;
+        ctx.beginPath(); ctx.moveTo(bx2, by2); ctx.lineTo(bx2 - aL * Math.cos(an - 0.45), by2 - aL * Math.sin(an - 0.45)); ctx.moveTo(bx2, by2); ctx.lineTo(bx2 - aL * Math.cos(an + 0.45), by2 - aL * Math.sin(an + 0.45)); ctx.stroke();
+        const fS = fonteAnot(2.5, 7, 12);
+        if (lodEsqCod || marc) {
+          ctx.font = `600 ${fS}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = cor;
+          const q0 = pts[0], q1 = pts[1], dx = q1.x - q0.x, dy = q1.y - q0.y, dl = Math.hypot(dx, dy) || 1;
+          // texto antes da bolinha, sem encostar nela (meia largura do texto + folga)
+          const txtS = desce ? "DESCE" : "SOBE", wS = ctx.measureText(txtS).width, cS = Math.abs(dx / dl), sS = Math.abs(dy / dl);
+          const recuo = (cS * wS / 2 + sS * fS * 0.6 + 6 * dpr) / v.s;
+          const [tx, ty] = T({ x: q0.x - dx / dl * recuo, y: q0.y - dy / dl * recuo });
+          ctx.fillText(txtS, tx, ty); ctx.textBaseline = "alphabetic"; ctx.textAlign = "start";
+        }
+      }
+    };
+    if (pavAbaixo) for (const e of ((dadosPav[pavAbaixo.id] || {}).areas || [])) if (e.tipo === "escada") desenharEscada(e, false, true);
+    areas.forEach((e, i) => { if (e.tipo === "escada") desenharEscada(e, marcadas.has("a" + i), false); });
+    if (ferramenta === "escada" && inicio && hover && Math.hypot(hover.x - inicio.x, hover.y - inicio.y) > 0.05) {
+      desenharEscada({ ...novaEscada, x: inicio.x, y: inicio.y, ang: Math.atan2(hover.y - inicio.y, hover.x - inicio.x), altura: alturaEscada() }, false, false, true);
+    }
+    // pavimento de baixo como referência (cinza claro, como o "underlay" do Revit)
+    if (pavAbaixo) {
+      const pb = (dadosPav[pavAbaixo.id] || { paredes: [] }).paredes || [];
+      ctx.fillStyle = "rgba(100,116,139,0.16)"; ctx.strokeStyle = "rgba(100,116,139,0.45)"; ctx.lineWidth = 1 * dpr;
+      for (const w of tpParedesDesenho(pb)) {
+        const L = tpLen(w); if (!L) continue;
+        const nx = -(w.b.y - w.a.y) / L * (w.t || 0.14) / 2, ny = (w.b.x - w.a.x) / L * (w.t || 0.14) / 2;
+        caminho([{ x: w.a.x + nx, y: w.a.y + ny }, { x: w.b.x + nx, y: w.b.y + ny }, { x: w.b.x - nx, y: w.b.y - ny }, { x: w.a.x - nx, y: w.a.y - ny }]); ctx.fill(); ctx.stroke();
+      }
+    }
     // paredes
     const todas = modoTraco === "linha" && inicio && hover && (hover.x !== inicio.x || hover.y !== inicio.y)
       ? [...paredes, { a: inicio, b: hover, t: espM, fantasma: true }] : paredes;
@@ -80586,9 +80804,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const gcS = tpGruposCurva(paredes), cmS = tpParesPonta(paredes);
       for (const i of selP) for (const f of ["a", "b"]) { if (gcS[i] >= 0 && cmS[i][f] && gcS[cmS[i][f].j] === gcS[i]) continue; quadradinho(paredes[i][f]); }
     }
-    for (const i of selA) if (areas[i].tipo !== "ambiente" && !(areas[i].tipo === "cota" && areas[i].amb)) areas[i].pts.forEach(quadradinho);
+    for (const i of selA) if (areas[i].pts && areas[i].tipo !== "ambiente" && !(areas[i].tipo === "cota" && areas[i].amb)) areas[i].pts.forEach(quadradinho);
     // editar contorno: com uma área só selecionada, bolinhas no meio de cada lado
-    if (selA.length === 1 && !selP.length && areas[selA[0]].tipo !== "ambiente" && areas[selA[0]].tipo !== "cota") {
+    if (selA.length === 1 && !selP.length && areas[selA[0]].tipo !== "ambiente" && areas[selA[0]].tipo !== "cota" && areas[selA[0]].tipo !== "escada") {
       const pts = areas[selA[0]].pts;
       pts.forEach((q, k) => { const r = pts[(k + 1) % pts.length]; const [x, y] = T({ x: (q.x + r.x) / 2, y: (q.y + r.y) / 2 }); ctx.fillStyle = TP_AZUL; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.arc(x, y, 6 * dpr, 0, 7); ctx.fill(); ctx.stroke(); });
     }
@@ -80611,13 +80829,36 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const desenhar3d = () => {
     const T = three.current, c = v3dRef.current; if (!T || !window.THREE || !c || !c.width) return;
     const THREE = window.THREE;
-    while (T.group.children.length) { const m = T.group.children.pop(); m.geometry.dispose(); m.material.dispose(); }
+    // limpa tudo (agora há um grupo por pavimento)
+    const limpar = (o) => { for (const ch of [...o.children]) { limpar(ch); o.remove(ch); if (ch.geometry) ch.geometry.dispose(); if (ch.material) ch.material.dispose(); } };
+    limpar(T.group);
     const b = limites(), cx = (b.x0 + b.x1) / 2, cz = (b.y0 + b.y1) / 2;
     T.centro = { cx, cz };
     const tam = Math.max(12, Math.ceil(Math.max(b.x1 - b.x0, b.y1 - b.y0) + 6));
     const grade = new THREE.GridHelper(tam, tam, 0xd1d5db, 0xeef0f3); grade.position.y = -0.001; T.group.add(grade);
-    const marcadas = new Set(sel);
-    const contorno = (g, mesh, cor) => { const e = new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: cor })); e.position.copy(mesh.position); e.rotation.copy(mesh.rotation); e.scale.copy(mesh.scale); T.group.add(e); };
+    const marcadas0 = new Set(sel);
+    // cada pavimento num grupo no seu nível; só o ativo fica selecionável
+    const camada = (paredes, areas, G, marcadas, analise) => {
+    const apoioT = (a) => {
+      if (a.cotaManual) return a.cota || 0;
+      const pts = a.pts || []; let topo = 0, achou = false;
+      for (const l of areas) { if (l.tipo !== "laje" || !l.pts || l.pts.length < 3) continue; if (tpDentroPoli(tpCentro(l.pts), pts)) { topo = Math.max(topo, (l.cota || 0) + (l.esp || 0)); achou = true; } }
+      for (const w of paredes) if (tpDentroPoli({ x: (w.a.x + w.b.x) / 2, y: (w.a.y + w.b.y) / 2 }, pts)) { topo = Math.max(topo, w.h || 0); achou = true; }
+      return achou ? r3(topo) : (a.cota != null ? a.cota : altM);
+    };
+    const geoTelhado = (a) => tpTelhadoGeo({ ...a, cota: apoioT(a) });
+    const contorno = (g, mesh, cor) => { const e = new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: cor })); e.position.copy(mesh.position); e.rotation.copy(mesh.rotation); e.scale.copy(mesh.scale); G.add(e); };
+    // escadas: cada degrau/patamar é um bloco maciço até a sua altura
+    areas.forEach((a, i) => {
+      if (a.tipo !== "escada") return;
+      const ge = tpEscadaGeo(a), marc = marcadas.has("a" + i);
+      for (const d of [...ge.degraus, ...ge.patamares]) {
+        const sh = new THREE.Shape(d.pts.map((p) => new THREE.Vector2(p.x - cx, -(p.y - cz))));
+        const gg = new THREE.ExtrudeGeometry(sh, { depth: Math.max(0.01, d.z), bevelEnabled: false });
+        const m = new THREE.Mesh(gg, new THREE.MeshLambertMaterial({ color: marc ? 0x8dbbff : 0xd6d3cd }));
+        m.rotation.x = -Math.PI / 2; m.userData.chave = "a" + i; G.add(m); contorno(gg, m, marc ? 0x0474f4 : 0x9ca3af);
+      }
+    });
     areas.forEach((a, i) => {
       if (!a.pts || a.pts.length < 3 || a.tipo === "telhado" || a.tipo === "ambiente") return;
       const shape = new THREE.Shape(a.pts.map((p) => new THREE.Vector2(p.x - cx, -(p.y - cz))));
@@ -80633,7 +80874,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       mesh.rotation.x = -Math.PI / 2; mesh.position.y = a.tipo === "terreno" ? -0.03 : (a.cota || 0);
       if (a.tipo === "terreno") { mesh.scale.z = 0.02 / Math.max(0.01, a.esp || 0.05); mesh.material.color.set(marc ? 0x8dbbff : 0xc7d3c0); }
       if (a.tipo === "contrapiso" && a.acab && !marc) mesh.material.color.set({ pedra: 0xf0f0ee, deck: 0x9c6b43, porcelanato: 0xdcd8d2 }[a.acab] || TP_AREA_TIPOS.contrapiso.cor3d);
-      mesh.userData.chave = "a" + i; T.group.add(mesh);
+      mesh.userData.chave = "a" + i; G.add(mesh);
       contorno(g, mesh, marc ? 0x0474f4 : 0x6b7280);
     });
     // telhados: cada água é um polígono plano levantado por z(p); oitões
@@ -80647,8 +80888,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (pos.length) {
         const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); geo.computeVertexNormals();
         const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: marc ? 0x8dbbff : tpTelha(a.telha).cor, side: THREE.DoubleSide }));
-        mesh.userData.chave = "a" + i; T.group.add(mesh);
-        const lin = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 1), new THREE.LineBasicMaterial({ color: marc ? 0x0474f4 : 0x5b2a14 })); T.group.add(lin);
+        mesh.userData.chave = "a" + i; G.add(mesh);
+        const lin = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 1), new THREE.LineBasicMaterial({ color: marc ? 0x0474f4 : 0x5b2a14 })); G.add(lin);
       }
       const emp = [];
       for (const L of g.lados) {
@@ -80664,7 +80905,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (emp.length) {
         const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(emp, 3)); geo.computeVertexNormals();
         const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: marc ? 0x8dbbff : 0xe5e1d8, side: THREE.DoubleSide }));
-        mesh.userData.chave = "a" + i; T.group.add(mesh);
+        mesh.userData.chave = "a" + i; G.add(mesh);
       }
     });
     // Parede = vista de frente (contorno com os recortes das portas, furos das
@@ -80678,9 +80919,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const pts = c.banda(c.t / 2, 0).map((q) => new THREE.Vector2(q.x - cx, -(q.y - cz)));
       const g = new THREE.ExtrudeGeometry(new THREE.Shape(pts), { depth: w0.h || 2.8, bevelEnabled: false, curveSegments: 1 });
       const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: marc ? 0x8dbbff : 0xe5e1d8 }));
-      mesh.rotation.x = -Math.PI / 2; mesh.userData.chave = "p" + c.membros[0]; T.group.add(mesh);
+      mesh.rotation.x = -Math.PI / 2; mesh.userData.chave = "p" + c.membros[0]; G.add(mesh);
       const e = new THREE.LineSegments(new THREE.EdgesGeometry(g, 25), new THREE.LineBasicMaterial({ color: marc ? 0x0474f4 : 0x4b5563 }));
-      e.rotation.copy(mesh.rotation); T.group.add(e);
+      e.rotation.copy(mesh.rotation); G.add(e);
     });
     pD3.forEach((w, i) => {
       const L = tpLen(w); if (!L || naCurva3.has(i)) return;
@@ -80724,7 +80965,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       }
       const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: marc ? 0x8dbbff : 0xe5e1d8 }));
       mesh.position.set(w.a.x - cx, 0, w.a.y - cz); mesh.rotation.y = rot;
-      mesh.userData.chave = "p" + i; T.group.add(mesh);
+      mesh.userData.chave = "p" + i; G.add(mesh);
       const suaves = pontas.filter((pn) => pn.suave);
       if (!suaves.length) contorno(g, mesh, marc ? 0x0474f4 : 0x4b5563);
       else {
@@ -80733,7 +80974,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const fica = [];
         for (let k = 0; k < ep.count; k += 2) { if (nas(ep.getX(k), ep.getZ(k)) && nas(ep.getX(k + 1), ep.getZ(k + 1))) continue; fica.push(ep.getX(k), ep.getY(k), ep.getZ(k), ep.getX(k + 1), ep.getY(k + 1), ep.getZ(k + 1)); }
         const fg = new THREE.BufferGeometry(); fg.setAttribute("position", new THREE.Float32BufferAttribute(fica, 3));
-        const e = new THREE.LineSegments(fg, new THREE.LineBasicMaterial({ color: marc ? 0x0474f4 : 0x4b5563 })); e.position.copy(mesh.position); e.rotation.copy(mesh.rotation); T.group.add(e);
+        const e = new THREE.LineSegments(fg, new THREE.LineBasicMaterial({ color: marc ? 0x0474f4 : 0x4b5563 })); e.position.copy(mesh.position); e.rotation.copy(mesh.rotation); G.add(e);
       }
       // folha / vidro dentro do vão (fechado), clicável
       for (const o of vis) {
@@ -80744,10 +80985,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const mt = new THREE.MeshLambertMaterial({ color: mo ? 0x8dbbff : (madeira ? 0xa47148 : 0x9cc9f0), transparent: !madeira && !mo, opacity: !madeira && !mo ? 0.5 : 1 });
         const m2 = new THREE.Mesh(gg, mt);
         m2.position.set(w.a.x + ux * o.x - cx, (z0 + z1) / 2, w.a.y + uy * o.x - cz); m2.rotation.y = rot;
-        m2.userData.chave = "o" + o.id; T.group.add(m2);
+        m2.userData.chave = "o" + o.id; G.add(m2);
         contorno(gg, m2, mo ? 0x0474f4 : (madeira ? 0x5b3a1e : 0x4b5563));
       }
     });
+    };
+    for (const p of pavsOrd) {
+      const G = new THREE.Group(); G.position.y = p.nivel || 0; T.group.add(G);
+      const ativo = p.id === pavAtivo, d = dadosDe(p.id);
+      if (ativo) T.grupoAtivo = G;
+      camada(d.paredes || [], d.areas || [], G, ativo ? marcadas0 : new Set(), ativo ? analise : tpAnaliseAreas(d.areas || [], d.paredes || []));
+    }
     T.camera.aspect = c.width / c.height; T.camera.updateProjectionMatrix();
     const alvo = T.alvo || { x: 0, y: 1, z: 0 };
     T.camera.position.set(alvo.x + T.dist * Math.sin(T.phi) * Math.cos(T.theta), alvo.y + T.dist * Math.cos(T.phi), alvo.z + T.dist * Math.sin(T.phi) * Math.sin(T.theta));
@@ -80759,7 +81007,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const r = c.getBoundingClientRect();
     const ndc = new window.THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     const ray = new window.THREE.Raycaster(); ray.setFromCamera(ndc, T.camera);
-    const hits = ray.intersectObjects(T.group.children.filter((o) => o.userData && o.userData.chave), false);
+    const hits = ray.intersectObjects((T.grupoAtivo || T.group).children.filter((o) => o.userData && o.userData.chave), false);
     return hits.length ? hits[0].object.userData.chave : null;
   };
 
@@ -80806,7 +81054,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   }, []);
 
   // desenha antes da tela pintar (no mesmo quadro da mudança), não depois
-  tpUseLayoutEffect(() => { desenharPlanta(); }, [paredes, areas, inicio, poli, hover, espM, sel, caixa, ferramenta, ancora, modoTraco, previaEsq, editNome, escala]);
+  tpUseLayoutEffect(() => { desenharPlanta(); }, [paredes, areas, inicio, poli, hover, espM, sel, caixa, ferramenta, ancora, modoTraco, previaEsq, editNome, escala, pavAtivo, dadosPav]);
   // ambiente acompanha as paredes: mexeu numa parede, o contorno e a área se refazem
   useEffect(() => {
     if (!areas.some((a) => a.tipo === "ambiente" && a.ponto)) return;
@@ -80843,7 +81091,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       return;
     }
     clearTimeout(tempo3d.current); tempo3d.current = null; desenhar3d();
-  }, [paredes, areas, sel]);
+  }, [paredes, areas, sel, pavAtivo, dadosPav, pavimentos]);
 
   useEffect(() => {
     const k = (e) => {
@@ -80897,7 +81145,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const t = tecla.toLowerCase();
         if (t === "z" || t === "f") { ajustar(); return; } // ZF no Revit / F no SketchUp
         if (t === "d" || t === "j") { trocarFerramenta("esquadria"); setTipoEsq(t === "d" ? "porta_giro" : "janela_correr"); return; } // DR / WN no Revit
-        const f = { v: "selecionar", p: "parede", c: "contrapiso", l: "laje", t: "telhado", r: "terreno", a: "ambiente", s: "separador", k: "cota", h: "mover" }[t];
+        const f = { v: "selecionar", p: "parede", c: "contrapiso", l: "laje", t: "telhado", r: "terreno", a: "ambiente", s: "separador", k: "cota", e: "escada", h: "mover" }[t];
         if (f) trocarFerramenta(f);
       }
     };
@@ -80958,6 +81206,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const kc = cotaNoPonto(d); if (kc) return kc;
     areas.forEach((a, i) => { if (a.tipo === "separador" && a.pts && a.pts.length === 2) { const dd = distSeg(p, a.pts[0], a.pts[1]); if (dd <= tol && dd < menor) { menor = dd; melhor = "a" + i; } } });
     if (melhor) return melhor;
+    // escada (está por cima do piso e do ambiente)
+    { const ie = areas.findIndex((a) => a.tipo === "escada" && tpDentroPoli(p, tpEscadaGeo(a).contorno)); if (ie >= 0) return "a" + ie; }
     // área: a menor que contém o ponto (laje e contrapiso iguais: a laje, que está por cima)
     let menorArea = Infinity;
     areas.forEach((a, i) => { if (a.pts && a.pts.length >= 3 && tpDentroPoli(p, a.pts)) { const ar = tpAreaPoli(a.pts) - (a.tipo === "laje" ? 1e-6 : 0); if (ar < menorArea) { menorArea = ar; melhor = "a" + i; } } });
@@ -80980,7 +81230,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const v = vista.current; if (!v) return null;
     const tol = 10 * (window.devicePixelRatio || 1);
     const perto = (q) => Math.hypot(q.x * v.s + v.ox - d.x, q.y * v.s + v.oy - d.y) <= tol;
-    if (selA.length === 1 && !selP.length && areas[selA[0]].tipo !== "ambiente" && !(areas[selA[0]].tipo === "cota" && areas[selA[0]].amb)) {
+    if (selA.length === 1 && !selP.length && areas[selA[0]].tipo !== "ambiente" && areas[selA[0]].tipo !== "escada" && !(areas[selA[0]].tipo === "cota" && areas[selA[0]].amb)) {
       const ai = selA[0], pts = areas[ai].pts;
       for (let k = 0; k < pts.length; k++) if (perto(pts[k])) return { tipo: "vertice", ai, k };
       if (areas[ai].tipo === "cota") return null;
@@ -81387,7 +81637,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         if (k && (linha || sel.includes(k))) {
           const chaves = sel.includes(k) ? sel : [k];
           const pm = paraMundoLivre(d), idx = +k.slice(1);
-          const cands = k[0] === "p" ? [paredes[idx].a, paredes[idx].b] : (areas[idx].pts || []);
+          const cands = k[0] === "p" ? [paredes[idx].a, paredes[idx].b] : (areas[idx].tipo === "escada" ? [{ x: areas[idx].x, y: areas[idx].y }] : (areas[idx].pts || []));
           const ancoraPt = cands.reduce((m, q) => (Math.hypot(q.x - pm.x, q.y - pm.y) < Math.hypot(m.x - pm.x, m.y - pm.y) ? q : m), cands[0]);
           gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: { tipo: "mover", chave: k, chaves, ancora: ancoraPt, off: desvioCliente(ancoraPt, e) }, orig: { paredes, areas } };
           e.currentTarget.setPointerCapture(e.pointerId); return;
@@ -81399,7 +81649,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // Com uma ferramenta de desenho ativa e nenhum traço em andamento, apertar
     // em cima de uma parede ou linha de separação e ARRASTAR move o elemento
     // (sem precisar trocar para Selecionar). Só clicar continua desenhando.
-    if (e.button === 0 && ferramenta !== "selecionar" && ferramenta !== "mover" && ferramenta !== "ambiente" && ferramenta !== "esquadria" && ferramenta !== "cota" && !poli.length && !ancora) {
+    if (e.button === 0 && ferramenta !== "selecionar" && ferramenta !== "mover" && ferramenta !== "ambiente" && ferramenta !== "esquadria" && ferramenta !== "cota" && ferramenta !== "escada" && !poli.length && !ancora) {
       const k = elementoNoPonto(d);
       const idx = k ? +k.slice(1) : -1;
       if (k && (k[0] === "p" || (areas[idx] && areas[idx].tipo === "separador"))) {
@@ -81444,7 +81694,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         setCaixa({ x0: g.x0, y0: g.y0, x1: d.x, y1: d.y }); return;
       }
     }
-    if (ferramenta === "parede" || ferramenta === "separador" || ferramenta === "cota" || tpEhPoli(ferramenta)) setHover(pontoDoCursor(e));
+    if (ferramenta === "parede" || ferramenta === "separador" || ferramenta === "cota" || ferramenta === "escada" || tpEhPoli(ferramenta)) setHover(pontoDoCursor(e));
     if (ferramenta === "esquadria") setPreviaEsq(previaEsqEm(paraMundoLivre(d)));
   };
   const planUp = (e) => {
@@ -81476,6 +81726,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         areas.forEach((ar, i) => {
           const pts = ar.pts || [];
           if ((ar.tipo === "separador" || ar.tipo === "cota") && pts.length === 2) { if (cruzando ? segCruzaRet(pts[0], pts[1], r) : (dentro(pts[0]) && dentro(pts[1]))) achadas.push("a" + i); return; }
+          if (ar.tipo === "escada") { if (tpEscadaGeo(ar).contorno.some(dentro)) achadas.push("a" + i); return; }
           if (pts.length < 3) return;
           const ok = cruzando
             ? pts.some((p, k) => segCruzaRet(p, pts[(k + 1) % pts.length], r)) || tpDentroPoli({ x: r.x0, y: r.y0 }, pts)
@@ -81494,6 +81745,18 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       return;
     }
     if (ferramenta === "ambiente") { inserirAmbienteEm(paraMundoLivre(devPx(e))); return; }
+    if (ferramenta === "escada") {
+      // 1º clique: pé do primeiro degrau (no caracol, o centro); 2º: direção em que sobe
+      const pc = pontoDoCursor(e), p2 = limpo(pc); setHover(pc);
+      if (!inicio) { setInicio(p2); return; }
+      if (Math.hypot(p2.x - inicio.x, p2.y - inicio.y) < 0.05) return;
+      const nova = { tipo: "escada", id: "esc" + Date.now().toString(36), ...novaEscada, x: inicio.x, y: inicio.y, ang: r3(Math.atan2(p2.y - inicio.y, p2.x - inicio.x)), altura: alturaEscada() };
+      const idx = areas.length;
+      mudar(null, [...areas, nova]); setInicio(null); setFerramenta("selecionar"); setTimeout(() => setSel(["a" + idx]), 0);
+      const g = tpEscadaGeo(nova);
+      avisar(`Escada ${TP_ESCADA_FORMAS.find((f) => f.id === nova.forma).rotulo.toLowerCase()}: ${g.n} degraus de ${tpFmt(g.esp * 100, 1)} cm, piso ${tpFmt(g.piso * 100, 1)} cm.`);
+      return;
+    }
     if (ferramenta === "cota") {
       // 1º e 2º cliques: os pontos medidos; 3º: onde fica a linha de cota
       const pc = pontoDoCursor(e), p2 = limpo(pc); setHover(pc);
@@ -81659,6 +81922,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     { id: "separador", rotulo: "Separador", dica: "Separador de ambiente (S): linha que divide ambientes sem parede, como cozinha integrada" },
     { id: "esquadria", rotulo: "Porta/Janela", dica: "Porta (D), janela (J) e vão: passe o cursor na parede e clique. Espaço inverte a mão" },
     { id: "cota", rotulo: "Cota", dica: "Cota (K): clique os dois pontos a medir e depois onde fica a linha" },
+    { id: "escada", rotulo: "Escada", dica: "Escada (E): clique o pé do primeiro degrau e depois a direção em que sobe" },
     { id: "mover", rotulo: "Mover", dica: "Mover a vista (H)" },
   ];
   const MODOS = [{ id: "planta", rotulo: "Planta" }, { id: "ambos", rotulo: "Planta + 3D" }, { id: "3d", rotulo: "3D" }];
@@ -81667,6 +81931,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const desenhoAtivo = ferramenta === "parede" || tpEhPoli(ferramenta);
   const status = (ferramenta === "separador" && dividir) ? `Dividindo "${(areas[dividir.ai] || {}).nome || "ambiente"}": clique de uma parede até a outra (pode quebrar a linha). Esc cancela.`
     : ferramenta === "separador" ? (inicio ? "Clique o fim da linha. Esc cancela." : "Separador: linha que divide ambientes sem parede. Clique de uma parede até a outra.")
+    : ferramenta === "escada" ? (inicio ? "Aponte para onde a escada sobe e clique. Esc cancela." : "Escada: clique o pé do primeiro degrau (no caracol, o centro). Forma e largura no painel ao lado.")
     : ferramenta === "cota" ? (ancora && ancora.cotaB ? "Clique onde fica a linha de cota. Esc cancela." : inicio ? "Clique o segundo ponto a medir. Esc cancela." : "Cota: clique o primeiro ponto a medir (gruda nas quinas e faces das paredes).")
     : ferramenta === "ambiente" ? "Clique dentro de um cômodo fechado por paredes para criar o ambiente (nome e área)."
     : ferramenta === "esquadria" ? (() => {
@@ -81682,6 +81947,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         : "Retângulo: clique o primeiro canto.")
     : (desenhoAtivo && modoTraco === "arco") ? (ancora && ancora.arcoFim ? "Mova para curvar e clique um ponto da curva. Esc cancela." : ((ferramenta === "parede" ? inicio : poli.length) ? "Arco: clique o ponto final." : "Arco: clique o ponto inicial."))
     : (selA.length === 1 && !selP.length && ferramenta === "selecionar" && areas[selA[0]].tipo === "ambiente") ? "Ambiente: arraste o nome para mudar de lugar; clique no nome para editar. A área é calculada pelas paredes."
+    : (selA.length === 1 && !selP.length && ferramenta === "selecionar" && areas[selA[0]].tipo === "escada") ? "Escada: arraste para mudar de lugar; forma, largura e desnível no painel. Delete apaga."
     : (selA.length === 1 && !selP.length && ferramenta === "selecionar" && areas[selA[0]].tipo === "cota") ? (areas[selA[0]].amb ? "Cota do ambiente: arraste o número para outro ponto ou outra parede; acompanha o ambiente. Delete apaga." : "Cota: arraste a linha para afastar; arraste os quadradinhos para mudar os pontos medidos. Delete apaga.")
     : (selA.length === 1 && !selP.length && ferramenta === "selecionar") ? "Editar contorno: arraste os quadrados (cantos) ou as bolinhas (lados). O cursor gruda nas quinas das paredes (quadrado verde)."
     : (selO.length === 1 && sel.length === 1 && ferramenta === "selecionar") ? "Arraste para mover (até para outra parede); arraste os quadradinhos das pontas para mudar a largura. Clique na cota para digitar a medida; EQ centraliza. Espaço inverte a mão."
@@ -81872,6 +82138,32 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             </div>
           );
         })()}
+        {selA.length === 1 && !selP.length && areas[selA[0]].tipo === "escada" && (() => {
+          const ai = selA[0], e = areas[ai], g = tpEscadaGeo(e), ed = (m) => editarAreas([ai], (x) => ({ ...x, ...m }));
+          return (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label htmlFor="tp-esc-forma" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>Forma</label>
+                <select id="tp-esc-forma" value={e.forma || "reta"} onChange={(ev) => ed({ forma: ev.target.value })}
+                  style={{ width: "100%", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit", background: "#fff" }}>
+                  {TP_ESCADA_FORMAS.map((f) => <option key={f.id} value={f.id}>{f.rotulo}</option>)}
+                </select>
+              </div>
+              <TpCampo id="tp-esc-larg" rotulo="Largura (m)" valor={e.largura || 0.9} onConfirmar={(v) => ed({ largura: Math.max(0.6, v) })} />
+              <TpCampo id="tp-esc-alt" rotulo="Desnível (m)" valor={e.altura || 2.9} onConfirmar={(v) => ed({ altura: Math.max(0.3, v) })} />
+              <TpCampo id="tp-esc-n" rotulo="Degraus (espelhos)" casas={0} valor={g.n} somenteLeitura onConfirmar={() => {}} />
+              <TpCampo id="tp-esc-e" rotulo="Espelho (cm)" casas={1} valor={g.esp * 100} somenteLeitura onConfirmar={() => {}} />
+              <TpCampo id="tp-esc-p" rotulo="Piso (cm)" casas={1} valor={g.piso * 100} somenteLeitura onConfirmar={() => {}} />
+              <TpCampo id="tp-esc-c" rotulo={g.forma === "caracol" ? "Diâmetro (m)" : "Comprimento (m)"} valor={g.comp} somenteLeitura onConfirmar={() => {}} />
+              <button onClick={() => ed({ ang: r3((e.ang || 0) + Math.PI / 2) })} style={{ ...btn, minHeight: 30, fontSize: 12.5 }}>Girar 90°</button>
+              {(e.forma || "reta") !== "reta" && <button onClick={() => ed({ giro: -((e.giro || 1)) })} style={{ ...btn, minHeight: 30, fontSize: 12.5 }}>Inverter giro</button>}
+              <button onClick={() => ed({ altura: alturaEscada() })} style={{ ...btn, gridColumn: "1 / -1", minHeight: 30, fontSize: 12.5 }}>Desnível até o pavimento de cima ({tpFmt(alturaEscada())} m)</button>
+              <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#4b5563", lineHeight: 1.4 }}>
+                {`2 × espelho + piso = ${tpFmt((2 * g.esp + g.piso) * 100, 1)} cm (Blondel: 63 a 64). `}Arraste a escada para mudar de lugar. A abertura na laje de cima ainda não é feita automaticamente.
+              </div>
+            </div>
+          );
+        })()}
         {selA.length === 1 && !selP.length && areas[selA[0]].tipo === "cota" && (() => {
           const c = areas[selA[0]], m = c.pts && c.pts.length === 2 ? Math.hypot(c.pts[1].x - c.pts[0].x, c.pts[1].y - c.pts[0].y) : 0;
           return (
@@ -81882,7 +82174,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             </div>
           );
         })()}
-        {selA.length > 0 && !selP.length && !(selA.length === 1 && ["telhado", "ambiente", "separador", "cota"].includes(areas[selA[0]].tipo)) && (
+        {selA.length > 0 && !selP.length && !(selA.length === 1 && ["telhado", "ambiente", "separador", "cota", "escada"].includes(areas[selA[0]].tipo)) && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             {selA.length === 1 && <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#4b5563", lineHeight: 1.4, background: "#eef5ff", borderRadius: 6, padding: "6px 8px" }}>Para mudar o contorno, arraste na planta os quadrados (cantos) ou as bolinhas (lados).</div>}
             {selA.length === 1 && <TpCampo id="tp-a-area" rotulo={furadoArea(areas[selA[0]]) ? "Área sem a casa (m²)" : "Área (m²)"} valor={areaLiquida(areas[selA[0]])} somenteLeitura onConfirmar={() => {}} />}
@@ -81994,6 +82286,37 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         </>
       )}
 
+      <div style={secao}>Pavimentos</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
+        {[...pavsOrd].reverse().map((p) => (
+          <button key={p.id} onClick={() => { irParaPav(p.id); if (isMobile) setMenuAberto(false); }}
+            style={{ ...btn, textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", borderColor: p.id === pavAtivo ? TP_AZUL : "#e5e7eb", background: p.id === pavAtivo ? "#eef5ff" : "#fff", color: p.id === pavAtivo ? TP_AZUL : "#111827", fontWeight: p.id === pavAtivo ? 600 : 500 }}>
+            <span>{p.nome}</span><span style={{ fontSize: 12, color: "#6b7280", fontWeight: 500 }}>nível {tpFmt(p.nivel)}</span>
+          </button>
+        ))}
+        <button onClick={() => { novoPavimento(); if (isMobile) setMenuAberto(false); }} style={{ ...btn, minHeight: 32, fontSize: 12.5, color: TP_AZUL }}>+ Novo pavimento acima</button>
+      </div>
+      {pavimentos.length > 1 && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+          <div>
+            <label htmlFor="tp-pav-nome" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>Nome</label>
+            <input id="tp-pav-nome" key={"pn" + pavAtivo + pavAt.nome} defaultValue={pavAt.nome}
+              onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== pavAt.nome) editarPav(pavAtivo, { nome: v }); }}
+              onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+              style={{ width: "100%", boxSizing: "border-box", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit" }} />
+          </div>
+          {pavsOrd[0].id === pavAtivo
+            ? <TpCampo id="tp-pav-nivel" rotulo="Nível (m)" valor={pavAt.nivel} somenteLeitura onConfirmar={() => {}} />
+            : <TpCampo id="tp-pav-nivel" rotulo="Nível (m)" valor={pavAt.nivel} onConfirmar={(v) => editarPav(pavAtivo, { nivel: r3(v) })} />}
+          {pavsOrd[0].id !== pavAtivo && (confirmarPav === pavAtivo
+            ? <div style={{ gridColumn: "1 / -1", display: "flex", gap: 6 }}>
+                <button onClick={() => { excluirPav(pavAtivo); setConfirmarPav(null); }} style={{ ...btn, flex: 1, minHeight: 30, fontSize: 12.5, color: "#fff", background: "#b91c1c", borderColor: "#b91c1c" }}>Excluir {pavAt.nome} e o desenho dele</button>
+                <button onClick={() => setConfirmarPav(null)} style={{ ...btn, minHeight: 30, fontSize: 12.5 }}>Cancelar</button>
+              </div>
+            : <button onClick={() => setConfirmarPav(pavAtivo)} style={{ ...btn, gridColumn: "1 / -1", minHeight: 30, fontSize: 12.5, color: "#b91c1c" }}>Excluir pavimento</button>)}
+        </div>
+      )}
+
       <div style={secao}>Visualização</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
         {MODOS.map((m) => (
@@ -82011,6 +82334,19 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           {[20, 25, 50, 75, 100, 200].map((n) => <option key={n} value={n}>1:{n}</option>)}
         </select>
       </div>
+
+      {ferramenta === "escada" && (<>
+        <div style={secao}>Nova escada</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+          {TP_ESCADA_FORMAS.map((f) => (
+            <button key={f.id} onClick={() => setNovaEscada({ ...novaEscada, forma: f.id })}
+              style={{ ...btn, minHeight: 32, fontSize: 12.5, borderColor: novaEscada.forma === f.id ? TP_AZUL : "#e5e7eb", background: novaEscada.forma === f.id ? "#eef5ff" : "#fff", color: novaEscada.forma === f.id ? TP_AZUL : "#111827" }}>{f.rotulo}</button>
+          ))}
+          <TpCampo id="tp-ne-larg" rotulo="Largura (m)" valor={novaEscada.largura} onConfirmar={(v) => setNovaEscada({ ...novaEscada, largura: Math.max(0.6, v) })} />
+          {novaEscada.forma !== "reta" && <button onClick={() => setNovaEscada({ ...novaEscada, giro: -(novaEscada.giro || 1) })} style={{ ...btn, minHeight: 32, fontSize: 12.5, alignSelf: "end" }}>{novaEscada.forma === "caracol" ? (novaEscada.giro >= 0 ? "Gira horário" : "Gira anti-horário") : (novaEscada.giro >= 0 ? "Vira à direita" : "Vira à esquerda")}</button>}
+          <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#4b5563", lineHeight: 1.4 }}>Desnível {tpFmt(alturaEscada())} m (até o pavimento de cima). Degraus calculados pela fórmula de Blondel.</div>
+        </div>
+      </>)}
 
       <div style={secao}>Nova parede</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -82161,7 +82497,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           gridTemplateColumns: modo === "ambos" && !isMobile ? "1fr 1fr" : "1fr", gridTemplateRows: modo === "ambos" && isMobile ? "1fr 1fr" : "1fr",
           paddingBottom: "env(safe-area-inset-bottom, 0px)", paddingRight: "env(safe-area-inset-right, 0px)" }}>
           <div ref={planBox} style={{ ...pane, display: mostraPlanta ? "block" : "none" }}>
-            <span style={tag}>Planta baixa · grade 0,50 m</span>
+            <span style={tag}>{pavimentos.length > 1 ? `${pavAt.nome} · nível ${tpFmt(pavAt.nivel)} · ` : "Planta baixa · "}grade 0,50 m</span>
             <canvas ref={planRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none", cursor: ferramenta === "mover" ? "grab" : ferramenta === "selecionar" ? "default" : "crosshair" }}
               onContextMenu={(e) => e.preventDefault()} onDoubleClick={() => { if (poli.length >= 3) finalizarPoli(); }}
               onPointerDown={planDown} onPointerMove={(e) => { planMove(e); if (!gesto.current && ferramenta === "selecionar") { const dd = devPx(e), eq = iconeEq.current; e.currentTarget.style.cursor = (eq && Math.abs(dd.x - eq.x) <= eq.r && Math.abs(dd.y - eq.y) <= eq.r) || cotasClic.current.some((q) => Math.abs(dd.x - q.x) <= q.r && Math.abs(dd.y - q.y) <= q.r * 0.6) ? "pointer" : (alcasEsq.current.some((q) => Math.abs(dd.x - q.x) <= 9 * (window.devicePixelRatio || 1) && Math.abs(dd.y - q.y) <= 9 * (window.devicePixelRatio || 1)) || alcaNoPonto(dd) || rotulosClic.current.some((q) => dd.x >= q.x0 && dd.x <= q.x1 && dd.y >= q.y0 && dd.y <= q.y1)) ? "move" : "default"; } }} onPointerUp={planUp} onPointerLeave={() => { if (!inicio && !poli.length && !gesto.current) setHover(null); else if (!gesto.current && hover && hover.guias) setHover({ x: hover.x, y: hover.y }); if (!gesto.current) setPreviaEsq(null); }} />
@@ -82213,7 +82549,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       </main>
 
       {painelObra && (() => {
-        const conv = tpDesenhoParaObra(paredes, areas);
+        const conv = tpDesenhoParaObraPavs(pavsOrd.map((p) => ({ ...dadosDe(p.id), nome: p.nome })));
         const vazio = !paredes.length && !areas.length;
         return (
           <div style={{ position: "fixed", inset: 0, zIndex: 20, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
@@ -82332,7 +82668,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               {desenhando && linha("l0")}
               {sel.length > 0 && item(`Excluir${sel.length > 1 ? ` (${sel.length})` : ""}`, "Delete", excluirSelecao, { perigo: true })}
               {sel.length > 0 && item("Editar propriedades", null, editarPropriedades, { desativado: selP.length > 0 && selA.length > 0 })}
-              {selA.length === 1 && !selP.length && areas[selA[0]].tipo !== "cota" && item("Editar contorno", null, () => { setFerramenta("selecionar"); if (modo === "3d") setModo("ambos"); })}
+              {selA.length === 1 && !selP.length && areas[selA[0]].tipo !== "cota" && areas[selA[0]].tipo !== "escada" && item("Editar contorno", null, () => { setFerramenta("selecionar"); if (modo === "3d") setModo("ambos"); })}
               {selO.length > 0 && item("Inverter mão", "Espaço", () => inverterAberturas("mao"))}
               {selO.length > 0 && item("Inverter lado de abertura", "Shift+Espaço", () => inverterAberturas("lado"))}
               {sel.length > 0 && item("Limpar seleção", "Esc", () => setSel([]))}
