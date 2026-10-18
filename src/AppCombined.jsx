@@ -78251,6 +78251,33 @@ function tpAcharAbertura(paredes, id) {
   for (let i = 0; i < paredes.length; i++) { const ab = paredes[i].ab || []; for (let k = 0; k < ab.length; k++) if (ab[k].id === id) return { i, k, o: ab[k], w: paredes[i] }; }
   return null;
 }
+// Muda a ponta de uma parede mantendo portas/janelas no mesmo lugar da
+// planta (a posição delas é medida a partir da ponta "a")
+function tpComPonta(w, fim, p) {
+  const nw = { ...w, [fim]: { x: p.x, y: p.y } };
+  if (fim !== "a" || !(w.ab || []).length) return nw;
+  const L0 = tpLen(w) || 1, L1 = tpLen(nw) || 1, u0 = { x: (w.b.x - w.a.x) / L0, y: (w.b.y - w.a.y) / L0 }, u1 = { x: (nw.b.x - nw.a.x) / L1, y: (nw.b.y - nw.a.y) / L1 };
+  return { ...nw, ab: w.ab.map((o) => { const c = { x: w.a.x + u0.x * o.x, y: w.a.y + u0.y * o.x }; return { ...o, x: Math.round(((c.x - nw.a.x) * u1.x + (c.y - nw.a.y) * u1.y) * 1000) / 1000 }; }) };
+}
+// Paredes ligadas (como no Revit): quando paredes se movem, a ponta de outra
+// parede que encostava nelas (canto ou T) vai junto, e essa outra parede
+// estica ou encurta sozinha. origPs = antes; movidas = índices que andaram
+// (dx, dy). Devolve o novo vetor de paredes e os índices que seguiram.
+function tpSeguirLigadas(origPs, novasPs, movidas, dx, dy) {
+  if (!movidas.size || (!dx && !dy)) return { ps: novasPs, seguiram: [] };
+  const r3 = (x) => Math.round(x * 1000) / 1000, seguiram = [];
+  const ps = novasPs.map((w, j) => {
+    if (movidas.has(j)) return w;
+    let nw = w;
+    for (const fim of ["a", "b"]) {
+      const q = origPs[j][fim];
+      for (const i of movidas) { const m = origPs[i]; if (tpLen(m) && tpDistSeg(q, m.a, m.b) < 2e-3) { nw = tpComPonta(nw, fim, { x: r3(q.x + dx), y: r3(q.y + dy) }); break; } }
+    }
+    if (nw !== w) seguiram.push(j);
+    return nw;
+  });
+  return { ps, seguiram };
+}
 // Quadro de esquadrias: mesmo tipo + material + medidas = mesmo código (P1,
 // J1, V1...), na ordem em que aparecem. É o que vai para a etiqueta da planta.
 function tpQuadroEsquadrias(paredes) {
@@ -78430,7 +78457,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   };
   const moverSelecao = (dx, dy) => {
     if (!sel.length) return;
-    const r = deslocar({ paredes, areas }, sel, dx, dy);
+    const r0 = deslocar({ paredes, areas }, sel, dx, dy);
+    const lig = tpSeguirLigadas(paredes, r0.paredes, new Set(selP), dx, dy);
+    const r = { ...r0, paredes: lig.ps };
     // porta/janela selecionada anda ao longo da própria parede (a seta
     // perpendicular à parede não faz nada); se a parede também está
     // selecionada, ela já foi junto
@@ -78598,6 +78627,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // dentro. É isso que deixa a laje ir até a face externa da parede.
   const pontosIma = (ign = {}) => {
     const out = [];
+    const fora = (i) => i === ign.parede || (ign.paredes && ign.paredes.includes(i)); // paredes que estão se mexendo não servem de ímã
     const faces = paredes.map((w, i) => {
       const l = tpLen(w); if (!l) return null;
       const ux = (w.b.x - w.a.x) / l, uy = (w.b.y - w.a.y) / l, nx = -uy, ny = ux, h = (w.t || 0) / 2;
@@ -78605,25 +78635,27 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     }).filter(Boolean);
     const mesmo = (p, q) => Math.abs(p.x - q.x) < 1e-6 && Math.abs(p.y - q.y) < 1e-6;
     for (const f of faces) {
-      if (f.i === ign.parede) continue;
+      if (fora(f.i)) continue;
       const { w, ux, uy, nx, ny, h } = f;
       out.push(w.a, w.b);
       for (const [pt, sgn] of [[w.a, -1], [w.b, 1]]) {
-        const solta = !faces.some((g) => g.i !== f.i && g.i !== ign.parede && (mesmo(g.w.a, pt) || mesmo(g.w.b, pt)));
+        const solta = !faces.some((g) => g.i !== f.i && !fora(g.i) && (mesmo(g.w.a, pt) || mesmo(g.w.b, pt)));
         if (solta) for (const lado of [1, -1]) out.push({ x: pt.x + sgn * ux * h + lado * nx * h, y: pt.y + sgn * uy * h + lado * ny * h });
       }
     }
     const cruzar = (p1, d1, p2, d2) => { const den = d1.x * d2.y - d1.y * d2.x; if (Math.abs(den) < 1e-9) return null; const t = ((p2.x - p1.x) * d2.y - (p2.y - p1.y) * d2.x) / den; return { x: p1.x + d1.x * t, y: p1.y + d1.y * t }; };
     for (let a = 0; a < faces.length; a++) for (let b = a + 1; b < faces.length; b++) {
       const f = faces[a], g = faces[b];
-      if (f.i === ign.parede || g.i === ign.parede) continue;
+      if (fora(f.i) || fora(g.i)) continue;
       if (![f.w.a, f.w.b].some((p) => mesmo(p, g.w.a) || mesmo(p, g.w.b))) continue;
       for (const lf of [1, -1]) for (const lg of [1, -1]) {
         const q = cruzar({ x: f.w.a.x + lf * f.nx * f.h, y: f.w.a.y + lf * f.ny * f.h }, { x: f.ux, y: f.uy }, { x: g.w.a.x + lg * g.nx * g.h, y: g.w.a.y + lg * g.ny * g.h }, { x: g.ux, y: g.uy });
         if (q) out.push(q);
       }
     }
-    areas.forEach((a, ai) => (a.pts || []).forEach((q, k) => { if (!(ign.area === ai && (ign.vertices || []).includes(k))) out.push(q); }));
+    // ambiente não serve de ímã: o contorno dele é calculado das paredes e
+    // anda junto com elas num arraste (puxava a ponta para a posição anterior)
+    areas.forEach((a, ai) => { if (a.tipo !== "ambiente") (a.pts || []).forEach((q, k) => { if (!(ign.area === ai && (ign.vertices || []).includes(k))) out.push(q); }); });
     out.push(...poli);
     return out;
   };
@@ -79630,7 +79662,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     if (al.tipo === "mover") {
       if (!sel.includes(al.chave)) setSel(al.chaves);
       const off = al.off || { x: 0, y: 0 };
-      const pc = pontoDoCursor({ clientX: e.clientX + off.x, clientY: e.clientY + off.y, shiftKey: e.shiftKey }, { base: al.ancora }); setHover(pc);
+      if (!g.ligMover) {
+        const mv = al.chaves.filter((k) => k[0] === "p").map((k) => +k.slice(1));
+        g.ligMover = [...mv, ...orig.paredes.map((w, j) => (!mv.includes(j) && ["a", "b"].some((f) => mv.some((i) => tpDistSeg(w[f], orig.paredes[i].a, orig.paredes[i].b) < 2e-3)) ? j : -1)).filter((j) => j >= 0)];
+      }
+      const pc = pontoDoCursor({ clientX: e.clientX + off.x, clientY: e.clientY + off.y, shiftKey: e.shiftKey }, { base: al.ancora, ignorar: { paredes: g.ligMover } }); setHover(pc);
       let dx = pc.x - al.ancora.x, dy = pc.y - al.ancora.y;
       // Linha de separação sozinha anda só na perpendicular a ela mesma: as
       // pontas continuam encostadas nas mesmas paredes (o ímã/alinhamento podia
@@ -79666,7 +79702,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         });
       }
       const r = deslocar({ paredes: orig.paredes, areas: areasBase }, al.chaves, dx, dy);
-      setParedes(r.paredes); setAreas(comAmbientes(r.paredes, r.areas));
+      // paredes ligadas nas pontas seguem (Alt solta a ligação durante o arraste)
+      const movidas = new Set(al.chaves.filter((k) => k[0] === "p").map((k) => +k.slice(1)));
+      const lig = e.altKey ? { ps: r.paredes, seguiram: [] } : tpSeguirLigadas(orig.paredes, r.paredes, movidas, dx, dy);
+      const perto = [...movidas, ...lig.seguiram].flatMap((i) => [orig.paredes[i], lig.ps[i]]);
+      setParedes(lig.ps); setAreas(comAmbientes(lig.ps, r.areas, movidas.size ? perto : null));
       return;
     }
     if (al.tipo === "vertice") {
@@ -79684,7 +79724,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       setAreas(comAmbientes(orig.paredes, orig.areas.map((ar, i) => (i === al.ai ? { ...ar, pts: ar.pts.map((q, k) => (k === al.k || k === k2 ? novo(pts0[k]) : q)) } : ar))));
     } else if (al.tipo === "ponta") {
       const w0 = orig.paredes[al.pi], outra = al.fim === "a" ? w0.b : w0.a;
-      let pc = pontoDoCursor(e, { ignorar: { parede: al.pi }, base: outra });
+      if (!g.ligPonta) g.ligPonta = orig.paredes.map((w, i) => (i !== al.pi && ["a", "b"].some((f) => Math.hypot(w[f].x - w0[al.fim].x, w[f].y - w0[al.fim].y) < 2e-3) ? i : -1)).filter((i) => i >= 0);
+      let pc = pontoDoCursor(e, { ignorar: { parede: al.pi, paredes: g.ligPonta }, base: outra });
       // Esticar/encolher: a ponta anda na direção da própria parede (sem a
       // grade de 0,50 m puxar para o lado — era isso que fazia a parede
       // "tremer" com o mouse balançando). Afastando o cursor mais de ~25 px
@@ -79702,14 +79743,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       setHover(pc);
       // portas/janelas ficam no mesmo lugar da planta quando se mexe a ponta "a"
       // (a posição delas é medida a partir dessa ponta)
-      const novaW = (w) => {
-        const nw = { ...w, [al.fim]: limpo(pc) };
-        if (al.fim !== "a" || !(w.ab || []).length) return nw;
-        const L0 = tpLen(w) || 1, L1 = tpLen(nw) || 1, u0 = { x: (w.b.x - w.a.x) / L0, y: (w.b.y - w.a.y) / L0 }, u1 = { x: (nw.b.x - nw.a.x) / L1, y: (nw.b.y - nw.a.y) / L1 };
-        return { ...nw, ab: w.ab.map((o) => { const c = { x: w.a.x + u0.x * o.x, y: w.a.y + u0.y * o.x }; return { ...o, x: r3((c.x - nw.a.x) * u1.x + (c.y - nw.a.y) * u1.y) }; }) };
-      };
-      const novasP = orig.paredes.map((w, i) => (i === al.pi ? novaW(w) : w));
-      setParedes(novasP); setAreas(comAmbientes(novasP, orig.areas, [w0, novasP[al.pi]]));
+      // a ponta leva junto as outras paredes ligadas nela (Alt solta)
+      const p0 = w0[al.fim], ligadas = [];
+      const novasP = orig.paredes.map((w, i) => {
+        if (i === al.pi) return tpComPonta(w, al.fim, limpo(pc));
+        if (e.altKey) return w;
+        let nw = w;
+        for (const fim of ["a", "b"]) if (Math.hypot(w[fim].x - p0.x, w[fim].y - p0.y) < 2e-3) nw = tpComPonta(nw, fim, limpo(pc));
+        if (nw !== w) ligadas.push(i);
+        return nw;
+      });
+      setParedes(novasP); setAreas(comAmbientes(novasP, orig.areas, [w0, novasP[al.pi], ...ligadas.flatMap((i) => [orig.paredes[i], novasP[i]])]));
     }
   };
   const planDown = (e) => {
@@ -79793,7 +79837,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         // junta os movimentos num quadro de tela só (o mouse manda mais
         // eventos do que a tela consegue desenhar)
         if (g.moveu) {
-          g.ultimo = { clientX: e.clientX, clientY: e.clientY, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey };
+          g.ultimo = { clientX: e.clientX, clientY: e.clientY, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey };
           if (!g.raf) g.raf = requestAnimationFrame(() => { g.raf = 0; if (gesto.current === g && g.ultimo) arrastarAlca(g.ultimo, g); });
         }
         return;
