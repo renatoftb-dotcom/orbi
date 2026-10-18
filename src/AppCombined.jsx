@@ -80039,11 +80039,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         ctx.strokeStyle = normal ? "#8a8a8a" : cor;
         seg(P(e0, -h * 0.7), P(e1, -h * 0.7), 0.8); seg(P(e0, h * 0.7), P(e1, h * 0.7), 0.8);
         seg(P(e0, -h * 0.45), P(e1, -h * 0.45), 0.6); seg(P(e0, h * 0.45), P(e1, h * 0.45), 0.6);
-        const sb = 0.06, fol = Math.min(0.035, h * 0.35), q = Math.min(0.05, h * 0.5);
+        const nF0 = Math.max(2, tpFolhas(o)), sb = 0.06, fol = Math.min(0.035, h * (nF0 > 2 ? 0.75 / nF0 : 0.35)), q = Math.min(0.05, h * (nF0 > 2 ? 0.9 / nF0 : 0.5));
         const escuro = normal ? "#2f2f2f" : cor, pecaCor = normal ? "#000" : cor;
-        // N folhas em trilhos alternados, sobrepostas um pouco umas nas outras
-        const nF = Math.max(2, tpFolhas(o)), luz = o.larg - 0.06, wp = (luz + (nF - 1) * sb) / nF, pecas = [];
-        for (let k = 0; k < nF; k++) { const sa = e0 + 0.03 + k * (wp - sb); pecas.push([[sa, sa + wp], ((k % 2 === 0) === (md > 0) ? 1 : -1) * h * 0.12]); }
+        // N folhas, cada uma num trilho, em sequência (uma atrás da outra,
+        // escalonadas de um lado ao outro), sobrepostas um pouco nas pontas
+        const nF = nF0, luz = o.larg - 0.06, wp = (luz + (nF - 1) * sb) / nF, pecas = [], A = (nF > 2 ? 0.36 : 0.12) * h * (md > 0 ? 1 : -1);
+        for (let k = 0; k < nF; k++) { const sa = e0 + 0.03 + k * (wp - sb); pecas.push([[sa, sa + wp], A * (1 - 2 * k / (nF - 1))]); }
         for (const [[sa, sbb], nn] of pecas) {
           caminho([P(sa, nn - fol / 2), P(sbb, nn - fol / 2), P(sbb, nn + fol / 2), P(sa, nn + fol / 2)]); ctx.fillStyle = escuro; ctx.fill();
           for (const pp of [sa, sbb]) { caminho([P(pp - q / 2, nn - q / 2), P(pp + q / 2, nn - q / 2), P(pp + q / 2, nn + q / 2), P(pp - q / 2, nn + q / 2)]); ctx.fillStyle = pecaCor; ctx.fill(); }
@@ -80053,9 +80054,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         seg(P(e0, -h), P(e1, -h), 0.8); seg(P(e0, h), P(e1, h), 0.8); // faces
         const nF = Math.max(1, tpFolhas(o));
         if (o.tipo === "janela_correr") {
-          // N folhas de correr em trilhos alternados, com sobreposição
-          const sb = 0.05, wp = (o.larg + (Math.max(2, nF) - 1) * sb) / Math.max(2, nF);
-          for (let k = 0; k < Math.max(2, nF); k++) { const sa = e0 + k * (wp - sb); const nn = (k % 2 === 0 ? 1 : -1) * h * 0.15; seg(P(sa, nn), P(Math.min(e1, sa + wp), nn), 1.4); }
+          // N folhas de correr, cada uma num trilho, em sequência (escalonadas)
+          const n2 = Math.max(2, nF), sb = 0.05, wp = (o.larg + (n2 - 1) * sb) / n2, A = (n2 > 2 ? 0.3 : 0.15) * h;
+          for (let k = 0; k < n2; k++) { const sa = e0 + k * (wp - sb); const nn = A * (1 - 2 * k / (n2 - 1)); seg(P(sa, nn), P(Math.min(e1, sa + wp), nn), 1.4); }
         } else {
           seg(P(e0, 0), P(e1, 0), 1.4);
           // montantes entre as folhas (maxim-ar / fixo com mais de uma)
