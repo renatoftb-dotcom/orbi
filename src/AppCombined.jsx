@@ -78864,16 +78864,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       }
       ctx.restore();
     };
-    // símbolo de nível (círculo em quartos, preto e branco) nos cantos do lote
-    const marcoNivel = (q) => {
-      const [x, y] = T(q), r = 6 * dpr;
-      ctx.fillStyle = "#fff"; ctx.strokeStyle = "#000"; ctx.lineWidth = 1 * dpr;
-      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = "#000";
-      for (const a0 of [Math.PI, 0]) { ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, r, a0, a0 + Math.PI / 2); ctx.closePath(); ctx.fill(); }
-    };
-    // terreno: grama (verde-sálvia com pontinhos brancos), divisa em linha
-    // preta fina e marco de nível em cada canto
+    // terreno: grama (verde-sálvia com pontinhos brancos)
     areas.forEach((a, i) => {
       if (a.tipo !== "terreno" || !a.pts || a.pts.length < 3) return;
       const marc = marcadas.has("a" + i);
@@ -78881,8 +78872,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       ctx.fillStyle = marc ? "#bcd3e8" : "#c7d3c0"; ctx.fill();
       granulado(a.pts, 0.5, 22, "rgba(255,255,255,0.9)");
       ctx.restore();
-      caminho(a.pts); ctx.strokeStyle = marc ? TP_AZUL : "#000"; ctx.lineWidth = (marc ? 2.5 : 1.2) * dpr; ctx.stroke();
-      a.pts.forEach(marcoNivel);
+      // sem linha de borda nem símbolo nos cantos; o contorno só aparece selecionado (para editar)
+      if (marc) { caminho(a.pts); ctx.strokeStyle = TP_AZUL; ctx.lineWidth = 2.5 * dpr; ctx.stroke(); }
       const b0 = a.pts.reduce((m, q) => (q.y < m.y ? q : m), a.pts[0]); const [tx, ty] = T(b0);
       ctx.font = `600 ${11 * dpr}px system-ui, sans-serif`; ctx.textAlign = "left"; ctx.fillStyle = marc ? TP_AZUL : "#b65b3d";
       ctx.fillText(`Terreno ${tpFmt(tpAreaPoli(a.pts))} m²`, tx + 12 * dpr, ty + 18 * dpr);
