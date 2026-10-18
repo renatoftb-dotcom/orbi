@@ -78318,6 +78318,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const three = useRef(null);
   const vista = useRef(null);
   const iconeEq = useRef(null);
+  const ambientesFeitos = useRef(null);          // último par (paredes → ambientes) já calculado no arraste
   const cotasClic = useRef([]);                  // cotas clicáveis da esquadria selecionada (px do canvas)
   const [editCota, setEditCota] = useState(null); // { x, y, lado, id, txt } cota sendo digitada                  // ícone "EQ" (centralizar) da esquadria selecionada, em px do canvas
   const primeiraVez = useRef(true);
@@ -78326,10 +78327,22 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const altM = Math.max(1, parseFloat(String(alt).replace(",", ".")) || 2.8);
   const r3 = (x) => Math.round(x * 1000) / 1000;
 
+  // Gravar o projeto custa (lê e regrava a lista inteira no navegador); num
+  // arraste isso acontecia a cada movimento do mouse e travava o desenho.
+  // Agora grava 400 ms depois da última mudança, e na saída do editor.
+  const gravarPendente = useRef(null);
   useEffect(() => {
     if (primeiraVez.current) { primeiraVez.current = false; return; }
-    onAlterar({ ...projeto, obraId, sincronizar, paredes, areas, atualizadoEm: new Date().toISOString() });
+    const dados = { ...projeto, obraId, sincronizar, paredes, areas, atualizadoEm: new Date().toISOString() };
+    gravarPendente.current = () => { gravarPendente.current = null; onAlterar(dados); };
+    const t = setTimeout(() => gravarPendente.current && gravarPendente.current(), 400);
+    return () => clearTimeout(t);
   }, [paredes, areas, obraId, sincronizar]);
+  useEffect(() => {
+    const sair = () => gravarPendente.current && gravarPendente.current();
+    window.addEventListener("beforeunload", sair);
+    return () => { window.removeEventListener("beforeunload", sair); sair(); };
+  }, []);
 
   useEffect(() => {
     const antes = document.body.style.overflow; document.body.style.overflow = "hidden";
@@ -79379,6 +79392,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // ambiente acompanha as paredes: mexeu numa parede, o contorno e a área se refazem
   useEffect(() => {
     if (!areas.some((a) => a.tipo === "ambiente" && a.ponto)) return;
+    // o arraste já refez os ambientes para estas mesmas paredes neste quadro
+    if (ambientesFeitos.current && ambientesFeitos.current.ps === paredes && ambientesFeitos.current.out === areas) return;
     const seps = separadoresAtuais();
     let mudou = false;
     const novas = areas.map((a) => {
@@ -79395,7 +79410,16 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // quadro repetir a posição, só as linhas não mudariam e o contorno velho
     // ficaria. Com esta chave, qualquer contorno desatualizado é refeito.
   }, [paredes, JSON.stringify(areas.filter((a) => a.tipo === "separador").map((a) => a.pts)), JSON.stringify(areas.filter((a) => a.tipo === "ambiente").map((a) => [a.ponto, a.pts]))]);
-  useEffect(() => { desenhar3d(); }, [paredes, areas, sel]);
+  // 3D: refazer a cena inteira é o passo mais caro; durante um arraste ele
+  // acompanha a ~7 quadros/s (e sempre fecha na posição final), a planta segue em tempo real
+  const tempo3d = useRef(null);
+  useEffect(() => {
+    if (gesto.current && gesto.current.moveu) {
+      if (!tempo3d.current) tempo3d.current = setTimeout(() => { tempo3d.current = null; atual.current.desenhar3d(); }, 140);
+      return;
+    }
+    clearTimeout(tempo3d.current); tempo3d.current = null; desenhar3d();
+  }, [paredes, areas, sel]);
 
   useEffect(() => {
     const k = (e) => {
@@ -79534,14 +79558,57 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   };
   // Recalcula os ambientes para um par (paredes, áreas) — usado no próprio
   // quadro do arraste, para nunca aparecer o contorno antigo nem por um instante.
-  const comAmbientes = (ps, ars) => {
+  // perto = trechos que mudaram: só os ambientes encostados neles são
+  // refeitos (detectar um cômodo é caro; num arraste isso roda a cada quadro)
+  const comAmbientes = (ps, ars, perto) => {
     if (!ars.some((a) => a.tipo === "ambiente" && a.ponto)) return ars;
     const seps = ars.filter((a) => a.tipo === "separador" && a.pts && a.pts.length === 2).map((a) => ({ a: a.pts[0], b: a.pts[1] }));
-    return ars.map((a) => {
-      if (a.tipo !== "ambiente" || !a.ponto) return a;
+    let caixa = null;
+    if (perto && perto.length) {
+      caixa = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+      for (const w of perto) for (const q of [w.a, w.b]) { caixa.x0 = Math.min(caixa.x0, q.x - (w.t || 0) - 0.3); caixa.y0 = Math.min(caixa.y0, q.y - (w.t || 0) - 0.3); caixa.x1 = Math.max(caixa.x1, q.x + (w.t || 0) + 0.3); caixa.y1 = Math.max(caixa.y1, q.y + (w.t || 0) + 0.3); }
+    }
+    const longe = (a) => {
+      if (!caixa || a.aberto || !a.pts || a.pts.length < 3) return false;
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const q of a.pts) { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); }
+      return x1 < caixa.x0 || x0 > caixa.x1 || y1 < caixa.y0 || y0 > caixa.y1;
+    };
+    const out = ars.map((a) => {
+      if (a.tipo !== "ambiente" || !a.ponto || longe(a)) return a;
       const det = tpDetectarAmbiente(ps, a.ponto, seps);
       return det && !det.aberto ? { ...a, pts: det.pts, aberto: false } : { ...a, aberto: true };
     });
+    ambientesFeitos.current = { ps, out };
+    return out;
+  };
+  // Ponta de parede embaixo do cursor (até 10 px), mesmo sem a parede estar
+  // selecionada: apertar ali e arrastar estica a parede (antes movia a parede
+  // inteira, que ia "de um lado para o outro" com a grade). Num canto, fica a
+  // parede em cujo corpo o cursor está.
+  const pontaPerto = (d) => {
+    const v = vista.current; if (!v) return null;
+    const tol = 10 * (window.devicePixelRatio || 1), p = paraMundoLivre(d);
+    let melhor = null, menor = Infinity;
+    paredes.forEach((w, i) => {
+      for (const fim of ["a", "b"]) {
+        const q = w[fim]; if (Math.hypot(q.x * v.s + v.ox - d.x, q.y * v.s + v.oy - d.y) > tol) continue;
+        const dd = distSeg(p, w.a, w.b) + (sel.includes("p" + i) ? -1 : 0);
+        if (dd < menor) { menor = dd; melhor = { tipo: "ponta", pi: i, fim, chave: "p" + i }; }
+      }
+    });
+    return melhor;
+  };
+  // Valor ao longo de um eixo com ímã ESTÁVEL: gruda num ponto/alinhamento
+  // e só solta quando o cursor se afasta mais de 12 px dele (antes o ímã
+  // ligava e desligava a cada pixel e a ponta pulava para lá e para cá).
+  const eixoEstavel = (g, chave, tCursor, tIma) => {
+    const px = vista.current.s / (window.devicePixelRatio || 1);
+    const atual = g[chave];
+    if (atual != null && Math.abs(tCursor - atual) * px < 12) return atual;
+    if (tIma != null && Math.abs(tCursor - tIma) * px < 8) { g[chave] = tIma; return tIma; }
+    g[chave] = null;
+    return Math.round(tCursor / 0.05) * 0.05;
   };
   const arrastarAlca = (e, g) => {
     const al = g.grip, orig = g.orig;
@@ -79570,6 +79637,18 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       // empurrá-la uns centímetros de lado e abrir uma fresta, e aí o cômodo
       // "vazava" para o vizinho em certas posições).
       const so = al.chaves.length === 1 && al.chaves[0][0] === "a" ? orig.areas[+al.chaves[0].slice(1)] : null;
+      // Parede sozinha: anda só de lado (perpendicular a ela), sem pular pela
+      // grade; gruda de forma estável em alinhamentos. Shift = livre em 90°.
+      const pw = al.chaves.length === 1 && al.chaves[0][0] === "p" ? orig.paredes[+al.chaves[0].slice(1)] : null;
+      if (pw && !e.shiftKey && tpLen(pw)) {
+        const l = tpLen(pw), nx = -(pw.b.y - pw.a.y) / l, ny = (pw.b.x - pw.a.x) / l;
+        const livre = paraMundoLivre(devPx({ clientX: e.clientX + off.x, clientY: e.clientY + off.y }));
+        const nCur = (livre.x - al.ancora.x) * nx + (livre.y - al.ancora.y) * ny;
+        const nIma = pc.ima || pc.guias ? (pc.x - al.ancora.x) * nx + (pc.y - al.ancora.y) * ny : null;
+        const dn = eixoEstavel(g, "snapN", nCur, nIma);
+        dx = nx * dn; dy = ny * dn;
+        setHover({ x: r3(al.ancora.x + dx), y: r3(al.ancora.y + dy) });
+      }
       let areasBase = orig.areas;
       if (so && so.tipo === "separador" && so.pts && so.pts.length === 2) {
         const [a0, b0] = so.pts, l = Math.hypot(b0.x - a0.x, b0.y - a0.y) || 1, nx = -(b0.y - a0.y) / l, ny = (b0.x - a0.x) / l;
@@ -79605,7 +79684,21 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       setAreas(comAmbientes(orig.paredes, orig.areas.map((ar, i) => (i === al.ai ? { ...ar, pts: ar.pts.map((q, k) => (k === al.k || k === k2 ? novo(pts0[k]) : q)) } : ar))));
     } else if (al.tipo === "ponta") {
       const w0 = orig.paredes[al.pi], outra = al.fim === "a" ? w0.b : w0.a;
-      const pc = pontoDoCursor(e, { ignorar: { parede: al.pi }, base: outra });
+      let pc = pontoDoCursor(e, { ignorar: { parede: al.pi }, base: outra });
+      // Esticar/encolher: a ponta anda na direção da própria parede (sem a
+      // grade de 0,50 m puxar para o lado — era isso que fazia a parede
+      // "tremer" com o mouse balançando). Afastando o cursor mais de ~25 px
+      // da linha da parede, solta para girar livremente; Shift trava em 90°.
+      const L0 = tpLen(w0) || 1, ux = (w0[al.fim].x - outra.x) / L0, uy = (w0[al.fim].y - outra.y) / L0;
+      const livre = paraMundoLivre(devPx(e)), perpPx = Math.abs((livre.x - outra.x) * -uy + (livre.y - outra.y) * ux) * vista.current.s / (window.devicePixelRatio || 1);
+      if (g.giroLivre ? perpPx < 8 : false) g.giroLivre = false;
+      else if (!g.giroLivre && perpPx > 25) g.giroLivre = true;
+      if (!g.giroLivre && !e.shiftKey) {
+        const tCur = (livre.x - outra.x) * ux + (livre.y - outra.y) * uy;
+        const tIma = pc.ima || pc.guias ? (pc.x - outra.x) * ux + (pc.y - outra.y) * uy : null;
+        const t = Math.max(0.05, eixoEstavel(g, "snapT", tCur, tIma));
+        pc = { x: r3(outra.x + ux * t), y: r3(outra.y + uy * t), ...(pc.ima ? { ima: true } : {}) };
+      }
       setHover(pc);
       // portas/janelas ficam no mesmo lugar da planta quando se mexe a ponta "a"
       // (a posição delas é medida a partir dessa ponta)
@@ -79616,7 +79709,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         return { ...nw, ab: w.ab.map((o) => { const c = { x: w.a.x + u0.x * o.x, y: w.a.y + u0.y * o.x }; return { ...o, x: r3((c.x - nw.a.x) * u1.x + (c.y - nw.a.y) * u1.y) }; }) };
       };
       const novasP = orig.paredes.map((w, i) => (i === al.pi ? novaW(w) : w));
-      setParedes(novasP); setAreas(comAmbientes(novasP, orig.areas));
+      setParedes(novasP); setAreas(comAmbientes(novasP, orig.areas, [w0, novasP[al.pi]]));
     }
   };
   const planDown = (e) => {
@@ -79637,8 +79730,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         setEditCota({ x: Math.max(44, Math.min(rc.width - 44, cq.x / k)), y: Math.max(18, Math.min(rc.height - 18, cq.y / k)), lado: cq.lado, id: cq.id, txt: tpFmt(cq.d), t: Date.now() });
         return;
       }
-      const al = alcaNoPonto(d);
-      if (al) { gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: al, orig: { paredes, areas } }; e.currentTarget.setPointerCapture(e.pointerId); return; }
+      const al = alcaNoPonto(d) || (!e.ctrlKey && !e.metaKey && !e.shiftKey ? pontaPerto(d) : null);
+      if (al) {
+        if (al.chave && !sel.includes(al.chave)) setSel([al.chave]);
+        gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: al, orig: { paredes, areas } }; e.currentTarget.setPointerCapture(e.pointerId); return;
+      }
       // Arrastar uma parede ou linha de separação (ou uma área já selecionada)
       // move o elemento — e o que estiver selecionado junto. Os ambientes em
       // volta refazem a área sozinhos. Ctrl/Shift continuam sendo seleção.
@@ -79676,6 +79772,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const anc = cands.reduce((m, q) => (Math.hypot(q.x - pm.x, q.y - pm.y) < Math.hypot(m.x - pm.x, m.y - pm.y) ? q : m), cands[0]);
         g.candMover = { tipo: "mover", chave: k, chaves: [k], ancora: anc, off: desvioCliente(anc, e) };
       }
+      const pp = pontaPerto(d); // apertar na ponta e arrastar estica (só clicar continua desenhando dali)
+      if (pp) g.candMover = pp;
     }
     // toque longo (celular) = botão direito
     if (e.pointerType === "touch") {
@@ -79691,7 +79789,15 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const lim = (g.grip ? 3 : 6) * (window.devicePixelRatio || 1);
       if (!g.moveu && Math.hypot(d.x - g.x0, d.y - g.y0) > lim) { g.moveu = true; clearTimeout(g.timer); }
       if (!g.grip && g.candMover && g.moveu && !g.panear) { g.grip = g.candMover; g.orig = { paredes, areas }; setSel([g.candMover.chave]); setInicio(null); }
-      if (g.grip) { if (g.moveu) arrastarAlca(e, g); return; }
+      if (g.grip) {
+        // junta os movimentos num quadro de tela só (o mouse manda mais
+        // eventos do que a tela consegue desenhar)
+        if (g.moveu) {
+          g.ultimo = { clientX: e.clientX, clientY: e.clientY, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey };
+          if (!g.raf) g.raf = requestAnimationFrame(() => { g.raf = 0; if (gesto.current === g && g.ultimo) arrastarAlca(g.ultimo, g); });
+        }
+        return;
+      }
       if (g.menu) return;
       if (g.moveu) {
         if (g.panear || ferramenta !== "selecionar") {
@@ -79708,6 +79814,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     if (!g) return;
     clearTimeout(g.timer);
     if (g.grip) {
+      // movimento que ainda esperava o próximo quadro: aplica já, para a
+      // posição final ser exatamente onde o botão foi solto
+      if (g.raf) { cancelAnimationFrame(g.raf); g.raf = 0; if (g.ultimo) arrastarAlca(g.ultimo, g); }
       if (g.moveu) { historico.current.push(g.orig); if (historico.current.length > 200) historico.current.shift(); futuro.current = []; }
       else if (g.grip.tipo === "mover" || g.grip.tipo === "abertura") aplicarSelecao([g.grip.chave], g); // só clicou: seleciona
       setHover(null); return;

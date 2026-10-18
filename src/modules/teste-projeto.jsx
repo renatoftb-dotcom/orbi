@@ -1863,6 +1863,34 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     ambientesFeitos.current = { ps, out };
     return out;
   };
+  // Ponta de parede embaixo do cursor (até 10 px), mesmo sem a parede estar
+  // selecionada: apertar ali e arrastar estica a parede (antes movia a parede
+  // inteira, que ia "de um lado para o outro" com a grade). Num canto, fica a
+  // parede em cujo corpo o cursor está.
+  const pontaPerto = (d) => {
+    const v = vista.current; if (!v) return null;
+    const tol = 10 * (window.devicePixelRatio || 1), p = paraMundoLivre(d);
+    let melhor = null, menor = Infinity;
+    paredes.forEach((w, i) => {
+      for (const fim of ["a", "b"]) {
+        const q = w[fim]; if (Math.hypot(q.x * v.s + v.ox - d.x, q.y * v.s + v.oy - d.y) > tol) continue;
+        const dd = distSeg(p, w.a, w.b) + (sel.includes("p" + i) ? -1 : 0);
+        if (dd < menor) { menor = dd; melhor = { tipo: "ponta", pi: i, fim, chave: "p" + i }; }
+      }
+    });
+    return melhor;
+  };
+  // Valor ao longo de um eixo com ímã ESTÁVEL: gruda num ponto/alinhamento
+  // e só solta quando o cursor se afasta mais de 12 px dele (antes o ímã
+  // ligava e desligava a cada pixel e a ponta pulava para lá e para cá).
+  const eixoEstavel = (g, chave, tCursor, tIma) => {
+    const px = vista.current.s / (window.devicePixelRatio || 1);
+    const atual = g[chave];
+    if (atual != null && Math.abs(tCursor - atual) * px < 12) return atual;
+    if (tIma != null && Math.abs(tCursor - tIma) * px < 8) { g[chave] = tIma; return tIma; }
+    g[chave] = null;
+    return Math.round(tCursor / 0.05) * 0.05;
+  };
   const arrastarAlca = (e, g) => {
     const al = g.grip, orig = g.orig;
     if (al.tipo === "abertura") {
@@ -1890,6 +1918,18 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       // empurrá-la uns centímetros de lado e abrir uma fresta, e aí o cômodo
       // "vazava" para o vizinho em certas posições).
       const so = al.chaves.length === 1 && al.chaves[0][0] === "a" ? orig.areas[+al.chaves[0].slice(1)] : null;
+      // Parede sozinha: anda só de lado (perpendicular a ela), sem pular pela
+      // grade; gruda de forma estável em alinhamentos. Shift = livre em 90°.
+      const pw = al.chaves.length === 1 && al.chaves[0][0] === "p" ? orig.paredes[+al.chaves[0].slice(1)] : null;
+      if (pw && !e.shiftKey && tpLen(pw)) {
+        const l = tpLen(pw), nx = -(pw.b.y - pw.a.y) / l, ny = (pw.b.x - pw.a.x) / l;
+        const livre = paraMundoLivre(devPx({ clientX: e.clientX + off.x, clientY: e.clientY + off.y }));
+        const nCur = (livre.x - al.ancora.x) * nx + (livre.y - al.ancora.y) * ny;
+        const nIma = pc.ima || pc.guias ? (pc.x - al.ancora.x) * nx + (pc.y - al.ancora.y) * ny : null;
+        const dn = eixoEstavel(g, "snapN", nCur, nIma);
+        dx = nx * dn; dy = ny * dn;
+        setHover({ x: r3(al.ancora.x + dx), y: r3(al.ancora.y + dy) });
+      }
       let areasBase = orig.areas;
       if (so && so.tipo === "separador" && so.pts && so.pts.length === 2) {
         const [a0, b0] = so.pts, l = Math.hypot(b0.x - a0.x, b0.y - a0.y) || 1, nx = -(b0.y - a0.y) / l, ny = (b0.x - a0.x) / l;
@@ -1935,10 +1975,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (g.giroLivre ? perpPx < 8 : false) g.giroLivre = false;
       else if (!g.giroLivre && perpPx > 25) g.giroLivre = true;
       if (!g.giroLivre && !e.shiftKey) {
-        const ref = pc.ima || pc.guias ? pc : livre;
-        let t = (ref.x - outra.x) * ux + (ref.y - outra.y) * uy;
-        if (!(pc.ima || pc.guias)) t = Math.round(t / 0.05) * 0.05;
-        t = Math.max(0.05, t);
+        const tCur = (livre.x - outra.x) * ux + (livre.y - outra.y) * uy;
+        const tIma = pc.ima || pc.guias ? (pc.x - outra.x) * ux + (pc.y - outra.y) * uy : null;
+        const t = Math.max(0.05, eixoEstavel(g, "snapT", tCur, tIma));
         pc = { x: r3(outra.x + ux * t), y: r3(outra.y + uy * t), ...(pc.ima ? { ima: true } : {}) };
       }
       setHover(pc);
@@ -1972,8 +2011,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         setEditCota({ x: Math.max(44, Math.min(rc.width - 44, cq.x / k)), y: Math.max(18, Math.min(rc.height - 18, cq.y / k)), lado: cq.lado, id: cq.id, txt: tpFmt(cq.d), t: Date.now() });
         return;
       }
-      const al = alcaNoPonto(d);
-      if (al) { gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: al, orig: { paredes, areas } }; e.currentTarget.setPointerCapture(e.pointerId); return; }
+      const al = alcaNoPonto(d) || (!e.ctrlKey && !e.metaKey && !e.shiftKey ? pontaPerto(d) : null);
+      if (al) {
+        if (al.chave && !sel.includes(al.chave)) setSel([al.chave]);
+        gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: al, orig: { paredes, areas } }; e.currentTarget.setPointerCapture(e.pointerId); return;
+      }
       // Arrastar uma parede ou linha de separação (ou uma área já selecionada)
       // move o elemento — e o que estiver selecionado junto. Os ambientes em
       // volta refazem a área sozinhos. Ctrl/Shift continuam sendo seleção.
@@ -2011,6 +2053,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const anc = cands.reduce((m, q) => (Math.hypot(q.x - pm.x, q.y - pm.y) < Math.hypot(m.x - pm.x, m.y - pm.y) ? q : m), cands[0]);
         g.candMover = { tipo: "mover", chave: k, chaves: [k], ancora: anc, off: desvioCliente(anc, e) };
       }
+      const pp = pontaPerto(d); // apertar na ponta e arrastar estica (só clicar continua desenhando dali)
+      if (pp) g.candMover = pp;
     }
     // toque longo (celular) = botão direito
     if (e.pointerType === "touch") {
