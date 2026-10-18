@@ -78977,6 +78977,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const alcasEsq = useRef([]);                     // quadradinhos das pontas da esquadria selecionada (px do canvas)
   const ambientesFeitos = useRef(null);
   const sepAnterior = useRef(null);               // linhas de separação da última vez (nome volta ao centro se mudarem)          // último par (paredes → ambientes) já calculado no arraste
+  const rotulosEsq = useRef([]);                  // rótulos das esquadrias (código + medidas), px do canvas
   const rotulosParede = useRef([]);              // comprimentos das paredes na planta (px do canvas): selecionar, arrastar, apagar
   const rotulosClic = useRef([]);                // nomes dos ambientes na planta (px do canvas): clicar e arrastar move, clicar de novo edita
   const [editNome, setEditNome] = useState(null);  // { ai, x, y, txt, t } nome de ambiente sendo digitado na planta
@@ -79525,7 +79526,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const c = planRef.current, v = vista.current; if (!c || !v || !c.width) return;
     const ctx = c.getContext("2d"), W = c.width, H = c.height, dpr = window.devicePixelRatio || 1;
     ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, W, H);
-    iconeEq.current = null; cotasClic.current = []; rotulosClic.current = []; rotulosParede.current = []; alcasEsq.current = []; cotasDes.current = [];
+    iconeEq.current = null; cotasClic.current = []; rotulosClic.current = []; rotulosParede.current = []; rotulosEsq.current = []; alcasEsq.current = []; cotasDes.current = [];
     const passo = v.s * TP_GRADE < 8 * dpr ? 1 : TP_GRADE;
     const xA = Math.floor(-v.ox / v.s), xB = Math.ceil((W - v.ox) / v.s), yA = Math.floor(-v.oy / v.s), yB = Math.ceil((H - v.oy) / v.s);
     ctx.lineWidth = 1;
@@ -80180,14 +80181,36 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const [sax, say] = T(w.a), [sbx, sby] = T(w.b);
         let ang = Math.atan2(sby - say, sbx - sax); if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
         const ladoMedida = nx * Math.sin(ang) - ny * Math.cos(ang) > 0 ? 1 : -1;
-        const sg = tpGiro(o.tipo) ? -ld : -ladoMedida;
+        // porta de giro: do lado em que abre (dentro do arco); correr, vão e janela: do lado oposto à medida
+        const sg = tpGiro(o.tipo) ? ld : -ladoMedida;
         const longe = sg === ladoMedida && Math.abs(o.x - L / 2) < o.larg / 2 + 0.8;
-        const offPx = h * v.s + (longe ? 34 : 13) * dpr;
-        const [cx0, cy0] = T(P(o.x, 0)), tx = cx0 + nx * sg * offPx, ty = cy0 + ny * sg * offPx;
-        ctx.font = `700 ${10.5 * dpr}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        const wd = ctx.measureText(opts.codigo).width + 8 * dpr;
-        ctx.fillStyle = "rgba(255,255,255,0.95)"; ctx.fillRect(tx - wd / 2, ty - 8 * dpr, wd, 16 * dpr);
-        ctx.fillStyle = cor; ctx.fillText(opts.codigo, tx, ty); ctx.textBaseline = "alphabetic";
+        // padrão de prancha: código e, ao lado, a fração largura x altura
+        // sobre o peitoril (porta e vão: só largura x altura). Deitado na
+        // parede; dá para arrastar (rotOff, em metros ao longo/para fora).
+        // janela: código à esquerda e a fração (larg x alt sobre o peitoril);
+        // porta e vão: código em cima e larg x alt embaixo (peitoril só se tiver)
+        const porta = String(o.tipo).startsWith("porta") || o.tipo === "vao", peit = o.peit || 0, cod = String(opts.codigo).toLowerCase();
+        const l1 = `${tpFmt(o.larg)}x${tpFmt(o.alt)}`, l2 = !porta || peit > 0.005 ? tpFmt(peit) : null;
+        const fC = `600 ${11.5 * dpr}px system-ui, sans-serif`, fN = `500 ${11.5 * dpr}px system-ui, sans-serif`;
+        ctx.font = fC; const cw = ctx.measureText(cod).width;
+        ctx.font = fN; const fw = Math.max(ctx.measureText(l1).width, l2 ? ctx.measureText(l2).width : 0);
+        const gap = 5 * dpr, Wt = porta ? Math.max(cw, fw) : cw + gap + fw, Ht = porta ? (l2 ? 39 : 27) * dpr : (l2 ? 27 : 13) * dpr, ro = o.rotOff || { ds: 0, dn: 0 };
+        // texto de parede vertical lê de baixo para cima
+        let angT = Math.atan2(sby - say, sbx - sax); if (angT >= Math.PI / 2 - 1e-3) angT -= Math.PI; else if (angT < -Math.PI / 2 - 1e-3) angT += Math.PI;
+        const offPx = h * v.s + (longe ? 30 : 6) * dpr + Ht / 2 + ro.dn * v.s, ca = Math.cos(angT), sa = Math.sin(angT);
+        const [cx0, cy0] = T(P(o.x, 0)), tx = cx0 + nx * sg * offPx + ca * ro.ds * v.s, ty = cy0 + ny * sg * offPx + sa * ro.ds * v.s;
+        ctx.save(); ctx.translate(tx, ty); ctx.rotate(angT); ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+        const escreve = (t, x, y, f) => { ctx.font = f; ctx.strokeStyle = "rgba(255,255,255,0.95)"; ctx.lineWidth = 3.5 * dpr; ctx.strokeText(t, x, y); ctx.fillStyle = cor; ctx.fillText(t, x, y); };
+        const fracao = (xF, y0) => {
+          if (!l2) { escreve(l1, xF, y0, fN); return; }
+          escreve(l1, xF, y0 - 7 * dpr, fN); escreve(l2, xF, y0 + 7.5 * dpr, fN);
+          ctx.strokeStyle = cor; ctx.lineWidth = 1 * dpr; ctx.beginPath(); ctx.moveTo(xF - fw / 2, y0 + 0.5 * dpr); ctx.lineTo(xF + fw / 2, y0 + 0.5 * dpr); ctx.stroke();
+        };
+        if (opts.marc) { ctx.fillStyle = "rgba(4,116,244,0.10)"; ctx.fillRect(-Wt / 2 - 3 * dpr, -Ht / 2 - 3 * dpr, Wt + 6 * dpr, Ht + 6 * dpr); }
+        if (porta) { escreve(cod, 0, -Ht / 2 + 6.5 * dpr, fC); fracao(0, -Ht / 2 + (l2 ? 26 : 19.5) * dpr); }
+        else { escreve(cod, -Wt / 2 + cw / 2, 0.5 * dpr, fC); fracao(-Wt / 2 + cw + gap + fw / 2, 0); }
+        ctx.restore(); ctx.textBaseline = "alphabetic"; ctx.textAlign = "start";
+        if (opts.i != null) rotulosEsq.current.push({ id: o.id, x: tx, y: ty, ang: angT, meiaW: Wt / 2 + 3 * dpr, meiaH: Ht / 2 + 3 * dpr, n: { x: nx * sg, y: ny * sg } });
       }
       // cotas temporárias até as faces das paredes vizinhas (como no Revit)
       if (opts.cotas) {
@@ -80954,6 +80977,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       setAreas(orig.areas.map((x, i) => (i === al.ai ? { ...x, rotulo: { x: r3(q.x), y: r3(q.y) } } : x)));
       return;
     }
+    if (al.tipo === "rotEsq") {
+      if (!sel.includes(al.chave)) setSel([al.chave]);
+      const loc = tpAcharAbertura(orig.paredes, al.id); if (!loc) return;
+      const pt = paraMundoLivre(devPx(e)), ddx = pt.x - al.p0.x, ddy = pt.y - al.p0.y, r0 = loc.o.rotOff || { ds: 0, dn: 0 }, R = (x) => Math.round(x * 100) / 100;
+      const rotOff = { ds: R(r0.ds + ddx * Math.cos(al.ang) + ddy * Math.sin(al.ang)), dn: R(r0.dn + ddx * al.n.x + ddy * al.n.y) };
+      setParedes(orig.paredes.map((w, i) => (i === loc.i ? { ...w, ab: w.ab.map((q) => (q.id === al.id ? { ...q, rotOff } : q)) } : w)));
+      return;
+    }
     if (al.tipo === "rotParede") {
       if (!sel.includes(al.chave)) setSel([al.chave]);
       const w0 = orig.paredes[al.i]; if (!w0) return;
@@ -81152,6 +81183,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       }
       // cota: arrastar afasta/aproxima a linha (na perpendicular), como no Revit.
       // Vem antes do nome do ambiente: a linha é fina e o nome é um alvo grande.
+      const re = !e.ctrlKey && !e.metaKey && !e.shiftKey && rotulosEsq.current.find((r) => { const dx = d.x - r.x, dy = d.y - r.y, u = dx * Math.cos(r.ang) + dy * Math.sin(r.ang), nn = -dx * Math.sin(r.ang) + dy * Math.cos(r.ang); return Math.abs(u) <= r.meiaW && Math.abs(nn) <= r.meiaH; });
+      if (re) {
+        gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: { tipo: "rotEsq", chave: "o" + re.id, id: re.id, ang: re.ang, n: re.n, p0: paraMundoLivre(d) }, orig: { paredes, areas } };
+        e.currentTarget.setPointerCapture(e.pointerId); return;
+      }
       const rp = !e.ctrlKey && !e.metaKey && !e.shiftKey && rotParedeNoPonto(d);
       if (rp && paredes[rp.i]) {
         gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: { tipo: "rotParede", chave: "l" + rp.i, i: rp.i, ang: rp.ang, p0: paraMundoLivre(d) }, orig: { paredes, areas } };
@@ -81264,7 +81300,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       // posição final com tudo recalculado (ambientes e análise)
       if (g.moveu && g.ultimo) { g.forcarAmb = true; arrastarAlca(g.ultimo, g); }
       if (g.moveu) { historico.current.push(g.orig); if (historico.current.length > 200) historico.current.shift(); futuro.current = []; }
-      else if (g.grip.tipo === "mover" || g.grip.tipo === "abertura" || g.grip.tipo === "cota" || g.grip.tipo === "rotParede") aplicarSelecao([g.grip.chave], g); // só clicou: seleciona
+      else if (g.grip.tipo === "mover" || g.grip.tipo === "abertura" || g.grip.tipo === "cota" || g.grip.tipo === "rotParede" || g.grip.tipo === "rotEsq") aplicarSelecao([g.grip.chave], g); // só clicou: seleciona
       else if (g.grip.tipo === "rotulo" && g.grip.ja) abrirEditNome(g.grip.ai, e); // clicou no nome já selecionado: edita
       setHover(null); return;
     }
