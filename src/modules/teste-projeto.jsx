@@ -941,6 +941,10 @@ const TP_ESQ = [
   { id: "vao", rotulo: "Vão livre", curto: "Vão", cat: "V", familia: null, folhas: 0, larg: 0.90, alt: 2.10, peit: 0, mat: null },
 ];
 const tpEsq = (id) => TP_ESQ.find((t) => t.id === id) || TP_ESQ[0];
+// Folhas: escolhidas nas propriedades (paramétrico, como família do Revit).
+// Porta de giro: 1 ou 2 folhas troca o tipo (porta_giro / porta_giro2).
+const TP_FOLHAS_OPC = { porta_giro: [1, 2], porta_giro2: [1, 2], porta_correr: [2, 3, 4, 6], janela_correr: [2, 3, 4], maxim_ar: [1, 2, 3], fixo: [1, 2, 3] };
+const tpFolhas = (o) => (o.folhas != null && !tpGiro(o.tipo) ? o.folhas : tpEsq(o.tipo).folhas);
 const tpGiro = (tipo) => tipo === "porta_giro" || tipo === "porta_giro2";
 function tpDistSeg(p, a, b) {
   const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
@@ -1100,9 +1104,9 @@ function tpQuadroEsquadrias(paredes) {
   const grupos = [], mapa = new Map(), codigoDe = new Map(), cont = { P: 0, J: 0, V: 0 };
   paredes.forEach((w) => [...tpAbsVisiveis(w)].sort((a, b) => a.x - b.x).forEach((o) => {
     const t = tpEsq(o.tipo), mat = t.mat ? (o.mat || t.mat) : null;
-    const k = [t.id, mat, r2(o.larg), r2(o.alt), r2(o.peit)].join("|");
+    const k = [t.id, mat, r2(o.larg), r2(o.alt), r2(o.peit), tpFolhas(o)].join("|");
     let g = mapa.get(k);
-    if (!g) { cont[t.cat]++; g = { codigo: t.cat + cont[t.cat], tipo: t.id, rot: t.rotulo, mat, larg: o.larg, alt: o.alt, peit: o.peit || 0, qtd: 0, ids: [], familia: t.familia, folhas: t.folhas }; mapa.set(k, g); grupos.push(g); }
+    if (!g) { cont[t.cat]++; g = { codigo: t.cat + cont[t.cat], tipo: t.id, rot: t.rotulo, mat, larg: o.larg, alt: o.alt, peit: o.peit || 0, qtd: 0, ids: [], familia: t.familia, folhas: tpFolhas(o) }; mapa.set(k, g); grupos.push(g); }
     g.qtd++; g.ids.push(o.id); codigoDe.set(o.id, g.codigo);
   }));
   return { grupos, codigoDe };
@@ -1160,6 +1164,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const three = useRef(null);
   const vista = useRef(null);
   const iconeEq = useRef(null);
+  const alcasEsq = useRef([]);                     // quadradinhos das pontas da esquadria selecionada (px do canvas)
   const ambientesFeitos = useRef(null);          // último par (paredes → ambientes) já calculado no arraste
   const rotulosClic = useRef([]);                // nomes dos ambientes na planta (px do canvas): clicar e arrastar move, clicar de novo edita
   const [editNome, setEditNome] = useState(null);  // { ai, x, y, txt, t } nome de ambiente sendo digitado na planta
@@ -1245,6 +1250,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const v = numDigitado(ec.txt) ?? (String(ec.txt).trim().match(/^0+([.,]0*)?$/) ? 0 : null);
     if (v == null) return;
     if (ec.parede) { aplicarCotaParede(ec.parede, v); return; }
+    if (ec.larg) {
+      // largura digitada: cresce/encolhe para os dois lados a partir do centro
+      if (v < 0.2) { avisar("Largura mínima de 0,20 m."); return; }
+      editarAberturas([ec.id], (o) => ({ ...o, larg: Math.round(v * 1000) / 1000 }));
+      return;
+    }
     const loc = tpAcharAbertura(paredes, ec.id); if (!loc) return;
     const viz = tpVizinhos(paredes, loc.i, loc.o.x - loc.o.larg / 2, loc.o.x + loc.o.larg / 2);
     editarAberturas([ec.id], (o) => ({ ...o, x: r3(ec.lado === "antes" ? viz.antes + v + o.larg / 2 : viz.depois - v - o.larg / 2) }));
@@ -1699,7 +1710,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const c = planRef.current, v = vista.current; if (!c || !v || !c.width) return;
     const ctx = c.getContext("2d"), W = c.width, H = c.height, dpr = window.devicePixelRatio || 1;
     ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, W, H);
-    iconeEq.current = null; cotasClic.current = []; rotulosClic.current = [];
+    iconeEq.current = null; cotasClic.current = []; rotulosClic.current = []; alcasEsq.current = [];
     const passo = v.s * TP_GRADE < 8 * dpr ? 1 : TP_GRADE;
     const xA = Math.floor(-v.ox / v.s), xB = Math.ceil((W - v.ox) / v.s), yA = Math.floor(-v.oy / v.s), yB = Math.ceil((H - v.oy) / v.s);
     ctx.lineWidth = 1;
@@ -2293,19 +2304,33 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         seg(P(e0, -h * 0.7), P(e1, -h * 0.7), 0.8); seg(P(e0, h * 0.7), P(e1, h * 0.7), 0.8);
         seg(P(e0, -h * 0.45), P(e1, -h * 0.45), 0.6); seg(P(e0, h * 0.45), P(e1, h * 0.45), 0.6);
         const sb = 0.06, fol = Math.min(0.035, h * 0.35), q = Math.min(0.05, h * 0.5);
-        const a1 = md > 0 ? [e0 + 0.03, o.x + sb] : [o.x - sb, e1 - 0.03], a2 = md > 0 ? [o.x - sb, e1 - 0.03] : [e0 + 0.03, o.x + sb];
         const escuro = normal ? "#2f2f2f" : cor, pecaCor = normal ? "#000" : cor;
-        for (const [[sa, sbb], nn] of [[a1, h * 0.12], [a2, -h * 0.12]]) {
+        // N folhas em trilhos alternados, sobrepostas um pouco umas nas outras
+        const nF = Math.max(2, tpFolhas(o)), luz = o.larg - 0.06, wp = (luz + (nF - 1) * sb) / nF, pecas = [];
+        for (let k = 0; k < nF; k++) { const sa = e0 + 0.03 + k * (wp - sb); pecas.push([[sa, sa + wp], ((k % 2 === 0) === (md > 0) ? 1 : -1) * h * 0.12]); }
+        for (const [[sa, sbb], nn] of pecas) {
           caminho([P(sa, nn - fol / 2), P(sbb, nn - fol / 2), P(sbb, nn + fol / 2), P(sa, nn + fol / 2)]); ctx.fillStyle = escuro; ctx.fill();
           for (const pp of [sa, sbb]) { caminho([P(pp - q / 2, nn - q / 2), P(pp + q / 2, nn - q / 2), P(pp + q / 2, nn + q / 2), P(pp - q / 2, nn + q / 2)]); ctx.fillStyle = pecaCor; ctx.fill(); }
         }
       } else if (o.tipo === "janela_correr" || o.tipo === "maxim_ar" || o.tipo === "fixo") {
         ret(e0, e1, -h * 0.45, h * 0.45, claro, 0);                 // vidro / caixilho
         seg(P(e0, -h), P(e1, -h), 0.8); seg(P(e0, h), P(e1, h), 0.8); // faces
-        if (o.tipo === "janela_correr") { const sb = 0.05; seg(P(e0, h * 0.15), P(o.x + sb, h * 0.15), 1.4); seg(P(o.x - sb, -h * 0.15), P(e1, -h * 0.15), 1.4); }
-        else seg(P(e0, 0), P(e1, 0), 1.4);
+        const nF = Math.max(1, tpFolhas(o));
+        if (o.tipo === "janela_correr") {
+          // N folhas de correr em trilhos alternados, com sobreposição
+          const sb = 0.05, wp = (o.larg + (Math.max(2, nF) - 1) * sb) / Math.max(2, nF);
+          for (let k = 0; k < Math.max(2, nF); k++) { const sa = e0 + k * (wp - sb); const nn = (k % 2 === 0 ? 1 : -1) * h * 0.15; seg(P(sa, nn), P(Math.min(e1, sa + wp), nn), 1.4); }
+        } else {
+          seg(P(e0, 0), P(e1, 0), 1.4);
+          // montantes entre as folhas (maxim-ar / fixo com mais de uma)
+          for (let k = 1; k < nF; k++) { const sk = e0 + o.larg * k / nF; seg(P(sk, -h * 0.45), P(sk, h * 0.45), 1.4); }
+        }
         ret(e0 - 0.03, e1 + 0.03, fora * h, fora * (h + 0.035), normal ? "#7a7a76" : claro, 0.8); // peitoril
-        if (o.tipo === "maxim_ar") { const q = Math.min(0.3, o.larg * 0.4); ctx.strokeStyle = fraco; seg(P(e0, -fora * h), P(o.x, -fora * (h + q)), 1, [4 * dpr, 3 * dpr]); seg(P(o.x, -fora * (h + q)), P(e1, -fora * h), 1, [4 * dpr, 3 * dpr]); }
+        if (o.tipo === "maxim_ar") {
+          ctx.strokeStyle = fraco;
+          for (let k = 0; k < nF; k++) { const sa = e0 + o.larg * k / nF, sbb = e0 + o.larg * (k + 1) / nF, sm = (sa + sbb) / 2, q = Math.min(0.3, (sbb - sa) * 0.4);
+            seg(P(sa, -fora * h), P(sm, -fora * (h + q)), 1, [4 * dpr, 3 * dpr]); seg(P(sm, -fora * (h + q)), P(sbb, -fora * h), 1, [4 * dpr, 3 * dpr]); }
+        }
       } else { ctx.strokeStyle = fraco; seg(P(e0, -h), P(e1, -h), 1, [5 * dpr, 4 * dpr]); seg(P(e0, h), P(e1, h), 1, [5 * dpr, 4 * dpr]); }
       if (opts.codigo) {
         // lado da etiqueta: porta do lado oposto ao giro; janela/vão do lado
@@ -2338,10 +2363,24 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             cotasClic.current.push({ x: (ax + bx) / 2 + 14 * dpr * Math.sin(an), y: (ay + by) / 2 - 14 * dpr * Math.cos(an), r: 22 * dpr, lado: s0 === viz.antes ? "antes" : "depois", id: o.id, d });
           }
         }
-        // ícone "EQ" (como no Revit): no vão da linha de cota, no meio da
+        // largura da esquadria: cota na mesma linha, entre as duas (clicável) e
+        // quadradinhos nas duas pontas para esticar como uma parede
+        if (opts.eq) {
+          seg(P(e0, off), P(e1, off), 1); seg(P(e0, off - 0.08), P(e0, off + 0.08), 1); seg(P(e1, off - 0.08), P(e1, off + 0.08), 1);
+          etiqueta(P(e0, off), P(e1, off), tpFmt(o.larg) + " m", "#0284c7");
+          const [ax, ay] = T(P(e0, off)), [bx, by] = T(P(e1, off));
+          let an = Math.atan2(by - ay, bx - ax); if (an > Math.PI / 2 || an < -Math.PI / 2) an += Math.PI;
+          if (Math.hypot(bx - ax, by - ay) >= 18 * dpr) cotasClic.current.push({ x: (ax + bx) / 2 + 14 * dpr * Math.sin(an), y: (ay + by) / 2 - 14 * dpr * Math.cos(an), r: 22 * dpr, larg: true, id: o.id, d: o.larg });
+          for (const [sx, lado] of [[e0, "e0"], [e1, "e1"]]) {
+            const [gx, gy] = T(P(sx, 0)); ctx.fillStyle = "#fff"; ctx.strokeStyle = TP_AZUL; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.rect(gx - 4 * dpr, gy - 4 * dpr, 8 * dpr, 8 * dpr); ctx.fill(); ctx.stroke();
+            alcasEsq.current.push({ x: gx, y: gy, id: o.id, lado });
+          }
+          ctx.strokeStyle = "#0ea5e9";
+        }
+        // ícone "EQ" (como no Revit): uma linha acima da cota, no meio da
         // esquadria; clicar centraliza entre as duas paredes mais próximas
         if (opts.eq) {
-          const [ix, iy] = T(P(o.x, off)), r = 11 * dpr, centrada = Math.abs(dA - dB) < 0.005;
+          const [ix, iy] = T(P(o.x, off - ld * 30 * dpr / v.s)), r = 11 * dpr, centrada = Math.abs(dA - dB) < 0.005;
           ctx.fillStyle = centrada ? "#e0f2fe" : "#fff"; ctx.strokeStyle = "#0284c7"; ctx.lineWidth = 1.5 * dpr;
           ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(ix - r, iy - r * 0.8, 2 * r, 1.6 * r, 4 * dpr); else ctx.rect(ix - r, iy - r * 0.8, 2 * r, 1.6 * r);
           ctx.fill(); ctx.stroke();
@@ -2980,6 +3019,26 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       setAreas(orig.areas.map((x, i) => (i === al.ai ? { ...x, rotulo: { x: r3(q.x), y: r3(q.y) } } : x)));
       return;
     }
+    if (al.tipo === "largEsq") {
+      // estica a esquadria por uma ponta (a outra fica parada), na grade do
+      // zoom, gruda na face das paredes vizinhas e não passa delas
+      const loc = tpAcharAbertura(orig.paredes, al.id); if (!loc) return;
+      const w = loc.w, L = tpLen(w), ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
+      const pt = paraMundoLivre(devPx(e)), sc = (pt.x - w.a.x) * ux + (pt.y - w.a.y) * uy;
+      const o = loc.o, e0 = o.x - o.larg / 2, e1 = o.x + o.larg / 2;
+      const viz = tpVizinhos(orig.paredes, loc.i, e0, e1), px = (window.devicePixelRatio || 1) / vista.current.s, p5 = Math.max(0.01, passoZoom());
+      { const { fa, fb } = tpFacesPonta(orig.paredes, loc.i); viz.antes = Math.max(viz.antes, fa); viz.depois = Math.min(viz.depois, L - fb);
+        for (const q of (w.ab || [])) if (q.id !== al.id) { const q0 = q.x - q.larg / 2, q1 = q.x + q.larg / 2; if (q1 <= e0 + 1e-6) viz.antes = Math.max(viz.antes, q1); if (q0 >= e1 - 1e-6) viz.depois = Math.min(viz.depois, q0); } }
+      let sN = Math.round(sc / p5) * p5;
+      const ima = al.lado === "e0" ? viz.antes : viz.depois; if (Math.abs(sc - ima) < 10 * px) sN = ima;
+      let n0 = e0, n1 = e1;
+      if (al.lado === "e0") n0 = Math.max(viz.antes, Math.min(sN, e1 - 0.2)); else n1 = Math.min(viz.depois, Math.max(sN, e0 + 0.2));
+      const R3 = (x) => Math.round(x * 1000) / 1000, novo = { ...o, x: R3((n0 + n1) / 2), larg: R3(n1 - n0) };
+      const ps = orig.paredes.map((x, i) => (i === loc.i ? { ...x, ab: x.ab.map((q) => (q.id === al.id ? novo : q)) } : x));
+      if (tpValidarAbertura(ps, loc.i, novo, al.id)) return;
+      setParedes(ps); setHover({ x: w.a.x + ux * (al.lado === "e0" ? n0 : n1), y: w.a.y + uy * (al.lado === "e0" ? n0 : n1) });
+      return;
+    }
     if (al.tipo === "abertura") {
       // arrasta ao longo da parede; passando para outra parede, muda de parede
       // (como no Revit). Posição que não cabe: fica onde estava no quadro anterior.
@@ -3103,6 +3162,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const planDown = (e) => {
     const d = devPx(e);
     if (e.button === 0 && ferramenta === "selecionar") {
+      // ponta da esquadria selecionada: arrastar muda a largura (como esticar parede)
+      const rg = (e.pointerType === "touch" ? 16 : 9) * (window.devicePixelRatio || 1), ge = alcasEsq.current.find((q) => Math.abs(d.x - q.x) <= rg && Math.abs(d.y - q.y) <= rg);
+      if (ge) {
+        gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: { tipo: "largEsq", id: ge.id, lado: ge.lado, chave: "o" + ge.id }, orig: { paredes, areas } };
+        e.currentTarget.setPointerCapture(e.pointerId); return;
+      }
       const eq = iconeEq.current;
       if (eq && Math.abs(d.x - eq.x) <= eq.r && Math.abs(d.y - eq.y) <= eq.r) {
         if (eq.centrada) avisar("Já está centralizada entre as paredes.");
@@ -3115,7 +3180,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         // sem o preventDefault, o mousedown que vem depois tira o foco do campo e ele fecha;
         // o campo fica sempre dentro da planta (senão o quadro rola para mostrá-lo)
         e.preventDefault();
-        setEditCota({ x: Math.max(44, Math.min(rc.width - 44, cq.x / k)), y: Math.max(18, Math.min(rc.height - 18, cq.y / k)), lado: cq.lado, id: cq.id, parede: cq.parede, txt: tpFmt(cq.d), t: Date.now() });
+        setEditCota({ x: Math.max(44, Math.min(rc.width - 44, cq.x / k)), y: Math.max(18, Math.min(rc.height - 18, cq.y / k)), lado: cq.lado, id: cq.id, parede: cq.parede, larg: cq.larg, txt: tpFmt(cq.d), t: Date.now() });
         return;
       }
       // nome do ambiente: apertar e arrastar move o nome; clicar de novo nele
@@ -3431,7 +3496,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     : (desenhoAtivo && modoTraco === "arco") ? (ancora && ancora.arcoFim ? "Mova para curvar e clique um ponto da curva. Esc cancela." : ((ferramenta === "parede" ? inicio : poli.length) ? "Arco: clique o ponto final." : "Arco: clique o ponto inicial."))
     : (selA.length === 1 && !selP.length && ferramenta === "selecionar" && areas[selA[0]].tipo === "ambiente") ? "Ambiente: arraste o nome para mudar de lugar; clique no nome para editar. A área é calculada pelas paredes."
     : (selA.length === 1 && !selP.length && ferramenta === "selecionar") ? "Editar contorno: arraste os quadrados (cantos) ou as bolinhas (lados). O cursor gruda nas quinas das paredes (quadrado verde)."
-    : (selO.length === 1 && sel.length === 1 && ferramenta === "selecionar") ? "Arraste para mover (até para outra parede). Clique na cota para digitar a medida; EQ centraliza. Espaço inverte a mão."
+    : (selO.length === 1 && sel.length === 1 && ferramenta === "selecionar") ? "Arraste para mover (até para outra parede); arraste os quadradinhos das pontas para mudar a largura. Clique na cota para digitar a medida; EQ centraliza. Espaço inverte a mão."
     : (selP.length === 1 && !selA.length && ferramenta === "selecionar") ? "Quadradinho branco: estica só esta parede (solta do canto). Sem selecionar, arrastar a ponta leva as paredes ligadas. Delete exclui."
     : ferramenta === "selecionar"
     ? (sel.length ? `${sel.length} selecionado${sel.length === 1 ? "" : "s"}. Ctrl soma, Shift tira, setas movem, Delete exclui, Esc limpa.` : "Clique ou arraste uma área (esq.→dir.: inteiro dentro; dir.→esq.: o que tocar). Ctrl soma, Shift tira. Tecla ? mostra os atalhos.")
@@ -3468,6 +3533,19 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                   {TP_ESQ.map((x) => <option key={x.id} value={x.id}>{x.rotulo}</option>)}
                 </select>
               </div>
+              {t && TP_FOLHAS_OPC[t.id] && (() => {
+                const fc = comum(selO, (x) => tpFolhas(x.o));
+                return (
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <label htmlFor="tp-o-folhas" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>Folhas</label>
+                    <select id="tp-o-folhas" value={fc == null ? "" : String(fc)} style={selStyle}
+                      onChange={(e) => { const n = +e.target.value; editarAberturas(ids, (o) => (tpGiro(o.tipo) ? { ...o, tipo: n === 2 ? "porta_giro2" : "porta_giro", folhas: undefined } : { ...o, folhas: n })); }}>
+                      {fc == null && <option value="">várias</option>}
+                      {TP_FOLHAS_OPC[t.id].map((n) => <option key={n} value={n}>{n} folha{n > 1 ? "s" : ""}</option>)}
+                    </select>
+                  </div>
+                );
+              })()}
               <TpCampo id="tp-o-larg" rotulo="Largura (m)" valor={comum(selO, (x) => x.o.larg)} onConfirmar={(v) => editarAberturas(ids, (o) => ({ ...o, larg: v }))} />
               <TpCampo id="tp-o-alt" rotulo="Altura (m)" valor={comum(selO, (x) => x.o.alt)} onConfirmar={(v) => editarAberturas(ids, (o) => ({ ...o, alt: v }))} />
               <TpCampo id="tp-o-peit" rotulo="Peitoril (m)" min={-0.0001} valor={comum(selO, (x) => x.o.peit || 0)} somenteLeitura={!!t && t.cat !== "J"} onConfirmar={(v) => editarAberturas(ids, (o) => ({ ...o, peit: v }))} />
@@ -3861,7 +3939,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             <span style={tag}>Planta baixa · grade 0,50 m</span>
             <canvas ref={planRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none", cursor: ferramenta === "mover" ? "grab" : ferramenta === "selecionar" ? "default" : "crosshair" }}
               onContextMenu={(e) => e.preventDefault()} onDoubleClick={() => { if (poli.length >= 3) finalizarPoli(); }}
-              onPointerDown={planDown} onPointerMove={(e) => { planMove(e); if (!gesto.current && ferramenta === "selecionar") { const dd = devPx(e), eq = iconeEq.current; e.currentTarget.style.cursor = (eq && Math.abs(dd.x - eq.x) <= eq.r && Math.abs(dd.y - eq.y) <= eq.r) || cotasClic.current.some((q) => Math.abs(dd.x - q.x) <= q.r && Math.abs(dd.y - q.y) <= q.r * 0.6) ? "pointer" : (alcaNoPonto(dd) || rotulosClic.current.some((q) => dd.x >= q.x0 && dd.x <= q.x1 && dd.y >= q.y0 && dd.y <= q.y1)) ? "move" : "default"; } }} onPointerUp={planUp} onPointerLeave={() => { if (!inicio && !poli.length && !gesto.current) setHover(null); else if (!gesto.current && hover && hover.guias) setHover({ x: hover.x, y: hover.y }); if (!gesto.current) setPreviaEsq(null); }} />
+              onPointerDown={planDown} onPointerMove={(e) => { planMove(e); if (!gesto.current && ferramenta === "selecionar") { const dd = devPx(e), eq = iconeEq.current; e.currentTarget.style.cursor = (eq && Math.abs(dd.x - eq.x) <= eq.r && Math.abs(dd.y - eq.y) <= eq.r) || cotasClic.current.some((q) => Math.abs(dd.x - q.x) <= q.r && Math.abs(dd.y - q.y) <= q.r * 0.6) ? "pointer" : (alcasEsq.current.some((q) => Math.abs(dd.x - q.x) <= 9 * (window.devicePixelRatio || 1) && Math.abs(dd.y - q.y) <= 9 * (window.devicePixelRatio || 1)) || alcaNoPonto(dd) || rotulosClic.current.some((q) => dd.x >= q.x0 && dd.x <= q.x1 && dd.y >= q.y0 && dd.y <= q.y1)) ? "move" : "default"; } }} onPointerUp={planUp} onPointerLeave={() => { if (!inicio && !poli.length && !gesto.current) setHover(null); else if (!gesto.current && hover && hover.guias) setHover({ x: hover.x, y: hover.y }); if (!gesto.current) setPreviaEsq(null); }} />
             {barraFerramentas}
             {editNome && (
               <input ref={(el) => { if (el && document.activeElement !== el) { el.focus({ preventScroll: true }); el.select(); } }} aria-label="Nome do ambiente" value={editNome.txt}
