@@ -80250,10 +80250,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         let ang = Math.atan2(sby - say, sbx - sax); if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
         const ladoMedida = nx * Math.sin(ang) - ny * Math.cos(ang) > 0 ? 1 : -1;
         // porta de giro: do lado em que abre (dentro do arco); correr, vão e janela: do lado oposto à medida
-        let sg = tpGiro(o.tipo) ? ld : -ladoMedida;
+        let sg = tpGiro(o.tipo) ? ld : -ladoMedida, periferia = false;
         if (pegCasa.length) {
           const tq = h + 0.3, qA = P(o.x, tq), qB = P(o.x, -tq), dA = naCasa(qA), dB = naCasa(qB);
-          if (dA !== dB) sg = dA ? -1 : 1; // parede de periferia: lado de fora
+          if (dA !== dB) { sg = dA ? -1 : 1; periferia = true; } // parede de periferia: lado de fora
         }
         const longe = sg === ladoMedida && Math.abs(o.x - L / 2) < o.larg / 2 + 0.8;
         // padrão de prancha: código e, ao lado, a fração largura x altura
@@ -80263,8 +80263,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         // porta e vão: código em cima e larg x alt embaixo (peitoril só se tiver)
         const porta = String(o.tipo).startsWith("porta") || o.tipo === "vao", peit = o.peit || 0, cod = String(opts.codigo).toUpperCase();
         // tamanho em escala de prancha (3 mm) travado na tela; U = "1 px" do rótulo
-        const fE = fonteAnot(3, 7, 14), U = fE / 11.5;
-        const fC = `600 ${fE}px system-ui, sans-serif`, fN = `500 ${fE}px system-ui, sans-serif`;
+        let fE = fonteAnot(3, 7, 14), U = fE / 11.5;
+        let fC = `600 ${fE}px system-ui, sans-serif`, fN = `500 ${fE}px system-ui, sans-serif`;
+        const porTam = (f) => { fE = f; U = fE / 11.5; fC = `600 ${fE}px system-ui, sans-serif`; fN = `500 ${fE}px system-ui, sans-serif`; };
         const ro = o.rotOff || { ds: 0, dn: 0 };
         // texto de parede vertical lê de baixo para cima
         let angT = Math.atan2(sby - say, sbx - sax); if (angT >= Math.PI / 2 - 1e-3) angT -= Math.PI; else if (angT < -Math.PI / 2 - 1e-3) angT += Math.PI;
@@ -80281,6 +80282,15 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           return { l1, l2, cw, fw, gap, Wt, Ht, tx, ty, caixa: caixaRot(tx, ty, angT, Wt / 2 + 3 * U, Ht / 2 + 2 * U) };
         };
         let R = (!lodEsqCod && !opts.marc) ? null : montar(!lodEsqMed && !opts.marc);
+        // porta interna: o rótulo cabe na largura da porta (letra um pouco menor);
+        // se nem no mínimo couber, fica só o código
+        if (R && porta && !periferia) {
+          const vaoPx = o.larg * v.s - 4 * dpr, ocupa = (r) => r.Wt + 6 * U;
+          porTam(Math.min(fE, fonteAnot(2.5, 6, 12)));
+          R = montar(!R.l1);
+          if (ocupa(R) > vaoPx) { porTam(Math.max(6 * dpr, fE * vaoPx / ocupa(R))); R = montar(!R.l1); }
+          if (R.l1 && ocupa(R) > vaoPx + 1) R = montar(true);
+        }
         // encavalou com outra anotação: tenta só o código; se ainda bater, sai
         if (R && !opts.marc && bate(R.caixa)) { R = R.l1 ? montar(true) : R; if (bate(R.caixa)) R = null; }
         if (R) {
