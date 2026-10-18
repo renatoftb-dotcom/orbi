@@ -39,7 +39,7 @@ const M = new Function(src + `
            efNomeDoFornecedor, EF_FORNECEDOR_OUTROS,
            custoDoLancamento, validarCustoEmItens, itemUnicoDoCusto, itensDoCustoOuUnico, padraoDaContaDaObra,
            comIdsDosMovimentos, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
-           sugestaoDoExtrato, palpiteDoExtrato, sugestaoCompletaDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao, fornecedorPadraoDaConta, contaDeEntradaNoEscritorio, semFornecedorNaEntrada, clienteRapidoDoLancamento, ehLigacaoDaGestao,
+           sugestaoDoExtrato, palpiteDoExtrato, sugestaoCompletaDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao, fornecedorPadraoDaConta, contaDeEntradaNoEscritorio, semFornecedorNaEntrada, clienteRapidoDoLancamento, ehLigacaoDaGestao, gestaoSemContratoVaiParaObra,
            ehReceitaDaGestao, contaEhEntradaEscritorio, rotuloDoPapelLido, refDaParcela, gestaoNaObra, desfazerGestaoNaObra, parcelaDoLancamento, parcelaDoMesNaGestao, recalibrarGestao, previaDaGestao, contasDaGestao,
            extratosComArquivo, movimentosGuardadosDoMes, ignoradosGuardados, extratosComIgnorado, efLinhasDoHtml, efLinhasDoOfx, saldoDoExtratoNoMes, efTabelaDoArquivo };`)();
 
@@ -2870,6 +2870,13 @@ teste("cliente novo de dentro do lançamento: nome obrigatório, serviço pela u
   const pj = M.clienteRapidoDoLancamento({ nome: "Cobop", cpfCnpj: "12.345.678/0001-90" }, "gestao_obras", "c2");
   assert.strictEqual(pj.tipo, "PJ");
   assert.strictEqual(pj.servicos.gestaoObra, true);
+});
+
+teste("gestão sem contrato: só vai para a obra quando o cliente faz os pagamentos", () => {
+  if (M.gestaoSemContratoVaiParaObra({ id: "o1", clientePagaDireto: true }) !== true) throw new Error("cliente paga direto: deveria ir");
+  if (M.gestaoSemContratoVaiParaObra({ id: "o1", clientePagaDireto: false }) !== false) throw new Error("escritório paga: não deveria ir");
+  if (M.gestaoSemContratoVaiParaObra({ id: "o1" }) !== false) throw new Error("sem marca: não deveria ir");
+  if (M.gestaoSemContratoVaiParaObra(null) !== false) throw new Error("sem obra: não deveria ir");
 });
 
 teste("gestão sem contrato: a conta paga de Gerenciamento na obra vira Receita Gestão ligada, e excluir apaga os dois lados", () => {

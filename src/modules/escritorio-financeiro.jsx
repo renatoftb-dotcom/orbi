@@ -3389,6 +3389,14 @@ function refDaParcela(c) {
   return n ? `${c.id}#${n}` : ((c && c.id) || "");
 }
 
+// Receita Gestão de obra SEM contrato de gestão: entra também na obra, como
+// conta paga de "Gerenciamento de obra", só quando o cadastro da obra diz
+// que o cliente faz os pagamentos. Obra em que o dinheiro passa pelo
+// escritório fica com a receita só no escritório.
+function gestaoSemContratoVaiParaObra(obra) {
+  return !!(obra && obra.clientePagaDireto);
+}
+
 function ehLigacaoDaGestao(origem) {
   const o = origem || {};
   // a conta avulsa de gestão (obra sem contrato) é uma transação comum de
@@ -4792,17 +4800,16 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     || !!f.estorno || (!lancNovo && Number((inicial || {}).valor) < 0);
   const ligadoAntes = !!(inicial && ehLigacaoDaGestao(inicial.origem));
   const temGestao = !naObra && ehReceitaDaGestao(f) && !!obraDaGestao && contasDaGestao(obraDaGestao).length > 0;
-  // Obra SEM contrato de gestão: sem parcela, a receita ficaria só no
-  // escritório — a obra não veria o custo do gerenciamento. A tela avisa e
-  // oferece lançar dos dois lados: uma conta paga de "Gerenciamento de obra"
-  // na obra, ligada a este lançamento.
+  // Obra SEM contrato de gestão, com o cliente pagando direto: sem parcela,
+  // a receita ficaria só no escritório. Lança dos dois lados: uma conta paga
+  // de "Gerenciamento de obra" na obra, ligada a este lançamento.
   const jaLigadoNaObra = !!(inicial && inicial.origem && inicial.origem.obraId);
   const gestaoSemContrato = !naObra && ehReceitaDaGestao(f) && !!obraDaGestao && contasDaGestao(obraDaGestao).length === 0
-    && !jaLigadoNaObra && !(f.sinalDoBanco && ehEstornoNaConta(f.contaId, f.sinalDoBanco)) && !f.estorno
+    && gestaoSemContratoVaiParaObra(obraDaGestao) && !jaLigadoNaObra && !(f.sinalDoBanco && ehEstornoNaConta(f.contaId, f.sinalDoBanco)) && !f.estorno
     && !(!lancNovo && Number((inicial || {}).valor) < 0);
-  // Não é pergunta: honorário é custo da obra nos dois cadastros — com o
-  // cliente pagando direto ou com o dinheiro passando pelo escritório (é a
-  // mesma regra da ponte, destinoNoEscritorio). Vai para a obra sempre.
+  // Não é pergunta: quem decide é o cadastro da obra ("O cliente realiza
+  // os pagamentos"). Marcado, vai para a obra sozinho; desmarcado, fica só
+  // no escritório.
   const gestaoAvulsa = gestaoSemContrato;
   // O lançamento antigo, de antes da ligação, só entra se a pessoa marcar:
   // o pagamento dele pode já estar contado na parcela, baixado na obra.
@@ -7376,6 +7383,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const { gestaoAvulsaNaObra: _g, sinalDoBanco: _s, noContratoGestao: _n, ...resto } = l || {};
     const valor = Math.round(Math.abs(Number(resto.valor) || 0) * 100) / 100;
     if (!(valor > 0) || !resto.obraId) return false;
+    const obraAlvo = (((data || {}).obras) || []).find((o) => o && o.id === resto.obraId) || null;
+    if (!gestaoSemContratoVaiParaObra(obraAlvo)) return false;
     const nomeEsc = String(((data || {}).escritorio || {}).nome || "").trim() || "Escritório";
     lancarCustoNaObra({ ...resto, ...(marca || {}), naObra: true, obraIdAlvo: resto.obraId, contaId: EF_CONTA_GESTAO_NA_OBRA,
       itens: [itemUnicoDoCusto(valor, "", EF_CONTA_GESTAO_NA_OBRA, "Gerenciamento de obra", "")],
