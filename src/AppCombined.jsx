@@ -78596,16 +78596,18 @@ function tpCurvasLisas(paredes, cantos = tpCantosMitra(paredes), grupos = tpGrup
         const t1 = -b + Math.sqrt(disc), t2 = -b - Math.sqrt(disc), t = Math.abs(t1) < Math.abs(t2) ? t1 : t2;
         return Math.abs(t) > 4 * (hIn + 0.01) ? Q : { x: Q.x + e.x * t, y: Q.y + e.y * t };
       };
-      pM = noArco(pM, eM); pP = noArco(pP, eP);
-      const dm = Math.hypot(pM.x - ox, pM.y - oy), dp = Math.hypot(pP.x - ox, pP.y - oy);
-      return dm > dp ? { fora: pM, dentro: pP, no } : { fora: pP, dentro: pM, no };
+      // guarda também o ponto do corte reto: é ele que encosta na parede vizinha
+      // (sem ele abria uma fissura entre a faixa e a vizinha)
+      const aM = noArco(pM, eM), aP = noArco(pP, eP);
+      const dm = Math.hypot(aM.x - ox, aM.y - oy), dp = Math.hypot(aP.x - ox, aP.y - oy);
+      return dm > dp ? { fora: aM, dentro: aP, foraC: pM, dentroC: pP, no } : { fora: aP, dentro: aM, foraC: pP, dentroC: pM, no };
     };
     const banda = (hIn, recuo = 0) => {
       const ini = ponta(ord[0], ord[0].ini, hIn, recuo), last = ord[ord.length - 1], fim = ponta(last, last.ini === "a" ? "b" : "a", hIn, recuo);
       const n = Math.max(12, Math.ceil(Math.abs(sw) / (Math.PI / 90)));
       const arco = (rr) => { const q = []; for (let k = 1; k < n; k++) { const a = a0 + sw * k / n; q.push({ x: ox + rr * Math.cos(a), y: oy + rr * Math.sin(a) }); } return q; };
       // num nó de várias paredes a ponta da faixa passa pelo ponto do nó
-      return [ini.fora, ...arco(r + hIn), fim.fora, ...(fim.no ? [fim.no] : []), fim.dentro, ...arco(r - hIn).reverse(), ini.dentro, ...(ini.no ? [ini.no] : [])];
+      return [ini.foraC, ini.fora, ...arco(r + hIn), fim.fora, fim.foraC, ...(fim.no ? [fim.no] : []), fim.dentroC, fim.dentro, ...arco(r - hIn).reverse(), ini.dentro, ini.dentroC, ...(ini.no ? [ini.no] : [])];
     };
     out.push({ membros: ms, set, t, r, banda, ord });
   }
@@ -79887,7 +79889,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     ctx.lineJoin = "round";
     pD.forEach((w, i) => { if (naCurva.has(i)) return; ctx.fillStyle = ctx.strokeStyle = marcadas.has("p" + i) ? "#5b8fd6" : TP_NUCLEO; ctx.lineWidth = 1 * dpr; quadros(w, penaDe(w) / v.s + 0.5 * dpr / v.s).forEach((q) => { quadro(q); ctx.fill(); ctx.stroke(); }); });
     ctx.lineJoin = "miter";
-    lisas.forEach((c) => { const w0 = pD[c.membros[0]]; ctx.fillStyle = curvaMarc(c) ? "#5b8fd6" : TP_NUCLEO; quadro(bandaPx(c, penaDe(w0) / v.s)); ctx.fill(); });
+    // miolo da curva: preenche e passa um traço fino da mesma cor (fecha qualquer fresta no encontro)
+    lisas.forEach((c) => { const w0 = pD[c.membros[0]]; ctx.fillStyle = ctx.strokeStyle = curvaMarc(c) ? "#5b8fd6" : TP_NUCLEO; ctx.lineWidth = 1 * dpr; ctx.lineJoin = "round"; quadro(bandaPx(c, penaDe(w0) / v.s + 0.5 * dpr / v.s)); ctx.fill(); ctx.stroke(); ctx.lineJoin = "miter"; });
     for (const m of miolos) { ctx.fillStyle = m.cor; ctx.fill(m.pth); }
     ctx.restore();
     // parede em desenho (fantasma): azul translúcido, sem união
