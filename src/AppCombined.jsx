@@ -78442,6 +78442,8 @@ function tpJuncoes(ps) {
       // parede passa direto pelo ponto, os dois lados dela
       const dirDe = (q) => { const L = Math.hypot(q.x - P.x, q.y - P.y) || 1; return { x: (q.x - P.x) / L, y: (q.y - P.y) / L }; };
       const bracos = lista.filter((x) => x.i !== i).map((x) => ({ i: x.i, e: dirDe(x.f === "a" ? ps[x.i].b : ps[x.i].a) }));
+      // emenda de dois trechos quase em linha (curva): não é nó, mesmo colada numa parede
+      if (lista.length === 2) { const eu = dirDe(f === "a" ? w.b : w.a), ev = bracos[0].e; if (eu.x * ev.x + eu.y * ev.y < -0.8) continue; }
       ps.forEach((o, k) => {
         if (k === i || lista.some((x) => x.i === k) || !tpLen(o)) return;
         if (tpDistSeg(P, o.a, o.b) >= (o.t || 0) / 2 + 0.01) return;
@@ -78512,8 +78514,18 @@ function tpPontaMitra(w, fim, o, fo, h, ho) {
 }
 // Trechos curtos encadeados quase em linha (curva feita pelo Arco, ou
 // paredes com w.curva igual): uma "curva" só, com uma medida só.
+// Pontas que se encontram de duas em duas (sem olhar se outra parede passa
+// por perto): é o que encadeia os trechos de uma curva, mesmo quando a curva
+// corre colada numa parede reta.
+function tpParesPonta(paredes) {
+  const mapa = new Map(), chave = (q) => Math.round(q.x * 200) + "|" + Math.round(q.y * 200);
+  paredes.forEach((w, i) => { if (!tpLen(w)) return; for (const f of ["a", "b"]) { const k = chave(w[f]); if (!mapa.has(k)) mapa.set(k, []); mapa.get(k).push({ i, f }); } });
+  const out = paredes.map(() => ({ a: null, b: null }));
+  for (const l of mapa.values()) if (l.length === 2 && l[0].i !== l[1].i) { out[l[0].i][l[0].f] = { j: l[1].i, f: l[1].f }; out[l[1].i][l[1].f] = { j: l[0].i, f: l[0].f }; }
+  return out;
+}
 function tpGruposCurva(paredes) {
-  const cm = tpCantosMitra(paredes), grupo = paredes.map(() => -1);
+  const cm = tpParesPonta(paredes), grupo = paredes.map(() => -1);
   const parece = (i, j) => {
     const a = paredes[i], b = paredes[j];
     if (a.curva != null && a.curva === b.curva) return true;
@@ -78535,20 +78547,20 @@ function tpGruposCurva(paredes) {
 // uma faixa só, seguindo o círculo que passa pelos pontos. Cada curva traz a
 // função banda(hIn, recuoPonta) → polígono (pontos do desenho) da parede com
 // meia espessura hIn; nas pontas, meia-esquadria com a parede vizinha.
-function tpCurvasLisas(paredes, cantos = tpCantosMitra(paredes), grupos = tpGruposCurva(paredes)) {
+function tpCurvasLisas(paredes, cantos = tpCantosMitra(paredes), grupos = tpGruposCurva(paredes), juncoes = tpJuncoes(paredes)) {
   const por = new Map();
   grupos.forEach((g, i) => { if (g < 0) return; if (!por.has(g)) por.set(g, []); por.get(g).push(i); });
-  const out = [];
+  const out = [], pares = tpParesPonta(paredes);
   for (const ms of por.values()) {
     if (ms.some((i) => (paredes[i].ab || []).length)) continue; // com porta/janela: fica em trechos
     const set = new Set(ms);
-    const solta = (i) => ["a", "b"].find((f) => !cantos[i][f] || !set.has(cantos[i][f].j));
+    const solta = (i) => ["a", "b"].find((f) => !pares[i][f] || !set.has(pares[i][f].j));
     const i0 = ms.find((i) => solta(i)); if (i0 == null) continue; // círculo fechado: fica em trechos
     // corrente ordenada: [{ i, ini }] — o trecho i vai de w[ini] até a outra ponta
     const ord = []; let cur = i0, ini = solta(i0); const vis = new Set();
     while (cur != null && !vis.has(cur)) {
       vis.add(cur); ord.push({ i: cur, ini });
-      const fimOp = ini === "a" ? "b" : "a", c = cantos[cur][fimOp];
+      const fimOp = ini === "a" ? "b" : "a", c = pares[cur][fimOp];
       if (c && set.has(c.j) && !vis.has(c.j)) { cur = c.j; ini = c.f; } else cur = null;
     }
     if (ord.length !== ms.length) continue;
@@ -78566,19 +78578,21 @@ function tpCurvasLisas(paredes, cantos = tpCantosMitra(paredes), grupos = tpGrup
     // pontas: a meia-esquadria do trecho da ponta com a parede vizinha (fora da curva)
     const ponta = (o, fim, hIn, recuo) => {
       const w = paredes[o.i], L = tpLen(w), u = { x: (w.b.x - w.a.x) / L, y: (w.b.y - w.a.y) / L }, nv = { x: -u.y, y: u.x };
-      const c = cantos[o.i][fim], P = w[fim];
-      let sm, sp;
+      const c = cantos[o.i][fim], P = w[fim], jx = juncoes[o.i] && juncoes[o.i][fim];
+      let sm, sp, no = null;
       if (c && !set.has(c.j)) { const viz = paredes[c.j]; [sm, sp] = tpPontaMitra(w, fim, viz, c.f, hIn, (viz.t || 0) / 2 - recuo); }
+      else if (jx && jx.tipo === "no") { [sm, sp] = tpCorteNo(paredes, o.i, fim, jx.viz, (k) => (k === o.i ? hIn : (paredes[k].t || 0) / 2 - recuo)); no = P; }
       else { const s0 = fim === "a" ? recuo : L - recuo; sm = s0; sp = s0; }
       const pM = { x: w.a.x + u.x * sm - nv.x * hIn, y: w.a.y + u.y * sm - nv.y * hIn }, pP = { x: w.a.x + u.x * sp + nv.x * hIn, y: w.a.y + u.y * sp + nv.y * hIn };
       const dm = Math.hypot(pM.x - ox, pM.y - oy), dp = Math.hypot(pP.x - ox, pP.y - oy);
-      return dm > dp ? { fora: pM, dentro: pP } : { fora: pP, dentro: pM };
+      return dm > dp ? { fora: pM, dentro: pP, no } : { fora: pP, dentro: pM, no };
     };
     const banda = (hIn, recuo = 0) => {
       const ini = ponta(ord[0], ord[0].ini, hIn, recuo), last = ord[ord.length - 1], fim = ponta(last, last.ini === "a" ? "b" : "a", hIn, recuo);
       const n = Math.max(12, Math.ceil(Math.abs(sw) / (Math.PI / 90)));
       const arco = (rr) => { const q = []; for (let k = 1; k < n; k++) { const a = a0 + sw * k / n; q.push({ x: ox + rr * Math.cos(a), y: oy + rr * Math.sin(a) }); } return q; };
-      return [ini.fora, ...arco(r + hIn), fim.fora, fim.dentro, ...arco(r - hIn).reverse(), ini.dentro];
+      // num nó de várias paredes a ponta da faixa passa pelo ponto do nó
+      return [ini.fora, ...arco(r + hIn), fim.fora, ...(fim.no ? [fim.no] : []), fim.dentro, ...arco(r - hIn).reverse(), ini.dentro, ...(ini.no ? [ini.no] : [])];
     };
     out.push({ membros: ms, set, t, r, banda, ord });
   }
@@ -79233,7 +79247,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       // um tracejado até esse ponto
       const tolA = 8 * (window.devicePixelRatio || 1) / v.s;
       // emendas internas de curva não servem de alinhamento (só poluíam a tela)
-      const gcR = tpGruposCurva(paredes), cmR = tpCantosMitra(paredes), emendas = new Set();
+      const gcR = tpGruposCurva(paredes), cmR = tpParesPonta(paredes), emendas = new Set();
       paredes.forEach((w, i) => { if (gcR[i] >= 0) for (const f of ["a", "b"]) if (cmR[i][f] && gcR[cmR[i][f].j] === gcR[i]) emendas.add(r3(w[f].x) + "|" + r3(w[f].y)); });
       const refs = [...pontosIma(opts.ignorar).filter((q) => !emendas.has(r3(q.x) + "|" + r3(q.y))), ...(inicio ? [inicio] : []), ...(ancora && ancora.ret ? [ancora.ret] : []), ...(ancora && ancora.arcoIni ? [ancora.arcoIni, ancora.arcoFim] : [])];
       let gx = null, gy = null, dx = tolA, dy = tolA;
@@ -79764,12 +79778,15 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       alvo.arcTo(ox, oy, ox + d2.x * tt, oy + d2.y * tt, rpx);
       alvo.lineTo(ox + d2.x * tt - d1.x * fx, oy + d2.y * tt - d1.y * fx); alvo.lineTo(ox - (d1.x + d2.x) * fx, oy - (d1.y + d2.y) * fx); alvo.closePath(); temCanto = true;
     };
+    const paresQ = tpParesPonta(pD);
     pD.forEach((w, i) => {
       const L = tpLen(w); if (!L) return;
       const u = { x: (w.b.x - w.a.x) / L, y: (w.b.y - w.a.y) / L }, nv = { x: -u.y, y: u.x }, h = (w.t || 0) / 2;
       const rpx = Math.min(penaDe(w) * 0.9, h * v.s * 0.8);
       const ptS = (sx, n) => ({ x: w.a.x + u.x * sx + nv.x * n, y: w.a.y + u.y * sx + nv.y * n });
       for (const fim of ["a", "b"]) {
+        // emenda interna de curva lisa: nada a arredondar
+        if (naCurva.has(i) && paresQ[i][fim] && naCurva.has(paresQ[i][fim].j)) continue;
         const dIn = fim === "a" ? u : { x: -u.x, y: -u.y }, P = w[fim], c = cantos[i] && cantos[i][fim];
         if (c) {
           if (c.j < i) continue; // cada canto uma vez
@@ -79865,9 +79882,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     { const por = new Map(); gruposCurva.forEach((g, i) => { if (g < 0) return; if (!por.has(g)) por.set(g, []); por.get(g).push(i); });
       for (const ms of por.values()) {
         // ordena pela corrente (de uma ponta solta até a outra)
-        const set = new Set(ms); let ini = ms.find((i) => ["a", "b"].some((f) => !cantos[i][f] || !set.has(cantos[i][f].j))) ?? ms[0];
+        const pr = tpParesPonta(paredes), set = new Set(ms); let ini = ms.find((i) => ["a", "b"].some((f) => !pr[i][f] || !set.has(pr[i][f].j))) ?? ms[0];
         const ord = [], vis = new Set(); let cur = ini;
-        while (cur != null && !vis.has(cur)) { vis.add(cur); ord.push(cur); const nx = ["a", "b"].map((f) => cantos[cur][f]).find((c) => c && set.has(c.j) && !vis.has(c.j)); cur = nx ? nx.j : null; }
+        while (cur != null && !vis.has(cur)) { vis.add(cur); ord.push(cur); const nx = ["a", "b"].map((f) => pr[cur][f]).find((c) => c && set.has(c.j) && !vis.has(c.j)); cur = nx ? nx.j : null; }
         rotuloCurva.set(ord[Math.floor(ord.length / 2)] ?? ms[0], ms.reduce((t, i) => t + tpLen(paredes[i]), 0));
       } }
     // paredes com uma ponta encostada na parede selecionada (sozinha)
@@ -80114,7 +80131,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     if (inicio) ponto(inicio, 5);
     const quadradinho = (p) => { const [x, y] = T(p); ctx.fillStyle = "#fff"; ctx.strokeStyle = TP_AZUL; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.rect(x - 4 * dpr, y - 4 * dpr, 8 * dpr, 8 * dpr); ctx.fill(); ctx.stroke(); };
     { // emendas internas de uma curva não ganham quadradinho (só as pontas dela)
-      const gcS = tpGruposCurva(paredes), cmS = tpCantosMitra(paredes);
+      const gcS = tpGruposCurva(paredes), cmS = tpParesPonta(paredes);
       for (const i of selP) for (const f of ["a", "b"]) { if (gcS[i] >= 0 && cmS[i][f] && gcS[cmS[i][f].j] === gcS[i]) continue; quadradinho(paredes[i][f]); }
     }
     for (const i of selA) if (areas[i].tipo !== "ambiente") areas[i].pts.forEach(quadradinho);
@@ -80556,7 +80573,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const tol = 10 * (window.devicePixelRatio || 1), p = paraMundoLivre(d);
     let melhor = null, menor = Infinity;
     // emenda entre dois trechos da mesma curva não é ponta (puxar ali quebraria a curva)
-    const gc = tpGruposCurva(paredes), cm = tpCantosMitra(paredes);
+    const gc = tpGruposCurva(paredes), cm = tpParesPonta(paredes);
     paredes.forEach((w, i) => {
       for (const fim of ["a", "b"]) {
         if (gc[i] >= 0 && cm[i][fim] && gc[cm[i][fim].j] === gc[i]) continue;
