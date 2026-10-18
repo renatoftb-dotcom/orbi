@@ -78727,6 +78727,16 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       esticar(info.fim, info.fim === "b" ? { x: w.b.x + u.x * ext, y: w.b.y + u.y * ext } : { x: w.a.x - u.x * ext, y: w.a.y - u.y * ext });
       return;
     }
+    if (info.tipo === "lig") {
+      // comprimento de uma parede ligada: a selecionada anda na direção dela
+      const o = paredes[info.j]; if (!o) return;
+      const Lj = tpLen(o), f = info.fim, outro = f === "a" ? "b" : "a"; if (!Lj) return;
+      const delta = v - Lj, dxl = r3((o[f].x - o[outro].x) / Lj * delta), dyl = r3((o[f].y - o[outro].y) / Lj * delta);
+      if (!dxl && !dyl) return;
+      const mv = paredes.map((x, j) => (j === i ? { ...x, a: { x: r3(x.a.x + dxl), y: r3(x.a.y + dyl) }, b: { x: r3(x.b.x + dxl), y: r3(x.b.y + dyl) } } : x));
+      mudar(tpSeguirLigadas(paredes, mv, new Set([i]), dxl, dyl).ps, null, true);
+      return;
+    }
     const c = cp.cotas.find((x) => x.tipo === "perp" && x.lado === info.lado); if (!c) return;
     const m = info.lado * (c.d - v), dx = r3(nr.x * m), dy = r3(nr.y * m);
     if (!dx && !dy) return;
@@ -79409,6 +79419,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     paredes.forEach((w, i) => { ctx.fillStyle = marcadas.has("p" + i) ? "#5b8fd6" : "#555555"; quadros(w, penaDe(w) / v.s).forEach((q) => { quadro(q); ctx.fill(); }); });
     // parede em desenho (fantasma): azul translúcido, sem união
     todas.forEach((w) => { if (!w.fantasma) return; ctx.globalAlpha = 0.55; ctx.fillStyle = TP_AZUL; quadros(w).forEach((q) => { quadro(q); ctx.fill(); }); ctx.globalAlpha = 1; });
+    // paredes com uma ponta encostada na parede selecionada (sozinha)
+    const ligadasSel = new Map();
+    if (sel.length === 1 && sel[0][0] === "p" && (ferramenta === "selecionar" || ferramenta === "mover")) {
+      const si = +sel[0].slice(1), ws = paredes[si];
+      if (ws && tpLen(ws)) paredes.forEach((x, j) => {
+        if (j === si || !tpLen(x)) return;
+        const cr = Math.abs(((ws.b.x - ws.a.x) * (x.b.y - x.a.y) - (ws.b.y - ws.a.y) * (x.b.x - x.a.x)) / tpLen(ws) / tpLen(x));
+        if (cr < 0.02) return; // paralela (na mesma linha) não serve
+        for (const f of ["a", "b"]) if (tpDistSeg(x[f], ws.a, ws.b) < 2e-3) { ligadasSel.set(j, { i: si, fim: f }); break; }
+      });
+    }
     todas.forEach((w, i) => {
       const [ax, ay] = T(w.a), [bx, by] = T(w.b), marc = marcadas.has("p" + i);
       let ang = Math.atan2(by - ay, bx - ax); if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
@@ -79417,7 +79438,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       ctx.fillStyle = w.fantasma || marc ? TP_AZUL : "#6b7280";
       // a selecionada sozinha mostra o comprimento na cota temporária (clicável)
       const soCota = marc && sel.length === 1 && (ferramenta === "selecionar" || ferramenta === "mover");
+      // parede ligada na selecionada: a medida dela fica azul e clicável —
+      // digitar o novo comprimento desloca a parede selecionada
+      const lig = !w.fantasma && ligadasSel.get(i);
+      if (lig) ctx.fillStyle = "#0284c7";
       if (!w.fantasma && !soCota) ctx.fillText(tpFmt(tpLen(w)) + " m", 0, -(w.t * v.s / 2 + pena + 6 * dpr)); ctx.restore();
+      if (lig) { const yy = w.t * v.s / 2 + pena + 10 * dpr; cotasClic.current.push({ x: (ax + bx) / 2 + yy * Math.sin(ang), y: (ay + by) / 2 - yy * Math.cos(ang), r: 26 * dpr, parede: { tipo: "lig", i: lig.i, j: i, fim: lig.fim }, d: tpLen(w) }); }
       if (w.fantasma) etiqueta(w.a, w.b, `${tpFmt(tpLen(w))} m${angulo(w.a, w.b)}`);
     });
     // portas, janelas e vãos: símbolo de planta (NBR 6492 / convenção usual)
@@ -80968,7 +80994,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 style={{ position: "absolute", left: editNome.x, top: editNome.y, transform: "translate(-50%, -50%)", zIndex: 3, width: 130, padding: "3px 6px", border: "2px solid " + TP_AZUL, outline: "none", borderRadius: 6, fontSize: 13, fontWeight: 600, textAlign: "center", color: TP_AZUL, fontFamily: "inherit", boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }} />
             )}
             {editCota && (
-              <input ref={(el) => { if (el && document.activeElement !== el) { el.focus({ preventScroll: true }); el.select(); } }} inputMode="decimal" aria-label={editCota.parede ? (editCota.parede.tipo === "comp" ? "Comprimento da parede (m)" : "Distância até a parede (m)") : "Distância até a parede (m)"} value={editCota.txt}
+              <input ref={(el) => { if (el && document.activeElement !== el) { el.focus({ preventScroll: true }); el.select(); } }} inputMode="decimal" aria-label={editCota.parede ? (editCota.parede.tipo === "comp" || editCota.parede.tipo === "lig" ? "Comprimento da parede (m)" : "Distância até a parede (m)") : "Distância até a parede (m)"} value={editCota.txt}
                 onChange={(e) => setEditCota({ ...editCota, txt: e.target.value })}
                 onKeyDown={(e) => { if (e.key === "Enter") aplicarCota(editCota); if (e.key === "Escape") setEditCota(null); e.stopPropagation(); }}
                 onBlur={(e) => { if (Date.now() - editCota.t < 300) { const el = e.currentTarget; setTimeout(() => el.focus({ preventScroll: true }), 0); return; } setEditCota(null); }}
