@@ -2642,12 +2642,21 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const txt = tpFmt(Math.hypot(B.x - A.x, B.y - A.y)), fT = fonteAnot(3, 7, 14), kT = fT / (11.5 * dpr);
         ctx.font = `500 ${fT}px system-ui, sans-serif`; const tw = ctx.measureText(txt).width;
         const folga = Math.min(0.5, (tw / 2 + 10 * dpr) / L);
-        const fr = so.pos != null ? Math.max(folga, Math.min(1 - folga, so.pos)) : (so.canto === "ini" ? folga : 1 - folga);
+        const fr0 = so.pos != null ? Math.max(folga, Math.min(1 - folga, so.pos)) : (so.canto === "ini" ? folga : 1 - folga);
         let ang = Math.atan2(uy, ux); if (ang >= Math.PI / 2 - 1e-3 || ang < -Math.PI / 2 - 1e-3) ang -= Math.PI; if (ang < -Math.PI) ang += 2 * Math.PI;
         // o pé do número fica na linha (a 2,5 cm da face): "deitado" na parede
-        const dist = 4.6 * dpr * kT + Math.max(0, 2 * dpr - 0.025 * v.s), cx = ax + (bx - ax) * fr + lado.x * dist, cy = ay + (by - ay) * fr + lado.y * dist;
-        const cxT = caixaRot(cx, cy, ang, tw / 2 + 1 * dpr, fT * 0.45);
-        if (!marc && bate(cxT)) return null; // encavalou com nome/esquadria: sai
+        const dist = 4.6 * dpr * kT + Math.max(0, 2 * dpr - 0.025 * v.s);
+        const lugar = (f) => { const x = ax + (bx - ax) * f + lado.x * dist, y = ay + (by - ay) * f + lado.y * dist; return { fr: f, cx: x, cy: y, cxT: caixaRot(x, y, ang, tw / 2 + 1 * dpr, fT * 0.45) }; };
+        // encavalou com nome/esquadria: procura outro ponto da mesma parede
+        // (outra ponta, meio, entre eles) antes de desistir
+        let LG = lugar(fr0);
+        if (!marc && bate(LG.cxT)) {
+          const alt = [1 - fr0, 0.5, (fr0 + 0.5) / 2, (1 - fr0 + 0.5) / 2].map((f) => Math.max(folga, Math.min(1 - folga, f)));
+          LG = alt.map(lugar).find((q) => !bate(q.cxT)) || null;
+          // nenhum ponto livre deste lado: tenta a parede oposta do cômodo
+          if (!LG) return so.alt ? cotaDes(so.alt.A, so.alt.B, so.alt.lado, marc, null, { canto: so.canto === "ini" ? "fim" : "ini", pos: null, alt: null }) : null;
+        }
+        const { fr, cx, cy, cxT } = LG;
         ocupar(cxT);
         ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang); ctx.textAlign = "center"; ctx.textBaseline = "middle";
         if (marc) { ctx.fillStyle = "rgba(4,116,244,0.12)"; ctx.fillRect(-tw / 2 - 3 * dpr, -fT * 0.7, tw + 6 * dpr, fT * 1.4); }
@@ -2683,7 +2692,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         // ponta com porta/janela ou linha de separação: o número vai para a outra ponta
         { const sp = tpSegsSep(ars), rI = tpRuimFracao(p, q, sp, paredes, 0.06, 0.3), rF = tpRuimFracao(p, q, sp, paredes, 0.7, 0.94);
           if (canto === "ini" && rI > 0 && rF < rI) canto = "fim"; else if (canto === "fim" && rF > 0 && rI < rF) canto = "ini"; }
-        return { A: p, B: q, lado: g ? g.dentro : { x: nx, y: ny }, ext: null, so: { canto, pos: a.pos } };
+        // lado oposto do cômodo, para o número ir para lá se aqui não couber
+        const g2 = amb && tpCotaAmbiente(amb.pts, a.eixo, (a.desl || 0) >= 0 ? -0.025 : 0.025);
+        return { A: p, B: q, lado: g ? g.dentro : { x: nx, y: ny }, ext: null, so: { canto, pos: a.pos, alt: g2 ? { A: g2.pts[0], B: g2.pts[1], lado: g2.dentro } : null } };
       }
       const off = offTmp != null ? offTmp : (a.off || 0), A = { x: p.x + nx * off, y: p.y + ny * off }, B = { x: q.x + nx * off, y: q.y + ny * off };
       const sg = off < 0 ? -1 : 1, lado = { x: nx * sg, y: ny * sg };
