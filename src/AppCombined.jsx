@@ -78696,7 +78696,7 @@ function tpCotaAmbiente(pts, eixo, desl) {
   const S = pts.map((p) => ({ s: p.x * dir.x + p.y * dir.y, t: p.x * nor.x + p.y * nor.y }));
   const t0 = Math.min(...S.map((q) => q.t)), t1 = Math.max(...S.map((q) => q.t));
   if (t1 - t0 < 0.1) return null;
-  const d = desl == null ? -0.05 : desl, tl = Math.max(t0 + 0.02, Math.min(t1 - 0.02, d >= 0 ? t0 + d : t1 + d));
+  const d = desl == null ? -0.025 : desl, tl = Math.max(t0 + 0.01, Math.min(t1 - 0.01, d >= 0 ? t0 + d : t1 + d));
   const xs = [];
   for (let k = 0; k < S.length; k++) { const a = S[k], b = S[(k + 1) % S.length]; if ((a.t <= tl) !== (b.t <= tl)) xs.push(a.s + (tl - a.t) / (b.t - a.t) * (b.s - a.s)); }
   xs.sort((p, q) => p - q);
@@ -78708,7 +78708,7 @@ function tpCotaAmbiente(pts, eixo, desl) {
   return { pts: [P(m[0]), P(m[1])], nor, tl, t0, t1, dentro };
 }
 // As duas cotas que entram junto com um ambiente novo
-const tpCotasNovas = (amb) => ["h", "v"].map((eixo) => { const g = tpCotaAmbiente(amb.pts, eixo, -0.05); return g ? { tipo: "cota", amb: amb.id, eixo, desl: -0.05, pts: g.pts } : null; }).filter(Boolean);
+const tpCotasNovas = (amb) => ["h", "v"].map((eixo) => { const g = tpCotaAmbiente(amb.pts, eixo, -0.025); return g ? { tipo: "cota", amb: amb.id, eixo, desl: -0.025, pts: g.pts } : null; }).filter(Boolean);
 // Cotas de ambiente acompanham o contorno dele; ambiente apagado leva as cotas
 function tpAtualizarCotas(ars) {
   if (!ars.some((a) => a.tipo === "cota" && a.amb)) return ars;
@@ -80205,7 +80205,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const folga = (tw / 2 + 10 * dpr) / L;
         const fr = so.pos != null ? Math.max(folga, Math.min(1 - folga, so.pos)) : (so.canto === "ini" ? folga : 1 - folga);
         let ang = Math.atan2(uy, ux); if (ang >= Math.PI / 2 - 1e-3 || ang < -Math.PI / 2 - 1e-3) ang -= Math.PI; if (ang < -Math.PI) ang += 2 * Math.PI;
-        const dist = 9 * dpr, cx = ax + (bx - ax) * fr + lado.x * dist, cy = ay + (by - ay) * fr + lado.y * dist;
+        // o pé do número fica na linha (a 2,5 cm da face): "deitado" na parede
+        const dist = 4.6 * dpr + Math.max(0, 2 * dpr - 0.025 * v.s), cx = ax + (bx - ax) * fr + lado.x * dist, cy = ay + (by - ay) * fr + lado.y * dist;
         ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang); ctx.textAlign = "center"; ctx.textBaseline = "middle";
         if (marc) { ctx.fillStyle = "rgba(4,116,244,0.12)"; ctx.fillRect(-tw / 2 - 3 * dpr, -8 * dpr, tw + 6 * dpr, 16 * dpr); }
         ctx.fillStyle = cor; ctx.fillText(txt, 0, 0.5 * dpr); ctx.restore(); ctx.textBaseline = "alphabetic"; ctx.textAlign = "start";
@@ -80894,7 +80895,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const amb = orig.areas.find((x) => x.tipo === "ambiente" && x.id === c0.amb), g0 = amb && tpCotaAmbiente(amb.pts, c0.eixo, c0.desl); if (!g0) return;
         // fica referida à parede mais perto (de cima/esq. ou de baixo/dir.)
         const tl = g0.tl + ddx * g0.nor.x + ddy * g0.nor.y, r0 = tl - g0.t0, r1 = tl - g0.t1;
-        let desl = Math.abs(r0) <= Math.abs(r1) ? Math.max(0.05, Math.round(r0 / p5) * p5) : Math.min(-0.05, Math.round(r1 / p5) * p5);
+        let desl = Math.abs(r0) <= Math.abs(r1) ? Math.max(0.025, Math.round(r0 / p5) * p5) : Math.min(-0.025, Math.round(r1 / p5) * p5);
         desl = Math.round(desl * 1000) / 1000;
         const g1 = tpCotaAmbiente(amb.pts, c0.eixo, desl); if (!g1) return;
         // e corre ao longo da parede (fica onde soltar)
