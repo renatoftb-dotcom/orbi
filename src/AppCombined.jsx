@@ -79866,10 +79866,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       { const bx = caixaDe(a.pts); if (!marc && Math.max(wN, wA) > (bx.x1 - bx.x0) * v.s * 1.05) return; }
       // dois ambientes no mesmo espaço (ex.: apagou a parede entre eles): um nome
       // não cobre o outro — desce, mas só enquanto continuar dentro do cômodo
-      const dentroTela = (yy) => tpDentroPoli({ x: (lx - v.ox) / v.s, y: (yy - v.oy) / v.s }, a.pts);
-      const bateNome = (yy) => rotulosClic.current.some((q) => lx - meia < q.x1 && lx + meia > q.x0 && yy + y0r < q.y1 && yy + y1r > q.y0);
-      for (let k = 0; k < 6 && bateNome(ly) && dentroTela(ly + alt + 2 * dpr); k++) ly += alt + 2 * dpr;
-      if (!marc && bateNome(ly)) return;
+      const dentroTela = (xx, yy) => tpDentroPoli({ x: (xx - v.ox) / v.s, y: (yy - v.oy) / v.s }, a.pts);
+      const bateNome = (xx, yy) => rotulosClic.current.some((q) => xx - meia < q.x1 && xx + meia > q.x0 && yy + y0r < q.y1 && yy + y1r > q.y0);
+      if (bateNome(lx, ly)) {
+        const pa = alt + 2 * dpr, pl = 2 * meia + 4 * dpr, cands = [];
+        for (let k = 1; k <= 4; k++) cands.push([lx, ly + k * pa], [lx, ly - k * pa], [lx + k * pl / 2, ly], [lx - k * pl / 2, ly]);
+        const ok = cands.find(([xx, yy]) => dentroTela(xx, yy + y0r) && dentroTela(xx, yy + y1r) && dentroTela(xx - meia, yy) && dentroTela(xx + meia, yy) && !bateNome(xx, yy));
+        if (ok) [lx, ly] = ok; else if (!marc) return;
+      }
       rotulosClic.current.push({ ai: i, x0: lx - meia, x1: lx + meia, y0: ly + y0r, y1: ly + y1r, yNome: ly - dy });
       ocupar({ x0: lx - meia + 4 * dpr, x1: lx + meia - 4 * dpr, y0: ly + y0r, y1: ly + y1r });
       // selecionado: moldura discreta mostrando que o nome pode ser arrastado e editado
@@ -80149,13 +80153,25 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const pcx = cxw + ca * xL - sa * yc, pcy = cyw + sa * xL + ca * yc;
         // desenha depois das esquadrias e das cotas: se encavalar com elas, sai
         adiados.push(() => {
-          const cx = caixaRot(pcx, pcy, ang, twL / 2 + 2 * dpr, fL * 0.55);
-          if (!forte && bate(cx)) return;
-          ocupar(cx);
+          // lugar padrão; encavalou: outro lado da parede (se lá não for dentro de
+          // ambiente) e pontos deslocados ao longo dela; se nada servir, sai
+          const yOut = w.t * v.s / 2 + pena + 6 * dpr * kL + fL * 0.8;
+          const opcoes = [[xL, yL]];
+          if (!dsl) {
+            for (const k of [0.7, -0.7, 1.4, -1.4]) opcoes.push([xL + k * twL, yL]);
+            if (!tapadoPorCota(w, ang + Math.PI, twL / 2 / v.s, null)) { opcoes.push([xL, yOut]); for (const k of [0.7, -0.7]) opcoes.push([xL + k * twL, yOut]); }
+          }
+          const ca2 = Math.cos(ang), sa2 = Math.sin(ang);
+          const centro = ([x, y]) => { const yc2 = y - 4 * dpr * kL; return [cxw + ca2 * x - sa2 * yc2, cyw + sa2 * x + ca2 * yc2]; };
+          let esc = null;
+          for (const op of opcoes) { const [qx, qy] = centro(op), bx2 = caixaRot(qx, qy, ang, twL / 2 + 2 * dpr, fL * 0.55); if (forte || !bate(bx2)) { esc = { op, qx, qy, bx2 }; break; } }
+          if (!esc) return;
+          ocupar(esc.bx2);
+          const [xx, yy] = esc.op;
           ctx.save(); ctx.translate(cxw, cyw); ctx.rotate(ang); ctx.font = `600 ${fL}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.fillStyle = cor0;
-          if (selL) { ctx.save(); ctx.fillStyle = "rgba(4,116,244,0.12)"; ctx.fillRect(xL - twL / 2 - 3 * dpr, yL - fL, twL + 6 * dpr, fL * 1.33); ctx.restore(); }
-          ctx.fillText(txtL, xL, yL); ctx.restore(); ctx.textAlign = "start";
-          rotulosParede.current.push({ i, x: pcx, y: pcy, ang, meia: twL / 2 + 3 * dpr });
+          if (selL) { ctx.save(); ctx.fillStyle = "rgba(4,116,244,0.12)"; ctx.fillRect(xx - twL / 2 - 3 * dpr, yy - fL, twL + 6 * dpr, fL * 1.33); ctx.restore(); }
+          ctx.fillText(txtL, xx, yy); ctx.restore(); ctx.textAlign = "start";
+          rotulosParede.current.push({ i, x: esc.qx, y: esc.qy, ang, meia: twL / 2 + 3 * dpr });
         });
       }
       if (lig) { const yy = w.t * v.s / 2 + pena + 10 * dpr; cotasClic.current.push({ x: (ax + bx) / 2 + yy * Math.sin(ang), y: (ay + by) / 2 - yy * Math.cos(ang), r: 26 * dpr, parede: { tipo: "lig", i: lig.i, j: i, fim: lig.fim }, d: tpLen(w) }); }
@@ -80271,14 +80287,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         let angT = Math.atan2(sby - say, sbx - sax); if (angT >= Math.PI / 2 - 1e-3) angT -= Math.PI; else if (angT < -Math.PI / 2 - 1e-3) angT += Math.PI;
         const ca = Math.cos(angT), sa = Math.sin(angT), [cx0, cy0] = T(P(o.x, 0));
         // monta o rótulo (completo ou só o código), colado na esquadria
-        const montar = (soCod) => {
+        const montar = (soCod, var_ = {}) => {
           const l1 = soCod ? null : `${tpFmt(o.larg)}x${tpFmt(o.alt)}`, l2 = soCod ? null : (!porta || peit > 0.005 ? tpFmt(peit) : null);
           ctx.font = fC; const cw = ctx.measureText(cod).width;
           ctx.font = fN; const fw = l1 ? Math.max(ctx.measureText(l1).width, l2 ? ctx.measureText(l2).width : 0) : 0;
           const gap = l1 ? 5 * U : 0, Wt = porta ? Math.max(cw, fw) : cw + gap + fw;
           const Ht = (porta ? (l1 ? (l2 ? 39 : 27) : 13) : (l2 ? 27 : 13)) * U;
-          const offPx = h * v.s + 5 * U + Ht / 2 + ro.dn * v.s;
-          const tx = cx0 + nx * sg * offPx + ca * ro.ds * v.s, ty = cy0 + ny * sg * offPx + sa * ro.ds * v.s;
+          const offPx = h * v.s + 5 * U + Ht / 2 + ro.dn * v.s, sgV = var_.sg || sg, dsV = ro.ds * v.s + (var_.ds || 0);
+          const tx = cx0 + nx * sgV * offPx + ca * dsV, ty = cy0 + ny * sgV * offPx + sa * dsV;
           return { l1, l2, cw, fw, gap, Wt, Ht, tx, ty, caixa: caixaRot(tx, ty, angT, Wt / 2 + 3 * U, Ht / 2 + 2 * U) };
         };
         let R = (!lodEsqCod && !opts.marc) ? null : montar(!lodEsqMed && !opts.marc);
@@ -80291,8 +80307,19 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           if (ocupa(R) > vaoPx) { porTam(Math.max(6 * dpr, fE * vaoPx / ocupa(R))); R = montar(!R.l1); }
           if (R.l1 && ocupa(R) > vaoPx + 1) R = montar(true);
         }
-        // encavalou com outra anotação: tenta só o código; se ainda bater, sai
-        if (R && !opts.marc && bate(R.caixa)) { R = R.l1 ? montar(true) : R; if (bate(R.caixa)) R = null; }
+        // encavalou com outra anotação: desliza ao longo da parede (e, em parede
+        // interna, tenta o outro lado); depois só o código; se ainda bater, sai
+        if (R && !opts.marc && bate(R.caixa)) {
+          const soC = !R.l1, livre = !o.rotOff, vars = [];
+          if (livre) for (const k of [0.6, -0.6, 1.2, -1.2]) vars.push({ ds: k * R.Wt });
+          if (livre && !periferia) { vars.push({ sg: -sg }); for (const k of [0.6, -0.6]) vars.push({ sg: -sg, ds: k * R.Wt }); }
+          let achou = null;
+          for (const cod of soC ? [true] : [false, true]) {
+            for (const vv of [{}, ...vars]) { const r = montar(cod, vv); if (!bate(r.caixa)) { achou = r; break; } }
+            if (achou) break;
+          }
+          R = achou;
+        }
         if (R) {
           ocupar(R.caixa);
           const { l1, l2, cw, fw, gap, Wt, Ht, tx, ty } = R;
@@ -80377,20 +80404,30 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         if (!lodCotas && !marc) return null; // de longe a cota interna some (nível de detalhe)
         const txt = tpFmt(Math.hypot(B.x - A.x, B.y - A.y)), fT = fonteAnot(3, 7, 14), kT = fT / (11.5 * dpr);
         ctx.font = `500 ${fT}px system-ui, sans-serif`; const tw = ctx.measureText(txt).width;
-        const folga = Math.min(0.5, (tw / 2 + 10 * dpr) / L);
-        const fr0 = so.pos != null ? Math.max(folga, Math.min(1 - folga, so.pos)) : (so.canto === "ini" ? folga : 1 - folga);
         let ang = Math.atan2(uy, ux); if (ang >= Math.PI / 2 - 1e-3 || ang < -Math.PI / 2 - 1e-3) ang -= Math.PI; if (ang < -Math.PI) ang += 2 * Math.PI;
         // o pé do número fica na linha (a 2,5 cm da face): "deitado" na parede
         const dist = 4.6 * dpr * kT + Math.max(0, 2 * dpr - 0.025 * v.s);
-        const lugar = (f) => { const x = ax + (bx - ax) * f + lado.x * dist, y = ay + (by - ay) * f + lado.y * dist; return { fr: f, cx: x, cy: y, cxT: caixaRot(x, y, ang, tw / 2 + 1 * dpr, fT * 0.45) }; };
-        // encavalou com nome/esquadria: procura outro ponto da mesma parede
-        // (outra ponta, meio, entre eles) antes de desistir
-        let LG = lugar(fr0);
+        // pontos candidatos de uma parede (A→B): ponta preferida, outra ponta,
+        // meio e entre eles; "mais" afasta o número da parede (passa por baixo
+        // do rótulo de uma porta, por exemplo)
+        const candidatos = (pA, pB, ld, f0, mais) => {
+          const [qax, qay] = T(pA), [qbx, qby] = T(pB), Lq = Math.hypot(qbx - qax, qby - qay) || 1, fg = Math.min(0.5, (tw / 2 + 10 * dpr) / Lq);
+          return [f0, 1 - f0, 0.5, (f0 + 0.5) / 2, (1.5 - f0) / 2].map((f) => Math.max(fg, Math.min(1 - fg, f))).map((f) => {
+            const d = dist + mais, x = qax + (qbx - qax) * f + ld.x * d, y = qay + (qby - qay) * f + ld.y * d;
+            return { fr: f, cx: x, cy: y, cxT: caixaRot(x, y, ang, tw / 2 + 1 * dpr, fT * 0.45) };
+          });
+        };
+        const folga = Math.min(0.5, (tw / 2 + 10 * dpr) / L);
+        const fr0 = so.pos != null ? Math.max(folga, Math.min(1 - folga, so.pos)) : (so.canto === "ini" ? folga : 1 - folga);
+        let LG = candidatos(A, B, lado, fr0, 0)[0];
+        // encavalou com nome/esquadria: procura outro ponto desta parede, depois
+        // a parede oposta do cômodo, depois um pouco mais afastado da parede
         if (!marc && bate(LG.cxT)) {
-          const alt = [1 - fr0, 0.5, (fr0 + 0.5) / 2, (1 - fr0 + 0.5) / 2].map((f) => Math.max(folga, Math.min(1 - folga, f)));
-          LG = alt.map(lugar).find((q) => !bate(q.cxT)) || null;
-          // nenhum ponto livre deste lado: tenta a parede oposta do cômodo
-          if (!LG) return so.alt ? cotaDes(so.alt.A, so.alt.B, so.alt.lado, marc, null, { canto: so.canto === "ini" ? "fim" : "ini", pos: null, alt: null }) : null;
+          const op = so.alt, fO = so.canto === "ini" ? 0.9 : 0.1, passo = fT * 1.4;
+          const lista = [...candidatos(A, B, lado, fr0, 0), ...(op ? candidatos(op.A, op.B, op.lado, fO, 0) : []),
+            ...[1, 2, 3].flatMap((k) => [...candidatos(A, B, lado, fr0, k * passo), ...(op ? candidatos(op.A, op.B, op.lado, fO, k * passo) : [])])];
+          LG = lista.find((q) => !bate(q.cxT)) || null;
+          if (!LG) return null;
         }
         const { fr, cx, cy, cxT } = LG;
         ocupar(cxT);
