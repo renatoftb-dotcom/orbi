@@ -77831,6 +77831,7 @@ const TP_AREA_TIPOS = {
   terreno: { nome: "Terreno", esp: 0, cor3d: 0xcfe8c4 },
   ambiente: { nome: "Ambiente", esp: 0, cor3d: 0xffffff },
   separador: { nome: "Separador de ambiente", esp: 0, cor3d: 0xffffff },
+  cota: { nome: "Cota", esp: 0, cor3d: 0xffffff },
 };
 const tpEhPoli = (f) => f === "contrapiso" || f === "laje" || f === "telhado" || f === "terreno";
 // Área exata da união de polígonos (contorno simples): fatias verticais entre
@@ -78680,6 +78681,49 @@ const tpEsq = (id) => TP_ESQ.find((t) => t.id === id) || TP_ESQ[0];
 // Folhas: escolhidas nas propriedades (paramétrico, como família do Revit).
 // Porta de giro: 1 ou 2 folhas troca o tipo (porta_giro / porta_giro2).
 const TP_FOLHAS_OPC = { porta_giro: [1, 2], porta_giro2: [1, 2], porta_correr: [2, 3, 4, 6], janela_correr: [2, 3, 4], maxim_ar: [1, 2, 3], fixo: [1, 2, 3] };
+// Cota de ambiente (padrão de prancha): medida interna de face a face, numa
+// linha paralela à parede de referência, a "desl" metros dela (desl >= 0: a
+// partir da parede de cima/esquerda; < 0: a partir da de baixo/direita).
+// eixo "h" mede a largura, "v" a profundidade; ambiente girado segue o lado
+// mais comprido. Em ambiente em L, mede o trecho cheio naquela linha.
+function tpCotaAmbiente(pts, eixo, desl) {
+  if (!pts || pts.length < 3) return null;
+  let maior = 0, ang = 0;
+  for (let k = 0; k < pts.length; k++) { const p = pts[k], q = pts[(k + 1) % pts.length], l = Math.hypot(q.x - p.x, q.y - p.y); if (l > maior) { maior = l; ang = Math.atan2(q.y - p.y, q.x - p.x); } }
+  const qd = Math.PI / 2; ang = ((ang % qd) + qd) % qd; if (ang > qd / 2) ang -= qd;
+  const u = { x: Math.cos(ang), y: Math.sin(ang) }, w = { x: -u.y, y: u.x };
+  const dir = eixo === "v" ? w : u, nor = eixo === "v" ? u : w;
+  const S = pts.map((p) => ({ s: p.x * dir.x + p.y * dir.y, t: p.x * nor.x + p.y * nor.y }));
+  const t0 = Math.min(...S.map((q) => q.t)), t1 = Math.max(...S.map((q) => q.t));
+  if (t1 - t0 < 0.1) return null;
+  const d = desl == null ? -0.3 : desl, tl = Math.max(t0 + 0.02, Math.min(t1 - 0.02, d >= 0 ? t0 + d : t1 + d));
+  const xs = [];
+  for (let k = 0; k < S.length; k++) { const a = S[k], b = S[(k + 1) % S.length]; if ((a.t <= tl) !== (b.t <= tl)) xs.push(a.s + (tl - a.t) / (b.t - a.t) * (b.s - a.s)); }
+  xs.sort((p, q) => p - q);
+  let m = null; for (let k = 0; k + 1 < xs.length; k += 2) if (!m || xs[k + 1] - xs[k] > m[1] - m[0]) m = [xs[k], xs[k + 1]];
+  if (!m || m[1] - m[0] < 0.05) return null;
+  const R = (x) => Math.round(x * 1000) / 1000, P = (sv) => ({ x: R(sv * dir.x + tl * nor.x), y: R(sv * dir.y + tl * nor.y) });
+  // lado de dentro do ambiente (onde vai o número)
+  const dentro = d >= 0 ? nor : { x: -nor.x, y: -nor.y };
+  return { pts: [P(m[0]), P(m[1])], nor, tl, t0, t1, dentro };
+}
+// As duas cotas que entram junto com um ambiente novo
+const tpCotasNovas = (amb) => ["h", "v"].map((eixo) => { const g = tpCotaAmbiente(amb.pts, eixo, -0.3); return g ? { tipo: "cota", amb: amb.id, eixo, desl: -0.3, pts: g.pts } : null; }).filter(Boolean);
+// Cotas de ambiente acompanham o contorno dele; ambiente apagado leva as cotas
+function tpAtualizarCotas(ars) {
+  if (!ars.some((a) => a.tipo === "cota" && a.amb)) return ars;
+  let mudou = false; const out = [];
+  for (const a of ars) {
+    if (a.tipo !== "cota" || !a.amb) { out.push(a); continue; }
+    const amb = ars.find((x) => x.tipo === "ambiente" && x.id === a.amb);
+    if (!amb) { mudou = true; continue; }
+    const g = tpCotaAmbiente(amb.pts, a.eixo, a.desl);
+    if (!g || (a.pts && a.pts.length === 2 && g.pts.every((q, k) => Math.abs(q.x - a.pts[k].x) < 1e-6 && Math.abs(q.y - a.pts[k].y) < 1e-6))) { out.push(a); continue; }
+    mudou = true; out.push({ ...a, pts: g.pts });
+  }
+  return mudou ? out : ars;
+}
+const tpNovoIdAmb = () => "amb" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const tpFolhas = (o) => (o.folhas != null && !tpGiro(o.tipo) ? o.folhas : tpEsq(o.tipo).folhas);
 const tpGiro = (tipo) => tipo === "porta_giro" || tipo === "porta_giro2";
 function tpDistSeg(p, a, b) {
@@ -78900,6 +78944,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const three = useRef(null);
   const vista = useRef(null);
   const iconeEq = useRef(null);
+  const cotasDes = useRef([]);                     // cotas desenhadas neste quadro (mundo), para o clique
   const alcasEsq = useRef([]);                     // quadradinhos das pontas da esquadria selecionada (px do canvas)
   const ambientesFeitos = useRef(null);          // último par (paredes → ambientes) já calculado no arraste
   const rotulosClic = useRef([]);                // nomes dos ambientes na planta (px do canvas): clicar e arrastar move, clicar de novo edita
@@ -78952,7 +78997,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const excluirSelecao = () => {
     if (!sel.length) return;
     const fp = new Set(selP), fa = new Set(selA), fo = new Set(selO.map((x) => x.o.id));
-    mudar(paredes.filter((_, i) => !fp.has(i)).map((w) => ((w.ab || []).some((o) => fo.has(o.id)) ? { ...w, ab: w.ab.filter((o) => !fo.has(o.id)) } : w)), areas.filter((_, i) => !fa.has(i)));
+    mudar(paredes.filter((_, i) => !fp.has(i)).map((w) => ((w.ab || []).some((o) => fo.has(o.id)) ? { ...w, ab: w.ab.filter((o) => !fo.has(o.id)) } : w)), tpAtualizarCotas(areas.filter((_, i) => !fa.has(i))));
   };
   // Edita esquadrias por id; se alguma não couber mais, não muda nada e avisa
   const editarAberturas = (ids, fn) => {
@@ -79208,7 +79253,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const confirmarAmbiente = (nome) => {
     const n = String(nome || "").trim() || "Ambiente";
     const idx = areas.length;
-    mudar(null, [...areas, { tipo: "ambiente", nome: n, ponto: novoAmbiente.ponto, pts: novoAmbiente.pts }]);
+    const amb = { tipo: "ambiente", id: tpNovoIdAmb(), nome: n, ponto: novoAmbiente.ponto, pts: novoAmbiente.pts };
+    mudar(null, [...areas, amb, ...tpCotasNovas(amb)]);
     setNovoAmbiente(null);
     setTimeout(() => setSel(["a" + idx]), 0);
   };
@@ -79249,7 +79295,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // Ponto do traço: ímã nas pontas de paredes e áreas (vence a grade, para
   // fechar cantos com medidas digitadas) e, com Shift, trava na horizontal
   // ou vertical a partir do ponto anterior (ortogonal).
-  const baseTraco = () => (ancora && ancora.ret ? ancora.ret : ancora && ancora.arcoFim ? null : (ferramenta === "parede" || ferramenta === "separador") ? inicio : (poli.length ? poli[poli.length - 1] : null));
+  const baseTraco = () => (ancora && ancora.ret ? ancora.ret : ancora && ancora.arcoFim ? null : (ferramenta === "parede" || ferramenta === "separador" || ferramenta === "cota") ? inicio : (poli.length ? poli[poli.length - 1] : null));
   // Pontos de ímã. Além do eixo (pontas), cada parede oferece os cantos das
   // suas faces: nas pontas soltas, os 4 cantos do retângulo; onde duas paredes
   // se encontram, o cruzamento das faces — que dá a quina de fora e a de
@@ -79284,7 +79330,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     }
     // ambiente não serve de ímã: o contorno dele é calculado das paredes e
     // anda junto com elas num arraste (puxava a ponta para a posição anterior)
-    areas.forEach((a, ai) => { if (a.tipo !== "ambiente" && !(ign.areas && ign.areas.includes(ai))) (a.pts || []).forEach((q, k) => { if (!(ign.area === ai && (ign.vertices || []).includes(k))) out.push(q); }); });
+    areas.forEach((a, ai) => { if (a.tipo !== "ambiente" && a.tipo !== "cota" && !(ign.areas && ign.areas.includes(ai))) (a.pts || []).forEach((q, k) => { if (!(ign.area === ai && (ign.vertices || []).includes(k))) out.push(q); }); });
     out.push(...poli);
     return out;
   };
@@ -79446,7 +79492,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const c = planRef.current, v = vista.current; if (!c || !v || !c.width) return;
     const ctx = c.getContext("2d"), W = c.width, H = c.height, dpr = window.devicePixelRatio || 1;
     ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, W, H);
-    iconeEq.current = null; cotasClic.current = []; rotulosClic.current = []; alcasEsq.current = [];
+    iconeEq.current = null; cotasClic.current = []; rotulosClic.current = []; alcasEsq.current = []; cotasDes.current = [];
     const passo = v.s * TP_GRADE < 8 * dpr ? 1 : TP_GRADE;
     const xA = Math.floor(-v.ox / v.s), xB = Math.ceil((W - v.ox) / v.s), yA = Math.floor(-v.oy / v.s), yB = Math.ceil((H - v.oy) / v.s);
     ctx.lineWidth = 1;
@@ -79972,6 +80018,20 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         if (melhor) ligadasSel.set(j, { i: si, fim: melhor.f });
       });
     }
+    // cota de ambiente encostada na parede, do lado do comprimento dela: o
+    // comprimento sai (a cota já mede ali e os dois números ficariam um em cima do outro)
+    const linhasCotaAmb = areas.filter((a) => a.tipo === "cota" && a.amb && a.pts && a.pts.length === 2).map((a) => a.pts);
+    const tapadoPorCota = (w, ang) => {
+      if (!linhasCotaAmb.length) return false;
+      const mx = (w.a.x + w.b.x) / 2 + Math.sin(ang) * (w.t / 2 + 12 * dpr / v.s), my = (w.a.y + w.b.y) / 2 - Math.cos(ang) * (w.t / 2 + 12 * dpr / v.s);
+      const L = tpLen(w) || 1, ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
+      return linhasCotaAmb.some(([p, q]) => {
+        const l = Math.hypot(q.x - p.x, q.y - p.y) || 1, cx = (q.x - p.x) / l, cy = (q.y - p.y) / l;
+        if (Math.abs(ux * cy - uy * cx) > 0.05) return false;
+        const sp = (mx - p.x) * cx + (my - p.y) * cy, dn = Math.abs((mx - p.x) * -cy + (my - p.y) * cx);
+        return dn < 0.25 + 14 * dpr / v.s && sp > -0.2 && sp < l + 0.2;
+      });
+    };
     todas.forEach((w, i) => {
       const [ax, ay] = T(w.a), [bx, by] = T(w.b), marc = marcadas.has("p" + i);
       let ang = Math.atan2(by - ay, bx - ax); if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
@@ -79984,7 +80044,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       // digitar o novo comprimento desloca a parede selecionada
       const lig = !w.fantasma && ligadasSel.get(i);
       if (lig) ctx.fillStyle = "#0284c7";
-      if (!w.fantasma && !soCota) ctx.fillText(rotuloCurva.has(i) ? `curva ${tpFmt(rotuloCurva.get(i))} m` : tpFmt(tpLen(w)) + " m", 0, -(w.t * v.s / 2 + pena + 6 * dpr)); ctx.restore();
+      if (!w.fantasma && !soCota && (lig || marc || !tapadoPorCota(w, ang))) ctx.fillText(rotuloCurva.has(i) ? `curva ${tpFmt(rotuloCurva.get(i))} m` : tpFmt(tpLen(w)) + " m", 0, -(w.t * v.s / 2 + pena + 6 * dpr)); ctx.restore();
       if (lig) { const yy = w.t * v.s / 2 + pena + 10 * dpr; cotasClic.current.push({ x: (ax + bx) / 2 + yy * Math.sin(ang), y: (ay + by) / 2 - yy * Math.cos(ang), r: 26 * dpr, parede: { tipo: "lig", i: lig.i, j: i, fim: lig.fim }, d: tpLen(w) }); }
       if (w.fantasma) etiqueta(w.a, w.b, `${tpFmt(tpLen(w))} m${angulo(w.a, w.b)}`);
     });
@@ -80136,6 +80196,54 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         desenharEsq(w, o, marc ? TP_AZUL : "#111827", { marc: marcadas.has("o" + o.id), codigo: quadroPl.codigoDe.get(o.id), cotas: marcadas.has("o" + o.id) && sel.length === 1, eq: marcadas.has("o" + o.id) && sel.length === 1, i });
       });
     });
+    // cotas do desenho (padrão de prancha): linha fina passando um pouco das
+    // pontas, traço oblíquo a 45° em cada ponta e o número deitado no sentido
+    // da medida, do lado de dentro (cota de ambiente) ou do lado da linha
+    const cotaDes = (A, B, lado, marc, ext) => {
+      const [ax, ay] = T(A), [bx, by] = T(B), L = Math.hypot(bx - ax, by - ay); if (L < 4 * dpr) return null;
+      const cor = marc ? TP_AZUL : "#2b2b2b", ux = (bx - ax) / L, uy = (by - ay) / L, pas = 3 * dpr;
+      ctx.strokeStyle = cor; ctx.lineWidth = 1 * dpr; ctx.beginPath();
+      if (ext) for (const [p, q] of ext) { const [px, py] = T(p), [qx, qy] = T(q); ctx.moveTo(px, py); ctx.lineTo(qx, qy); }
+      ctx.moveTo(ax - ux * pas, ay - uy * pas); ctx.lineTo(bx + ux * pas, by + uy * pas); ctx.stroke();
+      const tk = 4.5 * dpr, rx = (ux - uy) * Math.SQRT1_2 * tk, ry = (ux + uy) * Math.SQRT1_2 * tk;
+      ctx.lineWidth = 1.7 * dpr; ctx.beginPath(); for (const [x, y] of [[ax, ay], [bx, by]]) { ctx.moveTo(x - rx, y - ry); ctx.lineTo(x + rx, y + ry); } ctx.stroke();
+      const txt = tpFmt(Math.hypot(B.x - A.x, B.y - A.y));
+      ctx.font = `500 ${11.5 * dpr}px system-ui, sans-serif`; const tw = ctx.measureText(txt).width;
+      if (L < 16 * dpr) return { A, B, tc: { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 }, r: 0 };
+      let ang = Math.atan2(uy, ux); if (ang > Math.PI / 2 + 1e-3 || ang < -Math.PI / 2 + 1e-3) ang += Math.PI;
+      const dist = 9 * dpr, cx = (ax + bx) / 2 + lado.x * dist, cy = (ay + by) / 2 + lado.y * dist;
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(255,255,255,0.92)"; ctx.lineWidth = 3.5 * dpr; ctx.strokeText(txt, 0, 0.5 * dpr);
+      ctx.fillStyle = cor; ctx.fillText(txt, 0, 0.5 * dpr); ctx.restore(); ctx.textBaseline = "alphabetic"; ctx.textAlign = "start";
+      return { A, B, tc: { x: (cx - v.ox) / v.s, y: (cy - v.oy) / v.s }, r: (tw / 2 + 2 * dpr) / v.s };
+    };
+    const geoCota = (a, ars, offTmp) => {
+      const [p, q] = a.pts, l = Math.hypot(q.x - p.x, q.y - p.y); if (l < 1e-6) return null;
+      const nx = -(q.y - p.y) / l, ny = (q.x - p.x) / l;
+      if (a.amb) {
+        const amb = ars.find((x) => x.tipo === "ambiente" && x.id === a.amb), g = amb && tpCotaAmbiente(amb.pts, a.eixo, a.desl);
+        return { A: p, B: q, lado: g ? g.dentro : { x: nx, y: ny }, ext: null };
+      }
+      const off = offTmp != null ? offTmp : (a.off || 0), A = { x: p.x + nx * off, y: p.y + ny * off }, B = { x: q.x + nx * off, y: q.y + ny * off };
+      const sg = off < 0 ? -1 : 1, lado = { x: nx * sg, y: ny * sg };
+      let ext = null;
+      if (Math.abs(off) * v.s > 6 * dpr) { const gp = 3 * dpr / v.s, ps = 4 * dpr / v.s, E = (o, d) => ({ x: o.x + lado.x * d, y: o.y + lado.y * d }); ext = [[E(p, gp), E(A, ps)], [E(q, gp), E(B, ps)]]; }
+      return { A, B, lado, ext };
+    };
+    areas.forEach((a, i) => {
+      if (a.tipo !== "cota" || !a.pts || a.pts.length !== 2) return;
+      const gc = geoCota(a, areas); if (!gc) return;
+      const r = cotaDes(gc.A, gc.B, gc.lado, marcadas.has("a" + i), gc.ext);
+      if (r) cotasDes.current.push({ ...r, ai: i });
+    });
+    if (ferramenta === "cota" && hover) {
+      if (ancora && ancora.cotaB) {
+        const p = ancora.cotaA, q = ancora.cotaB, l = Math.hypot(q.x - p.x, q.y - p.y) || 1, off = (hover.x - p.x) * -(q.y - p.y) / l + (hover.y - p.y) * (q.x - p.x) / l;
+        const gc = geoCota({ pts: [p, q] }, areas, off); if (gc) cotaDes(gc.A, gc.B, gc.lado, true, gc.ext);
+      } else if (inicio && (hover.x !== inicio.x || hover.y !== inicio.y)) {
+        const gc = geoCota({ pts: [inicio, hover] }, areas, 0); if (gc) cotaDes(gc.A, gc.B, gc.lado, true, null);
+      }
+    }
     // parede selecionada sozinha: cotas temporárias (comprimento, vão até a
     // próxima parede na ponta solta e vão livre até as paralelas). Clicar no
     // número e digitar move ou estica a parede selecionada.
@@ -80220,7 +80328,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // arrastando alça de uma área: medida de todos os lados
     if (gesto.current && gesto.current.grip && gesto.current.moveu && gesto.current.grip.ai != null) {
       const ar = areas[gesto.current.grip.ai];
-      if (ar && ar.pts) ar.pts.forEach((q, k) => { const r = ar.pts[(k + 1) % ar.pts.length]; etiqueta(q, r, tpFmt(Math.hypot(r.x - q.x, r.y - q.y)) + " m"); });
+      if (ar && ar.pts && ar.tipo !== "cota") ar.pts.forEach((q, k) => { const r = ar.pts[(k + 1) % ar.pts.length]; etiqueta(q, r, tpFmt(Math.hypot(r.x - q.x, r.y - q.y)) + " m"); });
     }
     if (hover && (ferramenta !== "selecionar" || (gesto.current && gesto.current.grip)) && ferramenta !== "mover") {
       if (hover.ima) { const [x, y] = T(hover); ctx.strokeStyle = "#16a34a"; ctx.lineWidth = 2 * dpr; ctx.strokeRect(x - 6 * dpr, y - 6 * dpr, 12 * dpr, 12 * dpr); }
@@ -80232,9 +80340,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const gcS = tpGruposCurva(paredes), cmS = tpParesPonta(paredes);
       for (const i of selP) for (const f of ["a", "b"]) { if (gcS[i] >= 0 && cmS[i][f] && gcS[cmS[i][f].j] === gcS[i]) continue; quadradinho(paredes[i][f]); }
     }
-    for (const i of selA) if (areas[i].tipo !== "ambiente") areas[i].pts.forEach(quadradinho);
+    for (const i of selA) if (areas[i].tipo !== "ambiente" && !(areas[i].tipo === "cota" && areas[i].amb)) areas[i].pts.forEach(quadradinho);
     // editar contorno: com uma área só selecionada, bolinhas no meio de cada lado
-    if (selA.length === 1 && !selP.length && areas[selA[0]].tipo !== "ambiente") {
+    if (selA.length === 1 && !selP.length && areas[selA[0]].tipo !== "ambiente" && areas[selA[0]].tipo !== "cota") {
       const pts = areas[selA[0]].pts;
       pts.forEach((q, k) => { const r = pts[(k + 1) % pts.length]; const [x, y] = T({ x: (q.x + r.x) / 2, y: (q.y + r.y) / 2 }); ctx.fillStyle = TP_AZUL; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.arc(x, y, 6 * dpr, 0, 7); ctx.fill(); ctx.stroke(); });
     }
@@ -80468,7 +80576,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (JSON.stringify(pts) === JSON.stringify(a.pts) && !!a.aberto === aberto) return a;
       mudou = true; return { ...a, pts, aberto };
     });
-    if (mudou) setAreas(novas);
+    const comCotas = tpAtualizarCotas(novas);
+    if (mudou || comCotas !== novas) setAreas(comCotas);
     // Depende também do contorno atual dos ambientes: durante um arraste cada
     // quadro reaplica o estado de origem (com o contorno antigo); se o último
     // quadro repetir a posição, só as linhas não mudariam e o contorno velho
@@ -80537,7 +80646,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const t = tecla.toLowerCase();
         if (t === "z" || t === "f") { ajustar(); return; } // ZF no Revit / F no SketchUp
         if (t === "d" || t === "j") { trocarFerramenta("esquadria"); setTipoEsq(t === "d" ? "porta_giro" : "janela_correr"); return; } // DR / WN no Revit
-        const f = { v: "selecionar", p: "parede", c: "contrapiso", l: "laje", t: "telhado", r: "terreno", a: "ambiente", s: "separador", h: "mover" }[t];
+        const f = { v: "selecionar", p: "parede", c: "contrapiso", l: "laje", t: "telhado", r: "terreno", a: "ambiente", s: "separador", k: "cota", h: "mover" }[t];
         if (f) trocarFerramenta(f);
       }
     };
@@ -80562,6 +80671,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const t = l2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0;
     return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
   };
+  // cota do desenho embaixo do cursor (linha ou número)
+  const cotaNoPonto = (d) => {
+    const v = vista.current; if (!v) return null;
+    const p = paraMundoLivre(d), tol = 7 * (window.devicePixelRatio || 1) / v.s;
+    let melhor = null, menor = Infinity;
+    for (const c of cotasDes.current) { if (!areas[c.ai] || areas[c.ai].tipo !== "cota") continue; const dd = Math.min(distSeg(p, c.A, c.B), Math.max(0, Math.hypot(p.x - c.tc.x, p.y - c.tc.y) - c.r)); if (dd <= tol && dd < menor) { menor = dd; melhor = "a" + c.ai; } }
+    return melhor;
+  };
   const elementoNoPonto = (d) => {
     const v = vista.current, p = paraMundoLivre(d), tol = 7 * (window.devicePixelRatio || 1) / v.s;
     let melhor = null, menor = Infinity;
@@ -80578,6 +80695,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     }
     paredes.forEach((w, i) => { const dd = distSeg(p, w.a, w.b); if (dd <= Math.max(w.t / 2, tol) && dd < menor) { menor = dd; melhor = "p" + i; } });
     if (melhor) return melhor;
+    const kc = cotaNoPonto(d); if (kc) return kc;
     areas.forEach((a, i) => { if (a.tipo === "separador" && a.pts && a.pts.length === 2) { const dd = distSeg(p, a.pts[0], a.pts[1]); if (dd <= tol && dd < menor) { menor = dd; melhor = "a" + i; } } });
     if (melhor) return melhor;
     // área: a menor que contém o ponto (laje e contrapiso iguais: a laje, que está por cima)
@@ -80602,9 +80720,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const v = vista.current; if (!v) return null;
     const tol = 10 * (window.devicePixelRatio || 1);
     const perto = (q) => Math.hypot(q.x * v.s + v.ox - d.x, q.y * v.s + v.oy - d.y) <= tol;
-    if (selA.length === 1 && !selP.length && areas[selA[0]].tipo !== "ambiente") {
+    if (selA.length === 1 && !selP.length && areas[selA[0]].tipo !== "ambiente" && !(areas[selA[0]].tipo === "cota" && areas[selA[0]].amb)) {
       const ai = selA[0], pts = areas[ai].pts;
       for (let k = 0; k < pts.length; k++) if (perto(pts[k])) return { tipo: "vertice", ai, k };
+      if (areas[ai].tipo === "cota") return null;
       for (let k = 0; k < pts.length; k++) { const r = pts[(k + 1) % pts.length]; if (perto({ x: (pts[k].x + r.x) / 2, y: (pts[k].y + r.y) / 2 })) return { tipo: "lado", ai, k }; }
     }
     if (selP.length === 1 && !selA.length) {
@@ -80633,7 +80752,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // ambientes ficam com o último contorno calculado.
     const g = gesto.current, agora = performance.now();
     if (g && g.moveu && !g.forcarAmb && g.ambUlt && agora - g.tAmb < 120) {
-      const out = ars.map((a, i) => { const u = g.ambUlt[i]; return a.tipo === "ambiente" && u && u.tipo === "ambiente" ? { ...a, pts: u.pts, aberto: u.aberto } : a; });
+      const out = tpAtualizarCotas(ars.map((a, i) => { const u = g.ambUlt[i]; return a.tipo === "ambiente" && u && u.tipo === "ambiente" ? { ...a, pts: u.pts, aberto: u.aberto } : a; }));
       ambientesFeitos.current = { ps, out };
       return out;
     }
@@ -80654,11 +80773,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       for (const q of a.pts) { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); }
       return x1 < caixa.x0 || x0 > caixa.x1 || y1 < caixa.y0 || y0 > caixa.y1;
     };
-    const out = ars.map((a) => {
+    const out1 = ars.map((a) => {
       if (a.tipo !== "ambiente" || !a.ponto || longe(a)) return a;
       const det = tpDetectarAmbiente(ps, a.ponto, seps);
       return det && !det.aberto ? { ...a, pts: det.pts, aberto: false } : { ...a, aberto: true };
-    });
+    }), out = tpAtualizarCotas(out1);
     ambientesFeitos.current = { ps, out };
     return out;
   };
@@ -80754,6 +80873,26 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const q = paraMundoLivre(devPx({ clientX: e.clientX + al.off.x, clientY: e.clientY + al.off.y }));
       if (!tpDentroPoli(q, a.pts)) return;
       setAreas(orig.areas.map((x, i) => (i === al.ai ? { ...x, rotulo: { x: r3(q.x), y: r3(q.y) } } : x)));
+      return;
+    }
+    if (al.tipo === "cota") {
+      if (!sel.includes(al.chave)) setSel([al.chave]);
+      const c0 = orig.areas[al.ai]; if (!c0 || !c0.pts) return;
+      const pt = paraMundoLivre(devPx(e)), ddx = pt.x - al.p0.x, ddy = pt.y - al.p0.y, p5 = Math.max(0.01, passoZoom());
+      let nc;
+      if (c0.amb) {
+        const amb = orig.areas.find((x) => x.tipo === "ambiente" && x.id === c0.amb), g0 = amb && tpCotaAmbiente(amb.pts, c0.eixo, c0.desl); if (!g0) return;
+        // fica referida à parede mais perto (de cima/esq. ou de baixo/dir.)
+        const tl = g0.tl + ddx * g0.nor.x + ddy * g0.nor.y, r0 = tl - g0.t0, r1 = tl - g0.t1;
+        let desl = Math.abs(r0) <= Math.abs(r1) ? Math.max(p5, Math.round(r0 / p5) * p5) : Math.min(-p5, Math.round(r1 / p5) * p5);
+        desl = Math.round(desl * 1000) / 1000;
+        const g1 = tpCotaAmbiente(amb.pts, c0.eixo, desl); if (!g1) return;
+        nc = { ...c0, desl, pts: g1.pts };
+      } else {
+        const [a, b] = c0.pts, l = Math.hypot(b.x - a.x, b.y - a.y) || 1, nx = -(b.y - a.y) / l, ny = (b.x - a.x) / l;
+        nc = { ...c0, off: Math.round(Math.round(((c0.off || 0) + ddx * nx + ddy * ny) / p5) * p5 * 1000) / 1000 };
+      }
+      setAreas(orig.areas.map((x, i) => (i === al.ai ? nc : x)));
       return;
     }
     if (al.tipo === "largEsq") {
@@ -80920,6 +81059,13 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         setEditCota({ x: Math.max(44, Math.min(rc.width - 44, cq.x / k)), y: Math.max(18, Math.min(rc.height - 18, cq.y / k)), lado: cq.lado, id: cq.id, parede: cq.parede, larg: cq.larg, txt: tpFmt(cq.d), t: Date.now() });
         return;
       }
+      // cota: arrastar afasta/aproxima a linha (na perpendicular), como no Revit.
+      // Vem antes do nome do ambiente: a linha é fina e o nome é um alvo grande.
+      const kc = !e.ctrlKey && !e.metaKey && !e.shiftKey && cotaNoPonto(d);
+      if (kc) {
+        gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: { tipo: "cota", chave: kc, ai: +kc.slice(1), p0: paraMundoLivre(d) }, orig: { paredes, areas } };
+        e.currentTarget.setPointerCapture(e.pointerId); return;
+      }
       // nome do ambiente: apertar e arrastar move o nome; clicar de novo nele
       // (já selecionado) abre a edição do nome. A área não se edita: é calculada.
       const rq = !e.ctrlKey && !e.metaKey && !e.shiftKey && [...rotulosClic.current].reverse().find((q) => d.x >= q.x0 && d.x <= q.x1 && d.y >= q.y0 && d.y <= q.y1);
@@ -80963,7 +81109,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // Com uma ferramenta de desenho ativa e nenhum traço em andamento, apertar
     // em cima de uma parede ou linha de separação e ARRASTAR move o elemento
     // (sem precisar trocar para Selecionar). Só clicar continua desenhando.
-    if (e.button === 0 && ferramenta !== "selecionar" && ferramenta !== "mover" && ferramenta !== "ambiente" && ferramenta !== "esquadria" && !poli.length && !ancora) {
+    if (e.button === 0 && ferramenta !== "selecionar" && ferramenta !== "mover" && ferramenta !== "ambiente" && ferramenta !== "esquadria" && ferramenta !== "cota" && !poli.length && !ancora) {
       const k = elementoNoPonto(d);
       const idx = k ? +k.slice(1) : -1;
       if (k && (k[0] === "p" || (areas[idx] && areas[idx].tipo === "separador"))) {
@@ -81008,7 +81154,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         setCaixa({ x0: g.x0, y0: g.y0, x1: d.x, y1: d.y }); return;
       }
     }
-    if (ferramenta === "parede" || ferramenta === "separador" || tpEhPoli(ferramenta)) setHover(pontoDoCursor(e));
+    if (ferramenta === "parede" || ferramenta === "separador" || ferramenta === "cota" || tpEhPoli(ferramenta)) setHover(pontoDoCursor(e));
     if (ferramenta === "esquadria") setPreviaEsq(previaEsqEm(paraMundoLivre(d)));
   };
   const planUp = (e) => {
@@ -81022,7 +81168,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       // posição final com tudo recalculado (ambientes e análise)
       if (g.moveu && g.ultimo) { g.forcarAmb = true; arrastarAlca(g.ultimo, g); }
       if (g.moveu) { historico.current.push(g.orig); if (historico.current.length > 200) historico.current.shift(); futuro.current = []; }
-      else if (g.grip.tipo === "mover" || g.grip.tipo === "abertura") aplicarSelecao([g.grip.chave], g); // só clicou: seleciona
+      else if (g.grip.tipo === "mover" || g.grip.tipo === "abertura" || g.grip.tipo === "cota") aplicarSelecao([g.grip.chave], g); // só clicou: seleciona
       else if (g.grip.tipo === "rotulo" && g.grip.ja) abrirEditNome(g.grip.ai, e); // clicou no nome já selecionado: edita
       setHover(null); return;
     }
@@ -81039,7 +81185,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         paredes.forEach((w) => { const L = tpLen(w); if (L) for (const o of tpAbsVisiveis(w)) if (dentro({ x: w.a.x + (w.b.x - w.a.x) / L * o.x, y: w.a.y + (w.b.y - w.a.y) / L * o.x })) achadas.push("o" + o.id); });
         areas.forEach((ar, i) => {
           const pts = ar.pts || [];
-          if (ar.tipo === "separador" && pts.length === 2) { if (cruzando ? segCruzaRet(pts[0], pts[1], r) : (dentro(pts[0]) && dentro(pts[1]))) achadas.push("a" + i); return; }
+          if ((ar.tipo === "separador" || ar.tipo === "cota") && pts.length === 2) { if (cruzando ? segCruzaRet(pts[0], pts[1], r) : (dentro(pts[0]) && dentro(pts[1]))) achadas.push("a" + i); return; }
           if (pts.length < 3) return;
           const ok = cruzando
             ? pts.some((p, k) => segCruzaRet(p, pts[(k + 1) % pts.length], r)) || tpDentroPoli({ x: r.x0, y: r.y0 }, pts)
@@ -81058,6 +81204,18 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       return;
     }
     if (ferramenta === "ambiente") { inserirAmbienteEm(paraMundoLivre(devPx(e))); return; }
+    if (ferramenta === "cota") {
+      // 1º e 2º cliques: os pontos medidos; 3º: onde fica a linha de cota
+      const pc = pontoDoCursor(e), p2 = limpo(pc); setHover(pc);
+      if (ancora && ancora.cotaB) {
+        const a = ancora.cotaA, b = ancora.cotaB, l = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+        const off = Math.round(((p2.x - a.x) * -(b.y - a.y) / l + (p2.y - a.y) * (b.x - a.x) / l) * 1000) / 1000;
+        mudar(null, [...areas, { tipo: "cota", pts: [a, b], off }]); setAncora(null); return;
+      }
+      if (!inicio) { setInicio(p2); return; }
+      if (p2.x === inicio.x && p2.y === inicio.y) return;
+      setAncora({ cotaA: inicio, cotaB: p2 }); setInicio(null); return;
+    }
     if (ferramenta === "esquadria") { setDigitado(""); colocarEsquadria(previaEsqEm(paraMundoLivre(devPx(e)))); return; }
     if (ferramenta === "separador") {
       const p2 = limpo(pontoDoCursor(e)); setHover(pontoDoCursor(e));
@@ -81210,6 +81368,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     { id: "ambiente", rotulo: "Ambiente", dica: "Ambiente (A): clique dentro de um cômodo fechado por paredes" },
     { id: "separador", rotulo: "Separador", dica: "Separador de ambiente (S): linha que divide ambientes sem parede, como cozinha integrada" },
     { id: "esquadria", rotulo: "Porta/Janela", dica: "Porta (D), janela (J) e vão: passe o cursor na parede e clique. Espaço inverte a mão" },
+    { id: "cota", rotulo: "Cota", dica: "Cota (K): clique os dois pontos a medir e depois onde fica a linha" },
     { id: "mover", rotulo: "Mover", dica: "Mover a vista (H)" },
   ];
   const MODOS = [{ id: "planta", rotulo: "Planta" }, { id: "ambos", rotulo: "Planta + 3D" }, { id: "3d", rotulo: "3D" }];
@@ -81218,6 +81377,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const desenhoAtivo = ferramenta === "parede" || tpEhPoli(ferramenta);
   const status = (ferramenta === "separador" && dividir) ? `Dividindo "${(areas[dividir.ai] || {}).nome || "ambiente"}": clique de uma parede até a outra (pode quebrar a linha). Esc cancela.`
     : ferramenta === "separador" ? (inicio ? "Clique o fim da linha. Esc cancela." : "Separador: linha que divide ambientes sem parede. Clique de uma parede até a outra.")
+    : ferramenta === "cota" ? (ancora && ancora.cotaB ? "Clique onde fica a linha de cota. Esc cancela." : inicio ? "Clique o segundo ponto a medir. Esc cancela." : "Cota: clique o primeiro ponto a medir (gruda nas quinas e faces das paredes).")
     : ferramenta === "ambiente" ? "Clique dentro de um cômodo fechado por paredes para criar o ambiente (nome e área)."
     : ferramenta === "esquadria" ? (() => {
         const t = tpEsq(tipoEsq), dm = dimsEsq[tipoEsq] || t, nome = `${t.rotulo} ${tpFmt(dm.larg)} × ${tpFmt(dm.alt)}`;
@@ -81232,6 +81392,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         : "Retângulo: clique o primeiro canto.")
     : (desenhoAtivo && modoTraco === "arco") ? (ancora && ancora.arcoFim ? "Mova para curvar e clique um ponto da curva. Esc cancela." : ((ferramenta === "parede" ? inicio : poli.length) ? "Arco: clique o ponto final." : "Arco: clique o ponto inicial."))
     : (selA.length === 1 && !selP.length && ferramenta === "selecionar" && areas[selA[0]].tipo === "ambiente") ? "Ambiente: arraste o nome para mudar de lugar; clique no nome para editar. A área é calculada pelas paredes."
+    : (selA.length === 1 && !selP.length && ferramenta === "selecionar" && areas[selA[0]].tipo === "cota") ? (areas[selA[0]].amb ? "Cota do ambiente: arraste para afastar ou aproximar da parede; acompanha o ambiente. Delete apaga." : "Cota: arraste a linha para afastar; arraste os quadradinhos para mudar os pontos medidos. Delete apaga.")
     : (selA.length === 1 && !selP.length && ferramenta === "selecionar") ? "Editar contorno: arraste os quadrados (cantos) ou as bolinhas (lados). O cursor gruda nas quinas das paredes (quadrado verde)."
     : (selO.length === 1 && sel.length === 1 && ferramenta === "selecionar") ? "Arraste para mover (até para outra parede); arraste os quadradinhos das pontas para mudar a largura. Clique na cota para digitar a medida; EQ centraliza. Espaço inverte a mão."
     : (selP.length === 1 && !selA.length && ferramenta === "selecionar") ? "Quadradinho branco: estica só esta parede (solta do canto). Sem selecionar, arrastar a ponta leva as paredes ligadas. Delete exclui."
@@ -81353,6 +81514,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: a.aberto ? "#92400e" : "#4b5563", lineHeight: 1.4 }}>
                 {a.aberto ? "As paredes em volta não fecham mais este cômodo; a área mostrada é a última válida." : "Área pela face interna das paredes. Mexeu nas paredes, ela se refaz sozinha."}
               </div>
+              {!(a.id && areas.some((x) => x.tipo === "cota" && x.amb === a.id)) && (
+                <button style={{ ...btn, gridColumn: "1 / -1", minHeight: 30, padding: "4px 8px", fontSize: 12.5 }}
+                  onClick={() => { const id = a.id || tpNovoIdAmb(), am = { ...a, id }; mudar(null, [...areas.map((x, i) => (i === ai ? am : x)), ...tpCotasNovas(am)]); }}>
+                  Inserir cotas do ambiente
+                </button>
+              )}
             </div>
           );
         })()}
@@ -81402,7 +81569,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             </div>
           );
         })()}
-        {selA.length > 0 && !selP.length && !(selA.length === 1 && ["telhado", "ambiente", "separador"].includes(areas[selA[0]].tipo)) && (
+        {selA.length === 1 && !selP.length && areas[selA[0]].tipo === "cota" && (() => {
+          const c = areas[selA[0]], m = c.pts && c.pts.length === 2 ? Math.hypot(c.pts[1].x - c.pts[0].x, c.pts[1].y - c.pts[0].y) : 0;
+          return (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+              <TpCampo id="tp-cota-med" rotulo="Medida (m)" valor={m} somenteLeitura onConfirmar={() => {}} />
+              <div style={{ fontSize: 11.5, color: "#4b5563", lineHeight: 1.4 }}>{c.amb ? "Cota do ambiente: mede de face a face e acompanha as paredes. Arraste para afastar ou aproximar da parede." : "Arraste a linha para afastar; os quadradinhos mudam os pontos medidos."}</div>
+              <button style={{ ...btn, minHeight: 30, padding: "4px 8px", fontSize: 12.5, color: "#b91c1c" }} onClick={excluirSelecao}>Excluir cota</button>
+            </div>
+          );
+        })()}
+        {selA.length > 0 && !selP.length && !(selA.length === 1 && ["telhado", "ambiente", "separador", "cota"].includes(areas[selA[0]].tipo)) && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             {selA.length === 1 && <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#4b5563", lineHeight: 1.4, background: "#eef5ff", borderRadius: 6, padding: "6px 8px" }}>Para mudar o contorno, arraste na planta os quadrados (cantos) ou as bolinhas (lados).</div>}
             {selA.length === 1 && <TpCampo id="tp-a-area" rotulo={furadoArea(areas[selA[0]]) ? "Área sem a casa (m²)" : "Área (m²)"} valor={areaLiquida(areas[selA[0]])} somenteLeitura onConfirmar={() => {}} />}
@@ -81844,7 +82021,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               {desenhando && linha("l0")}
               {sel.length > 0 && item(`Excluir${sel.length > 1 ? ` (${sel.length})` : ""}`, "Delete", excluirSelecao, { perigo: true })}
               {sel.length > 0 && item("Editar propriedades", null, editarPropriedades, { desativado: selP.length > 0 && selA.length > 0 })}
-              {selA.length === 1 && !selP.length && item("Editar contorno", null, () => { setFerramenta("selecionar"); if (modo === "3d") setModo("ambos"); })}
+              {selA.length === 1 && !selP.length && areas[selA[0]].tipo !== "cota" && item("Editar contorno", null, () => { setFerramenta("selecionar"); if (modo === "3d") setModo("ambos"); })}
               {selO.length > 0 && item("Inverter mão", "Espaço", () => inverterAberturas("mao"))}
               {selO.length > 0 && item("Inverter lado de abertura", "Shift+Espaço", () => inverterAberturas("lado"))}
               {sel.length > 0 && item("Limpar seleção", "Esc", () => setSel([]))}
