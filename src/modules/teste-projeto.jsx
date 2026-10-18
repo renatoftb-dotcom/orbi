@@ -234,7 +234,7 @@ function tpNumerarAmbientes(areas) {
   });
   return mudou ? out : areas;
 }
-const TP_NOMES_AMBIENTE = ["Sala", "Cozinha", "Suíte", "Quarto", "WC", "Banheiro", "Lavanderia", "Varanda", "Garagem", "Circulação", "Closet", "Escritório", "Área gourmet", "Despensa"];
+const TP_NOMES_AMBIENTE = ["Sala", "Cozinha", "Suíte", "Quarto", "Dormitório", "WC", "Lavabo", "Lavabo Lazer", "Banheiro", "Lavanderia", "Varanda", "Garagem", "Circulação", "Closet", "Escritório", "Área gourmet", "Despensa", "Academia", "Louceiro"];
 
 // Pegada construída: o espaço ocupado pela casa (paredes + tudo o que elas
 // fecham), visto de fora. Grade de 2 cm: as paredes bloqueiam, inunda a partir
