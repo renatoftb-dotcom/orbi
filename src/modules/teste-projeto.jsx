@@ -57,6 +57,26 @@ function TpCampo({ id, rotulo, valor, casas = 2, onConfirmar, min = 0, somenteLe
 const tpAreaPoli = (pts) => { let s = 0; for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; s += a.x * b.y - b.x * a.y; } return Math.abs(s) / 2; };
 const tpPerimPoli = (pts) => { let s = 0; for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; s += Math.hypot(b.x - a.x, b.y - a.y); } return s; };
 const tpCentro = (pts) => ({ x: pts.reduce((s, p) => s + p.x, 0) / pts.length, y: pts.reduce((s, p) => s + p.y, 0) / pts.length });
+// Ponto do rótulo de um cômodo: o meio dele, mesmo num cômodo em L (onde a
+// média dos vértices pode cair fora ou colada numa parede) — o ponto interno
+// mais afastado das bordas, preferindo o centro quando ele serve.
+function tpPontoRotulo(pts) {
+  if (!pts || pts.length < 3) return pts && pts[0] ? pts[0] : { x: 0, y: 0 };
+  const dBorda = (q) => { let m = Infinity; for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length], vx = b.x - a.x, vy = b.y - a.y, L2 = vx * vx + vy * vy || 1e-12; const t = Math.max(0, Math.min(1, ((q.x - a.x) * vx + (q.y - a.y) * vy) / L2)); m = Math.min(m, Math.hypot(q.x - a.x - t * vx, q.y - a.y - t * vy)); } return m; };
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const q of pts) { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); }
+  let melhor = null, dm = -1; const N = 24;
+  for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
+    const q = { x: x0 + (x1 - x0) * i / N, y: y0 + (y1 - y0) * j / N };
+    if (!tpDentroPoli(q, pts)) continue; const d = dBorda(q); if (d > dm) { dm = d; melhor = q; }
+  }
+  const c = tpCentro(pts);
+  if (tpDentroPoli(c, pts) && (!melhor || dBorda(c) >= 0.7 * dm)) return c;
+  return melhor || c;
+}
+// Onde o nome do ambiente aparece: onde o usuário arrastou (se ainda estiver
+// dentro do cômodo) ou no meio dele
+const tpRotuloAmb = (a) => (a.rotulo && a.pts && a.pts.length >= 3 && tpDentroPoli(a.rotulo, a.pts) ? a.rotulo : tpPontoRotulo(a.pts));
 function tpDentroPoli(p, pts) {
   let dentro = false;
   for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
@@ -804,6 +824,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const vista = useRef(null);
   const iconeEq = useRef(null);
   const ambientesFeitos = useRef(null);          // último par (paredes → ambientes) já calculado no arraste
+  const rotulosClic = useRef([]);                // nomes dos ambientes na planta (px do canvas): clicar e arrastar move, clicar de novo edita
+  const [editNome, setEditNome] = useState(null);  // { ai, x, y, txt, t } nome de ambiente sendo digitado na planta
   const cotasClic = useRef([]);                  // cotas clicáveis da esquadria selecionada (px do canvas)
   const [editCota, setEditCota] = useState(null); // { x, y, lado, id, txt } cota sendo digitada                  // ícone "EQ" (centralizar) da esquadria selecionada, em px do canvas
   const primeiraVez = useRef(true);
@@ -868,6 +890,19 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     mudar(novas, null, true); return true;
   };
   // cota clicada + medida digitada: põe a esquadria a essa distância da parede daquele lado
+  // edição do nome do ambiente direto na planta (só o nome; a área é calculada)
+  const abrirEditNome = (ai, e) => {
+    const q = rotulosClic.current.find((r) => r.ai === ai), c = planRef.current; if (!q || !c || !areas[ai]) return;
+    const rc = c.getBoundingClientRect(), k = c.width / rc.width;
+    if (e && e.preventDefault) e.preventDefault();
+    setEditNome({ ai, x: Math.max(70, Math.min(rc.width - 70, (q.x0 + q.x1) / 2 / k)), y: Math.max(18, Math.min(rc.height - 18, q.yNome / k)), txt: areas[ai].nome || "", t: Date.now() });
+  };
+  const aplicarNome = (en) => {
+    if (en.feito) return; en.feito = true; // Enter e o blur que vem depois
+    const v = String(en.txt || "").trim();
+    setEditNome(null);
+    if (v && areas[en.ai] && v !== areas[en.ai].nome) editarAreas([en.ai], (x) => ({ ...x, nome: v }));
+  };
   const aplicarCota = (ec) => {
     setEditCota(null);
     const v = numDigitado(ec.txt) ?? (String(ec.txt).trim().match(/^0+([.,]0*)?$/) ? 0 : null);
@@ -910,7 +945,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const mv = (q) => ({ x: r3(q.x + dx), y: r3(q.y + dy) });
     return {
       paredes: base.paredes.map((w, i) => (fp.has(i) ? { ...w, a: mv(w.a), b: mv(w.b) } : w)),
-      areas: base.areas.map((a, i) => (fa.has(i) ? { ...a, pts: (a.pts || []).map(mv), ...(a.ponto ? { ponto: mv(a.ponto) } : {}) } : a)),
+      areas: base.areas.map((a, i) => (fa.has(i) ? { ...a, pts: (a.pts || []).map(mv), ...(a.ponto ? { ponto: mv(a.ponto) } : {}), ...(a.rotulo ? { rotulo: mv(a.rotulo) } : {}) } : a)),
     };
   };
   const moverSelecao = (dx, dy) => {
@@ -1242,7 +1277,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const c = planRef.current, v = vista.current; if (!c || !v || !c.width) return;
     const ctx = c.getContext("2d"), W = c.width, H = c.height, dpr = window.devicePixelRatio || 1;
     ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, W, H);
-    iconeEq.current = null; cotasClic.current = [];
+    iconeEq.current = null; cotasClic.current = []; rotulosClic.current = [];
     const passo = v.s * TP_GRADE < 8 * dpr ? 1 : TP_GRADE;
     const xA = Math.floor(-v.ox / v.s), xB = Math.ceil((W - v.ox) / v.s), yA = Math.floor(-v.oy / v.s), yB = Math.ceil((H - v.oy) / v.s);
     ctx.lineWidth = 1;
@@ -1497,12 +1532,21 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       caminho(a.pts);
       // sem seleção o piso já mostra o cômodo; o contorno só aparece selecionado (ou se não fechou)
       if (marc || a.aberto) { ctx.strokeStyle = marc ? TP_AZUL : "rgba(17,24,39,0.25)"; ctx.lineWidth = (marc ? 2 : 1) * dpr; ctx.setLineDash([2 * dpr, 3 * dpr]); ctx.stroke(); ctx.setLineDash([]); }
-      const [lx, ly] = T(a.ponto || tpCentro(a.pts));
+      let [lx, ly] = T(tpRotuloAmb(a));
+      const txtNome = a.nome || "Ambiente", txtArea = a.aberto ? "não fechado" : `${tpFmt(tpAreaPoli(a.pts))} m²`;
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.font = `600 ${13 * dpr}px system-ui, sans-serif`; const wN = ctx.measureText(txtNome).width;
+      ctx.font = `500 ${11.5 * dpr}px system-ui, sans-serif`; const wA = ctx.measureText(txtArea).width;
+      const meia = Math.max(wN, wA) / 2 + 6 * dpr;
+      // dois ambientes no mesmo espaço (ex.: apagou a parede entre eles): um nome não cobre o outro
+      for (let k = 0; k < 6 && rotulosClic.current.some((q) => lx - meia < q.x1 && lx + meia > q.x0 && ly - 18 * dpr < q.y1 && ly + 17 * dpr > q.y0); k++) ly += 36 * dpr;
+      rotulosClic.current.push({ ai: i, x0: lx - meia, x1: lx + meia, y0: ly - 18 * dpr, y1: ly + 17 * dpr, yNome: ly - 8 * dpr });
+      // selecionado: moldura discreta mostrando que o nome pode ser arrastado e editado
+      if (marc && !(editNome && editNome.ai === i)) { ctx.strokeStyle = "rgba(4,116,244,0.55)"; ctx.lineWidth = 1 * dpr; ctx.setLineDash([3 * dpr, 2 * dpr]); ctx.strokeRect(lx - meia, ly - 18 * dpr, 2 * meia, 35 * dpr); ctx.setLineDash([]); }
       ctx.font = `600 ${13 * dpr}px system-ui, sans-serif`; ctx.fillStyle = marc ? TP_AZUL : "#b65b3d";
-      ctx.fillText(a.nome || "Ambiente", lx, ly - 8 * dpr);
+      if (!(editNome && editNome.ai === i)) ctx.fillText(txtNome, lx, ly - 8 * dpr);
       ctx.font = `500 ${11.5 * dpr}px system-ui, sans-serif`; ctx.fillStyle = a.aberto ? "#b45309" : (marc ? TP_AZUL : "#b65b3d");
-      ctx.fillText(a.aberto ? "não fechado" : `${tpFmt(tpAreaPoli(a.pts))} m²`, lx, ly + 8 * dpr);
+      ctx.fillText(txtArea, lx, ly + 8 * dpr);
       ctx.textBaseline = "alphabetic";
     });
 
@@ -1898,7 +1942,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     return () => { vivo = false; if (three.current) { three.current.renderer.dispose(); three.current = null; } };
   }, []);
 
-  useEffect(() => { desenharPlanta(); }, [paredes, areas, inicio, poli, hover, espM, sel, caixa, ferramenta, ancora, modoTraco, previaEsq]);
+  useEffect(() => { desenharPlanta(); }, [paredes, areas, inicio, poli, hover, espM, sel, caixa, ferramenta, ancora, modoTraco, previaEsq, editNome]);
   // ambiente acompanha as paredes: mexeu numa parede, o contorno e a área se refazem
   useEffect(() => {
     if (!areas.some((a) => a.tipo === "ambiente" && a.ponto)) return;
@@ -2177,6 +2221,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   };
   const arrastarAlca = (e, g) => {
     const al = g.grip, orig = g.orig;
+    if (al.tipo === "rotulo") {
+      // move só o nome, sem ímã nem grade; não sai de dentro do cômodo
+      const a = orig.areas[al.ai]; if (!a || !a.pts || a.pts.length < 3) return;
+      const q = paraMundoLivre(devPx({ clientX: e.clientX + al.off.x, clientY: e.clientY + al.off.y }));
+      if (!tpDentroPoli(q, a.pts)) return;
+      setAreas(orig.areas.map((x, i) => (i === al.ai ? { ...x, rotulo: { x: r3(q.x), y: r3(q.y) } } : x)));
+      return;
+    }
     if (al.tipo === "abertura") {
       // arrasta ao longo da parede; passando para outra parede, muda de parede
       // (como no Revit). Posição que não cabe: fica onde estava no quadro anterior.
@@ -2315,6 +2367,15 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         setEditCota({ x: Math.max(44, Math.min(rc.width - 44, cq.x / k)), y: Math.max(18, Math.min(rc.height - 18, cq.y / k)), lado: cq.lado, id: cq.id, txt: tpFmt(cq.d), t: Date.now() });
         return;
       }
+      // nome do ambiente: apertar e arrastar move o nome; clicar de novo nele
+      // (já selecionado) abre a edição do nome. A área não se edita: é calculada.
+      const rq = !e.ctrlKey && !e.metaKey && !e.shiftKey && [...rotulosClic.current].reverse().find((q) => d.x >= q.x0 && d.x <= q.x1 && d.y >= q.y0 && d.y <= q.y1);
+      if (rq && areas[rq.ai]) {
+        const ja = sel.length === 1 && sel[0] === "a" + rq.ai;
+        if (!ja) setSel(["a" + rq.ai]);
+        gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: { tipo: "rotulo", chave: "a" + rq.ai, ai: rq.ai, ja, off: desvioCliente(tpRotuloAmb(areas[rq.ai]), e) }, orig: { paredes, areas } };
+        e.currentTarget.setPointerCapture(e.pointerId); return;
+      }
       const al = alcaNoPonto(d) || (!e.ctrlKey && !e.metaKey && !e.shiftKey ? pontaPerto(d) : null);
       if (al) {
         if (al.chave && !sel.includes(al.chave)) setSel([al.chave]);
@@ -2404,6 +2465,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (g.raf) { cancelAnimationFrame(g.raf); g.raf = 0; if (g.ultimo) arrastarAlca(g.ultimo, g); }
       if (g.moveu) { historico.current.push(g.orig); if (historico.current.length > 200) historico.current.shift(); futuro.current = []; }
       else if (g.grip.tipo === "mover" || g.grip.tipo === "abertura") aplicarSelecao([g.grip.chave], g); // só clicou: seleciona
+      else if (g.grip.tipo === "rotulo" && g.grip.ja) abrirEditNome(g.grip.ai, e); // clicou no nome já selecionado: edita
       setHover(null); return;
     }
     if (g.menu) return;
@@ -2602,6 +2664,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         ? (ancora.d1 ? `1ª medida ${tpFmt(Math.abs(ancora.d1.v))} m fixada. Digite a 2ª e Enter, ou clique para escolher o lado.` : "Aponte o cursor para o lado e digite a 1ª medida + Enter (ou clique o canto oposto). Esc cancela.")
         : "Retângulo: clique o primeiro canto.")
     : (desenhoAtivo && modoTraco === "arco") ? (ancora && ancora.arcoFim ? "Mova para curvar e clique um ponto da curva. Esc cancela." : ((ferramenta === "parede" ? inicio : poli.length) ? "Arco: clique o ponto final." : "Arco: clique o ponto inicial."))
+    : (selA.length === 1 && !selP.length && ferramenta === "selecionar" && areas[selA[0]].tipo === "ambiente") ? "Ambiente: arraste o nome para mudar de lugar; clique no nome para editar. A área é calculada pelas paredes."
     : (selA.length === 1 && !selP.length && ferramenta === "selecionar") ? "Editar contorno: arraste os quadrados (cantos) ou as bolinhas (lados). O cursor gruda nas quinas das paredes (quadrado verde)."
     : (selO.length === 1 && sel.length === 1 && ferramenta === "selecionar") ? "Arraste para mover (até para outra parede). Clique na cota para digitar a medida; EQ centraliza. Espaço inverte a mão."
     : (selP.length === 1 && !selA.length && ferramenta === "selecionar") ? "Quadradinho branco: estica só esta parede (solta do canto). Sem selecionar, arrastar a ponta leva as paredes ligadas. Delete exclui."
@@ -3033,8 +3096,15 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             <span style={tag}>Planta baixa · grade 0,50 m</span>
             <canvas ref={planRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none", cursor: ferramenta === "mover" ? "grab" : ferramenta === "selecionar" ? "default" : "crosshair" }}
               onContextMenu={(e) => e.preventDefault()} onDoubleClick={() => { if (poli.length >= 3) finalizarPoli(); }}
-              onPointerDown={planDown} onPointerMove={(e) => { planMove(e); if (!gesto.current && ferramenta === "selecionar") { const dd = devPx(e), eq = iconeEq.current; e.currentTarget.style.cursor = (eq && Math.abs(dd.x - eq.x) <= eq.r && Math.abs(dd.y - eq.y) <= eq.r) || cotasClic.current.some((q) => Math.abs(dd.x - q.x) <= q.r && Math.abs(dd.y - q.y) <= q.r * 0.6) ? "pointer" : alcaNoPonto(dd) ? "move" : "default"; } }} onPointerUp={planUp} onPointerLeave={() => { if (!inicio && !poli.length && !gesto.current) setHover(null); if (!gesto.current) setPreviaEsq(null); }} />
+              onPointerDown={planDown} onPointerMove={(e) => { planMove(e); if (!gesto.current && ferramenta === "selecionar") { const dd = devPx(e), eq = iconeEq.current; e.currentTarget.style.cursor = (eq && Math.abs(dd.x - eq.x) <= eq.r && Math.abs(dd.y - eq.y) <= eq.r) || cotasClic.current.some((q) => Math.abs(dd.x - q.x) <= q.r && Math.abs(dd.y - q.y) <= q.r * 0.6) ? "pointer" : (alcaNoPonto(dd) || rotulosClic.current.some((q) => dd.x >= q.x0 && dd.x <= q.x1 && dd.y >= q.y0 && dd.y <= q.y1)) ? "move" : "default"; } }} onPointerUp={planUp} onPointerLeave={() => { if (!inicio && !poli.length && !gesto.current) setHover(null); if (!gesto.current) setPreviaEsq(null); }} />
             {barraFerramentas}
+            {editNome && (
+              <input ref={(el) => { if (el && document.activeElement !== el) { el.focus({ preventScroll: true }); el.select(); } }} aria-label="Nome do ambiente" value={editNome.txt}
+                onChange={(e) => setEditNome({ ...editNome, txt: e.target.value })}
+                onKeyDown={(e) => { if (e.key === "Enter") aplicarNome(editNome); if (e.key === "Escape") setEditNome(null); e.stopPropagation(); }}
+                onBlur={(e) => { if (Date.now() - editNome.t < 300) { const el = e.currentTarget; setTimeout(() => el.focus({ preventScroll: true }), 0); return; } aplicarNome(editNome); }}
+                style={{ position: "absolute", left: editNome.x, top: editNome.y, transform: "translate(-50%, -50%)", zIndex: 3, width: 130, padding: "3px 6px", border: "2px solid " + TP_AZUL, outline: "none", borderRadius: 6, fontSize: 13, fontWeight: 600, textAlign: "center", color: TP_AZUL, fontFamily: "inherit", boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }} />
+            )}
             {editCota && (
               <input ref={(el) => { if (el && document.activeElement !== el) { el.focus({ preventScroll: true }); el.select(); } }} inputMode="decimal" aria-label="Distância até a parede (m)" value={editCota.txt}
                 onChange={(e) => setEditCota({ ...editCota, txt: e.target.value })}
