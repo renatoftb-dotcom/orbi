@@ -2380,7 +2380,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         // ícone "EQ" (como no Revit): uma linha acima da cota, no meio da
         // esquadria; clicar centraliza entre as duas paredes mais próximas
         if (opts.eq) {
-          const [ix, iy] = T(P(o.x, off - ld * 30 * dpr / v.s)), r = 11 * dpr, centrada = Math.abs(dA - dB) < 0.005;
+          const [ix, iy] = T(P(o.x, off - ld * 44 * dpr / v.s)), r = 11 * dpr, centrada = Math.abs(dA - dB) < 0.005;
           ctx.fillStyle = centrada ? "#e0f2fe" : "#fff"; ctx.strokeStyle = "#0284c7"; ctx.lineWidth = 1.5 * dpr;
           ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(ix - r, iy - r * 0.8, 2 * r, 1.6 * r, 4 * dpr); else ctx.rect(ix - r, iy - r * 0.8, 2 * r, 1.6 * r);
           ctx.fill(); ctx.stroke();
