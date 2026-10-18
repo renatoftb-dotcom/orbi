@@ -79208,27 +79208,31 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       ctx.fillText(`Terreno ${tpFmt(tpAreaPoli(a.pts))} m²`, tx + 12 * dpr, ty + 18 * dpr);
     });
     const cobPts = areas.filter((a) => (a.tipo === "laje" || a.tipo === "telhado") && a.pts && a.pts.length >= 3).map((a) => a.pts);
-    // Piso interno (padrão da prancha): porcelanato cinza bem claro com
-    // rejunte branco a cada 0,90 m e pontinhos brancos de granilite. Tudo
-    // ancorado no desenho (não "escorrega" ao mover a vista). Vai nos
-    // ambientes fechados e no contrapiso que está debaixo da cobertura.
-    const pisoInterno = (pts, marc, base = "#ebe8e5", P0 = 0.9) => {
+    // Piso interno (padrão da prancha): porcelanato cinza bem claro, peça
+    // grande (1,20 m) com rejunte branco fino e bastante pontinho branco de
+    // granilite — tudo sutil. Ancorado no desenho (não "escorrega" ao mover a
+    // vista). Vai nos ambientes fechados e no contrapiso debaixo da cobertura.
+    const pisoInterno = (pts, marc, base = "#ebe8e5", P0 = 1.2) => {
       ctx.save(); caminho(pts); ctx.clip();
       ctx.fillStyle = marc ? "rgba(4,116,244,0.10)" : base; ctx.fill();
       let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
       for (const q of pts) { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); }
       const i0 = Math.floor(x0 / P0), i1 = Math.ceil(x1 / P0), j0 = Math.floor(y0 / P0), j1 = Math.ceil(y1 / P0);
-      if (v.s * 0.05 >= 2 * dpr && (i1 - i0) * (j1 - j0) < 2500) { // granilite: só com zoom suficiente
-        ctx.strokeStyle = "rgba(255,255,255,0.95)"; ctx.lineWidth = Math.max(0.8 * dpr, 0.008 * v.s); ctx.beginPath();
-        for (let i = i0; i < i1; i++) for (let j = j0; j < j1; j++) for (let k = 0; k < 18; k++) {
+      // granilite só nas peças que estão na tela e com zoom suficiente para ver o grão
+      const vx0 = -v.ox / v.s, vy0 = -v.oy / v.s, vx1 = (c.width - v.ox) / v.s, vy1 = (c.height - v.oy) / v.s;
+      const gi0 = Math.max(i0, Math.floor(vx0 / P0)), gi1 = Math.min(i1, Math.ceil(vx1 / P0)), gj0 = Math.max(j0, Math.floor(vy0 / P0)), gj1 = Math.min(j1, Math.ceil(vy1 / P0));
+      const porPeca = Math.round(110 * P0 * P0); // ~110 grãos por m²
+      if (v.s >= 40 * dpr && gi1 > gi0 && gj1 > gj0 && (gi1 - gi0) * (gj1 - gj0) * porPeca < 120000) {
+        ctx.strokeStyle = "rgba(255,255,255,0.75)"; ctx.lineWidth = Math.max(0.7 * dpr, 0.006 * v.s); ctx.lineCap = "round"; ctx.beginPath();
+        for (let i = gi0; i < gi1; i++) for (let j = gj0; j < gj1; j++) for (let k = 0; k < porPeca; k++) {
           const hsh = (n) => { const t = Math.sin(i * 127.1 + j * 311.7 + k * 74.7 + n * 19.3) * 43758.5453; return t - Math.floor(t); };
-          const cx = (i + hsh(1)) * P0, cy = (j + hsh(2)) * P0, an = hsh(3) * Math.PI, l = 0.025 + 0.02 * hsh(4);
+          const cx = (i + hsh(1)) * P0, cy = (j + hsh(2)) * P0, an = hsh(3) * Math.PI, l = hsh(4) < 0.45 ? 0.002 : 0.01 + 0.014 * hsh(5); // pontinho ou tracinho
           const [ax, ay] = T({ x: cx, y: cy }), [bx, by] = T({ x: cx + Math.cos(an) * l, y: cy + Math.sin(an) * l });
           ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
         }
-        ctx.stroke();
+        ctx.stroke(); ctx.lineCap = "butt";
       }
-      ctx.strokeStyle = "#ffffff"; ctx.lineWidth = Math.max(1 * dpr, 0.012 * v.s); ctx.beginPath();
+      ctx.strokeStyle = "rgba(255,255,255,0.9)"; ctx.lineWidth = Math.max(0.6 * dpr, 0.004 * v.s); ctx.beginPath();
       for (let i = i0; i <= i1; i++) { const [ax, ay] = T({ x: i * P0, y: y0 }), [bx, by] = T({ x: i * P0, y: y1 }); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); }
       for (let j = j0; j <= j1; j++) { const [ax, ay] = T({ x: x0, y: j * P0 }), [bx, by] = T({ x: x1, y: j * P0 }); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); }
       ctx.stroke(); ctx.restore();
@@ -79260,7 +79264,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (!a.pts || a.pts.length < 3 || a.tipo === "telhado" || a.tipo === "terreno" || a.tipo === "ambiente") continue;
       caminho(a.pts);
       if (a.tipo === "laje") {
-        ctx.fillStyle = marc ? "rgba(4,116,244,0.14)" : "rgba(107,143,199,0.07)"; ctx.fill();
+        // sem véu azul por cima do piso (deixava o porcelanato acinzentado); só selecionada
+        if (marc) { ctx.fillStyle = "rgba(4,116,244,0.14)"; ctx.fill(); }
         ctx.setLineDash([8 * dpr, 5 * dpr]); ctx.strokeStyle = marc ? TP_AZUL : "#6b8fc7"; ctx.lineWidth = (marc ? 2.5 : 1.5) * dpr; ctx.stroke(); ctx.setLineDash([]);
       } else if (cpInterno(a)) {
         caminho(a.pts); ctx.strokeStyle = marc ? TP_AZUL : "#b8a98a"; ctx.lineWidth = (marc ? 2.5 : 1) * dpr; ctx.stroke();
