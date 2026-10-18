@@ -478,6 +478,34 @@ function tpFacesPonta(paredes, i) {
   });
   return { fa, fb };
 }
+// Faixas da parede ocupadas por outras paredes que encostam nela ou a cruzam
+// (cantos, "T" e cruzamentos), em metros ao longo do eixo a partir da ponta
+// "a". A faixa é a espessura da outra parede medida no sentido desta.
+function tpFaixasParede(paredes, i) {
+  const w = paredes[i], L = tpLen(w); if (!L) return [];
+  const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, hw = (w.t || 0) / 2, out = [];
+  paredes.forEach((v, j) => {
+    const Lv = tpLen(v); if (j === i || !Lv) return;
+    const vx = (v.b.x - v.a.x) / Lv, vy = (v.b.y - v.a.y) / Lv, den = ux * vy - uy * vx, sen = Math.abs(den);
+    if (sen < 0.2) return; // paralela: não corta esta parede
+    const t = ((v.a.x - w.a.x) * vy - (v.a.y - w.a.y) * vx) / den;  // onde o eixo dela cruza o desta
+    const tv = ((v.a.x - w.a.x) * uy - (v.a.y - w.a.y) * ux) / den; // e em que ponto dela
+    const folgaV = hw / sen + 0.02, meia = (v.t || 0) / 2 / sen;
+    if (tv < -folgaV || tv > Lv + folgaV || t < -meia - 0.02 || t > L + meia + 0.02) return;
+    out.push([t - meia, t + meia]);
+  });
+  return out.sort((p, q) => p[0] - q[0]);
+}
+// Paredes mais próximas de um trecho [s0, s1] da parede: a face da parede
+// vizinha antes e depois (sem vizinha, a ponta da própria parede)
+function tpVizinhos(paredes, i, s0, s1) {
+  const L = tpLen(paredes[i]); let antes = 0, depois = L;
+  for (const [f0, f1] of tpFaixasParede(paredes, i)) {
+    if (f1 <= s0 + 1e-6 && f1 > antes) antes = f1;
+    if (f0 >= s1 - 1e-6 && f0 < depois) depois = f0;
+  }
+  return { antes, depois };
+}
 // Esquadrias que cabem na parede (se a parede encolheu, a que sobrou fica de fora do desenho)
 const tpAbsVisiveis = (w) => { const L = tpLen(w); return (w.ab || []).filter((o) => o.x - o.larg / 2 >= -1e-6 && o.x + o.larg / 2 <= L + 1e-6); };
 // Trechos cheios da parede ao longo do eixo (de −t/2 a L+t/2, como o canto quadrado), sem os vãos
@@ -495,6 +523,7 @@ function tpValidarAbertura(paredes, i, ab, ignorarId) {
   const L = tpLen(w), { fa, fb } = tpFacesPonta(paredes, i);
   if (ab.larg > L - fa - fb + 1e-6) return "A parede é curta para essa largura";
   if (ab.x - ab.larg / 2 < fa - 1e-6 || ab.x + ab.larg / 2 > L - fb + 1e-6) return "Passa da ponta da parede";
+  for (const [f0, f1] of tpFaixasParede(paredes, i)) if (f1 > ab.x - ab.larg / 2 + 1e-6 && f0 < ab.x + ab.larg / 2 - 1e-6) return "Fica em cima de outra parede";
   for (const o of (w.ab || [])) if (o.id !== ignorarId && Math.abs(o.x - ab.x) < (o.larg + ab.larg) / 2 - 1e-6) return "Encosta em outra abertura";
   if ((ab.peit || 0) + ab.alt > (w.h || 0) + 1e-6) return "Mais alta que a parede";
   return null;
@@ -897,7 +926,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const proj = (pt.x - w.a.x) * ux + (pt.y - w.a.y) * uy, lado = ((pt.x - w.a.x) * -uy + (pt.y - w.a.y) * ux) >= 0 ? 1 : -1;
     const { fa, fb } = tpFacesPonta(ps, best);
     let x = Math.round(proj / 0.05) * 0.05;
-    const imas = [L / 2, fa + larg / 2 + 0.10, L - fb - larg / 2 - 0.10];
+    const viz = tpVizinhos(ps, best, proj, proj);
+    const imas = [L / 2, (viz.antes + viz.depois) / 2, viz.antes + larg / 2 + 0.10, viz.depois - larg / 2 - 0.10];
     for (const m of imas) if (Math.abs(proj - m) < 10 * px) { x = m; break; }
     x = Math.max(fa + larg / 2, Math.min(L - fb - larg / 2, x));
     return { i: best, x: r3(x), lado, proj, L, fa, fb };
@@ -921,7 +951,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const aplicarDigitadoEsq = () => {
     const d = numDigitado(digitado); setDigitado("");
     const p = previaEsq; if (d == null || !p) return;
-    const x = p.proj < p.L / 2 ? p.fa + d + p.larg / 2 : p.L - p.fb - d - p.larg / 2;
+    const viz = tpVizinhos(paredes, p.i, p.proj, p.proj);
+    const x = p.proj - viz.antes < viz.depois - p.proj ? viz.antes + d + p.larg / 2 : viz.depois - d - p.larg / 2;
     const ab = { x: r3(x), larg: p.larg, alt: p.alt, peit: p.peit };
     colocarEsquadria({ ...p, x: ab.x, motivo: tpValidarAbertura(paredes, p.i, ab, null) });
   };
@@ -1182,9 +1213,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       }
       // cotas temporárias até as faces das paredes vizinhas (como no Revit)
       if (opts.cotas) {
-        const off = -ld * (h + 0.5), dA = e0 - (opts.fa || 0), dB = (L - (opts.fb || 0)) - e1;
+        const viz = opts.i != null ? tpVizinhos(paredes, opts.i, e0, e1) : { antes: 0, depois: L };
+        const off = -ld * (h + 0.5), dA = e0 - viz.antes, dB = viz.depois - e1;
         ctx.strokeStyle = "#0ea5e9";
-        for (const [s0, s1, d] of [[opts.fa || 0, e0, dA], [e1, L - (opts.fb || 0), dB]]) {
+        for (const [s0, s1, d] of [[viz.antes, e0, dA], [e1, viz.depois, dB]]) {
           if (d < 0.005) continue;
           seg(P(s0, off), P(s1, off), 1); seg(P(s0, off - 0.08), P(s0, off + 0.08), 1); seg(P(s1, off - 0.08), P(s1, off + 0.08), 1);
           etiqueta(P(s0, off), P(s1, off), tpFmt(d) + " m", "#0284c7");
@@ -1195,15 +1227,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const quadroPl = tpQuadroEsquadrias(paredes);
     paredes.forEach((w, i) => {
       const vis = tpAbsVisiveis(w); if (!vis.length) return;
-      const fc = tpFacesPonta(paredes, i);
       vis.forEach((o) => {
         const marc = marcadas.has("o" + o.id) || marcadas.has("p" + i);
-        desenharEsq(w, o, marc ? TP_AZUL : "#111827", { marc: marcadas.has("o" + o.id), codigo: quadroPl.codigoDe.get(o.id), cotas: marcadas.has("o" + o.id) && sel.length === 1, fa: fc.fa, fb: fc.fb });
+        desenharEsq(w, o, marc ? TP_AZUL : "#111827", { marc: marcadas.has("o" + o.id), codigo: quadroPl.codigoDe.get(o.id), cotas: marcadas.has("o" + o.id) && sel.length === 1, i });
       });
     });
     if (ferramenta === "esquadria" && previaEsq && paredes[previaEsq.i]) {
       ctx.globalAlpha = 0.9;
-      desenharEsq(paredes[previaEsq.i], previaEsq, previaEsq.motivo ? "#dc2626" : TP_AZUL, { limpar: true, cotas: true, fa: previaEsq.fa, fb: previaEsq.fb });
+      desenharEsq(paredes[previaEsq.i], previaEsq, previaEsq.motivo ? "#dc2626" : TP_AZUL, { limpar: true, cotas: true, i: previaEsq.i });
       ctx.globalAlpha = 1;
     }
     const ponto = (p, r) => { const [x, y] = T(p); ctx.fillStyle = TP_AZUL; ctx.beginPath(); ctx.arc(x, y, r * dpr, 0, 7); ctx.fill(); };
@@ -1960,8 +1991,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           const ids = selO.map((x) => x.o.id), um = selO.length === 1 ? selO[0] : null;
           const tipoComum = comum(selO, (x) => TP_ESQ.indexOf(tpEsq(x.o.tipo)));
           const t = tipoComum != null ? TP_ESQ[tipoComum] : null;
-          const fc = um ? tpFacesPonta(paredes, um.i) : null, Lw = um ? tpLen(um.w) : 0;
-          const dA = um ? um.o.x - um.o.larg / 2 - fc.fa : 0, dB = um ? (Lw - fc.fb) - (um.o.x + um.o.larg / 2) : 0;
+          const viz = um ? tpVizinhos(paredes, um.i, um.o.x - um.o.larg / 2, um.o.x + um.o.larg / 2) : null;
+          const dA = um ? um.o.x - um.o.larg / 2 - viz.antes : 0, dB = um ? viz.depois - (um.o.x + um.o.larg / 2) : 0;
           const madeiraSel = comum(selO, (x) => ((x.o.mat || tpEsq(x.o.tipo).mat) === "madeira" ? 1 : 0)) === 1;
           const selStyle = { width: "100%", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit", background: "#fff" };
           return (
@@ -1985,8 +2016,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                   </select>
                 </div>
               ) : <TpCampo id="tp-o-area" rotulo="Área do vão (m²)" valor={comum(selO, (x) => x.o.larg * x.o.alt)} somenteLeitura onConfirmar={() => {}} />}
-              {um && <TpCampo id="tp-o-da" rotulo="Até a parede (lado A)" min={-0.0001} valor={Math.max(0, dA)} onConfirmar={(v) => editarAberturas(ids, (o) => ({ ...o, x: r3(fc.fa + v + o.larg / 2) }))} />}
-              {um && <TpCampo id="tp-o-db" rotulo="Até a parede (lado B)" min={-0.0001} valor={Math.max(0, dB)} onConfirmar={(v) => editarAberturas(ids, (o) => ({ ...o, x: r3(Lw - fc.fb - v - o.larg / 2) }))} />}
+              {um && <TpCampo id="tp-o-da" rotulo="Até a parede (lado A)" min={-0.0001} valor={Math.max(0, dA)} onConfirmar={(v) => editarAberturas(ids, (o) => ({ ...o, x: r3(viz.antes + v + o.larg / 2) }))} />}
+              {um && <TpCampo id="tp-o-db" rotulo="Até a parede (lado B)" min={-0.0001} valor={Math.max(0, dB)} onConfirmar={(v) => editarAberturas(ids, (o) => ({ ...o, x: r3(viz.depois - v - o.larg / 2) }))} />}
               {t && t.cat !== "V" && t.id !== "fixo" && (
                 <div style={{ gridColumn: "1 / -1", display: "flex", gap: 6 }}>
                   <button style={{ ...btn, flex: 1, minHeight: 30, padding: "4px 8px", fontSize: 12.5 }} title="Espaço" onClick={() => inverterAberturas("mao")}>Inverter mão</button>
@@ -2267,7 +2298,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         <div style={linhaQ}><span>Telhado (projeção · real)</span><span style={numQ}>{tpFmt(telProj)} · {tpFmt(telReal)} m²</span></div>
         <div style={linhaQ}><span>Laje</span><span style={numQ}>{tpFmt(areaLj)} m² · {tpFmt(volLj)} m³</span></div>
       </div>
-      <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 10, lineHeight: 1.4 }}>Teste: salvo só neste navegador. Medidas brutas, sem descontar aberturas; os materiais virão do motor do orçamento de obra.</div>
+      <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 10, lineHeight: 1.4 }}>Teste: salvo só neste navegador. Para o orçamento de obra segue indo o m² de parede bruto, como antes; o desconto das aberturas aparece acima.</div>
     </aside>
   );
 
