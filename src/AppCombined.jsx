@@ -78389,7 +78389,7 @@ function tpCantosMitra(paredes) {
 // face atravessando. Não muda o projeto; só o desenho.
 function tpParedesDesenho(paredes) {
   const r3 = (x) => Math.round(x * 1000) / 1000;
-  return paredes.map((w, i) => {
+  const p1 = paredes.map((w, i) => {
     const L = tpLen(w); if (!L) return w;
     const u = { x: (w.b.x - w.a.x) / L, y: (w.b.y - w.a.y) / L };
     let nw = w;
@@ -78421,10 +78421,33 @@ function tpParedesDesenho(paredes) {
         if (r < -tol || r > Lo + tol) return;                  // a outra não chega lá
         // a ponta não pode atravessar a parede: só ajusta se o cruzamento fica além do miolo desta
         const sEnd = fim === "a" ? 0 : L; if (Math.abs(s - sEnd) > tol) return;
-        if (!melhor || d < melhor.d) melhor = { d, X };
+        // prefere a parede em que a ponta realmente encosta (dentro da espessura dela)
+        // e, entre elas, a que passa direto pelo ponto (T) — as outras pontas convergem para ela
+        const toca = tpDistSeg(P, o.a, o.b) <= (o.t || 0) / 2 + 0.01;
+        const passa = toca && r > tol && r < Lo - tol;
+        const nota = (passa ? 2 : 0) + (toca ? 1 : 0);
+        if (!melhor || nota > melhor.nota || (nota === melhor.nota && d < melhor.d)) melhor = { d, X, nota };
       });
       if (melhor) nw = tpComPonta(nw, fim, { x: r3(melhor.X.x), y: r3(melhor.X.y) });
     }
+    return nw;
+  });
+  // 2ª passada: pontas que ficaram perto umas das outras num encontro (ex.:
+  // diagonal chegando quase no T de outras duas) vão todas para um ponto só —
+  // o primeiro do grupo (ordem fixa: nada troca de lugar entre si)
+  const pontas = [];
+  p1.forEach((w, i) => { if (tpLen(w)) for (const f of ["a", "b"]) pontas.push({ i, f, P: w[f], t: w.t || 0 }); });
+  const alvo = new Map();
+  for (const pt of pontas) {
+    if (alvo.has(pt.i + pt.f)) continue;
+    const grupo = pontas.filter((q) => !alvo.has(q.i + q.f) && Math.hypot(q.P.x - pt.P.x, q.P.y - pt.P.y) <= Math.min(pt.t, q.t) / 2 + 0.03);
+    if (grupo.length < 2) continue;
+    for (const q of grupo) alvo.set(q.i + q.f, pt.P);
+  }
+  return p1.map((w, i) => {
+    if (!tpLen(w)) return w;
+    let nw = w;
+    for (const f of ["a", "b"]) { const q = alvo.get(i + f); if (q && (q.x !== w[f].x || q.y !== w[f].y)) nw = tpComPonta(nw, f, { x: q.x, y: q.y }); }
     return nw;
   });
 }
@@ -79784,6 +79807,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const miolos = []; // { path, cor }: cantinho de dentro do miolo (a borda preta de dentro arredonda do lado do miolo)
     const quina = (alvo, O, d1, d2, rpx) => {
       if (!alvo) return;
+      // quina de fora de verdade: logo além dela não pode haver parede (senão o
+      // recorte abriria um buraco branco dentro de outra parede)
+      if (alvo === cortes) {
+        const bx = d1.x + d2.x, by = d1.y + d2.y, bl = Math.hypot(bx, by) || 1, k = (0.6 * rpx + 1.5 * dpr) / v.s;
+        const Q = { x: O.x - bx / bl * k, y: O.y - by / bl * k };
+        if (pD.some((w) => tpLen(w) && tpDistSeg(Q, w.a, w.b) < (w.t || 0) / 2 - 1e-4)) return;
+        if (lisas.some((c) => c.membros.some((m) => tpDistSeg(Q, pD[m].a, pD[m].b) < (pD[m].t || 0) / 2 + 0.01))) return;
+      }
       const c = d1.x * d2.x + d1.y * d2.y, th = Math.acos(Math.max(-1, Math.min(1, c)));
       if (th > 2.9 || th < 0.2 || rpx < 0.8) return;
       const [ox, oy] = T(O), tt = rpx / Math.tan(th / 2);
@@ -79796,6 +79827,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const paresQ = tpParesPonta(pD);
     pD.forEach((w, i) => {
       const L = tpLen(w); if (!L) return;
+      if (naCurva.has(i)) return; // curva lisa: a faixa dela é desenhada pelo arco
       const u = { x: (w.b.x - w.a.x) / L, y: (w.b.y - w.a.y) / L }, nv = { x: -u.y, y: u.x }, h = (w.t || 0) / 2;
       const rpx = Math.min(penaDe(w) * 0.9, h * v.s * 0.8);
       const ptS = (sx, n) => ({ x: w.a.x + u.x * sx + nv.x * n, y: w.a.y + u.y * sx + nv.y * n });
