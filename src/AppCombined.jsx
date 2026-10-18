@@ -78485,7 +78485,8 @@ function tpSeguirLigadas(origPs, novasPs, movidas, dx, dy) {
     let nw = w;
     for (const fim of ["a", "b"]) {
       const q = origPs[j][fim];
-      for (const i of movidas) { const m = origPs[i]; if (tpLen(m) && tpDistSeg(q, m.a, m.b) < 2e-3) { nw = tpComPonta(nw, fim, { x: r3(q.x + dx), y: r3(q.y + dy) }); break; } }
+      // encostada no eixo ou dentro da espessura da parede que andou (canto pela face)
+      for (const i of movidas) { const m = origPs[i]; if (tpLen(m) && tpDistSeg(q, m.a, m.b) < Math.max(2e-3, (m.t || 0) / 2 + 0.01)) { nw = tpComPonta(nw, fim, { x: r3(q.x + dx), y: r3(q.y + dy) }); break; } }
     }
     if (nw !== w) seguiram.push(j);
     return nw;
@@ -78734,7 +78735,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const delta = v - Lj, dxl = r3((o[f].x - o[outro].x) / Lj * delta), dyl = r3((o[f].y - o[outro].y) / Lj * delta);
       if (!dxl && !dyl) return;
       const mv = paredes.map((x, j) => (j === i ? { ...x, a: { x: r3(x.a.x + dxl), y: r3(x.a.y + dyl) }, b: { x: r3(x.b.x + dxl), y: r3(x.b.y + dyl) } } : x));
-      mudar(tpSeguirLigadas(paredes, mv, new Set([i]), dxl, dyl).ps, null, true);
+      const ps = tpSeguirLigadas(paredes, mv, new Set([i]), dxl, dyl).ps;
+      // a ponta dela pode estar na face (não exatamente no eixo): garante que acompanha
+      if (ps[info.j][f].x === o[f].x && ps[info.j][f].y === o[f].y) ps[info.j] = tpComPonta(ps[info.j], f, { x: r3(o[f].x + dxl), y: r3(o[f].y + dyl) });
+      mudar(ps, null, true);
       return;
     }
     const c = cp.cotas.find((x) => x.tipo === "perp" && x.lado === info.lado); if (!c) return;
@@ -79432,7 +79436,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         if (j === si || !tpLen(x)) return;
         const cr = Math.abs(((ws.b.x - ws.a.x) * (x.b.y - x.a.y) - (ws.b.y - ws.a.y) * (x.b.x - x.a.x)) / tpLen(ws) / tpLen(x));
         if (cr < 0.02) return; // paralela (na mesma linha) não serve
-        for (const f of ["a", "b"]) if (tpDistSeg(x[f], ws.a, ws.b) < 2e-3) { ligadasSel.set(j, { i: si, fim: f }); break; }
+        // ponta encostada: no eixo da selecionada ou dentro da espessura dela
+        // (canto desenhado pela face, com uma pequena diferença do eixo)
+        const tol = Math.max(2e-3, (ws.t || 0) / 2 + 0.01);
+        let melhor = null;
+        for (const f of ["a", "b"]) { const d = tpDistSeg(x[f], ws.a, ws.b); if (d <= tol && (!melhor || d < melhor.d)) melhor = { f, d }; }
+        if (melhor) ligadasSel.set(j, { i: si, fim: melhor.f });
       });
     }
     todas.forEach((w, i) => {
