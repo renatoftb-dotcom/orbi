@@ -80131,9 +80131,13 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const quadro = useMemo(() => tpQuadroEsquadrias(paredes), [paredes]);
   const areaAberturas = useMemo(() => tpAreaAberturas(paredes), [paredes]);
   const somaArea = (tipo, f) => areas.filter((a) => a.tipo === tipo).reduce((s, a) => s + f(a), 0);
-  const areaCp = somaArea("contrapiso", (a) => tpAreaPoli(a.pts)), volCp = somaArea("contrapiso", (a) => tpAreaPoli(a.pts) * (a.esp || 0));
-  const areaLj = somaArea("laje", (a) => tpAreaPoli(a.pts)), volLj = somaArea("laje", (a) => tpAreaPoli(a.pts) * (a.esp || 0));
   const analise = useMemo(() => tpAnaliseAreas(areas, paredes), [areas, paredes]);
+  // área real da peça: no contrapiso que envolve a casa, sem a casa (pegada)
+  const cobPtsC = areas.filter((a) => (a.tipo === "laje" || a.tipo === "telhado") && a.pts && a.pts.length >= 3).map((a) => a.pts);
+  const furadoArea = (a) => a.tipo === "contrapiso" && a.pts && a.pts.length >= 3 && tpTipoContrapiso(a.pts, analise.pegada, cobPtsC) === "furado";
+  const areaLiquida = (a) => (furadoArea(a) ? Math.max(0, tpAreaPoli(a.pts) - tpAreaDentro(a.pts, analise.pegada)) : tpAreaPoli(a.pts || []));
+  const areaCp = somaArea("contrapiso", areaLiquida), volCp = somaArea("contrapiso", (a) => areaLiquida(a) * (a.esp || 0));
+  const areaLj = somaArea("laje", (a) => tpAreaPoli(a.pts)), volLj = somaArea("laje", (a) => tpAreaPoli(a.pts) * (a.esp || 0));
   const telProj = somaArea("telhado", (a) => geoTelhado(a).areaProjecao), telReal = somaArea("telhado", (a) => geoTelhado(a).areaReal);
   const comum = (lista, f) => { if (!lista.length) return null; const v0 = f(lista[0]); return lista.every((x) => Math.abs(f(x) - v0) < 1e-9) ? v0 : null; };
 
@@ -80340,8 +80344,13 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         {selA.length > 0 && !selP.length && !(selA.length === 1 && ["telhado", "ambiente", "separador"].includes(areas[selA[0]].tipo)) && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             {selA.length === 1 && <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#4b5563", lineHeight: 1.4, background: "#eef5ff", borderRadius: 6, padding: "6px 8px" }}>Para mudar o contorno, arraste na planta os quadrados (cantos) ou as bolinhas (lados).</div>}
-            {selA.length === 1 && <TpCampo id="tp-a-area" rotulo="Área (m²)" valor={tpAreaPoli(areas[selA[0]].pts)} somenteLeitura onConfirmar={() => {}} />}
-            {selA.length === 1 && <TpCampo id="tp-a-per" rotulo="Perímetro (m)" valor={tpPerimPoli(areas[selA[0]].pts)} somenteLeitura onConfirmar={() => {}} />}
+            {selA.length === 1 && <TpCampo id="tp-a-area" rotulo={furadoArea(areas[selA[0]]) ? "Área sem a casa (m²)" : "Área (m²)"} valor={areaLiquida(areas[selA[0]])} somenteLeitura onConfirmar={() => {}} />}
+            {selA.length === 1 && <TpCampo id="tp-a-per" rotulo={furadoArea(areas[selA[0]]) ? "Perímetro externo (m)" : "Perímetro (m)"} valor={tpPerimPoli(areas[selA[0]].pts)} somenteLeitura onConfirmar={() => {}} />}
+            {selA.length === 1 && furadoArea(areas[selA[0]]) && (
+              <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#4b5563", lineHeight: 1.4 }}>
+                Contorno desenhado {tpFmt(tpAreaPoli(areas[selA[0]].pts))} m² − casa {tpFmt(tpAreaDentro(areas[selA[0]].pts, analise.pegada))} m² (pela face de fora das paredes).
+              </div>
+            )}
             <TpCampo id="tp-a-esp" rotulo="Espessura (cm)" casas={0} valor={comum(selA, (i) => Math.round((areas[i].esp || 0) * 100))} onConfirmar={(v) => editarAreas(selA, (a) => ({ ...a, esp: v / 100 }))} />
             <TpCampo id="tp-a-cota" rotulo="Nível (m)" min={-0.0001} valor={comum(selA, (i) => areas[i].cota || 0)} onConfirmar={(v) => editarAreas(selA, (a) => ({ ...a, cota: v }))} />
             {selA.every((i) => areas[i].tipo === "contrapiso") && (() => {
@@ -80358,7 +80367,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                     </select>
                     {atual === "deck" && <button style={{ ...btn, minHeight: 34, padding: "4px 10px", fontSize: 12.5 }} title="Girar o sentido das ripas em 90°" onClick={() => editarAreas(selA, (a) => ({ ...a, angRipa: (a.angRipa || 0) ? 0 : Math.PI / 2 }))}>Girar ripas</button>}
                   </div>
-                  <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4, lineHeight: 1.4 }}>Vale para o contrapiso fora da cobertura; dentro da casa ele aparece como piso interno.</div>
+                  <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4, lineHeight: 1.4 }}>Vale para o piso fora da casa. O contrapiso que envolve a casa conta só a parte de fora (a casa fica recortada).</div>
                 </div>
               );
             })()}
@@ -80528,7 +80537,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         <div style={linhaQ}><span>Reboco 2 faces</span><span style={numQ}>{tpFmt((A - areaAberturas) * 2)} m²</span></div>
         <div style={linhaQ}><span>Área construída (coberta)</span><span style={numQ}>{tpFmt(analise.coberta)} m²</span></div>
         <div style={linhaQ}><span>Contrapiso</span><span style={numQ}>{tpFmt(areaCp)} m² · {tpFmt(volCp)} m³</span></div>
-        {analise.temCobertura && areaCp > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>interno · externo</span><span style={numQ}>{tpFmt(analise.pisoInterno)} · {tpFmt(analise.pisoExterno)} m²</span></div>}
+        {(analise.temCobertura || (analise.pegada || []).length > 0) && areaCp > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>interno · externo</span><span style={numQ}>{tpFmt(analise.pisoInterno)} · {tpFmt(analise.pisoExterno)} m²</span></div>}
         {analise.terreno > 0 && <div style={linhaQ}><span>Terreno</span><span style={numQ}>{tpFmt(analise.terreno)} m²</span></div>}
         {analise.terreno > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>Taxa de ocupação</span><span style={numQ}>{tpFmt(analise.taxaOcupacao * 100, 1)}%</span></div>}
         {analise.terreno > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>Área livre (sem piso nem cobertura)</span><span style={numQ}>{tpFmt(analise.permeavel)} m²</span></div>}
