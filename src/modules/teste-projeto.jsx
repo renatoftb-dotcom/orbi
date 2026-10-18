@@ -659,6 +659,20 @@ function tpParedesDesenho(paredes) {
     let nw = w;
     for (const fim of ["a", "b"]) {
       const P = w[fim]; let melhor = null;
+      // já ligada certinho na ponta de outra parede: fica como está
+      if (paredes.some((o, j) => j !== i && tpLen(o) && (Math.hypot(o.a.x - P.x, o.a.y - P.y) < 1e-3 || Math.hypot(o.b.x - P.x, o.b.y - P.y) < 1e-3))) continue;
+      // perto da ponta de outra parede (canto já formado por elas): vai para essa ponta
+      paredes.forEach((o, j) => {
+        if (j === i || !tpLen(o)) return;
+        const tol = (o.t || 0) / 2 + (w.t || 0) / 2 + 0.02;
+        for (const q of [o.a, o.b]) {
+          const d = Math.hypot(q.x - P.x, q.y - P.y); if (d <= 1e-4 || d > tol || (melhor && d >= melhor.d)) continue;
+          // só um ponto onde já se encontram 2+ paredes (um nó firme); senão vale o cruzamento dos eixos
+          const nNo = paredes.filter((x, k) => k !== i && (Math.hypot(x.a.x - q.x, x.a.y - q.y) < 1e-3 || Math.hypot(x.b.x - q.x, x.b.y - q.y) < 1e-3)).length;
+          if (nNo >= 2) melhor = { d, X: q, ponta: true };
+        }
+      });
+      if (melhor && melhor.ponta) { nw = tpComPonta(nw, fim, { x: melhor.X.x, y: melhor.X.y }); continue; }
       paredes.forEach((o, j) => {
         if (j === i) return; const Lo = tpLen(o); if (!Lo) return;
         const uo = { x: (o.b.x - o.a.x) / Lo, y: (o.b.y - o.a.y) / Lo }, cr = u.x * uo.y - u.y * uo.x;
@@ -677,6 +691,57 @@ function tpParedesDesenho(paredes) {
     }
     return nw;
   });
+}
+// Encontros que não são canto de duas: nó de 3 ou mais paredes num ponto, e
+// T (ponta encostada no meio de outra). tipo "no" → viz = as outras pontas;
+// tipo "t" → j = a parede que passa.
+function tpJuncoes(ps) {
+  const mapa = new Map(), chave = (q) => Math.round(q.x * 200) + "|" + Math.round(q.y * 200);
+  ps.forEach((w, i) => { if (!tpLen(w)) return; for (const f of ["a", "b"]) { const k = chave(w[f]); if (!mapa.has(k)) mapa.set(k, []); mapa.get(k).push({ i, f }); } });
+  return ps.map((w, i) => {
+    const r = { a: null, b: null }; if (!tpLen(w)) return r;
+    for (const f of ["a", "b"]) {
+      const lista = mapa.get(chave(w[f])) || [];
+      if (lista.length >= 3) { r[f] = { tipo: "no", viz: lista.filter((x) => x.i !== i) }; continue; }
+      if (lista.length === 2) continue; // canto de duas: meia-esquadria
+      const P = w[f];
+      const j = ps.findIndex((o, k) => k !== i && tpLen(o) && tpDistSeg(P, o.a, o.b) < (o.t || 0) / 2 + 0.01
+        && Math.hypot(P.x - o.a.x, P.y - o.a.y) > (o.t || 0) / 2 && Math.hypot(P.x - o.b.x, P.y - o.b.y) > (o.t || 0) / 2);
+      if (j >= 0) r[f] = { tipo: "t", j };
+    }
+    return r;
+  });
+}
+// Nó de várias paredes: cada face desta parede corta a face da vizinha mais
+// próxima naquele lado (em volta do ponto). Devolve [s(−h), s(+h)].
+function tpCorteNo(ps, i, fim, viz, hDe) {
+  const w = ps[i], L = tpLen(w), u = { x: (w.b.x - w.a.x) / L, y: (w.b.y - w.a.y) / L }, P = w[fim];
+  const d = fim === "a" ? u : { x: -u.x, y: -u.y };
+  const todos = [{ j: i, e: d }, ...viz.map(({ i: j, f }) => { const o = ps[j], q = f === "a" ? o.b : o.a, Lo = Math.hypot(q.x - P.x, q.y - P.y) || 1; return { j, e: { x: (q.x - P.x) / Lo, y: (q.y - P.y) / Lo } }; })];
+  todos.forEach((x) => { x.ang = Math.atan2(x.e.y, x.e.x); });
+  todos.sort((p, q) => p.ang - q.ang);
+  const k = todos.findIndex((x) => x.j === i), ccw = todos[(k + 1) % todos.length], cw = todos[(k - 1 + todos.length) % todos.length];
+  const hi = hDe(i), lim = 4 * Math.max(hi, hDe(ccw.j), hDe(cw.j));
+  const corta = (n1, e, n2) => { // P+n1+d·t = P+n2+e·r
+    const cr = d.x * e.y - d.y * e.x; if (Math.abs(cr) < 0.05) return 0;
+    const D = { x: n2.x - n1.x, y: n2.y - n1.y }; return Math.max(-lim, Math.min(lim, (D.x * e.y - D.y * e.x) / cr));
+  };
+  const nL = { x: -d.y, y: d.x };
+  const tL = corta({ x: nL.x * hi, y: nL.y * hi }, ccw.e, { x: ccw.e.y * hDe(ccw.j), y: -ccw.e.x * hDe(ccw.j) });
+  const tR = corta({ x: -nL.x * hi, y: -nL.y * hi }, cw.e, { x: -cw.e.y * hDe(cw.j), y: cw.e.x * hDe(cw.j) });
+  const res = fim === "a" ? [tR, tL] : [L - tL, L - tR];
+  // vão até a vizinha do lado direito (sentido horário): > 180° = quina de fora ali
+  let gap = todos[k].ang - cw.ang; while (gap <= 0) gap += 2 * Math.PI;
+  res.cw = { e: cw.e, gap };
+  return res;
+}
+// T: as faces desta parede cortadas no eixo da parede que passa (sem a ponta
+// atravessar para o outro lado). Devolve [s(−h), s(+h)] ou null.
+function tpCorteT(w, o, h) {
+  const L = tpLen(w), Lo = tpLen(o); if (!L || !Lo) return null;
+  const u = { x: (w.b.x - w.a.x) / L, y: (w.b.y - w.a.y) / L }, nv = { x: -u.y, y: u.x }, uo = { x: (o.b.x - o.a.x) / Lo, y: (o.b.y - o.a.y) / Lo };
+  const cr = u.x * uo.y - u.y * uo.x; if (Math.abs(cr) < 0.2) return null;
+  return [-h, h].map((n) => { const D = { x: o.a.x - w.a.x - nv.x * n, y: o.a.y - w.a.y - nv.y * n }; return (D.x * uo.y - D.y * uo.x) / cr; });
 }
 const TP_NUCLEO = "#6e6e6e"; // miolo cinza da parede cortada na planta
 function tpPontaMitra(w, fim, o, fo, h, ho) {
@@ -1888,7 +1953,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // geometria só do desenho: pontas encostadas pela face vão até o eixo da
     // outra parede (canto e T fecham certinho, com meia-esquadria e arredondado)
     const pD = tpParedesDesenho(paredes);
-    const cantos = tpCantosMitra(pD);
+    const cantos = tpCantosMitra(pD), juncoes = tpJuncoes(pD);
     const quadros = (w, recuo = 0, wi = pD.indexOf(w)) => {
       const L = tpLen(w); if (!L) return [];
       const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, nx = -uy, ny = ux, h = (w.t || 0) / 2 - recuo;
@@ -1901,14 +1966,26 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const o = pD[c.j], ro = recuo ? recuo + (penaDe(o) - penaDe(w)) / v.s : 0;
         return tpPontaMitra(w, fim, o, c.f, h, (o.t || 0) / 2 - ro);
       };
-      let mA = mitra("a"), mB = mitra("b");
-      // passa um pouquinho da meia-esquadria para dentro da vizinha (sem costura no canto)
+      // nó de 3+ paredes e T: corte pelas vizinhas (sem a ponta passar para fora)
+      const jn = (fim) => (wi >= 0 && juncoes[wi] ? juncoes[wi][fim] : null);
+      const hDe = (k) => (pD[k].t || 0) / 2 - (recuo ? recuo + (penaDe(pD[k]) - penaDe(w)) / v.s : 0);
+      const outro = (fim) => {
+        const x = jn(fim); if (!x) return null;
+        if (x.tipo === "no") return { s: tpCorteNo(pD, wi, fim, x.viz, hDe), P: w[fim] };
+        const c = tpCorteT(w, pD[x.j], h); return c ? { s: c } : null;
+      };
+      let mA = mitra("a"), mB = mitra("b"), pA = null, pB = null;
+      if (!mA) { const o = outro("a"); if (o) { mA = o.s; pA = o.P || null; } }
+      if (!mB) { const o = outro("b"); if (o) { mB = o.s; pB = o.P || null; } }
+      // passa um pouquinho do corte para dentro da vizinha (sem costura no encontro)
       { const ex = 0.8 * dpr / v.s; if (mA) mA = mA.map((x) => x - ex); if (mB) mB = mB.map((x) => x + ex); }
+      const Wp = (sa, sn) => ({ x: w.a.x + ux * sa + nx * sn, y: w.a.y + uy * sa + ny * sn });
       return tpTrechosParede(w).map(([s0, s1]) => {
         const iniA = Math.abs(s0 + hw) < 1e-6, fimB = Math.abs(s1 - L - hw) < 1e-6;
         const a0 = iniA && mA ? mA : [s0 + recuo, s0 + recuo], b0 = fimB && mB ? mB : [s1 - recuo, s1 - recuo];
         if (b0[0] <= a0[0] && b0[1] <= a0[1]) return null;
-        return [[a0[0], -h], [b0[0], -h], [b0[1], h], [a0[1], h]].map(([sa, sn]) => T({ x: w.a.x + ux * sa + nx * sn, y: w.a.y + uy * sa + ny * sn }));
+        const pts = [Wp(a0[0], -h), Wp(b0[0], -h), ...(fimB && pB ? [pB] : []), Wp(b0[1], h), Wp(a0[1], h), ...(iniA && pA ? [pA] : [])];
+        return pts.map(T);
       }).filter(Boolean);
     };
     const quadro = (q) => { ctx.beginPath(); q.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); };
@@ -1964,6 +2041,13 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         }
         // ponta encostada no meio de outra parede (T): os cantos ali são do lado
         // de dentro da virada — ficam vivos
+        const jx = juncoes[i] && juncoes[i][fim];
+        if (jx && jx.tipo === "no") {
+          // nó de várias paredes: arredonda só a quina de fora (vão maior que 180°)
+          const cs = tpCorteNo(pD, i, fim, jx.viz, (k) => (pD[k].t || 0) / 2);
+          if (cs.cw.gap > Math.PI + 0.05) quina(cortes, fim === "a" ? ptS(cs[0], -h) : ptS(cs[1], h), dIn, cs.cw.e, rpx);
+          continue;
+        }
         const tq = pD.findIndex((x, j) => j !== i && tpLen(x) && tpDistSeg(P, x.a, x.b) < (x.t || 0) / 2 + 0.01);
         if (tq >= 0) {
           // no T a borda preta vira da face da parede que passa para a face desta:
@@ -2349,7 +2433,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // Parede = vista de frente (contorno com os recortes das portas, furos das
     // janelas) extrudada na espessura. Porta e vão recortam a base; janela é furo.
     const pD3 = tpParedesDesenho(paredes); // pontas pela face levadas ao eixo (igual à planta)
-    const cantos3 = tpCantosMitra(pD3);
+    const cantos3 = tpCantosMitra(pD3), juncoes3 = tpJuncoes(pD3);
     // curva lisa: uma peça só, a faixa da planta levantada na altura da parede
     const lisas3 = tpCurvasLisas(pD3, cantos3), naCurva3 = new Set(lisas3.flatMap((c) => c.membros));
     lisas3.forEach((c) => {
@@ -2382,7 +2466,15 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       // em curva / quase em linha, some a aresta da emenda (parece uma peça só)
       const pontas = [];
       for (const [fim, x0] of [["a", -h], ["b", L + h]]) {
-        const c = cantos3[i] && cantos3[i][fim]; if (!c) continue;
+        const c = cantos3[i] && cantos3[i][fim];
+        if (!c) {
+          // T e nó de várias paredes: corte pelas vizinhas (a ponta não atravessa a outra)
+          const jx = juncoes3[i] && juncoes3[i][fim]; if (!jx) continue;
+          const cs = jx.tipo === "no" ? tpCorteNo(pD3, i, fim, jx.viz, (k) => (pD3[k].t || 0) / 2) : tpCorteT(w, pD3[jx.j], h);
+          if (!cs) continue;
+          const [sm, sp] = cs; pontas.push({ x0, sx: (z) => sm + (z + h) / (2 * h || 1) * (sp - sm), suave: false });
+          continue;
+        }
         const o = pD3[c.j], [sm, sp] = tpPontaMitra(w, fim, o, c.f, h, (o.t || 0) / 2);
         const Lo = tpLen(o), uo = { x: (o.b.x - o.a.x) / Lo, y: (o.b.y - o.a.y) / Lo };
         const suave = Math.abs(ux * uo.y - uy * uo.x) < 0.5; // dobra pequena
