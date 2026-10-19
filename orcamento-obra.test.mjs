@@ -1827,5 +1827,19 @@ teste("sem parede não há andaime; mês começado conta inteiro", () => {
   assert.strictEqual(modulo.mesesDaEtapaNoCronograma(cp, "Y"), 0);
 });
 
+teste("escada desenhada no Projetar vira concreto, fôrma, aço e escoras; caracol não", () => {
+  const esc = { forma: "reta", degraus: 16, concreto: 1.234, formaM2: 9.5, fundoM2: 4.2, acoKg: 99 };
+  const r = modulo.gerarOrcamentoObra({ tipologia: "Sobrado", arquitetura: { areaConstruida: 150 }, escadas: [esc] }, { materiais: [] });
+  const da = (nome) => r.itens.filter((i) => i.subEtapa === "Escada" && i.item === nome);
+  assert.strictEqual(da("Concreto - FCK25")[0].qtd, 2, "1,234 m³ × 1,10 = 1,36 → 2 m³");
+  assert.strictEqual(da("Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm")[0].qtd, 5, "9,5 ÷ 2,42 × 1,10 = 4,32 → 5");
+  assert.strictEqual(da("Aço - Barras de CA50 8.0mm 12mts")[0].qtd, 23, "99 × 1,10 ÷ 4,80 = 22,7 → 23");
+  assert.strictEqual(da("Locação Ferramentas - Escoras")[0].qtd, 5, "4,2 × 1,10 = 4,62 → 5");
+  const c = modulo.gerarOrcamentoObra({ tipologia: "Sobrado", arquitetura: { areaConstruida: 150 }, escadas: [{ forma: "caracol", degraus: 14, concreto: 0 }] }, { materiais: [] });
+  assert.ok(!c.itens.some((i) => i.subEtapa === "Escada"), "caracol não emite concreto");
+  const sem = modulo.gerarOrcamentoObra({ tipologia: "Sobrado", arquitetura: { areaConstruida: 150 } }, { materiais: [] });
+  assert.ok(!sem.itens.some((i) => i.subEtapa === "Escada"), "sem escada, nada muda");
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou > 0) process.exit(1);

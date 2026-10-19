@@ -1222,6 +1222,52 @@ function vigaRespaldoLajeTerreo(cp, out) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// ESCADAS DE CONCRETO (módulo novo, sem equivalente no VBA) — vêm do
+// Projetar, que já mede cada escada desenhada: volume de concreto (laje
+// inclinada de 12 cm + degraus + patamares), fôrma (fundo, espelhos e
+// laterais), fundo escorado e aço pela taxa de 80 kg/m³. Escada caracol é
+// estrutura pronta e chega com concreto zero (não emite nada aqui). O piso
+// dos degraus entra pelo cômodo "Escada" em Pisos e Revestimentos.
+// ═══════════════════════════════════════════════════════════════
+function escadasConcreto(cp, out) {
+  const lista = (cp.escadas || []).filter((e) => e.concreto > 0);
+  if (!lista.length) return;
+  const sobrado = cp.tipologia === "Sobrado";
+  const o = sobrado ? ORD.vigaLajePav1 : ORD.vigaLajeTerreo, etapa = "Viga Respaldo e Laje", sub = "Escada";
+  const soma = (k) => lista.reduce((t, e) => t + e[k], 0);
+  const vol = soma("concreto"), forma = soma("formaM2"), fundo = soma("fundoM2"), aco = soma("acoKg");
+  const qtdEsc = `${lista.length} escada${lista.length > 1 ? "s" : ""} (${lista.reduce((t, e) => t + e.degraus, 0)} degraus)`;
+  const volBruto = vol * PERDA, volQ = teto(volBruto);
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: sub, item: nomeConcreto(sobrado ? cp.pav1.resistenciaConcretoLoje : cp.terreo.resistenciaConcretoLoje), unidade: "m3", qtd: volQ, memoria: [
+    MEM.nota(`Concreto da escada moldada no lugar: laje inclinada de 12 cm + degraus + patamares — ${qtdEsc}.`),
+    MEM.dado("Volume de concreto", vol, "m³", "Projetar (escada desenhada)"),
+    MEM.conta("Volume com 10% de perda", "volume × 1,10", [["volume", vol]], volBruto, "m³"),
+    MEM.teto(volBruto, volQ, "m³", "Arredonda para cima (a usina entrega em m³ inteiro)"),
+  ] });
+  const chapasBruto = forma / 2.42 * PERDA, chapas = teto(chapasBruto);
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: sub, item: "Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm", unidade: "Unidade", qtd: chapas, memoria: [
+    MEM.nota("Fôrma da escada: fundo inclinado, espelhos dos degraus e laterais, em chapas de 2,10 × 1,10 m (2,42 m² cada)."),
+    MEM.dado("Área de fôrma", forma, "m²", "Projetar (escada desenhada)"),
+    MEM.conta("Chapas, com 10% de perda", "área ÷ 2,42 × 1,10", [["área", forma]], chapasBruto, "chapas"),
+    MEM.teto(chapasBruto, chapas, "chapas", "Arredonda para cima (chapa inteira)"),
+  ] });
+  const barrasBruto = aco * PERDA / PESOS_FERRO.CA50_8MM, barras = teto(barrasBruto);
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: sub, item: LABEL_BARRA.CA50_8MM, unidade: "Unidade", qtd: barras, memoria: [
+    MEM.nota("Armadura da escada pela taxa de 80 kg de aço por m³ de concreto, em barras de CA50 8,0 mm (4,80 kg por barra de 12 m). Com projeto estrutural, ajuste no item."),
+    MEM.dado("Aço estimado", aco, "kg", "Projetar: volume × 80 kg/m³"),
+    MEM.conta("Barras, com 10% de perda", "kg × 1,10 ÷ 4,80", [["kg", aco]], barrasBruto, "barras"),
+    MEM.teto(barrasBruto, barras, "barras"),
+  ] });
+  const escBruto = fundo * PERDA, esc = teto(escBruto);
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: sub, item: "Locação Ferramentas - Escoras", unidade: "Unidade", qtd: esc, memoria: [
+    MEM.nota("Escoras do fundo da escada: uma por m², um mês de aluguel."),
+    MEM.dado("Área do fundo escorado", fundo, "m²", "Projetar (escada desenhada)"),
+    MEM.conta("Escoras, com 10% de perda", "área × 1,10", [["área", fundo]], escBruto, "escoras"),
+    MEM.teto(escBruto, esc, "escoras"),
+  ] });
+}
+
+// ═══════════════════════════════════════════════════════════════
 // H_PAREDES_PAV_1.bas — parecido com F_PAREDES_TERREO, mas com diferenças
 // reais do original preservadas (não generalizado): "tábuas 30" usa
 // COLUNAS_25 (não 30), CA60 4.2mm nunca é calculado nem emitido aqui, e o
@@ -4047,6 +4093,17 @@ function normalizarProjeto(projeto) {
       vigaRespaldo: normalizarFerro(pav1In.vigaRespaldo),
     },
 
+    // cp.escadas — escadas desenhadas no Projetar (concreto moldado no lugar);
+    // usado por escadasConcreto()
+    escadas: (Array.isArray(p.escadas) ? p.escadas : []).map((e) => ({
+      forma: String((e && e.forma) || ""),
+      degraus: numOrZero(e && e.degraus),
+      concreto: numOrZero(e && e.concreto),
+      formaM2: numOrZero(e && e.formaM2),
+      fundoM2: numOrZero(e && e.fundoM2),
+      acoKg: numOrZero(e && e.acoKg),
+    })),
+
     // cp.fundacao — usado por fundacao()
     fundacao: {
       qtdEstacas: numOrZero(fundacaoIn.qtdEstacas),
@@ -4934,6 +4991,7 @@ function gerarOrcamentoObra(projeto, data) {
     paredesPav1(cp, out);
     vigaRespaldoLajePav1(cp, out);
   }
+  escadasConcreto(cp, out);
   supraCobertura(cp, out);
   cobertura(cp, out);
   chapiscoReboco(cp, out);

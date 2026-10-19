@@ -21214,6 +21214,52 @@ function vigaRespaldoLajeTerreo(cp, out) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// ESCADAS DE CONCRETO (módulo novo, sem equivalente no VBA) — vêm do
+// Projetar, que já mede cada escada desenhada: volume de concreto (laje
+// inclinada de 12 cm + degraus + patamares), fôrma (fundo, espelhos e
+// laterais), fundo escorado e aço pela taxa de 80 kg/m³. Escada caracol é
+// estrutura pronta e chega com concreto zero (não emite nada aqui). O piso
+// dos degraus entra pelo cômodo "Escada" em Pisos e Revestimentos.
+// ═══════════════════════════════════════════════════════════════
+function escadasConcreto(cp, out) {
+  const lista = (cp.escadas || []).filter((e) => e.concreto > 0);
+  if (!lista.length) return;
+  const sobrado = cp.tipologia === "Sobrado";
+  const o = sobrado ? ORD.vigaLajePav1 : ORD.vigaLajeTerreo, etapa = "Viga Respaldo e Laje", sub = "Escada";
+  const soma = (k) => lista.reduce((t, e) => t + e[k], 0);
+  const vol = soma("concreto"), forma = soma("formaM2"), fundo = soma("fundoM2"), aco = soma("acoKg");
+  const qtdEsc = `${lista.length} escada${lista.length > 1 ? "s" : ""} (${lista.reduce((t, e) => t + e.degraus, 0)} degraus)`;
+  const volBruto = vol * PERDA, volQ = teto(volBruto);
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: sub, item: nomeConcreto(sobrado ? cp.pav1.resistenciaConcretoLoje : cp.terreo.resistenciaConcretoLoje), unidade: "m3", qtd: volQ, memoria: [
+    MEM.nota(`Concreto da escada moldada no lugar: laje inclinada de 12 cm + degraus + patamares — ${qtdEsc}.`),
+    MEM.dado("Volume de concreto", vol, "m³", "Projetar (escada desenhada)"),
+    MEM.conta("Volume com 10% de perda", "volume × 1,10", [["volume", vol]], volBruto, "m³"),
+    MEM.teto(volBruto, volQ, "m³", "Arredonda para cima (a usina entrega em m³ inteiro)"),
+  ] });
+  const chapasBruto = forma / 2.42 * PERDA, chapas = teto(chapasBruto);
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: sub, item: "Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm", unidade: "Unidade", qtd: chapas, memoria: [
+    MEM.nota("Fôrma da escada: fundo inclinado, espelhos dos degraus e laterais, em chapas de 2,10 × 1,10 m (2,42 m² cada)."),
+    MEM.dado("Área de fôrma", forma, "m²", "Projetar (escada desenhada)"),
+    MEM.conta("Chapas, com 10% de perda", "área ÷ 2,42 × 1,10", [["área", forma]], chapasBruto, "chapas"),
+    MEM.teto(chapasBruto, chapas, "chapas", "Arredonda para cima (chapa inteira)"),
+  ] });
+  const barrasBruto = aco * PERDA / PESOS_FERRO.CA50_8MM, barras = teto(barrasBruto);
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: sub, item: LABEL_BARRA.CA50_8MM, unidade: "Unidade", qtd: barras, memoria: [
+    MEM.nota("Armadura da escada pela taxa de 80 kg de aço por m³ de concreto, em barras de CA50 8,0 mm (4,80 kg por barra de 12 m). Com projeto estrutural, ajuste no item."),
+    MEM.dado("Aço estimado", aco, "kg", "Projetar: volume × 80 kg/m³"),
+    MEM.conta("Barras, com 10% de perda", "kg × 1,10 ÷ 4,80", [["kg", aco]], barrasBruto, "barras"),
+    MEM.teto(barrasBruto, barras, "barras"),
+  ] });
+  const escBruto = fundo * PERDA, esc = teto(escBruto);
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: sub, item: "Locação Ferramentas - Escoras", unidade: "Unidade", qtd: esc, memoria: [
+    MEM.nota("Escoras do fundo da escada: uma por m², um mês de aluguel."),
+    MEM.dado("Área do fundo escorado", fundo, "m²", "Projetar (escada desenhada)"),
+    MEM.conta("Escoras, com 10% de perda", "área × 1,10", [["área", fundo]], escBruto, "escoras"),
+    MEM.teto(escBruto, esc, "escoras"),
+  ] });
+}
+
+// ═══════════════════════════════════════════════════════════════
 // H_PAREDES_PAV_1.bas — parecido com F_PAREDES_TERREO, mas com diferenças
 // reais do original preservadas (não generalizado): "tábuas 30" usa
 // COLUNAS_25 (não 30), CA60 4.2mm nunca é calculado nem emitido aqui, e o
@@ -24039,6 +24085,17 @@ function normalizarProjeto(projeto) {
       vigaRespaldo: normalizarFerro(pav1In.vigaRespaldo),
     },
 
+    // cp.escadas — escadas desenhadas no Projetar (concreto moldado no lugar);
+    // usado por escadasConcreto()
+    escadas: (Array.isArray(p.escadas) ? p.escadas : []).map((e) => ({
+      forma: String((e && e.forma) || ""),
+      degraus: numOrZero(e && e.degraus),
+      concreto: numOrZero(e && e.concreto),
+      formaM2: numOrZero(e && e.formaM2),
+      fundoM2: numOrZero(e && e.fundoM2),
+      acoKg: numOrZero(e && e.acoKg),
+    })),
+
     // cp.fundacao — usado por fundacao()
     fundacao: {
       qtdEstacas: numOrZero(fundacaoIn.qtdEstacas),
@@ -24926,6 +24983,7 @@ function gerarOrcamentoObra(projeto, data) {
     paredesPav1(cp, out);
     vigaRespaldoLajePav1(cp, out);
   }
+  escadasConcreto(cp, out);
   supraCobertura(cp, out);
   cobertura(cp, out);
   chapiscoReboco(cp, out);
@@ -77892,10 +77950,11 @@ function tpDetectarAmbiente(paredes, p, separadores) {
   if (p.x <= x0 || p.x >= x1 || p.y <= y0 || p.y >= y1) return { aberto: true };
   let passo = 0.02;
   while (((x1 - x0) / passo) * ((y1 - y0) / passo) > 3e6) passo *= 1.5;
-  const W = Math.ceil((x1 - x0) / passo), H = Math.ceil((y1 - y0) / passo);
-  const cel = new Uint8Array(W * H); // 1 = parede, 2 = ambiente
+  const Wg = Math.ceil((x1 - x0) / passo), Hg = Math.ceil((y1 - y0) / passo);
+  // faces das paredes alinhadas aos eixos (para acertar os cantos) e a caixa
+  // de cada parede na grade
   const xs = [], ys = [];
-  for (const w of ws) {
+  const geo = ws.map((w) => {
     // separador (linha sem parede, ex.: cozinha integrada) = barreira de 1,5 célula
     // As pontas do separador avançam 15 cm além do desenhado: a linha costuma
     // terminar na face de uma parede (ímã), e se ali houver outra linha no eixo
@@ -77904,24 +77963,46 @@ function tpDetectarAmbiente(paredes, p, separadores) {
     const L = tpLen(w), ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, nx = -uy, ny = ux, h = w.separador ? passo * 0.75 : (w.t || 0) / 2, hl = L / 2 + (w.separador ? 0.15 : h);
     const cx = (w.a.x + w.b.x) / 2, cy = (w.a.y + w.b.y) / 2;
     const cantos = [[hl, h], [hl, -h], [-hl, h], [-hl, -h]].map(([a, b]) => ({ x: cx + ux * a + nx * b, y: cy + uy * a + ny * b }));
-    const i0 = Math.max(0, Math.floor((Math.min(...cantos.map((q) => q.x)) - x0) / passo)), i1 = Math.min(W - 1, Math.ceil((Math.max(...cantos.map((q) => q.x)) - x0) / passo));
-    const j0 = Math.max(0, Math.floor((Math.min(...cantos.map((q) => q.y)) - y0) / passo)), j1 = Math.min(H - 1, Math.ceil((Math.max(...cantos.map((q) => q.y)) - y0) / passo));
-    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
-      const qx = x0 + (i + 0.5) * passo - cx, qy = y0 + (j + 0.5) * passo - cy;
-      if (Math.abs(qx * ux + qy * uy) <= hl && Math.abs(qx * nx + qy * ny) <= h) cel[j * W + i] = 1;
-    }
-    // faces das paredes alinhadas aos eixos, para acertar os cantos
-    if (w.separador) { if (Math.abs(uy) < 1e-6) ys.push(cy); else if (Math.abs(ux) < 1e-6) xs.push(cx); continue; }
-    if (Math.abs(uy) < 1e-6) { ys.push(cy + h, cy - h); xs.push(cx + hl, cx - hl); }
+    if (w.separador) { if (Math.abs(uy) < 1e-6) ys.push(cy); else if (Math.abs(ux) < 1e-6) xs.push(cx); }
+    else if (Math.abs(uy) < 1e-6) { ys.push(cy + h, cy - h); xs.push(cx + hl, cx - hl); }
     else if (Math.abs(ux) < 1e-6) { xs.push(cx + h, cx - h); ys.push(cy + hl, cy - hl); }
-  }
-  const si = Math.floor((p.x - x0) / passo), sj = Math.floor((p.y - y0) / passo);
-  if (cel[sj * W + si] === 1) return null;
-  const pilha = [sj * W + si]; cel[sj * W + si] = 2;
-  while (pilha.length) {
-    const k = pilha.pop(), i = k % W, j = (k - i) / W;
-    if (i === 0 || j === 0 || i === W - 1 || j === H - 1) return { aberto: true };
-    for (const n of [k - 1, k + 1, k - W, k + W]) if (cel[n] === 0) { cel[n] = 2; pilha.push(n); }
+    return { ux, uy, nx, ny, h, hl, cx, cy,
+      i0: Math.max(0, Math.floor((Math.min(...cantos.map((q) => q.x)) - x0) / passo)), i1: Math.min(Wg - 1, Math.ceil((Math.max(...cantos.map((q) => q.x)) - x0) / passo)),
+      j0: Math.max(0, Math.floor((Math.min(...cantos.map((q) => q.y)) - y0) / passo)), j1: Math.min(Hg - 1, Math.ceil((Math.max(...cantos.map((q) => q.y)) - y0) / passo)) };
+  });
+  // A mancha é preenchida numa janela em volta do ponto (alinhada à grade
+  // geral, então o resultado é o mesmo da grade inteira). Se vaza pela borda
+  // da janela, ela dobra; só é "aberto" quando vaza pela borda da grade geral.
+  // Num projeto grande isso deixa a detecção dezenas de vezes mais rápida.
+  const si0 = Math.floor((p.x - x0) / passo), sj0 = Math.floor((p.y - y0) / passo);
+  let raio = Math.ceil(3.5 / passo), cel = null, W = 0, H = 0, oi = 0, oj = 0;
+  for (;;) {
+    oi = Math.max(0, si0 - raio); oj = Math.max(0, sj0 - raio);
+    const fi = Math.min(Wg, si0 + raio + 1), fj = Math.min(Hg, sj0 + raio + 1);
+    W = fi - oi; H = fj - oj;
+    const total = oi === 0 && oj === 0 && fi === Wg && fj === Hg;
+    cel = new Uint8Array(W * H); // 1 = parede, 2 = ambiente
+    for (const g of geo) {
+      const a0 = Math.max(g.i0, oi), a1 = Math.min(g.i1, fi - 1), b0 = Math.max(g.j0, oj), b1 = Math.min(g.j1, fj - 1);
+      for (let j = b0; j <= b1; j++) for (let i = a0; i <= a1; i++) {
+        const qx = x0 + (i + 0.5) * passo - g.cx, qy = y0 + (j + 0.5) * passo - g.cy;
+        if (Math.abs(qx * g.ux + qy * g.uy) <= g.hl && Math.abs(qx * g.nx + qy * g.ny) <= g.h) cel[(j - oj) * W + (i - oi)] = 1;
+      }
+    }
+    const s0 = (sj0 - oj) * W + (si0 - oi);
+    if (cel[s0] === 1) return null;
+    const pilha = [s0]; cel[s0] = 2; let vazou = 0; // 1 = borda da janela, 2 = borda geral
+    while (pilha.length && !vazou) {
+      const k = pilha.pop(), i = k % W, j = (k - i) / W;
+      if (i === 0 || j === 0 || i === W - 1 || j === H - 1) {
+        const gi = i + oi, gj = j + oj;
+        vazou = (gi === 0 || gj === 0 || gi === Wg - 1 || gj === Hg - 1) ? 2 : 1; break;
+      }
+      for (const n of [k - 1, k + 1, k - W, k + W]) if (cel[n] === 0) { cel[n] = 2; pilha.push(n); }
+    }
+    if (vazou === 2 || (vazou && total)) return { aberto: true };
+    if (!vazou) break;
+    raio *= 2;
   }
   // arestas da borda da mancha (sentido fixo), encadeadas em laços
   const prox = new Map(), chave = (i, j) => j * (W + 1) + i;
@@ -77944,7 +78025,7 @@ function tpDetectarAmbiente(paredes, p, separadores) {
       const nx = l.pop(); if (!l.length) prox.delete(at);
       at = nx;
     } while (at !== ini && ++guarda < 1e6);
-    const pts = laco.map((k) => ({ x: x0 + (k % (W + 1)) * passo, y: y0 + Math.floor(k / (W + 1)) * passo }));
+    const pts = laco.map((k) => ({ x: x0 + (k % (W + 1) + oi) * passo, y: y0 + (Math.floor(k / (W + 1)) + oj) * passo }));
     const ar = tpAreaPoli(pts);
     if (ar > maior) { maior = ar; melhor = pts; }
   }
@@ -77957,8 +78038,85 @@ function tpDetectarAmbiente(paredes, p, separadores) {
   }
   const perto = (v, lista) => { let best = v, d = passo * 1.6; for (const c of lista) { const dd = Math.abs(c - v); if (dd < d) { d = dd; best = c; } } return best; };
   const r3 = (x) => Math.round(x * 1000) / 1000;
+  // Parede inclinada: a borda da mancha vira uma "escadinha" de células.
+  // Simplifica (Douglas-Peucker) e, se sobrar lado inclinado, encaixa cada
+  // lado na face da parede (ou na linha de separação) em que ele encosta;
+  // a quina é o cruzamento das faces. Cômodo só com paredes retas não muda.
+  const diag = tpContornoInclinado(melhor, ws, passo);
+  if (diag) {
+    let pd = diag.map((q) => ({ x: r3(perto(q.x, xs)), y: r3(perto(q.y, ys)) }));
+    for (let volta = 0; volta < 3; volta++) {
+      const f = [];
+      for (let k = 0; k < pd.length; k++) {
+        const a = pd[(k - 1 + pd.length) % pd.length], b = pd[k], c = pd[(k + 1) % pd.length];
+        if (Math.hypot(b.x - a.x, b.y - a.y) < 1e-4) continue;
+        if (Math.abs((b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)) > 1e-6) f.push(b);
+      }
+      if (f.length === pd.length || f.length < 3) { if (f.length >= 3) pd = f; break; }
+      pd = f;
+    }
+    return { pts: pd, area: tpAreaPoli(pd) };
+  }
   const pts = limpa.map((q) => ({ x: r3(perto(q.x, xs)), y: r3(perto(q.y, ys)) }));
   return { pts, area: tpAreaPoli(pts) };
+}
+function tpDouglasPeucker(pts, tol) {
+  if (pts.length < 3) return pts.slice();
+  const d2 = (p, a, b) => { const dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1e-12; return Math.abs((p.x - a.x) * dy - (p.y - a.y) * dx) / l; };
+  const manter = new Uint8Array(pts.length); manter[0] = manter[pts.length - 1] = 1;
+  const pilha = [[0, pts.length - 1]];
+  while (pilha.length) {
+    const [i, j] = pilha.pop(); let dm = -1, km = -1;
+    for (let k = i + 1; k < j; k++) { const d = d2(pts[k], pts[i], pts[j]); if (d > dm) { dm = d; km = k; } }
+    if (dm > tol) { manter[km] = 1; pilha.push([i, km], [km, j]); }
+  }
+  return pts.filter((_, k) => manter[k]);
+}
+function tpContornoInclinado(laco, ws, passo) {
+  if (!ws.some((w) => { const L = tpLen(w) || 1; return Math.abs(w.b.x - w.a.x) / L > 1e-6 && Math.abs(w.b.y - w.a.y) / L > 1e-6; })) return null;
+  const n = laco.length; if (n < 4) return null;
+  // laço fechado: corta no ponto mais longe do primeiro e simplifica as duas metades
+  let km = 0, dm = -1; for (let k = 1; k < n; k++) { const d = Math.hypot(laco[k].x - laco[0].x, laco[k].y - laco[0].y); if (d > dm) { dm = d; km = k; } }
+  const tol = passo * 1.6;
+  const s1 = tpDouglasPeucker(laco.slice(0, km + 1), tol), s2 = tpDouglasPeucker([...laco.slice(km), laco[0]], tol);
+  let simp = [...s1.slice(0, -1), ...s2.slice(0, -1)];
+  if (simp.length < 3) return null;
+  const inclinado = simp.some((p, k) => { const q = simp[(k + 1) % simp.length]; return Math.abs(q.x - p.x) > passo * 2.5 && Math.abs(q.y - p.y) > passo * 2.5; });
+  if (!inclinado) return null;
+  // linhas candidatas: as duas faces de cada parede e a própria linha do separador
+  const linhas = [];
+  for (const w of ws) {
+    const L = tpLen(w) || 1, ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, nx = -uy, ny = ux;
+    const offs = w.separador ? [0] : [(w.t || 0) / 2, -(w.t || 0) / 2];
+    for (const o of offs) linhas.push({ px: w.a.x + nx * o, py: w.a.y + ny * o, ux, uy, nx, ny });
+  }
+  const dist = (p, l) => Math.abs((p.x - l.px) * l.nx + (p.y - l.py) * l.ny);
+  const lados = simp.map((p, k) => {
+    const q = simp[(k + 1) % simp.length], L = Math.hypot(q.x - p.x, q.y - p.y) || 1, ex = (q.x - p.x) / L, ey = (q.y - p.y) / L;
+    let melhor = null, md = Infinity;
+    for (const l of linhas) {
+      if (Math.abs(ex * l.uy - ey * l.ux) > 0.08) continue; // não paralela
+      const d = dist(p, l) + dist(q, l); if (dist(p, l) > passo * 2.5 || dist(q, l) > passo * 2.5) continue;
+      if (d < md) { md = d; melhor = l; }
+    }
+    return melhor;
+  });
+  const out = simp.map((p, k) => {
+    const l1 = lados[(k - 1 + simp.length) % simp.length], l2 = lados[k];
+    if (!l1 || !l2) return p;
+    const den = l1.ux * l2.uy - l1.uy * l2.ux; if (Math.abs(den) < 1e-6) return p;
+    const t = ((l2.px - l1.px) * l2.uy - (l2.py - l1.py) * l2.ux) / den;
+    const q = { x: l1.px + l1.ux * t, y: l1.py + l1.uy * t };
+    return Math.hypot(q.x - p.x, q.y - p.y) < passo * 6 ? q : p;
+  });
+  // tira pontos repetidos ou alinhados que sobraram
+  const fim = [];
+  for (let k = 0; k < out.length; k++) {
+    const a = out[(k - 1 + out.length) % out.length], b = out[k], c = out[(k + 1) % out.length];
+    if (Math.hypot(b.x - a.x, b.y - a.y) < 1e-4) continue;
+    if (Math.abs((b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)) > 1e-7) fim.push(b);
+  }
+  return fim.length >= 3 ? fim : null;
 }
 // Numeração automática: dois ou mais ambientes com o mesmo nome viram
 // "Suíte 01", "Suíte 02"... na ordem em que foram criados; sobrando um só,
@@ -78234,7 +78392,15 @@ function tpComodosDoDesenho(paredes, areas) {
     ambientes[id] = g.n;
     comodosCfg[id] = { L: r2(L), W: r2(W), peDireito };
   }
-  return { ambientes, comodosCfg, grupos, soltos, temAmbientes: amb.length > 0 };
+  // escadas desenhadas entram como o cômodo "Escada" do orçamento (comprimento × largura da projeção)
+  const escadas = areas.filter((a) => a.tipo === "escada");
+  if (escadas.length) {
+    const gs = escadas.map((e) => tpEscadaGeo(e)), n = escadas.length;
+    ambientes.escada = (ambientes.escada || 0) + n;
+    comodosCfg.escada = { L: r2(gs.reduce((t, g) => t + g.comp, 0) / n), W: r2(gs.reduce((t, g) => t + g.larg, 0) / n), peDireito };
+    grupos.set("escada", { n, A: gs.reduce((t, g) => t + tpAreaPoli(g.contorno), 0), P: 0, nomes: escadas.map(() => "Escada") });
+  }
+  return { ambientes, comodosCfg, grupos, soltos, temAmbientes: amb.length > 0 || escadas.length > 0 };
 }
 function tpDesenhoParaObra(paredes, areas) {
   const r2 = (x) => Math.round(x * 100) / 100;
@@ -78273,7 +78439,10 @@ function tpDesenhoParaObra(paredes, areas) {
     perim += L;
   }
   const soma = (tipo, f) => areas.filter((a) => a.tipo === tipo && a.pts && a.pts.length >= 3).reduce((s, a) => s + f(a), 0);
-  const areaCp = soma("contrapiso", (a) => tpAreaPoli(a.pts)), areaLj = soma("laje", (a) => tpAreaPoli(a.pts)), perLj = soma("laje", (a) => tpPerimPoli(a.pts));
+  // laje: desconta a abertura sobre as escadas deste pavimento
+  const furoEsc = areas.filter((a) => a.tipo === "escada").map((e) => tpEscadaGeo(e).contorno)
+    .filter((c) => areas.some((l) => l.tipo === "laje" && l.pts && l.pts.length >= 3 && tpDentroPoli(tpCentro(c), l.pts))).reduce((t, c) => t + tpAreaPoli(c), 0);
+  const areaCp = soma("contrapiso", (a) => tpAreaPoli(a.pts)), areaLj = Math.max(0, soma("laje", (a) => tpAreaPoli(a.pts)) - furoEsc), perLj = soma("laje", (a) => tpPerimPoli(a.pts));
   const an = tpAnaliseAreas(areas, paredes);
   // sem cobertura: a pegada das paredes (casa fechada); sem ela, o contrapiso interno
   const areaPegada = tpUniaoArea((an.pegada && an.pegada.length) ? an.pegada : pegadaCasa);
@@ -78300,6 +78469,7 @@ function tpDesenhoParaObra(paredes, areas) {
     .map((g) => ({ familia: g.familia, linha: "GOLD", folhas: g.folhas, qtd: g.qtd, largura: r2(g.larg), altura: r2(g.alt) }));
   const areaAb = tpAreaAberturas(paredes);
   const com = tpComodosDoDesenho(paredes, areas);
+  const escadasQ = areas.filter((a) => a.tipo === "escada").map((e) => { const q = tpQuantEscada(e); return { forma: q.forma, degraus: q.degraus, concreto: q.concreto, formaM2: q.formaM2, fundoM2: q.fundo || 0, acoKg: q.aco, revestimento: q.revestimento, corrimao: q.corrimao }; });
   const projeto = {
     tipologia: "Térrea",
     ...(temAberturas ? { esquadrias } : {}),
@@ -78310,6 +78480,7 @@ function tpDesenhoParaObra(paredes, areas) {
     terreo: { area: r2(areaConstruida), m2Parede15: r2(m15), m2Parede20: r2(m20), m2Parede25: r2(m25), perimetroParedes: r2(perim),
       ...(areaLj ? { areaLoje: r2(areaLj), perimetroLoje: r2(perLj), tipoLoje: "Treliça" } : {}) },
     ...(cobertura.length ? { cobertura } : {}),
+    ...(escadasQ.length ? { escadas: escadasQ } : {}),
   };
   const linhas = [
     ["Tipologia", "Térrea"],
@@ -78321,6 +78492,7 @@ function tpDesenhoParaObra(paredes, areas) {
     ["Perímetro de paredes", tpFmt(perim) + " m"],
     ...(areaLj ? [["Laje (treliçada)", `${tpFmt(areaLj)} m² · perímetro ${tpFmt(perLj)} m`]] : []),
     ...cobertura.map((c, k) => [`Telhado ${cobertura.length > 1 ? k + 1 : ""}`.trim(), `${tpTelha(c.tipo).rotulo}, ${tpFmt(c.comprimento)} × ${tpFmt(c.largura)} m, ${c.aguas} água${c.aguas === 1 ? "" : "s"}, ${tpFmt(c.inclinacao * 100, 0)}%`]),
+    ...escadasQ.map((q, k) => [`Escada${escadasQ.length > 1 ? " " + (k + 1) : ""}`, q.forma === "caracol" ? `caracol, ${q.degraus} degraus — estrutura pronta (não entra concreto); revestimento ${tpFmt(q.revestimento)} m²` : `${q.degraus} degraus · concreto ${tpFmt(q.concreto, 3)} m³ · fôrma ${tpFmt(q.formaM2)} m² · aço ~${q.acoKg} kg · revestimento ${tpFmt(q.revestimento)} m²${q.corrimao ? ` · corrimão ${tpFmt(q.corrimao)} m` : ""}`]),
     ...(com.temAmbientes ? [
       ["Cômodos", [...com.grupos.entries()].map(([id, g]) => `${g.n}× ${(typeof NOME_AMBIENTE === "function" ? NOME_AMBIENTE(id) : id)} (${tpFmt(com.comodosCfg[id].L)} × ${tpFmt(com.comodosCfg[id].W)} m)`).join(" · ") || "nenhum reconhecido"],
       ...(com.soltos.length ? [["Sem tipo de cômodo", `${com.soltos.join(", ")} (não entram; renomeie para um tipo conhecido)`]] : []),
@@ -78351,8 +78523,13 @@ function tpDesenhoParaObraPavs(lista) {
     ...(todos.projeto.ambientes ? { ambientes: todos.projeto.ambientes, comodosCfg: todos.projeto.comodosCfg } : {}),
     ...(todos.projeto.portasDesenho ? { portasDesenho: todos.projeto.portasDesenho } : {}),
     arquitetura: { areaConstruida: soma((p) => p.arquitetura.areaConstruida), m2ParedesInternas: soma((p) => p.arquitetura.m2ParedesInternas), m2ParedesExternas: soma((p) => p.arquitetura.m2ParedesExternas), m2ParedesTotal: soma((p) => p.arquitetura.m2ParedesTotal) },
-    pav1: { ...c1.terreo },
+    pav1: cs.length > 2 ? (() => {
+      // 3 ou mais pavimentos: o orçamento tem um "pavimento superior"; soma os de cima
+      const sup = cs.slice(1).map((c) => c.projeto.terreo), sm = (k) => r2(sup.reduce((t, x) => t + (+x[k] || 0), 0));
+      return { ...c1.terreo, area: sm("area"), m2Parede15: sm("m2Parede15"), m2Parede20: sm("m2Parede20"), m2Parede25: sm("m2Parede25"), perimetroParedes: sm("perimetroParedes"), ...(sup.some((x) => x.areaLoje) ? { areaLoje: sm("areaLoje"), perimetroLoje: sm("perimetroLoje") } : {}) };
+    })() : { ...c1.terreo },
     ...(todos.projeto.cobertura ? { cobertura: todos.projeto.cobertura } : {}),
+    ...(todos.projeto.escadas ? { escadas: todos.projeto.escadas } : {}),
   };
   const linhas = [
     ["Tipologia", `Sobrado (${lista.length} pavimentos)`],
@@ -78373,6 +78550,8 @@ function tpMesclarProjetoObra(ant, conv, projetoId) {
     terreo: { ...(ant.terreo || {}), ...conv.projeto.terreo },
     ...(conv.projeto.pav1 ? { pav1: { ...(ant.pav1 || {}), ...conv.projeto.pav1 } } : {}),
     ...(conv.projeto.cobertura ? { cobertura: conv.projeto.cobertura } : {}),
+    // escadas: o desenho manda (apagou todas, limpa só o que ele tinha escrito)
+    ...(conv.projeto.escadas ? { escadas: conv.projeto.escadas } : ((ant.origemDesenho || {}).escadas ? { escadas: [] } : {})),
     ...(conv.projeto.externa ? { externa: { ...(ant.externa || {}), ...conv.projeto.externa } } : {}),
     // esquadrias: o desenho passa a mandar na lista quando tem portas/janelas;
     // se depois apagar todas, limpa só o que ele mesmo tinha escrito
@@ -78385,7 +78564,7 @@ function tpMesclarProjetoObra(ant, conv, projetoId) {
       comodosCfg: Object.entries(conv.projeto.comodosCfg).reduce((acc, [id, c]) => ({ ...acc, [id]: { ...((ant.comodosCfg || {})[id] || {}), ...c } }), { ...(ant.comodosCfg || {}) }),
     } : ((ant.origemDesenho || {}).ambientes ? { ambientes: {} } : {})),
     ...(conv.projeto.portasDesenho ? { portasDesenho: conv.projeto.portasDesenho } : ((ant.origemDesenho || {}).portas ? { portasDesenho: null } : {})),
-    origemDesenho: { projetoId, esquadrias: !!conv.projeto.esquadrias, ambientes: !!conv.projeto.ambientes, portas: !!conv.projeto.portasDesenho } };
+    origemDesenho: { projetoId, esquadrias: !!conv.projeto.esquadrias, ambientes: !!conv.projeto.ambientes, portas: !!conv.projeto.portasDesenho, escadas: !!conv.projeto.escadas } };
 }
 // "assinatura" dos campos do desenho, para só gravar quando algo mudou
 function tpAssinaturaDesenho(pr) {
@@ -78394,7 +78573,7 @@ function tpAssinaturaDesenho(pr) {
   const p1 = pr.pav1 || {};
   return JSON.stringify([pr.tipologia, p1.area, p1.m2Parede15, p1.m2Parede20, p1.m2Parede25, p1.perimetroParedes, p1.areaLoje, a.areaConstruida, a.m2ParedesInternas, a.m2ParedesExternas, a.m2ParedesTotal,
     t.area, t.m2Parede15, t.m2Parede20, t.m2Parede25, t.perimetroParedes, t.areaLoje, t.perimetroLoje, t.tipoLoje, pr.cobertura || null, (pr.externa || {}).pavimentacao || 0, pr.esquadrias || null, pr.ambientes || null, pr.portasDesenho || null,
-    pr.ambientes ? Object.keys(pr.ambientes).sort().map((id) => { const c = (pr.comodosCfg || {})[id] || {}; return [id, c.L, c.W, c.peDireito]; }) : null]);
+    pr.ambientes ? Object.keys(pr.ambientes).sort().map((id) => { const c = (pr.comodosCfg || {})[id] || {}; return [id, c.L, c.W, c.peDireito]; }) : null, pr.escadas || null]);
 }
 
 // Arco por 3 pontos (início, fim e um ponto da curva), devolvido como
@@ -78830,7 +79009,18 @@ function tpParedesExternas(ps) {
 // largura, desnível (altura) e forma (reta, L, U, caracol). Degraus pela
 // fórmula de Blondel: espelho ~17,5 cm (altura / nº inteiro), piso = 63 − 2e
 // (entre 25 e 32 cm). L e U têm patamar no meio; giro 1 = vira à direita.
-const TP_ESCADA_FORMAS = [{ id: "reta", rotulo: "Reta" }, { id: "L", rotulo: "Em L" }, { id: "U", rotulo: "Em U" }, { id: "caracol", rotulo: "Caracol" }];
+const TP_ESCADA_FORMAS = [{ id: "reta", rotulo: "Reta" }, { id: "L", rotulo: "Em L" }, { id: "Lleque", rotulo: "L em leque" }, { id: "U", rotulo: "Em U" }, { id: "caracol", rotulo: "Caracol" }];
+// Conforto e norma (NBR 9050 / códigos de obra usuais): espelho 16–18 cm,
+// piso 28–32 cm, Blondel 63–64 cm, largura mínima usual 0,80 m
+function tpAvisosEscada(g, e) {
+  const av = [];
+  if (g.esp > 0.185) av.push(`Espelho de ${tpFmt(g.esp * 100, 1)} cm: alto (máx. 18 cm).`);
+  if (g.esp < 0.155) av.push(`Espelho de ${tpFmt(g.esp * 100, 1)} cm: baixo (mín. 16 cm).`);
+  if (g.piso < 0.275) av.push(`Piso de ${tpFmt(g.piso * 100, 1)} cm: curto (mín. 28 cm).`);
+  if ((+e.largura || 0.9) < 0.8) av.push("Largura abaixo de 0,80 m.");
+  if (g.forma === "caracol" && (+e.largura || 0.9) < 0.7) av.push("Caracol com menos de 0,70 m de passagem.");
+  return av;
+}
 function tpEscadaGeo(e) {
   const H = Math.max(0.3, +e.altura || 2.9), L = Math.max(0.6, +e.largura || 0.9), n = Math.max(2, Math.round(H / 0.175)), esp = H / n;
   const piso = Math.max(0.25, Math.min(0.32, 0.63 - 2 * esp)), T = n - 1; // pisos (o último espelho chega no pavimento de cima)
@@ -78855,26 +79045,114 @@ function tpEscadaGeo(e) {
   }
   if (forma === "reta") {
     for (let k = 0; k < T; k++) { degraus.push({ pts: ret(k * piso, (k + 1) * piso, -L / 2, L / 2), z: (k + 1) * esp }); caminho.push(P((k + 0.5) * piso, 0)); }
-    return { n, esp, piso, T, forma, degraus, patamares, caminho, comp: T * piso, larg: L, contorno: ret(0, T * piso, -L / 2, L / 2) };
+    const oR = 0.05;
+    return { n, esp, piso, T, forma, degraus, patamares, caminho, comp: T * piso, larg: L, contorno: ret(0, T * piso, -L / 2, L / 2),
+      bordas: { pos: [P(0, L / 2 - oR), P(T * piso, L / 2 - oR)], neg: [P(0, -L / 2 + oR), P(T * piso, -L / 2 + oR)] } };
   }
   // L e U: 1º lance, patamar (um nível), 2º lance
   const a = Math.ceil((T - 1) / 2), b = Math.max(0, T - 1 - a), sA = a * piso;
   for (let k = 0; k < a; k++) { degraus.push({ pts: ret(k * piso, (k + 1) * piso, -L / 2, L / 2), z: (k + 1) * esp }); caminho.push(P((k + 0.5) * piso, 0)); }
   const zP = (a + 1) * esp;
+  if (forma === "Lleque") {
+    // patamar trocado por 3 degraus em leque girando no canto de dentro
+    const a2 = Math.max(1, Math.ceil((T - 3) / 2)), b2 = Math.max(0, T - 3 - a2), sB = a2 * piso;
+    degraus.length = 0; caminho.length = 0;
+    for (let k = 0; k < a2; k++) { degraus.push({ pts: ret(k * piso, (k + 1) * piso, -L / 2, L / 2), z: (k + 1) * esp }); caminho.push(P((k + 0.5) * piso, 0)); }
+    const C = P(sB, L / 2), A = P(sB, -L / 2), B = P(sB + L, -L / 2), D = P(sB + L, L / 2), M1 = P(sB + L * 0.62, -L / 2), M2 = P(sB + L, -L / 2 + L * 0.38);
+    const z0 = a2 * esp;
+    degraus.push({ pts: [C, A, M1], z: z0 + esp }, { pts: [C, M1, B, M2], z: z0 + 2 * esp }, { pts: [C, M2, D], z: z0 + 3 * esp });
+    caminho.push(P(sB + L * 0.3, -L * 0.15), P(sB + L * 0.62, -L * 0.1), P(sB + L * 0.68, L * 0.3));
+    for (let k = 0; k < b2; k++) { degraus.push({ pts: ret(sB, sB + L, L / 2 + k * piso, L / 2 + (k + 1) * piso), z: z0 + 3 * esp + (k + 1) * esp }); caminho.push(P(sB + L / 2, L / 2 + (k + 0.5) * piso)); }
+    const oQ = 0.05, fim2 = L / 2 + b2 * piso;
+    return { n, esp, piso, T, forma, degraus, patamares, caminho, comp: sB + L, larg: L + b2 * piso,
+      contorno: [P(0, -L / 2), P(sB + L, -L / 2), P(sB + L, L / 2 + b2 * piso), P(sB, L / 2 + b2 * piso), P(sB, L / 2), P(0, L / 2)],
+      bordas: { neg: [P(0, -L / 2 + oQ), P(sB + L - oQ, -L / 2 + oQ), P(sB + L - oQ, fim2)], pos: [P(0, L / 2 - oQ), P(sB + oQ, L / 2 - oQ), P(sB + oQ, fim2)] } };
+  }
   if (forma === "L") {
     patamares.push({ pts: ret(sA, sA + L, -L / 2, L / 2), z: zP }); caminho.push(P(sA + L / 2, 0));
     for (let k = 0; k < b; k++) { degraus.push({ pts: ret(sA, sA + L, L / 2 + k * piso, L / 2 + (k + 1) * piso), z: zP + (k + 1) * esp }); caminho.push(P(sA + L / 2, L / 2 + (k + 0.5) * piso)); }
+    const oQ = 0.05, fim2 = L / 2 + b * piso;
     return { n, esp, piso, T, forma, degraus, patamares, caminho, comp: sA + L, larg: L + b * piso,
-      contorno: [P(0, -L / 2), P(sA + L, -L / 2), P(sA + L, L / 2 + b * piso), P(sA, L / 2 + b * piso), P(sA, L / 2), P(0, L / 2)] };
+      contorno: [P(0, -L / 2), P(sA + L, -L / 2), P(sA + L, L / 2 + b * piso), P(sA, L / 2 + b * piso), P(sA, L / 2), P(0, L / 2)],
+      bordas: { neg: [P(0, -L / 2 + oQ), P(sA + L - oQ, -L / 2 + oQ), P(sA + L - oQ, fim2)], pos: [P(0, L / 2 - oQ), P(sA + oQ, L / 2 - oQ), P(sA + oQ, fim2)] } };
   }
   // U: patamar atravessa os dois lances (vão de 10 cm entre eles); 2º lance volta
   const gap = 0.1, t2 = L + gap; // eixo do 2º lance
   patamares.push({ pts: ret(sA, sA + L, -L / 2, L / 2 + t2), z: zP }); caminho.push(P(sA + L / 2, 0), P(sA + L / 2, t2));
   for (let k = 0; k < b; k++) { degraus.push({ pts: ret(sA - (k + 1) * piso, sA - k * piso, t2 - L / 2, t2 + L / 2), z: zP + (k + 1) * esp }); caminho.push(P(sA - (k + 0.5) * piso, t2)); }
   const s2 = sA - b * piso;
+  const oU = 0.05;
   return { n, esp, piso, T, forma, degraus, patamares, caminho, comp: Math.max(sA, sA - s2) + L, larg: 2 * L + gap,
-    contorno: [P(Math.min(0, s2), -L / 2), P(sA + L, -L / 2), P(sA + L, t2 + L / 2), P(Math.min(0, s2), t2 + L / 2)] };
+    contorno: [P(Math.min(0, s2), -L / 2), P(sA + L, -L / 2), P(sA + L, t2 + L / 2), P(Math.min(0, s2), t2 + L / 2)],
+    bordas: { neg: [P(0, -L / 2 + oU), P(sA + L - oU, -L / 2 + oU), P(sA + L - oU, t2 + L / 2 - oU), P(s2, t2 + L / 2 - oU)],
+      pos: [P(0, L / 2 - oU), P(sA, L / 2 - oU), P(sA, t2 - L / 2 + oU), P(s2, t2 - L / 2 + oU)] } };
 }
+// Corrimão: linhas ao longo do percurso, a "lado" (±1 = direita/esquerda de
+// quem sobe) e recuadas 5 cm da borda; altura sobe junto com os degraus
+function tpCorrimaosEscada(e, g) {
+  const L = Math.max(0.6, +e.largura || 0.9), H = Math.max(0.3, +e.altura || 2.9), gs = (e.giro || 1) >= 0 ? 1 : -1;
+  let linhas = [];
+  if (g.forma === "caracol") {
+    // por fora, acompanhando os degraus
+    if ((e.corrimao || "ambos") === "nenhum") return [];
+    const Ro = g.R - 0.05; linhas = [g.caminho.map((q) => { const dx = q.x - g.centro.x, dy = q.y - g.centro.y, d = Math.hypot(dx, dy) || 1; return { x: g.centro.x + dx / d * Ro, y: g.centro.y + dy / d * Ro }; })];
+  } else {
+    // lado direito de quem sobe = lado +v quando vira à direita (giro 1)
+    const dir = gs > 0 ? g.bordas.pos : g.bordas.neg, esq = gs > 0 ? g.bordas.neg : g.bordas.pos;
+    linhas = { ambos: [dir, esq], dir: [dir], esq: [esq], nenhum: [] }[e.corrimao || "ambos"] || [dir, esq];
+  }
+  // altura: sobe junto com os degraus, do primeiro espelho até o pavimento de cima
+  return linhas.map((r) => {
+    const comp = [0]; for (let k = 1; k < r.length; k++) comp.push(comp[k - 1] + Math.hypot(r[k].x - r[k - 1].x, r[k].y - r[k - 1].y));
+    const tot = comp[comp.length - 1] || 1;
+    return r.map((q, k) => ({ x: q.x, y: q.y, z: g.esp + (H - g.esp) * comp[k] / tot }));
+  });
+}
+// Quantitativo da escada de concreto armado (moldada no lugar): laje inclinada
+// de 12 cm por baixo dos degraus, degraus maciços (meio espelho × piso),
+// patamares com 12 cm; fôrma = fundo inclinado + espelhos + laterais; aço por
+// taxa de 80 kg/m³. Revestimento = pisos + espelhos. Caracol: estrutura
+// metálica/pré-moldada — não entra concreto, só revestimento e corrimão.
+const TP_ESCADA_LAJE = 0.12, TP_ESCADA_ACO_KGM3 = 80;
+function tpQuantEscada(e) {
+  const g = tpEscadaGeo(e), r2 = (x) => Math.round(x * 100) / 100, r3 = (x) => Math.round(x * 1000) / 1000;
+  const L = Math.max(0.6, +e.largura || 0.9);
+  const areaPisos = g.degraus.reduce((t, d) => t + tpAreaPoli(d.pts), 0), areaPat = g.patamares.reduce((t, d) => t + tpAreaPoli(d.pts), 0);
+  const fatInc = Math.hypot(g.piso, g.esp) / (g.piso || 1);
+  const espelhos = g.n * L * g.esp;
+  const corr = tpCorrimaosEscada(e, g).reduce((t, r) => { let c = 0; for (let k = 1; k < r.length; k++) c += Math.hypot(r[k].x - r[k - 1].x, r[k].y - r[k - 1].y, r[k].z - r[k - 1].z); return t + c; }, 0);
+  if (g.forma === "caracol") return { forma: g.forma, degraus: g.n, concreto: 0, formaM2: 0, aco: 0, revestimento: r2(areaPisos + areaPat + espelhos), corrimao: r2(corr) };
+  const concreto = areaPisos * fatInc * TP_ESCADA_LAJE + areaPisos * g.esp / 2 + areaPat * TP_ESCADA_LAJE;
+  const compInc = (g.comp || 0) * fatInc;
+  const forma = areaPisos * fatInc + areaPat + espelhos + 2 * compInc * (TP_ESCADA_LAJE + g.esp / 2);
+  return { forma: g.forma, degraus: g.n, concreto: r3(concreto), formaM2: r2(forma), aco: Math.round(concreto * TP_ESCADA_ACO_KGM3), revestimento: r2(areaPisos + areaPat + espelhos), corrimao: r2(corr), fundo: r2(areaPisos * fatInc + areaPat) };
+}
+// Trechos (s0, s1) em que a linha (ponto a, direção u, normal n) atravessa o
+// polígono — usado no corte para laje, piso, degraus e ambientes
+function tpIntervalosLinha(pts, a, u, n) {
+  if (!pts || pts.length < 3) return [];
+  const xs = [];
+  for (let k = 0; k < pts.length; k++) {
+    const p = pts[k], q = pts[(k + 1) % pts.length];
+    const dp = (p.x - a.x) * n.x + (p.y - a.y) * n.y, dq = (q.x - a.x) * n.x + (q.y - a.y) * n.y;
+    if ((dp <= 0) !== (dq <= 0)) { const t = dp / (dp - dq); xs.push((p.x + (q.x - p.x) * t - a.x) * u.x + (p.y + (q.y - p.y) * t - a.y) * u.y); }
+  }
+  xs.sort((x, y) => x - y);
+  const out = []; for (let k = 0; k + 1 < xs.length; k += 2) if (xs[k + 1] - xs[k] > 1e-4) out.push([xs[k], xs[k + 1]]);
+  return out;
+}
+// Apoio do telhado num pavimento qualquer (mesma regra do 3D): topo da laje
+// ou das paredes que ficam embaixo dele, ou o nível digitado
+function tpApoioTelhado(a, paredes, areas, padrao) {
+  if (a.cotaManual) return a.cota || 0;
+  const pts = a.pts || []; let topo = 0, achou = false;
+  for (const l of areas || []) { if (l.tipo !== "laje" || !l.pts || l.pts.length < 3) continue; if (tpDentroPoli(tpCentro(l.pts), pts)) { topo = Math.max(topo, (l.cota || 0) + (l.esp || 0)); achou = true; } }
+  for (const w of paredes || []) if (tpDentroPoli({ x: (w.a.x + w.b.x) / 2, y: (w.a.y + w.b.y) / 2 }, pts)) { topo = Math.max(topo, w.h || 0); achou = true; }
+  return achou ? Math.round(topo * 1000) / 1000 : (a.cota != null ? a.cota : padrao);
+}
+// Corte: "A" vira "AA" no título (convenção de prancha); nome longo fica como está
+const tpNomeCorte = (c) => { const n = String(c.nome || "A").trim() || "A"; return n.length === 1 ? n + n : n; };
+const tpProximaLetraCorte = (cs) => { for (const l of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") if (!cs.some((c) => c.nome === l)) return l; return String(cs.length + 1); };
 const tpNovoIdAmb = () => "amb" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const tpFolhas = (o) => (o.folhas != null && !tpGiro(o.tipo) ? o.folhas : tpEsq(o.tipo).folhas);
 const tpGiro = (tipo) => tipo === "porta_giro" || tipo === "porta_giro2";
@@ -79057,7 +79335,8 @@ const TP_MODOS_TRACO = [
 // Laje, Mover. Propriedades do que estiver selecionado no menu lateral.
 function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const planRef = useRef(null), v3dRef = useRef(null);
-  const planBox = useRef(null), v3dBox = useRef(null);
+  const planBox = useRef(null), v3dBox = useRef(null), barraRef = useRef(null);
+  const [barraAberta, setBarraAberta] = useState(false); // celular: barra de ferramentas aberta
   // Pavimentos: lista (id, nome, nível) e o desenho de cada um. O pavimento
   // ativo fica em paredes/areas (o editor inteiro trabalha nele); os outros
   // ficam guardados em dadosPav. O térreo continua também em projeto.paredes/areas.
@@ -79100,6 +79379,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const [ultimaSinc, setUltimaSinc] = useState(null);
   const [painelObra, setPainelObra] = useState(null); // null, confirmar ou feito
   const [confirmarPav, setConfirmarPav] = useState(null);
+  const [vis3d, setVis3d] = useState("todos");
+  const [cortes, setCortes] = useState(() => (Array.isArray(projeto.cortes) ? projeto.cortes : [])); // cortes AA, BB… (linha na planta)
+  const [verCorte, setVerCorte] = useState(() => (Array.isArray(projeto.cortes) && projeto.cortes[0] ? projeto.cortes[0].id : null));
+  const corteRef = useRef(null), corteBox = useRef(null);  // 3D: todos os pavimentos, até o ativo, ou só o ativo
   const [novaEscada, setNovaEscada] = useState({ forma: "reta", largura: 0.9, giro: 1 }); // opções da próxima escada // id do pavimento a excluir (confirmação)
   const [tipoEsq, setTipoEsq] = useState("porta_giro");  // tipo da próxima porta/janela
   const [dimsEsq, setDimsEsq] = useState(() => Object.fromEntries(TP_ESQ.map((t) => [t.id, { larg: t.larg, alt: t.alt, peit: t.peit, mat: t.mat }])));
@@ -79116,6 +79399,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const alcasEsq = useRef([]);                     // quadradinhos das pontas da esquadria selecionada (px do canvas)
   const ambientesFeitos = useRef(null);
   const sepAnterior = useRef(null);               // linhas de separação da última vez (nome volta ao centro se mudarem)          // último par (paredes → ambientes) já calculado no arraste
+  const escGrips = useRef([]);                    // puxadores da escada selecionada (px do canvas)
   const pegCache = useRef(null);                  // contorno da casa da última planta desenhada
   const rotulosEsq = useRef([]);                  // rótulos das esquadrias (código + medidas), px do canvas
   const rotulosParede = useRef([]);              // comprimentos das paredes na planta (px do canvas): selecionar, arrastar, apagar
@@ -79139,10 +79423,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const terreo = lista[0] || { paredes, areas };
     const dados = { ...projeto, obraId, sincronizar, paredes: terreo.paredes, areas: terreo.areas, escala, atualizadoEm: new Date().toISOString() };
     if (lista.length > 1) dados.pavimentos = lista; else delete dados.pavimentos;
+    if (cortes.length) dados.cortes = cortes; else delete dados.cortes;
     gravarPendente.current = () => { gravarPendente.current = null; onAlterar(dados); };
     const t = setTimeout(() => gravarPendente.current && gravarPendente.current(), 400);
     return () => clearTimeout(t);
-  }, [paredes, areas, obraId, sincronizar, escala, pavimentos, dadosPav, pavAtivo]);
+  }, [paredes, areas, obraId, sincronizar, escala, pavimentos, dadosPav, pavAtivo, cortes]);
   useEffect(() => {
     const sair = () => gravarPendente.current && gravarPendente.current();
     window.addEventListener("beforeunload", sair);
@@ -79157,10 +79442,26 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   }, []);
 
   // ---------- alterações (com histórico) ----------
-  const mudar = (novasParedes, novasAreas, manterSel) => {
-    historico.current.push({ paredes, areas });
+  // Histórico guarda a foto do projeto inteiro (pavimento ativo, todos os
+  // pavimentos e os cortes): o Ctrl+Z atravessa a troca de pavimento e desfaz
+  // também criar/excluir pavimento, levar parede para cima e os cortes.
+  const fotoAtual = () => ({ pavAtivo, paredes, areas, pavimentos, dadosPav, cortes });
+  const registrar = (extra) => {
+    historico.current.push({ ...fotoAtual(), ...(extra || {}) });
     if (historico.current.length > 200) historico.current.shift();
     futuro.current = [];
+  };
+  const restaurar = (f) => {
+    const outroPav = f.pavAtivo && f.pavAtivo !== pavAtivo;
+    if (f.pavimentos) setPavimentos(f.pavimentos);
+    if (f.dadosPav) setDadosPav(f.dadosPav);
+    if (f.pavAtivo) setPavAtivo(f.pavAtivo);
+    if (f.cortes) { setCortes(f.cortes); if (!f.cortes.some((c) => c.id === verCorte)) setVerCorte(f.cortes[0] ? f.cortes[0].id : null); }
+    setParedes(f.paredes); setAreas(f.areas); setSel([]);
+    if (outroPav) { setPoli([]); setAncora(null); setDividir(null); sepAnterior.current = null; ambientesFeitos.current = null; const pv = (f.pavimentos || pavimentos).find((p) => p.id === f.pavAtivo); if (pv) avisar(`Voltou para o ${pv.nome}.`); }
+  };
+  const mudar = (novasParedes, novasAreas, manterSel) => {
+    registrar();
     if (novasParedes) setParedes(novasParedes);
     if (novasAreas) setAreas(tpNumerarAmbientes(novasAreas));
     if (!manterSel) setSel([]);
@@ -79171,6 +79472,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const todasChaves = () => [...paredes.map((_, i) => "p" + i), ...areas.map((_, i) => "a" + i), ...paredes.flatMap((w) => (w.ab || []).map((o) => "o" + o.id))];
   const excluirSelecao = () => {
     if (!sel.length) return;
+    if (sel.every((k) => k[0] === "x")) { const fx = new Set(sel.map((k) => +k.slice(1))); const resto = cortes.filter((_, i) => !fx.has(i)); registrar(); setCortes(resto); if (!resto.some((c) => c.id === verCorte)) setVerCorte(resto[0] ? resto[0].id : null); setSel([]); return; }
     const fl = new Set(sel.filter((k) => k[0] === "l").map((k) => +k.slice(1)));
     if (fl.size && sel.every((k) => k[0] === "l")) { mudar(paredes.map((w, i) => (fl.has(i) ? { ...w, semCota: true } : w))); setSel([]); return; }
     const fp = new Set(selP), fa = new Set(selA), fo = new Set(selO.map((x) => x.o.id));
@@ -79273,17 +79575,18 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   function desfazer() {
     const anterior = historico.current.pop();
     if (!anterior) return;
-    futuro.current.push({ paredes, areas });
-    const removida = paredes.length === anterior.paredes.length + 1 ? paredes[paredes.length - 1] : null;
+    futuro.current.push(fotoAtual());
+    const mesmo = !anterior.pavAtivo || anterior.pavAtivo === pavAtivo;
+    const removida = mesmo && paredes.length === anterior.paredes.length + 1 ? paredes[paredes.length - 1] : null;
     if (inicio && removida && removida.b.x === inicio.x && removida.b.y === inicio.y) setInicio(removida.a);
     else setInicio(null);
-    setParedes(anterior.paredes); setAreas(anterior.areas); setSel([]);
+    restaurar(anterior);
   }
   function refazer() {
     const prox = futuro.current.pop();
     if (!prox) return;
-    historico.current.push({ paredes, areas });
-    setParedes(prox.paredes); setAreas(prox.areas); setSel([]); setInicio(null);
+    historico.current.push(fotoAtual());
+    restaurar(prox); setInicio(null);
   }
   // seleção: Ctrl soma, Shift tira, sem tecla substitui (convenção Revit)
   const aplicarSelecao = (chaves0, g) => {
@@ -79337,9 +79640,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const d = novos[id] || { paredes: [], areas: [] };
     setDadosPav(novos); setPavAtivo(id); setParedes(d.paredes); setAreas(d.areas);
     setSel([]); setInicio(null); setPoli([]); setAncora(null); setDividir(null);
-    historico.current = []; futuro.current = []; sepAnterior.current = null; ambientesFeitos.current = null;
+    sepAnterior.current = null; ambientesFeitos.current = null;
   };
   const novoPavimento = () => {
+    registrar();
     const topo = pavsOrd[pavsOrd.length - 1], dT = dadosDe(topo.id);
     const hMax = Math.max(0, ...dT.paredes.map((w) => w.h || 0)) || altM;
     const esLaje = Math.max(0.1, ...dT.areas.filter((a) => a.tipo === "laje").map((a) => a.esp || 0.1));
@@ -79348,21 +79652,43 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const nome = pavsOrd.length === 1 ? "Superior" : `Pavimento ${pavsOrd.length}`;
     // nasce com as paredes de periferia do pavimento de baixo (sem portas/janelas)
     const ext = tpParedesExternas(dT.paredes).map(({ ab, cotaDesl, semCota, ...w }) => ({ ...w }));
+    // laje entre os pavimentos: se o de baixo ainda não tem, nasce pelo contorno
+    // externo das paredes, no topo delas (10 cm)
+    let areasT = dT.areas, lajeNova = false;
+    if (!areasT.some((a) => a.tipo === "laje")) {
+      let peg = []; try { peg = tpPegadaConstruida(tpParedesDesenho(dT.paredes)) || []; } catch (err) { peg = []; }
+      const lajes = peg.filter((P) => P && P.length >= 3).map((P) => ({ tipo: "laje", pts: P.map((q) => ({ x: r3(q.x), y: r3(q.y) })), esp: 0.1, cota: r3(hMax) }));
+      if (lajes.length) { areasT = [...areasT, ...lajes]; lajeNova = true; }
+    }
+    const baseT = topo.id === pavAtivo ? { paredes, areas: areasT } : { ...dT, areas: areasT };
     setPavimentos([...pavimentos, { id, nome, nivel }]);
-    setDadosPav({ ...dadosPav, [pavAtivo]: { paredes, areas }, [id]: { paredes: ext, areas: [] } });
+    setDadosPav({ ...dadosPav, [pavAtivo]: { paredes, areas }, [topo.id]: baseT, [id]: { paredes: ext, areas: [] } });
     setPavAtivo(id); setParedes(ext); setAreas([]);
     setSel([]); setInicio(null); setPoli([]); setAncora(null); setDividir(null);
-    historico.current = []; futuro.current = []; sepAnterior.current = null; ambientesFeitos.current = null;
-    avisar(`${nome} criado no nível ${tpFmt(nivel)} m${ext.length ? `, com ${ext.length} parede${ext.length > 1 ? "s" : ""} de periferia copiada${ext.length > 1 ? "s" : ""}` : ""}.`);
+    sepAnterior.current = null; ambientesFeitos.current = null;
+    avisar(`${nome} criado no nível ${tpFmt(nivel)} m${ext.length ? `, com ${ext.length} parede${ext.length > 1 ? "s" : ""} de periferia copiada${ext.length > 1 ? "s" : ""}` : ""}${lajeNova ? "; laje criada sobre o " + topo.nome : ""}.`);
+  };
+  // leva (copia) as paredes selecionadas para o pavimento de cima — paredes que sobem
+  const levarParaCima = (idx) => {
+    const k = pavsOrd.findIndex((p) => p.id === pavAtivo), acima = pavsOrd[k + 1];
+    if (!acima) { avisar("Não há pavimento acima. Crie um em Pavimentos."); return; }
+    const novas = idx.map((i) => paredes[i]).filter(Boolean).map(({ ab, cotaDesl, semCota, ...w }) => ({ ...w }));
+    const d = dadosPav[acima.id] || { paredes: [], areas: [] };
+    const ja = (w) => d.paredes.some((x) => Math.hypot(x.a.x - w.a.x, x.a.y - w.a.y) < 1e-3 && Math.hypot(x.b.x - w.b.x, x.b.y - w.b.y) < 1e-3);
+    const add = novas.filter((w) => !ja(w));
+    if (add.length) registrar();
+    setDadosPav({ ...dadosPav, [acima.id]: { ...d, paredes: [...d.paredes, ...add] } });
+    avisar(add.length ? `${add.length} parede${add.length > 1 ? "s" : ""} levada${add.length > 1 ? "s" : ""} para o ${acima.nome}.` : `Essas paredes já existem no ${acima.nome}.`);
   };
   const alturaEscada = () => { const k = pavsOrd.findIndex((p) => p.id === pavAtivo), acima = pavsOrd[k + 1]; return acima ? r3(acima.nivel - pavAt.nivel) : r3(altM + 0.1); };
-  const editarPav = (id, mud) => setPavimentos(pavimentos.map((p) => (p.id === id ? { ...p, ...mud } : p)));
+  const editarPav = (id, mud) => { registrar(); setPavimentos(pavimentos.map((p) => (p.id === id ? { ...p, ...mud } : p))); };
   const excluirPav = (id) => {
     if (pavsOrd[0].id === id) return; // o térreo não sai
+    registrar();
     const resto = pavimentos.filter((p) => p.id !== id), { [id]: _fora, ...dRest } = dadosPav;
     if (id === pavAtivo) {
       const alvo = [...resto].sort((a, b) => a.nivel - b.nivel)[0], d = dRest[alvo.id] || { paredes: [], areas: [] };
-      setPavAtivo(alvo.id); setParedes(d.paredes); setAreas(d.areas); setSel([]); historico.current = []; futuro.current = [];
+      setPavAtivo(alvo.id); setParedes(d.paredes); setAreas(d.areas); setSel([]);
     }
     setPavimentos(resto); setDadosPav(dRest);
   };
@@ -79489,11 +79815,18 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     for (const p of pts) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
     return { x0, y0, x1: Math.max(x1, x0 + 1), y1: Math.max(y1, y0 + 1) };
   };
+  // faixa de cima da planta coberta pela barra de ferramentas (px do canvas):
+  // o "ajustar à tela" centraliza o desenho na parte que fica visível
+  const topoUtil = () => {
+    const c = planRef.current, bb = barraRef.current; if (!c || !bb || !c.width) return 0;
+    const rc = c.getBoundingClientRect(), rb = bb.getBoundingClientRect(); if (!rc.width || !rb.height || rb.height > rc.height * 0.5) return 0; // barra que ocuparia meia tela: medida sem sentido, ignora
+    return Math.max(0, Math.min(c.height * 0.4, (rb.bottom - rc.top + 4) * (c.width / rc.width)));
+  };
   const ajustar = () => {
     const c = planRef.current; if (!c || !c.width) return;
-    const b = limites(), m = 1.5;
-    const s = Math.min(c.width / (b.x1 - b.x0 + 2 * m), c.height / (b.y1 - b.y0 + 2 * m));
-    vista.current = { s, ox: c.width / 2 - ((b.x0 + b.x1) / 2) * s, oy: c.height / 2 - ((b.y0 + b.y1) / 2) * s };
+    const b = limites(), m = 1.5, tp = topoUtil(), hu = c.height - tp;
+    const s = Math.min(c.width / (b.x1 - b.x0 + 2 * m), hu / (b.y1 - b.y0 + 2 * m));
+    vista.current = { s, ox: c.width / 2 - ((b.x0 + b.x1) / 2) * s, oy: tp + hu / 2 - ((b.y0 + b.y1) / 2) * s };
     desenharPlanta();
   };
   const zoom = (fator, cx, cy) => {
@@ -79513,7 +79846,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // Ponto do traço: ímã nas pontas de paredes e áreas (vence a grade, para
   // fechar cantos com medidas digitadas) e, com Shift, trava na horizontal
   // ou vertical a partir do ponto anterior (ortogonal).
-  const baseTraco = () => (ancora && ancora.ret ? ancora.ret : ancora && ancora.arcoFim ? null : (ferramenta === "parede" || ferramenta === "separador" || ferramenta === "cota" || ferramenta === "escada") ? inicio : (poli.length ? poli[poli.length - 1] : null));
+  const baseTraco = () => (ancora && ancora.ret ? ancora.ret : ancora && ancora.arcoFim ? null : (ferramenta === "parede" || ferramenta === "separador" || ferramenta === "cota" || ferramenta === "escada" || ferramenta === "corte") ? inicio : (poli.length ? poli[poli.length - 1] : null));
   // Pontos de ímã. Além do eixo (pontas), cada parede oferece os cantos das
   // suas faces: nas pontas soltas, os 4 cantos do retângulo; onde duas paredes
   // se encontram, o cruzamento das faces — que dá a quina de fora e a de
@@ -79712,7 +80045,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const c = planRef.current, v = vista.current; if (!c || !v || !c.width) return;
     const ctx = c.getContext("2d"), W = c.width, H = c.height, dpr = window.devicePixelRatio || 1;
     ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, W, H);
-    iconeEq.current = null; cotasClic.current = []; rotulosClic.current = []; rotulosParede.current = []; rotulosEsq.current = []; alcasEsq.current = []; cotasDes.current = [];
+    iconeEq.current = null; cotasClic.current = []; rotulosClic.current = []; rotulosParede.current = []; rotulosEsq.current = []; escGrips.current = []; alcasEsq.current = []; cotasDes.current = [];
     const passo = v.s * TP_GRADE < 8 * dpr ? 1 : TP_GRADE;
     const xA = Math.floor(-v.ox / v.s), xB = Math.ceil((W - v.ox) / v.s), yA = Math.floor(-v.oy / v.s), yB = Math.ceil((H - v.oy) / v.s);
     ctx.lineWidth = 1;
@@ -80069,6 +80402,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         ctx.setLineDash(acima ? [4 * dpr, 3 * dpr] : []); caminho(d.pts); ctx.stroke();
       }
       ctx.setLineDash([]); ctx.lineWidth = 1.4 * dpr; caminho(g.contorno); ctx.stroke();
+      // corrimão: linha fina junto da borda
+      ctx.lineWidth = 0.9 * dpr; ctx.strokeStyle = cor;
+      for (const r of tpCorrimaosEscada(e, g)) { ctx.beginPath(); r.forEach((q, k) => { const [x, y] = T(q); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.stroke(); }
       // linha de corte (traço quebrado na diagonal) no primeiro degrau acima de 1,20 m
       if (!desce) {
         const k = g.degraus.findIndex((d) => d.z > CORTE + 1e-6);
@@ -80098,6 +80434,19 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     };
     if (pavAbaixo) for (const e of ((dadosPav[pavAbaixo.id] || {}).areas || [])) if (e.tipo === "escada") desenharEscada(e, false, true);
     areas.forEach((e, i) => { if (e.tipo === "escada") desenharEscada(e, marcadas.has("a" + i), false); });
+    // escada selecionada sozinha: quadradinho no lado (largura) e bolinha atrás do pé (girar)
+    if (sel.length === 1 && selA.length === 1 && areas[selA[0]] && areas[selA[0]].tipo === "escada" && ferramenta === "selecionar") {
+      const ai = selA[0], e = areas[ai], g = tpEscadaGeo(e), u = { x: Math.cos(e.ang || 0), y: Math.sin(e.ang || 0) }, L = +e.largura || 0.9, gs = (e.giro || 1) >= 0 ? 1 : -1;
+      const pL = g.forma === "caracol" ? { x: e.x + u.x * g.R, y: e.y + u.y * g.R } : { x: e.x + u.x * g.piso * 1.5 - (-u.y * gs) * L / 2, y: e.y + u.y * g.piso * 1.5 - (u.x * gs) * L / 2 };
+      // bolinha de girar: na frente da escada (não briga com o "SOBE", que fica atrás do pé)
+      const off = g.forma === "caracol" ? g.R + 0.45 : (g.forma === "reta" ? g.comp : g.comp) + 0.45, pG = { x: e.x + u.x * off, y: e.y + u.y * off };
+      const [lx, ly] = T(pL), [gx, gy] = T(pG), [ox, oy] = T(g.forma === "caracol" ? { x: e.x + u.x * g.R, y: e.y + u.y * g.R } : { x: e.x, y: e.y });
+      ctx.strokeStyle = TP_AZUL; ctx.lineWidth = 1 * dpr; ctx.setLineDash([3 * dpr, 3 * dpr]); ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(gx, gy); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = "#fff"; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.rect(lx - 5 * dpr, ly - 5 * dpr, 10 * dpr, 10 * dpr); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(gx, gy, 6 * dpr, 0, 7); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(gx, gy, 2.2 * dpr, 0, 7); ctx.fillStyle = TP_AZUL; ctx.fill();
+      escGrips.current.push({ x: lx, y: ly, tipo: "escLarg", ai }, { x: gx, y: gy, tipo: "escGiro", ai });
+    }
     if (ferramenta === "escada" && inicio && hover && Math.hypot(hover.x - inicio.x, hover.y - inicio.y) > 0.05) {
       desenharEscada({ ...novaEscada, x: inicio.x, y: inicio.y, ang: Math.atan2(hover.y - inicio.y, hover.x - inicio.x), altura: alturaEscada() }, false, false, true);
     }
@@ -80129,7 +80478,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const pD = tpParedesDesenho(paredes);
     // contorno da casa (face de fora das paredes): esquadria em parede de
     // periferia leva o rótulo pelo lado de fora
-    if (!pegCache.current || pegCache.current.ps !== paredes) { let pg = []; try { pg = tpPegadaConstruida(pD) || []; } catch (err) { pg = []; } pegCache.current = { ps: paredes, pg }; }
+    // no arraste o contorno da casa se refaz no máximo a cada ~0,6 s (é caro em
+    // projeto grande); ao soltar, refaz na hora
+    const arrastando = gesto.current && gesto.current.moveu, agoraPg = performance.now();
+    if (!pegCache.current || (pegCache.current.ps !== paredes && !(arrastando && agoraPg - pegCache.current.t < 600))) { let pg = []; try { pg = tpPegadaConstruida(pD) || []; } catch (err) { pg = []; } pegCache.current = { ps: paredes, pg, t: agoraPg }; }
     const pegCasa = pegCache.current.pg, naCasa = (q) => pegCasa.some((P) => P && P.length >= 3 && tpDentroPoli(q, P));
     const cantos = tpCantosMitra(pD), juncoes = tpJuncoes(pD);
     const quadros = (w, recuo = 0, wi = pD.indexOf(w)) => {
@@ -80181,13 +80533,13 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // da virada (quina convexa), seja parede externa ou interna; o lado de
     // dentro da virada fica em canto vivo. Curvas suaves ficam de fora.
     const temP2 = typeof Path2D !== "undefined"; // (sem Path2D — ambiente de teste — fica sem arredondar)
-    const cortes = temP2 ? new Path2D() : null; let temCanto = false;
+    const cortesQ = temP2 ? new Path2D() : null; let temCanto = false;
     const miolos = []; // { path, cor }: cantinho de dentro do miolo (a borda preta de dentro arredonda do lado do miolo)
     const quina = (alvo, O, d1, d2, rpx) => {
       if (!alvo) return;
       // quina de fora de verdade: logo além dela não pode haver parede (senão o
       // recorte abriria um buraco branco dentro de outra parede)
-      if (alvo === cortes) {
+      if (alvo === cortesQ) {
         const bx = d1.x + d2.x, by = d1.y + d2.y, bl = Math.hypot(bx, by) || 1, k = (0.6 * rpx + 1.5 * dpr) / v.s;
         const Q = { x: O.x - bx / bl * k, y: O.y - by / bl * k };
         if (pD.some((w) => tpLen(w) && tpDistSeg(Q, w.a, w.b) < (w.t || 0) / 2 - 1e-4)) return;
@@ -80219,7 +80571,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           const [sm, sp] = tpPontaMitra(w, fim, o, c.f, h, (o.t || 0) / 2), pm = ptS(sm, -h), pp = ptS(sp, h);
           // a vizinha fica do lado de dentro do canto: a face do outro lado é a de fora
           const ladoViz = e.x * nv.x + e.y * nv.y, fora = ladoViz > 0 ? pm : pp;
-          quina(cortes, fora, dIn, e, rpx);
+          quina(cortesQ, fora, dIn, e, rpx);
           // borda preta do lado de dentro: arredonda o lado dela que encosta no
           // miolo (o cinza ganha a curvinha); o lado do piso fica vivo
           const rw = penaDe(w) / v.s, ro = penaDe(o) / v.s, hi = h - rw, hoi = (o.t || 0) / 2 - ro;
@@ -80236,7 +80588,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         if (jx && jx.tipo === "no") {
           // nó de várias paredes: arredonda só a quina de fora (vão maior que 180°)
           const cs = tpCorteNo(pD, i, fim, jx.viz, (k) => (pD[k].t || 0) / 2);
-          if (cs.cw.gap > Math.PI + 0.05) quina(cortes, fim === "a" ? ptS(cs[0], -h) : ptS(cs[1], h), dIn, cs.cw.e, rpx);
+          if (cs.cw.gap > Math.PI + 0.05) quina(cortesQ, fim === "a" ? ptS(cs[0], -h) : ptS(cs[1], h), dIn, cs.cw.e, rpx);
           // canto do lado anti-horário (cada canto contado uma vez): se fecha
           // (< 180°), a borda preta vira do lado do miolo → o cinza ganha a curvinha
           // (o lado horário só quando a vizinha é uma parede que passa direto: ela não conta o canto)
@@ -80280,17 +80632,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         }
         // ponta solta: as duas quinas do topo
         const s0 = fim === "a" ? -h : L + h;
-        for (const sg of [-1, 1]) quina(cortes, ptS(s0, sg * h), dIn, { x: -nv.x * sg, y: -nv.y * sg }, rpx);
+        for (const sg of [-1, 1]) quina(cortesQ, ptS(s0, sg * h), dIn, { x: -nv.x * sg, y: -nv.y * sg }, rpx);
       }
       // ombreiras de portas e janelas (pontas dos trechos no meio da parede)
       if (naCurva.has(i)) return;
       for (const [s0, s1] of tpTrechosParede(w)) {
-        if (s0 > -h + 1e-6) for (const sg of [-1, 1]) quina(cortes, ptS(s0, sg * h), u, { x: -nv.x * sg, y: -nv.y * sg }, rpx);
-        if (s1 < L + h - 1e-6) for (const sg of [-1, 1]) quina(cortes, ptS(s1, sg * h), { x: -u.x, y: -u.y }, { x: -nv.x * sg, y: -nv.y * sg }, rpx);
+        if (s0 > -h + 1e-6) for (const sg of [-1, 1]) quina(cortesQ, ptS(s0, sg * h), u, { x: -nv.x * sg, y: -nv.y * sg }, rpx);
+        if (s1 < L + h - 1e-6) for (const sg of [-1, 1]) quina(cortesQ, ptS(s1, sg * h), { x: -u.x, y: -u.y }, { x: -nv.x * sg, y: -nv.y * sg }, rpx);
       }
     });
     ctx.save();
-    if (temCanto) { const m = new Path2D(); m.rect(0, 0, W, H); m.addPath(cortes); ctx.clip(m, "evenodd"); }
+    if (temCanto) { const m = new Path2D(); m.rect(0, 0, W, H); m.addPath(cortesQ); ctx.clip(m, "evenodd"); }
     ctx.fillStyle = "#000";
     pD.forEach((w, i) => { if (!naCurva.has(i)) quadros(w).forEach((q) => { quadro(q); ctx.fill(); }); });
     lisas.forEach((c) => { quadro(bandaPx(c, 0)); ctx.fill(); });
@@ -80700,6 +81052,33 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (r) cotasDes.current.push({ ...r, ai: i });
     });
     for (const f of adiados) f();
+    // linhas de corte (valem para todos os pavimentos): traço-ponto, setas
+    // apontando para onde se olha e a letra em cada ponta
+    const linhaCorte = (ct, marc, previa) => {
+      const [ax, ay] = T(ct.a), [bx, by] = T(ct.b), L = Math.hypot(bx - ax, by - ay); if (L < 2) return;
+      const ux = (bx - ax) / L, uy = (by - ay) / L, nx = -uy * (ct.lado || 1), ny = ux * (ct.lado || 1);
+      const cor = marc ? TP_AZUL : "#111827";
+      ctx.save(); ctx.strokeStyle = cor; ctx.lineWidth = (marc ? 2 : 1.4) * dpr; ctx.setLineDash([14 * dpr, 4 * dpr, 2 * dpr, 4 * dpr]);
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); ctx.setLineDash([]);
+      if (!previa) {
+        ctx.lineWidth = 2.6 * dpr; ctx.beginPath(); ctx.moveTo(ax - ux * 4 * dpr, ay - uy * 4 * dpr); ctx.lineTo(ax + ux * 22 * dpr, ay + uy * 22 * dpr); ctx.moveTo(bx + ux * 4 * dpr, by + uy * 4 * dpr); ctx.lineTo(bx - ux * 22 * dpr, by - uy * 22 * dpr); ctx.stroke();
+        const r = Math.max(8, Math.min(11, nivelAnot * 1.6)) * dpr;
+        for (const [px, py, sg] of [[ax, ay, -1], [bx, by, 1]]) {
+          // seta: da ponta para o lado de onde se olha
+          const sx = px + nx * 16 * dpr, sy = py + ny * 16 * dpr;
+          ctx.lineWidth = 1.4 * dpr; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(sx, sy); ctx.stroke();
+          ctx.fillStyle = cor; ctx.beginPath(); ctx.moveTo(sx + nx * 7 * dpr, sy + ny * 7 * dpr); ctx.lineTo(sx - ny * 5 * dpr, sy + nx * 5 * dpr); ctx.lineTo(sx + ny * 5 * dpr, sy - nx * 5 * dpr); ctx.closePath(); ctx.fill();
+          const cx2 = px + ux * sg * (r + 8 * dpr) - nx * (r + 2 * dpr), cy2 = py + uy * sg * (r + 8 * dpr) - ny * (r + 2 * dpr);
+          ctx.fillStyle = "#ffffff"; ctx.beginPath(); ctx.arc(cx2, cy2, r, 0, Math.PI * 2); ctx.fill(); ctx.lineWidth = 1.2 * dpr; ctx.stroke();
+          ctx.fillStyle = cor; ctx.font = `700 ${r * 1.1}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(ct.nome || "A"), cx2, cy2 + 0.5 * dpr);
+        }
+        ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+        if (marc) for (const [px, py] of [[ax, ay], [bx, by]]) { ctx.fillStyle = "#ffffff"; ctx.strokeStyle = TP_AZUL; ctx.lineWidth = 1.5 * dpr; ctx.fillRect(px - 5 * dpr, py - 5 * dpr, 10 * dpr, 10 * dpr); ctx.strokeRect(px - 5 * dpr, py - 5 * dpr, 10 * dpr, 10 * dpr); }
+      }
+      ctx.restore();
+    };
+    cortes.forEach((ct, i) => linhaCorte(ct, marcadas.has("x" + i), false));
+    if (ferramenta === "corte" && inicio && hover) linhaCorte({ a: inicio, b: hover, lado: 1 }, true, true);
     if (ferramenta === "cota" && hover) {
       if (ancora && ancora.cotaB) {
         const p = ancora.cotaA, q = ancora.cotaB, l = Math.hypot(q.x - p.x, q.y - p.y) || 1, off = (hover.x - p.x) * -(q.y - p.y) / l + (hover.y - p.y) * (q.x - p.x) / l;
@@ -80827,6 +81206,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
   // ---------- 3D ----------
   const desenhar3d = () => {
+    // 3D escondido (só planta ou planta + corte): não refaz a cena; refaz ao aparecer
+    if (modo === "planta" || modo === "corte") return;
     const T = three.current, c = v3dRef.current; if (!T || !window.THREE || !c || !c.width) return;
     const THREE = window.THREE;
     // limpa tudo (agora há um grupo por pavimento)
@@ -80858,6 +81239,18 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const m = new THREE.Mesh(gg, new THREE.MeshLambertMaterial({ color: marc ? 0x8dbbff : 0xd6d3cd }));
         m.rotation.x = -Math.PI / 2; m.userData.chave = "a" + i; G.add(m); contorno(gg, m, marc ? 0x0474f4 : 0x9ca3af);
       }
+      // corrimão: tubo a 90 cm dos degraus, com montantes a cada ~1 m
+      const tubo = (p1, p2, r, cor) => {
+        const v1 = new THREE.Vector3(p1.x - cx, p1.z, p1.y - cz), v2 = new THREE.Vector3(p2.x - cx, p2.z, p2.y - cz), d = new THREE.Vector3().subVectors(v2, v1), len = d.length(); if (len < 1e-3) return;
+        const cy = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 8), new THREE.MeshLambertMaterial({ color: cor }));
+        cy.position.copy(v1).add(d.clone().multiplyScalar(0.5)); cy.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); G.add(cy);
+      };
+      for (const r of tpCorrimaosEscada(a, ge)) {
+        const cor = marc ? 0x0474f4 : 0x4b5563;
+        for (let k = 1; k < r.length; k++) tubo({ ...r[k - 1], z: r[k - 1].z + 0.9 }, { ...r[k], z: r[k].z + 0.9 }, 0.022, cor);
+        let acum = 1e9;
+        r.forEach((q, k) => { if (k) acum += Math.hypot(q.x - r[k - 1].x, q.y - r[k - 1].y); if (acum >= 1 || k === r.length - 1) { acum = 0; tubo(q, { ...q, z: q.z + 0.9 }, 0.015, cor); } });
+      }
     });
     areas.forEach((a, i) => {
       if (!a.pts || a.pts.length < 3 || a.tipo === "telhado" || a.tipo === "ambiente") return;
@@ -80866,6 +81259,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (a.tipo === "contrapiso") {
         const peg = analise.pegada || [], cob = areas.filter((x) => (x.tipo === "laje" || x.tipo === "telhado") && x.pts && x.pts.length >= 3).map((x) => x.pts);
         if (tpTipoContrapiso(a.pts, peg, cob) === "furado") for (const P of peg) if (P.every((q) => tpDentroPoli(q, a.pts))) shape.holes.push(new THREE.Path(P.map((q) => new THREE.Vector2(q.x - cx, -(q.y - cz)))));
+      }
+      // laje: abertura sobre as escadas deste pavimento (o vão por onde se sobe)
+      if (a.tipo === "laje") for (const es of areas) if (es.tipo === "escada") {
+        const ce = tpEscadaGeo(es).contorno; if (!tpDentroPoli(tpCentro(ce), a.pts)) continue;
+        shape.holes.push(new THREE.Path(ce.map((q) => new THREE.Vector2(q.x - cx, -(q.y - cz)))));
       }
       const g = new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.01, a.esp || 0.05), bevelEnabled: false });
       const marc = marcadas.has("a" + i);
@@ -80991,6 +81389,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     });
     };
     for (const p of pavsOrd) {
+      if (vis3d === "so" && p.id !== pavAtivo) continue;
+      if (vis3d === "ate" && p.nivel > pavAt.nivel + 1e-6) continue;
       const G = new THREE.Group(); G.position.y = p.nivel || 0; T.group.add(G);
       const ativo = p.id === pavAtivo, d = dadosDe(p.id);
       if (ativo) T.grupoAtivo = G;
@@ -81001,6 +81401,184 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     T.camera.position.set(alvo.x + T.dist * Math.sin(T.phi) * Math.cos(T.theta), alvo.y + T.dist * Math.cos(T.phi), alvo.z + T.dist * Math.sin(T.phi) * Math.sin(T.theta));
     T.camera.lookAt(alvo.x, alvo.y, alvo.z);
     T.renderer.render(T.scene, T.camera);
+  };
+  // ---- Corte (AA, BB…): desenho em elevação ao longo da linha de corte ----
+  // Paredes cortadas em preto (com portas/janelas abertas), paredes vistas
+  // atrás em contorno, lajes e pisos cortados, degraus, nomes dos ambientes,
+  // níveis de cada pavimento e pé-direito. Ajusta sozinho à janela.
+  const desenharCorte = () => {
+    const c = corteRef.current; if (!c) return;
+    const r0 = c.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    const W = Math.round(r0.width * dpr), Hc = Math.round(r0.height * dpr); if (!W || !Hc) return;
+    if (c.width !== W || c.height !== Hc) { c.width = W; c.height = Hc; }
+    const ctx = c.getContext("2d"); ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, W, Hc);
+    const ct = cortes.find((x) => x.id === verCorte) || cortes[0];
+    if (!ct) { ctx.fillStyle = "#6b7280"; ctx.font = `${13 * dpr}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.fillText("Use a ferramenta Corte na planta (clique o início e o fim da linha).", W / 2, Hc / 2); ctx.textAlign = "start"; return; }
+    // n = para onde se olha; o eixo horizontal do desenho é a direita de quem
+    // olha (senão o corte sai espelhado em relação à planta)
+    const Lc = Math.hypot(ct.b.x - ct.a.x, ct.b.y - ct.a.y) || 1, ul = { x: (ct.b.x - ct.a.x) / Lc, y: (ct.b.y - ct.a.y) / Lc };
+    const n = { x: -ul.y * (ct.lado || 1), y: ul.x * (ct.lado || 1) }, u = { x: -n.y, y: n.x }, prof = ct.prof || 15;
+    const a0 = (ct.b.x - ct.a.x) * u.x + (ct.b.y - ct.a.y) * u.y >= 0 ? ct.a : ct.b;
+    const S = (p) => (p.x - a0.x) * u.x + (p.y - a0.y) * u.y, D = (p) => (p.x - a0.x) * n.x + (p.y - a0.y) * n.y;
+    const pavs = pavsOrd.map((p) => ({ ...p, ...dadosDe(p.id) }));
+    // limites do desenho
+    // telhados cortados pela linha: em cada água o corte é um segmento reto
+    const cortesTel = [];
+    for (const p of pavs) for (const a of (p.areas || [])) {
+      if (a.tipo !== "telhado" || !a.pts || a.pts.length < 3) continue;
+      let g; try { g = tpTelhadoGeo({ ...a, cota: tpApoioTelhado(a, p.paredes, p.areas, altM) }); } catch (err) { continue; }
+      for (const f of g.facetas || []) for (const [x0, x1] of tpIntervalosLinha(f.pts, a0, u, n)) {
+        const P = (sv) => ({ x: a0.x + u.x * sv, y: a0.y + u.y * sv });
+        cortesTel.push({ sa: x0, sb: x1, za: p.nivel + g.z(P(x0)), zb: p.nivel + g.z(P(x1)) });
+      }
+    }
+    let zMax = 3; for (const p of pavs) { zMax = Math.max(zMax, p.nivel + Math.max(0, ...(p.paredes || []).map((w) => w.h || 0)) + 0.3); }
+    for (const t of cortesTel) zMax = Math.max(zMax, t.za + 0.3, t.zb + 0.3);
+    const s0 = -2.4, s1 = Lc + 2.2, z0 = -1.1, z1 = zMax + 0.6, mg = 36 * dpr;
+    const k = Math.min((W - 2 * mg) / (s1 - s0), (Hc - 2 * mg) / (z1 - z0));
+    const ox = (W - (s1 - s0) * k) / 2 - s0 * k, oy = Hc - (Hc - (z1 - z0) * k) / 2 + z0 * k;
+    const X = (sv) => ox + sv * k, Y = (zv) => oy - zv * k;
+    const ret = (sa, sb, za, zb, fill, stroke, lw) => { const x = X(Math.min(sa, sb)), y = Y(Math.max(za, zb)), w = Math.abs(sb - sa) * k, h = Math.abs(zb - za) * k; if (fill) { ctx.fillStyle = fill; ctx.fillRect(x, y, w, h); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = (lw || 1) * dpr; ctx.strokeRect(x, y, w, h); } };
+    // terreno
+    ctx.fillStyle = "#eef2ea"; ctx.fillRect(X(s0), Y(0), (s1 - s0) * k, 0.45 * k);
+    ctx.strokeStyle = "#111827"; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.moveTo(X(s0), Y(0)); ctx.lineTo(X(s1), Y(0)); ctx.stroke();
+    const dentroS = (sv) => sv >= -0.05 && sv <= Lc + 0.05;
+    // 1) o que está atrás (vista): paredes e esquadrias em contorno, do mais longe ao mais perto
+    const vistas = [];
+    for (const p of pavs) for (const w of (p.paredes || [])) {
+      const da = D(w.a), db = D(w.b); if (da <= 0.02 && db <= 0.02) continue; if (Math.min(da, db) > prof) continue;
+      if ((da > 0.02) !== (db > 0.02)) continue; // cortada: vai depois
+      const sa = S(w.a), sb = S(w.b); if (Math.max(sa, sb) < s0 || Math.min(sa, sb) > s1) continue;
+      vistas.push({ p, w, d: (da + db) / 2, sa, sb });
+    }
+    // degraus vistos além da linha (não cortados): a face de cada degrau
+    for (const p of pavs) for (const e of (p.areas || [])) {
+      if (e.tipo !== "escada") continue;
+      const g = tpEscadaGeo(e);
+      for (const dg of [...g.degraus, ...g.patamares]) {
+        const ds = dg.pts.map(D); if (Math.min(...ds) <= 0.01 || Math.min(...ds) > prof) continue;
+        const ss = dg.pts.map(S); vistas.push({ p, deg: dg, esp: g.esp, d: Math.min(...ds), sa: Math.min(...ss), sb: Math.max(...ss) });
+      }
+    }
+    vistas.sort((x, y) => y.d - x.d);
+    for (const { p, w, deg, esp, sa, sb } of vistas) {
+      if (deg) { ret(Math.max(s0, sa), Math.min(s1, sb), p.nivel, p.nivel + deg.z, "#f3f1ed", "#9ca3af", 1); continue; }
+      const h2 = (w.t || 0.14) / 2, Lw = tpLen(w) || 1, ux = (w.b.x - w.a.x) / Lw, uy = (w.b.y - w.a.y) / Lw;
+      const cs = [[h2, 0], [-h2, 0]].flatMap(([o]) => [w.a, w.b].map((q, kk) => S({ x: q.x - uy * o + (kk ? ux : -ux) * h2, y: q.y + ux * o + (kk ? uy : -uy) * h2 })));
+      const smin = Math.max(s0, Math.min(...cs)), smax = Math.min(s1, Math.max(...cs));
+      ret(smin, smax, p.nivel, p.nivel + (w.h || 0), "#ffffff", "#9ca3af", 1);
+      for (const o of tpAbsVisiveis(w)) {
+        const e0 = S({ x: w.a.x + ux * (o.x - o.larg / 2), y: w.a.y + uy * (o.x - o.larg / 2) }), e1 = S({ x: w.a.x + ux * (o.x + o.larg / 2), y: w.a.y + uy * (o.x + o.larg / 2) });
+        if (Math.abs(e1 - e0) < 0.05) continue;
+        const porta = String(o.tipo).startsWith("porta") || o.tipo === "vao";
+        ret(e0, e1, p.nivel + (o.peit || 0), p.nivel + (o.peit || 0) + o.alt, porta ? "#ffffff" : "#e6f0fb", "#9ca3af", 1);
+      }
+    }
+    // 2) lajes e pisos cortados
+    for (const p of pavs) for (const a of (p.areas || [])) {
+      if (!a.pts || a.pts.length < 3) continue;
+      if (a.tipo === "laje" || a.tipo === "contrapiso") {
+        // laje com a abertura da escada descontada
+        const furos = a.tipo === "laje" ? (p.areas || []).filter((e) => e.tipo === "escada").map((e) => tpEscadaGeo(e).contorno).filter((ce) => tpDentroPoli(tpCentro(ce), a.pts)) : [];
+        for (const [ia, ib] of tpIntervalosLinha(a.pts, a0, u, n)) {
+          let partes = [[ia, ib]];
+          for (const f of furos) for (const [fa, fb] of tpIntervalosLinha(f, a0, u, n)) partes = partes.flatMap(([x0, x1]) => (fb <= x0 || fa >= x1 ? [[x0, x1]] : [[x0, Math.max(x0, fa)], [Math.min(x1, fb), x1]].filter(([m0, m1]) => m1 - m0 > 1e-3)));
+          const zb = p.nivel + (a.cota || 0), ze = zb + Math.max(0.03, a.esp || TP_AREA_TIPOS[a.tipo].esp || 0.05);
+          for (const [x0, x1] of partes) ret(x0, x1, zb, ze, a.tipo === "laje" ? "#3f3f3f" : "#bdbdbd", "#111827", 1);
+        }
+      }
+    }
+    // 3) escadas cortadas: cada degrau atravessado vira um bloco até a altura dele
+    for (const p of pavs) for (const e of (p.areas || [])) {
+      if (e.tipo !== "escada") continue;
+      const g = tpEscadaGeo(e);
+      for (const d of [...g.degraus, ...g.patamares]) for (const [x0, x1] of tpIntervalosLinha(d.pts, a0, u, n)) ret(x0, x1, p.nivel, p.nivel + d.z, "#cfcac2", "#4b5563", 1);
+    }
+    // 4) paredes cortadas (preto), com portas/janelas abertas
+    const cotasEsq = [];
+    for (const p of pavs) for (const w of (p.paredes || [])) {
+      const da = D(w.a), db = D(w.b); if ((da > 0) === (db > 0)) continue;
+      const t = da / (da - db), q = { x: w.a.x + (w.b.x - w.a.x) * t, y: w.a.y + (w.b.y - w.a.y) * t }, sv = S(q); if (!dentroS(sv)) continue;
+      const Lw = tpLen(w) || 1, ux = (w.b.x - w.a.x) / Lw, uy = (w.b.y - w.a.y) / Lw, sn = Math.abs(ux * u.y - uy * u.x) || 0.05;
+      const larg = Math.min(1.2, (w.t || 0.14) / sn), xa = sv - larg / 2, xb = sv + larg / 2, zb = p.nivel, zt = zb + (w.h || 0);
+      const pos = t * Lw, o = tpAbsVisiveis(w).find((oo) => Math.abs(pos - oo.x) <= oo.larg / 2);
+      if (!o) { ret(xa, xb, zb, zt, "#3f3f3f", "#111827", 1.4); continue; }
+      const zp = zb + (o.peit || 0), zv = Math.min(zt, zp + o.alt);
+      if (zp > zb + 1e-3) ret(xa, xb, zb, zp, "#3f3f3f", "#111827", 1.4);
+      if (zt > zv + 1e-3) ret(xa, xb, zv, zt, "#3f3f3f", "#111827", 1.4);
+      const porta = String(o.tipo).startsWith("porta") || o.tipo === "vao";
+      const sCota = sv > Lc / 2 ? xb + 0.3 : xa - 0.3; // pelo lado de fora da casa
+      cotasEsq.push({ s: sCota, zb, zp: porta ? zb : zp, zv, dir: sv > Lc / 2 });
+      ctx.strokeStyle = "#111827"; ctx.lineWidth = 1 * dpr;
+      if (!porta) { ctx.beginPath(); for (const f of [0.4, 0.6]) { ctx.moveTo(X(xa + larg * f), Y(zp)); ctx.lineTo(X(xa + larg * f), Y(zv)); } ctx.stroke(); }
+    }
+    // 4b) telhado cortado (telha + estrutura numa faixa só)
+    for (const t of cortesTel) {
+      const e = 0.07;
+      ctx.fillStyle = "#7c3f22"; ctx.strokeStyle = "#3b1d0e"; ctx.lineWidth = 1 * dpr;
+      ctx.beginPath(); ctx.moveTo(X(t.sa), Y(t.za)); ctx.lineTo(X(t.sb), Y(t.zb)); ctx.lineTo(X(t.sb), Y(t.zb - e)); ctx.lineTo(X(t.sa), Y(t.za - e)); ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    // cotas verticais: linha com traço a 45° nas pontas e o número deitado
+    const cotaV = (sv, za, zb, txt, cor, dir) => {
+      if ((zb - za) * k < 12 * dpr) return;
+      const x = X(sv), ya = Y(za), yb = Y(zb), tk = 4 * dpr;
+      ctx.strokeStyle = cor || "#374151"; ctx.lineWidth = 1 * dpr; ctx.beginPath(); ctx.moveTo(x, ya + 3 * dpr); ctx.lineTo(x, yb - 3 * dpr);
+      for (const y of [ya, yb]) { ctx.moveTo(x - tk, y + tk); ctx.lineTo(x + tk, y - tk); ctx.moveTo(x - 6 * dpr, y); ctx.lineTo(x + 6 * dpr, y); }
+      ctx.stroke();
+      ctx.save(); ctx.translate(x + (dir ? 5 : -5) * dpr, (ya + yb) / 2); ctx.rotate(-Math.PI / 2);
+      ctx.font = `600 ${10 * dpr}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = dir ? "top" : "bottom";
+      ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(255,255,255,0.95)"; ctx.lineWidth = 3 * dpr; ctx.strokeText(txt, 0, 0); ctx.fillStyle = cor || "#374151"; ctx.fillText(txt, 0, 0);
+      ctx.restore();
+    };
+    // peitoril e altura das janelas cortadas (e a altura das portas)
+    // (desenho pequeno, como no celular: só ficam as cotas gerais da direita)
+    if (k / dpr >= 28) for (const c of cotasEsq) { if (c.zp > c.zb + 0.01) cotaV(c.s, c.zb, c.zp, tpFmt(c.zp - c.zb), null, c.dir); cotaV(c.s, c.zp, c.zv, tpFmt(c.zv - c.zp), "#0369a1", c.dir); }
+    // à direita: pé-direito e laje de cada pavimento, e a altura total
+    { const sC = Lc + 0.7; let topo = 0;
+      for (const p of pavs) {
+        const pd = Math.max(0, ...(p.paredes || []).map((w) => w.h || 0)); if (pd <= 0) continue;
+        cotaV(sC, p.nivel, p.nivel + pd, tpFmt(pd)); topo = Math.max(topo, p.nivel + pd);
+        const lj = (p.areas || []).filter((a) => a.tipo === "laje" && a.pts && tpIntervalosLinha(a.pts, a0, u, n).length);
+        if (lj.length) { const zl = p.nivel + Math.max(...lj.map((a) => a.cota || 0)), el = Math.max(...lj.map((a) => a.esp || 0.1)); if (Math.abs(zl - (p.nivel + pd)) > 0.02) cotaV(sC, p.nivel + pd, zl, tpFmt(zl - p.nivel - pd)); topo = Math.max(topo, zl + el); }
+      }
+      for (const t of cortesTel) topo = Math.max(topo, t.za, t.zb);
+      if (topo > 0) cotaV(Lc + 1.6, 0, topo, tpFmt(topo), "#111827");
+      // cumeeira (ponto mais alto do telhado no corte) como nível
+      if (cortesTel.length) {
+        const zt = Math.max(...cortesTel.flatMap((t) => [t.za, t.zb])), y = Y(zt), x = X(s0) + 6 * dpr;
+        ctx.fillStyle = "#111827"; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 7 * dpr, y - 8 * dpr); ctx.lineTo(x - 7 * dpr, y - 8 * dpr); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = "#9ca3af"; ctx.lineWidth = 1 * dpr; ctx.setLineDash([4 * dpr, 3 * dpr]); ctx.beginPath(); ctx.moveTo(x + 10 * dpr, y); ctx.lineTo(X(s1), y); ctx.stroke(); ctx.setLineDash([]);
+        ctx.font = `600 ${11 * dpr}px system-ui, sans-serif`; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillText(`+${tpFmt(zt)}  Cumeeira`, x + 10 * dpr, y - 9 * dpr);
+      }
+    }
+    // 5) nomes dos ambientes e pé-direito
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    for (const p of pavs) {
+      const pd = Math.max(0, ...(p.paredes || []).map((w) => w.h || 0));
+      for (const a of (p.areas || [])) {
+        if (a.tipo !== "ambiente" || !a.pts || a.pts.length < 3) continue;
+        for (const [x0, x1] of tpIntervalosLinha(a.pts, a0, u, n)) {
+          if ((x1 - x0) * k < 40 * dpr) continue;
+          const halo = (t, x, y) => { ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(255,255,255,0.92)"; ctx.lineWidth = 4 * dpr; ctx.strokeText(t, x, y); ctx.fillText(t, x, y); };
+          ctx.font = `600 ${11 * dpr}px system-ui, sans-serif`; ctx.fillStyle = "#b65b3d"; halo(a.nome || "Ambiente", X((x0 + x1) / 2), Y(p.nivel + Math.max(0.6, pd / 2)));
+
+        }
+      }
+    }
+    // 6) níveis (à esquerda): triângulo + cota de cada pavimento
+    ctx.textAlign = "left";
+    for (const p of pavs) {
+      const y = Y(p.nivel), x = X(s0) + 6 * dpr;
+      ctx.fillStyle = "#111827"; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 7 * dpr, y - 8 * dpr); ctx.lineTo(x - 7 * dpr, y - 8 * dpr); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = "#111827"; ctx.lineWidth = 1 * dpr; ctx.setLineDash([4 * dpr, 3 * dpr]); ctx.beginPath(); ctx.moveTo(x + 10 * dpr, y); ctx.lineTo(X(s1), y); ctx.stroke(); ctx.setLineDash([]);
+      ctx.font = `600 ${11 * dpr}px system-ui, sans-serif`; ctx.fillText(`${p.nivel >= 0 ? "+" : ""}${tpFmt(p.nivel)}  ${p.nome}`, x + 10 * dpr, y - 9 * dpr);
+    }
+    ctx.textBaseline = "alphabetic";
+    // título
+    ctx.font = `700 ${13 * dpr}px system-ui, sans-serif`; ctx.fillStyle = "#111827"; ctx.textAlign = "center";
+    const yt = Math.min(Hc - 12 * dpr, Y(0) + 0.45 * k + 26 * dpr), tt = `CORTE ${tpNomeCorte(ct)}`, xt = X((0 + Lc) / 2);
+    ctx.fillText(tt, xt, yt); const wt = ctx.measureText(tt).width; ctx.fillRect(xt - wt / 2, yt + 4 * dpr, wt, 1.5 * dpr);
+    ctx.font = `500 ${10 * dpr}px system-ui, sans-serif`; ctx.fillStyle = "#6b7280"; ctx.fillText("sem escala", xt, yt + 18 * dpr); ctx.textAlign = "start";
   };
   const pegar3d = (e) => {
     const T = three.current, c = v3dRef.current; if (!T || !c) return null;
@@ -81013,7 +81591,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
   // canvases acompanham o tamanho do quadro
   const atual = useRef({});
-  atual.current = { ajustar, desenharPlanta, desenhar3d };
+  atual.current = { ajustar, desenharPlanta, desenhar3d, desenharCorte, limites, topoUtil };
   useEffect(() => {
     const ajustarCanvas = (canvas) => {
       if (!canvas) return false;
@@ -81024,14 +81602,22 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     };
     const ro = new ResizeObserver(() => {
       const c = planRef.current, antes = c ? { w: c.width, h: c.height } : null;
+      // o desenho cabia inteiro antes (ex.: trocou Planta por Planta + Corte e o
+      // quadro encolheu)? Se deixar de caber, reajusta; senão só recentraliza
+      const cabe = (w, h) => { const v = vista.current; if (!v) return false; let b; try { b = atual.current.limites(); } catch (err) { return false; } return b.x0 * v.s + v.ox >= -1 && b.x1 * v.s + v.ox <= w + 1 && b.y0 * v.s + v.oy >= atual.current.topoUtil() - 1 && b.y1 * v.s + v.oy <= h + 1; };
+      const cabia = antes && antes.w ? cabe(antes.w, antes.h) : false;
       if (ajustarCanvas(planRef.current)) {
         if (!vista.current || !antes || !antes.w) atual.current.ajustar();
-        else { const v = vista.current; vista.current = { ...v, ox: v.ox + (c.width - antes.w) / 2, oy: v.oy + (c.height - antes.h) / 2 }; atual.current.desenharPlanta(); }
+        else {
+          const v = vista.current; vista.current = { ...v, ox: v.ox + (c.width - antes.w) / 2, oy: v.oy + (c.height - antes.h) / 2 };
+          if (cabia && !cabe(c.width, c.height)) atual.current.ajustar(); else atual.current.desenharPlanta();
+        }
       }
       if (ajustarCanvas(v3dRef.current) && three.current) { three.current.renderer.setSize(v3dRef.current.width, v3dRef.current.height, false); atual.current.desenhar3d(); }
     });
     if (planBox.current) ro.observe(planBox.current);
     if (v3dBox.current) ro.observe(v3dBox.current);
+    if (corteBox.current) { const ro2 = new ResizeObserver(() => atual.current.desenharCorte()); ro2.observe(corteBox.current); return () => { ro.disconnect(); ro2.disconnect(); }; }
     return () => ro.disconnect();
   }, []);
 
@@ -81054,7 +81640,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   }, []);
 
   // desenha antes da tela pintar (no mesmo quadro da mudança), não depois
-  tpUseLayoutEffect(() => { desenharPlanta(); }, [paredes, areas, inicio, poli, hover, espM, sel, caixa, ferramenta, ancora, modoTraco, previaEsq, editNome, escala, pavAtivo, dadosPav]);
+  tpUseLayoutEffect(() => { desenharPlanta(); }, [paredes, areas, inicio, poli, hover, espM, sel, caixa, ferramenta, ancora, modoTraco, previaEsq, editNome, escala, pavAtivo, dadosPav, cortes]);
+  useEffect(() => { if (modo !== "corte") return; const id = requestAnimationFrame(() => desenharCorte()); return () => cancelAnimationFrame(id); }, [modo, cortes, verCorte, paredes, areas, dadosPav, pavimentos, pavAtivo]);
   // ambiente acompanha as paredes: mexeu numa parede, o contorno e a área se refazem
   useEffect(() => {
     if (!areas.some((a) => a.tipo === "ambiente" && a.ponto)) return;
@@ -81091,7 +81678,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       return;
     }
     clearTimeout(tempo3d.current); tempo3d.current = null; desenhar3d();
-  }, [paredes, areas, sel, pavAtivo, dadosPav, pavimentos]);
+  }, [paredes, areas, sel, pavAtivo, dadosPav, pavimentos, vis3d, modo]);
 
   useEffect(() => {
     const k = (e) => {
@@ -81141,11 +81728,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         return;
       }
       if (tecla === "?") { setVerAtalhos(true); return; }
+      // Page Up / Page Down: sobe/desce de pavimento
+      if (tecla === "PageUp" || tecla === "PageDown") {
+        const k = pavsOrd.findIndex((p) => p.id === pavAtivo), alvo = pavsOrd[k + (tecla === "PageUp" ? 1 : -1)];
+        if (alvo) { e.preventDefault(); irParaPav(alvo.id); }
+        return;
+      }
       if (!ctrl && !e.altKey) {
         const t = tecla.toLowerCase();
         if (t === "z" || t === "f") { ajustar(); return; } // ZF no Revit / F no SketchUp
         if (t === "d" || t === "j") { trocarFerramenta("esquadria"); setTipoEsq(t === "d" ? "porta_giro" : "janela_correr"); return; } // DR / WN no Revit
-        const f = { v: "selecionar", p: "parede", c: "contrapiso", l: "laje", t: "telhado", r: "terreno", a: "ambiente", s: "separador", k: "cota", e: "escada", h: "mover" }[t];
+        const f = { v: "selecionar", p: "parede", c: "contrapiso", l: "laje", t: "telhado", r: "terreno", a: "ambiente", s: "separador", k: "cota", e: "escada", x: "corte", h: "mover" }[t];
         if (f) trocarFerramenta(f);
       }
     };
@@ -81186,6 +81779,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     let melhor = null, menor = Infinity;
     for (const c of cotasDes.current) { if (!areas[c.ai] || areas[c.ai].tipo !== "cota") continue; const dd = Math.min(distSeg(p, c.A, c.B), Math.max(0, Math.hypot(p.x - c.tc.x, p.y - c.tc.y) - c.r)); if (dd <= tol && dd < menor) { menor = dd; melhor = "a" + c.ai; } }
     return melhor;
+  };
+  // linha de corte embaixo do cursor: ponta (para esticar) ou a linha (mover)
+  const cortePerto = (d) => {
+    const v = vista.current; if (!v) return null;
+    const dpr = window.devicePixelRatio || 1, p = paraMundoLivre(d), tol = 8 * dpr / v.s;
+    for (let i = cortes.length - 1; i >= 0; i--) {
+      const ct = cortes[i];
+      if (sel.includes("x" + i)) for (const k of ["a", "b"]) if (Math.hypot(p.x - ct[k].x, p.y - ct[k].y) <= tol * 1.4) return { i, ponta: k };
+      if (distSeg(p, ct.a, ct.b) <= tol) return { i, ponta: null };
+    }
+    return null;
   };
   const elementoNoPonto = (d) => {
     const v = vista.current, p = paraMundoLivre(d), tol = 7 * (window.devicePixelRatio || 1) / v.s;
@@ -81377,12 +81981,35 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   };
   const arrastarAlca = (e, g) => {
     const al = g.grip, orig = g.orig;
+    if (al.tipo === "corte") {
+      const q = paraMundoLivre(devPx(e)), c0 = al.c0;
+      if (al.ponta) { const p2 = limpo(pontoDoCursor(e)); setCortes((cs) => cs.map((c, i) => (i === al.i ? { ...c, [al.ponta]: p2 } : c))); return; }
+      const dx = r3(Math.round((q.x - al.p0.x) * 20) / 20), dy = r3(Math.round((q.y - al.p0.y) * 20) / 20);
+      setCortes((cs) => cs.map((c, i) => (i === al.i ? { ...c, a: { x: r3(c0.a.x + dx), y: r3(c0.a.y + dy) }, b: { x: r3(c0.b.x + dx), y: r3(c0.b.y + dy) } } : c)));
+      return;
+    }
     if (al.tipo === "rotulo") {
       // move só o nome, sem ímã nem grade; não sai de dentro do cômodo
       const a = orig.areas[al.ai]; if (!a || !a.pts || a.pts.length < 3) return;
       const q = paraMundoLivre(devPx({ clientX: e.clientX + al.off.x, clientY: e.clientY + al.off.y }));
       if (!tpDentroPoli(q, a.pts)) return;
       setAreas(orig.areas.map((x, i) => (i === al.ai ? { ...x, rotulo: { x: r3(q.x), y: r3(q.y) } } : x)));
+      return;
+    }
+    if (al.tipo === "escLarg" || al.tipo === "escGiro") {
+      const e0 = orig.areas[al.ai]; if (!e0) return;
+      const pt = paraMundoLivre(devPx(e)), car = e0.forma === "caracol";
+      let mud;
+      if (al.tipo === "escLarg") {
+        const p5 = Math.max(0.01, passoZoom()), u = { x: Math.cos(e0.ang || 0), y: Math.sin(e0.ang || 0) };
+        const dd = car ? Math.hypot(pt.x - e0.x, pt.y - e0.y) - 0.1 : 2 * Math.abs(-(pt.x - e0.x) * u.y + (pt.y - e0.y) * u.x);
+        mud = { largura: Math.max(0.6, Math.min(2.5, Math.round(dd / p5) * p5)) };
+      } else {
+        let an = Math.atan2(pt.y - e0.y, pt.x - e0.x);
+        if (!e.shiftKey) an = Math.round(an / (Math.PI / 12)) * (Math.PI / 12); // de 15 em 15° (Shift: livre)
+        mud = { ang: Math.round(an * 1000) / 1000 };
+      }
+      setAreas(orig.areas.map((x, i) => (i === al.ai ? { ...x, ...mud } : x)));
       return;
     }
     if (al.tipo === "rotEsq") {
@@ -81589,8 +82216,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         setEditCota({ x: Math.max(44, Math.min(rc.width - 44, cq.x / k)), y: Math.max(18, Math.min(rc.height - 18, cq.y / k)), lado: cq.lado, id: cq.id, parede: cq.parede, larg: cq.larg, txt: tpFmt(cq.d), t: Date.now() });
         return;
       }
+      { const cp = !e.ctrlKey && !e.metaKey && !e.shiftKey && cortePerto(d);
+        if (cp) { if (!sel.includes("x" + cp.i)) setSel(["x" + cp.i]); setVerCorte(cortes[cp.i].id); gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: { tipo: "corte", chave: "x" + cp.i, i: cp.i, ponta: cp.ponta, p0: paraMundoLivre(d), c0: cortes[cp.i], cs0: cortes }, orig: { paredes, areas } }; e.currentTarget.setPointerCapture(e.pointerId); return; } }
       // cota: arrastar afasta/aproxima a linha (na perpendicular), como no Revit.
       // Vem antes do nome do ambiente: a linha é fina e o nome é um alvo grande.
+      { const rg = (e.pointerType === "touch" ? 16 : 10) * (window.devicePixelRatio || 1), gq = escGrips.current.find((q) => Math.hypot(d.x - q.x, d.y - q.y) <= rg);
+        if (gq) { gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: { tipo: gq.tipo, ai: gq.ai, chave: "a" + gq.ai }, orig: { paredes, areas } }; e.currentTarget.setPointerCapture(e.pointerId); return; } }
       const re = !e.ctrlKey && !e.metaKey && !e.shiftKey && rotulosEsq.current.find((r) => { const dx = d.x - r.x, dy = d.y - r.y, u = dx * Math.cos(r.ang) + dy * Math.sin(r.ang), nn = -dx * Math.sin(r.ang) + dy * Math.cos(r.ang); return Math.abs(u) <= r.meiaW && Math.abs(nn) <= r.meiaH; });
       if (re) {
         gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: { tipo: "rotEsq", chave: "o" + re.id, id: re.id, ang: re.ang, n: re.n, p0: paraMundoLivre(d) }, orig: { paredes, areas } };
@@ -81649,7 +82280,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // Com uma ferramenta de desenho ativa e nenhum traço em andamento, apertar
     // em cima de uma parede ou linha de separação e ARRASTAR move o elemento
     // (sem precisar trocar para Selecionar). Só clicar continua desenhando.
-    if (e.button === 0 && ferramenta !== "selecionar" && ferramenta !== "mover" && ferramenta !== "ambiente" && ferramenta !== "esquadria" && ferramenta !== "cota" && ferramenta !== "escada" && !poli.length && !ancora) {
+    if (e.button === 0 && ferramenta !== "selecionar" && ferramenta !== "mover" && ferramenta !== "ambiente" && ferramenta !== "esquadria" && ferramenta !== "cota" && ferramenta !== "escada" && ferramenta !== "corte" && !poli.length && !ancora) {
       const k = elementoNoPonto(d);
       const idx = k ? +k.slice(1) : -1;
       if (k && (k[0] === "p" || (areas[idx] && areas[idx].tipo === "separador"))) {
@@ -81694,20 +82325,21 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         setCaixa({ x0: g.x0, y0: g.y0, x1: d.x, y1: d.y }); return;
       }
     }
-    if (ferramenta === "parede" || ferramenta === "separador" || ferramenta === "cota" || ferramenta === "escada" || tpEhPoli(ferramenta)) setHover(pontoDoCursor(e));
+    if (ferramenta === "parede" || ferramenta === "separador" || ferramenta === "cota" || ferramenta === "escada" || ferramenta === "corte" || tpEhPoli(ferramenta)) setHover(pontoDoCursor(e));
     if (ferramenta === "esquadria") setPreviaEsq(previaEsqEm(paraMundoLivre(d)));
   };
   const planUp = (e) => {
     const g = gesto.current; gesto.current = null;
     if (!g) return;
     clearTimeout(g.timer);
+    if (g.grip && g.grip.tipo === "corte") { if (g.raf) { cancelAnimationFrame(g.raf); g.raf = 0; } if (g.moveu && g.ultimo) { arrastarAlca(g.ultimo, g); registrar({ cortes: g.grip.cs0 }); } setHover(null); return; }
     if (g.grip) {
       // movimento que ainda esperava o próximo quadro: aplica já, para a
       // posição final ser exatamente onde o botão foi solto
       if (g.raf) { cancelAnimationFrame(g.raf); g.raf = 0; }
       // posição final com tudo recalculado (ambientes e análise)
       if (g.moveu && g.ultimo) { g.forcarAmb = true; arrastarAlca(g.ultimo, g); }
-      if (g.moveu) { historico.current.push(g.orig); if (historico.current.length > 200) historico.current.shift(); futuro.current = []; }
+      if (g.moveu) registrar(g.orig);
       else if (g.grip.tipo === "mover" || g.grip.tipo === "abertura" || g.grip.tipo === "cota" || g.grip.tipo === "rotParede" || g.grip.tipo === "rotEsq") aplicarSelecao([g.grip.chave], g); // só clicou: seleciona
       else if (g.grip.tipo === "rotulo" && g.grip.ja) abrirEditNome(g.grip.ai, e); // clicou no nome já selecionado: edita
       setHover(null); return;
@@ -81755,6 +82387,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       mudar(null, [...areas, nova]); setInicio(null); setFerramenta("selecionar"); setTimeout(() => setSel(["a" + idx]), 0);
       const g = tpEscadaGeo(nova);
       avisar(`Escada ${TP_ESCADA_FORMAS.find((f) => f.id === nova.forma).rotulo.toLowerCase()}: ${g.n} degraus de ${tpFmt(g.esp * 100, 1)} cm, piso ${tpFmt(g.piso * 100, 1)} cm.`);
+      return;
+    }
+    if (ferramenta === "corte") {
+      const p2 = limpo(pontoDoCursor(e)); setHover(pontoDoCursor(e));
+      if (!inicio) { setInicio(p2); return; }
+      if (Math.hypot(p2.x - inicio.x, p2.y - inicio.y) < 0.3) return;
+      const nv = { id: "ct" + Date.now().toString(36), nome: tpProximaLetraCorte(cortes), a: inicio, b: p2, lado: 1, prof: 15 };
+      registrar(); setCortes([...cortes, nv]); setVerCorte(nv.id); setInicio(null); setFerramenta("selecionar");
+      setTimeout(() => setSel(["x" + cortes.length]), 0);
+      if (modo !== "corte") setModo("corte");
+      avisar(`Corte ${tpNomeCorte(nv)} criado. As setas mostram para onde se olha; “Inverter direção” no painel troca o lado.`);
       return;
     }
     if (ferramenta === "cota") {
@@ -81923,14 +82566,16 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     { id: "esquadria", rotulo: "Porta/Janela", dica: "Porta (D), janela (J) e vão: passe o cursor na parede e clique. Espaço inverte a mão" },
     { id: "cota", rotulo: "Cota", dica: "Cota (K): clique os dois pontos a medir e depois onde fica a linha" },
     { id: "escada", rotulo: "Escada", dica: "Escada (E): clique o pé do primeiro degrau e depois a direção em que sobe" },
+    { id: "corte", rotulo: "Corte", dica: "Corte (X): clique o início e o fim da linha de corte; as setas mostram para onde se olha" },
     { id: "mover", rotulo: "Mover", dica: "Mover a vista (H)" },
   ];
-  const MODOS = [{ id: "planta", rotulo: "Planta" }, { id: "ambos", rotulo: "Planta + 3D" }, { id: "3d", rotulo: "3D" }];
-  const mostraPlanta = modo !== "3d", mostra3d = modo !== "planta";
+  const MODOS = [{ id: "planta", rotulo: "Planta" }, { id: "ambos", rotulo: "Planta + 3D" }, { id: "3d", rotulo: "3D" }, { id: "corte", rotulo: "Planta + Corte" }];
+  const mostraPlanta = modo !== "3d", mostra3d = modo === "ambos" || modo === "3d", mostraCorte = modo === "corte";
 
   const desenhoAtivo = ferramenta === "parede" || tpEhPoli(ferramenta);
   const status = (ferramenta === "separador" && dividir) ? `Dividindo "${(areas[dividir.ai] || {}).nome || "ambiente"}": clique de uma parede até a outra (pode quebrar a linha). Esc cancela.`
     : ferramenta === "separador" ? (inicio ? "Clique o fim da linha. Esc cancela." : "Separador: linha que divide ambientes sem parede. Clique de uma parede até a outra.")
+    : ferramenta === "corte" ? (inicio ? "Clique o fim da linha de corte. Esc cancela." : "Corte: clique o início da linha que atravessa a casa (passe pela escada e pelas janelas que quer mostrar).")
     : ferramenta === "escada" ? (inicio ? "Aponte para onde a escada sobe e clique. Esc cancela." : "Escada: clique o pé do primeiro degrau (no caracol, o centro). Forma e largura no painel ao lado.")
     : ferramenta === "cota" ? (ancora && ancora.cotaB ? "Clique onde fica a linha de cota. Esc cancela." : inicio ? "Clique o segundo ponto a medir. Esc cancela." : "Cota: clique o primeiro ponto a medir (gruda nas quinas e faces das paredes).")
     : ferramenta === "ambiente" ? "Clique dentro de um cômodo fechado por paredes para criar o ambiente (nome e área)."
@@ -81967,6 +82612,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           {selO.length && sel.length === selO.length ? (selO.length === 1 ? `${tpEsq(selO[0].o.tipo).rotulo} · ${quadro.codigoDe.get(selO[0].o.id) || ""}` : `${selO.length} esquadrias`)
             : selP.length && !selA.length && sel.length === selP.length ? (selP.length === 1 ? "Parede" : `${selP.length} paredes`)
             : selA.length && !selP.length ? (selA.length === 1 ? TP_AREA_TIPOS[areas[selA[0]].tipo].nome : `${selA.length} áreas`)
+            : sel.every((k) => k[0] === "x") ? (sel.length === 1 && cortes[+sel[0].slice(1)] ? `Corte ${tpNomeCorte(cortes[+sel[0].slice(1)])}` : `${sel.length} cortes`)
             : sel.every((k) => k[0] === "l") ? (sel.length === 1 ? "Comprimento da parede" : `${sel.length} comprimentos`)
             : `${sel.length} elementos`}
         </div>
@@ -82043,12 +82689,33 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             <TpCampo id="tp-p-esp" rotulo="Espessura (cm)" casas={0} valor={comum(selP, (i) => Math.round(paredes[i].t * 100))} onConfirmar={(v) => editarParedes(selP, (w) => ({ ...w, t: v / 100 }))} />
           </div>
         )}
+        {selP.length > 0 && pavsOrd.findIndex((p) => p.id === pavAtivo) < pavsOrd.length - 1 && (
+          <button style={{ ...btn, width: "100%", minHeight: 30, padding: "4px 8px", fontSize: 12.5, marginTop: 8 }} onClick={() => levarParaCima(selP)}>
+            Levar {selP.length > 1 ? `estas ${selP.length} paredes` : "esta parede"} para o {pavsOrd[pavsOrd.findIndex((p) => p.id === pavAtivo) + 1].nome}
+          </button>
+        )}
         {selP.length > 0 && selP.some((i) => paredes[i] && (paredes[i].semCota || paredes[i].cotaDesl)) && (
           <button style={{ ...btn, width: "100%", minHeight: 30, padding: "4px 8px", fontSize: 12.5, marginTop: 8 }}
             onClick={() => editarParedes(selP, (w) => { const { semCota, cotaDesl, ...r } = w; return r; })}>
             Voltar o comprimento da parede (mostrar no lugar padrão)
           </button>
         )}
+        {sel.length === 1 && sel[0][0] === "x" && cortes[+sel[0].slice(1)] && (() => {
+          const ci = +sel[0].slice(1), ct = cortes[ci], mudarCt = (f) => registrar() || setCortes((cs) => cs.map((c, i) => (i === ci ? { ...c, ...f } : c)));
+          return (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <label style={{ fontSize: 12, color: "#4b5563", display: "grid", gap: 4 }}>Nome
+                <input key={ct.id} defaultValue={ct.nome} maxLength={4} onBlur={(e) => { const v = e.target.value.trim().toUpperCase(); if (v && v !== ct.nome) mudarCt({ nome: v }); }} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); e.stopPropagation(); }}
+                  style={{ padding: "6px 8px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 13, textTransform: "uppercase", fontFamily: "inherit" }} />
+              </label>
+              <TpCampo id="tp-corte-prof" rotulo="Vista até (m)" valor={ct.prof || 15} onConfirmar={(x) => mudarCt({ prof: Math.max(0.5, Math.min(100, x)) })} />
+              <button style={{ ...btn, minHeight: 30, padding: "4px 8px", fontSize: 12.5 }} onClick={() => mudarCt({ lado: -(ct.lado || 1) })}>Inverter direção</button>
+              <button style={{ ...btn, minHeight: 30, padding: "4px 8px", fontSize: 12.5, fontWeight: 600 }} onClick={() => { setVerCorte(ct.id); setModo("corte"); if (isMobile) setMenuAberto(false); }}>Ver o corte</button>
+              <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#4b5563", lineHeight: 1.4 }}>Arraste a linha para mover e os quadradinhos das pontas para esticar. “Vista até” é quanto se enxerga além da linha. Vale para todos os pavimentos.</div>
+              <button style={{ ...btn, gridColumn: "1 / -1", minHeight: 30, padding: "4px 8px", fontSize: 12.5, color: "#b91c1c" }} onClick={excluirSelecao}>Excluir corte</button>
+            </div>
+          );
+        })()}
         {sel.length > 0 && sel.every((k) => k[0] === "l") && (
           <div style={{ fontSize: 12, color: "#4b5563", lineHeight: 1.45 }}>
             Comprimento da parede: arraste para mudar de lugar; Delete (ou Excluir) tira da planta. Para voltar, selecione a parede e use “Voltar o comprimento da parede”.
@@ -82150,6 +82817,13 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 </select>
               </div>
               <TpCampo id="tp-esc-larg" rotulo="Largura (m)" valor={e.largura || 0.9} onConfirmar={(v) => ed({ largura: Math.max(0.6, v) })} />
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label htmlFor="tp-esc-corr" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>Corrimão</label>
+                <select id="tp-esc-corr" value={e.corrimao || "ambos"} onChange={(ev) => ed({ corrimao: ev.target.value })}
+                  style={{ width: "100%", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit", background: "#fff" }}>
+                  <option value="ambos">Dos dois lados</option><option value="dir">Só à direita (de quem sobe)</option><option value="esq">Só à esquerda (de quem sobe)</option><option value="nenhum">Sem corrimão</option>
+                </select>
+              </div>
               <TpCampo id="tp-esc-alt" rotulo="Desnível (m)" valor={e.altura || 2.9} onConfirmar={(v) => ed({ altura: Math.max(0.3, v) })} />
               <TpCampo id="tp-esc-n" rotulo="Degraus (espelhos)" casas={0} valor={g.n} somenteLeitura onConfirmar={() => {}} />
               <TpCampo id="tp-esc-e" rotulo="Espelho (cm)" casas={1} valor={g.esp * 100} somenteLeitura onConfirmar={() => {}} />
@@ -82158,8 +82832,23 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               <button onClick={() => ed({ ang: r3((e.ang || 0) + Math.PI / 2) })} style={{ ...btn, minHeight: 30, fontSize: 12.5 }}>Girar 90°</button>
               {(e.forma || "reta") !== "reta" && <button onClick={() => ed({ giro: -((e.giro || 1)) })} style={{ ...btn, minHeight: 30, fontSize: 12.5 }}>Inverter giro</button>}
               <button onClick={() => ed({ altura: alturaEscada() })} style={{ ...btn, gridColumn: "1 / -1", minHeight: 30, fontSize: 12.5 }}>Desnível até o pavimento de cima ({tpFmt(alturaEscada())} m)</button>
+              {tpAvisosEscada(g, e).length > 0 && (
+                <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#b91c1c", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "6px 8px", lineHeight: 1.45 }}>
+                  {tpAvisosEscada(g, e).map((t) => <div key={t}>{t}</div>)}
+                </div>
+              )}
+              {(() => { const q = tpQuantEscada(e); return (
+                <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#374151", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 8px", lineHeight: 1.55 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 2 }}>Quantitativo (vai para o orçamento de obra)</div>
+                  {q.forma === "caracol" ? <div>Caracol: estrutura pronta, sem concreto.</div> : <>
+                    <div>Concreto: {tpFmt(q.concreto, 3)} m³ · Fôrma: {tpFmt(q.formaM2)} m²</div>
+                    <div>Aço (80 kg/m³): ~{q.aco} kg · Escoras: {tpFmt(q.fundo)} m² de fundo</div>
+                  </>}
+                  <div>Revestimento (pisos + espelhos): {tpFmt(q.revestimento)} m²{q.corrimao ? ` · Corrimão: ${tpFmt(q.corrimao)} m` : ""}</div>
+                </div>
+              ); })()}
               <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#4b5563", lineHeight: 1.4 }}>
-                {`2 × espelho + piso = ${tpFmt((2 * g.esp + g.piso) * 100, 1)} cm (Blondel: 63 a 64). `}Arraste a escada para mudar de lugar. A abertura na laje de cima ainda não é feita automaticamente.
+                {`2 × espelho + piso = ${tpFmt((2 * g.esp + g.piso) * 100, 1)} cm (Blondel: 63 a 64). `}Arraste a escada para mudar de lugar; o quadradinho do lado muda a largura e a bolinha na ponta gira. A laje deste pavimento abre sozinha sobre a escada.
               </div>
             </div>
           );
@@ -82314,6 +83003,13 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 <button onClick={() => setConfirmarPav(null)} style={{ ...btn, minHeight: 30, fontSize: 12.5 }}>Cancelar</button>
               </div>
             : <button onClick={() => setConfirmarPav(pavAtivo)} style={{ ...btn, gridColumn: "1 / -1", minHeight: 30, fontSize: 12.5, color: "#b91c1c" }}>Excluir pavimento</button>)}
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label htmlFor="tp-vis3d" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>No 3D</label>
+            <select id="tp-vis3d" value={vis3d} onChange={(e) => setVis3d(e.target.value)} style={{ width: "100%", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit", background: "#fff" }}>
+              <option value="todos">Todos os pavimentos</option><option value="ate">Até o pavimento ativo (corta acima)</option><option value="so">Só o pavimento ativo</option>
+            </select>
+          </div>
+          <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#6b7280" }}>Page Up / Page Down troca de pavimento.</div>
         </div>
       )}
 
@@ -82409,7 +83105,18 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 <span>{a.nome || "Ambiente"}</span><span style={numQ}>{a.aberto ? "não fechado" : `${tpFmt(tpAreaPoli(a.pts))} m²`}</span>
               </button>
             ) : null))}
-            <div style={{ ...linhaQ, fontWeight: 600 }}><span>Área útil</span><span style={numQ}>{tpFmt(areas.filter((a) => a.tipo === "ambiente" && !a.aberto).reduce((t, a) => t + tpAreaPoli(a.pts), 0))} m²</span></div>
+            <div style={{ ...linhaQ, fontWeight: 600 }}><span>Área útil{pavimentos.length > 1 ? ` (${pavAt.nome})` : ""}</span><span style={numQ}>{tpFmt(areas.filter((a) => a.tipo === "ambiente" && !a.aberto).reduce((t, a) => t + tpAreaPoli(a.pts), 0))} m²</span></div>
+            {pavimentos.length > 1 && pavsOrd.filter((p) => p.id !== pavAtivo).map((p) => {
+              const am = (dadosDe(p.id).areas || []).filter((a) => a.tipo === "ambiente" && a.pts && a.pts.length >= 3);
+              if (!am.length) return null;
+              return (
+                <div key={p.id} style={{ marginTop: 6 }}>
+                  <button onClick={() => irParaPav(p.id)} style={{ ...linhaQ, width: "100%", background: "none", border: "none", padding: "4px 0", cursor: "pointer", color: "#6b7280", fontFamily: "inherit", fontSize: 12 }}>
+                    <span>{p.nome} — {am.length} ambiente{am.length > 1 ? "s" : ""}</span><span style={numQ}>{tpFmt(am.filter((a) => !a.aberto).reduce((t, a) => t + tpAreaPoli(a.pts), 0))} m²</span>
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </>
       )}
@@ -82435,13 +83142,20 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
   const barraFerramentas = (
     <div style={{ position: "absolute", left: 12, top: 32, right: 56, display: "flex", flexWrap: "wrap", gap: 4, zIndex: 1, pointerEvents: "none" }}>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 2, background: "rgba(255,255,255,0.94)", borderRadius: 10, padding: 3, border: "1px solid #e5e7eb", pointerEvents: "auto" }}>
-        {FERRAMENTAS.map((f) => (
-          <button key={f.id} title={f.dica} onClick={() => trocarFerramenta(f.id)}
+      <div ref={barraRef} style={{ display: "flex", flexWrap: "wrap", gap: 2, background: "rgba(255,255,255,0.94)", borderRadius: 10, padding: 3, border: "1px solid #e5e7eb", pointerEvents: "auto" }}>
+        {/* no celular a barra fica numa linha só: as mais usadas + a ativa; "Mais" abre o resto */}
+        {(isMobile && !barraAberta ? FERRAMENTAS.filter((f) => ["selecionar", "parede", "esquadria"].includes(f.id) || f.id === ferramenta) : FERRAMENTAS).map((f) => (
+          <button key={f.id} title={f.dica} onClick={() => { trocarFerramenta(f.id); setBarraAberta(false); }}
             style={{ border: "none", borderRadius: 7, padding: isMobile ? "6px 7px" : "6px 10px", fontSize: isMobile ? 12 : 12.5, cursor: "pointer", fontFamily: "inherit", background: ferramenta === f.id ? TP_AZUL : "transparent", color: ferramenta === f.id ? "#fff" : "#374151", fontWeight: 600 }}>
-            {f.rotulo}
+            {isMobile && !barraAberta && f.id === "esquadria" ? "Porta" : f.rotulo}
           </button>
         ))}
+        {isMobile && (
+          <button onClick={() => setBarraAberta((x) => !x)} aria-expanded={barraAberta}
+            style={{ border: "none", borderRadius: 7, padding: "6px 8px", fontSize: 12, cursor: "pointer", fontFamily: "inherit", background: barraAberta ? "#e5e7eb" : "transparent", color: "#374151", fontWeight: 600 }}>
+            {barraAberta ? "Menos ▴" : "Mais ▾"}
+          </button>
+        )}
       </div>
       {(ferramenta === "parede" || tpEhPoli(ferramenta)) && (
         <div style={{ display: "flex", gap: 2, background: "rgba(255,255,255,0.94)", borderRadius: 10, padding: 3, border: "1px solid #e5e7eb", pointerEvents: "auto" }}>
@@ -82489,15 +83203,23 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           </div>
           {isMobile && (
             <div style={{ display: "flex", gap: 4 }}>
-              {MODOS.map((m) => <button key={m.id} onClick={() => setModo(m.id)} style={{ ...btn, minHeight: 30, padding: "4px 8px", fontSize: 12, borderColor: modo === m.id ? TP_AZUL : "#e5e7eb", color: modo === m.id ? TP_AZUL : "#374151", background: modo === m.id ? "#eef5ff" : "#fff" }}>{m.id === "ambos" ? "2" : m.rotulo}</button>)}
+              {MODOS.map((m) => <button key={m.id} onClick={() => setModo(m.id)} style={{ ...btn, minHeight: 30, padding: "4px 8px", fontSize: 12, borderColor: modo === m.id ? TP_AZUL : "#e5e7eb", color: modo === m.id ? TP_AZUL : "#374151", background: modo === m.id ? "#eef5ff" : "#fff" }}>{m.id === "ambos" ? "2" : m.id === "corte" ? "Corte" : m.rotulo}</button>)}
             </div>
           )}
         </div>
         <div style={{ flex: 1, minHeight: 0, display: "grid", gap: 1, background: "#e5e7eb",
-          gridTemplateColumns: modo === "ambos" && !isMobile ? "1fr 1fr" : "1fr", gridTemplateRows: modo === "ambos" && isMobile ? "1fr 1fr" : "1fr",
+          gridTemplateColumns: (modo === "ambos" || modo === "corte") && !isMobile ? "1fr 1fr" : "1fr", gridTemplateRows: (modo === "ambos" || modo === "corte") && isMobile ? "1fr 1fr" : "1fr",
           paddingBottom: "env(safe-area-inset-bottom, 0px)", paddingRight: "env(safe-area-inset-right, 0px)" }}>
           <div ref={planBox} style={{ ...pane, display: mostraPlanta ? "block" : "none" }}>
-            <span style={tag}>{pavimentos.length > 1 ? `${pavAt.nome} · nível ${tpFmt(pavAt.nivel)} · ` : "Planta baixa · "}grade 0,50 m</span>
+            <span style={tag}>{pavimentos.length > 1 ? `${pavAt.nome} · nível ${tpFmt(pavAt.nivel)} · ` : "Planta baixa · "}grade 0,50 m
+            {pavimentos.length > 1 && (
+              <span style={{ display: "inline-flex", gap: 4, marginLeft: 8, verticalAlign: "middle", textTransform: "none", letterSpacing: 0 }}>
+                {pavsOrd.map((p) => (
+                  <button key={p.id} onClick={() => irParaPav(p.id)} title={`${p.nome} (Page Up / Page Down troca)`}
+                    style={{ border: "1px solid " + (p.id === pavAtivo ? TP_AZUL : "#d1d5db"), background: p.id === pavAtivo ? "#eef5ff" : "#fff", color: p.id === pavAtivo ? TP_AZUL : "#374151", borderRadius: 999, padding: "2px 9px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", pointerEvents: "auto" }}>{p.nome}</button>
+                ))}
+              </span>
+            )}</span>
             <canvas ref={planRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none", cursor: ferramenta === "mover" ? "grab" : ferramenta === "selecionar" ? "default" : "crosshair" }}
               onContextMenu={(e) => e.preventDefault()} onDoubleClick={() => { if (poli.length >= 3) finalizarPoli(); }}
               onPointerDown={planDown} onPointerMove={(e) => { planMove(e); if (!gesto.current && ferramenta === "selecionar") { const dd = devPx(e), eq = iconeEq.current; e.currentTarget.style.cursor = (eq && Math.abs(dd.x - eq.x) <= eq.r && Math.abs(dd.y - eq.y) <= eq.r) || cotasClic.current.some((q) => Math.abs(dd.x - q.x) <= q.r && Math.abs(dd.y - q.y) <= q.r * 0.6) ? "pointer" : (alcasEsq.current.some((q) => Math.abs(dd.x - q.x) <= 9 * (window.devicePixelRatio || 1) && Math.abs(dd.y - q.y) <= 9 * (window.devicePixelRatio || 1)) || alcaNoPonto(dd) || rotulosClic.current.some((q) => dd.x >= q.x0 && dd.x <= q.x1 && dd.y >= q.y0 && dd.y <= q.y1)) ? "move" : "default"; } }} onPointerUp={planUp} onPointerLeave={() => { if (!inicio && !poli.length && !gesto.current) setHover(null); else if (!gesto.current && hover && hover.guias) setHover({ x: hover.x, y: hover.y }); if (!gesto.current) setPreviaEsq(null); }} />
@@ -82536,6 +83258,23 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               onContextMenu={(e) => e.preventDefault()}
               onPointerDown={v3dDown} onPointerMove={v3dMove} onPointerUp={v3dUp} />
             {erro3d && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#6b7280", fontSize: 13, padding: 16, textAlign: "center" }}>{erro3d} Verifique a conexão e abra o projeto de novo.</div>}
+          </div>
+          <div ref={corteBox} style={{ ...pane, display: mostraCorte ? "block" : "none" }}>
+            <span style={tag}>{cortes.length ? "Corte" : "Corte · nenhum ainda"}</span>
+            {cortes.length > 0 && (
+              <div style={{ position: "absolute", top: 8, right: 8, zIndex: 1, display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end", maxWidth: "70%" }}>
+                {cortes.map((c, i) => (
+                  <button key={c.id} onClick={() => { setVerCorte(c.id); setSel(["x" + i]); }}
+                    style={{ ...btn, minHeight: 28, padding: "2px 10px", fontSize: 12, fontWeight: 700, background: (verCorte || cortes[0].id) === c.id ? "#111827" : "#fff", color: (verCorte || cortes[0].id) === c.id ? "#fff" : "#111827", borderRadius: 999 }}>{tpNomeCorte(c)}</button>
+                ))}
+              </div>
+            )}
+            <canvas ref={corteRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
+            {!cortes.length && (
+              <div style={{ position: "absolute", left: "50%", bottom: 16, transform: "translateX(-50%)" }}>
+                <button style={{ ...btn, minHeight: 32, padding: "4px 12px", fontSize: 13, fontWeight: 600 }} onClick={() => trocarFerramenta("corte")}>Desenhar linha de corte</button>
+              </div>
+            )}
           </div>
         </div>
         {sel.length > 0 && (
@@ -82668,6 +83407,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               {desenhando && linha("l0")}
               {sel.length > 0 && item(`Excluir${sel.length > 1 ? ` (${sel.length})` : ""}`, "Delete", excluirSelecao, { perigo: true })}
               {sel.length > 0 && item("Editar propriedades", null, editarPropriedades, { desativado: selP.length > 0 && selA.length > 0 })}
+              {selP.length > 0 && pavsOrd.findIndex((p) => p.id === pavAtivo) < pavsOrd.length - 1 && item("Levar para o pavimento de cima", null, () => levarParaCima(selP))}
               {selA.length === 1 && !selP.length && areas[selA[0]].tipo !== "cota" && areas[selA[0]].tipo !== "escada" && item("Editar contorno", null, () => { setFerramenta("selecionar"); if (modo === "3d") setModo("ambos"); })}
               {selO.length > 0 && item("Inverter mão", "Espaço", () => inverterAberturas("mao"))}
               {selO.length > 0 && item("Inverter lado de abertura", "Shift+Espaço", () => inverterAberturas("lado"))}
