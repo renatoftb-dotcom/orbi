@@ -42811,10 +42811,15 @@ function ComparativoLista({ cot, dinheiro, isMobile, divisao }) {
       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: isMobile && comPreco.length > 1 ? 480 : 0 }}>
         <thead>
           <tr style={{ background: "#fff" }}>
-            <th style={th}>Material</th>
+            {/* O material tem largura mínima e o nome da loja quebra em
+                linhas: com muitas lojas (ou numa TV pelo HDMI, que aumenta
+                tudo), eram os nomes longos das lojas, numa linha só, que
+                espremiam o material até uma palavra por linha. */}
+            <th style={{ ...th, minWidth: isMobile ? 150 : 220 }}>Material</th>
             <th style={{ ...th, textAlign: "right" }}>Qtd.</th>
             {comPreco.map((l) => (
-              <th key={l.propostaId} style={{ ...th, textAlign: "right" }}>{l.favorecido || "Loja"}</th>
+              <th key={l.propostaId} data-vk-loja-coluna="1" style={{ ...th, textAlign: "right", whiteSpace: "normal", minWidth: 96, maxWidth: 160,
+                verticalAlign: "bottom", lineHeight: 1.25, overflowWrap: "anywhere" }}>{l.favorecido || "Loja"}</th>
             ))}
             {dv && <th style={{ ...th, textAlign: "center" }}>Não comprar</th>}
           </tr>
@@ -42831,7 +42836,7 @@ function ComparativoLista({ cot, dinheiro, isMobile, divisao }) {
                   {it.unidade ? <span style={{ color: "#6b7280" }}> · {it.unidade}</span> : null}
                   {textoDaMedidaDoItem(it) && <div style={{ fontSize: 11, color: "#6b7280", textDecoration: "none" }}>{textoDaMedidaDoItem(it)}</div>}
                 </td>
-                <td style={{ ...td, textAlign: "right", color: "#4b5563" }}>
+                <td style={{ ...td, textAlign: "right", color: "#4b5563", whiteSpace: "nowrap" }}>
                   {quantidadeDoItem(it) > 0 ? qtdBR(quantidadeDoItem(it)) : "—"}
                 </td>
                 {comPreco.map((l) => {
