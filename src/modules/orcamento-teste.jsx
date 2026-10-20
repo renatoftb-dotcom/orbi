@@ -6650,6 +6650,29 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     setComodosTocados(new Set());
   }, [tipoProjeto]);
 
+  // Térreo ↔ Sobrado: no preço do projeto, o que separa os dois é a escada —
+  // um cômodo com área e índice próprios, que só existe no sobrado (no térreo
+  // o grupo "Outros" nem aparece). Trocar a tipologia põe ou tira a escada;
+  // antes ficava tudo igual e o preço não mudava. Abrir um orçamento salvo
+  // não mexe em nada (a tipologia vem do cadastro, não de uma troca).
+  const tipologiaAnterior = useRef(tipologia);
+  useEffect(() => {
+    const antes = tipologiaAnterior.current;
+    tipologiaAnterior.current = tipologia;
+    if (antes === tipologia || !tipologia) return;
+    if (sincronizandoOrcBase.current) return;
+    const grupos = configAtual && configAtual.grupos;
+    if (!grupos || !(grupos.Outros || []).includes("Escada")) return;
+    const terrea = tipologia === "Térreo" || tipologia === "Térrea";
+    if (!terrea) {
+      setQtds((p) => ((p.Escada || 0) > 0 ? p : { ...p, Escada: 1 }));
+      setComodosTocados((p) => { if (p.has("Escada")) return p; const n = new Set(p); n.add("Escada"); return n; });
+    } else {
+      setQtds((p) => ((p.Escada || 0) > 0 ? { ...p, Escada: 0 } : p));
+      setComodosTocados((p) => { if (!p.has("Escada")) return p; const n = new Set(p); n.delete("Escada"); return n; });
+    }
+  }, [tipologia]);
+
   // Tutorial Beta — expõe setters do form via window pra o tutorial
   // injetar cômodos com animação visual (popup abre, número aparece).
   // Setters de useState são estáveis entre renders, dá pra usar com [] deps.
