@@ -53,7 +53,7 @@ const modulo = new Function(`
     paredesTerreo, pintura, prestadores,
     normalizarProjeto, gerarOrcamentoObra, precificarETotalizar,
     locacaoCanteiro, mesesDeObra, prazoParametricoMeses, gerarCronogramaObra, mesesDaEtapaNoCronograma, normalizarProjeto,
-    calcularEsquadria, metrosPorRegra, barrasPalhetas, ESQUADRIAS_CATALOGO,
+    calcularEsquadria, metrosPorRegra, ESQUADRIAS_ACESSORIOS_PRECOS, barrasPalhetas, ESQUADRIAS_CATALOGO,
     vidroEsquadria, acessoriosEsquadria, ESQUADRIAS_FAMILIAS, ESQUADRIAS_ACESSORIOS,
     interpretarListaColada, ETAPAS_PROJETO,
     instalacoesPorAmbiente, composicoesAtivas, COMPOSICOES_SEED, AMBIENTES_TIPOS, PONTOS_ELETRICOS,
@@ -338,12 +338,19 @@ teste("preço fechado da esquadria = alumínio × R$ 39,80/kg + vidro × R$ 166,
   const um = gerarOrcamentoObra({ tipologia: "Térrea", esquadrias: [
     { familia: "PORTA_GIRO", linha: "GOLD", folhas: 2, qtd: 1, largura: 1.6, altura: 2.1 },
   ] }, { materiais: [] }).itens.find((i) => i.etapa === "Esquadrias");
-  // sem catálogo de insumos: alumínio e vidro pela referência do VBA, acessórios a R$ 0 (marcados sem_preco)
-  const esperado = um.composicao.reduce((a, c) => a + c.qtd * (c.unidade === "Kg" ? 39.8 : c.item === "Vidro 8mm" ? 166.63 : 0), 0);
-  assert.ok(um.composicao.some((c) => c.fonte === "sem_preco"));
-  assert.strictEqual(um.confianca, "parcial");
+  // sem catálogo de insumos: alumínio e vidro pela referência do VBA, acessórios pela referência pesquisada (out/2026)
+  const ref = modulo.ESQUADRIAS_ACESSORIOS_PRECOS;
+  const esperado = um.composicao.reduce((a, c) => a + c.qtd * (c.unidade === "Kg" ? 39.8 : c.item === "Vidro 8mm" ? 166.63 : ref[c.codigo].preco), 0);
+  assert.ok(!um.composicao.some((c) => c.fonte === "sem_preco"), "porta de giro: todo acessório tem referência");
+  assert.ok(um.composicao.filter((c) => c.codigo && ref[c.codigo]).every((c) => c.fonte === "referencia" && c.ref));
+  assert.strictEqual(um.confianca, "modulo");
   assert.ok(Math.abs(um.preco - esperado) < 0.01, `${um.preco} vs ${esperado}`);
-  assert.ok(um.preco > 1400 && um.preco < 1600, `preço fora da faixa: ${um.preco}`);
+  assert.ok(um.preco > 1400 && um.preco < 2200, `preço fora da faixa: ${um.preco}`);
+  // a memória abre cada componente com quantidade × preço e a fonte
+  assert.ok(um.memoria.some((x) => x.rotulo && /DOB - Dobradiça/.test(x.rotulo) && /× R\$ 36,85 — referência/.test(x.fonte)));
+  // porta de correr: kit de roldana = 2 roldanas por folha (R$ 31,00)
+  const pc = gerarOrcamentoObra({ tipologia: "Térrea", esquadrias: [{ familia: "PORTA_CORRER", linha: "GOLD", folhas: 2, qtd: 1, largura: 2, altura: 2.1 }] }, { materiais: [] }).itens.find((i) => i.etapa === "Esquadrias");
+  assert.strictEqual(pc.composicao.find((c) => c.codigo === "KITGN05").total, 62);
   const tres = gerarOrcamentoObra({ tipologia: "Térrea", esquadrias: [
     { familia: "PORTA_GIRO", linha: "GOLD", folhas: 2, qtd: 3, largura: 1.6, altura: 2.1 },
   ] }, { materiais: [] }).itens.find((i) => i.etapa === "Esquadrias");

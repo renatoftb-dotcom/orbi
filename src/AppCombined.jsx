@@ -22617,6 +22617,40 @@ function piscina(cp, out) {
 // ARQUIVO GERADO a partir de docs/referencia-orcamento/esquadrias-catalogo.json.
 
 const ESQUADRIAS_PRECOS_VBA = { aluminioKg: 39.80, vidro8mmM2: 166.63 }; // referência do S_ESQUADRIAS.bas
+// Preço de referência dos acessórios (out/2026), por código do catálogo e na
+// unidade da composição (peça ou metro). Varejo online, sem frete, peça
+// equivalente — não o código Alcoa exato. Vale só quando o acessório não tem
+// preço em Insumos: cadastrar o código Alcoa como apelido do insumo, com o
+// preço da distribuidora, passa na frente. "aprox: true" = peça só parecida
+// (conferir com a serralheria). Sem preço achado: TRA044 (trava antiretirada).
+const ESQUADRIAS_ACESSORIOS_PRECOS = {
+  KITGN05: { preco: 31.00, ref: "2 roldanas duplas Gold 80 kg/folha (ROL40, R$ 15,50 cada) — ProAcessórios" },
+  KITGN06: { preco: 23.04, ref: "2 roldanas simples Gold 40 kg/folha (ROL71, R$ 11,52 cada) — ProAcessórios" },
+  FEC1208: { preco: 29.80, ref: "fecho concha com chave 192 mm (FEC44) — ProAcessórios" },
+  FEC1106: { preco: 20.25, ref: "fecho concha manual (FEC16) — ProAcessórios" },
+  CAL966:  { preco: 0.54,  ref: "calço de nylon para vidro — Fixa Ferramentas" },
+  NYL042:  { preco: 1.35,  ref: "guia deslizante linha Gold Fermax, kit 20 peças R$ 27,00 — Esfera Acessórios" },
+  NYL545:  { preco: 4.42,  ref: "tampa/nylon de montante Gold (NYL399, kit 8 peças R$ 17,69), 2 peças por folha — Esfera", aprox: true },
+  CON536:  { preco: 2.84,  ref: "esquadro de nylon para contramarco (R$ 1,68 a 2,84) — Esfera", aprox: true },
+  CON547:  { preco: 2.84,  ref: "esquadro de nylon para contramarco (R$ 1,68 a 2,84) — Esfera", aprox: true },
+  CON548:  { preco: 2.84,  ref: "esquadro de nylon para contramarco (R$ 1,68 a 2,84) — Esfera", aprox: true },
+  NYL482:  { preco: 2.21,  ref: "nylon de canto Gold (NYL399, kit 8 peças R$ 17,69) — Esfera", aprox: true },
+  NYL743:  { preco: 103.50, ref: "kit completo recolhedor e ponteiras com rolamento para persiana integrada (KREC03) — ProAcessórios" },
+  GUA006:  { preco: 3.20,  ref: "borracha GUA-039 de vidro, rolo 50 m R$ 159,99 — Leroy Merlin" },
+  GUA410:  { preco: 3.20,  ref: "borracha GUA-039 de vidro, rolo 50 m R$ 159,99 — Leroy Merlin", aprox: true },
+  GUA526:  { preco: 0.77,  ref: "escova de vedação 5 × 7 mm, rolo 50 m R$ 38,47 — Sacadabox" },
+  GUA172:  { preco: 0.77,  ref: "escova de vedação 5 × 7 mm, rolo 50 m R$ 38,47 — Sacadabox" },
+  GUA392:  { preco: 0.77,  ref: "escova de vedação 5 × 7 mm, rolo 50 m R$ 38,47 — Sacadabox", aprox: true },
+  CHU838:  { preco: 0.37,  ref: "grapa chumbador para contramarco CM063, 100 un R$ 37,40 — Fast Vidros" },
+  CHU840:  { preco: 0.37,  ref: "grapa chumbador para contramarco CM063, 100 un R$ 37,40 — Fast Vidros" },
+  PAR428:  { preco: 0.18,  ref: "parafuso autobrocante panela 4,2 × 13, caixa 1.000 R$ 182,91 — Aciole Fix" },
+  PAR694:  { preco: 0.18,  ref: "parafuso autobrocante panela 4,2 × 13, caixa 1.000 R$ 182,91 — Aciole Fix" },
+  DOB:     { preco: 36.85, ref: "dobradiça Gold 3 abas reforçada (DOB24) — ProAcessórios" },
+  FECH:    { preco: 79.50, ref: "fechadura de porta de alumínio Pado Magnum 661 com maçaneta — Esfera Acessórios" },
+  KITGN16: { preco: 24.24, ref: "2 fechos unha de alumínio para a folha parada (FEC14, R$ 12,12 cada) — ProAcessórios", aprox: true },
+  BRA832:  { preco: 36.09, ref: "par de braços maxim-ar 50 cm (BRA702) — Magazine Luiza" },
+  FEC1212: { preco: 24.58, ref: "fecho maxim-ar 95 mm (FMA83) — ProAcessórios" },
+};
 const ESQUADRIAS_DESCONTO_ALTURA = 0.14; // "desconta 14 cm para altura útil, folhas, vidros, persiana"
 const ESQUADRIAS_BARRA_MTS = 6;          // palhetas vendem em barra de 6 m
 
@@ -23072,10 +23106,14 @@ function precoComponenteEsquadria(comp, data) {
       }
     }
   }
-  if (comp.unidade === "Kg") return { preco: ESQUADRIAS_PRECOS_VBA.aluminioKg, fonte: "referencia" };
-  if (comp.item === "Vidro 8mm") return { preco: ESQUADRIAS_PRECOS_VBA.vidro8mmM2, fonte: "referencia" };
+  if (comp.unidade === "Kg") return { preco: ESQUADRIAS_PRECOS_VBA.aluminioKg, fonte: "referencia", ref: "R$ 39,80/kg — S_ESQUADRIAS.bas" };
+  if (comp.item === "Vidro 8mm") return { preco: ESQUADRIAS_PRECOS_VBA.vidro8mmM2, fonte: "referencia", ref: "R$ 166,63/m² — S_ESQUADRIAS.bas" };
   const r = precoDoInsumo(comp.item, data);
-  return r.preco != null ? { preco: r.preco, fonte: "insumo" } : { preco: 0, fonte: "sem_preco" };
+  if (r.preco != null) return { preco: r.preco, fonte: "insumo" };
+  // 4. acessório sem insumo: preço de referência pesquisado (out/2026)
+  const a = comp.codigo ? ESQUADRIAS_ACESSORIOS_PRECOS[comp.codigo] : null;
+  if (a) return { preco: a.preco, fonte: "referencia", ref: a.ref, aprox: !!a.aprox };
+  return { preco: 0, fonte: "sem_preco" };
 }
 
 function rotuloEsquadria(e) {
@@ -23098,9 +23136,9 @@ function esquadrias(cp, out, data) {
     if (!componentes.length) continue;
     let precoUnitario = 0;
     const composicao = componentes.map((c) => {
-      const { preco, fonte } = precoComponenteEsquadria(c, data);
+      const { preco, fonte, ref, aprox } = precoComponenteEsquadria(c, data);
       precoUnitario += c.qtd * preco;
-      return { item: c.item, codigo: c.codigo, unidade: c.unidade, qtd: c.qtd, preco, fonte, total: Math.round(c.qtd * preco * 100) / 100 };
+      return { item: c.item, codigo: c.codigo, unidade: c.unidade, qtd: c.qtd, preco, fonte, ...(ref ? { ref } : {}), ...(aprox ? { aprox: true } : {}), total: Math.round(c.qtd * preco * 100) / 100 };
     });
     const linha = ESQUADRIAS_LINHAS.find((l) => l.id === e.linha);
     const semPreco = composicao.filter((c) => c.fonte === "sem_preco");
@@ -23112,9 +23150,12 @@ function esquadrias(cp, out, data) {
       subEtapa: linha ? `Linha ${linha.nome}` : e.linha, unidade: "Unidades", qtd: numOrZero(e.qtd),
       preco: Math.round(precoUnitario * 100) / 100, composicao, confianca: semPreco.length ? "parcial" : "modulo",
       memoria: [
-        MEM.nota(`Esquadria cadastrada no bloco Esquadrias. A quantidade é a que você digitou; o preço unitário é fechado pelo VICKE somando os perfis de alumínio da linha ${linha ? linha.nome : e.linha}, o vidro e os acessórios — a lista completa aparece na composição do item, na própria tabela.`),
+        MEM.nota(`Esquadria cadastrada no bloco Esquadrias. A quantidade é a que você digitou; o preço unitário é fechado pelo VICKE somando os perfis de alumínio da linha ${linha ? linha.nome : e.linha}, o vidro e os acessórios — abaixo, cada componente com a quantidade, o preço e de onde ele veio.`),
         MEM.dado("Medidas da peça", `${numMem(e.largura)} × ${numMem(e.altura)} m, ${numMem(e.folhas)} folha${numOrZero(e.folhas) === 1 ? "" : "s"}`, "", "bloco Esquadrias"),
-        MEM.dado("Componentes que formam o preço", composicao.length, "itens", "catálogo de perfis da linha"),
+        // cada componente: quantidade × preço = total, e de onde veio o preço
+        ...composicao.map((c) => MEM.dado(c.item.replace(/^Acessório esquadria - /, ""), c.total, "R$",
+          `${numMem(c.qtd)} ${c.unidade === "Kg" ? "kg" : c.unidade === "m2" ? "m²" : c.unidade === "Mts" ? "m" : "un"} × R$ ${numMem(c.preco)} — ${c.fonte === "insumo" ? "Insumos" : c.fonte === "referencia" ? `referência: ${c.ref || ""}${c.aprox ? " (peça parecida, confirmar)" : ""}` : "sem preço (entra R$ 0)"}`)),
+        MEM.conta("Preço unitário da esquadria", "soma dos componentes", [], Math.round(precoUnitario * 100) / 100, "R$"),
         MEM.dado("Quantidade no orçamento", numOrZero(e.qtd), "unidades", "bloco Esquadrias"),
       ],
     });
