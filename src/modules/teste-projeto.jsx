@@ -940,6 +940,12 @@ function tpDesenhoParaObraPavs(lista) {
 }
 // Junta no projeto da obra só os campos que vêm do desenho. Padrão, cômodos,
 // esquadrias, fundação, prestadores etc. ficam como estavam.
+function tpManterLinhaEsquadrias(novas, antigas) {
+  const chave = (e) => [e.familia, Number(e.folhas) || 0, Math.round((Number(e.largura) || 0) * 100), Math.round((Number(e.altura) || 0) * 100)].join("|");
+  const linhas = new Map();
+  for (const e of (Array.isArray(antigas) ? antigas : [])) if (e && e.linha) linhas.set(chave(e), e.linha);
+  return novas.map((e) => (linhas.has(chave(e)) ? { ...e, linha: linhas.get(chave(e)) } : e));
+}
 function tpMesclarProjetoObra(ant, conv, projetoId) {
   ant = ant || {};
   return { ...ant, tipologia: conv.projeto.tipologia,
@@ -952,7 +958,9 @@ function tpMesclarProjetoObra(ant, conv, projetoId) {
     ...(conv.projeto.externa ? { externa: { ...(ant.externa || {}), ...conv.projeto.externa } } : {}),
     // esquadrias: o desenho passa a mandar na lista quando tem portas/janelas;
     // se depois apagar todas, limpa só o que ele mesmo tinha escrito
-    ...(conv.projeto.esquadrias ? { esquadrias: conv.projeto.esquadrias } : ((ant.origemDesenho || {}).esquadrias ? { esquadrias: [] } : {})),
+    // a linha (Gold/Suprema) escolhida no orçamento fica: a esquadria do desenho
+    // com o mesmo tipo, folhas e medidas herda a linha que estava lá
+    ...(conv.projeto.esquadrias ? { esquadrias: tpManterLinhaEsquadrias(conv.projeto.esquadrias, ant.esquadrias) } : ((ant.origemDesenho || {}).esquadrias ? { esquadrias: [] } : {})),
     // cômodos: com ambientes desenhados, o desenho manda na quantidade e nas
     // medidas (comprimento, largura, pé-direito); o resto do que foi editado
     // no cômodo (revestimento, bancada) fica
