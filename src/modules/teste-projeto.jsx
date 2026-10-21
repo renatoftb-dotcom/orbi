@@ -608,6 +608,123 @@ function tpComodosDoDesenho(paredes, areas) {
   }
   return { ambientes, comodosCfg, grupos, soltos, temAmbientes: amb.length > 0 || escadas.length > 0 };
 }
+// Gabarito da obra: o cavalete de tábuas que cerca a casa na marcação e
+// guarda os eixos até a fundação sair do chão. Acompanha o contorno das
+// paredes externas, TP_GABARITO_AFASTAMENTO afastado da face de fora, com os
+// cantos em esquadro: casa só com ângulos retos dá perímetro externo + 8 m.
+// Com a casa ainda aberta (sem pegada), um retângulo em volta das paredes.
+const TP_GABARITO_AFASTAMENTO = 1.0;
+// Gabarito pelo contorno: a pegada da casa (face de fora das paredes) crescida
+// TP_GABARITO_AFASTAMENTO para todos os lados, com os cantos em esquadro.
+// Recorte mais estreito que 2 × afastamento fecha sozinho (o gabarito passa
+// reto pela boca). Volta o comprimento total em metros.
+function tpGabaritoDoContorno(polys, d) {
+  polys = (polys || []).filter((p) => p && p.length >= 3);
+  if (!polys.length || !(d > 0)) return 0;
+  // gira para o lado mais comprido ficar no eixo x: o quadrado da grade vira o esquadro da casa
+  let ang = 0, maior = 0;
+  for (const P of polys) P.forEach((a, i) => { const b = P[(i + 1) % P.length], l = Math.hypot(b.x - a.x, b.y - a.y); if (l > maior) { maior = l; ang = Math.atan2(b.y - a.y, b.x - a.x); } });
+  const co = Math.cos(-ang), si = Math.sin(-ang);
+  const R = polys.map((P) => P.map((q) => ({ x: q.x * co - q.y * si, y: q.x * si + q.y * co })));
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const P of R) for (const q of P) { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); }
+  let passo = 0.03;
+  const folga = () => d + passo * 3;
+  while (((x1 - x0 + 2 * folga()) / passo) * ((y1 - y0 + 2 * folga()) / passo) > 1.5e6) passo *= 1.5;
+  const gx = x0 - folga(), gy = y0 - folga();
+  const W = Math.ceil((x1 - gx + folga()) / passo), H = Math.ceil((y1 - gy + folga()) / passo);
+  // 1) casa na grade: linha a linha, cruzamentos de cada contorno (união)
+  let cel = new Uint8Array(W * H);
+  for (let j = 0; j < H; j++) {
+    const y = gy + (j + 0.5) * passo;
+    for (const P of R) {
+      const xs = [];
+      for (let k = 0; k < P.length; k++) { const a = P[k], b = P[(k + 1) % P.length]; if ((a.y <= y && b.y > y) || (b.y <= y && a.y > y)) xs.push(a.x + (y - a.y) * (b.x - a.x) / (b.y - a.y)); }
+      xs.sort((m, n) => m - n);
+      for (let k = 0; k + 1 < xs.length; k += 2) {
+        const i0 = Math.max(0, Math.ceil((xs[k] - gx) / passo - 0.5)), i1 = Math.min(W - 1, Math.floor((xs[k + 1] - gx) / passo - 0.5));
+        for (let i = i0; i <= i1; i++) cel[j * W + i] = 1;
+      }
+    }
+  }
+  // 2) cresce o afastamento: quadrado de lado 2r (máximo deslizante em x, depois em y)
+  const r = Math.max(1, Math.round(d / passo));
+  const passa = (src, n, m, idx) => {
+    const out = new Uint8Array(src.length);
+    for (let a = 0; a < m; a++) {
+      let cont = 0;
+      for (let b = 0; b <= Math.min(n - 1, r); b++) cont += src[idx(a, b)];
+      for (let b = 0; b < n; b++) {
+        if (cont) out[idx(a, b)] = 1;
+        const sai = b - r, entra = b + r + 1;
+        if (sai >= 0) cont -= src[idx(a, sai)];
+        if (entra < n) cont += src[idx(a, entra)];
+      }
+    }
+    return out;
+  };
+  cel = passa(cel, W, H, (j, i) => j * W + i);
+  cel = passa(cel, H, W, (i, j) => j * W + i);
+  // 3) fora = o que a água alcança a partir da borda (pátio fechado conta como casa)
+  const fora = new Uint8Array(W * H), pilha = [];
+  const solta = (k) => { if (!cel[k] && !fora[k]) { fora[k] = 1; pilha.push(k); } };
+  for (let i = 0; i < W; i++) { solta(i); solta((H - 1) * W + i); }
+  for (let j = 0; j < H; j++) { solta(j * W); solta(j * W + W - 1); }
+  while (pilha.length) { const k = pilha.pop(), i = k % W; if (i > 0) solta(k - 1); if (i < W - 1) solta(k + 1); if (k >= W) solta(k - W); if (k < W * (H - 1)) solta(k + W); }
+  const dentro = (i, j) => i >= 0 && j >= 0 && i < W && j < H && !fora[j * W + i];
+  // 4) contorno: arestas entre dentro e fora, encadeadas
+  const prox = new Map(), chave = (i, j) => j * (W + 1) + i;
+  const add = (a, b) => { const l = prox.get(a); if (l) l.push(b); else prox.set(a, [b]); };
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    if (!dentro(i, j)) continue;
+    if (!dentro(i, j - 1)) add(chave(i, j), chave(i + 1, j));
+    if (!dentro(i + 1, j)) add(chave(i + 1, j), chave(i + 1, j + 1));
+    if (!dentro(i, j + 1)) add(chave(i + 1, j + 1), chave(i, j + 1));
+    if (!dentro(i - 1, j)) add(chave(i, j + 1), chave(i, j));
+  }
+  // linhas onde o gabarito deve cair (lado da casa ± afastamento): os cantos se acertam nelas
+  const alvoX = [], alvoY = [];
+  for (const P of R) P.forEach((a, k) => { const b = P[(k + 1) % P.length]; if (Math.abs(a.y - b.y) < 1e-6) alvoY.push(a.y - d, a.y + d); if (Math.abs(a.x - b.x) < 1e-6) alvoX.push(a.x - d, a.x + d); });
+  const perto = (v, lista) => { let best = v, dd = passo * 1.6; for (const c of lista) { const e = Math.abs(c - v); if (e < dd) { dd = e; best = c; } } return best; };
+  // tira a escada da grade nos lados inclinados (Douglas-Peucker no laço fechado)
+  const simplifica = (pts, tol) => {
+    if (pts.length < 4) return pts;
+    const Q = pts.concat([pts[0]]);
+    const dist = (p, a, b) => { const L = Math.hypot(b.x - a.x, b.y - a.y); return L < 1e-12 ? Math.hypot(p.x - a.x, p.y - a.y) : Math.abs((b.x - a.x) * (a.y - p.y) - (a.x - p.x) * (b.y - a.y)) / L; };
+    const dp = (a, b) => { let m = 0, k = -1; for (let i = a + 1; i < b; i++) { const e = dist(Q[i], Q[a], Q[b]); if (e > m) { m = e; k = i; } } return m > tol ? [...dp(a, k).slice(0, -1), ...dp(k, b)] : [a, b]; };
+    let far = 0, fm = -1; pts.forEach((p, i) => { const e = Math.hypot(p.x - pts[0].x, p.y - pts[0].y); if (e > fm) { fm = e; far = i; } });
+    const idx = [...dp(0, far), ...dp(far, Q.length - 1).slice(1, -1)];
+    return idx.map((i) => Q[i]);
+  };
+  let total = 0;
+  while (prox.size) {
+    const ini = prox.keys().next().value, laco = [];
+    let at = ini, guarda = 0;
+    do { laco.push(at); const l = prox.get(at); if (!l) break; const nx = l.pop(); if (!l.length) prox.delete(at); at = nx; } while (at !== ini && ++guarda < 4e6);
+    let pts = laco.map((k) => ({ x: gx + (k % (W + 1)) * passo, y: gy + Math.floor(k / (W + 1)) * passo }));
+    pts = pts.filter((b, k) => { const a = pts[(k - 1 + pts.length) % pts.length], c = pts[(k + 1) % pts.length]; return Math.abs((b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)) > 1e-12; });
+    if (pts.length < 3) continue;
+    pts = simplifica(pts, passo * 1.5).map((q) => ({ x: perto(q.x, alvoX), y: perto(q.y, alvoY) }));
+    for (let k = 0; k < pts.length; k++) { const a = pts[k], b = pts[(k + 1) % pts.length]; total += Math.hypot(b.x - a.x, b.y - a.y); }
+  }
+  return Math.round(total * 100) / 100;
+}
+function tpGabaritoDaObra(paredes, pegada) {
+  if (pegada && pegada.length) return tpGabaritoDoContorno(pegada, TP_GABARITO_AFASTAMENTO);
+  const ok = (paredes || []).filter((w) => tpLen(w));
+  if (!ok.length) return 0;
+  const h = tpEnvoltoria(ok.flatMap((w) => [w.a, w.b]));
+  if (h.length < 3) return 0;
+  const d = ok.reduce((m, w) => Math.max(m, w.t || 0), 0) / 2 + TP_GABARITO_AFASTAMENTO;
+  let ux = 1, uy = 0, maior = 0;
+  for (let i = 0; i < h.length; i++) {
+    const p = h[i], q = h[(i + 1) % h.length], l = Math.hypot(q.x - p.x, q.y - p.y);
+    if (l > maior) { maior = l; ux = (q.x - p.x) / l; uy = (q.y - p.y) / l; }
+  }
+  const pu = h.map((q) => q.x * ux + q.y * uy), pn = h.map((q) => -q.x * uy + q.y * ux);
+  const comp = Math.max(...pu) - Math.min(...pu) + 2 * d, larg = Math.max(...pn) - Math.min(...pn) + 2 * d;
+  return Math.round(2 * (comp + larg) * 100) / 100;
+}
 function tpDesenhoParaObra(paredes, areas) {
   const r2 = (x) => Math.round(x * 100) / 100;
   // casa = área coberta (laje/telhado); sem cobertura, contrapiso; sem nada, envoltória das paredes
@@ -676,12 +793,14 @@ function tpDesenhoParaObra(paredes, areas) {
   const areaAb = tpAreaAberturas(paredes);
   const com = tpComodosDoDesenho(paredes, areas);
   const escadasQ = areas.filter((a) => a.tipo === "escada").map((e) => { const q = tpQuantEscada(e); return { forma: q.forma, degraus: q.degraus, concreto: q.concreto, formaM2: q.formaM2, fundoM2: q.fundo || 0, acoKg: q.aco, revestimento: q.revestimento, corrimao: q.corrimao }; });
+  const gabarito = tpGabaritoDaObra(paredes, pegadaCasa);
   const projeto = {
     tipologia: "Térrea",
     ...(temAberturas ? { esquadrias } : {}),
     ...(com.temAmbientes ? { ambientes: com.ambientes, comodosCfg: com.comodosCfg } : {}),
     ...(temAberturas ? { portasDesenho: { interna: portas.interna, banheiro: portas.banheiro } } : {}),
-    arquitetura: { areaConstruida: r2(areaConstruida), m2ParedesInternas: r2(m2Int), m2ParedesExternas: r2(m2Ext), m2ParedesTotal: r2(m2Int + m2Ext) },
+    arquitetura: { areaConstruida: r2(areaConstruida), m2ParedesInternas: r2(m2Int), m2ParedesExternas: r2(m2Ext), m2ParedesTotal: r2(m2Int + m2Ext),
+      ...(gabarito > 0 ? { gabarito } : {}) },
     ...(an.pisoExterno > 0 ? { externa: { pavimentacao: r2(an.pisoExterno) } } : {}),
     terreo: { area: r2(areaConstruida), m2Parede15: r2(m15), m2Parede20: r2(m20), m2Parede25: r2(m25), perimetroParedes: r2(perim),
       ...(areaLj ? { areaLoje: r2(areaLj), perimetroLoje: r2(perLj), tipoLoje: "Treliça" } : {}) },
@@ -696,6 +815,7 @@ function tpDesenhoParaObra(paredes, areas) {
     ["Parede externa", `${tpFmt(m2Ext)} m² (${nExt} parede${nExt === 1 ? "" : "s"})`],
     ["Por espessura", `15 cm: ${tpFmt(m15)} · 20 cm: ${tpFmt(m20)} · 25 cm: ${tpFmt(m25)} m²`],
     ["Perímetro de paredes", tpFmt(perim) + " m"],
+    ...(gabarito > 0 ? [["Gabarito", `${tpFmt(gabarito)} m (${pegadaCasa.length ? "contornando as paredes externas" : "retângulo em volta das paredes — feche a casa para contornar"}, ${tpFmt(TP_GABARITO_AFASTAMENTO)} m afastado da face de fora)`]] : []),
     ...(areaLj ? [["Laje (treliçada)", `${tpFmt(areaLj)} m² · perímetro ${tpFmt(perLj)} m`]] : []),
     ...cobertura.map((c, k) => [`Telhado ${cobertura.length > 1 ? k + 1 : ""}`.trim(), `${tpTelha(c.tipo).rotulo}, ${tpFmt(c.comprimento)} × ${tpFmt(c.largura)} m, ${c.aguas} água${c.aguas === 1 ? "" : "s"}, ${tpFmt(c.inclinacao * 100, 0)}%`]),
     ...escadasQ.map((q, k) => [`Escada${escadasQ.length > 1 ? " " + (k + 1) : ""}`, q.forma === "caracol" ? `caracol, ${q.degraus} degraus — estrutura pronta (não entra concreto); revestimento ${tpFmt(q.revestimento)} m²` : `${q.degraus} degraus · concreto ${tpFmt(q.concreto, 3)} m³ · fôrma ${tpFmt(q.formaM2)} m² · aço ~${q.acoKg} kg · revestimento ${tpFmt(q.revestimento)} m²${q.corrimao ? ` · corrimão ${tpFmt(q.corrimao)} m` : ""}`]),
@@ -728,7 +848,9 @@ function tpDesenhoParaObraPavs(lista) {
     ...(todos.projeto.esquadrias ? { esquadrias: todos.projeto.esquadrias } : {}),
     ...(todos.projeto.ambientes ? { ambientes: todos.projeto.ambientes, comodosCfg: todos.projeto.comodosCfg } : {}),
     ...(todos.projeto.portasDesenho ? { portasDesenho: todos.projeto.portasDesenho } : {}),
-    arquitetura: { areaConstruida: soma((p) => p.arquitetura.areaConstruida), m2ParedesInternas: soma((p) => p.arquitetura.m2ParedesInternas), m2ParedesExternas: soma((p) => p.arquitetura.m2ParedesExternas), m2ParedesTotal: soma((p) => p.arquitetura.m2ParedesTotal) },
+    // o gabarito marca o térreo: é o do primeiro pavimento
+    arquitetura: { areaConstruida: soma((p) => p.arquitetura.areaConstruida), m2ParedesInternas: soma((p) => p.arquitetura.m2ParedesInternas), m2ParedesExternas: soma((p) => p.arquitetura.m2ParedesExternas), m2ParedesTotal: soma((p) => p.arquitetura.m2ParedesTotal),
+      ...(c0.arquitetura.gabarito > 0 ? { gabarito: c0.arquitetura.gabarito } : {}) },
     pav1: cs.length > 2 ? (() => {
       // 3 ou mais pavimentos: o orçamento tem um "pavimento superior"; soma os de cima
       const sup = cs.slice(1).map((c) => c.projeto.terreo), sm = (k) => r2(sup.reduce((t, x) => t + (+x[k] || 0), 0));
@@ -742,8 +864,8 @@ function tpDesenhoParaObraPavs(lista) {
     ...lista.map((d, k) => [`${d.nome || (k ? "Pavimento " + k : "Térreo")}`, `${tpFmt(cs[k].projeto.terreo.area)} m² · paredes ${tpFmt(cs[k].projeto.arquitetura.m2ParedesTotal)} m²`]),
     ["Área construída (total)", tpFmt(projeto.arquitetura.areaConstruida) + " m²"],
     ["Paredes (total)", `${tpFmt(projeto.arquitetura.m2ParedesTotal)} m² — internas ${tpFmt(projeto.arquitetura.m2ParedesInternas)} · externas ${tpFmt(projeto.arquitetura.m2ParedesExternas)}`],
-    ...cs[0].linhas.filter(([k]) => k === "Pavimentação externa" || String(k).startsWith("Laje")),
-    ...todos.linhas.filter(([k]) => !["Tipologia", "Área construída", "Pavimentação externa", "Parede interna", "Parede externa", "Por espessura", "Perímetro de paredes"].includes(k) && !String(k).startsWith("Laje")),
+    ...cs[0].linhas.filter(([k]) => k === "Pavimentação externa" || k === "Gabarito" || String(k).startsWith("Laje")),
+    ...todos.linhas.filter(([k]) => !["Tipologia", "Área construída", "Pavimentação externa", "Parede interna", "Parede externa", "Por espessura", "Perímetro de paredes", "Gabarito"].includes(k) && !String(k).startsWith("Laje")),
   ];
   return { projeto, linhas };
 }
@@ -770,14 +892,14 @@ function tpMesclarProjetoObra(ant, conv, projetoId) {
       comodosCfg: Object.entries(conv.projeto.comodosCfg).reduce((acc, [id, c]) => ({ ...acc, [id]: { ...((ant.comodosCfg || {})[id] || {}), ...c } }), { ...(ant.comodosCfg || {}) }),
     } : ((ant.origemDesenho || {}).ambientes ? { ambientes: {} } : {})),
     ...(conv.projeto.portasDesenho ? { portasDesenho: conv.projeto.portasDesenho } : ((ant.origemDesenho || {}).portas ? { portasDesenho: null } : {})),
-    origemDesenho: { projetoId, esquadrias: !!conv.projeto.esquadrias, ambientes: !!conv.projeto.ambientes, portas: !!conv.projeto.portasDesenho, escadas: !!conv.projeto.escadas } };
+    origemDesenho: { projetoId, gabarito: !!(conv.projeto.arquitetura && conv.projeto.arquitetura.gabarito), esquadrias: !!conv.projeto.esquadrias, ambientes: !!conv.projeto.ambientes, portas: !!conv.projeto.portasDesenho, escadas: !!conv.projeto.escadas } };
 }
 // "assinatura" dos campos do desenho, para só gravar quando algo mudou
 function tpAssinaturaDesenho(pr) {
   pr = pr || {};
   const a = pr.arquitetura || {}, t = pr.terreo || {};
   const p1 = pr.pav1 || {};
-  return JSON.stringify([pr.tipologia, p1.area, p1.m2Parede15, p1.m2Parede20, p1.m2Parede25, p1.perimetroParedes, p1.areaLoje, a.areaConstruida, a.m2ParedesInternas, a.m2ParedesExternas, a.m2ParedesTotal,
+  return JSON.stringify([pr.tipologia, p1.area, p1.m2Parede15, p1.m2Parede20, p1.m2Parede25, p1.perimetroParedes, p1.areaLoje, a.areaConstruida, a.gabarito || 0, a.m2ParedesInternas, a.m2ParedesExternas, a.m2ParedesTotal,
     t.area, t.m2Parede15, t.m2Parede20, t.m2Parede25, t.perimetroParedes, t.areaLoje, t.perimetroLoje, t.tipoLoje, pr.cobertura || null, (pr.externa || {}).pavimentacao || 0, pr.esquadrias || null, pr.ambientes || null, pr.portasDesenho || null,
     pr.ambientes ? Object.keys(pr.ambientes).sort().map((id) => { const c = (pr.comodosCfg || {})[id] || {}; return [id, c.L, c.W, c.peDireito]; }) : null, pr.escadas || null]);
 }

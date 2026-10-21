@@ -1841,5 +1841,20 @@ teste("escada desenhada no Projetar vira concreto, fôrma, aço e escoras; carac
   assert.ok(!sem.itens.some((i) => i.subEtapa === "Escada"), "sem escada, nada muda");
 });
 
+teste("gabarito vindo do desenho: tábuas, sarrafos e pregos saem dele, e a memória diz de onde veio", () => {
+  // casa em U pelo desenho: contorno das paredes externas 54,6 m + 8 m de cantos = 62,6 m
+  const proj = { tipologia: "Térrea", arquitetura: { areaConstruida: 105, gabarito: 62.6 }, origemDesenho: { gabarito: true } };
+  const r = modulo.gerarOrcamentoObra(proj, { materiais: [] });
+  const achar = (nome) => r.itens.find((i) => i.item === nome && i.etapa === "Marcação obra");
+  const tab = achar("Madeira Caixaria - Tábuas de 10cm x 3mts");
+  assert.strictEqual(tab.qtd, 26, "62,6 ÷ 3 × 1,20 = 25,04 → 26");
+  assert.ok(tab.memoria.some((x) => x.tipo === "dado" && /Projetar/.test(x.fonte)), "a memória cita o desenho");
+  assert.strictEqual(achar("Madeira Caixaria - Sarrafos de 05cm x 3mts").qtd, 32, "62,6 × 1,20 ÷ 1,30 × 0,60 ÷ 3 + 20 = 31,56 → 32");
+  assert.strictEqual(achar("Aço - Pregos 18x27").qtd, 1);
+  // digitado à mão: a fonte continua sendo o bloco Geral
+  const r2 = modulo.gerarOrcamentoObra({ ...proj, origemDesenho: null }, { materiais: [] });
+  assert.ok(r2.itens.find((i) => i.item === "Madeira Caixaria - Tábuas de 10cm x 3mts").memoria.some((x) => x.fonte === "bloco Geral"));
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou > 0) process.exit(1);

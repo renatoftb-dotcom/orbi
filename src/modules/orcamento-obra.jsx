@@ -867,7 +867,8 @@ function instalacoesObraProjetos(cp, out) {
   const prego18x27Bruto = 0.05 * tabua10 / 2;
   const prego18x27 = teto(prego18x27Bruto);
   const prego17x21 = prego18x27;
-  const memGabarito = MEM.dado("Gabarito da obra (perímetro do cavalete de marcação)", gab, "m", "bloco Geral");
+  const memGabarito = MEM.dado("Gabarito da obra (perímetro do cavalete de marcação)", gab, "m",
+    cp.gabaritoDoDesenho ? "desenho do Projetar — contorno das paredes externas, 1 m afastado da face" : "bloco Geral");
 
   emitir(out, { ...baseMarc, subEtapa: "Gabarito", item: "Madeira Caixaria - Tábuas de 10cm x 3mts", unidade: "Barras 3mts", qtd: tabua10, memoria: [
     MEM.nota("O gabarito é o cavalete de tábuas que cerca a obra e guarda os eixos das paredes até a fundação sair do chão."),
@@ -4029,6 +4030,8 @@ function normalizarProjeto(projeto) {
     m2ParedesInternas: numOrZero(arq.m2ParedesInternas),
     m2ParedesExternas: numOrZero(arq.m2ParedesExternas),
     gabarito: numOrZero(arq.gabarito),
+    // gabarito escrito pelo desenho (Projetar): a memória de cálculo diz de onde veio
+    gabaritoDoDesenho: !!(p.origemDesenho && p.origemDesenho.gabarito),
     perimetroParedesGeral: numOrZero(arq.perimetroParedes),
 
     // Campos achatados historicamente usados por paredesTerreo() (pilotos
@@ -6139,7 +6142,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           {!ehTerrea && (
             <CampoNum label="Perímetro de paredes (casa toda)" valor={get("arquitetura.perimetroParedes")} onChange={(v) => set("arquitetura.perimetroParedes", v)} />
           )}
-          <CampoNum label="Gabarito" valor={get("arquitetura.gabarito")} onChange={(v) => set("arquitetura.gabarito", v)} />
+          <CampoNum label={(projetoDraft.origemDesenho || {}).gabarito ? "Gabarito (do desenho)" : "Gabarito"} valor={get("arquitetura.gabarito")} onChange={(v) => set("arquitetura.gabarito", v)} />
           <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 6 }}>Cômodos</div>
             <ListaComodos projeto={projetoDraft} get={get} set={set} comodoAberto={comodoAberto} setComodoAberto={setComodoAberto} isMobile={isMobile} />
