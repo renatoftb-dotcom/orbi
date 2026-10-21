@@ -23129,22 +23129,26 @@ function esquadrias(cp, out, data) {
 // fórmula nenhuma na casa; as únicas fórmulas de revestimento eram as da
 // piscina (R_PISCINA.bas): argamassa AC3 7,5 kg/m², disco 0,005/m² e um
 // rejunte de 0,095 kg/m² que não bate com nenhum fabricante. Aqui:
-//   • peça: m² × PERDA, produto do projeto (escolhido no orçamento) ou o
-//     genérico do padrão da obra (REV-054…065 na semente);
-//   • argamassa colante: porcelanato / peça ≥ 45 cm / externo → AC-III
-//     7,5 kg/m² (dupla colagem, mesma taxa da piscina); cerâmica e azulejo →
-//     AC-II 4,5 kg/m²; sacos de 20 kg;
-//   • rejunte: geometria da junta — comprimento de junta por m² ×
-//     largura × profundidade × 1.600 kg/m³ × 1,5 (perda e sobra) — dá 0,24
-//     kg/m² num 60x60 com 2 mm e 0,58 kg/m² num azulejo 10x20 com 2 mm, na
-//     faixa das tabelas Quartzolit/Eliane; sacos de 5 kg;
-//   • espaçadores: peça ≥ 60 cm usa clip nivelador (3 por peça) + cunha
-//     (1 para cada 3 clips, reaproveitada); peça menor usa cruzeta (1 por
+//   • peça: m² × perda da superfície (15% se não mudar; até out/2026 era
+//     20% fixo), produto do projeto ou o genérico do padrão da obra
+//     (REV-054…065 na semente);
+//   • piso interno: soma das áreas internas dos cômodos (desenho do Projetar
+//     ou cômodos da obra); sem cômodos, a área construída;
+//   • argamassa colante pela peça (tabelas dos fabricantes): até 30 × 30 cm
+//     interno, colagem simples 4–5 kg/m²; maior ou externo, dupla colagem
+//     8 kg/m² até 60 cm de lado e 10 kg/m² acima. AC-III em porcelanato e
+//     externo, AC-II em cerâmica; sacos de 20 kg (antes: 7,5 e 4,5 fixos);
+//   • rejunte: fórmula dos fabricantes (C + L) ÷ (C × L) × junta ×
+//     espessura × 1,58 — 0,105 kg/m² num 60x60 com 2 mm — e 10% na
+//     embalagem de 5 kg (antes: × 1.600 × 1,5, ~50% acima);
+//   • espaçadores: peça ≥ 60 cm no lado menor (ou 90 cm no maior) usa clip
+//     nivelador, um a cada 30 cm de junta (antes 3 por peça), + cunha (1
+//     para cada 3 clips, reaproveitada); peça menor usa cruzeta (1 por
 //     peça, pacote de 100);
 //   • disco de porcelanato 0,005/m² (piscina), salva-piso 1 rolo/25 m²;
 //   • deck (m² + Cetol 1 lata/20 m²), bancadas (m²), soleiras e peitoris
-//     (m lineares × 0,15 m de largura), rodapé (poliestireno barra 2,40 m
-//     ou recorte do próprio piso: m × 0,10 m²).
+//     (m lineares × 0,15 m de largura), rodapé = perímetro interno dos
+//     cômodos menos as portas, recorte do próprio piso de 10, 15 ou 20 cm.
 // Etapa "Pisos e revestimentos" (ORD.pisos = 25, Acabamento). O cronograma
 // mede AZULEJO e PISO_CERAMICO a partir destes m².
 
@@ -23177,7 +23181,12 @@ const FORMATO_PADRAO = { pisoInterno: { MCMV: "45x45", Baixo: "45x45", Médio: "
   pisoExterno: { MCMV: "45x45", Baixo: "45x45", Médio: "60x60", Alto: "60x60", Altíssimo: "90x90" },
   revestimentoInterno: { MCMV: "30x60", Baixo: "30x60", Médio: "30x60", Alto: "45x90", Altíssimo: "60x120" },
   revestimentoExterno: { MCMV: "30x60", Baixo: "30x60", Médio: "30x60", Alto: "45x90", Altíssimo: "60x120" } };
-const RODAPE_ALTURA_M = 0.10; // rodapé = recorte do próprio piso interno, 10 cm, somado ao m² do piso
+// Rodapé = recorte do próprio piso interno, somado ao m² do piso. Altura de
+// 10, 15 ou 20 cm, escolhida no bloco (padrão 10 cm).
+const RODAPE_ALTURAS_CM = [10, 15, 20];
+const RODAPE_ALTURA_PADRAO_CM = 10;
+const RODAPE_ALTURA_M = RODAPE_ALTURA_PADRAO_CM / 100;
+function rodapeAlturaCm(v) { const n = Math.round(numOrZero(v)); return RODAPE_ALTURAS_CM.includes(n) ? n : RODAPE_ALTURA_PADRAO_CM; }
 // Pedras (granito de bancada e soleira) por padrão da obra — item genérico da
 // semente (REV-067…076); o quantitativo mostra só "Granito padrão X" /
 // "Soleira padrão X". Produto digitado na bancada/soleira continua vencendo.
@@ -23213,9 +23222,31 @@ function medirBancada(b) {
   const r2 = (x) => Math.round(x * 100) / 100;
   return { tampo: r2(tampo), saia: r2(saia), fundo: r2(fundo), sapatas: r2(sapatas), total: r2(total) };
 }
-const PERDA_PECAS = 1.2; // peças cerâmicas (piso e revestimento): 20% de recortes e quebras; consumíveis seguem os 10% gerais
-const ARGAMASSA_KG_M2 = { AC3: 7.5, AC2: 4.5 };
-const REJUNTE_DENSIDADE = 1600, REJUNTE_FATOR = 1.5;
+// Peças cerâmicas (piso e revestimento): 15% de recortes e quebras por
+// padrão, editável em cada superfície do bloco. Consumíveis seguem os 10%
+// gerais (PERDA).
+const PERDA_PECAS_PCT = 15;
+const PERDA_PECAS = 1 + PERDA_PECAS_PCT / 100;
+function perdaPecasPct(v) { const n = Number(v); return v === "" || v == null || !Number.isFinite(n) || n < 0 || n > 100 ? PERDA_PECAS_PCT : n; }
+// Argamassa colante por m², pela peça (tabela dos fabricantes, NBR 13753/13754):
+// até 30 × 30 cm em área interna, colagem simples (desempenadeira de 6 mm nas
+// pequenas, 8 mm nas demais); acima de 900 cm² de peça, ou em área externa,
+// dupla colagem (argamassa na base e no verso da peça), com dentes de 8 mm até
+// 60 cm de lado e 10 mm nas maiores. AC-III em porcelanato e externo; AC-II em
+// cerâmica interna.
+const ARGAMASSA_KG_M2 = { AC3: 8, AC2: 5 }; // referência; o consumo de cada superfície sai de argamassaDaPeca
+function argamassaDaPeca(fmt, externo) {
+  const area = fmt.a * fmt.b, maior = Math.max(fmt.a, fmt.b);
+  if (!externo && area <= 0.09 + 1e-9) return maior <= 0.20 + 1e-9 ? { kg: 4, colagem: "simples", dentesMm: 6 } : { kg: 5, colagem: "simples", dentesMm: 8 };
+  return maior > 0.60 + 1e-9 ? { kg: 10, colagem: "dupla", dentesMm: 10 } : { kg: 8, colagem: "dupla", dentesMm: 8 };
+}
+// Rejunte (fórmula dos fabricantes): (C + L) ÷ (C × L) × junta × espessura ×
+// 1,58 — metros de junta por m² × largura da junta × espessura da peça ×
+// densidade do rejunte cimentício (1.580 kg/m³).
+const REJUNTE_DENSIDADE = 1580;
+// Nivelador (clips + cunhas): peça de 60 cm ou mais de lado menor, ou de 90 cm
+// ou mais de lado maior; um clip a cada 30 cm de junta. A cunha é reaproveitada.
+const CLIP_ESPACAMENTO_M = 0.30;
 
 // Arredonda para cima ignorando o ruído de ponto flutuante: 150 × 40 × 1,1
 // dá 6600.000000000001 em JavaScript, e Math.ceil viraria 6601 tijolos. A
@@ -23236,13 +23267,14 @@ function consumoRevestimento(formatoId, externo, juntaMm) {
   const junta = juntaMm > 0 ? juntaMm : juntaMmPadrao(fmt);
   const pecasM2 = 1 / (fmt.a * fmt.b);
   const juntaM = (fmt.a + fmt.b) / (fmt.a * fmt.b); // metros de junta por m²
-  const rejunteKg = juntaM * (junta / 1000) * (fmt.esp / 1000) * REJUNTE_DENSIDADE * REJUNTE_FATOR;
-  const nivelador = Math.min(fmt.a, fmt.b) >= 0.60;
+  const rejunteKg = juntaM * (junta / 1000) * (fmt.esp / 1000) * REJUNTE_DENSIDADE;
+  const nivelador = Math.min(fmt.a, fmt.b) >= 0.60 - 1e-9 || Math.max(fmt.a, fmt.b) >= 0.90 - 1e-9;
+  const arg = argamassaDaPeca(fmt, externo);
   return {
-    formato: fmt, porcelanato, juntaMm: junta, pecasM2,
-    argamassa: porcelanato ? "AC3" : "AC2", argamassaKg: porcelanato ? ARGAMASSA_KG_M2.AC3 : ARGAMASSA_KG_M2.AC2,
+    formato: fmt, porcelanato, juntaMm: junta, pecasM2, juntaM: Math.round(juntaM * 1000) / 1000,
+    argamassa: porcelanato ? "AC3" : "AC2", argamassaKg: arg.kg, colagem: arg.colagem, dentesMm: arg.dentesMm,
     rejunteKg: Math.round(rejunteKg * 1000) / 1000,
-    nivelador, clipsM2: nivelador ? pecasM2 * 3 : 0, cruzetasM2: nivelador ? 0 : pecasM2,
+    nivelador, clipsM2: nivelador ? Math.round(juntaM / CLIP_ESPACAMENTO_M * 1000) / 1000 : 0, cruzetasM2: nivelador ? 0 : pecasM2,
   };
 }
 
@@ -23417,6 +23449,45 @@ function paredeDigitada(pav) {
   const o = pav || {};
   return numOrZero(o.m2Parede20) + numOrZero(o.m2Parede15) + numOrZero(o.m2Parede25);
 }
+// Piso e rodapé por cômodo. Projeto desenhado no Projetar: um por ambiente
+// desenhado — área interna, perímetro interno e portas do próprio desenho.
+// Sem desenho: um por tipo de cômodo da obra (quantidade × medidas do
+// tamanho, ou as editadas no cômodo), com uma porta de 0,80 por cômodo.
+// Rodapé = perímetro interno menos as portas; os cômodos molhados ou de
+// parede revestida (WC, cozinha, lavanderia, garagem…) não levam rodapé, e
+// cada cômodo pode ser ligado ou desligado no bloco (pisos.rodapeComodos).
+const RODAPE_SEM_NOME = /\b(wc|banh|lavabo|cozinha|lavanderia|servi[cç]o|garagem|varanda|sacada|gourmet|churrasq|piscina|sauna|deposito|depósito|escada|jardim|quintal)/i;
+function rodapePadraoDoComodo(id, nome) {
+  const regra = id ? COMODO_OBRA_PROJETO[id] : null;
+  if (regra) return !!regra.rodape;
+  return !RODAPE_SEM_NOME.test(String(nome || ""));
+}
+function pisosPorComodo(projeto) {
+  const p = projeto || {};
+  const escolha = ((p.pisos || {}).rodapeComodos) || {};
+  const r2 = (x) => Math.round(x * 100) / 100;
+  const linha = (chave, nome, n, area, perimetro, portas, id, pavimento) => {
+    const padrao = rodapePadraoDoComodo(id, nome);
+    const rodape = typeof escolha[chave] === "boolean" ? escolha[chave] : padrao;
+    return { chave, nome, n, id: id || "", pavimento: pavimento || "", area: r2(area), perimetro: r2(perimetro), portas: r2(portas),
+      rodape, rodapePadrao: padrao, rodapeM: rodape ? r2(Math.max(0, perimetro - portas)) : 0 };
+  };
+  const des = Array.isArray(p.ambientesDesenho) ? p.ambientesDesenho : null;
+  if (des && des.length) {
+    return des.filter((a) => a && numOrZero(a.area) > 0 && a.comodo !== "escada").map((a, k) =>
+      linha(`d:${a.pavimento || ""}:${a.nome || k}`, String(a.nome || "Ambiente"), 1, numOrZero(a.area), numOrZero(a.perimetro), numOrZero(a.portas), a.comodo || "", a.pavimento || ""));
+  }
+  const ambientes = migrarAmbientes(p.ambientes || {});
+  const out = [];
+  for (const id of Object.keys(COMODO_OBRA_PROJETO)) {
+    const n = Math.max(0, Math.round(numOrZero(ambientes[id])));
+    if (!n || id === "escada") continue;
+    const c = calcularComodo(comodoConfig(p, id));
+    if (!(c.area > 0)) continue;
+    out.push(linha(`c:${id}`, NOME_AMBIENTE(id), n, n * c.area, n * c.perimetro, n * PORTA_LARGURA, id, ""));
+  }
+  return out;
+}
 // Valores automáticos do bloco Pisos e revestimentos quando o campo está em branco
 function autosPisos(projeto) {
   const p = projeto || {};
@@ -23425,10 +23496,15 @@ function autosPisos(projeto) {
   const est = estimarPelosComodos(p);
   const perimetro = numOrZero(terreo.perimetroParedes) + (p.tipologia === "Sobrado" ? numOrZero(pav1.perimetroParedes) : 0);
   const r1 = (x) => Math.round(x * 10) / 10;
+  const comodos = pisosPorComodo(p);
+  const temComodos = comodos.length > 0;
   return {
-    pisoInterno: r1(numOrZero(arq.areaConstruida)),
+    // piso interno = soma das áreas internas dos cômodos; sem cômodos, a área construída
+    pisoInterno: temComodos ? r1(comodos.reduce((t, c) => t + c.area, 0)) : r1(numOrZero(arq.areaConstruida)),
     pisoExterno: r1(numOrZero(externa.pavimentacao)), // mesma área do bloco Pavimentação externa
-    rodapeM: r1(Math.max(0, perimetro - v.portasInternas * PORTA_LARGURA)),
+    // rodapé = perímetro interno dos cômodos com rodapé, menos as portas; sem cômodos, o perímetro das paredes
+    rodapeM: temComodos ? r1(comodos.reduce((t, c) => t + c.rodapeM, 0)) : r1(Math.max(0, perimetro - v.portasInternas * PORTA_LARGURA)),
+    comodos, pelosComodos: temComodos,
     soleirasM: r1(v.vaoEsquadrias),
     revestimentoInterno: est.revestimentoInterno,
     bancadas: est.bancadas,
@@ -23471,32 +23547,52 @@ function pisosRevestimentos(cp, out, data) {
   const ps = cp.pisos || {};
   const padrao = cp.padrao || "Médio";
   let m2Porcelanato = 0, m2PisoInterno = 0;
-  const totais = { AC3: 0, AC2: 0, rejunteKg: 0, clips: 0, cruzetas: 0 };
+  const totais = { AC3: 0, AC2: 0, rejunteKg: 0, clips: 0, cruzetas: 0, det: { AC3: [], AC2: [], rejunte: [], clips: [], cruzetas: [] } };
 
-  // Rodapé é recorte do próprio piso interno: m × 0,10 somados ao m² do piso
+  // Rodapé é recorte do próprio piso interno: metros × altura somados ao m² do piso
   const rodapeM = numOrZero(ps.rodapeM);
-  const rodapeM2 = rodapeM * RODAPE_ALTURA_M;
+  const altRodCm = rodapeAlturaCm(ps.rodapeAlturaCm), altRod = altRodCm / 100;
+  const rodapeM2 = rodapeM * altRod;
+  const comodos = Array.isArray(ps.comodos) ? ps.comodos : [];
   for (const sup of SUPERFICIES_PISOS) {
-    const area = numOrZero(ps[sup.id] && ps[sup.id].m2) + (sup.id === "pisoInterno" ? rodapeM2 : 0);
+    const s0 = ps[sup.id] || {};
+    const m2Sup = numOrZero(s0.m2);
+    const area = m2Sup + (sup.id === "pisoInterno" ? rodapeM2 : 0);
     if (!(area > 0)) continue;
-    const formatoId = (ps[sup.id] && ps[sup.id].formato) || FORMATO_PADRAO[sup.id][padrao] || "60x60";
-    const c = consumoRevestimento(formatoId, sup.externo, numOrZero(ps[sup.id] && ps[sup.id].juntaMm));
-    const produto = String((ps[sup.id] && ps[sup.id].produto) || "").trim() || PISOS_GENERICOS[sup.id][padrao] || PISOS_GENERICOS[sup.id]["Médio"];
-    emitir(out, { ...base, subEtapa: sup.subEtapa, item: produto, unidade: "m2", qtd: ceil2(area * PERDA_PECAS), memoria: [
-      MEM.nota(`${sup.nome}: ${String((ps[sup.id] && ps[sup.id].produto) || "").trim() ? "produto escolhido no projeto" : `sem produto escolhido, entra o genérico do padrão ${padrao}`}. Formato ${c.formato.nome}${(ps[sup.id] && ps[sup.id].formato) ? "" : " (padrão da obra)"}.${sup.id === "pisoInterno" ? " O rodapé é recorte do próprio piso: entra somado aqui, não como item separado." : ""}`),
-      MEM.dado(`${sup.nome} informado`, numOrZero(ps[sup.id] && ps[sup.id].m2), "m²", "bloco Pisos e revestimentos"),
+    const formatoId = s0.formato || FORMATO_PADRAO[sup.id][padrao] || "60x60";
+    const c = consumoRevestimento(formatoId, sup.externo, numOrZero(s0.juntaMm));
+    const produto = String(s0.produto || "").trim() || PISOS_GENERICOS[sup.id][padrao] || PISOS_GENERICOS[sup.id]["Médio"];
+    const pct = perdaPecasPct(s0.perdaPct), fator = 1 + pct / 100;
+    // piso interno em branco: vem da soma dos cômodos — a memória mostra cada um
+    const porComodo = sup.id === "pisoInterno" && !s0.digitado && ps.pelosComodos && comodos.length > 0;
+    const rodPorComodo = sup.id === "pisoInterno" && !ps.rodapeDigitado && ps.pelosComodos && comodos.some((x) => x.rodapeM > 0);
+    emitir(out, { ...base, subEtapa: sup.subEtapa, item: produto, unidade: "m2", qtd: ceil2(area * fator), memoria: [
+      MEM.nota(`${sup.nome}: ${String(s0.produto || "").trim() ? "produto escolhido no projeto" : `sem produto escolhido, entra o genérico do padrão ${padrao}`}. Formato ${c.formato.nome}${s0.formato ? "" : " (padrão da obra)"}.${sup.id === "pisoInterno" ? ` O rodapé (${altRodCm} cm) é recorte do próprio piso: entra somado aqui, não como item separado.` : ""}`),
+      ...(porComodo ? [
+        MEM.nota("Piso interno = área interna de cada cômodo (sem as paredes)."),
+        ...comodos.map((x) => MEM.dado(x.n > 1 ? `${x.nome} (${x.n}×)` : x.nome, x.area, "m²", x.pavimento ? `desenho — ${x.pavimento}` : (x.chave.startsWith("d:") ? "desenho do Projetar" : "cômodos da obra"))),
+        MEM.conta("Piso dos cômodos", "soma das áreas internas", [], m2Sup, "m²"),
+      ] : [MEM.dado(`${sup.nome} informado`, m2Sup, "m²", "bloco Pisos e revestimentos")]),
       ...(sup.id === "pisoInterno" && rodapeM > 0 ? [
-        MEM.dado("Rodapé", rodapeM, "m", "bloco Pisos e revestimentos"),
-        MEM.conta("Rodapé em m² de piso (faixa de 10 cm)", "rodapé × 0,10", [["rodapé", rodapeM]], rodapeM2, "m²"),
-        MEM.conta("Área a assentar", "piso + rodapé", [["piso", numOrZero(ps[sup.id] && ps[sup.id].m2)], ["rodapé", rodapeM2]], area, "m²"),
+        ...(rodPorComodo ? [
+          MEM.nota("Rodapé = perímetro interno de cada cômodo menos as portas; cômodo molhado ou desligado no bloco não entra."),
+          ...comodos.filter((x) => x.rodapeM > 0).map((x) => MEM.conta(x.n > 1 ? `${x.nome} (${x.n}×)` : x.nome, "perímetro − portas", [["perímetro", x.perimetro], ["portas", x.portas]], x.rodapeM, "m")),
+          MEM.conta("Rodapé dos cômodos", "soma", [], rodapeM, "m"),
+        ] : [MEM.dado("Rodapé", rodapeM, "m", "bloco Pisos e revestimentos")]),
+        MEM.conta(`Rodapé em m² de piso (faixa de ${altRodCm} cm)`, `rodapé × ${numMem(altRod)}`, [["rodapé", rodapeM]], rodapeM2, "m²"),
+        MEM.conta("Área a assentar", "piso + rodapé", [["piso", m2Sup], ["rodapé", rodapeM2]], area, "m²"),
       ] : []),
-      MEM.conta(`Peças com ${Math.round((PERDA_PECAS - 1) * 100)}% de perda (recortes e quebras)`, "área × 1,20", [["área", area]], area * PERDA_PECAS, "m²"),
-      MEM.teto(area * PERDA_PECAS, ceil2(area * PERDA_PECAS), "m²", "Arredonda em centésimos de m²"),
+      MEM.conta(`Peças com ${numMem(pct)}% de perda (recortes e quebras)`, `área × ${numMem(fator)}`, [["área", area]], area * fator, "m²"),
+      MEM.teto(area * fator, ceil2(area * fator), "m²", "Arredonda em centésimos de m²"),
     ] });
     totais[c.argamassa] += area * c.argamassaKg;
+    totais.det[c.argamassa].push({ nome: sup.id === "pisoInterno" && rodapeM2 > 0 ? `${sup.nome} + rodapé` : sup.nome, area, kg: c.argamassaKg, colagem: c.colagem, dentes: c.dentesMm, formato: c.formato.nome });
     totais.rejunteKg += area * c.rejunteKg;
+    totais.det.rejunte.push({ nome: sup.nome, area, kgM2: c.rejunteKg, formato: c.formato, junta: c.juntaMm, juntaM: c.juntaM });
     totais.clips += area * c.clipsM2;
+    if (c.clipsM2 > 0) totais.det.clips.push({ nome: sup.nome, area, porM2: c.clipsM2, juntaM: c.juntaM, formato: c.formato.nome });
     totais.cruzetas += area * c.cruzetasM2;
+    if (c.cruzetasM2 > 0) totais.det.cruzetas.push({ nome: sup.nome, area, porM2: c.cruzetasM2, formato: c.formato.nome });
     if (c.porcelanato) m2Porcelanato += area;
     if (sup.id === "pisoInterno") m2PisoInterno += area;
   }
@@ -23514,6 +23610,7 @@ function pisosRevestimentos(cp, out, data) {
       MEM.teto(m2 * PERDA, ceil2(m2 * PERDA), "m²", "Arredonda em centésimos de m²"),
     ] });
     totais.AC3 += m2 * ARGAMASSA_KG_M2.AC3;
+    totais.det.AC3.push({ nome: "Soleiras e peitoris", area: m2, kg: ARGAMASSA_KG_M2.AC3, colagem: "pedra", dentes: 8, formato: "pedra" });
   }
 
   // Bancadas — uma linha por bancada (tampo + saia + fundo + sapatas em m² de pedra),
@@ -23563,42 +23660,45 @@ function pisosRevestimentos(cp, out, data) {
     ] });
   }
 
-  // Consumíveis somados
-  if (totais.AC3 > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Argamassa AC 3 GF - 20kg", unidade: "Unidades", qtd: teto(totais.AC3 / 20 * PERDA), memoria: [
-    MEM.nota(`Argamassa AC-III: usada em porcelanato e em tudo que é externo, a ${numMem(ARGAMASSA_KG_M2.AC3)} kg por m². Soma todas as superfícies desse tipo mais as soleiras. Saco de 20 kg.`),
-    MEM.conta("Argamassa necessária", "soma das superfícies em AC-III", [], totais.AC3, "kg"),
-    MEM.conta("Sacos, com 10% de perda", "kg ÷ 20 × 1,10", [["kg", totais.AC3]], totais.AC3 / 20 * PERDA, "sacos"),
-    MEM.teto(totais.AC3 / 20 * PERDA, teto(totais.AC3 / 20 * PERDA), "sacos de 20 kg", "Arredonda para cima (saco fechado)"),
-  ] });
-  if (totais.AC2 > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Argamassa AC 2 - 20kg", unidade: "Unidades", qtd: teto(totais.AC2 / 20 * PERDA), memoria: [
-    MEM.nota(`Argamassa AC-II: cerâmica em área interna, a ${numMem(ARGAMASSA_KG_M2.AC2)} kg por m². Saco de 20 kg.`),
-    MEM.conta("Argamassa necessária", "soma das superfícies em AC-II", [], totais.AC2, "kg"),
-    MEM.conta("Sacos, com 10% de perda", "kg ÷ 20 × 1,10", [["kg", totais.AC2]], totais.AC2 / 20 * PERDA, "sacos"),
-    MEM.teto(totais.AC2 / 20 * PERDA, teto(totais.AC2 / 20 * PERDA), "sacos de 20 kg", "Arredonda para cima (saco fechado)"),
-  ] });
-  if (totais.rejunteKg > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Rejunte - 5kg", unidade: "Unidades", qtd: teto(totais.rejunteKg / 5), memoria: [
-    MEM.nota("Rejunte pela geometria da junta de cada superfície: metros de junta por m² × largura da junta × espessura da peça × densidade 1.600 kg/m³, com fator 1,5 de acomodação. Embalagem de 5 kg."),
+  // Consumíveis somados — a memória abre superfície por superfície
+  const linhaArg = (d) => MEM.conta(`${d.nome} (${d.formato === "pedra" ? "pedra" : `${d.formato}, ${d.colagem === "dupla" ? "dupla colagem" : "colagem simples"}, dentes ${d.dentes} mm`})`, `área × ${numMem(d.kg)} kg/m²`, [["área", d.area]], d.area * d.kg, "kg");
+  for (const [tipo, item, rotulo] of [["AC3", "Argamassa AC 3 GF - 20kg", "AC-III (porcelanato e áreas externas)"], ["AC2", "Argamassa AC 2 - 20kg", "AC-II (cerâmica em área interna)"]]) {
+    const kg = totais[tipo];
+    if (!(kg > 0)) continue;
+    emitir(out, { ...base, subEtapa: "Assentamento", item, unidade: "Unidades", qtd: teto(kg / 20 * PERDA), memoria: [
+      MEM.nota(`Argamassa ${rotulo}. Consumo pela peça, como nas tabelas dos fabricantes: até 30 × 30 cm em área interna, colagem simples (4 kg/m² com dentes de 6 mm nas peças até 20 cm, 5 kg/m² com 8 mm); peça maior que 900 cm² ou área externa, dupla colagem — argamassa na base e no verso — com 8 kg/m² (dentes de 8 mm) até 60 cm de lado e 10 kg/m² (10 mm) nas maiores. Saco de 20 kg.`),
+      ...totais.det[tipo].map(linhaArg),
+      MEM.conta("Argamassa necessária", "soma das superfícies", [], kg, "kg"),
+      MEM.conta("Sacos, com 10% de perda", "kg ÷ 20 × 1,10", [["kg", kg]], kg / 20 * PERDA, "sacos"),
+      MEM.teto(kg / 20 * PERDA, teto(kg / 20 * PERDA), "sacos de 20 kg", "Arredonda para cima (saco fechado)"),
+    ] });
+  }
+  if (totais.rejunteKg > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Rejunte - 5kg", unidade: "Unidades", qtd: teto(totais.rejunteKg / 5 * PERDA), memoria: [
+    MEM.nota("Rejunte pela fórmula dos fabricantes: (comprimento + largura da peça) ÷ (comprimento × largura) × largura da junta × espessura da peça × 1,58 (densidade do rejunte cimentício, 1.580 kg/m³). Embalagem de 5 kg."),
+    ...totais.det.rejunte.map((d) => MEM.conta(`${d.nome} (${d.formato.nome}, junta ${numMem(d.junta)} mm, peça ${numMem(d.formato.esp)} mm)`, `área × ${numMem(d.juntaM)} m de junta/m² × ${numMem(d.junta)} mm × ${numMem(d.formato.esp)} mm × 1,58`, [["área", d.area]], d.area * d.kgM2, "kg")),
     MEM.conta("Rejunte necessário", "soma das superfícies", [], totais.rejunteKg, "kg"),
-    MEM.conta("Embalagens", "kg ÷ 5", [["kg", totais.rejunteKg]], totais.rejunteKg / 5, "embalagens"),
-    MEM.teto(totais.rejunteKg / 5, teto(totais.rejunteKg / 5), "embalagens de 5 kg", "Arredonda para cima (embalagem fechada)"),
+    MEM.conta("Embalagens, com 10% de perda", "kg ÷ 5 × 1,10", [["kg", totais.rejunteKg]], totais.rejunteKg / 5 * PERDA, "embalagens"),
+    MEM.teto(totais.rejunteKg / 5 * PERDA, teto(totais.rejunteKg / 5 * PERDA), "embalagens de 5 kg", "Arredonda para cima (embalagem fechada)"),
   ] });
   if (totais.clips > 0) {
     emitir(out, { ...base, subEtapa: "Assentamento", item: "Pisos e revestimentos - Espaçador", unidade: "Unidades", qtd: teto(totais.clips * PERDA), memoria: [
-    MEM.nota("Clips niveladores: só em peça de 60 cm ou maior, 3 por peça."),
-    MEM.conta("Clips necessários", "3 × peças das superfícies com peça ≥ 60 cm", [], totais.clips, "clips"),
+    MEM.nota(`Clips do sistema nivelador: em peça de 60 cm ou mais no lado menor (ou 90 cm no maior), um clip a cada ${numMem(CLIP_ESPACAMENTO_M * 100)} cm de junta. O clip fica perdido sob o rejunte.`),
+    ...totais.det.clips.map((d) => MEM.conta(`${d.nome} (${d.formato})`, `área × ${numMem(d.juntaM)} m de junta/m² ÷ ${numMem(CLIP_ESPACAMENTO_M)}`, [["área", d.area]], d.area * d.porM2, "clips")),
+    MEM.conta("Clips necessários", "soma das superfícies", [], totais.clips, "clips"),
     MEM.conta("Com 10% de perda", "clips × 1,10", [["clips", totais.clips]], totais.clips * PERDA, "clips"),
     MEM.teto(totais.clips * PERDA, teto(totais.clips * PERDA), "clips"),
   ] });
     emitir(out, { ...base, subEtapa: "Assentamento", item: "Pisos e revestimentos - Cunha Niveladora", unidade: "Unidades", qtd: teto(totais.clips / 3), memoria: [
-    MEM.nota("Cunhas do sistema de nivelamento: uma para cada 3 clips (a cunha é reutilizada)."),
+    MEM.nota("Cunhas do sistema nivelador: a cunha sai do clip depois da cura e volta para a próxima fiada — uma para cada 3 clips."),
     MEM.dado("Clips niveladores", totais.clips, "clips", "passo anterior"),
     MEM.conta("Cunhas", "clips ÷ 3", [["clips", totais.clips]], totais.clips / 3, "cunhas"),
     MEM.teto(totais.clips / 3, teto(totais.clips / 3), "cunhas"),
   ] });
   }
   if (totais.cruzetas > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Pisos e revestimentos - Espaçador Cruzeta", unidade: "Pacotes 100 un", qtd: teto(totais.cruzetas * PERDA / 100), memoria: [
-    MEM.nota("Cruzetas: nas peças menores que 60 cm, uma por peça. Pacote de 100."),
-    MEM.conta("Cruzetas necessárias", "peças das superfícies com peça < 60 cm", [], totais.cruzetas, "cruzetas"),
+    MEM.nota("Cruzetas: nas peças sem nivelador, uma por peça (cada encontro de quatro peças leva uma). Pacote de 100."),
+    ...totais.det.cruzetas.map((d) => MEM.conta(`${d.nome} (${d.formato})`, `área × ${numMem(d.porM2)} peças/m²`, [["área", d.area]], d.area * d.porM2, "cruzetas")),
+    MEM.conta("Cruzetas necessárias", "soma das superfícies", [], totais.cruzetas, "cruzetas"),
     MEM.conta("Pacotes, com 10% de perda", "cruzetas × 1,10 ÷ 100", [["cruzetas", totais.cruzetas]], totais.cruzetas * PERDA / 100, "pacotes"),
     MEM.teto(totais.cruzetas * PERDA / 100, teto(totais.cruzetas * PERDA / 100), "pacotes de 100", "Arredonda para cima (pacote fechado)"),
   ] });
@@ -23938,7 +24038,8 @@ function instalacoesPorAmbiente(cp, out, data) {
 
 function normalizarSuperficie(sup, m2Antigo) {
   const o = sup || {};
-  return { m2: numOrZero(o.m2) || numOrZero(m2Antigo), formato: o.formato || "", produto: o.produto || "", juntaMm: numOrZero(o.juntaMm) };
+  return { m2: numOrZero(o.m2) || numOrZero(m2Antigo), formato: o.formato || "", produto: o.produto || "", juntaMm: numOrZero(o.juntaMm),
+    perdaPct: perdaPecasPct(o.perdaPct), digitado: numOrZero(o.m2) > 0 };
 }
 function normalizarProjeto(projeto) {
   const p = projeto || {};
@@ -24259,6 +24360,10 @@ function normalizarProjeto(projeto) {
       revestimentoInterno: normalizarSuperficie(pisosIn.revestimentoInterno, estimativaComodos.revestimentoInterno || numOrZero(externa.revestimentoInterno)),
       revestimentoExterno: normalizarSuperficie(pisosIn.revestimentoExterno),
       rodapeM: numOrZero(pisosIn.rodapeM) || autos.rodapeM,
+      rodapeDigitado: numOrZero(pisosIn.rodapeM) > 0,
+      rodapeAlturaCm: rodapeAlturaCm(pisosIn.rodapeAlturaCm),
+      // piso e rodapé por cômodo, para a memória de cálculo
+      comodos: autos.comodos, pelosComodos: autos.pelosComodos,
       soleirasM: numOrZero(pisosIn.soleirasM) || autos.soleirasM, soleirasProduto: pisosIn.soleirasProduto || "",
       bancadasM2: numOrZero(pisosIn.bancadasM2), bancadasProduto: pisosIn.bancadasProduto || "",
       // lista digitada; em branco, as bancadas automáticas dos cômodos
@@ -24759,22 +24864,23 @@ function execucaoNoExistente(cp, out, data) {
     emitir(out, { ...acab, subEtapa: sub, item: produto, unidade: "m2", qtd: pecas, memoria: [
       MEM.nota(`Sem produto escolhido nesta etapa, entra o genérico do padrão ${padrao}, formato ${c.formato.nome}. Para especificar marca e formato, use o bloco Pisos e revestimentos.`),
       memArea,
-      MEM.conta(`Peças com ${Math.round((PERDA_PECAS - 1) * 100)}% de perda (recortes e quebras)`, "área × 1,20", [["área", area]], area * PERDA_PECAS, "m²"),
+      MEM.conta(`Peças com ${numMem(PERDA_PECAS_PCT)}% de perda (recortes e quebras)`, `área × ${numMem(PERDA_PECAS)}`, [["área", area]], area * PERDA_PECAS, "m²"),
       MEM.teto(area * PERDA_PECAS, pecas, "m²", "Arredonda em centésimos de m²"),
     ] });
     emitir(out, { ...acab, subEtapa: sub, item: c.argamassa === "AC3" ? "Argamassa AC 3 GF - 20kg" : "Argamassa AC 2 - 20kg", unidade: "Unidades", qtd: teto(argKg / 20 * PERDA), memoria: [
-      MEM.nota(`${c.porcelanato ? "Porcelanato pede AC-III" : "Cerâmica pede AC-II"}: ${numMem(c.argamassaKg)} kg por m², saco de 20 kg.`),
+      MEM.nota(`${c.porcelanato ? "Porcelanato pede AC-III" : "Cerâmica pede AC-II"}: ${numMem(c.argamassaKg)} kg por m² (${c.colagem === "dupla" ? "dupla colagem" : "colagem simples"}, dentes de ${c.dentesMm} mm), saco de 20 kg.`),
       memArea,
       MEM.conta("Argamassa", `área × ${numMem(c.argamassaKg)}`, [["área", area]], argKg, "kg"),
       MEM.teto(argKg / 20 * PERDA, teto(argKg / 20 * PERDA), "sacos de 20 kg", "Arredonda para cima (saco fechado)"),
     ] });
     // Rejunte vem em embalagem de 5 kg, como no bloco de pisos — contar em
     // quilos daria uma quantidade que não existe para comprar.
-    emitir(out, { ...acab, subEtapa: sub, item: "Rejunte - 5kg", unidade: "Unidades", qtd: teto(rejKg / 5), memoria: [
+    emitir(out, { ...acab, subEtapa: sub, item: "Rejunte - 5kg", unidade: "Unidades", qtd: teto(rejKg / 5 * PERDA), memoria: [
       MEM.nota(`Rejunte calculado pela junta do formato ${c.formato.nome}: ${numMem(c.rejunteKg)} kg por m². Embalagem de 5 kg.`),
       memArea,
       MEM.conta("Rejunte necessário", `área × ${numMem(c.rejunteKg)}`, [["área", area]], rejKg, "kg"),
-      MEM.teto(rejKg / 5, teto(rejKg / 5), "embalagens de 5 kg", "Arredonda para cima (embalagem fechada)"),
+      MEM.conta("Embalagens, com 10% de perda", "kg ÷ 5 × 1,10", [["kg", rejKg]], rejKg / 5 * PERDA, "embalagens"),
+      MEM.teto(rejKg / 5 * PERDA, teto(rejKg / 5 * PERDA), "embalagens de 5 kg", "Arredonda para cima (embalagem fechada)"),
     ] });
   }
 
@@ -26353,20 +26459,20 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             {(data.materiais || []).filter((m) => /pisos e revestimentos|argamassas/i.test(String(m.grupo || "")) || /^(Piso|Revestimento|Soleira|Granito)/i.test(String(m.nome || ""))).map((m) => <option key={m.codigo || m.nome} value={m.nome} />)}
           </datalist>
           <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#4b5563" }}>
-            Informe os m² de cada superfície. Sem produto escolhido, entra o genérico do padrão da obra ({padraoObra(projetoDraft)}); sem formato, o tamanho típico do padrão. Peças com {Math.round((PERDA_PECAS - 1) * 100)}% de perda (recortes e quebras); a partir do formato o VICKE calcula argamassa (AC-III em porcelanato e externo, AC-II em cerâmica), rejunte pela geometria da junta, clips e cunhas (peça ≥ 60 cm) ou cruzetas, disco e salva-piso.
+            Informe os m² de cada superfície. Sem produto escolhido, entra o genérico do padrão da obra ({padraoObra(projetoDraft)}); sem formato, o tamanho típico do padrão. Peças com perda de recortes e quebras ({PERDA_PECAS_PCT}% se não mudar). A partir do formato o VICKE calcula argamassa (colagem simples até 30 × 30 cm; dupla colagem nas maiores e no externo — AC-III em porcelanato e externo, AC-II em cerâmica), rejunte pela fórmula dos fabricantes, clips e cunhas (peça ≥ 60 cm) ou cruzetas, disco e salva-piso.
           </div>
           {(() => { const au = autosPisos(projetoDraft); return (
             <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#4b5563", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px" }}>
-              Em branco, o VICKE usa o automático: piso interno = área construída ({au.pisoInterno} m²) · piso externo = pavimentação externa ({au.pisoExterno} m²) · revestimento de parede = cômodos ({au.revestimentoInterno} m²) · rodapé = perímetro das paredes menos portas ({au.rodapeM} m) · soleiras e peitoris = vão das esquadrias ({au.soleirasM} m) · bancadas = cômodos ({au.bancadas.length}). Vergas e contravergas: {au.vaos.portasInternas} porta{au.vaos.portasInternas !== 1 ? "s" : ""} interna{au.vaos.portasInternas !== 1 ? "s" : ""} de 0,80 + {au.vaos.metrosPortasExternas} m de portas externas + {au.vaos.metrosJanelas} m de janelas (verga e contraverga) = {au.vaos.metrosVergas} m de treliça.
+              Em branco, o VICKE usa o automático: piso interno = {au.pelosComodos ? `soma das áreas internas dos cômodos (${numMem(au.pisoInterno)} m²)` : `área construída (${numMem(au.pisoInterno)} m²)`} · piso externo = pavimentação externa ({au.pisoExterno} m²) · revestimento de parede = cômodos ({au.revestimentoInterno} m²) · rodapé = {au.pelosComodos ? "perímetro interno dos cômodos menos as portas" : "perímetro das paredes menos portas"} ({numMem(au.rodapeM)} m) · soleiras e peitoris = vão das esquadrias ({au.soleirasM} m) · bancadas = cômodos ({au.bancadas.length}). Vergas e contravergas: {au.vaos.portasInternas} porta{au.vaos.portasInternas !== 1 ? "s" : ""} interna{au.vaos.portasInternas !== 1 ? "s" : ""} de 0,80 + {au.vaos.metrosPortasExternas} m de portas externas + {au.vaos.metrosJanelas} m de janelas (verga e contraverga) = {au.vaos.metrosVergas} m de treliça.
             </div>
           ); })()}
           {SUPERFICIES_PISOS.map((sup) => (
-            <div key={sup.id} style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
+            <div key={sup.id} data-vk-superficie={sup.id} style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "150px 200px 90px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
               {sup.id === "revestimentoInterno" || sup.id === "pisoInterno" || sup.id === "pisoExterno" ? (
                 <div style={CAMPO_CELULA}>
                   <label style={C.label}>{sup.nome} (m²)</label>
                   <input style={C.input} type="number" step="0.01" value={get(`pisos.${sup.id}.m2`) ?? ""}
-                    placeholder={sup.id === "pisoInterno" ? `auto: ${autosPisos(projetoDraft).pisoInterno} (área construída)` : sup.id === "pisoExterno" ? `auto: ${autosPisos(projetoDraft).pisoExterno} (pavimentação externa)` : `auto: ${autosPisos(projetoDraft).revestimentoInterno} (cômodos)`}
+                    placeholder={sup.id === "pisoInterno" ? `auto: ${numMem(autosPisos(projetoDraft).pisoInterno)} (${autosPisos(projetoDraft).pelosComodos ? "cômodos" : "área construída"})` : sup.id === "pisoExterno" ? `auto: ${autosPisos(projetoDraft).pisoExterno} (pavimentação externa)` : `auto: ${autosPisos(projetoDraft).revestimentoInterno} (cômodos)`}
                     onChange={(e) => set(`pisos.${sup.id}.m2`, e.target.value === "" ? "" : Number(e.target.value))} />
                 </div>
               ) : (
@@ -26374,16 +26480,90 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
               )}
               <CampoSelect label="Formato da peça" valor={get(`pisos.${sup.id}.formato`) || ""} onChange={(v) => set(`pisos.${sup.id}.formato`, v)}
                 opcoes={[{ value: "", label: `automático (${FORMATO_PADRAO[sup.id][padraoObra(projetoDraft)] || "60x60"})` }, ...FORMATOS_PECA.map((f) => ({ value: f.id, label: f.nome }))]} />
-              <div>
+              <div style={CAMPO_CELULA}>
+                <label style={C.label}>Perda (%)</label>
+                <input style={C.input} type="number" step="1" min="0" max="100" data-vk-perda={sup.id} value={get(`pisos.${sup.id}.perdaPct`) ?? ""} placeholder={String(PERDA_PECAS_PCT)}
+                  onChange={(e) => set(`pisos.${sup.id}.perdaPct`, e.target.value === "" ? "" : Number(e.target.value))} />
+              </div>
+              <div style={isMobile ? { gridColumn: "1 / -1" } : undefined}>
                 <label style={C.label}>Produto (Insumos)</label>
                 <input style={C.input} list="vk-insumos-pisos" value={get(`pisos.${sup.id}.produto`) ?? ""} placeholder={PISOS_GENERICOS[sup.id][padraoObra(projetoDraft)]} onChange={(e) => set(`pisos.${sup.id}.produto`, e.target.value)} />
               </div>
             </div>
           ))}
-          <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
-            <div><label style={C.label}>Rodapé (m)</label><input style={C.input} type="number" step="0.01" value={get("pisos.rodapeM") ?? ""} placeholder={`auto: ${autosPisos(projetoDraft).rodapeM} (perímetro)`} onChange={(e) => set("pisos.rodapeM", e.target.value === "" ? "" : Number(e.target.value))} /></div>
-            <div style={{ fontSize: 11, color: "#6b7280", paddingBottom: 8, gridColumn: isMobile ? "auto" : "2 / -1" }}>recorte do próprio piso interno, {RODAPE_ALTURA_M * 100} cm de altura — os m² entram somados ao piso</div>
+          <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
+            <div style={CAMPO_CELULA}><label style={C.label}>Rodapé (m)</label><input style={C.input} type="number" step="0.01" value={get("pisos.rodapeM") ?? ""} placeholder={`auto: ${numMem(autosPisos(projetoDraft).rodapeM)} (${autosPisos(projetoDraft).pelosComodos ? "cômodos" : "perímetro"})`} onChange={(e) => set("pisos.rodapeM", e.target.value === "" ? "" : Number(e.target.value))} /></div>
+            <CampoSelect label="Altura do rodapé" valor={String(rodapeAlturaCm(get("pisos.rodapeAlturaCm")))} onChange={(v) => set("pisos.rodapeAlturaCm", Number(v))}
+              opcoes={RODAPE_ALTURAS_CM.map((h) => ({ value: String(h), label: `${h} cm` }))} />
+            <div style={{ fontSize: 11, color: "#6b7280", paddingBottom: 8, gridColumn: isMobile ? "1 / -1" : "auto" }}>recorte do próprio piso interno — metros × altura entram somados ao m² do piso</div>
           </div>
+          {(() => {
+            const linhas = autosPisos(projetoDraft).comodos || [];
+            if (!linhas.length) return null;
+            const fmt = (v) => Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const tot = linhas.reduce((t, l) => ({ area: t.area + l.area, rod: t.rod + l.rodapeM }), { area: 0, rod: 0 });
+            const desenho = linhas.some((l) => l.chave.startsWith("d:"));
+            // a chave tem o nome do cômodo (pode ter ponto): grava o objeto inteiro
+            const alternar = (l) => set("pisos.rodapeComodos", { ...(get("pisos.rodapeComodos") || {}), [l.chave]: !l.rodape });
+            const th = { fontSize: 11, color: "#6b7280", fontWeight: 600, textAlign: "right", padding: "4px 6px", whiteSpace: "nowrap" };
+            const td = { fontSize: 12.5, color: "#111827", textAlign: "right", padding: "6px", borderTop: "1px solid #f3f4f6", whiteSpace: "nowrap" };
+            const caixa = (l) => (
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12.5 }}>
+                <input type="checkbox" data-vk-rodape-comodo={l.chave} checked={l.rodape} onChange={() => alternar(l)} />
+                {l.rodape ? `${fmt(l.rodapeM)} m` : <span style={{ color: "#9ca3af" }}>sem rodapé</span>}
+              </label>
+            );
+            return (
+              <div data-vk-pisos-comodos style={{ gridColumn: "1 / -1", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 4 }}>
+                  Piso e rodapé por cômodo <span style={{ fontWeight: 400, color: "#6b7280" }}>— {desenho ? "do desenho do Projetar (área e perímetro internos, portas desenhadas)" : "pelos cômodos da obra (medidas do tamanho ou as editadas no cômodo, uma porta de 0,80 por cômodo)"}</span>
+                </div>
+                <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 6 }}>Rodapé = perímetro interno menos as portas. Cômodo molhado ou de parede revestida vem sem rodapé; marque ou desmarque à vontade.</div>
+                {isMobile ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {linhas.map((l) => (
+                      <div key={l.chave} style={{ background: "#fafafa", borderRadius: 8, padding: "8px 10px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "#111827", minWidth: 0 }}>{l.nome}{l.n > 1 ? ` (${l.n}×)` : ""}{l.pavimento ? <span style={{ fontWeight: 400, color: "#6b7280" }}> · {l.pavimento}</span> : null}</span>
+                          <span style={{ fontSize: 13, color: "#111827", whiteSpace: "nowrap" }}>{fmt(l.area)} m²</span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 4, fontSize: 11.5, color: "#6b7280" }}>
+                          <span>perímetro {fmt(l.perimetro)} · portas {fmt(l.portas)}</span>
+                          {caixa(l)}
+                        </div>
+                      </div>
+                    ))}
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, fontWeight: 700, color: "#111827", padding: "4px 2px" }}>
+                      <span>Total</span><span>{fmt(tot.area)} m² · rodapé {fmt(tot.rod)} m</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", maxWidth: 760 }}>
+                      <thead><tr>
+                        <th style={{ ...th, textAlign: "left" }}>Cômodo</th><th style={th}>Piso (m²)</th><th style={th}>Perímetro (m)</th><th style={th}>Portas (m)</th><th style={{ ...th, textAlign: "left", paddingLeft: 16 }}>Rodapé</th>
+                      </tr></thead>
+                      <tbody>
+                        {linhas.map((l) => (
+                          <tr key={l.chave}>
+                            <td style={{ ...td, textAlign: "left", whiteSpace: "normal" }}>{l.nome}{l.n > 1 ? ` (${l.n}×)` : ""}{l.pavimento ? <span style={{ color: "#6b7280" }}> · {l.pavimento}</span> : null}</td>
+                            <td style={td}>{fmt(l.area)}</td><td style={td}>{fmt(l.perimetro)}</td><td style={td}>{fmt(l.portas)}</td>
+                            <td style={{ ...td, textAlign: "left", paddingLeft: 16 }}>{caixa(l)}</td>
+                          </tr>
+                        ))}
+                        <tr>
+                          <td style={{ ...td, textAlign: "left", fontWeight: 700, borderTop: "1.5px solid #e5e7eb" }}>Total</td>
+                          <td style={{ ...td, fontWeight: 700, borderTop: "1.5px solid #e5e7eb" }}>{fmt(tot.area)}</td>
+                          <td style={{ ...td, borderTop: "1.5px solid #e5e7eb" }} /><td style={{ ...td, borderTop: "1.5px solid #e5e7eb" }} />
+                          <td style={{ ...td, textAlign: "left", paddingLeft: 16, fontWeight: 700, borderTop: "1.5px solid #e5e7eb" }}>{fmt(tot.rod)} m</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
             <div><label style={C.label}>Soleiras e peitoris (m)</label><input style={C.input} type="number" step="0.01" value={get("pisos.soleirasM") ?? ""} placeholder={`auto: ${autosPisos(projetoDraft).soleirasM} (esquadrias)`} onChange={(e) => set("pisos.soleirasM", e.target.value === "" ? "" : Number(e.target.value))} /></div>
             <div style={{ fontSize: 11, color: "#6b7280" }}>largura {SOLEIRA_LARGURA_M * 100} cm</div>
@@ -78586,6 +78766,25 @@ function tpDesenhoParaObra(paredes, areas) {
     if (cm <= 16.5) m15 += m2; else if (cm <= 22.5) m20 += m2; else m25 += m2;
     perim += L;
   }
+  // Piso e rodapé por ambiente: área e perímetro internos do próprio desenho;
+  // toda abertura sem peitoril (porta, vão de passagem) interrompe o rodapé
+  // dos dois ambientes que ela liga.
+  const portasAmb = new Map();
+  for (const w of paredes) {
+    const L = tpLen(w); if (!L) continue;
+    const nx = -(w.b.y - w.a.y) / L, ny = (w.b.x - w.a.x) / L, dd = (w.t || 0) / 2 + 0.3;
+    for (const o of tpAbsVisiveis(w)) {
+      if ((o.peit || 0) > 0.05) continue;
+      const c = { x: w.a.x + (w.b.x - w.a.x) / L * o.x, y: w.a.y + (w.b.y - w.a.y) / L * o.x };
+      for (const sg of [1, -1]) {
+        const q = { x: c.x + nx * dd * sg, y: c.y + ny * dd * sg };
+        const a = ambs.find((am) => tpDentroPoli(q, am.pts));
+        if (a) portasAmb.set(a, (portasAmb.get(a) || 0) + (o.larg || 0));
+      }
+    }
+  }
+  const ambientesDesenho = ambs.map((a) => ({ nome: a.nome || "Ambiente", comodo: tpComodoDoNome(a.nome) || "",
+    area: r2(tpAreaPoli(a.pts)), perimetro: r2(tpPerimPoli(a.pts)), portas: r2(portasAmb.get(a) || 0) }));
   const soma = (tipo, f) => areas.filter((a) => a.tipo === tipo && a.pts && a.pts.length >= 3).reduce((s, a) => s + f(a), 0);
   // laje: desconta a abertura sobre as escadas deste pavimento
   const furoEsc = areas.filter((a) => a.tipo === "escada").map((e) => tpEscadaGeo(e).contorno)
@@ -78623,6 +78822,7 @@ function tpDesenhoParaObra(paredes, areas) {
     tipologia: "Térrea",
     ...(temAberturas ? { esquadrias } : {}),
     ...(com.temAmbientes ? { ambientes: com.ambientes, comodosCfg: com.comodosCfg } : {}),
+    ...(ambientesDesenho.length ? { ambientesDesenho } : {}),
     ...(temAberturas ? { portasDesenho: { interna: portas.interna, banheiro: portas.banheiro } } : {}),
     arquitetura: { areaConstruida: r2(areaConstruida), m2ParedesInternas: r2(m2Int), m2ParedesExternas: r2(m2Ext), m2ParedesTotal: r2(m2Int + m2Ext),
       ...(gabarito > 0 ? { gabarito } : {}) },
@@ -78673,6 +78873,8 @@ function tpDesenhoParaObraPavs(lista) {
     ...(todos.projeto.esquadrias ? { esquadrias: todos.projeto.esquadrias } : {}),
     ...(todos.projeto.ambientes ? { ambientes: todos.projeto.ambientes, comodosCfg: todos.projeto.comodosCfg } : {}),
     ...(todos.projeto.portasDesenho ? { portasDesenho: todos.projeto.portasDesenho } : {}),
+    // piso e rodapé: cada pavimento com os seus ambientes (as portas são de cada um)
+    ...(cs.some((c) => c.projeto.ambientesDesenho) ? { ambientesDesenho: cs.flatMap((c, k) => (c.projeto.ambientesDesenho || []).map((a) => ({ ...a, pavimento: lista[k].nome || (k ? "Pavimento " + k : "Térreo") }))) } : {}),
     // o gabarito marca o térreo: é o do primeiro pavimento
     arquitetura: { areaConstruida: soma((p) => p.arquitetura.areaConstruida), m2ParedesInternas: soma((p) => p.arquitetura.m2ParedesInternas), m2ParedesExternas: soma((p) => p.arquitetura.m2ParedesExternas), m2ParedesTotal: soma((p) => p.arquitetura.m2ParedesTotal),
       ...(c0.arquitetura.gabarito > 0 ? { gabarito: c0.arquitetura.gabarito } : {}) },
@@ -78717,7 +78919,9 @@ function tpMesclarProjetoObra(ant, conv, projetoId) {
       comodosCfg: Object.entries(conv.projeto.comodosCfg).reduce((acc, [id, c]) => ({ ...acc, [id]: { ...((ant.comodosCfg || {})[id] || {}), ...c } }), { ...(ant.comodosCfg || {}) }),
     } : ((ant.origemDesenho || {}).ambientes ? { ambientes: {} } : {})),
     ...(conv.projeto.portasDesenho ? { portasDesenho: conv.projeto.portasDesenho } : ((ant.origemDesenho || {}).portas ? { portasDesenho: null } : {})),
-    origemDesenho: { projetoId, gabarito: !!(conv.projeto.arquitetura && conv.projeto.arquitetura.gabarito), esquadrias: !!conv.projeto.esquadrias, ambientes: !!conv.projeto.ambientes, portas: !!conv.projeto.portasDesenho, escadas: !!conv.projeto.escadas } };
+    // piso e rodapé por ambiente desenhado; apagou todos, limpa só o que o desenho tinha escrito
+    ...(conv.projeto.ambientesDesenho ? { ambientesDesenho: conv.projeto.ambientesDesenho } : ((ant.origemDesenho || {}).pisos ? { ambientesDesenho: [] } : {})),
+    origemDesenho: { projetoId, pisos: !!conv.projeto.ambientesDesenho, gabarito: !!(conv.projeto.arquitetura && conv.projeto.arquitetura.gabarito), esquadrias: !!conv.projeto.esquadrias, ambientes: !!conv.projeto.ambientes, portas: !!conv.projeto.portasDesenho, escadas: !!conv.projeto.escadas } };
 }
 // "assinatura" dos campos do desenho, para só gravar quando algo mudou
 function tpAssinaturaDesenho(pr) {
@@ -78726,7 +78930,7 @@ function tpAssinaturaDesenho(pr) {
   const p1 = pr.pav1 || {};
   return JSON.stringify([pr.tipologia, p1.area, p1.m2Parede15, p1.m2Parede20, p1.m2Parede25, p1.perimetroParedes, p1.areaLoje, a.areaConstruida, a.gabarito || 0, a.m2ParedesInternas, a.m2ParedesExternas, a.m2ParedesTotal,
     t.area, t.m2Parede15, t.m2Parede20, t.m2Parede25, t.perimetroParedes, t.areaLoje, t.perimetroLoje, t.tipoLoje, pr.cobertura || null, (pr.externa || {}).pavimentacao || 0, pr.esquadrias || null, pr.ambientes || null, pr.portasDesenho || null,
-    pr.ambientes ? Object.keys(pr.ambientes).sort().map((id) => { const c = (pr.comodosCfg || {})[id] || {}; return [id, c.L, c.W, c.peDireito]; }) : null, pr.escadas || null]);
+    pr.ambientes ? Object.keys(pr.ambientes).sort().map((id) => { const c = (pr.comodosCfg || {})[id] || {}; return [id, c.L, c.W, c.peDireito]; }) : null, pr.escadas || null, pr.ambientesDesenho || null]);
 }
 
 // Arco por 3 pontos (início, fim e um ponto da curva), devolvido como

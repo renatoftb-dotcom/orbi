@@ -64,7 +64,7 @@ const modulo = new Function(`
     PRESTADORES_OBRA, linhasPrestadores, migrarPrestadores, baseAutomaticaPrestador, totalPrestadores,
     vaosAutomaticos, areaImpermeabilizacao,
     itemDoPrestador, numeroDigitadoBR, textoNumeroBR,
-    consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit, comodoConfig, calcularComodo, numMem, contaMem, MEM, teto, autosForros, FORRO_TIPOS,
+    consumoRevestimento, pisosRevestimentos, pisosPorComodo, rodapeAlturaCm, perdaPecasPct, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit, comodoConfig, calcularComodo, numMem, contaMem, MEM, teto, autosForros, FORRO_TIPOS,
   };
 `)();
 
@@ -509,11 +509,21 @@ teste("sem piscina: dados da piscina são ignorados e os prestadores da piscina 
 
 
 console.log("\n--- pisos e revestimentos ---");
-teste("consumos por formato: 60x60 = porcelanato AC-III, rejunte ≈ 0,16 kg/m², 8,3 clips/m²; 10x20 = AC-II, cruzetas, rejunte ≈ 0,58", () => {
+teste("consumos por formato (fabricantes): argamassa pela peça e colagem, rejunte (C+L)/(C×L)×J×E×1,58, clip a cada 30 cm de junta", () => {
   const g = modulo.consumoRevestimento("60x60", false, 0);
-  assert.strictEqual(g.argamassa, "AC3"); assert.strictEqual(g.juntaMm, 2); assert.ok(Math.abs(g.rejunteKg - 0.16) < 0.005); assert.ok(Math.abs(g.clipsM2 - 8.33) < 0.01); assert.strictEqual(g.cruzetasM2, 0);
+  // 60x60: dupla colagem, dentes 8 mm, 8 kg/m²; rejunte 3,333 m/m² × 2 mm × 10 mm × 1,58 = 0,105; clips 3,333 ÷ 0,30 = 11,1/m²
+  assert.strictEqual(g.argamassa, "AC3"); assert.strictEqual(g.argamassaKg, 8); assert.strictEqual(g.colagem, "dupla"); assert.strictEqual(g.juntaMm, 2);
+  assert.ok(Math.abs(g.rejunteKg - 0.105) < 0.001); assert.ok(Math.abs(g.clipsM2 - 11.111) < 0.01); assert.strictEqual(g.cruzetasM2, 0);
   const a = modulo.consumoRevestimento("10x20", false, 0);
-  assert.strictEqual(a.argamassa, "AC2"); assert.ok(Math.abs(a.rejunteKg - 0.576) < 0.005); assert.ok(Math.abs(a.cruzetasM2 - 50) < 0.01); assert.strictEqual(a.clipsM2, 0);
+  // azulejo 10x20: colagem simples, dentes 6 mm, 4 kg/m²; rejunte 15 m/m² × 2 mm × 8 mm × 1,58 = 0,379; cruzeta por peça (50/m²)
+  assert.strictEqual(a.argamassa, "AC2"); assert.strictEqual(a.argamassaKg, 4); assert.strictEqual(a.colagem, "simples");
+  assert.ok(Math.abs(a.rejunteKg - 0.379) < 0.001); assert.ok(Math.abs(a.cruzetasM2 - 50) < 0.01); assert.strictEqual(a.clipsM2, 0);
+  assert.strictEqual(modulo.consumoRevestimento("30x60", false, 0).argamassaKg, 8);    // 1.800 cm² > 900: dupla colagem
+  assert.strictEqual(modulo.consumoRevestimento("20x20", false, 0).argamassaKg, 4);
+  assert.strictEqual(modulo.consumoRevestimento("45x45", true, 0).argamassaKg, 8);     // externo: dupla
+  const g12 = modulo.consumoRevestimento("120x120", false, 0);
+  assert.strictEqual(g12.argamassaKg, 10); assert.ok(Math.abs(g12.clipsM2 - 5.556) < 0.01); // 1,667 m/m² ÷ 0,30
+  assert.ok(modulo.consumoRevestimento("45x90", false, 0).nivelador, "lado de 90 cm leva nivelador");
   assert.strictEqual(modulo.consumoRevestimento("45x45", true, 0).argamassa, "AC3"); // externo sempre AC-III
   assert.strictEqual(modulo.consumoRevestimento("30x60", false, 4).juntaMm, 4);
 });
@@ -522,13 +532,13 @@ teste("módulo: genérico pelo padrão, produto do projeto vence, consumíveis s
   const r = gerarOrcamentoObra(proj, { materiais: [] });
   const it = r.itens.filter((i) => i.etapa === "Pisos e revestimentos");
   const achar = (nome) => it.find((i) => i.item === nome);
-  assert.strictEqual(achar("Piso - Porcelanato padrão Alto").qtd, 125.76);           // (100 + rodapé 48 × 0,10) × 1,2 (perda de peças)
-  assert.strictEqual(achar("Pisos e revestimentos - REVESTIMENTO BRANCO 10X20").qtd, 60); // 50 × 1,2
+  assert.strictEqual(achar("Piso - Porcelanato padrão Alto").qtd, 120.52);           // (100 + rodapé 48 × 0,10) × 1,15 (perda de peças)
+  assert.strictEqual(achar("Pisos e revestimentos - REVESTIMENTO BRANCO 10X20").qtd, 57.5); // 50 × 1,15
   assert.ok(!achar("Revestimento - Porcelanato parede padrão Alto"));
-  // AC3: piso 104,8 m² (90x90 → porcelanato) 7,5 + soleiras 1,5 m² × 7,5 = 797,25 kg → /20 × 1,1 = 43,8 → 44
-  assert.strictEqual(achar("Argamassa AC 3 GF - 20kg").qtd, 44);
-  // AC2: azulejo 50 × 4,5 = 225 kg → 12,4 → 13
-  assert.strictEqual(achar("Argamassa AC 2 - 20kg").qtd, 13);
+  // AC3: piso 104,8 m² (90x90, dupla colagem 10 kg) + soleiras 1,5 m² × 8 = 1.060 kg → /20 × 1,1 = 58,3 → 59
+  assert.strictEqual(achar("Argamassa AC 3 GF - 20kg").qtd, 59);
+  // AC2: azulejo 50 × 4 (colagem simples, dentes 6 mm) = 200 kg → 11
+  assert.strictEqual(achar("Argamassa AC 2 - 20kg").qtd, 11);
   assert.ok(!achar("RODAPE POLIESTIRENO 15CM"));                                      // rodapé é recorte do piso
   assert.strictEqual(achar("Soleira padrão Alto").qtd, 1.65);                        // 10 × 0,15 × 1,1 — pedra pelo padrão da obra
   assert.ok(achar("Rejunte - 5kg").qtd >= 6);
@@ -544,11 +554,11 @@ teste("padrão Baixo usa cerâmica; rodapé soma no m² do piso; sem m² nada é
   const it = r.itens.filter((i) => i.etapa === "Pisos e revestimentos");
   const ceram = it.filter((i) => i.item === "Piso - Cerâmica padrão Baixo");
   assert.strictEqual(ceram.length, 1);
-  assert.strictEqual(ceram[0].qtd, 63.6); // (50 + 30 × 0,10) × 1,2
+  assert.strictEqual(ceram[0].qtd, 60.95); // (50 + 30 × 0,10) × 1,15
   assert.ok(!it.some((i) => i.item === "RODAPE POLIESTIRENO 15CM"));
   // área construída preenche o piso interno sozinha; sem área nem cômodos, nada
   const auto = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 60 } }, { materiais: [] });
-  assert.strictEqual(auto.itens.find((i) => i.subEtapa === "Piso interno").qtd, 72); // 60 × 1,2
+  assert.strictEqual(auto.itens.find((i) => i.subEtapa === "Piso interno").qtd, 69); // 60 × 1,15
   const vazio = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: {} }, { materiais: [] });
   assert.ok(!vazio.itens.some((i) => i.etapa === "Pisos e revestimentos"));
 });
@@ -625,17 +635,22 @@ teste("vãos automáticos: portas internas 0,80 (1 verga) + esquadrias (janela 2
   const cp = normalizarProjeto(proj);
   assert.strictEqual(cp.vaoPortasJanelasTerreo, 9.2);
   const au = modulo.autosPisos(proj);
-  assert.strictEqual(au.pisoInterno, 120);
-  assert.strictEqual(au.rodapeM, 86);      // 90 − 5 × 0,8
+  // com cômodos: piso = áreas internas (3 dorm. 3×4 + 2 WC 3×1,4 + cozinha 4×3); rodapé só nos dormitórios: 3 × (14 − 0,8)
+  assert.strictEqual(au.pisoInterno, 56.4);
+  assert.strictEqual(au.rodapeM, 39.6);
   assert.strictEqual(au.soleirasM, 8.4);   // 6 + 2,4
-  assert.strictEqual(cp.pisos.rodapeM, 86); assert.strictEqual(cp.pisos.soleirasM, 8.4); assert.strictEqual(cp.pisos.pisoInterno.m2, 120);
+  assert.strictEqual(cp.pisos.rodapeM, 39.6); assert.strictEqual(cp.pisos.soleirasM, 8.4); assert.strictEqual(cp.pisos.pisoInterno.m2, 56.4);
+  // sem cômodos: área construída e perímetro das paredes menos as portas
+  const semComodos = { ...proj, ambientes: {}, portasDesenho: { interna: 5, banheiro: 0 } };
+  assert.strictEqual(modulo.autosPisos(semComodos).pisoInterno, 120);
+  assert.strictEqual(modulo.autosPisos(semComodos).rodapeM, 86);      // 90 − 5 × 0,8
   // digitado vence o automático; projeto antigo sem cômodos/esquadrias mantém o vão digitado
   assert.strictEqual(normalizarProjeto({ ...proj, pisos: { rodapeM: 50 } }).pisos.rodapeM, 50);
   assert.strictEqual(normalizarProjeto({ tipologia: "Térrea", terreo: { vaoPortasJanelas: 49 } }).vaoPortasJanelasTerreo, 49);
   // sobrado reparte pelo m² de parede
   const sob = normalizarProjeto({ ...proj, tipologia: "Sobrado", pav1: { m2Parede20: 100, perimetroParedes: 30 } });
   assert.strictEqual(sob.vaoPortasJanelasTerreo, 6.9); assert.strictEqual(sob.pav1.vaoPortasJanelas, 2.3);
-  assert.strictEqual(modulo.autosPisos({ ...proj, tipologia: "Sobrado", pav1: { perimetroParedes: 30 } }).rodapeM, 116);
+  assert.strictEqual(modulo.autosPisos({ ...semComodos, tipologia: "Sobrado", pav1: { perimetroParedes: 30 } }).rodapeM, 116);
   // piso externo em branco = área da pavimentação externa; digitado vence
   assert.strictEqual(modulo.autosPisos({ ...proj, externa: { pavimentacao: 45.5 } }).pisoExterno, 45.5);
   assert.strictEqual(normalizarProjeto({ ...proj, externa: { pavimentacao: 45.5 } }).pisos.pisoExterno.m2, 45.5);
@@ -1057,7 +1072,7 @@ teste("piso a assentar traz peças, argamassa e rejunte", () => {
   modulo.execucaoNoExistente(projetoReforma({ piso: { executar: 50 } }), out, { materiais: [] });
   const sub = out.filter(i => i.subEtapa === "Piso");
   assert.strictEqual(sub.length, 3);
-  assert.strictEqual(sub.find(i => /Porcelanato|Cerâmica/.test(i.item)).qtd, 60); // 50 × 1,20
+  assert.strictEqual(sub.find(i => /Porcelanato|Cerâmica/.test(i.item)).qtd, 57.5); // 50 × 1,15
   assert.ok(sub.some(i => /Argamassa AC 3/.test(i.item)), "60x60 é porcelanato, pede AC-III");
   assert.ok(sub.some(i => i.item === "Rejunte - 5kg"), "rejunte vem em embalagem de 5 kg, como no bloco de pisos");
 });
@@ -1854,6 +1869,34 @@ teste("gabarito vindo do desenho: tábuas, sarrafos e pregos saem dele, e a mem�
   // digitado à mão: a fonte continua sendo o bloco Geral
   const r2 = modulo.gerarOrcamentoObra({ ...proj, origemDesenho: null }, { materiais: [] });
   assert.ok(r2.itens.find((i) => i.item === "Madeira Caixaria - Tábuas de 10cm x 3mts").memoria.some((x) => x.fonte === "bloco Geral"));
+});
+
+teste("piso e rodapé por cômodo: desenho do Projetar, altura do rodapé 10/15/20, perda editável e cômodo sem rodapé", () => {
+  const proj = { tipologia: "Térrea", padrao: "Médio", arquitetura: { areaConstruida: 70 },
+    ambientesDesenho: [
+      { nome: "Sala", comodo: "salaTV", area: 20, perimetro: 18, portas: 1.6 },
+      { nome: "Quarto 1", comodo: "dormitorio", area: 12, perimetro: 14, portas: 0.8 },
+      { nome: "WC", comodo: "wc", area: 4.2, perimetro: 8.8, portas: 0.7 },
+      { nome: "Circulação", comodo: "", area: 5, perimetro: 12, portas: 2.4 },
+    ] };
+  const linhas = modulo.pisosPorComodo(proj);
+  assert.deepStrictEqual(linhas.map((l) => [l.nome, l.rodape, l.rodapeM]), [["Sala", true, 16.4], ["Quarto 1", true, 13.2], ["WC", false, 0], ["Circulação", true, 9.6]]);
+  const au = modulo.autosPisos(proj);
+  assert.strictEqual(au.pisoInterno, 41.2);   // 20 + 12 + 4,2 + 5 (área interna, sem as paredes)
+  assert.strictEqual(au.rodapeM, 39.2);       // 16,4 + 13,2 + 9,6
+  // rodapé de 15 cm, perda de 12% e a circulação desligada do rodapé
+  const r = gerarOrcamentoObra({ ...proj, pisos: { rodapeAlturaCm: 15, pisoInterno: { perdaPct: 12 }, rodapeComodos: { "d::Circulação": false } } }, { materiais: [] });
+  const piso = r.itens.find((i) => i.subEtapa === "Piso interno");
+  // (41,2 + (16,4 + 13,2) × 0,15) × 1,12 = (41,2 + 4,44) × 1,12 = 51,1168 → 51,12
+  assert.strictEqual(piso.qtd, 51.12);
+  assert.ok(piso.memoria.some((x) => x.tipo === "dado" && x.rotulo === "Quarto 1" && x.valor === "12"), "a memória lista cada cômodo");
+  assert.ok(piso.memoria.some((x) => /12% de perda/.test(x.rotulo)));
+  assert.ok(piso.memoria.some((x) => /15 cm/.test(x.rotulo)));
+  assert.strictEqual(modulo.rodapeAlturaCm(20), 20); assert.strictEqual(modulo.rodapeAlturaCm(12), 10);
+  assert.strictEqual(modulo.perdaPecasPct(""), 15); assert.strictEqual(modulo.perdaPecasPct(0), 0);
+  // digitado vence: piso informado à mão não lista cômodos
+  const r2 = gerarOrcamentoObra({ ...proj, pisos: { pisoInterno: { m2: 50 } } }, { materiais: [] });
+  assert.ok(!r2.itens.find((i) => i.subEtapa === "Piso interno").memoria.some((x) => x.tipo === "dado" && x.rotulo === "Quarto 1"));
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

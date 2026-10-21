@@ -761,6 +761,25 @@ function tpDesenhoParaObra(paredes, areas) {
     if (cm <= 16.5) m15 += m2; else if (cm <= 22.5) m20 += m2; else m25 += m2;
     perim += L;
   }
+  // Piso e rodapé por ambiente: área e perímetro internos do próprio desenho;
+  // toda abertura sem peitoril (porta, vão de passagem) interrompe o rodapé
+  // dos dois ambientes que ela liga.
+  const portasAmb = new Map();
+  for (const w of paredes) {
+    const L = tpLen(w); if (!L) continue;
+    const nx = -(w.b.y - w.a.y) / L, ny = (w.b.x - w.a.x) / L, dd = (w.t || 0) / 2 + 0.3;
+    for (const o of tpAbsVisiveis(w)) {
+      if ((o.peit || 0) > 0.05) continue;
+      const c = { x: w.a.x + (w.b.x - w.a.x) / L * o.x, y: w.a.y + (w.b.y - w.a.y) / L * o.x };
+      for (const sg of [1, -1]) {
+        const q = { x: c.x + nx * dd * sg, y: c.y + ny * dd * sg };
+        const a = ambs.find((am) => tpDentroPoli(q, am.pts));
+        if (a) portasAmb.set(a, (portasAmb.get(a) || 0) + (o.larg || 0));
+      }
+    }
+  }
+  const ambientesDesenho = ambs.map((a) => ({ nome: a.nome || "Ambiente", comodo: tpComodoDoNome(a.nome) || "",
+    area: r2(tpAreaPoli(a.pts)), perimetro: r2(tpPerimPoli(a.pts)), portas: r2(portasAmb.get(a) || 0) }));
   const soma = (tipo, f) => areas.filter((a) => a.tipo === tipo && a.pts && a.pts.length >= 3).reduce((s, a) => s + f(a), 0);
   // laje: desconta a abertura sobre as escadas deste pavimento
   const furoEsc = areas.filter((a) => a.tipo === "escada").map((e) => tpEscadaGeo(e).contorno)
@@ -798,6 +817,7 @@ function tpDesenhoParaObra(paredes, areas) {
     tipologia: "Térrea",
     ...(temAberturas ? { esquadrias } : {}),
     ...(com.temAmbientes ? { ambientes: com.ambientes, comodosCfg: com.comodosCfg } : {}),
+    ...(ambientesDesenho.length ? { ambientesDesenho } : {}),
     ...(temAberturas ? { portasDesenho: { interna: portas.interna, banheiro: portas.banheiro } } : {}),
     arquitetura: { areaConstruida: r2(areaConstruida), m2ParedesInternas: r2(m2Int), m2ParedesExternas: r2(m2Ext), m2ParedesTotal: r2(m2Int + m2Ext),
       ...(gabarito > 0 ? { gabarito } : {}) },
@@ -848,6 +868,8 @@ function tpDesenhoParaObraPavs(lista) {
     ...(todos.projeto.esquadrias ? { esquadrias: todos.projeto.esquadrias } : {}),
     ...(todos.projeto.ambientes ? { ambientes: todos.projeto.ambientes, comodosCfg: todos.projeto.comodosCfg } : {}),
     ...(todos.projeto.portasDesenho ? { portasDesenho: todos.projeto.portasDesenho } : {}),
+    // piso e rodapé: cada pavimento com os seus ambientes (as portas são de cada um)
+    ...(cs.some((c) => c.projeto.ambientesDesenho) ? { ambientesDesenho: cs.flatMap((c, k) => (c.projeto.ambientesDesenho || []).map((a) => ({ ...a, pavimento: lista[k].nome || (k ? "Pavimento " + k : "Térreo") }))) } : {}),
     // o gabarito marca o térreo: é o do primeiro pavimento
     arquitetura: { areaConstruida: soma((p) => p.arquitetura.areaConstruida), m2ParedesInternas: soma((p) => p.arquitetura.m2ParedesInternas), m2ParedesExternas: soma((p) => p.arquitetura.m2ParedesExternas), m2ParedesTotal: soma((p) => p.arquitetura.m2ParedesTotal),
       ...(c0.arquitetura.gabarito > 0 ? { gabarito: c0.arquitetura.gabarito } : {}) },
@@ -892,7 +914,9 @@ function tpMesclarProjetoObra(ant, conv, projetoId) {
       comodosCfg: Object.entries(conv.projeto.comodosCfg).reduce((acc, [id, c]) => ({ ...acc, [id]: { ...((ant.comodosCfg || {})[id] || {}), ...c } }), { ...(ant.comodosCfg || {}) }),
     } : ((ant.origemDesenho || {}).ambientes ? { ambientes: {} } : {})),
     ...(conv.projeto.portasDesenho ? { portasDesenho: conv.projeto.portasDesenho } : ((ant.origemDesenho || {}).portas ? { portasDesenho: null } : {})),
-    origemDesenho: { projetoId, gabarito: !!(conv.projeto.arquitetura && conv.projeto.arquitetura.gabarito), esquadrias: !!conv.projeto.esquadrias, ambientes: !!conv.projeto.ambientes, portas: !!conv.projeto.portasDesenho, escadas: !!conv.projeto.escadas } };
+    // piso e rodapé por ambiente desenhado; apagou todos, limpa só o que o desenho tinha escrito
+    ...(conv.projeto.ambientesDesenho ? { ambientesDesenho: conv.projeto.ambientesDesenho } : ((ant.origemDesenho || {}).pisos ? { ambientesDesenho: [] } : {})),
+    origemDesenho: { projetoId, pisos: !!conv.projeto.ambientesDesenho, gabarito: !!(conv.projeto.arquitetura && conv.projeto.arquitetura.gabarito), esquadrias: !!conv.projeto.esquadrias, ambientes: !!conv.projeto.ambientes, portas: !!conv.projeto.portasDesenho, escadas: !!conv.projeto.escadas } };
 }
 // "assinatura" dos campos do desenho, para só gravar quando algo mudou
 function tpAssinaturaDesenho(pr) {
@@ -901,7 +925,7 @@ function tpAssinaturaDesenho(pr) {
   const p1 = pr.pav1 || {};
   return JSON.stringify([pr.tipologia, p1.area, p1.m2Parede15, p1.m2Parede20, p1.m2Parede25, p1.perimetroParedes, p1.areaLoje, a.areaConstruida, a.gabarito || 0, a.m2ParedesInternas, a.m2ParedesExternas, a.m2ParedesTotal,
     t.area, t.m2Parede15, t.m2Parede20, t.m2Parede25, t.perimetroParedes, t.areaLoje, t.perimetroLoje, t.tipoLoje, pr.cobertura || null, (pr.externa || {}).pavimentacao || 0, pr.esquadrias || null, pr.ambientes || null, pr.portasDesenho || null,
-    pr.ambientes ? Object.keys(pr.ambientes).sort().map((id) => { const c = (pr.comodosCfg || {})[id] || {}; return [id, c.L, c.W, c.peDireito]; }) : null, pr.escadas || null]);
+    pr.ambientes ? Object.keys(pr.ambientes).sort().map((id) => { const c = (pr.comodosCfg || {})[id] || {}; return [id, c.L, c.W, c.peDireito]; }) : null, pr.escadas || null, pr.ambientesDesenho || null]);
 }
 
 // Arco por 3 pontos (início, fim e um ponto da curva), devolvido como
