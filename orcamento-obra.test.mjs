@@ -64,7 +64,7 @@ const modulo = new Function(`
     PRESTADORES_OBRA, linhasPrestadores, migrarPrestadores, baseAutomaticaPrestador, totalPrestadores,
     vaosAutomaticos, areaImpermeabilizacao,
     itemDoPrestador, numeroDigitadoBR, textoNumeroBR,
-    consumoRevestimento, pisosRevestimentos, pisosPorComodo, rodapeAlturaCm, perdaPecasPct, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit, comodoConfig, calcularComodo, numMem, contaMem, MEM, teto, autosForros, FORRO_TIPOS,
+    consumoRevestimento, pisosRevestimentos, pisosPorComodo, revestimentoDoAmbiente, rodapeAlturaCm, perdaPecasPct, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit, comodoConfig, calcularComodo, numMem, contaMem, MEM, teto, autosForros, FORRO_TIPOS,
   };
 `)();
 
@@ -1903,6 +1903,22 @@ teste("rodapé: o lado sem parede (separador de ambiente) sai do perímetro, com
   const linhas = modulo.pisosPorComodo({ ambientesDesenho: [{ nome: "Sala", comodo: "living", area: 33, perimetro: 23.24, portas: 0.9, semParede: 4.85 }] });
   assert.strictEqual(linhas[0].portas, 5.75);
   assert.strictEqual(linhas[0].rodapeM, 17.49); // 23,24 − 0,90 − 4,85
+});
+
+teste("desenho: revestimento só onde há parede (separador não), na altura das paredes, menos as aberturas reais; verga pela largura real das portas", () => {
+  const proj = { tamanhoComodos: "Médio", ambientes: { cozinha: 1, wc: 1 },
+    ambientesDesenho: [
+      { nome: "Cozinha", comodo: "cozinha", area: 28.74, perimetro: 21.55, portas: 0.7, semParede: 4.85, paredeM: 16.7, maiorParede: 5.93, peDireito: 2.8, aberturasM2: 3.27, aberturasMeiaM2: 1.8 },
+      { nome: "WC", comodo: "wc", area: 6.93, perimetro: 10.6, portas: 0.7, semParede: 0, paredeM: 10.6, maiorParede: 3.3, peDireito: 2.6, aberturasM2: 1.47, aberturasMeiaM2: 1.05 } ],
+    portasDesenho: { interna: 0, banheiro: 1, metros: 0.7 } };
+  const est = modulo.estimarPelosComodos(proj);
+  // cozinha: 16,7 × 2,8 − 3,27 = 43,49; WC: 10,6 × 2,6 − 1,47 = 26,09 → 69,58
+  assert.strictEqual(est.revestimentoInterno, 69.6);
+  assert.strictEqual(modulo.revestimentoDoAmbiente(proj.ambientesDesenho[0], { revestir: "meia" }), 16.7 * 1.5 - 1.8);
+  assert.strictEqual(modulo.revestimentoDoAmbiente(proj.ambientesDesenho[0], { revestir: "maior" }), 5.93 * 2.8);
+  assert.strictEqual(modulo.vaosAutomaticos(proj).metrosPortasInternas, 0.7);   // não 0,80
+  // bancada pela maior parede do ambiente: cozinha 100% de 5,93; WC 50% de 3,30
+  assert.deepStrictEqual(est.bancadas.map((b) => [b.nome, b.comprimento]), [["Cozinha", 5.93], ["WC", 1.65]]);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

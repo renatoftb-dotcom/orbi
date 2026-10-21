@@ -738,7 +738,7 @@ function tpDesenhoParaObra(paredes, areas) {
   let m2Int = 0, m2Ext = 0, m15 = 0, m20 = 0, m25 = 0, perim = 0, nExt = 0;
   // portas de madeira desenhadas: internas (kit de porta) e de banheiro (a
   // que dá para WC/lavabo); as de parede externa ficam de fora do kit
-  const portas = { interna: 0, banheiro: 0, externa: 0 };
+  const portas = { interna: 0, banheiro: 0, externa: 0, metros: 0 };
   const BANHO = new Set(["wc", "wcSuite", "wcSuiteMaster", "lavabo", "lavaboLazer"]);
   const ambs = areas.filter((a) => a.tipo === "ambiente" && a.pts && a.pts.length >= 3);
   for (const w of paredes) {
@@ -756,6 +756,7 @@ function tpDesenhoParaObra(paredes, areas) {
       const c = { x: w.a.x + (w.b.x - w.a.x) / L * o.x, y: w.a.y + (w.b.y - w.a.y) / L * o.x }, dd = (w.t || 0) / 2 + 0.3;
       const banho = [1, -1].some((sg) => { const q = { x: c.x + nx * dd * sg, y: c.y + ny * dd * sg }; const a = ambs.find((am) => tpDentroPoli(q, am.pts)); return a && BANHO.has(tpComodoDoNome(a.nome)); });
       if (banho) portas.banheiro++; else portas.interna++;
+      portas.metros += o.larg || 0;
     }
     const cm = (w.t || 0) * 100;
     if (cm <= 16.5) m15 += m2; else if (cm <= 22.5) m20 += m2; else m25 += m2;
@@ -764,17 +765,23 @@ function tpDesenhoParaObra(paredes, areas) {
   // Piso e rodapé por ambiente: área e perímetro internos do próprio desenho;
   // toda abertura sem peitoril (porta, vão de passagem) interrompe o rodapé
   // dos dois ambientes que ela liga.
-  const portasAmb = new Map();
+  const portasAmb = new Map(), abAmb = new Map();
   for (const w of paredes) {
     const L = tpLen(w); if (!L) continue;
     const nx = -(w.b.y - w.a.y) / L, ny = (w.b.x - w.a.x) / L, dd = (w.t || 0) / 2 + 0.3;
     for (const o of tpAbsVisiveis(w)) {
-      if ((o.peit || 0) > 0.05) continue;
       const c = { x: w.a.x + (w.b.x - w.a.x) / L * o.x, y: w.a.y + (w.b.y - w.a.y) / L * o.x };
+      const peit = o.peit || 0, alt = Math.max(0, Math.min(o.alt || 0, (w.h || 0) - peit));
       for (const sg of [1, -1]) {
         const q = { x: c.x + nx * dd * sg, y: c.y + ny * dd * sg };
         const a = ambs.find((am) => tpDentroPoli(q, am.pts));
-        if (a) portasAmb.set(a, (portasAmb.get(a) || 0) + (o.larg || 0));
+        if (!a) continue;
+        if (peit <= 0.05) portasAmb.set(a, (portasAmb.get(a) || 0) + (o.larg || 0));
+        // área da abertura na parede deste ambiente: inteira e só a parte até 1,50 m (meia parede)
+        const ab = abAmb.get(a) || { m2: 0, meia: 0 };
+        ab.m2 += (o.larg || 0) * alt;
+        ab.meia += (o.larg || 0) * Math.max(0, Math.min(peit + alt, 1.5) - peit);
+        abAmb.set(a, ab);
       }
     }
   }
@@ -787,28 +794,39 @@ function tpDesenhoParaObra(paredes, areas) {
   for (const w of paredes) {
     const L = tpLen(w); if (!L) continue;
     const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, h = (w.t || 0) / 2;
-    for (const off of [h, -h]) faces.push([{ x: w.a.x - ux * h - uy * off, y: w.a.y - uy * h + ux * off }, { x: w.b.x + ux * h - uy * off, y: w.b.y + uy * h + ux * off }]);
+    for (const off of [h, -h]) faces.push([{ x: w.a.x - ux * h - uy * off, y: w.a.y - uy * h + ux * off }, { x: w.b.x + ux * h - uy * off, y: w.b.y + uy * h + ux * off }, w]);
   }
-  const naParede = (pts) => pts.reduce((tot, p, i) => {
-    const q = pts[(i + 1) % pts.length], L = Math.hypot(q.x - p.x, q.y - p.y); if (!L) return tot;
+  // trecho de cada lado do ambiente encostado em face de parede; guarda o
+  // maior lado com parede e a altura das paredes que o cercam
+  const medirNaParede = (pts) => { let tot = 0, maior = 0, hSoma = 0; const visto = new Set();
+    pts.forEach((p, i) => { const q = pts[(i + 1) % pts.length]; const m = naParedeLado(p, q); tot += m.len; maior = Math.max(maior, m.len); for (const w of m.paredes) visto.add(w); });
+    for (const w of visto) hSoma += w.h || 0;
+    return { len: tot, maior, peDireito: visto.size ? hSoma / visto.size : 0 }; };
+  const naParedeLado = (p, q) => {
+    const L = Math.hypot(q.x - p.x, q.y - p.y); if (!L) return { len: 0, paredes: [] };
     const ux = (q.x - p.x) / L, uy = (q.y - p.y) / L, dist = (r) => Math.abs((r.x - p.x) * uy - (r.y - p.y) * ux);
-    const iv = [];
-    for (const [a, b] of faces) {
+    const iv = [], ws = [];
+    for (const [a, b, w] of faces) {
       if (dist(a) > 0.03 || dist(b) > 0.03) continue;
       const ta = (a.x - p.x) * ux + (a.y - p.y) * uy, tb = (b.x - p.x) * ux + (b.y - p.y) * uy;
       const i0 = Math.max(0, Math.min(ta, tb)), i1 = Math.min(L, Math.max(ta, tb));
-      if (i1 > i0) iv.push([i0, i1]);
+      if (i1 > i0) { iv.push([i0, i1]); ws.push(w); }
     }
     iv.sort((m, n) => m[0] - n[0]);
     let soma = 0, cs = null, ce = null;
     for (const [a0, a1] of iv) { if (cs === null) { cs = a0; ce = a1; } else if (a0 <= ce) ce = Math.max(ce, a1); else { soma += ce - cs; cs = a0; ce = a1; } }
     if (cs !== null) soma += ce - cs;
-    return tot + soma;
-  }, 0);
-  const ambientesDesenho = ambs.map((a) => ({ nome: a.nome || "Ambiente", comodo: tpComodoDoNome(a.nome) || "",
-    area: r2(tpAreaPoli(a.pts)), perimetro: r2(tpPerimPoli(a.pts)), portas: r2(portasAmb.get(a) || 0),
-    // trecho do perímetro sem parede (separador, lado aberto): sai do rodapé como as portas
-    semParede: r2(Math.max(0, tpPerimPoli(a.pts) - naParede(a.pts))) }));
+    return { len: soma, paredes: ws };
+  };
+  const ambientesDesenho = ambs.map((a) => {
+    const m = medirNaParede(a.pts), ab = abAmb.get(a) || { m2: 0, meia: 0 };
+    return { nome: a.nome || "Ambiente", comodo: tpComodoDoNome(a.nome) || "",
+      area: r2(tpAreaPoli(a.pts)), perimetro: r2(tpPerimPoli(a.pts)), portas: r2(portasAmb.get(a) || 0),
+      // trecho do perímetro sem parede (separador, lado aberto): sai do rodapé como as portas
+      semParede: r2(Math.max(0, tpPerimPoli(a.pts) - m.len)),
+      // para o revestimento de parede: só o que é parede, na altura das paredes do ambiente, menos as aberturas
+      paredeM: r2(m.len), maiorParede: r2(m.maior), peDireito: r2(m.peDireito), aberturasM2: r2(ab.m2), aberturasMeiaM2: r2(ab.meia) };
+  });
   const soma = (tipo, f) => areas.filter((a) => a.tipo === tipo && a.pts && a.pts.length >= 3).reduce((s, a) => s + f(a), 0);
   // laje: desconta a abertura sobre as escadas deste pavimento
   const furoEsc = areas.filter((a) => a.tipo === "escada").map((e) => tpEscadaGeo(e).contorno)
@@ -847,7 +865,7 @@ function tpDesenhoParaObra(paredes, areas) {
     ...(temAberturas ? { esquadrias } : {}),
     ...(com.temAmbientes ? { ambientes: com.ambientes, comodosCfg: com.comodosCfg } : {}),
     ...(ambientesDesenho.length ? { ambientesDesenho } : {}),
-    ...(temAberturas ? { portasDesenho: { interna: portas.interna, banheiro: portas.banheiro } } : {}),
+    ...(temAberturas ? { portasDesenho: { interna: portas.interna, banheiro: portas.banheiro, metros: r2(portas.metros) } } : {}),
     arquitetura: { areaConstruida: r2(areaConstruida), m2ParedesInternas: r2(m2Int), m2ParedesExternas: r2(m2Ext), m2ParedesTotal: r2(m2Int + m2Ext),
       ...(gabarito > 0 ? { gabarito } : {}) },
     ...(an.pisoExterno > 0 ? { externa: { pavimentacao: r2(an.pisoExterno) } } : {}),

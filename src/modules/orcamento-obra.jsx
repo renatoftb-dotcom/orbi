@@ -3430,9 +3430,11 @@ function vaosAutomaticos(projeto) {
     const m = numOrZero(e && e.qtd) * numOrZero(e && e.largura);
     if (/^PORTA/.test(String(e && e.familia || ""))) metrosPortasExternas += m; else metrosJanelas += m;
   }
-  const metrosVergas = portasInternas * PORTA_LARGURA + metrosPortasExternas + 2 * metrosJanelas;
+  // portas desenhadas: a largura real de cada uma (sem desenho, 0,80 por porta)
+  const metrosPortasInternas = (pd && numOrZero(pd.metros) > 0) ? numOrZero(pd.metros) : portasInternas * PORTA_LARGURA;
+  const metrosVergas = metrosPortasInternas + metrosPortasExternas + 2 * metrosJanelas;
   const r1 = (x) => Math.round(x * 100) / 100;
-  return { portasInternas, metrosPortasInternas: r1(portasInternas * PORTA_LARGURA), metrosPortasExternas: r1(metrosPortasExternas), metrosJanelas: r1(metrosJanelas), vaoEsquadrias: r1(metrosPortasExternas + metrosJanelas), metrosVergas: r1(metrosVergas), vaoEquivalente: r1(metrosVergas / 2) };
+  return { portasInternas, metrosPortasInternas: r1(metrosPortasInternas), metrosPortasExternas: r1(metrosPortasExternas), metrosJanelas: r1(metrosJanelas), vaoEsquadrias: r1(metrosPortasExternas + metrosJanelas), metrosVergas: r1(metrosVergas), vaoEquivalente: r1(metrosVergas / 2) };
 }
 // Rateio automático entre pavimentos. No sobrado, o que o usuário lança no
 // bloco Geral (m² de parede total e perímetro de paredes) vale para a casa
@@ -3520,6 +3522,16 @@ function autosPisos(projeto) {
     vaos: v,
   };
 }
+// Revestimento de parede de um ambiente desenhado, pela regra do cômodo
+// (todas as paredes, meia parede até 1,50 m, só a maior, nenhuma)
+function revestimentoDoAmbiente(a, cfg) {
+  const pd = numOrZero(a.peDireito) || numOrZero(cfg.peDireito) || PE_DIREITO_PADRAO;
+  const paredes = numOrZero(a.paredeM);
+  if (cfg.revestir === "todas") return Math.max(0, paredes * pd - numOrZero(a.aberturasM2));
+  if (cfg.revestir === "meia") return Math.max(0, paredes * 1.5 - numOrZero(a.aberturasMeiaM2));
+  if (cfg.revestir === "maior") return numOrZero(a.maiorParede) * pd;
+  return 0;
+}
 // Estimativa da obra inteira pelos cômodos (contagem × unitário)
 function estimarPelosComodos(projeto) {
   const p = projeto || {};
@@ -3546,6 +3558,33 @@ function estimarPelosComodos(projeto) {
   }
   for (const e of (Array.isArray(p.esquadrias) ? p.esquadrias : [])) {
     if (/JANELA|MAXIM|FIXO/.test(String(e && e.familia || ""))) r.soleirasM += numOrZero(e.qtd) * numOrZero(e.largura);
+  }
+  // Desenho do Projetar: o revestimento de parede sai de cada ambiente
+  // desenhado — só o trecho que é parede (separador e lado aberto não têm
+  // parede), na altura das paredes dele, menos as aberturas de verdade.
+  const des = (Array.isArray(p.ambientesDesenho) ? p.ambientesDesenho : []).filter((a) => a && a.paredeM != null);
+  if (des.length) {
+    const porTipo = {};
+    r.revestimentoInterno = 0;
+    for (const a of des) {
+      const id = a.comodo || "";
+      const v = id ? revestimentoDoAmbiente(a, comodoConfig(p, id)) : 0;
+      r.revestimentoInterno += v;
+      if (id) porTipo[id] = (porTipo[id] || 0) + v;
+    }
+    for (const d of r.detalhes) d.revestimento = r1(porTipo[d.id] || 0);
+    // bancada encosta numa parede: o comprimento sai da maior parede do
+    // ambiente desenhado (não do retângulo equivalente), com o nome do desenho
+    const r2b = (x) => Math.round(x * 100) / 100;
+    r.bancadas = [];
+    for (const a of des) {
+      const id = a.comodo || ""; if (!id) continue;
+      const cfg = comodoConfig(p, id), maior = numOrZero(a.maiorParede);
+      if (!(maior > 0)) continue;
+      if (cfg.temBancada) r.bancadas.push({ ...BANCADA_PADRAO, nome: a.nome, comprimento: r2b(maior * numOrZero(cfg.bancadaFracao)), profundidade: numOrZero(cfg.bancadaProfundidade),
+        saiaCm: numOrZero(cfg.saiaCm), fundoCm: numOrZero(cfg.fundoCm), sapatas: numOrZero(cfg.sapatas), sapataCm: numOrZero(cfg.sapataCm) });
+      if (cfg.temIlha && maior > ILHA_FOLGA_M) r.bancadas.push({ ...BANCADA_PADRAO, fundoCm: 0, sapatas: 0, nome: a.nome + " — ilha", comprimento: r2b(maior - ILHA_FOLGA_M), profundidade: numOrZero(cfg.bancadaProfundidade), saiaCm: numOrZero(cfg.saiaCm), ilha: true });
+    }
   }
   r.pisoInterno = r1(r.pisoInterno); r.revestimentoInterno = r1(r.revestimentoInterno); r.rodapeM = r1(r.rodapeM); r.soleirasM = r1(r.soleirasM); r.perimetroComodos = r1(r.perimetroComodos);
   return r;
