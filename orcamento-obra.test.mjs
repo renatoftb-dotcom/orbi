@@ -306,9 +306,9 @@ teste("palhetas da persiana seguem a regra literal da aba", () => {
   assert.ok(Math.abs(b.ventilada - (31.5 * 2 / 6 - 2.1)) < 1e-9);
 });
 
-teste("tipo sem lista na linha (maxim-ar SUPREMA) não emite e avisa", () => {
+teste("tipo sem lista na linha (persiana integrada SUPREMA) não emite e avisa", () => {
   const avisos = [];
-  const linhas = calcularEsquadria({ familia: "MAXIM_AR", linha: "SUPREMA", folhas: 1, qtd: 1, largura: 1.5, altura: 1.2 }, avisos);
+  const linhas = calcularEsquadria({ familia: "JANELA_PERSIANA", linha: "SUPREMA", folhas: 2, qtd: 1, largura: 1.5, altura: 1.2 }, avisos);
   assert.strictEqual(linhas.length, 0);
   assert.strictEqual(avisos.length, 1);
   assert.ok(avisos[0].mensagem.includes("SUPREMA"));
@@ -321,10 +321,10 @@ teste("esquadria sem medida não emite nada", () => {
 teste("gerarOrcamentoObra emite etapa Esquadrias na ordem 17 e repassa avisos", () => {
   const r = gerarOrcamentoObra({ tipologia: "Térrea", esquadrias: [
     { familia: "JANELA_CORRER", linha: "GOLD", folhas: 2, qtd: 1, largura: 1.5, altura: 1.2 },
-    { familia: "MAXIM_AR", linha: "SUPREMA", folhas: 1, qtd: 1, largura: 1.5, altura: 1.2 },
+    { familia: "JANELA_PERSIANA", linha: "SUPREMA", folhas: 2, qtd: 1, largura: 1.5, altura: 1.2 },
   ] }, { materiais: [] });
   const esq = r.itens.filter((i) => i.etapa === "Esquadrias");
-  // uma linha por esquadria; maxim-ar Suprema sem lista → nada
+  // uma linha por esquadria; persiana integrada Suprema sem lista → nada
   assert.strictEqual(esq.length, 1);
   assert.ok(esq.every((i) => i.ordem === 17 && i.tipo === "Acabamento" && i.unidade === "Unidades"));
   assert.strictEqual(esq[0].item, "Janela de correr 2 folhas · Gold · 1,50 × 1,20 m");
@@ -1952,6 +1952,17 @@ teste("esquadria: preço de venda = (material + perda 6% do alumínio + R$ 15/kg
   const lucro25 = gerarOrcamentoObra({ tipologia: "Térrea", esquadriasPreco: { lucroPct: 25 }, esquadrias: [{ familia: "PORTA_CORRER", linha: "GOLD", folhas: 3, qtd: 1, largura: 3.7, altura: 2.1 }] }, { materiais: [] }).itens.find((i) => i.etapa === "Esquadrias");
   assert.ok(Math.abs(lucro25.preco - 5285.04 / 0.57) < 0.02, String(lucro25.preco));
   assert.strictEqual(modulo.precoVendaEsquadriaParams({ impostosPct: 50, despesasPct: 50, lucroPct: 50 }).lucroPct, 30);
+});
+
+teste("Suprema: todas as tipologias (menos persiana) têm lista, e cada uma pesa menos que a mesma Gold", () => {
+  const casos = [["JANELA_CORRER", 2, 1.5, 1.2], ["JANELA_CORRER", 3, 2.4, 1.2], ["JANELA_CORRER", 4, 3, 1.2], ["PORTA_CORRER", 2, 2, 2.1], ["PORTA_CORRER", 3, 3.7, 2.1], ["PORTA_CORRER", 4, 4, 2.1],
+    ["PORTA_GIRO", 1, 0.9, 2.1], ["PORTA_GIRO", 2, 1.6, 2.1], ["MAXIM_AR", 1, 0.6, 0.6], ["MAXIM_AR", 2, 1.2, 0.6], ["QUADRO_FIXO", 1, 1, 1]];
+  const kg = (linha, f, n, L, H) => calcularEsquadria({ familia: f, linha, folhas: n, qtd: 1, largura: L, altura: H }, []).filter((c) => c.unidade === "Kg").reduce((t, c) => t + c.qtd, 0);
+  for (const [f, n, L, H] of casos) {
+    const su = kg("SUPREMA", f, n, L, H), go = kg("GOLD", f, n, L, H);
+    assert.ok(su > 0, `${f} ${n}: sem perfis Suprema`);
+    assert.ok(su < go, `${f} ${n}: Suprema ${su} kg não é mais leve que Gold ${go} kg`);
+  }
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
