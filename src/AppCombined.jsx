@@ -23491,6 +23491,18 @@ function pisosPorComodo(projeto) {
   }
   return out;
 }
+// Soleira em porta interna só nos WCs (e lavabos): a pedra segura a água do
+// banheiro. Desenho do Projetar: a largura real das portas de banheiro
+// desenhadas; sem desenho, uma porta de 0,80 por WC/lavabo da obra.
+const COMODOS_COM_SOLEIRA = ["wc", "wcSuite", "wcSuiteMaster", "lavabo", "lavaboLazer"];
+function soleirasDeWC(projeto) {
+  const p = projeto || {};
+  const pd = p.portasDesenho;
+  if (pd && typeof pd === "object" && pd.metrosBanheiro != null) return { metros: numOrZero(pd.metrosBanheiro), portas: Math.round(numOrZero(pd.banheiro)), fonte: "desenho" };
+  const amb = migrarAmbientes(p.ambientes || {});
+  const n = COMODOS_COM_SOLEIRA.reduce((t, id) => t + Math.max(0, Math.round(numOrZero(amb[id]))), 0);
+  return { metros: n * PORTA_LARGURA, portas: n, fonte: "comodos" };
+}
 // Valores automáticos do bloco Pisos e revestimentos quando o campo está em branco
 function autosPisos(projeto) {
   const p = projeto || {};
@@ -23508,7 +23520,9 @@ function autosPisos(projeto) {
     // rodapé = perímetro interno dos cômodos com rodapé, menos as portas; sem cômodos, o perímetro das paredes
     rodapeM: temComodos ? r1(comodos.reduce((t, c) => t + c.rodapeM, 0)) : r1(Math.max(0, perimetro - v.portasInternas * PORTA_LARGURA)),
     comodos, pelosComodos: temComodos,
-    soleirasM: r1(v.vaoEsquadrias),
+    // soleiras e peitoris = esquadrias de alumínio (portas externas e janelas) + portas dos WCs
+    soleirasM: r1(v.vaoEsquadrias + soleirasDeWC(p).metros),
+    soleirasPartes: { esquadrias: r1(v.vaoEsquadrias), wc: r1(soleirasDeWC(p).metros), portasWc: soleirasDeWC(p).portas, fonteWc: soleirasDeWC(p).fonte },
     revestimentoInterno: est.revestimentoInterno,
     bancadas: est.bancadas,
     vaos: v,
@@ -23644,7 +23658,11 @@ function pisosRevestimentos(cp, out, data) {
     const m2 = soleirasM * SOLEIRA_LARGURA_M;
     emitir(out, { ...base, subEtapa: "Soleiras e peitoris", item: String(ps.soleirasProduto || "").trim() || soleiraPadrao(padrao), unidade: "m2", qtd: ceil2(m2 * PERDA), memoria: [
       MEM.nota(`Soleiras e peitoris em pedra, faixa de ${SOLEIRA_LARGURA_M * 100} cm. Em branco, os metros vêm do vão das esquadrias e das portas internas; a pedra é a do padrão ${padrao} quando você não escolhe outra.`),
-      MEM.dado("Metros de soleira e peitoril", soleirasM, "m", "bloco Pisos e revestimentos"),
+      ...(!ps.soleirasDigitado && ps.soleirasPartes ? [
+        MEM.dado("Esquadrias de alumínio (portas externas e janelas)", ps.soleirasPartes.esquadrias, "m", "quantidade × largura"),
+        MEM.dado(`Portas dos WCs (${ps.soleirasPartes.portasWc})`, ps.soleirasPartes.wc, "m", ps.soleirasPartes.fonteWc === "desenho" ? "largura das portas desenhadas" : "0,80 por WC/lavabo"),
+        MEM.conta("Metros de soleira e peitoril", "esquadrias + portas dos WCs", [["esquadrias", ps.soleirasPartes.esquadrias], ["portas dos WCs", ps.soleirasPartes.wc]], soleirasM, "m"),
+      ] : [MEM.dado("Metros de soleira e peitoril", soleirasM, "m", "bloco Pisos e revestimentos")]),
       MEM.conta("Metros quadrados de pedra", `metros × ${numMem(SOLEIRA_LARGURA_M)}`, [["metros", soleirasM]], m2, "m²"),
       MEM.conta("Com 10% de perda", "m² × 1,10", [["m²", m2]], m2 * PERDA, "m²"),
       MEM.teto(m2 * PERDA, ceil2(m2 * PERDA), "m²", "Arredonda em centésimos de m²"),
@@ -24405,6 +24423,7 @@ function normalizarProjeto(projeto) {
       // piso e rodapé por cômodo, para a memória de cálculo
       comodos: autos.comodos, pelosComodos: autos.pelosComodos,
       soleirasM: numOrZero(pisosIn.soleirasM) || autos.soleirasM, soleirasProduto: pisosIn.soleirasProduto || "",
+      soleirasDigitado: numOrZero(pisosIn.soleirasM) > 0, soleirasPartes: autos.soleirasPartes,
       bancadasM2: numOrZero(pisosIn.bancadasM2), bancadasProduto: pisosIn.bancadasProduto || "",
       // lista digitada; em branco, as bancadas automáticas dos cômodos
       bancadas: ((Array.isArray(pisosIn.bancadas) && pisosIn.bancadas.length) ? pisosIn.bancadas : estimativaComodos.bancadas).slice(0, BANCADAS_MAX).map((b) => ({
@@ -26503,7 +26522,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           </div>
           {(() => { const au = autosPisos(projetoDraft); return (
             <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#4b5563", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px" }}>
-              Em branco, o VICKE usa o automático: piso interno = {au.pelosComodos ? `soma das áreas internas dos cômodos (${numMem(au.pisoInterno)} m²)` : `área construída (${numMem(au.pisoInterno)} m²)`} · piso externo = pavimentação externa ({au.pisoExterno} m²) · revestimento de parede = cômodos ({au.revestimentoInterno} m²) · rodapé = {au.pelosComodos ? "perímetro interno dos cômodos menos as portas" : "perímetro das paredes menos portas"} ({numMem(au.rodapeM)} m) · soleiras e peitoris = vão das esquadrias ({au.soleirasM} m) · bancadas = cômodos ({au.bancadas.length}). Vergas e contravergas: {au.vaos.portasInternas} porta{au.vaos.portasInternas !== 1 ? "s" : ""} interna{au.vaos.portasInternas !== 1 ? "s" : ""} de 0,80 + {au.vaos.metrosPortasExternas} m de portas externas + {au.vaos.metrosJanelas} m de janelas (verga e contraverga) = {au.vaos.metrosVergas} m de treliça.
+              Em branco, o VICKE usa o automático: piso interno = {au.pelosComodos ? `soma das áreas internas dos cômodos (${numMem(au.pisoInterno)} m²)` : `área construída (${numMem(au.pisoInterno)} m²)`} · piso externo = pavimentação externa ({au.pisoExterno} m²) · revestimento de parede = cômodos ({au.revestimentoInterno} m²) · rodapé = {au.pelosComodos ? "perímetro interno dos cômodos menos as portas" : "perímetro das paredes menos portas"} ({numMem(au.rodapeM)} m) · soleiras e peitoris = esquadrias ({numMem(au.soleirasPartes.esquadrias)} m) + portas dos WCs ({numMem(au.soleirasPartes.wc)} m) = {numMem(au.soleirasM)} m · bancadas = cômodos ({au.bancadas.length}). Vergas e contravergas: {au.vaos.portasInternas} porta{au.vaos.portasInternas !== 1 ? "s" : ""} interna{au.vaos.portasInternas !== 1 ? "s" : ""} de 0,80 + {au.vaos.metrosPortasExternas} m de portas externas + {au.vaos.metrosJanelas} m de janelas (verga e contraverga) = {au.vaos.metrosVergas} m de treliça.
             </div>
           ); })()}
           {SUPERFICIES_PISOS.map((sup) => (
@@ -26610,7 +26629,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             );
           })()}
           <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
-            <div><label style={C.label}>Soleiras e peitoris (m)</label><input style={C.input} type="number" step="0.01" value={get("pisos.soleirasM") ?? ""} placeholder={`auto: ${autosPisos(projetoDraft).soleirasM} (esquadrias)`} onChange={(e) => set("pisos.soleirasM", e.target.value === "" ? "" : Number(e.target.value))} /></div>
+            <div><label style={C.label}>Soleiras e peitoris (m)</label><input style={C.input} type="number" step="0.01" value={get("pisos.soleirasM") ?? ""} placeholder={`auto: ${numMem(autosPisos(projetoDraft).soleirasM)} (esquadrias + WCs)`} onChange={(e) => set("pisos.soleirasM", e.target.value === "" ? "" : Number(e.target.value))} /></div>
             <div style={{ fontSize: 11, color: "#6b7280" }}>largura {SOLEIRA_LARGURA_M * 100} cm</div>
             <div><label style={C.label}>Produto (Insumos)</label><input style={C.input} list="vk-insumos-pisos" value={get("pisos.soleirasProduto") ?? ""} placeholder={soleiraPadrao(padraoObra(projetoDraft))} onChange={(e) => set("pisos.soleirasProduto", e.target.value)} /></div>
           </div>
@@ -78788,7 +78807,7 @@ function tpDesenhoParaObra(paredes, areas) {
   let m2Int = 0, m2Ext = 0, m15 = 0, m20 = 0, m25 = 0, perim = 0, nExt = 0;
   // portas de madeira desenhadas: internas (kit de porta) e de banheiro (a
   // que dá para WC/lavabo); as de parede externa ficam de fora do kit
-  const portas = { interna: 0, banheiro: 0, externa: 0, metros: 0 };
+  const portas = { interna: 0, banheiro: 0, externa: 0, metros: 0, metrosBanheiro: 0 };
   const BANHO = new Set(["wc", "wcSuite", "wcSuiteMaster", "lavabo", "lavaboLazer"]);
   const ambs = areas.filter((a) => a.tipo === "ambiente" && a.pts && a.pts.length >= 3);
   for (const w of paredes) {
@@ -78805,7 +78824,7 @@ function tpDesenhoParaObra(paredes, areas) {
       if (externa) { portas.externa++; continue; }
       const c = { x: w.a.x + (w.b.x - w.a.x) / L * o.x, y: w.a.y + (w.b.y - w.a.y) / L * o.x }, dd = (w.t || 0) / 2 + 0.3;
       const banho = [1, -1].some((sg) => { const q = { x: c.x + nx * dd * sg, y: c.y + ny * dd * sg }; const a = ambs.find((am) => tpDentroPoli(q, am.pts)); return a && BANHO.has(tpComodoDoNome(a.nome)); });
-      if (banho) portas.banheiro++; else portas.interna++;
+      if (banho) { portas.banheiro++; portas.metrosBanheiro += o.larg || 0; } else portas.interna++;
       portas.metros += o.larg || 0;
     }
     const cm = (w.t || 0) * 100;
@@ -78915,7 +78934,7 @@ function tpDesenhoParaObra(paredes, areas) {
     ...(temAberturas ? { esquadrias } : {}),
     ...(com.temAmbientes ? { ambientes: com.ambientes, comodosCfg: com.comodosCfg } : {}),
     ...(ambientesDesenho.length ? { ambientesDesenho } : {}),
-    ...(temAberturas ? { portasDesenho: { interna: portas.interna, banheiro: portas.banheiro, metros: r2(portas.metros) } } : {}),
+    ...(temAberturas ? { portasDesenho: { interna: portas.interna, banheiro: portas.banheiro, metros: r2(portas.metros), metrosBanheiro: r2(portas.metrosBanheiro) } } : {}),
     arquitetura: { areaConstruida: r2(areaConstruida), m2ParedesInternas: r2(m2Int), m2ParedesExternas: r2(m2Ext), m2ParedesTotal: r2(m2Int + m2Ext),
       ...(gabarito > 0 ? { gabarito } : {}) },
     ...(an.pisoExterno > 0 ? { externa: { pavimentacao: r2(an.pisoExterno) } } : {}),

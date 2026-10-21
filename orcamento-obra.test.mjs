@@ -638,8 +638,9 @@ teste("vãos automáticos: portas internas 0,80 (1 verga) + esquadrias (janela 2
   // com cômodos: piso = áreas internas (3 dorm. 3×4 + 2 WC 3×1,4 + cozinha 4×3); rodapé só nos dormitórios: 3 × (14 − 0,8)
   assert.strictEqual(au.pisoInterno, 56.4);
   assert.strictEqual(au.rodapeM, 39.6);
-  assert.strictEqual(au.soleirasM, 8.4);   // 6 + 2,4
-  assert.strictEqual(cp.pisos.rodapeM, 39.6); assert.strictEqual(cp.pisos.soleirasM, 8.4); assert.strictEqual(cp.pisos.pisoInterno.m2, 56.4);
+  assert.strictEqual(au.soleirasM, 10);    // esquadrias 6 + 2,4 + soleira só nas portas dos 2 WCs (2 × 0,80)
+  assert.deepStrictEqual([au.soleirasPartes.esquadrias, au.soleirasPartes.wc], [8.4, 1.6]);
+  assert.strictEqual(cp.pisos.rodapeM, 39.6); assert.strictEqual(cp.pisos.soleirasM, 10); assert.strictEqual(cp.pisos.pisoInterno.m2, 56.4);
   // sem cômodos: área construída e perímetro das paredes menos as portas
   const semComodos = { ...proj, ambientes: {}, portasDesenho: { interna: 5, banheiro: 0 } };
   assert.strictEqual(modulo.autosPisos(semComodos).pisoInterno, 120);
@@ -1917,6 +1918,8 @@ teste("desenho: revestimento só onde há parede (separador não), na altura das
   assert.strictEqual(modulo.revestimentoDoAmbiente(proj.ambientesDesenho[0], { revestir: "meia" }), 16.7 * 1.5 - 1.8);
   assert.strictEqual(modulo.revestimentoDoAmbiente(proj.ambientesDesenho[0], { revestir: "maior" }), 5.93 * 2.8);
   assert.strictEqual(modulo.vaosAutomaticos(proj).metrosPortasInternas, 0.7);   // não 0,80
+  // soleira só na porta do WC desenhado, pela largura real
+  assert.strictEqual(modulo.autosPisos({ ...proj, portasDesenho: { ...proj.portasDesenho, metrosBanheiro: 0.7 } }).soleirasPartes.wc, 0.7);
   // bancada pela maior parede do ambiente: cozinha 100% de 5,93; WC 50% de 3,30
   assert.deepStrictEqual(est.bancadas.map((b) => [b.nome, b.comprimento]), [["Cozinha", 5.93], ["WC", 1.65]]);
 });

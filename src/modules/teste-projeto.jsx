@@ -738,7 +738,7 @@ function tpDesenhoParaObra(paredes, areas) {
   let m2Int = 0, m2Ext = 0, m15 = 0, m20 = 0, m25 = 0, perim = 0, nExt = 0;
   // portas de madeira desenhadas: internas (kit de porta) e de banheiro (a
   // que dá para WC/lavabo); as de parede externa ficam de fora do kit
-  const portas = { interna: 0, banheiro: 0, externa: 0, metros: 0 };
+  const portas = { interna: 0, banheiro: 0, externa: 0, metros: 0, metrosBanheiro: 0 };
   const BANHO = new Set(["wc", "wcSuite", "wcSuiteMaster", "lavabo", "lavaboLazer"]);
   const ambs = areas.filter((a) => a.tipo === "ambiente" && a.pts && a.pts.length >= 3);
   for (const w of paredes) {
@@ -755,7 +755,7 @@ function tpDesenhoParaObra(paredes, areas) {
       if (externa) { portas.externa++; continue; }
       const c = { x: w.a.x + (w.b.x - w.a.x) / L * o.x, y: w.a.y + (w.b.y - w.a.y) / L * o.x }, dd = (w.t || 0) / 2 + 0.3;
       const banho = [1, -1].some((sg) => { const q = { x: c.x + nx * dd * sg, y: c.y + ny * dd * sg }; const a = ambs.find((am) => tpDentroPoli(q, am.pts)); return a && BANHO.has(tpComodoDoNome(a.nome)); });
-      if (banho) portas.banheiro++; else portas.interna++;
+      if (banho) { portas.banheiro++; portas.metrosBanheiro += o.larg || 0; } else portas.interna++;
       portas.metros += o.larg || 0;
     }
     const cm = (w.t || 0) * 100;
@@ -865,7 +865,7 @@ function tpDesenhoParaObra(paredes, areas) {
     ...(temAberturas ? { esquadrias } : {}),
     ...(com.temAmbientes ? { ambientes: com.ambientes, comodosCfg: com.comodosCfg } : {}),
     ...(ambientesDesenho.length ? { ambientesDesenho } : {}),
-    ...(temAberturas ? { portasDesenho: { interna: portas.interna, banheiro: portas.banheiro, metros: r2(portas.metros) } } : {}),
+    ...(temAberturas ? { portasDesenho: { interna: portas.interna, banheiro: portas.banheiro, metros: r2(portas.metros), metrosBanheiro: r2(portas.metrosBanheiro) } } : {}),
     arquitetura: { areaConstruida: r2(areaConstruida), m2ParedesInternas: r2(m2Int), m2ParedesExternas: r2(m2Ext), m2ParedesTotal: r2(m2Int + m2Ext),
       ...(gabarito > 0 ? { gabarito } : {}) },
     ...(an.pisoExterno > 0 ? { externa: { pavimentacao: r2(an.pisoExterno) } } : {}),
