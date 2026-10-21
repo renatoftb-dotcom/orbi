@@ -1899,5 +1899,11 @@ teste("piso e rodapé por cômodo: desenho do Projetar, altura do rodapé 10/15/
   assert.ok(!r2.itens.find((i) => i.subEtapa === "Piso interno").memoria.some((x) => x.tipo === "dado" && x.rotulo === "Quarto 1"));
 });
 
+teste("rodapé: o lado sem parede (separador de ambiente) sai do perímetro, como as portas", () => {
+  const linhas = modulo.pisosPorComodo({ ambientesDesenho: [{ nome: "Sala", comodo: "living", area: 33, perimetro: 23.24, portas: 0.9, semParede: 4.85 }] });
+  assert.strictEqual(linhas[0].portas, 5.75);
+  assert.strictEqual(linhas[0].rodapeM, 17.49); // 23,24 − 0,90 − 4,85
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou > 0) process.exit(1);

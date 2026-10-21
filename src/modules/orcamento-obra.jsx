@@ -3483,7 +3483,8 @@ function pisosPorComodo(projeto) {
   const des = Array.isArray(p.ambientesDesenho) ? p.ambientesDesenho : null;
   if (des && des.length) {
     return des.filter((a) => a && numOrZero(a.area) > 0 && a.comodo !== "escada").map((a, k) =>
-      linha(`d:${a.pavimento || ""}:${a.nome || k}`, String(a.nome || "Ambiente"), 1, numOrZero(a.area), numOrZero(a.perimetro), numOrZero(a.portas), a.comodo || "", a.pavimento || ""));
+      // portas e vãos + o lado sem parede (separador de ambiente): nada disso leva rodapé
+      linha(`d:${a.pavimento || ""}:${a.nome || k}`, String(a.nome || "Ambiente"), 1, numOrZero(a.area), numOrZero(a.perimetro), numOrZero(a.portas) + numOrZero(a.semParede), a.comodo || "", a.pavimento || ""));
   }
   const ambientes = migrarAmbientes(p.ambientes || {});
   const out = [];
@@ -3583,8 +3584,8 @@ function pisosRevestimentos(cp, out, data) {
       ] : [MEM.dado(`${sup.nome} informado`, m2Sup, "m²", "bloco Pisos e revestimentos")]),
       ...(sup.id === "pisoInterno" && rodapeM > 0 ? [
         ...(rodPorComodo ? [
-          MEM.nota("Rodapé = perímetro interno de cada cômodo menos as portas; cômodo molhado ou desligado no bloco não entra."),
-          ...comodos.filter((x) => x.rodapeM > 0).map((x) => MEM.conta(x.n > 1 ? `${x.nome} (${x.n}×)` : x.nome, "perímetro − portas", [["perímetro", x.perimetro], ["portas", x.portas]], x.rodapeM, "m")),
+          MEM.nota("Rodapé = perímetro interno de cada cômodo menos portas, vãos e o lado sem parede (separador de ambiente); cômodo molhado ou desligado no bloco não entra."),
+          ...comodos.filter((x) => x.rodapeM > 0).map((x) => MEM.conta(x.n > 1 ? `${x.nome} (${x.n}×)` : x.nome, "perímetro − portas e vãos", [["perímetro", x.perimetro], ["portas e vãos", x.portas]], x.rodapeM, "m")),
           MEM.conta("Rodapé dos cômodos", "soma", [], rodapeM, "m"),
         ] : [MEM.dado("Rodapé", rodapeM, "m", "bloco Pisos e revestimentos")]),
         MEM.conta(`Rodapé em m² de piso (faixa de ${altRodCm} cm)`, `rodapé × ${numMem(altRod)}`, [["rodapé", rodapeM]], rodapeM2, "m²"),
@@ -6526,7 +6527,12 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                 <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 4 }}>
                   Piso e rodapé por cômodo <span style={{ fontWeight: 400, color: "#6b7280" }}>— {desenho ? "do desenho do Projetar (área e perímetro internos, portas desenhadas)" : "pelos cômodos da obra (medidas do tamanho ou as editadas no cômodo, uma porta de 0,80 por cômodo)"}</span>
                 </div>
-                <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 6 }}>Rodapé = perímetro interno menos as portas. Cômodo molhado ou de parede revestida vem sem rodapé; marque ou desmarque à vontade.</div>
+                <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 6 }}>Rodapé = perímetro interno menos portas, vãos e o lado sem parede (separador de ambiente). Cômodo molhado ou de parede revestida vem sem rodapé; marque ou desmarque à vontade.</div>
+                {!desenho && (projetoDraft.origemDesenho || {}).projetoId && (
+                  <div data-vk-pisos-abrir-desenho style={{ fontSize: 12, color: "#1e3a5f", background: "#f0f7ff", border: "1px solid rgba(4,116,244,0.25)", borderRadius: 8, padding: "6px 10px", marginBottom: 6 }}>
+                    Esta obra vem de um desenho do Projetar. Abra o desenho uma vez para trazer os ambientes exatamente como desenhados (nomes, áreas, portas); até lá, a lista abaixo é pelos tipos de cômodo.
+                  </div>
+                )}
                 {isMobile ? (
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {linhas.map((l) => (
@@ -6536,7 +6542,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                           <span style={{ fontSize: 13, color: "#111827", whiteSpace: "nowrap" }}>{fmt(l.area)} m²</span>
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 4, fontSize: 11.5, color: "#6b7280" }}>
-                          <span>perímetro {fmt(l.perimetro)} · portas {fmt(l.portas)}</span>
+                          <span>perímetro {fmt(l.perimetro)} · portas e vãos {fmt(l.portas)}</span>
                           {caixa(l)}
                         </div>
                       </div>
@@ -6549,7 +6555,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                   <div style={{ overflowX: "auto" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse", maxWidth: 760 }}>
                       <thead><tr>
-                        <th style={{ ...th, textAlign: "left" }}>Cômodo</th><th style={th}>Piso (m²)</th><th style={th}>Perímetro (m)</th><th style={th}>Portas (m)</th><th style={{ ...th, textAlign: "left", paddingLeft: 16 }}>Rodapé</th>
+                        <th style={{ ...th, textAlign: "left" }}>Cômodo</th><th style={th}>Piso (m²)</th><th style={th}>Perímetro (m)</th><th style={th}>Portas e vãos (m)</th><th style={{ ...th, textAlign: "left", paddingLeft: 16 }}>Rodapé</th>
                       </tr></thead>
                       <tbody>
                         {linhas.map((l) => (

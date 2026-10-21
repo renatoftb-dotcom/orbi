@@ -778,8 +778,37 @@ function tpDesenhoParaObra(paredes, areas) {
       }
     }
   }
+  // Rodapé corre na face das paredes: de cada lado do ambiente conta só o
+  // trecho que encosta numa face de parede (as duas faces de cada parede,
+  // esticadas meia espessura nas pontas para pegar os cantos). O que sobra do
+  // perímetro — separador de ambiente (cozinha integrada à sala), lado aberto,
+  // ambiente desenhado à mão fora da parede — não leva rodapé.
+  const faces = [];
+  for (const w of paredes) {
+    const L = tpLen(w); if (!L) continue;
+    const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, h = (w.t || 0) / 2;
+    for (const off of [h, -h]) faces.push([{ x: w.a.x - ux * h - uy * off, y: w.a.y - uy * h + ux * off }, { x: w.b.x + ux * h - uy * off, y: w.b.y + uy * h + ux * off }]);
+  }
+  const naParede = (pts) => pts.reduce((tot, p, i) => {
+    const q = pts[(i + 1) % pts.length], L = Math.hypot(q.x - p.x, q.y - p.y); if (!L) return tot;
+    const ux = (q.x - p.x) / L, uy = (q.y - p.y) / L, dist = (r) => Math.abs((r.x - p.x) * uy - (r.y - p.y) * ux);
+    const iv = [];
+    for (const [a, b] of faces) {
+      if (dist(a) > 0.03 || dist(b) > 0.03) continue;
+      const ta = (a.x - p.x) * ux + (a.y - p.y) * uy, tb = (b.x - p.x) * ux + (b.y - p.y) * uy;
+      const i0 = Math.max(0, Math.min(ta, tb)), i1 = Math.min(L, Math.max(ta, tb));
+      if (i1 > i0) iv.push([i0, i1]);
+    }
+    iv.sort((m, n) => m[0] - n[0]);
+    let soma = 0, cs = null, ce = null;
+    for (const [a0, a1] of iv) { if (cs === null) { cs = a0; ce = a1; } else if (a0 <= ce) ce = Math.max(ce, a1); else { soma += ce - cs; cs = a0; ce = a1; } }
+    if (cs !== null) soma += ce - cs;
+    return tot + soma;
+  }, 0);
   const ambientesDesenho = ambs.map((a) => ({ nome: a.nome || "Ambiente", comodo: tpComodoDoNome(a.nome) || "",
-    area: r2(tpAreaPoli(a.pts)), perimetro: r2(tpPerimPoli(a.pts)), portas: r2(portasAmb.get(a) || 0) }));
+    area: r2(tpAreaPoli(a.pts)), perimetro: r2(tpPerimPoli(a.pts)), portas: r2(portasAmb.get(a) || 0),
+    // trecho do perímetro sem parede (separador, lado aberto): sai do rodapé como as portas
+    semParede: r2(Math.max(0, tpPerimPoli(a.pts) - naParede(a.pts))) }));
   const soma = (tipo, f) => areas.filter((a) => a.tipo === tipo && a.pts && a.pts.length >= 3).reduce((s, a) => s + f(a), 0);
   // laje: desconta a abertura sobre as escadas deste pavimento
   const furoEsc = areas.filter((a) => a.tipo === "escada").map((e) => tpEscadaGeo(e).contorno)

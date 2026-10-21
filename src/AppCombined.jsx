@@ -23475,7 +23475,8 @@ function pisosPorComodo(projeto) {
   const des = Array.isArray(p.ambientesDesenho) ? p.ambientesDesenho : null;
   if (des && des.length) {
     return des.filter((a) => a && numOrZero(a.area) > 0 && a.comodo !== "escada").map((a, k) =>
-      linha(`d:${a.pavimento || ""}:${a.nome || k}`, String(a.nome || "Ambiente"), 1, numOrZero(a.area), numOrZero(a.perimetro), numOrZero(a.portas), a.comodo || "", a.pavimento || ""));
+      // portas e vãos + o lado sem parede (separador de ambiente): nada disso leva rodapé
+      linha(`d:${a.pavimento || ""}:${a.nome || k}`, String(a.nome || "Ambiente"), 1, numOrZero(a.area), numOrZero(a.perimetro), numOrZero(a.portas) + numOrZero(a.semParede), a.comodo || "", a.pavimento || ""));
   }
   const ambientes = migrarAmbientes(p.ambientes || {});
   const out = [];
@@ -23575,8 +23576,8 @@ function pisosRevestimentos(cp, out, data) {
       ] : [MEM.dado(`${sup.nome} informado`, m2Sup, "m²", "bloco Pisos e revestimentos")]),
       ...(sup.id === "pisoInterno" && rodapeM > 0 ? [
         ...(rodPorComodo ? [
-          MEM.nota("Rodapé = perímetro interno de cada cômodo menos as portas; cômodo molhado ou desligado no bloco não entra."),
-          ...comodos.filter((x) => x.rodapeM > 0).map((x) => MEM.conta(x.n > 1 ? `${x.nome} (${x.n}×)` : x.nome, "perímetro − portas", [["perímetro", x.perimetro], ["portas", x.portas]], x.rodapeM, "m")),
+          MEM.nota("Rodapé = perímetro interno de cada cômodo menos portas, vãos e o lado sem parede (separador de ambiente); cômodo molhado ou desligado no bloco não entra."),
+          ...comodos.filter((x) => x.rodapeM > 0).map((x) => MEM.conta(x.n > 1 ? `${x.nome} (${x.n}×)` : x.nome, "perímetro − portas e vãos", [["perímetro", x.perimetro], ["portas e vãos", x.portas]], x.rodapeM, "m")),
           MEM.conta("Rodapé dos cômodos", "soma", [], rodapeM, "m"),
         ] : [MEM.dado("Rodapé", rodapeM, "m", "bloco Pisos e revestimentos")]),
         MEM.conta(`Rodapé em m² de piso (faixa de ${altRodCm} cm)`, `rodapé × ${numMem(altRod)}`, [["rodapé", rodapeM]], rodapeM2, "m²"),
@@ -26518,7 +26519,12 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                 <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 4 }}>
                   Piso e rodapé por cômodo <span style={{ fontWeight: 400, color: "#6b7280" }}>— {desenho ? "do desenho do Projetar (área e perímetro internos, portas desenhadas)" : "pelos cômodos da obra (medidas do tamanho ou as editadas no cômodo, uma porta de 0,80 por cômodo)"}</span>
                 </div>
-                <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 6 }}>Rodapé = perímetro interno menos as portas. Cômodo molhado ou de parede revestida vem sem rodapé; marque ou desmarque à vontade.</div>
+                <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 6 }}>Rodapé = perímetro interno menos portas, vãos e o lado sem parede (separador de ambiente). Cômodo molhado ou de parede revestida vem sem rodapé; marque ou desmarque à vontade.</div>
+                {!desenho && (projetoDraft.origemDesenho || {}).projetoId && (
+                  <div data-vk-pisos-abrir-desenho style={{ fontSize: 12, color: "#1e3a5f", background: "#f0f7ff", border: "1px solid rgba(4,116,244,0.25)", borderRadius: 8, padding: "6px 10px", marginBottom: 6 }}>
+                    Esta obra vem de um desenho do Projetar. Abra o desenho uma vez para trazer os ambientes exatamente como desenhados (nomes, áreas, portas); até lá, a lista abaixo é pelos tipos de cômodo.
+                  </div>
+                )}
                 {isMobile ? (
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {linhas.map((l) => (
@@ -26528,7 +26534,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                           <span style={{ fontSize: 13, color: "#111827", whiteSpace: "nowrap" }}>{fmt(l.area)} m²</span>
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 4, fontSize: 11.5, color: "#6b7280" }}>
-                          <span>perímetro {fmt(l.perimetro)} · portas {fmt(l.portas)}</span>
+                          <span>perímetro {fmt(l.perimetro)} · portas e vãos {fmt(l.portas)}</span>
                           {caixa(l)}
                         </div>
                       </div>
@@ -26541,7 +26547,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                   <div style={{ overflowX: "auto" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse", maxWidth: 760 }}>
                       <thead><tr>
-                        <th style={{ ...th, textAlign: "left" }}>Cômodo</th><th style={th}>Piso (m²)</th><th style={th}>Perímetro (m)</th><th style={th}>Portas (m)</th><th style={{ ...th, textAlign: "left", paddingLeft: 16 }}>Rodapé</th>
+                        <th style={{ ...th, textAlign: "left" }}>Cômodo</th><th style={th}>Piso (m²)</th><th style={th}>Perímetro (m)</th><th style={th}>Portas e vãos (m)</th><th style={{ ...th, textAlign: "left", paddingLeft: 16 }}>Rodapé</th>
                       </tr></thead>
                       <tbody>
                         {linhas.map((l) => (
@@ -78783,8 +78789,37 @@ function tpDesenhoParaObra(paredes, areas) {
       }
     }
   }
+  // Rodapé corre na face das paredes: de cada lado do ambiente conta só o
+  // trecho que encosta numa face de parede (as duas faces de cada parede,
+  // esticadas meia espessura nas pontas para pegar os cantos). O que sobra do
+  // perímetro — separador de ambiente (cozinha integrada à sala), lado aberto,
+  // ambiente desenhado à mão fora da parede — não leva rodapé.
+  const faces = [];
+  for (const w of paredes) {
+    const L = tpLen(w); if (!L) continue;
+    const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, h = (w.t || 0) / 2;
+    for (const off of [h, -h]) faces.push([{ x: w.a.x - ux * h - uy * off, y: w.a.y - uy * h + ux * off }, { x: w.b.x + ux * h - uy * off, y: w.b.y + uy * h + ux * off }]);
+  }
+  const naParede = (pts) => pts.reduce((tot, p, i) => {
+    const q = pts[(i + 1) % pts.length], L = Math.hypot(q.x - p.x, q.y - p.y); if (!L) return tot;
+    const ux = (q.x - p.x) / L, uy = (q.y - p.y) / L, dist = (r) => Math.abs((r.x - p.x) * uy - (r.y - p.y) * ux);
+    const iv = [];
+    for (const [a, b] of faces) {
+      if (dist(a) > 0.03 || dist(b) > 0.03) continue;
+      const ta = (a.x - p.x) * ux + (a.y - p.y) * uy, tb = (b.x - p.x) * ux + (b.y - p.y) * uy;
+      const i0 = Math.max(0, Math.min(ta, tb)), i1 = Math.min(L, Math.max(ta, tb));
+      if (i1 > i0) iv.push([i0, i1]);
+    }
+    iv.sort((m, n) => m[0] - n[0]);
+    let soma = 0, cs = null, ce = null;
+    for (const [a0, a1] of iv) { if (cs === null) { cs = a0; ce = a1; } else if (a0 <= ce) ce = Math.max(ce, a1); else { soma += ce - cs; cs = a0; ce = a1; } }
+    if (cs !== null) soma += ce - cs;
+    return tot + soma;
+  }, 0);
   const ambientesDesenho = ambs.map((a) => ({ nome: a.nome || "Ambiente", comodo: tpComodoDoNome(a.nome) || "",
-    area: r2(tpAreaPoli(a.pts)), perimetro: r2(tpPerimPoli(a.pts)), portas: r2(portasAmb.get(a) || 0) }));
+    area: r2(tpAreaPoli(a.pts)), perimetro: r2(tpPerimPoli(a.pts)), portas: r2(portasAmb.get(a) || 0),
+    // trecho do perímetro sem parede (separador, lado aberto): sai do rodapé como as portas
+    semParede: r2(Math.max(0, tpPerimPoli(a.pts) - naParede(a.pts))) }));
   const soma = (tipo, f) => areas.filter((a) => a.tipo === tipo && a.pts && a.pts.length >= 3).reduce((s, a) => s + f(a), 0);
   // laje: desconta a abertura sobre as escadas deste pavimento
   const furoEsc = areas.filter((a) => a.tipo === "escada").map((e) => tpEscadaGeo(e).contorno)
