@@ -53,7 +53,7 @@ const modulo = new Function(`
     paredesTerreo, pintura, prestadores,
     normalizarProjeto, gerarOrcamentoObra, precificarETotalizar,
     locacaoCanteiro, mesesDeObra, prazoParametricoMeses, gerarCronogramaObra, mesesDaEtapaNoCronograma, normalizarProjeto,
-    calcularEsquadria, metrosPorRegra, ESQUADRIAS_ACESSORIOS_PRECOS, barrasPalhetas, ESQUADRIAS_CATALOGO,
+    calcularEsquadria, metrosPorRegra, ESQUADRIAS_ACESSORIOS_PRECOS, precoVendaEsquadriaParams, barrasPalhetas, ESQUADRIAS_CATALOGO,
     vidroEsquadria, acessoriosEsquadria, ESQUADRIAS_FAMILIAS, ESQUADRIAS_ACESSORIOS,
     interpretarListaColada, ETAPAS_PROJETO,
     instalacoesPorAmbiente, composicoesAtivas, COMPOSICOES_SEED, AMBIENTES_TIPOS, PONTOS_ELETRICOS,
@@ -344,8 +344,14 @@ teste("preço fechado da esquadria = alumínio × R$ 39,80/kg + vidro × R$ 166,
   assert.ok(!um.composicao.some((c) => c.fonte === "sem_preco"), "porta de giro: todo acessório tem referência");
   assert.ok(um.composicao.filter((c) => c.codigo && ref[c.codigo]).every((c) => c.fonte === "referencia" && c.ref));
   assert.strictEqual(um.confianca, "modulo");
-  assert.ok(Math.abs(um.preco - esperado) < 0.01, `${um.preco} vs ${esperado}`);
-  assert.ok(um.preco > 1400 && um.preco < 2200, `preço fora da faixa: ${um.preco}`);
+  // material = soma da composição; o preço da linha é o de venda da serralheria
+  assert.ok(Math.abs(um.formacaoPreco.material - esperado) < 0.02, `${um.formacaoPreco.material} vs ${esperado}`);
+  assert.ok(um.formacaoPreco.material > 1400 && um.formacaoPreco.material < 2200, `material fora da faixa: ${um.formacaoPreco.material}`);
+  assert.strictEqual(um.preco, um.formacaoPreco.preco);
+  // sem perda, fabricação, instalação, impostos, despesas e lucro: preço = material
+  const zero = { perdaAluminioPct: 0, maoObraKg: 0, instalacaoPct: 0, impostosPct: 0, despesasPct: 0, lucroPct: 0 };
+  const so = gerarOrcamentoObra({ tipologia: "Térrea", esquadriasPreco: zero, esquadrias: [{ familia: "PORTA_GIRO", linha: "GOLD", folhas: 2, qtd: 1, largura: 1.6, altura: 2.1 }] }, { materiais: [] }).itens.find((i) => i.etapa === "Esquadrias");
+  assert.ok(Math.abs(so.preco - esperado) < 0.02, `${so.preco} vs ${esperado}`);
   // a memória abre cada componente com quantidade × preço e a fonte
   assert.ok(um.memoria.some((x) => x.rotulo && /DOB - Dobradiça/.test(x.rotulo) && /× R\$ 36,85 — referência/.test(x.fonte)));
   // porta de correr: kit de roldana = 2 roldanas por folha (R$ 31,00)
@@ -1929,6 +1935,23 @@ teste("desenho: revestimento só onde há parede (separador não), na altura das
   assert.strictEqual(modulo.autosPisos({ ...proj, portasDesenho: { ...proj.portasDesenho, metrosBanheiro: 0.7 } }).soleirasPartes.wc, 0.7);
   // bancada pela maior parede do ambiente: cozinha 100% de 5,93; WC 50% de 3,30
   assert.deepStrictEqual(est.bancadas.map((b) => [b.nome, b.comprimento]), [["Cozinha", 5.93], ["WC", 1.65]]);
+});
+
+teste("esquadria: preço de venda = (material + perda 6% do alumínio + R$ 15/kg + instalação 20%) ÷ (1 − 8% − 10% − 15%)", () => {
+  const it = gerarOrcamentoObra({ tipologia: "Térrea", esquadrias: [{ familia: "PORTA_CORRER", linha: "GOLD", folhas: 3, qtd: 1, largura: 3.7, altura: 2.1 }] }, { materiais: [] }).itens.find((i) => i.etapa === "Esquadrias");
+  const f = it.formacaoPreco;
+  assert.strictEqual(f.material, 3611.56);
+  assert.strictEqual(f.kg, 53.24);
+  assert.strictEqual(f.perda, 127.14);       // 2.118,96 × 6%
+  assert.strictEqual(f.fabricacao, 798.6);   // 53,24 kg × 15
+  assert.strictEqual(f.instalacao, 747.74);  // (3.611,56 + 127,14) × 20%
+  assert.strictEqual(f.custo, 5285.04);
+  assert.strictEqual(it.preco, 7888.11);     // ÷ 0,67
+  assert.ok(it.memoria.some((x) => /Preço de venda/.test(x.rotulo || "") && x.valor === "7.888,11"));
+  // editável por obra; impostos + despesas + lucro nunca passam de 90%
+  const lucro25 = gerarOrcamentoObra({ tipologia: "Térrea", esquadriasPreco: { lucroPct: 25 }, esquadrias: [{ familia: "PORTA_CORRER", linha: "GOLD", folhas: 3, qtd: 1, largura: 3.7, altura: 2.1 }] }, { materiais: [] }).itens.find((i) => i.etapa === "Esquadrias");
+  assert.ok(Math.abs(lucro25.preco - 5285.04 / 0.57) < 0.02, String(lucro25.preco));
+  assert.strictEqual(modulo.precoVendaEsquadriaParams({ impostosPct: 50, despesasPct: 50, lucroPct: 50 }).lucroPct, 30);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

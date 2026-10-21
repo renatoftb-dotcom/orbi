@@ -20142,7 +20142,7 @@ const MEM = {
 const MEM_CANTEIRO = (texto) => [MEM.nota(texto || "Quantidade fixa do canteiro: entra igual em qualquer obra, não depende das medidas do projeto. Herdada da planilha do escritório; para mudar, edite o item no orçamento.")];
 
 // ── Helper de emissão, usado por todo módulo de cálculo (§4) ──
-function emitir(out, { ordem, item, tipo, etapa, subEtapa, unidade, qtd, preco, composicao, confianca, insumoCodigo, memoria }) {
+function emitir(out, { ordem, item, tipo, etapa, subEtapa, unidade, qtd, preco, composicao, formacaoPreco, confianca, insumoCodigo, memoria }) {
   if (!qtd || qtd === 0) return; // regra do VBA: só emite se qtd ≠ 0
   // Quantidade negativa NUNCA sai no orçamento. Não existe "menos três sacos
   // de cimento": quando uma conta dá negativo é erro de dado (área revestida
@@ -20155,6 +20155,7 @@ function emitir(out, { ordem, item, tipo, etapa, subEtapa, unidade, qtd, preco, 
   }
   const linha = { ordem, item, tipo, etapa, subEtapa, unidade, qtd: Number(qtd), preco: preco ?? null };
   if (composicao) linha.composicao = composicao; // item composto (esquadria): o que forma o preço unitário
+  if (formacaoPreco) linha.formacaoPreco = formacaoPreco; // esquadria: material → custo → preço de venda
   if (memoria) linha.memoria = memoria;          // passos do cálculo da quantidade (tela da engrenagem)
   if (confianca) linha.confianca = confianca;
   if (insumoCodigo) linha.insumoCodigo = insumoCodigo;
@@ -22617,6 +22618,54 @@ function piscina(cp, out) {
 // ARQUIVO GERADO a partir de docs/referencia-orcamento/esquadrias-catalogo.json.
 
 const ESQUADRIAS_PRECOS_VBA = { aluminioKg: 39.80, vidro8mmM2: 166.63 }; // referência do S_ESQUADRIAS.bas
+// Preço de venda da serralheria (out/2026): material + perda de corte do
+// alumínio + mão de obra de fabricação (R$/kg de alumínio) + instalação (% do
+// material) = custo direto; preço = custo ÷ (1 − impostos − despesas fixas −
+// lucro). Padrões de mercado, editáveis por obra no bloco Esquadrias:
+//   perda 6% (setor 5–12%, ABAL) · fabricação R$ 15/kg (hora de serralheiro
+//   R$ 70–90 × produtividade estimada — calibrar com a serralheria) ·
+//   instalação 20% (mercado 15–30%) · impostos 8% · despesas 10% · lucro 15%.
+const ESQUADRIAS_PRECO_VENDA_PADRAO = { perdaAluminioPct: 6, maoObraKg: 15, instalacaoPct: 20, impostosPct: 8, despesasPct: 10, lucroPct: 15 };
+const ESQUADRIAS_PRECO_VENDA_CAMPOS = [
+  { id: "perdaAluminioPct", nome: "Perda de corte do alumínio (%)" },
+  { id: "maoObraKg",        nome: "Fabricação (R$ por kg de alumínio)" },
+  { id: "instalacaoPct",    nome: "Instalação (% do material)" },
+  { id: "impostosPct",      nome: "Impostos (%)" },
+  { id: "despesasPct",      nome: "Despesas fixas (%)" },
+  { id: "lucroPct",         nome: "Lucro (%)" },
+];
+function precoVendaEsquadriaParams(v) {
+  const o = v || {}, out = {};
+  for (const [k, padrao] of Object.entries(ESQUADRIAS_PRECO_VENDA_PADRAO)) {
+    const n = Number(o[k]);
+    out[k] = (o[k] === "" || o[k] == null || !Number.isFinite(n) || n < 0) ? padrao : n;
+  }
+  // impostos + despesas + lucro precisam deixar sobra para o custo
+  const soma = out.impostosPct + out.despesasPct + out.lucroPct;
+  if (soma > 90) { const f = 90 / soma; out.impostosPct *= f; out.despesasPct *= f; out.lucroPct *= f; }
+  return out;
+}
+// Formação do preço de venda de UMA esquadria a partir da composição de material
+function formarPrecoEsquadria(composicao, params) {
+  const pr = precoVendaEsquadriaParams(params);
+  const r2 = (x) => Math.round(x * 100) / 100;
+  const al = (composicao || []).filter((c) => c.unidade === "Kg");
+  // valores sem arredondar por componente (o total da linha não acumula centavos)
+  const val = (c) => numOrZero(c.qtd) * numOrZero(c.preco);
+  const kg = al.reduce((t, c) => t + numOrZero(c.qtd), 0), aluminio = al.reduce((t, c) => t + val(c), 0);
+  const vidro = (composicao || []).filter((c) => c.item === "Vidro 8mm").reduce((t, c) => t + val(c), 0);
+  const material = (composicao || []).reduce((t, c) => t + val(c), 0);
+  const acessorios = material - aluminio - vidro;
+  const perda = aluminio * pr.perdaAluminioPct / 100;
+  const fabricacao = kg * pr.maoObraKg;
+  const instalacao = (material + perda) * pr.instalacaoPct / 100;
+  const custo = material + perda + fabricacao + instalacao;
+  const divisor = 1 - (pr.impostosPct + pr.despesasPct + pr.lucroPct) / 100;
+  const preco = custo / divisor;
+  return { params: pr, kg: r2(kg), aluminio: r2(aluminio), vidro: r2(vidro), acessorios: r2(acessorios), material: r2(material),
+    perda: r2(perda), fabricacao: r2(fabricacao), instalacao: r2(instalacao), custo: r2(custo), divisor: Math.round(divisor * 10000) / 10000,
+    impostos: r2(preco * pr.impostosPct / 100), despesas: r2(preco * pr.despesasPct / 100), lucro: r2(preco * pr.lucroPct / 100), preco: r2(preco) };
+}
 // Preço de referência dos acessórios (out/2026), por código do catálogo e na
 // unidade da composição (peça ou metro). Varejo online, sem frete, peça
 // equivalente — não o código Alcoa exato. Vale só quando o acessório não tem
@@ -23145,17 +23194,25 @@ function esquadrias(cp, out, data) {
     if (semPreco.length && !avisos.some((a) => a.tipo === "esquadria_componente_sem_preco")) {
       avisos.push({ tipo: "esquadria_componente_sem_preco", mensagem: `Componentes de esquadria sem preço em Insumos (${[...new Set(semPreco.map((c) => c.codigo || c.item))].slice(0, 6).join(", ")}${semPreco.length > 6 ? "…" : ""}) — entram com R$ 0 no preço fechado` });
     }
+    const fp = formarPrecoEsquadria(composicao, cp.esquadriasPreco);
+    const pr = fp.params;
     emitir(out, {
       ordem: ORD.esquadrias, item: rotuloEsquadria(e), tipo: "Acabamento", etapa: "Esquadrias",
       subEtapa: linha ? `Linha ${linha.nome}` : e.linha, unidade: "Unidades", qtd: numOrZero(e.qtd),
-      preco: Math.round(precoUnitario * 100) / 100, composicao, confianca: semPreco.length ? "parcial" : "modulo",
+      preco: fp.preco, composicao, formacaoPreco: fp, confianca: semPreco.length ? "parcial" : "modulo",
       memoria: [
-        MEM.nota(`Esquadria cadastrada no bloco Esquadrias. A quantidade é a que você digitou; o preço unitário é fechado pelo VICKE somando os perfis de alumínio da linha ${linha ? linha.nome : e.linha}, o vidro e os acessórios — abaixo, cada componente com a quantidade, o preço e de onde ele veio.`),
+        MEM.nota(`Esquadria cadastrada no bloco Esquadrias, com o preço de venda da serralheria: o material (perfis de alumínio da linha ${linha ? linha.nome : e.linha}, vidro e acessórios, abertos abaixo) mais perda de corte, fabricação e instalação, e por cima impostos, despesas fixas e lucro.`),
         MEM.dado("Medidas da peça", `${numMem(e.largura)} × ${numMem(e.altura)} m, ${numMem(e.folhas)} folha${numOrZero(e.folhas) === 1 ? "" : "s"}`, "", "bloco Esquadrias"),
         // cada componente: quantidade × preço = total, e de onde veio o preço
         ...composicao.map((c) => MEM.dado(c.item.replace(/^Acessório esquadria - /, ""), c.total, "R$",
           `${numMem(c.qtd)} ${c.unidade === "Kg" ? "kg" : c.unidade === "m2" ? "m²" : c.unidade === "Mts" ? "m" : "un"} × R$ ${numMem(c.preco)} — ${c.fonte === "insumo" ? "Insumos" : c.fonte === "referencia" ? `referência: ${c.ref || ""}${c.aprox ? " (peça parecida, confirmar)" : ""}` : "sem preço (entra R$ 0)"}`)),
-        MEM.conta("Preço unitário da esquadria", "soma dos componentes", [], Math.round(precoUnitario * 100) / 100, "R$"),
+        MEM.conta("Material", "alumínio + vidro + acessórios", [["alumínio", fp.aluminio], ["vidro", fp.vidro], ["acessórios", fp.acessorios]], fp.material, "R$"),
+        MEM.conta(`Perda de corte do alumínio (${numMem(pr.perdaAluminioPct)}%)`, `alumínio × ${numMem(pr.perdaAluminioPct / 100)}`, [["alumínio", fp.aluminio]], fp.perda, "R$"),
+        MEM.conta(`Fabricação (R$ ${numMem(pr.maoObraKg)} por kg)`, `kg de alumínio × ${numMem(pr.maoObraKg)}`, [["kg de alumínio", fp.kg]], fp.fabricacao, "R$"),
+        MEM.conta(`Instalação (${numMem(pr.instalacaoPct)}% do material)`, `(material + perda) × ${numMem(pr.instalacaoPct / 100)}`, [["material", fp.material], ["perda", fp.perda]], fp.instalacao, "R$"),
+        MEM.conta("Custo direto", "material + perda + fabricação + instalação", [["material", fp.material], ["perda", fp.perda], ["fabricação", fp.fabricacao], ["instalação", fp.instalacao]], fp.custo, "R$"),
+        MEM.conta(`Preço de venda (impostos ${numMem(pr.impostosPct)}% + despesas ${numMem(pr.despesasPct)}% + lucro ${numMem(pr.lucroPct)}%)`, `custo ÷ ${numMem(fp.divisor)}`, [["custo", fp.custo]], fp.preco, "R$"),
+        MEM.nota(`Do preço de venda: impostos R$ ${numMem(fp.impostos)} · despesas fixas R$ ${numMem(fp.despesas)} · lucro R$ ${numMem(fp.lucro)}.`),
         MEM.dado("Quantidade no orçamento", numOrZero(e.qtd), "unidades", "bloco Esquadrias"),
       ],
     });
@@ -24437,6 +24494,8 @@ function normalizarProjeto(projeto) {
       largura: numOrZero(e && e.largura),
       altura: numOrZero(e && e.altura),
     })),
+    // preço de venda da serralheria (perda, fabricação, instalação, impostos, despesas, lucro)
+    esquadriasPreco: precoVendaEsquadriaParams(p.esquadriasPreco),
 
     // cp.portasDesenho — portas internas contadas no desenho do Projetar
     // ({ interna, banheiro }); ausente = conta pelos cômodos (kit de porta)
@@ -26540,8 +26599,44 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             {esquadriasLista.length < 40 && (
               <button type="button" style={{ ...C.btnSec, alignSelf: "flex-start" }} onClick={addEsquadria}>＋ Adicionar esquadria</button>
             )}
+            {(() => {
+              // Preço de venda da serralheria: os 6 inputs (em branco = padrão de mercado)
+              const pr = precoVendaEsquadriaParams(get("esquadriasPreco"));
+              let mat = 0, venda = 0;
+              for (const e of esquadriasLista) {
+                const q = numOrZero(e.qtd);
+                const comps = calcularEsquadria({ familia: e.familia, linha: e.linha, folhas: numOrZero(e.folhas) || 2, largura: numOrZero(e.largura), altura: numOrZero(e.altura), qtd: 1 }, null);
+                if (!comps.length || !(q > 0)) continue;
+                const compo = comps.map((c) => { const r = precoComponenteEsquadria(c, data); return { ...c, preco: r.preco, total: c.qtd * r.preco }; });
+                const f = formarPrecoEsquadria(compo, pr);
+                mat += f.material * q; venda += f.preco * q;
+              }
+              const br = (v) => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+              return (
+                <div data-vk-esq-preco-venda style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: "10px 12px", background: "#fff" }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", marginBottom: 2 }}>Preço de venda da serralheria</div>
+                  <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 8 }}>
+                    Material + perda de corte do alumínio + fabricação + instalação = custo; preço = custo ÷ (1 − impostos − despesas − lucro). Em branco vale o padrão de mercado (entre parênteses).
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(6, 1fr)", gap: 8, alignItems: "end" }}>
+                    {ESQUADRIAS_PRECO_VENDA_CAMPOS.map((c) => (
+                      <div key={c.id} style={CAMPO_CELULA}>
+                        <label style={C.label}>{c.nome}</label>
+                        <CampoNumeroBR estilo={C.input} valor={get(`esquadriasPreco.${c.id}`)} placeholder={`(${numMem(ESQUADRIAS_PRECO_VENDA_PADRAO[c.id])})`}
+                          aoMudar={(v) => set(`esquadriasPreco.${c.id}`, v == null ? "" : v)} />
+                      </div>
+                    ))}
+                  </div>
+                  {mat > 0 && (
+                    <div data-vk-esq-preco-resumo style={{ fontSize: 12.5, color: "#111827", marginTop: 8 }}>
+                      Material R$ {br(mat)} → preço de venda <b>R$ {br(venda)}</b> <span style={{ color: "#6b7280" }}>({(venda / mat).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}× o material · impostos {numMem(pr.impostosPct)}% + despesas {numMem(pr.despesasPct)}% + lucro {numMem(pr.lucroPct)}%)</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             <div style={{ fontSize: 11, color: "#6b7280" }}>
-              Calcula o alumínio por perfil (código Alcoa e kg), o vidro 8mm (descontos de corte por tipo) e os acessórios (roldanas, fechos, dobradiças, braços, borrachas, conexões, chumbadores e parafusos), segundo a lista de perfis da linha. No orçamento aparece uma linha por esquadria com o preço fechado; a composição fica guardada no item. Correr e persiana: aba ESQUADRIAS da planilha; giro, maxim-ar e fixo: desenhos de montagem do catálogo Alcoa Gold. Para usar seus preços, cadastre o alumínio, o vidro e os acessórios em Insumos com o código Alcoa como alias.
+              Calcula o alumínio por perfil (código Alcoa e kg), o vidro 8mm (descontos de corte por tipo) e os acessórios (roldanas, fechos, dobradiças, braços, borrachas, conexões, chumbadores e parafusos), segundo a lista de perfis da linha. No orçamento aparece uma linha por esquadria com o preço de venda da serralheria; a memória de cálculo abre material, perda, fabricação, instalação, impostos, despesas e lucro. Correr e persiana: aba ESQUADRIAS da planilha; giro, maxim-ar e fixo: desenhos de montagem do catálogo Alcoa Gold. Para usar seus preços, cadastre o alumínio, o vidro e os acessórios em Insumos com o código Alcoa como alias.
             </div>
           </div>
         </BlocoColapsavel>
