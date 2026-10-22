@@ -34250,6 +34250,164 @@ function prestacaoDeContas(linhas) {
   };
 }
 
+// O relatório da prestação de contas, em PDF (A4 em pé): o cabeçalho com a
+// obra e o período, os totais, o resumo por conta contábil, as notas uma a
+// uma pelo número do papel (o mesmo nome do arquivo na pasta Papeis) e, no
+// fim, o que ficou sem arquivo ou sem número — à vista, não escondido.
+function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
+  const i = info || {};
+  const doc = new JsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+  const W = 210, M = 12, X1 = W - M;
+  const AZUL = [54, 96, 146], CINZA = [107, 114, 128], TINTA = [17, 24, 39], VERM = [185, 28, 28], LINHA = [229, 231, 235];
+  const moeda = (v) => "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const dia = (iso) => { const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : ""; };
+  const cor = (c) => doc.setTextColor(c[0], c[1], c[2]);
+  const caber = (t, larg) => {
+    let s = String(t == null ? "" : t).replace(/\s+/g, " ").trim();
+    if (doc.getTextWidth(s) <= larg) return s;
+    while (s.length > 1 && doc.getTextWidth(s + "…") > larg) s = s.slice(0, -1);
+    return s.replace(/\s+$/, "") + "…";
+  };
+  let y = M;
+  const quebra = (alt, aoAbrir) => {
+    if (y + alt <= 285) return false;
+    doc.addPage(); y = M + 4;
+    if (aoAbrir) aoAbrir();
+    return true;
+  };
+  // cabeçalho
+  doc.setFont("helvetica", "bold"); doc.setFontSize(17); cor(TINTA);
+  doc.text("Prestação de contas", M, y + 6);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9); cor(CINZA);
+  if (i.escritorio) doc.text(caber(i.escritorio, 80), X1, y + 2, { align: "right" });
+  doc.text("Emitido em " + (i.emitidoEm || dia(new Date().toISOString())), X1, y + 6.5, { align: "right" });
+  y += 13;
+  doc.setFontSize(10.5); cor(TINTA); doc.setFont("helvetica", "bold");
+  doc.text(caber(i.obra || "Obra", 120), M, y);
+  doc.setFont("helvetica", "normal"); cor(CINZA); doc.setFontSize(9);
+  const sub = [i.cliente ? "Cliente: " + i.cliente : "", (pc.de || pc.ate) ? `Período: ${dia(i.de || pc.de)} a ${dia(i.ate || pc.ate)}` : ""].filter(Boolean).join("   ·   ");
+  if (sub) doc.text(caber(sub, X1 - M), M, y + 5);
+  y += 9;
+  doc.setDrawColor(AZUL[0], AZUL[1], AZUL[2]); doc.setLineWidth(0.6); doc.line(M, y, X1, y); y += 6;
+  // os totais
+  const caixas = [["Total das saídas", moeda(pc.total)], ["Notas", String(pc.notas.length)],
+    ["Arquivos", String(pc.arquivos.length)], ["Pendências", String(pc.semArquivo + pc.semNumero)]];
+  if (pc.nEntradas) caixas.splice(1, 0, ["Total das entradas", moeda(pc.entradas)]);
+  const lc = (X1 - M - (caixas.length - 1) * 3) / caixas.length;
+  caixas.forEach(([rot, val], k) => {
+    const x = M + k * (lc + 3);
+    doc.setFillColor(243, 246, 251); doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.2);
+    doc.roundedRect(x, y, lc, 15, 1.5, 1.5, "FD");
+    doc.setFontSize(7.5); cor(CINZA); doc.text(rot.toUpperCase(), x + 3, y + 5);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11.5);
+    cor(rot === "Pendências" && val !== "0" ? VERM : TINTA); doc.text(caber(val, lc - 5), x + 3, y + 11.5);
+    doc.setFont("helvetica", "normal");
+  });
+  y += 22;
+  // a tabela genérica
+  const tabela = (titulo, cols, linhas, opcoes) => {
+    const o = opcoes || {};
+    quebra(22);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11); cor(TINTA); doc.text(titulo, M, y); y += 4;
+    const cab = () => {
+      doc.setFillColor(AZUL[0], AZUL[1], AZUL[2]); doc.rect(M, y, X1 - M, 6.5, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(255, 255, 255);
+      let x = M;
+      for (const c of cols) {
+        const tx = c.alinhar === "right" ? x + c.w - 1.5 : c.alinhar === "center" ? x + c.w / 2 : x + 1.5;
+        doc.text(c.t, tx, y + 4.4, { align: c.alinhar || "left" });
+        x += c.w;
+      }
+      y += 6.5;
+    };
+    cab();
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.8);
+    linhas.forEach((l, k) => {
+      if (quebra(5.6, () => { cab(); doc.setFont("helvetica", "normal"); doc.setFontSize(7.8); })) { /* cabeçalho repetido */ }
+      if (k % 2 === 1 && !l.total) { doc.setFillColor(248, 250, 252); doc.rect(M, y, X1 - M, 5.6, "F"); }
+      if (l.total) { doc.setFont("helvetica", "bold"); doc.setDrawColor(AZUL[0], AZUL[1], AZUL[2]); doc.setLineWidth(0.3); doc.line(M, y, X1, y); }
+      let x = M;
+      cols.forEach((c, j) => {
+        const v = l.celulas[j];
+        cor(l.vermelho && l.vermelho.indexOf(j) >= 0 ? VERM : TINTA);
+        const t = caber(v, c.w - 3);
+        const tx = c.alinhar === "right" ? x + c.w - 1.5 : c.alinhar === "center" ? x + c.w / 2 : x + 1.5;
+        doc.text(t, tx, y + 3.9, { align: c.alinhar || "left" });
+        x += c.w;
+      });
+      if (l.total) doc.setFont("helvetica", "normal");
+      y += 5.6;
+    });
+    doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.2); doc.line(M, y, X1, y);
+    y += o.depois != null ? o.depois : 8;
+  };
+  // 1. resumo por conta
+  const saidas = pc.resumo.filter((r) => !r.entrada);
+  const pct = (v) => (pc.total > 0 ? (v / pc.total * 100).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%" : "");
+  tabela("Resumo por conta contábil", [{ t: "Conta contábil", w: 96 }, { t: "Notas", w: 24, alinhar: "center" },
+    { t: "Valor", w: 40, alinhar: "right" }, { t: "% das saídas", w: 26, alinhar: "right" }],
+    saidas.map((r) => ({ celulas: [r.conta, String(r.transacoes), moeda(r.valor), pct(r.valor)] }))
+      .concat([{ total: true, celulas: ["Total das saídas", String(pc.nSaidas), moeda(pc.total), pc.total > 0 ? "100,0%" : ""] }]));
+  if (pc.nEntradas) {
+    tabela("Entradas", [{ t: "Conta contábil", w: 96 }, { t: "Lançamentos", w: 24, alinhar: "center" }, { t: "Valor", w: 40, alinhar: "right" }, { t: "", w: 26 }],
+      pc.resumo.filter((r) => r.entrada).map((r) => ({ celulas: [r.conta, String(r.transacoes), moeda(r.valor), ""] }))
+        .concat([{ total: true, celulas: ["Total das entradas", String(pc.nEntradas), moeda(pc.entradas), ""] }]));
+  }
+  // 2. as notas, uma a uma
+  const colsNotas = [{ t: "Nº", w: 13, alinhar: "center" }, { t: "Data", w: 17, alinhar: "center" }, { t: "Fornecedor", w: 37 },
+    { t: "Descrição", w: 50 }, { t: "Conta", w: 33 }, { t: "NF", w: 14, alinhar: "center" }, { t: "Valor", w: 22, alinhar: "right" }];
+  const linhaDaNota = (n) => ({ celulas: [n.numero || "—", dia(n.data), n.fornecedor || "—", n.descricao, n.conta, n.nf || "", moeda(n.valor)],
+    vermelho: [].concat(n.semNumero || n.semArquivo ? [0] : []) });
+  const notasSaida = pc.notas.filter((n) => !n.entrada);
+  tabela("Notas e comprovantes", colsNotas, notasSaida.map(linhaDaNota)
+    .concat([{ total: true, celulas: ["", "", "", "Total das saídas", "", "", moeda(pc.total)] }]), { depois: 4 });
+  doc.setFontSize(7.5); cor(CINZA); quebra(6);
+  doc.text("O número de cada nota é o nome do arquivo na pasta Papeis (nota 4226 = arquivo 4226.pdf). Em vermelho: sem arquivo ou sem número.", M, y + 1);
+  y += 8;
+  const notasEntrada = pc.notas.filter((n) => n.entrada);
+  if (notasEntrada.length) {
+    tabela("Entradas — lançamentos", colsNotas, notasEntrada.map(linhaDaNota)
+      .concat([{ total: true, celulas: ["", "", "", "Total das entradas", "", "", moeda(pc.entradas)] }]));
+  }
+  // 3. pendências
+  const pend = pc.notas.filter((n) => n.semArquivo || n.semNumero);
+  if (pend.length) {
+    tabela("Pendências", [{ t: "Nº", w: 13, alinhar: "center" }, { t: "Data", w: 17, alinhar: "center" }, { t: "Fornecedor", w: 46 },
+      { t: "Descrição", w: 60 }, { t: "Valor", w: 22, alinhar: "right" }, { t: "Falta", w: 28 }],
+      pend.map((n) => ({ celulas: [n.numero || "—", dia(n.data), n.fornecedor || "—", n.descricao, moeda(n.valor),
+        [n.semNumero ? "número" : "", n.semArquivo ? "arquivo" : ""].filter(Boolean).join(" e ")], vermelho: [5] })));
+  }
+  // rodapé em todas as páginas
+  const total = doc.getNumberOfPages();
+  for (let k = 1; k <= total; k++) {
+    doc.setPage(k);
+    doc.setFontSize(7.5); cor(CINZA); doc.setFont("helvetica", "normal");
+    doc.text(caber(["Prestação de contas", i.obra].filter(Boolean).join(" · "), 140), M, 292);
+    doc.text(`Página ${k} de ${total}`, X1, 292, { align: "right" });
+  }
+  return doc;
+}
+
+// O jsPDF entra pela página (shared.jsx o carrega na abertura); se ainda
+// não chegou, espera um pouco e, sem ele, busca de novo.
+function carregarJsPDF() {
+  if (typeof window === "undefined") return Promise.reject(new Error("sem janela"));
+  if (window.jspdf && window.jspdf.jsPDF) return Promise.resolve(window.jspdf.jsPDF);
+  return new Promise((ok, falha) => {
+    let n = 0;
+    const tique = setInterval(() => {
+      if (window.jspdf && window.jspdf.jsPDF) { clearInterval(tique); ok(window.jspdf.jsPDF); return; }
+      if (++n === 20 && !document.getElementById("jspdf-script-2")) {
+        const s = document.createElement("script");
+        s.id = "jspdf-script-2";
+        s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+        document.head.appendChild(s);
+      }
+      if (n > 80) { clearInterval(tique); falha(new Error("a biblioteca de PDF não carregou")); }
+    }, 150);
+  });
+}
+
 let cpCargaZip = null;
 function carregarJSZip() {
   if (typeof window !== "undefined" && window.JSZip) return Promise.resolve(window.JSZip);
@@ -34718,10 +34876,17 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       });
       cabecalho(r3);
       const xlsx = await wb.xlsx.writeBuffer();
+      // o relatório em PDF — é ele a prestação; a planilha vai de apoio
+      setPrestando({ fazendo: true, msg: "Montando o relatório…" });
+      const JsPDF = await carregarJsPDF();
+      const cli = obraFixa && (obras || [])[0] ? ((clientes || []).find((c) => c && c.id === obras[0].clienteId) || {}).nome || "" : "";
+      const esc = (completar && completar.data && completar.data.escritorio && completar.data.escritorio.nome) || "";
+      const pdf = pdfDaPrestacaoDeContas(JsPDF, pc, { obra: obraNome, cliente: cli, escritorio: esc, de, ate }).output("blob");
       // a pasta dos papéis
       const JSZip = await carregarJSZip();
       const z = new JSZip();
-      z.file(titulo + ".xlsx", xlsx);
+      z.file(titulo + ".pdf", pdf);
+      z.file(titulo + " - planilha.xlsx", xlsx);
       const falharam = [];
       let feitos = 0;
       for (const a of pc.arquivos) {
