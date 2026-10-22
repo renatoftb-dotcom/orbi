@@ -4741,7 +4741,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   const ocultas = obraFixa ? ["Nome Cliente", "Projeto / obra"] : [];
   const COLS = relat.colunas.map((c, j) => ({ ...c, j, px: Math.max(56, Math.round(c.largura * 7.2)) }))
     .filter((c) => ocultas.indexOf(c.titulo) < 0);
-  const comAcoes = !!(acoes && (acoes.editar || acoes.excluir || acoes.verPapel));
+  const comAcoes = !!(acoes && (acoes.editar || acoes.excluir || acoes.verPapel || acoes.anexar));
   const grade = COLS.map((c) => c.px + "px").join(" ") + (comAcoes ? " 132px" : "");
   const largura = COLS.reduce((t, c) => t + c.px, 0) + (comAcoes ? 142 : 0) + COLS.length * 10 + 24;
   // Os títulos da linha ficam presos à esquerda ao rolar para o lado, como
@@ -4771,6 +4771,13 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
         {acoes.verPapel && papeis.length > 0 && (
           <button type="button" style={b} title={papeis.length === 1 ? "Ver o documento: " + (papeis[0].nome || "") : "Ver os " + papeis.length + " documentos"}
             onClick={() => acoes.verPapel(papeis[0], lanc)}>{"\u{1F4CE}"}{papeis.length > 1 ? papeis.length : ""}</button>
+        )}
+        {acoes.anexar && (
+          <label style={{ ...b, display: "inline-block" }} title={papeis.length ? "Pôr mais um papel nesta transação" : "Anexar o comprovante ou a nota desta transação"}>
+            + papel
+            <input type="file" accept="image/*,application/pdf" style={{ display: "none" }}
+              onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) acoes.anexar(lanc, f); }} />
+          </label>
         )}
         {acoes.editar && <button type="button" style={b} onClick={() => acoes.editar(lanc)}>Editar</button>}
         {acoes.excluir && <button type="button" style={{ ...b, color: "#dc2626" }} onClick={() => acoes.excluir(lanc)}>Excluir</button>}

@@ -6554,7 +6554,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <BaseDeDados obras={[obraAtual]} clientes={data.clientes || []} prestadores={prestadores}
           insumos={insumosDoCatalogo(data)} lancamentos={typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : []}
           isMobile={isMobile} obraFixa nomeDoArquivo={"base " + (obraAtual.nome || "obra")}
-          acoes={perm.podeGerenciarObra ? { daObra: true, excluir: excluirDaBaseDaObra } : null}
+          acoes={perm.podeGerenciarObra ? { daObra: true, excluir: excluirDaBaseDaObra,
+            // o papel entra em todas as contas da mesma referência e, se a
+            // transação já tem número, ganha o nome dele (4219.pdf)
+            anexar: (c, arquivo) => mexerNoPapel(c, "anexar", null, arquivo, undefined, "comprovante") } : null}
           completar={perm.podeGerenciarObra ? { data, save, quem: typeof nomeDeQuem === "function" ? nomeDeQuem(perm.usuario) : "", obraId: obraAtual.id } : null} />
       </div>
     );
