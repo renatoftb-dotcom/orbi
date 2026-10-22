@@ -34963,7 +34963,9 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   const botoesDaLinha = (l) => {
     const lanc = l.lanc_ || (acoes && acoes.daObra ? l.conta_ : null);
     if (!comAcoes || !lanc) return null;
-    const papeis = ((l.conta_ && l.conta_.anexos) || []).filter((a) => a && a.url);
+    const c0 = l.conta_ || {};
+    const papeis = ((c0.anexos) || []).concat(c0.comprovante && !(c0.anexos || []).some((a) => a && a.url === c0.comprovante.url) ? [c0.comprovante] : [])
+      .filter((a) => a && a.url);
     const b = { border: "none", background: "none", padding: "0 3px", cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: "#0474f4" };
     return (
       <span style={{ display: "inline-flex", gap: 4, justifyContent: "flex-end", whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
@@ -34971,8 +34973,22 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
           <button type="button" style={b} title={papeis.length === 1 ? "Ver o documento: " + (papeis[0].nome || "") : "Ver os " + papeis.length + " documentos"}
             onClick={() => acoes.verPapel(papeis[0], lanc)}>{"\u{1F4CE}"}{papeis.length > 1 ? papeis.length : ""}</button>
         )}
-        {acoes.anexar && (
-          <label style={{ ...b, display: "inline-block" }} title={papeis.length ? "Pôr mais um papel nesta transação" : "Anexar o comprovante ou a nota desta transação"}>
+        {/* na obra: o papel que já está aqui aparece pelo nome (abre ao
+            clicar) — e o "+ papel" some, para não anexar duas vezes */}
+        {acoes.anexar && papeis.length > 0 && (
+          <a href={papeis[0].url} target="_blank" rel="noopener noreferrer" data-vk-papel-da-linha="1"
+            title={papeis.length === 1 ? "Abrir " + (papeis[0].nome || "o papel") : papeis.map((a) => a.nome || "papel").join(", ")}
+            style={{ ...b, textDecoration: "none", color: "#047857", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", display: "inline-block", verticalAlign: "bottom" }}>
+            {/* folha com o canto dobrado e o visto: "tem papel, conferido" */}
+            <svg width="11" height="13" viewBox="0 0 11 13" fill="none" stroke="currentColor" strokeWidth="1.3"
+              strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 4, verticalAlign: "-2px" }} aria-hidden="true">
+              <path d="M1.2 1.2h5.4l3.2 3.2v7.4H1.2z" /><path d="M6.6 1.2v3.2h3.2" /><path d="M3.3 8.1l1.5 1.5 2.9-3" />
+            </svg>
+            {papeis[0].nome || "papel"}{papeis.length > 1 ? ` +${papeis.length - 1}` : ""}
+          </a>
+        )}
+        {acoes.anexar && papeis.length === 0 && (
+          <label style={{ ...b, display: "inline-block" }} title="Anexar o comprovante ou a nota desta transação">
             + papel
             <input type="file" accept="image/*,application/pdf" style={{ display: "none" }}
               onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) acoes.anexar(lanc, f); }} />
