@@ -1244,6 +1244,7 @@ function itemDaEntrada(cru, tipo) {
     return { descricao: String(c.descricao || "").trim(), quantidade: c.quantidade || "",
       unidade: c.unidade || "", unitario: c.unitario || "", bruto: c.total || "",
       codigoLoja: c.codigo || "",
+      ...(c.unitarioPeloTotal ? { unitarioPeloTotal: true } : {}),
       // medida do vão (esquadria, vidro): segue até a tabela da cotação
       ...(Number(c.largura) > 0 ? { largura: Number(c.largura) } : {}),
       ...(Number(c.altura) > 0 ? { altura: Number(c.altura) } : {}) };
@@ -2235,8 +2236,47 @@ function fichaDaEntradaPelaIA(documentos) {
   // Papel sem tabela (comprovante, recibo, nota de serviço): um item só,
   // com o valor do papel. A conta contábil fica para a pessoa.
   const itens = itensLidos.length ? itensLidos
-    : [{ descricao: papel.descricao || "", quantidade: "", unidade: "", unitario: "", total: papel.valor || papel.total || 0 }];
+    : [itemUnicoDoPapel(papel.descricao || "", papel.valor || papel.total || 0)];
   return { papel, itens, avisos, documentos: docs };
+}
+
+// O item único do papel sem tabela (nota de serviço, recibo, comprovante):
+// o papel diz quanto custou tudo, não quanto custou cada um. Nasce 1 × o
+// total, e o unitário fica marcado como "tirado do total" — se a pessoa
+// disser a quantidade (8 andaimes), quem se ajusta é o unitário (8 × 35),
+// e o total do papel fica como está.
+function itemUnicoDoPapel(descricao, total) {
+  const t = Math.round((Number(total) || 0) * 100) / 100;
+  return { descricao: descricao || "", quantidade: t > 0 ? 1 : "", unidade: "",
+    unitario: t > 0 ? t : "", total: t, ...(t > 0 ? { unitarioPeloTotal: true } : {}) };
+}
+
+// A linha da entrada quando muda a quantidade ou o unitário. Regra de sempre:
+// quantidade × unitário = total. Exceção: o total veio do papel e o unitário
+// não (nota de serviço, ou a pessoa digitou o total) — aí a quantidade nova
+// divide o total, em vez de multiplicar um unitário que ninguém leu.
+function itemComQtdOuUnit(item, muda) {
+  const x = item || {};
+  const n = { ...x, ...(muda || {}) };
+  const q = numeroDeCampo(n.quantidade), u = numeroDeCampo(n.unitario), t = numeroDeCampo(x.bruto);
+  const mudouUnit = muda && Object.prototype.hasOwnProperty.call(muda, "unitario");
+  if (mudouUnit) {
+    delete n.unitarioPeloTotal;
+    return q > 0 && u > 0 ? { ...n, bruto: Math.round(q * u * 100) / 100 } : n;
+  }
+  if (t > 0 && (x.unitarioPeloTotal || !(numeroDeCampo(x.unitario) > 0))) {
+    return q > 0 ? { ...n, unitario: Math.round((t / q) * 100) / 100, unitarioPeloTotal: true } : n;
+  }
+  return q > 0 && u > 0 ? { ...n, bruto: Math.round(q * u * 100) / 100 } : n;
+}
+
+// A linha da entrada quando a pessoa digita o total: o unitário sai dele.
+function itemComTotal(item, v) {
+  const x = item || {};
+  const t = numeroDeCampo(v), q = numeroDeCampo(x.quantidade);
+  const calcula = q > 0 && t > 0;
+  return { ...x, bruto: t > 0 ? t : "", unitario: calcula ? Math.round((t / q) * 100) / 100 : x.unitario,
+    ...(calcula ? { unitarioPeloTotal: true } : {}) };
 }
 
 // ── Qualquer papel, para um lançamento ──────────────────────────
@@ -9995,17 +10035,8 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     setApagar({ vencimento: (p && p.vencimento) || "", parcelas: "1", intervalo: "30" });
     setForaDaLoja(false);
   }
-  const mexerQtdOuUnit = (i, muda) => setItens((lista) => (lista || []).map((x, j) => {
-    if (j !== i) return x;
-    const n = { ...x, ...muda };
-    const q = numeroDeCampo(n.quantidade), u = numeroDeCampo(n.unitario);
-    return q > 0 && u > 0 ? { ...n, bruto: Math.round(q * u * 100) / 100 } : n;
-  }));
-  const mexerTotal = (i, v) => setItens((lista) => (lista || []).map((x, j) => {
-    if (j !== i) return x;
-    const t = numeroDeCampo(v), q = numeroDeCampo(x.quantidade);
-    return { ...x, bruto: t > 0 ? t : "", unitario: q > 0 && t > 0 ? Math.round((t / q) * 100) / 100 : x.unitario };
-  }));
+  const mexerQtdOuUnit = (i, muda) => setItens((lista) => (lista || []).map((x, j) => (j === i ? itemComQtdOuUnit(x, muda) : x)));
+  const mexerTotal = (i, v) => setItens((lista) => (lista || []).map((x, j) => (j === i ? itemComTotal(x, v) : x)));
   const novoItemDaEntrada = () => setItens((l) => (l || []).concat([{
     ...(typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio() : {}),
     etapa: ((l || [])[0] || {}).etapa || "", contaId: ((l || [])[0] || {}).contaId || "" }]));
@@ -10226,8 +10257,9 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     setDespesa(null); setDestino("");
     setLojaId(achado ? achado.id : "");
     setPapel(p);
+    const unico = itemUnicoDoPapel((ficha.itens[0] || {}).descricao || "", (ficha.itens[0] || {}).total || p.valor || 0);
     setItens(comContaPadraoDaEntrada(lidos.length ? lidos : [{ ...(typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio() : {}),
-      descricao: ficha.itens[0].descricao || "", bruto: ficha.itens[0].total || "" }], contaPadrao));
+      ...unico, total: undefined, bruto: unico.total || "" }], contaPadrao));
     setAvisosDaLeitura(ficha.avisos || []);
     iniciarSituacao(p);
   }
@@ -10246,8 +10278,9 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     setDespesa(null); setDestino("");
     setLojaId(achado ? achado.id : "");
     setPapel(p);
+    const unico = itemUnicoDoPapel(textoSemCaixaAlta(comp.descricao || ""), valor);
     setItens([{ ...(typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio() : {}),
-      descricao: textoSemCaixaAlta(comp.descricao || ""), bruto: valor || "", contaId: "" }]);
+      ...unico, total: undefined, bruto: unico.total || "", contaId: "" }]);
     iniciarSituacao(p);
   }
 

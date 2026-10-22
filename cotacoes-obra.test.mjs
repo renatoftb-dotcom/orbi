@@ -99,7 +99,7 @@ const modulo = new Function(`
            fichaDaEntradaPelaIA, tipoDoPapelPelaIA, textoSemCaixaAlta,
            entradaTemPreco, modoPadraoDaCotacao, cotacoesParaGuardarProposta, cotacaoSugeridaParaProposta,
            propostaDaEntrada, MODOS_DA_COTACAO_NA_ENTRADA, contaDeCompra, destinosDasLinhas, resumoDaPropostaNaEntrada, medidasDaLinha, areaDaMedida, fichaDaEntradaPelaIA, situacaoPadraoDaEntrada, codigoDoVao, assuntoDoPapel, textoDaMedidaDoItem, precoDoM2DoItem,
-           cotacaoDeOrigemDasContas, papelDaPropostaEscolhida, resumoDaCotacao };
+           cotacaoDeOrigemDasContas, papelDaPropostaEscolhida, resumoDaCotacao, itemUnicoDoPapel, itemComQtdOuUnit, itemComTotal };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -3553,6 +3553,48 @@ teste("IA: comprovante sozinho vira um item com o valor pago", () => {
   assert.strictEqual(f.itens[0].total, 304);
   assert.strictEqual(f.itens[0].descricao, "Frete areia");
   assert.strictEqual(f.papel.chave, "", "ID do Pix não é chave de nota");
+});
+
+teste("IA: nota de serviço sem tabela vira 1 × o total, e a quantidade digitada divide o total", () => {
+  const f = M.fichaDaEntradaPelaIA([{ tipo: "nota_servico", situacao: "nao_se_aplica", valor: 280, numero: "41",
+    emitente: "ANGELA REGINA DE LIMA SILVA", descricao: "Locação de equipamentos: 8 andaimes de 1×1m, 8 andaimes de 1,50m e 12 plataformas", itens: [] }]);
+  assert.strictEqual(f.itens.length, 1);
+  assert.strictEqual(f.itens[0].quantidade, 1);
+  assert.strictEqual(f.itens[0].unitario, 280);
+  assert.strictEqual(f.itens[0].total, 280);
+  // na tela: a pessoa diz 8 — o unitário vira 35 e o total da nota fica
+  let it = { quantidade: 1, unitario: 280, bruto: 280, unitarioPeloTotal: true };
+  it = M.itemComQtdOuUnit(it, { quantidade: "8" });
+  assert.strictEqual(it.unitario, 35);
+  assert.strictEqual(it.bruto, 280);
+  it = M.itemComQtdOuUnit(it, { quantidade: "16" });
+  assert.strictEqual(it.unitario, 17.5, "corrigir a quantidade continua dividindo o total");
+  assert.strictEqual(it.bruto, 280);
+  // digitou o unitário: volta a regra de sempre (qtd × unit = total)
+  it = M.itemComQtdOuUnit(it, { unitario: 20 });
+  assert.strictEqual(it.bruto, 320);
+  assert.ok(!it.unitarioPeloTotal);
+  it = M.itemComQtdOuUnit(it, { quantidade: "10" });
+  assert.strictEqual(it.bruto, 200);
+});
+
+teste("Entrada: total sem unitário — a quantidade preenche o unitário; item de nota com unitário multiplica", () => {
+  // o caso da tela: total 280, unitário vazio, a pessoa digita 8
+  const a = M.itemComQtdOuUnit({ quantidade: "", unitario: "", bruto: 280 }, { quantidade: "8" });
+  assert.strictEqual(a.unitario, 35);
+  assert.strictEqual(a.bruto, 280);
+  // item de nota com unitário lido: mudar a quantidade recalcula o total
+  const b = M.itemComQtdOuUnit({ quantidade: 10, unitario: 32.5, bruto: 325 }, { quantidade: 12 });
+  assert.strictEqual(b.bruto, 390);
+  assert.strictEqual(b.unitario, 32.5);
+  // digitou o total com quantidade: o unitário sai do total e acompanha a quantidade
+  let c = M.itemComTotal({ quantidade: 4, unitario: "" }, "100");
+  assert.strictEqual(c.unitario, 25);
+  c = M.itemComQtdOuUnit(c, { quantidade: 5 });
+  assert.strictEqual(c.unitario, 20);
+  assert.strictEqual(c.bruto, 100);
+  // sem valor no papel, nada é inventado
+  assert.strictEqual(M.itemUnicoDoPapel("Serviço", 0).quantidade, "");
 });
 
 teste("IA: lista de material vira cotação; sem documento não há ficha", () => {
