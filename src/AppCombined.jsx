@@ -16884,8 +16884,21 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             <div style={{ fontSize: 11.5, color: "#6b7280" }}>
               o custo por etapa da obra sai daqui
             </div>
+            {/* a nota de cimento, areia e cal vai toda para a fundação: uma
+                escolha só, em vez de uma por item (cada item ainda muda à parte) */}
+            {itensDoCusto.length > 1 && (
+              <div data-vk-etapa-todos="1" style={{ minWidth: 220, flex: "0 1 280px", marginLeft: "auto",
+                ...(typeof window !== "undefined" && window.innerWidth < 640 ? { flex: "1 1 100%", marginLeft: 0 } : {}) }}>
+                <SelectBusca style={{ ...S.input, padding: "6px 10px", fontSize: 12 }} value=""
+                  onChange={(v) => { if (v) setF((p) => ({ ...p, itens: (p.itens || []).map((x) => ({ ...x, etapa: v })) })); }}
+                  placeholder="Procurar etapa…"
+                  opcoes={(typeof opcoesDeEtapaDoLancamento === "function" ? opcoesDeEtapaDoLancamento(null, "Mesma etapa para todos…")
+                    : [{ valor: "", rotulo: "Mesma etapa para todos…" }]
+                      .concat(etapasDaObra.map((e) => ({ valor: e.id, rotulo: e.nome || e.titulo || e.id }))))} />
+              </div>
+            )}
             {itensDoCusto.filter((x) => !x.insumoCodigo && x.sugestao && x.sugestao.codigo).length > 1 && (
-              <button type="button" style={{ ...S.btnSec, marginLeft: "auto", padding: "4px 10px", fontSize: 11.5, color: "#0474f4",
+              <button type="button" style={{ ...S.btnSec, marginLeft: itensDoCusto.length > 1 ? 0 : "auto", padding: "4px 10px", fontSize: 11.5, color: "#0474f4",
                 borderColor: "rgba(4,116,244,0.4)" }} onClick={aceitarSugestoes}>
                 ✓ aceitar as {itensDoCusto.filter((x) => !x.insumoCodigo && x.sugestao && x.sugestao.codigo).length} sugestões
               </button>
