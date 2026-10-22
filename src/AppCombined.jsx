@@ -34288,7 +34288,7 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   doc.setFontSize(10.5); cor(TINTA); doc.setFont("helvetica", "bold");
   doc.text(caber(i.obra || "Obra", 120), M, y);
   doc.setFont("helvetica", "normal"); cor(CINZA); doc.setFontSize(9);
-  const sub = [i.cliente ? "Cliente: " + i.cliente : "", (pc.de || pc.ate) ? `Período: ${dia(i.de || pc.de)} a ${dia(i.ate || pc.ate)}` : ""].filter(Boolean).join("   ·   ");
+  const sub = [i.tipo || "", i.cliente ? "Cliente: " + i.cliente : "", (pc.de || pc.ate) ? `Período: ${dia(i.de || pc.de)} a ${dia(i.ate || pc.ate)}` : ""].filter(Boolean).join("   ·   ");
   if (sub) doc.text(caber(sub, X1 - M), M, y + 5);
   y += 9;
   doc.setDrawColor(AZUL[0], AZUL[1], AZUL[2]); doc.setLineWidth(0.6); doc.line(M, y, X1, y); y += 6;
@@ -34885,9 +34885,12 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       // o relatório em PDF — é ele a prestação; a planilha vai de apoio
       setPrestando({ fazendo: true, msg: "Montando o relatório…" });
       const JsPDF = await carregarJsPDF();
-      const cli = obraFixa && (obras || [])[0] ? ((clientes || []).find((c) => c && c.id === obras[0].clienteId) || {}).nome || "" : "";
+      const cliObj = obraFixa && (obras || [])[0] ? ((clientes || []).find((c) => c && c.id === obras[0].clienteId) || null) : null;
+      // empreendimento próprio não tem cliente: o relatório diz o que é
+      const ehEmp = !!cliObj && typeof ehEmpreendimento === "function" && ehEmpreendimento(cliObj);
       const esc = (completar && completar.data && completar.data.escritorio && completar.data.escritorio.nome) || "";
-      const pdf = pdfDaPrestacaoDeContas(JsPDF, pc, { obra: obraNome, cliente: cli, escritorio: esc, de, ate }).output("blob");
+      const pdf = pdfDaPrestacaoDeContas(JsPDF, pc, { obra: obraNome, cliente: ehEmp ? "" : ((cliObj && cliObj.nome) || ""),
+        tipo: ehEmp ? "Empreendimento" : "", escritorio: esc, de, ate }).output("blob");
       // a pasta dos papéis
       const JSZip = await carregarJSZip();
       const z = new JSZip();
