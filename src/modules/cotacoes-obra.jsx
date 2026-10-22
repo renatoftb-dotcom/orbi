@@ -1150,16 +1150,45 @@ function sugestaoDoCatalogo(descricao, indice) {
 // O apelido é o que faz a próxima vez ser exata: guardado no insumo, a
 // mesma linha do mesmo papel casa por igualdade no mês seguinte. Só entra
 // texto que ainda não está lá e que é diferente do próprio nome.
+// O apelido é o nome da coisa, não da compra: "Plataformas - período 17/09
+// a 17/10/2026" ensina "Plataformas". Com o período junto, o apelido só
+// casaria com a nota daquele mês.
+function textoParaApelido(descricao) {
+  const data = "\\d{1,2}\\/\\d{1,2}(?:\\/\\d{2,4})?";
+  return String(descricao == null ? "" : descricao)
+    .replace(/\s*[-–—,(]?\s*\b(per[ií]odo|refer[eê]ncia|ref\.|compet[eê]ncia)\b.*$/i, "")
+    .replace(new RegExp("\\s*[-–—,(]?\\s*(de\\s+)?" + data + "\\s*(a|at[eé]|-|–)\\s*" + data + "\\s*\\)?\\s*$", "i"), "")
+    .replace(/[\s\-–—,;:(]+$/, "")
+    .trim();
+}
+
+// A chave que casa o apelido: sem acento, sem o período, e sem o plural —
+// "Plataformas", "plataforma" e "PLATAFORMAS - período 17/09 a 17/10" são
+// a mesma coisa.
+function chaveDeApelido(texto) {
+  return cotSemAcento(textoParaApelido(texto)).split(" ").filter(Boolean)
+    .map((w) => (w.length > 3 && /s$/.test(w) ? w.slice(0, -1) : w)).join(" ");
+}
+
+// O insumo pelo nome ou por um apelido, com a chave acima. É a segunda
+// tentativa — a primeira (resolverInsumo) compara o texto inteiro.
+function insumoPeloApelido(descricao, insumos) {
+  const k = chaveDeApelido(descricao);
+  if (!k) return null;
+  return (insumos || []).find((i) => i && i.ativo !== false
+    && [i.nome].concat(i.aliases || []).some((a) => a && chaveDeApelido(a) === k)) || null;
+}
+
 function comApelidoDaLoja(insumos, codigo, descricao) {
-  const texto = String(descricao == null ? "" : descricao).trim();
+  const texto = textoParaApelido(descricao);
   if (!codigo || !texto) return { insumos: insumos || [], mudou: false };
   let mudou = false;
   const lista = (insumos || []).map((i) => {
     if (!i || i.codigo !== codigo) return i;
     const atuais = i.aliases || [];
-    const alvo = cotSemAcento(texto);
-    if (!alvo || alvo === cotSemAcento(i.nome)) return i;
-    if (atuais.some((a) => cotSemAcento(a) === alvo)) return i;
+    const alvo = chaveDeApelido(texto);
+    if (!alvo || alvo === chaveDeApelido(i.nome)) return i;
+    if (atuais.some((a) => chaveDeApelido(a) === alvo)) return i;
     mudou = true;
     return { ...i, aliases: atuais.concat([texto]) };
   });
@@ -1265,17 +1294,16 @@ function casarItemDaEntrada(item, insumos, indice) {
   const it = item || {};
   if (it.insumoCodigo) return it;
   const lista = insumos || [];
-  if (typeof resolverInsumo === "function") {
-    const r = resolverInsumo(it.descricao, lista);
-    if (r && r.insumo) {
-      return { ...it, insumoCodigo: r.insumo.codigo || "", grupoMaterial: r.insumo.grupo || "",
-        unidade: it.unidade || r.insumo.unidade || "",
-        etapa: it.etapa || "",
-        contaId: it.contaId || "",
-        ...(typeof padraoAoEscolherInsumo === "function" ? padraoAoEscolherInsumo(r.insumo, it)
-          : { etapa: it.etapa || r.insumo.etapaPadrao || "", contaId: it.contaId || r.insumo.contaPadrao || "" }),
-        sugestao: null };
-    }
+  const r = typeof resolverInsumo === "function" ? resolverInsumo(it.descricao, lista) : null;
+  const achado = (r && r.insumo) || insumoPeloApelido(it.descricao, lista);
+  if (achado) {
+    return { ...it, insumoCodigo: achado.codigo || "", grupoMaterial: achado.grupo || "",
+      unidade: it.unidade || achado.unidade || "",
+      etapa: it.etapa || "",
+      contaId: it.contaId || "",
+      ...(typeof padraoAoEscolherInsumo === "function" ? padraoAoEscolherInsumo(achado, it)
+        : { etapa: it.etapa || achado.etapaPadrao || "", contaId: it.contaId || achado.contaPadrao || "" }),
+      sugestao: null };
   }
   return { ...it, sugestao: sugestaoDoCatalogo(it.descricao, indice) };
 }
@@ -10347,7 +10375,8 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     setLojaId(achado ? achado.id : "");
     setPapel(p);
     const semTabela = itensDoPapelSemTabela(textoSemCaixaAlta(comp.descricao || ""), valor);
-    setItens(semTabela.itens.map((x) => ({ ...(typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio() : {}),
+    const casados = itensDaEntrada({ itens: semTabela.itens }, "orcamento", insumos || []);
+    setItens(casados.length ? casados : semTabela.itens.map((x) => ({ ...(typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio() : {}),
       ...x, total: undefined, bruto: x.total || "", contaId: "" })));
     if (semTabela.aviso) setAvisosDaLeitura((l) => (l || []).concat([semTabela.aviso]));
     iniciarSituacao(p);
@@ -10974,7 +11003,11 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                         <div style={{ minWidth: 0, gridColumn: isMobile ? "1 / -1" : "auto" }}>
                           {mini("Item do catálogo")}
                           <EscolhaInsumoPedido x={x} parecidos={parecidos} insumos={insumos} unidades={unidades}
-                            aoEscolher={(ins) => mexerItem(i, comInsumoDaEntrada(it, ins))}
+                            aoEscolher={(ins) => {
+                              mexerItem(i, comInsumoDaEntrada(it, ins));
+                              // escolher à mão também ensina: a próxima nota escrita assim já casa
+                              if (aoAprender && ins && ins.codigo && String(it.descricao || "").trim()) aoAprender([{ codigo: ins.codigo, descricao: it.descricao }]);
+                            }}
                             aoDeixarFora={casado ? () => mexerItem(i, { insumoCodigo: "", grupoMaterial: "", sugestao: null }) : undefined}
                             aoCadastrar={(campos) => {
                               const novo = aoCadastrarInsumo ? aoCadastrarInsumo(campos) : null;

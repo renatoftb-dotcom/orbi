@@ -99,7 +99,7 @@ const modulo = new Function(`
            fichaDaEntradaPelaIA, tipoDoPapelPelaIA, textoSemCaixaAlta,
            entradaTemPreco, modoPadraoDaCotacao, cotacoesParaGuardarProposta, cotacaoSugeridaParaProposta,
            propostaDaEntrada, MODOS_DA_COTACAO_NA_ENTRADA, contaDeCompra, destinosDasLinhas, resumoDaPropostaNaEntrada, medidasDaLinha, areaDaMedida, fichaDaEntradaPelaIA, situacaoPadraoDaEntrada, codigoDoVao, assuntoDoPapel, textoDaMedidaDoItem, precoDoM2DoItem,
-           cotacaoDeOrigemDasContas, papelDaPropostaEscolhida, resumoDaCotacao, itemUnicoDoPapel, itemComQtdOuUnit, itemComTotal, itensDaDescricaoDoServico, itensDoPapelSemTabela };
+           cotacaoDeOrigemDasContas, papelDaPropostaEscolhida, resumoDaCotacao, itemUnicoDoPapel, itemComQtdOuUnit, itemComTotal, itensDaDescricaoDoServico, itensDoPapelSemTabela, textoParaApelido, chaveDeApelido, insumoPeloApelido, comApelidoDaLoja, casarItemDaEntrada };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -3570,6 +3570,27 @@ teste("IA: nota de serviço que conta as peças vira um item por peça, com o to
   // nota de produto sem preço lido NÃO é rateada — é leitura a conferir
   const h = M.fichaDaEntradaPelaIA([{ tipo: "nota_produto", valor: 280, itens: [{ descricao: "Cimento", quantidade: 8 }] }]);
   assert.strictEqual(h.itens[0].total, 0);
+});
+
+teste("Apelido: sem o período e sem o plural — a plataforma da próxima nota casa com o piso do andaime", () => {
+  assert.strictEqual(M.textoParaApelido("Plataformas - período 17/09 a 17/10/2026"), "Plataformas");
+  assert.strictEqual(M.textoParaApelido("Andaimes de 1,50m (17/09 a 17/10)"), "Andaimes de 1,50m");
+  assert.strictEqual(M.textoParaApelido("Cimento CP II 50kg"), "Cimento CP II 50kg");
+  assert.strictEqual(M.chaveDeApelido("PLATAFORMAS"), M.chaveDeApelido("plataforma"));
+  const cat = [{ codigo: "AND-P", nome: "Locação Ferramentas - Andaimes - Piso", ativo: true, aliases: ["Locação Ferramentas - Andaimes - Piso"] },
+    { codigo: "AND", nome: "Locação Ferramentas - Andaimes", ativo: true, aliases: [] }];
+  // escolheu à mão na nota de setembro: aprende "Plataformas", sem o período
+  const r = M.comApelidoDaLoja(cat, "AND-P", "Plataformas - período 17/09 a 17/10/2026");
+  assert.deepStrictEqual(r.insumos[0].aliases.slice(1), ["Plataformas"]);
+  // a nota de outubro: "12 plataformas" vira "Plataformas" e já casa
+  assert.strictEqual(M.insumoPeloApelido("Plataforma - período 17/10 a 17/11/2026", r.insumos).codigo, "AND-P");
+  const it = M.casarItemDaEntrada({ descricao: "Plataformas" }, r.insumos, null);
+  assert.strictEqual(it.insumoCodigo, "AND-P");
+  // apelido antigo, gravado com o período, também casa
+  const velho = [{ ...cat[0], aliases: ["Plataformas - período 17/09 a 17/10/2026"] }];
+  assert.strictEqual(M.insumoPeloApelido("Plataformas", velho).codigo, "AND-P");
+  // e não repete o apelido que já existe com outra grafia
+  assert.strictEqual(M.comApelidoDaLoja(r.insumos, "AND-P", "PLATAFORMA").mudou, false);
 });
 
 teste("Descrição do serviço: só vira lista quando toda ela começa por número", () => {
