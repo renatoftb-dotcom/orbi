@@ -99,7 +99,7 @@ const modulo = new Function(`
            fichaDaEntradaPelaIA, tipoDoPapelPelaIA, textoSemCaixaAlta,
            entradaTemPreco, modoPadraoDaCotacao, cotacoesParaGuardarProposta, cotacaoSugeridaParaProposta,
            propostaDaEntrada, MODOS_DA_COTACAO_NA_ENTRADA, contaDeCompra, destinosDasLinhas, resumoDaPropostaNaEntrada, medidasDaLinha, areaDaMedida, fichaDaEntradaPelaIA, situacaoPadraoDaEntrada, codigoDoVao, assuntoDoPapel, textoDaMedidaDoItem, precoDoM2DoItem,
-           cotacaoDeOrigemDasContas, papelDaPropostaEscolhida, resumoDaCotacao, itemUnicoDoPapel, itemComQtdOuUnit, itemComTotal };
+           cotacaoDeOrigemDasContas, papelDaPropostaEscolhida, resumoDaCotacao, itemUnicoDoPapel, itemComQtdOuUnit, itemComTotal, itensDaDescricaoDoServico, itensDoPapelSemTabela };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -3555,9 +3555,39 @@ teste("IA: comprovante sozinho vira um item com o valor pago", () => {
   assert.strictEqual(f.papel.chave, "", "ID do Pix não é chave de nota");
 });
 
-teste("IA: nota de serviço sem tabela vira 1 × o total, e a quantidade digitada divide o total", () => {
+teste("IA: nota de serviço que conta as peças vira um item por peça, com o total dividido pela quantidade", () => {
   const f = M.fichaDaEntradaPelaIA([{ tipo: "nota_servico", situacao: "nao_se_aplica", valor: 280, numero: "41",
-    emitente: "ANGELA REGINA DE LIMA SILVA", descricao: "Locação de equipamentos: 8 andaimes de 1×1m, 8 andaimes de 1,50m e 12 plataformas", itens: [] }]);
+    emitente: "ANGELA REGINA DE LIMA SILVA", descricao: "Locação de equipamentos: 8 andaimes de 1×1m, 8 andaimes de 1,50m e 12 plataformas, período 17/09 a 17/10", itens: [] }]);
+  assert.deepStrictEqual(f.itens.map((x) => [x.descricao, x.quantidade, x.unitario, x.total]),
+    [["Andaimes de 1×1m", 8, 10, 80], ["Andaimes de 1,50m", 8, 10, 80], ["Plataformas", 12, 10, 120]]);
+  assert.ok(f.avisos.some((a) => /só o total/.test(a)), "avisa que o preço por peça foi dividido");
+  // a IA já separou as peças (sem preço): o mesmo rateio
+  const g = M.fichaDaEntradaPelaIA([{ tipo: "nota_servico", situacao: "nao_se_aplica", valor: 280, descricao: "Locação",
+    itens: [{ descricao: "pernas de andaime de 1 m", quantidade: 8 }, { descricao: "pernas de andaime de 1,50 m", quantidade: 8 },
+      { descricao: "plataformas", quantidade: 12 }] }]);
+  assert.deepStrictEqual(g.itens.map((x) => x.total), [80, 80, 120]);
+  assert.ok(g.itens.every((x) => x.unitarioPeloTotal));
+  // nota de produto sem preço lido NÃO é rateada — é leitura a conferir
+  const h = M.fichaDaEntradaPelaIA([{ tipo: "nota_produto", valor: 280, itens: [{ descricao: "Cimento", quantidade: 8 }] }]);
+  assert.strictEqual(h.itens[0].total, 0);
+});
+
+teste("Descrição do serviço: só vira lista quando toda ela começa por número", () => {
+  const a = M.itensDaDescricaoDoServico("Equipamentos: 8 andaimes de 1 x 1 m, 8 andaimes de 1,50 m e 12 plataformas / Período: 17/09 a 17/10 / Valor total: R$ 280,00");
+  assert.deepStrictEqual(a.map((x) => [x.descricao, x.quantidade]),
+    [["Andaimes de 1 x 1 m", 8], ["Andaimes de 1,50 m", 8], ["Plataformas", 12]]);
+  assert.deepStrictEqual(M.itensDaDescricaoDoServico("Serviço: 2 visitas técnicas e acompanhamento da obra"), []);
+  assert.deepStrictEqual(M.itensDaDescricaoDoServico("Usinagem de concreto fck 25"), []);
+  assert.deepStrictEqual(M.itensDaDescricaoDoServico("Locação: 1.200 tijolos").map((x) => x.quantidade), [1200]);
+  assert.deepStrictEqual(M.itensDaDescricaoDoServico("Frete: 2,5 m3 de areia").map((x) => x.quantidade), [2.5]);
+  // três que não dividem certo: a sobra do centavo vai na última linha e a soma fecha
+  const r = M.itensDoPapelSemTabela("3 diárias de pedreiro, 3 diárias de servente e 1 frete", 100);
+  assert.strictEqual(Math.round(r.itens.reduce((s, x) => s + x.total, 0) * 100) / 100, 100);
+});
+
+teste("IA: nota de serviço sem lista vira 1 × o total, e a quantidade digitada divide o total", () => {
+  const f = M.fichaDaEntradaPelaIA([{ tipo: "nota_servico", situacao: "nao_se_aplica", valor: 280, numero: "41",
+    emitente: "ANGELA REGINA DE LIMA SILVA", descricao: "Locação de equipamentos para a obra", itens: [] }]);
   assert.strictEqual(f.itens.length, 1);
   assert.strictEqual(f.itens[0].quantidade, 1);
   assert.strictEqual(f.itens[0].unitario, 280);

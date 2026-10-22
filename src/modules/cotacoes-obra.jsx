@@ -2233,11 +2233,78 @@ function fichaDaEntradaPelaIA(documentos) {
     chave: chaveNf, idTransacao,
     descricao: textoSemCaixaAlta(principal.descricao || (pago && pago.descricao) || ""),
   };
-  // Papel sem tabela (comprovante, recibo, nota de serviço): um item só,
-  // com o valor do papel. A conta contábil fica para a pessoa.
-  const itens = itensLidos.length ? itensLidos
-    : [itemUnicoDoPapel(papel.descricao || "", papel.valor || papel.total || 0)];
+  // Papel sem tabela (comprovante, recibo, nota de serviço): os itens saem
+  // da descrição quando ela conta as coisas ("8 andaimes de 1 x 1 m, 8
+  // andaimes de 1,50 m e 12 plataformas"); senão, um item só, com o valor do
+  // papel. A conta contábil fica para a pessoa.
+  const valorDoPapel = papel.valor || papel.total || 0;
+  const semPreco = itensLidos.length > 0 && itensLidos.every((l) => !(Number(l.total) > 0) && !(Number(l.unitario) > 0));
+  let itens;
+  if (itensLidos.length && !(semPreco && COT_TIPOS_SEM_TABELA.indexOf(principal.tipo) >= 0)) {
+    itens = itensLidos;
+  } else {
+    const r = itensDoPapelSemTabela(itensLidos.length ? itensLidos : (papel.descricao || ""), valorDoPapel);
+    itens = r.itens;
+    if (r.aviso) avisos.push(r.aviso);
+  }
   return { papel, itens, avisos, documentos: docs };
+}
+
+// Papel que não tem tabela de itens: a nota de serviço, o recibo, o
+// contrato, o comprovante. O que ele cobra está escrito numa frase.
+const COT_TIPOS_SEM_TABELA = ["nota_servico", "recibo", "contrato", "comprovante_pix", "comprovante_boleto", "comprovante_ted", "comprovante_cartao"];
+
+// "Equipamentos: 8 andaimes de 1 x 1 m, 8 andaimes de 1,50 m e 12
+// plataformas / Período: 17/09 a 17/10" → 8 andaimes de 1 x 1 m, 8 andaimes
+// de 1,50 m, 12 plataformas. Só vale quando TODA a lista começa por número:
+// "2 visitas e acompanhamento" não é lista — volta vazio, e o papel fica
+// num item só. O período, o valor e o jeito de pagar não são itens.
+function itensDaDescricaoDoServico(descricao) {
+  let t = String(descricao || "").split(/\s+\/\s+|\n/)[0];
+  const doisPontos = t.indexOf(":");
+  if (doisPontos >= 0 && doisPontos < 60) t = t.slice(doisPontos + 1);
+  const partes = t.split(/\s*;\s*|,\s+|\s+e\s+/).map((x) => x.trim()).filter(Boolean);
+  const fim = partes.findIndex((x) => /^(per[ií]odo|valor|total|pagamento|pago|refer[eê]n|vencimento|pix|cnpj|cpf|favorecid)/i.test(x));
+  const lista = fim >= 0 ? partes.slice(0, fim) : partes;
+  if (!lista.length) return [];
+  const itens = [];
+  for (const x of lista) {
+    const m = /^(\d{1,3}(?:\.\d{3})+|\d+(?:,\d+)?)\s+([A-Za-zÀ-ÿ].*)$/.exec(x);
+    if (!m) return [];
+    const q = Number(m[1].replace(/\./g, "").replace(",", "."));
+    if (!(q > 0) || q > 100000) return [];
+    const nome = m[2].trim().replace(/[.;,]+$/, "");
+    itens.push({ descricao: nome.charAt(0).toUpperCase() + nome.slice(1), quantidade: q, unidade: "" });
+  }
+  return itens;
+}
+
+// Os itens do papel sem tabela. A nota diz quanto custou tudo, não cada
+// peça: o total é dividido pela quantidade (cada peça vale o mesmo) e fica
+// avisado — quem souber o preço de cada uma ajusta. Sem quantidades
+// lidas, é um item só, 1 × o total.
+function itensDoPapelSemTabela(descricaoOuItens, total) {
+  const t = Math.round((Number(total) || 0) * 100) / 100;
+  const lidos = Array.isArray(descricaoOuItens)
+    ? descricaoOuItens.filter((x) => x && x.descricao && Number(x.quantidade) > 0)
+    : itensDaDescricaoDoServico(descricaoOuItens);
+  if (!lidos.length || !(t > 0)) {
+    const desc = Array.isArray(descricaoOuItens) ? ((descricaoOuItens[0] || {}).descricao || "") : descricaoOuItens;
+    return { itens: [itemUnicoDoPapel(desc, t)], aviso: "" };
+  }
+  const soma = lidos.reduce((a, x) => a + Number(x.quantidade), 0);
+  let resto = t;
+  const itens = lidos.map((x, i) => {
+    const q = Number(x.quantidade);
+    const v = i === lidos.length - 1 ? Math.round(resto * 100) / 100 : Math.round((t * q / soma) * 100) / 100;
+    resto -= v;
+    return { ...x, quantidade: q, unidade: x.unidade || "", unitario: Math.round((v / q) * 100) / 100, total: v, unitarioPeloTotal: true };
+  });
+  const porPeca = Math.round((t / soma) * 100) / 100;
+  const aviso = lidos.length > 1
+    ? `A nota traz só o total (${t.toFixed(2).replace(".", ",")}), sem o preço de cada item — dividi pela quantidade (${porPeca.toFixed(2).replace(".", ",")} cada). Se souber o preço de cada um, ajuste o total da linha.`
+    : "";
+  return { itens, aviso };
 }
 
 // O item único do papel sem tabela (nota de serviço, recibo, comprovante):
@@ -10257,10 +10324,11 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     setDespesa(null); setDestino("");
     setLojaId(achado ? achado.id : "");
     setPapel(p);
-    const unico = itemUnicoDoPapel((ficha.itens[0] || {}).descricao || "", (ficha.itens[0] || {}).total || p.valor || 0);
-    setItens(comContaPadraoDaEntrada(lidos.length ? lidos : [{ ...(typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio() : {}),
-      ...unico, total: undefined, bruto: unico.total || "" }], contaPadrao));
-    setAvisosDaLeitura(ficha.avisos || []);
+    const semTabela = lidos.length ? null
+      : itensDoPapelSemTabela(p.descricao || (ficha.itens[0] || {}).descricao || "", (ficha.itens[0] || {}).total || p.valor || 0);
+    setItens(comContaPadraoDaEntrada(lidos.length ? lidos : semTabela.itens.map((x) => ({ ...(typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio() : {}),
+      ...x, total: undefined, bruto: x.total || "" })), contaPadrao));
+    setAvisosDaLeitura((ficha.avisos || []).concat(semTabela && semTabela.aviso ? [semTabela.aviso] : []));
     iniciarSituacao(p);
   }
 
@@ -10278,9 +10346,10 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
     setDespesa(null); setDestino("");
     setLojaId(achado ? achado.id : "");
     setPapel(p);
-    const unico = itemUnicoDoPapel(textoSemCaixaAlta(comp.descricao || ""), valor);
-    setItens([{ ...(typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio() : {}),
-      ...unico, total: undefined, bruto: unico.total || "", contaId: "" }]);
+    const semTabela = itensDoPapelSemTabela(textoSemCaixaAlta(comp.descricao || ""), valor);
+    setItens(semTabela.itens.map((x) => ({ ...(typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio() : {}),
+      ...x, total: undefined, bruto: x.total || "", contaId: "" })));
+    if (semTabela.aviso) setAvisosDaLeitura((l) => (l || []).concat([semTabela.aviso]));
     iniciarSituacao(p);
   }
 
