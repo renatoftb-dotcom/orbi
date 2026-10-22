@@ -4961,8 +4961,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                           return "contas " + cs.map(nomeConta).filter(Boolean).join(" e ");
                                         })(),
                                         L.numeroNota && !pedidoEhNotaPaga(L) ? "NF " + L.numeroNota : "",
-                                        (() => { const n = papeisDoPedido(L).length; return n ? "\u{1F4CE} " + (n === 1 ? "1 papel" : n + " papéis") : "sem papel"; })(),
                                         L.parcial ? "parcialmente pago" : ""].filter(Boolean).join(" · ")}
+                                      {(() => {
+                                        const n = papeisDoPedido(L).length;
+                                        if (!n) return " · sem papel";
+                                        return <>{" · "}<span style={{ color: "#047857" }}>{typeof IconePapel === "function" ? <IconePapel estilo={{ marginRight: 3 }} /> : null}{n === 1 ? "1 papel" : n + " papéis"}</span></>;
+                                      })()}
                                       {entregaConferida(L.contas) && (
                                         <span data-vk-entregue="1" style={{ color: "#15803d", fontWeight: 600 }}> · ✓ entregue</span>
                                       )}

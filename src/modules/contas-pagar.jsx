@@ -4288,6 +4288,18 @@ function fluxoMensal(contas, hoje) {
 
 // ═══════════════════════════════════════════════════════════════
 // UI — gráfico do fluxo mensal
+// (antes dele, o ícone do papel, que as telas de contas usam todas: a folha
+// com o canto dobrado e o visto — "tem papel aqui". No lugar do clipe 📎,
+// que cada sistema desenha de um jeito.)
+function IconePapel({ tamanho, estilo }) {
+  const t = Number(tamanho) || 11;
+  return (
+    <svg width={t} height={Math.round(t * 13 / 11)} viewBox="0 0 11 13" fill="none" stroke="currentColor" strokeWidth="1.3"
+      strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-2px", flex: "none", ...(estilo || {}) }} aria-hidden="true">
+      <path d="M1.2 1.2h5.4l3.2 3.2v7.4H1.2z" /><path d="M6.6 1.2v3.2h3.2" /><path d="M3.3 8.1l1.5 1.5 2.9-3" />
+    </svg>
+  );
+}
 // ═══════════════════════════════════════════════════════════════
 // Barras empilhadas: pago embaixo, vencido no meio, a pagar no topo — o que
 // falta pagar fica na ponta, que é o que se olha. O topo é arredondado pela
@@ -4772,7 +4784,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       <span style={{ display: "inline-flex", gap: 4, justifyContent: "flex-end", whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
         {acoes.verPapel && papeis.length > 0 && (
           <button type="button" style={b} title={papeis.length === 1 ? "Ver o documento: " + (papeis[0].nome || "") : "Ver os " + papeis.length + " documentos"}
-            onClick={() => acoes.verPapel(papeis[0], lanc)}>{"\u{1F4CE}"}{papeis.length > 1 ? papeis.length : ""}</button>
+            onClick={() => acoes.verPapel(papeis[0], lanc)}><IconePapel />{papeis.length > 1 ? " " + papeis.length : ""}</button>
         )}
         {/* na obra: o papel que já está aqui aparece pelo nome (abre ao
             clicar) — e o "+ papel" some, para não anexar duas vezes */}
@@ -4780,11 +4792,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
           <a href={papeis[0].url} target="_blank" rel="noopener noreferrer" data-vk-papel-da-linha="1"
             title={papeis.length === 1 ? "Abrir " + (papeis[0].nome || "o papel") : papeis.map((a) => a.nome || "papel").join(", ")}
             style={{ ...b, textDecoration: "none", color: "#047857", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", display: "inline-block", verticalAlign: "bottom" }}>
-            {/* folha com o canto dobrado e o visto: "tem papel, conferido" */}
-            <svg width="11" height="13" viewBox="0 0 11 13" fill="none" stroke="currentColor" strokeWidth="1.3"
-              strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 4, verticalAlign: "-2px" }} aria-hidden="true">
-              <path d="M1.2 1.2h5.4l3.2 3.2v7.4H1.2z" /><path d="M6.6 1.2v3.2h3.2" /><path d="M3.3 8.1l1.5 1.5 2.9-3" />
-            </svg>
+            <IconePapel estilo={{ marginRight: 4 }} />
             {papeis[0].nome || "papel"}{papeis.length > 1 ? ` +${papeis.length - 1}` : ""}
           </a>
         )}

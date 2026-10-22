@@ -15873,7 +15873,8 @@ function LinksDeAnexo({ transacao, compacto, aoTrocar, aoTirar, ocupado }) {
             style={{ fontSize: compacto ? 11 : 11.5, color: a.tipo === "entrega" ? "#15803d" : "#0474f4", textDecoration: "none",
               fontWeight: a.tipo === "entrega" ? 600 : 400,
               whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 3 }}>
-            <span aria-hidden="true">{a.tipo === "entrega" ? "\u2713" : "\u{1F4CE}"}</span>
+            {a.tipo === "entrega" ? <span aria-hidden="true">{"\u2713"}</span>
+              : (typeof IconePapel === "function" ? <IconePapel /> : <span aria-hidden="true">{"\u{1F4CE}"}</span>)}
             {compacto ? rotuloDoAnexo(a, i) : rotuloDoAnexo(a, i) + (a.nome ? " · " + a.nome : "")}
           </a>
           {aoTrocar && tirando !== chave(a, i) && (
@@ -34487,6 +34488,18 @@ function fluxoMensal(contas, hoje) {
 
 // ═══════════════════════════════════════════════════════════════
 // UI — gráfico do fluxo mensal
+// (antes dele, o ícone do papel, que as telas de contas usam todas: a folha
+// com o canto dobrado e o visto — "tem papel aqui". No lugar do clipe 📎,
+// que cada sistema desenha de um jeito.)
+function IconePapel({ tamanho, estilo }) {
+  const t = Number(tamanho) || 11;
+  return (
+    <svg width={t} height={Math.round(t * 13 / 11)} viewBox="0 0 11 13" fill="none" stroke="currentColor" strokeWidth="1.3"
+      strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-2px", flex: "none", ...(estilo || {}) }} aria-hidden="true">
+      <path d="M1.2 1.2h5.4l3.2 3.2v7.4H1.2z" /><path d="M6.6 1.2v3.2h3.2" /><path d="M3.3 8.1l1.5 1.5 2.9-3" />
+    </svg>
+  );
+}
 // ═══════════════════════════════════════════════════════════════
 // Barras empilhadas: pago embaixo, vencido no meio, a pagar no topo — o que
 // falta pagar fica na ponta, que é o que se olha. O topo é arredondado pela
@@ -34971,7 +34984,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       <span style={{ display: "inline-flex", gap: 4, justifyContent: "flex-end", whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
         {acoes.verPapel && papeis.length > 0 && (
           <button type="button" style={b} title={papeis.length === 1 ? "Ver o documento: " + (papeis[0].nome || "") : "Ver os " + papeis.length + " documentos"}
-            onClick={() => acoes.verPapel(papeis[0], lanc)}>{"\u{1F4CE}"}{papeis.length > 1 ? papeis.length : ""}</button>
+            onClick={() => acoes.verPapel(papeis[0], lanc)}><IconePapel />{papeis.length > 1 ? " " + papeis.length : ""}</button>
         )}
         {/* na obra: o papel que já está aqui aparece pelo nome (abre ao
             clicar) — e o "+ papel" some, para não anexar duas vezes */}
@@ -34979,11 +34992,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
           <a href={papeis[0].url} target="_blank" rel="noopener noreferrer" data-vk-papel-da-linha="1"
             title={papeis.length === 1 ? "Abrir " + (papeis[0].nome || "o papel") : papeis.map((a) => a.nome || "papel").join(", ")}
             style={{ ...b, textDecoration: "none", color: "#047857", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", display: "inline-block", verticalAlign: "bottom" }}>
-            {/* folha com o canto dobrado e o visto: "tem papel, conferido" */}
-            <svg width="11" height="13" viewBox="0 0 11 13" fill="none" stroke="currentColor" strokeWidth="1.3"
-              strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 4, verticalAlign: "-2px" }} aria-hidden="true">
-              <path d="M1.2 1.2h5.4l3.2 3.2v7.4H1.2z" /><path d="M6.6 1.2v3.2h3.2" /><path d="M3.3 8.1l1.5 1.5 2.9-3" />
-            </svg>
+            <IconePapel estilo={{ marginRight: 4 }} />
             {papeis[0].nome || "papel"}{papeis.length > 1 ? ` +${papeis.length - 1}` : ""}
           </a>
         )}
@@ -53284,8 +53293,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                           return "contas " + cs.map(nomeConta).filter(Boolean).join(" e ");
                                         })(),
                                         L.numeroNota && !pedidoEhNotaPaga(L) ? "NF " + L.numeroNota : "",
-                                        (() => { const n = papeisDoPedido(L).length; return n ? "\u{1F4CE} " + (n === 1 ? "1 papel" : n + " papéis") : "sem papel"; })(),
                                         L.parcial ? "parcialmente pago" : ""].filter(Boolean).join(" · ")}
+                                      {(() => {
+                                        const n = papeisDoPedido(L).length;
+                                        if (!n) return " · sem papel";
+                                        return <>{" · "}<span style={{ color: "#047857" }}>{typeof IconePapel === "function" ? <IconePapel estilo={{ marginRight: 3 }} /> : null}{n === 1 ? "1 papel" : n + " papéis"}</span></>;
+                                      })()}
                                       {entregaConferida(L.contas) && (
                                         <span data-vk-entregue="1" style={{ color: "#15803d", fontWeight: 600 }}> · ✓ entregue</span>
                                       )}

@@ -4226,7 +4226,8 @@ function LinksDeAnexo({ transacao, compacto, aoTrocar, aoTirar, ocupado }) {
             style={{ fontSize: compacto ? 11 : 11.5, color: a.tipo === "entrega" ? "#15803d" : "#0474f4", textDecoration: "none",
               fontWeight: a.tipo === "entrega" ? 600 : 400,
               whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 3 }}>
-            <span aria-hidden="true">{a.tipo === "entrega" ? "\u2713" : "\u{1F4CE}"}</span>
+            {a.tipo === "entrega" ? <span aria-hidden="true">{"\u2713"}</span>
+              : (typeof IconePapel === "function" ? <IconePapel /> : <span aria-hidden="true">{"\u{1F4CE}"}</span>)}
             {compacto ? rotuloDoAnexo(a, i) : rotuloDoAnexo(a, i) + (a.nome ? " · " + a.nome : "")}
           </a>
           {aoTrocar && tirando !== chave(a, i) && (
