@@ -4014,7 +4014,10 @@ function prestacaoDeContas(linhas) {
     const nomes = t.papeis.map((a, i) => {
       let nome = t.numero
         ? (cpNomeJaENumero(a.nome) && String(a.nome).indexOf(t.numero) === 0 ? String(a.nome) : cpNomeDoPapel(t.numero, i, a.nome || (cpEhPdf(a) ? "x.pdf" : "")))
-        : "sem número - " + String(a.nome || "papel");
+        // sem número, o nome vai curto: a referência e a extensão — nome
+        // original comprido estoura o limite de caminho do Windows ao extrair
+        : "sem-numero-ref" + (t.ref || "x") + (i > 0 ? "-" + (i + 1) : "")
+          + ((String(a.nome || "").match(/\.[A-Za-z0-9]{2,5}$/) || [cpEhPdf(a) ? ".pdf" : ""])[0]).toLowerCase();
       nome = nome.replace(/[\\/:*?"<>|]+/g, "-");
       const n = (usados.get(nome) || 0) + 1;
       usados.set(nome, n);
@@ -4590,13 +4593,16 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
     const pc = prestacaoDeContas(filtradas);
     if (!pc.notas.length) { setPrestando({ erro: true, msg: "Nada pago no que está filtrado." }); return; }
     setPrestando({ fazendo: true, msg: "Montando a planilha…" });
-    const diaBRx = (iso) => { const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : ""; };
     const obraNome = obraFixa && (obras || [])[0] ? (obras[0].nome || "obra") : (obraId ? nomeDe(obras, obraId) : "obras");
-    const periodo = (de || pc.de) && (ate || pc.ate) ? `${diaBRx(de || pc.de)} a ${diaBRx(ate || pc.ate)}` : "";
     // sem acento no nome dos arquivos de dentro do .zip: o Windows abre zip
     // com nome acentuado mostrando "PrestaÃ§Ã£o"
     const semAcento = (t) => String(t).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    const titulo = semAcento("Prestacao de contas - " + obraNome + (periodo ? " - " + periodo : "")).replace(/[\\/:*?"<>|]+/g, "-");
+    // Nome curto: o Windows extrai para "Downloads\<nome do zip>\..." e
+    // recusa caminho comprido. "PC Jacarezinho Modulo 1 09-2026 a 10-2026".
+    const mesAno = (iso) => { const m = String(iso || "").match(/^(\d{4})-(\d{2})/); return m ? `${m[2]}-${m[1]}` : ""; };
+    const ini = mesAno(de || pc.de), fim = mesAno(ate || pc.ate);
+    const obraCurta = semAcento(obraNome).replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim().slice(0, 28).trim();
+    const titulo = ("PC " + obraCurta + (ini ? " " + (ini === fim || !fim ? ini : ini + " a " + fim) : "")).trim();
     try {
       const E = await carregarExcelJS();
       const wb = new E.Workbook();
@@ -4686,8 +4692,8 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       // a pasta dos papéis
       const JSZip = await carregarJSZip();
       const z = new JSZip();
-      z.file(titulo + ".pdf", pdf);
-      z.file(titulo + " - planilha.xlsx", xlsx);
+      z.file("Relatorio.pdf", pdf);
+      z.file("Planilha.xlsx", xlsx);
       const falharam = [];
       let feitos = 0;
       for (const a of pc.arquivos) {

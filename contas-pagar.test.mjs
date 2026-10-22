@@ -2753,6 +2753,9 @@ teste("prestação de contas: resumo por conta, uma nota por número de papel, a
       anexos: [pdf("f2", "Gasolina Jacarezinho.pdf"), pdf("f3", "cupom.jpg", "nota")] },
     { id: "c1", numeroDoc: "0325", pedidoId: "p3", favorecido: "Danieli", descricao: "Empreiteiro",
       valor: 400, valorPago: 400, pago: true, pagoEm: "2026-10-09", vencimento: "2026-10-09", contaId: "empreiteiro" },
+    { id: "c2", numeroDoc: "0331", pedidoId: "p6", favorecido: "Posto", descricao: "Pedágio",
+      valor: 12.8, valorPago: 12.8, pago: true, pagoEm: "2026-10-10", vencimento: "2026-10-10", contaId: "combustivel",
+      anexos: [pdf("f9", "WhatsApp Image 2026-10-09 at 13.49.40 (2) comprovante do pedágio da rodovia.jpeg")] },
     { id: "d1", numeroDoc: "0326", pedidoId: "p4", favorecido: "Loja", descricao: "Cimento", valor: 50, pago: false, vencimento: "2026-11-01", contaId: "material" },
     { id: "e1", doc: "4228", numeroDoc: "0327", pedidoId: "p5", favorecido: "Comprador", descricao: "Venda casa 1", valor: 1000, valorPago: 1000, pago: true,
       pagoEm: "2026-10-15", vencimento: "2026-10-15", contaId: "venda_imovel", anexos: [pdf("f4", "4228.pdf")] },
@@ -2762,18 +2765,19 @@ teste("prestação de contas: resumo por conta, uma nota por número de papel, a
     { id: "empreiteiro", nome: "Empreiteiro" }, { id: "material", nome: "Material" }, { id: "venda_imovel", nome: "Venda de imóvel" }] });
   const pc = modulo.prestacaoDeContas(L);
   assert.deepStrictEqual(pc.notas.map((n) => [n.numero, n.valor, n.arquivos]),
-    [["4226", 200, ["4226.pdf"]], ["4227", 134.93, ["4227.pdf", "4227-2.jpg"]], ["4228", 1000, ["4228.pdf"]], ["", 400, []]]);
+    [["4226", 200, ["4226.pdf"]], ["4227", 134.93, ["4227.pdf", "4227-2.jpg"]], ["4228", 1000, ["4228.pdf"]], ["", 400, []],
+     ["", 12.8, ["sem-numero-ref0331.jpeg"]]], "sem número: nome curto, pela referência");
   assert.strictEqual(pc.entradas, 1000, "a venda do imóvel é entrada, fora do total das saídas");
   assert.strictEqual(pc.nEntradas, 1);
   assert.strictEqual(pc.notas[0].nf, "41");
   assert.strictEqual(pc.notas[0].descricao, "Andaimes de 1x1m e mais 1");
   assert.deepStrictEqual(pc.resumo.map((r) => [r.conta, r.transacoes, r.valor]),
-    [["Empreiteiro", 1, 400], ["Aluguel de ferramentas e equipamentos", 1, 200], ["Combustível", 1, 134.93], ["Venda de imóvel", 1, 1000]]);
-  assert.strictEqual(pc.total, 734.93);
-  assert.strictEqual(pc.semNumero, 1);
+    [["Empreiteiro", 1, 400], ["Aluguel de ferramentas e equipamentos", 1, 200], ["Combustível", 2, 147.73], ["Venda de imóvel", 1, 1000]]);
+  assert.strictEqual(pc.total, 747.73);
+  assert.strictEqual(pc.semNumero, 2);
   assert.strictEqual(pc.semArquivo, 1);
   assert.strictEqual(pc.aPagarFora, 1, "o cimento a pagar não entra");
-  assert.deepStrictEqual(pc.arquivos.map((a) => a.nome), ["4226.pdf", "4227.pdf", "4227-2.jpg", "4228.pdf"], "o mesmo arquivo nos dois itens vai uma vez");
+  assert.deepStrictEqual(pc.arquivos.map((a) => a.nome), ["4226.pdf", "4227.pdf", "4227-2.jpg", "4228.pdf", "sem-numero-ref0331.jpeg"], "o mesmo arquivo nos dois itens vai uma vez");
   assert.strictEqual(pc.de, "2026-10-09");
 });
 
