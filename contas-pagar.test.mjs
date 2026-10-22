@@ -2981,12 +2981,12 @@ teste("base do escritório: uma linha por transação do extrato", () => {
   const p = L.find((l) => l.id === "lanc:L1");
   assert.strictEqual(p.valorNota, 304);
   assert.strictEqual(p.obra, "Módulo 1", "o nome da obra vem da origem");
-  assert.strictEqual(al.emitirNota, "Não");
+  assert.strictEqual(al.emitirNota, undefined, "Emitir nota fiscal saiu da base");
   const t = modulo.tabelaDaBase(L, modulo.BASE_COLUNAS_ESCRITORIO);
   assert.deepStrictEqual(t[0], ["Ref", "Nome Cliente", "Unidade negócio", "Projeto / obra", "Fornecedor", "Descrição Lançamento",
-    "Conta contábil", "Nota / Comprovante", "Emitir nota fiscal", "Valor total nota", "Período Contábil", "Data do lançamento"]);
+    "Conta contábil", "Nota / Comprovante", "Valor total nota", "Período Contábil", "Data do lançamento"]);
   const pl = modulo.planilhaDaBase(t, modulo.BASE_RELATORIO_ESCRITORIO);
-  assert.strictEqual(pl.colunas.length, 12);
+  assert.strictEqual(pl.colunas.length, 11);
   assert.deepStrictEqual(modulo.filtrarBase(L, { texto: "aluguel" }).map((l) => l.id), ["lanc:L2"]);
 });
 

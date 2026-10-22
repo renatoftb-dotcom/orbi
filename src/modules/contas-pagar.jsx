@@ -3487,7 +3487,6 @@ function linhasDoEscritorio(obras, lancamentos, opcoes) {
       unidadeNegocio: CP_UNIDADES_NEGOCIO[l.unidadeId] || l.unidadeOriginal || "",
       ref: l.numeroDoc || "", nota: String(l.documento || ""), arquivo: "",
       fornecedor: l.fornecedor || "", descricaoLanc: l.descricao || "", item: l.descricao || "",
-      emitirNota: l.emitirNota ? "Sim" : "Não",
       insumoCodigo: "", insumo: "", insumoNome: nomeConta || "Outros",
       quantidade: 1, unidade: "Unidades", unitario: valor, total: valor, valorNota: valor,
       grupo: titulo(grupo && grupo.titulo), etapaId: "", etapa: "",
@@ -3530,7 +3529,7 @@ const BASE_COLUNAS = [
 const BASE_COLUNAS_ESCRITORIO = [
   ["ref", "Ref"], ["cliente", "Nome Cliente"], ["unidadeNegocio", "Unidade negócio"], ["obra", "Projeto / obra"],
   ["fornecedor", "Fornecedor"], ["descricaoLanc", "Descrição Lançamento"], ["conta", "Conta contábil"],
-  ["nota", "Nota / Comprovante"], ["emitirNota", "Emitir nota fiscal"], ["valorNota", "Valor total nota"],
+  ["nota", "Nota / Comprovante"], ["valorNota", "Valor total nota"],
   ["competencia", "Período Contábil"], ["dataLanc", "Data do lançamento"],
 ];
 function tabelaDaBase(linhas, colunas) {
@@ -3643,7 +3642,7 @@ function cpLarguraDoTexto(t) {
 const BASE_RELATORIO_ESCRITORIO = [
   ["Ref", "numeroTexto", "0", "center"], ["Nome Cliente", "texto", "", "center"], ["Unidade negócio", "texto", "", "center"],
   ["Projeto / obra", "texto", "", "center"], ["Fornecedor", "texto", "", "center"], ["Descrição Lançamento", "texto", "", ""],
-  ["Conta contábil", "texto", "", "center"], ["Nota / Comprovante", "numeroTexto", "0", "center"], ["Emitir nota fiscal", "texto", "", "center"],
+  ["Conta contábil", "texto", "", "center"], ["Nota / Comprovante", "numeroTexto", "0", "center"],
   ["Valor total nota", "moeda", CP_MOEDA_XL, ""], ["Período Contábil", "mes", "[$-416]mmm\\-yy;@", "center"],
   ["Data do lançamento", "data", "[$-416]d\\-mmm\\-yy;@", "center"],
 ];

@@ -1094,6 +1094,8 @@ const EF_COLUNAS = {
   descricao: ["descricao lancamento", "descricao", "historico"],
   conta: ["conta contabil", "conta"],
   documento: ["nota / comprovante", "nota/comprovante", "nota", "documento"],
+  // "Emitir nota fiscal" saiu das bases (out/2026): a coluna da planilha
+  // antiga é reconhecida só para não ser confundida com a da nota — e fica de fora.
   emitirNota: ["emitir nota fiscal", "emitir nf"],
   valor: ["valor total nota", "valor"],
   competencia: ["periodo contabil", "competencia", "periodo"],
@@ -1179,7 +1181,6 @@ function interpretarColagemEscritorio(texto, opcoes) {
       fornecedor: pega("fornecedor"),
       descricao: pega("descricao"),
       documento: pega("documento"),
-      emitirNota: efSemAcento(pega("emitirNota")) === "sim",
       valor: efNumero(pega("valor")),
       competencia: efCompetencia(pega("competencia")),
       lancadoEm: efData(pega("lancadoEm")),
@@ -1222,7 +1223,6 @@ function lancamentoDaColagem(item, novoId) {
     fornecedor: i.fornecedor || "",
     descricao: i.descricao || "",
     documento: i.documento || "",
-    emitirNota: !!i.emitirNota,
     contaBanco: i.contaBanco || "",
     observacao: i.observacao || "",
     importado: true,

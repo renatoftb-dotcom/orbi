@@ -462,7 +462,7 @@ teste("o lançamento gravado carrega a marca do escritório e o que veio da plan
   assert.strictEqual(l.contaId, "rrt_impressoes");
   assert.strictEqual(l.unidadeId, "projetos");
   assert.strictEqual(l.valor, 120.5);
-  assert.strictEqual(l.emitirNota, true);
+  assert.ok(!("emitirNota" in l), "a coluna Emitir nota fiscal da planilha fica de fora");
   assert.strictEqual(l.importado, true);
   assert.strictEqual(l.contaOriginal, "RRTs e Impressões");
 });
