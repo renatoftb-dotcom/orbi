@@ -4019,10 +4019,15 @@ function prestacaoDeContas(linhas) {
         : "sem-numero-ref" + (t.ref || "x") + (i > 0 ? "-" + (i + 1) : "")
           + ((String(a.nome || "").match(/\.[A-Za-z0-9]{2,5}$/) || [cpEhPdf(a) ? ".pdf" : ""])[0]).toLowerCase();
       nome = nome.replace(/[\\/:*?"<>|]+/g, "-");
+      // foto ou print vira PDF na prestação: quem recebe abre tudo igual.
+      // O nome já sai .pdf aqui, para o relatório e a planilha baterem.
+      const ehImagem = !cpEhPdf(a) && (/\.(jpe?g|png|webp|gif|bmp)$/i.test(nome)
+        || /^(jpe?g|png|webp|gif|bmp)$/i.test(String(a.formato || "")) || a.resourceType === "image");
+      if (ehImagem) nome = nome.replace(/\.[A-Za-z0-9]{2,5}$/, "") + ".pdf";
       const n = (usados.get(nome) || 0) + 1;
       usados.set(nome, n);
       if (n > 1) nome = nome.replace(/(\.[^.]+)?$/, (ext) => ` (${n})${ext || ""}`);
-      arquivos.push({ url: a.url, nome, numero: t.numero, tipo: a.tipo === "nota" ? "nota" : "comprovante" });
+      arquivos.push({ url: a.url, nome, numero: t.numero, tipo: a.tipo === "nota" ? "nota" : "comprovante", ...(ehImagem ? { daImagem: true } : {}) });
       return nome;
     });
     const descricao = t.itens.length === 1 ? t.itens[0] : `${t.itens[0] || "Itens"} e mais ${t.itens.length - 1}`;
@@ -4190,6 +4195,40 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
     doc.text(`Página ${k} de ${total}`, X1, 292, { align: "right" });
   }
   return doc;
+}
+
+// A foto do comprovante numa página A4 (em pé ou deitada, como a foto
+// for), centrada com margem. Passa pelo canvas: qualquer formato que o
+// navegador abre (jpg, png, webp) sai como JPEG dentro do PDF, já girado
+// como a foto foi tirada.
+async function imagemEmPdf(JsPDF, blob) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise((ok, falha) => {
+      const im = new Image();
+      im.onload = () => ok(im);
+      im.onerror = () => falha(new Error("imagem ilegível"));
+      im.src = url;
+    });
+    const w = img.naturalWidth, h = img.naturalHeight;
+    if (!(w > 0 && h > 0)) throw new Error("imagem vazia");
+    const escala = Math.min(1, 2400 / Math.max(w, h));
+    const cv = document.createElement("canvas");
+    cv.width = Math.round(w * escala); cv.height = Math.round(h * escala);
+    const ctx = cv.getContext("2d");
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(img, 0, 0, cv.width, cv.height);
+    const dados = cv.toDataURL("image/jpeg", 0.85);
+    const deitada = w > h;
+    const doc = new JsPDF({ unit: "mm", format: "a4", orientation: deitada ? "landscape" : "portrait" });
+    const PW = deitada ? 297 : 210, PH = deitada ? 210 : 297, M = 8;
+    const k = Math.min((PW - 2 * M) / cv.width, (PH - 2 * M) / cv.height);
+    const iw = cv.width * k, ih = cv.height * k;
+    doc.addImage(dados, "JPEG", (PW - iw) / 2, (PH - ih) / 2, iw, ih);
+    return doc.output("blob");
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 // O jsPDF entra pela página (shared.jsx o carrega na abertura); se ainda
@@ -4710,13 +4749,26 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       z.file("Relatorio.pdf", pdf);
       z.file("Planilha.xlsx", xlsx);
       const falharam = [];
+      const naoConverteu = [];
       let feitos = 0;
       for (const a of pc.arquivos) {
         setPrestando({ fazendo: true, msg: `Juntando os papéis… ${++feitos} de ${pc.arquivos.length}` });
         try {
           const resp = await fetch(a.url);
           if (!resp.ok) throw new Error("HTTP " + resp.status);
-          z.file("Papeis/" + semAcento(a.nome), await resp.blob());
+          const bruto = await resp.blob();
+          if (a.daImagem) {
+            // não converteu (formato que o navegador não abre): vai a foto
+            // mesmo, com a extensão dela, e o aviso conta
+            try { z.file("Papeis/" + semAcento(a.nome), await imagemEmPdf(JsPDF, bruto)); }
+            catch (e2) {
+              const ext = ((bruto.type || "").split("/")[1] || "jpg").replace("jpeg", "jpg");
+              z.file("Papeis/" + semAcento(a.nome).replace(/\.pdf$/, "." + ext), bruto);
+              naoConverteu.push(a.nome);
+            }
+          } else {
+            z.file("Papeis/" + semAcento(a.nome), bruto);
+          }
         } catch (e) { falharam.push(a.nome); }
       }
       const blob = await z.generateAsync({ type: "blob" });
@@ -4728,6 +4780,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       const avisos = [];
       if (pc.semNumero) avisos.push(`${pc.semNumero} sem número (use Completar a base)`);
       if (pc.semArquivo) avisos.push(`${pc.semArquivo} sem arquivo`);
+      if (naoConverteu.length) avisos.push(`${naoConverteu.length === 1 ? "1 foto ficou" : naoConverteu.length + " fotos ficaram"} no formato original: ${naoConverteu.join(", ")}`);
       if (falharam.length) avisos.push(`${falharam.length === 1 ? "1 arquivo não baixou" : falharam.length + " arquivos não baixaram"}: ${falharam.join(", ")}`);
       setPrestando({ erro: avisos.length > 0,
         msg: `Prestação baixada: ${pc.notas.length} ${pc.notas.length === 1 ? "nota" : "notas"}, ${pc.arquivos.length - falharam.length} ${pc.arquivos.length - falharam.length === 1 ? "arquivo" : "arquivos"}, saídas ${moeda(pc.total)}`

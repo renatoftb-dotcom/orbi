@@ -2765,8 +2765,8 @@ teste("prestação de contas: resumo por conta, uma nota por número de papel, a
     { id: "empreiteiro", nome: "Empreiteiro" }, { id: "material", nome: "Material" }, { id: "venda_imovel", nome: "Venda de imóvel" }] });
   const pc = modulo.prestacaoDeContas(L);
   assert.deepStrictEqual(pc.notas.map((n) => [n.numero, n.valor, n.arquivos]),
-    [["4226", 200, ["4226.pdf"]], ["4227", 134.93, ["4227.pdf", "4227-2.jpg"]], ["4228", 1000, ["4228.pdf"]], ["", 400, []],
-     ["", 12.8, ["sem-numero-ref0331.jpeg"]]], "sem número: nome curto, pela referência");
+    [["4226", 200, ["4226.pdf"]], ["4227", 134.93, ["4227.pdf", "4227-2.pdf"]], ["4228", 1000, ["4228.pdf"]], ["", 400, []],
+     ["", 12.8, ["sem-numero-ref0331.pdf"]]], "sem número: nome curto, pela referência");
   assert.strictEqual(pc.entradas, 1000, "a venda do imóvel é entrada, fora do total das saídas");
   assert.strictEqual(pc.nEntradas, 1);
   assert.strictEqual(pc.notas[0].nf, "41");
@@ -2777,8 +2777,10 @@ teste("prestação de contas: resumo por conta, uma nota por número de papel, a
   assert.strictEqual(pc.semNumero, 2);
   assert.strictEqual(pc.semArquivo, 1);
   assert.strictEqual(pc.aPagarFora, 1, "o cimento a pagar não entra");
-  assert.deepStrictEqual(pc.arquivos.map((a) => a.nome), ["4226.pdf", "4227.pdf", "4227-2.jpg", "4228.pdf", "sem-numero-ref0331.jpeg"], "o mesmo arquivo nos dois itens vai uma vez");
+  assert.deepStrictEqual(pc.arquivos.map((a) => a.nome), ["4226.pdf", "4227.pdf", "4227-2.pdf", "4228.pdf", "sem-numero-ref0331.pdf"], "o mesmo arquivo nos dois itens vai uma vez");
   assert.strictEqual(pc.de, "2026-10-09");
+  assert.deepStrictEqual(pc.arquivos.filter((a) => a.daImagem).map((a) => a.nome), ["4227-2.pdf", "sem-numero-ref0331.pdf"],
+    "foto e print saem em PDF na prestação");
 });
 
 teste("custo lançado pelo extrato: a nota inteira ganha UM número e o papel (tipo pedido) vai para a prestação", () => {
