@@ -3992,7 +3992,10 @@ function prestacaoDeContas(linhas) {
     // antigo): o segundo papel da transação é o "-2" na pasta também
     const todos = (Array.isArray(c.anexos) ? c.anexos.filter(Boolean) : []).concat(c.comprovante ? [c.comprovante] : []);
     for (const a of todos) {
-      if (["pedido", "proposta", "boleto", "entrega"].indexOf(a.tipo || "") >= 0) continue;
+      // a proposta (antes da compra) e a foto da entrega não provam o
+      // pagamento; o resto vai — o papel lançado pelo extrato chega como
+      // "pedido" e é ele o documento da transação
+      if (["proposta", "entrega"].indexOf(a.tipo || "") >= 0) continue;
       const chave = a.public_id || a.url;
       if (!a.url || t._vistos.has(chave)) continue;
       t._vistos.add(chave);

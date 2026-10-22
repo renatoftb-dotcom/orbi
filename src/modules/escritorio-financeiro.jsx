@@ -7446,8 +7446,15 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       return comAnexos(paga, papeis);
     });
     if (!novas.length) return;
-    const obraNova = { ...obra, contasPagar: (obra.contasPagar || []).concat(novas) };
-    const ponte = lancamentosDaBaixa(obraNova, cliente, novas,
+    // O número do papel: o custo lançado pelo extrato já nasce pago, e
+    // pago sem número não acha o arquivo na prestação de contas. A nota
+    // inteira leva UM número (as contas dela dividem a referência), e os
+    // arquivos passam a se chamar por ele.
+    const numeradas = typeof numerarPapeisDasPagas === "function" && typeof proximoNumeroDePapel === "function"
+      ? numerarPapeisDasPagas(novas, proximoNumeroDePapel(todas, lancamentosDoEscritorio(data)), () => true).contas
+      : novas;
+    const obraNova = { ...obra, contasPagar: (obra.contasPagar || []).concat(numeradas) };
+    const ponte = lancamentosDaBaixa(obraNova, cliente, numeradas,
       { fechamentos: fechamentosDoEscritorio(data), lancamentos: lancamentosDoEscritorio(data) });
     // Vindo da fila do extrato, o que atravessa leva a marca da linha do banco.
     const marca = l.extratoId ? { extratoId: l.extratoId, historicoBanco: l.historicoBanco || "",

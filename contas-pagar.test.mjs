@@ -2777,6 +2777,21 @@ teste("prestação de contas: resumo por conta, uma nota por número de papel, a
   assert.strictEqual(pc.de, "2026-10-09");
 });
 
+teste("custo lançado pelo extrato: a nota inteira ganha UM número e o papel (tipo pedido) vai para a prestação", () => {
+  const papel = { url: "https://x/ped", public_id: "ped", nome: "PEDÁGIOS JACAREZINHO.pdf", tipo: "pedido" };
+  const contas = [
+    { id: "k1", pedidoId: "px", numeroDoc: "0329", pago: true, pagoEm: "2026-10-09", valor: 100, contaId: "frete", anexos: [papel] },
+    { id: "k2", pedidoId: "px", numeroDoc: "0329", pago: true, pagoEm: "2026-10-09", valor: 57.2, contaId: "frete", anexos: [papel] },
+  ];
+  const r = modulo.numerarPapeisDasPagas(contas, 4243, () => true);
+  assert.deepStrictEqual(r.contas.map((c) => c.doc), ["4243", "4243"]);
+  assert.strictEqual(r.contas[0].anexos[0].nome, "4243.pdf", "o arquivo passa a se chamar pelo número");
+  assert.strictEqual(r.proximo, 4244);
+  const L = modulo.linhasDaBase([{ id: "o1", nome: "Obra", contasPagar: r.contas }], {});
+  const pc = modulo.prestacaoDeContas(L);
+  assert.deepStrictEqual(pc.notas.map((n) => [n.numero, n.valor, n.arquivos]), [["4243", 157.2, ["4243.pdf"]]]);
+});
+
 teste("base de dados: uma linha por item, nas colunas da planilha do escritório", () => {
   const obras = [{ id: "o1", nome: "Jacarezinho Módulo 1", clienteId: "c1", contasPagar: [
     { id: "a", numeroDoc: "0173", numeroNota: "8623", prestadorId: "rc", descricao: "Areia Fina", insumoCodigo: "ARE-1",

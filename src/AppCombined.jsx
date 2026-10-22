@@ -19093,8 +19093,15 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       return comAnexos(paga, papeis);
     });
     if (!novas.length) return;
-    const obraNova = { ...obra, contasPagar: (obra.contasPagar || []).concat(novas) };
-    const ponte = lancamentosDaBaixa(obraNova, cliente, novas,
+    // O número do papel: o custo lançado pelo extrato já nasce pago, e
+    // pago sem número não acha o arquivo na prestação de contas. A nota
+    // inteira leva UM número (as contas dela dividem a referência), e os
+    // arquivos passam a se chamar por ele.
+    const numeradas = typeof numerarPapeisDasPagas === "function" && typeof proximoNumeroDePapel === "function"
+      ? numerarPapeisDasPagas(novas, proximoNumeroDePapel(todas, lancamentosDoEscritorio(data)), () => true).contas
+      : novas;
+    const obraNova = { ...obra, contasPagar: (obra.contasPagar || []).concat(numeradas) };
+    const ponte = lancamentosDaBaixa(obraNova, cliente, numeradas,
       { fechamentos: fechamentosDoEscritorio(data), lancamentos: lancamentosDoEscritorio(data) });
     // Vindo da fila do extrato, o que atravessa leva a marca da linha do banco.
     const marca = l.extratoId ? { extratoId: l.extratoId, historicoBanco: l.historicoBanco || "",
@@ -34184,7 +34191,10 @@ function prestacaoDeContas(linhas) {
     // antigo): o segundo papel da transação é o "-2" na pasta também
     const todos = (Array.isArray(c.anexos) ? c.anexos.filter(Boolean) : []).concat(c.comprovante ? [c.comprovante] : []);
     for (const a of todos) {
-      if (["pedido", "proposta", "boleto", "entrega"].indexOf(a.tipo || "") >= 0) continue;
+      // a proposta (antes da compra) e a foto da entrega não provam o
+      // pagamento; o resto vai — o papel lançado pelo extrato chega como
+      // "pedido" e é ele o documento da transação
+      if (["proposta", "entrega"].indexOf(a.tipo || "") >= 0) continue;
       const chave = a.public_id || a.url;
       if (!a.url || t._vistos.has(chave)) continue;
       t._vistos.add(chave);
