@@ -46222,14 +46222,17 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
         )}
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14, flexWrap: "wrap" }}>
           {!embutido && <button type="button" style={E.btnSec} onClick={aoFechar}>Fechar</button>}
+          {/* Desistir do lançamento: a caixa volta limpa, sem o papel e sem
+              o que foi lido — nada é gravado. */}
+          {embutido && (itens || arquivo || String(texto).trim() !== "") && (
+            <button type="button" data-vk-entrada-cancelar="1" style={{ ...E.btnSec, marginRight: "auto" }} onClick={limpar}
+              disabled={lendo}>Cancelar</button>
+          )}
           {itens && (
             <button type="button" style={E.btnSec}
               onClick={() => { situacaoTocada.current = false; setSituacao(""); setParcelaId(""); setAvisosDaLeitura([]);
                 setItens(null); setDespesa(null); setPapel(null); setDestino(""); setObraId(""); setAviso(""); setReconhecido(null);
                 setModoCotacao(""); setCotacaoDestino(""); setTituloNova(""); }}>Ler de novo</button>
-          )}
-          {embutido && !itens && String(texto).trim() !== "" && (
-            <button type="button" style={E.btnSec} onClick={limpar}>Limpar</button>
           )}
           {itens && guardaProposta ? (
             <button type="button" onClick={seguir} data-vk-botao-proposta="1"
