@@ -31527,13 +31527,41 @@ function pedidoEhNotaPaga(l) {
   return x.tipo === "pedido" && !!x.pago && !x.cotacaoId
     && (x.contas || []).every((c) => c && (c.origem || "avulsa") === "avulsa" && !c.cotacaoId);
 }
+// Prestador de serviço não faz pedido: recebe pagamento. Quando todos os
+// itens caem em conta de mão de obra ou de serviço (empreiteiro, pedreiro,
+// eletricista, taxas…), o nível se chama "Pagamento" — "Pedido" é da loja.
+const CP_GRUPOS_DE_SERVICO = ["maoDeObra", "servicos"];
+const CP_CONTAS_DE_SERVICO_PADRAO = ["ajudantes", "carpinteiro", "eletricista", "empreiteiro", "encarregados", "mo_diversos",
+  "marceneiro", "pedreiros", "pintor", "serralheiro", "impermeabilizacao", "encanador", "gesseiro", "instalador_ar",
+  "assentador_pisos", "vale_refeicao", "fgts", "darf", "lixador_concreto", "adicionais_mo",
+  "impostos", "impressao_plantas", "outras_taxas"];
+function contaEhDeServico(contaId) {
+  if (!contaId) return false;
+  const plano = typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : null;
+  if (plano && plano.length) {
+    const c = plano.find((x) => x && x.id === contaId);
+    if (c) return CP_GRUPOS_DE_SERVICO.indexOf(c.grupo) >= 0;
+  }
+  return CP_CONTAS_DE_SERVICO_PADRAO.indexOf(contaId) >= 0;
+}
+function pedidoEhServico(l) {
+  const x = l || {};
+  if (Array.isArray(x.pedidos)) return x.pedidos.length > 0 && x.pedidos.every(pedidoEhServico);
+  const cs = (x.contas || []).filter(Boolean);
+  return cs.length > 0 && cs.every((c) => contaEhDeServico(c.contaId));
+}
+// "pedido" ou "pagamento", no singular ou no plural, para as frases da tela.
+function palavraDoPedido(l, n) {
+  const serv = pedidoEhServico(l);
+  return (serv ? "pagamento" : "pedido") + (n === 1 || n == null ? "" : "s");
+}
 function rotuloDoPedido(l) {
   const x = l || {};
   if (pedidoEhNotaPaga(x)) {
     const n = x.numeroNota || ((x.contas || [])[0] || {}).doc || "";
     return n ? "Nota " + n : "Nota";
   }
-  return "Pedido " + (x.numeroLoja || x.numeroPedido || "");
+  return (pedidoEhServico(x) ? "Pagamento " : "Pedido ") + (x.numeroLoja || x.numeroPedido || "");
 }
 
 function linhasDeLoja(contas, opcoes) {
@@ -51021,7 +51049,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!sai.quantas) return;
     const nome = linha.numeroLoja || linha.numeroPedido || "";
     const ok = await dialogo.confirmar({
-      titulo: tituloPronto || `Apagar ${(typeof rotuloDoPedido === "function" ? rotuloDoPedido(linha) : "Pedido " + nome).trim().replace(/^Nota/, "a nota").replace(/^Pedido/, "o pedido")}?`,
+      titulo: tituloPronto || `Apagar ${(typeof rotuloDoPedido === "function" ? rotuloDoPedido(linha) : "Pedido " + nome).trim().replace(/^Nota/, "a nota").replace(/^Pedido/, "o pedido").replace(/^Pagamento/, "o pagamento")}?`,
       mensagem: [
         sai.quantas === 1 ? "Sai 1 conta a pagar" : `Saem ${sai.quantas} contas a pagar`,
         `, no total de ${fmtMoedaCtr(sai.valor)}.`,
@@ -51030,7 +51058,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         vaiJuntoNoEscritorio((obra.contasPagar || []).filter(c => c && c.pago && ids.indexOf(c.pedidoId) >= 0)),
         " Isto n\u00e3o tem volta.",
       ].join(""),
-      confirmar: ids.length > 1 ? `Apagar os ${ids.length} pedidos` : "Apagar pedido",
+      confirmar: ids.length > 1 ? `Apagar os ${ids.length} ${typeof palavraDoPedido === "function" ? palavraDoPedido(linha, 2) : "pedidos"}`
+        : `Apagar ${typeof palavraDoPedido === "function" ? palavraDoPedido(linha, 1) : "pedido"}`,
       destrutivo: true,
     });
     if (!ok) return;
@@ -53594,30 +53623,33 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                             const chaveL = String(g.chave || "") + "|" + L.chave;
                             const abertaL = contasAbertas[chaveL] === undefined ? true : !!contasAbertas[chaveL];
                             const stL = rotuloSituacaoConta({ vencimento: L.vencimento, pago: L.pago }, hojeIso);
+                            // prestador de serviço: "3 pagamentos", não "3 pedidos"
+                            const umL = palavraDoPedido(L, 1), variosL = palavraDoPedido(L, 2);
+                            const servL = pedidoEhServico(L);
                             return (
                               <div key={L.chave} style={{ borderTop: "1px solid rgba(38,36,33,0.06)", background: "#fff" }}>
                                 <div style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, alignItems: "center",
                                   padding: "9px 40px 9px 11px", background: "#f6f8fc", position: "relative" }}>
                                   {perm.podeEditar && (
                                     <div data-vk-mantem-mes="1" data-vk-menu-canto="1" onClick={e => e.stopPropagation()} style={{ position: "absolute", top: 3, right: 4 }}>
-                                      <MenuDeAcoes semBorda toque={isMobile} title="Mais ações da loja" itens={[
-                                        { rotulo: L.pedidosEmAberto ? `Editar vencimento${L.pedidos.length > 1 ? " dos " + L.pedidos.length + " pedidos" : ""}` : "Editar vencimento — já pago",
+                                      <MenuDeAcoes semBorda toque={isMobile} title={servL ? "Mais ações do prestador" : "Mais ações da loja"} itens={[
+                                        { rotulo: L.pedidosEmAberto ? `Editar vencimento${L.pedidos.length > 1 ? " dos " + L.pedidos.length + " " + variosL : ""}` : "Editar vencimento — já pago",
                                           desativado: !L.pedidosEmAberto,
-                                          onClick: () => abrirEditarVencimento(L, `${L.pedidos.length === 1 ? "1 pedido" : L.pedidos.length + " pedidos"} · ${L.favorecido || "Loja"}`) },
-                                        { rotulo: L.pedidos.length > 1 ? `Excluir os ${L.pedidos.length} pedidos` : "Excluir", destrutivo: true,
-                                          onClick: () => apagarPedidoDeContas(L, L.pedidos.length > 1 ? `Apagar os ${L.pedidos.length} pedidos da ${L.favorecido || "loja"}?` : undefined) },
+                                          onClick: () => abrirEditarVencimento(L, `${L.pedidos.length === 1 ? "1 " + umL : L.pedidos.length + " " + variosL} · ${L.favorecido || (servL ? "Prestador" : "Loja")}`) },
+                                        { rotulo: L.pedidos.length > 1 ? `Excluir os ${L.pedidos.length} ${variosL}` : "Excluir", destrutivo: true,
+                                          onClick: () => apagarPedidoDeContas(L, L.pedidos.length > 1 ? `Apagar os ${L.pedidos.length} ${variosL} ${servL ? "de " + (L.favorecido || "prestador") : "da " + (L.favorecido || "loja")}?` : undefined) },
                                       ]} />
                                     </div>
                                   )}
                                   <div data-vk-mantem-mes="1" style={{ minWidth: 0, cursor: "pointer" }}
-                                    title={abertaL ? "Fechar os pedidos" : "Ver os pedidos"}
+                                    title={abertaL ? "Fechar os " + variosL : "Ver os " + variosL}
                                     onClick={() => setContasAbertas({ ...contasAbertas, [chaveL]: !abertaL })}>
                                     <div style={{ fontSize: 13, color: "#111827", fontWeight: 700, ...umaLinha }}>
                                       <span style={{ color: "#6b7280", fontWeight: 400, marginRight: 4 }}>{abertaL ? "\u25be" : "\u25b8"}</span>
                                       {L.favorecido || "Loja"}
                                     </div>
                                     <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2, ...umaLinha }}>
-                                      {[L.pedidos.length === 1 ? "1 pedido" : `${L.pedidos.length} pedidos`,
+                                      {[L.pedidos.length === 1 ? "1 " + umL : `${L.pedidos.length} ${variosL}`,
                                         L.contas.length === 1 ? "1 item" : `${L.contas.length} itens`,
                                         L.parcial ? "parcialmente pago" : ""].filter(Boolean).join(" \u00b7 ")}
                                     </div>
@@ -53632,7 +53664,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                   {perm.podeEditar && L.pedidosEmAberto > 1 ? (
                                     <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
                                       <button onClick={() => alternarPagamentoPedido(L)} style={{ ...C.btn, fontSize: 12, padding: "6px 12px" }}>
-                                        Pagar os {L.pedidosEmAberto} pedidos
+                                        {servL ? `Pagar os ${L.pedidosEmAberto}` : `Pagar os ${L.pedidosEmAberto} pedidos`}
                                       </button>
                                     </div>
                                   ) : <div />}

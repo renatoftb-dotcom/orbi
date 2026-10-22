@@ -1335,13 +1335,41 @@ function pedidoEhNotaPaga(l) {
   return x.tipo === "pedido" && !!x.pago && !x.cotacaoId
     && (x.contas || []).every((c) => c && (c.origem || "avulsa") === "avulsa" && !c.cotacaoId);
 }
+// Prestador de serviço não faz pedido: recebe pagamento. Quando todos os
+// itens caem em conta de mão de obra ou de serviço (empreiteiro, pedreiro,
+// eletricista, taxas…), o nível se chama "Pagamento" — "Pedido" é da loja.
+const CP_GRUPOS_DE_SERVICO = ["maoDeObra", "servicos"];
+const CP_CONTAS_DE_SERVICO_PADRAO = ["ajudantes", "carpinteiro", "eletricista", "empreiteiro", "encarregados", "mo_diversos",
+  "marceneiro", "pedreiros", "pintor", "serralheiro", "impermeabilizacao", "encanador", "gesseiro", "instalador_ar",
+  "assentador_pisos", "vale_refeicao", "fgts", "darf", "lixador_concreto", "adicionais_mo",
+  "impostos", "impressao_plantas", "outras_taxas"];
+function contaEhDeServico(contaId) {
+  if (!contaId) return false;
+  const plano = typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : null;
+  if (plano && plano.length) {
+    const c = plano.find((x) => x && x.id === contaId);
+    if (c) return CP_GRUPOS_DE_SERVICO.indexOf(c.grupo) >= 0;
+  }
+  return CP_CONTAS_DE_SERVICO_PADRAO.indexOf(contaId) >= 0;
+}
+function pedidoEhServico(l) {
+  const x = l || {};
+  if (Array.isArray(x.pedidos)) return x.pedidos.length > 0 && x.pedidos.every(pedidoEhServico);
+  const cs = (x.contas || []).filter(Boolean);
+  return cs.length > 0 && cs.every((c) => contaEhDeServico(c.contaId));
+}
+// "pedido" ou "pagamento", no singular ou no plural, para as frases da tela.
+function palavraDoPedido(l, n) {
+  const serv = pedidoEhServico(l);
+  return (serv ? "pagamento" : "pedido") + (n === 1 || n == null ? "" : "s");
+}
 function rotuloDoPedido(l) {
   const x = l || {};
   if (pedidoEhNotaPaga(x)) {
     const n = x.numeroNota || ((x.contas || [])[0] || {}).doc || "";
     return n ? "Nota " + n : "Nota";
   }
-  return "Pedido " + (x.numeroLoja || x.numeroPedido || "");
+  return (pedidoEhServico(x) ? "Pagamento " : "Pedido ") + (x.numeroLoja || x.numeroPedido || "");
 }
 
 function linhasDeLoja(contas, opcoes) {

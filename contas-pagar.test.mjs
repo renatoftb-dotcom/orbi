@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -2721,6 +2721,24 @@ teste("nota paga nao vira conta de loja; pedido a pagar continua sob a loja", ()
   assert.ok(loja, "o pedido a pagar continua sob a loja");
   assert.deepStrictEqual(loja.pedidoIds, ["p2"]);
   assert.strictEqual(modulo.rotuloDoPedido(loja.pedidos[0]), "Pedido 777");
+});
+
+teste("prestador de serviço recebe Pagamento, não Pedido; loja continua com Pedido", () => {
+  const it = (id, ped, contaId, extra) => ({ id, pedidoId: ped, prestadorId: "ct", favorecido: "Carlos Trindade", valor: 100,
+    vencimento: "2026-10-02", origem: "cotacao", cotacaoId: "q" + ped, contaId, ...extra });
+  const contas = [it("a", "p1", "empreiteiro"), it("b", "p2", "empreiteiro"), it("c", "p3", "pedreiros")];
+  const loja = modulo.linhasDeLoja(contas).find((l) => l.tipo === "loja");
+  assert.ok(loja);
+  assert.ok(modulo.pedidoEhServico(loja), "todos os itens são mão de obra");
+  assert.strictEqual(modulo.rotuloDoPedido(loja.pedidos[0]).trim(), "Pagamento");
+  assert.strictEqual(modulo.palavraDoPedido(loja, 3), "pagamentos");
+  assert.strictEqual(modulo.palavraDoPedido(loja.pedidos[0], 1), "pagamento");
+  // material, ou mistura de material com mão de obra: é pedido
+  const misto = modulo.linhasDePedido([it("d", "p4", "material"), it("e", "p4", "empreiteiro")]).find((l) => l.tipo === "pedido");
+  assert.strictEqual(modulo.rotuloDoPedido(misto).trim(), "Pedido");
+  assert.strictEqual(modulo.palavraDoPedido(misto, 2), "pedidos");
+  // sem conta escolhida ainda: continua pedido
+  assert.strictEqual(modulo.pedidoEhServico({ contas: [{ id: "x" }] }), false);
 });
 
 teste("base de dados: uma linha por item, nas colunas da planilha do escritório", () => {
