@@ -50690,10 +50690,37 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   //
   // `extras` continua aceito para quem precisa gravar outra coisa no mesmo
   // save (o que vier daqui entra junto).
-  const gravarObras = (fatia, extras) => {
+  const gravarObras = (fatiaCrua, extras) => {
+    const fatia = comPapeisNumerados(fatiaCrua);
     const efeito = efeitosDaFatia(fatia);
     save({ ...data, obras: mesclarPorCliente(data.obras, cliente.id, fatia),
       ...(efeito || {}), ...(extras || {}) });
+  };
+  // O número do papel nasce na baixa: a transação que acabou de ser paga
+  // (ou de ganhar um papel) recebe o próximo número da série, e o arquivo
+  // anexado passa a se chamar por ele. O que já estava gravado não mexe.
+  // Mora na porta de TODA gravação de obra — o pedido que a Entrada lança
+  // já pago (conta de loja, cotação) gravava por outro caminho e ficava sem
+  // número, sem nada que ligasse a linha da base ao arquivo.
+  const comPapeisNumerados = (fatia) => {
+    if (typeof numerarPapeisDasPagas !== "function" || typeof proximoNumeroDePapel !== "function") return fatia;
+    const todas = data.obras || obras || [];
+    let proximo = null;
+    return (fatia || []).map((o) => {
+      if (!o || !o.id) return o;
+      const velha = (obras || []).find(x => x && x.id === o.id);
+      if (velha && velha.contasPagar === o.contasPagar) return o;
+      const antes = new Map(((velha && velha.contasPagar) || []).filter(Boolean).map(c => [c.id, c]));
+      const qtdPapeis = (c) => (Array.isArray(c.anexos) ? c.anexos.filter(Boolean).length : 0) + (c.comprovante ? 1 : 0);
+      const agora = (c) => { const a = antes.get(c.id); return !a || (c.pago && !a.pago) || qtdPapeis(c) !== qtdPapeis(a); };
+      if (proximo == null) {
+        const lancs = typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : [];
+        proximo = proximoNumeroDePapel(todas, lancs);
+      }
+      const r = numerarPapeisDasPagas(o.contasPagar || [], proximo, agora);
+      proximo = r.proximo;
+      return { ...o, contasPagar: r.contas };
+    });
   };
   // Escritório e cliente usam esta mesma tela e mexem nas mesmas contas.
   // Tudo que é gravado daqui leva o nome de quem gravou — é o que permite
@@ -50831,18 +50858,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const gravarContas = (novasContas, obraId, extra) => {
     const alvo = obraId || (obraSelecionada && obraSelecionada.id);
     if (!alvo) return;
-    // O número do papel nasce na baixa: a transação que acabou de ser paga
-    // (ou de ganhar um papel) recebe o próximo número da série, e o arquivo
-    // anexado passa a se chamar por ele. O que já estava gravado não mexe.
-    let contasFinais = novasContas;
-    if (typeof numerarPapeisDasPagas === "function") {
-      const antes = new Map((((obras || []).find(o => o && o.id === alvo) || {}).contasPagar || []).filter(Boolean).map(c => [c.id, c]));
-      const qtdPapeis = (c) => (Array.isArray(c.anexos) ? c.anexos.filter(Boolean).length : 0) + (c.comprovante ? 1 : 0);
-      const agora = (c) => { const a = antes.get(c.id); return !a || (c.pago && !a.pago) || qtdPapeis(c) !== qtdPapeis(a); };
-      const lancs = typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : [];
-      contasFinais = numerarPapeisDasPagas(novasContas, proximoNumeroDePapel(obras, lancs), agora).contas;
-    }
-    gravarObras(obras.map(o => o.id === alvo ? { ...o, ...(extra || {}), contasPagar: contasFinais } : o));
+    // o número do papel das que acabaram de ser pagas sai em gravarObras
+    gravarObras(obras.map(o => o.id === alvo ? { ...o, ...(extra || {}), contasPagar: novasContas } : o));
   };
   // O cartão de um pagamento: um dos cartões da obra (os do escritório, se a
   // obra é do escritório; os do cliente, se é de cliente) ou o cartão do
