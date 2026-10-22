@@ -34145,6 +34145,101 @@ function arquivosDaFolha(folha, tipos) {
   return r;
 }
 
+// ── Prestação de contas ─────────────────────────────────────────
+// O pacote que vai para quem paga a obra: o resumo por conta contábil, a
+// lista das notas (uma linha por transação paga, pelo número do papel) e os
+// arquivos, um por um, com o nome do número — "4226.pdf" é a linha 4226.
+// Entra só o que foi pago: a pagar não é conta prestada. O que estiver sem
+// número ou sem arquivo vai junto, marcado — a prestação mostra o buraco
+// em vez de escondê-lo.
+// Venda do imóvel, depósito, liberação do financiamento: dinheiro que
+// ENTRA. Na prestação ficam à parte — somá-los às despesas inflaria o custo.
+function cpContaEhEntrada(contaId) {
+  if (!contaId) return false;
+  const plano = typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : null;
+  const c = plano && plano.find((x) => x && x.id === contaId);
+  if (c) return c.grupo === "receitas";
+  return ["deposito_proprio", "liberacao_financ", "venda_imovel"].indexOf(contaId) >= 0;
+}
+function prestacaoDeContas(linhas) {
+  const red = (x) => Math.round(x * 100) / 100;
+  const pagas = (linhas || []).filter((l) => l && l.pago);
+  const porTransacao = new Map();
+  for (const l of pagas) {
+    const c = l.conta_ || {};
+    const numero = String(c.doc || "").trim();
+    const k = numero ? "n:" + numero : "r:" + String(l.ref || c.numeroDoc || c.pedidoId || l.id);
+    if (!porTransacao.has(k)) {
+      porTransacao.set(k, { numero, ref: l.ref || "", data: l.pagoEm || "", fornecedor: l.fornecedor || "", obra: l.obra || "",
+        nf: String(c.numeroNota || "").trim(), itens: [], contas: [], valor: 0, papeis: [], _vistos: new Set() });
+    }
+    const t = porTransacao.get(k);
+    if (t.itens.length === 0) t.entrada = cpContaEhEntrada(l.contaId || c.contaId);
+    t.itens.push(l.item || l.descricaoLanc || "");
+    if (l.conta && t.contas.indexOf(l.conta) < 0) t.contas.push(l.conta);
+    t.valor = red(t.valor + (Number(l.total) || 0));
+    if (!t.data || (l.pagoEm && l.pagoEm < t.data)) t.data = l.pagoEm || t.data;
+    if (!t.nf && c.numeroNota) t.nf = String(c.numeroNota).trim();
+    // na ordem em que o número os batizou (anexos, depois o comprovante
+    // antigo): o segundo papel da transação é o "-2" na pasta também
+    const todos = (Array.isArray(c.anexos) ? c.anexos.filter(Boolean) : []).concat(c.comprovante ? [c.comprovante] : []);
+    for (const a of todos) {
+      if (["pedido", "proposta", "boleto", "entrega"].indexOf(a.tipo || "") >= 0) continue;
+      const chave = a.public_id || a.url;
+      if (!a.url || t._vistos.has(chave)) continue;
+      t._vistos.add(chave);
+      t.papeis.push(a);
+    }
+  }
+  const transacoes = [...porTransacao.values()].sort((a, b) => {
+    if (a.numero && b.numero) return Number(a.numero) - Number(b.numero) || a.numero.localeCompare(b.numero);
+    if (a.numero !== b.numero) return a.numero ? -1 : 1;
+    return String(a.data).localeCompare(String(b.data));
+  });
+  // os arquivos, com o nome do número e sem repetir nome
+  const usados = new Map();
+  const arquivos = [];
+  const notas = transacoes.map((t) => {
+    const nomes = t.papeis.map((a, i) => {
+      let nome = t.numero
+        ? (cpNomeJaENumero(a.nome) && String(a.nome).indexOf(t.numero) === 0 ? String(a.nome) : cpNomeDoPapel(t.numero, i, a.nome || (cpEhPdf(a) ? "x.pdf" : "")))
+        : "sem número - " + String(a.nome || "papel");
+      nome = nome.replace(/[\\/:*?"<>|]+/g, "-");
+      const n = (usados.get(nome) || 0) + 1;
+      usados.set(nome, n);
+      if (n > 1) nome = nome.replace(/(\.[^.]+)?$/, (ext) => ` (${n})${ext || ""}`);
+      arquivos.push({ url: a.url, nome, numero: t.numero, tipo: a.tipo === "nota" ? "nota" : "comprovante" });
+      return nome;
+    });
+    const descricao = t.itens.length === 1 ? t.itens[0] : `${t.itens[0] || "Itens"} e mais ${t.itens.length - 1}`;
+    return { numero: t.numero, ref: t.ref, data: t.data, fornecedor: t.fornecedor, descricao, itens: t.itens.length,
+      conta: t.contas.join(" / "), nf: t.nf, valor: t.valor, arquivos: nomes, entrada: t.entrada,
+      semNumero: !t.numero, semArquivo: !nomes.length };
+  });
+  const porConta = new Map();
+  for (const l of pagas) {
+    const nome = l.conta || "Sem conta";
+    const r = porConta.get(nome) || { conta: nome, valor: 0, _t: new Set(), entrada: cpContaEhEntrada(l.contaId || (l.conta_ || {}).contaId) };
+    r.valor = red(r.valor + (Number(l.total) || 0));
+    const c = l.conta_ || {};
+    r._t.add(String(c.doc || "").trim() || "r:" + String(l.ref || c.numeroDoc || c.pedidoId || l.id));
+    porConta.set(nome, r);
+  }
+  const resumo = [...porConta.values()].map((r) => ({ conta: r.conta, transacoes: r._t.size, valor: r.valor, entrada: r.entrada }))
+    .sort((a, b) => (a.entrada - b.entrada) || b.valor - a.valor || a.conta.localeCompare(b.conta));
+  const datas = notas.map((n) => n.data).filter(Boolean).sort();
+  return {
+    resumo, notas, arquivos,
+    total: red(resumo.filter((r) => !r.entrada).reduce((t, r) => t + r.valor, 0)),
+    entradas: red(resumo.filter((r) => r.entrada).reduce((t, r) => t + r.valor, 0)),
+    nSaidas: notas.filter((n) => !n.entrada).length, nEntradas: notas.filter((n) => n.entrada).length,
+    de: datas[0] || "", ate: datas[datas.length - 1] || "",
+    semNumero: notas.filter((n) => n.semNumero).length,
+    semArquivo: notas.filter((n) => n.semArquivo).length,
+    aPagarFora: (linhas || []).filter((l) => l && !l.pago).length,
+  };
+}
+
 let cpCargaZip = null;
 function carregarJSZip() {
   if (typeof window !== "undefined" && window.JSZip) return Promise.resolve(window.JSZip);
@@ -34518,6 +34613,135 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
     }
   }
 
+  // A prestação de contas do que está filtrado (a obra, o período): um .zip
+  // com a planilha (resumo por conta, notas, itens) e a pasta dos papéis,
+  // cada um com o nome do número.
+  const [prestando, setPrestando] = useState(null); // { fazendo, msg, erro }
+  async function baixarPrestacao() {
+    const pc = prestacaoDeContas(filtradas);
+    if (!pc.notas.length) { setPrestando({ erro: true, msg: "Nada pago no que está filtrado." }); return; }
+    setPrestando({ fazendo: true, msg: "Montando a planilha…" });
+    const diaBRx = (iso) => { const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : ""; };
+    const obraNome = obraFixa && (obras || [])[0] ? (obras[0].nome || "obra") : (obraId ? nomeDe(obras, obraId) : "obras");
+    const periodo = (de || pc.de) && (ate || pc.ate) ? `${diaBRx(de || pc.de)} a ${diaBRx(ate || pc.ate)}` : "";
+    // sem acento no nome dos arquivos de dentro do .zip: o Windows abre zip
+    // com nome acentuado mostrando "PrestaÃ§Ã£o"
+    const semAcento = (t) => String(t).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const titulo = semAcento("Prestacao de contas - " + obraNome + (periodo ? " - " + periodo : "")).replace(/[\\/:*?"<>|]+/g, "-");
+    try {
+      const E = await carregarExcelJS();
+      const wb = new E.Workbook();
+      wb.creator = "VICKE";
+      const fonte = { name: "Century Gothic", size: 9 };
+      const cabecalho = (ws) => {
+        const cab = ws.getRow(1);
+        cab.height = 19.95;
+        cab.eachCell((cel) => {
+          cel.font = { name: "Century Gothic", size: 10, bold: true, color: { argb: "FFFFFFFF" } };
+          cel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF366092" } };
+          cel.alignment = { horizontal: "center", vertical: "middle" };
+        });
+      };
+      const data = (iso) => { const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : null; };
+      // 1. resumo por conta contábil
+      const r1 = wb.addWorksheet("Resumo por conta", { views: [{ state: "frozen", ySplit: 1 }] });
+      r1.columns = [{ header: "Conta contábil", width: 38 }, { header: "Transações", width: 13 }, { header: "Valor", width: 16 }];
+      const totais = [];
+      pc.resumo.filter((r) => !r.entrada).forEach((r) => r1.addRow([r.conta, r.transacoes, r.valor]));
+      totais.push(r1.addRow(["Total das saídas", pc.nSaidas, pc.total]));
+      if (pc.nEntradas) {
+        r1.addRow([]);
+        pc.resumo.filter((r) => r.entrada).forEach((r) => r1.addRow([r.conta + " (entrada)", r.transacoes, r.valor]));
+        totais.push(r1.addRow(["Total das entradas", pc.nEntradas, pc.entradas]));
+      }
+      r1.eachRow((row, i) => row.eachCell((cel, j) => {
+        if (i > 1) cel.font = { ...fonte, bold: totais.indexOf(row) >= 0 };
+        if (j === 3 && i > 1) cel.numFmt = CP_MOEDA_XL;
+        if (j === 2 && i > 1) cel.alignment = { horizontal: "center" };
+      }));
+      cabecalho(r1);
+      // 2. as notas, uma por transação, pelo número do papel
+      const r2 = wb.addWorksheet("Notas", { views: [{ state: "frozen", ySplit: 1 }] });
+      r2.columns = [{ header: "Nº papel", width: 10 }, { header: "Data pagamento", width: 15 }, { header: "Fornecedor", width: 30 },
+        { header: "Descrição", width: 40 }, { header: "Conta contábil", width: 26 }, { header: "Nº nota fiscal", width: 14 },
+        { header: "Valor", width: 14 }, { header: "Arquivos", width: 30 }, { header: "Ref", width: 8 }, { header: "Tipo", width: 9 }];
+      pc.notas.forEach((n) => {
+        const row = r2.addRow([n.numero ? (/^\d+$/.test(n.numero) ? Number(n.numero) : n.numero) : "sem número", data(n.data), n.fornecedor,
+          n.descricao, n.conta, n.nf || "", n.valor, n.arquivos.length ? n.arquivos.join(", ") : "sem arquivo", n.ref ? Number(n.ref) || n.ref : "",
+          n.entrada ? "Entrada" : "Saída"]);
+        row.eachCell({ includeEmpty: true }, (cel, j) => {
+          cel.font = (n.semNumero && j === 1) || (n.semArquivo && j === 8) ? { ...fonte, color: { argb: "FFB91C1C" } } : fonte;
+          if (j === 2) cel.numFmt = "dd/mm/yyyy";
+          if (j === 7) cel.numFmt = CP_MOEDA_XL;
+          if (j === 1 || j === 2 || j === 6 || j === 9) cel.alignment = { horizontal: "center" };
+        });
+      });
+      const tn = r2.addRow(["", null, "", "Total das saídas", "", "", pc.total, "", "", ""]);
+      tn.eachCell((cel, j) => { cel.font = { ...fonte, bold: true }; if (j === 7) cel.numFmt = CP_MOEDA_XL; });
+      if (pc.nEntradas) {
+        const te = r2.addRow(["", null, "", "Total das entradas", "", "", pc.entradas, "", "", ""]);
+        te.eachCell((cel, j) => { cel.font = { ...fonte, bold: true }; if (j === 7) cel.numFmt = CP_MOEDA_XL; });
+      }
+      cabecalho(r2);
+      r2.autoFilter = { from: { row: 1, column: 1 }, to: { row: pc.notas.length + 1, column: 10 } };
+      // 3. os itens, como na base
+      const plan = planilhaDaBase(tabelaDaBase(filtradas.filter((l) => l.pago), COLS_TAB), COLS_REL);
+      const r3 = wb.addWorksheet("Itens", { views: [{ state: "frozen", ySplit: 1 }] });
+      r3.columns = plan.colunas.map((c) => ({ header: c.titulo, width: c.largura }));
+      plan.linhas.forEach((linha) => {
+        const row = r3.addRow(linha.map((v, j) => {
+          const tipo = plan.colunas[j].tipo;
+          if (v === "" || v == null) return null;
+          if (tipo === "numeroTexto") return /^\d{1,9}$/.test(String(v).trim()) ? Number(String(v).trim()) : v;
+          if (tipo === "data" || tipo === "mes") {
+            const m = String(v).match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);
+            return m ? new Date(Date.UTC(+m[1], +m[2] - 1, m[3] ? +m[3] : 1)) : v;
+          }
+          return v;
+        }));
+        row.eachCell({ includeEmpty: true }, (cel, j) => {
+          const c = plan.colunas[j - 1];
+          cel.font = { name: "Century Gothic", size: 8 };
+          if (c.formato) cel.numFmt = c.formato;
+          if (c.alinhar) cel.alignment = { horizontal: c.alinhar };
+        });
+      });
+      cabecalho(r3);
+      const xlsx = await wb.xlsx.writeBuffer();
+      // a pasta dos papéis
+      const JSZip = await carregarJSZip();
+      const z = new JSZip();
+      z.file(titulo + ".xlsx", xlsx);
+      const falharam = [];
+      let feitos = 0;
+      for (const a of pc.arquivos) {
+        setPrestando({ fazendo: true, msg: `Juntando os papéis… ${++feitos} de ${pc.arquivos.length}` });
+        try {
+          const resp = await fetch(a.url);
+          if (!resp.ok) throw new Error("HTTP " + resp.status);
+          z.file("Papeis/" + semAcento(a.nome), await resp.blob());
+        } catch (e) { falharam.push(a.nome); }
+      }
+      const blob = await z.generateAsync({ type: "blob" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = titulo + ".zip";
+      document.body.appendChild(link); link.click();
+      setTimeout(() => { try { URL.revokeObjectURL(link.href); link.remove(); } catch (e) {} }, 1500);
+      const avisos = [];
+      if (pc.semNumero) avisos.push(`${pc.semNumero} sem número (use Completar a base)`);
+      if (pc.semArquivo) avisos.push(`${pc.semArquivo} sem arquivo`);
+      if (falharam.length) avisos.push(`${falharam.length === 1 ? "1 arquivo não baixou" : falharam.length + " arquivos não baixaram"}: ${falharam.join(", ")}`);
+      setPrestando({ erro: avisos.length > 0,
+        msg: `Prestação baixada: ${pc.notas.length} ${pc.notas.length === 1 ? "nota" : "notas"}, ${pc.arquivos.length - falharam.length} ${pc.arquivos.length - falharam.length === 1 ? "arquivo" : "arquivos"}, saídas ${moeda(pc.total)}`
+          + (pc.nEntradas ? `, entradas ${moeda(pc.entradas)}` : "") + "."
+          + (avisos.length ? " Atenção: " + avisos.join("; ") + " — marcados em vermelho na aba Notas." : "")
+          + (pc.aPagarFora ? ` ${pc.aPagarFora === 1 ? "1 item a pagar ficou" : pc.aPagarFora + " itens a pagar ficaram"} de fora.` : "") });
+    } catch (e) {
+      setPrestando({ erro: true, msg: "Não consegui montar a prestação (" + ((e && e.message) || "erro") + ")." });
+    }
+  }
+
   const input = { border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 10, padding: "8px 11px", fontSize: 13, color: "#111827",
     outline: "none", background: "#fff", fontFamily: "inherit", width: "100%", boxSizing: "border-box" };
   const chip = (ativo, rot, fn) => (
@@ -34651,6 +34875,14 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
             Completar a base ({pendencias.total})
           </button>
         )}
+        {!doEscritorio && (
+          <button type="button" data-vk-prestacao="1" onClick={baixarPrestacao} disabled={!filtradas.length || !!(prestando && prestando.fazendo)}
+            title="Resumo por conta, lista das notas e os arquivos nota a nota, do que está filtrado (só o que foi pago)"
+            style={{ background: "#fff", color: "#0474f4", border: "1.5px solid #0474f4", borderRadius: 10, padding: "7px 14px", fontSize: 12.5, fontWeight: 600,
+              cursor: filtradas.length ? "pointer" : "default", opacity: filtradas.length ? 1 : 0.5, fontFamily: "inherit" }}>
+            {prestando && prestando.fazendo ? prestando.msg : "Prestação de contas"}
+          </button>
+        )}
         <button type="button" onClick={baixar} disabled={!filtradas.length || !!baixando}
           style={{ background: "#0474f4", color: "#fff", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 12.5, fontWeight: 600,
             cursor: filtradas.length ? "pointer" : "default", opacity: filtradas.length ? 1 : 0.5, fontFamily: "inherit" }}>
@@ -34658,6 +34890,12 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
         </button>
         </div>
       </div>
+      {prestando && !prestando.fazendo && (
+        <div data-vk-prestacao-msg="1" style={{ fontSize: 12.5, color: prestando.erro ? "#b45309" : "#047857", marginBottom: 10 }}>
+          {prestando.msg} <button type="button" onClick={() => setPrestando(null)}
+            style={{ background: "none", border: "none", padding: 0, color: "#6b7280", cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}>fechar</button>
+        </div>
+      )}
       {gravandoBase && !conferindo && <div style={{ fontSize: 12.5, color: /^Não/.test(gravandoBase) ? "#b91c1c" : "#047857", marginBottom: 10 }}>{gravandoBase}</div>}
       {conferindo && pendencias && (
         <div style={{ border: "1.5px solid #0474f4", borderRadius: 12, padding: 14, marginBottom: 12, background: "#f8fbff" }}>

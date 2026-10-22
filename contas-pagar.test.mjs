@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -2739,6 +2739,42 @@ teste("prestador de serviço recebe Pagamento, não Pedido; loja continua com Pe
   assert.strictEqual(modulo.palavraDoPedido(misto, 2), "pedidos");
   // sem conta escolhida ainda: continua pedido
   assert.strictEqual(modulo.pedidoEhServico({ contas: [{ id: "x" }] }), false);
+});
+
+teste("prestação de contas: resumo por conta, uma nota por número de papel, arquivos com o nome do número", () => {
+  const pdf = (id, nome, tipo) => ({ url: "https://x/" + id, public_id: id, nome, tipo });
+  const obras = [{ id: "o1", nome: "Jacarezinho Módulo 1", clienteId: "c1", contasPagar: [
+    { id: "a1", doc: "4226", numeroDoc: "0323", numeroNota: "41", pedidoId: "p1", favorecido: "Angela", descricao: "Andaimes de 1x1m",
+      valor: 80, valorPago: 80, pago: true, pagoEm: "2026-10-22", vencimento: "2026-10-22", contaId: "aluguel_equip", comprovante: pdf("f1", "4226.pdf", "nota") },
+    { id: "a2", doc: "4226", numeroDoc: "0323", numeroNota: "41", pedidoId: "p1", favorecido: "Angela", descricao: "Plataformas",
+      valor: 120, valorPago: 120, pago: true, pagoEm: "2026-10-22", vencimento: "2026-10-22", contaId: "aluguel_equip", comprovante: pdf("f1", "4226.pdf", "nota") },
+    { id: "b1", doc: "4227", numeroDoc: "0324", pedidoId: "p2", favorecido: "Posto", descricao: "Gasolina",
+      valor: 134.93, valorPago: 134.93, pago: true, pagoEm: "2026-10-09", vencimento: "2026-10-09", contaId: "combustivel",
+      anexos: [pdf("f2", "Gasolina Jacarezinho.pdf"), pdf("f3", "cupom.jpg", "nota")] },
+    { id: "c1", numeroDoc: "0325", pedidoId: "p3", favorecido: "Danieli", descricao: "Empreiteiro",
+      valor: 400, valorPago: 400, pago: true, pagoEm: "2026-10-09", vencimento: "2026-10-09", contaId: "empreiteiro" },
+    { id: "d1", numeroDoc: "0326", pedidoId: "p4", favorecido: "Loja", descricao: "Cimento", valor: 50, pago: false, vencimento: "2026-11-01", contaId: "material" },
+    { id: "e1", doc: "4228", numeroDoc: "0327", pedidoId: "p5", favorecido: "Comprador", descricao: "Venda casa 1", valor: 1000, valorPago: 1000, pago: true,
+      pagoEm: "2026-10-15", vencimento: "2026-10-15", contaId: "venda_imovel", anexos: [pdf("f4", "4228.pdf")] },
+  ] }];
+  const L = modulo.linhasDaBase(obras, { clientes: [{ id: "c1", nome: "Jacarezinho" }], planoContas: [
+    { id: "aluguel_equip", nome: "Aluguel de ferramentas e equipamentos" }, { id: "combustivel", nome: "Combustível" },
+    { id: "empreiteiro", nome: "Empreiteiro" }, { id: "material", nome: "Material" }, { id: "venda_imovel", nome: "Venda de imóvel" }] });
+  const pc = modulo.prestacaoDeContas(L);
+  assert.deepStrictEqual(pc.notas.map((n) => [n.numero, n.valor, n.arquivos]),
+    [["4226", 200, ["4226.pdf"]], ["4227", 134.93, ["4227.pdf", "4227-2.jpg"]], ["4228", 1000, ["4228.pdf"]], ["", 400, []]]);
+  assert.strictEqual(pc.entradas, 1000, "a venda do imóvel é entrada, fora do total das saídas");
+  assert.strictEqual(pc.nEntradas, 1);
+  assert.strictEqual(pc.notas[0].nf, "41");
+  assert.strictEqual(pc.notas[0].descricao, "Andaimes de 1x1m e mais 1");
+  assert.deepStrictEqual(pc.resumo.map((r) => [r.conta, r.transacoes, r.valor]),
+    [["Empreiteiro", 1, 400], ["Aluguel de ferramentas e equipamentos", 1, 200], ["Combustível", 1, 134.93], ["Venda de imóvel", 1, 1000]]);
+  assert.strictEqual(pc.total, 734.93);
+  assert.strictEqual(pc.semNumero, 1);
+  assert.strictEqual(pc.semArquivo, 1);
+  assert.strictEqual(pc.aPagarFora, 1, "o cimento a pagar não entra");
+  assert.deepStrictEqual(pc.arquivos.map((a) => a.nome), ["4226.pdf", "4227.pdf", "4227-2.jpg", "4228.pdf"], "o mesmo arquivo nos dois itens vai uma vez");
+  assert.strictEqual(pc.de, "2026-10-09");
 });
 
 teste("base de dados: uma linha por item, nas colunas da planilha do escritório", () => {
