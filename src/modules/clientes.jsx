@@ -3175,6 +3175,44 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   //
   // Serve também para o pedido que ficou sem cotação dona: até aqui ele não
   // aparecia em tela nenhuma que soubesse apagá-lo.
+  // Excluir pela base de dados da obra: as mesmas regras do contas a pagar.
+  // Item de uma nota (pedido) leva a nota inteira — tirar um item só
+  // desequilibraria o papel; parcela de contrato muda no contrato; o que foi
+  // lançado no escritório sai de lá.
+  const excluirDaBaseDaObra = (c) => {
+    if (!c || !perm.podeGerenciarObra) return;
+    const contas = contasDaObra;
+    if (c.origem === "contrato") {
+      dialogo.alertar({ titulo: "Parcela de contrato", mensagem: "Ela muda no contrato da obra, não na base.", tipo: "aviso" });
+      return;
+    }
+    if (c.origem === "escritorio") {
+      dialogo.alertar({ titulo: "Lançada no escritório", mensagem: "Exclua pelo lançamento na base do escritório — as duas pontas saem juntas.", tipo: "aviso" });
+      return;
+    }
+    // Lançamento de cotação comum (medição, sinal, parcelas): quem desfaz é a
+    // cotação — ela guarda o "lançada" e o plano, e ficaria marcada como
+    // lançada sem contas. Só o pedido da conta de loja sai daqui.
+    const cot = c.cotacaoId ? ((obraAtual && obraAtual.cotacoes) || []).find(x => x && x.id === c.cotacaoId) : null;
+    if (cot && !cot.contaLoja) {
+      dialogo.alertar({ titulo: "Veio da cotação", mensagem: `Desfaça o lançamento na cotação “${cot.titulo || "da obra"}” — ela volta a ficar aberta e as contas saem juntas.`, tipo: "aviso" });
+      return;
+    }
+    if (c.pedidoId && typeof linhasDePedido === "function") {
+      const linha = linhasDePedido(contas).find(l => l && l.tipo === "pedido" && l.pedidoId === c.pedidoId);
+      if (linha) { apagarPedidoDeContas({ ...linha, obraId: c.obraId || (obraAtual && obraAtual.id) }); return; }
+    }
+    if (c.origem === "cotacao") {
+      dialogo.alertar({ titulo: "Veio da cotação", mensagem: "Desfaça o lançamento na cotação da obra.", tipo: "aviso" });
+      return;
+    }
+    if (travouNaFatura([c], "excluir")) return;
+    if (travouNoMesFechado([c], "excluir")) return;
+    dialogo.confirmar({ titulo: "Excluir conta?",
+      mensagem: `${c.descricao || "Conta"} · ${fmtMoedaCtr(Number(c.valor) || 0)}${c.doc ? " · papel " + c.doc : ""}. Esta ação não pode ser desfeita.` + vaiJuntoNoEscritorio([c]),
+      confirmar: "Excluir", destrutivo: true })
+      .then(ok => { if (ok) gravarContas(contas.filter(x => x.id !== c.id)); });
+  };
   const apagarPedidoDeContas = async (linha, tituloPronto) => {
     const obra = (obras || []).find(o => o && o.id === linha.obraId);
     if (!obra) return;
@@ -3205,9 +3243,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!ok) return;
     let contas = obra.contasPagar || [];
     for (const id of ids) contas = apagarPedidoInteiro(contas, id);
-    const cotacoes = (obra.cotacoes || []).map(c => !c ? c : ({
-      ...c, pedidos: (c.pedidos || []).filter(x => x && ids.indexOf(x.id) < 0),
-    }));
+    // a cotação que tinha virado este pedido deixa de apontar para ele
+    const cotacoes = (obra.cotacoes || []).map(c => {
+      if (!c) return c;
+      let x = { ...c, pedidos: (c.pedidos || []).filter(p => p && ids.indexOf(p.id) < 0) };
+      if (x.pedidoNaLoja && ids.indexOf(x.pedidoNaLoja.pedidoId) >= 0) { x = { ...x }; delete x.pedidoNaLoja; }
+      return x;
+    });
     const atualizada = { ...obra, contasPagar: contas, cotacoes };
     gravarObras(obras.map(o => o.id === obra.id ? atualizada : o));
     if (obraAtual && obraAtual.id === obra.id) setObraSelecionada(atualizada);
@@ -6512,6 +6554,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <BaseDeDados obras={[obraAtual]} clientes={data.clientes || []} prestadores={prestadores}
           insumos={insumosDoCatalogo(data)} lancamentos={typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : []}
           isMobile={isMobile} obraFixa nomeDoArquivo={"base " + (obraAtual.nome || "obra")}
+          acoes={perm.podeGerenciarObra ? { daObra: true, excluir: excluirDaBaseDaObra } : null}
           completar={perm.podeGerenciarObra ? { data, save, quem: typeof nomeDeQuem === "function" ? nomeDeQuem(perm.usuario) : "", obraId: obraAtual.id } : null} />
       </div>
     );

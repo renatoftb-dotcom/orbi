@@ -4750,9 +4750,10 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
     return { position: "sticky", left: esquerda, zIndex: 1, background: fundo, marginLeft: -respiro, paddingLeft: respiro,
       boxShadow: k === fixas.length - 1 ? "1px 0 0 rgba(38,36,33,0.10)" : undefined };
   };
-  // os botões da transação (no escritório): ver o papel, editar, excluir
+  // os botões da transação (no escritório): ver o papel, editar, excluir.
+  // Na base da obra (`acoes.daObra`) a linha é a conta da obra.
   const botoesDaLinha = (l) => {
-    const lanc = l.lanc_;
+    const lanc = l.lanc_ || (acoes && acoes.daObra ? l.conta_ : null);
     if (!comAcoes || !lanc) return null;
     const papeis = ((l.conta_ && l.conta_.anexos) || []).filter((a) => a && a.url);
     const b = { border: "none", background: "none", padding: "0 3px", cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: "#0474f4" };
