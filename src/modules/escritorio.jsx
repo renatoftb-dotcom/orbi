@@ -1252,6 +1252,7 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
 
   const renderSistema = () => (
     <div style={E.body}>
+      {perm.podeGerenciarUsuarios && <HistoricoGravacoes E={E} onReload={onReload} />}
       <div style={E.secao}>
         <div style={E.secTitulo}>Manutenção automática</div>
         <div style={{ fontSize:13, color:"#4b5563", lineHeight:1.6, marginBottom:16 }}>
@@ -1323,6 +1324,140 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
       {aba === "usuarios" && perm.podeGerenciarUsuarios && renderUsuarios()}
       {renderModalMembro()}
       {aba === "sistema"  && renderSistema()}
+    </div>
+  );
+}
+
+
+
+// ── Histórico de gravações (Sistema, só admin) ──────────────────
+// O servidor guarda a versão de ANTES de cada gravação que muda alguma
+// coisa (escritório, obras, lançamentos, clientes, orçamentos) e de cada
+// exclusão. Aqui dá para ver, baixar e voltar uma versão. Restaurar também
+// guarda o estado atual antes — dá para desfazer a restauração.
+const HIST_TABELAS = [
+  ["escritorio", "Escritório"],
+  ["obras", "Obras"],
+  ["lancamentos", "Lançamentos do escritório"],
+  ["clientes", "Clientes"],
+  ["orcamentos_projeto", "Orçamentos"],
+];
+const HIST_MOTIVO = { gravacao: "gravação", lote: "importação", exclusao: "exclusão", "antes de restaurar": "antes de restaurar" };
+
+function histTamanho(b) {
+  const n = Number(b) || 0;
+  return n >= 1024 * 1024 ? (n / 1024 / 1024).toFixed(1).replace(".", ",") + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+}
+
+function HistoricoGravacoes({ E, onReload }) {
+  const [tabela, setTabela] = useState("escritorio");
+  const [lista, setLista] = useState(null);
+  const [erro, setErro] = useState("");
+  const [ocupado, setOcupado] = useState("");
+  const [estreito, setEstreito] = useState(typeof window !== "undefined" && window.innerWidth < 640);
+  useEffect(() => {
+    const f = () => setEstreito(window.innerWidth < 640);
+    window.addEventListener("resize", f);
+    return () => window.removeEventListener("resize", f);
+  }, []);
+
+  async function carregar(t) {
+    setErro(""); setLista(null);
+    try { setLista(await api.historico.listar(t || tabela)); }
+    catch (e) { setErro((e && e.message) || "Não deu para ler o histórico."); setLista([]); }
+  }
+  useEffect(() => { carregar(tabela); }, [tabela]);
+
+  async function baixar(h) {
+    setOcupado("b" + h.id);
+    try {
+      const v = await api.historico.ler(h.id);
+      const blob = new Blob([JSON.stringify(v.dados, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      const quando = String(h.criado_em || "").slice(0, 16).replace(/[T:]/g, "-");
+      a.href = URL.createObjectURL(blob);
+      a.download = `historico-${h.tabela}-${quando}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    } catch (e) {
+      dialogo.alertar({ titulo: "Não deu para baixar", mensagem: (e && e.message) || "", tipo: "erro" });
+    } finally { setOcupado(""); }
+  }
+
+  async function restaurar(h, so) {
+    const quando = new Date(h.criado_em).toLocaleString("pt-BR");
+    const oque = h.tabela === "escritorio"
+      ? (so ? "o financeiro do escritório (extratos, fechamentos, saldos)" : "o escritório inteiro (cadastro, equipe e financeiro)")
+      : (h.nome ? `"${h.nome}"` : "este registro");
+    const ok = await dialogo.confirmar({
+      titulo: "Voltar esta versão?",
+      mensagem: `Volta ${oque} para como estava antes da gravação de ${quando}.\n\nO que está gravado agora fica guardado no histórico — dá para desfazer.`
+        + (h.tabela === "escritorio" && so ? "\n\nCadastro e equipe ficam como estão." : ""),
+      confirmar: "Restaurar",
+    });
+    if (!ok) return;
+    setOcupado("r" + h.id);
+    try {
+      await api.historico.restaurar(h.id, so);
+      if (typeof toast !== "undefined" && toast.sucesso) toast.sucesso("Versão restaurada");
+      if (onReload) await onReload();
+      await carregar(tabela);
+    } catch (e) {
+      dialogo.alertar({ titulo: "Não deu para restaurar", mensagem: (e && e.message) || "", tipo: "erro" });
+    } finally { setOcupado(""); }
+  }
+
+  const btnP = { ...E.btnSec, padding: "6px 12px", fontSize: 12.5 };
+  return (
+    <div style={E.secao} data-vk-historico>
+      <div style={E.secTitulo}>Histórico de gravações</div>
+      <div style={{ fontSize: 13, color: "#4b5563", lineHeight: 1.6, marginBottom: 14 }}>
+        A cada gravação, o sistema guarda como o registro estava antes. Se algum dado sumir, escolha a versão
+        de antes e restaure. Fica tudo dos últimos 3 dias e, até 90 dias, a última versão de cada dia.
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+        <select value={tabela} onChange={(e) => setTabela(e.target.value)}
+          style={{ ...E.input, width: estreito ? "100%" : 320, cursor: "pointer" }} data-vk-historico-tabela>
+          {HIST_TABELAS.map(([k, r]) => <option key={k} value={k}>{r}</option>)}
+        </select>
+        <button style={btnP} onClick={() => carregar(tabela)}>Atualizar</button>
+      </div>
+      {erro && <div style={{ fontSize: 12.5, color: "#b91c1c", marginBottom: 10 }}>{erro}</div>}
+      {lista === null ? <div style={{ fontSize: 13, color: "#6b7280" }}>Carregando…</div>
+        : lista.length === 0 ? <div style={{ fontSize: 13, color: "#6b7280" }}>Nenhuma versão guardada ainda.</div>
+        : (
+          <div style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, overflow: "hidden", background: "#fff" }}>
+            {lista.map((h, i) => {
+              const quando = new Date(h.criado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+              const resumo = h.tabela === "escritorio"
+                ? [h.extratos != null ? `${h.extratos} ${Number(h.extratos) === 1 ? "mês" : "meses"} de extrato` : "sem extratos",
+                   h.fechamentos != null ? `${h.fechamentos} fechamento${Number(h.fechamentos) === 1 ? "" : "s"}` : "sem fechamentos"].join(" · ")
+                : (h.nome || h.registro_id);
+              return (
+                <div key={h.id} data-vk-historico-linha style={{ display: "flex", flexDirection: estreito ? "column" : "row", alignItems: estreito ? "stretch" : "center",
+                  gap: estreito ? 8 : 12, padding: "10px 12px", borderTop: i ? "1px solid rgba(38,36,33,0.08)" : "none" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, color: "#111827", fontWeight: 600 }}>{quando}
+                      <span style={{ fontWeight: 400, color: "#6b7280" }}> · {HIST_MOTIVO[h.motivo] || h.motivo || "gravação"}{h.usuario_email ? ` por ${h.usuario_email}` : ""}</span>
+                    </div>
+                    <div style={{ fontSize: 12.5, color: "#4b5563", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: estreito ? "normal" : "nowrap" }}>
+                      {resumo} · {histTamanho(h.bytes)}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button style={btnP} disabled={!!ocupado} onClick={() => baixar(h)}>{ocupado === "b" + h.id ? "Baixando…" : "Baixar"}</button>
+                    {h.tabela === "escritorio" && (
+                      <button style={btnP} disabled={!!ocupado} onClick={() => restaurar(h, "financeiro")} data-vk-historico-financeiro>Restaurar o financeiro</button>
+                    )}
+                    <button style={btnP} disabled={!!ocupado} onClick={() => restaurar(h, "")}>
+                      {ocupado === "r" + h.id ? "Restaurando…" : h.tabela === "escritorio" ? "Restaurar tudo" : "Restaurar"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
     </div>
   );
 }

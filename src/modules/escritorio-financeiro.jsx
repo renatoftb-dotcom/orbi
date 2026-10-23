@@ -406,8 +406,10 @@ function fontesDasContasPagas(contas) {
     anexos: anexosDaTransacao(c),
   });
   for (const c of pagas) {
-    if (!c.pedidoId) { soltas.push(fonteDaConta(c)); continue; }
-    const chave = c.pedidoId + "|" + (c.contaId || "") + "|" + dataDe(c);
+    if (!c.pedidoId && !c.pagamentoConjunto) { soltas.push(fonteDaConta(c)); continue; }
+    // vários pedidos pagos de uma vez (um débito só no banco) viram uma
+    // linha só no extrato, como o banco mostra
+    const chave = (c.pagamentoConjunto ? "pg:" + c.pagamentoConjunto : c.pedidoId) + "|" + (c.contaId || "") + "|" + dataDe(c);
     if (!porChave[chave]) {
       porChave[chave] = { chave, itens: [], contas: [] };
       grupos.push(porChave[chave]);
@@ -432,7 +434,9 @@ function fontesDasContasPagas(contas) {
       tipo: "pedido", refId: g.chave, contaId: p.contaId || "",
       valor: num(itens.reduce((s, c) => s + valorDe(c), 0)),
       data: dataDe(p),
-      descricao: (rotulo ? "Pedido " + rotulo : "Pedido") + " \u2014 " + itens.length + " itens",
+      descricao: p.pagamentoConjunto && new Set(itens.map((c) => c.pedidoId)).size > 1
+        ? `Pagamento de ${new Set(itens.map((c) => c.pedidoId)).size} pedidos \u2014 ${itens.length} itens`
+        : (rotulo ? "Pedido " + rotulo : "Pedido") + " \u2014 " + itens.length + " itens",
       fornecedor: p.favorecido || "", fornecedorId: p.prestadorId || "",
       documento: p.doc || p.numeroNota || p.numeroLoja || "",
       numeroDoc: p.numeroDoc || "",
@@ -923,6 +927,29 @@ function compraEditada(compra, mudancas, cartao, origem) {
 
 // O que mudou no DINHEIRO da compra — é isso que a fatura fechada trava.
 // Trocar só a descrição passa.
+// O que muda o dinheiro de um lançamento: valor, mês, data, conta, unidade,
+// se passa pelo banco, a obra que recebe o custo, cartão e parcelas.
+// Descrição, fornecedor e papel não mexem no saldo de nada.
+function lancamentoMexeuNoDinheiro(antes, depois) {
+  const a = antes || {}, d = depois || {};
+  const n = (v) => Math.round((Number(v) || 0) * 100) / 100;
+  return n(a.valor) !== n(d.valor)
+    || String(a.competencia || "") !== String(d.competencia || "")
+    || String(a.lancadoEm || "").slice(0, 10) !== String(d.lancadoEm || "").slice(0, 10)
+    || String(a.contaId || "") !== String(d.contaId || "")
+    || String(a.unidadeId || "") !== String(d.unidadeId || "")
+    || String(a.contaBanco || "") !== String(d.contaBanco || "")
+    || String(a.cartaoId || "") !== String(d.cartaoId || "")
+    || !!d.naObra;
+}
+// O lançamento que veio de uma obra pela ponte (a baixa de uma conta, um
+// pedido pago): as duas pontas são a mesma transação. Mudar o dinheiro só
+// do lado do escritório deixava a obra com o valor antigo.
+function lancamentoVeioDaObra(l) {
+  const o = (l && l.origem) || {};
+  return !!o.obraId && !o.avulsa && !ehLigacaoDaGestao(o) && ["conta", "pedido", "doc"].indexOf(o.tipo) >= 0;
+}
+
 function compraMexeuNoDinheiro(antes, depois) {
   const plano = (x) => JSON.stringify(((x || {}).parcelasCartao || []).map((p) => [p.competencia, p.valor]));
   return plano(antes) !== plano(depois) || (antes || {}).cartaoId !== (depois || {}).cartaoId;
@@ -1108,7 +1135,9 @@ const EF_COLUNAS = {
 function efNumero(txt) {
   const t = String(txt == null ? "" : txt).replace(/r\$/i, "").replace(/\s/g, "").trim();
   if (!t) return null;
-  const limpo = t.indexOf(",") >= 0 ? t.replace(/\./g, "").replace(",", ".") : t;
+  // sem vírgula, "1.500" e "2.350.000" são milhar (pt-BR), não decimal
+  const limpo = t.indexOf(",") >= 0 ? t.replace(/\./g, "").replace(",", ".")
+    : /^-?[1-9]\d{0,2}(\.\d{3})+$/.test(t) ? t.replace(/\./g, "") : t;
   const n = Number(limpo);
   return Number.isFinite(n) ? n : null;
 }
@@ -1933,6 +1962,8 @@ function efValorDeTexto(t) {
   const virgula = s.lastIndexOf(","), ponto = s.lastIndexOf(".");
   if (virgula >= 0 && virgula > ponto) s = s.replace(/\./g, "").replace(",", ".");
   else if (virgula >= 0) s = s.replace(/,/g, "");
+  // "R$ 2.350" (sem centavos): o ponto é milhar, não decimal
+  else if (/^[1-9]\d{0,2}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
   const n = Number(s);
   if (!Number.isFinite(n)) return null;
   return negativo ? -n : n;
@@ -7484,7 +7515,9 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const lig = l.ligarOriginal;
     const lancsLigados0 = lig && lig.id ? lancs.map((x) => (x && x.id === lig.id ? { ...x, origem: lig.origem } : x)) : lancs;
     // o lançamento que existia (editado para ligar à obra) dá lugar ao ligado
-    const lancsLigados = av && av.substitui && daPonte.length ? lancsLigados0.filter((x) => x && x.id !== av.substitui) : lancsLigados0;
+    // — sem isto ele ficava, e o custo contava duas vezes no escritório
+    const substituido = (av && av.substitui) || (l.id && !av ? l.id : "");
+    const lancsLigados = substituido && daPonte.length ? lancsLigados0.filter((x) => x && x.id !== substituido) : lancsLigados0;
     save({ ...data, ...catalogoQueAprendeu(l),
       obras: todas.map((o) => (o && o.id === obra.id ? obraNova : o)),
       lancamentos: [...outrosLancamentos, ...lancsLigados, ...daPonte],
@@ -7583,6 +7616,25 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   }
 
   function salvarLancamento(l) {
+    // Editar não tira nem põe dinheiro em mês fechado: o mês de ANTES também
+    // conta (mudar a competência de agosto, fechado, para setembro mudava o
+    // saldo conferido de agosto).
+    const antesDaEdicao = l && l.id ? lancs.find((x) => x && x.id === l.id) : null;
+    if (antesDaEdicao && lancamentoMexeuNoDinheiro(antesDaEdicao, l)) {
+      const travaAntes = bloqueioPorMesFechado(antesDaEdicao.competencia, fechamentos);
+      if (travaAntes) {
+        dialogo.alertar({ titulo: "Mês fechado", tipo: "aviso",
+          mensagem: String(travaAntes).replace(/:[^:]*$/, ".") + " Para mudar valor, data, mês ou conta deste lançamento, reabra o mês no Fechamento antes. A descrição e o papel podem mudar." });
+        return;
+      }
+      if (lancamentoVeioDaObra(antesDaEdicao)) {
+        const ob = (((data || {}).obras || []).find((o) => o && o.id === antesDaEdicao.origem.obraId)) || null;
+        dialogo.alertar({ titulo: "Este lançamento vem da obra", tipo: "aviso",
+          mensagem: `Ele é a baixa de uma conta ${ob ? "da obra " + (ob.nome || "") : "de uma obra"}. Valor, data, mês e conta mudam lá, no Contas a pagar — `
+            + "a linha do extrato acompanha. Por aqui dá para mudar a descrição e o papel." });
+        return;
+      }
+    }
     if (l && l.naObra) { lancarCustoNaObra(l); return; }
     if (l && l.gestaoAvulsaNaObra) {
       const antes = l.id ? lancs.find((x) => x && x.id === l.id) : null;

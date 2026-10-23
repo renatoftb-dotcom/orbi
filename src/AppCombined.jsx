@@ -3487,6 +3487,13 @@ const api = {
     enviar: (categoria, texto) => post("/feedback", { categoria, texto }),
   },
 
+  // Histórico: a versão de antes de cada gravação (admin). Ver server.js.
+  historico: {
+    listar:    (tabela, registro) => get(`/api/historico?tabela=${encodeURIComponent(tabela || "escritorio")}${registro ? `&registro=${encodeURIComponent(registro)}` : ""}`),
+    ler:       (id)               => get(`/api/historico/${encodeURIComponent(id)}`),
+    restaurar: (id, so)           => post(`/api/historico/${encodeURIComponent(id)}/restaurar`, so ? { so } : {}),
+  },
+
   backup: {
     exportar: () => get("/api/backup"),
     importar: (dados) => post("/api/backup/importar", dados),
@@ -3747,15 +3754,25 @@ async function _gravarComVersao(salvar, base, nosso, aoJuntar) {
       alvo = junto;
     }
   }
-  throw new Error("Não consegui gravar: a obra está sendo alterada ao mesmo tempo por outra pessoa. Tente de novo.");
+  throw new Error("Não consegui gravar: o registro está sendo alterado ao mesmo tempo por outra pessoa. Tente de novo.");
 }
 
 async function saveAllData(newData, oldData = {}, opcoes = {}) {
   const tasks = [];
   // o que voltou do servidor diferente do que mandamos (versão nova,
   // mudanças de outra pessoa juntadas): o app aplica na tela
-  const atualizados = { obras: {}, escritorio: null };
+  const atualizados = { obras: {}, lancamentos: {}, clientes: {}, orcamentosProjeto: {}, escritorio: null };
   const aoJuntar = opcoes.aoJuntar;
+  // A versão que vai junto é a do último estado que ESTE app gravou ou leu
+  // (`base`), não a que ficou presa no registro: uma tela que guardou uma
+  // cópia do orçamento (ou do cliente) antes da última gravação mandaria uma
+  // versão velha e daria "outra pessoa alterou" sem ninguém ter mexido.
+  const comVersaoDaBase = (reg, base) => (base && base._versao != null && reg && reg._versao !== base._versao)
+    ? { ...reg, _versao: base._versao } : reg;
+  // Grava um registro de lista com versão; o que voltou vai para `atualizados`.
+  const comVersao = (lista, salvar, base, reg0, tipo, nome) => { const reg = comVersaoDaBase(reg0, base); return _gravarComVersao(salvar, base, reg,
+    (nosso, deles) => aoJuntar && aoJuntar({ tipo, nome: nome(deles) || nome(nosso) || "" }))
+    .then((final) => { atualizados[lista][reg.id] = final; }); };
 
   // Clientes
   const clientesNovos = (newData.clientes || []).filter(
@@ -3764,7 +3781,8 @@ async function saveAllData(newData, oldData = {}, opcoes = {}) {
   const clientesRemovidos = (oldData.clientes || []).filter(
     o => !newData.clientes?.find(c => c.id === o.id)
   );
-  clientesNovos.forEach(c => tasks.push(api.clientes.save(c)));
+  clientesNovos.forEach(c => tasks.push(comVersao("clientes", (x) => api.clientes.save(x),
+    (oldData.clientes || []).find(a => a && a.id === c.id) || null, c, "cliente", (x) => x && x.nome)));
   clientesRemovidos.forEach(c => tasks.push(api.clientes.delete(c.id)));
 
   // Fornecedores
@@ -3786,7 +3804,8 @@ async function saveAllData(newData, oldData = {}, opcoes = {}) {
   const orcsRemovidos = (oldData.orcamentosProjeto || []).filter(
     a => !newData.orcamentosProjeto?.find(o => o.id === a.id)
   );
-  orcsNovos.forEach(o => tasks.push(api.orcamentos.save(o)));
+  orcsNovos.forEach(o => tasks.push(comVersao("orcamentosProjeto", (x) => api.orcamentos.save(x),
+    orcsVelhosTodos.find(a => a && a.id === o.id) || null, o, "orcamento", (x) => x && (x.referencia || x.titulo || x.nome))));
   orcsRemovidos.forEach(o => tasks.push(api.orcamentos.delete(o.id)));
 
   // Receitas
@@ -3808,7 +3827,7 @@ async function saveAllData(newData, oldData = {}, opcoes = {}) {
   );
   obrasNovas.forEach(o => {
     const base = (oldData.obras || []).find(a => a && a.id === o.id) || null;
-    tasks.push(_gravarComVersao((x) => api.obras.save(x), base, o,
+    tasks.push(_gravarComVersao((x) => api.obras.save(x), base, comVersaoDaBase(o, base),
       (nosso, deles) => aoJuntar && aoJuntar({ tipo: "obra", nome: deles.nome || nosso.nome || "" }))
       .then((final) => { atualizados.obras[o.id] = final; }));
   });
@@ -3817,7 +3836,9 @@ async function saveAllData(newData, oldData = {}, opcoes = {}) {
   // Lançamentos
   const { mudados: lancsNovos, removidos: lancsRemovidos } =
     _mudadosERemovidos(newData.lancamentos, oldData.lancamentos);
-  lancsNovos.forEach(l => tasks.push(api.lancamentos.save(l)));
+  const lancsAntes = new Map((oldData.lancamentos || []).map(a => [a && a.id, a]));
+  lancsNovos.forEach(l => tasks.push(comVersao("lancamentos", (x) => api.lancamentos.save(x),
+    lancsAntes.get(l.id) || null, l, "lancamento", (x) => x && x.descricao)));
   lancsRemovidos.forEach(l => tasks.push(api.lancamentos.delete(l.id)));
 
   // Materiais / Insumos — faltava aqui: o catálogo semeado ou editado em
@@ -3829,7 +3850,7 @@ async function saveAllData(newData, oldData = {}, opcoes = {}) {
 
   // Escritório (inclui logo agregado no mesmo objeto)
   if (newData.escritorio && JSON.stringify(newData.escritorio) !== JSON.stringify(oldData.escritorio)) {
-    tasks.push(_gravarComVersao((x) => api.escritorio.save(x), oldData.escritorio || {}, newData.escritorio,
+    tasks.push(_gravarComVersao((x) => api.escritorio.save(x), oldData.escritorio || {}, comVersaoDaBase(newData.escritorio, oldData.escritorio),
       () => aoJuntar && aoJuntar({ tipo: "escritorio", nome: "escritório" }))
       .then((final) => { atualizados.escritorio = final; }));
   }
@@ -12143,8 +12164,10 @@ function fontesDasContasPagas(contas) {
     anexos: anexosDaTransacao(c),
   });
   for (const c of pagas) {
-    if (!c.pedidoId) { soltas.push(fonteDaConta(c)); continue; }
-    const chave = c.pedidoId + "|" + (c.contaId || "") + "|" + dataDe(c);
+    if (!c.pedidoId && !c.pagamentoConjunto) { soltas.push(fonteDaConta(c)); continue; }
+    // vários pedidos pagos de uma vez (um débito só no banco) viram uma
+    // linha só no extrato, como o banco mostra
+    const chave = (c.pagamentoConjunto ? "pg:" + c.pagamentoConjunto : c.pedidoId) + "|" + (c.contaId || "") + "|" + dataDe(c);
     if (!porChave[chave]) {
       porChave[chave] = { chave, itens: [], contas: [] };
       grupos.push(porChave[chave]);
@@ -12169,7 +12192,9 @@ function fontesDasContasPagas(contas) {
       tipo: "pedido", refId: g.chave, contaId: p.contaId || "",
       valor: num(itens.reduce((s, c) => s + valorDe(c), 0)),
       data: dataDe(p),
-      descricao: (rotulo ? "Pedido " + rotulo : "Pedido") + " \u2014 " + itens.length + " itens",
+      descricao: p.pagamentoConjunto && new Set(itens.map((c) => c.pedidoId)).size > 1
+        ? `Pagamento de ${new Set(itens.map((c) => c.pedidoId)).size} pedidos \u2014 ${itens.length} itens`
+        : (rotulo ? "Pedido " + rotulo : "Pedido") + " \u2014 " + itens.length + " itens",
       fornecedor: p.favorecido || "", fornecedorId: p.prestadorId || "",
       documento: p.doc || p.numeroNota || p.numeroLoja || "",
       numeroDoc: p.numeroDoc || "",
@@ -12660,6 +12685,29 @@ function compraEditada(compra, mudancas, cartao, origem) {
 
 // O que mudou no DINHEIRO da compra — é isso que a fatura fechada trava.
 // Trocar só a descrição passa.
+// O que muda o dinheiro de um lançamento: valor, mês, data, conta, unidade,
+// se passa pelo banco, a obra que recebe o custo, cartão e parcelas.
+// Descrição, fornecedor e papel não mexem no saldo de nada.
+function lancamentoMexeuNoDinheiro(antes, depois) {
+  const a = antes || {}, d = depois || {};
+  const n = (v) => Math.round((Number(v) || 0) * 100) / 100;
+  return n(a.valor) !== n(d.valor)
+    || String(a.competencia || "") !== String(d.competencia || "")
+    || String(a.lancadoEm || "").slice(0, 10) !== String(d.lancadoEm || "").slice(0, 10)
+    || String(a.contaId || "") !== String(d.contaId || "")
+    || String(a.unidadeId || "") !== String(d.unidadeId || "")
+    || String(a.contaBanco || "") !== String(d.contaBanco || "")
+    || String(a.cartaoId || "") !== String(d.cartaoId || "")
+    || !!d.naObra;
+}
+// O lançamento que veio de uma obra pela ponte (a baixa de uma conta, um
+// pedido pago): as duas pontas são a mesma transação. Mudar o dinheiro só
+// do lado do escritório deixava a obra com o valor antigo.
+function lancamentoVeioDaObra(l) {
+  const o = (l && l.origem) || {};
+  return !!o.obraId && !o.avulsa && !ehLigacaoDaGestao(o) && ["conta", "pedido", "doc"].indexOf(o.tipo) >= 0;
+}
+
 function compraMexeuNoDinheiro(antes, depois) {
   const plano = (x) => JSON.stringify(((x || {}).parcelasCartao || []).map((p) => [p.competencia, p.valor]));
   return plano(antes) !== plano(depois) || (antes || {}).cartaoId !== (depois || {}).cartaoId;
@@ -12845,7 +12893,9 @@ const EF_COLUNAS = {
 function efNumero(txt) {
   const t = String(txt == null ? "" : txt).replace(/r\$/i, "").replace(/\s/g, "").trim();
   if (!t) return null;
-  const limpo = t.indexOf(",") >= 0 ? t.replace(/\./g, "").replace(",", ".") : t;
+  // sem vírgula, "1.500" e "2.350.000" são milhar (pt-BR), não decimal
+  const limpo = t.indexOf(",") >= 0 ? t.replace(/\./g, "").replace(",", ".")
+    : /^-?[1-9]\d{0,2}(\.\d{3})+$/.test(t) ? t.replace(/\./g, "") : t;
   const n = Number(limpo);
   return Number.isFinite(n) ? n : null;
 }
@@ -13670,6 +13720,8 @@ function efValorDeTexto(t) {
   const virgula = s.lastIndexOf(","), ponto = s.lastIndexOf(".");
   if (virgula >= 0 && virgula > ponto) s = s.replace(/\./g, "").replace(",", ".");
   else if (virgula >= 0) s = s.replace(/,/g, "");
+  // "R$ 2.350" (sem centavos): o ponto é milhar, não decimal
+  else if (/^[1-9]\d{0,2}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
   const n = Number(s);
   if (!Number.isFinite(n)) return null;
   return negativo ? -n : n;
@@ -19221,7 +19273,9 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const lig = l.ligarOriginal;
     const lancsLigados0 = lig && lig.id ? lancs.map((x) => (x && x.id === lig.id ? { ...x, origem: lig.origem } : x)) : lancs;
     // o lançamento que existia (editado para ligar à obra) dá lugar ao ligado
-    const lancsLigados = av && av.substitui && daPonte.length ? lancsLigados0.filter((x) => x && x.id !== av.substitui) : lancsLigados0;
+    // — sem isto ele ficava, e o custo contava duas vezes no escritório
+    const substituido = (av && av.substitui) || (l.id && !av ? l.id : "");
+    const lancsLigados = substituido && daPonte.length ? lancsLigados0.filter((x) => x && x.id !== substituido) : lancsLigados0;
     save({ ...data, ...catalogoQueAprendeu(l),
       obras: todas.map((o) => (o && o.id === obra.id ? obraNova : o)),
       lancamentos: [...outrosLancamentos, ...lancsLigados, ...daPonte],
@@ -19320,6 +19374,25 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   }
 
   function salvarLancamento(l) {
+    // Editar não tira nem põe dinheiro em mês fechado: o mês de ANTES também
+    // conta (mudar a competência de agosto, fechado, para setembro mudava o
+    // saldo conferido de agosto).
+    const antesDaEdicao = l && l.id ? lancs.find((x) => x && x.id === l.id) : null;
+    if (antesDaEdicao && lancamentoMexeuNoDinheiro(antesDaEdicao, l)) {
+      const travaAntes = bloqueioPorMesFechado(antesDaEdicao.competencia, fechamentos);
+      if (travaAntes) {
+        dialogo.alertar({ titulo: "Mês fechado", tipo: "aviso",
+          mensagem: String(travaAntes).replace(/:[^:]*$/, ".") + " Para mudar valor, data, mês ou conta deste lançamento, reabra o mês no Fechamento antes. A descrição e o papel podem mudar." });
+        return;
+      }
+      if (lancamentoVeioDaObra(antesDaEdicao)) {
+        const ob = (((data || {}).obras || []).find((o) => o && o.id === antesDaEdicao.origem.obraId)) || null;
+        dialogo.alertar({ titulo: "Este lançamento vem da obra", tipo: "aviso",
+          mensagem: `Ele é a baixa de uma conta ${ob ? "da obra " + (ob.nome || "") : "de uma obra"}. Valor, data, mês e conta mudam lá, no Contas a pagar — `
+            + "a linha do extrato acompanha. Por aqui dá para mudar a descrição e o papel." });
+        return;
+      }
+    }
     if (l && l.naObra) { lancarCustoNaObra(l); return; }
     if (l && l.gestaoAvulsaNaObra) {
       const antes = l.id ? lancs.find((x) => x && x.id === l.id) : null;
@@ -29228,8 +29301,12 @@ function numeroDeCampo(v) {
   if (typeof v === "number") return Number.isFinite(v) ? v : 0;
   const t = String(v == null ? "" : v).trim();
   if (!t) return 0;
-  // com vírgula, é pt-BR: o ponto é separador de milhar
-  const limpo = t.indexOf(",") >= 0 ? t.replace(/\./g, "").replace(",", ".") : t.replace(/\s/g, "");
+  // com vírgula, é pt-BR: o ponto é separador de milhar. Sem vírgula, ponto
+  // seguido de grupos de 3 dígitos também é milhar ("1.500", "2.350.000"):
+  // lido como decimal, "1.500" virava 1,5.
+  const limpo = t.indexOf(",") >= 0 ? t.replace(/\./g, "").replace(",", ".")
+    : /^-?[1-9]\d{0,2}(\.\d{3})+$/.test(t.replace(/\s/g, "")) ? t.replace(/\s/g, "").replace(/\./g, "")
+    : t.replace(/\s/g, "");
   const n = parseFloat(limpo);
   return Number.isFinite(n) ? n : 0;
 }
@@ -33243,18 +33320,47 @@ function cpNomeJaENumero(nome) {
 // aos arquivos delas. `elegivel(c)` diz quais contas podem ganhar número
 // agora (na gravação do dia a dia, só as que acabaram de ser pagas ou de
 // receber um papel). Devolve as contas e o próximo número livre.
+// Que contas são UMA transação para o número do papel. A mesma nota (mesma
+// referência e mesmo pedido) paga no mesmo dia é uma; as parcelas de uma
+// compra a prazo, pagas em meses diferentes, são transações diferentes
+// (cada boleto tem o seu comprovante e a sua linha no banco). Pagamentos
+// feitos juntos, num débito só (vários pedidos da loja de uma vez), levam
+// a marca `pagamentoConjunto` e ficam com um número só.
+function cpChaveDoPapel(c) {
+  const x = c || {};
+  if (x.pagamentoConjunto) return "pg:" + x.pagamentoConjunto;
+  const dia = String(x.pagoEm || "").slice(0, 10);
+  return String(x.numeroDoc || "") + "|" + String(x.pedidoId || (x.numeroDoc ? "" : x.id)) + "|" + dia;
+}
 function numerarPapeisDasPagas(contas, proximo, elegivel, numeros) {
   const lista = (contas || []).slice();
   let n = Number(proximo) || 1;
   const pode = typeof elegivel === "function" ? elegivel : () => true;
-  const chave = (c) => String(c.numeroDoc || c.pedidoId || c.id);
+  const chave = cpChaveDoPapel;
   const grupos = {};
   lista.forEach((c, i) => { if (c && c.pago) (grupos[chave(c)] = grupos[chave(c)] || []).push(i); });
+  // Que transações já usam cada número. Uma conta desfeita guarda o número
+  // (e o papel) de quando foi paga; paga de novo em outro dia ou junto com
+  // outras, vira outra transação — e levaria o mesmo número de outra que
+  // continua paga. Aí ela ganha número novo.
+  const gruposDoNumero = {};
+  for (const k of Object.keys(grupos)) for (const i of grupos[k]) {
+    const d = String(lista[i].doc || "").trim();
+    if (d) (gruposDoNumero[d] = gruposDoNumero[d] || new Set()).add(k);
+  }
   for (const k of Object.keys(grupos)) {
     const idx = grupos[k];
     if (!idx.some((i) => pode(lista[i]))) continue;
     const comDoc = idx.map((i) => lista[i]).find((c) => String(c.doc || "").trim());
     let numero = comDoc ? String(comDoc.doc).trim() : "";
+    // o número é de outra transação que segue paga (e esta não é a dona
+    // dele: a dona é a que não acabou de mudar) → número novo
+    const doOutro = numero && gruposDoNumero[numero] && [...gruposDoNumero[numero]].some((g) => g !== k
+      && !grupos[g].some((i) => pode(lista[i])));
+    if (doOutro) {
+      numero = (numeros && numeros[k]) ? String(numeros[k]) : String(n++);
+      for (const i of idx) if (String(lista[i].doc || "").trim()) lista[i] = { ...lista[i], doc: "" };
+    }
     if (!numero && numeros && numeros[k]) numero = String(numeros[k]);
     if (!numero) { numero = String(n); n++; }
     // os papéis da transação, na ordem em que aparecem, com o nome novo
@@ -33410,7 +33516,7 @@ function completarBase(dados, opcoes) {
   const reg = (c, det) => (typeof registrarAto === "function" ? registrarAto(c, "editada", quem, agora, det) : c);
 
   // 1. números do papel, na ordem do pagamento
-  const chave = (c) => String(c.numeroDoc || c.pedidoId || c.id);
+  const chave = cpChaveDoPapel;
   const pend = [];
   for (const ob of (quer("papel") ? obras.filter(daVez) : [])) {
     const vistos = {};
@@ -51315,6 +51421,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // número, sem nada que ligasse a linha da base ao arquivo.
   const comPapeisNumerados = (fatia) => {
     if (typeof numerarPapeisDasPagas !== "function" || typeof proximoNumeroDePapel !== "function") return fatia;
+    // o cliente vê só as obras dele e nenhum lançamento do escritório: a
+    // série que ele calcularia repetiria números de outras obras. O número
+    // nasce quando o escritório grava (ou no Completar a base).
+    if (perm.isCliente) return fatia;
     const todas = data.obras || obras || [];
     let proximo = null;
     return (fatia || []).map((o) => {
@@ -51409,9 +51519,27 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const lancsAgora = typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : [];
     const desfeitas = typeof contasQueDeixaramDeSerPagas === "function"
       ? contasQueDeixaramDeSerPagas(contasAntes, contasDepois) : [];
-    const limpo = (typeof semLancamentosDasContas === "function" && obraDepois)
+    const limpo0 = (typeof semLancamentosDasContas === "function" && obraDepois)
       ? semLancamentosDasContas(lancsAgora, obraDepois.id, desfeitas, contasDepois)
       : { lancamentos: lancsAgora, removidos: 0, reenviar: [] };
+    // Conta que já estava paga e ganhou o número do papel agora (o papel
+    // chegou depois): o lançamento ligado no extrato passa a levar o número.
+    const antesPorId = new Map((contasAntes || []).filter(Boolean).map(c => [c.id, c]));
+    const ganharamNumero = (contasDepois || []).filter(c => {
+      const a = c && antesPorId.get(c.id);
+      return a && a.pago && c.pago && c.doc && String(c.doc) !== String(a.doc || "");
+    });
+    let docsAtualizados = 0;
+    let lancsComDoc = limpo0.lancamentos;
+    if (ganharamNumero.length && obraDepois && typeof lancamentosLigadosAsContas === "function") {
+      lancsComDoc = limpo0.lancamentos.map(l => {
+        const c = ganharamNumero.find(x => lancamentosLigadosAsContas([l], obraDepois.id, [x]).length);
+        if (!c || String(l.documento || "") === String(c.doc)) return l;
+        docsAtualizados++;
+        return { ...l, documento: String(c.doc) };
+      });
+    }
+    const limpo = { ...limpo0, lancamentos: lancsComDoc, removidos: limpo0.removidos + docsAtualizados };
 
     const pagas = contasRecemPagas(contasAntes, contasDepois);
     // Saiu parte de uma nota: a linha dela no extrato saiu inteira, e o que
@@ -51635,7 +51763,18 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       confirmar: "Desfazer pagamento",
     });
   };
+  // O login do cliente dá baixa só na obra em que ELE paga os fornecedores.
+  // Onde quem paga é o escritório, a baixa vira lançamento no extrato do
+  // escritório — e o cliente não enxerga nem grava esse extrato: a baixa
+  // dele ficava sem a outra ponta (e desfazer deixava a do escritório solta).
+  const clienteNaoDaBaixa = () => {
+    if (!perm.isCliente || (obraAtual && obraAtual.clientePagaDireto)) return false;
+    dialogo.alertar({ titulo: "Pagamento feito pelo escritório", tipo: "aviso",
+      mensagem: "Nesta obra quem paga os fornecedores é o escritório. A baixa (e o desfazer) é feita por ele — fale com o escritório." });
+    return true;
+  };
   const alternarPagamento = async (conta) => {
+    if (clienteNaoDaBaixa()) return;
     if (conta.pago) {
       if (!(await confirmarDesfazer([conta]))) return;
       const atualizada = contaEmAberto(conta, quemSou());
@@ -51648,6 +51787,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // A loja cobra o pedido, não o saco de cimento: a baixa é de uma vez só,
   // todos os itens na mesma data, e o boleto vale como comprovante de todos.
   const alternarPagamentoPedido = async (linha) => {
+    if (clienteNaoDaBaixa()) return;
     if (linha.pago) {
       if (!(await confirmarDesfazer(linha.contas))) return;
       const alvo = new Set(linha.contas.map(c => c.id));
@@ -51837,16 +51977,33 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const rc = cartaoDoPagamento(f.forma, f.cartaoId, f.novoCartao);
     if (rc.erro) { dialogo.alertar({ titulo: rc.erro, tipo: "aviso" }); return; }
     const cartao = rc.cartao;
+    // Baixa à vista numa obra que o escritório paga vai para o extrato do
+    // mês da data: mês já conferido com o banco não recebe linha nova (a
+    // conta ficava paga e a ponte, recusada, nunca mais era mandada).
+    if (!cartao && !(obraAtual && obraAtual.clientePagaDireto) && typeof bloqueioPorMesFechado === "function") {
+      const fechEsc = typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {};
+      const trava = bloqueioPorMesFechado(String(f.dataContab).slice(0, 7), fechEsc);
+      if (trava) {
+        dialogo.alertar({ titulo: "Mês fechado no escritório", tipo: "aviso",
+          mensagem: trava + " Use uma data de pagamento num mês aberto, ou reabra o mês no Fechamento do escritório." });
+        return;
+      }
+    }
     const noCartao = (conta, valor) => {
       if (!cartao) return { ...conta, formaPagamento: "avista" };
       const p = pagamentoNoCartao(conta, cartao, { pagoEm: f.dataContab, valorPago: valor, parcelas: f.parcelas });
       return p ? { ...conta, ...p } : conta;
     };
     if (f.pedido) {
-      const r = baixarPedidos(contasDaObra, f.pedido.pedidoIds || [f.pedido.pedidoId],
+      const idsDosPedidos = f.pedido.pedidoIds || [f.pedido.pedidoId];
+      const r = baixarPedidos(contasDaObra, idsDosPedidos,
         { pagoEm: f.dataContab, comprovante: f.comprovante || null }, quemSou());
       const alvo = new Set((f.pedido.contas || []).map(c => c.id));
-      gravarContas(r.contas.map(c => (alvo.has(c.id) ? noCartao(c, Number(c.valorPago) || Number(c.valor) || 0) : c)),
+      // vários pedidos pagos de uma vez são um débito só no banco: um
+      // número de papel para todos (o comprovante é o mesmo)
+      const conjunto = idsDosPedidos.length > 1 ? (typeof uid === "function" ? uid() : String(Date.now())) : "";
+      gravarContas(r.contas.map(c => (alvo.has(c.id)
+        ? noCartao(conjunto && c.pago ? { ...c, pagamentoConjunto: conjunto } : c, Number(c.valorPago) || Number(c.valor) || 0) : c)),
         f.pedido.obraId, rc.extra);
       setFormPagamento(null);
       return;
@@ -72055,6 +72212,7 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
 
   const renderSistema = () => (
     <div style={E.body}>
+      {perm.podeGerenciarUsuarios && <HistoricoGravacoes E={E} onReload={onReload} />}
       <div style={E.secao}>
         <div style={E.secTitulo}>Manutenção automática</div>
         <div style={{ fontSize:13, color:"#4b5563", lineHeight:1.6, marginBottom:16 }}>
@@ -72126,6 +72284,140 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
       {aba === "usuarios" && perm.podeGerenciarUsuarios && renderUsuarios()}
       {renderModalMembro()}
       {aba === "sistema"  && renderSistema()}
+    </div>
+  );
+}
+
+
+
+// ── Histórico de gravações (Sistema, só admin) ──────────────────
+// O servidor guarda a versão de ANTES de cada gravação que muda alguma
+// coisa (escritório, obras, lançamentos, clientes, orçamentos) e de cada
+// exclusão. Aqui dá para ver, baixar e voltar uma versão. Restaurar também
+// guarda o estado atual antes — dá para desfazer a restauração.
+const HIST_TABELAS = [
+  ["escritorio", "Escritório"],
+  ["obras", "Obras"],
+  ["lancamentos", "Lançamentos do escritório"],
+  ["clientes", "Clientes"],
+  ["orcamentos_projeto", "Orçamentos"],
+];
+const HIST_MOTIVO = { gravacao: "gravação", lote: "importação", exclusao: "exclusão", "antes de restaurar": "antes de restaurar" };
+
+function histTamanho(b) {
+  const n = Number(b) || 0;
+  return n >= 1024 * 1024 ? (n / 1024 / 1024).toFixed(1).replace(".", ",") + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+}
+
+function HistoricoGravacoes({ E, onReload }) {
+  const [tabela, setTabela] = useState("escritorio");
+  const [lista, setLista] = useState(null);
+  const [erro, setErro] = useState("");
+  const [ocupado, setOcupado] = useState("");
+  const [estreito, setEstreito] = useState(typeof window !== "undefined" && window.innerWidth < 640);
+  useEffect(() => {
+    const f = () => setEstreito(window.innerWidth < 640);
+    window.addEventListener("resize", f);
+    return () => window.removeEventListener("resize", f);
+  }, []);
+
+  async function carregar(t) {
+    setErro(""); setLista(null);
+    try { setLista(await api.historico.listar(t || tabela)); }
+    catch (e) { setErro((e && e.message) || "Não deu para ler o histórico."); setLista([]); }
+  }
+  useEffect(() => { carregar(tabela); }, [tabela]);
+
+  async function baixar(h) {
+    setOcupado("b" + h.id);
+    try {
+      const v = await api.historico.ler(h.id);
+      const blob = new Blob([JSON.stringify(v.dados, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      const quando = String(h.criado_em || "").slice(0, 16).replace(/[T:]/g, "-");
+      a.href = URL.createObjectURL(blob);
+      a.download = `historico-${h.tabela}-${quando}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    } catch (e) {
+      dialogo.alertar({ titulo: "Não deu para baixar", mensagem: (e && e.message) || "", tipo: "erro" });
+    } finally { setOcupado(""); }
+  }
+
+  async function restaurar(h, so) {
+    const quando = new Date(h.criado_em).toLocaleString("pt-BR");
+    const oque = h.tabela === "escritorio"
+      ? (so ? "o financeiro do escritório (extratos, fechamentos, saldos)" : "o escritório inteiro (cadastro, equipe e financeiro)")
+      : (h.nome ? `"${h.nome}"` : "este registro");
+    const ok = await dialogo.confirmar({
+      titulo: "Voltar esta versão?",
+      mensagem: `Volta ${oque} para como estava antes da gravação de ${quando}.\n\nO que está gravado agora fica guardado no histórico — dá para desfazer.`
+        + (h.tabela === "escritorio" && so ? "\n\nCadastro e equipe ficam como estão." : ""),
+      confirmar: "Restaurar",
+    });
+    if (!ok) return;
+    setOcupado("r" + h.id);
+    try {
+      await api.historico.restaurar(h.id, so);
+      if (typeof toast !== "undefined" && toast.sucesso) toast.sucesso("Versão restaurada");
+      if (onReload) await onReload();
+      await carregar(tabela);
+    } catch (e) {
+      dialogo.alertar({ titulo: "Não deu para restaurar", mensagem: (e && e.message) || "", tipo: "erro" });
+    } finally { setOcupado(""); }
+  }
+
+  const btnP = { ...E.btnSec, padding: "6px 12px", fontSize: 12.5 };
+  return (
+    <div style={E.secao} data-vk-historico>
+      <div style={E.secTitulo}>Histórico de gravações</div>
+      <div style={{ fontSize: 13, color: "#4b5563", lineHeight: 1.6, marginBottom: 14 }}>
+        A cada gravação, o sistema guarda como o registro estava antes. Se algum dado sumir, escolha a versão
+        de antes e restaure. Fica tudo dos últimos 3 dias e, até 90 dias, a última versão de cada dia.
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+        <select value={tabela} onChange={(e) => setTabela(e.target.value)}
+          style={{ ...E.input, width: estreito ? "100%" : 320, cursor: "pointer" }} data-vk-historico-tabela>
+          {HIST_TABELAS.map(([k, r]) => <option key={k} value={k}>{r}</option>)}
+        </select>
+        <button style={btnP} onClick={() => carregar(tabela)}>Atualizar</button>
+      </div>
+      {erro && <div style={{ fontSize: 12.5, color: "#b91c1c", marginBottom: 10 }}>{erro}</div>}
+      {lista === null ? <div style={{ fontSize: 13, color: "#6b7280" }}>Carregando…</div>
+        : lista.length === 0 ? <div style={{ fontSize: 13, color: "#6b7280" }}>Nenhuma versão guardada ainda.</div>
+        : (
+          <div style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, overflow: "hidden", background: "#fff" }}>
+            {lista.map((h, i) => {
+              const quando = new Date(h.criado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+              const resumo = h.tabela === "escritorio"
+                ? [h.extratos != null ? `${h.extratos} ${Number(h.extratos) === 1 ? "mês" : "meses"} de extrato` : "sem extratos",
+                   h.fechamentos != null ? `${h.fechamentos} fechamento${Number(h.fechamentos) === 1 ? "" : "s"}` : "sem fechamentos"].join(" · ")
+                : (h.nome || h.registro_id);
+              return (
+                <div key={h.id} data-vk-historico-linha style={{ display: "flex", flexDirection: estreito ? "column" : "row", alignItems: estreito ? "stretch" : "center",
+                  gap: estreito ? 8 : 12, padding: "10px 12px", borderTop: i ? "1px solid rgba(38,36,33,0.08)" : "none" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, color: "#111827", fontWeight: 600 }}>{quando}
+                      <span style={{ fontWeight: 400, color: "#6b7280" }}> · {HIST_MOTIVO[h.motivo] || h.motivo || "gravação"}{h.usuario_email ? ` por ${h.usuario_email}` : ""}</span>
+                    </div>
+                    <div style={{ fontSize: 12.5, color: "#4b5563", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: estreito ? "normal" : "nowrap" }}>
+                      {resumo} · {histTamanho(h.bytes)}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button style={btnP} disabled={!!ocupado} onClick={() => baixar(h)}>{ocupado === "b" + h.id ? "Baixando…" : "Baixar"}</button>
+                    {h.tabela === "escritorio" && (
+                      <button style={btnP} disabled={!!ocupado} onClick={() => restaurar(h, "financeiro")} data-vk-historico-financeiro>Restaurar o financeiro</button>
+                    )}
+                    <button style={btnP} disabled={!!ocupado} onClick={() => restaurar(h, "")}>
+                      {ocupado === "r" + h.id ? "Restaurando…" : h.tabela === "escritorio" ? "Restaurar tudo" : "Restaurar"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
     </div>
   );
 }
@@ -86667,11 +86959,17 @@ export default function ModuloClientesFornecedores() {
     filaGravacaoRef.current = p.catch(() => {});
     return p.catch(() => {});
   }
+  // Listas cujos registros voltam do servidor com versão (e, se outra pessoa
+  // mexeu ao mesmo tempo, já juntados).
+  const LISTAS_COM_VERSAO = ["obras", "lancamentos", "clientes", "orcamentosProjeto"];
   function aplicarAtualizados(alvo, at) {
     if (!at) return alvo;
     let r = alvo;
-    const ids = Object.keys(at.obras || {});
-    if (ids.length) r = { ...r, obras: (r.obras || []).map(o => (o && at.obras[o.id]) ? at.obras[o.id] : o) };
+    for (const lista of LISTAS_COM_VERSAO) {
+      const mapa = at[lista] || {};
+      if (!Object.keys(mapa).length) continue;
+      r = { ...r, [lista]: (r[lista] || []).map(o => (o && mapa[o.id]) ? mapa[o.id] : o) };
+    }
     if (at.escritorio) r = { ...r, escritorio: at.escritorio };
     return r;
   }
@@ -86686,10 +86984,12 @@ export default function ModuloClientesFornecedores() {
       return (j && g && g._versao != null) ? { ...j, _versao: g._versao } : j;
     };
     let r = agora;
-    if (gravado.obras !== enviado.obras) {
-      r = { ...r, obras: (agora.obras || []).map(o => {
-        const g = o && (gravado.obras || []).find(x => x && x.id === o.id);
-        const e = o && (enviado.obras || []).find(x => x && x.id === o.id);
+    for (const lista of LISTAS_COM_VERSAO) {
+      if (gravado[lista] === enviado[lista] || !Array.isArray(agora[lista])) continue;
+      const G = new Map((gravado[lista] || []).map(x => [x && x.id, x]));
+      const Env = new Map((enviado[lista] || []).map(x => [x && x.id, x]));
+      r = { ...r, [lista]: agora[lista].map(o => {
+        const g = o && G.get(o.id), e = o && Env.get(o.id);
         return (o && g && e) ? juntaReg(e, o, g) : o;
       }) };
     }
@@ -86714,7 +87014,8 @@ export default function ModuloClientesFornecedores() {
       setBackendOffline(false);
       if (novaTentativaRef.current) { clearTimeout(novaTentativaRef.current); novaTentativaRef.current = null; }
       if (juntou.length) {
-        const nomes = [...new Set(juntou.map(j => j.tipo === "obra" ? "a obra " + (j.nome || "") : "o escritório"))].join(", ");
+        const ROTULO = { obra: "a obra", lancamento: "o lançamento", cliente: "o cliente", orcamento: "o orçamento" };
+        const nomes = [...new Set(juntou.map(j => ROTULO[j.tipo] ? (ROTULO[j.tipo] + " " + (j.nome || "")).trim() : "o escritório"))].join(", ");
         setAvisoGravacao({ texto: `Outra pessoa alterou ${nomes} ao mesmo tempo. As duas alterações foram juntadas e gravadas.` });
       }
     } catch (e) {

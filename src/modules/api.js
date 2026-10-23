@@ -442,6 +442,13 @@ const api = {
     enviar: (categoria, texto) => post("/feedback", { categoria, texto }),
   },
 
+  // Histórico: a versão de antes de cada gravação (admin). Ver server.js.
+  historico: {
+    listar:    (tabela, registro) => get(`/api/historico?tabela=${encodeURIComponent(tabela || "escritorio")}${registro ? `&registro=${encodeURIComponent(registro)}` : ""}`),
+    ler:       (id)               => get(`/api/historico/${encodeURIComponent(id)}`),
+    restaurar: (id, so)           => post(`/api/historico/${encodeURIComponent(id)}/restaurar`, so ? { so } : {}),
+  },
+
   backup: {
     exportar: () => get("/api/backup"),
     importar: (dados) => post("/api/backup/importar", dados),
@@ -702,15 +709,25 @@ async function _gravarComVersao(salvar, base, nosso, aoJuntar) {
       alvo = junto;
     }
   }
-  throw new Error("Não consegui gravar: a obra está sendo alterada ao mesmo tempo por outra pessoa. Tente de novo.");
+  throw new Error("Não consegui gravar: o registro está sendo alterado ao mesmo tempo por outra pessoa. Tente de novo.");
 }
 
 async function saveAllData(newData, oldData = {}, opcoes = {}) {
   const tasks = [];
   // o que voltou do servidor diferente do que mandamos (versão nova,
   // mudanças de outra pessoa juntadas): o app aplica na tela
-  const atualizados = { obras: {}, escritorio: null };
+  const atualizados = { obras: {}, lancamentos: {}, clientes: {}, orcamentosProjeto: {}, escritorio: null };
   const aoJuntar = opcoes.aoJuntar;
+  // A versão que vai junto é a do último estado que ESTE app gravou ou leu
+  // (`base`), não a que ficou presa no registro: uma tela que guardou uma
+  // cópia do orçamento (ou do cliente) antes da última gravação mandaria uma
+  // versão velha e daria "outra pessoa alterou" sem ninguém ter mexido.
+  const comVersaoDaBase = (reg, base) => (base && base._versao != null && reg && reg._versao !== base._versao)
+    ? { ...reg, _versao: base._versao } : reg;
+  // Grava um registro de lista com versão; o que voltou vai para `atualizados`.
+  const comVersao = (lista, salvar, base, reg0, tipo, nome) => { const reg = comVersaoDaBase(reg0, base); return _gravarComVersao(salvar, base, reg,
+    (nosso, deles) => aoJuntar && aoJuntar({ tipo, nome: nome(deles) || nome(nosso) || "" }))
+    .then((final) => { atualizados[lista][reg.id] = final; }); };
 
   // Clientes
   const clientesNovos = (newData.clientes || []).filter(
@@ -719,7 +736,8 @@ async function saveAllData(newData, oldData = {}, opcoes = {}) {
   const clientesRemovidos = (oldData.clientes || []).filter(
     o => !newData.clientes?.find(c => c.id === o.id)
   );
-  clientesNovos.forEach(c => tasks.push(api.clientes.save(c)));
+  clientesNovos.forEach(c => tasks.push(comVersao("clientes", (x) => api.clientes.save(x),
+    (oldData.clientes || []).find(a => a && a.id === c.id) || null, c, "cliente", (x) => x && x.nome)));
   clientesRemovidos.forEach(c => tasks.push(api.clientes.delete(c.id)));
 
   // Fornecedores
@@ -741,7 +759,8 @@ async function saveAllData(newData, oldData = {}, opcoes = {}) {
   const orcsRemovidos = (oldData.orcamentosProjeto || []).filter(
     a => !newData.orcamentosProjeto?.find(o => o.id === a.id)
   );
-  orcsNovos.forEach(o => tasks.push(api.orcamentos.save(o)));
+  orcsNovos.forEach(o => tasks.push(comVersao("orcamentosProjeto", (x) => api.orcamentos.save(x),
+    orcsVelhosTodos.find(a => a && a.id === o.id) || null, o, "orcamento", (x) => x && (x.referencia || x.titulo || x.nome))));
   orcsRemovidos.forEach(o => tasks.push(api.orcamentos.delete(o.id)));
 
   // Receitas
@@ -763,7 +782,7 @@ async function saveAllData(newData, oldData = {}, opcoes = {}) {
   );
   obrasNovas.forEach(o => {
     const base = (oldData.obras || []).find(a => a && a.id === o.id) || null;
-    tasks.push(_gravarComVersao((x) => api.obras.save(x), base, o,
+    tasks.push(_gravarComVersao((x) => api.obras.save(x), base, comVersaoDaBase(o, base),
       (nosso, deles) => aoJuntar && aoJuntar({ tipo: "obra", nome: deles.nome || nosso.nome || "" }))
       .then((final) => { atualizados.obras[o.id] = final; }));
   });
@@ -772,7 +791,9 @@ async function saveAllData(newData, oldData = {}, opcoes = {}) {
   // Lançamentos
   const { mudados: lancsNovos, removidos: lancsRemovidos } =
     _mudadosERemovidos(newData.lancamentos, oldData.lancamentos);
-  lancsNovos.forEach(l => tasks.push(api.lancamentos.save(l)));
+  const lancsAntes = new Map((oldData.lancamentos || []).map(a => [a && a.id, a]));
+  lancsNovos.forEach(l => tasks.push(comVersao("lancamentos", (x) => api.lancamentos.save(x),
+    lancsAntes.get(l.id) || null, l, "lancamento", (x) => x && x.descricao)));
   lancsRemovidos.forEach(l => tasks.push(api.lancamentos.delete(l.id)));
 
   // Materiais / Insumos — faltava aqui: o catálogo semeado ou editado em
@@ -784,7 +805,7 @@ async function saveAllData(newData, oldData = {}, opcoes = {}) {
 
   // Escritório (inclui logo agregado no mesmo objeto)
   if (newData.escritorio && JSON.stringify(newData.escritorio) !== JSON.stringify(oldData.escritorio)) {
-    tasks.push(_gravarComVersao((x) => api.escritorio.save(x), oldData.escritorio || {}, newData.escritorio,
+    tasks.push(_gravarComVersao((x) => api.escritorio.save(x), oldData.escritorio || {}, comVersaoDaBase(newData.escritorio, oldData.escritorio),
       () => aoJuntar && aoJuntar({ tipo: "escritorio", nome: "escritório" }))
       .then((final) => { atualizados.escritorio = final; }));
   }

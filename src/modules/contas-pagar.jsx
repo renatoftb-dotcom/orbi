@@ -2940,18 +2940,47 @@ function cpNomeJaENumero(nome) {
 // aos arquivos delas. `elegivel(c)` diz quais contas podem ganhar número
 // agora (na gravação do dia a dia, só as que acabaram de ser pagas ou de
 // receber um papel). Devolve as contas e o próximo número livre.
+// Que contas são UMA transação para o número do papel. A mesma nota (mesma
+// referência e mesmo pedido) paga no mesmo dia é uma; as parcelas de uma
+// compra a prazo, pagas em meses diferentes, são transações diferentes
+// (cada boleto tem o seu comprovante e a sua linha no banco). Pagamentos
+// feitos juntos, num débito só (vários pedidos da loja de uma vez), levam
+// a marca `pagamentoConjunto` e ficam com um número só.
+function cpChaveDoPapel(c) {
+  const x = c || {};
+  if (x.pagamentoConjunto) return "pg:" + x.pagamentoConjunto;
+  const dia = String(x.pagoEm || "").slice(0, 10);
+  return String(x.numeroDoc || "") + "|" + String(x.pedidoId || (x.numeroDoc ? "" : x.id)) + "|" + dia;
+}
 function numerarPapeisDasPagas(contas, proximo, elegivel, numeros) {
   const lista = (contas || []).slice();
   let n = Number(proximo) || 1;
   const pode = typeof elegivel === "function" ? elegivel : () => true;
-  const chave = (c) => String(c.numeroDoc || c.pedidoId || c.id);
+  const chave = cpChaveDoPapel;
   const grupos = {};
   lista.forEach((c, i) => { if (c && c.pago) (grupos[chave(c)] = grupos[chave(c)] || []).push(i); });
+  // Que transações já usam cada número. Uma conta desfeita guarda o número
+  // (e o papel) de quando foi paga; paga de novo em outro dia ou junto com
+  // outras, vira outra transação — e levaria o mesmo número de outra que
+  // continua paga. Aí ela ganha número novo.
+  const gruposDoNumero = {};
+  for (const k of Object.keys(grupos)) for (const i of grupos[k]) {
+    const d = String(lista[i].doc || "").trim();
+    if (d) (gruposDoNumero[d] = gruposDoNumero[d] || new Set()).add(k);
+  }
   for (const k of Object.keys(grupos)) {
     const idx = grupos[k];
     if (!idx.some((i) => pode(lista[i]))) continue;
     const comDoc = idx.map((i) => lista[i]).find((c) => String(c.doc || "").trim());
     let numero = comDoc ? String(comDoc.doc).trim() : "";
+    // o número é de outra transação que segue paga (e esta não é a dona
+    // dele: a dona é a que não acabou de mudar) → número novo
+    const doOutro = numero && gruposDoNumero[numero] && [...gruposDoNumero[numero]].some((g) => g !== k
+      && !grupos[g].some((i) => pode(lista[i])));
+    if (doOutro) {
+      numero = (numeros && numeros[k]) ? String(numeros[k]) : String(n++);
+      for (const i of idx) if (String(lista[i].doc || "").trim()) lista[i] = { ...lista[i], doc: "" };
+    }
     if (!numero && numeros && numeros[k]) numero = String(numeros[k]);
     if (!numero) { numero = String(n); n++; }
     // os papéis da transação, na ordem em que aparecem, com o nome novo
@@ -3107,7 +3136,7 @@ function completarBase(dados, opcoes) {
   const reg = (c, det) => (typeof registrarAto === "function" ? registrarAto(c, "editada", quem, agora, det) : c);
 
   // 1. números do papel, na ordem do pagamento
-  const chave = (c) => String(c.numeroDoc || c.pedidoId || c.id);
+  const chave = cpChaveDoPapel;
   const pend = [];
   for (const ob of (quer("papel") ? obras.filter(daVez) : [])) {
     const vistos = {};

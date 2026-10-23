@@ -2827,6 +2827,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // número, sem nada que ligasse a linha da base ao arquivo.
   const comPapeisNumerados = (fatia) => {
     if (typeof numerarPapeisDasPagas !== "function" || typeof proximoNumeroDePapel !== "function") return fatia;
+    // o cliente vê só as obras dele e nenhum lançamento do escritório: a
+    // série que ele calcularia repetiria números de outras obras. O número
+    // nasce quando o escritório grava (ou no Completar a base).
+    if (perm.isCliente) return fatia;
     const todas = data.obras || obras || [];
     let proximo = null;
     return (fatia || []).map((o) => {
@@ -2921,9 +2925,27 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const lancsAgora = typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : [];
     const desfeitas = typeof contasQueDeixaramDeSerPagas === "function"
       ? contasQueDeixaramDeSerPagas(contasAntes, contasDepois) : [];
-    const limpo = (typeof semLancamentosDasContas === "function" && obraDepois)
+    const limpo0 = (typeof semLancamentosDasContas === "function" && obraDepois)
       ? semLancamentosDasContas(lancsAgora, obraDepois.id, desfeitas, contasDepois)
       : { lancamentos: lancsAgora, removidos: 0, reenviar: [] };
+    // Conta que já estava paga e ganhou o número do papel agora (o papel
+    // chegou depois): o lançamento ligado no extrato passa a levar o número.
+    const antesPorId = new Map((contasAntes || []).filter(Boolean).map(c => [c.id, c]));
+    const ganharamNumero = (contasDepois || []).filter(c => {
+      const a = c && antesPorId.get(c.id);
+      return a && a.pago && c.pago && c.doc && String(c.doc) !== String(a.doc || "");
+    });
+    let docsAtualizados = 0;
+    let lancsComDoc = limpo0.lancamentos;
+    if (ganharamNumero.length && obraDepois && typeof lancamentosLigadosAsContas === "function") {
+      lancsComDoc = limpo0.lancamentos.map(l => {
+        const c = ganharamNumero.find(x => lancamentosLigadosAsContas([l], obraDepois.id, [x]).length);
+        if (!c || String(l.documento || "") === String(c.doc)) return l;
+        docsAtualizados++;
+        return { ...l, documento: String(c.doc) };
+      });
+    }
+    const limpo = { ...limpo0, lancamentos: lancsComDoc, removidos: limpo0.removidos + docsAtualizados };
 
     const pagas = contasRecemPagas(contasAntes, contasDepois);
     // Saiu parte de uma nota: a linha dela no extrato saiu inteira, e o que
@@ -3147,7 +3169,18 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       confirmar: "Desfazer pagamento",
     });
   };
+  // O login do cliente dá baixa só na obra em que ELE paga os fornecedores.
+  // Onde quem paga é o escritório, a baixa vira lançamento no extrato do
+  // escritório — e o cliente não enxerga nem grava esse extrato: a baixa
+  // dele ficava sem a outra ponta (e desfazer deixava a do escritório solta).
+  const clienteNaoDaBaixa = () => {
+    if (!perm.isCliente || (obraAtual && obraAtual.clientePagaDireto)) return false;
+    dialogo.alertar({ titulo: "Pagamento feito pelo escritório", tipo: "aviso",
+      mensagem: "Nesta obra quem paga os fornecedores é o escritório. A baixa (e o desfazer) é feita por ele — fale com o escritório." });
+    return true;
+  };
   const alternarPagamento = async (conta) => {
+    if (clienteNaoDaBaixa()) return;
     if (conta.pago) {
       if (!(await confirmarDesfazer([conta]))) return;
       const atualizada = contaEmAberto(conta, quemSou());
@@ -3160,6 +3193,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // A loja cobra o pedido, não o saco de cimento: a baixa é de uma vez só,
   // todos os itens na mesma data, e o boleto vale como comprovante de todos.
   const alternarPagamentoPedido = async (linha) => {
+    if (clienteNaoDaBaixa()) return;
     if (linha.pago) {
       if (!(await confirmarDesfazer(linha.contas))) return;
       const alvo = new Set(linha.contas.map(c => c.id));
@@ -3349,16 +3383,33 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const rc = cartaoDoPagamento(f.forma, f.cartaoId, f.novoCartao);
     if (rc.erro) { dialogo.alertar({ titulo: rc.erro, tipo: "aviso" }); return; }
     const cartao = rc.cartao;
+    // Baixa à vista numa obra que o escritório paga vai para o extrato do
+    // mês da data: mês já conferido com o banco não recebe linha nova (a
+    // conta ficava paga e a ponte, recusada, nunca mais era mandada).
+    if (!cartao && !(obraAtual && obraAtual.clientePagaDireto) && typeof bloqueioPorMesFechado === "function") {
+      const fechEsc = typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {};
+      const trava = bloqueioPorMesFechado(String(f.dataContab).slice(0, 7), fechEsc);
+      if (trava) {
+        dialogo.alertar({ titulo: "Mês fechado no escritório", tipo: "aviso",
+          mensagem: trava + " Use uma data de pagamento num mês aberto, ou reabra o mês no Fechamento do escritório." });
+        return;
+      }
+    }
     const noCartao = (conta, valor) => {
       if (!cartao) return { ...conta, formaPagamento: "avista" };
       const p = pagamentoNoCartao(conta, cartao, { pagoEm: f.dataContab, valorPago: valor, parcelas: f.parcelas });
       return p ? { ...conta, ...p } : conta;
     };
     if (f.pedido) {
-      const r = baixarPedidos(contasDaObra, f.pedido.pedidoIds || [f.pedido.pedidoId],
+      const idsDosPedidos = f.pedido.pedidoIds || [f.pedido.pedidoId];
+      const r = baixarPedidos(contasDaObra, idsDosPedidos,
         { pagoEm: f.dataContab, comprovante: f.comprovante || null }, quemSou());
       const alvo = new Set((f.pedido.contas || []).map(c => c.id));
-      gravarContas(r.contas.map(c => (alvo.has(c.id) ? noCartao(c, Number(c.valorPago) || Number(c.valor) || 0) : c)),
+      // vários pedidos pagos de uma vez são um débito só no banco: um
+      // número de papel para todos (o comprovante é o mesmo)
+      const conjunto = idsDosPedidos.length > 1 ? (typeof uid === "function" ? uid() : String(Date.now())) : "";
+      gravarContas(r.contas.map(c => (alvo.has(c.id)
+        ? noCartao(conjunto && c.pago ? { ...c, pagamentoConjunto: conjunto } : c, Number(c.valorPago) || Number(c.valor) || 0) : c)),
         f.pedido.obraId, rc.extra);
       setFormPagamento(null);
       return;

@@ -2798,6 +2798,38 @@ teste("custo lançado pelo extrato: a nota inteira ganha UM número e o papel (t
   assert.deepStrictEqual(pc.notas.map((n) => [n.numero, n.valor, n.arquivos]), [["4243", 157.2, ["4243.pdf"]]]);
 });
 
+teste("número do papel: parcelas pagas em meses diferentes têm números diferentes; pedidos pagos juntos, um só", () => {
+  const parc = (id, ped, pagoEm) => ({ id, numeroDoc: "0400", pedidoId: ped, pago: true, pagoEm, valor: 100 });
+  const r = modulo.numerarPapeisDasPagas([parc("b1", "p1", "2026-09-10"), parc("b2", "p2", "2026-10-10")], 4215, () => true);
+  assert.deepStrictEqual(r.contas.map((c) => c.doc), ["4215", "4216"]);
+  const nota = (id) => ({ id, numeroDoc: "0401", pedidoId: "pX", pago: true, pagoEm: "2026-10-10", valor: 10 });
+  assert.deepStrictEqual(modulo.numerarPapeisDasPagas([nota("i1"), nota("i2")], 4300, () => true).contas.map((c) => c.doc), ["4300", "4300"],
+    "itens da mesma nota pagos no mesmo dia: um número");
+  const ped = (id, p) => ({ id, numeroDoc: "05" + p, pedidoId: p, pago: true, pagoEm: "2026-10-20", valor: 10, pagamentoConjunto: "pg1" });
+  assert.deepStrictEqual(modulo.numerarPapeisDasPagas([ped("a", "1"), ped("b", "2")], 4400, () => true).contas.map((c) => c.doc), ["4400", "4400"]);
+});
+
+teste("número do papel: item desfeito e pago de novo em outro dia não repete o número da nota que segue paga", () => {
+  const item = (id, extra) => ({ id, numeroDoc: "0410", pedidoId: "pN", valor: 10, ...extra });
+  // nota de 2 itens paga em 10/10 com o número 4500; o item i2 foi desfeito
+  const pagaAntes = [item("i1", { pago: true, pagoEm: "2026-10-10", doc: "4500" })];
+  const desfeito = modulo.contaEmAberto(item("i2", { pago: true, pagoEm: "2026-10-10", doc: "4500" }), "Renato", "2026-10-12T10:00:00Z");
+  assert.strictEqual(desfeito.doc, "4500", "desfazer guarda o número (o papel fica)");
+  // pago de novo em 15/10: outra transação → número novo, e i1 segue com 4500
+  const repaga = { ...desfeito, pago: true, pagoEm: "2026-10-15" };
+  const r = modulo.numerarPapeisDasPagas(pagaAntes.concat([repaga]), 4600, (c) => c.id === "i2");
+  assert.deepStrictEqual(r.contas.map((c) => c.doc), ["4500", "4600"]);
+  assert.strictEqual(r.proximo, 4601);
+  // pago de novo no MESMO dia, junto da nota: continua a mesma transação e o mesmo número
+  const mesmoDia = { ...desfeito, pago: true, pagoEm: "2026-10-10" };
+  const r2 = modulo.numerarPapeisDasPagas(pagaAntes.concat([mesmoDia]), 4600, (c) => c.id === "i2");
+  assert.deepStrictEqual(r2.contas.map((c) => c.doc), ["4500", "4500"]);
+  assert.strictEqual(r2.proximo, 4600);
+  // a nota inteira desfeita e paga de novo: guarda o número dela
+  const sozinha = modulo.numerarPapeisDasPagas([{ ...repaga }], 4600, () => true);
+  assert.deepStrictEqual(sozinha.contas.map((c) => c.doc), ["4500"]);
+});
+
 teste("base de dados: uma linha por item, nas colunas da planilha do escritório", () => {
   const obras = [{ id: "o1", nome: "Jacarezinho Módulo 1", clienteId: "c1", contasPagar: [
     { id: "a", numeroDoc: "0173", numeroNota: "8623", prestadorId: "rc", descricao: "Areia Fina", insumoCodigo: "ARE-1",

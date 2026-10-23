@@ -16,7 +16,7 @@ const M = new Function(src + `
   return { UNIDADES_NEGOCIO, GRUPOS_ESCRITORIO, PLANO_CONTAS_ESCRITORIO, contaEscritorio, grupoEscritorio,
            contaPeloApelido, unidadePeloApelido, validarLancamentoEscritorio, mesesEntreEscritorio,
            extratoEscritorio, resultadoEmpreendimento, interpretarColagemEscritorio, lancamentoDaColagem,
-           efNumero, efCompetencia, lancamentosDoEscritorio,
+           efNumero, efCompetencia, lancamentosDoEscritorio, lancamentoMexeuNoDinheiro, lancamentoVeioDaObra,
            efAbasDaPlanilha, efLinhasDaAba, efDataDoSerial, efEstilosDeData, efTextosCompartilhados,
            efCsvParaTsv, efAbaDeLancamentos, efTextoDoArquivo,
            resumoEscritorio, efMesPorExtenso, filtrarLancamentosEscritorio, resumoDoPeriodoEscritorio,
@@ -2899,6 +2899,37 @@ teste("gestão sem contrato: a conta paga de Gerenciamento na obra vira Receita 
   // a ponte não cria de novo
   const outra = M.lancamentosDaBaixa(obNova, cli, [conta], { ...OPC, lancamentos: [l] });
   assert.strictEqual(outra.lancamentos.length, 0);
+});
+
+teste("pt-BR: '1.500' e 'R$ 2.350' são milhar, não decimal; '1,5' e '0.5' continuam", () => {
+  assert.strictEqual(M.efNumero("1.500"), 1500);
+  assert.strictEqual(M.efNumero("2.350.000"), 2350000);
+  assert.strictEqual(M.efNumero("1,5"), 1.5);
+  assert.strictEqual(M.efNumero("1.234,56"), 1234.56);
+  assert.strictEqual(M.efNumero("0.5"), 0.5);
+  assert.strictEqual(M.efNumero("12.5"), 12.5);
+  assert.strictEqual(Math.abs(M.efValorDeTexto("R$ 2.350")), 2350);
+  assert.strictEqual(Math.abs(M.efValorDeTexto("108,02D")), 108.02);
+});
+
+teste("editar lançamento: o que mexe no dinheiro e o que veio da obra", () => {
+  const a = { valor: 100, competencia: "2026-08", lancadoEm: "2026-08-10", contaId: "material" };
+  assert.strictEqual(M.lancamentoMexeuNoDinheiro(a, { ...a, descricao: "outra" }), false, "descrição não mexe");
+  assert.strictEqual(M.lancamentoMexeuNoDinheiro(a, { ...a, competencia: "2026-09" }), true, "mudar o mês mexe");
+  assert.strictEqual(M.lancamentoMexeuNoDinheiro(a, { ...a, valor: 100.001 }), false);
+  assert.strictEqual(M.lancamentoVeioDaObra({ origem: { obraId: "o1", tipo: "conta" } }), true);
+  assert.strictEqual(M.lancamentoVeioDaObra({ origem: { obraId: "o1", tipo: "pedido" } }), true);
+  assert.strictEqual(M.lancamentoVeioDaObra({ origem: { obraId: "o1", tipo: "gestao" } }), false, "gestão tem caminho próprio");
+  assert.strictEqual(M.lancamentoVeioDaObra({ origem: { obraId: "o1", tipo: "conta", avulsa: true } }), false);
+  assert.strictEqual(M.lancamentoVeioDaObra({}), false);
+});
+
+teste("pagamento de vários pedidos de uma vez: uma linha só no extrato", () => {
+  const it = (id, ped, valor) => ({ id, pedidoId: ped, pago: true, pagoEm: "2026-10-20", valor, valorPago: valor, contaId: "material", pagamentoConjunto: "pg1", favorecido: "Ourifer" });
+  const f = M.fontesDasContasPagas([it("a", "p1", 100), it("b", "p1", 50), it("c", "p2", 30)]);
+  assert.strictEqual(f.length, 1);
+  assert.strictEqual(f[0].valor, 180);
+  assert.ok(/Pagamento de 2 pedidos/.test(f[0].descricao));
 });
 
 for (const [nome, fn] of testes) {

@@ -476,8 +476,12 @@ function numeroDeCampo(v) {
   if (typeof v === "number") return Number.isFinite(v) ? v : 0;
   const t = String(v == null ? "" : v).trim();
   if (!t) return 0;
-  // com vírgula, é pt-BR: o ponto é separador de milhar
-  const limpo = t.indexOf(",") >= 0 ? t.replace(/\./g, "").replace(",", ".") : t.replace(/\s/g, "");
+  // com vírgula, é pt-BR: o ponto é separador de milhar. Sem vírgula, ponto
+  // seguido de grupos de 3 dígitos também é milhar ("1.500", "2.350.000"):
+  // lido como decimal, "1.500" virava 1,5.
+  const limpo = t.indexOf(",") >= 0 ? t.replace(/\./g, "").replace(",", ".")
+    : /^-?[1-9]\d{0,2}(\.\d{3})+$/.test(t.replace(/\s/g, "")) ? t.replace(/\s/g, "").replace(/\./g, "")
+    : t.replace(/\s/g, "");
   const n = parseFloat(limpo);
   return Number.isFinite(n) ? n : 0;
 }

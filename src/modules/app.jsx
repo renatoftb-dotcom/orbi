@@ -1370,11 +1370,17 @@ export default function ModuloClientesFornecedores() {
     filaGravacaoRef.current = p.catch(() => {});
     return p.catch(() => {});
   }
+  // Listas cujos registros voltam do servidor com versão (e, se outra pessoa
+  // mexeu ao mesmo tempo, já juntados).
+  const LISTAS_COM_VERSAO = ["obras", "lancamentos", "clientes", "orcamentosProjeto"];
   function aplicarAtualizados(alvo, at) {
     if (!at) return alvo;
     let r = alvo;
-    const ids = Object.keys(at.obras || {});
-    if (ids.length) r = { ...r, obras: (r.obras || []).map(o => (o && at.obras[o.id]) ? at.obras[o.id] : o) };
+    for (const lista of LISTAS_COM_VERSAO) {
+      const mapa = at[lista] || {};
+      if (!Object.keys(mapa).length) continue;
+      r = { ...r, [lista]: (r[lista] || []).map(o => (o && mapa[o.id]) ? mapa[o.id] : o) };
+    }
     if (at.escritorio) r = { ...r, escritorio: at.escritorio };
     return r;
   }
@@ -1389,10 +1395,12 @@ export default function ModuloClientesFornecedores() {
       return (j && g && g._versao != null) ? { ...j, _versao: g._versao } : j;
     };
     let r = agora;
-    if (gravado.obras !== enviado.obras) {
-      r = { ...r, obras: (agora.obras || []).map(o => {
-        const g = o && (gravado.obras || []).find(x => x && x.id === o.id);
-        const e = o && (enviado.obras || []).find(x => x && x.id === o.id);
+    for (const lista of LISTAS_COM_VERSAO) {
+      if (gravado[lista] === enviado[lista] || !Array.isArray(agora[lista])) continue;
+      const G = new Map((gravado[lista] || []).map(x => [x && x.id, x]));
+      const Env = new Map((enviado[lista] || []).map(x => [x && x.id, x]));
+      r = { ...r, [lista]: agora[lista].map(o => {
+        const g = o && G.get(o.id), e = o && Env.get(o.id);
         return (o && g && e) ? juntaReg(e, o, g) : o;
       }) };
     }
@@ -1417,7 +1425,8 @@ export default function ModuloClientesFornecedores() {
       setBackendOffline(false);
       if (novaTentativaRef.current) { clearTimeout(novaTentativaRef.current); novaTentativaRef.current = null; }
       if (juntou.length) {
-        const nomes = [...new Set(juntou.map(j => j.tipo === "obra" ? "a obra " + (j.nome || "") : "o escritório"))].join(", ");
+        const ROTULO = { obra: "a obra", lancamento: "o lançamento", cliente: "o cliente", orcamento: "o orçamento" };
+        const nomes = [...new Set(juntou.map(j => ROTULO[j.tipo] ? (ROTULO[j.tipo] + " " + (j.nome || "")).trim() : "o escritório"))].join(", ");
         setAvisoGravacao({ texto: `Outra pessoa alterou ${nomes} ao mesmo tempo. As duas alterações foram juntadas e gravadas.` });
       }
     } catch (e) {
