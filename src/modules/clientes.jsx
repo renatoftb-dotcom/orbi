@@ -2929,8 +2929,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // Saiu parte de uma nota: a linha dela no extrato saiu inteira, e o que
     // sobrou pago da nota volta pela ponte com o valor novo.
     const paraPonte = pagas.concat((limpo.reenviar || []).filter(c => !pagas.some(p => p && p.id === c.id)));
+    // data.lancamentos guarda também o que não é do escritório: a lista que
+    // volta tem que levar esses junto, senão o save apaga cada um no banco
+    const outros = ((data && data.lancamentos) || []).filter(l => !(l && l.tipo === "escritorio"));
     if (!paraPonte.length) {
-      return { extras: limpo.removidos ? { lancamentos: limpo.lancamentos } : null };
+      return { extras: limpo.removidos ? { lancamentos: outros.concat(limpo.lancamentos) } : null };
     }
 
     const r = aplicarComprasNoCatalogo(data.materiais, pagas);
@@ -2944,7 +2947,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const extras = {};
     if (r.materiais !== data.materiais) extras.materiais = r.materiais;
     if (ponte.lancamentos.length || limpo.removidos) {
-      extras.lancamentos = limpo.lancamentos.concat(ponte.lancamentos);
+      extras.lancamentos = outros.concat(limpo.lancamentos, ponte.lancamentos);
     }
 
     setAvisoPreco(r.relato.aplicados.length || r.relato.pendencias.length ? r.relato : null);
@@ -3624,8 +3627,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     setView("form");
   }
 
+  // A cópia de quando o formulário abriu: ao salvar, só o que a pessoa
+  // MUDOU no formulário vai por cima da obra como ela está gravada AGORA.
+  // Salvar o formulário inteiro devolvia a obra ao retrato da abertura —
+  // e com ele sumiam as contas pagas, cotações e contratos feitos depois.
+  const formObraBaseRef = useRef(null);
   function editarObra(obra) {
-    setFormObra({ ...obra });
+    const atual = (obras || []).find(o => o && obra && o.id === obra.id) || obra;
+    formObraBaseRef.current = { ...atual };
+    setFormObra({ ...atual });
     setView("form");
   }
 
@@ -3654,13 +3664,16 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!formObra.nome?.trim()) { dialogo.alertar({ titulo: "Informe o nome da obra", tipo: "aviso" }); return; }
     const ehNova = !obras.find(o => o.id === formObra.id);
     // ao editar a obra, preserva o que vive dentro dela e não está no formulário
+    const base = formObraBaseRef.current || {};
+    const mudou = (k) => JSON.stringify(formObra[k]) !== JSON.stringify(base[k]);
     gravarObras(ehNova ? [...obras, formObra]
-      : obras.map(o => o.id === formObra.id
-          ? { ...formObra, contratos: o.contratos || [], estimativaPL: o.estimativaPL || [],
-              // o formulário não conhece a marca da carga única; sem isto,
-              // editar a obra a apagaria e a carga rodaria de novo
-              estimativaCarregadaEm: o.estimativaCarregadaEm }
-          : o));
+      : obras.map(o => {
+          if (o.id !== formObra.id) return o;
+          const editado = {};
+          for (const k of Object.keys(formObra)) if (mudou(k)) editado[k] = formObra[k];
+          return { ...o, ...editado };
+        }));
+    formObraBaseRef.current = null;
     setView("lista");
   }
 
@@ -6497,7 +6510,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   if (view === "orcamentoObra" && obraSelecionada) {
     return (
       <OrcamentoObraView
-        obra={obraSelecionada}
+        // a obra como está gravada agora (a cópia da abertura não sabe das
+        // contas pagas e dos contratos feitos depois — salvar a partir dela
+        // os apagava)
+        obra={obraAtual}
         obras={obras}
         data={data}
         save={save}
@@ -6536,7 +6552,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   if (view === "cronogramaObra" && obraSelecionada) {
     return (
       <CronogramaObraView
-        obra={obraSelecionada}
+        // a obra como está gravada agora (a cópia da abertura não sabe das
+        // contas pagas e dos contratos feitos depois — salvar a partir dela
+        // os apagava)
+        obra={obraAtual}
         obras={obras}
         data={data}
         save={save}
