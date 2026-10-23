@@ -13974,13 +13974,23 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
   // com ELA, antes de qualquer comparação de valor — com dois Pix de R$ 60
   // no mês, o que foi lançado é o que sai da fila, não o primeiro que aparece.
   const jaCasados = new Set();
+  const dirDoMov = (m) => (Number(m.valor) < 0 ? -1 : (Number(m.valor) > 0 ? 1 : 0));
+  // Uma linha pode ter MAIS de um lançamento ligado: o pedido pago num Pix só
+  // com itens de contas diferentes (material e ferramenta) vira um lançamento
+  // por conta, todos com a mesma linha. Casam todos com ela — antes só o
+  // primeiro casava e o outro ia para "lançado, não veio no banco".
   for (const m of emOrdem) {
     if (!m.id) continue;
-    const c = candidatos.find((x) => !x.usado && x.l.extratoId && x.l.extratoId === m.id);
-    if (!c) continue;
-    c.usado = true; jaCasados.add(m);
-    casados.push({ extrato: m, lancamento: c.l, dias: distancia(m, c) === 9999 ? null : distancia(m, c),
-      centavos: Math.round((c.abs - m.abs) * 100), ambiguo: false, certeza: "vinculo", pontos: 0, alternativas: [] });
+    const ligados = candidatos.filter((x) => !x.usado && x.l.extratoId && x.l.extratoId === m.id);
+    if (!ligados.length) continue;
+    jaCasados.add(m);
+    const somaLigados = Math.round(ligados.reduce((s, c) => s + c.abs * (c.dir && c.dir !== dirDoMov(m) ? -1 : 1), 0) * 100) / 100;
+    for (const c of ligados) {
+      c.usado = true;
+      casados.push({ extrato: m, lancamento: c.l, dias: distancia(m, c) === 9999 ? null : distancia(m, c),
+        centavos: Math.round((somaLigados - Math.round(Math.abs(Number(m.valor) || 0) * 100) / 100) * 100), ambiguo: false, certeza: "vinculo", pontos: 0, alternativas: [],
+        ...(ligados.length > 1 ? { parteDe: ligados.length } : {}) });
+    }
   }
   // Os demais casam por valor e lado — mas, quando o mesmo valor aparece
   // mais de uma vez, a escolha não é mais "o primeiro da lista": ganha o par
@@ -14099,7 +14109,8 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
     resumo: {
       movimentos: doBanco.length,
       lancamentos: candidatos.filter((c) => !c.nao || c.usado).length,
-      casados: casados.length,
+      // linhas do banco que casaram (uma linha com dois lançamentos conta uma)
+      casados: new Set(casados.map((c) => c.extrato)).size,
       noBanco: noBancoSemPar.length,
       contabilizado: contabilizadoSemPar.length,
       valorNoBanco: soma(noBancoSemPar, (m) => m.valor),

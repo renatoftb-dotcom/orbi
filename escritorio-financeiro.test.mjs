@@ -2967,6 +2967,23 @@ teste("fechamento jan/26: lançamento com 'não' antigo mas ligado à linha do b
   assert.strictEqual(ch.difCredito, 0);
 });
 
+teste("fechamento out/26: um Pix pagou um pedido com itens de duas contas — os dois lançamentos casam com a mesma linha", () => {
+  const linha = { id: "2026-10-09|-70.00|pix emitido|Pix#1", data: "2026-10-09", valor: -70, abs: 70, historico: "PIX EMITIDO OUTRA IF · Pagamento Pix loja" };
+  const outra = { id: "2026-10-10|-30.00|tarifa|x#1", data: "2026-10-10", valor: -30, abs: 30, historico: "TARIFA" };
+  const lancs = [
+    { id: "p1", competencia: "2026-10", contaId: "emp_construcao", unidadeId: "empreendimento", valor: 62.14, conferido: true, extratoId: linha.id,
+      origem: { tipo: "pedido", obraId: "xflr1rp", refId: "ch1sese|material|2026-10-09" } },
+    { id: "p2", competencia: "2026-10", contaId: "emp_construcao", unidadeId: "empreendimento", valor: 7.86, conferido: true, extratoId: linha.id,
+      origem: { tipo: "conta", obraId: "xflr1rp", refId: "k58e5p6" } },
+  ];
+  const r = M.conciliarExtrato([linha, outra], lancs, {});
+  assert.deepStrictEqual(r.casados.map((c) => [c.lancamento.id, c.certeza, c.centavos, c.parteDe]), [["p1", "vinculo", 0, 2], ["p2", "vinculo", 0, 2]]);
+  assert.strictEqual(r.contabilizadoSemPar.length, 0, "nenhum vai para 'lançado, não veio no banco'");
+  assert.deepStrictEqual(r.noBancoSemPar.map((m) => m.valor), [-30]);
+  assert.strictEqual(r.resumo.casados, 1, "uma linha do banco casou");
+  assert.strictEqual(Object.keys(r.duplicados).length, 0);
+});
+
 for (const [nome, fn] of testes) {
   try { await fn(); console.log("  ok   " + nome); }
   catch (e) { falhas++; console.log("  FALHOU " + nome + "\n         " + e.message); }
