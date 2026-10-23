@@ -48,7 +48,9 @@ async function req(method, path, body) {
     // Ex: PainelEmpresas mostra "você não é master" em vez de erro genérico.
     const erro = new Error(json.error || "Erro na API");
     erro.status = res.status;
-    erro.code   = res.status === 403 ? "FORBIDDEN" : "API_ERROR";
+    erro.code   = res.status === 403 ? "FORBIDDEN" : res.status === 409 ? "CONFLITO" : "API_ERROR";
+    // 409: o servidor manda junto o registro como está agora, para juntar
+    if (json.conflito) { erro.conflito = true; erro.atual = json.data; }
     throw erro;
   }
   return json.data;
@@ -631,8 +633,84 @@ function orcamentosComProjetos(orcs, projetos) {
   });
 }
 
-async function saveAllData(newData, oldData = {}) {
+// ── Juntar duas mudanças no mesmo registro ──────────────────────
+// Duas pessoas mexeram na mesma obra: `base` é o que as duas leram,
+// `nosso` o que este app quer gravar, `deles` o que já está gravado.
+// Campo que só um lado mudou fica com a mudança desse lado; lista de itens
+// com id (contas, cotações, contratos, entradas) junta item a item — conta
+// paga lá e cotação criada aqui ficam as duas. Só quando os dois mudaram o
+// MESMO campo vale o nosso (o último a gravar). Item apagado de um lado e
+// alterado do outro fica — melhor sobrar do que sumir.
+function _igualJson(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+function mesclar3(base, nosso, deles) {
+  if (_igualJson(nosso, base)) return deles;
+  if (_igualJson(deles, base)) return nosso;
+  if (_igualJson(nosso, deles)) return nosso;
+  const ehObj = (x) => !!x && typeof x === "object" && !Array.isArray(x);
+  if (ehObj(nosso) && ehObj(deles)) {
+    const b = ehObj(base) ? base : {};
+    const out = {};
+    const chaves = [...Object.keys(deles), ...Object.keys(nosso).filter((k) => !(k in deles))];
+    for (const k of chaves) {
+      const temN = k in nosso, temD = k in deles, temB = k in b;
+      if (!temN && temB && temD && _igualJson(deles[k], b[k])) continue; // nós tiramos
+      if (!temD && temB && temN && _igualJson(nosso[k], b[k])) continue; // eles tiraram
+      if (!temN) { out[k] = deles[k]; continue; }
+      if (!temD) { out[k] = nosso[k]; continue; }
+      out[k] = mesclar3(b[k], nosso[k], deles[k]);
+    }
+    return out;
+  }
+  const soComId = (arr) => Array.isArray(arr) && arr.every((x) => x && typeof x === "object" && x.id != null);
+  if (soComId(nosso) && soComId(deles) && (nosso.length || deles.length)) {
+    const B = new Map((soComId(base) ? base : []).map((x) => [x.id, x]));
+    const N = new Map(nosso.map((x) => [x.id, x]));
+    const D = new Map(deles.map((x) => [x.id, x]));
+    const ids = [...deles.map((x) => x.id), ...nosso.map((x) => x.id).filter((id) => !D.has(id))];
+    const out = [];
+    for (const id of ids) {
+      const b = B.get(id), n = N.get(id), d = D.get(id);
+      if (!n && b) { if (d && !_igualJson(d, b)) out.push(d); continue; }
+      if (!d && b) { if (n && !_igualJson(n, b)) out.push(n); continue; }
+      if (!n) { out.push(d); continue; }
+      if (!d) { out.push(n); continue; }
+      out.push(mesclar3(b, n, d));
+    }
+    return out;
+  }
+  return nosso;
+}
+
+// Grava um registro com versão. Recusado por versão velha (409): junta a
+// nossa mudança com a que está gravada e tenta de novo (até 3 vezes).
+// Devolve o registro como ficou gravado — com a versão nova e, se houve
+// junção, com as mudanças da outra pessoa —, para o app se atualizar.
+async function _gravarComVersao(salvar, base, nosso, aoJuntar) {
+  let alvo = nosso;
+  let basePara = base;
+  for (let tentativa = 0; tentativa < 3; tentativa++) {
+    try {
+      const gravado = await salvar(alvo);
+      return { ...alvo, ...(gravado && typeof gravado === "object" && gravado._versao != null ? { _versao: gravado._versao } : {}) };
+    } catch (e) {
+      if (!e || !e.conflito || !e.atual) throw e;
+      const deles = e.atual;
+      const junto = mesclar3(basePara || {}, alvo, deles);
+      junto._versao = deles._versao;
+      if (typeof aoJuntar === "function") aoJuntar(alvo, deles);
+      basePara = deles;
+      alvo = junto;
+    }
+  }
+  throw new Error("Não consegui gravar: a obra está sendo alterada ao mesmo tempo por outra pessoa. Tente de novo.");
+}
+
+async function saveAllData(newData, oldData = {}, opcoes = {}) {
   const tasks = [];
+  // o que voltou do servidor diferente do que mandamos (versão nova,
+  // mudanças de outra pessoa juntadas): o app aplica na tela
+  const atualizados = { obras: {}, escritorio: null };
+  const aoJuntar = opcoes.aoJuntar;
 
   // Clientes
   const clientesNovos = (newData.clientes || []).filter(
@@ -683,7 +761,12 @@ async function saveAllData(newData, oldData = {}) {
   const obrasRemovidas = (oldData.obras || []).filter(
     a => !newData.obras?.find(o => o.id === a.id)
   );
-  obrasNovas.forEach(o => tasks.push(api.obras.save(o)));
+  obrasNovas.forEach(o => {
+    const base = (oldData.obras || []).find(a => a && a.id === o.id) || null;
+    tasks.push(_gravarComVersao((x) => api.obras.save(x), base, o,
+      (nosso, deles) => aoJuntar && aoJuntar({ tipo: "obra", nome: deles.nome || nosso.nome || "" }))
+      .then((final) => { atualizados.obras[o.id] = final; }));
+  });
   obrasRemovidas.forEach(o => tasks.push(api.obras.delete(o.id)));
 
   // Lançamentos
@@ -701,8 +784,15 @@ async function saveAllData(newData, oldData = {}) {
 
   // Escritório (inclui logo agregado no mesmo objeto)
   if (newData.escritorio && JSON.stringify(newData.escritorio) !== JSON.stringify(oldData.escritorio)) {
-    tasks.push(api.escritorio.save(newData.escritorio));
+    tasks.push(_gravarComVersao((x) => api.escritorio.save(x), oldData.escritorio || {}, newData.escritorio,
+      () => aoJuntar && aoJuntar({ tipo: "escritorio", nome: "escritório" }))
+      .then((final) => { atualizados.escritorio = final; }));
   }
 
-  await Promise.all(tasks);
+  // allSettled: uma gravação recusada não pode impedir as outras de
+  // terminarem (e de devolverem a versão nova); o erro sobe no fim.
+  const resultados = await Promise.allSettled(tasks);
+  const falha = resultados.find((r) => r.status === "rejected");
+  if (falha) { const e = falha.reason || new Error("falha ao gravar"); e.atualizados = atualizados; throw e; }
+  return atualizados;
 }

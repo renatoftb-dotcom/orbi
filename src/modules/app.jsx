@@ -1049,6 +1049,14 @@ export default function ModuloClientesFornecedores() {
   // true só depois que os dados vieram do servidor; com a base vazia de
   // emergência (SEED), nada é gravado — ver loadData e save
   const carregouDoServidorRef = useRef(false);
+  // O que o servidor tem: o último retrato gravado com sucesso. O save
+  // compara a tela com ELE (não com o retrato anterior da tela): o que não
+  // chegou ao servidor continua na diferença e vai na próxima tentativa.
+  const syncedRef = useRef(null);
+  // As gravações vão em fila, uma por vez; a que falha tenta de novo.
+  const filaGravacaoRef = useRef(Promise.resolve());
+  const novaTentativaRef = useRef(null);
+  const [avisoGravacao, setAvisoGravacao] = useState(null); // { texto, erro }
 
   // Flag: orçamento em tela cheia está aberto.
   // Usada pelo beforeunload — se o usuário entrou num form de orçamento,
@@ -1224,7 +1232,8 @@ export default function ModuloClientesFornecedores() {
   // preencher cômodos antes do form fazer setup do handler próprio.
   useEffect(() => {
     const handler = (e) => {
-      const savingAgora = savingRef.current;
+      // gravando, ou com alteração ainda não aceita pelo servidor
+      const savingAgora = savingRef.current || (!!syncedRef.current && syncedRef.current !== dataRef.current);
       const orcamentoAberto = orcamentoAbertoRef.current;
       let orcSujo = false;
       try {
@@ -1300,6 +1309,8 @@ export default function ModuloClientesFornecedores() {
       }
       const saved = await loadAllData(estadoEmpresa);
       setData(saved);
+      dataRef.current = saved;
+      syncedRef.current = saved;
       carregouDoServidorRef.current = true;
       setBackendOffline(false);
     }
@@ -1345,16 +1356,86 @@ export default function ModuloClientesFornecedores() {
     }
     setData(newData);
     dataRef.current = newData; // mantém ref em sync imediato pra callbacks subsequentes
+    return enfileirarGravacao();
+  }
+
+  // ── Gravação em fila, com nova tentativa e junção ─────────────
+  // Cada save entra na fila e grava a diferença entre a tela e o que o
+  // servidor tem. Sem rede, fica pendente e tenta de novo a cada 15 s (e
+  // ao clicar em "Tentar de novo"). Se outra pessoa mexeu na mesma obra,
+  // o servidor recusa e o api.js junta as duas mudanças; a tela recebe a
+  // versão juntada, com o que a outra pessoa fez.
+  function enfileirarGravacao() {
+    const p = filaGravacaoRef.current.then(gravarPendente);
+    filaGravacaoRef.current = p.catch(() => {});
+    return p.catch(() => {});
+  }
+  function aplicarAtualizados(alvo, at) {
+    if (!at) return alvo;
+    let r = alvo;
+    const ids = Object.keys(at.obras || {});
+    if (ids.length) r = { ...r, obras: (r.obras || []).map(o => (o && at.obras[o.id]) ? at.obras[o.id] : o) };
+    if (at.escritorio) r = { ...r, escritorio: at.escritorio };
+    return r;
+  }
+  // O que a pessoa fez DEPOIS de mandar a gravação fica por cima do que
+  // voltou do servidor.
+  function juntarNaTela(enviado, agora, gravado) {
+    if (agora === enviado) return gravado;
+    const juntaReg = (e, a, g) => {
+      if (g === e) return a;
+      if (a === e) return g;
+      const j = typeof mesclar3 === "function" ? mesclar3(e, a, g) : a;
+      return (j && g && g._versao != null) ? { ...j, _versao: g._versao } : j;
+    };
+    let r = agora;
+    if (gravado.obras !== enviado.obras) {
+      r = { ...r, obras: (agora.obras || []).map(o => {
+        const g = o && (gravado.obras || []).find(x => x && x.id === o.id);
+        const e = o && (enviado.obras || []).find(x => x && x.id === o.id);
+        return (o && g && e) ? juntaReg(e, o, g) : o;
+      }) };
+    }
+    if (gravado.escritorio !== enviado.escritorio && agora.escritorio) {
+      r = { ...r, escritorio: juntaReg(enviado.escritorio, agora.escritorio, gravado.escritorio) };
+    }
+    return r;
+  }
+  async function gravarPendente() {
+    const alvo = dataRef.current;
+    const base = syncedRef.current || {};
+    if (!alvo || alvo === base || !carregouDoServidorRef.current) return;
     savingRef.current = true;
+    const juntou = [];
     try {
-      await saveAllData(newData, oldData);
+      const atualizados = await saveAllData(alvo, base, { aoJuntar: (x) => juntou.push(x) });
+      const gravado = aplicarAtualizados(alvo, atualizados);
+      syncedRef.current = gravado;
+      const agora = dataRef.current;
+      const tela = juntarNaTela(alvo, agora, gravado);
+      if (tela !== agora) { dataRef.current = tela; setData(tela); }
       setBackendOffline(false);
-    }
-    catch(e) {
+      if (novaTentativaRef.current) { clearTimeout(novaTentativaRef.current); novaTentativaRef.current = null; }
+      if (juntou.length) {
+        const nomes = [...new Set(juntou.map(j => j.tipo === "obra" ? "a obra " + (j.nome || "") : "o escritório"))].join(", ");
+        setAvisoGravacao({ texto: `Outra pessoa alterou ${nomes} ao mesmo tempo. As duas alterações foram juntadas e gravadas.` });
+      }
+    } catch (e) {
       console.error("Erro ao salvar:", e);
-      setBackendOffline(true);
-    }
-    finally {
+      const recusado = e && e.status >= 400 && e.status < 500 && e.status !== 409;
+      if (recusado) {
+        // o servidor recusou (sem permissão, dado inválido): tentar de novo
+        // não adianta. O resto da gravação já foi; esta alteração não.
+        syncedRef.current = aplicarAtualizados(alvo, e.atualizados);
+        setAvisoGravacao({ erro: true, texto: (e.status === 403 ? "Sem permissão para gravar esta alteração" : "O servidor recusou a gravação")
+          + (e.message ? ` (${e.message})` : "") + ". Ela aparece na tela, mas não foi salva — recarregue a página para ver o que está gravado." });
+      } else {
+        setBackendOffline(true);
+        if (!novaTentativaRef.current) {
+          novaTentativaRef.current = setTimeout(() => { novaTentativaRef.current = null; enfileirarGravacao(); }, 15000);
+        }
+      }
+    } finally {
       savingRef.current = false;
     }
   }
@@ -2042,11 +2123,22 @@ export default function ModuloClientesFornecedores() {
           <div style={{ background:"#fef2f2", borderBottom:"1px solid #fecaca", padding:"8px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
             <div style={{ fontSize:12, color:"#991b1b" }}>
               <span style={{ fontWeight:600 }}>⚠ Servidor indisponível</span>
-              <span style={{ marginLeft:8, color:"#b91c1c" }}>— trabalhando no modo offline. Alterações não serão salvas até o servidor voltar.</span>
+              <span style={{ marginLeft:8, color:"#b91c1c" }}>
+                {carregouDoServidorRef.current
+                  ? "— as alterações ficam guardadas nesta aba e são enviadas quando o servidor voltar (nova tentativa a cada 15 s). Não feche a aba."
+                  : "— os dados não carregaram; nada será gravado até reconectar."}
+              </span>
             </div>
-            <button onClick={loadData} style={{ background:"#fff", color:"#991b1b", border:"1px solid #fca5a5", borderRadius:6, padding:"4px 12px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+            <button onClick={() => (carregouDoServidorRef.current ? enfileirarGravacao() : loadData())} style={{ background:"#fff", color:"#991b1b", border:"1px solid #fca5a5", borderRadius:6, padding:"4px 12px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
               Tentar reconectar
             </button>
+          </div>
+        )}
+        {avisoGravacao && (
+          <div data-vk-aviso-gravacao="1" style={{ background: avisoGravacao.erro ? "#fef2f2" : "#eff6ff", borderBottom: `1px solid ${avisoGravacao.erro ? "#fecaca" : "#bfdbfe"}`,
+            padding:"8px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+            <div style={{ fontSize:12, color: avisoGravacao.erro ? "#991b1b" : "#1e3a8a" }}>{avisoGravacao.texto}</div>
+            <button onClick={() => setAvisoGravacao(null)} style={{ background:"none", border:"none", color:"#6b7280", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>fechar</button>
           </div>
         )}
         {/* O formato visual do app (hover/foco em azul) vale para toda a área de
