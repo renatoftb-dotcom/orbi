@@ -70922,7 +70922,10 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
   const emptyMembro = { id:"", nome:"", cargo:"", email:"", telefone:"", cau:"", cpf:"" };
 
   function handleSave() {
-    save({ ...data, escritorio: { ...form, equipe, responsaveis } });
+    // O formulário só tem os campos do cadastro: o resto do escritório
+    // (financeiro — extratos, fechamentos, saldo de abertura —, cartões,
+    // cronograma) vem do que está gravado, senão salvar o cadastro apaga tudo.
+    save({ ...data, escritorio: { ...((data && data.escritorio) || {}), ...form, equipe, responsaveis } });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
     // Volta pro modo visualização — UX padrão de "salvou, fecha edição"
@@ -71494,7 +71497,7 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
                   ? equipe.map(m => m.id === novoMembro.id ? novoMembro : m)
                   : [...equipe, novoMembro];
                 setEquipe(novaEquipe);
-                save({ ...data, escritorio: { ...form, equipe: novaEquipe, responsaveis } });
+                save({ ...data, escritorio: { ...((data && data.escritorio) || {}), ...form, equipe: novaEquipe, responsaveis } });
                 // Item 7: se há um modal de usuário aberto e este é membro NOVO
                 // (não edição), auto-seleciona o membro recém-criado no dropdown.
                 // Fluxo: usuário clica "+ novo membro" → preenche → Adicionar →
@@ -71544,7 +71547,7 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
                 style={{ background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, color:"#4b5563", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
                 Editar
               </button>
-              <button onClick={() => { setEquipe(eq => eq.filter(x => x.id !== m.id)); save({ ...data, escritorio: { ...form, equipe: equipe.filter(x => x.id !== m.id), responsaveis } }); }}
+              <button onClick={() => { setEquipe(eq => eq.filter(x => x.id !== m.id)); save({ ...data, escritorio: { ...((data && data.escritorio) || {}), ...form, equipe: equipe.filter(x => x.id !== m.id), responsaveis } }); }}
                 style={{ background:"none", border:"none", color:"#4b5563", fontSize:18, cursor:"pointer", padding:"5px 8px" }}>×</button>
             </div>
           </div>
