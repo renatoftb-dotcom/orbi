@@ -2932,6 +2932,41 @@ teste("pagamento de vários pedidos de uma vez: uma linha só no extrato", () =>
   assert.ok(/Pagamento de 2 pedidos/.test(f[0].descricao));
 });
 
+teste("fechamento jan/26: lançamento com 'não' antigo mas ligado à linha do banco casa com ela (não vai para Falta lançar)", () => {
+  // os registros de produção de janeiro/2026, como estão gravados
+  const linhas = [
+    { abs: 4750, data: "2026-01-27", documento: "Pix", valor: 4750,
+      historico: "PIX RECEBIDO - OUTRA IF - MESMA TIT. · Recebimento Pix LEO PADOVAN PROJETOS E CONSTRUCOES 36.122.417 0001-74 Projeto Nova Alcantara",
+      id: "2026-01-27|4750.00|pix recebido - outra if - mesma tit. · recebimento pix leo p|Pix#1" },
+    { abs: 1200, data: "2026-01-27", documento: "Pix", valor: 1200,
+      historico: "PIX RECEBIDO - OUTRA IF - MESMA TIT. · Recebimento Pix LEO PADOVAN PROJETOS E CONSTRUCOES 36.122.417 0001-74 Projeto Nova Alcantara",
+      id: "2026-01-27|1200.00|pix recebido - outra if - mesma tit. · recebimento pix leo p|Pix#1" },
+    { abs: 6250, data: "2026-01-02", documento: "Pix", valor: -6250,
+      historico: "PIX EMITIDO OUTRA IF · Pagamento Pix ***.544.328-** parcela esquadrias obras",
+      id: "2026-01-02|-6250.00|pix emitido outra if · pagamento pix ***.544.328-** parcela |Pix#1" },
+  ];
+  const lancs = [
+    { id: "imp_3538", tipo: "escritorio", competencia: "2026-01", conferido: true, contaBanco: "nao", contaId: "pagamentos_compras", unidadeId: "gestao_obras",
+      valor: 6250, lancadoEm: "2025-07-01", extratoId: linhas[2].id },
+    { id: "imp_3802", tipo: "escritorio", competencia: "2026-01", conferido: true, contaBanco: "nao", contaId: "rec_projetos", unidadeId: "projetos",
+      valor: 1200, lancadoEm: "2025-08-19", extratoId: linhas[1].id },
+    { id: "imp_3808", tipo: "escritorio", competencia: "2026-01", conferido: true, contaBanco: "nao", contaId: "rec_projetos", unidadeId: "projetos",
+      valor: 4750, lancadoEm: "2025-08-19", extratoId: linhas[0].id },
+    // fora da conta de verdade (sem linha do banco): continua fora
+    { id: "res", tipo: "escritorio", competencia: "2026-01", conferido: true, contaBanco: "nao", contaId: "res_engenharia", valor: 300 },
+  ];
+  const r = M.conciliarExtrato(linhas, lancs, {});
+  assert.strictEqual(r.noBancoSemPar.length, 0, "nenhuma linha em Falta lançar: " + r.noBancoSemPar.map((m) => m.valor));
+  assert.deepStrictEqual(r.casados.map((c) => [c.lancamento.id, c.certeza]).sort(),
+    [["imp_3538", "vinculo"], ["imp_3802", "vinculo"], ["imp_3808", "vinculo"]]);
+  // e a checagem débito × crédito conta os três (a reserva continua fora)
+  const ch = M.checagemDebitoCredito(linhas, lancs, "2026-01");
+  assert.strictEqual(ch.base.saidas, 6250);
+  assert.strictEqual(ch.base.entradas, 5950);
+  assert.strictEqual(ch.difDebito, 0);
+  assert.strictEqual(ch.difCredito, 0);
+});
+
 for (const [nome, fn] of testes) {
   try { await fn(); console.log("  ok   " + nome); }
   catch (e) { falhas++; console.log("  FALHOU " + nome + "\n         " + e.message); }

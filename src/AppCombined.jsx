@@ -13917,6 +13917,17 @@ function efEhMovimento(historico) {
 // fila é o mais recente, que é justamente o que falta lançar. A tolerância
 // de um centavo existe porque parcela dividida arredonda para lados
 // diferentes; a distância de dias é informação na tela, não critério.
+// Passou pela conta do escritório? O "não" vale, a não ser que o lançamento
+// esteja ligado a uma linha do banco: a linha é a prova de que passou. Foi o
+// que deixou linhas já lançadas em "Falta lançar" — lançamentos da planilha
+// antiga com "não" (ou marcados "fora da conta" enquanto o extrato do mês
+// estava sumido) que guardavam a ligação com a linha: a conferência os
+// tirava da comparação e a linha deles ficava órfã.
+function efPassouPeloBanco(l) {
+  if (!l) return false;
+  return l.contaBanco !== "nao" || !!String(l.extratoId || "").trim();
+}
+
 function conciliarExtrato(movimentos, lancamentos, opcoes) {
   const o = opcoes || {};
   const tolerancia = o.tolerancia == null ? 0.01 : o.tolerancia;
@@ -13942,9 +13953,11 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
   // vieram com "não" e depois foram debitadas. Ele ainda pode ter a linha do
   // banco: entra por último, e o par que fizer vem como dúvida, para a
   // pessoa confirmar (e a confirmação corrige o "não").
-  const candidatos = (lancamentos || []).filter((l) => !compraNoCartaoDoEscritorio(l) && !(l && l.contaBanco === "nao" && l.conferido)).map((l, i) => ({
+  // Ligado a uma linha do banco (extratoId), passou pela conta — mesmo que
+  // carregue um "não" antigo (ver efPassouPeloBanco): casa com a linha dele.
+  const candidatos = (lancamentos || []).filter((l) => !compraNoCartaoDoEscritorio(l) && !(l && !efPassouPeloBanco(l) && l.conferido)).map((l, i) => ({
     l, i, abs: Math.round(Math.abs(Number(l.valor) || 0) * 100) / 100, usado: false, dir: direcaoDoLancamento(l),
-    nao: !!(l && l.contaBanco === "nao"),
+    nao: !!(l && !efPassouPeloBanco(l)),
   }));
 
   const distancia = (m, c) => {
@@ -14227,7 +14240,7 @@ function checagemDebitoCredito(movimentos, lancamentos, mes) {
     const v = Number(l.valor) || 0;
     if (!v) continue;
     if (ehRendimentoDaAplicacao(l)) { base.rendimento += v; continue; }
-    if (l.contaBanco === "nao") continue;                  // não passou pelo banco (custo e reserva da engenharia)
+    if (!efPassouPeloBanco(l)) continue;                   // não passou pelo banco (custo e reserva da engenharia)
     const conta = contaEscritorio(l.contaId);
     const g = conta && grupoEscritorio(conta.grupo);
     const sinalConta = g && g.sinal ? g.sinal : 1;
@@ -19804,7 +19817,9 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       confirmar: "Marcar",
     });
     if (!ok) return;
-    gravar(lancs.map((x) => x.id === l.id ? { ...x, contaBanco: "nao", conferido: true, conferidoEm: new Date().toISOString() } : x));
+    // fora da conta não tem linha do banco: a ligação com a linha sai junto
+    // (senão a linha volta a casar com ele quando o extrato for lido de novo)
+    gravar(lancs.map((x) => x.id === l.id ? { ...x, contaBanco: "nao", conferido: true, conferidoEm: new Date().toISOString(), extratoId: "" } : x));
   }
 
   // Conferência: marca um lançamento como visto no extrato do banco. É o
