@@ -71516,7 +71516,9 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
                   ? equipe.map(m => m.id === novoMembro.id ? novoMembro : m)
                   : [...equipe, novoMembro];
                 setEquipe(novaEquipe);
-                save({ ...data, escritorio: { ...((data && data.escritorio) || {}), ...form, equipe: novaEquipe, responsaveis } });
+                // só a equipe muda: o formulário do cadastro pode estar no
+                // meio de uma edição (ou limpo) e não deve ir junto
+                save({ ...data, escritorio: { ...((data && data.escritorio) || {}), equipe: novaEquipe } });
                 // Item 7: se há um modal de usuário aberto e este é membro NOVO
                 // (não edição), auto-seleciona o membro recém-criado no dropdown.
                 // Fluxo: usuário clica "+ novo membro" → preenche → Adicionar →
@@ -71542,7 +71544,7 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
           <div style={{ fontSize:14, color:"#111827", fontWeight:600 }}>{equipe.length} membro{equipe.length !== 1 ? "s" : ""}</div>
           <div style={{ fontSize:12, color:"#4b5563", marginTop:2 }}>Gerencie os membros da equipe</div>
         </div>
-        <button style={E.btn} onClick={() => setNovoMembro({...emptyMembro, id:uid()})}>+ Adicionar membro</button>
+        {perm.podeGerenciarUsuarios && <button style={E.btn} onClick={() => setNovoMembro({...emptyMembro, id:uid()})}>+ Adicionar membro</button>}
       </div>
 
       {equipe.length === 0 ? (
@@ -71561,14 +71563,15 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
                 {m.cau && <span>{m.cau}</span>}
               </div>
             </div>
-            <div style={{ display:"flex", gap:6 }}>
+            {/* gravar a equipe é do administrador (o servidor recusa os demais) */}
+            {perm.podeGerenciarUsuarios && <div style={{ display:"flex", gap:6 }}>
               <button onClick={() => setNovoMembro(m)}
                 style={{ background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, color:"#4b5563", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
                 Editar
               </button>
-              <button onClick={() => { setEquipe(eq => eq.filter(x => x.id !== m.id)); save({ ...data, escritorio: { ...((data && data.escritorio) || {}), ...form, equipe: equipe.filter(x => x.id !== m.id), responsaveis } }); }}
+              <button onClick={() => { setEquipe(eq => eq.filter(x => x.id !== m.id)); save({ ...data, escritorio: { ...((data && data.escritorio) || {}), equipe: equipe.filter(x => x.id !== m.id) } }); }}
                 style={{ background:"none", border:"none", color:"#4b5563", fontSize:18, cursor:"pointer", padding:"5px 8px" }}>×</button>
-            </div>
+            </div>}
           </div>
         ))
       )}
@@ -76410,7 +76413,13 @@ function TelaOnboarding({ usuario, escritorio, onConcluido, onLogout }) {
       // o cadastro existente.
       if (!escritorioJaPreenchido) {
         try {
+          // O registro do escritório guarda mais que o cadastro (financeiro,
+          // cartões, equipe, cronograma): parte do que está gravado e põe o
+          // cadastro por cima. Sem conseguir ler o gravado, não grava nada.
+          const gravado = await api.escritorio.get();
+          const { logo: _logoAntigo, ...restoGravado } = (gravado && typeof gravado === "object") ? gravado : {};
           await api.escritorio.save({
+            ...restoGravado,
             nome:      escNome.trim(),
             email:     escEmail.trim(),
             telefone:  escTelefone.trim(),
@@ -86244,6 +86253,9 @@ export default function ModuloClientesFornecedores() {
   // Flag interna: true quando há salvamento em andamento.
   // Usada pelo beforeunload pra bloquear fechamento durante saves.
   const savingRef = useRef(false);
+  // true só depois que os dados vieram do servidor; com a base vazia de
+  // emergência (SEED), nada é gravado — ver loadData e save
+  const carregouDoServidorRef = useRef(false);
 
   // Flag: orçamento em tela cheia está aberto.
   // Usada pelo beforeunload — se o usuário entrou num form de orçamento,
@@ -86495,10 +86507,16 @@ export default function ModuloClientesFornecedores() {
       }
       const saved = await loadAllData(estadoEmpresa);
       setData(saved);
+      carregouDoServidorRef.current = true;
       setBackendOffline(false);
     }
     catch(e) {
       console.error("Erro ao carregar dados do servidor:", e);
+      // Sem os dados do servidor, a tela abre com a base vazia (SEED). Nada
+      // pode ser gravado a partir dela: o save compara com essa base vazia e
+      // mandaria o escritório "{}" por cima do gravado — cadastro, financeiro,
+      // cartões e logo apagados. Só volta a gravar depois de recarregar.
+      carregouDoServidorRef.current = false;
       setData(SEED);
       setBackendOffline(true);
     }
@@ -86518,6 +86536,11 @@ export default function ModuloClientesFornecedores() {
   // que ela acabou de escrever. A forma de função recebe o dado mais
   // fresco que o app tem neste instante.
   async function save(newData, opts = {}) {
+    if (!carregouDoServidorRef.current) {
+      console.warn("save ignorado: os dados não vieram do servidor (modo offline)");
+      setBackendOffline(true);
+      return;
+    }
     const oldData = dataRef.current || data;
     if (typeof newData === "function") newData = newData(oldData);
     if (!newData) return;

@@ -502,7 +502,13 @@ function TelaOnboarding({ usuario, escritorio, onConcluido, onLogout }) {
       // o cadastro existente.
       if (!escritorioJaPreenchido) {
         try {
+          // O registro do escritório guarda mais que o cadastro (financeiro,
+          // cartões, equipe, cronograma): parte do que está gravado e põe o
+          // cadastro por cima. Sem conseguir ler o gravado, não grava nada.
+          const gravado = await api.escritorio.get();
+          const { logo: _logoAntigo, ...restoGravado } = (gravado && typeof gravado === "object") ? gravado : {};
           await api.escritorio.save({
+            ...restoGravado,
             nome:      escNome.trim(),
             email:     escEmail.trim(),
             telefone:  escTelefone.trim(),

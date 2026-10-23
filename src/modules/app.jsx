@@ -1046,6 +1046,9 @@ export default function ModuloClientesFornecedores() {
   // Flag interna: true quando há salvamento em andamento.
   // Usada pelo beforeunload pra bloquear fechamento durante saves.
   const savingRef = useRef(false);
+  // true só depois que os dados vieram do servidor; com a base vazia de
+  // emergência (SEED), nada é gravado — ver loadData e save
+  const carregouDoServidorRef = useRef(false);
 
   // Flag: orçamento em tela cheia está aberto.
   // Usada pelo beforeunload — se o usuário entrou num form de orçamento,
@@ -1297,10 +1300,16 @@ export default function ModuloClientesFornecedores() {
       }
       const saved = await loadAllData(estadoEmpresa);
       setData(saved);
+      carregouDoServidorRef.current = true;
       setBackendOffline(false);
     }
     catch(e) {
       console.error("Erro ao carregar dados do servidor:", e);
+      // Sem os dados do servidor, a tela abre com a base vazia (SEED). Nada
+      // pode ser gravado a partir dela: o save compara com essa base vazia e
+      // mandaria o escritório "{}" por cima do gravado — cadastro, financeiro,
+      // cartões e logo apagados. Só volta a gravar depois de recarregar.
+      carregouDoServidorRef.current = false;
       setData(SEED);
       setBackendOffline(true);
     }
@@ -1320,6 +1329,11 @@ export default function ModuloClientesFornecedores() {
   // que ela acabou de escrever. A forma de função recebe o dado mais
   // fresco que o app tem neste instante.
   async function save(newData, opts = {}) {
+    if (!carregouDoServidorRef.current) {
+      console.warn("save ignorado: os dados não vieram do servidor (modo offline)");
+      setBackendOffline(true);
+      return;
+    }
     const oldData = dataRef.current || data;
     if (typeof newData === "function") newData = newData(oldData);
     if (!newData) return;
