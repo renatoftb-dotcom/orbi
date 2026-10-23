@@ -15981,6 +15981,29 @@ function lancamentosDoGanhoRecebido(orc, numeros, ctx) {
   }
   return { lancamentos: novos };
 }
+// Parcela recebida marcada à mão, em "Projetos a receber": para o escritório
+// que não traz o extrato do banco, era o único jeito de o projeto ganho
+// virar Receita de projetos depois do fechamento. Mesmos lançamentos do
+// "Receber parcela" da fila; o dia e o valor são os que a pessoa informa.
+// Quando o extrato chegar, a linha casa com o lançamento pelo valor.
+//   p     a parcela (de parcelasDosProjetos)
+//   ctx   { lancamentos, fechamentos, novoId(), numeroDoc(lista), agora }
+function lancamentosDaParcelaRecebida(p, dia, valor, ctx) {
+  const c = ctx || {};
+  if (!p) return { erro: "Parcela não encontrada." };
+  if (p.recebida) return { erro: "Esta parcela já foi recebida." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dia || ""))) return { erro: "Informe o dia em que o dinheiro entrou." };
+  const v = efCentavos(Math.abs(efValorDoCampo(valor)));
+  if (!(v > 0)) return { erro: "Informe o valor recebido." };
+  const r = lancamentosDoRecebimento({ id: "", data: dia, valor: v, historico: "" }, String(dia).slice(0, 7), { parcelaProjeto: p }, c.fechamentos);
+  if (r.erro) return { erro: r.erro };
+  const { recebimentoExtras, extratoId: _e, historicoBanco: _h, ...principal } = r.lancamento;
+  const agora = c.agora || new Date().toISOString();
+  const id = typeof c.novoId === "function" ? c.novoId() : String(Date.now());
+  const numeroDoc = typeof c.numeroDoc === "function" ? c.numeroDoc(c.lancamentos || []) : "";
+  return { lancamentos: [{ ...principal, id, numeroDoc, criadoEm: agora },
+    ...recebimentoExtras.map((x, i) => ({ ...x, id: id + "_" + (i + 1), parDe: id, numeroDoc, criadoEm: agora, conferidoEm: agora }))] };
+}
 // O mesmo, a partir do data inteiro — é o que as telas de "Marcar como Ganho"
 // chamam. Devolve a lista de lançamentos já com os novos (ou o erro).
 function lancamentosComGanhoRecebido(data, orcGanho) {
@@ -17511,12 +17534,26 @@ function EmpreendimentosQuadro({ data, lancs, aoFiltrar }) {
 
 // Projetos ganhos com parcela ainda por receber: o "a receber" do
 // escritório. Some sozinho quando a parcela é recebida pela fila do extrato.
-function ProjetosAReceberQuadro({ data, lancs }) {
+function ProjetosAReceberQuadro({ data, lancs, aoReceber }) {
   const S = EF_ESTILO;
+  const [abrindo, setAbrindo] = useState("");      // orcId|numero da parcela com o formulário aberto
+  const [dia, setDia] = useState("");
+  const [valor, setValor] = useState("");
+  const [erro, setErro] = useState("");
   const pend = parcelasDosProjetos((data || {}).orcamentosProjeto, (data || {}).clientes, lancs)
     .filter((p) => !p.recebida).sort((a, b) => String(a.data).localeCompare(String(b.data)));
   if (!pend.length) return null;
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const abrir = (p) => {
+    setAbrindo(p.orcId + "|" + p.numero); setErro("");
+    setDia(p.data && p.data <= hoje ? p.data : hoje);
+    setValor(efCentavos(p.valor).toFixed(2).replace(".", ","));
+  };
+  const confirmar = (p) => {
+    const r = aoReceber ? aoReceber(p, dia, valor) : { erro: "Indisponível." };
+    if (r && r.erro) { setErro(r.erro); return; }
+    setAbrindo(""); setErro("");
+  };
   const total = efCentavos(pend.reduce((t, p) => t + p.valor, 0));
   const td = { padding: "7px 12px", fontSize: 12.5 };
   return (
@@ -17542,13 +17579,37 @@ function ProjetosAReceberQuadro({ data, lancs }) {
                   {p.data ? (vencida ? "venceu " : "vence ") + p.data.split("-").reverse().join("/") : "sem data"}
                 </div>
                 <div style={{ fontVariantNumeric: "tabular-nums", fontWeight: 600, whiteSpace: "nowrap", minWidth: 100, textAlign: "right" }}>{efDinheiro(p.valor)}</div>
+                {aoReceber && abrindo !== p.orcId + "|" + p.numero && (
+                  <button type="button" data-vk-receber-parcela onClick={() => abrir(p)}
+                    style={{ ...S.btnSec, padding: "5px 12px", fontSize: 12 }}>Receber</button>
+                )}
               </div>
+              {abrindo === p.orcId + "|" + p.numero && (
+                <div data-vk-receber-form style={{ flexBasis: "100%", display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end", paddingTop: 6 }}>
+                  <label style={{ display: "grid", gap: 3 }}>
+                    <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>Dia em que entrou</span>
+                    <input type="date" value={dia} max={hoje} onChange={(e) => setDia(e.target.value)}
+                      style={{ ...S.input, padding: "6px 10px", width: 160 }} />
+                  </label>
+                  <label style={{ display: "grid", gap: 3 }}>
+                    <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>Valor recebido</span>
+                    <input inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)}
+                      style={{ ...S.input, padding: "6px 10px", width: 130 }} />
+                  </label>
+                  <button type="button" data-vk-receber-confirmar onClick={() => confirmar(p)}
+                    style={{ ...S.btn, padding: "7px 14px", fontSize: 12.5 }}>Lançar recebimento</button>
+                  <button type="button" onClick={() => { setAbrindo(""); setErro(""); }}
+                    style={{ ...S.btnSec, padding: "7px 14px", fontSize: 12.5 }}>Cancelar</button>
+                  {erro && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{erro}</div>}
+                </div>
+              )}
             </div>
           );
         })}
       </div>
       <div style={{ fontSize: 11.5, color: "#6b7280" }}>
-        Vem dos orçamentos marcados como Ganho. Quando o dinheiro cai no banco, a linha do extrato já sugere a parcela — “✓ Receber parcela”.
+        Vem dos orçamentos marcados como Ganho. Recebeu? “Receber” lança a parcela em Receita de projetos
+        {" "}(com a parte da engenharia na reserva). Quem traz o extrato do banco também pode receber por lá — “✓ Receber parcela”.
       </div>
     </div>
   );
@@ -17569,7 +17630,7 @@ function EFSeletor({ rotulo, valor, aoTrocar, opcoes }) {
   );
 }
 
-function PainelFinanceiroEscritorio({ lancs, linhas, fechamentos, filtro, aoFiltrar, aoIr, dadosDoPainel }) {
+function PainelFinanceiroEscritorio({ lancs, linhas, fechamentos, filtro, aoFiltrar, aoIr, dadosDoPainel, aoReceberParcela }) {
   const S = EF_ESTILO;
   const anos = [...new Set((linhas || []).map((l) => l.mes.slice(0, 4)))].sort();
   const doFiltro = filtrarLancamentosEscritorio(lancs, filtro);
@@ -17626,9 +17687,15 @@ function PainelFinanceiroEscritorio({ lancs, linhas, fechamentos, filtro, aoFilt
       </div>
 
       {!doFiltro.length ? (
-        <div style={{ ...S.card, textAlign: "center", color: "#6b7280", fontSize: 13 }}>
-          Nenhum lançamento em {periodo}{unidade ? ` para ${unidade.nome}` : ""}.
-        </div>
+        <>
+          <div style={{ ...S.card, textAlign: "center", color: "#6b7280", fontSize: 13 }}>
+            Nenhum lançamento em {periodo}{unidade ? ` para ${unidade.nome}` : ""}.
+          </div>
+          {/* O a receber não depende de haver lançamento: o escritório que
+              ainda não lançou nada (ou não traz extrato) é justamente quem
+              precisa receber a primeira parcela por aqui. */}
+          <ProjetosAReceberQuadro data={dadosDoPainel} lancs={lancs} aoReceber={aoReceberParcela} />
+        </>
       ) : (
         <>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
@@ -17683,7 +17750,7 @@ function PainelFinanceiroEscritorio({ lancs, linhas, fechamentos, filtro, aoFilt
           <EmpreendimentosQuadro data={dadosDoPainel} lancs={lancs}
             aoFiltrar={() => aoFiltrar({ ...filtro, unidadeId: "empreendimento" })} />
 
-          <ProjetosAReceberQuadro data={dadosDoPainel} lancs={lancs} />
+          <ProjetosAReceberQuadro data={dadosDoPainel} lancs={lancs} aoReceber={aoReceberParcela} />
 
           <div style={S.quadro}>
             <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
@@ -19176,6 +19243,20 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   const gravar = (novosDoEscritorio, extra) =>
     save({ ...data, ...(extra || {}), lancamentos: [...outrosLancamentos, ...novosDoEscritorio] }).catch(console.error);
 
+  // "Receber" em Projetos a receber: a parcela vira Receita de projetos sem
+  // depender do extrato do banco.
+  function receberParcelaDeProjeto(p, dia, valor) {
+    const r = lancamentosDaParcelaRecebida(p, dia, valor, {
+      lancamentos: lancs, fechamentos,
+      novoId: typeof uid === "function" ? uid : undefined,
+      numeroDoc: typeof proximaReferencia === "function" ? (lista) => proximaReferencia((data || {}).obras || [], lista) : undefined,
+    });
+    if (r.erro) return r;
+    gravar([...lancs, ...r.lancamentos]);
+    if (typeof toast !== "undefined" && toast.sucesso) toast.sucesso("Recebimento lançado em Receita de projetos");
+    return { ok: true };
+  }
+
   // O que a pessoa confirmou ("este item da nota é aquele insumo") vira
   // apelido no catálogo — é assim que a próxima nota da mesma loja casa
   // sozinha. Vai junto na gravada do lançamento, nunca numa separada.
@@ -19976,6 +20057,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         <PainelFinanceiroEscritorio
           dadosDoPainel={data}
           lancs={lancs} linhas={linhas} fechamentos={fechamentos}
+          aoReceberParcela={receberParcelaDeProjeto}
           filtro={filtro} aoFiltrar={setFiltro}
           aoIr={(destino, mes) => {
             if (mes) setMesFecho(mes);

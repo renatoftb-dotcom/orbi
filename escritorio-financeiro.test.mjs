@@ -27,7 +27,7 @@ const M = new Function(src + `
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
-           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
+           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
            competenciasDoCartao,
@@ -2982,6 +2982,31 @@ teste("fechamento out/26: um Pix pagou um pedido com itens de duas contas — os
   assert.deepStrictEqual(r.noBancoSemPar.map((m) => m.valor), [-30]);
   assert.strictEqual(r.resumo.casados, 1, "uma linha do banco casou");
   assert.strictEqual(Object.keys(r.duplicados).length, 0);
+});
+
+teste("Projetos a receber: 'Receber' lança a parcela em Receita de projetos sem extrato (dia e valor informados)", () => {
+  const cli = { id: "v1", nome: "Cliente do Victor" };
+  const orc = { id: "ORC-0005", clienteId: "v1", referencia: "Residência", status: "ganho",
+    fechamento: { valorTotalFechado: 12000, valorEngFechado: 3000, inclEng: true,
+      condicao: { tipo: "parcelado", parcelas: [{ nome: "1ª Parcela", valor: 6000, data: "2026-10-05" }, { nome: "2ª Parcela", valor: 6000, data: "2026-11-05" }] } } };
+  let n = 0;
+  const ctx = { lancamentos: [], fechamentos: {}, novoId: () => "r" + (++n), numeroDoc: () => "4300", agora: "2026-10-23T12:00:00Z" };
+  const [p1, p2] = M.parcelasDosProjetos([orc], [cli], []);
+  const r = M.lancamentosDaParcelaRecebida(p1, "2026-10-08", "6.000,00", ctx);
+  assert.ok(!r.erro, r.erro);
+  assert.deepStrictEqual(r.lancamentos.map((l) => [l.contaId, l.valor, l.contaBanco, l.competencia, l.lancadoEm, l.origem.parte]),
+    [["rec_projetos", 6000, "sim", "2026-10", "2026-10-08", "recebido"], ["parceiros", 1500, "nao", "2026-10", "2026-10-08", "eng-custo"],
+     ["res_engenharia", 1500, "nao", "2026-10", "2026-10-08", "eng-reserva"]]);
+  const depois = M.parcelasDosProjetos([orc], [cli], r.lancamentos);
+  assert.deepStrictEqual(depois.map((p) => p.recebida), [true, false], "sai do a receber só a parcela recebida");
+  // a receita aparece no resumo do mês
+  const ext = M.extratoEscritorio(r.lancamentos, { saldoAbertura: 0 }).find((x) => x.mes === "2026-10");
+  assert.strictEqual(ext.contas.rec_projetos, 6000);
+  // de novo não lança; sem dia, sem valor ou em mês fechado, recusa
+  assert.ok(M.lancamentosDaParcelaRecebida(depois[0], "2026-10-08", 6000, ctx).erro);
+  assert.ok(M.lancamentosDaParcelaRecebida(p2, "", 6000, ctx).erro);
+  assert.ok(M.lancamentosDaParcelaRecebida(p2, "2026-11-05", "0", ctx).erro);
+  assert.ok(/fechado/.test(M.lancamentosDaParcelaRecebida(p2, "2026-09-30", 6000, { ...ctx, fechamentos: { "2026-09": { fechadoEm: "x" } } }).erro));
 });
 
 for (const [nome, fn] of testes) {
