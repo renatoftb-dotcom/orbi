@@ -2012,6 +2012,25 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const inverterAberturas = (campo) => { if (selO.length) editarAberturas(selO.map((x) => x.o.id), (o) => ({ ...o, [campo]: -(o[campo] || 1) })); };
   const editarParedes = (idx, fn) => { const s = new Set(idx); mudar(paredes.map((w, i) => (s.has(i) ? fn(w) : w)), null, true); };
   const editarAreas = (idx, fn) => { const s = new Set(idx); mudar(null, areas.map((a, i) => (s.has(i) ? fn(a) : a)), true); };
+  const endireitarParede = (i) => {
+    const w = paredes[i]; if (!w) return;
+    const horiz = Math.abs(w.b.x - w.a.x) >= Math.abs(w.b.y - w.a.y);
+    const perto = (p, q) => Math.hypot(p.x - q.x, p.y - q.y) < 2e-3;
+    // qual ponta mexer: a que tem as paredes ligadas na direção do movimento
+    // (assim elas só esticam/encolhem, sem entortar); empate = a ponta "b"
+    const nota = (fim) => {
+      const p = w[fim]; let ok = 0, ruim = 0;
+      paredes.forEach((o, k) => { if (k === i) return; for (const f of ["a", "b"]) if (perto(o[f], p)) { const L = tpLen(o) || 1, ox = Math.abs(o.b.x - o.a.x) / L, oy = Math.abs(o.b.y - o.a.y) / L; ((horiz ? oy : ox) > 0.99 ? ok++ : ruim++); } });
+      return ok - ruim * 2;
+    };
+    const fim = nota("b") >= nota("a") ? "b" : "a", fixo = fim === "a" ? w.b : w.a, velho = w[fim];
+    const novo = horiz ? { x: velho.x, y: fixo.y } : { x: fixo.x, y: velho.y };
+    mudar(paredes.map((o, k) => {
+      if (k === i) return tpComPonta(o, fim, novo);
+      let n = o; for (const f of ["a", "b"]) if (perto(o[f], velho)) n = tpComPonta(n, f, novo);
+      return n;
+    }), null, true);
+  };
   const mudarComprimento = (i, L) => editarParedes([i], (w) => {
     const l0 = tpLen(w) || 1, ux = (w.b.x - w.a.x) / l0, uy = (w.b.y - w.a.y) / l0;
     return { ...w, b: { x: r3(w.a.x + ux * L), y: r3(w.a.y + uy * L) } };
@@ -4623,7 +4642,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       // grade de 0,50 m puxar para o lado — era isso que fazia a parede
       // "tremer" com o mouse balançando). Afastando o cursor mais de ~25 px
       // da linha da parede, solta para girar livremente; Shift trava em 90°.
-      const L0 = tpLen(w0) || 1, ux = (w0[al.fim].x - outra.x) / L0, uy = (w0[al.fim].y - outra.y) / L0;
+      let L0 = tpLen(w0) || 1, ux = (w0[al.fim].x - outra.x) / L0, uy = (w0[al.fim].y - outra.y) / L0;
+      // parede quase no esquadro (até ~4°): esticar já endireita (anda no eixo
+      // horizontal/vertical a partir da outra ponta)
+      if (Math.min(Math.abs(ux), Math.abs(uy)) < Math.sin(4 * Math.PI / 180) && Math.min(Math.abs(ux), Math.abs(uy)) > 1e-6) { if (Math.abs(ux) > Math.abs(uy)) { ux = Math.sign(ux); uy = 0; } else { uy = Math.sign(uy); ux = 0; } }
       const livre = paraMundoLivre(devPx(e)), perpPx = Math.abs((livre.x - outra.x) * -uy + (livre.y - outra.y) * ux) * vista.current.s / (window.devicePixelRatio || 1);
       if (g.giroLivre ? perpPx < 8 : false) g.giroLivre = false;
       else if (!g.giroLivre && perpPx > 25) g.giroLivre = true;
@@ -4632,6 +4654,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const tIma = [...imasDoCursor(pc, outra, { x: ux, y: uy }), ...cortesNoEixo(outra, { x: ux, y: uy }, orig.paredes, [al.pi, ...(g.ligPonta || [])])];
         const t = Math.max(0.05, eixoEstavel(g, "snapT", tCur, tIma, outra.x * ux + outra.y * uy));
         pc = { x: r3(outra.x + ux * t), y: r3(outra.y + uy * t), ...(pc.ima ? { ima: true } : {}) };
+      } else if (g.giroLivre && !e.shiftKey) {
+        // girando: até ~4° de horizontal/vertical, trava no esquadro (o ímã de
+        // uma quina vizinha 2 ou 3 cm fora do prumo deixava a parede torta)
+        const dx = pc.x - outra.x, dy = pc.y - outra.y, ang = Math.abs(Math.atan2(Math.min(Math.abs(dx), Math.abs(dy)), Math.max(Math.abs(dx), Math.abs(dy))));
+        if (ang < 4 * Math.PI / 180 && Math.hypot(dx, dy) > 0.05) pc = Math.abs(dx) >= Math.abs(dy) ? { x: pc.x, y: outra.y } : { x: outra.x, y: pc.y };
       }
       setHover(pc);
       // portas/janelas ficam no mesmo lugar da planta quando se mexe a ponta "a"
@@ -5326,6 +5353,13 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         })()}
         {selP.length > 0 && !selA.length && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            {selP.length === 1 && (() => {
+              // parede quase no esquadro (até 15°): um clique deixa a 90°, levando
+              // junto as paredes ligadas na ponta que se move (elas esticam/encolhem)
+              const w = paredes[selP[0]], dx = w.b.x - w.a.x, dy = w.b.y - w.a.y, desvio = Math.atan2(Math.min(Math.abs(dx), Math.abs(dy)), Math.max(Math.abs(dx), Math.abs(dy))) * 180 / Math.PI;
+              if (!(desvio > 0.05 && desvio < 15)) return null;
+              return <button style={{ ...btn, gridColumn: "1 / -1", minHeight: 30, padding: "4px 8px", fontSize: 12.5 }} title={`Está ${tpFmt(desvio, 1)}° fora do esquadro`} onClick={() => endireitarParede(selP[0])}>Endireitar a 90° <span style={{ color: "#9ca3af" }}>({tpFmt(desvio, 1)}° fora)</span></button>;
+            })()}
             {selP.length === 1 && <div style={{ gridColumn: "1 / -1" }}><TpCampo id="tp-p-comp" rotulo="Comprimento (m)" valor={tpLen(paredes[selP[0]])} onConfirmar={(v) => mudarComprimento(selP[0], v)} /></div>}
             <TpCampo id="tp-p-alt" rotulo="Altura (m)" valor={comum(selP, (i) => paredes[i].h)} onConfirmar={(v) => editarParedes(selP, (w) => ({ ...w, h: v }))} />
             <TpCampo id="tp-p-esp" rotulo="Espessura (cm)" casas={0} valor={comum(selP, (i) => Math.round(paredes[i].t * 100))} onConfirmar={(v) => editarParedes(selP, (w) => ({ ...w, t: v / 100 }))} />
@@ -5646,7 +5680,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           <div key={p.id} style={{ display: "flex", gap: 4 }}>
             <button onClick={() => { if (p.id === pavAtivo) { setEditPav((x) => !x); return; } irParaPav(p.id); setPavAberto(false); }} onDoubleClick={() => { irParaPav(p.id); setEditPav(true); }}
               title={`${p.nome} · nível ${tpFmt(p.nivel)}. Clique de novo no pavimento em uso para editar (nome, nível, excluir). Page Up / Page Down troca.`}
-              style={{ ...btn, flex: 1, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, display: "flex", justifyContent: "space-between", alignItems: "center", borderColor: p.id === pavAtivo ? TP_AZUL : "#e5e7eb", background: p.id === pavAtivo ? "#eef5ff" : "#fff", color: p.id === pavAtivo ? TP_AZUL : "#374151", fontWeight: p.id === pavAtivo ? 600 : 500 }}>
+              style={{ ...btn, width: 140, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, display: "flex", justifyContent: "space-between", alignItems: "center", borderColor: p.id === pavAtivo ? TP_AZUL : "#e5e7eb", background: p.id === pavAtivo ? "#eef5ff" : "#fff", color: p.id === pavAtivo ? TP_AZUL : "#374151", fontWeight: p.id === pavAtivo ? 600 : 500 }}>
               <span>{p.nome}</span><span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>{tpFmt(p.nivel)}</span>
             </button>
             {k === 0 && (
@@ -5668,7 +5702,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                   const ids = (dadosDe(comTelhado.id).areas || []).map((a, i) => (a.tipo === "telhado" ? "a" + i : null)).filter(Boolean);
                   trocarFerramenta("selecionar"); setTimeout(() => setSel(ids), 0); setPavAberto(false); if (isMobile) setMenuAberto(false);
                 }} title="Cobertura: seleciona o telhado"
-                style={{ ...btn, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, textAlign: "left", borderColor: selTelhado ? TP_AZUL : "#e5e7eb", background: selTelhado ? "#eef5ff" : "#fff", color: selTelhado ? TP_AZUL : "#374151", fontWeight: selTelhado ? 600 : 500 }}>
+                style={{ ...btn, width: 140, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, textAlign: "left", borderColor: selTelhado ? TP_AZUL : "#e5e7eb", background: selTelhado ? "#eef5ff" : "#fff", color: selTelhado ? TP_AZUL : "#374151", fontWeight: selTelhado ? 600 : 500 }}>
                 Cobertura
               </button>
             )}
@@ -5843,7 +5877,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         <>
           {/* tudo da obra num botão só: abre o gerar/atualizar e o preencher sozinho */}
           <button onClick={() => setObraAberta((x) => !x)} aria-expanded={obraAberta}
-            style={{ ...btn, width: "100%", minHeight: 30, padding: "4px 10px", fontSize: 12.5, marginTop: 12, display: "flex", alignItems: "center", gap: 8, borderColor: obraAberta ? TP_AZUL : "#e5e7eb", background: obraAberta ? "#eef5ff" : "#fff", color: obraAberta ? TP_AZUL : "#111827", fontWeight: 600 }}>
+            style={{ ...btn, width: "fit-content", minWidth: 140, minHeight: 28, padding: "3px 10px", fontSize: 12, marginTop: 12, display: "flex", alignItems: "center", gap: 8, borderColor: obraAberta ? TP_AZUL : "#e5e7eb", background: obraAberta ? "#eef5ff" : "#fff", color: obraAberta ? TP_AZUL : "#111827", fontWeight: 600 }}>
             <span style={{ flex: 1, textAlign: "left" }}>Obra</span>
             {obraLigada && <span style={{ fontSize: 11, fontWeight: 500, color: "#6b7280" }}>{sincronizar && ultimaSinc ? `ligada · ${ultimaSinc.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "ligada"}</span>}
             <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" style={{ transform: obraAberta ? "rotate(180deg)" : "none", transition: "transform .15s" }}><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
