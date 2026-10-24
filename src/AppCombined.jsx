@@ -83809,7 +83809,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       out.push({ x: w.a.x, y: w.a.y, eixo: true }, { x: w.b.x, y: w.b.y, eixo: true });
       for (const [pt, sgn] of [[w.a, -1], [w.b, 1]]) {
         const solta = !faces.some((g) => g.i !== f.i && !fora(g.i) && (mesmo(g.w.a, pt) || mesmo(g.w.b, pt)));
-        if (solta) for (const lado of [1, -1]) out.push({ x: pt.x + sgn * ux * h + lado * nx * h, y: pt.y + sgn * uy * h + lado * ny * h });
+        if (solta) for (const lado of [1, -1]) out.push({ x: pt.x + sgn * ux * h + lado * nx * h, y: pt.y + sgn * uy * h + lado * ny * h, face: true });
       }
     }
     const cruzar = (p1, d1, p2, d2) => { const den = d1.x * d2.y - d1.y * d2.x; if (Math.abs(den) < 1e-9) return null; const t = ((p2.x - p1.x) * d2.y - (p2.y - p1.y) * d2.x) / den; return { x: p1.x + d1.x * t, y: p1.y + d1.y * t }; };
@@ -83819,7 +83819,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (![f.w.a, f.w.b].some((p) => mesmo(p, g.w.a) || mesmo(p, g.w.b))) continue;
       for (const lf of [1, -1]) for (const lg of [1, -1]) {
         const q = cruzar({ x: f.w.a.x + lf * f.nx * f.h, y: f.w.a.y + lf * f.ny * f.h }, { x: f.ux, y: f.uy }, { x: g.w.a.x + lg * g.nx * g.h, y: g.w.a.y + lg * g.ny * g.h }, { x: g.ux, y: g.uy });
-        if (q) out.push(q);
+        if (q) out.push({ ...q, face: true });
       }
     }
     // pontas das paredes do pavimento de baixo também atraem (alinhar com ele)
@@ -83835,9 +83835,15 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // Quinas: as das faces (lado de fora e de dentro da parede) têm preferência
     // sobre o eixo — laje, contrapiso, cota etc. medem pela face. Desenhando
     // parede, o eixo vale igual (a parede liga pelo eixo).
-    const prefereFace = ferramenta !== "parede";
+    // Parede sempre se une a outra parede: desenhando (ou esticando a ponta de)
+    // uma parede, só valem as pontas no eixo e a linha do eixo — nunca as
+    // quinas/linhas das faces, que deixariam a parede solta. Os outros
+    // elementos (laje, contrapiso, cota…) usam as faces.
+    const modoParede = ferramenta === "parede" || !!opts.parede;
+    const prefereFace = !modoParede;
     let ima = null, menor = Infinity;
     for (const q of pontosIma(opts.ignorar)) {
+      if (modoParede && q.face) continue;
       const dd = Math.hypot(q.x - livre.x, q.y - livre.y) * (q.eixo && prefereFace ? 1.8 : 1); if (dd < tol && dd < menor) { menor = dd; ima = q; }
     }
     // sem quina por perto: gruda na linha da face (interna ou externa) da parede
@@ -83848,11 +83854,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         if (opts.ignorar && (i === opts.ignorar.parede || (opts.ignorar.paredes && opts.ignorar.paredes.includes(i)))) return;
         const L = tpLen(w); if (!L) return;
         const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, h = (w.t || 0) / 2;
-        for (const lado of [1, -1]) {
+        for (const lado of (modoParede ? [0] : [1, -1])) {
           const ox = w.a.x - uy * h * lado, oy = w.a.y + ux * h * lado, t = (livre.x - ox) * ux + (livre.y - oy) * uy;
           if (t < -h || t > L + h) continue;
           const px = ox + ux * t, py = oy + uy * t, dd = Math.hypot(livre.x - px, livre.y - py);
-          if (dd < dmin) { dmin = dd; naFace = { x: px, y: py, ux, uy, ox, oy }; }
+          if (dd < dmin) { dmin = dd; naFace = { x: px, y: py, ux, uy, ox, oy, ref: { a: { x: ox - ux * h, y: oy - uy * h }, b: { x: ox + ux * (L + h), y: oy + uy * (L + h) }, eixo: lado === 0 } }; }
         }
       });
     }
@@ -83860,7 +83866,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       : naFace ? (() => { // na face: anda pela grade ao longo dela
           const t = (livre.x - naFace.ox) * naFace.ux + (livre.y - naFace.oy) * naFace.uy, ts = Math.abs(naFace.ux) > 0.999 || Math.abs(naFace.uy) > 0.999 ? null : t;
           const q = ts == null ? (Math.abs(naFace.ux) > 0.999 ? { x: snap(naFace.x), y: naFace.y } : { x: naFace.x, y: snap(naFace.y) }) : { x: naFace.x, y: naFace.y };
-          return { x: r3(q.x), y: r3(q.y), ima: true, face: true };
+          return { x: r3(q.x), y: r3(q.y), ima: true, face: true, ref: naFace.ref };
         })()
       : { x: snap(livre.x), y: snap(livre.y) };
     const base = opts.base !== undefined ? opts.base : baseTraco();
@@ -85145,6 +85151,13 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (ar && ar.pts && ar.tipo !== "cota") ar.pts.forEach((q, k) => { const r = ar.pts[(k + 1) % ar.pts.length]; etiqueta(q, r, tpFmt(Math.hypot(r.x - q.x, r.y - q.y)) + " m"); });
     }
     if (hover && (ferramenta !== "selecionar" || (gesto.current && gesto.current.grip)) && ferramenta !== "mover") {
+      // como no Revit: a face (ou o eixo) em que o ponto grudou acende em azul
+      if (hover.ref) {
+        const [ax, ay] = T(hover.ref.a), [bx, by] = T(hover.ref.b);
+        ctx.save(); ctx.strokeStyle = "rgba(4,116,244,0.85)"; ctx.lineWidth = 3 * dpr; ctx.lineCap = "round";
+        if (hover.ref.eixo) ctx.setLineDash([8 * dpr, 4 * dpr]);
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); ctx.restore();
+      }
       if (hover.ima) { const [x, y] = T(hover), r = (hover.face ? 4 : 5.5) * dpr; ctx.fillStyle = "#ffffff"; ctx.fillRect(x - r, y - r, 2 * r, 2 * r); ctx.strokeStyle = TP_AZUL; ctx.lineWidth = 1.6 * dpr; ctx.strokeRect(x - r, y - r, 2 * r, 2 * r); }
       else ponto(hover, 3);
     }
@@ -86137,7 +86150,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     } else if (al.tipo === "ponta") {
       const w0 = orig.paredes[al.pi], outra = al.fim === "a" ? w0.b : w0.a;
       if (!g.ligPonta) g.ligPonta = al.solta ? [] : orig.paredes.map((w, i) => (i !== al.pi && ["a", "b"].some((f) => Math.hypot(w[f].x - w0[al.fim].x, w[f].y - w0[al.fim].y) < 2e-3) ? i : -1)).filter((i) => i >= 0);
-      let pc = pontoDoCursor(e, { ignorar: { parede: al.pi, paredes: g.ligPonta }, base: outra });
+      let pc = pontoDoCursor(e, { ignorar: { parede: al.pi, paredes: g.ligPonta }, base: outra, parede: true });
       // Esticar/encolher: a ponta anda na direção da própria parede (sem a
       // grade de 0,50 m puxar para o lado — era isso que fazia a parede
       // "tremer" com o mouse balançando). Afastando o cursor mais de ~25 px
