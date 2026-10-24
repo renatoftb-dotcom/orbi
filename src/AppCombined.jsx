@@ -87713,9 +87713,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       {(() => {
         const pilPav = (p, k) => (
           <div key={p.id} style={{ display: "flex", gap: 4 }}>
-            <button onClick={() => { if (p.id === pavAtivo && (vis3d === "so" || (pavsOrd.length < 2 && !comTelhado))) { setEditPav((x) => !x); return; } irParaPav(p.id); setVis3d("so"); setPavAberto(false); }} onDoubleClick={() => { irParaPav(p.id); setEditPav(true); }}
+            <button onClick={() => { if (p.id === pavAtivo && (!mostra3d || vis3d === "so" || (pavsOrd.length < 2 && !comTelhado))) { setEditPav((x) => !x); return; } irParaPav(p.id); if (mostra3d) setVis3d("so"); setPavAberto(false); }} onDoubleClick={() => { irParaPav(p.id); setEditPav(true); }}
               title={`${p.nome} · nível ${tpFmt(p.nivel)}. Clique de novo no pavimento em uso para editar (nome, nível, excluir). Page Up / Page Down troca.`}
-              style={{ ...btn, width: 140, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, display: "flex", justifyContent: "space-between", alignItems: "center", borderColor: p.id === pavAtivo ? TP_AZUL : "#e5e7eb", background: p.id === pavAtivo && !((vis3d === "todos" || vis3d === "cob") && (pavsOrd.length > 1 || comTelhado)) ? "#eef5ff" : "#fff", color: p.id === pavAtivo ? TP_AZUL : "#374151", fontWeight: p.id === pavAtivo ? 600 : 500 }}>
+              style={{ ...btn, width: 140, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, display: "flex", justifyContent: "space-between", alignItems: "center", borderColor: p.id === pavAtivo ? TP_AZUL : "#e5e7eb", background: p.id === pavAtivo && !(mostra3d && (vis3d === "todos" || vis3d === "cob") && (pavsOrd.length > 1 || comTelhado)) ? "#eef5ff" : "#fff", color: p.id === pavAtivo ? TP_AZUL : "#374151", fontWeight: p.id === pavAtivo ? 600 : 500 }}>
               <span>{p.nome}</span><span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>{tpFmt(p.nivel)}</span>
             </button>
             {k === 0 && (
@@ -87732,7 +87732,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const lista = pavAberto ? pavsOrd : pavsOrd.filter((p) => p.id === pavAtivo);
         return (
           <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 3 }}>
-            {pavAberto && (pavsOrd.length > 1 || comTelhado) && (
+            {pavAberto && mostra3d && (pavsOrd.length > 1 || comTelhado) && (
               <button onClick={() => { setVis3d("todos"); setEditPav(false); setPavAberto(false); }} title="Todos os pavimentos no 3D (o desenho continua no pavimento em uso)"
                 style={{ ...btn, width: 140, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, textAlign: "left", borderColor: vis3d === "todos" ? TP_AZUL : "#e5e7eb", background: vis3d === "todos" ? "#eef5ff" : "#fff", color: vis3d === "todos" ? TP_AZUL : "#374151", fontWeight: vis3d === "todos" ? 600 : 500 }}>
                 Todos
@@ -87743,9 +87743,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               <button onClick={() => {
                   const ir = comTelhado.id !== pavAtivo; if (ir) irParaPav(comTelhado.id);
                   const ids = (dadosDe(comTelhado.id).areas || []).map((a, i) => (a.tipo === "telhado" ? "a" + i : null)).filter(Boolean);
-                  trocarFerramenta("selecionar"); setTimeout(() => setSel(ids), 0); setVis3d("cob"); setPavAberto(false); if (isMobile) setMenuAberto(false);
+                  trocarFerramenta("selecionar"); setTimeout(() => setSel(ids), 0); if (mostra3d) setVis3d("cob"); setPavAberto(false); if (isMobile) setMenuAberto(false);
                 }} title="Cobertura: seleciona o telhado"
-                style={{ ...btn, width: 140, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, textAlign: "left", borderColor: vis3d === "cob" || selTelhado ? TP_AZUL : "#e5e7eb", background: vis3d === "cob" ? "#eef5ff" : "#fff", color: vis3d === "cob" || selTelhado ? TP_AZUL : "#374151", fontWeight: vis3d === "cob" || selTelhado ? 600 : 500 }}>
+                style={{ ...btn, width: 140, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, textAlign: "left", borderColor: (mostra3d && vis3d === "cob") || selTelhado ? TP_AZUL : "#e5e7eb", background: mostra3d && vis3d === "cob" ? "#eef5ff" : "#fff", color: (mostra3d && vis3d === "cob") || selTelhado ? TP_AZUL : "#374151", fontWeight: (mostra3d && vis3d === "cob") || selTelhado ? 600 : 500 }}>
                 Cobertura
               </button>
             )}
