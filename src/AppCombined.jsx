@@ -85037,12 +85037,6 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       ctx.strokeStyle = cruzando ? "#16a34a" : TP_AZUL; ctx.lineWidth = 1.5 * dpr; ctx.setLineDash(cruzando ? [6 * dpr, 4 * dpr] : []);
       ctx.strokeRect(x, y, w, h); ctx.setLineDash([]);
     }
-    const m = v.s >= 60 * dpr ? 1 : (v.s >= 25 * dpr ? 2 : 5);
-    // escala gráfica: à direita do painel suspenso (não fica escondida embaixo dele)
-    const xEsc = 16 * dpr + esquerdaUtil();
-    ctx.fillStyle = "#374151"; ctx.fillRect(xEsc, H - 20 * dpr, m * v.s, 3 * dpr);
-    ctx.font = `500 ${11 * dpr}px system-ui, sans-serif`; ctx.textAlign = "left";
-    ctx.fillText(m + " m", xEsc, H - 26 * dpr);
   };
 
   // ---------- 3D ----------
@@ -86034,6 +86028,50 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       setParedes(novasP); setAreas(comAmbientes(novasP, orig.areas, [w0, novasP[al.pi], ...ligadas.flatMap((i) => [orig.paredes[i], novasP[i]])]));
     }
   };
+  // Dois dedos na planta: pinça aproxima/afasta e arrasta a vista (no celular
+  // não há mais botões de zoom). Toque duplo (ou clique duplo) num lugar vazio,
+  // com Selecionar, ajusta o desenho à tela.
+  const toques = useRef(new Map()), pinca = useRef(null), posPinca = useRef(false), ultimoToque = useRef(null);
+  const planDownT = (e) => {
+    if (e.pointerType === "touch") {
+      toques.current.set(e.pointerId, devPx(e));
+      if (toques.current.size >= 2) {
+        const g = gesto.current;
+        if (g) { if (g.raf) cancelAnimationFrame(g.raf); clearTimeout(g.timer); if (g.grip && g.moveu && g.orig) { setParedes(g.orig.paredes); setAreas(g.orig.areas); } }
+        gesto.current = null; setCaixa(null);
+        const [a, b] = [...toques.current.values()];
+        pinca.current = { d: Math.hypot(b.x - a.x, b.y - a.y) || 1, m: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, v: { ...vista.current } };
+        posPinca.current = true; return;
+      }
+      if (posPinca.current) return;
+      const agora = Date.now(), d = devPx(e), u = ultimoToque.current;
+      ultimoToque.current = { t: agora, x: d.x, y: d.y };
+      if (u && agora - u.t < 320 && Math.hypot(d.x - u.x, d.y - u.y) < 30 * (window.devicePixelRatio || 1) && ferramenta === "selecionar" && !elementoNoPonto(d)) { ultimoToque.current = null; ajustar(); return; }
+    }
+    planDown(e);
+  };
+  const planMoveT = (e) => {
+    if (e.pointerType === "touch" && toques.current.has(e.pointerId)) {
+      toques.current.set(e.pointerId, devPx(e));
+      const pc = pinca.current;
+      if (pc && toques.current.size >= 2) {
+        const [a, b] = [...toques.current.values()], dd = Math.hypot(b.x - a.x, b.y - a.y) || 1, m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        const s2 = Math.min(3000 * (window.devicePixelRatio || 1), Math.max(4, pc.v.s * dd / pc.d));
+        const wx = (pc.m.x - pc.v.ox) / pc.v.s, wy = (pc.m.y - pc.v.oy) / pc.v.s;
+        vista.current = { s: s2, ox: m.x - wx * s2, oy: m.y - wy * s2 }; desenharPlanta(); return true;
+      }
+      if (posPinca.current) return true;
+    }
+    return false;
+  };
+  const planUpT = (e) => {
+    if (e.pointerType === "touch") {
+      toques.current.delete(e.pointerId);
+      if (toques.current.size < 2) pinca.current = null;
+      if (posPinca.current) { if (!toques.current.size) posPinca.current = false; return; }
+    }
+    planUp(e);
+  };
   const planDown = (e) => {
     const d = devPx(e);
     if (e.button === 0 && ferramenta === "selecionar") {
@@ -86325,7 +86363,38 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
   // ---------- gestos do 3D: arrastar gira, clique seleciona ----------
   const drag = useRef(null);
-  const v3dDown = (e) => {
+ // Vistas prontas do 3D (como no SketchUp/Revit): topo, frente, fundo,
+  // esquerda, direita e a perspectiva. Gira suave até a vista e enquadra a casa.
+  // Frente = olhando do lado de baixo da planta para cima.
+  const animVista = useRef(0);
+  const VISTAS_3D = [
+    { id: "topo", rot: "Topo", theta: Math.PI / 2, phi: 0.05 },
+    { id: "frente", rot: "Frente", theta: Math.PI / 2, phi: Math.PI / 2 - 0.02 },
+    { id: "fundo", rot: "Fundo", theta: -Math.PI / 2, phi: Math.PI / 2 - 0.02 },
+    { id: "esq", rot: "Esq.", theta: Math.PI, phi: Math.PI / 2 - 0.02 },
+    { id: "dir", rot: "Dir.", theta: 0, phi: Math.PI / 2 - 0.02 },
+    { id: "persp", rot: "3D", theta: -0.7, phi: 0.9 },
+  ];
+  const irVista3d = (v) => {
+    const T = three.current; if (!T) return;
+    const b = limites(), tam = Math.max(b.x1 - b.x0, b.y1 - b.y0, 4);
+    let alt = 3; for (const p of pavsOrd) alt = Math.max(alt, (p.nivel || 0) + Math.max(0, ...((dadosDe(p.id).paredes || []).map((w) => w.h || 0))));
+    const ini = { theta: T.theta, phi: T.phi, dist: T.dist, alvo: T.alvo || { x: 0, y: 1, z: 0 } };
+    let dth = v.theta - ini.theta; while (dth > Math.PI) dth -= 2 * Math.PI; while (dth < -Math.PI) dth += 2 * Math.PI;
+    const fim = { theta: ini.theta + dth, phi: v.phi, dist: Math.max(10, v.id === "persp" ? tam * 1.6 : (Math.max(tam, alt * 1.6) / 2 + 2) / Math.tan(20 * Math.PI / 180)), alvo: { x: 0, y: v.id === "topo" ? 0 : alt / 2, z: 0 } };
+    const t0 = performance.now(), dur = 380, id = ++animVista.current;
+    const passo = (agora) => {
+      if (id !== animVista.current || !three.current) return;
+      const t = Math.min(1, (agora - t0) / dur), k = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      const L = (a, b2) => a + (b2 - a) * k;
+      T.theta = L(ini.theta, fim.theta); T.phi = L(ini.phi, fim.phi); T.dist = L(ini.dist, fim.dist);
+      T.alvo = { x: L(ini.alvo.x, fim.alvo.x), y: L(ini.alvo.y, fim.alvo.y), z: L(ini.alvo.z, fim.alvo.z) };
+      desenhar3d();
+      if (t < 1) requestAnimationFrame(passo);
+    };
+    requestAnimationFrame(passo);
+  };
+  const v3dDown = (e) => { animVista.current++;
     if (e.button === 1) { const agora = Date.now(); if (agora - meioClique.current < 350 && three.current) { const b = limites(); three.current.alvo = { x: 0, y: 1, z: 0 }; three.current.dist = Math.max(14, Math.max(b.x1 - b.x0, b.y1 - b.y0) * 1.6); desenhar3d(); meioClique.current = 0; return; } meioClique.current = agora; }
     const g = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, moveu: false, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, direito: e.button === 2, panear: e.button === 1 || e.button === 2, menu: false };
     if (e.pointerType === "touch") { const cx = e.clientX, cy = e.clientY, ev = { clientX: cx, clientY: cy }; g.timer = setTimeout(() => { if (drag.current === g && !g.moveu) { g.menu = true; abrirMenuCtx(cx, cy, pegar3d(ev)); } }, 550); }
@@ -87197,8 +87266,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 style={{ position: "absolute", top: 10, left: 10, zIndex: 2, ...ctrl, fontSize: 18 }}>☰</button>
             )}
             <canvas ref={planRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none", cursor: ferramenta === "mover" ? "grab" : ferramenta === "selecionar" ? "default" : "crosshair" }}
-              onContextMenu={(e) => e.preventDefault()} onDoubleClick={() => { if (poli.length >= 3) finalizarPoli(); }}
-              onPointerDown={planDown} onPointerMove={(e) => { planMove(e); if (!gesto.current && ferramenta === "selecionar") { const dd = devPx(e), eq = iconeEq.current; e.currentTarget.style.cursor = (eq && Math.abs(dd.x - eq.x) <= eq.r && Math.abs(dd.y - eq.y) <= eq.r) || cotasClic.current.some((q) => Math.abs(dd.x - q.x) <= q.r && Math.abs(dd.y - q.y) <= q.r * 0.6) ? "pointer" : (alcasEsq.current.some((q) => Math.abs(dd.x - q.x) <= 9 * (window.devicePixelRatio || 1) && Math.abs(dd.y - q.y) <= 9 * (window.devicePixelRatio || 1)) || alcaNoPonto(dd) || rotulosClic.current.some((q) => dd.x >= q.x0 && dd.x <= q.x1 && dd.y >= q.y0 && dd.y <= q.y1)) ? "move" : "default"; } }} onPointerUp={planUp} onPointerLeave={() => { if (!inicio && !poli.length && !gesto.current) setHover(null); else if (!gesto.current && hover && hover.guias) setHover({ x: hover.x, y: hover.y }); if (!gesto.current) setPreviaEsq(null); }} />
+              onContextMenu={(e) => e.preventDefault()} onDoubleClick={(e) => { if (poli.length >= 3) finalizarPoli(); else if (ferramenta === "selecionar" && !inicio && !elementoNoPonto(devPx(e))) ajustar(); }}
+              onPointerCancel={planUpT}
+              onPointerDown={planDownT} onPointerMove={(e) => { if (planMoveT(e)) return; planMove(e); if (!gesto.current && ferramenta === "selecionar") { const dd = devPx(e), eq = iconeEq.current; e.currentTarget.style.cursor = (eq && Math.abs(dd.x - eq.x) <= eq.r && Math.abs(dd.y - eq.y) <= eq.r) || cotasClic.current.some((q) => Math.abs(dd.x - q.x) <= q.r && Math.abs(dd.y - q.y) <= q.r * 0.6) ? "pointer" : (alcasEsq.current.some((q) => Math.abs(dd.x - q.x) <= 9 * (window.devicePixelRatio || 1) && Math.abs(dd.y - q.y) <= 9 * (window.devicePixelRatio || 1)) || alcaNoPonto(dd) || rotulosClic.current.some((q) => dd.x >= q.x0 && dd.x <= q.x1 && dd.y >= q.y0 && dd.y <= q.y1)) ? "move" : "default"; } }} onPointerUp={planUpT} onPointerLeave={() => { if (!inicio && !poli.length && !gesto.current) setHover(null); else if (!gesto.current && hover && hover.guias) setHover({ x: hover.x, y: hover.y }); if (!gesto.current) setPreviaEsq(null); }} />
             {editNome && (
               <input ref={(el) => { if (el && document.activeElement !== el) { el.focus({ preventScroll: true }); el.select(); } }} aria-label="Nome do ambiente" value={editNome.txt}
                 onChange={(e) => setEditNome({ ...editNome, txt: e.target.value })}
@@ -87221,17 +87291,18 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 {ferramenta === "esquadria" ? "Até a parede: " : modoTraco === "retangulo" && ancora && ancora.ret ? (ancora.d1 ? "2ª medida: " : "1ª medida: ") : ""}{digitado} m <span style={{ fontWeight: 400, opacity: 0.7, fontSize: 12, marginLeft: 6 }}>Enter</span>
               </div>
             )}
-            <div style={{ position: "absolute", right: 12, bottom: 12, display: "flex", flexDirection: "column", gap: 6, zIndex: 1 }}>
-              <button aria-label="Aproximar" style={ctrl} onClick={() => zoom(1.25)}>+</button>
-              <button aria-label="Afastar" style={ctrl} onClick={() => zoom(1 / 1.25)}>−</button>
-              <button aria-label="Ajustar à tela" title="Ajustar à tela" style={{ ...ctrl, fontSize: 13 }} onClick={ajustar}>⤢</button>
-            </div>
           </div>
           <div ref={v3dBox} style={{ ...estiloVista("3d"), display: mostra3d ? "block" : "none" }}>
             {vistaSegunda === "3d" && barraSegunda}
             <canvas ref={v3dRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none" }}
               onContextMenu={(e) => e.preventDefault()}
               onPointerDown={v3dDown} onPointerMove={v3dMove} onPointerUp={v3dUp} />
+            <div style={{ position: "absolute", right: 8, bottom: 8, zIndex: 2, display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 1, padding: 2, background: "rgba(255,255,255,0.9)", border: "1px solid #e5e7eb", borderRadius: 8, maxWidth: "calc(100% - 16px)" }}>
+              {VISTAS_3D.map((v) => (
+                <button key={v.id} onClick={() => irVista3d(v)} title={v.id === "persp" ? "Perspectiva" : `Vista ${v.rot.replace(".", "")}`.replace("Esq", "esquerda").replace("Dir", "direita")}
+                  style={{ height: 24, padding: "0 7px", border: "none", borderRadius: 6, background: "transparent", color: "#374151", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>{v.rot}</button>
+              ))}
+            </div>
             {erro3d && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#6b7280", fontSize: 13, padding: 16, textAlign: "center" }}>{erro3d} Verifique a conexão e abra o projeto de novo.</div>}
           </div>
           <div ref={corteBox} style={{ ...estiloVista("corte"), display: mostraCorte ? "block" : "none" }}>
