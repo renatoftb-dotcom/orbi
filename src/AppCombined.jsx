@@ -83806,7 +83806,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     for (const f of faces) {
       if (fora(f.i)) continue;
       const { w, ux, uy, nx, ny, h } = f;
-      out.push(w.a, w.b);
+      out.push({ x: w.a.x, y: w.a.y, eixo: true }, { x: w.b.x, y: w.b.y, eixo: true });
       for (const [pt, sgn] of [[w.a, -1], [w.b, 1]]) {
         const solta = !faces.some((g) => g.i !== f.i && !fora(g.i) && (mesmo(g.w.a, pt) || mesmo(g.w.b, pt)));
         if (solta) for (const lado of [1, -1]) out.push({ x: pt.x + sgn * ux * h + lado * nx * h, y: pt.y + sgn * uy * h + lado * ny * h });
@@ -83831,15 +83831,41 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     return out;
   };
   const pontoDoCursor = (e, opts = {}) => {
-    const v = vista.current, d = devPx(e), livre = paraMundoLivre(d), tol = 10 * (window.devicePixelRatio || 1) / v.s;
+    const v = vista.current, d = devPx(e), livre = paraMundoLivre(d), tol = 11 * (window.devicePixelRatio || 1) / v.s;
+    // Quinas: as das faces (lado de fora e de dentro da parede) têm preferência
+    // sobre o eixo — laje, contrapiso, cota etc. medem pela face. Desenhando
+    // parede, o eixo vale igual (a parede liga pelo eixo).
+    const prefereFace = ferramenta !== "parede";
     let ima = null, menor = Infinity;
     for (const q of pontosIma(opts.ignorar)) {
-      const dd = Math.hypot(q.x - livre.x, q.y - livre.y); if (dd < tol && dd < menor) { menor = dd; ima = q; }
+      const dd = Math.hypot(q.x - livre.x, q.y - livre.y) * (q.eixo && prefereFace ? 1.8 : 1); if (dd < tol && dd < menor) { menor = dd; ima = q; }
     }
-    let p = ima ? { x: r3(ima.x), y: r3(ima.y), ima: true } : { x: snap(livre.x), y: snap(livre.y) };
+    // sem quina por perto: gruda na linha da face (interna ou externa) da parede
+    let naFace = null;
+    if (!ima) {
+      let dmin = 7 * (window.devicePixelRatio || 1) / v.s;
+      paredes.forEach((w, i) => {
+        if (opts.ignorar && (i === opts.ignorar.parede || (opts.ignorar.paredes && opts.ignorar.paredes.includes(i)))) return;
+        const L = tpLen(w); if (!L) return;
+        const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, h = (w.t || 0) / 2;
+        for (const lado of [1, -1]) {
+          const ox = w.a.x - uy * h * lado, oy = w.a.y + ux * h * lado, t = (livre.x - ox) * ux + (livre.y - oy) * uy;
+          if (t < -h || t > L + h) continue;
+          const px = ox + ux * t, py = oy + uy * t, dd = Math.hypot(livre.x - px, livre.y - py);
+          if (dd < dmin) { dmin = dd; naFace = { x: px, y: py, ux, uy, ox, oy }; }
+        }
+      });
+    }
+    let p = ima ? { x: r3(ima.x), y: r3(ima.y), ima: true }
+      : naFace ? (() => { // na face: anda pela grade ao longo dela
+          const t = (livre.x - naFace.ox) * naFace.ux + (livre.y - naFace.oy) * naFace.uy, ts = Math.abs(naFace.ux) > 0.999 || Math.abs(naFace.uy) > 0.999 ? null : t;
+          const q = ts == null ? (Math.abs(naFace.ux) > 0.999 ? { x: snap(naFace.x), y: naFace.y } : { x: naFace.x, y: snap(naFace.y) }) : { x: naFace.x, y: naFace.y };
+          return { x: r3(q.x), y: r3(q.y), ima: true, face: true };
+        })()
+      : { x: snap(livre.x), y: snap(livre.y) };
     const base = opts.base !== undefined ? opts.base : baseTraco();
     if (base && e.shiftKey) p = Math.abs(p.x - base.x) >= Math.abs(p.y - base.y) ? { x: p.x, y: base.y } : { x: base.x, y: p.y };
-    else if (!ima) {
+    else if (!ima && !naFace) {
       // linhas de alinhamento (como no Revit): se o cursor passa na mesma
       // vertical ou horizontal de um ponto já desenhado, gruda nela e mostra
       // um tracejado até esse ponto
@@ -85119,7 +85145,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (ar && ar.pts && ar.tipo !== "cota") ar.pts.forEach((q, k) => { const r = ar.pts[(k + 1) % ar.pts.length]; etiqueta(q, r, tpFmt(Math.hypot(r.x - q.x, r.y - q.y)) + " m"); });
     }
     if (hover && (ferramenta !== "selecionar" || (gesto.current && gesto.current.grip)) && ferramenta !== "mover") {
-      if (hover.ima) { const [x, y] = T(hover); ctx.strokeStyle = "#16a34a"; ctx.lineWidth = 2 * dpr; ctx.strokeRect(x - 6 * dpr, y - 6 * dpr, 12 * dpr, 12 * dpr); }
+      if (hover.ima) { const [x, y] = T(hover), r = (hover.face ? 4 : 5.5) * dpr; ctx.fillStyle = "#ffffff"; ctx.fillRect(x - r, y - r, 2 * r, 2 * r); ctx.strokeStyle = TP_AZUL; ctx.lineWidth = 1.6 * dpr; ctx.strokeRect(x - r, y - r, 2 * r, 2 * r); }
       else ponto(hover, 3);
     }
     if (inicio) ponto(inicio, 5);
