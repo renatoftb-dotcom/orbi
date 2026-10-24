@@ -3727,7 +3727,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const grade = new THREE.GridHelper(tam, tam, 0xd1d5db, 0xeef0f3); grade.position.y = -0.001; T.group.add(grade);
     const marcadas0 = new Set(sel);
     // cada pavimento num grupo no seu nível; só o ativo fica selecionável
-    const camada = (paredes, areas, G, marcadas, analise) => {
+    // filtro: "semTel" tira os telhados (pavimento escolhido); "soTel" deixa só eles (Cobertura)
+    const camada = (paredes, areas, G, marcadas, analise, filtro) => {
     const apoioT = (a) => {
       if (a.cotaManual) return a.cota || 0;
       const pts = a.pts || []; let topo = 0, achou = false;
@@ -3783,6 +3784,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       mesh.userData.chave = "a" + i; G.add(mesh);
       contorno(g, mesh, marc ? 0x0474f4 : 0x6b7280);
     });
+    const nTel0 = G.children.length;
     // telhados: cada água é um polígono plano levantado por z(p); oitões
     // (lados sem inclinação) fecham a empena na linha do contorno
     areas.forEach((a, i) => {
@@ -3814,6 +3816,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         mesh.userData.chave = "a" + i; G.add(mesh);
       }
     });
+    const nTel1 = G.children.length;
     // Parede = vista de frente (contorno com os recortes das portas, furos das
     // janelas) extrudada na espessura. Porta e vão recortam a base; janela é furo.
     const pD3 = tpParedesDesenho(paredes); // pontas pela face levadas ao eixo (igual à planta)
@@ -3895,14 +3898,19 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         contorno(gg, m2, mo ? 0x0474f4 : (madeira ? 0x5b3a1e : 0x4b5563));
       }
     });
+    if (filtro === "semTel" || filtro === "soTel") {
+      const tel = new Set(G.children.slice(nTel0, nTel1));
+      for (const o of [...G.children]) if (tel.has(o) === (filtro === "semTel")) G.remove(o);
+    }
     };
     for (const p of pavsOrd) {
       if (vis3d === "so" && p.id !== pavAtivo) continue;
       if (vis3d === "ate" && p.nivel > pavAt.nivel + 1e-6) continue;
+      if (vis3d === "cob" && !(dadosDe(p.id).areas || []).some((a) => a.tipo === "telhado")) continue;
       const G = new THREE.Group(); G.position.y = p.nivel || 0; G.userData.pav = p.id; T.group.add(G);
       const ativo = p.id === pavAtivo, d = dadosDe(p.id);
       if (ativo) T.grupoAtivo = G;
-      camada(d.paredes || [], d.areas || [], G, ativo ? marcadas0 : new Set(), ativo ? analise : tpAnaliseAreas(d.areas || [], d.paredes || []));
+      camada(d.paredes || [], d.areas || [], G, ativo ? marcadas0 : new Set(), ativo ? analise : tpAnaliseAreas(d.areas || [], d.paredes || []), vis3d === "so" ? "semTel" : vis3d === "cob" ? "soTel" : null);
     }
     T.camera.aspect = c.width / c.height; T.camera.updateProjectionMatrix();
     const alvo = T.alvo || { x: 0, y: 1, z: 0 };
@@ -5776,9 +5784,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       {(() => {
         const pilPav = (p, k) => (
           <div key={p.id} style={{ display: "flex", gap: 4 }}>
-            <button onClick={() => { if (p.id === pavAtivo && (vis3d === "so" || pavsOrd.length < 2)) { setEditPav((x) => !x); return; } irParaPav(p.id); setVis3d("so"); setPavAberto(false); }} onDoubleClick={() => { irParaPav(p.id); setEditPav(true); }}
+            <button onClick={() => { if (p.id === pavAtivo && (vis3d === "so" || (pavsOrd.length < 2 && !comTelhado))) { setEditPav((x) => !x); return; } irParaPav(p.id); setVis3d("so"); setPavAberto(false); }} onDoubleClick={() => { irParaPav(p.id); setEditPav(true); }}
               title={`${p.nome} · nível ${tpFmt(p.nivel)}. Clique de novo no pavimento em uso para editar (nome, nível, excluir). Page Up / Page Down troca.`}
-              style={{ ...btn, width: 140, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, display: "flex", justifyContent: "space-between", alignItems: "center", borderColor: p.id === pavAtivo ? TP_AZUL : "#e5e7eb", background: p.id === pavAtivo && !(vis3d === "todos" && pavsOrd.length > 1) ? "#eef5ff" : "#fff", color: p.id === pavAtivo ? TP_AZUL : "#374151", fontWeight: p.id === pavAtivo ? 600 : 500 }}>
+              style={{ ...btn, width: 140, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, display: "flex", justifyContent: "space-between", alignItems: "center", borderColor: p.id === pavAtivo ? TP_AZUL : "#e5e7eb", background: p.id === pavAtivo && !((vis3d === "todos" || vis3d === "cob") && (pavsOrd.length > 1 || comTelhado)) ? "#eef5ff" : "#fff", color: p.id === pavAtivo ? TP_AZUL : "#374151", fontWeight: p.id === pavAtivo ? 600 : 500 }}>
               <span>{p.nome}</span><span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>{tpFmt(p.nivel)}</span>
             </button>
             {k === 0 && (
@@ -5795,7 +5803,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const lista = pavAberto ? pavsOrd : pavsOrd.filter((p) => p.id === pavAtivo);
         return (
           <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 3 }}>
-            {pavAberto && pavsOrd.length > 1 && (
+            {pavAberto && (pavsOrd.length > 1 || comTelhado) && (
               <button onClick={() => { setVis3d("todos"); setEditPav(false); setPavAberto(false); }} title="Todos os pavimentos no 3D (o desenho continua no pavimento em uso)"
                 style={{ ...btn, width: 140, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, textAlign: "left", borderColor: vis3d === "todos" ? TP_AZUL : "#e5e7eb", background: vis3d === "todos" ? "#eef5ff" : "#fff", color: vis3d === "todos" ? TP_AZUL : "#374151", fontWeight: vis3d === "todos" ? 600 : 500 }}>
                 Todos
@@ -5806,9 +5814,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               <button onClick={() => {
                   const ir = comTelhado.id !== pavAtivo; if (ir) irParaPav(comTelhado.id);
                   const ids = (dadosDe(comTelhado.id).areas || []).map((a, i) => (a.tipo === "telhado" ? "a" + i : null)).filter(Boolean);
-                  trocarFerramenta("selecionar"); setTimeout(() => setSel(ids), 0); setPavAberto(false); if (isMobile) setMenuAberto(false);
+                  trocarFerramenta("selecionar"); setTimeout(() => setSel(ids), 0); setVis3d("cob"); setPavAberto(false); if (isMobile) setMenuAberto(false);
                 }} title="Cobertura: seleciona o telhado"
-                style={{ ...btn, width: 140, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, textAlign: "left", borderColor: selTelhado ? TP_AZUL : "#e5e7eb", background: selTelhado ? "#eef5ff" : "#fff", color: selTelhado ? TP_AZUL : "#374151", fontWeight: selTelhado ? 600 : 500 }}>
+                style={{ ...btn, width: 140, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, textAlign: "left", borderColor: vis3d === "cob" || selTelhado ? TP_AZUL : "#e5e7eb", background: vis3d === "cob" ? "#eef5ff" : "#fff", color: vis3d === "cob" || selTelhado ? TP_AZUL : "#374151", fontWeight: vis3d === "cob" || selTelhado ? 600 : 500 }}>
                 Cobertura
               </button>
             )}
@@ -6017,7 +6025,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           <div style={{ gridColumn: "1 / -1" }}>
             <label htmlFor="tp-vis3d" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>No 3D</label>
             <select id="tp-vis3d" value={vis3d} onChange={(e) => setVis3d(e.target.value)} style={{ width: "100%", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit", background: "#fff" }}>
-              <option value="todos">Todos os pavimentos</option><option value="ate">Até o pavimento ativo (corta acima)</option><option value="so">Só o pavimento ativo</option>
+              <option value="todos">Todos os pavimentos</option><option value="cob">Só a cobertura</option><option value="ate">Até o pavimento ativo (corta acima)</option><option value="so">Só o pavimento ativo</option>
             </select>
           </div>
           <button onClick={() => setEditPav(false)} style={{ ...btn, gridColumn: "1 / -1", minHeight: 28, fontSize: 12 }}>Fechar</button>
