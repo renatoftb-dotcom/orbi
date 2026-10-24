@@ -83276,7 +83276,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const [hover, setHover] = useState(null);
   const [esp, setEsp] = useState("14");
   const [alt, setAlt] = useState("2,80");
-  const [modo, setModo] = useState("ambos"); // planta | ambos | 3d
+  const [modo, setModo] = useState("planta"); // planta | ambos | 3d | corte — abre só na planta (térreo)
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
   const [menuAberto, setMenuAberto] = useState(false);
   const [confirmarLimpar, setConfirmarLimpar] = useState(false);
@@ -87101,7 +87101,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // bloco de ferramentas: no menu ou solto na prancheta (o "+" arrasta de um lugar para o outro)
   const botaoMais = (noCanvas) => { const ferrAberto = noCanvas ? ferrAbertoC : ferrAbertoM, setFerrAberto = noCanvas ? setFerrAbertoC : setFerrAbertoM; return (
             <button aria-label={ferrAberto ? "Fechar a lista de ferramentas" : "Abrir a lista de ferramentas"} aria-expanded={ferrAberto}
-              onPointerDown={iniciarArraste("ferr")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setFerrAberto((x) => !x); if (!noCanvas) { setPavAbertoM(false); setExibirAberto(false); setTabelasAberto(false); } }}
+              onPointerDown={iniciarArraste("ferr")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setFerrAberto((x) => !x); if (!noCanvas) { setPavAbertoM(false); setExibirAberto(false); setTabelasAberto(false); setObraAberta(false); } }}
               title={ferrAberto ? "Fechar a lista" : noCanvas ? "Ferramentas (arraste para mover; solte no menu para tirar da prancheta)" : "Ferramentas (arraste para a prancheta para ter uma cópia à mão)"}
               style={{ width: 32, height: 32, borderRadius: "50%", touchAction: "none", border: `1px solid ${ferrAberto ? TP_AZUL : "#e5e7eb"}`, background: ferrAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "transform .15s", transform: ferrAberto ? "rotate(45deg)" : "none" }}>
               <svg width="14" height="14" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke={ferrAberto ? TP_AZUL : "#111827"} strokeWidth="2" strokeLinecap="round" /></svg>
@@ -87110,7 +87110,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // pavimentos: mesma dinâmica do "+" (abre a lista embaixo, arrasta para a prancheta)
   const botaoPav = (noCanvas) => { const pavAberto = noCanvas ? pavAbertoC : pavAbertoM, setPavAberto = noCanvas ? setPavAbertoC : setPavAbertoM; return (
             <button aria-label={pavAberto ? "Fechar a lista de pavimentos" : "Abrir a lista de pavimentos"} aria-expanded={pavAberto}
-              onPointerDown={iniciarArraste("pav")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setPavAberto((x) => !x); if (!noCanvas) { setFerrAbertoM(false); setExibirAberto(false); setTabelasAberto(false); } }}
+              onPointerDown={iniciarArraste("pav")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setPavAberto((x) => !x); if (!noCanvas) { setFerrAbertoM(false); setExibirAberto(false); setTabelasAberto(false); setObraAberta(false); } }}
               title={pavAberto ? "Fechar a lista" : noCanvas ? "Pavimentos (arraste para mover; solte no menu para tirar da prancheta)" : "Pavimentos (arraste para a prancheta para ter uma cópia à mão)"}
               style={{ width: 32, height: 32, borderRadius: "50%", touchAction: "none", border: `1px solid ${pavAberto ? TP_AZUL : "#e5e7eb"}`, background: pavAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: pavAberto ? TP_AZUL : "#111827" }}>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" aria-hidden="true"><path d="M8 2 14 5 8 8 2 5z" /><path d="M2 8.25 8 11.25l6-3" /><path d="M2 11.25 8 14.25l6-3" /></svg>
@@ -87119,16 +87119,24 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // exibir: escala das anotações e prancha com/sem grade
   const botaoExibir = (
     <button aria-label={exibirAberto ? "Fechar as opções de exibição" : "Exibir: escala e grade"} aria-expanded={exibirAberto} title="Exibir: escala da planta e grade"
-      onClick={() => { setExibirAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setTabelasAberto(false); }}
+      onClick={() => { setExibirAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setTabelasAberto(false); setObraAberta(false); }}
       style={{ width: 32, height: 32, borderRadius: "50%", border: `1px solid ${exibirAberto ? TP_AZUL : "#e5e7eb"}`, background: exibirAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: exibirAberto ? TP_AZUL : "#111827" }}>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" /><circle cx="8" cy="8" r="2" /></svg>
     </button>
   );
   const botaoTabelas = (
     <button aria-label={tabelasAberto ? "Fechar as tabelas" : "Tabelas: esquadrias, ambientes e quantitativo"} aria-expanded={tabelasAberto} title="Tabelas: esquadrias, ambientes e quantitativo"
-      onClick={() => { setTabelasAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setExibirAberto(false); }}
+      onClick={() => { setTabelasAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setExibirAberto(false); setObraAberta(false); }}
       style={{ width: 32, height: 32, borderRadius: "50%", border: `1px solid ${tabelasAberto ? TP_AZUL : "#e5e7eb"}`, background: tabelasAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: tabelasAberto ? TP_AZUL : "#111827" }}>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M2 6h12M2 9.5h12M6.5 6v7.5" /></svg>
+    </button>
+  );
+  // obra: gerar/atualizar o orçamento e o preencher sozinho (capacete de obra)
+  const botaoObra = (
+    <button aria-label={obraAberta ? "Fechar obra" : "Obra: orçamento e preenchimento"} aria-expanded={obraAberta} title={obraLigada ? `Obra "${obraLigada.nome}": atualizar orçamento` : "Obra: gerar orçamento de obra"}
+      onClick={() => { setObraAberta((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setExibirAberto(false); setTabelasAberto(false); }}
+      style={{ width: 32, height: 32, borderRadius: "50%", border: `1px solid ${obraAberta ? TP_AZUL : "#e5e7eb"}`, background: obraAberta ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: obraAberta ? TP_AZUL : "#111827" }}>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1.75 12h12.5" /><path d="M3 12V10.5a5 5 0 0 1 10 0V12" /><path d="M6.25 6.2V4.5h3.5v1.7" /><path d="M8 4.5V12" /></svg>
     </button>
   );
   const listaExibir = exibirAberto && (
@@ -87265,10 +87273,30 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       </div>
 
       <div style={{ height: 12 }} />
-      <div style={{ display: "flex", gap: 6 }}>{botaoMais(false)}{botaoPav(false)}{botaoExibir}{botaoTabelas}</div>
+      <div style={{ display: "flex", gap: 6 }}>{botaoMais(false)}{botaoPav(false)}{botaoExibir}{botaoTabelas}{podeOrcar && botaoObra}</div>
       {listaFerr(false)}
       {listaPav(false)}
       {listaExibir}
+      {podeOrcar && obraAberta && (
+        <div style={{ marginTop: 6, padding: 8, border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff" }}>
+          <button style={{ ...btn, width: "100%", minHeight: 32, fontSize: 12.5, marginTop: 0, background: "#111827", borderColor: "#111827", color: "#fff" }} onClick={() => setPainelObra("confirmar")}>
+            {obraLigada ? "Atualizar orçamento da obra" : "Gerar orçamento de obra"}
+          </button>
+          <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6, lineHeight: 1.4 }}>
+            {obraLigada ? `Ligado à obra "${obraLigada.nome}". O botão recalcula o orçamento com o desenho atual.` : `Cria a obra "${projeto.nome}" em ${nomeCliente || "o cliente"} com o orçamento calculado pelo desenho.`}
+          </div>
+          {obraLigada && (
+            <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12.5, color: "#374151", marginTop: 8, cursor: "pointer", lineHeight: 1.4 }}>
+              <input type="checkbox" id="tp-sinc" checked={sincronizar} onChange={(e) => setSincronizar(e.target.checked)} style={{ marginTop: 2 }} />
+              <span>Preencher sozinho os campos da obra com o desenho
+                <span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>
+                  {sincronizar ? (ultimaSinc ? `Atualizado às ${ultimaSinc.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "Paredes, área, laje, telhado, cômodos, portas e esquadrias") : "Desligado: só pelo botão"}
+                </span>
+              </span>
+            </label>
+          )}
+        </div>
+      )}
       {tabelasAberto && (
         <div style={{ marginTop: 2 }}>
       {quadro.grupos.length > 0 && dobra("esq", "Esquadrias", `${quadro.grupos.reduce((t, g) => t + g.qtd, 0)} un`, (
@@ -87409,35 +87437,6 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
 
 
-      {podeOrcar && (
-        <>
-          {/* tudo da obra num botão só: abre o gerar/atualizar e o preencher sozinho */}
-          <button onClick={() => setObraAberta((x) => !x)} aria-expanded={obraAberta}
-            style={{ ...btn, width: "fit-content", minWidth: 140, minHeight: 28, padding: "3px 10px", fontSize: 12, marginTop: 12, display: "flex", alignItems: "center", gap: 8, borderColor: obraAberta ? TP_AZUL : "#e5e7eb", background: obraAberta ? "#eef5ff" : "#fff", color: obraAberta ? TP_AZUL : "#111827", fontWeight: 600 }}>
-            <span style={{ flex: 1, textAlign: "left" }}>Obra</span>
-            {obraLigada && <span style={{ fontSize: 11, fontWeight: 500, color: "#6b7280" }}>{sincronizar && ultimaSinc ? `ligada · ${ultimaSinc.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "ligada"}</span>}
-            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" style={{ transform: obraAberta ? "rotate(180deg)" : "none", transition: "transform .15s" }}><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          </button>
-          {obraAberta && <>
-          <button style={{ ...btn, width: "100%", minHeight: 32, fontSize: 12.5, marginTop: 6, background: "#111827", borderColor: "#111827", color: "#fff" }} onClick={() => setPainelObra("confirmar")}>
-            {obraLigada ? "Atualizar orçamento da obra" : "Gerar orçamento de obra"}
-          </button>
-          <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6, lineHeight: 1.4 }}>
-            {obraLigada ? `Ligado à obra "${obraLigada.nome}". O botão recalcula o orçamento com o desenho atual.` : `Cria a obra "${projeto.nome}" em ${nomeCliente || "o cliente"} com o orçamento calculado pelo desenho.`}
-          </div>
-          {obraLigada && (
-            <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12.5, color: "#374151", marginTop: 8, cursor: "pointer", lineHeight: 1.4 }}>
-              <input type="checkbox" id="tp-sinc" checked={sincronizar} onChange={(e) => setSincronizar(e.target.checked)} style={{ marginTop: 2 }} />
-              <span>Preencher sozinho os campos da obra com o desenho
-                <span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>
-                  {sincronizar ? (ultimaSinc ? `Atualizado às ${ultimaSinc.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "Paredes, área, laje, telhado, cômodos, portas e esquadrias") : "Desligado: só pelo botão"}
-                </span>
-              </span>
-            </label>
-          )}
-          </>}
-        </>
-      )}
       <div style={{ marginTop: 16, paddingTop: 10, borderTop: "1px solid #eef0f3", display: "flex", flexWrap: "wrap", gap: "6px 14px" }}>
         <button style={linkLat} onClick={() => setVerAtalhos(true)}>Atalhos (?)</button>
         <button style={linkLat} title="Copia o desenho deste projeto (paredes, áreas, ambientes) para colar na conversa de suporte e reproduzir um problema"
