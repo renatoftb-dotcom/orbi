@@ -2089,7 +2089,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const esLaje = Math.max(0.1, ...dT.areas.filter((a) => a.tipo === "laje").map((a) => a.esp || 0.1));
     const nivel = r3(topo.nivel + hMax + esLaje);
     const id = "pav" + Date.now().toString(36);
-    const nome = pavsOrd.length === 1 ? "Superior" : `Pavimento ${pavsOrd.length}`;
+    const nome = `Pav ${pavsOrd.length}`;
     // nasce com as paredes de periferia do pavimento de baixo (sem portas/janelas)
     const ext = tpParedesExternas(dT.paredes).map(({ ab, cotaDesl, semCota, ...w }) => ({ ...w }));
     // laje entre os pavimentos: se o de baixo ainda não tem, nasce pelo contorno
@@ -5639,7 +5639,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         </button>
       </div>
 
-      <div style={secao}>Ferramenta</div>
+      <div style={{ height: 12 }} />
       {blocoFerramentas(false)}
 
       {(ferramenta === "parede" || ferramenta === "laje") && (
@@ -5704,23 +5704,44 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         </select>
       </label>
 
-      <div style={{ ...secao, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span>Pavimentos</span>
-        {pavimentos.length > 1 && <button onClick={() => setEditPav((x) => !x)} aria-label="Editar pavimento" title="Nome, nível, excluir e o que aparece no 3D"
-          style={{ border: "none", background: "none", cursor: "pointer", color: editPav ? TP_AZUL : "#9ca3af", fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", padding: 0, fontFamily: "inherit" }}>{editPav ? "Fechar" : "Editar"}</button>}
-      </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-        {pavsOrd.map((p) => (
-          <button key={p.id} onClick={() => { irParaPav(p.id); if (isMobile) setMenuAberto(false); }} title={`${p.nome} · nível ${tpFmt(p.nivel)} (Page Up / Page Down troca)`}
-            style={{ ...btn, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 999, borderColor: p.id === pavAtivo ? TP_AZUL : "#e5e7eb", background: p.id === pavAtivo ? "#eef5ff" : "#fff", color: p.id === pavAtivo ? TP_AZUL : "#374151", fontWeight: p.id === pavAtivo ? 600 : 500 }}>
-            {p.nome}
-          </button>
-        ))}
-        <button onClick={() => { novoPavimento(); if (isMobile) setMenuAberto(false); }} aria-label="Novo pavimento acima" title="Novo pavimento acima (copia as paredes de fora e cria a laje)"
-          style={{ ...btn, minHeight: 28, width: 28, padding: 0, fontSize: 15, borderRadius: 999, borderColor: "#e5e7eb", color: "#374151" }}>+</button>
-      </div>
-      {pavimentos.length > 1 && editPav && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+      {/* pavimentos de baixo para cima, um por linha: Térreo (com o + ao lado),
+          Pav 1, Pav 2… e, havendo telhado, Cobertura por último. Clicar de novo
+          no pavimento em uso abre nome, nível, excluir e o que aparece no 3D. */}
+      {(() => {
+        const pilPav = (p, k) => (
+          <div key={p.id} style={{ display: "flex", gap: 4 }}>
+            <button onClick={() => { if (p.id === pavAtivo) { setEditPav((x) => !x); return; } irParaPav(p.id); }} onDoubleClick={() => { irParaPav(p.id); setEditPav(true); }}
+              title={`${p.nome} · nível ${tpFmt(p.nivel)}. Clique de novo no pavimento em uso para editar (nome, nível, excluir). Page Up / Page Down troca.`}
+              style={{ ...btn, flex: 1, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, display: "flex", justifyContent: "space-between", alignItems: "center", borderColor: p.id === pavAtivo ? TP_AZUL : "#e5e7eb", background: p.id === pavAtivo ? "#eef5ff" : "#fff", color: p.id === pavAtivo ? TP_AZUL : "#374151", fontWeight: p.id === pavAtivo ? 600 : 500 }}>
+              <span>{p.nome}</span><span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>{tpFmt(p.nivel)}</span>
+            </button>
+            {k === 0 && (
+              <button onClick={() => { novoPavimento(); if (isMobile) setMenuAberto(false); }} aria-label="Novo pavimento acima" title="Novo pavimento acima (copia as paredes de fora e cria a laje)"
+                style={{ ...btn, minHeight: 28, width: 30, padding: 0, fontSize: 15, borderRadius: 7, borderColor: "#e5e7eb", color: "#374151" }}>+</button>
+            )}
+          </div>
+        );
+        // cobertura: aparece sozinha quando algum pavimento tem telhado
+        const comTelhado = [...pavsOrd].reverse().find((p) => (dadosDe(p.id).areas || []).some((a) => a.tipo === "telhado"));
+        const selTelhado = comTelhado && comTelhado.id === pavAtivo && sel.length > 0 && sel.every((k) => k[0] === "a" && areas[+k.slice(1)] && areas[+k.slice(1)].tipo === "telhado");
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 12 }}>
+            {pavsOrd.map(pilPav)}
+            {comTelhado && (
+              <button onClick={() => {
+                  const ir = comTelhado.id !== pavAtivo; if (ir) irParaPav(comTelhado.id);
+                  const ids = (dadosDe(comTelhado.id).areas || []).map((a, i) => (a.tipo === "telhado" ? "a" + i : null)).filter(Boolean);
+                  trocarFerramenta("selecionar"); setTimeout(() => setSel(ids), 0); if (isMobile) setMenuAberto(false);
+                }} title="Cobertura: seleciona o telhado"
+                style={{ ...btn, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, textAlign: "left", borderColor: selTelhado ? TP_AZUL : "#e5e7eb", background: selTelhado ? "#eef5ff" : "#fff", color: selTelhado ? TP_AZUL : "#374151", fontWeight: selTelhado ? 600 : 500 }}>
+                Cobertura
+              </button>
+            )}
+          </div>
+        );
+      })()}
+      {editPav && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8, padding: 8, border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff" }}>
           <div>
             <label htmlFor="tp-pav-nome" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>Nome</label>
             <input id="tp-pav-nome" key={"pn" + pavAtivo + pavAt.nome} defaultValue={pavAt.nome}
@@ -5743,6 +5764,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               <option value="todos">Todos os pavimentos</option><option value="ate">Até o pavimento ativo (corta acima)</option><option value="so">Só o pavimento ativo</option>
             </select>
           </div>
+          <button onClick={() => setEditPav(false)} style={{ ...btn, gridColumn: "1 / -1", minHeight: 28, fontSize: 12 }}>Fechar</button>
         </div>
       )}
 
