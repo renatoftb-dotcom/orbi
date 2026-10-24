@@ -1770,6 +1770,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const [pavAbertoM, setPavAbertoM] = useState(false), [pavAbertoC, setPavAbertoC] = useState(false);
   const [exibirAberto, setExibirAberto] = useState(false);
   const [tabelasAberto, setTabelasAberto] = useState(false); // botão Tabelas: esquadrias, ambientes e quantitativo // botão Exibir: escala da planta e grade
+  const [maisAberto, setMaisAberto] = useState(false); // trilho: ⋯ (projeto, atalhos, suporte, limpar)
   const [mostrarGrade, setMostrarGrade] = useState(() => { try { return localStorage.getItem("vicke-projetar-grade") !== "0"; } catch (err) { return true; } });
   const [pavSolta, setPavSolta] = useState(() => { try { const v = JSON.parse(localStorage.getItem("vicke-projetar-pav-solta") || "null"); return v && v.x >= 0 && v.y >= 0 ? v : null; } catch (err) { return null; } });
   const arrastouMais = useRef(false);
@@ -5620,7 +5621,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   );
 
   // seção que dobra no painel: título + resumo à direita; aberta/fechada lembrada neste navegador
-  const icoLat = { width: 30, height: 30, flexShrink: 0, borderRadius: 8, border: "1px solid #e5e7eb", background: "#fff", color: "#374151", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 };
+  const icoLat = { width: 32, height: 32, flexShrink: 0, borderRadius: "50%", border: "1px solid #e5e7eb", background: "#fff", color: "#374151", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 };
   const linkLat = { border: "none", background: "none", padding: 0, fontSize: 12, color: "#4b5563", cursor: "pointer", fontFamily: "inherit", textDecoration: "underline", textDecorationColor: "#d1d5db", textUnderlineOffset: 3 };
   const dobra = (id, titulo, resumo, conteudo) => {
     const aberta = dobrasAbertas.includes(id);
@@ -5667,7 +5668,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // bloco de ferramentas: no menu ou solto na prancheta (o "+" arrasta de um lugar para o outro)
   const botaoMais = (noCanvas) => { const ferrAberto = noCanvas ? ferrAbertoC : ferrAbertoM, setFerrAberto = noCanvas ? setFerrAbertoC : setFerrAbertoM; return (
             <button aria-label={ferrAberto ? "Fechar a lista de ferramentas" : "Abrir a lista de ferramentas"} aria-expanded={ferrAberto}
-              onPointerDown={iniciarArraste("ferr")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setFerrAberto((x) => !x); if (!noCanvas) { setPavAbertoM(false); setExibirAberto(false); setTabelasAberto(false); setObraAberta(false); } }}
+              onPointerDown={iniciarArraste("ferr")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setFerrAberto((x) => !x); if (!noCanvas) { setPavAbertoM(false); setExibirAberto(false); setTabelasAberto(false); setObraAberta(false); setMaisAberto(false); } }}
               title={ferrAberto ? "Fechar a lista" : noCanvas ? "Ferramentas (arraste para mover; solte no menu para tirar da prancheta)" : "Ferramentas (arraste para a prancheta para ter uma cópia à mão)"}
               style={{ width: 32, height: 32, borderRadius: "50%", touchAction: "none", border: `1px solid ${ferrAberto ? TP_AZUL : "#e5e7eb"}`, background: ferrAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "transform .15s", transform: ferrAberto ? "rotate(45deg)" : "none" }}>
               <svg width="14" height="14" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke={ferrAberto ? TP_AZUL : "#111827"} strokeWidth="2" strokeLinecap="round" /></svg>
@@ -5676,23 +5677,28 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // pavimentos: mesma dinâmica do "+" (abre a lista embaixo, arrasta para a prancheta)
   const botaoPav = (noCanvas) => { const pavAberto = noCanvas ? pavAbertoC : pavAbertoM, setPavAberto = noCanvas ? setPavAbertoC : setPavAbertoM; return (
             <button aria-label={pavAberto ? "Fechar a lista de pavimentos" : "Abrir a lista de pavimentos"} aria-expanded={pavAberto}
-              onPointerDown={iniciarArraste("pav")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setPavAberto((x) => !x); if (!noCanvas) { setFerrAbertoM(false); setExibirAberto(false); setTabelasAberto(false); setObraAberta(false); } }}
+              onPointerDown={iniciarArraste("pav")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setPavAberto((x) => !x); if (!noCanvas) { setFerrAbertoM(false); setExibirAberto(false); setTabelasAberto(false); setObraAberta(false); setMaisAberto(false); } }}
               title={pavAberto ? "Fechar a lista" : noCanvas ? "Pavimentos (arraste para mover; solte no menu para tirar da prancheta)" : "Pavimentos (arraste para a prancheta para ter uma cópia à mão)"}
-              style={{ width: 32, height: 32, borderRadius: "50%", touchAction: "none", border: `1px solid ${pavAberto ? TP_AZUL : "#e5e7eb"}`, background: pavAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: pavAberto ? TP_AZUL : "#111827" }}>
+              style={{ position: "relative", width: 32, height: 32, borderRadius: "50%", touchAction: "none", border: `1px solid ${pavAberto ? TP_AZUL : "#e5e7eb"}`, background: pavAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: pavAberto ? TP_AZUL : "#111827" }}>
+              {!noCanvas && pavsOrd.length > 1 && (
+                <span aria-hidden="true" title={pavAt.nome} style={{ position: "absolute", right: -4, bottom: -3, minWidth: 14, height: 14, padding: "0 3px", boxSizing: "border-box", borderRadius: 7, background: TP_AZUL, color: "#fff", fontSize: 8.5, fontWeight: 700, lineHeight: "14px", textAlign: "center" }}>
+                  {pavAt.nome === "Térreo" ? "T" : (pavAt.nome.match(/\d+/) || [pavAt.nome.slice(0, 1).toUpperCase()])[0]}
+                </span>
+              )}
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" aria-hidden="true"><path d="M8 2 14 5 8 8 2 5z" /><path d="M2 8.25 8 11.25l6-3" /><path d="M2 11.25 8 14.25l6-3" /></svg>
             </button>
   ); };
   // exibir: escala das anotações e prancha com/sem grade
   const botaoExibir = (
     <button aria-label={exibirAberto ? "Fechar as opções de exibição" : "Exibir: escala e grade"} aria-expanded={exibirAberto} title="Exibir: escala da planta e grade"
-      onClick={() => { setExibirAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setTabelasAberto(false); setObraAberta(false); }}
+      onClick={() => { setExibirAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setTabelasAberto(false); setObraAberta(false); setMaisAberto(false); }}
       style={{ width: 32, height: 32, borderRadius: "50%", border: `1px solid ${exibirAberto ? TP_AZUL : "#e5e7eb"}`, background: exibirAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: exibirAberto ? TP_AZUL : "#111827" }}>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" /><circle cx="8" cy="8" r="2" /></svg>
     </button>
   );
   const botaoTabelas = (
     <button aria-label={tabelasAberto ? "Fechar as tabelas" : "Tabelas: esquadrias, ambientes e quantitativo"} aria-expanded={tabelasAberto} title="Tabelas: esquadrias, ambientes e quantitativo"
-      onClick={() => { setTabelasAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setExibirAberto(false); setObraAberta(false); }}
+      onClick={() => { setTabelasAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setExibirAberto(false); setObraAberta(false); setMaisAberto(false); }}
       style={{ width: 32, height: 32, borderRadius: "50%", border: `1px solid ${tabelasAberto ? TP_AZUL : "#e5e7eb"}`, background: tabelasAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: tabelasAberto ? TP_AZUL : "#111827" }}>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M2 6h12M2 9.5h12M6.5 6v7.5" /></svg>
     </button>
@@ -5700,7 +5706,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // obra: gerar/atualizar o orçamento e o preencher sozinho (capacete de obra)
   const botaoObra = (
     <button aria-label={obraAberta ? "Fechar obra" : "Obra: orçamento e preenchimento"} aria-expanded={obraAberta} title={obraLigada ? `Obra "${obraLigada.nome}": atualizar orçamento` : "Obra: gerar orçamento de obra"}
-      onClick={() => { setObraAberta((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setExibirAberto(false); setTabelasAberto(false); }}
+      onClick={() => { setObraAberta((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setExibirAberto(false); setTabelasAberto(false); setMaisAberto(false); }}
       style={{ width: 32, height: 32, borderRadius: "50%", border: `1px solid ${obraAberta ? TP_AZUL : "#e5e7eb"}`, background: obraAberta ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: obraAberta ? TP_AZUL : "#111827" }}>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1.75 12h12.5" /><path d="M3 12V10.5a5 5 0 0 1 10 0V12" /><path d="M6.25 6.2V4.5h3.5v1.7" /><path d="M8 4.5V12" /></svg>
     </button>
@@ -5747,6 +5753,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         // cobertura: aparece sozinha quando algum pavimento tem telhado
         const comTelhado = [...pavsOrd].reverse().find((p) => (dadosDe(p.id).areas || []).some((a) => a.tipo === "telhado"));
         const selTelhado = comTelhado && comTelhado.id === pavAtivo && sel.length > 0 && sel.every((k) => k[0] === "a" && areas[+k.slice(1)] && areas[+k.slice(1)].tipo === "telhado");
+        // no menu, fechado não mostra nada (o selo no ícone indica o pavimento); na prancheta mostra o ativo
+        if (!pavAberto && !noCanvas) return null;
         const lista = pavAberto ? pavsOrd : pavsOrd.filter((p) => p.id === pavAtivo);
         return (
           <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 3 }}>
@@ -5812,34 +5820,43 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
     </>
   ); };
+  const temConteudo = ferrAbertoM || ferramenta !== "selecionar" || pavAbertoM || editPav || exibirAberto || tabelasAberto || (podeOrcar && obraAberta) || maisAberto || sel.length > 0 || !!inicio || poli.length > 0 || confirmarLimpar;
   const menu = (
-    <aside ref={asideRef} style={{ width: isMobile ? "min(86vw, 300px)" : 248, flexShrink: 0, background: "#fff", borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", height: "100%", boxSizing: "border-box",
-      paddingTop: "max(14px, env(safe-area-inset-top, 0px))", paddingBottom: "max(14px, env(safe-area-inset-bottom, 0px))", paddingLeft: "max(16px, env(safe-area-inset-left, 0px))", paddingRight: 16, overflowY: "auto",
-      ...(isMobile ? { position: "absolute", top: 0, left: 0, bottom: 0, zIndex: 3, boxShadow: "4px 0 20px rgba(0,0,0,0.15)", transform: menuAberto ? "none" : "translateX(-105%)", transition: "transform .2s ease" }
-        // desktop: painel suspenso sobre o desenho (o projeto passa por baixo)
-        : { position: "absolute", top: 10, left: 10, height: "auto", maxHeight: "calc(100% - 20px)", zIndex: 3, borderRight: "none", border: "1px solid rgba(229,231,235,0.7)", borderRadius: 12, background: "rgba(255,255,255,0.5)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", boxShadow: "none", scrollbarWidth: "thin", paddingTop: 12, paddingBottom: 12, paddingLeft: 14, paddingRight: 14, transform: painelOculto ? "translateX(calc(-100% - 20px))" : "none", transition: "transform .2s ease" }) }}>
-      {!isMobile && (
-        <button onClick={() => setPainelOculto(true)} aria-label="Recolher o painel" title="Recolher o painel (o desenho ocupa a tela toda)"
-          style={{ position: "absolute", top: 8, right: 8, width: 26, height: 26, borderRadius: 7, border: "1px solid #e5e7eb", background: "#fff", cursor: "pointer", color: "#4b5563", fontSize: 14, lineHeight: 1, padding: 0 }}>‹</button>
-      )}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, paddingRight: isMobile ? 0 : 30 }}>
+    <aside ref={asideRef} style={{ display: "flex", alignItems: "flex-start", gap: 6, boxSizing: "border-box",
+      ...(isMobile ? { position: "absolute", top: 0, left: 0, bottom: 0, zIndex: 3, width: "min(88vw, 320px)", background: "#fff", boxShadow: "4px 0 20px rgba(0,0,0,0.15)", transform: menuAberto ? "none" : "translateX(-105%)", transition: "transform .2s ease",
+          paddingTop: "max(12px, env(safe-area-inset-top, 0px))", paddingBottom: "max(12px, env(safe-area-inset-bottom, 0px))", paddingLeft: "max(8px, env(safe-area-inset-left, 0px))", paddingRight: 10 }
+        // desktop: trilho de ícones suspenso sobre o desenho; o conteúdo do ícone aberto aparece num cartão ao lado
+        : { position: "absolute", top: 10, left: 10, maxHeight: "calc(100% - 20px)", zIndex: 3, transform: painelOculto ? "translateX(calc(-100% - 20px))" : "none", transition: "transform .2s ease" }) }}>
+      {/* trilho vertical: voltar, ferramentas, pavimentos, exibir, tabelas, obra, desfazer/refazer, mais */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: 6, flexShrink: 0, borderRadius: 14,
+        ...(isMobile ? {} : { background: "rgba(255,255,255,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", border: "1px solid rgba(229,231,235,0.8)" }) }}>
         <button onClick={onVoltar} aria-label="Voltar ao menu principal" title="Menu principal" style={icoLat}>
-          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 4 6 10l6 6" /></svg>
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 4 6 10l6 6" /></svg>
         </button>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={projeto.nome}>{projeto.nome}</div>
-          <div style={{ fontSize: 11.5, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nomeCliente || "Sem cliente"}</div>
-        </div>
+        <span aria-hidden="true" style={{ width: 18, height: 1, background: "#e5e7eb" }} />
+        {botaoMais(false)}{botaoPav(false)}{botaoExibir}{botaoTabelas}{podeOrcar && botaoObra}
+        <span aria-hidden="true" style={{ width: 18, height: 1, background: "#e5e7eb" }} />
         <button onClick={desfazer} disabled={!historico.current.length} aria-label="Desfazer" title="Desfazer (Ctrl+Z)" style={{ ...icoLat, opacity: historico.current.length ? 1 : 0.4 }}>
-          <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 5 3 9l4 4" /><path d="M3 9h9a5 5 0 0 1 0 10h-2" /></svg>
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 5 3 9l4 4" /><path d="M3 9h9a5 5 0 0 1 0 10h-2" /></svg>
         </button>
         <button onClick={refazer} disabled={!futuro.current.length} aria-label="Refazer" title="Refazer (Ctrl+Y)" style={{ ...icoLat, opacity: futuro.current.length ? 1 : 0.4 }}>
-          <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M13 5l4 4-4 4" /><path d="M17 9H8a5 5 0 0 0 0 10h2" /></svg>
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M13 5l4 4-4 4" /><path d="M17 9H8a5 5 0 0 0 0 10h2" /></svg>
         </button>
+        <button onClick={() => { setMaisAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setExibirAberto(false); setTabelasAberto(false); setObraAberta(false); }} aria-label="Mais: projeto, atalhos, suporte e limpar" aria-expanded={maisAberto} title="Mais"
+          style={{ ...icoLat, borderColor: maisAberto ? TP_AZUL : "#e5e7eb", background: maisAberto ? "#eef5ff" : "#fff", color: maisAberto ? TP_AZUL : "#374151" }}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="3.5" cy="8" r="1.3" /><circle cx="8" cy="8" r="1.3" /><circle cx="12.5" cy="8" r="1.3" /></svg>
+        </button>
+        {!isMobile && (
+          <button onClick={() => setPainelOculto(true)} aria-label="Recolher o painel" title="Recolher (o desenho ocupa a tela toda)" style={icoLat}>
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M10 3.5 5.5 8l4.5 4.5" /></svg>
+          </button>
+        )}
       </div>
-
-      <div style={{ height: 12 }} />
-      <div style={{ display: "flex", gap: 6 }}>{botaoMais(false)}{botaoPav(false)}{botaoExibir}{botaoTabelas}{podeOrcar && botaoObra}</div>
+      {/* cartão ao lado do trilho: o que o ícone aberto mostra, as opções da
+          ferramenta em uso e as propriedades do que está selecionado */}
+      {(isMobile || temConteudo) && (
+      <div style={{ minWidth: 0, boxSizing: "border-box", overflowY: "auto", scrollbarWidth: "thin",
+        ...(isMobile ? { flex: 1, alignSelf: "stretch", paddingTop: 2 } : { width: 214, maxHeight: "calc(100vh - 40px)", padding: 10, borderRadius: 14, background: "rgba(255,255,255,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", border: "1px solid rgba(229,231,235,0.8)" }) }}>
       {listaFerr(false)}
       {listaPav(false)}
       {listaExibir}
@@ -6000,10 +6017,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
       {propriedades}
 
-
-
-
-      <div style={{ marginTop: 16, paddingTop: 10, borderTop: "1px solid #eef0f3", display: "flex", flexWrap: "wrap", gap: "6px 14px" }}>
+      {maisAberto && (<>
+      <div style={{ marginTop: 2 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: "#111827", lineHeight: 1.25, wordBreak: "break-word" }}>{projeto.nome}</div>
+        <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 2 }}>{nomeCliente || "Sem cliente"}</div>
+      </div>
+      <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #eef0f3", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
         <button style={linkLat} onClick={() => setVerAtalhos(true)}>Atalhos (?)</button>
         <button style={linkLat} title="Copia o desenho deste projeto (paredes, áreas, ambientes) para colar na conversa de suporte e reproduzir um problema"
           onClick={() => {
@@ -6021,6 +6040,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             <button style={{ ...btnPerigo, minHeight: 30, padding: "4px 10px", fontSize: 12.5 }} onClick={() => { mudar([], []); setInicio(null); setPoli([]); setConfirmarLimpar(false); }}>Apagar</button>
           </div>
         </div>
+      )}
+      </>)}
+      </div>
       )}
     </aside>
   );
