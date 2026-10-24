@@ -16720,6 +16720,16 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   // nada sozinho: só põe à vista, porque na conciliação do extrato isto
   // costuma ser comprovante colado na linha errada.
   const [divergencia, setDivergencia] = useState(null);
+  // O papel que a trava tirou (valor de outra linha) — guardado para o
+  // "é deste lançamento, anexar mesmo assim".
+  const [papelRecusado, setPapelRecusado] = useState(null);
+  const recusadoRef = useRef(null);
+  function anexarRecusadoMesmoAssim() {
+    const a = recusadoRef.current;
+    if (a) setF((p) => comAnexos({ ...p }, anexosDaTransacao(p).concat([{ ...a, conferidoForaDoValor: true }])));
+    recusadoRef.current = null;
+    setPapelRecusado(null);
+  }
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   // A mesma IA da Entrada: lê foto, print e PDF de qualquer papel.
   const iaDisponivel = typeof useIaDisponivel === "function" ? useIaDisponivel() : false;
@@ -16735,6 +16745,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const [progresso, setProgresso] = useState(null);
   async function lerPapel(arquivo) {
     setLendoComprov(true); setErroAnexo(""); setDivergencia(null); setAvisosLidos([]); setProgresso(null);
+    setPapelRecusado(null); recusadoRef.current = null;
     try {
       const r = typeof lerPapelDoLancamento === "function"
         ? await lerPapelDoLancamento(arquivo, { iaDisponivel, aoProgresso: (pr) => setProgresso(pr) })
@@ -16779,6 +16790,34 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       : [];
     const tipoPapel = (entrada || rotulo === "Cheque" || pa.tipo === "comprovante") ? "comprovante" : (pa.ehNota || pa.tipo === "nfse" || pa.tipo === "nota") ? "nota"
       : (typeof tipoDoAnexoDaEntrada === "function" ? tipoDoAnexoDaEntrada(pa) : "pedido");
+    // Papel de OUTRA linha: o valor dele não é o desta (o comprovante do Pix de
+    // R$ 160 anexado na linha do boleto de R$ 710). A trava abaixo tira o
+    // papel — antes a descrição, o fornecedor e o número saíam do papel
+    // errado, e ele ficava anexado no lançamento.
+    const valorDaLinha = efValorDoCampo(f.valor);
+    // (diferença pequena — juros do boleto, desconto da nota — é o mesmo
+    // pagamento: aí preenche, e o aviso de divergência continua aparecendo)
+    const deOutraLinha = valorLido > 0 && valorDaLinha > 0
+      && Math.abs(valorLido - valorDaLinha) > Math.max(1, valorDaLinha * 0.05);
+    // TRAVA: papel de outra linha não fica anexado. Sai da lista, nada é
+    // preenchido, e o aviso diz o que o papel é. Só volta se a pessoa disser
+    // que é deste lançamento mesmo (nota paga em parcelas, um boleto que paga
+    // várias notas) — aí fica, mas ainda sem preencher nada.
+    if (deOutraLinha) {
+      const quando0 = pa.pagoEm || pa.emitido || "";
+      setF((p) => {
+        const lista0 = anexosDaTransacao(p);
+        let k0 = -1;
+        for (let x = lista0.length - 1; x >= 0; x--) if (lista0[x] && !lista0[x].tipo) { k0 = x; break; }
+        if (k0 < 0) return p;
+        recusadoRef.current = { ...lista0[k0], tipo: tipoPapel };
+        return comAnexos({ ...p }, lista0.filter((_, x) => x !== k0));
+      });
+      setLida(null);
+      setDivergencia(null);
+      setPapelRecusado({ valor: valorLido, valorDaLinha, favorecido: emitente || "", data: quando0, rotulo });
+      return;
+    }
     setF((p) => {
       const novo = { ...p };
       if (valorLido > 0 && !(efValorDoCampo(p.valor) > 0)) novo.valor = valorLido.toFixed(2).replace(".", ",");
@@ -17676,19 +17715,35 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             rotuloLendo="Lendo o papel…"
             aceita="application/pdf,image/*,.xml,text/xml,application/xml,.txt,text/plain,.eml,.html"
             aoMudar={(lista) => setF((p) => { const novo = comAnexos(p, lista);
-              if (!lista.length) { setDivergencia(null); setErroAnexo(""); }
+              if (!lista.length) { setDivergencia(null); setErroAnexo(""); setPapelRecusado(null); recusadoRef.current = null; }
               return novo; })}
             onErro={setErroAnexo} />
         ) : null}
         {erroAnexo && <div style={{ fontSize: 12, color: "#b45309", marginTop: 6 }}>{erroAnexo}</div>}
         {avisosLidos.map((x, k) => <div key={k} style={{ fontSize: 12, color: "#b45309", marginTop: 6 }}>{x}</div>)}
+        {papelRecusado && (
+          <div data-vk-papel-recusado="1" style={{ fontSize: 12.5, color: "#991b1b", background: "#fef2f2", border: "1px solid rgba(185,28,28,0.3)",
+            borderRadius: 10, padding: "9px 11px", marginTop: 6, lineHeight: 1.5 }}>
+            <b>Não anexei: este papel não é desta linha.</b>{" "}
+            {papelRecusado.rotulo ? papelRecusado.rotulo + " de " : "Ele é de "}<b>{efDinheiro(papelRecusado.valor)}</b>
+            {papelRecusado.favorecido ? <> para <b>{papelRecusado.favorecido}</b></> : ""}
+            {papelRecusado.data ? ` (${typeof dataDoDiaBR === "function" ? dataDoDiaBR(papelRecusado.data) : papelRecusado.data})` : ""}
+            ; a linha é de <b>{efDinheiro(papelRecusado.valorDaLinha)}</b>. Procure o papel certo — este é de outro pagamento.
+            <div style={{ marginTop: 6 }}>
+              <button type="button" data-vk-anexar-mesmo-assim="1" onClick={anexarRecusadoMesmoAssim}
+                style={{ background: "none", border: "none", padding: 0, fontSize: 12, color: "#6b7280", cursor: "pointer", textDecoration: "underline", fontFamily: "inherit" }}>
+                É deste lançamento (nota paga em parcelas, boleto de várias notas) — anexar mesmo assim
+              </button>
+            </div>
+          </div>
+        )}
         {divergencia && (
           <div style={{ fontSize: 12, color: "#b45309", marginTop: 6, lineHeight: 1.45 }}>
             O papel não bate com esta linha:
             {divergencia.valor ? ` ele diz ${efDinheiro(divergencia.valor)}` : ""}
             {divergencia.data ? ` ${divergencia.valor ? "e" : "ele diz"} pago em ${typeof dataDoDiaBR === "function" ? dataDoDiaBR(divergencia.data) : divergencia.data}` : ""}
             {divergencia.favorecido ? ` (para ${divergencia.favorecido})` : ""}.
-            Confira se é o papel desta linha do extrato — não mexi em nada.
+            Confira se é o papel desta linha do extrato.
           </div>
         )}
       </div>
