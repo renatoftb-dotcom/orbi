@@ -5770,7 +5770,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     </button>
   );
   const botaoTabelas = (
-    <button aria-label={tabelasAberto ? "Fechar as tabelas" : "Tabelas: esquadrias, ambientes e quantitativo"} aria-expanded={tabelasAberto} title="Tabelas: esquadrias, ambientes e quantitativo"
+    <button aria-label={tabelasAberto ? "Fechar as tabelas" : "Tabelas: esquadrias e ambientes"} aria-expanded={tabelasAberto} title="Tabelas: esquadrias e ambientes"
       onClick={() => { setTabelasAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setExibirAberto(false); setObraAberta(false); setMaisAberto(false); }}
       style={{ width: 32, height: 32, borderRadius: "50%", border: `1px solid ${tabelasAberto ? TP_AZUL : "#e5e7eb"}`, background: tabelasAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: tabelasAberto ? TP_AZUL : "#111827" }}>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M2 6h12M2 9.5h12M6.5 6v7.5" /></svg>
@@ -5778,10 +5778,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   );
   // obra: gerar/atualizar o orçamento e o preencher sozinho (capacete de obra)
   const botaoObra = (
-    <button aria-label={obraAberta ? "Fechar obra" : "Obra: orçamento e preenchimento"} aria-expanded={obraAberta} title={obraLigada ? `Obra "${obraLigada.nome}": atualizar orçamento` : "Obra: gerar orçamento de obra"}
+    <button aria-label={obraAberta ? "Fechar obra" : "Obra: quantitativo e orçamento"} aria-expanded={obraAberta} title={obraLigada ? `Obra "${obraLigada.nome}": quantitativo e orçamento` : "Obra: quantitativo e orçamento"}
       onClick={() => { setObraAberta((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setExibirAberto(false); setTabelasAberto(false); setMaisAberto(false); }}
       style={{ width: 32, height: 32, borderRadius: "50%", border: `1px solid ${obraAberta ? TP_AZUL : "#e5e7eb"}`, background: obraAberta ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: obraAberta ? TP_AZUL : "#111827" }}>
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1.75 12h12.5" /><path d="M3 12V10.5a5 5 0 0 1 10 0V12" /><path d="M6.25 6.2V4.5h3.5v1.7" /><path d="M8 4.5V12" /></svg>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2.5 14.5h5" /><path d="M5 14.5V2" /><path d="M1.5 5h13" /><path d="M2 5 5 2l6.5 3" /><path d="M11.5 5v3.5" /><path d="M10 8.5h3v2.5h-3z" /></svg>
     </button>
   );
   const listaExibir = exibirAberto && (
@@ -5899,7 +5899,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
     </>
   ); };
-  const temConteudo = ferrAbertoM || ferramenta !== "selecionar" || pavAbertoM || editPav || exibirAberto || tabelasAberto || (podeOrcar && obraAberta) || maisAberto || sel.length > 0 || !!inicio || poli.length > 0 || confirmarLimpar;
+  const temConteudo = ferrAbertoM || ferramenta !== "selecionar" || pavAbertoM || editPav || exibirAberto || tabelasAberto || obraAberta || maisAberto || sel.length > 0 || !!inicio || poli.length > 0 || confirmarLimpar;
   const menu = (
     <aside ref={asideRef} style={{ display: "flex", alignItems: "flex-start", gap: 6, boxSizing: "border-box",
       ...(isMobile ? { position: "absolute", top: 0, left: 0, bottom: 0, zIndex: 3, width: "min(88vw, 320px)", background: "#fff", boxShadow: "4px 0 20px rgba(0,0,0,0.15)", transform: menuAberto ? "none" : "translateX(-105%)", transition: "transform .2s ease",
@@ -5913,7 +5913,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 4 6 10l6 6" /></svg>
         </button>
         <span aria-hidden="true" style={{ width: 18, height: 1, background: "#e5e7eb" }} />
-        {botaoMais(false)}{botaoPav(false)}{botaoExibir}{botaoTabelas}{podeOrcar && botaoObra}
+        {botaoMais(false)}{botaoPav(false)}{botaoExibir}{botaoTabelas}{botaoObra}
         <span aria-hidden="true" style={{ width: 18, height: 1, background: "#e5e7eb" }} />
         <button onClick={desfazer} disabled={!historico.current.length} aria-label="Desfazer" title="Desfazer (Ctrl+Z)" style={{ ...icoLat, opacity: historico.current.length ? 1 : 0.4 }}>
           <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 5 3 9l4 4" /><path d="M3 9h9a5 5 0 0 1 0 10h-2" /></svg>
@@ -5939,8 +5939,47 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       {listaFerr(false)}
       {listaPav(false)}
       {listaExibir}
+      {obraAberta && (
+        <div style={{ marginTop: 2 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "#9ca3af", padding: "4px 0 2px" }}>
+            <span>Quantitativo</span><span style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0, fontVariantNumeric: "tabular-nums" }}>{tpFmt(qtd.A - qtd.ab)} m²</span>
+          </div>
+      <div>
+        {pavimentos.length > 1 && (
+          <div role="group" aria-label="Quantitativo de" style={{ display: "flex", gap: 2, padding: 2, margin: "4px 0 2px", background: "#f3f4f6", borderRadius: 8 }}>
+            {[[false, pavAt.nome], [true, "Total"]].map(([v, rot]) => (
+              <button key={rot} onClick={() => escolherQtdTotal(v)} aria-pressed={qtdTotal === v}
+                style={{ flex: 1, minWidth: 0, padding: "4px 6px", border: "none", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  background: qtdTotal === v ? "#fff" : "transparent", color: qtdTotal === v ? TP_AZUL : "#6b7280", fontWeight: qtdTotal === v ? 600 : 500, boxShadow: qtdTotal === v ? "0 1px 2px rgba(0,0,0,0.08)" : "none" }}>{rot}</button>
+            ))}
+          </div>
+        )}
+        {grupoQ("Paredes")}
+        {linhaTab("Quantidade", qtd.n, "un")}
+        {linhaTab("Comprimento", tpFmt(qtd.L), "m")}
+        {linhaTab(qtd.ab > 0 ? "Área bruta" : "Área", tpFmt(qtd.A), "m²")}
+        {qtd.ab > 0 && linhaTab("Aberturas", tpFmt(qtd.ab), "m²", true)}
+        {qtd.ab > 0 && linhaTab("Área líquida", tpFmt(qtd.A - qtd.ab), "m²")}
+        {linhaTab("Reboco (2 faces)", tpFmt((qtd.A - qtd.ab) * 2), "m²")}
+        {grupoQ("Áreas")}
+        {linhaTab("Construída (coberta)", tpFmt(qtd.coberta), "m²")}
+        {linhaTab("Contrapiso", tpFmt(qtd.cp), "m²")}
+        {qtd.mostraIntExt && qtd.cp > 0 && linhaTab("interno", tpFmt(qtd.cpInt), "m²", true)}
+        {qtd.mostraIntExt && qtd.cp > 0 && linhaTab("externo", tpFmt(qtd.cpExt), "m²", true)}
+        {linhaTab("Volume contrapiso", tpFmt(qtd.volCp), "m³", true)}
+        {linhaTab("Laje", tpFmt(qtd.lj), "m²")}
+        {linhaTab("Volume laje", tpFmt(qtd.volLj), "m³", true)}
+        {linhaTab("Telhado (projeção)", tpFmt(qtd.telP), "m²")}
+        {linhaTab("Telhado (real)", tpFmt(qtd.telR), "m²", true)}
+        {qtd.terreno > 0 && grupoQ("Terreno")}
+        {qtd.terreno > 0 && linhaTab("Área do terreno", tpFmt(qtd.terreno), "m²")}
+        {qtd.terreno > 0 && linhaTab("Taxa de ocupação", tpFmt(qtd.ocupada / qtd.terreno * 100, 1), "%")}
+        {qtd.terreno > 0 && linhaTab("Área livre", tpFmt(qtd.livre), "m²")}
+      </div>
+        </div>
+      )}
       {podeOrcar && obraAberta && (
-        <div style={{ marginTop: 6, padding: 8, border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff" }}>
+        <div style={{ marginTop: 12, padding: 8, border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff" }}>
           <button style={{ ...btn, width: "100%", minHeight: 32, fontSize: 12.5, marginTop: 0, background: "#111827", borderColor: "#111827", color: "#fff" }} onClick={() => setPainelObra("confirmar")}>
             {obraLigada ? "Atualizar orçamento da obra" : "Gerar orçamento de obra"}
           </button>
@@ -5995,40 +6034,6 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               );
             })}
           </div>
-      ))}
-      {dobra("qtd", "Quantitativo", `${tpFmt(qtd.A - qtd.ab)} m²`, (
-      <div>
-        {pavimentos.length > 1 && (
-          <div role="group" aria-label="Quantitativo de" style={{ display: "flex", gap: 2, padding: 2, margin: "4px 0 2px", background: "#f3f4f6", borderRadius: 8 }}>
-            {[[false, pavAt.nome], [true, "Total"]].map(([v, rot]) => (
-              <button key={rot} onClick={() => escolherQtdTotal(v)} aria-pressed={qtdTotal === v}
-                style={{ flex: 1, minWidth: 0, padding: "4px 6px", border: "none", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  background: qtdTotal === v ? "#fff" : "transparent", color: qtdTotal === v ? TP_AZUL : "#6b7280", fontWeight: qtdTotal === v ? 600 : 500, boxShadow: qtdTotal === v ? "0 1px 2px rgba(0,0,0,0.08)" : "none" }}>{rot}</button>
-            ))}
-          </div>
-        )}
-        {grupoQ("Paredes")}
-        {linhaTab("Quantidade", qtd.n, "un")}
-        {linhaTab("Comprimento", tpFmt(qtd.L), "m")}
-        {linhaTab(qtd.ab > 0 ? "Área bruta" : "Área", tpFmt(qtd.A), "m²")}
-        {qtd.ab > 0 && linhaTab("Aberturas", tpFmt(qtd.ab), "m²", true)}
-        {qtd.ab > 0 && linhaTab("Área líquida", tpFmt(qtd.A - qtd.ab), "m²")}
-        {linhaTab("Reboco (2 faces)", tpFmt((qtd.A - qtd.ab) * 2), "m²")}
-        {grupoQ("Áreas")}
-        {linhaTab("Construída (coberta)", tpFmt(qtd.coberta), "m²")}
-        {linhaTab("Contrapiso", tpFmt(qtd.cp), "m²")}
-        {qtd.mostraIntExt && qtd.cp > 0 && linhaTab("interno", tpFmt(qtd.cpInt), "m²", true)}
-        {qtd.mostraIntExt && qtd.cp > 0 && linhaTab("externo", tpFmt(qtd.cpExt), "m²", true)}
-        {linhaTab("Volume contrapiso", tpFmt(qtd.volCp), "m³", true)}
-        {linhaTab("Laje", tpFmt(qtd.lj), "m²")}
-        {linhaTab("Volume laje", tpFmt(qtd.volLj), "m³", true)}
-        {linhaTab("Telhado (projeção)", tpFmt(qtd.telP), "m²")}
-        {linhaTab("Telhado (real)", tpFmt(qtd.telR), "m²", true)}
-        {qtd.terreno > 0 && grupoQ("Terreno")}
-        {qtd.terreno > 0 && linhaTab("Área do terreno", tpFmt(qtd.terreno), "m²")}
-        {qtd.terreno > 0 && linhaTab("Taxa de ocupação", tpFmt(qtd.ocupada / qtd.terreno * 100, 1), "%")}
-        {qtd.terreno > 0 && linhaTab("Área livre", tpFmt(qtd.livre), "m²")}
-      </div>
       ))}
         </div>
       )}
