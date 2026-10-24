@@ -4933,10 +4933,14 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       const falharam = [];
       const naoConverteu = [];
       let feitos = 0;
+      // os links curtos dos papéis privados, de uma vez só
+      const links = typeof linksDosPapeis === "function"
+        ? await linksDosPapeis(pc.arquivos.map((a) => a.url)).catch(() => ({})) : {};
       for (const a of pc.arquivos) {
         setPrestando({ fazendo: true, msg: `Juntando os papéis… ${++feitos} de ${pc.arquivos.length}` });
         try {
-          const resp = await fetch(a.url);
+          if (!links[a.url] && typeof papelEhPrivado === "function" && papelEhPrivado(a.url)) throw new Error("sem acesso");
+          const resp = await fetch(links[a.url] || a.url);
           if (!resp.ok) throw new Error("HTTP " + resp.status);
           const bruto = await resp.blob();
           if (a.daImagem) {

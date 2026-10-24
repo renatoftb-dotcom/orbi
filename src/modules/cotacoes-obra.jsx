@@ -5776,7 +5776,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     if (buscandoPapel || !p || !p.anexo || !p.anexo.url) return;
     setErro(""); setBuscandoPapel(p.id);
     try {
-      const r = await fetch(p.anexo.url);
+      const r = await buscarPapel(p.anexo.url, p.anexo.nome);
       if (!r.ok) throw new Error(r.status === 404 ? "o arquivo não está mais no storage" : "o storage respondeu " + r.status);
       const bruto = await r.blob();
       const cabeca = new Uint8Array(await bruto.slice(0, 5).arrayBuffer());
@@ -8349,10 +8349,31 @@ function CotacaoLancamento({ cotacao, dados, contaDaLoja, dinheiro, isMobile, on
 // para o iframe. Parece rodeio, mas é o que torna o visor independente do
 // cabeçalho que o storage manda: anexo antigo, que subiu sem extensão e é
 // servido como octet-stream, abre igual — sem precisar reanexar.
+// Papéis privados (linkDoPapel, em api.js): o endereço que abre agora.
+// Para <img src> e links ("" enquanto busca).
+function useLinkDoPapel(url, nome) {
+  const [link, setLink] = useState(() => (url && !papelEhPrivado(url) ? url : ""));
+  useEffect(() => {
+    let vivo = true;
+    if (!url) { setLink(""); return undefined; }
+    if (!papelEhPrivado(url)) { setLink(url); return undefined; }
+    setLink("");
+    linkDoPapel(url, nome).then((l) => { if (vivo) setLink(l); }).catch(() => { if (vivo) setLink(""); });
+    return () => { vivo = false; };
+  }, [url]);
+  return link;
+}
+function ImagemDoPapel({ url, nome, ...props }) {
+  const link = useLinkDoPapel(url, nome);
+  return link ? <img src={link} {...props} /> : <span style={{ display: "inline-block", fontSize: 11, color: "#9ca3af", padding: 6 }}>carregando…</span>;
+}
+
 function VisorProposta({ anexo, aoFechar }) {
   const [estado, setEstado] = useState("carregando"); // carregando | pronto | direto | erro
   const [motivo, setMotivo] = useState("");
   const [blobUrl, setBlobUrl] = useState("");
+  // o endereço que abre agora: o papel privado vem por link curto do backend
+  const [link, setLink] = useState("");
   const a = anexo || {};
   const pdf = a.formato === "pdf" || a.resourceType === "raw";
 
@@ -8364,11 +8385,21 @@ function VisorProposta({ anexo, aoFechar }) {
 
   useEffect(() => {
     if (!a.url) { setEstado("erro"); return; }
-    if (!pdf) { setEstado("pronto"); return; }
     let vivo = true, criada = "";
+    setEstado("carregando"); setLink("");
     (async () => {
+      let l = "";
       try {
-        const r = await fetch(a.url);
+        l = typeof linkDoPapel === "function" ? await linkDoPapel(a.url, a.nome) : a.url;
+      } catch (e) {
+        if (vivo) { setMotivo(e && e.status === 403 ? "Você não tem acesso a este papel." : "Não consegui pedir o papel ao servidor. Tente de novo."); setEstado("erro"); }
+        return;
+      }
+      if (!vivo) return;
+      setLink(l);
+      if (!pdf) { setEstado("pronto"); return; }
+      try {
+        const r = await fetch(l);
         if (!r.ok) {
           if (!vivo) return;
           // 401 é o storage recusando ENTREGAR um arquivo que existe: os
@@ -8428,7 +8459,7 @@ function VisorProposta({ anexo, aoFechar }) {
               é o que conserta o anexo antigo, que chegava sem extensão. */}
           {blobUrl
             ? <a href={blobUrl} download={/\.pdf$/i.test(a.nome || "") ? a.nome : (a.nome || "arquivo") + ".pdf"} style={{ ...E.btnSec, textDecoration: "none" }}>Baixar</a>
-            : <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ ...E.btnSec, textDecoration: "none" }}>Baixar</a>}
+            : link ? <a href={link} target="_blank" rel="noopener noreferrer" style={{ ...E.btnSec, textDecoration: "none" }}>Baixar</a> : null}
           <button style={E.btnSec} onClick={aoFechar}>Fechar</button>
         </div>
         {/* `minHeight: 0` não é enfeite: item de flex nasce com min-height auto
@@ -8447,12 +8478,12 @@ function VisorProposta({ anexo, aoFechar }) {
               <div style={{ fontSize: 12.5, color: "#4b5563", maxWidth: 420 }}>
                 {motivo || "Não deu para mostrar a proposta aqui. O arquivo continua inteiro — dá para baixar e abrir no leitor de PDF do computador."}
               </div>
-              <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ ...E.btn, textDecoration: "none" }}>Baixar assim mesmo</a>
+              {link && <a href={link} target="_blank" rel="noopener noreferrer" style={{ ...E.btn, textDecoration: "none" }}>Baixar assim mesmo</a>}
             </div>
           )}
           {(estado === "pronto" || estado === "direto") && (pdf
-            ? <iframe title="Proposta" src={estado === "direto" ? a.url : blobUrl} style={{ width: "100%", height: "100%", border: "none" }} />
-            : <img src={a.url} alt="Proposta" style={{ display: "block", width: "100%", height: "auto" }} />)}
+            ? <iframe title="Proposta" src={estado === "direto" ? link : blobUrl} style={{ width: "100%", height: "100%", border: "none" }} />
+            : <img src={link} alt="Proposta" style={{ display: "block", width: "100%", height: "auto" }} />)}
           {estado === "direto" && (
             <div style={{ position: "sticky", bottom: 0, padding: "6px 12px", background: "rgba(17,24,39,0.75)", color: "#fff", fontSize: 11 }}>
               Se a proposta não aparecer aqui, use “Baixar”.
@@ -12972,7 +13003,7 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, chama
     return (
       <div style={{ ...E.quadro, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div style={{ width: 38, height: 46, borderRadius: 6, border: "1px solid rgba(38,36,33,0.14)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: pdf ? "#dc2626" : "#0474f4", background: "#fafafa", overflow: "hidden" }}>
-          {pdf ? "PDF" : <img src={anexo.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+          {pdf ? "PDF" : <ImagemDoPapel url={anexo.url} nome={anexo.nome} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
         </div>
         <div style={{ flex: 1, minWidth: 140 }}>
           <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", wordBreak: "break-all" }}>{anexo.nome}</div>

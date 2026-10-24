@@ -4412,7 +4412,7 @@ function PropostaVisualizer({ proposta, onFechar, onEditar, versoes, aoTrocarVer
     setPdfNaTela({ estado: "carregando" });
     (async () => {
       try {
-        const r = await fetch(arquivoPdf.url);
+        const r = await buscarPapel(arquivoPdf.url, arquivoPdf.nome);
         if (!r.ok) throw new Error(`O storage respondeu ${r.status}`);
         const bruto = await r.blob();
         if (!vivo) return;
@@ -4432,7 +4432,7 @@ function PropostaVisualizer({ proposta, onFechar, onEditar, versoes, aoTrocarVer
   async function baixarArquivoSalvo() {
     setBaixando(true);
     try {
-      const r = await fetch(arquivoPdf.url);
+      const r = await buscarPapel(arquivoPdf.url, arquivoPdf.nome);
       if (!r.ok) throw new Error(`O storage respondeu ${r.status}.`);
       const bruto = await r.blob();
       const url = URL.createObjectURL(new Blob([bruto], { type: "application/pdf" }));

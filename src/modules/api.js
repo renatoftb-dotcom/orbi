@@ -895,3 +895,43 @@ function resumoDaImportacao(previa) {
   if (!linhas.length) linhas.push("O arquivo não tem registros.");
   return linhas.join("\n") + "\n\nNada do que já está no sistema é apagado: o que não está no arquivo continua como está.";
 }
+
+// ── Papéis privados ─────────────────────────────────────────────
+// Comprovante, nota e proposta guardados no armazenamento não abrem mais
+// pelo endereço que está nos dados: o app pede ao backend um link curto
+// (15 min) para cada um, só de quem é do escritório dono. Logo e imagens de
+// projeto continuam abrindo direto.
+const _RE_PAPEL_PRIVADO = /^https:\/\/res\.cloudinary\.com\/[^/]+\/(raw|image)\/(upload|authenticated)\/(s--[^/]+--\/)?(v\d+\/)?vicke\/[^/]+\/(comprovantes|cotacoes|propostas)\//;
+function papelEhPrivado(url) { return _RE_PAPEL_PRIVADO.test(String(url || "")); }
+const _linksDePapel = new Map();   // url → { link, ate }
+// Pede de uma vez os links que faltam. Devolve { url: link } — o papel que
+// o backend recusou fica de fora.
+async function linksDosPapeis(urls, nomes) {
+  const agora = Date.now();
+  const saida = {};
+  const faltam = [];
+  for (const u of [...new Set((urls || []).filter(Boolean))]) {
+    if (!papelEhPrivado(u)) { saida[u] = u; continue; }
+    const c = _linksDePapel.get(u);
+    if (c && c.ate > agora) saida[u] = c.link; else faltam.push(u);
+  }
+  for (let i = 0; i < faltam.length; i += 200) {
+    const lote = faltam.slice(i, i + 200);
+    const r = await post("/api/arquivos/links", { urls: lote, nomes: nomes || {} });
+    // um minuto de folga antes de vencer
+    const ate = new Date(r.validoAte).getTime() - 60 * 1000;
+    for (const u of lote) if (r.links && r.links[u]) { saida[u] = r.links[u]; _linksDePapel.set(u, { link: r.links[u], ate }); }
+  }
+  return saida;
+}
+async function linkDoPapel(url, nome) {
+  if (!url) return "";
+  if (!papelEhPrivado(url)) return url;
+  const m = await linksDosPapeis([url], nome ? { [url]: nome } : undefined);
+  if (!m[url]) { const e = new Error("Você não tem acesso a este papel"); e.status = 403; throw e; }
+  return m[url];
+}
+// fetch do papel, venha ele privado ou público
+async function buscarPapel(url, nome) {
+  return fetch(await linkDoPapel(url, nome));
+}

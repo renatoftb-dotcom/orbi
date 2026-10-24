@@ -1551,7 +1551,7 @@ function FolhaComprovantes({ folha, obraNome, escritorioNome, fmtBRL, aoFechar }
       const falharam = [];
       for (const a of arquivos) {
         try {
-          const r = await fetch(a.url);
+          const r = await buscarPapel(a.url, a.nome);
           if (!r.ok) throw new Error("HTTP " + r.status);
           z.file(a.nome, await r.blob());
         } catch (e) { falharam.push(a.nome); }
@@ -1673,7 +1673,7 @@ function FolhaComprovantes({ folha, obraNome, escritorioNome, fmtBRL, aoFechar }
             ) : (
               <div key={(a.public_id || a.url) + k} style={{ marginBottom: 8 }}>
                 <div style={{ fontSize: 10.5, color: "#6b7280", marginBottom: 3 }}>{a.rotulo}{a.nome ? " · " + a.nome : ""}</div>
-                <img src={a.url} alt={`${a.rotulo} ${i + 1}`}
+                <ImagemDoPapel url={a.url} nome={a.nome} alt={`${a.rotulo} ${i + 1}`}
                   style={{ display: "block", maxWidth: "100%", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 6 }} />
               </div>
             ))}
