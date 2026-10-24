@@ -1768,7 +1768,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const [ferrSolta, setFerrSolta] = useState(() => { try { const v = JSON.parse(localStorage.getItem("vicke-projetar-ferr-solta") || "null"); return v && v.x >= 0 && v.y >= 0 ? v : null; } catch (err) { return null; } });
   const [arrasteMais, setArrasteMais] = useState(null);
   const [pavAbertoM, setPavAbertoM] = useState(false), [pavAbertoC, setPavAbertoC] = useState(false);
-  const [exibirAberto, setExibirAberto] = useState(false); // botão Exibir: escala da planta e grade
+  const [exibirAberto, setExibirAberto] = useState(false);
+  const [tabelasAberto, setTabelasAberto] = useState(false); // botão Tabelas: esquadrias, ambientes e quantitativo // botão Exibir: escala da planta e grade
   const [mostrarGrade, setMostrarGrade] = useState(() => { try { return localStorage.getItem("vicke-projetar-grade") !== "0"; } catch (err) { return true; } });
   const [pavSolta, setPavSolta] = useState(() => { try { const v = JSON.parse(localStorage.getItem("vicke-projetar-pav-solta") || "null"); return v && v.x >= 0 && v.y >= 0 ? v : null; } catch (err) { return null; } });
   const arrastouMais = useRef(false);
@@ -5627,7 +5628,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // bloco de ferramentas: no menu ou solto na prancheta (o "+" arrasta de um lugar para o outro)
   const botaoMais = (noCanvas) => { const ferrAberto = noCanvas ? ferrAbertoC : ferrAbertoM, setFerrAberto = noCanvas ? setFerrAbertoC : setFerrAbertoM; return (
             <button aria-label={ferrAberto ? "Fechar a lista de ferramentas" : "Abrir a lista de ferramentas"} aria-expanded={ferrAberto}
-              onPointerDown={iniciarArraste("ferr")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setFerrAberto((x) => !x); if (!noCanvas) { setPavAbertoM(false); setExibirAberto(false); } }}
+              onPointerDown={iniciarArraste("ferr")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setFerrAberto((x) => !x); if (!noCanvas) { setPavAbertoM(false); setExibirAberto(false); setTabelasAberto(false); } }}
               title={ferrAberto ? "Fechar a lista" : noCanvas ? "Ferramentas (arraste para mover; solte no menu para tirar da prancheta)" : "Ferramentas (arraste para a prancheta para ter uma cópia à mão)"}
               style={{ width: 32, height: 32, borderRadius: "50%", touchAction: "none", border: `1px solid ${ferrAberto ? TP_AZUL : "#e5e7eb"}`, background: ferrAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "transform .15s", transform: ferrAberto ? "rotate(45deg)" : "none" }}>
               <svg width="14" height="14" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke={ferrAberto ? TP_AZUL : "#111827"} strokeWidth="2" strokeLinecap="round" /></svg>
@@ -5636,7 +5637,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // pavimentos: mesma dinâmica do "+" (abre a lista embaixo, arrasta para a prancheta)
   const botaoPav = (noCanvas) => { const pavAberto = noCanvas ? pavAbertoC : pavAbertoM, setPavAberto = noCanvas ? setPavAbertoC : setPavAbertoM; return (
             <button aria-label={pavAberto ? "Fechar a lista de pavimentos" : "Abrir a lista de pavimentos"} aria-expanded={pavAberto}
-              onPointerDown={iniciarArraste("pav")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setPavAberto((x) => !x); if (!noCanvas) { setFerrAbertoM(false); setExibirAberto(false); } }}
+              onPointerDown={iniciarArraste("pav")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setPavAberto((x) => !x); if (!noCanvas) { setFerrAbertoM(false); setExibirAberto(false); setTabelasAberto(false); } }}
               title={pavAberto ? "Fechar a lista" : noCanvas ? "Pavimentos (arraste para mover; solte no menu para tirar da prancheta)" : "Pavimentos (arraste para a prancheta para ter uma cópia à mão)"}
               style={{ width: 32, height: 32, borderRadius: "50%", touchAction: "none", border: `1px solid ${pavAberto ? TP_AZUL : "#e5e7eb"}`, background: pavAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: pavAberto ? TP_AZUL : "#111827" }}>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" aria-hidden="true"><path d="M8 2 14 5 8 8 2 5z" /><path d="M2 8.25 8 11.25l6-3" /><path d="M2 11.25 8 14.25l6-3" /></svg>
@@ -5645,9 +5646,16 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // exibir: escala das anotações e prancha com/sem grade
   const botaoExibir = (
     <button aria-label={exibirAberto ? "Fechar as opções de exibição" : "Exibir: escala e grade"} aria-expanded={exibirAberto} title="Exibir: escala da planta e grade"
-      onClick={() => { setExibirAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); }}
+      onClick={() => { setExibirAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setTabelasAberto(false); }}
       style={{ width: 32, height: 32, borderRadius: "50%", border: `1px solid ${exibirAberto ? TP_AZUL : "#e5e7eb"}`, background: exibirAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: exibirAberto ? TP_AZUL : "#111827" }}>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" /><circle cx="8" cy="8" r="2" /></svg>
+    </button>
+  );
+  const botaoTabelas = (
+    <button aria-label={tabelasAberto ? "Fechar as tabelas" : "Tabelas: esquadrias, ambientes e quantitativo"} aria-expanded={tabelasAberto} title="Tabelas: esquadrias, ambientes e quantitativo"
+      onClick={() => { setTabelasAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setExibirAberto(false); }}
+      style={{ width: 32, height: 32, borderRadius: "50%", border: `1px solid ${tabelasAberto ? TP_AZUL : "#e5e7eb"}`, background: tabelasAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: tabelasAberto ? TP_AZUL : "#111827" }}>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M2 6h12M2 9.5h12M6.5 6v7.5" /></svg>
     </button>
   );
   const listaExibir = exibirAberto && (
@@ -5784,10 +5792,65 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       </div>
 
       <div style={{ height: 12 }} />
-      <div style={{ display: "flex", gap: 6 }}>{botaoMais(false)}{botaoPav(false)}{botaoExibir}</div>
+      <div style={{ display: "flex", gap: 6 }}>{botaoMais(false)}{botaoPav(false)}{botaoExibir}{botaoTabelas}</div>
       {listaFerr(false)}
       {listaPav(false)}
       {listaExibir}
+      {tabelasAberto && (
+        <div style={{ marginTop: 2 }}>
+      {quadro.grupos.length > 0 && dobra("esq", "Esquadrias", `${quadro.grupos.reduce((t, g) => t + g.qtd, 0)} un`, (
+          <div>
+            {quadro.grupos.map((g) => (
+              <button key={g.codigo} onClick={() => { trocarFerramenta("selecionar"); setSel(g.ids.map((id) => "o" + id)); }}
+                style={{ ...linhaQ, width: "100%", background: "none", border: "none", borderBottom: "1px solid #f0f2f5", cursor: "pointer", fontFamily: "inherit", textAlign: "left", alignItems: "flex-start" }}>
+                <span style={{ minWidth: 0 }}>
+                  <strong style={{ color: "#111827" }}>{g.codigo}</strong> {g.rot}{g.mat === "madeira" ? " (madeira)" : ""}
+                  <span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>{tpFmt(g.larg)} × {tpFmt(g.alt)} m{g.peit ? ` · peitoril ${tpFmt(g.peit)}` : ""}</span>
+                </span>
+                <span style={numQ}>{g.qtd} un</span>
+              </button>
+            ))}
+          </div>
+      ))}
+      {areas.some((a) => a.tipo === "ambiente") && dobra("amb", "Ambientes", `${tpFmt(areas.filter((a) => a.tipo === "ambiente" && !a.aberto).reduce((t, a) => t + tpAreaPoli(a.pts), 0))} m²`, (
+          <div>
+            {areas.map((a, i) => (a.tipo === "ambiente" ? (
+              <button key={i} onClick={() => { trocarFerramenta("selecionar"); setSel(["a" + i]); }} style={{ ...linhaQ, width: "100%", background: "none", border: "none", borderBottom: "1px solid #f0f2f5", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                <span>{a.nome || "Ambiente"}</span><span style={numQ}>{a.aberto ? "não fechado" : `${tpFmt(tpAreaPoli(a.pts))} m²`}</span>
+              </button>
+            ) : null))}
+            <div style={{ ...linhaQ, fontWeight: 600 }}><span>Área útil{pavimentos.length > 1 ? ` (${pavAt.nome})` : ""}</span><span style={numQ}>{tpFmt(areas.filter((a) => a.tipo === "ambiente" && !a.aberto).reduce((t, a) => t + tpAreaPoli(a.pts), 0))} m²</span></div>
+            {pavimentos.length > 1 && pavsOrd.filter((p) => p.id !== pavAtivo).map((p) => {
+              const am = (dadosDe(p.id).areas || []).filter((a) => a.tipo === "ambiente" && a.pts && a.pts.length >= 3);
+              if (!am.length) return null;
+              return (
+                <div key={p.id} style={{ marginTop: 6 }}>
+                  <button onClick={() => irParaPav(p.id)} style={{ ...linhaQ, width: "100%", background: "none", border: "none", padding: "4px 0", cursor: "pointer", color: "#6b7280", fontFamily: "inherit", fontSize: 12 }}>
+                    <span>{p.nome} — {am.length} ambiente{am.length > 1 ? "s" : ""}</span><span style={numQ}>{tpFmt(am.filter((a) => !a.aberto).reduce((t, a) => t + tpAreaPoli(a.pts), 0))} m²</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+      ))}
+      {dobra("qtd", "Quantitativo", `${tpFmt(A - areaAberturas)} m² de parede`, (
+      <div>
+        <div style={linhaQ}><span>Paredes</span><span style={numQ}>{paredes.length} · {tpFmt(L)} m</span></div>
+        <div style={linhaQ}><span>Área de parede{areaAberturas > 0 ? " (bruta)" : ""}</span><span style={numQ}>{tpFmt(A)} m²</span></div>
+        {areaAberturas > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>aberturas · líquida</span><span style={numQ}>{tpFmt(areaAberturas)} · {tpFmt(A - areaAberturas)} m²</span></div>}
+        <div style={linhaQ}><span>Reboco 2 faces</span><span style={numQ}>{tpFmt((A - areaAberturas) * 2)} m²</span></div>
+        <div style={linhaQ}><span>Área construída (coberta)</span><span style={numQ}>{tpFmt(analise.coberta)} m²</span></div>
+        <div style={linhaQ}><span>Contrapiso</span><span style={numQ}>{tpFmt(areaCp)} m² · {tpFmt(volCp)} m³</span></div>
+        {(analise.temCobertura || (analise.pegada || []).length > 0) && areaCp > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>interno · externo</span><span style={numQ}>{tpFmt(analise.pisoInterno)} · {tpFmt(analise.pisoExterno)} m²</span></div>}
+        {analise.terreno > 0 && <div style={linhaQ}><span>Terreno</span><span style={numQ}>{tpFmt(analise.terreno)} m²</span></div>}
+        {analise.terreno > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>Taxa de ocupação</span><span style={numQ}>{tpFmt(analise.taxaOcupacao * 100, 1)}%</span></div>}
+        {analise.terreno > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>Área livre (sem piso nem cobertura)</span><span style={numQ}>{tpFmt(analise.permeavel)} m²</span></div>}
+        <div style={linhaQ}><span>Telhado (projeção · real)</span><span style={numQ}>{tpFmt(telProj)} · {tpFmt(telReal)} m²</span></div>
+        <div style={linhaQ}><span>Laje</span><span style={numQ}>{tpFmt(areaLj)} m² · {tpFmt(volLj)} m³</span></div>
+      </div>
+      ))}
+        </div>
+      )}
       {editPav && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8, padding: 8, border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff" }}>
           <div>
@@ -5902,57 +5965,6 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           </>}
         </>
       )}
-      {quadro.grupos.length > 0 && dobra("esq", "Esquadrias", `${quadro.grupos.reduce((t, g) => t + g.qtd, 0)} un`, (
-          <div>
-            {quadro.grupos.map((g) => (
-              <button key={g.codigo} onClick={() => { trocarFerramenta("selecionar"); setSel(g.ids.map((id) => "o" + id)); }}
-                style={{ ...linhaQ, width: "100%", background: "none", border: "none", borderBottom: "1px solid #f0f2f5", cursor: "pointer", fontFamily: "inherit", textAlign: "left", alignItems: "flex-start" }}>
-                <span style={{ minWidth: 0 }}>
-                  <strong style={{ color: "#111827" }}>{g.codigo}</strong> {g.rot}{g.mat === "madeira" ? " (madeira)" : ""}
-                  <span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>{tpFmt(g.larg)} × {tpFmt(g.alt)} m{g.peit ? ` · peitoril ${tpFmt(g.peit)}` : ""}</span>
-                </span>
-                <span style={numQ}>{g.qtd} un</span>
-              </button>
-            ))}
-          </div>
-      ))}
-      {areas.some((a) => a.tipo === "ambiente") && dobra("amb", "Ambientes", `${tpFmt(areas.filter((a) => a.tipo === "ambiente" && !a.aberto).reduce((t, a) => t + tpAreaPoli(a.pts), 0))} m²`, (
-          <div>
-            {areas.map((a, i) => (a.tipo === "ambiente" ? (
-              <button key={i} onClick={() => { trocarFerramenta("selecionar"); setSel(["a" + i]); }} style={{ ...linhaQ, width: "100%", background: "none", border: "none", borderBottom: "1px solid #f0f2f5", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
-                <span>{a.nome || "Ambiente"}</span><span style={numQ}>{a.aberto ? "não fechado" : `${tpFmt(tpAreaPoli(a.pts))} m²`}</span>
-              </button>
-            ) : null))}
-            <div style={{ ...linhaQ, fontWeight: 600 }}><span>Área útil{pavimentos.length > 1 ? ` (${pavAt.nome})` : ""}</span><span style={numQ}>{tpFmt(areas.filter((a) => a.tipo === "ambiente" && !a.aberto).reduce((t, a) => t + tpAreaPoli(a.pts), 0))} m²</span></div>
-            {pavimentos.length > 1 && pavsOrd.filter((p) => p.id !== pavAtivo).map((p) => {
-              const am = (dadosDe(p.id).areas || []).filter((a) => a.tipo === "ambiente" && a.pts && a.pts.length >= 3);
-              if (!am.length) return null;
-              return (
-                <div key={p.id} style={{ marginTop: 6 }}>
-                  <button onClick={() => irParaPav(p.id)} style={{ ...linhaQ, width: "100%", background: "none", border: "none", padding: "4px 0", cursor: "pointer", color: "#6b7280", fontFamily: "inherit", fontSize: 12 }}>
-                    <span>{p.nome} — {am.length} ambiente{am.length > 1 ? "s" : ""}</span><span style={numQ}>{tpFmt(am.filter((a) => !a.aberto).reduce((t, a) => t + tpAreaPoli(a.pts), 0))} m²</span>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-      ))}
-      {dobra("qtd", "Quantitativo", `${tpFmt(A - areaAberturas)} m² de parede`, (
-      <div>
-        <div style={linhaQ}><span>Paredes</span><span style={numQ}>{paredes.length} · {tpFmt(L)} m</span></div>
-        <div style={linhaQ}><span>Área de parede{areaAberturas > 0 ? " (bruta)" : ""}</span><span style={numQ}>{tpFmt(A)} m²</span></div>
-        {areaAberturas > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>aberturas · líquida</span><span style={numQ}>{tpFmt(areaAberturas)} · {tpFmt(A - areaAberturas)} m²</span></div>}
-        <div style={linhaQ}><span>Reboco 2 faces</span><span style={numQ}>{tpFmt((A - areaAberturas) * 2)} m²</span></div>
-        <div style={linhaQ}><span>Área construída (coberta)</span><span style={numQ}>{tpFmt(analise.coberta)} m²</span></div>
-        <div style={linhaQ}><span>Contrapiso</span><span style={numQ}>{tpFmt(areaCp)} m² · {tpFmt(volCp)} m³</span></div>
-        {(analise.temCobertura || (analise.pegada || []).length > 0) && areaCp > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>interno · externo</span><span style={numQ}>{tpFmt(analise.pisoInterno)} · {tpFmt(analise.pisoExterno)} m²</span></div>}
-        {analise.terreno > 0 && <div style={linhaQ}><span>Terreno</span><span style={numQ}>{tpFmt(analise.terreno)} m²</span></div>}
-        {analise.terreno > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>Taxa de ocupação</span><span style={numQ}>{tpFmt(analise.taxaOcupacao * 100, 1)}%</span></div>}
-        {analise.terreno > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>Área livre (sem piso nem cobertura)</span><span style={numQ}>{tpFmt(analise.permeavel)} m²</span></div>}
-        <div style={linhaQ}><span>Telhado (projeção · real)</span><span style={numQ}>{tpFmt(telProj)} · {tpFmt(telReal)} m²</span></div>
-        <div style={linhaQ}><span>Laje</span><span style={numQ}>{tpFmt(areaLj)} m² · {tpFmt(volLj)} m³</span></div>
-      </div>
-      ))}
       <div style={{ marginTop: 16, paddingTop: 10, borderTop: "1px solid #eef0f3", display: "flex", flexWrap: "wrap", gap: "6px 14px" }}>
         <button style={linkLat} onClick={() => setVerAtalhos(true)}>Atalhos (?)</button>
         <button style={linkLat} title="Copia o desenho deste projeto (paredes, áreas, ambientes) para colar na conversa de suporte e reproduzir um problema"
