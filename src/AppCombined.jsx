@@ -86549,7 +86549,23 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     window.addEventListener("pointermove", mover); window.addEventListener("pointerup", soltar);
   };
   const escolherDoca = (d) => { setDoca(d); salvarTela({ doca: d }); };
-  const icoTela = (ativo) => ({ width: 26, height: 24, borderRadius: 6, border: "none", background: ativo ? "#eef5ff" : "transparent", color: ativo ? TP_AZUL : "#4b5563", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 });
+  // ícones de linha (traço 1,5, sem preenchimento), todos 16 px em botões de 28 px:
+  // mesmo desenho nas duas barrinhas
+  const icoTela = (ativo) => ({ width: 28, height: 28, borderRadius: 7, border: "none", background: ativo ? "#eef5ff" : "transparent", color: ativo ? TP_AZUL : "#4b5563", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, fontFamily: "inherit" });
+  const barraVidro = { display: "flex", alignItems: "center", gap: 2, padding: 3, background: "rgba(255,255,255,0.92)", border: "1px solid #e5e7eb", borderRadius: 10, boxShadow: "0 1px 3px rgba(17,24,39,0.06)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" };
+  const Ico = ({ children }) => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>;
+  const ICO = {
+    lado: <Ico><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2" /><path d="M9.5 2.75v10.5" /></Ico>,
+    baixo: <Ico><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2" /><path d="M1.75 9h12.5" /></Ico>,
+    solta: <Ico><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2" /><rect x="7.5" y="7.25" width="4.75" height="4" rx="1" /></Ico>,
+    trocar: <Ico><path d="M2.5 5.5h10l-2.5-2.5" /><path d="M13.5 10.5h-10l2.5 2.5" /></Ico>,
+    fechar: <Ico><path d="M4 4l8 8M12 4l-8 8" /></Ico>,
+    alca: <Ico><circle cx="6" cy="4" r=".6" /><circle cx="10" cy="4" r=".6" /><circle cx="6" cy="8" r=".6" /><circle cx="10" cy="8" r=".6" /><circle cx="6" cy="12" r=".6" /><circle cx="10" cy="12" r=".6" /></Ico>,
+    planta: <Ico><rect x="2" y="2" width="12" height="12" rx="1.5" /><path d="M2 8h6.5V2M8.5 8v6" /></Ico>,
+    tresd: <Ico><path d="M8 1.75 13.75 5v6L8 14.25 2.25 11V5z" /><path d="M2.25 5 8 8.25 13.75 5M8 8.25v6" /></Ico>,
+    dividir: <Ico><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2" /><path d="M8 2.75v10.5" /></Ico>,
+    corte: <Ico><path d="M2.5 11.5h11" strokeDasharray="2.4 1.6" /><path d="M2.5 11.5V4M13.5 11.5V4" /><path d="M1 5.5 2.5 4 4 5.5M12 5.5 13.5 4 15 5.5" /></Ico>,
+  };
   // alças da janela solta: as 4 bordas e os 4 cantos mudam largura e altura
   const alcasJanela = docaEf === "livre" && (
     <>
@@ -86566,38 +86582,26 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // solta, a própria barrinha arrasta a janela
   const barraSegunda = (
     <div onPointerDown={docaEf === "livre" ? arrastoTela("mover") : undefined}
-      style={{ position: "absolute", top: 6, left: docaEf === "baixo" && !isMobile && !painelOculto ? 292 : 6, zIndex: 3, display: "flex", alignItems: "center", gap: 1, padding: 2, background: "rgba(255,255,255,0.92)", border: "1px solid #e5e7eb", borderRadius: 8, cursor: docaEf === "livre" ? "move" : "default", touchAction: "none" }}>
-      {docaEf === "livre" && <span aria-hidden="true" style={{ color: "#9ca3af", fontSize: 12, padding: "0 4px", letterSpacing: -1 }}>⋮⋮</span>}
-      <button onPointerDown={(e) => e.stopPropagation()} onClick={() => escolherDoca("direita")} title="Ao lado" aria-label="Segunda vista ao lado" style={icoTela(docaEf === "direita")}>
-        <svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><rect x="1" y="1" width="14" height="12" rx="2" /><path d="M9.5 1v12" /><rect x="9.5" y="1" width="5.5" height="12" fill="currentColor" opacity="0.25" stroke="none" /></svg>
-      </button>
-      <button onPointerDown={(e) => e.stopPropagation()} onClick={() => escolherDoca("baixo")} title="Embaixo" aria-label="Segunda vista embaixo" style={icoTela(docaEf === "baixo")}>
-        <svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><rect x="1" y="1" width="14" height="12" rx="2" /><path d="M1 8h14" /><rect x="1" y="8" width="14" height="5" fill="currentColor" opacity="0.25" stroke="none" /></svg>
-      </button>
-      <button onPointerDown={(e) => e.stopPropagation()} onClick={() => escolherDoca("livre")} title="Janela solta (arraste e redimensione)" aria-label="Segunda vista em janela solta" style={icoTela(docaEf === "livre")}>
-        <svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><rect x="1" y="1" width="14" height="12" rx="2" /><rect x="7" y="6" width="7" height="6" rx="1" fill="currentColor" opacity="0.25" /></svg>
-      </button>
-      <button onPointerDown={(e) => e.stopPropagation()} onClick={() => setTrocado((t) => !t)} title="Trocar: esta vira a vista grande" aria-label="Trocar as vistas" style={icoTela(false)}>
-        <svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 4.5h11l-3-3" /><path d="M14 9.5H3l3 3" /></svg>
-      </button>
-      <button onPointerDown={(e) => e.stopPropagation()} onClick={() => { setModo(modo === "ambos" ? "planta" : "planta"); setTrocado(false); }} title="Fechar a segunda vista" aria-label="Fechar a segunda vista" style={icoTela(false)}>
-        <svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M2 2l8 8M10 2 2 10" /></svg>
-      </button>
+      style={{ ...barraVidro, position: "absolute", top: 6, left: docaEf === "baixo" && !isMobile && !painelOculto ? 292 : 6, zIndex: 3, cursor: docaEf === "livre" ? "move" : "default", touchAction: "none" }}>
+      {docaEf === "livre" && <span style={{ ...icoTela(false), width: 18, color: "#9ca3af", cursor: "move" }}>{ICO.alca}</span>}
+      {[["direita", "Ao lado", ICO.lado], ["baixo", "Embaixo", ICO.baixo], ["livre", "Janela solta (arraste e redimensione)", ICO.solta]].map(([d, rot, ic]) => (
+        <button key={d} onPointerDown={(e) => e.stopPropagation()} onClick={() => escolherDoca(d)} title={rot} aria-label={d === "direita" ? "Segunda vista ao lado" : d === "baixo" ? "Segunda vista embaixo" : "Segunda vista em janela solta"} aria-pressed={docaEf === d} style={icoTela(docaEf === d)}>{ic}</button>
+      ))}
+      <span aria-hidden="true" style={{ width: 1, height: 16, background: "#e5e7eb", margin: "0 2px" }} />
+      <button onPointerDown={(e) => e.stopPropagation()} onClick={() => setTrocado((t) => !t)} title="Trocar: esta vira a vista grande" aria-label="Trocar as vistas" style={icoTela(false)}>{ICO.trocar}</button>
+      <button onPointerDown={(e) => e.stopPropagation()} onClick={() => { setModo("planta"); setTrocado(false); }} title="Fechar a segunda vista" aria-label="Fechar a segunda vista" style={icoTela(false)}>{ICO.fechar}</button>
     </div>
   );
-  // ícones de vista, no alto da tela: 2D, 3D, dividir (planta + 3D) e corte
+  // ícones de vista, no alto da tela: planta, 3D, dividir (planta + 3D) e corte
   const grupoVistas = (
-    <div style={{ display: "flex", alignItems: "center", gap: 2, padding: 2, background: "rgba(255,255,255,0.92)", border: "1px solid #e5e7eb", borderRadius: 9 }}>
+    <div style={barraVidro}>
       {[
-        { id: "planta", rot: "2D", dica: "Planta (2D)" },
-        { id: "3d", rot: "3D", dica: "3D" },
-        { id: "ambos", rot: null, dica: "Dividir a tela: planta + 3D" },
-        { id: "corte", rot: "Corte", dica: "Planta + corte" },
+        { id: "planta", ic: ICO.planta, dica: "Planta (2D)" },
+        { id: "3d", ic: ICO.tresd, dica: "3D" },
+        { id: "ambos", ic: ICO.dividir, dica: "Dividir a tela: planta + 3D" },
+        { id: "corte", ic: ICO.corte, dica: "Planta + corte" },
       ].map((v) => (
-        <button key={v.id} onClick={() => { setModo(v.id); setTrocado(false); }} title={v.dica} aria-label={v.dica} aria-pressed={modo === v.id}
-          style={{ minWidth: 30, height: 26, padding: "0 7px", borderRadius: 7, border: "none", background: modo === v.id ? "#eef5ff" : "transparent", color: modo === v.id ? TP_AZUL : "#374151", fontWeight: 600, fontSize: 12, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {v.rot || <svg width="18" height="14" viewBox="0 0 18 14" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><rect x="1" y="1" width="16" height="12" rx="2" /><path d="M9 1v12" /></svg>}
-        </button>
+        <button key={v.id} onClick={() => { setModo(v.id); setTrocado(false); }} title={v.dica} aria-label={v.dica} aria-pressed={modo === v.id} style={icoTela(modo === v.id)}>{v.ic}</button>
       ))}
     </div>
   );
@@ -87409,10 +87413,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             <canvas ref={v3dRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none" }}
               onContextMenu={(e) => e.preventDefault()}
               onPointerDown={v3dDown} onPointerMove={v3dMove} onPointerUp={v3dUp} />
-            <div style={{ position: "absolute", right: 8, bottom: sel.length && (isMobile || vistaPrinc === "3d" || docaEf === "baixo") ? 62 : 8, zIndex: 2, display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 1, padding: 2, background: "rgba(255,255,255,0.9)", border: "1px solid #e5e7eb", borderRadius: 8, maxWidth: "calc(100% - 16px)" }}>
+            <div style={{ position: "absolute", right: 8, bottom: sel.length && (isMobile || vistaPrinc === "3d" || docaEf === "baixo") ? 62 : 8, zIndex: 2, ...barraVidro, flexWrap: "wrap", justifyContent: "flex-end", maxWidth: "calc(100% - 16px)" }}>
               {VISTAS_3D.map((v) => (
                 <button key={v.id} onClick={() => irVista3d(v)} title={v.id === "persp" ? "Perspectiva" : `Vista ${v.rot.replace(".", "")}`.replace("Esq", "esquerda").replace("Dir", "direita")}
-                  style={{ height: 24, padding: "0 7px", border: "none", borderRadius: 6, background: "transparent", color: "#374151", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>{v.rot}</button>
+                  style={{ height: 28, padding: "0 8px", border: "none", borderRadius: 7, background: "transparent", color: "#4b5563", fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>{v.rot}</button>
               ))}
             </div>
             {erro3d && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#6b7280", fontSize: 13, padding: 16, textAlign: "center" }}>{erro3d} Verifique a conexão e abra o projeto de novo.</div>}
