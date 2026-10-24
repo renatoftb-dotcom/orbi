@@ -1761,7 +1761,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const asideRef = useRef(null);
   const [painelOculto, setPainelOculto] = useState(false); // desktop: painel suspenso recolhido
   // painel lateral: lista de ferramentas aberta pelo "+" e as fixadas (lembradas neste navegador)
-  const [ferrAberto, setFerrAberto] = useState(false);
+  const [ferrAbertoM, setFerrAbertoM] = useState(false), [ferrAbertoC, setFerrAbertoC] = useState(false); // lista aberta: no menu e na cópia da prancheta
   const [editPav, setEditPav] = useState(false);
   const [obraAberta, setObraAberta] = useState(false); // painel: botão Obra aberto
   // "+" solto na prancheta: posição (fração da área do desenho), lembrada neste navegador
@@ -5561,7 +5561,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     window.addEventListener("pointermove", mover); window.addEventListener("pointerup", soltar); window.addEventListener("pointercancel", soltar);
   };
   // bloco de ferramentas: no menu ou solto na prancheta (o "+" arrasta de um lugar para o outro)
-  const blocoFerramentas = (noCanvas) => (
+  const blocoFerramentas = (noCanvas) => { const ferrAberto = noCanvas ? ferrAbertoC : ferrAbertoM, setFerrAberto = noCanvas ? setFerrAbertoC : setFerrAbertoM; return (
     <>
       {/* "+" abre a lista de ferramentas logo abaixo; escolher uma fecha a
           lista e deixa à mostra só a ferramenta em uso (em azul). Selecionar é
@@ -5583,7 +5583,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 3 }}>
             <button aria-label={ferrAberto ? "Fechar a lista de ferramentas" : "Abrir a lista de ferramentas"} aria-expanded={ferrAberto}
               onPointerDown={iniciarArrasteMais} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setFerrAberto((x) => !x); }}
-              title={ferrAberto ? "Fechar a lista" : noCanvas ? "Ferramentas (arraste para mover; solte no menu para guardar)" : "Ferramentas (arraste para a prancheta para deixar à mão)"}
+              title={ferrAberto ? "Fechar a lista" : noCanvas ? "Ferramentas (arraste para mover; solte no menu para tirar da prancheta)" : "Ferramentas (arraste para a prancheta para ter uma cópia à mão)"}
               style={{ alignSelf: "flex-start", width: 32, height: 32, borderRadius: "50%", touchAction: "none", border: `1px solid ${ferrAberto ? TP_AZUL : "#e5e7eb"}`, background: ferrAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "transform .15s", transform: ferrAberto ? "rotate(45deg)" : "none" }}>
               <svg width="14" height="14" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke={ferrAberto ? TP_AZUL : "#111827"} strokeWidth="2" strokeLinecap="round" /></svg>
             </button>
@@ -5612,7 +5612,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       )}
 
     </>
-  );
+  ); };
   const menu = (
     <aside ref={asideRef} style={{ width: isMobile ? "min(86vw, 300px)" : 268, flexShrink: 0, background: "#fff", borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", height: "100%", boxSizing: "border-box",
       paddingTop: "max(14px, env(safe-area-inset-top, 0px))", paddingBottom: "max(14px, env(safe-area-inset-bottom, 0px))", paddingLeft: "max(16px, env(safe-area-inset-left, 0px))", paddingRight: 16, overflowY: "auto",
@@ -5640,9 +5640,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       </div>
 
       <div style={secao}>Ferramenta</div>
-      {ferrSolta
-        ? <div style={{ fontSize: 11.5, color: "#9ca3af", lineHeight: 1.4, border: "1px dashed #d1d5db", borderRadius: 8, padding: "6px 8px" }}>Ferramentas na prancheta. Arraste o + de volta para cá para guardar.</div>
-        : blocoFerramentas(false)}
+      {blocoFerramentas(false)}
 
       {(ferramenta === "parede" || ferramenta === "laje") && (
         <div style={{ display: "grid", gridTemplateColumns: ferramenta === "parede" ? "1fr 1fr" : "1fr", gap: 8, marginTop: 8 }}>
@@ -5922,7 +5920,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           marginBottom: "env(safe-area-inset-bottom, 0px)", marginRight: "env(safe-area-inset-right, 0px)" }}>
           {!isMobile && <div style={{ position: "absolute", top: 10, right: 10, zIndex: 5 }}>{grupoVistas}</div>}
           {ferrSolta && (
-            <div style={{ position: "absolute", zIndex: 6, left: `min(${ferrSolta.x * 100}%, calc(100% - 236px))`, top: `min(${ferrSolta.y * 100}%, calc(100% - 50px))`, width: ferrAberto || ferramenta !== "selecionar" ? 226 : "auto", padding: 6, boxSizing: "border-box",
+            <div style={{ position: "absolute", zIndex: 6, left: `min(${ferrSolta.x * 100}%, calc(100% - 236px))`, top: `min(${ferrSolta.y * 100}%, calc(100% - 50px))`, width: ferrAbertoC || ferramenta !== "selecionar" ? 226 : "auto", padding: 6, boxSizing: "border-box",
               background: "rgba(255,255,255,0.6)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", border: "1px solid rgba(229,231,235,0.8)", borderRadius: 12, maxHeight: "calc(100% - 20px)", overflowY: "auto" }}>
               {blocoFerramentas(true)}
             </div>
