@@ -83160,6 +83160,16 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const [painelOculto, setPainelOculto] = useState(false); // desktop: painel suspenso recolhido
   // painel lateral: lista de ferramentas aberta pelo "+" e as fixadas (lembradas neste navegador)
   const [ferrAberto, setFerrAberto] = useState(false);
+  const [editPav, setEditPav] = useState(false);
+  // tela dividida: a segunda vista (3D ou corte) fica à direita, embaixo ou solta
+  // numa janela que se arrasta e redimensiona; "trocado" inverte qual é a grande
+  const lerTela = () => { try { return JSON.parse(localStorage.getItem("vicke-projetar-tela") || "null") || {}; } catch (err) { return {}; } };
+  const [doca, setDoca] = useState(() => { const v = lerTela().doca; return v === "direita" || v === "baixo" || v === "livre" ? v : null; });
+  const [fracao, setFracao] = useState(() => { const v = +lerTela().fracao; return v >= 0.2 && v <= 0.8 ? v : 0.5; });
+  const [janela, setJanela] = useState(() => { const j = lerTela().janela; return j && j.w > 0.1 && j.h > 0.1 ? j : { x: 0.56, y: 0.5, w: 0.4, h: 0.44 }; });
+  const [trocado, setTrocado] = useState(false);
+  const telaArea = useRef(null); // painel: detalhes do pavimento (nome, nível, excluir)
+  const [dobrasAbertas, setDobrasAbertas] = useState(() => { try { const v = JSON.parse(localStorage.getItem("vicke-projetar-dobras") || "null"); return Array.isArray(v) ? v : []; } catch (err) { return []; } });
   // Pavimentos: lista (id, nome, nível) e o desenho de cada um. O pavimento
   // ativo fica em paredes/areas (o editor inteiro trabalha nele); os outros
   // ficam guardados em dadosPav. O térreo continua também em projeto.paredes/areas.
@@ -86377,7 +86387,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // ---------- estilos ----------
   const btn = { padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#111827", fontSize: 13.5, fontWeight: 500, cursor: "pointer", minHeight: 36, fontFamily: "inherit" };
   const btnPerigo = { ...btn, background: "#b91c1c", borderColor: "#b91c1c", color: "#fff" };
-  const secao = { fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "#9ca3af", margin: "18px 0 8px" };
+  const secao = { fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "#9ca3af", margin: "14px 0 6px" };
   const lbl = { fontSize: 12, color: "#4b5563", marginBottom: 4 };
   const inp = { width: "100%", boxSizing: "border-box", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, fontVariantNumeric: "tabular-nums", fontFamily: "inherit" };
   const linhaQ = { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, padding: "6px 0", borderBottom: "1px solid #f0f2f5", fontSize: 13 };
@@ -86403,6 +86413,87 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   ];
   const MODOS = [{ id: "planta", rotulo: "Planta" }, { id: "ambos", rotulo: "Planta + 3D" }, { id: "3d", rotulo: "3D" }, { id: "corte", rotulo: "Planta + Corte" }];
   const mostraPlanta = modo !== "3d", mostra3d = modo === "ambos" || modo === "3d", mostraCorte = modo === "corte";
+  // qual vista é a grande e qual é a segunda (tela dividida)
+  const dividido = modo === "ambos" || modo === "corte";
+  const vistaSec = modo === "ambos" ? "3d" : modo === "corte" ? "corte" : null;
+  const vistaPrinc = !dividido ? (modo === "3d" ? "3d" : "planta") : (trocado ? vistaSec : "planta");
+  const vistaSegunda = dividido ? (trocado ? "planta" : vistaSec) : null;
+  const docaEf = doca || (isMobile ? "baixo" : "direita");
+  const salvarTela = (mud) => { try { localStorage.setItem("vicke-projetar-tela", JSON.stringify({ doca, fracao, janela, ...mud })); } catch (err) { /* sem armazenamento */ } };
+  const estiloVista = (id) => {
+    const base = { ...pane, position: "absolute" };
+    if (id === vistaPrinc) {
+      if (!dividido || docaEf === "livre") return { ...base, inset: 0 };
+      if (docaEf === "direita") return { ...base, left: 0, top: 0, bottom: 0, width: `calc(${(1 - fracao) * 100}% - 3px)` };
+      return { ...base, left: 0, top: 0, right: 0, height: `calc(${(1 - fracao) * 100}% - 3px)` };
+    }
+    if (id === vistaSegunda) {
+      if (docaEf === "livre") return { ...base, left: `${janela.x * 100}%`, top: `${janela.y * 100}%`, width: `${janela.w * 100}%`, height: `${janela.h * 100}%`, zIndex: 4, borderRadius: 10, border: "1px solid #d1d5db", boxShadow: "0 10px 30px rgba(0,0,0,0.18)" };
+      if (docaEf === "direita") return { ...base, top: 0, bottom: 0, right: 0, width: `calc(${fracao * 100}% - 3px)` };
+      return { ...base, left: 0, right: 0, bottom: 0, height: `calc(${fracao * 100}% - 3px)` };
+    }
+    return { ...base, inset: 0, display: "none" };
+  };
+  // arrastar a divisória / mover e redimensionar a janela solta
+  const arrastoTela = (tipo) => (e) => {
+    const area = telaArea.current; if (!area) return;
+    e.preventDefault(); e.stopPropagation();
+    const r = area.getBoundingClientRect(), x0 = e.clientX, y0 = e.clientY, j0 = { ...janela };
+    const mover = (ev) => {
+      const fx = (ev.clientX - x0) / r.width, fy = (ev.clientY - y0) / r.height;
+      if (tipo === "divisoria") {
+        const f = docaEf === "direita" ? 1 - (ev.clientX - r.left) / r.width : 1 - (ev.clientY - r.top) / r.height;
+        setFracao(Math.max(0.2, Math.min(0.8, f)));
+      } else if (tipo === "mover") {
+        setJanela({ ...j0, x: Math.max(0, Math.min(1 - j0.w, j0.x + fx)), y: Math.max(0, Math.min(1 - j0.h, j0.y + fy)) });
+      } else {
+        setJanela({ ...j0, w: Math.max(0.18, Math.min(1 - j0.x, j0.w + fx)), h: Math.max(0.18, Math.min(1 - j0.y, j0.h + fy)) });
+      }
+    };
+    const soltar = () => { window.removeEventListener("pointermove", mover); window.removeEventListener("pointerup", soltar); setTimeout(() => { setFracao((f) => { setJanela((jj) => { salvarTela({ fracao: f, janela: jj }); return jj; }); return f; }); }, 0); };
+    window.addEventListener("pointermove", mover); window.addEventListener("pointerup", soltar);
+  };
+  const escolherDoca = (d) => { setDoca(d); salvarTela({ doca: d }); };
+  const icoTela = (ativo) => ({ width: 26, height: 24, borderRadius: 6, border: "none", background: ativo ? "#eef5ff" : "transparent", color: ativo ? TP_AZUL : "#4b5563", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 });
+  // barrinha da segunda vista: onde ela fica (lado, embaixo, solta) e trocar com a grande;
+  // solta, a própria barrinha arrasta a janela
+  const barraSegunda = (
+    <div onPointerDown={docaEf === "livre" ? arrastoTela("mover") : undefined}
+      style={{ position: "absolute", top: 6, left: docaEf === "baixo" && !isMobile && !painelOculto ? 292 : 6, zIndex: 3, display: "flex", alignItems: "center", gap: 1, padding: 2, background: "rgba(255,255,255,0.92)", border: "1px solid #e5e7eb", borderRadius: 8, cursor: docaEf === "livre" ? "move" : "default", touchAction: "none" }}>
+      {docaEf === "livre" && <span aria-hidden="true" style={{ color: "#9ca3af", fontSize: 12, padding: "0 4px", letterSpacing: -1 }}>⋮⋮</span>}
+      <button onPointerDown={(e) => e.stopPropagation()} onClick={() => escolherDoca("direita")} title="Ao lado" aria-label="Segunda vista ao lado" style={icoTela(docaEf === "direita")}>
+        <svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><rect x="1" y="1" width="14" height="12" rx="2" /><path d="M9.5 1v12" /><rect x="9.5" y="1" width="5.5" height="12" fill="currentColor" opacity="0.25" stroke="none" /></svg>
+      </button>
+      <button onPointerDown={(e) => e.stopPropagation()} onClick={() => escolherDoca("baixo")} title="Embaixo" aria-label="Segunda vista embaixo" style={icoTela(docaEf === "baixo")}>
+        <svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><rect x="1" y="1" width="14" height="12" rx="2" /><path d="M1 8h14" /><rect x="1" y="8" width="14" height="5" fill="currentColor" opacity="0.25" stroke="none" /></svg>
+      </button>
+      <button onPointerDown={(e) => e.stopPropagation()} onClick={() => escolherDoca("livre")} title="Janela solta (arraste e redimensione)" aria-label="Segunda vista em janela solta" style={icoTela(docaEf === "livre")}>
+        <svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><rect x="1" y="1" width="14" height="12" rx="2" /><rect x="7" y="6" width="7" height="6" rx="1" fill="currentColor" opacity="0.25" /></svg>
+      </button>
+      <button onPointerDown={(e) => e.stopPropagation()} onClick={() => setTrocado((t) => !t)} title="Trocar: esta vira a vista grande" aria-label="Trocar as vistas" style={icoTela(false)}>
+        <svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 4.5h11l-3-3" /><path d="M14 9.5H3l3 3" /></svg>
+      </button>
+      <button onPointerDown={(e) => e.stopPropagation()} onClick={() => { setModo(modo === "ambos" ? "planta" : "planta"); setTrocado(false); }} title="Fechar a segunda vista" aria-label="Fechar a segunda vista" style={icoTela(false)}>
+        <svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M2 2l8 8M10 2 2 10" /></svg>
+      </button>
+    </div>
+  );
+  // ícones de vista, no alto da tela: 2D, 3D, dividir (planta + 3D) e corte
+  const grupoVistas = (
+    <div style={{ display: "flex", alignItems: "center", gap: 2, padding: 2, background: "rgba(255,255,255,0.92)", border: "1px solid #e5e7eb", borderRadius: 9 }}>
+      {[
+        { id: "planta", rot: "2D", dica: "Planta (2D)" },
+        { id: "3d", rot: "3D", dica: "3D" },
+        { id: "ambos", rot: null, dica: "Dividir a tela: planta + 3D" },
+        { id: "corte", rot: "Corte", dica: "Planta + corte" },
+      ].map((v) => (
+        <button key={v.id} onClick={() => { setModo(v.id); setTrocado(false); }} title={v.dica} aria-label={v.dica} aria-pressed={modo === v.id}
+          style={{ minWidth: 30, height: 26, padding: "0 7px", borderRadius: 7, border: "none", background: modo === v.id ? "#eef5ff" : "transparent", color: modo === v.id ? TP_AZUL : "#374151", fontWeight: 600, fontSize: 12, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {v.rot || <svg width="18" height="14" viewBox="0 0 18 14" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><rect x="1" y="1" width="16" height="12" rx="2" /><path d="M9 1v12" /></svg>}
+        </button>
+      ))}
+    </div>
+  );
 
   const desenhoAtivo = ferramenta === "parede" || tpEhPoli(ferramenta);
   const status = (ferramenta === "separador" && dividir) ? `Dividindo "${(areas[dividir.ai] || {}).nome || "ambiente"}": clique de uma parede até a outra (pode quebrar a linha). Esc cancela.`
@@ -86735,22 +86826,48 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     </>
   );
 
+  // seção que dobra no painel: título + resumo à direita; aberta/fechada lembrada neste navegador
+  const icoLat = { width: 30, height: 30, flexShrink: 0, borderRadius: 8, border: "1px solid #e5e7eb", background: "#fff", color: "#374151", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 };
+  const linkLat = { border: "none", background: "none", padding: 0, fontSize: 12, color: "#4b5563", cursor: "pointer", fontFamily: "inherit", textDecoration: "underline", textDecorationColor: "#d1d5db", textUnderlineOffset: 3 };
+  const dobra = (id, titulo, resumo, conteudo) => {
+    const aberta = dobrasAbertas.includes(id);
+    const alternar = () => setDobrasAbertas((xs) => { const n = xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]; try { localStorage.setItem("vicke-projetar-dobras", JSON.stringify(n)); } catch (err) { /* sem armazenamento */ } return n; });
+    return (
+      <div style={{ marginTop: 10, borderTop: "1px solid #eef0f3" }}>
+        <button onClick={alternar} aria-expanded={aberta}
+          style={{ width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "8px 0 4px", border: "none", background: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+          <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "#9ca3af", flex: 1 }}>{titulo}</span>
+          {resumo && <span style={{ fontSize: 12, color: "#6b7280", fontVariantNumeric: "tabular-nums" }}>{resumo}</span>}
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" style={{ transform: aberta ? "rotate(180deg)" : "none", transition: "transform .15s" }}><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="#9ca3af" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </button>
+        {aberta && conteudo}
+      </div>
+    );
+  };
   const menu = (
     <aside ref={asideRef} style={{ width: isMobile ? "min(86vw, 300px)" : 268, flexShrink: 0, background: "#fff", borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", height: "100%", boxSizing: "border-box",
       paddingTop: "max(14px, env(safe-area-inset-top, 0px))", paddingBottom: "max(14px, env(safe-area-inset-bottom, 0px))", paddingLeft: "max(16px, env(safe-area-inset-left, 0px))", paddingRight: 16, overflowY: "auto",
       ...(isMobile ? { position: "absolute", top: 0, left: 0, bottom: 0, zIndex: 3, boxShadow: "4px 0 20px rgba(0,0,0,0.15)", transform: menuAberto ? "none" : "translateX(-105%)", transition: "transform .2s ease" }
         // desktop: painel suspenso sobre o desenho (o projeto passa por baixo)
-        : { position: "absolute", top: 10, left: 10, bottom: 10, height: "auto", zIndex: 3, borderRight: "none", border: "1px solid #e5e7eb", borderRadius: 12, background: "rgba(255,255,255,0.96)", boxShadow: "0 6px 24px rgba(0,0,0,0.12)", paddingTop: 12, paddingBottom: 12, paddingLeft: 14, paddingRight: 14, transform: painelOculto ? "translateX(calc(-100% - 20px))" : "none", transition: "transform .2s ease" }) }}>
+        : { position: "absolute", top: 10, left: 10, height: "auto", maxHeight: "calc(100% - 20px)", zIndex: 3, borderRight: "none", border: "1px solid rgba(229,231,235,0.7)", borderRadius: 12, background: "rgba(255,255,255,0.5)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", boxShadow: "none", scrollbarWidth: "thin", paddingTop: 12, paddingBottom: 12, paddingLeft: 14, paddingRight: 14, transform: painelOculto ? "translateX(calc(-100% - 20px))" : "none", transition: "transform .2s ease" }) }}>
       {!isMobile && (
         <button onClick={() => setPainelOculto(true)} aria-label="Recolher o painel" title="Recolher o painel (o desenho ocupa a tela toda)"
           style={{ position: "absolute", top: 8, right: 8, width: 26, height: 26, borderRadius: 7, border: "1px solid #e5e7eb", background: "#fff", cursor: "pointer", color: "#4b5563", fontSize: 14, lineHeight: 1, padding: 0 }}>‹</button>
       )}
-      <button onClick={onVoltar} style={{ ...btn, border: "none", background: "#f3f4f6", textAlign: "left", display: "flex", alignItems: "center", gap: 8, ...(isMobile ? {} : { marginRight: 30 }) }}>
-        <span aria-hidden="true">←</span> Menu principal
-      </button>
-      <div style={{ marginTop: 16 }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: "#111827", lineHeight: 1.25, wordBreak: "break-word" }}>{projeto.nome}</div>
-        <div style={{ fontSize: 12.5, color: "#6b7280", marginTop: 3 }}>{nomeCliente || "Sem cliente"}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, paddingRight: isMobile ? 0 : 30 }}>
+        <button onClick={onVoltar} aria-label="Voltar ao menu principal" title="Menu principal" style={icoLat}>
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 4 6 10l6 6" /></svg>
+        </button>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={projeto.nome}>{projeto.nome}</div>
+          <div style={{ fontSize: 11.5, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nomeCliente || "Sem cliente"}</div>
+        </div>
+        <button onClick={desfazer} disabled={!historico.current.length} aria-label="Desfazer" title="Desfazer (Ctrl+Z)" style={{ ...icoLat, opacity: historico.current.length ? 1 : 0.4 }}>
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 5 3 9l4 4" /><path d="M3 9h9a5 5 0 0 1 0 10h-2" /></svg>
+        </button>
+        <button onClick={refazer} disabled={!futuro.current.length} aria-label="Refazer" title="Refazer (Ctrl+Y)" style={{ ...icoLat, opacity: futuro.current.length ? 1 : 0.4 }}>
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M13 5l4 4-4 4" /><path d="M17 9H8a5 5 0 0 0 0 10h2" /></svg>
+        </button>
       </div>
 
       <div style={secao}>Ferramenta</div>
@@ -86800,10 +86917,28 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       {poli.length >= 3 && (
         <button onClick={finalizarPoli} style={{ ...btn, marginTop: 8, background: TP_AZUL, borderColor: TP_AZUL, color: "#fff" }}>Fechar {ferramenta === "laje" ? "laje" : ferramenta === "telhado" ? "telhado" : ferramenta === "terreno" ? "terreno" : "contorno"}</button>
       )}
-      {/* dica da ferramenta (antes no texto de cima da tela) */}
-      {(ferramenta !== "selecionar" || sel.length > 0 || inicio || poli.length > 0) && status && (
-        <div style={{ fontSize: 11.5, color: "#4b5563", lineHeight: 1.45, marginTop: 8, background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: 8, padding: "6px 8px" }}>{status}</div>
+
+      {(ferramenta === "parede" || ferramenta === "laje") && (
+        <div style={{ display: "grid", gridTemplateColumns: ferramenta === "parede" ? "1fr 1fr" : "1fr", gap: 8, marginTop: 8 }}>
+          {ferramenta === "parede" && <div><div style={lbl}>Espessura (cm)</div><input id="tp-esp" style={inp} inputMode="decimal" value={esp} onChange={(e) => setEsp(e.target.value)} /></div>}
+          <div title="A laje nova entra no nível dessa altura, com 10 cm; o contrapiso, no nível 0 com 5 cm. Dá para mudar depois na laje selecionada."><div style={lbl}>{ferramenta === "parede" ? "Altura (m)" : "Laje no nível (m)"}</div><input id="tp-alt" style={inp} inputMode="decimal" value={alt} onChange={(e) => setAlt(e.target.value)} /></div>
+        </div>
       )}
+      {(inicio || poli.length > 0) && (
+        <button style={{ ...btn, width: "100%", marginTop: 8, minHeight: 32, fontSize: 12.5, background: TP_AZUL, borderColor: TP_AZUL, color: "#fff" }} onClick={finalizar}>Finalizar traço <span style={{ opacity: 0.75 }}>(Enter)</span></button>
+      )}
+      {ferramenta === "escada" && (<>
+        <div style={secao}>Nova escada</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+          {TP_ESCADA_FORMAS.map((f) => (
+            <button key={f.id} onClick={() => setNovaEscada({ ...novaEscada, forma: f.id })}
+              style={{ ...btn, minHeight: 32, fontSize: 12.5, borderColor: novaEscada.forma === f.id ? TP_AZUL : "#e5e7eb", background: novaEscada.forma === f.id ? "#eef5ff" : "#fff", color: novaEscada.forma === f.id ? TP_AZUL : "#111827" }}>{f.rotulo}</button>
+          ))}
+          <TpCampo id="tp-ne-larg" rotulo="Largura (m)" valor={novaEscada.largura} onConfirmar={(v) => setNovaEscada({ ...novaEscada, largura: Math.max(0.6, v) })} />
+          {novaEscada.forma !== "reta" && <button onClick={() => setNovaEscada({ ...novaEscada, giro: -(novaEscada.giro || 1) })} style={{ ...btn, minHeight: 32, fontSize: 12.5, alignSelf: "end" }}>{novaEscada.forma === "caracol" ? (novaEscada.giro >= 0 ? "Gira horário" : "Gira anti-horário") : (novaEscada.giro >= 0 ? "Vira à direita" : "Vira à esquerda")}</button>}
+          <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#4b5563", lineHeight: 1.4 }}>Desnível {tpFmt(alturaEscada())} m (até o pavimento de cima). Degraus calculados pela fórmula de Blondel.</div>
+        </div>
+      </>)}
 
       {ferramenta === "esquadria" && (() => {
         const t = tpEsq(tipoEsq), dm = dimsEsq[tipoEsq] || t;
@@ -86837,35 +86972,30 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
       {propriedades}
 
-      {quadro.grupos.length > 0 && (
-        <>
-          <div style={secao}>Quadro de esquadrias</div>
-          <div>
-            {quadro.grupos.map((g) => (
-              <button key={g.codigo} onClick={() => { trocarFerramenta("selecionar"); setSel(g.ids.map((id) => "o" + id)); }}
-                style={{ ...linhaQ, width: "100%", background: "none", border: "none", borderBottom: "1px solid #f0f2f5", cursor: "pointer", fontFamily: "inherit", textAlign: "left", alignItems: "flex-start" }}>
-                <span style={{ minWidth: 0 }}>
-                  <strong style={{ color: "#111827" }}>{g.codigo}</strong> {g.rot}{g.mat === "madeira" ? " (madeira)" : ""}
-                  <span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>{tpFmt(g.larg)} × {tpFmt(g.alt)} m{g.peit ? ` · peitoril ${tpFmt(g.peit)}` : ""}</span>
-                </span>
-                <span style={numQ}>{g.qtd} un</span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+      <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 14, fontSize: 12, color: "#4b5563" }} title="Tamanho das anotações (cotas, nomes, esquadrias) como na prancha impressa">
+        Escala da planta
+        <select id="tp-escala" value={String(escala)} onChange={(e) => setEscala(+e.target.value)}
+          style={{ padding: "3px 6px", border: "1px solid #e5e7eb", borderRadius: 7, fontSize: 12, fontFamily: "inherit", background: "#fff" }}>
+          {[20, 25, 50, 75, 100, 200].map((n) => <option key={n} value={n}>1:{n}</option>)}
+        </select>
+      </label>
 
-      <div style={secao}>Pavimentos</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
-        {[...pavsOrd].reverse().map((p) => (
-          <button key={p.id} onClick={() => { irParaPav(p.id); if (isMobile) setMenuAberto(false); }}
-            style={{ ...btn, textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", borderColor: p.id === pavAtivo ? TP_AZUL : "#e5e7eb", background: p.id === pavAtivo ? "#eef5ff" : "#fff", color: p.id === pavAtivo ? TP_AZUL : "#111827", fontWeight: p.id === pavAtivo ? 600 : 500 }}>
-            <span>{p.nome}</span><span style={{ fontSize: 12, color: "#6b7280", fontWeight: 500 }}>nível {tpFmt(p.nivel)}</span>
+      <div style={{ ...secao, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span>Pavimentos</span>
+        {pavimentos.length > 1 && <button onClick={() => setEditPav((x) => !x)} aria-label="Editar pavimento" title="Nome, nível, excluir e o que aparece no 3D"
+          style={{ border: "none", background: "none", cursor: "pointer", color: editPav ? TP_AZUL : "#9ca3af", fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", padding: 0, fontFamily: "inherit" }}>{editPav ? "Fechar" : "Editar"}</button>}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+        {pavsOrd.map((p) => (
+          <button key={p.id} onClick={() => { irParaPav(p.id); if (isMobile) setMenuAberto(false); }} title={`${p.nome} · nível ${tpFmt(p.nivel)} (Page Up / Page Down troca)`}
+            style={{ ...btn, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 999, borderColor: p.id === pavAtivo ? TP_AZUL : "#e5e7eb", background: p.id === pavAtivo ? "#eef5ff" : "#fff", color: p.id === pavAtivo ? TP_AZUL : "#374151", fontWeight: p.id === pavAtivo ? 600 : 500 }}>
+            {p.nome}
           </button>
         ))}
-        <button onClick={() => { novoPavimento(); if (isMobile) setMenuAberto(false); }} style={{ ...btn, minHeight: 32, fontSize: 12.5, color: TP_AZUL }}>+ Novo pavimento acima</button>
+        <button onClick={() => { novoPavimento(); if (isMobile) setMenuAberto(false); }} aria-label="Novo pavimento acima" title="Novo pavimento acima (copia as paredes de fora e cria a laje)"
+          style={{ ...btn, minHeight: 28, width: 28, padding: 0, fontSize: 15, borderRadius: 999, borderColor: "#e5e7eb", color: "#374151" }}>+</button>
       </div>
-      {pavimentos.length > 1 && (
+      {pavimentos.length > 1 && editPav && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
           <div>
             <label htmlFor="tp-pav-nome" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>Nome</label>
@@ -86889,68 +87019,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               <option value="todos">Todos os pavimentos</option><option value="ate">Até o pavimento ativo (corta acima)</option><option value="so">Só o pavimento ativo</option>
             </select>
           </div>
-          <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#6b7280" }}>Page Up / Page Down troca de pavimento.</div>
         </div>
       )}
 
-      <div style={secao}>Visualização</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
-        {MODOS.map((m) => (
-          <button key={m.id} onClick={() => { setModo(m.id); if (isMobile) setMenuAberto(false); }}
-            style={{ ...btn, textAlign: "left", borderColor: modo === m.id ? TP_AZUL : "#e5e7eb", background: modo === m.id ? "#eef5ff" : "#fff", color: modo === m.id ? TP_AZUL : "#111827", fontWeight: modo === m.id ? 600 : 500 }}>
-            {m.rotulo}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ marginTop: 8 }}>
-        <label htmlFor="tp-escala" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>Escala da planta (tamanho das anotações)</label>
-        <select id="tp-escala" value={String(escala)} onChange={(e) => setEscala(+e.target.value)}
-          style={{ width: "100%", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit", background: "#fff" }}>
-          {[20, 25, 50, 75, 100, 200].map((n) => <option key={n} value={n}>1:{n}</option>)}
-        </select>
-      </div>
-
-      {ferramenta === "escada" && (<>
-        <div style={secao}>Nova escada</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-          {TP_ESCADA_FORMAS.map((f) => (
-            <button key={f.id} onClick={() => setNovaEscada({ ...novaEscada, forma: f.id })}
-              style={{ ...btn, minHeight: 32, fontSize: 12.5, borderColor: novaEscada.forma === f.id ? TP_AZUL : "#e5e7eb", background: novaEscada.forma === f.id ? "#eef5ff" : "#fff", color: novaEscada.forma === f.id ? TP_AZUL : "#111827" }}>{f.rotulo}</button>
-          ))}
-          <TpCampo id="tp-ne-larg" rotulo="Largura (m)" valor={novaEscada.largura} onConfirmar={(v) => setNovaEscada({ ...novaEscada, largura: Math.max(0.6, v) })} />
-          {novaEscada.forma !== "reta" && <button onClick={() => setNovaEscada({ ...novaEscada, giro: -(novaEscada.giro || 1) })} style={{ ...btn, minHeight: 32, fontSize: 12.5, alignSelf: "end" }}>{novaEscada.forma === "caracol" ? (novaEscada.giro >= 0 ? "Gira horário" : "Gira anti-horário") : (novaEscada.giro >= 0 ? "Vira à direita" : "Vira à esquerda")}</button>}
-          <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#4b5563", lineHeight: 1.4 }}>Desnível {tpFmt(alturaEscada())} m (até o pavimento de cima). Degraus calculados pela fórmula de Blondel.</div>
-        </div>
-      </>)}
-
-      <div style={secao}>Nova parede</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-        <div><div style={lbl}>Espessura (cm)</div><input id="tp-esp" style={inp} inputMode="decimal" value={esp} onChange={(e) => setEsp(e.target.value)} /></div>
-        <div><div style={lbl}>Altura (m)</div><input id="tp-alt" style={inp} inputMode="decimal" value={alt} onChange={(e) => setAlt(e.target.value)} /></div>
-      </div>
-      <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>A laje nova entra no nível dessa altura, com 10 cm; o contrapiso, no nível 0 com 5 cm. Dá para mudar depois em Propriedades.</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
-        <button style={{ ...btn, background: TP_AZUL, borderColor: TP_AZUL, color: "#fff" }} onClick={finalizar}>Finalizar traço</button>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-          <button style={btn} onClick={desfazer}>Desfazer</button>
-          <button style={btn} onClick={() => setConfirmarLimpar(true)}>Limpar</button>
-        </div>
-        {confirmarLimpar && (
-          <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: 10, fontSize: 12.5, color: "#7f1d1d" }}>
-            Apagar todas as paredes, contrapisos e lajes deste projeto?
-            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-              <button style={{ ...btn, minHeight: 30, padding: "4px 10px", fontSize: 12.5 }} onClick={() => setConfirmarLimpar(false)}>Cancelar</button>
-              <button style={{ ...btnPerigo, minHeight: 30, padding: "4px 10px", fontSize: 12.5 }} onClick={() => { mudar([], []); setInicio(null); setPoli([]); setConfirmarLimpar(false); }}>Apagar</button>
-            </div>
-          </div>
-        )}
-      </div>
 
       {podeOrcar && (
         <>
           <div style={secao}>Orçamento de obra</div>
-          <button style={{ ...btn, background: "#111827", borderColor: "#111827", color: "#fff" }} onClick={() => setPainelObra("confirmar")}>
+          <button style={{ ...btn, width: "100%", minHeight: 32, fontSize: 12.5, background: "#111827", borderColor: "#111827", color: "#fff" }} onClick={() => setPainelObra("confirmar")}>
             {obraLigada ? "Atualizar orçamento da obra" : "Gerar orçamento de obra"}
           </button>
           <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6, lineHeight: 1.4 }}>
@@ -86968,17 +87044,21 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           )}
         </>
       )}
-      <button style={{ ...btn, marginTop: 8, fontSize: 12.5 }} title="Copia o desenho deste projeto (paredes, áreas, ambientes) para colar na conversa de suporte e reproduzir um problema"
-        onClick={() => {
-          const txt = JSON.stringify({ v: 1, nome: projeto.nome, paredes, areas });
-          const ok = () => avisar("Dados do projeto copiados. Cole na conversa de suporte.");
-          try { navigator.clipboard.writeText(txt).then(ok, () => { window.prompt("Copie o texto abaixo:", txt); }); } catch (err) { window.prompt("Copie o texto abaixo:", txt); }
-        }}>Copiar dados do projeto (suporte)</button>
-      <button style={{ ...btn, marginTop: 8, fontSize: 12.5 }} onClick={() => setVerAtalhos(true)}>Atalhos de teclado e mouse <span style={{ color: "#9ca3af" }}>(?)</span></button>
-
-      {areas.some((a) => a.tipo === "ambiente") && (
-        <>
-          <div style={secao}>Ambientes</div>
+      {quadro.grupos.length > 0 && dobra("esq", "Esquadrias", `${quadro.grupos.reduce((t, g) => t + g.qtd, 0)} un`, (
+          <div>
+            {quadro.grupos.map((g) => (
+              <button key={g.codigo} onClick={() => { trocarFerramenta("selecionar"); setSel(g.ids.map((id) => "o" + id)); }}
+                style={{ ...linhaQ, width: "100%", background: "none", border: "none", borderBottom: "1px solid #f0f2f5", cursor: "pointer", fontFamily: "inherit", textAlign: "left", alignItems: "flex-start" }}>
+                <span style={{ minWidth: 0 }}>
+                  <strong style={{ color: "#111827" }}>{g.codigo}</strong> {g.rot}{g.mat === "madeira" ? " (madeira)" : ""}
+                  <span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>{tpFmt(g.larg)} × {tpFmt(g.alt)} m{g.peit ? ` · peitoril ${tpFmt(g.peit)}` : ""}</span>
+                </span>
+                <span style={numQ}>{g.qtd} un</span>
+              </button>
+            ))}
+          </div>
+      ))}
+      {areas.some((a) => a.tipo === "ambiente") && dobra("amb", "Ambientes", `${tpFmt(areas.filter((a) => a.tipo === "ambiente" && !a.aberto).reduce((t, a) => t + tpAreaPoli(a.pts), 0))} m²`, (
           <div>
             {areas.map((a, i) => (a.tipo === "ambiente" ? (
               <button key={i} onClick={() => { trocarFerramenta("selecionar"); setSel(["a" + i]); }} style={{ ...linhaQ, width: "100%", background: "none", border: "none", borderBottom: "1px solid #f0f2f5", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
@@ -86998,10 +87078,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               );
             })}
           </div>
-        </>
-      )}
-
-      <div style={secao}>Quantitativo</div>
+      ))}
+      {dobra("qtd", "Quantitativo", `${tpFmt(A - areaAberturas)} m² de parede`, (
       <div>
         <div style={linhaQ}><span>Paredes</span><span style={numQ}>{paredes.length} · {tpFmt(L)} m</span></div>
         <div style={linhaQ}><span>Área de parede{areaAberturas > 0 ? " (bruta)" : ""}</span><span style={numQ}>{tpFmt(A)} m²</span></div>
@@ -87016,7 +87094,26 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         <div style={linhaQ}><span>Telhado (projeção · real)</span><span style={numQ}>{tpFmt(telProj)} · {tpFmt(telReal)} m²</span></div>
         <div style={linhaQ}><span>Laje</span><span style={numQ}>{tpFmt(areaLj)} m² · {tpFmt(volLj)} m³</span></div>
       </div>
-      <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 10, lineHeight: 1.4 }}>Teste: salvo só neste navegador. Para o orçamento de obra vai o m² de parede líquido (descontando portas e janelas).</div>
+      ))}
+      <div style={{ marginTop: 16, paddingTop: 10, borderTop: "1px solid #eef0f3", display: "flex", flexWrap: "wrap", gap: "6px 14px" }}>
+        <button style={linkLat} onClick={() => setVerAtalhos(true)}>Atalhos (?)</button>
+        <button style={linkLat} title="Copia o desenho deste projeto (paredes, áreas, ambientes) para colar na conversa de suporte e reproduzir um problema"
+          onClick={() => {
+            const txt = JSON.stringify({ v: 1, nome: projeto.nome, paredes, areas });
+            const ok = () => avisar("Dados do projeto copiados. Cole na conversa de suporte.");
+            try { navigator.clipboard.writeText(txt).then(ok, () => { window.prompt("Copie o texto abaixo:", txt); }); } catch (err) { window.prompt("Copie o texto abaixo:", txt); }
+          }}>Copiar dados (suporte)</button>
+        <button style={{ ...linkLat, color: "#b91c1c" }} onClick={() => setConfirmarLimpar(true)}>Limpar desenho</button>
+      </div>
+      {confirmarLimpar && (
+        <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: 10, fontSize: 12.5, color: "#7f1d1d", marginTop: 8 }}>
+          Apagar todas as paredes, contrapisos e lajes deste pavimento?
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            <button style={{ ...btn, minHeight: 30, padding: "4px 10px", fontSize: 12.5 }} onClick={() => setConfirmarLimpar(false)}>Cancelar</button>
+            <button style={{ ...btnPerigo, minHeight: 30, padding: "4px 10px", fontSize: 12.5 }} onClick={() => { mudar([], []); setInicio(null); setPoli([]); setConfirmarLimpar(false); }}>Apagar</button>
+          </div>
+        </div>
+      )}
     </aside>
   );
 
@@ -87080,16 +87177,21 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "nowrap" : "normal" }}>
             <strong style={{ color: "#111827", marginRight: 6 }}>{projeto.nome}</strong>
           </div>
-          {isMobile && (
-            <div style={{ display: "flex", gap: 4 }}>
-              {MODOS.map((m) => <button key={m.id} onClick={() => setModo(m.id)} style={{ ...btn, minHeight: 30, padding: "4px 8px", fontSize: 12, borderColor: modo === m.id ? TP_AZUL : "#e5e7eb", color: modo === m.id ? TP_AZUL : "#374151", background: modo === m.id ? "#eef5ff" : "#fff" }}>{m.id === "ambos" ? "2" : m.id === "corte" ? "Corte" : m.rotulo}</button>)}
+          {grupoVistas}
+        </div>}
+        <div ref={telaArea} style={{ flex: 1, minHeight: 0, position: "relative", background: "#e5e7eb", overflow: "hidden",
+          marginBottom: "env(safe-area-inset-bottom, 0px)", marginRight: "env(safe-area-inset-right, 0px)" }}>
+          {!isMobile && <div style={{ position: "absolute", top: 10, right: 10, zIndex: 5 }}>{grupoVistas}</div>}
+          {dividido && docaEf !== "livre" && (
+            <div onPointerDown={arrastoTela("divisoria")} title="Arraste para mudar o tamanho"
+              style={{ position: "absolute", zIndex: 5, touchAction: "none", background: "transparent", ...(docaEf === "direita"
+                ? { top: 0, bottom: 0, width: 10, left: `calc(${(1 - fracao) * 100}% - 8px)`, cursor: "col-resize" }
+                : { left: 0, right: 0, height: 10, top: `calc(${(1 - fracao) * 100}% - 8px)`, cursor: "row-resize" }) }}>
+              <div style={{ position: "absolute", ...(docaEf === "direita" ? { left: 3, top: "50%", width: 4, height: 40, marginTop: -20 } : { top: 3, left: "50%", height: 4, width: 40, marginLeft: -20 }), borderRadius: 2, background: "#9ca3af" }} />
             </div>
           )}
-        </div>}
-        <div style={{ flex: 1, minHeight: 0, display: "grid", gap: 1, background: "#e5e7eb",
-          gridTemplateColumns: (modo === "ambos" || modo === "corte") && !isMobile ? "1fr 1fr" : "1fr", gridTemplateRows: (modo === "ambos" || modo === "corte") && isMobile ? "1fr 1fr" : "1fr",
-          paddingBottom: "env(safe-area-inset-bottom, 0px)", paddingRight: "env(safe-area-inset-right, 0px)" }}>
-          <div ref={planBox} style={{ ...pane, display: mostraPlanta ? "block" : "none" }}>
+          <div ref={planBox} style={{ ...estiloVista("planta"), display: mostraPlanta ? "block" : "none" }}>
+            {vistaSegunda === "planta" && barraSegunda}
             {!isMobile && painelOculto && (
               <button onClick={() => setPainelOculto(false)} aria-label="Mostrar o painel" title="Mostrar o painel"
                 style={{ position: "absolute", top: 10, left: 10, zIndex: 2, ...ctrl, fontSize: 18 }}>☰</button>
@@ -87125,15 +87227,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               <button aria-label="Ajustar à tela" title="Ajustar à tela" style={{ ...ctrl, fontSize: 13 }} onClick={ajustar}>⤢</button>
             </div>
           </div>
-          <div ref={v3dBox} style={{ ...pane, display: mostra3d ? "block" : "none" }}>
+          <div ref={v3dBox} style={{ ...estiloVista("3d"), display: mostra3d ? "block" : "none" }}>
+            {vistaSegunda === "3d" && barraSegunda}
             <canvas ref={v3dRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none" }}
               onContextMenu={(e) => e.preventDefault()}
               onPointerDown={v3dDown} onPointerMove={v3dMove} onPointerUp={v3dUp} />
             {erro3d && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#6b7280", fontSize: 13, padding: 16, textAlign: "center" }}>{erro3d} Verifique a conexão e abra o projeto de novo.</div>}
           </div>
-          <div ref={corteBox} style={{ ...pane, display: mostraCorte ? "block" : "none" }}>
+          <div ref={corteBox} style={{ ...estiloVista("corte"), display: mostraCorte ? "block" : "none" }}>
+            {vistaSegunda === "corte" && barraSegunda}
             {cortes.length > 0 && (
-              <div style={{ position: "absolute", top: 8, right: 8, zIndex: 1, display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end", maxWidth: "70%" }}>
+              <div style={{ position: "absolute", top: 6, left: "50%", transform: "translateX(-50%)", zIndex: 1, display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "center", maxWidth: "60%" }}>
                 {cortes.map((c, i) => (
                   <button key={c.id} onClick={() => { setVerCorte(c.id); setSel(["x" + i]); }}
                     style={{ ...btn, minHeight: 28, padding: "2px 10px", fontSize: 12, fontWeight: 700, background: (verCorte || cortes[0].id) === c.id ? "#111827" : "#fff", color: (verCorte || cortes[0].id) === c.id ? "#fff" : "#111827", borderRadius: 999 }}>{tpNomeCorte(c)}</button>
