@@ -86620,6 +86620,34 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const areaCp = somaArea("contrapiso", areaLiquida), volCp = somaArea("contrapiso", (a) => areaLiquida(a) * (a.esp || 0));
   const areaLj = somaArea("laje", (a) => tpAreaPoli(a.pts)), volLj = somaArea("laje", (a) => tpAreaPoli(a.pts) * (a.esp || 0));
   const telProj = somaArea("telhado", (a) => geoTelhado(a).areaProjecao), telReal = somaArea("telhado", (a) => geoTelhado(a).areaReal);
+  // quantitativo: do pavimento ativo ou o total de todos os pavimentos
+  const [qtdTotal, setQtdTotal] = useState(() => { try { return localStorage.getItem("vicke-projetar-qtd-total") === "1"; } catch (err) { return false; } });
+  const escolherQtdTotal = (v) => { setQtdTotal(v); try { localStorage.setItem("vicke-projetar-qtd-total", v ? "1" : "0"); } catch (err) {} };
+  const qtdDe = (ps, ars, an, geoT) => {
+    const soma = (tipo, f) => ars.filter((a) => a.tipo === tipo).reduce((t, a) => t + f(a), 0);
+    const cob = ars.filter((a) => (a.tipo === "laje" || a.tipo === "telhado") && a.pts && a.pts.length >= 3).map((a) => a.pts);
+    const liq = (a) => (a.tipo === "contrapiso" && a.pts && a.pts.length >= 3 && tpTipoContrapiso(a.pts, an.pegada, cob) === "furado" ? Math.max(0, tpAreaPoli(a.pts) - tpAreaDentro(a.pts, an.pegada)) : tpAreaPoli(a.pts || []));
+    return {
+      n: ps.length, L: ps.reduce((t, w) => t + tpLen(w), 0), A: ps.reduce((t, w) => t + tpLen(w) * w.h, 0), ab: tpAreaAberturas(ps),
+      coberta: an.coberta || 0, cp: soma("contrapiso", liq), volCp: soma("contrapiso", (a) => liq(a) * (a.esp || 0)),
+      cpInt: an.pisoInterno || 0, cpExt: an.pisoExterno || 0, mostraIntExt: !!(an.temCobertura || (an.pegada || []).length),
+      lj: soma("laje", (a) => tpAreaPoli(a.pts)), volLj: soma("laje", (a) => tpAreaPoli(a.pts) * (a.esp || 0)),
+      telP: soma("telhado", (a) => geoT(a).areaProjecao), telR: soma("telhado", (a) => geoT(a).areaReal),
+      terreno: an.terreno || 0, ocupada: (an.taxaOcupacao || 0) * (an.terreno || 0), livre: an.permeavel || 0,
+    };
+  };
+  const qtdAtivo = qtdDe(paredes, areas, analise, geoTelhado);
+  const qtd = (() => {
+    if (!qtdTotal || pavimentos.length < 2) return qtdAtivo;
+    const t = { ...qtdAtivo };
+    for (const p of pavsOrd) {
+      if (p.id === pavAtivo) continue;
+      const d = dadosDe(p.id), ps = d.paredes || [], ars = d.areas || [];
+      const q = qtdDe(ps, ars, tpAnaliseAreas(ars, ps), (a) => tpTelhadoGeo(a));
+      for (const k of Object.keys(t)) if (typeof t[k] === "number") t[k] += q[k]; else if (k === "mostraIntExt") t[k] = t[k] || q[k];
+    }
+    return t;
+  })();
   const comum = (lista, f) => { if (!lista.length) return null; const v0 = f(lista[0]); return lista.every((x) => Math.abs(f(x) - v0) < 1e-9) ? v0 : null; };
 
   // ---------- estilos ----------
@@ -87399,29 +87427,38 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             })}
           </div>
       ))}
-      {dobra("qtd", "Quantitativo", `${tpFmt(A - areaAberturas)} m²`, (
+      {dobra("qtd", "Quantitativo", `${tpFmt(qtd.A - qtd.ab)} m²`, (
       <div>
+        {pavimentos.length > 1 && (
+          <div role="group" aria-label="Quantitativo de" style={{ display: "flex", gap: 2, padding: 2, margin: "4px 0 2px", background: "#f3f4f6", borderRadius: 8 }}>
+            {[[false, pavAt.nome], [true, "Total"]].map(([v, rot]) => (
+              <button key={rot} onClick={() => escolherQtdTotal(v)} aria-pressed={qtdTotal === v}
+                style={{ flex: 1, minWidth: 0, padding: "4px 6px", border: "none", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  background: qtdTotal === v ? "#fff" : "transparent", color: qtdTotal === v ? TP_AZUL : "#6b7280", fontWeight: qtdTotal === v ? 600 : 500, boxShadow: qtdTotal === v ? "0 1px 2px rgba(0,0,0,0.08)" : "none" }}>{rot}</button>
+            ))}
+          </div>
+        )}
         {grupoQ("Paredes")}
-        {linhaTab("Quantidade", paredes.length, "un")}
-        {linhaTab("Comprimento", tpFmt(L), "m")}
-        {linhaTab(areaAberturas > 0 ? "Área bruta" : "Área", tpFmt(A), "m²")}
-        {areaAberturas > 0 && linhaTab("Aberturas", tpFmt(areaAberturas), "m²", true)}
-        {areaAberturas > 0 && linhaTab("Área líquida", tpFmt(A - areaAberturas), "m²")}
-        {linhaTab("Reboco (2 faces)", tpFmt((A - areaAberturas) * 2), "m²")}
+        {linhaTab("Quantidade", qtd.n, "un")}
+        {linhaTab("Comprimento", tpFmt(qtd.L), "m")}
+        {linhaTab(qtd.ab > 0 ? "Área bruta" : "Área", tpFmt(qtd.A), "m²")}
+        {qtd.ab > 0 && linhaTab("Aberturas", tpFmt(qtd.ab), "m²", true)}
+        {qtd.ab > 0 && linhaTab("Área líquida", tpFmt(qtd.A - qtd.ab), "m²")}
+        {linhaTab("Reboco (2 faces)", tpFmt((qtd.A - qtd.ab) * 2), "m²")}
         {grupoQ("Áreas")}
-        {linhaTab("Construída (coberta)", tpFmt(analise.coberta), "m²")}
-        {linhaTab("Contrapiso", tpFmt(areaCp), "m²")}
-        {(analise.temCobertura || (analise.pegada || []).length > 0) && areaCp > 0 && linhaTab("interno", tpFmt(analise.pisoInterno), "m²", true)}
-        {(analise.temCobertura || (analise.pegada || []).length > 0) && areaCp > 0 && linhaTab("externo", tpFmt(analise.pisoExterno), "m²", true)}
-        {linhaTab("Volume contrapiso", tpFmt(volCp), "m³", true)}
-        {linhaTab("Laje", tpFmt(areaLj), "m²")}
-        {linhaTab("Volume laje", tpFmt(volLj), "m³", true)}
-        {linhaTab("Telhado (projeção)", tpFmt(telProj), "m²")}
-        {linhaTab("Telhado (real)", tpFmt(telReal), "m²", true)}
-        {analise.terreno > 0 && grupoQ("Terreno")}
-        {analise.terreno > 0 && linhaTab("Área do terreno", tpFmt(analise.terreno), "m²")}
-        {analise.terreno > 0 && linhaTab("Taxa de ocupação", tpFmt(analise.taxaOcupacao * 100, 1), "%")}
-        {analise.terreno > 0 && linhaTab("Área livre", tpFmt(analise.permeavel), "m²")}
+        {linhaTab("Construída (coberta)", tpFmt(qtd.coberta), "m²")}
+        {linhaTab("Contrapiso", tpFmt(qtd.cp), "m²")}
+        {qtd.mostraIntExt && qtd.cp > 0 && linhaTab("interno", tpFmt(qtd.cpInt), "m²", true)}
+        {qtd.mostraIntExt && qtd.cp > 0 && linhaTab("externo", tpFmt(qtd.cpExt), "m²", true)}
+        {linhaTab("Volume contrapiso", tpFmt(qtd.volCp), "m³", true)}
+        {linhaTab("Laje", tpFmt(qtd.lj), "m²")}
+        {linhaTab("Volume laje", tpFmt(qtd.volLj), "m³", true)}
+        {linhaTab("Telhado (projeção)", tpFmt(qtd.telP), "m²")}
+        {linhaTab("Telhado (real)", tpFmt(qtd.telR), "m²", true)}
+        {qtd.terreno > 0 && grupoQ("Terreno")}
+        {qtd.terreno > 0 && linhaTab("Área do terreno", tpFmt(qtd.terreno), "m²")}
+        {qtd.terreno > 0 && linhaTab("Taxa de ocupação", tpFmt(qtd.ocupada / qtd.terreno * 100, 1), "%")}
+        {qtd.terreno > 0 && linhaTab("Área livre", tpFmt(qtd.livre), "m²")}
       </div>
       ))}
         </div>
