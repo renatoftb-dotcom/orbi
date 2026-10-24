@@ -1758,6 +1758,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const planRef = useRef(null), v3dRef = useRef(null);
   const planBox = useRef(null), v3dBox = useRef(null), barraRef = useRef(null);
   const [barraAberta, setBarraAberta] = useState(false); // celular: barra de ferramentas aberta
+  // painel lateral: lista de ferramentas aberta pelo "+" e as fixadas (lembradas neste navegador)
+  const [ferrAberto, setFerrAberto] = useState(false);
+  const [ferrFixas, setFerrFixas] = useState(() => { try { const v = JSON.parse(localStorage.getItem("vicke-projetar-ferramentas-fixas") || "null"); return Array.isArray(v) ? v : ["selecionar"]; } catch (err) { return ["selecionar"]; } });
+  const alternarFixa = (id) => setFerrFixas((xs) => { const novo = xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]; try { localStorage.setItem("vicke-projetar-ferramentas-fixas", JSON.stringify(novo)); } catch (err) { /* sem armazenamento: vale só nesta sessão */ } return novo; });
   // Pavimentos: lista (id, nome, nível) e o desenho de cada um. O pavimento
   // ativo fica em paredes/areas (o editor inteiro trabalha nele); os outros
   // ficam guardados em dadosPav. O térreo continua também em projeto.paredes/areas.
@@ -5337,14 +5341,41 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       </div>
 
       <div style={secao}>Ferramenta</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-        {FERRAMENTAS.map((f) => (
-          <button key={f.id} title={f.dica} onClick={() => { trocarFerramenta(f.id); if (isMobile) setMenuAberto(false); }}
-            style={{ ...btn, padding: "8px 6px", fontSize: 12.5, borderColor: ferramenta === f.id ? TP_AZUL : "#e5e7eb", background: ferramenta === f.id ? "#eef5ff" : "#fff", color: ferramenta === f.id ? TP_AZUL : "#111827", fontWeight: ferramenta === f.id ? 600 : 500 }}>
-            {f.rotulo}
-          </button>
-        ))}
-      </div>
+      {/* "+" abre a lista de ferramentas logo abaixo; escolher uma fecha a
+          lista e deixa só ela (e as fixadas no alfinete) à mostra. Clicar no
+          "+" de novo reabre. */}
+      {(() => {
+        const visiveis = ferrAberto ? FERRAMENTAS : FERRAMENTAS.filter((f) => f.id === ferramenta || ferrFixas.includes(f.id));
+        const pilula = (f) => {
+          const ativa = ferramenta === f.id, fixa = ferrFixas.includes(f.id);
+          return (
+            <div key={f.id} style={{ display: "flex", alignItems: "stretch", gap: 4 }}>
+              <button title={f.dica} onClick={() => { trocarFerramenta(f.id); setFerrAberto(false); if (isMobile) setMenuAberto(false); }}
+                style={{ flex: 1, minHeight: 36, padding: "6px 10px", fontSize: 13.5, fontFamily: "inherit", cursor: "pointer", borderRadius: 8, border: `2px solid ${ativa ? TP_AZUL : "#93b8e8"}`, background: ativa ? "#eef5ff" : "#fff", color: ativa ? TP_AZUL : "#111827", fontWeight: ativa ? 700 : 500 }}>
+                {f.rotulo}
+              </button>
+              {ferrAberto && (
+                <button aria-label={fixa ? `Desafixar ${f.rotulo}` : `Fixar ${f.rotulo}`} title={fixa ? "Fixada: fica à mostra com a lista fechada. Clique para soltar." : "Fixar: fica à mostra com a lista fechada"}
+                  onClick={() => alternarFixa(f.id)}
+                  style={{ width: 34, borderRadius: 8, border: `1px solid ${fixa ? TP_AZUL : "#e5e7eb"}`, background: fixa ? TP_AZUL : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={fixa ? "#fff" : "#6b7280"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3z" /><path d="M12 14v6" /></svg>
+                </button>
+              )}
+            </div>
+          );
+        };
+        return (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 5 }}>
+            <button aria-label={ferrAberto ? "Fechar a lista de ferramentas" : "Abrir a lista de ferramentas"} aria-expanded={ferrAberto} onClick={() => setFerrAberto((x) => !x)}
+              title={ferrAberto ? "Fechar a lista" : "Mais ferramentas"}
+              style={{ alignSelf: "center", width: 44, height: 44, borderRadius: "50%", border: `2px solid ${TP_AZUL}`, background: ferrAberto ? "#eef5ff" : "#fff", color: "#111827", fontSize: 26, lineHeight: 1, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "transform .15s", transform: ferrAberto ? "rotate(45deg)" : "none" }}>
+              <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke="#111827" strokeWidth="2.2" strokeLinecap="round" /></svg>
+            </button>
+            {visiveis.map(pilula)}
+            {ferrAberto && <div style={{ fontSize: 11.5, color: "#6b7280", lineHeight: 1.4, marginTop: 2 }}>O alfinete fixa a ferramenta: ela continua à mostra quando a lista fecha.</div>}
+          </div>
+        );
+      })()}
 
       {ferramenta === "esquadria" && (() => {
         const t = tpEsq(tipoEsq), dm = dimsEsq[tipoEsq] || t;
