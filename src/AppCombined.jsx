@@ -86765,17 +86765,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           const ativa = ferramenta === f.id;
           return (
             <button key={f.id} title={f.dica} onClick={() => { trocarFerramenta(ativa ? "selecionar" : f.id); setFerrAberto(false); if (isMobile && !ativa) setMenuAberto(false); }}
-              style={{ ...btn, width: "100%", padding: "7px 10px", fontSize: 13, borderColor: ativa ? TP_AZUL : "#e5e7eb", background: ativa ? "#eef5ff" : "#fff", color: ativa ? TP_AZUL : "#111827", fontWeight: ativa ? 600 : 500 }}>
+              style={{ ...btn, width: "100%", minHeight: 28, padding: "3px 8px", fontSize: 12, borderRadius: 7, borderColor: ativa ? TP_AZUL : "#e5e7eb", background: ativa ? "#eef5ff" : "#fff", color: ativa ? TP_AZUL : "#111827", fontWeight: ativa ? 600 : 500 }}>
               {f.rotulo}
             </button>
           );
         };
         return (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 5 }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 3 }}>
             <button aria-label={ferrAberto ? "Fechar a lista de ferramentas" : "Abrir a lista de ferramentas"} aria-expanded={ferrAberto} onClick={() => setFerrAberto((x) => !x)}
               title={ferrAberto ? "Fechar a lista" : "Ferramentas"}
-              style={{ alignSelf: "center", width: 40, height: 40, borderRadius: "50%", border: `1px solid ${ferrAberto ? TP_AZUL : "#e5e7eb"}`, background: ferrAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "transform .15s", transform: ferrAberto ? "rotate(45deg)" : "none" }}>
-              <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke={ferrAberto ? TP_AZUL : "#111827"} strokeWidth="2" strokeLinecap="round" /></svg>
+              style={{ alignSelf: "flex-start", width: 32, height: 32, borderRadius: "50%", border: `1px solid ${ferrAberto ? TP_AZUL : "#e5e7eb"}`, background: ferrAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "transform .15s", transform: ferrAberto ? "rotate(45deg)" : "none" }}>
+              <svg width="14" height="14" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke={ferrAberto ? TP_AZUL : "#111827"} strokeWidth="2" strokeLinecap="round" /></svg>
             </button>
             {visiveis.map(pilula)}
           </div>
@@ -86786,7 +86786,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         <div style={{ display: "grid", gridTemplateColumns: `repeat(${TP_MODOS_TRACO.length}, 1fr)`, gap: 4, marginTop: 8 }}>
           {TP_MODOS_TRACO.map((m) => (
             <button key={m.id} title={m.dica} onClick={() => { setModoTraco(m.id); setAncora(null); setDigitado(""); if (m.id === "retangulo") { setInicio(null); } }}
-              style={{ ...btn, minHeight: 32, padding: "4px 6px", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, borderColor: modoTraco === m.id ? TP_AZUL : "#e5e7eb", background: modoTraco === m.id ? "#eef5ff" : "#fff", color: modoTraco === m.id ? TP_AZUL : "#374151", fontWeight: 600 }}>
+              style={{ ...btn, minHeight: 26, padding: "2px 6px", fontSize: 11.5, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, borderColor: modoTraco === m.id ? TP_AZUL : "#e5e7eb", background: modoTraco === m.id ? "#eef5ff" : "#fff", color: modoTraco === m.id ? TP_AZUL : "#374151", fontWeight: 600 }}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
                 {m.id === "linha" && <path d="M2 12 L6 4 L12 7" />}
                 {m.id === "retangulo" && <rect x="2" y="3" width="10" height="8" />}
