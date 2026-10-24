@@ -86536,7 +86536,13 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       } else if (tipo === "mover") {
         setJanela({ ...j0, x: Math.max(0, Math.min(1 - j0.w, j0.x + fx)), y: Math.max(0, Math.min(1 - j0.h, j0.y + fy)) });
       } else {
-        setJanela({ ...j0, w: Math.max(0.18, Math.min(1 - j0.x, j0.w + fx)), h: Math.max(0.18, Math.min(1 - j0.y, j0.h + fy)) });
+        // redimensionar por qualquer borda ou canto: tipo = "redim-" + lados (l, r, t, b)
+        const ld = tipo.slice(6), mn = 0.15; let { x, y, w, h } = j0;
+        if (ld.includes("r")) w = Math.max(mn, Math.min(1 - j0.x, j0.w + fx));
+        if (ld.includes("b")) h = Math.max(mn, Math.min(1 - j0.y, j0.h + fy));
+        if (ld.includes("l")) { const nx = Math.max(0, Math.min(j0.x + j0.w - mn, j0.x + fx)); w = j0.w + (j0.x - nx); x = nx; }
+        if (ld.includes("t")) { const ny = Math.max(0, Math.min(j0.y + j0.h - mn, j0.y + fy)); h = j0.h + (j0.y - ny); y = ny; }
+        setJanela({ x, y, w, h });
       }
     };
     const soltar = () => { window.removeEventListener("pointermove", mover); window.removeEventListener("pointerup", soltar); setTimeout(() => { setFracao((f) => { setJanela((jj) => { salvarTela({ fracao: f, janela: jj }); return jj; }); return f; }); }, 0); };
@@ -86544,6 +86550,18 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   };
   const escolherDoca = (d) => { setDoca(d); salvarTela({ doca: d }); };
   const icoTela = (ativo) => ({ width: 26, height: 24, borderRadius: 6, border: "none", background: ativo ? "#eef5ff" : "transparent", color: ativo ? TP_AZUL : "#4b5563", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 });
+  // alças da janela solta: as 4 bordas e os 4 cantos mudam largura e altura
+  const alcasJanela = docaEf === "livre" && (
+    <>
+      {[["t", { top: -4, left: 12, right: 12, height: 8, cursor: "ns-resize" }], ["b", { bottom: -4, left: 12, right: 12, height: 8, cursor: "ns-resize" }],
+        ["l", { left: -4, top: 12, bottom: 12, width: 8, cursor: "ew-resize" }], ["r", { right: -4, top: 12, bottom: 12, width: 8, cursor: "ew-resize" }],
+        ["tl", { top: -4, left: -4, width: 16, height: 16, cursor: "nwse-resize" }], ["tr", { top: -4, right: -4, width: 16, height: 16, cursor: "nesw-resize" }],
+        ["bl", { bottom: -4, left: -4, width: 16, height: 16, cursor: "nesw-resize" }], ["br", { bottom: -4, right: -4, width: 16, height: 16, cursor: "nwse-resize" }]].map(([ld, st]) => (
+        <div key={ld} onPointerDown={arrastoTela("redim-" + ld)} style={{ position: "absolute", zIndex: 4, touchAction: "none", ...st }} />
+      ))}
+      <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" style={{ position: "absolute", right: 3, bottom: 3, zIndex: 3, pointerEvents: "none" }}><path d="M11 4 4 11M11 8 8 11" stroke="#9ca3af" strokeWidth="1.3" strokeLinecap="round" /></svg>
+    </>
+  );
   // barrinha da segunda vista: onde ela fica (lado, embaixo, solta) e trocar com a grande;
   // solta, a própria barrinha arrasta a janela
   const barraSegunda = (
@@ -87354,7 +87372,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             </div>
           )}
           <div ref={planBox} style={{ ...estiloVista("planta"), display: mostraPlanta ? "block" : "none" }}>
-            {vistaSegunda === "planta" && barraSegunda}
+            {vistaSegunda === "planta" && barraSegunda}{vistaSegunda === "planta" && alcasJanela}
             {!isMobile && painelOculto && (
               <button onClick={() => setPainelOculto(false)} aria-label="Mostrar o painel" title="Mostrar o painel"
                 style={{ position: "absolute", top: 10, left: 10, zIndex: 2, ...ctrl, fontSize: 18 }}>☰</button>
@@ -87387,7 +87405,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             )}
           </div>
           <div ref={v3dBox} style={{ ...estiloVista("3d"), display: mostra3d ? "block" : "none" }}>
-            {vistaSegunda === "3d" && barraSegunda}
+            {vistaSegunda === "3d" && barraSegunda}{vistaSegunda === "3d" && alcasJanela}
             <canvas ref={v3dRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none" }}
               onContextMenu={(e) => e.preventDefault()}
               onPointerDown={v3dDown} onPointerMove={v3dMove} onPointerUp={v3dUp} />
@@ -87400,7 +87418,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             {erro3d && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#6b7280", fontSize: 13, padding: 16, textAlign: "center" }}>{erro3d} Verifique a conexão e abra o projeto de novo.</div>}
           </div>
           <div ref={corteBox} style={{ ...estiloVista("corte"), display: mostraCorte ? "block" : "none" }}>
-            {vistaSegunda === "corte" && barraSegunda}
+            {vistaSegunda === "corte" && barraSegunda}{vistaSegunda === "corte" && alcasJanela}
             {cortes.length > 0 && (
               <div style={{ position: "absolute", top: 6, left: "50%", transform: "translateX(-50%)", zIndex: 1, display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "center", maxWidth: "60%" }}>
                 {cortes.map((c, i) => (
