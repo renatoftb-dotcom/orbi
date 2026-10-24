@@ -312,7 +312,7 @@ function TelaLoginEntrada({ onLogin, onCriarConta, onEsqueciSenha }) {
           Não tem conta?{" "}
           <button style={S.linkBtn} onClick={onCriarConta}>Criar conta</button>
         </div>
-        <div style={S.rodape}>Vicke — Conectando elos</div>
+        <div style={S.rodape}>Vicke — Conectando elos<LinksLegais /></div>
       </div>
     </div>
   );
@@ -321,6 +321,17 @@ function TelaLoginEntrada({ onLogin, onCriarConta, onEsqueciSenha }) {
 // ═══════════════════════════════════════════════════════════════
 // 2. Tela de Cadastro (form com dados da empresa + admin)
 // ═══════════════════════════════════════════════════════════════
+// Links da Política de Privacidade e dos Termos, no rodapé das telas de acesso
+function LinksLegais() {
+  const a = { color: "#6b7280", textDecoration: "underline", fontSize: 11.5 };
+  return (
+    <div data-vk-links-legais="1" style={{ marginTop: 6, display: "flex", gap: 12, justifyContent: "center" }}>
+      <a href="/privacidade" target="_blank" rel="noopener noreferrer" style={a}>Privacidade</a>
+      <a href="/termos" target="_blank" rel="noopener noreferrer" style={a}>Termos de uso</a>
+    </div>
+  );
+}
+
 function TelaCadastro({ onVoltar, onCodigoEnviado }) {
   const [nomeEmpresa, setNomeEmpresa]   = useState("");
   const [cnpjCpf, setCnpjCpf]           = useState("");
@@ -328,6 +339,7 @@ function TelaCadastro({ onVoltar, onCodigoEnviado }) {
   const [email, setEmail]               = useState("");
   const [senha, setSenha]               = useState("");
   const [mostrarSenha, setMostrarSenha] = useState(false);
+  const [aceitouTermos, setAceitouTermos] = useState(false);
   const [erro, setErro]                 = useState("");
   const [loading, setLoading]           = useState(false);
   const S = getEstilos(loading);
@@ -339,6 +351,7 @@ function TelaCadastro({ onVoltar, onCodigoEnviado }) {
     if (!email.trim())       return setErro("Informe seu e-mail.");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setErro("E-mail inválido.");
     if (senha.length < 8)    return setErro("Senha deve ter no mínimo 8 caracteres.");
+    if (!aceitouTermos)      return setErro("Para criar a conta, aceite os Termos de Uso, o Acordo de Tratamento de Dados e a Política de Privacidade.");
 
     setLoading(true);
     try {
@@ -348,6 +361,7 @@ function TelaCadastro({ onVoltar, onCodigoEnviado }) {
         nome_responsavel: nomeResp,
         email,
         senha,
+        aceite_termos: typeof LEGAL_VERSAO !== "undefined" ? LEGAL_VERSAO : "",
       });
       if (res.ok) {
         // Sobe pra próxima tela com email memorizado
@@ -448,6 +462,13 @@ function TelaCadastro({ onVoltar, onCodigoEnviado }) {
               </button>
             </div>
           </div>
+          <label data-vk-cadastro-termos="1" style={{ display:"flex", gap:8, alignItems:"flex-start", fontSize:12.5, color:"#374151", lineHeight:1.5, cursor:"pointer", margin:"4px 0 12px" }}>
+            <input type="checkbox" checked={aceitouTermos} onChange={e => setAceitouTermos(e.target.checked)} style={{ marginTop:3, accentColor:"#0474f4" }} />
+            <span>
+              Li e aceito os <a href="/termos" target="_blank" rel="noopener noreferrer" style={{ color:"#0474f4" }}>Termos de Uso e o Acordo de Tratamento de Dados</a> e
+              a <a href="/privacidade" target="_blank" rel="noopener noreferrer" style={{ color:"#0474f4" }}>Política de Privacidade</a>.
+            </span>
+          </label>
           <button style={S.btn} onClick={handleCadastrar} disabled={loading}>
             {loading ? "Enviando código..." : "Continuar"}
           </button>
@@ -457,7 +478,7 @@ function TelaCadastro({ onVoltar, onCodigoEnviado }) {
           Já tem conta?{" "}
           <button style={S.linkBtn} onClick={onVoltar}>Entrar</button>
         </div>
-        <div style={S.rodape}>Vicke — Conectando elos</div>
+        <div style={S.rodape}>Vicke — Conectando elos<LinksLegais /></div>
       </div>
     </div>
   );
@@ -650,7 +671,7 @@ function TelaCadastroCodigo({ email, onVoltar, onValidado }) {
         <div style={S.linkSec}>
           <button style={S.linkBtn} onClick={onVoltar}>← Voltar</button>
         </div>
-        <div style={S.rodape}>Vicke — Conectando elos</div>
+        <div style={S.rodape}>Vicke — Conectando elos<LinksLegais /></div>
       </div>
     </div>
   );
@@ -712,7 +733,7 @@ function TelaRecuperarSenha({ onVoltar }) {
           <div style={S.linkSec}>
             <button style={S.linkBtn} onClick={onVoltar}>← Voltar para o login</button>
           </div>
-          <div style={S.rodape}>Vicke — Conectando elos</div>
+          <div style={S.rodape}>Vicke — Conectando elos<LinksLegais /></div>
         </div>
       </div>
     );
@@ -749,7 +770,7 @@ function TelaRecuperarSenha({ onVoltar }) {
         <div style={S.linkSec}>
           <button style={S.linkBtn} onClick={onVoltar}>← Voltar para o login</button>
         </div>
-        <div style={S.rodape}>Vicke — Conectando elos</div>
+        <div style={S.rodape}>Vicke — Conectando elos<LinksLegais /></div>
       </div>
     </div>
   );
@@ -810,7 +831,7 @@ function TelaRedefinirSenha({ token, onConcluido }) {
           <div style={S.linkSec}>
             <button style={S.linkBtn} onClick={onConcluido}>← Voltar para o login</button>
           </div>
-          <div style={S.rodape}>Vicke — Conectando elos</div>
+          <div style={S.rodape}>Vicke — Conectando elos<LinksLegais /></div>
         </div>
       </div>
     );
@@ -843,7 +864,7 @@ function TelaRedefinirSenha({ token, onConcluido }) {
               Sua senha foi redefinida. Você já pode entrar com a nova senha.
             </div>
           </div>
-          <div style={S.rodape}>Vicke — Conectando elos</div>
+          <div style={S.rodape}>Vicke — Conectando elos<LinksLegais /></div>
         </div>
       </div>
     );
@@ -915,7 +936,7 @@ function TelaRedefinirSenha({ token, onConcluido }) {
         <div style={S.linkSec}>
           <button style={S.linkBtn} onClick={onConcluido}>← Voltar para o login</button>
         </div>
-        <div style={S.rodape}>Vicke — Conectando elos</div>
+        <div style={S.rodape}>Vicke — Conectando elos<LinksLegais /></div>
       </div>
     </div>
   );

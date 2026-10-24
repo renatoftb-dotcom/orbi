@@ -2378,6 +2378,7 @@ export default function ModuloClientesFornecedores() {
     <DialogosHost />
     <VersionWatcher />
     <BotaoFeedbackFlutuante usuario={usuario} />
+    {typeof AvisoTermos === "function" && <AvisoTermos usuario={usuario} />}
     {conflitoModal}
     {/* Tutorial Beta — overlay guiado disparado pelo item "+ Novo (Beta) 🧪"
         no sidebar. Só aparece em empresas com dev_mode (Vicke Dev). */}

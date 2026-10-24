@@ -79,6 +79,9 @@ const ORDER = [
   "orcamento-teste.jsx",
   "escritorio.jsx",
   "admin.jsx",
+  // legal.jsx: Política de Privacidade e Termos (páginas /privacidade e
+  // /termos, aceite no cadastro e o aviso para o admin). Antes de login.jsx.
+  "legal.jsx",
   "login.jsx",
   "mensagens.jsx",
   "onboarding.jsx",

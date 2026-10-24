@@ -1810,6 +1810,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const [confirmarLimpar, setConfirmarLimpar] = useState(false);
   const [ferramenta, setFerramenta] = useState(() => ((projeto.paredes || []).length || (projeto.areas || []).length ? "selecionar" : "parede"));
   const [sel, setSel] = useState([]);
+  const [selOutros, setSelOutros] = useState({}); // seleção "no projeto": chaves dos outros pavimentos
+  const manterOutros = useRef(false);
+  useEffect(() => { if (manterOutros.current) { manterOutros.current = false; return; } setSelOutros((o) => (Object.keys(o).length ? {} : o)); }, [sel, pavAtivo]);
   const [caixa, setCaixa] = useState(null);
   const [erro3d, setErro3d] = useState("");
   const [menuCtx, setMenuCtx] = useState(null); // menu do botão direito { x, y }
@@ -1918,12 +1921,15 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // seleção por tipo (como o "Selecionar todas as instâncias" do Revit):
   // na vista = o que aparece na planta agora; tudo = o pavimento inteiro
   const CATS_SEL = [["parede", "Paredes"], ["porta", "Portas"], ["janela", "Janelas"], ["vao", "Vãos"], ["contrapiso", "Contrapisos"], ["laje", "Lajes"], ["telhado", "Telhados"], ["terreno", "Terrenos"], ["ambiente", "Ambientes"], ["escada", "Escadas"], ["cota", "Cotas"], ["separador", "Separadores"]];
-  const catDaChave = (k) => {
+  const todasChavesEm = (ps, ars) => [...ps.map((_, i) => "p" + i), ...ars.map((_, i) => "a" + i), ...ps.flatMap((w) => (w.ab || []).map((o) => "o" + o.id))];
+  const aberturaEm = (k, ps) => { for (const w of ps) { const o = (w.ab || []).find((x) => "o" + x.id === k); if (o) return { w, o }; } return null; };
+  const catDaChaveEm = (k, ps, ars) => {
     if (k[0] === "p") return "parede";
-    if (k[0] === "a") { const a = areas[+k.slice(1)]; return a ? a.tipo : null; }
-    if (k[0] === "o") { for (const w of paredes) { const o = (w.ab || []).find((x) => "o" + x.id === k); if (o) { const c = tpEsq(o.tipo).cat; return c === "P" ? "porta" : c === "J" ? "janela" : "vao"; } } }
+    if (k[0] === "a") { const a = ars[+k.slice(1)]; return a ? a.tipo : null; }
+    if (k[0] === "o") { const r = aberturaEm(k, ps); if (r) { const c = tpEsq(r.o.tipo).cat; return c === "P" ? "porta" : c === "J" ? "janela" : "vao"; } }
     return null;
   };
+  const catDaChave = (k) => catDaChaveEm(k, paredes, areas);
   const retanguloVista = () => {
     const c = planRef.current, v = vista.current;
     if (!c || !v || !c.width || !c.getBoundingClientRect().width) return null;
@@ -1932,7 +1938,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const ptsDaChave = (k) => {
     if (k[0] === "p") { const w = paredes[+k.slice(1)]; return w ? [w.a, w.b] : []; }
     if (k[0] === "a") { const a = areas[+k.slice(1)]; if (!a) return []; const r = [...(a.pts || [])]; if (a.ponto) r.push(a.ponto); if (a.x != null && a.y != null) r.push({ x: a.x, y: a.y }); return r; }
-    if (k[0] === "o") { for (const w of paredes) { const o = (w.ab || []).find((x) => "o" + x.id === k); if (o) { const L = tpLen(w) || 1; return [{ x: w.a.x + (w.b.x - w.a.x) / L * o.x, y: w.a.y + (w.b.y - w.a.y) / L * o.x }]; } } }
+    if (k[0] === "o") { const r = aberturaEm(k, paredes); if (r) { const { w, o } = r, L = tpLen(w) || 1; return [{ x: w.a.x + (w.b.x - w.a.x) / L * o.x, y: w.a.y + (w.b.y - w.a.y) / L * o.x }]; } }
     return [];
   };
   const chavesDaCat = (cat, soVista) => {
@@ -1942,15 +1948,52 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const bx0 = Math.min(...ps.map((q) => q.x)), bx1 = Math.max(...ps.map((q) => q.x)), by0 = Math.min(...ps.map((q) => q.y)), by1 = Math.max(...ps.map((q) => q.y));
       return bx1 >= r.x0 && bx0 <= r.x1 && by1 >= r.y0 && by0 <= r.y1; });
   };
-  const selecionarCat = (cat, soVista) => { const ks = chavesDaCat(cat, soVista); trocarFerramenta("selecionar"); setSel(ks); avisar(`Seleção: ${ks.length} ${(CATS_SEL.find((c) => c[0] === cat) || [, "elementos"])[1].toLowerCase()}${soVista ? " na vista" : pavimentos.length > 1 ? ` (${pavAt.nome})` : ""}`); };
-  const todasChaves = () => [...paredes.map((_, i) => "p" + i), ...areas.map((_, i) => "a" + i), ...paredes.flatMap((w) => (w.ab || []).map((o) => "o" + o.id))];
+  // "Projeto": o tipo em todos os pavimentos. Os dos outros pavimentos ficam em
+  // selOutros (aparecem marcados no 3D, entram na soma e no Excluir).
+  const quantosDaCatProjeto = (cat) => pavsOrd.reduce((t, p) => { const d = dadosDe(p.id), ps = d.paredes || [], ars = d.areas || []; return t + todasChavesEm(ps, ars).filter((k) => catDaChaveEm(k, ps, ars) === cat).length; }, 0);
+  const selecionarCat = (cat, soVista) => {
+    const ks = chavesDaCat(cat, soVista), outros = {};
+    if (!soVista) for (const p of pavsOrd) {
+      if (p.id === pavAtivo) continue;
+      const d = dadosDe(p.id), ps = d.paredes || [], ars = d.areas || [];
+      const o = todasChavesEm(ps, ars).filter((k) => catDaChaveEm(k, ps, ars) === cat); if (o.length) outros[p.id] = o;
+    }
+    trocarFerramenta("selecionar"); manterOutros.current = true; setSel(ks); setSelOutros(outros);
+    const nPav = (ks.length ? 1 : 0) + Object.keys(outros).length, n = ks.length + Object.values(outros).reduce((t, o) => t + o.length, 0);
+    avisar(`Seleção: ${n} ${(CATS_SEL.find((c) => c[0] === cat) || [, "elementos"])[1].toLowerCase()}${soVista ? " na vista" : nPav > 1 ? ` em ${nPav} pavimentos` : ""}`);
+  };
+  // soma do que está selecionado: m² (parede = área líquida de uma face;
+  // piso, laje, terreno, ambiente = área; telhado = área real; porta/janela = vão)
+  const areaDaChaveEm = (k, ps, ars, geoT) => {
+    if (k[0] === "p") { const w = ps[+k.slice(1)]; return w ? tpLen(w) * (w.h || 0) - tpAreaAberturas([w]) : 0; }
+    if (k[0] === "a") { const a = ars[+k.slice(1)]; if (!a || !a.pts || a.pts.length < 3) return 0;
+      if (a.tipo === "telhado") return geoT(a).areaReal || 0;
+      if (a.tipo === "ambiente") return a.aberto ? 0 : tpAreaPoli(a.pts);
+      return ["contrapiso", "laje", "terreno"].includes(a.tipo) ? tpAreaPoli(a.pts) : 0; }
+    if (k[0] === "o") { const r = aberturaEm(k, ps); return r ? r.o.larg * Math.max(0, Math.min(r.o.alt, (r.w.h || 0) - (r.o.peit || 0))) : 0; }
+    return 0;
+  };
+  const todasChaves = () => todasChavesEm(paredes, areas);
+  const excluirOutros = () => {
+    const ids = Object.keys(selOutros).filter((id) => dadosPav[id]); if (!ids.length) return null;
+    const novos = { ...dadosPav };
+    for (const id of ids) {
+      const d = dadosPav[id], ks = new Set(selOutros[id]), ps0 = d.paredes || [], ars0 = d.areas || [];
+      const ps = ps0.filter((_, i) => !ks.has("p" + i)).map((w) => ((w.ab || []).some((o) => ks.has("o" + o.id)) ? { ...w, ab: w.ab.filter((o) => !ks.has("o" + o.id)) } : w));
+      novos[id] = { ...d, paredes: ps, areas: tpNumerarAmbientes(tpAtualizarCotas(ars0.filter((_, i) => !ks.has("a" + i)), ps0)) };
+    }
+    return novos;
+  };
   const excluirSelecao = () => {
+    if (!sel.length && Object.keys(selOutros).length) { const n = excluirOutros(); if (n) { registrar(); setDadosPav(n); } setSelOutros({}); return; }
     if (!sel.length) return;
     if (sel.every((k) => k[0] === "x")) { const fx = new Set(sel.map((k) => +k.slice(1))); const resto = cortes.filter((_, i) => !fx.has(i)); registrar(); setCortes(resto); if (!resto.some((c) => c.id === verCorte)) setVerCorte(resto[0] ? resto[0].id : null); setSel([]); return; }
     const fl = new Set(sel.filter((k) => k[0] === "l").map((k) => +k.slice(1)));
     if (fl.size && sel.every((k) => k[0] === "l")) { mudar(paredes.map((w, i) => (fl.has(i) ? { ...w, semCota: true } : w))); setSel([]); return; }
     const fp = new Set(selP), fa = new Set(selA), fo = new Set(selO.map((x) => x.o.id));
+    const nOutros = excluirOutros();
     mudar(paredes.filter((_, i) => !fp.has(i)).map((w) => ((w.ab || []).some((o) => fo.has(o.id)) ? { ...w, ab: w.ab.filter((o) => !fo.has(o.id)) } : w)), tpAtualizarCotas(areas.filter((_, i) => !fa.has(i)), paredes));
+    if (nOutros) { setDadosPav(nOutros); setSelOutros({}); }
   };
   // Edita esquadrias por id; se alguma não couber mais, não muda nada e avisa
   const editarAberturas = (ids, fn) => {
@@ -3938,7 +3981,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const G = new THREE.Group(); G.position.y = p.nivel || 0; G.userData.pav = p.id; T.group.add(G);
       const ativo = p.id === pavAtivo, d = dadosDe(p.id);
       if (ativo) T.grupoAtivo = G;
-      camada(d.paredes || [], d.areas || [], G, ativo ? marcadas0 : new Set(), ativo ? analise : tpAnaliseAreas(d.areas || [], d.paredes || []), vis3d === "so" ? "semTel" : vis3d === "cob" ? "soTel" : null);
+      camada(d.paredes || [], d.areas || [], G, ativo ? marcadas0 : new Set(selOutros[p.id] || []), ativo ? analise : tpAnaliseAreas(d.areas || [], d.paredes || []), vis3d === "so" ? "semTel" : vis3d === "cob" ? "soTel" : null);
     }
     T.camera.aspect = c.width / c.height; T.camera.updateProjectionMatrix();
     const alvo = T.alvo || { x: 0, y: 1, z: 0 };
@@ -4231,7 +4274,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       return;
     }
     clearTimeout(tempo3d.current); tempo3d.current = null; desenhar3d();
-  }, [paredes, areas, sel, pavAtivo, dadosPav, pavimentos, vis3d, modo]);
+  }, [paredes, areas, sel, selOutros, pavAtivo, dadosPav, pavimentos, vis3d, modo]);
 
   useEffect(() => {
     const k = (e) => {
@@ -4273,7 +4316,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         if (ferramenta === "esquadria") { e.preventDefault(); const m = -maoEsq; setMaoEsq(m); setPreviaEsq((p) => (p ? { ...p, mao: m } : p)); return; }
         if (selO.length) { e.preventDefault(); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); inverterAberturas(e.shiftKey ? "lado" : "mao"); return; }
       }
-      if (tecla === "Delete" || tecla === "Backspace") { if (sel.length) { e.preventDefault(); excluirSelecao(); } return; }
+      if (tecla === "Delete" || tecla === "Backspace") { if (sel.length || Object.keys(selOutros).length) { e.preventDefault(); excluirSelecao(); } return; }
       if (sel.length && tecla.startsWith("Arrow")) {
         e.preventDefault();
         const passo = e.shiftKey ? 1 : 0.1;
@@ -6307,12 +6350,23 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             )}
           </div>
         </div>
-        {sel.length > 0 && (
+        {(sel.length > 0 || Object.keys(selOutros).length > 0) && (
           <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: "calc(14px + env(safe-area-inset-bottom, 0px))", display: "flex", gap: 6, zIndex: 2, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 6, boxShadow: "0 4px 14px rgba(0,0,0,0.12)", alignItems: "center", whiteSpace: "nowrap" }}>
-            <span style={{ fontSize: 12.5, color: "#374151", padding: "0 6px", fontWeight: 600 }}>{sel.length} selecionado{sel.length === 1 ? "" : "s"}</span>
+            {(() => {
+              const outrosIds = Object.keys(selOutros).filter((id) => dadosPav[id]);
+              let n = sel.length, m2 = sel.reduce((t, k) => t + areaDaChaveEm(k, paredes, areas, geoTelhado), 0);
+              for (const id of outrosIds) { const d = dadosPav[id]; n += selOutros[id].length; m2 += selOutros[id].reduce((t, k) => t + areaDaChaveEm(k, d.paredes || [], d.areas || [], (a) => tpTelhadoGeo(a)), 0); }
+              return (
+                <span style={{ fontSize: 12.5, color: "#374151", padding: isMobile ? "0 2px" : "0 6px", whiteSpace: "nowrap" }}>
+                  <b style={{ fontWeight: 600 }}>{n} selecionado{n === 1 ? "" : "s"}</b>
+                  {outrosIds.length > 0 && !isMobile && <span style={{ color: "#6b7280" }}> · {outrosIds.length + (sel.length ? 1 : 0)} pav.</span>}
+                  {m2 > 0 && <span style={{ fontVariantNumeric: "tabular-nums" }}> · {tpFmt(m2)} m²</span>}
+                </span>
+              );
+            })()}
             {isMobile && <button onClick={() => setMenuAberto(true)} style={{ ...btn, minHeight: 30, padding: "4px 10px", fontSize: 12.5 }}>Editar</button>}
             <button onClick={excluirSelecao} style={{ ...btnPerigo, minHeight: 30, padding: "4px 10px", fontSize: 12.5 }}>Excluir</button>
-            <button onClick={() => setSel([])} aria-label="Limpar seleção" style={{ ...btn, minHeight: 30, padding: "4px 10px", fontSize: 12.5 }}>✕</button>
+            <button onClick={() => { setSel([]); setSelOutros({}); }} aria-label="Limpar seleção" style={{ ...btn, minHeight: 30, padding: "4px 10px", fontSize: 12.5 }}>✕</button>
           </div>
         )}
       </main>
@@ -6449,7 +6503,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               {(() => {
                 // "Na vista" só faz sentido com a planta na tela
                 const temVista = !!retanguloVista();
-                const rotTudo = pavimentos.length > 1 ? "Pavimento" : "Projeto";
+                const rotTudo = "Projeto";
                 const chip = (rot, acao) => (
                   <button key={rot} onClick={(e) => { e.stopPropagation(); setMenuCtx(null); acao(); }}
                     style={{ border: "1px solid #dadce0", background: "#fff", borderRadius: 6, padding: "2px 8px", fontSize: 12, fontFamily: "inherit", color: "#202124", cursor: "pointer", whiteSpace: "nowrap" }}
@@ -6464,7 +6518,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                   </div>
                 );
                 const cats = sel.length ? [...new Set(sel.map(catDaChave))] : [];
-                const presentes = CATS_SEL.filter(([c]) => chavesDaCat(c, false).length);
+                const presentes = CATS_SEL.filter(([c]) => quantosDaCatProjeto(c));
                 return (
                   <>
                     {cats.length === 1 && cats[0] && linhaCat(cats[0], `Todos: ${(CATS_SEL.find((c) => c[0] === cats[0]) || [, cats[0]])[1]}`)}
@@ -6475,7 +6529,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                         <span>Selecionar por tipo</span><span style={{ fontSize: 12, color: "#5f6368", transform: menuCtx.porTipo ? "rotate(90deg)" : "none", transition: "transform .15s" }}>›</span>
                       </button>
                     )}
-                    {menuCtx.porTipo && presentes.map(([c, rot]) => linhaCat(c, `${rot} (${chavesDaCat(c, false).length})`, true))}
+                    {menuCtx.porTipo && presentes.map(([c, rot]) => linhaCat(c, `${rot} (${quantosDaCatProjeto(c)})`, true))}
                   </>
                 );
               })()}

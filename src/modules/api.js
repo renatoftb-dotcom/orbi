@@ -435,6 +435,12 @@ const api = {
     redefinir:    (token, senha_nova)         => post("/auth/redefinir-senha", { token, senha_nova }),
   },
 
+  // ── TERMOS DE USO (aceite do escritório; o texto está em legal.jsx) ──
+  termos: {
+    situacao: ()       => get("/empresa/termos"),
+    aceitar:  (versao) => post("/empresa/termos/aceitar", { versao }),
+  },
+
   // ── FEEDBACK IN-APP (qualquer usuário autenticado) ─────────
   // Botão flutuante no app dispara aqui. Backend grava em feedback_app
   // com snapshot de quem enviou + empresa.
