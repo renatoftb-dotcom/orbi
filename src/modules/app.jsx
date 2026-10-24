@@ -952,6 +952,10 @@ export default function ModuloClientesFornecedores() {
   const [projetosKey, setProjetosKey]         = useState(0);
   const [orcamentosKey, setOrcamentosKey]     = useState(0);
   const [obrasKey, setObrasKey]               = useState(0);
+  // Obra a abrir direto (o "Abrir a obra" do Contas a receber). Vale para
+  // uma entrada: saiu de Obras, esquece.
+  const [obraParaAbrir, setObraParaAbrir]     = useState(null);
+  useEffect(() => { if (aba !== "obras" && obraParaAbrir) setObraParaAbrir(null); }, [aba]);
   // Teste grátis do WhatsApp: o backend diz se esta empresa é a piloto.
   // Para as outras o item de menu não aparece.
   const [waPiloto, setWaPiloto] = useState(false);
@@ -1744,6 +1748,7 @@ export default function ModuloClientesFornecedores() {
     { k:"escritorio", icon:"escritorio", label:"Escritório", sub: [
       ...(permMenu.podeGerenciarUsuarios ? [
         { k:"escritorio:financeiro",  icon:"financeiro", label:"Financeiro" },
+        { k:"escritorio:receber",     icon:"financeiro", label:"A receber" },
         { k:"escritorio:extrato",     icon:"cub",        label:"Extrato" },
         { k:"escritorio:base",        icon:"tabela",     label:"Base de dados" },
         { k:"escritorio:cartoes",     icon:"cartao",     label:"Cartões" },
@@ -2267,13 +2272,14 @@ export default function ModuloClientesFornecedores() {
           {aba === "clientes"               && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} abrirCadastroNovo={cadastroNovoCliente} onCadastroNovoAberto={() => setCadastroNovoCliente(false)} onClienteSalvoVoltarOrcamento={(c) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: null, modo: "editar" })} />}
           {aba === "projetos:etapas"        && <Etapas key={projetosKey} data={data} save={save} />}
           {aba === "projetos:orcamentos"    && <TesteOrcamento key={orcamentosKey} data={{ ...data, _usuario: usuario }} save={save} onCadastrarCliente={(nome) => { setAba("clientes"); setClientesKey(n=>n+1); setCadastroNovoCliente(nome || true); }} />}
-          {aba === "obras"                  && <Obras key={obrasKey} data={data} save={save} />}
+          {aba === "obras"                  && <Obras key={obrasKey} data={data} save={save} obraInicialId={obraParaAbrir} />}
           {aba === "financeiro"             && <Financeiro key={financeiroKey} data={data} save={save} />}
           {aba === "fornecedores"           && <PrestadoresServico key={fornecedoresKey} data={data} save={save} />}
           {aba === "insumos"                && <Insumos data={data} save={save} />}
           {aba === "whatsapp-piloto" && waPiloto && <WhatsappPiloto data={data} usuario={usuario} />}
           {aba === "teste-projeto" && <TesteProjeto data={data} usuario={usuario} save={save} />}
-          {typeof aba === "string" && aba.indexOf("escritorio") === 0 && <Escritorio key={escritorioKey} abaInicial={aba.indexOf(":") > 0 ? aba.slice(aba.indexOf(":") + 1) : "dados"} data={data} save={save} onReload={loadData} aoTrocarAba={(k) => setAba("escritorio:" + k)} />}
+          {typeof aba === "string" && aba.indexOf("escritorio") === 0 && <Escritorio key={escritorioKey} abaInicial={aba.indexOf(":") > 0 ? aba.slice(aba.indexOf(":") + 1) : "dados"} data={data} save={save} onReload={loadData} aoTrocarAba={(k) => setAba("escritorio:" + k)}
+            aoAbrirObra={(id) => { setObraParaAbrir(id || null); setObrasKey(n => n + 1); setAba("obras"); }} />}
           {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} setUsuario={setUsuario} />}
           {/* Sub-abas do menu Master — Admin recebe initialTab pra abrir direto na aba certa */}
           {aba === "admin" && isMaster && <Admin usuario={usuario} data={data} save={save} />}

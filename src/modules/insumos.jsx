@@ -1084,7 +1084,11 @@ function qtdIns(n) {
 
 function fmtBRLIns(v) {
   if (v == null) return "—";
-  return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  var n = Number(v);
+  // preço unitário de prego e parafuso fica abaixo do centavo (R$ 0,004):
+  // com 2 casas a tela mostrava R$ 0,00
+  var casas = n !== 0 && Math.abs(n) < 0.1 ? 4 : 2;
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: casas });
 }
 function fmtDataIns(d) {
   if (!d) return "—";

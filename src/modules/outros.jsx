@@ -480,11 +480,12 @@ function motivoPadrao(colKey) {
 // ═══════════════════════════════════════════════════════════════
 // MÓDULO OBRAS (stub — será desenvolvido em fase posterior)
 // ═══════════════════════════════════════════════════════════════
-function Obras({ data, save }) {
+function Obras({ data, save, obraInicialId }) {
   const obras = data.obras || [];
   const clientes = data.clientes || [];
   const [filtro, setFiltro] = useState("andamento"); // "andamento" | "concluidas" | "todas"
-  const [obraAbertaId, setObraAbertaId] = useState(null);
+  // obraInicialId: aberta direto de outra tela (Contas a receber)
+  const [obraAbertaId, setObraAbertaId] = useState(obraInicialId || null);
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
   // A Entrada aberta daqui, antes de escolher a obra: a nota chega na mão e
   // entra; de qual obra ela é se diz depois de ler. Quando a pessoa segue,
@@ -739,7 +740,9 @@ function Financeiro({ data, save }) {
       </div>
 
       {/* Cards */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14, marginBottom:20 }}>
+      {/* auto-fit: no celular os três cartões passam um embaixo do outro em
+          vez de estourar a largura da tela */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))", gap:14, marginBottom:20 }}>
         {[
           { label:"Receita Contabil",  v:totalContabil, c:"#3b82f6", sub: receitas.filter(r=>r.contabil1==="Receita Total").length + " lancamentos" },
           { label:"Caixa Recebido",    v:totalCaixa,    c:"#10b981", sub: receitas.filter(r=>r.recebimento==="Recebido").length + " lancamentos" },

@@ -3,7 +3,7 @@
 // Visual minimalista, fundo branco, estilo Claude.ai
 // ═══════════════════════════════════════════════════════════════
 
-function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
+function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba, aoAbrirObra }) {
   const cfg = (data && data.escritorio) || {};
   // abaInicial: o menu lateral abre o módulo já na aba pedida (Financeiro,
   // Cadastro, Equipe, Usuários, Sistema). Sem ela, cai em "dados".
@@ -839,8 +839,8 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
           Nenhum membro cadastrado ainda.
         </div>
       ) : (
-        equipe.map(m => (
-          <div key={m.id} style={E.membroCard}>
+        equipe.map((m, i) => (
+          <div key={m.id || m.email || m.nome || i} style={E.membroCard}>
             <div>
               <div style={E.membroNome}>{m.nome}</div>
               <div style={E.membroCargo}>{m.cargo || "—"}</div>
@@ -1304,6 +1304,7 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
           // O financeiro do escritório é dado de dono: mesma régua da aba
           // Usuários, que também só admin enxerga.
           if (perm.podeGerenciarUsuarios) abasDisponiveis.push(["financeiro", "Financeiro"]);
+          if (perm.podeGerenciarUsuarios) abasDisponiveis.push(["receber", "A receber"]);
           if (perm.podeGerenciarUsuarios) abasDisponiveis.push(["usuarios", "Usuários"]);
           abasDisponiveis.push(["sistema", "Sistema"]);
           return abasDisponiveis.map(([key, lbl]) => (
@@ -1320,6 +1321,11 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba }) {
         <FinanceiroEscritorio data={data} save={save} onReload={onReload}
           vista={peloMenu ? (aba === "financeiro" ? "resumo" : aba) : null}
           aoIrPara={(destino) => { setAba(destino); if (aoTrocarAba) aoTrocarAba(destino); }} />
+      )}
+      {aba === "receber" && perm.podeGerenciarUsuarios && typeof ContasAReceber === "function" && (
+        <div style={{ padding: "0 0 24px" }}>
+          <ContasAReceber data={data} save={save} aoAbrirObra={aoAbrirObra} />
+        </div>
       )}
       {aba === "usuarios" && perm.podeGerenciarUsuarios && renderUsuarios()}
       {renderModalMembro()}

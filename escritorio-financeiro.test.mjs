@@ -1006,6 +1006,26 @@ teste("o aporte n\u00e3o vira venda nem investimento", () => {
   assert.strictEqual(r.resultado, null, "sem venda n\u00e3o h\u00e1 lucro a apurar");
 });
 
+teste("empreendimento: aporte (depósito próprio) atravessa fora da conta e não entra na checagem do banco", () => {
+  const obra = { id: "obE", clienteId: "e1", nome: "Jacarezinho Módulo 1" };
+  const cliente = { id: "e1", nome: "Jacarezinho Módulo 1", servicos: { empreendimento: true } };
+  const r = M.lancamentosDaObraParaEscritorio(obra, cliente, {
+    planoObra: PLANO_OBRA,
+    contasPagar: [{ id: "m1", contaId: "material", valor: 20000, pago: true, valorPago: 20000, pagoEm: "2026-10-05" }],
+    entradas: [{ id: "ap1", contaId: "deposito_proprio", valor: 50000, data: "2026-10-01" }],
+  });
+  const ap = r.lancamentos.find((l) => l.contaId === "emp_aporte");
+  const mat = r.lancamentos.find((l) => l.contaId === "emp_construcao");
+  assert.ok(ap && mat, JSON.stringify(r.lancamentos.map((l) => l.contaId)));
+  assert.strictEqual(ap.contaBanco, "nao");
+  assert.strictEqual(mat.contaBanco, "sim");
+  const ch = M.checagemDebitoCredito([{ id: "b1", data: "2026-10-05", valor: -20000, historico: "PIX" }], r.lancamentos, "2026-10");
+  assert.strictEqual(ch.difCredito, 0, "o aporte não é crédito do banco");
+  assert.strictEqual(ch.difDebito, 0);
+  const c = M.conciliarExtrato([{ id: "b1", data: "2026-10-05", valor: -20000, historico: "PIX" }], r.lancamentos, {});
+  assert.ok(!c.contabilizadoSemPar.some((l) => l.contaId === "emp_aporte"), "não aparece como 'não veio no banco'");
+});
+
 teste("a obra manda o que pagou, com a compet\u00eancia do pagamento", () => {
   const obra = { id: "ob1", clienteId: "c1", nome: "Reforma Loja Cobop" };
   const cliente = { id: "c1", nome: "COBOP", servicos: {} };
@@ -1245,6 +1265,22 @@ teste("compra lancada com atraso entra na proxima fatura, marcada como atrasada"
   assert.strictEqual(f.totalDoMes, 7700, "lajes 7200 + a 2a parcela do concreto 500");
   assert.strictEqual(f.atrasadas.length, 0, "setembro esta fechado, nao volta");
   assert.strictEqual(f.total, 7700);
+});
+
+teste("compra de setembro lancada DEPOIS de fechar setembro entra em outubro como atrasada (e a ja faturada nao volta)", () => {
+  const fSet = M.faturaParaFechar(CARTAO, OBRAS_CT, [], "2026-09");
+  const fatSet = M.lancamentoDaFatura(CARTAO, "2026-09", fSet.linhas, {});
+  // depois do fechamento, uma compra de setembro que tinha ficado de fora
+  const obras = [{ ...OBRAS_CT[0], contasPagar: OBRAS_CT[0].contasPagar.concat([
+    { id: "tarde", cartaoId: "k1", contaId: "material", descricao: "Bomba", pagoEm: "2026-09-25",
+      parcelasCartao: [{ parcela: 1, de: 1, competencia: "2026-09", valor: 1520 }] }]) }];
+  const f = M.faturaParaFechar(CARTAO, obras, [fatSet], "2026-10");
+  assert.deepStrictEqual(f.atrasadas.map((l) => [l.refId, l.valor]), [["tarde", 1520]], "só a que ficou de fora");
+  assert.strictEqual(f.total, 7700 + 1520);
+  // fechada outubro (levando a atrasada), novembro não a traz de novo
+  const fatOut = M.lancamentoDaFatura(CARTAO, "2026-10", f.linhas, {});
+  const fNov = M.faturaParaFechar(CARTAO, obras, [fatSet, fatOut], "2026-11");
+  assert.strictEqual(fNov.atrasadas.length, 0);
 });
 
 teste("o mes anterior em aberto e varrido junto — nao deixa parcela orfa", () => {

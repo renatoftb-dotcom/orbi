@@ -4760,6 +4760,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             serviço, gestão de obra inclusive */}
         <div style={bloco}>
           <div style={tituloBloco}>Modalidade de pagamento</div>
+          {/* Equipamento é sempre pago por medição (o texto do contrato e as
+              contas seguem isso): os outros modos não teriam efeito. */}
+          {porUnidade && (
+            <div style={{ fontSize: 12.5, color: "#4b5563", marginBottom: 10 }}>
+              Contrato de equipamento é pago <b>por medição</b> — o período e o prazo de pagamento ficam na medição, abaixo.
+            </div>
+          )}
+          {!porUnidade && (
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8, marginBottom: 10 }}>
             {MODALIDADES_PAGAMENTO.map(mp => (
               <label key={mp.id} style={{ display: "flex", gap: 8, alignItems: "start", border: `1.5px solid ${modo === mp.id ? AZUL_VK : "rgba(38,36,33,0.14)"}`, borderRadius: 10, padding: "9px 11px", cursor: "pointer", background: "#fff" }}>
@@ -4771,6 +4779,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               </label>
             ))}
           </div>
+          )}
           <div style={grade("1fr 1fr 1fr")}>
             {(modo === "entradaParcelas" || modo === "entradaFinal") && (
               <div><label style={C.label}>Entrada (%)</label><CampoCtrNum tipo="pct" valor={g.entradaPct} onChange={v => setG("entradaPct", v)} style={C.input} placeholder="0,00%" /></div>

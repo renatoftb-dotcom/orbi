@@ -522,7 +522,11 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
       // lançamento do próprio escritório.
       numeroDoc: fonte.numeroDoc || "",
       anexos: [],
-      contaBanco: "sim",
+      // Aporte no empreendimento é o próprio escritório pondo dinheiro na obra
+      // dele (todo custo do empreendimento sai da conta do escritório): troca
+      // de bolso, sem linha no banco. Com "sim", a checagem de débito × crédito
+      // contava como entrada e a conferência o dava como "não veio no banco".
+      contaBanco: destino === "emp_aporte" ? "nao" : "sim",
       // Quando ele nasceu, para a lista pôr o mais novo na frente dentro do
       // mês. Sem isto, o lançamento recém-criado cai no meio dos outros de
       // setembro e parece que não entrou.
@@ -744,11 +748,29 @@ function faturaParaFechar(cartao, obras, lancamentos, competencia, opcoes) {
   const cid = (cartao || {}).id || "";
   const fechadas = faturasFechadas(lancamentos, cid);
   const doMes = linhasDaFatura(obras, lancamentos, cid, competencia, opcoes);
+  // O que já entrou em alguma fatura deste cartão (a composição fica
+  // guardada em `linhas`). A compra lançada DEPOIS de o mês dela fechar não
+  // está em fatura nenhuma: ela vem como atrasada na próxima — antes, mês
+  // fechado era pulado inteiro e essa compra ficava fora de todas.
+  const chaveDaLinha = (l) => [l.origem || "", l.obraId || "", l.refId || "", l.parcela || "", l.refId ? "" : `${l.descricao || ""}|${l.valor}`].join("|");
+  const jaFaturadas = new Set();
+  const antigas = new Set();
+  for (const f of lancamentos || []) {
+    const o = (f || {}).origem || {};
+    if (o.tipo !== "fatura" || o.cartaoId !== cid) continue;
+    for (const l of f.linhas || []) jaFaturadas.add(chaveDaLinha(l));
+    // fatura gravada sem a identidade das compras (versão antiga): não dá
+    // para saber o que ela levou — o mês dela fica como antes, de fora
+    if ((f.linhas || []).some((l) => !l || !l.refId)) {
+      antigas.add(o.competencia);
+      for (const c of Array.isArray(o.cobre) ? o.cobre : []) antigas.add(c);
+    }
+  }
   const atrasadas = [];
   for (const comp of competenciasDoCartao(obras, lancamentos, cid)) {
     if (comp >= competencia) continue;
-    if (fechadas.has(comp)) continue;
     for (const l of linhasDaFatura(obras, lancamentos, cid, comp, opcoes)) {
+      if (fechadas.has(comp) && (antigas.has(comp) || jaFaturadas.has(chaveDaLinha(l)))) continue;
       atrasadas.push({ ...l, competenciaOriginal: comp, atrasada: true });
     }
   }

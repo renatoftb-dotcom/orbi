@@ -25,6 +25,14 @@ function Mensagens({ usuario }) {
   const [filtro, setFiltro]       = useState("todas"); // "todas" | "nao-lidas"
   // Mensagem selecionada (objeto com body completo carregado sob demanda)
   const [selecionada, setSelecionada] = useState(null);
+  // No celular não cabem lista e mensagem lado a lado: mostra uma de cada
+  // vez (a lista; tocou, a mensagem com "← Voltar").
+  const [estreito, setEstreito] = useState(typeof window !== "undefined" && window.innerWidth < 700);
+  useEffect(() => {
+    const f = () => setEstreito(window.innerWidth < 700);
+    window.addEventListener("resize", f);
+    return () => window.removeEventListener("resize", f);
+  }, []);
   const [carregandoDet, setCarregandoDet] = useState(false);
   // Modal de Responder
   const [respondendo, setRespondendo]       = useState(null); // mensagem a responder, ou null
@@ -298,7 +306,7 @@ function Mensagens({ usuario }) {
       </div>
 
       <div style={S.body}>
-        <div style={S.listaCol}>
+        <div style={estreito ? { ...S.listaCol, width: "100%", minWidth: 0, borderRight: "none", display: selecionada ? "none" : "block" } : S.listaCol}>
           {mensagens.length === 0 ? (
             <div style={S.vazio}>
               {filtro === "nao-lidas"
@@ -332,7 +340,13 @@ function Mensagens({ usuario }) {
           )}
         </div>
 
-        <div style={S.detalheCol}>
+        <div style={estreito ? { ...S.detalheCol, display: selecionada ? "block" : "none" } : S.detalheCol}>
+          {estreito && selecionada && (
+            <button type="button" onClick={() => setSelecionada(null)} data-vk-msg-voltar
+              style={{ background: "none", border: "none", color: "#0474f4", fontSize: 13, padding: "12px 16px 0", cursor: "pointer", fontFamily: "inherit" }}>
+              ← Voltar
+            </button>
+          )}
           {!selecionada ? (
             <div style={{ ...S.vazio, paddingTop:120 }}>
               Selecione uma mensagem para visualizar

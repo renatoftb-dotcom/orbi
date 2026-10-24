@@ -12103,8 +12103,21 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
               <input style={E.input} type="date" value={p.vencimento || ""} onChange={(e) => aoMudar({ ...p, vencimento: e.target.value })} />
             </div>
             <div>
-              <label style={E.label}>{numeroDoCampo(p.desconto) < 0 ? "Desconto (R$) · negativo é acréscimo" : "Desconto (R$)"}</label>
-              <CampoCtrNum tipo="moeda" valor={p.desconto} onChange={(v) => aoMudar({ ...p, desconto: v })} style={E.input} placeholder="0,00" />
+              {/* Desconto ou acréscimo combinado no fechamento: o campo de valor
+                  não aceita sinal, então o lado vem da escolha ao lado (o
+                  acréscimo fica gravado como desconto negativo). */}
+              <label style={E.label}>{numeroDoCampo(p.desconto) < 0 ? "Acréscimo (R$)" : "Desconto (R$)"}</label>
+              <div style={{ display: "flex", gap: 6 }}>
+                <Selecao style={{ ...E.input, width: "auto", flex: "0 0 auto", cursor: "pointer" }}
+                  value={numeroDoCampo(p.desconto) < 0 ? "-" : "+"}
+                  onChange={(e) => { const v = Math.abs(numeroDoCampo(p.desconto)) || 0; aoMudar({ ...p, desconto: e.target.value === "-" ? -v : v }); }}>
+                  <option value="+">desconto</option>
+                  <option value="-">acréscimo</option>
+                </Selecao>
+                <CampoCtrNum tipo="moeda" valor={Math.abs(numeroDoCampo(p.desconto)) || ""}
+                  onChange={(v) => { const n = Math.abs(numeroDoCampo(v)) || 0; aoMudar({ ...p, desconto: numeroDoCampo(p.desconto) < 0 ? -n : (v === "" ? "" : n) }); }}
+                  style={{ ...E.input, flex: 1, minWidth: 0 }} placeholder="0,00" />
+              </div>
             </div>
           </div>
 

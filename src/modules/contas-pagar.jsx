@@ -1819,6 +1819,9 @@ function tituloCurtoConta(conta) {
   if (curta) partes.push(curta);
   else if (c.parcela && c.totalParcelas) partes.push(`Parcela ${c.parcela}/${c.totalParcelas}`);
   else if (d) partes.push(d.slice(0, CP_TITULO_CURTO));
+  // a parcela retida até o aceite diz isso já no título (não só no detalhe):
+  // é a que não se paga no calendário normal
+  if (c.retida && !/retida/i.test(partes.join(" "))) partes.push("retida até o aceite");
   return partes.join(" · ") || "—";
 }
 function apoioCurtoConta(conta) {
@@ -1832,7 +1835,8 @@ function detalheConta(conta) {
   if (c.origem !== "contrato") return d;
   // "Parcela 2/6 (mensal)" → "mensal"; "Medição 1/3 (estimada)" → "estimada"
   const m = /^(?:Parcela|Medição) \d+\/\d+ \((.+)\)$/.exec(d);
-  if (m) return m[1];
+  // "retida até o aceite" já está no título (tituloCurtoConta)
+  if (m) return c.retida ? m[1].replace(/,? ?retida até o aceite/, "") : m[1];
   return c.parcela && c.totalParcelas && /^Parcela \d+\/\d+$/.test(d) ? "" : d;
 }
 

@@ -53,6 +53,9 @@ const ORDER = [
   // dentro do painel da obra.
   "cotacoes-obra.jsx",
   "clientes.jsx",
+  // contas-receber.jsx: a tela do Contas a receber do escritório. Usa as
+  // regras do financeiro do escritório (parcelas de projeto, ponte da obra).
+  "contas-receber.jsx",
   "resultado-pdf.jsx",
   // shared-textos.jsx vem antes de quem o consome (modelo-padrao.jsx,
   // template-edicao.jsx). Contém defaults/helpers de texto da proposta —
