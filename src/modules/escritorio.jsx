@@ -127,10 +127,10 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba, aoAbrirObra
     const senhaPreenchida = !!novoUsuario.senha;
     // Ao criar: senha obrigatória. Ao editar: senha opcional (se preencher, valida).
     if (!editando || senhaPreenchida) {
-      if (!novoUsuario.senha || novoUsuario.senha.length < 6) {
+      if (!novoUsuario.senha || novoUsuario.senha.length < 8) {
         dialogo.alertar({
           titulo: "Senha muito curta",
-          mensagem: editando ? "A nova senha deve ter no mínimo 6 caracteres." : "A senha deve ter no mínimo 6 caracteres.",
+          mensagem: editando ? "A nova senha deve ter no mínimo 8 caracteres." : "A senha deve ter no mínimo 8 caracteres.",
           tipo: "aviso",
         });
         return;
@@ -1053,7 +1053,7 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba, aoAbrirObra
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:14 }}>
                 <div style={E.campo}>
                   <label style={E.label}>
-                    {novoUsuario._editando ? "Nova senha (deixe em branco pra manter)" : "Senha * (mín. 6 caracteres)"}
+                    {novoUsuario._editando ? "Nova senha (deixe em branco pra manter)" : "Senha * (mín. 8 caracteres)"}
                   </label>
                   <input type="password" style={E.input} value={novoUsuario.senha}
                     autoComplete="new-password"

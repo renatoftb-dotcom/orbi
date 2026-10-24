@@ -1606,8 +1606,8 @@ function ModalNovaEmpresa({ S, onFechar, onSucesso }) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.adminEmail.trim())) {
       dialogo.alertar({ titulo: "Email inválido", tipo: "aviso" }); return;
     }
-    if (!form.adminSenha || form.adminSenha.length < 6) {
-      dialogo.alertar({ titulo: "Senha muito curta", mensagem: "A senha do administrador deve ter no mínimo 6 caracteres.", tipo: "aviso" }); return;
+    if (!form.adminSenha || form.adminSenha.length < 8) {
+      dialogo.alertar({ titulo: "Senha muito curta", mensagem: "A senha do administrador deve ter no mínimo 8 caracteres.", tipo: "aviso" }); return;
     }
 
     setSalvando(true);
@@ -1706,7 +1706,7 @@ function ModalNovaEmpresa({ S, onFechar, onSucesso }) {
           </div>
 
           <div>
-            <label style={S.label}>Senha (mínimo 6 caracteres)</label>
+            <label style={S.label}>Senha (mínimo 8 caracteres)</label>
             <input
               style={S.input}
               type="password"
@@ -2396,8 +2396,8 @@ function ModalNovoMaster({ S, onFechar, onSucesso }) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
       dialogo.alertar({ titulo: "Email inválido", tipo: "aviso" }); return;
     }
-    if (!form.senha || form.senha.length < 6) {
-      dialogo.alertar({ titulo: "Senha muito curta", mensagem: "Mínimo 6 caracteres.", tipo: "aviso" }); return;
+    if (!form.senha || form.senha.length < 8) {
+      dialogo.alertar({ titulo: "Senha muito curta", mensagem: "Mínimo 8 caracteres.", tipo: "aviso" }); return;
     }
 
     setSalvando(true);
@@ -2449,7 +2449,7 @@ function ModalNovoMaster({ S, onFechar, onSucesso }) {
             />
           </div>
           <div>
-            <label style={S.label}>Senha (mínimo 6 caracteres)</label>
+            <label style={S.label}>Senha (mínimo 8 caracteres)</label>
             <input
               style={S.input}
               type="password"

@@ -338,7 +338,7 @@ function TelaCadastro({ onVoltar, onCodigoEnviado }) {
     if (!nomeResp.trim())    return setErro("Informe seu nome.");
     if (!email.trim())       return setErro("Informe seu e-mail.");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setErro("E-mail inválido.");
-    if (senha.length < 6)    return setErro("Senha deve ter no mínimo 6 caracteres.");
+    if (senha.length < 8)    return setErro("Senha deve ter no mínimo 8 caracteres.");
 
     setLoading(true);
     try {
@@ -409,7 +409,7 @@ function TelaCadastro({ onVoltar, onCodigoEnviado }) {
             />
           </div>
           <div style={S.grupo}>
-            <label style={S.label}>Senha * <span style={{ color:"#4b5563", fontWeight:400 }}>(mínimo 6 caracteres)</span></label>
+            <label style={S.label}>Senha * <span style={{ color:"#4b5563", fontWeight:400 }}>(mínimo 8 caracteres)</span></label>
             <div style={{ position:"relative" }}>
               <input
                 style={{ ...S.input, paddingRight: 40 }}

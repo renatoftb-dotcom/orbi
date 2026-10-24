@@ -73040,10 +73040,10 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba, aoAbrirObra
     const senhaPreenchida = !!novoUsuario.senha;
     // Ao criar: senha obrigatória. Ao editar: senha opcional (se preencher, valida).
     if (!editando || senhaPreenchida) {
-      if (!novoUsuario.senha || novoUsuario.senha.length < 6) {
+      if (!novoUsuario.senha || novoUsuario.senha.length < 8) {
         dialogo.alertar({
           titulo: "Senha muito curta",
-          mensagem: editando ? "A nova senha deve ter no mínimo 6 caracteres." : "A senha deve ter no mínimo 6 caracteres.",
+          mensagem: editando ? "A nova senha deve ter no mínimo 8 caracteres." : "A senha deve ter no mínimo 8 caracteres.",
           tipo: "aviso",
         });
         return;
@@ -73966,7 +73966,7 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba, aoAbrirObra
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:14 }}>
                 <div style={E.campo}>
                   <label style={E.label}>
-                    {novoUsuario._editando ? "Nova senha (deixe em branco pra manter)" : "Senha * (mín. 6 caracteres)"}
+                    {novoUsuario._editando ? "Nova senha (deixe em branco pra manter)" : "Senha * (mín. 8 caracteres)"}
                   </label>
                   <input type="password" style={E.input} value={novoUsuario.senha}
                     autoComplete="new-password"
@@ -75994,8 +75994,8 @@ function ModalNovaEmpresa({ S, onFechar, onSucesso }) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.adminEmail.trim())) {
       dialogo.alertar({ titulo: "Email inválido", tipo: "aviso" }); return;
     }
-    if (!form.adminSenha || form.adminSenha.length < 6) {
-      dialogo.alertar({ titulo: "Senha muito curta", mensagem: "A senha do administrador deve ter no mínimo 6 caracteres.", tipo: "aviso" }); return;
+    if (!form.adminSenha || form.adminSenha.length < 8) {
+      dialogo.alertar({ titulo: "Senha muito curta", mensagem: "A senha do administrador deve ter no mínimo 8 caracteres.", tipo: "aviso" }); return;
     }
 
     setSalvando(true);
@@ -76094,7 +76094,7 @@ function ModalNovaEmpresa({ S, onFechar, onSucesso }) {
           </div>
 
           <div>
-            <label style={S.label}>Senha (mínimo 6 caracteres)</label>
+            <label style={S.label}>Senha (mínimo 8 caracteres)</label>
             <input
               style={S.input}
               type="password"
@@ -76784,8 +76784,8 @@ function ModalNovoMaster({ S, onFechar, onSucesso }) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
       dialogo.alertar({ titulo: "Email inválido", tipo: "aviso" }); return;
     }
-    if (!form.senha || form.senha.length < 6) {
-      dialogo.alertar({ titulo: "Senha muito curta", mensagem: "Mínimo 6 caracteres.", tipo: "aviso" }); return;
+    if (!form.senha || form.senha.length < 8) {
+      dialogo.alertar({ titulo: "Senha muito curta", mensagem: "Mínimo 8 caracteres.", tipo: "aviso" }); return;
     }
 
     setSalvando(true);
@@ -76837,7 +76837,7 @@ function ModalNovoMaster({ S, onFechar, onSucesso }) {
             />
           </div>
           <div>
-            <label style={S.label}>Senha (mínimo 6 caracteres)</label>
+            <label style={S.label}>Senha (mínimo 8 caracteres)</label>
             <input
               style={S.input}
               type="password"
@@ -77207,7 +77207,7 @@ function TelaCadastro({ onVoltar, onCodigoEnviado }) {
     if (!nomeResp.trim())    return setErro("Informe seu nome.");
     if (!email.trim())       return setErro("Informe seu e-mail.");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setErro("E-mail inválido.");
-    if (senha.length < 6)    return setErro("Senha deve ter no mínimo 6 caracteres.");
+    if (senha.length < 8)    return setErro("Senha deve ter no mínimo 8 caracteres.");
 
     setLoading(true);
     try {
@@ -77278,7 +77278,7 @@ function TelaCadastro({ onVoltar, onCodigoEnviado }) {
             />
           </div>
           <div style={S.grupo}>
-            <label style={S.label}>Senha * <span style={{ color:"#4b5563", fontWeight:400 }}>(mínimo 6 caracteres)</span></label>
+            <label style={S.label}>Senha * <span style={{ color:"#4b5563", fontWeight:400 }}>(mínimo 8 caracteres)</span></label>
             <div style={{ position:"relative" }}>
               <input
                 style={{ ...S.input, paddingRight: 40 }}
@@ -88711,7 +88711,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
 
   function validar() {
     if (!senhaAtual) return "Informe a senha atual (a temporária recebida)";
-    if (!senhaNova || senhaNova.length < 6) return "A nova senha deve ter no mínimo 6 caracteres";
+    if (!senhaNova || senhaNova.length < 8) return "A nova senha deve ter no mínimo 8 caracteres";
     if (senhaNova === senhaAtual) return "A nova senha precisa ser diferente da atual";
     if (senhaNova !== confirmar) return "Confirmação de senha não confere";
     return null;
@@ -88723,7 +88723,9 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
     setLoading(true);
     setErro(null);
     try {
-      await api.auth.trocarSenha(senhaAtual, senhaNova);
+      const r = await api.auth.trocarSenha(senhaAtual, senhaNova);
+      // a troca derruba o login em uso; o servidor devolve um novo
+      if (r && r.token) { try { localStorage.setItem("vicke-token", r.token); } catch (e) {} }
       onTrocada();
     } catch (e) {
       setErro(e.message || "Falha ao trocar senha");
@@ -88776,7 +88778,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
 
         <div style={{ marginBottom:14 }}>
           <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
-            Nova senha (mínimo 6 caracteres)
+            Nova senha (mínimo 8 caracteres)
           </label>
           <CampoSenha
             nome="vk-senha-nova"

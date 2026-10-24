@@ -584,7 +584,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
 
   function validar() {
     if (!senhaAtual) return "Informe a senha atual (a temporária recebida)";
-    if (!senhaNova || senhaNova.length < 6) return "A nova senha deve ter no mínimo 6 caracteres";
+    if (!senhaNova || senhaNova.length < 8) return "A nova senha deve ter no mínimo 8 caracteres";
     if (senhaNova === senhaAtual) return "A nova senha precisa ser diferente da atual";
     if (senhaNova !== confirmar) return "Confirmação de senha não confere";
     return null;
@@ -596,7 +596,9 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
     setLoading(true);
     setErro(null);
     try {
-      await api.auth.trocarSenha(senhaAtual, senhaNova);
+      const r = await api.auth.trocarSenha(senhaAtual, senhaNova);
+      // a troca derruba o login em uso; o servidor devolve um novo
+      if (r && r.token) { try { localStorage.setItem("vicke-token", r.token); } catch (e) {} }
       onTrocada();
     } catch (e) {
       setErro(e.message || "Falha ao trocar senha");
@@ -649,7 +651,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
 
         <div style={{ marginBottom:14 }}>
           <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
-            Nova senha (mínimo 6 caracteres)
+            Nova senha (mínimo 8 caracteres)
           </label>
           <CampoSenha
             nome="vk-senha-nova"
