@@ -5776,9 +5776,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       {(() => {
         const pilPav = (p, k) => (
           <div key={p.id} style={{ display: "flex", gap: 4 }}>
-            <button onClick={() => { if (p.id === pavAtivo) { setEditPav((x) => !x); return; } irParaPav(p.id); setPavAberto(false); }} onDoubleClick={() => { irParaPav(p.id); setEditPav(true); }}
+            <button onClick={() => { if (p.id === pavAtivo && (vis3d === "so" || pavsOrd.length < 2)) { setEditPav((x) => !x); return; } irParaPav(p.id); setVis3d("so"); setPavAberto(false); }} onDoubleClick={() => { irParaPav(p.id); setEditPav(true); }}
               title={`${p.nome} · nível ${tpFmt(p.nivel)}. Clique de novo no pavimento em uso para editar (nome, nível, excluir). Page Up / Page Down troca.`}
-              style={{ ...btn, width: 140, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, display: "flex", justifyContent: "space-between", alignItems: "center", borderColor: p.id === pavAtivo ? TP_AZUL : "#e5e7eb", background: p.id === pavAtivo ? "#eef5ff" : "#fff", color: p.id === pavAtivo ? TP_AZUL : "#374151", fontWeight: p.id === pavAtivo ? 600 : 500 }}>
+              style={{ ...btn, width: 140, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, display: "flex", justifyContent: "space-between", alignItems: "center", borderColor: p.id === pavAtivo ? TP_AZUL : "#e5e7eb", background: p.id === pavAtivo && !(vis3d === "todos" && pavsOrd.length > 1) ? "#eef5ff" : "#fff", color: p.id === pavAtivo ? TP_AZUL : "#374151", fontWeight: p.id === pavAtivo ? 600 : 500 }}>
               <span>{p.nome}</span><span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>{tpFmt(p.nivel)}</span>
             </button>
             {k === 0 && (
@@ -5795,6 +5795,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const lista = pavAberto ? pavsOrd : pavsOrd.filter((p) => p.id === pavAtivo);
         return (
           <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 3 }}>
+            {pavAberto && pavsOrd.length > 1 && (
+              <button onClick={() => { setVis3d("todos"); setEditPav(false); setPavAberto(false); }} title="Todos os pavimentos no 3D (o desenho continua no pavimento em uso)"
+                style={{ ...btn, width: 140, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, textAlign: "left", borderColor: vis3d === "todos" ? TP_AZUL : "#e5e7eb", background: vis3d === "todos" ? "#eef5ff" : "#fff", color: vis3d === "todos" ? TP_AZUL : "#374151", fontWeight: vis3d === "todos" ? 600 : 500 }}>
+                Todos
+              </button>
+            )}
             {lista.map((p) => pilPav(p, pavsOrd.indexOf(p) === 0 && pavAberto ? 0 : 1))}
             {comTelhado && pavAberto && (
               <button onClick={() => {
