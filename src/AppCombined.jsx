@@ -86691,7 +86691,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // solta, a própria barrinha arrasta a janela
   const barraSegunda = (
     <div onPointerDown={docaEf === "livre" ? arrastoTela("mover") : undefined}
-      style={{ ...barraVidro, position: "absolute", top: 6, left: docaEf === "baixo" && !isMobile && !painelOculto ? 292 : 6, zIndex: 3, cursor: docaEf === "livre" ? "move" : "default", touchAction: "none" }}>
+      style={{ ...barraVidro, position: "absolute", top: 6, left: docaEf === "baixo" && !isMobile && !painelOculto ? 272 : 6, zIndex: 3, cursor: docaEf === "livre" ? "move" : "default", touchAction: "none" }}>
       {docaEf === "livre" && <span style={{ ...icoTela(false), width: 18, color: "#9ca3af", cursor: "move" }}>{ICO.alca}</span>}
       {[["direita", "Ao lado", ICO.lado], ["baixo", "Embaixo", ICO.baixo], ["livre", "Janela solta (arraste e redimensione)", ICO.solta]].map(([d, rot, ic]) => (
         <button key={d} onPointerDown={(e) => e.stopPropagation()} onClick={() => escolherDoca(d)} title={rot} aria-label={d === "direita" ? "Segunda vista ao lado" : d === "baixo" ? "Segunda vista embaixo" : "Segunda vista em janela solta"} aria-pressed={docaEf === d} style={icoTela(docaEf === d)}>{ic}</button>
@@ -87213,7 +87213,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           const ativa = ferramenta === f.id;
           return (
             <button key={f.id} title={f.dica} onClick={() => { trocarFerramenta(ativa ? "selecionar" : f.id); setFerrAberto(false); if (isMobile && !ativa) setMenuAberto(false); }}
-              style={{ ...btn, width: "100%", minHeight: 28, padding: "3px 8px", fontSize: 12, borderRadius: 7, borderColor: ativa ? TP_AZUL : "#e5e7eb", background: ativa ? "#eef5ff" : "#fff", color: ativa ? TP_AZUL : "#111827", fontWeight: ativa ? 600 : 500 }}>
+              style={{ ...btn, width: 140, minHeight: 28, padding: "3px 8px", fontSize: 12, borderRadius: 7, borderColor: ativa ? TP_AZUL : "#e5e7eb", background: ativa ? "#eef5ff" : "#fff", color: ativa ? TP_AZUL : "#111827", fontWeight: ativa ? 600 : 500 }}>
               {f.rotulo}
             </button>
           );
@@ -87247,7 +87247,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     </>
   ); };
   const menu = (
-    <aside ref={asideRef} style={{ width: isMobile ? "min(86vw, 300px)" : 268, flexShrink: 0, background: "#fff", borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", height: "100%", boxSizing: "border-box",
+    <aside ref={asideRef} style={{ width: isMobile ? "min(86vw, 300px)" : 248, flexShrink: 0, background: "#fff", borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", height: "100%", boxSizing: "border-box",
       paddingTop: "max(14px, env(safe-area-inset-top, 0px))", paddingBottom: "max(14px, env(safe-area-inset-bottom, 0px))", paddingLeft: "max(16px, env(safe-area-inset-left, 0px))", paddingRight: 16, overflowY: "auto",
       ...(isMobile ? { position: "absolute", top: 0, left: 0, bottom: 0, zIndex: 3, boxShadow: "4px 0 20px rgba(0,0,0,0.15)", transform: menuAberto ? "none" : "translateX(-105%)", transition: "transform .2s ease" }
         // desktop: painel suspenso sobre o desenho (o projeto passa por baixo)
@@ -87334,7 +87334,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             })}
           </div>
       ))}
-      {dobra("qtd", "Quantitativo", `${tpFmt(A - areaAberturas)} m² de parede`, (
+      {dobra("qtd", "Quantitativo", `${tpFmt(A - areaAberturas)} m²`, (
       <div>
         <div style={linhaQ}><span>Paredes</span><span style={numQ}>{paredes.length} · {tpFmt(L)} m</span></div>
         <div style={linhaQ}><span>Área de parede{areaAberturas > 0 ? " (bruta)" : ""}</span><span style={numQ}>{tpFmt(A)} m²</span></div>
@@ -87532,7 +87532,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           marginBottom: "env(safe-area-inset-bottom, 0px)", marginRight: "env(safe-area-inset-right, 0px)" }}>
           {!isMobile && <div style={{ position: "absolute", top: 10, right: 10, zIndex: 5 }}>{grupoVistas}</div>}
           {ferrSolta && (
-            <div style={{ position: "absolute", zIndex: 6, left: `min(${ferrSolta.x * 100}%, calc(100% - 236px))`, top: `min(${ferrSolta.y * 100}%, calc(100% - 50px))`, width: ferrAbertoC || ferramenta !== "selecionar" ? 226 : "auto", padding: 6, boxSizing: "border-box",
+            <div style={{ position: "absolute", zIndex: 6, left: `min(${ferrSolta.x * 100}%, calc(100% - 236px))`, top: `min(${ferrSolta.y * 100}%, calc(100% - 50px))`, width: (ferramenta === "parede" || tpEhPoli(ferramenta)) ? 226 : (ferrAbertoC || ferramenta !== "selecionar") ? 154 : "auto", padding: 6, boxSizing: "border-box",
               background: "rgba(255,255,255,0.6)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", border: "1px solid rgba(229,231,235,0.8)", borderRadius: 12, maxHeight: "calc(100% - 20px)", overflowY: "auto" }}>
               {botaoMais(true)}
               {listaFerr(true)}
