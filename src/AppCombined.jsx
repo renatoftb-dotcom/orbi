@@ -83166,6 +83166,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const [ferrSolta, setFerrSolta] = useState(() => { try { const v = JSON.parse(localStorage.getItem("vicke-projetar-ferr-solta") || "null"); return v && v.x >= 0 && v.y >= 0 ? v : null; } catch (err) { return null; } });
   const [arrasteMais, setArrasteMais] = useState(null);
   const [pavAbertoM, setPavAbertoM] = useState(false), [pavAbertoC, setPavAbertoC] = useState(false);
+  const [exibirAberto, setExibirAberto] = useState(false); // botão Exibir: escala da planta e grade
+  const [mostrarGrade, setMostrarGrade] = useState(() => { try { return localStorage.getItem("vicke-projetar-grade") !== "0"; } catch (err) { return true; } });
   const [pavSolta, setPavSolta] = useState(() => { try { const v = JSON.parse(localStorage.getItem("vicke-projetar-pav-solta") || "null"); return v && v.x >= 0 && v.y >= 0 ? v : null; } catch (err) { return null; } });
   const arrastouMais = useRef(false);
   // tela dividida: a segunda vista (3D ou corte) fica à direita, embaixo ou solta
@@ -83896,8 +83898,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const xA = Math.floor(-v.ox / v.s), xB = Math.ceil((W - v.ox) / v.s), yA = Math.floor(-v.oy / v.s), yB = Math.ceil((H - v.oy) / v.s);
     ctx.lineWidth = 1;
     const corGrade = (k) => (Math.abs(k % 5) < 1e-6 ? "#cfd5dc" : (Math.abs(k % 1) < 1e-6 ? "#e3e7ec" : "#f1f3f6"));
-    for (let x = xA; x <= xB; x += passo) { const sx = Math.round(x * v.s + v.ox) + 0.5; ctx.strokeStyle = corGrade(x); ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, H); ctx.stroke(); }
-    for (let y = yA; y <= yB; y += passo) { const sy = Math.round(y * v.s + v.oy) + 0.5; ctx.strokeStyle = corGrade(y); ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(W, sy); ctx.stroke(); }
+    if (mostrarGrade) {
+      for (let x = xA; x <= xB; x += passo) { const sx = Math.round(x * v.s + v.ox) + 0.5; ctx.strokeStyle = corGrade(x); ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, H); ctx.stroke(); }
+      for (let y = yA; y <= yB; y += passo) { const sy = Math.round(y * v.s + v.oy) + 0.5; ctx.strokeStyle = corGrade(y); ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(W, sy); ctx.stroke(); }
+    }
     const T = (p) => [p.x * v.s + v.ox, p.y * v.s + v.oy];
     const marcadas = new Set(sel);
     // ---- anotações em escala de prancha (como no Revit) ----
@@ -85490,7 +85494,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   }, []);
 
   // desenha antes da tela pintar (no mesmo quadro da mudança), não depois
-  tpUseLayoutEffect(() => { desenharPlanta(); }, [paredes, areas, inicio, poli, hover, espM, sel, caixa, ferramenta, ancora, modoTraco, previaEsq, editNome, escala, pavAtivo, dadosPav, cortes]);
+  tpUseLayoutEffect(() => { desenharPlanta(); }, [mostrarGrade, paredes, areas, inicio, poli, hover, espM, sel, caixa, ferramenta, ancora, modoTraco, previaEsq, editNome, escala, pavAtivo, dadosPav, cortes]);
   useEffect(() => { const t = setTimeout(() => atual.current.desenharPlanta(), 230); return () => clearTimeout(t); }, [painelOculto]); // escala gráfica acompanha o painel
   useEffect(() => { if (modo !== "corte") return; const id = requestAnimationFrame(() => desenharCorte()); return () => cancelAnimationFrame(id); }, [modo, cortes, verCorte, paredes, areas, dadosPav, pavimentos, pavAtivo]);
   // ambiente acompanha as paredes: mexeu numa parede, o contorno e a área se refazem
@@ -86987,7 +86991,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // bloco de ferramentas: no menu ou solto na prancheta (o "+" arrasta de um lugar para o outro)
   const botaoMais = (noCanvas) => { const ferrAberto = noCanvas ? ferrAbertoC : ferrAbertoM, setFerrAberto = noCanvas ? setFerrAbertoC : setFerrAbertoM; return (
             <button aria-label={ferrAberto ? "Fechar a lista de ferramentas" : "Abrir a lista de ferramentas"} aria-expanded={ferrAberto}
-              onPointerDown={iniciarArraste("ferr")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setFerrAberto((x) => !x); if (!noCanvas) setPavAbertoM(false); }}
+              onPointerDown={iniciarArraste("ferr")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setFerrAberto((x) => !x); if (!noCanvas) { setPavAbertoM(false); setExibirAberto(false); } }}
               title={ferrAberto ? "Fechar a lista" : noCanvas ? "Ferramentas (arraste para mover; solte no menu para tirar da prancheta)" : "Ferramentas (arraste para a prancheta para ter uma cópia à mão)"}
               style={{ width: 32, height: 32, borderRadius: "50%", touchAction: "none", border: `1px solid ${ferrAberto ? TP_AZUL : "#e5e7eb"}`, background: ferrAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "transform .15s", transform: ferrAberto ? "rotate(45deg)" : "none" }}>
               <svg width="14" height="14" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke={ferrAberto ? TP_AZUL : "#111827"} strokeWidth="2" strokeLinecap="round" /></svg>
@@ -86996,12 +87000,40 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // pavimentos: mesma dinâmica do "+" (abre a lista embaixo, arrasta para a prancheta)
   const botaoPav = (noCanvas) => { const pavAberto = noCanvas ? pavAbertoC : pavAbertoM, setPavAberto = noCanvas ? setPavAbertoC : setPavAbertoM; return (
             <button aria-label={pavAberto ? "Fechar a lista de pavimentos" : "Abrir a lista de pavimentos"} aria-expanded={pavAberto}
-              onPointerDown={iniciarArraste("pav")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setPavAberto((x) => !x); if (!noCanvas) setFerrAbertoM(false); }}
+              onPointerDown={iniciarArraste("pav")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setPavAberto((x) => !x); if (!noCanvas) { setFerrAbertoM(false); setExibirAberto(false); } }}
               title={pavAberto ? "Fechar a lista" : noCanvas ? "Pavimentos (arraste para mover; solte no menu para tirar da prancheta)" : "Pavimentos (arraste para a prancheta para ter uma cópia à mão)"}
               style={{ width: 32, height: 32, borderRadius: "50%", touchAction: "none", border: `1px solid ${pavAberto ? TP_AZUL : "#e5e7eb"}`, background: pavAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: pavAberto ? TP_AZUL : "#111827" }}>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" aria-hidden="true"><path d="M8 2 14 5 8 8 2 5z" /><path d="M2 8.25 8 11.25l6-3" /><path d="M2 11.25 8 14.25l6-3" /></svg>
             </button>
   ); };
+  // exibir: escala das anotações e prancha com/sem grade
+  const botaoExibir = (
+    <button aria-label={exibirAberto ? "Fechar as opções de exibição" : "Exibir: escala e grade"} aria-expanded={exibirAberto} title="Exibir: escala da planta e grade"
+      onClick={() => { setExibirAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); }}
+      style={{ width: 32, height: 32, borderRadius: "50%", border: `1px solid ${exibirAberto ? TP_AZUL : "#e5e7eb"}`, background: exibirAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: exibirAberto ? TP_AZUL : "#111827" }}>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" /><circle cx="8" cy="8" r="2" /></svg>
+    </button>
+  );
+  const listaExibir = exibirAberto && (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6, padding: 8, border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff" }}>
+      <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12, color: "#4b5563" }} title="Tamanho das anotações (cotas, nomes, esquadrias) como na prancha impressa">
+        Escala da planta
+        <select id="tp-escala" value={String(escala)} onChange={(e) => setEscala(+e.target.value)}
+          style={{ padding: "3px 6px", border: "1px solid #e5e7eb", borderRadius: 7, fontSize: 12, fontFamily: "inherit", background: "#fff" }}>
+          {[20, 25, 50, 75, 100, 200].map((n) => <option key={n} value={n}>1:{n}</option>)}
+        </select>
+      </label>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12, color: "#4b5563" }}>
+        Prancha
+        <div style={{ display: "flex", border: "1px solid #e5e7eb", borderRadius: 7, overflow: "hidden", flexShrink: 0 }}>
+          {[[true, "Com grade"], [false, "Sem grade"]].map(([v, rot], k) => (
+            <button key={rot} onClick={() => { setMostrarGrade(v); try { localStorage.setItem("vicke-projetar-grade", v ? "1" : "0"); } catch (err) { /* sem armazenamento */ } }} aria-pressed={mostrarGrade === v}
+              style={{ border: "none", borderLeft: k ? "1px solid #e5e7eb" : "none", padding: "4px 8px", fontSize: 11.5, fontFamily: "inherit", cursor: "pointer", background: mostrarGrade === v ? "#eef5ff" : "#fff", color: mostrarGrade === v ? TP_AZUL : "#374151", fontWeight: mostrarGrade === v ? 600 : 500 }}>{rot}</button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
   const listaPav = (noCanvas) => { const pavAberto = noCanvas ? pavAbertoC : pavAbertoM, setPavAberto = noCanvas ? setPavAbertoC : setPavAbertoM; return (
     <>
       {/* pavimentos de baixo para cima, um por linha: Térreo (com o + ao lado),
@@ -87116,9 +87148,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       </div>
 
       <div style={{ height: 12 }} />
-      <div style={{ display: "flex", gap: 6 }}>{botaoMais(false)}{botaoPav(false)}</div>
+      <div style={{ display: "flex", gap: 6 }}>{botaoMais(false)}{botaoPav(false)}{botaoExibir}</div>
       {listaFerr(false)}
       {listaPav(false)}
+      {listaExibir}
       {editPav && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8, padding: 8, border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff" }}>
           <div>
@@ -87201,13 +87234,6 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
       {propriedades}
 
-      <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 14, fontSize: 12, color: "#4b5563" }} title="Tamanho das anotações (cotas, nomes, esquadrias) como na prancha impressa">
-        Escala da planta
-        <select id="tp-escala" value={String(escala)} onChange={(e) => setEscala(+e.target.value)}
-          style={{ padding: "3px 6px", border: "1px solid #e5e7eb", borderRadius: 7, fontSize: 12, fontFamily: "inherit", background: "#fff" }}>
-          {[20, 25, 50, 75, 100, 200].map((n) => <option key={n} value={n}>1:{n}</option>)}
-        </select>
-      </label>
 
 
 
