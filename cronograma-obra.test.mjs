@@ -382,5 +382,55 @@ teste("marcar como reforma sem medir nada não muda o cronograma", () => {
   assert.ok(!marcada.ativo.etapas.some(e => e.id === "DEMOLICAO"));
 });
 
+
+console.log("\n--- correções da revisão (área obra) ---");
+teste("térrea: etapa pulada passa o lag adiante (INSTALACOES fica FS −10 da laje)", () => {
+  const rede = M.resolverRedeCronograma(M.ETAPAS_CRONOGRAMA_SEED, { sobrado: false });
+  const inst = rede.find((e) => e.id === "INSTALACOES");
+  const laje = inst.links.find((l) => l.id === "LAJE_TERREO" && l.tipo === "FS");
+  assert.strictEqual(laje.lag, -10);
+  assert.ok(inst.links.every((l) => !("herdado" in l)), "a marca interna não vaza");
+  // FS sobre FS soma: A ← B(pulada, FS −3) ← C(FS −2) dá −5
+  const r = M.resolverRedeCronograma([
+    { id: "A", predecessoras: [] },
+    { id: "B", condicao: "nao", predecessoras: [{ id: "A", tipo: "FS", lag: -2 }] },
+    { id: "C", predecessoras: [{ id: "B", tipo: "FS", lag: -3 }] },
+  ], {});
+  assert.deepStrictEqual(r.find((e) => e.id === "C").links, [{ id: "A", tipo: "FS", lag: -5, avanco: 0 }]);
+});
+
+teste("tabela de prazo de uma linha não quebra o orçamento", () => {
+  const data = { materiais: [], escritorio: { cronograma: { prazoTabela: [{ area: 0, terrea: 6.6 }, { area: 100, terrea: 13.2 }] } } };
+  assert.strictEqual(M.prazoParametricoMeses(120, "Térrea", data), 13.2);
+  assert.strictEqual(M.prazoParametricoMeses(80, "Térrea", data), 13.2);
+  const p = { tipologia: "Térrea", arquitetura: { areaConstruida: 120 } };
+  assert.doesNotThrow(() => M.gerarOrcamentoObra(p, data));
+});
+
+teste("tabela de prazo gravada crua (como o editor deixa) é limpa e ordenada na hora de usar", () => {
+  const cru = { materiais: [], escritorio: { cronograma: { prazoTabela: [
+    { area: "300", terrea: "12" }, { area: "", terrea: "9" }, { area: "100", terrea: 6 }, { area: "200", terrea: "" }] } } };
+  // válidas: 100 → 6 e 300 → 12; 200 m² interpola 9
+  assert.strictEqual(M.prazoParametricoMeses(200, "Térrea", cru), 9);
+  // nenhuma linha válida: vale a tabela padrão
+  const vazia = { materiais: [], escritorio: { cronograma: { prazoTabela: [{ area: "", terrea: "" }] } } };
+  assert.strictEqual(M.prazoParametricoMeses(150, "Térrea", vazia), M.prazoParametricoMeses(150, "Térrea", dataVazia));
+});
+
+teste("sem data de início, o cronograma começa hoje no fuso do usuário (não em UTC)", () => {
+  const tz = process.env.TZ, agora = Date.now;
+  try {
+    process.env.TZ = "America/Sao_Paulo";
+    Date.now = () => Date.UTC(2026, 9, 24, 1, 30); // 23/10 22h30 em Brasília, 24/10 em UTC
+    const r = M.gerarCronogramaObra(projetoTerrea, null, dataVazia, {});
+    assert.strictEqual(r.dataInicio, "2026-10-23");
+    const comData = M.gerarCronogramaObra(projetoTerrea, null, dataVazia, { dataInicio: "2026-11-02" });
+    assert.strictEqual(comData.dataInicio, "2026-11-02");
+  } finally {
+    Date.now = agora;
+    if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz;
+  }
+});
+
 console.log(`\n${passou} passaram, ${falhou} falharam`);
 if (falhou) process.exit(1);

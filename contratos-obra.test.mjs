@@ -24,7 +24,7 @@ const modulo = new Function(`
            CONTRATO_OPCOES, opcaoAtiva, opcoesPadrao,
            textoMoedaCampo, textoPctCampo, textoInteiroCampo, digitandoNumero, dataExtensoCtr, numeroDeCampo,
            mesclarPorCliente, contratosDasObras, contratosNasObras,
-           prestadorDoEscritorio, faltaNoEscritorio, qualificarCurto, ID_PRESTADOR_ESCRITORIO };
+           prestadorDoEscritorio, faltaNoEscritorio, qualificarCurto, ID_PRESTADOR_ESCRITORIO, proximoNumeroContrato };
 `)();
 
 let passou = 0, falhou = 0;
@@ -346,7 +346,8 @@ teste("modalidade parcelada aceita semanal, quinzenal e mensal", () => {
   const semAjuste = texto(modulo.montarContrato({ ...base, periodicidade: "quinzenais", ajusteFeriado: "nenhum" }, { cliente, obra, prestador: serralheiro }));
   assert.ok(!semAjuste.includes("antecipado para o dia útil"));
   assert.ok(t("mensais").includes("12 (doze) parcelas mensais"));
-  assert.ok(t("mensais").includes("a cada 30 (trinta) dias"));
+  // mensal é o mesmo dia do mês (é o que as contas a pagar fazem), não "a cada 30 dias"
+  assert.ok(t("mensais").includes("no mesmo dia dos meses subsequentes"));
   assert.ok(t("mensais").includes("R$ 1.000,00"));
 });
 
@@ -769,7 +770,7 @@ teste("primeiro vencimento entra no texto do contrato", () => {
   assert.ok(t.includes("A primeira parcela vence em 10/08/2026 e as demais no mesmo dia dos meses subsequentes."));
   // sem o campo, volta a frase padrão
   const semCampo = texto(modulo.montarContrato({ ...c, primeiroVencimento: "" }, { cliente, obra, prestador: serralheiro }));
-  assert.ok(semCampo.includes("vencendo-se a primeira parcela 30 (trinta) dias após o início dos serviços"));
+  assert.ok(semCampo.includes("vencendo-se a primeira parcela 1 (um) mês após o início dos serviços e as demais no mesmo dia dos meses subsequentes"));
   // gerenciamento: a data informada vence o "todo dia"
   const g = { ...modulo.contratoVazio(null, "c1", "o1", "gestaoObra"), valor: 120000, parcelas: 12,
     diaVencimento: 5, primeiroVencimento: "2026-08-05" };
@@ -796,6 +797,61 @@ teste("numeroDeCampo não multiplica por 100 o que tem centavos", () => {
   // o valor que o campo mostra volta igual quando relido
   const ida = modulo.textoMoedaCampo(10833.33);
   assert.strictEqual(modulo.numeroDeCampo(ida), 10833.33);
+});
+
+
+// ── Correções da revisão (área obra) ─────────────────────────────
+const proximoNumeroDocCtr = modulo.proximoNumeroContrato;
+teste("terraplanagem e brocas nascem como serviço com equipamento, por medição", () => {
+  assert.strictEqual(modulo.escopoDoTipo("terraplanagem"), "equipamento");
+  assert.strictEqual(modulo.escopoDoTipo("perfuracaoBrocas"), "equipamento");
+  const e = modulo.contratoVazio(null, "c1", "o1", "terraplanagem");
+  assert.strictEqual(e.modelo, "servicoEquipamento");
+  assert.strictEqual(e.modalidade, "medicao");
+  assert.strictEqual(e.medicaoPeriodicidade, "quinzenal");
+  assert.strictEqual(e.medicaoPrazoDias, 5);
+  assert.ok(!/material fornecido pelo CONTRATANTE/.test(e.objeto));
+  assert.strictEqual(modulo.modalidadeContrato({ modelo: "servicoEquipamento", modalidade: "parcelado" }), "medicao");
+});
+
+teste("prazo do equipamento sai do prazo digitado (prazoQtd/prazoUnidade)", () => {
+  const e = { ...modulo.contratoVazio(null, "c1", "o1", "terraplanagem"), prazoQtd: 20, prazoUnidade: "dias",
+    itens: [{ descricao: "Escavadeira", unidade: "hora", valorUnitario: 250, quantidade: 40 }] };
+  const t = texto(modulo.montarContrato(e, { cliente, obra, prestador: serralheiro }));
+  assert.ok(t.includes("prazo estimado de 20 (vinte) dias úteis"), t.match(/prazo estimado[^,]*/));
+  assert.ok(t.includes("pagamento será feito por medição quinzenal"));
+});
+
+teste("gerenciamento: intervalo do texto é o das contas, e 'todo dia' só no mensal", () => {
+  const g = { ...modulo.contratoVazio(null, "c1", "o1", "gestaoObra"), valor: 12000, parcelas: 4, periodicidade: "quinzenais" };
+  assert.strictEqual(g.diaVencimento, 5, "o padrão do modelo traz o dia 05");
+  const t = texto(modulo.montarContrato(g, { cliente, obra, prestador: serralheiro }));
+  assert.ok(!t.includes("todo dia 05"), "quinzenal não vence todo dia 05");
+  assert.ok(t.includes("na 2ª sexta-feira posterior ao início e as demais a cada 14 (quatorze) dias, sempre às sextas-feiras"));
+  assert.ok(!t.includes("15 (quinze) dias"));
+  const comData = texto(modulo.montarContrato({ ...g, primeiroVencimento: "2026-11-06" }, { cliente, obra, prestador: serralheiro }));
+  assert.ok(comData.includes("vencendo a primeira em 06/11/2026 e as demais a cada 14 (quatorze) dias, no mesmo dia da semana"));
+  const corridos = texto(modulo.montarContrato({ ...g, periodicidade: "quinzeDias" }, { cliente, obra, prestador: serralheiro }));
+  assert.ok(corridos.includes("a cada 15 (quinze) dias"));
+  const mensal = texto(modulo.montarContrato({ ...g, periodicidade: "mensais" }, { cliente, obra, prestador: serralheiro }));
+  assert.ok(mensal.includes("com vencimento todo dia 05 de cada mês"));
+});
+
+teste("milhão redondo leva 'de': um milhão de reais", () => {
+  assert.strictEqual(modulo.moedaExtensoCtr(1000000), "um milhão de reais");
+  assert.strictEqual(modulo.moedaExtensoCtr(2000000), "dois milhões de reais");
+  assert.strictEqual(modulo.moedaExtensoCtr(2500000), "dois milhões e quinhentos mil reais");
+  assert.strictEqual(modulo.moedaExtensoCtr(1000000.5), "um milhão de reais e cinquenta centavos");
+});
+
+teste("número de contrato e de pedido consideram os lançamentos do escritório", () => {
+  const obras = [{ contratos: [{ numeroContrato: "0003" }] }];
+  assert.strictEqual(proximoNumeroDocCtr(obras, [{ numeroDoc: "0009" }]), "0010");
+  // as chamadas da tela passam data.lancamentos (sem eles o número repetia)
+  const cli = readFileSync(join(__dirname, "src", "modules", "clientes.jsx"), "utf-8");
+  const chamadas = cli.match(/proximoNumero(Contrato|Pedido)\([^)]*\)/g) || [];
+  assert.ok(chamadas.length >= 3, chamadas);
+  for (const ch of chamadas) assert.ok(/data\.lancamentos/.test(ch), ch);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

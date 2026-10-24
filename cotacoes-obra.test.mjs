@@ -482,7 +482,9 @@ teste("cotação nasce aberta, sem propostas e exigindo aval do cliente", () => 
   assert.strictEqual(c.status, "aberta");
   assert.deepStrictEqual(c.propostas, []);
   assert.strictEqual(c.precisaAprovacaoCliente, true);
-  assert.strictEqual(c.contaId, M.PLANO_CONTAS[0].id);
+  // nasce sem conta, para quem cota escolher — a primeira do plano é de
+  // receita (Depósito Recurso Próprio), e compra não cai em receita
+  assert.strictEqual(c.contaId, "");
 });
 
 teste("valor da proposta lê 12.500,90 e 12500.9 do mesmo jeito", () => {
@@ -4182,7 +4184,9 @@ teste("XML da NF-e vira a ficha da nota: emitente, CNPJ, número, itens, descont
   assert.strictEqual(f.papel.cnpj, "05206161000150");
   assert.strictEqual(f.papel.fantasia, "Ourimadeiras");
   assert.ok(/Ourimadeiras Casa & Construcao/i.test(f.papel.lidoComo));
-  assert.deepStrictEqual([f.papel.valor, f.papel.total, f.papel.desconto, f.papel.emitido], [529, 699, 170, "2026-09-01"]);
+  // `total` é o vNF: é com ele que a tela compara a soma da entrada (já com
+  // o desconto) — com o vProd toda nota com desconto acusava diferença
+  assert.deepStrictEqual([f.papel.valor, f.papel.total, f.papel.desconto, f.papel.emitido], [529, 529, 170, "2026-09-01"]);
   assert.strictEqual(f.papel.chave.length, 44);
   assert.strictEqual(f.itens.length, 2);
   assert.deepStrictEqual([f.itens[0].quantidade, f.itens[0].unidade, f.itens[0].unitario, f.itens[0].total], [2, "RL", 249.5, 499]);
@@ -4547,12 +4551,14 @@ teste("Loja que cotou só parte da lista não é a mais barata nem a base da eco
   const c = listaDividir();
   c.propostas[0].valor = 4315;   // A completa
   c.propostas[1].valor = 3340;   // B sem o prego
-  c.propostas.push({ id: "pC", favorecido: "Loja C", valor: 4500, precos: { i1: 40, i2: 23.5, i3: 22 } });
+  // o valor de C é o dos preços dela (40×40 + 120×23,5 + 5×22): o total
+  // guardado não manda mais na comparação, e 4.500 aqui estava velho
+  c.propostas.push({ id: "pC", favorecido: "Loja C", valor: 4530, precos: { i1: 40, i2: 23.5, i3: 22 } });
   assert.ok(!M.propostaComparavel(c, c.propostas[1]));
   assert.strictEqual(M.melhorProposta(c).id, "pA");
   const e = M.economiaDaCotacao(c);
   assert.strictEqual(e.menor, 4315);
-  assert.strictEqual(e.economia, 4500 - 4315);
+  assert.strictEqual(e.economia, 4530 - 4315);
 });
 
 

@@ -1965,5 +1965,31 @@ teste("Suprema: todas as tipologias (menos persiana) têm lista, e cada uma pesa
   }
 });
 
+
+// ── Correções da revisão (área obra) ─────────────────────────────
+teste("o quadro de prestadores já enxerga a área do telhado (Carpinteiro)", () => {
+  const cp = obraP({ cobertura: [{ tipo: "Telha Barro Portuguesa", comprimento: 12, largura: 10, aguas: 2, inclinacao: 0.35 }] });
+  const area = 12 * 10 * Math.sqrt(1 + 0.35 ** 2);
+  assert.ok(Math.abs(cp.areaCoberturaTotal - area) < 1e-9, cp.areaCoberturaTotal);
+  const data = { materiais: [{ nome: "Carpinteiro", preco: 45, codigo: "PRE-005" }] };
+  const l = linha(cp, "carpinteiro", data);
+  assert.strictEqual(l.disponivel, true);
+  // a metragem do quadro é a mesma que o orçamento cobra (área inclinada)
+  assert.ok(Math.abs(l.qtd - area) < 1e-9, l.qtd);
+});
+
+teste("pingadeira é por telhado: barro não leva, nem desconta do metálico", () => {
+  const p = { tipologia: "Térrea", arquitetura: { areaConstruida: 100 },
+    cobertura: [{ tipo: "Telha Barro Portuguesa", comprimento: 10, largura: 8, aguas: 2, inclinacao: 0.35 }] };
+  const so = modulo.gerarOrcamentoObra(p, {});
+  assert.ok(!so.itens.some((i) => i.item === "Telhado - Pingadeira" && i.qtd < 0));
+  assert.ok(!(so.avisos || []).some((a) => a.tipo === "quantidade_negativa"), JSON.stringify(so.avisos));
+  p.cobertura.push({ tipo: "Telha Metálica Simples", comprimento: 10, largura: 8, aguas: 1, inclinacao: 0.1 });
+  const misto = modulo.gerarOrcamentoObra(p, {});
+  const ping = misto.itens.find((i) => i.item === "Telhado - Pingadeira");
+  // metálico sozinho: perímetro 39,6 (com perda) − calha 10 = 29,6
+  assert.ok(ping && Math.abs(ping.qtd - 29.6) < 1e-9, ping && ping.qtd);
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou > 0) process.exit(1);

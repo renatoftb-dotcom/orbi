@@ -1746,13 +1746,17 @@ function calcularTelhado(t) {
 
   // Telhas de barro/concreto não usam rufo (perímetro zerado no original).
   if (TELHAS_BARRO_CONCRETO.includes(tipo)) perimetro1 = 0;
+  // Pingadeira é o perímetro que não recebe calha, telhado a telhado: na
+  // soma da obra, o perímetro zerado do barro descontava a calha dele da
+  // pingadeira do metálico (e sozinho dava negativo). Barro/concreto: 0.
+  const pingadeira = Math.max(0, perimetro1 - perimetro2);
 
-  return { tipo, vigas, espigao, maoFrancesa, caibros, ripas, berco, apoios, prego1, prego2, manta, areaInclinada, telhas, cumeeira, perimetro1, perimetro2 };
+  return { tipo, vigas, espigao, maoFrancesa, caibros, ripas, berco, apoios, prego1, prego2, manta, areaInclinada, telhas, cumeeira, perimetro1, perimetro2, pingadeira };
 }
 
 function cobertura(cp, out) {
   let vigasTotal = 0, caibrosTotal = 0, ripasTotal = 0, bercoTotal = 0, prego1Total = 0, prego2Total = 0, mantaTotal = 0;
-  let perimetroTotal1 = 0, perimetroTotal2 = 0, areaCoberturaTotal = 0;
+  let perimetroTotal1 = 0, perimetroTotal2 = 0, pingadeiraTotal = 0, areaCoberturaTotal = 0;
   const telhasPorTipo = {};
   const cumeeiraPorTipo = {};
 
@@ -1770,6 +1774,7 @@ function cobertura(cp, out) {
     mantaTotal += r.manta;
     perimetroTotal1 += r.perimetro1;
     perimetroTotal2 += r.perimetro2;
+    pingadeiraTotal += r.pingadeira;
     areaCoberturaTotal += r.areaInclinada;
     telhasPorTipo[r.tipo] = (telhasPorTipo[r.tipo] || 0) + r.telhas;
     cumeeiraPorTipo[r.tipo] = (cumeeiraPorTipo[r.tipo] || 0) + r.cumeeira;
@@ -1826,12 +1831,8 @@ function cobertura(cp, out) {
 
   const baseCalha = { ordem: ORD.cobertura, tipo: "Bruto", etapa: "Cobertura", subEtapa: "Calha" };
   emitir(out, { ...baseCalha, item: "Telhado - Calha", unidade: "Mts", qtd: perimetroTotal2, memoria: memSoma("Calha: os metros de beiral de cada telhado que recebem calha (nos telhados de barro, a planilha zera o perímetro de rufo e conta só a calha).", (r) => r.perimetro2, perimetroTotal2, "m") });
-  emitir(out, { ...baseCalha, item: "Telhado - Pingadeira", unidade: "Mts", qtd: perimetroTotal1 - perimetroTotal2, memoria: [
-    MEM.nota("Pingadeira: o que sobra do perímetro do telhado depois de descontar o que já é calha."),
-    MEM.conta("Perímetro total dos telhados", "soma dos telhados", [], perimetroTotal1, "m"),
-    MEM.conta("Metros de calha", "soma dos telhados", [], perimetroTotal2, "m"),
-    MEM.conta("Pingadeira", "perímetro − calha", [["perímetro", perimetroTotal1], ["calha", perimetroTotal2]], perimetroTotal1 - perimetroTotal2, "m"),
-  ] });
+  emitir(out, { ...baseCalha, item: "Telhado - Pingadeira", unidade: "Mts", qtd: pingadeiraTotal,
+    memoria: memSoma("Pingadeira: em cada telhado, o que sobra do perímetro depois de descontar o que já é calha (perímetro − calha, nunca menos que zero; telhado de barro ou concreto não leva).", (r) => r.pingadeira, pingadeiraTotal, "m") });
   emitir(out, { ...baseCalha, item: "Telhado - Rufo", unidade: "Mts", qtd: perimetroTotal1, memoria: memSoma("Rufo: acompanha todo o perímetro do telhado.", (r) => r.perimetro1, perimetroTotal1, "m") });
 }
 
@@ -4366,7 +4367,7 @@ function normalizarProjeto(projeto) {
   const concretoPiscinaAtiva = temPiscina ? concretoPiscina : {};
   const colunasPiscinaAtiva = temPiscina ? colunasPiscina : {};
 
-  return {
+  const cpNorm = {
     tipologia,
     tipoObra,
     padrao,
@@ -4589,9 +4590,8 @@ function normalizarProjeto(projeto) {
       inclinacao: (() => { const i = numOrZero(t && t.inclinacao); return i > 1 ? i / 100 : i; })(),
     })),
 
-    // Escrito por cobertura() (variável pública no VBA original) e lido
-    // depois por prestadores() (base do Carpinteiro). Antes de cobertura()
-    // rodar, fica 0 — igual ao VBA antes do loop.
+    // Lido por prestadores() (base do Carpinteiro); calculado logo abaixo,
+    // no fim da normalização, e regravado por cobertura().
     areaCoberturaTotal: 0,
 
     // cp.esquadrias — lista de esquadrias, usado por esquadrias()
@@ -4667,6 +4667,13 @@ function normalizarProjeto(projeto) {
     // é quem lê, migra o formato antigo e aplica os sugeridos.
     prestadores: prestadoresIn,
   };
+  // A área inclinada dos telhados já sai daqui: o quadro de prestadores lê o
+  // projeto normalizado sem rodar cobertura(), e com 0 o Carpinteiro sumia
+  // da tabela embora o orçamento o cobrasse. cobertura() regrava o mesmo valor.
+  cpNorm.areaCoberturaTotal = cpNorm.coberturas
+    .filter((t) => t && t.tipo)
+    .reduce((soma, t) => soma + calcularTelhado(t).areaInclinada, 0);
+  return cpNorm;
 }
 
 // Último passo do motor: resolve preço (precoDoInsumo p/ tudo que não tem
@@ -6192,10 +6199,14 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
     if (viewInterna !== "resultado" || !obra.orcamento || !obra.projeto) return null;
     try {
       if (typeof gerarCronogramaObra !== "function") return null;
-      const r = gerarCronogramaObra(obra.projeto, obra.orcamento, data, obra.cronograma || {});
+      // sem cronograma salvo, vale a data de início da obra, como na tela do
+      // Cronograma — sem ela o término do cabeçalho contava de hoje
+      const crono = obra.cronograma || {};
+      const r = gerarCronogramaObra(obra.projeto, obra.orcamento, data,
+        { ...crono, dataInicio: crono.dataInicio || (obra.dataInicio ? String(obra.dataInicio).slice(0, 10) : "") });
       return r && r.ativo && r.ativo.meses > 0 ? r.ativo : null;
     } catch (e) { return null; }
-  }, [viewInterna, obra.projeto, obra.orcamento, obra.cronograma, data]);
+  }, [viewInterna, obra.projeto, obra.orcamento, obra.cronograma, obra.dataInicio, data]);
 
   const memorias = useMemo(() => (viewInterna === "resultado" && obra.orcamento ? mapaMemorias(obra.projeto, data) : {}), [viewInterna, obra.projeto, obra.orcamento, data]);
 

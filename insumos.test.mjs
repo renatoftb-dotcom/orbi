@@ -982,6 +982,93 @@ t("exportar: etapa com id que a taxonomia não conhece aparece pelo id, antes do
   eq(api.linhasDoCatalogoParaExportar(null).linhas.length, 0);
 });
 
+// ── correções da revisão (outros) ───────────────────────────
+// A semente de verdade é INSUMOS_SEED + INSUMOS_SEED_CADASTRO (concatenadas
+// no fim de insumos-seed.jsx). Carrega as duas, como o app.
+const cadSrc = readFileSync(join(MODULES, "insumos-seed-cadastro.jsx"), "utf8");
+const apiFull = new Function(
+  shim + cadSrc + "\n" + seedSrc + "\n" + puro + `
+  return { INSUMOS_SEED, semearInsumos, faltamDaSementeNoCatalogo, normalizarTexto };`
+)();
+const SEED_FULL = apiFull.INSUMOS_SEED;
+
+t("semente completa (com cadastro): todo código é único", () => {
+  assert(SEED_FULL.length > 900, "cadastro não foi carregado");
+  const vistos = {}, rep = [];
+  SEED_FULL.forEach(x => { if (vistos[x.codigo]) rep.push(x.codigo); vistos[x.codigo] = 1; });
+  eq(rep, []);
+});
+
+t("semente completa: nenhum nome/apelido aponta para dois códigos", () => {
+  const al = {};
+  SEED_FULL.forEach(s => [s.nome].concat(s.aliases || []).forEach(a => {
+    const k = apiFull.normalizarTexto(a); (al[k] = al[k] || new Set()).add(s.codigo);
+  }));
+  eq(Object.keys(al).filter(k => al[k].size > 1), []);
+});
+
+t("semente completa: Container/Betoneira mantêm LOC-004/LOC-005 (códigos de produção)", () => {
+  eq(SEED_FULL.find(x => x.codigo === "LOC-004").nome, "Locação Ferramentas - Container 2,5 x 1,5 mts");
+  eq(SEED_FULL.find(x => x.codigo === "LOC-005").nome, "Locação Ferramentas - Betoneira");
+});
+
+t("semear 3x a semente completa: nenhum código muda, nada é recriado, aviso zera", () => {
+  const a = apiFull.semearInsumos([], SEED_FULL);
+  eq(a.criados, SEED_FULL.length);
+  const cods = m => m.map(x => x.id + "=" + x.codigo).join("|");
+  const b = apiFull.semearInsumos(a.materiais, SEED_FULL);
+  const c = apiFull.semearInsumos(b.materiais, SEED_FULL);
+  eq(b.criados + b.atualizados + c.criados + c.atualizados, 0);
+  eq(cods(b.materiais), cods(a.materiais));
+  eq(cods(c.materiais), cods(a.materiais));
+  eq(apiFull.faltamDaSementeNoCatalogo(c.materiais, SEED_FULL), 0);
+});
+
+t("catálogo de produção já recodificado: semear não mexe em código e o aviso some", () => {
+  // Estado deixado pela semente antiga: Container foi para LOC-029 e Betoneira
+  // para LOC-030; os aquecedores ficaram com LOC-004/LOC-005.
+  const legado = [
+    { id: "c", codigo: "LOC-029", nome: "Locação Ferramentas - Container 2,5 x 1,5 mts", grupo: "Locação de equipamentos", aliases: ["Locação Ferramentas - Container 2,5 x 1,5 mts", "Container de obra"] },
+    { id: "b", codigo: "LOC-030", nome: "Locação Ferramentas - Betoneira", grupo: "Locação de equipamentos", aliases: ["Betoneira"] },
+    { id: "q1", codigo: "LOC-004", nome: "Aquecedor - Coletor Solares Casa", grupo: "Locação de equipamentos", aliases: ["Aquecedor - Coletor Solares Casa"] },
+    { id: "q2", codigo: "LOC-005", nome: "Aquecedor - Coletor Solares Piscina", grupo: "Locação de equipamentos", aliases: ["Aquecedor - Coletor Solares Piscina"] },
+  ];
+  const r = apiFull.semearInsumos(legado, SEED_FULL);
+  eq(r.criados, SEED_FULL.length - 4);
+  eq(["c", "b", "q1", "q2"].map(id => r.materiais.find(x => x.id === id).codigo), ["LOC-029", "LOC-030", "LOC-004", "LOC-005"]);
+  eq(apiFull.faltamDaSementeNoCatalogo(r.materiais, SEED_FULL), 0);
+  const r2 = apiFull.semearInsumos(r.materiais, SEED_FULL);
+  eq(r2.criados + r2.atualizados, 0);
+});
+
+t("código da semente ocupado por item sem relação: item fica com o código, o novo nasce com código livre", () => {
+  const legado = [{ id: "f", codigo: "LOC-004", nome: "Furadeira de bancada", grupo: "Locação de equipamentos", aliases: [] }];
+  const r = apiFull.semearInsumos(legado, SEED_FULL);
+  eq(r.materiais.find(x => x.id === "f").codigo, "LOC-004");
+  const cont = r.materiais.filter(x => x.nome === "Locação Ferramentas - Container 2,5 x 1,5 mts");
+  eq(cont.length, 1);
+  assert(cont[0].codigo !== "LOC-004", "nasceu com código repetido");
+  const vistos = {}; r.materiais.forEach(x => { assert(!vistos[x.codigo], "código repetido " + x.codigo); vistos[x.codigo] = 1; });
+  eq(apiFull.faltamDaSementeNoCatalogo(r.materiais, SEED_FULL), 0);
+  const r2 = apiFull.semearInsumos(r.materiais, SEED_FULL);
+  eq(r2.criados, 0);
+  eq(r2.materiais.find(x => x.id === "f").codigo, "LOC-004");
+});
+
+t("compra retroativa com salto/unidade diferente não vira pendência (bug 5)", () => {
+  const ins = { codigo: "CIM-001", nome: "Cimento", unidade: "Sacos", precoReferencia: 40, precoData: "2026-09-01", precoUnidade: "Sacos", precoNCompras: 5 };
+  eq(atualizarPrecoReferencia(ins, { tipo: "custo", quantidade: 10, total: 1300, data: "2023-01-10", unidade: "Sacos", id: "L1" }) === ins, true);
+  eq(atualizarPrecoReferencia(ins, { tipo: "custo", quantidade: 10, total: 300, data: "2023-01-10", unidade: "m3", id: "L2" }) === ins, true);
+  // compra nova com salto continua indo para a fila
+  eq(atualizarPrecoReferencia(ins, { tipo: "custo", quantidade: 10, total: 1300, data: "2026-10-01", unidade: "Sacos", id: "L3" }).precoPendente.motivo, "salto");
+});
+
+t("preço unitário com 4 casas: 5000 pregos por R$ 20 = R$ 0,004 (bug 8)", () => {
+  const ins = { codigo: "X", nome: "Prego", unidade: "Unidades", precoReferencia: null };
+  eq(atualizarPrecoReferencia(ins, { tipo: "custo", quantidade: 5000, total: 20, data: "2026-10-01", unidade: "un" }).precoReferencia, 0.004);
+  eq(atualizarPrecoReferencia(ins, { tipo: "custo", quantidade: 1000, total: 35, data: "2026-10-01", unidade: "un" }).precoReferencia, 0.035);
+});
+
 console.log("\n" + ok + " testes passaram" + (falhas.length ? ", " + falhas.length + " falharam" : ""));
 if (falhas.length) {
   console.log("\nFALHAS:\n  - " + falhas.join("\n  - ") + "\n");

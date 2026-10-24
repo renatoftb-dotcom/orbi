@@ -1242,6 +1242,9 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
   // Mesmo valor que a lista de Orçamentos mostra: o da proposta enviada
   // quando existe, senão o do cálculo.
   const valorDoProjeto = (o) => {
+    // a mesma conta da lista de Orçamentos: a engenharia só soma quando foi
+    // incluída (o cálculo guarda precoEng mesmo quando ficou de fora)
+    if (typeof orcValorTotal === "function") return Number(orcValorTotal(o)) || 0;
     const ult = ultimaProposta(o);
     if (ult) {
       if (ult.valorTotalExibido != null) return Number(ult.valorTotalExibido) || 0;
@@ -1301,9 +1304,6 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
     const props = orc.propostas || [];
     const iVer = typeof ganhoVersao === "number" && props[iVerSeguro(props, ganhoVersao)] ? iVerSeguro(props, ganhoVersao) : props.length - 1;
     const fechada = props[iVer] || null;
-    if (typeof esquecerArquivoDaProposta === "function") {
-      props.forEach((p, i) => { if (i !== iVer) esquecerArquivoDaProposta(p); });
-    }
     const projetos = data.projetos || [];
     const novosProjetos = projetos.some(p => p.orcId === orc.id) ? projetos : [...projetos, {
       id: "PRJ-" + Date.now(), orcId: orc.id, clienteId: orc.clienteId,
@@ -1326,6 +1326,11 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
       return;
     }
     const comRecebido = recebido.novos && recebido.novos.length;
+    // Só agora, com o Ganho validado, o PDF das outras versões sai do storage
+    // (antes saía mesmo quando o Ganho parava no aviso acima).
+    if (typeof esquecerArquivoDaProposta === "function") {
+      props.forEach((p, i) => { if (i !== iVer) esquecerArquivoDaProposta(p); });
+    }
     setGanhando(null);
     if (typeof toast !== "undefined" && toast.sucesso) toast.sucesso(comRecebido
       ? "Orçamento ganho · recebimento lançado no financeiro do escritório" : "Orçamento marcado como ganho");
@@ -1403,9 +1408,11 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
                         {orc.status === "perdido" ? "Reabrir" : "Perdido"}
                       </button>
                     )}
-                    <button onClick={(e) => { e.stopPropagation(); onAbrirOrcamento(cliente, orc, "editar"); }} style={acao()}>
-                      Editar
-                    </button>
+                    {perm.podeEditar && (
+                      <button onClick={(e) => { e.stopPropagation(); onAbrirOrcamento(cliente, orc, "editar"); }} style={acao()}>
+                        Editar
+                      </button>
+                    )}
                     {perm.podeExcluir && (
                       <button onClick={(e) => { e.stopPropagation(); excluirProjeto(orc); }} style={acao("#dc2626")}>Excluir</button>
                     )}
@@ -1450,7 +1457,7 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
             setVendo(resta ? { ...resta, clienteNome: vendo.clienteNome, _orcOrigem: novo } : null);
           } : null}
           onFechar={() => setVendo(null)}
-          onEditar={() => { const orc = vendo._orcOrigem; setVendo(null); if (orc) onAbrirOrcamento(cliente, orc, "editar"); }}
+          onEditar={perm.podeEditar ? () => { const orc = vendo._orcOrigem; setVendo(null); if (orc) onAbrirOrcamento(cliente, orc, "editar"); } : undefined}
         />
       )}
     </div>
@@ -3041,7 +3048,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   useEffect(() => {
     if (view !== "contasPagar" || !obraAtual) return;
     const contratosDaObra = obraAtual.contratos || [];
-    const numerada = numerarPedidosAntigos(obraAtual, data.obras || []);
+    const numerada = numerarPedidosAntigos(obraAtual, data.obras || [], data.lancamentos || []);
     const alvo = numerada || obraAtual;
     // `contratos` é a lista completa do cliente (obras + coleção antiga) —
     // com uma lista parcial a faxina apagaria parcela boa
@@ -3179,14 +3186,73 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       mensagem: "Nesta obra quem paga os fornecedores é o escritório. A baixa (e o desfazer) é feita por ele — fale com o escritório." });
     return true;
   };
+  // Mesmo onde o cliente paga direto, o honorário (e o que mais tiver
+  // destino no escritório) atravessa — e o cliente não grava o extrato do
+  // escritório: `efeitosDaBaixa` não roda para ele. Desfazer essa baixa, ou
+  // apagar uma conta já paga, deixava o lançamento de lá solto. Isso fica
+  // com o escritório.
+  const clienteNaoMexeNoPago = (lista, acao) => {
+    if (perm.podeGerenciarObra) return false;
+    const modo = typeof modoDaPonte === "function" ? modoDaPonte(obraAtual, cliente) : "";
+    const pagas = (lista || []).filter(c => c && c.pago);
+    const comDestino = (c) => typeof destinoNoEscritorio !== "function" || !!destinoNoEscritorio(c.contaId, modo);
+    // "pagar": o honorário pago pelo cliente também entra no extrato do
+    // escritório, e quem registra esse recebimento é o escritório
+    const trava = acao === "excluir" ? pagas.length > 0
+      : acao === "pagar" ? (lista || []).some(c => c && !c.pago && comDestino(c))
+      : pagas.some(comDestino);
+    if (!trava) return false;
+    dialogo.alertar({ titulo: "Fale com o escritório", tipo: "aviso",
+      mensagem: acao === "excluir"
+        ? "Esta conta já está paga. Para apagá-la, desfaça o pagamento antes — ou peça ao escritório."
+        : acao === "pagar"
+          ? "Este pagamento entra também no extrato do escritório (honorário). Quem dá a baixa é o escritório, quando receber."
+          : "Este pagamento também está no extrato do escritório (honorário). Quem desfaz é o escritório." });
+    return true;
+  };
+  // Baixa que atravessa para o escritório entra no extrato do mês da data:
+  // mês já conferido com o banco não recebe linha nova — a conta ficava paga
+  // e a ponte, recusada, nunca mais era mandada (reabrir o mês não trazia).
+  // Olha as contas como a ponte olha: no cartão não atravessa agora (vai
+  // pela fatura), e sem destino no escritório (o material da obra em que o
+  // cliente paga direto) também não. Devolve a mensagem, ou "".
+  const mesFechadoNaBaixa = (contas) => {
+    if (typeof bloqueioPorMesFechado !== "function") return "";
+    const fech = typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {};
+    const modo = typeof modoDaPonte === "function" ? modoDaPonte(obraAtual, cliente) : "";
+    const atravessa = (c) => c && c.pago && !(c.formaPagamento === "cartao" || c.cartaoId)
+      && !Array.isArray(c.movimentos)
+      && (typeof destinoNoEscritorio === "function" ? !!destinoNoEscritorio(c.contaId, modo)
+        : !(obraAtual && obraAtual.clientePagaDireto));
+    for (const c of contas || []) {
+      if (!atravessa(c)) continue;
+      const trava = bloqueioPorMesFechado(String(c.pagoEm || c.vencimento || "").slice(0, 7), fech);
+      if (trava) return trava + " Use uma data de pagamento num mês aberto, ou reabra o mês no Fechamento do escritório.";
+    }
+    return "";
+  };
+  // O pedido que nasce pago (lançar "já pago", regravar um pedido pago)
+  // passa pela mesma trava antes de gravar.
+  const lancarPedidoNoMesAberto = (dados) => {
+    const p = (dados && dados.pedido) || {};
+    if (p.jaPago && p.pagoEm) {
+      const contaPadrao = (dados && dados.contaId) || "material";
+      const itens = (p.itens || []).length ? p.itens : [{}];
+      const trava = mesFechadoNaBaixa(itens.map(i => ({ pago: true, pagoEm: p.pagoEm, contaId: (i && i.contaId) || contaPadrao })));
+      if (trava) return { erro: trava };
+    }
+    return lancarCotacaoEmContas(dados);
+  };
   const alternarPagamento = async (conta) => {
     if (clienteNaoDaBaixa()) return;
     if (conta.pago) {
+      if (clienteNaoMexeNoPago([conta], "desfazer")) return;
       if (!(await confirmarDesfazer([conta]))) return;
       const atualizada = contaEmAberto(conta, quemSou());
       gravarContas(contasDaObra.map(c => c.id === conta.id ? atualizada : c), conta.obraId);
       return;
     }
+    if (clienteNaoMexeNoPago([conta], "pagar")) return;
     setFormPagamento({ conta, dataContab: conta.vencimento && conta.vencimento <= hojeIso ? conta.vencimento : hojeIso,
       valorPago: Number(conta.valor) || 0, comprovante: conta.comprovante || null, erroAnexo: "" });
   };
@@ -3195,11 +3261,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const alternarPagamentoPedido = async (linha) => {
     if (clienteNaoDaBaixa()) return;
     if (linha.pago) {
+      if (clienteNaoMexeNoPago(linha.contas, "desfazer")) return;
       if (!(await confirmarDesfazer(linha.contas))) return;
       const alvo = new Set(linha.contas.map(c => c.id));
       gravarContas(contasDaObra.map(c => (alvo.has(c.id) ? contaEmAberto(c, quemSou()) : c)), linha.obraId);
       return;
     }
+    if (clienteNaoMexeNoPago(linha.contas, "pagar")) return;
     setFormPagamento({ pedido: linha, conta: null,
       dataContab: linha.vencimento && linha.vencimento <= hojeIso ? linha.vencimento : hojeIso,
       valorPago: linha.aberto, comprovante: null, erroAnexo: "" });
@@ -3254,6 +3322,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const obra = (obras || []).find(o => o && o.id === linha.obraId);
     if (!obra) return;
     const ids = linha.pedidoIds || [linha.pedidoId];
+    if (clienteNaoMexeNoPago((obra.contasPagar || []).filter(c => c && ids.indexOf(c.pedidoId) >= 0), "excluir")) return;
     if (travouNaFatura((obra.contasPagar || []).filter(c => c && ids.indexOf(c.pedidoId) >= 0), "apagar o pedido")) return;
     if (travouNoMesFechado((obra.contasPagar || []).filter(c => c && ids.indexOf(c.pedidoId) >= 0), "apagar o pedido")) return;
     const sai = ids.reduce((a, id) => {
@@ -3323,7 +3392,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const cot = f.cotacao;
     const loja = prestadores.find(x => x && x.id === cot.lojaId) || {};
     const comBaixa = pedido.jaPago ? { ...pedido, pagoEm: pedido.pagoEm || pedido.vencimento || pedido.data || "" } : pedido;
-    const r = lancarCotacaoEmContas({
+    const r = lancarPedidoNoMesAberto({
       cotacaoId: cot.id, obraId: cot.obraId || (obraAtual && obraAtual.id), modo: "contaLoja", pedido: comBaixa,
       contaNova: null, contaId: cot.contaId || "material",
       prestadorId: loja.id || "", favorecido: loja.nome || "", descricao: cot.titulo || "Compra",
@@ -3383,18 +3452,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const rc = cartaoDoPagamento(f.forma, f.cartaoId, f.novoCartao);
     if (rc.erro) { dialogo.alertar({ titulo: rc.erro, tipo: "aviso" }); return; }
     const cartao = rc.cartao;
-    // Baixa à vista numa obra que o escritório paga vai para o extrato do
-    // mês da data: mês já conferido com o banco não recebe linha nova (a
-    // conta ficava paga e a ponte, recusada, nunca mais era mandada).
-    if (!cartao && !(obraAtual && obraAtual.clientePagaDireto) && typeof bloqueioPorMesFechado === "function") {
-      const fechEsc = typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {};
-      const trava = bloqueioPorMesFechado(String(f.dataContab).slice(0, 7), fechEsc);
-      if (trava) {
-        dialogo.alertar({ titulo: "Mês fechado no escritório", tipo: "aviso",
-          mensagem: trava + " Use uma data de pagamento num mês aberto, ou reabra o mês no Fechamento do escritório." });
-        return;
-      }
-    }
+    // Baixa à vista que vai para o extrato do escritório: mês já conferido
+    // com o banco não recebe linha nova (`mesFechadoNaBaixa`). A obra em que
+    // o cliente paga direto pulava a trava inteira — mas o honorário dela
+    // atravessa; agora a regra é a da ponte, conta a conta.
+    const travouMes = (contas) => {
+      const trava = mesFechadoNaBaixa(contas);
+      if (trava) dialogo.alertar({ titulo: "Mês fechado no escritório", tipo: "aviso", mensagem: trava });
+      return !!trava;
+    };
     const noCartao = (conta, valor) => {
       if (!cartao) return { ...conta, formaPagamento: "avista" };
       const p = pagamentoNoCartao(conta, cartao, { pagoEm: f.dataContab, valorPago: valor, parcelas: f.parcelas });
@@ -3404,13 +3470,24 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       const idsDosPedidos = f.pedido.pedidoIds || [f.pedido.pedidoId];
       const r = baixarPedidos(contasDaObra, idsDosPedidos,
         { pagoEm: f.dataContab, comprovante: f.comprovante || null }, quemSou());
-      const alvo = new Set((f.pedido.contas || []).map(c => c.id));
+      // Só o que ESTA baixa pagou. A linha da loja leva todos os pedidos,
+      // inclusive o que já tinha sido pago antes, sozinho: marcá-lo com o
+      // conjunto (e o cartão) de agora contava o mesmo dinheiro de novo — no
+      // extrato e na fatura.
+      const eraPaga = new Set(contasDaObra.filter(c => c && c.pago).map(c => c.id));
+      const alvo = new Set((f.pedido.contas || []).map(c => c && c.id).filter(id => id && !eraPaga.has(id)));
+      const pagasAgora = r.contas.filter(c => c && c.pago && alvo.has(c.id));
       // vários pedidos pagos de uma vez são um débito só no banco: um
       // número de papel para todos (o comprovante é o mesmo)
-      const conjunto = idsDosPedidos.length > 1 ? (typeof uid === "function" ? uid() : String(Date.now())) : "";
-      gravarContas(r.contas.map(c => (alvo.has(c.id)
-        ? noCartao(conjunto && c.pago ? { ...c, pagamentoConjunto: conjunto } : c, Number(c.valorPago) || Number(c.valor) || 0) : c)),
-        f.pedido.obraId, rc.extra);
+      const conjunto = new Set(pagasAgora.map(c => c.pedidoId)).size > 1 ? (typeof uid === "function" ? uid() : String(Date.now())) : "";
+      const lista = r.contas.map(c => (c && c.pago && alvo.has(c.id)
+        ? noCartao(conjunto ? { ...c, pagamentoConjunto: conjunto } : c, Number(c.valorPago) || Number(c.valor) || 0) : c));
+      // no cartão em várias vezes a loja parcela a nota, não o item: os
+      // centavos do arredondamento ficam num item só
+      const finais = cartao && typeof acertarParcelasDoCartaoNoPedido === "function"
+        ? acertarParcelasDoCartaoNoPedido(lista, [...alvo]) : lista;
+      if (travouMes(finais.filter(c => c && alvo.has(c.id)))) return;
+      gravarContas(finais, f.pedido.obraId, rc.extra);
       setFormPagamento(null);
       return;
     }
@@ -3418,6 +3495,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const atualizada = noCartao(
       contaPaga(f.conta, { pagoEm: f.dataContab, valorPago: valor, comprovante: f.comprovante || null }, quemSou()),
       valor);
+    if (travouMes([atualizada])) return;
     gravarContas(contasDaObra.map(c => c.id === f.conta.id ? atualizada : c), f.conta.obraId, rc.extra);
     setFormPagamento(null);
   };
@@ -4227,7 +4305,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       if (!g.prestadorId && !g.nomeContratado?.trim()) { dialogo.alertar({ titulo: "Escolha o prestador", mensagem: "Selecione um prestador cadastrado, cadastre um novo ou digite o nome do contratado.", tipo: "aviso" }); return null; }
       const novo0 = { ...g, nomeContratado: prest ? prest.nome : g.nomeContratado, valor: total,
         // número sequencial atribuído na primeira gravação e mantido depois
-        numeroContrato: g.numeroContrato || proximoNumeroContrato(data.obras || []),
+        // a sequência é a mesma dos lançamentos do escritório: sem eles, o
+        // número repetia um que já está no extrato
+        numeroContrato: g.numeroContrato || proximoNumeroContrato(data.obras || [], data.lancamentos || []),
         geradoEm: g.geradoEm || new Date().toISOString(), atualizadoEm: new Date().toISOString() };
       const existe = contratos.some(c => c.id === novo0.id);
       // Contrato antigo não tem "criado por" — não dá para inventar quem
@@ -4286,7 +4366,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             if (!t) { setG("tipoProfissional", ""); return; }
             // Trocar o tipo reescreve o objeto padrão e o regime, mas preserva
             // o que já foi digitado à mão.
-            const novoEscopo = escopoContrato(g) && tipoProfissional(g.tipoProfissional) ? escopoContrato(g) : escopoDoTipo(t.id);
+            // O escopo que era só o padrão do tipo anterior (não escolhido à
+            // mão) acompanha o tipo novo — senão Empreiteiro → Terraplanagem
+            // ficava em mão de obra, e Terraplanagem → Pintor em equipamento.
+            const tipoAnterior = tipoProfissional(g.tipoProfissional);
+            const novoEscopo = tipoAnterior && escopoContrato(g) !== escopoDoTipo(tipoAnterior.id) ? escopoContrato(g) : escopoDoTipo(t.id);
             const base = contratoVazio(null, cliente.id, obraSelecionada.id, t.id, novoEscopo);
             const compat = prestadoresDoTipo(prestadores, t.id, data.escritorio).some(p => p.id === g.prestadorId);
             setContratoGerando({ ...base, id: g.id, objeto: objetoEditado ? g.objeto : base.objeto,
@@ -5947,6 +6031,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                       : c.origem === "cotacao" ? { rotulo: "Excluir — veio da cotação", desativado: true }
                                       : c.origem === "escritorio" ? { rotulo: "Excluir — lançada no escritório", desativado: true }
                                       : { rotulo: "Excluir", destrutivo: true, onClick: () => {
+                                          if (clienteNaoMexeNoPago([c], "excluir")) return;
                                           if (travouNaFatura([c], "excluir")) return;
                                           if (travouNoMesFechado([c], "excluir")) return;
                                           dialogo.confirmar({ titulo: "Excluir conta?", mensagem: "Esta ação não pode ser desfeita." + vaiJuntoNoEscritorio([c]), confirmar: "Excluir", destrutivo: true })
@@ -6103,6 +6188,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // segunda parte de uma cópia da obra sem as contas da primeira e as apaga.
   function lancarCotacaoEmContas(dados) {
     if (!obraAtual) return { erro: "Obra não encontrada." };
+    // gerar conta a pagar é do escritório; o cliente cota, propõe e escolhe
+    if (!perm.podeGerenciarObra) return { erro: "Sem permissão para lançar contas nesta obra." };
     // O pedido entra na mesma fila de números do contrato — quem relança um
     // pedido desfeito reaproveita o número que já era dele.
     // A conta de loja que a Entrada acabou de abrir vem junto com o pedido e
@@ -6119,9 +6206,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // Conta de loja é outra história: cada pedido ganha o SEU número e se soma
     // aos anteriores; a cotação comum tem um pedido só e reaproveita o dele.
     const ehLoja = dados.modo === "contaLoja";
+    // mesma sequência dos lançamentos do escritório (proximoNumeroDoc)
     const numeroPedido = ehLoja
-      ? proximoNumeroPedido(data.obras || [])
-      : (anterior.numeroPedido || proximoNumeroPedido(data.obras || []));
+      ? proximoNumeroPedido(data.obras || [], data.lancamentos || [])
+      : (anterior.numeroPedido || proximoNumeroPedido(data.obras || [], data.lancamentos || []));
     if (ehLoja) {
       // Editar um pedido é relançá-lo: ele guarda o próprio id e o próprio
       // número, as contas antigas saem e as novas entram no lugar.
@@ -6197,11 +6285,16 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Item já pago trava a operação inteira — o gasto não pode sumir da obra.
   function excluirPedidoDaLoja(cotacaoId, pedidoId) {
     if (!obraAtual) return { erro: "Obra não encontrada." };
+    if (!perm.podeGerenciarObra) return { erro: "Sem permissão para apagar pedidos nesta obra." };
     const trava = podeMexerNoPedido(obraAtual.contasPagar || [], pedidoId);
     if (!trava.pode) return { erro: trava.motivo };
-    const cotacoes = (obraAtual.cotacoes || []).map(c => c.id !== cotacaoId ? c : ({
+    const semPedido = (obraAtual.cotacoes || []).map(c => c.id !== cotacaoId ? c : ({
       ...c, pedidos: (c.pedidos || []).filter(x => x && x.id !== pedidoId),
     }));
+    // a cotação que tinha virado este pedido deixa de apontar para ele (como
+    // no apagar da lista de pedidos), senão fica travada em "Virou pedido na loja"
+    const cotacoes = typeof soltarPedidoNaLoja === "function"
+      ? soltarPedidoNaLoja(semPedido, { pedidoIds: [pedidoId] }) : semPedido;
     const atualizada = { ...obraAtual,
       contasPagar: removerContasDoPedido(obraAtual.contasPagar || [], pedidoId), cotacoes };
     gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o));
@@ -6264,6 +6357,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const novas = contasDaEntrada(l, { obraId: obraAtual.id, numeroDoc, quem: quemSou(), novoId: uid,
       anexo, cartao, planoDoCartao: pagamentoNoCartao });
     if (!novas.length) return { erro: "Nenhum item com valor." };
+    // pago à vista num mês já fechado no escritório: a conta gravava paga e
+    // o lançamento nunca chegava (a ponte recusava, e não tenta de novo)
+    const travaE = mesFechadoNaBaixa(novas);
+    if (travaE) return { erro: travaE };
     gravarContas([...contas, ...novas], obraAtual.id, rcE.extra);
     return { gravado: true, quantas: novas.length, ref: numeroDoc,
       valor: Math.round(novas.reduce((t, c) => t + (Number(c.valor) || 0), 0) * 100) / 100 };
@@ -6359,6 +6456,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         const plano = pagamentoNoCartao(pagaP, cartaoP, { pagoEm: d.pagoEm, valorPago: valor, parcelas: d.parcelas });
         if (plano) pagaP = { ...pagaP, ...plano };
       }
+      const travaP = mesFechadoNaBaixa([pagaP]);
+      if (travaP) return { erro: travaP };
       gravarContas(contas.map(c => c.id === alvo.id ? pagaP : c), obraAtual.id, rcP.extra);
       return { gravado: true, parcela: true, favorecido: alvo.favorecido || d.favorecido || "" };
     }
@@ -6392,6 +6491,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       const plano = pagamentoNoCartao(paga, cartao, { pagoEm: d.pagoEm, valorPago: valor, parcelas: d.parcelas });
       if (plano) paga = { ...paga, ...plano };
     }
+    const travaD = mesFechadoNaBaixa([paga]);
+    if (travaD) return { erro: travaD };
     gravarContas(contas.concat([paga]), obraAtual.id, rcD.extra);
     return { gravado: true, contaId: nova.id, favorecido: d.favorecido || "", cartao: !!cartao };
   }
@@ -6416,6 +6517,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
   function desfazerLancamentoDaCotacao(cotacaoId) {
     if (!obraAtual) return { erro: "Obra não encontrada." };
+    // mexer em contas a pagar é do escritório
+    if (!perm.podeGerenciarObra) return { erro: "Sem permissão para desfazer lançamentos nesta obra." };
+    // Com parcela paga, desfazer limpava o `contaGeradaId` e relançar gerava
+    // o total de novo por cima do que já saiu. Desfaz-se o pagamento antes.
+    const trava = podeDesfazerLancamento({ id: cotacaoId }, obraAtual.contasPagar || []);
+    if (!trava.pode) return { erro: trava.motivo };
     const restantes = removerContasDaCotacao(obraAtual.contasPagar || [], cotacaoId);
     const cotacoes = (obraAtual.cotacoes || []).map(c => c.id !== cotacaoId ? c
       : ({ ...c, contaGeradaId: "", lancadoEm: "", lancadoPor: "" }));
@@ -6590,7 +6697,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         onVoltar={() => { setAbrirEntrada(false); setCotacaoInicialId(""); setView("detalheObra"); }}
         abrirEntrada={abrirEntrada} entradaInicial={entradaInicial} cotacaoInicialId={cotacaoInicialId}
         onGerarContrato={abrirContratoDaCotacao}
-        onLancarContas={lancarCotacaoEmContas}
+        onLancarContas={lancarPedidoNoMesAberto}
         onLancarDespesa={lancarDespesaDaEntrada}
         onLancarEntrada={lancarEntradaDaObra}
         onDesfazerLancamento={desfazerLancamentoDaCotacao}

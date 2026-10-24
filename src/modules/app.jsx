@@ -1384,6 +1384,24 @@ export default function ModuloClientesFornecedores() {
     if (at.escritorio) r = { ...r, escritorio: at.escritorio };
     return r;
   }
+  // Para a base (o que o servidor tem) depois de uma gravação que caiu no
+  // meio: entra só o que chegou a gravar — com a versão nova, e o registro
+  // novo que foi criado. O resto da base fica como estava, e a próxima
+  // tentativa reenvia só o que não foi.
+  function aplicarGravadosNaBase(base, at) {
+    if (!at) return base;
+    let r = base;
+    for (const lista of LISTAS_COM_VERSAO) {
+      const mapa = at[lista] || {};
+      if (!Object.keys(mapa).length) continue;
+      const atual = r[lista] || [];
+      const ids = new Set(atual.map(o => o && o.id));
+      r = { ...r, [lista]: atual.map(o => (o && mapa[o.id]) ? mapa[o.id] : o)
+        .concat(Object.keys(mapa).filter(id => !ids.has(id)).map(id => mapa[id])) };
+    }
+    if (at.escritorio) r = { ...r, escritorio: at.escritorio };
+    return r;
+  }
   // O que a pessoa fez DEPOIS de mandar a gravação fica por cima do que
   // voltou do servidor.
   function juntarNaTela(enviado, agora, gravado) {
@@ -1431,7 +1449,10 @@ export default function ModuloClientesFornecedores() {
       }
     } catch (e) {
       console.error("Erro ao salvar:", e);
-      const recusado = e && e.status >= 400 && e.status < 500 && e.status !== 409;
+      // Só 4xx é recusa definitiva (sem permissão, dado inválido). 5xx (banco
+      // fora do ar por um instante), erro de rede, 408 e 429 passam: tenta de
+      // novo. 409 que sobrou é conflito que não juntou em 3 voltas.
+      const recusado = e && e.status >= 400 && e.status < 500 && e.status !== 409 && e.status !== 408 && e.status !== 429;
       if (recusado) {
         // o servidor recusou (sem permissão, dado inválido): tentar de novo
         // não adianta. O resto da gravação já foi; esta alteração não.
@@ -1439,6 +1460,17 @@ export default function ModuloClientesFornecedores() {
         setAvisoGravacao({ erro: true, texto: (e.status === 403 ? "Sem permissão para gravar esta alteração" : "O servidor recusou a gravação")
           + (e.message ? ` (${e.message})` : "") + ". Ela aparece na tela, mas não foi salva — recarregue a página para ver o que está gravado." });
       } else {
+        // O que gravou antes da falha já mudou de versão no servidor. Sem
+        // levar isso para a base e para a tela, a nova tentativa mandava a
+        // versão velha desses registros e dava um falso "Outra pessoa
+        // alterou". Só os que gravaram: o resto fica pendente como estava.
+        if (e && e.atualizados) {
+          syncedRef.current = aplicarGravadosNaBase(base, e.atualizados);
+          const gravado = aplicarAtualizados(alvo, e.atualizados);
+          const agora = dataRef.current;
+          const tela = juntarNaTela(alvo, agora, gravado);
+          if (tela !== agora) { dataRef.current = tela; setData(tela); }
+        }
         setBackendOffline(true);
         if (!novaTentativaRef.current) {
           novaTentativaRef.current = setTimeout(() => { novaTentativaRef.current = null; enfileirarGravacao(); }, 15000);
@@ -1474,8 +1506,24 @@ export default function ModuloClientesFornecedores() {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = async (ev) => {
-      try { const parsed = JSON.parse(ev.target.result); await save(parsed); toast.sucesso("Dados importados"); }
-      catch { dialogo.alertar({ titulo: "Arquivo inválido", mensagem: "Não foi possível ler este arquivo JSON.", tipo: "erro" }); }
+      let parsed;
+      try { parsed = JSON.parse(ev.target.result); }
+      catch { dialogo.alertar({ titulo: "Arquivo inválido", mensagem: "Não foi possível ler este arquivo JSON.", tipo: "erro" }); return; }
+      // O arquivo entra POR CIMA dos dados atuais (mesclarImportacao, api.js):
+      // gravá-lo como os dados inteiros apagava tudo o que não estava nele.
+      const previa = mesclarImportacao(dataRef.current || data, parsed);
+      if (previa.erro) { dialogo.alertar({ titulo: "Arquivo inválido", mensagem: previa.erro, tipo: "erro" }); return; }
+      const confirmou = await dialogo.confirmar({
+        titulo: "Importar este backup?",
+        mensagem: resumoDaImportacao(previa),
+        confirmar: "Importar",
+        destrutivo: previa.escritorio || previa.contagem.some((c) => c.atualizados > 0),
+      });
+      if (!confirmou) return;
+      // mescla de novo sobre o dado mais fresco: algo pode ter gravado
+      // enquanto a confirmação estava aberta
+      await save((atual) => { const m = mesclarImportacao(atual, parsed); return m.erro ? null : m.dados; });
+      toast.sucesso("Dados importados");
     };
     reader.readAsText(file); e.target.value = "";
   }
@@ -2177,13 +2225,19 @@ export default function ModuloClientesFornecedores() {
                 // tempo real pelo save() e pelo useEffect que segue `data`.
                 const dataAtual = dataRef.current || data;
                 const todos = dataAtual.orcamentosProjeto || [];
-                const maxSeq = todos.reduce((mx2, o2) => {
-                  const mm = (o2.id||"").match(/^ORC-(\d+)$/);
-                  return mm ? Math.max(mx2, parseInt(mm[1])) : mx2;
-                }, 0);
-                const nextId = "ORC-" + String(maxSeq + 1).padStart(4, "0");
+                // Número novo: maior já usado em qualquer referência (lançamentos,
+                // projetos — não só a lista), para nunca reusar o de um orçamento
+                // excluído (orcamento-teste.jsx, proximoIdOrcamento).
+                const nextId = orc.id ? null : proximoIdOrcamento(dataAtual);
+                // A tela guarda a cópia de quando abriu (orcBase). Se outra
+                // pessoa gravou no meio (e a junção trouxe a mudança dela para
+                // `todos`), gravar a cópia por cima apagaria essa mudança: junta
+                // as duas, como a gravação do app faz (orcamento-teste.jsx).
+                const atualOrc = orc.id ? todos.find(o2 => o2.id === orc.id) : null;
+                const orcJunto = (atualOrc && typeof orcMesclarComAtual === "function")
+                  ? orcMesclarComAtual(orcamentoTelaCheia.orcBase, orc, atualOrc) : orc;
                 const novo2 = {
-                  ...orc,
+                  ...orcJunto,
                   clienteId: orcamentoTelaCheia.clienteOrc.id,
                   cliente: orcamentoTelaCheia.clienteOrc.nome,
                   whatsapp: orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone || "",

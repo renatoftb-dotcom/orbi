@@ -74,6 +74,214 @@ function formatComodo(nome, qtd) {
   return `${qtdStr} ${nomeStr}`;
 }
 
+// ── Orçamento: parte pura ──────────────────────────────────────
+// JavaScript comum, sem JSX e sem React: fix-orc.test.mjs carrega só este
+// trecho (até o marcador de fim) para testar em node.
+
+// Data local de hoje "AAAA-MM-DD". O usuário está no Brasil (UTC-3):
+// toISOString() puro dá o dia seguinte depois das 21h.
+function orcHojeLocal() {
+  return new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+// Soma n meses a "AAAA-MM-DD" em aritmética de calendário, sem passar por
+// new Date("AAAA-MM-DD") (que é UTC) nem por setMonth (que transborda):
+// dia 31 + 1 mês cai no último dia do mês seguinte (28/02, 30/04) em vez de
+// pular fevereiro. Data vazia ou inválida conta a partir de hoje.
+function orcSomarMeses(iso, n) {
+  const re = /^(\d{4})-(\d{2})-(\d{2})/;
+  const m = re.exec(String(iso || "")) || re.exec(orcHojeLocal());
+  const ano = parseInt(m[1], 10), mes = parseInt(m[2], 10) - 1, dia = parseInt(m[3], 10);
+  const tot = ano * 12 + mes + (parseInt(n, 10) || 0);
+  const a2 = Math.floor(tot / 12), m2 = tot - a2 * 12;
+  const ultimoDia = new Date(Date.UTC(a2, m2 + 1, 0)).getUTCDate();
+  const d2 = Math.min(dia, ultimoDia);
+  return `${String(a2).padStart(4, "0")}-${String(m2 + 1).padStart(2, "0")}-${String(d2).padStart(2, "0")}`;
+}
+
+// Divide `total` em n valores iguais, em centavos; a sobra vai 1 centavo por
+// vez às primeiras — a soma bate exatamente com o total.
+function orcDividirIgual(n, total) {
+  if (n <= 0) return [];
+  const totalCentavos = Math.round((Number(total) || 0) * 100);
+  const vp = Math.floor(totalCentavos / n);
+  const sobra = totalCentavos - vp * n;
+  return Array.from({ length: n }, (_, i) => (vp + (i < sobra ? 1 : 0)) / 100);
+}
+
+// N parcelas iguais, uma por mês a partir de hoje (ou de `hoje`, AAAA-MM-DD).
+function orcGerarParcelasIguais(n, total, nomeBase = "Parcela", hoje) {
+  if (n <= 0) return [];
+  const base = hoje || orcHojeLocal();
+  return orcDividirIgual(n, total).map((v, i) => ({
+    nome: `${i + 1}ª ${nomeBase}`, valor: v, data: orcSomarMeses(base, i),
+  }));
+}
+
+// Muda a quantidade de parcelas SEM refazer as que já existem: nomes e datas
+// (que o usuário pode ter acertado) ficam; acrescenta no fim, um mês depois
+// da última, ou tira do fim. Os valores são redivididos por igual (é o modo
+// "parcelas iguais"). Antes refazia tudo a partir de hoje.
+function orcRedimensionarParcelas(atuais, n, total, nomeBase = "Parcela", hoje) {
+  const lista = (atuais || []).slice(0, Math.max(0, n));
+  while (lista.length < n) {
+    const ult = lista[lista.length - 1];
+    lista.push({ nome: `${lista.length + 1}ª ${nomeBase}`, valor: 0,
+      data: ult ? orcSomarMeses(ult.data, 1) : (hoje || orcHojeLocal()) });
+  }
+  const valores = orcDividirIgual(lista.length, total);
+  return lista.map((p, i) => ({ ...p, valor: valores[i] }));
+}
+
+// Tira a parcela i (modo parcelas iguais) mantendo as datas das outras. Os
+// nomes no padrão "Nª Parcela" são renumerados para não ficar 1ª, 3ª.
+function orcRemoverParcelaIgual(atuais, i, total, nomeBase = "Parcela") {
+  if (!atuais || atuais.length <= 1) return atuais;
+  const resto = atuais.filter((_, idx) => idx !== i);
+  const valores = orcDividirIgual(resto.length, total);
+  const padrao = new RegExp("^\\d+ª " + nomeBase + "$");
+  return resto.map((p, k) => ({ ...p, valor: valores[k],
+    nome: padrao.test(p.nome || "") ? `${k + 1}ª ${nomeBase}` : p.nome }));
+}
+
+// Edição do VALOR da parcela i: a próxima (ou a 1ª, se i é a última) compensa
+// para a soma continuar igual ao total. O valor digitado fica entre 0 e o que
+// sobra depois das outras parcelas — sem esse limite a compensadora ficava
+// negativa (12.000 + -2.000 = 10.000) e passava na conferência da soma.
+function orcCascataParcela(atuais, i, valor, total) {
+  if (!atuais || atuais.length === 0) return atuais;
+  let novo = Math.round((parseFloat(valor) || 0) * 100) / 100;
+  if (novo < 0) novo = 0;
+  if (atuais.length === 1) return [{ ...atuais[0], valor: novo }];
+  const j = i === atuais.length - 1 ? 0 : i + 1;
+  const somaOutras = Math.round(atuais.reduce((s, p, idx) =>
+    (idx === i || idx === j) ? s : s + (parseFloat(p.valor) || 0), 0) * 100) / 100;
+  const teto = Math.max(0, Math.round(((Number(total) || 0) - somaOutras) * 100) / 100);
+  if (novo > teto) novo = teto;
+  const comp = Math.round(((Number(total) || 0) - novo - somaOutras) * 100) / 100;
+  return atuais.map((p, idx) => idx === i ? { ...p, valor: novo } : idx === j ? { ...p, valor: comp } : p);
+}
+
+// Parcela com valor zero ou negativo não pode ir para o financeiro (vira
+// "a receber" negativo ou some da numeração). Só vale quando há o que
+// receber: um ganho de valor zero continua podendo ser confirmado.
+function orcTemParcelaSemValor(parcelas, total) {
+  if (!(Math.round((Number(total) || 0) * 100) > 0)) return false;
+  return (parcelas || []).some((p) => !(Math.round((parseFloat(p && p.valor) || 0) * 100) > 0));
+}
+
+// Maior número ORC já usado em QUALQUER lugar dos dados: o próprio
+// orçamento e tudo que guarda `orcId` — o projeto que nasceu do ganho, os
+// lançamentos do financeiro (origem.orcId), receitas. Excluir o orçamento de
+// maior número não apaga essas referências; reusar o número fazia o
+// orçamento novo herdar recebimentos e projeto do excluído.
+function orcMaiorNumeroUsado(data) {
+  let max = 0;
+  const ver = (v) => { const m = /^ORC-(\d+)$/.exec(String(v || "")); if (m) max = Math.max(max, parseInt(m[1], 10)); };
+  for (const o of (data && data.orcamentosProjeto) || []) ver(o && o.id);
+  const vistos = new WeakSet();
+  const andar = (x) => {
+    if (!x || typeof x !== "object" || vistos.has(x)) return;
+    vistos.add(x);
+    if (Array.isArray(x)) { for (const y of x) andar(y); return; }
+    for (const k of Object.keys(x)) {
+      const v = x[k];
+      if (k === "orcId" || k === "orc_id") ver(v);
+      else if (v && typeof v === "object") andar(v);
+    }
+  };
+  andar(data);
+  return max;
+}
+function proximoIdOrcamento(data) {
+  return "ORC-" + String(orcMaiorNumeroUsado(data) + 1).padStart(4, "0");
+}
+
+// Arquitetura e engenharia (sem imposto) de uma proposta — ou da raiz do
+// orçamento, se não há proposta —, respeitando o que foi INCLUÍDO: o cálculo
+// guarda precoEng mesmo quando a engenharia ficou de fora da proposta.
+function orcValoresBase(orc, prop) {
+  const o = orc || {};
+  const res = o.resultado || {};
+  const incArq = ((prop && prop.incluiArq != null) ? prop.incluiArq : o.incluiArq) !== false;
+  const incEng = ((prop && prop.incluiEng != null) ? prop.incluiEng : o.incluiEng) !== false;
+  let arq, eng;
+  if (prop) {
+    const c = prop.calculo || {};
+    arq = prop.arqEdit != null ? prop.arqEdit : (c.precoArq != null ? c.precoArq : (res.precoArq || 0));
+    eng = prop.engEdit != null ? prop.engEdit : (c.precoEng != null ? c.precoEng : (res.precoEng || 0));
+  } else {
+    arq = res.precoArq || 0;
+    eng = res.precoEng || 0;
+  }
+  return { arq: incArq ? (Number(arq) || 0) : 0, eng: incEng ? (Number(eng) || 0) : 0 };
+}
+
+// Valor total do orçamento na lista (tabela, card, ordenação): o que o
+// cliente viu na última proposta, ou arquitetura + engenharia incluídas.
+function orcValorTotal(orc) {
+  const props = (orc && orc.propostas) || [];
+  const ult = props.length > 0 ? props[props.length - 1] : null;
+  if (ult && ult.valorTotalExibido != null) return ult.valorTotalExibido;
+  const v = orcValoresBase(orc, ult);
+  return v.arq + v.eng;
+}
+
+// Desconto, nº de parcelas e rótulo que o modal de Ganho propõe — da versão
+// ESCOLHIDA como fechada (`prop`), não da última: com v1 e v2 enviadas e a
+// v1 aceita, o fechamento tem de sair das condições da v1.
+function orcOpcoesDoGanho(orc, prop, inclArq, inclEng, etapas) {
+  const o = orc || {};
+  const tipoPgto = (prop && prop.tipoPgto) || o.tipoPagamento || o.tipoPgto || "padrao";
+  const pick = (...vals) => { for (const v of vals) if (v != null) return v; return 0; };
+  if (tipoPgto === "padrao") {
+    // Arq + Eng = pacote completo | só um dos dois = "etapa" (individual)
+    const ehPacote = inclArq && inclEng;
+    const descArq = pick(prop?.descArq, o.descontoEtapa, o.descArq, 5);
+    const parcArq = pick(prop?.parcArq, o.parcelasEtapa, o.parcArq, 3);
+    const descPac = pick(prop?.descPacote, o.descontoPacote, o.descPacote, 10);
+    const parcPac = pick(prop?.parcPacote, o.parcelasPacote, o.parcPacote, 4);
+    return {
+      descAntecipado: ehPacote ? descPac : descArq,
+      qtdParcelado:   ehPacote ? parcPac : parcArq,
+      blocoLabel:     ehPacote ? "Pacote Completo" : (inclArq ? "Apenas Arquitetura" : "Apenas Engenharia"),
+    };
+  }
+  // Tipo "etapas": se TODAS etapas marcadas → pacote (Ctrt Pacote); se subset → etapa a etapa (Ctrt Etapa)
+  const lista = etapas || [];
+  const ehPacote = lista.length > 0 && lista.filter(e => e.marcado).length === lista.length;
+  const descEt  = pick(prop?.descEtCtrt,  o.descontoEtapaCtrt,  o.descEtCtrt,  5);
+  const parcEt  = pick(prop?.parcEtCtrt,  o.parcelasEtapaCtrt,  o.parcEtCtrt,  2);
+  const descPac = pick(prop?.descPacCtrt, o.descontoPacoteCtrt, o.descPacCtrt, 15);
+  const parcPac = pick(prop?.parcPacCtrt, o.parcelasPacoteCtrt, o.parcPacCtrt, 8);
+  return {
+    descAntecipado: ehPacote ? descPac : descEt,
+    qtdParcelado:   ehPacote ? parcPac : parcEt,
+    blocoLabel:     ehPacote ? "Pacote de Etapas" : "Etapa a Etapa",
+  };
+}
+
+// Status ao "Salvar rascunho" na volta do formulário: só o que ainda é
+// rascunho (ou novo) vira rascunho. Ganho, perdido e aberto (proposta
+// enviada) ficam como estão — rascunho é apagado em 3 dias.
+function orcStatusAoSalvarRascunho(orcBase) {
+  const st = orcBase && orcBase.status;
+  return st && st !== "rascunho" ? st : "rascunho";
+}
+
+// Grava por cima do registro ATUAL, não da cópia que a tela guardou: depois
+// de uma junção (409) com a mudança de outra pessoa, `base` (o que o
+// formulário leu) fica velho, e `{ ...base, ...mudanças }` desfazia a mudança
+// dela na gravação seguinte. Junta em 3 vias como a gravação do app
+// (mesclar3, api.js): campo que só o outro lado mudou fica com a mudança dele.
+function orcMesclarComAtual(base, nosso, atual) {
+  if (!nosso || !nosso.id || !atual || atual.id !== nosso.id) return nosso;
+  if (!base || base.id !== nosso.id || atual === base) return nosso;
+  if (typeof mesclar3 !== "function") return nosso;
+  return mesclar3(base, nosso, atual);
+}
+// ── Orçamento: fim da parte pura ───────────────────────────────
+
 // ═══════════════════════════════════════════════════════════════
 // MÓDULO ORÇAMENTOS (lista centralizada de todos os orçamentos)
 // ═══════════════════════════════════════════════════════════════
@@ -115,6 +323,10 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
 
   const orcamentos = data?.orcamentosProjeto || [];
   const clientes = data?.clientes || [];
+  // Últimos dados conhecidos, para salvarOrcamento (ver lá). Cada render traz
+  // os do app; entre dois renders, a própria gravação atualiza.
+  const dadosRef = useRef(data);
+  dadosRef.current = data;
 
   // Nota: expiração automática de propostas (30 dias) é feita pelo backend
   // via cron job (endpoint POST /admin/manutencao), todo dia às 3h da manhã.
@@ -250,7 +462,9 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
     const props = orc.propostas || [];
     const iVer = typeof ganhoVersao === "number" && props[ganhoVersao] ? ganhoVersao : props.length - 1;
     const fechada = props[iVer] || null;
-    props.forEach((p, i) => { if (i !== iVer) esquecerArquivoDaProposta(p); });
+    // O PDF das outras versões só sai do storage DEPOIS que o ganho foi
+    // gravado (no .then do save, abaixo): se o recebimento dá erro ou a
+    // gravação falha, nada muda no orçamento — e os PDFs não podem sumir.
 
     // Atualiza o orçamento: status ganho + fechamento
     const novosOrc = todos.map(o =>
@@ -288,6 +502,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
     // Save em background. Falha silenciosa via toast de erro.
     save({ ...data, orcamentosProjeto: novosOrc, projetos: novosProjetos,
       ...(recebido.novos && recebido.novos.length ? { lancamentos: recebido.lancamentos } : {}) })
+      .then(() => { props.forEach((p, i) => { if (i !== iVer) esquecerArquivoDaProposta(p); }); })
       .catch(e => {
         console.error("Erro ao salvar orçamento ganho:", e);
         toast.erro("Erro ao salvar — tente novamente");
@@ -295,27 +510,30 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   }
 
   async function salvarOrcamento(orc) {
-    const todos = data.orcamentosProjeto || [];
-    const nextId = () => {
-      const max = todos.reduce((mx, o) => {
-        const m = (o.id || "").match(/^ORC-(\d+)$/);
-        return m ? Math.max(mx, parseInt(m[1])) : mx;
-      }, 0);
-      return "ORC-" + String(max + 1).padStart(4, "0");
-    };
+    // Visualizador não grava orçamento (a tela já esconde; aqui é a trava).
+    if (!perm.podeEditar) return;
+    // Dados mais novos que esta tela conhece: duas gravações seguidas (salvar
+    // + snapshot da proposta) acontecem antes do re-render.
+    const dataAtual = dadosRef.current || data;
+    const todos = dataAtual.orcamentosProjeto || [];
+    // Número novo: maior já usado em qualquer referência (não só na lista),
+    // para nunca reusar o de um orçamento excluído.
+    const nextId = () => proximoIdOrcamento(dataAtual);
+    const atual = orc.id ? todos.find(o => o.id === orc.id) : null;
+    const junto = orcMesclarComAtual(orcBase, orc, atual);
     const novo = {
-      ...orc,
-      id: orc.id || nextId(),
-      criadoEm: orc.criadoEm || new Date().toISOString(),
-      clienteId: orc.clienteId || clienteAtivo?.id || null,
-      status: orc.status || "rascunho",
+      ...junto,
+      id: junto.id || nextId(),
+      criadoEm: junto.criadoEm || new Date().toISOString(),
+      clienteId: junto.clienteId || clienteAtivo?.id || null,
+      status: junto.status || "rascunho",
     };
     setOrcBase(novo);
     const novos = orc.id ? todos.map(o => o.id === orc.id ? novo : o) : [...todos, novo];
 
     // Reativação automática: se o cliente está inativo e está criando novo orçamento,
     // reativa automaticamente (cliente voltou a ser ativo).
-    let clientesAtualizados = data.clientes || [];
+    let clientesAtualizados = dataAtual.clientes || [];
     const cliId = novo.clienteId;
     if (cliId && !orc.id) { // só em novos orçamentos
       const cli = clientesAtualizados.find(c => c.id === cliId);
@@ -333,7 +551,9 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       }
     }
 
-    save({ ...data, orcamentosProjeto: novos, clientes: clientesAtualizados }).catch(console.error);
+    const novoData = { ...dataAtual, orcamentosProjeto: novos, clientes: clientesAtualizados };
+    dadosRef.current = novoData;
+    save(novoData).catch(console.error);
   }
 
   function abrirNovoOrcamento(cliente) {
@@ -390,6 +610,11 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         orcBase={orcBase}
         onSalvar={salvarOrcamento}
         onVoltar={voltarParaLista}
+        // Aberto só para ver: o Voltar não oferece "salvar como rascunho"
+        // (que regravava um ganho/perdido como rascunho, apagado em 3 dias).
+        // Rascunho fica de fora: na lista, clicar é o único jeito de abrir um
+        // rascunho para continuar, e a pergunta ao voltar é o que o salva.
+        modoVer={modoAbertura === "ver" && (orcBase?.status || "rascunho") !== "rascunho"}
         modoAbertura={modoAbertura}
         escritorio={data?.escritorio || {}}
         usuario={data?._usuario}
@@ -409,16 +634,8 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   const totalAtivos = totalTodos - totalContadores.perdido;
 
   // Helper: valor Total do orçamento (usa proposta salva se existir)
-  const valorTotalOrc = (o) => {
-    const ult = o.propostas && o.propostas.length > 0 ? o.propostas[o.propostas.length - 1] : null;
-    if (ult) {
-      if (ult.valorTotalExibido != null) return ult.valorTotalExibido;
-      const arq = ult.arqEdit != null ? ult.arqEdit : (ult.calculo?.precoArq || 0);
-      const eng = ult.engEdit != null ? ult.engEdit : (ult.calculo?.precoEng || 0);
-      return arq + eng;
-    }
-    return (o.resultado?.precoArq || 0) + (o.resultado?.precoEng || 0);
-  };
+  // (orcValorTotal: só soma a engenharia/arquitetura que foi incluída)
+  const valorTotalOrc = (o) => orcValorTotal(o);
 
   // Helper: dias até vencer (null se não aplicável). Negativo = já vencido.
   const diasParaVencer = (o) => {
@@ -744,7 +961,9 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
             const lista = (p._orcOrigem || {}).propostas || [];
             return lista[i] ? { ...lista[i], clienteNome: p.clienteNome, _orcOrigem: p._orcOrigem, _indice: i } : p;
           })}
-          aoExcluirVersao={() => {
+          // Excluir versão apaga o PDF do storage: só quem pode excluir (o
+          // mesmo critério da tela do cliente). Editar: só quem pode editar.
+          aoExcluirVersao={!perm.podeExcluir ? null : () => {
             const p = propostaVisualizada;
             const orc = p._orcOrigem || {};
             const i = typeof p._indice === "number" ? p._indice : (orc.propostas || []).length - 1;
@@ -758,7 +977,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
               : null);
           }}
           onFechar={() => setPropostaVisualizada(null)}
-          onEditar={() => {
+          onEditar={!perm.podeEditar ? null : () => {
             const orc = propostaVisualizada._orcOrigem;
             if (!orc) return;
             setPropostaVisualizada(null);
@@ -1064,18 +1283,8 @@ function OrcCard({ orc, clientes, onAbrir, onAction, onChangeProb, perm }) {
   const ultimaProposta = orc.propostas && orc.propostas.length > 0
     ? orc.propostas[orc.propostas.length - 1]
     : null;
-  let valorTotal;
-  if (ultimaProposta) {
-    if (ultimaProposta.valorTotalExibido != null) {
-      valorTotal = ultimaProposta.valorTotalExibido;
-    } else {
-      const arq = ultimaProposta.arqEdit != null ? ultimaProposta.arqEdit : (ultimaProposta.calculo?.precoArq || 0);
-      const eng = ultimaProposta.engEdit != null ? ultimaProposta.engEdit : (ultimaProposta.calculo?.precoEng || 0);
-      valorTotal = arq + eng;
-    }
-  } else {
-    valorTotal = (orc.resultado?.precoArq || 0) + (orc.resultado?.precoEng || 0);
-  }
+  // Só soma a engenharia/arquitetura que foi incluída (orcValorTotal)
+  const valorTotal = orcValorTotal(orc);
 
   const tipo = orc.tipo || "—";
   const ref = orc.referencia || "";
@@ -1376,18 +1585,8 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
   const ultimaProposta = orc.propostas && orc.propostas.length > 0
     ? orc.propostas[orc.propostas.length - 1]
     : null;
-  let valorTotal;
-  if (ultimaProposta) {
-    if (ultimaProposta.valorTotalExibido != null) {
-      valorTotal = ultimaProposta.valorTotalExibido;
-    } else {
-      const arq = ultimaProposta.arqEdit != null ? ultimaProposta.arqEdit : (ultimaProposta.calculo?.precoArq || 0);
-      const eng = ultimaProposta.engEdit != null ? ultimaProposta.engEdit : (ultimaProposta.calculo?.precoEng || 0);
-      valorTotal = arq + eng;
-    }
-  } else {
-    valorTotal = (orc.resultado?.precoArq || 0) + (orc.resultado?.precoEng || 0);
-  }
+  // Só soma a engenharia/arquitetura que foi incluída (orcValorTotal)
+  const valorTotal = orcValorTotal(orc);
 
   const tipo = orc.tipo || "—";
   const refRaw = orc.referencia || "";
@@ -2585,16 +2784,9 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
   // IMPORTANTE: NÃO usar valorArqExibido/valorEngExibido da proposta porque esses
   // já vêm com imposto incluído quando o orçamento tem imposto (arqCIEdit/engCIEdit).
   // Precisamos dos valores LÍQUIDOS pra aplicar comImp() corretamente.
-  const baseArq = (() => {
-    if (ultPropImp?.arqEdit != null) return ultPropImp.arqEdit;
-    if (ultPropImp?.calculo?.precoArq != null) return ultPropImp.calculo.precoArq;
-    return orc.resultado?.precoArq || 0;
-  })();
-  const baseEng = (() => {
-    if (ultPropImp?.engEdit != null) return ultPropImp.engEdit;
-    if (ultPropImp?.calculo?.precoEng != null) return ultPropImp.calculo.precoEng;
-    return orc.resultado?.precoEng || 0;
-  })();
+  // orcValoresBase zera a parte que não foi incluída na proposta: o cálculo
+  // guarda precoEng mesmo com a engenharia de fora, e o ganho a somava.
+  const { arq: baseArq, eng: baseEng } = orcValoresBase(orc, ultPropImp);
 
   // ── Estados principais ──
   const [incluirImposto, setIncluirImposto] = useState(temImpostoOrc);   // começa marcado se orçamento tem imposto
@@ -2690,42 +2882,9 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
 
   // ── Deriva opções padrão do orçamento (desconto e quantidade de parcelas) ──
   // Prioridade: proposta enviada > raiz do orçamento > fallback.
-  const opcoesOrcamento = (() => {
-    const tipoPgto = orc.tipoPagamento || orc.tipoPgto || "padrao";
-    const ultProp = orc.propostas && orc.propostas.length > 0
-      ? orc.propostas[orc.propostas.length - 1]
-      : null;
-    const pick = (...vals) => { for (const v of vals) if (v != null) return v; return 0; };
-
-    if (tipoPgto === "padrao") {
-      // Arq + Eng = pacote completo | só um dos dois = "etapa" (individual)
-      const ehPacote = inclArq && inclEng;
-      const descArq = pick(ultProp?.descArq, orc.descontoEtapa, orc.descArq, 5);
-      const parcArq = pick(ultProp?.parcArq, orc.parcelasEtapa, orc.parcArq, 3);
-      const descPac = pick(ultProp?.descPacote, orc.descontoPacote, orc.descPacote, 10);
-      const parcPac = pick(ultProp?.parcPacote, orc.parcelasPacote, orc.parcPacote, 4);
-      return {
-        descAntecipado: ehPacote ? descPac : descArq,
-        qtdParcelado:   ehPacote ? parcPac : parcArq,
-        blocoLabel:     ehPacote ? "Pacote Completo" : (inclArq ? "Apenas Arquitetura" : "Apenas Engenharia"),
-      };
-    }
-
-    // Tipo "etapas": se TODAS etapas marcadas → pacote (Ctrt Pacote); se subset → etapa a etapa (Ctrt Etapa)
-    const totalEtapas = etapas.length;
-    const marcadas    = etapas.filter(e => e.marcado).length;
-    const ehPacote    = totalEtapas > 0 && marcadas === totalEtapas;
-
-    const descEt  = pick(ultProp?.descEtCtrt,  orc.descontoEtapaCtrt,  orc.descEtCtrt,  5);
-    const parcEt  = pick(ultProp?.parcEtCtrt,  orc.parcelasEtapaCtrt,  orc.parcEtCtrt,  2);
-    const descPac = pick(ultProp?.descPacCtrt, orc.descontoPacoteCtrt, orc.descPacCtrt, 15);
-    const parcPac = pick(ultProp?.parcPacCtrt, orc.parcelasPacoteCtrt, orc.parcPacCtrt, 8);
-    return {
-      descAntecipado: ehPacote ? descPac : descEt,
-      qtdParcelado:   ehPacote ? parcPac : parcEt,
-      blocoLabel:     ehPacote ? "Pacote de Etapas" : "Etapa a Etapa",
-    };
-  })();
+  // Da versão escolhida como fechada (ultPropImp = propostas[iProp]), não da
+  // última — ver orcOpcoesDoGanho.
+  const opcoesOrcamento = orcOpcoesDoGanho(orc, ultPropImp, inclArq, inclEng, etapas);
 
   // ── Cálculos derivados ──
   // No tipo "etapas": propTotal = soma das etapas MARCADAS (valor editável)
@@ -2761,26 +2920,17 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
   const somaParcelas = Math.round(parcelas.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0) * 100) / 100;
   const diferencaParcelas = Math.round((somaParcelas - totalFechado) * 100) / 100;
   const temDiferenca = Math.abs(diferencaParcelas) > 0.01;
+  // Parcela zerada ou negativa também trava o Confirmar (orcTemParcelaSemValor).
+  const temParcelaSemValor = orcTemParcelaSemValor(parcelas, totalFechado);
+  const bloqueiaConfirmar = temDiferenca || temParcelaSemValor;
 
   // ── Helpers ──
   // Gera N parcelas iguais, com a última absorvendo a diferença de arredondamento.
   // Garante que soma(parcelas) === total exatamente (em centavos).
+  // Datas em aritmética de calendário (orcSomarMeses): dia 29-31 cai no
+  // último dia de fevereiro em vez de pular para março.
   function gerarParcelasIguais(n, total, nomeBase = "Parcela") {
-    const hoje = new Date();
-    if (n <= 0) return [];
-    const totalCentavos = Math.round(total * 100);
-    const vpCentavos = Math.floor(totalCentavos / n);
-    const sobra = totalCentavos - (vpCentavos * n); // centavos que sobram (vai pra primeira)
-    return Array.from({ length: n }, (_, i) => {
-      const d = new Date(hoje.getFullYear(), hoje.getMonth() + i, hoje.getDate());
-      // Distribui a sobra nas primeiras parcelas (1 centavo cada) pra fechar exato
-      const centavos = vpCentavos + (i < sobra ? 1 : 0);
-      return {
-        nome: `${i + 1}ª ${nomeBase}`,
-        valor: centavos / 100,
-        data: d.toISOString().slice(0, 10),
-      };
-    });
+    return orcGerarParcelasIguais(n, total, nomeBase);
   }
 
   // Refs de controle (devem ser declarados antes dos useEffects que os usam)
@@ -2899,7 +3049,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
   function mudarValorEtapa(i, novoValor) {
     setEtapas(atuais => {
       if (atuais.length === 0) return atuais;
-      const novoV = Math.round((parseFloat(novoValor) || 0) * 100) / 100;
+      let novoV = Math.round((parseFloat(novoValor) || 0) * 100) / 100;
       // Só aplica cascata entre etapas MARCADAS (desmarcadas não entram)
       const marcadasIdx = atuais.map((e, idx) => e.marcado ? idx : -1).filter(x => x !== -1);
       const iMarcada = marcadasIdx.indexOf(i);
@@ -2917,6 +3067,11 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
         if (idx === i || idx === jCompensar) return s;
         return s + (parseFloat(atuais[idx].valor) || 0);
       }, 0);
+      // A etapa editada vai de 0 até o que sobra do total — a que compensa
+      // nunca fica negativa (mesma regra das parcelas, orcCascataParcela).
+      const teto = Math.max(0, Math.round((somaAtualMarcadas - somaOutras) * 100) / 100);
+      if (novoV < 0) novoV = 0;
+      if (novoV > teto) novoV = teto;
       // Valor compensador = soma total marcadas - novoV - somaOutras
       const valorCompensador = Math.round((somaAtualMarcadas - novoV - somaOutras) * 100) / 100;
 
@@ -2930,7 +3085,8 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
 
   function mudarQtdParcelas(n) {
     const qtd = Math.max(1, Math.min(24, parseInt(n) || 1));
-    setParcelas(gerarParcelasIguais(qtd, totalFechado, "Parcela"));
+    // Mantém nomes e datas das parcelas que já existem; só acrescenta/tira no fim.
+    setParcelas(atuais => orcRedimensionarParcelas(atuais, qtd, totalFechado, "Parcela"));
   }
 
   function mudarParcelaCampo(i, campo, valor) {
@@ -2943,26 +3099,8 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
     // Estratégia: seta o valor novo na parcela i, depois define a parcela j (próxima)
     // como o que falta pra fechar o total (totalFechado - soma das outras).
     // Se for a última parcela editada, a primeira absorve.
-    setParcelas(atuais => {
-      if (atuais.length === 0) return atuais;
-      const novoValor = Math.round((parseFloat(valor) || 0) * 100) / 100;
-      if (atuais.length === 1) {
-        return [{ ...atuais[0], valor: novoValor }];
-      }
-      const jCompensar = i === atuais.length - 1 ? 0 : i + 1;
-      // Soma todas as parcelas exceto a editada e a que compensa
-      const somaOutras = atuais.reduce((s, p, idx) => {
-        if (idx === i || idx === jCompensar) return s;
-        return s + (parseFloat(p.valor) || 0);
-      }, 0);
-      // O que falta pra fechar o total = totalFechado - novoValor - somaOutras
-      const valorCompensador = Math.round((totalFechado - novoValor - somaOutras) * 100) / 100;
-      return atuais.map((p, idx) => {
-        if (idx === i) return { ...p, valor: novoValor };
-        if (idx === jCompensar) return { ...p, valor: valorCompensador };
-        return p;
-      });
-    });
+    // orcCascataParcela limita o valor para a compensadora não ficar negativa.
+    setParcelas(atuais => orcCascataParcela(atuais, i, valor, totalFechado));
   }
 
   function mudarParcelaPct(i, novoPct) {
@@ -2974,10 +3112,11 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
 
   function adicionarParcela() {
     const ult = parcelas[parcelas.length - 1];
-    const d = ult ? new Date(ult.data) : new Date();
-    d.setMonth(d.getMonth() + 1);
+    // Um mês depois da última, em data local com o dia limitado ao fim do mês.
+    // Antes: new Date("AAAA-MM-DD") (UTC) + setMonth local + toISOString dava
+    // o dia errado, e data vazia lançava RangeError.
     const nome = modoEtapas ? "Nova etapa" : `${parcelas.length + 1}ª Parcela`;
-    const novaParcela = { nome, valor: 0, data: d.toISOString().slice(0, 10) };
+    const novaParcela = { nome, valor: 0, data: orcSomarMeses(ult && ult.data, 1) };
     if (modoEtapas) {
       // Modo etapas: só adiciona, usuário preenche o valor
       setParcelas([...parcelas, novaParcela]);
@@ -2992,7 +3131,9 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
     if (modoEtapas) {
       setParcelas(parcelas.filter((_, idx) => idx !== i));
     } else {
-      setParcelas(gerarParcelasIguais(parcelas.length - 1, totalFechado, "Parcela"));
+      // Tira a parcela clicada e mantém as datas das outras (antes refazia
+      // todas a partir de hoje).
+      setParcelas(orcRemoverParcelaIgual(parcelas, i, totalFechado, "Parcela"));
     }
   }
 
@@ -3042,6 +3183,14 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
       dialogo.alertar({
         titulo: "Ajuste os valores das parcelas",
         mensagem: `A soma das parcelas precisa bater com o total fechado.\n\nSoma atual: ${fmtBRL(somaParcelas)}\nTotal fechado: ${fmtBRL(totalFechado)}\nDiferença: ${diferencaParcelas > 0 ? "+" : ""}${fmtBRL(diferencaParcelas)}`,
+        tipo: "aviso",
+      });
+      return;
+    }
+    if (temParcelaSemValor) {
+      dialogo.alertar({
+        titulo: "Ajuste os valores das parcelas",
+        mensagem: "Toda parcela precisa ter valor maior que zero. Preencha o valor ou remova a parcela.",
         tipo: "aviso",
       });
       return;
@@ -3426,6 +3575,19 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
                   </div>
                 </div>
               )}
+              {/* Parcela zerada: o botão Confirmar fica travado — sem este aviso
+                  (no celular não há o title do botão) não se sabia por quê. */}
+              {temParcelaSemValor && !temDiferenca && !editandoTotal && !editandoDesconto && !editandoImposto && (
+                <div data-vk-parcela-sem-valor style={{
+                  marginTop:10, padding:"8px 10px",
+                  background:"#fef2f2", border:"1px solid #fecaca",
+                  borderRadius:6, fontSize:11.5, color:"#b91c1c",
+                  display:"flex", alignItems:"center", gap:6,
+                }}>
+                  <span style={{ fontSize:13, fontWeight:700 }}>⚠</span>
+                  <div>Toda parcela precisa ter valor maior que zero. Preencha o valor ou remova a parcela.</div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -3502,14 +3664,15 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
             Cancelar
           </button>
           <button onClick={confirmar}
-            disabled={temDiferenca}
-            title={temDiferenca ? `A soma das parcelas precisa bater com o total fechado (diferença: ${fmtBRL(diferencaParcelas)})` : ""}
+            disabled={bloqueiaConfirmar}
+            title={temDiferenca ? `A soma das parcelas precisa bater com o total fechado (diferença: ${fmtBRL(diferencaParcelas)})`
+              : temParcelaSemValor ? "Toda parcela precisa ter valor maior que zero" : ""}
             style={{
               padding:"8px 18px",
-              background: temDiferenca ? "#d1d5db" : "#262421",
+              background: bloqueiaConfirmar ? "#d1d5db" : "#262421",
               color:"#fff", border:"none", borderRadius:7,
               fontSize:12.5, fontWeight:500,
-              cursor: temDiferenca ? "not-allowed" : "pointer",
+              cursor: bloqueiaConfirmar ? "not-allowed" : "pointer",
               fontFamily:"inherit",
             }}>
             Confirmar
@@ -6441,10 +6604,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     tipoPgto: orcBase.tipoPgto || "padrao",
     temImposto: orcBase.temImposto || false,
     aliqImp: orcBase.aliqImp || 16,
-    descArq: orcBase.descArq || 5, parcArq: orcBase.parcArq || 3,
-    descPacote: orcBase.descPacote || 10, parcPacote: orcBase.parcPacote || 4,
-    descEtCtrt: orcBase.descEtCtrt || 5, parcEtCtrt: orcBase.parcEtCtrt || 2,
-    descPacCtrt: orcBase.descPacCtrt || 15, parcPacCtrt: orcBase.parcPacCtrt || 8,
+    descArq: orcBase.descArq ?? 5, parcArq: orcBase.parcArq || 3,
+    descPacote: orcBase.descPacote ?? 10, parcPacote: orcBase.parcPacote || 4,
+    descEtCtrt: orcBase.descEtCtrt ?? 5, parcEtCtrt: orcBase.parcEtCtrt || 2,
+    descPacCtrt: orcBase.descPacCtrt ?? 15, parcPacCtrt: orcBase.parcPacCtrt || 8,
     etapasPct: orcBase.etapasPct || [],
     totSI: orcBase.totSI || 0, totCI: orcBase.totCI || 0, impostoV: orcBase.impostoV || 0,
     incluiArq: orcBase.incluiArq !== false,
@@ -6457,22 +6620,24 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [tipoPgto,      setTipoPgto]      = useState(orcBase?.tipoPgto    || "padrao");
   const [temImposto,    setTemImposto]    = useState(orcBase?.temImposto  || false);
   const [aliqImp,       setAliqImp]       = useState(orcBase?.aliqImp     || 16);
-  const [descArq,       setDescArq]       = useState(orcBase?.descArq     || 5);
+  // `??` e não `||` nos descontos e na entrada: 0% é escolha válida e,
+  // com `||`, voltava 5/10/15/50% ao reabrir o orçamento.
+  const [descArq,       setDescArq]       = useState(orcBase?.descArq     ?? 5);
   const [parcArq,       setParcArq]       = useState(orcBase?.parcArq     || 3);
-  const [descPacote,    setDescPacote]    = useState(orcBase?.descPacote  || 10);
+  const [descPacote,    setDescPacote]    = useState(orcBase?.descPacote  ?? 10);
   const [parcPacote,    setParcPacote]    = useState(orcBase?.parcPacote  || 4);
   // Por etapa — Patch 1: nomenclatura nova (semântica clara).
   //   descEtCtrt/parcEtCtrt = "Contratação etapa a etapa" (cliente contrata 1 de cada vez)
   //   descPacCtrt/parcPacCtrt = "Etapas completas" (cliente contrata todas juntas)
   // Defaults: 5%/2x pra etapa a etapa, 10%/4x pra etapas completas.
-  const [descEtCtrt,    setDescEtCtrt]    = useState(orcBase?.descEtCtrt  || 5);
+  const [descEtCtrt,    setDescEtCtrt]    = useState(orcBase?.descEtCtrt  ?? 5);
   const [parcEtCtrt,    setParcEtCtrt]    = useState(orcBase?.parcEtCtrt  || 2);
-  const [descPacCtrt,   setDescPacCtrt]   = useState(orcBase?.descPacCtrt || 10);
+  const [descPacCtrt,   setDescPacCtrt]   = useState(orcBase?.descPacCtrt ?? 10);
   const [parcPacCtrt,   setParcPacCtrt]   = useState(orcBase?.parcPacCtrt || 4);
   // Entrada + final (introduzido na Etapa 5 / Deploy 2). entArq/entPac são o
   // % de entrada; o restante (100 - entArq) é pago no final, na entrega.
-  const [entArq,        setEntArq]        = useState(orcBase?.entArq      || 50);
-  const [entPac,        setEntPac]        = useState(orcBase?.entPac      || 40);
+  const [entArq,        setEntArq]        = useState(orcBase?.entArq      ?? 50);
+  const [entPac,        setEntPac]        = useState(orcBase?.entPac      ?? 40);
   const [etapasPct, setEtapasPct] = useState(orcBase?.etapasPct || [
     { id:1, nome:"Estudo de Viabilidade",  pct:10 },
     { id:2, nome:"Estudo Preliminar",      pct:40 },
@@ -6736,19 +6901,15 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     }
   }
   async function salvarRascunhoEVoltar() {
+    // Mesmo objeto que "Gerar Orçamento" grava (montarOrcParaSalvar): antes
+    // era um subconjunto e o rascunho perdia repetição, pavimentos, vagas,
+    // grupos do comercial, marcenaria, etapas isoladas, entrada, forma de
+    // pagamento e o resultado. Status: ganho/perdido/aberto não viram rascunho.
+    const status = orcStatusAoSalvarRascunho(orcBase);
     const orcRascunho = {
-      ...(orcBase || {}),
-      referencia,
-      tipo: tipoProjeto, subtipo: tipoObra,
-      padrao, tipologia, tamanho,
-      comodos: Object.entries(qtds).filter(([,q]) => q > 0).map(([nome, qtd]) => ({ nome, qtd })),
-      incluiArq, incluiEng,
-      tipoPgto, temImposto, aliqImp,
-      descArq, parcArq, descPacote, parcPacote,
-      descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
-      etapasPct,
-      rascunho: true,
-      status: "rascunho",
+      ...montarOrcParaSalvar().orcParaSalvar,
+      ...(status === "rascunho" ? { rascunho: true } : {}),
+      status,
     };
     setShowSaveDialog(false);
     if (onSalvar) {
@@ -8335,6 +8496,31 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       }
       return `${prefixo}${ed.um} ${ed.nome} ${ed.tip}, com ${fmtN2(areaUni)}m² de área construída, ${ed.composta} por ${totalAmb} ambientes: ${listaStr}.`;
     })();
+    const { orcParaSalvar, formaPagamentoObj } = montarOrcParaSalvar();
+    setPropostaData({
+      tipoProjeto, tipoObra, padrao, tipologia, tamanho,
+      qtdPavimentos, vagasPorUnidade,
+      clienteNome, referencia,
+      comodos: Object.entries(qtds).filter(([,q])=>q>0).map(([nome,qtd])=>({nome,qtd})),
+      resumoDescritivo,
+      grupoQtds: isComercial ? grupoQtds : null,
+      calculo,
+      incluiArq, incluiEng, incluiMarcenaria,
+      etapasIsoladas: Array.from(etapasIsoladas),
+      tipoPgto, temImposto, aliqImp,
+      descArq, parcArq, descPacote, parcPacote,
+      descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
+      etapasPct,
+      totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
+      escritorio: esc, // Passa o escritório inteiro pra PropostaPreview/PDF lerem dados
+      formaPagamento: formaPagamentoObj, // Fase 1 — objeto canônico
+    });
+    if (onSalvar) onSalvar(orcParaSalvar);
+  }
+
+  // O orçamento como o formulário está agora — o que "Gerar Orçamento" grava
+  // e também o que "Salvar rascunho" grava (um só lugar para os campos).
+  function montarOrcParaSalvar() {
     // ─── Objeto canônico de Forma de Pagamento (Fase 1 do refator) ───
     // Centraliza tudo o que foi configurado na Etapa 5. Lido pelo Preview
     // (BlocoFormaPagamentoView) e futuramente pelo PDF.
@@ -8356,24 +8542,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         modalidade2: { desconto: descPacCtrt, parcelas: parcPacCtrt }, // Patch 1: etapas completas
       },
     };
-    setPropostaData({
-      tipoProjeto, tipoObra, padrao, tipologia, tamanho,
-      qtdPavimentos, vagasPorUnidade,
-      clienteNome, referencia,
-      comodos: Object.entries(qtds).filter(([,q])=>q>0).map(([nome,qtd])=>({nome,qtd})),
-      resumoDescritivo,
-      grupoQtds: isComercial ? grupoQtds : null,
-      calculo,
-      incluiArq, incluiEng, incluiMarcenaria,
-      etapasIsoladas: Array.from(etapasIsoladas),
-      tipoPgto, temImposto, aliqImp,
-      descArq, parcArq, descPacote, parcPacote,
-      descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
-      etapasPct,
-      totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
-      escritorio: esc, // Passa o escritório inteiro pra PropostaPreview/PDF lerem dados
-      formaPagamento: formaPagamentoObj, // Fase 1 — objeto canônico
-    });
     const orcParaSalvar = {
       ...(orcBase || {}),
       tipo: tipoProjeto, subtipo: tipoObra, tipologia, tamanho, padrao,
@@ -8394,7 +8562,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
       formaPagamento: formaPagamentoObj, // Fase 1 — objeto canônico
     };
-    if (onSalvar) onSalvar(orcParaSalvar);
+    return { orcParaSalvar, formaPagamentoObj };
   }
 
   if (propostaData) {

@@ -155,7 +155,13 @@ function diaAlvoContrato(c) {
     const m = /^\d{4}-\d{2}-(\d{2})/.exec(String(o.primeiroVencimento));
     return m ? Number(m[1]) : 0;
   }
-  return Math.floor(Number(o.diaVencimento) || 0);
+  const dia = Math.floor(Number(o.diaVencimento) || 0);
+  if (dia > 0) return dia;
+  // Sem dia escolhido, vale o dia da âncora: início em 31/01 vence 28/02 e
+  // volta a 31/03 — sem isto o 28 de fevereiro virava o dia de todo mês,
+  // contra o "mesmo dia dos meses subsequentes" da cláusula.
+  const a = /^\d{4}-\d{2}-(\d{2})/.exec(String(ancoraContrato(o)));
+  return a ? Number(a[1]) : 0;
 }
 // Vencimento da parcela i (1 = a primeira). Mensais caem sempre no MESMO dia
 // do mês — dia 31 continua 31 em março e maio, e só encolhe onde o calendário
@@ -203,7 +209,9 @@ function parcelasAPagar(contrato) {
       });
     }
   } else if (modo === "entradaParcelas") {
-    const n = Math.max(0, Math.floor(Number(c.parcelas) || 0));
+    // nº de parcelas em branco é o saldo inteiro numa parcela só — sem o
+    // "|| 1" só a entrada virava conta e o saldo sumia das contas a pagar
+    const n = Math.max(0, Math.floor(Number(c.parcelas) || 0)) || 1;
     const e = entradaESaldo(total, c.entradaPct, n || 1);
     if (e.entrada > 0) linhas.push({ n: 1, parcela: 1, totalParcelas: n + 1, descricao: "Entrada", valor: e.entrada, vencimento: c.dataAssinatura || ancora });
     if (n && e.saldo > 0) {
@@ -217,7 +225,9 @@ function parcelasAPagar(contrato) {
       }
     }
   } else if (modo === "entradaFinal") {
-    const porItem = (c.entradaEscopo || "contrato") === "item";
+    // contrato global antigo, sem o campo, é item a item — o mesmo padrão
+    // que o texto do contrato usa (montarContrato)
+    const porItem = (c.entradaEscopo || (c.modelo === "empreitadaGlobal" ? "item" : "contrato")) === "item";
     const itens = (c.itens || []).filter((i) => i && (String(i.descricao || "").trim() || Number(i.valor)));
     const pct = (Number(c.entradaPct) || 0) / 100;
     // O saldo depende da conclusão, que ainda não aconteceu: a data é uma
@@ -261,6 +271,49 @@ function parcelasAPagar(contrato) {
         vencimento: ancora ? somarDias(ancora, perMed * i + prazoPag) : "",
         estimada: true,
       });
+    }
+  }
+
+  // ── Retenção de garantia ──
+  // A cláusula de pagamento retém a última parcela, ou um percentual de cada
+  // pagamento, até o aceite final (montarContrato, opção "retencao"). Sem
+  // isto as contas pagavam tudo no calendário normal, contra o contrato.
+  // Gerenciamento e serviço com equipamento não têm essa cláusula.
+  const modeloId = typeof contratoModelo === "function" ? contratoModelo(c.modelo).id : c.modelo;
+  const temRetencao = modeloId !== "gerenciamentoObra" && modeloId !== "servicoEquipamento"
+    && typeof opcaoAtiva === "function" && opcaoAtiva(c, "retencao");
+  if (linhas.length && temRetencao) {
+    // o aceite vem depois da conclusão: a previsão informada, ou o fim do
+    // prazo — nunca antes do vencimento que a parcela já teria
+    const fim = c.previsaoConclusao || vencimentoFinal(c);
+    const noAceite = (v) => (fim && (!v || fim > v) ? fim : v);
+    const pct = Number(c.retencaoPct) || 0;
+    if (pct > 0) {
+      // "De cada pagamento será retido X%": cada linha paga o resto, e o
+      // retido volta numa linha só — o total continua o do contrato
+      let retido = 0;
+      for (const l of linhas) {
+        const r = Math.round(l.valor * pct) / 100;
+        l.valor = Math.round((l.valor - r) * 100) / 100;
+        retido += r;
+      }
+      retido = Math.round(retido * 100) / 100;
+      if (retido > 0) {
+        const ultimo = linhas.reduce((a, l) => (l.vencimento && l.vencimento > a ? l.vencimento : a), "");
+        // totalParcelas 0: o título não vira "Parcela 7/6"
+        linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: 0,
+          descricao: "Retenção — liberação no aceite", valor: retido,
+          vencimento: noAceite(ultimo), estimada: true, retencao: true });
+      }
+    } else if (modo !== "entradaFinal") {
+      // "A última parcela ficará retida ... e será paga somente após a
+      // conclusão total dos serviços e o respectivo aceite final". Na
+      // entrada + saldo no final a última já é o saldo da conclusão.
+      const u = linhas[linhas.length - 1];
+      u.descricao = /\)$/.test(u.descricao) ? u.descricao.replace(/\)$/, ", retida até o aceite)") : `${u.descricao} — retida até o aceite`;
+      u.retida = true;
+      const v = noAceite(u.vencimento);
+      if (v !== u.vencimento) { u.vencimento = v; u.estimada = true; }
     }
   }
   return linhas;
@@ -393,6 +446,10 @@ function contasDoContrato(contrato) {
     vencimento: ajustes[`${c.id}:${idx + 1}`] || p.vencimento || "",
     ajustada: !!ajustes[`${c.id}:${idx + 1}`],
     estimada: !!p.estimada && !ajustes[`${c.id}:${idx + 1}`],
+    // a linha do retido e a última parcela retida carregam a marca: é por
+    // ela que a sincronização acerta o retido das parcelas já pagas cheias
+    ...(p.retencao ? { retencao: true } : {}),
+    ...(p.retida ? { retida: true } : {}),
     pago: false,
     pagoEm: "",
     valorPago: "",
@@ -430,11 +487,39 @@ function sincronizarContasDoContrato(contas, contrato) {
     return { ...nova, observacao: anterior.observacao || "", registros: anterior.registros || [],
       ...(anterior.numeroDoc ? { numeroDoc: anterior.numeroDoc } : {}),
       ...(anterior.estornos ? { estornos: anterior.estornos } : {}),
-      ...(anterior.movimentos ? { movimentos: anterior.movimentos } : {}) };
+      ...(anterior.movimentos ? { movimentos: anterior.movimentos } : {}),
+      // Os papéis também: o boleto anexado à parcela em aberto (e o número
+      // do papel) sumiam na primeira regravação — bastava prorrogar outra
+      // parcela do mesmo contrato.
+      ...(anterior.anexos ? { anexos: anterior.anexos } : {}),
+      ...(anterior.comprovante ? { comprovante: anterior.comprovante } : {}),
+      ...(anterior.doc ? { doc: anterior.doc } : {}),
+      ...(anterior.chaveNota ? { chaveNota: anterior.chaveNota } : {}),
+      ...(anterior.idTransacao ? { idTransacao: anterior.idTransacao } : {}) };
   });
   // parcela paga que não existe mais no contrato continua na lista: o
   // dinheiro saiu, e sumir com ela esconderia um pagamento real
   const orfas = pagas.filter((x) => !geradas.some((g) => g.id === x.id));
+  // Retenção percentual num contrato com parcelas JÁ pagas pelo valor cheio
+  // (antes de a retenção entrar nas contas): o retido delas não existe — o
+  // dinheiro saiu inteiro. A linha da retenção fica com o que falta para
+  // fechar o contrato, e some se não falta nada; senão o total passaria do
+  // valor do contrato.
+  const ret = geradas.find((g) => g && g.retencao && !g.pago);
+  if (ret) {
+    const cent = (v) => Math.round((Number(v) || 0) * 100) / 100;
+    // o valor do contrato manda: parcela com valor ajustado à mão não leva o
+    // desconto da retenção, e somar as contas geradas passaria do contrato
+    const totalDoContrato = Number(c.valor) > 0 ? cent(c.valor)
+      : cent(contasDoContrato(c).reduce((t, x) => t + (Number(x.valor) || 0), 0));
+    const resto = cent([...geradas, ...orfas].filter((g) => g !== ret).reduce((t, g) => t + (Number(g.valor) || 0), 0));
+    const falta = cent(totalDoContrato - resto);
+    if (falta <= 0) return [...outras, ...geradas.filter((g) => g !== ret), ...orfas];
+    if (falta !== cent(ret.valor)) {
+      const i = geradas.indexOf(ret);
+      geradas[i] = { ...ret, valor: falta };
+    }
+  }
   return [...outras, ...geradas, ...orfas];
 }
 // Passa a régua em todos os contratos da obra de uma vez. Serve para
@@ -1532,6 +1617,48 @@ function baixarPedidos(contasPagar, pedidoIds, dados, quem, agoraIso) {
   return { contas, total };
 }
 
+// Pedido pago no cartão em várias vezes: a loja parcela a NOTA, não o item.
+// Cada item dividido sozinho arredonda os próprios centavos, e a fatura de
+// uma compra de 30,00 em 3x (três itens de 10,00) saía 9,99 / 9,99 / 10,02.
+// O total das contas `ids` se divide uma vez (a conta de parcelasDoCartao:
+// parcelas iguais, a última leva o resto) e a diferença de centavos fica num
+// item só — o maior —, que acerta a própria última parcela para continuar
+// somando o valor dele. Só mexe quando todas têm o mesmo cartão e as mesmas
+// faturas; senão devolve a lista como veio.
+function acertarParcelasDoCartaoNoPedido(contas, ids) {
+  const lista = (contas || []).slice();
+  const alvo = new Set(ids || []);
+  const red = (x) => Math.round(x * 100) / 100;
+  const idx = [];
+  lista.forEach((c, i) => {
+    if (c && alvo.has(c.id) && c.cartaoId && Array.isArray(c.parcelasCartao) && c.parcelasCartao.length > 1) idx.push(i);
+  });
+  if (idx.length < 2) return lista;
+  const primeira = lista[idx[0]];
+  const n = primeira.parcelasCartao.length;
+  const faturas = primeira.parcelasCartao.map((p) => p && p.competencia).join(",");
+  if (idx.some((i) => lista[i].cartaoId !== primeira.cartaoId || lista[i].parcelasCartao.length !== n
+    || lista[i].parcelasCartao.map((p) => p && p.competencia).join(",") !== faturas)) return lista;
+  const somaDe = (c) => red(c.parcelasCartao.reduce((t, p) => t + (Number(p && p.valor) || 0), 0));
+  const total = red(idx.reduce((t, i) => t + somaDe(lista[i]), 0));
+  const base = red(total / n);
+  const maior = idx.reduce((a, i) => (somaDe(lista[i]) > somaDe(lista[a]) ? i : a), idx[0]);
+  const parcelas = lista[maior].parcelasCartao.map((p) => ({ ...p }));
+  let desvio = 0;
+  for (let k = 0; k < n - 1; k++) {
+    const soma = red(idx.reduce((t, i) => t + (Number(lista[i].parcelasCartao[k].valor) || 0), 0));
+    const d = red(base - soma);
+    if (!d) continue;
+    parcelas[k].valor = red(Number(parcelas[k].valor) + d);
+    desvio = red(desvio + d);
+  }
+  if (!desvio) return lista;
+  parcelas[n - 1].valor = red(Number(parcelas[n - 1].valor) - desvio);
+  if (parcelas.some((p) => !(Number(p.valor) > 0))) return lista;
+  lista[maior] = { ...lista[maior], parcelasCartao: parcelas };
+  return lista;
+}
+
 // As formas de pagar de uma compra — as mesmas do contrato, menos a medição,
 // que é de serviço executado e não de material entregue. "Item a item" do
 // contrato é a entrega daqui: o que muda de nome é a coisa que se paga.
@@ -1783,7 +1910,11 @@ function ultimoAto(conta, ato) {
 // Dar baixa. O comprovante entra junto e é ato à parte: anexar comprovante
 // depois, sem mexer no pagamento, também tem dono.
 function contaPaga(conta, dados, quem, agoraIso) {
-  const c = conta || {};
+  // A marca de pagamento conjunto é de UM pagamento: conta paga de novo é
+  // outro débito. Quem paga junto (vários pedidos de uma vez) põe a marca
+  // nova depois desta baixa; quem paga sozinho não pode herdar a velha,
+  // senão leva o número do papel e a linha do extrato do conjunto antigo.
+  const { pagamentoConjunto, ...c } = conta || {};
   const d = dados || {};
   const agora = agoraIso || new Date().toISOString();
   const antes = c.comprovante || null;
@@ -1795,7 +1926,8 @@ function contaPaga(conta, dados, quem, agoraIso) {
     valorPago: Math.round((Number(d.valorPago) || Number(c.valor) || 0) * 100) / 100,
     // o dia de quem está mexendo, no fuso dele: depois das 21h, o relógio
     // UTC já está no dia seguinte
-    contabilizadoEm: agoraIso ? String(agoraIso).slice(0, 10) : new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10),
+    // (o carimbo vem em UTC: o dia é o local, não o corte da string)
+    contabilizadoEm: agoraIso ? cpDiaLocal(agoraIso) : new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10),
     comprovante: depois,
   };
   nova = registrarAto(nova, "paga", quem, agora);
@@ -1810,7 +1942,10 @@ function contaPaga(conta, dados, quem, agoraIso) {
 function contaEmAberto(conta, quem, agoraIso) {
   // O jeito de pagar vai embora junto com o pagamento: uma conta em aberto
   // com plano de parcelas continuaria caindo na fatura do cartão.
-  const { formaPagamento, cartaoId, parcelasCartao, ...c } = conta || {};
+  // A marca do pagamento conjunto também: ela é daquele débito. Mantida,
+  // a conta paga de novo, sozinha, herdava o papel e a linha do extrato
+  // do conjunto antigo.
+  const { formaPagamento, cartaoId, parcelasCartao, pagamentoConjunto, ...c } = conta || {};
   const agora = agoraIso || new Date().toISOString();
   return registrarAto({ ...c, pago: false, pagoEm: "", valorPago: "", contabilizadoEm: "" },
     "desfeita", quem, agora);
@@ -2771,11 +2906,13 @@ function previaAjusteContrato(contrato, contas, datas, limite) {
 // idênticos, impossíveis de distinguir. Então o número é atribuído na
 // primeira vez que a tela abre, seguindo a fila de sempre, e desce para as
 // contas que já tinham nascido dele.
-function numerarPedidosAntigos(obra, obras) {
+function numerarPedidosAntigos(obra, obras, lancamentos) {
   const cots = (obra && obra.cotacoes) || [];
   const faltando = cots.filter((c) => c && c.contaGeradaId && !c.numeroPedido);
   if (!faltando.length) return null;
-  let n = parseInt(String(proximoNumeroDoc(obras)).replace(/\D/g, ""), 10);
+  // a série é a mesma dos lançamentos do escritório: sem eles, o número podia
+  // repetir o de um lançamento já feito lá
+  let n = parseInt(String(proximoNumeroDoc(obras, lancamentos)).replace(/\D/g, ""), 10);
   if (!Number.isFinite(n)) n = 1;
   const novos = {};
   for (const c of faltando) { novos[c.id] = String(n).padStart(4, "0"); n++; }
@@ -3313,6 +3450,12 @@ function completarBase(dados, opcoes) {
 // O lançamento do escritório que representa esta conta (a ponte grava a
 // origem: a conta, o pedido inteiro ou o papel da planilha antiga).
 function cpLancamentoDaConta(lancamentos, obraId, c) {
+  // A regra de quem liga a quem é uma só, a do escritório: a parcela
+  // estornada leva "#n" no refId e o pagamento conjunto leva "pg:" — a
+  // comparação feita aqui à parte não via nenhum dos dois.
+  if (typeof ligaContaAoLancamento === "function") {
+    return (lancamentos || []).find((l) => l && ligaContaAoLancamento(l, obraId, c)) || null;
+  }
   for (const l of lancamentos || []) {
     const o = (l && l.origem) || {};
     if (!o.obraId || o.obraId !== obraId) continue;
@@ -3425,12 +3568,14 @@ function linhasDaBase(obras, opcoes) {
 
       const regs = (c.registros || []).filter((r) => r && r.em);
       const criada = regs.find((r) => r.ato === "criada");
-      const primeiro = regs.map((r) => dia(r.em)).sort()[0] || "";
+      // carimbos com hora (UTC): o dia é o local — depois das 21h o corte
+      // da string já dá amanhã
+      const primeiro = regs.map((r) => cpDiaLocal(r.em)).sort()[0] || "";
       // Pedido na conta da loja: a data é a do PEDIDO. A conta da loja é uma
       // cotação só, e o `lancadoEm` dela anda a cada pedido novo — usá-lo
       // punha todos os pedidos antigos com a data do último lançado.
       const ped = c.pedidoId && cot ? (cot.pedidos || []).find((p) => p && p.id === c.pedidoId) : null;
-      const entradaEm = dia((criada && criada.em) || c.importadoEm || c.lancadoEm
+      const entradaEm = cpDiaLocal((criada && criada.em) || c.importadoEm || c.lancadoEm
         || (ped && (ped.lancadoEm || ped.data))
         || (cot && !cot.contaLoja && cot.lancadoEm)
         || (ctr && (ctr.criadoEm || ctr.criadaEm || ctr.dataAssinatura)) || primeiro);

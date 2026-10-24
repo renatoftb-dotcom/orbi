@@ -719,7 +719,14 @@ function faturasFechadas(lancamentos, cartaoId) {
   const set = new Set();
   for (const l of lancamentos || []) {
     const o = (l || {}).origem || {};
-    if (o.tipo === "fatura" && o.cartaoId === cartaoId && o.competencia) set.add(o.competencia);
+    if (o.tipo === "fatura" && o.cartaoId === cartaoId && o.competencia) {
+      set.add(o.competencia);
+      // as competências atrasadas que esta fatura levou junto também estão
+      // fechadas: fechar novembro antes de outubro puxava as compras de
+      // outubro, e outubro continuava "aberto" — fechá-lo depois somava as
+      // mesmas compras outra vez
+      for (const c of Array.isArray(o.cobre) ? o.cobre : []) if (c) set.add(c);
+    }
   }
   return set;
 }
@@ -775,12 +782,21 @@ function lancamentoDaFatura(cartao, competencia, linhas, opcoes) {
   const o = opcoes || {};
   const total = totalDaFatura(linhas);
   if (!(total > 0)) return null;
-  const venc = String(o.pagoEm || "").slice(0, 10)
-    || (competencia + "-" + String(Math.max(1, Math.min(28, Number((cartao || {}).diaVencimento) || 10))).padStart(2, "0"));
+  // Vencimento antes (ou no) dia do fechamento — fecha 25, vence 5 — é no
+  // mês SEGUINTE: a fatura de setembro é debitada em 5 de outubro. Datada em
+  // 5 de setembro, caía no mês errado da conferência com o banco. Só vale
+  // para a fatura que se fecha agora; as já gravadas ficam como estão.
+  const dv = Math.max(1, Math.min(28, Number((cartao || {}).diaVencimento) || 10));
+  const df = Math.max(1, Math.min(31, Number((cartao || {}).diaFechamento) || 1));
+  const mesDoVenc = dv <= df ? somarCompetencia(competencia, 1) : competencia;
+  const venc = String(o.pagoEm || "").slice(0, 10) || (mesDoVenc + "-" + String(dv).padStart(2, "0"));
+  // as competências atrasadas que vieram junto (ver faturasFechadas)
+  const cobre = [...new Set((linhas || []).filter((l) => l && l.atrasada && l.competenciaOriginal && l.competenciaOriginal !== competencia)
+    .map((l) => l.competenciaOriginal))].sort();
   return {
     id: idDaFatura((cartao || {}).id, competencia),
     tipo: "escritorio",
-    origem: { tipo: "fatura", cartaoId: (cartao || {}).id || "", competencia },
+    origem: { tipo: "fatura", cartaoId: (cartao || {}).id || "", competencia, ...(cobre.length ? { cobre } : {}) },
     unidadeId: "escritorio",
     contaId: "cartao_credito",
     valor: total,
@@ -1036,7 +1052,19 @@ function ligaContaAoLancamento(l, obraId, conta) {
   const c = conta || {};
   if (!o.obraId || o.obraId !== obraId || !c.id) return false;
   if (o.tipo === "conta") return o.refId === refDaParcela(c);
-  if (o.tipo === "pedido") return !!c.pedidoId && String(o.refId || "").split("|")[0] === c.pedidoId;
+  if (o.tipo === "pedido") {
+    // Vários pedidos pagos de uma vez viram uma linha só, com a chave
+    // "pg:<conjunto>|conta|data" (ver fontesDasContasPagas). A chave não é
+    // o pedido: comparar com `pedidoId` nunca ligava, e desfazer, excluir ou
+    // fechar o mês deixava essa linha solta no extrato.
+    const [ped, contaId, data] = String(o.refId || "").split("|");
+    if (ped.indexOf("pg:") === 0) {
+      return !!c.pagamentoConjunto && ped === "pg:" + c.pagamentoConjunto
+        && (!contaId || (c.contaId || "") === contaId)
+        && (!data || String(c.pagoEm || c.vencimento || "").slice(0, 10) === data);
+    }
+    return !!c.pedidoId && ped === c.pedidoId;
+  }
   if (o.tipo === "doc") return !!c.doc && String(o.refId || "") === String(c.doc);
   return false;
 }
@@ -1059,7 +1087,9 @@ function contasLigadasAoLancamento(obra, l) {
   if (o.tipo === "doc") return contas.filter((c) => c.doc && String(c.doc) === String(o.refId));
   if (o.tipo === "pedido") {
     const [ped, contaId, data] = String(o.refId || "").split("|");
-    return contas.filter((c) => c.pedidoId === ped
+    // pagamento conjunto: a chave é a marca do pagamento, não um pedido
+    const conjunto = ped.indexOf("pg:") === 0 ? ped.slice(3) : "";
+    return contas.filter((c) => (conjunto ? c.pagamentoConjunto === conjunto : c.pedidoId === ped)
       && (!contaId || (c.contaId || "") === contaId)
       && (!data || String(c.pagoEm || c.vencimento || "").slice(0, 10) === data));
   }
@@ -1161,6 +1191,11 @@ function efData(txt) {
   // dia/mês/ano com qualquer separador: cada banco escolhe o seu.
   m = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/.exec(t);
   if (m) return `${m[3]}-${String(m[2]).padStart(2, "0")}-${String(m[1]).padStart(2, "0")}`;
+  // Ano com dois dígitos (25/09/26): a detecção de colunas aceita (efEhData)
+  // e o movimento ficava com a data crua — fora de qualquer mês, sumia sem
+  // aviso. Extrato bancário é deste século: aa → 20aa.
+  m = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2})(?!\d)/.exec(t);
+  if (m) return `20${m[3]}-${String(m[2]).padStart(2, "0")}-${String(m[1]).padStart(2, "0")}`;
   return "";
 }
 
@@ -1469,15 +1504,21 @@ async function efAbasDaPlanilha(buffer) {
 
 // CSV/TSV também servem: se o separador não for tabulação, converte —
 // respeitando aspas, que é onde vírgula dentro de descrição costuma morar.
+// O separador é o que aparece em mais linhas (e, empatado, mais vezes) nas
+// primeiras linhas do arquivo. Pela 1ª linha só, o título que o banco põe
+// em cima ("Extrato Conta Corrente") não tinha separador nenhum e o arquivo
+// inteiro virava uma coluna só. Empate: tab, depois ";", depois "," — a
+// vírgula do centavo não ganha do ";" que separa as colunas.
 function efSeparadorDoTexto(texto) {
-  const linha = String(texto || "").split(/\r?\n/).find((l) => l.trim() !== "") || "";
-  const fora = linha.replace(/"[^"]*"/g, "");
-  if (fora.indexOf("\t") >= 0) return "\t";
-  const p = (fora.match(/;/g) || []).length;
-  const v = (fora.match(/,/g) || []).length;
-  if (p >= v && p > 0) return ";";
-  if (v > 0) return ",";
-  return "\t";
+  const linhas = String(texto || "").split(/\r?\n/).filter((l) => l.trim() !== "").slice(0, 10)
+    .map((l) => l.replace(/"[^"]*"/g, ""));
+  let melhor = "\t", nota = [0, 0];
+  for (const sep of ["\t", ";", ","]) {
+    let comEle = 0, vezes = 0;
+    for (const l of linhas) { const n = l.split(sep).length - 1; if (n) { comEle++; vezes += n; } }
+    if (comEle > nota[0] || (comEle === nota[0] && vezes > nota[1])) { melhor = sep; nota = [comEle, vezes]; }
+  }
+  return melhor;
 }
 
 function efCsvParaTsv(texto, separador) {
@@ -1808,15 +1849,27 @@ function bloqueioPorMesFechado(competencia, fechamentos) {
 // passaram pelo banco (entram no extrato do mês em que acontecerem).
 // Dentro da célula, a quebra de linha vira " · " e o resto um espaço:
 // "PIX EMITIDO OUTRA IF · Pagamento Pix 53.859.112 0001-69 cimento".
+// As entidades com nome do Latin-1 (&Ccedil; &Atilde; &ordm;…), na ordem
+// dos códigos 160–255. O extrato em HTML do banco escreve assim: sem elas,
+// "APLICA&Ccedil;&Atilde;O RDC" não era reconhecida como aplicação e virava
+// movimento na fila, e "D&Eacute;B." não casava com o histórico guardado.
+const EF_ENTIDADES_LATIN1 = ("nbsp iexcl cent pound curren yen brvbar sect uml copy ordf laquo not shy reg macr deg plusmn sup2 sup3 "
+  + "acute micro para middot cedil sup1 ordm raquo frac14 frac12 frac34 iquest Agrave Aacute Acirc Atilde Auml Aring AElig Ccedil "
+  + "Egrave Eacute Ecirc Euml Igrave Iacute Icirc Iuml ETH Ntilde Ograve Oacute Ocirc Otilde Ouml times Oslash Ugrave Uacute Ucirc "
+  + "Uuml Yacute THORN szlig agrave aacute acirc atilde auml aring aelig ccedil egrave eacute ecirc euml igrave iacute icirc iuml eth "
+  + "ntilde ograve oacute ocirc otilde ouml divide oslash ugrave uacute ucirc uuml yacute thorn yuml").split(" ")
+  .reduce((t, nome, i) => { t[nome] = String.fromCharCode(160 + i); return t; }, {});
 function efTextoDaCelulaHtml(html) {
-  const ent = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+  const ent = { ...EF_ENTIDADES_LATIN1, amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
+    ndash: "–", mdash: "—", lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”", bull: "•", hellip: "…", euro: "€" };
   return String(html || "")
     .replace(/<br\s*\/?>/gi, "\u0001")
     .replace(/<\/(strong|b|div|p)>/gi, "\u0001")
     .replace(/<[^>]+>/g, "")
     .replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi, (m, e) => {
       if (e[0] === "#") return String.fromCharCode(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10));
-      return ent[e.toLowerCase()] != null ? ent[e.toLowerCase()] : m;
+      // a caixa importa (&Ccedil; é Ç, &ccedil; é ç); &AMP; e afins, sem caixa
+      return ent[e] != null ? ent[e] : (ent[e.toLowerCase()] != null ? ent[e.toLowerCase()] : m);
     })
     .split("\u0001").map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean).join(" · ");
 }
@@ -2450,9 +2503,9 @@ function extratoParaGuardar(movimentos) {
 
 // O extrato guardado é por MÊS DO MOVIMENTO, não pelo mês que estava na
 // tela quando o arquivo chegou: o extrato de setembro arrastado com outubro
-// aberto continua sendo de setembro. Um arquivo novo substitui, nos meses
-// que ele cobre, tudo o que estava guardado desses meses — onde quer que
-// estivesse — e não mexe nos outros meses. O "não é lançamento" fica.
+// aberto continua sendo de setembro. Um arquivo novo substitui, nos DIAS
+// que ele cobre, o que estava guardado nesses dias — onde quer que
+// estivesse — e não mexe no resto nem em mês fechado. O "não é lançamento" fica.
 function mesDoMovimento(m) { return String((m && m.data) || "").slice(0, 7); }
 
 // ── Débitos × créditos do mês (o "check" da planilha de análise) ─
@@ -2467,9 +2520,17 @@ function efEhAplicacaoFinanceira(historico) {
   const h = efSemAcento(historico);
   return /\brdc\b|^aplicacao|^resgate|credito resgate|\bcdb\b|deb fundo/.test(h);
 }
+// Rendimento DA APLICAÇÃO é o lançado pelo fechamento (origem "rendimento")
+// ou o que não passou pela conta. Receita financeira que o banco pagou na
+// conta (ligada à linha do extrato) é crédito do extrato como qualquer
+// outro — pela descrição ("RENDIMENTO POUPANCA") ela saía das entradas e o
+// débito × crédito acusava diferença onde não havia. A descrição só decide
+// no lançamento sem linha do banco (o da planilha antiga, sem contaBanco).
 function ehRendimentoDaAplicacao(l) {
   if (!l || l.contaId !== "rec_financeira") return false;
-  return (l.origem && l.origem.tipo === "rendimento") || l.contaBanco === "nao" || /aplica|rendimento|renda fixa/i.test(String(l.descricao || ""));
+  if ((l.origem && l.origem.tipo === "rendimento") || !efPassouPeloBanco(l)) return true;
+  if (String(l.extratoId || "").trim()) return false;
+  return /aplica|rendimento|renda fixa/i.test(String(l.descricao || ""));
 }
 function checagemDebitoCredito(movimentos, lancamentos, mes) {
   const c = (v) => efCentavos(v);
@@ -2524,24 +2585,44 @@ function rendimentoPelaAplicacao(saldoAnterior, aplicacoes, resgates, saldoAtual
   const principal = efCentavos(Number(saldoAnterior) + (Number(aplicacoes) || 0) - (Number(resgates) || 0));
   return { principal, rendimento: efCentavos(Number(saldoAtual) - principal) };
 }
-function extratosComArquivo(extratos, movimentos, origem, agora) {
+function extratosComArquivo(extratos, movimentos, origem, agora, opcoes) {
   const atuais = (extratos && typeof extratos === "object") ? extratos : {};
   const doArquivo = extratoParaGuardar(movimentos || []);
+  const fechamentos = (opcoes || {}).fechamentos;
   // Só substitui o mês que o arquivo traz de verdade (com movimento). O
   // extrato de outubro começa com o "SALDO ANTERIOR" de 30/09: essa linha
   // sozinha não pode apagar o setembro inteiro que já estava guardado —
   // ela só se junta a ele.
   const valido = (x) => /^\d{4}-\d{2}$/.test(x);
-  const meses = [...new Set(doArquivo.filter((m) => efEhMovimento(m.historico)).map(mesDoMovimento).filter(valido))];
-  const soSaldo = [...new Set(doArquivo.map(mesDoMovimento).filter(valido))].filter((x) => meses.indexOf(x) < 0);
+  const comMovimento = doArquivo.filter((m) => efEhMovimento(m.historico));
+  const mesesDoArquivo = [...new Set(comMovimento.map(mesDoMovimento).filter(valido))];
+  // Mês fechado já conferiu com o banco: o guardado dele não muda. A tela
+  // avisa (`fechados`) em vez de trocar as linhas por baixo do fechamento.
+  const fechados = mesesDoArquivo.filter((m) => mesEstaFechado(m, fechamentos));
+  const meses = mesesDoArquivo.filter((m) => fechados.indexOf(m) < 0);
+  const soSaldo = [...new Set(doArquivo.map(mesDoMovimento).filter(valido))]
+    .filter((x) => mesesDoArquivo.indexOf(x) < 0 && !mesEstaFechado(x, fechamentos));
+  // E dentro do mês, só os DIAS que o arquivo cobre (do primeiro ao último
+  // movimento dele): o "últimos 30 dias" de 25/09 a 03/10 apagava o 1º a 24
+  // de setembro que já estava guardado. O resto do mês fica como estava.
+  const dias = comMovimento.map((m) => String(m.data || "").slice(0, 10)).filter(Boolean).sort();
+  const ini = dias[0] || "", fim = dias[dias.length - 1] || "";
+  const dia = (m) => String((m && m.data) || "").slice(0, 10);
+  const cobre = (m) => meses.indexOf(mesDoMovimento(m)) >= 0 && dia(m) >= ini && dia(m) <= fim;
   const novos = {};
   for (const [k, v] of Object.entries(atuais)) {
-    const sobra = ((v && v.movimentos) || []).filter((m) => meses.indexOf(mesDoMovimento(m)) < 0);
+    const sobra = ((v && v.movimentos) || []).filter((m) => !cobre(m));
     novos[k] = { ...v, movimentos: sobra };
   }
   for (const mes of meses) {
+    // a linha do arquivo fora dos dias cobertos (o saldo do dia anterior)
+    // só entra se ainda não estiver guardada
+    const ja = new Set(Object.values(novos).flatMap((v) => ((v && v.movimentos) || []).map((m) => m.id)));
+    const entram = doArquivo.filter((m) => mesDoMovimento(m) === mes && (cobre(m) || !ja.has(m.id)));
     novos[mes] = { ...(novos[mes] || {}), origem: origem || "", atualizadoEm: agora || new Date().toISOString(),
-      movimentos: doArquivo.filter((m) => mesDoMovimento(m) === mes), ignorados: ((novos[mes] || {}).ignorados) || {} };
+      movimentos: (((novos[mes] || {}).movimentos) || []).concat(entram)
+        .sort((x, y) => String(x.data).localeCompare(String(y.data))),
+      ignorados: ((novos[mes] || {}).ignorados) || {} };
   }
   for (const mes of soSaldo) {
     const ja = new Set(Object.values(novos).flatMap((v) => ((v && v.movimentos) || []).map((m) => m.id)));
@@ -2550,7 +2631,7 @@ function extratosComArquivo(extratos, movimentos, origem, agora) {
     const atual = novos[mes] || { origem: origem || "", atualizadoEm: agora || new Date().toISOString(), movimentos: [], ignorados: {} };
     novos[mes] = { ...atual, movimentos: ((atual.movimentos) || []).concat(juntar) };
   }
-  return { extratos: novos, meses };
+  return { extratos: novos, meses, fechados };
 }
 // As linhas do mês, de onde estiverem guardadas (sem repetir).
 function movimentosGuardadosDoMes(extratos, mes) {
@@ -3734,6 +3815,17 @@ function valorBRNaTela(canon) {
   const inteira = (partes[0] || "").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   return (neg ? "-" : "") + inteira + (partes.length > 1 ? "," + partes[1] : "");
 }
+// O estorno já gravado (valor negativo, ou marcado como estorno) é editado
+// com o sinal dele: o campo de valor só lê números, e abrir um estorno de
+// −500 e salvar gravava +500 — a saída virava entrada sem ninguém pedir.
+function efSinalFixoDoEstorno(inicial) {
+  const i = inicial || {};
+  return !!(i.id && (i.estorno || efValorDoCampo(i.valor) < 0));
+}
+function efValorComSinalDoEstorno(v, inicial) {
+  const n = efValorDoCampo(v);
+  return efSinalFixoDoEstorno(inicial) ? -Math.abs(n) : n;
+}
 // Ao sair do campo: sempre com os centavos.
 function valorBRCompleto(canon) {
   const s = String(canon || "");
@@ -4042,12 +4134,50 @@ function investidoDoEmpreendimento(cliente, obras, lancamentos, opcoes) {
   const id = (cliente && cliente.id) || "";
   const pelaConta = resultadoEmpreendimento(lancamentos, id, o).investido;
   const obrasDele = (obras || []).filter((x) => x && x.clienteId === id);
+  // Índices feitos uma vez: com ~5 mil lançamentos e milhares de contas,
+  // procurar a ligação de cada conta na base inteira custava meio segundo a
+  // cada desenho da tela. Só lançamento com origem.obraId pode ligar uma
+  // conta daquela obra; só conta paga de mesmo valor (ou mesmo papel) pode
+  // ser a outra ponta de um lançamento antigo sem ligação.
+  const idsDasObras = new Set(obrasDele.map((x) => x.id));
+  const ligadosPorObra = new Map();
+  // A compra no cartão vira linha da fatura quando a fatura fecha — e essa
+  // linha já conta em "pela conta" (emp_construcao). A conta da obra não
+  // tem lançamento ligado, então contava de novo "por fora". O que as
+  // faturas já cobriram de cada conta (obraId|refId) sai do "por fora".
+  const cobertoPelaFatura = new Map();
+  for (const l of lancamentos || []) {
+    const og = (l && l.origem) || {};
+    if (og.obraId && idsDasObras.has(og.obraId)) {
+      if (!ligadosPorObra.has(og.obraId)) ligadosPorObra.set(og.obraId, []);
+      ligadosPorObra.get(og.obraId).push(l);
+    }
+    if (og.tipo === "fatura" && Array.isArray(l.linhas)) {
+      for (const x of l.linhas) {
+        if (!x || !x.obraId || !x.refId || !idsDasObras.has(x.obraId)) continue;
+        const k = x.obraId + "|" + x.refId;
+        cobertoPelaFatura.set(k, efCentavos((cobertoPelaFatura.get(k) || 0) + (Number(x.valor) || 0)));
+      }
+    }
+  }
+  const temLigacao = (ob, k) => (ligadosPorObra.get(ob.id) || []).some((l) => ligaContaAoLancamento(l, ob.id, k));
+  const valoresPagos = new Set(), papeis = new Set();
+  for (const ob of obrasDele) {
+    for (const k of ob.contasPagar || []) {
+      if (!k || !k.pago || k.estorno) continue;
+      valoresPagos.add(Math.round(Math.abs(Number(k.valorPago) || Number(k.valor) || 0) * 100));
+      if (k.doc) papeis.add(String(k.doc));
+    }
+  }
   // as contas da obra que a base antiga do escritório já tem, sem ligação
   const achadas = new Set();
   for (const l of lancamentos || []) {
     if (!l || l.empreendimentoId !== id || (l.origem && l.origem.obraId)) continue;
     const c = contaEscritorio(l.contaId);
     if (!c || c.grupo !== "emp_saidas") continue;
+    // sem conta de mesmo valor nem de mesmo papel, não há o que achar
+    if (!valoresPagos.has(Math.round(Math.abs(Number(l.valor) || 0) * 100))
+      && !(l.documento && papeis.has(String(l.documento)))) continue;
     const a = contasDaObraSemLigacao(l, obrasDele, lancamentos);
     if (a.length === 1) achadas.add(a[0].k.id);
   }
@@ -4056,8 +4186,12 @@ function investidoDoEmpreendimento(cliente, obras, lancamentos, opcoes) {
     for (const k of ob.contasPagar || []) {
       if (!k || !k.pago || achadas.has(k.id)) continue;
       if (EF_GRUPOS_CUSTO_OBRA.indexOf(ponteGrupoDaConta(k.contaId, o)) < 0) continue;
-      if (lancamentosLigadosAsContas(lancamentos, ob.id, [k]).length) continue;
-      foraDaConta = efCentavos(foraDaConta + (Number(k.valorPago) || Number(k.valor) || 0));
+      if (temLigacao(ob, k)) continue;
+      const valor = Number(k.valorPago) || Number(k.valor) || 0;
+      // parcela do cartão em fatura fechada já está "pela conta"; o resto
+      // das parcelas (faturas ainda abertas) segue por fora
+      const coberto = cobertoPelaFatura.get(ob.id + "|" + k.id) || 0;
+      foraDaConta = efCentavos(foraDaConta + (coberto ? Math.max(0, efCentavos(valor - coberto)) : valor));
     }
   }
   return { pelaConta, foraDaConta, total: efCentavos(pelaConta + foraDaConta) };
@@ -4152,7 +4286,21 @@ function saldoDaReservaEngenharia(lancamentos, clienteId) {
 //   passa da reserva → o pagamento fica em Parceiros (é a linha do banco,
 //                      inteira) e um par fora do banco tira dele a parte que
 //                      a reserva cobre: só o que passou é custo novo.
+// Saída lançada DIRETO na reserva (a fila copia o pagamento anterior, que
+// já tinha virado res_engenharia; ou a pessoa escolhe a reserva) passa pela
+// mesma régua: o que cabe sai da reserva, o que passa é custo em Parceiros.
+// Sem isso a reserva do cliente ficava negativa e o custo não aparecia.
+function ehSaidaDiretaNaReserva(l) {
+  return !!l && l.contaId === "res_engenharia" && efPassouPeloBanco(l)
+    && (efValorDoCampo(l.valor) < 0 || Number(l.sinalDoBanco) < 0);
+}
 function comoPagamentoDaReserva(l, lancamentos) {
+  if (ehSaidaDiretaNaReserva(l)) {
+    const { sinalDoBanco: _s, estorno: _e, pagoDaReserva: _p, ...semSinal } = l;
+    const comoParceiro = { ...semSinal, contaId: "parceiros", valor: efCentavos(Math.abs(efValorDoCampo(l.valor))) };
+    // reserva vazia (ou sem cliente): o pagamento inteiro é custo
+    return comoPagamentoDaReserva(comoParceiro, lancamentos) || comoParceiro;
+  }
   if (!l || l.contaId !== "parceiros" || l.estorno) return null;
   const v = efCentavos(Math.abs(efValorDoCampo(l.valor)));
   const saldo = saldoDaReservaEngenharia(lancamentos, l.clienteId);
@@ -4925,6 +5073,12 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   // custo já entrou quando o projeto foi recebido — o pagamento sai da reserva.
   const saldoReservaCli = (lancNovo && !naObra && !noCartao && f.contaId === "parceiros" && !estornoNoForm)
     ? saldoDaReservaEngenharia(lancamentos || [], f.clienteId) : 0;
+  // Saída escolhida direto na reserva: não é opção, é teto — o que passar do
+  // saldo do cliente vai para Parceiros (ver comoPagamentoDaReserva).
+  const saidaNaReserva = lancNovo && !naObra && !noCartao && ehSaidaDiretaNaReserva({ ...f, valor: efValorDoCampo(f.valor),
+    contaBanco: f.extratoId ? "sim" : regraBanco });
+  const saldoDaReservaNaSaida = saidaNaReserva ? Math.max(0, saldoDaReservaEngenharia(lancamentos || [], f.clienteId)) : 0;
+  const passaDaReserva = saidaNaReserva ? efCentavos(Math.max(0, Math.abs(efValorDoCampo(f.valor)) - saldoDaReservaNaSaida)) : 0;
   const usaReserva = saldoReservaCli > 0 && pagarDaReserva;
   const excedeReserva = usaReserva ? efCentavos(Math.max(0, efValorDoCampo(f.valor) - saldoReservaCli)) : 0;
   const todosErros = erros.concat(errosCartao).concat(errosGestao).concat(errosDuasPontas).concat(errosDobro);
@@ -4958,8 +5112,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     const pronto = semFornecedorNaEntrada(comCartao({ ...semMarcaAvulsa, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
       ...(lancNovo && !noCartao ? { contaBanco: regraBanco } : {}),
       ...(gestaoAvulsa ? { gestaoAvulsaNaObra: true } : {}),
-      tipo: "escritorio", valor: efValorDoCampo(g.valor) }));
-    aoSalvar((usaReserva && comoPagamentoDaReserva(pronto, lancamentos || [])) || pronto);
+      tipo: "escritorio", valor: efValorComSinalDoEstorno(g.valor, inicial) }));
+    aoSalvar(((usaReserva || saidaNaReserva) && comoPagamentoDaReserva(pronto, lancamentos || [])) || pronto);
   }
   // Na fila, quem lança 50 linhas não larga o teclado: Enter num campo de
   // texto lança e abre a próxima, Esc fecha. A lista de escolha aberta e o
@@ -5064,7 +5218,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           </Selecao>
         ), "conta")}
         {campo("Valor", <CampoValorBR style={S.input} valor={f.valor} placeholder="0,00"
-          aoMudar={(v) => set("valor", v)} />)}
+          negativo={efSinalFixoDoEstorno(inicial)} aoMudar={(v) => set("valor", v)} />)}
         {/* No fechamento, a competência é o mês que se está fechando: não
             é uma escolha, e um mês errado aqui sumiria da conferência. */}
         {!naObra && (competenciaFixa
@@ -5523,6 +5677,13 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           </span>
         </label>
       )}
+      {saidaNaReserva && passaDaReserva > 0 && (
+        <div data-vk-reserva-teto="1" style={{ fontSize: 12.5, lineHeight: 1.5, color: "#1e3a8a", background: "#eff6ff",
+          border: "1px solid rgba(4,116,244,0.3)", borderRadius: 10, padding: "9px 11px" }}>
+          A reserva da engenharia deste cliente tem <b>{efDinheiro(saldoDaReservaNaSaida)}</b>: só isso sai dela; os{" "}
+          <b>{efDinheiro(passaDaReserva)}</b> que passam entram como custo em Parceiros.
+        </div>
+      )}
       {iguaisNaObra.length > 0 && (
         <div data-vk-dobro-obra="1" style={{ fontSize: 12.5, color: "#92400e", background: "#fffbeb", border: "1px solid rgba(180,83,9,0.3)",
           borderRadius: 10, padding: "9px 11px", lineHeight: 1.5 }}>
@@ -5715,6 +5876,21 @@ function ResumoEscritorioPainel({ resumo, quantidade, aoVerExtrato }) {
 function EmpreendimentosQuadro({ data, lancs, aoFiltrar }) {
   const S = EF_ESTILO;
   const lista = empreendimentosDoData(data);
+  // Investido de cada empreendimento: uma conta só por mudança dos dados,
+  // não a cada desenho do painel (cada tecla no formulário redesenha tudo).
+  const contas = useMemo(() => {
+    const m = new Map();
+    for (const c of lista) {
+      // "Em andamento" desmarcado no cadastro = empreendimento fechado.
+      const r0 = resultadoEmpreendimento(lancs, c.id, { concluido: c.ativo === false });
+      const inv = investidoDoEmpreendimento(c, (data || {}).obras || [], lancs);
+      m.set(c.id, { r0, inv });
+    }
+    return m;
+    // lancs é refeito a cada desenho (filtro de data.lancamentos): a chave é
+    // o próprio data, que só muda quando algo é gravado
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
   if (!lista.length) return null;
   return (
     <div style={{ display: "grid", gap: 6 }}>
@@ -5731,9 +5907,7 @@ function EmpreendimentosQuadro({ data, lancs, aoFiltrar }) {
           </thead>
           <tbody>
             {lista.map((c) => {
-              // "Em andamento" desmarcado no cadastro = empreendimento fechado.
-              const r0 = resultadoEmpreendimento(lancs, c.id, { concluido: c.ativo === false });
-              const inv = investidoDoEmpreendimento(c, (data || {}).obras || [], lancs);
+              const { r0, inv } = contas.get(c.id);
               // o resultado da venda é contra o custo inteiro, não só o que passou pela conta
               const r = { ...r0, investido: inv.total, resultado: r0.resultado == null ? null : efCentavos(r0.vendido - inv.total) };
               return (
@@ -7402,6 +7576,14 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo, quem }) 
                   <b>{efDinheiro(lancDaFatura ? lancDaFatura.valor : fatura.total)}</b>
                   {lancDaFatura && lancDaFatura.lancadoEm ? <>, em {efDiaBR(lancDaFatura.lancadoEm)}</> : null}.
                   {" "}Para mexer nas compras dela, use ⋯ → Reabrir fatura (ou exclua essa linha em Lançamentos).
+                  {!lancDaFatura && (() => {
+                    // fechada por tabela: as compras entraram, atrasadas, na fatura de outro mês
+                    const quem = lancs.find((x) => x && x.origem && x.origem.tipo === "fatura" && x.origem.cartaoId === (cartao && cartao.id)
+                      && Array.isArray(x.origem.cobre) && x.origem.cobre.indexOf(compAtual) >= 0);
+                    return quem ? <div data-vk-fatura-coberta="1" style={{ color: "#4b5563", marginTop: 4 }}>
+                      As compras deste mês entraram na fatura de {mesAnoPorExtenso(quem.origem.competencia)}, como atrasadas — é lá que se reabre.
+                    </div> : null;
+                  })()}
                   {lancDaFatura && fatura.total - (Number(lancDaFatura.valor) || 0) >= 0.01 && (
                     <div style={{ color: "#92400e", marginTop: 4 }}>
                       Depois de fechada entrou compra nesta fatura ({efDinheiro(fatura.total)} hoje). Ela vai para a próxima
@@ -7467,17 +7649,37 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   const saldoAbertura = Number(cfgFin.saldoAbertura) || 0;
   const linhas = extratoEscritorio(lancs, { saldoAbertura });
   const fechamentos = fechamentosDoEscritorio(data);
-  const mesesDoExtrato = linhas.map((l) => l.mes);
   // O mês da conferência é o de hoje — é nele que o extrato parcial chega.
   // Se ele já estiver fechado, vai para o primeiro aberto depois dele; e se
   // o histórico nem chegou em hoje, fica no último mês que existe.
   const mesDeHoje = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+  // Mês novo ainda sem lançamento (o dia 1º, ou o extrato que acabou de
+  // chegar) também se fecha: sem ele no seletor, não havia onde conferir o
+  // extrato. Entram o mês de hoje e os meses dos extratos guardados, com o
+  // saldo levado do mês anterior.
+  const mesesForaDasLinhas = [...new Set([mesDeHoje].concat(Object.keys((cfgFin.extratos && typeof cfgFin.extratos === "object") ? cfgFin.extratos : {})))]
+    .filter((m) => /^\d{4}-\d{2}$/.test(m) && !linhas.some((l) => l.mes === m));
+  const linhasDoFecho = !mesesForaDasLinhas.length ? linhas : (() => {
+    const todos = linhas.map((l) => l.mes).concat(mesesForaDasLinhas).sort();
+    return extratoEscritorio(lancs, { saldoAbertura, de: todos[0], ate: todos[todos.length - 1] });
+  })();
+  const mesesDoExtrato = linhasDoFecho.map((l) => l.mes);
   const primeiroAberto = (mesesDoExtrato.includes(mesDeHoje) && !mesEstaFechado(mesDeHoje, fechamentos))
     ? mesDeHoje
     : (mesesDoExtrato.filter((m) => m >= mesDeHoje).find((m) => !mesEstaFechado(m, fechamentos))
       || mesesDoExtrato.find((m) => !mesEstaFechado(m, fechamentos))
       || mesesDoExtrato[mesesDoExtrato.length - 1] || "");
   const mesEmConferencia = mesFecho && mesesDoExtrato.includes(mesFecho) ? mesFecho : primeiroAberto;
+  // A sugestão e o "lançar assim" de cada linha da fila: uma conta por linha
+  // enquanto os dados e o mês não mudam. Antes, cada desenho refazia as duas
+  // para todas as linhas (marcar uma caixinha recalculava a fila inteira).
+  const memoDaFila = useMemo(() => ({ sugestao: new Map(), rapido: new Map() }), [data, mesEmConferencia]);
+  const daMemoDaFila = (tipo, m, calcular) => {
+    const cache = memoDaFila[tipo];
+    if (!m || !m.id) return calcular();
+    if (!cache.has(m.id)) cache.set(m.id, calcular());
+    return cache.get(m.id);
+  };
   const [ano, setAno] = useState("");
   const anoAtual = ano || (linhas.length ? linhas[linhas.length - 1].mes.slice(0, 4) : String(new Date().getFullYear()));
 
@@ -7960,7 +8162,14 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   // O arquivo só vale para este mês se trouxer movimento dele: o extrato de
   // outubro tem o "SALDO ANTERIOR" de 30/09, e isso não é o setembro.
   const arquivoServe = !!(doArquivo && doArquivo.some((m) => efEhMovimento(m.historico)));
-  const movimentosExtrato = arquivoServe ? doArquivo : (guardadosDoMes.length ? guardadosDoMes : null);
+  // O arquivo que cobre só parte do mês (os "últimos 30 dias") se junta ao
+  // que já estava guardado: a fila mostra o mês inteiro, não só os dias do
+  // arquivo. Mês fechado fica com o guardado — o arquivo não o muda.
+  const mesFechadoNoArquivo = mesEstaFechado(mesEmConferencia, fechamentos);
+  const doArquivoNoMes = !arquivoServe ? null
+    : (mesFechadoNoArquivo ? (guardadosDoMes.length ? guardadosDoMes : doArquivo)
+      : movimentosGuardadosDoMes(extratosComArquivo(extratosGuardados, doArquivoTodos, origemExtrato, "", { fechamentos }).extratos, mesEmConferencia));
+  const movimentosExtrato = arquivoServe ? doArquivoNoMes : (guardadosDoMes.length ? guardadosDoMes : null);
   const ignoradosDoMes = ignoradosGuardados(extratosGuardados);
   const conciliacao = movimentosExtrato
     ? conciliarExtrato(movimentosExtrato, lancs.filter((l) => String(l.competencia) === String(mesEmConferencia)),
@@ -7981,12 +8190,19 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     if (!doArquivoTodos || !doArquivoTodos.length) return;
     if (guardandoExtrato.current === assinaturaDoArquivo) return;
     guardandoExtrato.current = assinaturaDoArquivo;
-    const r = extratosComArquivo(extratosGuardados, doArquivoTodos, origemExtrato, new Date().toISOString());
-    const mesesAbertos = r.meses.filter((m) => mesesDoExtrato.includes(m) && !mesEstaFechado(m, fechamentos)).sort();
+    const r = extratosComArquivo(extratosGuardados, doArquivoTodos, origemExtrato, new Date().toISOString(), { fechamentos });
+    // o mês do arquivo pode ainda não ter lançamento: ele entra no seletor
+    // assim que o extrato dele é guardado (logo abaixo)
+    const mesesAbertos = r.meses.filter((m) => !mesEstaFechado(m, fechamentos)).sort();
+    // mês fechado: o extrato guardado dele fica como estava — e a pessoa sabe
+    const avisoFechado = r.fechados.length
+      ? `${r.fechados.map((m) => efMesPorExtenso(m)).join(" e ")} já ${r.fechados.length > 1 ? "estão fechados" : "está fechado"}: as linhas do arquivo desse mês não foram guardadas (reabra o mês para trocar o extrato).`
+      : "";
     if (r.meses.length && !r.meses.includes(String(mesEmConferencia)) && mesesAbertos.length) {
       setMesFecho(mesesAbertos[mesesAbertos.length - 1]);
-      setAviso(`O extrato é de ${r.meses.map((m) => efMesPorExtenso(m)).join(" e ")} — abri ${efMesPorExtenso(mesesAbertos[mesesAbertos.length - 1])}.`);
-    }
+      setAviso(`O extrato é de ${r.meses.map((m) => efMesPorExtenso(m)).join(" e ")} — abri ${efMesPorExtenso(mesesAbertos[mesesAbertos.length - 1])}.`
+        + (avisoFechado ? " " + avisoFechado : ""));
+    } else if (avisoFechado) setAviso(avisoFechado);
     // O mapa das colunas deste banco vai na MESMA gravada: duas seguidas
     // partiriam do mesmo retrato de `data` e a segunda apagaria a primeira.
     const novosLayouts = mapaExtrato && mapaExtrato.assinatura && !mapaExtrato.lembrado
@@ -8093,6 +8309,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         valor: Math.round(Math.abs(Number(m.valor) || 0) * 100) / 100 });
       const erros = validarLancamentoEscritorio(l, { fechamentos });
       if (erros.length) return { erro: erros[0] + " Lance esta conta uma linha por vez." };
+      // saída da reserva tem teto (o saldo do cliente): uma linha por vez
+      if (ehSaidaDiretaNaReserva(l)) return { erro: "Pagamento da reserva da engenharia: lance uma linha por vez." };
       ref = proximaReferencia((data || {}).obras || [], lancs.concat(novos));
       novos.push({ ...l, id: (typeof uid === "function" ? uid() : String(Date.now())) + "_" + novos.length,
         numeroDoc: ref, criadoEm: agora, conferido: true, conferidoEm: agora,
@@ -8309,7 +8527,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
 
       {vista === "fechamento" && (
         <FechamentoEscritorioTela
-          lancs={lancs} linhas={linhas} fechamentos={fechamentos}
+          lancs={lancs} linhas={linhasDoFecho} fechamentos={fechamentos}
           mes={mesEmConferencia} aoTrocarMes={setMesFecho}
           aoMarcar={marcarConferido} aoMarcarTodos={marcarMesInteiro}
           aoFechar={fecharMes} aoReabrir={reabrirMes} ocupado={ocupado}
@@ -8326,10 +8544,11 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             checagem: movimentosExtrato ? checagemDebitoCredito(movimentosExtrato, lancs, mesEmConferencia) : null,
             fila: {
               mes: mesEmConferencia,
-              inicial: (m) => lancamentoDaLinhaDoExtrato(m, mesEmConferencia, sugestaoCompletaDoExtrato(m, lancs, ctxDoPalpite)),
-              sugestao: (m) => sugestaoCompletaDoExtrato(m, lancs, ctxDoPalpite),
+              inicial: (m) => lancamentoDaLinhaDoExtrato(m, mesEmConferencia,
+                daMemoDaFila("sugestao", m, () => sugestaoCompletaDoExtrato(m, lancs, ctxDoPalpite))),
+              sugestao: (m) => daMemoDaFila("sugestao", m, () => sugestaoCompletaDoExtrato(m, lancs, ctxDoPalpite)),
               lancar: lancarLinhaDoExtrato,
-              rapido: rapidoDoExtrato,
+              rapido: (m) => daMemoDaFila("rapido", m, () => rapidoDoExtrato(m)),
               lancarVarias: lancarVariasDoExtrato,
               lancarSugeridas: lancarSugeridasDoExtrato,
               naoE: naoELancamento,

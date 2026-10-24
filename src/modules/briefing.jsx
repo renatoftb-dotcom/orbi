@@ -692,7 +692,10 @@ function faltaNaPergunta(p, t, r) {
     return lista.some((x) => obr.some((c) => brVazio((x || {})[c.id]))) ? "Complete a faixa etária de cada morador." : "";
   }
   if (p.tipo === "escala") {
-    const marcados = Object.keys(v || {}).filter((k) => !brVazio((v || {})[k]) && k !== "_outro");
+    // Só as linhas da escala DESTE tipo de projeto: trocar de casa nova para
+    // reforma deixa as respostas antigas gravadas (matrícula, IPTU…), e
+    // contá-las fazia a pergunta obrigatória passar sem resposta.
+    const marcados = itensDaEscala(p, t).map(([k]) => k).filter((k) => !brVazio((v || {})[k]));
     if (p.minMarcados && marcados.filter((k) => p.niveis !== BR_PRIORIDADE || v[k] !== "dispensavel").length < p.minMarcados) return "Marque ao menos um ambiente como essencial ou desejável.";
     if (!p.minMarcados && marcados.length < itensDaEscala(p, t).length) return "Marque uma opção em cada linha.";
     return "";
@@ -788,7 +791,10 @@ function resumoDoBriefing(respostas, tipoPadrao) {
   // Pendências para a reunião: o que o cliente não sabia ou vai mandar depois
   const atencao = [];
   const docs = r.documentos || {};
-  Object.keys(docs).forEach((k) => { if (docs[k] === "depois") atencao.push(`Documento a receber: ${k.replace(/_/g, " ")}`); });
+  // Só os documentos do tipo atual (resposta de outro tipo fica gravada).
+  const pDocs = BRIEFING_SECOES.flatMap((s) => s.telas.flatMap((tl) => tl.perguntas)).find((p) => p.id === "documentos");
+  const docsDoTipo = pDocs ? itensDaEscala(pDocs, t).map(([k]) => k) : Object.keys(docs);
+  docsDoTipo.forEach((k) => { if (docs[k] === "depois") atencao.push(`Documento a receber: ${k.replace(/_/g, " ")}`); });
   if (r.investimento === "nao_sei") atencao.push("Orçamento da obra ainda indefinido — orientar o cliente.");
   if (r.inicio_obra === "nao_sei") atencao.push("Início da obra sem data.");
   if (r.data_rigidez === "rigida") atencao.push("Data-limite rígida" + (r.data_limite && r.data_limite !== "nao_sei" ? ` (${textoDaResposta({ tipo: "mes" }, r.data_limite)})` : "") + ".");
@@ -805,6 +811,16 @@ async function brPublico(method, token, body) {
   try { json = await res.json(); } catch (e) { throw new Error("Sem conexão com o servidor"); }
   if (!json.ok) { const e = new Error(json.error || "Erro"); e.status = res.status; throw e; }
   return json.data;
+}
+
+// Gravação ao fechar a aba: fetch com keepalive sobrevive à página (o fetch
+// comum é cancelado no pagehide). keepalive tem teto de 64 KB no corpo — se o
+// navegador recusar, tenta o fetch comum, que ainda pode sair a tempo.
+function brPublicoAoSair(token, body) {
+  const url = `${_API_URL}/api/briefing-publico/${encodeURIComponent(token)}`;
+  const op = { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  try { return fetch(url, { ...op, keepalive: true }).catch(() => fetch(url, op).catch(() => {})); }
+  catch (e) { try { return fetch(url, op).catch(() => {}); } catch (e2) { return Promise.resolve(); } }
 }
 
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
@@ -1215,6 +1231,10 @@ function BriefingPublico({ token: tokenProp }) {
   const [confirmou, setConfirmou] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const pendente = useRef(null), timer = useRef(null), topo = useRef(null);
+  // emVoo: resposta do PUT ainda sem retorno (o pagehide também a reenvia);
+  // seq: ordem das gravações, para uma falha antiga não ressuscitar resposta
+  // velha por cima de uma mais nova; tentativas: espera crescente no retry.
+  const emVoo = useRef(null), seq = useRef(0), tentativas = useRef(0), montado = useRef(true);
 
   useEffect(() => {
     let vivo = true;
@@ -1233,10 +1253,33 @@ function BriefingPublico({ token: tokenProp }) {
   const somenteLeitura = estado.status === "validado";
   function gravar(resp, extra) {
     pendente.current = null;
+    const meu = ++seq.current;
+    emVoo.current = resp;
     setSalvo("salvando");
     return brPublico("PUT", token, { respostas: resp, respondente: resp.respondente || "", ...(extra || {}) })
-      .then((d) => { setSalvo("salvo"); return d; })
-      .catch((e) => { setSalvo("falhou"); if (e.status === 409) setEstado((x) => ({ ...x, status: "validado" })); throw e; });
+      .then((d) => {
+        if (meu === seq.current) { emVoo.current = null; tentativas.current = 0; setSalvo("salvo"); }
+        return d;
+      })
+      .catch((e) => {
+        if (meu === seq.current) emVoo.current = null;
+        if (e.status === 409) { setSalvo("falhou"); setEstado((x) => ({ ...x, status: "validado" })); throw e; }
+        // A resposta volta para a fila — antes ela se perdia: pendente já
+        // estava zerado e nada tentava de novo. Só volta se nada mais novo
+        // foi gravado ou digitado depois (resp é o formulário inteiro).
+        if (meu === seq.current) {
+          if (!pendente.current) pendente.current = resp;
+          setSalvo("falhou");
+          tentarDeNovo();
+        }
+        throw e;
+      });
+  }
+  function tentarDeNovo() {
+    if (!montado.current) return;
+    const espera = Math.min(60000, 3000 * Math.pow(2, tentativas.current++));
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => { if (pendente.current) gravar(pendente.current).catch(() => {}); }, espera);
   }
   function agendar(resp) {
     pendente.current = resp;
@@ -1244,10 +1287,20 @@ function BriefingPublico({ token: tokenProp }) {
     timer.current = setTimeout(() => { if (pendente.current) gravar(pendente.current).catch(() => {}); }, 1200);
   }
   useEffect(() => {
-    const sair = () => { if (pendente.current) gravar(pendente.current).catch(() => {}); };
+    montado.current = true;
+    // Fechar a aba: manda o que falta (ou o que ainda está no ar) com keepalive.
+    const sair = () => {
+      const resp = pendente.current || emVoo.current;
+      if (!resp) return;
+      pendente.current = null;
+      brPublicoAoSair(token, { respostas: resp, respondente: resp.respondente || "" });
+    };
+    // Voltou a conexão: não espera o próximo retry.
+    const voltou = () => { if (pendente.current) { tentativas.current = 0; gravar(pendente.current).catch(() => {}); } };
     window.addEventListener("pagehide", sair);
-    return () => { window.removeEventListener("pagehide", sair); clearTimeout(timer.current); };
-  }, []);
+    window.addEventListener("online", voltou);
+    return () => { montado.current = false; window.removeEventListener("pagehide", sair); window.removeEventListener("online", voltou); clearTimeout(timer.current); };
+  }, [token]);
   function mudar(id, v) {
     if (somenteLeitura) return;
     setR((atual) => { const n = { ...atual, [id]: v }; agendar(n); return n; });

@@ -897,7 +897,8 @@ function tpDesenhoParaObra(paredes, areas) {
       ["Aberturas nas paredes", `${tpFmt(areaAb)} m² (já descontadas do m² de parede)`],
     ] : []),
   ];
-  return { projeto, linhas };
+  // portas: a contagem bruta, para o sobrado somar pavimento a pavimento
+  return { projeto, linhas, portas: temAberturas ? portas : null };
 }
 
 // Vários pavimentos: o térreo vai para "terreo", o primeiro de cima para
@@ -909,12 +910,20 @@ function tpDesenhoParaObraPavs(lista) {
   const cs = lista.map((d) => tpDesenhoParaObra(d.paredes || [], d.areas || []));
   const todos = tpDesenhoParaObra(lista.flatMap((d) => d.paredes || []), lista.flatMap((d) => d.areas || []));
   const c0 = cs[0].projeto, c1 = cs[1].projeto, soma = (f) => r2(cs.reduce((t, c) => t + (+f(c.projeto) || 0), 0));
+  const portasPavs = cs.some((c) => c.portas) ? cs.reduce((t, c) => {
+    const p = c.portas || {};
+    return { interna: t.interna + (p.interna || 0), banheiro: t.banheiro + (p.banheiro || 0), externa: t.externa + (p.externa || 0),
+      metros: t.metros + (p.metros || 0), metrosBanheiro: t.metrosBanheiro + (p.metrosBanheiro || 0) };
+  }, { interna: 0, banheiro: 0, externa: 0, metros: 0, metrosBanheiro: 0 }) : null;
   const projeto = {
     ...c0,
     tipologia: "Sobrado",
     ...(todos.projeto.esquadrias ? { esquadrias: todos.projeto.esquadrias } : {}),
     ...(todos.projeto.ambientes ? { ambientes: todos.projeto.ambientes, comodosCfg: todos.projeto.comodosCfg } : {}),
-    ...(todos.projeto.portasDesenho ? { portasDesenho: todos.projeto.portasDesenho } : {}),
+    // portas: cada pavimento com as suas paredes e ambientes, depois soma.
+    // Achatar os pavimentos fazia a porta do térreo "cair" no banheiro do
+    // andar de cima (e a pegada da casa misturava os andares).
+    ...(portasPavs ? { portasDesenho: { interna: portasPavs.interna, banheiro: portasPavs.banheiro, metros: r2(portasPavs.metros), metrosBanheiro: r2(portasPavs.metrosBanheiro) } } : {}),
     // piso e rodapé: cada pavimento com os seus ambientes (as portas são de cada um)
     ...(cs.some((c) => c.projeto.ambientesDesenho) ? { ambientesDesenho: cs.flatMap((c, k) => (c.projeto.ambientesDesenho || []).map((a) => ({ ...a, pavimento: lista[k].nome || (k ? "Pavimento " + k : "Térreo") }))) } : {}),
     // o gabarito marca o térreo: é o do primeiro pavimento
@@ -934,7 +943,12 @@ function tpDesenhoParaObraPavs(lista) {
     ["Área construída (total)", tpFmt(projeto.arquitetura.areaConstruida) + " m²"],
     ["Paredes (total)", `${tpFmt(projeto.arquitetura.m2ParedesTotal)} m² — internas ${tpFmt(projeto.arquitetura.m2ParedesInternas)} · externas ${tpFmt(projeto.arquitetura.m2ParedesExternas)}`],
     ...cs[0].linhas.filter(([k]) => k === "Pavimentação externa" || k === "Gabarito" || String(k).startsWith("Laje")),
-    ...todos.linhas.filter(([k]) => !["Tipologia", "Área construída", "Pavimentação externa", "Parede interna", "Parede externa", "Por espessura", "Perímetro de paredes", "Gabarito"].includes(k) && !String(k).startsWith("Laje")),
+    ...todos.linhas.filter(([k]) => !["Tipologia", "Área construída", "Pavimentação externa", "Parede interna", "Parede externa", "Por espessura", "Perímetro de paredes", "Gabarito", "Porta de madeira em parede externa"].includes(k) && !String(k).startsWith("Laje"))
+      // as linhas de porta repetem a soma por pavimento (a do desenho achatado erra)
+      .flatMap(([k, v]) => k !== "Portas internas (madeira)" || !portasPavs ? [[k, v]] : [
+        [k, `${portasPavs.interna + portasPavs.banheiro} — ${portasPavs.interna} interna${portasPavs.interna === 1 ? "" : "s"} + ${portasPavs.banheiro} de banheiro (kit de porta por porta desenhada)`],
+        ...(portasPavs.externa ? [["Porta de madeira em parede externa", `${portasPavs.externa} (não entra no kit de porta interna; lance na obra)`]] : []),
+      ]),
   ];
   return { projeto, linhas };
 }
@@ -5898,7 +5912,9 @@ function TesteProjeto({ data, usuario, save }) {
       const obra = tpObraDoProjeto(p); p.obraId = obra.id;
       save({ ...data, obras: [...(data.obras || []), obra] });
     }
-    salvarLista([p, ...projetos]);
+    // base = o que está gravado agora, não a lista lida ao abrir a tela: outra
+    // aba pode ter desenhado nesse meio-tempo (igual a TpProjetosDoCliente)
+    salvarLista([p, ...tpLer(empresaId)]);
     setNovo(null); setAbertoId(p.id);
   };
 
@@ -5990,7 +6006,7 @@ function TesteProjeto({ data, usuario, save }) {
             <div style={{ fontSize: 14, color: "#374151", margin: "8px 0 18px" }}>"{excluir.nome}" e todo o desenho serão apagados deste navegador.</div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
               <button style={btn} onClick={() => setExcluir(null)}>Cancelar</button>
-              <button style={{ ...btn, background: "#b91c1c", borderColor: "#b91c1c", color: "#fff" }} onClick={() => { salvarLista(projetos.filter((p) => p.id !== excluir.id)); setExcluir(null); }}>Excluir</button>
+              <button style={{ ...btn, background: "#b91c1c", borderColor: "#b91c1c", color: "#fff" }} onClick={() => { salvarLista(tpLer(empresaId).filter((p) => p.id !== excluir.id)); setExcluir(null); }}>Excluir</button>
             </div>
           </div>
         </div>

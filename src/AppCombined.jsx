@@ -3862,6 +3862,85 @@ async function saveAllData(newData, oldData = {}, opcoes = {}) {
   if (falha) { const e = falha.reason || new Error("falha ao gravar"); e.atualizados = atualizados; throw e; }
   return atualizados;
 }
+// ── Importar backup (JSON) por cima do que já está no sistema ──────
+// O save compara a tela com o servidor e APAGA o que sumiu da lista. Importar
+// o arquivo como os dados inteiros apagava tudo o que não estava nele (um
+// arquivo só com obras levava clientes, lançamentos e orçamentos embora).
+// Aqui o arquivo entra por cima dos dados atuais: registro do arquivo
+// substitui o de mesmo id, registro novo entra, e nada é apagado.
+// Devolve { erro } se o arquivo não tem cara de backup, ou { dados, contagem }.
+const LISTAS_IMPORTACAO = [
+  ["clientes", "Clientes"], ["fornecedores", "Fornecedores"], ["materiais", "Insumos"], ["obras", "Obras"],
+  ["lancamentos", "Lançamentos"], ["orcamentosProjeto", "Orçamentos"], ["receitasFinanceiro", "Receitas"],
+];
+// as que todo backup (do app ou do servidor) traz: sem elas não é um backup
+const LISTAS_IMPORTACAO_PRINCIPAIS = ["clientes", "obras", "lancamentos", "orcamentosProjeto"];
+function mesclarImportacao(atual, arquivo) {
+  const ehObj = (x) => !!x && typeof x === "object" && !Array.isArray(x);
+  if (!ehObj(arquivo)) return { erro: "O arquivo não é um backup do VICKE." };
+  const faltam = LISTAS_IMPORTACAO_PRINCIPAIS.filter((k) => !(k in arquivo));
+  if (faltam.length) return { erro: "O arquivo não é um backup completo: falta " + faltam.join(", ") + "." };
+  for (const k of LISTAS_IMPORTACAO.map((l) => l[0]).concat(["projetos"])) {
+    if (!(k in arquivo)) continue;
+    if (!Array.isArray(arquivo[k])) return { erro: `No arquivo, "${k}" não é uma lista.` };
+    if (arquivo[k].some((x) => !ehObj(x) || x.id == null || x.id === "")) return { erro: `No arquivo, "${k}" tem registro sem id.` };
+  }
+  if (arquivo.escritorio != null && !ehObj(arquivo.escritorio)) return { erro: 'No arquivo, "escritorio" não é um cadastro.' };
+
+  const base = atual || {};
+  // O _versao do arquivo é de quando ele foi exportado: o registro que
+  // substitui um atual leva a versão do atual (senão a gravação dava conflito).
+  const porId = (lista, doArquivo) => {
+    const out = Array.isArray(lista) ? lista.slice() : [];
+    const idx = new Map(out.map((x, i) => [x && x.id, i]));
+    let novos = 0, atualizados = 0;
+    for (const reg0 of doArquivo) {
+      const { _versao, ...reg } = reg0;
+      const i = idx.get(reg.id);
+      if (i === undefined) { idx.set(reg.id, out.length); out.push(reg); novos++; }
+      else { const v = out[i] && out[i]._versao; out[i] = v != null ? { ...reg, _versao: v } : reg; atualizados++; }
+    }
+    return { lista: out, novos, atualizados };
+  };
+  const dados = { ...base };
+  const contagem = [];
+  for (const [k, rotulo] of LISTAS_IMPORTACAO) {
+    if (!Array.isArray(arquivo[k])) continue;
+    const m = porId(base[k], arquivo[k]);
+    dados[k] = m.lista;
+    contagem.push({ chave: k, rotulo, total: arquivo[k].length, novos: m.novos, atualizados: m.atualizados });
+  }
+  // Projetos (Etapas) moram no orçamento ganho: o save os devolve ao
+  // orçamento, e projeto que falta na lista vira "finalizado". Ficam os
+  // atuais, por cima os dos orçamentos que vieram no arquivo e, por último,
+  // os projetos do próprio arquivo — nenhum some.
+  if (Array.isArray(arquivo.orcamentosProjeto) || Array.isArray(arquivo.projetos)) {
+    let prj = Array.isArray(base.projetos) ? base.projetos : projetosDosOrcamentos(base.orcamentosProjeto);
+    const doArquivo = projetosDosOrcamentos((arquivo.orcamentosProjeto || []).map((o) => (dados.orcamentosProjeto || []).find((x) => x && x.id === o.id) || o));
+    prj = porId(prj, doArquivo).lista;
+    if (Array.isArray(arquivo.projetos)) prj = porId(prj, arquivo.projetos).lista;
+    dados.projetos = prj;
+  }
+  let escritorio = false;
+  if (ehObj(arquivo.escritorio)) {
+    const { _versao, ...esc } = arquivo.escritorio;
+    const atualEsc = ehObj(base.escritorio) ? base.escritorio : {};
+    dados.escritorio = { ...atualEsc, ...esc, ...(atualEsc._versao != null ? { _versao: atualEsc._versao } : {}) };
+    escritorio = true;
+  }
+  return { dados, contagem, escritorio };
+}
+// O texto da confirmação: quanto de cada tipo entra e quanto substitui.
+function resumoDaImportacao(previa) {
+  const linhas = (previa.contagem || []).filter((c) => c.total > 0).map((c) =>
+    `${c.rotulo}: ${c.total}` + (c.novos || c.atualizados
+      ? ` (${[c.novos ? `${c.novos} ${c.novos === 1 ? "novo" : "novos"}` : "", c.atualizados ? `${c.atualizados} ${c.atualizados === 1 ? "substitui o atual" : "substituem os atuais"}` : ""].filter(Boolean).join(", ")})`
+      : ""));
+  if (previa.escritorio) linhas.push("Escritório: os campos do arquivo substituem os atuais");
+  if (!linhas.length) linhas.push("O arquivo não tem registros.");
+  return linhas.join("\n") + "\n\nNada do que já está no sistema é apagado: o que não está no arquivo continua como está.";
+}
+
 
 // ════════════════════════════════════════════════════════════
 // outros.jsx
@@ -4522,8 +4601,21 @@ function Financeiro({ data, save }) {
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   }
 
-  function excluirSelecionados() {
-    const novos = receitas.filter((_r, i) => !selecionados.has(i));
+  // Seleção pelo id do lançamento (o objeto, se a linha antiga não tem id):
+  // pelo índice, a seleção sobrevivia a um filtro e "Excluir" apagava linha
+  // que não estava mais na tela. Exclui só o que está selecionado E visível,
+  // e só depois de confirmar.
+  const chaveLanc = r => r.id || r;
+  async function excluirSelecionados() {
+    const alvo = lancs.filter(r => selecionados.has(chaveLanc(r)));
+    if (!alvo.length) { setSelecionados(new Set()); return; }
+    const ok = await dialogo.confirmar({
+      titulo: `Excluir ${alvo.length} lançamento${alvo.length!==1?"s":""}?`,
+      mensagem: "Esta ação não pode ser desfeita.",
+      confirmar: "Excluir", destrutivo: true,
+    });
+    if (!ok) return;
+    const novos = receitas.filter(r => !alvo.includes(r));
     save({...data, receitasFinanceiro: novos});
     setSelecionados(new Set());
   }
@@ -4553,6 +4645,8 @@ function Financeiro({ data, save }) {
   const totalCaixa    = receitas.filter(r=>r.contabil1==="Caixa" && r.recebimento==="Recebido").reduce((s,r)=>s+(r.valor||0),0);
   const totalReceber  = receitas.filter(r=>r.contabil1==="Caixa" && r.recebimento==="A Receber").reduce((s,r)=>s+(r.valor||0),0);
   const temFiltroAtivo = Object.values(filtroVals).some(s => s && s.size > 0);
+  // Mudou o filtro, a seleção recomeça (não se exclui o que não se vê).
+  useEffect(() => { setSelecionados(new Set()); }, [busca, filtroTipo, filtroVals]);
 
   const lancs = receitas.filter(r => {
     if (filtroTipo==="contabil" && r.contabil1!=="Receita Total") return false;
@@ -4711,8 +4805,8 @@ function Financeiro({ data, save }) {
                 {/* Checkbox todos */}
                 <th style={{...thS, width:36, textAlign:"center"}}>
                   <input type="checkbox"
-                    checked={lancs.length>0 && lancs.every(r=>selecionados.has(receitas.indexOf(r)))}
-                    onChange={e=>setSelecionados(e.target.checked?new Set(lancs.map(r=>receitas.indexOf(r))):new Set())}
+                    checked={lancs.length>0 && lancs.every(r=>selecionados.has(chaveLanc(r)))}
+                    onChange={e=>setSelecionados(e.target.checked?new Set(lancs.map(chaveLanc)):new Set())}
                     style={{ cursor:"pointer", accentColor:"#3b82f6" }} />
                 </th>
                 {/* Identificacao */}
@@ -4769,14 +4863,14 @@ function Financeiro({ data, save }) {
                 const isCaixa = r.contabil1 === "Caixa";
                 const isReceb = r.recebimento === "Recebido";
                 const isAReceber = r.recebimento === "A Receber";
-                const rowBg = selecionados.has(realIdx) ? "rgba(59,130,246,0.1)"
+                const rowBg = selecionados.has(chaveLanc(r)) ? "rgba(59,130,246,0.1)"
                   : isCaixa ? (idx%2===0?"#060d1a":"#080e1a")
                   : (idx%2===0?"#0a1122":"#0c1420");
                 return (
                   <tr key={r.id||idx} style={{ background:rowBg }}>
                     <td style={{...tdS,width:36,textAlign:"center"}}>
-                      <input type="checkbox" checked={selecionados.has(realIdx)}
-                        onChange={e=>setSelecionados(prev=>{const n=new Set(prev);if(e.target.checked)n.add(realIdx);else n.delete(realIdx);return n;})}
+                      <input type="checkbox" checked={selecionados.has(chaveLanc(r))}
+                        onChange={e=>setSelecionados(prev=>{const n=new Set(prev);if(e.target.checked)n.add(chaveLanc(r));else n.delete(chaveLanc(r));return n;})}
                         style={{ cursor:"pointer", accentColor:"#3b82f6" }} />
                     </td>
                     <td style={{...tdS,fontFamily:"monospace",fontSize:10,color:"#475569"}}>{r.codigo||"--"}</td>
@@ -6031,7 +6125,10 @@ function faltaNaPergunta(p, t, r) {
     return lista.some((x) => obr.some((c) => brVazio((x || {})[c.id]))) ? "Complete a faixa etária de cada morador." : "";
   }
   if (p.tipo === "escala") {
-    const marcados = Object.keys(v || {}).filter((k) => !brVazio((v || {})[k]) && k !== "_outro");
+    // Só as linhas da escala DESTE tipo de projeto: trocar de casa nova para
+    // reforma deixa as respostas antigas gravadas (matrícula, IPTU…), e
+    // contá-las fazia a pergunta obrigatória passar sem resposta.
+    const marcados = itensDaEscala(p, t).map(([k]) => k).filter((k) => !brVazio((v || {})[k]));
     if (p.minMarcados && marcados.filter((k) => p.niveis !== BR_PRIORIDADE || v[k] !== "dispensavel").length < p.minMarcados) return "Marque ao menos um ambiente como essencial ou desejável.";
     if (!p.minMarcados && marcados.length < itensDaEscala(p, t).length) return "Marque uma opção em cada linha.";
     return "";
@@ -6127,7 +6224,10 @@ function resumoDoBriefing(respostas, tipoPadrao) {
   // Pendências para a reunião: o que o cliente não sabia ou vai mandar depois
   const atencao = [];
   const docs = r.documentos || {};
-  Object.keys(docs).forEach((k) => { if (docs[k] === "depois") atencao.push(`Documento a receber: ${k.replace(/_/g, " ")}`); });
+  // Só os documentos do tipo atual (resposta de outro tipo fica gravada).
+  const pDocs = BRIEFING_SECOES.flatMap((s) => s.telas.flatMap((tl) => tl.perguntas)).find((p) => p.id === "documentos");
+  const docsDoTipo = pDocs ? itensDaEscala(pDocs, t).map(([k]) => k) : Object.keys(docs);
+  docsDoTipo.forEach((k) => { if (docs[k] === "depois") atencao.push(`Documento a receber: ${k.replace(/_/g, " ")}`); });
   if (r.investimento === "nao_sei") atencao.push("Orçamento da obra ainda indefinido — orientar o cliente.");
   if (r.inicio_obra === "nao_sei") atencao.push("Início da obra sem data.");
   if (r.data_rigidez === "rigida") atencao.push("Data-limite rígida" + (r.data_limite && r.data_limite !== "nao_sei" ? ` (${textoDaResposta({ tipo: "mes" }, r.data_limite)})` : "") + ".");
@@ -6144,6 +6244,16 @@ async function brPublico(method, token, body) {
   try { json = await res.json(); } catch (e) { throw new Error("Sem conexão com o servidor"); }
   if (!json.ok) { const e = new Error(json.error || "Erro"); e.status = res.status; throw e; }
   return json.data;
+}
+
+// Gravação ao fechar a aba: fetch com keepalive sobrevive à página (o fetch
+// comum é cancelado no pagehide). keepalive tem teto de 64 KB no corpo — se o
+// navegador recusar, tenta o fetch comum, que ainda pode sair a tempo.
+function brPublicoAoSair(token, body) {
+  const url = `${_API_URL}/api/briefing-publico/${encodeURIComponent(token)}`;
+  const op = { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  try { return fetch(url, { ...op, keepalive: true }).catch(() => fetch(url, op).catch(() => {})); }
+  catch (e) { try { return fetch(url, op).catch(() => {}); } catch (e2) { return Promise.resolve(); } }
 }
 
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
@@ -6554,6 +6664,10 @@ function BriefingPublico({ token: tokenProp }) {
   const [confirmou, setConfirmou] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const pendente = useRef(null), timer = useRef(null), topo = useRef(null);
+  // emVoo: resposta do PUT ainda sem retorno (o pagehide também a reenvia);
+  // seq: ordem das gravações, para uma falha antiga não ressuscitar resposta
+  // velha por cima de uma mais nova; tentativas: espera crescente no retry.
+  const emVoo = useRef(null), seq = useRef(0), tentativas = useRef(0), montado = useRef(true);
 
   useEffect(() => {
     let vivo = true;
@@ -6572,10 +6686,33 @@ function BriefingPublico({ token: tokenProp }) {
   const somenteLeitura = estado.status === "validado";
   function gravar(resp, extra) {
     pendente.current = null;
+    const meu = ++seq.current;
+    emVoo.current = resp;
     setSalvo("salvando");
     return brPublico("PUT", token, { respostas: resp, respondente: resp.respondente || "", ...(extra || {}) })
-      .then((d) => { setSalvo("salvo"); return d; })
-      .catch((e) => { setSalvo("falhou"); if (e.status === 409) setEstado((x) => ({ ...x, status: "validado" })); throw e; });
+      .then((d) => {
+        if (meu === seq.current) { emVoo.current = null; tentativas.current = 0; setSalvo("salvo"); }
+        return d;
+      })
+      .catch((e) => {
+        if (meu === seq.current) emVoo.current = null;
+        if (e.status === 409) { setSalvo("falhou"); setEstado((x) => ({ ...x, status: "validado" })); throw e; }
+        // A resposta volta para a fila — antes ela se perdia: pendente já
+        // estava zerado e nada tentava de novo. Só volta se nada mais novo
+        // foi gravado ou digitado depois (resp é o formulário inteiro).
+        if (meu === seq.current) {
+          if (!pendente.current) pendente.current = resp;
+          setSalvo("falhou");
+          tentarDeNovo();
+        }
+        throw e;
+      });
+  }
+  function tentarDeNovo() {
+    if (!montado.current) return;
+    const espera = Math.min(60000, 3000 * Math.pow(2, tentativas.current++));
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => { if (pendente.current) gravar(pendente.current).catch(() => {}); }, espera);
   }
   function agendar(resp) {
     pendente.current = resp;
@@ -6583,10 +6720,20 @@ function BriefingPublico({ token: tokenProp }) {
     timer.current = setTimeout(() => { if (pendente.current) gravar(pendente.current).catch(() => {}); }, 1200);
   }
   useEffect(() => {
-    const sair = () => { if (pendente.current) gravar(pendente.current).catch(() => {}); };
+    montado.current = true;
+    // Fechar a aba: manda o que falta (ou o que ainda está no ar) com keepalive.
+    const sair = () => {
+      const resp = pendente.current || emVoo.current;
+      if (!resp) return;
+      pendente.current = null;
+      brPublicoAoSair(token, { respostas: resp, respondente: resp.respondente || "" });
+    };
+    // Voltou a conexão: não espera o próximo retry.
+    const voltou = () => { if (pendente.current) { tentativas.current = 0; gravar(pendente.current).catch(() => {}); } };
     window.addEventListener("pagehide", sair);
-    return () => { window.removeEventListener("pagehide", sair); clearTimeout(timer.current); };
-  }, []);
+    window.addEventListener("online", voltou);
+    return () => { montado.current = false; window.removeEventListener("pagehide", sair); window.removeEventListener("online", voltou); clearTimeout(timer.current); };
+  }, [token]);
   function mudar(id, v) {
     if (somenteLeitura) return;
     setR((atual) => { const n = { ...atual, [id]: v }; agendar(n); return n; });
@@ -6962,14 +7109,19 @@ if (typeof window !== "undefined") {
 //                       (SINAPI-SP jul/2026 ou varejo de SP), fonte na observacao
 // Última compra fora de 3× da mediana das 5 últimas → usa a mediana.
 // Data de referência: 2026-09-06. ARQUIVO GERADO (mat/gerar_seed_cadastro.py).
+// Correção à mão (out/2026): os aquecedores solares tinham saído com LOC-004 e
+// LOC-005, que já são Container e Betoneira em insumos-seed.jsx — passaram a
+// LOC-050/LOC-051 (longe de LOC-029..032, que semeaduras antigas distribuíram
+// ao recodificar). Saíram LOC-012 (Betoneira) e LOC-018 (Container), repetidos
+// de LOC-005/LOC-004. O gerador precisa da mesma correção.
 // ═══════════════════════════════════════════════════════════════
 
 var INSUMOS_SEED_CADASTRO = [
   { codigo:"LOU-014", nome:"ASSENTO ORIG PP SC THEMA PLUS BR", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:209.63, precoFonte:"compra_corrigida", precoData:"2025-01-17", precoNCompras:2, precoFatorInccAplicado:1.1202, aliases:["ASSENTO ORIG PP SC THEMA PLUS BR"] },
   { codigo:"ELE-002", nome:"Adesivo Numérico (0 a 9)", grupo:"Elétrica e iluminação", unidade:"Unidades", tipo:"material", precoReferencia:1.12, precoFonte:"compra_corrigida", precoData:"2023-07-25", precoNCompras:1, precoFatorInccAplicado:1.2108, aliases:["Adesivo Numérico (0 a 9)"] },
   { codigo:"LOU-015", nome:"Anel de Vedação para Bacia Sanitária", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:14.2, precoFonte:"compra_corrigida", precoData:"2025-01-17", precoNCompras:3, precoFatorInccAplicado:1.1202, aliases:["Anel de Vedação para Bacia Sanitária"] },
-  { codigo:"LOC-004", nome:"Aquecedor - Coletor Solares Casa", grupo:"Locação de equipamentos", unidade:"Unidades", tipo:"material", precoReferencia:1019.13, precoFonte:"compra_corrigida", precoData:"2023-08-22", precoNCompras:1, precoFatorInccAplicado:1.2075, aliases:["Aquecedor - Coletor Solares Casa"] },
-  { codigo:"LOC-005", nome:"Aquecedor - Coletor Solares Piscina", grupo:"Locação de equipamentos", unidade:"Unidades", tipo:"material", precoReferencia:2250.31, precoFonte:"compra_corrigida", precoData:"2023-09-20", precoNCompras:2, precoFatorInccAplicado:1.2042, aliases:["Aquecedor - Coletor Solares Piscina"] },
+  { codigo:"LOC-050", nome:"Aquecedor - Coletor Solares Casa", grupo:"Locação de equipamentos", unidade:"Unidades", tipo:"material", precoReferencia:1019.13, precoFonte:"compra_corrigida", precoData:"2023-08-22", precoNCompras:1, precoFatorInccAplicado:1.2075, aliases:["Aquecedor - Coletor Solares Casa"] },
+  { codigo:"LOC-051", nome:"Aquecedor - Coletor Solares Piscina", grupo:"Locação de equipamentos", unidade:"Unidades", tipo:"material", precoReferencia:2250.31, precoFonte:"compra_corrigida", precoData:"2023-09-20", precoNCompras:2, precoFatorInccAplicado:1.2042, aliases:["Aquecedor - Coletor Solares Piscina"] },
   { codigo:"EQP-001", nome:"Aquecedor - Gás de Passagem", grupo:"Equipamentos e sistemas", unidade:"Unidades", tipo:"material", precoReferencia:2650.0, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Aquecedor - Gás de Passagem"], observacao:"Referência de mercado SP (Leroy Merlin): Aquecedor a gás Rinnai E21 21 L/min GLP digital — https://www.leroymerlin.com.br/aquecedor-de-agua-a-gas-rinnai-21l-min-glp-branco-digital-e21_89839351" },
   { codigo:"EQP-002", nome:"Aquecedor - Kit instalação gás (tubulação, registro, chaminé)", grupo:"Equipamentos e sistemas", unidade:"Unidades", tipo:"material", precoReferencia:464.8, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Aquecedor - Kit instalação gás (tubulação, registro, chaminé)"], observacao:"Referência de mercado SP (Telhanorte): Kit instalação Lorenzetti (flexíveis + registro de gás) R$ 279,90 + kit exaustão 80 mm x 1,5 m WDB R$ 184,90 — https://www.telhanorte.com.br/kit-de-instalacao-de-aquecedor-de-agua-a-gas-lorenzetti-1587897/p | soma de dois kits; versão econômica dos flexíveis: R$ 349,80 no total" },
   { codigo:"AGR-004", nome:"Areia Fina Ensacada", grupo:"Areia e pedra", unidade:"Unidades", tipo:"material", precoReferencia:8.73, precoFonte:"compra", precoData:"2026-02-02", precoNCompras:8, precoFatorInccAplicado:1.0, aliases:["Areia Fina Ensacada"] },
@@ -7267,7 +7419,6 @@ var INSUMOS_SEED_CADASTRO = [
   { codigo:"FER-043", nome:"Lixa Ferro G150", grupo:"Ferramentas", unidade:"Unidades", tipo:"material", precoReferencia:2.04, precoFonte:"compra_corrigida", precoData:"2024-11-18", precoNCompras:5, precoFatorInccAplicado:1.1317, aliases:["Lixa Ferro G150"] },
   { codigo:"FER-044", nome:"Lixa Ferro G80", grupo:"Ferramentas", unidade:"Unidades", tipo:"material", precoReferencia:3.81, precoFonte:"compra_corrigida", precoData:"2025-07-21", precoNCompras:14, precoFatorInccAplicado:1.0876, aliases:["Lixa Ferro G80"] },
   { codigo:"EQP-006", nome:"Lixeira de Concreto", grupo:"Equipamentos e sistemas", unidade:"Unidades", tipo:"material", precoReferencia:189.9, precoFonte:"compra", precoData:"2026-06-30", precoNCompras:2, precoFatorInccAplicado:1.0, aliases:["Lixeira de Concreto"] },
-  { codigo:"LOC-012", nome:"Locação Ferramentas -  Betoneira", grupo:"Locação de equipamentos", unidade:"Unidades", tipo:"material", precoReferencia:96.92, precoFonte:"compra_corrigida", precoData:"2025-09-16", precoNCompras:83, precoFatorInccAplicado:1.0769, aliases:["Locação Ferramentas -  Betoneira"] },
   { codigo:"FER-045", nome:"Locação Ferramentas -  Cortadora de piso", grupo:"Ferramentas", unidade:"Unidades", tipo:"material", precoReferencia:258.46, precoFonte:"compra_corrigida", precoData:"2025-09-18", precoNCompras:8, precoFatorInccAplicado:1.0769, aliases:["Locação Ferramentas -  Cortadora de piso"] },
   { codigo:"LOC-013", nome:"Locação Ferramentas -  Parafusadeira", grupo:"Locação de equipamentos", unidade:"Unidades", tipo:"material", precoReferencia:142.2, precoFonte:"compra_corrigida", precoData:"2024-02-15", precoNCompras:16, precoFatorInccAplicado:1.185, aliases:["Locação Ferramentas -  Parafusadeira"] },
   { codigo:"LOC-014", nome:"Locação Ferramentas -  Transformador", grupo:"Locação de equipamentos", unidade:"Unidades", tipo:"material", precoReferencia:1909.0, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Locação Ferramentas -  Transformador"], observacao:"Referência de mercado SP (ABC Transformadores (SP)): COMPRA de autotransformador trifásico 5 kVA 220/380V (ABC Transformadores, Diadema/SP) — locadoras de SP só cotam sob consulta — https://www.abctrafos.com.br/auto-transformador-5-kva-220v-380v-trifasico-a-seco-5000-va-reversivel | é preço de compra, não de locação — ajustar quando tiver cotação de locação" },
@@ -7275,7 +7426,6 @@ var INSUMOS_SEED_CADASTRO = [
   { codigo:"LOC-016", nome:"Locação Ferramentas - Andaimes - Piso", grupo:"Locação de equipamentos", unidade:"Unidades", tipo:"material", precoReferencia:15.0, precoFonte:"compra", precoData:"2026-01-26", precoNCompras:110, precoFatorInccAplicado:1.0, aliases:["Locação Ferramentas - Andaimes - Piso"] },
   { codigo:"LOC-017", nome:"Locação Ferramentas - Bomba", grupo:"Locação de equipamentos", unidade:"Unidades", tipo:"material", precoReferencia:89.18, precoFonte:"compra_corrigida", precoData:"2025-02-13", precoNCompras:4, precoFatorInccAplicado:1.1147, aliases:["Locação Ferramentas - Bomba"] },
   { codigo:"EQP-007", nome:"Locação Ferramentas - Compressor", grupo:"Equipamentos e sistemas", unidade:"Unidades", tipo:"material", precoReferencia:97.4, precoFonte:"compra_corrigida", precoData:"2025-08-25", precoNCompras:3, precoFatorInccAplicado:1.0822, aliases:["Locação Ferramentas - Compressor"] },
-  { codigo:"LOC-018", nome:"Locação Ferramentas - Container 2,5 x 1,5 mts", grupo:"Locação de equipamentos", unidade:"Unidades", tipo:"material", precoReferencia:251.55, precoFonte:"compra_corrigida", precoData:"2024-09-18", precoNCompras:53, precoFatorInccAplicado:1.1434, aliases:["Locação Ferramentas - Container 2,5 x 1,5 mts"] },
   { codigo:"LOC-019", nome:"Locação Ferramentas - Esmerilhadeira", grupo:"Locação de equipamentos", unidade:"Unidades", tipo:"material", precoReferencia:43.29, precoFonte:"compra_corrigida", precoData:"2025-08-18", precoNCompras:28, precoFatorInccAplicado:1.0822, aliases:["Locação Ferramentas - Esmerilhadeira"], observacao:"última compra fora da faixa; usada a mediana das 5 últimas" },
   { codigo:"FER-046", nome:"Locação Ferramentas - Furadeira de Impacto", grupo:"Ferramentas", unidade:"Unidades", tipo:"material", precoReferencia:40.0, precoFonte:"compra", precoData:"2025-10-23", precoNCompras:19, precoFatorInccAplicado:1.0, aliases:["Locação Ferramentas - Furadeira de Impacto"] },
   { codigo:"LOC-020", nome:"Locação Ferramentas - Lixadeira 7''", grupo:"Locação de equipamentos", unidade:"Unidades", tipo:"material", precoReferencia:398.45, precoFonte:"compra_corrigida", precoData:"2025-09-16", precoNCompras:12, precoFatorInccAplicado:1.0769, aliases:["Locação Ferramentas - Lixadeira 7''"] },
@@ -9211,7 +9361,9 @@ function atualizarPrecoReferencia(insumo, lancamento) {
   var total = Number(lancamento.total != null ? lancamento.total : lancamento.valor);
   if (!(qtd > 0) || !(total > 0)) return insumo;
 
-  var unitario = Math.round((total / qtd) * 100) / 100;
+  // 4 casas, como comprasDoInsumo: em centavos, 5000 pregos por R$ 20 dava
+  // R$ 0,00 o prego (e a guarda de salto disparava contra o preço certo).
+  var unitario = Math.round((total / qtd) * 10000) / 10000;
   var data = lancamento.dataPagamento || lancamento.data || null;
   var uniCompra = lancamento.unidade || "";
   var uniPreco = unidadeDoPreco(insumo);
@@ -9226,6 +9378,11 @@ function atualizarPrecoReferencia(insumo, lancamento) {
     });
   };
 
+  // Nota retroativa não rebaixa preço mais novo — e vem ANTES das guardas:
+  // uma compra antiga não é candidata a preço, então não pode virar pendência
+  // (aceitar a pendência trocava o preço novo pelo antigo).
+  if (insumo.precoData && data && data < insumo.precoData) return insumo;
+
   // Guarda 1: unidade diferente. Vale mesmo sem preço anterior — nascer com o
   // preço do metro num catálogo que cobra o rolo é o mesmo estrago.
   if (confere === false) return pendencia("unidade");
@@ -9236,9 +9393,6 @@ function atualizarPrecoReferencia(insumo, lancamento) {
     var razao = unitario / ref;
     if (razao > INSUMO_FATOR_SUSPEITO || razao < 1 / INSUMO_FATOR_SUSPEITO) return pendencia("salto");
   }
-
-  // Nota retroativa não rebaixa preço mais novo.
-  if (insumo.precoData && data && data < insumo.precoData) return insumo;
 
   return Object.assign({}, insumo, {
     precoReferencia: unitario,
@@ -9477,37 +9631,56 @@ function unirAliases() {
   return out;
 }
 
+// Onde um item da semente já está no catálogo: pelo código, se o item com
+// esse código tem um nome compatível; senão pelo nome/apelido. `ocupado` diz
+// que o código da semente está com OUTRO item (colisão). Usado pela semeadura
+// e pelo aviso "Catálogo incompleto" — os dois têm de concordar, senão o aviso
+// nunca some depois de semear.
+function localizarSementeNoCatalogo(s, lista) {
+  var ns = [s.nome].concat(s.aliases || []).map(normalizarTexto);
+  var idx = lista.findIndex(x => x && x.codigo === s.codigo);
+  var ocupado = false;
+  if (idx >= 0) {
+    var x = lista[idx];
+    var nomesX = [x.nome].concat(x.aliases || []).map(normalizarTexto);
+    if (!nomesX.some(function (n) { return ns.indexOf(n) >= 0; })) { ocupado = true; idx = -1; }
+  }
+  if (idx < 0) {
+    // Mesmo critério de resolverInsumo (apelido, depois nome), sem o ranking
+    // por semelhança — que é caro e não serve aqui (o aviso roda a cada render).
+    var n = normalizarTexto(s.nome);
+    idx = lista.findIndex(x => x && (x.aliases || []).some(a => normalizarTexto(a) === n));
+    if (idx < 0) idx = lista.findIndex(x => x && normalizarTexto(x.nome) === n);
+  }
+  return { idx: idx, ocupado: ocupado };
+}
+
+// Quantos itens da semente faltam no catálogo (para o aviso da tela).
+function faltamDaSementeNoCatalogo(insumos, seed) {
+  var lista = insumos || [];
+  return (seed || INSUMOS_SEED).filter(function (s) {
+    return localizarSementeNoCatalogo(s, lista).idx < 0;
+  }).length;
+}
+
 // Aplica INSUMOS_SEED sobre o catálogo. Nunca sobrescreve precoManual nem um
 // preço cuja data seja mais recente que a da semente.
 function semearInsumos(materiais, seed) {
   var lista = (materiais || []).slice();
   var criados = 0, atualizados = 0, ignorados = 0;
 
-  var nomesDaSemente = function (s) {
-    return [s.nome].concat(s.aliases || []).map(normalizarTexto);
-  };
   (seed || INSUMOS_SEED).forEach(function (s) {
-    var idx = lista.findIndex(x => x.codigo === s.codigo);
-    if (idx >= 0) {
-      // Código igual mas nome incompatível = colisão (material legado que
-      // recebeu esse código antes da reserva). Recodifica o legado e segue.
-      var x = lista[idx];
-      var nomesX = [x.nome].concat(x.aliases || []).map(normalizarTexto);
-      var ns = nomesDaSemente(s);
-      var compativel = nomesX.some(function (n) { return ns.indexOf(n) >= 0; });
-      if (!compativel) {
-        lista[idx] = Object.assign({}, x, { codigo: proximoCodigoInsumo(x.grupo || grupoInferido(x.nome), lista) });
-        idx = -1;
-      }
-    }
-    if (idx < 0) {
-      var r = resolverInsumo(s.nome, lista);
-      if (r.insumo && (r.confianca === "alias" || r.confianca === "normalizado")) {
-        idx = lista.indexOf(r.insumo);
-      }
-    }
+    // Código igual mas nome incompatível = colisão. NÃO recodifica o item que
+    // já está no catálogo: compras e orçamentos apontam para ele pelo
+    // insumoCodigo, e trocar o código desligava esses vínculos (e, com dois
+    // itens da semente no mesmo código, recodificava a cada semeadura).
+    var loc = localizarSementeNoCatalogo(s, lista);
+    var idx = loc.idx;
 
     if (idx < 0) {
+      // Código da semente já ocupado por outro item: o novo nasce com o
+      // próximo código livre do grupo, nunca com um código repetido.
+      var codigoNovo = loc.ocupado ? proximoCodigoInsumo(s.grupo, lista) : s.codigo;
       lista.push(Object.assign({
         id: uid(),
         ativo: true,
@@ -9515,7 +9688,7 @@ function semearInsumos(materiais, seed) {
         precoPendente: null,
         fornecedorPreferido: null,
         precoAtualizadoEm: new Date().toISOString(),
-      }, s, { aliases: unirAliases(s.aliases) }));
+      }, s, { codigo: codigoNovo, aliases: unirAliases(s.aliases) }));
       criados++;
       return;
     }
@@ -10346,10 +10519,10 @@ function Insumos({ data, save }) {
 
   var insumos = useMemo(function () { return data.materiais || []; }, [data.materiais]);
   var pendentesMigracao = insumos.filter(i => !i.codigo).length;
+  // Mesma regra da semeadura (código compatível ou nome): contar só por código
+  // deixava o aviso aceso para sempre quando um item estava com outro código.
   var faltamDaSemente = useMemo(function () {
-    var codigos = {};
-    insumos.forEach(i => { if (i.codigo) codigos[i.codigo] = 1; });
-    return INSUMOS_SEED.filter(s => !codigos[s.codigo]).length;
+    return faltamDaSementeNoCatalogo(insumos, INSUMOS_SEED);
   }, [insumos]);
 
   var enriquecidos = useMemo(function () {
@@ -12477,7 +12650,14 @@ function faturasFechadas(lancamentos, cartaoId) {
   const set = new Set();
   for (const l of lancamentos || []) {
     const o = (l || {}).origem || {};
-    if (o.tipo === "fatura" && o.cartaoId === cartaoId && o.competencia) set.add(o.competencia);
+    if (o.tipo === "fatura" && o.cartaoId === cartaoId && o.competencia) {
+      set.add(o.competencia);
+      // as competências atrasadas que esta fatura levou junto também estão
+      // fechadas: fechar novembro antes de outubro puxava as compras de
+      // outubro, e outubro continuava "aberto" — fechá-lo depois somava as
+      // mesmas compras outra vez
+      for (const c of Array.isArray(o.cobre) ? o.cobre : []) if (c) set.add(c);
+    }
   }
   return set;
 }
@@ -12533,12 +12713,21 @@ function lancamentoDaFatura(cartao, competencia, linhas, opcoes) {
   const o = opcoes || {};
   const total = totalDaFatura(linhas);
   if (!(total > 0)) return null;
-  const venc = String(o.pagoEm || "").slice(0, 10)
-    || (competencia + "-" + String(Math.max(1, Math.min(28, Number((cartao || {}).diaVencimento) || 10))).padStart(2, "0"));
+  // Vencimento antes (ou no) dia do fechamento — fecha 25, vence 5 — é no
+  // mês SEGUINTE: a fatura de setembro é debitada em 5 de outubro. Datada em
+  // 5 de setembro, caía no mês errado da conferência com o banco. Só vale
+  // para a fatura que se fecha agora; as já gravadas ficam como estão.
+  const dv = Math.max(1, Math.min(28, Number((cartao || {}).diaVencimento) || 10));
+  const df = Math.max(1, Math.min(31, Number((cartao || {}).diaFechamento) || 1));
+  const mesDoVenc = dv <= df ? somarCompetencia(competencia, 1) : competencia;
+  const venc = String(o.pagoEm || "").slice(0, 10) || (mesDoVenc + "-" + String(dv).padStart(2, "0"));
+  // as competências atrasadas que vieram junto (ver faturasFechadas)
+  const cobre = [...new Set((linhas || []).filter((l) => l && l.atrasada && l.competenciaOriginal && l.competenciaOriginal !== competencia)
+    .map((l) => l.competenciaOriginal))].sort();
   return {
     id: idDaFatura((cartao || {}).id, competencia),
     tipo: "escritorio",
-    origem: { tipo: "fatura", cartaoId: (cartao || {}).id || "", competencia },
+    origem: { tipo: "fatura", cartaoId: (cartao || {}).id || "", competencia, ...(cobre.length ? { cobre } : {}) },
     unidadeId: "escritorio",
     contaId: "cartao_credito",
     valor: total,
@@ -12794,7 +12983,19 @@ function ligaContaAoLancamento(l, obraId, conta) {
   const c = conta || {};
   if (!o.obraId || o.obraId !== obraId || !c.id) return false;
   if (o.tipo === "conta") return o.refId === refDaParcela(c);
-  if (o.tipo === "pedido") return !!c.pedidoId && String(o.refId || "").split("|")[0] === c.pedidoId;
+  if (o.tipo === "pedido") {
+    // Vários pedidos pagos de uma vez viram uma linha só, com a chave
+    // "pg:<conjunto>|conta|data" (ver fontesDasContasPagas). A chave não é
+    // o pedido: comparar com `pedidoId` nunca ligava, e desfazer, excluir ou
+    // fechar o mês deixava essa linha solta no extrato.
+    const [ped, contaId, data] = String(o.refId || "").split("|");
+    if (ped.indexOf("pg:") === 0) {
+      return !!c.pagamentoConjunto && ped === "pg:" + c.pagamentoConjunto
+        && (!contaId || (c.contaId || "") === contaId)
+        && (!data || String(c.pagoEm || c.vencimento || "").slice(0, 10) === data);
+    }
+    return !!c.pedidoId && ped === c.pedidoId;
+  }
   if (o.tipo === "doc") return !!c.doc && String(o.refId || "") === String(c.doc);
   return false;
 }
@@ -12817,7 +13018,9 @@ function contasLigadasAoLancamento(obra, l) {
   if (o.tipo === "doc") return contas.filter((c) => c.doc && String(c.doc) === String(o.refId));
   if (o.tipo === "pedido") {
     const [ped, contaId, data] = String(o.refId || "").split("|");
-    return contas.filter((c) => c.pedidoId === ped
+    // pagamento conjunto: a chave é a marca do pagamento, não um pedido
+    const conjunto = ped.indexOf("pg:") === 0 ? ped.slice(3) : "";
+    return contas.filter((c) => (conjunto ? c.pagamentoConjunto === conjunto : c.pedidoId === ped)
       && (!contaId || (c.contaId || "") === contaId)
       && (!data || String(c.pagoEm || c.vencimento || "").slice(0, 10) === data));
   }
@@ -12919,6 +13122,11 @@ function efData(txt) {
   // dia/mês/ano com qualquer separador: cada banco escolhe o seu.
   m = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/.exec(t);
   if (m) return `${m[3]}-${String(m[2]).padStart(2, "0")}-${String(m[1]).padStart(2, "0")}`;
+  // Ano com dois dígitos (25/09/26): a detecção de colunas aceita (efEhData)
+  // e o movimento ficava com a data crua — fora de qualquer mês, sumia sem
+  // aviso. Extrato bancário é deste século: aa → 20aa.
+  m = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2})(?!\d)/.exec(t);
+  if (m) return `20${m[3]}-${String(m[2]).padStart(2, "0")}-${String(m[1]).padStart(2, "0")}`;
   return "";
 }
 
@@ -13227,15 +13435,21 @@ async function efAbasDaPlanilha(buffer) {
 
 // CSV/TSV também servem: se o separador não for tabulação, converte —
 // respeitando aspas, que é onde vírgula dentro de descrição costuma morar.
+// O separador é o que aparece em mais linhas (e, empatado, mais vezes) nas
+// primeiras linhas do arquivo. Pela 1ª linha só, o título que o banco põe
+// em cima ("Extrato Conta Corrente") não tinha separador nenhum e o arquivo
+// inteiro virava uma coluna só. Empate: tab, depois ";", depois "," — a
+// vírgula do centavo não ganha do ";" que separa as colunas.
 function efSeparadorDoTexto(texto) {
-  const linha = String(texto || "").split(/\r?\n/).find((l) => l.trim() !== "") || "";
-  const fora = linha.replace(/"[^"]*"/g, "");
-  if (fora.indexOf("\t") >= 0) return "\t";
-  const p = (fora.match(/;/g) || []).length;
-  const v = (fora.match(/,/g) || []).length;
-  if (p >= v && p > 0) return ";";
-  if (v > 0) return ",";
-  return "\t";
+  const linhas = String(texto || "").split(/\r?\n/).filter((l) => l.trim() !== "").slice(0, 10)
+    .map((l) => l.replace(/"[^"]*"/g, ""));
+  let melhor = "\t", nota = [0, 0];
+  for (const sep of ["\t", ";", ","]) {
+    let comEle = 0, vezes = 0;
+    for (const l of linhas) { const n = l.split(sep).length - 1; if (n) { comEle++; vezes += n; } }
+    if (comEle > nota[0] || (comEle === nota[0] && vezes > nota[1])) { melhor = sep; nota = [comEle, vezes]; }
+  }
+  return melhor;
 }
 
 function efCsvParaTsv(texto, separador) {
@@ -13566,15 +13780,27 @@ function bloqueioPorMesFechado(competencia, fechamentos) {
 // passaram pelo banco (entram no extrato do mês em que acontecerem).
 // Dentro da célula, a quebra de linha vira " · " e o resto um espaço:
 // "PIX EMITIDO OUTRA IF · Pagamento Pix 53.859.112 0001-69 cimento".
+// As entidades com nome do Latin-1 (&Ccedil; &Atilde; &ordm;…), na ordem
+// dos códigos 160–255. O extrato em HTML do banco escreve assim: sem elas,
+// "APLICA&Ccedil;&Atilde;O RDC" não era reconhecida como aplicação e virava
+// movimento na fila, e "D&Eacute;B." não casava com o histórico guardado.
+const EF_ENTIDADES_LATIN1 = ("nbsp iexcl cent pound curren yen brvbar sect uml copy ordf laquo not shy reg macr deg plusmn sup2 sup3 "
+  + "acute micro para middot cedil sup1 ordm raquo frac14 frac12 frac34 iquest Agrave Aacute Acirc Atilde Auml Aring AElig Ccedil "
+  + "Egrave Eacute Ecirc Euml Igrave Iacute Icirc Iuml ETH Ntilde Ograve Oacute Ocirc Otilde Ouml times Oslash Ugrave Uacute Ucirc "
+  + "Uuml Yacute THORN szlig agrave aacute acirc atilde auml aring aelig ccedil egrave eacute ecirc euml igrave iacute icirc iuml eth "
+  + "ntilde ograve oacute ocirc otilde ouml divide oslash ugrave uacute ucirc uuml yacute thorn yuml").split(" ")
+  .reduce((t, nome, i) => { t[nome] = String.fromCharCode(160 + i); return t; }, {});
 function efTextoDaCelulaHtml(html) {
-  const ent = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+  const ent = { ...EF_ENTIDADES_LATIN1, amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
+    ndash: "–", mdash: "—", lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”", bull: "•", hellip: "…", euro: "€" };
   return String(html || "")
     .replace(/<br\s*\/?>/gi, "\u0001")
     .replace(/<\/(strong|b|div|p)>/gi, "\u0001")
     .replace(/<[^>]+>/g, "")
     .replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi, (m, e) => {
       if (e[0] === "#") return String.fromCharCode(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10));
-      return ent[e.toLowerCase()] != null ? ent[e.toLowerCase()] : m;
+      // a caixa importa (&Ccedil; é Ç, &ccedil; é ç); &AMP; e afins, sem caixa
+      return ent[e] != null ? ent[e] : (ent[e.toLowerCase()] != null ? ent[e.toLowerCase()] : m);
     })
     .split("\u0001").map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean).join(" · ");
 }
@@ -14208,9 +14434,9 @@ function extratoParaGuardar(movimentos) {
 
 // O extrato guardado é por MÊS DO MOVIMENTO, não pelo mês que estava na
 // tela quando o arquivo chegou: o extrato de setembro arrastado com outubro
-// aberto continua sendo de setembro. Um arquivo novo substitui, nos meses
-// que ele cobre, tudo o que estava guardado desses meses — onde quer que
-// estivesse — e não mexe nos outros meses. O "não é lançamento" fica.
+// aberto continua sendo de setembro. Um arquivo novo substitui, nos DIAS
+// que ele cobre, o que estava guardado nesses dias — onde quer que
+// estivesse — e não mexe no resto nem em mês fechado. O "não é lançamento" fica.
 function mesDoMovimento(m) { return String((m && m.data) || "").slice(0, 7); }
 
 // ── Débitos × créditos do mês (o "check" da planilha de análise) ─
@@ -14225,9 +14451,17 @@ function efEhAplicacaoFinanceira(historico) {
   const h = efSemAcento(historico);
   return /\brdc\b|^aplicacao|^resgate|credito resgate|\bcdb\b|deb fundo/.test(h);
 }
+// Rendimento DA APLICAÇÃO é o lançado pelo fechamento (origem "rendimento")
+// ou o que não passou pela conta. Receita financeira que o banco pagou na
+// conta (ligada à linha do extrato) é crédito do extrato como qualquer
+// outro — pela descrição ("RENDIMENTO POUPANCA") ela saía das entradas e o
+// débito × crédito acusava diferença onde não havia. A descrição só decide
+// no lançamento sem linha do banco (o da planilha antiga, sem contaBanco).
 function ehRendimentoDaAplicacao(l) {
   if (!l || l.contaId !== "rec_financeira") return false;
-  return (l.origem && l.origem.tipo === "rendimento") || l.contaBanco === "nao" || /aplica|rendimento|renda fixa/i.test(String(l.descricao || ""));
+  if ((l.origem && l.origem.tipo === "rendimento") || !efPassouPeloBanco(l)) return true;
+  if (String(l.extratoId || "").trim()) return false;
+  return /aplica|rendimento|renda fixa/i.test(String(l.descricao || ""));
 }
 function checagemDebitoCredito(movimentos, lancamentos, mes) {
   const c = (v) => efCentavos(v);
@@ -14282,24 +14516,44 @@ function rendimentoPelaAplicacao(saldoAnterior, aplicacoes, resgates, saldoAtual
   const principal = efCentavos(Number(saldoAnterior) + (Number(aplicacoes) || 0) - (Number(resgates) || 0));
   return { principal, rendimento: efCentavos(Number(saldoAtual) - principal) };
 }
-function extratosComArquivo(extratos, movimentos, origem, agora) {
+function extratosComArquivo(extratos, movimentos, origem, agora, opcoes) {
   const atuais = (extratos && typeof extratos === "object") ? extratos : {};
   const doArquivo = extratoParaGuardar(movimentos || []);
+  const fechamentos = (opcoes || {}).fechamentos;
   // Só substitui o mês que o arquivo traz de verdade (com movimento). O
   // extrato de outubro começa com o "SALDO ANTERIOR" de 30/09: essa linha
   // sozinha não pode apagar o setembro inteiro que já estava guardado —
   // ela só se junta a ele.
   const valido = (x) => /^\d{4}-\d{2}$/.test(x);
-  const meses = [...new Set(doArquivo.filter((m) => efEhMovimento(m.historico)).map(mesDoMovimento).filter(valido))];
-  const soSaldo = [...new Set(doArquivo.map(mesDoMovimento).filter(valido))].filter((x) => meses.indexOf(x) < 0);
+  const comMovimento = doArquivo.filter((m) => efEhMovimento(m.historico));
+  const mesesDoArquivo = [...new Set(comMovimento.map(mesDoMovimento).filter(valido))];
+  // Mês fechado já conferiu com o banco: o guardado dele não muda. A tela
+  // avisa (`fechados`) em vez de trocar as linhas por baixo do fechamento.
+  const fechados = mesesDoArquivo.filter((m) => mesEstaFechado(m, fechamentos));
+  const meses = mesesDoArquivo.filter((m) => fechados.indexOf(m) < 0);
+  const soSaldo = [...new Set(doArquivo.map(mesDoMovimento).filter(valido))]
+    .filter((x) => mesesDoArquivo.indexOf(x) < 0 && !mesEstaFechado(x, fechamentos));
+  // E dentro do mês, só os DIAS que o arquivo cobre (do primeiro ao último
+  // movimento dele): o "últimos 30 dias" de 25/09 a 03/10 apagava o 1º a 24
+  // de setembro que já estava guardado. O resto do mês fica como estava.
+  const dias = comMovimento.map((m) => String(m.data || "").slice(0, 10)).filter(Boolean).sort();
+  const ini = dias[0] || "", fim = dias[dias.length - 1] || "";
+  const dia = (m) => String((m && m.data) || "").slice(0, 10);
+  const cobre = (m) => meses.indexOf(mesDoMovimento(m)) >= 0 && dia(m) >= ini && dia(m) <= fim;
   const novos = {};
   for (const [k, v] of Object.entries(atuais)) {
-    const sobra = ((v && v.movimentos) || []).filter((m) => meses.indexOf(mesDoMovimento(m)) < 0);
+    const sobra = ((v && v.movimentos) || []).filter((m) => !cobre(m));
     novos[k] = { ...v, movimentos: sobra };
   }
   for (const mes of meses) {
+    // a linha do arquivo fora dos dias cobertos (o saldo do dia anterior)
+    // só entra se ainda não estiver guardada
+    const ja = new Set(Object.values(novos).flatMap((v) => ((v && v.movimentos) || []).map((m) => m.id)));
+    const entram = doArquivo.filter((m) => mesDoMovimento(m) === mes && (cobre(m) || !ja.has(m.id)));
     novos[mes] = { ...(novos[mes] || {}), origem: origem || "", atualizadoEm: agora || new Date().toISOString(),
-      movimentos: doArquivo.filter((m) => mesDoMovimento(m) === mes), ignorados: ((novos[mes] || {}).ignorados) || {} };
+      movimentos: (((novos[mes] || {}).movimentos) || []).concat(entram)
+        .sort((x, y) => String(x.data).localeCompare(String(y.data))),
+      ignorados: ((novos[mes] || {}).ignorados) || {} };
   }
   for (const mes of soSaldo) {
     const ja = new Set(Object.values(novos).flatMap((v) => ((v && v.movimentos) || []).map((m) => m.id)));
@@ -14308,7 +14562,7 @@ function extratosComArquivo(extratos, movimentos, origem, agora) {
     const atual = novos[mes] || { origem: origem || "", atualizadoEm: agora || new Date().toISOString(), movimentos: [], ignorados: {} };
     novos[mes] = { ...atual, movimentos: ((atual.movimentos) || []).concat(juntar) };
   }
-  return { extratos: novos, meses };
+  return { extratos: novos, meses, fechados };
 }
 // As linhas do mês, de onde estiverem guardadas (sem repetir).
 function movimentosGuardadosDoMes(extratos, mes) {
@@ -15492,6 +15746,17 @@ function valorBRNaTela(canon) {
   const inteira = (partes[0] || "").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   return (neg ? "-" : "") + inteira + (partes.length > 1 ? "," + partes[1] : "");
 }
+// O estorno já gravado (valor negativo, ou marcado como estorno) é editado
+// com o sinal dele: o campo de valor só lê números, e abrir um estorno de
+// −500 e salvar gravava +500 — a saída virava entrada sem ninguém pedir.
+function efSinalFixoDoEstorno(inicial) {
+  const i = inicial || {};
+  return !!(i.id && (i.estorno || efValorDoCampo(i.valor) < 0));
+}
+function efValorComSinalDoEstorno(v, inicial) {
+  const n = efValorDoCampo(v);
+  return efSinalFixoDoEstorno(inicial) ? -Math.abs(n) : n;
+}
 // Ao sair do campo: sempre com os centavos.
 function valorBRCompleto(canon) {
   const s = String(canon || "");
@@ -15800,12 +16065,50 @@ function investidoDoEmpreendimento(cliente, obras, lancamentos, opcoes) {
   const id = (cliente && cliente.id) || "";
   const pelaConta = resultadoEmpreendimento(lancamentos, id, o).investido;
   const obrasDele = (obras || []).filter((x) => x && x.clienteId === id);
+  // Índices feitos uma vez: com ~5 mil lançamentos e milhares de contas,
+  // procurar a ligação de cada conta na base inteira custava meio segundo a
+  // cada desenho da tela. Só lançamento com origem.obraId pode ligar uma
+  // conta daquela obra; só conta paga de mesmo valor (ou mesmo papel) pode
+  // ser a outra ponta de um lançamento antigo sem ligação.
+  const idsDasObras = new Set(obrasDele.map((x) => x.id));
+  const ligadosPorObra = new Map();
+  // A compra no cartão vira linha da fatura quando a fatura fecha — e essa
+  // linha já conta em "pela conta" (emp_construcao). A conta da obra não
+  // tem lançamento ligado, então contava de novo "por fora". O que as
+  // faturas já cobriram de cada conta (obraId|refId) sai do "por fora".
+  const cobertoPelaFatura = new Map();
+  for (const l of lancamentos || []) {
+    const og = (l && l.origem) || {};
+    if (og.obraId && idsDasObras.has(og.obraId)) {
+      if (!ligadosPorObra.has(og.obraId)) ligadosPorObra.set(og.obraId, []);
+      ligadosPorObra.get(og.obraId).push(l);
+    }
+    if (og.tipo === "fatura" && Array.isArray(l.linhas)) {
+      for (const x of l.linhas) {
+        if (!x || !x.obraId || !x.refId || !idsDasObras.has(x.obraId)) continue;
+        const k = x.obraId + "|" + x.refId;
+        cobertoPelaFatura.set(k, efCentavos((cobertoPelaFatura.get(k) || 0) + (Number(x.valor) || 0)));
+      }
+    }
+  }
+  const temLigacao = (ob, k) => (ligadosPorObra.get(ob.id) || []).some((l) => ligaContaAoLancamento(l, ob.id, k));
+  const valoresPagos = new Set(), papeis = new Set();
+  for (const ob of obrasDele) {
+    for (const k of ob.contasPagar || []) {
+      if (!k || !k.pago || k.estorno) continue;
+      valoresPagos.add(Math.round(Math.abs(Number(k.valorPago) || Number(k.valor) || 0) * 100));
+      if (k.doc) papeis.add(String(k.doc));
+    }
+  }
   // as contas da obra que a base antiga do escritório já tem, sem ligação
   const achadas = new Set();
   for (const l of lancamentos || []) {
     if (!l || l.empreendimentoId !== id || (l.origem && l.origem.obraId)) continue;
     const c = contaEscritorio(l.contaId);
     if (!c || c.grupo !== "emp_saidas") continue;
+    // sem conta de mesmo valor nem de mesmo papel, não há o que achar
+    if (!valoresPagos.has(Math.round(Math.abs(Number(l.valor) || 0) * 100))
+      && !(l.documento && papeis.has(String(l.documento)))) continue;
     const a = contasDaObraSemLigacao(l, obrasDele, lancamentos);
     if (a.length === 1) achadas.add(a[0].k.id);
   }
@@ -15814,8 +16117,12 @@ function investidoDoEmpreendimento(cliente, obras, lancamentos, opcoes) {
     for (const k of ob.contasPagar || []) {
       if (!k || !k.pago || achadas.has(k.id)) continue;
       if (EF_GRUPOS_CUSTO_OBRA.indexOf(ponteGrupoDaConta(k.contaId, o)) < 0) continue;
-      if (lancamentosLigadosAsContas(lancamentos, ob.id, [k]).length) continue;
-      foraDaConta = efCentavos(foraDaConta + (Number(k.valorPago) || Number(k.valor) || 0));
+      if (temLigacao(ob, k)) continue;
+      const valor = Number(k.valorPago) || Number(k.valor) || 0;
+      // parcela do cartão em fatura fechada já está "pela conta"; o resto
+      // das parcelas (faturas ainda abertas) segue por fora
+      const coberto = cobertoPelaFatura.get(ob.id + "|" + k.id) || 0;
+      foraDaConta = efCentavos(foraDaConta + (coberto ? Math.max(0, efCentavos(valor - coberto)) : valor));
     }
   }
   return { pelaConta, foraDaConta, total: efCentavos(pelaConta + foraDaConta) };
@@ -15910,7 +16217,21 @@ function saldoDaReservaEngenharia(lancamentos, clienteId) {
 //   passa da reserva → o pagamento fica em Parceiros (é a linha do banco,
 //                      inteira) e um par fora do banco tira dele a parte que
 //                      a reserva cobre: só o que passou é custo novo.
+// Saída lançada DIRETO na reserva (a fila copia o pagamento anterior, que
+// já tinha virado res_engenharia; ou a pessoa escolhe a reserva) passa pela
+// mesma régua: o que cabe sai da reserva, o que passa é custo em Parceiros.
+// Sem isso a reserva do cliente ficava negativa e o custo não aparecia.
+function ehSaidaDiretaNaReserva(l) {
+  return !!l && l.contaId === "res_engenharia" && efPassouPeloBanco(l)
+    && (efValorDoCampo(l.valor) < 0 || Number(l.sinalDoBanco) < 0);
+}
 function comoPagamentoDaReserva(l, lancamentos) {
+  if (ehSaidaDiretaNaReserva(l)) {
+    const { sinalDoBanco: _s, estorno: _e, pagoDaReserva: _p, ...semSinal } = l;
+    const comoParceiro = { ...semSinal, contaId: "parceiros", valor: efCentavos(Math.abs(efValorDoCampo(l.valor))) };
+    // reserva vazia (ou sem cliente): o pagamento inteiro é custo
+    return comoPagamentoDaReserva(comoParceiro, lancamentos) || comoParceiro;
+  }
   if (!l || l.contaId !== "parceiros" || l.estorno) return null;
   const v = efCentavos(Math.abs(efValorDoCampo(l.valor)));
   const saldo = saldoDaReservaEngenharia(lancamentos, l.clienteId);
@@ -16683,6 +17004,12 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   // custo já entrou quando o projeto foi recebido — o pagamento sai da reserva.
   const saldoReservaCli = (lancNovo && !naObra && !noCartao && f.contaId === "parceiros" && !estornoNoForm)
     ? saldoDaReservaEngenharia(lancamentos || [], f.clienteId) : 0;
+  // Saída escolhida direto na reserva: não é opção, é teto — o que passar do
+  // saldo do cliente vai para Parceiros (ver comoPagamentoDaReserva).
+  const saidaNaReserva = lancNovo && !naObra && !noCartao && ehSaidaDiretaNaReserva({ ...f, valor: efValorDoCampo(f.valor),
+    contaBanco: f.extratoId ? "sim" : regraBanco });
+  const saldoDaReservaNaSaida = saidaNaReserva ? Math.max(0, saldoDaReservaEngenharia(lancamentos || [], f.clienteId)) : 0;
+  const passaDaReserva = saidaNaReserva ? efCentavos(Math.max(0, Math.abs(efValorDoCampo(f.valor)) - saldoDaReservaNaSaida)) : 0;
   const usaReserva = saldoReservaCli > 0 && pagarDaReserva;
   const excedeReserva = usaReserva ? efCentavos(Math.max(0, efValorDoCampo(f.valor) - saldoReservaCli)) : 0;
   const todosErros = erros.concat(errosCartao).concat(errosGestao).concat(errosDuasPontas).concat(errosDobro);
@@ -16716,8 +17043,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     const pronto = semFornecedorNaEntrada(comCartao({ ...semMarcaAvulsa, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
       ...(lancNovo && !noCartao ? { contaBanco: regraBanco } : {}),
       ...(gestaoAvulsa ? { gestaoAvulsaNaObra: true } : {}),
-      tipo: "escritorio", valor: efValorDoCampo(g.valor) }));
-    aoSalvar((usaReserva && comoPagamentoDaReserva(pronto, lancamentos || [])) || pronto);
+      tipo: "escritorio", valor: efValorComSinalDoEstorno(g.valor, inicial) }));
+    aoSalvar(((usaReserva || saidaNaReserva) && comoPagamentoDaReserva(pronto, lancamentos || [])) || pronto);
   }
   // Na fila, quem lança 50 linhas não larga o teclado: Enter num campo de
   // texto lança e abre a próxima, Esc fecha. A lista de escolha aberta e o
@@ -16822,7 +17149,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           </Selecao>
         ), "conta")}
         {campo("Valor", <CampoValorBR style={S.input} valor={f.valor} placeholder="0,00"
-          aoMudar={(v) => set("valor", v)} />)}
+          negativo={efSinalFixoDoEstorno(inicial)} aoMudar={(v) => set("valor", v)} />)}
         {/* No fechamento, a competência é o mês que se está fechando: não
             é uma escolha, e um mês errado aqui sumiria da conferência. */}
         {!naObra && (competenciaFixa
@@ -17281,6 +17608,13 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           </span>
         </label>
       )}
+      {saidaNaReserva && passaDaReserva > 0 && (
+        <div data-vk-reserva-teto="1" style={{ fontSize: 12.5, lineHeight: 1.5, color: "#1e3a8a", background: "#eff6ff",
+          border: "1px solid rgba(4,116,244,0.3)", borderRadius: 10, padding: "9px 11px" }}>
+          A reserva da engenharia deste cliente tem <b>{efDinheiro(saldoDaReservaNaSaida)}</b>: só isso sai dela; os{" "}
+          <b>{efDinheiro(passaDaReserva)}</b> que passam entram como custo em Parceiros.
+        </div>
+      )}
       {iguaisNaObra.length > 0 && (
         <div data-vk-dobro-obra="1" style={{ fontSize: 12.5, color: "#92400e", background: "#fffbeb", border: "1px solid rgba(180,83,9,0.3)",
           borderRadius: 10, padding: "9px 11px", lineHeight: 1.5 }}>
@@ -17473,6 +17807,21 @@ function ResumoEscritorioPainel({ resumo, quantidade, aoVerExtrato }) {
 function EmpreendimentosQuadro({ data, lancs, aoFiltrar }) {
   const S = EF_ESTILO;
   const lista = empreendimentosDoData(data);
+  // Investido de cada empreendimento: uma conta só por mudança dos dados,
+  // não a cada desenho do painel (cada tecla no formulário redesenha tudo).
+  const contas = useMemo(() => {
+    const m = new Map();
+    for (const c of lista) {
+      // "Em andamento" desmarcado no cadastro = empreendimento fechado.
+      const r0 = resultadoEmpreendimento(lancs, c.id, { concluido: c.ativo === false });
+      const inv = investidoDoEmpreendimento(c, (data || {}).obras || [], lancs);
+      m.set(c.id, { r0, inv });
+    }
+    return m;
+    // lancs é refeito a cada desenho (filtro de data.lancamentos): a chave é
+    // o próprio data, que só muda quando algo é gravado
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
   if (!lista.length) return null;
   return (
     <div style={{ display: "grid", gap: 6 }}>
@@ -17489,9 +17838,7 @@ function EmpreendimentosQuadro({ data, lancs, aoFiltrar }) {
           </thead>
           <tbody>
             {lista.map((c) => {
-              // "Em andamento" desmarcado no cadastro = empreendimento fechado.
-              const r0 = resultadoEmpreendimento(lancs, c.id, { concluido: c.ativo === false });
-              const inv = investidoDoEmpreendimento(c, (data || {}).obras || [], lancs);
+              const { r0, inv } = contas.get(c.id);
               // o resultado da venda é contra o custo inteiro, não só o que passou pela conta
               const r = { ...r0, investido: inv.total, resultado: r0.resultado == null ? null : efCentavos(r0.vendido - inv.total) };
               return (
@@ -19160,6 +19507,14 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo, quem }) 
                   <b>{efDinheiro(lancDaFatura ? lancDaFatura.valor : fatura.total)}</b>
                   {lancDaFatura && lancDaFatura.lancadoEm ? <>, em {efDiaBR(lancDaFatura.lancadoEm)}</> : null}.
                   {" "}Para mexer nas compras dela, use ⋯ → Reabrir fatura (ou exclua essa linha em Lançamentos).
+                  {!lancDaFatura && (() => {
+                    // fechada por tabela: as compras entraram, atrasadas, na fatura de outro mês
+                    const quem = lancs.find((x) => x && x.origem && x.origem.tipo === "fatura" && x.origem.cartaoId === (cartao && cartao.id)
+                      && Array.isArray(x.origem.cobre) && x.origem.cobre.indexOf(compAtual) >= 0);
+                    return quem ? <div data-vk-fatura-coberta="1" style={{ color: "#4b5563", marginTop: 4 }}>
+                      As compras deste mês entraram na fatura de {mesAnoPorExtenso(quem.origem.competencia)}, como atrasadas — é lá que se reabre.
+                    </div> : null;
+                  })()}
                   {lancDaFatura && fatura.total - (Number(lancDaFatura.valor) || 0) >= 0.01 && (
                     <div style={{ color: "#92400e", marginTop: 4 }}>
                       Depois de fechada entrou compra nesta fatura ({efDinheiro(fatura.total)} hoje). Ela vai para a próxima
@@ -19225,17 +19580,37 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   const saldoAbertura = Number(cfgFin.saldoAbertura) || 0;
   const linhas = extratoEscritorio(lancs, { saldoAbertura });
   const fechamentos = fechamentosDoEscritorio(data);
-  const mesesDoExtrato = linhas.map((l) => l.mes);
   // O mês da conferência é o de hoje — é nele que o extrato parcial chega.
   // Se ele já estiver fechado, vai para o primeiro aberto depois dele; e se
   // o histórico nem chegou em hoje, fica no último mês que existe.
   const mesDeHoje = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+  // Mês novo ainda sem lançamento (o dia 1º, ou o extrato que acabou de
+  // chegar) também se fecha: sem ele no seletor, não havia onde conferir o
+  // extrato. Entram o mês de hoje e os meses dos extratos guardados, com o
+  // saldo levado do mês anterior.
+  const mesesForaDasLinhas = [...new Set([mesDeHoje].concat(Object.keys((cfgFin.extratos && typeof cfgFin.extratos === "object") ? cfgFin.extratos : {})))]
+    .filter((m) => /^\d{4}-\d{2}$/.test(m) && !linhas.some((l) => l.mes === m));
+  const linhasDoFecho = !mesesForaDasLinhas.length ? linhas : (() => {
+    const todos = linhas.map((l) => l.mes).concat(mesesForaDasLinhas).sort();
+    return extratoEscritorio(lancs, { saldoAbertura, de: todos[0], ate: todos[todos.length - 1] });
+  })();
+  const mesesDoExtrato = linhasDoFecho.map((l) => l.mes);
   const primeiroAberto = (mesesDoExtrato.includes(mesDeHoje) && !mesEstaFechado(mesDeHoje, fechamentos))
     ? mesDeHoje
     : (mesesDoExtrato.filter((m) => m >= mesDeHoje).find((m) => !mesEstaFechado(m, fechamentos))
       || mesesDoExtrato.find((m) => !mesEstaFechado(m, fechamentos))
       || mesesDoExtrato[mesesDoExtrato.length - 1] || "");
   const mesEmConferencia = mesFecho && mesesDoExtrato.includes(mesFecho) ? mesFecho : primeiroAberto;
+  // A sugestão e o "lançar assim" de cada linha da fila: uma conta por linha
+  // enquanto os dados e o mês não mudam. Antes, cada desenho refazia as duas
+  // para todas as linhas (marcar uma caixinha recalculava a fila inteira).
+  const memoDaFila = useMemo(() => ({ sugestao: new Map(), rapido: new Map() }), [data, mesEmConferencia]);
+  const daMemoDaFila = (tipo, m, calcular) => {
+    const cache = memoDaFila[tipo];
+    if (!m || !m.id) return calcular();
+    if (!cache.has(m.id)) cache.set(m.id, calcular());
+    return cache.get(m.id);
+  };
   const [ano, setAno] = useState("");
   const anoAtual = ano || (linhas.length ? linhas[linhas.length - 1].mes.slice(0, 4) : String(new Date().getFullYear()));
 
@@ -19718,7 +20093,14 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   // O arquivo só vale para este mês se trouxer movimento dele: o extrato de
   // outubro tem o "SALDO ANTERIOR" de 30/09, e isso não é o setembro.
   const arquivoServe = !!(doArquivo && doArquivo.some((m) => efEhMovimento(m.historico)));
-  const movimentosExtrato = arquivoServe ? doArquivo : (guardadosDoMes.length ? guardadosDoMes : null);
+  // O arquivo que cobre só parte do mês (os "últimos 30 dias") se junta ao
+  // que já estava guardado: a fila mostra o mês inteiro, não só os dias do
+  // arquivo. Mês fechado fica com o guardado — o arquivo não o muda.
+  const mesFechadoNoArquivo = mesEstaFechado(mesEmConferencia, fechamentos);
+  const doArquivoNoMes = !arquivoServe ? null
+    : (mesFechadoNoArquivo ? (guardadosDoMes.length ? guardadosDoMes : doArquivo)
+      : movimentosGuardadosDoMes(extratosComArquivo(extratosGuardados, doArquivoTodos, origemExtrato, "", { fechamentos }).extratos, mesEmConferencia));
+  const movimentosExtrato = arquivoServe ? doArquivoNoMes : (guardadosDoMes.length ? guardadosDoMes : null);
   const ignoradosDoMes = ignoradosGuardados(extratosGuardados);
   const conciliacao = movimentosExtrato
     ? conciliarExtrato(movimentosExtrato, lancs.filter((l) => String(l.competencia) === String(mesEmConferencia)),
@@ -19739,12 +20121,19 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     if (!doArquivoTodos || !doArquivoTodos.length) return;
     if (guardandoExtrato.current === assinaturaDoArquivo) return;
     guardandoExtrato.current = assinaturaDoArquivo;
-    const r = extratosComArquivo(extratosGuardados, doArquivoTodos, origemExtrato, new Date().toISOString());
-    const mesesAbertos = r.meses.filter((m) => mesesDoExtrato.includes(m) && !mesEstaFechado(m, fechamentos)).sort();
+    const r = extratosComArquivo(extratosGuardados, doArquivoTodos, origemExtrato, new Date().toISOString(), { fechamentos });
+    // o mês do arquivo pode ainda não ter lançamento: ele entra no seletor
+    // assim que o extrato dele é guardado (logo abaixo)
+    const mesesAbertos = r.meses.filter((m) => !mesEstaFechado(m, fechamentos)).sort();
+    // mês fechado: o extrato guardado dele fica como estava — e a pessoa sabe
+    const avisoFechado = r.fechados.length
+      ? `${r.fechados.map((m) => efMesPorExtenso(m)).join(" e ")} já ${r.fechados.length > 1 ? "estão fechados" : "está fechado"}: as linhas do arquivo desse mês não foram guardadas (reabra o mês para trocar o extrato).`
+      : "";
     if (r.meses.length && !r.meses.includes(String(mesEmConferencia)) && mesesAbertos.length) {
       setMesFecho(mesesAbertos[mesesAbertos.length - 1]);
-      setAviso(`O extrato é de ${r.meses.map((m) => efMesPorExtenso(m)).join(" e ")} — abri ${efMesPorExtenso(mesesAbertos[mesesAbertos.length - 1])}.`);
-    }
+      setAviso(`O extrato é de ${r.meses.map((m) => efMesPorExtenso(m)).join(" e ")} — abri ${efMesPorExtenso(mesesAbertos[mesesAbertos.length - 1])}.`
+        + (avisoFechado ? " " + avisoFechado : ""));
+    } else if (avisoFechado) setAviso(avisoFechado);
     // O mapa das colunas deste banco vai na MESMA gravada: duas seguidas
     // partiriam do mesmo retrato de `data` e a segunda apagaria a primeira.
     const novosLayouts = mapaExtrato && mapaExtrato.assinatura && !mapaExtrato.lembrado
@@ -19851,6 +20240,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         valor: Math.round(Math.abs(Number(m.valor) || 0) * 100) / 100 });
       const erros = validarLancamentoEscritorio(l, { fechamentos });
       if (erros.length) return { erro: erros[0] + " Lance esta conta uma linha por vez." };
+      // saída da reserva tem teto (o saldo do cliente): uma linha por vez
+      if (ehSaidaDiretaNaReserva(l)) return { erro: "Pagamento da reserva da engenharia: lance uma linha por vez." };
       ref = proximaReferencia((data || {}).obras || [], lancs.concat(novos));
       novos.push({ ...l, id: (typeof uid === "function" ? uid() : String(Date.now())) + "_" + novos.length,
         numeroDoc: ref, criadoEm: agora, conferido: true, conferidoEm: agora,
@@ -20067,7 +20458,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
 
       {vista === "fechamento" && (
         <FechamentoEscritorioTela
-          lancs={lancs} linhas={linhas} fechamentos={fechamentos}
+          lancs={lancs} linhas={linhasDoFecho} fechamentos={fechamentos}
           mes={mesEmConferencia} aoTrocarMes={setMesFecho}
           aoMarcar={marcarConferido} aoMarcarTodos={marcarMesInteiro}
           aoFechar={fecharMes} aoReabrir={reabrirMes} ocupado={ocupado}
@@ -20084,10 +20475,11 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             checagem: movimentosExtrato ? checagemDebitoCredito(movimentosExtrato, lancs, mesEmConferencia) : null,
             fila: {
               mes: mesEmConferencia,
-              inicial: (m) => lancamentoDaLinhaDoExtrato(m, mesEmConferencia, sugestaoCompletaDoExtrato(m, lancs, ctxDoPalpite)),
-              sugestao: (m) => sugestaoCompletaDoExtrato(m, lancs, ctxDoPalpite),
+              inicial: (m) => lancamentoDaLinhaDoExtrato(m, mesEmConferencia,
+                daMemoDaFila("sugestao", m, () => sugestaoCompletaDoExtrato(m, lancs, ctxDoPalpite))),
+              sugestao: (m) => daMemoDaFila("sugestao", m, () => sugestaoCompletaDoExtrato(m, lancs, ctxDoPalpite)),
               lancar: lancarLinhaDoExtrato,
-              rapido: rapidoDoExtrato,
+              rapido: (m) => daMemoDaFila("rapido", m, () => rapidoDoExtrato(m)),
               lancarVarias: lancarVariasDoExtrato,
               lancarSugeridas: lancarSugeridasDoExtrato,
               naoE: naoELancamento,
@@ -22030,13 +22422,17 @@ function calcularTelhado(t) {
 
   // Telhas de barro/concreto não usam rufo (perímetro zerado no original).
   if (TELHAS_BARRO_CONCRETO.includes(tipo)) perimetro1 = 0;
+  // Pingadeira é o perímetro que não recebe calha, telhado a telhado: na
+  // soma da obra, o perímetro zerado do barro descontava a calha dele da
+  // pingadeira do metálico (e sozinho dava negativo). Barro/concreto: 0.
+  const pingadeira = Math.max(0, perimetro1 - perimetro2);
 
-  return { tipo, vigas, espigao, maoFrancesa, caibros, ripas, berco, apoios, prego1, prego2, manta, areaInclinada, telhas, cumeeira, perimetro1, perimetro2 };
+  return { tipo, vigas, espigao, maoFrancesa, caibros, ripas, berco, apoios, prego1, prego2, manta, areaInclinada, telhas, cumeeira, perimetro1, perimetro2, pingadeira };
 }
 
 function cobertura(cp, out) {
   let vigasTotal = 0, caibrosTotal = 0, ripasTotal = 0, bercoTotal = 0, prego1Total = 0, prego2Total = 0, mantaTotal = 0;
-  let perimetroTotal1 = 0, perimetroTotal2 = 0, areaCoberturaTotal = 0;
+  let perimetroTotal1 = 0, perimetroTotal2 = 0, pingadeiraTotal = 0, areaCoberturaTotal = 0;
   const telhasPorTipo = {};
   const cumeeiraPorTipo = {};
 
@@ -22054,6 +22450,7 @@ function cobertura(cp, out) {
     mantaTotal += r.manta;
     perimetroTotal1 += r.perimetro1;
     perimetroTotal2 += r.perimetro2;
+    pingadeiraTotal += r.pingadeira;
     areaCoberturaTotal += r.areaInclinada;
     telhasPorTipo[r.tipo] = (telhasPorTipo[r.tipo] || 0) + r.telhas;
     cumeeiraPorTipo[r.tipo] = (cumeeiraPorTipo[r.tipo] || 0) + r.cumeeira;
@@ -22110,12 +22507,8 @@ function cobertura(cp, out) {
 
   const baseCalha = { ordem: ORD.cobertura, tipo: "Bruto", etapa: "Cobertura", subEtapa: "Calha" };
   emitir(out, { ...baseCalha, item: "Telhado - Calha", unidade: "Mts", qtd: perimetroTotal2, memoria: memSoma("Calha: os metros de beiral de cada telhado que recebem calha (nos telhados de barro, a planilha zera o perímetro de rufo e conta só a calha).", (r) => r.perimetro2, perimetroTotal2, "m") });
-  emitir(out, { ...baseCalha, item: "Telhado - Pingadeira", unidade: "Mts", qtd: perimetroTotal1 - perimetroTotal2, memoria: [
-    MEM.nota("Pingadeira: o que sobra do perímetro do telhado depois de descontar o que já é calha."),
-    MEM.conta("Perímetro total dos telhados", "soma dos telhados", [], perimetroTotal1, "m"),
-    MEM.conta("Metros de calha", "soma dos telhados", [], perimetroTotal2, "m"),
-    MEM.conta("Pingadeira", "perímetro − calha", [["perímetro", perimetroTotal1], ["calha", perimetroTotal2]], perimetroTotal1 - perimetroTotal2, "m"),
-  ] });
+  emitir(out, { ...baseCalha, item: "Telhado - Pingadeira", unidade: "Mts", qtd: pingadeiraTotal,
+    memoria: memSoma("Pingadeira: em cada telhado, o que sobra do perímetro depois de descontar o que já é calha (perímetro − calha, nunca menos que zero; telhado de barro ou concreto não leva).", (r) => r.pingadeira, pingadeiraTotal, "m") });
   emitir(out, { ...baseCalha, item: "Telhado - Rufo", unidade: "Mts", qtd: perimetroTotal1, memoria: memSoma("Rufo: acompanha todo o perímetro do telhado.", (r) => r.perimetro1, perimetroTotal1, "m") });
 }
 
@@ -24650,7 +25043,7 @@ function normalizarProjeto(projeto) {
   const concretoPiscinaAtiva = temPiscina ? concretoPiscina : {};
   const colunasPiscinaAtiva = temPiscina ? colunasPiscina : {};
 
-  return {
+  const cpNorm = {
     tipologia,
     tipoObra,
     padrao,
@@ -24873,9 +25266,8 @@ function normalizarProjeto(projeto) {
       inclinacao: (() => { const i = numOrZero(t && t.inclinacao); return i > 1 ? i / 100 : i; })(),
     })),
 
-    // Escrito por cobertura() (variável pública no VBA original) e lido
-    // depois por prestadores() (base do Carpinteiro). Antes de cobertura()
-    // rodar, fica 0 — igual ao VBA antes do loop.
+    // Lido por prestadores() (base do Carpinteiro); calculado logo abaixo,
+    // no fim da normalização, e regravado por cobertura().
     areaCoberturaTotal: 0,
 
     // cp.esquadrias — lista de esquadrias, usado por esquadrias()
@@ -24951,6 +25343,13 @@ function normalizarProjeto(projeto) {
     // é quem lê, migra o formato antigo e aplica os sugeridos.
     prestadores: prestadoresIn,
   };
+  // A área inclinada dos telhados já sai daqui: o quadro de prestadores lê o
+  // projeto normalizado sem rodar cobertura(), e com 0 o Carpinteiro sumia
+  // da tabela embora o orçamento o cobrasse. cobertura() regrava o mesmo valor.
+  cpNorm.areaCoberturaTotal = cpNorm.coberturas
+    .filter((t) => t && t.tipo)
+    .reduce((soma, t) => soma + calcularTelhado(t).areaInclinada, 0);
+  return cpNorm;
 }
 
 // Último passo do motor: resolve preço (precoDoInsumo p/ tudo que não tem
@@ -26476,10 +26875,14 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
     if (viewInterna !== "resultado" || !obra.orcamento || !obra.projeto) return null;
     try {
       if (typeof gerarCronogramaObra !== "function") return null;
-      const r = gerarCronogramaObra(obra.projeto, obra.orcamento, data, obra.cronograma || {});
+      // sem cronograma salvo, vale a data de início da obra, como na tela do
+      // Cronograma — sem ela o término do cabeçalho contava de hoje
+      const crono = obra.cronograma || {};
+      const r = gerarCronogramaObra(obra.projeto, obra.orcamento, data,
+        { ...crono, dataInicio: crono.dataInicio || (obra.dataInicio ? String(obra.dataInicio).slice(0, 10) : "") });
       return r && r.ativo && r.ativo.meses > 0 ? r.ativo : null;
     } catch (e) { return null; }
-  }, [viewInterna, obra.projeto, obra.orcamento, obra.cronograma, data]);
+  }, [viewInterna, obra.projeto, obra.orcamento, obra.cronograma, obra.dataInicio, data]);
 
   const memorias = useMemo(() => (viewInterna === "resultado" && obra.orcamento ? mapaMemorias(obra.projeto, data) : {}), [viewInterna, obra.projeto, obra.orcamento, data]);
 
@@ -27682,11 +28085,14 @@ function servicosCronogramaAtivos(data) {
 function prazoTabelaAtiva(data) {
   const cfg = cronogramaCfg(data);
   const seed = typeof PRAZO_TABELA_SEED !== "undefined" ? PRAZO_TABELA_SEED : [];
-  const tab = Array.isArray(cfg.prazoTabela) && cfg.prazoTabela.length ? cfg.prazoTabela : seed;
-  return tab
+  const limpa = (tab) => tab
     .map((l) => ({ area: Number(l.area), terrea: Number(l.terrea) }))
     .filter((l) => l.area > 0 && l.terrea > 0)
     .sort((a, b) => a.area - b.area);
+  // O editor grava as linhas como digitadas (em branco, fora de ordem); a
+  // limpeza é aqui, na hora de usar. Sem nenhuma linha válida, vale a padrão.
+  const editada = Array.isArray(cfg.prazoTabela) ? limpa(cfg.prazoTabela) : [];
+  return editada.length ? editada : limpa(seed);
 }
 function extraSobradoMeses(data) {
   const cfg = cronogramaCfg(data);
@@ -27778,7 +28184,10 @@ function prazoParametricoMeses(areaConstruida, tipologia, data) {
   const area = numOrZero(areaConstruida);
   if (!tab.length || area <= 0) return 0;
   let meses;
-  if (area <= tab[0].area) meses = tab[0].terrea;
+  // tabela de uma linha só não tem trecho para interpolar nem inclinação
+  // para extrapolar (tab[i - 1] não existia e o orçamento quebrava): vale o
+  // prazo da linha
+  if (area <= tab[0].area || tab.length === 1) meses = tab[0].terrea;
   else {
     let i = tab.findIndex((l) => l.area >= area);
     if (i === -1) i = tab.length - 1;
@@ -28015,18 +28424,29 @@ function resolverRedeCronograma(etapas, cond) {
       if (ativoIds.has(l.id)) out.push({ id: l.id, tipo: l.tipo === "SS" ? "SS" : "FS", lag: numOrZero(l.lag), avanco: l.avanco == null ? 0 : Number(l.avanco) });
       else {
         const p = porId[l.id];
-        if (p && !visitados.has(p.id)) { visitados.add(p.id); for (const l2 of predsDe(p, visitados)) out.push(l2); }
+        if (p && !visitados.has(p.id)) {
+          visitados.add(p.id);
+          // A etapa pulada tem duração zero: FS sobre FS soma os lags. Sem
+          // isto, na térrea INSTALACOES herdava LAJE_TERREO com lag 0 (via
+          // LAJE_PAV1) e o vínculo de −10 dias se perdia na de-duplicação.
+          const fs = l.tipo !== "SS";
+          for (const l2 of predsDe(p, visitados)) out.push({ ...l2, lag: fs && l2.tipo === "FS" ? numOrZero(l.lag) + l2.lag : l2.lag, herdado: true });
+        }
       }
     }
-    // de-duplica por id+tipo (fica o vínculo mais restritivo)
+    // de-duplica por id+tipo (fica o vínculo mais restritivo; no empate, o
+    // vínculo direto, que é o que a rede declarou)
     const dedup = {};
     for (const l of out) {
       const k = l.id + "|" + l.tipo;
-      if (!dedup[k] || l.lag > dedup[k].lag || l.avanco > dedup[k].avanco) dedup[k] = l;
+      const d = dedup[k];
+      const empate = d && l.lag === d.lag && l.avanco === d.avanco;
+      if (!d || l.lag > d.lag || l.avanco > d.avanco || (empate && d.herdado && !l.herdado)) dedup[k] = l;
     }
     return Object.values(dedup);
   }
-  return ativos.map((e) => ({ ...e, links: predsDe(e, new Set([e.id])) }));
+  // a marca de herdado é só da de-duplicação
+  return ativos.map((e) => ({ ...e, links: predsDe(e, new Set([e.id])).map(({ herdado, ...l }) => l) }));
 }
 
 // ── CPM: passagem à frente e para trás, folga e caminho crítico ──
@@ -28288,7 +28708,8 @@ function gerarCronogramaObra(projeto, orcamento, data, config) {
   const ativo = modo === "produtividade" ? produtividade : simplificado;
 
   // Calendário
-  const inicio = dataUTC(cfg.dataInicio) || dataUTC(new Date().toISOString());
+  // sem data, hoje no calendário do usuário (UTC-3): às 22h o UTC já é amanhã
+  const inicio = dataUTC(cfg.dataInicio) || dataUTC(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString());
   const comDatas = (res) => res.etapas.map((e) => ({
     ...e,
     dataInicio: isoData(dataDoDiaUtil(inicio, e.inicio)),
@@ -28730,8 +29151,12 @@ function gravarCronogramaCfg(data, save, novaCfg) {
 function CronogramaEditor({ data, save, podeEditar }) {
   const cfg = cronogramaCfg(data);
   const etapas = etapasCronogramaAtivas(data);
-  const tabela = prazoTabelaAtiva(data);
   const seedTab = typeof PRAZO_TABELA_SEED !== "undefined" ? PRAZO_TABELA_SEED : [];
+  // O editor mostra as linhas como foram digitadas: limpar o m² não apaga a
+  // linha e digitar uma área menor não a faz pular de lugar no meio da
+  // digitação. Filtrar e ordenar é com prazoTabelaAtiva, na hora de usar.
+  const linhasTabela = Array.isArray(cfg.prazoTabela) ? cfg.prazoTabela : seedTab;
+  const linhaValida = (l) => Number(l.area) > 0 && Number(l.terrea) > 0;
   const nomeDe = (id) => { const e = etapas.find((x) => x.id === id); return e ? e.nome : id; };
   const input = { width: 70, padding: "4px 6px", border: "1px solid #e5e7eb", borderRadius: 6, fontSize: 12, fontFamily: "inherit", textAlign: "right" };
 
@@ -28742,11 +29167,12 @@ function CronogramaEditor({ data, save, podeEditar }) {
     gravarCronogramaCfg(data, save, { ...cfg, etapas: et });
   }
   function restaurarEtapas() { const c = { ...cfg }; delete c.etapas; gravarCronogramaCfg(data, save, c); }
+  function gravarTabela(t) { gravarCronogramaCfg(data, save, { ...cfg, prazoTabela: t }); }
   function setTabela(i, campo, v) {
-    const t = tabela.map((l) => ({ ...l }));
-    t[i][campo] = Number(v) || 0;
-    gravarCronogramaCfg(data, save, { ...cfg, prazoTabela: t });
+    gravarTabela(linhasTabela.map((l, j) => (j === i ? { ...l, [campo]: v } : { ...l })));
   }
+  function addLinhaTabela() { gravarTabela([...linhasTabela.map((l) => ({ ...l })), { area: "", terrea: "" }]); }
+  function delLinhaTabela(i) { gravarTabela(linhasTabela.filter((_, j) => j !== i).map((l) => ({ ...l }))); }
   function restaurarTabela() { const c = { ...cfg }; delete c.prazoTabela; delete c.sobradoExtra; gravarCronogramaCfg(data, save, c); }
   const editouTabela = Array.isArray(cfg.prazoTabela) || cfg.sobradoExtra != null;
 
@@ -28755,27 +29181,35 @@ function CronogramaEditor({ data, save, podeEditar }) {
       <div style={{ fontSize: 12.5, color: "#4b5563", marginBottom: 10 }}>
         Prazo total por área construída (modo simplificado) e rede de etapas com a duração-base de cada uma. A duração-base é um peso: o VICKE escala todas até o caminho crítico fechar no prazo da tabela (ou no prazo-alvo digitado na obra).
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) 1fr", gap: 16, alignItems: "start" }}>
-        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12 }}>
+      {/* flex com quebra: no celular a rede de etapas desce para baixo da
+          tabela de prazo, em vez de ficar espremida numa coluna de 20 px */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "flex-start" }}>
+        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, flex: "0 1 340px", minWidth: 0, boxSizing: "border-box" }}>
           <div style={{ fontWeight: 600, fontSize: 12.5, marginBottom: 6 }}>Prazo por área (meses, térrea)</div>
           <table style={{ borderCollapse: "collapse", fontSize: 12 }}>
-            <thead><tr style={{ color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}><th style={{ padding: "4px 8px", textAlign: "right" }}>m²</th><th style={{ padding: "4px 8px", textAlign: "right" }}>meses</th></tr></thead>
+            <thead><tr style={{ color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}><th style={{ padding: "4px 8px", textAlign: "right" }}>m²</th><th style={{ padding: "4px 8px", textAlign: "right" }}>meses</th><th /></tr></thead>
             <tbody>
-              {tabela.map((l, i) => (
-                <tr key={i}>
-                  <td style={{ padding: "3px 8px", textAlign: "right" }}><input type="number" style={input} disabled={!podeEditar} value={l.area} onChange={(e) => setTabela(i, "area", e.target.value)} /></td>
-                  <td style={{ padding: "3px 8px", textAlign: "right" }}><input type="number" step="0.1" style={input} disabled={!podeEditar} value={l.terrea} onChange={(e) => setTabela(i, "terrea", e.target.value)} /></td>
-                </tr>
-              ))}
+              {linhasTabela.map((l, i) => {
+                const fora = !linhaValida(l);
+                const inp = fora ? { ...input, borderColor: "#fcd34d", background: "#fffbeb" } : input;
+                return (
+                  <tr key={i}>
+                    <td style={{ padding: "3px 8px", textAlign: "right" }}><input type="number" style={inp} disabled={!podeEditar} value={l.area ?? ""} onChange={(e) => setTabela(i, "area", e.target.value)} /></td>
+                    <td style={{ padding: "3px 8px", textAlign: "right" }}><input type="number" step="0.1" style={inp} disabled={!podeEditar} value={l.terrea ?? ""} onChange={(e) => setTabela(i, "terrea", e.target.value)} /></td>
+                    <td style={{ padding: "3px 0" }}>{podeEditar && <button type="button" title="Remover linha" aria-label="Remover linha" onClick={() => delLinhaTabela(i)} style={{ border: "none", background: "transparent", color: "#9ca3af", cursor: "pointer", fontSize: 15, padding: "2px 6px" }}>×</button>}</td>
+                  </tr>
+                );
+              })}
+              {podeEditar && <tr><td colSpan={3} style={{ padding: "4px 8px" }}><button type="button" style={INS_S.btnGhost} onClick={addLinhaTabela}>+ Adicionar linha</button></td></tr>}
               <tr><td style={{ padding: "6px 8px", textAlign: "right", color: "#4b5563" }}>Sobrado: +</td>
                 <td style={{ padding: "3px 8px", textAlign: "right" }}><input type="number" step="0.5" style={input} disabled={!podeEditar} value={extraSobradoMeses(data)} onChange={(e) => gravarCronogramaCfg(data, save, { ...cfg, sobradoExtra: Number(e.target.value) || 0 })} /></td></tr>
             </tbody>
           </table>
-          <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>Interpolado entre as linhas; acima da última, segue a inclinação do último trecho. Tabela do modelo antigo do escritório.</div>
+          <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>Interpolado entre as linhas, na ordem da área (a ordem digitada não importa); acima da última, segue a inclinação do último trecho. Linha com m² ou meses em branco fica de fora da conta. Tabela do modelo antigo do escritório.</div>
           {editouTabela && podeEditar && <button style={{ ...INS_S.btnGhost, marginTop: 6 }} onClick={restaurarTabela}>Restaurar tabela padrão</button>}
           {!editouTabela && seedTab.length > 0 && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>Valores padrão.</div>}
         </div>
-        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, overflowX: "auto" }}>
+        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, overflowX: "auto", flex: "1 1 420px", minWidth: 0, boxSizing: "border-box" }}>
           <div style={{ fontWeight: 600, fontSize: 12.5, marginBottom: 6 }}>Rede de etapas</div>
           <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%", minWidth: 640 }}>
             <thead><tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
@@ -29164,7 +29598,9 @@ function clausulasEquipamento(c, ctx) {
 
   // ── Prazo e jornada ──
   add("prazo", "DO PRAZO E DA JORNADA", [
-    `Os serviços serão executados no prazo estimado de ${numCtr(c.prazoDias, "dias úteis")}, contados da liberação formal da frente de serviço pela CONTRATANTE.`,
+    // o prazo é gravado em prazoQtd/prazoUnidade (o prazoDias do modelo é de
+    // contrato antigo) — lido pelo prazoContrato, como no resto do sistema
+    (() => { const pz = prazoContrato(c); return `Os serviços serão executados no prazo estimado de ${numCtr(pz.qtd, pz.unidade === "meses" ? "meses" : "dias úteis")}, contados da liberação formal da frente de serviço pela CONTRATANTE.`; })(),
     `A jornada normal de trabalho é de segunda a sexta-feira, das ${c.jornadaInicio || "______"} às ${c.jornadaFim || "______"}. Trabalhos em sábados, domingos, feriados ou fora da jornada dependem de acordo prévio e escrito entre as partes.`,
     "O prazo acima é estimativa fundada nas quantidades previstas e será ajustado na medida em que as quantidades efetivamente medidas dele se afastarem.",
   ]);
@@ -29269,6 +29705,9 @@ function escopoContrato(c) {
 }
 function escopoDoTipo(tipoId) {
   const t = tipoProfissional(tipoId);
+  // terraplanagem e brocas são máquina com operador: sem isto caíam em
+  // empreitada de mão de obra, com o objeto "material fornecido pelo CONTRATANTE"
+  if (t && t.modelo === "servicoEquipamento") return "equipamento";
   return t && t.modelo === "empreitadaGlobal" ? "ambos" : "maoDeObra";
 }
 // Texto padrão do objeto — o mesmo racional para todo prestador.
@@ -29345,7 +29784,9 @@ function moedaExtensoCtr(v) {
   const n = Number(v) || 0;
   const reais = Math.floor(n);
   const centavos = Math.round((n - reais) * 100);
-  let s = `${porExtensoCtr(reais)} ${reais === 1 ? "real" : "reais"}`;
+  // milhão redondo pede "de": "um milhão de reais", "dois milhões de reais"
+  const de = reais >= 1000000 && reais % 1000000 === 0 ? "de " : "";
+  let s = `${porExtensoCtr(reais)} ${de}${reais === 1 ? "real" : "reais"}`;
   if (centavos) s += ` e ${porExtensoCtr(centavos)} ${centavos === 1 ? "centavo" : "centavos"}`;
   return s;
 }
@@ -29507,6 +29948,10 @@ function modalidadePagamento(id) { return MODALIDADES_PAGAMENTO.find((m) => m.id
 // cada modelo: mão de obra em parcelas, global com entrada item a item.
 function modalidadeContrato(c) {
   const o = c || {};
+  // Serviço com equipamento é sempre por medição — é o que a cláusula de
+  // pagamento escreve, qualquer que seja a modalidade gravada (contratos
+  // antigos nasceram "parcelado" e geravam parcelas que o texto não prevê).
+  if (o.modelo === "servicoEquipamento") return "medicao";
   if (modalidadePagamento(o.modalidade)) return o.modalidade;
   return o.modelo === "empreitadaGlobal" ? "entradaFinal" : "parcelado";
 }
@@ -29732,7 +30177,8 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
     valor: "",
     // prazo em branco de propósito — quem escolhe a unidade e o número é o usuário
     prazoQtd: "", prazoUnidade: "",
-    modalidade: m.id === "empreitadaGlobal" ? "entradaFinal" : "parcelado",
+    // equipamento paga por medição (o quadro é de quantidades estimadas)
+    modalidade: m.porUnidade ? "medicao" : m.id === "empreitadaGlobal" ? "entradaFinal" : "parcelado",
     // o número de parcelas só vem pronto no gerenciamento, onde 12 é a praxe
     parcelas: m.id === "gerenciamentoObra" ? (m.padrao.parcelas || "") : "",
     periodicidade: m.padrao.periodicidade || "quinzenais",
@@ -29751,8 +30197,9 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
     previsaoConclusao: "",
     entradaPct: m.id === "empreitadaGlobal" ? 50 : "",
     entradaEscopo: m.id === "empreitadaGlobal" ? "item" : "contrato",
-    medicaoPeriodicidade: "mensal",
-    medicaoPrazoDias: "",
+    // os padrões de medição vêm do modelo (equipamento: quinzenal, 5 dias)
+    medicaoPeriodicidade: m.padrao.medicaoPeriodicidade || "mensal",
+    medicaoPrazoDias: m.padrao.medicaoPrazoDias || "",
     meioPagamento: m.id === "gerenciamentoObra" ? "boleto" : "pixOuTransferencia",
     // gerenciamento de obra
     referenciaObra: "",
@@ -29838,7 +30285,9 @@ function vencimentoTexto(p, primeiro, c) {
   }
   // ordinal em numeral evita a gagueira de "na segunda segunda-feira"
   if (p === "semanais") return `Os pagamentos serão realizados semanalmente, sempre às ${plural}, vencendo-se a primeira parcela na 1ª ${singular} posterior ao início dos serviços e as demais a cada 7 (sete) dias subsequentes.`;
-  if (p === "mensais") return "Os pagamentos serão realizados mensalmente, vencendo-se a primeira parcela 30 (trinta) dias após o início dos serviços e as demais a cada 30 (trinta) dias subsequentes.";
+  // "a cada 30 dias" não é o que as contas fazem: elas caem no mesmo dia do
+  // mês (início dia 31 → 31, ou o último dia nos meses mais curtos)
+  if (p === "mensais") return "Os pagamentos serão realizados mensalmente, vencendo-se a primeira parcela 1 (um) mês após o início dos serviços e as demais no mesmo dia dos meses subsequentes.";
   if (p === "quinzeDias") return "Os pagamentos serão realizados quinzenalmente, vencendo-se a primeira parcela 15 (quinze) dias após o início dos serviços e as demais a cada 15 (quinze) dias subsequentes, em data fixa, independentemente do dia da semana.";
   return `Os pagamentos serão realizados sempre às ${plural}, em quinzenas alternadas — uma ${singular} sim, outra não —, vencendo-se a primeira parcela na 2ª ${singular} posterior ao início dos serviços e as demais a cada 14 (quatorze) dias subsequentes.`;
 }
@@ -29886,9 +30335,20 @@ function clausulasGerenciamento(c, ctx) {
   // de serviço (parcelado, por medição, entrada + parcelas, entrada + saldo),
   // escrita na voz do modelo do escritório.
   const perGer = periodicidadeAdj(c.periodicidade);
+  // O intervalo sai de DIAS_PERIODO, o mesmo que as contas a pagar usam
+  // (quinzenal = 14 dias, no mesmo dia da semana; 15 dias só no quinzeDias),
+  // e "todo dia X" só vale para as mensais — nas demais o dia do mês muda.
+  const perGerId = c.periodicidade || "quinzenais";
+  const diasPer = (typeof DIAS_PERIODO !== "undefined" ? DIAS_PERIODO : { semanais: 7, quinzenais: 14, quinzeDias: 15 })[perGerId] || 14;
+  // com a data da primeira informada, as demais andam dela (mesmo dia da
+  // semana dela); sem a data, contam do dia da semana escolhido
+  const intervalo = (comData) => perGerId === "mensais" ? "no mesmo dia dos meses subsequentes"
+    : `a cada ${numExtensoCtr(diasPer)} dias${!pagaEmDiaDaSemana(perGerId) ? "" : comData ? ", no mesmo dia da semana" : `, sempre às ${diaSemanaPlural(c)}`}`;
   const quando = c.primeiroVencimento
-    ? `, vencendo a primeira em ${fmtDataCtr(c.primeiroVencimento)} e as demais ${c.periodicidade === "mensais" ? "no mesmo dia dos meses subsequentes" : `a cada ${c.periodicidade === "semanais" ? "7 (sete)" : "15 (quinze)"} dias`}`
-    : dia ? `, com vencimento todo dia ${String(dia).padStart(2, "0")} de cada mês` : "";
+    ? `, vencendo a primeira em ${fmtDataCtr(c.primeiroVencimento)} e as demais ${intervalo(true)}`
+    : perGerId === "mensais"
+      ? (dia ? `, com vencimento todo dia ${String(dia).padStart(2, "0")} de cada mês` : `, vencendo a primeira 1 (um) mês após o início e as demais ${intervalo(false)}`)
+      : `, vencendo a primeira ${perGerId === "quinzeDias" ? "15 (quinze) dias após o início" : perGerId === "semanais" ? `na 1ª ${diaSemanaPlural(c).replace(/s-feiras$/, "-feira")} posterior ao início` : `na 2ª ${diaSemanaPlural(c).replace(/s-feiras$/, "-feira")} posterior ao início`} e as demais ${intervalo(false)}`;
   const comoPaga = `${meio.id === "boleto" ? "Os pagamentos serão feitos por boleto bancário" : `Os pagamentos serão feitos por ${meio.curto}`}`;
   const frasesPag = [];
   if (modo === "medicao") {
@@ -29903,6 +30363,8 @@ function clausulasGerenciamento(c, ctx) {
   } else {
     frasesPag.push(`O valor total do presente contrato é de ${fmtMoedaCtr(total)} (${moedaExtensoCtr(total)})${parcelas ? `, parcelado em ${numExtensoCtr(parcelas)} parcelas ${perGer} de ${fmtMoedaCtr(p.base)} (${moedaExtensoCtr(p.base)})${p.iguais ? "" : `, sendo a última de ${fmtMoedaCtr(p.ultima)}`}` : ""}${quando ? `${quando}` : ""}. ${comoPaga}.`);
   }
+  // as contas antecipam o pagamento de dia da semana que cai em feriado
+  if ((modo === "parcelado" || modo === "entradaParcelas") && feriadoTexto(c)) frasesPag.push(feriadoTexto(c));
   frasesPag.push("Caso a obra seja concluída antes do prazo das parcelas, a quitação do saldo devedor será antecipada; caso o prazo seja extrapolado, o valor deste contrato não se altera, ou seja, não será cobrado nenhum valor adicional de gerenciamento de obra.");
   add("pagamento", "VALORES E FORMA DE PAGAMENTO", frasesPag);
 
@@ -30373,8 +30835,11 @@ function ContratoDocumento({ contrato, cliente, obra, prestador }) {
   );
   // Quadro do serviço com equipamento: a unidade muda por linha, então ela
   // é coluna. O total é "estimado" de propósito — quem manda é a medição.
+  // Sete colunas não cabem nos 390 px do celular: a tabela rola dentro da
+  // própria caixa em vez de empurrar a página para os lados.
   const tabelaEquipEl = (k) => (
-    <table key={k} style={CTR_S.tabela}>
+    <div key={k} style={{ overflowX: "auto" }}>
+    <table style={CTR_S.tabela}>
       <thead><tr>
         <th style={{ ...CTR_S.th, width: 34 }}>#</th>
         <th style={CTR_S.th}>Equipamento / serviço</th>
@@ -30402,6 +30867,7 @@ function ContratoDocumento({ contrato, cliente, obra, prestador }) {
         </tr>
       </tbody>
     </table>
+    </div>
   );
   const tabelaParcelasEl = (k) => (
     <table key={k} style={CTR_S.tabela}>
@@ -30643,7 +31109,13 @@ function diaAlvoContrato(c) {
     const m = /^\d{4}-\d{2}-(\d{2})/.exec(String(o.primeiroVencimento));
     return m ? Number(m[1]) : 0;
   }
-  return Math.floor(Number(o.diaVencimento) || 0);
+  const dia = Math.floor(Number(o.diaVencimento) || 0);
+  if (dia > 0) return dia;
+  // Sem dia escolhido, vale o dia da âncora: início em 31/01 vence 28/02 e
+  // volta a 31/03 — sem isto o 28 de fevereiro virava o dia de todo mês,
+  // contra o "mesmo dia dos meses subsequentes" da cláusula.
+  const a = /^\d{4}-\d{2}-(\d{2})/.exec(String(ancoraContrato(o)));
+  return a ? Number(a[1]) : 0;
 }
 // Vencimento da parcela i (1 = a primeira). Mensais caem sempre no MESMO dia
 // do mês — dia 31 continua 31 em março e maio, e só encolhe onde o calendário
@@ -30691,7 +31163,9 @@ function parcelasAPagar(contrato) {
       });
     }
   } else if (modo === "entradaParcelas") {
-    const n = Math.max(0, Math.floor(Number(c.parcelas) || 0));
+    // nº de parcelas em branco é o saldo inteiro numa parcela só — sem o
+    // "|| 1" só a entrada virava conta e o saldo sumia das contas a pagar
+    const n = Math.max(0, Math.floor(Number(c.parcelas) || 0)) || 1;
     const e = entradaESaldo(total, c.entradaPct, n || 1);
     if (e.entrada > 0) linhas.push({ n: 1, parcela: 1, totalParcelas: n + 1, descricao: "Entrada", valor: e.entrada, vencimento: c.dataAssinatura || ancora });
     if (n && e.saldo > 0) {
@@ -30705,7 +31179,9 @@ function parcelasAPagar(contrato) {
       }
     }
   } else if (modo === "entradaFinal") {
-    const porItem = (c.entradaEscopo || "contrato") === "item";
+    // contrato global antigo, sem o campo, é item a item — o mesmo padrão
+    // que o texto do contrato usa (montarContrato)
+    const porItem = (c.entradaEscopo || (c.modelo === "empreitadaGlobal" ? "item" : "contrato")) === "item";
     const itens = (c.itens || []).filter((i) => i && (String(i.descricao || "").trim() || Number(i.valor)));
     const pct = (Number(c.entradaPct) || 0) / 100;
     // O saldo depende da conclusão, que ainda não aconteceu: a data é uma
@@ -30749,6 +31225,49 @@ function parcelasAPagar(contrato) {
         vencimento: ancora ? somarDias(ancora, perMed * i + prazoPag) : "",
         estimada: true,
       });
+    }
+  }
+
+  // ── Retenção de garantia ──
+  // A cláusula de pagamento retém a última parcela, ou um percentual de cada
+  // pagamento, até o aceite final (montarContrato, opção "retencao"). Sem
+  // isto as contas pagavam tudo no calendário normal, contra o contrato.
+  // Gerenciamento e serviço com equipamento não têm essa cláusula.
+  const modeloId = typeof contratoModelo === "function" ? contratoModelo(c.modelo).id : c.modelo;
+  const temRetencao = modeloId !== "gerenciamentoObra" && modeloId !== "servicoEquipamento"
+    && typeof opcaoAtiva === "function" && opcaoAtiva(c, "retencao");
+  if (linhas.length && temRetencao) {
+    // o aceite vem depois da conclusão: a previsão informada, ou o fim do
+    // prazo — nunca antes do vencimento que a parcela já teria
+    const fim = c.previsaoConclusao || vencimentoFinal(c);
+    const noAceite = (v) => (fim && (!v || fim > v) ? fim : v);
+    const pct = Number(c.retencaoPct) || 0;
+    if (pct > 0) {
+      // "De cada pagamento será retido X%": cada linha paga o resto, e o
+      // retido volta numa linha só — o total continua o do contrato
+      let retido = 0;
+      for (const l of linhas) {
+        const r = Math.round(l.valor * pct) / 100;
+        l.valor = Math.round((l.valor - r) * 100) / 100;
+        retido += r;
+      }
+      retido = Math.round(retido * 100) / 100;
+      if (retido > 0) {
+        const ultimo = linhas.reduce((a, l) => (l.vencimento && l.vencimento > a ? l.vencimento : a), "");
+        // totalParcelas 0: o título não vira "Parcela 7/6"
+        linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: 0,
+          descricao: "Retenção — liberação no aceite", valor: retido,
+          vencimento: noAceite(ultimo), estimada: true, retencao: true });
+      }
+    } else if (modo !== "entradaFinal") {
+      // "A última parcela ficará retida ... e será paga somente após a
+      // conclusão total dos serviços e o respectivo aceite final". Na
+      // entrada + saldo no final a última já é o saldo da conclusão.
+      const u = linhas[linhas.length - 1];
+      u.descricao = /\)$/.test(u.descricao) ? u.descricao.replace(/\)$/, ", retida até o aceite)") : `${u.descricao} — retida até o aceite`;
+      u.retida = true;
+      const v = noAceite(u.vencimento);
+      if (v !== u.vencimento) { u.vencimento = v; u.estimada = true; }
     }
   }
   return linhas;
@@ -30881,6 +31400,10 @@ function contasDoContrato(contrato) {
     vencimento: ajustes[`${c.id}:${idx + 1}`] || p.vencimento || "",
     ajustada: !!ajustes[`${c.id}:${idx + 1}`],
     estimada: !!p.estimada && !ajustes[`${c.id}:${idx + 1}`],
+    // a linha do retido e a última parcela retida carregam a marca: é por
+    // ela que a sincronização acerta o retido das parcelas já pagas cheias
+    ...(p.retencao ? { retencao: true } : {}),
+    ...(p.retida ? { retida: true } : {}),
     pago: false,
     pagoEm: "",
     valorPago: "",
@@ -30918,11 +31441,39 @@ function sincronizarContasDoContrato(contas, contrato) {
     return { ...nova, observacao: anterior.observacao || "", registros: anterior.registros || [],
       ...(anterior.numeroDoc ? { numeroDoc: anterior.numeroDoc } : {}),
       ...(anterior.estornos ? { estornos: anterior.estornos } : {}),
-      ...(anterior.movimentos ? { movimentos: anterior.movimentos } : {}) };
+      ...(anterior.movimentos ? { movimentos: anterior.movimentos } : {}),
+      // Os papéis também: o boleto anexado à parcela em aberto (e o número
+      // do papel) sumiam na primeira regravação — bastava prorrogar outra
+      // parcela do mesmo contrato.
+      ...(anterior.anexos ? { anexos: anterior.anexos } : {}),
+      ...(anterior.comprovante ? { comprovante: anterior.comprovante } : {}),
+      ...(anterior.doc ? { doc: anterior.doc } : {}),
+      ...(anterior.chaveNota ? { chaveNota: anterior.chaveNota } : {}),
+      ...(anterior.idTransacao ? { idTransacao: anterior.idTransacao } : {}) };
   });
   // parcela paga que não existe mais no contrato continua na lista: o
   // dinheiro saiu, e sumir com ela esconderia um pagamento real
   const orfas = pagas.filter((x) => !geradas.some((g) => g.id === x.id));
+  // Retenção percentual num contrato com parcelas JÁ pagas pelo valor cheio
+  // (antes de a retenção entrar nas contas): o retido delas não existe — o
+  // dinheiro saiu inteiro. A linha da retenção fica com o que falta para
+  // fechar o contrato, e some se não falta nada; senão o total passaria do
+  // valor do contrato.
+  const ret = geradas.find((g) => g && g.retencao && !g.pago);
+  if (ret) {
+    const cent = (v) => Math.round((Number(v) || 0) * 100) / 100;
+    // o valor do contrato manda: parcela com valor ajustado à mão não leva o
+    // desconto da retenção, e somar as contas geradas passaria do contrato
+    const totalDoContrato = Number(c.valor) > 0 ? cent(c.valor)
+      : cent(contasDoContrato(c).reduce((t, x) => t + (Number(x.valor) || 0), 0));
+    const resto = cent([...geradas, ...orfas].filter((g) => g !== ret).reduce((t, g) => t + (Number(g.valor) || 0), 0));
+    const falta = cent(totalDoContrato - resto);
+    if (falta <= 0) return [...outras, ...geradas.filter((g) => g !== ret), ...orfas];
+    if (falta !== cent(ret.valor)) {
+      const i = geradas.indexOf(ret);
+      geradas[i] = { ...ret, valor: falta };
+    }
+  }
   return [...outras, ...geradas, ...orfas];
 }
 // Passa a régua em todos os contratos da obra de uma vez. Serve para
@@ -32020,6 +32571,48 @@ function baixarPedidos(contasPagar, pedidoIds, dados, quem, agoraIso) {
   return { contas, total };
 }
 
+// Pedido pago no cartão em várias vezes: a loja parcela a NOTA, não o item.
+// Cada item dividido sozinho arredonda os próprios centavos, e a fatura de
+// uma compra de 30,00 em 3x (três itens de 10,00) saía 9,99 / 9,99 / 10,02.
+// O total das contas `ids` se divide uma vez (a conta de parcelasDoCartao:
+// parcelas iguais, a última leva o resto) e a diferença de centavos fica num
+// item só — o maior —, que acerta a própria última parcela para continuar
+// somando o valor dele. Só mexe quando todas têm o mesmo cartão e as mesmas
+// faturas; senão devolve a lista como veio.
+function acertarParcelasDoCartaoNoPedido(contas, ids) {
+  const lista = (contas || []).slice();
+  const alvo = new Set(ids || []);
+  const red = (x) => Math.round(x * 100) / 100;
+  const idx = [];
+  lista.forEach((c, i) => {
+    if (c && alvo.has(c.id) && c.cartaoId && Array.isArray(c.parcelasCartao) && c.parcelasCartao.length > 1) idx.push(i);
+  });
+  if (idx.length < 2) return lista;
+  const primeira = lista[idx[0]];
+  const n = primeira.parcelasCartao.length;
+  const faturas = primeira.parcelasCartao.map((p) => p && p.competencia).join(",");
+  if (idx.some((i) => lista[i].cartaoId !== primeira.cartaoId || lista[i].parcelasCartao.length !== n
+    || lista[i].parcelasCartao.map((p) => p && p.competencia).join(",") !== faturas)) return lista;
+  const somaDe = (c) => red(c.parcelasCartao.reduce((t, p) => t + (Number(p && p.valor) || 0), 0));
+  const total = red(idx.reduce((t, i) => t + somaDe(lista[i]), 0));
+  const base = red(total / n);
+  const maior = idx.reduce((a, i) => (somaDe(lista[i]) > somaDe(lista[a]) ? i : a), idx[0]);
+  const parcelas = lista[maior].parcelasCartao.map((p) => ({ ...p }));
+  let desvio = 0;
+  for (let k = 0; k < n - 1; k++) {
+    const soma = red(idx.reduce((t, i) => t + (Number(lista[i].parcelasCartao[k].valor) || 0), 0));
+    const d = red(base - soma);
+    if (!d) continue;
+    parcelas[k].valor = red(Number(parcelas[k].valor) + d);
+    desvio = red(desvio + d);
+  }
+  if (!desvio) return lista;
+  parcelas[n - 1].valor = red(Number(parcelas[n - 1].valor) - desvio);
+  if (parcelas.some((p) => !(Number(p.valor) > 0))) return lista;
+  lista[maior] = { ...lista[maior], parcelasCartao: parcelas };
+  return lista;
+}
+
 // As formas de pagar de uma compra — as mesmas do contrato, menos a medição,
 // que é de serviço executado e não de material entregue. "Item a item" do
 // contrato é a entrega daqui: o que muda de nome é a coisa que se paga.
@@ -32271,7 +32864,11 @@ function ultimoAto(conta, ato) {
 // Dar baixa. O comprovante entra junto e é ato à parte: anexar comprovante
 // depois, sem mexer no pagamento, também tem dono.
 function contaPaga(conta, dados, quem, agoraIso) {
-  const c = conta || {};
+  // A marca de pagamento conjunto é de UM pagamento: conta paga de novo é
+  // outro débito. Quem paga junto (vários pedidos de uma vez) põe a marca
+  // nova depois desta baixa; quem paga sozinho não pode herdar a velha,
+  // senão leva o número do papel e a linha do extrato do conjunto antigo.
+  const { pagamentoConjunto, ...c } = conta || {};
   const d = dados || {};
   const agora = agoraIso || new Date().toISOString();
   const antes = c.comprovante || null;
@@ -32283,7 +32880,8 @@ function contaPaga(conta, dados, quem, agoraIso) {
     valorPago: Math.round((Number(d.valorPago) || Number(c.valor) || 0) * 100) / 100,
     // o dia de quem está mexendo, no fuso dele: depois das 21h, o relógio
     // UTC já está no dia seguinte
-    contabilizadoEm: agoraIso ? String(agoraIso).slice(0, 10) : new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10),
+    // (o carimbo vem em UTC: o dia é o local, não o corte da string)
+    contabilizadoEm: agoraIso ? cpDiaLocal(agoraIso) : new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10),
     comprovante: depois,
   };
   nova = registrarAto(nova, "paga", quem, agora);
@@ -32298,7 +32896,10 @@ function contaPaga(conta, dados, quem, agoraIso) {
 function contaEmAberto(conta, quem, agoraIso) {
   // O jeito de pagar vai embora junto com o pagamento: uma conta em aberto
   // com plano de parcelas continuaria caindo na fatura do cartão.
-  const { formaPagamento, cartaoId, parcelasCartao, ...c } = conta || {};
+  // A marca do pagamento conjunto também: ela é daquele débito. Mantida,
+  // a conta paga de novo, sozinha, herdava o papel e a linha do extrato
+  // do conjunto antigo.
+  const { formaPagamento, cartaoId, parcelasCartao, pagamentoConjunto, ...c } = conta || {};
   const agora = agoraIso || new Date().toISOString();
   return registrarAto({ ...c, pago: false, pagoEm: "", valorPago: "", contabilizadoEm: "" },
     "desfeita", quem, agora);
@@ -33259,11 +33860,13 @@ function previaAjusteContrato(contrato, contas, datas, limite) {
 // idênticos, impossíveis de distinguir. Então o número é atribuído na
 // primeira vez que a tela abre, seguindo a fila de sempre, e desce para as
 // contas que já tinham nascido dele.
-function numerarPedidosAntigos(obra, obras) {
+function numerarPedidosAntigos(obra, obras, lancamentos) {
   const cots = (obra && obra.cotacoes) || [];
   const faltando = cots.filter((c) => c && c.contaGeradaId && !c.numeroPedido);
   if (!faltando.length) return null;
-  let n = parseInt(String(proximoNumeroDoc(obras)).replace(/\D/g, ""), 10);
+  // a série é a mesma dos lançamentos do escritório: sem eles, o número podia
+  // repetir o de um lançamento já feito lá
+  let n = parseInt(String(proximoNumeroDoc(obras, lancamentos)).replace(/\D/g, ""), 10);
   if (!Number.isFinite(n)) n = 1;
   const novos = {};
   for (const c of faltando) { novos[c.id] = String(n).padStart(4, "0"); n++; }
@@ -33801,6 +34404,12 @@ function completarBase(dados, opcoes) {
 // O lançamento do escritório que representa esta conta (a ponte grava a
 // origem: a conta, o pedido inteiro ou o papel da planilha antiga).
 function cpLancamentoDaConta(lancamentos, obraId, c) {
+  // A regra de quem liga a quem é uma só, a do escritório: a parcela
+  // estornada leva "#n" no refId e o pagamento conjunto leva "pg:" — a
+  // comparação feita aqui à parte não via nenhum dos dois.
+  if (typeof ligaContaAoLancamento === "function") {
+    return (lancamentos || []).find((l) => l && ligaContaAoLancamento(l, obraId, c)) || null;
+  }
   for (const l of lancamentos || []) {
     const o = (l && l.origem) || {};
     if (!o.obraId || o.obraId !== obraId) continue;
@@ -33913,12 +34522,14 @@ function linhasDaBase(obras, opcoes) {
 
       const regs = (c.registros || []).filter((r) => r && r.em);
       const criada = regs.find((r) => r.ato === "criada");
-      const primeiro = regs.map((r) => dia(r.em)).sort()[0] || "";
+      // carimbos com hora (UTC): o dia é o local — depois das 21h o corte
+      // da string já dá amanhã
+      const primeiro = regs.map((r) => cpDiaLocal(r.em)).sort()[0] || "";
       // Pedido na conta da loja: a data é a do PEDIDO. A conta da loja é uma
       // cotação só, e o `lancadoEm` dela anda a cada pedido novo — usá-lo
       // punha todos os pedidos antigos com a data do último lançado.
       const ped = c.pedidoId && cot ? (cot.pedidos || []).find((p) => p && p.id === c.pedidoId) : null;
-      const entradaEm = dia((criada && criada.em) || c.importadoEm || c.lancadoEm
+      const entradaEm = cpDiaLocal((criada && criada.em) || c.importadoEm || c.lancadoEm
         || (ped && (ped.lancadoEm || ped.data))
         || (cot && !cot.contaLoja && cot.lancadoEm)
         || (ctr && (ctr.criadoEm || ctr.criadaEm || ctr.dataAssinatura)) || primeiro);
@@ -35751,7 +36362,13 @@ function cotacaoVazia(obraId) {
     criadaEm: new Date().toISOString(),
     titulo: "",
     escopo: "",
-    contaId: (typeof PLANO_CONTAS !== "undefined" && PLANO_CONTAS[0] ? PLANO_CONTAS[0].id : "material"),
+    // Em branco, para quem cota escolher. A primeira conta do plano era o
+    // padrão, e ela é de RECEITA (Depósito Recurso Próprio): a compra que
+    // ninguém classificou entrava na obra como dinheiro recebido. Não se
+    // põe "material" aqui porque a conta decide o destino (destinoDaCotacao)
+    // e a cotação de serviço viraria pedido de loja; o lançamento e o pedido
+    // já caem em conta de custo por contaDeCompra.
+    contaId: "",
     etapaId: "",
     quantidade: "",
     unidade: "",
@@ -35815,8 +36432,9 @@ function propostasDaCotacao(cot) {
 // ainda não é comparável, e deixá-la em primeiro faria a "mais barata"
 // mentir.
 function propostasOrdenadas(cot) {
+  // pelo valor de agora, não pelo guardado (ver comValoresDasPropostas)
   return propostasDaCotacao(cot).slice().sort((a, b) => {
-    const va = valorProposta(a), vb = valorProposta(b);
+    const va = valorDaProposta(cot, a), vb = valorDaProposta(cot, b);
     if (va <= 0 && vb <= 0) return 0;
     if (va <= 0) return 1;
     if (vb <= 0) return -1;
@@ -36049,6 +36667,24 @@ function descontoDaProposta(cot, proposta) {
 // item, senão o total digitado.
 function valorDaProposta(cot, proposta) {
   return propostaTemPrecoPorItem(cot, proposta) ? totalNegociado(cot, proposta) : valorProposta(proposta);
+}
+
+// O `valor` guardado de cada proposta item a item, refeito pela lista de
+// agora. Ele é gravado ao salvar a proposta; mexer depois na quantidade de
+// um item (ou numa proposta que muda a lista) deixava o das OUTRAS velho —
+// e era por ele que se escolhia a mais barata, a economia e o contrato.
+function comValoresDasPropostas(cot) {
+  const c = cot || {};
+  const ps = c.propostas || [];
+  let mudou = false;
+  const propostas = ps.map((p) => {
+    if (!p || !propostaTemPrecoPorItem(c, p)) return p;
+    const v = totalNegociado(c, p);
+    if (numeroDoCampo(p.valor) === v) return p;
+    mudou = true;
+    return { ...p, valor: v };
+  });
+  return mudou ? { ...c, propostas } : c;
 }
 
 // Qual loja está mais barata em cada item. É o que permite olhar a lista e
@@ -37674,7 +38310,10 @@ function propostaDaEntradaPorItem(x, cot0) {
 function propostaDaEntrada(d) {
   const x = d || {};
   const loja = x.loja || {};
-  const hoje = String(x.hojeIso || new Date().toISOString()).slice(0, 10);
+  // data LOCAL: toISOString é UTC, e depois das 21h no Brasil a proposta
+  // nascia recebida (e a lista rápida nomeada) com a data de amanhã
+  const hoje = String(x.hojeIso || (typeof dataParaIso === "function" ? dataParaIso(new Date())
+    : new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString())).slice(0, 10);
   const papel = x.papel || {};
   const cot0 = x.cotacao || { ...cotacaoVazia(x.obraId || ""),
     titulo: String(x.titulo || "").trim() || tituloDaListaRapida(x.itens, hoje) };
@@ -38130,6 +38769,30 @@ function fichaDoXmlDaNfe(xml) {
   }
   const numero = texto(tag(ide, "nNF")).replace(/^0+/, "");
   const valor = Math.round(num(tag(tot, "vNF")) * 100) / 100;
+  const c2 = (x) => Math.round(x * 100) / 100;
+  const vProd = c2(num(tag(tot, "vProd"))), vDesc = c2(num(tag(tot, "vDesc")));
+  // O que a nota cobra além dos produtos entra como linha do papel. Sem
+  // isto a entrada ficava em vProd − vDesc: o frete e o IPI que a loja
+  // cobra sumiam do lançamento (nota de 1.100 virava 1.000).
+  const extras = [
+    ["Frete", num(tag(tot, "vFrete")), "frete"],
+    ["Seguro", num(tag(tot, "vSeg")), ""],
+    ["IPI", num(tag(tot, "vIPI")) + num(tag(tot, "vIPIDevol")), ""],
+    ["ICMS ST", num(tag(tot, "vST")) + num(tag(tot, "vFCPST")), ""],
+    ["Imposto de importação", num(tag(tot, "vII")), ""],
+    ["Outras despesas da nota", num(tag(tot, "vOutro")), ""],
+  ];
+  for (const [descricao, v, contaId] of extras) {
+    const total = c2(v);
+    if (total >= 0.01) itens.push({ descricao, codigo: "", quantidade: 1, unidade: "vb", unitario: total, total,
+      extraDaNota: true, ...(contaId ? { contaId } : {}) });
+  }
+  // O que ainda não fecha com o vNF (ICMS desonerado, campo que a nota usa
+  // e aqui não se lê) não se inventa como item: vira aviso.
+  const somaLida = c2(itens.reduce((t, x) => t + (Number(x.total) || 0), 0) - vDesc);
+  const avisos = valor > 0 && Math.abs(somaLida - valor) >= 0.01
+    ? [`Os itens da nota somam ${somaLida.toFixed(2).replace(".", ",")} e o total da nota é ${valor.toFixed(2).replace(".", ",")}. Confira os itens.`]
+    : [];
   const papel = {
     tipo: "nota", tipoIA: "nota_produto", lidoPeloXml: true, ehNota: true,
     lidoComo: textoSemCaixaAlta(texto(tag(emit, "xNome"))), fantasia: textoSemCaixaAlta(texto(tag(emit, "xFant"))),
@@ -38137,11 +38800,14 @@ function fichaDoXmlDaNfe(xml) {
     numeroNota: numero, numeroPedido: "",
     emitido: (texto(tag(ide, "dhEmi")) || texto(tag(ide, "dEmi"))).slice(0, 10),
     vencimento: texto(tag(tag(t, "dup"), "dVenc")).slice(0, 10),
-    pagoEm: "", total: Math.round(num(tag(tot, "vProd")) * 100) / 100, valor,
-    desconto: Math.round(num(tag(tot, "vDesc")) * 100) / 100,
+    // `total` é o que a tela compara com a soma da entrada (já com o
+    // desconto): é o vNF. Com o vProd, toda nota com desconto mostrava
+    // "o papel diz…" sem nada errado.
+    pagoEm: "", total: valor || vProd, valor,
+    desconto: vDesc,
     situacaoLida: "", formaLida: "", chave, idTransacao: "", descricao: "",
   };
-  return { papel, itens, avisos: [], documentos: [] };
+  return { papel, itens, avisos, documentos: [] };
 }
 
 // O PDF que a IA não leu (ou sem IA): o leitor do VICKE tenta, nesta ordem,
@@ -39477,7 +40143,10 @@ function precoDaLinha(linha, quantidade, item) {
     return daLoja > 0 ? Math.round((daLoja / fator) * 1e6) / 1e6 : 0;
   }
   if (l.unitario > 0) return l.unitario;
-  if (l.total > 0 && q > 0) return Math.round((l.total / q) * 10000) / 10000;
+  // O total da linha é da quantidade DA LINHA: a loja cotou 20 sacos por
+  // 800 e a cotação pedia 10 — dividir por 10 dava 80 o saco, o dobro.
+  const ql = Number(l.quantidade) > 0 ? Number(l.quantidade) : q;
+  if (l.total > 0 && ql > 0) return Math.round((l.total / ql) * 10000) / 10000;
   return 0;
 }
 
@@ -40080,7 +40749,7 @@ function propostaComparavel(cot, p) {
 }
 
 function melhorProposta(cot) {
-  const ord = propostasOrdenadas(cot).filter(p => valorProposta(p) > 0 && propostaComparavel(cot, p));
+  const ord = propostasOrdenadas(cot).filter(p => valorDaProposta(cot, p) > 0 && propostaComparavel(cot, p));
   return ord[0] || null;
 }
 
@@ -40088,11 +40757,11 @@ function melhorProposta(cot) {
 // Com uma proposta só não há economia a declarar — comparar consigo mesma
 // daria zero e ocuparia espaço à toa, então devolve null.
 function economiaDaCotacao(cot) {
-  const vals = propostasDaCotacao(cot).filter(p => propostaComparavel(cot, p)).map(valorProposta).filter(v => v > 0);
+  const vals = propostasDaCotacao(cot).filter(p => propostaComparavel(cot, p)).map(p => valorDaProposta(cot, p)).filter(v => v > 0);
   if (vals.length < 2) return null;
   const menor = Math.min(...vals), maior = Math.max(...vals);
   const esc = propostaEscolhida(cot);
-  const referencia = esc && valorProposta(esc) > 0 ? valorProposta(esc) : menor;
+  const referencia = esc && valorDaProposta(cot, esc) > 0 ? valorDaProposta(cot, esc) : menor;
   return { menor, maior, referencia, economia: maior - referencia };
 }
 
@@ -40110,6 +40779,15 @@ function aprovacaoDaEscolha(cot, aprovacoes) {
   const ap = aprovacaoDaCotacao(aprovacoes, c.id);
   if (ap.status === "pendente") return ap;
   if (ap.propostaId && c.escolhidaId && ap.propostaId !== c.escolhidaId) return COT_SEM_APROVACAO;
+  // Mesma proposta, outro preço: editar a escolhida depois do aval (mais
+  // um item, outra quantidade, outro total) não pode herdar o "aprovado".
+  // Registro antigo, sem valor, continua valendo.
+  const esc = propostaEscolhida(c);
+  const aprovado = Number(ap.valor);
+  if (esc && ap.valor !== "" && ap.valor != null && aprovado > 0
+      && Math.abs(valorDaProposta(c, esc) - aprovado) >= 0.01) {
+    return { status: "pendente", precisaReaprovar: true, anterior: ap };
+  }
   return ap;
 }
 
@@ -40120,6 +40798,9 @@ function registrarAprovacaoCotacao(aprovacoes, dados) {
   return limpa.concat([{
     cotacaoId: dados.cotacaoId,
     propostaId: dados.propostaId || "",
+    // o valor que o cliente viu: mudou depois, a decisão deixa de valer
+    // (ver aprovacaoDaEscolha)
+    valor: Number(dados.valor) > 0 ? Math.round(Number(dados.valor) * 100) / 100 : "",
     status: dados.status === "recusada" ? "recusada" : "aprovada",
     motivo: dados.motivo || "",
     por: dados.por || "Cliente",
@@ -40248,6 +40929,23 @@ function herdarDoPedidoAnterior(novos, anteriores) {
   });
 }
 
+// A cotação que virou pedido na conta da loja aponta para ele
+// (`pedidoNaLoja`). Apagado o pedido — ou a conta inteira —, ela deixa de
+// apontar: senão ficava travada em "Virou pedido na loja" sem pedido
+// nenhum, e não dava nem para gerar o pedido de novo.
+function soltarPedidoNaLoja(cotacoes, o) {
+  const ids = (o && o.pedidoIds) || [];
+  const contaId = (o && o.contaLojaId) || "";
+  return (cotacoes || []).map((c) => {
+    const pl = c && c.pedidoNaLoja;
+    if (!pl) return c;
+    if (!(ids.indexOf(pl.pedidoId) >= 0 || (contaId && pl.contaLojaId === contaId))) return c;
+    const x = { ...c };
+    delete x.pedidoNaLoja;
+    return x;
+  });
+}
+
 function contaDeLojaAberta(cotacoes, prestadorId) {
   if (!prestadorId) return null;
   return (cotacoes || []).find((c) => c && ehContaDeLoja(c)
@@ -40303,7 +41001,10 @@ function pedidoDaCotacao(cot, proposta, insumos, prazoDias) {
     numeroNota: p.numeroNota || (daObs && daObs[1] === "Nota" ? daObs[2] : "") || base.numeroNota || "",
     data: hoje,
     vencimento: prazo > 0 && typeof somarDias === "function" ? somarDias(hoje, prazo) : "",
-    desconto: d && d.desconto ? d.valor : 0,
+    // bruto − combinado: negativo quando o fechamento ficou ACIMA da soma
+    // (frete embutido, arredondamento para cima). Só o desconto era levado,
+    // e o acréscimo sumia do pedido; itensRateados reparte os dois.
+    desconto: d ? Math.round((d.bruto - d.alvo) * 100) / 100 : 0,
     itens,
     cotacaoOrigemId: c.id || "",
     observacao: c.titulo || "",
@@ -40385,7 +41086,7 @@ function dadosDoContratoDaCotacao(cot) {
     tipoId: tipoDoContaId(c.contaId),
     prestadorId: esc.fornecedorId || "",
     nomeContratado: esc.favorecido || "",
-    valor: valorProposta(esc),
+    valor: valorDaProposta(c, esc),
     titulo: String(c.titulo || "").trim(),
     escopo: String(c.escopo || "").trim(),
     condicaoPagamento: esc.condicaoPagamento || "",
@@ -40419,7 +41120,7 @@ function podeLancarEmContas(cot, contratos) {
   if (c.contaGeradaId)           return { pode: false, motivo: "Já foi lançada em contas a pagar." };
   const esc = propostaEscolhida(c);
   if (!esc)                      return { pode: false, motivo: "Escolha uma proposta primeiro." };
-  if (valorProposta(esc) <= 0)   return { pode: false, motivo: "A proposta escolhida está sem valor." };
+  if (valorDaProposta(c, esc) <= 0) return { pode: false, motivo: "A proposta escolhida está sem valor." };
   return { pode: true, motivo: "" };
 }
 
@@ -40439,13 +41140,15 @@ function dadosDoLancamento(cot) {
   return {
     cotacaoId: c.id,
     obraId: c.obraId || "",
-    contaId: c.contaId || "",
+    // compra nunca nasce em conta de receita (cotação antiga guardou a
+    // primeira do plano, Depósito Recurso Próprio)
+    contaId: contaDeCompra(c.contaId),
     // a etapa para a qual se cotou — vai para cada conta que nascer daqui
     etapaId: c.etapaId || "",
     prestadorId: esc.fornecedorId || "",
     favorecido: esc.favorecido || "",
     descricao: String(c.titulo || "").trim() || "Compra",
-    valor: valorProposta(esc),
+    valor: valorDaProposta(c, esc),
     modo: p.modo || "parcelas",   // ver MODOS_LANCAMENTO
     parcelas: p.parcelas || 1,
     primeiroVencimento: p.primeiroVencimento
@@ -40482,12 +41185,19 @@ function medicaoDaCotacao(cot, proposta, insumos) {
       // Nasce medido igual ao cotado: o caso comum é consumir o que se pediu,
       // e quem consumiu menos muda um número.
       quantidade: cotada,
-      unitario: precoUnitario(proposta, it.id),
+      // O unitário EFETIVO, não o de tabela: com "leva tudo por X" o que se
+      // paga é o total negociado, e as contas nascem daqui com desconto zero.
+      // Com o de tabela, 10 sc×40 + 2 m³×100 fechados por 500 viravam 600.
+      unitario: precoEfetivo(cot, proposta, it),
       // a cotacao guarda a etapa em `etapaId` — ler `etapa` aqui jogava fora
       // a etapa escolhida na cotacao e deixava em branco todo item cujo
-      // insumo nao tem etapa padrao
-      etapa: etapaDoItem(ins, (cot || {}).etapaId),
-      contaId: (cot || {}).contaId || "",
+      // insumo nao tem etapa padrao. A etapa própria do item manda, como no
+      // pedido da loja (pedidoDaCotacao).
+      etapa: it.etapa || etapaDoItem(ins, (cot || {}).etapaId),
+      // Só a conta própria do item vem daqui. Em branco, vale a conta que se
+      // escolhe no painel do lançamento (contasDoPedidoDaLoja usa a de
+      // `dados`) — carimbar a da cotação fazia a escolha do painel não valer.
+      contaId: it.contaId || "",
     };
   }).filter((r) => r.unitario > 0 || r.cotada > 0);
 }
@@ -40547,7 +41257,10 @@ function completarItemDaConta(conta, obra, insumos, contasDaObra) {
 }
 
 function totalDaMedicao(medicao) {
-  const soma = (medicao || []).reduce((s, r) => s + (numeroDoCampo(r.quantidade) * numeroDoCampo(r.unitario)), 0);
+  // centavos por linha, como a conta de cada item nasce (brutoDoItem): com
+  // unitário efetivo de seis casas, somar sem arredondar podia dar um
+  // centavo diferente da soma das contas
+  const soma = (medicao || []).reduce((s, r) => s + Math.round(numeroDoCampo(r.quantidade) * numeroDoCampo(r.unitario) * 100) / 100, 0);
   return Math.round(soma * 100) / 100;
 }
 
@@ -40560,6 +41273,18 @@ function validarMedicao(medicao) {
   const semEtapa = comValor.filter((r) => !String(r.etapa || "").trim()).length;
   if (semEtapa) erros.push(semEtapa === 1 ? "1 item está sem etapa." : semEtapa + " itens estão sem etapa.");
   return { ok: !erros.length, erros: erros };
+}
+
+// Desfazer o lançamento só enquanto nada foi pago. Com uma parcela paga, o
+// desfazer tirava as abertas e limpava `contaGeradaId`; relançar gerava o
+// TOTAL de novo por cima da paga (3.000 + 1.000 já pago = 4.000 na obra).
+function podeDesfazerLancamento(cot, contasPagar) {
+  const id = (cot || {}).id;
+  const pagas = (contasPagar || []).filter((x) => x && id && x.cotacaoId === id && x.pago).length;
+  if (!pagas) return { pode: true, motivo: "" };
+  return { pode: false, motivo: pagas === 1
+    ? "Uma conta deste lançamento já foi paga. Desfaça o pagamento dela em contas a pagar antes de desfazer o lançamento."
+    : `${pagas} contas deste lançamento já foram pagas. Desfaça o pagamento delas em contas a pagar antes de desfazer o lançamento.` };
 }
 
 // ── O que foi combinado com o fornecedor ────────────────────────
@@ -40671,7 +41396,7 @@ function podeGerarContrato(cot, aprovacoes, contratos) {
   if (foiDividida(c))            return { pode: false, motivo: "Foi dividida entre lojas — cada loja tem o seu pedido." };
   const esc = propostaEscolhida(c);
   if (!esc)                      return { pode: false, motivo: "Escolha uma proposta primeiro." };
-  if (valorProposta(esc) <= 0)   return { pode: false, motivo: "A proposta escolhida está sem valor." };
+  if (valorDaProposta(c, esc) <= 0) return { pode: false, motivo: "A proposta escolhida está sem valor." };
   const ap = aprovacaoDaEscolha(c, aprovacoes);
   if (c.precisaAprovacaoCliente && ap.status === "recusada") return { pode: false, motivo: "O cliente recusou esta escolha." };
   if (c.precisaAprovacaoCliente && ap.status !== "aprovada") {
@@ -41313,6 +42038,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const podeGerenciar = !!perm.podeGerenciarObra || !!perm.isCliente;
   const ehCliente = !!perm.isCliente;
   const ehEscritorio = !!perm.podeGerenciarObra;
+  // O que mexe em contas a pagar — gerar pedido, lançar, desfazer o
+  // lançamento, a conta da loja — e excluir proposta é só do escritório. O
+  // cliente cria a cotação, registra proposta e escolhe; com `podeGerenciar`
+  // ele via esses botões também.
+  const podeFinanceiro = ehEscritorio;
   // A exceção é apagar a cotação inteira: leva junto a decisão registrada e
   // não deixa rastro de quem apagou. Segue só com o admin do escritório.
   const podeExcluir = !!perm.podeGerenciarObra && !!perm.podeExcluir;
@@ -41363,7 +42093,14 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const [progressoPdf, setProgressoPdf] = useState(null);
   // null = ainda não perguntou. Pergunta uma vez por tela: sem a IA, anexar
   // não pode virar dois envios do mesmo arquivo.
-  const iaDisponivel = useIaDisponivel();
+  // O hook só devolve o valor. Quando a IA cai por crédito/token no meio da
+  // tela, as leituras chamavam um `setIaDisponivel` que não existia: o
+  // ReferenceError no catch matava o leitor por regras e o botão ficava em
+  // "Lendo…". A queda fica guardada aqui e desliga a IA nesta tela.
+  const iaDoServidor = useIaDisponivel();
+  const [iaCaiu, setIaCaiu] = useState(false);
+  const iaDisponivel = iaCaiu ? false : iaDoServidor;
+  const setIaDisponivel = (v) => setIaCaiu(!v);
   const [sobreOPedido, setSobreOPedido] = useState(false);   // arquivo sendo arrastado sobre o campo
   const refArquivoPedido = useRef(null);
   const [orcamentoLido, setOrcamentoLido] = useState(null);  // { orcamento, casamento }
@@ -41491,7 +42228,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     if (f.contaLoja && !f.lojaId) { setErro("Escolha a loja desta conta."); return; }
     setErro("");
     const existe = cotacoes.some(c => c.id === f.id);
-    const marcada = carimbar(f, usuario, !existe);
+    // a quantidade de um item pode ter mudado: o total guardado de cada
+    // proposta item a item acompanha
+    const marcada = carimbar(comValoresDasPropostas(f), usuario, !existe);
     gravarCotacoes(existe ? cotacoes.map(c => (c.id === f.id ? marcada : c)) : cotacoes.concat([marcada]));
     setFormCotacao(null);
   }
@@ -42106,7 +42845,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         ? { ...proposta, valor: totalNegociado(c, proposta) }
         : proposta;
       const p = carimbar({ ...comTotal, favorecido: nome }, usuario, !existe);
-      return { ...c, propostas: existe ? lista.map(x => (x.id === p.id ? p : x)) : lista.concat([p]) };
+      // item próprio desta proposta mexe na lista de todas: as outras
+      // refazem o total guardado
+      return comValoresDasPropostas({ ...c, propostas: existe ? lista.map(x => (x.id === p.id ? p : x)) : lista.concat([p]) });
     });
     setFormProposta(null);
   }
@@ -42575,8 +43316,12 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     const status = statusEscolhido || formDecisao.status;
     const eu = nomeDeQuem(usuario);
     const quem = registrando ? (String(quemRespondeu || "").trim() || "Cliente") : (usuario?.nome || usuario?.email || "Cliente");
+    // a decisão leva o valor da proposta: editada depois, pede nova resposta
+    const atual = cotacoes.find((c) => c && c.id === cotacao.id) || cotacao;
+    const escAtual = propostaEscolhida(atual);
     const novas = registrarAprovacaoCotacao(aprovacoes, {
       cotacaoId: cotacao.id, propostaId: cotacao.escolhidaId, status, motivo, por: quem,
+      valor: escAtual ? valorDaProposta(atual, escAtual) : "",
       registradaPor: registrando ? eu : "",
     });
     gravar({ ...obra, aprovacoesCotacao: novas });
@@ -42591,6 +43336,8 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   }
 
   async function excluirProposta(cot, prop) {
+    if (!podeFinanceiro) { setErro("Só o escritório exclui proposta."); return; }
+    if (cot.pedidoNaLoja) { setErro("Esta cotação já virou pedido na conta da loja — apague o pedido antes de mexer nas propostas."); return; }
     const ok = await dialogo.confirmar({
       titulo: `Excluir a proposta de ${prop.favorecido || "fornecedor sem nome"}?`,
       mensagem: prop.id === cot.escolhidaId
@@ -42713,7 +43460,10 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     if (!ok) return;
     setErro("");
     const r = removerCotacao(cotacoes, aprovacoes, cot.id);
-    gravar({ ...obra, cotacoes: r.cotacoes, aprovacoesCotacao: r.aprovacoes,
+    // as cotações que viraram pedido nesta conta voltam a poder gerar pedido
+    const soltas = soltarPedidoNaLoja(r.cotacoes, { contaLojaId: cot.id,
+      pedidoIds: (cot.pedidos || []).map((x) => x && x.id) });
+    gravar({ ...obra, cotacoes: soltas, aprovacoesCotacao: r.aprovacoes,
       contasPagar: removerContasDaCotacao(obra.contasPagar || [], cot.id) });
   }
 
@@ -42727,6 +43477,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   // A escolha vai para a conta da loja em vez de virar parcelas próprias:
   // abre o mesmo painel de pedido, já com os itens e os preços cotados.
   function mandarParaContaDaLoja(cot) {
+    if (!podeFinanceiro) { setErro("Só o escritório gera o pedido."); return; }
     const trava = podeLancarEmContas(cot, contratos);
     if (!trava.pode) { setErro(trava.motivo); return; }
     const esc = propostaEscolhida(cot);
@@ -42740,7 +43491,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       const loja = prestadores.find((f) => f.id === esc.fornecedorId);
       if (!loja) { setErro("A proposta escolhida não está ligada a um fornecedor cadastrado. Edite a proposta e escolha a loja."); return; }
       criada = { ...cotacaoVazia(obra.id), titulo: loja.nome || esc.favorecido || "Loja", contaLoja: true,
-        lojaId: loja.id, prazoLoja: 30, contaId: cot.contaId || "material" };
+        lojaId: loja.id, prazoLoja: 30, contaId: contaDeCompra(cot.contaId) };
       conta = criada;
     }
     setErro("");
@@ -42753,6 +43504,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   // Fornecedor de material não assina contrato; a cotação escolhida vira
   // conta e o ciclo fecha por aqui.
   function abrirLancamento(cot) {
+    if (!podeFinanceiro) { setErro("Só o escritório lança em contas a pagar."); return; }
     const trava = podeLancarEmContas(cot, contratos);
     if (!trava.pode) { setErro(trava.motivo); return; }
     const dados = dadosDoLancamento(cot);
@@ -42891,7 +43643,8 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     const r = onLancarContas({
       cotacaoId: cot.id, obraId: cot.obraId || obra.id, modo: 'contaLoja', pedido: comBaixa,
       contaNova: formPedido.contaNova || null,
-      contaId: cot.contaId || 'material',
+      // conta de compra: a da cotação antiga podia ser a de receita
+      contaId: contaDeCompra(cot.contaId),
       prestadorId: loja.id || '', favorecido: loja.nome || '',
       descricao: cot.titulo || 'Compra',
       lancadoEm: new Date().toISOString(), lancadoPor: nomeDeQuem(usuario),
@@ -42919,15 +43672,20 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   }
 
   async function desfazerLancamento(cot) {
+    if (!podeFinanceiro) { setErro("Só o escritório desfaz o lançamento."); return; }
+    // com conta paga, desfazer e relançar dobraria o gasto: trava antes
+    const trava = podeDesfazerLancamento(cot, obra.contasPagar || []);
+    if (!trava.pode) { setErro(trava.motivo); return; }
     const ok = await dialogo.confirmar({
       titulo: "Desfazer o lançamento desta cotação?",
-      mensagem: "As contas em aberto geradas por ela são removidas. Conta já paga fica como está — o dinheiro saiu e o gasto tem que continuar na obra.",
+      mensagem: "As contas a pagar geradas por ela são removidas e a cotação volta a poder ser lançada.",
       confirmar: "Desfazer lançamento",
       destrutivo: true,
     });
     if (!ok) return;
     setErro("");
-    if (onDesfazerLancamento) onDesfazerLancamento(cot.id);
+    const r = onDesfazerLancamento ? onDesfazerLancamento(cot.id) : null;
+    if (r && r.erro) setErro(r.erro);
   }
 
   // ── Gerar o contrato da escolha ───────────────────────────────
@@ -43073,7 +43831,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   {ehContaDeLoja(cot)
                     ? dinheiro(abertoDaLoja)
                     : foiDividida(cot) ? dinheiro(totaisDaDivisao(cot, cotacoes).total)
-                    : esc ? dinheiro(valorProposta(esc)) : melhor ? `a partir de ${dinheiro(valorProposta(melhor))}` : "—"}
+                    : esc ? dinheiro(valorDaProposta(cot, esc)) : melhor ? `a partir de ${dinheiro(valorDaProposta(cot, melhor))}` : "—"}
                 </div>
               </div>
               <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 3 }}>
@@ -43102,7 +43860,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                 {cot.escopo && <div style={{ fontSize: 12.5, color: "#374151", marginBottom: 12, whiteSpace: "pre-wrap" }}>{cot.escopo}</div>}
                 <BlocoContaLoja cotacao={cot} contasPagar={obra.contasPagar || []}
                   loja={prestadores.find((f) => f.id === cot.lojaId)} isMobile={isMobile}
-                  dinheiro={dinheiro} podeGerenciar={podeGerenciar}
+                  dinheiro={dinheiro} podeGerenciar={podeFinanceiro}
                   aoNovoPedido={() => abrirPedido(cot)}
                   aoEditarPedido={(p) => editarPedido(cot, p)}
                   aoApagarPedido={(p) => apagarPedido(cot, p)}
@@ -43236,7 +43994,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     <>
                       {/* o pedido de uma divisão nasce escolhido: trocar de loja
                           é desfazer a divisão, lá na cotação completa */}
-                      {!cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && !cot.divisaoDe && (
+                      {/* virou pedido na loja: trocar a escolha deixaria o pedido
+                          apontando para uma proposta que não é mais a escolhida */}
+                      {!cot.contaGeradaId && !cot.pedidoNaLoja && !contratoDaCotacao(contratos, cot.id) && !cot.divisaoDe && (
                         <button style={isMobile && !escolhida ? { ...E.btn, padding: "8px 14px", fontSize: 12.5 } : { ...bt, marginRight: isMobile ? 0 : 6 }}
                           onClick={() => trocarCotacao(cot.id, c => (escolhida
                             ? { ...limparEnvioAoCliente(c), escolhidaId: "", escolhidoPor: "", escolhidoEm: "" }
@@ -43257,11 +44017,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                       {/* Desfazer o lançamento é ação sobre ESTE fornecedor,
                           não sobre a cotação: mora ao lado dos pagamentos que
                           ele gerou. */}
-                      {escolhida && cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
+                      {podeFinanceiro && escolhida && cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
                         <button style={{ ...bt, marginLeft: isMobile ? 0 : 6, color: "#dc2626" }}
                           onClick={() => desfazerLancamento(cot)}>Desfazer lançamento</button>
                       )}
-                      {!cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && !cot.divisaoDe && (
+                      {podeFinanceiro && !cot.contaGeradaId && !cot.pedidoNaLoja && !contratoDaCotacao(contratos, cot.id) && !cot.divisaoDe && (
                         <button title="Excluir esta proposta"
                           style={{ ...bt, marginLeft: isMobile ? 0 : 6, color: "#dc2626" }}
                           onClick={() => excluirProposta(cot, p)}>Excluir</button>
@@ -43282,7 +44042,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
                                 <div style={{ minWidth: 0, fontSize: 13 }}>{infoDa(p, escolhida, maisBarata)}</div>
                                 <div style={{ fontWeight: 700, fontSize: 15, color: "#111827", whiteSpace: "nowrap" }}>
-                                  {valorProposta(p) > 0 ? dinheiro(valorProposta(p)) : "—"}
+                                  {valorDaProposta(cot, p) > 0 ? dinheiro(valorDaProposta(cot, p)) : "—"}
                                 </div>
                               </div>
                               {detalhes.length > 0 && (
@@ -43320,7 +44080,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                             return (
                               <tr key={p.id} style={{ borderTop: "1px solid rgba(38,36,33,0.08)", background: escolhida ? "#f0f7ff" : "transparent" }}>
                                 <td style={{ padding: "8px" }}>{infoDa(p, escolhida, maisBarata)}</td>
-                                <td style={{ padding: "8px", textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>{valorProposta(p) > 0 ? dinheiro(valorProposta(p)) : "—"}</td>
+                                <td style={{ padding: "8px", textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>{valorDaProposta(cot, p) > 0 ? dinheiro(valorDaProposta(cot, p)) : "—"}</td>
                                 <td style={{ padding: "8px", whiteSpace: "nowrap" }}>{p.prazoDias ? `${p.prazoDias} dias` : "—"}</td>
                                 <td style={{ padding: "8px" }}>{p.condicaoPagamento || "—"}</td>
                                 {podeGerenciar && (
@@ -43354,9 +44114,14 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   </div>
                 )}
 
+                {ap.precisaReaprovar && esc && (
+                  <div data-vk-reaprovar="1" style={{ fontSize: 12, color: "#b45309", background: "#fffbeb", border: "1px solid rgba(180,83,9,0.25)", borderRadius: 10, padding: "8px 10px", marginBottom: 12 }}>
+                    A proposta escolhida mudou depois da resposta do cliente ({ap.anterior.status === "recusada" ? "recusada" : "aprovada"} por {dinheiro(Number(ap.anterior.valor) || 0)}, agora {dinheiro(valorDaProposta(cot, esc))}). Precisa {ap.anterior.status === "recusada" ? "de nova resposta" : "ser aprovada de novo"}.
+                  </div>
+                )}
                 {ap.status === "pendente" && s.id === "aEnviar" && ehEscritorio && esc && (
                   <div style={{ fontSize: 12, color: "#0474f4", background: "#eef5ff", border: "1px solid rgba(4,116,244,0.22)", borderRadius: 10, padding: "8px 10px", marginBottom: 12 }}>
-                    Escolha feita: {esc.favorecido} por {dinheiro(valorProposta(esc))}. O cliente ainda não foi avisado — envie a escolha para ele aprovar.
+                    Escolha feita: {esc.favorecido} por {dinheiro(valorDaProposta(cot, esc))}. O cliente ainda não foi avisado — envie a escolha para ele aprovar.
                   </div>
                 )}
                 {ap.status === "pendente" && cot.enviadaClienteEm && (
@@ -43366,7 +44131,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     borderRadius: 10, padding: ehEscritorio ? 0 : "8px 10px", marginBottom: 12 }}>
                     {ehEscritorio
                       ? `Escolha enviada ao cliente em ${dataCurta(cot.enviadaClienteEm)}${cot.enviadaClientePor ? ` por ${nomeGravado(cot.enviadaClientePor)}` : ""} — aguardando a resposta.`
-                      : `O escritório escolheu ${esc ? `${esc.favorecido}, ${dinheiro(valorProposta(esc))}` : "uma proposta"} e enviou em ${dataCurta(cot.enviadaClienteEm)} para a sua aprovação.`}
+                      : `O escritório escolheu ${esc ? `${esc.favorecido}, ${dinheiro(valorDaProposta(cot, esc))}` : "uma proposta"} e enviou em ${dataCurta(cot.enviadaClienteEm)} para a sua aprovação.`}
                   </div>
                 )}
 
@@ -43444,7 +44209,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                       !aprovacaoNaTela && ehEscritorio && s.id === "aguardando" ? { rotulo: "Registrar resposta do cliente",
                         onClick: () => { setErro(""); setFormDecisao({ cotacao: cot, status: "aprovada", registrando: true }); } } : null,
                       esc && !cot.divisaoDe && destino === "pedido" ? { rotulo: "Gerar contrato em vez de pedido", onClick: () => gerarContrato(cot) } : null,
-                      esc && destino === "contrato" && !manter ? { rotulo: "Lançar em contas a pagar, sem contrato",
+                      esc && destino === "contrato" && !manter && podeFinanceiro ? { rotulo: "Lançar em contas a pagar, sem contrato",
                         onClick: () => { if (!lanc.pode) { setErro(lanc.motivo); return; } abrirLancamento(cot); } } : null,
                       comLista ? { rotulo: "Pedido (PDF)", onClick: () => setFolhaPedido({ cot, proposta: esc }) } : null,
                       comLista ? { rotulo: copiado === cot.id ? "Copiado ✓" : "Copiar para WhatsApp", onClick: () => copiarPedido(cot, esc) } : null,
@@ -43477,7 +44242,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                             style={{ ...E.btn, opacity: trava.pode ? 1 : 0.45, cursor: trava.pode ? "pointer" : "not-allowed" }}
                             onClick={() => gerarContrato(cot)}>Gerar contrato</button>
                         ))}
-                        {esc && destino === "pedido" && (
+                        {esc && destino === "pedido" && podeFinanceiro && (
                           <button data-vk-acao-principal="pedido" disabled={!lanc.pode} title={lanc.pode ? "" : lanc.motivo}
                             style={{ ...E.btn, opacity: lanc.pode ? 1 : 0.45, cursor: lanc.pode ? "pointer" : "not-allowed" }}
                             onClick={gerarPedido}>{lojaAberta ? `Gerar pedido na conta da ${nomeLoja}` : "Gerar pedido"}</button>
@@ -47077,7 +47842,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                             const nomeConta = conta && conta.nome && cotSemAcento(conta.nome) !== cotSemAcento(c.titulo) ? conta.nome : "";
                             return { valor: c.id, rotulo: [c.titulo || "Sem nome", nomeConta,
                               n ? (n === 1 ? "1 proposta" : n + " propostas") : "sem proposta",
-                              melhor ? "a partir de " + brl(valorProposta(melhor)) : ""].filter(Boolean).join(" · ") };
+                              melhor ? "a partir de " + brl(valorDaProposta(c, melhor)) : ""].filter(Boolean).join(" · ") };
                           }))} />
                         {!destinoId && (
                           <div style={{ marginTop: 8 }}>
@@ -47675,7 +48440,7 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
               <input style={E.input} type="date" value={p.vencimento || ""} onChange={(e) => aoMudar({ ...p, vencimento: e.target.value })} />
             </div>
             <div>
-              <label style={E.label}>Desconto (R$)</label>
+              <label style={E.label}>{numeroDoCampo(p.desconto) < 0 ? "Desconto (R$) · negativo é acréscimo" : "Desconto (R$)"}</label>
               <CampoCtrNum tipo="moeda" valor={p.desconto} onChange={(v) => aoMudar({ ...p, desconto: v })} style={E.input} placeholder="0,00" />
             </div>
           </div>
@@ -48668,7 +49433,7 @@ function CotacaoDecisao({ cotacao, status, registrando, dinheiro, onConfirmar, o
           {registrando ? "Registrar a resposta do cliente" : aprovar ? "Aprovar esta escolha" : "Recusar esta escolha"}
         </div>
         <div style={{ fontSize: 12.5, color: "#4b5563", marginBottom: 14 }}>
-          {cotacao.titulo} — {esc ? `${esc.favorecido}, ${dinheiro(valorProposta(esc))}` : "sem proposta escolhida"}.
+          {cotacao.titulo} — {esc ? `${esc.favorecido}, ${dinheiro(valorDaProposta(cotacao, esc))}` : "sem proposta escolhida"}.
           {registrando ? " A resposta veio por fora do sistema; fica gravado que foi você quem registrou." : ""}
         </div>
         {registrando && (
@@ -49944,6 +50709,9 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
   // Mesmo valor que a lista de Orçamentos mostra: o da proposta enviada
   // quando existe, senão o do cálculo.
   const valorDoProjeto = (o) => {
+    // a mesma conta da lista de Orçamentos: a engenharia só soma quando foi
+    // incluída (o cálculo guarda precoEng mesmo quando ficou de fora)
+    if (typeof orcValorTotal === "function") return Number(orcValorTotal(o)) || 0;
     const ult = ultimaProposta(o);
     if (ult) {
       if (ult.valorTotalExibido != null) return Number(ult.valorTotalExibido) || 0;
@@ -50003,9 +50771,6 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
     const props = orc.propostas || [];
     const iVer = typeof ganhoVersao === "number" && props[iVerSeguro(props, ganhoVersao)] ? iVerSeguro(props, ganhoVersao) : props.length - 1;
     const fechada = props[iVer] || null;
-    if (typeof esquecerArquivoDaProposta === "function") {
-      props.forEach((p, i) => { if (i !== iVer) esquecerArquivoDaProposta(p); });
-    }
     const projetos = data.projetos || [];
     const novosProjetos = projetos.some(p => p.orcId === orc.id) ? projetos : [...projetos, {
       id: "PRJ-" + Date.now(), orcId: orc.id, clienteId: orc.clienteId,
@@ -50028,6 +50793,11 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
       return;
     }
     const comRecebido = recebido.novos && recebido.novos.length;
+    // Só agora, com o Ganho validado, o PDF das outras versões sai do storage
+    // (antes saía mesmo quando o Ganho parava no aviso acima).
+    if (typeof esquecerArquivoDaProposta === "function") {
+      props.forEach((p, i) => { if (i !== iVer) esquecerArquivoDaProposta(p); });
+    }
     setGanhando(null);
     if (typeof toast !== "undefined" && toast.sucesso) toast.sucesso(comRecebido
       ? "Orçamento ganho · recebimento lançado no financeiro do escritório" : "Orçamento marcado como ganho");
@@ -50105,9 +50875,11 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
                         {orc.status === "perdido" ? "Reabrir" : "Perdido"}
                       </button>
                     )}
-                    <button onClick={(e) => { e.stopPropagation(); onAbrirOrcamento(cliente, orc, "editar"); }} style={acao()}>
-                      Editar
-                    </button>
+                    {perm.podeEditar && (
+                      <button onClick={(e) => { e.stopPropagation(); onAbrirOrcamento(cliente, orc, "editar"); }} style={acao()}>
+                        Editar
+                      </button>
+                    )}
                     {perm.podeExcluir && (
                       <button onClick={(e) => { e.stopPropagation(); excluirProjeto(orc); }} style={acao("#dc2626")}>Excluir</button>
                     )}
@@ -50152,7 +50924,7 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
             setVendo(resta ? { ...resta, clienteNome: vendo.clienteNome, _orcOrigem: novo } : null);
           } : null}
           onFechar={() => setVendo(null)}
-          onEditar={() => { const orc = vendo._orcOrigem; setVendo(null); if (orc) onAbrirOrcamento(cliente, orc, "editar"); }}
+          onEditar={perm.podeEditar ? () => { const orc = vendo._orcOrigem; setVendo(null); if (orc) onAbrirOrcamento(cliente, orc, "editar"); } : undefined}
         />
       )}
     </div>
@@ -51743,7 +52515,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   useEffect(() => {
     if (view !== "contasPagar" || !obraAtual) return;
     const contratosDaObra = obraAtual.contratos || [];
-    const numerada = numerarPedidosAntigos(obraAtual, data.obras || []);
+    const numerada = numerarPedidosAntigos(obraAtual, data.obras || [], data.lancamentos || []);
     const alvo = numerada || obraAtual;
     // `contratos` é a lista completa do cliente (obras + coleção antiga) —
     // com uma lista parcial a faxina apagaria parcela boa
@@ -51881,14 +52653,73 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       mensagem: "Nesta obra quem paga os fornecedores é o escritório. A baixa (e o desfazer) é feita por ele — fale com o escritório." });
     return true;
   };
+  // Mesmo onde o cliente paga direto, o honorário (e o que mais tiver
+  // destino no escritório) atravessa — e o cliente não grava o extrato do
+  // escritório: `efeitosDaBaixa` não roda para ele. Desfazer essa baixa, ou
+  // apagar uma conta já paga, deixava o lançamento de lá solto. Isso fica
+  // com o escritório.
+  const clienteNaoMexeNoPago = (lista, acao) => {
+    if (perm.podeGerenciarObra) return false;
+    const modo = typeof modoDaPonte === "function" ? modoDaPonte(obraAtual, cliente) : "";
+    const pagas = (lista || []).filter(c => c && c.pago);
+    const comDestino = (c) => typeof destinoNoEscritorio !== "function" || !!destinoNoEscritorio(c.contaId, modo);
+    // "pagar": o honorário pago pelo cliente também entra no extrato do
+    // escritório, e quem registra esse recebimento é o escritório
+    const trava = acao === "excluir" ? pagas.length > 0
+      : acao === "pagar" ? (lista || []).some(c => c && !c.pago && comDestino(c))
+      : pagas.some(comDestino);
+    if (!trava) return false;
+    dialogo.alertar({ titulo: "Fale com o escritório", tipo: "aviso",
+      mensagem: acao === "excluir"
+        ? "Esta conta já está paga. Para apagá-la, desfaça o pagamento antes — ou peça ao escritório."
+        : acao === "pagar"
+          ? "Este pagamento entra também no extrato do escritório (honorário). Quem dá a baixa é o escritório, quando receber."
+          : "Este pagamento também está no extrato do escritório (honorário). Quem desfaz é o escritório." });
+    return true;
+  };
+  // Baixa que atravessa para o escritório entra no extrato do mês da data:
+  // mês já conferido com o banco não recebe linha nova — a conta ficava paga
+  // e a ponte, recusada, nunca mais era mandada (reabrir o mês não trazia).
+  // Olha as contas como a ponte olha: no cartão não atravessa agora (vai
+  // pela fatura), e sem destino no escritório (o material da obra em que o
+  // cliente paga direto) também não. Devolve a mensagem, ou "".
+  const mesFechadoNaBaixa = (contas) => {
+    if (typeof bloqueioPorMesFechado !== "function") return "";
+    const fech = typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {};
+    const modo = typeof modoDaPonte === "function" ? modoDaPonte(obraAtual, cliente) : "";
+    const atravessa = (c) => c && c.pago && !(c.formaPagamento === "cartao" || c.cartaoId)
+      && !Array.isArray(c.movimentos)
+      && (typeof destinoNoEscritorio === "function" ? !!destinoNoEscritorio(c.contaId, modo)
+        : !(obraAtual && obraAtual.clientePagaDireto));
+    for (const c of contas || []) {
+      if (!atravessa(c)) continue;
+      const trava = bloqueioPorMesFechado(String(c.pagoEm || c.vencimento || "").slice(0, 7), fech);
+      if (trava) return trava + " Use uma data de pagamento num mês aberto, ou reabra o mês no Fechamento do escritório.";
+    }
+    return "";
+  };
+  // O pedido que nasce pago (lançar "já pago", regravar um pedido pago)
+  // passa pela mesma trava antes de gravar.
+  const lancarPedidoNoMesAberto = (dados) => {
+    const p = (dados && dados.pedido) || {};
+    if (p.jaPago && p.pagoEm) {
+      const contaPadrao = (dados && dados.contaId) || "material";
+      const itens = (p.itens || []).length ? p.itens : [{}];
+      const trava = mesFechadoNaBaixa(itens.map(i => ({ pago: true, pagoEm: p.pagoEm, contaId: (i && i.contaId) || contaPadrao })));
+      if (trava) return { erro: trava };
+    }
+    return lancarCotacaoEmContas(dados);
+  };
   const alternarPagamento = async (conta) => {
     if (clienteNaoDaBaixa()) return;
     if (conta.pago) {
+      if (clienteNaoMexeNoPago([conta], "desfazer")) return;
       if (!(await confirmarDesfazer([conta]))) return;
       const atualizada = contaEmAberto(conta, quemSou());
       gravarContas(contasDaObra.map(c => c.id === conta.id ? atualizada : c), conta.obraId);
       return;
     }
+    if (clienteNaoMexeNoPago([conta], "pagar")) return;
     setFormPagamento({ conta, dataContab: conta.vencimento && conta.vencimento <= hojeIso ? conta.vencimento : hojeIso,
       valorPago: Number(conta.valor) || 0, comprovante: conta.comprovante || null, erroAnexo: "" });
   };
@@ -51897,11 +52728,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const alternarPagamentoPedido = async (linha) => {
     if (clienteNaoDaBaixa()) return;
     if (linha.pago) {
+      if (clienteNaoMexeNoPago(linha.contas, "desfazer")) return;
       if (!(await confirmarDesfazer(linha.contas))) return;
       const alvo = new Set(linha.contas.map(c => c.id));
       gravarContas(contasDaObra.map(c => (alvo.has(c.id) ? contaEmAberto(c, quemSou()) : c)), linha.obraId);
       return;
     }
+    if (clienteNaoMexeNoPago(linha.contas, "pagar")) return;
     setFormPagamento({ pedido: linha, conta: null,
       dataContab: linha.vencimento && linha.vencimento <= hojeIso ? linha.vencimento : hojeIso,
       valorPago: linha.aberto, comprovante: null, erroAnexo: "" });
@@ -51956,6 +52789,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const obra = (obras || []).find(o => o && o.id === linha.obraId);
     if (!obra) return;
     const ids = linha.pedidoIds || [linha.pedidoId];
+    if (clienteNaoMexeNoPago((obra.contasPagar || []).filter(c => c && ids.indexOf(c.pedidoId) >= 0), "excluir")) return;
     if (travouNaFatura((obra.contasPagar || []).filter(c => c && ids.indexOf(c.pedidoId) >= 0), "apagar o pedido")) return;
     if (travouNoMesFechado((obra.contasPagar || []).filter(c => c && ids.indexOf(c.pedidoId) >= 0), "apagar o pedido")) return;
     const sai = ids.reduce((a, id) => {
@@ -52025,7 +52859,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const cot = f.cotacao;
     const loja = prestadores.find(x => x && x.id === cot.lojaId) || {};
     const comBaixa = pedido.jaPago ? { ...pedido, pagoEm: pedido.pagoEm || pedido.vencimento || pedido.data || "" } : pedido;
-    const r = lancarCotacaoEmContas({
+    const r = lancarPedidoNoMesAberto({
       cotacaoId: cot.id, obraId: cot.obraId || (obraAtual && obraAtual.id), modo: "contaLoja", pedido: comBaixa,
       contaNova: null, contaId: cot.contaId || "material",
       prestadorId: loja.id || "", favorecido: loja.nome || "", descricao: cot.titulo || "Compra",
@@ -52085,18 +52919,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const rc = cartaoDoPagamento(f.forma, f.cartaoId, f.novoCartao);
     if (rc.erro) { dialogo.alertar({ titulo: rc.erro, tipo: "aviso" }); return; }
     const cartao = rc.cartao;
-    // Baixa à vista numa obra que o escritório paga vai para o extrato do
-    // mês da data: mês já conferido com o banco não recebe linha nova (a
-    // conta ficava paga e a ponte, recusada, nunca mais era mandada).
-    if (!cartao && !(obraAtual && obraAtual.clientePagaDireto) && typeof bloqueioPorMesFechado === "function") {
-      const fechEsc = typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {};
-      const trava = bloqueioPorMesFechado(String(f.dataContab).slice(0, 7), fechEsc);
-      if (trava) {
-        dialogo.alertar({ titulo: "Mês fechado no escritório", tipo: "aviso",
-          mensagem: trava + " Use uma data de pagamento num mês aberto, ou reabra o mês no Fechamento do escritório." });
-        return;
-      }
-    }
+    // Baixa à vista que vai para o extrato do escritório: mês já conferido
+    // com o banco não recebe linha nova (`mesFechadoNaBaixa`). A obra em que
+    // o cliente paga direto pulava a trava inteira — mas o honorário dela
+    // atravessa; agora a regra é a da ponte, conta a conta.
+    const travouMes = (contas) => {
+      const trava = mesFechadoNaBaixa(contas);
+      if (trava) dialogo.alertar({ titulo: "Mês fechado no escritório", tipo: "aviso", mensagem: trava });
+      return !!trava;
+    };
     const noCartao = (conta, valor) => {
       if (!cartao) return { ...conta, formaPagamento: "avista" };
       const p = pagamentoNoCartao(conta, cartao, { pagoEm: f.dataContab, valorPago: valor, parcelas: f.parcelas });
@@ -52106,13 +52937,24 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       const idsDosPedidos = f.pedido.pedidoIds || [f.pedido.pedidoId];
       const r = baixarPedidos(contasDaObra, idsDosPedidos,
         { pagoEm: f.dataContab, comprovante: f.comprovante || null }, quemSou());
-      const alvo = new Set((f.pedido.contas || []).map(c => c.id));
+      // Só o que ESTA baixa pagou. A linha da loja leva todos os pedidos,
+      // inclusive o que já tinha sido pago antes, sozinho: marcá-lo com o
+      // conjunto (e o cartão) de agora contava o mesmo dinheiro de novo — no
+      // extrato e na fatura.
+      const eraPaga = new Set(contasDaObra.filter(c => c && c.pago).map(c => c.id));
+      const alvo = new Set((f.pedido.contas || []).map(c => c && c.id).filter(id => id && !eraPaga.has(id)));
+      const pagasAgora = r.contas.filter(c => c && c.pago && alvo.has(c.id));
       // vários pedidos pagos de uma vez são um débito só no banco: um
       // número de papel para todos (o comprovante é o mesmo)
-      const conjunto = idsDosPedidos.length > 1 ? (typeof uid === "function" ? uid() : String(Date.now())) : "";
-      gravarContas(r.contas.map(c => (alvo.has(c.id)
-        ? noCartao(conjunto && c.pago ? { ...c, pagamentoConjunto: conjunto } : c, Number(c.valorPago) || Number(c.valor) || 0) : c)),
-        f.pedido.obraId, rc.extra);
+      const conjunto = new Set(pagasAgora.map(c => c.pedidoId)).size > 1 ? (typeof uid === "function" ? uid() : String(Date.now())) : "";
+      const lista = r.contas.map(c => (c && c.pago && alvo.has(c.id)
+        ? noCartao(conjunto ? { ...c, pagamentoConjunto: conjunto } : c, Number(c.valorPago) || Number(c.valor) || 0) : c));
+      // no cartão em várias vezes a loja parcela a nota, não o item: os
+      // centavos do arredondamento ficam num item só
+      const finais = cartao && typeof acertarParcelasDoCartaoNoPedido === "function"
+        ? acertarParcelasDoCartaoNoPedido(lista, [...alvo]) : lista;
+      if (travouMes(finais.filter(c => c && alvo.has(c.id)))) return;
+      gravarContas(finais, f.pedido.obraId, rc.extra);
       setFormPagamento(null);
       return;
     }
@@ -52120,6 +52962,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const atualizada = noCartao(
       contaPaga(f.conta, { pagoEm: f.dataContab, valorPago: valor, comprovante: f.comprovante || null }, quemSou()),
       valor);
+    if (travouMes([atualizada])) return;
     gravarContas(contasDaObra.map(c => c.id === f.conta.id ? atualizada : c), f.conta.obraId, rc.extra);
     setFormPagamento(null);
   };
@@ -52929,7 +53772,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       if (!g.prestadorId && !g.nomeContratado?.trim()) { dialogo.alertar({ titulo: "Escolha o prestador", mensagem: "Selecione um prestador cadastrado, cadastre um novo ou digite o nome do contratado.", tipo: "aviso" }); return null; }
       const novo0 = { ...g, nomeContratado: prest ? prest.nome : g.nomeContratado, valor: total,
         // número sequencial atribuído na primeira gravação e mantido depois
-        numeroContrato: g.numeroContrato || proximoNumeroContrato(data.obras || []),
+        // a sequência é a mesma dos lançamentos do escritório: sem eles, o
+        // número repetia um que já está no extrato
+        numeroContrato: g.numeroContrato || proximoNumeroContrato(data.obras || [], data.lancamentos || []),
         geradoEm: g.geradoEm || new Date().toISOString(), atualizadoEm: new Date().toISOString() };
       const existe = contratos.some(c => c.id === novo0.id);
       // Contrato antigo não tem "criado por" — não dá para inventar quem
@@ -52988,7 +53833,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             if (!t) { setG("tipoProfissional", ""); return; }
             // Trocar o tipo reescreve o objeto padrão e o regime, mas preserva
             // o que já foi digitado à mão.
-            const novoEscopo = escopoContrato(g) && tipoProfissional(g.tipoProfissional) ? escopoContrato(g) : escopoDoTipo(t.id);
+            // O escopo que era só o padrão do tipo anterior (não escolhido à
+            // mão) acompanha o tipo novo — senão Empreiteiro → Terraplanagem
+            // ficava em mão de obra, e Terraplanagem → Pintor em equipamento.
+            const tipoAnterior = tipoProfissional(g.tipoProfissional);
+            const novoEscopo = tipoAnterior && escopoContrato(g) !== escopoDoTipo(tipoAnterior.id) ? escopoContrato(g) : escopoDoTipo(t.id);
             const base = contratoVazio(null, cliente.id, obraSelecionada.id, t.id, novoEscopo);
             const compat = prestadoresDoTipo(prestadores, t.id, data.escritorio).some(p => p.id === g.prestadorId);
             setContratoGerando({ ...base, id: g.id, objeto: objetoEditado ? g.objeto : base.objeto,
@@ -54649,6 +55498,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                       : c.origem === "cotacao" ? { rotulo: "Excluir — veio da cotação", desativado: true }
                                       : c.origem === "escritorio" ? { rotulo: "Excluir — lançada no escritório", desativado: true }
                                       : { rotulo: "Excluir", destrutivo: true, onClick: () => {
+                                          if (clienteNaoMexeNoPago([c], "excluir")) return;
                                           if (travouNaFatura([c], "excluir")) return;
                                           if (travouNoMesFechado([c], "excluir")) return;
                                           dialogo.confirmar({ titulo: "Excluir conta?", mensagem: "Esta ação não pode ser desfeita." + vaiJuntoNoEscritorio([c]), confirmar: "Excluir", destrutivo: true })
@@ -54805,6 +55655,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // segunda parte de uma cópia da obra sem as contas da primeira e as apaga.
   function lancarCotacaoEmContas(dados) {
     if (!obraAtual) return { erro: "Obra não encontrada." };
+    // gerar conta a pagar é do escritório; o cliente cota, propõe e escolhe
+    if (!perm.podeGerenciarObra) return { erro: "Sem permissão para lançar contas nesta obra." };
     // O pedido entra na mesma fila de números do contrato — quem relança um
     // pedido desfeito reaproveita o número que já era dele.
     // A conta de loja que a Entrada acabou de abrir vem junto com o pedido e
@@ -54821,9 +55673,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // Conta de loja é outra história: cada pedido ganha o SEU número e se soma
     // aos anteriores; a cotação comum tem um pedido só e reaproveita o dele.
     const ehLoja = dados.modo === "contaLoja";
+    // mesma sequência dos lançamentos do escritório (proximoNumeroDoc)
     const numeroPedido = ehLoja
-      ? proximoNumeroPedido(data.obras || [])
-      : (anterior.numeroPedido || proximoNumeroPedido(data.obras || []));
+      ? proximoNumeroPedido(data.obras || [], data.lancamentos || [])
+      : (anterior.numeroPedido || proximoNumeroPedido(data.obras || [], data.lancamentos || []));
     if (ehLoja) {
       // Editar um pedido é relançá-lo: ele guarda o próprio id e o próprio
       // número, as contas antigas saem e as novas entram no lugar.
@@ -54899,11 +55752,16 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Item já pago trava a operação inteira — o gasto não pode sumir da obra.
   function excluirPedidoDaLoja(cotacaoId, pedidoId) {
     if (!obraAtual) return { erro: "Obra não encontrada." };
+    if (!perm.podeGerenciarObra) return { erro: "Sem permissão para apagar pedidos nesta obra." };
     const trava = podeMexerNoPedido(obraAtual.contasPagar || [], pedidoId);
     if (!trava.pode) return { erro: trava.motivo };
-    const cotacoes = (obraAtual.cotacoes || []).map(c => c.id !== cotacaoId ? c : ({
+    const semPedido = (obraAtual.cotacoes || []).map(c => c.id !== cotacaoId ? c : ({
       ...c, pedidos: (c.pedidos || []).filter(x => x && x.id !== pedidoId),
     }));
+    // a cotação que tinha virado este pedido deixa de apontar para ele (como
+    // no apagar da lista de pedidos), senão fica travada em "Virou pedido na loja"
+    const cotacoes = typeof soltarPedidoNaLoja === "function"
+      ? soltarPedidoNaLoja(semPedido, { pedidoIds: [pedidoId] }) : semPedido;
     const atualizada = { ...obraAtual,
       contasPagar: removerContasDoPedido(obraAtual.contasPagar || [], pedidoId), cotacoes };
     gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o));
@@ -54966,6 +55824,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const novas = contasDaEntrada(l, { obraId: obraAtual.id, numeroDoc, quem: quemSou(), novoId: uid,
       anexo, cartao, planoDoCartao: pagamentoNoCartao });
     if (!novas.length) return { erro: "Nenhum item com valor." };
+    // pago à vista num mês já fechado no escritório: a conta gravava paga e
+    // o lançamento nunca chegava (a ponte recusava, e não tenta de novo)
+    const travaE = mesFechadoNaBaixa(novas);
+    if (travaE) return { erro: travaE };
     gravarContas([...contas, ...novas], obraAtual.id, rcE.extra);
     return { gravado: true, quantas: novas.length, ref: numeroDoc,
       valor: Math.round(novas.reduce((t, c) => t + (Number(c.valor) || 0), 0) * 100) / 100 };
@@ -55061,6 +55923,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         const plano = pagamentoNoCartao(pagaP, cartaoP, { pagoEm: d.pagoEm, valorPago: valor, parcelas: d.parcelas });
         if (plano) pagaP = { ...pagaP, ...plano };
       }
+      const travaP = mesFechadoNaBaixa([pagaP]);
+      if (travaP) return { erro: travaP };
       gravarContas(contas.map(c => c.id === alvo.id ? pagaP : c), obraAtual.id, rcP.extra);
       return { gravado: true, parcela: true, favorecido: alvo.favorecido || d.favorecido || "" };
     }
@@ -55094,6 +55958,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       const plano = pagamentoNoCartao(paga, cartao, { pagoEm: d.pagoEm, valorPago: valor, parcelas: d.parcelas });
       if (plano) paga = { ...paga, ...plano };
     }
+    const travaD = mesFechadoNaBaixa([paga]);
+    if (travaD) return { erro: travaD };
     gravarContas(contas.concat([paga]), obraAtual.id, rcD.extra);
     return { gravado: true, contaId: nova.id, favorecido: d.favorecido || "", cartao: !!cartao };
   }
@@ -55118,6 +55984,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
   function desfazerLancamentoDaCotacao(cotacaoId) {
     if (!obraAtual) return { erro: "Obra não encontrada." };
+    // mexer em contas a pagar é do escritório
+    if (!perm.podeGerenciarObra) return { erro: "Sem permissão para desfazer lançamentos nesta obra." };
+    // Com parcela paga, desfazer limpava o `contaGeradaId` e relançar gerava
+    // o total de novo por cima do que já saiu. Desfaz-se o pagamento antes.
+    const trava = podeDesfazerLancamento({ id: cotacaoId }, obraAtual.contasPagar || []);
+    if (!trava.pode) return { erro: trava.motivo };
     const restantes = removerContasDaCotacao(obraAtual.contasPagar || [], cotacaoId);
     const cotacoes = (obraAtual.cotacoes || []).map(c => c.id !== cotacaoId ? c
       : ({ ...c, contaGeradaId: "", lancadoEm: "", lancadoPor: "" }));
@@ -55292,7 +56164,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         onVoltar={() => { setAbrirEntrada(false); setCotacaoInicialId(""); setView("detalheObra"); }}
         abrirEntrada={abrirEntrada} entradaInicial={entradaInicial} cotacaoInicialId={cotacaoInicialId}
         onGerarContrato={abrirContratoDaCotacao}
-        onLancarContas={lancarCotacaoEmContas}
+        onLancarContas={lancarPedidoNoMesAberto}
         onLancarDespesa={lancarDespesaDaEntrada}
         onLancarEntrada={lancarEntradaDaObra}
         onDesfazerLancamento={desfazerLancamentoDaCotacao}
@@ -57147,6 +58019,37 @@ function PropostaPreview(props) {
   );
 }
 
+// ── Escopo: parte pura ─────────────────────────────────────────
+// Sincroniza os blocos do escopo com as etapas (etapasPct). Testada em
+// fix-orc.test.mjs (sem JSX, sem React).
+//  - Bloco de etapa que saiu de etapasPct sai do escopo.
+//  - Bloco LIVRE ("+ bloco": custom, etapaId = Date.now()) não é de etapa
+//    nenhuma: fica. Antes era removido ao reabrir a proposta, porque o id
+//    dele nunca está em etapasPct. Os blocos que este efeito cria para
+//    etapas novas (id > 5, ids pequenos e sequenciais) também são custom,
+//    mas seguem a etapa — por isso o critério é o id não ser de etapa.
+//  - Etapa nova (id > 5) ganha bloco antes da Engenharia; sem bloco de
+//    Engenharia, no fim (splice(-1) punha antes do último bloco).
+function escopoBlocoLivre(b) {
+  return !!(b && b.custom && Number(b.etapaId) > 1e9);
+}
+function sincronizarEscopoComEtapas(prev, etapasPct) {
+  const idsAtivos = new Set((etapasPct || []).map(e => e.id));
+  // Remove blocos de etapas que foram excluídas (não-eng e não-livres)
+  const filtrado = (prev || []).filter(b => b.isEng || escopoBlocoLivre(b) || idsAtivos.has(b.etapaId));
+  // Adiciona blocos de etapas novas (id > 5 = customizadas)
+  (etapasPct || []).forEach(et => {
+    if (et.id > 5 && !filtrado.find(b => b.etapaId === et.id)) {
+      const novo = { etapaId: et.id, titulo: et.nome, objetivo:"", itens:[], entregaveis:[], obs:"", isEng:false, custom:true };
+      const iEng = filtrado.findIndex(b => b.isEng);
+      if (iEng === -1) filtrado.push(novo);
+      else filtrado.splice(iEng, 0, novo);
+    }
+  });
+  return filtrado;
+}
+// ── Escopo: fim da parte pura ──────────────────────────────────
+
 function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, propostaReadOnly, propostaSnapshot, lockEdicao, templateId }) {
   // NOTA: NÃO fazer `if (!data) return null` aqui — os hooks abaixo precisam ser
   // chamados em todo render (regra do React). Em vez disso, usamos optional chaining
@@ -57584,21 +58487,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
   });
 
   // Sincroniza escopo quando etapasPct muda (adiciona/remove etapas)
+  // (sincronizarEscopoComEtapas: mantém os blocos livres do "+ bloco")
   useEffect(() => {
-    setEscopoState(prev => {
-      const idsAtivos = new Set(etapasPct.map(e => e.id));
-      // Remove blocos de etapas que foram excluídas (não-eng)
-      const filtrado = prev.filter(b => b.isEng || idsAtivos.has(b.etapaId));
-      // Adiciona blocos de etapas novas (id > 5 = customizadas)
-      etapasPct.forEach(et => {
-        if (et.id > 5 && !filtrado.find(b => b.etapaId === et.id)) {
-          filtrado.splice(filtrado.findIndex(b=>b.isEng), 0, {
-            etapaId: et.id, titulo: et.nome, objetivo:"", itens:[], entregaveis:[], obs:"", isEng:false, custom:true,
-          });
-        }
-      });
-      return filtrado;
-    });
+    setEscopoState(prev => sincronizarEscopoComEtapas(prev, etapasPct));
   }, [etapasPct]);
 
   // Guard defensivo: se data não veio, retorna null (APÓS todos os hooks)
@@ -59760,6 +60651,27 @@ function tplHandleEnterBullet(e, valor, setValor) {
 // recálculo de totais/parcelas em tempo real). On blur reformata pra
 // padrão BR (1.234,56) pra ficar bonito quando o usuário sai do campo.
 // ─────────────────────────────────────────────────────────────
+// Texto digitado → número. "1.234,56" e "1234,56": vírgula é o decimal e
+// ponto é milhar. Sem vírgula, UM ponto seguido de 1 ou 2 dígitos no fim é
+// decimal ("2500.50" = 2500,50 — antes virava 250.050,00); "2.500" ou
+// "1.234.567" continuam sendo milhar.
+function tplParseMoeda(txt) {
+  const t = String(txt == null ? "" : txt).trim();
+  let limpo;
+  if (!t.includes(",") && /^[^.]*\.\d{1,2}$/.test(t)) limpo = t;
+  else limpo = t.replace(/\./g, "").replace(",", ".");
+  const n = parseFloat(limpo);
+  return isNaN(n) ? 0 : n;
+}
+
+// Número salvo ou o padrão — `!= null`, não `||`: 0% de desconto (ou de
+// entrada) é escolha válida e com `||` virava 5/10/15/50%.
+function tplNumOu(v, padrao) {
+  if (v == null || v === "") return padrao;
+  const n = Number(v);
+  return isNaN(n) ? padrao : n;
+}
+
 function TplInputMoeda({ valor, onChange, style, ...rest }) {
   const formatar = v => {
     const n = Number(v) || 0;
@@ -59780,11 +60692,8 @@ function TplInputMoeda({ valor, onChange, style, ...rest }) {
   function handleChange(e) {
     const txt = e.target.value;
     setRaw(txt);
-    // Aceita "1.234,56" ou "1234.56" — limpa pontos de milhar e troca
-    // vírgula decimal por ponto antes do parseFloat.
-    const limpo = txt.replace(/\./g, "").replace(",", ".");
-    const n = parseFloat(limpo);
-    const novo = isNaN(n) ? 0 : n;
+    // Aceita "1.234,56" ou "1234.56" (ver tplParseMoeda).
+    const novo = tplParseMoeda(txt);
     ultimoValorPropRef.current = novo;
     onChange(novo);
   }
@@ -59880,10 +60789,10 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   // pro modo "padrão" (Antecipado/Parcelas). Por etapa fica pra 6d.
   // Defaults vêm de safeData (vem do form/Etapa 5) ou hardcoded.
   const [descArq, setDescArq] = useState(
-    tv.descArq != null ? Number(tv.descArq) : (Number(safeData.descArq) || 5)
+    tv.descArq != null ? Number(tv.descArq) : tplNumOu(safeData.descArq, 5)
   );
   const [descPacote, setDescPacote] = useState(
-    tv.descPacote != null ? Number(tv.descPacote) : (Number(safeData.descPacote) || 10)
+    tv.descPacote != null ? Number(tv.descPacote) : tplNumOu(safeData.descPacote, 10)
   );
   const [parcArq, setParcArq] = useState(
     tv.parcArq != null ? Number(tv.parcArq) : (Number(safeData.parcArq) || 3)
@@ -59897,13 +60806,13 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   //   descEtCtrt/parcEtCtrt = "Contratação etapa a etapa" (cliente contrata 1 de cada vez)
   //   descPacCtrt/parcPacCtrt = "Etapas completas" (cliente contrata todas juntas)
   const [descEtCtrt, setDescEtCtrt] = useState(
-    tv.descEtCtrt != null ? Number(tv.descEtCtrt) : (Number(safeData.descEtCtrt) || 5)
+    tv.descEtCtrt != null ? Number(tv.descEtCtrt) : tplNumOu(safeData.descEtCtrt, 5)
   );
   const [parcEtCtrt, setParcEtCtrt] = useState(
     tv.parcEtCtrt != null ? Number(tv.parcEtCtrt) : (Number(safeData.parcEtCtrt) || 2)
   );
   const [descPacCtrt, setDescPacCtrt] = useState(
-    tv.descPacCtrt != null ? Number(tv.descPacCtrt) : (Number(safeData.descPacCtrt) || 15)
+    tv.descPacCtrt != null ? Number(tv.descPacCtrt) : tplNumOu(safeData.descPacCtrt, 15)
   );
   const [parcPacCtrt, setParcPacCtrt] = useState(
     tv.parcPacCtrt != null ? Number(tv.parcPacCtrt) : (Number(safeData.parcPacCtrt) || 8)
@@ -59913,10 +60822,10 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   // Pré-vem de safeData.formaPagamento.final ou template.valores; fallback 50%.
   const _fpFin = safeData.formaPagamento?.final || {};
   const [entArq, setEntArq] = useState(
-    tv.entArq != null ? Number(tv.entArq) : (Number(_fpFin.entArq) || 50)
+    tv.entArq != null ? Number(tv.entArq) : tplNumOu(_fpFin.entArq, 50)
   );
   const [entPacote, setEntPacote] = useState(
-    tv.entPacote != null ? Number(tv.entPacote) : (Number(_fpFin.entPac) || 50)
+    tv.entPacote != null ? Number(tv.entPacote) : tplNumOu(_fpFin.entPac, 50)
   );
 
   // Estrutura da forma de pagamento (Fase 6d.1) — agora editável no Template.
@@ -61184,6 +62093,214 @@ function formatComodo(nome, qtd) {
   return `${qtdStr} ${nomeStr}`;
 }
 
+// ── Orçamento: parte pura ──────────────────────────────────────
+// JavaScript comum, sem JSX e sem React: fix-orc.test.mjs carrega só este
+// trecho (até o marcador de fim) para testar em node.
+
+// Data local de hoje "AAAA-MM-DD". O usuário está no Brasil (UTC-3):
+// toISOString() puro dá o dia seguinte depois das 21h.
+function orcHojeLocal() {
+  return new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+// Soma n meses a "AAAA-MM-DD" em aritmética de calendário, sem passar por
+// new Date("AAAA-MM-DD") (que é UTC) nem por setMonth (que transborda):
+// dia 31 + 1 mês cai no último dia do mês seguinte (28/02, 30/04) em vez de
+// pular fevereiro. Data vazia ou inválida conta a partir de hoje.
+function orcSomarMeses(iso, n) {
+  const re = /^(\d{4})-(\d{2})-(\d{2})/;
+  const m = re.exec(String(iso || "")) || re.exec(orcHojeLocal());
+  const ano = parseInt(m[1], 10), mes = parseInt(m[2], 10) - 1, dia = parseInt(m[3], 10);
+  const tot = ano * 12 + mes + (parseInt(n, 10) || 0);
+  const a2 = Math.floor(tot / 12), m2 = tot - a2 * 12;
+  const ultimoDia = new Date(Date.UTC(a2, m2 + 1, 0)).getUTCDate();
+  const d2 = Math.min(dia, ultimoDia);
+  return `${String(a2).padStart(4, "0")}-${String(m2 + 1).padStart(2, "0")}-${String(d2).padStart(2, "0")}`;
+}
+
+// Divide `total` em n valores iguais, em centavos; a sobra vai 1 centavo por
+// vez às primeiras — a soma bate exatamente com o total.
+function orcDividirIgual(n, total) {
+  if (n <= 0) return [];
+  const totalCentavos = Math.round((Number(total) || 0) * 100);
+  const vp = Math.floor(totalCentavos / n);
+  const sobra = totalCentavos - vp * n;
+  return Array.from({ length: n }, (_, i) => (vp + (i < sobra ? 1 : 0)) / 100);
+}
+
+// N parcelas iguais, uma por mês a partir de hoje (ou de `hoje`, AAAA-MM-DD).
+function orcGerarParcelasIguais(n, total, nomeBase = "Parcela", hoje) {
+  if (n <= 0) return [];
+  const base = hoje || orcHojeLocal();
+  return orcDividirIgual(n, total).map((v, i) => ({
+    nome: `${i + 1}ª ${nomeBase}`, valor: v, data: orcSomarMeses(base, i),
+  }));
+}
+
+// Muda a quantidade de parcelas SEM refazer as que já existem: nomes e datas
+// (que o usuário pode ter acertado) ficam; acrescenta no fim, um mês depois
+// da última, ou tira do fim. Os valores são redivididos por igual (é o modo
+// "parcelas iguais"). Antes refazia tudo a partir de hoje.
+function orcRedimensionarParcelas(atuais, n, total, nomeBase = "Parcela", hoje) {
+  const lista = (atuais || []).slice(0, Math.max(0, n));
+  while (lista.length < n) {
+    const ult = lista[lista.length - 1];
+    lista.push({ nome: `${lista.length + 1}ª ${nomeBase}`, valor: 0,
+      data: ult ? orcSomarMeses(ult.data, 1) : (hoje || orcHojeLocal()) });
+  }
+  const valores = orcDividirIgual(lista.length, total);
+  return lista.map((p, i) => ({ ...p, valor: valores[i] }));
+}
+
+// Tira a parcela i (modo parcelas iguais) mantendo as datas das outras. Os
+// nomes no padrão "Nª Parcela" são renumerados para não ficar 1ª, 3ª.
+function orcRemoverParcelaIgual(atuais, i, total, nomeBase = "Parcela") {
+  if (!atuais || atuais.length <= 1) return atuais;
+  const resto = atuais.filter((_, idx) => idx !== i);
+  const valores = orcDividirIgual(resto.length, total);
+  const padrao = new RegExp("^\\d+ª " + nomeBase + "$");
+  return resto.map((p, k) => ({ ...p, valor: valores[k],
+    nome: padrao.test(p.nome || "") ? `${k + 1}ª ${nomeBase}` : p.nome }));
+}
+
+// Edição do VALOR da parcela i: a próxima (ou a 1ª, se i é a última) compensa
+// para a soma continuar igual ao total. O valor digitado fica entre 0 e o que
+// sobra depois das outras parcelas — sem esse limite a compensadora ficava
+// negativa (12.000 + -2.000 = 10.000) e passava na conferência da soma.
+function orcCascataParcela(atuais, i, valor, total) {
+  if (!atuais || atuais.length === 0) return atuais;
+  let novo = Math.round((parseFloat(valor) || 0) * 100) / 100;
+  if (novo < 0) novo = 0;
+  if (atuais.length === 1) return [{ ...atuais[0], valor: novo }];
+  const j = i === atuais.length - 1 ? 0 : i + 1;
+  const somaOutras = Math.round(atuais.reduce((s, p, idx) =>
+    (idx === i || idx === j) ? s : s + (parseFloat(p.valor) || 0), 0) * 100) / 100;
+  const teto = Math.max(0, Math.round(((Number(total) || 0) - somaOutras) * 100) / 100);
+  if (novo > teto) novo = teto;
+  const comp = Math.round(((Number(total) || 0) - novo - somaOutras) * 100) / 100;
+  return atuais.map((p, idx) => idx === i ? { ...p, valor: novo } : idx === j ? { ...p, valor: comp } : p);
+}
+
+// Parcela com valor zero ou negativo não pode ir para o financeiro (vira
+// "a receber" negativo ou some da numeração). Só vale quando há o que
+// receber: um ganho de valor zero continua podendo ser confirmado.
+function orcTemParcelaSemValor(parcelas, total) {
+  if (!(Math.round((Number(total) || 0) * 100) > 0)) return false;
+  return (parcelas || []).some((p) => !(Math.round((parseFloat(p && p.valor) || 0) * 100) > 0));
+}
+
+// Maior número ORC já usado em QUALQUER lugar dos dados: o próprio
+// orçamento e tudo que guarda `orcId` — o projeto que nasceu do ganho, os
+// lançamentos do financeiro (origem.orcId), receitas. Excluir o orçamento de
+// maior número não apaga essas referências; reusar o número fazia o
+// orçamento novo herdar recebimentos e projeto do excluído.
+function orcMaiorNumeroUsado(data) {
+  let max = 0;
+  const ver = (v) => { const m = /^ORC-(\d+)$/.exec(String(v || "")); if (m) max = Math.max(max, parseInt(m[1], 10)); };
+  for (const o of (data && data.orcamentosProjeto) || []) ver(o && o.id);
+  const vistos = new WeakSet();
+  const andar = (x) => {
+    if (!x || typeof x !== "object" || vistos.has(x)) return;
+    vistos.add(x);
+    if (Array.isArray(x)) { for (const y of x) andar(y); return; }
+    for (const k of Object.keys(x)) {
+      const v = x[k];
+      if (k === "orcId" || k === "orc_id") ver(v);
+      else if (v && typeof v === "object") andar(v);
+    }
+  };
+  andar(data);
+  return max;
+}
+function proximoIdOrcamento(data) {
+  return "ORC-" + String(orcMaiorNumeroUsado(data) + 1).padStart(4, "0");
+}
+
+// Arquitetura e engenharia (sem imposto) de uma proposta — ou da raiz do
+// orçamento, se não há proposta —, respeitando o que foi INCLUÍDO: o cálculo
+// guarda precoEng mesmo quando a engenharia ficou de fora da proposta.
+function orcValoresBase(orc, prop) {
+  const o = orc || {};
+  const res = o.resultado || {};
+  const incArq = ((prop && prop.incluiArq != null) ? prop.incluiArq : o.incluiArq) !== false;
+  const incEng = ((prop && prop.incluiEng != null) ? prop.incluiEng : o.incluiEng) !== false;
+  let arq, eng;
+  if (prop) {
+    const c = prop.calculo || {};
+    arq = prop.arqEdit != null ? prop.arqEdit : (c.precoArq != null ? c.precoArq : (res.precoArq || 0));
+    eng = prop.engEdit != null ? prop.engEdit : (c.precoEng != null ? c.precoEng : (res.precoEng || 0));
+  } else {
+    arq = res.precoArq || 0;
+    eng = res.precoEng || 0;
+  }
+  return { arq: incArq ? (Number(arq) || 0) : 0, eng: incEng ? (Number(eng) || 0) : 0 };
+}
+
+// Valor total do orçamento na lista (tabela, card, ordenação): o que o
+// cliente viu na última proposta, ou arquitetura + engenharia incluídas.
+function orcValorTotal(orc) {
+  const props = (orc && orc.propostas) || [];
+  const ult = props.length > 0 ? props[props.length - 1] : null;
+  if (ult && ult.valorTotalExibido != null) return ult.valorTotalExibido;
+  const v = orcValoresBase(orc, ult);
+  return v.arq + v.eng;
+}
+
+// Desconto, nº de parcelas e rótulo que o modal de Ganho propõe — da versão
+// ESCOLHIDA como fechada (`prop`), não da última: com v1 e v2 enviadas e a
+// v1 aceita, o fechamento tem de sair das condições da v1.
+function orcOpcoesDoGanho(orc, prop, inclArq, inclEng, etapas) {
+  const o = orc || {};
+  const tipoPgto = (prop && prop.tipoPgto) || o.tipoPagamento || o.tipoPgto || "padrao";
+  const pick = (...vals) => { for (const v of vals) if (v != null) return v; return 0; };
+  if (tipoPgto === "padrao") {
+    // Arq + Eng = pacote completo | só um dos dois = "etapa" (individual)
+    const ehPacote = inclArq && inclEng;
+    const descArq = pick(prop?.descArq, o.descontoEtapa, o.descArq, 5);
+    const parcArq = pick(prop?.parcArq, o.parcelasEtapa, o.parcArq, 3);
+    const descPac = pick(prop?.descPacote, o.descontoPacote, o.descPacote, 10);
+    const parcPac = pick(prop?.parcPacote, o.parcelasPacote, o.parcPacote, 4);
+    return {
+      descAntecipado: ehPacote ? descPac : descArq,
+      qtdParcelado:   ehPacote ? parcPac : parcArq,
+      blocoLabel:     ehPacote ? "Pacote Completo" : (inclArq ? "Apenas Arquitetura" : "Apenas Engenharia"),
+    };
+  }
+  // Tipo "etapas": se TODAS etapas marcadas → pacote (Ctrt Pacote); se subset → etapa a etapa (Ctrt Etapa)
+  const lista = etapas || [];
+  const ehPacote = lista.length > 0 && lista.filter(e => e.marcado).length === lista.length;
+  const descEt  = pick(prop?.descEtCtrt,  o.descontoEtapaCtrt,  o.descEtCtrt,  5);
+  const parcEt  = pick(prop?.parcEtCtrt,  o.parcelasEtapaCtrt,  o.parcEtCtrt,  2);
+  const descPac = pick(prop?.descPacCtrt, o.descontoPacoteCtrt, o.descPacCtrt, 15);
+  const parcPac = pick(prop?.parcPacCtrt, o.parcelasPacoteCtrt, o.parcPacCtrt, 8);
+  return {
+    descAntecipado: ehPacote ? descPac : descEt,
+    qtdParcelado:   ehPacote ? parcPac : parcEt,
+    blocoLabel:     ehPacote ? "Pacote de Etapas" : "Etapa a Etapa",
+  };
+}
+
+// Status ao "Salvar rascunho" na volta do formulário: só o que ainda é
+// rascunho (ou novo) vira rascunho. Ganho, perdido e aberto (proposta
+// enviada) ficam como estão — rascunho é apagado em 3 dias.
+function orcStatusAoSalvarRascunho(orcBase) {
+  const st = orcBase && orcBase.status;
+  return st && st !== "rascunho" ? st : "rascunho";
+}
+
+// Grava por cima do registro ATUAL, não da cópia que a tela guardou: depois
+// de uma junção (409) com a mudança de outra pessoa, `base` (o que o
+// formulário leu) fica velho, e `{ ...base, ...mudanças }` desfazia a mudança
+// dela na gravação seguinte. Junta em 3 vias como a gravação do app
+// (mesclar3, api.js): campo que só o outro lado mudou fica com a mudança dele.
+function orcMesclarComAtual(base, nosso, atual) {
+  if (!nosso || !nosso.id || !atual || atual.id !== nosso.id) return nosso;
+  if (!base || base.id !== nosso.id || atual === base) return nosso;
+  if (typeof mesclar3 !== "function") return nosso;
+  return mesclar3(base, nosso, atual);
+}
+// ── Orçamento: fim da parte pura ───────────────────────────────
+
 // ═══════════════════════════════════════════════════════════════
 // MÓDULO ORÇAMENTOS (lista centralizada de todos os orçamentos)
 // ═══════════════════════════════════════════════════════════════
@@ -61225,6 +62342,10 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
 
   const orcamentos = data?.orcamentosProjeto || [];
   const clientes = data?.clientes || [];
+  // Últimos dados conhecidos, para salvarOrcamento (ver lá). Cada render traz
+  // os do app; entre dois renders, a própria gravação atualiza.
+  const dadosRef = useRef(data);
+  dadosRef.current = data;
 
   // Nota: expiração automática de propostas (30 dias) é feita pelo backend
   // via cron job (endpoint POST /admin/manutencao), todo dia às 3h da manhã.
@@ -61360,7 +62481,9 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
     const props = orc.propostas || [];
     const iVer = typeof ganhoVersao === "number" && props[ganhoVersao] ? ganhoVersao : props.length - 1;
     const fechada = props[iVer] || null;
-    props.forEach((p, i) => { if (i !== iVer) esquecerArquivoDaProposta(p); });
+    // O PDF das outras versões só sai do storage DEPOIS que o ganho foi
+    // gravado (no .then do save, abaixo): se o recebimento dá erro ou a
+    // gravação falha, nada muda no orçamento — e os PDFs não podem sumir.
 
     // Atualiza o orçamento: status ganho + fechamento
     const novosOrc = todos.map(o =>
@@ -61398,6 +62521,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
     // Save em background. Falha silenciosa via toast de erro.
     save({ ...data, orcamentosProjeto: novosOrc, projetos: novosProjetos,
       ...(recebido.novos && recebido.novos.length ? { lancamentos: recebido.lancamentos } : {}) })
+      .then(() => { props.forEach((p, i) => { if (i !== iVer) esquecerArquivoDaProposta(p); }); })
       .catch(e => {
         console.error("Erro ao salvar orçamento ganho:", e);
         toast.erro("Erro ao salvar — tente novamente");
@@ -61405,27 +62529,30 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   }
 
   async function salvarOrcamento(orc) {
-    const todos = data.orcamentosProjeto || [];
-    const nextId = () => {
-      const max = todos.reduce((mx, o) => {
-        const m = (o.id || "").match(/^ORC-(\d+)$/);
-        return m ? Math.max(mx, parseInt(m[1])) : mx;
-      }, 0);
-      return "ORC-" + String(max + 1).padStart(4, "0");
-    };
+    // Visualizador não grava orçamento (a tela já esconde; aqui é a trava).
+    if (!perm.podeEditar) return;
+    // Dados mais novos que esta tela conhece: duas gravações seguidas (salvar
+    // + snapshot da proposta) acontecem antes do re-render.
+    const dataAtual = dadosRef.current || data;
+    const todos = dataAtual.orcamentosProjeto || [];
+    // Número novo: maior já usado em qualquer referência (não só na lista),
+    // para nunca reusar o de um orçamento excluído.
+    const nextId = () => proximoIdOrcamento(dataAtual);
+    const atual = orc.id ? todos.find(o => o.id === orc.id) : null;
+    const junto = orcMesclarComAtual(orcBase, orc, atual);
     const novo = {
-      ...orc,
-      id: orc.id || nextId(),
-      criadoEm: orc.criadoEm || new Date().toISOString(),
-      clienteId: orc.clienteId || clienteAtivo?.id || null,
-      status: orc.status || "rascunho",
+      ...junto,
+      id: junto.id || nextId(),
+      criadoEm: junto.criadoEm || new Date().toISOString(),
+      clienteId: junto.clienteId || clienteAtivo?.id || null,
+      status: junto.status || "rascunho",
     };
     setOrcBase(novo);
     const novos = orc.id ? todos.map(o => o.id === orc.id ? novo : o) : [...todos, novo];
 
     // Reativação automática: se o cliente está inativo e está criando novo orçamento,
     // reativa automaticamente (cliente voltou a ser ativo).
-    let clientesAtualizados = data.clientes || [];
+    let clientesAtualizados = dataAtual.clientes || [];
     const cliId = novo.clienteId;
     if (cliId && !orc.id) { // só em novos orçamentos
       const cli = clientesAtualizados.find(c => c.id === cliId);
@@ -61443,7 +62570,9 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       }
     }
 
-    save({ ...data, orcamentosProjeto: novos, clientes: clientesAtualizados }).catch(console.error);
+    const novoData = { ...dataAtual, orcamentosProjeto: novos, clientes: clientesAtualizados };
+    dadosRef.current = novoData;
+    save(novoData).catch(console.error);
   }
 
   function abrirNovoOrcamento(cliente) {
@@ -61500,6 +62629,11 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         orcBase={orcBase}
         onSalvar={salvarOrcamento}
         onVoltar={voltarParaLista}
+        // Aberto só para ver: o Voltar não oferece "salvar como rascunho"
+        // (que regravava um ganho/perdido como rascunho, apagado em 3 dias).
+        // Rascunho fica de fora: na lista, clicar é o único jeito de abrir um
+        // rascunho para continuar, e a pergunta ao voltar é o que o salva.
+        modoVer={modoAbertura === "ver" && (orcBase?.status || "rascunho") !== "rascunho"}
         modoAbertura={modoAbertura}
         escritorio={data?.escritorio || {}}
         usuario={data?._usuario}
@@ -61519,16 +62653,8 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   const totalAtivos = totalTodos - totalContadores.perdido;
 
   // Helper: valor Total do orçamento (usa proposta salva se existir)
-  const valorTotalOrc = (o) => {
-    const ult = o.propostas && o.propostas.length > 0 ? o.propostas[o.propostas.length - 1] : null;
-    if (ult) {
-      if (ult.valorTotalExibido != null) return ult.valorTotalExibido;
-      const arq = ult.arqEdit != null ? ult.arqEdit : (ult.calculo?.precoArq || 0);
-      const eng = ult.engEdit != null ? ult.engEdit : (ult.calculo?.precoEng || 0);
-      return arq + eng;
-    }
-    return (o.resultado?.precoArq || 0) + (o.resultado?.precoEng || 0);
-  };
+  // (orcValorTotal: só soma a engenharia/arquitetura que foi incluída)
+  const valorTotalOrc = (o) => orcValorTotal(o);
 
   // Helper: dias até vencer (null se não aplicável). Negativo = já vencido.
   const diasParaVencer = (o) => {
@@ -61854,7 +62980,9 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
             const lista = (p._orcOrigem || {}).propostas || [];
             return lista[i] ? { ...lista[i], clienteNome: p.clienteNome, _orcOrigem: p._orcOrigem, _indice: i } : p;
           })}
-          aoExcluirVersao={() => {
+          // Excluir versão apaga o PDF do storage: só quem pode excluir (o
+          // mesmo critério da tela do cliente). Editar: só quem pode editar.
+          aoExcluirVersao={!perm.podeExcluir ? null : () => {
             const p = propostaVisualizada;
             const orc = p._orcOrigem || {};
             const i = typeof p._indice === "number" ? p._indice : (orc.propostas || []).length - 1;
@@ -61868,7 +62996,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
               : null);
           }}
           onFechar={() => setPropostaVisualizada(null)}
-          onEditar={() => {
+          onEditar={!perm.podeEditar ? null : () => {
             const orc = propostaVisualizada._orcOrigem;
             if (!orc) return;
             setPropostaVisualizada(null);
@@ -62174,18 +63302,8 @@ function OrcCard({ orc, clientes, onAbrir, onAction, onChangeProb, perm }) {
   const ultimaProposta = orc.propostas && orc.propostas.length > 0
     ? orc.propostas[orc.propostas.length - 1]
     : null;
-  let valorTotal;
-  if (ultimaProposta) {
-    if (ultimaProposta.valorTotalExibido != null) {
-      valorTotal = ultimaProposta.valorTotalExibido;
-    } else {
-      const arq = ultimaProposta.arqEdit != null ? ultimaProposta.arqEdit : (ultimaProposta.calculo?.precoArq || 0);
-      const eng = ultimaProposta.engEdit != null ? ultimaProposta.engEdit : (ultimaProposta.calculo?.precoEng || 0);
-      valorTotal = arq + eng;
-    }
-  } else {
-    valorTotal = (orc.resultado?.precoArq || 0) + (orc.resultado?.precoEng || 0);
-  }
+  // Só soma a engenharia/arquitetura que foi incluída (orcValorTotal)
+  const valorTotal = orcValorTotal(orc);
 
   const tipo = orc.tipo || "—";
   const ref = orc.referencia || "";
@@ -62486,18 +63604,8 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
   const ultimaProposta = orc.propostas && orc.propostas.length > 0
     ? orc.propostas[orc.propostas.length - 1]
     : null;
-  let valorTotal;
-  if (ultimaProposta) {
-    if (ultimaProposta.valorTotalExibido != null) {
-      valorTotal = ultimaProposta.valorTotalExibido;
-    } else {
-      const arq = ultimaProposta.arqEdit != null ? ultimaProposta.arqEdit : (ultimaProposta.calculo?.precoArq || 0);
-      const eng = ultimaProposta.engEdit != null ? ultimaProposta.engEdit : (ultimaProposta.calculo?.precoEng || 0);
-      valorTotal = arq + eng;
-    }
-  } else {
-    valorTotal = (orc.resultado?.precoArq || 0) + (orc.resultado?.precoEng || 0);
-  }
+  // Só soma a engenharia/arquitetura que foi incluída (orcValorTotal)
+  const valorTotal = orcValorTotal(orc);
 
   const tipo = orc.tipo || "—";
   const refRaw = orc.referencia || "";
@@ -63695,16 +64803,9 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
   // IMPORTANTE: NÃO usar valorArqExibido/valorEngExibido da proposta porque esses
   // já vêm com imposto incluído quando o orçamento tem imposto (arqCIEdit/engCIEdit).
   // Precisamos dos valores LÍQUIDOS pra aplicar comImp() corretamente.
-  const baseArq = (() => {
-    if (ultPropImp?.arqEdit != null) return ultPropImp.arqEdit;
-    if (ultPropImp?.calculo?.precoArq != null) return ultPropImp.calculo.precoArq;
-    return orc.resultado?.precoArq || 0;
-  })();
-  const baseEng = (() => {
-    if (ultPropImp?.engEdit != null) return ultPropImp.engEdit;
-    if (ultPropImp?.calculo?.precoEng != null) return ultPropImp.calculo.precoEng;
-    return orc.resultado?.precoEng || 0;
-  })();
+  // orcValoresBase zera a parte que não foi incluída na proposta: o cálculo
+  // guarda precoEng mesmo com a engenharia de fora, e o ganho a somava.
+  const { arq: baseArq, eng: baseEng } = orcValoresBase(orc, ultPropImp);
 
   // ── Estados principais ──
   const [incluirImposto, setIncluirImposto] = useState(temImpostoOrc);   // começa marcado se orçamento tem imposto
@@ -63800,42 +64901,9 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
 
   // ── Deriva opções padrão do orçamento (desconto e quantidade de parcelas) ──
   // Prioridade: proposta enviada > raiz do orçamento > fallback.
-  const opcoesOrcamento = (() => {
-    const tipoPgto = orc.tipoPagamento || orc.tipoPgto || "padrao";
-    const ultProp = orc.propostas && orc.propostas.length > 0
-      ? orc.propostas[orc.propostas.length - 1]
-      : null;
-    const pick = (...vals) => { for (const v of vals) if (v != null) return v; return 0; };
-
-    if (tipoPgto === "padrao") {
-      // Arq + Eng = pacote completo | só um dos dois = "etapa" (individual)
-      const ehPacote = inclArq && inclEng;
-      const descArq = pick(ultProp?.descArq, orc.descontoEtapa, orc.descArq, 5);
-      const parcArq = pick(ultProp?.parcArq, orc.parcelasEtapa, orc.parcArq, 3);
-      const descPac = pick(ultProp?.descPacote, orc.descontoPacote, orc.descPacote, 10);
-      const parcPac = pick(ultProp?.parcPacote, orc.parcelasPacote, orc.parcPacote, 4);
-      return {
-        descAntecipado: ehPacote ? descPac : descArq,
-        qtdParcelado:   ehPacote ? parcPac : parcArq,
-        blocoLabel:     ehPacote ? "Pacote Completo" : (inclArq ? "Apenas Arquitetura" : "Apenas Engenharia"),
-      };
-    }
-
-    // Tipo "etapas": se TODAS etapas marcadas → pacote (Ctrt Pacote); se subset → etapa a etapa (Ctrt Etapa)
-    const totalEtapas = etapas.length;
-    const marcadas    = etapas.filter(e => e.marcado).length;
-    const ehPacote    = totalEtapas > 0 && marcadas === totalEtapas;
-
-    const descEt  = pick(ultProp?.descEtCtrt,  orc.descontoEtapaCtrt,  orc.descEtCtrt,  5);
-    const parcEt  = pick(ultProp?.parcEtCtrt,  orc.parcelasEtapaCtrt,  orc.parcEtCtrt,  2);
-    const descPac = pick(ultProp?.descPacCtrt, orc.descontoPacoteCtrt, orc.descPacCtrt, 15);
-    const parcPac = pick(ultProp?.parcPacCtrt, orc.parcelasPacoteCtrt, orc.parcPacCtrt, 8);
-    return {
-      descAntecipado: ehPacote ? descPac : descEt,
-      qtdParcelado:   ehPacote ? parcPac : parcEt,
-      blocoLabel:     ehPacote ? "Pacote de Etapas" : "Etapa a Etapa",
-    };
-  })();
+  // Da versão escolhida como fechada (ultPropImp = propostas[iProp]), não da
+  // última — ver orcOpcoesDoGanho.
+  const opcoesOrcamento = orcOpcoesDoGanho(orc, ultPropImp, inclArq, inclEng, etapas);
 
   // ── Cálculos derivados ──
   // No tipo "etapas": propTotal = soma das etapas MARCADAS (valor editável)
@@ -63871,26 +64939,17 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
   const somaParcelas = Math.round(parcelas.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0) * 100) / 100;
   const diferencaParcelas = Math.round((somaParcelas - totalFechado) * 100) / 100;
   const temDiferenca = Math.abs(diferencaParcelas) > 0.01;
+  // Parcela zerada ou negativa também trava o Confirmar (orcTemParcelaSemValor).
+  const temParcelaSemValor = orcTemParcelaSemValor(parcelas, totalFechado);
+  const bloqueiaConfirmar = temDiferenca || temParcelaSemValor;
 
   // ── Helpers ──
   // Gera N parcelas iguais, com a última absorvendo a diferença de arredondamento.
   // Garante que soma(parcelas) === total exatamente (em centavos).
+  // Datas em aritmética de calendário (orcSomarMeses): dia 29-31 cai no
+  // último dia de fevereiro em vez de pular para março.
   function gerarParcelasIguais(n, total, nomeBase = "Parcela") {
-    const hoje = new Date();
-    if (n <= 0) return [];
-    const totalCentavos = Math.round(total * 100);
-    const vpCentavos = Math.floor(totalCentavos / n);
-    const sobra = totalCentavos - (vpCentavos * n); // centavos que sobram (vai pra primeira)
-    return Array.from({ length: n }, (_, i) => {
-      const d = new Date(hoje.getFullYear(), hoje.getMonth() + i, hoje.getDate());
-      // Distribui a sobra nas primeiras parcelas (1 centavo cada) pra fechar exato
-      const centavos = vpCentavos + (i < sobra ? 1 : 0);
-      return {
-        nome: `${i + 1}ª ${nomeBase}`,
-        valor: centavos / 100,
-        data: d.toISOString().slice(0, 10),
-      };
-    });
+    return orcGerarParcelasIguais(n, total, nomeBase);
   }
 
   // Refs de controle (devem ser declarados antes dos useEffects que os usam)
@@ -64009,7 +65068,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
   function mudarValorEtapa(i, novoValor) {
     setEtapas(atuais => {
       if (atuais.length === 0) return atuais;
-      const novoV = Math.round((parseFloat(novoValor) || 0) * 100) / 100;
+      let novoV = Math.round((parseFloat(novoValor) || 0) * 100) / 100;
       // Só aplica cascata entre etapas MARCADAS (desmarcadas não entram)
       const marcadasIdx = atuais.map((e, idx) => e.marcado ? idx : -1).filter(x => x !== -1);
       const iMarcada = marcadasIdx.indexOf(i);
@@ -64027,6 +65086,11 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
         if (idx === i || idx === jCompensar) return s;
         return s + (parseFloat(atuais[idx].valor) || 0);
       }, 0);
+      // A etapa editada vai de 0 até o que sobra do total — a que compensa
+      // nunca fica negativa (mesma regra das parcelas, orcCascataParcela).
+      const teto = Math.max(0, Math.round((somaAtualMarcadas - somaOutras) * 100) / 100);
+      if (novoV < 0) novoV = 0;
+      if (novoV > teto) novoV = teto;
       // Valor compensador = soma total marcadas - novoV - somaOutras
       const valorCompensador = Math.round((somaAtualMarcadas - novoV - somaOutras) * 100) / 100;
 
@@ -64040,7 +65104,8 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
 
   function mudarQtdParcelas(n) {
     const qtd = Math.max(1, Math.min(24, parseInt(n) || 1));
-    setParcelas(gerarParcelasIguais(qtd, totalFechado, "Parcela"));
+    // Mantém nomes e datas das parcelas que já existem; só acrescenta/tira no fim.
+    setParcelas(atuais => orcRedimensionarParcelas(atuais, qtd, totalFechado, "Parcela"));
   }
 
   function mudarParcelaCampo(i, campo, valor) {
@@ -64053,26 +65118,8 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
     // Estratégia: seta o valor novo na parcela i, depois define a parcela j (próxima)
     // como o que falta pra fechar o total (totalFechado - soma das outras).
     // Se for a última parcela editada, a primeira absorve.
-    setParcelas(atuais => {
-      if (atuais.length === 0) return atuais;
-      const novoValor = Math.round((parseFloat(valor) || 0) * 100) / 100;
-      if (atuais.length === 1) {
-        return [{ ...atuais[0], valor: novoValor }];
-      }
-      const jCompensar = i === atuais.length - 1 ? 0 : i + 1;
-      // Soma todas as parcelas exceto a editada e a que compensa
-      const somaOutras = atuais.reduce((s, p, idx) => {
-        if (idx === i || idx === jCompensar) return s;
-        return s + (parseFloat(p.valor) || 0);
-      }, 0);
-      // O que falta pra fechar o total = totalFechado - novoValor - somaOutras
-      const valorCompensador = Math.round((totalFechado - novoValor - somaOutras) * 100) / 100;
-      return atuais.map((p, idx) => {
-        if (idx === i) return { ...p, valor: novoValor };
-        if (idx === jCompensar) return { ...p, valor: valorCompensador };
-        return p;
-      });
-    });
+    // orcCascataParcela limita o valor para a compensadora não ficar negativa.
+    setParcelas(atuais => orcCascataParcela(atuais, i, valor, totalFechado));
   }
 
   function mudarParcelaPct(i, novoPct) {
@@ -64084,10 +65131,11 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
 
   function adicionarParcela() {
     const ult = parcelas[parcelas.length - 1];
-    const d = ult ? new Date(ult.data) : new Date();
-    d.setMonth(d.getMonth() + 1);
+    // Um mês depois da última, em data local com o dia limitado ao fim do mês.
+    // Antes: new Date("AAAA-MM-DD") (UTC) + setMonth local + toISOString dava
+    // o dia errado, e data vazia lançava RangeError.
     const nome = modoEtapas ? "Nova etapa" : `${parcelas.length + 1}ª Parcela`;
-    const novaParcela = { nome, valor: 0, data: d.toISOString().slice(0, 10) };
+    const novaParcela = { nome, valor: 0, data: orcSomarMeses(ult && ult.data, 1) };
     if (modoEtapas) {
       // Modo etapas: só adiciona, usuário preenche o valor
       setParcelas([...parcelas, novaParcela]);
@@ -64102,7 +65150,9 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
     if (modoEtapas) {
       setParcelas(parcelas.filter((_, idx) => idx !== i));
     } else {
-      setParcelas(gerarParcelasIguais(parcelas.length - 1, totalFechado, "Parcela"));
+      // Tira a parcela clicada e mantém as datas das outras (antes refazia
+      // todas a partir de hoje).
+      setParcelas(orcRemoverParcelaIgual(parcelas, i, totalFechado, "Parcela"));
     }
   }
 
@@ -64152,6 +65202,14 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
       dialogo.alertar({
         titulo: "Ajuste os valores das parcelas",
         mensagem: `A soma das parcelas precisa bater com o total fechado.\n\nSoma atual: ${fmtBRL(somaParcelas)}\nTotal fechado: ${fmtBRL(totalFechado)}\nDiferença: ${diferencaParcelas > 0 ? "+" : ""}${fmtBRL(diferencaParcelas)}`,
+        tipo: "aviso",
+      });
+      return;
+    }
+    if (temParcelaSemValor) {
+      dialogo.alertar({
+        titulo: "Ajuste os valores das parcelas",
+        mensagem: "Toda parcela precisa ter valor maior que zero. Preencha o valor ou remova a parcela.",
         tipo: "aviso",
       });
       return;
@@ -64536,6 +65594,19 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
                   </div>
                 </div>
               )}
+              {/* Parcela zerada: o botão Confirmar fica travado — sem este aviso
+                  (no celular não há o title do botão) não se sabia por quê. */}
+              {temParcelaSemValor && !temDiferenca && !editandoTotal && !editandoDesconto && !editandoImposto && (
+                <div data-vk-parcela-sem-valor style={{
+                  marginTop:10, padding:"8px 10px",
+                  background:"#fef2f2", border:"1px solid #fecaca",
+                  borderRadius:6, fontSize:11.5, color:"#b91c1c",
+                  display:"flex", alignItems:"center", gap:6,
+                }}>
+                  <span style={{ fontSize:13, fontWeight:700 }}>⚠</span>
+                  <div>Toda parcela precisa ter valor maior que zero. Preencha o valor ou remova a parcela.</div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -64612,14 +65683,15 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
             Cancelar
           </button>
           <button onClick={confirmar}
-            disabled={temDiferenca}
-            title={temDiferenca ? `A soma das parcelas precisa bater com o total fechado (diferença: ${fmtBRL(diferencaParcelas)})` : ""}
+            disabled={bloqueiaConfirmar}
+            title={temDiferenca ? `A soma das parcelas precisa bater com o total fechado (diferença: ${fmtBRL(diferencaParcelas)})`
+              : temParcelaSemValor ? "Toda parcela precisa ter valor maior que zero" : ""}
             style={{
               padding:"8px 18px",
-              background: temDiferenca ? "#d1d5db" : "#262421",
+              background: bloqueiaConfirmar ? "#d1d5db" : "#262421",
               color:"#fff", border:"none", borderRadius:7,
               fontSize:12.5, fontWeight:500,
-              cursor: temDiferenca ? "not-allowed" : "pointer",
+              cursor: bloqueiaConfirmar ? "not-allowed" : "pointer",
               fontFamily:"inherit",
             }}>
             Confirmar
@@ -67551,10 +68623,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     tipoPgto: orcBase.tipoPgto || "padrao",
     temImposto: orcBase.temImposto || false,
     aliqImp: orcBase.aliqImp || 16,
-    descArq: orcBase.descArq || 5, parcArq: orcBase.parcArq || 3,
-    descPacote: orcBase.descPacote || 10, parcPacote: orcBase.parcPacote || 4,
-    descEtCtrt: orcBase.descEtCtrt || 5, parcEtCtrt: orcBase.parcEtCtrt || 2,
-    descPacCtrt: orcBase.descPacCtrt || 15, parcPacCtrt: orcBase.parcPacCtrt || 8,
+    descArq: orcBase.descArq ?? 5, parcArq: orcBase.parcArq || 3,
+    descPacote: orcBase.descPacote ?? 10, parcPacote: orcBase.parcPacote || 4,
+    descEtCtrt: orcBase.descEtCtrt ?? 5, parcEtCtrt: orcBase.parcEtCtrt || 2,
+    descPacCtrt: orcBase.descPacCtrt ?? 15, parcPacCtrt: orcBase.parcPacCtrt || 8,
     etapasPct: orcBase.etapasPct || [],
     totSI: orcBase.totSI || 0, totCI: orcBase.totCI || 0, impostoV: orcBase.impostoV || 0,
     incluiArq: orcBase.incluiArq !== false,
@@ -67567,22 +68639,24 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [tipoPgto,      setTipoPgto]      = useState(orcBase?.tipoPgto    || "padrao");
   const [temImposto,    setTemImposto]    = useState(orcBase?.temImposto  || false);
   const [aliqImp,       setAliqImp]       = useState(orcBase?.aliqImp     || 16);
-  const [descArq,       setDescArq]       = useState(orcBase?.descArq     || 5);
+  // `??` e não `||` nos descontos e na entrada: 0% é escolha válida e,
+  // com `||`, voltava 5/10/15/50% ao reabrir o orçamento.
+  const [descArq,       setDescArq]       = useState(orcBase?.descArq     ?? 5);
   const [parcArq,       setParcArq]       = useState(orcBase?.parcArq     || 3);
-  const [descPacote,    setDescPacote]    = useState(orcBase?.descPacote  || 10);
+  const [descPacote,    setDescPacote]    = useState(orcBase?.descPacote  ?? 10);
   const [parcPacote,    setParcPacote]    = useState(orcBase?.parcPacote  || 4);
   // Por etapa — Patch 1: nomenclatura nova (semântica clara).
   //   descEtCtrt/parcEtCtrt = "Contratação etapa a etapa" (cliente contrata 1 de cada vez)
   //   descPacCtrt/parcPacCtrt = "Etapas completas" (cliente contrata todas juntas)
   // Defaults: 5%/2x pra etapa a etapa, 10%/4x pra etapas completas.
-  const [descEtCtrt,    setDescEtCtrt]    = useState(orcBase?.descEtCtrt  || 5);
+  const [descEtCtrt,    setDescEtCtrt]    = useState(orcBase?.descEtCtrt  ?? 5);
   const [parcEtCtrt,    setParcEtCtrt]    = useState(orcBase?.parcEtCtrt  || 2);
-  const [descPacCtrt,   setDescPacCtrt]   = useState(orcBase?.descPacCtrt || 10);
+  const [descPacCtrt,   setDescPacCtrt]   = useState(orcBase?.descPacCtrt ?? 10);
   const [parcPacCtrt,   setParcPacCtrt]   = useState(orcBase?.parcPacCtrt || 4);
   // Entrada + final (introduzido na Etapa 5 / Deploy 2). entArq/entPac são o
   // % de entrada; o restante (100 - entArq) é pago no final, na entrega.
-  const [entArq,        setEntArq]        = useState(orcBase?.entArq      || 50);
-  const [entPac,        setEntPac]        = useState(orcBase?.entPac      || 40);
+  const [entArq,        setEntArq]        = useState(orcBase?.entArq      ?? 50);
+  const [entPac,        setEntPac]        = useState(orcBase?.entPac      ?? 40);
   const [etapasPct, setEtapasPct] = useState(orcBase?.etapasPct || [
     { id:1, nome:"Estudo de Viabilidade",  pct:10 },
     { id:2, nome:"Estudo Preliminar",      pct:40 },
@@ -67846,19 +68920,15 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     }
   }
   async function salvarRascunhoEVoltar() {
+    // Mesmo objeto que "Gerar Orçamento" grava (montarOrcParaSalvar): antes
+    // era um subconjunto e o rascunho perdia repetição, pavimentos, vagas,
+    // grupos do comercial, marcenaria, etapas isoladas, entrada, forma de
+    // pagamento e o resultado. Status: ganho/perdido/aberto não viram rascunho.
+    const status = orcStatusAoSalvarRascunho(orcBase);
     const orcRascunho = {
-      ...(orcBase || {}),
-      referencia,
-      tipo: tipoProjeto, subtipo: tipoObra,
-      padrao, tipologia, tamanho,
-      comodos: Object.entries(qtds).filter(([,q]) => q > 0).map(([nome, qtd]) => ({ nome, qtd })),
-      incluiArq, incluiEng,
-      tipoPgto, temImposto, aliqImp,
-      descArq, parcArq, descPacote, parcPacote,
-      descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
-      etapasPct,
-      rascunho: true,
-      status: "rascunho",
+      ...montarOrcParaSalvar().orcParaSalvar,
+      ...(status === "rascunho" ? { rascunho: true } : {}),
+      status,
     };
     setShowSaveDialog(false);
     if (onSalvar) {
@@ -69445,6 +70515,31 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       }
       return `${prefixo}${ed.um} ${ed.nome} ${ed.tip}, com ${fmtN2(areaUni)}m² de área construída, ${ed.composta} por ${totalAmb} ambientes: ${listaStr}.`;
     })();
+    const { orcParaSalvar, formaPagamentoObj } = montarOrcParaSalvar();
+    setPropostaData({
+      tipoProjeto, tipoObra, padrao, tipologia, tamanho,
+      qtdPavimentos, vagasPorUnidade,
+      clienteNome, referencia,
+      comodos: Object.entries(qtds).filter(([,q])=>q>0).map(([nome,qtd])=>({nome,qtd})),
+      resumoDescritivo,
+      grupoQtds: isComercial ? grupoQtds : null,
+      calculo,
+      incluiArq, incluiEng, incluiMarcenaria,
+      etapasIsoladas: Array.from(etapasIsoladas),
+      tipoPgto, temImposto, aliqImp,
+      descArq, parcArq, descPacote, parcPacote,
+      descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
+      etapasPct,
+      totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
+      escritorio: esc, // Passa o escritório inteiro pra PropostaPreview/PDF lerem dados
+      formaPagamento: formaPagamentoObj, // Fase 1 — objeto canônico
+    });
+    if (onSalvar) onSalvar(orcParaSalvar);
+  }
+
+  // O orçamento como o formulário está agora — o que "Gerar Orçamento" grava
+  // e também o que "Salvar rascunho" grava (um só lugar para os campos).
+  function montarOrcParaSalvar() {
     // ─── Objeto canônico de Forma de Pagamento (Fase 1 do refator) ───
     // Centraliza tudo o que foi configurado na Etapa 5. Lido pelo Preview
     // (BlocoFormaPagamentoView) e futuramente pelo PDF.
@@ -69466,24 +70561,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         modalidade2: { desconto: descPacCtrt, parcelas: parcPacCtrt }, // Patch 1: etapas completas
       },
     };
-    setPropostaData({
-      tipoProjeto, tipoObra, padrao, tipologia, tamanho,
-      qtdPavimentos, vagasPorUnidade,
-      clienteNome, referencia,
-      comodos: Object.entries(qtds).filter(([,q])=>q>0).map(([nome,qtd])=>({nome,qtd})),
-      resumoDescritivo,
-      grupoQtds: isComercial ? grupoQtds : null,
-      calculo,
-      incluiArq, incluiEng, incluiMarcenaria,
-      etapasIsoladas: Array.from(etapasIsoladas),
-      tipoPgto, temImposto, aliqImp,
-      descArq, parcArq, descPacote, parcPacote,
-      descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
-      etapasPct,
-      totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
-      escritorio: esc, // Passa o escritório inteiro pra PropostaPreview/PDF lerem dados
-      formaPagamento: formaPagamentoObj, // Fase 1 — objeto canônico
-    });
     const orcParaSalvar = {
       ...(orcBase || {}),
       tipo: tipoProjeto, subtipo: tipoObra, tipologia, tamanho, padrao,
@@ -69504,7 +70581,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
       formaPagamento: formaPagamentoObj, // Fase 1 — objeto canônico
     };
-    if (onSalvar) onSalvar(orcParaSalvar);
+    return { orcParaSalvar, formaPagamentoObj };
   }
 
   if (propostaData) {
@@ -76319,13 +77396,21 @@ function Mensagens({ usuario }) {
               </div>
               <div style={S.detBody}>
                 {selecionada.body_html ? (
-                  // HTML renderizado direto. ATENÇÃO: aqui há risco teórico de XSS
-                  // se o atacante enviar email com script inline. No futuro vale
-                  // adicionar sanitização (DOMPurify ou similar). Pra MVP do
-                  // Master só, com poucos remetentes confiáveis, aceitável.
-                  <div
-                    style={S.detHtml}
-                    dangerouslySetInnerHTML={{ __html: selecionada.body_html }}
+                  // O HTML vem de e-mail de fora: qualquer um manda. Direto na
+                  // página (dangerouslySetInnerHTML), um <img onerror> rodava
+                  // aqui dentro e levava o token do master do localStorage.
+                  // No iframe com sandbox e SEM allow-scripts, nada do e-mail
+                  // executa, e sem allow-same-origin ele nem enxerga esta
+                  // página. allow-popups: link do e-mail abre em outra aba
+                  // (o <base target="_blank"> do srcDoc), não dentro do quadro.
+                  <iframe
+                    title="Conteúdo da mensagem"
+                    sandbox="allow-popups allow-popups-to-escape-sandbox"
+                    referrerPolicy="no-referrer"
+                    srcDoc={'<!doctype html><html><head><meta charset="utf-8"><base target="_blank">'
+                      + '<style>body{margin:0;font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;line-height:1.6;color:#111827;word-wrap:break-word}img{max-width:100%;height:auto}</style>'
+                      + '</head><body>' + selecionada.body_html + '</body></html>'}
+                    style={{ display:"block", width:"100%", height:"max(360px, calc(100vh - 340px))", border:"none", background:"#fff" }}
                   />
                 ) : selecionada.body_text ? (
                   <pre style={{ ...S.detHtml, whiteSpace:"pre-wrap", fontFamily:"inherit", margin:0 }}>
@@ -79374,6 +80459,10 @@ function WhatsappPiloto({ data, usuario }) {
   const [mostrarConfig, setMostrarConfig] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const fimRef = useRef(null);
+  // Respostas de carregar() fora de ordem: a de outra obra (ou mais velha que
+  // a já mostrada) é ignorada — senão a conversa da obra anterior voltava.
+  const filtroRef = useRef(filtroObra), reqSeq = useRef(0), reqAplicada = useRef(0);
+  filtroRef.current = filtroObra;
 
   const podeEscrever = usuario?.nivel === "admin" || usuario?.nivel === "editor" || usuario?.perfil === "master";
   const obras = useMemo(() => {
@@ -79387,21 +80476,33 @@ function WhatsappPiloto({ data, usuario }) {
     : ((data?.obras || []).find(o => o.id === filtroObra)?.nome || "Obra");
 
   const carregar = useCallback(async () => {
+    const meu = ++reqSeq.current;
+    const valida = () => filtroRef.current === filtroObra && meu > reqAplicada.current;
     try {
       const qs = filtroObra ? `?obra_id=${encodeURIComponent(filtroObra)}` : "";
       const [st, lista] = await Promise.all([
         waReq("GET", "/api/whatsapp-teste/status"),
         waReq("GET", `/api/whatsapp-teste/mensagens${qs}`),
       ]);
+      if (!valida()) return;
+      reqAplicada.current = meu;
       setStatus(st);
       setMsgs(lista || []);
       setErro("");
     } catch (e) {
-      setErro(e.message);
+      if (valida()) setErro(e.message);
     } finally {
-      setCarregando(false);
+      if (filtroRef.current === filtroObra) setCarregando(false);
     }
   }, [filtroObra]);
+  // Trocar de obra zera o destinatário: sem mensagem recebida na obra nova, o
+  // "Para" ficava com o número da obra anterior (e o editado à mão grudava).
+  // msgs zera junto, para o destino padrão não ser tirado da conversa velha.
+  function trocarObra(id) {
+    setAbertoMobile(true);
+    if (id === filtroObra) return;
+    setFiltroObra(id); setMsgs([]); setPara(""); setParaEditado(false);
+  }
 
   useEffect(() => {
     setCarregando(true);
@@ -79474,12 +80575,12 @@ function WhatsappPiloto({ data, usuario }) {
           <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2 }}>Número de teste da Meta, sem custo</div>
           <input style={{ ...S.input, width: "100%", boxSizing: "border-box", marginTop: 12 }} placeholder="Filtrar obras" value={busca} onChange={e => setBusca(e.target.value)} />
         </div>
-        <button style={S.item(filtroObra === "")} onClick={() => { setFiltroObra(""); setAbertoMobile(true); }}>Todas as mensagens</button>
-        <button style={S.item(filtroObra === "__sem_obra__")} onClick={() => { setFiltroObra("__sem_obra__"); setAbertoMobile(true); }}>Sem obra vinculada</button>
+        <button style={S.item(filtroObra === "")} onClick={() => trocarObra("")}>Todas as mensagens</button>
+        <button style={S.item(filtroObra === "__sem_obra__")} onClick={() => trocarObra("__sem_obra__")}>Sem obra vinculada</button>
         <div style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", letterSpacing: 0.4, textTransform: "uppercase", padding: "14px 14px 6px" }}>Obras</div>
         {obras.length === 0 && <div style={{ fontSize: 13, color: "#6b7280", padding: "4px 14px" }}>Nenhuma obra encontrada</div>}
         {obras.map(o => (
-          <button key={o.id} style={S.item(filtroObra === o.id)} onClick={() => { setFiltroObra(o.id); setAbertoMobile(true); }}>{o.nome || "(sem nome)"}</button>
+          <button key={o.id} style={S.item(filtroObra === o.id)} onClick={() => trocarObra(o.id)}>{o.nome || "(sem nome)"}</button>
         ))}
       </div>
 
@@ -80481,7 +81582,8 @@ function tpDesenhoParaObra(paredes, areas) {
       ["Aberturas nas paredes", `${tpFmt(areaAb)} m² (já descontadas do m² de parede)`],
     ] : []),
   ];
-  return { projeto, linhas };
+  // portas: a contagem bruta, para o sobrado somar pavimento a pavimento
+  return { projeto, linhas, portas: temAberturas ? portas : null };
 }
 
 // Vários pavimentos: o térreo vai para "terreo", o primeiro de cima para
@@ -80493,12 +81595,20 @@ function tpDesenhoParaObraPavs(lista) {
   const cs = lista.map((d) => tpDesenhoParaObra(d.paredes || [], d.areas || []));
   const todos = tpDesenhoParaObra(lista.flatMap((d) => d.paredes || []), lista.flatMap((d) => d.areas || []));
   const c0 = cs[0].projeto, c1 = cs[1].projeto, soma = (f) => r2(cs.reduce((t, c) => t + (+f(c.projeto) || 0), 0));
+  const portasPavs = cs.some((c) => c.portas) ? cs.reduce((t, c) => {
+    const p = c.portas || {};
+    return { interna: t.interna + (p.interna || 0), banheiro: t.banheiro + (p.banheiro || 0), externa: t.externa + (p.externa || 0),
+      metros: t.metros + (p.metros || 0), metrosBanheiro: t.metrosBanheiro + (p.metrosBanheiro || 0) };
+  }, { interna: 0, banheiro: 0, externa: 0, metros: 0, metrosBanheiro: 0 }) : null;
   const projeto = {
     ...c0,
     tipologia: "Sobrado",
     ...(todos.projeto.esquadrias ? { esquadrias: todos.projeto.esquadrias } : {}),
     ...(todos.projeto.ambientes ? { ambientes: todos.projeto.ambientes, comodosCfg: todos.projeto.comodosCfg } : {}),
-    ...(todos.projeto.portasDesenho ? { portasDesenho: todos.projeto.portasDesenho } : {}),
+    // portas: cada pavimento com as suas paredes e ambientes, depois soma.
+    // Achatar os pavimentos fazia a porta do térreo "cair" no banheiro do
+    // andar de cima (e a pegada da casa misturava os andares).
+    ...(portasPavs ? { portasDesenho: { interna: portasPavs.interna, banheiro: portasPavs.banheiro, metros: r2(portasPavs.metros), metrosBanheiro: r2(portasPavs.metrosBanheiro) } } : {}),
     // piso e rodapé: cada pavimento com os seus ambientes (as portas são de cada um)
     ...(cs.some((c) => c.projeto.ambientesDesenho) ? { ambientesDesenho: cs.flatMap((c, k) => (c.projeto.ambientesDesenho || []).map((a) => ({ ...a, pavimento: lista[k].nome || (k ? "Pavimento " + k : "Térreo") }))) } : {}),
     // o gabarito marca o térreo: é o do primeiro pavimento
@@ -80518,7 +81628,12 @@ function tpDesenhoParaObraPavs(lista) {
     ["Área construída (total)", tpFmt(projeto.arquitetura.areaConstruida) + " m²"],
     ["Paredes (total)", `${tpFmt(projeto.arquitetura.m2ParedesTotal)} m² — internas ${tpFmt(projeto.arquitetura.m2ParedesInternas)} · externas ${tpFmt(projeto.arquitetura.m2ParedesExternas)}`],
     ...cs[0].linhas.filter(([k]) => k === "Pavimentação externa" || k === "Gabarito" || String(k).startsWith("Laje")),
-    ...todos.linhas.filter(([k]) => !["Tipologia", "Área construída", "Pavimentação externa", "Parede interna", "Parede externa", "Por espessura", "Perímetro de paredes", "Gabarito"].includes(k) && !String(k).startsWith("Laje")),
+    ...todos.linhas.filter(([k]) => !["Tipologia", "Área construída", "Pavimentação externa", "Parede interna", "Parede externa", "Por espessura", "Perímetro de paredes", "Gabarito", "Porta de madeira em parede externa"].includes(k) && !String(k).startsWith("Laje"))
+      // as linhas de porta repetem a soma por pavimento (a do desenho achatado erra)
+      .flatMap(([k, v]) => k !== "Portas internas (madeira)" || !portasPavs ? [[k, v]] : [
+        [k, `${portasPavs.interna + portasPavs.banheiro} — ${portasPavs.interna} interna${portasPavs.interna === 1 ? "" : "s"} + ${portasPavs.banheiro} de banheiro (kit de porta por porta desenhada)`],
+        ...(portasPavs.externa ? [["Porta de madeira em parede externa", `${portasPavs.externa} (não entra no kit de porta interna; lance na obra)`]] : []),
+      ]),
   ];
   return { projeto, linhas };
 }
@@ -85482,7 +86597,9 @@ function TesteProjeto({ data, usuario, save }) {
       const obra = tpObraDoProjeto(p); p.obraId = obra.id;
       save({ ...data, obras: [...(data.obras || []), obra] });
     }
-    salvarLista([p, ...projetos]);
+    // base = o que está gravado agora, não a lista lida ao abrir a tela: outra
+    // aba pode ter desenhado nesse meio-tempo (igual a TpProjetosDoCliente)
+    salvarLista([p, ...tpLer(empresaId)]);
     setNovo(null); setAbertoId(p.id);
   };
 
@@ -85574,7 +86691,7 @@ function TesteProjeto({ data, usuario, save }) {
             <div style={{ fontSize: 14, color: "#374151", margin: "8px 0 18px" }}>"{excluir.nome}" e todo o desenho serão apagados deste navegador.</div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
               <button style={btn} onClick={() => setExcluir(null)}>Cancelar</button>
-              <button style={{ ...btn, background: "#b91c1c", borderColor: "#b91c1c", color: "#fff" }} onClick={() => { salvarLista(projetos.filter((p) => p.id !== excluir.id)); setExcluir(null); }}>Excluir</button>
+              <button style={{ ...btn, background: "#b91c1c", borderColor: "#b91c1c", color: "#fff" }} onClick={() => { salvarLista(tpLer(empresaId).filter((p) => p.id !== excluir.id)); setExcluir(null); }}>Excluir</button>
             </div>
           </div>
         </div>
@@ -87081,6 +88198,24 @@ export default function ModuloClientesFornecedores() {
     if (at.escritorio) r = { ...r, escritorio: at.escritorio };
     return r;
   }
+  // Para a base (o que o servidor tem) depois de uma gravação que caiu no
+  // meio: entra só o que chegou a gravar — com a versão nova, e o registro
+  // novo que foi criado. O resto da base fica como estava, e a próxima
+  // tentativa reenvia só o que não foi.
+  function aplicarGravadosNaBase(base, at) {
+    if (!at) return base;
+    let r = base;
+    for (const lista of LISTAS_COM_VERSAO) {
+      const mapa = at[lista] || {};
+      if (!Object.keys(mapa).length) continue;
+      const atual = r[lista] || [];
+      const ids = new Set(atual.map(o => o && o.id));
+      r = { ...r, [lista]: atual.map(o => (o && mapa[o.id]) ? mapa[o.id] : o)
+        .concat(Object.keys(mapa).filter(id => !ids.has(id)).map(id => mapa[id])) };
+    }
+    if (at.escritorio) r = { ...r, escritorio: at.escritorio };
+    return r;
+  }
   // O que a pessoa fez DEPOIS de mandar a gravação fica por cima do que
   // voltou do servidor.
   function juntarNaTela(enviado, agora, gravado) {
@@ -87128,7 +88263,10 @@ export default function ModuloClientesFornecedores() {
       }
     } catch (e) {
       console.error("Erro ao salvar:", e);
-      const recusado = e && e.status >= 400 && e.status < 500 && e.status !== 409;
+      // Só 4xx é recusa definitiva (sem permissão, dado inválido). 5xx (banco
+      // fora do ar por um instante), erro de rede, 408 e 429 passam: tenta de
+      // novo. 409 que sobrou é conflito que não juntou em 3 voltas.
+      const recusado = e && e.status >= 400 && e.status < 500 && e.status !== 409 && e.status !== 408 && e.status !== 429;
       if (recusado) {
         // o servidor recusou (sem permissão, dado inválido): tentar de novo
         // não adianta. O resto da gravação já foi; esta alteração não.
@@ -87136,6 +88274,17 @@ export default function ModuloClientesFornecedores() {
         setAvisoGravacao({ erro: true, texto: (e.status === 403 ? "Sem permissão para gravar esta alteração" : "O servidor recusou a gravação")
           + (e.message ? ` (${e.message})` : "") + ". Ela aparece na tela, mas não foi salva — recarregue a página para ver o que está gravado." });
       } else {
+        // O que gravou antes da falha já mudou de versão no servidor. Sem
+        // levar isso para a base e para a tela, a nova tentativa mandava a
+        // versão velha desses registros e dava um falso "Outra pessoa
+        // alterou". Só os que gravaram: o resto fica pendente como estava.
+        if (e && e.atualizados) {
+          syncedRef.current = aplicarGravadosNaBase(base, e.atualizados);
+          const gravado = aplicarAtualizados(alvo, e.atualizados);
+          const agora = dataRef.current;
+          const tela = juntarNaTela(alvo, agora, gravado);
+          if (tela !== agora) { dataRef.current = tela; setData(tela); }
+        }
         setBackendOffline(true);
         if (!novaTentativaRef.current) {
           novaTentativaRef.current = setTimeout(() => { novaTentativaRef.current = null; enfileirarGravacao(); }, 15000);
@@ -87171,8 +88320,24 @@ export default function ModuloClientesFornecedores() {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = async (ev) => {
-      try { const parsed = JSON.parse(ev.target.result); await save(parsed); toast.sucesso("Dados importados"); }
-      catch { dialogo.alertar({ titulo: "Arquivo inválido", mensagem: "Não foi possível ler este arquivo JSON.", tipo: "erro" }); }
+      let parsed;
+      try { parsed = JSON.parse(ev.target.result); }
+      catch { dialogo.alertar({ titulo: "Arquivo inválido", mensagem: "Não foi possível ler este arquivo JSON.", tipo: "erro" }); return; }
+      // O arquivo entra POR CIMA dos dados atuais (mesclarImportacao, api.js):
+      // gravá-lo como os dados inteiros apagava tudo o que não estava nele.
+      const previa = mesclarImportacao(dataRef.current || data, parsed);
+      if (previa.erro) { dialogo.alertar({ titulo: "Arquivo inválido", mensagem: previa.erro, tipo: "erro" }); return; }
+      const confirmou = await dialogo.confirmar({
+        titulo: "Importar este backup?",
+        mensagem: resumoDaImportacao(previa),
+        confirmar: "Importar",
+        destrutivo: previa.escritorio || previa.contagem.some((c) => c.atualizados > 0),
+      });
+      if (!confirmou) return;
+      // mescla de novo sobre o dado mais fresco: algo pode ter gravado
+      // enquanto a confirmação estava aberta
+      await save((atual) => { const m = mesclarImportacao(atual, parsed); return m.erro ? null : m.dados; });
+      toast.sucesso("Dados importados");
     };
     reader.readAsText(file); e.target.value = "";
   }
@@ -87874,13 +89039,19 @@ export default function ModuloClientesFornecedores() {
                 // tempo real pelo save() e pelo useEffect que segue `data`.
                 const dataAtual = dataRef.current || data;
                 const todos = dataAtual.orcamentosProjeto || [];
-                const maxSeq = todos.reduce((mx2, o2) => {
-                  const mm = (o2.id||"").match(/^ORC-(\d+)$/);
-                  return mm ? Math.max(mx2, parseInt(mm[1])) : mx2;
-                }, 0);
-                const nextId = "ORC-" + String(maxSeq + 1).padStart(4, "0");
+                // Número novo: maior já usado em qualquer referência (lançamentos,
+                // projetos — não só a lista), para nunca reusar o de um orçamento
+                // excluído (orcamento-teste.jsx, proximoIdOrcamento).
+                const nextId = orc.id ? null : proximoIdOrcamento(dataAtual);
+                // A tela guarda a cópia de quando abriu (orcBase). Se outra
+                // pessoa gravou no meio (e a junção trouxe a mudança dela para
+                // `todos`), gravar a cópia por cima apagaria essa mudança: junta
+                // as duas, como a gravação do app faz (orcamento-teste.jsx).
+                const atualOrc = orc.id ? todos.find(o2 => o2.id === orc.id) : null;
+                const orcJunto = (atualOrc && typeof orcMesclarComAtual === "function")
+                  ? orcMesclarComAtual(orcamentoTelaCheia.orcBase, orc, atualOrc) : orc;
                 const novo2 = {
-                  ...orc,
+                  ...orcJunto,
                   clienteId: orcamentoTelaCheia.clienteOrc.id,
                   cliente: orcamentoTelaCheia.clienteOrc.nome,
                   whatsapp: orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone || "",

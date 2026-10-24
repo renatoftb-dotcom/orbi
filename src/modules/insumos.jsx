@@ -493,7 +493,9 @@ function atualizarPrecoReferencia(insumo, lancamento) {
   var total = Number(lancamento.total != null ? lancamento.total : lancamento.valor);
   if (!(qtd > 0) || !(total > 0)) return insumo;
 
-  var unitario = Math.round((total / qtd) * 100) / 100;
+  // 4 casas, como comprasDoInsumo: em centavos, 5000 pregos por R$ 20 dava
+  // R$ 0,00 o prego (e a guarda de salto disparava contra o preço certo).
+  var unitario = Math.round((total / qtd) * 10000) / 10000;
   var data = lancamento.dataPagamento || lancamento.data || null;
   var uniCompra = lancamento.unidade || "";
   var uniPreco = unidadeDoPreco(insumo);
@@ -508,6 +510,11 @@ function atualizarPrecoReferencia(insumo, lancamento) {
     });
   };
 
+  // Nota retroativa não rebaixa preço mais novo — e vem ANTES das guardas:
+  // uma compra antiga não é candidata a preço, então não pode virar pendência
+  // (aceitar a pendência trocava o preço novo pelo antigo).
+  if (insumo.precoData && data && data < insumo.precoData) return insumo;
+
   // Guarda 1: unidade diferente. Vale mesmo sem preço anterior — nascer com o
   // preço do metro num catálogo que cobra o rolo é o mesmo estrago.
   if (confere === false) return pendencia("unidade");
@@ -518,9 +525,6 @@ function atualizarPrecoReferencia(insumo, lancamento) {
     var razao = unitario / ref;
     if (razao > INSUMO_FATOR_SUSPEITO || razao < 1 / INSUMO_FATOR_SUSPEITO) return pendencia("salto");
   }
-
-  // Nota retroativa não rebaixa preço mais novo.
-  if (insumo.precoData && data && data < insumo.precoData) return insumo;
 
   return Object.assign({}, insumo, {
     precoReferencia: unitario,
@@ -759,37 +763,56 @@ function unirAliases() {
   return out;
 }
 
+// Onde um item da semente já está no catálogo: pelo código, se o item com
+// esse código tem um nome compatível; senão pelo nome/apelido. `ocupado` diz
+// que o código da semente está com OUTRO item (colisão). Usado pela semeadura
+// e pelo aviso "Catálogo incompleto" — os dois têm de concordar, senão o aviso
+// nunca some depois de semear.
+function localizarSementeNoCatalogo(s, lista) {
+  var ns = [s.nome].concat(s.aliases || []).map(normalizarTexto);
+  var idx = lista.findIndex(x => x && x.codigo === s.codigo);
+  var ocupado = false;
+  if (idx >= 0) {
+    var x = lista[idx];
+    var nomesX = [x.nome].concat(x.aliases || []).map(normalizarTexto);
+    if (!nomesX.some(function (n) { return ns.indexOf(n) >= 0; })) { ocupado = true; idx = -1; }
+  }
+  if (idx < 0) {
+    // Mesmo critério de resolverInsumo (apelido, depois nome), sem o ranking
+    // por semelhança — que é caro e não serve aqui (o aviso roda a cada render).
+    var n = normalizarTexto(s.nome);
+    idx = lista.findIndex(x => x && (x.aliases || []).some(a => normalizarTexto(a) === n));
+    if (idx < 0) idx = lista.findIndex(x => x && normalizarTexto(x.nome) === n);
+  }
+  return { idx: idx, ocupado: ocupado };
+}
+
+// Quantos itens da semente faltam no catálogo (para o aviso da tela).
+function faltamDaSementeNoCatalogo(insumos, seed) {
+  var lista = insumos || [];
+  return (seed || INSUMOS_SEED).filter(function (s) {
+    return localizarSementeNoCatalogo(s, lista).idx < 0;
+  }).length;
+}
+
 // Aplica INSUMOS_SEED sobre o catálogo. Nunca sobrescreve precoManual nem um
 // preço cuja data seja mais recente que a da semente.
 function semearInsumos(materiais, seed) {
   var lista = (materiais || []).slice();
   var criados = 0, atualizados = 0, ignorados = 0;
 
-  var nomesDaSemente = function (s) {
-    return [s.nome].concat(s.aliases || []).map(normalizarTexto);
-  };
   (seed || INSUMOS_SEED).forEach(function (s) {
-    var idx = lista.findIndex(x => x.codigo === s.codigo);
-    if (idx >= 0) {
-      // Código igual mas nome incompatível = colisão (material legado que
-      // recebeu esse código antes da reserva). Recodifica o legado e segue.
-      var x = lista[idx];
-      var nomesX = [x.nome].concat(x.aliases || []).map(normalizarTexto);
-      var ns = nomesDaSemente(s);
-      var compativel = nomesX.some(function (n) { return ns.indexOf(n) >= 0; });
-      if (!compativel) {
-        lista[idx] = Object.assign({}, x, { codigo: proximoCodigoInsumo(x.grupo || grupoInferido(x.nome), lista) });
-        idx = -1;
-      }
-    }
-    if (idx < 0) {
-      var r = resolverInsumo(s.nome, lista);
-      if (r.insumo && (r.confianca === "alias" || r.confianca === "normalizado")) {
-        idx = lista.indexOf(r.insumo);
-      }
-    }
+    // Código igual mas nome incompatível = colisão. NÃO recodifica o item que
+    // já está no catálogo: compras e orçamentos apontam para ele pelo
+    // insumoCodigo, e trocar o código desligava esses vínculos (e, com dois
+    // itens da semente no mesmo código, recodificava a cada semeadura).
+    var loc = localizarSementeNoCatalogo(s, lista);
+    var idx = loc.idx;
 
     if (idx < 0) {
+      // Código da semente já ocupado por outro item: o novo nasce com o
+      // próximo código livre do grupo, nunca com um código repetido.
+      var codigoNovo = loc.ocupado ? proximoCodigoInsumo(s.grupo, lista) : s.codigo;
       lista.push(Object.assign({
         id: uid(),
         ativo: true,
@@ -797,7 +820,7 @@ function semearInsumos(materiais, seed) {
         precoPendente: null,
         fornecedorPreferido: null,
         precoAtualizadoEm: new Date().toISOString(),
-      }, s, { aliases: unirAliases(s.aliases) }));
+      }, s, { codigo: codigoNovo, aliases: unirAliases(s.aliases) }));
       criados++;
       return;
     }
@@ -1628,10 +1651,10 @@ function Insumos({ data, save }) {
 
   var insumos = useMemo(function () { return data.materiais || []; }, [data.materiais]);
   var pendentesMigracao = insumos.filter(i => !i.codigo).length;
+  // Mesma regra da semeadura (código compatível ou nome): contar só por código
+  // deixava o aviso aceso para sempre quando um item estava com outro código.
   var faltamDaSemente = useMemo(function () {
-    var codigos = {};
-    insumos.forEach(i => { if (i.codigo) codigos[i.codigo] = 1; });
-    return INSUMOS_SEED.filter(s => !codigos[s.codigo]).length;
+    return faltamDaSementeNoCatalogo(insumos, INSUMOS_SEED);
   }, [insumos]);
 
   var enriquecidos = useMemo(function () {

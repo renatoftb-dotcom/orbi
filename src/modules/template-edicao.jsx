@@ -83,6 +83,27 @@ function tplHandleEnterBullet(e, valor, setValor) {
 // recálculo de totais/parcelas em tempo real). On blur reformata pra
 // padrão BR (1.234,56) pra ficar bonito quando o usuário sai do campo.
 // ─────────────────────────────────────────────────────────────
+// Texto digitado → número. "1.234,56" e "1234,56": vírgula é o decimal e
+// ponto é milhar. Sem vírgula, UM ponto seguido de 1 ou 2 dígitos no fim é
+// decimal ("2500.50" = 2500,50 — antes virava 250.050,00); "2.500" ou
+// "1.234.567" continuam sendo milhar.
+function tplParseMoeda(txt) {
+  const t = String(txt == null ? "" : txt).trim();
+  let limpo;
+  if (!t.includes(",") && /^[^.]*\.\d{1,2}$/.test(t)) limpo = t;
+  else limpo = t.replace(/\./g, "").replace(",", ".");
+  const n = parseFloat(limpo);
+  return isNaN(n) ? 0 : n;
+}
+
+// Número salvo ou o padrão — `!= null`, não `||`: 0% de desconto (ou de
+// entrada) é escolha válida e com `||` virava 5/10/15/50%.
+function tplNumOu(v, padrao) {
+  if (v == null || v === "") return padrao;
+  const n = Number(v);
+  return isNaN(n) ? padrao : n;
+}
+
 function TplInputMoeda({ valor, onChange, style, ...rest }) {
   const formatar = v => {
     const n = Number(v) || 0;
@@ -103,11 +124,8 @@ function TplInputMoeda({ valor, onChange, style, ...rest }) {
   function handleChange(e) {
     const txt = e.target.value;
     setRaw(txt);
-    // Aceita "1.234,56" ou "1234.56" — limpa pontos de milhar e troca
-    // vírgula decimal por ponto antes do parseFloat.
-    const limpo = txt.replace(/\./g, "").replace(",", ".");
-    const n = parseFloat(limpo);
-    const novo = isNaN(n) ? 0 : n;
+    // Aceita "1.234,56" ou "1234.56" (ver tplParseMoeda).
+    const novo = tplParseMoeda(txt);
     ultimoValorPropRef.current = novo;
     onChange(novo);
   }
@@ -203,10 +221,10 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   // pro modo "padrão" (Antecipado/Parcelas). Por etapa fica pra 6d.
   // Defaults vêm de safeData (vem do form/Etapa 5) ou hardcoded.
   const [descArq, setDescArq] = useState(
-    tv.descArq != null ? Number(tv.descArq) : (Number(safeData.descArq) || 5)
+    tv.descArq != null ? Number(tv.descArq) : tplNumOu(safeData.descArq, 5)
   );
   const [descPacote, setDescPacote] = useState(
-    tv.descPacote != null ? Number(tv.descPacote) : (Number(safeData.descPacote) || 10)
+    tv.descPacote != null ? Number(tv.descPacote) : tplNumOu(safeData.descPacote, 10)
   );
   const [parcArq, setParcArq] = useState(
     tv.parcArq != null ? Number(tv.parcArq) : (Number(safeData.parcArq) || 3)
@@ -220,13 +238,13 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   //   descEtCtrt/parcEtCtrt = "Contratação etapa a etapa" (cliente contrata 1 de cada vez)
   //   descPacCtrt/parcPacCtrt = "Etapas completas" (cliente contrata todas juntas)
   const [descEtCtrt, setDescEtCtrt] = useState(
-    tv.descEtCtrt != null ? Number(tv.descEtCtrt) : (Number(safeData.descEtCtrt) || 5)
+    tv.descEtCtrt != null ? Number(tv.descEtCtrt) : tplNumOu(safeData.descEtCtrt, 5)
   );
   const [parcEtCtrt, setParcEtCtrt] = useState(
     tv.parcEtCtrt != null ? Number(tv.parcEtCtrt) : (Number(safeData.parcEtCtrt) || 2)
   );
   const [descPacCtrt, setDescPacCtrt] = useState(
-    tv.descPacCtrt != null ? Number(tv.descPacCtrt) : (Number(safeData.descPacCtrt) || 15)
+    tv.descPacCtrt != null ? Number(tv.descPacCtrt) : tplNumOu(safeData.descPacCtrt, 15)
   );
   const [parcPacCtrt, setParcPacCtrt] = useState(
     tv.parcPacCtrt != null ? Number(tv.parcPacCtrt) : (Number(safeData.parcPacCtrt) || 8)
@@ -236,10 +254,10 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   // Pré-vem de safeData.formaPagamento.final ou template.valores; fallback 50%.
   const _fpFin = safeData.formaPagamento?.final || {};
   const [entArq, setEntArq] = useState(
-    tv.entArq != null ? Number(tv.entArq) : (Number(_fpFin.entArq) || 50)
+    tv.entArq != null ? Number(tv.entArq) : tplNumOu(_fpFin.entArq, 50)
   );
   const [entPacote, setEntPacote] = useState(
-    tv.entPacote != null ? Number(tv.entPacote) : (Number(_fpFin.entPac) || 50)
+    tv.entPacote != null ? Number(tv.entPacote) : tplNumOu(_fpFin.entPac, 50)
   );
 
   // Estrutura da forma de pagamento (Fase 6d.1) — agora editável no Template.

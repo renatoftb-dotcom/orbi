@@ -1201,8 +1201,10 @@ teste("a fatura vira UMA linha no extrato, com o total e a composicao por dentro
   assert.strictEqual(l.valor, 8200, "o banco debitou isto, e so isto");
   assert.strictEqual(l.contaId, "cartao_credito");
   assert.strictEqual(l.unidadeId, "escritorio");
-  assert.strictEqual(l.lancadoEm, "2026-10-01", "o dia do vencimento do cartao");
-  assert.strictEqual(l.competencia, "2026-10");
+  // fecha 20, vence 1: a fatura de outubro (compras de 20/09 a 19/10) é
+  // debitada em 1º de NOVEMBRO — vencimento antes do fechamento é no mês seguinte
+  assert.strictEqual(l.lancadoEm, "2026-11-01", "o dia do vencimento do cartao, no mes seguinte");
+  assert.strictEqual(l.competencia, "2026-11");
   assert.strictEqual(l.linhas.length, 2, "a composicao fica guardada para conferencia");
   assert.ok(/Sicoob Empresarial/.test(l.descricao) && /2 compras/.test(l.descricao), l.descricao);
 });
@@ -1602,7 +1604,8 @@ teste("no resultado a fatura abre nas compras; no saldo nada muda", () => {
   const fechado = { ...fat, linhas: fat.linhas.map((x) => ({ ...x, destinoContaId: "" })) };
   const comAberta = M.extratoEscritorio([fat], { saldoAbertura: 10000 });
   const inteira = M.extratoEscritorio([fechado], { saldoAbertura: 10000 });
-  const mes = (ls) => ls.find((x) => x.mes === "2026-10");
+  // a fatura de outubro vence em 1º/11 (fecha 20, vence 1)
+  const mes = (ls) => ls.find((x) => x.mes === "2026-11");
   assert.strictEqual(mes(comAberta).saldoExtrato, mes(inteira).saldoExtrato, "o banco debitou o mesmo valor");
   assert.strictEqual(mes(inteira).contas.cartao_credito, 2275.63);
   assert.strictEqual(mes(comAberta).contas.cartao_credito, undefined);
@@ -1650,7 +1653,7 @@ teste("compra no cartão fica fora da conferência com o banco; a fatura entra",
   const doSet = [{ ...LANC_RES[0] }, { id: "P1", contaId: "luz_agua_net", competencia: "2026-09", valor: 90, lancadoEm: "2026-09-10" }];
   const c = M.conferenciaDoMes(doSet, "2026-09");
   assert.strictEqual(c.total, 1, "só a luz — o anúncio no cartão não passa pelo banco");
-  assert.strictEqual(M.conferenciaDoMes([fat], "2026-10").total, 1);
+  assert.strictEqual(M.conferenciaDoMes([fat], "2026-11").total, 1, "a fatura de outubro, no mês em que o banco a debita");
   const r = M.conciliarExtrato([{ data: "2026-09-24", valor: -300, historico: "PIX ENVIADO" }], doSet);
   assert.ok(!JSON.stringify(r).includes('"E1"'), "não casa a compra no cartão com movimento do banco");
 });

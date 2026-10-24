@@ -71,6 +71,10 @@ function WhatsappPiloto({ data, usuario }) {
   const [mostrarConfig, setMostrarConfig] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const fimRef = useRef(null);
+  // Respostas de carregar() fora de ordem: a de outra obra (ou mais velha que
+  // a já mostrada) é ignorada — senão a conversa da obra anterior voltava.
+  const filtroRef = useRef(filtroObra), reqSeq = useRef(0), reqAplicada = useRef(0);
+  filtroRef.current = filtroObra;
 
   const podeEscrever = usuario?.nivel === "admin" || usuario?.nivel === "editor" || usuario?.perfil === "master";
   const obras = useMemo(() => {
@@ -84,21 +88,33 @@ function WhatsappPiloto({ data, usuario }) {
     : ((data?.obras || []).find(o => o.id === filtroObra)?.nome || "Obra");
 
   const carregar = useCallback(async () => {
+    const meu = ++reqSeq.current;
+    const valida = () => filtroRef.current === filtroObra && meu > reqAplicada.current;
     try {
       const qs = filtroObra ? `?obra_id=${encodeURIComponent(filtroObra)}` : "";
       const [st, lista] = await Promise.all([
         waReq("GET", "/api/whatsapp-teste/status"),
         waReq("GET", `/api/whatsapp-teste/mensagens${qs}`),
       ]);
+      if (!valida()) return;
+      reqAplicada.current = meu;
       setStatus(st);
       setMsgs(lista || []);
       setErro("");
     } catch (e) {
-      setErro(e.message);
+      if (valida()) setErro(e.message);
     } finally {
-      setCarregando(false);
+      if (filtroRef.current === filtroObra) setCarregando(false);
     }
   }, [filtroObra]);
+  // Trocar de obra zera o destinatário: sem mensagem recebida na obra nova, o
+  // "Para" ficava com o número da obra anterior (e o editado à mão grudava).
+  // msgs zera junto, para o destino padrão não ser tirado da conversa velha.
+  function trocarObra(id) {
+    setAbertoMobile(true);
+    if (id === filtroObra) return;
+    setFiltroObra(id); setMsgs([]); setPara(""); setParaEditado(false);
+  }
 
   useEffect(() => {
     setCarregando(true);
@@ -171,12 +187,12 @@ function WhatsappPiloto({ data, usuario }) {
           <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2 }}>Número de teste da Meta, sem custo</div>
           <input style={{ ...S.input, width: "100%", boxSizing: "border-box", marginTop: 12 }} placeholder="Filtrar obras" value={busca} onChange={e => setBusca(e.target.value)} />
         </div>
-        <button style={S.item(filtroObra === "")} onClick={() => { setFiltroObra(""); setAbertoMobile(true); }}>Todas as mensagens</button>
-        <button style={S.item(filtroObra === "__sem_obra__")} onClick={() => { setFiltroObra("__sem_obra__"); setAbertoMobile(true); }}>Sem obra vinculada</button>
+        <button style={S.item(filtroObra === "")} onClick={() => trocarObra("")}>Todas as mensagens</button>
+        <button style={S.item(filtroObra === "__sem_obra__")} onClick={() => trocarObra("__sem_obra__")}>Sem obra vinculada</button>
         <div style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", letterSpacing: 0.4, textTransform: "uppercase", padding: "14px 14px 6px" }}>Obras</div>
         {obras.length === 0 && <div style={{ fontSize: 13, color: "#6b7280", padding: "4px 14px" }}>Nenhuma obra encontrada</div>}
         {obras.map(o => (
-          <button key={o.id} style={S.item(filtroObra === o.id)} onClick={() => { setFiltroObra(o.id); setAbertoMobile(true); }}>{o.nome || "(sem nome)"}</button>
+          <button key={o.id} style={S.item(filtroObra === o.id)} onClick={() => trocarObra(o.id)}>{o.nome || "(sem nome)"}</button>
         ))}
       </div>
 

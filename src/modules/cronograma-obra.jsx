@@ -59,11 +59,14 @@ function servicosCronogramaAtivos(data) {
 function prazoTabelaAtiva(data) {
   const cfg = cronogramaCfg(data);
   const seed = typeof PRAZO_TABELA_SEED !== "undefined" ? PRAZO_TABELA_SEED : [];
-  const tab = Array.isArray(cfg.prazoTabela) && cfg.prazoTabela.length ? cfg.prazoTabela : seed;
-  return tab
+  const limpa = (tab) => tab
     .map((l) => ({ area: Number(l.area), terrea: Number(l.terrea) }))
     .filter((l) => l.area > 0 && l.terrea > 0)
     .sort((a, b) => a.area - b.area);
+  // O editor grava as linhas como digitadas (em branco, fora de ordem); a
+  // limpeza é aqui, na hora de usar. Sem nenhuma linha válida, vale a padrão.
+  const editada = Array.isArray(cfg.prazoTabela) ? limpa(cfg.prazoTabela) : [];
+  return editada.length ? editada : limpa(seed);
 }
 function extraSobradoMeses(data) {
   const cfg = cronogramaCfg(data);
@@ -155,7 +158,10 @@ function prazoParametricoMeses(areaConstruida, tipologia, data) {
   const area = numOrZero(areaConstruida);
   if (!tab.length || area <= 0) return 0;
   let meses;
-  if (area <= tab[0].area) meses = tab[0].terrea;
+  // tabela de uma linha só não tem trecho para interpolar nem inclinação
+  // para extrapolar (tab[i - 1] não existia e o orçamento quebrava): vale o
+  // prazo da linha
+  if (area <= tab[0].area || tab.length === 1) meses = tab[0].terrea;
   else {
     let i = tab.findIndex((l) => l.area >= area);
     if (i === -1) i = tab.length - 1;
@@ -392,18 +398,29 @@ function resolverRedeCronograma(etapas, cond) {
       if (ativoIds.has(l.id)) out.push({ id: l.id, tipo: l.tipo === "SS" ? "SS" : "FS", lag: numOrZero(l.lag), avanco: l.avanco == null ? 0 : Number(l.avanco) });
       else {
         const p = porId[l.id];
-        if (p && !visitados.has(p.id)) { visitados.add(p.id); for (const l2 of predsDe(p, visitados)) out.push(l2); }
+        if (p && !visitados.has(p.id)) {
+          visitados.add(p.id);
+          // A etapa pulada tem duração zero: FS sobre FS soma os lags. Sem
+          // isto, na térrea INSTALACOES herdava LAJE_TERREO com lag 0 (via
+          // LAJE_PAV1) e o vínculo de −10 dias se perdia na de-duplicação.
+          const fs = l.tipo !== "SS";
+          for (const l2 of predsDe(p, visitados)) out.push({ ...l2, lag: fs && l2.tipo === "FS" ? numOrZero(l.lag) + l2.lag : l2.lag, herdado: true });
+        }
       }
     }
-    // de-duplica por id+tipo (fica o vínculo mais restritivo)
+    // de-duplica por id+tipo (fica o vínculo mais restritivo; no empate, o
+    // vínculo direto, que é o que a rede declarou)
     const dedup = {};
     for (const l of out) {
       const k = l.id + "|" + l.tipo;
-      if (!dedup[k] || l.lag > dedup[k].lag || l.avanco > dedup[k].avanco) dedup[k] = l;
+      const d = dedup[k];
+      const empate = d && l.lag === d.lag && l.avanco === d.avanco;
+      if (!d || l.lag > d.lag || l.avanco > d.avanco || (empate && d.herdado && !l.herdado)) dedup[k] = l;
     }
     return Object.values(dedup);
   }
-  return ativos.map((e) => ({ ...e, links: predsDe(e, new Set([e.id])) }));
+  // a marca de herdado é só da de-duplicação
+  return ativos.map((e) => ({ ...e, links: predsDe(e, new Set([e.id])).map(({ herdado, ...l }) => l) }));
 }
 
 // ── CPM: passagem à frente e para trás, folga e caminho crítico ──
@@ -665,7 +682,8 @@ function gerarCronogramaObra(projeto, orcamento, data, config) {
   const ativo = modo === "produtividade" ? produtividade : simplificado;
 
   // Calendário
-  const inicio = dataUTC(cfg.dataInicio) || dataUTC(new Date().toISOString());
+  // sem data, hoje no calendário do usuário (UTC-3): às 22h o UTC já é amanhã
+  const inicio = dataUTC(cfg.dataInicio) || dataUTC(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString());
   const comDatas = (res) => res.etapas.map((e) => ({
     ...e,
     dataInicio: isoData(dataDoDiaUtil(inicio, e.inicio)),
@@ -1107,8 +1125,12 @@ function gravarCronogramaCfg(data, save, novaCfg) {
 function CronogramaEditor({ data, save, podeEditar }) {
   const cfg = cronogramaCfg(data);
   const etapas = etapasCronogramaAtivas(data);
-  const tabela = prazoTabelaAtiva(data);
   const seedTab = typeof PRAZO_TABELA_SEED !== "undefined" ? PRAZO_TABELA_SEED : [];
+  // O editor mostra as linhas como foram digitadas: limpar o m² não apaga a
+  // linha e digitar uma área menor não a faz pular de lugar no meio da
+  // digitação. Filtrar e ordenar é com prazoTabelaAtiva, na hora de usar.
+  const linhasTabela = Array.isArray(cfg.prazoTabela) ? cfg.prazoTabela : seedTab;
+  const linhaValida = (l) => Number(l.area) > 0 && Number(l.terrea) > 0;
   const nomeDe = (id) => { const e = etapas.find((x) => x.id === id); return e ? e.nome : id; };
   const input = { width: 70, padding: "4px 6px", border: "1px solid #e5e7eb", borderRadius: 6, fontSize: 12, fontFamily: "inherit", textAlign: "right" };
 
@@ -1119,11 +1141,12 @@ function CronogramaEditor({ data, save, podeEditar }) {
     gravarCronogramaCfg(data, save, { ...cfg, etapas: et });
   }
   function restaurarEtapas() { const c = { ...cfg }; delete c.etapas; gravarCronogramaCfg(data, save, c); }
+  function gravarTabela(t) { gravarCronogramaCfg(data, save, { ...cfg, prazoTabela: t }); }
   function setTabela(i, campo, v) {
-    const t = tabela.map((l) => ({ ...l }));
-    t[i][campo] = Number(v) || 0;
-    gravarCronogramaCfg(data, save, { ...cfg, prazoTabela: t });
+    gravarTabela(linhasTabela.map((l, j) => (j === i ? { ...l, [campo]: v } : { ...l })));
   }
+  function addLinhaTabela() { gravarTabela([...linhasTabela.map((l) => ({ ...l })), { area: "", terrea: "" }]); }
+  function delLinhaTabela(i) { gravarTabela(linhasTabela.filter((_, j) => j !== i).map((l) => ({ ...l }))); }
   function restaurarTabela() { const c = { ...cfg }; delete c.prazoTabela; delete c.sobradoExtra; gravarCronogramaCfg(data, save, c); }
   const editouTabela = Array.isArray(cfg.prazoTabela) || cfg.sobradoExtra != null;
 
@@ -1132,27 +1155,35 @@ function CronogramaEditor({ data, save, podeEditar }) {
       <div style={{ fontSize: 12.5, color: "#4b5563", marginBottom: 10 }}>
         Prazo total por área construída (modo simplificado) e rede de etapas com a duração-base de cada uma. A duração-base é um peso: o VICKE escala todas até o caminho crítico fechar no prazo da tabela (ou no prazo-alvo digitado na obra).
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) 1fr", gap: 16, alignItems: "start" }}>
-        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12 }}>
+      {/* flex com quebra: no celular a rede de etapas desce para baixo da
+          tabela de prazo, em vez de ficar espremida numa coluna de 20 px */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "flex-start" }}>
+        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, flex: "0 1 340px", minWidth: 0, boxSizing: "border-box" }}>
           <div style={{ fontWeight: 600, fontSize: 12.5, marginBottom: 6 }}>Prazo por área (meses, térrea)</div>
           <table style={{ borderCollapse: "collapse", fontSize: 12 }}>
-            <thead><tr style={{ color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}><th style={{ padding: "4px 8px", textAlign: "right" }}>m²</th><th style={{ padding: "4px 8px", textAlign: "right" }}>meses</th></tr></thead>
+            <thead><tr style={{ color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}><th style={{ padding: "4px 8px", textAlign: "right" }}>m²</th><th style={{ padding: "4px 8px", textAlign: "right" }}>meses</th><th /></tr></thead>
             <tbody>
-              {tabela.map((l, i) => (
-                <tr key={i}>
-                  <td style={{ padding: "3px 8px", textAlign: "right" }}><input type="number" style={input} disabled={!podeEditar} value={l.area} onChange={(e) => setTabela(i, "area", e.target.value)} /></td>
-                  <td style={{ padding: "3px 8px", textAlign: "right" }}><input type="number" step="0.1" style={input} disabled={!podeEditar} value={l.terrea} onChange={(e) => setTabela(i, "terrea", e.target.value)} /></td>
-                </tr>
-              ))}
+              {linhasTabela.map((l, i) => {
+                const fora = !linhaValida(l);
+                const inp = fora ? { ...input, borderColor: "#fcd34d", background: "#fffbeb" } : input;
+                return (
+                  <tr key={i}>
+                    <td style={{ padding: "3px 8px", textAlign: "right" }}><input type="number" style={inp} disabled={!podeEditar} value={l.area ?? ""} onChange={(e) => setTabela(i, "area", e.target.value)} /></td>
+                    <td style={{ padding: "3px 8px", textAlign: "right" }}><input type="number" step="0.1" style={inp} disabled={!podeEditar} value={l.terrea ?? ""} onChange={(e) => setTabela(i, "terrea", e.target.value)} /></td>
+                    <td style={{ padding: "3px 0" }}>{podeEditar && <button type="button" title="Remover linha" aria-label="Remover linha" onClick={() => delLinhaTabela(i)} style={{ border: "none", background: "transparent", color: "#9ca3af", cursor: "pointer", fontSize: 15, padding: "2px 6px" }}>×</button>}</td>
+                  </tr>
+                );
+              })}
+              {podeEditar && <tr><td colSpan={3} style={{ padding: "4px 8px" }}><button type="button" style={INS_S.btnGhost} onClick={addLinhaTabela}>+ Adicionar linha</button></td></tr>}
               <tr><td style={{ padding: "6px 8px", textAlign: "right", color: "#4b5563" }}>Sobrado: +</td>
                 <td style={{ padding: "3px 8px", textAlign: "right" }}><input type="number" step="0.5" style={input} disabled={!podeEditar} value={extraSobradoMeses(data)} onChange={(e) => gravarCronogramaCfg(data, save, { ...cfg, sobradoExtra: Number(e.target.value) || 0 })} /></td></tr>
             </tbody>
           </table>
-          <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>Interpolado entre as linhas; acima da última, segue a inclinação do último trecho. Tabela do modelo antigo do escritório.</div>
+          <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>Interpolado entre as linhas, na ordem da área (a ordem digitada não importa); acima da última, segue a inclinação do último trecho. Linha com m² ou meses em branco fica de fora da conta. Tabela do modelo antigo do escritório.</div>
           {editouTabela && podeEditar && <button style={{ ...INS_S.btnGhost, marginTop: 6 }} onClick={restaurarTabela}>Restaurar tabela padrão</button>}
           {!editouTabela && seedTab.length > 0 && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>Valores padrão.</div>}
         </div>
-        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, overflowX: "auto" }}>
+        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, overflowX: "auto", flex: "1 1 420px", minWidth: 0, boxSizing: "border-box" }}>
           <div style={{ fontWeight: 600, fontSize: 12.5, marginBottom: 6 }}>Rede de etapas</div>
           <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%", minWidth: 640 }}>
             <thead><tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>

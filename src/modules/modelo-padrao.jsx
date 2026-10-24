@@ -165,6 +165,37 @@ function PropostaPreview(props) {
   );
 }
 
+// ── Escopo: parte pura ─────────────────────────────────────────
+// Sincroniza os blocos do escopo com as etapas (etapasPct). Testada em
+// fix-orc.test.mjs (sem JSX, sem React).
+//  - Bloco de etapa que saiu de etapasPct sai do escopo.
+//  - Bloco LIVRE ("+ bloco": custom, etapaId = Date.now()) não é de etapa
+//    nenhuma: fica. Antes era removido ao reabrir a proposta, porque o id
+//    dele nunca está em etapasPct. Os blocos que este efeito cria para
+//    etapas novas (id > 5, ids pequenos e sequenciais) também são custom,
+//    mas seguem a etapa — por isso o critério é o id não ser de etapa.
+//  - Etapa nova (id > 5) ganha bloco antes da Engenharia; sem bloco de
+//    Engenharia, no fim (splice(-1) punha antes do último bloco).
+function escopoBlocoLivre(b) {
+  return !!(b && b.custom && Number(b.etapaId) > 1e9);
+}
+function sincronizarEscopoComEtapas(prev, etapasPct) {
+  const idsAtivos = new Set((etapasPct || []).map(e => e.id));
+  // Remove blocos de etapas que foram excluídas (não-eng e não-livres)
+  const filtrado = (prev || []).filter(b => b.isEng || escopoBlocoLivre(b) || idsAtivos.has(b.etapaId));
+  // Adiciona blocos de etapas novas (id > 5 = customizadas)
+  (etapasPct || []).forEach(et => {
+    if (et.id > 5 && !filtrado.find(b => b.etapaId === et.id)) {
+      const novo = { etapaId: et.id, titulo: et.nome, objetivo:"", itens:[], entregaveis:[], obs:"", isEng:false, custom:true };
+      const iEng = filtrado.findIndex(b => b.isEng);
+      if (iEng === -1) filtrado.push(novo);
+      else filtrado.splice(iEng, 0, novo);
+    }
+  });
+  return filtrado;
+}
+// ── Escopo: fim da parte pura ──────────────────────────────────
+
 function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, propostaReadOnly, propostaSnapshot, lockEdicao, templateId }) {
   // NOTA: NÃO fazer `if (!data) return null` aqui — os hooks abaixo precisam ser
   // chamados em todo render (regra do React). Em vez disso, usamos optional chaining
@@ -602,21 +633,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
   });
 
   // Sincroniza escopo quando etapasPct muda (adiciona/remove etapas)
+  // (sincronizarEscopoComEtapas: mantém os blocos livres do "+ bloco")
   useEffect(() => {
-    setEscopoState(prev => {
-      const idsAtivos = new Set(etapasPct.map(e => e.id));
-      // Remove blocos de etapas que foram excluídas (não-eng)
-      const filtrado = prev.filter(b => b.isEng || idsAtivos.has(b.etapaId));
-      // Adiciona blocos de etapas novas (id > 5 = customizadas)
-      etapasPct.forEach(et => {
-        if (et.id > 5 && !filtrado.find(b => b.etapaId === et.id)) {
-          filtrado.splice(filtrado.findIndex(b=>b.isEng), 0, {
-            etapaId: et.id, titulo: et.nome, objetivo:"", itens:[], entregaveis:[], obs:"", isEng:false, custom:true,
-          });
-        }
-      });
-      return filtrado;
-    });
+    setEscopoState(prev => sincronizarEscopoComEtapas(prev, etapasPct));
   }, [etapasPct]);
 
   // Guard defensivo: se data não veio, retorna null (APÓS todos os hooks)

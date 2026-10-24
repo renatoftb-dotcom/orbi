@@ -817,3 +817,81 @@ async function saveAllData(newData, oldData = {}, opcoes = {}) {
   if (falha) { const e = falha.reason || new Error("falha ao gravar"); e.atualizados = atualizados; throw e; }
   return atualizados;
 }
+// ── Importar backup (JSON) por cima do que já está no sistema ──────
+// O save compara a tela com o servidor e APAGA o que sumiu da lista. Importar
+// o arquivo como os dados inteiros apagava tudo o que não estava nele (um
+// arquivo só com obras levava clientes, lançamentos e orçamentos embora).
+// Aqui o arquivo entra por cima dos dados atuais: registro do arquivo
+// substitui o de mesmo id, registro novo entra, e nada é apagado.
+// Devolve { erro } se o arquivo não tem cara de backup, ou { dados, contagem }.
+const LISTAS_IMPORTACAO = [
+  ["clientes", "Clientes"], ["fornecedores", "Fornecedores"], ["materiais", "Insumos"], ["obras", "Obras"],
+  ["lancamentos", "Lançamentos"], ["orcamentosProjeto", "Orçamentos"], ["receitasFinanceiro", "Receitas"],
+];
+// as que todo backup (do app ou do servidor) traz: sem elas não é um backup
+const LISTAS_IMPORTACAO_PRINCIPAIS = ["clientes", "obras", "lancamentos", "orcamentosProjeto"];
+function mesclarImportacao(atual, arquivo) {
+  const ehObj = (x) => !!x && typeof x === "object" && !Array.isArray(x);
+  if (!ehObj(arquivo)) return { erro: "O arquivo não é um backup do VICKE." };
+  const faltam = LISTAS_IMPORTACAO_PRINCIPAIS.filter((k) => !(k in arquivo));
+  if (faltam.length) return { erro: "O arquivo não é um backup completo: falta " + faltam.join(", ") + "." };
+  for (const k of LISTAS_IMPORTACAO.map((l) => l[0]).concat(["projetos"])) {
+    if (!(k in arquivo)) continue;
+    if (!Array.isArray(arquivo[k])) return { erro: `No arquivo, "${k}" não é uma lista.` };
+    if (arquivo[k].some((x) => !ehObj(x) || x.id == null || x.id === "")) return { erro: `No arquivo, "${k}" tem registro sem id.` };
+  }
+  if (arquivo.escritorio != null && !ehObj(arquivo.escritorio)) return { erro: 'No arquivo, "escritorio" não é um cadastro.' };
+
+  const base = atual || {};
+  // O _versao do arquivo é de quando ele foi exportado: o registro que
+  // substitui um atual leva a versão do atual (senão a gravação dava conflito).
+  const porId = (lista, doArquivo) => {
+    const out = Array.isArray(lista) ? lista.slice() : [];
+    const idx = new Map(out.map((x, i) => [x && x.id, i]));
+    let novos = 0, atualizados = 0;
+    for (const reg0 of doArquivo) {
+      const { _versao, ...reg } = reg0;
+      const i = idx.get(reg.id);
+      if (i === undefined) { idx.set(reg.id, out.length); out.push(reg); novos++; }
+      else { const v = out[i] && out[i]._versao; out[i] = v != null ? { ...reg, _versao: v } : reg; atualizados++; }
+    }
+    return { lista: out, novos, atualizados };
+  };
+  const dados = { ...base };
+  const contagem = [];
+  for (const [k, rotulo] of LISTAS_IMPORTACAO) {
+    if (!Array.isArray(arquivo[k])) continue;
+    const m = porId(base[k], arquivo[k]);
+    dados[k] = m.lista;
+    contagem.push({ chave: k, rotulo, total: arquivo[k].length, novos: m.novos, atualizados: m.atualizados });
+  }
+  // Projetos (Etapas) moram no orçamento ganho: o save os devolve ao
+  // orçamento, e projeto que falta na lista vira "finalizado". Ficam os
+  // atuais, por cima os dos orçamentos que vieram no arquivo e, por último,
+  // os projetos do próprio arquivo — nenhum some.
+  if (Array.isArray(arquivo.orcamentosProjeto) || Array.isArray(arquivo.projetos)) {
+    let prj = Array.isArray(base.projetos) ? base.projetos : projetosDosOrcamentos(base.orcamentosProjeto);
+    const doArquivo = projetosDosOrcamentos((arquivo.orcamentosProjeto || []).map((o) => (dados.orcamentosProjeto || []).find((x) => x && x.id === o.id) || o));
+    prj = porId(prj, doArquivo).lista;
+    if (Array.isArray(arquivo.projetos)) prj = porId(prj, arquivo.projetos).lista;
+    dados.projetos = prj;
+  }
+  let escritorio = false;
+  if (ehObj(arquivo.escritorio)) {
+    const { _versao, ...esc } = arquivo.escritorio;
+    const atualEsc = ehObj(base.escritorio) ? base.escritorio : {};
+    dados.escritorio = { ...atualEsc, ...esc, ...(atualEsc._versao != null ? { _versao: atualEsc._versao } : {}) };
+    escritorio = true;
+  }
+  return { dados, contagem, escritorio };
+}
+// O texto da confirmação: quanto de cada tipo entra e quanto substitui.
+function resumoDaImportacao(previa) {
+  const linhas = (previa.contagem || []).filter((c) => c.total > 0).map((c) =>
+    `${c.rotulo}: ${c.total}` + (c.novos || c.atualizados
+      ? ` (${[c.novos ? `${c.novos} ${c.novos === 1 ? "novo" : "novos"}` : "", c.atualizados ? `${c.atualizados} ${c.atualizados === 1 ? "substitui o atual" : "substituem os atuais"}` : ""].filter(Boolean).join(", ")})`
+      : ""));
+  if (previa.escritorio) linhas.push("Escritório: os campos do arquivo substituem os atuais");
+  if (!linhas.length) linhas.push("O arquivo não tem registros.");
+  return linhas.join("\n") + "\n\nNada do que já está no sistema é apagado: o que não está no arquivo continua como está.";
+}

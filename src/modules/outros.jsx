@@ -653,8 +653,21 @@ function Financeiro({ data, save }) {
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   }
 
-  function excluirSelecionados() {
-    const novos = receitas.filter((_r, i) => !selecionados.has(i));
+  // Seleção pelo id do lançamento (o objeto, se a linha antiga não tem id):
+  // pelo índice, a seleção sobrevivia a um filtro e "Excluir" apagava linha
+  // que não estava mais na tela. Exclui só o que está selecionado E visível,
+  // e só depois de confirmar.
+  const chaveLanc = r => r.id || r;
+  async function excluirSelecionados() {
+    const alvo = lancs.filter(r => selecionados.has(chaveLanc(r)));
+    if (!alvo.length) { setSelecionados(new Set()); return; }
+    const ok = await dialogo.confirmar({
+      titulo: `Excluir ${alvo.length} lançamento${alvo.length!==1?"s":""}?`,
+      mensagem: "Esta ação não pode ser desfeita.",
+      confirmar: "Excluir", destrutivo: true,
+    });
+    if (!ok) return;
+    const novos = receitas.filter(r => !alvo.includes(r));
     save({...data, receitasFinanceiro: novos});
     setSelecionados(new Set());
   }
@@ -684,6 +697,8 @@ function Financeiro({ data, save }) {
   const totalCaixa    = receitas.filter(r=>r.contabil1==="Caixa" && r.recebimento==="Recebido").reduce((s,r)=>s+(r.valor||0),0);
   const totalReceber  = receitas.filter(r=>r.contabil1==="Caixa" && r.recebimento==="A Receber").reduce((s,r)=>s+(r.valor||0),0);
   const temFiltroAtivo = Object.values(filtroVals).some(s => s && s.size > 0);
+  // Mudou o filtro, a seleção recomeça (não se exclui o que não se vê).
+  useEffect(() => { setSelecionados(new Set()); }, [busca, filtroTipo, filtroVals]);
 
   const lancs = receitas.filter(r => {
     if (filtroTipo==="contabil" && r.contabil1!=="Receita Total") return false;
@@ -842,8 +857,8 @@ function Financeiro({ data, save }) {
                 {/* Checkbox todos */}
                 <th style={{...thS, width:36, textAlign:"center"}}>
                   <input type="checkbox"
-                    checked={lancs.length>0 && lancs.every(r=>selecionados.has(receitas.indexOf(r)))}
-                    onChange={e=>setSelecionados(e.target.checked?new Set(lancs.map(r=>receitas.indexOf(r))):new Set())}
+                    checked={lancs.length>0 && lancs.every(r=>selecionados.has(chaveLanc(r)))}
+                    onChange={e=>setSelecionados(e.target.checked?new Set(lancs.map(chaveLanc)):new Set())}
                     style={{ cursor:"pointer", accentColor:"#3b82f6" }} />
                 </th>
                 {/* Identificacao */}
@@ -900,14 +915,14 @@ function Financeiro({ data, save }) {
                 const isCaixa = r.contabil1 === "Caixa";
                 const isReceb = r.recebimento === "Recebido";
                 const isAReceber = r.recebimento === "A Receber";
-                const rowBg = selecionados.has(realIdx) ? "rgba(59,130,246,0.1)"
+                const rowBg = selecionados.has(chaveLanc(r)) ? "rgba(59,130,246,0.1)"
                   : isCaixa ? (idx%2===0?"#060d1a":"#080e1a")
                   : (idx%2===0?"#0a1122":"#0c1420");
                 return (
                   <tr key={r.id||idx} style={{ background:rowBg }}>
                     <td style={{...tdS,width:36,textAlign:"center"}}>
-                      <input type="checkbox" checked={selecionados.has(realIdx)}
-                        onChange={e=>setSelecionados(prev=>{const n=new Set(prev);if(e.target.checked)n.add(realIdx);else n.delete(realIdx);return n;})}
+                      <input type="checkbox" checked={selecionados.has(chaveLanc(r))}
+                        onChange={e=>setSelecionados(prev=>{const n=new Set(prev);if(e.target.checked)n.add(chaveLanc(r));else n.delete(chaveLanc(r));return n;})}
                         style={{ cursor:"pointer", accentColor:"#3b82f6" }} />
                     </td>
                     <td style={{...tdS,fontFamily:"monospace",fontSize:10,color:"#475569"}}>{r.codigo||"--"}</td>

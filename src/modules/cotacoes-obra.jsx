@@ -25,7 +25,13 @@ function cotacaoVazia(obraId) {
     criadaEm: new Date().toISOString(),
     titulo: "",
     escopo: "",
-    contaId: (typeof PLANO_CONTAS !== "undefined" && PLANO_CONTAS[0] ? PLANO_CONTAS[0].id : "material"),
+    // Em branco, para quem cota escolher. A primeira conta do plano era o
+    // padrão, e ela é de RECEITA (Depósito Recurso Próprio): a compra que
+    // ninguém classificou entrava na obra como dinheiro recebido. Não se
+    // põe "material" aqui porque a conta decide o destino (destinoDaCotacao)
+    // e a cotação de serviço viraria pedido de loja; o lançamento e o pedido
+    // já caem em conta de custo por contaDeCompra.
+    contaId: "",
     etapaId: "",
     quantidade: "",
     unidade: "",
@@ -89,8 +95,9 @@ function propostasDaCotacao(cot) {
 // ainda não é comparável, e deixá-la em primeiro faria a "mais barata"
 // mentir.
 function propostasOrdenadas(cot) {
+  // pelo valor de agora, não pelo guardado (ver comValoresDasPropostas)
   return propostasDaCotacao(cot).slice().sort((a, b) => {
-    const va = valorProposta(a), vb = valorProposta(b);
+    const va = valorDaProposta(cot, a), vb = valorDaProposta(cot, b);
     if (va <= 0 && vb <= 0) return 0;
     if (va <= 0) return 1;
     if (vb <= 0) return -1;
@@ -323,6 +330,24 @@ function descontoDaProposta(cot, proposta) {
 // item, senão o total digitado.
 function valorDaProposta(cot, proposta) {
   return propostaTemPrecoPorItem(cot, proposta) ? totalNegociado(cot, proposta) : valorProposta(proposta);
+}
+
+// O `valor` guardado de cada proposta item a item, refeito pela lista de
+// agora. Ele é gravado ao salvar a proposta; mexer depois na quantidade de
+// um item (ou numa proposta que muda a lista) deixava o das OUTRAS velho —
+// e era por ele que se escolhia a mais barata, a economia e o contrato.
+function comValoresDasPropostas(cot) {
+  const c = cot || {};
+  const ps = c.propostas || [];
+  let mudou = false;
+  const propostas = ps.map((p) => {
+    if (!p || !propostaTemPrecoPorItem(c, p)) return p;
+    const v = totalNegociado(c, p);
+    if (numeroDoCampo(p.valor) === v) return p;
+    mudou = true;
+    return { ...p, valor: v };
+  });
+  return mudou ? { ...c, propostas } : c;
 }
 
 // Qual loja está mais barata em cada item. É o que permite olhar a lista e
@@ -1948,7 +1973,10 @@ function propostaDaEntradaPorItem(x, cot0) {
 function propostaDaEntrada(d) {
   const x = d || {};
   const loja = x.loja || {};
-  const hoje = String(x.hojeIso || new Date().toISOString()).slice(0, 10);
+  // data LOCAL: toISOString é UTC, e depois das 21h no Brasil a proposta
+  // nascia recebida (e a lista rápida nomeada) com a data de amanhã
+  const hoje = String(x.hojeIso || (typeof dataParaIso === "function" ? dataParaIso(new Date())
+    : new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString())).slice(0, 10);
   const papel = x.papel || {};
   const cot0 = x.cotacao || { ...cotacaoVazia(x.obraId || ""),
     titulo: String(x.titulo || "").trim() || tituloDaListaRapida(x.itens, hoje) };
@@ -2404,6 +2432,30 @@ function fichaDoXmlDaNfe(xml) {
   }
   const numero = texto(tag(ide, "nNF")).replace(/^0+/, "");
   const valor = Math.round(num(tag(tot, "vNF")) * 100) / 100;
+  const c2 = (x) => Math.round(x * 100) / 100;
+  const vProd = c2(num(tag(tot, "vProd"))), vDesc = c2(num(tag(tot, "vDesc")));
+  // O que a nota cobra além dos produtos entra como linha do papel. Sem
+  // isto a entrada ficava em vProd − vDesc: o frete e o IPI que a loja
+  // cobra sumiam do lançamento (nota de 1.100 virava 1.000).
+  const extras = [
+    ["Frete", num(tag(tot, "vFrete")), "frete"],
+    ["Seguro", num(tag(tot, "vSeg")), ""],
+    ["IPI", num(tag(tot, "vIPI")) + num(tag(tot, "vIPIDevol")), ""],
+    ["ICMS ST", num(tag(tot, "vST")) + num(tag(tot, "vFCPST")), ""],
+    ["Imposto de importação", num(tag(tot, "vII")), ""],
+    ["Outras despesas da nota", num(tag(tot, "vOutro")), ""],
+  ];
+  for (const [descricao, v, contaId] of extras) {
+    const total = c2(v);
+    if (total >= 0.01) itens.push({ descricao, codigo: "", quantidade: 1, unidade: "vb", unitario: total, total,
+      extraDaNota: true, ...(contaId ? { contaId } : {}) });
+  }
+  // O que ainda não fecha com o vNF (ICMS desonerado, campo que a nota usa
+  // e aqui não se lê) não se inventa como item: vira aviso.
+  const somaLida = c2(itens.reduce((t, x) => t + (Number(x.total) || 0), 0) - vDesc);
+  const avisos = valor > 0 && Math.abs(somaLida - valor) >= 0.01
+    ? [`Os itens da nota somam ${somaLida.toFixed(2).replace(".", ",")} e o total da nota é ${valor.toFixed(2).replace(".", ",")}. Confira os itens.`]
+    : [];
   const papel = {
     tipo: "nota", tipoIA: "nota_produto", lidoPeloXml: true, ehNota: true,
     lidoComo: textoSemCaixaAlta(texto(tag(emit, "xNome"))), fantasia: textoSemCaixaAlta(texto(tag(emit, "xFant"))),
@@ -2411,11 +2463,14 @@ function fichaDoXmlDaNfe(xml) {
     numeroNota: numero, numeroPedido: "",
     emitido: (texto(tag(ide, "dhEmi")) || texto(tag(ide, "dEmi"))).slice(0, 10),
     vencimento: texto(tag(tag(t, "dup"), "dVenc")).slice(0, 10),
-    pagoEm: "", total: Math.round(num(tag(tot, "vProd")) * 100) / 100, valor,
-    desconto: Math.round(num(tag(tot, "vDesc")) * 100) / 100,
+    // `total` é o que a tela compara com a soma da entrada (já com o
+    // desconto): é o vNF. Com o vProd, toda nota com desconto mostrava
+    // "o papel diz…" sem nada errado.
+    pagoEm: "", total: valor || vProd, valor,
+    desconto: vDesc,
     situacaoLida: "", formaLida: "", chave, idTransacao: "", descricao: "",
   };
-  return { papel, itens, avisos: [], documentos: [] };
+  return { papel, itens, avisos, documentos: [] };
 }
 
 // O PDF que a IA não leu (ou sem IA): o leitor do VICKE tenta, nesta ordem,
@@ -3751,7 +3806,10 @@ function precoDaLinha(linha, quantidade, item) {
     return daLoja > 0 ? Math.round((daLoja / fator) * 1e6) / 1e6 : 0;
   }
   if (l.unitario > 0) return l.unitario;
-  if (l.total > 0 && q > 0) return Math.round((l.total / q) * 10000) / 10000;
+  // O total da linha é da quantidade DA LINHA: a loja cotou 20 sacos por
+  // 800 e a cotação pedia 10 — dividir por 10 dava 80 o saco, o dobro.
+  const ql = Number(l.quantidade) > 0 ? Number(l.quantidade) : q;
+  if (l.total > 0 && ql > 0) return Math.round((l.total / ql) * 10000) / 10000;
   return 0;
 }
 
@@ -4354,7 +4412,7 @@ function propostaComparavel(cot, p) {
 }
 
 function melhorProposta(cot) {
-  const ord = propostasOrdenadas(cot).filter(p => valorProposta(p) > 0 && propostaComparavel(cot, p));
+  const ord = propostasOrdenadas(cot).filter(p => valorDaProposta(cot, p) > 0 && propostaComparavel(cot, p));
   return ord[0] || null;
 }
 
@@ -4362,11 +4420,11 @@ function melhorProposta(cot) {
 // Com uma proposta só não há economia a declarar — comparar consigo mesma
 // daria zero e ocuparia espaço à toa, então devolve null.
 function economiaDaCotacao(cot) {
-  const vals = propostasDaCotacao(cot).filter(p => propostaComparavel(cot, p)).map(valorProposta).filter(v => v > 0);
+  const vals = propostasDaCotacao(cot).filter(p => propostaComparavel(cot, p)).map(p => valorDaProposta(cot, p)).filter(v => v > 0);
   if (vals.length < 2) return null;
   const menor = Math.min(...vals), maior = Math.max(...vals);
   const esc = propostaEscolhida(cot);
-  const referencia = esc && valorProposta(esc) > 0 ? valorProposta(esc) : menor;
+  const referencia = esc && valorDaProposta(cot, esc) > 0 ? valorDaProposta(cot, esc) : menor;
   return { menor, maior, referencia, economia: maior - referencia };
 }
 
@@ -4384,6 +4442,15 @@ function aprovacaoDaEscolha(cot, aprovacoes) {
   const ap = aprovacaoDaCotacao(aprovacoes, c.id);
   if (ap.status === "pendente") return ap;
   if (ap.propostaId && c.escolhidaId && ap.propostaId !== c.escolhidaId) return COT_SEM_APROVACAO;
+  // Mesma proposta, outro preço: editar a escolhida depois do aval (mais
+  // um item, outra quantidade, outro total) não pode herdar o "aprovado".
+  // Registro antigo, sem valor, continua valendo.
+  const esc = propostaEscolhida(c);
+  const aprovado = Number(ap.valor);
+  if (esc && ap.valor !== "" && ap.valor != null && aprovado > 0
+      && Math.abs(valorDaProposta(c, esc) - aprovado) >= 0.01) {
+    return { status: "pendente", precisaReaprovar: true, anterior: ap };
+  }
   return ap;
 }
 
@@ -4394,6 +4461,9 @@ function registrarAprovacaoCotacao(aprovacoes, dados) {
   return limpa.concat([{
     cotacaoId: dados.cotacaoId,
     propostaId: dados.propostaId || "",
+    // o valor que o cliente viu: mudou depois, a decisão deixa de valer
+    // (ver aprovacaoDaEscolha)
+    valor: Number(dados.valor) > 0 ? Math.round(Number(dados.valor) * 100) / 100 : "",
     status: dados.status === "recusada" ? "recusada" : "aprovada",
     motivo: dados.motivo || "",
     por: dados.por || "Cliente",
@@ -4522,6 +4592,23 @@ function herdarDoPedidoAnterior(novos, anteriores) {
   });
 }
 
+// A cotação que virou pedido na conta da loja aponta para ele
+// (`pedidoNaLoja`). Apagado o pedido — ou a conta inteira —, ela deixa de
+// apontar: senão ficava travada em "Virou pedido na loja" sem pedido
+// nenhum, e não dava nem para gerar o pedido de novo.
+function soltarPedidoNaLoja(cotacoes, o) {
+  const ids = (o && o.pedidoIds) || [];
+  const contaId = (o && o.contaLojaId) || "";
+  return (cotacoes || []).map((c) => {
+    const pl = c && c.pedidoNaLoja;
+    if (!pl) return c;
+    if (!(ids.indexOf(pl.pedidoId) >= 0 || (contaId && pl.contaLojaId === contaId))) return c;
+    const x = { ...c };
+    delete x.pedidoNaLoja;
+    return x;
+  });
+}
+
 function contaDeLojaAberta(cotacoes, prestadorId) {
   if (!prestadorId) return null;
   return (cotacoes || []).find((c) => c && ehContaDeLoja(c)
@@ -4577,7 +4664,10 @@ function pedidoDaCotacao(cot, proposta, insumos, prazoDias) {
     numeroNota: p.numeroNota || (daObs && daObs[1] === "Nota" ? daObs[2] : "") || base.numeroNota || "",
     data: hoje,
     vencimento: prazo > 0 && typeof somarDias === "function" ? somarDias(hoje, prazo) : "",
-    desconto: d && d.desconto ? d.valor : 0,
+    // bruto − combinado: negativo quando o fechamento ficou ACIMA da soma
+    // (frete embutido, arredondamento para cima). Só o desconto era levado,
+    // e o acréscimo sumia do pedido; itensRateados reparte os dois.
+    desconto: d ? Math.round((d.bruto - d.alvo) * 100) / 100 : 0,
     itens,
     cotacaoOrigemId: c.id || "",
     observacao: c.titulo || "",
@@ -4659,7 +4749,7 @@ function dadosDoContratoDaCotacao(cot) {
     tipoId: tipoDoContaId(c.contaId),
     prestadorId: esc.fornecedorId || "",
     nomeContratado: esc.favorecido || "",
-    valor: valorProposta(esc),
+    valor: valorDaProposta(c, esc),
     titulo: String(c.titulo || "").trim(),
     escopo: String(c.escopo || "").trim(),
     condicaoPagamento: esc.condicaoPagamento || "",
@@ -4693,7 +4783,7 @@ function podeLancarEmContas(cot, contratos) {
   if (c.contaGeradaId)           return { pode: false, motivo: "Já foi lançada em contas a pagar." };
   const esc = propostaEscolhida(c);
   if (!esc)                      return { pode: false, motivo: "Escolha uma proposta primeiro." };
-  if (valorProposta(esc) <= 0)   return { pode: false, motivo: "A proposta escolhida está sem valor." };
+  if (valorDaProposta(c, esc) <= 0) return { pode: false, motivo: "A proposta escolhida está sem valor." };
   return { pode: true, motivo: "" };
 }
 
@@ -4713,13 +4803,15 @@ function dadosDoLancamento(cot) {
   return {
     cotacaoId: c.id,
     obraId: c.obraId || "",
-    contaId: c.contaId || "",
+    // compra nunca nasce em conta de receita (cotação antiga guardou a
+    // primeira do plano, Depósito Recurso Próprio)
+    contaId: contaDeCompra(c.contaId),
     // a etapa para a qual se cotou — vai para cada conta que nascer daqui
     etapaId: c.etapaId || "",
     prestadorId: esc.fornecedorId || "",
     favorecido: esc.favorecido || "",
     descricao: String(c.titulo || "").trim() || "Compra",
-    valor: valorProposta(esc),
+    valor: valorDaProposta(c, esc),
     modo: p.modo || "parcelas",   // ver MODOS_LANCAMENTO
     parcelas: p.parcelas || 1,
     primeiroVencimento: p.primeiroVencimento
@@ -4756,12 +4848,19 @@ function medicaoDaCotacao(cot, proposta, insumos) {
       // Nasce medido igual ao cotado: o caso comum é consumir o que se pediu,
       // e quem consumiu menos muda um número.
       quantidade: cotada,
-      unitario: precoUnitario(proposta, it.id),
+      // O unitário EFETIVO, não o de tabela: com "leva tudo por X" o que se
+      // paga é o total negociado, e as contas nascem daqui com desconto zero.
+      // Com o de tabela, 10 sc×40 + 2 m³×100 fechados por 500 viravam 600.
+      unitario: precoEfetivo(cot, proposta, it),
       // a cotacao guarda a etapa em `etapaId` — ler `etapa` aqui jogava fora
       // a etapa escolhida na cotacao e deixava em branco todo item cujo
-      // insumo nao tem etapa padrao
-      etapa: etapaDoItem(ins, (cot || {}).etapaId),
-      contaId: (cot || {}).contaId || "",
+      // insumo nao tem etapa padrao. A etapa própria do item manda, como no
+      // pedido da loja (pedidoDaCotacao).
+      etapa: it.etapa || etapaDoItem(ins, (cot || {}).etapaId),
+      // Só a conta própria do item vem daqui. Em branco, vale a conta que se
+      // escolhe no painel do lançamento (contasDoPedidoDaLoja usa a de
+      // `dados`) — carimbar a da cotação fazia a escolha do painel não valer.
+      contaId: it.contaId || "",
     };
   }).filter((r) => r.unitario > 0 || r.cotada > 0);
 }
@@ -4821,7 +4920,10 @@ function completarItemDaConta(conta, obra, insumos, contasDaObra) {
 }
 
 function totalDaMedicao(medicao) {
-  const soma = (medicao || []).reduce((s, r) => s + (numeroDoCampo(r.quantidade) * numeroDoCampo(r.unitario)), 0);
+  // centavos por linha, como a conta de cada item nasce (brutoDoItem): com
+  // unitário efetivo de seis casas, somar sem arredondar podia dar um
+  // centavo diferente da soma das contas
+  const soma = (medicao || []).reduce((s, r) => s + Math.round(numeroDoCampo(r.quantidade) * numeroDoCampo(r.unitario) * 100) / 100, 0);
   return Math.round(soma * 100) / 100;
 }
 
@@ -4834,6 +4936,18 @@ function validarMedicao(medicao) {
   const semEtapa = comValor.filter((r) => !String(r.etapa || "").trim()).length;
   if (semEtapa) erros.push(semEtapa === 1 ? "1 item está sem etapa." : semEtapa + " itens estão sem etapa.");
   return { ok: !erros.length, erros: erros };
+}
+
+// Desfazer o lançamento só enquanto nada foi pago. Com uma parcela paga, o
+// desfazer tirava as abertas e limpava `contaGeradaId`; relançar gerava o
+// TOTAL de novo por cima da paga (3.000 + 1.000 já pago = 4.000 na obra).
+function podeDesfazerLancamento(cot, contasPagar) {
+  const id = (cot || {}).id;
+  const pagas = (contasPagar || []).filter((x) => x && id && x.cotacaoId === id && x.pago).length;
+  if (!pagas) return { pode: true, motivo: "" };
+  return { pode: false, motivo: pagas === 1
+    ? "Uma conta deste lançamento já foi paga. Desfaça o pagamento dela em contas a pagar antes de desfazer o lançamento."
+    : `${pagas} contas deste lançamento já foram pagas. Desfaça o pagamento delas em contas a pagar antes de desfazer o lançamento.` };
 }
 
 // ── O que foi combinado com o fornecedor ────────────────────────
@@ -4945,7 +5059,7 @@ function podeGerarContrato(cot, aprovacoes, contratos) {
   if (foiDividida(c))            return { pode: false, motivo: "Foi dividida entre lojas — cada loja tem o seu pedido." };
   const esc = propostaEscolhida(c);
   if (!esc)                      return { pode: false, motivo: "Escolha uma proposta primeiro." };
-  if (valorProposta(esc) <= 0)   return { pode: false, motivo: "A proposta escolhida está sem valor." };
+  if (valorDaProposta(c, esc) <= 0) return { pode: false, motivo: "A proposta escolhida está sem valor." };
   const ap = aprovacaoDaEscolha(c, aprovacoes);
   if (c.precisaAprovacaoCliente && ap.status === "recusada") return { pode: false, motivo: "O cliente recusou esta escolha." };
   if (c.precisaAprovacaoCliente && ap.status !== "aprovada") {
@@ -5587,6 +5701,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const podeGerenciar = !!perm.podeGerenciarObra || !!perm.isCliente;
   const ehCliente = !!perm.isCliente;
   const ehEscritorio = !!perm.podeGerenciarObra;
+  // O que mexe em contas a pagar — gerar pedido, lançar, desfazer o
+  // lançamento, a conta da loja — e excluir proposta é só do escritório. O
+  // cliente cria a cotação, registra proposta e escolhe; com `podeGerenciar`
+  // ele via esses botões também.
+  const podeFinanceiro = ehEscritorio;
   // A exceção é apagar a cotação inteira: leva junto a decisão registrada e
   // não deixa rastro de quem apagou. Segue só com o admin do escritório.
   const podeExcluir = !!perm.podeGerenciarObra && !!perm.podeExcluir;
@@ -5637,7 +5756,14 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const [progressoPdf, setProgressoPdf] = useState(null);
   // null = ainda não perguntou. Pergunta uma vez por tela: sem a IA, anexar
   // não pode virar dois envios do mesmo arquivo.
-  const iaDisponivel = useIaDisponivel();
+  // O hook só devolve o valor. Quando a IA cai por crédito/token no meio da
+  // tela, as leituras chamavam um `setIaDisponivel` que não existia: o
+  // ReferenceError no catch matava o leitor por regras e o botão ficava em
+  // "Lendo…". A queda fica guardada aqui e desliga a IA nesta tela.
+  const iaDoServidor = useIaDisponivel();
+  const [iaCaiu, setIaCaiu] = useState(false);
+  const iaDisponivel = iaCaiu ? false : iaDoServidor;
+  const setIaDisponivel = (v) => setIaCaiu(!v);
   const [sobreOPedido, setSobreOPedido] = useState(false);   // arquivo sendo arrastado sobre o campo
   const refArquivoPedido = useRef(null);
   const [orcamentoLido, setOrcamentoLido] = useState(null);  // { orcamento, casamento }
@@ -5765,7 +5891,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     if (f.contaLoja && !f.lojaId) { setErro("Escolha a loja desta conta."); return; }
     setErro("");
     const existe = cotacoes.some(c => c.id === f.id);
-    const marcada = carimbar(f, usuario, !existe);
+    // a quantidade de um item pode ter mudado: o total guardado de cada
+    // proposta item a item acompanha
+    const marcada = carimbar(comValoresDasPropostas(f), usuario, !existe);
     gravarCotacoes(existe ? cotacoes.map(c => (c.id === f.id ? marcada : c)) : cotacoes.concat([marcada]));
     setFormCotacao(null);
   }
@@ -6380,7 +6508,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         ? { ...proposta, valor: totalNegociado(c, proposta) }
         : proposta;
       const p = carimbar({ ...comTotal, favorecido: nome }, usuario, !existe);
-      return { ...c, propostas: existe ? lista.map(x => (x.id === p.id ? p : x)) : lista.concat([p]) };
+      // item próprio desta proposta mexe na lista de todas: as outras
+      // refazem o total guardado
+      return comValoresDasPropostas({ ...c, propostas: existe ? lista.map(x => (x.id === p.id ? p : x)) : lista.concat([p]) });
     });
     setFormProposta(null);
   }
@@ -6849,8 +6979,12 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     const status = statusEscolhido || formDecisao.status;
     const eu = nomeDeQuem(usuario);
     const quem = registrando ? (String(quemRespondeu || "").trim() || "Cliente") : (usuario?.nome || usuario?.email || "Cliente");
+    // a decisão leva o valor da proposta: editada depois, pede nova resposta
+    const atual = cotacoes.find((c) => c && c.id === cotacao.id) || cotacao;
+    const escAtual = propostaEscolhida(atual);
     const novas = registrarAprovacaoCotacao(aprovacoes, {
       cotacaoId: cotacao.id, propostaId: cotacao.escolhidaId, status, motivo, por: quem,
+      valor: escAtual ? valorDaProposta(atual, escAtual) : "",
       registradaPor: registrando ? eu : "",
     });
     gravar({ ...obra, aprovacoesCotacao: novas });
@@ -6865,6 +6999,8 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   }
 
   async function excluirProposta(cot, prop) {
+    if (!podeFinanceiro) { setErro("Só o escritório exclui proposta."); return; }
+    if (cot.pedidoNaLoja) { setErro("Esta cotação já virou pedido na conta da loja — apague o pedido antes de mexer nas propostas."); return; }
     const ok = await dialogo.confirmar({
       titulo: `Excluir a proposta de ${prop.favorecido || "fornecedor sem nome"}?`,
       mensagem: prop.id === cot.escolhidaId
@@ -6987,7 +7123,10 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     if (!ok) return;
     setErro("");
     const r = removerCotacao(cotacoes, aprovacoes, cot.id);
-    gravar({ ...obra, cotacoes: r.cotacoes, aprovacoesCotacao: r.aprovacoes,
+    // as cotações que viraram pedido nesta conta voltam a poder gerar pedido
+    const soltas = soltarPedidoNaLoja(r.cotacoes, { contaLojaId: cot.id,
+      pedidoIds: (cot.pedidos || []).map((x) => x && x.id) });
+    gravar({ ...obra, cotacoes: soltas, aprovacoesCotacao: r.aprovacoes,
       contasPagar: removerContasDaCotacao(obra.contasPagar || [], cot.id) });
   }
 
@@ -7001,6 +7140,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   // A escolha vai para a conta da loja em vez de virar parcelas próprias:
   // abre o mesmo painel de pedido, já com os itens e os preços cotados.
   function mandarParaContaDaLoja(cot) {
+    if (!podeFinanceiro) { setErro("Só o escritório gera o pedido."); return; }
     const trava = podeLancarEmContas(cot, contratos);
     if (!trava.pode) { setErro(trava.motivo); return; }
     const esc = propostaEscolhida(cot);
@@ -7014,7 +7154,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       const loja = prestadores.find((f) => f.id === esc.fornecedorId);
       if (!loja) { setErro("A proposta escolhida não está ligada a um fornecedor cadastrado. Edite a proposta e escolha a loja."); return; }
       criada = { ...cotacaoVazia(obra.id), titulo: loja.nome || esc.favorecido || "Loja", contaLoja: true,
-        lojaId: loja.id, prazoLoja: 30, contaId: cot.contaId || "material" };
+        lojaId: loja.id, prazoLoja: 30, contaId: contaDeCompra(cot.contaId) };
       conta = criada;
     }
     setErro("");
@@ -7027,6 +7167,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   // Fornecedor de material não assina contrato; a cotação escolhida vira
   // conta e o ciclo fecha por aqui.
   function abrirLancamento(cot) {
+    if (!podeFinanceiro) { setErro("Só o escritório lança em contas a pagar."); return; }
     const trava = podeLancarEmContas(cot, contratos);
     if (!trava.pode) { setErro(trava.motivo); return; }
     const dados = dadosDoLancamento(cot);
@@ -7165,7 +7306,8 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     const r = onLancarContas({
       cotacaoId: cot.id, obraId: cot.obraId || obra.id, modo: 'contaLoja', pedido: comBaixa,
       contaNova: formPedido.contaNova || null,
-      contaId: cot.contaId || 'material',
+      // conta de compra: a da cotação antiga podia ser a de receita
+      contaId: contaDeCompra(cot.contaId),
       prestadorId: loja.id || '', favorecido: loja.nome || '',
       descricao: cot.titulo || 'Compra',
       lancadoEm: new Date().toISOString(), lancadoPor: nomeDeQuem(usuario),
@@ -7193,15 +7335,20 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   }
 
   async function desfazerLancamento(cot) {
+    if (!podeFinanceiro) { setErro("Só o escritório desfaz o lançamento."); return; }
+    // com conta paga, desfazer e relançar dobraria o gasto: trava antes
+    const trava = podeDesfazerLancamento(cot, obra.contasPagar || []);
+    if (!trava.pode) { setErro(trava.motivo); return; }
     const ok = await dialogo.confirmar({
       titulo: "Desfazer o lançamento desta cotação?",
-      mensagem: "As contas em aberto geradas por ela são removidas. Conta já paga fica como está — o dinheiro saiu e o gasto tem que continuar na obra.",
+      mensagem: "As contas a pagar geradas por ela são removidas e a cotação volta a poder ser lançada.",
       confirmar: "Desfazer lançamento",
       destrutivo: true,
     });
     if (!ok) return;
     setErro("");
-    if (onDesfazerLancamento) onDesfazerLancamento(cot.id);
+    const r = onDesfazerLancamento ? onDesfazerLancamento(cot.id) : null;
+    if (r && r.erro) setErro(r.erro);
   }
 
   // ── Gerar o contrato da escolha ───────────────────────────────
@@ -7347,7 +7494,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   {ehContaDeLoja(cot)
                     ? dinheiro(abertoDaLoja)
                     : foiDividida(cot) ? dinheiro(totaisDaDivisao(cot, cotacoes).total)
-                    : esc ? dinheiro(valorProposta(esc)) : melhor ? `a partir de ${dinheiro(valorProposta(melhor))}` : "—"}
+                    : esc ? dinheiro(valorDaProposta(cot, esc)) : melhor ? `a partir de ${dinheiro(valorDaProposta(cot, melhor))}` : "—"}
                 </div>
               </div>
               <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 3 }}>
@@ -7376,7 +7523,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                 {cot.escopo && <div style={{ fontSize: 12.5, color: "#374151", marginBottom: 12, whiteSpace: "pre-wrap" }}>{cot.escopo}</div>}
                 <BlocoContaLoja cotacao={cot} contasPagar={obra.contasPagar || []}
                   loja={prestadores.find((f) => f.id === cot.lojaId)} isMobile={isMobile}
-                  dinheiro={dinheiro} podeGerenciar={podeGerenciar}
+                  dinheiro={dinheiro} podeGerenciar={podeFinanceiro}
                   aoNovoPedido={() => abrirPedido(cot)}
                   aoEditarPedido={(p) => editarPedido(cot, p)}
                   aoApagarPedido={(p) => apagarPedido(cot, p)}
@@ -7510,7 +7657,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     <>
                       {/* o pedido de uma divisão nasce escolhido: trocar de loja
                           é desfazer a divisão, lá na cotação completa */}
-                      {!cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && !cot.divisaoDe && (
+                      {/* virou pedido na loja: trocar a escolha deixaria o pedido
+                          apontando para uma proposta que não é mais a escolhida */}
+                      {!cot.contaGeradaId && !cot.pedidoNaLoja && !contratoDaCotacao(contratos, cot.id) && !cot.divisaoDe && (
                         <button style={isMobile && !escolhida ? { ...E.btn, padding: "8px 14px", fontSize: 12.5 } : { ...bt, marginRight: isMobile ? 0 : 6 }}
                           onClick={() => trocarCotacao(cot.id, c => (escolhida
                             ? { ...limparEnvioAoCliente(c), escolhidaId: "", escolhidoPor: "", escolhidoEm: "" }
@@ -7531,11 +7680,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                       {/* Desfazer o lançamento é ação sobre ESTE fornecedor,
                           não sobre a cotação: mora ao lado dos pagamentos que
                           ele gerou. */}
-                      {escolhida && cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
+                      {podeFinanceiro && escolhida && cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
                         <button style={{ ...bt, marginLeft: isMobile ? 0 : 6, color: "#dc2626" }}
                           onClick={() => desfazerLancamento(cot)}>Desfazer lançamento</button>
                       )}
-                      {!cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && !cot.divisaoDe && (
+                      {podeFinanceiro && !cot.contaGeradaId && !cot.pedidoNaLoja && !contratoDaCotacao(contratos, cot.id) && !cot.divisaoDe && (
                         <button title="Excluir esta proposta"
                           style={{ ...bt, marginLeft: isMobile ? 0 : 6, color: "#dc2626" }}
                           onClick={() => excluirProposta(cot, p)}>Excluir</button>
@@ -7556,7 +7705,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
                                 <div style={{ minWidth: 0, fontSize: 13 }}>{infoDa(p, escolhida, maisBarata)}</div>
                                 <div style={{ fontWeight: 700, fontSize: 15, color: "#111827", whiteSpace: "nowrap" }}>
-                                  {valorProposta(p) > 0 ? dinheiro(valorProposta(p)) : "—"}
+                                  {valorDaProposta(cot, p) > 0 ? dinheiro(valorDaProposta(cot, p)) : "—"}
                                 </div>
                               </div>
                               {detalhes.length > 0 && (
@@ -7594,7 +7743,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                             return (
                               <tr key={p.id} style={{ borderTop: "1px solid rgba(38,36,33,0.08)", background: escolhida ? "#f0f7ff" : "transparent" }}>
                                 <td style={{ padding: "8px" }}>{infoDa(p, escolhida, maisBarata)}</td>
-                                <td style={{ padding: "8px", textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>{valorProposta(p) > 0 ? dinheiro(valorProposta(p)) : "—"}</td>
+                                <td style={{ padding: "8px", textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>{valorDaProposta(cot, p) > 0 ? dinheiro(valorDaProposta(cot, p)) : "—"}</td>
                                 <td style={{ padding: "8px", whiteSpace: "nowrap" }}>{p.prazoDias ? `${p.prazoDias} dias` : "—"}</td>
                                 <td style={{ padding: "8px" }}>{p.condicaoPagamento || "—"}</td>
                                 {podeGerenciar && (
@@ -7628,9 +7777,14 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   </div>
                 )}
 
+                {ap.precisaReaprovar && esc && (
+                  <div data-vk-reaprovar="1" style={{ fontSize: 12, color: "#b45309", background: "#fffbeb", border: "1px solid rgba(180,83,9,0.25)", borderRadius: 10, padding: "8px 10px", marginBottom: 12 }}>
+                    A proposta escolhida mudou depois da resposta do cliente ({ap.anterior.status === "recusada" ? "recusada" : "aprovada"} por {dinheiro(Number(ap.anterior.valor) || 0)}, agora {dinheiro(valorDaProposta(cot, esc))}). Precisa {ap.anterior.status === "recusada" ? "de nova resposta" : "ser aprovada de novo"}.
+                  </div>
+                )}
                 {ap.status === "pendente" && s.id === "aEnviar" && ehEscritorio && esc && (
                   <div style={{ fontSize: 12, color: "#0474f4", background: "#eef5ff", border: "1px solid rgba(4,116,244,0.22)", borderRadius: 10, padding: "8px 10px", marginBottom: 12 }}>
-                    Escolha feita: {esc.favorecido} por {dinheiro(valorProposta(esc))}. O cliente ainda não foi avisado — envie a escolha para ele aprovar.
+                    Escolha feita: {esc.favorecido} por {dinheiro(valorDaProposta(cot, esc))}. O cliente ainda não foi avisado — envie a escolha para ele aprovar.
                   </div>
                 )}
                 {ap.status === "pendente" && cot.enviadaClienteEm && (
@@ -7640,7 +7794,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     borderRadius: 10, padding: ehEscritorio ? 0 : "8px 10px", marginBottom: 12 }}>
                     {ehEscritorio
                       ? `Escolha enviada ao cliente em ${dataCurta(cot.enviadaClienteEm)}${cot.enviadaClientePor ? ` por ${nomeGravado(cot.enviadaClientePor)}` : ""} — aguardando a resposta.`
-                      : `O escritório escolheu ${esc ? `${esc.favorecido}, ${dinheiro(valorProposta(esc))}` : "uma proposta"} e enviou em ${dataCurta(cot.enviadaClienteEm)} para a sua aprovação.`}
+                      : `O escritório escolheu ${esc ? `${esc.favorecido}, ${dinheiro(valorDaProposta(cot, esc))}` : "uma proposta"} e enviou em ${dataCurta(cot.enviadaClienteEm)} para a sua aprovação.`}
                   </div>
                 )}
 
@@ -7718,7 +7872,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                       !aprovacaoNaTela && ehEscritorio && s.id === "aguardando" ? { rotulo: "Registrar resposta do cliente",
                         onClick: () => { setErro(""); setFormDecisao({ cotacao: cot, status: "aprovada", registrando: true }); } } : null,
                       esc && !cot.divisaoDe && destino === "pedido" ? { rotulo: "Gerar contrato em vez de pedido", onClick: () => gerarContrato(cot) } : null,
-                      esc && destino === "contrato" && !manter ? { rotulo: "Lançar em contas a pagar, sem contrato",
+                      esc && destino === "contrato" && !manter && podeFinanceiro ? { rotulo: "Lançar em contas a pagar, sem contrato",
                         onClick: () => { if (!lanc.pode) { setErro(lanc.motivo); return; } abrirLancamento(cot); } } : null,
                       comLista ? { rotulo: "Pedido (PDF)", onClick: () => setFolhaPedido({ cot, proposta: esc }) } : null,
                       comLista ? { rotulo: copiado === cot.id ? "Copiado ✓" : "Copiar para WhatsApp", onClick: () => copiarPedido(cot, esc) } : null,
@@ -7751,7 +7905,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                             style={{ ...E.btn, opacity: trava.pode ? 1 : 0.45, cursor: trava.pode ? "pointer" : "not-allowed" }}
                             onClick={() => gerarContrato(cot)}>Gerar contrato</button>
                         ))}
-                        {esc && destino === "pedido" && (
+                        {esc && destino === "pedido" && podeFinanceiro && (
                           <button data-vk-acao-principal="pedido" disabled={!lanc.pode} title={lanc.pode ? "" : lanc.motivo}
                             style={{ ...E.btn, opacity: lanc.pode ? 1 : 0.45, cursor: lanc.pode ? "pointer" : "not-allowed" }}
                             onClick={gerarPedido}>{lojaAberta ? `Gerar pedido na conta da ${nomeLoja}` : "Gerar pedido"}</button>
@@ -11351,7 +11505,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                             const nomeConta = conta && conta.nome && cotSemAcento(conta.nome) !== cotSemAcento(c.titulo) ? conta.nome : "";
                             return { valor: c.id, rotulo: [c.titulo || "Sem nome", nomeConta,
                               n ? (n === 1 ? "1 proposta" : n + " propostas") : "sem proposta",
-                              melhor ? "a partir de " + brl(valorProposta(melhor)) : ""].filter(Boolean).join(" · ") };
+                              melhor ? "a partir de " + brl(valorDaProposta(c, melhor)) : ""].filter(Boolean).join(" · ") };
                           }))} />
                         {!destinoId && (
                           <div style={{ marginTop: 8 }}>
@@ -11949,7 +12103,7 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
               <input style={E.input} type="date" value={p.vencimento || ""} onChange={(e) => aoMudar({ ...p, vencimento: e.target.value })} />
             </div>
             <div>
-              <label style={E.label}>Desconto (R$)</label>
+              <label style={E.label}>{numeroDoCampo(p.desconto) < 0 ? "Desconto (R$) · negativo é acréscimo" : "Desconto (R$)"}</label>
               <CampoCtrNum tipo="moeda" valor={p.desconto} onChange={(v) => aoMudar({ ...p, desconto: v })} style={E.input} placeholder="0,00" />
             </div>
           </div>
@@ -12942,7 +13096,7 @@ function CotacaoDecisao({ cotacao, status, registrando, dinheiro, onConfirmar, o
           {registrando ? "Registrar a resposta do cliente" : aprovar ? "Aprovar esta escolha" : "Recusar esta escolha"}
         </div>
         <div style={{ fontSize: 12.5, color: "#4b5563", marginBottom: 14 }}>
-          {cotacao.titulo} — {esc ? `${esc.favorecido}, ${dinheiro(valorProposta(esc))}` : "sem proposta escolhida"}.
+          {cotacao.titulo} — {esc ? `${esc.favorecido}, ${dinheiro(valorDaProposta(cotacao, esc))}` : "sem proposta escolhida"}.
           {registrando ? " A resposta veio por fora do sistema; fica gravado que foi você quem registrou." : ""}
         </div>
         {registrando && (

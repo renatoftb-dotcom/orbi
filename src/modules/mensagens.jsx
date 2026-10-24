@@ -373,13 +373,21 @@ function Mensagens({ usuario }) {
               </div>
               <div style={S.detBody}>
                 {selecionada.body_html ? (
-                  // HTML renderizado direto. ATENÇÃO: aqui há risco teórico de XSS
-                  // se o atacante enviar email com script inline. No futuro vale
-                  // adicionar sanitização (DOMPurify ou similar). Pra MVP do
-                  // Master só, com poucos remetentes confiáveis, aceitável.
-                  <div
-                    style={S.detHtml}
-                    dangerouslySetInnerHTML={{ __html: selecionada.body_html }}
+                  // O HTML vem de e-mail de fora: qualquer um manda. Direto na
+                  // página (dangerouslySetInnerHTML), um <img onerror> rodava
+                  // aqui dentro e levava o token do master do localStorage.
+                  // No iframe com sandbox e SEM allow-scripts, nada do e-mail
+                  // executa, e sem allow-same-origin ele nem enxerga esta
+                  // página. allow-popups: link do e-mail abre em outra aba
+                  // (o <base target="_blank"> do srcDoc), não dentro do quadro.
+                  <iframe
+                    title="Conteúdo da mensagem"
+                    sandbox="allow-popups allow-popups-to-escape-sandbox"
+                    referrerPolicy="no-referrer"
+                    srcDoc={'<!doctype html><html><head><meta charset="utf-8"><base target="_blank">'
+                      + '<style>body{margin:0;font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;line-height:1.6;color:#111827;word-wrap:break-word}img{max-width:100%;height:auto}</style>'
+                      + '</head><body>' + selecionada.body_html + '</body></html>'}
+                    style={{ display:"block", width:"100%", height:"max(360px, calc(100vh - 340px))", border:"none", background:"#fff" }}
                   />
                 ) : selecionada.body_text ? (
                   <pre style={{ ...S.detHtml, whiteSpace:"pre-wrap", fontFamily:"inherit", margin:0 }}>

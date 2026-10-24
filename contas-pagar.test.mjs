@@ -3474,6 +3474,98 @@ teste("orçado × realizado item a item: pavimento, conversão e mão de obra pe
   assert.strictEqual(tij.orcado, 4250);
 });
 
+
+// ── Correções da revisão (área obra) ─────────────────────────────
+teste("equipamento paga por medição quinzenal, mesmo com modalidade antiga gravada", () => {
+  const e = { ...modulo.contratoVazio(null, "c1", "o1", "terraplanagem"), prazoQtd: 30, prazoUnidade: "dias", dataInicio: "2026-11-02",
+    itens: [{ descricao: "Escavadeira", unidade: "hora", valorUnitario: 250, quantidade: 40 }] };
+  assert.strictEqual(e.modelo, "servicoEquipamento");
+  assert.strictEqual(e.modalidade, "medicao");
+  assert.strictEqual(e.medicaoPeriodicidade, "quinzenal");
+  const l = modulo.parcelasAPagar(e);
+  assert.deepStrictEqual(l.map((x) => [x.descricao, x.valor, x.vencimento]),
+    [["Medição 1/2 (estimada)", 5000, "2026-11-22"], ["Medição 2/2 (estimada)", 5000, "2026-12-07"]]);
+  // contrato gravado antes, com "parcelado": continua por medição, como o texto
+  const antigo = modulo.parcelasAPagar({ ...e, modalidade: "parcelado", parcelas: 3, medicaoPeriodicidade: "mensal" });
+  assert.ok(antigo.every((x) => /^Medição/.test(x.descricao)), JSON.stringify(antigo));
+});
+
+teste("retenção da última parcela: marcada e com vencimento no fim do prazo", () => {
+  const c = base({ valor: 12000, parcelas: 6, periodicidade: "quinzenais", dataInicio: "2026-11-02", prazoQtd: 4, prazoUnidade: "meses" });
+  const l = modulo.parcelasAPagar(c);
+  assert.strictEqual(l.length, 6);
+  assert.strictEqual(soma(l), 12000);
+  const u = l[5];
+  assert.strictEqual(u.descricao, "Parcela 6/6 (quinzenal, retida até o aceite)");
+  assert.strictEqual(u.vencimento, "2027-03-02", "fim do prazo: 02/11 + 4 meses");
+  assert.ok(u.estimada && u.retida);
+  assert.ok(!/retida/.test(l[4].descricao));
+  // retenção desligada: calendário normal
+  const sem = modulo.parcelasAPagar({ ...c, opcoes: { ...c.opcoes, retencao: false } });
+  assert.strictEqual(sem[5].descricao, "Parcela 6/6 (quinzenal)");
+  assert.strictEqual(sem[5].vencimento, "2027-01-22");
+});
+
+teste("retenção percentual: cada parcela paga o resto e o retido volta no aceite", () => {
+  const c = base({ valor: 10000, parcelas: 4, retencaoPct: 5, dataInicio: "2026-11-02", prazoQtd: 4, prazoUnidade: "meses" });
+  const l = modulo.parcelasAPagar(c);
+  assert.deepStrictEqual(l.map((x) => x.valor), [2375, 2375, 2375, 2375, 500]);
+  assert.strictEqual(soma(l), 10000, "o total continua o do contrato");
+  assert.strictEqual(l[4].descricao, "Retenção — liberação no aceite");
+  assert.strictEqual(l[4].vencimento, "2027-03-02");
+  assert.ok(l[4].estimada);
+  // centavos: 3 × 3333,33/3333,34 com 7% → soma fecha
+  const c3 = modulo.parcelasAPagar(base({ valor: 10000, parcelas: 3, retencaoPct: 7, dataInicio: "2026-11-02" }));
+  assert.strictEqual(soma(c3), 10000);
+  // gerenciamento não tem cláusula de retenção
+  const g = { ...modulo.contratoVazio(null, "c1", "o1", "gestaoObra"), valor: 12000, parcelas: 4, dataInicio: "2026-11-02", opcoes: { retencao: true } };
+  assert.ok(modulo.parcelasAPagar(g).every((x) => !/retid|Retenção/.test(x.descricao)));
+});
+
+teste("retenção percentual em contrato com parcelas já pagas cheias: o total não passa do contrato", () => {
+  const c = { ...base({ valor: 10000, parcelas: 4, retencaoPct: 5, dataInicio: "2026-11-02", prazoQtd: 4, prazoUnidade: "meses" }), id: "ctR" };
+  const novas = modulo.contasDoContrato(c);
+  // as duas primeiras foram pagas antes da retenção existir: 2.500 cada
+  const pagas = novas.slice(0, 2).map((x) => ({ ...x, valor: 2500, valorPago: 2500, pago: true, pagoEm: "2026-11-20" }));
+  const r = modulo.sincronizarContasDoContrato(pagas, c);
+  const doCtr = r.filter((x) => x.contratoId === "ctR");
+  assert.strictEqual(soma(doCtr), 10000, JSON.stringify(doCtr.map((x) => [x.descricao, x.valor])));
+  assert.strictEqual(doCtr.find((x) => x.retencao).valor, 250, "retém só das duas em aberto");
+  // parcelas com valor ajustado à mão (1ª menor, última maior), como no
+  // contrato da Cobop: o total continua o do contrato
+  const cA = { ...c, id: "ctA", valor: 128000, parcelas: 14, ajustesValor: { "ctA:1": 6000, "ctA:14": 12285.68 } };
+  const novasA = modulo.contasDoContrato(cA);
+  const pagaA = [{ ...novasA[0], valor: 6000, valorPago: 6000, pago: true, pagoEm: "2026-10-09" }];
+  const rA = modulo.sincronizarContasDoContrato(pagaA, cA).filter((x) => x.contratoId === "ctA");
+  assert.strictEqual(soma(rA), 128000, JSON.stringify(rA.map((x) => x.valor)));
+  assert.strictEqual(rA.find((x) => x.retencao).valor, 5485.68);
+  // tudo pago cheio: não sobra linha de retenção
+  const todas = novas.filter((x) => !x.retencao).map((x) => ({ ...x, valor: 2500, valorPago: 2500, pago: true, pagoEm: "2026-11-20" }));
+  const r2 = modulo.sincronizarContasDoContrato(todas, c).filter((x) => x.contratoId === "ctR");
+  assert.ok(!r2.some((x) => x.retencao && !x.pago));
+  assert.strictEqual(soma(r2), 10000);
+});
+
+teste("mensal a partir do dia 31 volta ao 31 nos meses que têm", () => {
+  const c = base({ valor: 6000, parcelas: 4, periodicidade: "mensais", dataInicio: "2027-01-31" });
+  assert.deepStrictEqual(modulo.parcelasAPagar(c).map((x) => x.vencimento), ["2027-02-28", "2027-03-31", "2027-04-30", "2027-05-31"]);
+});
+
+teste("entrada + parcelas sem nº de parcelas: o saldo vira uma parcela", () => {
+  const c = base({ modalidade: "entradaParcelas", valor: 10000, entradaPct: 30, parcelas: "", dataInicio: "2026-11-02", dataAssinatura: "2026-11-01",
+    opcoes: { retencao: false } });
+  const l = modulo.parcelasAPagar(c);
+  assert.deepStrictEqual(l.map((x) => [x.descricao, x.valor]), [["Entrada", 3000], ["Parcela 1/1 (quinzenal)", 7000]]);
+  assert.strictEqual(soma(l), 10000);
+});
+
+teste("global antigo sem entradaEscopo paga item a item, como o texto", () => {
+  const lg = { modelo: "empreitadaGlobal", valor: 0, entradaPct: 50, dataAssinatura: "2026-10-01",
+    itens: [{ descricao: "Portão", valor: 5000 }, { descricao: "Grade", valor: 3000 }] };
+  assert.deepStrictEqual(modulo.parcelasAPagar(lg).map((x) => x.descricao),
+    ["Portão — entrada", "Portão — conclusão", "Grade — entrada", "Grade — conclusão"]);
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);
 teste("Entrada a pagar de loja com conta: vira pedido da conta, com o nº do PEDIDO (não de nota) e o desconto", () => {

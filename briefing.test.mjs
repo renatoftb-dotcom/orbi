@@ -163,6 +163,24 @@ teste("Estilo: as 3 fotos só aparecem depois do estilo; obrigatórias, e foto i
   assert.strictEqual(M.faltaNaPergunta(p, { tipo: "CN" }, { estilo_fotos: ["rustico-1", "natural-2", "rustico-8"] }), "");
 });
 
+teste("Escala só conta as linhas do tipo atual: respostas de outro tipo não cumprem a obrigatória nem vão ao resumo", () => {
+  const perg = (id) => M.BRIEFING_SECOES.flatMap((s) => s.telas.flatMap((t) => t.perguntas)).find((p) => p.id === id);
+  const docs = perg("documentos");
+  // respondeu como casa nova e depois trocou para reforma
+  const r = { tipo: "RA", documentos: { matricula: "tenho", iptu: "tenho", topografia: "nao_tenho", sondagem: "depois", regulamento: "tenho" } };
+  assert.strictEqual(M.faltaNaPergunta(docs, M.contextoDoBriefing(r), r), "Marque uma opção em cada linha.");
+  assert.ok(!M.resumoDoBriefing(r).atencao.some((x) => /sondagem/.test(x)));
+  const ok = { tipo: "RA", documentos: { planta: "depois", habite_se: "tenho", matricula: "tenho", sondagem: "depois" } };
+  assert.strictEqual(M.faltaNaPergunta(docs, M.contextoDoBriefing(ok), ok), "");
+  assert.ok(M.resumoDoBriefing(ok).atencao.some((x) => /Documento a receber: planta/.test(x)));
+  // programa (minMarcados): ambiente que só existe no residencial não vale para o comercial
+  const prog = perg("programa");
+  const pc = { tipo: "PC", programa: { cozinha: "essencial", sala_estar: "desejavel" } };
+  assert.strictEqual(M.faltaNaPergunta(prog, M.contextoDoBriefing(pc), pc), "Marque ao menos um ambiente como essencial ou desejável.");
+  const pc2 = { tipo: "PC", programa: { recepcao: "essencial" } };
+  assert.strictEqual(M.faltaNaPergunta(prog, M.contextoDoBriefing(pc2), pc2), "");
+});
+
 for (const [nome, fn] of testes) {
   try { await fn(); console.log("  ok   " + nome); }
   catch (e) { falhas++; console.log("  FALHOU " + nome + "\n         " + e.message); }

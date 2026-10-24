@@ -231,7 +231,9 @@ function clausulasEquipamento(c, ctx) {
 
   // ── Prazo e jornada ──
   add("prazo", "DO PRAZO E DA JORNADA", [
-    `Os serviços serão executados no prazo estimado de ${numCtr(c.prazoDias, "dias úteis")}, contados da liberação formal da frente de serviço pela CONTRATANTE.`,
+    // o prazo é gravado em prazoQtd/prazoUnidade (o prazoDias do modelo é de
+    // contrato antigo) — lido pelo prazoContrato, como no resto do sistema
+    (() => { const pz = prazoContrato(c); return `Os serviços serão executados no prazo estimado de ${numCtr(pz.qtd, pz.unidade === "meses" ? "meses" : "dias úteis")}, contados da liberação formal da frente de serviço pela CONTRATANTE.`; })(),
     `A jornada normal de trabalho é de segunda a sexta-feira, das ${c.jornadaInicio || "______"} às ${c.jornadaFim || "______"}. Trabalhos em sábados, domingos, feriados ou fora da jornada dependem de acordo prévio e escrito entre as partes.`,
     "O prazo acima é estimativa fundada nas quantidades previstas e será ajustado na medida em que as quantidades efetivamente medidas dele se afastarem.",
   ]);
@@ -336,6 +338,9 @@ function escopoContrato(c) {
 }
 function escopoDoTipo(tipoId) {
   const t = tipoProfissional(tipoId);
+  // terraplanagem e brocas são máquina com operador: sem isto caíam em
+  // empreitada de mão de obra, com o objeto "material fornecido pelo CONTRATANTE"
+  if (t && t.modelo === "servicoEquipamento") return "equipamento";
   return t && t.modelo === "empreitadaGlobal" ? "ambos" : "maoDeObra";
 }
 // Texto padrão do objeto — o mesmo racional para todo prestador.
@@ -412,7 +417,9 @@ function moedaExtensoCtr(v) {
   const n = Number(v) || 0;
   const reais = Math.floor(n);
   const centavos = Math.round((n - reais) * 100);
-  let s = `${porExtensoCtr(reais)} ${reais === 1 ? "real" : "reais"}`;
+  // milhão redondo pede "de": "um milhão de reais", "dois milhões de reais"
+  const de = reais >= 1000000 && reais % 1000000 === 0 ? "de " : "";
+  let s = `${porExtensoCtr(reais)} ${de}${reais === 1 ? "real" : "reais"}`;
   if (centavos) s += ` e ${porExtensoCtr(centavos)} ${centavos === 1 ? "centavo" : "centavos"}`;
   return s;
 }
@@ -574,6 +581,10 @@ function modalidadePagamento(id) { return MODALIDADES_PAGAMENTO.find((m) => m.id
 // cada modelo: mão de obra em parcelas, global com entrada item a item.
 function modalidadeContrato(c) {
   const o = c || {};
+  // Serviço com equipamento é sempre por medição — é o que a cláusula de
+  // pagamento escreve, qualquer que seja a modalidade gravada (contratos
+  // antigos nasceram "parcelado" e geravam parcelas que o texto não prevê).
+  if (o.modelo === "servicoEquipamento") return "medicao";
   if (modalidadePagamento(o.modalidade)) return o.modalidade;
   return o.modelo === "empreitadaGlobal" ? "entradaFinal" : "parcelado";
 }
@@ -799,7 +810,8 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
     valor: "",
     // prazo em branco de propósito — quem escolhe a unidade e o número é o usuário
     prazoQtd: "", prazoUnidade: "",
-    modalidade: m.id === "empreitadaGlobal" ? "entradaFinal" : "parcelado",
+    // equipamento paga por medição (o quadro é de quantidades estimadas)
+    modalidade: m.porUnidade ? "medicao" : m.id === "empreitadaGlobal" ? "entradaFinal" : "parcelado",
     // o número de parcelas só vem pronto no gerenciamento, onde 12 é a praxe
     parcelas: m.id === "gerenciamentoObra" ? (m.padrao.parcelas || "") : "",
     periodicidade: m.padrao.periodicidade || "quinzenais",
@@ -818,8 +830,9 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
     previsaoConclusao: "",
     entradaPct: m.id === "empreitadaGlobal" ? 50 : "",
     entradaEscopo: m.id === "empreitadaGlobal" ? "item" : "contrato",
-    medicaoPeriodicidade: "mensal",
-    medicaoPrazoDias: "",
+    // os padrões de medição vêm do modelo (equipamento: quinzenal, 5 dias)
+    medicaoPeriodicidade: m.padrao.medicaoPeriodicidade || "mensal",
+    medicaoPrazoDias: m.padrao.medicaoPrazoDias || "",
     meioPagamento: m.id === "gerenciamentoObra" ? "boleto" : "pixOuTransferencia",
     // gerenciamento de obra
     referenciaObra: "",
@@ -905,7 +918,9 @@ function vencimentoTexto(p, primeiro, c) {
   }
   // ordinal em numeral evita a gagueira de "na segunda segunda-feira"
   if (p === "semanais") return `Os pagamentos serão realizados semanalmente, sempre às ${plural}, vencendo-se a primeira parcela na 1ª ${singular} posterior ao início dos serviços e as demais a cada 7 (sete) dias subsequentes.`;
-  if (p === "mensais") return "Os pagamentos serão realizados mensalmente, vencendo-se a primeira parcela 30 (trinta) dias após o início dos serviços e as demais a cada 30 (trinta) dias subsequentes.";
+  // "a cada 30 dias" não é o que as contas fazem: elas caem no mesmo dia do
+  // mês (início dia 31 → 31, ou o último dia nos meses mais curtos)
+  if (p === "mensais") return "Os pagamentos serão realizados mensalmente, vencendo-se a primeira parcela 1 (um) mês após o início dos serviços e as demais no mesmo dia dos meses subsequentes.";
   if (p === "quinzeDias") return "Os pagamentos serão realizados quinzenalmente, vencendo-se a primeira parcela 15 (quinze) dias após o início dos serviços e as demais a cada 15 (quinze) dias subsequentes, em data fixa, independentemente do dia da semana.";
   return `Os pagamentos serão realizados sempre às ${plural}, em quinzenas alternadas — uma ${singular} sim, outra não —, vencendo-se a primeira parcela na 2ª ${singular} posterior ao início dos serviços e as demais a cada 14 (quatorze) dias subsequentes.`;
 }
@@ -953,9 +968,20 @@ function clausulasGerenciamento(c, ctx) {
   // de serviço (parcelado, por medição, entrada + parcelas, entrada + saldo),
   // escrita na voz do modelo do escritório.
   const perGer = periodicidadeAdj(c.periodicidade);
+  // O intervalo sai de DIAS_PERIODO, o mesmo que as contas a pagar usam
+  // (quinzenal = 14 dias, no mesmo dia da semana; 15 dias só no quinzeDias),
+  // e "todo dia X" só vale para as mensais — nas demais o dia do mês muda.
+  const perGerId = c.periodicidade || "quinzenais";
+  const diasPer = (typeof DIAS_PERIODO !== "undefined" ? DIAS_PERIODO : { semanais: 7, quinzenais: 14, quinzeDias: 15 })[perGerId] || 14;
+  // com a data da primeira informada, as demais andam dela (mesmo dia da
+  // semana dela); sem a data, contam do dia da semana escolhido
+  const intervalo = (comData) => perGerId === "mensais" ? "no mesmo dia dos meses subsequentes"
+    : `a cada ${numExtensoCtr(diasPer)} dias${!pagaEmDiaDaSemana(perGerId) ? "" : comData ? ", no mesmo dia da semana" : `, sempre às ${diaSemanaPlural(c)}`}`;
   const quando = c.primeiroVencimento
-    ? `, vencendo a primeira em ${fmtDataCtr(c.primeiroVencimento)} e as demais ${c.periodicidade === "mensais" ? "no mesmo dia dos meses subsequentes" : `a cada ${c.periodicidade === "semanais" ? "7 (sete)" : "15 (quinze)"} dias`}`
-    : dia ? `, com vencimento todo dia ${String(dia).padStart(2, "0")} de cada mês` : "";
+    ? `, vencendo a primeira em ${fmtDataCtr(c.primeiroVencimento)} e as demais ${intervalo(true)}`
+    : perGerId === "mensais"
+      ? (dia ? `, com vencimento todo dia ${String(dia).padStart(2, "0")} de cada mês` : `, vencendo a primeira 1 (um) mês após o início e as demais ${intervalo(false)}`)
+      : `, vencendo a primeira ${perGerId === "quinzeDias" ? "15 (quinze) dias após o início" : perGerId === "semanais" ? `na 1ª ${diaSemanaPlural(c).replace(/s-feiras$/, "-feira")} posterior ao início` : `na 2ª ${diaSemanaPlural(c).replace(/s-feiras$/, "-feira")} posterior ao início`} e as demais ${intervalo(false)}`;
   const comoPaga = `${meio.id === "boleto" ? "Os pagamentos serão feitos por boleto bancário" : `Os pagamentos serão feitos por ${meio.curto}`}`;
   const frasesPag = [];
   if (modo === "medicao") {
@@ -970,6 +996,8 @@ function clausulasGerenciamento(c, ctx) {
   } else {
     frasesPag.push(`O valor total do presente contrato é de ${fmtMoedaCtr(total)} (${moedaExtensoCtr(total)})${parcelas ? `, parcelado em ${numExtensoCtr(parcelas)} parcelas ${perGer} de ${fmtMoedaCtr(p.base)} (${moedaExtensoCtr(p.base)})${p.iguais ? "" : `, sendo a última de ${fmtMoedaCtr(p.ultima)}`}` : ""}${quando ? `${quando}` : ""}. ${comoPaga}.`);
   }
+  // as contas antecipam o pagamento de dia da semana que cai em feriado
+  if ((modo === "parcelado" || modo === "entradaParcelas") && feriadoTexto(c)) frasesPag.push(feriadoTexto(c));
   frasesPag.push("Caso a obra seja concluída antes do prazo das parcelas, a quitação do saldo devedor será antecipada; caso o prazo seja extrapolado, o valor deste contrato não se altera, ou seja, não será cobrado nenhum valor adicional de gerenciamento de obra.");
   add("pagamento", "VALORES E FORMA DE PAGAMENTO", frasesPag);
 
@@ -1440,8 +1468,11 @@ function ContratoDocumento({ contrato, cliente, obra, prestador }) {
   );
   // Quadro do serviço com equipamento: a unidade muda por linha, então ela
   // é coluna. O total é "estimado" de propósito — quem manda é a medição.
+  // Sete colunas não cabem nos 390 px do celular: a tabela rola dentro da
+  // própria caixa em vez de empurrar a página para os lados.
   const tabelaEquipEl = (k) => (
-    <table key={k} style={CTR_S.tabela}>
+    <div key={k} style={{ overflowX: "auto" }}>
+    <table style={CTR_S.tabela}>
       <thead><tr>
         <th style={{ ...CTR_S.th, width: 34 }}>#</th>
         <th style={CTR_S.th}>Equipamento / serviço</th>
@@ -1469,6 +1500,7 @@ function ContratoDocumento({ contrato, cliente, obra, prestador }) {
         </tr>
       </tbody>
     </table>
+    </div>
   );
   const tabelaParcelasEl = (k) => (
     <table key={k} style={CTR_S.tabela}>
