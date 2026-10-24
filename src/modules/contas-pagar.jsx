@@ -4720,6 +4720,10 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   const [de, setDe] = useState("");
   const [ate, setAte] = useState("");
   const [limite, setLimite] = useState(300);
+  // O papel abre no visor do VICKE: o storage guarda o arquivo sem extensão,
+  // e o link cru baixava um arquivo com nome de código (kdhsk…) que o
+  // computador não sabe abrir.
+  const [vendoPapelBase, setVendoPapelBase] = useState(null);
   const [baixando, setBaixando] = useState("");
   const etapas = typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [];
   const plano = typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [];
@@ -5021,6 +5025,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
             clicar) — e o "+ papel" some, para não anexar duas vezes */}
         {acoes.anexar && papeis.length > 0 && (
           <a href={papeis[0].url} target="_blank" rel="noopener noreferrer" data-vk-papel-da-linha="1"
+            onClick={(e) => { if (typeof VisorProposta === "function") { e.preventDefault(); setVendoPapelBase(papeis[0]); } }}
             title={papeis.length === 1 ? "Abrir " + (papeis[0].nome || "o papel") : papeis.map((a) => a.nome || "papel").join(", ")}
             style={{ ...b, textDecoration: "none", color: "#047857", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", display: "inline-block", verticalAlign: "bottom" }}>
             <IconePapel estilo={{ marginRight: 4 }} />
@@ -5060,6 +5065,9 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
 
   return (
     <div style={{ minWidth: 0, maxWidth: "100%" }}>
+      {vendoPapelBase && typeof VisorProposta === "function" && (
+        <VisorProposta anexo={vendoPapelBase} aoFechar={() => setVendoPapelBase(null)} />
+      )}
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : (doEscritorio ? "minmax(0,2fr) repeat(2, minmax(0,1fr))" : obraFixa ? "minmax(0,2fr) repeat(3, minmax(0,1fr))" : "minmax(0,2fr) repeat(4, minmax(0,1fr))"), gap: 8, marginBottom: 8 }}>
         <input style={input} value={texto} onChange={(e) => setTexto(e.target.value)} aria-label="Procurar na base"
           placeholder={doEscritorio ? "Procurar: descrição, fornecedor, cliente, conta, nota, ref, valor…" : "Procurar: item, fornecedor, nota, ref, valor…"} />
