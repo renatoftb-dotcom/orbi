@@ -83161,6 +83161,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // painel lateral: lista de ferramentas aberta pelo "+" e as fixadas (lembradas neste navegador)
   const [ferrAberto, setFerrAberto] = useState(false);
   const [editPav, setEditPav] = useState(false);
+  const [obraAberta, setObraAberta] = useState(false); // painel: botão Obra aberto
   // tela dividida: a segunda vista (3D ou corte) fica à direita, embaixo ou solta
   // numa janela que se arrasta e redimensiona; "trocado" inverte qual é a grande
   const lerTela = () => { try { return JSON.parse(localStorage.getItem("vicke-projetar-tela") || "null") || {}; } catch (err) { return {}; } };
@@ -85078,7 +85079,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const tubo = (p1, p2, r, cor) => {
         const v1 = new THREE.Vector3(p1.x - cx, p1.z, p1.y - cz), v2 = new THREE.Vector3(p2.x - cx, p2.z, p2.y - cz), d = new THREE.Vector3().subVectors(v2, v1), len = d.length(); if (len < 1e-3) return;
         const cy = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 8), new THREE.MeshLambertMaterial({ color: cor }));
-        cy.position.copy(v1).add(d.clone().multiplyScalar(0.5)); cy.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); G.add(cy);
+        cy.position.copy(v1).add(d.clone().multiplyScalar(0.5)); cy.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); cy.userData.chave = "a" + i; G.add(cy);
       };
       for (const r of tpCorrimaosEscada(a, ge)) {
         const cor = marc ? 0x0474f4 : 0x4b5563;
@@ -85226,7 +85227,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     for (const p of pavsOrd) {
       if (vis3d === "so" && p.id !== pavAtivo) continue;
       if (vis3d === "ate" && p.nivel > pavAt.nivel + 1e-6) continue;
-      const G = new THREE.Group(); G.position.y = p.nivel || 0; T.group.add(G);
+      const G = new THREE.Group(); G.position.y = p.nivel || 0; G.userData.pav = p.id; T.group.add(G);
       const ativo = p.id === pavAtivo, d = dadosDe(p.id);
       if (ativo) T.grupoAtivo = G;
       camada(d.paredes || [], d.areas || [], G, ativo ? marcadas0 : new Set(), ativo ? analise : tpAnaliseAreas(d.areas || [], d.paredes || []));
@@ -85420,9 +85421,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const r = c.getBoundingClientRect();
     const ndc = new window.THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     const ray = new window.THREE.Raycaster(); ray.setFromCamera(ndc, T.camera);
-    const hits = ray.intersectObjects((T.grupoAtivo || T.group).children.filter((o) => o.userData && o.userData.chave), false);
-    return hits.length ? hits[0].object.userData.chave : null;
+    // todos os pavimentos visíveis: o mais perto da câmera vence; o pavimento
+    // de onde ele veio também volta (clicar em outro andar troca para ele)
+    const hits = ray.intersectObjects(T.group.children, true).filter((h) => h.object.userData && h.object.userData.chave && h.object.visible);
+    if (!hits.length) return null;
+    let o = hits[0].object, pav = null; while (o && !pav) { pav = o.userData && o.userData.pav; o = o.parent; }
+    pegouPav.current = pav || pavAtivo;
+    return hits[0].object.userData.chave;
   };
+  const pegouPav = useRef(null);
+  // menu do botão direito só age no pavimento ativo
+  const pegar3dAtivo = (e) => { const k = pegar3d(e); return k && pegouPav.current === pavAtivo ? k : null; };
 
   // canvases acompanham o tamanho do quadro
   const atual = useRef({});
@@ -86397,7 +86406,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const v3dDown = (e) => { animVista.current++;
     if (e.button === 1) { const agora = Date.now(); if (agora - meioClique.current < 350 && three.current) { const b = limites(); three.current.alvo = { x: 0, y: 1, z: 0 }; three.current.dist = Math.max(14, Math.max(b.x1 - b.x0, b.y1 - b.y0) * 1.6); desenhar3d(); meioClique.current = 0; return; } meioClique.current = agora; }
     const g = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, moveu: false, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, direito: e.button === 2, panear: e.button === 1 || e.button === 2, menu: false };
-    if (e.pointerType === "touch") { const cx = e.clientX, cy = e.clientY, ev = { clientX: cx, clientY: cy }; g.timer = setTimeout(() => { if (drag.current === g && !g.moveu) { g.menu = true; abrirMenuCtx(cx, cy, pegar3d(ev)); } }, 550); }
+    if (e.pointerType === "touch") { const cx = e.clientX, cy = e.clientY, ev = { clientX: cx, clientY: cy }; g.timer = setTimeout(() => { if (drag.current === g && !g.moveu) { g.menu = true; abrirMenuCtx(cx, cy, pegar3dAtivo(ev)); } }, 550); }
     drag.current = g; e.currentTarget.setPointerCapture(e.pointerId);
   };
   const v3dMove = (e) => {
@@ -86422,10 +86431,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     if (!g) return;
     clearTimeout(g.timer);
     if (g.moveu || g.menu) return;
-    if (g.direito) { abrirMenuCtx(e.clientX, e.clientY, pegar3d(e)); return; }
+    if (g.direito) { abrirMenuCtx(e.clientX, e.clientY, pegar3dAtivo(e)); return; }
     const k = pegar3d(e);
     if (ferramenta !== "selecionar" && ferramenta !== "mover") trocarFerramenta("selecionar");
     if (!k) { if (!g.shift && !g.ctrl) setSel([]); return; }
+    if (pegouPav.current && pegouPav.current !== pavAtivo) {
+      // elemento de outro pavimento: vai para ele e seleciona
+      const alvo = pavimentos.find((p) => p.id === pegouPav.current);
+      irParaPav(pegouPav.current); setTimeout(() => setSel([k]), 0);
+      if (alvo) avisar(`${alvo.nome}: selecionado no 3D.`);
+      return;
+    }
     aplicarSelecao([k], g);
   };
 
@@ -87094,8 +87110,15 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
       {podeOrcar && (
         <>
-          <div style={secao}>Orçamento de obra</div>
-          <button style={{ ...btn, width: "100%", minHeight: 32, fontSize: 12.5, background: "#111827", borderColor: "#111827", color: "#fff" }} onClick={() => setPainelObra("confirmar")}>
+          {/* tudo da obra num botão só: abre o gerar/atualizar e o preencher sozinho */}
+          <button onClick={() => setObraAberta((x) => !x)} aria-expanded={obraAberta}
+            style={{ ...btn, width: "100%", minHeight: 30, padding: "4px 10px", fontSize: 12.5, marginTop: 12, display: "flex", alignItems: "center", gap: 8, borderColor: obraAberta ? TP_AZUL : "#e5e7eb", background: obraAberta ? "#eef5ff" : "#fff", color: obraAberta ? TP_AZUL : "#111827", fontWeight: 600 }}>
+            <span style={{ flex: 1, textAlign: "left" }}>Obra</span>
+            {obraLigada && <span style={{ fontSize: 11, fontWeight: 500, color: "#6b7280" }}>{sincronizar && ultimaSinc ? `ligada · ${ultimaSinc.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "ligada"}</span>}
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" style={{ transform: obraAberta ? "rotate(180deg)" : "none", transition: "transform .15s" }}><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </button>
+          {obraAberta && <>
+          <button style={{ ...btn, width: "100%", minHeight: 32, fontSize: 12.5, marginTop: 6, background: "#111827", borderColor: "#111827", color: "#fff" }} onClick={() => setPainelObra("confirmar")}>
             {obraLigada ? "Atualizar orçamento da obra" : "Gerar orçamento de obra"}
           </button>
           <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6, lineHeight: 1.4 }}>
@@ -87111,6 +87134,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               </span>
             </label>
           )}
+          </>}
         </>
       )}
       {quadro.grupos.length > 0 && dobra("esq", "Esquadrias", `${quadro.grupos.reduce((t, g) => t + g.qtd, 0)} un`, (
@@ -87248,7 +87272,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           </div>
           {grupoVistas}
         </div>}
-        <div ref={telaArea} style={{ flex: 1, minHeight: 0, position: "relative", background: "#e5e7eb", overflow: "hidden",
+        <div ref={telaArea} style={{ flex: 1, minHeight: 0, position: "relative", isolation: "isolate", background: "#e5e7eb", overflow: "hidden",
           marginBottom: "env(safe-area-inset-bottom, 0px)", marginRight: "env(safe-area-inset-right, 0px)" }}>
           {!isMobile && <div style={{ position: "absolute", top: 10, right: 10, zIndex: 5 }}>{grupoVistas}</div>}
           {dividido && docaEf !== "livre" && (
@@ -87297,7 +87321,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             <canvas ref={v3dRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none" }}
               onContextMenu={(e) => e.preventDefault()}
               onPointerDown={v3dDown} onPointerMove={v3dMove} onPointerUp={v3dUp} />
-            <div style={{ position: "absolute", right: 8, bottom: 8, zIndex: 2, display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 1, padding: 2, background: "rgba(255,255,255,0.9)", border: "1px solid #e5e7eb", borderRadius: 8, maxWidth: "calc(100% - 16px)" }}>
+            <div style={{ position: "absolute", right: 8, bottom: sel.length && (isMobile || vistaPrinc === "3d" || docaEf === "baixo") ? 62 : 8, zIndex: 2, display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 1, padding: 2, background: "rgba(255,255,255,0.9)", border: "1px solid #e5e7eb", borderRadius: 8, maxWidth: "calc(100% - 16px)" }}>
               {VISTAS_3D.map((v) => (
                 <button key={v.id} onClick={() => irVista3d(v)} title={v.id === "persp" ? "Perspectiva" : `Vista ${v.rot.replace(".", "")}`.replace("Esq", "esquerda").replace("Dir", "direita")}
                   style={{ height: 24, padding: "0 7px", border: "none", borderRadius: 6, background: "transparent", color: "#374151", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>{v.rot}</button>
