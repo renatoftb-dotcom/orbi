@@ -1764,6 +1764,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const [ferrAberto, setFerrAberto] = useState(false);
   const [editPav, setEditPav] = useState(false);
   const [obraAberta, setObraAberta] = useState(false); // painel: botão Obra aberto
+  // "+" solto na prancheta: posição (fração da área do desenho), lembrada neste navegador
+  const [ferrSolta, setFerrSolta] = useState(() => { try { const v = JSON.parse(localStorage.getItem("vicke-projetar-ferr-solta") || "null"); return v && v.x >= 0 && v.y >= 0 ? v : null; } catch (err) { return null; } });
+  const [arrasteMais, setArrasteMais] = useState(null);
+  const arrastouMais = useRef(false);
   // tela dividida: a segunda vista (3D ou corte) fica à direita, embaixo ou solta
   // numa janela que se arrasta e redimensiona; "trocado" inverte qual é a grande
   const lerTela = () => { try { return JSON.parse(localStorage.getItem("vicke-projetar-tela") || "null") || {}; } catch (err) { return {}; } };
@@ -5531,6 +5535,84 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       </div>
     );
   };
+  const guardarFerrSolta = (v) => { setFerrSolta(v); try { if (v) localStorage.setItem("vicke-projetar-ferr-solta", JSON.stringify(v)); else localStorage.removeItem("vicke-projetar-ferr-solta"); } catch (err) { /* sem armazenamento */ } };
+  const iniciarArrasteMais = (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    const x0 = e.clientX, y0 = e.clientY, b = e.currentTarget.getBoundingClientRect(), ox = x0 - b.left, oy = y0 - b.top;
+    let moveu = false;
+    const mover = (ev) => {
+      if (!moveu && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return;
+      moveu = true; ev.preventDefault(); setArrasteMais({ x: ev.clientX - ox, y: ev.clientY - oy });
+    };
+    const soltar = (ev) => {
+      window.removeEventListener("pointermove", mover); window.removeEventListener("pointerup", soltar); window.removeEventListener("pointercancel", soltar);
+      setArrasteMais(null);
+      if (!moveu) return;
+      arrastouMais.current = true; setTimeout(() => { arrastouMais.current = false; }, 0);
+      const a = asideRef.current, t = telaArea.current, cx = ev.clientX, cy = ev.clientY;
+      const ra = a && a.getBoundingClientRect(), dentroMenu = ra && cx >= ra.left && cx <= ra.right && cy >= ra.top && cy <= ra.bottom && (isMobile ? menuAberto : !painelOculto);
+      if (dentroMenu) { guardarFerrSolta(null); return; }
+      if (!t) return;
+      const rt = t.getBoundingClientRect();
+      if (cx < rt.left || cx > rt.right || cy < rt.top || cy > rt.bottom) return;
+      guardarFerrSolta({ x: Math.max(0, Math.min(0.95, (cx - ox - rt.left) / rt.width)), y: Math.max(0, Math.min(0.95, (cy - oy - rt.top) / rt.height)) });
+      if (isMobile) setMenuAberto(false);
+    };
+    window.addEventListener("pointermove", mover); window.addEventListener("pointerup", soltar); window.addEventListener("pointercancel", soltar);
+  };
+  // bloco de ferramentas: no menu ou solto na prancheta (o "+" arrasta de um lugar para o outro)
+  const blocoFerramentas = (noCanvas) => (
+    <>
+      {/* "+" abre a lista de ferramentas logo abaixo; escolher uma fecha a
+          lista e deixa à mostra só a ferramenta em uso (em azul). Selecionar é
+          o estado normal: clicar de novo na ferramenta em uso (ou Esc) volta
+          a selecionar. */}
+      {(() => {
+        const lista = FERRAMENTAS.filter((f) => f.id !== "selecionar");
+        const visiveis = ferrAberto ? lista : lista.filter((f) => f.id === ferramenta);
+        const pilula = (f) => {
+          const ativa = ferramenta === f.id;
+          return (
+            <button key={f.id} title={f.dica} onClick={() => { trocarFerramenta(ativa ? "selecionar" : f.id); setFerrAberto(false); if (isMobile && !ativa) setMenuAberto(false); }}
+              style={{ ...btn, width: "100%", minHeight: 28, padding: "3px 8px", fontSize: 12, borderRadius: 7, borderColor: ativa ? TP_AZUL : "#e5e7eb", background: ativa ? "#eef5ff" : "#fff", color: ativa ? TP_AZUL : "#111827", fontWeight: ativa ? 600 : 500 }}>
+              {f.rotulo}
+            </button>
+          );
+        };
+        return (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 3 }}>
+            <button aria-label={ferrAberto ? "Fechar a lista de ferramentas" : "Abrir a lista de ferramentas"} aria-expanded={ferrAberto}
+              onPointerDown={iniciarArrasteMais} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setFerrAberto((x) => !x); }}
+              title={ferrAberto ? "Fechar a lista" : noCanvas ? "Ferramentas (arraste para mover; solte no menu para guardar)" : "Ferramentas (arraste para a prancheta para deixar à mão)"}
+              style={{ alignSelf: "flex-start", width: 32, height: 32, borderRadius: "50%", touchAction: "none", border: `1px solid ${ferrAberto ? TP_AZUL : "#e5e7eb"}`, background: ferrAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "transform .15s", transform: ferrAberto ? "rotate(45deg)" : "none" }}>
+              <svg width="14" height="14" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke={ferrAberto ? TP_AZUL : "#111827"} strokeWidth="2" strokeLinecap="round" /></svg>
+            </button>
+            {visiveis.map(pilula)}
+          </div>
+        );
+      })()}
+      {/* modo do traço (antes na barra de cima da planta) */}
+      {(ferramenta === "parede" || tpEhPoli(ferramenta)) && (
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${TP_MODOS_TRACO.length}, 1fr)`, gap: 4, marginTop: 8 }}>
+          {TP_MODOS_TRACO.map((m) => (
+            <button key={m.id} title={m.dica} onClick={() => { setModoTraco(m.id); setAncora(null); setDigitado(""); if (m.id === "retangulo") { setInicio(null); } }}
+              style={{ ...btn, minHeight: 26, padding: "2px 6px", fontSize: 11.5, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, borderColor: modoTraco === m.id ? TP_AZUL : "#e5e7eb", background: modoTraco === m.id ? "#eef5ff" : "#fff", color: modoTraco === m.id ? TP_AZUL : "#374151", fontWeight: 600 }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                {m.id === "linha" && <path d="M2 12 L6 4 L12 7" />}
+                {m.id === "retangulo" && <rect x="2" y="3" width="10" height="8" />}
+                {m.id === "arco" && <path d="M2 11 Q7 1 12 11" />}
+              </svg>
+              {m.rotulo}
+            </button>
+          ))}
+        </div>
+      )}
+      {poli.length >= 3 && (
+        <button onClick={finalizarPoli} style={{ ...btn, marginTop: 8, background: TP_AZUL, borderColor: TP_AZUL, color: "#fff" }}>Fechar {ferramenta === "laje" ? "laje" : ferramenta === "telhado" ? "telhado" : ferramenta === "terreno" ? "terreno" : "contorno"}</button>
+      )}
+
+    </>
+  );
   const menu = (
     <aside ref={asideRef} style={{ width: isMobile ? "min(86vw, 300px)" : 268, flexShrink: 0, background: "#fff", borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", height: "100%", boxSizing: "border-box",
       paddingTop: "max(14px, env(safe-area-inset-top, 0px))", paddingBottom: "max(14px, env(safe-area-inset-bottom, 0px))", paddingLeft: "max(16px, env(safe-area-inset-left, 0px))", paddingRight: 16, overflowY: "auto",
@@ -5558,52 +5640,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       </div>
 
       <div style={secao}>Ferramenta</div>
-      {/* "+" abre a lista de ferramentas logo abaixo; escolher uma fecha a
-          lista e deixa à mostra só a ferramenta em uso (em azul). Selecionar é
-          o estado normal: clicar de novo na ferramenta em uso (ou Esc) volta
-          a selecionar. */}
-      {(() => {
-        const lista = FERRAMENTAS.filter((f) => f.id !== "selecionar");
-        const visiveis = ferrAberto ? lista : lista.filter((f) => f.id === ferramenta);
-        const pilula = (f) => {
-          const ativa = ferramenta === f.id;
-          return (
-            <button key={f.id} title={f.dica} onClick={() => { trocarFerramenta(ativa ? "selecionar" : f.id); setFerrAberto(false); if (isMobile && !ativa) setMenuAberto(false); }}
-              style={{ ...btn, width: "100%", minHeight: 28, padding: "3px 8px", fontSize: 12, borderRadius: 7, borderColor: ativa ? TP_AZUL : "#e5e7eb", background: ativa ? "#eef5ff" : "#fff", color: ativa ? TP_AZUL : "#111827", fontWeight: ativa ? 600 : 500 }}>
-              {f.rotulo}
-            </button>
-          );
-        };
-        return (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 3 }}>
-            <button aria-label={ferrAberto ? "Fechar a lista de ferramentas" : "Abrir a lista de ferramentas"} aria-expanded={ferrAberto} onClick={() => setFerrAberto((x) => !x)}
-              title={ferrAberto ? "Fechar a lista" : "Ferramentas"}
-              style={{ alignSelf: "flex-start", width: 32, height: 32, borderRadius: "50%", border: `1px solid ${ferrAberto ? TP_AZUL : "#e5e7eb"}`, background: ferrAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "transform .15s", transform: ferrAberto ? "rotate(45deg)" : "none" }}>
-              <svg width="14" height="14" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke={ferrAberto ? TP_AZUL : "#111827"} strokeWidth="2" strokeLinecap="round" /></svg>
-            </button>
-            {visiveis.map(pilula)}
-          </div>
-        );
-      })()}
-      {/* modo do traço (antes na barra de cima da planta) */}
-      {(ferramenta === "parede" || tpEhPoli(ferramenta)) && (
-        <div style={{ display: "grid", gridTemplateColumns: `repeat(${TP_MODOS_TRACO.length}, 1fr)`, gap: 4, marginTop: 8 }}>
-          {TP_MODOS_TRACO.map((m) => (
-            <button key={m.id} title={m.dica} onClick={() => { setModoTraco(m.id); setAncora(null); setDigitado(""); if (m.id === "retangulo") { setInicio(null); } }}
-              style={{ ...btn, minHeight: 26, padding: "2px 6px", fontSize: 11.5, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, borderColor: modoTraco === m.id ? TP_AZUL : "#e5e7eb", background: modoTraco === m.id ? "#eef5ff" : "#fff", color: modoTraco === m.id ? TP_AZUL : "#374151", fontWeight: 600 }}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-                {m.id === "linha" && <path d="M2 12 L6 4 L12 7" />}
-                {m.id === "retangulo" && <rect x="2" y="3" width="10" height="8" />}
-                {m.id === "arco" && <path d="M2 11 Q7 1 12 11" />}
-              </svg>
-              {m.rotulo}
-            </button>
-          ))}
-        </div>
-      )}
-      {poli.length >= 3 && (
-        <button onClick={finalizarPoli} style={{ ...btn, marginTop: 8, background: TP_AZUL, borderColor: TP_AZUL, color: "#fff" }}>Fechar {ferramenta === "laje" ? "laje" : ferramenta === "telhado" ? "telhado" : ferramenta === "terreno" ? "terreno" : "contorno"}</button>
-      )}
+      {ferrSolta
+        ? <div style={{ fontSize: 11.5, color: "#9ca3af", lineHeight: 1.4, border: "1px dashed #d1d5db", borderRadius: 8, padding: "6px 8px" }}>Ferramentas na prancheta. Arraste o + de volta para cá para guardar.</div>
+        : blocoFerramentas(false)}
 
       {(ferramenta === "parede" || ferramenta === "laje") && (
         <div style={{ display: "grid", gridTemplateColumns: ferramenta === "parede" ? "1fr 1fr" : "1fr", gap: 8, marginTop: 8 }}>
@@ -5864,6 +5903,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     <div onContextMenu={(e) => { const tg = (e.target && e.target.tagName) || ""; if (tg !== "INPUT" && tg !== "TEXTAREA") e.preventDefault(); }}
       style={{ position: "fixed", inset: 0, zIndex: 2000, display: "flex", background: "#e5e7eb", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
       {menu}
+      {arrasteMais && (
+        <div aria-hidden="true" style={{ position: "fixed", left: arrasteMais.x, top: arrasteMais.y, width: 32, height: 32, borderRadius: "50%", border: `1px solid ${TP_AZUL}`, background: "#eef5ff", zIndex: 5000, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 14px rgba(0,0,0,0.18)" }}>
+          <svg width="14" height="14" viewBox="0 0 20 20"><path d="M10 3v14M3 10h14" stroke={TP_AZUL} strokeWidth="2" strokeLinecap="round" /></svg>
+        </div>
+      )}
       {isMobile && menuAberto && <div onClick={() => setMenuAberto(false)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.3)", zIndex: 2 }} />}
       <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", position: "relative" }}>
         {isMobile && <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#fff", borderBottom: "1px solid #e5e7eb",
@@ -5877,6 +5921,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         <div ref={telaArea} style={{ flex: 1, minHeight: 0, position: "relative", isolation: "isolate", background: "#e5e7eb", overflow: "hidden",
           marginBottom: "env(safe-area-inset-bottom, 0px)", marginRight: "env(safe-area-inset-right, 0px)" }}>
           {!isMobile && <div style={{ position: "absolute", top: 10, right: 10, zIndex: 5 }}>{grupoVistas}</div>}
+          {ferrSolta && (
+            <div style={{ position: "absolute", zIndex: 6, left: `min(${ferrSolta.x * 100}%, calc(100% - 236px))`, top: `min(${ferrSolta.y * 100}%, calc(100% - 50px))`, width: ferrAberto || ferramenta !== "selecionar" ? 226 : "auto", padding: 6, boxSizing: "border-box",
+              background: "rgba(255,255,255,0.6)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", border: "1px solid rgba(229,231,235,0.8)", borderRadius: 12, maxHeight: "calc(100% - 20px)", overflowY: "auto" }}>
+              {blocoFerramentas(true)}
+            </div>
+          )}
           {dividido && docaEf !== "livre" && (
             <div onPointerDown={arrastoTela("divisoria")} title="Arraste para mudar o tamanho"
               style={{ position: "absolute", zIndex: 5, touchAction: "none", background: "transparent", ...(docaEf === "direita"
