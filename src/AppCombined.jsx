@@ -83156,10 +83156,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const planRef = useRef(null), v3dRef = useRef(null);
   const planBox = useRef(null), v3dBox = useRef(null), barraRef = useRef(null);
   const [barraAberta, setBarraAberta] = useState(false); // celular: barra de ferramentas aberta
+  const asideRef = useRef(null);
+  const [painelOculto, setPainelOculto] = useState(false); // desktop: painel suspenso recolhido
   // painel lateral: lista de ferramentas aberta pelo "+" e as fixadas (lembradas neste navegador)
   const [ferrAberto, setFerrAberto] = useState(false);
-  const [ferrFixas, setFerrFixas] = useState(() => { try { const v = JSON.parse(localStorage.getItem("vicke-projetar-ferramentas-fixas") || "null"); return Array.isArray(v) ? v : ["selecionar"]; } catch (err) { return ["selecionar"]; } });
-  const alternarFixa = (id) => setFerrFixas((xs) => { const novo = xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]; try { localStorage.setItem("vicke-projetar-ferramentas-fixas", JSON.stringify(novo)); } catch (err) { /* sem armazenamento: vale só nesta sessão */ } return novo; });
   // Pavimentos: lista (id, nome, nível) e o desenho de cada um. O pavimento
   // ativo fica em paredes/areas (o editor inteiro trabalha nele); os outros
   // ficam guardados em dadosPav. O térreo continua também em projeto.paredes/areas.
@@ -83645,11 +83645,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const rc = c.getBoundingClientRect(), rb = bb.getBoundingClientRect(); if (!rc.width || !rb.height || rb.height > rc.height * 0.5) return 0; // barra que ocuparia meia tela: medida sem sentido, ignora
     return Math.max(0, Math.min(c.height * 0.4, (rb.bottom - rc.top + 4) * (c.width / rc.width)));
   };
+  // faixa da esquerda coberta pelo painel suspenso (desktop)
+  const esquerdaUtil = () => {
+    const c = planRef.current, a = asideRef.current; if (!c || !a || !c.width || isMobile || painelOculto) return 0;
+    const rc = c.getBoundingClientRect(), ra = a.getBoundingClientRect(); if (!rc.width || !ra.width || ra.width > rc.width * 0.6) return 0;
+    return Math.max(0, Math.min(c.width * 0.5, (ra.right - rc.left + 8) * (c.width / rc.width)));
+  };
   const ajustar = () => {
     const c = planRef.current; if (!c || !c.width) return;
-    const b = limites(), m = 1.5, tp = topoUtil(), hu = c.height - tp;
-    const s = Math.min(c.width / (b.x1 - b.x0 + 2 * m), hu / (b.y1 - b.y0 + 2 * m));
-    vista.current = { s, ox: c.width / 2 - ((b.x0 + b.x1) / 2) * s, oy: tp + hu / 2 - ((b.y0 + b.y1) / 2) * s };
+    const b = limites(), m = 1.5, tp = topoUtil(), hu = c.height - tp, es = esquerdaUtil(), wu = c.width - es;
+    const s = Math.min(wu / (b.x1 - b.x0 + 2 * m), hu / (b.y1 - b.y0 + 2 * m));
+    vista.current = { s, ox: es + wu / 2 - ((b.x0 + b.x1) / 2) * s, oy: tp + hu / 2 - ((b.y0 + b.y1) / 2) * s };
     desenharPlanta();
   };
   const zoom = (fator, cx, cy) => {
@@ -85022,9 +85028,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       ctx.strokeRect(x, y, w, h); ctx.setLineDash([]);
     }
     const m = v.s >= 60 * dpr ? 1 : (v.s >= 25 * dpr ? 2 : 5);
-    ctx.fillStyle = "#374151"; ctx.fillRect(16 * dpr, H - 20 * dpr, m * v.s, 3 * dpr);
+    // escala gráfica: à direita do painel suspenso (não fica escondida embaixo dele)
+    const xEsc = 16 * dpr + esquerdaUtil();
+    ctx.fillStyle = "#374151"; ctx.fillRect(xEsc, H - 20 * dpr, m * v.s, 3 * dpr);
     ctx.font = `500 ${11 * dpr}px system-ui, sans-serif`; ctx.textAlign = "left";
-    ctx.fillText(m + " m", 16 * dpr, H - 26 * dpr);
+    ctx.fillText(m + " m", xEsc, H - 26 * dpr);
   };
 
   // ---------- 3D ----------
@@ -85414,7 +85422,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
   // canvases acompanham o tamanho do quadro
   const atual = useRef({});
-  atual.current = { ajustar, desenharPlanta, desenhar3d, desenharCorte, limites, topoUtil };
+  atual.current = { ajustar, desenharPlanta, desenhar3d, desenharCorte, limites, topoUtil, esquerdaUtil };
   useEffect(() => {
     const ajustarCanvas = (canvas) => {
       if (!canvas) return false;
@@ -85427,7 +85435,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const c = planRef.current, antes = c ? { w: c.width, h: c.height } : null;
       // o desenho cabia inteiro antes (ex.: trocou Planta por Planta + Corte e o
       // quadro encolheu)? Se deixar de caber, reajusta; senão só recentraliza
-      const cabe = (w, h) => { const v = vista.current; if (!v) return false; let b; try { b = atual.current.limites(); } catch (err) { return false; } return b.x0 * v.s + v.ox >= -1 && b.x1 * v.s + v.ox <= w + 1 && b.y0 * v.s + v.oy >= atual.current.topoUtil() - 1 && b.y1 * v.s + v.oy <= h + 1; };
+      const cabe = (w, h) => { const v = vista.current; if (!v) return false; let b; try { b = atual.current.limites(); } catch (err) { return false; } return b.x0 * v.s + v.ox >= atual.current.esquerdaUtil() - 1 && b.x1 * v.s + v.ox <= w + 1 && b.y0 * v.s + v.oy >= atual.current.topoUtil() - 1 && b.y1 * v.s + v.oy <= h + 1; };
       const cabia = antes && antes.w ? cabe(antes.w, antes.h) : false;
       if (ajustarCanvas(planRef.current)) {
         if (!vista.current || !antes || !antes.w) atual.current.ajustar();
@@ -85464,6 +85472,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
   // desenha antes da tela pintar (no mesmo quadro da mudança), não depois
   tpUseLayoutEffect(() => { desenharPlanta(); }, [paredes, areas, inicio, poli, hover, espM, sel, caixa, ferramenta, ancora, modoTraco, previaEsq, editNome, escala, pavAtivo, dadosPav, cortes]);
+  useEffect(() => { const t = setTimeout(() => atual.current.desenharPlanta(), 230); return () => clearTimeout(t); }, [painelOculto]); // escala gráfica acompanha o painel
   useEffect(() => { if (modo !== "corte") return; const id = requestAnimationFrame(() => desenharCorte()); return () => cancelAnimationFrame(id); }, [modo, cortes, verCorte, paredes, areas, dadosPav, pavimentos, pavAtivo]);
   // ambiente acompanha as paredes: mexeu numa parede, o contorno e a área se refazem
   useEffect(() => {
@@ -86727,10 +86736,16 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   );
 
   const menu = (
-    <aside style={{ width: isMobile ? "min(86vw, 300px)" : 268, flexShrink: 0, background: "#fff", borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", height: "100%", boxSizing: "border-box",
+    <aside ref={asideRef} style={{ width: isMobile ? "min(86vw, 300px)" : 268, flexShrink: 0, background: "#fff", borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", height: "100%", boxSizing: "border-box",
       paddingTop: "max(14px, env(safe-area-inset-top, 0px))", paddingBottom: "max(14px, env(safe-area-inset-bottom, 0px))", paddingLeft: "max(16px, env(safe-area-inset-left, 0px))", paddingRight: 16, overflowY: "auto",
-      ...(isMobile ? { position: "absolute", top: 0, left: 0, bottom: 0, zIndex: 3, boxShadow: "4px 0 20px rgba(0,0,0,0.15)", transform: menuAberto ? "none" : "translateX(-105%)", transition: "transform .2s ease" } : {}) }}>
-      <button onClick={onVoltar} style={{ ...btn, border: "none", background: "#f3f4f6", textAlign: "left", display: "flex", alignItems: "center", gap: 8 }}>
+      ...(isMobile ? { position: "absolute", top: 0, left: 0, bottom: 0, zIndex: 3, boxShadow: "4px 0 20px rgba(0,0,0,0.15)", transform: menuAberto ? "none" : "translateX(-105%)", transition: "transform .2s ease" }
+        // desktop: painel suspenso sobre o desenho (o projeto passa por baixo)
+        : { position: "absolute", top: 10, left: 10, bottom: 10, height: "auto", zIndex: 3, borderRight: "none", border: "1px solid #e5e7eb", borderRadius: 12, background: "rgba(255,255,255,0.96)", boxShadow: "0 6px 24px rgba(0,0,0,0.12)", paddingTop: 12, paddingBottom: 12, paddingLeft: 14, paddingRight: 14, transform: painelOculto ? "translateX(calc(-100% - 20px))" : "none", transition: "transform .2s ease" }) }}>
+      {!isMobile && (
+        <button onClick={() => setPainelOculto(true)} aria-label="Recolher o painel" title="Recolher o painel (o desenho ocupa a tela toda)"
+          style={{ position: "absolute", top: 8, right: 8, width: 26, height: 26, borderRadius: 7, border: "1px solid #e5e7eb", background: "#fff", cursor: "pointer", color: "#4b5563", fontSize: 14, lineHeight: 1, padding: 0 }}>‹</button>
+      )}
+      <button onClick={onVoltar} style={{ ...btn, border: "none", background: "#f3f4f6", textAlign: "left", display: "flex", alignItems: "center", gap: 8, ...(isMobile ? {} : { marginRight: 30 }) }}>
         <span aria-hidden="true">←</span> Menu principal
       </button>
       <div style={{ marginTop: 16 }}>
@@ -86740,40 +86755,55 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
       <div style={secao}>Ferramenta</div>
       {/* "+" abre a lista de ferramentas logo abaixo; escolher uma fecha a
-          lista e deixa só ela (e as fixadas no alfinete) à mostra. Clicar no
-          "+" de novo reabre. */}
+          lista e deixa à mostra só a ferramenta em uso (em azul). Selecionar é
+          o estado normal: clicar de novo na ferramenta em uso (ou Esc) volta
+          a selecionar. */}
       {(() => {
-        const visiveis = ferrAberto ? FERRAMENTAS : FERRAMENTAS.filter((f) => f.id === ferramenta || ferrFixas.includes(f.id));
+        const lista = FERRAMENTAS.filter((f) => f.id !== "selecionar");
+        const visiveis = ferrAberto ? lista : lista.filter((f) => f.id === ferramenta);
         const pilula = (f) => {
-          const ativa = ferramenta === f.id, fixa = ferrFixas.includes(f.id);
+          const ativa = ferramenta === f.id;
           return (
-            <div key={f.id} style={{ display: "flex", alignItems: "stretch", gap: 4 }}>
-              <button title={f.dica} onClick={() => { trocarFerramenta(f.id); setFerrAberto(false); if (isMobile) setMenuAberto(false); }}
-                style={{ flex: 1, minHeight: 36, padding: "6px 10px", fontSize: 13.5, fontFamily: "inherit", cursor: "pointer", borderRadius: 8, border: `2px solid ${ativa ? TP_AZUL : "#93b8e8"}`, background: ativa ? "#eef5ff" : "#fff", color: ativa ? TP_AZUL : "#111827", fontWeight: ativa ? 700 : 500 }}>
-                {f.rotulo}
-              </button>
-              {ferrAberto && (
-                <button aria-label={fixa ? `Desafixar ${f.rotulo}` : `Fixar ${f.rotulo}`} title={fixa ? "Fixada: fica à mostra com a lista fechada. Clique para soltar." : "Fixar: fica à mostra com a lista fechada"}
-                  onClick={() => alternarFixa(f.id)}
-                  style={{ width: 34, borderRadius: 8, border: `1px solid ${fixa ? TP_AZUL : "#e5e7eb"}`, background: fixa ? TP_AZUL : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={fixa ? "#fff" : "#6b7280"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3z" /><path d="M12 14v6" /></svg>
-                </button>
-              )}
-            </div>
+            <button key={f.id} title={f.dica} onClick={() => { trocarFerramenta(ativa ? "selecionar" : f.id); setFerrAberto(false); if (isMobile && !ativa) setMenuAberto(false); }}
+              style={{ ...btn, width: "100%", padding: "7px 10px", fontSize: 13, borderColor: ativa ? TP_AZUL : "#e5e7eb", background: ativa ? "#eef5ff" : "#fff", color: ativa ? TP_AZUL : "#111827", fontWeight: ativa ? 600 : 500 }}>
+              {f.rotulo}
+            </button>
           );
         };
         return (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 5 }}>
             <button aria-label={ferrAberto ? "Fechar a lista de ferramentas" : "Abrir a lista de ferramentas"} aria-expanded={ferrAberto} onClick={() => setFerrAberto((x) => !x)}
-              title={ferrAberto ? "Fechar a lista" : "Mais ferramentas"}
-              style={{ alignSelf: "center", width: 44, height: 44, borderRadius: "50%", border: `2px solid ${TP_AZUL}`, background: ferrAberto ? "#eef5ff" : "#fff", color: "#111827", fontSize: 26, lineHeight: 1, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "transform .15s", transform: ferrAberto ? "rotate(45deg)" : "none" }}>
-              <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke="#111827" strokeWidth="2.2" strokeLinecap="round" /></svg>
+              title={ferrAberto ? "Fechar a lista" : "Ferramentas"}
+              style={{ alignSelf: "center", width: 40, height: 40, borderRadius: "50%", border: `1px solid ${ferrAberto ? TP_AZUL : "#e5e7eb"}`, background: ferrAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "transform .15s", transform: ferrAberto ? "rotate(45deg)" : "none" }}>
+              <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke={ferrAberto ? TP_AZUL : "#111827"} strokeWidth="2" strokeLinecap="round" /></svg>
             </button>
             {visiveis.map(pilula)}
-            {ferrAberto && <div style={{ fontSize: 11.5, color: "#6b7280", lineHeight: 1.4, marginTop: 2 }}>O alfinete fixa a ferramenta: ela continua à mostra quando a lista fecha.</div>}
           </div>
         );
       })()}
+      {/* modo do traço (antes na barra de cima da planta) */}
+      {(ferramenta === "parede" || tpEhPoli(ferramenta)) && (
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${TP_MODOS_TRACO.length}, 1fr)`, gap: 4, marginTop: 8 }}>
+          {TP_MODOS_TRACO.map((m) => (
+            <button key={m.id} title={m.dica} onClick={() => { setModoTraco(m.id); setAncora(null); setDigitado(""); if (m.id === "retangulo") { setInicio(null); } }}
+              style={{ ...btn, minHeight: 32, padding: "4px 6px", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, borderColor: modoTraco === m.id ? TP_AZUL : "#e5e7eb", background: modoTraco === m.id ? "#eef5ff" : "#fff", color: modoTraco === m.id ? TP_AZUL : "#374151", fontWeight: 600 }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                {m.id === "linha" && <path d="M2 12 L6 4 L12 7" />}
+                {m.id === "retangulo" && <rect x="2" y="3" width="10" height="8" />}
+                {m.id === "arco" && <path d="M2 11 Q7 1 12 11" />}
+              </svg>
+              {m.rotulo}
+            </button>
+          ))}
+        </div>
+      )}
+      {poli.length >= 3 && (
+        <button onClick={finalizarPoli} style={{ ...btn, marginTop: 8, background: TP_AZUL, borderColor: TP_AZUL, color: "#fff" }}>Fechar {ferramenta === "laje" ? "laje" : ferramenta === "telhado" ? "telhado" : ferramenta === "terreno" ? "terreno" : "contorno"}</button>
+      )}
+      {/* dica da ferramenta (antes no texto de cima da tela) */}
+      {(ferramenta !== "selecionar" || sel.length > 0 || inicio || poli.length > 0) && status && (
+        <div style={{ fontSize: 11.5, color: "#4b5563", lineHeight: 1.45, marginTop: 8, background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: 8, padding: "6px 8px" }}>{status}</div>
+      )}
 
       {ferramenta === "esquadria" && (() => {
         const t = tpEsq(tipoEsq), dm = dimsEsq[tipoEsq] || t;
@@ -87044,36 +87074,29 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       {menu}
       {isMobile && menuAberto && <div onClick={() => setMenuAberto(false)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.3)", zIndex: 2 }} />}
       <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", position: "relative" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#fff", borderBottom: "1px solid #e5e7eb",
+        {isMobile && <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#fff", borderBottom: "1px solid #e5e7eb",
           paddingTop: isMobile ? "max(8px, env(safe-area-inset-top, 0px))" : 8, paddingBottom: 8, paddingLeft: isMobile ? "max(12px, env(safe-area-inset-left, 0px))" : 14, paddingRight: "max(12px, env(safe-area-inset-right, 0px))" }}>
           {isMobile && <button aria-label="Abrir menu do projeto" onClick={() => setMenuAberto(true)} style={{ ...ctrl, fontSize: 18 }}>☰</button>}
           <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "nowrap" : "normal" }}>
-            {isMobile && <strong style={{ color: "#111827", marginRight: 6 }}>{projeto.nome}</strong>}
-            {status}
+            <strong style={{ color: "#111827", marginRight: 6 }}>{projeto.nome}</strong>
           </div>
           {isMobile && (
             <div style={{ display: "flex", gap: 4 }}>
               {MODOS.map((m) => <button key={m.id} onClick={() => setModo(m.id)} style={{ ...btn, minHeight: 30, padding: "4px 8px", fontSize: 12, borderColor: modo === m.id ? TP_AZUL : "#e5e7eb", color: modo === m.id ? TP_AZUL : "#374151", background: modo === m.id ? "#eef5ff" : "#fff" }}>{m.id === "ambos" ? "2" : m.id === "corte" ? "Corte" : m.rotulo}</button>)}
             </div>
           )}
-        </div>
+        </div>}
         <div style={{ flex: 1, minHeight: 0, display: "grid", gap: 1, background: "#e5e7eb",
           gridTemplateColumns: (modo === "ambos" || modo === "corte") && !isMobile ? "1fr 1fr" : "1fr", gridTemplateRows: (modo === "ambos" || modo === "corte") && isMobile ? "1fr 1fr" : "1fr",
           paddingBottom: "env(safe-area-inset-bottom, 0px)", paddingRight: "env(safe-area-inset-right, 0px)" }}>
           <div ref={planBox} style={{ ...pane, display: mostraPlanta ? "block" : "none" }}>
-            <span style={tag}>{pavimentos.length > 1 ? `${pavAt.nome} · nível ${tpFmt(pavAt.nivel)} · ` : "Planta baixa · "}grade 0,50 m
-            {pavimentos.length > 1 && (
-              <span style={{ display: "inline-flex", gap: 4, marginLeft: 8, verticalAlign: "middle", textTransform: "none", letterSpacing: 0 }}>
-                {pavsOrd.map((p) => (
-                  <button key={p.id} onClick={() => irParaPav(p.id)} title={`${p.nome} (Page Up / Page Down troca)`}
-                    style={{ border: "1px solid " + (p.id === pavAtivo ? TP_AZUL : "#d1d5db"), background: p.id === pavAtivo ? "#eef5ff" : "#fff", color: p.id === pavAtivo ? TP_AZUL : "#374151", borderRadius: 999, padding: "2px 9px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", pointerEvents: "auto" }}>{p.nome}</button>
-                ))}
-              </span>
-            )}</span>
+            {!isMobile && painelOculto && (
+              <button onClick={() => setPainelOculto(false)} aria-label="Mostrar o painel" title="Mostrar o painel"
+                style={{ position: "absolute", top: 10, left: 10, zIndex: 2, ...ctrl, fontSize: 18 }}>☰</button>
+            )}
             <canvas ref={planRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none", cursor: ferramenta === "mover" ? "grab" : ferramenta === "selecionar" ? "default" : "crosshair" }}
               onContextMenu={(e) => e.preventDefault()} onDoubleClick={() => { if (poli.length >= 3) finalizarPoli(); }}
               onPointerDown={planDown} onPointerMove={(e) => { planMove(e); if (!gesto.current && ferramenta === "selecionar") { const dd = devPx(e), eq = iconeEq.current; e.currentTarget.style.cursor = (eq && Math.abs(dd.x - eq.x) <= eq.r && Math.abs(dd.y - eq.y) <= eq.r) || cotasClic.current.some((q) => Math.abs(dd.x - q.x) <= q.r && Math.abs(dd.y - q.y) <= q.r * 0.6) ? "pointer" : (alcasEsq.current.some((q) => Math.abs(dd.x - q.x) <= 9 * (window.devicePixelRatio || 1) && Math.abs(dd.y - q.y) <= 9 * (window.devicePixelRatio || 1)) || alcaNoPonto(dd) || rotulosClic.current.some((q) => dd.x >= q.x0 && dd.x <= q.x1 && dd.y >= q.y0 && dd.y <= q.y1)) ? "move" : "default"; } }} onPointerUp={planUp} onPointerLeave={() => { if (!inicio && !poli.length && !gesto.current) setHover(null); else if (!gesto.current && hover && hover.guias) setHover({ x: hover.x, y: hover.y }); if (!gesto.current) setPreviaEsq(null); }} />
-            {barraFerramentas}
             {editNome && (
               <input ref={(el) => { if (el && document.activeElement !== el) { el.focus({ preventScroll: true }); el.select(); } }} aria-label="Nome do ambiente" value={editNome.txt}
                 onChange={(e) => setEditNome({ ...editNome, txt: e.target.value })}
@@ -87103,14 +87126,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             </div>
           </div>
           <div ref={v3dBox} style={{ ...pane, display: mostra3d ? "block" : "none" }}>
-            <span style={tag}>3D · arraste para girar, clique para selecionar</span>
             <canvas ref={v3dRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", touchAction: "none" }}
               onContextMenu={(e) => e.preventDefault()}
               onPointerDown={v3dDown} onPointerMove={v3dMove} onPointerUp={v3dUp} />
             {erro3d && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#6b7280", fontSize: 13, padding: 16, textAlign: "center" }}>{erro3d} Verifique a conexão e abra o projeto de novo.</div>}
           </div>
           <div ref={corteBox} style={{ ...pane, display: mostraCorte ? "block" : "none" }}>
-            <span style={tag}>{cortes.length ? "Corte" : "Corte · nenhum ainda"}</span>
             {cortes.length > 0 && (
               <div style={{ position: "absolute", top: 8, right: 8, zIndex: 1, display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end", maxWidth: "70%" }}>
                 {cortes.map((c, i) => (
