@@ -87112,7 +87112,18 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const linhaQ = { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, padding: "6px 0", borderBottom: "1px solid #f0f2f5", fontSize: 13 };
   const numQ = { fontWeight: 400, color: "#111827", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
   // quantitativo em tabela: rótulo | número (alinhado à direita) | unidade (coluna própria)
-  const grupoQ = (t) => <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 0.6, textTransform: "uppercase", color: "#9ca3af", padding: "10px 0 3px" }}>{t}</div>;
+  // grupos do quantitativo recolhíveis (Paredes, Áreas, Terreno); fechado mostra um resumo
+  const [gruposQFechados, setGruposQFechados] = useState(() => { try { return JSON.parse(localStorage.getItem("vicke-projetar-qtd-fechados") || "[]"); } catch (err) { return []; } });
+  const qFechado = (id) => gruposQFechados.includes(id);
+  const alternarGrupoQ = (id) => setGruposQFechados((xs) => { const n = xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]; try { localStorage.setItem("vicke-projetar-qtd-fechados", JSON.stringify(n)); } catch (err) {} return n; });
+  const grupoQ = (id, t, resumo) => { const f = qFechado(id); return (
+    <button onClick={() => alternarGrupoQ(id)} aria-expanded={!f} title={f ? "Mostrar" : "Recolher"}
+      style={{ width: "100%", display: "flex", alignItems: "center", gap: 6, border: "none", background: "none", cursor: "pointer", fontFamily: "inherit", padding: "10px 0 3px", textAlign: "left", borderBottom: f ? "1px solid #f0f2f5" : "none", paddingBottom: f ? 6 : 3 }}>
+      <span style={{ flex: 1, fontSize: 10.5, fontWeight: 600, letterSpacing: 0.6, textTransform: "uppercase", color: "#9ca3af" }}>{t}</span>
+      {f && resumo && <span style={{ fontSize: 11.5, color: "#6b7280", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{resumo}</span>}
+      <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" style={{ flexShrink: 0, transform: f ? "rotate(-90deg)" : "none", transition: "transform .15s" }}><path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="#9ca3af" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    </button>
+  ); };
   const linhaTab = (rot, val, un, sub) => (
     <div style={{ display: "grid", gridTemplateColumns: "1fr auto 22px", columnGap: 6, alignItems: "baseline", padding: "5px 0", borderBottom: "1px solid #f0f2f5", fontSize: 12.5 }}>
       <span style={{ color: sub ? "#6b7280" : "#374151", paddingLeft: sub ? 10 : 0, minWidth: 0 }}>{rot}</span>
@@ -87844,14 +87855,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             ))}
           </div>
         )}
-        {grupoQ("Paredes")}
+        {grupoQ("par", "Paredes", `${tpFmt(qtd.A - qtd.ab)} m²`)}
+        {!qFechado("par") && (<>
         {linhaTab("Quantidade", qtd.n, "un")}
         {linhaTab("Comprimento", tpFmt(qtd.L), "m")}
         {linhaTab(qtd.ab > 0 ? "Área bruta" : "Área", tpFmt(qtd.A), "m²")}
         {qtd.ab > 0 && linhaTab("Aberturas", tpFmt(qtd.ab), "m²", true)}
         {qtd.ab > 0 && linhaTab("Área líquida", tpFmt(qtd.A - qtd.ab), "m²")}
         {linhaTab("Reboco (2 faces)", tpFmt((qtd.A - qtd.ab) * 2), "m²")}
-        {grupoQ("Áreas")}
+        </>)}
+        {grupoQ("are", "Áreas", `${tpFmt(qtd.coberta)} m²`)}
+        {!qFechado("are") && (<>
         {linhaTab("Construída (coberta)", tpFmt(qtd.coberta), "m²")}
         {linhaTab("Contrapiso", tpFmt(qtd.cp), "m²")}
         {qtd.mostraIntExt && qtd.cp > 0 && linhaTab("interno", tpFmt(qtd.cpInt), "m²", true)}
@@ -87861,10 +87875,13 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         {linhaTab("Volume laje", tpFmt(qtd.volLj), "m³", true)}
         {linhaTab("Telhado (projeção)", tpFmt(qtd.telP), "m²")}
         {linhaTab("Telhado (real)", tpFmt(qtd.telR), "m²", true)}
-        {qtd.terreno > 0 && grupoQ("Terreno")}
-        {qtd.terreno > 0 && linhaTab("Área do terreno", tpFmt(qtd.terreno), "m²")}
-        {qtd.terreno > 0 && linhaTab("Taxa de ocupação", tpFmt(qtd.ocupada / qtd.terreno * 100, 1), "%")}
-        {qtd.terreno > 0 && linhaTab("Área livre", tpFmt(qtd.livre), "m²")}
+        </>)}
+        {qtd.terreno > 0 && grupoQ("ter", "Terreno", `${tpFmt(qtd.terreno)} m²`)}
+        {qtd.terreno > 0 && !qFechado("ter") && (<>
+        {linhaTab("Área do terreno", tpFmt(qtd.terreno), "m²")}
+        {linhaTab("Taxa de ocupação", tpFmt(qtd.ocupada / qtd.terreno * 100, 1), "%")}
+        {linhaTab("Área livre", tpFmt(qtd.livre), "m²")}
+        </>)}
       </div>
         </div>
       )}
