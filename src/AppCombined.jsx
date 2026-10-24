@@ -83165,6 +83165,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // "+" solto na prancheta: posição (fração da área do desenho), lembrada neste navegador
   const [ferrSolta, setFerrSolta] = useState(() => { try { const v = JSON.parse(localStorage.getItem("vicke-projetar-ferr-solta") || "null"); return v && v.x >= 0 && v.y >= 0 ? v : null; } catch (err) { return null; } });
   const [arrasteMais, setArrasteMais] = useState(null);
+  const [pavAbertoM, setPavAbertoM] = useState(false), [pavAbertoC, setPavAbertoC] = useState(false);
+  const [pavSolta, setPavSolta] = useState(() => { try { const v = JSON.parse(localStorage.getItem("vicke-projetar-pav-solta") || "null"); return v && v.x >= 0 && v.y >= 0 ? v : null; } catch (err) { return null; } });
   const arrastouMais = useRef(false);
   // tela dividida: a segunda vista (3D ou corte) fica à direita, embaixo ou solta
   // numa janela que se arrasta e redimensiona; "trocado" inverte qual é a grande
@@ -86956,13 +86958,15 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     );
   };
   const guardarFerrSolta = (v) => { setFerrSolta(v); try { if (v) localStorage.setItem("vicke-projetar-ferr-solta", JSON.stringify(v)); else localStorage.removeItem("vicke-projetar-ferr-solta"); } catch (err) { /* sem armazenamento */ } };
-  const iniciarArrasteMais = (e) => {
+  const guardarPavSolta = (v) => { setPavSolta(v); try { if (v) localStorage.setItem("vicke-projetar-pav-solta", JSON.stringify(v)); else localStorage.removeItem("vicke-projetar-pav-solta"); } catch (err) { /* sem armazenamento */ } };
+  const iniciarArraste = (tipo) => (e) => {
+    const guardar = tipo === "pav" ? guardarPavSolta : guardarFerrSolta;
     if (e.button !== undefined && e.button !== 0) return;
     const x0 = e.clientX, y0 = e.clientY, b = e.currentTarget.getBoundingClientRect(), ox = x0 - b.left, oy = y0 - b.top;
     let moveu = false;
     const mover = (ev) => {
       if (!moveu && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return;
-      moveu = true; ev.preventDefault(); setArrasteMais({ x: ev.clientX - ox, y: ev.clientY - oy });
+      moveu = true; ev.preventDefault(); setArrasteMais({ x: ev.clientX - ox, y: ev.clientY - oy, tipo });
     };
     const soltar = (ev) => {
       window.removeEventListener("pointermove", mover); window.removeEventListener("pointerup", soltar); window.removeEventListener("pointercancel", soltar);
@@ -86971,17 +86975,75 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       arrastouMais.current = true; setTimeout(() => { arrastouMais.current = false; }, 0);
       const a = asideRef.current, t = telaArea.current, cx = ev.clientX, cy = ev.clientY;
       const ra = a && a.getBoundingClientRect(), dentroMenu = ra && cx >= ra.left && cx <= ra.right && cy >= ra.top && cy <= ra.bottom && (isMobile ? menuAberto : !painelOculto);
-      if (dentroMenu) { guardarFerrSolta(null); return; }
+      if (dentroMenu) { guardar(null); return; }
       if (!t) return;
       const rt = t.getBoundingClientRect();
       if (cx < rt.left || cx > rt.right || cy < rt.top || cy > rt.bottom) return;
-      guardarFerrSolta({ x: Math.max(0, Math.min(0.95, (cx - ox - rt.left) / rt.width)), y: Math.max(0, Math.min(0.95, (cy - oy - rt.top) / rt.height)) });
+      guardar({ x: Math.max(0, Math.min(0.95, (cx - ox - rt.left) / rt.width)), y: Math.max(0, Math.min(0.95, (cy - oy - rt.top) / rt.height)) });
       if (isMobile) setMenuAberto(false);
     };
     window.addEventListener("pointermove", mover); window.addEventListener("pointerup", soltar); window.addEventListener("pointercancel", soltar);
   };
   // bloco de ferramentas: no menu ou solto na prancheta (o "+" arrasta de um lugar para o outro)
-  const blocoFerramentas = (noCanvas) => { const ferrAberto = noCanvas ? ferrAbertoC : ferrAbertoM, setFerrAberto = noCanvas ? setFerrAbertoC : setFerrAbertoM; return (
+  const botaoMais = (noCanvas) => { const ferrAberto = noCanvas ? ferrAbertoC : ferrAbertoM, setFerrAberto = noCanvas ? setFerrAbertoC : setFerrAbertoM; return (
+            <button aria-label={ferrAberto ? "Fechar a lista de ferramentas" : "Abrir a lista de ferramentas"} aria-expanded={ferrAberto}
+              onPointerDown={iniciarArraste("ferr")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setFerrAberto((x) => !x); if (!noCanvas) setPavAbertoM(false); }}
+              title={ferrAberto ? "Fechar a lista" : noCanvas ? "Ferramentas (arraste para mover; solte no menu para tirar da prancheta)" : "Ferramentas (arraste para a prancheta para ter uma cópia à mão)"}
+              style={{ width: 32, height: 32, borderRadius: "50%", touchAction: "none", border: `1px solid ${ferrAberto ? TP_AZUL : "#e5e7eb"}`, background: ferrAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "transform .15s", transform: ferrAberto ? "rotate(45deg)" : "none" }}>
+              <svg width="14" height="14" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke={ferrAberto ? TP_AZUL : "#111827"} strokeWidth="2" strokeLinecap="round" /></svg>
+            </button>
+  ); };
+  // pavimentos: mesma dinâmica do "+" (abre a lista embaixo, arrasta para a prancheta)
+  const botaoPav = (noCanvas) => { const pavAberto = noCanvas ? pavAbertoC : pavAbertoM, setPavAberto = noCanvas ? setPavAbertoC : setPavAbertoM; return (
+            <button aria-label={pavAberto ? "Fechar a lista de pavimentos" : "Abrir a lista de pavimentos"} aria-expanded={pavAberto}
+              onPointerDown={iniciarArraste("pav")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setPavAberto((x) => !x); if (!noCanvas) setFerrAbertoM(false); }}
+              title={pavAberto ? "Fechar a lista" : noCanvas ? "Pavimentos (arraste para mover; solte no menu para tirar da prancheta)" : "Pavimentos (arraste para a prancheta para ter uma cópia à mão)"}
+              style={{ width: 32, height: 32, borderRadius: "50%", touchAction: "none", border: `1px solid ${pavAberto ? TP_AZUL : "#e5e7eb"}`, background: pavAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: pavAberto ? TP_AZUL : "#111827" }}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" aria-hidden="true"><path d="M8 2 14 5 8 8 2 5z" /><path d="M2 8.25 8 11.25l6-3" /><path d="M2 11.25 8 14.25l6-3" /></svg>
+            </button>
+  ); };
+  const listaPav = (noCanvas) => { const pavAberto = noCanvas ? pavAbertoC : pavAbertoM, setPavAberto = noCanvas ? setPavAbertoC : setPavAbertoM; return (
+    <>
+      {/* pavimentos de baixo para cima, um por linha: Térreo (com o + ao lado),
+          Pav 1, Pav 2… e, havendo telhado, Cobertura por último. Clicar de novo
+          no pavimento em uso abre nome, nível, excluir e o que aparece no 3D. */}
+      {(() => {
+        const pilPav = (p, k) => (
+          <div key={p.id} style={{ display: "flex", gap: 4 }}>
+            <button onClick={() => { if (p.id === pavAtivo) { setEditPav((x) => !x); return; } irParaPav(p.id); setPavAberto(false); }} onDoubleClick={() => { irParaPav(p.id); setEditPav(true); }}
+              title={`${p.nome} · nível ${tpFmt(p.nivel)}. Clique de novo no pavimento em uso para editar (nome, nível, excluir). Page Up / Page Down troca.`}
+              style={{ ...btn, flex: 1, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, display: "flex", justifyContent: "space-between", alignItems: "center", borderColor: p.id === pavAtivo ? TP_AZUL : "#e5e7eb", background: p.id === pavAtivo ? "#eef5ff" : "#fff", color: p.id === pavAtivo ? TP_AZUL : "#374151", fontWeight: p.id === pavAtivo ? 600 : 500 }}>
+              <span>{p.nome}</span><span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>{tpFmt(p.nivel)}</span>
+            </button>
+            {k === 0 && (
+              <button onClick={() => { novoPavimento(); if (isMobile) setMenuAberto(false); }} aria-label="Novo pavimento acima" title="Novo pavimento acima (copia as paredes de fora e cria a laje)"
+                style={{ ...btn, minHeight: 28, width: 30, padding: 0, fontSize: 15, borderRadius: 7, borderColor: "#e5e7eb", color: "#374151" }}>+</button>
+            )}
+          </div>
+        );
+        // cobertura: aparece sozinha quando algum pavimento tem telhado
+        const comTelhado = [...pavsOrd].reverse().find((p) => (dadosDe(p.id).areas || []).some((a) => a.tipo === "telhado"));
+        const selTelhado = comTelhado && comTelhado.id === pavAtivo && sel.length > 0 && sel.every((k) => k[0] === "a" && areas[+k.slice(1)] && areas[+k.slice(1)].tipo === "telhado");
+        const lista = pavAberto ? pavsOrd : pavsOrd.filter((p) => p.id === pavAtivo);
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 3 }}>
+            {lista.map((p) => pilPav(p, pavsOrd.indexOf(p) === 0 && pavAberto ? 0 : 1))}
+            {comTelhado && pavAberto && (
+              <button onClick={() => {
+                  const ir = comTelhado.id !== pavAtivo; if (ir) irParaPav(comTelhado.id);
+                  const ids = (dadosDe(comTelhado.id).areas || []).map((a, i) => (a.tipo === "telhado" ? "a" + i : null)).filter(Boolean);
+                  trocarFerramenta("selecionar"); setTimeout(() => setSel(ids), 0); setPavAberto(false); if (isMobile) setMenuAberto(false);
+                }} title="Cobertura: seleciona o telhado"
+                style={{ ...btn, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, textAlign: "left", borderColor: selTelhado ? TP_AZUL : "#e5e7eb", background: selTelhado ? "#eef5ff" : "#fff", color: selTelhado ? TP_AZUL : "#374151", fontWeight: selTelhado ? 600 : 500 }}>
+                Cobertura
+              </button>
+            )}
+          </div>
+        );
+      })()}
+    </>
+  ); };
+  const listaFerr = (noCanvas) => { const ferrAberto = noCanvas ? ferrAbertoC : ferrAbertoM, setFerrAberto = noCanvas ? setFerrAbertoC : setFerrAbertoM; return (
     <>
       {/* "+" abre a lista de ferramentas logo abaixo; escolher uma fecha a
           lista e deixa à mostra só a ferramenta em uso (em azul). Selecionar é
@@ -87001,12 +87063,6 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         };
         return (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 3 }}>
-            <button aria-label={ferrAberto ? "Fechar a lista de ferramentas" : "Abrir a lista de ferramentas"} aria-expanded={ferrAberto}
-              onPointerDown={iniciarArrasteMais} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setFerrAberto((x) => !x); }}
-              title={ferrAberto ? "Fechar a lista" : noCanvas ? "Ferramentas (arraste para mover; solte no menu para tirar da prancheta)" : "Ferramentas (arraste para a prancheta para ter uma cópia à mão)"}
-              style={{ alignSelf: "flex-start", width: 32, height: 32, borderRadius: "50%", touchAction: "none", border: `1px solid ${ferrAberto ? TP_AZUL : "#e5e7eb"}`, background: ferrAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "transform .15s", transform: ferrAberto ? "rotate(45deg)" : "none" }}>
-              <svg width="14" height="14" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke={ferrAberto ? TP_AZUL : "#111827"} strokeWidth="2" strokeLinecap="round" /></svg>
-            </button>
             {visiveis.map(pilula)}
           </div>
         );
@@ -87060,7 +87116,36 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       </div>
 
       <div style={{ height: 12 }} />
-      {blocoFerramentas(false)}
+      <div style={{ display: "flex", gap: 6 }}>{botaoMais(false)}{botaoPav(false)}</div>
+      {listaFerr(false)}
+      {listaPav(false)}
+      {editPav && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8, padding: 8, border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff" }}>
+          <div>
+            <label htmlFor="tp-pav-nome" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>Nome</label>
+            <input id="tp-pav-nome" key={"pn" + pavAtivo + pavAt.nome} defaultValue={pavAt.nome}
+              onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== pavAt.nome) editarPav(pavAtivo, { nome: v }); }}
+              onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+              style={{ width: "100%", boxSizing: "border-box", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit" }} />
+          </div>
+          {pavsOrd[0].id === pavAtivo
+            ? <TpCampo id="tp-pav-nivel" rotulo="Nível (m)" valor={pavAt.nivel} somenteLeitura onConfirmar={() => {}} />
+            : <TpCampo id="tp-pav-nivel" rotulo="Nível (m)" valor={pavAt.nivel} onConfirmar={(v) => editarPav(pavAtivo, { nivel: r3(v) })} />}
+          {pavsOrd[0].id !== pavAtivo && (confirmarPav === pavAtivo
+            ? <div style={{ gridColumn: "1 / -1", display: "flex", gap: 6 }}>
+                <button onClick={() => { excluirPav(pavAtivo); setConfirmarPav(null); }} style={{ ...btn, flex: 1, minHeight: 30, fontSize: 12.5, color: "#fff", background: "#b91c1c", borderColor: "#b91c1c" }}>Excluir {pavAt.nome} e o desenho dele</button>
+                <button onClick={() => setConfirmarPav(null)} style={{ ...btn, minHeight: 30, fontSize: 12.5 }}>Cancelar</button>
+              </div>
+            : <button onClick={() => setConfirmarPav(pavAtivo)} style={{ ...btn, gridColumn: "1 / -1", minHeight: 30, fontSize: 12.5, color: "#b91c1c" }}>Excluir pavimento</button>)}
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label htmlFor="tp-vis3d" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>No 3D</label>
+            <select id="tp-vis3d" value={vis3d} onChange={(e) => setVis3d(e.target.value)} style={{ width: "100%", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit", background: "#fff" }}>
+              <option value="todos">Todos os pavimentos</option><option value="ate">Até o pavimento ativo (corta acima)</option><option value="so">Só o pavimento ativo</option>
+            </select>
+          </div>
+          <button onClick={() => setEditPav(false)} style={{ ...btn, gridColumn: "1 / -1", minHeight: 28, fontSize: 12 }}>Fechar</button>
+        </div>
+      )}
 
       {(ferramenta === "parede" || ferramenta === "laje") && (
         <div style={{ display: "grid", gridTemplateColumns: ferramenta === "parede" ? "1fr 1fr" : "1fr", gap: 8, marginTop: 8 }}>
@@ -87124,69 +87209,6 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         </select>
       </label>
 
-      {/* pavimentos de baixo para cima, um por linha: Térreo (com o + ao lado),
-          Pav 1, Pav 2… e, havendo telhado, Cobertura por último. Clicar de novo
-          no pavimento em uso abre nome, nível, excluir e o que aparece no 3D. */}
-      {(() => {
-        const pilPav = (p, k) => (
-          <div key={p.id} style={{ display: "flex", gap: 4 }}>
-            <button onClick={() => { if (p.id === pavAtivo) { setEditPav((x) => !x); return; } irParaPav(p.id); }} onDoubleClick={() => { irParaPav(p.id); setEditPav(true); }}
-              title={`${p.nome} · nível ${tpFmt(p.nivel)}. Clique de novo no pavimento em uso para editar (nome, nível, excluir). Page Up / Page Down troca.`}
-              style={{ ...btn, flex: 1, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, display: "flex", justifyContent: "space-between", alignItems: "center", borderColor: p.id === pavAtivo ? TP_AZUL : "#e5e7eb", background: p.id === pavAtivo ? "#eef5ff" : "#fff", color: p.id === pavAtivo ? TP_AZUL : "#374151", fontWeight: p.id === pavAtivo ? 600 : 500 }}>
-              <span>{p.nome}</span><span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>{tpFmt(p.nivel)}</span>
-            </button>
-            {k === 0 && (
-              <button onClick={() => { novoPavimento(); if (isMobile) setMenuAberto(false); }} aria-label="Novo pavimento acima" title="Novo pavimento acima (copia as paredes de fora e cria a laje)"
-                style={{ ...btn, minHeight: 28, width: 30, padding: 0, fontSize: 15, borderRadius: 7, borderColor: "#e5e7eb", color: "#374151" }}>+</button>
-            )}
-          </div>
-        );
-        // cobertura: aparece sozinha quando algum pavimento tem telhado
-        const comTelhado = [...pavsOrd].reverse().find((p) => (dadosDe(p.id).areas || []).some((a) => a.tipo === "telhado"));
-        const selTelhado = comTelhado && comTelhado.id === pavAtivo && sel.length > 0 && sel.every((k) => k[0] === "a" && areas[+k.slice(1)] && areas[+k.slice(1)].tipo === "telhado");
-        return (
-          <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 12 }}>
-            {pavsOrd.map(pilPav)}
-            {comTelhado && (
-              <button onClick={() => {
-                  const ir = comTelhado.id !== pavAtivo; if (ir) irParaPav(comTelhado.id);
-                  const ids = (dadosDe(comTelhado.id).areas || []).map((a, i) => (a.tipo === "telhado" ? "a" + i : null)).filter(Boolean);
-                  trocarFerramenta("selecionar"); setTimeout(() => setSel(ids), 0); if (isMobile) setMenuAberto(false);
-                }} title="Cobertura: seleciona o telhado"
-                style={{ ...btn, minHeight: 28, padding: "3px 10px", fontSize: 12, borderRadius: 7, textAlign: "left", borderColor: selTelhado ? TP_AZUL : "#e5e7eb", background: selTelhado ? "#eef5ff" : "#fff", color: selTelhado ? TP_AZUL : "#374151", fontWeight: selTelhado ? 600 : 500 }}>
-                Cobertura
-              </button>
-            )}
-          </div>
-        );
-      })()}
-      {editPav && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8, padding: 8, border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff" }}>
-          <div>
-            <label htmlFor="tp-pav-nome" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>Nome</label>
-            <input id="tp-pav-nome" key={"pn" + pavAtivo + pavAt.nome} defaultValue={pavAt.nome}
-              onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== pavAt.nome) editarPav(pavAtivo, { nome: v }); }}
-              onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
-              style={{ width: "100%", boxSizing: "border-box", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit" }} />
-          </div>
-          {pavsOrd[0].id === pavAtivo
-            ? <TpCampo id="tp-pav-nivel" rotulo="Nível (m)" valor={pavAt.nivel} somenteLeitura onConfirmar={() => {}} />
-            : <TpCampo id="tp-pav-nivel" rotulo="Nível (m)" valor={pavAt.nivel} onConfirmar={(v) => editarPav(pavAtivo, { nivel: r3(v) })} />}
-          {pavsOrd[0].id !== pavAtivo && (confirmarPav === pavAtivo
-            ? <div style={{ gridColumn: "1 / -1", display: "flex", gap: 6 }}>
-                <button onClick={() => { excluirPav(pavAtivo); setConfirmarPav(null); }} style={{ ...btn, flex: 1, minHeight: 30, fontSize: 12.5, color: "#fff", background: "#b91c1c", borderColor: "#b91c1c" }}>Excluir {pavAt.nome} e o desenho dele</button>
-                <button onClick={() => setConfirmarPav(null)} style={{ ...btn, minHeight: 30, fontSize: 12.5 }}>Cancelar</button>
-              </div>
-            : <button onClick={() => setConfirmarPav(pavAtivo)} style={{ ...btn, gridColumn: "1 / -1", minHeight: 30, fontSize: 12.5, color: "#b91c1c" }}>Excluir pavimento</button>)}
-          <div style={{ gridColumn: "1 / -1" }}>
-            <label htmlFor="tp-vis3d" style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>No 3D</label>
-            <select id="tp-vis3d" value={vis3d} onChange={(e) => setVis3d(e.target.value)} style={{ width: "100%", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit", background: "#fff" }}>
-              <option value="todos">Todos os pavimentos</option><option value="ate">Até o pavimento ativo (corta acima)</option><option value="so">Só o pavimento ativo</option>
-            </select>
-          </div>
-          <button onClick={() => setEditPav(false)} style={{ ...btn, gridColumn: "1 / -1", minHeight: 28, fontSize: 12 }}>Fechar</button>
-        </div>
-      )}
 
 
       {podeOrcar && (
@@ -87345,7 +87367,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       {menu}
       {arrasteMais && (
         <div aria-hidden="true" style={{ position: "fixed", left: arrasteMais.x, top: arrasteMais.y, width: 32, height: 32, borderRadius: "50%", border: `1px solid ${TP_AZUL}`, background: "#eef5ff", zIndex: 5000, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 14px rgba(0,0,0,0.18)" }}>
-          <svg width="14" height="14" viewBox="0 0 20 20"><path d="M10 3v14M3 10h14" stroke={TP_AZUL} strokeWidth="2" strokeLinecap="round" /></svg>
+          {arrasteMais.tipo === "pav"
+            ? <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke={TP_AZUL} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round"><path d="M8 2 14 5 8 8 2 5z" /><path d="M2 8.25 8 11.25l6-3" /><path d="M2 11.25 8 14.25l6-3" /></svg>
+            : <svg width="14" height="14" viewBox="0 0 20 20"><path d="M10 3v14M3 10h14" stroke={TP_AZUL} strokeWidth="2" strokeLinecap="round" /></svg>}
         </div>
       )}
       {isMobile && menuAberto && <div onClick={() => setMenuAberto(false)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.3)", zIndex: 2 }} />}
@@ -87364,7 +87388,15 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           {ferrSolta && (
             <div style={{ position: "absolute", zIndex: 6, left: `min(${ferrSolta.x * 100}%, calc(100% - 236px))`, top: `min(${ferrSolta.y * 100}%, calc(100% - 50px))`, width: ferrAbertoC || ferramenta !== "selecionar" ? 226 : "auto", padding: 6, boxSizing: "border-box",
               background: "rgba(255,255,255,0.6)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", border: "1px solid rgba(229,231,235,0.8)", borderRadius: 12, maxHeight: "calc(100% - 20px)", overflowY: "auto" }}>
-              {blocoFerramentas(true)}
+              {botaoMais(true)}
+              {listaFerr(true)}
+            </div>
+          )}
+          {pavSolta && (
+            <div style={{ position: "absolute", zIndex: 6, left: `min(${pavSolta.x * 100}%, calc(100% - 196px))`, top: `min(${pavSolta.y * 100}%, calc(100% - 50px))`, width: pavAbertoC ? 186 : "auto", padding: 6, boxSizing: "border-box",
+              background: "rgba(255,255,255,0.6)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", border: "1px solid rgba(229,231,235,0.8)", borderRadius: 12, maxHeight: "calc(100% - 20px)", overflowY: "auto" }}>
+              {botaoPav(true)}
+              {pavAbertoC && listaPav(true)}
             </div>
           )}
           {dividido && docaEf !== "livre" && (
