@@ -86629,7 +86629,16 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const lbl = { fontSize: 12, color: "#4b5563", marginBottom: 4 };
   const inp = { width: "100%", boxSizing: "border-box", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, fontVariantNumeric: "tabular-nums", fontFamily: "inherit" };
   const linhaQ = { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, padding: "6px 0", borderBottom: "1px solid #f0f2f5", fontSize: 13 };
-  const numQ = { fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
+  const numQ = { fontWeight: 400, color: "#111827", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
+  // quantitativo em tabela: rótulo | número (alinhado à direita) | unidade (coluna própria)
+  const grupoQ = (t) => <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 0.6, textTransform: "uppercase", color: "#9ca3af", padding: "10px 0 3px" }}>{t}</div>;
+  const linhaTab = (rot, val, un, sub) => (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr auto 22px", columnGap: 6, alignItems: "baseline", padding: "5px 0", borderBottom: "1px solid #f0f2f5", fontSize: 12.5 }}>
+      <span style={{ color: sub ? "#6b7280" : "#374151", paddingLeft: sub ? 10 : 0, minWidth: 0 }}>{rot}</span>
+      <span style={{ color: sub ? "#4b5563" : "#111827", fontVariantNumeric: "tabular-nums", textAlign: "right", whiteSpace: "nowrap" }}>{val}</span>
+      <span style={{ color: "#9ca3af", fontSize: 11 }}>{un}</span>
+    </div>
+  );
   const pane = { position: "relative", background: "#fff", minWidth: 0, minHeight: 0, overflow: "hidden" };
   const tag = { position: "absolute", top: 10, left: 12, fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", color: "#9ca3af", pointerEvents: "none", zIndex: 1 };
   const ctrl = { width: 34, height: 34, borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer", fontSize: 16, fontWeight: 600, color: "#374151", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit" };
@@ -87392,18 +87401,27 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       ))}
       {dobra("qtd", "Quantitativo", `${tpFmt(A - areaAberturas)} m²`, (
       <div>
-        <div style={linhaQ}><span>Paredes</span><span style={numQ}>{paredes.length} · {tpFmt(L)} m</span></div>
-        <div style={linhaQ}><span>Área de parede{areaAberturas > 0 ? " (bruta)" : ""}</span><span style={numQ}>{tpFmt(A)} m²</span></div>
-        {areaAberturas > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>aberturas · líquida</span><span style={numQ}>{tpFmt(areaAberturas)} · {tpFmt(A - areaAberturas)} m²</span></div>}
-        <div style={linhaQ}><span>Reboco 2 faces</span><span style={numQ}>{tpFmt((A - areaAberturas) * 2)} m²</span></div>
-        <div style={linhaQ}><span>Área construída (coberta)</span><span style={numQ}>{tpFmt(analise.coberta)} m²</span></div>
-        <div style={linhaQ}><span>Contrapiso</span><span style={numQ}>{tpFmt(areaCp)} m² · {tpFmt(volCp)} m³</span></div>
-        {(analise.temCobertura || (analise.pegada || []).length > 0) && areaCp > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>interno · externo</span><span style={numQ}>{tpFmt(analise.pisoInterno)} · {tpFmt(analise.pisoExterno)} m²</span></div>}
-        {analise.terreno > 0 && <div style={linhaQ}><span>Terreno</span><span style={numQ}>{tpFmt(analise.terreno)} m²</span></div>}
-        {analise.terreno > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>Taxa de ocupação</span><span style={numQ}>{tpFmt(analise.taxaOcupacao * 100, 1)}%</span></div>}
-        {analise.terreno > 0 && <div style={linhaQ}><span style={{ paddingLeft: 10 }}>Área livre (sem piso nem cobertura)</span><span style={numQ}>{tpFmt(analise.permeavel)} m²</span></div>}
-        <div style={linhaQ}><span>Telhado (projeção · real)</span><span style={numQ}>{tpFmt(telProj)} · {tpFmt(telReal)} m²</span></div>
-        <div style={linhaQ}><span>Laje</span><span style={numQ}>{tpFmt(areaLj)} m² · {tpFmt(volLj)} m³</span></div>
+        {grupoQ("Paredes")}
+        {linhaTab("Quantidade", paredes.length, "un")}
+        {linhaTab("Comprimento", tpFmt(L), "m")}
+        {linhaTab(areaAberturas > 0 ? "Área bruta" : "Área", tpFmt(A), "m²")}
+        {areaAberturas > 0 && linhaTab("Aberturas", tpFmt(areaAberturas), "m²", true)}
+        {areaAberturas > 0 && linhaTab("Área líquida", tpFmt(A - areaAberturas), "m²")}
+        {linhaTab("Reboco (2 faces)", tpFmt((A - areaAberturas) * 2), "m²")}
+        {grupoQ("Áreas")}
+        {linhaTab("Construída (coberta)", tpFmt(analise.coberta), "m²")}
+        {linhaTab("Contrapiso", tpFmt(areaCp), "m²")}
+        {(analise.temCobertura || (analise.pegada || []).length > 0) && areaCp > 0 && linhaTab("interno", tpFmt(analise.pisoInterno), "m²", true)}
+        {(analise.temCobertura || (analise.pegada || []).length > 0) && areaCp > 0 && linhaTab("externo", tpFmt(analise.pisoExterno), "m²", true)}
+        {linhaTab("Volume contrapiso", tpFmt(volCp), "m³", true)}
+        {linhaTab("Laje", tpFmt(areaLj), "m²")}
+        {linhaTab("Volume laje", tpFmt(volLj), "m³", true)}
+        {linhaTab("Telhado (projeção)", tpFmt(telProj), "m²")}
+        {linhaTab("Telhado (real)", tpFmt(telReal), "m²", true)}
+        {analise.terreno > 0 && grupoQ("Terreno")}
+        {analise.terreno > 0 && linhaTab("Área do terreno", tpFmt(analise.terreno), "m²")}
+        {analise.terreno > 0 && linhaTab("Taxa de ocupação", tpFmt(analise.taxaOcupacao * 100, 1), "%")}
+        {analise.terreno > 0 && linhaTab("Área livre", tpFmt(analise.permeavel), "m²")}
       </div>
       ))}
         </div>
