@@ -279,31 +279,55 @@ function AvisoTermos({ usuario }) {
     catch (e) { setErro(e.message || "Não foi possível registrar o aceite."); }
     finally { setEnviando(false); }
   }
+  const doc = (href, titulo, linha) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" data-vk-termos-doc="1"
+      style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", border: "1px solid rgba(38,36,33,0.12)",
+        borderRadius: 12, textDecoration: "none", background: "#fafafa" }}>
+      <span aria-hidden="true" style={{ width: 30, height: 30, borderRadius: 8, background: "#fff", border: "1px solid rgba(38,36,33,0.12)",
+        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M16 13H8" /><path d="M16 17H8" />
+        </svg>
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, color: "#262421" }}>{titulo}</span>
+        <span style={{ display: "block", fontSize: 12, color: "#6b7280", marginTop: 1 }}>{linha}</span>
+      </span>
+      <span aria-hidden="true" style={{ color: "#9ca3af", fontSize: 14 }}>↗</span>
+    </a>
+  );
   return (
-    <div data-vk-aviso-termos="1" style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.55)", zIndex: 100040, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <div style={{ background: "#fff", borderRadius: 16, padding: "24px 24px 20px", maxWidth: 480, width: "100%", boxShadow: "0 12px 40px rgba(0,0,0,0.2)", fontFamily: "inherit" }}>
-        <div style={{ fontSize: 17, fontWeight: 700, color: "#111827", marginBottom: 8 }}>Termos de Uso e Privacidade</div>
-        <div style={{ fontSize: 13.5, color: "#4b5563", lineHeight: 1.55, marginBottom: 14 }}>
-          Publicamos os Termos de Uso, o Acordo de Tratamento de Dados (o VICKE como operador dos dados que o seu escritório coloca no sistema) e a Política de Privacidade.
+    <div data-vk-aviso-termos="1" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 100040, display: "flex",
+      alignItems: "center", justifyContent: "center", padding: 20, fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
+      <div style={{ background: "#fff", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "24px 26px 22px", maxWidth: 460,
+        width: "100%", boxShadow: "0 20px 40px rgba(0,0,0,0.15)", boxSizing: "border-box" }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "#0474f4", letterSpacing: 0.3, marginBottom: 6 }}>VICKE · versão {LEGAL_VERSAO}</div>
+        <div style={{ fontSize: 17, fontWeight: 700, color: "#262421", marginBottom: 8 }}>Termos de Uso e Privacidade</div>
+        <div style={{ fontSize: 13.5, color: "#4b5563", lineHeight: 1.55, marginBottom: 16 }}>
+          Publicamos as regras de uso do VICKE e de como cuidamos dos dados que o seu escritório coloca aqui.
           Como administrador, confirme o aceite em nome do escritório.
         </div>
-        <div style={{ display: "flex", gap: 14, marginBottom: 14, flexWrap: "wrap" }}>
-          <a href="/termos" target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#0474f4" }}>Ler os Termos e o Acordo</a>
-          <a href="/privacidade" target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#0474f4" }}>Ler a Política de Privacidade</a>
+        <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+          {doc("/termos", "Termos de Uso e Acordo de Tratamento de Dados", "o escritório decide sobre os dados; o VICKE só os trata para prestar o serviço")}
+          {doc("/privacidade", "Política de Privacidade", "quais dados, para quê, com quem e por quanto tempo")}
         </div>
-        <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, color: "#374151", lineHeight: 1.5, cursor: "pointer", marginBottom: 12 }}>
-          <input type="checkbox" data-vk-aceite-termos="1" checked={aceitou} onChange={(e) => setAceitou(e.target.checked)} style={{ marginTop: 3, accentColor: "#0474f4" }} />
-          <span>Li e aceito, em nome do escritório, os Termos de Uso, o Acordo de Tratamento de Dados e a Política de Privacidade (versão {LEGAL_VERSAO}).</span>
+        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, color: "#374151", lineHeight: 1.5, cursor: "pointer",
+          padding: "10px 12px", borderRadius: 12, background: aceitou ? "#eff6ff" : "transparent", marginBottom: 14 }}>
+          <input type="checkbox" data-vk-aceite-termos="1" checked={aceitou} onChange={(e) => { setAceitou(e.target.checked); setErro(""); }}
+            style={{ marginTop: 3, accentColor: "#0474f4", width: 15, height: 15, flexShrink: 0 }} />
+          <span>Li e aceito, em nome do escritório, os Termos de Uso, o Acordo de Tratamento de Dados e a Política de Privacidade.</span>
         </label>
-        {erro && <div style={{ fontSize: 12, color: "#b91c1c", marginBottom: 10 }}>{erro}</div>}
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+        {erro && <div style={{ fontSize: 12.5, color: "#b91c1c", marginBottom: 10 }}>{erro}</div>}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
           {/* toda janela tem como sair: "agora não" volta a perguntar no próximo acesso */}
           <button type="button" data-vk-termos-depois="1" onClick={() => setPendente(false)} disabled={enviando}
-            style={{ background: "#fff", color: "#374151", border: "1px solid rgba(38,36,33,0.2)", borderRadius: 10, padding: "10px 16px", fontSize: 13.5, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
+            style={{ background: "#fff", color: "#4b5563", border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding: "8px 18px",
+              fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
             Agora não
           </button>
           <button type="button" data-vk-aceitar-termos="1" onClick={aceitar} disabled={enviando}
-            style={{ background: "#0474f4", color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", opacity: enviando ? 0.7 : 1 }}>
+            style={{ background: aceitou ? "#262421" : "#a8a29e", color: "#fff", border: "none", borderRadius: 12, padding: "8px 20px",
+              fontSize: 13, fontWeight: 600, cursor: aceitou ? "pointer" : "default", fontFamily: "inherit", opacity: enviando ? 0.7 : 1 }}>
             {enviando ? "Registrando…" : "Aceitar e continuar"}
           </button>
         </div>
