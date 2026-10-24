@@ -1915,6 +1915,34 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const selP = sel.filter((k) => k[0] === "p").map((k) => +k.slice(1)).filter((i) => paredes[i]);
   const selA = sel.filter((k) => k[0] === "a").map((k) => +k.slice(1)).filter((i) => areas[i]);
   const selO = sel.filter((k) => k[0] === "o").map((k) => tpAcharAbertura(paredes, k.slice(1))).filter(Boolean);
+  // seleção por tipo (como o "Selecionar todas as instâncias" do Revit):
+  // na vista = o que aparece na planta agora; tudo = o pavimento inteiro
+  const CATS_SEL = [["parede", "Paredes"], ["porta", "Portas"], ["janela", "Janelas"], ["vao", "Vãos"], ["contrapiso", "Contrapisos"], ["laje", "Lajes"], ["telhado", "Telhados"], ["terreno", "Terrenos"], ["ambiente", "Ambientes"], ["escada", "Escadas"], ["cota", "Cotas"], ["separador", "Separadores"]];
+  const catDaChave = (k) => {
+    if (k[0] === "p") return "parede";
+    if (k[0] === "a") { const a = areas[+k.slice(1)]; return a ? a.tipo : null; }
+    if (k[0] === "o") { for (const w of paredes) { const o = (w.ab || []).find((x) => "o" + x.id === k); if (o) { const c = tpEsq(o.tipo).cat; return c === "P" ? "porta" : c === "J" ? "janela" : "vao"; } } }
+    return null;
+  };
+  const retanguloVista = () => {
+    const c = planRef.current, v = vista.current;
+    if (!c || !v || !c.width || !c.getBoundingClientRect().width) return null;
+    return { x0: -v.ox / v.s, y0: -v.oy / v.s, x1: (c.width - v.ox) / v.s, y1: (c.height - v.oy) / v.s };
+  };
+  const ptsDaChave = (k) => {
+    if (k[0] === "p") { const w = paredes[+k.slice(1)]; return w ? [w.a, w.b] : []; }
+    if (k[0] === "a") { const a = areas[+k.slice(1)]; if (!a) return []; const r = [...(a.pts || [])]; if (a.ponto) r.push(a.ponto); if (a.x != null && a.y != null) r.push({ x: a.x, y: a.y }); return r; }
+    if (k[0] === "o") { for (const w of paredes) { const o = (w.ab || []).find((x) => "o" + x.id === k); if (o) { const L = tpLen(w) || 1; return [{ x: w.a.x + (w.b.x - w.a.x) / L * o.x, y: w.a.y + (w.b.y - w.a.y) / L * o.x }]; } } }
+    return [];
+  };
+  const chavesDaCat = (cat, soVista) => {
+    const todas = todasChaves().filter((k) => catDaChave(k) === cat);
+    const r = soVista ? retanguloVista() : null; if (!r) return todas;
+    return todas.filter((k) => { const ps = ptsDaChave(k); if (!ps.length) return false;
+      const bx0 = Math.min(...ps.map((q) => q.x)), bx1 = Math.max(...ps.map((q) => q.x)), by0 = Math.min(...ps.map((q) => q.y)), by1 = Math.max(...ps.map((q) => q.y));
+      return bx1 >= r.x0 && bx0 <= r.x1 && by1 >= r.y0 && by0 <= r.y1; });
+  };
+  const selecionarCat = (cat, soVista) => { const ks = chavesDaCat(cat, soVista); trocarFerramenta("selecionar"); setSel(ks); avisar(`Seleção: ${ks.length} ${(CATS_SEL.find((c) => c[0] === cat) || [, "elementos"])[1].toLowerCase()}${soVista ? " na vista" : pavimentos.length > 1 ? ` (${pavAt.nome})` : ""}`); };
   const todasChaves = () => [...paredes.map((_, i) => "p" + i), ...areas.map((_, i) => "a" + i), ...paredes.flatMap((w) => (w.ab || []).map((o) => "o" + o.id))];
   const excluirSelecao = () => {
     if (!sel.length) return;
@@ -2231,7 +2259,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const abrirMenuCtx = (clientX, clientY, chave, mundo) => {
     if (chave && !sel.includes(chave)) { setSel([chave]); if (ferramenta !== "selecionar" && ferramenta !== "mover") trocarFerramenta("selecionar"); }
     const W = window.innerWidth, H = window.innerHeight;
-    setMenuCtx({ x: Math.max(8, Math.min(clientX, W - 268)), y: clientY, cy: clientY, t: Date.now(), mundo: mundo || null });
+    setMenuCtx({ x: Math.max(8, Math.min(clientX, W - 298)), y: clientY, cy: clientY, t: Date.now(), mundo: mundo || null });
   };
   const menuRef = useRef(null);
   useEffect(() => { // menu fica invisível até ser medido, então não pisca
@@ -6399,7 +6427,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 ou seja, depois de o menu abrir, já em cima desta camada. Ignorar os
                 primeiros 400 ms evita que o próprio clique que abriu o feche. */}
             <div onPointerDown={() => { if (Date.now() - menuCtx.t > 150) setMenuCtx(null); }} onContextMenu={(e) => { e.preventDefault(); if (Date.now() - menuCtx.t > 400) setMenuCtx(null); }} style={{ position: "fixed", inset: 0, zIndex: 9 }} />
-            <div role="menu" ref={menuRef} onContextMenu={(e) => e.preventDefault()} style={{ position: "fixed", left: menuCtx.x, top: menuCtx.y, zIndex: 10, width: 260, maxHeight: menuCtx.maxH || "calc(100vh - 16px)", overflowY: "auto", visibility: menuCtx.medido ? "visible" : "hidden", background: "#fff", border: "none", borderRadius: 12, boxShadow: "0 2px 6px rgba(60,64,67,0.15), 0 8px 24px rgba(60,64,67,0.2)", padding: "8px 0" }}>
+            <div role="menu" ref={menuRef} onContextMenu={(e) => e.preventDefault()} style={{ position: "fixed", left: menuCtx.x, top: menuCtx.y, zIndex: 10, width: 290, maxHeight: menuCtx.maxH || "calc(100vh - 16px)", overflowY: "auto", visibility: menuCtx.medido ? "visible" : "hidden", background: "#fff", border: "none", borderRadius: 12, boxShadow: "0 2px 6px rgba(60,64,67,0.15), 0 8px 24px rgba(60,64,67,0.2)", padding: "8px 0" }}>
               {desenhando && item("Finalizar traço", "Enter", finalizar)}
               {desenhando && linha("l0")}
               {sel.length > 0 && item(`Excluir${sel.length > 1 ? ` (${sel.length})` : ""}`, "Delete", excluirSelecao, { perigo: true })}
@@ -6413,6 +6441,39 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               {item("Desfazer", "Ctrl+Z", desfazer, { desativado: !historico.current.length })}
               {item("Refazer", "Ctrl+Y", refazer, { desativado: !futuro.current.length })}
               {item("Selecionar tudo", "Ctrl+A", () => { trocarFerramenta("selecionar"); setSel(todasChaves()); }, { desativado: !paredes.length && !areas.length })}
+              {(() => {
+                // "Na vista" só faz sentido com a planta na tela
+                const temVista = !!retanguloVista();
+                const rotTudo = pavimentos.length > 1 ? "Pavimento" : "Projeto";
+                const chip = (rot, acao) => (
+                  <button key={rot} onClick={(e) => { e.stopPropagation(); setMenuCtx(null); acao(); }}
+                    style={{ border: "1px solid #dadce0", background: "#fff", borderRadius: 6, padding: "2px 8px", fontSize: 12, fontFamily: "inherit", color: "#202124", cursor: "pointer", whiteSpace: "nowrap" }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = TP_AZUL; e.currentTarget.style.color = TP_AZUL; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#dadce0"; e.currentTarget.style.color = "#202124"; }}>{rot}</button>
+                );
+                const linhaCat = (cat, rot, recuo) => (
+                  <div key={"c" + cat} style={{ display: "flex", alignItems: "center", gap: 6, padding: `0 12px 0 ${recuo ? 32 : 20}px`, height: 32, fontSize: recuo ? 13.5 : 14, color: "#202124" }}>
+                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rot}</span>
+                    {temVista && chip("Na vista", () => selecionarCat(cat, true))}
+                    {chip(rotTudo, () => selecionarCat(cat, false))}
+                  </div>
+                );
+                const cats = sel.length ? [...new Set(sel.map(catDaChave))] : [];
+                const presentes = CATS_SEL.filter(([c]) => chavesDaCat(c, false).length);
+                return (
+                  <>
+                    {cats.length === 1 && cats[0] && linhaCat(cats[0], `Todos: ${(CATS_SEL.find((c) => c[0] === cats[0]) || [, cats[0]])[1]}`)}
+                    {presentes.length > 0 && (
+                      <button role="menuitem" aria-expanded={!!menuCtx.porTipo} onClick={() => setMenuCtx({ ...menuCtx, porTipo: !menuCtx.porTipo, medido: false })}
+                        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", border: "none", background: "transparent", padding: "0 20px", height: 34, fontSize: 14, fontFamily: "inherit", textAlign: "left", cursor: "pointer", color: "#202124" }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = "#f1f3f4"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                        <span>Selecionar por tipo</span><span style={{ fontSize: 12, color: "#5f6368", transform: menuCtx.porTipo ? "rotate(90deg)" : "none", transition: "transform .15s" }}>›</span>
+                      </button>
+                    )}
+                    {menuCtx.porTipo && presentes.map(([c, rot]) => linhaCat(c, `${rot} (${chavesDaCat(c, false).length})`, true))}
+                  </>
+                );
+              })()}
               {linha("l2")}
               {item("Desenhar parede", "P", () => trocarFerramenta("parede"))}
               {item("Inserir contrapiso", "C", () => trocarFerramenta("contrapiso"))}
