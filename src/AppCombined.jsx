@@ -14234,9 +14234,13 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
   // com itens de contas diferentes (material e ferramenta) vira um lançamento
   // por conta, todos com a mesma linha. Casam todos com ela — antes só o
   // primeiro casava e o outro ia para "lançado, não veio no banco".
+  // A ligação exata vem primeiro; a por letras e números só vale para o
+  // lançamento cujo id de linha não existe mais neste extrato (lido de novo).
+  const idsDoExtrato = new Set(emOrdem.map((m) => m.id).filter(Boolean));
   for (const m of emOrdem) {
     if (!m.id) continue;
-    const ligados = candidatos.filter((x) => !x.usado && x.l.extratoId && x.l.extratoId === m.id);
+    const ligados = candidatos.filter((x) => !x.usado && x.l.extratoId
+      && (x.l.extratoId === m.id || (!idsDoExtrato.has(x.l.extratoId) && efMesmaLinhaDoBanco(x.l.extratoId, m.id))));
     if (!ligados.length) continue;
     jaCasados.add(m);
     const somaLigados = Math.round(ligados.reduce((s, c) => s + c.abs * (c.dir && c.dir !== dirDoMov(m) ? -1 : 1), 0) * 100) / 100;
@@ -14443,6 +14447,21 @@ function pistasDoCasamento(lancamentos, opcoes) {
 // documento e a ordem entre iguais): é ele que guarda o "não é lançamento",
 // liga o lançamento à linha de onde nasceu e deixa o extrato salvo de um
 // dia para o outro sem duplicar quando o arquivo é arrastado de novo.
+// O mesmo extrato lido de novo pode trazer o documento escrito diferente
+// ("OURINHOS S" num dia, "OURINHOSS" no outro; "VIVO - SP" e "VIVOSP"), e
+// aí o id da linha muda e o lançamento perde a ligação com ela. Para ligar,
+// data e valor têm de ser os mesmos; histórico e documento são comparados
+// só pelas letras e números.
+function efChaveDaLinhaDoBanco(id) {
+  const p = String(id || "").split("|");
+  if (p.length < 4) return String(id || "");
+  const so = (x) => efSemAcento(x).toLowerCase().replace(/[^a-z0-9#]/g, "");
+  return [p[0], p[1], so(p[2]), so(p.slice(3).join("|"))].join("|");
+}
+function efMesmaLinhaDoBanco(a, b) {
+  if (!a || !b) return false;
+  return a === b || efChaveDaLinhaDoBanco(a) === efChaveDaLinhaDoBanco(b);
+}
 function comIdsDosMovimentos(movimentos) {
   const vistos = {};
   return (movimentos || []).filter(Boolean).map((m) => {

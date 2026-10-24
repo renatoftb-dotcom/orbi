@@ -38,7 +38,7 @@ const M = new Function(src + `
            efValorDoCampo, anexosDaTransacao, comAnexos,
            efNomeDoFornecedor, EF_FORNECEDOR_OUTROS,
            custoDoLancamento, validarCustoEmItens, itemUnicoDoCusto, itensDoCustoOuUnico, padraoDaContaDaObra,
-           comIdsDosMovimentos, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
+           comIdsDosMovimentos, efMesmaLinhaDoBanco, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
            sugestaoDoExtrato, palpiteDoExtrato, sugestaoCompletaDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao, fornecedorPadraoDaConta, contaDeEntradaNoEscritorio, semFornecedorNaEntrada, clienteRapidoDoLancamento, ehLigacaoDaGestao, gestaoSemContratoVaiParaObra,
            ehReceitaDaGestao, contaEhEntradaEscritorio, rotuloDoPapelLido, refDaParcela, gestaoNaObra, desfazerGestaoNaObra, parcelaDoLancamento, parcelaDoMesNaGestao, recalibrarGestao, previaDaGestao, contasDaGestao,
            extratosComArquivo, movimentosGuardadosDoMes, ignoradosGuardados, extratosComIgnorado, efLinhasDoHtml, efLinhasDoOfx, saldoDoExtratoNoMes, efTabelaDoArquivo };`)();
@@ -3046,6 +3046,30 @@ teste("Projetos a receber: 'Receber' lança a parcela em Receita de projetos sem
   assert.ok(M.lancamentosDaParcelaRecebida(p2, "", 6000, ctx).erro);
   assert.ok(M.lancamentosDaParcelaRecebida(p2, "2026-11-05", "0", ctx).erro);
   assert.ok(/fechado/.test(M.lancamentosDaParcelaRecebida(p2, "2026-09-30", 6000, { ...ctx, fechamentos: { "2026-09": { fechadoEm: "x" } } }).erro));
+});
+
+teste("extrato lido de novo com o documento escrito diferente (OURINHOS S → OURINHOSS): o lançamento continua ligado à linha", () => {
+  const velho = M.comIdsDosMovimentos([{ data: "2026-09-24", valor: -145.83, historico: "DÉB.CONV.SANEAMENTO", documento: "OURINHOS S" },
+    { data: "2026-09-28", valor: -90, historico: "DÉB.CONV.TELECOMUNICAÇÕES", documento: "VIVO - SP" }]);
+  const novo = M.comIdsDosMovimentos([
+    { data: "2026-09-24", valor: -145.83, historico: "DÉB.CONV.SANEAMENTO", documento: "OURINHOSS" },
+    { data: "2026-09-24", valor: -145.83, historico: "DÉB.CONV.SANEAMENTO", documento: "OUTRA" },
+    { data: "2026-09-28", valor: -90, historico: "DÉB.CONV.TELECOMUNICAÇÕES", documento: "VIVOSP" }]);
+  assert.notStrictEqual(velho[0].id, novo[0].id, "o id mudou com a releitura");
+  const lancs = [
+    // o da segunda linha (OUTRA) foi lançado depois e ligado exatamente a ela
+    { id: "b", tipo: "escritorio", contaId: "luz_agua_net", valor: 145.83, lancadoEm: "2026-09-24", competencia: "2026-09", extratoId: novo[1].id },
+    { id: "a", tipo: "escritorio", contaId: "luz_agua_net", valor: 145.83, lancadoEm: "2026-09-24", competencia: "2026-09", extratoId: velho[0].id },
+    { id: "c", tipo: "escritorio", contaId: "utensilios", valor: 90, lancadoEm: "2026-09-28", competencia: "2026-09", extratoId: velho[1].id },
+  ];
+  const r = M.conciliarExtrato(novo, lancs);
+  const par = (lid) => { const x = r.casados.find((c) => c.lancamento.id === lid); return x && [x.extrato.id, x.certeza]; };
+  assert.deepStrictEqual(par("a"), [novo[0].id, "vinculo"]);
+  assert.deepStrictEqual(par("b"), [novo[1].id, "vinculo"]);
+  assert.deepStrictEqual(par("c"), [novo[2].id, "vinculo"]);
+  // data ou valor diferentes não ligam
+  assert.ok(!M.efMesmaLinhaDoBanco(velho[0].id, velho[0].id.replace("-145.83", "-145.84")));
+  assert.ok(!M.efMesmaLinhaDoBanco(velho[0].id, velho[0].id.replace("2026-09-24", "2026-09-25")));
 });
 
 for (const [nome, fn] of testes) {
