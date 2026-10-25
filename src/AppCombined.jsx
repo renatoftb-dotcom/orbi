@@ -89258,7 +89258,9 @@ function CampoSenha({ valor, onChange, visivel, setVisivel, disabled, autoFocus,
   );
 }
 
-function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
+// Também serve para a troca VOLUNTÁRIA (menu "Trocar senha"): `voluntaria`
+// muda os textos e o botão de baixo vira "Cancelar" (onLogout = fechar).
+function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout, voluntaria }) {
   const [senhaAtual, setSenhaAtual] = useState("");
   const [senhaNova, setSenhaNova]   = useState("");
   const [confirmar, setConfirmar]   = useState("");
@@ -89272,7 +89274,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
   const [verConfirmar, setVerConfirmar] = useState(false);
 
   function validar() {
-    if (!senhaAtual) return "Informe a senha atual (a temporária recebida)";
+    if (!senhaAtual) return voluntaria ? "Informe a senha atual" : "Informe a senha atual (a temporária recebida)";
     if (!senhaNova || senhaNova.length < 8) return "A nova senha deve ter no mínimo 8 caracteres";
     if (senhaNova === senhaAtual) return "A nova senha precisa ser diferente da atual";
     if (senhaNova !== confirmar) return "Confirmação de senha não confere";
@@ -89318,14 +89320,16 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
           Trocar senha
         </div>
         <div style={{ fontSize:13, color:"#4b5563", marginBottom:20, lineHeight:1.5 }}>
-          {usuario?.perfil === "cliente"
+          {voluntaria
+            ? "Escolha uma senha nova, com pelo menos 8 caracteres, que só você saiba. Ao trocar, os acessos abertos em outros aparelhos são encerrados."
+            : usuario?.perfil === "cliente"
             ? "Este é o seu primeiro acesso. Digite a senha que o escritório te passou e escolha uma nova, que só você saiba."
             : "Sua senha foi resetada por um administrador. Para continuar, escolha uma senha nova que só você saiba."}
         </div>
 
         <div style={{ marginBottom:14 }}>
           <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
-            Senha temporária recebida
+            {voluntaria ? "Senha atual" : "Senha temporária recebida"}
           </label>
           <CampoSenha
             nome="vk-senha-temporaria"
@@ -89379,7 +89383,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
             fontFamily:"inherit", width:"100%", marginBottom:10,
             opacity: loading ? 0.6 : 1,
           }}>
-          {loading ? "Salvando..." : "Trocar senha e continuar"}
+          {loading ? "Salvando..." : voluntaria ? "Trocar senha" : "Trocar senha e continuar"}
         </button>
 
         <button type="button" onClick={onLogout} disabled={loading}
@@ -89387,7 +89391,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
             background:"transparent", color:"#4b5563", border:"none",
             padding:"8px", fontSize:12, cursor:"pointer", fontFamily:"inherit", width:"100%",
           }}>
-          Sair sem trocar
+          {voluntaria ? "Cancelar" : "Sair sem trocar"}
         </button>
 
         <div style={{ fontSize:11, color:"#4b5563", marginTop:12, textAlign:"center" }}>
@@ -89637,6 +89641,7 @@ export default function ModuloClientesFornecedores() {
   const [loading, setLoading]         = useState(false);
   const [aba, setAba]                 = useState("home");
   const [showBackup, setShowBackup]   = useState(false);
+  const [trocandoSenha, setTrocandoSenha] = useState(false);   // menu "Trocar senha"
   const [backupJson, setBackupJson]   = useState("");
   const [clientesKey, setClientesKey]         = useState(0);
   const [fornecedoresKey, setFornecedoresKey] = useState(0);
@@ -90793,6 +90798,10 @@ export default function ModuloClientesFornecedores() {
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:12, fontWeight:600, color:"#111827", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{usuario?.nome || "—"}</div>
                   <div style={{ fontSize:11, color:"#4b5563" }}>{usuario?.perfil || ""}</div>
+                  <button type="button" data-vk-trocar-senha="1" onClick={() => setTrocandoSenha(true)}
+                    style={{ background:"none", border:"none", padding:0, marginTop:2, fontSize:11, color:"#0474f4", cursor:"pointer", fontFamily:"inherit" }}>
+                    Trocar senha
+                  </button>
                 </div>
               )}
               <button
@@ -91068,6 +91077,13 @@ export default function ModuloClientesFornecedores() {
     <VersionWatcher />
     <BotaoFeedbackFlutuante usuario={usuario} />
     {typeof AvisoTermos === "function" && <AvisoTermos usuario={usuario} />}
+    {trocandoSenha && (
+      <div style={{ position:"fixed", inset:0, zIndex:100045 }}>
+        <TelaTrocarSenhaObrigatoria usuario={usuario} voluntaria
+          onTrocada={() => { setTrocandoSenha(false); if (typeof toast !== "undefined" && toast.sucesso) toast.sucesso("Senha trocada"); }}
+          onLogout={() => setTrocandoSenha(false)} />
+      </div>
+    )}
     {conflitoModal}
     {/* Tutorial Beta — overlay guiado disparado pelo item "+ Novo (Beta) 🧪"
         no sidebar. Só aparece em empresas com dev_mode (Vicke Dev). */}
