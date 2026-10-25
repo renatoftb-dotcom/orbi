@@ -472,7 +472,6 @@ function HomeMenu({ data, setAba, tentarTrocar, isMaster }) {
   const VK = { fundo:"#fafafb", grafite:"#111827", cobre:AZUL_VK_APP, cobreClaro:"#eef5ff", inkSoft:"#4b5563" };
   return (
     <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"calc(100vh - 53px)", padding: isMobile ? "32px 16px" : "40px 32px", background:VK.fundo, fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');`}</style>
       <div style={{ textAlign:"center", marginBottom: isMobile ? 36 : 56 }}>
         <div style={{ fontFamily:"'Inter', system-ui, sans-serif", fontSize: isMobile ? 26 : 30, fontWeight:800, color:VK.grafite, letterSpacing:"-0.02em", transition:"opacity 0.4s ease, transform 0.4s ease", opacity, transform }}>
           {texto}

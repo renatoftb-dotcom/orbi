@@ -1324,7 +1324,6 @@ function PrestadoresServico({ data, save }) {
 // STYLES
 // ═══════════════════════════════════════════════════════════════
 var CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
   * { box-sizing: border-box; }
   html, body { margin:0; padding:0; background:#07101f; overflow-x:hidden; scroll-behavior:auto !important; }
   @keyframes spin { to { transform: rotate(360deg); } }

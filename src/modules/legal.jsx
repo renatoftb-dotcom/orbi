@@ -9,7 +9,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 const LEGAL_VERSAO = "1.0";
-const LEGAL_DATA = "24/10/2026";
+const LEGAL_DATA = "25/10/2026";
 
 const LEGAL_PRIVACIDADE = `## Política de Privacidade
 
@@ -158,13 +158,12 @@ Neste acordo, o Assinante é o **controlador** dos dados pessoais que coloca no 
 
 | Fornecedor | O que faz no VICKE | Dados que recebe | País |
 | --- | --- | --- | --- |
-| Railway | servidor e banco de dados | todos os dados do sistema | EUA |
+| Railway | servidor e banco de dados | todos os dados do sistema | EUA (região US East) |
 | Cloudinary | guarda comprovantes, notas, propostas, logos e imagens | arquivos enviados | EUA |
 | Cloudflare (R2) | cópia de segurança diária | banco e arquivos, criptografados com chave que só o VICKE tem | fora do Brasil (localização automática do Cloudflare) |
 | Vercel | entrega as telas do site | endereço IP e navegador de quem acessa | EUA (rede mundial) |
 | Resend | e-mails de sistema e caixa de entrada do VICKE | e-mail, nome, conteúdo das mensagens | EUA |
 | Anthropic | leitura de documentos por IA, só nos escritórios que ligam o recurso | o documento lido (orçamento, nota, comprovante) | EUA |
-| Google Fonts | fonte das letras do site | endereço IP de quem acessa | EUA |
 | ViaCEP | preenche endereço pelo CEP | só o CEP digitado | Brasil |
 
 Duração: enquanto durar o contrato com o Assinante, mais o prazo de apagamento das cópias de segurança (até 12 meses).`;

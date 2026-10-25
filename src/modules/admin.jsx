@@ -206,6 +206,8 @@ function Admin({ usuario, data, save, initialTab }) {
         </div>
       </div>
 
+      <PainelBackupExterno S={S} />
+
       {/* Modal de confirmação — substitui o confirm() nativo */}
       {confirmManut && (
         <div style={S.overlay}>
@@ -2398,6 +2400,93 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
           onSucesso={() => { setEditando(null); carregar(); }}
         />
       )}
+    </div>
+  );
+}
+
+// ── Backup externo (R2): situação e ensaio de restauração ───────
+// O ensaio restaura a cópia mais nova num espaço temporário do banco,
+// confere registro por registro e papel por papel, e desfaz tudo no fim.
+function PainelBackupExterno({ S }) {
+  const [st, setSt] = useState(null);
+  const [ens, setEns] = useState(null);
+  const [erro, setErro] = useState("");
+  const [pedindo, setPedindo] = useState(false);
+
+  async function carregar() {
+    try {
+      const [a, b] = await Promise.all([api.admin.backupExterno.status(), api.admin.backupExterno.ensaio()]);
+      setSt(a); setEns(b); setErro("");
+    } catch (e) { setErro(e.message || "Falha ao ler a situação do backup"); }
+  }
+  useEffect(() => { carregar(); }, []);
+  const rodando = !!(ens && (ens.rodando || (ens.ultimo && ens.ultimo.rodando)));
+  useEffect(() => {
+    if (!rodando) return;
+    const t = setInterval(carregar, 5000);
+    return () => clearInterval(t);
+  }, [rodando]);
+
+  async function ensaiar() {
+    setPedindo(true);
+    try { await api.admin.backupExterno.ensaiar(); await carregar(); }
+    catch (e) { dialogo.alertar({ titulo: "Não foi possível iniciar o ensaio", mensagem: e.message, tipo: "erro" }); }
+    finally { setPedindo(false); }
+  }
+
+  const dt = (d) => { try { return d ? new Date(d).toLocaleString("pt-BR") : "—"; } catch { return "—"; } };
+  const num = (n) => (Number(n) || 0).toLocaleString("pt-BR");
+  const NOMES = { ok: "Em dia", parcial: "Em dia, com papel pendente", rodando: "Rodando agora", atrasado: "Atrasado", falhou: "Falhou", desligado: "Desligado" };
+  const situ = st ? (st.situacao || "desligado") : "";
+  const bom = situ === "ok" || situ === "rodando";
+  const u = st && st.status && st.status.ultimo;
+  const e = ens && ens.ultimo;
+  const caixa = (okk) => ({ fontSize:12.5, lineHeight:1.6, borderRadius:12, padding:"10px 14px",
+    color: okk ? "#166534" : "#991b1b", background: okk ? "#f0fdf4" : "#fef2f2", border: "1px solid " + (okk ? "#bbf7d0" : "#fecaca") });
+  const linha = { fontSize:13, color:"#4b5563", lineHeight:1.7 };
+
+  return (
+    <div style={S.secao} data-vk-backup-externo>
+      <div style={S.secTit}>Backup externo</div>
+      {erro && <div style={caixa(false)}>⚠ {erro}</div>}
+      {!erro && !st && <div style={linha}>Carregando...</div>}
+      {st && (
+        <div style={{ ...linha, marginBottom:16 }}>
+          Situação: <b style={{ color: bom ? "#166534" : (situ === "parcial" ? "#92400e" : "#991b1b") }}>{NOMES[situ] || situ}</b>
+          {st.status && st.status.ultimoOk && <> · último backup bom em {dt(st.status.ultimoOk)}</>}
+          {u && u.ok && (
+            <div>{num(u.registros)} registros em {num(u.tabelas)} tabelas · papéis guardados: {num(u.arquivos && u.arquivos.guardados)} de {num(u.arquivos && u.arquivos.conhecidos)} · {num(u.copias)} {Number(u.copias) === 1 ? "cópia guardada" : "cópias guardadas"}</div>
+          )}
+          {u && !u.ok && u.erro && <div style={{ color:"#991b1b" }}>Último erro: {u.erro}</div>}
+          {!st.ligado && <div style={{ color:"#991b1b" }}>Faltam as variáveis: {(st.faltam || []).join(", ") || st.erroConfig}</div>}
+        </div>
+      )}
+
+      <div style={{ fontSize:13, fontWeight:600, color:"#111827", marginBottom:4 }}>Ensaio de restauração</div>
+      <div style={{ ...linha, marginBottom:12 }}>
+        Restaura a cópia mais nova num espaço temporário, confere cada registro e cada papel, e desfaz tudo no fim.
+        Nada no sistema muda. Roda sozinho todo dia 2 e avisa por e-mail se encontrar problema.
+      </div>
+      <div style={{ display:"flex", alignItems:"flex-start", gap:12, flexWrap:"wrap" }}>
+        <button
+          data-vk-ensaiar
+          onClick={ensaiar}
+          disabled={pedindo || rodando || !st || !st.ligado}
+          style={{ ...S.btn, opacity: (pedindo || rodando || !st || !st.ligado) ? 0.5 : 1, cursor: (pedindo || rodando || !st || !st.ligado) ? "not-allowed" : "pointer" }}>
+          {rodando ? "Ensaiando..." : "Ensaiar restauração agora"}
+        </button>
+        {e && !e.rodando && (
+          <div style={caixa(e.ok)} data-vk-ensaio-resultado>
+            {e.ok ? "✓ Restauração conferida" : "⚠ Ensaio encontrou problema"} em {dt(e.fim || e.inicio)}
+            {e.copia && <><br/><span style={{ color:"#111827" }}>
+              Cópia de {dt(e.criadaEm)} · {num(e.registros)} registros em {num(e.tabelas)} tabelas
+              {e.papeis && <> · papéis {num(e.papeis.ok)} de {num(e.papeis.total)}</>}
+            </span></>}
+            {!e.ok && e.erro && <><br/>{e.erro}</>}
+          </div>
+        )}
+        {rodando && <div style={linha}>Leva de um a alguns minutos.</div>}
+      </div>
     </div>
   );
 }

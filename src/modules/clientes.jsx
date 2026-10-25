@@ -1051,7 +1051,6 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   return (
     <div data-vk-ui="1" style={{ padding: isMobile ? "24px 16px 60px" : "40px 32px", background:VK.fundo, minHeight:"100%", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         .vk-fc-input:hover, .vk-fc-tipo:hover { border-color:#0474f4 !important; }
         .vk-fc-input:focus { border-color:#0474f4 !important; box-shadow:0 0 0 3px rgba(4,116,244,0.18); outline:none; }
         .vk-fc-tipo.ativo { border-color:#0474f4 !important; background:#fff !important; box-shadow:0 0 0 2px rgba(4,116,244,0.16); }

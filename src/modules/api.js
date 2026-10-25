@@ -340,6 +340,12 @@ const api = {
       responder:   (id, dados) => post(`/admin/mensagens/${id}/responder`, dados),
     },
     manutencao: ()         => post("/admin/manutencao"),
+    // Backup externo (R2): situação e ensaio de restauração
+    backupExterno: {
+      status:  () => get("/admin/backup-externo"),
+      ensaio:  () => get("/admin/backup-externo/ensaio"),
+      ensaiar: () => post("/admin/backup-externo/ensaio", {}),
+    },
     dashboard:  ()         => get("/admin/dashboard"),
 
     // Caixa de feedback in-app — listagem master com filtros, controle de status.
