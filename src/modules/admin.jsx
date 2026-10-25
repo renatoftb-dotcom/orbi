@@ -16,7 +16,8 @@ function Admin({ usuario, data, save, initialTab }) {
   // Se initialTab vier, abre direto na aba escolhida (usado pelo Master quando
   // clica em "Empresas", "Usuários Master" ou "Manutenção" no menu principal —
   // Sprint 3 Bloco E. Senão fica em manutencao por padrão.
-  const [aba, setAba] = useState(initialTab || "manutencao");
+  // o menu lateral abre "Usuários Master" como "usuarios-master"; a aba aqui chama "usuarios"
+  const [aba, setAba] = useState(initialTab === "usuarios-master" ? "usuarios" : (initialTab || "manutencao"));
   const [manutResult, setManutResult] = useState(null);
   const [manutLoading, setManutLoading] = useState(false);
   const [manutErro, setManutErro]       = useState(null);
@@ -2245,6 +2246,7 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
   const [loading, setLoading]   = useState(true);
   const [erro, setErro]         = useState(null);
   const [modalNovo, setModalNovo] = useState(false);
+  const [editando, setEditando]   = useState(null);
 
   async function carregar() {
     setLoading(true);
@@ -2354,7 +2356,14 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
                         {u.ativo ? "Ativo" : "Inativo"}
                       </span>
                     </td>
-                    <td style={{ ...S.td, textAlign:"right" }} data-label="">
+                    <td style={{ ...S.td, textAlign:"right", whiteSpace:"nowrap" }} data-label="">
+                      <button
+                        data-vk-editar-master={u.id}
+                        style={{ ...S.btnSec, color:"#4b5563", padding:"5px 12px", fontSize:12, marginRight: ehVoce ? 0 : 6 }}
+                        onClick={() => setEditando(u)}
+                      >
+                        Editar
+                      </button>
                       {!ehVoce && (
                         <button
                           style={{ ...S.btnSec, color:"#4b5563", padding:"5px 12px", fontSize:12 }}
@@ -2379,6 +2388,86 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
           onSucesso={() => { setModalNovo(false); carregar(); }}
         />
       )}
+
+      {editando && (
+        <ModalEditarMaster
+          S={S}
+          usuario={editando}
+          ehVoce={editando.id === usuarioLogado?.id}
+          onFechar={() => setEditando(null)}
+          onSucesso={() => { setEditando(null); carregar(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Modal: Editar usuário master (nome e e-mail de login) ───────
+// Perfil, nível e status seguem como estão (o backend exige os campos).
+// A senha não muda aqui: cada um troca a própria em "Trocar senha".
+function ModalEditarMaster({ S, usuario, ehVoce, onFechar, onSucesso }) {
+  const [form, setForm] = useState({ nome: usuario.nome || "", email: usuario.email || "" });
+  const [salvando, setSalvando] = useState(false);
+
+  function atualizar(campo, valor) { setForm(f => ({ ...f, [campo]: valor })); }
+
+  async function salvar() {
+    const nome = form.nome.trim();
+    const email = form.email.trim().toLowerCase();
+    if (!nome) { dialogo.alertar({ titulo: "Informe o nome", tipo: "aviso" }); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      dialogo.alertar({ titulo: "Email inválido", tipo: "aviso" }); return;
+    }
+    if (nome === (usuario.nome || "") && email === (usuario.email || "")) { onFechar(); return; }
+    setSalvando(true);
+    try {
+      await api.admin.usuarios.update(usuario.id, {
+        nome, email,
+        perfil: usuario.perfil,
+        nivel:  usuario.nivel,
+        ativo:  usuario.ativo !== false,
+      });
+      toast.sucesso(email !== usuario.email
+        ? (ehVoce ? "E-mail trocado. Da próxima vez, entre com " + email : "E-mail de login trocado")
+        : "Usuário atualizado");
+      onSucesso();
+    } catch (e) {
+      dialogo.alertar({ titulo: "Erro ao salvar", mensagem: e.message, tipo: "erro" });
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div style={S.overlay}>
+      <div style={S.modal} onClick={e => e.stopPropagation()} data-vk-modal-editar-master>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111827", marginBottom:4 }}>Editar usuário master</div>
+        <div style={{ fontSize:12, color:"#4b5563", marginBottom:20 }}>
+          {ehVoce ? "Este é o seu usuário. O novo e-mail passa a ser o seu login." : "O novo e-mail passa a ser o login desta pessoa."}
+        </div>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          <div>
+            <label style={S.label}>Nome completo</label>
+            <input style={S.input} value={form.nome} onChange={e => atualizar("nome", e.target.value)} />
+          </div>
+          <div>
+            <label style={S.label}>Email (login)</label>
+            <input style={S.input} type="email" value={form.email} onChange={e => atualizar("email", e.target.value)} autoFocus />
+          </div>
+        </div>
+
+        <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:24 }}>
+          <button onClick={onFechar} disabled={salvando} style={S.btnSec}>Cancelar</button>
+          <button
+            onClick={salvar}
+            disabled={salvando}
+            style={{ ...S.btn, opacity: salvando ? 0.6 : 1, cursor: salvando ? "not-allowed" : "pointer" }}
+          >
+            {salvando ? "Salvando..." : "Salvar"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
