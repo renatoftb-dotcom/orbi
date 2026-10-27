@@ -12052,6 +12052,11 @@ const GRUPOS_ESCRITORIO = [
   // de parceiro — e o dinheiro fica aqui até ser pago ao engenheiro, quando
   // sai como estorno da reserva (sem custo de novo).
   { id: "reservas", titulo: "RESERVAS A REPASSAR", sinal: +1, resultado: false, bloco: "reservas" },
+  // Dinheiro que só troca de bolso entre as contas bancárias do escritório
+  // (Sicoob → Cora). Cada transferência são duas linhas, uma em cada conta,
+  // que se anulam no saldo total — e nunca entram no resultado.
+  { id: "transf_entradas", titulo: "TRANSFERÊNCIAS RECEBIDAS (ENTRE CONTAS)", sinal: +1, resultado: false, bloco: "transferencias" },
+  { id: "transf_saidas",   titulo: "TRANSFERÊNCIAS ENVIADAS (ENTRE CONTAS)",  sinal: -1, resultado: false, bloco: "transferencias" },
 ];
 
 // ── Plano de contas ─────────────────────────────────────────────
@@ -12115,6 +12120,11 @@ const PLANO_CONTAS_ESCRITORIO = [
   { id: "reemb_socio",       nome: "Reembolso de sócio",     grupo: "socios_entradas", unidades: ["escritorio"], apelidos: [] },
 
   // ── estornos do banco (não é resultado; débito e crédito se anulam) ──
+  // ── transferência entre contas do escritório (só pelo Fechamento) ──
+  // `interna`: não aparece para escolher no formulário; nasce do botão
+  // "Transferência entre contas" da fila do extrato, já com as duas pontas.
+  { id: "transf_saida",   nome: "Transferência para outra conta", grupo: "transf_saidas",   unidades: ["escritorio"], apelidos: [], interna: true },
+  { id: "transf_entrada", nome: "Transferência de outra conta",   grupo: "transf_entradas", unidades: ["escritorio"], apelidos: [], interna: true },
   { id: "res_engenharia", nome: "Reserva engenharia (a repassar)", grupo: "reservas", unidades: ["projetos", "escritorio"],
     apelidos: ["Reserva engenharia"] },
   { id: "estornos_bancarios", nome: "Estornos bancários",    grupo: "ajustes_bancarios", unidades: ["escritorio"],
@@ -12247,7 +12257,10 @@ function extratoEscritorio(lancamentos, opcoes) {
     // que só volta no mês seguinte) mexe no saldo enquanto não volta
     const ajustes = g("ajustes_bancarios");
     const saldoReservas = g("reservas");
-    saldo = saldo + saldoGestao + paraInvestimento + saldoEmpreendimento - ajustes + saldoReservas;
+    // transferência entre contas: no total as duas pontas se anulam; numa
+    // conta só (o saldo dela no Fechamento), é o dinheiro que entrou ou saiu
+    const transferencias = g("transf_entradas") - g("transf_saidas");
+    saldo = saldo + saldoGestao + paraInvestimento + saldoEmpreendimento - ajustes + saldoReservas + transferencias;
     const contas = {}; for (const k in linha.contas) contas[k] = efCentavos(linha.contas[k]);
     const grupos = {}; for (const k in linha.grupos) grupos[k] = efCentavos(linha.grupos[k]);
     return {
@@ -12651,21 +12664,20 @@ function somarCompetencia(comp, n) {
 }
 
 // O plano de parcelas de uma compra: a primeira na fatura em que ela caiu,
-// as seguintes mês a mês. O resíduo do arredondamento vai na última, como
-// nas parcelas de contrato — senão a soma das parcelas não fecha no valor
-// da compra, e a diferença some sem dono.
+// as seguintes mês a mês. Como o cartão faz: a parcela é o valor dividido
+// cortado no centavo, e o que sobra vai na PRIMEIRA (5.326,88 em 6x =
+// 887,83 + 5 × 887,81, igual à fatura da Cora). Assim a fatura do VICKE
+// bate no centavo com a do banco, e a soma fecha no valor da compra.
 function parcelasDoCartao(cartao, dataCompra, valor, quantas) {
-  const total = Math.round((Number(valor) || 0) * 100) / 100;
+  const centavos = Math.round((Number(valor) || 0) * 100);
   const n = Math.max(1, Math.floor(Number(quantas) || 1));
   const primeira = faturaDaCompra(cartao, dataCompra);
-  if (!(total > 0) || !primeira) return [];
-  const base = Math.round((total / n) * 100) / 100;
+  if (!(centavos > 0) || !primeira) return [];
+  const base = Math.floor(centavos / n);
   const parcelas = [];
-  let soma = 0;
   for (let i = 0; i < n; i++) {
-    const v = i === n - 1 ? Math.round((total - soma) * 100) / 100 : base;
-    soma = Math.round((soma + v) * 100) / 100;
-    parcelas.push({ parcela: i + 1, de: n, competencia: somarCompetencia(primeira, i), valor: v });
+    const v = i === 0 ? centavos - base * (n - 1) : base;
+    parcelas.push({ parcela: i + 1, de: n, competencia: somarCompetencia(primeira, i), valor: v / 100 });
   }
   return parcelas;
 }
@@ -12859,6 +12871,10 @@ function lancamentoDaFatura(cartao, competencia, linhas, opcoes) {
     documento: "",
     numeroDoc: o.numeroDoc || "",
     contaBanco: "sim",
+    // a conta bancária que paga a fatura (a Cora paga a do cartão Cora): é
+    // no extrato dela que a fatura casa com o débito
+    ...((cartao || {}).contaBancariaId && cartao.contaBancariaId !== CONTA_BANCARIA_PRINCIPAL
+      ? { contaBancariaId: cartao.contaBancariaId } : {}),
     // a composição, para a fatura poder ser aberta e conferida
     linhas: linhas.map((l) => ({ obra: l.obra, descricao: l.descricao, fornecedor: l.fornecedor,
       contaId: l.contaId, parcela: l.parcela, de: l.de, valor: l.valor, numeroDoc: l.numeroDoc,
@@ -13884,6 +13900,114 @@ function diferencaDeFechamento(saldoCalculado, saldoBanco) {
   return efCentavos((Number(saldoBanco) || 0) - (Number(saldoCalculado) || 0));
 }
 
+// ── Contas bancárias do escritório ──────────────────────────────
+// A conta de sempre (a "principal", hoje o Sicoob) não precisa de cadastro:
+// o histórico inteiro é dela e os lançamentos dela não levam marca. As
+// outras (a Cora) moram em financeiro.contasBancarias; o lançamento que
+// passa por uma delas leva `contaBancariaId`, e o extrato dela fica em
+// financeiro.extratosContas[id], no mesmo formato do principal.
+const CONTA_BANCARIA_PRINCIPAL = "principal";
+function contasBancariasDoEscritorio(data) {
+  const esc = (data || {}).escritorio || {};
+  const fin = esc.financeiro || {};
+  const extras = (Array.isArray(fin.contasBancarias) ? fin.contasBancarias : [])
+    .filter((c) => c && c.id && c.id !== CONTA_BANCARIA_PRINCIPAL && c.ativa !== false);
+  const nome = String(fin.nomeContaPrincipal || esc.banco || "").trim() || "Conta principal";
+  return [{ id: CONTA_BANCARIA_PRINCIPAL, nome, principal: true }].concat(extras);
+}
+function contaBancariaDoLancamento(l) {
+  return (l && l.contaBancariaId) || CONTA_BANCARIA_PRINCIPAL;
+}
+function lancamentosDaContaBancaria(lancamentos, contaId) {
+  const alvo = contaId || CONTA_BANCARIA_PRINCIPAL;
+  return (lancamentos || []).filter((l) => l && contaBancariaDoLancamento(l) === alvo);
+}
+function extratosDaContaBancaria(fin, contaId) {
+  const f = fin || {};
+  if (!contaId || contaId === CONTA_BANCARIA_PRINCIPAL) return (f.extratos && typeof f.extratos === "object") ? f.extratos : {};
+  const t = (f.extratosContas || {})[contaId];
+  return (t && typeof t === "object") ? t : {};
+}
+function financeiroComExtratos(fin, contaId, novos) {
+  const f = fin || {};
+  if (!contaId || contaId === CONTA_BANCARIA_PRINCIPAL) return { ...f, extratos: novos };
+  return { ...f, extratosContas: { ...(f.extratosContas || {}), [contaId]: novos } };
+}
+// A linha de outra conta leva o id da conta na frente: duas contas podem ter
+// uma linha igual no mesmo dia (o mesmo Pix, saindo de uma e entrando na
+// outra) e a ligação do lançamento não pode confundir as duas.
+function comIdsDaContaBancaria(movimentos, contaId) {
+  if (!contaId || contaId === CONTA_BANCARIA_PRINCIPAL) return movimentos || [];
+  const pre = contaId + ":";
+  return (movimentos || []).map((m) => (m && m.id && String(m.id).indexOf(pre) !== 0 ? { ...m, id: pre + m.id } : m));
+}
+// O saldo do banco da conta no fim do mês. A principal guarda no próprio
+// registro do mês; as outras, em fechamentos[mes].contas[id].
+function saldoBancoDaContaNoMes(fechamentos, mes, contaId) {
+  if (!contaId || contaId === CONTA_BANCARIA_PRINCIPAL) return saldoBancoDoMes(fechamentos, mes);
+  const r = (((fechamentos || {})[String(mes)] || {}).contas || {})[contaId];
+  const v = r && r.saldoBanco;
+  return v == null || v === "" || !Number.isFinite(Number(v)) ? null : efCentavos(Number(v));
+}
+function comSaldoBancoDaConta(fechamentos, mes, contaId, valor) {
+  if (!contaId || contaId === CONTA_BANCARIA_PRINCIPAL) return comSaldoBanco(fechamentos, mes, valor);
+  const f = { ...(fechamentos || {}) };
+  const reg = { ...(f[String(mes)] || {}) };
+  const contas = { ...(reg.contas || {}) };
+  const n = valor == null || valor === "" ? null : Number(valor);
+  if (n == null || !Number.isFinite(n)) delete contas[contaId];
+  else contas[contaId] = { ...(contas[contaId] || {}), saldoBanco: efCentavos(n) };
+  if (Object.keys(contas).length) reg.contas = contas; else delete reg.contas;
+  if (Object.keys(reg).length) f[String(mes)] = reg; else delete f[String(mes)];
+  return f;
+}
+// Banco que não manda linha de saldo (a Cora): o saldo sai do saldo inicial
+// da conta mais todos os movimentos guardados até o fim do mês.
+function saldoPeloExtratoDaConta(extratos, mes, saldoInicial) {
+  const vistos = new Set();
+  let soma = Number(saldoInicial) || 0, achou = false;
+  for (const v of Object.values(extratos || {})) {
+    for (const m of ((v && v.movimentos) || [])) {
+      if (!m || vistos.has(m.id) || !efEhMovimento(m.historico)) continue;
+      vistos.add(m.id);
+      if (mesDoMovimento(m) > String(mes)) continue;
+      soma += Number(m.valor) || 0; achou = true;
+    }
+  }
+  return achou ? efCentavos(soma) : null;
+}
+
+// ── Transferência entre as contas do escritório ─────────────────
+// A linha do banco que é dinheiro indo de uma conta sua para outra vira DUAS
+// linhas ligadas (transferenciaId): a saída na conta de onde saiu e a
+// entrada na outra. A ponta da linha que está na tela já nasce ligada a ela
+// e conferida; a outra espera o extrato da outra conta, onde casa pelo valor.
+// Nenhuma das duas entra no resultado, e no saldo total as duas se anulam.
+function lancamentosDaTransferencia(movimento, mes, contaDaLinha, contaOutra, opcoes) {
+  const o = opcoes || {};
+  const m = movimento || {};
+  const valor = Math.round(Math.abs(Number(m.valor) || 0) * 100) / 100;
+  if (!(valor > 0)) return { erro: "A linha não tem valor." };
+  if (!contaOutra || contaOutra === contaDaLinha) return { erro: "Escolha a outra conta." };
+  const bloq = bloqueioPorMesFechado(mes, o.fechamentos);
+  if (bloq) return { erro: bloq };
+  const sai = Number(m.valor) < 0;
+  const de = sai ? contaDaLinha : contaOutra;
+  const para = sai ? contaOutra : contaDaLinha;
+  const nome = (id) => ((o.contas || []).find((c) => c && c.id === id) || {}).nome || id;
+  const base = typeof o.novoId === "function" ? o.novoId() : String(Date.now());
+  const marcaDaConta = (id) => (id && id !== CONTA_BANCARIA_PRINCIPAL ? { contaBancariaId: id } : {});
+  const agora = o.agora || new Date().toISOString();
+  const comum = { tipo: "escritorio", unidadeId: "escritorio", competencia: String(mes), lancadoEm: String(m.data || "").slice(0, 10),
+    valor, transferenciaId: "transf:" + base, fornecedor: "", contaBanco: "sim", criadoEm: agora };
+  const ligada = { extratoId: m.id || "", historicoBanco: m.historico || "", conferido: true, conferidoEm: agora, conferidoPor: "extrato" };
+  const saida = { ...comum, id: base + "_s", contaId: "transf_saida", ...marcaDaConta(de),
+    descricao: `Transferência para ${nome(para)}`, ...(de === contaDaLinha ? ligada : {}) };
+  const entrada = { ...comum, id: base + "_e", contaId: "transf_entrada", ...marcaDaConta(para),
+    descricao: `Transferência de ${nome(de)}`, ...(para === contaDaLinha ? ligada : {}) };
+  return { lancamentos: [saida, entrada] };
+}
+
 // Um lançamento só entra em mês aberto. A regra vale para o formulário e
 // para a importação — mês fechado é passado conferido, não se mexe.
 function bloqueioPorMesFechado(competencia, fechamentos) {
@@ -14102,8 +14226,8 @@ const EF_NOMES = {
   debito:    ["debito", "saida", "pagamento", "debitos"],
   credito:   ["credito", "entrada", "recebimento", "creditos"],
   documento: ["documento", "doc", "nota", "nota / comprovante", "numero do documento", "num doc"],
-  historico: ["historico", "descricao", "descricao lancamento", "lancamento", "memo", "detalhe", "fornecedor"],
-  complemento: ["informacoes complementares", "informacoes", "complemento", "observacao", "detalhamento"],
+  historico: ["historico", "descricao", "descricao lancamento", "lancamento", "memo", "detalhe", "fornecedor", "identificacao"],
+  complemento: ["informacoes complementares", "informacoes", "complemento", "observacao", "detalhamento", "transacao"],
   saldo:     ["saldo", "saldo do dia", "saldo apos"],
 };
 
@@ -14242,11 +14366,21 @@ const EF_NAO_E_MOVIMENTO = [
 // Dinheiro que só troca de bolso: transferência entre contas do próprio
 // escritório. Não é receita nem despesa — a fila sugere "não é lançamento"
 // (sugere: quem decide é quem fecha).
-const EF_ENTRE_CONTAS = ["mesma titularidade", "mesma titular", "entre contas", "transf propria", "transferencia propria",
+const EF_ENTRE_CONTAS = ["mesma titularidade", "mesma titular", "mesma tit", "entre contas", "transf propria", "transferencia propria",
   "conta propria", "mesmo titular", "ted mesma", "pix mesma"];
-function pareceEntreContas(historico) {
+function pareceEntreContas(historico, titular) {
   const h = efSemAcento(historico || "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ");
-  return EF_ENTRE_CONTAS.some((x) => h.indexOf(x) >= 0);
+  if (EF_ENTRE_CONTAS.some((x) => h.indexOf(x) >= 0)) return true;
+  // o banco que não escreve "mesma titularidade" (a Cora) traz o nome ou o
+  // CNPJ do próprio escritório na linha: dinheiro dele mesmo
+  const so = h.replace(/\s/g, "");
+  return (titular || []).some((t) => {
+    const x = efSemAcento(t || "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+    if (!x) return false;
+    const digitos = x.replace(/\D/g, "");
+    if (digitos.length >= 8 && digitos.length === x.replace(/\s/g, "").length) return so.indexOf(digitos.slice(0, 8)) >= 0;
+    return x.length >= 8 && h.indexOf(x) >= 0;
+  });
 }
 
 function efEhMovimento(historico) {
@@ -14657,7 +14791,8 @@ function rendimentoPelaAplicacao(saldoAnterior, aplicacoes, resgates, saldoAtual
 }
 function extratosComArquivo(extratos, movimentos, origem, agora, opcoes) {
   const atuais = (extratos && typeof extratos === "object") ? extratos : {};
-  const doArquivo = extratoParaGuardar(movimentos || []);
+  // a linha de outra conta guarda o id com a conta na frente (ver comIdsDaContaBancaria)
+  const doArquivo = comIdsDaContaBancaria(extratoParaGuardar(movimentos || []), (opcoes || {}).contaId);
   const fechamentos = (opcoes || {}).fechamentos;
   // Só substitui o mês que o arquivo traz de verdade (com movimento). O
   // extrato de outubro começa com o "SALDO ANTERIOR" de 30/09: essa linha
@@ -15449,7 +15584,7 @@ function contaEscolhida(valor) {
 
 function contasDoLancamento(unidadeId, opcoes) {
   const escritorio = PLANO_CONTAS_ESCRITORIO
-    .filter((c) => c && (!(c.unidades || []).length || c.unidades.indexOf(unidadeId) >= 0))
+    .filter((c) => c && !c.interna && (!(c.unidades || []).length || c.unidades.indexOf(unidadeId) >= 0))
     .map((c) => ({ valor: valorDaConta(c.id, "escritorio"), id: c.id, nome: c.nome, grupo: c.grupo, fonte: "escritorio" }));
   if (!unidadePedeObra(unidadeId)) return { obra: [], escritorio: escritorio };
   const obra = pontePlanoDaObra(opcoes)
@@ -18472,6 +18607,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
   const [contaLote, setContaLote] = useState("");
   const [erroLote, setErroLote] = useState("");
   const [verIgnorados, setVerIgnorados] = useState(false);
+  const [transferindo, setTransferindo] = useState("");   // linha escolhendo a outra conta
   const lista = (linhas || []).filter((m) => m && m.id);
   const ids = lista.map((m) => m.id);
   const proximaDe = (id) => { const k = ids.indexOf(id); return ids[k + 1] || ids[k - 1] || ""; };
@@ -18486,6 +18622,10 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
     return lados.size !== 1 || !g || g.sinal === [...lados][0];
   });
 
+  function transferir(m, outra) {
+    if (aberto === m.id) setAberto(proximaDe(m.id));
+    Promise.resolve(fila.transferir(m, outra)).catch(console.error);
+  }
   // Do formulário, segue para a próxima linha; do "Lançar assim", não abre nada.
   function lancar(m, l, seguir) {
     const prox = proximaDe(m.id);
@@ -18587,7 +18727,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
             const sug = fila.sugestao(m);
             const contaSug = sug && sug.campos && sug.campos.contaId ? contaEscritorio(sug.campos.contaId) : null;
             const aberta = aberto === m.id;
-            const entreContas = pareceEntreContas(m.historico);
+            const entreContas = pareceEntreContas(m.historico, fila.titular);
             return (
               <div key={m.id} style={{ borderTop: k ? "1px solid rgba(38,36,33,0.08)" : "none",
                 background: aberta ? "#f7fbff" : "transparent" }}>
@@ -18660,7 +18800,25 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                     )}
                     <button style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12 }}
                       onClick={(e) => { e.stopPropagation(); setAberto(aberta ? "" : m.id); }}>{aberta ? "Fechar" : "Lançar"}</button>
-                    {entreContas && !contaSug ? (
+                    {fila.transferir && (entreContas || transferindo === m.id) ? (
+                      fila.outrasContas.length > 1 && transferindo === m.id ? (
+                        <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap", alignItems: "center", fontSize: 11.5, color: "#4b5563" }}>
+                          {Number(m.valor) < 0 ? "para" : "de"}
+                          {fila.outrasContas.map((c) => (
+                            <button key={c.id} style={{ ...S.btnSec, padding: "4px 9px", fontSize: 11.5 }} disabled={!!ocupado}
+                              onClick={(e) => { e.stopPropagation(); setTransferindo(""); transferir(m, c.id); }}>{c.nome}</button>
+                          ))}
+                          <button style={{ ...S.btnSec, padding: "4px 9px", fontSize: 11.5 }} onClick={(e) => { e.stopPropagation(); setTransferindo(""); }}>Cancelar</button>
+                        </span>
+                      ) : (
+                        <button data-vk-transferencia="1" style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#0474f4", borderColor: "rgba(4,116,244,0.4)" }}
+                          disabled={!!ocupado}
+                          title={Number(m.valor) < 0 ? `Saiu desta conta para ${fila.outrasContas.map((c) => c.nome).join(" ou ")}` : `Veio de ${fila.outrasContas.map((c) => c.nome).join(" ou ")}`}
+                          onClick={(e) => { e.stopPropagation(); if (fila.outrasContas.length > 1) setTransferindo(m.id); else transferir(m, fila.outrasContas[0].id); }}>
+                          ⇄ Transferência entre contas
+                        </button>
+                      )
+                    ) : entreContas && !contaSug ? (
                       <button style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#0474f4", borderColor: "rgba(4,116,244,0.4)" }}
                         onClick={(e) => { e.stopPropagation(); if (aberta) setAberto(proximaDe(m.id)); fila.naoE(m, "transferência entre contas"); }}>
                         ✓ Não é lançamento
@@ -18670,6 +18828,14 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                         cursor: "pointer", textDecoration: "underline", fontFamily: "inherit" }}
                         onClick={(e) => { e.stopPropagation(); if (aberta) setAberto(proximaDe(m.id)); fila.naoE(m); }}>
                         Não é lançamento
+                      </button>
+                    )}
+                    {/* a linha sem cara de transferência também pode ser uma */}
+                    {fila.transferir && !entreContas && transferindo !== m.id && (
+                      <button style={{ background: "none", border: "none", padding: "5px 2px", fontSize: 11.5, color: "#6b7280",
+                        cursor: "pointer", textDecoration: "underline", fontFamily: "inherit" }} disabled={!!ocupado}
+                        onClick={(e) => { e.stopPropagation(); if (fila.outrasContas.length > 1) setTransferindo(m.id); else transferir(m, fila.outrasContas[0].id); }}>
+                        Transferência entre contas
                       </button>
                     )}
                   </div>
@@ -18944,8 +19110,13 @@ function CampoValorBR({ valor, aoMudar, negativo, style, onBlur, ...resto }) {
   );
 }
 
-function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes, aoMarcar, aoMarcarTodos, aoFechar, aoReabrir, ocupado, extrato, aoGuardarAplicacao, aoGuardarBanco, aoLancarRendimento }) {
+function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes, aoMarcar, aoMarcarTodos, aoFechar, aoReabrir, ocupado, extrato, aoGuardarAplicacao, aoGuardarBanco, aoLancarRendimento, contas }) {
   const S = EF_ESTILO;
+  const contaId = (contas && contas.atual && contas.atual.id) || CONTA_BANCARIA_PRINCIPAL;
+  const naPrincipal = contaId === CONTA_BANCARIA_PRINCIPAL;
+  const variasContas = !!(contas && contas.lista && contas.lista.length > 1);
+  const nomePrincipal = ((contas && contas.lista) || []).find((c) => c.principal)?.nome || "conta principal";
+  const [formConta, setFormConta] = useState(null);   // { id?, nome, saldoInicial, desde }
   // A conferência é feita ao longo do mês, com o extrato parcial: por isso
   // a tela abre mostrando só o que ainda falta bater.
   const [soPendentes, setSoPendentes] = useState(true);
@@ -18968,17 +19139,19 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
   // O saldo do banco: o que foi informado ao fechar; sem ele, o da última
   // linha SALDO do extrato do mês — o arquivo já traz o número.
   const saldoLido = extrato && extrato.saldoLido != null ? extrato.saldoLido : null;
-  const bancoInicial = (reg) => (reg.saldoBanco != null && reg.saldoBanco !== "" ? Number(reg.saldoBanco).toFixed(2).replace(".", ",")
+  // o saldo gravado é o DESTA conta (a principal no registro do mês, as
+  // outras em registro.contas)
+  const saldoBancoGravado = saldoBancoDaContaNoMes(fechamentos, mes, contaId);
+  const bancoInicial = () => (saldoBancoGravado != null ? Number(saldoBancoGravado).toFixed(2).replace(".", ",")
     : saldoLido != null ? saldoLido.toFixed(2).replace(".", ",") : "");
-  const [banco, setBanco] = useState(() => bancoInicial(registro));
+  const [banco, setBanco] = useState(() => bancoInicial());
   // Volta ao gravado só quando muda o mês ou o saldo gravado/lido — não a
   // cada gravação do registro (a aplicação grava nele e apagava o saldo do
   // banco que estava sendo digitado).
-  const saldoBancoGravado = ((fechamentos || {})[mes] || {}).saldoBanco;
   useEffect(() => {
-    setBanco(bancoInicial((fechamentos || {})[mes] || {}));
-  }, [mes, saldoBancoGravado, saldoLido]);
-  const bancoDoExtrato = registro.saldoBanco == null && saldoLido != null && efNumero(banco) === saldoLido;
+    setBanco(bancoInicial());
+  }, [mes, saldoBancoGravado, saldoLido, contaId]);
+  const bancoDoExtrato = saldoBancoGravado == null && saldoLido != null && efNumero(banco) === saldoLido;
   const saldoBanco = efNumero(banco);
   const calculado = linha ? linha.saldoExtrato : 0;
   const aplicacaoGravada = saldoAplicacaoDoMes(fechamentos, mes);
@@ -18991,7 +19164,8 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
   const diferenca = comAplicacao
     ? receitaFinanceiraDoMes(calculado, saldoBanco, aplicacaoAtual)
     : diferencaDeFechamento(calculado, saldoBanco == null ? "" : saldoBanco);
-  const podeFechar = !fechado && diferenca === 0 && !ocupado;
+  // o mês fecha pela conta principal (que confere as outras junto)
+  const podeFechar = !fechado && diferenca === 0 && !ocupado && naPrincipal;
   useEffect(() => {
     setAplicacao(aplicacaoGravada == null ? "" : aplicacaoGravada.toFixed(2).replace(".", ","));
   }, [mes, aplicacaoGravada]);
@@ -19012,8 +19186,74 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
     return () => window.removeEventListener("paste", aoColar);
   }, [temExtrato]);
 
+  const salvarFormConta = async () => {
+    const f = formConta || {};
+    if (!String(f.nome || "").trim()) return;
+    await contas.aoSalvar({ ...f, saldoInicial: efNumero(f.saldoInicial) || 0 });
+    setFormConta(null);
+  };
+  const outraSit = (id) => ((contas && contas.outras) || []).find((x) => x.conta.id === id) || null;
+
   return (
     <div style={{ display: "grid", gap: 14 }}>
+      {/* As contas bancárias do escritório: cada uma confere com o extrato
+          dela; o mês fecha na principal, com as outras batendo. */}
+      {contas && (
+        <div data-vk-contas-banco="1" style={{ ...S.card, display: "grid", gap: 10, padding: "12px 16px" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280", marginRight: 4 }}>Conta</span>
+            {contas.lista.map((c) => {
+              const sit = c.principal ? null : outraSit(c.id);
+              const marca = !sit || !sit.temMovimento ? "" : sit.diferenca === 0 ? " ✓" : " •";
+              return (
+                <button key={c.id} data-vk-conta-banco={c.id} style={S.aba(c.id === contaId)} onClick={() => contas.aoTrocar(c.id)}
+                  title={sit && sit.temMovimento ? (sit.diferenca === 0 ? "bate com o banco" : sit.diferenca == null ? "falta o extrato" : `diferença ${efDinheiro(sit.diferenca)}`) : ""}>
+                  {c.nome}{marca}
+                </button>
+              );
+            })}
+            {!formConta && (
+              <button style={{ ...S.btnSec, padding: "6px 12px" }} data-vk-nova-conta-banco="1"
+                onClick={() => setFormConta({ nome: "", saldoInicial: "", desde: mes })}>＋ Conta bancária</button>
+            )}
+            {!formConta && (
+              <button style={{ background: "none", border: "none", padding: "6px 2px", fontSize: 12, color: "#6b7280", cursor: "pointer", textDecoration: "underline", fontFamily: "inherit" }}
+                onClick={() => setFormConta({ ...contas.atual, saldoInicial: contas.atual.saldoInicial == null ? "" : String(contas.atual.saldoInicial).replace(".", ",") })}>
+                editar {contas.atual.nome}
+              </button>
+            )}
+          </div>
+          {formConta && (
+            <div data-vk-form-conta-banco="1" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end",
+              padding: 12, border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12 }}>
+              <div style={{ flex: "2 1 200px", minWidth: 0 }}><div style={S.rot}>Nome da conta</div>
+                <input style={S.input} autoFocus value={formConta.nome} placeholder="Cora"
+                  onChange={(e) => setFormConta({ ...formConta, nome: e.target.value })} /></div>
+              {formConta.id !== CONTA_BANCARIA_PRINCIPAL && (
+                <>
+                  <div style={{ flex: "1 1 140px", minWidth: 0 }}><div style={S.rot}>Saldo no início</div>
+                    <CampoValorBR style={S.input} valor={formConta.saldoInicial} placeholder="0,00" negativo
+                      aoMudar={(v) => setFormConta({ ...formConta, saldoInicial: v })} /></div>
+                  <div style={{ flex: "1 1 150px", minWidth: 0 }}><div style={S.rot}>Desde (mês)</div>
+                    <input style={S.input} type="month" value={formConta.desde || ""}
+                      onChange={(e) => setFormConta({ ...formConta, desde: e.target.value })} /></div>
+                </>
+              )}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button style={S.btnSec} onClick={() => setFormConta(null)}>Cancelar</button>
+                <button style={{ ...S.btn, opacity: String(formConta.nome || "").trim() ? 1 : .45 }} disabled={!String(formConta.nome || "").trim()}
+                  onClick={salvarFormConta}>Salvar</button>
+              </div>
+            </div>
+          )}
+          {variasContas && (
+            <div style={{ fontSize: 11.5, color: "#6b7280", lineHeight: 1.45 }}>
+              Cada conta confere com o extrato dela. Dinheiro que vai de uma conta sua para a outra é <b>transferência entre contas</b>:
+              não entra no resultado e, no saldo total, as duas pontas se anulam.
+            </div>
+          )}
+        </div>
+      )}
       {/* Todos os blocos com a mesma régua: rótulo, campo (38px) e uma linha
           de apoio embaixo. Assim os campos e os números ficam sempre na mesma
           altura, tenham ou não a linha de apoio. */}
@@ -19086,6 +19326,10 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
                 )}
                 {fechado ? (
                   <button style={{ ...S.btnSec, ...caixa }} onClick={() => aoReabrir(mes)}>Reabrir mês</button>
+                ) : !naPrincipal ? (
+                  <span data-vk-fecha-na-principal="1" style={{ fontSize: 12, color: diferenca === 0 ? "#0474f4" : "#6b7280", maxWidth: 220, lineHeight: 1.35 }}>
+                    {diferenca === 0 ? "✓ esta conta bate. " : ""}O mês fecha na {nomePrincipal}, conferindo esta junto.
+                  </span>
                 ) : (
                   <button style={{ ...S.btn, ...caixa, opacity: podeFechar ? 1 : .45 }} disabled={!podeFechar}
                     onClick={() => aoFechar(mes, saldoBanco)}>Fechar {efMesPorExtenso(mes, true)}</button>
@@ -19201,7 +19445,7 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
       {/* Fila vazia e diferença zero: não sobra nada para fazer além de
           fechar — a tela oferece isso no alto, em vez de esperar que se
           procure o botão. */}
-      {extrato && extrato.resultado && !fechado && diferenca === 0
+      {extrato && extrato.resultado && !fechado && diferenca === 0 && naPrincipal
         && !(extrato.resultado.noBancoSemPar || []).length && (
         <div style={{ ...S.card, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap",
           borderColor: "rgba(4,116,244,0.45)", background: "#eef5ff" }}>
@@ -19426,6 +19670,7 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo, quem }) 
   const [editando, setEditando] = useState(null);       // { linha, descricao, data, valor, parcelas, cartaoId }
   const [editFatura, setEditFatura] = useState(null);   // { valor, data }
   const fechamentos = fechamentosDoEscritorio(data);
+  const contasBanco = contasBancariasDoEscritorio(data);
 
   const cartao = cartaoPorId(cartoes, escolhido) || cartoes[0] || null;
   const comps = cartao ? competenciasDoCartao(obras, lancs, cartao.id) : [];
@@ -19598,6 +19843,14 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo, quem }) 
         {form && (
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr auto",
             alignItems: "end", padding: 12, border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, marginBottom: 12 }}>
+            {contasBanco.length > 1 && (
+              <div style={{ gridColumn: "1 / -1" }}><div style={S.rot}>Conta que paga a fatura</div>
+                <select style={{ ...S.input, cursor: "pointer", maxWidth: 320 }} data-vk-cartao-conta-banco="1"
+                  value={form.contaBancariaId || CONTA_BANCARIA_PRINCIPAL}
+                  onChange={(e) => setForm({ ...form, contaBancariaId: e.target.value === CONTA_BANCARIA_PRINCIPAL ? "" : e.target.value })}>
+                  {contasBanco.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select></div>
+            )}
             <div><div style={S.rot}>Nome do cartão</div>
               <input style={S.input} value={form.nome} placeholder="Sicoob Empresarial"
                 onChange={(e) => setForm({ ...form, nome: e.target.value })} /></div>
@@ -19865,6 +20118,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     return { ano: String(hoje.getFullYear()), mes: String(hoje.getMonth() + 1).padStart(2, "0"), unidadeId: "" };
   });
   const [mesFecho, setMesFecho] = useState("");
+  // A conta bancária em conferência no Fechamento (Sicoob, Cora…).
+  const [contaFecho, setContaFecho] = useState(CONTA_BANCARIA_PRINCIPAL);
 
   const lancs = lancamentosDoEscritorio(data);
   // o que o palpite da fila do extrato lê: obras (com as contas), clientes
@@ -19875,6 +20130,16 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   const cfgFin = ((data || {}).escritorio || {}).financeiro || {};
   const saldoAbertura = Number(cfgFin.saldoAbertura) || 0;
   const linhas = extratoEscritorio(lancs, { saldoAbertura });
+  const contasBanco = contasBancariasDoEscritorio(data);
+  const variasContas = contasBanco.length > 1;
+  const contaAtual = contasBanco.find((c) => c.id === contaFecho) || contasBanco[0];
+  const ehPrincipal = contaAtual.id === CONTA_BANCARIA_PRINCIPAL;
+  // na conferência, só os lançamentos que passam por esta conta
+  const lancsDaConta = variasContas ? lancamentosDaContaBancaria(lancs, contaAtual.id) : lancs;
+  // a régua do título do escritório e os nomes que identificam dinheiro dele
+  // mesmo (transferência entre as contas)
+  const titular = [((data || {}).escritorio || {}).cnpj, ((data || {}).escritorio || {}).razaoSocial,
+    ...((Array.isArray(cfgFin.nomesTitular) ? cfgFin.nomesTitular : []))].filter(Boolean);
   const fechamentos = fechamentosDoEscritorio(data);
   // O mês da conferência é o de hoje — é nele que o extrato parcial chega.
   // Se ele já estiver fechado, vai para o primeiro aberto depois dele; e se
@@ -19897,6 +20162,15 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       || mesesDoExtrato.find((m) => !mesEstaFechado(m, fechamentos))
       || mesesDoExtrato[mesesDoExtrato.length - 1] || "");
   const mesEmConferencia = mesFecho && mesesDoExtrato.includes(mesFecho) ? mesFecho : primeiroAberto;
+  // O saldo calculado de UMA conta: só os lançamentos dela, a partir do saldo
+  // de abertura dela. Com uma conta só, é o extrato inteiro, como sempre.
+  const linhasDaContaBancaria = (conta) => {
+    if (!variasContas) return linhasDoFecho;
+    const ab = conta.id === CONTA_BANCARIA_PRINCIPAL ? saldoAbertura : (Number(conta.saldoInicial) || 0);
+    return extratoEscritorio(lancamentosDaContaBancaria(lancs, conta.id),
+      { saldoAbertura: ab, de: mesesDoExtrato[0], ate: mesesDoExtrato[mesesDoExtrato.length - 1] });
+  };
+  const linhasDaConta = linhasDaContaBancaria(contaAtual);
   // A sugestão e o "lançar assim" de cada linha da fila: uma conta por linha
   // enquanto os dados e o mês não mudam. Antes, cada desenho refazia as duas
   // para todas as linhas (marcar uma caixinha recalculava a fila inteira).
@@ -20037,7 +20311,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       { fechamentos: fechamentosDoEscritorio(data), lancamentos: lancamentosDoEscritorio(data) });
     // Vindo da fila do extrato, o que atravessa leva a marca da linha do banco.
     const marca = l.extratoId ? { extratoId: l.extratoId, historicoBanco: l.historicoBanco || "",
-      conferido: true, conferidoEm: l.conferidoEm || new Date().toISOString() } : null;
+      conferido: true, conferidoEm: l.conferidoEm || new Date().toISOString(),
+      ...(l.contaBancariaId ? { contaBancariaId: l.contaBancariaId } : {}) } : null;
     const daPonte = (marca ? ponte.lancamentos.map((x) => ({ ...x, ...marca })) : ponte.lancamentos)
       .map((x) => (est ? { ...x, estorno: true, ...(l.estornoDe ? { estornoDe: l.estornoDe } : {}) } : x))
       // gestão avulsa: o lançamento leva a descrição que a pessoa escreveu e
@@ -20352,6 +20627,15 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       let mapa = detectarColunasTabela(linhas);
       const guardado = layoutSalvo(layouts, mapa.assinatura);
       if (guardado) mapa = { ...mapa, colunas: { ...guardado.colunas }, lembrado: true };
+      // O formato já visto diz de qual conta é o arquivo: abre nela. Formato
+      // lembrado antes de haver outras contas é o da conta principal.
+      if (variasContas && guardado && aba !== "OFX") {
+        const daConta = contasBanco.find((c) => c.id === (guardado.contaBancariaId || CONTA_BANCARIA_PRINCIPAL));
+        if (daConta && daConta.id !== contaAtual.id) {
+          setContaFecho(daConta.id);
+          setAviso(`Este extrato é da conta ${daConta.nome} — abri a conferência dela.`);
+        }
+      }
       setTabelaExtrato(linhas); setMapaExtrato(mapa);
       setOrigemExtrato(aba ? `${arquivo.name} · aba “${aba}”` : arquivo.name);
       setOcupado("");
@@ -20376,9 +20660,9 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   // O extrato lido fica guardado no mês: trocar de tela, fechar o navegador
   // ou voltar outro dia não apaga a fila. O arquivo arrastado de novo
   // substitui as linhas; o "não é lançamento" de cada linha fica.
-  const extratosGuardados = (cfgFin.extratos && typeof cfgFin.extratos === "object") ? cfgFin.extratos : {};
+  const extratosGuardados = extratosDaContaBancaria(cfgFin, contaAtual.id);
   const doArquivoTodos = (tabelaExtrato && mapaExtrato && mapaExtrato.completo)
-    ? comIdsDosMovimentos(movimentosDaTabela(tabelaExtrato, mapaExtrato)) : null;
+    ? comIdsDaContaBancaria(comIdsDosMovimentos(movimentosDaTabela(tabelaExtrato, mapaExtrato)), contaAtual.id) : null;
   // Do arquivo, só as linhas do mês em conferência: o extrato de setembro
   // não entra no fechamento de outubro.
   const doArquivo = doArquivoTodos ? doArquivoTodos.filter((m) => mesDoMovimento(m) === String(mesEmConferencia)) : null;
@@ -20395,18 +20679,23 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   const mesFechadoNoArquivo = mesEstaFechado(mesEmConferencia, fechamentos);
   const doArquivoNoMes = !arquivoServe ? null
     : (mesFechadoNoArquivo ? (guardadosDoMes.length ? guardadosDoMes : doArquivo)
-      : movimentosGuardadosDoMes(extratosComArquivo(extratosGuardados, doArquivoTodos, origemExtrato, "", { fechamentos }).extratos, mesEmConferencia));
+      : movimentosGuardadosDoMes(extratosComArquivo(extratosGuardados, doArquivoTodos, origemExtrato, "", { fechamentos, contaId: contaAtual.id }).extratos, mesEmConferencia));
   const movimentosExtrato = arquivoServe ? doArquivoNoMes : (guardadosDoMes.length ? guardadosDoMes : null);
   const ignoradosDoMes = ignoradosGuardados(extratosGuardados);
   const conciliacao = movimentosExtrato
-    ? conciliarExtrato(movimentosExtrato, lancs.filter((l) => String(l.competencia) === String(mesEmConferencia)),
+    ? conciliarExtrato(movimentosExtrato, lancsDaConta.filter((l) => String(l.competencia) === String(mesEmConferencia)),
         { ignorados: ignoradosDoMes, fornecedores: (data && data.fornecedores) || [], historico: lancs })
     : null;
-  const saldoLidoDoExtrato = movimentosExtrato ? saldoDoExtratoNoMes(movimentosExtrato, mesEmConferencia) : null;
+  // Banco que traz a linha SALDO (Sicoob) diz o saldo; o que não traz (Cora)
+  // tem o saldo somado: saldo inicial da conta + os movimentos guardados.
+  const extratosParaSaldo = arquivoServe && !mesFechadoNoArquivo
+    ? extratosComArquivo(extratosGuardados, doArquivoTodos, origemExtrato, "", { fechamentos, contaId: contaAtual.id }).extratos : extratosGuardados;
+  const saldoLidoDoExtrato = movimentosExtrato ? (saldoDoExtratoNoMes(movimentosExtrato, mesEmConferencia)
+    ?? (ehPrincipal ? null : saldoPeloExtratoDaConta(extratosParaSaldo, mesEmConferencia, contaAtual.saldoInicial))) : null;
 
   function guardarExtratos(novos) {
     const esc = (data || {}).escritorio || {};
-    return save({ ...data, escritorio: { ...esc, financeiro: { ...cfgFin, extratos: novos } } });
+    return save({ ...data, escritorio: { ...esc, financeiro: financeiroComExtratos(cfgFin, contaAtual.id, novos) } });
   }
   // Arquivo novo e com as colunas certas: guarda cada linha no mês dela
   // (uma vez por conteúdo) e, se o arquivo não tem nada do mês aberto, vai
@@ -20417,7 +20706,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     if (!doArquivoTodos || !doArquivoTodos.length) return;
     if (guardandoExtrato.current === assinaturaDoArquivo) return;
     guardandoExtrato.current = assinaturaDoArquivo;
-    const r = extratosComArquivo(extratosGuardados, doArquivoTodos, origemExtrato, new Date().toISOString(), { fechamentos });
+    const r = extratosComArquivo(extratosGuardados, doArquivoTodos, origemExtrato, new Date().toISOString(), { fechamentos, contaId: contaAtual.id });
     // o mês do arquivo pode ainda não ter lançamento: ele entra no seletor
     // assim que o extrato dele é guardado (logo abaixo)
     const mesesAbertos = r.meses.filter((m) => !mesEstaFechado(m, fechamentos)).sort();
@@ -20433,19 +20722,26 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     // O mapa das colunas deste banco vai na MESMA gravada: duas seguidas
     // partiriam do mesmo retrato de `data` e a segunda apagaria a primeira.
     const novosLayouts = mapaExtrato && mapaExtrato.assinatura && !mapaExtrato.lembrado
-      ? { ...layouts, [mapaExtrato.assinatura]: { colunas: mapaExtrato.colunas, visto: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10) } }
+      ? { ...layouts, [mapaExtrato.assinatura]: layoutParaLembrar() }
       : layouts;
     const esc = (data || {}).escritorio || {};
-    Promise.resolve(save({ ...data, escritorio: { ...esc, financeiro: { ...cfgFin, extratos: r.extratos, layouts: novosLayouts } } }))
+    Promise.resolve(save({ ...data, escritorio: { ...esc, financeiro: { ...financeiroComExtratos(cfgFin, contaAtual.id, r.extratos), layouts: novosLayouts } } }))
       .then(() => { if (novosLayouts !== layouts) setMapaExtrato((m) => (m ? { ...m, lembrado: true } : m)); })
       .catch(console.error);
   }, [assinaturaDoArquivo]);
 
-  // Guardar o mapa para a próxima vez que este banco aparecer.
+  // Guardar o mapa para a próxima vez que este banco aparecer — e de qual
+  // conta ele é: o próximo arquivo igual abre direto na conta certa. O OFX
+  // tem o mesmo formato em todo banco, então não diz a conta.
+  function layoutParaLembrar() {
+    const visto = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const ofx = /\bOFX\b/.test(String(origemExtrato || ""));
+    return { colunas: mapaExtrato.colunas, visto, ...(variasContas && !ofx ? { contaBancariaId: contaAtual.id } : {}) };
+  }
   function lembrarLayout() {
     if (!mapaExtrato || !mapaExtrato.assinatura || mapaExtrato.lembrado) return Promise.resolve();
     const esc = (data || {}).escritorio || {};
-    const novos = { ...layouts, [mapaExtrato.assinatura]: { colunas: mapaExtrato.colunas, visto: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10) } };
+    const novos = { ...layouts, [mapaExtrato.assinatura]: layoutParaLembrar() };
     return save({ ...data, escritorio: { ...esc, financeiro: { ...cfgFin, layouts: novos } } });
   }
 
@@ -20480,6 +20776,41 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     if (aoIrPara) aoIrPara("base");
   }
 
+  // A marca da conta bancária no que nasce da fila (a principal não leva).
+  const marcaDaContaBancaria = () => (contaAtual.id !== CONTA_BANCARIA_PRINCIPAL ? { contaBancariaId: contaAtual.id } : {});
+
+  // "Transferência entre contas": a linha vira as duas pontas ligadas.
+  async function transferirDoExtrato(m, outra) {
+    const r = lancamentosDaTransferencia(m, mesEmConferencia, contaAtual.id, outra, {
+      contas: contasBanco, fechamentos, novoId: typeof uid === "function" ? uid : undefined });
+    if (r.erro) { setAviso(r.erro); return; }
+    await gravar([...lancs, ...r.lancamentos]);
+    const nomeOutra = (contasBanco.find((c) => c.id === outra) || {}).nome || "a outra conta";
+    setAviso(`Transferência lançada: ${efDinheiro(r.lancamentos[0].valor)} ${Number(m.valor) < 0 ? "para" : "de"} ${nomeOutra}. `
+      + `A outra ponta casa sozinha quando o extrato de ${nomeOutra} for conferido.`);
+  }
+
+  // Cadastro das contas bancárias (a principal só troca de nome).
+  async function salvarContaBancaria(c) {
+    const esc = (data || {}).escritorio || {};
+    if (c.id === CONTA_BANCARIA_PRINCIPAL) {
+      await save({ ...data, escritorio: { ...esc, financeiro: { ...cfgFin, nomeContaPrincipal: String(c.nome || "").trim() } } });
+      return;
+    }
+    const atuais = Array.isArray(cfgFin.contasBancarias) ? cfgFin.contasBancarias : [];
+    const limpo = { id: c.id || (typeof uid === "function" ? uid() : String(Date.now())), nome: String(c.nome || "").trim(),
+      saldoInicial: efCentavos(Number(c.saldoInicial) || 0), desde: String(c.desde || "").slice(0, 7), ativa: true };
+    const lista = atuais.some((x) => x && x.id === limpo.id) ? atuais.map((x) => (x && x.id === limpo.id ? { ...x, ...limpo } : x)) : [...atuais, limpo];
+    await save({ ...data, escritorio: { ...esc, financeiro: { ...cfgFin, contasBancarias: lista } } });
+    setContaFecho(limpo.id);
+  }
+  function trocarContaDoFecho(id) {
+    if (id === contaAtual.id) return;
+    // o arquivo lido é da conta que estava aberta: não pode virar extrato da outra
+    setTabelaExtrato(null); setMapaExtrato(null); setOrigemExtrato(""); setAviso("");
+    setContaFecho(id);
+  }
+
   // ── A fila: lançar sem sair do Fechamento ──
   // A linha do banco vira lançamento ali mesmo: competência = o mês que está
   // sendo fechado, conferido, ligado à linha (extratoId) e com o histórico do
@@ -20487,7 +20818,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   function lancarLinhaDoExtrato(l) {
     const agora = new Date().toISOString();
     const marca = { extratoId: l.extratoId || "", historicoBanco: l.historicoBanco || "",
-      conferido: true, conferidoEm: agora, contaBanco: l.contaBanco || "sim" };
+      conferido: true, conferidoEm: agora, contaBanco: l.contaBanco || "sim", ...marcaDaContaBancaria() };
     if (l && l.naObra) { const { sinalDoBanco, ...semSinal } = l; lancarCustoNaObra({ ...semSinal, ...marca }); return true; }
     if (l && l.gestaoAvulsaNaObra && lancarGestaoAvulsaNaObra(l, marca)) return true;
     // Parcela de projeto recebida: a linha inteira em Receita Projetos e,
@@ -20533,7 +20864,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const novos = [];
     for (const m of movimentos || []) {
       const l = comSinalDeEstorno({ ...lancamentoDaLinhaDoExtrato(m, mesEmConferencia, null), contaId, unidadeId,
-        valor: Math.round(Math.abs(Number(m.valor) || 0) * 100) / 100 });
+        valor: Math.round(Math.abs(Number(m.valor) || 0) * 100) / 100, ...marcaDaContaBancaria() });
       const erros = validarLancamentoEscritorio(l, { fechamentos });
       if (erros.length) return { erro: erros[0] + " Lance esta conta uma linha por vez." };
       // saída da reserva tem teto (o saldo do cliente): uma linha por vez
@@ -20574,7 +20905,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       const l = r.lancamento;
       novos.push({ ...l, id: (typeof uid === "function" ? uid() : String(Date.now())) + "_" + novos.length,
         numeroDoc: proximaReferencia((data || {}).obras || [], lancs.concat(novos)),
-        criadoEm: agora, conferido: true, conferidoEm: agora, contaBanco: "sim",
+        criadoEm: agora, conferido: true, conferidoEm: agora, contaBanco: "sim", ...marcaDaContaBancaria(),
         fornecedor: efNomeDoFornecedor(l), tipo: "escritorio" });
     }
     if (!novos.length) return { erro: "Nenhuma linha com sugestão pronta." };
@@ -20654,7 +20985,33 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     }
   }
 
+  // Cada conta além da principal, no mês: o calculado dela, o saldo do banco
+  // (informado ou somado do extrato guardado) e a diferença.
+  function situacaoDasOutrasContas(mes) {
+    return contasBanco.filter((c) => c.id !== CONTA_BANCARIA_PRINCIPAL).map((c) => {
+      const ls = linhasDaContaBancaria(c);
+      const linha = ls.find((x) => x.mes === mes);
+      const temMovimento = lancamentosDaContaBancaria(lancs, c.id).some((l) => String(l.competencia) === String(mes))
+        || movimentosGuardadosDoMes(extratosDaContaBancaria(cfgFin, c.id), mes).length > 0;
+      const banco = saldoBancoDaContaNoMes(fechamentos, mes, c.id)
+        ?? saldoPeloExtratoDaConta(extratosDaContaBancaria(cfgFin, c.id), mes, c.saldoInicial);
+      const calculado = linha ? linha.saldoExtrato : (Number(c.saldoInicial) || 0);
+      return { conta: c, temMovimento, banco, calculado, diferenca: banco == null ? null : efCentavos(banco - calculado) };
+    });
+  }
+
   async function fecharMes(mes, saldoBanco) {
+    // o mês fecha pela conta principal, e só com as outras batendo também
+    if (variasContas) {
+      const pendentes = situacaoDasOutrasContas(mes).filter((x) => x.temMovimento && x.diferenca !== 0);
+      if (pendentes.length) {
+        await dialogo.alertar({ titulo: `${efMesPorExtenso(mes)} ainda não fecha`, tipo: "aviso",
+          mensagem: pendentes.map((x) => x.diferenca == null
+            ? `${x.conta.nome}: traga o extrato do mês ou informe o saldo do banco.`
+            : `${x.conta.nome}: diferença de ${efDinheiro(x.diferenca)} entre o banco e o calculado.`).join(" ") });
+        return;
+      }
+    }
     const certosDoMes = mes === mesEmConferencia && conciliacao ? conferidosPeloExtrato(conciliacao) : [];
     const conf = conferenciaDoMes(lancs, mes, { certos: new Set(certosDoMes.map((l) => l.id)) });
     if (conf.pendentes) {
@@ -20678,7 +21035,10 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         return;
       }
     }
-    await guardarFechamentos({ ...fechamentos, [mes]: { ...(fechamentos[mes] || {}), saldoBanco: Number(saldoBanco) || 0, fechadoEm: new Date().toISOString() } });
+    // o saldo de cada outra conta fica guardado no fecho, como o da principal
+    let comOutras = fechamentos;
+    if (variasContas) for (const x of situacaoDasOutrasContas(mes)) if (x.temMovimento && x.banco != null) comOutras = comSaldoBancoDaConta(comOutras, mes, x.conta.id, x.banco);
+    await guardarFechamentos({ ...comOutras, [mes]: { ...(comOutras[mes] || {}), saldoBanco: Number(saldoBanco) || 0, fechadoEm: new Date().toISOString() } });
     if (certosDoMes.length && onReload) await onReload();
     setAviso(`${efMesPorExtenso(mes)} fechado.`);
   }
@@ -20754,13 +21114,15 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
 
       {vista === "fechamento" && (
         <FechamentoEscritorioTela
-          lancs={lancs} linhas={linhasDoFecho} fechamentos={fechamentos}
+          lancs={lancsDaConta} linhas={linhasDaConta} fechamentos={fechamentos}
+          contas={{ lista: contasBanco, atual: contaAtual, aoTrocar: trocarContaDoFecho, aoSalvar: salvarContaBancaria,
+            outras: variasContas ? situacaoDasOutrasContas(mesEmConferencia) : [] }}
           mes={mesEmConferencia} aoTrocarMes={setMesFecho}
           aoMarcar={marcarConferido} aoMarcarTodos={marcarMesInteiro}
           aoFechar={fecharMes} aoReabrir={reabrirMes} ocupado={ocupado}
-          aoGuardarAplicacao={(mes, v) => guardarFechamentos(comSaldoAplicacao(fechamentos, mes, v)).catch(console.error)}
-          aoGuardarBanco={(mes, v) => guardarFechamentos(comSaldoBanco(fechamentos, mes, v)).catch(console.error)}
-          aoLancarRendimento={lancarRendimento}
+          aoGuardarAplicacao={ehPrincipal ? (mes, v) => guardarFechamentos(comSaldoAplicacao(fechamentos, mes, v)).catch(console.error) : null}
+          aoGuardarBanco={(mes, v) => guardarFechamentos(comSaldoBancoDaConta(fechamentos, mes, contaAtual.id, v)).catch(console.error)}
+          aoLancarRendimento={ehPrincipal ? lancarRendimento : null}
           extrato={{
             arrastando: arrastandoExtrato, setArrastando: setArrastandoExtrato,
             origem: origemExtrato, entrada: entradaExtrato, receber: receberExtrato,
@@ -20768,11 +21130,14 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             lancar: lancarDoExtrato, marcarCasados: marcarCasadosDoExtrato, confirmarPar: confirmarParDoExtrato, descartar: marcarForaDoBanco, excluir: perm.podeExcluir ? excluirLancamento : null,
             guardado: !arquivoServe && guardadoDoMes ? guardadoDoMes : null,
             saldoLido: saldoLidoDoExtrato,
-            checagem: movimentosExtrato ? checagemDebitoCredito(movimentosExtrato, lancs, mesEmConferencia) : null,
+            checagem: movimentosExtrato ? checagemDebitoCredito(movimentosExtrato, lancsDaConta, mesEmConferencia) : null,
             fila: {
               mes: mesEmConferencia,
-              inicial: (m) => lancamentoDaLinhaDoExtrato(m, mesEmConferencia,
-                daMemoDaFila("sugestao", m, () => sugestaoCompletaDoExtrato(m, lancs, ctxDoPalpite))),
+              titular,
+              transferir: variasContas ? transferirDoExtrato : null,
+              outrasContas: contasBanco.filter((c) => c.id !== contaAtual.id),
+              inicial: (m) => ({ ...lancamentoDaLinhaDoExtrato(m, mesEmConferencia,
+                daMemoDaFila("sugestao", m, () => sugestaoCompletaDoExtrato(m, lancs, ctxDoPalpite))), ...marcaDaContaBancaria() }),
               sugestao: (m) => daMemoDaFila("sugestao", m, () => sugestaoCompletaDoExtrato(m, lancs, ctxDoPalpite)),
               lancar: lancarLinhaDoExtrato,
               rapido: (m) => daMemoDaFila("rapido", m, () => rapidoDoExtrato(m)),
