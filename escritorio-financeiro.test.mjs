@@ -30,7 +30,7 @@ const M = new Function(src + `
            fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
-           competenciasDoCartao,
+           competenciasDoCartao, composicaoDoExtrato,
            faturasFechadas, faturaParaFechar, lancamentosParaResultado, mesAnoPorExtenso, efDiaBR, fechadasDaCompra, compraEditada, compraMexeuNoDinheiro, faturaAjustada,
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas, ligaContaAoLancamento, lancamentosLigadosAsContas, contasLigadasAoLancamento,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
@@ -3070,6 +3070,45 @@ teste("extrato lido de novo com o documento escrito diferente (OURINHOS S → OU
   // data ou valor diferentes não ligam
   assert.ok(!M.efMesmaLinhaDoBanco(velho[0].id, velho[0].id.replace("-145.83", "-145.84")));
   assert.ok(!M.efMesmaLinhaDoBanco(velho[0].id, velho[0].id.replace("2026-09-24", "2026-09-25")));
+});
+
+teste("composição do número: cada célula do quadro abre nos lançamentos que somam exatamente o número", () => {
+  const L = [
+    { id: "a", competencia: "2026-09", lancadoEm: "2026-09-08", contaId: "rec_gestao", unidadeId: "gestao_obras", valor: 1800, descricao: "Gestão" },
+    { id: "b", competencia: "2026-09", lancadoEm: "2026-09-14", contaId: "rec_projetos", unidadeId: "projetos", valor: 1000, descricao: "Projeto" },
+    { id: "c", competencia: "2026-09", lancadoEm: "2026-09-20", contaId: "rec_projetos", unidadeId: "projetos", valor: -200, descricao: "estorno" },
+    { id: "d", competencia: "2026-09", lancadoEm: "2026-09-09", contaId: "parceiros", unidadeId: "escritorio", valor: 2250, descricao: "Victor" },
+    { id: "e", competencia: "2026-10", lancadoEm: "2026-10-02", contaId: "rec_projetos", unidadeId: "projetos", valor: 500, descricao: "outubro" },
+    // fatura aberta nas compras: a compra do empreendimento sai do escritório
+    { id: "f", competencia: "2026-09", lancadoEm: "2026-09-15", contaId: "cartao_credito", unidadeId: "escritorio", valor: 700,
+      origem: { tipo: "fatura", cartaoId: "k", competencia: "2026-09" },
+      linhas: [{ valor: 600, destinoContaId: "emp_construcao", unidadeId: "empreendimento", empreendimentoId: "x", descricao: "concreto" },
+               { valor: 50, destinoContaId: "utensilios", unidadeId: "escritorio", descricao: "caneta" }] },
+  ];
+  const ext = M.extratoEscritorio(L, {});
+  const set = ext.find((m) => m.mes === "2026-09");
+  const tot = (alvo, p) => M.composicaoDoExtrato(L, alvo, p).total;
+  assert.strictEqual(tot({ conta: "rec_projetos" }, "2026-09"), set.contas.rec_projetos);
+  assert.strictEqual(tot({ conta: "rec_projetos" }, "2026-09"), 800);
+  assert.strictEqual(tot({ grupo: "receitas" }, "2026-09"), set.grupos.receitas);
+  assert.strictEqual(tot({ grupo: "despesas" }, "2026-09"), set.grupos.despesas);
+  assert.strictEqual(tot({ saldo: "saldoEscritorio" }, "2026-09"), set.saldoEscritorio);
+  assert.strictEqual(tot({ saldo: "saldoGestao" }, "2026-09"), set.saldoGestao);
+  assert.strictEqual(tot({ saldo: "saldoEmpreendimento" }, "2026-09"), set.saldoEmpreendimento);
+  // o ano soma os meses
+  const ano = ext.filter((m) => m.mes.startsWith("2026")).reduce((s, m) => s + (m.contas.rec_projetos || 0), 0);
+  assert.strictEqual(tot({ conta: "rec_projetos" }, "2026"), ano);
+  // a fatura aparece pelas compras, não inteira em Cartão de crédito
+  const cc = M.composicaoDoExtrato(L, { conta: "cartao_credito" }, "2026-09");
+  assert.deepStrictEqual(cc.linhas.map((x) => x.valor), [50]);           // só a diferença (juros)
+  const emp = M.composicaoDoExtrato(L, { conta: "emp_construcao" }, "2026-09");
+  assert.strictEqual(emp.total, 600);
+  // no saldo, a despesa entra com sinal negativo
+  const se = M.composicaoDoExtrato(L, { saldo: "saldoEscritorio" }, "2026-09");
+  assert.ok(se.linhas.some((x) => x.l.id === "d" && x.valor === -2250));
+  // período inválido ou alvo vazio: nada
+  assert.strictEqual(M.composicaoDoExtrato(L, { conta: "rec_projetos" }, "").linhas.length, 0);
+  assert.strictEqual(M.composicaoDoExtrato(L, {}, "2026-09").linhas.length, 0);
 });
 
 for (const [nome, fn] of testes) {

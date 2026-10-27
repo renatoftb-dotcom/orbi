@@ -12266,6 +12266,46 @@ function extratoEscritorio(lancamentos, opcoes) {
   });
 }
 
+// ── O que compõe um número do quadro ────────────────────────────
+// Dois cliques num número do extrato abrem os lançamentos que o formam.
+// `alvo`: { conta } (uma linha de conta), { grupo } (o total do grupo) ou
+// { saldo } (o saldo do bloco); `periodo`: "2026-09" (o mês) ou "2026" (a
+// coluna do ano). Lê a mesma lista que o quadro soma — a fatura do cartão já
+// aberta nas compras —, então o total sai igual ao número da célula. Cada
+// linha leva o valor com o sinal que tem naquele número (no saldo do
+// escritório, a despesa entra negativa).
+const EF_SALDOS_DO_QUADRO = {
+  saldoGestao: { gestao_entradas: 1, gestao_saidas: -1 },
+  saldoEscritorio: { receitas: 1, despesas: -1 },
+  saldoEmpreendimento: { emp_entradas: 1, emp_saidas: -1 },
+  retiradas: { socios: 1, socios_entradas: -1 },
+  ajustes: { ajustes_bancarios: 1 },
+  saldoReservas: { reservas: 1 },
+};
+function composicaoDoExtrato(lancamentos, alvo, periodo) {
+  const a = alvo || {};
+  const p = String(periodo || "");
+  const linhas = [];
+  let total = 0;
+  if (!/^\d{4}(-\d{2})?$/.test(p)) return { linhas, total: 0 };
+  const pesos = a.saldo ? (EF_SALDOS_DO_QUADRO[a.saldo] || null) : null;
+  for (const l of lancamentosParaResultado(lancamentos)) {
+    if (!l || !/^\d{4}-\d{2}$/.test(String(l.competencia)) || !String(l.competencia).startsWith(p)) continue;
+    const conta = contaEscritorio(l.contaId);
+    if (!conta) continue;
+    const sinal = a.conta ? (conta.id === a.conta ? 1 : 0)
+      : a.grupo ? (conta.grupo === a.grupo ? 1 : 0)
+      : pesos ? (pesos[conta.grupo] || 0) : 0;
+    if (!sinal) continue;
+    const v = (Number(l.valor) || 0) * sinal;
+    total += v;
+    linhas.push({ l, conta, valor: efCentavos(v) });
+  }
+  const dia = (x) => String(x.l.lancadoEm || x.l.competencia || "");
+  linhas.sort((x, y) => dia(x).localeCompare(dia(y)) || Math.abs(y.valor) - Math.abs(x.valor));
+  return { linhas, total: efCentavos(total) };
+}
+
 // Quanto já foi investido em cada empreendimento e o que sobrou na venda.
 // Enquanto não vende, `resultado` é null — investimento em andamento não é
 // lucro nem prejuízo, é dinheiro parado em imóvel.
@@ -16548,8 +16588,23 @@ function efDinheiro(v) {
 
 // O extrato: blocos em linhas, meses em colunas. Mesma leitura da planilha,
 // com cada bloco somando só o que é dele.
-function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos }) {
+function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancamentos, clientes }) {
   const S = EF_ESTILO;
+  // Dois cliques (ou dois toques) num número abrem o que o compõe. O toque
+  // duplo é contado aqui, e não pelo dblclick do navegador, que no celular
+  // vira zoom.
+  const [abrindo, setAbrindo] = useState(null);       // { titulo, alvo, periodo }
+  const ultimoToque = useRef({ k: "", t: 0 });
+  const podeAbrir = Array.isArray(lancamentos);
+  const toque = (k, abrir) => (e) => {
+    if (!podeAbrir) return;
+    const agora = Date.now();
+    if (ultimoToque.current.k === k && agora - ultimoToque.current.t < 450) {
+      ultimoToque.current = { k: "", t: 0 };
+      try { window.getSelection().removeAllRanges(); } catch (_) { /* nada */ }
+      abrir();
+    } else ultimoToque.current = { k, t: agora };
+  };
   // O quadro rola dentro de uma caixa que termina no pé da janela: a barra
   // de rolagem para o lado fica sempre à vista (não lá embaixo, depois da
   // última linha), e os meses no alto e os nomes das contas à esquerda
@@ -16600,14 +16655,29 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos }) {
   // título dos meses: preso no alto; o canto (preso nos dois sentidos) por cima de tudo
   const th = { ...td, fontSize: 11, textTransform: "uppercase", letterSpacing: .4, position: "sticky", top: 0, background: "#fff", zIndex: 2,
     boxShadow: "0 1px 0 rgba(38,36,33,0.12)" };
+  // número que tem algo dentro: mãozinha e o aviso do que os dois cliques fazem
+  const clicavel = (v) => (podeAbrir && Math.abs(Number(v) || 0) >= 0.005
+    ? { cursor: "pointer", userSelect: "none", WebkitUserSelect: "none" } : {});
+  const abre = (k, titulo, alvo, periodo, v) => (podeAbrir && Math.abs(Number(v) || 0) >= 0.005
+    ? toque(k, () => setAbrindo({ titulo, alvo, periodo })) : undefined);
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
+      {abrindo && (
+        <ComposicaoDoNumero titulo={abrindo.titulo} periodo={abrindo.periodo}
+          composicao={composicaoDoExtrato(lancamentos, abrindo.alvo, abrindo.periodo)}
+          mostrarConta={!abrindo.alvo.conta} clientes={clientes} aoFechar={() => setAbrindo(null)} />
+      )}
       <div style={S.abas}>
         {anos.map((a) => (
           <button key={a} style={S.aba(a === ano)} onClick={() => aoTrocarAno(a)}>{a}</button>
         ))}
       </div>
+      {podeAbrir && (
+        <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: -4 }}>
+          Clique duas vezes num número para ver os lançamentos que o formam.
+        </div>
+      )}
       <div ref={caixaRef} data-vk-extrato-quadro="1" style={{ ...S.quadro, maxHeight: alturaCaixa || "calc(100vh - 140px)", overscrollBehavior: "contain" }}>
         <style>{`[data-vk-extrato-quadro="1"]::-webkit-scrollbar{width:12px;height:12px}
 [data-vk-extrato-quadro="1"]::-webkit-scrollbar-track{background:#f3f4f6}
@@ -16644,8 +16714,10 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos }) {
               const itens = (lista) => lista.map((c, k) => (
                 <tr key={c.id} data-vk-item-conta={c.id}>
                   <td style={{ ...tdNome, ...tdItem, textAlign: "left", whiteSpace: "normal", paddingLeft: 30, paddingBottom: k === lista.length - 1 ? 8 : 3 }}>{c.nome}</td>
-                  {doAno.map((m) => <td key={m.mes} style={{ ...tdItem, paddingBottom: k === lista.length - 1 ? 8 : 3 }}>{cel(m.contas[c.id] || 0)}</td>)}
-                  <td style={{ ...tdItem, paddingBottom: k === lista.length - 1 ? 8 : 3 }}>{cel(soma((m) => m.contas[c.id] || 0))}</td>
+                  {doAno.map((m) => <td key={m.mes} style={{ ...tdItem, paddingBottom: k === lista.length - 1 ? 8 : 3, ...clicavel(m.contas[c.id]) }}
+                    data-vk-celula={`conta:${c.id}:${m.mes}`} onClick={abre(`conta:${c.id}:${m.mes}`, c.nome, { conta: c.id }, m.mes, m.contas[c.id])}>{cel(m.contas[c.id] || 0)}</td>)}
+                  <td style={{ ...tdItem, paddingBottom: k === lista.length - 1 ? 8 : 3, ...clicavel(soma((m) => m.contas[c.id] || 0)) }}
+                    data-vk-celula={`conta:${c.id}:${ano}`} onClick={abre(`conta:${c.id}:${ano}`, c.nome, { conta: c.id }, ano, soma((m) => m.contas[c.id] || 0))}>{cel(soma((m) => m.contas[c.id] || 0))}</td>
                 </tr>
               ));
               const sinalDe = (g) => ((grupoEscritorio(g) || {}).sinal < 0 ? "−" : "+");
@@ -16660,8 +16732,10 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos }) {
                     <>
                       <tr data-vk-total-grupo={grupos[0] || b.saldo}>
                         <td style={{ ...tdNome, ...tdGrupo, textAlign: "left", whiteSpace: "normal" }}>{b.rotulo}</td>
-                        {doAno.map((m) => <td key={m.mes} style={tdGrupo}>{cel(m[b.saldo] || 0)}</td>)}
-                        <td style={tdGrupo}>{cel(soma((m) => m[b.saldo] || 0))}</td>
+                        {doAno.map((m) => <td key={m.mes} style={{ ...tdGrupo, ...clicavel(m[b.saldo]) }} data-vk-celula={`saldo:${b.saldo}:${m.mes}`}
+                          onClick={abre(`saldo:${b.saldo}:${m.mes}`, b.rotulo, { saldo: b.saldo }, m.mes, m[b.saldo])}>{cel(m[b.saldo] || 0)}</td>)}
+                        <td style={{ ...tdGrupo, ...clicavel(soma((m) => m[b.saldo] || 0)) }} data-vk-celula={`saldo:${b.saldo}:${ano}`}
+                          onClick={abre(`saldo:${b.saldo}:${ano}`, b.rotulo, { saldo: b.saldo }, ano, soma((m) => m[b.saldo] || 0))}>{cel(soma((m) => m[b.saldo] || 0))}</td>
                       </tr>
                       {itens(usadas)}
                     </>
@@ -16673,16 +16747,20 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos }) {
                             <td style={{ ...tdNome, ...tdGrupo, textAlign: "left", whiteSpace: "normal" }}>
                               <span style={{ color: "#9ca3af", fontWeight: 500, marginRight: 6 }}>{sinalDe(g)}</span>{(b.totais || {})[g] || g}
                             </td>
-                            {doAno.map((m) => <td key={m.mes} style={tdGrupo}>{cel((m.grupos || {})[g] || 0)}</td>)}
-                            <td style={tdGrupo}>{cel(soma((m) => (m.grupos || {})[g] || 0))}</td>
+                            {doAno.map((m) => <td key={m.mes} style={{ ...tdGrupo, ...clicavel((m.grupos || {})[g]) }} data-vk-celula={`grupo:${g}:${m.mes}`}
+                              onClick={abre(`grupo:${g}:${m.mes}`, (b.totais || {})[g] || g, { grupo: g }, m.mes, (m.grupos || {})[g])}>{cel((m.grupos || {})[g] || 0)}</td>)}
+                            <td style={{ ...tdGrupo, ...clicavel(soma((m) => (m.grupos || {})[g] || 0)) }} data-vk-celula={`grupo:${g}:${ano}`}
+                              onClick={abre(`grupo:${g}:${ano}`, (b.totais || {})[g] || g, { grupo: g }, ano, soma((m) => (m.grupos || {})[g] || 0))}>{cel(soma((m) => (m.grupos || {})[g] || 0))}</td>
                           </tr>
                           {itens(usadas.filter((c) => c.grupo === g))}
                         </Fragment>
                       ))}
                       <tr data-vk-saldo-bloco={b.saldo}>
                         <td style={{ ...tdNome, ...tdSaldo, textAlign: "left", whiteSpace: "normal" }}>= {b.rotulo}</td>
-                        {doAno.map((m) => <td key={m.mes} style={tdSaldo}>{cel(m[b.saldo] || 0)}</td>)}
-                        <td style={tdSaldo}>{cel(soma((m) => m[b.saldo] || 0))}</td>
+                        {doAno.map((m) => <td key={m.mes} style={{ ...tdSaldo, ...clicavel(m[b.saldo]) }} data-vk-celula={`saldo:${b.saldo}:${m.mes}`}
+                          onClick={abre(`saldo:${b.saldo}:${m.mes}`, b.rotulo, { saldo: b.saldo }, m.mes, m[b.saldo])}>{cel(m[b.saldo] || 0)}</td>)}
+                        <td style={{ ...tdSaldo, ...clicavel(soma((m) => m[b.saldo] || 0)) }} data-vk-celula={`saldo:${b.saldo}:${ano}`}
+                          onClick={abre(`saldo:${b.saldo}:${ano}`, b.rotulo, { saldo: b.saldo }, ano, soma((m) => m[b.saldo] || 0))}>{cel(soma((m) => m[b.saldo] || 0))}</td>
                       </tr>
                     </>
                   )}
@@ -16725,6 +16803,70 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos }) {
             })()}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+// A janela com o que compõe um número do quadro. Fecha só pelo Fechar.
+function ComposicaoDoNumero({ titulo, periodo, composicao, mostrarConta, clientes, aoFechar }) {
+  const S = EF_ESTILO;
+  const { linhas, total } = composicao || { linhas: [], total: 0 };
+  const quando = /^\d{4}-\d{2}$/.test(String(periodo)) ? efMesPorExtenso(periodo) : `ano de ${periodo}`;
+  const nomeCli = (id) => ((clientes || []).find((c) => c && c.id === id) || {}).nome || "";
+  const unidade = (id) => (UNIDADES_NEGOCIO.find((u) => u.id === id) || {}).nome || "";
+  useEffect(() => {
+    const esc = (e) => { if (e.key === "Escape") aoFechar(); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, []);
+  return (
+    <div data-vk-composicao="1" style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", zIndex: 1000,
+      display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "max(16px, 4vh) 12px", overflowY: "auto" }}>
+      <div style={{ background: "#fff", borderRadius: 16, width: "min(860px, 100%)", boxShadow: "0 20px 50px rgba(0,0,0,0.25)",
+        display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 32px)" }}>
+        <div style={{ padding: "16px 18px 12px", borderBottom: "1px solid rgba(38,36,33,0.10)", display: "flex", gap: 12, alignItems: "flex-start" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>{titulo}</div>
+            <div style={{ fontSize: 12.5, color: "#6b7280", marginTop: 2 }}>
+              {quando} · {linhas.length === 1 ? "1 lançamento" : `${linhas.length} lançamentos`} ·{" "}
+              <b style={{ color: total < 0 ? "#b91c1c" : "#111827" }}>{efDinheiro(total)}</b>
+            </div>
+          </div>
+          <button style={S.btnSec} onClick={aoFechar}>Fechar</button>
+        </div>
+        <div style={{ overflowY: "auto", padding: "4px 0" }}>
+          {!linhas.length && <div style={{ padding: 18, fontSize: 13, color: "#6b7280" }}>Nenhum lançamento.</div>}
+          {linhas.map(({ l, conta, valor }, i) => {
+            const quem = [l.fornecedor && l.fornecedor !== "Outros" ? l.fornecedor : "", nomeCli(l.clienteId) || l.cliente || "", l.projeto || ""]
+              .filter((x, j, arr) => x && arr.indexOf(x) === j);
+            const detalhe = [unidade(l.unidadeId), mostrarConta ? conta.nome : "", ...quem].filter(Boolean).join(" · ");
+            return (
+              <div key={(l.id || "") + ":" + i} data-vk-composicao-linha="1" style={{ display: "flex", gap: 12, alignItems: "flex-start",
+                padding: "10px 18px", borderTop: i ? "1px solid #f3f4f6" : "none" }}>
+                <div style={{ width: 52, flex: "0 0 52px", fontSize: 12, color: "#6b7280", paddingTop: 1, fontVariantNumeric: "tabular-nums" }}>
+                  {l.lancadoEm ? efDiaBR(l.lancadoEm).slice(0, 5) : "—"}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, color: "#111827", overflowWrap: "anywhere" }}>{l.descricao || "(sem descrição)"}</div>
+                  {detalhe && <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 2, overflowWrap: "anywhere" }}>{detalhe}</div>}
+                  <div style={{ fontSize: 11, marginTop: 3, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={{ color: l.extratoId ? "#15803d" : "#92400e" }}>
+                      {l.extratoId ? "✓ ligado à linha do banco" : ((l.origem || {}).tipo === "faturaLinha" ? "compra da fatura do cartão" : "sem linha do banco")}
+                    </span>
+                    {typeof LinksDeAnexo === "function" && <LinksDeAnexo transacao={l} compacto />}
+                  </div>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums",
+                  color: valor < 0 ? "#b91c1c" : "#111827" }}>{efDinheiro(valor)}</div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ padding: "10px 18px 14px", borderTop: "1px solid rgba(38,36,33,0.10)", display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ flex: 1, fontSize: 13 }}>Total <b style={{ marginLeft: 6 }}>{efDinheiro(total)}</b></div>
+          <button style={S.btnSec} onClick={aoFechar}>Fechar</button>
+        </div>
       </div>
     </div>
   );
@@ -20673,7 +20815,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
                   </div>
                 ))}
               </div>
-              <ExtratoEscritorioQuadro linhas={linhas} ano={anoAtual} aoTrocarAno={setAno} fechamentos={fechamentos} />
+              <ExtratoEscritorioQuadro linhas={linhas} ano={anoAtual} aoTrocarAno={setAno} fechamentos={fechamentos}
+                lancamentos={lancs} clientes={(data || {}).clientes || []} />
             </>
           )}
         </>
