@@ -30,7 +30,7 @@ const M = new Function(src + `
            fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
-           competenciasDoCartao, composicaoDoExtrato, arquivoPareceDeOutraConta, CONTA_BANCARIA_PRINCIPAL, contasBancariasDoEscritorio, contaBancariaDoLancamento, lancamentosDaContaBancaria, extratosDaContaBancaria, financeiroComExtratos, comIdsDaContaBancaria, saldoBancoDaContaNoMes, comSaldoBancoDaConta, saldoPeloExtratoDaConta, lancamentosDaTransferencia, pareceEntreContas, contasDoLancamento,
+           competenciasDoCartao, composicaoDoExtrato, arquivoPareceDeOutraConta, contaDoArquivoPeloConteudo, CONTA_BANCARIA_PRINCIPAL, contasBancariasDoEscritorio, contaBancariaDoLancamento, lancamentosDaContaBancaria, extratosDaContaBancaria, financeiroComExtratos, comIdsDaContaBancaria, saldoBancoDaContaNoMes, comSaldoBancoDaConta, saldoPeloExtratoDaConta, lancamentosDaTransferencia, pareceEntreContas, contasDoLancamento,
            faturasFechadas, faturaParaFechar, lancamentosParaResultado, mesAnoPorExtenso, efDiaBR, fechadasDaCompra, compraEditada, compraMexeuNoDinheiro, faturaAjustada,
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas, ligaContaAoLancamento, lancamentosLigadosAsContas, contasLigadasAoLancamento,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
@@ -3238,6 +3238,17 @@ teste("arquivo de outra conta solto na aba errada: reconhecido, para não apagar
   assert.strictEqual(M.arquivoPareceDeOutraConta(sicoob, deNovo).outra, false);
   // conta sem nada guardado nesses dias: entra
   assert.strictEqual(M.arquivoPareceDeOutraConta({}, cora).outra, false);
+});
+
+teste("de qual conta é o arquivo: pelas linhas iguais às já guardadas de cada conta", () => {
+  const sic = M.extratosComArquivo({}, [{ data: "2026-09-14", valor: -624.48, historico: "PIX EMITIDO MESMA TIT" }, { data: "2026-09-20", valor: -5, historico: "TARIFA" }], "s", "x", {}).extratos;
+  const cor = M.extratosComArquivo({}, [{ data: "2026-09-08", valor: 1800, historico: "Roselene" }], "c", "x", { contaId: "k" }).extratos;
+  const fin = { extratos: sic, extratosContas: { k: cor } };
+  const contas = [{ id: "principal" }, { id: "k" }];
+  const ids = (ms) => ms.map((m) => ({ ...m, id: [m.data, m.valor.toFixed(2), m.historico.toLowerCase(), ""].join("|") + "#1" }));
+  assert.strictEqual(M.contaDoArquivoPeloConteudo(fin, contas, ids([{ data: "2026-09-20", valor: -5, historico: "TARIFA" }, { data: "2026-09-30", valor: -1, historico: "X" }])), "principal");
+  assert.strictEqual(M.contaDoArquivoPeloConteudo(fin, contas, ids([{ data: "2026-09-08", valor: 1800, historico: "Roselene" }])), "k");
+  assert.strictEqual(M.contaDoArquivoPeloConteudo(fin, contas, ids([{ data: "2026-10-01", valor: 9, historico: "nova" }])), null);
 });
 
 for (const [nome, fn] of testes) {

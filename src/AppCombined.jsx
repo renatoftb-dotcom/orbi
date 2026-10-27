@@ -14860,6 +14860,28 @@ function arquivoPareceDeOutraConta(extratos, movimentos) {
   return { outra: guardados.length >= 2 && comuns.length === 0, guardados: guardados.length };
 }
 
+// De qual conta é o arquivo, pelo CONTEÚDO: a conta cujo extrato guardado
+// tem linhas iguais às do arquivo. Sem linha em comum com nenhuma, não dá
+// para saber (null) — fica na aba aberta.
+function contaDoArquivoPeloConteudo(fin, contas, movimentos) {
+  let melhor = null, mais = 0;
+  for (const c of contas || []) {
+    const ids = comIdsDaContaBancaria(movimentos || [], c.id).filter((m) => m && efEhMovimento(m.historico)).map((m) => m.id);
+    if (!ids.length) continue;
+    const vistos = new Set();
+    let comuns = 0;
+    for (const v of Object.values(extratosDaContaBancaria(fin, c.id))) {
+      for (const g of ((v && v.movimentos) || [])) {
+        if (!g || vistos.has(g.id)) continue;
+        vistos.add(g.id);
+        if (ids.some((id) => efMesmaLinhaDoBanco(g.id, id))) comuns++;
+      }
+    }
+    if (comuns > mais) { mais = comuns; melhor = c.id; }
+  }
+  return melhor;
+}
+
 // As linhas do mês, de onde estiverem guardadas (sem repetir).
 function movimentosGuardadosDoMes(extratos, mes) {
   const vistos = new Set();
@@ -20649,10 +20671,14 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       let mapa = detectarColunasTabela(linhas);
       const guardado = layoutSalvo(layouts, mapa.assinatura);
       if (guardado) mapa = { ...mapa, colunas: { ...guardado.colunas }, lembrado: true };
-      // O formato já visto diz de qual conta é o arquivo: abre nela. Formato
-      // lembrado antes de haver outras contas é o da conta principal.
-      if (variasContas && guardado && aba !== "OFX") {
-        const daConta = contasBanco.find((c) => c.id === (guardado.contaBancariaId || CONTA_BANCARIA_PRINCIPAL));
+      // De qual conta é o arquivo: primeiro pelo conteúdo (linhas iguais às
+      // já guardadas de uma conta); senão, pelo formato lembrado COM a conta.
+      // Formato lembrado sem conta (de antes de haver outras) não decide.
+      if (variasContas) {
+        let alvo = null;
+        if (mapa.completo) alvo = contaDoArquivoPeloConteudo(cfgFin, contasBanco, comIdsDosMovimentos(movimentosDaTabela(linhas, mapa)));
+        if (!alvo && guardado && guardado.contaBancariaId && aba !== "OFX") alvo = guardado.contaBancariaId;
+        const daConta = alvo ? contasBanco.find((c) => c.id === alvo) : null;
         if (daConta && daConta.id !== contaAtual.id) {
           setContaFecho(daConta.id);
           setAviso(`Este extrato é da conta ${daConta.nome} — abri a conferência dela.`);
