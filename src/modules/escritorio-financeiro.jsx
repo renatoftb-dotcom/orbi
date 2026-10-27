@@ -2849,6 +2849,28 @@ function extratosComArquivo(extratos, movimentos, origem, agora, opcoes) {
   }
   return { extratos: novos, meses, fechados };
 }
+// O arquivo é desta conta? Um extrato novo SUBSTITUI os dias que ele cobre —
+// o de outra conta (a Cora solta na aba do Sicoob) apagava as linhas do
+// Sicoob desses dias. Sinal de outra conta: nos dias do arquivo já havia
+// linhas guardadas e nenhuma delas aparece no arquivo.
+function arquivoPareceDeOutraConta(extratos, movimentos) {
+  const doArquivo = (movimentos || []).filter((m) => m && efEhMovimento(m.historico));
+  const dias = doArquivo.map((m) => String(m.data || "").slice(0, 10)).filter(Boolean).sort();
+  if (!dias.length) return { outra: false, guardados: 0 };
+  const ini = dias[0], fim = dias[dias.length - 1];
+  const vistos = new Set(), guardados = [];
+  for (const v of Object.values(extratos || {})) {
+    for (const m of ((v && v.movimentos) || [])) {
+      if (!m || vistos.has(m.id) || !efEhMovimento(m.historico)) continue;
+      vistos.add(m.id);
+      const d = String(m.data || "").slice(0, 10);
+      if (d >= ini && d <= fim) guardados.push(m);
+    }
+  }
+  const comuns = guardados.filter((g) => doArquivo.some((m) => efMesmaLinhaDoBanco(g.id, m.id)));
+  return { outra: guardados.length >= 2 && comuns.length === 0, guardados: guardados.length };
+}
+
 // As linhas do mês, de onde estiverem guardadas (sem repetir).
 function movimentosGuardadosDoMes(extratos, mes) {
   const vistos = new Set();
@@ -8717,6 +8739,16 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     if (!doArquivoTodos || !doArquivoTodos.length) return;
     if (guardandoExtrato.current === assinaturaDoArquivo) return;
     guardandoExtrato.current = assinaturaDoArquivo;
+    // Arquivo de outra conta: não guarda (apagaria as linhas desta conta
+    // nesses dias) e devolve a tela ao extrato guardado.
+    const deOutra = arquivoPareceDeOutraConta(extratosGuardados, doArquivoTodos);
+    if (deOutra.outra) {
+      setTabelaExtrato(null); setMapaExtrato(null); setOrigemExtrato("");
+      setAviso(`Este extrato não tem nenhuma linha em comum com o da conta ${contaAtual.nome} nos mesmos dias `
+        + `(${deOutra.guardados} linhas guardadas) — parece ser de outra conta, e não foi guardado. `
+        + (variasContas ? "Abra a aba da conta certa e traga o arquivo de novo." : "Cadastre a conta em “＋ Conta bancária” e traga o arquivo na aba dela."));
+      return;
+    }
     const r = extratosComArquivo(extratosGuardados, doArquivoTodos, origemExtrato, new Date().toISOString(), { fechamentos, contaId: contaAtual.id });
     // o mês do arquivo pode ainda não ter lançamento: ele entra no seletor
     // assim que o extrato dele é guardado (logo abaixo)
