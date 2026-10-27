@@ -3685,9 +3685,11 @@ function linhasDoEscritorio(obras, lancamentos, opcoes) {
     const obraNome = l.projeto || (ob && ob.nome) || "";
     const obraId = (l.origem && l.origem.obraId) || l.obraId || l.empreendimentoId || (obraNome ? "p:" + cpSemAcento(obraNome) : "");
     const anexos = (Array.isArray(l.anexos) ? l.anexos : []).filter(Boolean).concat(l.comprovante ? [l.comprovante] : []);
+    // por onde o dinheiro passou: Sicoob, Cora, o cartão (quem diz é o escritório)
+    const meio = (typeof o.meioDoLancamento === "function" && o.meioDoLancamento(l)) || "";
     const pseudo = { id: "lanc:" + l.id, numeroDoc: l.numeroDoc || "", descricao: l.descricao || "", favorecido: l.fornecedor || "",
       numeroNota: l.documento || "", valor, valorPago: valor, pago: true, pagoEm: dia, vencimento: dia, contaId: l.contaId || "",
-      observacao: [nomeConta, l.cliente, obraNome, l.observacao].filter(Boolean).join(" "), anexos };
+      observacao: [nomeConta, l.cliente, obraNome, l.observacao, meio].filter(Boolean).join(" "), anexos };
     saida.push({
       id: pseudo.id, lancId: l.id, lanc_: l, obraId, obra: obraNome, cliente: l.cliente || "",
       unidadeNegocio: CP_UNIDADES_NEGOCIO[l.unidadeId] || l.unidadeOriginal || "",
@@ -3696,7 +3698,7 @@ function linhasDoEscritorio(obras, lancamentos, opcoes) {
       insumoCodigo: "", insumo: "", insumoNome: nomeConta || "Outros",
       quantidade: 1, unidade: "Unidades", unitario: valor, total: valor, valorNota: valor,
       grupo: titulo(grupo && grupo.titulo), etapaId: "", etapa: "",
-      contaId: l.contaId || "", conta: nomeConta,
+      contaId: l.contaId || "", conta: nomeConta, meio,
       pago: true, pagoEm: dia, vencimento: dia, competencia: String(l.competencia || dia.slice(0, 7)).slice(0, 7),
       dataLanc: entrou, entradaEm: entrou, origem: "escritorio", papeis: anexos.length, conta_: pseudo, sinal,
     });
@@ -3736,7 +3738,7 @@ const BASE_COLUNAS_ESCRITORIO = [
   ["ref", "Ref"], ["cliente", "Nome Cliente"], ["unidadeNegocio", "Unidade negócio"], ["obra", "Projeto / obra"],
   ["fornecedor", "Fornecedor"], ["descricaoLanc", "Descrição Lançamento"], ["conta", "Conta contábil"],
   ["nota", "Nota / Comprovante"], ["valorNota", "Valor total nota"],
-  ["competencia", "Período Contábil"], ["dataLanc", "Data do lançamento"],
+  ["competencia", "Período Contábil"], ["dataLanc", "Data do lançamento"], ["meio", "Meio"],
 ];
 function tabelaDaBase(linhas, colunas) {
   const cols = colunas || BASE_COLUNAS;
@@ -3850,7 +3852,7 @@ const BASE_RELATORIO_ESCRITORIO = [
   ["Projeto / obra", "texto", "", "center"], ["Fornecedor", "texto", "", "center"], ["Descrição Lançamento", "texto", "", ""],
   ["Conta contábil", "texto", "", "center"], ["Nota / Comprovante", "numeroTexto", "0", "center"],
   ["Valor total nota", "moeda", CP_MOEDA_XL, ""], ["Período Contábil", "mes", "[$-416]mmm\\-yy;@", "center"],
-  ["Data do lançamento", "data", "[$-416]d\\-mmm\\-yy;@", "center"],
+  ["Data do lançamento", "data", "[$-416]d\\-mmm\\-yy;@", "center"], ["Meio", "texto", "", "center"],
 ];
 function planilhaDaBase(tabela, especificacao) {
   const SPEC = especificacao || BASE_RELATORIO;
@@ -4640,7 +4642,7 @@ function carregarExcelJS() {
   return cpCargaExcel;
 }
 
-function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMobile, obraFixa, nomeDoArquivo, completar, doEscritorio, acoes }) {
+function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMobile, obraFixa, nomeDoArquivo, completar, doEscritorio, acoes, meioDoLancamento }) {
   // no escritório a linha é a transação, com as colunas da planilha do escritório
   const COLS_TAB = doEscritorio ? BASE_COLUNAS_ESCRITORIO : BASE_COLUNAS;
   const COLS_REL = doEscritorio ? BASE_RELATORIO_ESCRITORIO : BASE_RELATORIO;
@@ -4733,8 +4735,8 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
     // no escritório, só o que entrou no extrato
     return linhasDoEscritorio(obras || [], lancamentos || [], { ...op0,
       contaDoEscritorio: typeof contaEscritorio === "function" ? contaEscritorio : null,
-      grupoDoEscritorio: typeof grupoEscritorio === "function" ? grupoEscritorio : null });
-  }, [obras, clientes, prestadores, insumos, lancamentos, doEscritorio]);
+      grupoDoEscritorio: typeof grupoEscritorio === "function" ? grupoEscritorio : null, meioDoLancamento });
+  }, [obras, clientes, prestadores, insumos, lancamentos, doEscritorio, meioDoLancamento]);
   const nomeDe = (lista, id) => ((lista || []).find((x) => x && x.id === id) || {}).nome || "";
   const op = { nomePrestador: (id) => nomeDe(prestadores, id), nomeConta: (id) => nomeDe(plano, id), nomeEtapa: (id) => nomeDe(etapas, id) };
   const filtradasBase = useMemo(() => filtrarBase(linhas, { texto, obraId, contaId, etapa, grupo, papel, situacao, de, ate }, op),
@@ -5229,7 +5231,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
               </div>
               <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>
                 {(doEscritorio
-                  ? [l.conta, l.unidadeNegocio, [l.cliente, l.obra].filter(Boolean).join(" / "), "competência " + mesBR(l.competencia)]
+                  ? [l.conta, l.unidadeNegocio, [l.cliente, l.obra].filter(Boolean).join(" / "), "competência " + mesBR(l.competencia), l.meio]
                   : [l.quantidade ? `${num(l.quantidade)} ${l.unidade}`.trim() + (l.unitario != null ? ` × ${num(l.unitario, 2)}` : "") : "", l.etapa, l.grupo, l.conta,
                     l.unidadeNegocio, !obraFixa ? [l.cliente, l.obra].filter(Boolean).join(" / ") : ""]).filter(Boolean).join(" · ")}
               </div>

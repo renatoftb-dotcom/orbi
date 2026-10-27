@@ -30,7 +30,7 @@ const M = new Function(src + `
            fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
-           competenciasDoCartao, composicaoDoExtrato, arquivoPareceDeOutraConta, parDaTransferencia, lancamentosDaTransferenciaComPar, contaDoArquivoPeloConteudo, CONTA_BANCARIA_PRINCIPAL, contasBancariasDoEscritorio, contaBancariaDoLancamento, lancamentosDaContaBancaria, extratosDaContaBancaria, financeiroComExtratos, comIdsDaContaBancaria, saldoBancoDaContaNoMes, comSaldoBancoDaConta, saldoPeloExtratoDaConta, lancamentosDaTransferencia, pareceEntreContas, contasDoLancamento,
+           competenciasDoCartao, composicaoDoExtrato, efCabecalhoDeCartao, efParcelaDoTexto, movimentosDoCartao, comCompetenciaDaFatura, comIdsDoCartao, faturasGuardadasDoCartao, faturasComArquivo, financeiroComFaturas, faturasComIgnorado, mesDoPagamentoDaFatura, cartaoDoArquivo, conferenciaDaFatura, contasDaObraParaACompraDoCartao, contasNoCartao, checagemSemTransferencias, somarChecagens, conferenciaUnificada, arquivoPareceDeOutraConta, parDaTransferencia, lancamentosDaTransferenciaComPar, contaDoArquivoPeloConteudo, CONTA_BANCARIA_PRINCIPAL, contasBancariasDoEscritorio, contaBancariaDoLancamento, lancamentosDaContaBancaria, extratosDaContaBancaria, financeiroComExtratos, comIdsDaContaBancaria, saldoBancoDaContaNoMes, comSaldoBancoDaConta, saldoPeloExtratoDaConta, lancamentosDaTransferencia, pareceEntreContas, contasDoLancamento,
            faturasFechadas, faturaParaFechar, lancamentosParaResultado, mesAnoPorExtenso, efDiaBR, fechadasDaCompra, compraEditada, compraMexeuNoDinheiro, faturaAjustada,
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas, ligaContaAoLancamento, lancamentosLigadosAsContas, contasLigadasAoLancamento,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
@@ -1342,7 +1342,7 @@ teste("a fatura nao copia o papel da compra de obra; o do proprio escritorio con
       parcelasCartao: [{ parcela:1, de:2, competencia:"2026-10", valor:500 },
                        { parcela:2, de:2, competencia:"2026-11", valor:500 }] },
   ]}];
-  const doEscritorio = [{ id: "l1", tipo: "escritorio", cartaoId: "k1", contaId: "softwares", descricao: "Assinatura",
+  const doEscritorio = [{ id: "l1", tipo: "escritorio", cartaoId: "k1", contaId: "desp_outros", descricao: "Assinatura",
     lancadoEm: "2026-09-23", anexos: [meu], parcelasCartao: [{ parcela: 1, de: 1, competencia: "2026-10", valor: 50 }] }];
   const linhas = M.linhasDaFatura(obras, doEscritorio, "k1", "2026-10");
   const daObra = linhas.find((x) => x.origem === "obra"), doEsc = linhas.find((x) => x.origem === "escritorio");
@@ -3289,6 +3289,165 @@ teste("transferência pelo par na outra conta: o Pix do Sicoob lançado como car
   assert.strictEqual(M.parDaTransferencia({ ...linhaCora, historico: "Fulano · Pix" }, "cora", contas, fin3, [], []), null);
   assert.strictEqual(M.parDaTransferencia({ ...linhaCora, valor: -624.48 }, "cora", contas, fin, [], []), null);
   assert.strictEqual(M.parDaTransferencia({ ...linhaCora, data: "2026-09-25" }, "cora", contas, fin, [], []), null);
+});
+
+// ── Entrada única: cartão + contas ──────────────────────────────
+const CORA = { id: "kc", nome: "CORA Visa", diaFechamento: 5, diaVencimento: 15, final: "8821", contaBancariaId: "cora" };
+const FATURA_CSV = [
+  ["Data", "Nome no Cartão/Final do Cartão", "Descrição", "Valor"],
+  ["20/08/2026", "LEO PADOVAN / 8821", "MATERIAIS SILVA - Parcela 2/6", "R$ 648,78"],
+  ["01/09/2026", "LEO PADOVAN / 8821", "CASA DO CONSTRUTOR 1/6", "634,48"],
+  ["03/09/2026", "LEO PADOVAN / 8821", "ASSINATURA SOFTWARE", "99,90"],
+  ["15/09/2026", "LEO PADOVAN / 8821", "Pagamento de fatura", "-2.424,48"],
+];
+
+teste("fatura de cartão: reconhece pelo cabeçalho, lê parcela, sinal e final", () => {
+  assert.strictEqual(M.efCabecalhoDeCartao(FATURA_CSV), 0);
+  assert.strictEqual(M.efCabecalhoDeCartao([["Data", "Histórico", "Valor"]]), -1);
+  assert.deepStrictEqual(M.efParcelaDoTexto("PARC 02/06"), { parcela: 2, de: 6 });
+  assert.strictEqual(M.efParcelaDoTexto("Compra 15/09/2026"), null);
+  const r = M.movimentosDoCartao(FATURA_CSV);
+  assert.strictEqual(r.final, "8821");
+  assert.strictEqual(r.movimentos.length, 3);                 // o pagamento da fatura sai
+  assert.strictEqual(r.movimentos[0].valor, -648.78);
+  assert.strictEqual(r.movimentos[0].parcela, 2);
+  assert.strictEqual(r.movimentos[2].valor, -99.9);
+  assert.strictEqual(M.cartaoDoArquivo([CORA, { id: "x", nome: "Master", final: "1234" }], "8821").id, "kc");
+  assert.strictEqual(M.cartaoDoArquivo([{ id: "x", nome: "Master" }], "8821").id, "x");   // único sem final
+  assert.strictEqual(M.cartaoDoArquivo([{ id: "x", final: "1" }, { id: "y" }], "8821"), null);
+});
+
+teste("fatura de cartão: competência pela compra + parcela; arquivo de uma fatura só fica junto", () => {
+  const r = M.movimentosDoCartao(FATURA_CSV);
+  const c = M.comCompetenciaDaFatura(r.movimentos, CORA);
+  // 20/08 cai em 09 (fecha dia 5) e a parcela 2 vai para 10? fatura da compra 20/08 = 2026-09, +1 = 2026-10
+  // 01/09 → 2026-09; 03/09 → 2026-09. Pela data: 08/20→09, 09/01→09, 09/03→09 (uma só) → vale a data
+  assert.deepStrictEqual(c.map((m) => m.competencia), ["2026-09", "2026-09", "2026-09"]);
+  // com a data da compra de verdade (parcela 2 de julho), a leitura pela compra é a que junta
+  const r2 = [{ data: "2026-07-20", valor: -648.78, parcela: 2, de: 6 }, { data: "2026-09-01", valor: -634.48, parcela: 1, de: 6 }];
+  assert.deepStrictEqual(M.comCompetenciaDaFatura(r2, CORA).map((m) => m.competencia), ["2026-09", "2026-09"]);
+  const ids = M.comIdsDoCartao(c, "kc");
+  assert.ok(ids.every((m) => m.id.indexOf("cartao|kc|") === 0));
+  assert.strictEqual(new Set(ids.map((m) => m.id)).size, 3);
+  assert.strictEqual(M.mesDoPagamentoDaFatura(CORA, "2026-09"), "2026-09");
+  assert.strictEqual(M.mesDoPagamentoDaFatura({ diaFechamento: 25, diaVencimento: 5 }, "2026-09"), "2026-10");
+});
+
+teste("fatura de cartão: guardar substitui a competência, mantém o ignorado, não mexe na fechada", () => {
+  const movs = M.comIdsDoCartao([{ data: "2026-09-01", valor: -10, historico: "A", competencia: "2026-09" }], "kc");
+  let r = M.faturasComArquivo({}, movs, "f.csv", "t1");
+  assert.deepStrictEqual(r.competencias, ["2026-09"]);
+  const ig = M.faturasComIgnorado(r.faturas, "2026-09", movs[0].id, "teste", "t");
+  assert.ok(ig["2026-09"].ignorados[movs[0].id]);
+  r = M.faturasComArquivo(ig, movs, "f2.csv", "t2");
+  assert.ok(r.faturas["2026-09"].ignorados[movs[0].id]);
+  r = M.faturasComArquivo(r.faturas, [{ ...movs[0], valor: -20 }], "f3", "t3", { fechadas: new Set(["2026-09"]) });
+  assert.deepStrictEqual(r.fechadas, ["2026-09"]);
+  assert.strictEqual(r.faturas["2026-09"].movimentos[0].valor, -10);
+  // desmarcar o ignorado
+  assert.ok(!M.faturasComIgnorado(ig, "2026-09", movs[0].id)["2026-09"].ignorados[movs[0].id]);
+});
+
+const OBRA_JAC = { id: "ob1", nome: "Jacarezinho", clienteId: "emp1", contasPagar: [
+  { id: "c1", pago: true, pagoEm: "2026-09-01", valor: 3806.88, valorPago: 3806.88, contaId: "materiais", descricao: "Casa do construtor", numeroDoc: "500",
+    formaPagamento: "cartao", cartaoId: "kc", parcelasCartao: [] },
+] };
+OBRA_JAC.contasPagar[0].parcelasCartao = M.parcelasDoCartao(CORA, "2026-09-01", 3806.88, 6);
+
+teste("fatura de cartão: casa o arquivo com o VICKE; sobra o que falta lançar e o que não veio", () => {
+  const movs = M.comIdsDoCartao(M.comCompetenciaDaFatura(M.movimentosDoCartao(FATURA_CSV).movimentos, CORA), "kc");
+  const g = M.faturasComArquivo({}, movs, "f.csv", "t").faturas["2026-09"];
+  const f = M.conferenciaDaFatura(CORA, g, [OBRA_JAC], [], "2026-09", { clientes: [] });
+  assert.strictEqual(f.casadas.length, 1);                     // 634,48 da Casa do construtor
+  assert.strictEqual(f.faltam.length, 2);                      // 648,78 e a assinatura
+  assert.strictEqual(f.soNoVicke.length, 0);
+  assert.strictEqual(f.totalArquivo, 1383.16);
+  assert.strictEqual(f.pronta, false);
+  // lançadas as duas, fica pronta para fechar
+  const lancs = [
+    { id: "e1", tipo: "escritorio", contaId: "desp_outros", unidadeId: "escritorio", valor: 99.9, lancadoEm: "2026-09-03", competencia: "2026-09",
+      cartaoId: "kc", formaPagamento: "cartao", parcelasCartao: M.parcelasDoCartao(CORA, "2026-09-03", 99.9, 1) },
+    { id: "e2", tipo: "escritorio", contaId: "desp_outros", unidadeId: "escritorio", valor: 648.78 * 6, lancadoEm: "2026-08-20", competencia: "2026-08",
+      cartaoId: "kc", formaPagamento: "cartao", parcelasCartao: [{ parcela: 2, de: 6, competencia: "2026-09", valor: 648.78 }] },
+  ];
+  const f2 = M.conferenciaDaFatura(CORA, g, [OBRA_JAC], lancs, "2026-09", { clientes: [] });
+  assert.strictEqual(f2.faltam.length, 0);
+  assert.strictEqual(f2.pronta, true);
+  // ignorada sai da fila
+  const g3 = M.faturasComIgnorado({ "2026-09": g }, "2026-09", movs[2].id, "x", "t")["2026-09"];
+  const f3 = M.conferenciaDaFatura(CORA, g3, [OBRA_JAC], [], "2026-09", { clientes: [] });
+  assert.strictEqual(f3.faltam.length, 1);
+  assert.strictEqual(f3.naoLancar.length, 1);
+});
+
+teste("compra do cartão que a obra tem à vista: acha a nota e converte com as parcelas certas", () => {
+  const obra = { id: "ob2", nome: "Jac", contasPagar: [
+    { id: "a", pago: true, pagoEm: "2026-09-08", valor: 2000, valorPago: 2000, numeroDoc: "700", contaId: "materiais" },
+    { id: "b", pago: true, pagoEm: "2026-09-08", valor: 1892.72, valorPago: 1892.72, numeroDoc: "700", contaId: "ferramentas" },
+    { id: "z", pago: true, pagoEm: "2026-09-08", valor: 50, valorPago: 50, numeroDoc: "701", contaId: "materiais" },
+  ] };
+  // 3892,72 em 6x = 648,82 + 5 × 648,78
+  const m = { data: "2026-09-08", valor: -648.82, parcela: 1, de: 6 };
+  const achado = M.contasDaObraParaACompraDoCartao(m, CORA, [obra], [], {});
+  assert.ok(achado);
+  assert.deepStrictEqual(achado.contas.map((c) => c.id).sort(), ["a", "b"]);
+  assert.strictEqual(achado.total, 3892.72);
+  const conv = M.contasNoCartao(achado.contas, CORA, achado.dataCompra, 6);
+  const soma = (k) => Math.round(conv.reduce((s, c) => s + c.parcelasCartao[k].valor, 0) * 100) / 100;
+  assert.strictEqual(soma(0), 648.82);
+  for (let k = 1; k < 6; k++) assert.strictEqual(soma(k), 648.78);
+  for (const c of conv) assert.strictEqual(Math.round(c.parcelasCartao.reduce((s, p) => s + p.valor, 0) * 100) / 100, c.valorPago);
+  assert.ok(conv.every((c) => c.cartaoId === "kc" && c.formaPagamento === "cartao"));
+  // a parcela 2 também acha (a mesma nota)
+  assert.ok(M.contasDaObraParaACompraDoCartao({ ...m, valor: -648.78, parcela: 2 }, CORA, [obra], [], {}));
+  // ligada a uma linha do banco: foi paga pela conta, não é esta
+  const ponte = { id: "p", tipo: "escritorio", extratoId: "x", origem: { obraId: "ob2", tipo: "pedido", refId: "?" } };
+  const ligado = M.contasDaObraParaACompraDoCartao(m, CORA, [obra], [{ ...ponte, origem: { obraId: "ob2", tipo: "conta", refId: "a" } }], {});
+  assert.strictEqual(ligado === null || !ligado.contas.some((c) => c.id === "a"), true);
+  // valor que não fecha: nada
+  assert.strictEqual(M.contasDaObraParaACompraDoCartao({ ...m, valor: -700 }, CORA, [obra], [], {}), null);
+});
+
+teste("conferência unificada: junta as contas, tira a transferência do débito × crédito, põe o cartão na fila", () => {
+  const contas = [{ id: "principal", nome: "Sicoob", principal: true }, { id: "cora", nome: "Cora" }];
+  const sic = M.extratosComArquivo({}, [
+    { data: "2026-09-10", valor: -100, historico: "TARIFA" },
+    { data: "2026-09-14", valor: -624.48, historico: "PIX EMITIDO MESMA TIT" },
+  ], "s", "t", {}).extratos;
+  const cor = M.extratosComArquivo({}, [
+    { data: "2026-09-14", valor: 624.48, historico: "Transf Pix recebida · LEO PADOVAN" },
+    { data: "2026-09-15", valor: -50, historico: "Pagamento fornecedor" },
+  ], "c", "t", { contaId: "cora" }).extratos;
+  const idSic = Object.values(sic)[0].movimentos.find((m) => m.valor === -624.48).id;
+  const idCor = Object.values(cor)[0].movimentos.find((m) => m.valor === 624.48).id;
+  const lancs = [
+    { id: "t1", tipo: "escritorio", contaId: "taxas_impostos", unidadeId: "escritorio", valor: 100, competencia: "2026-09", lancadoEm: "2026-09-10", contaBanco: "sim" },
+    { id: "s", tipo: "escritorio", contaId: "transf_saida", unidadeId: "escritorio", valor: 624.48, competencia: "2026-09", lancadoEm: "2026-09-14", extratoId: idSic, contaBanco: "sim", transferenciaId: "tr" },
+    { id: "e", tipo: "escritorio", contaId: "transf_entrada", unidadeId: "escritorio", valor: 624.48, competencia: "2026-09", lancadoEm: "2026-09-14", extratoId: idCor, contaBanco: "sim", contaBancariaId: "cora", transferenciaId: "tr" },
+  ];
+  const movsCartao = M.comIdsDoCartao(M.comCompetenciaDaFatura(M.movimentosDoCartao(FATURA_CSV).movimentos, CORA), "kc");
+  const fin = { extratos: sic, extratosContas: { cora: cor }, faturasArquivo: { kc: M.faturasComArquivo({}, movsCartao, "f", "t").faturas } };
+  const u = M.conferenciaUnificada({ fin, contas, cartoes: [CORA], lancamentos: lancs, obras: [OBRA_JAC], clientes: [], mes: "2026-09" });
+  assert.strictEqual(u.meios.length, 3);
+  // fila: o pagamento de 50 da Cora e as 2 compras do cartão que faltam
+  const fila = u.resultado.noBancoSemPar;
+  assert.strictEqual(fila.filter((m) => m._meio === "cora").length, 1);
+  assert.strictEqual(fila.filter((m) => m._cartao).length, 2);
+  assert.ok(fila.every((m) => m._meio));
+  // débito × crédito sem a transferência: débitos 100 + 50, créditos 0
+  assert.strictEqual(u.checagem.extrato.debitos, 150);
+  assert.strictEqual(u.checagem.extrato.creditos, 0);
+  assert.strictEqual(u.checagem.base.saidas, 100);
+  assert.strictEqual(u.checagem.base.entradas, 0);
+  assert.strictEqual(u.checagem.transferencias.debitos, 624.48);
+  assert.strictEqual(u.checagem.transferencias.creditos, 624.48);
+  assert.strictEqual(u.checagem.bate, false);                 // falta lançar os 50
+  assert.strictEqual(u.resultado.contabilizadoSemPar.length, 0);
+  assert.strictEqual(u.faturas.length, 1);
+  // conta sem extrato no mês: não acusa os lançamentos dela
+  const u2 = M.conferenciaUnificada({ fin: { extratos: sic }, contas, cartoes: [], lancamentos: lancs, mes: "2026-09" });
+  assert.strictEqual(u2.resultado.contabilizadoSemPar.length, 0);
+  assert.strictEqual(u2.meios[1].conciliacao, null);
 });
 
 for (const [nome, fn] of testes) {

@@ -3091,9 +3091,14 @@ teste("base do escritório: uma linha por transação do extrato", () => {
   assert.strictEqual(al.emitirNota, undefined, "Emitir nota fiscal saiu da base");
   const t = modulo.tabelaDaBase(L, modulo.BASE_COLUNAS_ESCRITORIO);
   assert.deepStrictEqual(t[0], ["Ref", "Nome Cliente", "Unidade negócio", "Projeto / obra", "Fornecedor", "Descrição Lançamento",
-    "Conta contábil", "Nota / Comprovante", "Valor total nota", "Período Contábil", "Data do lançamento"]);
+    "Conta contábil", "Nota / Comprovante", "Valor total nota", "Período Contábil", "Data do lançamento", "Meio"]);
   const pl = modulo.planilhaDaBase(t, modulo.BASE_RELATORIO_ESCRITORIO);
-  assert.strictEqual(pl.colunas.length, 11);
+  assert.strictEqual(pl.colunas.length, 12);
+  // o meio (Sicoob, Cora, o cartão) vem de quem chama, e entra na busca
+  const comMeio = modulo.linhasDoEscritorio([], [{ id: "M1", tipo: "escritorio", contaId: "x", valor: 10, lancadoEm: "2026-09-01", competencia: "2026-09" }],
+    { meioDoLancamento: () => "Cora" });
+  assert.strictEqual(comMeio[0].meio, "Cora");
+  assert.deepStrictEqual(modulo.filtrarBase(comMeio, { texto: "cora" }).map((l) => l.id), ["lanc:M1"]);
   assert.deepStrictEqual(modulo.filtrarBase(L, { texto: "aluguel" }).map((l) => l.id), ["lanc:L2"]);
 });
 
