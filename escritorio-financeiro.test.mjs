@@ -30,7 +30,7 @@ const M = new Function(src + `
            fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
-           competenciasDoCartao, composicaoDoExtrato, arquivoPareceDeOutraConta, contaDoArquivoPeloConteudo, CONTA_BANCARIA_PRINCIPAL, contasBancariasDoEscritorio, contaBancariaDoLancamento, lancamentosDaContaBancaria, extratosDaContaBancaria, financeiroComExtratos, comIdsDaContaBancaria, saldoBancoDaContaNoMes, comSaldoBancoDaConta, saldoPeloExtratoDaConta, lancamentosDaTransferencia, pareceEntreContas, contasDoLancamento,
+           competenciasDoCartao, composicaoDoExtrato, arquivoPareceDeOutraConta, parDaTransferencia, lancamentosDaTransferenciaComPar, contaDoArquivoPeloConteudo, CONTA_BANCARIA_PRINCIPAL, contasBancariasDoEscritorio, contaBancariaDoLancamento, lancamentosDaContaBancaria, extratosDaContaBancaria, financeiroComExtratos, comIdsDaContaBancaria, saldoBancoDaContaNoMes, comSaldoBancoDaConta, saldoPeloExtratoDaConta, lancamentosDaTransferencia, pareceEntreContas, contasDoLancamento,
            faturasFechadas, faturaParaFechar, lancamentosParaResultado, mesAnoPorExtenso, efDiaBR, fechadasDaCompra, compraEditada, compraMexeuNoDinheiro, faturaAjustada,
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas, ligaContaAoLancamento, lancamentosLigadosAsContas, contasLigadasAoLancamento,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
@@ -3249,6 +3249,46 @@ teste("de qual conta é o arquivo: pelas linhas iguais às já guardadas de cada
   assert.strictEqual(M.contaDoArquivoPeloConteudo(fin, contas, ids([{ data: "2026-09-20", valor: -5, historico: "TARIFA" }, { data: "2026-09-30", valor: -1, historico: "X" }])), "principal");
   assert.strictEqual(M.contaDoArquivoPeloConteudo(fin, contas, ids([{ data: "2026-09-08", valor: 1800, historico: "Roselene" }])), "k");
   assert.strictEqual(M.contaDoArquivoPeloConteudo(fin, contas, ids([{ data: "2026-10-01", valor: 9, historico: "nova" }])), null);
+});
+
+teste("transferência pelo par na outra conta: o Pix do Sicoob lançado como cartão vira a outra ponta", () => {
+  const contas = [{ id: "principal", nome: "Sicoob" }, { id: "cora", nome: "Cora" }];
+  const sic = M.extratosComArquivo({}, [{ data: "2026-09-14", valor: -624.48, historico: "PIX EMITIDO OUTRA IF - MESMA TIT. · Pagamento Pix 36.122.417" }], "s", "x", {}).extratos;
+  const idSic = sic["2026-09"].movimentos[0].id;
+  const fin = { extratos: sic };
+  const cartao = { id: "c1", tipo: "escritorio", competencia: "2026-09", lancadoEm: "2026-09-24", contaId: "cartao_credito", unidadeId: "gestao_obras",
+    valor: 624.48, extratoId: idSic, conferido: true, descricao: "Cartão de crédito Obra Jacarezinho" };
+  const linhaCora = { id: "cora:2026-09-14|624.48|leo padovan|#1", data: "2026-09-14", valor: 624.48, historico: "LEO PADOVAN PROJETOS E CONSTRUCOES · Transf Pix recebida" };
+  const par = M.parDaTransferencia(linhaCora, "cora", contas, fin, [cartao], []);
+  assert.ok(par, "achou o par pelo MESMA TIT do Sicoob");
+  assert.strictEqual(par.conta.id, "principal");
+  assert.strictEqual(par.lancamento.id, "c1");
+  let n = 0;
+  const r = M.lancamentosDaTransferenciaComPar(linhaCora, "2026-09", "cora", par, { contas, novoId: () => "t" + (++n), agora: "A" });
+  assert.ok(!r.erro, r.erro);
+  assert.strictEqual(r.lancamentos.length, 1);
+  assert.strictEqual(r.lancamentos[0].contaId, "transf_entrada");
+  assert.strictEqual(r.lancamentos[0].contaBancariaId, "cora");
+  assert.strictEqual(r.lancamentos[0].extratoId, linhaCora.id);
+  const conv = r.alterados[0];
+  assert.strictEqual(conv.id, "c1"); assert.strictEqual(conv.contaId, "transf_saida");
+  assert.strictEqual(conv.extratoId, idSic); assert.strictEqual(conv.unidadeId, "escritorio");
+  assert.strictEqual(conv.transferenciaId, r.lancamentos[0].transferenciaId);
+  // resultado: os 624,48 saem das despesas; saldo total igual
+  const antes = M.extratoEscritorio([cartao], {}).find((x) => x.mes === "2026-09");
+  const depois = M.extratoEscritorio([conv, r.lancamentos[0]], {}).find((x) => x.mes === "2026-09");
+  assert.strictEqual(antes.grupos.despesas, 624.48);
+  assert.strictEqual(depois.grupos.despesas || 0, 0);
+  // sem lançamento do outro lado: as duas pontas nascem ligadas
+  const par2 = M.parDaTransferencia(linhaCora, "cora", contas, fin, [], []);
+  const r2 = M.lancamentosDaTransferenciaComPar(linhaCora, "2026-09", "cora", par2, { contas, novoId: () => "u" });
+  assert.strictEqual(r2.lancamentos.length, 2);
+  assert.ok(r2.lancamentos.every((l) => l.extratoId && l.conferido));
+  // sem cara de dinheiro próprio dos dois lados, ou valor/sinal diferentes: não é par
+  const fin3 = { extratos: M.extratosComArquivo({}, [{ data: "2026-09-14", valor: -624.48, historico: "PIX PARA FULANO" }], "s", "x", {}).extratos };
+  assert.strictEqual(M.parDaTransferencia({ ...linhaCora, historico: "Fulano · Pix" }, "cora", contas, fin3, [], []), null);
+  assert.strictEqual(M.parDaTransferencia({ ...linhaCora, valor: -624.48 }, "cora", contas, fin, [], []), null);
+  assert.strictEqual(M.parDaTransferencia({ ...linhaCora, data: "2026-09-25" }, "cora", contas, fin, [], []), null);
 });
 
 for (const [nome, fn] of testes) {

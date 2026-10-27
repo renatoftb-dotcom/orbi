@@ -2019,6 +2019,69 @@ function lancamentosDaTransferencia(movimento, mes, contaDaLinha, contaOutra, op
   return { lancamentos: [saida, entrada] };
 }
 
+// A linha que tem o seu par na OUTRA conta do escritório: mesmo valor, sinal
+// contrário, até 3 dias de distância, e um dos dois lados com cara de
+// dinheiro próprio ("MESMA TIT.", o nome ou o CNPJ do escritório). É
+// transferência entre contas. `lancamento`: o que já está lançado na linha
+// do par (o Pix do Sicoob lançado como cartão, por exemplo).
+function parDaTransferencia(m, contaDaLinha, contas, fin, lancamentos, titular) {
+  const v = Math.round(Math.abs(Number((m || {}).valor) || 0) * 100) / 100;
+  if (!(v > 0) || !m.data) return null;
+  const dia = (d) => Date.parse(String(d || "").slice(0, 10) + "T12:00:00Z");
+  const d0 = dia(m.data);
+  if (!Number.isFinite(d0)) return null;
+  let melhor = null;
+  for (const c of contas || []) {
+    if (!c || c.id === (contaDaLinha || CONTA_BANCARIA_PRINCIPAL)) continue;
+    const vistos = new Set();
+    for (const x of Object.values(extratosDaContaBancaria(fin, c.id))) {
+      for (const g of ((x && x.movimentos) || [])) {
+        if (!g || vistos.has(g.id) || !efEhMovimento(g.historico)) continue;
+        vistos.add(g.id);
+        const vg = Math.round(Math.abs(Number(g.valor) || 0) * 100) / 100;
+        if (Math.abs(vg - v) > 0.005 || (Number(g.valor) < 0) === (Number(m.valor) < 0)) continue;
+        const dist = Math.abs(dia(g.data) - d0) / 86400000;
+        if (!(dist <= 3)) continue;
+        if (!pareceEntreContas(m.historico, titular) && !pareceEntreContas(g.historico, titular)) continue;
+        if (melhor && melhor.dist <= dist) continue;
+        const lancamento = lancamentosDaContaBancaria(lancamentos, c.id)
+          .find((l) => l && l.extratoId && efMesmaLinhaDoBanco(l.extratoId, g.id)) || null;
+        melhor = { conta: c, movimento: g, lancamento, dist };
+      }
+    }
+  }
+  return melhor;
+}
+// A transferência com o par achado: as duas pontas já ligadas às duas linhas.
+// Se o par já tinha um lançamento (o Pix lançado como despesa), ele VIRA a
+// outra ponta — mesmo id, mesma ligação com o banco — em vez de ficar ao lado.
+function lancamentosDaTransferenciaComPar(m, mes, contaDaLinha, par, opcoes) {
+  const o = opcoes || {};
+  if (!par || !par.conta) return { erro: "Não achei a outra ponta." };
+  const mesOutra = mesDoMovimento(par.movimento) || mes;
+  const bloq = bloqueioPorMesFechado(mesOutra, o.fechamentos);
+  if (bloq) return { erro: bloq };
+  if (par.lancamento && (par.lancamento.origem || {}).obraId) {
+    return { erro: `No ${par.conta.nome} esta linha está lançada por uma obra (${par.lancamento.descricao || "conta da obra"}): desfaça lá antes.` };
+  }
+  if (par.lancamento && par.lancamento.transferenciaId) return { erro: "A outra ponta já é uma transferência." };
+  const r = lancamentosDaTransferencia(m, mes, contaDaLinha, par.conta.id, o);
+  if (r.erro) return r;
+  const daLinha = r.lancamentos.find((l) => contaBancariaDoLancamento(l) === (contaDaLinha || CONTA_BANCARIA_PRINCIPAL));
+  const outra = r.lancamentos.find((l) => l !== daLinha);
+  const agora = o.agora || new Date().toISOString();
+  if (par.lancamento) {
+    const a = par.lancamento;
+    const convertido = { ...a, contaId: outra.contaId, descricao: outra.descricao, transferenciaId: outra.transferenciaId,
+      unidadeId: "escritorio", clienteId: "", cliente: "", obraId: "", empreendimentoId: "", projeto: "", contaBanco: "sim",
+      conferido: true, conferidoEm: a.conferidoEm || agora };
+    return { lancamentos: [daLinha], alterados: [convertido] };
+  }
+  return { lancamentos: [daLinha, { ...outra, competencia: mesOutra, lancadoEm: String(par.movimento.data || "").slice(0, 10) || outra.lancadoEm,
+    extratoId: par.movimento.id || "", historicoBanco: par.movimento.historico || "", conferido: true, conferidoEm: agora, conferidoPor: "extrato" }],
+    alterados: [] };
+}
+
 // Um lançamento só entra em mês aberto. A regra vale para o formulário e
 // para a importação — mês fechado é passado conferido, não se mexe.
 function bloqueioPorMesFechado(competencia, fechamentos) {
@@ -6708,7 +6771,10 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
   }
   // As que já têm classificação pronta (a mesma do mês passado, e que valida
   // sozinha): todas de uma vez, numa gravada só.
-  const prontas = lista.filter((m) => { const r = fila.rapido(m); return r && r.lancamento && !r.lancamento.naObra && !r.lancamento.ligarObra && !r.lancamento.recebimentoExtras; });
+  // as que têm o par na outra conta: transferência, não lançamento
+  const comPar = fila.parTransferencia ? lista.map((m) => ({ m, par: fila.parTransferencia(m) })).filter((x) => x.par) : [];
+  const idsComPar = new Set(comPar.map((x) => x.m.id));
+  const prontas = lista.filter((m) => { if (idsComPar.has(m.id)) return false; const r = fila.rapido(m); return r && r.lancamento && !r.lancamento.naObra && !r.lancamento.ligarObra && !r.lancamento.recebimentoExtras; });
   function lancarSugeridas() {
     setErroLote("");
     const r = fila.lancarSugeridas(prontas);
@@ -6733,6 +6799,13 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
           <div style={{ fontSize: 12, color: "#6b7280" }}>
             {lista.length} {lista.length === 1 ? "linha" : "linhas"} do banco · clique na linha para lançar
           </div>
+          {comPar.length > 1 && (
+            <button data-vk-transferir-pares="1" style={{ ...S.btnSec, padding: "5px 12px", fontSize: 12, color: "#0474f4", borderColor: "rgba(4,116,244,0.4)",
+              opacity: ocupado ? .45 : 1 }} disabled={!!ocupado}
+              onClick={() => Promise.resolve(fila.transferirPares(comPar)).catch(console.error)}>
+              ⇄ Lançar as {comPar.length} transferências entre contas
+            </button>
+          )}
           {prontas.length > 1 && (
             <button style={{ ...S.btnSec, padding: "5px 12px", fontSize: 12, color: "#0474f4", borderColor: "rgba(4,116,244,0.4)",
               opacity: ocupado ? .45 : 1 }} disabled={!!ocupado} onClick={lancarSugeridas}>
@@ -6782,7 +6855,8 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
             const sug = fila.sugestao(m);
             const contaSug = sug && sug.campos && sug.campos.contaId ? contaEscritorio(sug.campos.contaId) : null;
             const aberta = aberto === m.id;
-            const entreContas = pareceEntreContas(m.historico, fila.titular);
+            const par = fila.parTransferencia ? fila.parTransferencia(m) : null;
+            const entreContas = !!par || pareceEntreContas(m.historico, fila.titular);
             return (
               <div key={m.id} style={{ borderTop: k ? "1px solid rgba(38,36,33,0.08)" : "none",
                 background: aberta ? "#f7fbff" : "transparent" }}>
@@ -6793,7 +6867,13 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                   <div style={{ fontSize: 12, color: "#6b7280", whiteSpace: "nowrap", paddingTop: 1 }}>{dataBR(m.data)}</div>
                   <div style={{ flex: "1 1 220px", minWidth: 0 }}>
                     <div style={{ fontSize: 12.5, color: "#262421", overflowWrap: "anywhere" }}>{m.historico || m.documento || "—"}</div>
-                    {entreContas && !contaSug && (
+                    {par && (
+                      <div data-vk-par-transferencia="1" style={{ fontSize: 11.5, color: "#0474f4", marginTop: 2, lineHeight: 1.4 }}>
+                        ⇄ Transferência entre contas: {Number(m.valor) < 0 ? "entrou na conta" : "saiu da conta"} {par.conta.nome} em {dataBR(par.movimento.data)}
+                        {par.lancamento ? <span style={{ color: "#b45309" }}> — lá está lançada como {(contaEscritorio(par.lancamento.contaId) || {}).nome || "outra conta"}; vira a outra ponta</span> : null}
+                      </div>
+                    )}
+                    {entreContas && !contaSug && !par && (
                       <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 2 }}>
                         parece transferência entre contas suas — não entra no resultado
                       </div>
@@ -6848,14 +6928,20 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                       <button data-vk-lancar-estorno="1" style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#047857", borderColor: "rgba(4,120,87,0.45)" }}
                         disabled={!!ocupado}
                         onClick={(e) => { e.stopPropagation(); rapido(m); }}>✓ Lançar estorno</button>
-                    ) : contaSug && !sug.daObra && !aberta && (
+                    ) : contaSug && !sug.daObra && !aberta && !par && (
                       <button style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#0474f4", borderColor: "rgba(4,116,244,0.4)" }}
                         disabled={!!ocupado}
                         onClick={(e) => { e.stopPropagation(); rapido(m); }}>✓ Lançar assim</button>
                     )}
                     <button style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12 }}
                       onClick={(e) => { e.stopPropagation(); setAberto(aberta ? "" : m.id); }}>{aberta ? "Fechar" : "Lançar"}</button>
-                    {fila.transferir && (entreContas || transferindo === m.id) ? (
+                    {par && !aberta ? (
+                      <button data-vk-transferir-par="1" style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#fff", background: "#0474f4", borderColor: "#0474f4" }}
+                        disabled={!!ocupado}
+                        onClick={(e) => { e.stopPropagation(); Promise.resolve(fila.transferirPar(m, par)).catch(console.error); }}>
+                        ✓ Transferência entre contas
+                      </button>
+                    ) : fila.transferir && (entreContas || transferindo === m.id) ? (
                       fila.outrasContas.length > 1 && transferindo === m.id ? (
                         <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap", alignItems: "center", fontSize: 11.5, color: "#4b5563" }}>
                           {Number(m.valor) < 0 ? "para" : "de"}
@@ -6886,7 +6972,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                       </button>
                     )}
                     {/* a linha sem cara de transferência também pode ser uma */}
-                    {fila.transferir && !entreContas && transferindo !== m.id && (
+                    {fila.transferir && !entreContas && !par && transferindo !== m.id && (
                       <button style={{ background: "none", border: "none", padding: "5px 2px", fontSize: 11.5, color: "#6b7280",
                         cursor: "pointer", textDecoration: "underline", fontFamily: "inherit" }} disabled={!!ocupado}
                         onClick={(e) => { e.stopPropagation(); if (fila.outrasContas.length > 1) setTransferindo(m.id); else transferir(m, fila.outrasContas[0].id); }}>
@@ -8229,7 +8315,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   // A sugestão e o "lançar assim" de cada linha da fila: uma conta por linha
   // enquanto os dados e o mês não mudam. Antes, cada desenho refazia as duas
   // para todas as linhas (marcar uma caixinha recalculava a fila inteira).
-  const memoDaFila = useMemo(() => ({ sugestao: new Map(), rapido: new Map() }), [data, mesEmConferencia]);
+  const memoDaFila = useMemo(() => ({ sugestao: new Map(), rapido: new Map(), par: new Map() }), [data, mesEmConferencia, contaFecho]);
   const daMemoDaFila = (tipo, m, calcular) => {
     const cache = memoDaFila[tipo];
     if (!m || !m.id) return calcular();
@@ -8859,6 +8945,32 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       + `A outra ponta casa sozinha quando o extrato de ${nomeOutra} for conferido.`);
   }
 
+  // Transferência com o par achado na outra conta: um clique, as duas pontas.
+  async function transferirComPar(m, par) {
+    const r = lancamentosDaTransferenciaComPar(m, mesEmConferencia, contaAtual.id, par, {
+      contas: contasBanco, fechamentos, novoId: typeof uid === "function" ? uid : undefined });
+    if (r.erro) { setAviso(r.erro); return false; }
+    const trocados = new Map((r.alterados || []).map((l) => [l.id, l]));
+    await gravar([...lancs.map((l) => (l && trocados.has(l.id) ? trocados.get(l.id) : l)), ...r.lancamentos]);
+    setAviso(`Transferência entre contas: ${efDinheiro(Math.abs(Number(m.valor) || 0))} ${Number(m.valor) < 0 ? "para" : "de"} ${par.conta.nome}`
+      + (r.alterados && r.alterados.length ? ` — o lançamento que estava no ${par.conta.nome} virou a outra ponta.` : "."));
+    return true;
+  }
+  async function transferirVariosComPar(itens) {
+    let todos = lancs.slice(), n = 0;
+    for (const { m, par } of itens || []) {
+      const r = lancamentosDaTransferenciaComPar(m, mesEmConferencia, contaAtual.id, par, {
+        contas: contasBanco, fechamentos, novoId: typeof uid === "function" ? uid : undefined });
+      if (r.erro) continue;
+      const trocados = new Map((r.alterados || []).map((l) => [l.id, l]));
+      todos = [...todos.map((l) => (l && trocados.has(l.id) ? trocados.get(l.id) : l)), ...r.lancamentos];
+      n++;
+    }
+    if (!n) return;
+    await gravar(todos);
+    setAviso(`${n} ${n === 1 ? "transferência lançada" : "transferências lançadas"} entre as contas.`);
+  }
+
   // Cadastro das contas bancárias (a principal só troca de nome).
   async function salvarContaBancaria(c) {
     const esc = (data || {}).escritorio || {};
@@ -9204,6 +9316,9 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
               mes: mesEmConferencia,
               titular,
               transferir: variasContas ? transferirDoExtrato : null,
+              parTransferencia: variasContas ? (m) => daMemoDaFila("par", m, () => parDaTransferencia(m, contaAtual.id, contasBanco, cfgFin, lancs, titular)) : null,
+              transferirPar: transferirComPar,
+              transferirPares: transferirVariosComPar,
               outrasContas: contasBanco.filter((c) => c.id !== contaAtual.id),
               inicial: (m) => ({ ...lancamentoDaLinhaDoExtrato(m, mesEmConferencia,
                 daMemoDaFila("sugestao", m, () => sugestaoCompletaDoExtrato(m, lancs, ctxDoPalpite))), ...marcaDaContaBancaria() }),
