@@ -3171,8 +3171,10 @@ teste("transferência entre contas: duas pontas ligadas, a da linha conferida; o
   assert.strictEqual(ent.contaId, "transf_entrada"); assert.strictEqual(ent.contaBancariaId, "cora");
   assert.strictEqual(ent.extratoId, undefined); assert.ok(!ent.conferido);
   assert.strictEqual(sai.transferenciaId, ent.transferenciaId);
-  assert.strictEqual(sai.descricao, "Transferência para Cora");
-  assert.strictEqual(ent.descricao, "Transferência de Sicoob");
+  // as duas pontas com o mesmo nome, com a direção junto
+  assert.strictEqual(sai.descricao, "Transferência entre contas · Sicoob → Cora");
+  assert.strictEqual(ent.descricao, "Transferência entre contas · Sicoob → Cora");
+  assert.strictEqual(M.contaEscritorio("transf_saida").nome, M.contaEscritorio("transf_entrada").nome);
   // vindo da linha de ENTRADA na Cora: a ponta da Cora é a ligada
   const r2 = M.lancamentosDaTransferencia({ id: "cora:x", data: "2026-09-14", valor: 624.48 }, "2026-09", "cora", "principal", { contas, novoId: () => "u" });
   assert.strictEqual(r2.lancamentos[0].contaBancariaId, undefined);   // saiu da principal

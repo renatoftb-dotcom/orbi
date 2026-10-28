@@ -3687,6 +3687,11 @@ function linhasDoEscritorio(obras, lancamentos, opcoes) {
     const anexos = (Array.isArray(l.anexos) ? l.anexos : []).filter(Boolean).concat(l.comprovante ? [l.comprovante] : []);
     // por onde o dinheiro passou: Sicoob, Cora, o cartão (quem diz é o escritório)
     const meio = (typeof o.meioDoLancamento === "function" && o.meioDoLancamento(l)) || "";
+    // Afeta o saldo? A transferência entre as suas contas não (as duas pontas
+    // se anulam); a fatura do cartão inteira e a compra no cartão também não
+    // (quem afeta são as compras da fatura, cada uma na linha dela). Somando
+    // só o "Sim", o Excel dá o mesmo resultado do extrato, sem contar duas vezes.
+    const afetaSaldo = l._afetaSaldo === false || !!(conta && conta.interna) ? "Não" : "Sim";
     const pseudo = { id: "lanc:" + l.id, numeroDoc: l.numeroDoc || "", descricao: l.descricao || "", favorecido: l.fornecedor || "",
       numeroNota: l.documento || "", valor, valorPago: valor, pago: true, pagoEm: dia, vencimento: dia, contaId: l.contaId || "",
       observacao: [nomeConta, l.cliente, obraNome, l.observacao, meio].filter(Boolean).join(" "), anexos };
@@ -3698,7 +3703,7 @@ function linhasDoEscritorio(obras, lancamentos, opcoes) {
       insumoCodigo: "", insumo: "", insumoNome: nomeConta || "Outros",
       quantidade: 1, unidade: "Unidades", unitario: valor, total: valor, valorNota: valor,
       grupo: titulo(grupo && grupo.titulo), etapaId: "", etapa: "",
-      contaId: l.contaId || "", conta: nomeConta, meio,
+      contaId: l.contaId || "", conta: nomeConta, meio, afetaSaldo,
       pago: true, pagoEm: dia, vencimento: dia, competencia: String(l.competencia || dia.slice(0, 7)).slice(0, 7),
       dataLanc: entrou, entradaEm: entrou, origem: "escritorio", papeis: anexos.length, conta_: pseudo, sinal,
       ...(estorno ? { estorno: true } : {}),
@@ -3739,7 +3744,7 @@ const BASE_COLUNAS_ESCRITORIO = [
   ["ref", "Ref"], ["cliente", "Nome Cliente"], ["unidadeNegocio", "Unidade negócio"], ["obra", "Projeto / obra"],
   ["fornecedor", "Fornecedor"], ["descricaoLanc", "Descrição Lançamento"], ["conta", "Conta contábil"],
   ["nota", "Nota / Comprovante"], ["valorNota", "Valor total nota"],
-  ["competencia", "Período Contábil"], ["dataLanc", "Data do lançamento"], ["meio", "Meio"],
+  ["competencia", "Período Contábil"], ["dataLanc", "Data do lançamento"], ["meio", "Meio"], ["afetaSaldo", "Afeta saldo"],
 ];
 // No Excel do escritório o estorno sai NEGATIVO (a receita de gestão
 // devolvida abate a receita, a loja que devolveu abate a despesa): a tabela
@@ -3863,6 +3868,7 @@ const BASE_RELATORIO_ESCRITORIO = [
   ["Conta contábil", "texto", "", "center"], ["Nota / Comprovante", "numeroTexto", "0", "center"],
   ["Valor total nota", "moeda", CP_MOEDA_XL, ""], ["Período Contábil", "mes", "[$-416]mmm\\-yy;@", "center"],
   ["Data do lançamento", "data", "[$-416]d\\-mmm\\-yy;@", "center"], ["Meio", "texto", "", "center"],
+  ["Afeta saldo", "texto", "", "center"],
 ];
 function planilhaDaBase(tabela, especificacao) {
   const SPEC = especificacao || BASE_RELATORIO;
@@ -5119,8 +5125,10 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
         <div style={{ fontSize: 12.5, color: "#374151" }}>
           <b>{filtradas.length}</b> {filtradas.length === 1 ? "item" : "itens"}
           {doEscritorio ? (<>
-            {" · entradas "}<b>{moeda(red(filtradas.filter((l) => l.sinal > 0).reduce((t, l) => t + l.total, 0)))}</b>
-            {" · saídas "}<b>{moeda(red(filtradas.filter((l) => !(l.sinal > 0)).reduce((t, l) => t + l.total, 0)))}</b>
+            {/* só o que afeta o saldo: a fatura inteira e a transferência
+                entre contas não entram, para não contar duas vezes */}
+            {" · entradas "}<b>{moeda(red(filtradas.filter((l) => l.sinal > 0 && l.afetaSaldo !== "Não").reduce((t, l) => t + l.total, 0)))}</b>
+            {" · saídas "}<b>{moeda(red(filtradas.filter((l) => !(l.sinal > 0) && l.afetaSaldo !== "Não").reduce((t, l) => t + l.total, 0)))}</b>
           </>) : (<>
             {" · total "}<b>{moeda(soma)}</b>
             {somaPaga !== soma ? ` · pago ${moeda(somaPaga)}` : ""}
@@ -5241,7 +5249,8 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
               </div>
               <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>
                 {(doEscritorio
-                  ? [l.conta, l.unidadeNegocio, [l.cliente, l.obra].filter(Boolean).join(" / "), "competência " + mesBR(l.competencia), l.meio]
+                  ? [l.conta, l.unidadeNegocio, [l.cliente, l.obra].filter(Boolean).join(" / "), "competência " + mesBR(l.competencia), l.meio,
+                    l.afetaSaldo === "Não" ? "não afeta o saldo" : ""]
                   : [l.quantidade ? `${num(l.quantidade)} ${l.unidade}`.trim() + (l.unitario != null ? ` × ${num(l.unitario, 2)}` : "") : "", l.etapa, l.grupo, l.conta,
                     l.unidadeNegocio, !obraFixa ? [l.cliente, l.obra].filter(Boolean).join(" / ") : ""]).filter(Boolean).join(" · ")}
               </div>

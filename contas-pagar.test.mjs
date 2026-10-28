@@ -3091,9 +3091,16 @@ teste("base do escritório: uma linha por transação do extrato", () => {
   assert.strictEqual(al.emitirNota, undefined, "Emitir nota fiscal saiu da base");
   const t = modulo.tabelaDaBase(L, modulo.BASE_COLUNAS_ESCRITORIO);
   assert.deepStrictEqual(t[0], ["Ref", "Nome Cliente", "Unidade negócio", "Projeto / obra", "Fornecedor", "Descrição Lançamento",
-    "Conta contábil", "Nota / Comprovante", "Valor total nota", "Período Contábil", "Data do lançamento", "Meio"]);
+    "Conta contábil", "Nota / Comprovante", "Valor total nota", "Período Contábil", "Data do lançamento", "Meio", "Afeta saldo"]);
   const pl = modulo.planilhaDaBase(t, modulo.BASE_RELATORIO_ESCRITORIO);
-  assert.strictEqual(pl.colunas.length, 12);
+  assert.strictEqual(pl.colunas.length, 13);
+  // afeta o saldo: a transferência entre contas e o que o escritório marca não
+  const afeta = modulo.linhasDoEscritorio([], [
+    { id: "A1", tipo: "escritorio", contaId: "x", valor: 10, lancadoEm: "2026-09-01", competencia: "2026-09" },
+    { id: "A2", tipo: "escritorio", contaId: "tr", valor: 10, lancadoEm: "2026-09-01", competencia: "2026-09" },
+    { id: "A3", tipo: "escritorio", contaId: "x", valor: 10, lancadoEm: "2026-09-01", competencia: "2026-09", _afetaSaldo: false },
+  ], { contaDoEscritorio: (id) => (id === "tr" ? { id, nome: "Transferência entre contas", interna: true } : { id, nome: "Outra" }) });
+  assert.deepStrictEqual(afeta.map((l) => l.lancId + ":" + l.afetaSaldo).sort(), ["A1:Sim", "A2:Não", "A3:Não"]);
   // o meio (Sicoob, Cora, o cartão) vem de quem chama, e entra na busca
   const comMeio = modulo.linhasDoEscritorio([], [{ id: "M1", tipo: "escritorio", contaId: "x", valor: 10, lancadoEm: "2026-09-01", competencia: "2026-09" }],
     { meioDoLancamento: () => "Cora" });

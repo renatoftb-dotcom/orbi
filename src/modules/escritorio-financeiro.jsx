@@ -134,8 +134,8 @@ const PLANO_CONTAS_ESCRITORIO = [
   // ── transferência entre contas do escritório (só pelo Fechamento) ──
   // `interna`: não aparece para escolher no formulário; nasce do botão
   // "Transferência entre contas" da fila do extrato, já com as duas pontas.
-  { id: "transf_saida",   nome: "Transferência para outra conta", grupo: "transf_saidas",   unidades: ["escritorio"], apelidos: [], interna: true },
-  { id: "transf_entrada", nome: "Transferência de outra conta",   grupo: "transf_entradas", unidades: ["escritorio"], apelidos: [], interna: true },
+  { id: "transf_saida",   nome: "Transferência entre contas", grupo: "transf_saidas",   unidades: ["escritorio"], apelidos: [], interna: true },
+  { id: "transf_entrada", nome: "Transferência entre contas", grupo: "transf_entradas", unidades: ["escritorio"], apelidos: [], interna: true },
   { id: "res_engenharia", nome: "Reserva engenharia (a repassar)", grupo: "reservas", unidades: ["projetos", "escritorio"],
     apelidos: ["Reserva engenharia"] },
   { id: "estornos_bancarios", nome: "Estornos bancários",    grupo: "ajustes_bancarios", unidades: ["escritorio"],
@@ -2012,10 +2012,12 @@ function lancamentosDaTransferencia(movimento, mes, contaDaLinha, contaOutra, op
   const comum = { tipo: "escritorio", unidadeId: "escritorio", competencia: String(mes), lancadoEm: String(m.data || "").slice(0, 10),
     valor, transferenciaId: "transf:" + base, fornecedor: "", contaBanco: "sim", criadoEm: agora };
   const ligada = { extratoId: m.id || "", historicoBanco: m.historico || "", conferido: true, conferidoEm: agora, conferidoPor: "extrato" };
+  // as duas pontas com o mesmo nome; a direção vai junto, de → para
+  const descricao = `Transferência entre contas · ${nome(de)} → ${nome(para)}`;
   const saida = { ...comum, id: base + "_s", contaId: "transf_saida", ...marcaDaConta(de),
-    descricao: `Transferência para ${nome(para)}`, ...(de === contaDaLinha ? ligada : {}) };
+    descricao, ...(de === contaDaLinha ? ligada : {}) };
   const entrada = { ...comum, id: base + "_e", contaId: "transf_entrada", ...marcaDaConta(para),
-    descricao: `Transferência de ${nome(de)}`, ...(para === contaDaLinha ? ligada : {}) };
+    descricao, ...(para === contaDaLinha ? ligada : {}) };
   return { lancamentos: [saida, entrada] };
 }
 
@@ -9715,13 +9717,24 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   // fatura, Meio = o cartão), como no resultado. Assim a tabela dinâmica por
   // conta dá o mesmo número do extrato — antes a fatura inteira caía em
   // "Cartão de crédito". A compra do escritório no cartão entra pela fatura.
+  // A fatura inteira (a linha que o banco debitou) e a compra do escritório
+  // no cartão continuam na base — é com elas que se confere o banco e se
+  // edita a compra —, marcadas "não afeta o saldo": quem afeta são as
+  // compras da fatura.
   const lancamentosDaBase = useMemo(() => {
     const clientes = (data || {}).clientes || [];
-    return lancamentosParaResultado(lancamentosDoEscritorio(data)).map((l) => {
-      if ((l.origem || {}).tipo !== "faturaLinha" || l.cliente || !l.clienteId) return l;
+    const todos = lancamentosDoEscritorio(data);
+    const abertas = new Set();
+    const partes = lancamentosParaResultado(todos).map((l) => {
+      if ((l.origem || {}).tipo !== "faturaLinha") return l;
+      abertas.add(l.origem.faturaId);
+      if (l.cliente || !l.clienteId) return l;
       const cli = clientes.find((c) => c && c.id === l.clienteId);
       return cli ? { ...l, cliente: cli.nome || "" } : l;
     });
+    const naoAfetam = todos.filter((l) => l && (abertas.has(l.id) || compraNoCartaoDoEscritorio(l)))
+      .map((l) => ({ ...l, _afetaSaldo: false }));
+    return partes.concat(naoAfetam);
   }, [data]);
   const faturaDaParte = (l) => {
     const o = (l && l.origem) || {};
