@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, linhasParaExportar, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -3099,6 +3099,16 @@ teste("base do escritório: uma linha por transação do extrato", () => {
     { meioDoLancamento: () => "Cora" });
   assert.strictEqual(comMeio[0].meio, "Cora");
   assert.deepStrictEqual(modulo.filtrarBase(comMeio, { texto: "cora" }).map((l) => l.id), ["lanc:M1"]);
+  // o estorno sai negativo SÓ no Excel: a tabela dinâmica por conta bate com o extrato
+  const gest = modulo.linhasDoEscritorio([], [
+    { id: "G1", tipo: "escritorio", contaId: "rec_gestao", valor: 5000, lancadoEm: "2026-09-05", competencia: "2026-09" },
+    { id: "G2", tipo: "escritorio", contaId: "rec_gestao", valor: -1200, lancadoEm: "2026-09-20", competencia: "2026-09" },
+  ], {});
+  assert.ok(gest.every((l) => l.valorNota > 0), "na tela, sem sinal");
+  const exp = modulo.tabelaDaBase(modulo.linhasParaExportar(gest), modulo.BASE_COLUNAS_ESCRITORIO);
+  const iValor = exp[0].indexOf("Valor total nota");
+  assert.deepStrictEqual(exp.slice(1).map((l) => l[iValor]).sort((a, b) => a - b), [-1200, 5000]);
+  assert.strictEqual(exp.slice(1).reduce((t, l) => t + l[iValor], 0), 3800);
   assert.deepStrictEqual(modulo.filtrarBase(L, { texto: "aluguel" }).map((l) => l.id), ["lanc:L2"]);
 });
 

@@ -36527,6 +36527,7 @@ function linhasDoEscritorio(obras, lancamentos, opcoes) {
       contaId: l.contaId || "", conta: nomeConta, meio,
       pago: true, pagoEm: dia, vencimento: dia, competencia: String(l.competencia || dia.slice(0, 7)).slice(0, 7),
       dataLanc: entrou, entradaEm: entrou, origem: "escritorio", papeis: anexos.length, conta_: pseudo, sinal,
+      ...(estorno ? { estorno: true } : {}),
     });
   }
   // como era na tela de lançamentos: competência mais nova primeiro e, no
@@ -36566,6 +36567,15 @@ const BASE_COLUNAS_ESCRITORIO = [
   ["nota", "Nota / Comprovante"], ["valorNota", "Valor total nota"],
   ["competencia", "Período Contábil"], ["dataLanc", "Data do lançamento"], ["meio", "Meio"],
 ];
+// No Excel do escritório o estorno sai NEGATIVO (a receita de gestão
+// devolvida abate a receita, a loja que devolveu abate a despesa): a tabela
+// dinâmica por conta dá o mesmo número do extrato do VICKE. Na tela o valor
+// continua sem sinal, com a cor dizendo entrada ou saída.
+function linhasParaExportar(linhas) {
+  return (linhas || []).map((l) => (l && l.estorno && l.origem === "escritorio"
+    ? { ...l, valorNota: -Math.abs(Number(l.valorNota) || 0), total: -Math.abs(Number(l.total) || 0), unitario: -Math.abs(Number(l.unitario) || 0) }
+    : l));
+}
 function tabelaDaBase(linhas, colunas) {
   const cols = colunas || BASE_COLUNAS;
   return [cols.map((c) => c[1])].concat((linhas || []).map((l) => cols.map(([k]) => {
@@ -37587,7 +37597,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
 
   async function baixar() {
     setBaixando("Montando a planilha…");
-    const tabela = tabelaDaBase(filtradas, COLS_TAB);
+    const tabela = tabelaDaBase(linhasParaExportar(filtradas), COLS_TAB);
     const plan = planilhaDaBase(tabela, COLS_REL);
     const nome = (nomeDoArquivo || "base-de-dados").replace(/[^\w-]+/g, "-").toLowerCase() + "-" + new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
     const salvar = (blob, arquivo) => {
@@ -37721,7 +37731,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       cabecalho(r2);
       r2.autoFilter = { from: { row: 1, column: 1 }, to: { row: pc.notas.length + 1, column: 10 } };
       // 3. os itens, como na base
-      const plan = planilhaDaBase(tabelaDaBase(filtradas.filter((l) => l.pago), COLS_TAB), COLS_REL);
+      const plan = planilhaDaBase(tabelaDaBase(linhasParaExportar(filtradas.filter((l) => l.pago)), COLS_TAB), COLS_REL);
       const r3 = wb.addWorksheet("Itens", { views: [{ state: "frozen", ySplit: 1 }] });
       r3.columns = plan.colunas.map((c) => ({ header: c.titulo, width: c.largura }));
       plan.linhas.forEach((linha) => {
