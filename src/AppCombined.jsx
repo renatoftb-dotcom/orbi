@@ -21539,6 +21539,103 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo, quem }) 
   );
 }
 
+// ── Quadros + fluxo por mês do escritório (A pagar e A receber) ──
+// O mesmo desenho do Contas a pagar da obra: os quatro quadros do topo
+// trocam o que o gráfico desenha (e o que a lista mostra); clicar numa barra
+// mostra só aquele mês; clicar fora do gráfico volta a todos. O gráfico é o
+// da obra (GraficoFluxoMensal, em contas-pagar.jsx).
+const EF_FLUXO_TEXTOS = {
+  pagar: { aPagar: "A pagar", vencidas: "Vencido", pagas: "Pago", todas: "Total",
+    faixa: { pago: "Pago", vencido: "Vencido", aberto: "A pagar" }, conta: ["conta", "contas"] },
+  receber: { aPagar: "A receber", vencidas: "Vencido", pagas: "Recebido", todas: "Total",
+    faixa: { pago: "Recebido", vencido: "Vencido", aberto: "A receber" }, conta: ["conta", "contas"] },
+};
+// a conta passa pelo quadro escolhido e pelo mês clicado?
+function efPassaNoFluxo(c, filtro, mes, hoje) {
+  if (mes && String((c || {}).vencimento || "").slice(0, 7) !== mes) return false;
+  if (filtro === "pagas") return !!c.pago;
+  if (filtro === "aPagar") return !c.pago;
+  if (filtro === "vencidas") return !c.pago && !!c.vencimento && String(c.vencimento) < hoje;
+  return true;
+}
+function FluxoDoEscritorio({ contas, tipo, filtro, aoFiltrar, mes, aoEscolherMes, hoje, subPago, subTotal, uid: idGrafico }) {
+  const T = EF_FLUXO_TEXTOS[tipo] || EF_FLUXO_TEXTOS.pagar;
+  const AZUL = "#0474f4";
+  const [estreito, setEstreito] = useState(typeof window !== "undefined" && window.innerWidth < 768);
+  useEffect(() => {
+    const f = () => setEstreito(window.innerWidth < 768);
+    window.addEventListener("resize", f);
+    return () => window.removeEventListener("resize", f);
+  }, []);
+  const refGrafico = useRef(null);
+  useEffect(() => {
+    if (!mes || typeof document === "undefined") return;
+    const fora = (ev) => {
+      const alvo = ev.target;
+      if (refGrafico.current && refGrafico.current.contains(alvo)) return;
+      if (alvo && alvo.closest && alvo.closest("[data-vk-mantem-mes]")) return;
+      aoEscolherMes("");
+    };
+    document.addEventListener("mousedown", fora);
+    return () => document.removeEventListener("mousedown", fora);
+  }, [mes]);
+  const temGrafico = typeof GraficoFluxoMensal === "function" && typeof fluxoMensal === "function";
+  const t = typeof totaisContas === "function" ? totaisContas(contas, hoje) : { total: 0, aberto: 0, vencido: 0, pago: 0, qtdAberto: 0, qtdVencido: 0 };
+  const fluxo = temGrafico ? fluxoMensal(contas, hoje) : { meses: [], semData: 0 };
+  const series = typeof seriesDoFiltro === "function" ? seriesDoFiltro(filtro) : ["vencido", "aberto"];
+  const faixas = typeof CP_FAIXAS !== "undefined" ? CP_FAIXAS : [];
+  const nomeFiltro = (T[filtro] || T.todas).toLowerCase();
+  const dinheiro = (v) => efDinheiro(v);
+  const tile = (rot, valor, sub, f) => {
+    const ativo = filtro === f;
+    return (
+      <button type="button" data-vk-quadro-fluxo={f} onClick={() => aoFiltrar(ativo && f !== "todas" ? "todas" : f)}
+        style={{ border: `1.5px solid ${ativo ? AZUL : "rgba(38,36,33,0.14)"}`, borderRadius: 14, padding: "12px 14px",
+          background: "#fff", cursor: "pointer", fontFamily: "inherit", textAlign: "left", width: "100%" }}>
+        <div style={{ fontSize: 11.5, color: ativo ? AZUL : "#4b5563", marginBottom: 4, fontWeight: ativo ? 700 : 400 }}>{rot}</div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: ativo ? AZUL : "#111827" }}>{dinheiro(valor)}</div>
+        {sub ? <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>{sub}</div> : null}
+      </button>
+    );
+  };
+  const nomeDoMes = (k) => (typeof rotuloMes === "function" ? rotuloMes(k) : mesAnoPorExtenso(k));
+  return (
+    <>
+      <div style={{ display: "grid", gridTemplateColumns: estreito ? "1fr 1fr" : "repeat(4, 1fr)", gap: 12 }}>
+        {tile(T.aPagar, t.aberto, `${t.qtdAberto} ${t.qtdAberto === 1 ? T.conta[0] : T.conta[1]}`, "aPagar")}
+        {tile(T.vencidas, t.vencido, `${t.qtdVencido} em atraso`, "vencidas")}
+        {tile(T.pagas, t.pago, subPago, "pagas")}
+        {tile(T.todas, t.total, subTotal, "todas")}
+      </div>
+      {temGrafico && fluxo.meses.length > 0 && (
+        <div ref={refGrafico} data-vk-fluxo-mes="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding: "14px 16px", background: "#fff", minWidth: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>Fluxo por mês</div>
+            <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+              {[...faixas].filter(([k]) => series.indexOf(k) >= 0).reverse().map(([k, cor]) => (
+                <span key={k} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "#4b5563" }}>
+                  <span style={{ width: 9, height: 9, borderRadius: 2, background: cor, display: "inline-block" }} />{T.faixa[k]}
+                </span>
+              ))}
+            </div>
+          </div>
+          <GraficoFluxoMensal fluxo={fluxo} hojeIso={hoje} uid={idGrafico} onEscolherMes={(k) => aoEscolherMes(mes === k ? "" : k)} mesSelecionado={mes} series={series} />
+          <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6 }}>
+            Mostrando {nomeFiltro} — os quadros acima trocam o que o gráfico desenha. Valores em milhares quando passam de mil. Clique num mês para ver só as contas dele; clique fora do gráfico para voltar a todas.
+            {fluxo.semData > 0 ? ` ${fluxo.semData} ${fluxo.semData === 1 ? "conta" : "contas"} sem vencimento (${dinheiro(fluxo.semDataValor)}) fora do gráfico.` : ""}
+          </div>
+        </div>
+      )}
+      {(filtro !== "aPagar" || mes) && (
+        <div data-vk-mantem-mes="1" style={{ fontSize: 11.5, color: "#4b5563" }}>
+          {`Mostrando ${mes ? nomeDoMes(mes).toLowerCase() : ""}${mes && filtro !== "todas" ? " · " : ""}${filtro === "todas" ? (mes ? "" : "todas as contas") : `só ${nomeFiltro}`} · `}
+          <button type="button" onClick={() => { aoFiltrar("aPagar"); aoEscolherMes(""); }} style={{ background: "none", border: "none", padding: 0, color: AZUL, cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>voltar ao padrão</button>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ── A pagar do escritório ───────────────────────────────────────
 // Os boletos e carnês parcelados na conta (cada parcela com vencimento) e
 // as parcelas que ainda vão cair nas faturas abertas dos cartões. Nada aqui
@@ -21546,13 +21643,17 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo, quem }) 
 function ContasAPagarEscritorio({ itens, faturas, contasBancarias, podeEditar, aoNova, aoGuardar }) {
   const S = EF_ESTILO;
   const hoje = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-  const [verPagas, setVerPagas] = useState(false);
   const [editando, setEditando] = useState(null);
   const [aberta, setAberta] = useState("");
-  const lista = (itens || []).filter((it) => it && (verPagas || !it.pago))
+  // os quadros do topo e a barra clicada filtram a lista, como na obra
+  const [filtro, setFiltro] = useState("aPagar");
+  const [mes, setMes] = useState("");
+  const lista = (itens || []).filter((it) => it && efPassaNoFluxo(it, filtro, mes, hoje))
     .slice().sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)) || (Number(a.parcela) - Number(b.parcela)));
-  const res = resumoDoAPagar(itens, hoje);
-  const totalCartoes = efCentavos((faturas || []).reduce((t, f) => t + f.total, 0));
+  const faturasDaVez = (faturas || []).filter((f) => efPassaNoFluxo({ vencimento: f.vencimento, pago: false }, filtro, mes, hoje));
+  // o que o gráfico soma: cada parcela do boleto e cada fatura aberta
+  const contasDoFluxo = (itens || []).filter(Boolean).map((it) => ({ vencimento: it.vencimento, valor: it.valor, pago: !!it.pago, valorPago: it.valor }))
+    .concat((faturas || []).map((f) => ({ vencimento: f.vencimento, valor: f.total, pago: false })));
   const nomeConta = (id) => (contaEscritorio(id) || {}).nome || "";
   const nomeBanco = (id) => ((contasBancarias || []).find((c) => c.id === (id || CONTA_BANCARIA_PRINCIPAL)) || {}).nome || "";
   const variasContas = (contasBancarias || []).length > 1;
@@ -21586,46 +21687,26 @@ function ContasAPagarEscritorio({ itens, faturas, contasBancarias, podeEditar, a
   const chip = (t, cor, fundo) => (
     <span style={{ fontSize: 10.5, fontWeight: 600, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap", color: cor, background: fundo }}>{t}</span>
   );
-  const tiles = [
-    ["Vencidas", res.vencidas, res.nVencidas, res.nVencidas ? "#b45309" : "#111827"],
-    ["Vencem este mês", res.esteMes, res.nEsteMes, "#111827"],
-    ["Próximos meses", res.depois, res.nDepois, "#111827"],
-    ["Faturas abertas dos cartões", totalCartoes, (faturas || []).length, "#111827"],
-  ];
   return (
     <div data-vk-a-pagar="1" style={{ display: "grid", gap: 14, minWidth: 0 }}>
-      <div style={{ ...S.card, display: "grid", gap: 12, minWidth: 0 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
-          <div style={{ minWidth: 0, flex: "1 1 260px" }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>A pagar</div>
-            <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2, lineHeight: 1.45 }}>
-              Boletos e carnês parcelados na conta do escritório e as parcelas que ainda vão cair nas faturas dos cartões.
-              Nada aqui afeta o saldo: cada parcela vira lançamento quando o banco debita, no Fechamento.
-            </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ minWidth: 0, flex: "1 1 260px" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Contas a pagar</div>
+          <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 2, lineHeight: 1.45 }}>
+            Boletos e carnês parcelados na conta do escritório e as parcelas que ainda vão cair nas faturas dos cartões.
+            Nada aqui afeta o saldo: cada parcela vira lançamento quando o banco debita, no Fechamento.
           </div>
-          {podeEditar && aoNova && <button data-vk-nova-parcelada="1" style={S.btn} onClick={aoNova}>+ Nova conta parcelada</button>}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
-          {tiles.map(([r, v, n, cor]) => (
-            <div key={r} style={{ border: "1px solid rgba(38,36,33,0.1)", borderRadius: 12, padding: "10px 12px" }}>
-              <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .4, color: "#6b7280" }}>{r}</div>
-              <div style={{ fontSize: 17, fontWeight: 700, marginTop: 3, color: cor, fontVariantNumeric: "tabular-nums" }}>{efDinheiro(v)}</div>
-              <div style={{ fontSize: 11, color: "#6b7280" }}>{n === 1 ? "1 item" : `${n} itens`}</div>
-            </div>
-          ))}
-        </div>
+        {podeEditar && aoNova && <button data-vk-nova-parcelada="1" style={S.btn} onClick={aoNova}>+ Nova conta parcelada</button>}
       </div>
+      <FluxoDoEscritorio contas={contasDoFluxo} tipo="pagar" filtro={filtro} aoFiltrar={setFiltro} mes={mes} aoEscolherMes={setMes}
+        hoje={hoje} subPago="já debitado no banco" subTotal="boletos + faturas abertas" uid="escritorio-pagar" />
 
-      <div style={{ ...S.card, display: "grid", gap: 10, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 13, fontWeight: 700 }}>Boletos e carnês</div>
-          <label style={{ marginLeft: "auto", fontSize: 12, color: "#4b5563", display: "inline-flex", gap: 6, alignItems: "center", cursor: "pointer" }}>
-            <input type="checkbox" checked={verPagas} onChange={(e) => setVerPagas(e.target.checked)} /> mostrar as pagas
-          </label>
-        </div>
+      <div data-vk-mantem-mes="1" style={{ ...S.card, display: "grid", gap: 10, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>Boletos e carnês</div>
         {!meses.length && (
           <div style={{ fontSize: 12.5, color: "#6b7280", padding: "6px 0" }}>
-            Nenhuma parcela a pagar. Ao lançar uma conta, escolha “Conta do escritório — parcelado (boleto)” em Como foi pago.
+            {(itens || []).length ? "Nenhuma parcela neste filtro." : "Nenhuma parcela a pagar. Ao lançar uma conta, escolha “Conta do escritório — parcelado (boleto)” em Como foi pago."}
           </div>
         )}
         {meses.map((g) => (
@@ -21681,10 +21762,10 @@ function ContasAPagarEscritorio({ itens, faturas, contasBancarias, podeEditar, a
         ))}
       </div>
 
-      <div style={{ ...S.card, display: "grid", gap: 10, minWidth: 0 }}>
+      <div data-vk-mantem-mes="1" style={{ ...S.card, display: "grid", gap: 10, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 700 }}>Cartões — faturas abertas</div>
-        {!(faturas || []).length && <div style={{ fontSize: 12.5, color: "#6b7280" }}>Nenhuma parcela de cartão a pagar.</div>}
-        {(faturas || []).map((f) => {
+        {!faturasDaVez.length && <div style={{ fontSize: 12.5, color: "#6b7280" }}>{(faturas || []).length ? "Nenhuma fatura neste filtro." : "Nenhuma parcela de cartão a pagar."}</div>}
+        {faturasDaVez.map((f) => {
           const chave = f.cartaoId + f.competencia;
           return (
             <div key={chave} data-vk-a-pagar-fatura={chave} style={{ borderBottom: "1px solid rgba(38,36,33,0.06)", paddingBottom: 8 }}>
@@ -59731,7 +59812,10 @@ const CR_ROTULO_ORIGEM = { projeto: "Projeto", obra: "Gerenciamento", venda: "Ve
 function ContasAReceber({ data, save, aoAbrirObra }) {
   const S = typeof EF_ESTILO !== "undefined" ? EF_ESTILO : {};
   const [filtro, setFiltro] = useState("");
-  const [comRecebidos, setComRecebidos] = useState(false);
+  // os quadros do topo e a barra clicada no gráfico filtram a lista, como no
+  // Contas a pagar da obra
+  const [quadro, setQuadro] = useState("aPagar");
+  const [mesGrafico, setMesGrafico] = useState("");
   const [abrindo, setAbrindo] = useState("");
   const [dia, setDia] = useState("");
   const [valor, setValor] = useState("");
@@ -59747,9 +59831,11 @@ function ContasAReceber({ data, save, aoAbrirObra }) {
   const hoje = crHoje();
   const quem = typeof nomeDeQuem === "function" ? nomeDeQuem(perm.usuario) : ((perm.usuario && perm.usuario.nome) || "");
   const fechamentos = typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {};
-  const todos = itensAReceber(data, { comRecebidos });
-  const itens = todos.filter((i) => !filtro || i.origem === filtro);
-  const resumo = resumoAReceber(todos, hoje);
+  const todos = itensAReceber(data, { comRecebidos: true });
+  const noQuadro = (i) => (typeof efPassaNoFluxo === "function"
+    ? efPassaNoFluxo({ vencimento: i.vencimento, pago: i.recebido }, quadro, mesGrafico, hoje) : !i.recebido);
+  const itens = todos.filter((i) => (!filtro || i.origem === filtro) && noQuadro(i));
+  const contasDoFluxo = todos.map((i) => ({ vencimento: i.vencimento, valor: i.valor, pago: i.recebido, valorPago: i.valor }));
   const dinheiro = (v) => (typeof efDinheiro === "function" ? efDinheiro(v) : "R$ " + crCent(v).toFixed(2).replace(".", ","));
   const novoId = () => (typeof uid === "function" ? uid() : "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5));
   const numeroDoc = (lista) => (typeof proximaReferencia === "function" ? proximaReferencia((data || {}).obras || [], lista.filter((x) => x && x.tipo === "escritorio")) : "");
@@ -59807,13 +59893,6 @@ function ContasAReceber({ data, save, aoAbrirObra }) {
   const btn = { ...(S.btnSec || {}), padding: "5px 12px", fontSize: 12 };
   const chip = (on) => ({ font: "inherit", fontSize: 12.5, padding: "5px 12px", borderRadius: 999, cursor: "pointer",
     border: `1px solid ${on ? "#0474f4" : "rgba(38,36,33,0.16)"}`, background: on ? "#eef5ff" : "#fff", color: on ? "#0474f4" : "#262421" });
-  const cartao = (rot, v, apoio, cor) => (
-    <div key={rot} style={{ ...(S.card || {}), display: "grid", gap: 2 }}>
-      <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>{rot}</div>
-      <div style={{ fontSize: 20, fontWeight: 700, color: cor || "#262421" }}>{dinheiro(v)}</div>
-      <div style={{ fontSize: 11.5, color: "#6b7280" }}>{apoio}</div>
-    </div>
-  );
   const porMes = {};
   for (const it of itens) { const k = (it.vencimento || "").slice(0, 7) || "sem data"; (porMes[k] = porMes[k] || []).push(it); }
   const nomeMes = (k) => (k === "sem data" ? "Sem data" : (typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso(k) : k));
@@ -59843,22 +59922,19 @@ function ContasAReceber({ data, save, aoAbrirObra }) {
           return { ok: true };
         }} />}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 }}>
-        {cartao("Vencido", resumo.vencido, "passou do vencimento", resumo.vencido > 0 ? "#b91c1c" : undefined)}
-        {cartao("Próximos 30 dias", resumo.proximos, "a vencer")}
-        {cartao("Total a receber", resumo.total, `${resumo.quantos} ${resumo.quantos === 1 ? "conta" : "contas"}`, "#0474f4")}
-      </div>
+      {typeof FluxoDoEscritorio === "function" && (
+        <FluxoDoEscritorio contas={contasDoFluxo} tipo="receber" filtro={quadro} aoFiltrar={setQuadro} mes={mesGrafico} aoEscolherMes={setMesGrafico}
+          hoje={hoje} subPago="já entrou no banco" subTotal="recebido + a receber" uid="escritorio-receber" />
+      )}
 
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+      <div data-vk-mantem-mes="1" style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
         {CR_ORIGENS.map(([k, r]) => <button key={k} type="button" style={chip(filtro === k)} onClick={() => setFiltro(k)}>{r}</button>)}
-        <label style={{ display: "inline-flex", gap: 6, alignItems: "center", fontSize: 12.5, color: "#4b5563", marginLeft: estreito ? 0 : "auto", cursor: "pointer" }}>
-          <input type="checkbox" checked={comRecebidos} onChange={(e) => setComRecebidos(e.target.checked)} /> Mostrar recebidos
-        </label>
       </div>
 
+      <div data-vk-mantem-mes="1" style={{ display: "grid", gap: 14 }}>
       {!itens.length ? (
         <div style={{ ...(S.card || {}), textAlign: "center", color: "#6b7280", fontSize: 13 }}>
-          Nada a receber{filtro ? " aqui" : ""}. Projetos entram quando o orçamento é marcado como Ganho (com as parcelas); vendas e outras receitas, pelo “+ Nova conta a receber”.
+          Nada a receber{filtro || quadro !== "aPagar" || mesGrafico ? " neste filtro" : ""}. Projetos entram quando o orçamento é marcado como Ganho (com as parcelas); vendas e outras receitas, pelo “+ Nova conta a receber”.
         </div>
       ) : Object.keys(porMes).map((mes) => (
         <div key={mes} style={{ display: "grid", gap: 6 }}>
@@ -59939,6 +60015,7 @@ function ContasAReceber({ data, save, aoAbrirObra }) {
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 }

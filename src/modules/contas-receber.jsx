@@ -280,7 +280,10 @@ const CR_ROTULO_ORIGEM = { projeto: "Projeto", obra: "Gerenciamento", venda: "Ve
 function ContasAReceber({ data, save, aoAbrirObra }) {
   const S = typeof EF_ESTILO !== "undefined" ? EF_ESTILO : {};
   const [filtro, setFiltro] = useState("");
-  const [comRecebidos, setComRecebidos] = useState(false);
+  // os quadros do topo e a barra clicada no gráfico filtram a lista, como no
+  // Contas a pagar da obra
+  const [quadro, setQuadro] = useState("aPagar");
+  const [mesGrafico, setMesGrafico] = useState("");
   const [abrindo, setAbrindo] = useState("");
   const [dia, setDia] = useState("");
   const [valor, setValor] = useState("");
@@ -296,9 +299,11 @@ function ContasAReceber({ data, save, aoAbrirObra }) {
   const hoje = crHoje();
   const quem = typeof nomeDeQuem === "function" ? nomeDeQuem(perm.usuario) : ((perm.usuario && perm.usuario.nome) || "");
   const fechamentos = typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {};
-  const todos = itensAReceber(data, { comRecebidos });
-  const itens = todos.filter((i) => !filtro || i.origem === filtro);
-  const resumo = resumoAReceber(todos, hoje);
+  const todos = itensAReceber(data, { comRecebidos: true });
+  const noQuadro = (i) => (typeof efPassaNoFluxo === "function"
+    ? efPassaNoFluxo({ vencimento: i.vencimento, pago: i.recebido }, quadro, mesGrafico, hoje) : !i.recebido);
+  const itens = todos.filter((i) => (!filtro || i.origem === filtro) && noQuadro(i));
+  const contasDoFluxo = todos.map((i) => ({ vencimento: i.vencimento, valor: i.valor, pago: i.recebido, valorPago: i.valor }));
   const dinheiro = (v) => (typeof efDinheiro === "function" ? efDinheiro(v) : "R$ " + crCent(v).toFixed(2).replace(".", ","));
   const novoId = () => (typeof uid === "function" ? uid() : "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5));
   const numeroDoc = (lista) => (typeof proximaReferencia === "function" ? proximaReferencia((data || {}).obras || [], lista.filter((x) => x && x.tipo === "escritorio")) : "");
@@ -356,13 +361,6 @@ function ContasAReceber({ data, save, aoAbrirObra }) {
   const btn = { ...(S.btnSec || {}), padding: "5px 12px", fontSize: 12 };
   const chip = (on) => ({ font: "inherit", fontSize: 12.5, padding: "5px 12px", borderRadius: 999, cursor: "pointer",
     border: `1px solid ${on ? "#0474f4" : "rgba(38,36,33,0.16)"}`, background: on ? "#eef5ff" : "#fff", color: on ? "#0474f4" : "#262421" });
-  const cartao = (rot, v, apoio, cor) => (
-    <div key={rot} style={{ ...(S.card || {}), display: "grid", gap: 2 }}>
-      <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280" }}>{rot}</div>
-      <div style={{ fontSize: 20, fontWeight: 700, color: cor || "#262421" }}>{dinheiro(v)}</div>
-      <div style={{ fontSize: 11.5, color: "#6b7280" }}>{apoio}</div>
-    </div>
-  );
   const porMes = {};
   for (const it of itens) { const k = (it.vencimento || "").slice(0, 7) || "sem data"; (porMes[k] = porMes[k] || []).push(it); }
   const nomeMes = (k) => (k === "sem data" ? "Sem data" : (typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso(k) : k));
@@ -392,22 +390,19 @@ function ContasAReceber({ data, save, aoAbrirObra }) {
           return { ok: true };
         }} />}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 }}>
-        {cartao("Vencido", resumo.vencido, "passou do vencimento", resumo.vencido > 0 ? "#b91c1c" : undefined)}
-        {cartao("Próximos 30 dias", resumo.proximos, "a vencer")}
-        {cartao("Total a receber", resumo.total, `${resumo.quantos} ${resumo.quantos === 1 ? "conta" : "contas"}`, "#0474f4")}
-      </div>
+      {typeof FluxoDoEscritorio === "function" && (
+        <FluxoDoEscritorio contas={contasDoFluxo} tipo="receber" filtro={quadro} aoFiltrar={setQuadro} mes={mesGrafico} aoEscolherMes={setMesGrafico}
+          hoje={hoje} subPago="já entrou no banco" subTotal="recebido + a receber" uid="escritorio-receber" />
+      )}
 
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+      <div data-vk-mantem-mes="1" style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
         {CR_ORIGENS.map(([k, r]) => <button key={k} type="button" style={chip(filtro === k)} onClick={() => setFiltro(k)}>{r}</button>)}
-        <label style={{ display: "inline-flex", gap: 6, alignItems: "center", fontSize: 12.5, color: "#4b5563", marginLeft: estreito ? 0 : "auto", cursor: "pointer" }}>
-          <input type="checkbox" checked={comRecebidos} onChange={(e) => setComRecebidos(e.target.checked)} /> Mostrar recebidos
-        </label>
       </div>
 
+      <div data-vk-mantem-mes="1" style={{ display: "grid", gap: 14 }}>
       {!itens.length ? (
         <div style={{ ...(S.card || {}), textAlign: "center", color: "#6b7280", fontSize: 13 }}>
-          Nada a receber{filtro ? " aqui" : ""}. Projetos entram quando o orçamento é marcado como Ganho (com as parcelas); vendas e outras receitas, pelo “+ Nova conta a receber”.
+          Nada a receber{filtro || quadro !== "aPagar" || mesGrafico ? " neste filtro" : ""}. Projetos entram quando o orçamento é marcado como Ganho (com as parcelas); vendas e outras receitas, pelo “+ Nova conta a receber”.
         </div>
       ) : Object.keys(porMes).map((mes) => (
         <div key={mes} style={{ display: "grid", gap: 6 }}>
@@ -488,6 +483,7 @@ function ContasAReceber({ data, save, aoAbrirObra }) {
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 }
