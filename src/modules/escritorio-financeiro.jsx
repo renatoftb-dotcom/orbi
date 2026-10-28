@@ -5557,7 +5557,7 @@ function CadastroRapidoDeCliente({ form, aoMudar, erro, aoSalvar, aoCancelar }) 
         </div>
         <div style={{ flex: "1 1 170px", minWidth: 0 }}>
           <div style={rot}>WhatsApp</div>
-          <input style={S.input} value={form.telefone || ""} onChange={(e) => mexer("telefone", e.target.value)} onKeyDown={noEnter} placeholder="(14) 99999-9999" />
+          <input style={S.input} value={form.telefone || ""} onChange={(e) => mexer("telefone", e.target.value)} onKeyDown={noEnter} placeholder="(DDD) número" />
         </div>
       </div>
       <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>Só o nome é obrigatório — o resto do cadastro se completa depois em Clientes.</div>
@@ -7705,7 +7705,7 @@ function SaldoDaContaNoMes({ meio, mes, fechado, aoGuardar }) {
   const [v, setV] = useState(inicial);
   useEffect(() => { setV(inicial()); }, [mes, meio.banco, meio.id]);
   return (
-    <CampoValorBR style={{ ...S.input, width: "100%", boxSizing: "border-box", padding: "6px 9px", fontSize: 12.5, textAlign: "right" }} valor={v} placeholder="saldo" negativo
+    <CampoValorBR style={{ ...S.input, width: "100%", boxSizing: "border-box", padding: "6px 9px", fontSize: 12.5, textAlign: "right" }} valor={v} placeholder="Digite o saldo" negativo
       disabled={fechado || !aoGuardar} aoMudar={setV} data-vk-saldo-meio={meio.id}
       onBlur={(e) => {
         if (!aoGuardar || fechado) return;
@@ -7992,7 +7992,7 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
             <div data-vk-form-conta-banco="1" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end",
               padding: 12, border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12 }}>
               <div style={{ flex: "2 1 200px", minWidth: 0 }}><div style={S.rot}>Nome da conta</div>
-                <input style={S.input} autoFocus value={formConta.nome} placeholder="Cora"
+                <input style={S.input} autoFocus value={formConta.nome} placeholder="Digite o nome do banco"
                   onChange={(e) => setFormConta({ ...formConta, nome: e.target.value })} /></div>
               {formConta.id !== CONTA_BANCARIA_PRINCIPAL && (
                 <>
@@ -8390,17 +8390,17 @@ function CampoCartaoDoPagamento({ cartoes, doCliente, valor, aoMudar, total, dat
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "2fr 1fr 1fr 1fr", gap: 8 }}>
             <div style={{ gridColumn: isMobile ? "1 / -1" : "auto" }}>
               <label style={label}>Nome do cartão</label>
-              <input style={input} value={novo.nome} placeholder="ex.: Nubank do João" data-vk-cartao-nome="1"
+              <input style={input} value={novo.nome} placeholder="Digite o nome do cartão" data-vk-cartao-nome="1"
                 onChange={(e) => mudar({ novoCartao: { ...novo, nome: e.target.value } })} />
             </div>
             <div>
               <label style={label}>Fecha dia</label>
-              <input style={input} inputMode="numeric" value={novo.diaFechamento} placeholder="25" data-vk-cartao-fecha="1"
+              <input style={input} inputMode="numeric" value={novo.diaFechamento} placeholder="Dia (1 a 31)" data-vk-cartao-fecha="1"
                 onChange={(e) => mudar({ novoCartao: { ...novo, diaFechamento: e.target.value.replace(/\D/g, "").slice(0, 2) } })} />
             </div>
             <div>
               <label style={label}>Vence dia</label>
-              <input style={input} inputMode="numeric" value={novo.diaVencimento} placeholder="5" data-vk-cartao-vence="1"
+              <input style={input} inputMode="numeric" value={novo.diaVencimento} placeholder="Dia (1 a 31)" data-vk-cartao-vence="1"
                 onChange={(e) => mudar({ novoCartao: { ...novo, diaVencimento: e.target.value.replace(/\D/g, "").slice(0, 2) } })} />
             </div>
             <div>
@@ -8649,11 +8649,11 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo, quem }) 
               {/* o final do cartão é como a fatura que chega no Fechamento
                   acha o cartão dela */}
               <div style={{ flex: "0 1 160px", minWidth: 0 }}><div style={S.rot}>Final do cartão</div>
-                <input style={S.input} inputMode="numeric" value={form.final || ""} placeholder="8821" data-vk-cartao-final="1"
+                <input style={S.input} inputMode="numeric" value={form.final || ""} placeholder="4 últimos dígitos" data-vk-cartao-final="1"
                   onChange={(e) => setForm({ ...form, final: e.target.value.replace(/\D/g, "").slice(0, 4) })} /></div>
             </div>
             <div><div style={S.rot}>Nome do cartão</div>
-              <input style={S.input} value={form.nome} placeholder="Sicoob Empresarial"
+              <input style={S.input} value={form.nome} placeholder="Digite o nome do cartão"
                 onChange={(e) => setForm({ ...form, nome: e.target.value })} /></div>
             <div><div style={S.rot}>Fecha no dia</div>
               <input style={S.input} inputMode="numeric" value={form.diaFechamento}
