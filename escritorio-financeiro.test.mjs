@@ -41,7 +41,7 @@ const M = new Function(src + `
            comIdsDosMovimentos, efMesmaLinhaDoBanco, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
            sugestaoDoExtrato, palpiteDoExtrato, sugestaoCompletaDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao, fornecedorPadraoDaConta, contaDeEntradaNoEscritorio, semFornecedorNaEntrada, clienteRapidoDoLancamento, ehLigacaoDaGestao, gestaoSemContratoVaiParaObra,
            ehReceitaDaGestao, contaEhEntradaEscritorio, rotuloDoPapelLido, refDaParcela, gestaoNaObra, desfazerGestaoNaObra, parcelaDoLancamento, parcelaDoMesNaGestao, recalibrarGestao, previaDaGestao, contasDaGestao,
-           extratosComArquivo, movimentosGuardadosDoMes, ignoradosGuardados, extratosComIgnorado, efLinhasDoHtml, efLinhasDoOfx, saldoDoExtratoNoMes, efTabelaDoArquivo };`)();
+           extratosComArquivo, movimentosGuardadosDoMes, ignoradosGuardados, extratosComIgnorado, efLinhasDoHtml, efLinhasDoOfx, saldoDoExtratoNoMes, efTabelaDoArquivo, efLinhasDoCnab, efLinhasDoExcelXml, efFaturaDoOfx, efLadoDoTexto, efValorDeTexto, efCabecalhoDeCartao };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -3469,6 +3469,142 @@ teste("débito do banco que paga a fatura: acha a fatura aberta do cartão pago 
   assert.strictEqual(M.faturaParaALinhaDoBanco(m, "cora", [CORA], [OBRA_JAC], [fechada], {}), null);
   // fatura que só vence depois do mês da linha: nada
   assert.strictEqual(M.faturaParaALinhaDoBanco({ ...m, data: "2026-08-15" }, "cora", [CORA], [OBRA_JAC], [], {}), null);
+});
+
+// ── Extratos dos bancos brasileiros ─────────────────────────────
+const lerTabela = (linhas) => M.movimentosDaTabela(linhas, M.detectarColunasTabela(linhas)).map((m) => [m.data, m.valor, m.historico]);
+const arq = (nome, texto, bytes) => ({ name: nome, arrayBuffer: async () => (bytes || new TextEncoder().encode(texto)).buffer, text: async () => texto });
+const tsv = (texto) => M.efCsvParaTsv(texto).split("\n").filter((l) => l.trim()).map((l) => l.split("\t"));
+
+teste("extratos CSV: débito e crédito em colunas, lado em coluna à parte, nomes em inglês, sinal escrito", () => {
+  // débito e crédito separados, com título antes do cabeçalho e "(R$)" no nome
+  const brad = tsv("Extrato de: Agência 1234 Conta 56789-0\nData;Histórico;Docto.;Crédito (R$);Débito (R$);Saldo (R$)\n01/09/2026;SALDO ANTERIOR;;;;1.000,00\n02/09/2026;PIX RECEBIDO;123;500,00;;1.500,00\n03/09/2026;TARIFA;;;-35,00;1.465,00");
+  const b = lerTabela(brad).filter((x) => !/saldo/i.test(x[2]));
+  assert.deepStrictEqual(b.map((x) => x[1]), [500, -35]);
+  // valor sem sinal e o lado numa coluna (Entrada/Saída)
+  const bb = tsv('"Data","Lançamento","Detalhes","Nº documento","Valor","Tipo Lançamento"\n"02/09/2026","Pix - Recebido","FULANO","123","1.000,00","Entrada"\n"03/09/2026","Pagamento de Boleto","LOJA","456","250,00","Saída"');
+  assert.deepStrictEqual(lerTabela(bb).map((x) => x[1]), [1000, -250]);
+  assert.strictEqual(lerTabela(bb)[0][2], "Pix - Recebido · FULANO");   // o detalhe vai junto no histórico
+  // D/C numa coluna curta
+  const dc = tsv("Data;Descrição;Valor;D/C\n02/09/2026;DEPOSITO;100,00;C\n03/09/2026;CHEQUE;40,00;D");
+  assert.deepStrictEqual(lerTabela(dc).map((x) => x[1]), [100, -40]);
+  // valor com sinal e uma coluna de tipo por extenso: o sinal do banco fica
+  const cora = tsv("Data,Transação,Tipo Transação,Identificação,Valor\n15/09/2026,Pagamento da fatura,DÉBITO,Cora SCFI,-2424.48\n14/09/2026,Pix recebido,CRÉDITO,FULANO,624.48");
+  assert.deepStrictEqual(lerTabela(cora).map((x) => x[1]), [-2424.48, 624.48]);
+  // conta de pagamento em inglês, data ISO com hora
+  const mp = tsv("RELEASE_DATE,TRANSACTION_TYPE,REFERENCE_ID,TRANSACTION_NET_AMOUNT,PARTIAL_BALANCE\n2026-09-02T10:15:00.000-03:00,SETTLEMENT,111,95.50,95.50\n2026-09-05T08:00:00.000-03:00,WITHDRAWAL,222,-50.00,45.50");
+  const m = lerTabela(mp);
+  assert.deepStrictEqual(m.map((x) => [x[0], x[1]]), [["2026-09-02", 95.5], ["2026-09-05", -50]]);
+  // valor com o sinal escrito e saldo negativo: o saldo não vira "lado"
+  const sinal = tsv("Data Lançamento;Descrição;Valor;Saldo\n02/09/2026;Pix recebido;+1.200,00;-300,00\n03/09/2026;Pix enviado;-100,00;-400,00");
+  assert.deepStrictEqual(lerTabela(sinal).map((x) => x[1]), [1200, -100]);
+  assert.strictEqual(M.efValorDeTexto("+R$ 1.200,00"), 1200);
+  assert.strictEqual(M.efLadoDoTexto("-300,00"), 0);
+  assert.strictEqual(M.efLadoDoTexto("Débito"), -1);
+  assert.strictEqual(M.efLadoDoTexto("C"), 1);
+});
+
+// monta uma linha de posição fixa
+const pos = (tam, campos) => { const a = Array(tam).fill(" "); for (const [ini, txt] of campos) String(txt).split("").forEach((ch, k) => { a[ini - 1 + k] = ch; }); return a.join(""); };
+const n18 = (v) => String(Math.round(v * 100)).padStart(18, "0");
+
+teste("extrato CNAB 240 (segmento E): data, valor com D/C, histórico, documento, saldo final e a conta", () => {
+  const linhas = [
+    pos(240, [[1, "3410000"], [8, "0"]]),
+    pos(240, [[1, "341"], [4, "0001"], [8, "1"], [9, "E"], [53, "01234"], [59, "000000567890"], [143, "01092026"], [151, n18(1000)], [169, "C"]]),
+    pos(240, [[1, "341"], [4, "0001"], [8, "3"], [9, "00001"], [14, "E"], [15, "1"], [143, "02092026"], [151, n18(1500)], [169, "C"], [170, "209"], [173, "0007"], [177, "TED RECEBIDA FULANO"], [202, "000123"]]),
+    pos(240, [[1, "341"], [4, "0001"], [8, "3"], [9, "00002"], [14, "E"], [15, "1"], [143, "03092026"], [151, n18(35.9)], [169, "D"], [170, "105"], [173, "0074"], [177, "TARIFA"]]),
+    pos(240, [[1, "341"], [4, "0001"], [8, "3"], [9, "00003"], [14, "E"], [15, "5"], [143, "30092026"], [151, n18(99)], [169, "D"], [177, "AGENDADO"]]),
+    pos(240, [[1, "341"], [4, "0001"], [8, "5"], [143, "03092026"], [151, n18(2464.1)], [169, "C"]]),
+    pos(240, [[1, "341"], [4, "9999"], [8, "9"]]),
+  ].join("\r\n");
+  const r = M.efLinhasDoCnab(linhas);
+  assert.ok(r);
+  assert.strictEqual(r.contas.length, 1);
+  assert.ok(/^341\//.test(r.contaDoArquivo));
+  const movs = M.movimentosDaTabela(r.linhas, M.detectarColunasTabela(r.linhas));
+  assert.deepStrictEqual(movs.map((m) => [m.data, m.valor, m.historico]), [
+    ["2026-09-02", 1500, "TED RECEBIDA FULANO"], ["2026-09-03", -35.9, "TARIFA"], ["2026-09-03", 2464.1, "SALDO DO DIA"]]);
+  assert.strictEqual(movs[0].documento, "123");
+  assert.strictEqual(M.saldoDoExtratoNoMes(movs, "2026-09"), 2464.1);
+  // texto comum não é CNAB
+  assert.strictEqual(M.efLinhasDoCnab("Data;Valor\n01/09/2026;10,00"), null);
+});
+
+teste("extrato de 200 posições (Bradesco): lançamentos e saldo final", () => {
+  const conta = [[1, "1"], [18, "1234"], [31, "0000056789"], [41, "0"]];
+  const linhas = [
+    pos(200, [[1, "0"], [12, "EXTRATO C/C"]]),
+    pos(200, [...conta, [42, "0"], [87, n18(1000)], [105, "C"], [165, "01092026"]]),
+    pos(200, [...conta, [42, "1"], [50, "PIX RECEBIDO"], [75, "000777"], [87, n18(200)], [105, "C"], [106, "FULANO DE TAL"], [165, "02092026"]]),
+    pos(200, [...conta, [42, "1"], [50, "TARIFA BANCARIA"], [87, n18(12.5)], [105, "D"], [165, "02092026"]]),
+    pos(200, [...conta, [42, "2"], [87, n18(1187.5)], [105, "C"], [165, "02092026"]]),
+    pos(200, [[1, "9"]]),
+  ].join("\n");
+  const r = M.efLinhasDoCnab(linhas);
+  assert.ok(r);
+  const movs = M.movimentosDaTabela(r.linhas, M.detectarColunasTabela(r.linhas));
+  assert.deepStrictEqual(movs.map((m) => [m.data, m.valor, m.historico]), [
+    ["2026-09-02", 200, "PIX RECEBIDO · FULANO DE TAL"], ["2026-09-02", -12.5, "TARIFA BANCARIA"], ["2026-09-02", 1187.5, "SALDO DO DIA"]]);
+});
+
+teste("arquivo do banco: PDF e Excel antigo explicam o que fazer; .xls que é HTML ou XML abre; texto em Windows-1252", async () => {
+  await assert.rejects(M.efTabelaDoArquivo(arq("extrato.pdf", "", new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]))), /OFX/);
+  await assert.rejects(M.efTabelaDoArquivo(arq("extrato.xls", "", new Uint8Array([0xD0, 0xCF, 0x11, 0xE0, 0, 0, 0, 0]))), /\.xlsx/);
+  const html = "<html><body><table><tr><td>Data</td><td>Histórico</td><td>Valor</td></tr><tr><td>02/09/2026</td><td>PIX</td><td>-10,00</td></tr></table></body></html>";
+  const h = await M.efTabelaDoArquivo(arq("extrato.xls", html));
+  assert.strictEqual(h.aba, "HTML");
+  const xml = '<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet><Table>'
+    + '<Row><Cell><Data ss:Type="String">Data</Data></Cell><Cell><Data ss:Type="String">Descrição</Data></Cell><Cell><Data ss:Type="String">Valor</Data></Cell></Row>'
+    + '<Row><Cell><Data ss:Type="DateTime">2026-09-02T00:00:00.000</Data></Cell><Cell ss:Index="3"><Data ss:Type="Number">-10.5</Data></Cell></Row>'
+    + '</Table></Worksheet></Workbook>';
+  const x = await M.efTabelaDoArquivo(arq("extrato.xls", xml));
+  assert.deepStrictEqual(x.linhas[1], ["02/09/2026", "", "-10.5"]);
+  // CSV em Windows-1252: "Lançamento" não vira lixo
+  const cp = new Uint8Array([...new TextEncoder().encode("Data;Lan"), 0xE7, ...new TextEncoder().encode("amento;Valor\n02/09/2026;PIX;10,00")]);
+  const c = await M.efTabelaDoArquivo(arq("extrato.csv", "", cp));
+  assert.strictEqual(c.linhas[0][1], "Lançamento");
+  // CNAB entra pelo mesmo caminho, com a conta
+  const cnab = [pos(240, [[1, "001"], [8, "1"], [53, "1234"], [59, "99"]]),
+    pos(240, [[1, "001"], [8, "3"], [14, "E"], [15, "1"], [143, "02092026"], [151, n18(10)], [169, "D"], [177, "TARIFA"]])].join("\n");
+  const k = await M.efTabelaDoArquivo(arq("extrato.ret", cnab));
+  assert.strictEqual(k.aba, "CNAB"); assert.ok(k.contaDoArquivo);
+});
+
+teste("OFX do cartão de crédito vira fatura, com o final do cartão", async () => {
+  const ofx = "OFXHEADER:100\n<OFX><CREDITCARDMSGSRSV1><CCSTMTTRNRS><CCSTMTRS><CCACCTFROM><ACCTID>5502********8821</CCACCTFROM><BANKTRANLIST>"
+    + "<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20260901<TRNAMT>-634.48<FITID>1<MEMO>CASA DO CONSTRUTOR 1/6</STMTTRN>"
+    + "<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20260903<TRNAMT>-99.90<FITID>2<MEMO>ASSINATURA</STMTTRN></BANKTRANLIST></CCSTMTRS></CCSTMTTRNRS></CREDITCARDMSGSRSV1></OFX>";
+  const t = await M.efTabelaDoArquivo(arq("fatura.ofx", ofx));
+  assert.ok(M.efCabecalhoDeCartao(t.linhas) >= 0);
+  const r = M.movimentosDoCartao(t.linhas);
+  assert.strictEqual(r.final, "8821");
+  assert.deepStrictEqual(r.movimentos.map((m) => [m.valor, m.parcela || 0]), [[-634.48, 1], [-99.9, 0]]);
+});
+
+teste("faturas de cartão de vários bancos: data da compra, valor em reais, parcela, pagamento fora", () => {
+  const ler = (texto, op) => M.movimentosDoCartao(tsv(texto), op);
+  // data, título e valor (compra positiva, pagamento negativo, parcela no título)
+  const nu = ler("date,title,amount\n2026-09-01,Casa do Construtor - Parcela 2/6,648.78\n2026-09-03,Assinatura software,99.90\n2026-09-10,Pagamento recebido,-1500.00");
+  assert.deepStrictEqual(nu.movimentos.map((m) => [m.data, m.valor, m.parcela || 0]), [["2026-09-01", -648.78, 2], ["2026-09-03", -99.9, 0]]);
+  // valor em dólar e em reais lado a lado, cartão e parcela em colunas
+  const c6 = ler("Data de Compra;Nome no Cartão;Final do Cartão;Categoria;Descrição;Parcela;Valor (em US$);Cotação (em R$);Valor (em R$)\n"
+    + "01/09/2026;FULANO;8821;Material;LOJA X;1/3;0;0;300,00\n05/09/2026;FULANO;8821;Serviços;SOFTWARE INC;Única;20,00;5,50;110,00\n06/09/2026;FULANO;8821;;Inclusao de Pagamento;Única;0;0;-410,00");
+  assert.strictEqual(c6.final, "8821");
+  assert.deepStrictEqual(c6.movimentos.map((m) => [m.valor, m.parcela || 0, m.de || 0]), [[-300, 1, 3], [-110, 0, 0]]);
+  // estabelecimento e portador; linha de total fora
+  const xp = ler("Data;Estabelecimento;Portador;Valor;Parcela\n02/09/2026;POSTO;FULANO;R$ 200,00;-\n03/09/2026;LOJA;FULANO;R$ 90,00;2 de 4\n30/09/2026;Total da fatura;;R$ 290,00;");
+  assert.deepStrictEqual(xp.movimentos.map((m) => [m.valor, m.parcela || 0]), [[-200, 0], [-90, 2]]);
+  // sem nenhuma marca de fatura: não é reconhecido sozinho...
+  const semMarca = "Data,Lançamento,Categoria,Tipo,Valor\n02/09/2026,PADARIA,Alimentação,Compra à vista,\"R$ 25,00\"\n04/09/2026,LOJA,Casa,Parcela 2 de 6,\"R$ 100,00\"";
+  assert.strictEqual(M.efCabecalhoDeCartao(tsv(semMarca)), -1);
+  assert.ok(ler(semMarca).erro);
+  // ...mas, dito que é cartão, lê: a parcela vem de outra coluna de texto
+  const inter = ler(semMarca, { forcar: true });
+  assert.deepStrictEqual(inter.movimentos.map((m) => [m.valor, m.parcela || 0, m.de || 0]), [[-25, 0, 0], [-100, 2, 6]]);
+  // extrato de conta não vira fatura
+  assert.strictEqual(M.efCabecalhoDeCartao(tsv("Data Lançamento;Descrição;Valor;Saldo\n02/09/2026;Pix;10,00;10,00")), -1);
+  assert.strictEqual(M.efCabecalhoDeCartao(tsv("Data,Valor,Identificador,Descrição\n02/09/2026,-10.00,abc,Pix")), -1);
 });
 
 for (const [nome, fn] of testes) {
