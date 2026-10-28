@@ -17285,7 +17285,9 @@ function conferenciaUnificada(opcoes) {
     const movs = movimentosGuardadosDoMes(ext, mes);
     const lancs = lancamentosDaContaBancaria(lancamentos, conta.id).filter((l) => String(l.competencia) === mes);
     const guardado = ext[mes] || Object.values(ext).find((v) => v && (v.movimentos || []).some((m) => mesDoMovimento(m) === mes)) || null;
-    const meio = { id: conta.id, tipo: "conta", nome: conta.nome, conta, linhas: movs.filter((m) => efEhMovimento(m.historico)).length,
+    const dosMovimentos = movs.filter((m) => efEhMovimento(m.historico));
+    const meio = { id: conta.id, tipo: "conta", nome: conta.nome, conta, linhas: dosMovimentos.length,
+      ultimoDia: dosMovimentos.map((m) => String(m.data || "").slice(0, 10)).sort().pop() || "",
       guardado, lancamentos: lancs.length, conciliacao: null, checagem: null };
     if (movs.length) {
       const r = conciliarExtrato(movs, lancs, { ignorados: ignoradosGuardados(ext), fornecedores: o.fornecedores || [], historico: lancamentos });
@@ -19926,7 +19928,7 @@ function QuadroDosMeios({ unificado, mes, fechado, ocupado }) {
   const corDif = (d) => (d == null ? "#6b7280" : d === 0 ? "#0474f4" : "#b45309");
   const contas = (u.lista || []).filter((x) => x.tipo === "conta");
   const cartoes = (u.lista || []).filter((x) => x.tipo === "cartao");
-  const totalDif = u.totalBanco == null ? null : efCentavos(u.totalBanco - u.totalCalculado);
+  const totalDif = u.totalBanco == null ? null : efCentavos(u.totalBanco + (u.totalAplicacao || 0) - u.totalCalculado);
   const largo = typeof window === "undefined" || window.innerWidth >= 700;
   return (
     <div data-vk-meios="1" style={{ ...S.card, display: "grid", gap: 10, minWidth: 0 }}>
@@ -19957,6 +19959,10 @@ function QuadroDosMeios({ unificado, mes, fechado, ocupado }) {
                 {!largo && <div style={{ ...th, padding: 0, border: "none", textAlign: "right" }}>Banco</div>}
                 <SaldoDaContaNoMes meio={x} mes={mes} fechado={fechado} aoGuardar={u.aoGuardarSaldo} />
                 {x.gravado == null && x.lido != null && <div style={{ fontSize: 10.5, color: "#6b7280", marginTop: 2 }}>lido do extrato</div>}
+                {x.aplicacao != null && <div data-vk-meio-aplicacao="1" style={{ fontSize: 10.5, color: "#6b7280", marginTop: 2, whiteSpace: "nowrap" }}>+ aplicação {efDinheiro(x.aplicacao)}</div>}
+                {x.aplicacao == null && x.id === CONTA_BANCARIA_PRINCIPAL && x.diferenca != null && Math.abs(x.diferenca) >= 0.01 && (
+                  <div style={{ fontSize: 10.5, color: "#b45309", marginTop: 2, whiteSpace: "normal" }}>informe a aplicação no alto</div>
+                )}
               </div>
               <div style={{ width: largo ? 120 : 92, ...num, padding: largo ? "6px 0 0" : 0 }}>
                 {!largo && <div style={{ ...th, padding: 0, border: "none", textAlign: "right" }}>Calculado</div>}
@@ -20029,6 +20035,118 @@ function QuadroDosMeios({ unificado, mes, fechado, ocupado }) {
           })}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── A entrada do mês ────────────────────────────────────────────
+// Ao abrir o Fechamento: uma janela para trazer todos os extratos e faturas
+// de uma vez. Cada arquivo é reconhecido (de qual conta, de qual cartão) e o
+// checklist marca, com o ponto azul, o que já chegou. Dá para pular.
+function itensDoChecklist(meios, mes) {
+  const dia = (d) => String(d || "").slice(0, 10).split("-").reverse().slice(0, 2).join("/");
+  const itens = [];
+  for (const mi of meios || []) {
+    if (mi.tipo === "conta") {
+      itens.push({ id: mi.id, nome: mi.nome, tipo: "conta", feito: mi.linhas > 0,
+        detalhe: mi.linhas > 0 ? `${mi.linhas} ${mi.linhas === 1 ? "linha" : "linhas"}${mi.ultimoDia ? " · até " + dia(mi.ultimoDia) : ""}` : "falta o extrato" });
+      continue;
+    }
+    const fs = mi.faturas || [];
+    const fechada = fs.find((f) => f.jaFechada);
+    const comArquivo = fs.find((f) => f.temArquivo);
+    const esperada = fs.find((f) => f.linhasVicke && f.linhasVicke.length);
+    itens.push({ id: mi.id, nome: mi.nome, tipo: "cartao", feito: !!(fechada || comArquivo),
+      opcional: !fs.length,
+      detalhe: fechada ? `fatura de ${mesAnoPorExtenso(fechada.competencia)} fechada`
+        : comArquivo ? `fatura de ${mesAnoPorExtenso(comArquivo.competencia)} · ${comArquivo.casadas.length + comArquivo.faltam.length} compras`
+        : esperada ? `falta a fatura de ${mesAnoPorExtenso(esperada.competencia)}`
+        : "traga a fatura do mês, se houver" });
+  }
+  return itens;
+}
+
+function EntradaDosExtratos({ mes, unificado, contas, receber, ocupado, aviso, aoFechar }) {
+  const S = EF_ESTILO;
+  const entrada = useRef(null);
+  const [arrastando, setArrastando] = useState(false);
+  const itens = itensDoChecklist((unificado && unificado.lista) || [], mes);
+  const feitos = itens.filter((x) => x.feito).length;
+  const obrigatorios = itens.filter((x) => !x.opcional);
+  const tudo = obrigatorios.length > 0 && obrigatorios.every((x) => x.feito);
+  useEffect(() => {
+    const esc = (e) => { if (e.key === "Escape") aoFechar(); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, []);
+  const ponto = (feito, opcional) => (
+    <span aria-hidden="true" style={{ width: 20, height: 20, borderRadius: 999, flex: "0 0 20px", display: "inline-flex", alignItems: "center",
+      justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff", transition: "background .2s, border-color .2s",
+      background: feito ? "#0474f4" : "#fff", border: `2px solid ${feito ? "#0474f4" : opcional ? "rgba(38,36,33,0.15)" : "rgba(4,116,244,0.35)"}` }}>
+      {feito ? "✓" : ""}
+    </span>
+  );
+  return (
+    <div data-vk-entrada-extratos="1" style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", zIndex: 1000,
+      display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "max(16px, 6vh) 12px", overflowY: "auto" }}>
+      <div style={{ background: "#fff", borderRadius: 18, width: "min(560px, 100%)", boxShadow: "0 20px 50px rgba(0,0,0,0.25)",
+        display: "flex", flexDirection: "column", maxHeight: "calc(100vh - 32px)" }}>
+        <div style={{ padding: "18px 20px 6px", display: "flex", gap: 12, alignItems: "flex-start" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Extratos de {efMesPorExtenso(mes)}</div>
+            <div style={{ fontSize: 12.5, color: "#6b7280", marginTop: 3, lineHeight: 1.45 }}>
+              Traga os extratos das contas e as faturas dos cartões, todos juntos. Cada arquivo vai para o lugar dele.
+            </div>
+          </div>
+          <button style={{ ...S.btnSec, padding: "6px 12px" }} onClick={aoFechar}>Pular</button>
+        </div>
+        <div style={{ overflowY: "auto", padding: "10px 20px 4px", display: "grid", gap: 12 }}>
+          <div data-vk-entrada-soltar="1"
+            onDragOver={(e) => { e.preventDefault(); if (!arrastando) setArrastando(true); }}
+            onDragLeave={(e) => { if (e.currentTarget === e.target) setArrastando(false); }}
+            onDrop={(e) => { e.preventDefault(); setArrastando(false); receber(e.dataTransfer && e.dataTransfer.files); }}
+            onClick={() => entrada.current && entrada.current.click()}
+            style={{ border: `1.5px dashed ${arrastando ? "#0474f4" : "rgba(38,36,33,0.22)"}`, background: arrastando ? "#eef5ff" : "#fafbfc",
+              borderRadius: 14, padding: "22px 14px", textAlign: "center", cursor: "pointer", transition: "background .12s, border-color .12s" }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: arrastando ? "#0474f4" : "#262421" }}>
+              {ocupado ? ocupado : arrastando ? "Pode soltar" : "Arraste os arquivos aqui ou clique para escolher"}
+            </div>
+            <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 4 }}>OFX, CNAB, Excel, CSV ou HTML — vários de uma vez</div>
+          </div>
+          <input ref={entrada} type="file" multiple data-vk-entrada-arquivos="1" style={{ display: "none" }}
+            accept=".xlsx,.xlsm,.xls,.csv,.tsv,.txt,.ofx,.ofc,.html,.htm,.xml,.ret,.rem,.cnab,.pdf"
+            onChange={(e) => { const fs = Array.from(e.target.files || []); e.target.value = ""; receber(fs); }} />
+          <ArquivosEsperando unificado={unificado} contas={contas} />
+          {aviso && <div data-vk-entrada-aviso="1" style={{ fontSize: 12, color: "#0474f4", lineHeight: 1.45 }}>{aviso}</div>}
+          <div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+              <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280", fontWeight: 600 }}>Checklist</span>
+              <span style={{ fontSize: 11.5, color: "#9ca3af" }}>{feitos} de {itens.length}</span>
+            </div>
+            <div style={{ display: "grid" }}>
+              {itens.map((x, k) => (
+                <div key={x.id} data-vk-checklist-item={x.id} data-vk-feito={x.feito ? "1" : "0"}
+                  style={{ display: "flex", gap: 12, alignItems: "center", padding: "9px 2px", borderTop: k ? "1px solid rgba(38,36,33,0.06)" : "none" }}>
+                  {ponto(x.feito, x.opcional)}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{x.tipo === "cartao" ? "💳 " : ""}{x.nome}</div>
+                    <div style={{ fontSize: 11.5, color: x.feito ? "#4b5563" : "#9ca3af", marginTop: 1 }}>{x.detalhe}</div>
+                  </div>
+                  <span style={{ fontSize: 10.5, color: "#9ca3af", whiteSpace: "nowrap" }}>{x.tipo === "cartao" ? "cartão" : "conta"}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div style={{ padding: "12px 20px 16px", display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center",
+          borderTop: "1px solid rgba(38,36,33,0.08)", marginTop: 8 }}>
+          <span style={{ fontSize: 11.5, color: "#6b7280", marginRight: "auto" }}>
+            {tudo ? "Tudo chegou." : "Dá para pular e trazer depois."}
+          </span>
+          <button style={S.btnSec} onClick={aoFechar}>Fechar</button>
+          <button data-vk-entrada-conferir="1" style={S.btn} onClick={aoFechar}>Conferir o mês</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -20358,6 +20476,12 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
               if (extrato.receberVarios) extrato.receberVarios(fs); else extrato.receber(fs[0]);
             }} />
           {modoTodas && <ArquivosEsperando unificado={unificado} contas={(contas && contas.lista) || []} />}
+          {modoTodas && unificado.aoAbrirChecklist && (
+            <button data-vk-abrir-checklist="1" onClick={unificado.aoAbrirChecklist}
+              style={{ justifySelf: "start", background: "none", border: "none", padding: 0, fontSize: 12, color: "#0474f4", cursor: "pointer", fontFamily: "inherit" }}>
+              Ver o checklist dos extratos do mês
+            </button>
+          )}
         </div>
       )}
 
@@ -21149,6 +21273,12 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   const contaEfetiva = contaFecho || (unificavel ? EF_TODAS_AS_CONTAS : CONTA_BANCARIA_PRINCIPAL);
   const modoTodas = unificavel && contaEfetiva === EF_TODAS_AS_CONTAS;
   const contaAtual = (!modoTodas && contasBanco.find((c) => c.id === contaEfetiva)) || contasBanco[0];
+  // Ao abrir o Fechamento com mais de um meio: a janela para trazer os
+  // extratos do mês, com o checklist. Dá para pular.
+  const [entradaDoMes, setEntradaDoMes] = useState(false);
+  useEffect(() => {
+    if (vista === "fechamento" && unificavel) { setContaFecho(""); setAviso(""); setEntradaDoMes(true); }
+  }, [vista]);
   const ehPrincipal = contaAtual.id === CONTA_BANCARIA_PRINCIPAL;
   // na conferência, só os lançamentos que passam por esta conta
   const lancsDaConta = variasContas ? lancamentosDaContaBancaria(lancs, contaAtual.id) : lancs;
@@ -21732,15 +21862,19 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         : (c.id === CONTA_BANCARIA_PRINCIPAL ? null : saldoPeloExtratoDaConta(extratosDaContaBancaria(cfgFin, c.id), mesEmConferencia, c.saldoInicial));
       const temMovimento = mi.linhas > 0 || mi.lancamentos > 0;
       const banco = gravado != null ? gravado : lido;
-      return { ...mi, calculado, gravado, lido, banco, temMovimento,
-        diferenca: banco == null ? null : efCentavos(banco - calculado) };
+      // a principal tem a aplicação: o dinheiro aplicado está no calculado,
+      // então a régua dela é banco + aplicação
+      const aplicacao = c.id === CONTA_BANCARIA_PRINCIPAL ? saldoAplicacaoDoMes(fechamentos, mesEmConferencia) : null;
+      return { ...mi, calculado, gravado, lido, banco, temMovimento, aplicacao,
+        diferenca: banco == null ? null : efCentavos(banco + (aplicacao || 0) - calculado) };
     });
     const contas = linhasMeios.filter((x) => x.tipo === "conta");
     const faltaSaldo = contas.some((x) => x.temMovimento && x.banco == null);
     const totalBanco = faltaSaldo ? null : efCentavos(contas.reduce((t, x) => t + (x.banco != null ? x.banco : x.calculado), 0));
     const totalCalculado = efCentavos(contas.reduce((t, x) => t + x.calculado, 0));
     const principal = contas.find((x) => x.id === CONTA_BANCARIA_PRINCIPAL) || null;
-    return { lista: linhasMeios, totalBanco, totalCalculado, saldoPrincipal: principal ? principal.banco : null };
+    const totalAplicacao = principal && principal.aplicacao != null ? principal.aplicacao : null;
+    return { lista: linhasMeios, totalBanco, totalCalculado, totalAplicacao, saldoPrincipal: principal ? principal.banco : null };
   })();
   // Banco que traz a linha SALDO (Sicoob) diz o saldo; o que não traz (Cora)
   // tem o saldo somado: saldo inicial da conta + os movimentos guardados.
@@ -22585,6 +22719,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             nomeDoMeio, aoGuardarSaldo: guardarSaldoDaConta, aoFecharFatura: perm.podeEditar ? fecharFaturaDoMes : null,
             aoDestinar: destinarPendente, aoDescartar: descartarPendente,
             cartoes: cartoesAtivos,
+            aoAbrirChecklist: () => { setAviso(""); setEntradaDoMes(true); },
           } : null}
           mes={mesEmConferencia} aoTrocarMes={setMesFecho}
           aoMarcar={marcarConferido} aoMarcarTodos={marcarMesInteiro}
@@ -22634,6 +22769,12 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
               },
             },
           }} />
+      )}
+
+      {vista === "fechamento" && entradaDoMes && modoTodas && meiosDoMes && (
+        <EntradaDosExtratos mes={mesEmConferencia} contas={contasBanco} receber={receberArquivosTodos} ocupado={ocupado} aviso={aviso}
+          unificado={{ ...meiosDoMes, pendentes, cartoes: cartoesAtivos, aoDestinar: destinarPendente, aoDescartar: descartarPendente }}
+          aoFechar={() => setEntradaDoMes(false)} />
       )}
 
       {aviso && <div style={{ fontSize: 12.5, color: "#0474f4" }}>{aviso}</div>}
