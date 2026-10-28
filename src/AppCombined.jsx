@@ -12682,6 +12682,15 @@ function parcelasDoCartao(cartao, dataCompra, valor, quantas) {
   return parcelas;
 }
 
+// A compra que já vinha sendo paga antes de entrar no VICKE (a fatura traz
+// "10/12"): as parcelas de antes estão em faturas que o VICKE não detalhou
+// (ou lançou inteiras em Cartão de crédito). Ficam só as de agora em diante —
+// senão elas apareceriam como atrasadas na próxima fatura.
+function planoAPartirDa(plano, parcelaInicial) {
+  const k = Math.floor(Number(parcelaInicial) || 1);
+  return k > 1 ? (plano || []).filter((p) => p && p.parcela >= k) : (plano || []);
+}
+
 // Marca a conta como paga no cartão. `pagoEm` continua sendo o DIA DA
 // COMPRA — é o custo da obra —, e o plano de parcelas fica na conta para a
 // fatura encontrar.
@@ -12996,8 +13005,8 @@ function compraEditada(compra, mudancas, cartao, origem) {
   const data = m.data != null && m.data !== "" ? String(m.data).slice(0, 10) : dataAntes;
   const valor = m.valor != null && m.valor !== "" ? efCentavos(m.valor) : efCentavos(valorAntes);
   const parcelas = m.parcelas != null && m.parcelas !== ""
-    ? Math.max(1, Math.floor(Number(m.parcelas) || 1)) : ((t.parcelasCartao || []).length || 1);
-  const plano = parcelasDoCartao(cartao, data, valor, parcelas);
+    ? Math.max(1, Math.floor(Number(m.parcelas) || 1)) : ((((t.parcelasCartao || [])[0]) || {}).de || (t.parcelasCartao || []).length || 1);
+  const plano = planoAPartirDa(parcelasDoCartao(cartao, data, valor, parcelas), t.parcelaInicial);
   if (!plano.length) return null;
   const base = { ...t, descricao: m.descricao != null ? String(m.descricao).trim() : (t.descricao || ""),
     formaPagamento: "cartao", cartaoId: (cartao || {}).id || "", parcelasCartao: plano };
@@ -14335,9 +14344,14 @@ async function efTabelaDoArquivo(arquivo) {
   if (/\.(ofx|ofc)$/.test(nome) || /<OFX>|OFXHEADER|<OFC>/i.test(bruto.slice(0, 2000))) {
     const linhas = efLinhasDoOfx(bruto);
     if (!linhas.length) throw new Error("Não achei lançamentos nesse OFX.");
-    // OFX de cartão de crédito: segue como fatura
+    // OFX de cartão de crédito: segue como fatura, com a pista do banco
+    // (o código e o nome da instituição) para achar o cartão
     const fatura = efFaturaDoOfx(bruto, linhas);
-    if (fatura) return { linhas: fatura, aba: "OFX", abas: [] };
+    if (fatura) {
+      const doOfx = (n) => ((new RegExp("<" + n + ">([^<\\r\\n]+)", "i").exec(bruto) || [])[1] || "").trim();
+      const dicaDoCartao = [doOfx("ORG"), efNomeDoBancoPeloCodigo(doOfx("FID") || doOfx("BANKID"))].filter(Boolean).join(" ");
+      return { linhas: fatura, aba: "OFX", abas: [], ...(dicaDoCartao ? { dicaDoCartao } : {}) };
+    }
     // banco e número da conta do OFX: é por eles que o próximo arquivo da
     // mesma conta é reconhecido (o formato é igual em todo banco)
     const doOfx = (n) => ((new RegExp("<" + n + ">([^<\\r\\n]+)", "i").exec(bruto) || [])[1] || "").trim();
@@ -17082,17 +17096,41 @@ function mesDoPagamentoDaFatura(cartao, competencia) {
   return dv <= df ? somarCompetencia(competencia, 1) : competencia;
 }
 
-// O cartão do arquivo: pelo final (8821); sem final cadastrado, o único
-// cartão sem final.
-function cartaoDoArquivo(cartoes, final) {
+// O banco pelo código da compensação (o OFX traz o código, não o nome)
+const EF_BANCOS_PELO_CODIGO = {
+  "001": "banco do brasil bb", "033": "santander", "041": "banrisul", "070": "brb", "077": "inter", "085": "ailos",
+  "102": "xp", "104": "caixa", "136": "unicred", "197": "stone", "208": "btg", "212": "original", "237": "bradesco",
+  "260": "nubank nu", "290": "pagbank pagseguro", "323": "mercado pago", "336": "c6", "341": "itau", "380": "picpay",
+  "403": "cora", "422": "safra", "655": "neon", "748": "sicredi", "756": "sicoob bancoob",
+};
+function efNomeDoBancoPeloCodigo(codigo) {
+  const c = String(codigo || "").replace(/\D/g, "");
+  return c ? (EF_BANCOS_PELO_CODIGO[c.padStart(3, "0").slice(-3)] || "") : "";
+}
+
+// O cartão do arquivo:
+//   1. pelo final (8821) — cartão com outro final cadastrado não é ele;
+//   2. sobrando um só cartão sem final cadastrado, é ele;
+//   3. sobrando mais de um, pela pista do arquivo (o banco, a bandeira, o
+//      nome do arquivo) contra o nome do cartão: "Sicoob Mastercard" casa
+//      com o OFX do banco 756 que fala em MASTERCARD.
+function cartaoDoArquivo(cartoes, final, dica) {
   const ativos = (cartoes || []).filter((c) => c && c.ativo !== false);
-  const f = String(final || "").replace(/\D/g, "").slice(-4);
+  const so = (x) => String(x || "").replace(/\D/g, "").slice(-4);
+  const f = so(final);
   if (f) {
-    const igual = ativos.find((c) => String(c.final || "").replace(/\D/g, "").slice(-4) === f);
+    const igual = ativos.find((c) => so(c.final) === f);
     if (igual) return igual;
   }
-  if (ativos.length === 1 && !String(ativos[0].final || "").trim()) return ativos[0];
-  return null;
+  const semFinal = ativos.filter((c) => !so(c.final));
+  if (semFinal.length === 1) return semFinal[0];
+  if (!semFinal.length || !dica) return null;
+  const texto = " " + efSemAcento(dica).replace(/[^a-z0-9]+/g, " ") + " ";
+  const notas = semFinal.map((c) => ({ c, n: efSemAcento(c.nome || "").split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 3 && !["cartao", "empresarial", "credito", "pro", "pj", "black", "gold", "platinum"].includes(w))
+    .filter((w) => texto.indexOf(" " + w + " ") >= 0).length }));
+  notas.sort((a, b) => b.n - a.n);
+  return notas[0].n > 0 && (notas.length < 2 || notas[0].n > notas[1].n) ? notas[0].c : null;
 }
 
 // A fatura do arquivo contra a do VICKE (as parcelas das obras e do
@@ -17218,6 +17256,61 @@ function faturaParaALinhaDoBanco(movimento, contaDaLinha, cartoes, obras, lancam
   }
   if (exata) return { ...exata, exata: true };
   return pareceFatura && perto ? { ...perto, exata: false } : null;
+}
+
+// A fatura que já estava no extrato do jeito antigo: o débito do banco
+// lançado inteiro em "Cartão de crédito", sem as compras. Fechar a fatura
+// agora SUBSTITUI esse lançamento (fica a mesma linha do banco, o mesmo
+// valor e a mesma referência) — senão o débito contaria duas vezes.
+function lancamentoAntigoDaFatura(lancamentos, cartao, competencia, total) {
+  const pagadora = (cartao || {}).contaBancariaId || CONTA_BANCARIA_PRINCIPAL;
+  const mes = mesDoPagamentoDaFatura(cartao, competencia);
+  const v = efCentavos(Math.abs(Number(total) || 0));
+  const achados = (lancamentos || []).filter((l) => l && l.contaId === "cartao_credito" && ((l.origem || {}).tipo !== "fatura")
+    && !compraNoCartaoDoEscritorio(l) && String(l.competencia) === mes && contaBancariaDoLancamento(l) === pagadora
+    && Math.abs(efCentavos(Math.abs(Number(l.valor) || 0)) - v) < 0.01);
+  return achados.sort((a, b) => Number(!!b.extratoId) - Number(!!a.extratoId))[0] || null;
+}
+function faturaNoLugarDoAntigo(fatura, antigo) {
+  if (!fatura || !antigo) return fatura;
+  return { ...fatura, lancadoEm: antigo.lancadoEm || fatura.lancadoEm, competencia: antigo.competencia || fatura.competencia,
+    numeroDoc: antigo.numeroDoc || fatura.numeroDoc,
+    ...(antigo.extratoId ? { extratoId: antigo.extratoId, historicoBanco: antigo.historicoBanco || "" } : {}),
+    ...(antigo.conferido ? { conferido: true, conferidoEm: antigo.conferidoEm || "" } : {}),
+    ...(antigo.contaBancariaId ? { contaBancariaId: antigo.contaBancariaId } : {}),
+    substituiu: antigo.id };
+}
+
+// As parcelas que ainda vão cair nas faturas abertas de um cartão — as
+// compras de hoje que se pagam nos meses seguintes. Uma linha por parcela,
+// no mês em que o banco vai debitar a fatura, na conta/obra/unidade da
+// compra: é o "a pagar" do cartão. Não afeta o saldo (ainda não saiu do
+// banco); quando a fatura fecha, a mesma parcela vira a linha da fatura.
+function parcelasAPagarDoCartao(cartao, obras, lancamentos, opcoes) {
+  const o = opcoes || {};
+  if (!cartao || !cartao.id) return [];
+  const fechadas = faturasFechadas(lancamentos, cartao.id);
+  const linhas = [];
+  for (const comp of competenciasDoCartao(obras, lancamentos, cartao.id)) {
+    if (fechadas.has(comp)) continue;
+    const mesPaga = mesDoPagamentoDaFatura(cartao, comp);
+    for (const x of linhasDaFatura(obras, lancamentos, cartao.id, comp, { clientes: o.clientes || [] })) {
+      const destino = x.destinoContaId && contaQueSaiDoBanco(x.destinoContaId) ? x.destinoContaId : "cartao_credito";
+      linhas.push({
+        id: `apagar:${cartao.id}:${comp}:${x.origem}:${x.refId || ""}:${x.parcela || 1}`,
+        tipo: "escritorio",
+        origem: { tipo: "parcelaAPagar", cartaoId: cartao.id, competencia: comp, refId: x.refId || "", obraId: x.obraId || "", de: x.origem },
+        contaId: destino,
+        unidadeId: destino !== "cartao_credito" ? (x.unidadeId || "escritorio") : "escritorio",
+        clienteId: x.clienteId || "", empreendimentoId: x.empreendimentoId || "", projeto: x.obra || "",
+        valor: efCentavos(x.valor), competencia: mesPaga, lancadoEm: x.compraEm || "",
+        descricao: [x.descricao, x.de > 1 ? `parcela ${x.parcela}/${x.de}` : "", `a pagar na fatura de ${mesAnoPorExtenso(comp)}`].filter(Boolean).join(" · "),
+        fornecedor: x.fornecedor || "", numeroDoc: x.numeroDoc || "", anexos: x.anexos || [],
+        _afetaSaldo: false,
+      });
+    }
+  }
+  return linhas;
 }
 
 const EF_CONTAS_INTERNAS = new Set(PLANO_CONTAS_ESCRITORIO.filter((c) => c.interna).map((c) => c.id));
@@ -17780,7 +17873,10 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     cliente: "", clienteId: "", empreendimentoId: "", projeto: "", fornecedor: "", descricao: "", documento: "", contaBanco: "sim",
     ...(inicial || {}),
     ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
-    parcelas: (inicial && Array.isArray(inicial.parcelasCartao) && inicial.parcelasCartao.length) || (inicial && inicial.parcelas) || 1,
+    // o número de parcelas da compra (a primeira do plano diz "de N" — o plano
+    // pode começar no meio, ver planoAPartirDa)
+    parcelas: (inicial && Array.isArray(inicial.parcelasCartao) && inicial.parcelasCartao.length
+      && ((inicial.parcelasCartao[0] || {}).de || inicial.parcelasCartao.length)) || (inicial && inicial.parcelas) || 1,
   }));
   const lancNovo = !(inicial && inicial.id);
   const [tentou, setTentou] = useState(false);
@@ -18162,7 +18258,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     if (!noCartao) return { ...x, formaPagamento: naObra ? "avista" : (x.formaPagamento === "cartao" ? "" : x.formaPagamento),
       cartaoId: "", parcelasCartao: undefined };
     return { ...x, formaPagamento: "cartao", cartaoId: cartaoEscolhido.id, contaBanco: "nao",
-      parcelasCartao: planoCartao };
+      parcelasCartao: planoAPartirDa(planoCartao, f.parcelaInicial) };
   };
 
   const campo = (rot, filho, chave) => <div data-campo={chave} style={{ minWidth: 0 }}><div style={S.rot}>{rot}</div>{filho}</div>;
@@ -18293,7 +18389,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             })}
           </Selecao>
         ), "conta")}
-        {campo("Valor", <CampoValorBR style={S.input} valor={f.valor} placeholder="0,00"
+        {campo(noCartao && Number(f.parcelas) > 1 ? "Valor da compra (todas as parcelas)" : "Valor", <CampoValorBR style={S.input} valor={f.valor} placeholder="0,00"
           negativo={efSinalFixoDoEstorno(inicial)} aoMudar={(v) => set("valor", v)} />)}
         {/* No fechamento, a competência é o mês que se está fechando: não
             é uma escolha, e um mês errado aqui sumiria da conferência. */}
@@ -18347,6 +18443,36 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
         ))}
         {noCartao && campo("Parcelas", <input style={S.input} inputMode="numeric" value={f.parcelas}
           onChange={(e) => set("parcelas", e.target.value.replace(/\D/g, "").slice(0, 2))} />)}
+        {/* O plano no cartão, visível: em que fatura cai cada parcela. A de
+            agora entra neste mês; as seguintes ficam programadas nas faturas
+            dos meses seguintes — o fechamento delas só pede compra nova. */}
+        {noCartao && cartaoEscolhido && planoCartao.length > 0 && (() => {
+          const plano = planoAPartirDa(planoCartao, f.parcelaInicial);
+          const k0 = Number(f.parcelaInicial) > 1 ? Number(f.parcelaInicial) : 1;
+          return (
+            <div data-vk-plano-cartao="1" style={{ gridColumn: "1 / -1", display: "grid", gap: 6, padding: "10px 12px", borderRadius: 10,
+              background: "#f7fbff", border: "1px solid rgba(4,116,244,0.18)" }}>
+              <div style={{ fontSize: 12, color: "#374151", lineHeight: 1.45 }}>
+                {plano.length === 1 && planoCartao.length === 1
+                  ? <>À vista no cartão: entra na fatura de <b>{mesAnoPorExtenso(plano[0].competencia)}</b>.</>
+                  : <>{planoCartao.length} parcelas de <b>{efDinheiro(planoCartao[planoCartao.length - 1].valor)}</b>
+                    {k0 > 1 ? <> — as parcelas 1 a {k0 - 1} já foram pagas em faturas anteriores</> : null}.
+                    {" "}A parcela {plano[0].parcela} entra na fatura de <b>{mesAnoPorExtenso(plano[0].competencia)}</b>
+                    {plano.length > 1 ? "; as seguintes ficam programadas e entram sozinhas nas próximas faturas." : "."}</>}
+              </div>
+              {plano.length > 1 && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {plano.map((p, i) => (
+                    <span key={p.parcela} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 999, whiteSpace: "nowrap",
+                      background: i === 0 ? "#0474f4" : "#fff", color: i === 0 ? "#fff" : "#374151", border: `1px solid ${i === 0 ? "#0474f4" : "rgba(38,36,33,0.15)"}` }}>
+                      {p.parcela}/{p.de} · {mesAnoPorExtenso(p.competencia)} · {efDinheiro(p.valor)}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
         {obraAntiga ? campo("Cliente", <input style={S.input} value={f.cliente || ""} placeholder="como está na base antiga"
           onChange={(e) => setF((p) => ({ ...p, cliente: e.target.value, clienteId: "" }))} />) : campo(ehEmp ? "Empreendimento" : "Cliente", (
           <Selecao style={{ ...S.input, cursor: "pointer" }}
@@ -21441,6 +21567,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       const plano = cartaoDoCusto
         ? pagamentoNoCartao(paga, cartaoDoCusto, { pagoEm: l.lancadoEm, valorPago: Number(c.valor) || 0, parcelas: l.parcelas })
         : null;
+      // compra que já vinha sendo paga: só as parcelas de agora em diante
+      if (plano && Number(l.parcelaInicial) > 1) { plano.parcelasCartao = planoAPartirDa(plano.parcelasCartao, l.parcelaInicial); plano.parcelaInicial = Number(l.parcelaInicial); }
       paga = plano ? { ...paga, ...plano } : { ...paga, formaPagamento: "avista" };
       return comAnexos(paga, papeis);
     });
@@ -22048,7 +22176,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     return (l) => {
       if (!l) return "";
       if (compraNoCartaoDoEscritorio(l)) return "Cartão " + (cartoes[l.cartaoId] || "");
-      if ((l.origem || {}).tipo === "faturaLinha") return "Cartão " + (cartoes[l.origem.cartaoId] || "");
+      if (["faturaLinha", "parcelaAPagar"].includes((l.origem || {}).tipo)) return "Cartão " + (cartoes[l.origem.cartaoId] || "");
       if (!efPassouPeloBanco(l)) return "Fora da conta";
       return nomes[contaBancariaDoLancamento(l)] || nomes[CONTA_BANCARIA_PRINCIPAL] || "";
     };
@@ -22074,14 +22202,29 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       const cli = clientes.find((c) => c && c.id === l.clienteId);
       return cli ? { ...l, cliente: cli.nome || "" } : l;
     });
-    const naoAfetam = todos.filter((l) => l && (abertas.has(l.id) || compraNoCartaoDoEscritorio(l)))
-      .map((l) => ({ ...l, _afetaSaldo: false }));
-    return partes.concat(naoAfetam);
+    // a fatura inteira continua (é a linha do banco); a compra no cartão
+    // aparece pelas parcelas: as das faturas fechadas (acima, afetam o
+    // saldo) e as que ainda vão cair (abaixo, a pagar)
+    const naoAfetam = todos.filter((l) => l && abertas.has(l.id)).map((l) => ({ ...l, _afetaSaldo: false }));
+    const aPagar = cartoesDoEscritorio(data).filter((c) => c && c.id)
+      .flatMap((c) => parcelasAPagarDoCartao(c, (data || {}).obras || [], todos, { clientes }))
+      .map((l) => {
+        if (l.cliente || !l.clienteId) return l;
+        const cli = clientes.find((c) => c && c.id === l.clienteId);
+        return cli ? { ...l, cliente: cli.nome || "" } : l;
+      });
+    return partes.concat(naoAfetam, aPagar);
   }, [data]);
+  // a linha que é parte de outra (a compra dentro da fatura, a parcela a
+  // pagar) edita a de origem: a fatura, ou a compra do escritório no cartão
   const faturaDaParte = (l) => {
     const o = (l && l.origem) || {};
-    return o.tipo === "faturaLinha" ? (lancs.find((x) => x && x.id === o.faturaId) || l) : l;
+    if (o.tipo === "faturaLinha") return lancs.find((x) => x && x.id === o.faturaId) || l;
+    if (o.tipo === "parcelaAPagar") return (o.de === "escritorio" && lancs.find((x) => x && x.id === o.refId)) || null;
+    return l;
   };
+  const avisarCompraDaObra = () => dialogo.alertar({ titulo: "Compra de obra no cartão", tipo: "aviso",
+    mensagem: "Esta parcela é de uma compra lançada na obra: valor, data e parcelas mudam lá, no Contas a pagar da obra, ou em Cartões." });
 
   // ── "Tudo": vários arquivos de uma vez ──
   // Cada arquivo é lido e reconhecido: fatura de cartão (pelo cabeçalho e
@@ -22126,7 +22269,9 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       if (destinoCartao || (!x.destino && efCabecalhoDeCartao(x.linhas) >= 0)) {
         const lido = movimentosDoCartao(x.linhas, { forcar: !!destinoCartao });
         if (lido.erro || !lido.movimentos.length) { feitos.push(`${x.nome}: ${lido.erro || "nenhuma compra na fatura"}`); continue; }
-        const cartao = destinoCartao ? cartaoPorId(cartoes, destinoCartao) : cartaoDoArquivo(cartoes, lido.final);
+        // a pista: o banco do arquivo, o nome dele e o texto das compras (a bandeira)
+        const dica = [x.dicaDoCartao, x.nome, ...(x.linhas || []).slice(0, 40).map((l) => (l || []).join(" "))].join(" ");
+        const cartao = destinoCartao ? cartaoPorId(cartoes, destinoCartao) : cartaoDoArquivo(cartoes, lido.final, dica);
         if (!cartao) {
           esperando.push({ ...x, id: x.nome + "|" + agora + "|" + esperando.length, tipo: "cartao",
             motivo: cartoes.length ? `de qual cartão é${lido.final ? " o final " + lido.final : ""}?` : "cadastre o cartão em Cartões antes" });
@@ -22252,9 +22397,12 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const dia = dataDaCompraDaLinha(m, cartao);
     const total = efCentavos(Math.abs(Number(m.valor) || 0) * n);
     const { sinalDoBanco: _s, extratoId: _e, contaBancariaId: _c, ...resto } = l || {};
-    return { ...resto, valor: total, lancadoEm: dia, competencia: String(mesEmConferencia), historicoBanco: m.historico || "",
+    // a descrição é a da compra: o "10/12" do banco sai (cada parcela diz a sua)
+    const semParcela = (t) => String(t || "").replace(/(^|\s)(parc(ela)?\.?\s*)?\d{1,2}\s*(\/|de)\s*\d{1,2}(?![\d\/])/gi, " ").replace(/\s+/g, " ").trim();
+    return { ...resto, descricao: semParcela(resto.descricao || m.historico), valor: total, lancadoEm: dia, competencia: String(mesEmConferencia), historicoBanco: m.historico || "",
       formaPagamento: "cartao", cartaoId: cartao.id, contaBanco: "nao", parcelas: n,
-      parcelasCartao: parcelasDoCartao(cartao, dia, total, n) };
+      ...(Number(m.parcela) > 1 ? { parcelaInicial: Number(m.parcela) } : {}),
+      parcelasCartao: planoAPartirDa(parcelasDoCartao(cartao, dia, total, n), m.parcela) };
   }
   function sugestaoDaLinha(m) {
     if (!m || !m._cartao) {
@@ -22293,7 +22441,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     if (s && s.cartaoObra) {
       const x = s.cartaoObra;
       return { lancamento: { ligarCartao: { obraId: x.obra.id, contaIds: x.contas.map((c) => c.id), dataCompra: x.dataCompra,
-        parcelas: x.parcelas, cartaoId: cartao.id, ligadosIds: (x.ligados || []).map((l) => l.id) } } };
+        parcelas: x.parcelas, cartaoId: cartao.id, ligadosIds: (x.ligados || []).map((l) => l.id), aPartirDa: Number(m.parcela) || 1 } } };
     }
     if (Number(m.valor) > 0) return { erro: "Crédito na fatura: lance pelo formulário." };
     const r = lancamentoRapidoDoExtrato({ ...m, id: "" }, mesEmConferencia, sugestaoDoExtrato(m, lancs), fechamentos, (data || {}).obras || [], lancs);
@@ -22308,7 +22456,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const cartao = cartaoDaLinha(m);
     if (!cartao) return base;
     const c = compraNoCartaoDaLinha(base, m, cartao);
-    return { ...c, valor: String(c.valor.toFixed(2)).replace(".", ","), descricao: base.descricao || m.historico || "" };
+    return { ...c, valor: String(c.valor.toFixed(2)).replace(".", ",") };
   }
   // A compra do cartão que a obra tinha à vista: as contas passam a ser do
   // cartão (com as parcelas) e a saída à vista que tinha atravessado para o
@@ -22321,7 +22469,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const ids = new Set(x.contaIds || []);
     const quem = typeof nomeDeQuem === "function" ? nomeDeQuem(perm && perm.usuario) : "";
     const agora = new Date().toISOString();
-    const conv = contasNoCartao((ob.contasPagar || []).filter((c) => c && ids.has(c.id)), cartao, x.dataCompra, x.parcelas);
+    const conv = contasNoCartao((ob.contasPagar || []).filter((c) => c && ids.has(c.id)), cartao, x.dataCompra, x.parcelas)
+      .map((c) => (Number(x.aPartirDa) > 1 ? { ...c, parcelaInicial: Number(x.aPartirDa), parcelasCartao: planoAPartirDa(c.parcelasCartao, x.aPartirDa) } : c));
     const porId = new Map(conv.map((c) => [c.id, { ...c, registros: [...(c.registros || []),
       { em: agora, ato: "paga no cartão", por: quem, detalhe: `${cartao.nome || "cartão"} · ${x.parcelas}x` }] }]));
     const obraNova = { ...ob, contasPagar: (ob.contasPagar || []).map((c) => (c && porId.has(c.id) ? porId.get(c.id) : c)) };
@@ -22343,20 +22492,23 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const pagadora = cartao.contaBancariaId || CONTA_BANCARIA_PRINCIPAL;
     const debito = movimentosGuardadosDoMes(extratosDaContaBancaria(cfgFin, pagadora), mesDoPagamentoDaFatura(cartao, f.competencia))
       .find((m) => Number(m.valor) < 0 && Math.abs(Math.abs(Number(m.valor)) - fat.total) < 0.01);
-    const l = lancamentoDaFatura(cartao, f.competencia, fat.linhas, { pagoEm: debito ? debito.data : "",
-      numeroDoc: typeof proximaReferencia === "function" ? proximaReferencia(obras, lancs) : "" });
+    const antigo = lancamentoAntigoDaFatura(lancs, cartao, f.competencia, fat.total);
+    const l = faturaNoLugarDoAntigo(lancamentoDaFatura(cartao, f.competencia, fat.linhas, { pagoEm: debito ? debito.data : "",
+      numeroDoc: typeof proximaReferencia === "function" ? proximaReferencia(obras, lancs) : "" }), antigo);
     if (!l) return;
     const trava = bloqueioPorMesFechado(l.competencia, fechamentos);
     if (trava) { dialogo.alertar({ titulo: "Não dá para fechar a fatura", mensagem: trava, tipo: "aviso" }); return; }
     const ok = await dialogo.confirmar({
       titulo: `Fechar a fatura de ${mesAnoPorExtenso(f.competencia)} do ${cartao.nome}?`,
       mensagem: `${efDinheiro(fat.total)} — ${fat.linhas.length === 1 ? "1 compra" : fat.linhas.length + " compras"}, iguais às da fatura do banco. `
-        + `Entra UMA linha no extrato da ${nomeDoMeio(pagadora) || "conta"}${debito ? `, em ${efDiaBR(debito.data)}, casando com o débito do banco` : ""}; `
-        + "no resultado, cada compra vai para a linha dela (obra, empreendimento ou escritório).",
+        + (antigo
+          ? `O débito já estava lançado inteiro como “${antigo.descricao || "Cartão de crédito"}” (${efDinheiro(Math.abs(Number(antigo.valor)))}, ${efDiaBR(antigo.lancadoEm)}): a fatura entra no lugar dele, na mesma linha do banco. `
+          : `Entra UMA linha no extrato da ${nomeDoMeio(pagadora) || "conta"}${debito ? `, em ${efDiaBR(debito.data)}, casando com o débito do banco` : ""}. `)
+        + "No resultado, cada compra vai para a linha dela (obra, empreendimento ou escritório).",
       confirmar: "Fechar fatura",
     });
     if (!ok) return;
-    gravar([...lancs, l]);
+    gravar([...lancs.filter((x) => !(antigo && x && x.id === antigo.id)), l]);
     setAviso(`Fatura de ${mesAnoPorExtenso(f.competencia)} do ${cartao.nome} fechada: ${efDinheiro(fat.total)}.`);
   }
 
@@ -22835,8 +22987,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             lancamentos={lancamentosDaBase} doEscritorio meioDoLancamento={meioDoLancamento}
             acoes={{
               // a compra da fatura é uma parte dela: editar e excluir agem na fatura
-              editar: perm.podeEditar ? (l) => { setForm(faturaDaParte(l)); if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); } : null,
-              excluir: perm.podeExcluir ? (l) => excluirLancamento(faturaDaParte(l)) : null,
+              editar: perm.podeEditar ? (l) => { const x = faturaDaParte(l); if (!x) { avisarCompraDaObra(); return; } setForm(x); if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); } : null,
+              excluir: perm.podeExcluir ? (l) => { const x = faturaDaParte(l); if (!x) { avisarCompraDaObra(); return; } excluirLancamento(x); } : null,
               verPapel: (a) => setVendoComprovante(a),
             }}
             completar={perm.podeEditar !== false ? { data, save, quem: typeof nomeDeQuem === "function" ? nomeDeQuem(perm && perm.usuario) : "" } : null}

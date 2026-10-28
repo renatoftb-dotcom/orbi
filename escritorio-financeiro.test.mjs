@@ -30,7 +30,7 @@ const M = new Function(src + `
            fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
-           competenciasDoCartao, composicaoDoExtrato, efCabecalhoDeCartao, efParcelaDoTexto, movimentosDoCartao, comCompetenciaDaFatura, comIdsDoCartao, faturasGuardadasDoCartao, faturasComArquivo, financeiroComFaturas, faturasComIgnorado, mesDoPagamentoDaFatura, cartaoDoArquivo, conferenciaDaFatura, contasDaObraParaACompraDoCartao, contasNoCartao, checagemSemTransferencias, somarChecagens, conferenciaUnificada, faturaParaALinhaDoBanco, arquivoPareceDeOutraConta, parDaTransferencia, lancamentosDaTransferenciaComPar, contaDoArquivoPeloConteudo, CONTA_BANCARIA_PRINCIPAL, contasBancariasDoEscritorio, contaBancariaDoLancamento, lancamentosDaContaBancaria, extratosDaContaBancaria, financeiroComExtratos, comIdsDaContaBancaria, saldoBancoDaContaNoMes, comSaldoBancoDaConta, saldoPeloExtratoDaConta, lancamentosDaTransferencia, pareceEntreContas, contasDoLancamento,
+           competenciasDoCartao, composicaoDoExtrato, efCabecalhoDeCartao, efParcelaDoTexto, movimentosDoCartao, comCompetenciaDaFatura, comIdsDoCartao, faturasGuardadasDoCartao, faturasComArquivo, financeiroComFaturas, faturasComIgnorado, mesDoPagamentoDaFatura, cartaoDoArquivo, conferenciaDaFatura, contasDaObraParaACompraDoCartao, contasNoCartao, checagemSemTransferencias, somarChecagens, conferenciaUnificada, faturaParaALinhaDoBanco, lancamentoAntigoDaFatura, faturaNoLugarDoAntigo, parcelasAPagarDoCartao, planoAPartirDa, efNomeDoBancoPeloCodigo, arquivoPareceDeOutraConta, parDaTransferencia, lancamentosDaTransferenciaComPar, contaDoArquivoPeloConteudo, CONTA_BANCARIA_PRINCIPAL, contasBancariasDoEscritorio, contaBancariaDoLancamento, lancamentosDaContaBancaria, extratosDaContaBancaria, financeiroComExtratos, comIdsDaContaBancaria, saldoBancoDaContaNoMes, comSaldoBancoDaConta, saldoPeloExtratoDaConta, lancamentosDaTransferencia, pareceEntreContas, contasDoLancamento,
            faturasFechadas, faturaParaFechar, lancamentosParaResultado, mesAnoPorExtenso, efDiaBR, fechadasDaCompra, compraEditada, compraMexeuNoDinheiro, faturaAjustada,
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas, ligaContaAoLancamento, lancamentosLigadosAsContas, contasLigadasAoLancamento,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
@@ -3316,7 +3316,13 @@ teste("fatura de cartão: reconhece pelo cabeçalho, lê parcela, sinal e final"
   assert.strictEqual(r.movimentos[2].valor, -99.9);
   assert.strictEqual(M.cartaoDoArquivo([CORA, { id: "x", nome: "Master", final: "1234" }], "8821").id, "kc");
   assert.strictEqual(M.cartaoDoArquivo([{ id: "x", nome: "Master" }], "8821").id, "x");   // único sem final
-  assert.strictEqual(M.cartaoDoArquivo([{ id: "x", final: "1" }, { id: "y" }], "8821"), null);
+  // cartão com outro final cadastrado não é ele: sobra o único sem final
+  assert.strictEqual(M.cartaoDoArquivo([{ id: "x", final: "1" }, { id: "y" }], "8821").id, "y");
+  // dois sem final: decide a pista (o banco do arquivo, a bandeira)
+  const dois = [{ id: "s", nome: "Sicoob Mastercard Empresarial Pro" }, { id: "o", nome: "Outro Visa" }];
+  assert.strictEqual(M.cartaoDoArquivo(dois, "5298", "Banco Cooperativo do Brasil sicoob bancoob"), dois[0]);
+  assert.strictEqual(M.cartaoDoArquivo(dois, "5298", "fatura.csv COMPRA VISA"), dois[1]);
+  assert.strictEqual(M.cartaoDoArquivo(dois, "5298", "fatura.csv"), null);
 });
 
 teste("fatura de cartão: competência pela compra + parcela; arquivo de uma fatura só fica junto", () => {
@@ -3605,6 +3611,69 @@ teste("faturas de cartão de vários bancos: data da compra, valor em reais, par
   // extrato de conta não vira fatura
   assert.strictEqual(M.efCabecalhoDeCartao(tsv("Data Lançamento;Descrição;Valor;Saldo\n02/09/2026;Pix;10,00;10,00")), -1);
   assert.strictEqual(M.efCabecalhoDeCartao(tsv("Data,Valor,Identificador,Descrição\n02/09/2026,-10.00,abc,Pix")), -1);
+});
+
+teste("fatura do cartão do Sicoob em OFX: reconhece o cartão pelo banco, compra antiga entra da parcela de agora", async () => {
+  const SIC = { id: "sm", nome: "Sicoob Mastercard Empresarial Pro", diaFechamento: 12, diaVencimento: 22, ativo: true };
+  const tr = (tipo, d, v, memo) => `<STMTTRN><TRNTYPE>${tipo}<DTPOSTED>${d}120000[-3:BRT]<TRNAMT>${v}<FITID>${d}${v}<MEMO>${memo}</STMTTRN>`;
+  const ofx = "OFXHEADER:100\nCHARSET:1252\n<OFX><SIGNONMSGSRSV1><SONRS><FI><ORG>Banco Cooperativo do Brasil</ORG><FID>756</FID></FI></SONRS></SIGNONMSGSRSV1>"
+    + "<CREDITCARDMSGSRSV1><CCSTMTTRNRS><CCSTMTRS><CCACCTFROM><ACCTID>5502XXXXXXXX5298</CCACCTFROM><BANKTRANLIST>"
+    + tr("PAYMENT", "20260822", "-3.20", "PROTECAO PERDA OU ROUBO") + tr("CREDIT", "20260824", "268.60", "PAGAMENTO DEBITO EM CONTA")
+    + tr("PAYMENT", "20260812", "-12.00", "ANUIDADE MASTERCARD  (8810) 01/12") + tr("PAYMENT", "20251128", "-87.29", "LOJA A  10/12   CIDADE")
+    + tr("PAYMENT", "20260102", "-55.36", "LOJA B  09/09   CIDADE") + tr("PAYMENT", "20260812", "-69.90", "CURSO  01/12   CIDADE")
+    + "</BANKTRANLIST></CCSTMTRS></CCSTMTTRNRS></CREDITCARDMSGSRSV1></OFX>";
+  const t = await M.efTabelaDoArquivo(arq("fatura-cartao.ofx", ofx));
+  assert.ok(/sicoob/.test(t.dicaDoCartao));
+  const lido = M.movimentosDoCartao(t.linhas);
+  assert.strictEqual(lido.final, "5298");
+  assert.strictEqual(lido.movimentos.length, 5);                       // o pagamento da fatura anterior sai
+  const cartoes = [{ ...CORA, final: "8821" }, SIC];
+  assert.strictEqual(M.cartaoDoArquivo(cartoes, lido.final, t.dicaDoCartao).id, "sm");
+  const comp = M.comCompetenciaDaFatura(lido.movimentos, SIC);
+  assert.ok(comp.every((m) => m.competencia === "2026-09"));            // todas na fatura de setembro
+  // a compra 10/12 entra da parcela 10 em diante
+  const plano = M.planoAPartirDa(M.parcelasDoCartao(SIC, "2025-11-28", 87.29 * 12, 12), 10);
+  assert.deepStrictEqual(plano.map((p) => [p.parcela, p.competencia]), [[10, "2026-09"], [11, "2026-10"], [12, "2026-11"]]);
+  const editada = M.compraEditada({ id: "e", cartaoId: "sm", lancadoEm: "2025-11-28", valor: 1047.48, parcelaInicial: 10,
+    parcelasCartao: plano }, { descricao: "loja" }, SIC, "escritorio");
+  assert.deepStrictEqual(editada.parcelasCartao.map((p) => p.parcela), [10, 11, 12]);
+});
+
+teste("fatura que já estava lançada inteira em Cartão de crédito: fechar substitui, na mesma linha do banco", () => {
+  const SIC = { id: "sm", nome: "Sicoob Master", diaFechamento: 12, diaVencimento: 22 };
+  const antigo = { id: "imp_1", tipo: "escritorio", contaId: "cartao_credito", unidadeId: "escritorio", valor: 302.94, competencia: "2026-09",
+    lancadoEm: "2026-09-22", extratoId: "2026-09-22|-302.94|DEB.CONV|#1", historicoBanco: "DEB.CONV", conferido: true, numeroDoc: "4773" };
+  const outros = [antigo, { ...antigo, id: "x", valor: 100 }, { ...antigo, id: "y", contaBancariaId: "cora" }];
+  assert.strictEqual(M.lancamentoAntigoDaFatura(outros, SIC, "2026-09", 302.94).id, "imp_1");
+  assert.strictEqual(M.lancamentoAntigoDaFatura(outros, SIC, "2026-08", 302.94), null);
+  const fat = M.lancamentoDaFatura(SIC, "2026-09", [{ valor: 302.94, descricao: "c", destinoContaId: "desp_outros" }], {});
+  const nova = M.faturaNoLugarDoAntigo(fat, antigo);
+  assert.strictEqual(nova.extratoId, antigo.extratoId); assert.strictEqual(nova.numeroDoc, "4773");
+  assert.strictEqual(nova.lancadoEm, "2026-09-22"); assert.strictEqual(nova.substituiu, "imp_1");
+  assert.strictEqual(nova.id, M.idDaFatura("sm", "2026-09"));
+  assert.strictEqual(M.efNomeDoBancoPeloCodigo("756"), "sicoob bancoob");
+});
+
+teste("compra parcelada do cartão: as parcelas futuras ficam a pagar e a próxima fatura só pede compra nova", () => {
+  const SIC = { id: "sm", nome: "Sicoob Master", diaFechamento: 12, diaVencimento: 22 };
+  // 10/12 lançada em setembro: entram 10, 11 e 12
+  const compra = { id: "c1", tipo: "escritorio", contaId: "desp_outros", unidadeId: "escritorio", valor: 1047.48, lancadoEm: "2025-11-28",
+    competencia: "2026-09", descricao: "Oficina", cartaoId: "sm", formaPagamento: "cartao", parcelaInicial: 10,
+    parcelasCartao: M.planoAPartirDa(M.parcelasDoCartao(SIC, "2025-11-28", 1047.48, 12), 10) };
+  const aPagar = M.parcelasAPagarDoCartao(SIC, [], [compra], {});
+  assert.deepStrictEqual(aPagar.map((l) => [l.competencia, l.valor, l.contaId]), [["2026-09", 87.29, "desp_outros"], ["2026-10", 87.29, "desp_outros"], ["2026-11", 87.29, "desp_outros"]]);
+  assert.ok(aPagar.every((l) => l._afetaSaldo === false && /a pagar na fatura/.test(l.descricao)));
+  // setembro fechado: sai do "a pagar"
+  const fat = { ...M.lancamentoDaFatura(SIC, "2026-09", M.linhasDaFatura([], [compra], "sm", "2026-09", {}), {}) };
+  assert.deepStrictEqual(M.parcelasAPagarDoCartao(SIC, [], [compra, fat], {}).map((l) => l.competencia), ["2026-10", "2026-11"]);
+  // a fatura de outubro do banco: a 11/12 já está no VICKE, só a compra nova falta
+  const movs = M.comIdsDoCartao(M.comCompetenciaDaFatura([
+    { data: "2025-11-28", valor: -87.29, historico: "Oficina 11/12", parcela: 11, de: 12 },
+    { data: "2026-09-20", valor: -40, historico: "LOJA NOVA" }], SIC), "sm");
+  const g = M.faturasComArquivo({}, movs, "out.ofx", "t").faturas["2026-10"];
+  const f = M.conferenciaDaFatura(SIC, g, [], [compra, fat], "2026-10", {});
+  assert.strictEqual(f.casadas.length, 1);
+  assert.deepStrictEqual(f.faltam.map((m) => m.historico), ["LOJA NOVA"]);
 });
 
 for (const [nome, fn] of testes) {
