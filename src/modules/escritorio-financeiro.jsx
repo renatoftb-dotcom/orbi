@@ -9704,10 +9704,29 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     return (l) => {
       if (!l) return "";
       if (compraNoCartaoDoEscritorio(l)) return "Cartão " + (cartoes[l.cartaoId] || "");
+      if ((l.origem || {}).tipo === "faturaLinha") return "Cartão " + (cartoes[l.origem.cartaoId] || "");
       if (!efPassouPeloBanco(l)) return "Fora da conta";
       return nomes[contaBancariaDoLancamento(l)] || nomes[CONTA_BANCARIA_PRINCIPAL] || "";
     };
   }, [data]);
+
+  // A Base de dados com cada compra do cartão na linha dela: a fatura fechada
+  // se abre nas compras (cada uma na conta, obra e unidade dela, no mês da
+  // fatura, Meio = o cartão), como no resultado. Assim a tabela dinâmica por
+  // conta dá o mesmo número do extrato — antes a fatura inteira caía em
+  // "Cartão de crédito". A compra do escritório no cartão entra pela fatura.
+  const lancamentosDaBase = useMemo(() => {
+    const clientes = (data || {}).clientes || [];
+    return lancamentosParaResultado(lancamentosDoEscritorio(data)).map((l) => {
+      if ((l.origem || {}).tipo !== "faturaLinha" || l.cliente || !l.clienteId) return l;
+      const cli = clientes.find((c) => c && c.id === l.clienteId);
+      return cli ? { ...l, cliente: cli.nome || "" } : l;
+    });
+  }, [data]);
+  const faturaDaParte = (l) => {
+    const o = (l && l.origem) || {};
+    return o.tipo === "faturaLinha" ? (lancs.find((x) => x && x.id === o.faturaId) || l) : l;
+  };
 
   // ── "Tudo": vários arquivos de uma vez ──
   // Cada arquivo é lido e reconhecido: fatura de cartão (pelo cabeçalho e
@@ -10434,10 +10453,11 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
           <BaseDeDados obras={(data || {}).obras || []} clientes={(data || {}).clientes || []}
             prestadores={(data || {}).fornecedores || []}
             insumos={typeof insumosDoCatalogo === "function" ? insumosDoCatalogo(data) : []}
-            lancamentos={lancamentosDoEscritorio(data)} doEscritorio meioDoLancamento={meioDoLancamento}
+            lancamentos={lancamentosDaBase} doEscritorio meioDoLancamento={meioDoLancamento}
             acoes={{
-              editar: perm.podeEditar ? (l) => { setForm(l); if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); } : null,
-              excluir: perm.podeExcluir ? (l) => excluirLancamento(l) : null,
+              // a compra da fatura é uma parte dela: editar e excluir agem na fatura
+              editar: perm.podeEditar ? (l) => { setForm(faturaDaParte(l)); if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); } : null,
+              excluir: perm.podeExcluir ? (l) => excluirLancamento(faturaDaParte(l)) : null,
               verPapel: (a) => setVendoComprovante(a),
             }}
             completar={perm.podeEditar !== false ? { data, save, quem: typeof nomeDeQuem === "function" ? nomeDeQuem(perm && perm.usuario) : "" } : null}
