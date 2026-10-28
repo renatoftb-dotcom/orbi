@@ -30,7 +30,7 @@ const M = new Function(src + `
            fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
-           competenciasDoCartao, composicaoDoExtrato, efCabecalhoDeCartao, efParcelaDoTexto, movimentosDoCartao, comCompetenciaDaFatura, comIdsDoCartao, faturasGuardadasDoCartao, faturasComArquivo, financeiroComFaturas, faturasComIgnorado, mesDoPagamentoDaFatura, cartaoDoArquivo, conferenciaDaFatura, contasDaObraParaACompraDoCartao, contasNoCartao, checagemSemTransferencias, somarChecagens, conferenciaUnificada, arquivoPareceDeOutraConta, parDaTransferencia, lancamentosDaTransferenciaComPar, contaDoArquivoPeloConteudo, CONTA_BANCARIA_PRINCIPAL, contasBancariasDoEscritorio, contaBancariaDoLancamento, lancamentosDaContaBancaria, extratosDaContaBancaria, financeiroComExtratos, comIdsDaContaBancaria, saldoBancoDaContaNoMes, comSaldoBancoDaConta, saldoPeloExtratoDaConta, lancamentosDaTransferencia, pareceEntreContas, contasDoLancamento,
+           competenciasDoCartao, composicaoDoExtrato, efCabecalhoDeCartao, efParcelaDoTexto, movimentosDoCartao, comCompetenciaDaFatura, comIdsDoCartao, faturasGuardadasDoCartao, faturasComArquivo, financeiroComFaturas, faturasComIgnorado, mesDoPagamentoDaFatura, cartaoDoArquivo, conferenciaDaFatura, contasDaObraParaACompraDoCartao, contasNoCartao, checagemSemTransferencias, somarChecagens, conferenciaUnificada, faturaParaALinhaDoBanco, arquivoPareceDeOutraConta, parDaTransferencia, lancamentosDaTransferenciaComPar, contaDoArquivoPeloConteudo, CONTA_BANCARIA_PRINCIPAL, contasBancariasDoEscritorio, contaBancariaDoLancamento, lancamentosDaContaBancaria, extratosDaContaBancaria, financeiroComExtratos, comIdsDaContaBancaria, saldoBancoDaContaNoMes, comSaldoBancoDaConta, saldoPeloExtratoDaConta, lancamentosDaTransferencia, pareceEntreContas, contasDoLancamento,
            faturasFechadas, faturaParaFechar, lancamentosParaResultado, mesAnoPorExtenso, efDiaBR, fechadasDaCompra, compraEditada, compraMexeuNoDinheiro, faturaAjustada,
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas, ligaContaAoLancamento, lancamentosLigadosAsContas, contasLigadasAoLancamento,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
@@ -1342,7 +1342,7 @@ teste("a fatura nao copia o papel da compra de obra; o do proprio escritorio con
       parcelasCartao: [{ parcela:1, de:2, competencia:"2026-10", valor:500 },
                        { parcela:2, de:2, competencia:"2026-11", valor:500 }] },
   ]}];
-  const doEscritorio = [{ id: "l1", tipo: "escritorio", cartaoId: "k1", contaId: "desp_outros", descricao: "Assinatura",
+  const doEscritorio = [{ id: "l1", tipo: "escritorio", cartaoId: "k1", contaId: "softwares", descricao: "Assinatura",
     lancadoEm: "2026-09-23", anexos: [meu], parcelasCartao: [{ parcela: 1, de: 1, competencia: "2026-10", valor: 50 }] }];
   const linhas = M.linhasDaFatura(obras, doEscritorio, "k1", "2026-10");
   const daObra = linhas.find((x) => x.origem === "obra"), doEsc = linhas.find((x) => x.origem === "escritorio");
@@ -3448,6 +3448,25 @@ teste("conferência unificada: junta as contas, tira a transferência do débito
   const u2 = M.conferenciaUnificada({ fin: { extratos: sic }, contas, cartoes: [], lancamentos: lancs, mes: "2026-09" });
   assert.strictEqual(u2.resultado.contabilizadoSemPar.length, 0);
   assert.strictEqual(u2.meios[1].conciliacao, null);
+});
+
+teste("débito do banco que paga a fatura: acha a fatura aberta do cartão pago pela conta", () => {
+  const m = { id: "x", data: "2026-09-15", valor: -634.48, historico: "Pagamento da fatura · Cora SCFI" };
+  const f = M.faturaParaALinhaDoBanco(m, "cora", [CORA], [OBRA_JAC], [], {});
+  assert.ok(f && f.exata);
+  assert.strictEqual(f.cartao.id, "kc"); assert.strictEqual(f.competencia, "2026-09"); assert.strictEqual(f.compras, 1);
+  // outra conta: não é dela
+  assert.strictEqual(M.faturaParaALinhaDoBanco(m, "principal", [CORA], [OBRA_JAC], [], {}), null);
+  // valor diferente, com cara de fatura: devolve a mais perto e a diferença
+  const p = M.faturaParaALinhaDoBanco({ ...m, valor: -700 }, "cora", [CORA], [OBRA_JAC], [], {});
+  assert.strictEqual(p.exata, false); assert.strictEqual(p.diferenca, 65.52);
+  // sem cara de fatura e valor diferente: nada
+  assert.strictEqual(M.faturaParaALinhaDoBanco({ ...m, valor: -700, historico: "PIX FULANO" }, "cora", [CORA], [OBRA_JAC], [], {}), null);
+  // fatura já fechada: nada
+  const fechada = { id: M.idDaFatura("kc", "2026-09"), tipo: "escritorio", origem: { tipo: "fatura", cartaoId: "kc", competencia: "2026-09" } };
+  assert.strictEqual(M.faturaParaALinhaDoBanco(m, "cora", [CORA], [OBRA_JAC], [fechada], {}), null);
+  // fatura que só vence depois do mês da linha: nada
+  assert.strictEqual(M.faturaParaALinhaDoBanco({ ...m, data: "2026-08-15" }, "cora", [CORA], [OBRA_JAC], [], {}), null);
 });
 
 for (const [nome, fn] of testes) {
