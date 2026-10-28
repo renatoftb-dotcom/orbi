@@ -1317,7 +1317,7 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba, aoAbrirObra
       {/* Conteúdo */}
       {aba === "dados"    && renderDados()}
       {aba === "equipe"   && renderEquipe()}
-      {["financeiro", "extrato", "lancamentos", "cartoes", "importar", "fechamento", "base"].includes(aba) && perm.podeGerenciarUsuarios && (
+      {["financeiro", "extrato", "lancamentos", "cartoes", "importar", "fechamento", "base", "pagar"].includes(aba) && perm.podeGerenciarUsuarios && (
         <FinanceiroEscritorio data={data} save={save} onReload={onReload}
           vista={peloMenu ? (aba === "financeiro" ? "resumo" : aba) : null}
           aoIrPara={(destino) => { setAba(destino); if (aoTrocarAba) aoTrocarAba(destino); }} />

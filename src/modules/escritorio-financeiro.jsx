@@ -5324,6 +5324,131 @@ function parcelasAPagarDoCartao(cartao, obras, lancamentos, opcoes) {
   return linhas;
 }
 
+// ── Contas a pagar do escritório: o parcelado na conta (boleto) ───
+// A compra parcelada que sai da conta do banco (boleto, carnê, débito
+// programado): cada parcela fica "a pagar" com vencimento e valor. Ela NÃO
+// é lançamento enquanto o banco não debita — o extrato e o resultado só
+// veem dinheiro que saiu. Quando a linha do banco chega no Fechamento, casa
+// com a parcela (mesmo valor, perto do vencimento) e vira o lançamento.
+function aPagarDoEscritorio(fin) {
+  const l = (fin || {}).aPagar;
+  return Array.isArray(l) ? l.filter(Boolean) : [];
+}
+// O mesmo dia do mês seguinte (31 em mês de 30 dias vira 30).
+function efSomarMeses(iso, n) {
+  const d = String(iso || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return "";
+  const comp = somarCompetencia(d.slice(0, 7), n);
+  const [a, m] = comp.split("-").map(Number);
+  const ultimo = new Date(Date.UTC(a, m, 0)).getUTCDate();
+  return comp + "-" + String(Math.min(Number(d.slice(8, 10)), ultimo)).padStart(2, "0");
+}
+// O plano das parcelas: o valor dividido cortado no centavo, a sobra na
+// primeira (como o cartão). `parcelaAtual` > 1: a compra já vinha sendo
+// paga — o plano começa nela.
+function planoParceladoNaConta(dados) {
+  const d = dados || {};
+  const n = Math.max(1, Math.floor(Number(d.parcelas) || 1));
+  const total = efCentavos(d.total != null ? d.total : (Number(d.valorParcela) || 0) * n);
+  const centavos = Math.round(total * 100);
+  const primeiro = String(d.primeiroVencimento || "").slice(0, 10);
+  if (!(centavos > 0) || n < 2 || !/^\d{4}-\d{2}-\d{2}$/.test(primeiro)) return [];
+  const base = Math.floor(centavos / n);
+  const k0 = Math.max(1, Math.min(n, Math.floor(Number(d.parcelaAtual) || 1)));
+  const plano = [];
+  for (let i = k0; i <= n; i++) {
+    const v = i === 1 ? centavos - base * (n - 1) : base;
+    plano.push({ parcela: i, de: n, vencimento: efSomarMeses(primeiro, i - k0), valor: v / 100 });
+  }
+  return plano;
+}
+// As parcelas viram itens a pagar, com o que o lançamento vai precisar.
+function itensAPagarDoLancamento(l, plano, opcoes) {
+  const o = opcoes || {};
+  const grupoId = o.grupoId || ("ap" + Date.now().toString(36));
+  const agora = o.agora || new Date().toISOString();
+  const campos = ["contaId", "unidadeId", "clienteId", "cliente", "obraId", "projeto", "empreendimentoId",
+    "fornecedor", "fornecedorId", "descricao", "documento", "contaBancariaId", "observacao"];
+  const base = {};
+  for (const k of campos) if (l && l[k] != null && l[k] !== "") base[k] = l[k];
+  return (plano || []).map((p) => ({ ...base, id: grupoId + "_" + p.parcela, grupoId, parcela: p.parcela, de: p.de,
+    vencimento: p.vencimento, valor: efCentavos(p.valor), criadoEm: agora, pago: false }));
+}
+// A linha do banco que paga uma parcela a pagar: saída, da mesma conta, do
+// mesmo valor, até 20 dias do vencimento. A mais perto do vencimento ganha.
+function parcelaAPagarParaALinha(m, contaDaLinha, aPagar) {
+  if (!m || !(Number(m.valor) < 0)) return null;
+  const v = efCentavos(Math.abs(Number(m.valor)));
+  const conta = contaDaLinha || CONTA_BANCARIA_PRINCIPAL;
+  let melhor = null;
+  for (const it of aPagar || []) {
+    if (!it || it.pago) continue;
+    if ((it.contaBancariaId || CONTA_BANCARIA_PRINCIPAL) !== conta) continue;
+    if (Math.abs(efCentavos(it.valor) - v) > 0.01) continue;
+    const dias = efDias(it.vencimento, m.data);
+    if (!(dias <= 20)) continue;
+    if (!melhor || dias < melhor.dias) melhor = { item: it, dias };
+  }
+  return melhor ? melhor.item : null;
+}
+// A parcela paga vira o lançamento, ligado à linha do banco.
+function lancamentoDaParcelaAPagar(it, m, mes, opcoes) {
+  const o = opcoes || {};
+  const agora = o.agora || new Date().toISOString();
+  const { id: _i, grupoId, parcela, de, vencimento: _v, pago: _p, criadoEm: _c, ...campos } = it || {};
+  return { ...campos, tipo: "escritorio", unidadeId: campos.unidadeId || "escritorio",
+    valor: efCentavos(Math.abs(Number((m || {}).valor) || it.valor)), competencia: String(mes || mesDoMovimento(m)),
+    lancadoEm: String((m || {}).data || "").slice(0, 10), contaBanco: "sim",
+    descricao: [campos.descricao, `parcela ${parcela}/${de}`].filter(Boolean).join(" · "),
+    extratoId: (m || {}).id || "", historicoBanco: (m || {}).historico || "",
+    conferido: true, conferidoEm: agora, conferidoPor: "extrato",
+    origem: { tipo: "aPagar", grupoId, parcela, de, itemId: it.id } };
+}
+function aPagarComParcelaPaga(aPagar, itemId, dados) {
+  return (aPagar || []).map((it) => (it && it.id === itemId ? { ...it, pago: true, ...(dados || {}) } : it));
+}
+
+// As parcelas a pagar na Base de dados: uma linha por parcela, no mês do
+// vencimento. Não afetam o saldo — ainda não saíram do banco.
+function linhasDaBaseDoAPagar(aPagar) {
+  return (aPagar || []).filter((it) => it && !it.pago).map((it) => ({
+    id: "apconta:" + it.id, tipo: "escritorio",
+    origem: { tipo: "aPagarConta", itemId: it.id, grupoId: it.grupoId || "" },
+    contaId: it.contaId || "", unidadeId: it.unidadeId || "escritorio",
+    clienteId: it.clienteId || "", cliente: it.cliente || "", obraId: it.obraId || "", projeto: it.projeto || "",
+    empreendimentoId: it.empreendimentoId || "", fornecedor: it.fornecedor || "",
+    valor: efCentavos(it.valor), competencia: String(it.vencimento || "").slice(0, 7), lancadoEm: it.vencimento || "",
+    descricao: [it.descricao, `parcela ${it.parcela}/${it.de}`, `a pagar em ${efDiaBR(it.vencimento)}`].filter(Boolean).join(" · "),
+    contaBanco: "sim", ...(it.contaBancariaId ? { contaBancariaId: it.contaBancariaId } : {}),
+    _afetaSaldo: false,
+  }));
+}
+// Excluir uma parcela; com `todas`, ela e as seguintes do mesmo grupo que
+// ainda não foram pagas.
+function aPagarSemParcela(aPagar, itemId, todas) {
+  const lista = aPagar || [];
+  const it = lista.find((x) => x && x.id === itemId);
+  if (!it) return lista;
+  return lista.filter((x) => !(x && (x.id === itemId
+    || (todas && !x.pago && x.grupoId && x.grupoId === it.grupoId && Number(x.parcela) > Number(it.parcela)))));
+}
+// O resumo do a pagar: vencidas, as deste mês e as seguintes.
+function resumoDoAPagar(itens, hoje) {
+  const d = String(hoje || "").slice(0, 10);
+  const mes = d.slice(0, 7);
+  const r = { vencidas: 0, nVencidas: 0, esteMes: 0, nEsteMes: 0, depois: 0, nDepois: 0 };
+  for (const it of itens || []) {
+    if (!it || it.pago) continue;
+    const v = Number(it.valor) || 0;
+    const venc = String(it.vencimento || "").slice(0, 10);
+    if (venc < d) { r.vencidas += v; r.nVencidas++; }
+    else if (venc.slice(0, 7) === mes) { r.esteMes += v; r.nEsteMes++; }
+    else { r.depois += v; r.nDepois++; }
+  }
+  r.vencidas = efCentavos(r.vencidas); r.esteMes = efCentavos(r.esteMes); r.depois = efCentavos(r.depois);
+  return r;
+}
+
 const EF_CONTAS_INTERNAS = new Set(PLANO_CONTAS_ESCRITORIO.filter((c) => c.interna).map((c) => c.id));
 
 // O débito × crédito de todas as contas, sem a transferência entre elas: a
@@ -5876,7 +6001,7 @@ function CadastroRapidoDeCliente({ form, aoMudar, erro, aoSalvar, aoCancelar }) 
   );
 }
 
-function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, lancamentos, prestadores, aoCriarPrestador, aoCriarCliente, insumos, cartoes, aoCadastrarInsumo, competenciaFixa, titulo, rotuloSalvar, atalhos, nomeEscritorio, motivos }) {
+function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, clientes, obras, lancamentos, prestadores, aoCriarPrestador, aoCriarCliente, insumos, cartoes, aoCadastrarInsumo, competenciaFixa, titulo, rotuloSalvar, atalhos, nomeEscritorio, motivos, contasBancarias }) {
   const S = EF_ESTILO;
   const [f, setF] = useState(() => ({
     contaId: "", contaFonte: "", obraIdAlvo: "", fornecedorId: "", anexos: [], itens: [],
@@ -6185,6 +6310,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           .filter((e) => !/Escolha a obra|Informe o valor pago/.test(e))
           .map((e) => (custoUnico && /sem etapa/.test(e) ? "Escolha a etapa da obra." : e)))
     : validarLancamentoEscritorio({ ...f, valor: efValorDoCampo(f.valor), obraEncerrada: obraAntiga,
+        // parcelado sem extrato: nada entra agora — o mês é o do 1º vencimento
+        ...(f.formaPagamento === "parcelado" && !naObra && !f.extratoId ? { competencia: String(f.primeiroVencimento || "").slice(0, 7) } : {}),
         clienteId: f.clienteId || f.cliente,
         // na gestão, a obra é escolhida da lista (o id); lançamento antigo,
         // de antes da lista, segue valendo pelo nome
@@ -6197,6 +6324,18 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   // conferência com o banco e do resultado até a fatura fechar.
   const cartoesAtivos = (cartoes || []).filter((c) => c && c.ativo !== false);
   const noCartao = f.formaPagamento === "cartao";
+  // Parcelado na conta (boleto, carnê): a parcela de hoje (a linha do banco,
+  // quando vem do extrato) e as seguintes ficam a pagar, com vencimento.
+  const noParcelado = f.formaPagamento === "parcelado" && !naObra;
+  const hojeIso = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const planoParcelado = noParcelado ? planoParceladoNaConta(f.extratoId
+    ? { valorParcela: efValorDoCampo(f.valor), parcelas: f.parcelas, parcelaAtual: f.parcelaAtual, primeiroVencimento: f.lancadoEm }
+    : { total: efValorDoCampo(f.valor), parcelas: f.parcelas, primeiroVencimento: f.primeiroVencimento || f.lancadoEm }) : [];
+  const errosParcelado = !noParcelado ? []
+    : [Number(f.parcelas) >= 2 ? "" : "Parcelado: informe 2 parcelas ou mais.",
+      f.extratoId && (Number(f.parcelaAtual) < 1 || Number(f.parcelaAtual) > Number(f.parcelas)) ? "A parcela de hoje tem que estar entre 1 e o total." : "",
+      !f.extratoId && !(f.primeiroVencimento || f.lancadoEm) ? "Informe o 1º vencimento." : "",
+      Number(f.parcelas) >= 2 && !planoParcelado.length ? "Informe o valor." : ""].filter(Boolean);
   // Lançamento novo: por onde o dinheiro passou sai da regra (unidade, conta
   // e cadastro da obra) — e linha do banco passou pelo banco, sempre. O
   // antigo, ao editar, fica como foi gravado.
@@ -6264,7 +6403,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const passaDaReserva = saidaNaReserva ? efCentavos(Math.max(0, Math.abs(efValorDoCampo(f.valor)) - saldoDaReservaNaSaida)) : 0;
   const usaReserva = saldoReservaCli > 0 && pagarDaReserva;
   const excedeReserva = usaReserva ? efCentavos(Math.max(0, efValorDoCampo(f.valor) - saldoReservaCli)) : 0;
-  const todosErros = erros.concat(errosCartao).concat(errosGestao).concat(errosDuasPontas).concat(errosDobro);
+  const todosErros = erros.concat(errosCartao).concat(errosGestao).concat(errosDuasPontas).concat(errosDobro).concat(errosParcelado);
   const comCartao = (x) => {
     if (!noCartao) return { ...x, formaPagamento: naObra ? "avista" : (x.formaPagamento === "cartao" ? "" : x.formaPagamento),
       cartaoId: "", parcelasCartao: undefined };
@@ -6292,10 +6431,14 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     const noContrato = temGestao ? !foraDaGestao : (ligadoAntes ? false : undefined);
     if (noContrato !== undefined) semObraDaParcela.noContratoGestao = noContrato;
     const { gestaoAvulsa: _ga, ...semMarcaAvulsa } = semObraDaParcela;
-    const pronto = semFornecedorNaEntrada(comCartao({ ...semMarcaAvulsa, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
+    const pronto0 = semFornecedorNaEntrada(comCartao({ ...semMarcaAvulsa, ...(competenciaFixa ? { competencia: competenciaFixa } : {}),
       ...(lancNovo && !noCartao ? { contaBanco: regraBanco } : {}),
       ...(gestaoAvulsa ? { gestaoAvulsaNaObra: true } : {}),
       tipo: "escritorio", valor: efValorComSinalDoEstorno(g.valor, inicial) }));
+    // parcelado na conta: vai o plano; quem chama grava a parcela de hoje (se
+    // veio do extrato) e põe as outras no Contas a pagar
+    const pronto = noParcelado ? { ...pronto0, contaBanco: "sim", formaPagamento: "parcelado", parceladoNaConta: { plano: planoParcelado },
+      ...(f.extratoId ? {} : { competencia: String(f.primeiroVencimento || "").slice(0, 7), lancadoEm: f.primeiroVencimento }) } : pronto0;
     aoSalvar(((usaReserva || saidaNaReserva) && comoPagamentoDaReserva(pronto, lancamentos || [])) || pronto);
   }
   // Na fila, quem lança 50 linhas não larga o teclado: Enter num campo de
@@ -6400,38 +6543,44 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             })}
           </Selecao>
         ), "conta")}
-        {campo(noCartao && Number(f.parcelas) > 1 ? "Valor da compra (todas as parcelas)" : "Valor", <CampoValorBR style={S.input} valor={f.valor} placeholder="0,00"
+        {campo(noCartao && Number(f.parcelas) > 1 ? "Valor da compra (todas as parcelas)"
+          : noParcelado ? (f.extratoId ? "Valor da parcela" : "Valor total (todas as parcelas)") : "Valor", <CampoValorBR style={S.input} valor={f.valor} placeholder="0,00"
           negativo={efSinalFixoDoEstorno(inicial)} aoMudar={(v) => set("valor", v)} />)}
         {/* No fechamento, a competência é o mês que se está fechando: não
             é uma escolha, e um mês errado aqui sumiria da conferência. */}
-        {!naObra && (competenciaFixa
+        {!naObra && !(noParcelado && !f.extratoId) && (competenciaFixa
           ? campo("Competência", <div style={{ ...S.input, background: "#f3f4f6", color: "#374151",
               display: "flex", alignItems: "center", minHeight: 36 }}>
               {efMesPorExtenso(competenciaFixa)}<span style={{ color: "#9ca3af", marginLeft: 6, fontSize: 11.5 }}>· do fechamento</span></div>)
           : campo("Competência", <input style={S.input} type="month" value={f.competencia}
               onChange={(e) => set("competencia", e.target.value)} />))}
-        {campo("Data do pagamento", <input style={S.input} type="date" value={f.lancadoEm}
+        {!(noParcelado && !f.extratoId) && campo("Data do pagamento", <input style={S.input} type="date" value={f.lancadoEm}
           onChange={(e) => set("lancadoEm", e.target.value)} />)}
         {/* Lançamento novo: o "fora da conta" não é escolha — sai da regra.
             Sobra escolher entre a conta e o cartão do escritório. */}
-        {lancNovo && !naObra ? campo("Como foi pago", (f.unidadeId === "gestao_obras" || f.extratoId || !(cartoesAtivos.length > 0 || noCartao)) ? (
+        {lancNovo && !naObra ? campo("Como foi pago", (regraBanco !== "sim" && !f.extratoId) ? (
           <div data-vk-como-pago="1" style={{ ...S.input, background: "#f3f4f6", color: "#374151", display: "flex", alignItems: "center", minHeight: 36 }}>
-            {regraBanco === "sim" ? "Conta do escritório" : "Pago pelo cliente, fora da conta"}
+            Pago pelo cliente, fora da conta
           </div>
         ) : (
-          <Selecao style={{ ...S.input, cursor: "pointer" }} value={noCartao ? "cartao" : "sim"} onChange={(e) => {
+          <Selecao style={{ ...S.input, cursor: "pointer" }} value={noCartao ? "cartao" : noParcelado ? "parcelado" : "sim"} onChange={(e) => {
             const v = e.target.value;
             if (v === "cartao") {
               setF((p) => ({ ...p, formaPagamento: "cartao", contaBanco: "nao",
                 cartaoId: p.cartaoId || (cartoesAtivos[0] ? cartoesAtivos[0].id : ""), parcelas: p.parcelas || 1 }));
+            } else if (v === "parcelado") {
+              setF((p) => ({ ...p, formaPagamento: "parcelado", contaBanco: "sim", cartaoId: "",
+                parcelas: Number(p.parcelas) > 1 ? p.parcelas : 2, parcelaAtual: p.parcelaAtual || 1,
+                primeiroVencimento: p.primeiroVencimento || p.lancadoEm || hojeIso }));
             } else {
               setF((p) => ({ ...p, formaPagamento: "", contaBanco: "sim", cartaoId: "" }));
             }
           }}>
-            <option value="sim">Conta do escritório</option>
-            <option value="cartao">Cartão do escritório</option>
+            <option value="sim">Conta do escritório — à vista</option>
+            <option value="parcelado">Conta do escritório — parcelado (boleto)</option>
+            {!f.extratoId && f.unidadeId !== "gestao_obras" && (cartoesAtivos.length > 0 || noCartao) && <option value="cartao">Cartão do escritório</option>}
           </Selecao>
-        )) : (campo("Como foi pago", (
+        ), "comoPago") : (campo("Como foi pago", (
           <Selecao style={{ ...S.input, cursor: "pointer" }} value={comoFoiPago} onChange={(e) => {
             const v = e.target.value;
             if (v === "cartao") {
@@ -6446,6 +6595,38 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             <option value="nao">Fora da conta do escritório</option>
           </Selecao>
         )))}
+        {noParcelado && campo("Parcelas", <input style={S.input} inputMode="numeric" value={f.parcelas} data-vk-parcelado-n="1"
+          onChange={(e) => set("parcelas", e.target.value.replace(/\D/g, "").slice(0, 2))} />)}
+        {noParcelado && f.extratoId && campo("Esta é a parcela", <input style={S.input} inputMode="numeric" value={f.parcelaAtual || ""} data-vk-parcelado-k="1"
+          onChange={(e) => set("parcelaAtual", e.target.value.replace(/\D/g, "").slice(0, 2))} />)}
+        {noParcelado && !f.extratoId && campo("1º vencimento", <input style={S.input} type="date" value={f.primeiroVencimento || ""} data-vk-parcelado-venc="1"
+          onChange={(e) => set("primeiroVencimento", e.target.value)} />)}
+        {noParcelado && !f.extratoId && (contasBancarias || []).length > 1 && campo("Conta que paga", (
+          <Selecao style={{ ...S.input, cursor: "pointer" }} value={f.contaBancariaId || CONTA_BANCARIA_PRINCIPAL}
+            onChange={(e) => set("contaBancariaId", e.target.value === CONTA_BANCARIA_PRINCIPAL ? "" : e.target.value)}>
+            {(contasBancarias || []).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </Selecao>
+        ), "contaPaga")}
+        {noParcelado && planoParcelado.length > 0 && (
+          <div data-vk-plano-parcelado="1" style={{ gridColumn: "1 / -1", display: "grid", gap: 6, padding: "10px 12px", borderRadius: 10,
+            background: "#f7fbff", border: "1px solid rgba(4,116,244,0.18)" }}>
+            <div style={{ fontSize: 12, color: "#374151", lineHeight: 1.45 }}>
+              {planoParcelado[0].de} parcelas{planoParcelado[0].parcela > 1 ? <> — as parcelas 1 a {planoParcelado[0].parcela - 1} já foram pagas</> : null}.
+              {" "}{f.extratoId
+                ? <>A parcela {planoParcelado[0].parcela} é esta linha do banco e entra agora; as seguintes ficam no <b>Contas a pagar</b> e saem de lá quando o banco debitar.</>
+                : <>Todas ficam no <b>Contas a pagar</b>, cada uma no vencimento dela; saem de lá quando o banco debitar, no Fechamento.</>}
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {planoParcelado.map((p, i) => (
+                <span key={p.parcela} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 999, whiteSpace: "nowrap",
+                  background: i === 0 && f.extratoId ? "#0474f4" : "#fff", color: i === 0 && f.extratoId ? "#fff" : "#374151",
+                  border: `1px solid ${i === 0 && f.extratoId ? "#0474f4" : "rgba(38,36,33,0.15)"}` }}>
+                  {p.parcela}/{p.de} · {efDiaBR(p.vencimento)} · {efDinheiro(p.valor)}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         {noCartao && campo("Cartão", (
           <Selecao style={{ ...S.input, cursor: "pointer" }} value={f.cartaoId || ""} onChange={(e) => set("cartaoId", e.target.value)}>
             <option value="">Escolha…</option>
@@ -7523,7 +7704,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
   // as que têm o par na outra conta: transferência, não lançamento
   const comPar = fila.parTransferencia ? lista.map((m) => ({ m, par: fila.parTransferencia(m) })).filter((x) => x.par) : [];
   const idsComPar = new Set(comPar.map((x) => x.m.id));
-  const prontas = lista.filter((m) => { if (idsComPar.has(m.id)) return false; const r = fila.rapido(m); return r && r.lancamento && !r.lancamento.naObra && !r.lancamento.ligarObra && !r.lancamento.recebimentoExtras && !r.lancamento.ligarCartao && !r.lancamento.fecharFaturaDaLinha; });
+  const prontas = lista.filter((m) => { if (idsComPar.has(m.id)) return false; const r = fila.rapido(m); return r && r.lancamento && !r.lancamento.naObra && !r.lancamento.ligarObra && !r.lancamento.recebimentoExtras && !r.lancamento.ligarCartao && !r.lancamento.fecharFaturaDaLinha && !r.lancamento.baixarParcela; });
   function lancarSugeridas() {
     setErroLote("");
     const r = fila.lancarSugeridas(prontas);
@@ -7666,6 +7847,11 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                           : `parece a fatura de ${mesAnoPorExtenso(sug.faturaDoCartao.competencia)} do ${sug.faturaDoCartao.cartao.nome}, mas no VICKE ela soma ${efDinheiro(sug.faturaDoCartao.total)} (${sug.faturaDoCartao.diferenca > 0 ? "faltam" : "sobram"} ${efDinheiro(Math.abs(sug.faturaDoCartao.diferenca))}) — traga o arquivo da fatura para ver o que falta`}
                       </div>
                     )}
+                    {sug && sug.parcelaAPagar && (
+                      <div data-vk-parcela-a-pagar="1" style={{ fontSize: 11.5, color: "#0474f4", marginTop: 2, lineHeight: 1.4 }}>
+                        📄 {(sug.motivos || [])[0]} — sai do A pagar e vira o lançamento desta linha
+                      </div>
+                    )}
                     {sug && sug.cartaoObra && (
                       <div data-vk-cartao-na-obra="1" style={{ fontSize: 11.5, color: "#0474f4", marginTop: 2 }}>
                         ⇄ {(sug.motivos || [])[0]} — vira compra no cartão em {sug.cartaoObra.parcelas}x, sem lançar de novo
@@ -7681,7 +7867,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                         ↺ {(sug.motivos || [])[0]}. {sug.bloqueio}
                       </div>
                     )}
-                    {contaSug && !(sug && (sug.palpite || sug.estorno || sug.parcelaProjeto)) && (
+                    {contaSug && !(sug && (sug.palpite || sug.estorno || sug.parcelaProjeto || sug.parcelaAPagar)) && (
                       <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 2 }}>
                         como em {dataBR(sug.de.lancadoEm) || "lançamento anterior"}: <b style={{ color: "#374151" }}>{contaSug.nome}</b>
                         {sug.campos.cliente ? ` · ${sug.campos.cliente}` : ""}
@@ -7694,6 +7880,10 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                       <button data-vk-fechar-fatura-linha="1" style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#fff", background: "#0474f4", borderColor: "#0474f4" }}
                         disabled={!!ocupado}
                         onClick={(e) => { e.stopPropagation(); rapido(m); }}>✓ Fechar a fatura</button>
+                    ) : sug && sug.parcelaAPagar && !aberta ? (
+                      <button data-vk-baixar-parcela="1" style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#fff", background: "#0474f4", borderColor: "#0474f4" }}
+                        disabled={!!ocupado}
+                        onClick={(e) => { e.stopPropagation(); rapido(m); }}>✓ Baixar parcela</button>
                     ) : sug && sug.cartaoObra && !aberta ? (
                       <button data-vk-ligar-cartao="1" style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#0474f4", borderColor: "rgba(4,116,244,0.4)" }}
                         disabled={!!ocupado}
@@ -9360,6 +9550,181 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo, quem }) 
   );
 }
 
+// ── A pagar do escritório ───────────────────────────────────────
+// Os boletos e carnês parcelados na conta (cada parcela com vencimento) e
+// as parcelas que ainda vão cair nas faturas abertas dos cartões. Nada aqui
+// afeta o saldo: vira lançamento quando o banco debita (no Fechamento).
+function ContasAPagarEscritorio({ itens, faturas, contasBancarias, podeEditar, aoNova, aoGuardar }) {
+  const S = EF_ESTILO;
+  const hoje = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const [verPagas, setVerPagas] = useState(false);
+  const [editando, setEditando] = useState(null);
+  const [aberta, setAberta] = useState("");
+  const lista = (itens || []).filter((it) => it && (verPagas || !it.pago))
+    .slice().sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)) || (Number(a.parcela) - Number(b.parcela)));
+  const res = resumoDoAPagar(itens, hoje);
+  const totalCartoes = efCentavos((faturas || []).reduce((t, f) => t + f.total, 0));
+  const nomeConta = (id) => (contaEscritorio(id) || {}).nome || "";
+  const nomeBanco = (id) => ((contasBancarias || []).find((c) => c.id === (id || CONTA_BANCARIA_PRINCIPAL)) || {}).nome || "";
+  const variasContas = (contasBancarias || []).length > 1;
+  const meses = [];
+  for (const it of lista) {
+    const m = String(it.vencimento || "").slice(0, 7);
+    let g = meses.find((x) => x.mes === m);
+    if (!g) { g = { mes: m, itens: [], total: 0 }; meses.push(g); }
+    g.itens.push(it); if (!it.pago) g.total = efCentavos(g.total + Number(it.valor || 0));
+  }
+  const temSeguintes = (it) => (itens || []).some((x) => x && !x.pago && x.grupoId === it.grupoId && Number(x.parcela) > Number(it.parcela));
+  async function excluir(it, todas) {
+    const ok = await dialogo.confirmar({
+      titulo: todas ? "Excluir esta parcela e as seguintes?" : "Excluir esta parcela?",
+      mensagem: `${it.descricao || "Conta"} · parcela ${it.parcela}/${it.de} · ${efDinheiro(it.valor)} · vence ${efDiaBR(it.vencimento)}.`
+        + " Ela sai do A pagar; nenhum lançamento muda.",
+      confirmar: "Excluir", destrutivo: true,
+    });
+    if (!ok) return;
+    setEditando(null);
+    aoGuardar(aPagarSemParcela(itens, it.id, todas));
+  }
+  function guardarEdicao() {
+    const e = editando;
+    const v = efValorDoCampo(e.valor);
+    if (!(v > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(String(e.vencimento || ""))) return;
+    aoGuardar((itens || []).map((x) => (x && x.id === e.id ? { ...x, vencimento: e.vencimento, valor: efCentavos(v),
+      descricao: String(e.descricao || "").trim() || x.descricao } : x)));
+    setEditando(null);
+  }
+  const chip = (t, cor, fundo) => (
+    <span style={{ fontSize: 10.5, fontWeight: 600, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap", color: cor, background: fundo }}>{t}</span>
+  );
+  const tiles = [
+    ["Vencidas", res.vencidas, res.nVencidas, res.nVencidas ? "#b45309" : "#111827"],
+    ["Vencem este mês", res.esteMes, res.nEsteMes, "#111827"],
+    ["Próximos meses", res.depois, res.nDepois, "#111827"],
+    ["Faturas abertas dos cartões", totalCartoes, (faturas || []).length, "#111827"],
+  ];
+  return (
+    <div data-vk-a-pagar="1" style={{ display: "grid", gap: 14, minWidth: 0 }}>
+      <div style={{ ...S.card, display: "grid", gap: 12, minWidth: 0 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ minWidth: 0, flex: "1 1 260px" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>A pagar</div>
+            <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2, lineHeight: 1.45 }}>
+              Boletos e carnês parcelados na conta do escritório e as parcelas que ainda vão cair nas faturas dos cartões.
+              Nada aqui afeta o saldo: cada parcela vira lançamento quando o banco debita, no Fechamento.
+            </div>
+          </div>
+          {podeEditar && aoNova && <button data-vk-nova-parcelada="1" style={S.btn} onClick={aoNova}>+ Nova conta parcelada</button>}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+          {tiles.map(([r, v, n, cor]) => (
+            <div key={r} style={{ border: "1px solid rgba(38,36,33,0.1)", borderRadius: 12, padding: "10px 12px" }}>
+              <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .4, color: "#6b7280" }}>{r}</div>
+              <div style={{ fontSize: 17, fontWeight: 700, marginTop: 3, color: cor, fontVariantNumeric: "tabular-nums" }}>{efDinheiro(v)}</div>
+              <div style={{ fontSize: 11, color: "#6b7280" }}>{n === 1 ? "1 item" : `${n} itens`}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ ...S.card, display: "grid", gap: 10, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>Boletos e carnês</div>
+          <label style={{ marginLeft: "auto", fontSize: 12, color: "#4b5563", display: "inline-flex", gap: 6, alignItems: "center", cursor: "pointer" }}>
+            <input type="checkbox" checked={verPagas} onChange={(e) => setVerPagas(e.target.checked)} /> mostrar as pagas
+          </label>
+        </div>
+        {!meses.length && (
+          <div style={{ fontSize: 12.5, color: "#6b7280", padding: "6px 0" }}>
+            Nenhuma parcela a pagar. Ao lançar uma conta, escolha “Conta do escritório — parcelado (boleto)” em Como foi pago.
+          </div>
+        )}
+        {meses.map((g) => (
+          <div key={g.mes} data-vk-a-pagar-mes={g.mes} style={{ display: "grid", gap: 0 }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "baseline", padding: "6px 0", borderBottom: "1px solid rgba(38,36,33,0.12)" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, textTransform: "capitalize" }}>{mesAnoPorExtenso(g.mes)}</span>
+              <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{efDinheiro(g.total)}</span>
+            </div>
+            {g.itens.map((it) => {
+              const vencida = !it.pago && String(it.vencimento) < hoje;
+              const ed = editando && editando.id === it.id ? editando : null;
+              return (
+                <div key={it.id} data-vk-a-pagar-item={it.id} style={{ padding: "8px 0", borderBottom: "1px solid rgba(38,36,33,0.06)", display: "grid", gap: 8 }}>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 12.5 }}>
+                    <span style={{ color: vencida ? "#b45309" : "#6b7280", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", minWidth: 42 }}>{efDiaBR(it.vencimento).slice(0, 5)}</span>
+                    <span style={{ flex: "1 1 200px", minWidth: 0, overflowWrap: "anywhere", color: it.pago ? "#6b7280" : "#111827" }}>
+                      <b style={{ fontWeight: 600 }}>{it.descricao || it.fornecedor || "Conta"}</b>
+                      {it.fornecedor && it.descricao && it.fornecedor !== "Outros" ? <span style={{ color: "#6b7280" }}> · {it.fornecedor}</span> : null}
+                      <span style={{ color: "#6b7280" }}> · {nomeConta(it.contaId)}{variasContas ? ` · ${nomeBanco(it.contaBancariaId)}` : ""}</span>
+                    </span>
+                    {chip(`${it.parcela}/${it.de}`, "#374151", "#f3f4f6")}
+                    {it.pago ? chip(`paga ${efDiaBR(it.pagoEm).slice(0, 5)}`, "#047857", "#ecfdf5")
+                      : vencida ? chip("vencida", "#b45309", "#fffbeb") : chip("a vencer", "#0474f4", "#eef5ff")}
+                    <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", minWidth: 86, textAlign: "right" }}>{efDinheiro(it.valor)}</span>
+                    {podeEditar && !it.pago && !ed && (
+                      <button data-vk-editar-a-pagar="1" style={{ ...S.btnSec, padding: "4px 10px", fontSize: 12 }}
+                        onClick={() => setEditando({ id: it.id, vencimento: it.vencimento, descricao: it.descricao || "",
+                          valor: Number(it.valor).toFixed(2).replace(".", ",") })}>Editar</button>
+                    )}
+                  </div>
+                  {ed && (
+                    <div data-vk-editando-a-pagar="1" style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                      padding: "10px 12px", borderRadius: 10, background: "#f9fafb", border: "1px solid rgba(38,36,33,0.1)" }}>
+                      <div><div style={S.rot}>Vencimento</div>
+                        <input type="date" style={S.input} value={ed.vencimento || ""} onChange={(e) => setEditando({ ...ed, vencimento: e.target.value })} /></div>
+                      <div><div style={S.rot}>Valor da parcela</div>
+                        <CampoValorBR style={S.input} valor={ed.valor} placeholder="0,00" aoMudar={(v) => setEditando({ ...ed, valor: v })} /></div>
+                      <div style={{ gridColumn: "1 / -1" }}><div style={S.rot}>Descrição</div>
+                        <input style={S.input} value={ed.descricao} placeholder="Digite a descrição da conta" onChange={(e) => setEditando({ ...ed, descricao: e.target.value })} /></div>
+                      <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button style={S.btn} onClick={guardarEdicao}>Salvar</button>
+                        <button style={S.btnSec} onClick={() => setEditando(null)}>Cancelar</button>
+                        <span style={{ flex: 1 }} />
+                        <button data-vk-excluir-a-pagar="1" style={{ ...S.btnSec, color: "#b91c1c" }} onClick={() => excluir(it, false)}>Excluir esta parcela</button>
+                        {temSeguintes(it) && <button style={{ ...S.btnSec, color: "#b91c1c" }} onClick={() => excluir(it, true)}>Excluir esta e as seguintes</button>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ ...S.card, display: "grid", gap: 10, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>Cartões — faturas abertas</div>
+        {!(faturas || []).length && <div style={{ fontSize: 12.5, color: "#6b7280" }}>Nenhuma parcela de cartão a pagar.</div>}
+        {(faturas || []).map((f) => {
+          const chave = f.cartaoId + f.competencia;
+          return (
+            <div key={chave} data-vk-a-pagar-fatura={chave} style={{ borderBottom: "1px solid rgba(38,36,33,0.06)", paddingBottom: 8 }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 12.5 }}>
+                <span style={{ color: "#6b7280", whiteSpace: "nowrap", minWidth: 42 }}>{efDiaBR(f.vencimento).slice(0, 5)}</span>
+                <span style={{ flex: "1 1 200px", minWidth: 0 }}>💳 <b style={{ fontWeight: 600 }}>{f.cartaoNome}</b>
+                  <span style={{ color: "#6b7280" }}> · fatura de {mesAnoPorExtenso(f.competencia)} · {f.linhas.length === 1 ? "1 parcela" : `${f.linhas.length} parcelas`}</span></span>
+                <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", minWidth: 86, textAlign: "right" }}>{efDinheiro(f.total)}</span>
+                <button style={{ ...S.btnSec, padding: "4px 10px", fontSize: 12 }} onClick={() => setAberta(aberta === chave ? "" : chave)}>{aberta === chave ? "Esconder" : "Ver"}</button>
+              </div>
+              {aberta === chave && (
+                <div style={{ ...S.quadro, marginTop: 8, fontSize: 12 }}>
+                  {f.linhas.map((l, i) => (
+                    <div key={l.id} style={{ display: "flex", gap: 10, flexWrap: "wrap", padding: "6px 10px", borderTop: i ? "1px solid rgba(38,36,33,0.06)" : "none" }}>
+                      <span style={{ color: "#6b7280", whiteSpace: "nowrap" }}>{efDiaBR(l.lancadoEm)}</span>
+                      <span style={{ flex: "1 1 200px", minWidth: 0, overflowWrap: "anywhere" }}>{[l.projeto, String(l.descricao || "").replace(/ · a pagar na fatura de .*$/, "") || l.fornecedor].filter(Boolean).join(" · ") || "—"}</span>
+                      <span style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{efDinheiro(l.valor)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   const S = EF_ESTILO;
   const perm = typeof getPermissoes === "function" ? getPermissoes() : { podeEditar: true, podeExcluir: true };
@@ -9730,6 +10095,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       }
     }
     if (l && l.naObra) { lancarCustoNaObra(l); return; }
+    if (l && !l.id && l.parceladoNaConta) { if (lancarParceladoNaConta(l, null)) setForm(null); return; }
     if (l && l.gestaoAvulsaNaObra) {
       const antes = l.id ? lancs.find((x) => x && x.id === l.id) : null;
       const marca = antes && antes.extratoId ? { extratoId: antes.extratoId, historicoBanco: antes.historicoBanco || "",
@@ -10224,7 +10590,26 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         const cli = clientes.find((c) => c && c.id === l.clienteId);
         return cli ? { ...l, cliente: cli.nome || "" } : l;
       });
-    return partes.concat(naoAfetam, aPagar);
+    return partes.concat(naoAfetam, aPagar, linhasDaBaseDoAPagar(aPagarDoEscritorio(cfgFin)));
+  }, [data]);
+  // As faturas abertas dos cartões, para o A pagar: as parcelas que ainda
+  // vão cair, por cartão e por fatura, no dia em que o banco debita.
+  const faturasAPagar = useMemo(() => {
+    const todos = lancamentosDoEscritorio(data);
+    const r = [];
+    for (const c of cartoesDoEscritorio(data).filter((x) => x && x.id && x.ativo !== false)) {
+      const dv = String(Math.max(1, Math.min(28, Number(c.diaVencimento) || 10))).padStart(2, "0");
+      const porComp = new Map();
+      for (const l of parcelasAPagarDoCartao(c, (data || {}).obras || [], todos, { clientes: (data || {}).clientes || [] })) {
+        const comp = l.origem.competencia;
+        if (!porComp.has(comp)) porComp.set(comp, { cartaoId: c.id, cartaoNome: c.nome || "Cartão", competencia: comp,
+          vencimento: `${l.competencia}-${dv}`, linhas: [], total: 0 });
+        const f = porComp.get(comp);
+        f.linhas.push(l); f.total = efCentavos(f.total + Number(l.valor || 0));
+      }
+      r.push(...porComp.values());
+    }
+    return r.sort((a, b) => a.vencimento.localeCompare(b.vencimento));
   }, [data]);
   // a linha que é parte de outra (a compra dentro da fatura, a parcela a
   // pagar) edita a de origem: a fatura, ou a compra do escritório no cartão
@@ -10232,8 +10617,10 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     const o = (l && l.origem) || {};
     if (o.tipo === "faturaLinha") return lancs.find((x) => x && x.id === o.faturaId) || l;
     if (o.tipo === "parcelaAPagar") return (o.de === "escritorio" && lancs.find((x) => x && x.id === o.refId)) || null;
+    if (o.tipo === "aPagarConta") return null;
     return l;
   };
+  const irParaAPagar = () => { if (aoIrPara) aoIrPara("pagar"); else setAba("pagar"); };
   const avisarCompraDaObra = () => dialogo.alertar({ titulo: "Compra de obra no cartão", tipo: "aviso",
     mensagem: "Esta parcela é de uma compra lançada na obra: valor, data e parcelas mudam lá, no Contas a pagar da obra, ou em Cartões." });
 
@@ -10423,6 +10810,10 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       const fat = faturaParaALinhaDoBanco(m, contaDaLinha(m), cartoesAtivos, (data || {}).obras || [], lancs, { clientes: (data || {}).clientes || [] });
       if (fat && fat.exata) return { campos: {}, faturaDoCartao: fat,
         motivos: [`fatura de ${mesAnoPorExtenso(fat.competencia)} do ${fat.cartao.nome}: ${efDinheiro(fat.total)}, ${fat.compras === 1 ? "1 compra" : fat.compras + " compras"}`] };
+      // a parcela de um boleto que estava a pagar: a linha é ela
+      const ap = parcelaAPagarParaALinha(m, contaDaLinha(m), aPagarDoEscritorio(cfgFin));
+      if (ap) return { campos: { contaId: ap.contaId, unidadeId: ap.unidadeId }, parcelaAPagar: ap,
+        motivos: [`parcela ${ap.parcela}/${ap.de}${ap.descricao ? " de " + ap.descricao : ""}, a pagar em ${efDiaBR(ap.vencimento)}`] };
       const s0 = sugestaoCompletaDoExtrato(m, lancs, ctxDoPalpite);
       return fat ? { ...(s0 || { campos: {} }), faturaDoCartao: fat } : s0;
     }
@@ -10443,6 +10834,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         return { lancamento: { fecharFaturaDaLinha: { cartaoId: f.cartao.id, competencia: f.competencia, extratoId: m.id || "",
           historicoBanco: m.historico || "", data: String(m.data || "").slice(0, 10), ...marcaDaLinha(m) } } };
       }
+      if (sf && sf.parcelaAPagar) return { lancamento: { baixarParcela: { itemId: sf.parcelaAPagar.id, m } } };
       const r = rapidoDoExtrato(m);
       return r && r.lancamento ? { ...r, lancamento: { ...r.lancamento, ...marcaDaLinha(m) } } : r;
     }
@@ -10549,6 +10941,64 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     return guardarFechamentos(comSaldoBancoDaConta(fechamentos, mes, contaId, v)).catch(console.error);
   }
 
+  // ── Contas a pagar: o parcelado na conta (boleto) ──
+  // Do formulário sem extrato: todas as parcelas ficam a pagar, nenhuma é
+  // lançamento ainda. Da linha do banco: a parcela de hoje é a linha (entra
+  // conferida) e as seguintes ficam a pagar. Uma gravada só.
+  function lancarParceladoNaConta(l, marca) {
+    const plano = ((l && l.parceladoNaConta) || {}).plano || [];
+    if (!plano.length) return false;
+    const { parceladoNaConta: _p, sinalDoBanco: _s, parcelaAtual: _k, primeiroVencimento: _v, formaPagamento: _f, parcelas: _n, ...base0 } = l;
+    const base = { ...semAprender(base0), contaBanco: "sim", fornecedor: efNomeDoFornecedor(l) };
+    if (marca && !base.contaBancariaId && marca.contaBancariaId) base.contaBancariaId = marca.contaBancariaId;
+    const agora = new Date().toISOString();
+    const grupoId = "ap" + (typeof uid === "function" ? uid() : Date.now().toString(36));
+    const novos = [];
+    const resto = marca ? plano.slice(1) : plano;
+    if (marca) {
+      const p = plano[0];
+      const trava = bloqueioPorMesFechado(base.competencia, fechamentos);
+      if (trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: trava, tipo: "aviso" }); return false; }
+      novos.push({ ...base, ...marca, contaBanco: "sim", id: typeof uid === "function" ? uid() : String(Date.now()),
+        numeroDoc: base.numeroDoc || proximaReferencia((data || {}).obras || [], lancs), criadoEm: agora, tipo: "escritorio",
+        valor: p.valor, descricao: [base.descricao, `parcela ${p.parcela}/${p.de}`].filter(Boolean).join(" · "),
+        origem: { tipo: "aPagar", grupoId, parcela: p.parcela, de: p.de } });
+    }
+    const itens = itensAPagarDoLancamento(base, resto, { grupoId, agora });
+    const esc = (data || {}).escritorio || {};
+    gravar([...lancs, ...novos], { ...catalogoQueAprendeu(l),
+      escritorio: { ...esc, financeiro: { ...cfgFin, aPagar: [...aPagarDoEscritorio(cfgFin), ...itens] } } });
+    const n = plano[0].de;
+    setAviso(marca
+      ? `Parcela ${plano[0].parcela}/${n} lançada; ${itens.length === 1 ? "a outra ficou" : `as outras ${itens.length} ficaram`} em A pagar.`
+      : `${itens.length} parcelas em A pagar (${efDinheiro(efCentavos(itens.reduce((t, x) => t + x.valor, 0)))}). Cada uma vira lançamento quando o banco debitar.`);
+    return true;
+  }
+  // A linha do banco que paga uma parcela a pagar: a parcela vira o
+  // lançamento, ligado à linha, e sai do A pagar como paga.
+  function baixarParcelaAPagar(x) {
+    const lista = aPagarDoEscritorio(cfgFin);
+    const it = lista.find((i) => i && i.id === x.itemId);
+    if (!it || it.pago || !x.m) return false;
+    const agora = new Date().toISOString();
+    const l0 = lancamentoDaParcelaAPagar(it, x.m, mesEmConferencia, { agora });
+    const trava = bloqueioPorMesFechado(l0.competencia, fechamentos);
+    if (trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: trava, tipo: "aviso" }); return false; }
+    const id = typeof uid === "function" ? uid() : String(Date.now());
+    const l = { ...l0, ...marcaDaLinha(x.m), id, numeroDoc: proximaReferencia((data || {}).obras || [], lancs), criadoEm: agora };
+    const esc = (data || {}).escritorio || {};
+    gravar([...lancs, l], { escritorio: { ...esc, financeiro: { ...cfgFin,
+      aPagar: aPagarComParcelaPaga(lista, it.id, { pagoEm: l.lancadoEm, lancamentoId: id }) } } });
+    setAviso(`Parcela ${it.parcela}/${it.de}${it.descricao ? " de " + it.descricao : ""} paga: ${efDinheiro(l.valor)}.`);
+    return true;
+  }
+  // Editar ou tirar uma parcela a pagar (a que já foi paga não muda aqui:
+  // ela é lançamento, e o lançamento se edita na Base).
+  function guardarAPagar(lista) {
+    const esc = (data || {}).escritorio || {};
+    return save({ ...data, escritorio: { ...esc, financeiro: { ...cfgFin, aPagar: lista } } }).catch(console.error);
+  }
+
   // ── A fila: lançar sem sair do Fechamento ──
   // A linha do banco vira lançamento ali mesmo: competência = o mês que está
   // sendo fechado, conferido, ligado à linha (extratoId) e com o histórico do
@@ -10562,6 +11012,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       ...(l.contaBancariaId || l.formaPagamento === "cartao" ? {} : marcaDaContaBancaria()) };
     if (l && l.ligarCartao) return ligarCompraDoCartao(l.ligarCartao);
     if (l && l.fecharFaturaDaLinha) return fecharFaturaPelaLinha(l.fecharFaturaDaLinha);
+    if (l && l.baixarParcela) return baixarParcelaAPagar(l.baixarParcela);
+    if (l && l.parceladoNaConta) return lancarParceladoNaConta(l, marca);
     if (l && l.naObra) { const { sinalDoBanco, ...semSinal } = l; lancarCustoNaObra({ ...semSinal, ...marca }); return true; }
     if (l && l.gestaoAvulsaNaObra && lancarGestaoAvulsaNaObra(l, marca)) return true;
     // Parcela de projeto recebida: a linha inteira em Receita Projetos e,
@@ -10649,7 +11101,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       // o mesmo caminho do botão da linha — o estorno com o original achado
       // vai como estorno; o que entra numa obra fica para lançar um a um
       const r = rapidoDaLinha(m);
-      if (!r.lancamento || r.lancamento.naObra || r.lancamento.ligarObra || r.lancamento.recebimentoExtras || r.lancamento.ligarCartao) continue;
+      if (!r.lancamento || r.lancamento.naObra || r.lancamento.ligarObra || r.lancamento.recebimentoExtras || r.lancamento.ligarCartao || r.lancamento.fecharFaturaDaLinha || r.lancamento.baixarParcela) continue;
       const l = r.lancamento;
       novos.push({ ...l, id: (typeof uid === "function" ? uid() : String(Date.now())) + "_" + novos.length,
         numeroDoc: proximaReferencia((data || {}).obras || [], lancs.concat(novos)),
@@ -10849,11 +11301,24 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   const u12 = fechados.slice(-12);
   const media = (f) => (u12.length ? u12.reduce((s, m) => s + (f(m) || 0), 0) / u12.length : 0);
 
+  const desenharForm = () => (
+    <div style={{ marginBottom: 14 }}><FormLancamentoEscritorio fechamentos={fechamentos} clientes={(data || {}).clientes || []}
+            nomeEscritorio={(((data || {}).escritorio || {}).nome || "").trim()}
+            obras={(data || {}).obras || []} lancamentos={lancs}
+            prestadores={((data || {}).fornecedores || []).filter((x) => x && x.ativo !== false)}
+            insumos={((data || {}).materiais || []).filter((x) => x && x.ativo !== false)}
+            cartoes={cartoesDoEscritorio(data)} contasBancarias={contasBanco}
+            aoCadastrarInsumo={(campos) => typeof cadastrarInsumoNoCatalogo === "function"
+              ? cadastrarInsumoNoCatalogo(data, save, campos) : null}
+            aoCriarPrestador={criarPrestadorDoLancamento}
+            aoCriarCliente={criarClienteDoLancamento}
+            inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} /></div>
+  );
   return (
     <div style={S.wrap}>
       {!vista && (
         <div style={S.abas}>
-          {[["extrato", "Extrato"], ["base", `Base de dados (${lancs.length})`], ["cartoes", "Cartões"], ["importar", "Importar"]].map(([k, r]) => (
+          {[["extrato", "Extrato"], ["base", `Base de dados (${lancs.length})`], ["pagar", "A pagar"], ["cartoes", "Cartões"], ["importar", "Importar"]].map(([k, r]) => (
             <button key={k} style={S.aba(aba === k)} onClick={() => setAba(k)}>{r}</button>
           ))}
         </div>
@@ -10925,7 +11390,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
                 nomeEscritorio: (((data || {}).escritorio || {}).nome || "").trim(),
                 prestadores: ((data || {}).fornecedores || []).filter((x) => x && x.ativo !== false),
                 insumos: ((data || {}).materiais || []).filter((x) => x && x.ativo !== false),
-                cartoes: cartoesDoEscritorio(data),
+                cartoes: cartoesDoEscritorio(data), contasBancarias: contasBanco,
                 aoCadastrarInsumo: (campos) => typeof cadastrarInsumoNoCatalogo === "function" ? cadastrarInsumoNoCatalogo(data, save, campos) : null,
                 aoCriarPrestador: criarPrestadorDoLancamento,
                 aoCriarCliente: criarClienteDoLancamento,
@@ -10978,17 +11443,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
               <button style={S.btn} onClick={() => setForm({})}>+ Novo lançamento</button>
             )}
           </div>
-          {form && <div style={{ marginBottom: 14 }}><FormLancamentoEscritorio fechamentos={fechamentos} clientes={(data || {}).clientes || []}
-            nomeEscritorio={(((data || {}).escritorio || {}).nome || "").trim()}
-            obras={(data || {}).obras || []} lancamentos={lancs}
-            prestadores={((data || {}).fornecedores || []).filter((x) => x && x.ativo !== false)}
-            insumos={((data || {}).materiais || []).filter((x) => x && x.ativo !== false)}
-            cartoes={cartoesDoEscritorio(data)}
-            aoCadastrarInsumo={(campos) => typeof cadastrarInsumoNoCatalogo === "function"
-              ? cadastrarInsumoNoCatalogo(data, save, campos) : null}
-            aoCriarPrestador={criarPrestadorDoLancamento}
-            aoCriarCliente={criarClienteDoLancamento}
-            inicial={form} aoSalvar={salvarLancamento} aoCancelar={() => setForm(null)} /></div>}
+          {form && desenharForm()}
           {vendoComprovante && typeof VisorProposta === "function" && (
             <VisorProposta anexo={vendoComprovante} aoFechar={() => setVendoComprovante(null)} />
           )}
@@ -10998,13 +11453,23 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
             lancamentos={lancamentosDaBase} doEscritorio meioDoLancamento={meioDoLancamento}
             acoes={{
               // a compra da fatura é uma parte dela: editar e excluir agem na fatura
-              editar: perm.podeEditar ? (l) => { const x = faturaDaParte(l); if (!x) { avisarCompraDaObra(); return; } setForm(x); if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); } : null,
-              excluir: perm.podeExcluir ? (l) => { const x = faturaDaParte(l); if (!x) { avisarCompraDaObra(); return; } excluirLancamento(x); } : null,
+              editar: perm.podeEditar ? (l) => { if ((l.origem || {}).tipo === "aPagarConta") { irParaAPagar(); return; } const x = faturaDaParte(l); if (!x) { avisarCompraDaObra(); return; } setForm(x); if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); } : null,
+              excluir: perm.podeExcluir ? (l) => { if ((l.origem || {}).tipo === "aPagarConta") { irParaAPagar(); return; } const x = faturaDaParte(l); if (!x) { avisarCompraDaObra(); return; } excluirLancamento(x); } : null,
               verPapel: (a) => setVendoComprovante(a),
             }}
             completar={perm.podeEditar !== false ? { data, save, quem: typeof nomeDeQuem === "function" ? nomeDeQuem(perm && perm.usuario) : "" } : null}
             isMobile={typeof window !== "undefined" && window.innerWidth < 768} nomeDoArquivo="base de dados" />
         </div>
+      )}
+
+      {!["resumo", "fechamento"].includes(vista) && aba === "pagar" && (
+        <>
+          {form && desenharForm()}
+          <ContasAPagarEscritorio itens={aPagarDoEscritorio(cfgFin)} faturas={faturasAPagar} contasBancarias={contasBanco}
+            podeEditar={!!perm.podeEditar} aoGuardar={guardarAPagar}
+            aoNova={form ? null : () => { setAviso(""); setForm({ formaPagamento: "parcelado", contaBanco: "sim", parcelas: 2,
+              primeiroVencimento: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10) }); }} />
+        </>
       )}
 
       {!["resumo", "fechamento"].includes(vista) && aba === "cartoes" && (

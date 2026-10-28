@@ -1755,6 +1755,7 @@ export default function ModuloClientesFornecedores() {
       ...(permMenu.podeGerenciarUsuarios ? [
         { k:"escritorio:financeiro",  icon:"financeiro", label:"Financeiro" },
         { k:"escritorio:receber",     icon:"financeiro", label:"A receber" },
+        { k:"escritorio:pagar",       icon:"financeiro", label:"A pagar" },
         { k:"escritorio:extrato",     icon:"cub",        label:"Extrato" },
         { k:"escritorio:base",        icon:"tabela",     label:"Base de dados" },
         { k:"escritorio:cartoes",     icon:"cartao",     label:"Cartões" },
