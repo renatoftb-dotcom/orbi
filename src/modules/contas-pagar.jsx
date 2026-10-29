@@ -629,14 +629,23 @@ function totaisContas(contas, hoje) {
   const red = (x) => Math.round(x * 100) / 100;
   return { total: red(r.total), aberto: red(r.aberto), vencido: red(r.vencido), pago: red(r.pago), qtdAberto: r.qtdAberto, qtdVencido: r.qtdVencido };
 }
+// No planejado, a compra no cartão do escritório conta inteira desde o dia
+// da compra: as parcelas pagas e as que ainda vão cair nas faturas. No
+// contas a pagar e na base, cada parcela segue a fatura dela.
+function contaNoRealizado(c) {
+  return !!(c && (c.pago || (c.parcelaCartao && c.parcelaCartao.grupo)));
+}
+function valorNoRealizado(c) {
+  return (c && c.pago ? (Number(c.valorPago) || Number(c.valor)) : Number((c || {}).valor)) || 0;
+}
 // Realizado por conta do plano de contas — é o que o Planejamento compara
 // com a estimativa.
 function realizadoPorConta(contas) {
   const r = {};
   for (const c of contas || []) {
-    if (!c.pago) continue;
+    if (!contaNoRealizado(c)) continue;
     const k = c.contaId || "mo_diversos";
-    r[k] = Math.round(((r[k] || 0) + (Number(c.valorPago) || Number(c.valor) || 0)) * 100) / 100;
+    r[k] = Math.round(((r[k] || 0) + valorNoRealizado(c)) * 100) / 100;
   }
   return r;
 }
@@ -2487,8 +2496,8 @@ function orcadoXRealizadoPorItem(obra, insumos, opcoes) {
       r = pegar("conta:" + (c.contaId || "?") + (porEtapa ? "@" + etapaId : ""), etapaId, { contaId: c.contaId || "",
         nome: (cc ? cc.nome : (c.descricao || "Sem conta")) + " (sem item)", grupo: c.grupoMaterial || "" });
     }
-    const valor = (Number(c.valorPago) || Number(c.valor)) || 0;
-    if (c.pago) {
+    const valor = valorNoRealizado(c);
+    if (contaNoRealizado(c)) {
       r.realizado = red(r.realizado + valor);
       r.notas++;
       if (!contaMO) {
@@ -2583,7 +2592,7 @@ function conferenciaDaLigacao(obra, insumos) {
     "A etapa destas linhas não tem correspondente: " + semEtapaOrc.map((x) => x.etapa).join(", ") + ".",
     semEtapaOrc.reduce((s, x) => s + x.linhas, 0), 0));
 
-  const pagas = contas.filter((c) => c && c.pago);
+  const pagas = contas.filter((c) => contaNoRealizado(c));
   // A régua é a regra da transação: só é furo o que ela EXIGE. Tarifa
   // bancária sem etapa, frete sem item e parcela de obra civil sem etapa
   // estão certos, e apontá-los como erro faria a pessoa parar de olhar.
@@ -2641,9 +2650,9 @@ function subcontasDaConta(itens, contasPagar, contaId, opcoes) {
     est[k] = Math.round(((est[k] || 0) + (Number(i.valor) || 0)) * 100) / 100;
   }
   for (const c of contasPagar || []) {
-    if (!c || !c.pago || c.contaId !== contaId) continue;
+    if (!contaNoRealizado(c) || c.contaId !== contaId) continue;
     const k = chaveReal(c);
-    real[k] = Math.round(((real[k] || 0) + (Number(c.valorPago) || Number(c.valor) || 0)) * 100) / 100;
+    real[k] = Math.round(((real[k] || 0) + valorNoRealizado(c)) * 100) / 100;
   }
   const chaves = [...new Set([...Object.keys(est), ...Object.keys(real)])];
   const nomeEtapa = (id) => {

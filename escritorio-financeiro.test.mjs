@@ -30,7 +30,7 @@ const M = new Function(src + `
            fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
-           competenciasDoCartao, composicaoDoExtrato, efCabecalhoDeCartao, efParcelaDoTexto, movimentosDoCartao, comCompetenciaDaFatura, comIdsDoCartao, faturasGuardadasDoCartao, faturasComArquivo, financeiroComFaturas, faturasComIgnorado, mesDoPagamentoDaFatura, cartaoDoArquivo, conferenciaDaFatura, contasDaObraParaACompraDoCartao, contasNoCartao, checagemSemTransferencias, somarChecagens, conferenciaUnificada, faturaParaALinhaDoBanco, lancamentoAntigoDaFatura, faturaNoLugarDoAntigo, parcelasAPagarDoCartao, aPagarDoEscritorio, efSomarMeses, planoParceladoNaConta, itensAPagarDoLancamento, parcelaAPagarParaALinha, lancamentoDaParcelaAPagar, aPagarComParcelaPaga, linhasDaBaseDoAPagar, aPagarSemParcela, resumoDoAPagar, contasParaReclassificar, travaDaReclassificacao, reclassificarLancamento, contaDeCostume, contaPeloBancoDoArquivo, planoAPartirDa, efNomeDoBancoPeloCodigo, arquivoPareceDeOutraConta, parDaTransferencia, lancamentosDaTransferenciaComPar, contaDoArquivoPeloConteudo, CONTA_BANCARIA_PRINCIPAL, contasBancariasDoEscritorio, contaBancariaDoLancamento, lancamentosDaContaBancaria, extratosDaContaBancaria, financeiroComExtratos, comIdsDaContaBancaria, saldoBancoDaContaNoMes, comSaldoBancoDaConta, saldoPeloExtratoDaConta, lancamentosDaTransferencia, pareceEntreContas, contasDoLancamento,
+           competenciasDoCartao, composicaoDoExtrato, efCabecalhoDeCartao, efParcelaDoTexto, movimentosDoCartao, comCompetenciaDaFatura, comIdsDoCartao, faturasGuardadasDoCartao, faturasComArquivo, financeiroComFaturas, faturasComIgnorado, mesDoPagamentoDaFatura, cartaoDoArquivo, conferenciaDaFatura, contasDaObraParaACompraDoCartao, contasNoCartao, checagemSemTransferencias, somarChecagens, conferenciaUnificada, faturaParaALinhaDoBanco, lancamentoAntigoDaFatura, faturaNoLugarDoAntigo, parcelasAPagarDoCartao, aPagarDoEscritorio, efSomarMeses, planoParceladoNaConta, itensAPagarDoLancamento, parcelaAPagarParaALinha, lancamentoDaParcelaAPagar, aPagarComParcelaPaga, linhasDaBaseDoAPagar, aPagarSemParcela, resumoDoAPagar, contasParaReclassificar, travaDaReclassificacao, reclassificarLancamento, contaDeCostume, contaPeloBancoDoArquivo, obrasComCartaoEmParcelas, compraDoGrupoDoCartao, contaEmParcelasDoCartao, ehParcelaDoCartao, planoAPartirDa, efNomeDoBancoPeloCodigo, arquivoPareceDeOutraConta, parDaTransferencia, lancamentosDaTransferenciaComPar, contaDoArquivoPeloConteudo, CONTA_BANCARIA_PRINCIPAL, contasBancariasDoEscritorio, contaBancariaDoLancamento, lancamentosDaContaBancaria, extratosDaContaBancaria, financeiroComExtratos, comIdsDaContaBancaria, saldoBancoDaContaNoMes, comSaldoBancoDaConta, saldoPeloExtratoDaConta, lancamentosDaTransferencia, pareceEntreContas, contasDoLancamento,
            faturasFechadas, faturaParaFechar, lancamentosParaResultado, mesAnoPorExtenso, efDiaBR, fechadasDaCompra, compraEditada, compraMexeuNoDinheiro, faturaAjustada,
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas, ligaContaAoLancamento, lancamentosLigadosAsContas, contasLigadasAoLancamento,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
@@ -3810,6 +3810,54 @@ teste("Fatura CSV da Cora: várias colunas de valor — vale a que tem número (
   // fecha dia 10: tudo na fatura de outubro (as 2/6 de agosto e setembro também)
   const comp = M.comCompetenciaDaFatura(r.movimentos, { diaFechamento: 10, diaVencimento: 15 });
   assert.deepStrictEqual([...new Set(comp.map((m) => m.competencia))], ["2026-10"]);
+});
+
+teste("Compra no cartão do escritório na obra: uma conta por parcela, paga quando a fatura fecha", () => {
+  const cartao = { id: "cora", nome: "CORA Visa", diaFechamento: 10, diaVencimento: 15, ativo: true };
+  const lajes = { id: "lj", descricao: "Lajes", favorecido: "TONET", contaId: "material", etapa: "laje", valor: 7200, valorPago: 7200,
+    pago: true, pagoEm: "2026-09-21", vencimento: "2026-09-23", formaPagamento: "cartao", cartaoId: "cora", numeroDoc: "0132",
+    parcelasCartao: [1, 2, 3, 4, 5].map((k) => ({ parcela: k, de: 5, competencia: M.somarCompetencia("2026-10", k - 1), valor: 1440 })) };
+  const concreto = { id: "cc", descricao: "Concreto", contaId: "material", valor: 3806.88, valorPago: 3806.88, pago: true, pagoEm: "2026-09-01",
+    formaPagamento: "cartao", cartaoId: "cora", pedidoId: "nota-1", quantidade: 6,
+    itens: [{ descricao: "FCK25", quantidade: 6, unitario: 634.48, total: 3806.88 }],
+    parcelasCartao: [1, 2, 3, 4, 5, 6].map((k) => ({ parcela: k, de: 6, competencia: M.somarCompetencia("2026-09", k - 1), valor: 634.48 })) };
+  const avista = { id: "av", descricao: "Cimento", valor: 100, pago: true, pagoEm: "2026-09-02" };
+  const doCliente = { id: "cl", descricao: "Porta", valor: 900, pago: true, pagoEm: "2026-09-03", cartaoId: "outro", parcelasCartao: [{ parcela: 1, de: 1, competencia: "2026-09", valor: 900 }] };
+  const obras = [{ id: "o1", nome: "Módulo 1", contasPagar: [lajes, concreto, avista, doCliente] }];
+  // setembro fechado (débito 15/09)
+  const fatSet = { id: "fatura:cora:2026-09", tipo: "escritorio", lancadoEm: "2026-09-15", valor: 634.48, origem: { tipo: "fatura", cartaoId: "cora", competencia: "2026-09" } };
+  const r = M.obrasComCartaoEmParcelas(obras, [fatSet], [cartao]);
+  const cs = r[0].contasPagar;
+  assert.strictEqual(cs.length, 5 + 6 + 2);
+  const lj = cs.filter((c) => c.parcelaCartao && c.parcelaCartao.grupo === "lj");
+  assert.deepStrictEqual(lj.map((c) => [c.id, c.valor, c.vencimento, c.pago]),
+    [["lj", 1440, "2026-10-15", false], ["lj~p2", 1440, "2026-11-15", false], ["lj~p3", 1440, "2026-12-15", false], ["lj~p4", 1440, "2027-01-15", false], ["lj~p5", 1440, "2027-02-15", false]]);
+  const cc = cs.filter((c) => c.parcelaCartao && c.parcelaCartao.grupo === "cc");
+  assert.deepStrictEqual([cc[0].pago, cc[0].pagoEm, cc[0].valorPago, cc[1].pago], [true, "2026-09-15", 634.48, false]);
+  assert.deepStrictEqual(cc.map((c) => c.pedidoId).slice(0, 2), ["nota-1", "nota-1~p2"]);
+  // os itens e a quantidade divididos: somados, voltam ao da compra
+  assert.strictEqual(Math.round(cc.reduce((t, c) => t + c.itens[0].total, 0) * 100) / 100, 3806.88);
+  assert.strictEqual(Math.round(cc.reduce((t, c) => t + c.quantidade, 0) * 10000) / 10000, 6);
+  // à vista e cartão do cliente: como estavam
+  assert.ok(cs.includes(avista) && cs.includes(doCliente));
+  // a fatura (e o A pagar) continua igual: cada parcela na sua fatura, com a data da compra
+  const linhas = M.linhasDaFatura(r, [], "cora", "2026-10", {});
+  assert.deepStrictEqual(linhas.map((l) => [l.refId, l.valor, l.parcela, l.compraEm]).sort(),
+    [["cc~p2", 634.48, 2, "2026-09-01"], ["lj", 1440, 1, "2026-09-21"]]);
+  // a fatura de outubro fechada: as parcelas dela ficam pagas no dia do débito
+  const fatOut = { id: "fatura:cora:2026-10", tipo: "escritorio", lancadoEm: "2026-10-14", valor: 2074.48, origem: { tipo: "fatura", cartaoId: "cora", competencia: "2026-10" } };
+  const r2 = M.obrasComCartaoEmParcelas(r, [fatSet, fatOut], [cartao]);
+  const pagas = r2[0].contasPagar.filter((c) => c.parcelaCartao && c.pago).map((c) => [c.id, c.pagoEm]);
+  assert.deepStrictEqual(pagas, [["lj", "2026-10-14"], ["cc", "2026-09-15"], ["cc~p2", "2026-10-14"]]);
+  // nada muda: o mesmo array
+  assert.strictEqual(M.obrasComCartaoEmParcelas(r2, [fatSet, fatOut], [cartao]), r2);
+  // reaberta: volta a pagar
+  const r3 = M.obrasComCartaoEmParcelas(r2, [fatSet], [cartao]);
+  assert.strictEqual(r3[0].contasPagar.find((c) => c.id === "lj").pago, false);
+  // a compra inteira de volta (para editar em Cartões)
+  const compra = M.compraDoGrupoDoCartao(r3[0].contasPagar, "cc");
+  assert.deepStrictEqual([compra.id, compra.valor, compra.pagoEm, compra.parcelasCartao.length, compra.pedidoId, compra.quantidade, compra.itens[0].total],
+    ["cc", 3806.88, "2026-09-01", 6, "nota-1", 6, 3806.88]);
 });
 
 for (const [nome, fn] of testes) {

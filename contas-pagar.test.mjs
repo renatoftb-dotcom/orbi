@@ -474,6 +474,15 @@ teste("o que foi pago vira realizado por conta e por prestador", () => {
   assert.deepStrictEqual(modulo.realizadoPorPrestador(contas), { p1: 3800, p2: 5000, __sem_prestador__: 300 });
 });
 
+teste("planejado: a compra no cartão conta inteira (parcelas pagas e a pagar); o contas a pagar segue a fatura", () => {
+  const parc = (k, pago) => ({ id: k === 1 ? "lj" : "lj~p" + k, contaId: "material", valor: 1440, pago, ...(pago ? { valorPago: 1440, pagoEm: "2026-10-14" } : {}),
+    vencimento: "2026-1" + (k - 1) + "-15", cartaoId: "cora", parcelaCartao: { grupo: "lj", k, de: 3, total: 4320, compraEm: "2026-09-21" } });
+  const contas = [parc(1, true), parc(2, false), parc(3, false), { contaId: "material", valor: 100, pago: false }];
+  assert.deepStrictEqual(modulo.realizadoPorConta(contas), { material: 4320 });
+  const t = modulo.totaisContas(contas, "2026-10-20");
+  assert.deepStrictEqual([t.pago, t.aberto], [1440, 2980]);
+});
+
 teste("conta avulsa nasce válida", () => {
   const a = modulo.contaAvulsaVazia("o1");
   assert.strictEqual(a.origem, "avulsa");

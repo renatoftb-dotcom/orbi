@@ -12787,7 +12787,7 @@ function linhasDaFatura(obras, lancamentos, cartaoId, competencia, opcoes) {
           origem: "obra", obraId: o.id || "", obra: o.nome || "",
           contaId: c.contaId || "", descricao: c.descricao || "",
           fornecedor: c.favorecido || "", numeroDoc: c.numeroDoc || "",
-          compraEm: String(c.pagoEm || "").slice(0, 10),
+          compraEm: String(c.compraEm || c.pagoEm || "").slice(0, 10),
           parcela: p.parcela, de: p.de, valor: Math.round((Number(p.valor) || 0) * 100) / 100,
           refId: c.id,
           // o papel da compra de obra fica na obra — a fatura não o copia
@@ -17323,6 +17323,135 @@ function mesDoPagamentoDaFatura(cartao, competencia) {
   return dv <= df ? somarCompetencia(competencia, 1) : competencia;
 }
 
+// ── Compra no cartão na obra: uma conta por parcela ─────────────
+// A obra (e o empreendimento) registra o que SAIU do caixa: a compra de
+// 7.200 em 5x no cartão do escritório vira 5 contas de 1.440, cada uma
+// vencendo no dia em que o banco debita a fatura dela. A parcela fica "a
+// pagar" até a fatura ser fechada no Fechamento; fechada, fica paga no dia
+// do débito. A primeira parcela guarda o id da compra (é o id que as
+// faturas já fechadas apontam); as outras, "<id>~p<k>".
+function ehParcelaDoCartao(c) { return !!(c && c.parcelaCartao && c.parcelaCartao.grupo); }
+// As faturas fechadas de um cartão e o dia do débito de cada uma.
+function faturasPagasDoCartao(lancamentos, cartaoId) {
+  const r = new Map();
+  for (const l of lancamentos || []) {
+    const o = (l || {}).origem || {};
+    if (o.tipo !== "fatura" || o.cartaoId !== cartaoId || !o.competencia) continue;
+    const dia = String(l.lancadoEm || "").slice(0, 10) || `${o.competencia}-01`;
+    r.set(o.competencia, dia);
+    for (const c of Array.isArray(o.cobre) ? o.cobre : []) if (c && !r.has(c)) r.set(c, dia);
+  }
+  return r;
+}
+function vencimentoDaFaturaDoCartao(cartao, competencia) {
+  const dv = Math.max(1, Math.min(28, Number((cartao || {}).diaVencimento) || 10));
+  return `${mesDoPagamentoDaFatura(cartao, competencia)}-${String(dv).padStart(2, "0")}`;
+}
+// Os itens da nota divididos na proporção da parcela: somadas as parcelas,
+// quantidade e valor voltam ao da compra.
+const EF_CAMPOS_DO_ITEM = ["quantidade", "bruto", "total", "valor", "valorNota", "desconto"];
+function itensNaProporcao(itens, f, ultima, todasAsOutras) {
+  return (itens || []).map((it, i) => {
+    if (!it) return it;
+    const n = { ...it };
+    for (const k of EF_CAMPOS_DO_ITEM) {
+      const v = Number(it[k]);
+      if (!Number.isFinite(v) || it[k] === "" || it[k] == null) continue;
+      const casas = k === "quantidade" ? 10000 : 100;
+      // a última parcela leva a sobra do arredondamento
+      n[k] = ultima ? Math.round((v - (todasAsOutras[i] && todasAsOutras[i][k] || 0)) * casas) / casas : Math.round(v * f * casas) / casas;
+    }
+    return n;
+  });
+}
+// A compra (uma conta, com o plano do cartão) em contas de parcela.
+function contaEmParcelasDoCartao(conta, cartao, pagas) {
+  const c = conta || {};
+  const plano = (c.parcelasCartao || []).filter(Boolean);
+  if (!c.cartaoId || !plano.length || ehParcelaDoCartao(c)) return [c];
+  const total = efCentavos(plano.reduce((t, p) => t + (Number(p.valor) || 0), 0));
+  const compraEm = String(c.compraEm || c.pagoEm || c.vencimento || "").slice(0, 10);
+  const { id, valor: _v, valorPago: _vp, pago: _p, pagoEm: _pe, vencimento: _ve, parcelasCartao: _pc, itens, quantidade, contabilizadoEm: _ce, ...base } = c;
+  const somaOutras = (itens || []).map(() => ({}));
+  let qtdOutras = 0;
+  return plano.map((p, i) => {
+    const ultima = i === plano.length - 1;
+    const f = total > 0 ? (Number(p.valor) || 0) / total : 0;
+    const itensDela = Array.isArray(itens) && itens.length ? itensNaProporcao(itens, f, ultima, somaOutras) : itens;
+    if (!ultima && Array.isArray(itensDela)) itensDela.forEach((it, k) => { for (const campo of EF_CAMPOS_DO_ITEM) if (it && Number.isFinite(Number(it[campo]))) somaOutras[k][campo] = (somaOutras[k][campo] || 0) + Number(it[campo]); });
+    let q;
+    if (quantidade !== "" && quantidade != null && Number.isFinite(Number(quantidade))) {
+      q = ultima ? Math.round((Number(quantidade) - qtdOutras) * 10000) / 10000 : Math.round(Number(quantidade) * f * 10000) / 10000;
+      qtdOutras += q;
+    }
+    const paga = pagas && pagas.get ? pagas.get(p.competencia) : "";
+    return {
+      ...base, id: i === 0 ? id : `${id}~p${p.parcela}`,
+      // o pedido da loja: cada parcela é um pedido (vence numa fatura só)
+      ...(base.pedidoId && i > 0 ? { pedidoId: `${base.pedidoId}~p${p.parcela}` } : {}),
+      ...(itensDela !== undefined ? { itens: itensDela } : {}), ...(q !== undefined ? { quantidade: q } : {}),
+      valor: efCentavos(p.valor), formaPagamento: "cartao", cartaoId: c.cartaoId, parcelasCartao: [p],
+      vencimento: vencimentoDaFaturaDoCartao(cartao, p.competencia), compraEm,
+      parcelaCartao: { grupo: id, k: p.parcela, de: p.de, total, compraEm },
+      pago: !!paga, pagoEm: paga || "", valorPago: paga ? efCentavos(p.valor) : "",
+    };
+  });
+}
+// As parcelas de volta numa compra só (para editar ou excluir a compra
+// inteira pelo cartão): o valor, a data e o plano da compra.
+function compraDoGrupoDoCartao(contas, grupo) {
+  const ps = (contas || []).filter((c) => c && c.parcelaCartao && c.parcelaCartao.grupo === grupo)
+    .sort((a, b) => (Number(a.parcelaCartao.k) || 0) - (Number(b.parcelaCartao.k) || 0));
+  if (!ps.length) return null;
+  const pri = ps.find((c) => c.id === grupo) || ps[0];
+  const { parcelaCartao, ...base } = pri;
+  const soma = (k) => ps.reduce((t, c) => t + (Number(c[k]) || 0), 0);
+  const itens = Array.isArray(pri.itens) && pri.itens.length
+    ? pri.itens.map((it, i) => { if (!it) return it; const n = { ...it };
+      for (const k of EF_CAMPOS_DO_ITEM) if (Number.isFinite(Number(it[k])) && it[k] !== "" && it[k] != null) {
+        const casas = k === "quantidade" ? 10000 : 100;
+        n[k] = Math.round(ps.reduce((t, c) => t + (Number(((c.itens || [])[i] || {})[k]) || 0), 0) * casas) / casas;
+      }
+      return n; }) : pri.itens;
+  const total = efCentavos(soma("valor"));
+  if (base.pedidoId) base.pedidoId = String(base.pedidoId).replace(/~p\d+$/, "");
+  return { ...base, id: grupo, valor: total, valorPago: total, pago: true, pagoEm: parcelaCartao.compraEm || pri.compraEm || "",
+    vencimento: parcelaCartao.compraEm || pri.compraEm || "", itens,
+    ...(pri.quantidade !== undefined && pri.quantidade !== "" ? { quantidade: Math.round(soma("quantidade") * 10000) / 10000 } : {}),
+    parcelasCartao: ps.map((c) => (c.parcelasCartao || [])[0]).filter(Boolean) };
+}
+// Todas as obras: a compra no cartão do ESCRITÓRIO vira parcelas, e cada
+// parcela fica paga (ou não) pela fatura dela. O cartão do cliente fica
+// como está — quem paga a fatura dele é o cliente. Devolve o mesmo array
+// quando nada muda.
+function obrasComCartaoEmParcelas(obras, lancamentos, cartoes) {
+  const doEscritorio = new Map((cartoes || []).filter((c) => c && c.id).map((c) => [c.id, c]));
+  if (!doEscritorio.size) return obras;
+  const pagasPor = new Map();
+  const pagas = (id) => { if (!pagasPor.has(id)) pagasPor.set(id, faturasPagasDoCartao(lancamentos, id)); return pagasPor.get(id); };
+  let mudou = false;
+  const novas = (obras || []).map((o) => {
+    if (!o || !Array.isArray(o.contasPagar) || !o.contasPagar.some((c) => c && c.cartaoId && doEscritorio.has(c.cartaoId))) return o;
+    let mexeu = false;
+    const contas = [];
+    for (const c of o.contasPagar) {
+      const cartao = c && c.cartaoId ? doEscritorio.get(c.cartaoId) : null;
+      if (!cartao || !(c.parcelasCartao || []).length) { contas.push(c); continue; }
+      if (!ehParcelaDoCartao(c)) { contas.push(...contaEmParcelasDoCartao(c, cartao, pagas(cartao.id))); mexeu = true; continue; }
+      // a parcela já separada: paga se a fatura dela foi fechada
+      const p = (c.parcelasCartao || [])[0] || {};
+      const dia = pagas(cartao.id).get(p.competencia) || "";
+      if (!!c.pago !== !!dia || (dia && c.pagoEm !== dia)) {
+        contas.push({ ...c, pago: !!dia, pagoEm: dia, valorPago: dia ? efCentavos(c.valor) : "" }); mexeu = true;
+      } else contas.push(c);
+    }
+    if (!mexeu) return o;
+    mudou = true;
+    return { ...o, contasPagar: contas };
+  });
+  return mudou ? novas : obras;
+}
+
 // O banco pelo código da compensação (o OFX traz o código, não o nome)
 const EF_BANCOS_PELO_CODIGO = {
   "001": "banco do brasil bb", "033": "santander", "041": "banrisul", "070": "brb", "077": "inter", "085": "ailos",
@@ -21534,6 +21663,11 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo, quem }) 
     if (l.origem === "obra") {
       const obra = obras.find((o) => o && o.id === l.obraId);
       const c = obra && (obra.contasPagar || []).find((x) => x && x.id === l.refId);
+      // parcela de compra no cartão: edita (e exclui) a compra inteira
+      if (c && ehParcelaDoCartao(c)) {
+        const compra = compraDoGrupoDoCartao(obra.contasPagar, c.parcelaCartao.grupo);
+        return compra ? { tipo: "obra", obra, compra, grupo: c.parcelaCartao.grupo } : null;
+      }
       return c ? { tipo: "obra", obra, compra: c } : null;
     }
     const c = lancs.find((x) => x && x.id === l.refId);
@@ -21541,9 +21675,19 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo, quem }) 
   };
   const gravarFonte = (f, nova) => {
     if (f.tipo === "obra") {
-      return save({ ...data, obras: obras.map((o) => (o && o.id === f.obra.id
-        ? { ...o, contasPagar: (o.contasPagar || []).flatMap((x) => (x && x.id === f.compra.id ? (nova ? [nova] : []) : [x])) }
-        : o)) });
+      // a compra em parcelas sai inteira e volta (já editada) inteira — o
+      // gravar a divide de novo, uma conta por parcela
+      const daCompra = (x) => x && (f.grupo ? (x.parcelaCartao && x.parcelaCartao.grupo === f.grupo) : x.id === f.compra.id);
+      return save({ ...data, obras: obras.map((o) => {
+        if (!o || o.id !== f.obra.id) return o;
+        const lista = [];
+        let pos = false;
+        for (const x of o.contasPagar || []) {
+          if (daCompra(x)) { if (!pos && nova) lista.push(nova); pos = true; continue; }
+          lista.push(x);
+        }
+        return { ...o, contasPagar: lista };
+      }) });
     }
     return save({ ...data, lancamentos: lancs.flatMap((x) => (x && x.id === f.compra.id ? (nova ? [nova] : []) : [x])) });
   };
@@ -34966,14 +35110,23 @@ function totaisContas(contas, hoje) {
   const red = (x) => Math.round(x * 100) / 100;
   return { total: red(r.total), aberto: red(r.aberto), vencido: red(r.vencido), pago: red(r.pago), qtdAberto: r.qtdAberto, qtdVencido: r.qtdVencido };
 }
+// No planejado, a compra no cartão do escritório conta inteira desde o dia
+// da compra: as parcelas pagas e as que ainda vão cair nas faturas. No
+// contas a pagar e na base, cada parcela segue a fatura dela.
+function contaNoRealizado(c) {
+  return !!(c && (c.pago || (c.parcelaCartao && c.parcelaCartao.grupo)));
+}
+function valorNoRealizado(c) {
+  return (c && c.pago ? (Number(c.valorPago) || Number(c.valor)) : Number((c || {}).valor)) || 0;
+}
 // Realizado por conta do plano de contas — é o que o Planejamento compara
 // com a estimativa.
 function realizadoPorConta(contas) {
   const r = {};
   for (const c of contas || []) {
-    if (!c.pago) continue;
+    if (!contaNoRealizado(c)) continue;
     const k = c.contaId || "mo_diversos";
-    r[k] = Math.round(((r[k] || 0) + (Number(c.valorPago) || Number(c.valor) || 0)) * 100) / 100;
+    r[k] = Math.round(((r[k] || 0) + valorNoRealizado(c)) * 100) / 100;
   }
   return r;
 }
@@ -36824,8 +36977,8 @@ function orcadoXRealizadoPorItem(obra, insumos, opcoes) {
       r = pegar("conta:" + (c.contaId || "?") + (porEtapa ? "@" + etapaId : ""), etapaId, { contaId: c.contaId || "",
         nome: (cc ? cc.nome : (c.descricao || "Sem conta")) + " (sem item)", grupo: c.grupoMaterial || "" });
     }
-    const valor = (Number(c.valorPago) || Number(c.valor)) || 0;
-    if (c.pago) {
+    const valor = valorNoRealizado(c);
+    if (contaNoRealizado(c)) {
       r.realizado = red(r.realizado + valor);
       r.notas++;
       if (!contaMO) {
@@ -36920,7 +37073,7 @@ function conferenciaDaLigacao(obra, insumos) {
     "A etapa destas linhas não tem correspondente: " + semEtapaOrc.map((x) => x.etapa).join(", ") + ".",
     semEtapaOrc.reduce((s, x) => s + x.linhas, 0), 0));
 
-  const pagas = contas.filter((c) => c && c.pago);
+  const pagas = contas.filter((c) => contaNoRealizado(c));
   // A régua é a regra da transação: só é furo o que ela EXIGE. Tarifa
   // bancária sem etapa, frete sem item e parcela de obra civil sem etapa
   // estão certos, e apontá-los como erro faria a pessoa parar de olhar.
@@ -36978,9 +37131,9 @@ function subcontasDaConta(itens, contasPagar, contaId, opcoes) {
     est[k] = Math.round(((est[k] || 0) + (Number(i.valor) || 0)) * 100) / 100;
   }
   for (const c of contasPagar || []) {
-    if (!c || !c.pago || c.contaId !== contaId) continue;
+    if (!contaNoRealizado(c) || c.contaId !== contaId) continue;
     const k = chaveReal(c);
-    real[k] = Math.round(((real[k] || 0) + (Number(c.valorPago) || Number(c.valor) || 0)) * 100) / 100;
+    real[k] = Math.round(((real[k] || 0) + valorNoRealizado(c)) * 100) / 100;
   }
   const chaves = [...new Set([...Object.keys(est), ...Object.keys(real)])];
   const nomeEtapa = (id) => {
@@ -54739,7 +54892,7 @@ function PrestadoresPLView({ itens, contasPagar, isMobile, fmtBRL }) {
       <div style={{ fontSize: 11, color: "#6b7280", marginTop: 10 }}>
         Cada anel é o ofício contra o próprio estimado. Entram a mão de obra inteira e o gerenciamento de obra —
         material, imposto e tarifa não são prestador. “Gasto” é o que já foi <strong style={{ color: "#4b5563" }}>pago</strong>;
-        conta em aberto não entra.
+        conta em aberto não entra; a compra no cartão do escritório entra inteira.
       </div>
     </div>
   );
@@ -55307,7 +55460,7 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
       )}
       <div style={{ fontSize: 11, color: "#6b7280", marginTop: 8 }}>
         “Realizado” é o que já foi <strong style={{ color: "#4b5563" }}>pago</strong> em contas a pagar, acumulado até hoje —
-        conta em aberto não entra. “Estimado” vem da aba Preencher.
+        conta em aberto não entra; a compra no cartão do escritório entra inteira (parcelas pagas e a pagar). “Estimado” vem da aba Preencher.
         {soCusto && " Preço de venda, terreno e tributos ficam fora deste quadro — só o que custa construir."}
         {clientePaga && " O cliente paga os fornecedores direto, então a obra fecha no custo."}
       </div>
@@ -56008,6 +56161,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       ? completarItemDaConta(conta, obraAtual, data.materiais || [], contasDaObra)
       : conta;
     if (soCalcular) return completa;
+    if (conta && conta.parcelaCartao && conta.parcelaCartao.grupo) {
+      dialogo.alertar({ titulo: "Parcela do cartão", tipo: "aviso",
+        mensagem: "Esta conta é uma parcela de compra no cartão do escritório. A compra (valor, data, parcelas) se corrige inteira em Escritório → Cartões." });
+      return;
+    }
     setFormConta(completa);
   };
   const salvarContaAvulsa = () => {
@@ -56173,8 +56331,19 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     }
     return lancarCotacaoEmContas(dados);
   };
+  // A parcela de compra no cartão do escritório é paga pela fatura: fica
+  // paga quando a fatura dela é fechada no Fechamento do escritório.
+  const parcelaPagaPelaFatura = (contas) => {
+    const c = (contas || []).find(x => x && x.parcelaCartao && x.parcelaCartao.grupo);
+    if (!c) return false;
+    dialogo.alertar({ titulo: "Parcela do cartão", tipo: "aviso",
+      mensagem: `Esta é a parcela ${c.parcelaCartao.k}/${c.parcelaCartao.de} de uma compra no cartão. Ela fica paga sozinha quando a fatura `
+        + "dela é fechada no Fechamento do escritório — sem baixa por aqui. Para mudar a compra, use Cartões no Escritório." });
+    return true;
+  };
   const alternarPagamento = async (conta) => {
     if (clienteNaoDaBaixa()) return;
+    if (parcelaPagaPelaFatura([conta])) return;
     if (conta.pago) {
       if (clienteNaoMexeNoPago([conta], "desfazer")) return;
       if (!(await confirmarDesfazer([conta]))) return;
@@ -56190,6 +56359,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // todos os itens na mesma data, e o boleto vale como comprovante de todos.
   const alternarPagamentoPedido = async (linha) => {
     if (clienteNaoDaBaixa()) return;
+    if (parcelaPagaPelaFatura(linha.contas)) return;
     if (linha.pago) {
       if (clienteNaoMexeNoPago(linha.contas, "desfazer")) return;
       if (!(await confirmarDesfazer(linha.contas))) return;
@@ -56923,7 +57093,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       const dif = realizado - estimado;
       const cor = dif > 0.005 ? "#dc2626" : "#4b5563";
       const sinal = dif > 0 ? "+" : "−";
-      return <span style={{ fontSize: 11, color: cor, marginLeft: 8 }}>pago {fmtBRL(realizado)}{estimado > 0 ? ` (${sinal}${fmtBRL(Math.abs(dif))})` : ""}</span>;
+      return <span style={{ fontSize: 11, color: cor, marginLeft: 8 }}>realizado {fmtBRL(realizado)}{estimado > 0 ? ` (${sinal}${fmtBRL(Math.abs(dif))})` : ""}</span>;
     };
 
     return (
@@ -58068,9 +58238,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                   </div>
                                   {perm.podeEditar ? (
                                     <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
-                                      <button onClick={() => alternarPagamentoPedido(L)} style={isMobile ? C.btnLinhaToque : C.btnLinha}>
+                                      {(L.contas || []).some(x => x && x.parcelaCartao && x.parcelaCartao.grupo)
+                                        ? <span title="Fica paga quando a fatura do cartão é fechada no Fechamento do escritório" style={{ fontSize: 11.5, color: "#6b7280", whiteSpace: "nowrap" }}>pela fatura</span>
+                                        : <button onClick={() => alternarPagamentoPedido(L)} style={isMobile ? C.btnLinhaToque : C.btnLinha}>
                                         {L.pago ? "Desfazer" : "Pagar"}
-                                      </button>
+                                      </button>}
                                     </div>
                                   ) : <div />}
                                 </div>
@@ -58947,7 +59119,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                             );
                           }
                           const c = L.conta;
-                          const st = rotuloSituacaoConta(c, hojeIso);
+                          const parcCartao = c.parcelaCartao && c.parcelaCartao.grupo ? c.parcelaCartao : null;
+                          const mesFatura = (cp) => { const comp = (((cp || {}).parcelasCartao || [])[0] || {}).competencia || ""; return comp ? `${["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"][Number(comp.slice(5, 7)) - 1]}/${comp.slice(2, 4)}` : ""; };
+                          const st0 = rotuloSituacaoConta(c, hojeIso);
+                          // parcela do cartão: paga pela fatura dela, não aqui
+                          const st = parcCartao ? { ...st0, label: c.pago ? "Paga na fatura" : `Fatura de ${mesFatura(c)}`, forte: false } : st0;
                           const detalhe = detalheConta(c);
                           const aberta = !!contasAbertas[c.id];
                           const apoio = [apoioCurtoConta(c), nomeConta(c.contaId)].filter(Boolean).join(" · ");
@@ -58984,6 +59160,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                 <div style={{ fontSize: 13, color: "#111827", fontWeight: 600, ...umaLinha }}>
                                   <span style={{ color: "#6b7280", fontWeight: 400, marginRight: 4 }}>{aberta ? "▾" : "▸"}</span>
                                   {tituloCurtoConta(c)}
+                                  {parcCartao ? <span style={{ fontWeight: 400, color: "#9d174d" }}> · 💳 parcela {parcCartao.k}/{parcCartao.de}</span> : null}
                                   {c.estimada ? <span style={{ fontWeight: 400, color: "#6b7280" }}> · estimada</span> : null}
                                 </div>
                                 <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2, ...umaLinha }}>
@@ -59015,7 +59192,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                       ["Registrado em", c.pago ? dataBR(c.contabilizadoEm) : ""],
                                       ["Valor pago", c.pago ? (Number(c.valorPago) < 0 ? "devolvido " + fmtMoedaCtr(Math.abs(Number(c.valorPago)))
                                         : fmtMoedaCtr(Number(c.valorPago) || Number(c.valor) || 0)) : ""],
-                                      ["Pago", c.pago ? (c.formaPagamento === "cartao"
+                                      ["Cartão", c.parcelaCartao ? `parcela ${c.parcelaCartao.k}/${c.parcelaCartao.de} de ${fmtMoedaCtr(c.parcelaCartao.total)}, `
+                                        + `comprada em ${dataBR(c.parcelaCartao.compraEm)} — fatura de ${(typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso : (x) => x)(((c.parcelasCartao || [])[0] || {}).competencia || "")}`
+                                        + (c.pago ? `, paga em ${dataBR(c.pagoEm)}` : ", a pagar quando a fatura fechar") : ""],
+                                      ["Pago", c.pago && !c.parcelaCartao ? (c.formaPagamento === "cartao"
                                         ? "no cartão" + (c.parcelasCartao && c.parcelasCartao.length > 1 ? `, em ${c.parcelasCartao.length}x` : "")
                                           + " — faturas " + [...new Set((c.parcelasCartao || []).map(p => p.competencia))].map((typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso : (x) => x)).join(", ")
                                         : (c.formaPagamento === "avista" ? "à vista / transferência" : "")) : ""],
@@ -59068,7 +59248,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                               </div>
                               {perm.podeEditar ? (
                                 <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
-                                  <button onClick={() => alternarPagamento(c)} style={isMobile ? C.btnLinhaToque : C.btnLinha}>{c.pago ? "Desfazer" : "Pagar"}</button>
+                                  {parcCartao
+                                    ? <span title="Fica paga quando a fatura do cartão é fechada no Fechamento do escritório" style={{ fontSize: 11.5, color: "#6b7280", whiteSpace: "nowrap" }}>pela fatura</span>
+                                    : <button onClick={() => alternarPagamento(c)} style={isMobile ? C.btnLinhaToque : C.btnLinha}>{c.pago ? "Desfazer" : "Pagar"}</button>}
                                 </div>
                               ) : <div />}
                             </div>
@@ -93479,6 +93661,13 @@ export default function ModuloClientesFornecedores() {
     if (typeof ligarObrasAoCatalogo === "function" && Array.isArray(newData.obras)) {
       const obrasLigadas = ligarObrasAoCatalogo(newData.obras, oldData && oldData.obras, newData.materiais);
       if (obrasLigadas !== newData.obras) newData = { ...newData, obras: obrasLigadas };
+    }
+    // Compra no cartão do escritório: na obra, uma conta por parcela, paga
+    // quando a fatura dela é fechada (escritorio-financeiro.jsx).
+    if (typeof obrasComCartaoEmParcelas === "function" && Array.isArray(newData.obras)) {
+      const cartoesEsc = ((newData.escritorio || {}).cartoes) || [];
+      const obrasParc = obrasComCartaoEmParcelas(newData.obras, newData.lancamentos || [], cartoesEsc);
+      if (obrasParc !== newData.obras) newData = { ...newData, obras: obrasParc };
     }
     setData(newData);
     dataRef.current = newData; // mantém ref em sync imediato pra callbacks subsequentes

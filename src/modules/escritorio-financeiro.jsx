@@ -798,7 +798,7 @@ function linhasDaFatura(obras, lancamentos, cartaoId, competencia, opcoes) {
           origem: "obra", obraId: o.id || "", obra: o.nome || "",
           contaId: c.contaId || "", descricao: c.descricao || "",
           fornecedor: c.favorecido || "", numeroDoc: c.numeroDoc || "",
-          compraEm: String(c.pagoEm || "").slice(0, 10),
+          compraEm: String(c.compraEm || c.pagoEm || "").slice(0, 10),
           parcela: p.parcela, de: p.de, valor: Math.round((Number(p.valor) || 0) * 100) / 100,
           refId: c.id,
           // o papel da compra de obra fica na obra — a fatura não o copia
@@ -5334,6 +5334,135 @@ function mesDoPagamentoDaFatura(cartao, competencia) {
   return dv <= df ? somarCompetencia(competencia, 1) : competencia;
 }
 
+// ── Compra no cartão na obra: uma conta por parcela ─────────────
+// A obra (e o empreendimento) registra o que SAIU do caixa: a compra de
+// 7.200 em 5x no cartão do escritório vira 5 contas de 1.440, cada uma
+// vencendo no dia em que o banco debita a fatura dela. A parcela fica "a
+// pagar" até a fatura ser fechada no Fechamento; fechada, fica paga no dia
+// do débito. A primeira parcela guarda o id da compra (é o id que as
+// faturas já fechadas apontam); as outras, "<id>~p<k>".
+function ehParcelaDoCartao(c) { return !!(c && c.parcelaCartao && c.parcelaCartao.grupo); }
+// As faturas fechadas de um cartão e o dia do débito de cada uma.
+function faturasPagasDoCartao(lancamentos, cartaoId) {
+  const r = new Map();
+  for (const l of lancamentos || []) {
+    const o = (l || {}).origem || {};
+    if (o.tipo !== "fatura" || o.cartaoId !== cartaoId || !o.competencia) continue;
+    const dia = String(l.lancadoEm || "").slice(0, 10) || `${o.competencia}-01`;
+    r.set(o.competencia, dia);
+    for (const c of Array.isArray(o.cobre) ? o.cobre : []) if (c && !r.has(c)) r.set(c, dia);
+  }
+  return r;
+}
+function vencimentoDaFaturaDoCartao(cartao, competencia) {
+  const dv = Math.max(1, Math.min(28, Number((cartao || {}).diaVencimento) || 10));
+  return `${mesDoPagamentoDaFatura(cartao, competencia)}-${String(dv).padStart(2, "0")}`;
+}
+// Os itens da nota divididos na proporção da parcela: somadas as parcelas,
+// quantidade e valor voltam ao da compra.
+const EF_CAMPOS_DO_ITEM = ["quantidade", "bruto", "total", "valor", "valorNota", "desconto"];
+function itensNaProporcao(itens, f, ultima, todasAsOutras) {
+  return (itens || []).map((it, i) => {
+    if (!it) return it;
+    const n = { ...it };
+    for (const k of EF_CAMPOS_DO_ITEM) {
+      const v = Number(it[k]);
+      if (!Number.isFinite(v) || it[k] === "" || it[k] == null) continue;
+      const casas = k === "quantidade" ? 10000 : 100;
+      // a última parcela leva a sobra do arredondamento
+      n[k] = ultima ? Math.round((v - (todasAsOutras[i] && todasAsOutras[i][k] || 0)) * casas) / casas : Math.round(v * f * casas) / casas;
+    }
+    return n;
+  });
+}
+// A compra (uma conta, com o plano do cartão) em contas de parcela.
+function contaEmParcelasDoCartao(conta, cartao, pagas) {
+  const c = conta || {};
+  const plano = (c.parcelasCartao || []).filter(Boolean);
+  if (!c.cartaoId || !plano.length || ehParcelaDoCartao(c)) return [c];
+  const total = efCentavos(plano.reduce((t, p) => t + (Number(p.valor) || 0), 0));
+  const compraEm = String(c.compraEm || c.pagoEm || c.vencimento || "").slice(0, 10);
+  const { id, valor: _v, valorPago: _vp, pago: _p, pagoEm: _pe, vencimento: _ve, parcelasCartao: _pc, itens, quantidade, contabilizadoEm: _ce, ...base } = c;
+  const somaOutras = (itens || []).map(() => ({}));
+  let qtdOutras = 0;
+  return plano.map((p, i) => {
+    const ultima = i === plano.length - 1;
+    const f = total > 0 ? (Number(p.valor) || 0) / total : 0;
+    const itensDela = Array.isArray(itens) && itens.length ? itensNaProporcao(itens, f, ultima, somaOutras) : itens;
+    if (!ultima && Array.isArray(itensDela)) itensDela.forEach((it, k) => { for (const campo of EF_CAMPOS_DO_ITEM) if (it && Number.isFinite(Number(it[campo]))) somaOutras[k][campo] = (somaOutras[k][campo] || 0) + Number(it[campo]); });
+    let q;
+    if (quantidade !== "" && quantidade != null && Number.isFinite(Number(quantidade))) {
+      q = ultima ? Math.round((Number(quantidade) - qtdOutras) * 10000) / 10000 : Math.round(Number(quantidade) * f * 10000) / 10000;
+      qtdOutras += q;
+    }
+    const paga = pagas && pagas.get ? pagas.get(p.competencia) : "";
+    return {
+      ...base, id: i === 0 ? id : `${id}~p${p.parcela}`,
+      // o pedido da loja: cada parcela é um pedido (vence numa fatura só)
+      ...(base.pedidoId && i > 0 ? { pedidoId: `${base.pedidoId}~p${p.parcela}` } : {}),
+      ...(itensDela !== undefined ? { itens: itensDela } : {}), ...(q !== undefined ? { quantidade: q } : {}),
+      valor: efCentavos(p.valor), formaPagamento: "cartao", cartaoId: c.cartaoId, parcelasCartao: [p],
+      vencimento: vencimentoDaFaturaDoCartao(cartao, p.competencia), compraEm,
+      parcelaCartao: { grupo: id, k: p.parcela, de: p.de, total, compraEm },
+      pago: !!paga, pagoEm: paga || "", valorPago: paga ? efCentavos(p.valor) : "",
+    };
+  });
+}
+// As parcelas de volta numa compra só (para editar ou excluir a compra
+// inteira pelo cartão): o valor, a data e o plano da compra.
+function compraDoGrupoDoCartao(contas, grupo) {
+  const ps = (contas || []).filter((c) => c && c.parcelaCartao && c.parcelaCartao.grupo === grupo)
+    .sort((a, b) => (Number(a.parcelaCartao.k) || 0) - (Number(b.parcelaCartao.k) || 0));
+  if (!ps.length) return null;
+  const pri = ps.find((c) => c.id === grupo) || ps[0];
+  const { parcelaCartao, ...base } = pri;
+  const soma = (k) => ps.reduce((t, c) => t + (Number(c[k]) || 0), 0);
+  const itens = Array.isArray(pri.itens) && pri.itens.length
+    ? pri.itens.map((it, i) => { if (!it) return it; const n = { ...it };
+      for (const k of EF_CAMPOS_DO_ITEM) if (Number.isFinite(Number(it[k])) && it[k] !== "" && it[k] != null) {
+        const casas = k === "quantidade" ? 10000 : 100;
+        n[k] = Math.round(ps.reduce((t, c) => t + (Number(((c.itens || [])[i] || {})[k]) || 0), 0) * casas) / casas;
+      }
+      return n; }) : pri.itens;
+  const total = efCentavos(soma("valor"));
+  if (base.pedidoId) base.pedidoId = String(base.pedidoId).replace(/~p\d+$/, "");
+  return { ...base, id: grupo, valor: total, valorPago: total, pago: true, pagoEm: parcelaCartao.compraEm || pri.compraEm || "",
+    vencimento: parcelaCartao.compraEm || pri.compraEm || "", itens,
+    ...(pri.quantidade !== undefined && pri.quantidade !== "" ? { quantidade: Math.round(soma("quantidade") * 10000) / 10000 } : {}),
+    parcelasCartao: ps.map((c) => (c.parcelasCartao || [])[0]).filter(Boolean) };
+}
+// Todas as obras: a compra no cartão do ESCRITÓRIO vira parcelas, e cada
+// parcela fica paga (ou não) pela fatura dela. O cartão do cliente fica
+// como está — quem paga a fatura dele é o cliente. Devolve o mesmo array
+// quando nada muda.
+function obrasComCartaoEmParcelas(obras, lancamentos, cartoes) {
+  const doEscritorio = new Map((cartoes || []).filter((c) => c && c.id).map((c) => [c.id, c]));
+  if (!doEscritorio.size) return obras;
+  const pagasPor = new Map();
+  const pagas = (id) => { if (!pagasPor.has(id)) pagasPor.set(id, faturasPagasDoCartao(lancamentos, id)); return pagasPor.get(id); };
+  let mudou = false;
+  const novas = (obras || []).map((o) => {
+    if (!o || !Array.isArray(o.contasPagar) || !o.contasPagar.some((c) => c && c.cartaoId && doEscritorio.has(c.cartaoId))) return o;
+    let mexeu = false;
+    const contas = [];
+    for (const c of o.contasPagar) {
+      const cartao = c && c.cartaoId ? doEscritorio.get(c.cartaoId) : null;
+      if (!cartao || !(c.parcelasCartao || []).length) { contas.push(c); continue; }
+      if (!ehParcelaDoCartao(c)) { contas.push(...contaEmParcelasDoCartao(c, cartao, pagas(cartao.id))); mexeu = true; continue; }
+      // a parcela já separada: paga se a fatura dela foi fechada
+      const p = (c.parcelasCartao || [])[0] || {};
+      const dia = pagas(cartao.id).get(p.competencia) || "";
+      if (!!c.pago !== !!dia || (dia && c.pagoEm !== dia)) {
+        contas.push({ ...c, pago: !!dia, pagoEm: dia, valorPago: dia ? efCentavos(c.valor) : "" }); mexeu = true;
+      } else contas.push(c);
+    }
+    if (!mexeu) return o;
+    mudou = true;
+    return { ...o, contasPagar: contas };
+  });
+  return mudou ? novas : obras;
+}
+
 // O banco pelo código da compensação (o OFX traz o código, não o nome)
 const EF_BANCOS_PELO_CODIGO = {
   "001": "banco do brasil bb", "033": "santander", "041": "banrisul", "070": "brb", "077": "inter", "085": "ailos",
@@ -9545,6 +9674,11 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo, quem }) 
     if (l.origem === "obra") {
       const obra = obras.find((o) => o && o.id === l.obraId);
       const c = obra && (obra.contasPagar || []).find((x) => x && x.id === l.refId);
+      // parcela de compra no cartão: edita (e exclui) a compra inteira
+      if (c && ehParcelaDoCartao(c)) {
+        const compra = compraDoGrupoDoCartao(obra.contasPagar, c.parcelaCartao.grupo);
+        return compra ? { tipo: "obra", obra, compra, grupo: c.parcelaCartao.grupo } : null;
+      }
       return c ? { tipo: "obra", obra, compra: c } : null;
     }
     const c = lancs.find((x) => x && x.id === l.refId);
@@ -9552,9 +9686,19 @@ function CartoesEscritorio({ data, save, isMobile, podeEditar, dialogo, quem }) 
   };
   const gravarFonte = (f, nova) => {
     if (f.tipo === "obra") {
-      return save({ ...data, obras: obras.map((o) => (o && o.id === f.obra.id
-        ? { ...o, contasPagar: (o.contasPagar || []).flatMap((x) => (x && x.id === f.compra.id ? (nova ? [nova] : []) : [x])) }
-        : o)) });
+      // a compra em parcelas sai inteira e volta (já editada) inteira — o
+      // gravar a divide de novo, uma conta por parcela
+      const daCompra = (x) => x && (f.grupo ? (x.parcelaCartao && x.parcelaCartao.grupo === f.grupo) : x.id === f.compra.id);
+      return save({ ...data, obras: obras.map((o) => {
+        if (!o || o.id !== f.obra.id) return o;
+        const lista = [];
+        let pos = false;
+        for (const x of o.contasPagar || []) {
+          if (daCompra(x)) { if (!pos && nova) lista.push(nova); pos = true; continue; }
+          lista.push(x);
+        }
+        return { ...o, contasPagar: lista };
+      }) });
     }
     return save({ ...data, lancamentos: lancs.flatMap((x) => (x && x.id === f.compra.id ? (nova ? [nova] : []) : [x])) });
   };

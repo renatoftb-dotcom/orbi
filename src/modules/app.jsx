@@ -1364,6 +1364,13 @@ export default function ModuloClientesFornecedores() {
       const obrasLigadas = ligarObrasAoCatalogo(newData.obras, oldData && oldData.obras, newData.materiais);
       if (obrasLigadas !== newData.obras) newData = { ...newData, obras: obrasLigadas };
     }
+    // Compra no cartão do escritório: na obra, uma conta por parcela, paga
+    // quando a fatura dela é fechada (escritorio-financeiro.jsx).
+    if (typeof obrasComCartaoEmParcelas === "function" && Array.isArray(newData.obras)) {
+      const cartoesEsc = ((newData.escritorio || {}).cartoes) || [];
+      const obrasParc = obrasComCartaoEmParcelas(newData.obras, newData.lancamentos || [], cartoesEsc);
+      if (obrasParc !== newData.obras) newData = { ...newData, obras: obrasParc };
+    }
     setData(newData);
     dataRef.current = newData; // mantém ref em sync imediato pra callbacks subsequentes
     return enfileirarGravacao();

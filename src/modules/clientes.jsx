@@ -1808,7 +1808,7 @@ function PrestadoresPLView({ itens, contasPagar, isMobile, fmtBRL }) {
       <div style={{ fontSize: 11, color: "#6b7280", marginTop: 10 }}>
         Cada anel é o ofício contra o próprio estimado. Entram a mão de obra inteira e o gerenciamento de obra —
         material, imposto e tarifa não são prestador. “Gasto” é o que já foi <strong style={{ color: "#4b5563" }}>pago</strong>;
-        conta em aberto não entra.
+        conta em aberto não entra; a compra no cartão do escritório entra inteira.
       </div>
     </div>
   );
@@ -2376,7 +2376,7 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
       )}
       <div style={{ fontSize: 11, color: "#6b7280", marginTop: 8 }}>
         “Realizado” é o que já foi <strong style={{ color: "#4b5563" }}>pago</strong> em contas a pagar, acumulado até hoje —
-        conta em aberto não entra. “Estimado” vem da aba Preencher.
+        conta em aberto não entra; a compra no cartão do escritório entra inteira (parcelas pagas e a pagar). “Estimado” vem da aba Preencher.
         {soCusto && " Preço de venda, terreno e tributos ficam fora deste quadro — só o que custa construir."}
         {clientePaga && " O cliente paga os fornecedores direto, então a obra fecha no custo."}
       </div>
@@ -3077,6 +3077,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       ? completarItemDaConta(conta, obraAtual, data.materiais || [], contasDaObra)
       : conta;
     if (soCalcular) return completa;
+    if (conta && conta.parcelaCartao && conta.parcelaCartao.grupo) {
+      dialogo.alertar({ titulo: "Parcela do cartão", tipo: "aviso",
+        mensagem: "Esta conta é uma parcela de compra no cartão do escritório. A compra (valor, data, parcelas) se corrige inteira em Escritório → Cartões." });
+      return;
+    }
     setFormConta(completa);
   };
   const salvarContaAvulsa = () => {
@@ -3242,8 +3247,19 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     }
     return lancarCotacaoEmContas(dados);
   };
+  // A parcela de compra no cartão do escritório é paga pela fatura: fica
+  // paga quando a fatura dela é fechada no Fechamento do escritório.
+  const parcelaPagaPelaFatura = (contas) => {
+    const c = (contas || []).find(x => x && x.parcelaCartao && x.parcelaCartao.grupo);
+    if (!c) return false;
+    dialogo.alertar({ titulo: "Parcela do cartão", tipo: "aviso",
+      mensagem: `Esta é a parcela ${c.parcelaCartao.k}/${c.parcelaCartao.de} de uma compra no cartão. Ela fica paga sozinha quando a fatura `
+        + "dela é fechada no Fechamento do escritório — sem baixa por aqui. Para mudar a compra, use Cartões no Escritório." });
+    return true;
+  };
   const alternarPagamento = async (conta) => {
     if (clienteNaoDaBaixa()) return;
+    if (parcelaPagaPelaFatura([conta])) return;
     if (conta.pago) {
       if (clienteNaoMexeNoPago([conta], "desfazer")) return;
       if (!(await confirmarDesfazer([conta]))) return;
@@ -3259,6 +3275,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // todos os itens na mesma data, e o boleto vale como comprovante de todos.
   const alternarPagamentoPedido = async (linha) => {
     if (clienteNaoDaBaixa()) return;
+    if (parcelaPagaPelaFatura(linha.contas)) return;
     if (linha.pago) {
       if (clienteNaoMexeNoPago(linha.contas, "desfazer")) return;
       if (!(await confirmarDesfazer(linha.contas))) return;
@@ -3992,7 +4009,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       const dif = realizado - estimado;
       const cor = dif > 0.005 ? "#dc2626" : "#4b5563";
       const sinal = dif > 0 ? "+" : "−";
-      return <span style={{ fontSize: 11, color: cor, marginLeft: 8 }}>pago {fmtBRL(realizado)}{estimado > 0 ? ` (${sinal}${fmtBRL(Math.abs(dif))})` : ""}</span>;
+      return <span style={{ fontSize: 11, color: cor, marginLeft: 8 }}>realizado {fmtBRL(realizado)}{estimado > 0 ? ` (${sinal}${fmtBRL(Math.abs(dif))})` : ""}</span>;
     };
 
     return (
@@ -5137,9 +5154,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                   </div>
                                   {perm.podeEditar ? (
                                     <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
-                                      <button onClick={() => alternarPagamentoPedido(L)} style={isMobile ? C.btnLinhaToque : C.btnLinha}>
+                                      {(L.contas || []).some(x => x && x.parcelaCartao && x.parcelaCartao.grupo)
+                                        ? <span title="Fica paga quando a fatura do cartão é fechada no Fechamento do escritório" style={{ fontSize: 11.5, color: "#6b7280", whiteSpace: "nowrap" }}>pela fatura</span>
+                                        : <button onClick={() => alternarPagamentoPedido(L)} style={isMobile ? C.btnLinhaToque : C.btnLinha}>
                                         {L.pago ? "Desfazer" : "Pagar"}
-                                      </button>
+                                      </button>}
                                     </div>
                                   ) : <div />}
                                 </div>
@@ -6016,7 +6035,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                             );
                           }
                           const c = L.conta;
-                          const st = rotuloSituacaoConta(c, hojeIso);
+                          const parcCartao = c.parcelaCartao && c.parcelaCartao.grupo ? c.parcelaCartao : null;
+                          const mesFatura = (cp) => { const comp = (((cp || {}).parcelasCartao || [])[0] || {}).competencia || ""; return comp ? `${["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"][Number(comp.slice(5, 7)) - 1]}/${comp.slice(2, 4)}` : ""; };
+                          const st0 = rotuloSituacaoConta(c, hojeIso);
+                          // parcela do cartão: paga pela fatura dela, não aqui
+                          const st = parcCartao ? { ...st0, label: c.pago ? "Paga na fatura" : `Fatura de ${mesFatura(c)}`, forte: false } : st0;
                           const detalhe = detalheConta(c);
                           const aberta = !!contasAbertas[c.id];
                           const apoio = [apoioCurtoConta(c), nomeConta(c.contaId)].filter(Boolean).join(" · ");
@@ -6053,6 +6076,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                 <div style={{ fontSize: 13, color: "#111827", fontWeight: 600, ...umaLinha }}>
                                   <span style={{ color: "#6b7280", fontWeight: 400, marginRight: 4 }}>{aberta ? "▾" : "▸"}</span>
                                   {tituloCurtoConta(c)}
+                                  {parcCartao ? <span style={{ fontWeight: 400, color: "#9d174d" }}> · 💳 parcela {parcCartao.k}/{parcCartao.de}</span> : null}
                                   {c.estimada ? <span style={{ fontWeight: 400, color: "#6b7280" }}> · estimada</span> : null}
                                 </div>
                                 <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2, ...umaLinha }}>
@@ -6084,7 +6108,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                       ["Registrado em", c.pago ? dataBR(c.contabilizadoEm) : ""],
                                       ["Valor pago", c.pago ? (Number(c.valorPago) < 0 ? "devolvido " + fmtMoedaCtr(Math.abs(Number(c.valorPago)))
                                         : fmtMoedaCtr(Number(c.valorPago) || Number(c.valor) || 0)) : ""],
-                                      ["Pago", c.pago ? (c.formaPagamento === "cartao"
+                                      ["Cartão", c.parcelaCartao ? `parcela ${c.parcelaCartao.k}/${c.parcelaCartao.de} de ${fmtMoedaCtr(c.parcelaCartao.total)}, `
+                                        + `comprada em ${dataBR(c.parcelaCartao.compraEm)} — fatura de ${(typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso : (x) => x)(((c.parcelasCartao || [])[0] || {}).competencia || "")}`
+                                        + (c.pago ? `, paga em ${dataBR(c.pagoEm)}` : ", a pagar quando a fatura fechar") : ""],
+                                      ["Pago", c.pago && !c.parcelaCartao ? (c.formaPagamento === "cartao"
                                         ? "no cartão" + (c.parcelasCartao && c.parcelasCartao.length > 1 ? `, em ${c.parcelasCartao.length}x` : "")
                                           + " — faturas " + [...new Set((c.parcelasCartao || []).map(p => p.competencia))].map((typeof mesAnoPorExtenso === "function" ? mesAnoPorExtenso : (x) => x)).join(", ")
                                         : (c.formaPagamento === "avista" ? "à vista / transferência" : "")) : ""],
@@ -6137,7 +6164,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                               </div>
                               {perm.podeEditar ? (
                                 <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
-                                  <button onClick={() => alternarPagamento(c)} style={isMobile ? C.btnLinhaToque : C.btnLinha}>{c.pago ? "Desfazer" : "Pagar"}</button>
+                                  {parcCartao
+                                    ? <span title="Fica paga quando a fatura do cartão é fechada no Fechamento do escritório" style={{ fontSize: 11.5, color: "#6b7280", whiteSpace: "nowrap" }}>pela fatura</span>
+                                    : <button onClick={() => alternarPagamento(c)} style={isMobile ? C.btnLinhaToque : C.btnLinha}>{c.pago ? "Desfazer" : "Pagar"}</button>}
                                 </div>
                               ) : <div />}
                             </div>
