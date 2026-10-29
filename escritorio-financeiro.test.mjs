@@ -3797,6 +3797,21 @@ teste("Conta do OFX pelo banco: o nome da conta casa com o banco do arquivo (uma
   assert.strictEqual(M.contaPeloBancoDoArquivo(contas, "Banco SA"), "");                                       // só palavra genérica
 });
 
+teste("Fatura CSV da Cora: várias colunas de valor — vale a que tem número (\"Valor\", não \"Valor Moeda Local\")", () => {
+  const cab = ["Data", "Nome no Cartão", "Final do Cartão", "Categoria", "Descrição", "Moeda", "Valor Moeda Local", "Conversão Dólar na Data", "Valor em Dólar", "IOF", "Valor"];
+  const l = (d, h, v) => [d, "TITULAR EXEMPLO", "1234", "Lançamentos", h, "R$", "", "", "", "", v];
+  const linhas = [cab, l("21/09/2026", "LOJA COBERTURAS          1/5", "1440,00"), l("16/09/2026", "LOJA SERVICOS         1/6", "825,00"),
+    l("08/09/2026", "CONCRETEIRA                   2/6", "887,81"), l("20/08/2026", "CONCRETEIRA                   2/6", "648,78")];
+  assert.ok(M.efCabecalhoDeCartao(linhas) >= 0);
+  const r = M.movimentosDoCartao(linhas);
+  assert.strictEqual(r.final, "1234");
+  assert.deepStrictEqual(r.movimentos.map((m) => [m.data, m.valor, m.parcela || 1, m.de || 1]),
+    [["2026-09-21", -1440, 1, 5], ["2026-09-16", -825, 1, 6], ["2026-09-08", -887.81, 2, 6], ["2026-08-20", -648.78, 2, 6]]);
+  // fecha dia 10: tudo na fatura de outubro (as 2/6 de agosto e setembro também)
+  const comp = M.comCompetenciaDaFatura(r.movimentos, { diaFechamento: 10, diaVencimento: 15 });
+  assert.deepStrictEqual([...new Set(comp.map((m) => m.competencia))], ["2026-10"]);
+});
+
 for (const [nome, fn] of testes) {
   try { await fn(); console.log("  ok   " + nome); }
   catch (e) { falhas++; console.log("  FALHOU " + nome + "\n         " + e.message); }

@@ -5096,7 +5096,18 @@ function movimentosDoCartao(linhas, opcoes) {
   if (cData < 0) cData = col(/^data|^dt\b|^date$/);
   // o valor em reais: "Valor (em R$)" antes de "Valor (em US$)"
   let cValor = col(/em r\$|valor em r|valor r\$|valor \(r\$\)|valor brl/, naoReais);
-  if (cValor < 0) cValor = col(/valor|amount|^r\$|montante/, naoReais);
+  if (cValor < 0) {
+    // mais de uma coluna de valor ("Valor Moeda Local", "IOF", "Valor"): fica
+    // a que tem número nas linhas — a Cora deixa "Valor Moeda Local" vazia
+    const candidatas = cab.map((c, i) => i).filter((i) => /valor|amount|^r\$|montante/.test(cab[i]) && !naoReais.test(cab[i]));
+    const comNumero = (i) => linhas.slice(h + 1).filter((l) => { const v = efValorDeTexto(String(((l || [])[i]) == null ? "" : l[i])); return v != null && v !== 0; }).length;
+    let melhor = -1;
+    for (const i of candidatas) {
+      const n = comNumero(i);
+      if (melhor < 0 || n > comNumero(melhor) || (n === comNumero(melhor) && /^valor$/.test(cab[i]))) melhor = i;
+    }
+    cValor = melhor;
+  }
   // o final do cartão: a coluna "final" antes da "nome no cartão"
   const cCartao = col(/final/, /valor/) >= 0 ? col(/final/, /valor/) : col(/cart/, /valor/);
   const cParcela = col(/parcel|installment/);
