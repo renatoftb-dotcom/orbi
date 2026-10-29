@@ -14416,7 +14416,10 @@ async function efTabelaDoArquivo(arquivo) {
     // mesma conta é reconhecido (o formato é igual em todo banco)
     const doOfx = (n) => ((new RegExp("<" + n + ">([^<\\r\\n]+)", "i").exec(bruto) || [])[1] || "").trim();
     const contaDoArquivo = [doOfx("BANKID"), doOfx("BRANCHID"), doOfx("ACCTID")].filter(Boolean).join("/");
-    return { linhas, aba: "OFX", abas: [], ...(contaDoArquivo ? { contaDoArquivo } : {}) };
+    // o banco (nome e código): o primeiro arquivo de uma conta com o nome
+    // do banco ("Cora") vai para ela sem perguntar
+    const dicaDoBanco = [doOfx("ORG"), efNomeDoBancoPeloCodigo(doOfx("BANKID") || doOfx("FID"))].filter(Boolean).join(" ");
+    return { linhas, aba: "OFX", abas: [], ...(contaDoArquivo ? { contaDoArquivo } : {}), ...(dicaDoBanco ? { dicaDoBanco } : {}) };
   }
   // planilha XML do Excel 2003 (alguns bancos exportam assim, com nome .xls)
   if (/<Workbook[^>]*urn:schemas-microsoft-com:office:spreadsheet/i.test(bruto.slice(0, 3000))) {
@@ -17209,6 +17212,19 @@ const EF_BANCOS_PELO_CODIGO = {
 function efNomeDoBancoPeloCodigo(codigo) {
   const c = String(codigo || "").replace(/\D/g, "");
   return c ? (EF_BANCOS_PELO_CODIGO[c.padStart(3, "0").slice(-3)] || "") : "";
+}
+// A conta do arquivo pelo banco: a pista ("Cora SCD SA cora", "sicoob
+// bancoob") contra o nome das contas cadastradas. Só quando UMA conta bate —
+// duas contas no mesmo banco continuam perguntando.
+const EF_PALAVRAS_DE_BANCO_GENERICAS = new Set(["banco", "bank", "sa", "s", "a", "scd", "scfi", "do", "da", "de", "dos", "das",
+  "conta", "contas", "corrente", "instituicao", "pagamento", "pagamentos", "financeira", "credito", "cooperativa", "ltda", "me",
+  "digital", "brasil", "principal"]);
+function contaPeloBancoDoArquivo(contas, dica) {
+  const pal = (t) => efSemAcento(t || "").replace(/[^a-z0-9]+/g, " ").split(" ").filter((w) => w.length >= 2 && !EF_PALAVRAS_DE_BANCO_GENERICAS.has(w));
+  const doBanco = new Set(pal(dica));
+  if (!doBanco.size) return "";
+  const batem = (contas || []).filter((c) => c && c.id && pal(c.nome).some((w) => doBanco.has(w)));
+  return batem.length === 1 ? batem[0].id : "";
 }
 
 // O cartão do arquivo:
@@ -22949,6 +22965,11 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       const chaveOfx = formatoPadrao && x.contaDoArquivo ? x.aba.toLowerCase() + ":" + x.contaDoArquivo : "";
       let contaId = x.destino || contaDoArquivoPeloConteudo(fin, contasBanco, crus) || "";
       if (!contaId && chaveOfx) contaId = (fin.arquivosDasContas || {})[chaveOfx] || "";
+      // primeira vez deste OFX/CNAB: o banco dele contra o nome das contas
+      if (!contaId && formatoPadrao) {
+        const dica = x.dicaDoBanco || efNomeDoBancoPeloCodigo(String(x.contaDoArquivo || "").split("/")[0]);
+        contaId = contaPeloBancoDoArquivo(contasBanco, dica);
+      }
       if (!contaId && lembrado && lembrado.contaBancariaId && !formatoPadrao) contaId = lembrado.contaBancariaId;
       // uma conta só e nenhum cartão: só pode ser dela. Com cartão, o arquivo
       // sem marca de fatura pode ser a fatura — pergunta
