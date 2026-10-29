@@ -1323,6 +1323,15 @@ export default function ModuloClientesFornecedores() {
       syncedRef.current = saved;
       carregouDoServidorRef.current = true;
       setBackendOffline(false);
+      // Compra no cartão do escritório que ainda está inteira na obra (de
+      // antes da regra) ou parcela com a fatura fechada em outro aparelho:
+      // acerta ao abrir — o save divide e marca as parcelas pagas.
+      if (typeof obrasComCartaoEmParcelas === "function" && Array.isArray(saved && saved.obras)) {
+        const cartoesEsc = (((saved || {}).escritorio || {}).cartoes) || [];
+        if (obrasComCartaoEmParcelas(saved.obras, saved.lancamentos || [], cartoesEsc) !== saved.obras) {
+          Promise.resolve(save((d) => ({ ...d }))).catch(() => {});
+        }
+      }
     }
     catch(e) {
       console.error("Erro ao carregar dados do servidor:", e);
