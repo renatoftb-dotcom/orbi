@@ -17216,6 +17216,10 @@ function efNomeDoBancoPeloCodigo(codigo) {
 // A conta do arquivo pelo banco: a pista ("Cora SCD SA cora", "sicoob
 // bancoob") contra o nome das contas cadastradas. Só quando UMA conta bate —
 // duas contas no mesmo banco continuam perguntando.
+// Formatos de CSV conhecidos (as colunas do cabeçalho) e o banco de cada um.
+const EF_BANCO_PELO_FORMATO = {
+  "data|transacao|tipo transacao|identificacao|valor": "cora",
+};
 const EF_PALAVRAS_DE_BANCO_GENERICAS = new Set(["banco", "bank", "sa", "s", "a", "scd", "scfi", "do", "da", "de", "dos", "das",
   "conta", "contas", "corrente", "instituicao", "pagamento", "pagamentos", "financeira", "credito", "cooperativa", "ltda", "me",
   "digital", "brasil", "principal"]);
@@ -22906,13 +22910,13 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     let cartoes = cartoesDoEscritorio(data);
     let mudouCartoes = false;
     let layoutsNovos = layouts;
-    const feitos = [], esperando = [], meses = [];
+    const feitos = [], esperando = [], meses = [], problemas = [];
     const agora = new Date().toISOString();
     const hoje = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
     const nomeDaConta = (id) => (contasBanco.find((c) => c.id === id) || {}).nome || "conta";
     const fechouTexto = (lista) => (lista.length ? ` (${lista.map((m) => efMesPorExtenso(m)).join(" e ")} já fechado: ficou como estava)` : "");
     for (const x of lidos) {
-      if (x.erro) { feitos.push(`${x.nome}: não consegui ler — ${x.erro}`); continue; }
+      if (x.erro) { problemas.push(`${x.nome}: ${x.erro}`); continue; }
       const origemDoArquivo = x.aba && !["OFX", "HTML", "CNAB"].includes(x.aba) ? `${x.nome} · aba “${x.aba}”` : x.nome;
       const formatoPadrao = x.aba === "OFX" || x.aba === "CNAB";
       // fatura de cartão: pelo cabeçalho de fatura, pelo formato que já foi
@@ -22923,7 +22927,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         : (!x.destino && formatoDoCartao && formatoDoCartao.cartaoId && cartaoPorId(cartoes, formatoDoCartao.cartaoId) ? formatoDoCartao.cartaoId : "");
       if (destinoCartao || (!x.destino && efCabecalhoDeCartao(x.linhas) >= 0)) {
         const lido = movimentosDoCartao(x.linhas, { forcar: !!destinoCartao });
-        if (lido.erro || !lido.movimentos.length) { feitos.push(`${x.nome}: ${lido.erro || "nenhuma compra na fatura"}`); continue; }
+        if (lido.erro || !lido.movimentos.length) { problemas.push(`${x.nome}: ${lido.erro || "li como fatura de cartão, mas não achei nenhuma compra"}`); continue; }
         // a pista: o banco do arquivo, o nome dele e o texto das compras (a bandeira)
         const dica = [x.dicaDoCartao, x.nome, ...(x.linhas || []).slice(0, 40).map((l) => (l || []).join(" "))].join(" ");
         const cartao = destinoCartao ? cartaoPorId(cartoes, destinoCartao) : cartaoDoArquivo(cartoes, lido.final, dica);
@@ -22967,10 +22971,12 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       if (!contaId && chaveOfx) contaId = (fin.arquivosDasContas || {})[chaveOfx] || "";
       // primeira vez deste OFX/CNAB: o banco dele contra o nome das contas
       if (!contaId && formatoPadrao) {
-        const dica = x.dicaDoBanco || efNomeDoBancoPeloCodigo(String(x.contaDoArquivo || "").split("/")[0]);
+        const dica = [x.dicaDoBanco || efNomeDoBancoPeloCodigo(String(x.contaDoArquivo || "").split("/")[0]), x.nome].join(" ");
         contaId = contaPeloBancoDoArquivo(contasBanco, dica);
       }
       if (!contaId && lembrado && lembrado.contaBancariaId && !formatoPadrao) contaId = lembrado.contaBancariaId;
+      // CSV/Excel sem memória: o banco pelo formato conhecido ou pelo nome do arquivo
+      if (!contaId && !formatoPadrao) contaId = contaPeloBancoDoArquivo(contasBanco, [x.nome, EF_BANCO_PELO_FORMATO[mapa.assinatura] || ""].join(" "));
       // uma conta só e nenhum cartão: só pode ser dela. Com cartão, o arquivo
       // sem marca de fatura pode ser a fatura — pergunta
       if (!contaId && !variasContas && !cartoes.some((c) => c && c.ativo !== false)) contaId = CONTA_BANCARIA_PRINCIPAL;
@@ -22989,9 +22995,12 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       }
       const r = extratosComArquivo(ext, movs, origemDoArquivo, agora, { fechamentos, contaId });
       fin = financeiroComExtratos(fin, contaId, r.extratos);
+      // o formato fica lembrado com a conta: o próximo arquivo igual vai sozinho
       if (mapa.assinatura && !mapa.lembrado) {
         layoutsNovos = { ...layoutsNovos, [mapa.assinatura]: { colunas: mapa.colunas, visto: hoje,
-          ...(variasContas && !formatoPadrao ? { contaBancariaId: contaId } : {}) } };
+          ...(!formatoPadrao ? { contaBancariaId: contaId } : {}) } };
+      } else if (mapa.assinatura && lembrado && !lembrado.contaBancariaId && !formatoPadrao) {
+        layoutsNovos = { ...layoutsNovos, [mapa.assinatura]: { ...lembrado, contaBancariaId: contaId } };
       }
       if (chaveOfx) fin = { ...fin, arquivosDasContas: { ...(fin.arquivosDasContas || {}), [chaveOfx]: contaId } };
       meses.push(...r.meses);
@@ -23015,7 +23024,9 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       setMesFecho(abertos[abertos.length - 1]);
       feitos.push(`abri ${efMesPorExtenso(abertos[abertos.length - 1])}`);
     }
-    if (feitos.length) setAviso("Guardado — " + feitos.join(" · ") + (esperando.length ? ` · ${esperando.length === 1 ? "1 arquivo espera" : esperando.length + " arquivos esperam"} você dizer de onde é` : ""));
+    const naoLi = problemas.length ? `Não li ${problemas.join(" · ")}` : "";
+    if (feitos.length) setAviso("Guardado — " + feitos.join(" · ") + (esperando.length ? ` · ${esperando.length === 1 ? "1 arquivo espera" : esperando.length + " arquivos esperam"} você dizer de onde é` : "") + (naoLi ? " · " + naoLi : ""));
+    else if (naoLi) setAviso(naoLi + (esperando.length ? ` · ${esperando.length === 1 ? "1 arquivo espera" : esperando.length + " arquivos esperam"} você dizer de onde é` : ""));
     else if (esperando.length) setAviso(`${esperando.length === 1 ? "1 arquivo espera" : esperando.length + " arquivos esperam"} você dizer de onde é.`);
   }
   // O arquivo que esperava: a pessoa diz de onde é. Sem colunas reconhecidas,

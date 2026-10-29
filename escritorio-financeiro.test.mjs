@@ -3791,6 +3791,9 @@ teste("Conta do OFX pelo banco: o nome da conta casa com o banco do arquivo (uma
   assert.strictEqual(M.contaPeloBancoDoArquivo(contas, M.efNomeDoBancoPeloCodigo("756")), "");              // nenhuma Sicoob
   assert.strictEqual(M.contaPeloBancoDoArquivo([...contas, { id: "s", nome: "Sicoob" }], "sicoob bancoob"), "s");
   assert.strictEqual(M.contaPeloBancoDoArquivo([...contas, { id: "c2", nome: "Cora reserva" }], "Cora SCD SA cora"), "");  // duas Cora: pergunta
+  // CSV: o nome do arquivo ("extrato-sicoob-outubro.csv") também é pista
+  assert.strictEqual(M.contaPeloBancoDoArquivo([...contas, { id: "s", nome: "Sicoob" }], "extrato-sicoob-outubro.csv"), "s");
+  assert.strictEqual(M.contaPeloBancoDoArquivo([...contas, { id: "s", nome: "Sicoob" }], "leo-padovan-projetos-e-construcoes_01102026.csv"), "");
   assert.strictEqual(M.contaPeloBancoDoArquivo(contas, "Banco SA"), "");                                       // só palavra genérica
 });
 
