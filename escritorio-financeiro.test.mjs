@@ -3601,11 +3601,11 @@ teste("faturas de cartão de vários bancos: data da compra, valor em reais, par
   // estabelecimento e portador; linha de total fora
   const xp = ler("Data;Estabelecimento;Portador;Valor;Parcela\n02/09/2026;POSTO;FULANO;R$ 200,00;-\n03/09/2026;LOJA;FULANO;R$ 90,00;2 de 4\n30/09/2026;Total da fatura;;R$ 290,00;");
   assert.deepStrictEqual(xp.movimentos.map((m) => [m.valor, m.parcela || 0]), [[-200, 0], [-90, 2]]);
-  // sem nenhuma marca de fatura: não é reconhecido sozinho...
+  // sem marca de fatura no cabeçalho: reconhecido pelo conteúdo ("Compra à
+  // vista", "Parcela 2 de 6") — a parcela vem de outra coluna de texto
   const semMarca = "Data,Lançamento,Categoria,Tipo,Valor\n02/09/2026,PADARIA,Alimentação,Compra à vista,\"R$ 25,00\"\n04/09/2026,LOJA,Casa,Parcela 2 de 6,\"R$ 100,00\"";
   assert.strictEqual(M.efCabecalhoDeCartao(tsv(semMarca)), -1);
-  assert.ok(ler(semMarca).erro);
-  // ...mas, dito que é cartão, lê: a parcela vem de outra coluna de texto
+  assert.ok(!ler(semMarca).erro);
   const inter = ler(semMarca, { forcar: true });
   assert.deepStrictEqual(inter.movimentos.map((m) => [m.valor, m.parcela || 0, m.de || 0]), [[-25, 0, 0], [-100, 2, 6]]);
   // extrato de conta não vira fatura

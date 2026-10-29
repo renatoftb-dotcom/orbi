@@ -1331,6 +1331,7 @@ function efCompetencia(txt) {
   return "";
 }
 
+const EF_MESES_ABREV = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 function efData(txt) {
   const t = String(txt == null ? "" : txt).trim();
   let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
@@ -1343,6 +1344,15 @@ function efData(txt) {
   // aviso. Extrato bancário é deste século: aa → 20aa.
   m = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2})(?!\d)/.exec(t);
   if (m) return `20${m[3]}-${String(m[2]).padStart(2, "0")}-${String(m[1]).padStart(2, "0")}`;
+  // mês por extenso: "01 set 2026", "01/SET/2026", "1 de setembro de 2026"
+  m = /^(\d{1,2})(?:\s+de\s+|[\s\/.-]+)([a-zç]{3,})\.?(?:\s+de\s+|[\s\/.-]+)(\d{4})$/i.exec(t);
+  if (m) {
+    const mes = EF_MESES_ABREV.indexOf(efSemAcento(m[2]).slice(0, 3)) + 1;
+    if (mes > 0) return `${m[3]}-${String(mes).padStart(2, "0")}-${String(m[1]).padStart(2, "0")}`;
+  }
+  // AAAAMMDD colado (a Caixa exporta assim: "20260901")
+  m = /^(19|20)(\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/.exec(t);
+  if (m) return `${m[1]}${m[2]}-${m[3]}-${m[4]}`;
   return "";
 }
 
@@ -2469,7 +2479,7 @@ function efEhData(t) {
 
 // Número em formato brasileiro ou americano, com ou sem R$ e sinal.
 function efValorDeTexto(t) {
-  let s = String(t == null ? "" : t).replace(/\s|R\$| /gi, "").replace(/^\+/, "").trim();
+  let s = String(t == null ? "" : t).replace(/\s|R\$|\bBRL\b| /gi, "").replace(/^\+/, "").trim();
   if (!s) return null;
   // O Sicoob (e outros) escrevem o lado no fim: "108,02D" é saída,
   // "763,50C" é entrada; o "*" marca saldo bloqueado.
@@ -2507,7 +2517,11 @@ function efLinhaDoCabecalho(linhas, limite) {
     const seguintes = linhas.slice(i + 1, i + 6);
     const temDadoAbaixo = seguintes.some((s) => (s || []).some((c) => efEhData(c) || efValorDeTexto(c) != null));
     if (!temDadoAbaixo) continue;
-    const nota = textoCurto / cheias.length + (cheias.length >= 3 ? 0.2 : 0);
+    // o cabeçalho da tabela tem DATA logo abaixo; o do resumo antes dela
+    // ("INITIAL_BALANCE;CREDITS;…", Mercado Pago) só tem número
+    const proxima = seguintes.find((s) => (s || []).some((c) => String(c == null ? "" : c).trim() !== "")) || [];
+    const comDataAbaixo = proxima.some((c) => efEhData(c));
+    const nota = textoCurto / cheias.length + (cheias.length >= 3 ? 0.2 : 0) + (comDataAbaixo ? 0.5 : 0);
     if (nota > melhorNota && textoCurto >= 2) { melhorNota = nota; melhor = i; }
   }
   return melhor;
@@ -5069,6 +5083,26 @@ function efCabecalhoDeCartao(linhas) {
   return -1;
 }
 
+// Fatura sem as palavras de cartão no cabeçalho ("Data,Lançamento,Valor"):
+// é fatura se não tem coluna de saldo e (a) o texto antes da tabela fala em
+// fatura/cartão ("Itaucard", "final 4321"), ou (b) um quinto das linhas
+// tem marca de compra parcelada ("Parcela 2 de 6", "Compra à vista",
+// "LOJA      1/5"). "01/09" solto no histórico não conta: é data.
+const EF_MARCA_DE_PARCELA = /\bparc(ela)?s?\.?\s*\d{1,2}\s*(\/|de)\s*\d{1,2}\b|\bcompra a vista\b|\s{2,}\d{1,2}\/\d{1,2}$|^\d{1,2} de \d{1,2}$/;
+function efPareceFatura(linhas) {
+  const h = efLinhaDoCabecalho(linhas || []);
+  if (h < 0) return false;
+  const cab = (linhas[h] || []).map((c) => efSemAcento(c));
+  if (cab.some((c) => /saldo|balance|deb_cred|^d\/c$/.test(c))) return false;
+  if (cab.filter((c) => /credito|debito|entrada|saida/.test(c)).length >= 2) return false;
+  const antes = linhas.slice(0, h).map((l) => (l || []).join(" ")).join(" ");
+  if (/fatura|cartao|\bcard\b|final \d{4}|itaucard|vencimento da fatura/.test(efSemAcento(antes))) return true;
+  const corpo = linhas.slice(h + 1).filter((l) => (l || []).some((c) => efData(c)));
+  if (corpo.length < 2) return false;
+  const marcadas = corpo.filter((l) => (l || []).some((c) => EF_MARCA_DE_PARCELA.test(efSemAcento(String(c == null ? "" : c).trim())))).length;
+  return marcadas / corpo.length >= 0.2;
+}
+
 // "Parcela 2/6", "PARC 02/06", "2 de 6" — sem confundir com a data.
 function efParcelaDoTexto(t) {
   const s = efSemAcento(t);
@@ -5079,53 +5113,128 @@ function efParcelaDoTexto(t) {
   return { parcela: k, de: n };
 }
 
+// As colunas da fatura: pelo NOME quando o conteúdo confirma, senão pelo
+// CONTEÚDO das linhas. Cada banco monta a fatura de um jeito — "Valor Moeda
+// Local" vazia (Cora), "Valor (em US$)" antes do "Valor (em R$)" (C6), o
+// final do cartão (8821) que também é número, a data ISO (Nubank) que vira
+// número se lida como valor. O que se olha em cada coluna: quantas linhas
+// têm data, número, texto, parcela ("2/6") e um final de 4 dígitos.
+function colunasDaFatura(linhas, h) {
+  const cab = (linhas[h] || []).map((c) => efSemAcento(c));
+  const corpo = (linhas || []).slice(h + 1, h + 201).filter((l) => (l || []).some((c) => String(c == null ? "" : c).trim()));
+  const n = Math.max(1, corpo.length);
+  const largura = Math.max(cab.length, ...corpo.map((l) => (l || []).length), 0);
+  const estat = [];
+  for (let c = 0; c < largura; c++) {
+    let datas = 0, semAno = 0, numeros = 0, textos = 0, parcelas = 0, finais = 0, letras = 0, vazias = 0;
+    for (const l of corpo) {
+      const v = String((l || [])[c] == null ? "" : l[c]).trim();
+      if (!v) { vazias++; continue; }
+      if (efData(v)) { datas++; continue; }
+      if (/^\d{2}[\/.-]\d{2}$/.test(v) || /^\d{1,2}[\s\/.-]+(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-z]*\.?$/i.test(efSemAcento(v))) { semAno++; continue; }
+      if (/^\d{4}$/.test(v) || /^[*x.\s\d]*\d{4}$/i.test(v) && /[*x]/i.test(v)) finais++;
+      if (efParcelaDoTexto(v) && v.length <= 12) parcelas++;
+      const num = efValorDeTexto(v);
+      if (num != null && num !== 0 && !/^\d{4}$/.test(v)) numeros++;
+      if (/[a-z]{3,}/i.test(efSemAcento(v))) { textos++; letras += v.length; }
+    }
+    estat.push({ c, nome: cab[c] || "", datas: datas / n, semAno: semAno / n, numeros: numeros / n, textos: textos / n, parcelas: parcelas / n,
+      finais: finais / n, tamanho: textos ? letras / textos : 0, vazias: vazias / n });
+  }
+  const pelo = (re, nao) => estat.filter((e) => re.test(e.nome) && !(nao && nao.test(e.nome)));
+  const naoReais = /dolar|us\$|usd|em us|cotacao|conversao|moeda estrangeira|iof|cambio/;
+  // data: a da compra primeiro (há fatura com a de lançamento também)
+  const comData = estat.filter((e) => e.datas >= 0.6);
+  const data = (pelo(/data (da|de) compra|data da transacao|^data compra/).find((e) => e.datas >= 0.6)
+    || pelo(/^data|^dt\b|^date$/).find((e) => e.datas >= 0.6) || comData.sort((a, b) => b.datas - a.datas)[0]
+    // sem ano ("01/09"): só a coluna que se chama data
+    || pelo(/^data|^dt\b|^date$/).find((e) => e.semAno >= 0.6) || { c: -1 }).c;
+  // final do cartão: pelo nome, ou a coluna com 4 dígitos em quase todas as linhas
+  const final = ((pelo(/final/, /valor/)[0]) || (pelo(/cart/, /valor|categoria/).find((e) => e.finais > 0.5))
+    || estat.find((e) => e.finais >= 0.8 && e.c !== data) || { c: -1 }).c;
+  const parcela = (pelo(/parcel|installment/, /valor/)[0] || estat.find((e) => e.c !== data && e.parcelas >= 0.5 && e.textos < 0.5) || { c: -1 }).c;
+  // valor: só coluna com número; o nome desempata (R$ > "valor" > o resto)
+  const usadas = new Set([data, final, parcela]);
+  const comNumero = estat.filter((e) => !usadas.has(e.c) && e.numeros >= 0.5 && !naoReais.test(e.nome));
+  const peso = (e) => (/em r\$|valor em r|valor r\$|\(r\$\)|valor brl|^r\$$/.test(e.nome) ? 3
+    : /^valor$|^amount$|^montante$/.test(e.nome) ? 2 : /valor|amount|montante|r\$/.test(e.nome) ? 1 : 0);
+  const valor = (comNumero.sort((a, b) => (peso(b) - peso(a)) || (b.numeros - a.numeros))[0] || { c: -1 }).c;
+  usadas.add(valor);
+  // descrição: pelo nome, senão a coluna de texto mais comprida
+  const textoDe = estat.filter((e) => !usadas.has(e.c) && e.textos >= 0.5);
+  const historico = (pelo(/descri|estabelec|historico|lancamento|transac|loja|^title$|merchant|detalhe/, /data|valor|final|categoria|tipo/)
+    .find((e) => !usadas.has(e.c) && e.textos >= 0.5)
+    || textoDe.filter((e) => !/categoria|tipo|nome no|portador|titular|moeda/.test(e.nome)).sort((a, b) => b.tamanho - a.tamanho)[0]
+    || { c: -1 }).c;
+  return { data, valor, historico, final, parcela };
+}
+
+// Para a pessoa apontar as colunas da fatura que não deu para ler: cada
+// coluna com o nome e um exemplo do que tem nela, e o palpite de cada uma.
+function colunasParaEscolher(linhas) {
+  const l = linhas || [];
+  let h = efCabecalhoDeCartao(l);
+  if (h < 0) h = efLinhaDoCabecalho(l);
+  // "cabeçalho" com data dentro é linha de compra: o arquivo não tem cabeçalho
+  if (h >= 0 && (l[h] || []).some((c) => efData(c))) h = -1;
+  const cab = h >= 0 ? (l[h] || []) : [];
+  const corpo = l.slice(h + 1).filter((r) => (r || []).some((c) => String(c == null ? "" : c).trim()));
+  const largura = Math.max(cab.length, ...corpo.slice(0, 20).map((r) => (r || []).length), 0);
+  const amostra = (i) => { const r = corpo.find((x) => String(((x || [])[i]) == null ? "" : x[i]).trim()); return r ? String(r[i]).trim() : ""; };
+  const opcoes = [];
+  for (let i = 0; i < largura; i++) {
+    const nome = String(cab[i] == null ? "" : cab[i]).trim() || `Coluna ${i + 1}`;
+    const ex = amostra(i);
+    opcoes.push({ i, rotulo: ex ? `${nome} — ${ex.slice(0, 24)}` : nome });
+  }
+  const sug = colunasDaFatura(l, h);
+  return { h, opcoes, sugestao: { data: sug.data, valor: sug.valor, historico: sug.historico } };
+}
+
 // As compras da fatura, no sinal do banco: compra é saída (negativa), o
 // crédito na fatura (estorno da loja) é entrada. O pagamento da própria
 // fatura não é compra e fica de fora.
 function movimentosDoCartao(linhas, opcoes) {
+  const o = opcoes || {};
   // com o cabeçalho de fatura; sem ele (a pessoa disse que é cartão), o
   // cabeçalho que a leitura de extrato acharia
   let h = efCabecalhoDeCartao(linhas);
-  if (h < 0 && (opcoes || {}).forcar) h = efLinhaDoCabecalho(linhas);
-  if (h < 0) return { erro: "não é fatura de cartão" };
-  const cab = (linhas[h] || []).map((c) => efSemAcento(c));
-  const col = (re, nao) => cab.findIndex((c) => re.test(c) && !(nao && nao.test(c)));
-  const naoReais = /dolar|us\$|usd|em us|cotacao|moeda estrangeira/;
-  // a data da COMPRA primeiro (há fatura com a data de lançamento também)
-  let cData = col(/data (da|de) compra|data da transacao|^data compra/);
-  if (cData < 0) cData = col(/^data|^dt\b|^date$/);
-  // o valor em reais: "Valor (em R$)" antes de "Valor (em US$)"
-  let cValor = col(/em r\$|valor em r|valor r\$|valor \(r\$\)|valor brl/, naoReais);
-  if (cValor < 0) {
-    // mais de uma coluna de valor ("Valor Moeda Local", "IOF", "Valor"): fica
-    // a que tem número nas linhas — a Cora deixa "Valor Moeda Local" vazia
-    const candidatas = cab.map((c, i) => i).filter((i) => /valor|amount|^r\$|montante/.test(cab[i]) && !naoReais.test(cab[i]));
-    const comNumero = (i) => linhas.slice(h + 1).filter((l) => { const v = efValorDeTexto(String(((l || [])[i]) == null ? "" : l[i])); return v != null && v !== 0; }).length;
-    let melhor = -1;
-    for (const i of candidatas) {
-      const n = comNumero(i);
-      if (melhor < 0 || n > comNumero(melhor) || (n === comNumero(melhor) && /^valor$/.test(cab[i]))) melhor = i;
-    }
-    cValor = melhor;
+  if (h < 0) {
+    if (!(o.forcar || o.colunas || efPareceFatura(linhas))) return { erro: "não é fatura de cartão" };
+    h = efLinhaDoCabecalho(linhas);
+    // "cabeçalho" com data dentro é compra: o arquivo não tem cabeçalho, e
+    // as colunas saem só do conteúdo (h = -1: todas as linhas são compra)
+    if (h >= 0 && (linhas[h] || []).some((c) => efData(c))) h = -1;
   }
-  // o final do cartão: a coluna "final" antes da "nome no cartão"
-  const cCartao = col(/final/, /valor/) >= 0 ? col(/final/, /valor/) : col(/cart/, /valor/);
-  const cParcela = col(/parcel|installment/);
-  let cHist = col(/descri|estabelec|historico|lancamento|transac|loja|^title$|merchant|detalhe/);
-  if (cHist === cCartao) cHist = -1;
-  // sem os nomes, a leitura de extrato acha data, valor e histórico pelo conteúdo
-  if (cData < 0 || cValor < 0 || cHist < 0) {
-    const m = detectarColunasTabela(linhas, { linhaCabecalho: h });
-    if (cData < 0 && m.colunas.data != null) cData = m.colunas.data;
-    if (cValor < 0 && m.colunas.valor != null) cValor = m.colunas.valor;
-    if (cHist < 0 && m.colunas.historico != null && m.colunas.historico !== cCartao) cHist = m.colunas.historico;
-  }
-  if (cData < 0 || cValor < 0) return { erro: "não achei a data ou o valor na fatura" };
+  const colunasDoArquivo = colunasDaFatura(linhas, h);
+  const escolhidas = o.colunas || {};
+  const pegar = (k) => (escolhidas[k] != null && escolhidas[k] !== "" ? Number(escolhidas[k]) : colunasDoArquivo[k]);
+  const cData = pegar("data"), cValor = pegar("valor"), cHist = pegar("historico");
+  const cCartao = colunasDoArquivo.final, cParcela = colunasDoArquivo.parcela;
+  if (cData < 0 || cValor < 0) return { erro: "não achei a data ou o valor na fatura", semColunas: true };
   const crus = [];
   const finais = {};
-  for (const l of linhas.slice(h + 1)) {
+  // fatura sem o ano na data ("01/09", Bradesco): o ano de hoje — ou o
+  // anterior, se a data cairia mais de um mês no futuro
+  const hoje = String(o.hoje || new Date().toISOString()).slice(0, 10);
+  // a linha tida como cabeçalho, com data na coluna apontada, é compra
+  const inicio = o.colunas && h >= 0 && efData(String(((linhas[h] || [])[cData]) == null ? "" : linhas[h][cData])) ? h : h + 1;
+  const comAno = (t) => {
+    const x = String(t || "").trim();
+    let m = /^(\d{1,2})[\/.-](\d{1,2})$/.exec(x);
+    const ext = /^(\d{1,2})[\s\/.-]+([a-zç]{3,})\.?$/i.exec(x);
+    if (!m && ext && EF_MESES_ABREV.indexOf(efSemAcento(ext[2]).slice(0, 3)) >= 0) m = [x, ext[1], String(EF_MESES_ABREV.indexOf(efSemAcento(ext[2]).slice(0, 3)) + 1)];
+    if (!m) return "";
+    let a = Number(hoje.slice(0, 4));
+    const d = (ano) => `${ano}-${String(m[2]).padStart(2, "0")}-${String(m[1]).padStart(2, "0")}`;
+    if (somarCompetencia(d(a).slice(0, 7), -1) > hoje.slice(0, 7)) a -= 1;
+    return d(a);
+  };
+  // o final escrito antes da tabela ("final 4321")
+  const fimAntes = (/final\D{0,6}(\d{4})\b/.exec(efSemAcento((h > 0 ? linhas.slice(0, h) : []).map((l) => (l || []).join(" ")).join(" "))) || [])[1] || "";
+  for (const l of linhas.slice(inicio)) {
     const cel = (c) => (c < 0 ? "" : String((l || [])[c] == null ? "" : l[c]).trim());
-    const data = efData(cel(cData));
+    const data = efData(cel(cData)) || comAno(cel(cData));
     const v = efValorDeTexto(cel(cValor));
     if (!data || v == null || !v) continue;
     const hist = cel(cHist >= 0 ? cHist : -1) || (l || []).filter((x, i) => i !== cData && i !== cValor && i !== cCartao).join(" ").trim();
@@ -5139,6 +5248,7 @@ function movimentosDoCartao(linhas, opcoes) {
     const p = efParcelaDoTexto(cel(cParcela)) || efParcelaDoTexto(hist) || efParcelaDoTexto(outras);
     crus.push({ data, v, historico: hist.replace(/\s+/g, " "), ...(p || {}) });
   }
+  if (!crus.length) return { erro: "não achei nenhuma linha com data e valor", semColunas: true };
   // o lado da compra é o da maioria das linhas que não são pagamento
   const ehPagamento = (x) => /pagamento|pagto|pgto|pag fatura|pagamento recebido/.test(efSemAcento(x.historico)) && !x.parcela;
   const compras = crus.filter((x) => !ehPagamento(x));
@@ -5151,7 +5261,7 @@ function movimentosDoCartao(linhas, opcoes) {
     movimentos.push({ data: x.data, valor: efCentavos(ehCompra ? -Math.abs(x.v) : Math.abs(x.v)),
       historico: x.historico, ...(x.parcela ? { parcela: x.parcela, de: x.de } : {}) });
   }
-  const final = Object.keys(finais).sort((a, b) => finais[b] - finais[a])[0] || "";
+  const final = Object.keys(finais).sort((a, b) => finais[b] - finais[a])[0] || fimAntes;
   return { final, movimentos };
 }
 
@@ -8684,24 +8794,35 @@ function EntradaDosExtratos({ mes, unificado, contas, receber, ocupado, aviso, a
 function ArquivosEsperando({ unificado, contas }) {
   const S = EF_ESTILO;
   const [escolha, setEscolha] = useState({});
+  const [colunas, setColunas] = useState({});      // { [p.id]: { data, valor, historico } }
   const lista = (unificado && unificado.pendentes) || [];
   if (!lista.length) return null;
+  const sel = { ...S.input, width: "auto", minWidth: 150, maxWidth: "100%", padding: "6px 9px", cursor: "pointer" };
   return (
     <div data-vk-pendentes="1" style={{ display: "grid", gap: 8 }}>
       {lista.map((p) => {
-        // arquivo de banco sem dono pode ser conta ou cartão (fatura sem marca)
+        // arquivo sem dono pode ser conta ou cartão (fatura sem marca)
         const cartoesOp = unificado.cartoes || [];
-        const opcoes = p.tipo === "cartao" ? cartoesOp : (contas || []).concat(p.semColunas ? [] : cartoesOp);
-        const v = escolha[p.id] || "";
+        const soCartao = p.tipo === "cartao";
+        const opcoes = soCartao ? cartoesOp : (contas || []).concat(cartoesOp);
+        const v = escolha[p.id] != null ? escolha[p.id] : (p.cartaoSugerido || (soCartao && cartoesOp.length === 1 ? cartoesOp[0].id : ""));
+        const ehCartao = cartoesOp.some((c) => c.id === v);
+        // fatura que não deu para ler: a pessoa aponta as colunas aqui mesmo
+        const naoLe = (soCartao || ehCartao) && (() => { const r = movimentosDoCartao(p.linhas || [], { forcar: true }); return !!r.erro || !r.movimentos.length; })();
+        const precisaColunas = (!!p.semColunas && (soCartao || ehCartao)) || naoLe;
+        const guia = precisaColunas ? colunasParaEscolher(p.linhas) : null;
+        const cols = precisaColunas ? { ...guia.sugestao, ...(colunas[p.id] || {}) } : null;
+        const colunasOk = !precisaColunas || (cols.data >= 0 && cols.valor >= 0 && cols.data !== cols.valor);
+        const mudarCol = (k, val) => setColunas((x) => ({ ...x, [p.id]: { ...(x[p.id] || {}), [k]: Number(val) } }));
         return (
           <div key={p.id} data-vk-pendente={p.nome} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap",
             padding: "8px 10px", border: "1px solid rgba(180,83,9,0.35)", background: "#fffbeb", borderRadius: 10, fontSize: 12.5 }}>
             <span style={{ flex: "1 1 220px", minWidth: 0, overflowWrap: "anywhere" }}><b>{p.nome}</b> — {p.motivo || "de onde é?"}</span>
             {opcoes.length > 0 && (
-              <select style={{ ...S.input, width: "auto", minWidth: 150, padding: "6px 9px", cursor: "pointer" }} value={v}
+              <select style={sel} value={v} data-vk-pendente-destino="1"
                 onChange={(e) => setEscolha((x) => ({ ...x, [p.id]: e.target.value }))}>
-                <option value="">{p.tipo === "cartao" ? "— cartão —" : cartoesOp.length && !p.semColunas ? "— conta ou cartão —" : "— conta —"}</option>
-                {p.tipo === "cartao" || !cartoesOp.length || p.semColunas
+                <option value="">{soCartao ? "— cartão —" : cartoesOp.length ? "— conta ou cartão —" : "— conta —"}</option>
+                {soCartao || !cartoesOp.length
                   ? opcoes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)
                   : (<>
                     <optgroup label="Extrato da conta">{(contas || []).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</optgroup>
@@ -8709,9 +8830,27 @@ function ArquivosEsperando({ unificado, contas }) {
                   </>)}
               </select>
             )}
+            {precisaColunas && (
+              <div data-vk-colunas-fatura="1" style={{ flexBasis: "100%", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+                <div style={{ flexBasis: "100%", fontSize: 12, color: "#78350f" }}>
+                  Não consegui ler esta fatura sozinho. Aponte as colunas uma vez — o formato fica lembrado para as próximas.
+                </div>
+                {[["data", "Data da compra"], ["valor", "Valor (R$)"], ["historico", "Descrição"]].map(([k, rot]) => (
+                  <label key={k} style={{ display: "grid", gap: 3, flex: "1 1 160px", minWidth: 0 }}>
+                    <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .4, color: "#6b7280" }}>{rot}</span>
+                    <select style={{ ...sel, width: "100%" }} value={cols[k] >= 0 ? cols[k] : ""} data-vk-coluna-fatura={k}
+                      onChange={(e) => mudarCol(k, e.target.value === "" ? -1 : e.target.value)}>
+                      <option value="">— escolha —</option>
+                      {guia.opcoes.map((o) => <option key={o.i} value={o.i}>{o.rotulo}</option>)}
+                    </select>
+                  </label>
+                ))}
+              </div>
+            )}
             {opcoes.length > 0 && (
-              <button style={{ ...S.btn, padding: "6px 12px", fontSize: 12, opacity: v ? 1 : .45 }} disabled={!v}
-                onClick={() => unificado.aoDestinar(p, v)}>{p.semColunas ? "Escolher colunas" : "Guardar"}</button>
+              <button data-vk-pendente-guardar="1" style={{ ...S.btn, padding: "6px 12px", fontSize: 12, opacity: v && colunasOk ? 1 : .45 }} disabled={!v || !colunasOk}
+                onClick={() => unificado.aoDestinar(p, v, precisaColunas ? { data: cols.data, valor: cols.valor, historico: cols.historico } : null)}>
+                {p.semColunas && !precisaColunas ? "Escolher colunas" : "Guardar"}</button>
             )}
             <button style={{ ...S.btnSec, padding: "6px 12px", fontSize: 12 }} onClick={() => unificado.aoDescartar(p)}>Descartar</button>
           </div>
@@ -10947,9 +11086,17 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       const formatoDoCartao = assinaturaDoArquivo ? (layoutsNovos || {})[assinaturaDoArquivo] : null;
       const destinoCartao = x.destino && cartaoPorId(cartoes, x.destino) ? x.destino
         : (!x.destino && formatoDoCartao && formatoDoCartao.cartaoId && cartaoPorId(cartoes, formatoDoCartao.cartaoId) ? formatoDoCartao.cartaoId : "");
-      if (destinoCartao || (!x.destino && efCabecalhoDeCartao(x.linhas) >= 0)) {
-        const lido = movimentosDoCartao(x.linhas, { forcar: !!destinoCartao });
-        if (lido.erro || !lido.movimentos.length) { problemas.push(`${x.nome}: ${lido.erro || "li como fatura de cartão, mas não achei nenhuma compra"}`); continue; }
+      if (destinoCartao || (!x.destino && (efCabecalhoDeCartao(x.linhas) >= 0 || efPareceFatura(x.linhas)))) {
+        const colunasCartao = x.colunasCartao || (formatoDoCartao && formatoDoCartao.colunasCartao) || null;
+        const lido = movimentosDoCartao(x.linhas, { forcar: !!destinoCartao, ...(colunasCartao ? { colunas: colunasCartao } : {}) });
+        if (lido.erro || !lido.movimentos.length) {
+          // não travar: a pessoa aponta data, valor e descrição, e o formato fica lembrado
+          if (lido.semColunas || lido.erro) {
+            esperando.push({ ...x, id: x.nome + "|" + agora + "|" + esperando.length, tipo: "cartao", semColunas: true,
+              cartaoSugerido: destinoCartao || "", motivo: "não consegui ler as colunas desta fatura — aponte a data, o valor e a descrição" });
+          } else problemas.push(`${x.nome}: li como fatura de cartão, mas não achei nenhuma compra`);
+          continue;
+        }
         // a pista: o banco do arquivo, o nome dele e o texto das compras (a bandeira)
         const dica = [x.dicaDoCartao, x.nome, ...(x.linhas || []).slice(0, 40).map((l) => (l || []).join(" "))].join(" ");
         const cartao = destinoCartao ? cartaoPorId(cartoes, destinoCartao) : cartaoDoArquivo(cartoes, lido.final, dica);
@@ -10962,8 +11109,9 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
           cartoes = cartoes.map((c) => (c.id === cartao.id ? { ...c, final: lido.final } : c)); mudouCartoes = true;
         }
         // o formato fica lembrado como deste cartão: a próxima fatura igual vai sozinha
-        if (assinaturaDoArquivo && x.destino && !formatoPadrao) {
-          layoutsNovos = { ...layoutsNovos, [assinaturaDoArquivo]: { cartaoId: cartao.id, visto: hoje } };
+        if (assinaturaDoArquivo && (x.destino || x.colunasCartao) && !formatoPadrao) {
+          layoutsNovos = { ...layoutsNovos, [assinaturaDoArquivo]: { cartaoId: cartao.id, visto: hoje,
+            ...(colunasCartao ? { colunasCartao } : {}) } };
         }
         const movs = comIdsDoCartao(comCompetenciaDaFatura(lido.movimentos, cartao), cartao.id);
         const r = faturasComArquivo(faturasGuardadasDoCartao(fin, cartao.id), movs, origemDoArquivo, agora,
@@ -11053,8 +11201,14 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   }
   // O arquivo que esperava: a pessoa diz de onde é. Sem colunas reconhecidas,
   // ele vai para a aba da conta, onde as colunas se escolhem à mão.
-  function destinarPendente(p, destino) {
+  function destinarPendente(p, destino, colunas) {
     if (!p || !destino) return;
+    // fatura de cartão: vai com as colunas apontadas (ou sem elas, pelo cartão)
+    if (cartaoPorId(cartoesAtivos, destino)) {
+      setPendentes((x) => x.filter((y) => y.id !== p.id));
+      guardarArquivosLidos([{ ...p, destino, ...(colunas ? { colunasCartao: colunas } : {}) }]).catch(console.error);
+      return;
+    }
     if (p.semColunas) {
       setPendentes((x) => x.filter((y) => y.id !== p.id));
       setContaFecho(destino);
