@@ -15303,6 +15303,49 @@ function sugestaoDoExtrato(movimento, lancamentos) {
     daObra: !!achado.origem };
 }
 
+// ── A conta de costume ──────────────────────────────────────────
+// O que já foi lançado do mesmo fornecedor (ou da mesma linha do banco, ou
+// com a mesma descrição) diz em que conta essa despesa costuma ir. Se a
+// conta escolhida agora é outra, o formulário avisa — só avisa: quem lança
+// decide. Precisa de pelo menos 2 lançamentos e 60% deles na mesma conta.
+function efChaveDaDescricao(t) {
+  return efPalavras(t, 4).filter((w) => !EF_PALAVRAS_DO_BANCO.has(w)).slice(0, 4).join(" ");
+}
+function contaDeCostume(f, lancamentos) {
+  const x = f || {};
+  if (!x.contaId || x.contaFonte === "obra") return null;
+  const atual = contaEscritorio(x.contaId);
+  if (!atual || atual.interna) return null;
+  const forn = String(x.fornecedor || "").trim();
+  const fornValido = forn && forn !== EF_FORNECEDOR_OUTROS;
+  const chaveBanco = chaveDoHistorico(x.historicoBanco);
+  const chaveDesc = efChaveDaDescricao(x.descricao);
+  const base = (lancamentos || []).filter((l) => l && l.contaId && l.id !== x.id && (l.origem || {}).tipo !== "fatura"
+    && contaEscritorio(l.contaId) && !contaEscritorio(l.contaId).interna);
+  const regras = [
+    ["fornecedor", x.fornecedorId ? (l) => l.fornecedorId === x.fornecedorId
+      : fornValido ? (l) => efSemAcento(l.fornecedor || "") === efSemAcento(forn) : null],
+    ["banco", chaveBanco ? (l) => !!l.historicoBanco && chaveDoHistorico(l.historicoBanco) === chaveBanco : null],
+    ["descricao", chaveDesc ? (l) => efChaveDaDescricao(l.descricao) === chaveDesc : null],
+  ];
+  for (const [por, bate] of regras) {
+    if (!bate) continue;
+    const iguais = base.filter(bate);
+    if (iguais.length < 2) continue;
+    const cont = {};
+    for (const l of iguais) cont[l.contaId] = (cont[l.contaId] || 0) + 1;
+    const d = efDominante(cont, 2);
+    if (!d) return null;                   // sem costume claro: nada a dizer
+    if (d.chave === x.contaId) return null; // está na conta de sempre
+    const conta = contaEscritorio(d.chave);
+    if (!conta) return null;
+    const nome = por === "fornecedor" ? (x.fornecedor || (iguais[0] || {}).fornecedor || "")
+      : por === "banco" ? String(x.historicoBanco || "").slice(0, 40) : String(x.descricao || "").trim();
+    return { contaId: d.chave, conta, vezes: d.vezes, total: d.total, por, nome };
+  }
+  return null;
+}
+
 // ── O palpite: quando não há linha igual para copiar ────────────
 // Lê o histórico do banco e o que já foi lançado (no escritório e nas
 // obras) e propõe o resto do lançamento, com o porquê de cada campo:
@@ -18944,6 +18987,30 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
         );
       })()}
       {campo("Descrição", <input style={S.input} value={f.descricao} onChange={(e) => set("descricao", e.target.value)} />, "descricao")}
+      {/* A conta de costume: o mesmo fornecedor (ou a mesma linha do banco,
+          ou a mesma descrição) sempre foi lançado noutra conta — avisa. */}
+      {(() => {
+        if (naObra) return null;
+        const c = contaDeCostume(f, lancamentos || []);
+        if (!c) return null;
+        const agora = (contaEscritorio(f.contaId) || {}).nome || "outra conta";
+        const quem = c.por === "fornecedor" ? <>Os lançamentos de <b>{c.nome}</b> costumam ir</>
+          : c.por === "banco" ? <>Esta linha do banco costuma ir</> : <>“{c.nome}” costuma ir</>;
+        return (
+          <div data-vk-conta-costume="1" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "9px 12px",
+            borderRadius: 10, background: "#fffbeb", border: "1px solid rgba(180,83,9,0.35)", fontSize: 12.5, color: "#78350f", lineHeight: 1.45 }}>
+            <span style={{ flex: "1 1 260px", minWidth: 0 }}>
+              ⚠ {quem} em <b>{c.conta.nome}</b> ({c.vezes} de {c.total} {c.total === 1 ? "lançamento" : "lançamentos"}). Agora está em <b>{agora}</b>.
+            </span>
+            <button type="button" data-vk-usar-costume="1" style={{ ...S.btnSec, padding: "5px 12px", fontSize: 12, color: "#0474f4", borderColor: "rgba(4,116,244,0.4)" }}
+              onClick={() => setF((p) => {
+                const us = (c.conta.unidades || []);
+                return { ...p, contaId: c.contaId, contaFonte: "escritorio", obraIdAlvo: "",
+                  unidadeId: us.length && !us.includes(p.unidadeId) ? us[0] : p.unidadeId };
+              })}>Usar {c.conta.nome}</button>
+          </div>
+        );
+      })()}
       {/* ── O custo, item a item ──
           A conta a pagar sempre foi por item; é daqui que saem o custo por
           etapa e a abertura por subconta. Escolher o insumo traz unidade,

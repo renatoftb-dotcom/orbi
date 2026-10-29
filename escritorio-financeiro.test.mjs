@@ -30,7 +30,7 @@ const M = new Function(src + `
            fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
-           competenciasDoCartao, composicaoDoExtrato, efCabecalhoDeCartao, efParcelaDoTexto, movimentosDoCartao, comCompetenciaDaFatura, comIdsDoCartao, faturasGuardadasDoCartao, faturasComArquivo, financeiroComFaturas, faturasComIgnorado, mesDoPagamentoDaFatura, cartaoDoArquivo, conferenciaDaFatura, contasDaObraParaACompraDoCartao, contasNoCartao, checagemSemTransferencias, somarChecagens, conferenciaUnificada, faturaParaALinhaDoBanco, lancamentoAntigoDaFatura, faturaNoLugarDoAntigo, parcelasAPagarDoCartao, aPagarDoEscritorio, efSomarMeses, planoParceladoNaConta, itensAPagarDoLancamento, parcelaAPagarParaALinha, lancamentoDaParcelaAPagar, aPagarComParcelaPaga, linhasDaBaseDoAPagar, aPagarSemParcela, resumoDoAPagar, contasParaReclassificar, travaDaReclassificacao, reclassificarLancamento, planoAPartirDa, efNomeDoBancoPeloCodigo, arquivoPareceDeOutraConta, parDaTransferencia, lancamentosDaTransferenciaComPar, contaDoArquivoPeloConteudo, CONTA_BANCARIA_PRINCIPAL, contasBancariasDoEscritorio, contaBancariaDoLancamento, lancamentosDaContaBancaria, extratosDaContaBancaria, financeiroComExtratos, comIdsDaContaBancaria, saldoBancoDaContaNoMes, comSaldoBancoDaConta, saldoPeloExtratoDaConta, lancamentosDaTransferencia, pareceEntreContas, contasDoLancamento,
+           competenciasDoCartao, composicaoDoExtrato, efCabecalhoDeCartao, efParcelaDoTexto, movimentosDoCartao, comCompetenciaDaFatura, comIdsDoCartao, faturasGuardadasDoCartao, faturasComArquivo, financeiroComFaturas, faturasComIgnorado, mesDoPagamentoDaFatura, cartaoDoArquivo, conferenciaDaFatura, contasDaObraParaACompraDoCartao, contasNoCartao, checagemSemTransferencias, somarChecagens, conferenciaUnificada, faturaParaALinhaDoBanco, lancamentoAntigoDaFatura, faturaNoLugarDoAntigo, parcelasAPagarDoCartao, aPagarDoEscritorio, efSomarMeses, planoParceladoNaConta, itensAPagarDoLancamento, parcelaAPagarParaALinha, lancamentoDaParcelaAPagar, aPagarComParcelaPaga, linhasDaBaseDoAPagar, aPagarSemParcela, resumoDoAPagar, contasParaReclassificar, travaDaReclassificacao, reclassificarLancamento, contaDeCostume, planoAPartirDa, efNomeDoBancoPeloCodigo, arquivoPareceDeOutraConta, parDaTransferencia, lancamentosDaTransferenciaComPar, contaDoArquivoPeloConteudo, CONTA_BANCARIA_PRINCIPAL, contasBancariasDoEscritorio, contaBancariaDoLancamento, lancamentosDaContaBancaria, extratosDaContaBancaria, financeiroComExtratos, comIdsDaContaBancaria, saldoBancoDaContaNoMes, comSaldoBancoDaConta, saldoPeloExtratoDaConta, lancamentosDaTransferencia, pareceEntreContas, contasDoLancamento,
            faturasFechadas, faturaParaFechar, lancamentosParaResultado, mesAnoPorExtenso, efDiaBR, fechadasDaCompra, compraEditada, compraMexeuNoDinheiro, faturaAjustada,
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas, ligaContaAoLancamento, lancamentosLigadosAsContas, contasLigadasAoLancamento,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
@@ -3758,6 +3758,31 @@ teste("Reclassificar: só a conta muda, dentro do mesmo grupo; a compra do cart�
   // diferença da fatura e compra de obra: trava
   assert.ok(M.travaDaReclassificacao({ ...l, id: "fatura:k:2026-02:resto", origem: { tipo: "faturaLinha" } }));
   assert.ok(M.travaDaReclassificacao({ ...l, id: "fatura:k:2026-02:1", origem: { tipo: "faturaLinha", obraId: "o1" } }));
+});
+
+teste("Conta de costume: avisa quando o fornecedor (ou a linha do banco, ou a descrição) sempre foi noutra conta", () => {
+  const L = (id, contaId, extra) => ({ id, tipo: "escritorio", contaId, unidadeId: "escritorio", valor: 200, ...extra });
+  const hist = [L("1", "jardim_limpeza", { fornecedorId: "am", fornecedor: "Amanda Limpeza", descricao: "Faxina escritório" }),
+    L("2", "jardim_limpeza", { fornecedorId: "am", fornecedor: "Amanda Limpeza", descricao: "Faxina" }),
+    L("3", "jardim_limpeza", { fornecedorId: "am", fornecedor: "Amanda Limpeza", descricao: "Faxina escritório" }),
+    L("4", "luz_agua_net", { fornecedor: "Outros", historicoBanco: "PAGTO CONTA LUZ CPFL 123", descricao: "Conta de luz" }),
+    L("5", "luz_agua_net", { fornecedor: "Outros", historicoBanco: "PAGTO CONTA LUZ CPFL 456", descricao: "Conta de luz" })];
+  // fornecedor
+  const c = M.contaDeCostume({ contaId: "utensilios", fornecedorId: "am", fornecedor: "Amanda Limpeza" }, hist);
+  assert.deepStrictEqual([c.contaId, c.vezes, c.total, c.por], ["jardim_limpeza", 3, 3, "fornecedor"]);
+  assert.strictEqual(M.contaDeCostume({ contaId: "jardim_limpeza", fornecedorId: "am" }, hist), null);   // conta de sempre
+  // linha do banco (fornecedor "Outros" não conta)
+  const b = M.contaDeCostume({ contaId: "desp_outros", fornecedor: "Outros", historicoBanco: "PAGTO CONTA LUZ CPFL 789" }, hist);
+  assert.deepStrictEqual([b.contaId, b.por], ["luz_agua_net", "banco"]);
+  // descrição
+  const d = M.contaDeCostume({ contaId: "desp_outros", descricao: "Faxina escritório" }, hist);
+  assert.deepStrictEqual([d.contaId, d.vezes, d.por], ["jardim_limpeza", 3, "descricao"]);   // "escritório" é palavra genérica: vale "faxina"
+  // um só lançamento antes, ou sem costume claro: não avisa
+  assert.strictEqual(M.contaDeCostume({ contaId: "desp_outros", descricao: "Pintura da fachada" }, hist.concat([L("8", "imobilizado", { descricao: "Pintura da fachada" })])), null);
+  const dividido = hist.concat([L("6", "utensilios", { fornecedorId: "am" }), L("7", "utensilios", { fornecedorId: "am" }), L("9", "utensilios", { fornecedorId: "am" })]);
+  assert.strictEqual(M.contaDeCostume({ contaId: "desp_outros", fornecedorId: "am" }, dividido), null);
+  // editando o próprio lançamento: ele não conta
+  assert.strictEqual(M.contaDeCostume({ id: "1", contaId: "utensilios", fornecedorId: "am" }, hist.slice(0, 2)), null);
 });
 
 for (const [nome, fn] of testes) {
