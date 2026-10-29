@@ -330,6 +330,66 @@ function composicaoDoExtrato(lancamentos, alvo, periodo) {
   return { linhas, total: efCentavos(total) };
 }
 
+// ── Reclassificar: trocar a conta contábil de um lançamento ─────
+// Só entre contas do mesmo grupo (despesa por despesa, receita por
+// receita) que aceitam a unidade do lançamento: o saldo do banco não muda,
+// muda só a linha do resultado em que o valor aparece.
+function contasParaReclassificar(l) {
+  const atual = contaEscritorio((l || {}).contaId);
+  if (!atual) return [];
+  return PLANO_CONTAS_ESCRITORIO.filter((c) => c.grupo === atual.grupo && !c.interna && c.id !== atual.id
+    && (!(c.unidades || []).length || c.unidades.indexOf(l.unidadeId) >= 0));
+}
+// O que impede reclassificar por aqui (texto) — ou "" quando pode.
+function travaDaReclassificacao(l) {
+  const o = (l && l.origem) || {};
+  if (!l || !l.id) return "Lançamento sem identificação.";
+  if (o.tipo === "faturaLinha") {
+    if (/:resto$/.test(String(l.id))) return "É a diferença da fatura (juros, tarifas): fica em Cartão de crédito.";
+    if (o.obraId) return "Esta compra do cartão é de uma obra: a conta dela muda na obra.";
+  }
+  if (lancamentoVeioDaObra(l)) return "Este lançamento vem da obra: a conta dele muda lá, no Contas a pagar da obra.";
+  if (ehLigacaoDaGestao(o)) return "É receita do contrato de gestão: fica em Receita Gestão.";
+  if (!contasParaReclassificar(l).length) return "Não há outra conta do mesmo grupo para esta unidade.";
+  return "";
+}
+// Troca a conta. `id` é o da linha do resultado: um lançamento, ou uma
+// compra dentro da fatura ("fatura:…:3") — aí muda a compra (a do
+// escritório, em todas as faturas em que ela tem parcela).
+function reclassificarLancamento(lancamentos, id, contaId) {
+  const lista = lancamentos || [];
+  const nova = contaEscritorio(contaId);
+  if (!nova) return { erro: "Escolha a conta." };
+  const direto = lista.find((x) => x && x.id === id);
+  if (direto) {
+    if (direto.contaId === contaId) return { lancamentos: lista, mudou: 0 };
+    if (!contasParaReclassificar(direto).some((c) => c.id === contaId)) return { erro: "Esta conta não serve para este lançamento." };
+    return { lancamentos: lista.map((x) => (x && x.id === id ? { ...x, contaId } : x)), mudou: 1 };
+  }
+  const m = /^(.*):(\d+)$/.exec(String(id || ""));
+  const fat = m ? lista.find((x) => x && x.id === m[1] && (x.origem || {}).tipo === "fatura") : null;
+  const linha = fat && Array.isArray(fat.linhas) ? fat.linhas[Number(m[2]) - 1] : null;
+  if (!linha) return { erro: "Lançamento não encontrado." };
+  if (linha.obraId || linha.origem === "obra") return { erro: "Esta compra do cartão é de uma obra: a conta dela muda na obra." };
+  if (!contaQueSaiDoBanco(contaId)) return { erro: "Compra no cartão só vai para conta de saída." };
+  const ref = linha.refId || "";
+  const idx = Number(m[2]) - 1;
+  // a mesma compra: pelo id dela (em todas as faturas) ou, sem id, só esta linha
+  const ehAMesma = (fx, y, i) => (ref ? !!y && y.refId === ref : fx.id === fat.id && i === idx);
+  let mudou = 0;
+  const novos = lista.map((x) => {
+    if (!x) return x;
+    if (ref && x.id === ref) { mudou++; return { ...x, contaId }; }
+    if ((x.origem || {}).tipo !== "fatura" || !Array.isArray(x.linhas)) return x;
+    let mexeu = false;
+    const linhas = x.linhas.map((y, i) => (ehAMesma(x, y, i) ? (mexeu = true, { ...y, contaId, destinoContaId: contaId }) : y));
+    if (!mexeu) return x;
+    mudou++;
+    return { ...x, linhas };
+  });
+  return { lancamentos: novos, mudou };
+}
+
 // Quanto já foi investido em cada empreendimento e o que sobrou na venda.
 // Enquanto não vende, `resultado` é null — investimento em andamento não é
 // lucro nem prejuízo, é dinheiro parado em imóvel.
@@ -5682,7 +5742,7 @@ function efDinheiro(v) {
 
 // O extrato: blocos em linhas, meses em colunas. Mesma leitura da planilha,
 // com cada bloco somando só o que é dele.
-function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancamentos, clientes }) {
+function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancamentos, clientes, aoReclassificar }) {
   const S = EF_ESTILO;
   // Dois cliques (ou dois toques) num número abrem o que o compõe. O toque
   // duplo é contado aqui, e não pelo dblclick do navegador, que no celular
@@ -5760,7 +5820,7 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancam
       {abrindo && (
         <ComposicaoDoNumero titulo={abrindo.titulo} periodo={abrindo.periodo}
           composicao={composicaoDoExtrato(lancamentos, abrindo.alvo, abrindo.periodo)}
-          mostrarConta={!abrindo.alvo.conta} clientes={clientes} aoFechar={() => setAbrindo(null)} />
+          mostrarConta={!abrindo.alvo.conta} clientes={clientes} aoFechar={() => setAbrindo(null)} aoReclassificar={aoReclassificar} />
       )}
       <div style={S.abas}>
         {anos.map((a) => (
@@ -5903,8 +5963,18 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancam
 }
 
 // A janela com o que compõe um número do quadro. Fecha só pelo Fechar.
-function ComposicaoDoNumero({ titulo, periodo, composicao, mostrarConta, clientes, aoFechar }) {
+function ComposicaoDoNumero({ titulo, periodo, composicao, mostrarConta, clientes, aoFechar, aoReclassificar }) {
   const S = EF_ESTILO;
+  // Reclassificar: a linha aberta (id), a conta escolhida e o recado.
+  const [reclass, setReclass] = useState(null);   // { id, contaId, trava, erro }
+  const [recado, setRecado] = useState("");
+  function salvarReclass(l) {
+    if (!reclass || !reclass.contaId) { setReclass({ ...reclass, erro: "Escolha a conta." }); return; }
+    const r = aoReclassificar(l, reclass.contaId);
+    if (r && r.erro) { setReclass({ ...reclass, erro: r.erro }); return; }
+    setRecado(`“${l.descricao || "Lançamento"}” foi para ${(contaEscritorio(reclass.contaId) || {}).nome || "a conta escolhida"}.`);
+    setReclass(null);
+  }
   const { linhas, total } = composicao || { linhas: [], total: 0 };
   const quando = /^\d{4}-\d{2}$/.test(String(periodo)) ? efMesPorExtenso(periodo) : `ano de ${periodo}`;
   const nomeCli = (id) => ((clientes || []).find((c) => c && c.id === id) || {}).nome || "";
@@ -5930,11 +6000,13 @@ function ComposicaoDoNumero({ titulo, periodo, composicao, mostrarConta, cliente
           <button style={S.btnSec} onClick={aoFechar}>Fechar</button>
         </div>
         <div style={{ overflowY: "auto", padding: "4px 0" }}>
+          {recado && <div data-vk-reclassificado="1" style={{ margin: "8px 18px 4px", padding: "8px 12px", borderRadius: 10, background: "#eef5ff", color: "#0474f4", fontSize: 12.5 }}>✓ {recado}</div>}
           {!linhas.length && <div style={{ padding: 18, fontSize: 13, color: "#6b7280" }}>Nenhum lançamento.</div>}
           {linhas.map(({ l, conta, valor }, i) => {
             const quem = [l.fornecedor && l.fornecedor !== "Outros" ? l.fornecedor : "", nomeCli(l.clienteId) || l.cliente || "", l.projeto || ""]
               .filter((x, j, arr) => x && arr.indexOf(x) === j);
             const detalhe = [unidade(l.unidadeId), mostrarConta ? conta.nome : "", ...quem].filter(Boolean).join(" · ");
+            const aberta = !!reclass && reclass.id === l.id;
             return (
               <div key={(l.id || "") + ":" + i} data-vk-composicao-linha="1" style={{ display: "flex", gap: 12, alignItems: "flex-start",
                 padding: "10px 18px", borderTop: i ? "1px solid #f3f4f6" : "none" }}>
@@ -5950,9 +6022,41 @@ function ComposicaoDoNumero({ titulo, periodo, composicao, mostrarConta, cliente
                     </span>
                     {typeof LinksDeAnexo === "function" && <LinksDeAnexo transacao={l} compacto />}
                   </div>
+                  {aberta && (
+                    <div data-vk-reclassificar-form="1" style={{ marginTop: 8, padding: "10px 12px", borderRadius: 10, background: "#f9fafb",
+                      border: "1px solid rgba(38,36,33,0.1)", display: "grid", gap: 8 }}>
+                      {reclass.trava ? (
+                        <div style={{ fontSize: 12, color: "#92400e" }}>{reclass.trava}</div>
+                      ) : (
+                        <>
+                          <div style={{ fontSize: 11.5, color: "#4b5563" }}>
+                            Hoje em <b>{conta.nome}</b>. Escolha a conta certa — o saldo do banco não muda, só a linha do resultado.
+                          </div>
+                          <div data-campo="reclassificar">
+                            <Selecao style={{ ...S.input, cursor: "pointer" }} value={reclass.contaId || ""} placeholder="Procurar conta…"
+                              onChange={(e) => setReclass({ ...reclass, contaId: e.target.value, erro: "" })}>
+                              <option value="">Escolha a conta contábil</option>
+                              {contasParaReclassificar(l).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                            </Selecao>
+                          </div>
+                        </>
+                      )}
+                      {reclass.erro && <div style={{ fontSize: 12, color: "#b91c1c" }}>{reclass.erro}</div>}
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {!reclass.trava && <button data-vk-reclassificar-salvar="1" style={{ ...S.btn, padding: "6px 14px", fontSize: 12.5 }} onClick={() => salvarReclass(l)}>Salvar</button>}
+                        <button style={{ ...S.btnSec, padding: "6px 14px", fontSize: 12.5 }} onClick={() => setReclass(null)}>{reclass.trava ? "Fechar" : "Cancelar"}</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums",
-                  color: valor < 0 ? "#b91c1c" : "#111827" }}>{efDinheiro(valor)}</div>
+                <div style={{ display: "grid", gap: 6, justifyItems: "end", flex: "none" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums",
+                    color: valor < 0 ? "#b91c1c" : "#111827" }}>{efDinheiro(valor)}</div>
+                  {aoReclassificar && !aberta && (
+                    <button data-vk-reclassificar="1" style={{ ...S.btnSec, padding: "4px 10px", fontSize: 11.5 }}
+                      onClick={() => { setRecado(""); setReclass({ id: l.id, contaId: "", trava: travaDaReclassificacao(l), erro: "" }); }}>Reclassificar</button>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -11022,6 +11126,16 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     return guardarFechamentos(comSaldoBancoDaConta(fechamentos, mes, contaId, v)).catch(console.error);
   }
 
+  // Reclassificar pelo detalhe do número do quadro: só a conta contábil muda.
+  function reclassificarDoQuadro(l, contaId) {
+    const trava = travaDaReclassificacao(l);
+    if (trava) return { erro: trava };
+    const r = reclassificarLancamento(lancs, l.id, contaId);
+    if (r.erro) return r;
+    if (r.mudou) gravar(r.lancamentos);
+    return { ok: true };
+  }
+
   // ── Contas a pagar: o parcelado na conta (boleto) ──
   // Do formulário sem extrato: todas as parcelas ficam a pagar, nenhuma é
   // lançamento ainda. Da linha do banco: a parcela de hoje é a linha (entra
@@ -11509,7 +11623,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
                 ))}
               </div>
               <ExtratoEscritorioQuadro linhas={linhas} ano={anoAtual} aoTrocarAno={setAno} fechamentos={fechamentos}
-                lancamentos={lancs} clientes={(data || {}).clientes || []} />
+                lancamentos={lancs} clientes={(data || {}).clientes || []}
+                aoReclassificar={perm.podeEditar ? reclassificarDoQuadro : null} />
             </>
           )}
         </>

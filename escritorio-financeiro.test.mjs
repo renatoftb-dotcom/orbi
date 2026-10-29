@@ -30,7 +30,7 @@ const M = new Function(src + `
            fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
-           competenciasDoCartao, composicaoDoExtrato, efCabecalhoDeCartao, efParcelaDoTexto, movimentosDoCartao, comCompetenciaDaFatura, comIdsDoCartao, faturasGuardadasDoCartao, faturasComArquivo, financeiroComFaturas, faturasComIgnorado, mesDoPagamentoDaFatura, cartaoDoArquivo, conferenciaDaFatura, contasDaObraParaACompraDoCartao, contasNoCartao, checagemSemTransferencias, somarChecagens, conferenciaUnificada, faturaParaALinhaDoBanco, lancamentoAntigoDaFatura, faturaNoLugarDoAntigo, parcelasAPagarDoCartao, aPagarDoEscritorio, efSomarMeses, planoParceladoNaConta, itensAPagarDoLancamento, parcelaAPagarParaALinha, lancamentoDaParcelaAPagar, aPagarComParcelaPaga, linhasDaBaseDoAPagar, aPagarSemParcela, resumoDoAPagar, planoAPartirDa, efNomeDoBancoPeloCodigo, arquivoPareceDeOutraConta, parDaTransferencia, lancamentosDaTransferenciaComPar, contaDoArquivoPeloConteudo, CONTA_BANCARIA_PRINCIPAL, contasBancariasDoEscritorio, contaBancariaDoLancamento, lancamentosDaContaBancaria, extratosDaContaBancaria, financeiroComExtratos, comIdsDaContaBancaria, saldoBancoDaContaNoMes, comSaldoBancoDaConta, saldoPeloExtratoDaConta, lancamentosDaTransferencia, pareceEntreContas, contasDoLancamento,
+           competenciasDoCartao, composicaoDoExtrato, efCabecalhoDeCartao, efParcelaDoTexto, movimentosDoCartao, comCompetenciaDaFatura, comIdsDoCartao, faturasGuardadasDoCartao, faturasComArquivo, financeiroComFaturas, faturasComIgnorado, mesDoPagamentoDaFatura, cartaoDoArquivo, conferenciaDaFatura, contasDaObraParaACompraDoCartao, contasNoCartao, checagemSemTransferencias, somarChecagens, conferenciaUnificada, faturaParaALinhaDoBanco, lancamentoAntigoDaFatura, faturaNoLugarDoAntigo, parcelasAPagarDoCartao, aPagarDoEscritorio, efSomarMeses, planoParceladoNaConta, itensAPagarDoLancamento, parcelaAPagarParaALinha, lancamentoDaParcelaAPagar, aPagarComParcelaPaga, linhasDaBaseDoAPagar, aPagarSemParcela, resumoDoAPagar, contasParaReclassificar, travaDaReclassificacao, reclassificarLancamento, planoAPartirDa, efNomeDoBancoPeloCodigo, arquivoPareceDeOutraConta, parDaTransferencia, lancamentosDaTransferenciaComPar, contaDoArquivoPeloConteudo, CONTA_BANCARIA_PRINCIPAL, contasBancariasDoEscritorio, contaBancariaDoLancamento, lancamentosDaContaBancaria, extratosDaContaBancaria, financeiroComExtratos, comIdsDaContaBancaria, saldoBancoDaContaNoMes, comSaldoBancoDaConta, saldoPeloExtratoDaConta, lancamentosDaTransferencia, pareceEntreContas, contasDoLancamento,
            faturasFechadas, faturaParaFechar, lancamentosParaResultado, mesAnoPorExtenso, efDiaBR, fechadasDaCompra, compraEditada, compraMexeuNoDinheiro, faturaAjustada,
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas, ligaContaAoLancamento, lancamentosLigadosAsContas, contasLigadasAoLancamento,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
@@ -3727,6 +3727,37 @@ teste("A pagar: linhas da Base, excluir parcela (ou as seguintes) e o resumo", (
   assert.deepStrictEqual([r.vencidas, r.nVencidas, r.esteMes, r.depois, r.nDepois], [300, 1, 0, 300, 1]);
   const r2 = M.resumoDoAPagar(pagos, "2026-11-01");
   assert.deepStrictEqual([r2.vencidas, r2.esteMes, r2.nEsteMes, r2.depois], [0, 300, 1, 300]);
+});
+
+teste("Reclassificar: só a conta muda, dentro do mesmo grupo; a compra do cartão muda em todas as faturas", () => {
+  const l = { id: "a", tipo: "escritorio", contaId: "jardim_limpeza", unidadeId: "escritorio", valor: 200, competencia: "2026-02", lancadoEm: "2026-02-23", contaBanco: "sim" };
+  const ops = M.contasParaReclassificar(l).map((c) => c.id);
+  assert.ok(ops.includes("utensilios") && !ops.includes("jardim_limpeza") && !ops.includes("rec_projetos"));
+  const r = M.reclassificarLancamento([l], "a", "utensilios");
+  assert.strictEqual(r.lancamentos[0].contaId, "utensilios"); assert.strictEqual(r.lancamentos[0].valor, 200);
+  assert.ok(M.reclassificarLancamento([l], "a", "rec_projetos").erro);      // receita não
+  // o saldo do extrato não muda
+  const antes = M.extratoEscritorio([l], {}), depois = M.extratoEscritorio(r.lancamentos, {});
+  assert.strictEqual(antes.find((x) => x.mes === "2026-02").saldoExtrato, depois.find((x) => x.mes === "2026-02").saldoExtrato);
+  // vindo da obra e da gestão: trava
+  assert.ok(M.travaDaReclassificacao({ ...l, origem: { obraId: "o1", tipo: "conta", refId: "c1" } }));
+  assert.ok(M.travaDaReclassificacao({ ...l, contaId: "rec_gestao", origem: { obraId: "o1", tipo: "gestao" } }));
+  assert.strictEqual(M.travaDaReclassificacao(l), "");
+  // compra do escritório no cartão, com parcela em duas faturas
+  const compra = { id: "c", tipo: "escritorio", contaId: "desp_outros", unidadeId: "escritorio", cartaoId: "k", valor: 200,
+    parcelasCartao: [{ competencia: "2026-02", valor: 100, parcela: 1, de: 2 }, { competencia: "2026-03", valor: 100, parcela: 2, de: 2 }] };
+  const fat = (comp, p) => ({ id: "fatura:k:" + comp, tipo: "escritorio", contaId: "cartao_credito", unidadeId: "escritorio", valor: 100, competencia: comp,
+    origem: { tipo: "fatura", cartaoId: "k", competencia: comp }, linhas: [{ origem: "escritorio", refId: "c", valor: 100, parcela: p, de: 2, contaId: "desp_outros", destinoContaId: "desp_outros" }] });
+  const lista = [compra, fat("2026-02", 1), fat("2026-03", 2)];
+  const r2 = M.reclassificarLancamento(lista, "fatura:k:2026-02:1", "utensilios");
+  assert.strictEqual(r2.mudou, 3);
+  assert.deepStrictEqual(r2.lancamentos.map((x) => x.contaId), ["utensilios", "cartao_credito", "cartao_credito"]);
+  assert.deepStrictEqual(r2.lancamentos.slice(1).map((x) => x.linhas[0].destinoContaId), ["utensilios", "utensilios"]);
+  const partes = M.lancamentosParaResultado(r2.lancamentos);
+  assert.deepStrictEqual(partes.map((x) => x.contaId), ["utensilios", "utensilios"]);
+  // diferença da fatura e compra de obra: trava
+  assert.ok(M.travaDaReclassificacao({ ...l, id: "fatura:k:2026-02:resto", origem: { tipo: "faturaLinha" } }));
+  assert.ok(M.travaDaReclassificacao({ ...l, id: "fatura:k:2026-02:1", origem: { tipo: "faturaLinha", obraId: "o1" } }));
 });
 
 for (const [nome, fn] of testes) {
