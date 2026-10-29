@@ -481,6 +481,10 @@ teste("planejado: a compra no cartão conta inteira (parcelas pagas e a pagar); 
   assert.deepStrictEqual(modulo.realizadoPorConta(contas), { material: 4320 });
   const t = modulo.totaisContas(contas, "2026-10-20");
   assert.deepStrictEqual([t.pago, t.aberto], [1440, 2980]);
+  // por etapa também: a compra inteira
+  const comEtapa = contas.map((c) => ({ ...c, etapa: "laje_1" }));
+  const pe = modulo.plPorEtapa([], comEtapa, {});
+  assert.strictEqual(pe.linhas.find((l) => l.etapaId === "laje_1").realizado, 4320);
 });
 
 teste("conta avulsa nasce válida", () => {

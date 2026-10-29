@@ -36759,10 +36759,10 @@ function plPorEtapa(itens, contasPagar, opcoes) {
     est[k] = Math.round(((est[k] || 0) + (Number(i.valor) || 0)) * 100) / 100;
   }
   for (const c of contasPagar || []) {
-    if (!c || !c.pago) continue;
+    if (!contaNoRealizado(c)) continue;
     if (fora(c.contaId)) continue;
     const k = c.etapa || c.etapaId || "";
-    const v = Number(c.valorPago) || Number(c.valor) || 0;
+    const v = valorNoRealizado(c);
     real[k] = Math.round(((real[k] || 0) + v) * 100) / 100;
     (contasDe[k] = contasDe[k] || []).push(c);
   }
@@ -36870,9 +36870,9 @@ function plPorInsumo(orcamento, contasPagar, insumos) {
     if (!r.unidade) r.unidade = i.unidade || "";
   }
   for (const c of contasPagar || []) {
-    if (!c || !c.pago || !c.insumoCodigo) continue;
+    if (!contaNoRealizado(c) || !c.insumoCodigo) continue;
     const r = pegar(c.insumoCodigo);
-    r.realizado = red(r.realizado + ((Number(c.valorPago) || Number(c.valor)) || 0));
+    r.realizado = red(r.realizado + valorNoRealizado(c));
     r.qtdRealizada = Math.round((r.qtdRealizada + (Number(c.quantidade) || 0)) * 1000) / 1000;
     if (!r.nome) r.nome = c.descricao || "";
     if (!r.unidade) r.unidade = c.unidade || "";
