@@ -19957,7 +19957,16 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
   const [erroLote, setErroLote] = useState("");
   const [verIgnorados, setVerIgnorados] = useState(false);
   const [transferindo, setTransferindo] = useState("");   // linha escolhendo a outra conta
-  const lista = (linhas || []).filter((m) => m && m.id);
+  // No "Tudo", as linhas de cada conta e de cada cartão vêm juntas: a conta
+  // principal, as outras contas, depois os cartões; dentro de cada um, pela data.
+  const nomeDoGrupo = (m) => (fila.meioDaLinha ? ((fila.meioDaLinha(m) || {}).nome || "") : "");
+  const lista = (linhas || []).filter((m) => m && m.id).map((m, i) => ({ m, i }))
+    .sort((a, b) => !fila.meioDaLinha ? a.i - b.i
+      : ((a.m._cartao ? 2 : a.m._meio === CONTA_BANCARIA_PRINCIPAL ? 0 : 1) - (b.m._cartao ? 2 : b.m._meio === CONTA_BANCARIA_PRINCIPAL ? 0 : 1))
+        || nomeDoGrupo(a.m).localeCompare(nomeDoGrupo(b.m), "pt-BR")
+        || String(a.m.data || "").localeCompare(String(b.m.data || ""))
+        || a.i - b.i)
+    .map((x) => x.m);
   const ids = lista.map((m) => m.id);
   const proximaDe = (id) => { const k = ids.indexOf(id); return ids[k + 1] || ids[k - 1] || ""; };
   const dataBR = (d) => String(d || "").slice(0, 10).split("-").reverse().join("/");
@@ -20092,8 +20101,22 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
             const outrasContas = fila.outrasContasDe ? fila.outrasContasDe(m) : fila.outrasContas;
             const podeTransferir = !!fila.transferir && !m._cartao && outrasContas.length > 0;
             const meio = fila.meioDaLinha ? fila.meioDaLinha(m) : null;
+            // o título do grupo, quando começa outra conta ou outro cartão
+            const novoGrupo = !!(meio && meio.nome) && (k === 0 || nomeDoGrupo(lista[k - 1]) !== meio.nome || !!lista[k - 1]._cartao !== !!m._cartao);
+            const doGrupo = novoGrupo ? lista.filter((x) => nomeDoGrupo(x) === meio.nome && !!x._cartao === !!m._cartao) : [];
             return (
-              <div key={m.id} style={{ borderTop: k ? "1px solid rgba(38,36,33,0.08)" : "none",
+              <Fragment key={m.id}>
+              {novoGrupo && (
+                <div data-vk-grupo-fila={meio.nome} style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap", padding: "9px 12px 7px",
+                  background: meio.cartao ? "#fdf2f8" : "#eef5ff", borderTop: k ? "1px solid rgba(38,36,33,0.12)" : "none",
+                  borderRadius: k ? 0 : "14px 14px 0 0" }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: meio.cartao ? "#9d174d" : "#0474f4" }}>{meio.cartao ? "💳 " : ""}{meio.nome}</span>
+                  <span style={{ fontSize: 11.5, color: "#6b7280" }}>
+                    {doGrupo.length} {doGrupo.length === 1 ? "linha" : "linhas"} · {efDinheiro(efCentavos(doGrupo.reduce((t, x) => t + Math.abs(Number(x.valor) || 0), 0)))}
+                  </span>
+                </div>
+              )}
+              <div style={{ borderTop: k && !novoGrupo ? "1px solid rgba(38,36,33,0.08)" : "none",
                 background: aberta ? "#f7fbff" : "transparent" }}>
                 <div onClick={() => setAberto(aberta ? "" : m.id)}
                   style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "9px 12px", cursor: "pointer", flexWrap: "wrap" }}>
@@ -20269,6 +20292,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                   </div>
                 )}
               </div>
+              </Fragment>
             );
           })}
         </div>
