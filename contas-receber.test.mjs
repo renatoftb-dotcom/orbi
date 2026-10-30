@@ -18,7 +18,8 @@ const a = cr.indexOf("// ── A receber: parte pura"), b = cr.indexOf("// ─�
 if (a < 0 || b < 0) throw new Error("marcadores da parte pura não encontrados");
 const M = new Function(puroEf + "\n" + cr.slice(a, b) + `
   return { crSomarMeses, crGerarParcelas, novasContasAReceber, itensAReceber, resumoAReceber, candidatosDoRecebimento,
-    receberContaAReceber, desfazerRecebimento, ligarParcelaDeProjeto, extratoEscritorio, lancamentosDoEscritorio };`)();
+    receberContaAReceber, desfazerRecebimento, ligarParcelaDeProjeto, extratoEscritorio, lancamentosDoEscritorio,
+    planoDaVenda, obraComVenda, obraSemVenda, resumoDasVendas, entradasDeVendaSoltas, contasDaVenda };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -118,6 +119,35 @@ teste("a lista junta projetos ganhos, honorários de gerenciamento das obras e a
 });
 
 let ok = 0, falhou = 0;
+teste("vendas do empreendimento: unidade, sinal já recebido + parcelas + financiamento; o que falta receber", () => {
+  const sinal1 = { id: "s1", contaId: "venda_imovel", descricao: "Pagamento sinal Residência 01", valor: 5000, valorPago: 5000, pago: true, pagoEm: "2026-09-24" };
+  const sinal2 = { id: "s2", contaId: "venda_imovel", descricao: "Residência 01", valor: 7000, valorPago: 7000, pago: true, pagoEm: "2026-09-24" };
+  const obra = { id: "o1", nome: "Módulo 1", unidadesVenda: [{ id: "u1", nome: "Residência 01", area: "45,93", precoEstimado: 210000 }, { id: "u2", nome: "Residência 02", precoEstimado: 210000 }],
+    contasPagar: [sinal1, sinal2, { id: "x", contaId: "material", valor: 100, pago: true }] };
+  assert.deepStrictEqual(M.entradasDeVendaSoltas(obra.contasPagar).map((c) => c.id), ["s1", "s2"]);
+  const f = { unidadeId: "u1", comprador: "Comprador Exemplo", data: "2026-09-20", valor: "200.000,00",
+    sinais: [{ contaId: "s1" }, { contaId: "s2" }], nParcelas: "4", valorParcela: "2.000,00", primeiroVencimento: "2026-10-20",
+    financiamento: "180.000,00", dataFinanciamento: "2027-03-15" };
+  // a soma não fecha: avisa quanto falta
+  assert.match(M.planoDaVenda({ ...f, financiamento: "170.000" }, { unidades: obra.unidadesVenda, contas: obra.contasPagar }).erro, /faltam R\$ 10\.000,00/);
+  let n = 0;
+  const p = M.planoDaVenda(f, { unidades: obra.unidadesVenda, contas: obra.contasPagar, obraId: "o1", novoId: () => "n" + (++n), quem: "R" });
+  assert.ok(!p.erro, p.erro);
+  assert.deepStrictEqual(p.ligar, ["s1", "s2"]);
+  assert.deepStrictEqual(p.novas.map((c) => [c.parteVenda, c.valor, c.vencimento, c.contaId, c.pago]),
+    [["parcela", 2000, "2026-10-20", "venda_imovel", false], ["parcela", 2000, "2026-11-20", "venda_imovel", false], ["parcela", 2000, "2026-12-20", "venda_imovel", false],
+     ["parcela", 2000, "2027-01-20", "venda_imovel", false], ["financiamento", 180000, "2027-03-15", "venda_imovel", false]]);
+  const o2 = M.obraComVenda(obra, p);
+  assert.deepStrictEqual(o2.contasPagar.filter((c) => c.vendaId).map((c) => c.id), ["s1", "s2", "n2", "n3", "n4", "n5", "n6"]);
+  const r = M.resumoDasVendas(o2);
+  assert.deepStrictEqual([r.unidades, r.vendidas, r.estimado, r.vendido, r.recebido, r.aReceber], [2, 1, 420000, 200000, 12000, 188000]);
+  assert.strictEqual(r.linhas[0].contas[0].parteVenda, "sinal");
+  // desfazer: sai o que falta receber; os sinais ficam na obra, soltos de novo
+  const o3 = M.obraSemVenda(o2, p.venda.id);
+  assert.deepStrictEqual(o3.contasPagar.map((c) => c.id), ["s1", "s2", "x"]);
+  assert.ok(!o3.contasPagar[0].vendaId && !o3.vendas.length);
+});
+
 for (const [nome, fn] of testes) {
   try { fn(); ok++; console.log("  ok  " + nome); }
   catch (e) { falhou++; console.log("  FALHOU  " + nome + "\n        " + (e && e.message)); }

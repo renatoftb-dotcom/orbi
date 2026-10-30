@@ -4997,19 +4997,21 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       if (!ct) return "Contrato removido";
       return `${ct.numeroContrato ? `Contrato ${ct.numeroContrato} · ` : ""}${servicoDoContrato(ct)} · ${ct.nomeContratado || "Contratado"}`;
     };
-    const t = totaisContas(contasDaObra, hojeIso);
+    // o que o empreendimento tem a RECEBER das vendas mora em Vendas, não aqui
+    const contasDoPagar = contasDaObra.filter(c => c && !c.vendaId);
+    const t = totaisContas(contasDoPagar, hojeIso);
     // o mês escolhido no gráfico entra antes dos demais filtros
     const doMes = mesSelecionado
-      ? contasDaObra.filter(c => String(c.vencimento || "").slice(0, 7) === mesSelecionado)
-      : contasDaObra;
+      ? contasDoPagar.filter(c => String(c.vencimento || "").slice(0, 7) === mesSelecionado)
+      : contasDoPagar;
     const nomeEtapa = (id) => (((typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).find(x => x.id === id) || {}).nome || "");
     const lista = buscarContas(filtrarContas(doMes, filtroContas, hojeIso),
       { texto: buscaContas, papel: papelContas, contaId: contaFiltro, etapa: etapaFiltro },
       { nomePrestador, nomeConta, nomeEtapa });
     const procurando = !!(buscaContas.trim() || papelContas !== "todos" || contaFiltro || etapaFiltro);
-    const contasUsadas = [...new Set(contasDaObra.map(c => c.contaId).filter(Boolean))]
+    const contasUsadas = [...new Set(contasDoPagar.map(c => c.contaId).filter(Boolean))]
       .map(id => ({ valor: id, rotulo: nomeConta(id) })).sort((a, b) => a.rotulo.localeCompare(b.rotulo));
-    const etapasUsadas = [...new Set(contasDaObra.map(c => c.etapa).filter(Boolean))]
+    const etapasUsadas = [...new Set(contasDoPagar.map(c => c.etapa).filter(Boolean))]
       .map(id => ({ valor: id, rotulo: nomeEtapa(id) || id })).sort((a, b) => a.rotulo.localeCompare(b.rotulo));
     const grupos = agruparContas(lista, visaoContas, { hoje: hojeIso, nomePrestador, nomeContrato });
     // Os anéis somam a obra INTEIRA, não a lista filtrada: "pago de total"
@@ -5017,7 +5019,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // todo anel sairia em 0%. Os quadros do topo e o mês do gráfico mandam na
     // lista de baixo; o anel é o retrato do contrato/fornecedor por inteiro.
     const gruposCheios = visaoUsaAnel(visaoContas)
-      ? agruparContas(contasDaObra, visaoContas, { hoje: hojeIso, nomePrestador, nomeContrato })
+      ? agruparContas(contasDoPagar, visaoContas, { hoje: hojeIso, nomePrestador, nomeContrato })
       : grupos;
     const mesAtual = hojeIso.slice(0, 7);
     const abertoPadrao = (g) => (visaoContas === "mes" ? g.chave >= mesAtual : true);
@@ -5277,7 +5279,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
 
     // ── Gráfico do fluxo mensal (desenho em contas-pagar.jsx) ──
-    const fluxo = fluxoMensal(contasDaObra, hojeIso);
+    const fluxo = fluxoMensal(contasDoPagar, hojeIso);
     // O gráfico desenha as faixas do filtro escolhido nos quadros do topo.
     const seriesGrafico = seriesDoFiltro(filtroContas);
     // Clicar na barra filtra a lista por aquele mês; clicar de novo desfaz.
@@ -6781,6 +6783,18 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     );
   }
 
+  // Vendas do empreendimento: unidades, venda (sinal, parcelas,
+  // financiamento) e o que falta receber (contas-receber.jsx).
+  if (view === "vendasObra" && obraSelecionada && typeof VendasDoEmpreendimento === "function") {
+    return (
+      <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+        <VendasDoEmpreendimento obra={obraAtual} podeEditar={!!perm.podeGerenciarObra} isMobile={isMobile} quem={quemSou()}
+          aoVoltar={() => setView("detalheObra")} travaDoMes={(cs) => mesFechadoNaBaixa(cs)}
+          aoGravarObra={(nova) => gravarObras(obras.map(o => (o.id === nova.id ? nova : o)))} />
+      </div>
+    );
+  }
+
   if (view === "detalheObra" && obraSelecionada) {
     return (
       <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
@@ -6822,11 +6836,22 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Cronograma</div>
             <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>{obraAtual.cronograma?.prazoMeses ? `${obraAtual.cronograma.prazoMeses} meses` : "Prazo, etapas e equipe"}</div>
           </button>
+          {typeof ehEmpreendimento === "function" && ehEmpreendimento(cliente) && typeof VendasDoEmpreendimento === "function" && (
+            <button data-vk-abrir-vendas="1" onClick={() => setView("vendasObra")}
+              style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Vendas</div>
+              <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>
+                {(() => { const r = typeof resumoDasVendas === "function" ? resumoDasVendas(obraAtual) : null;
+                  if (!r || !r.unidades) return "Unidades e contas a receber";
+                  return `${r.vendidas} de ${r.unidades} vendidas` + (r.aReceber > 0 ? ` · ${fmtMoedaCtr(r.aReceber)} a receber` : ""); })()}
+              </div>
+            </button>
+          )}
           <button onClick={() => setView("contasPagar")}
             style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Contas a pagar</div>
             <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>
-              {(() => { const t = totaisContas((obraAtual.contasPagar || []), hojeIso);
+              {(() => { const t = totaisContas((obraAtual.contasPagar || []).filter(c => c && !c.vendaId), hojeIso);
                 return t.aberto > 0 ? `${fmtMoedaCtr(t.aberto)} em aberto` : "Parcelas dos contratos"; })()}
             </div>
           </button>
