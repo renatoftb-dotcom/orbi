@@ -3661,3 +3661,16 @@ teste("planejamento: da venda entra o recebido; o a receber é só informação"
   const g = modulo.subcontasDaConta([], cs, "venda_imovel");
   assert.deepStrictEqual(g.map((x) => [x.nome, x.realizado]), [["Recebido", 13925.8]]);
 });
+
+teste("planejamento por etapa: os ofícios (empreiteiro, pintor…) somam em Prestadores de serviços", () => {
+  const contas = [
+    { id: "a", contaId: "empreiteiro", etapa: "prest_empreiteiro", valor: 9524.88, pago: true, valorPago: 9524.88 },
+    { id: "b", contaId: "pedreiro", etapa: "prestadores", valor: 16118.3, pago: true, valorPago: 16118.3 },
+    { id: "c", contaId: "material", etapa: "fundacao", valor: 100, pago: true, valorPago: 100 },
+  ];
+  const pe = modulo.plPorEtapa([], contas, {});
+  const p = pe.linhas.find((l) => l.etapaId === "prestadores");
+  assert.ok(p, JSON.stringify(pe.linhas.map((l) => l.etapaId)));
+  assert.strictEqual(p.realizado, 25643.18); assert.strictEqual(p.notas, 2); assert.strictEqual(p.nome, "Prestadores de serviços");
+  assert.ok(!pe.linhas.some((l) => l.etapaId === "prest_empreiteiro"));
+});

@@ -37011,9 +37011,20 @@ function estimativaPorEtapaDoOrcamento(orcamento, insumos) {
   return por;
 }
 
+// No Planejamento por etapa, os ofícios (Empreiteiro, Pintor, Eletricista…)
+// não são etapa da obra: são todos "Prestadores de serviços". A conta
+// guarda o ofício (é ele que casa o orçado com o pago), e o quadro soma
+// tudo na etapa de prestadores.
+function etapaDoPlanejamento(id) {
+  const lista = typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : [];
+  const e = id ? lista.find((x) => x && x.id === id) : null;
+  return e && e.macro === "Prestadores de serviços" ? "prestadores" : (id || "");
+}
 function plPorEtapa(itens, contasPagar, opcoes) {
   const est = {}, real = {}, contasDe = {};
-  const orc = estimativaPorEtapaDoOrcamento((opcoes || {}).orcamento, (opcoes || {}).insumos);
+  const orc0 = estimativaPorEtapaDoOrcamento((opcoes || {}).orcamento, (opcoes || {}).insumos);
+  const orc = {};
+  for (const k of Object.keys(orc0)) { const kk = etapaDoPlanejamento(k); orc[kk] = Math.round(((orc[kk] || 0) + (Number(orc0[k]) || 0)) * 100) / 100; }
   const temOrcamento = Object.keys(orc).length > 0;
   const soCusto = !!(opcoes && opcoes.soCusto);
   // Receita e terreno nunca são etapa de obra; com soCusto os tributos
@@ -37027,13 +37038,13 @@ function plPorEtapa(itens, contasPagar, opcoes) {
   for (const i of itens || []) {
     if (!i) continue;
     if (fora(i.contaId)) continue;
-    const k = i.etapaId || "";
+    const k = etapaDoPlanejamento(i.etapaId || "");
     est[k] = Math.round(((est[k] || 0) + (Number(i.valor) || 0)) * 100) / 100;
   }
   for (const c of contasPagar || []) {
     if (!contaNoRealizado(c)) continue;
     if (fora(c.contaId)) continue;
-    const k = c.etapa || c.etapaId || "";
+    const k = etapaDoPlanejamento(c.etapa || c.etapaId || "");
     const v = valorNoRealizado(c);
     real[k] = Math.round(((real[k] || 0) + v) * 100) / 100;
     (contasDe[k] = contasDe[k] || []).push(c);
@@ -55563,7 +55574,7 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
   const [concluindo, setConcluindo] = useState(null); // { etapaId, nome, inicio, data, ja, erro }
   // o início sugerido: o primeiro gasto da etapa
   const inicioDaEtapa = (etapaId) => (contasPagar || [])
-    .filter((c) => c && (c.etapa || c.etapaId) === etapaId && contaNoRealizado(c))
+    .filter((c) => c && (typeof etapaDoPlanejamento === "function" ? etapaDoPlanejamento(c.etapa || c.etapaId || "") : (c.etapa || c.etapaId)) === etapaId && contaNoRealizado(c))
     .map((c) => String(c.pagoEm || c.compraEm || c.vencimento || "").slice(0, 10))
     .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort()[0] || "";
   const concluidas = etapasConcluidas || {};

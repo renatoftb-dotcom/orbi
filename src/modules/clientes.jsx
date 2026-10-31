@@ -2207,7 +2207,7 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
   const [concluindo, setConcluindo] = useState(null); // { etapaId, nome, inicio, data, ja, erro }
   // o início sugerido: o primeiro gasto da etapa
   const inicioDaEtapa = (etapaId) => (contasPagar || [])
-    .filter((c) => c && (c.etapa || c.etapaId) === etapaId && contaNoRealizado(c))
+    .filter((c) => c && (typeof etapaDoPlanejamento === "function" ? etapaDoPlanejamento(c.etapa || c.etapaId || "") : (c.etapa || c.etapaId)) === etapaId && contaNoRealizado(c))
     .map((c) => String(c.pagoEm || c.compraEm || c.vencimento || "").slice(0, 10))
     .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort()[0] || "";
   const concluidas = etapasConcluidas || {};
