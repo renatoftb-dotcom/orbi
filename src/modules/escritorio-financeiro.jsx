@@ -4460,6 +4460,15 @@ function valorBRNaTela(canon) {
   const inteira = (partes[0] || "").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   return (neg ? "-" : "") + inteira + (partes.length > 1 ? "," + partes[1] : "");
 }
+// As casas decimais que ainda faltam no que está na tela ("210.000" → ",00",
+// "210.000,5" → "0"): o campo mostra em cinza enquanto a pessoa digita.
+function valorBRCasasQueFaltam(tela) {
+  const s = String(tela || "");
+  if (!/\d/.test(s)) return "";
+  const i = s.indexOf(",");
+  if (i < 0) return ",00";
+  return "00".slice(0, Math.max(0, 2 - (s.length - i - 1)));
+}
 // O estorno já gravado (valor negativo, ou marcado como estorno) é editado
 // com o sinal dele: o campo de valor só lê números, e abrir um estorno de
 // −500 e salvar gravava +500 — a saída virava entrada sem ninguém pedir.
@@ -8646,8 +8655,10 @@ function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcar
 // não zera, o mês não fecha; depois de fechado, não entra lançamento nele.
 // O campo de valor da tela: pontos de milhar e vírgula aparecem enquanto
 // se digita; o cursor fica onde estava, contado pelos números.
-function CampoValorBR({ valor, aoMudar, negativo, style, onBlur, ...resto }) {
+function CampoValorBR({ valor, aoMudar, negativo, style, onBlur, casas, ...resto }) {
   const ref = useRef(null);
+  const [foco, setFoco] = useState(false);
+  const [fantasma, setFantasma] = useState(null);
   const cursor = useRef(null);
   const canon = valorBRDeFora(valor);
   const tela = valorBRNaTela(canon);
@@ -8661,8 +8672,25 @@ function CampoValorBR({ valor, aoMudar, negativo, style, onBlur, ...resto }) {
     while (pos < el.value.length && n < alvo) { if (/[\d,-]/.test(el.value.charAt(pos))) n++; pos++; }
     try { el.setSelectionRange(pos, pos); } catch (e) { /* campo sem seleção */ }
   });
-  return (
-    <input ref={ref} {...resto} style={style} type="text" inputMode="decimal" value={tela}
+  // `casas`: enquanto digita, as casas decimais que faltam aparecem em cinza
+  // logo depois do número ("210.000" + ",00"); ao sair do campo elas entram.
+  const faltam = casas && foco ? valorBRCasasQueFaltam(tela) : "";
+  useEffect(() => {
+    const el = ref.current;
+    if (!faltam || !el || typeof document === "undefined") { if (fantasma) setFantasma(null); return; }
+    const cs = window.getComputedStyle(el);
+    const ctx = (CampoValorBR.tela || (CampoValorBR.tela = document.createElement("canvas"))).getContext("2d");
+    if (!ctx) return;
+    ctx.font = cs.fontStyle + " " + cs.fontWeight + " " + cs.fontSize + " " + cs.fontFamily;
+    const esq = (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.paddingLeft) || 0) + ctx.measureText(el.value).width - el.scrollLeft;
+    const caberia = el.offsetWidth - (parseFloat(cs.paddingRight) || 0) - (parseFloat(cs.borderRightWidth) || 0) - ctx.measureText(faltam).width;
+    if (esq > caberia) { if (fantasma) setFantasma(null); return; }
+    const novo = { left: Math.round(esq), font: ctx.font, top: el.offsetTop, height: el.offsetHeight };
+    if (!fantasma || fantasma.left !== novo.left || fantasma.font !== novo.font || fantasma.top !== novo.top || fantasma.height !== novo.height) setFantasma(novo);
+  });
+  const campo = (
+    <input ref={ref} {...resto} style={casas ? { ...(style || {}), width: "100%", boxSizing: "border-box" } : style} type="text" inputMode="decimal" value={tela}
+      onFocus={(e) => { if (casas) setFoco(true); if (resto.onFocus) resto.onFocus(e); }}
       onChange={(e) => {
         const bruto = e.target.value;
         const sel = e.target.selectionStart == null ? bruto.length : e.target.selectionStart;
@@ -8682,10 +8710,22 @@ function CampoValorBR({ valor, aoMudar, negativo, style, onBlur, ...resto }) {
         aoMudar(novo);
       }}
       onBlur={(e) => {
+        if (casas) setFoco(false);
         const completo = valorBRCompleto(valorBRDigitado(e.target.value, { negativo }));
         if (completo !== canon) aoMudar(completo);
         if (onBlur) onBlur(e);
       }} />
+  );
+  if (!casas) return campo;
+  const largura = style && style.width != null ? style.width : "100%";
+  return (
+    <span style={{ position: "relative", display: "block", width: largura, maxWidth: "100%" }}>
+      {campo}
+      {faltam && fantasma && (
+        <span data-vk-casas-faltando="1" aria-hidden="true" style={{ position: "absolute", left: fantasma.left, top: fantasma.top, height: fantasma.height,
+          display: "flex", alignItems: "center", font: fantasma.font, color: "#9ca3af", pointerEvents: "none", whiteSpace: "pre" }}>{faltam}</span>
+      )}
+    </span>
   );
 }
 

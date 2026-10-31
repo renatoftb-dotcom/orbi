@@ -685,7 +685,7 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
     const { style: est, ...resto } = extra || {};
     const estilo = { ...inp, ...(est || {}) };
     return typeof CampoValorBR === "function"
-      ? <CampoValorBR {...resto} style={estilo} valor={valor} placeholder="0,00" aoMudar={aoMudar} />
+      ? <CampoValorBR {...resto} casas style={estilo} valor={valor} placeholder="0,00" aoMudar={aoMudar} />
       : <input {...resto} inputMode="decimal" style={estilo} value={valor} placeholder="0,00" onChange={(e) => aoMudar(e.target.value)} />;
   };
 
