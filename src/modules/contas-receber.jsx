@@ -1166,7 +1166,11 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
             <div style={{ display: "grid", gap: 8, gridTemplateColumns: isMobile ? "1fr" : "200px 1fr", alignItems: "end" }}>
               <label style={{ display: "grid", gap: 4 }}><span style={rot}>Provisão de documentação</span>
                 {campoDinheiro(fv.provisao, (v) => setFormVenda({ ...fv, provisao: v }), { "data-vk-venda-provisao": "1" })}</label>
-              <div style={{ fontSize: 11.5, color: "#6b7280", paddingBottom: 6 }}>Paga pelo comprador junto com os pagamentos. Fica reservada para ITBI, cartório e registro — não é receita da venda.</div>
+              <div data-vk-venda-provisao-aviso="1" style={{ fontSize: 11.5, color: provForm > 0 ? "#1e40af" : "#6b7280", paddingBottom: 6 }}>
+                {provForm > 0
+                  ? <>Ao registrar, <b>{dinheiro(provForm)}</b> saem de Venda de imóvel e entram em <b>Documentação Empreendimentos</b> (Provisões e reservas do escritório), no mês da venda — ou no mês aberto, se ele estiver fechado. Fica reservada para ITBI, cartório e registro.</>
+                  : "Paga pelo comprador junto com os pagamentos. Fica reservada para ITBI, cartório e registro — não é receita da venda."}
+              </div>
             </div>
 
             <div style={{ display: "grid", gap: 6 }}>
