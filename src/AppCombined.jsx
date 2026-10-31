@@ -12047,11 +12047,14 @@ const GRUPOS_ESCRITORIO = [
   // o crédito como estorno — e se anulam. Mexe no saldo do banco no dia,
   // nunca no resultado.
   { id: "ajustes_bancarios", titulo: "ESTORNOS E AJUSTES BANCÁRIOS", sinal: -1, resultado: false, bloco: "ajustes" },
-  // Dinheiro guardado para pagar alguém: a parte da engenharia que veio junto
-  // com o projeto. No recebimento ela é receita (o projeto inteiro) e custo
-  // de parceiro — e o dinheiro fica aqui até ser pago ao engenheiro, quando
-  // sai como estorno da reserva (sem custo de novo).
-  { id: "reservas", titulo: "RESERVAS A REPASSAR", sinal: +1, resultado: false, bloco: "reservas" },
+  // Dinheiro guardado para pagar alguém — provisões e reservas:
+  //  · a parte da engenharia que veio junto com o projeto. No recebimento ela
+  //    é receita (o projeto inteiro) e custo de parceiro — e o dinheiro fica
+  //    aqui até ser pago ao engenheiro, quando sai como estorno da reserva
+  //    (sem custo de novo);
+  //  · a documentação dos empreendimentos: o que o comprador paga junto com o
+  //    imóvel para ITBI, cartório e registro. É dele, não é receita da venda.
+  { id: "reservas", titulo: "PROVISÕES E RESERVAS", sinal: +1, resultado: false, bloco: "reservas" },
   // Dinheiro que só troca de bolso entre as contas bancárias do escritório
   // (Sicoob → Cora). Cada transferência são duas linhas, uma em cada conta,
   // que se anulam no saldo total — e nunca entram no resultado.
@@ -12127,6 +12130,8 @@ const PLANO_CONTAS_ESCRITORIO = [
   { id: "transf_entrada", nome: "Transferência entre contas", grupo: "transf_entradas", unidades: ["escritorio"], apelidos: [], interna: true },
   { id: "res_engenharia", nome: "Reserva engenharia (a repassar)", grupo: "reservas", unidades: ["projetos", "escritorio"],
     apelidos: ["Reserva engenharia"] },
+  { id: "res_documentacao", nome: "Documentação Empreendimentos", grupo: "reservas", unidades: ["empreendimento"],
+    apelidos: ["Provisão de documentação", "Documentação empreendimento"] },
   { id: "estornos_bancarios", nome: "Estornos bancários",    grupo: "ajustes_bancarios", unidades: ["escritorio"],
     apelidos: ["Estornos bancários", "Estorno bancário", "Estorno de boleto"] },
 ];
@@ -18130,7 +18135,7 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancam
     { titulo: "Sócios", grupos: ["socios", "socios_entradas"], saldo: "retiradas", rotulo: "Retiradas e empréstimos",
       totais: { socios: "Retiradas e empréstimos", socios_entradas: "Devoluções e aportes" } },
     { titulo: "Estornos bancários", grupos: ["ajustes_bancarios"], saldo: "ajustes", rotulo: "Em aberto com o banco" },
-    { titulo: "Reservas", grupos: ["reservas"], saldo: "saldoReservas", rotulo: "Reserva a repassar (engenharia)" },
+    { titulo: "Provisões e reservas", grupos: ["reservas"], saldo: "saldoReservas", rotulo: "Provisões e reservas" },
   ];
   const soma = (f) => doAno.reduce((s, m) => s + (f(m) || 0), 0);
   const cel = (v) => (!v ? <span style={{ color: "#d1d5db" }}>—</span>
