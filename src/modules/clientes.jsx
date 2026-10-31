@@ -4182,8 +4182,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <button onClick={() => setView("detalheObra")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Planejamento</div>
-            <div style={{ fontSize: 12, color: "#4b5563" }}>{visaoPL === "pl" ? "Estimado e realizado" : "P&L estimado"} · {obraSelecionada.nome}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Físico-Financeiro</div>
+            <div style={{ fontSize: 12, color: "#4b5563" }}>{visaoPL === "pl" ? "Planejado × executado" : "Estimativa"} · {obraSelecionada.nome}</div>
           </div>
           {/* Na aba P&L o cartão do anel já traz estimado e gasto; repetir os
               mesmos números no topo é ruído. */}
@@ -4210,7 +4210,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         {/* Toggle de visão — quebra linha no celular: sem isto a última aba
             fica fora da tela, inalcançável, e ninguém descobre que existe */}
         <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-          {[["pl", "P&L"], ["quadro", "Preencher"], ["itens", "Item a item"], ["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"], ["ligacao", "Confer\u00eancia"], ["escritorio", "Para o escrit\u00f3rio"]].map(([v, l]) => (
+          {[["pl", "Execução"], ["quadro", "Preencher"], ["itens", "Item a item"], ["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"], ["ligacao", "Confer\u00eancia"], ["escritorio", "Para o escrit\u00f3rio"]].map(([v, l]) => (
             <button key={v} onClick={() => setVisaoPL(v)}
               style={{ border: visaoPL === v ? `1.5px solid ${AZUL_VK}` : "1px solid rgba(38,36,33,0.16)", background: "#fff", color: visaoPL === v ? "#111827" : "#4b5563", borderRadius: 20, padding: "6px 16px", fontSize: 12.5, fontWeight: visaoPL === v ? 700 : 500, cursor: "pointer", fontFamily: "inherit" }}>
               {l}
@@ -4353,7 +4353,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6 }}>
                 {obraAtual.clientePagaDireto
                   ? "O cliente paga os fornecedores direto, então a obra fecha no custo, não num saldo."
-                  : "Entradas menos custos, pelo mês da data de contabilização."} "Contabilizado" é o acumulado da obra inteira{temEstimativa ? "; “Estimado” vem dos itens do Planejamento" : ""}.
+                  : "Entradas menos custos, pelo mês da data de contabilização."} "Contabilizado" é o acumulado da obra inteira{temEstimativa ? "; “Estimado” vem dos itens do Físico-Financeiro" : ""}.
               </div>
 
               {entradasDaObra.length > 0 && (
@@ -6362,7 +6362,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </>
         )}
         <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: "12px 14px", marginTop: 16, background: "#fafafa", fontSize: 12.5, color: "#4b5563", lineHeight: 1.55 }}>
-          As parcelas vêm dos contratos salvos e se atualizam quando o contrato muda — o que já foi pago fica como está. O que é pago entra no realizado da obra, ao lado da estimativa do Planejamento.
+          As parcelas vêm dos contratos salvos e se atualizam quando o contrato muda — o que já foi pago fica como está. O que é pago entra no realizado da obra, ao lado da estimativa do Físico-Financeiro.
         </div>
       </div>
     );
@@ -6971,6 +6971,17 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
   // Vendas do empreendimento: unidades, venda (sinal, parcelas,
   // financiamento) e o que falta receber (contas-receber.jsx).
+  // Resultado (P&L) do empreendimento: vendas pelo contrato × custo previsto
+  if (view === "resultadoObra" && obraSelecionada && typeof ResultadoDoEmpreendimento === "function") {
+    return (
+      <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+        <ResultadoDoEmpreendimento obra={obraAtual} isMobile={isMobile} aoVoltar={() => setView("detalheObra")}
+          plano={typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []}
+          estimativaPorConta={typeof estimativaPorConta === "function" ? estimativaPorConta(obraAtual.estimativaPL || []) : {}} />
+      </div>
+    );
+  }
+
   if (view === "vendasObra" && obraSelecionada && typeof VendasDoEmpreendimento === "function") {
     return (
       <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
@@ -7012,9 +7023,16 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </button>
           <button onClick={() => setView("planejamento")}
             style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Planejamento</div>
-            <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>P&L estimado da obra</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Físico-Financeiro</div>
+            <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>Planejado × executado</div>
           </button>
+          {typeof ehEmpreendimento === "function" && ehEmpreendimento(cliente) && typeof ResultadoDoEmpreendimento === "function" && (
+            <button data-vk-abrir-resultado="1" onClick={() => setView("resultadoObra")}
+              style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Resultado (P&amp;L)</div>
+              <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>O empreendimento dá lucro?</div>
+            </button>
+          )}
           <button onClick={() => setView("contratosDaObra")}
             style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Contratos</div>

@@ -19,7 +19,7 @@ if (a < 0 || b < 0) throw new Error("marcadores da parte pura não encontrados")
 const M = new Function(puroEf + "\n" + cr.slice(a, b) + `
   return { crSomarMeses, crGerarParcelas, novasContasAReceber, itensAReceber, resumoAReceber, candidatosDoRecebimento,
     receberContaAReceber, desfazerRecebimento, ligarParcelaDeProjeto, extratoEscritorio, lancamentosDoEscritorio,
-    planoDaVenda, obraComVenda, obraSemVenda, contasRecebidasCriadasPelaVenda, resumoDasVendas, entradasDeVendaSoltas, contasDaVenda, gruposDeParcelas, conferenciaDaVenda, provisaoDaVenda, obraComProvisao, obraComDespesaDaProvisao, acertoDaProvisao, obraSemMovDaProvisao };`)();
+    planoDaVenda, obraComVenda, obraSemVenda, contasRecebidasCriadasPelaVenda, resultadoDoEmpreendimento, resumoDasVendas, entradasDeVendaSoltas, contasDaVenda, gruposDeParcelas, conferenciaDaVenda, provisaoDaVenda, obraComProvisao, obraComDespesaDaProvisao, acertoDaProvisao, obraSemMovDaProvisao };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -217,6 +217,35 @@ teste("provisão de documentação: venda + provisão + juros; despesas, devolu�
   // alterar o valor da provisão
   assert.strictEqual(M.obraComProvisao(obra, vid, "7.000,00").vendas[0].provisaoDoc, 7000);
   assert.ok(!("provisaoDoc" in M.obraComProvisao(obra, vid, "").vendas[0]));
+});
+
+teste("resultado do empreendimento: venda pelo contrato, estoque pelo estimado, custo previsto rateado por área", () => {
+  const plano = [{ id: "venda_imovel", grupo: "receitas" }, { id: "material", grupo: "materiais" }, { id: "empreiteiro", grupo: "maoDeObra" },
+    { id: "terreno_aquisicao", grupo: "terreno" }, { id: "reembolsos", grupo: "excluidas" }];
+  const obra = {
+    unidadesVenda: [{ id: "u1", nome: "Casa 01", area: "45,93", precoEstimado: 210000 }, { id: "u2", nome: "Casa 02", area: "45,93", precoEstimado: 210000 },
+      { id: "u3", nome: "Casa 03", area: "91,86", precoEstimado: 400000 }],
+    vendas: [{ id: "v1", unidadeId: "u1", valor: 210000, juros: 1942.2, provisaoDoc: 6700 }],
+    contasPagar: [
+      { id: "a", contaId: "material", valor: 100000, pago: true, valorPago: 100000 },
+      { id: "b", contaId: "material", valor: 20000, pago: false },                 // a pagar também é custo incorrido
+      { id: "c", contaId: "empreiteiro", valor: 50000, pago: true, valorPago: 50000 },
+      { id: "d", contaId: "venda_imovel", vendaId: "v1", valor: 5000, pago: true },  // receita não é custo
+      { id: "e", contaId: "reembolsos", valor: 999, pago: true },                   // excluída
+    ],
+  };
+  const r = M.resultadoDoEmpreendimento(obra, { plano, estimativaPorConta: { material: 300000, empreiteiro: 40000, terreno_aquisicao: 60000 } });
+  const g = (id) => r.grupos.find((x) => x.id === id);
+  assert.deepStrictEqual([g("materiais").incorrido, g("materiais").previsto], [120000, 300000]);
+  assert.deepStrictEqual([g("maoDeObra").incorrido, g("maoDeObra").previsto], [50000, 50000], "passou do estimado: vale o incorrido");
+  assert.strictEqual(g("terreno").previsto, 60000);
+  assert.strictEqual(r.custo.previsto, 410000); assert.strictEqual(r.custo.incorrido, 170000);
+  assert.strictEqual(r.receita.vendida, 210000); assert.strictEqual(r.receita.estoque, 610000); assert.strictEqual(r.receita.juros, 1942.2);
+  assert.strictEqual(r.resultado.valor, 411942.2);
+  // rateio por área: a Casa 01 tem 1/4 da área
+  const u1 = r.unidades.find((l) => l.unidade.id === "u1");
+  assert.strictEqual(u1.custo, 102500); assert.strictEqual(u1.resultado, 109442.2);
+  assert.strictEqual(r.vendidas.quantas, 1); assert.strictEqual(r.rateio, "área");
 });
 
 for (const [nome, fn] of testes) {

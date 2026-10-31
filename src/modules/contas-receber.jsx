@@ -501,6 +501,76 @@ function resumoDasVendas(obra) {
 }
 function crBRL(v) { return "R$ " + crCent(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
+// ── Resultado do empreendimento (P&L) ──────────────────────────
+// Outra pergunta que o Físico-Financeiro: lá é "gastei mais ou menos que o
+// planejado"; aqui é "o empreendimento dá lucro". Por competência:
+//   receita = as vendas pelo contrato (sem a provisão de documentação, que é
+//             do comprador) + as unidades a vender pelo preço estimado + os
+//             juros/correção das parcelas (receita financeira);
+//   custo   = por grupo, o maior entre o estimado e o já incorrido (toda conta
+//             lançada na obra, paga ou a pagar — a compra no cartão inteira);
+//   por unidade, o custo rateado pela área (sem área, em partes iguais).
+const CR_GRUPOS_DO_CUSTO = [["terreno", "Terreno"], ["materiais", "Material & insumos"],
+  ["maoDeObra", "Mão de obra & prestadores"], ["servicos", "Serviços & taxas"], ["outros", "Outros custos"]];
+function resultadoDoEmpreendimento(obra, ctx) {
+  const o = obra || {};
+  const c = ctx || {};
+  const plano = c.plano || [];
+  const grupoDe = (id) => (plano.find((p) => p && p.id === id) || {}).grupo || "";
+  const doCusto = (g) => (g === "receitas" || g === "excluidas" ? "" : (CR_GRUPOS_DO_CUSTO.some(([id]) => id === g) ? g : "outros"));
+  const incorrido = {}, estimado = {};
+  for (const ct of o.contasPagar || []) {
+    if (!ct || ct.vendaId || ct.contaId === "documentacao_comprador") continue;
+    const g = doCusto(grupoDe(ct.contaId));
+    if (!g) continue;
+    const v = ct.pago ? (Number(ct.valorPago) || Number(ct.valor) || 0) : (Number(ct.valor) || 0);
+    incorrido[g] = crCent((incorrido[g] || 0) + v);
+  }
+  const est = c.estimativaPorConta || {};
+  for (const k of Object.keys(est)) {
+    const g = doCusto(grupoDe(k));
+    if (!g) continue;
+    estimado[g] = crCent((estimado[g] || 0) + (Number(est[k]) || 0));
+  }
+  const grupos = CR_GRUPOS_DO_CUSTO.map(([id, nome]) => {
+    const i = incorrido[id] || 0, e = estimado[id] || 0;
+    return { id, nome, incorrido: i, estimado: e, previsto: crCent(Math.max(i, e)) };
+  }).filter((g) => g.incorrido || g.estimado);
+  const soma = (k) => crCent(grupos.reduce((t, g) => t + g[k], 0));
+  const custo = { incorrido: soma("incorrido"), estimado: soma("estimado"), previsto: soma("previsto") };
+  const vendas = vendasDaObra(o);
+  const unidades = unidadesDaObra(o);
+  const areas = unidades.map((u) => crValor(u.area));
+  const comArea = areas.length && areas.every((a) => a > 0);
+  const somaArea = comArea ? areas.reduce((t, a) => t + a, 0) : unidades.length;
+  const linhas = unidades.map((u, i) => {
+    const v = vendas.find((x) => x.unidadeId === u.id) || null;
+    const peso = somaArea ? (comArea ? areas[i] : 1) / somaArea : 0;
+    const preco = v ? crCent(v.valor) : crCent(crValor(u.precoEstimado));
+    const juros = v ? crCent(Number(v.juros) || 0) : 0;
+    const custoU = crCent(custo.previsto * peso);
+    const res = crCent(preco + juros - custoU);
+    return { unidade: u, venda: v, preco, juros, custo: custoU, resultado: res, margem: preco + juros > 0 ? res / (preco + juros) : null, peso };
+  });
+  const receita = {
+    vendida: crCent(linhas.filter((l) => l.venda).reduce((t, l) => t + l.preco, 0)),
+    estoque: crCent(linhas.filter((l) => !l.venda).reduce((t, l) => t + l.preco, 0)),
+    juros: crCent(linhas.reduce((t, l) => t + l.juros, 0)),
+  };
+  receita.total = crCent(receita.vendida + receita.estoque + receita.juros);
+  const resultado = crCent(receita.total - custo.previsto);
+  const vend = linhas.filter((l) => l.venda);
+  const rv = crCent(vend.reduce((t, l) => t + l.preco + l.juros, 0));
+  const cv = crCent(vend.reduce((t, l) => t + l.custo, 0));
+  return {
+    grupos, custo, receita, unidades: linhas,
+    resultado: { valor: resultado, margem: receita.total > 0 ? resultado / receita.total : null },
+    vendidas: { quantas: vend.length, receita: rv, custo: cv, resultado: crCent(rv - cv), margem: rv > 0 ? (rv - cv) / rv : null },
+    executado: custo.previsto > 0 ? custo.incorrido / custo.previsto : null,
+    rateio: comArea ? "área" : "partes iguais",
+  };
+}
+
 // ── A receber: fim da parte pura ───────────────────────────────
 
 const CR_ORIGENS = [
@@ -1265,6 +1335,111 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Resultado do empreendimento (tela) ─────────────────────────
+function ResultadoDoEmpreendimento({ obra, plano, estimativaPorConta, isMobile, aoVoltar }) {
+  const r = resultadoDoEmpreendimento(obra, { plano, estimativaPorConta });
+  const din = (v) => crBRL(v);
+  const pct = (x) => (x == null ? "—" : (Math.round(x * 1000) / 10).toLocaleString("pt-BR") + "%");
+  const card = { border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding: "12px 14px", background: "#fff" };
+  const tile = (t, v, sub, cor) => (
+    <div style={card}>
+      <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 4 }}>{t}</div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: cor || "#111827", fontVariantNumeric: "tabular-nums" }}>{v}</div>
+      {sub ? <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>{sub}</div> : null}
+    </div>
+  );
+  const num = { textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
+  const linha = (rot, v, opc) => {
+    const o2 = opc || {};
+    return (
+      <div key={rot} style={{ display: "flex", gap: 10, padding: o2.forte ? "9px 12px" : "6px 12px", borderTop: "1px solid rgba(38,36,33,0.07)",
+        background: o2.forte ? "#fafafa" : "#fff", fontSize: o2.forte ? 13 : 12.5, fontWeight: o2.forte ? 700 : 400 }}>
+        <span style={{ flex: 1, minWidth: 0, color: o2.sub ? "#6b7280" : "#111827", paddingLeft: o2.sub ? 14 : 0 }}>{rot}</span>
+        <span style={{ ...num, color: o2.cor || (v < 0 ? "#b91c1c" : "#111827") }}>{o2.texto != null ? o2.texto : din(v)}</span>
+      </div>
+    );
+  };
+  const corRes = r.resultado.valor < 0 ? "#b91c1c" : "#047857";
+  return (
+    <div data-vk-resultado-emp="1" style={{ display: "grid", gap: 14 }}>
+      {aoVoltar && <button onClick={aoVoltar} style={{ background: "none", border: "none", padding: 0, color: "#4b5563", cursor: "pointer", fontFamily: "inherit", fontSize: 12, justifySelf: "start" }}>← Voltar</button>}
+      <div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Resultado (P&amp;L)</div>
+        <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 2 }}>{(obra || {}).nome} — o empreendimento dá lucro? Vendas pelo contrato, custo total previsto</div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 12 }}>
+        {tile("Receita total (VGV)", din(r.receita.total), `${din(r.receita.vendida)} vendido · ${din(r.receita.estoque)} a vender`)}
+        {tile("Custo total previsto", din(r.custo.previsto), `${din(r.custo.incorrido)} já incorrido`)}
+        {tile("Resultado previsto", din(r.resultado.valor), `margem ${pct(r.resultado.margem)}`, corRes)}
+        {tile("Custo executado", pct(r.executado), "do custo previsto")}
+      </div>
+
+      <div data-vk-dre="1" style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ padding: "8px 12px", fontSize: 10.5, fontWeight: 700, color: "#4b5563", letterSpacing: .4, background: "#fafafa" }}>DEMONSTRATIVO DO RESULTADO — PREVISTO</div>
+        {linha("Vendas contratadas", r.receita.vendida)}
+        {linha("Unidades a vender (preço estimado)", r.receita.estoque, { sub: true })}
+        {r.receita.juros ? linha("Receita financeira (juros/correção das parcelas)", r.receita.juros, { sub: true }) : null}
+        {linha("= Receita total", r.receita.total, { forte: true })}
+        {r.grupos.map((g) => linha(g.nome, -g.previsto, { sub: true, texto: "− " + din(g.previsto), cor: "#b91c1c" }))}
+        {linha("= Custo total", -r.custo.previsto, { forte: true, texto: "− " + din(r.custo.previsto), cor: "#b91c1c" })}
+        {linha("= Resultado", r.resultado.valor, { forte: true, cor: corRes })}
+        {linha("Margem", 0, { texto: pct(r.resultado.margem), cor: "#4b5563" })}
+      </div>
+
+      <div data-vk-custo-emp="1" style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "minmax(0,1fr) 90px 90px" : "minmax(0,1fr) 150px 150px 150px 90px", gap: 8,
+          padding: "8px 12px", fontSize: 10.5, fontWeight: 700, color: "#4b5563", letterSpacing: .4, background: "#fafafa" }}>
+          <span>CUSTO</span>{!isMobile && <span style={num}>ESTIMADO</span>}<span style={num}>INCORRIDO</span><span style={num}>PREVISTO</span>{!isMobile && <span style={num}>EXECUTADO</span>}
+        </div>
+        {r.grupos.map((g) => (
+          <div key={g.id} style={{ display: "grid", gridTemplateColumns: isMobile ? "minmax(0,1fr) 90px 90px" : "minmax(0,1fr) 150px 150px 150px 90px", gap: 8,
+            padding: "6px 12px", borderTop: "1px solid rgba(38,36,33,0.07)", fontSize: 12.5 }}>
+            <span style={{ minWidth: 0 }}>{g.nome}</span>
+            {!isMobile && <span style={{ ...num, color: "#6b7280" }}>{g.estimado ? din(g.estimado) : "—"}</span>}
+            <span style={num}>{din(g.incorrido)}</span>
+            <span style={{ ...num, fontWeight: 600 }}>{din(g.previsto)}</span>
+            {!isMobile && <span style={{ ...num, color: "#6b7280" }}>{g.previsto ? pct(g.incorrido / g.previsto) : "—"}</span>}
+          </div>
+        ))}
+        {!r.grupos.length && <div style={{ padding: 12, fontSize: 12.5, color: "#6b7280" }}>Nenhum custo lançado nem estimado ainda.</div>}
+      </div>
+
+      {r.unidades.length > 0 && (
+        <div data-vk-unidades-res="1" style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, overflow: "hidden" }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "minmax(0,1fr) 92px 92px" : "minmax(0,1fr) 140px 140px 140px 90px", gap: 8,
+            padding: "8px 12px", fontSize: 10.5, fontWeight: 700, color: "#4b5563", letterSpacing: .4, background: "#fafafa" }}>
+            <span>UNIDADE</span>{!isMobile && <span style={num}>RECEITA</span>}<span style={num}>CUSTO</span><span style={num}>RESULTADO</span>{!isMobile && <span style={num}>MARGEM</span>}
+          </div>
+          {r.unidades.map((l) => (
+            <div key={l.unidade.id} style={{ display: "grid", gridTemplateColumns: isMobile ? "minmax(0,1fr) 92px 92px" : "minmax(0,1fr) 140px 140px 140px 90px", gap: 8,
+              padding: "7px 12px", borderTop: "1px solid rgba(38,36,33,0.07)", fontSize: 12.5, alignItems: "center" }}>
+              <span style={{ minWidth: 0 }}>{l.unidade.nome}
+                <span style={{ fontSize: 10.5, marginLeft: 6, padding: "1px 7px", borderRadius: 999, background: l.venda ? "#eef5ff" : "#f3f4f6", color: l.venda ? "#0474f4" : "#4b5563" }}>
+                  {l.venda ? "vendida" : "a vender"}</span>
+                {isMobile && <div style={{ fontSize: 11, color: "#6b7280" }}>receita {din(l.preco + l.juros)}</div>}</span>
+              {!isMobile && <span style={num}>{din(l.preco + l.juros)}</span>}
+              <span style={num}>{din(l.custo)}</span>
+              <span style={{ ...num, fontWeight: 600, color: l.resultado < 0 ? "#b91c1c" : "#047857" }}>{din(l.resultado)}</span>
+              {!isMobile && <span style={{ ...num, color: "#6b7280" }}>{pct(l.margem)}</span>}
+            </div>
+          ))}
+          {r.vendidas.quantas > 0 && (
+            <div style={{ padding: "8px 12px", borderTop: "1px solid rgba(38,36,33,0.10)", background: "#fafafa", fontSize: 12.5 }}>
+              <b>Vendidas ({r.vendidas.quantas}):</b> receita {din(r.vendidas.receita)} · custo {din(r.vendidas.custo)} · resultado{" "}
+              <b style={{ color: r.vendidas.resultado < 0 ? "#b91c1c" : "#047857" }}>{din(r.vendidas.resultado)}</b> ({pct(r.vendidas.margem)})
+            </div>
+          )}
+        </div>
+      )}
+      <div style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.5 }}>
+        Por competência. A venda entra pelo contrato, sem a provisão de documentação (é do comprador); as unidades não vendidas entram pelo preço estimado.
+        O custo de cada grupo é o maior entre o estimado (Físico-Financeiro → Preencher) e o já incorrido (toda conta lançada na obra, paga ou a pagar).
+        Por unidade, o custo é rateado por {r.rateio}. O caixa (o que entrou e saiu do banco) fica no extrato do escritório.
+      </div>
     </div>
   );
 }
