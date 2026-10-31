@@ -2779,12 +2779,6 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [contratoSalvoEm, setContratoSalvoEm] = useState(0);
   // Contas a pagar: formulário da conta avulsa em edição.
   const [formConta, setFormConta] = useState(null);
-  // Editar pela Base de dados: o formulário é o mesmo das Contas a pagar;
-  // ao salvar ou cancelar, volta para a base.
-  const [voltarParaBase, setVoltarParaBase] = useState(false);
-  useEffect(() => {
-    if (!formConta && voltarParaBase) { setVoltarParaBase(false); setView("baseObra"); }
-  }, [formConta, voltarParaBase]);
   const [loteDePapeis, setLoteDePapeis] = useState(false);
   const [buscaContas, setBuscaContas] = useState("");
   const [papelContas, setPapelContas] = useState("todos");
@@ -5167,6 +5161,131 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   }
 
   // ── Contas a pagar da obra ───────────────────────────────────
+  // A janela de editar conta: a mesma nas Contas a pagar e na Base de dados
+  // (editar pela base não troca de tela).
+  const janelaDaConta = () => (
+      <>
+        {perm.podeEditar && formConta && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: isMobile ? 8 : 16 }}>
+          <div data-vk-ui="1" data-vk-form-conta="1" onClick={e => e.stopPropagation()}
+            style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: isMobile ? 14 : 18, background: "#fff", width: "100%", maxWidth: 820,
+              maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 12 }}>{contasDaObra.some(c => c.id === formConta.id) ? "Editar conta" : "Nova conta"}</div>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <div><label style={C.label}>Descrição *</label><input style={C.input} value={formConta.descricao} onChange={e => setFormConta({ ...formConta, descricao: e.target.value })} placeholder="ex.: caçamba de entulho" /></div>
+              {/* O valor é o que o fornecedor cobrou; mexer nele refaz o
+                  unitário, para os três números continuarem dizendo a
+                  mesma coisa. */}
+              <div><label style={C.label}>Valor (R$)</label><CampoCtrNum tipo="moeda" valor={formConta.valor}
+                onChange={v => setFormConta(conciliarValorDaConta(formConta, "valor", v))} style={C.input} placeholder="0,00" /></div>
+              <div><label style={C.label}>Vencimento</label><input style={C.input} type="date" value={formConta.vencimento || ""} onChange={e => setFormConta({ ...formConta, vencimento: e.target.value })} /></div>
+              <div>
+                <label style={C.label}>Conta</label>
+                <Selecao style={{ ...C.input, cursor: "pointer" }} value={formConta.contaId} onChange={e => setFormConta(typeof trocarContaComPadrao === "function"
+                  ? trocarContaComPadrao(formConta, e.target.value) : { ...formConta, contaId: e.target.value })}>
+                  {GRUPOS_PL.filter(g => g.id !== "receitas").map(g => (
+                    <optgroup key={g.id} label={g.titulo}>
+                      {PLANO_CONTAS.filter(c => c.grupo === g.id).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    </optgroup>
+                  ))}
+                </Selecao>
+              </div>
+              <div>
+                <label style={C.label}>Favorecido</label>
+                <Selecao style={{ ...C.input, cursor: "pointer" }} value={formConta.prestadorId || ""} onChange={e => setFormConta({ ...formConta, prestadorId: e.target.value, favorecido: (prestadores.find(p => p.id === e.target.value) || {}).nome || "" })}
+                  disabled={!!(prestRapido && prestRapido.destino === "conta")} criarRotulo="fornecedor" aoCriar={(termo) => abrirPrestRapido("conta", termo)}>
+                  <option value="">— sem prestador —</option>
+                  {prestadores.filter(p => p.ativo !== false).map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                </Selecao>
+                {blocoPrestRapido("conta")}
+              </div>
+              <div><label style={C.label}>Observação</label><input style={C.input} value={formConta.observacao || ""} onChange={e => setFormConta({ ...formConta, observacao: e.target.value })} /></div>
+            </div>
+
+            {/* ── O que foi comprado ──
+                Quantidade e preço são o que o custo por etapa e o preço do
+                catálogo leem. Consumiu menos do que o cotado? Muda a
+                quantidade aqui: o valor se refaz, e a conta a pagar passa a
+                dizer o que você vai pagar de verdade. */}
+            <div style={{ borderTop: "1px solid rgba(38,36,33,0.1)", paddingTop: 12, marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 10 }}>O que foi comprado</div>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr 1fr 1.4fr", gap: 12, alignItems: "end" }}>
+                <div style={{ minWidth: 0 }}>
+                  <label style={C.label}>Item do catálogo</label>
+                  {/* Não achou o item? O mesmo campo cadastra no catálogo, no padrão
+                      dele, e já usa — sem sair da conta. */}
+                  {typeof CampoItemDoCatalogo === "function" ? (
+                    <CampoItemDoCatalogo codigo={formConta.insumoCodigo || ""} descricao={formConta.descricao || ""}
+                      unidade={formConta.unidade || ""} insumos={data.materiais || []}
+                      aoCadastrar={(campos) => typeof cadastrarInsumoNoCatalogo === "function"
+                        ? cadastrarInsumoNoCatalogo(data, save, campos) : null}
+                      aoLimpar={() => setFormConta(f => ({ ...f, insumoCodigo: "" }))}
+                      aoEscolher={(ins) => setFormConta(f => lancamentoComInsumo(f, ins))} />
+                  ) : (
+                  <SelectBusca style={C.input} value={formConta.insumoCodigo || ""}
+                    onChange={(v) => {
+                      const ins = (data.materiais || []).find(x => x && (x.codigo === v || x.id === v)) || null;
+                      setFormConta(f => (ins ? lancamentoComInsumo(f, ins) : { ...f, insumoCodigo: v }));
+                    }}
+                    placeholder="Procurar no catálogo…"
+                    opcoes={[{ valor: "", rotulo: "— sem item do catálogo —" }].concat(
+                      (data.materiais || []).filter(i => i && i.ativo !== false)
+                        .map(i => ({ valor: i.codigo || i.id, rotulo: i.nome, grupo: i.grupo || "",
+                          extra: (i.aliases || []).join(" ") })))} />
+                  )}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <label style={C.label}>Quantidade</label>
+                  <CampoNumeroBR estilo={C.input} valor={formConta.quantidade} casas={0} maxCasas={4} placeholder="0"
+                    aoMudar={v => setFormConta(conciliarValorDaConta(formConta, "quantidade", v))} />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <label style={C.label}>Unidade</label>
+                  <CampoUnidadeDoItem valor={formConta.unidade || ""} estilo={C.input}
+                    unidades={typeof unidadesDoCatalogo === "function" ? unidadesDoCatalogo(insumosDoCatalogo(data)) : []}
+                    insumo={formConta.insumoCodigo ? insumosDoCatalogo(data).find(m => m && m.codigo === formConta.insumoCodigo) : null}
+                    aoMudar={v => setFormConta({ ...formConta, unidade: v })} />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <label style={C.label}>Preço unitário</label>
+                  <CampoCtrNum tipo="moeda" style={C.input} valor={formConta.unitario}
+                    onChange={v => setFormConta(conciliarValorDaConta(formConta, "unitario", v))} placeholder="0,00" />
+                </div>
+                {(() => {
+                  // Insumo por pavimento (tijolo, laje): os pavimentos vêm no
+                  // topo da lista e o campo avisa até alguém escolher.
+                  const insEtapa = formConta.insumoCodigo ? (data.materiais || []).find(m => m && m.codigo === formConta.insumoCodigo) : null;
+                  const pedePav = typeof faltaPavimento === "function" && faltaPavimento(insEtapa, formConta.etapa);
+                  return (
+                    <div style={{ minWidth: 0 }}>
+                      <label style={{ ...C.label, color: pedePav ? "#b45309" : C.label.color }}>{pedePav ? "Etapa — escolha o pavimento" : "Etapa"}</label>
+                      <SelectBusca style={pedePav ? { ...C.input, borderColor: "#f59e0b" } : C.input} value={formConta.etapa || ""}
+                        onChange={(v) => setFormConta(f => ({ ...f, etapa: v }))}
+                        placeholder={pedePav ? "Térreo, Pav 1 ou Pav 2…" : "Procurar etapa…"}
+                        opcoes={typeof opcoesDeEtapaDoLancamento === "function"
+                          ? opcoesDeEtapaDoLancamento(insEtapa, "— sem etapa —")
+                          : [{ valor: "", rotulo: "— sem etapa —" }].concat(
+                            (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(e => ({ valor: e.id, rotulo: e.nome || e.id })))} />
+                    </div>
+                  );
+                })()}
+              </div>
+              {numeroDeCampo(formConta.quantidade) > 0 && numeroDeCampo(formConta.unitario) > 0 && (
+                <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8 }}>
+                  {qtdBR(numeroDeCampo(formConta.quantidade))} {formConta.unidade || "un"} × {fmtMoedaCtr(numeroDeCampo(formConta.unitario))}
+                  {" = "}<b style={{ color: "#111827" }}>{fmtMoedaCtr(numeroDeCampo(formConta.valor))}</b>
+                </div>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button style={C.btnSec} onClick={() => setFormConta(null)}>Cancelar</button>
+              <button style={C.btn} onClick={salvarContaAvulsa}>Salvar conta</button>
+            </div>
+          </div>
+          </div>
+        )}
+      </>
+  );
   if (view === "contasPagar" && obraSelecionada) {
     const nomePrestador = (id) => (prestadores.find(p => p.id === id) || {}).nome || "";
     const nomeConta = (id) => (PLANO_CONTAS.find(c => c.id === id) || {}).nome || "—";
@@ -5744,125 +5863,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         {/* Nova conta e editar conta: numa janela por cima da lista. Antes o
             formulário abria no alto da página — quem clicava em Editar numa
             conta de novembro, lá embaixo, não via nada acontecer. */}
-        {perm.podeEditar && formConta && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: isMobile ? 8 : 16 }}>
-          <div data-vk-ui="1" data-vk-form-conta="1" onClick={e => e.stopPropagation()}
-            style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: isMobile ? 14 : 18, background: "#fff", width: "100%", maxWidth: 820,
-              maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 12 }}>{contasDaObra.some(c => c.id === formConta.id) ? "Editar conta" : "Nova conta"}</div>
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
-              <div><label style={C.label}>Descrição *</label><input style={C.input} value={formConta.descricao} onChange={e => setFormConta({ ...formConta, descricao: e.target.value })} placeholder="ex.: caçamba de entulho" /></div>
-              {/* O valor é o que o fornecedor cobrou; mexer nele refaz o
-                  unitário, para os três números continuarem dizendo a
-                  mesma coisa. */}
-              <div><label style={C.label}>Valor (R$)</label><CampoCtrNum tipo="moeda" valor={formConta.valor}
-                onChange={v => setFormConta(conciliarValorDaConta(formConta, "valor", v))} style={C.input} placeholder="0,00" /></div>
-              <div><label style={C.label}>Vencimento</label><input style={C.input} type="date" value={formConta.vencimento || ""} onChange={e => setFormConta({ ...formConta, vencimento: e.target.value })} /></div>
-              <div>
-                <label style={C.label}>Conta</label>
-                <Selecao style={{ ...C.input, cursor: "pointer" }} value={formConta.contaId} onChange={e => setFormConta(typeof trocarContaComPadrao === "function"
-                  ? trocarContaComPadrao(formConta, e.target.value) : { ...formConta, contaId: e.target.value })}>
-                  {GRUPOS_PL.filter(g => g.id !== "receitas").map(g => (
-                    <optgroup key={g.id} label={g.titulo}>
-                      {PLANO_CONTAS.filter(c => c.grupo === g.id).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                    </optgroup>
-                  ))}
-                </Selecao>
-              </div>
-              <div>
-                <label style={C.label}>Favorecido</label>
-                <Selecao style={{ ...C.input, cursor: "pointer" }} value={formConta.prestadorId || ""} onChange={e => setFormConta({ ...formConta, prestadorId: e.target.value, favorecido: (prestadores.find(p => p.id === e.target.value) || {}).nome || "" })}
-                  disabled={!!(prestRapido && prestRapido.destino === "conta")} criarRotulo="fornecedor" aoCriar={(termo) => abrirPrestRapido("conta", termo)}>
-                  <option value="">— sem prestador —</option>
-                  {prestadores.filter(p => p.ativo !== false).map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-                </Selecao>
-                {blocoPrestRapido("conta")}
-              </div>
-              <div><label style={C.label}>Observação</label><input style={C.input} value={formConta.observacao || ""} onChange={e => setFormConta({ ...formConta, observacao: e.target.value })} /></div>
-            </div>
-
-            {/* ── O que foi comprado ──
-                Quantidade e preço são o que o custo por etapa e o preço do
-                catálogo leem. Consumiu menos do que o cotado? Muda a
-                quantidade aqui: o valor se refaz, e a conta a pagar passa a
-                dizer o que você vai pagar de verdade. */}
-            <div style={{ borderTop: "1px solid rgba(38,36,33,0.1)", paddingTop: 12, marginBottom: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 10 }}>O que foi comprado</div>
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr 1fr 1.4fr", gap: 12, alignItems: "end" }}>
-                <div style={{ minWidth: 0 }}>
-                  <label style={C.label}>Item do catálogo</label>
-                  {/* Não achou o item? O mesmo campo cadastra no catálogo, no padrão
-                      dele, e já usa — sem sair da conta. */}
-                  {typeof CampoItemDoCatalogo === "function" ? (
-                    <CampoItemDoCatalogo codigo={formConta.insumoCodigo || ""} descricao={formConta.descricao || ""}
-                      unidade={formConta.unidade || ""} insumos={data.materiais || []}
-                      aoCadastrar={(campos) => typeof cadastrarInsumoNoCatalogo === "function"
-                        ? cadastrarInsumoNoCatalogo(data, save, campos) : null}
-                      aoLimpar={() => setFormConta(f => ({ ...f, insumoCodigo: "" }))}
-                      aoEscolher={(ins) => setFormConta(f => lancamentoComInsumo(f, ins))} />
-                  ) : (
-                  <SelectBusca style={C.input} value={formConta.insumoCodigo || ""}
-                    onChange={(v) => {
-                      const ins = (data.materiais || []).find(x => x && (x.codigo === v || x.id === v)) || null;
-                      setFormConta(f => (ins ? lancamentoComInsumo(f, ins) : { ...f, insumoCodigo: v }));
-                    }}
-                    placeholder="Procurar no catálogo…"
-                    opcoes={[{ valor: "", rotulo: "— sem item do catálogo —" }].concat(
-                      (data.materiais || []).filter(i => i && i.ativo !== false)
-                        .map(i => ({ valor: i.codigo || i.id, rotulo: i.nome, grupo: i.grupo || "",
-                          extra: (i.aliases || []).join(" ") })))} />
-                  )}
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <label style={C.label}>Quantidade</label>
-                  <CampoNumeroBR estilo={C.input} valor={formConta.quantidade} casas={0} maxCasas={4} placeholder="0"
-                    aoMudar={v => setFormConta(conciliarValorDaConta(formConta, "quantidade", v))} />
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <label style={C.label}>Unidade</label>
-                  <CampoUnidadeDoItem valor={formConta.unidade || ""} estilo={C.input}
-                    unidades={typeof unidadesDoCatalogo === "function" ? unidadesDoCatalogo(insumosDoCatalogo(data)) : []}
-                    insumo={formConta.insumoCodigo ? insumosDoCatalogo(data).find(m => m && m.codigo === formConta.insumoCodigo) : null}
-                    aoMudar={v => setFormConta({ ...formConta, unidade: v })} />
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <label style={C.label}>Preço unitário</label>
-                  <CampoCtrNum tipo="moeda" style={C.input} valor={formConta.unitario}
-                    onChange={v => setFormConta(conciliarValorDaConta(formConta, "unitario", v))} placeholder="0,00" />
-                </div>
-                {(() => {
-                  // Insumo por pavimento (tijolo, laje): os pavimentos vêm no
-                  // topo da lista e o campo avisa até alguém escolher.
-                  const insEtapa = formConta.insumoCodigo ? (data.materiais || []).find(m => m && m.codigo === formConta.insumoCodigo) : null;
-                  const pedePav = typeof faltaPavimento === "function" && faltaPavimento(insEtapa, formConta.etapa);
-                  return (
-                    <div style={{ minWidth: 0 }}>
-                      <label style={{ ...C.label, color: pedePav ? "#b45309" : C.label.color }}>{pedePav ? "Etapa — escolha o pavimento" : "Etapa"}</label>
-                      <SelectBusca style={pedePav ? { ...C.input, borderColor: "#f59e0b" } : C.input} value={formConta.etapa || ""}
-                        onChange={(v) => setFormConta(f => ({ ...f, etapa: v }))}
-                        placeholder={pedePav ? "Térreo, Pav 1 ou Pav 2…" : "Procurar etapa…"}
-                        opcoes={typeof opcoesDeEtapaDoLancamento === "function"
-                          ? opcoesDeEtapaDoLancamento(insEtapa, "— sem etapa —")
-                          : [{ valor: "", rotulo: "— sem etapa —" }].concat(
-                            (typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA : []).map(e => ({ valor: e.id, rotulo: e.nome || e.id })))} />
-                    </div>
-                  );
-                })()}
-              </div>
-              {numeroDeCampo(formConta.quantidade) > 0 && numeroDeCampo(formConta.unitario) > 0 && (
-                <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8 }}>
-                  {qtdBR(numeroDeCampo(formConta.quantidade))} {formConta.unidade || "un"} × {fmtMoedaCtr(numeroDeCampo(formConta.unitario))}
-                  {" = "}<b style={{ color: "#111827" }}>{fmtMoedaCtr(numeroDeCampo(formConta.valor))}</b>
-                </div>
-              )}
-            </div>
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              <button style={C.btnSec} onClick={() => setFormConta(null)}>Cancelar</button>
-              <button style={C.btn} onClick={salvarContaAvulsa}>Salvar conta</button>
-            </div>
-          </div>
-          </div>
-        )}
+        {janelaDaConta()}
         {perm.podeEditar && (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
             <button style={C.btnSec} onClick={() => setFormConta(contaAvulsaVazia(obraSelecionada.id))}>＋ Nova conta</button>
@@ -6957,12 +6958,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               const conta = (contasDaObra || []).find((x) => x && x.id === (c && c.id));
               if (!conta) return;
               if (conta.vendaId) { dialogo.alertar({ titulo: "Recebimento da venda", tipo: "aviso", mensagem: "Este lançamento é da venda: ajuste em Vendas." }); return; }
-              setVoltarParaBase(true); setView("contasPagar"); abrirEdicaoDaConta(conta);
+              abrirEdicaoDaConta(conta);
             },
             // o papel entra em todas as contas da mesma referência e, se a
             // transação já tem número, ganha o nome dele (4219.pdf)
             anexar: (c, arquivo) => mexerNoPapel(c, "anexar", null, arquivo, undefined, "comprovante") } : null}
           completar={perm.podeGerenciarObra ? { data, save, quem: typeof nomeDeQuem === "function" ? nomeDeQuem(perm.usuario) : "", obraId: obraAtual.id } : null} />
+        {janelaDaConta()}
       </div>
     );
   }
