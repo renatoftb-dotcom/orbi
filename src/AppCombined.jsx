@@ -12461,6 +12461,8 @@ function destinoNoEscritorio(contaId, modo, opcoes) {
     // gerenciar a própria obra não é receita: seria tirar de um bolso e pôr no outro
     if (contaId === "taxa_admin_obra") return "";
     if (contaId === "venda_imovel") return "emp_venda";
+    // complemento da documentação pago pelo comprador: volta para a provisão
+    if (contaId === "documentacao_comprador") return "res_documentacao";
     if (contaId === "deposito_proprio") return "emp_aporte";
     if (grupo === "terreno") return "emp_terreno";
     if (grupo === "materiais" || grupo === "maoDeObra") return "emp_construcao";
@@ -12474,6 +12476,93 @@ function destinoNoEscritorio(contaId, modo, opcoes) {
   if (contaId === "reembolsos") return "reembolsos";
   if (PONTE_GRUPOS_CUSTO.indexOf(grupo) >= 0) return "pagamentos_compras";
   return "";
+}
+
+// ── Provisão de documentação da venda, no escritório ─────────────
+// Parte do que o comprador paga (o sinal, em geral) é para a documentação
+// dele: não é receita da venda. Ao registrar a venda, o valor da provisão
+// troca de bolso — sai de "Venda de imóvel" e entra em "Documentação
+// Empreendimentos" (Provisões e reservas). É um par fora da conta: o saldo do
+// banco não muda. As despesas pagas pela provisão (ITBI, cartório, registro)
+// e a devolução ao comprador saem dela, pelo banco, e casam com o extrato.
+//
+// Nada que já foi lançado é editado (pode estar num mês fechado): mudou a
+// provisão, entra um par com a diferença; a venda desfeita, o par que a
+// zera. O lançamento de uma despesa tirada do quadro sai, se o mês dele
+// ainda estiver aberto.
+function ehLancamentoDaProvisao(l, obraId, vendaId) {
+  const o = (l && l.origem) || {};
+  return o.tipo === "provisao" && o.obraId === obraId && (!vendaId || o.refId === vendaId);
+}
+function provisaoNoEscritorio(lancamentos, obra, cliente, opcoes) {
+  const op = opcoes || {};
+  const ob = obra || {};
+  if (!ob.id) return lancamentos;
+  const hoje = /^\d{4}-\d{2}-\d{2}$/.test(String(op.hoje || "")) ? op.hoje : new Date().toISOString().slice(0, 10);
+  const fechamentos = op.fechamentos || {};
+  const aberto = (mes) => !bloqueioPorMesFechado(mes, fechamentos);
+  const lista = lancamentos || [];
+  const daObra = lista.filter((l) => ehLancamentoDaProvisao(l, ob.id));
+  const vendas = (ob.vendas || []).filter(Boolean);
+  const unidades = (ob.unidadesVenda || []).filter(Boolean);
+  const cents = (v) => Math.round((Number(v) || 0) * 100) / 100;
+  const comum = (venda) => {
+    const un = unidades.find((u) => u && u.id === venda.unidadeId) || {};
+    return { tipo: "escritorio", unidadeId: "empreendimento", empreendimentoId: (cliente && cliente.id) || ob.clienteId || "",
+      clienteId: (cliente && cliente.id) || ob.clienteId || "", cliente: (cliente && cliente.nome) || "", projeto: ob.nome || "",
+      fornecedor: "", fornecedorId: "", documento: "", anexos: [], unidadeVenda: un.nome || "", comprador: venda.comprador || "" };
+  };
+  const novos = [];
+  const tirar = new Set();
+  const idsDaVenda = new Set(vendas.map((v) => v.id));
+  const vendasComLanc = new Set(daObra.map((l) => l.origem.refId));
+  const todas = vendas.concat([...vendasComLanc].filter((id) => !idsDaVenda.has(id)).map((id) => ({ id, provisaoDoc: 0, provisaoMovs: [], _saiu: true })));
+  const mesHoje = hoje.slice(0, 7);
+  for (const v of todas) {
+    const dela = daObra.filter((l) => l.origem.refId === v.id);
+    const modelo = dela.find((l) => l.origem.parte === "reserva") || dela[0] || {};
+    const { extratoId: _e, historicoBanco: _h, contaBancariaId: _cb, conferidoPor: _cp, ...semBanco } = modelo;
+    const base = v._saiu ? semBanco : comum(v);
+    const rotulo = v._saiu ? (base.unidadeVenda || "venda desfeita") : `${base.unidadeVenda || "Unidade"}${v.comprador ? " · " + v.comprador : ""}`;
+    // 1) a troca de bolso: venda → provisão
+    const reservado = cents(dela.filter((l) => l.origem.parte === "reserva").reduce((t, l) => t + (Number(l.valor) || 0), 0));
+    const alvo = cents(Number(v.provisaoDoc) || 0);
+    const dif = cents(alvo - reservado);
+    if (Math.abs(dif) > 0.005 && aberto(mesHoje)) {
+      const n = dela.filter((l) => l.origem.parte === "reserva").length + 1;
+      const pre = `prov:${ob.id}:${v.id}:${n}`;
+      const marca = { competencia: mesHoje, lancadoEm: hoje, contaBanco: "nao", conferido: true, conferidoEm: hoje, criadoEm: new Date().toISOString() };
+      const { unidadeVenda: _u, comprador: _c, id: _i, origem: _o, contaId: _k, valor: _v, descricao: _d, ...resto } = base;
+      novos.push({ ...resto, ...marca, id: pre + ":venda", contaId: "emp_venda", valor: -dif,
+        descricao: `Provisão de documentação — ${rotulo} (sai da venda)`, origem: { obraId: ob.id, tipo: "provisao", refId: v.id, parte: "venda" } });
+      novos.push({ ...resto, ...marca, id: pre + ":reserva", contaId: "res_documentacao", valor: dif,
+        descricao: `Provisão de documentação — ${rotulo}`, origem: { obraId: ob.id, tipo: "provisao", refId: v.id, parte: "reserva" } });
+    }
+    // 2) as despesas e a devolução: saem da provisão, pelo banco
+    const movs = (v.provisaoMovs || []).filter((m) => m && (m.tipo === "despesa" || m.tipo === "devolucao"));
+    const idsMov = new Set(movs.map((m) => m.id));
+    for (const l of dela.filter((x) => x.origem.parte === "mov")) {
+      if (!idsMov.has(l.origem.movId) && aberto(l.competencia)) tirar.add(l.id);
+    }
+    for (const m of movs) {
+      const id = `prov:${ob.id}:${v.id}:mov:${m.id}`;
+      if (dela.some((l) => l.id === id)) continue;
+      const comp = String(m.data || "").slice(0, 7);
+      if (!/^\d{4}-\d{2}$/.test(comp) || !aberto(comp)) continue;
+      const { unidadeVenda: _u, comprador: _c, ...resto } = base;
+      novos.push({ ...resto, id, contaId: "res_documentacao", valor: -cents(m.valor), competencia: comp, lancadoEm: String(m.data).slice(0, 10),
+        contaBanco: "sim", ...(m.contaBancariaId && m.contaBancariaId !== CONTA_BANCARIA_PRINCIPAL ? { contaBancariaId: m.contaBancariaId } : {}),
+        descricao: `${m.tipo === "devolucao" ? "Devolução da provisão ao comprador" : m.descricao || "Despesa de documentação"} — ${rotulo}`,
+        criadoEm: new Date().toISOString(), origem: { obraId: ob.id, tipo: "provisao", refId: v.id, parte: "mov", movId: m.id } });
+    }
+  }
+  if (!novos.length && !tirar.size) return lancamentos;
+  return lista.filter((l) => !(l && tirar.has(l.id))).concat(novos);
+}
+// Quanto da provisão da venda já está reservado no escritório.
+function provisaoReservadaNoEscritorio(lancamentos, obraId, vendaId) {
+  return Math.round((lancamentos || []).filter((l) => ehLancamentoDaProvisao(l, obraId, vendaId) && l.origem.parte === "reserva")
+    .reduce((t, l) => t + (Number(l.valor) || 0), 0) * 100) / 100;
 }
 
 // O id é derivado da origem, não sorteado: rodar a ponte duas vezes na mesma
@@ -23496,7 +23585,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         motivos: [`fatura de ${mesAnoPorExtenso(fat.competencia)} do ${fat.cartao.nome}: ${efDinheiro(fat.total)}, ${fat.compras === 1 ? "1 compra" : fat.compras + " compras"}`] };
       // a parcela de um boleto que estava a pagar: a linha é ela
       const pv = parcelaDaVendaParaALinha(m, (data || {}).obras || []);
-      if (pv) return { campos: { contaId: "emp_venda", unidadeId: "empreendimento" }, parcelaDaVenda: pv,
+      if (pv) return { campos: { contaId: pv.conta.contaId === "documentacao_comprador" ? "res_documentacao" : "emp_venda", unidadeId: "empreendimento" }, parcelaDaVenda: pv,
         motivos: [`${pv.conta.descricao || "parcela da venda"}${pv.conta.favorecido ? " · " + pv.conta.favorecido : ""}, vence ${efDiaBR(pv.conta.vencimento)}`] };
       const ap = parcelaAPagarParaALinha(m, contaDaLinha(m), aPagarDoEscritorio(cfgFin));
       if (ap) return { campos: { contaId: ap.contaId, unidadeId: ap.unidadeId }, parcelaAPagar: ap,
@@ -56017,9 +56106,25 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // save (o que vier daqui entra junto).
   const gravarObras = (fatiaCrua, extras) => {
     const fatia = comPapeisNumerados(fatiaCrua);
-    const efeito = efeitosDaFatia(fatia);
+    const efeito = comProvisoesDasVendas(fatia, efeitosDaFatia(fatia));
     save({ ...data, obras: mesclarPorCliente(data.obras, cliente.id, fatia),
       ...(efeito || {}), ...(extras || {}) });
+  };
+  // A provisão de documentação das vendas do empreendimento vai para o
+  // escritório (sai da venda, entra em Documentação Empreendimentos), com as
+  // despesas e a devolução que saem dela. Só quando as vendas mudaram.
+  const comProvisoesDasVendas = (fatia, efeito) => {
+    if (perm.isCliente || typeof provisaoNoEscritorio !== "function") return efeito;
+    const fech = typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {};
+    let todos = (efeito && efeito.lancamentos) || (data && data.lancamentos) || [];
+    const antes = todos;
+    for (const o of fatia || []) {
+      if (!o || !o.id) continue;
+      const velha = (obras || []).find(x => x && x.id === o.id);
+      if (velha && velha.vendas === o.vendas) continue;
+      todos = provisaoNoEscritorio(todos, o, cliente, { fechamentos: fech });
+    }
+    return todos === antes ? efeito : { ...(efeito || {}), lancamentos: todos };
   };
   // O número do papel nasce na baixa: a transação que acabou de ser paga
   // (ou de ganhar um papel) recebe o próximo número da série, e o arquivo
@@ -59987,6 +60092,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <VendasDoEmpreendimento obra={obraAtual} podeEditar={!!perm.podeGerenciarObra} isMobile={isMobile} quem={quemSou()}
           aoVoltar={() => setView("detalheObra")} travaDoMes={(cs) => mesFechadoNaBaixa(cs)}
           contasBancarias={typeof contasBancariasDoEscritorio === "function" ? contasBancariasDoEscritorio(data) : []}
+          reservadoNoEscritorio={typeof provisaoReservadaNoEscritorio === "function" && !perm.isCliente
+            ? (vendaId) => provisaoReservadaNoEscritorio(lancamentosDoEscritorio(data), obraAtual.id, vendaId) : null}
           aoGravarObra={(nova) => gravarObras(obras.map(o => (o.id === nova.id ? nova : o)))} />
       </div>
     );
@@ -60698,14 +60805,15 @@ function acertoDaProvisao(obra, vendaId, ctx) {
   const id = o.novoId ? o.novoId() : "pm" + Date.now().toString(36);
   const agora = o.agora || new Date().toISOString();
   if (p.saldo > 0) {
-    const mov = { id, tipo: "devolucao", descricao: "Devolução ao comprador", valor: p.saldo, data: o.data, em: agora, por: o.quem || "" };
+    const mov = { id, tipo: "devolucao", descricao: "Devolução ao comprador", valor: p.saldo, data: o.data, em: agora, por: o.quem || "",
+      ...(o.contaBancariaId ? { contaBancariaId: o.contaBancariaId } : {}) };
     return { obra: obraComDespesaDaProvisao(obra, vendaId, mov) };
   }
   const un = unidadesDaObra(obra).find((u) => u.id === venda.unidadeId) || {};
   const contaId = o.novoId ? o.novoId() : id + "c";
   const conta = { id: contaId, obraId: o.obraId || (obra || {}).id || "", origem: "avulsa",
     descricao: `${un.nome || "Unidade"} · ${CR_PARTES_DA_VENDA.complemento}`, favorecido: venda.comprador,
-    contaId: "venda_imovel", etapa: "outros", valor: crCent(-p.saldo), vencimento: o.data, pago: false, pagoEm: "", valorPago: "",
+    contaId: "documentacao_comprador", etapa: "outros", valor: crCent(-p.saldo), vencimento: o.data, pago: false, pagoEm: "", valorPago: "",
     vendaId, parteVenda: "complemento", criadoEm: agora,
     registros: [{ em: agora, ato: "criada", por: o.quem || "", detalhe: "complemento da provisão de documentação" }] };
   const mov = { id, tipo: "complemento", descricao: "Complemento do comprador", valor: crCent(-p.saldo), data: o.data, contaId, em: agora, por: o.quem || "" };
@@ -61023,7 +61131,7 @@ function NovaContaAReceber({ data, f, setF, aoSalvar, estreito }) {
 // As unidades com o preço estimado; a venda de cada uma (sinal, parcelas,
 // financiamento do banco) e o que falta receber. Receber aqui é dar baixa
 // na conta da obra — a ponte leva para o escritório.
-function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra, travaDoMes, aoVoltar, contasBancarias }) {
+function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra, travaDoMes, aoVoltar, contasBancarias, reservadoNoEscritorio }) {
   const S = typeof EF_ESTILO !== "undefined" ? EF_ESTILO : {};
   const hoje = crHoje();
   const r = resumoDasVendas(obra);
@@ -61124,12 +61232,21 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
     if (!String(f.descricao || "").trim()) { setProvDesp({ ...f, erro: "Descreva a despesa." }); return; }
     if (!(valor > 0)) { setProvDesp({ ...f, erro: "Informe o valor." }); return; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(f.data || ""))) { setProvDesp({ ...f, erro: "Informe a data." }); return; }
+    if (variasContas && !f.contaBancaria) { setProvDesp({ ...f, erro: "Escolha de qual conta o dinheiro saiu." }); return; }
+    const trava = travaDoMes ? travaDoMes([{ pago: true, pagoEm: f.data, contaId: "venda_imovel" }]) : "";
+    if (trava) { setProvDesp({ ...f, erro: trava }); return; }
     aoGravarObra(obraComDespesaDaProvisao(obra, f.vendaId, { id: novoId(), tipo: "despesa", descricao: String(f.descricao).trim(),
-      valor, data: f.data, em: new Date().toISOString(), por: quem || "" }));
+      valor, data: f.data, em: new Date().toISOString(), por: quem || "",
+      ...(variasContas && f.contaBancaria !== "principal" ? { contaBancariaId: f.contaBancaria } : {}) }));
     setProvDesp(null);
   }
   function acertarProvisao() {
-    const r = acertoDaProvisao(obra, provAcerto.vendaId, { data: provAcerto.data, novoId, quem, obraId: obra.id });
+    const devolve = provisaoDaVenda(vendasDaObra(obra).find((v) => v.id === provAcerto.vendaId)).saldo > 0;
+    if (devolve && variasContas && !provAcerto.contaBancaria) { setProvAcerto({ ...provAcerto, erro: "Escolha de qual conta o dinheiro saiu." }); return; }
+    const trava = devolve && travaDoMes ? travaDoMes([{ pago: true, pagoEm: provAcerto.data, contaId: "venda_imovel" }]) : "";
+    if (trava) { setProvAcerto({ ...provAcerto, erro: trava }); return; }
+    const r = acertoDaProvisao(obra, provAcerto.vendaId, { data: provAcerto.data, novoId, quem, obraId: obra.id,
+      ...(devolve && variasContas && provAcerto.contaBancaria !== "principal" ? { contaBancariaId: provAcerto.contaBancaria } : {}) });
     if (r.erro) { setProvAcerto({ ...provAcerto, erro: r.erro }); return; }
     aoGravarObra(r.obra);
     setProvAcerto(null);
@@ -61285,10 +61402,22 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                               {" · "}<b style={{ color: pv.saldo < -0.005 ? "#b91c1c" : "#111827" }}>saldo {dinheiro(pv.saldo)}</b>
                             </div>
                           ) : <div style={{ color: "#6b7280", marginTop: 2 }}>Nenhuma provisão nesta venda.</div>}
+                          {reservadoNoEscritorio && (pv.valor > 0 || reservadoNoEscritorio(v.id) !== 0) && (() => {
+                            const noEsc = reservadoNoEscritorio(v.id);
+                            const ok = Math.abs(noEsc - pv.valor) < 0.005;
+                            return (
+                              <div data-vk-provisao-escritorio="1" style={{ marginTop: 2, color: ok ? "#047857" : "#b45309" }}>
+                                {ok ? `✓ reservado no escritório (Documentação Empreendimentos): ${dinheiro(noEsc)}`
+                                  : `No escritório: ${dinheiro(noEsc)} de ${dinheiro(pv.valor)} reservados em Documentação Empreendimentos`}
+                                {!ok && podeEditar && <button data-vk-provisao-reservar="1" style={{ ...btn, marginLeft: 8, padding: "3px 10px" }}
+                                  onClick={() => aoGravarObra({ ...obra, vendas: vendasDaObra(obra).map((x) => ({ ...x })) })}>Reservar agora</button>}
+                              </div>
+                            );
+                          })()}
                         </span>
                         {podeEditar && !ed && <button data-vk-provisao-valor="1" style={btn} onClick={() => setProvEd({ vendaId: v.id, valor: pv.valor ? paraCampoBR(pv.valor) : "", erro: "" })}>{pv.valor ? "Alterar valor" : "+ Provisão"}</button>}
-                        {podeEditar && (pv.valor > 0 || pv.movs.length > 0) && !dp && <button data-vk-provisao-despesa="1" style={btn} onClick={() => setProvDesp({ vendaId: v.id, descricao: "", valor: "", data: hoje, erro: "" })}>+ Despesa</button>}
-                        {podeEditar && Math.abs(pv.saldo) > 0.005 && pv.movs.length > 0 && !ac && <button data-vk-provisao-acertar="1" style={btn} onClick={() => setProvAcerto({ vendaId: v.id, data: hoje, erro: "" })}>Acertar com o comprador</button>}
+                        {podeEditar && (pv.valor > 0 || pv.movs.length > 0) && !dp && <button data-vk-provisao-despesa="1" style={btn} onClick={() => setProvDesp({ vendaId: v.id, descricao: "", valor: "", data: hoje, contaBancaria: "", erro: "" })}>+ Despesa</button>}
+                        {podeEditar && Math.abs(pv.saldo) > 0.005 && pv.movs.length > 0 && !ac && <button data-vk-provisao-acertar="1" style={btn} onClick={() => setProvAcerto({ vendaId: v.id, data: hoje, contaBancaria: "", erro: "" })}>Acertar com o comprador</button>}
                       </div>
                       {pv.movs.map((m) => (
                         <div key={m.id} data-vk-provisao-mov={m.tipo} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 12, paddingLeft: 10, borderLeft: "2px solid #e5e7eb" }}>
@@ -61316,6 +61445,14 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                             {campoDinheiro(provDesp.valor, (x) => setProvDesp({ ...provDesp, valor: x, erro: "" }), { style: { width: 140 }, "data-vk-provisao-desp-valor": "1" })}</label>
                           <label style={{ display: "grid", gap: 3 }}><span style={rot}>Data</span>
                             <input type="date" style={{ ...inp, width: 160 }} value={provDesp.data} onChange={(e) => setProvDesp({ ...provDesp, data: e.target.value, erro: "" })} /></label>
+                          {variasContas && (
+                            <label style={{ display: "grid", gap: 3 }}><span style={rot}>Saiu da conta</span>
+                              <select data-vk-provisao-conta="1" style={{ ...inp, width: 170 }} value={provDesp.contaBancaria}
+                                onChange={(e) => setProvDesp({ ...provDesp, contaBancaria: e.target.value, erro: "" })}>
+                                <option value="">Escolha a conta</option>
+                                {contasDoBanco.map((k) => <option key={k.id} value={k.id}>{k.nome}</option>)}
+                              </select></label>
+                          )}
                           <button data-vk-provisao-lancar="1" style={{ ...(S.btn || {}), padding: "7px 14px", fontSize: 12.5 }} onClick={lancarDespesaDaProvisao}>Lançar</button>
                           <button style={{ ...btn, padding: "7px 14px" }} onClick={() => setProvDesp(null)}>Cancelar</button>
                           {provDesp.erro && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{provDesp.erro}</div>}
@@ -61330,6 +61467,14 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                           </div>
                           <label style={{ display: "grid", gap: 3 }}><span style={rot}>{pv.saldo > 0 ? "Data da devolução" : "Vencimento"}</span>
                             <input type="date" style={{ ...inp, width: 160 }} value={provAcerto.data} onChange={(e) => setProvAcerto({ ...provAcerto, data: e.target.value, erro: "" })} /></label>
+                          {pv.saldo > 0 && variasContas && (
+                            <label style={{ display: "grid", gap: 3 }}><span style={rot}>Saiu da conta</span>
+                              <select data-vk-provisao-acerto-conta="1" style={{ ...inp, width: 170 }} value={provAcerto.contaBancaria}
+                                onChange={(e) => setProvAcerto({ ...provAcerto, contaBancaria: e.target.value, erro: "" })}>
+                                <option value="">Escolha a conta</option>
+                                {contasDoBanco.map((k) => <option key={k.id} value={k.id}>{k.nome}</option>)}
+                              </select></label>
+                          )}
                           <button data-vk-provisao-confirmar-acerto="1" style={{ ...(S.btn || {}), padding: "7px 14px", fontSize: 12.5 }} onClick={acertarProvisao}>{pv.saldo > 0 ? "Registrar devolução" : "Lançar complemento"}</button>
                           <button style={{ ...btn, padding: "7px 14px" }} onClick={() => setProvAcerto(null)}>Cancelar</button>
                           {provAcerto.erro && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{provAcerto.erro}</div>}

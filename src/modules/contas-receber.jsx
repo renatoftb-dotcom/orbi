@@ -443,14 +443,15 @@ function acertoDaProvisao(obra, vendaId, ctx) {
   const id = o.novoId ? o.novoId() : "pm" + Date.now().toString(36);
   const agora = o.agora || new Date().toISOString();
   if (p.saldo > 0) {
-    const mov = { id, tipo: "devolucao", descricao: "Devolução ao comprador", valor: p.saldo, data: o.data, em: agora, por: o.quem || "" };
+    const mov = { id, tipo: "devolucao", descricao: "Devolução ao comprador", valor: p.saldo, data: o.data, em: agora, por: o.quem || "",
+      ...(o.contaBancariaId ? { contaBancariaId: o.contaBancariaId } : {}) };
     return { obra: obraComDespesaDaProvisao(obra, vendaId, mov) };
   }
   const un = unidadesDaObra(obra).find((u) => u.id === venda.unidadeId) || {};
   const contaId = o.novoId ? o.novoId() : id + "c";
   const conta = { id: contaId, obraId: o.obraId || (obra || {}).id || "", origem: "avulsa",
     descricao: `${un.nome || "Unidade"} · ${CR_PARTES_DA_VENDA.complemento}`, favorecido: venda.comprador,
-    contaId: "venda_imovel", etapa: "outros", valor: crCent(-p.saldo), vencimento: o.data, pago: false, pagoEm: "", valorPago: "",
+    contaId: "documentacao_comprador", etapa: "outros", valor: crCent(-p.saldo), vencimento: o.data, pago: false, pagoEm: "", valorPago: "",
     vendaId, parteVenda: "complemento", criadoEm: agora,
     registros: [{ em: agora, ato: "criada", por: o.quem || "", detalhe: "complemento da provisão de documentação" }] };
   const mov = { id, tipo: "complemento", descricao: "Complemento do comprador", valor: crCent(-p.saldo), data: o.data, contaId, em: agora, por: o.quem || "" };
@@ -768,7 +769,7 @@ function NovaContaAReceber({ data, f, setF, aoSalvar, estreito }) {
 // As unidades com o preço estimado; a venda de cada uma (sinal, parcelas,
 // financiamento do banco) e o que falta receber. Receber aqui é dar baixa
 // na conta da obra — a ponte leva para o escritório.
-function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra, travaDoMes, aoVoltar, contasBancarias }) {
+function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra, travaDoMes, aoVoltar, contasBancarias, reservadoNoEscritorio }) {
   const S = typeof EF_ESTILO !== "undefined" ? EF_ESTILO : {};
   const hoje = crHoje();
   const r = resumoDasVendas(obra);
@@ -869,12 +870,21 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
     if (!String(f.descricao || "").trim()) { setProvDesp({ ...f, erro: "Descreva a despesa." }); return; }
     if (!(valor > 0)) { setProvDesp({ ...f, erro: "Informe o valor." }); return; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(f.data || ""))) { setProvDesp({ ...f, erro: "Informe a data." }); return; }
+    if (variasContas && !f.contaBancaria) { setProvDesp({ ...f, erro: "Escolha de qual conta o dinheiro saiu." }); return; }
+    const trava = travaDoMes ? travaDoMes([{ pago: true, pagoEm: f.data, contaId: "venda_imovel" }]) : "";
+    if (trava) { setProvDesp({ ...f, erro: trava }); return; }
     aoGravarObra(obraComDespesaDaProvisao(obra, f.vendaId, { id: novoId(), tipo: "despesa", descricao: String(f.descricao).trim(),
-      valor, data: f.data, em: new Date().toISOString(), por: quem || "" }));
+      valor, data: f.data, em: new Date().toISOString(), por: quem || "",
+      ...(variasContas && f.contaBancaria !== "principal" ? { contaBancariaId: f.contaBancaria } : {}) }));
     setProvDesp(null);
   }
   function acertarProvisao() {
-    const r = acertoDaProvisao(obra, provAcerto.vendaId, { data: provAcerto.data, novoId, quem, obraId: obra.id });
+    const devolve = provisaoDaVenda(vendasDaObra(obra).find((v) => v.id === provAcerto.vendaId)).saldo > 0;
+    if (devolve && variasContas && !provAcerto.contaBancaria) { setProvAcerto({ ...provAcerto, erro: "Escolha de qual conta o dinheiro saiu." }); return; }
+    const trava = devolve && travaDoMes ? travaDoMes([{ pago: true, pagoEm: provAcerto.data, contaId: "venda_imovel" }]) : "";
+    if (trava) { setProvAcerto({ ...provAcerto, erro: trava }); return; }
+    const r = acertoDaProvisao(obra, provAcerto.vendaId, { data: provAcerto.data, novoId, quem, obraId: obra.id,
+      ...(devolve && variasContas && provAcerto.contaBancaria !== "principal" ? { contaBancariaId: provAcerto.contaBancaria } : {}) });
     if (r.erro) { setProvAcerto({ ...provAcerto, erro: r.erro }); return; }
     aoGravarObra(r.obra);
     setProvAcerto(null);
@@ -1030,10 +1040,22 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                               {" · "}<b style={{ color: pv.saldo < -0.005 ? "#b91c1c" : "#111827" }}>saldo {dinheiro(pv.saldo)}</b>
                             </div>
                           ) : <div style={{ color: "#6b7280", marginTop: 2 }}>Nenhuma provisão nesta venda.</div>}
+                          {reservadoNoEscritorio && (pv.valor > 0 || reservadoNoEscritorio(v.id) !== 0) && (() => {
+                            const noEsc = reservadoNoEscritorio(v.id);
+                            const ok = Math.abs(noEsc - pv.valor) < 0.005;
+                            return (
+                              <div data-vk-provisao-escritorio="1" style={{ marginTop: 2, color: ok ? "#047857" : "#b45309" }}>
+                                {ok ? `✓ reservado no escritório (Documentação Empreendimentos): ${dinheiro(noEsc)}`
+                                  : `No escritório: ${dinheiro(noEsc)} de ${dinheiro(pv.valor)} reservados em Documentação Empreendimentos`}
+                                {!ok && podeEditar && <button data-vk-provisao-reservar="1" style={{ ...btn, marginLeft: 8, padding: "3px 10px" }}
+                                  onClick={() => aoGravarObra({ ...obra, vendas: vendasDaObra(obra).map((x) => ({ ...x })) })}>Reservar agora</button>}
+                              </div>
+                            );
+                          })()}
                         </span>
                         {podeEditar && !ed && <button data-vk-provisao-valor="1" style={btn} onClick={() => setProvEd({ vendaId: v.id, valor: pv.valor ? paraCampoBR(pv.valor) : "", erro: "" })}>{pv.valor ? "Alterar valor" : "+ Provisão"}</button>}
-                        {podeEditar && (pv.valor > 0 || pv.movs.length > 0) && !dp && <button data-vk-provisao-despesa="1" style={btn} onClick={() => setProvDesp({ vendaId: v.id, descricao: "", valor: "", data: hoje, erro: "" })}>+ Despesa</button>}
-                        {podeEditar && Math.abs(pv.saldo) > 0.005 && pv.movs.length > 0 && !ac && <button data-vk-provisao-acertar="1" style={btn} onClick={() => setProvAcerto({ vendaId: v.id, data: hoje, erro: "" })}>Acertar com o comprador</button>}
+                        {podeEditar && (pv.valor > 0 || pv.movs.length > 0) && !dp && <button data-vk-provisao-despesa="1" style={btn} onClick={() => setProvDesp({ vendaId: v.id, descricao: "", valor: "", data: hoje, contaBancaria: "", erro: "" })}>+ Despesa</button>}
+                        {podeEditar && Math.abs(pv.saldo) > 0.005 && pv.movs.length > 0 && !ac && <button data-vk-provisao-acertar="1" style={btn} onClick={() => setProvAcerto({ vendaId: v.id, data: hoje, contaBancaria: "", erro: "" })}>Acertar com o comprador</button>}
                       </div>
                       {pv.movs.map((m) => (
                         <div key={m.id} data-vk-provisao-mov={m.tipo} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 12, paddingLeft: 10, borderLeft: "2px solid #e5e7eb" }}>
@@ -1061,6 +1083,14 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                             {campoDinheiro(provDesp.valor, (x) => setProvDesp({ ...provDesp, valor: x, erro: "" }), { style: { width: 140 }, "data-vk-provisao-desp-valor": "1" })}</label>
                           <label style={{ display: "grid", gap: 3 }}><span style={rot}>Data</span>
                             <input type="date" style={{ ...inp, width: 160 }} value={provDesp.data} onChange={(e) => setProvDesp({ ...provDesp, data: e.target.value, erro: "" })} /></label>
+                          {variasContas && (
+                            <label style={{ display: "grid", gap: 3 }}><span style={rot}>Saiu da conta</span>
+                              <select data-vk-provisao-conta="1" style={{ ...inp, width: 170 }} value={provDesp.contaBancaria}
+                                onChange={(e) => setProvDesp({ ...provDesp, contaBancaria: e.target.value, erro: "" })}>
+                                <option value="">Escolha a conta</option>
+                                {contasDoBanco.map((k) => <option key={k.id} value={k.id}>{k.nome}</option>)}
+                              </select></label>
+                          )}
                           <button data-vk-provisao-lancar="1" style={{ ...(S.btn || {}), padding: "7px 14px", fontSize: 12.5 }} onClick={lancarDespesaDaProvisao}>Lançar</button>
                           <button style={{ ...btn, padding: "7px 14px" }} onClick={() => setProvDesp(null)}>Cancelar</button>
                           {provDesp.erro && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{provDesp.erro}</div>}
@@ -1075,6 +1105,14 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                           </div>
                           <label style={{ display: "grid", gap: 3 }}><span style={rot}>{pv.saldo > 0 ? "Data da devolução" : "Vencimento"}</span>
                             <input type="date" style={{ ...inp, width: 160 }} value={provAcerto.data} onChange={(e) => setProvAcerto({ ...provAcerto, data: e.target.value, erro: "" })} /></label>
+                          {pv.saldo > 0 && variasContas && (
+                            <label style={{ display: "grid", gap: 3 }}><span style={rot}>Saiu da conta</span>
+                              <select data-vk-provisao-acerto-conta="1" style={{ ...inp, width: 170 }} value={provAcerto.contaBancaria}
+                                onChange={(e) => setProvAcerto({ ...provAcerto, contaBancaria: e.target.value, erro: "" })}>
+                                <option value="">Escolha a conta</option>
+                                {contasDoBanco.map((k) => <option key={k.id} value={k.id}>{k.nome}</option>)}
+                              </select></label>
+                          )}
                           <button data-vk-provisao-confirmar-acerto="1" style={{ ...(S.btn || {}), padding: "7px 14px", fontSize: 12.5 }} onClick={acertarProvisao}>{pv.saldo > 0 ? "Registrar devolução" : "Lançar complemento"}</button>
                           <button style={{ ...btn, padding: "7px 14px" }} onClick={() => setProvAcerto(null)}>Cancelar</button>
                           {provAcerto.erro && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{provAcerto.erro}</div>}

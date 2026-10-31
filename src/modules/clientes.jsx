@@ -2821,9 +2821,25 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // save (o que vier daqui entra junto).
   const gravarObras = (fatiaCrua, extras) => {
     const fatia = comPapeisNumerados(fatiaCrua);
-    const efeito = efeitosDaFatia(fatia);
+    const efeito = comProvisoesDasVendas(fatia, efeitosDaFatia(fatia));
     save({ ...data, obras: mesclarPorCliente(data.obras, cliente.id, fatia),
       ...(efeito || {}), ...(extras || {}) });
+  };
+  // A provisão de documentação das vendas do empreendimento vai para o
+  // escritório (sai da venda, entra em Documentação Empreendimentos), com as
+  // despesas e a devolução que saem dela. Só quando as vendas mudaram.
+  const comProvisoesDasVendas = (fatia, efeito) => {
+    if (perm.isCliente || typeof provisaoNoEscritorio !== "function") return efeito;
+    const fech = typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {};
+    let todos = (efeito && efeito.lancamentos) || (data && data.lancamentos) || [];
+    const antes = todos;
+    for (const o of fatia || []) {
+      if (!o || !o.id) continue;
+      const velha = (obras || []).find(x => x && x.id === o.id);
+      if (velha && velha.vendas === o.vendas) continue;
+      todos = provisaoNoEscritorio(todos, o, cliente, { fechamentos: fech });
+    }
+    return todos === antes ? efeito : { ...(efeito || {}), lancamentos: todos };
   };
   // O número do papel nasce na baixa: a transação que acabou de ser paga
   // (ou de ganhar um papel) recebe o próximo número da série, e o arquivo
@@ -6791,6 +6807,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <VendasDoEmpreendimento obra={obraAtual} podeEditar={!!perm.podeGerenciarObra} isMobile={isMobile} quem={quemSou()}
           aoVoltar={() => setView("detalheObra")} travaDoMes={(cs) => mesFechadoNaBaixa(cs)}
           contasBancarias={typeof contasBancariasDoEscritorio === "function" ? contasBancariasDoEscritorio(data) : []}
+          reservadoNoEscritorio={typeof provisaoReservadaNoEscritorio === "function" && !perm.isCliente
+            ? (vendaId) => provisaoReservadaNoEscritorio(lancamentosDoEscritorio(data), obraAtual.id, vendaId) : null}
           aoGravarObra={(nova) => gravarObras(obras.map(o => (o.id === nova.id ? nova : o)))} />
       </div>
     );

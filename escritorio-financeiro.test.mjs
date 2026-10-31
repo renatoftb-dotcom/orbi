@@ -26,7 +26,7 @@ const M = new Function(src + `
            lancamentoDoExtrato, efValorDeTexto, efEhData, efLinhaDoCabecalho,
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
-           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte, parcelaDaVendaParaALinha, lancamentosDaContaBancaria,
+           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte, parcelaDaVendaParaALinha, lancamentosDaContaBancaria, provisaoNoEscritorio, provisaoReservadaNoEscritorio,
            fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
@@ -3886,6 +3886,47 @@ teste("venda do empreendimento: a parcela recebida na Cora vai para a Cora e cas
   // sem conta marcada, continua na principal (como sempre foi)
   const r2 = M.lancamentosDaObraParaEscritorio(obra, cliente, { planoObra: PLANO_OBRA, contasPagar: [{ ...paga, contaBancariaId: undefined }], entradas: [] });
   assert.ok(!("contaBancariaId" in r2.lancamentos[0]));
+});
+
+teste("provisão de documentação: sai da venda e entra em Documentação Empreendimentos; despesas saem dela pelo banco", () => {
+  const cliente = { id: "e1", nome: "Jacarezinho Módulo 1", servicos: { empreendimento: true } };
+  const venda = { id: "v1", unidadeId: "u1", comprador: "Comprador", valor: 210000, provisaoDoc: 6700, provisaoMovs: [] };
+  const obra = { id: "obE", clienteId: "e1", nome: "Jacarezinho Módulo 1", unidadesVenda: [{ id: "u1", nome: "Casa 01" }], vendas: [venda] };
+  const fech = { "2026-09": { fechadoEm: "2026-10-03" } };
+  const outro = { id: "x1", tipo: "escritorio", contaId: "emp_venda", valor: 12000, competencia: "2026-09" };
+  let l = M.provisaoNoEscritorio([outro], obra, cliente, { fechamentos: fech, hoje: "2026-10-31" });
+  const par = l.filter((x) => x.origem && x.origem.tipo === "provisao");
+  assert.strictEqual(par.length, 2);
+  const v = par.find((x) => x.contaId === "emp_venda"), r = par.find((x) => x.contaId === "res_documentacao");
+  assert.strictEqual(v.valor, -6700); assert.strictEqual(r.valor, 6700);
+  assert.strictEqual(v.contaBanco, "nao"); assert.strictEqual(r.competencia, "2026-10"); assert.ok(r.conferido);
+  assert.strictEqual(M.provisaoReservadaNoEscritorio(l, "obE", "v1"), 6700);
+  // de novo, sem mudança: nada novo
+  assert.strictEqual(M.provisaoNoEscritorio(l, obra, cliente, { fechamentos: fech, hoje: "2026-10-31" }), l);
+  // grupos: vendas cai 6.700, provisões e reservas sobe 6.700, saldo do banco igual
+  const ext = M.extratoEscritorio(l.concat([]), {});
+  const out = ext.find((m) => m.mes === "2026-10");
+  assert.strictEqual(out.grupos.reservas, 6700); assert.strictEqual(out.grupos.emp_entradas, -6700);
+  // a provisão mudou para 7.000: um par com a diferença
+  const obra2 = { ...obra, vendas: [{ ...venda, provisaoDoc: 7000 }] };
+  l = M.provisaoNoEscritorio(l, obra2, cliente, { fechamentos: fech, hoje: "2026-11-05" });
+  assert.strictEqual(M.provisaoReservadaNoEscritorio(l, "obE", "v1"), 7000);
+  // despesa paga pela Cora: sai da provisão, passa pelo banco, na conta certa
+  const obra3 = { ...obra2, vendas: [{ ...obra2.vendas[0], provisaoMovs: [{ id: "d1", tipo: "despesa", descricao: "ITBI", valor: 4200, data: "2026-11-10", contaBancariaId: "cora" }] }] };
+  l = M.provisaoNoEscritorio(l, obra3, cliente, { fechamentos: fech, hoje: "2026-11-10" });
+  const d = l.find((x) => x.origem && x.origem.movId === "d1");
+  assert.strictEqual(d.valor, -4200); assert.strictEqual(d.contaBanco, "sim"); assert.strictEqual(d.contaBancariaId, "cora"); assert.strictEqual(d.competencia, "2026-11");
+  const c = M.conciliarExtrato([{ id: "b1", data: "2026-11-10", valor: -4200, historico: "ITBI prefeitura" }], [d], {});
+  assert.strictEqual(c.casados.length, 1, "casa com o débito do banco");
+  // tirou a despesa do quadro: o lançamento sai
+  l = M.provisaoNoEscritorio(l, obra2, cliente, { fechamentos: fech, hoje: "2026-11-12" });
+  assert.ok(!l.some((x) => x.origem && x.origem.movId === "d1"));
+  // venda desfeita: o par que zera a provisão
+  l = M.provisaoNoEscritorio(l, { ...obra, vendas: [] }, cliente, { fechamentos: fech, hoje: "2026-11-15" });
+  assert.strictEqual(M.provisaoReservadaNoEscritorio(l, "obE", "v1"), 0);
+  assert.ok(l.some((x) => x.id === "x1"), "o resto fica");
+  // complemento do comprador vai para a provisão, não para a venda
+  assert.strictEqual(M.destinoNoEscritorio("documentacao_comprador", "empreendimento"), "res_documentacao");
 });
 
 for (const [nome, fn] of testes) {

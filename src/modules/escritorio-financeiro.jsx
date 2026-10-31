@@ -472,6 +472,8 @@ function destinoNoEscritorio(contaId, modo, opcoes) {
     // gerenciar a própria obra não é receita: seria tirar de um bolso e pôr no outro
     if (contaId === "taxa_admin_obra") return "";
     if (contaId === "venda_imovel") return "emp_venda";
+    // complemento da documentação pago pelo comprador: volta para a provisão
+    if (contaId === "documentacao_comprador") return "res_documentacao";
     if (contaId === "deposito_proprio") return "emp_aporte";
     if (grupo === "terreno") return "emp_terreno";
     if (grupo === "materiais" || grupo === "maoDeObra") return "emp_construcao";
@@ -485,6 +487,93 @@ function destinoNoEscritorio(contaId, modo, opcoes) {
   if (contaId === "reembolsos") return "reembolsos";
   if (PONTE_GRUPOS_CUSTO.indexOf(grupo) >= 0) return "pagamentos_compras";
   return "";
+}
+
+// ── Provisão de documentação da venda, no escritório ─────────────
+// Parte do que o comprador paga (o sinal, em geral) é para a documentação
+// dele: não é receita da venda. Ao registrar a venda, o valor da provisão
+// troca de bolso — sai de "Venda de imóvel" e entra em "Documentação
+// Empreendimentos" (Provisões e reservas). É um par fora da conta: o saldo do
+// banco não muda. As despesas pagas pela provisão (ITBI, cartório, registro)
+// e a devolução ao comprador saem dela, pelo banco, e casam com o extrato.
+//
+// Nada que já foi lançado é editado (pode estar num mês fechado): mudou a
+// provisão, entra um par com a diferença; a venda desfeita, o par que a
+// zera. O lançamento de uma despesa tirada do quadro sai, se o mês dele
+// ainda estiver aberto.
+function ehLancamentoDaProvisao(l, obraId, vendaId) {
+  const o = (l && l.origem) || {};
+  return o.tipo === "provisao" && o.obraId === obraId && (!vendaId || o.refId === vendaId);
+}
+function provisaoNoEscritorio(lancamentos, obra, cliente, opcoes) {
+  const op = opcoes || {};
+  const ob = obra || {};
+  if (!ob.id) return lancamentos;
+  const hoje = /^\d{4}-\d{2}-\d{2}$/.test(String(op.hoje || "")) ? op.hoje : new Date().toISOString().slice(0, 10);
+  const fechamentos = op.fechamentos || {};
+  const aberto = (mes) => !bloqueioPorMesFechado(mes, fechamentos);
+  const lista = lancamentos || [];
+  const daObra = lista.filter((l) => ehLancamentoDaProvisao(l, ob.id));
+  const vendas = (ob.vendas || []).filter(Boolean);
+  const unidades = (ob.unidadesVenda || []).filter(Boolean);
+  const cents = (v) => Math.round((Number(v) || 0) * 100) / 100;
+  const comum = (venda) => {
+    const un = unidades.find((u) => u && u.id === venda.unidadeId) || {};
+    return { tipo: "escritorio", unidadeId: "empreendimento", empreendimentoId: (cliente && cliente.id) || ob.clienteId || "",
+      clienteId: (cliente && cliente.id) || ob.clienteId || "", cliente: (cliente && cliente.nome) || "", projeto: ob.nome || "",
+      fornecedor: "", fornecedorId: "", documento: "", anexos: [], unidadeVenda: un.nome || "", comprador: venda.comprador || "" };
+  };
+  const novos = [];
+  const tirar = new Set();
+  const idsDaVenda = new Set(vendas.map((v) => v.id));
+  const vendasComLanc = new Set(daObra.map((l) => l.origem.refId));
+  const todas = vendas.concat([...vendasComLanc].filter((id) => !idsDaVenda.has(id)).map((id) => ({ id, provisaoDoc: 0, provisaoMovs: [], _saiu: true })));
+  const mesHoje = hoje.slice(0, 7);
+  for (const v of todas) {
+    const dela = daObra.filter((l) => l.origem.refId === v.id);
+    const modelo = dela.find((l) => l.origem.parte === "reserva") || dela[0] || {};
+    const { extratoId: _e, historicoBanco: _h, contaBancariaId: _cb, conferidoPor: _cp, ...semBanco } = modelo;
+    const base = v._saiu ? semBanco : comum(v);
+    const rotulo = v._saiu ? (base.unidadeVenda || "venda desfeita") : `${base.unidadeVenda || "Unidade"}${v.comprador ? " · " + v.comprador : ""}`;
+    // 1) a troca de bolso: venda → provisão
+    const reservado = cents(dela.filter((l) => l.origem.parte === "reserva").reduce((t, l) => t + (Number(l.valor) || 0), 0));
+    const alvo = cents(Number(v.provisaoDoc) || 0);
+    const dif = cents(alvo - reservado);
+    if (Math.abs(dif) > 0.005 && aberto(mesHoje)) {
+      const n = dela.filter((l) => l.origem.parte === "reserva").length + 1;
+      const pre = `prov:${ob.id}:${v.id}:${n}`;
+      const marca = { competencia: mesHoje, lancadoEm: hoje, contaBanco: "nao", conferido: true, conferidoEm: hoje, criadoEm: new Date().toISOString() };
+      const { unidadeVenda: _u, comprador: _c, id: _i, origem: _o, contaId: _k, valor: _v, descricao: _d, ...resto } = base;
+      novos.push({ ...resto, ...marca, id: pre + ":venda", contaId: "emp_venda", valor: -dif,
+        descricao: `Provisão de documentação — ${rotulo} (sai da venda)`, origem: { obraId: ob.id, tipo: "provisao", refId: v.id, parte: "venda" } });
+      novos.push({ ...resto, ...marca, id: pre + ":reserva", contaId: "res_documentacao", valor: dif,
+        descricao: `Provisão de documentação — ${rotulo}`, origem: { obraId: ob.id, tipo: "provisao", refId: v.id, parte: "reserva" } });
+    }
+    // 2) as despesas e a devolução: saem da provisão, pelo banco
+    const movs = (v.provisaoMovs || []).filter((m) => m && (m.tipo === "despesa" || m.tipo === "devolucao"));
+    const idsMov = new Set(movs.map((m) => m.id));
+    for (const l of dela.filter((x) => x.origem.parte === "mov")) {
+      if (!idsMov.has(l.origem.movId) && aberto(l.competencia)) tirar.add(l.id);
+    }
+    for (const m of movs) {
+      const id = `prov:${ob.id}:${v.id}:mov:${m.id}`;
+      if (dela.some((l) => l.id === id)) continue;
+      const comp = String(m.data || "").slice(0, 7);
+      if (!/^\d{4}-\d{2}$/.test(comp) || !aberto(comp)) continue;
+      const { unidadeVenda: _u, comprador: _c, ...resto } = base;
+      novos.push({ ...resto, id, contaId: "res_documentacao", valor: -cents(m.valor), competencia: comp, lancadoEm: String(m.data).slice(0, 10),
+        contaBanco: "sim", ...(m.contaBancariaId && m.contaBancariaId !== CONTA_BANCARIA_PRINCIPAL ? { contaBancariaId: m.contaBancariaId } : {}),
+        descricao: `${m.tipo === "devolucao" ? "Devolução da provisão ao comprador" : m.descricao || "Despesa de documentação"} — ${rotulo}`,
+        criadoEm: new Date().toISOString(), origem: { obraId: ob.id, tipo: "provisao", refId: v.id, parte: "mov", movId: m.id } });
+    }
+  }
+  if (!novos.length && !tirar.size) return lancamentos;
+  return lista.filter((l) => !(l && tirar.has(l.id))).concat(novos);
+}
+// Quanto da provisão da venda já está reservado no escritório.
+function provisaoReservadaNoEscritorio(lancamentos, obraId, vendaId) {
+  return Math.round((lancamentos || []).filter((l) => ehLancamentoDaProvisao(l, obraId, vendaId) && l.origem.parte === "reserva")
+    .reduce((t, l) => t + (Number(l.valor) || 0), 0) * 100) / 100;
 }
 
 // O id é derivado da origem, não sorteado: rodar a ponte duas vezes na mesma
@@ -11507,7 +11596,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         motivos: [`fatura de ${mesAnoPorExtenso(fat.competencia)} do ${fat.cartao.nome}: ${efDinheiro(fat.total)}, ${fat.compras === 1 ? "1 compra" : fat.compras + " compras"}`] };
       // a parcela de um boleto que estava a pagar: a linha é ela
       const pv = parcelaDaVendaParaALinha(m, (data || {}).obras || []);
-      if (pv) return { campos: { contaId: "emp_venda", unidadeId: "empreendimento" }, parcelaDaVenda: pv,
+      if (pv) return { campos: { contaId: pv.conta.contaId === "documentacao_comprador" ? "res_documentacao" : "emp_venda", unidadeId: "empreendimento" }, parcelaDaVenda: pv,
         motivos: [`${pv.conta.descricao || "parcela da venda"}${pv.conta.favorecido ? " · " + pv.conta.favorecido : ""}, vence ${efDiaBR(pv.conta.vencimento)}`] };
       const ap = parcelaAPagarParaALinha(m, contaDaLinha(m), aPagarDoEscritorio(cfgFin));
       if (ap) return { campos: { contaId: ap.contaId, unidadeId: ap.unidadeId }, parcelaAPagar: ap,
