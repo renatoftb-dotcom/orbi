@@ -950,6 +950,9 @@ export default function ModuloClientesFornecedores() {
   const [data, setData]               = useState(null);
   const [loading, setLoading]         = useState(false);
   const [aba, setAba]                 = useState("home");
+  // O plano de contas da empresa (Configuração → Plano de contas) monta as
+  // listas de conta em cima das de sempre — antes de qualquer tela ler.
+  if (typeof aplicarPlanoDeContas === "function") aplicarPlanoDeContas((((data || {}).escritorio) || {}).planoContas);
   const [showBackup, setShowBackup]   = useState(false);
   const [trocandoSenha, setTrocandoSenha] = useState(false);   // menu "Trocar senha"
   const [backupJson, setBackupJson]   = useState("");
@@ -2101,6 +2104,18 @@ export default function ModuloClientesFornecedores() {
                 {!colapsadaEf && "Orçamento"}
               </span>
             </button>
+            {!isMaster && typeof PlanoDeContasConfig === "function" && (
+              <button style={itemStyle(aba==="planoContas")} data-vk-menu-plano-contas="1"
+                title={colapsadaEf ? "Plano de contas" : undefined}
+                onMouseEnter={e => { if(aba!=="planoContas") e.currentTarget.style.background="#eef5ff"; }}
+                onMouseLeave={e => { if(aba!=="planoContas") e.currentTarget.style.background="transparent"; }}
+                onClick={() => { tentarTrocar(() => { setAba("planoContas"); setOrcamentoTelaCheia(null); }); }}>
+                <span style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <IconeMaster nome="tabela" tamanho={16} cor={aba==="planoContas" ? "#0474f4" : "#4b5563"} />
+                  {!colapsadaEf && "Plano de contas"}
+                </span>
+              </button>
+            )}
             {/* Botão Escritório do Master (gerenciar dados da Vicke). Mantido aqui
                 discretamente — uso raro mas existe. */}
             {isMaster && (
@@ -2308,6 +2323,10 @@ export default function ModuloClientesFornecedores() {
           {typeof aba === "string" && aba.indexOf("escritorio") === 0 && <Escritorio key={escritorioKey} abaInicial={aba.indexOf(":") > 0 ? aba.slice(aba.indexOf(":") + 1) : "dados"} data={data} save={save} onReload={loadData} aoTrocarAba={(k) => setAba("escritorio:" + k)}
             aoAbrirObra={(id) => { setObraParaAbrir(id || null); setObrasKey(n => n + 1); setAba("obras"); }} />}
           {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} setUsuario={setUsuario} />}
+          {aba === "planoContas" && typeof PlanoDeContasConfig === "function" && (
+            <div data-vk-ui="1" style={{ maxWidth: 980, border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: 16, background: "#fff", boxSizing: "border-box" }}>
+              <PlanoDeContasConfig data={data} save={save} podeEditar={!(usuario && usuario.perfil === "cliente")} /></div>
+          )}
           {/* Sub-abas do menu Master — Admin recebe initialTab pra abrir direto na aba certa */}
           {aba === "admin" && isMaster && <Admin usuario={usuario} data={data} save={save} />}
           {aba === "admin:empresas" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="empresas" />}

@@ -802,5 +802,6 @@ function contaPorId(id) {
 // contasDoGrupo(grupoId) → array de contas daquele grupo, na ordem em que
 // aparecem em PLANO_CONTAS.
 function contasDoGrupo(grupoId) {
-  return PLANO_CONTAS.filter(c => c.grupo === grupoId);
+  // desativada no Plano de contas da empresa: some da escolha
+  return PLANO_CONTAS.filter(c => c.grupo === grupoId && !c.inativa);
 }

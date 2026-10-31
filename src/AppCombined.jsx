@@ -11979,7 +11979,8 @@ function contaPorId(id) {
 // contasDoGrupo(grupoId) → array de contas daquele grupo, na ordem em que
 // aparecem em PLANO_CONTAS.
 function contasDoGrupo(grupoId) {
-  return PLANO_CONTAS.filter(c => c.grupo === grupoId);
+  // desativada no Plano de contas da empresa: some da escolha
+  return PLANO_CONTAS.filter(c => c.grupo === grupoId && !c.inativa);
 }
 
 
@@ -12147,6 +12148,116 @@ function contaEscritorio(id) {
 
 function grupoEscritorio(id) {
   return GRUPOS_ESCRITORIO.find((g) => g.id === id) || null;
+}
+
+// ── Plano de contas da empresa (Configuração → Plano de contas) ──
+// Os planos de sempre (o do escritório e o das obras) são a base; cada
+// empresa acrescenta contas, troca nomes e desativa as que não usa. Fica
+// em escritorio.planoContas = { escritorio: {novas, nomes, inativas},
+// obra: {novas, nomes, inativas} }. Conta nunca é apagada: desativada, ela
+// some das listas de escolha e o histórico continua lendo o nome dela.
+// A conta nova de obra chega ao escritório pelo grupo (material → construção,
+// mão de obra → construção, serviços → taxas…), como as de sempre.
+let EF_PLANOS_ORIGINAIS = null;
+let EF_PLANO_APLICADO = null;
+function planosOriginaisDeContas() {
+  if (!EF_PLANOS_ORIGINAIS) {
+    EF_PLANOS_ORIGINAIS = {
+      obra: (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).map((c) => ({ ...c })),
+      escritorio: PLANO_CONTAS_ESCRITORIO.map((c) => ({ ...c })),
+    };
+  }
+  return EF_PLANOS_ORIGINAIS;
+}
+function planoDeContasMontado(base, cfg) {
+  const c = cfg || {};
+  const nomes = c.nomes || {};
+  const inativas = new Set(c.inativas || []);
+  return (base || []).map((x) => ({ ...x })).concat((c.novas || []).map((x) => ({ ...x, nova: true }))).map((x) => {
+    const y = { ...x };
+    const nome = String(nomes[x.id] || "").trim();
+    if (nome && nome !== x.nome) { y.apelidos = (x.apelidos || []).concat([x.nome]); y.nome = nome; }
+    if (inativas.has(x.id)) y.inativa = true; else delete y.inativa;
+    return y;
+  });
+}
+// Monta os planos da empresa em cima dos de sempre, nos mesmos arrays que o
+// sistema inteiro lê. Mesma configuração, nada a fazer.
+function aplicarPlanoDeContas(cfg) {
+  const chave = JSON.stringify(cfg || {});
+  if (chave === EF_PLANO_APLICADO) return false;
+  const o = planosOriginaisDeContas();
+  const c = cfg || {};
+  const obra = planoDeContasMontado(o.obra, c.obra);
+  const esc = planoDeContasMontado(o.escritorio, c.escritorio);
+  if (typeof PLANO_CONTAS !== "undefined") PLANO_CONTAS.splice(0, PLANO_CONTAS.length, ...obra);
+  PLANO_CONTAS_ESCRITORIO.splice(0, PLANO_CONTAS_ESCRITORIO.length, ...esc);
+  EF_PLANO_APLICADO = chave;
+  return true;
+}
+// Os grupos em que se pode criar conta, por área.
+const EF_GRUPOS_DO_PLANO = {
+  escritorio: ["receitas", "despesas", "gestao_entradas", "gestao_saidas", "socios", "socios_entradas", "reservas"],
+  empreendimentos: ["emp_entradas", "emp_aportes", "emp_saidas"],
+  obra: ["materiais", "maoDeObra", "servicos", "terreno", "receitas"],
+};
+function efSlugDaConta(t) {
+  return efSemAcento(t).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 32) || "conta";
+}
+// Conta nova: nome, grupo e (no escritório) as unidades que o grupo já usa.
+function contaNovaNoPlano(cfg, area, dados, opcoes) {
+  const o = opcoes || {};
+  const plano = area === "obra" ? "obra" : "escritorio";
+  const nome = String((dados || {}).nome || "").trim();
+  const grupo = String((dados || {}).grupo || "");
+  if (!nome) return { erro: "Dê um nome à conta." };
+  if ((EF_GRUPOS_DO_PLANO[area] || []).indexOf(grupo) < 0) return { erro: "Escolha o grupo da conta." };
+  const atuais = o.atuais || (plano === "obra" ? (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []) : PLANO_CONTAS_ESCRITORIO);
+  if (atuais.some((c) => c && efSemAcento(c.nome) === efSemAcento(nome))) return { erro: `Já existe a conta "${nome}".` };
+  const base = (plano === "obra" ? "u_" : "ue_") + efSlugDaConta(nome);
+  let id = base, k = 2;
+  while (atuais.some((c) => c && c.id === id)) id = base + "_" + (k++);
+  const conta = { id, nome, grupo };
+  if (plano === "escritorio") {
+    const us = new Set();
+    for (const c of atuais) if (c && c.grupo === grupo) for (const u of c.unidades || []) us.add(u);
+    conta.unidades = us.size ? [...us] : (area === "empreendimentos" ? ["empreendimento"] : ["escritorio"]);
+    conta.apelidos = [];
+  }
+  const c = { ...(cfg || {}) };
+  const p = { ...(c[plano] || {}) };
+  p.novas = (p.novas || []).concat([conta]);
+  c[plano] = p;
+  return { cfg: c, conta };
+}
+function contaRenomeadaNoPlano(cfg, area, id, nome, opcoes) {
+  const o = opcoes || {};
+  const plano = area === "obra" ? "obra" : "escritorio";
+  const n = String(nome || "").trim();
+  if (!n) return { erro: "Dê um nome à conta." };
+  const atuais = o.atuais || (plano === "obra" ? (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []) : PLANO_CONTAS_ESCRITORIO);
+  if (atuais.some((c) => c && c.id !== id && efSemAcento(c.nome) === efSemAcento(n))) return { erro: `Já existe a conta "${n}".` };
+  const c = { ...(cfg || {}) };
+  const p = { ...(c[plano] || {}) };
+  if ((p.novas || []).some((x) => x.id === id)) p.novas = p.novas.map((x) => (x.id === id ? { ...x, nome: n } : x));
+  else {
+    const original = ((o.originais || planosOriginaisDeContas())[plano] || []).find((x) => x.id === id);
+    const nomes = { ...(p.nomes || {}) };
+    if (original && original.nome === n) delete nomes[id]; else nomes[id] = n;
+    p.nomes = nomes;
+  }
+  c[plano] = p;
+  return { cfg: c };
+}
+function contaAtivadaNoPlano(cfg, area, id, ativa) {
+  const plano = area === "obra" ? "obra" : "escritorio";
+  const c = { ...(cfg || {}) };
+  const p = { ...(c[plano] || {}) };
+  const s = new Set(p.inativas || []);
+  if (ativa) s.delete(id); else s.add(id);
+  p.inativas = [...s];
+  c[plano] = p;
+  return { cfg: c };
 }
 
 // Nome da planilha → id da conta. O que não casa volta null e vai para a
@@ -12331,7 +12442,7 @@ function composicaoDoExtrato(lancamentos, alvo, periodo) {
 function contasParaReclassificar(l) {
   const atual = contaEscritorio((l || {}).contaId);
   if (!atual) return [];
-  return PLANO_CONTAS_ESCRITORIO.filter((c) => c.grupo === atual.grupo && !c.interna && c.id !== atual.id
+  return PLANO_CONTAS_ESCRITORIO.filter((c) => c.grupo === atual.grupo && !c.interna && !c.inativa && c.id !== atual.id
     && (!(c.unidades || []).length || c.unidades.indexOf(l.unidadeId) >= 0));
 }
 // O que impede reclassificar por aqui (texto) — ou "" quando pode.
@@ -16184,11 +16295,11 @@ function contaEscolhida(valor) {
 
 function contasDoLancamento(unidadeId, opcoes) {
   const escritorio = PLANO_CONTAS_ESCRITORIO
-    .filter((c) => c && !c.interna && (!(c.unidades || []).length || c.unidades.indexOf(unidadeId) >= 0))
+    .filter((c) => c && !c.interna && !c.inativa && (!(c.unidades || []).length || c.unidades.indexOf(unidadeId) >= 0))
     .map((c) => ({ valor: valorDaConta(c.id, "escritorio"), id: c.id, nome: c.nome, grupo: c.grupo, fonte: "escritorio" }));
   if (!unidadePedeObra(unidadeId)) return { obra: [], escritorio: escritorio };
   const obra = pontePlanoDaObra(opcoes)
-    .filter((c) => c && EF_GRUPOS_CUSTO_OBRA.indexOf(c.grupo) >= 0)
+    .filter((c) => c && !c.inativa && EF_GRUPOS_CUSTO_OBRA.indexOf(c.grupo) >= 0)
     .map((c) => ({ valor: valorDaConta(c.id, "obra"), id: c.id, nome: c.nome, grupo: c.grupo, fonte: "obra" }));
   return { obra: obra, escritorio: escritorio };
 }
@@ -24489,6 +24600,132 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+// ── Configuração → Plano de contas ──────────────────────────────
+// Três áreas: o escritório (receitas, despesas, gestão, sócios, reservas),
+// os empreendimentos (vendas, aportes, investimento — no extrato do
+// escritório) e as obras (as contas de cada obra e empreendimento: material,
+// mão de obra, serviços, terreno, entradas). Criar, renomear e desativar.
+function PlanoDeContasConfig({ data, save, podeEditar }) {
+  const S = EF_ESTILO;
+  const [area, setArea] = useState("escritorio");
+  const [nova, setNova] = useState(null);       // { grupo, nome, erro }
+  const [renomeando, setRenomeando] = useState(null); // { id, nome, erro }
+  const [verInativas, setVerInativas] = useState(true);
+  const esc = (data || {}).escritorio || {};
+  const cfg = esc.planoContas || {};
+  if (typeof aplicarPlanoDeContas === "function") aplicarPlanoDeContas(cfg);
+  const plano = area === "obra" ? (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []) : PLANO_CONTAS_ESCRITORIO;
+  const gruposDaObra = typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : [];
+  const tituloDoGrupo = (g) => {
+    if (area === "obra") { const x = gruposDaObra.find((y) => y.id === g); return x ? x.titulo : g; }
+    const x = grupoEscritorio(g); return x ? x.titulo : g;
+  };
+  const gravar = (novoCfg) => {
+    aplicarPlanoDeContas(novoCfg);
+    return save({ ...data, escritorio: { ...esc, planoContas: novoCfg } }).catch(console.error);
+  };
+  function criar() {
+    const r = contaNovaNoPlano(cfg, area, { nome: nova.nome, grupo: nova.grupo });
+    if (r.erro) { setNova({ ...nova, erro: r.erro }); return; }
+    gravar(r.cfg); setNova(null);
+  }
+  function renomear() {
+    const r = contaRenomeadaNoPlano(cfg, area, renomeando.id, renomeando.nome);
+    if (r.erro) { setRenomeando({ ...renomeando, erro: r.erro }); return; }
+    gravar(r.cfg); setRenomeando(null);
+  }
+  const ativar = (c, ativa) => gravar(contaAtivadaNoPlano(cfg, area, c.id, ativa).cfg);
+  const abas = [["escritorio", "Escritório"], ["empreendimentos", "Empreendimentos"], ["obra", "Obras"]];
+  const nomeAba = { escritorio: "Escritório", empreendimentos: "Empreendimentos", obra: "Obras" };
+  const btn = { ...(S.btnSec || {}), padding: "4px 10px", fontSize: 12 };
+  const inp = { ...(S.input || {}), width: "100%" };
+  return (
+    <div data-vk-plano-contas="1" style={{ display: "grid", gap: 14 }}>
+      <div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Plano de contas</div>
+        <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 2 }}>
+          As contas do escritório, dos empreendimentos e das obras. Crie contas novas, troque nomes e desative as que não usa —
+          conta desativada some das listas de escolha, e o que já foi lançado nela continua como está.
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {abas.map(([v, r]) => (
+          <button key={v} type="button" data-vk-area-plano={v} onClick={() => { setArea(v); setNova(null); setRenomeando(null); }}
+            style={{ fontFamily: "inherit", fontSize: 12.5, padding: "6px 12px", borderRadius: 999, cursor: "pointer",
+              border: `1px solid ${area === v ? "#0474f4" : "rgba(38,36,33,0.16)"}`, background: area === v ? "#eef5ff" : "#fff",
+              color: area === v ? "#0474f4" : "#4b5563", fontWeight: area === v ? 600 : 500 }}>{r}</button>
+        ))}
+        <label style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center", fontSize: 12, color: "#4b5563" }}>
+          <input type="checkbox" checked={verInativas} onChange={(e) => setVerInativas(e.target.checked)} /> mostrar desativadas
+        </label>
+      </div>
+      {area === "obra" && (
+        <div style={{ fontSize: 12, color: "#4b5563", background: "#f8fafc", borderRadius: 10, padding: "8px 12px" }}>
+          São as contas de cada obra e empreendimento (contas a pagar, Físico-Financeiro). A conta nova chega ao escritório pelo grupo:
+          material e mão de obra viram Construção (ou Pagamentos e compras na gestão), serviços viram Taxas e registros, terreno vira Aquisição de terreno.
+        </div>
+      )}
+      {(EF_GRUPOS_DO_PLANO[area] || []).map((g) => {
+        const contas = plano.filter((c) => c && c.grupo === g && !c.interna && (verInativas || !c.inativa));
+        return (
+          <div key={g} data-vk-grupo-plano={g} style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, overflow: "hidden" }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 12px", background: "#fafafa" }}>
+              <span style={{ flex: 1, fontSize: 11, fontWeight: 700, color: "#4b5563", letterSpacing: .4, textTransform: "uppercase" }}>{tituloDoGrupo(g)}</span>
+              {podeEditar && !(nova && nova.grupo === g) && (
+                <button type="button" data-vk-nova-conta-plano={g} style={btn} onClick={() => { setRenomeando(null); setNova({ grupo: g, nome: "", erro: "" }); }}>+ Conta</button>
+              )}
+            </div>
+            {nova && nova.grupo === g && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: "8px 12px", borderTop: "1px solid rgba(38,36,33,0.07)", background: "#f7fbff" }}>
+                <input data-vk-nome-conta-nova="1" autoFocus style={{ ...inp, flex: "1 1 220px", width: "auto" }} value={nova.nome} placeholder="Digite o nome da conta"
+                  onChange={(e) => setNova({ ...nova, nome: e.target.value, erro: "" })} onKeyDown={(e) => { if (e.key === "Enter") criar(); }} />
+                <button type="button" data-vk-criar-conta="1" style={{ ...(S.btn || {}), padding: "7px 14px", fontSize: 12.5 }} onClick={criar}>Criar</button>
+                <button type="button" style={{ ...btn, padding: "7px 14px" }} onClick={() => setNova(null)}>Cancelar</button>
+                {nova.erro && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{nova.erro}</div>}
+              </div>
+            )}
+            {contas.map((c) => {
+              const aqui = renomeando && renomeando.id === c.id;
+              return (
+                <div key={c.id} data-vk-conta-plano={c.id} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: "7px 12px",
+                  borderTop: "1px solid rgba(38,36,33,0.07)", opacity: c.inativa ? 0.55 : 1 }}>
+                  {aqui ? (
+                    <>
+                      <input data-vk-renomear-campo="1" autoFocus style={{ ...inp, flex: "1 1 220px", width: "auto" }} value={renomeando.nome}
+                        onChange={(e) => setRenomeando({ ...renomeando, nome: e.target.value, erro: "" })} onKeyDown={(e) => { if (e.key === "Enter") renomear(); }} />
+                      <button type="button" data-vk-salvar-nome="1" style={{ ...(S.btn || {}), padding: "6px 12px", fontSize: 12.5 }} onClick={renomear}>Salvar</button>
+                      <button type="button" style={{ ...btn, padding: "6px 12px" }} onClick={() => setRenomeando(null)}>Cancelar</button>
+                      {renomeando.erro && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{renomeando.erro}</div>}
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ flex: "1 1 140px", minWidth: 0, fontSize: 13, color: "#111827" }}>
+                        {c.nome}
+                        {c.nova && <span style={{ fontSize: 10.5, marginLeft: 6, padding: "1px 7px", borderRadius: 999, background: "#eef5ff", color: "#0474f4" }}>criada</span>}
+                        {c.inativa && <span style={{ fontSize: 10.5, marginLeft: 6, padding: "1px 7px", borderRadius: 999, background: "#f3f4f6", color: "#4b5563" }}>desativada</span>}
+                      </span>
+                      {podeEditar && (
+                        <span style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                          <button type="button" data-vk-renomear-conta={c.id} style={btn} onClick={() => { setNova(null); setRenomeando({ id: c.id, nome: c.nome, erro: "" }); }}>Renomear</button>
+                          {c.inativa
+                            ? <button type="button" data-vk-reativar-conta={c.id} style={btn} onClick={() => ativar(c, true)}>Reativar</button>
+                            : <button type="button" data-vk-desativar-conta={c.id} style={{ ...btn, color: "#b91c1c" }} onClick={() => ativar(c, false)}>Desativar</button>}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })}
+            {!contas.length && <div style={{ padding: "8px 12px", fontSize: 12, color: "#6b7280", borderTop: "1px solid rgba(38,36,33,0.07)" }}>Nenhuma conta neste grupo.</div>}
+          </div>
+        );
+      })}
+      <div style={{ fontSize: 11, color: "#6b7280" }}>{nomeAba[area]}: as mudanças valem para toda a empresa e aparecem na hora nas listas de conta.</div>
     </div>
   );
 }
@@ -58614,7 +58851,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   ? trocarContaComPadrao(formConta, e.target.value) : { ...formConta, contaId: e.target.value })}>
                   {GRUPOS_PL.filter(g => g.id !== "receitas").map(g => (
                     <optgroup key={g.id} label={g.titulo}>
-                      {PLANO_CONTAS.filter(c => c.grupo === g.id).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                      {PLANO_CONTAS.filter(c => c.grupo === g.id && !c.inativa).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                     </optgroup>
                   ))}
                 </Selecao>
@@ -94724,6 +94961,9 @@ export default function ModuloClientesFornecedores() {
   const [data, setData]               = useState(null);
   const [loading, setLoading]         = useState(false);
   const [aba, setAba]                 = useState("home");
+  // O plano de contas da empresa (Configuração → Plano de contas) monta as
+  // listas de conta em cima das de sempre — antes de qualquer tela ler.
+  if (typeof aplicarPlanoDeContas === "function") aplicarPlanoDeContas((((data || {}).escritorio) || {}).planoContas);
   const [showBackup, setShowBackup]   = useState(false);
   const [trocandoSenha, setTrocandoSenha] = useState(false);   // menu "Trocar senha"
   const [backupJson, setBackupJson]   = useState("");
@@ -95875,6 +96115,18 @@ export default function ModuloClientesFornecedores() {
                 {!colapsadaEf && "Orçamento"}
               </span>
             </button>
+            {!isMaster && typeof PlanoDeContasConfig === "function" && (
+              <button style={itemStyle(aba==="planoContas")} data-vk-menu-plano-contas="1"
+                title={colapsadaEf ? "Plano de contas" : undefined}
+                onMouseEnter={e => { if(aba!=="planoContas") e.currentTarget.style.background="#eef5ff"; }}
+                onMouseLeave={e => { if(aba!=="planoContas") e.currentTarget.style.background="transparent"; }}
+                onClick={() => { tentarTrocar(() => { setAba("planoContas"); setOrcamentoTelaCheia(null); }); }}>
+                <span style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <IconeMaster nome="tabela" tamanho={16} cor={aba==="planoContas" ? "#0474f4" : "#4b5563"} />
+                  {!colapsadaEf && "Plano de contas"}
+                </span>
+              </button>
+            )}
             {/* Botão Escritório do Master (gerenciar dados da Vicke). Mantido aqui
                 discretamente — uso raro mas existe. */}
             {isMaster && (
@@ -96082,6 +96334,10 @@ export default function ModuloClientesFornecedores() {
           {typeof aba === "string" && aba.indexOf("escritorio") === 0 && <Escritorio key={escritorioKey} abaInicial={aba.indexOf(":") > 0 ? aba.slice(aba.indexOf(":") + 1) : "dados"} data={data} save={save} onReload={loadData} aoTrocarAba={(k) => setAba("escritorio:" + k)}
             aoAbrirObra={(id) => { setObraParaAbrir(id || null); setObrasKey(n => n + 1); setAba("obras"); }} />}
           {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} setUsuario={setUsuario} />}
+          {aba === "planoContas" && typeof PlanoDeContasConfig === "function" && (
+            <div data-vk-ui="1" style={{ maxWidth: 980, border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: 16, background: "#fff", boxSizing: "border-box" }}>
+              <PlanoDeContasConfig data={data} save={save} podeEditar={!(usuario && usuario.perfil === "cliente")} /></div>
+          )}
           {/* Sub-abas do menu Master — Admin recebe initialTab pra abrir direto na aba certa */}
           {aba === "admin" && isMaster && <Admin usuario={usuario} data={data} save={save} />}
           {aba === "admin:empresas" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="empresas" />}

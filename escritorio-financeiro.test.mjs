@@ -26,7 +26,7 @@ const M = new Function(src + `
            lancamentoDoExtrato, efValorDeTexto, efEhData, efLinhaDoCabecalho,
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
-           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte, parcelaDaVendaParaALinha, lancamentosDaContaBancaria, provisaoNoEscritorio, provisaoReservadaNoEscritorio, saldosDoPeDoExtrato, contaMudouNaPonte, contaMudouNoDinheiro, reclassificacaoMexeNoSaldo,
+           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte, parcelaDaVendaParaALinha, lancamentosDaContaBancaria, provisaoNoEscritorio, provisaoReservadaNoEscritorio, saldosDoPeDoExtrato, contaMudouNaPonte, contaMudouNoDinheiro, reclassificacaoMexeNoSaldo, aplicarPlanoDeContas, contaNovaNoPlano, contaRenomeadaNoPlano, contaAtivadaNoPlano, contasDoLancamento, contaPeloApelido,
            fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
@@ -3981,6 +3981,36 @@ teste("conta paga editada: só o que o escritório vê refaz o lançamento", () 
   assert.strictEqual(M.reclassificacaoMexeNoSaldo({ contaId: "material" }, { contaId: "pedreiros" }, "empreendimento", { planoObra: PLANO_OBRA }), false);
   assert.strictEqual(M.reclassificacaoMexeNoSaldo({ contaId: "material" }, { contaId: "venda_imovel" }, "empreendimento", { planoObra: PLANO_OBRA }), true);
   assert.strictEqual(M.reclassificacaoMexeNoSaldo({ contaId: "material" }, { contaId: "material" }, "empreendimento", { planoObra: PLANO_OBRA }), false);
+});
+
+teste("plano de contas da empresa: criar, renomear e desativar sem perder o histórico", () => {
+  let cfg = {};
+  let r = M.contaNovaNoPlano(cfg, "escritorio", { nome: "Software e assinaturas", grupo: "despesas" });
+  assert.ok(!r.erro, r.erro); cfg = r.cfg;
+  const id = r.conta.id;
+  assert.ok(/^ue_software/.test(id)); assert.ok(r.conta.unidades.length > 0);
+  assert.ok(M.contaNovaNoPlano(cfg, "escritorio", { nome: "", grupo: "despesas" }).erro);
+  assert.ok(M.contaNovaNoPlano(cfg, "escritorio", { nome: "X", grupo: "inexistente" }).erro);
+  M.aplicarPlanoDeContas(cfg);
+  assert.strictEqual(M.contaEscritorio(id).nome, "Software e assinaturas");
+  assert.ok(M.contaNovaNoPlano(cfg, "escritorio", { nome: "software e assinaturas", grupo: "despesas" }).erro, "nome repetido");
+  // renomear uma conta de sempre: o nome antigo vira apelido (a importação ainda acha)
+  cfg = M.contaRenomeadaNoPlano(cfg, "escritorio", "rec_financeira", "Rendimentos").cfg;
+  M.aplicarPlanoDeContas(cfg);
+  assert.strictEqual(M.contaEscritorio("rec_financeira").nome, "Rendimentos");
+  assert.strictEqual(M.contaPeloApelido("Receita Financeira"), "rec_financeira");
+  // desativar: some da escolha, continua existindo
+  cfg = M.contaAtivadaNoPlano(cfg, "escritorio", id, false).cfg;
+  M.aplicarPlanoDeContas(cfg);
+  assert.ok(M.contaEscritorio(id) && M.contaEscritorio(id).inativa);
+  assert.ok(!M.contasDoLancamento("escritorio").escritorio.some((c) => c.id === id));
+  cfg = M.contaAtivadaNoPlano(cfg, "escritorio", id, true).cfg;
+  M.aplicarPlanoDeContas(cfg);
+  assert.ok(M.contasDoLancamento("escritorio").escritorio.some((c) => c.id === id));
+  // volta ao plano de sempre (não afeta os outros testes)
+  M.aplicarPlanoDeContas({});
+  assert.strictEqual(M.contaEscritorio(id), null);
+  assert.strictEqual(M.contaEscritorio("rec_financeira").nome, "Receita Financeira");
 });
 
 for (const [nome, fn] of testes) {
