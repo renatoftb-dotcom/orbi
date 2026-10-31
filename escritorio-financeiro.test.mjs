@@ -26,7 +26,7 @@ const M = new Function(src + `
            lancamentoDoExtrato, efValorDeTexto, efEhData, efLinhaDoCabecalho,
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
-           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte, parcelaDaVendaParaALinha, lancamentosDaContaBancaria, provisaoNoEscritorio, provisaoReservadaNoEscritorio, saldosDoPeDoExtrato, contaMudouNaPonte, contaMudouNoDinheiro, reclassificacaoMexeNoSaldo, aplicarPlanoDeContas, contaNovaNoPlano, contaRenomeadaNoPlano, contaAtivadaNoPlano, contasDoLancamento, contaPeloApelido,
+           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte, parcelaDaVendaParaALinha, lancamentosDaContaBancaria, provisaoNoEscritorio, provisaoReservadaNoEscritorio, saldosDoPeDoExtrato, contaMudouNaPonte, contaMudouNoDinheiro, reclassificacaoMexeNoSaldo, aplicarPlanoDeContas, contaNovaNoPlano, contaRenomeadaNoPlano, contaAtivadaNoPlano, contasReordenadasNoPlano, contasDoLancamento, contaPeloApelido,
            fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
@@ -4011,6 +4011,30 @@ teste("plano de contas da empresa: criar, renomear e desativar sem perder o hist
   M.aplicarPlanoDeContas({});
   assert.strictEqual(M.contaEscritorio(id), null);
   assert.strictEqual(M.contaEscritorio("rec_financeira").nome, "Receita Financeira");
+});
+
+teste("plano de contas: subcontas (Pai › Sub) e ordem arrastada", () => {
+  let cfg = {};
+  let r = M.contaNovaNoPlano(cfg, "escritorio", { nome: "Residencial", pai: "rec_projetos" });
+  assert.ok(!r.erro, r.erro); cfg = r.cfg; M.aplicarPlanoDeContas(cfg);
+  const sub = r.conta.id;
+  assert.strictEqual(M.contaEscritorio(sub).nome, "Receita Projetos › Residencial");
+  assert.strictEqual(M.contaEscritorio(sub).grupo, "receitas");
+  assert.deepStrictEqual(M.contaEscritorio(sub).unidades, M.contaEscritorio("rec_projetos").unidades);
+  assert.ok(M.contaNovaNoPlano(cfg, "escritorio", { nome: "X", pai: sub }).erro, "um nível só");
+  assert.ok(M.contaNovaNoPlano(cfg, "escritorio", { nome: "residencial", pai: "rec_projetos" }).erro, "repetida");
+  // a filha vem logo depois do pai, e o nome do pai renomeado passa para ela
+  cfg = M.contaRenomeadaNoPlano(cfg, "escritorio", "rec_projetos", "Receita Projetos Arquitetura").cfg; M.aplicarPlanoDeContas(cfg);
+  assert.strictEqual(M.contaEscritorio(sub).nome, "Receita Projetos Arquitetura › Residencial");
+  const ids = () => M.PLANO_CONTAS_ESCRITORIO.filter((c) => c.grupo === "receitas").map((c) => c.id);
+  assert.strictEqual(ids()[ids().indexOf("rec_projetos") + 1], sub);
+  // renomear a subconta troca só o nome dela
+  cfg = M.contaRenomeadaNoPlano(cfg, "escritorio", sub, "Residências").cfg; M.aplicarPlanoDeContas(cfg);
+  assert.strictEqual(M.contaEscritorio(sub).nome, "Receita Projetos Arquitetura › Residências");
+  // ordem: Receita Financeira primeiro; a filha segue o pai
+  cfg = M.contasReordenadasNoPlano(cfg, "escritorio", "receitas", ["rec_financeira", "rec_gestao", "rec_projetos", "rec_comissoes"]).cfg; M.aplicarPlanoDeContas(cfg);
+  assert.deepStrictEqual(ids().slice(0, 4), ["rec_financeira", "rec_gestao", "rec_projetos", sub]);
+  M.aplicarPlanoDeContas({});
 });
 
 for (const [nome, fn] of testes) {

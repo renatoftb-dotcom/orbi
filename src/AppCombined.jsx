@@ -12169,17 +12169,47 @@ function planosOriginaisDeContas() {
   }
   return EF_PLANOS_ORIGINAIS;
 }
+// Subconta: conta nova com `pai` (uma conta do mesmo grupo). O nome que o
+// sistema mostra é "Pai › Sub" — trocar o nome do pai troca o das filhas.
+// A ordem (arrastar na Configuração) fica em `ordem`: por grupo, as contas
+// de cima; por "pai:<id>", as subcontas daquela conta.
 function planoDeContasMontado(base, cfg) {
   const c = cfg || {};
   const nomes = c.nomes || {};
   const inativas = new Set(c.inativas || []);
-  return (base || []).map((x) => ({ ...x })).concat((c.novas || []).map((x) => ({ ...x, nova: true }))).map((x) => {
+  const ordem = c.ordem || {};
+  const lista = (base || []).map((x) => ({ ...x })).concat((c.novas || []).map((x) => ({ ...x, nova: true }))).map((x) => {
     const y = { ...x };
     const nome = String(nomes[x.id] || "").trim();
     if (nome && nome !== x.nome) { y.apelidos = (x.apelidos || []).concat([x.nome]); y.nome = nome; }
     if (inativas.has(x.id)) y.inativa = true; else delete y.inativa;
     return y;
   });
+  const porId = new Map(lista.map((x) => [x.id, x]));
+  for (const x of lista) {
+    if (!x.pai) continue;
+    const pai = porId.get(x.pai);
+    const proprio = String(x.nomeProprio || x.nome || "").trim();
+    x.nomeProprio = proprio;
+    x.nome = pai ? `${pai.nome} › ${proprio}` : proprio;
+  }
+  const naOrdem = (itens, chave) => {
+    const ids = ordem[chave] || [];
+    const pos = (x) => { const i = ids.indexOf(x.id); return i < 0 ? ids.length + itens.indexOf(x) : i; };
+    return itens.slice().sort((a, b) => pos(a) - pos(b));
+  };
+  const grupos = [];
+  for (const x of lista) if (grupos.indexOf(x.grupo) < 0) grupos.push(x.grupo);
+  const out = [];
+  for (const g of grupos) {
+    const doGrupo = lista.filter((x) => x.grupo === g);
+    const tops = doGrupo.filter((x) => !x.pai || !porId.has(x.pai));
+    for (const t of naOrdem(tops, g)) {
+      out.push(t);
+      out.push(...naOrdem(doGrupo.filter((x) => x.pai === t.id), "pai:" + t.id));
+    }
+  }
+  return out;
 }
 // Monta os planos da empresa em cima dos de sempre, nos mesmos arrays que o
 // sistema inteiro lê. Mesma configuração, nada a fazer.
@@ -12209,16 +12239,21 @@ function contaNovaNoPlano(cfg, area, dados, opcoes) {
   const o = opcoes || {};
   const plano = area === "obra" ? "obra" : "escritorio";
   const nome = String((dados || {}).nome || "").trim();
-  const grupo = String((dados || {}).grupo || "");
+  const atuais = o.atuais || (plano === "obra" ? (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []) : PLANO_CONTAS_ESCRITORIO);
+  const pai = (dados || {}).pai ? atuais.find((c) => c && c.id === dados.pai) : null;
+  if ((dados || {}).pai && !pai) return { erro: "Conta de cima não encontrada." };
+  if (pai && pai.pai) return { erro: "Subconta não tem subconta: crie na conta de cima." };
+  const grupo = pai ? pai.grupo : String((dados || {}).grupo || "");
   if (!nome) return { erro: "Dê um nome à conta." };
   if ((EF_GRUPOS_DO_PLANO[area] || []).indexOf(grupo) < 0) return { erro: "Escolha o grupo da conta." };
-  const atuais = o.atuais || (plano === "obra" ? (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []) : PLANO_CONTAS_ESCRITORIO);
-  if (atuais.some((c) => c && efSemAcento(c.nome) === efSemAcento(nome))) return { erro: `Já existe a conta "${nome}".` };
-  const base = (plano === "obra" ? "u_" : "ue_") + efSlugDaConta(nome);
+  const nomeCheio = pai ? `${pai.nome} › ${nome}` : nome;
+  if (atuais.some((c) => c && efSemAcento(c.nome) === efSemAcento(nomeCheio))) return { erro: `Já existe a conta "${nomeCheio}".` };
+  const base = (plano === "obra" ? "u_" : "ue_") + (pai ? efSlugDaConta(pai.nomeProprio || pai.nome).slice(0, 14) + "_" : "") + efSlugDaConta(nome);
   let id = base, k = 2;
   while (atuais.some((c) => c && c.id === id)) id = base + "_" + (k++);
-  const conta = { id, nome, grupo };
-  if (plano === "escritorio") {
+  const conta = { id, nome, grupo, ...(pai ? { pai: pai.id, nomeProprio: nome } : {}) };
+  if (plano === "escritorio" && pai) { conta.unidades = (pai.unidades || []).slice(); conta.apelidos = []; }
+  else if (plano === "escritorio") {
     const us = new Set();
     for (const c of atuais) if (c && c.grupo === grupo) for (const u of c.unidades || []) us.add(u);
     conta.unidades = us.size ? [...us] : (area === "empreendimentos" ? ["empreendimento"] : ["escritorio"]);
@@ -12236,16 +12271,29 @@ function contaRenomeadaNoPlano(cfg, area, id, nome, opcoes) {
   const n = String(nome || "").trim();
   if (!n) return { erro: "Dê um nome à conta." };
   const atuais = o.atuais || (plano === "obra" ? (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []) : PLANO_CONTAS_ESCRITORIO);
-  if (atuais.some((c) => c && c.id !== id && efSemAcento(c.nome) === efSemAcento(n))) return { erro: `Já existe a conta "${n}".` };
+  const esta = atuais.find((c) => c && c.id === id);
+  const pai = esta && esta.pai ? atuais.find((c) => c && c.id === esta.pai) : null;
+  const cheio = pai ? `${pai.nome} › ${n}` : n;
+  if (atuais.some((c) => c && c.id !== id && efSemAcento(c.nome) === efSemAcento(cheio))) return { erro: `Já existe a conta "${cheio}".` };
   const c = { ...(cfg || {}) };
   const p = { ...(c[plano] || {}) };
-  if ((p.novas || []).some((x) => x.id === id)) p.novas = p.novas.map((x) => (x.id === id ? { ...x, nome: n } : x));
+  if ((p.novas || []).some((x) => x.id === id)) p.novas = p.novas.map((x) => (x.id === id ? { ...x, nome: n, ...(x.pai ? { nomeProprio: n } : {}) } : x));
   else {
     const original = ((o.originais || planosOriginaisDeContas())[plano] || []).find((x) => x.id === id);
     const nomes = { ...(p.nomes || {}) };
     if (original && original.nome === n) delete nomes[id]; else nomes[id] = n;
     p.nomes = nomes;
   }
+  c[plano] = p;
+  return { cfg: c };
+}
+// A ordem de um grupo (chave = id do grupo) ou das subcontas de uma conta
+// (chave = "pai:<id>"), como ficou depois de arrastar.
+function contasReordenadasNoPlano(cfg, area, chave, ids) {
+  const plano = area === "obra" ? "obra" : "escritorio";
+  const c = { ...(cfg || {}) };
+  const p = { ...(c[plano] || {}) };
+  p.ordem = { ...(p.ordem || {}), [chave]: (ids || []).slice() };
   c[plano] = p;
   return { cfg: c };
 }
@@ -24612,7 +24660,11 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
 function PlanoDeContasConfig({ data, save, podeEditar }) {
   const S = EF_ESTILO;
   const [area, setArea] = useState("escritorio");
-  const [nova, setNova] = useState(null);       // { grupo, nome, erro }
+  const [nova, setNova] = useState(null);       // { grupo, pai?, nome, erro }
+  // arrastar para ordenar (mouse e dedo): { chave, id, irmaos, sobre }
+  const [arrasto, setArrasto] = useState(null);
+  const arrastoRef = useRef(null);
+  arrastoRef.current = arrasto;
   const [renomeando, setRenomeando] = useState(null); // { id, nome, erro }
   const [verInativas, setVerInativas] = useState(true);
   const esc = (data || {}).escritorio || {};
@@ -24628,8 +24680,32 @@ function PlanoDeContasConfig({ data, save, podeEditar }) {
     aplicarPlanoDeContas(novoCfg);
     return save({ ...data, escritorio: { ...esc, planoContas: novoCfg } }).catch(console.error);
   };
+  useEffect(() => {
+    if (!arrasto) return undefined;
+    const mover = (e) => {
+      const a = arrastoRef.current; if (!a) return;
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const linha = el && el.closest ? el.closest("[data-vk-conta-plano]") : null;
+      const id = linha && linha.getAttribute("data-vk-conta-plano");
+      if (id && linha.getAttribute("data-vk-chave") === a.chave && id !== a.sobre) setArrasto({ ...a, sobre: id });
+      if (e.cancelable) e.preventDefault();
+    };
+    const soltar = () => {
+      const a = arrastoRef.current; setArrasto(null);
+      if (!a || !a.sobre || a.sobre === a.id) return;
+      const de = a.irmaos.indexOf(a.id), para = a.irmaos.indexOf(a.sobre);
+      const resto = a.irmaos.filter((x) => x !== a.id);
+      const i = resto.indexOf(a.sobre) + (de < para ? 1 : 0);
+      resto.splice(i, 0, a.id);
+      gravar(contasReordenadasNoPlano(cfg, area, a.chave, resto).cfg);
+    };
+    window.addEventListener("pointermove", mover, { passive: false });
+    window.addEventListener("pointerup", soltar);
+    window.addEventListener("pointercancel", soltar);
+    return () => { window.removeEventListener("pointermove", mover); window.removeEventListener("pointerup", soltar); window.removeEventListener("pointercancel", soltar); };
+  }, [!!arrasto]);
   function criar() {
-    const r = contaNovaNoPlano(cfg, area, { nome: nova.nome, grupo: nova.grupo });
+    const r = contaNovaNoPlano(cfg, area, { nome: nova.nome, grupo: nova.grupo, ...(nova.pai ? { pai: nova.pai } : {}) });
     if (r.erro) { setNova({ ...nova, erro: r.erro }); return; }
     gravar(r.cfg); setNova(null);
   }
@@ -24648,8 +24724,8 @@ function PlanoDeContasConfig({ data, save, podeEditar }) {
       <div>
         <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Plano de contas</div>
         <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 2 }}>
-          As contas do escritório, dos empreendimentos e das obras. Crie contas novas, troque nomes e desative as que não usa —
-          conta desativada some das listas de escolha, e o que já foi lançado nela continua como está.
+          As contas do escritório, dos empreendimentos e das obras. Crie contas e subcontas, troque nomes, arraste pelo ⋮⋮ para
+          ordenar e desative as que não usa — conta desativada some das listas de escolha, e o que já foi lançado nela continua como está.
         </div>
       </div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -24675,11 +24751,11 @@ function PlanoDeContasConfig({ data, save, podeEditar }) {
           <div key={g} data-vk-grupo-plano={g} style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, overflow: "hidden" }}>
             <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 12px", background: "#fafafa" }}>
               <span style={{ flex: 1, fontSize: 11, fontWeight: 700, color: "#4b5563", letterSpacing: .4, textTransform: "uppercase" }}>{tituloDoGrupo(g)}</span>
-              {podeEditar && !(nova && nova.grupo === g) && (
+              {podeEditar && !(nova && nova.grupo === g && !nova.pai) && (
                 <button type="button" data-vk-nova-conta-plano={g} style={btn} onClick={() => { setRenomeando(null); setNova({ grupo: g, nome: "", erro: "" }); }}>+ Conta</button>
               )}
             </div>
-            {nova && nova.grupo === g && (
+            {nova && nova.grupo === g && !nova.pai && (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: "8px 12px", borderTop: "1px solid rgba(38,36,33,0.07)", background: "#f7fbff" }}>
                 <input data-vk-nome-conta-nova="1" autoFocus style={{ ...inp, flex: "1 1 220px", width: "auto" }} value={nova.nome} placeholder="Digite o nome da conta"
                   onChange={(e) => setNova({ ...nova, nome: e.target.value, erro: "" })} onKeyDown={(e) => { if (e.key === "Enter") criar(); }} />
@@ -24690,9 +24766,22 @@ function PlanoDeContasConfig({ data, save, podeEditar }) {
             )}
             {contas.map((c) => {
               const aqui = renomeando && renomeando.id === c.id;
+              const chave = c.pai ? "pai:" + c.pai : g;
+              const irmaos = plano.filter((x) => x && x.grupo === g && !x.interna && (c.pai ? x.pai === c.pai : !x.pai)).map((x) => x.id);
+              const arrastando = arrasto && arrasto.id === c.id;
+              const alvo = arrasto && arrasto.sobre === c.id && arrasto.id !== c.id;
+              const desce = alvo && arrasto.irmaos.indexOf(arrasto.id) < arrasto.irmaos.indexOf(c.id);
               return (
-                <div key={c.id} data-vk-conta-plano={c.id} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: "7px 12px",
-                  borderTop: "1px solid rgba(38,36,33,0.07)", opacity: c.inativa ? 0.55 : 1 }}>
+                <Fragment key={c.id}>
+                <div data-vk-conta-plano={c.id} data-vk-chave={chave} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center",
+                  padding: c.pai ? "6px 12px 6px 34px" : "7px 12px", background: arrastando ? "#eef5ff" : c.pai ? "#fcfcfd" : "#fff",
+                  borderTop: alvo && !desce ? "2px solid #0474f4" : "1px solid rgba(38,36,33,0.07)",
+                  borderBottom: alvo && desce ? "2px solid #0474f4" : "none", opacity: c.inativa ? 0.55 : 1, userSelect: arrasto ? "none" : "auto" }}>
+                  {podeEditar && !aqui && (
+                    <span data-vk-arrastar-conta={c.id} title="Arraste para ordenar"
+                      onPointerDown={(e) => { e.preventDefault(); setArrasto({ chave, id: c.id, irmaos, sobre: c.id }); }}
+                      style={{ cursor: "grab", touchAction: "none", color: "#9ca3af", fontSize: 14, lineHeight: 1, padding: "4px 2px", userSelect: "none" }}>⋮⋮</span>
+                  )}
                   {aqui ? (
                     <>
                       <input data-vk-renomear-campo="1" autoFocus style={{ ...inp, flex: "1 1 220px", width: "auto" }} value={renomeando.nome}
@@ -24703,14 +24792,16 @@ function PlanoDeContasConfig({ data, save, podeEditar }) {
                     </>
                   ) : (
                     <>
-                      <span style={{ flex: "1 1 140px", minWidth: 0, fontSize: 13, color: "#111827" }}>
-                        {c.nome}
+                      <span style={{ flex: "1 1 140px", minWidth: 0, fontSize: c.pai ? 12.5 : 13, color: c.pai ? "#374151" : "#111827" }}>
+                        {c.pai ? <><span style={{ color: "#9ca3af" }}>↳ </span>{c.nomeProprio || c.nome}</> : c.nome}
                         {c.nova && <span style={{ fontSize: 10.5, marginLeft: 6, padding: "1px 7px", borderRadius: 999, background: "#eef5ff", color: "#0474f4" }}>criada</span>}
                         {c.inativa && <span style={{ fontSize: 10.5, marginLeft: 6, padding: "1px 7px", borderRadius: 999, background: "#f3f4f6", color: "#4b5563" }}>desativada</span>}
                       </span>
                       {podeEditar && (
                         <span style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                          <button type="button" data-vk-renomear-conta={c.id} style={btn} onClick={() => { setNova(null); setRenomeando({ id: c.id, nome: c.nome, erro: "" }); }}>Renomear</button>
+                          {!c.pai && <button type="button" data-vk-nova-subconta={c.id} style={btn} title="Criar uma subconta dentro desta"
+                            onClick={() => { setRenomeando(null); setNova({ grupo: g, pai: c.id, nome: "", erro: "" }); }}>+ Sub</button>}
+                          <button type="button" data-vk-renomear-conta={c.id} style={btn} onClick={() => { setNova(null); setRenomeando({ id: c.id, nome: c.pai ? (c.nomeProprio || c.nome) : c.nome, erro: "" }); }}>Renomear</button>
                           {c.inativa
                             ? <button type="button" data-vk-reativar-conta={c.id} style={btn} onClick={() => ativar(c, true)}>Reativar</button>
                             : <button type="button" data-vk-desativar-conta={c.id} style={{ ...btn, color: "#b91c1c" }} onClick={() => ativar(c, false)}>Desativar</button>}
@@ -24719,6 +24810,23 @@ function PlanoDeContasConfig({ data, save, podeEditar }) {
                     </>
                   )}
                 </div>
+                {nova && nova.pai && (() => {
+                  // o campo da subconta nova aparece depois da última filha desta conta (ou dela mesma)
+                  const filhas = contas.filter((x) => x.pai === nova.pai);
+                  const ultima = filhas.length ? filhas[filhas.length - 1].id : nova.pai;
+                  if (ultima !== c.id) return null;
+                  return (
+                    <div data-vk-form-subconta="1" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: "8px 12px 8px 34px", borderTop: "1px solid rgba(38,36,33,0.07)", background: "#f7fbff" }}>
+                      <span style={{ fontSize: 12, color: "#4b5563", flexBasis: "100%" }}>Subconta de <b>{(plano.find((x) => x.id === nova.pai) || {}).nome}</b></span>
+                      <input data-vk-nome-subconta="1" autoFocus style={{ ...inp, flex: "1 1 200px", width: "auto" }} value={nova.nome} placeholder="Digite o nome da subconta"
+                        onChange={(e) => setNova({ ...nova, nome: e.target.value, erro: "" })} onKeyDown={(e) => { if (e.key === "Enter") criar(); }} />
+                      <button type="button" data-vk-criar-subconta="1" style={{ ...(S.btn || {}), padding: "7px 14px", fontSize: 12.5 }} onClick={criar}>Criar</button>
+                      <button type="button" style={{ ...btn, padding: "7px 14px" }} onClick={() => setNova(null)}>Cancelar</button>
+                      {nova.erro && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{nova.erro}</div>}
+                    </div>
+                  );
+                })()}
+                </Fragment>
               );
             })}
             {!contas.length && <div style={{ padding: "8px 12px", fontSize: 12, color: "#6b7280", borderTop: "1px solid rgba(38,36,33,0.07)" }}>Nenhuma conta neste grupo.</div>}
