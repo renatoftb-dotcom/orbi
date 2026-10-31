@@ -60822,6 +60822,14 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
   const rot = { fontSize: 10.5, textTransform: "uppercase", letterSpacing: .4, color: "#6b7280", fontWeight: 600 };
   const inp = { ...(S.input || {}), width: "100%" };
   const btn = { ...(S.btnSec || {}), padding: "5px 12px", fontSize: 12 };
+  // valor em reais com a máscara do app (1.234,56 enquanto digita)
+  const campoDinheiro = (valor, aoMudar, extra) => {
+    const { style: est, ...resto } = extra || {};
+    const estilo = { ...inp, ...(est || {}) };
+    return typeof CampoValorBR === "function"
+      ? <CampoValorBR {...resto} style={estilo} valor={valor} placeholder="0,00" aoMudar={aoMudar} />
+      : <input {...resto} inputMode="decimal" style={estilo} value={valor} placeholder="0,00" onChange={(e) => aoMudar(e.target.value)} />;
+  };
 
   function salvarUnidade() {
     const f = formUn;
@@ -60888,7 +60896,7 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
   );
   const fv = formVenda;
   const somaVenda = fv ? crCent((fv.sinais || []).reduce((t, x) => t + (x.contaId
-    ? (Number((entradasDeVendaSoltas(contas).find((c) => c.id === x.contaId) || {}).valorPago) || 0) : crValor(x.valor)), 0)
+    ? ((c) => Number(c.valorPago) || Number(c.valor) || 0)(entradasDeVendaSoltas(contas).find((c) => c.id === x.contaId) || {}) : crValor(x.valor)), 0)
     + (Math.floor(Number(fv.nParcelas) || 0) * crValor(fv.valorParcela)) + crValor(fv.financiamento)) : 0;
   const soltas = entradasDeVendaSoltas(contas);
 
@@ -60917,7 +60925,7 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
           <label style={{ display: "grid", gap: 4 }}><span style={rot}>Área (m²)</span>
             <input style={inp} inputMode="decimal" value={formUn.area} placeholder="0,00" onChange={(e) => setFormUn({ ...formUn, area: e.target.value })} /></label>
           <label style={{ display: "grid", gap: 4 }}><span style={rot}>Preço estimado de venda</span>
-            <input style={inp} inputMode="decimal" value={formUn.precoEstimado} placeholder="0,00" onChange={(e) => setFormUn({ ...formUn, precoEstimado: e.target.value })} /></label>
+            {campoDinheiro(formUn.precoEstimado, (v) => setFormUn({ ...formUn, precoEstimado: v }))}</label>
           <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>
             <button style={S.btn} onClick={salvarUnidade}>Salvar</button>
             <button style={S.btnSec} onClick={() => setFormUn(null)}>Cancelar</button>
@@ -60982,7 +60990,7 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                           <label style={{ display: "grid", gap: 3 }}><span style={rot}>Dia em que entrou</span>
                             <input type="date" style={{ ...inp, width: 160 }} value={recebendo.dia} max={hoje} onChange={(e) => setRecebendo({ ...recebendo, dia: e.target.value })} /></label>
                           <label style={{ display: "grid", gap: 3 }}><span style={rot}>Valor recebido</span>
-                            <input inputMode="decimal" style={{ ...inp, width: 140 }} value={recebendo.valor} onChange={(e) => setRecebendo({ ...recebendo, valor: e.target.value })} /></label>
+                            {campoDinheiro(recebendo.valor, (v) => setRecebendo({ ...recebendo, valor: v }), { style: { width: 140 } })}</label>
                           <button data-vk-confirmar-recebimento="1" style={{ ...(S.btn || {}), padding: "7px 14px", fontSize: 12.5 }} onClick={receber}>Lançar recebimento</button>
                           <button style={{ ...btn, padding: "7px 14px" }} onClick={() => setRecebendo(null)}>Cancelar</button>
                           {recebendo.erro && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{recebendo.erro}</div>}
@@ -61014,7 +61022,7 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
               <label style={{ display: "grid", gap: 4 }}><span style={rot}>Data da venda</span>
                 <input type="date" style={inp} value={fv.data} onChange={(e) => setFormVenda({ ...fv, data: e.target.value })} /></label>
               <label style={{ display: "grid", gap: 4 }}><span style={rot}>Valor da venda</span>
-                <input data-vk-venda-valor="1" inputMode="decimal" style={inp} value={fv.valor} placeholder="0,00" onChange={(e) => setFormVenda({ ...fv, valor: e.target.value })} /></label>
+                {campoDinheiro(fv.valor, (v) => setFormVenda({ ...fv, valor: v }), { "data-vk-venda-valor": "1" })}</label>
             </div>
 
             <div style={{ display: "grid", gap: 6 }}>
@@ -61037,7 +61045,7 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
               {(fv.sinais || []).map((x, i) => x.contaId ? null : (
                 <div key={i} style={{ display: "grid", gap: 8, gridTemplateColumns: isMobile ? "1fr 1fr auto" : "160px 160px auto", alignItems: "end" }}>
                   <label style={{ display: "grid", gap: 4 }}><span style={rot}>Valor</span>
-                    <input inputMode="decimal" style={inp} value={x.valor || ""} placeholder="0,00" onChange={(e) => setFormVenda({ ...fv, sinais: fv.sinais.map((y, j) => (j === i ? { ...y, valor: e.target.value } : y)) })} /></label>
+                    {campoDinheiro(x.valor || "", (v) => setFormVenda({ ...fv, sinais: fv.sinais.map((y, j) => (j === i ? { ...y, valor: v } : y)) }))}</label>
                   <label style={{ display: "grid", gap: 4 }}><span style={rot}>Data</span>
                     <input type="date" style={inp} value={x.data || ""} onChange={(e) => setFormVenda({ ...fv, sinais: fv.sinais.map((y, j) => (j === i ? { ...y, data: e.target.value } : y)) })} /></label>
                   <button style={btn} onClick={() => setFormVenda({ ...fv, sinais: fv.sinais.filter((_, j) => j !== i) })}>Tirar</button>
@@ -61052,7 +61060,7 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                 <label style={{ display: "grid", gap: 4 }}><span style={rot}>Quantidade</span>
                   <input data-vk-venda-n="1" inputMode="numeric" style={inp} value={fv.nParcelas} placeholder="0" onChange={(e) => setFormVenda({ ...fv, nParcelas: e.target.value.replace(/\D/g, "").slice(0, 3) })} /></label>
                 <label style={{ display: "grid", gap: 4 }}><span style={rot}>Valor de cada</span>
-                  <input data-vk-venda-vp="1" inputMode="decimal" style={inp} value={fv.valorParcela} placeholder="0,00" onChange={(e) => setFormVenda({ ...fv, valorParcela: e.target.value })} /></label>
+                  {campoDinheiro(fv.valorParcela, (v) => setFormVenda({ ...fv, valorParcela: v }), { "data-vk-venda-vp": "1" })}</label>
                 <label style={{ display: "grid", gap: 4, gridColumn: isMobile ? "1 / -1" : "auto" }}><span style={rot}>1º vencimento</span>
                   <input data-vk-venda-venc="1" type="date" style={inp} value={fv.primeiroVencimento} onChange={(e) => setFormVenda({ ...fv, primeiroVencimento: e.target.value })} /></label>
               </div>
@@ -61062,7 +61070,7 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
               <div style={{ fontSize: 12.5, fontWeight: 700 }}>Financiamento do banco</div>
               <div style={{ display: "grid", gap: 8, gridTemplateColumns: isMobile ? "1fr 1fr" : "160px 160px" }}>
                 <label style={{ display: "grid", gap: 4 }}><span style={rot}>Valor</span>
-                  <input data-vk-venda-fin="1" inputMode="decimal" style={inp} value={fv.financiamento} placeholder="0,00" onChange={(e) => setFormVenda({ ...fv, financiamento: e.target.value })} /></label>
+                  {campoDinheiro(fv.financiamento, (v) => setFormVenda({ ...fv, financiamento: v }), { "data-vk-venda-fin": "1" })}</label>
                 <label style={{ display: "grid", gap: 4 }}><span style={rot}>Liberação prevista</span>
                   <input data-vk-venda-fin-data="1" type="date" style={inp} value={fv.dataFinanciamento} onChange={(e) => setFormVenda({ ...fv, dataFinanciamento: e.target.value })} /></label>
               </div>
