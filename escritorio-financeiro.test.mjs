@@ -26,7 +26,7 @@ const M = new Function(src + `
            lancamentoDoExtrato, efValorDeTexto, efEhData, efLinhaDoCabecalho,
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
-           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte, parcelaDaVendaParaALinha, lancamentosDaContaBancaria, provisaoNoEscritorio, provisaoReservadaNoEscritorio, saldosDoPeDoExtrato,
+           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte, parcelaDaVendaParaALinha, lancamentosDaContaBancaria, provisaoNoEscritorio, provisaoReservadaNoEscritorio, saldosDoPeDoExtrato, contaMudouNaPonte,
            fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
@@ -3963,6 +3963,16 @@ teste("pé do extrato: conta corrente sem a aplicação, menos provisões e rese
   // o que compõe, acumulado por conta
   assert.deepStrictEqual(pe["2026-10"].reservasPorConta, { res_documentacao: 6700, res_engenharia: 5083.85 });
   assert.deepStrictEqual(pe["2026-09"].reservasPorConta, { res_documentacao: 6700 });
+});
+
+teste("conta paga editada: só o que o escritório vê refaz o lançamento", () => {
+  const a = { id: "c1", pago: true, valor: 100, valorPago: 100, contaId: "material", descricao: "Cimento", pagoEm: "2026-10-02", etapa: "fundacao", grupoMaterial: "Cimento" };
+  assert.strictEqual(M.contaMudouNaPonte(a, { ...a, etapa: "alvenaria", grupoMaterial: "Outros" }), false, "etapa e grupo não");
+  assert.strictEqual(M.contaMudouNaPonte(a, { ...a, valor: 120, valorPago: 120 }), true);
+  assert.strictEqual(M.contaMudouNaPonte(a, { ...a, contaId: "ferramentas" }), true);
+  assert.strictEqual(M.contaMudouNaPonte(a, { ...a, descricao: "Cimento CP II" }), true);
+  assert.strictEqual(M.contaMudouNaPonte(a, { ...a, pagoEm: "2026-10-03" }), true);
+  assert.strictEqual(M.contaMudouNaPonte(a, { ...a, valor: "100" }), false);
 });
 
 for (const [nome, fn] of testes) {

@@ -582,6 +582,20 @@ function provisaoReservadaNoEscritorio(lancamentos, obraId, vendaId) {
     .reduce((t, l) => t + (Number(l.valor) || 0), 0) * 100) / 100;
 }
 
+// A conta paga mudou no que o lançamento do escritório leva? (valor, conta
+// contábil, descrição, fornecedor, data, papel). Etapa, grupo e item do
+// catálogo são da obra: o escritório não os vê.
+const PONTE_CAMPOS_DA_CONTA = ["valor", "valorPago", "contaId", "descricao", "favorecido", "prestadorId", "pagoEm", "vencimento", "doc", "numeroNota", "numeroLoja", "numeroDoc"];
+function contaMudouNaPonte(antes, depois) {
+  const a = antes || {}, d = depois || {};
+  const v = (x) => (x == null ? "" : String(x));
+  return PONTE_CAMPOS_DA_CONTA.some((k) => {
+    if (k === "valor" || k === "valorPago") return Math.abs((Number(a[k]) || 0) - (Number(d[k]) || 0)) > 0.005;
+    if (k === "vencimento") return !a.pagoEm && !d.pagoEm && v(a[k]) !== v(d[k]);
+    return v(a[k]) !== v(d[k]);
+  });
+}
+
 // O id é derivado da origem, não sorteado: rodar a ponte duas vezes na mesma
 // obra não cria o lançamento duas vezes.
 function idDaPonte(obraId, tipo, refId) {

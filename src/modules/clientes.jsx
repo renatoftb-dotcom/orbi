@@ -3049,12 +3049,42 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         return { ...l, documento: String(c.doc) };
       });
     }
-    const limpo = { ...limpo0, lancamentos: lancsComDoc, removidos: limpo0.removidos + docsAtualizados };
+    // Conta PAGA editada no que o escritório vê (valor, conta contábil,
+    // descrição, fornecedor, data, papel): o lançamento dela no escritório é
+    // refeito pela ponte, com a mesma ligação ao banco (linha do extrato,
+    // conferido, conta bancária). Mês fechado no escritório não se mexe.
+    const fechEsc = typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {};
+    const editadas = (contasDepois || []).filter(c => {
+      const a = c && antesPorId.get(c.id);
+      return a && a.pago && c.pago && !(c.formaPagamento === "cartao" || c.cartaoId) && contaMudouNaPonte(a, c);
+    });
+    let lancsDaEdicao = lancsComDoc;
+    const reenviarEditadas = [];
+    const marcasDaEdicao = {};
+    let editouNoEscritorio = 0;
+    if (editadas.length && obraDepois && typeof lancamentosLigadosAsContas === "function" && typeof contasLigadasAoLancamento === "function") {
+      const ligados = lancamentosLigadosAsContas(lancsComDoc, obraDepois.id, editadas)
+        .filter(l => !(typeof bloqueioPorMesFechado === "function" && bloqueioPorMesFechado(l.competencia, fechEsc)));
+      const datasMudaram = editadas.some(c => String((antesPorId.get(c.id) || {}).pagoEm || "") !== String(c.pagoEm || ""));
+      for (const l of ligados) {
+        const { extratoId, historicoBanco, conferido, conferidoEm, conferidoPor, contaBancariaId, competencia, numeroDoc, criadoEm } = l;
+        marcasDaEdicao[l.id] = { extratoId, historicoBanco, conferido, conferidoEm, conferidoPor, contaBancariaId, numeroDoc, criadoEm,
+          ...(datasMudaram ? {} : { competencia }) };
+        for (const c of contasLigadasAoLancamento(obraDepois, l)) if (c && c.pago && !reenviarEditadas.some(x => x.id === c.id)) reenviarEditadas.push(c);
+      }
+      if (ligados.length) {
+        const fora = new Set(ligados.map(l => l.id));
+        lancsDaEdicao = lancsComDoc.filter(l => !(l && fora.has(l.id)));
+        editouNoEscritorio = ligados.length;
+      }
+    }
+    const limpo = { ...limpo0, lancamentos: lancsDaEdicao, removidos: limpo0.removidos + docsAtualizados };
 
     const pagas = contasRecemPagas(contasAntes, contasDepois);
     // Saiu parte de uma nota: a linha dela no extrato saiu inteira, e o que
     // sobrou pago da nota volta pela ponte com o valor novo.
-    const paraPonte = pagas.concat((limpo.reenviar || []).filter(c => !pagas.some(p => p && p.id === c.id)));
+    const paraPonte = pagas.concat((limpo.reenviar || []).concat(reenviarEditadas).filter((c, i, arr) =>
+      !pagas.some(p => p && p.id === c.id) && arr.findIndex(x => x && x.id === c.id) === i));
     // data.lancamentos guarda também o que não é do escritório: a lista que
     // volta tem que levar esses junto, senão o save apaga cada um no banco
     const outros = ((data && data.lancamentos) || []).filter(l => !(l && l.tipo === "escritorio"));
@@ -3070,10 +3100,17 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         })
       : { lancamentos: [], bloqueados: [], modo: "" };
 
+    // o lançamento refeito leva a ligação que o antigo tinha com o banco
+    const idsMarcas = Object.keys(marcasDaEdicao);
+    const semVazios = (o) => { const x = {}; for (const k in o) if (o[k] !== undefined && o[k] !== null && o[k] !== "") x[k] = o[k]; return x; };
+    const daPonte = editouNoEscritorio ? ponte.lancamentos.map(l => {
+      const m = marcasDaEdicao[l.id] || (idsMarcas.length === 1 ? marcasDaEdicao[idsMarcas[0]] : null);
+      return m ? { ...l, ...semVazios(m) } : l;
+    }) : ponte.lancamentos;
     const extras = {};
     if (r.materiais !== data.materiais) extras.materiais = r.materiais;
-    if (ponte.lancamentos.length || limpo.removidos) {
-      extras.lancamentos = outros.concat(limpo.lancamentos, ponte.lancamentos);
+    if (daPonte.length || limpo.removidos || editouNoEscritorio) {
+      extras.lancamentos = outros.concat(limpo.lancamentos, daPonte);
     }
 
     setAvisoPreco(r.relato.aplicados.length || r.relato.pendencias.length ? r.relato : null);
@@ -3082,7 +3119,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const noCartao = pagas.filter(c => c && (c.formaPagamento === "cartao" || c.cartaoId))
       .map(c => ({ valor: Number(c.valorPago) || Number(c.valor) || 0,
         faturas: [...new Set((c.parcelasCartao || []).map(p => p.competencia))] }));
-    setAvisoExtrato((ponte.lancamentos.length || ponte.bloqueados.length || noCartao.length)
+    const soEdicao = editouNoEscritorio && !pagas.length;
+    setAvisoExtrato(!soEdicao && (ponte.lancamentos.length || ponte.bloqueados.length || noCartao.length)
       ? { modo: ponte.modo, lancamentos: ponte.lancamentos, bloqueados: ponte.bloqueados, noCartao } : null);
 
     return { extras: Object.keys(extras).length ? extras : null };
@@ -3198,17 +3236,30 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       }
     }
     // a conta do plano já diz a etapa e o grupo (mão de obra → Prestadores)
-    const f = typeof comPadraoDaConta === "function" ? comPadraoDaConta(formConta) : formConta;
+    const f0 = typeof comPadraoDaConta === "function" ? comPadraoDaConta(formConta) : formConta;
+    // conta paga por inteiro com o valor corrigido: o pago acompanha (senão o
+    // realizado e o escritório ficavam com o valor velho)
+    const g0 = guardada0 || (f0 && contasDaObra.find(c => c && c.id === f0.id));
+    const f = g0 && g0.pago && Math.abs((Number(g0.valorPago) || 0) - (Number(g0.valor) || 0)) < 0.005
+      && Math.abs((Number(f0.valor) || 0) - (Number(g0.valor) || 0)) > 0.005 ? { ...f0, valorPago: Number(f0.valor) || 0 } : f0;
     if (!f.descricao?.trim()) { dialogo.alertar({ titulo: "Informe a descrição da conta", tipo: "aviso" }); return; }
     if (!(Number(f.valor) > 0)) { dialogo.alertar({ titulo: "Informe um valor maior que zero", tipo: "aviso" }); return; }
     // A mesma régua de todas as portas: conta que entra torta aqui
     // arrebenta o custo por etapa e o orçado × consumido lá na frente.
-    const faltas = faltasDaTransacao({ ...f, obraId: f.obraId || (obraAtual && obraAtual.id) });
+    // Na edição, só cobra o que a edição tirou: a conta antiga que já não
+    // tinha a forma de pagamento (veio da cotação, da planilha) não pode
+    // travar quem só quer trocar a etapa.
+    const guardada = contasDaObra.find(c => c.id === f.id) || null;
+    const comObra = (x) => ({ ...x, obraId: x.obraId || (obraAtual && obraAtual.id) });
+    const jaFaltava = guardada ? faltasDaTransacao(comObra(guardada)) : [];
+    const faltas = faltasDaTransacao(comObra(f)).filter((x) => jaFaltava.indexOf(x) < 0);
     if (faltas.length) { dialogo.alertar({ titulo: frasesDasFaltas(faltas), tipo: "aviso" }); return; }
+    // conta paga que muda no que o escritório vê, com o mês já fechado lá: não
+    if (guardada && guardada.pago && typeof contaMudouNaPonte === "function" && contaMudouNaPonte(guardada, f)
+      && travouNoMesFechado([guardada], "mudar valor, conta, descrição, fornecedor ou data")) return;
     // O antes e o que o formulario mostrou, nao o que estava gravado: o que
     // veio da cotacao ao abrir nao foi decisao de ninguem, e registrar
     // "quantidade 0 -> 7" esconderia que o ajuste foi de 11 para 7.
-    const guardada = contasDaObra.find(c => c.id === f.id) || null;
     const antiga = guardada ? abrirEdicaoDaConta(guardada, true) : null;
     const carimbada = antiga
       ? registrarAto(f, "editada", quemSou(), undefined, detalheDaEdicaoDaConta(antiga, f))
