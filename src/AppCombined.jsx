@@ -56146,6 +56146,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [contratoSalvoEm, setContratoSalvoEm] = useState(0);
   // Contas a pagar: formulário da conta avulsa em edição.
   const [formConta, setFormConta] = useState(null);
+  // Editar pela Base de dados: o formulário é o mesmo das Contas a pagar;
+  // ao salvar ou cancelar, volta para a base.
+  const [voltarParaBase, setVoltarParaBase] = useState(false);
+  useEffect(() => {
+    if (!formConta && voltarParaBase) { setVoltarParaBase(false); setView("baseObra"); }
+  }, [formConta, voltarParaBase]);
   const [loteDePapeis, setLoteDePapeis] = useState(false);
   const [buscaContas, setBuscaContas] = useState("");
   const [papelContas, setPapelContas] = useState("todos");
@@ -60241,6 +60247,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           insumos={insumosDoCatalogo(data)} lancamentos={typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : []}
           isMobile={isMobile} obraFixa nomeDoArquivo={"base " + (obraAtual.nome || "obra")}
           acoes={perm.podeGerenciarObra ? { daObra: true, excluir: excluirDaBaseDaObra,
+            editar: (c) => {
+              const conta = (contasDaObra || []).find((x) => x && x.id === (c && c.id));
+              if (!conta) return;
+              if (conta.vendaId) { dialogo.alertar({ titulo: "Recebimento da venda", tipo: "aviso", mensagem: "Este lançamento é da venda: ajuste em Vendas." }); return; }
+              setVoltarParaBase(true); setView("contasPagar"); abrirEdicaoDaConta(conta);
+            },
             // o papel entra em todas as contas da mesma referência e, se a
             // transação já tem número, ganha o nome dele (4219.pdf)
             anexar: (c, arquivo) => mexerNoPapel(c, "anexar", null, arquivo, undefined, "comprovante") } : null}
