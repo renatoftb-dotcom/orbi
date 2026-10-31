@@ -26,7 +26,7 @@ const M = new Function(src + `
            lancamentoDoExtrato, efValorDeTexto, efEhData, efLinhaDoCabecalho,
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
-           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte, parcelaDaVendaParaALinha, lancamentosDaContaBancaria, provisaoNoEscritorio, provisaoReservadaNoEscritorio,
+           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte, parcelaDaVendaParaALinha, lancamentosDaContaBancaria, provisaoNoEscritorio, provisaoReservadaNoEscritorio, saldosDoPeDoExtrato,
            fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
@@ -3942,6 +3942,24 @@ teste("provisão de documentação: sai da venda e entra em Documentação Empre
   assert.ok(lOut.every((x) => x.competencia === "2026-10"));
   // complemento do comprador vai para a provisão, não para a venda
   assert.strictEqual(M.destinoNoEscritorio("documentacao_comprador", "empreendimento"), "res_documentacao");
+});
+
+teste("pé do extrato: conta corrente sem a aplicação, menos provisões e reservas = disponível", () => {
+  const linhas = [
+    { mes: "2026-08", saldoExtrato: 160716.05, saldoReservas: 0 },
+    { mes: "2026-09", saldoExtrato: 140928.96, saldoReservas: 6700 },
+    { mes: "2026-10", saldoExtrato: 150000, saldoReservas: 5083.85 },
+  ];
+  const fech = { "2026-08": { saldoAplicacao: 149731.01 }, "2026-09": { saldoAplicacao: 133150.77 } };
+  const pe = M.saldosDoPeDoExtrato(linhas, fech);
+  assert.strictEqual(pe["2026-09"].banco, 7778.19);
+  assert.strictEqual(pe["2026-09"].aplicacao, 133150.77);
+  assert.strictEqual(pe["2026-09"].reservas, 6700);
+  assert.strictEqual(pe["2026-09"].disponivel, 134228.96);
+  // as reservas acumulam; sem aplicação informada, a conta corrente é o calculado
+  assert.strictEqual(pe["2026-10"].reservas, 11783.85);
+  assert.strictEqual(pe["2026-10"].banco, 150000);
+  assert.strictEqual(pe["2026-10"].disponivel, 138216.15);
 });
 
 for (const [nome, fn] of testes) {

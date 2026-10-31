@@ -13974,6 +13974,28 @@ function saldoAplicacaoDoMes(fechamentos, mes) {
   const v = r && r.saldoAplicacao;
   return v == null || v === "" || !Number.isFinite(Number(v)) ? null : efCentavos(Number(v));
 }
+// O pé do extrato, mês a mês. O saldo calculado pelos lançamentos conta o
+// dinheiro aplicado (aplicar e resgatar não são lançamentos — como na
+// planilha), então:
+//   conta corrente = calculado − aplicação informada no Fechamento;
+//   provisões e reservas = o acumulado do bloco (dinheiro de terceiros
+//     guardado: a engenharia a repassar, a documentação dos compradores);
+//   disponível = conta corrente + aplicação − provisões e reservas.
+// Sem a aplicação informada no mês, a conta corrente é o próprio calculado.
+function saldosDoPeDoExtrato(linhas, fechamentos) {
+  const out = {};
+  let reservas = 0;
+  const lista = (linhas || []).filter((l) => l && /^\d{4}-\d{2}$/.test(String(l.mes))).slice()
+    .sort((a, b) => String(a.mes).localeCompare(String(b.mes)));
+  for (const l of lista) {
+    reservas += Number(l.saldoReservas) || 0;
+    const apl = saldoAplicacaoDoMes(fechamentos, l.mes);
+    const total = Number(l.saldoExtrato) || 0;
+    out[l.mes] = { banco: efCentavos(apl == null ? total : total - apl), aplicacao: apl,
+      reservas: efCentavos(reservas), disponivel: efCentavos(total - reservas) };
+  }
+  return out;
+}
 function comSaldoAplicacao(fechamentos, mes, valor) {
   const f = { ...(fechamentos || {}) };
   const reg = { ...(f[String(mes)] || {}) };
@@ -18356,36 +18378,42 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancam
                 </Fragment>
               );
             })}
-            <tr>
-              <td style={{ ...tdNome, fontWeight: 700, background: "#f0f7ff", borderTop: "2px solid #0474f4" }}>Saldo do extrato</td>
-              {doAno.map((m) => (
-                <td key={m.mes} style={{ ...td, fontWeight: 700, background: "#f0f7ff", borderTop: "2px solid #0474f4" }}>{cel(m.saldoExtrato)}</td>
-              ))}
-              <td style={{ ...td, fontWeight: 700, background: "#f0f7ff", borderTop: "2px solid #0474f4" }}>
-                {cel(doAno[doAno.length - 1].saldoExtrato)}
-              </td>
-            </tr>
-            {/* A aplicação, informada no Fechamento: fora da conta, então
-                fora do saldo do extrato — somada só no total disponível. */}
-            {doAno.some((m) => saldoAplicacaoDoMes(fechamentos, m.mes) != null) && (() => {
-              const apl = (m) => saldoAplicacaoDoMes(fechamentos, m.mes);
-              // na coluna do ano, o último mês que tem a aplicação informada
-              const ult = doAno.slice().reverse().find((m) => apl(m) != null);
+            {(() => {
+              // O pé: conta corrente, aplicação, menos o que é de terceiros
+              // (provisões e reservas) = o que está disponível de verdade.
+              const pe = saldosDoPeDoExtrato(linhas, fechamentos);
+              const ult = doAno[doAno.length - 1];
+              const de = (m) => pe[m.mes] || { banco: m.saldoExtrato, aplicacao: null, reservas: 0, disponivel: m.saldoExtrato };
               const vazio = <span style={{ color: "#d1d5db" }}>—</span>;
+              const temApl = doAno.some((m) => de(m).aplicacao != null);
+              const temRes = doAno.some((m) => Math.abs(de(m).reservas) > 0.005);
+              const azul = { background: "#f0f7ff", borderTop: "2px solid #0474f4" };
+              const menos = (v) => (Math.abs(v) < 0.005 ? vazio : <span style={{ color: "#b45309" }}>− {efDinheiro(v)}</span>);
               return (
                 <>
-                  <tr data-vk-linha-aplicacao="1">
-                    <td style={{ ...tdNome, color: "#4b5563" }}>Aplicação (investimento)</td>
-                    {doAno.map((m) => <td key={m.mes} style={td}>{apl(m) == null ? vazio : cel(apl(m))}</td>)}
-                    <td style={td}>{apl(ult) == null ? vazio : cel(apl(ult))}</td>
+                  <tr data-vk-linha-banco="1">
+                    <td style={{ ...tdNome, fontWeight: 700, ...azul }}>Saldo do extrato <span style={{ fontWeight: 400, color: "#6b7280" }}>(conta corrente)</span></td>
+                    {doAno.map((m) => <td key={m.mes} style={{ ...td, fontWeight: 700, ...azul }}>{cel(de(m).banco)}</td>)}
+                    <td style={{ ...td, fontWeight: 700, ...azul }}>{cel(de(ult).banco)}</td>
                   </tr>
-                  {/* conta corrente (o saldo do banco informado) + aplicação */}
-                  <tr data-vk-linha-total="1">
-                    <td style={{ ...tdNome, fontWeight: 700 }}>Total disponível <span style={{ fontWeight: 400, color: "#6b7280" }}>(banco + aplicação)</span></td>
-                    {doAno.map((m) => { const bco = saldoBancoDoMes(fechamentos, m.mes);
-                      return <td key={m.mes} style={{ ...td, fontWeight: 700 }}>{apl(m) == null || bco == null ? vazio : cel(efCentavos(bco + apl(m)))}</td>; })}
-                    <td style={{ ...td, fontWeight: 700 }}>{(() => { const bco = ult ? saldoBancoDoMes(fechamentos, ult.mes) : null;
-                      return !ult || bco == null ? vazio : cel(efCentavos(bco + apl(ult))); })()}</td>
+                  {temApl && (
+                    <tr data-vk-linha-aplicacao="1">
+                      <td style={{ ...tdNome, color: "#4b5563" }}>+ Aplicação (investimento)</td>
+                      {doAno.map((m) => <td key={m.mes} style={td}>{de(m).aplicacao == null ? vazio : cel(de(m).aplicacao)}</td>)}
+                      <td style={td}>{de(ult).aplicacao == null ? vazio : cel(de(ult).aplicacao)}</td>
+                    </tr>
+                  )}
+                  {temRes && (
+                    <tr data-vk-linha-reservas="1">
+                      <td style={{ ...tdNome, color: "#4b5563" }}>− Provisões e reservas <span style={{ color: "#6b7280" }}>(de terceiros)</span></td>
+                      {doAno.map((m) => <td key={m.mes} style={td}>{menos(de(m).reservas)}</td>)}
+                      <td style={td}>{menos(de(ult).reservas)}</td>
+                    </tr>
+                  )}
+                  <tr data-vk-linha-disponivel="1">
+                    <td style={{ ...tdNome, fontWeight: 700 }}>= Saldo disponível</td>
+                    {doAno.map((m) => <td key={m.mes} style={{ ...td, fontWeight: 700 }}>{cel(de(m).disponivel)}</td>)}
+                    <td style={{ ...td, fontWeight: 700 }}>{cel(de(ult).disponivel)}</td>
                   </tr>
                 </>
               );
@@ -20099,7 +20127,7 @@ function PainelFinanceiroEscritorio({ lancs, linhas, fechamentos, filtro, aoFilt
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(185px, 1fr))", gap: 12 }}>
             {!unidade && fim
-              ? cartao("Saldo do extrato", efDinheiro(fim.saldoExtrato), `fechamento de ${efMesPorExtenso(fim.mes, true)}`, true)
+              ? cartao("Saldo do extrato", efDinheiro((saldosDoPeDoExtrato(linhas, fechamentos)[fim.mes] || { banco: fim.saldoExtrato }).banco), `conta corrente · ${efMesPorExtenso(fim.mes, true)}`, true)
               : cartao("Movimento no período", efDinheiro(r.receitas + r.entradasGestao + r.vendasEmpreendimento),
                   "entradas — o saldo do banco não se divide por unidade", true)}
             {cartao("Receitas", efDinheiro(r.receitas), "projetos, gestão, comissões")}
@@ -24239,7 +24267,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
           ) : (
             <>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 }}>
-                {[["Saldo do extrato", efDinheiro(ultimo.saldoExtrato), ultimo.mes],
+                {[["Saldo do extrato", efDinheiro((saldosDoPeDoExtrato(linhas, fechamentos)[ultimo.mes] || { banco: ultimo.saldoExtrato }).banco), `conta corrente · ${ultimo.mes}`],
                   ["Receitas — média 12m", efDinheiro(media((m) => m.grupos.receitas || 0)), "projetos, gestão, comissões"],
                   ["Despesas — média 12m", efDinheiro(media((m) => m.grupos.despesas || 0)), "custo do escritório"],
                   ["Resultado — média 12m", efDinheiro(media((m) => m.saldoEscritorio || 0)), "antes das retiradas"]].map(([r, n, p]) => (
