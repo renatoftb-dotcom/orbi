@@ -2195,7 +2195,7 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
   // terreno e os tributos na conta, o número do canteiro fica escondido; o
   // botão esconde os três e sobra o que custa construir.
   const [soCusto, setSoCusto] = useState(false);
-  const pl = plDaObra(itens, contasPagar, GRUPOS_PL, PLANO_CONTAS, { soCusto });
+  const pl = plDaObra(itens, contasPagar, gruposDoFisicoFinanceiro(), PLANO_CONTAS, { soCusto });
   // Conta aberta em etapas: clicar no nome mostra onde o dinheiro foi, e não
   // só que a conta estourou. Só abre quando há etapa marcada dos dois lados.
   const [contaAberta, setContaAberta] = useState(null);
@@ -2401,10 +2401,10 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
           ))}
           <div style={{ ...grade, padding: "9px 12px", borderTop: "1.5px solid rgba(38,36,33,0.14)", background: "#fafafa" }}>
             <span style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>
-              {soCusto ? "CUSTO DE CONSTRUÇÃO" : clientePaga ? "CUSTO TOTAL" : "RESULTADO"}
+              {soCusto ? "CUSTO DE CONSTRUÇÃO" : "CUSTO TOTAL"}
             </span>
-            <span style={{ ...celula, fontWeight: 700 }}>{num(soCusto || clientePaga ? pl.custo.estimado : pl.resultado.estimado)}</span>
-            <span style={{ ...celula, fontWeight: 700 }}>{num(soCusto || clientePaga ? pl.custo.realizado : pl.resultado.realizado)}</span>
+            <span style={{ ...celula, fontWeight: 700 }}>{num(pl.custo.estimado)}</span>
+            <span style={{ ...celula, fontWeight: 700 }}>{num(pl.custo.realizado)}</span>
             {!isMobile && <span />}
           </div>
         </div>
@@ -2451,8 +2451,8 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
       )}
       <div style={{ fontSize: 11, color: "#6b7280", marginTop: 8 }}>
         “Realizado” é o que já foi <strong style={{ color: "#4b5563" }}>pago</strong> em contas a pagar, acumulado até hoje —
-        conta em aberto não entra; a compra no cartão do escritório entra inteira (parcelas pagas e a pagar). Da venda de imóvel entra o que
-        já foi recebido; o que falta receber aparece só como informação. “Estimado” vem da aba Preencher.
+        conta em aberto não entra; a compra no cartão do escritório entra inteira (parcelas pagas e a pagar). Aqui é só custo — as vendas
+        ficam no Resultado (P&amp;L). “Estimado” vem da aba Preencher.
         {soCusto && " Preço de venda, terreno e tributos ficam fora deste quadro — só o que custa construir."}
         {clientePaga && " O cliente paga os fornecedores direto, então a obra fecha no custo."}
       </div>
@@ -2464,10 +2464,17 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
 // Uma linha por conta do plano, o valor digitado direto. É o caminho para
 // dar o primeiro número em quarenta contas sem quarenta idas ao formulário;
 // o detalhe item a item continua existindo em "Por conta".
+// O Físico-Financeiro é só custo: as vendas (entradas) ficam no Resultado (P&L).
+function gruposDoFisicoFinanceiro() {
+  return (typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : []).filter((g) => g.id !== "receitas");
+}
 function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL, clientePaga }) {
-  const linhas = linhasEstimativaPL(itens, GRUPOS_PL, PLANO_CONTAS);
-  const totais = totaisEstimativaPL(itens, GRUPOS_PL, PLANO_CONTAS);
-  const fecho = fechoEstimativaPL(itens, GRUPOS_PL, PLANO_CONTAS, clientePaga);
+  const linhas = linhasEstimativaPL(itens, gruposDoFisicoFinanceiro(), PLANO_CONTAS);
+  const totais = totaisEstimativaPL(itens, gruposDoFisicoFinanceiro(), PLANO_CONTAS);
+  const custoEstimado = gruposDoFisicoFinanceiro().filter((g) => g.sinal < 0 && g.entra_no_resultado !== false)
+    .reduce((t, g) => t + (totais.porGrupo[g.id] || 0), 0);
+  const fecho = { rotulo: "Custo estimado da obra", valor: Math.round(custoEstimado * 100) / 100, porGrupo: totais.porGrupo,
+    nota: "Só o custo. As vendas ficam no Resultado (P&L). “Excluídas” aparece no quadro, mas fica de fora do custo." };
   const cel = { border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 9, padding: "6px 9px", fontSize: 12.5,
     color: "#111827", outline: "none", background: "#fff", fontFamily: "inherit", width: "100%",
     boxSizing: "border-box", textAlign: "right" };
@@ -2486,7 +2493,7 @@ function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL, cl
         Um campo por conta do P&amp;L. Campo em branco é conta sem estimativa — não é conta estimada em zero.
         Contas que já têm itens detalhados em “Por conta” mostram a soma deles e não são editadas aqui.
       </div>
-      {GRUPOS_PL.map(g => {
+      {gruposDoFisicoFinanceiro().map(g => {
         const ls = porGrupo[g.id] || [];
         if (!ls.length) return null;
         return (
@@ -4099,7 +4106,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // de entrada e 700 mil de custo mostrava "estimado 1,6 milhão". O topo
     // agora separa os dois lados, como o P&L faz.
     const totaisPL = totaisEstimativaPL(itensPL, GRUPOS_PL, PLANO_CONTAS);
-    const entradasPL = totaisPL.porGrupo.receitas || 0;
+    const entradasPL = 0; // só custo: as vendas ficam no Resultado (P&L)
     const totalPL = GRUPOS_PL
       .filter(g => g.sinal < 0 && g.entra_no_resultado !== false)
       .reduce((soma, g) => soma + (totaisPL.porGrupo[g.id] || 0), 0);
@@ -4115,7 +4122,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div>
               <label style={C.label}>Conta *</label>
               <Selecao style={{ ...C.input, cursor: "pointer" }} value={formItemPL.contaId} onChange={e => setFormItemPL({ ...formItemPL, contaId: e.target.value })}>
-                {GRUPOS_PL.filter(g => g.id !== "excluidas").map(g => (
+                {gruposDoFisicoFinanceiro().filter(g => g.id !== "excluidas").map(g => (
                   <optgroup key={g.id} label={g.titulo}>
                     {contasDoGrupo(g.id).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                   </optgroup>
@@ -4150,7 +4157,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     }
 
     // ── Agrupamento "por conta" ────────────────────────────────
-    const gruposComItens = GRUPOS_PL.map(g => {
+    const gruposComItens = gruposDoFisicoFinanceiro().map(g => {
       const contasComItens = contasDoGrupo(g.id).map(conta => {
         const itensDaConta = itensPL.filter(i => i.contaId === conta.id);
         const totalConta = itensDaConta.reduce((s, i) => s + (Number(i.valor) || 0), 0);
@@ -4243,8 +4250,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         ) : visaoPL === "extrato" ? (() => {
           // no menu, o mês corrente também aparece (para registrar entrada nele);
           // nas colunas, só os meses que têm movimento
-          const meses = mesesDoExtrato(contasDaObra, entradasDaObra, hojeIso);
-          const comMovimento = mesesDoExtrato(contasDaObra, entradasDaObra, "");
+          // só custo: sem as contas da venda (sinal, parcelas, financiamento)
+          const contasSemVenda = contasDaObra.filter(c => !(c && (c.vendaId || c.contaId === "venda_imovel")));
+          const meses = mesesDoExtrato(contasSemVenda, entradasDaObra, hojeIso);
+          const comMovimento = mesesDoExtrato(contasSemVenda, entradasDaObra, "");
           const rotulo = (chave) => {
             const [a, m] = String(chave).split("-");
             return `${["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"][Number(m) - 1]}-${a.slice(2)}`;
@@ -4257,8 +4266,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             : escolha === "todos" ? comMovimento
             : /^\d{4}$/.test(escolha) ? comMovimento.filter(m => m.startsWith(escolha))
             : meses.includes(escolha) ? [escolha] : [];
-          const estimativa = estimativaPorConta(itensPL);
-          const ex = extratoMatriz(contasDaObra, entradasDaObra, colunas, estimativa);
+          const estimativa = estimativaPorConta(itensPL.filter(i => i && i.contaId !== "venda_imovel"));
+          const ex = extratoMatriz(contasSemVenda, entradasDaObra, colunas, estimativa);
           const temEstimativa = Object.keys(estimativa).length > 0;
           const grade = `minmax(190px, 1fr) ${colunas.map(() => "110px").join(" ")} 120px${temEstimativa ? " 120px" : ""}`;
           // largura mínima do quadro: sem isso as colunas se espremem e a
