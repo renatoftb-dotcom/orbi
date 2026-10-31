@@ -2204,7 +2204,12 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
   const [visao, setVisao] = useState("conta");
   // Concluir a etapa: a data em que terminou; dali em diante não se espera
   // mais gasto nela, e o saldo dela é o final (economia ou estouro).
-  const [concluindo, setConcluindo] = useState(null); // { etapaId, nome, data, ja }
+  const [concluindo, setConcluindo] = useState(null); // { etapaId, nome, inicio, data, ja, erro }
+  // o início sugerido: o primeiro gasto da etapa
+  const inicioDaEtapa = (etapaId) => (contasPagar || [])
+    .filter((c) => c && (c.etapa || c.etapaId) === etapaId && contaNoRealizado(c))
+    .map((c) => String(c.pagoEm || c.compraEm || c.vencimento || "").slice(0, 10))
+    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort()[0] || "";
   const concluidas = etapasConcluidas || {};
   const dataBR = (iso) => (/^\d{4}-\d{2}-\d{2}$/.test(String(iso || "")) ? String(iso).split("-").reverse().join("/") : "");
   const hojeEtapa = new Date().toISOString().slice(0, 10);
@@ -2305,13 +2310,13 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
                     {e.etapaId && concluidas[e.etapaId] ? (
                       <button type="button" data-vk-etapa-concluida={e.etapaId}
                         disabled={!aoConcluirEtapa} title={aoConcluirEtapa ? "Mudar a data ou reabrir a etapa" : ""}
-                        onClick={() => aoConcluirEtapa && setConcluindo({ etapaId: e.etapaId, nome: e.nome, data: concluidas[e.etapaId].em || hojeEtapa, ja: true })}
+                        onClick={() => aoConcluirEtapa && setConcluindo({ etapaId: e.etapaId, nome: e.nome, inicio: concluidas[e.etapaId].inicio || inicioDaEtapa(e.etapaId), data: concluidas[e.etapaId].em || hojeEtapa, ja: true })}
                         style={{ fontFamily: "inherit", fontSize: 10.5, fontWeight: 600, padding: "1px 7px", borderRadius: 999, border: "1px solid #a7f3d0",
                           background: "#ecfdf5", color: "#047857", cursor: aoConcluirEtapa ? "pointer" : "default" }}>
-                        ✓ Concluída {dataBR(concluidas[e.etapaId].em)}</button>
+                        ✓ {concluidas[e.etapaId].inicio ? `${dataBR(concluidas[e.etapaId].inicio)} a ${dataBR(concluidas[e.etapaId].em)}` : `Concluída ${dataBR(concluidas[e.etapaId].em)}`}</button>
                     ) : e.etapaId && aoConcluirEtapa ? (
                       <button type="button" data-vk-concluir-etapa={e.etapaId}
-                        onClick={() => setConcluindo({ etapaId: e.etapaId, nome: e.nome, data: hojeEtapa, ja: false })}
+                        onClick={() => setConcluindo({ etapaId: e.etapaId, nome: e.nome, inicio: inicioDaEtapa(e.etapaId), data: hojeEtapa, ja: false })}
                         style={{ fontFamily: "inherit", fontSize: 10.5, padding: "1px 7px", borderRadius: 999, border: "1px solid rgba(38,36,33,0.18)",
                           background: "#fff", color: "#4b5563", cursor: "pointer" }}>Concluir</button>
                     ) : null}
@@ -2412,12 +2417,17 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
               <div style={{ fontSize: 15, fontWeight: 700 }}>{concluindo.ja ? "Etapa concluída" : "Concluir a etapa"}</div>
               <div style={{ fontSize: 12.5, color: "#6b7280", marginTop: 2 }}>{concluindo.nome} — a partir daí não se espera mais gasto nela.</div>
             </div>
-            <label style={{ display: "grid", gap: 4 }}>
-              <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .4, color: "#6b7280", fontWeight: 600 }}>Terminou em</span>
-              <input data-vk-data-conclusao="1" type="date" value={concluindo.data} max={hojeEtapa}
-                onChange={(ev) => setConcluindo({ ...concluindo, data: ev.target.value })}
-                style={{ fontFamily: "inherit", fontSize: 14, padding: "8px 10px", borderRadius: 9, border: "1px solid rgba(38,36,33,0.2)" }} />
-            </label>
+            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+              {[["inicio", "Começou em", "data-vk-data-inicio-etapa"], ["data", "Terminou em", "data-vk-data-conclusao"]].map(([k, rotulo, attr]) => (
+                <label key={k} style={{ display: "grid", gap: 4, minWidth: 0 }}>
+                  <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .4, color: "#6b7280", fontWeight: 600 }}>{rotulo}</span>
+                  <input {...{ [attr]: "1" }} type="date" value={concluindo[k] || ""} max={hojeEtapa}
+                    onChange={(ev) => setConcluindo({ ...concluindo, [k]: ev.target.value, erro: "" })}
+                    style={{ fontFamily: "inherit", fontSize: 14, padding: "8px 8px", borderRadius: 9, border: "1px solid rgba(38,36,33,0.2)", minWidth: 0, width: "100%", boxSizing: "border-box" }} />
+                </label>
+              ))}
+            </div>
+            {concluindo.erro && <div style={{ fontSize: 12, color: "#b91c1c" }}>{concluindo.erro}</div>}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
               {concluindo.ja && (
                 <button type="button" data-vk-reabrir-etapa="1" onClick={() => { aoConcluirEtapa(concluindo.etapaId, null); setConcluindo(null); }}
@@ -2427,7 +2437,12 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
               <button type="button" onClick={() => setConcluindo(null)}
                 style={{ fontFamily: "inherit", fontSize: 12.5, padding: "8px 14px", borderRadius: 9, border: "1px solid rgba(38,36,33,0.18)", background: "#fff", cursor: "pointer" }}>Cancelar</button>
               <button type="button" data-vk-confirmar-conclusao="1" disabled={!/^\d{4}-\d{2}-\d{2}$/.test(String(concluindo.data || ""))}
-                onClick={() => { aoConcluirEtapa(concluindo.etapaId, { em: concluindo.data }); setConcluindo(null); }}
+                onClick={() => {
+                  const ini = String(concluindo.inicio || "");
+                  if (ini && !/^\d{4}-\d{2}-\d{2}$/.test(ini)) { setConcluindo({ ...concluindo, erro: "Data de início inválida." }); return; }
+                  if (ini && ini > concluindo.data) { setConcluindo({ ...concluindo, erro: "O início não pode ser depois do fim." }); return; }
+                  aoConcluirEtapa(concluindo.etapaId, { inicio: ini, em: concluindo.data }); setConcluindo(null);
+                }}
                 style={{ fontFamily: "inherit", fontSize: 12.5, padding: "8px 14px", borderRadius: 9, border: "1px solid #0474f4", background: "#0474f4", color: "#fff", cursor: "pointer", fontWeight: 600 }}>
                 {concluindo.ja ? "Salvar" : "Concluir"}</button>
             </div>
@@ -4145,7 +4160,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             etapasConcluidas={obraAtual.etapasConcluidas || {}}
             aoConcluirEtapa={perm.podeGerenciarObra ? ((etapaId, dados) => {
               const atual = { ...(obraAtual.etapasConcluidas || {}) };
-              if (dados) atual[etapaId] = { em: dados.em, por: quemSou(), registradoEm: new Date().toISOString() };
+              if (dados) atual[etapaId] = { ...(dados.inicio ? { inicio: dados.inicio } : {}), em: dados.em, por: quemSou(), registradoEm: new Date().toISOString() };
               else delete atual[etapaId];
               gravarObras(obras.map(o => (o.id === obraAtual.id ? { ...o, etapasConcluidas: atual } : o)));
             }) : null} />
