@@ -539,10 +539,13 @@ function provisaoNoEscritorio(lancamentos, obra, cliente, opcoes) {
     const reservado = cents(dela.filter((l) => l.origem.parte === "reserva").reduce((t, l) => t + (Number(l.valor) || 0), 0));
     const alvo = cents(Number(v.provisaoDoc) || 0);
     const dif = cents(alvo - reservado);
-    if (Math.abs(dif) > 0.005 && aberto(mesHoje)) {
+    // no mês da venda (o do sinal), se estiver aberto; fechado, no mês de hoje
+    const diaVenda = /^\d{4}-\d{2}-\d{2}$/.test(String(v.data || "")) ? String(v.data) : "";
+    const [mesPar, diaPar] = diaVenda && aberto(diaVenda.slice(0, 7)) ? [diaVenda.slice(0, 7), diaVenda] : [mesHoje, hoje];
+    if (Math.abs(dif) > 0.005 && aberto(mesPar)) {
       const n = dela.filter((l) => l.origem.parte === "reserva").length + 1;
       const pre = `prov:${ob.id}:${v.id}:${n}`;
-      const marca = { competencia: mesHoje, lancadoEm: hoje, contaBanco: "nao", conferido: true, conferidoEm: hoje, criadoEm: new Date().toISOString() };
+      const marca = { competencia: mesPar, lancadoEm: diaPar, contaBanco: "nao", conferido: true, conferidoEm: hoje, criadoEm: new Date().toISOString() };
       const { unidadeVenda: _u, comprador: _c, id: _i, origem: _o, contaId: _k, valor: _v, descricao: _d, ...resto } = base;
       novos.push({ ...resto, ...marca, id: pre + ":venda", contaId: "emp_venda", valor: -dif,
         descricao: `Provisão de documentação — ${rotulo} (sai da venda)`, origem: { obraId: ob.id, tipo: "provisao", refId: v.id, parte: "venda" } });

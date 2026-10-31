@@ -3925,6 +3925,13 @@ teste("provisão de documentação: sai da venda e entra em Documentação Empre
   l = M.provisaoNoEscritorio(l, { ...obra, vendas: [] }, cliente, { fechamentos: fech, hoje: "2026-11-15" });
   assert.strictEqual(M.provisaoReservadaNoEscritorio(l, "obE", "v1"), 0);
   assert.ok(l.some((x) => x.id === "x1"), "o resto fica");
+  // setembro aberto: o par vai para o mês da venda (o do sinal)
+  const vSet = { ...venda, id: "v9", data: "2026-09-23" };
+  const lSet = M.provisaoNoEscritorio([], { ...obra, vendas: [vSet] }, cliente, { fechamentos: {}, hoje: "2026-10-31" });
+  assert.ok(lSet.every((x) => x.competencia === "2026-09" && x.lancadoEm === "2026-09-23"), JSON.stringify(lSet.map((x) => x.competencia)));
+  // setembro fechado: vai para o mês de hoje
+  const lOut = M.provisaoNoEscritorio([], { ...obra, vendas: [vSet] }, cliente, { fechamentos: fech, hoje: "2026-10-31" });
+  assert.ok(lOut.every((x) => x.competencia === "2026-10"));
   // complemento do comprador vai para a provisão, não para a venda
   assert.strictEqual(M.destinoNoEscritorio("documentacao_comprador", "empreendimento"), "res_documentacao");
 });
