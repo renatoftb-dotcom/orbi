@@ -13985,14 +13985,18 @@ function saldoAplicacaoDoMes(fechamentos, mes) {
 function saldosDoPeDoExtrato(linhas, fechamentos) {
   const out = {};
   let reservas = 0;
+  const porConta = {};     // o acumulado de cada conta do bloco (engenharia, documentação)
+  const doBloco = new Set(PLANO_CONTAS_ESCRITORIO.filter((c) => c.grupo === "reservas").map((c) => c.id));
   const lista = (linhas || []).filter((l) => l && /^\d{4}-\d{2}$/.test(String(l.mes))).slice()
     .sort((a, b) => String(a.mes).localeCompare(String(b.mes)));
   for (const l of lista) {
     reservas += Number(l.saldoReservas) || 0;
+    for (const k of Object.keys(l.contas || {})) if (doBloco.has(k)) porConta[k] = (porConta[k] || 0) + (Number(l.contas[k]) || 0);
     const apl = saldoAplicacaoDoMes(fechamentos, l.mes);
     const total = Number(l.saldoExtrato) || 0;
+    const contas = {}; for (const k of Object.keys(porConta)) contas[k] = efCentavos(porConta[k]);
     out[l.mes] = { banco: efCentavos(apl == null ? total : total - apl), aplicacao: apl,
-      reservas: efCentavos(reservas), disponivel: efCentavos(total - reservas) };
+      reservas: efCentavos(reservas), reservasPorConta: contas, disponivel: efCentavos(total - reservas) };
   }
   return out;
 }
@@ -18205,6 +18209,7 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancam
   // duplo é contado aqui, e não pelo dblclick do navegador, que no celular
   // vira zoom.
   const [abrindo, setAbrindo] = useState(null);       // { titulo, alvo, periodo }
+  const [verReservas, setVerReservas] = useState(false); // o que compõe as provisões e reservas, no pé
   const ultimoToque = useRef({ k: "", t: 0 });
   const podeAbrir = Array.isArray(lancamentos);
   const toque = (k, abrir) => (e) => {
@@ -18252,7 +18257,8 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancam
     { titulo: "Sócios", grupos: ["socios", "socios_entradas"], saldo: "retiradas", rotulo: "Retiradas e empréstimos",
       totais: { socios: "Retiradas e empréstimos", socios_entradas: "Devoluções e aportes" } },
     { titulo: "Estornos bancários", grupos: ["ajustes_bancarios"], saldo: "ajustes", rotulo: "Em aberto com o banco" },
-    { titulo: "Provisões e reservas", grupos: ["reservas"], saldo: "saldoReservas", rotulo: "Provisões e reservas" },
+    // Provisões e reservas não têm bloco aqui: são saldo guardado, e aparecem
+    // no pé, descontadas do disponível, com o que as compõe ao expandir.
   ];
   const soma = (f) => doAno.reduce((s, m) => s + (f(m) || 0), 0);
   const cel = (v) => (!v ? <span style={{ color: "#d1d5db" }}>—</span>
@@ -18389,6 +18395,8 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancam
               const temRes = doAno.some((m) => Math.abs(de(m).reservas) > 0.005);
               const azul = { background: "#f0f7ff", borderTop: "2px solid #0474f4" };
               const menos = (v) => (Math.abs(v) < 0.005 ? vazio : <span style={{ color: "#b45309" }}>− {efDinheiro(v)}</span>);
+              const contasRes = PLANO_CONTAS_ESCRITORIO.filter((c) => c.grupo === "reservas"
+                && doAno.some((m) => Math.abs(((de(m).reservasPorConta || {})[c.id]) || 0) > 0.005));
               return (
                 <>
                   <tr data-vk-linha-banco="1">
@@ -18404,12 +18412,24 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancam
                     </tr>
                   )}
                   {temRes && (
-                    <tr data-vk-linha-reservas="1">
-                      <td style={{ ...tdNome, color: "#4b5563" }}>− Provisões e reservas <span style={{ color: "#6b7280" }}>(de terceiros)</span></td>
+                    <tr data-vk-linha-reservas="1" style={{ cursor: "pointer" }} onClick={() => setVerReservas(!verReservas)}>
+                      <td style={{ ...tdNome, color: "#4b5563" }}>
+                        <button type="button" data-vk-expandir-reservas="1" aria-expanded={verReservas}
+                          onClick={(e) => { e.stopPropagation(); setVerReservas(!verReservas); }}
+                          style={{ border: "none", background: "none", padding: "0 6px 0 0", cursor: "pointer", color: "#0474f4", fontSize: 12, fontFamily: "inherit" }}
+                          title={verReservas ? "Esconder o que compõe" : "Ver o que compõe"}>{verReservas ? "▾" : "▸"}</button>
+                        − Provisões e reservas <span style={{ color: "#6b7280" }}>(de terceiros)</span></td>
                       {doAno.map((m) => <td key={m.mes} style={td}>{menos(de(m).reservas)}</td>)}
                       <td style={td}>{menos(de(ult).reservas)}</td>
                     </tr>
                   )}
+                  {temRes && verReservas && contasRes.map((c) => (
+                    <tr key={c.id} data-vk-reserva-conta={c.id}>
+                      <td style={{ ...tdNome, paddingLeft: 34, color: "#6b7280", fontSize: 12.5 }}>{c.nome}</td>
+                      {doAno.map((m) => <td key={m.mes} style={{ ...td, fontSize: 12.5, color: "#6b7280" }}>{menos(((de(m).reservasPorConta || {})[c.id]) || 0)}</td>)}
+                      <td style={{ ...td, fontSize: 12.5, color: "#6b7280" }}>{menos(((de(ult).reservasPorConta || {})[c.id]) || 0)}</td>
+                    </tr>
+                  ))}
                   <tr data-vk-linha-disponivel="1">
                     <td style={{ ...tdNome, fontWeight: 700 }}>= Saldo disponível</td>
                     {doAno.map((m) => <td key={m.mes} style={{ ...td, fontWeight: 700 }}>{cel(de(m).disponivel)}</td>)}

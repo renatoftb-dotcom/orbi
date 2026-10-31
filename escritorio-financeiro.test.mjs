@@ -3947,8 +3947,8 @@ teste("provisão de documentação: sai da venda e entra em Documentação Empre
 teste("pé do extrato: conta corrente sem a aplicação, menos provisões e reservas = disponível", () => {
   const linhas = [
     { mes: "2026-08", saldoExtrato: 160716.05, saldoReservas: 0 },
-    { mes: "2026-09", saldoExtrato: 140928.96, saldoReservas: 6700 },
-    { mes: "2026-10", saldoExtrato: 150000, saldoReservas: 5083.85 },
+    { mes: "2026-09", saldoExtrato: 140928.96, saldoReservas: 6700, contas: { res_documentacao: 6700, emp_venda: -6700 } },
+    { mes: "2026-10", saldoExtrato: 150000, saldoReservas: 5083.85, contas: { res_engenharia: 5083.85 } },
   ];
   const fech = { "2026-08": { saldoAplicacao: 149731.01 }, "2026-09": { saldoAplicacao: 133150.77 } };
   const pe = M.saldosDoPeDoExtrato(linhas, fech);
@@ -3960,6 +3960,9 @@ teste("pé do extrato: conta corrente sem a aplicação, menos provisões e rese
   assert.strictEqual(pe["2026-10"].reservas, 11783.85);
   assert.strictEqual(pe["2026-10"].banco, 150000);
   assert.strictEqual(pe["2026-10"].disponivel, 138216.15);
+  // o que compõe, acumulado por conta
+  assert.deepStrictEqual(pe["2026-10"].reservasPorConta, { res_documentacao: 6700, res_engenharia: 5083.85 });
+  assert.deepStrictEqual(pe["2026-09"].reservasPorConta, { res_documentacao: 6700 });
 });
 
 for (const [nome, fn] of testes) {
