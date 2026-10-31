@@ -596,6 +596,34 @@ function contaMudouNaPonte(antes, depois) {
   });
 }
 
+// Mexeu no dinheiro (valor ou data)? Isso não pode em mês fechado; trocar
+// a classificação (conta contábil, etapa, grupo, descrição) pode.
+function contaMudouNoDinheiro(antes, depois) {
+  const a = antes || {}, d = depois || {};
+  const v = (x) => (x == null ? "" : String(x));
+  if (Math.abs((Number(a.valor) || 0) - (Number(d.valor) || 0)) > 0.005) return true;
+  if (Math.abs((Number(a.valorPago) || 0) - (Number(d.valorPago) || 0)) > 0.005) return true;
+  if (v(a.pagoEm) !== v(d.pagoEm)) return true;
+  return !a.pagoEm && !d.pagoEm && v(a.vencimento) !== v(d.vencimento);
+}
+
+// Reclassificar entre contas pode em mês fechado quando não mexe no saldo:
+// no escritório, a conta de destino continua no mesmo lado (saída com
+// saída, entrada com entrada) e continua atravessando. Material → mão de
+// obra, sim; custo → venda, ou algo que deixa de ir para o escritório, não.
+function reclassificacaoMexeNoSaldo(antes, depois, modo, opcoes) {
+  const a = (antes || {}).contaId || "", d = (depois || {}).contaId || "";
+  if (a === d) return false;
+  const lado = (contaObra) => {
+    const destino = destinoNoEscritorio(contaObra, modo, opcoes);
+    if (!destino) return 0;
+    const c = contaEscritorio(destino); const g = c && grupoEscritorio(c.grupo);
+    return g ? (g.sinal < 0 ? -1 : 1) : 0;
+  };
+  const la = lado(a), ld = lado(d);
+  return la !== ld || la === 0;
+}
+
 // O id é derivado da origem, não sorteado: rodar a ponte duas vezes na mesma
 // obra não cria o lançamento duas vezes.
 function idDaPonte(obraId, tipo, refId) {

@@ -26,7 +26,7 @@ const M = new Function(src + `
            lancamentoDoExtrato, efValorDeTexto, efEhData, efLinhaDoCabecalho,
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
-           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte, parcelaDaVendaParaALinha, lancamentosDaContaBancaria, provisaoNoEscritorio, provisaoReservadaNoEscritorio, saldosDoPeDoExtrato, contaMudouNaPonte,
+           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte, parcelaDaVendaParaALinha, lancamentosDaContaBancaria, provisaoNoEscritorio, provisaoReservadaNoEscritorio, saldosDoPeDoExtrato, contaMudouNaPonte, contaMudouNoDinheiro, reclassificacaoMexeNoSaldo,
            fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
@@ -3973,6 +3973,14 @@ teste("conta paga editada: só o que o escritório vê refaz o lançamento", () 
   assert.strictEqual(M.contaMudouNaPonte(a, { ...a, descricao: "Cimento CP II" }), true);
   assert.strictEqual(M.contaMudouNaPonte(a, { ...a, pagoEm: "2026-10-03" }), true);
   assert.strictEqual(M.contaMudouNaPonte(a, { ...a, valor: "100" }), false);
+  // mês fechado: dinheiro (valor, data) trava; classificação não
+  assert.strictEqual(M.contaMudouNoDinheiro(a, { ...a, contaId: "ferramentas", descricao: "x", etapa: "y" }), false);
+  assert.strictEqual(M.contaMudouNoDinheiro(a, { ...a, valor: 120 }), true);
+  assert.strictEqual(M.contaMudouNoDinheiro(a, { ...a, pagoEm: "2026-10-03" }), true);
+  // reclassificar: material → mão de obra fica do mesmo lado (não mexe no saldo); custo → venda mexe
+  assert.strictEqual(M.reclassificacaoMexeNoSaldo({ contaId: "material" }, { contaId: "pedreiros" }, "empreendimento", { planoObra: PLANO_OBRA }), false);
+  assert.strictEqual(M.reclassificacaoMexeNoSaldo({ contaId: "material" }, { contaId: "venda_imovel" }, "empreendimento", { planoObra: PLANO_OBRA }), true);
+  assert.strictEqual(M.reclassificacaoMexeNoSaldo({ contaId: "material" }, { contaId: "material" }, "empreendimento", { planoObra: PLANO_OBRA }), false);
 });
 
 for (const [nome, fn] of testes) {

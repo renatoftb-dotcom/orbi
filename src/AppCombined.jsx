@@ -12585,6 +12585,34 @@ function contaMudouNaPonte(antes, depois) {
   });
 }
 
+// Mexeu no dinheiro (valor ou data)? Isso não pode em mês fechado; trocar
+// a classificação (conta contábil, etapa, grupo, descrição) pode.
+function contaMudouNoDinheiro(antes, depois) {
+  const a = antes || {}, d = depois || {};
+  const v = (x) => (x == null ? "" : String(x));
+  if (Math.abs((Number(a.valor) || 0) - (Number(d.valor) || 0)) > 0.005) return true;
+  if (Math.abs((Number(a.valorPago) || 0) - (Number(d.valorPago) || 0)) > 0.005) return true;
+  if (v(a.pagoEm) !== v(d.pagoEm)) return true;
+  return !a.pagoEm && !d.pagoEm && v(a.vencimento) !== v(d.vencimento);
+}
+
+// Reclassificar entre contas pode em mês fechado quando não mexe no saldo:
+// no escritório, a conta de destino continua no mesmo lado (saída com
+// saída, entrada com entrada) e continua atravessando. Material → mão de
+// obra, sim; custo → venda, ou algo que deixa de ir para o escritório, não.
+function reclassificacaoMexeNoSaldo(antes, depois, modo, opcoes) {
+  const a = (antes || {}).contaId || "", d = (depois || {}).contaId || "";
+  if (a === d) return false;
+  const lado = (contaObra) => {
+    const destino = destinoNoEscritorio(contaObra, modo, opcoes);
+    if (!destino) return 0;
+    const c = contaEscritorio(destino); const g = c && grupoEscritorio(c.grupo);
+    return g ? (g.sinal < 0 ? -1 : 1) : 0;
+  };
+  const la = lado(a), ld = lado(d);
+  return la !== ld || la === 0;
+}
+
 // O id é derivado da origem, não sorteado: rodar a ponte duas vezes na mesma
 // obra não cria o lançamento duas vezes.
 function idDaPonte(obraId, tipo, refId) {
@@ -56444,8 +56472,25 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const marcasDaEdicao = {};
     let editouNoEscritorio = 0;
     if (editadas.length && obraDepois && typeof lancamentosLigadosAsContas === "function" && typeof contasLigadasAoLancamento === "function") {
-      const ligados = lancamentosLigadosAsContas(lancsComDoc, obraDepois.id, editadas)
-        .filter(l => !(typeof bloqueioPorMesFechado === "function" && bloqueioPorMesFechado(l.competencia, fechEsc)));
+      const todosLigados = lancamentosLigadosAsContas(lancsComDoc, obraDepois.id, editadas);
+      const fechado = (l) => typeof bloqueioPorMesFechado === "function" && !!bloqueioPorMesFechado(l.competencia, fechEsc);
+      // mês fechado: só a classificação, no próprio lançamento (data e valor
+      // ficam como estão — a tela já não deixa mudá-los)
+      const modoDaObra = typeof modoDaPonte === "function" ? modoDaPonte(obraDepois, cliente) : "";
+      const corrigidos = {};
+      for (const l of todosLigados.filter(fechado)) {
+        if ((l.origem || {}).tipo === "pedido") continue;
+        const c = editadas.find(x => ligaContaAoLancamento(l, obraDepois.id, x));
+        if (!c) continue;
+        const destino = typeof destinoNoEscritorio === "function" ? destinoNoEscritorio(c.contaId, modoDaObra) : "";
+        corrigidos[l.id] = { ...l, ...(destino ? { contaId: destino } : {}), descricao: c.descricao || l.descricao,
+          fornecedor: c.favorecido || l.fornecedor || "", origem: { ...(l.origem || {}), contaObra: c.contaId || (l.origem || {}).contaObra } };
+      }
+      if (Object.keys(corrigidos).length) {
+        lancsDaEdicao = lancsDaEdicao.map(l => (l && corrigidos[l.id]) || l);
+        editouNoEscritorio += Object.keys(corrigidos).length;
+      }
+      const ligados = todosLigados.filter(l => !fechado(l));
       const datasMudaram = editadas.some(c => String((antesPorId.get(c.id) || {}).pagoEm || "") !== String(c.pagoEm || ""));
       for (const l of ligados) {
         const { extratoId, historicoBanco, conferido, conferidoEm, conferidoPor, contaBancariaId, competencia, numeroDoc, criadoEm } = l;
@@ -56455,8 +56500,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       }
       if (ligados.length) {
         const fora = new Set(ligados.map(l => l.id));
-        lancsDaEdicao = lancsComDoc.filter(l => !(l && fora.has(l.id)));
-        editouNoEscritorio = ligados.length;
+        lancsDaEdicao = lancsDaEdicao.filter(l => !(l && fora.has(l.id)));
+        editouNoEscritorio += ligados.length;
       }
     }
     const limpo = { ...limpo0, lancamentos: lancsDaEdicao, removidos: limpo0.removidos + docsAtualizados };
@@ -56470,7 +56515,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // volta tem que levar esses junto, senão o save apaga cada um no banco
     const outros = ((data && data.lancamentos) || []).filter(l => !(l && l.tipo === "escritorio"));
     if (!paraPonte.length) {
-      return { extras: limpo.removidos ? { lancamentos: outros.concat(limpo.lancamentos) } : null };
+      return { extras: (limpo.removidos || editouNoEscritorio) ? { lancamentos: outros.concat(limpo.lancamentos) } : null };
     }
 
     const r = aplicarComprasNoCatalogo(data.materiais, pagas);
@@ -56635,9 +56680,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const jaFaltava = guardada ? faltasDaTransacao(comObra(guardada)) : [];
     const faltas = faltasDaTransacao(comObra(f)).filter((x) => jaFaltava.indexOf(x) < 0);
     if (faltas.length) { dialogo.alertar({ titulo: frasesDasFaltas(faltas), tipo: "aviso" }); return; }
-    // conta paga que muda no que o escritório vê, com o mês já fechado lá: não
-    if (guardada && guardada.pago && typeof contaMudouNaPonte === "function" && contaMudouNaPonte(guardada, f)
-      && travouNoMesFechado([guardada], "mudar valor, conta, descrição, fornecedor ou data")) return;
+    // mês fechado no escritório: data e valor não mudam (reabra o mês antes);
+    // a classificação (conta, etapa, grupo, descrição) muda à vontade
+    if (guardada && guardada.pago && typeof contaMudouNoDinheiro === "function" && contaMudouNoDinheiro(guardada, f)
+      && travouNoMesFechado([guardada], "mudar a data ou o valor")) return;
+    // reclassificar entre contas: pode em mês fechado, se não mexer no saldo
+    if (guardada && guardada.pago && typeof reclassificacaoMexeNoSaldo === "function"
+      && reclassificacaoMexeNoSaldo(guardada, f, typeof modoDaPonte === "function" ? modoDaPonte(obraAtual, cliente) : "")
+      && travouNoMesFechado([guardada], "fazer esta reclassificação — ela muda o saldo do mês")) return;
     // O antes e o que o formulario mostrou, nao o que estava gravado: o que
     // veio da cotacao ao abrir nao foi decisao de ninguem, e registrar
     // "quantidade 0 -> 7" esconderia que o ajuste foi de 11 para 7.
