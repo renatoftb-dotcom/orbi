@@ -19,7 +19,7 @@ if (a < 0 || b < 0) throw new Error("marcadores da parte pura não encontrados")
 const M = new Function(puroEf + "\n" + cr.slice(a, b) + `
   return { crSomarMeses, crGerarParcelas, novasContasAReceber, itensAReceber, resumoAReceber, candidatosDoRecebimento,
     receberContaAReceber, desfazerRecebimento, ligarParcelaDeProjeto, extratoEscritorio, lancamentosDoEscritorio,
-    planoDaVenda, obraComVenda, obraSemVenda, resumoDasVendas, entradasDeVendaSoltas, contasDaVenda };`)();
+    planoDaVenda, obraComVenda, obraSemVenda, resumoDasVendas, entradasDeVendaSoltas, contasDaVenda, planoDePagamentoLimpo, vendaPeloPlano, descontoDoPlano };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -146,6 +146,44 @@ teste("vendas do empreendimento: unidade, sinal já recebido + parcelas + financ
   const o3 = M.obraSemVenda(o2, p.venda.id);
   assert.deepStrictEqual(o3.contasPagar.map((c) => c.id), ["s1", "s2", "x"]);
   assert.ok(!o3.contasPagar[0].vendaId && !o3.vendas.length);
+});
+
+teste("plano de pagamento: configuração validada e faixas de desconto ordenadas", () => {
+  const r = M.planoDePagamentoLimpo({ financiamentoPct: "80", sinalPct: "5", maxParcelas: "24", jurosAPartirDe: "7", jurosMes: "1",
+    mesesAteFinanciamento: "6", descontos: [{ ate: "6", pct: "2" }, { ate: "1", pct: "5" }, { ate: "", pct: "" }] });
+  assert.ok(!r.erro, r.erro);
+  assert.deepStrictEqual(r.plano.descontos, [{ ate: 1, pct: 5 }, { ate: 6, pct: 2 }]);
+  assert.strictEqual(M.descontoDoPlano(r.plano, 1), 5);
+  assert.strictEqual(M.descontoDoPlano(r.plano, 4), 2);
+  assert.strictEqual(M.descontoDoPlano(r.plano, 10), 0);
+  assert.ok(M.planoDePagamentoLimpo({ financiamentoPct: "120" }).erro);
+  assert.ok(M.planoDePagamentoLimpo({ financiamentoPct: "90", sinalPct: "20" }).erro);
+  assert.ok(M.planoDePagamentoLimpo({ maxParcelas: "2,5" }).erro);
+  assert.ok(M.planoDePagamentoLimpo({ descontos: [{ ate: "3", pct: "1" }, { ate: "3", pct: "2" }] }).erro);
+});
+
+teste("plano de pagamento: desconto até N parcelas, juros Price acima, sinal já recebido aproveitado", () => {
+  const { plano } = M.planoDePagamentoLimpo({ financiamentoPct: "80", sinalPct: "5", maxParcelas: "24", jurosAPartirDe: "7", jurosMes: "1",
+    mesesAteFinanciamento: "6", descontos: [{ ate: "6", pct: "2" }] });
+  // 4x: entrada 42.000 com 2% = 41.160; sinal 10.500; saldo 30.660 / 4
+  const a = M.vendaPeloPlano(plano, { preco: "210.000,00", n: 4, data: "2026-11-05", jaRecebido: 0 });
+  assert.strictEqual(a.financiamento, 168000); assert.strictEqual(a.sinal, 10500); assert.strictEqual(a.valorParcela, 7665);
+  assert.strictEqual(a.valor, 168000 + 41160); assert.strictEqual(a.descontoValor, 840); assert.strictEqual(a.juros, 0);
+  assert.strictEqual(a.primeiroVencimento, "2026-12-05"); assert.strictEqual(a.dataFinanciamento, "2027-05-05");
+  // 12x: sem desconto, 1% a.m.; o sinal é o já recebido (12.000 > 5%)
+  const b = M.vendaPeloPlano(plano, { preco: 210000, n: 12, data: "2026-11-05", jaRecebido: 12000 });
+  assert.strictEqual(b.sinal, 12000); assert.strictEqual(b.sinalNovo, 0); assert.strictEqual(b.desconto, 0);
+  assert.strictEqual(b.valorParcela, 2665.46); // 30.000 (42.000 − 12.000) a 1% em 12x
+  assert.strictEqual(b.valor, Math.round((168000 + 12000 + 2665.46 * 12) * 100) / 100);
+  assert.ok(b.jurosValor > 0);
+  // à vista (0 parcelas): a entrada toda no sinal, com o desconto da faixa
+  const c = M.vendaPeloPlano(plano, { preco: 210000, n: 0, data: "2026-11-05", jaRecebido: 5000 });
+  assert.strictEqual(c.sinal, 41160); assert.strictEqual(c.sinalNovo, 36160); assert.strictEqual(c.nParcelas, 0);
+  // centavos do arredondamento vão para o sinal: a soma bate com o preço com desconto
+  const d = M.vendaPeloPlano(plano, { preco: 100000, n: 3, data: "2026-11-05", jaRecebido: 0 });
+  assert.strictEqual(Math.round((d.sinal + d.valorParcela * 3) * 100) / 100, 19600);
+  assert.ok(M.vendaPeloPlano(plano, { preco: 210000, n: 30, data: "2026-11-05" }).erro);
+  assert.ok(M.vendaPeloPlano(plano, { preco: "", n: 3, data: "2026-11-05" }).erro);
 });
 
 for (const [nome, fn] of testes) {
