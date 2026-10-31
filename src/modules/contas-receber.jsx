@@ -298,8 +298,31 @@ function contasDaVenda(contas, vendaId) {
 function entradasDeVendaSoltas(contas) {
   return (contas || []).filter((c) => c && c.contaId === "venda_imovel" && c.pago && !c.vendaId);
 }
+// As parcelas da venda em grupos de valor ("1 a 7 de 1.900, 8 a 20 de 875"):
+// cada grupo diz até qual parcela vai e o valor de cada uma; o primeiro
+// começa na 1 e cada um começa logo depois do anterior. Sem `grupos`, vale o
+// formato antigo (nParcelas × valorParcela). Linhas vazias são ignoradas.
+function gruposDeParcelas(d) {
+  const f = d || {};
+  const brutos = Array.isArray(f.grupos) ? f.grupos
+    : (Number(f.nParcelas) > 0 ? [{ ate: f.nParcelas, valor: f.valorParcela }] : []);
+  const grupos = [];
+  let de = 1;
+  for (const g of brutos) {
+    const vazio = (g.ate == null || String(g.ate).trim() === "") && !(crValor(g.valor) > 0);
+    if (vazio) continue;
+    const ate = Math.floor(Number(String(g.ate == null ? "" : g.ate).replace(/\D/g, "")) || 0);
+    if (!(ate >= de)) return { erro: grupos.length ? `O grupo que começa na parcela ${de} precisa ir até a parcela ${de} ou mais.` : "Informe até qual parcela vai o grupo." };
+    const valor = crCent(crValor(g.valor));
+    if (!(valor > 0)) return { erro: `Informe o valor das parcelas ${de} a ${ate}.` };
+    grupos.push({ de, ate, valor });
+    de = ate + 1;
+  }
+  const n = grupos.length ? grupos[grupos.length - 1].ate : 0;
+  return { grupos, n, total: crCent(grupos.reduce((t, g) => t + (g.ate - g.de + 1) * g.valor, 0)) };
+}
 // A venda e o que falta receber. `f`: { unidadeId, comprador, data, valor,
-// sinais: [{ valor, data, contaId? }], nParcelas, valorParcela,
+// sinais: [{ valor, data, contaId? }], grupos: [{ ate, valor }] (ou nParcelas, valorParcela),
 // primeiroVencimento, financiamento, dataFinanciamento }.
 function planoDaVenda(f, ctx) {
   const o = ctx || {};
@@ -316,13 +339,13 @@ function planoDaVenda(f, ctx) {
     return { valor: crCent(crValor(x && x.valor)), data: String((x && x.data) || "") };
   }).filter((x) => x && x.valor > 0);
   for (const x of sinais) if (!x.contaId && !/^\d{4}-\d{2}-\d{2}$/.test(x.data)) return { erro: "Informe a data de cada sinal." };
-  const n = Math.max(0, Math.floor(Number(d.nParcelas) || 0));
-  const vp = crCent(crValor(d.valorParcela));
-  if (n > 0 && !(vp > 0)) return { erro: "Informe o valor de cada parcela." };
+  const gp = gruposDeParcelas(d);
+  if (gp.erro) return { erro: gp.erro };
+  const n = gp.n;
   if (n > 0 && !/^\d{4}-\d{2}-\d{2}$/.test(String(d.primeiroVencimento || ""))) return { erro: "Informe o 1º vencimento das parcelas." };
   const fin = crCent(crValor(d.financiamento));
   if (fin > 0 && !/^\d{4}-\d{2}-\d{2}$/.test(String(d.dataFinanciamento || ""))) return { erro: "Informe a data prevista da liberação do financiamento." };
-  const soma = crCent(sinais.reduce((t, x) => t + x.valor, 0) + n * vp + fin);
+  const soma = crCent(sinais.reduce((t, x) => t + x.valor, 0) + gp.total + fin);
   if (Math.abs(soma - valor) > 0.01) {
     const dif = crCent(valor - soma);
     return { erro: `Sinal + parcelas + financiamento dão ${crBRL(soma)}; a venda é ${crBRL(valor)} — ${dif > 0 ? "faltam" : "sobram"} ${crBRL(Math.abs(dif))}.` };
@@ -342,7 +365,7 @@ function planoDaVenda(f, ctx) {
   const sinaisNovos = sinais.filter((x) => !x.contaId);
   sinais.forEach((x) => { if (x.contaId) ligar.push(x.contaId); });
   sinaisNovos.forEach((x, i) => novas.push(base("sinal", i + 1, sinaisNovos.length, x.valor, x.data)));
-  for (let k = 1; k <= n; k++) novas.push(base("parcela", k, n, vp, crSomarMeses(d.primeiroVencimento, k - 1)));
+  for (const g of gp.grupos) for (let k = g.de; k <= g.ate; k++) novas.push(base("parcela", k, n, g.valor, crSomarMeses(d.primeiroVencimento, k - 1)));
   if (fin > 0) novas.push(base("financiamento", 1, 1, fin, d.dataFinanciamento));
   const venda = { id: vendaId, unidadeId: un.id, comprador, data: d.data, valor, criadoEm: agora, por: o.quem || "",
     ...(String(d.observacao || "").trim() ? { observacao: String(d.observacao).trim() } : {}) };
@@ -385,103 +408,6 @@ function resumoDasVendas(obra) {
     recebido: soma("recebido"), aReceber: soma("aReceber") };
 }
 function crBRL(v) { return "R$ " + crCent(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-
-// ── Plano de pagamento do empreendimento ───────────────────────
-// Os parâmetros ficam na obra (`planoPagamento`) e cada empreendimento tem
-// os seus: % financiado pelo banco, meses até a liberação, % de sinal,
-// máximo de parcelas, juros ao mês a partir de N parcelas e descontos na
-// entrada por faixa ("até N parcelas, X% de desconto").
-function crNumeroDoCampo(v) {
-  if (v == null || v === "") return null;
-  const n = crValor(v);
-  return Number.isFinite(n) ? n : null;
-}
-function planoDePagamentoDaObra(obra) {
-  const p = (obra || {}).planoPagamento;
-  return p && typeof p === "object" ? p : null;
-}
-// O que a pessoa digitou na configuração → o plano gravado, ou o erro.
-function planoDePagamentoLimpo(f) {
-  const d = f || {};
-  const pct = (v, nome) => {
-    const n = crNumeroDoCampo(v);
-    if (n == null) return 0;
-    if (n < 0 || n > 100) throw new Error(`${nome}: informe um percentual entre 0 e 100.`);
-    return crCent(n);
-  };
-  const inteiro = (v, nome, max) => {
-    const n = crNumeroDoCampo(v);
-    if (n == null) return 0;
-    if (n < 0 || Math.floor(n) !== n || n > max) throw new Error(`${nome}: informe um número inteiro de 0 a ${max}.`);
-    return n;
-  };
-  try {
-    const plano = {
-      financiamentoPct: pct(d.financiamentoPct, "Financiamento do banco"),
-      mesesAteFinanciamento: inteiro(d.mesesAteFinanciamento, "Liberação do financiamento", 120),
-      sinalPct: pct(d.sinalPct, "Sinal"),
-      maxParcelas: inteiro(d.maxParcelas, "Máximo de parcelas", 360),
-      jurosAPartirDe: inteiro(d.jurosAPartirDe, "Juros a partir de", 360),
-      jurosMes: pct(d.jurosMes, "Juros ao mês"),
-      descontos: [],
-    };
-    if (plano.financiamentoPct + plano.sinalPct > 100) throw new Error("Financiamento + sinal passam de 100% do preço.");
-    const vistos = new Set();
-    for (const x of d.descontos || []) {
-      const vazio = (x.ate == null || x.ate === "") && (x.pct == null || x.pct === "");
-      if (vazio) continue;
-      const ate = inteiro(x.ate, "Desconto: até quantas parcelas", 360);
-      const p = pct(x.pct, "Desconto");
-      if (vistos.has(ate)) throw new Error(`Desconto: a faixa "até ${ate} parcelas" aparece duas vezes.`);
-      vistos.add(ate);
-      plano.descontos.push({ ate, pct: p });
-    }
-    plano.descontos.sort((a, b) => a.ate - b.ate);
-    return { plano };
-  } catch (e) { return { erro: e.message }; }
-}
-// O desconto na entrada para N parcelas: a menor faixa que cobre N.
-function descontoDoPlano(plano, n) {
-  const f = ((plano || {}).descontos || []).slice().sort((a, b) => a.ate - b.ate).find((x) => n <= x.ate);
-  return f ? f.pct : 0;
-}
-// A venda calculada pelo plano. `preco`: preço de tabela; `n`: parcelas da
-// entrada (0 = entrada à vista); `jaRecebido`: sinais que já entraram e
-// contam como sinal. Devolve os campos do "Registrar venda".
-function vendaPeloPlano(plano, { preco, n, data, jaRecebido }) {
-  const p = plano || {};
-  const base = crCent(crValor(preco));
-  if (!(base > 0)) return { erro: "Informe o preço de tabela." };
-  const k = Math.max(0, Math.floor(Number(n) || 0));
-  if (p.maxParcelas > 0 && k > p.maxParcelas) return { erro: `O plano vai até ${p.maxParcelas} parcelas.` };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data || ""))) return { erro: "Informe a data da venda." };
-  const fin = crCent(base * (Number(p.financiamentoPct) || 0) / 100);
-  const comJuros = k > 0 && p.jurosAPartirDe > 0 && k >= p.jurosAPartirDe && p.jurosMes > 0;
-  const desc = comJuros ? 0 : descontoDoPlano(p, k);
-  const entrada = crCent((base - fin) * (1 - desc / 100));
-  const recebido = crCent(Math.min(Math.max(0, Number(jaRecebido) || 0), entrada));
-  let sinal = k === 0 ? entrada : Math.min(entrada, crCent(base * (Number(p.sinalPct) || 0) / 100));
-  sinal = crCent(Math.max(sinal, recebido));
-  const saldo = crCent(entrada - sinal);
-  let vp = 0;
-  if (k > 0 && saldo > 0) {
-    if (comJuros) {
-      const i = p.jurosMes / 100;
-      vp = crCent(saldo * i / (1 - Math.pow(1 + i, -k)));
-    } else {
-      vp = crCent(saldo / k);
-      const ajuste = crCent(saldo - vp * k); // os centavos do arredondamento vão para o sinal
-      if (sinal + ajuste >= recebido) sinal = crCent(sinal + ajuste);
-    }
-  }
-  const valor = crCent(fin + sinal + vp * k);
-  return {
-    valor, sinal, sinalNovo: crCent(sinal - recebido), nParcelas: vp > 0 ? k : 0, valorParcela: vp,
-    primeiroVencimento: vp > 0 ? crSomarMeses(data, 1) : "",
-    financiamento: fin, dataFinanciamento: fin > 0 && p.mesesAteFinanciamento > 0 ? crSomarMeses(data, p.mesesAteFinanciamento) : "",
-    desconto: desc, descontoValor: crCent((base - fin) - entrada), juros: comJuros ? p.jurosMes : 0, jurosValor: comJuros ? crCent(vp * k - saldo) : 0,
-  };
-}
 
 // ── A receber: fim da parte pura ───────────────────────────────
 
@@ -772,7 +698,6 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
   const [erroVenda, setErroVenda] = useState("");
   const [recebendo, setRecebendo] = useState(null); // { conta, dia, valor, erro }
   const [aberta, setAberta] = useState({});
-  const [configPlano, setConfigPlano] = useState(null); // o formulário da configuração do plano
   const novoId = () => (typeof uid === "function" ? uid() : "u" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5));
   const dinheiro = (v) => crBRL(v);
   const rot = { fontSize: 10.5, textTransform: "uppercase", letterSpacing: .4, color: "#6b7280", fontWeight: 600 };
@@ -805,44 +730,8 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
   }
   function abrirVenda(u) {
     setErroVenda("");
-    const preco = u.precoEstimado ? Number(u.precoEstimado).toFixed(2).replace(".", ",") : "";
-    setFormVenda({ unidadeId: u.id, comprador: "", data: hoje, valor: preco, precoTabela: preco,
-      sinais: [], nParcelas: "", valorParcela: "", primeiroVencimento: "", financiamento: "", dataFinanciamento: "", observacao: "", avisoPlano: null });
-  }
-  const paraCampo = (v) => crCent(v).toFixed(2).replace(".", ",");
-  const valorDaSolta = (id) => ((c) => Number(c.valorPago) || Number(c.valor) || 0)(entradasDeVendaSoltas(contas).find((c) => c.id === id) || {});
-  // Preenche a venda pelo plano do empreendimento: preço de tabela + parcelas.
-  function aplicarPlano() {
-    const fv = formVenda;
-    const plano = planoDePagamentoDaObra(obra);
-    const ligados = (fv.sinais || []).filter((x) => x.contaId);
-    const jaRecebido = ligados.reduce((t, x) => t + valorDaSolta(x.contaId), 0);
-    const r = vendaPeloPlano(plano, { preco: fv.precoTabela, n: fv.nParcelas, data: fv.data, jaRecebido });
-    if (r.erro) { setFormVenda({ ...fv, avisoPlano: { erro: r.erro } }); return; }
-    const partes = [];
-    if (r.desconto) partes.push(`entrada com ${String(r.desconto).replace(".", ",")}% de desconto (− ${crBRL(r.descontoValor)})`);
-    if (r.juros) partes.push(`juros de ${String(r.juros).replace(".", ",")}% ao mês (+ ${crBRL(r.jurosValor)})`);
-    setFormVenda({ ...fv, valor: paraCampo(r.valor),
-      sinais: ligados.concat(r.sinalNovo > 0 ? [{ valor: paraCampo(r.sinalNovo), data: fv.data }] : []),
-      nParcelas: r.nParcelas ? String(r.nParcelas) : "", valorParcela: r.nParcelas ? paraCampo(r.valorParcela) : "",
-      primeiroVencimento: r.nParcelas ? (fv.primeiroVencimento || r.primeiroVencimento) : "",
-      financiamento: r.financiamento > 0 ? paraCampo(r.financiamento) : "",
-      dataFinanciamento: r.financiamento > 0 ? (r.dataFinanciamento || fv.dataFinanciamento) : "",
-      avisoPlano: { ok: `Calculado pelo plano: venda de ${crBRL(r.valor)}${partes.length ? " — " + partes.join(" e ") : ", sem desconto nem juros"}. Confira e ajuste se precisar.` } });
-  }
-  function abrirConfigPlano() {
-    const p = planoDePagamentoDaObra(obra) || {};
-    const txt = (v) => (v ? String(v).replace(".", ",") : "");
-    setConfigPlano({ financiamentoPct: txt(p.financiamentoPct), mesesAteFinanciamento: txt(p.mesesAteFinanciamento), sinalPct: txt(p.sinalPct),
-      maxParcelas: txt(p.maxParcelas), jurosAPartirDe: txt(p.jurosAPartirDe), jurosMes: txt(p.jurosMes),
-      descontos: (p.descontos || []).map((x) => ({ ate: txt(x.ate), pct: txt(x.pct) })), erro: "" });
-  }
-  function salvarConfigPlano() {
-    const r = planoDePagamentoLimpo(configPlano);
-    if (r.erro) { setConfigPlano({ ...configPlano, erro: r.erro }); return; }
-    aoGravarObra({ ...obra, planoPagamento: r.plano });
-    setConfigPlano(null);
-    if (typeof toast !== "undefined" && toast.sucesso) toast.sucesso("Plano de pagamento salvo");
+    setFormVenda({ unidadeId: u.id, comprador: "", data: hoje, valor: u.precoEstimado ? Number(u.precoEstimado).toFixed(2).replace(".", ",") : "",
+      sinais: [], grupos: [{ ate: "", valor: "" }], primeiroVencimento: "", financiamento: "", dataFinanciamento: "", observacao: "" });
   }
   function salvarVenda() {
     const p = planoDaVenda(formVenda, { unidades: unidadesDaObra(obra), contas, obraId: obra.id, novoId, quem });
@@ -889,27 +778,9 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
   const fv = formVenda;
   const somaVenda = fv ? crCent((fv.sinais || []).reduce((t, x) => t + (x.contaId
     ? ((c) => Number(c.valorPago) || Number(c.valor) || 0)(entradasDeVendaSoltas(contas).find((c) => c.id === x.contaId) || {}) : crValor(x.valor)), 0)
-    + (Math.floor(Number(fv.nParcelas) || 0) * crValor(fv.valorParcela)) + crValor(fv.financiamento)) : 0;
+    + (gruposDeParcelas(fv).total || 0) + crValor(fv.financiamento)) : 0;
   const soltas = entradasDeVendaSoltas(contas);
-  const planoDoEmp = planoDePagamentoDaObra(obra);
-  const pctBR = (v) => String(v).replace(".", ",") + "%";
-  const resumoDoPlano = (p) => [
-    p.financiamentoPct ? `banco ${pctBR(p.financiamentoPct)}` : "",
-    p.sinalPct ? `sinal ${pctBR(p.sinalPct)}` : "",
-    p.maxParcelas ? `até ${p.maxParcelas}x` : "",
-    p.jurosMes && p.jurosAPartirDe ? `juros ${pctBR(p.jurosMes)} a.m. a partir de ${p.jurosAPartirDe}x` : "",
-    (p.descontos || []).length ? `${p.descontos.length} faixa${p.descontos.length > 1 ? "s" : ""} de desconto` : "",
-  ].filter(Boolean).join(" · ") || "sem parâmetros";
-  const cp = configPlano;
-  const campoCfg = (k, rotulo, sufixo, dica) => (
-    <label style={{ display: "grid", gap: 4 }}><span style={rot}>{rotulo}</span>
-      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <input data-vk-cfg={k} inputMode="decimal" style={inp} value={cp[k]} placeholder="0" onChange={(e) => setConfigPlano({ ...cp, [k]: e.target.value, erro: "" })} />
-        <span style={{ fontSize: 12, color: "#6b7280", whiteSpace: "nowrap" }}>{sufixo}</span>
-      </span>
-      {dica ? <span style={{ fontSize: 11, color: "#6b7280" }}>{dica}</span> : null}
-    </label>
-  );
+  const gpForm = fv ? gruposDeParcelas(fv) : { n: 0, total: 0 };
 
   return (
     <div data-vk-vendas="1" style={{ display: "grid", gap: 14 }}>
@@ -1036,28 +907,6 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                 {campoDinheiro(fv.valor, (v) => setFormVenda({ ...fv, valor: v }), { "data-vk-venda-valor": "1" })}</label>
             </div>
 
-            <div data-vk-plano-venda="1" style={{ display: "grid", gap: 8, background: "#f7fbff", border: "1px solid #dbeafe", borderRadius: 12, padding: "10px 12px" }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                <div style={{ flex: "1 1 200px", fontSize: 12.5, fontWeight: 700 }}>Plano de pagamento
-                  <span style={{ fontWeight: 400, color: "#4b5563" }}>{planoDoEmp ? ` — ${resumoDoPlano(planoDoEmp)}` : " — ainda não configurado"}</span></div>
-                {podeEditar && <button data-vk-config-plano="1" style={btn} onClick={abrirConfigPlano}>⚙ Configurar</button>}
-              </div>
-              {planoDoEmp && (
-                <div style={{ display: "grid", gap: 8, gridTemplateColumns: isMobile ? "1fr 1fr" : "160px 120px auto", alignItems: "end" }}>
-                  <label style={{ display: "grid", gap: 4 }}><span style={rot}>Preço de tabela</span>
-                    {campoDinheiro(fv.precoTabela, (v) => setFormVenda({ ...fv, precoTabela: v }), { "data-vk-plano-preco": "1" })}</label>
-                  <label style={{ display: "grid", gap: 4 }}><span style={rot}>Parcelas</span>
-                    <input data-vk-plano-n="1" inputMode="numeric" style={inp} value={fv.nParcelas} placeholder="0"
-                      onChange={(e) => setFormVenda({ ...fv, nParcelas: e.target.value.replace(/\D/g, "").slice(0, 3) })} /></label>
-                  <button data-vk-calcular-plano="1" style={{ ...(S.btn || {}), gridColumn: isMobile ? "1 / -1" : "auto", justifySelf: "start", padding: "8px 14px", fontSize: 12.5 }}
-                    onClick={aplicarPlano}>Calcular pelo plano</button>
-                </div>
-              )}
-              {fv.avisoPlano && (
-                <div data-vk-aviso-plano="1" style={{ fontSize: 12, color: fv.avisoPlano.erro ? "#b91c1c" : "#1e40af" }}>{fv.avisoPlano.erro || fv.avisoPlano.ok}</div>
-              )}
-            </div>
-
             <div style={{ display: "grid", gap: 6 }}>
               <div style={{ fontSize: 12.5, fontWeight: 700 }}>Sinal</div>
               {soltas.length > 0 && (
@@ -1089,14 +938,35 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
 
             <div style={{ display: "grid", gap: 6 }}>
               <div style={{ fontSize: 12.5, fontWeight: 700 }}>Parcelas</div>
-              <div style={{ display: "grid", gap: 8, gridTemplateColumns: isMobile ? "1fr 1fr" : "120px 160px 160px" }}>
-                <label style={{ display: "grid", gap: 4 }}><span style={rot}>Quantidade</span>
-                  <input data-vk-venda-n="1" inputMode="numeric" style={inp} value={fv.nParcelas} placeholder="0" onChange={(e) => setFormVenda({ ...fv, nParcelas: e.target.value.replace(/\D/g, "").slice(0, 3) })} /></label>
-                <label style={{ display: "grid", gap: 4 }}><span style={rot}>Valor de cada</span>
-                  {campoDinheiro(fv.valorParcela, (v) => setFormVenda({ ...fv, valorParcela: v }), { "data-vk-venda-vp": "1" })}</label>
-                <label style={{ display: "grid", gap: 4, gridColumn: isMobile ? "1 / -1" : "auto" }}><span style={rot}>1º vencimento</span>
-                  <input data-vk-venda-venc="1" type="date" style={inp} value={fv.primeiroVencimento} onChange={(e) => setFormVenda({ ...fv, primeiroVencimento: e.target.value })} /></label>
+              <div style={{ fontSize: 11.5, color: "#4b5563" }}>Todas iguais: um grupo só. Valores escalonados: um grupo para cada valor.</div>
+              {(fv.grupos || []).map((g, i) => {
+                const ateAnterior = i ? Math.floor(Number(String(fv.grupos[i - 1].ate || "").replace(/\D/g, "")) || 0) : 0;
+                const de = ateAnterior + 1;
+                const mudar = (campo, v) => setFormVenda({ ...fv, grupos: fv.grupos.map((y, j) => (j === i ? { ...y, [campo]: v } : y)) });
+                return (
+                  <div key={i} data-vk-grupo-parcelas={i} style={{ display: "grid", gap: 8, alignItems: "end",
+                    gridTemplateColumns: isMobile ? "52px 64px 1fr auto" : "110px 120px 160px auto" }}>
+                    <div style={{ display: "grid", gap: 4 }}><span style={rot}>{isMobile ? "De" : "Da parcela"}</span>
+                      <input readOnly tabIndex={-1} style={{ ...inp, background: "#f3f4f6", color: "#4b5563" }} value={de} /></div>
+                    <label style={{ display: "grid", gap: 4 }}><span style={rot}>{isMobile ? "Até" : "Até a parcela"}</span>
+                      <input data-vk-grupo-ate="1" inputMode="numeric" style={inp} value={g.ate} placeholder={String(de)}
+                        onChange={(e) => mudar("ate", e.target.value.replace(/\D/g, "").slice(0, 3))} /></label>
+                    <label style={{ display: "grid", gap: 4 }}><span style={rot}>Valor de cada</span>
+                      {campoDinheiro(g.valor, (v) => mudar("valor", v), { "data-vk-grupo-valor": "1" })}</label>
+                    {fv.grupos.length > 1
+                      ? <button style={{ ...btn, justifySelf: "start", padding: isMobile ? "8px 8px" : "8px 12px" }} onClick={() => setFormVenda({ ...fv, grupos: fv.grupos.filter((_, j) => j !== i) })}>Tirar</button>
+                      : <span />}
+                  </div>
+                );
+              })}
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <button data-vk-mais-grupo="1" style={btn} onClick={() => setFormVenda({ ...fv, grupos: (fv.grupos || []).concat([{ ate: "", valor: "" }]) })}>+ Grupo com outro valor</button>
+                {gpForm.n > 0 && !gpForm.erro && <span data-vk-resumo-parcelas="1" style={{ fontSize: 12, color: "#4b5563" }}>
+                  {gpForm.n} parcela{gpForm.n > 1 ? "s" : ""} · total <b>{dinheiro(gpForm.total)}</b></span>}
               </div>
+              <label style={{ display: "grid", gap: 4, maxWidth: isMobile ? "none" : 180 }}><span style={rot}>1º vencimento</span>
+                <input data-vk-venda-venc="1" type="date" style={inp} value={fv.primeiroVencimento} onChange={(e) => setFormVenda({ ...fv, primeiroVencimento: e.target.value })} /></label>
+              <div style={{ fontSize: 11, color: "#6b7280" }}>As seguintes vencem no mesmo dia dos meses seguintes.</div>
             </div>
 
             <div style={{ display: "grid", gap: 6 }}>
@@ -1119,52 +989,6 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
               <button style={S.btnSec} onClick={() => setFormVenda(null)}>Cancelar</button>
               <button data-vk-salvar-venda="1" style={S.btn} onClick={salvarVenda}>Registrar venda</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {cp && (
-        <div data-vk-modal-plano="1" style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", zIndex: 1100, display: "flex",
-          alignItems: "flex-start", justifyContent: "center", padding: "max(16px, 4vh) 12px", overflowY: "auto" }}>
-          <div style={{ background: "#fff", borderRadius: 16, width: "min(620px, 100%)", boxShadow: "0 20px 50px rgba(0,0,0,0.25)", padding: 18, display: "grid", gap: 14 }}>
-            <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 700 }}>Plano de pagamento</div>
-                <div style={{ fontSize: 12.5, color: "#6b7280" }}>{(obra || {}).nome} — vale para todas as vendas deste empreendimento</div>
-              </div>
-              <button style={S.btnSec} onClick={() => setConfigPlano(null)}>Fechar</button>
-            </div>
-            <div style={{ display: "grid", gap: 12, gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr" }}>
-              {campoCfg("financiamentoPct", "Financiamento do banco", "% do preço")}
-              {campoCfg("mesesAteFinanciamento", "Liberação do financiamento", "meses após a venda")}
-              {campoCfg("sinalPct", "Sinal", "% do preço", "Pago na assinatura; o resto da entrada vai para as parcelas.")}
-              {campoCfg("maxParcelas", "Máximo de parcelas", "parcelas")}
-              {campoCfg("jurosAPartirDe", "Juros a partir de", "parcelas", "Abaixo disso, sem juros.")}
-              {campoCfg("jurosMes", "Juros", "% ao mês", "Tabela Price sobre o saldo da entrada.")}
-            </div>
-            <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 700 }}>Descontos na entrada</div>
-              <div style={{ fontSize: 11.5, color: "#6b7280" }}>Vale a menor faixa que cobre a quantidade de parcelas. Não se soma aos juros.</div>
-              {(cp.descontos || []).map((x, i) => (
-                <div key={i} data-vk-cfg-desconto={i} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 12.5 }}>
-                  <span>até</span>
-                  <input inputMode="numeric" style={{ ...inp, width: 60 }} value={x.ate} placeholder="0"
-                    onChange={(e) => setConfigPlano({ ...cp, erro: "", descontos: cp.descontos.map((y, j) => (j === i ? { ...y, ate: e.target.value.replace(/\D/g, "").slice(0, 3) } : y)) })} />
-                  <span>parcelas:</span>
-                  <input inputMode="decimal" style={{ ...inp, width: 64 }} value={x.pct} placeholder="0"
-                    onChange={(e) => setConfigPlano({ ...cp, erro: "", descontos: cp.descontos.map((y, j) => (j === i ? { ...y, pct: e.target.value } : y)) })} />
-                  <span>{isMobile ? "%" : "% de desconto"}</span>
-                  <button style={btn} onClick={() => setConfigPlano({ ...cp, erro: "", descontos: cp.descontos.filter((_, j) => j !== i) })}>Tirar</button>
-                </div>
-              ))}
-              <button data-vk-cfg-mais-desconto="1" style={{ ...btn, justifySelf: "start" }}
-                onClick={() => setConfigPlano({ ...cp, erro: "", descontos: (cp.descontos || []).concat([{ ate: "", pct: "" }]) })}>+ Faixa de desconto</button>
-            </div>
-            {cp.erro && <div style={{ fontSize: 12.5, color: "#b91c1c" }}>{cp.erro}</div>}
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
-              <button style={S.btnSec} onClick={() => setConfigPlano(null)}>Cancelar</button>
-              <button data-vk-salvar-plano="1" style={S.btn} onClick={salvarConfigPlano}>Salvar plano</button>
             </div>
           </div>
         </div>
