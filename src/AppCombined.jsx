@@ -55873,13 +55873,21 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
 // Uma linha por conta do plano, o valor digitado direto. É o caminho para
 // dar o primeiro número em quarenta contas sem quarenta idas ao formulário;
 // o detalhe item a item continua existindo em "Por conta".
-// O Físico-Financeiro é só custo: as vendas (entradas) ficam no Resultado (P&L).
+// O Físico-Financeiro é só o custo de executar a obra: as vendas (entradas)
+// ficam no Resultado (P&L), e o terreno e o IR sobre a receita também — são
+// do negócio, não da execução.
+const FF_CONTAS_FORA = ["ir_receita"];
 function gruposDoFisicoFinanceiro() {
-  return (typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : []).filter((g) => g.id !== "receitas");
+  return (typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : []).filter((g) => g.id !== "receitas" && g.id !== "terreno");
+}
+function contaForaDoFisicoFinanceiro(contaId) {
+  if (FF_CONTAS_FORA.indexOf(contaId) >= 0) return true;
+  const c = (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((x) => x && x.id === contaId);
+  return !!c && (c.grupo === "receitas" || c.grupo === "terreno");
 }
 function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL, clientePaga }) {
-  const linhas = linhasEstimativaPL(itens, gruposDoFisicoFinanceiro(), PLANO_CONTAS);
-  const totais = totaisEstimativaPL(itens, gruposDoFisicoFinanceiro(), PLANO_CONTAS);
+  const linhas = linhasEstimativaPL(itens, gruposDoFisicoFinanceiro(), PLANO_CONTAS).filter((l) => !contaForaDoFisicoFinanceiro(l.contaId));
+  const totais = totaisEstimativaPL((itens || []).filter((i) => i && !contaForaDoFisicoFinanceiro(i.contaId)), gruposDoFisicoFinanceiro(), PLANO_CONTAS);
   const custoEstimado = gruposDoFisicoFinanceiro().filter((g) => g.sinal < 0 && g.entra_no_resultado !== false)
     .reduce((t, g) => t + (totais.porGrupo[g.id] || 0), 0);
   const fecho = { rotulo: "Custo estimado da obra", valor: Math.round(custoEstimado * 100) / 100, porGrupo: totais.porGrupo,
@@ -57511,12 +57519,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
   if (view === "planejamento" && obraSelecionada) {
     const itensPL = obraAtual.estimativaPL || [];
+    // o que o Físico-Financeiro mostra: só o custo de executar
+    const itensFF = itensPL.filter(i => i && !contaForaDoFisicoFinanceiro(i.contaId));
+    const contasFF = contasDaObra.filter(c => c && !c.vendaId && !contaForaDoFisicoFinanceiro(c.contaId));
     // Somar TODOS os itens misturava entrada com custo: uma obra de 900 mil
     // de entrada e 700 mil de custo mostrava "estimado 1,6 milhão". O topo
     // agora separa os dois lados, como o P&L faz.
-    const totaisPL = totaisEstimativaPL(itensPL, GRUPOS_PL, PLANO_CONTAS);
+    const totaisPL = totaisEstimativaPL(itensFF, gruposDoFisicoFinanceiro(), PLANO_CONTAS);
     const entradasPL = 0; // só custo: as vendas ficam no Resultado (P&L)
-    const totalPL = GRUPOS_PL
+    const totalPL = gruposDoFisicoFinanceiro()
       .filter(g => g.sinal < 0 && g.entra_no_resultado !== false)
       .reduce((soma, g) => soma + (totaisPL.porGrupo[g.id] || 0), 0);
     const fmtBRL = v => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -57533,7 +57544,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               <Selecao style={{ ...C.input, cursor: "pointer" }} value={formItemPL.contaId} onChange={e => setFormItemPL({ ...formItemPL, contaId: e.target.value })}>
                 {gruposDoFisicoFinanceiro().filter(g => g.id !== "excluidas").map(g => (
                   <optgroup key={g.id} label={g.titulo}>
-                    {contasDoGrupo(g.id).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    {contasDoGrupo(g.id).filter(c => !contaForaDoFisicoFinanceiro(c.id)).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                   </optgroup>
                 ))}
               </Selecao>
@@ -57567,8 +57578,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
     // ── Agrupamento "por conta" ────────────────────────────────
     const gruposComItens = gruposDoFisicoFinanceiro().map(g => {
-      const contasComItens = contasDoGrupo(g.id).map(conta => {
-        const itensDaConta = itensPL.filter(i => i.contaId === conta.id);
+      const contasComItens = contasDoGrupo(g.id).filter(conta => !contaForaDoFisicoFinanceiro(conta.id)).map(conta => {
+        const itensDaConta = itensFF.filter(i => i.contaId === conta.id);
         const totalConta = itensDaConta.reduce((s, i) => s + (Number(i.valor) || 0), 0);
         return { conta, itens: itensDaConta, total: totalConta };
       }).filter(c => c.itens.length > 0);
@@ -57583,7 +57594,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
     // Realizado: o que já foi pago nas Contas a pagar, pela mesma conta do
     // plano de contas — é o outro lado da estimativa.
-    const realConta = realizadoPorConta(typeof contasDoPlanejamento === "function" ? contasDoPlanejamento(obraAtual, contasDaObra) : contasDaObra);
+    const realConta = realizadoPorConta(contasFF);
     const totalRealizado = Object.values(realConta).reduce((a, v) => a + v, 0);
     const comparativo = (estimado, realizado) => {
       if (!realizado) return null;
@@ -57644,7 +57655,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <PonteEscritorioView obra={obraAtual} cliente={cliente} contasPagar={contasDaObra}
             entradas={entradasDaObra} data={data} isMobile={isMobile} fmtBRL={fmtBRL} />
         ) : visaoPL === "pl" ? (
-          <PLDaObraView itens={itensPL} contasPagar={typeof contasDoPlanejamento === "function" ? contasDoPlanejamento(obraAtual, contasDaObra) : contasDaObra} clientePaga={!!obraAtual.clientePagaDireto}
+          <PLDaObraView itens={itensFF} contasPagar={contasFF} clientePaga={!!obraAtual.clientePagaDireto}
             isMobile={isMobile} fmtBRL={fmtBRL} orcamento={obraAtual.orcamento} insumos={data.materiais || []}
             etapasConcluidas={obraAtual.etapasConcluidas || {}}
             aoConcluirEtapa={perm.podeGerenciarObra ? ((etapaId, dados) => {
@@ -57660,7 +57671,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           // no menu, o mês corrente também aparece (para registrar entrada nele);
           // nas colunas, só os meses que têm movimento
           // só custo: sem as contas da venda (sinal, parcelas, financiamento)
-          const contasSemVenda = contasDaObra.filter(c => !(c && (c.vendaId || c.contaId === "venda_imovel")));
+          const contasSemVenda = contasFF;
           const meses = mesesDoExtrato(contasSemVenda, entradasDaObra, hojeIso);
           const comMovimento = mesesDoExtrato(contasSemVenda, entradasDaObra, "");
           const rotulo = (chave) => {
@@ -57675,7 +57686,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             : escolha === "todos" ? comMovimento
             : /^\d{4}$/.test(escolha) ? comMovimento.filter(m => m.startsWith(escolha))
             : meses.includes(escolha) ? [escolha] : [];
-          const estimativa = estimativaPorConta(itensPL.filter(i => i && i.contaId !== "venda_imovel"));
+          const estimativa = estimativaPorConta(itensFF);
           const ex = extratoMatriz(contasSemVenda, entradasDaObra, colunas, estimativa);
           const temEstimativa = Object.keys(estimativa).length > 0;
           const grade = `minmax(190px, 1fr) ${colunas.map(() => "110px").join(" ")} 120px${temEstimativa ? " 120px" : ""}`;
