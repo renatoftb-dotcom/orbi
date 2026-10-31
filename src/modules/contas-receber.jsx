@@ -768,7 +768,7 @@ function NovaContaAReceber({ data, f, setF, aoSalvar, estreito }) {
 // As unidades com o preço estimado; a venda de cada uma (sinal, parcelas,
 // financiamento do banco) e o que falta receber. Receber aqui é dar baixa
 // na conta da obra — a ponte leva para o escritório.
-function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra, travaDoMes, aoVoltar }) {
+function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra, travaDoMes, aoVoltar, contasBancarias }) {
   const S = typeof EF_ESTILO !== "undefined" ? EF_ESTILO : {};
   const hoje = crHoje();
   const r = resumoDasVendas(obra);
@@ -776,7 +776,11 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
   const [formUn, setFormUn] = useState(null);       // { id?, nome, area, precoEstimado }
   const [formVenda, setFormVenda] = useState(null); // ver planoDaVenda
   const [erroVenda, setErroVenda] = useState("");
-  const [recebendo, setRecebendo] = useState(null); // { conta, dia, valor, erro }
+  const [recebendo, setRecebendo] = useState(null); // { conta, dia, valor, contaBancaria, erro }
+  // Com mais de uma conta no banco, o recebimento diz em qual entrou: é ela
+  // que o lançamento leva, para casar com a linha certa no fechamento.
+  const contasDoBanco = (contasBancarias || []).filter(Boolean);
+  const variasContas = contasDoBanco.length > 1;
   const [aberta, setAberta] = useState({});
   const [provEd, setProvEd] = useState(null);     // { vendaId, valor, erro } — valor da provisão
   const [provDesp, setProvDesp] = useState(null); // { vendaId, descricao, valor, data, erro } — despesa
@@ -833,8 +837,10 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
     const valor = crCent(crValor(f.valor));
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(f.dia || ""))) { setRecebendo({ ...f, erro: "Informe o dia em que entrou." }); return; }
     if (!(valor > 0)) { setRecebendo({ ...f, erro: "Informe o valor recebido." }); return; }
+    if (variasContas && !f.contaBancaria) { setRecebendo({ ...f, erro: "Escolha em qual conta o dinheiro entrou." }); return; }
     const c = f.conta;
-    const paga = contaPaga(c, { pagoEm: f.dia, valorPago: Math.min(valor, Number(c.valor) || valor) }, quem || "");
+    const doBanco = variasContas && f.contaBancaria && f.contaBancaria !== "principal" ? { contaBancariaId: f.contaBancaria } : {};
+    const paga = { ...contaPaga(c, { pagoEm: f.dia, valorPago: Math.min(valor, Number(c.valor) || valor) }, quem || ""), ...doBanco };
     const trava = travaDoMes ? travaDoMes([paga]) : "";
     if (trava) { setRecebendo({ ...f, erro: trava }); return; }
     // recebeu menos: o resto continua a receber, na mesma data
@@ -979,7 +985,7 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                           {dinheiro(c.pago ? (c.valorPago || c.valor) : c.valor)}</span>
                         {podeEditar && !c.pago && !aqui && (
                           <button data-vk-receber-parte="1" style={btn} onClick={() => setRecebendo({ conta: c, dia: c.vencimento && c.vencimento <= hoje ? c.vencimento : hoje,
-                            valor: Number(c.valor).toFixed(2).replace(".", ","), erro: "" })}>Receber</button>
+                            valor: Number(c.valor).toFixed(2).replace(".", ","), contaBancaria: "", erro: "" })}>Receber</button>
                         )}
                         {podeEditar && c.pago && <button style={btn} onClick={() => desfazerRecebimentoDaVenda(c)}>Desfazer</button>}
                       </div>
@@ -989,6 +995,14 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                             <input type="date" style={{ ...inp, width: 160 }} value={recebendo.dia} max={hoje} onChange={(e) => setRecebendo({ ...recebendo, dia: e.target.value })} /></label>
                           <label style={{ display: "grid", gap: 3 }}><span style={rot}>Valor recebido</span>
                             {campoDinheiro(recebendo.valor, (v) => setRecebendo({ ...recebendo, valor: v }), { style: { width: 140 } })}</label>
+                          {variasContas && (
+                            <label style={{ display: "grid", gap: 3 }}><span style={rot}>Entrou na conta</span>
+                              <select data-vk-receber-conta="1" style={{ ...inp, width: 170 }} value={recebendo.contaBancaria}
+                                onChange={(e) => setRecebendo({ ...recebendo, contaBancaria: e.target.value, erro: "" })}>
+                                <option value="">Escolha a conta</option>
+                                {contasDoBanco.map((k) => <option key={k.id} value={k.id}>{k.nome}</option>)}
+                              </select></label>
+                          )}
                           <button data-vk-confirmar-recebimento="1" style={{ ...(S.btn || {}), padding: "7px 14px", fontSize: 12.5 }} onClick={receber}>Lançar recebimento</button>
                           <button style={{ ...btn, padding: "7px 14px" }} onClick={() => setRecebendo(null)}>Cancelar</button>
                           {recebendo.erro && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{recebendo.erro}</div>}

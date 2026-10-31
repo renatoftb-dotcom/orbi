@@ -517,6 +517,8 @@ function fontesDasContasPagas(contas) {
     documento: c.doc || c.numeroNota || c.numeroLoja || "",
     numeroDoc: c.numeroDoc || "",
     anexos: anexosDaTransacao(c),
+    // recebimento que entrou numa conta que não é a principal (a Cora)
+    ...(c.contaBancariaId ? { contaBancariaId: c.contaBancariaId } : {}),
   });
   for (const c of pagas) {
     if (!c.pedidoId && !c.pagamentoConjunto) { soltas.push(fonteDaConta(c)); continue; }
@@ -640,6 +642,7 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
       // de bolso, sem linha no banco. Com "sim", a checagem de débito × crédito
       // contava como entrada e a conferência o dava como "não veio no banco".
       contaBanco: destino === "emp_aporte" ? "nao" : "sim",
+      ...(fonte.contaBancariaId && fonte.contaBancariaId !== CONTA_BANCARIA_PRINCIPAL ? { contaBancariaId: fonte.contaBancariaId } : {}),
       // Quando ele nasceu, para a lista pôr o mais novo na frente dentro do
       // mês. Sem isto, o lançamento recém-criado cai no meio dos outros de
       // setembro e parece que não entrou.
@@ -5773,6 +5776,27 @@ function parcelaAPagarParaALinha(m, contaDaLinha, aPagar) {
   }
   return melhor ? melhor.item : null;
 }
+// A linha de crédito que é uma parcela de venda do empreendimento a receber
+// (conta da obra com vendaId, em aberto): o mesmo valor; com várias iguais,
+// ganha a que tem o nome do comprador no histórico e, depois, a de
+// vencimento mais antigo — paga-se na ordem.
+function parcelaDaVendaParaALinha(m, obras) {
+  if (!m || !(Number(m.valor) > 0)) return null;
+  const v = efCentavos(Number(m.valor));
+  const hist = efPalavrasDaLinha(m.historico);
+  const cands = [];
+  for (const ob of obras || []) {
+    if (!ob) continue;
+    for (const c of ob.contasPagar || []) {
+      if (!c || !c.vendaId || c.pago || Math.abs(efCentavos(Number(c.valor) || 0) - v) > 0.01) continue;
+      let texto = 0; for (const w of efPalavrasDaLinha(c.favorecido)) if (hist.has(w)) texto++;
+      cands.push({ obra: ob, conta: c, texto });
+    }
+  }
+  if (!cands.length) return null;
+  cands.sort((a, b) => (b.texto - a.texto) || String(a.conta.vencimento || "").localeCompare(String(b.conta.vencimento || "")));
+  return cands[0];
+}
 // A parcela paga vira o lançamento, ligado à linha do banco.
 function lancamentoDaParcelaAPagar(it, m, mes, opcoes) {
   const o = opcoes || {};
@@ -8163,7 +8187,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
   // as que têm o par na outra conta: transferência, não lançamento
   const comPar = fila.parTransferencia ? lista.map((m) => ({ m, par: fila.parTransferencia(m) })).filter((x) => x.par) : [];
   const idsComPar = new Set(comPar.map((x) => x.m.id));
-  const prontas = lista.filter((m) => { if (idsComPar.has(m.id)) return false; const r = fila.rapido(m); return r && r.lancamento && !r.lancamento.naObra && !r.lancamento.ligarObra && !r.lancamento.recebimentoExtras && !r.lancamento.ligarCartao && !r.lancamento.fecharFaturaDaLinha && !r.lancamento.baixarParcela; });
+  const prontas = lista.filter((m) => { if (idsComPar.has(m.id)) return false; const r = fila.rapido(m); return r && r.lancamento && !r.lancamento.naObra && !r.lancamento.ligarObra && !r.lancamento.recebimentoExtras && !r.lancamento.ligarCartao && !r.lancamento.fecharFaturaDaLinha && !r.lancamento.baixarParcela && !r.lancamento.receberVenda; });
   function lancarSugeridas() {
     setErroLote("");
     const r = fila.lancarSugeridas(prontas);
@@ -8325,6 +8349,11 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                         📄 {(sug.motivos || [])[0]} — sai do A pagar e vira o lançamento desta linha
                       </div>
                     )}
+                    {sug && sug.parcelaDaVenda && (
+                      <div data-vk-parcela-da-venda="1" style={{ fontSize: 11.5, color: "#0474f4", marginTop: 2, lineHeight: 1.4 }}>
+                        🏠 {(sug.motivos || [])[0]} — a parcela da venda passa a recebida e vira o lançamento desta linha
+                      </div>
+                    )}
                     {sug && sug.cartaoObra && (
                       <div data-vk-cartao-na-obra="1" style={{ fontSize: 11.5, color: "#0474f4", marginTop: 2 }}>
                         ⇄ {(sug.motivos || [])[0]} — vira compra no cartão em {sug.cartaoObra.parcelas}x, sem lançar de novo
@@ -8340,7 +8369,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                         ↺ {(sug.motivos || [])[0]}. {sug.bloqueio}
                       </div>
                     )}
-                    {contaSug && !(sug && (sug.palpite || sug.estorno || sug.parcelaProjeto || sug.parcelaAPagar)) && (
+                    {contaSug && !(sug && (sug.palpite || sug.estorno || sug.parcelaProjeto || sug.parcelaAPagar || sug.parcelaDaVenda)) && (
                       <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 2 }}>
                         como em {dataBR(sug.de.lancadoEm) || "lançamento anterior"}: <b style={{ color: "#374151" }}>{contaSug.nome}</b>
                         {sug.campos.cliente ? ` · ${sug.campos.cliente}` : ""}
@@ -8357,6 +8386,10 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                       <button data-vk-baixar-parcela="1" style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#fff", background: "#0474f4", borderColor: "#0474f4" }}
                         disabled={!!ocupado}
                         onClick={(e) => { e.stopPropagation(); rapido(m); }}>✓ Baixar parcela</button>
+                    ) : sug && sug.parcelaDaVenda && !aberta ? (
+                      <button data-vk-receber-venda-linha="1" style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#fff", background: "#0474f4", borderColor: "#0474f4" }}
+                        disabled={!!ocupado}
+                        onClick={(e) => { e.stopPropagation(); rapido(m); }}>✓ Receber parcela</button>
                     ) : sug && sug.cartaoObra && !aberta ? (
                       <button data-vk-ligar-cartao="1" style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#0474f4", borderColor: "rgba(4,116,244,0.4)" }}
                         disabled={!!ocupado}
@@ -11468,6 +11501,9 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       if (fat && fat.exata) return { campos: {}, faturaDoCartao: fat,
         motivos: [`fatura de ${mesAnoPorExtenso(fat.competencia)} do ${fat.cartao.nome}: ${efDinheiro(fat.total)}, ${fat.compras === 1 ? "1 compra" : fat.compras + " compras"}`] };
       // a parcela de um boleto que estava a pagar: a linha é ela
+      const pv = parcelaDaVendaParaALinha(m, (data || {}).obras || []);
+      if (pv) return { campos: { contaId: "emp_venda", unidadeId: "empreendimento" }, parcelaDaVenda: pv,
+        motivos: [`${pv.conta.descricao || "parcela da venda"}${pv.conta.favorecido ? " · " + pv.conta.favorecido : ""}, vence ${efDiaBR(pv.conta.vencimento)}`] };
       const ap = parcelaAPagarParaALinha(m, contaDaLinha(m), aPagarDoEscritorio(cfgFin));
       if (ap) return { campos: { contaId: ap.contaId, unidadeId: ap.unidadeId }, parcelaAPagar: ap,
         motivos: [`parcela ${ap.parcela}/${ap.de}${ap.descricao ? " de " + ap.descricao : ""}, a pagar em ${efDiaBR(ap.vencimento)}`] };
@@ -11492,6 +11528,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
           historicoBanco: m.historico || "", data: String(m.data || "").slice(0, 10), ...marcaDaLinha(m) } } };
       }
       if (sf && sf.parcelaAPagar) return { lancamento: { baixarParcela: { itemId: sf.parcelaAPagar.id, m } } };
+      if (sf && sf.parcelaDaVenda) return { lancamento: { receberVenda: { obraId: sf.parcelaDaVenda.obra.id, contaId: sf.parcelaDaVenda.conta.id, m } } };
       const r = rapidoDoExtrato(m);
       return r && r.lancamento ? { ...r, lancamento: { ...r.lancamento, ...marcaDaLinha(m) } } : r;
     }
@@ -11659,6 +11696,35 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     setAviso(`Parcela ${it.parcela}/${it.de}${it.descricao ? " de " + it.descricao : ""} paga: ${efDinheiro(l.valor)}.`);
     return true;
   }
+  // A linha de crédito que recebe uma parcela de venda do empreendimento: a
+  // conta da obra passa a recebida (no dia e na conta do banco) e a ponte
+  // gera o lançamento, já ligado à linha — a mesma coisa que o Receber da
+  // tela de Vendas faria, sem a linha ficar pendente.
+  function receberParcelaDaVenda(x) {
+    const obras = (data || {}).obras || [];
+    const obra = obras.find((o) => o && o.id === x.obraId);
+    const c = obra && (obra.contasPagar || []).find((k) => k && k.id === x.contaId);
+    if (!c || c.pago || !x.m) return false;
+    const agora = new Date().toISOString();
+    const quem = typeof nomeDeQuem === "function" ? nomeDeQuem(perm && perm.usuario) : "";
+    const dia = String(x.m.data || "").slice(0, 10);
+    const conta = marcaDaLinha(x.m).contaBancariaId || "";
+    const paga = { ...contaPaga(c, { pagoEm: dia, valorPago: efCentavos(Number(x.m.valor)) }, quem),
+      ...(conta ? { contaBancariaId: conta } : {}), passouPelaConta: true };
+    const obraNova = { ...obra, contasPagar: (obra.contasPagar || []).map((k) => (k && k.id === c.id ? paga : k)) };
+    const cliente = ((data || {}).clientes || []).find((k) => k && k.id === obra.clienteId) || null;
+    const ponte = lancamentosDaBaixa(obraNova, cliente, [paga], { fechamentos, lancamentos: lancs });
+    if (!ponte.lancamentos.length) {
+      const motivo = ((ponte.bloqueados || [])[0] || (ponte.ignorados || [])[0] || {}).motivo || "A parcela não atravessa para o escritório.";
+      dialogo.alertar({ titulo: "Não deu para receber", mensagem: motivo, tipo: "aviso" });
+      return false;
+    }
+    const marca = { extratoId: x.m.id || "", historicoBanco: x.m.historico || "", conferido: true, conferidoEm: agora, ...marcaDaLinha(x.m) };
+    save({ ...data, obras: obras.map((o) => (o && o.id === obra.id ? obraNova : o)),
+      lancamentos: [...outrosLancamentos, ...lancs, ...ponte.lancamentos.map((l) => ({ ...l, ...marca, competencia: String(mesEmConferencia) }))] }).catch(console.error);
+    setAviso(`${c.descricao || "Parcela"} recebida: ${efDinheiro(paga.valorPago)}.`);
+    return true;
+  }
   // Editar ou tirar uma parcela a pagar (a que já foi paga não muda aqui:
   // ela é lançamento, e o lançamento se edita na Base).
   function guardarAPagar(lista) {
@@ -11680,6 +11746,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     if (l && l.ligarCartao) return ligarCompraDoCartao(l.ligarCartao);
     if (l && l.fecharFaturaDaLinha) return fecharFaturaPelaLinha(l.fecharFaturaDaLinha);
     if (l && l.baixarParcela) return baixarParcelaAPagar(l.baixarParcela);
+    if (l && l.receberVenda) return receberParcelaDaVenda(l.receberVenda);
     if (l && l.parceladoNaConta) return lancarParceladoNaConta(l, marca);
     if (l && l.naObra) { const { sinalDoBanco, ...semSinal } = l; lancarCustoNaObra({ ...semSinal, ...marca }); return true; }
     if (l && l.gestaoAvulsaNaObra && lancarGestaoAvulsaNaObra(l, marca)) return true;
@@ -11768,7 +11835,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       // o mesmo caminho do botão da linha — o estorno com o original achado
       // vai como estorno; o que entra numa obra fica para lançar um a um
       const r = rapidoDaLinha(m);
-      if (!r.lancamento || r.lancamento.naObra || r.lancamento.ligarObra || r.lancamento.recebimentoExtras || r.lancamento.ligarCartao || r.lancamento.fecharFaturaDaLinha || r.lancamento.baixarParcela) continue;
+      if (!r.lancamento || r.lancamento.naObra || r.lancamento.ligarObra || r.lancamento.recebimentoExtras || r.lancamento.ligarCartao || r.lancamento.fecharFaturaDaLinha || r.lancamento.baixarParcela || r.lancamento.receberVenda) continue;
       const l = r.lancamento;
       novos.push({ ...l, id: (typeof uid === "function" ? uid() : String(Date.now())) + "_" + novos.length,
         numeroDoc: proximaReferencia((data || {}).obras || [], lancs.concat(novos)),

@@ -6790,6 +6790,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <VendasDoEmpreendimento obra={obraAtual} podeEditar={!!perm.podeGerenciarObra} isMobile={isMobile} quem={quemSou()}
           aoVoltar={() => setView("detalheObra")} travaDoMes={(cs) => mesFechadoNaBaixa(cs)}
+          contasBancarias={typeof contasBancariasDoEscritorio === "function" ? contasBancariasDoEscritorio(data) : []}
           aoGravarObra={(nova) => gravarObras(obras.map(o => (o.id === nova.id ? nova : o)))} />
       </div>
     );

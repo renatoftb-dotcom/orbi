@@ -26,7 +26,7 @@ const M = new Function(src + `
            lancamentoDoExtrato, efValorDeTexto, efEhData, efLinhaDoCabecalho,
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
-           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte,
+           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte, parcelaDaVendaParaALinha, lancamentosDaContaBancaria,
            fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
@@ -3858,6 +3858,34 @@ teste("Compra no cartão do escritório na obra: uma conta por parcela, paga qua
   const compra = M.compraDoGrupoDoCartao(r3[0].contasPagar, "cc");
   assert.deepStrictEqual([compra.id, compra.valor, compra.pagoEm, compra.parcelasCartao.length, compra.pedidoId, compra.quantidade, compra.itens[0].total],
     ["cc", 3806.88, "2026-09-01", 6, "nota-1", 6, 3806.88]);
+});
+
+teste("venda do empreendimento: a parcela recebida na Cora vai para a Cora e casa com a linha do banco", () => {
+  const obra = { id: "obE", clienteId: "e1", nome: "Jacarezinho Módulo 1", contasPagar: [
+    { id: "p1", contaId: "venda_imovel", vendaId: "v1", parteVenda: "parcela", favorecido: "Murilo Santos Bonifácio", valor: 1925.8, vencimento: "2026-10-22", pago: false },
+    { id: "p2", contaId: "venda_imovel", vendaId: "v1", parteVenda: "parcela", favorecido: "Murilo Santos Bonifácio", valor: 1925.8, vencimento: "2026-11-22", pago: false },
+    { id: "f1", contaId: "venda_imovel", vendaId: "v1", parteVenda: "financiamento", favorecido: "Murilo Santos Bonifácio", valor: 182200, vencimento: "2027-04-01", pago: false },
+  ] };
+  const cliente = { id: "e1", nome: "Jacarezinho Módulo 1", servicos: { empreendimento: true } };
+  const linha = { id: "2sucyhk:2026-10-21|1925.80|pagamento recebido - murilo santos bonifacio#1", data: "2026-10-21", valor: 1925.8,
+    historico: "Pagamento recebido - Murilo Santos Bonifácio - 083.26" };
+  // a linha de crédito acha a parcela da venda — a mais antiga em aberto
+  const pv = M.parcelaDaVendaParaALinha(linha, [obra]);
+  assert.ok(pv && pv.conta.id === "p1", JSON.stringify(pv && pv.conta));
+  assert.strictEqual(M.parcelaDaVendaParaALinha({ ...linha, valor: -1925.8 }, [obra]), null, "débito não é recebimento");
+  assert.strictEqual(M.parcelaDaVendaParaALinha({ ...linha, valor: 1000 }, [obra]), null);
+  // recebida na Cora: o lançamento da ponte leva a conta e casa com a linha
+  const paga = { ...obra.contasPagar[0], pago: true, pagoEm: "2026-10-21", valorPago: 1925.8, contaBancariaId: "2sucyhk" };
+  const r = M.lancamentosDaObraParaEscritorio(obra, cliente, { planoObra: PLANO_OBRA, contasPagar: [paga], entradas: [] });
+  const l = r.lancamentos[0];
+  assert.ok(l, JSON.stringify(r));
+  assert.strictEqual(l.contaId, "emp_venda"); assert.strictEqual(l.contaBancariaId, "2sucyhk");
+  assert.strictEqual(M.lancamentosDaContaBancaria([l], "principal").length, 0, "não cai no Sicoob");
+  const c = M.conciliarExtrato([linha], M.lancamentosDaContaBancaria([l], "2sucyhk"), {});
+  assert.strictEqual(c.casados.length, 1); assert.strictEqual(c.noBancoSemPar.length, 0); assert.strictEqual(c.contabilizadoSemPar.length, 0);
+  // sem conta marcada, continua na principal (como sempre foi)
+  const r2 = M.lancamentosDaObraParaEscritorio(obra, cliente, { planoObra: PLANO_OBRA, contasPagar: [{ ...paga, contaBancariaId: undefined }], entradas: [] });
+  assert.ok(!("contaBancariaId" in r2.lancamentos[0]));
 });
 
 for (const [nome, fn] of testes) {
