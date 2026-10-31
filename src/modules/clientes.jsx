@@ -2376,7 +2376,8 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
       )}
       <div style={{ fontSize: 11, color: "#6b7280", marginTop: 8 }}>
         “Realizado” é o que já foi <strong style={{ color: "#4b5563" }}>pago</strong> em contas a pagar, acumulado até hoje —
-        conta em aberto não entra; a compra no cartão do escritório entra inteira (parcelas pagas e a pagar). “Estimado” vem da aba Preencher.
+        conta em aberto não entra; a compra no cartão do escritório entra inteira (parcelas pagas e a pagar), e a venda de imóvel entra pelo contrato
+        (recebido e a receber), sem a provisão de documentação e os juros das parcelas. “Estimado” vem da aba Preencher.
         {soCusto && " Preço de venda, terreno e tributos ficam fora deste quadro — só o que custa construir."}
         {clientePaga && " O cliente paga os fornecedores direto, então a obra fecha no custo."}
       </div>
@@ -4018,7 +4019,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
     // Realizado: o que já foi pago nas Contas a pagar, pela mesma conta do
     // plano de contas — é o outro lado da estimativa.
-    const realConta = realizadoPorConta(contasDaObra);
+    const realConta = realizadoPorConta(typeof contasDoPlanejamento === "function" ? contasDoPlanejamento(obraAtual, contasDaObra) : contasDaObra);
     const totalRealizado = Object.values(realConta).reduce((a, v) => a + v, 0);
     const comparativo = (estimado, realizado) => {
       if (!realizado) return null;
@@ -4079,7 +4080,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <PonteEscritorioView obra={obraAtual} cliente={cliente} contasPagar={contasDaObra}
             entradas={entradasDaObra} data={data} isMobile={isMobile} fmtBRL={fmtBRL} />
         ) : visaoPL === "pl" ? (
-          <PLDaObraView itens={itensPL} contasPagar={contasDaObra} clientePaga={!!obraAtual.clientePagaDireto}
+          <PLDaObraView itens={itensPL} contasPagar={typeof contasDoPlanejamento === "function" ? contasDoPlanejamento(obraAtual, contasDaObra) : contasDaObra} clientePaga={!!obraAtual.clientePagaDireto}
             isMobile={isMobile} fmtBRL={fmtBRL} orcamento={obraAtual.orcamento} insumos={data.materiais || []} />
         ) : visaoPL === "quadro" ? (
           <QuadroEstimativaPL itens={itensPL} podeEditar={perm.podeGerenciarObra} isMobile={isMobile}

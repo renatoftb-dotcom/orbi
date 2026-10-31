@@ -36,7 +36,7 @@ const modulo = new Function(`
            PLANO_CONTAS, contratoVazio, valorContrato,
            parcelasAPagar, contasDoContrato, sincronizarContasDoContrato, removerContasDoContrato,
            situacaoConta, rotuloSituacaoConta, diasParaVencer,
-           totaisContas, realizadoPorConta, realizadoPorPrestador,
+           totaisContas, realizadoPorConta, realizadoPorPrestador, contasDoPlanejamento,
            contaDoTipo, contaAvulsaVazia, somarDias, somarMeses, vencimentoFinal, medicoesPrevistas,
            tituloConta, detalheConta, agruparContas, filtrarContas, rotuloMes,
            VISOES_CONTAS, FILTROS_CONTAS, FILTRO_CONTAS_PADRAO, seriesDoFiltro,
@@ -3643,4 +3643,29 @@ teste("Vencimento do pedido: os itens em aberto mudam, o pago fica, o histórico
   assert.strictEqual(rc[0].pedidos[0].vencimento, "2026-11-10");
   assert.strictEqual(rc[0].pedidos[1].vencimento, "2026-10-01");
   assert.strictEqual(rc[1], cot[1]);
+});
+
+
+teste("planejamento: a venda entra pelo contrato — recebido + a receber − provisão − juros", () => {
+  const obra = { vendas: [{ id: "v1", valor: 210000, provisaoDoc: 6700, juros: 1942.2, data: "2026-09-16" }], contasPagar: [
+    { id: "s1", contaId: "venda_imovel", vendaId: "v1", parteVenda: "sinal", valor: 5000, pago: true, valorPago: 5000 },
+    { id: "s2", contaId: "venda_imovel", vendaId: "v1", parteVenda: "sinal", valor: 7000, pago: true, valorPago: 7000 },
+    { id: "p1", contaId: "venda_imovel", vendaId: "v1", parteVenda: "parcela", valor: 1925.8, pago: true, valorPago: 1925.8 },
+    ...[2, 3, 4, 5, 6, 7].map((k) => ({ id: "p" + k, contaId: "venda_imovel", vendaId: "v1", parteVenda: "parcela", valor: 1925.8, pago: false })),
+    ...Array.from({ length: 13 }, (_, i) => ({ id: "q" + i, contaId: "venda_imovel", vendaId: "v1", parteVenda: "parcela", valor: 843.2, pago: false })),
+    { id: "f1", contaId: "venda_imovel", vendaId: "v1", parteVenda: "financiamento", valor: 182200, pago: false },
+    { id: "m1", contaId: "material", valor: 1000, pago: false },
+  ] };
+  const cs = modulo.contasDoPlanejamento(obra);
+  assert.strictEqual(modulo.realizadoPorConta(cs).venda_imovel, 210000);
+  assert.ok(!("material" in modulo.realizadoPorConta(cs)), "conta de custo em aberto continua fora");
+  const g = modulo.subcontasDaConta([], cs, "venda_imovel");
+  const de = (n) => (g.find((x) => x.nome === n) || {}).realizado;
+  assert.strictEqual(de("Recebido"), 13925.8);
+  assert.strictEqual(de("A receber"), 204716.4);
+  assert.strictEqual(de("Provisão de documentação (do comprador)"), -6700);
+  assert.strictEqual(de("Juros/correção das parcelas"), -1942.2);
+  // obra sem venda: a lista volta igual
+  const semVenda = { contasPagar: [{ id: "m1", contaId: "material", valor: 1, pago: true }] };
+  assert.deepStrictEqual(modulo.contasDoPlanejamento(semVenda), semVenda.contasPagar);
 });

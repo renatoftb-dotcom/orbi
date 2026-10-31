@@ -35369,7 +35369,36 @@ function totaisContas(contas, hoje) {
 // da compra: as parcelas pagas e as que ainda vão cair nas faturas. No
 // contas a pagar e na base, cada parcela segue a fatura dela.
 function contaNoRealizado(c) {
-  return !!(c && (c.pago || (c.parcelaCartao && c.parcelaCartao.grupo)));
+  return !!(c && (c.pago || (c.parcelaCartao && c.parcelaCartao.grupo) || c.noRealizado));
+}
+// A venda de imóvel no Planejamento entra pelo contrato — como a compra no
+// cartão entra inteira: o recebido e o a receber da venda, menos a provisão
+// de documentação (é do comprador, fica reservada no escritório) e os
+// juros/correção das parcelas (receita financeira, não preço do imóvel).
+// Aberta, a conta mostra os quatro como grupos. Só para o quadro: a lista
+// que volta não é gravada.
+const PL_GRUPOS_DA_VENDA = { recebido: "Recebido", aReceber: "A receber",
+  provisao: "Provisão de documentação (do comprador)", juros: "Juros/correção das parcelas" };
+function contasDoPlanejamento(obra, contas) {
+  const o = obra || {};
+  const lista = (contas || o.contasPagar || []).filter(Boolean);
+  const vendas = (o.vendas || []).filter(Boolean);
+  if (!vendas.length && !lista.some((c) => c.contaId === "venda_imovel")) return lista;
+  const out = lista.map((c) => {
+    if (c.contaId !== "venda_imovel") return c;
+    if (c.pago) return { ...c, grupoMaterial: PL_GRUPOS_DA_VENDA.recebido };
+    if (c.vendaId) return { ...c, grupoMaterial: PL_GRUPOS_DA_VENDA.aReceber, noRealizado: true };
+    return c;
+  });
+  const menos = (v, chave, valor) => ({ id: `pl:${chave}:${v.id}`, contaId: "venda_imovel", pago: true, valor: -valor, valorPago: -valor,
+    pagoEm: v.data || "", grupoMaterial: PL_GRUPOS_DA_VENDA[chave], descricao: PL_GRUPOS_DA_VENDA[chave], doPlanejamento: true });
+  for (const v of vendas) {
+    const prov = Math.round((Number(v.provisaoDoc) || 0) * 100) / 100;
+    const jur = Math.round((Number(v.juros) || 0) * 100) / 100;
+    if (prov > 0) out.push(menos(v, "provisao", prov));
+    if (jur > 0) out.push(menos(v, "juros", jur));
+  }
+  return out;
 }
 function valorNoRealizado(c) {
   return (c && c.pago ? (Number(c.valorPago) || Number(c.valor)) : Number((c || {}).valor)) || 0;
@@ -55715,7 +55744,8 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
       )}
       <div style={{ fontSize: 11, color: "#6b7280", marginTop: 8 }}>
         “Realizado” é o que já foi <strong style={{ color: "#4b5563" }}>pago</strong> em contas a pagar, acumulado até hoje —
-        conta em aberto não entra; a compra no cartão do escritório entra inteira (parcelas pagas e a pagar). “Estimado” vem da aba Preencher.
+        conta em aberto não entra; a compra no cartão do escritório entra inteira (parcelas pagas e a pagar), e a venda de imóvel entra pelo contrato
+        (recebido e a receber), sem a provisão de documentação e os juros das parcelas. “Estimado” vem da aba Preencher.
         {soCusto && " Preço de venda, terreno e tributos ficam fora deste quadro — só o que custa construir."}
         {clientePaga && " O cliente paga os fornecedores direto, então a obra fecha no custo."}
       </div>
@@ -57357,7 +57387,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
     // Realizado: o que já foi pago nas Contas a pagar, pela mesma conta do
     // plano de contas — é o outro lado da estimativa.
-    const realConta = realizadoPorConta(contasDaObra);
+    const realConta = realizadoPorConta(typeof contasDoPlanejamento === "function" ? contasDoPlanejamento(obraAtual, contasDaObra) : contasDaObra);
     const totalRealizado = Object.values(realConta).reduce((a, v) => a + v, 0);
     const comparativo = (estimado, realizado) => {
       if (!realizado) return null;
@@ -57418,7 +57448,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <PonteEscritorioView obra={obraAtual} cliente={cliente} contasPagar={contasDaObra}
             entradas={entradasDaObra} data={data} isMobile={isMobile} fmtBRL={fmtBRL} />
         ) : visaoPL === "pl" ? (
-          <PLDaObraView itens={itensPL} contasPagar={contasDaObra} clientePaga={!!obraAtual.clientePagaDireto}
+          <PLDaObraView itens={itensPL} contasPagar={typeof contasDoPlanejamento === "function" ? contasDoPlanejamento(obraAtual, contasDaObra) : contasDaObra} clientePaga={!!obraAtual.clientePagaDireto}
             isMobile={isMobile} fmtBRL={fmtBRL} orcamento={obraAtual.orcamento} insumos={data.materiais || []} />
         ) : visaoPL === "quadro" ? (
           <QuadroEstimativaPL itens={itensPL} podeEditar={perm.podeGerenciarObra} isMobile={isMobile}
