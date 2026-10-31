@@ -633,36 +633,24 @@ function totaisContas(contas, hoje) {
 // da compra: as parcelas pagas e as que ainda vão cair nas faturas. No
 // contas a pagar e na base, cada parcela segue a fatura dela.
 function contaNoRealizado(c) {
-  return !!(c && (c.pago || (c.parcelaCartao && c.parcelaCartao.grupo) || c.noRealizado));
+  return !!(c && (c.pago || (c.parcelaCartao && c.parcelaCartao.grupo)));
 }
-// A venda de imóvel no Planejamento entra pelo contrato — como a compra no
-// cartão entra inteira: o recebido e o a receber da venda, menos a provisão
-// de documentação (é do comprador, fica reservada no escritório) e os
-// juros/correção das parcelas (receita financeira, não preço do imóvel).
-// Aberta, a conta mostra os quatro como grupos. Só para o quadro: a lista
-// que volta não é gravada.
-const PL_GRUPOS_DA_VENDA = { recebido: "Recebido", aReceber: "A receber",
-  provisao: "Provisão de documentação (do comprador)", juros: "Juros/correção das parcelas" };
+// A venda de imóvel no Planejamento: o Planejamento acompanha a EXECUÇÃO
+// (gasto × planejado), não apura resultado. Do lado da venda, o realizado é
+// o que já entrou ("Recebido"); o que falta receber da venda aparece só como
+// informação, fora do realizado (ver aReceberDaVendaNoPlanejamento).
+// O resultado pelo contrato é outra pergunta, de outra tela.
+// Só para o quadro: a lista que volta não é gravada.
+const PL_GRUPOS_DA_VENDA = { recebido: "Recebido" };
 function contasDoPlanejamento(obra, contas) {
   const o = obra || {};
   const lista = (contas || o.contasPagar || []).filter(Boolean);
-  const vendas = (o.vendas || []).filter(Boolean);
-  if (!vendas.length && !lista.some((c) => c.contaId === "venda_imovel")) return lista;
-  const out = lista.map((c) => {
-    if (c.contaId !== "venda_imovel") return c;
-    if (c.pago) return { ...c, grupoMaterial: PL_GRUPOS_DA_VENDA.recebido };
-    if (c.vendaId) return { ...c, grupoMaterial: PL_GRUPOS_DA_VENDA.aReceber, noRealizado: true };
-    return c;
-  });
-  const menos = (v, chave, valor) => ({ id: `pl:${chave}:${v.id}`, contaId: "venda_imovel", pago: true, valor: -valor, valorPago: -valor,
-    pagoEm: v.data || "", grupoMaterial: PL_GRUPOS_DA_VENDA[chave], descricao: PL_GRUPOS_DA_VENDA[chave], doPlanejamento: true });
-  for (const v of vendas) {
-    const prov = Math.round((Number(v.provisaoDoc) || 0) * 100) / 100;
-    const jur = Math.round((Number(v.juros) || 0) * 100) / 100;
-    if (prov > 0) out.push(menos(v, "provisao", prov));
-    if (jur > 0) out.push(menos(v, "juros", jur));
-  }
-  return out;
+  if (!lista.some((c) => c.contaId === "venda_imovel")) return lista;
+  return lista.map((c) => (c.contaId === "venda_imovel" && c.pago ? { ...c, grupoMaterial: PL_GRUPOS_DA_VENDA.recebido } : c));
+}
+function aReceberDaVendaNoPlanejamento(contas) {
+  return Math.round((contas || []).filter((c) => c && c.contaId === "venda_imovel" && c.vendaId && !c.pago)
+    .reduce((t, c) => t + (Number(c.valor) || 0), 0) * 100) / 100;
 }
 function valorNoRealizado(c) {
   return (c && c.pago ? (Number(c.valorPago) || Number(c.valor)) : Number((c || {}).valor)) || 0;

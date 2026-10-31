@@ -35369,36 +35369,24 @@ function totaisContas(contas, hoje) {
 // da compra: as parcelas pagas e as que ainda vão cair nas faturas. No
 // contas a pagar e na base, cada parcela segue a fatura dela.
 function contaNoRealizado(c) {
-  return !!(c && (c.pago || (c.parcelaCartao && c.parcelaCartao.grupo) || c.noRealizado));
+  return !!(c && (c.pago || (c.parcelaCartao && c.parcelaCartao.grupo)));
 }
-// A venda de imóvel no Planejamento entra pelo contrato — como a compra no
-// cartão entra inteira: o recebido e o a receber da venda, menos a provisão
-// de documentação (é do comprador, fica reservada no escritório) e os
-// juros/correção das parcelas (receita financeira, não preço do imóvel).
-// Aberta, a conta mostra os quatro como grupos. Só para o quadro: a lista
-// que volta não é gravada.
-const PL_GRUPOS_DA_VENDA = { recebido: "Recebido", aReceber: "A receber",
-  provisao: "Provisão de documentação (do comprador)", juros: "Juros/correção das parcelas" };
+// A venda de imóvel no Planejamento: o Planejamento acompanha a EXECUÇÃO
+// (gasto × planejado), não apura resultado. Do lado da venda, o realizado é
+// o que já entrou ("Recebido"); o que falta receber da venda aparece só como
+// informação, fora do realizado (ver aReceberDaVendaNoPlanejamento).
+// O resultado pelo contrato é outra pergunta, de outra tela.
+// Só para o quadro: a lista que volta não é gravada.
+const PL_GRUPOS_DA_VENDA = { recebido: "Recebido" };
 function contasDoPlanejamento(obra, contas) {
   const o = obra || {};
   const lista = (contas || o.contasPagar || []).filter(Boolean);
-  const vendas = (o.vendas || []).filter(Boolean);
-  if (!vendas.length && !lista.some((c) => c.contaId === "venda_imovel")) return lista;
-  const out = lista.map((c) => {
-    if (c.contaId !== "venda_imovel") return c;
-    if (c.pago) return { ...c, grupoMaterial: PL_GRUPOS_DA_VENDA.recebido };
-    if (c.vendaId) return { ...c, grupoMaterial: PL_GRUPOS_DA_VENDA.aReceber, noRealizado: true };
-    return c;
-  });
-  const menos = (v, chave, valor) => ({ id: `pl:${chave}:${v.id}`, contaId: "venda_imovel", pago: true, valor: -valor, valorPago: -valor,
-    pagoEm: v.data || "", grupoMaterial: PL_GRUPOS_DA_VENDA[chave], descricao: PL_GRUPOS_DA_VENDA[chave], doPlanejamento: true });
-  for (const v of vendas) {
-    const prov = Math.round((Number(v.provisaoDoc) || 0) * 100) / 100;
-    const jur = Math.round((Number(v.juros) || 0) * 100) / 100;
-    if (prov > 0) out.push(menos(v, "provisao", prov));
-    if (jur > 0) out.push(menos(v, "juros", jur));
-  }
-  return out;
+  if (!lista.some((c) => c.contaId === "venda_imovel")) return lista;
+  return lista.map((c) => (c.contaId === "venda_imovel" && c.pago ? { ...c, grupoMaterial: PL_GRUPOS_DA_VENDA.recebido } : c));
+}
+function aReceberDaVendaNoPlanejamento(contas) {
+  return Math.round((contas || []).filter((c) => c && c.contaId === "venda_imovel" && c.vendaId && !c.pago)
+    .reduce((t, c) => t + (Number(c.valor) || 0), 0) * 100) / 100;
 }
 function valorNoRealizado(c) {
   return (c && c.pago ? (Number(c.valorPago) || Number(c.valor)) : Number((c || {}).valor)) || 0;
@@ -55558,7 +55546,7 @@ function OrcadoXRealizadoView({ obra, insumos, isMobile, fmtBRL }) {
   );
 }
 
-function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcamento, insumos }) {
+function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcamento, insumos, etapasConcluidas, aoConcluirEtapa }) {
   // Acompanhar custo e apurar resultado são duas perguntas. Com a venda, o
   // terreno e os tributos na conta, o número do canteiro fica escondido; o
   // botão esconde os três e sobra o que custa construir.
@@ -55570,6 +55558,14 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
   // Duas leituras da mesma base: por conta (o que comprei) e por etapa
   // (onde a obra está). Quem está tocando a obra pensa por etapa.
   const [visao, setVisao] = useState("conta");
+  // Concluir a etapa: a data em que terminou; dali em diante não se espera
+  // mais gasto nela, e o saldo dela é o final (economia ou estouro).
+  const [concluindo, setConcluindo] = useState(null); // { etapaId, nome, data, ja }
+  const concluidas = etapasConcluidas || {};
+  const dataBR = (iso) => (/^\d{4}-\d{2}-\d{2}$/.test(String(iso || "")) ? String(iso).split("-").reverse().join("/") : "");
+  const hojeEtapa = new Date().toISOString().slice(0, 10);
+  // venda: o que falta receber, só como informação (fora do realizado)
+  const aReceberVenda = typeof aReceberDaVendaNoPlanejamento === "function" ? aReceberDaVendaNoPlanejamento(contasPagar) : 0;
   const porEtapa = plPorEtapa(itens, contasPagar, { soCusto, orcamento, insumos });
   // A estimativa do P&L fala por conta do plano e não sabe de etapa; quem
   // fala por etapa é o orçamento da obra. Com orçamento gerado, a coluna
@@ -55659,9 +55655,22 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
             <>
               {porEtapa.linhas.map(e => (
                 <div key={e.etapaId || "sem"} style={{ ...(gradeEtapa || grade), padding: "6px 12px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
-                  <span style={{ fontSize: 12.5, color: "#111827", minWidth: 0 }}>
-                    {e.nome}
-                    {e.notas ? <span style={{ fontSize: 10.5, color: "#9ca3af" }}> · {e.notas} {e.notas === 1 ? "nota" : "notas"}</span> : null}
+                  <span style={{ fontSize: 12.5, color: "#111827", minWidth: 0, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <span>{e.nome}
+                    {e.notas ? <span style={{ fontSize: 10.5, color: "#9ca3af" }}> · {e.notas} {e.notas === 1 ? "nota" : "notas"}</span> : null}</span>
+                    {e.etapaId && concluidas[e.etapaId] ? (
+                      <button type="button" data-vk-etapa-concluida={e.etapaId}
+                        disabled={!aoConcluirEtapa} title={aoConcluirEtapa ? "Mudar a data ou reabrir a etapa" : ""}
+                        onClick={() => aoConcluirEtapa && setConcluindo({ etapaId: e.etapaId, nome: e.nome, data: concluidas[e.etapaId].em || hojeEtapa, ja: true })}
+                        style={{ fontFamily: "inherit", fontSize: 10.5, fontWeight: 600, padding: "1px 7px", borderRadius: 999, border: "1px solid #a7f3d0",
+                          background: "#ecfdf5", color: "#047857", cursor: aoConcluirEtapa ? "pointer" : "default" }}>
+                        ✓ Concluída {dataBR(concluidas[e.etapaId].em)}</button>
+                    ) : e.etapaId && aoConcluirEtapa ? (
+                      <button type="button" data-vk-concluir-etapa={e.etapaId}
+                        onClick={() => setConcluindo({ etapaId: e.etapaId, nome: e.nome, data: hojeEtapa, ja: false })}
+                        style={{ fontFamily: "inherit", fontSize: 10.5, padding: "1px 7px", borderRadius: 999, border: "1px solid rgba(38,36,33,0.18)",
+                          background: "#fff", color: "#4b5563", cursor: "pointer" }}>Concluir</button>
+                    ) : null}
                   </span>
                   {comOrcado && !isMobile && <span style={{ ...celula, color: "#6b7280" }}>{num(e.orcado)}</span>}
                   {!(comOrcado && isMobile) && <span style={{ ...celula, color: "#6b7280" }}>{num(e.estimado)}</span>}
@@ -55699,7 +55708,8 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
               </div>
               {b.linhas.map(l => {
                 const etapas = subcontasDaConta(itens, contasPagar, l.conta.id);
-                const abrivel = etapas.length > 1;
+                const infoVenda = l.conta.id === "venda_imovel" && aReceberVenda > 0.005;
+                const abrivel = etapas.length > 1 || infoVenda;
                 const aberta = contaAberta === l.conta.id;
                 return (
                 <div key={l.conta.id}>
@@ -55712,7 +55722,7 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
                         transform: aberta ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▶</span>
                     )}
                     {l.conta.nome}
-                    {abrivel && <span style={{ fontSize: 10.5, color: "#9ca3af" }}> · {etapas.length} grupos</span>}
+                    {abrivel && etapas.length > 1 && <span style={{ fontSize: 10.5, color: "#9ca3af" }}> · {etapas.length} grupos</span>}
                   </span>
                   <span style={{ ...celula, color: "#6b7280" }}>{num(l.estimado)}</span>
                   <span style={{ ...celula, color: "#111827" }}>{num(l.realizado)}</span>
@@ -55727,6 +55737,14 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
                     {!isMobile && <span style={{ ...celula, fontSize: 12, color: e.saldo < -0.005 ? "#dc2626" : "#9ca3af" }}>{num(e.saldo)}</span>}
                   </div>
                 ))}
+                {aberta && infoVenda && (
+                  <div data-vk-venda-a-receber="1" style={{ ...grade, padding: "5px 12px 5px 30px", borderTop: "1px solid rgba(38,36,33,0.04)", background: "#fcfcfd" }}>
+                    <span style={{ fontSize: 12, color: "#9ca3af", fontStyle: "italic", minWidth: 0 }}>A receber da venda (informativo, fora do realizado)</span>
+                    <span />
+                    <span style={{ ...celula, fontSize: 12, color: "#9ca3af", fontStyle: "italic" }}>({num(aReceberVenda)})</span>
+                    {!isMobile && <span />}
+                  </div>
+                )}
                 </div>
                 );
               })}
@@ -55742,10 +55760,40 @@ function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL, orcam
           </div>
         </div>
       )}
+      {concluindo && (
+        <div data-vk-modal-concluir-etapa="1" style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", zIndex: 1000,
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "#fff", borderRadius: 14, width: "min(380px, 100%)", padding: 18, display: "grid", gap: 12, boxShadow: "0 20px 50px rgba(0,0,0,0.25)" }}>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>{concluindo.ja ? "Etapa concluída" : "Concluir a etapa"}</div>
+              <div style={{ fontSize: 12.5, color: "#6b7280", marginTop: 2 }}>{concluindo.nome} — a partir daí não se espera mais gasto nela.</div>
+            </div>
+            <label style={{ display: "grid", gap: 4 }}>
+              <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: .4, color: "#6b7280", fontWeight: 600 }}>Terminou em</span>
+              <input data-vk-data-conclusao="1" type="date" value={concluindo.data} max={hojeEtapa}
+                onChange={(ev) => setConcluindo({ ...concluindo, data: ev.target.value })}
+                style={{ fontFamily: "inherit", fontSize: 14, padding: "8px 10px", borderRadius: 9, border: "1px solid rgba(38,36,33,0.2)" }} />
+            </label>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+              {concluindo.ja && (
+                <button type="button" data-vk-reabrir-etapa="1" onClick={() => { aoConcluirEtapa(concluindo.etapaId, null); setConcluindo(null); }}
+                  style={{ fontFamily: "inherit", fontSize: 12.5, padding: "8px 14px", borderRadius: 9, border: "1px solid rgba(185,28,28,0.35)",
+                    background: "#fff", color: "#b91c1c", cursor: "pointer", marginRight: "auto" }}>Reabrir</button>
+              )}
+              <button type="button" onClick={() => setConcluindo(null)}
+                style={{ fontFamily: "inherit", fontSize: 12.5, padding: "8px 14px", borderRadius: 9, border: "1px solid rgba(38,36,33,0.18)", background: "#fff", cursor: "pointer" }}>Cancelar</button>
+              <button type="button" data-vk-confirmar-conclusao="1" disabled={!/^\d{4}-\d{2}-\d{2}$/.test(String(concluindo.data || ""))}
+                onClick={() => { aoConcluirEtapa(concluindo.etapaId, { em: concluindo.data }); setConcluindo(null); }}
+                style={{ fontFamily: "inherit", fontSize: 12.5, padding: "8px 14px", borderRadius: 9, border: "1px solid #0474f4", background: "#0474f4", color: "#fff", cursor: "pointer", fontWeight: 600 }}>
+                {concluindo.ja ? "Salvar" : "Concluir"}</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{ fontSize: 11, color: "#6b7280", marginTop: 8 }}>
         “Realizado” é o que já foi <strong style={{ color: "#4b5563" }}>pago</strong> em contas a pagar, acumulado até hoje —
-        conta em aberto não entra; a compra no cartão do escritório entra inteira (parcelas pagas e a pagar), e a venda de imóvel entra pelo contrato
-        (recebido e a receber), sem a provisão de documentação e os juros das parcelas. “Estimado” vem da aba Preencher.
+        conta em aberto não entra; a compra no cartão do escritório entra inteira (parcelas pagas e a pagar). Da venda de imóvel entra o que
+        já foi recebido; o que falta receber aparece só como informação. “Estimado” vem da aba Preencher.
         {soCusto && " Preço de venda, terreno e tributos ficam fora deste quadro — só o que custa construir."}
         {clientePaga && " O cliente paga os fornecedores direto, então a obra fecha no custo."}
       </div>
@@ -57449,7 +57497,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             entradas={entradasDaObra} data={data} isMobile={isMobile} fmtBRL={fmtBRL} />
         ) : visaoPL === "pl" ? (
           <PLDaObraView itens={itensPL} contasPagar={typeof contasDoPlanejamento === "function" ? contasDoPlanejamento(obraAtual, contasDaObra) : contasDaObra} clientePaga={!!obraAtual.clientePagaDireto}
-            isMobile={isMobile} fmtBRL={fmtBRL} orcamento={obraAtual.orcamento} insumos={data.materiais || []} />
+            isMobile={isMobile} fmtBRL={fmtBRL} orcamento={obraAtual.orcamento} insumos={data.materiais || []}
+            etapasConcluidas={obraAtual.etapasConcluidas || {}}
+            aoConcluirEtapa={perm.podeGerenciarObra ? ((etapaId, dados) => {
+              const atual = { ...(obraAtual.etapasConcluidas || {}) };
+              if (dados) atual[etapaId] = { em: dados.em, por: quemSou(), registradoEm: new Date().toISOString() };
+              else delete atual[etapaId];
+              gravarObras(obras.map(o => (o.id === obraAtual.id ? { ...o, etapasConcluidas: atual } : o)));
+            }) : null} />
         ) : visaoPL === "quadro" ? (
           <QuadroEstimativaPL itens={itensPL} podeEditar={perm.podeGerenciarObra} isMobile={isMobile}
             fmtBRL={fmtBRL} aoDefinir={definirEstimativa} clientePaga={!!obraAtual.clientePagaDireto} />
