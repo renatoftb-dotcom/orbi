@@ -19,7 +19,7 @@ if (a < 0 || b < 0) throw new Error("marcadores da parte pura não encontrados")
 const M = new Function(puroEf + "\n" + cr.slice(a, b) + `
   return { crSomarMeses, crGerarParcelas, novasContasAReceber, itensAReceber, resumoAReceber, candidatosDoRecebimento,
     receberContaAReceber, desfazerRecebimento, ligarParcelaDeProjeto, extratoEscritorio, lancamentosDoEscritorio,
-    planoDaVenda, obraComVenda, obraSemVenda, resumoDasVendas, entradasDeVendaSoltas, contasDaVenda, gruposDeParcelas };`)();
+    planoDaVenda, obraComVenda, obraSemVenda, resumoDasVendas, entradasDeVendaSoltas, contasDaVenda, gruposDeParcelas, conferenciaDaVenda, provisaoDaVenda, obraComProvisao, obraComDespesaDaProvisao, acertoDaProvisao, obraSemMovDaProvisao };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -170,6 +170,49 @@ teste("venda com parcelas escalonadas: 1 a 7 de 1.900 e 8 a 20 de 875; ou 20 igu
   assert.ok(M.gruposDeParcelas({ grupos: [{ ate: "7", valor: "100" }, { ate: "5", valor: "50" }] }).erro);
   assert.ok(M.gruposDeParcelas({ grupos: [{ ate: "7", valor: "" }] }).erro);
   assert.strictEqual(M.gruposDeParcelas({ grupos: [{ ate: "", valor: "" }] }).n, 0);
+});
+
+teste("provisão de documentação: venda + provisão + juros; despesas, devolução e complemento", () => {
+  const unidades = [{ id: "u1", nome: "Casa 01", precoEstimado: 210000 }];
+  const f = { unidadeId: "u1", comprador: "Comprador", data: "2026-10-31", valor: "210.000,00", provisao: "6.000,00",
+    sinais: [{ valor: "12.000,00", data: "2026-09-24" }], grupos: [{ ate: "7", valor: "1.925,80" }, { ate: "20", valor: "843,20" }],
+    primeiroVencimento: "2026-11-22", financiamento: "182.200,00", dataFinanciamento: "2027-04-01" };
+  const p = M.planoDaVenda(f, { unidades, contas: [], obraId: "o1", novoId });
+  assert.ok(!p.erro, p.erro);
+  assert.strictEqual(p.venda.provisaoDoc, 6000);
+  assert.strictEqual(p.venda.juros, 2642.2); // 218.642,20 − 210.000 − 6.000
+  // faltando: sem a provisão inteira coberta
+  const curto = M.planoDaVenda({ ...f, provisao: "10.000,00" }, { unidades, contas: [], obraId: "o1", novoId });
+  assert.ok(/faltam/.test(curto.erro), curto.erro);
+  assert.deepStrictEqual(M.conferenciaDaVenda(216000, 210000, 6000), { dif: 0, faltam: 0, juros: 0 });
+
+  let obra = M.obraComVenda({ id: "o1", unidadesVenda: unidades, contasPagar: [] }, p);
+  const vid = p.venda.id;
+  obra = M.obraComDespesaDaProvisao(obra, vid, { id: "d1", tipo: "despesa", descricao: "ITBI", valor: 4200, data: "2026-11-10" });
+  obra = M.obraComDespesaDaProvisao(obra, vid, { id: "d2", tipo: "despesa", descricao: "Registro", valor: 1300, data: "2026-12-01" });
+  let pv = M.provisaoDaVenda(obra.vendas[0]);
+  assert.strictEqual(pv.gasto, 5500); assert.strictEqual(pv.saldo, 500);
+  // sobra: devolução zera
+  const dev = M.acertoDaProvisao(obra, vid, { data: "2026-12-05", novoId });
+  assert.ok(!dev.erro, dev.erro);
+  assert.strictEqual(M.provisaoDaVenda(dev.obra.vendas[0]).saldo, 0);
+  assert.ok(M.acertoDaProvisao(dev.obra, vid, { data: "2026-12-05", novoId }).erro); // já zerada
+  // falta: complemento vira recebimento da venda
+  obra = M.obraComDespesaDaProvisao(obra, vid, { id: "d3", tipo: "despesa", descricao: "Certidões", valor: 800, data: "2026-12-02" });
+  const comp = M.acertoDaProvisao(obra, vid, { data: "2026-12-20", novoId });
+  assert.ok(!comp.erro, comp.erro);
+  const c = comp.obra.contasPagar.find((x) => x.parteVenda === "complemento");
+  assert.strictEqual(c.valor, 300); assert.strictEqual(c.vendaId, vid); assert.strictEqual(c.vencimento, "2026-12-20");
+  assert.strictEqual(M.provisaoDaVenda(comp.obra.vendas[0]).saldo, 0);
+  // tirar o complemento tira a conta; recebido, não deixa
+  const mc = comp.obra.vendas[0].provisaoMovs.find((m) => m.tipo === "complemento");
+  const sem = M.obraSemMovDaProvisao(comp.obra, vid, mc.id);
+  assert.ok(!sem.obra.contasPagar.some((x) => x.parteVenda === "complemento"));
+  const recebido = { ...comp.obra, contasPagar: comp.obra.contasPagar.map((x) => (x.id === c.id ? { ...x, pago: true, pagoEm: "2026-12-20" } : x)) };
+  assert.ok(M.obraSemMovDaProvisao(recebido, vid, mc.id).erro);
+  // alterar o valor da provisão
+  assert.strictEqual(M.obraComProvisao(obra, vid, "7.000,00").vendas[0].provisaoDoc, 7000);
+  assert.ok(!("provisaoDoc" in M.obraComProvisao(obra, vid, "").vendas[0]));
 });
 
 for (const [nome, fn] of testes) {

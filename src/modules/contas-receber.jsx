@@ -285,11 +285,11 @@ function ligarParcelaDeProjeto(lancamentos, parcela, lancamentoId) {
 // receber mora nas contas da obra com a conta "Venda de imóvel" e o
 // `vendaId` — recebida, a ponte leva para o escritório (Venda de imóvel do
 // empreendimento), como qualquer baixa da obra. Ficam fora do contas a pagar.
-const CR_PARTES_DA_VENDA = { sinal: "Sinal", parcela: "Parcela", financiamento: "Financiamento" };
+const CR_PARTES_DA_VENDA = { sinal: "Sinal", parcela: "Parcela", financiamento: "Financiamento", complemento: "Complemento da documentação" };
 function unidadesDaObra(obra) { return ((obra || {}).unidadesVenda || []).filter(Boolean); }
 function vendasDaObra(obra) { return ((obra || {}).vendas || []).filter(Boolean); }
 function contasDaVenda(contas, vendaId) {
-  const ordem = { sinal: 0, parcela: 1, financiamento: 2 };
+  const ordem = { sinal: 0, parcela: 1, financiamento: 2, complemento: 3 };
   return (contas || []).filter((c) => c && c.vendaId === vendaId)
     .sort((a, b) => (ordem[a.parteVenda] - ordem[b.parteVenda]) || String(a.vencimento || a.pagoEm || "").localeCompare(String(b.vencimento || b.pagoEm || "")));
 }
@@ -321,7 +321,13 @@ function gruposDeParcelas(d) {
   const n = grupos.length ? grupos[grupos.length - 1].ate : 0;
   return { grupos, n, total: crCent(grupos.reduce((t, g) => t + (g.ate - g.de + 1) * g.valor, 0)) };
 }
-// A venda e o que falta receber. `f`: { unidadeId, comprador, data, valor,
+// Sinal + parcelas + financiamento contra a venda e a provisão: o que falta,
+// ou o que passa (juros/correção das parcelas).
+function conferenciaDaVenda(soma, valor, provisao) {
+  const dif = crCent((Number(soma) || 0) - (Number(valor) || 0) - (Number(provisao) || 0));
+  return { dif, faltam: dif < -0.005 ? crCent(-dif) : 0, juros: dif > 0.005 ? dif : 0 };
+}
+// A venda e o que falta receber. `f`: { unidadeId, comprador, data, valor, provisao,
 // sinais: [{ valor, data, contaId? }], grupos: [{ ate, valor }] (ou nParcelas, valorParcela),
 // primeiroVencimento, financiamento, dataFinanciamento }.
 function planoDaVenda(f, ctx) {
@@ -345,10 +351,14 @@ function planoDaVenda(f, ctx) {
   if (n > 0 && !/^\d{4}-\d{2}-\d{2}$/.test(String(d.primeiroVencimento || ""))) return { erro: "Informe o 1º vencimento das parcelas." };
   const fin = crCent(crValor(d.financiamento));
   if (fin > 0 && !/^\d{4}-\d{2}-\d{2}$/.test(String(d.dataFinanciamento || ""))) return { erro: "Informe a data prevista da liberação do financiamento." };
+  const prov = crCent(crValor(d.provisao));
+  if (prov < 0) return { erro: "A provisão de documentação não pode ser negativa." };
   const soma = crCent(sinais.reduce((t, x) => t + x.valor, 0) + gp.total + fin);
-  if (Math.abs(soma - valor) > 0.01) {
-    const dif = crCent(valor - soma);
-    return { erro: `Sinal + parcelas + financiamento dão ${crBRL(soma)}; a venda é ${crBRL(valor)} — ${dif > 0 ? "faltam" : "sobram"} ${crBRL(Math.abs(dif))}.` };
+  // O que o comprador paga = venda + provisão de documentação + juros/correção
+  // das parcelas. A sobra além de venda + provisão é o juro/correção.
+  const conf = conferenciaDaVenda(soma, valor, prov);
+  if (conf.faltam > 0) {
+    return { erro: `Sinal + parcelas + financiamento dão ${crBRL(soma)}; venda${prov ? " + provisão" : ""} é ${crBRL(valor + prov)} — faltam ${crBRL(conf.faltam)}.` };
   }
   const vendaId = o.novoId ? o.novoId() : "v" + Date.now().toString(36);
   const agora = o.agora || new Date().toISOString();
@@ -368,6 +378,7 @@ function planoDaVenda(f, ctx) {
   for (const g of gp.grupos) for (let k = g.de; k <= g.ate; k++) novas.push(base("parcela", k, n, g.valor, crSomarMeses(d.primeiroVencimento, k - 1)));
   if (fin > 0) novas.push(base("financiamento", 1, 1, fin, d.dataFinanciamento));
   const venda = { id: vendaId, unidadeId: un.id, comprador, data: d.data, valor, criadoEm: agora, por: o.quem || "",
+    ...(prov > 0 ? { provisaoDoc: prov } : {}), ...(conf.juros > 0 ? { juros: conf.juros } : {}),
     ...(String(d.observacao || "").trim() ? { observacao: String(d.observacao).trim() } : {}) };
   return { venda, novas, ligar };
 }
@@ -390,6 +401,75 @@ function obraSemVenda(obra, vendaId) {
     contas.push(resto);
   }
   return { ...o, vendas: vendasDaObra(o).filter((v) => v.id !== vendaId), contasPagar: contas };
+}
+// ── Provisão de documentação da venda ──
+// Parte do que o comprador paga fica reservada para a documentação (ITBI,
+// cartório, registro). As despesas saem dela; no acerto, a sobra é devolvida
+// ao comprador ou a falta vira um complemento a receber. Fica na venda:
+// `provisaoDoc` (valor) e `provisaoMovs` [{ id, tipo, descricao, valor, data }],
+// tipo despesa | devolucao | complemento. Não entra no custo da obra.
+const CR_MOV_DA_PROVISAO = { despesa: "Despesa", devolucao: "Devolvido ao comprador", complemento: "Complemento do comprador" };
+function provisaoDaVenda(venda) {
+  const v = venda || {};
+  const movs = (v.provisaoMovs || []).filter(Boolean).slice().sort((a, b) => String(a.data || "").localeCompare(String(b.data || "")));
+  const soma = (t) => crCent(movs.filter((m) => m.tipo === t).reduce((x, m) => x + (Number(m.valor) || 0), 0));
+  const valor = crCent(Number(v.provisaoDoc) || 0);
+  const gasto = soma("despesa"), devolvido = soma("devolucao"), complemento = soma("complemento");
+  return { valor, gasto, devolvido, complemento, saldo: crCent(valor + complemento - gasto - devolvido), movs };
+}
+function obraComVendaAlterada(obra, vendaId, fn) {
+  const o = obra || {};
+  return { ...o, vendas: vendasDaObra(o).map((v) => (v.id === vendaId ? fn(v) : v)) };
+}
+function obraComProvisao(obra, vendaId, valor) {
+  const n = crCent(crValor(valor));
+  return obraComVendaAlterada(obra, vendaId, (v) => {
+    const { provisaoDoc: _p, ...resto } = v;
+    return n > 0 ? { ...resto, provisaoDoc: n } : resto;
+  });
+}
+function obraComDespesaDaProvisao(obra, vendaId, mov) {
+  return obraComVendaAlterada(obra, vendaId, (v) => ({ ...v, provisaoMovs: (v.provisaoMovs || []).concat([mov]) }));
+}
+// Acerto com o comprador: a sobra volta para ele; a falta ele complementa
+// (vira um recebimento da venda, como as parcelas).
+function acertoDaProvisao(obra, vendaId, ctx) {
+  const o = ctx || {};
+  const venda = vendasDaObra(obra).find((v) => v.id === vendaId);
+  if (!venda) return { erro: "Venda não encontrada." };
+  const p = provisaoDaVenda(venda);
+  if (Math.abs(p.saldo) < 0.005) return { erro: "A provisão já está zerada." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(o.data || ""))) return { erro: "Informe a data." };
+  const id = o.novoId ? o.novoId() : "pm" + Date.now().toString(36);
+  const agora = o.agora || new Date().toISOString();
+  if (p.saldo > 0) {
+    const mov = { id, tipo: "devolucao", descricao: "Devolução ao comprador", valor: p.saldo, data: o.data, em: agora, por: o.quem || "" };
+    return { obra: obraComDespesaDaProvisao(obra, vendaId, mov) };
+  }
+  const un = unidadesDaObra(obra).find((u) => u.id === venda.unidadeId) || {};
+  const contaId = o.novoId ? o.novoId() : id + "c";
+  const conta = { id: contaId, obraId: o.obraId || (obra || {}).id || "", origem: "avulsa",
+    descricao: `${un.nome || "Unidade"} · ${CR_PARTES_DA_VENDA.complemento}`, favorecido: venda.comprador,
+    contaId: "venda_imovel", etapa: "outros", valor: crCent(-p.saldo), vencimento: o.data, pago: false, pagoEm: "", valorPago: "",
+    vendaId, parteVenda: "complemento", criadoEm: agora,
+    registros: [{ em: agora, ato: "criada", por: o.quem || "", detalhe: "complemento da provisão de documentação" }] };
+  const mov = { id, tipo: "complemento", descricao: "Complemento do comprador", valor: crCent(-p.saldo), data: o.data, contaId, em: agora, por: o.quem || "" };
+  const comMov = obraComDespesaDaProvisao(obra, vendaId, mov);
+  return { obra: { ...comMov, contasPagar: (comMov.contasPagar || []).concat([conta]) } };
+}
+// Tirar um lançamento da provisão; o complemento só sai se ainda não foi recebido.
+function obraSemMovDaProvisao(obra, vendaId, movId) {
+  const venda = vendasDaObra(obra).find((v) => v.id === vendaId);
+  const mov = venda && (venda.provisaoMovs || []).find((m) => m && m.id === movId);
+  if (!mov) return { erro: "Lançamento não encontrado." };
+  let contas = (obra || {}).contasPagar || [];
+  if (mov.contaId) {
+    const c = contas.find((x) => x && x.id === mov.contaId);
+    if (c && c.pago) return { erro: "O complemento já foi recebido: desfaça o recebimento antes." };
+    contas = contas.filter((x) => !(x && x.id === mov.contaId));
+  }
+  const nova = obraComVendaAlterada(obra, vendaId, (v) => ({ ...v, provisaoMovs: (v.provisaoMovs || []).filter((m) => m && m.id !== movId) }));
+  return { obra: { ...nova, contasPagar: contas } };
 }
 // O quadro das unidades: a venda de cada uma, o recebido e o que falta.
 function resumoDasVendas(obra) {
@@ -698,6 +778,9 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
   const [erroVenda, setErroVenda] = useState("");
   const [recebendo, setRecebendo] = useState(null); // { conta, dia, valor, erro }
   const [aberta, setAberta] = useState({});
+  const [provEd, setProvEd] = useState(null);     // { vendaId, valor, erro } — valor da provisão
+  const [provDesp, setProvDesp] = useState(null); // { vendaId, descricao, valor, data, erro } — despesa
+  const [provAcerto, setProvAcerto] = useState(null); // { vendaId, data, erro }
   const novoId = () => (typeof uid === "function" ? uid() : "u" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5));
   const dinheiro = (v) => crBRL(v);
   const rot = { fontSize: 10.5, textTransform: "uppercase", letterSpacing: .4, color: "#6b7280", fontWeight: 600 };
@@ -731,7 +814,7 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
   function abrirVenda(u) {
     setErroVenda("");
     setFormVenda({ unidadeId: u.id, comprador: "", data: hoje, valor: u.precoEstimado ? Number(u.precoEstimado).toFixed(2).replace(".", ",") : "",
-      sinais: [], grupos: [{ ate: "", valor: "" }], primeiroVencimento: "", financiamento: "", dataFinanciamento: "", observacao: "" });
+      provisao: "", sinais: [], grupos: [{ ate: "", valor: "" }], primeiroVencimento: "", financiamento: "", dataFinanciamento: "", observacao: "" });
   }
   function salvarVenda() {
     const p = planoDaVenda(formVenda, { unidades: unidadesDaObra(obra), contas, obraId: obra.id, novoId, quem });
@@ -768,6 +851,38 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
     if (ok) aoGravarObra({ ...obra, contasPagar: contas.map((x) => (x && x.id === c.id ? contaEmAberto(x, quem || "") : x)) });
   }
 
+  function salvarValorDaProvisao() {
+    const f = provEd;
+    if (crValor(f.valor) < 0) { setProvEd({ ...f, erro: "Informe um valor válido." }); return; }
+    aoGravarObra(obraComProvisao(obra, f.vendaId, f.valor));
+    setProvEd(null);
+  }
+  function lancarDespesaDaProvisao() {
+    const f = provDesp;
+    const valor = crCent(crValor(f.valor));
+    if (!String(f.descricao || "").trim()) { setProvDesp({ ...f, erro: "Descreva a despesa." }); return; }
+    if (!(valor > 0)) { setProvDesp({ ...f, erro: "Informe o valor." }); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(f.data || ""))) { setProvDesp({ ...f, erro: "Informe a data." }); return; }
+    aoGravarObra(obraComDespesaDaProvisao(obra, f.vendaId, { id: novoId(), tipo: "despesa", descricao: String(f.descricao).trim(),
+      valor, data: f.data, em: new Date().toISOString(), por: quem || "" }));
+    setProvDesp(null);
+  }
+  function acertarProvisao() {
+    const r = acertoDaProvisao(obra, provAcerto.vendaId, { data: provAcerto.data, novoId, quem, obraId: obra.id });
+    if (r.erro) { setProvAcerto({ ...provAcerto, erro: r.erro }); return; }
+    aoGravarObra(r.obra);
+    setProvAcerto(null);
+  }
+  async function tirarMovDaProvisao(vendaId, m) {
+    const ok = await dialogo.confirmar({ titulo: "Tirar este lançamento da provisão?", confirmar: "Tirar", destrutivo: true,
+      mensagem: `${m.descricao} · ${dinheiro(m.valor)}` });
+    if (!ok) return;
+    const r = obraSemMovDaProvisao(obra, vendaId, m.id);
+    if (r.erro) { dialogo.alertar({ titulo: "Não dá para tirar", tipo: "aviso", mensagem: r.erro }); return; }
+    aoGravarObra(r.obra);
+  }
+
+  const paraCampoBR = (n) => crCent(n).toFixed(2).replace(".", ",");
   const tile = (t, v, sub) => (
     <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding: "12px 14px", background: "#fff" }}>
       <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 4 }}>{t}</div>
@@ -776,6 +891,7 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
     </div>
   );
   const fv = formVenda;
+  const provForm = fv ? crCent(crValor(fv.provisao)) : 0;
   const somaVenda = fv ? crCent((fv.sinais || []).reduce((t, x) => t + (x.contaId
     ? ((c) => Number(c.valorPago) || Number(c.valor) || 0)(entradasDeVendaSoltas(contas).find((c) => c.id === x.contaId) || {}) : crValor(x.valor)), 0)
     + (gruposDeParcelas(fv).total || 0) + crValor(fv.financiamento)) : 0;
@@ -881,6 +997,78 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                     </div>
                   );
                 })}
+                {(() => {
+                  const pv = provisaoDaVenda(v);
+                  const ed = provEd && provEd.vendaId === v.id;
+                  const dp = provDesp && provDesp.vendaId === v.id;
+                  const ac = provAcerto && provAcerto.vendaId === v.id;
+                  const caixa = { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", background: "#f8fafc", borderRadius: 10, padding: 10 };
+                  return (
+                    <div data-vk-provisao-venda={v.id} style={{ padding: "10px 14px", borderTop: "1px solid rgba(38,36,33,0.08)", background: "#fcfcfd", display: "grid", gap: 8 }}>
+                      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 12.5 }}>
+                        <span style={{ flex: "1 1 220px", minWidth: 0 }}>
+                          <b style={{ fontWeight: 600 }}>Provisão de documentação</b>
+                          {v.juros ? <span style={{ color: "#6b7280" }}> · juros/correção das parcelas {dinheiro(v.juros)}</span> : null}
+                          {pv.valor > 0 || pv.movs.length ? (
+                            <div data-vk-provisao-resumo="1" style={{ color: "#4b5563", marginTop: 2 }}>
+                              reservado {dinheiro(pv.valor)} · gasto {dinheiro(pv.gasto)}
+                              {pv.devolvido ? ` · devolvido ${dinheiro(pv.devolvido)}` : ""}{pv.complemento ? ` · complemento ${dinheiro(pv.complemento)}` : ""}
+                              {" · "}<b style={{ color: pv.saldo < -0.005 ? "#b91c1c" : "#111827" }}>saldo {dinheiro(pv.saldo)}</b>
+                            </div>
+                          ) : <div style={{ color: "#6b7280", marginTop: 2 }}>Nenhuma provisão nesta venda.</div>}
+                        </span>
+                        {podeEditar && !ed && <button data-vk-provisao-valor="1" style={btn} onClick={() => setProvEd({ vendaId: v.id, valor: pv.valor ? paraCampoBR(pv.valor) : "", erro: "" })}>{pv.valor ? "Alterar valor" : "+ Provisão"}</button>}
+                        {podeEditar && (pv.valor > 0 || pv.movs.length > 0) && !dp && <button data-vk-provisao-despesa="1" style={btn} onClick={() => setProvDesp({ vendaId: v.id, descricao: "", valor: "", data: hoje, erro: "" })}>+ Despesa</button>}
+                        {podeEditar && Math.abs(pv.saldo) > 0.005 && pv.movs.length > 0 && !ac && <button data-vk-provisao-acertar="1" style={btn} onClick={() => setProvAcerto({ vendaId: v.id, data: hoje, erro: "" })}>Acertar com o comprador</button>}
+                      </div>
+                      {pv.movs.map((m) => (
+                        <div key={m.id} data-vk-provisao-mov={m.tipo} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 12, paddingLeft: 10, borderLeft: "2px solid #e5e7eb" }}>
+                          <span style={{ flex: "1 1 200px", minWidth: 0 }}>{m.descricao} <span style={{ color: "#6b7280" }}>· {m.tipo === "despesa" ? "despesa · " : ""}{crDataBR(m.data)}</span></span>
+                          <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", color: m.tipo === "complemento" ? "#047857" : "#111827" }}>
+                            {m.tipo === "complemento" ? "+ " : "− "}{dinheiro(m.valor)}</span>
+                          {podeEditar && <button style={{ ...btn, padding: "3px 10px" }} onClick={() => tirarMovDaProvisao(v.id, m)}>Tirar</button>}
+                        </div>
+                      ))}
+                      {ed && (
+                        <div style={caixa}>
+                          <label style={{ display: "grid", gap: 3 }}><span style={rot}>Valor da provisão</span>
+                            {campoDinheiro(provEd.valor, (x) => setProvEd({ ...provEd, valor: x, erro: "" }), { style: { width: 160 }, "data-vk-provisao-campo": "1" })}</label>
+                          <button data-vk-provisao-salvar="1" style={{ ...(S.btn || {}), padding: "7px 14px", fontSize: 12.5 }} onClick={salvarValorDaProvisao}>Salvar</button>
+                          <button style={{ ...btn, padding: "7px 14px" }} onClick={() => setProvEd(null)}>Cancelar</button>
+                          {provEd.erro && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{provEd.erro}</div>}
+                        </div>
+                      )}
+                      {dp && (
+                        <div style={caixa}>
+                          <label style={{ display: "grid", gap: 3, flex: "1 1 200px" }}><span style={rot}>Despesa</span>
+                            <input data-vk-provisao-desc="1" style={inp} value={provDesp.descricao} placeholder="Digite a despesa de documentação"
+                              onChange={(e) => setProvDesp({ ...provDesp, descricao: e.target.value, erro: "" })} /></label>
+                          <label style={{ display: "grid", gap: 3 }}><span style={rot}>Valor</span>
+                            {campoDinheiro(provDesp.valor, (x) => setProvDesp({ ...provDesp, valor: x, erro: "" }), { style: { width: 140 }, "data-vk-provisao-desp-valor": "1" })}</label>
+                          <label style={{ display: "grid", gap: 3 }}><span style={rot}>Data</span>
+                            <input type="date" style={{ ...inp, width: 160 }} value={provDesp.data} onChange={(e) => setProvDesp({ ...provDesp, data: e.target.value, erro: "" })} /></label>
+                          <button data-vk-provisao-lancar="1" style={{ ...(S.btn || {}), padding: "7px 14px", fontSize: 12.5 }} onClick={lancarDespesaDaProvisao}>Lançar</button>
+                          <button style={{ ...btn, padding: "7px 14px" }} onClick={() => setProvDesp(null)}>Cancelar</button>
+                          {provDesp.erro && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{provDesp.erro}</div>}
+                        </div>
+                      )}
+                      {ac && (
+                        <div style={caixa}>
+                          <div style={{ flexBasis: "100%", fontSize: 12.5 }}>
+                            {pv.saldo > 0
+                              ? <>Sobram <b>{dinheiro(pv.saldo)}</b> da provisão: registrar a devolução ao comprador.</>
+                              : <>Faltam <b>{dinheiro(-pv.saldo)}</b>: o comprador complementa — entra em "a receber" desta venda.</>}
+                          </div>
+                          <label style={{ display: "grid", gap: 3 }}><span style={rot}>{pv.saldo > 0 ? "Data da devolução" : "Vencimento"}</span>
+                            <input type="date" style={{ ...inp, width: 160 }} value={provAcerto.data} onChange={(e) => setProvAcerto({ ...provAcerto, data: e.target.value, erro: "" })} /></label>
+                          <button data-vk-provisao-confirmar-acerto="1" style={{ ...(S.btn || {}), padding: "7px 14px", fontSize: 12.5 }} onClick={acertarProvisao}>{pv.saldo > 0 ? "Registrar devolução" : "Lançar complemento"}</button>
+                          <button style={{ ...btn, padding: "7px 14px" }} onClick={() => setProvAcerto(null)}>Cancelar</button>
+                          {provAcerto.erro && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{provAcerto.erro}</div>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
@@ -905,6 +1093,11 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                 <input type="date" style={inp} value={fv.data} onChange={(e) => setFormVenda({ ...fv, data: e.target.value })} /></label>
               <label style={{ display: "grid", gap: 4 }}><span style={rot}>Valor da venda</span>
                 {campoDinheiro(fv.valor, (v) => setFormVenda({ ...fv, valor: v }), { "data-vk-venda-valor": "1" })}</label>
+            </div>
+            <div style={{ display: "grid", gap: 8, gridTemplateColumns: isMobile ? "1fr" : "200px 1fr", alignItems: "end" }}>
+              <label style={{ display: "grid", gap: 4 }}><span style={rot}>Provisão de documentação</span>
+                {campoDinheiro(fv.provisao, (v) => setFormVenda({ ...fv, provisao: v }), { "data-vk-venda-provisao": "1" })}</label>
+              <div style={{ fontSize: 11.5, color: "#6b7280", paddingBottom: 6 }}>Paga pelo comprador junto com os pagamentos. Fica reservada para ITBI, cartório e registro — não é receita da venda.</div>
             </div>
 
             <div style={{ display: "grid", gap: 6 }}>
@@ -979,12 +1172,18 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
               </div>
             </div>
 
-            <div data-vk-venda-conferencia="1" style={{ fontSize: 12.5, padding: "8px 12px", borderRadius: 10,
-              background: Math.abs(somaVenda - crValor(fv.valor)) < 0.01 ? "#ecfdf5" : "#fffbeb",
-              color: Math.abs(somaVenda - crValor(fv.valor)) < 0.01 ? "#047857" : "#92400e" }}>
-              Sinal + parcelas + financiamento = <b>{dinheiro(somaVenda)}</b> · venda {dinheiro(crValor(fv.valor))}
-              {Math.abs(somaVenda - crValor(fv.valor)) < 0.01 ? " ✓" : ` · ${somaVenda < crValor(fv.valor) ? "faltam" : "sobram"} ${dinheiro(Math.abs(crValor(fv.valor) - somaVenda))}`}
-            </div>
+            {(() => {
+              const conf = conferenciaDaVenda(somaVenda, crValor(fv.valor), provForm);
+              const ok = conf.faltam === 0;
+              return (
+                <div data-vk-venda-conferencia="1" style={{ fontSize: 12.5, padding: "8px 12px", borderRadius: 10,
+                  background: ok ? "#ecfdf5" : "#fffbeb", color: ok ? "#047857" : "#92400e" }}>
+                  Sinal + parcelas + financiamento = <b>{dinheiro(somaVenda)}</b> · venda {dinheiro(crValor(fv.valor))}
+                  {provForm > 0 ? ` + provisão ${dinheiro(provForm)}` : ""}
+                  {conf.faltam > 0 ? ` · faltam ${dinheiro(conf.faltam)}` : conf.juros > 0 ? <> · ✓ inclui <b>{dinheiro(conf.juros)}</b> de juros/correção das parcelas</> : " ✓"}
+                </div>
+              );
+            })()}
             {erroVenda && <div style={{ fontSize: 12.5, color: "#b91c1c" }}>{erroVenda}</div>}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
               <button style={S.btnSec} onClick={() => setFormVenda(null)}>Cancelar</button>
