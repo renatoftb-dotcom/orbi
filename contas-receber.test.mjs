@@ -19,7 +19,7 @@ if (a < 0 || b < 0) throw new Error("marcadores da parte pura não encontrados")
 const M = new Function(puroEf + "\n" + cr.slice(a, b) + `
   return { crSomarMeses, crGerarParcelas, novasContasAReceber, itensAReceber, resumoAReceber, candidatosDoRecebimento,
     receberContaAReceber, desfazerRecebimento, ligarParcelaDeProjeto, extratoEscritorio, lancamentosDoEscritorio,
-    planoDaVenda, obraComVenda, obraSemVenda, resumoDasVendas, entradasDeVendaSoltas, contasDaVenda, gruposDeParcelas, conferenciaDaVenda, provisaoDaVenda, obraComProvisao, obraComDespesaDaProvisao, acertoDaProvisao, obraSemMovDaProvisao };`)();
+    planoDaVenda, obraComVenda, obraSemVenda, contasRecebidasCriadasPelaVenda, resumoDasVendas, entradasDeVendaSoltas, contasDaVenda, gruposDeParcelas, conferenciaDaVenda, provisaoDaVenda, obraComProvisao, obraComDespesaDaProvisao, acertoDaProvisao, obraSemMovDaProvisao };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -142,8 +142,12 @@ teste("vendas do empreendimento: unidade, sinal já recebido + parcelas + financ
   const r = M.resumoDasVendas(o2);
   assert.deepStrictEqual([r.unidades, r.vendidas, r.estimado, r.vendido, r.recebido, r.aReceber], [2, 1, 420000, 200000, 12000, 188000]);
   assert.strictEqual(r.linhas[0].contas[0].parteVenda, "sinal");
-  // desfazer: sai o que falta receber; os sinais ficam na obra, soltos de novo
-  const o3 = M.obraSemVenda(o2, p.venda.id);
+  // desfazer: sai tudo o que a venda criou (até parcela recebida); os sinais
+  // que já estavam na obra ficam, soltos de novo
+  const criada = o2.contasPagar.find((c) => c.parteVenda === "parcela");
+  const o2b = { ...o2, contasPagar: o2.contasPagar.map((c) => (c.id === criada.id ? { ...c, pago: true, pagoEm: "2026-10-21", valorPago: c.valor } : c)) };
+  assert.deepStrictEqual(M.contasRecebidasCriadasPelaVenda(o2b, p.venda.id).map((c) => c.id), [criada.id]);
+  const o3 = M.obraSemVenda(o2b, p.venda.id);
   assert.deepStrictEqual(o3.contasPagar.map((c) => c.id), ["s1", "s2", "x"]);
   assert.ok(!o3.contasPagar[0].vendaId && !o3.vendas.length);
 });

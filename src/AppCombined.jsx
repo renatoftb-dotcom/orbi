@@ -12524,8 +12524,11 @@ function provisaoNoEscritorio(lancamentos, obra, cliente, opcoes) {
     const { extratoId: _e, historicoBanco: _h, contaBancariaId: _cb, conferidoPor: _cp, ...semBanco } = modelo;
     const base = v._saiu ? semBanco : comum(v);
     const rotulo = v._saiu ? (base.unidadeVenda || "venda desfeita") : `${base.unidadeVenda || "Unidade"}${v.comprador ? " · " + v.comprador : ""}`;
+    // venda desfeita: a provisão de mês aberto simplesmente sai; a de mês
+    // fechado é zerada por um par contrário (abaixo)
+    if (v._saiu) for (const l of dela) if (l.origem.parte !== "mov" && aberto(l.competencia)) tirar.add(l.id);
     // 1) a troca de bolso: venda → provisão
-    const reservado = cents(dela.filter((l) => l.origem.parte === "reserva").reduce((t, l) => t + (Number(l.valor) || 0), 0));
+    const reservado = cents(dela.filter((l) => l.origem.parte === "reserva" && !tirar.has(l.id)).reduce((t, l) => t + (Number(l.valor) || 0), 0));
     const alvo = cents(Number(v.provisaoDoc) || 0);
     const dif = cents(alvo - reservado);
     // no mês da venda (o do sinal), se estiver aberto; fechado, no mês de hoje
@@ -60754,14 +60757,25 @@ function obraComVenda(obra, plano) {
     .concat(plano.novas || []);
   return { ...o, vendas: vendasDaObra(o).concat([plano.venda]), contasPagar: contas };
 }
-// Desfazer a venda: sai a venda e o que ainda não foi recebido. O que já foi
-// recebido (o sinal que entrou) fica na obra como estava antes, sem a venda.
+// Desfazer a venda: sai tudo o que a venda criou — parcelas, financiamento,
+// complemento, sinal lançado nela —, recebido ou não. O recebido sai com o
+// lançamento dele no escritório, e a linha do banco volta a ficar pendente
+// no Fechamento (registrando a venda de novo, ela se liga outra vez). Os
+// sinais que JÁ estavam na obra antes da venda ficam, soltos, como antes.
+function contaCriadaPelaVenda(c) {
+  if (!c || !c.vendaId) return false;
+  if (c.parteVenda !== "sinal") return true;
+  return (c.registros || []).some((r) => r && r.ato === "criada" && /^venda d/.test(String(r.detalhe || "")));
+}
+function contasRecebidasCriadasPelaVenda(obra, vendaId) {
+  return ((obra || {}).contasPagar || []).filter((c) => c && c.vendaId === vendaId && c.pago && contaCriadaPelaVenda(c));
+}
 function obraSemVenda(obra, vendaId) {
   const o = obra || {};
   const contas = [];
   for (const c of o.contasPagar || []) {
     if (!c || c.vendaId !== vendaId) { contas.push(c); continue; }
-    if (!c.pago) continue;
+    if (contaCriadaPelaVenda(c)) continue;
     const { vendaId: _v, parteVenda: _p, ...resto } = c;
     contas.push(resto);
   }
@@ -61194,8 +61208,14 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
     if (typeof toast !== "undefined" && toast.sucesso) toast.sucesso("Venda registrada");
   }
   async function desfazerVenda(linha) {
+    const recebidas = contasRecebidasCriadasPelaVenda(obra, linha.venda.id);
+    const trava = recebidas.length && travaDoMes ? travaDoMes(recebidas) : "";
+    if (trava) { dialogo.alertar({ titulo: "Não dá para desfazer", tipo: "aviso", mensagem: `${trava} Reabra o mês para desfazer a venda.` }); return; }
+    const somaRec = crCent(recebidas.reduce((t, c) => t + (Number(c.valorPago) || Number(c.valor) || 0), 0));
     const ok = await dialogo.confirmar({ titulo: "Desfazer a venda?", confirmar: "Desfazer", destrutivo: true,
-      mensagem: `${linha.unidade.nome} · ${linha.venda.comprador}. Sai o que ainda falta receber; o que já foi recebido fica na obra, sem a venda.` });
+      mensagem: `${linha.unidade.nome} · ${linha.venda.comprador}. Sai tudo o que a venda criou, inclusive a provisão no escritório.`
+        + (recebidas.length ? ` O que já foi recebido das parcelas (${dinheiro(somaRec)}) sai também, com o lançamento no escritório — a linha do banco volta a ficar pendente no Fechamento.` : "")
+        + " Os sinais que já estavam na obra antes da venda ficam, soltos." });
     if (ok) aoGravarObra(obraSemVenda(obra, linha.venda.id));
   }
   function receber() {

@@ -3921,9 +3921,17 @@ teste("provisão de documentação: sai da venda e entra em Documentação Empre
   // tirou a despesa do quadro: o lançamento sai
   l = M.provisaoNoEscritorio(l, obra2, cliente, { fechamentos: fech, hoje: "2026-11-12" });
   assert.ok(!l.some((x) => x.origem && x.origem.movId === "d1"));
-  // venda desfeita: o par que zera a provisão
+  // venda desfeita: o que está em mês aberto sai; nada de par contrário
+  const antesDeDesfazer = l.length;
   l = M.provisaoNoEscritorio(l, { ...obra, vendas: [] }, cliente, { fechamentos: fech, hoje: "2026-11-15" });
   assert.strictEqual(M.provisaoReservadaNoEscritorio(l, "obE", "v1"), 0);
+  assert.ok(!l.some((x) => x.origem && x.origem.tipo === "provisao"), "saiu sem deixar rastro");
+  assert.ok(l.length < antesDeDesfazer);
+  // com o mês da provisão fechado: entra o par que a zera, no mês de hoje
+  const lF = M.provisaoNoEscritorio([], obra, cliente, { fechamentos: {}, hoje: "2026-10-31" });
+  const lF2 = M.provisaoNoEscritorio(lF, { ...obra, vendas: [] }, cliente, { fechamentos: { "2026-10": { fechadoEm: "2026-11-02" } }, hoje: "2026-11-15" });
+  assert.strictEqual(M.provisaoReservadaNoEscritorio(lF2, "obE", "v1"), 0);
+  assert.strictEqual(lF2.length, 4);
   assert.ok(l.some((x) => x.id === "x1"), "o resto fica");
   // setembro aberto: o par vai para o mês da venda (o do sinal)
   const vSet = { ...venda, id: "v9", data: "2026-09-23" };

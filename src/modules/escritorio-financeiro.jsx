@@ -535,8 +535,11 @@ function provisaoNoEscritorio(lancamentos, obra, cliente, opcoes) {
     const { extratoId: _e, historicoBanco: _h, contaBancariaId: _cb, conferidoPor: _cp, ...semBanco } = modelo;
     const base = v._saiu ? semBanco : comum(v);
     const rotulo = v._saiu ? (base.unidadeVenda || "venda desfeita") : `${base.unidadeVenda || "Unidade"}${v.comprador ? " · " + v.comprador : ""}`;
+    // venda desfeita: a provisão de mês aberto simplesmente sai; a de mês
+    // fechado é zerada por um par contrário (abaixo)
+    if (v._saiu) for (const l of dela) if (l.origem.parte !== "mov" && aberto(l.competencia)) tirar.add(l.id);
     // 1) a troca de bolso: venda → provisão
-    const reservado = cents(dela.filter((l) => l.origem.parte === "reserva").reduce((t, l) => t + (Number(l.valor) || 0), 0));
+    const reservado = cents(dela.filter((l) => l.origem.parte === "reserva" && !tirar.has(l.id)).reduce((t, l) => t + (Number(l.valor) || 0), 0));
     const alvo = cents(Number(v.provisaoDoc) || 0);
     const dif = cents(alvo - reservado);
     // no mês da venda (o do sinal), se estiver aberto; fechado, no mês de hoje
