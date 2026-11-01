@@ -2082,7 +2082,7 @@ const CONTAS_TRIBUTO = ["impostos", "ir_receita", "inss", "iss"];
 function contaEntraNoCustoDeObra(conta) {
   if (!conta) return true;
   if (GRUPOS_FORA_DO_CUSTO_OBRA.indexOf(conta.grupo) >= 0) return false;
-  return CONTAS_TRIBUTO.indexOf(conta.id) < 0;
+  return CONTAS_TRIBUTO.indexOf(conta.pai || conta.id) < 0;
 }
 
 // ── O P&L da obra, conta a conta ────────────────────────────────

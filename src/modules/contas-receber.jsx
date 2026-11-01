@@ -272,14 +272,39 @@ function desfazerRecebimento(lancamentos, contaId, ctx) {
 }
 
 // Parcela de projeto já lançada pelo extrato (sem a ligação de origem):
-// ganha a ligação, e sai do "a receber" sem outro lançamento.
-function ligarParcelaDeProjeto(lancamentos, parcela, lancamentoId) {
+// ganha a ligação, e sai do "a receber" sem outro lançamento. Com projeto
+// que tem engenharia, o recebimento ganha as mesmas partes do ganho — a
+// receita dividida (Arquitetura + Engenharia, as duas na mesma linha do
+// banco), o custo em Parceiros e a reserva. O que o lançamento era antes
+// fica guardado: se o projeto voltar atrás, ele volta a ser o que era.
+// Mês fechado: só a ligação, sem mexer em conta e valor.
+function ligarParcelaDeProjeto(lancamentos, parcela, lancamentoId, opcoes) {
+  const o = opcoes || {};
   const lista = (lancamentos || []).slice();
   const i = lista.findIndex((x) => x && x.id === lancamentoId && x.tipo === "escritorio");
   if (i < 0 || !parcela) return { erro: "Lançamento não encontrado." };
-  if (lista[i].origem) return { erro: "Este lançamento já está ligado a outra coisa." };
-  lista[i] = { ...lista[i], origem: { tipo: "projeto", orcId: parcela.orcId, parcela: parcela.numero, parte: "recebido" } };
-  return { lancamentos: lista };
+  const l = lista[i];
+  if (l.origem) return { erro: "Este lançamento já está ligado a outra coisa." };
+  const antes = { contaId: l.contaId, valor: l.valor, descricao: l.descricao || "" };
+  const origem = { tipo: "projeto", orcId: parcela.orcId, parcela: parcela.numero, parte: "recebido", ligado: true, antes };
+  const r = typeof lancamentosDoRecebimento === "function"
+    ? lancamentosDoRecebimento({ id: l.extratoId || "", data: l.lancadoEm || "", valor: l.valor, historico: l.historicoBanco || "" },
+      l.competencia, { parcelaProjeto: parcela }, o.fechamentos || {})
+    : null;
+  if (!r || r.erro || !r.lancamento) {
+    lista[i] = { ...l, origem };
+    return { lancamentos: lista };
+  }
+  const rl = r.lancamento;
+  lista[i] = { ...l, contaId: rl.contaId, valor: rl.valor, origem };
+  const marca = { extratoId: l.extratoId || "", historicoBanco: l.historicoBanco || "",
+    ...(l.conferido ? { conferido: true, conferidoEm: l.conferidoEm || "", conferidoPor: l.conferidoPor || "" } : {}),
+    ...(l.contaBancariaId ? { contaBancariaId: l.contaBancariaId } : {}) };
+  const agora = o.agora || new Date().toISOString();
+  const extras = (rl.recebimentoExtras || []).map((x, k) => (typeof extraDoRecebimento === "function"
+    ? extraDoRecebimento({ ...x, competencia: l.competencia, lancadoEm: l.lancadoEm }, l.id, k, l.numeroDoc || "", agora, marca)
+    : { ...x, id: l.id + "_" + (k + 1), parDe: l.id }));
+  return { lancamentos: lista.concat(extras) };
 }
 // ── Vendas do empreendimento ────────────────────────────────────
 // As unidades (com o preço estimado) e a venda de cada uma: sinal (um ou
@@ -624,7 +649,7 @@ function ContasAReceber({ data, save, aoAbrirObra }) {
     const lancs = (data || {}).lancamentos || [];
     if (it.origem === "projeto") {
       if (usarLancamentoId) {
-        const r = ligarParcelaDeProjeto(lancs, it.parcela, usarLancamentoId);
+        const r = ligarParcelaDeProjeto(lancs, it.parcela, usarLancamentoId, { fechamentos });
         if (r.erro) { setErro(r.erro); return; }
         gravar(r.lancamentos); fechar(); return;
       }
@@ -942,6 +967,10 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
     setRecebendo(null);
   }
   async function desfazerRecebimentoDaVenda(c) {
+    // o lançamento que foi para o escritório está no mês do recebimento:
+    // mês fechado não perde linha
+    const trava = travaDoMes ? travaDoMes([c]) : "";
+    if (trava) { dialogo.alertar({ titulo: "Não dá para desfazer", tipo: "aviso", mensagem: trava }); return; }
     const ok = await dialogo.confirmar({ titulo: "Desfazer este recebimento?", confirmar: "Desfazer",
       mensagem: `${c.descricao} · ${dinheiro(c.valorPago || c.valor)}. Volta a ficar a receber; o lançamento que foi para o escritório sai.` });
     if (ok) aoGravarObra({ ...obra, contasPagar: contas.map((x) => (x && x.id === c.id ? contaEmAberto(x, quem || "") : x)) });
@@ -979,6 +1008,9 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
     setProvAcerto(null);
   }
   async function tirarMovDaProvisao(vendaId, m) {
+    // a despesa (ou devolução) já está no escritório, no mês dela
+    const trava = travaDoMes && m && m.data ? travaDoMes([{ pago: true, pagoEm: m.data, contaId: "venda_imovel" }]) : "";
+    if (trava) { dialogo.alertar({ titulo: "Não dá para tirar", tipo: "aviso", mensagem: trava }); return; }
     const ok = await dialogo.confirmar({ titulo: "Tirar este lançamento da provisão?", confirmar: "Tirar", destrutivo: true,
       mensagem: `${m.descricao} · ${dinheiro(m.valor)}` });
     if (!ok) return;

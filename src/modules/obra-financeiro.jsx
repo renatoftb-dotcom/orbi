@@ -587,6 +587,13 @@ function etapasDoOrcamentoSemMapa(linhas, insumos) {
 // Não pede item nem quantidade a PARCELA de uma compra parcelada no boleto:
 // o consumo aconteceu uma vez, e dividi-lo pelas parcelas inventaria 11 m³
 // de concreto em cada mês. O item mora na compra; a parcela é só dinheiro.
+// A conta de cima de uma subconta do plano da obra (ou a própria): as regras
+// que olham a conta pelo id (pede item, pede etapa, atravessa para o
+// escritório, é tributo) valem para as subcontas dela.
+function contaRaizDaObra(id) {
+  const c = (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((x) => x && x.id === id);
+  return (c && c.pai) || id;
+}
 const TRANSACAO_CONTAS_COM_ITEM = ["material", "adicionais_material"];
 const TRANSACAO_CONTAS_SEM_ETAPA = ["impostos", "ir_receita", "inss", "iss",
   "tarifas_bancarias", "contabilidade", "taxa_admin_obra"];
@@ -607,9 +614,9 @@ function exigenciasDaTransacao(t) {
     valor: true,
     data: true,
     fornecedor: custo || terreno,
-    etapa: custo && TRANSACAO_CONTAS_SEM_ETAPA.indexOf(c.contaId) < 0 && !contratoSemEtapa,
-    item: TRANSACAO_CONTAS_COM_ITEM.indexOf(c.contaId) >= 0 && !parcelaDeCompra,
-    quantidade: TRANSACAO_CONTAS_COM_ITEM.indexOf(c.contaId) >= 0 && !parcelaDeCompra,
+    etapa: custo && TRANSACAO_CONTAS_SEM_ETAPA.indexOf(contaRaizDaObra(c.contaId)) < 0 && !contratoSemEtapa,
+    item: TRANSACAO_CONTAS_COM_ITEM.indexOf(contaRaizDaObra(c.contaId)) >= 0 && !parcelaDeCompra,
+    quantidade: TRANSACAO_CONTAS_COM_ITEM.indexOf(contaRaizDaObra(c.contaId)) >= 0 && !parcelaDeCompra,
     formaPagamento: !!c.pago && !receita,
   };
 }

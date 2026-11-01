@@ -359,7 +359,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       });
       if (!ok) return;
       const novos = todos.filter(o => o.id !== orc.id);
-      save({ ...data, orcamentosProjeto: novos, ...(volta.removidos.length ? { lancamentos: volta.lancamentos } : {}) }).catch(console.error);
+      save({ ...data, orcamentosProjeto: novos, ...((volta.removidos.length || volta.devolvidos) ? { lancamentos: volta.lancamentos } : {}) }).catch(console.error);
       return;
     }
 
@@ -387,7 +387,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
           ? { ...o, status: "perdido", concluidoEm: o.concluidoEm || agora }
           : o
       );
-      save({ ...data, orcamentosProjeto: novos, ...(volta.removidos.length ? { lancamentos: volta.lancamentos } : {}) }).catch(console.error);
+      save({ ...data, orcamentosProjeto: novos, ...((volta.removidos.length || volta.devolvidos) ? { lancamentos: volta.lancamentos } : {}) }).catch(console.error);
       return;
     }
 
@@ -415,11 +415,12 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
     // ganho com recebimento lançado: os lançamentos saem junto (mês fechado trava)
     let lancs = data.lancamentos || [];
     let saem = 0;
+    let mexeu = false;
     if (typeof lancamentosSemOrcamento === "function") {
       for (const id of ids) {
         const v = lancamentosSemOrcamento({ ...data, lancamentos: lancs }, id);
         if (v.trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: `${id}: ${v.trava}`, tipo: "aviso" }); return; }
-        if (v.removidos.length) { lancs = v.lancamentos; saem += v.removidos.length; }
+        if (v.removidos.length || v.devolvidos) { lancs = v.lancamentos; saem += v.removidos.length; mexeu = true; }
       }
     }
     if (saem) {
@@ -429,7 +430,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       if (!ok) return;
     }
     try {
-      await save({ ...data, orcamentosProjeto: novos, ...(saem ? { lancamentos: lancs } : {}) });
+      await save({ ...data, orcamentosProjeto: novos, ...(mexeu ? { lancamentos: lancs } : {}) });
       setSelecionados(new Set());
     } catch (e) {
       console.error("Erro ao excluir em massa:", e);
@@ -463,7 +464,8 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
 
     // Cria projeto automaticamente (se ainda não existir)
     const projetosAtuais = data.projetos || [];
-    const jaExiste = projetosAtuais.some(p => p.orcId === orc.id);
+    // o projeto que já virou obra (finalizado) não volta para Em Andamento
+    const jaExiste = projetosAtuais.some(p => p.orcId === orc.id) || (data.obras || []).some(o => o && o.orcId === orc.id);
     const novosProjetos = jaExiste ? projetosAtuais : [
       ...projetosAtuais,
       {

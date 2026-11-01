@@ -27,7 +27,7 @@ const M = new Function(src + `
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
            modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte, parcelaDaVendaParaALinha, lancamentosDaContaBancaria, provisaoNoEscritorio, provisaoReservadaNoEscritorio, saldosDoPeDoExtrato, contaMudouNaPonte, contaMudouNoDinheiro, reclassificacaoMexeNoSaldo, aplicarPlanoDeContas, contaNovaNoPlano, contaRenomeadaNoPlano, contaAtivadaNoPlano, contasReordenadasNoPlano, usoDaContaNoPlano, contaExcluidaNoPlano, contaSoTotaliza, composicaoDoExtrato, contasDoLancamento, contaPeloApelido,
-           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosSemOrcamento, avisoDoOrcamentoQueVolta, projetosDosGanhos, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
+           fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosSemOrcamento, avisoDoOrcamentoQueVolta, projetosDosGanhos, lancamentosSemObra, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
            competenciasDoCartao, composicaoDoExtrato, efCabecalhoDeCartao, efParcelaDoTexto, movimentosDoCartao, comCompetenciaDaFatura, comIdsDoCartao, faturasGuardadasDoCartao, faturasComArquivo, financeiroComFaturas, faturasComIgnorado, mesDoPagamentoDaFatura, cartaoDoArquivo, conferenciaDaFatura, contasDaObraParaACompraDoCartao, contasNoCartao, checagemSemTransferencias, somarChecagens, conferenciaUnificada, faturaParaALinhaDoBanco, lancamentoAntigoDaFatura, faturaNoLugarDoAntigo, parcelasAPagarDoCartao, aPagarDoEscritorio, efSomarMeses, planoParceladoNaConta, itensAPagarDoLancamento, parcelaAPagarParaALinha, lancamentoDaParcelaAPagar, aPagarComParcelaPaga, linhasDaBaseDoAPagar, aPagarSemParcela, resumoDoAPagar, contasParaReclassificar, travaDaReclassificacao, reclassificarLancamento, contaDeCostume, contaPeloBancoDoArquivo, obrasComCartaoEmParcelas, compraDoGrupoDoCartao, contaEmParcelasDoCartao, ehParcelaDoCartao, planoAPartirDa, efNomeDoBancoPeloCodigo, arquivoPareceDeOutraConta, parDaTransferencia, lancamentosDaTransferenciaComPar, contaDoArquivoPeloConteudo, CONTA_BANCARIA_PRINCIPAL, contasBancariasDoEscritorio, contaBancariaDoLancamento, lancamentosDaContaBancaria, extratosDaContaBancaria, financeiroComExtratos, comIdsDaContaBancaria, saldoBancoDaContaNoMes, comSaldoBancoDaConta, saldoPeloExtratoDaConta, lancamentosDaTransferencia, pareceEntreContas, contasDoLancamento,
@@ -4095,6 +4095,27 @@ teste("recebimento de projeto com Receita Projetos dividida: entra na primeira s
   M.aplicarPlanoDeContas({});
   // sem subconta, continua na Receita Projetos
   assert.strictEqual(M.lancamentosDoRecebimento({ id: "b", data: "2026-10-05", valor: 1000, historico: "" }, "2026-10", { parcelaProjeto: p }, {}).lancamento.contaId, "rec_projetos");
+});
+
+teste("inspeção: arredondamento da engenharia, reserva já usada, obra apagada", () => {
+  // a última parcela fecha a engenharia: 1.666,67 + 1.666,67 + 1.666,66 = 5.000
+  const orc = { id: "O1", clienteId: "c1", status: "ganho", fechamento: { valorTotalFechado: 10000, valorEngFechado: 5000, inclEng: true,
+    condicao: { parcelas: [{ numero: 1, valor: 3333.33, data: "2026-10-01" }, { numero: 2, valor: 3333.33, data: "2026-11-01" }, { numero: 3, valor: 3333.34, data: "2026-12-01" }] } } };
+  const ps = M.parcelasDosProjetos([orc], [{ id: "c1", nome: "C" }], []);
+  assert.strictEqual(Math.round(ps.reduce((t, p) => t + p.eng, 0) * 100) / 100, 5000);
+  // engenheiro pago pela reserva: perdido trava (a reserva ficaria negativa)
+  const rec = M.lancamentosDoRecebimento({ id: "", data: "2026-10-01", valor: 3333.33 }, "2026-10", { parcelaProjeto: ps[0] }, {}).lancamento;
+  const ls = [{ ...rec, id: "r" }, ...rec.recebimentoExtras.map((e, i) => ({ ...e, id: "r_" + i, parDe: "r" }))];
+  const pg = M.comoPagamentoDaReserva({ tipo: "escritorio", contaId: "parceiros", valor: 1000, clienteId: "c1", competencia: "2026-10", contaBanco: "sim" }, ls);
+  assert.ok(/reserva ficaria negativa/.test(M.lancamentosSemOrcamento({ lancamentos: ls.concat([{ ...pg, id: "pg" }]) }, "O1").trava));
+  assert.strictEqual(M.lancamentosSemOrcamento({ lancamentos: ls }, "O1").trava, "");
+  // obra apagada: a ponte e a provisão saem; mês fechado trava
+  const L = [{ id: "ponte:o1:conta:a", tipo: "escritorio", contaId: "pagamentos_compras", valor: 10, competencia: "2026-10", origem: { obraId: "o1", tipo: "conta" } },
+    { id: "prov:o1:v1:1:reserva", tipo: "escritorio", contaId: "res_documentacao", valor: 5, competencia: "2026-09" },
+    { id: "x", tipo: "escritorio", contaId: "rec_financeira", valor: 1, competencia: "2026-10" }];
+  const so = M.lancamentosSemObra({ lancamentos: L }, "o1");
+  assert.deepStrictEqual([so.removidos.length, so.lancamentos.map((l) => l.id), so.trava], [2, ["x"], ""]);
+  assert.ok(M.lancamentosSemObra({ lancamentos: L, escritorio: { financeiro: { fechamentos: { "2026-09": { fechadoEm: "2026-10-01" } } } } }, "o1").trava);
 });
 
 teste("plano de contas: subcontas (Pai › Sub) e ordem arrastada", () => {

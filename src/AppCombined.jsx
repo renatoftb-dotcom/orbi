@@ -11852,6 +11852,13 @@ function etapasDoOrcamentoSemMapa(linhas, insumos) {
 // Não pede item nem quantidade a PARCELA de uma compra parcelada no boleto:
 // o consumo aconteceu uma vez, e dividi-lo pelas parcelas inventaria 11 m³
 // de concreto em cada mês. O item mora na compra; a parcela é só dinheiro.
+// A conta de cima de uma subconta do plano da obra (ou a própria): as regras
+// que olham a conta pelo id (pede item, pede etapa, atravessa para o
+// escritório, é tributo) valem para as subcontas dela.
+function contaRaizDaObra(id) {
+  const c = (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((x) => x && x.id === id);
+  return (c && c.pai) || id;
+}
 const TRANSACAO_CONTAS_COM_ITEM = ["material", "adicionais_material"];
 const TRANSACAO_CONTAS_SEM_ETAPA = ["impostos", "ir_receita", "inss", "iss",
   "tarifas_bancarias", "contabilidade", "taxa_admin_obra"];
@@ -11872,9 +11879,9 @@ function exigenciasDaTransacao(t) {
     valor: true,
     data: true,
     fornecedor: custo || terreno,
-    etapa: custo && TRANSACAO_CONTAS_SEM_ETAPA.indexOf(c.contaId) < 0 && !contratoSemEtapa,
-    item: TRANSACAO_CONTAS_COM_ITEM.indexOf(c.contaId) >= 0 && !parcelaDeCompra,
-    quantidade: TRANSACAO_CONTAS_COM_ITEM.indexOf(c.contaId) >= 0 && !parcelaDeCompra,
+    etapa: custo && TRANSACAO_CONTAS_SEM_ETAPA.indexOf(contaRaizDaObra(c.contaId)) < 0 && !contratoSemEtapa,
+    item: TRANSACAO_CONTAS_COM_ITEM.indexOf(contaRaizDaObra(c.contaId)) >= 0 && !parcelaDeCompra,
+    quantidade: TRANSACAO_CONTAS_COM_ITEM.indexOf(contaRaizDaObra(c.contaId)) >= 0 && !parcelaDeCompra,
     formaPagamento: !!c.pago && !receita,
   };
 }
@@ -12444,7 +12451,17 @@ function contasDaReceitaDeProjeto() {
   const nome = (x) => efSemAcento(x.nomeProprio || x.nome);
   const eng = filhas.find((x) => /engenhar/.test(nome(x)));
   const arq = filhas.find((x) => /arquitet/.test(nome(x))) || filhas.find((x) => x !== eng);
-  return { arq: arq ? arq.id : contaLancavelDoEscritorio("rec_projetos"), eng: eng && arq && eng !== arq ? eng.id : "" };
+  // só a subconta Engenharia: a arquitetura fica na própria Receita Projetos
+  if (!arq) return { arq: eng ? "rec_projetos" : contaLancavelDoEscritorio("rec_projetos"), eng: eng ? eng.id : "" };
+  return { arq: arq.id, eng: eng && eng !== arq ? eng.id : "" };
+}
+// A conta é `raiz` ou uma subconta dela? Regras que olham uma conta pelo id
+// (reserva da engenharia, Parceiros, a ponte da obra) valem para a família.
+function efDaFamilia(id, raiz) {
+  if (!id) return false;
+  if (id === raiz) return true;
+  const c = contaEscritorio(id);
+  return !!(c && c.pai === raiz);
 }
 // A conta e as subcontas dela contam como a mesma família (mãe › filhas).
 function familiaDaContaEscritorio(id) {
@@ -12835,8 +12852,10 @@ function modoDaPonte(obra, cliente) {
 }
 
 // Conta da obra + modo → conta do escritório. "" quer dizer que não atravessa.
-function destinoNoEscritorio(contaId, modo, opcoes) {
-  const grupo = ponteGrupoDaConta(contaId, opcoes);
+function destinoNoEscritorio(contaId0, modo, opcoes) {
+  const grupo = ponteGrupoDaConta(contaId0, opcoes);
+  // subconta do plano da obra segue a regra da conta de cima
+  const contaId = typeof contaRaizDaObra === "function" ? contaRaizDaObra(contaId0) : contaId0;
   if (modo === "empreendimento") {
     // gerenciar a própria obra não é receita: seria tirar de um bolso e pôr no outro
     if (contaId === "taxa_admin_obra") return "";
@@ -12995,6 +13014,25 @@ function reclassificacaoMexeNoSaldo(antes, depois, modo, opcoes) {
 
 // O id é derivado da origem, não sorteado: rodar a ponte duas vezes na mesma
 // obra não cria o lançamento duas vezes.
+// A obra apagada leva junto o que ela mandou para o escritório: a ponte das
+// contas pagas, a provisão das vendas e o que mais aponta para ela (com os
+// pares de cada um). Mês fechado trava.
+function lancamentosSemObra(data, obraId) {
+  const d = data || {};
+  const atuais = d.lancamentos || [];
+  if (!obraId) return { lancamentos: atuais, removidos: [], trava: "" };
+  const daObra = (l) => !!l && l.tipo === "escritorio" && (((l.origem || {}).obraId === obraId)
+    || String(l.id || "").indexOf(`ponte:${obraId}:`) === 0 || String(l.id || "").indexOf(`prov:${obraId}:`) === 0);
+  const ids = new Set(atuais.filter(daObra).map((l) => l.id));
+  const sai = (l) => !!l && (ids.has(l.id) || (l.parDe && ids.has(l.parDe)));
+  const removidos = atuais.filter(sai);
+  if (!removidos.length) return { lancamentos: atuais, removidos: [], trava: "" };
+  const fech = fechamentosDoEscritorio(d);
+  const fechado = [...new Set(removidos.map((l) => String(l.competencia || "")).filter(Boolean))].sort()
+    .find((m) => bloqueioPorMesFechado(m, fech));
+  return { lancamentos: atuais.filter((l) => !sai(l)), removidos,
+    trava: fechado ? `Esta obra tem lançamentos no escritório em ${efMesPorExtenso(fechado)}, que está fechado. Abra o mês antes de remover a obra.` : "" };
+}
 function idDaPonte(obraId, tipo, refId) {
   return `ponte:${obraId || "?"}:${tipo}:${refId || "?"}`;
 }
@@ -13784,8 +13822,9 @@ function semLancamentosDasContas(lancamentos, obraId, contasRemovidas, contasDep
   return { lancamentos: ficam, removidos: (lancamentos || []).length - ficam.length, reenviar };
 }
 
-function motivoDeIgnorar(contaId, modo, opcoes) {
-  const grupo = ponteGrupoDaConta(contaId, opcoes);
+function motivoDeIgnorar(contaId0, modo, opcoes) {
+  const grupo = ponteGrupoDaConta(contaId0, opcoes);
+  const contaId = typeof contaRaizDaObra === "function" ? contaRaizDaObra(contaId0) : contaId0;
   if (!contaId || !grupo) return "conta da obra sem correspondência no escritório";
   if (modo === "clientePaga") return "o cliente paga direto: este dinheiro não passa pelo escritório";
   if (modo === "empreendimento") {
@@ -16236,7 +16275,7 @@ function lancamentoRapidoDoExtrato(movimento, mes, sugestao, fechamentos, obras,
   // Regra das duas pontas: copiar um custo antigo só do escritório para um
   // cliente que hoje tem obra no VICKE deixaria a obra sem a conta.
   const cs = sugestao.campos;
-  if ((cs.unidadeId === "gestao_obras" || cs.unidadeId === "empreendimento") && EF_CONTAS_COM_PONTA_NA_OBRA.indexOf(cs.contaId) >= 0
+  if ((cs.unidadeId === "gestao_obras" || cs.unidadeId === "empreendimento") && EF_CONTAS_COM_PONTA_NA_OBRA.some((r) => efDaFamilia(cs.contaId, r))
     && obrasDoDonoDoLancamento(cs, obras || []).length) {
     return { erro: "Este cliente tem obra no VICKE: escolha a conta em “Custo de uma obra” para entrar no escritório e na obra, ligado." };
   }
@@ -16746,13 +16785,13 @@ function ehLigacaoDaGestao(origem) {
   // duas pontas: excluir um lado apaga o outro, não reabre parcela
   if (o.avulsa) return false;
   return !!o.obraId && (o.tipo === "gestao" || o.tipo === "estorno"
-    || (o.tipo === "conta" && o.contaObra === EF_CONTA_GESTAO_NA_OBRA));
+    || (o.tipo === "conta" && !!o.contaObra && (typeof contaRaizDaObra === "function" ? contaRaizDaObra(o.contaObra) : o.contaObra) === EF_CONTA_GESTAO_NA_OBRA));
 }
 
 // As parcelas de gestão da obra, por contrato, na ordem do vencimento.
 function contasDaGestao(obra, contratoId) {
   return ((obra && obra.contasPagar) || [])
-    .filter((c) => c && c.contaId === EF_CONTA_GESTAO_NA_OBRA
+    .filter((c) => c && (typeof contaRaizDaObra === "function" ? contaRaizDaObra(c.contaId) : c.contaId) === EF_CONTA_GESTAO_NA_OBRA
       && (contratoId === undefined || (c.contratoId || "") === (contratoId || "")))
     .slice()
     .sort((a, b) => String(a.vencimento || "").localeCompare(String(b.vencimento || ""))
@@ -16784,7 +16823,7 @@ function parcelaDoLancamento(obra, l) {
   const contas = (obra.contasPagar || []).filter(Boolean);
   if (o.tipo === "gestao") return contas.find((c) => c.id === o.refId) || null;
   if (o.tipo === "estorno") return contas.find((c) => c.id === o.parcelaId) || null;
-  if (o.tipo === "conta" && o.contaObra === EF_CONTA_GESTAO_NA_OBRA) {
+  if (o.tipo === "conta" && !!o.contaObra && (typeof contaRaizDaObra === "function" ? contaRaizDaObra(o.contaObra) : o.contaObra) === EF_CONTA_GESTAO_NA_OBRA) {
     // a referência guarda o "#n" do estorno que havia quando atravessou; se o
     // estorno foi desfeito depois, a parcela é a mesma pelo id
     return contas.find((c) => refDaParcela(c) === o.refId)
@@ -17445,10 +17484,18 @@ function parcelasDosProjetos(orcamentos, clientes, lancamentos) {
     const fracEng = total > 0 ? Math.min(1, Math.max(0, eng / total)) : 0;
     const cli = (clientes || []).find((c) => c && c.id === o.clienteId) || null;
     const tipo = (f.condicao && f.condicao.tipo) || "";
+    // a última parcela fecha a conta da engenharia (3 × 1.666,67 daria um
+    // centavo a mais que os 5.000 fechados) — quando as parcelas somam o total
+    const somaPs = efCentavos(ps.reduce((t, p) => t + Number(p.valor), 0));
+    const fechaNaUltima = eng > 0 && Math.abs(somaPs - total) < 0.01;
+    let engAntes = 0;
     ps.forEach((p, i) => {
       const numero = Number(p.numero) || i + 1;
       const valor = efCentavos(p.valor);
-      const engParte = efCentavos(valor * fracEng);
+      const engParte = fechaNaUltima && i === ps.length - 1
+        ? efCentavos(Math.min(valor, Math.max(0, eng - engAntes)))
+        : efCentavos(valor * fracEng);
+      engAntes = efCentavos(engAntes + engParte);
       const l = recebidos.get(o.id + "|" + numero) || null;
       out.push({ orcId: o.id, numero, totalParcelas: ps.length, nome: p.nome || `Parcela ${numero}`,
         rotulo: rotuloDaParcelaDeProjeto(tipo, numero, ps.length, p.nome), valor, data: String(p.data || "").slice(0, 10),
@@ -17493,7 +17540,7 @@ function parcelaDeProjetoParaALinha(movimento, lancamentos, ctx) {
 function saldoDaReservaEngenharia(lancamentos, clienteId) {
   if (!clienteId) return 0;
   let t = 0;
-  for (const l of lancamentos || []) if (l && l.contaId === "res_engenharia" && l.clienteId === clienteId) t += Number(l.valor) || 0;
+  for (const l of lancamentos || []) if (l && efDaFamilia(l.contaId, "res_engenharia") && l.clienteId === clienteId) t += Number(l.valor) || 0;
   return efCentavos(t);
 }
 // Saída em Parceiros de um cliente que tem engenharia guardada:
@@ -17507,7 +17554,7 @@ function saldoDaReservaEngenharia(lancamentos, clienteId) {
 // mesma régua: o que cabe sai da reserva, o que passa é custo em Parceiros.
 // Sem isso a reserva do cliente ficava negativa e o custo não aparecia.
 function ehSaidaDiretaNaReserva(l) {
-  return !!l && l.contaId === "res_engenharia" && efPassouPeloBanco(l)
+  return !!l && efDaFamilia(l.contaId, "res_engenharia") && efPassouPeloBanco(l)
     && (efValorDoCampo(l.valor) < 0 || Number(l.sinalDoBanco) < 0);
 }
 function comoPagamentoDaReserva(l, lancamentos) {
@@ -17517,7 +17564,7 @@ function comoPagamentoDaReserva(l, lancamentos) {
     // reserva vazia (ou sem cliente): o pagamento inteiro é custo
     return comoPagamentoDaReserva(comoParceiro, lancamentos) || comoParceiro;
   }
-  if (!l || l.contaId !== "parceiros" || l.estorno) return null;
+  if (!l || !efDaFamilia(l.contaId, "parceiros") || l.estorno) return null;
   const v = efCentavos(Math.abs(efValorDoCampo(l.valor)));
   const saldo = saldoDaReservaEngenharia(lancamentos, l.clienteId);
   if (!(v > 0) || !(saldo > 0)) return null;
@@ -17639,17 +17686,31 @@ function lancamentosSemOrcamento(data, orcId) {
   const d = data || {};
   const atuais = d.lancamentos || [];
   const doOrc = (l) => !!l && (l.origem || {}).tipo === "projeto" && (l.origem || {}).orcId === orcId;
-  const ids = new Set(atuais.filter(doOrc).map((l) => l.id));
-  const sai = (l) => !!l && (ids.has(l.id) || (l.parDe && ids.has(l.parDe)));
+  const doOrcL = atuais.filter(doOrc);
+  // o lançamento do extrato que foi LIGADO à parcela (A receber, "usar
+  // este") não nasceu do ganho: volta a ser o que era, sem a ligação
+  const ligados = new Map(doOrcL.filter((l) => (l.origem || {}).ligado).map((l) => [l.id, l]));
+  const ids = new Set(doOrcL.map((l) => l.id));
+  const sai = (l) => !!l && ((ids.has(l.id) && !ligados.has(l.id)) || (l.parDe && ids.has(l.parDe)));
   const removidos = atuais.filter(sai);
-  if (!removidos.length) return { lancamentos: atuais, removidos: [], recebido: 0, ligadoAoBanco: false, trava: "" };
+  const vazio = { lancamentos: atuais, removidos: [], devolvidos: 0, recebido: 0, ligadoAoBanco: false, trava: "" };
+  if (!removidos.length && !ligados.size) return vazio;
+  const volta = (l) => { const { origem: o, ...resto } = l; return { ...resto, ...((o && o.antes) || {}) }; };
+  const lista = atuais.filter((l) => !sai(l)).map((l) => (l && ligados.has(l.id) ? volta(l) : l));
   const fech = fechamentosDoEscritorio(d);
-  const meses = [...new Set(removidos.map((l) => String(l.competencia || "")).filter(Boolean))].sort();
+  const meses = [...new Set(removidos.concat([...ligados.values()]).map((l) => String(l.competencia || "")).filter(Boolean))].sort();
   const fechado = meses.find((m) => bloqueioPorMesFechado(m, fech));
-  const recebido = efCentavos(removidos.filter((l) => ["recebido", "recebido-eng"].indexOf((l.origem || {}).parte) >= 0).reduce((t, l) => t + (Number(l.valor) || 0), 0));
-  return { lancamentos: atuais.filter((l) => !sai(l)), removidos, recebido,
-    ligadoAoBanco: removidos.some((l) => String(l.extratoId || "").trim()),
-    trava: fechado ? `O recebimento deste projeto está em ${efMesPorExtenso(fechado)}, que está fechado. Abra o mês antes.` : "" };
+  // o engenheiro já foi pago pela reserva: sem o recebimento ela ficaria negativa
+  const clientes = [...new Set(removidos.map((l) => l.clienteId).filter(Boolean))];
+  const negativo = clientes.map((c) => saldoDaReservaEngenharia(lista, c)).find((v) => v < -0.005);
+  // o que nasceu do ganho (o par do lançamento ligado volta junto com ele)
+  const doGanho = removidos.filter((l) => !(l.parDe && ligados.has(l.parDe)));
+  const recebido = efCentavos(doGanho.filter((l) => ["recebido", "recebido-eng"].indexOf((l.origem || {}).parte) >= 0).reduce((t, l) => t + (Number(l.valor) || 0), 0));
+  const trava = fechado ? `O recebimento deste projeto está em ${efMesPorExtenso(fechado)}, que está fechado. Abra o mês antes.`
+    : negativo != null ? `O engenheiro já foi pago pela reserva deste cliente: sem o recebimento, a reserva ficaria negativa em R$ ${Math.abs(negativo).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Reclassifique ou desfaça esse pagamento antes.`
+    : "";
+  return { lancamentos: lista, removidos, doGanho: doGanho.length, devolvidos: ligados.size, recebido,
+    ligadoAoBanco: doGanho.some((l) => String(l.extratoId || "").trim()), trava };
 }
 // O aviso da janela de confirmação (ou "" quando não há o que avisar): o
 // projeto que sai de Em Andamento, o recebimento que sai do financeiro e a
@@ -17658,9 +17719,12 @@ function avisoDoOrcamentoQueVolta(r, data, orcId) {
   const d = data || {};
   const partes = [];
   if (orcId && (d.projetos || []).some((p) => p && p.orcId === orcId)) partes.push("O projeto sai de Em Andamento (Etapas).");
-  if (r && r.removidos && r.removidos.length) {
+  if (r && r.devolvidos) partes.push(r.devolvidos === 1 ? "O recebimento lançado pelo extrato volta a ficar sem projeto (continua no financeiro)."
+    : `${r.devolvidos} recebimentos lançados pelo extrato voltam a ficar sem projeto (continuam no financeiro).`);
+  const nGanho = r ? (r.doGanho != null ? r.doGanho : (r.removidos || []).length) : 0;
+  if (nGanho) {
     partes.push(`O recebimento lançado no ganho sai do financeiro do escritório: R$ ${Number(r.recebido || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} de receita`
-      + ` e o que veio junto (engenharia, custo em Parceiros e reserva) — ${r.removidos.length} lançamentos.`
+      + ` e o que veio junto (engenharia, custo em Parceiros e reserva) — ${nGanho} lançamentos.`
       + (r.ligadoAoBanco ? " A linha do banco volta a ficar pendente no fechamento." : ""));
   }
   const obra = orcId ? (d.obras || []).find((o) => o && o.orcId === orcId) : null;
@@ -19537,7 +19601,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   // recebe custo só no escritório — vai pela conta da obra, que lança nos
   // dois lados ligados (e o estorno, quando vier, sai dos dois).
   const errosDuasPontas = (lancNovo && !naObra && (f.unidadeId === "gestao_obras" || f.unidadeId === "empreendimento")
-    && EF_CONTAS_COM_PONTA_NA_OBRA.indexOf(f.contaId) >= 0 && obrasDoCliente.length > 0)
+    && EF_CONTAS_COM_PONTA_NA_OBRA.some((r) => efDaFamilia(f.contaId, r)) && obrasDoCliente.length > 0)
     ? [`${obrasDoCliente.length === 1 ? "A obra " + (obrasDoCliente[0].nome || "") + " está" : "As obras deste cliente estão"} no VICKE: escolha a conta em “Custo de uma obra” — assim entra no escritório e na obra, ligado.`]
     : [];
   // Trava contra o custo em dobro: a obra já tem uma conta paga, do mesmo
@@ -21221,7 +21285,11 @@ function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcar
   const r = resultado.resumo;
   const casados = (resultado.casados || []).filter((c) => c && c.lancamento);
   const certosAbertos = casados.filter((c) => casamentoCerto(c) && !c.lancamento.conferido).length;
-  const duvidas = casados.filter((c) => !casamentoCerto(c) && !c.lancamento.conferido);
+  // a parte da engenharia de um recebimento dividido segue a linha principal
+  // (a mesma linha do banco): uma linha de dúvida por recebimento
+  const parteQueSegue = (c) => ((c.lancamento.origem || {}).parte === "recebido-eng") && !!c.lancamento.parDe
+    && casados.some((x) => x !== c && x.extrato === c.extrato && x.lancamento && x.lancamento.id === c.lancamento.parDe);
+  const duvidas = casados.filter((c) => !casamentoCerto(c) && !c.lancamento.conferido && !parteQueSegue(c));
   const dia = (d) => String(d || "").slice(0, 10).split("-").reverse().join("/");
   const cartao = (rot, n, apoio, cor) => (
     <div key={rot} style={{ ...S.card, display: "grid", gap: 2 }}>
@@ -24623,12 +24691,19 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     if (!m || !l) return;
     // a linha do banco é a prova de que passou pela conta: o "não" da
     // planilha antiga (parcela a vencer) deixa de valer
-    const novo = { ...l, conferido: true, conferidoEm: new Date().toISOString(), conferidoPor: "extrato",
-      extratoId: m.id || l.extratoId || "", historicoBanco: m.historico || l.historicoBanco || "",
-      ...(l.contaBanco === "nao" ? { contaBanco: "sim" } : {}) };
+    const marcar = (x) => ({ ...x, conferido: true, conferidoEm: new Date().toISOString(), conferidoPor: "extrato",
+      extratoId: m.id || x.extratoId || "", historicoBanco: m.historico || x.historicoBanco || "",
+      ...(x.contaBanco === "nao" ? { contaBanco: "sim" } : {}) });
+    // recebimento de projeto dividido (Arquitetura + Engenharia): as partes
+    // que passam pela conta são um PIX só — confirmar uma liga as duas
+    const ehParteEng = (x) => !!x && ((x.origem || {}).tipo === "projeto") && (x.origem || {}).parte === "recebido-eng";
+    const raiz = ehParteEng(l) && l.parDe ? l.parDe : l.id;
+    const juntos = lancs.filter((x) => x && x.id !== l.id && !String(x.extratoId || "").trim()
+      && ((x.id === raiz && (x.origem || {}).parte === "recebido") || (x.parDe === raiz && ehParteEng(x))));
+    const novos = [marcar(l)].concat(juntos.map(marcar));
     setOcupado("Confirmando…");
     try {
-      await api.lancamentos.batch([novo]);
+      await api.lancamentos.batch(novos);
       setOcupado("");
       if (onReload) await onReload();
     } catch (e) {
@@ -37611,7 +37686,7 @@ const CONTAS_TRIBUTO = ["impostos", "ir_receita", "inss", "iss"];
 function contaEntraNoCustoDeObra(conta) {
   if (!conta) return true;
   if (GRUPOS_FORA_DO_CUSTO_OBRA.indexOf(conta.grupo) >= 0) return false;
-  return CONTAS_TRIBUTO.indexOf(conta.id) < 0;
+  return CONTAS_TRIBUTO.indexOf(conta.pai || conta.id) < 0;
 }
 
 // ── O P&L da obra, conta a conta ────────────────────────────────
@@ -54766,6 +54841,25 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     if (qtdOrcs > 0) {
       mensagem = `${nome} será removido com TODOS os ${qtdOrcs} orçamento${qtdOrcs !== 1 ? "s" : ""} vinculado${qtdOrcs !== 1 ? "s" : ""}.\n\n⚠️  Esta ação não pode ser desfeita.`;
     }
+    // Cliente com obra: a obra tem financeiro próprio (e manda lançamentos
+    // para o escritório) — remove-se a obra antes, pelo módulo Obras.
+    const obrasDoCliente = (data.obras || []).filter(o => o && o.clienteId === id);
+    if (obrasDoCliente.length) {
+      dialogo.alertar({ titulo: "Cliente com obra", tipo: "aviso",
+        mensagem: `${nome} tem ${obrasDoCliente.length === 1 ? "uma obra" : `${obrasDoCliente.length} obras`} no VICKE. Remova ${obrasDoCliente.length === 1 ? "a obra" : "as obras"} antes de remover o cliente.` });
+      return;
+    }
+    // Orçamento ganho com recebimento lançado: os lançamentos saem junto
+    let lancsSem = data.lancamentos || [];
+    let saemLancs = 0;
+    if (typeof lancamentosSemOrcamento === "function") {
+      for (const o of orcsDoCliente) {
+        const v = lancamentosSemOrcamento({ ...data, lancamentos: lancsSem }, o.id);
+        if (v.trava) { dialogo.alertar({ titulo: "Não dá para remover ainda", mensagem: `${o.id}: ${v.trava}`, tipo: "aviso" }); return; }
+        if (v.removidos.length || v.devolvidos) { lancsSem = v.lancamentos; saemLancs += v.removidos.length; }
+      }
+    }
+    if (saemLancs) mensagem += `\n\n${saemLancs} lançamentos de recebimento de projeto saem do financeiro do escritório.`;
 
     const ok = await dialogo.confirmar({
       titulo: "Remover cliente?",
@@ -54784,6 +54878,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       ...data,
       clientes: data.clientes.filter(c => c.id !== id),
       orcamentosProjeto: novosOrcs,
+      ...(lancsSem !== (data.lancamentos || []) ? { lancamentos: lancsSem } : {}),
     });
     setView(telaInicial);
   }
@@ -55440,7 +55535,7 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
     const ok = await dialogo.confirmar({ titulo: `Marcar ${orc.id} como Perdido?`, ...(avisoVolta ? { mensagem: avisoVolta } : {}), confirmar: "Marcar como perdido" });
     if (!ok) return;
     gravar(todos.map(o => o.id === orc.id ? { ...o, status: "perdido", concluidoEm: o.concluidoEm || agora } : o),
-      volta.removidos.length ? { lancamentos: volta.lancamentos } : undefined);
+      (volta.removidos.length || volta.devolvidos) ? { lancamentos: volta.lancamentos } : undefined);
   }
 
   async function excluirProjeto(orc) {
@@ -55457,7 +55552,7 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
       confirmar: "Excluir", destrutivo: true,
     });
     if (!ok) return;
-    gravar((data.orcamentosProjeto || []).filter(o => o.id !== orc.id), volta.removidos.length ? { lancamentos: volta.lancamentos } : undefined);
+    gravar((data.orcamentosProjeto || []).filter(o => o.id !== orc.id), (volta.removidos.length || volta.devolvidos) ? { lancamentos: volta.lancamentos } : undefined);
   }
 
   // Ganhar abre o mesmo modal de fechamento da lista de Orçamentos — escopo,
@@ -55472,7 +55567,8 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
     const iVer = typeof ganhoVersao === "number" && props[iVerSeguro(props, ganhoVersao)] ? iVerSeguro(props, ganhoVersao) : props.length - 1;
     const fechada = props[iVer] || null;
     const projetos = data.projetos || [];
-    const novosProjetos = projetos.some(p => p.orcId === orc.id) ? projetos : [...projetos, {
+    // o projeto que já virou obra (finalizado) não volta para Em Andamento
+    const novosProjetos = projetos.some(p => p.orcId === orc.id) || (data.obras || []).some(o => o && o.orcId === orc.id) ? projetos : [...projetos, {
       id: "PRJ-" + Date.now(), orcId: orc.id, clienteId: orc.clienteId,
       tipo: orc.tipo, subtipo: orc.subtipo, padrao: orc.padrao, tamanho: orc.tamanho,
       referencia: orc.referencia || "", areaTotal: orc.resultado?.areaTotal || 0,
@@ -56640,8 +56736,8 @@ function gruposDoFisicoFinanceiro() {
   return (typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : []).filter((g) => g.id !== "receitas" && g.id !== "terreno");
 }
 function contaForaDoFisicoFinanceiro(contaId) {
-  if (FF_CONTAS_FORA.indexOf(contaId) >= 0) return true;
   const c = (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((x) => x && x.id === contaId);
+  if (FF_CONTAS_FORA.indexOf((c && c.pai) || contaId) >= 0) return true;
   return !!c && (c.grupo === "receitas" || c.grupo === "terreno");
 }
 function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL, clientePaga }) {
@@ -57262,11 +57358,18 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       }
       const ligados = todosLigados.filter(l => !fechado(l));
       const datasMudaram = editadas.some(c => String((antesPorId.get(c.id) || {}).pagoEm || "") !== String(c.pagoEm || ""));
+      // A nota (pedido) agrupada é achada pela chave antiga (conta contábil e
+      // data de ANTES): o item que mudou de conta ou de data também era dela
+      // e volta pela ponte — senão o valor dele sumia do escritório.
+      const obraAntes = { ...obraDepois, contasPagar: (obraDepois.contasPagar || []).map(c => (c && antesPorId.get(c.id)) || c) };
+      const depoisPorId = new Map((contasDepois || []).filter(Boolean).map(c => [c.id, c]));
       for (const l of ligados) {
         const { extratoId, historicoBanco, conferido, conferidoEm, conferidoPor, contaBancariaId, competencia, numeroDoc, criadoEm } = l;
         marcasDaEdicao[l.id] = { extratoId, historicoBanco, conferido, conferidoEm, conferidoPor, contaBancariaId, numeroDoc, criadoEm,
           ...(datasMudaram ? {} : { competencia }) };
-        for (const c of contasLigadasAoLancamento(obraDepois, l)) if (c && c.pago && !reenviarEditadas.some(x => x.id === c.id)) reenviarEditadas.push(c);
+        const daNota = contasLigadasAoLancamento(obraDepois, l)
+          .concat(contasLigadasAoLancamento(obraAntes, l).map(c => depoisPorId.get(c.id)).filter(Boolean));
+        for (const c of daNota) if (c && c.pago && !reenviarEditadas.some(x => x.id === c.id)) reenviarEditadas.push(c);
       }
       if (ligados.length) {
         const fora = new Set(ligados.map(l => l.id));
@@ -58173,9 +58276,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   }
 
   async function deletarObra(obraId) {
-    const ok = await dialogo.confirmar({ titulo: "Remover obra?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true });
+    // o que a obra mandou para o escritório sai junto (mês fechado trava)
+    const volta = typeof lancamentosSemObra === "function" ? lancamentosSemObra(data, obraId) : { removidos: [] };
+    if (volta.trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: volta.trava, tipo: "aviso" }); return; }
+    const n = volta.removidos.length;
+    const ok = await dialogo.confirmar({ titulo: "Remover obra?",
+      mensagem: "Esta ação não pode ser desfeita." + (n ? ` ${n === 1 ? "1 lançamento" : `${n} lançamentos`} que a obra mandou para o financeiro do escritório saem junto.` : ""),
+      confirmar: "Remover", destrutivo: true });
     if (!ok) return;
-    gravarObras(obras.filter(o => o.id !== obraId));
+    gravarObras(obras.filter(o => o.id !== obraId), n ? { lancamentos: volta.lancamentos } : undefined);
   }
 
   if (view === "formContrato" && formContrato && obraSelecionada) {
@@ -61325,7 +61434,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         )}
 
         {perm.podeGerenciarObra && (
-          <button style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12, width: "100%" }} onClick={() => { dialogo.confirmar({ titulo: "Remover obra?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true }).then(ok => { if (ok) deletarObra(obraSelecionada.id); }); }}>Remover esta obra</button>
+          <button style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12, width: "100%" }} onClick={() => deletarObra(obraSelecionada.id)}>Remover esta obra</button>
         )}
       </div>
     );
@@ -61727,14 +61836,39 @@ function desfazerRecebimento(lancamentos, contaId, ctx) {
 }
 
 // Parcela de projeto já lançada pelo extrato (sem a ligação de origem):
-// ganha a ligação, e sai do "a receber" sem outro lançamento.
-function ligarParcelaDeProjeto(lancamentos, parcela, lancamentoId) {
+// ganha a ligação, e sai do "a receber" sem outro lançamento. Com projeto
+// que tem engenharia, o recebimento ganha as mesmas partes do ganho — a
+// receita dividida (Arquitetura + Engenharia, as duas na mesma linha do
+// banco), o custo em Parceiros e a reserva. O que o lançamento era antes
+// fica guardado: se o projeto voltar atrás, ele volta a ser o que era.
+// Mês fechado: só a ligação, sem mexer em conta e valor.
+function ligarParcelaDeProjeto(lancamentos, parcela, lancamentoId, opcoes) {
+  const o = opcoes || {};
   const lista = (lancamentos || []).slice();
   const i = lista.findIndex((x) => x && x.id === lancamentoId && x.tipo === "escritorio");
   if (i < 0 || !parcela) return { erro: "Lançamento não encontrado." };
-  if (lista[i].origem) return { erro: "Este lançamento já está ligado a outra coisa." };
-  lista[i] = { ...lista[i], origem: { tipo: "projeto", orcId: parcela.orcId, parcela: parcela.numero, parte: "recebido" } };
-  return { lancamentos: lista };
+  const l = lista[i];
+  if (l.origem) return { erro: "Este lançamento já está ligado a outra coisa." };
+  const antes = { contaId: l.contaId, valor: l.valor, descricao: l.descricao || "" };
+  const origem = { tipo: "projeto", orcId: parcela.orcId, parcela: parcela.numero, parte: "recebido", ligado: true, antes };
+  const r = typeof lancamentosDoRecebimento === "function"
+    ? lancamentosDoRecebimento({ id: l.extratoId || "", data: l.lancadoEm || "", valor: l.valor, historico: l.historicoBanco || "" },
+      l.competencia, { parcelaProjeto: parcela }, o.fechamentos || {})
+    : null;
+  if (!r || r.erro || !r.lancamento) {
+    lista[i] = { ...l, origem };
+    return { lancamentos: lista };
+  }
+  const rl = r.lancamento;
+  lista[i] = { ...l, contaId: rl.contaId, valor: rl.valor, origem };
+  const marca = { extratoId: l.extratoId || "", historicoBanco: l.historicoBanco || "",
+    ...(l.conferido ? { conferido: true, conferidoEm: l.conferidoEm || "", conferidoPor: l.conferidoPor || "" } : {}),
+    ...(l.contaBancariaId ? { contaBancariaId: l.contaBancariaId } : {}) };
+  const agora = o.agora || new Date().toISOString();
+  const extras = (rl.recebimentoExtras || []).map((x, k) => (typeof extraDoRecebimento === "function"
+    ? extraDoRecebimento({ ...x, competencia: l.competencia, lancadoEm: l.lancadoEm }, l.id, k, l.numeroDoc || "", agora, marca)
+    : { ...x, id: l.id + "_" + (k + 1), parDe: l.id }));
+  return { lancamentos: lista.concat(extras) };
 }
 // ── Vendas do empreendimento ────────────────────────────────────
 // As unidades (com o preço estimado) e a venda de cada uma: sinal (um ou
@@ -62079,7 +62213,7 @@ function ContasAReceber({ data, save, aoAbrirObra }) {
     const lancs = (data || {}).lancamentos || [];
     if (it.origem === "projeto") {
       if (usarLancamentoId) {
-        const r = ligarParcelaDeProjeto(lancs, it.parcela, usarLancamentoId);
+        const r = ligarParcelaDeProjeto(lancs, it.parcela, usarLancamentoId, { fechamentos });
         if (r.erro) { setErro(r.erro); return; }
         gravar(r.lancamentos); fechar(); return;
       }
@@ -62397,6 +62531,10 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
     setRecebendo(null);
   }
   async function desfazerRecebimentoDaVenda(c) {
+    // o lançamento que foi para o escritório está no mês do recebimento:
+    // mês fechado não perde linha
+    const trava = travaDoMes ? travaDoMes([c]) : "";
+    if (trava) { dialogo.alertar({ titulo: "Não dá para desfazer", tipo: "aviso", mensagem: trava }); return; }
     const ok = await dialogo.confirmar({ titulo: "Desfazer este recebimento?", confirmar: "Desfazer",
       mensagem: `${c.descricao} · ${dinheiro(c.valorPago || c.valor)}. Volta a ficar a receber; o lançamento que foi para o escritório sai.` });
     if (ok) aoGravarObra({ ...obra, contasPagar: contas.map((x) => (x && x.id === c.id ? contaEmAberto(x, quem || "") : x)) });
@@ -62434,6 +62572,9 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
     setProvAcerto(null);
   }
   async function tirarMovDaProvisao(vendaId, m) {
+    // a despesa (ou devolução) já está no escritório, no mês dela
+    const trava = travaDoMes && m && m.data ? travaDoMes([{ pago: true, pagoEm: m.data, contaId: "venda_imovel" }]) : "";
+    if (trava) { dialogo.alertar({ titulo: "Não dá para tirar", tipo: "aviso", mensagem: trava }); return; }
     const ok = await dialogo.confirmar({ titulo: "Tirar este lançamento da provisão?", confirmar: "Tirar", destrutivo: true,
       mensagem: `${m.descricao} · ${dinheiro(m.valor)}` });
     if (!ok) return;
@@ -68823,7 +68964,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       });
       if (!ok) return;
       const novos = todos.filter(o => o.id !== orc.id);
-      save({ ...data, orcamentosProjeto: novos, ...(volta.removidos.length ? { lancamentos: volta.lancamentos } : {}) }).catch(console.error);
+      save({ ...data, orcamentosProjeto: novos, ...((volta.removidos.length || volta.devolvidos) ? { lancamentos: volta.lancamentos } : {}) }).catch(console.error);
       return;
     }
 
@@ -68851,7 +68992,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
           ? { ...o, status: "perdido", concluidoEm: o.concluidoEm || agora }
           : o
       );
-      save({ ...data, orcamentosProjeto: novos, ...(volta.removidos.length ? { lancamentos: volta.lancamentos } : {}) }).catch(console.error);
+      save({ ...data, orcamentosProjeto: novos, ...((volta.removidos.length || volta.devolvidos) ? { lancamentos: volta.lancamentos } : {}) }).catch(console.error);
       return;
     }
 
@@ -68879,11 +69020,12 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
     // ganho com recebimento lançado: os lançamentos saem junto (mês fechado trava)
     let lancs = data.lancamentos || [];
     let saem = 0;
+    let mexeu = false;
     if (typeof lancamentosSemOrcamento === "function") {
       for (const id of ids) {
         const v = lancamentosSemOrcamento({ ...data, lancamentos: lancs }, id);
         if (v.trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: `${id}: ${v.trava}`, tipo: "aviso" }); return; }
-        if (v.removidos.length) { lancs = v.lancamentos; saem += v.removidos.length; }
+        if (v.removidos.length || v.devolvidos) { lancs = v.lancamentos; saem += v.removidos.length; mexeu = true; }
       }
     }
     if (saem) {
@@ -68893,7 +69035,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       if (!ok) return;
     }
     try {
-      await save({ ...data, orcamentosProjeto: novos, ...(saem ? { lancamentos: lancs } : {}) });
+      await save({ ...data, orcamentosProjeto: novos, ...(mexeu ? { lancamentos: lancs } : {}) });
       setSelecionados(new Set());
     } catch (e) {
       console.error("Erro ao excluir em massa:", e);
@@ -68927,7 +69069,8 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
 
     // Cria projeto automaticamente (se ainda não existir)
     const projetosAtuais = data.projetos || [];
-    const jaExiste = projetosAtuais.some(p => p.orcId === orc.id);
+    // o projeto que já virou obra (finalizado) não volta para Em Andamento
+    const jaExiste = projetosAtuais.some(p => p.orcId === orc.id) || (data.obras || []).some(o => o && o.orcId === orc.id);
     const novosProjetos = jaExiste ? projetosAtuais : [
       ...projetosAtuais,
       {

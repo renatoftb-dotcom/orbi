@@ -606,6 +606,25 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     if (qtdOrcs > 0) {
       mensagem = `${nome} será removido com TODOS os ${qtdOrcs} orçamento${qtdOrcs !== 1 ? "s" : ""} vinculado${qtdOrcs !== 1 ? "s" : ""}.\n\n⚠️  Esta ação não pode ser desfeita.`;
     }
+    // Cliente com obra: a obra tem financeiro próprio (e manda lançamentos
+    // para o escritório) — remove-se a obra antes, pelo módulo Obras.
+    const obrasDoCliente = (data.obras || []).filter(o => o && o.clienteId === id);
+    if (obrasDoCliente.length) {
+      dialogo.alertar({ titulo: "Cliente com obra", tipo: "aviso",
+        mensagem: `${nome} tem ${obrasDoCliente.length === 1 ? "uma obra" : `${obrasDoCliente.length} obras`} no VICKE. Remova ${obrasDoCliente.length === 1 ? "a obra" : "as obras"} antes de remover o cliente.` });
+      return;
+    }
+    // Orçamento ganho com recebimento lançado: os lançamentos saem junto
+    let lancsSem = data.lancamentos || [];
+    let saemLancs = 0;
+    if (typeof lancamentosSemOrcamento === "function") {
+      for (const o of orcsDoCliente) {
+        const v = lancamentosSemOrcamento({ ...data, lancamentos: lancsSem }, o.id);
+        if (v.trava) { dialogo.alertar({ titulo: "Não dá para remover ainda", mensagem: `${o.id}: ${v.trava}`, tipo: "aviso" }); return; }
+        if (v.removidos.length || v.devolvidos) { lancsSem = v.lancamentos; saemLancs += v.removidos.length; }
+      }
+    }
+    if (saemLancs) mensagem += `\n\n${saemLancs} lançamentos de recebimento de projeto saem do financeiro do escritório.`;
 
     const ok = await dialogo.confirmar({
       titulo: "Remover cliente?",
@@ -624,6 +643,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       ...data,
       clientes: data.clientes.filter(c => c.id !== id),
       orcamentosProjeto: novosOrcs,
+      ...(lancsSem !== (data.lancamentos || []) ? { lancamentos: lancsSem } : {}),
     });
     setView(telaInicial);
   }
@@ -1280,7 +1300,7 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
     const ok = await dialogo.confirmar({ titulo: `Marcar ${orc.id} como Perdido?`, ...(avisoVolta ? { mensagem: avisoVolta } : {}), confirmar: "Marcar como perdido" });
     if (!ok) return;
     gravar(todos.map(o => o.id === orc.id ? { ...o, status: "perdido", concluidoEm: o.concluidoEm || agora } : o),
-      volta.removidos.length ? { lancamentos: volta.lancamentos } : undefined);
+      (volta.removidos.length || volta.devolvidos) ? { lancamentos: volta.lancamentos } : undefined);
   }
 
   async function excluirProjeto(orc) {
@@ -1297,7 +1317,7 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
       confirmar: "Excluir", destrutivo: true,
     });
     if (!ok) return;
-    gravar((data.orcamentosProjeto || []).filter(o => o.id !== orc.id), volta.removidos.length ? { lancamentos: volta.lancamentos } : undefined);
+    gravar((data.orcamentosProjeto || []).filter(o => o.id !== orc.id), (volta.removidos.length || volta.devolvidos) ? { lancamentos: volta.lancamentos } : undefined);
   }
 
   // Ganhar abre o mesmo modal de fechamento da lista de Orçamentos — escopo,
@@ -1312,7 +1332,8 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
     const iVer = typeof ganhoVersao === "number" && props[iVerSeguro(props, ganhoVersao)] ? iVerSeguro(props, ganhoVersao) : props.length - 1;
     const fechada = props[iVer] || null;
     const projetos = data.projetos || [];
-    const novosProjetos = projetos.some(p => p.orcId === orc.id) ? projetos : [...projetos, {
+    // o projeto que já virou obra (finalizado) não volta para Em Andamento
+    const novosProjetos = projetos.some(p => p.orcId === orc.id) || (data.obras || []).some(o => o && o.orcId === orc.id) ? projetos : [...projetos, {
       id: "PRJ-" + Date.now(), orcId: orc.id, clienteId: orc.clienteId,
       tipo: orc.tipo, subtipo: orc.subtipo, padrao: orc.padrao, tamanho: orc.tamanho,
       referencia: orc.referencia || "", areaTotal: orc.resultado?.areaTotal || 0,
@@ -2480,8 +2501,8 @@ function gruposDoFisicoFinanceiro() {
   return (typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : []).filter((g) => g.id !== "receitas" && g.id !== "terreno");
 }
 function contaForaDoFisicoFinanceiro(contaId) {
-  if (FF_CONTAS_FORA.indexOf(contaId) >= 0) return true;
   const c = (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((x) => x && x.id === contaId);
+  if (FF_CONTAS_FORA.indexOf((c && c.pai) || contaId) >= 0) return true;
   return !!c && (c.grupo === "receitas" || c.grupo === "terreno");
 }
 function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL, clientePaga }) {
@@ -3102,11 +3123,18 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       }
       const ligados = todosLigados.filter(l => !fechado(l));
       const datasMudaram = editadas.some(c => String((antesPorId.get(c.id) || {}).pagoEm || "") !== String(c.pagoEm || ""));
+      // A nota (pedido) agrupada é achada pela chave antiga (conta contábil e
+      // data de ANTES): o item que mudou de conta ou de data também era dela
+      // e volta pela ponte — senão o valor dele sumia do escritório.
+      const obraAntes = { ...obraDepois, contasPagar: (obraDepois.contasPagar || []).map(c => (c && antesPorId.get(c.id)) || c) };
+      const depoisPorId = new Map((contasDepois || []).filter(Boolean).map(c => [c.id, c]));
       for (const l of ligados) {
         const { extratoId, historicoBanco, conferido, conferidoEm, conferidoPor, contaBancariaId, competencia, numeroDoc, criadoEm } = l;
         marcasDaEdicao[l.id] = { extratoId, historicoBanco, conferido, conferidoEm, conferidoPor, contaBancariaId, numeroDoc, criadoEm,
           ...(datasMudaram ? {} : { competencia }) };
-        for (const c of contasLigadasAoLancamento(obraDepois, l)) if (c && c.pago && !reenviarEditadas.some(x => x.id === c.id)) reenviarEditadas.push(c);
+        const daNota = contasLigadasAoLancamento(obraDepois, l)
+          .concat(contasLigadasAoLancamento(obraAntes, l).map(c => depoisPorId.get(c.id)).filter(Boolean));
+        for (const c of daNota) if (c && c.pago && !reenviarEditadas.some(x => x.id === c.id)) reenviarEditadas.push(c);
       }
       if (ligados.length) {
         const fora = new Set(ligados.map(l => l.id));
@@ -4013,9 +4041,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   }
 
   async function deletarObra(obraId) {
-    const ok = await dialogo.confirmar({ titulo: "Remover obra?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true });
+    // o que a obra mandou para o escritório sai junto (mês fechado trava)
+    const volta = typeof lancamentosSemObra === "function" ? lancamentosSemObra(data, obraId) : { removidos: [] };
+    if (volta.trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: volta.trava, tipo: "aviso" }); return; }
+    const n = volta.removidos.length;
+    const ok = await dialogo.confirmar({ titulo: "Remover obra?",
+      mensagem: "Esta ação não pode ser desfeita." + (n ? ` ${n === 1 ? "1 lançamento" : `${n} lançamentos`} que a obra mandou para o financeiro do escritório saem junto.` : ""),
+      confirmar: "Remover", destrutivo: true });
     if (!ok) return;
-    gravarObras(obras.filter(o => o.id !== obraId));
+    gravarObras(obras.filter(o => o.id !== obraId), n ? { lancamentos: volta.lancamentos } : undefined);
   }
 
   if (view === "formContrato" && formContrato && obraSelecionada) {
@@ -7165,7 +7199,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         )}
 
         {perm.podeGerenciarObra && (
-          <button style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12, width: "100%" }} onClick={() => { dialogo.confirmar({ titulo: "Remover obra?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true }).then(ok => { if (ok) deletarObra(obraSelecionada.id); }); }}>Remover esta obra</button>
+          <button style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12, width: "100%" }} onClick={() => deletarObra(obraSelecionada.id)}>Remover esta obra</button>
         )}
       </div>
     );
