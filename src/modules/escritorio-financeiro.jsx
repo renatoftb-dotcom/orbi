@@ -5549,12 +5549,29 @@ function lancamentosSemOrcamento(data, orcId) {
     ligadoAoBanco: removidos.some((l) => String(l.extratoId || "").trim()),
     trava: fechado ? `O recebimento deste projeto está em ${efMesPorExtenso(fechado)}, que está fechado. Abra o mês antes.` : "" };
 }
-// O aviso da janela de confirmação (ou "" quando não há o que tirar).
-function avisoDoOrcamentoQueVolta(r) {
-  if (!r || !r.removidos || !r.removidos.length) return "";
-  return `O recebimento lançado no ganho sai do financeiro do escritório: R$ ${Number(r.recebido || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} de receita`
-    + ` e o que veio junto (engenharia, custo em Parceiros e reserva) — ${r.removidos.length} lançamentos.`
-    + (r.ligadoAoBanco ? " A linha do banco volta a ficar pendente no fechamento." : "");
+// O aviso da janela de confirmação (ou "" quando não há o que avisar): o
+// projeto que sai de Em Andamento, o recebimento que sai do financeiro e a
+// obra que já nasceu dele (essa fica).
+function avisoDoOrcamentoQueVolta(r, data, orcId) {
+  const d = data || {};
+  const partes = [];
+  if (orcId && (d.projetos || []).some((p) => p && p.orcId === orcId)) partes.push("O projeto sai de Em Andamento (Etapas).");
+  if (r && r.removidos && r.removidos.length) {
+    partes.push(`O recebimento lançado no ganho sai do financeiro do escritório: R$ ${Number(r.recebido || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} de receita`
+      + ` e o que veio junto (engenharia, custo em Parceiros e reserva) — ${r.removidos.length} lançamentos.`
+      + (r.ligadoAoBanco ? " A linha do banco volta a ficar pendente no fechamento." : ""));
+  }
+  const obra = orcId ? (d.obras || []).find((o) => o && o.orcId === orcId) : null;
+  if (obra) partes.push(`A obra que nasceu deste projeto${obra.referencia ? ` (${obra.referencia})` : ""} continua em Obras.`);
+  return partes.join(" ");
+}
+// Projetos de Em Andamento só existem para orçamento ganho: o que perdeu,
+// voltou a rascunho ou foi excluído sai da lista (o projeto sem orçamento fica).
+function projetosDosGanhos(projetos, orcamentos) {
+  if (!Array.isArray(projetos) || !Array.isArray(orcamentos)) return projetos;
+  const ganhos = new Set(orcamentos.filter((o) => o && o.status === "ganho").map((o) => o.id));
+  const fica = projetos.filter((p) => !p || !p.orcId || ganhos.has(p.orcId));
+  return fica.length === projetos.length ? projetos : fica;
 }
 // O mesmo, a partir do data inteiro — é o que as telas de "Marcar como Ganho"
 // chamam. Devolve a lista de lançamentos já com os novos (ou o erro).
@@ -6860,7 +6877,7 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancam
                           onClick={(e) => { e.stopPropagation(); setVerReservas(!verReservas); }}
                           style={{ border: "none", background: "none", padding: "0 6px 0 0", cursor: "pointer", color: "#0474f4", fontSize: 12, fontFamily: "inherit" }}
                           title={verReservas ? "Esconder o que compõe" : "Ver o que compõe"}>{verReservas ? "▾" : "▸"}</button>
-                        − Provisões e reservas <span style={{ color: "#6b7280" }}>(de terceiros)</span></td>
+                        − Provisões e reservas</td>
                       {doAno.map((m) => <td key={m.mes} style={td}>{menos(de(m).reservas)}</td>)}
                       <td style={td}>{menos(de(ult).reservas)}</td>
                     </tr>

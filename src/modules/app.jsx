@@ -1383,6 +1383,12 @@ export default function ModuloClientesFornecedores() {
       const obrasParc = obrasComCartaoEmParcelas(newData.obras, newData.lancamentos || [], cartoesEsc);
       if (obrasParc !== newData.obras) newData = { ...newData, obras: obrasParc };
     }
+    // Orçamento que deixou de ser ganho (perdido, rascunho, excluído): o
+    // projeto dele sai de Em Andamento na hora, venha de onde vier a mudança.
+    if (typeof projetosDosGanhos === "function" && Array.isArray(newData.projetos)) {
+      const prj = projetosDosGanhos(newData.projetos, newData.orcamentosProjeto);
+      if (prj !== newData.projetos) newData = { ...newData, projetos: prj };
+    }
     setData(newData);
     dataRef.current = newData; // mantém ref em sync imediato pra callbacks subsequentes
     return enfileirarGravacao();

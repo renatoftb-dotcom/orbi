@@ -1276,7 +1276,7 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
     // era ganho com recebimento lançado: o lançamento sai junto
     const volta = typeof lancamentosSemOrcamento === "function" ? lancamentosSemOrcamento(data, orc.id) : { removidos: [] };
     if (volta.trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: volta.trava, tipo: "aviso" }); return; }
-    const avisoVolta = typeof avisoDoOrcamentoQueVolta === "function" ? avisoDoOrcamentoQueVolta(volta) : "";
+    const avisoVolta = typeof avisoDoOrcamentoQueVolta === "function" ? avisoDoOrcamentoQueVolta(volta, data, orc.id) : "";
     const ok = await dialogo.confirmar({ titulo: `Marcar ${orc.id} como Perdido?`, ...(avisoVolta ? { mensagem: avisoVolta } : {}), confirmar: "Marcar como perdido" });
     if (!ok) return;
     gravar(todos.map(o => o.id === orc.id ? { ...o, status: "perdido", concluidoEm: o.concluidoEm || agora } : o),
@@ -1290,7 +1290,7 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
     }
     const volta = typeof lancamentosSemOrcamento === "function" ? lancamentosSemOrcamento(data, orc.id) : { removidos: [] };
     if (volta.trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: volta.trava, tipo: "aviso" }); return; }
-    const avisoVolta = typeof avisoDoOrcamentoQueVolta === "function" ? avisoDoOrcamentoQueVolta(volta) : "";
+    const avisoVolta = typeof avisoDoOrcamentoQueVolta === "function" ? avisoDoOrcamentoQueVolta(volta, data, orc.id) : "";
     const ok = await dialogo.confirmar({
       titulo: `Excluir orçamento ${orc.id}?`,
       mensagem: "Esta ação não pode ser desfeita." + (avisoVolta ? " " + avisoVolta : ""),

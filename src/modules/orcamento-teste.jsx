@@ -350,7 +350,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       // ganho com recebimento lançado: o lançamento sai junto
       const volta = typeof lancamentosSemOrcamento === "function" ? lancamentosSemOrcamento(data, orc.id) : { removidos: [] };
       if (volta.trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: volta.trava, tipo: "aviso" }); return; }
-      const avisoVolta = typeof avisoDoOrcamentoQueVolta === "function" ? avisoDoOrcamentoQueVolta(volta) : "";
+      const avisoVolta = typeof avisoDoOrcamentoQueVolta === "function" ? avisoDoOrcamentoQueVolta(volta, data, orc.id) : "";
       const ok = await dialogo.confirmar({
         titulo: `Excluir orçamento ${orc.id}?`,
         mensagem: "Esta ação não pode ser desfeita." + (avisoVolta ? " " + avisoVolta : ""),
@@ -375,7 +375,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       // era ganho com recebimento lançado: o lançamento sai junto
       const volta = typeof lancamentosSemOrcamento === "function" ? lancamentosSemOrcamento(data, orc.id) : { removidos: [] };
       if (volta.trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: volta.trava, tipo: "aviso" }); return; }
-      const avisoVolta = typeof avisoDoOrcamentoQueVolta === "function" ? avisoDoOrcamentoQueVolta(volta) : "";
+      const avisoVolta = typeof avisoDoOrcamentoQueVolta === "function" ? avisoDoOrcamentoQueVolta(volta, data, orc.id) : "";
       const okP = await dialogo.confirmar({
         titulo: `Marcar orçamento ${orc.id} como Perdido?`,
         ...(avisoVolta ? { mensagem: avisoVolta } : {}),
@@ -412,8 +412,24 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
     const ids = selecionados; // Set
     const novos = todos.filter(o => !ids.has(o.id));
     setConfirmExcluirMassa(false);
+    // ganho com recebimento lançado: os lançamentos saem junto (mês fechado trava)
+    let lancs = data.lancamentos || [];
+    let saem = 0;
+    if (typeof lancamentosSemOrcamento === "function") {
+      for (const id of ids) {
+        const v = lancamentosSemOrcamento({ ...data, lancamentos: lancs }, id);
+        if (v.trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: `${id}: ${v.trava}`, tipo: "aviso" }); return; }
+        if (v.removidos.length) { lancs = v.lancamentos; saem += v.removidos.length; }
+      }
+    }
+    if (saem) {
+      const ok = await dialogo.confirmar({ titulo: "Sai também do financeiro",
+        mensagem: `Entre os orçamentos excluídos há recebimento lançado no ganho: ${saem} lançamentos saem do financeiro do escritório.`,
+        confirmar: "Excluir", destrutivo: true });
+      if (!ok) return;
+    }
     try {
-      await save({ ...data, orcamentosProjeto: novos });
+      await save({ ...data, orcamentosProjeto: novos, ...(saem ? { lancamentos: lancs } : {}) });
       setSelecionados(new Set());
     } catch (e) {
       console.error("Erro ao excluir em massa:", e);
