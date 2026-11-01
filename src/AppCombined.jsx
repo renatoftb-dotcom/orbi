@@ -18672,7 +18672,7 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancam
                   const v = (m) => it.ids.reduce((t, id) => t + (m.contas[id] || 0), 0);
                   const alvo = it.ids.length > 1 ? { contas: it.ids } : { conta: it.ids[0] };
                   const chave = it.semSub ? it.c.id + ":so" : it.c.id;
-                  const estilo = { ...tdItem, paddingBottom: ult ? 8 : 3, ...(it.nivel === 2 ? { fontSize: 11 } : {}), ...(it.mae ? { color: "#374151", fontWeight: 600 } : {}) };
+                  const estilo = { ...tdItem, paddingBottom: ult ? 8 : 3, ...(it.nivel === 2 ? { fontSize: 10.5 } : {}) };
                   return (
                     <tr key={chave} data-vk-item-conta={chave}>
                       <td style={{ ...tdNome, ...estilo, textAlign: "left", whiteSpace: "normal", paddingLeft: it.nivel === 2 ? 46 : 30 }}>
