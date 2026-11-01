@@ -4031,6 +4031,26 @@ teste("recebimento de projeto com Receita Projetos dividida: entra na primeira s
   assert.strictEqual(l.contaId, arq);
   assert.deepStrictEqual(M.validarLancamentoEscritorio({ ...l, clienteId: "c1" }, {}), []);
   assert.ok(eng && eng !== arq);
+  // parcela com engenharia: banco inteiro em Arquitetura; a parte da engenharia passa para Engenharia (fora do banco)
+  const pe = { ...p, valor: 5000, eng: 1250, rotulo: "parcela 1/4" };
+  const rb = M.lancamentosDoRecebimento({ id: "b2", data: "2026-10-05", valor: 5000, historico: "" }, "2026-10", { parcelaProjeto: pe }, {}).lancamento;
+  const todos = [{ ...rb, id: "x" }, ...rb.recebimentoExtras.map((e, i) => ({ ...e, id: "x_" + i }))];
+  const por = (c) => Math.round(todos.filter((x) => x.contaId === c).reduce((t, x) => t + x.valor, 0) * 100) / 100;
+  assert.deepStrictEqual([por(arq), por(eng), por("parceiros"), por("res_engenharia")], [3750, 1250, 1250, 1250]);
+  assert.deepStrictEqual(todos.filter((x) => x.contaBanco === "sim").map((x) => [x.contaId, x.valor]), [[arq, 5000]]);
+  // o saldo do banco é o da linha inteira; o pé desconta a reserva
+  const ext = M.extratoEscritorio(todos, {}).find((x) => x.mes === "2026-10");
+  assert.strictEqual(Math.round(ext.saldoExtrato * 100) / 100, 5000);
+  // casa com o PIX de 5.000 pelo valor (um lançamento só no banco)
+  const c = M.conciliarExtrato([{ id: "pix", data: "2026-10-05", valor: 5000, historico: "PIX" }], todos);
+  assert.strictEqual(c.casados.length, 1); assert.strictEqual(c.casados[0].lancamento.id, "x");
+  // pagamento antecipado (uma parcela só, com o total): tudo no mesmo mês
+  const pa = { ...p, valor: 20000, eng: 5000, rotulo: "pagamento antecipado" };
+  const ra = M.lancamentosDoRecebimento({ id: "", data: "2026-10-20", valor: 20000, historico: "" }, "2026-10", { parcelaProjeto: pa }, {}).lancamento;
+  const ta = [ra, ...ra.recebimentoExtras];
+  assert.ok(ta.every((x) => x.competencia === "2026-10"));
+  const soma = (c) => ta.filter((x) => x.contaId === c).reduce((t, x) => t + x.valor, 0);
+  assert.deepStrictEqual([soma(arq), soma(eng), soma("parceiros"), soma("res_engenharia")], [15000, 5000, 5000, 5000]);
   M.aplicarPlanoDeContas({});
   // sem subconta, continua na Receita Projetos
   assert.strictEqual(M.lancamentosDoRecebimento({ id: "b", data: "2026-10-05", valor: 1000, historico: "" }, "2026-10", { parcelaProjeto: p }, {}).lancamento.contaId, "rec_projetos");

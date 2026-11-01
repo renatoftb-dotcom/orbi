@@ -12348,6 +12348,16 @@ function contaLancavelDoEscritorio(id) {
   const f = PLANO_CONTAS_ESCRITORIO.find((x) => x && x.pai === c.id && !x.inativa);
   return f ? f.id : id;
 }
+// Receita Projetos dividida em subcontas: em qual entra a arquitetura e em
+// qual a engenharia (pelo nome da subconta). Sem subconta de engenharia,
+// `eng` vem vazio e o recebimento fica todo na conta da arquitetura.
+function contasDaReceitaDeProjeto() {
+  const filhas = PLANO_CONTAS_ESCRITORIO.filter((x) => x && x.pai === "rec_projetos" && !x.inativa);
+  const nome = (x) => efSemAcento(x.nomeProprio || x.nome);
+  const eng = filhas.find((x) => /engenhar/.test(nome(x)));
+  const arq = filhas.find((x) => /arquitet/.test(nome(x))) || filhas.find((x) => x !== eng);
+  return { arq: arq ? arq.id : contaLancavelDoEscritorio("rec_projetos"), eng: eng && arq && eng !== arq ? eng.id : "" };
+}
 // A conta e as subcontas dela contam como a mesma família (mãe › filhas).
 function familiaDaContaEscritorio(id) {
   const c = contaEscritorio(id);
@@ -17355,7 +17365,7 @@ function parcelaDeProjetoParaALinha(movimento, lancamentos, ctx) {
   if (b && b.t === a.t && b.d === a.d) return null;
   const p = a.p;
   return { parcelaProjeto: p, daObra: false,
-    campos: { unidadeId: "projetos", contaId: contaLancavelDoEscritorio("rec_projetos"), clienteId: p.clienteId, cliente: p.cliente, projeto: p.referencia,
+    campos: { unidadeId: "projetos", contaId: contasDaReceitaDeProjeto().arq, clienteId: p.clienteId, cliente: p.cliente, projeto: p.referencia,
       descricao: `Recebimento de projeto — ${p.rotulo}` },
     motivos: [`parcela ${p.numero}/${p.totalParcelas} do projeto ${p.cliente}${p.referencia ? " · " + p.referencia : ""}`] };
 }
@@ -17425,11 +17435,21 @@ function lancamentosDoRecebimento(movimento, mes, sug, fechamentos) {
   const comum = { tipo: "escritorio", unidadeId: "projetos", clienteId: p.clienteId, cliente: p.cliente, projeto: p.referencia,
     competencia, lancadoEm: String(m.data || "").slice(0, 10), fornecedor: "" };
   const orig = (parte) => ({ tipo: "projeto", orcId: p.orcId, parcela: p.numero, parte });
-  const principal = { ...comum, contaId: contaLancavelDoEscritorio("rec_projetos"), valor, contaBanco: "sim",
+  const contas = contasDaReceitaDeProjeto();
+  const principal = { ...comum, contaId: contas.arq, valor, contaBanco: "sim",
     descricao: `Recebimento de projeto — ${p.rotulo}`, origem: orig("recebido"),
     extratoId: m.id || "", historicoBanco: m.historico || "" };
   const eng = efCentavos(Math.min(p.eng, valor));
+  // A linha do banco entra inteira (casa com o PIX pelo valor). Com a
+  // subconta Engenharia, a parte dela passa de Arquitetura para Engenharia
+  // num par fora do banco — o saldo não muda, a receita fica separada.
   const extras = eng > 0 ? [
+    ...(contas.eng ? [
+      { ...comum, contaId: contas.arq, valor: -eng, contaBanco: "nao", conferido: true,
+        descricao: `Parte da engenharia (vai para Engenharia) — ${p.rotulo}`, origem: orig("eng-receita-sai") },
+      { ...comum, contaId: contas.eng, valor: eng, contaBanco: "nao", conferido: true,
+        descricao: `Receita da engenharia — ${p.rotulo}`, origem: orig("eng-receita") },
+    ] : []),
     { ...comum, contaId: "parceiros", valor: eng, contaBanco: "nao", conferido: true,
       descricao: `Custo da engenharia (parceiro) — ${p.rotulo}`, origem: orig("eng-custo") },
     { ...comum, contaId: "res_engenharia", valor: eng, contaBanco: "nao", conferido: true,
@@ -71812,6 +71832,8 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
                     {jaRecebida && (
                       <div style={{ fontSize:11.5, color:"#4b5563", marginTop:6, paddingLeft:22, lineHeight:1.45 }}>
                         Lança agora no financeiro do escritório, em {fmtData(p0.data) || "—"}: {fmtBRL(v0)} entrando na conta como Receita de projetos
+                        {eng0 > 0 && typeof contasDaReceitaDeProjeto === "function" && contasDaReceitaDeProjeto().eng
+                          ? <> ({fmtBRL(Math.round((v0 - eng0) * 100) / 100)} em Arquitetura e {fmtBRL(eng0)} em Engenharia)</> : null}
                         {eng0 > 0 ? <>; {fmtBRL(eng0)} da engenharia entra como custo em Parceiros Arquitetos e Engenheiros e fica guardado na Reserva engenharia até pagar o engenheiro</> : null}.
                         Quando o extrato chegar, o PIX casa com este lançamento.
                       </div>
