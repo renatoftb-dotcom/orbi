@@ -3223,10 +3223,30 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
   // pessoa confirmar (e a confirmação corrige o "não").
   // Ligado a uma linha do banco (extratoId), passou pela conta — mesmo que
   // carregue um "não" antigo (ver efPassouPeloBanco): casa com a linha dele.
-  const candidatos = (lancamentos || []).filter((l) => !compraNoCartaoDoEscritorio(l) && !(l && !efPassouPeloBanco(l) && l.conferido)).map((l, i) => ({
+  const candidatosTodos = (lancamentos || []).filter((l) => !compraNoCartaoDoEscritorio(l) && !(l && !efPassouPeloBanco(l) && l.conferido)).map((l, i) => ({
     l, i, abs: Math.round(Math.abs(Number(l.valor) || 0) * 100) / 100, usado: false, dir: direcaoDoLancamento(l),
     nao: !!(l && !efPassouPeloBanco(l)),
   }));
+  // Recebimento de projeto dividido (Arquitetura + Engenharia) lançado antes
+  // do extrato: um PIX só no banco, duas partes na base. A parte da
+  // engenharia vai junto com a principal (o mesmo recebimento, pelo parDe) e
+  // as duas casam como uma, pelo total. Só junta o que é do mesmo
+  // recebimento — nunca soma lançamentos soltos para fechar um valor.
+  const semLinha = (l) => !String((l && l.extratoId) || "").trim();
+  for (const c of candidatosTodos) {
+    const o = (c.l && c.l.origem) || {};
+    if (o.tipo !== "projeto" || o.parte !== "recebido-eng" || !c.l.parDe || !semLinha(c.l) || c.nao) continue;
+    const pai = candidatosTodos.find((x) => x !== c && x.l && x.l.id === c.l.parDe && semLinha(x.l) && !x.nao && !x.junto
+      && ((x.l.origem || {}).parte === "recebido"));
+    if (!pai) continue;
+    pai.abs = Math.round((pai.abs + c.abs) * 100) / 100;
+    (pai.partes = pai.partes || []).push(c);
+    c.junto = true;
+  }
+  const candidatos = candidatosTodos.filter((c) => !c.junto);
+  // a parte que foi junto casa com a mesma linha (e sai com o mesmo grau de certeza)
+  const comPartes = (casado, c) => [casado].concat((c.partes || []).map((pt) => ({ ...casado, lancamento: pt.l, parteDe: 1 + c.partes.length })))
+    .map((x, k) => (k === 0 && (c.partes || []).length ? { ...x, parteDe: 1 + c.partes.length } : x));
 
   const distancia = (m, c) => {
     const d1 = String(m.data || "").slice(0, 10);
@@ -3341,7 +3361,7 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
     }
     // marcado "não passou pela conta": casa, mas quem decide é a pessoa
     if (p.c.nao) certeza = "duvida";
-    casados.push({
+    casados.push(...comPartes({
       extrato: m, lancamento: p.c.l,
       dias: distancia(m, p.c) === 9999 ? null : distancia(m, p.c),
       centavos: Math.round((p.c.abs - absDe(m)) * 100),
@@ -3349,11 +3369,11 @@ function conciliarExtrato(movimentos, lancamentos, opcoes) {
       certeza, pontos: p.pontos, marcadoForaDaConta: p.c.nao,
       // as outras opções para a pessoa trocar o par, quando há dúvida
       alternativas: certeza === "duvida" ? outrosLanc.map((x) => x.c.l) : [],
-    });
+    }, p.c));
   }
   // a fila sai na ordem do extrato, como antes
   noBancoSemPar.sort((a, b) => String(a.data).localeCompare(String(b.data)));
-  const contabilizadoSemPar = candidatos.filter((c) => !c.usado && !c.nao).map((c) => c.l);
+  const contabilizadoSemPar = candidatos.filter((c) => !c.usado && !c.nao).flatMap((c) => [c.l].concat((c.partes || []).map((pt) => pt.l)));
   // Provável duplicado: sobrou sem linha do banco, mas há outro lançamento na
   // MESMA conta e do mesmo valor que já casou — uma entrada no banco, dois
   // lançamentos (a base antiga importada e a ponte da obra, por exemplo).
@@ -5410,6 +5430,14 @@ function comoPagamentoDaReserva(l, lancamentos) {
   ] };
 }
 
+// Os pares do recebimento gravados com o principal: id e documento dele.
+// O que passa pela conta (a receita da engenharia) leva a marca da linha do
+// banco, como o principal; o que fica fora da conta já nasce conferido.
+function extraDoRecebimento(x, base, i, numeroDoc, agora, marca) {
+  const noBanco = (x || {}).contaBanco !== "nao";
+  return { ...x, ...(noBanco && marca ? marca : {}), id: base + "_" + (i + 1), parDe: base, numeroDoc, criadoEm: agora,
+    ...(noBanco ? {} : { conferidoEm: agora }) };
+}
 function lancamentosDoRecebimento(movimento, mes, sug, fechamentos) {
   const m = movimento || {};
   const p = sug && sug.parcelaProjeto;
@@ -5422,19 +5450,22 @@ function lancamentosDoRecebimento(movimento, mes, sug, fechamentos) {
     competencia, lancadoEm: String(m.data || "").slice(0, 10), fornecedor: "" };
   const orig = (parte) => ({ tipo: "projeto", orcId: p.orcId, parcela: p.numero, parte });
   const contas = contasDaReceitaDeProjeto();
-  const principal = { ...comum, contaId: contas.arq, valor, contaBanco: "sim",
-    descricao: `Recebimento de projeto — ${p.rotulo}`, origem: orig("recebido"),
-    extratoId: m.id || "", historicoBanco: m.historico || "" };
   const eng = efCentavos(Math.min(p.eng, valor));
-  // A linha do banco entra inteira (casa com o PIX pelo valor). Com a
-  // subconta Engenharia, a parte dela passa de Arquitetura para Engenharia
-  // num par fora do banco — o saldo não muda, a receita fica separada.
+  // Com a subconta Engenharia, a receita já entra dividida: Arquitetura e
+  // Engenharia, as duas pela conta e ligadas à mesma linha do banco. Lançada
+  // antes do extrato, o fechamento soma as duas (mesmo recebimento) e casa
+  // o total com o PIX. Sem a subconta, a linha inteira fica na conta da
+  // arquitetura, como antes.
+  const divide = !!contas.eng && eng > 0;
+  const arqParte = divide ? efCentavos(valor - eng) : valor;
+  const soEng = divide && arqParte < 0.005;          // projeto só de engenharia
+  const banco = { contaBanco: "sim", extratoId: m.id || "", historicoBanco: m.historico || "" };
+  const principal = { ...comum, ...banco, contaId: soEng ? contas.eng : contas.arq, valor: soEng ? eng : arqParte,
+    descricao: `Recebimento de projeto — ${p.rotulo}${divide && !soEng ? " (arquitetura)" : ""}`, origem: orig("recebido") };
   const extras = eng > 0 ? [
-    ...(contas.eng ? [
-      { ...comum, contaId: contas.arq, valor: -eng, contaBanco: "nao", conferido: true,
-        descricao: `Parte da engenharia (vai para Engenharia) — ${p.rotulo}`, origem: orig("eng-receita-sai") },
-      { ...comum, contaId: contas.eng, valor: eng, contaBanco: "nao", conferido: true,
-        descricao: `Receita da engenharia — ${p.rotulo}`, origem: orig("eng-receita") },
+    ...(divide && !soEng ? [
+      { ...comum, ...banco, contaId: contas.eng, valor: eng,
+        descricao: `Recebimento de projeto — ${p.rotulo} (engenharia)`, origem: orig("recebido-eng") },
     ] : []),
     { ...comum, contaId: "parceiros", valor: eng, contaBanco: "nao", conferido: true,
       descricao: `Custo da engenharia (parceiro) — ${p.rotulo}`, origem: orig("eng-custo") },
@@ -5468,7 +5499,7 @@ function lancamentosDoGanhoRecebido(orc, numeros, ctx) {
     const id = typeof c.novoId === "function" ? c.novoId() : String(Date.now());
     const numeroDoc = typeof c.numeroDoc === "function" ? c.numeroDoc(lancs.concat(novos)) : "";
     novos.push({ ...principal, id, numeroDoc, criadoEm: agora },
-      ...recebimentoExtras.map((x, i) => ({ ...x, id: id + "_" + (i + 1), parDe: id, numeroDoc, criadoEm: agora, conferidoEm: agora })));
+      ...recebimentoExtras.map((x, i) => extraDoRecebimento(x, id, i, numeroDoc, agora)));
   }
   return { lancamentos: novos };
 }
@@ -5493,7 +5524,7 @@ function lancamentosDaParcelaRecebida(p, dia, valor, ctx) {
   const id = typeof c.novoId === "function" ? c.novoId() : String(Date.now());
   const numeroDoc = typeof c.numeroDoc === "function" ? c.numeroDoc(c.lancamentos || []) : "";
   return { lancamentos: [{ ...principal, id, numeroDoc, criadoEm: agora },
-    ...recebimentoExtras.map((x, i) => ({ ...x, id: id + "_" + (i + 1), parDe: id, numeroDoc, criadoEm: agora, conferidoEm: agora }))] };
+    ...recebimentoExtras.map((x, i) => extraDoRecebimento(x, id, i, numeroDoc, agora))] };
 }
 // O orçamento ganho que volta atrás (perdido ou excluído): o que o ganho
 // lançou no escritório sai junto — a receita, o custo da engenharia, a
@@ -5510,7 +5541,7 @@ function lancamentosSemOrcamento(data, orcId) {
   const fech = fechamentosDoEscritorio(d);
   const meses = [...new Set(removidos.map((l) => String(l.competencia || "")).filter(Boolean))].sort();
   const fechado = meses.find((m) => bloqueioPorMesFechado(m, fech));
-  const recebido = efCentavos(removidos.filter((l) => (l.origem || {}).parte === "recebido").reduce((t, l) => t + (Number(l.valor) || 0), 0));
+  const recebido = efCentavos(removidos.filter((l) => ["recebido", "recebido-eng"].indexOf((l.origem || {}).parte) >= 0).reduce((t, l) => t + (Number(l.valor) || 0), 0));
   return { lancamentos: atuais.filter((l) => !sai(l)), removidos, recebido,
     ligadoAoBanco: removidos.some((l) => String(l.extratoId || "").trim()),
     trava: fechado ? `O recebimento deste projeto está em ${efMesPorExtenso(fechado)}, que está fechado. Abra o mês antes.` : "" };
@@ -11317,7 +11348,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       const base = typeof uid === "function" ? uid() : String(Date.now());
       const numeroDoc = l.numeroDoc || proximaReferencia((data || {}).obras || [], lancs);
       gravar([...lancs, { ...semExtras, id: base, numeroDoc, criadoEm: agora, fornecedor: efNomeDoFornecedor(l), tipo: "escritorio" },
-        ...recebimentoExtras.map((x, i) => ({ ...x, id: base + "_" + (i + 1), parDe: base, numeroDoc, criadoEm: agora, conferidoEm: agora }))]);
+        ...recebimentoExtras.map((x, i) => extraDoRecebimento(x, base, i, numeroDoc, agora))]);
       setForm(null);
       return;
     }
@@ -12301,7 +12332,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       const base = typeof uid === "function" ? uid() : String(Date.now());
       const numeroDoc = proximaReferencia((data || {}).obras || [], lancs);
       const novos = [{ ...semExtras, ...marca, id: base, numeroDoc, criadoEm: agora },
-        ...recebimentoExtras.map((x, i) => ({ ...x, id: base + "_" + (i + 1), parDe: base, numeroDoc, criadoEm: agora, conferidoEm: agora }))];
+        ...recebimentoExtras.map((x, i) => extraDoRecebimento(x, base, i, numeroDoc, agora, marca))];
       gravar([...lancs, ...novos]);
       return true;
     }

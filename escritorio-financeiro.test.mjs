@@ -4031,19 +4031,33 @@ teste("recebimento de projeto com Receita Projetos dividida: entra na primeira s
   assert.strictEqual(l.contaId, arq);
   assert.deepStrictEqual(M.validarLancamentoEscritorio({ ...l, clienteId: "c1" }, {}), []);
   assert.ok(eng && eng !== arq);
-  // parcela com engenharia: banco inteiro em Arquitetura; a parte da engenharia passa para Engenharia (fora do banco)
+  // parcela com engenharia: a receita entra dividida, as duas partes pela conta; custo e reserva fora dela
   const pe = { ...p, valor: 5000, eng: 1250, rotulo: "parcela 1/4" };
   const rb = M.lancamentosDoRecebimento({ id: "b2", data: "2026-10-05", valor: 5000, historico: "" }, "2026-10", { parcelaProjeto: pe }, {}).lancamento;
   const todos = [{ ...rb, id: "x" }, ...rb.recebimentoExtras.map((e, i) => ({ ...e, id: "x_" + i }))];
   const por = (c) => Math.round(todos.filter((x) => x.contaId === c).reduce((t, x) => t + x.valor, 0) * 100) / 100;
   assert.deepStrictEqual([por(arq), por(eng), por("parceiros"), por("res_engenharia")], [3750, 1250, 1250, 1250]);
-  assert.deepStrictEqual(todos.filter((x) => x.contaBanco === "sim").map((x) => [x.contaId, x.valor]), [[arq, 5000]]);
+  assert.deepStrictEqual(todos.filter((x) => x.contaBanco === "sim").map((x) => [x.contaId, x.valor]), [[arq, 3750], [eng, 1250]]);
+  assert.ok(!todos.some((x) => x.valor < 0), "sem linha negativa");
   // o saldo do banco é o da linha inteira; o pé desconta a reserva
   const ext = M.extratoEscritorio(todos, {}).find((x) => x.mes === "2026-10");
   assert.strictEqual(Math.round(ext.saldoExtrato * 100) / 100, 5000);
-  // casa com o PIX de 5.000 pelo valor (um lançamento só no banco)
-  const c = M.conciliarExtrato([{ id: "pix", data: "2026-10-05", valor: 5000, historico: "PIX" }], todos);
-  assert.strictEqual(c.casados.length, 1); assert.strictEqual(c.casados[0].lancamento.id, "x");
+  // lançado antes do extrato: as duas partes (mesmo recebimento) casam juntas com o PIX de 5.000
+  const comPar = todos.map((x, i) => ({ ...x, extratoId: "", historicoBanco: "", ...(i ? { parDe: "x" } : {}) }));
+  const c = M.conciliarExtrato([{ id: "pix", data: "2026-10-05", valor: 5000, historico: "PIX" }], comPar);
+  assert.deepStrictEqual(c.casados.map((k) => k.lancamento.id).sort(), ["x", "x_0"]);
+  assert.strictEqual(c.noBancoSemPar.length, 0); assert.strictEqual(c.contabilizadoSemPar.length, 0);
+  assert.strictEqual(M.conferidosPeloExtrato(c).length, 2);
+  // só junta o mesmo recebimento: dois lançamentos soltos de 3.750 e 1.250 não casam com 5.000
+  const soltos = [{ id: "s1", tipo: "escritorio", contaId: arq, valor: 3750, contaBanco: "sim", competencia: "2026-10", lancadoEm: "2026-10-05" },
+    { id: "s2", tipo: "escritorio", contaId: eng, valor: 1250, contaBanco: "sim", competencia: "2026-10", lancadoEm: "2026-10-05" }];
+  assert.strictEqual(M.conciliarExtrato([{ id: "pix", data: "2026-10-05", valor: 5000, historico: "PIX" }], soltos).casados.length, 0);
+  // parte da engenharia apagada: a soma não bate e o PIX fica pendente (à vista)
+  const c2 = M.conciliarExtrato([{ id: "pix", data: "2026-10-05", valor: 5000, historico: "PIX" }], comPar.filter((x) => x.id !== "x_0"));
+  assert.strictEqual(c2.noBancoSemPar.length, 1);
+  // vindo do fechamento (ligado à linha): as duas partes levam o id do PIX
+  const doPix = M.lancamentosDoRecebimento({ id: "pix9", data: "2026-10-05", valor: 5000, historico: "PIX" }, "2026-10", { parcelaProjeto: pe }, {}).lancamento;
+  assert.deepStrictEqual([doPix.extratoId, doPix.recebimentoExtras[0].extratoId], ["pix9", "pix9"]);
   // pagamento antecipado (uma parcela só, com o total): tudo no mesmo mês
   const pa = { ...p, valor: 20000, eng: 5000, rotulo: "pagamento antecipado" };
   const ra = M.lancamentosDoRecebimento({ id: "", data: "2026-10-20", valor: 20000, historico: "" }, "2026-10", { parcelaProjeto: pa }, {}).lancamento;
@@ -4056,7 +4070,7 @@ teste("recebimento de projeto com Receita Projetos dividida: entra na primeira s
   const lan = [{ ...rb, id: "x", origem: { ...rb.origem, orcId: "ORC-9" } },
     ...rb.recebimentoExtras.map((e, i) => ({ ...e, id: "x_" + i, parDe: "x", origem: { ...e.origem, orcId: "ORC-9" } })), outro];
   const v = M.lancamentosSemOrcamento({ lancamentos: lan }, "ORC-9");
-  assert.deepStrictEqual([v.removidos.length, v.recebido, v.trava, v.lancamentos.map((x) => x.id)], [5, 5000, "", ["o"]]);
+  assert.deepStrictEqual([v.removidos.length, v.recebido, v.trava, v.lancamentos.map((x) => x.id)], [4, 5000, "", ["o"]]);
   assert.ok(/5\.000,00/.test(M.avisoDoOrcamentoQueVolta(v)));
   assert.strictEqual(M.lancamentosSemOrcamento({ lancamentos: lan }, "ORC-1").removidos.length, 0);
   // mês fechado: trava
