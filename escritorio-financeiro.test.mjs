@@ -3736,6 +3736,13 @@ teste("Reclassificar: só a conta muda, dentro do mesmo grupo; a compra do cart�
   const r = M.reclassificarLancamento([l], "a", "utensilios");
   assert.strictEqual(r.lancamentos[0].contaId, "utensilios"); assert.strictEqual(r.lancamentos[0].valor, 200);
   assert.ok(M.reclassificarLancamento([l], "a", "rec_projetos").erro);      // receita não
+  // receita de projeto (unidade Projetos) vai para qualquer receita; a unidade acompanha a conta
+  const rp = { id: "p", tipo: "escritorio", contaId: "rec_projetos", unidadeId: "projetos", valor: 1800, competencia: "2026-06" };
+  const opsR = M.contasParaReclassificar(rp).map((c) => c.id);
+  assert.ok(opsR.includes("rec_gestao") && opsR.includes("rec_comissoes") && opsR.includes("rec_financeira"));
+  const rg = M.reclassificarLancamento([rp], "p", "rec_gestao").lancamentos[0];
+  assert.deepStrictEqual([rg.contaId, rg.unidadeId, rg.valor], ["rec_gestao", "gestao_obras", 1800]);
+  assert.strictEqual(M.reclassificarLancamento([rp], "p", "rec_comissoes").lancamentos[0].unidadeId, "projetos");
   // o saldo do extrato não muda
   const antes = M.extratoEscritorio([l], {}), depois = M.extratoEscritorio(r.lancamentos, {});
   assert.strictEqual(antes.find((x) => x.mes === "2026-02").saldoExtrato, depois.find((x) => x.mes === "2026-02").saldoExtrato);

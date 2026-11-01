@@ -576,8 +576,13 @@ function composicaoDoExtrato(lancamentos, alvo, periodo) {
 function contasParaReclassificar(l) {
   const atual = contaEscritorio((l || {}).contaId);
   if (!atual) return [];
-  return PLANO_CONTAS_ESCRITORIO.filter((c) => c.grupo === atual.grupo && !c.interna && !c.inativa && !contaSoTotaliza(c) && c.id !== atual.id
-    && (!(c.unidades || []).length || c.unidades.indexOf(l.unidadeId) >= 0));
+  // todas as contas do mesmo grupo (receita com receita, despesa com despesa);
+  // se a unidade do lançamento não serve na conta nova, ela acompanha a conta
+  return PLANO_CONTAS_ESCRITORIO.filter((c) => c.grupo === atual.grupo && !c.interna && !c.inativa && !contaSoTotaliza(c) && c.id !== atual.id);
+}
+function unidadeNaContaNova(l, conta) {
+  const us = (conta && conta.unidades) || [];
+  return !us.length || us.indexOf((l || {}).unidadeId) >= 0 ? (l || {}).unidadeId : us[0];
 }
 // O que impede reclassificar por aqui (texto) — ou "" quando pode.
 function travaDaReclassificacao(l) {
@@ -589,7 +594,7 @@ function travaDaReclassificacao(l) {
   }
   if (lancamentoVeioDaObra(l)) return "Este lançamento vem da obra: a conta dele muda lá, no Contas a pagar da obra.";
   if (ehLigacaoDaGestao(o)) return "É receita do contrato de gestão: fica em Receita Gestão.";
-  if (!contasParaReclassificar(l).length) return "Não há outra conta do mesmo grupo para esta unidade.";
+  if (!contasParaReclassificar(l).length) return "Não há outra conta do mesmo grupo.";
   return "";
 }
 // Troca a conta. `id` é o da linha do resultado: um lançamento, ou uma
@@ -603,7 +608,8 @@ function reclassificarLancamento(lancamentos, id, contaId) {
   if (direto) {
     if (direto.contaId === contaId) return { lancamentos: lista, mudou: 0 };
     if (!contasParaReclassificar(direto).some((c) => c.id === contaId)) return { erro: "Esta conta não serve para este lançamento." };
-    return { lancamentos: lista.map((x) => (x && x.id === id ? { ...x, contaId } : x)), mudou: 1 };
+    const unidadeId = unidadeNaContaNova(direto, nova);
+    return { lancamentos: lista.map((x) => (x && x.id === id ? { ...x, contaId, ...(unidadeId !== x.unidadeId ? { unidadeId } : {}) } : x)), mudou: 1 };
   }
   const m = /^(.*):(\d+)$/.exec(String(id || ""));
   const fat = m ? lista.find((x) => x && x.id === m[1] && (x.origem || {}).tipo === "fatura") : null;
