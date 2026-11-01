@@ -4052,6 +4052,13 @@ teste("recebimento de projeto com Receita Projetos dividida: entra na primeira s
   const soltos = [{ id: "s1", tipo: "escritorio", contaId: arq, valor: 3750, contaBanco: "sim", competencia: "2026-10", lancadoEm: "2026-10-05" },
     { id: "s2", tipo: "escritorio", contaId: eng, valor: 1250, contaBanco: "sim", competencia: "2026-10", lancadoEm: "2026-10-05" }];
   assert.strictEqual(M.conciliarExtrato([{ id: "pix", data: "2026-10-05", valor: 5000, historico: "PIX" }], soltos).casados.length, 0);
+  // reserva: a composição do saldo acumulado até o mês (não só o do mês)
+  const res = [{ id: "r1", tipo: "escritorio", contaId: "res_engenharia", valor: 1000, competencia: "2026-09" },
+    { id: "r2", tipo: "escritorio", contaId: "res_engenharia", valor: 500, competencia: "2026-10" },
+    { id: "r3", tipo: "escritorio", contaId: "res_engenharia", valor: -200, competencia: "2026-11" }];
+  assert.strictEqual(M.composicaoDoExtrato(res, { conta: "res_engenharia", ate: true }, "2026-10").total, 1500);
+  assert.strictEqual(M.composicaoDoExtrato(res, { conta: "res_engenharia" }, "2026-10").total, 500);
+  assert.strictEqual(M.composicaoDoExtrato(res, { conta: "res_engenharia", ate: true }, "2026").total, 1300);
   // parte da engenharia apagada: a soma não bate e o PIX fica pendente (à vista)
   const c2 = M.conciliarExtrato([{ id: "pix", data: "2026-10-05", valor: 5000, historico: "PIX" }], comPar.filter((x) => x.id !== "x_0"));
   assert.strictEqual(c2.noBancoSemPar.length, 1);

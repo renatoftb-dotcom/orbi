@@ -575,8 +575,11 @@ function composicaoDoExtrato(lancamentos, alvo, periodo) {
   let total = 0;
   if (!/^\d{4}(-\d{2})?$/.test(p)) return { linhas, total: 0 };
   const pesos = a.saldo ? (EF_SALDOS_DO_QUADRO[a.saldo] || null) : null;
+  // `ate`: o saldo acumulado (provisões e reservas): tudo até o fim do período
+  const limite = p.length === 4 ? p + "-12" : p;
   for (const l of lancamentosParaResultado(lancamentos)) {
-    if (!l || !/^\d{4}-\d{2}$/.test(String(l.competencia)) || !String(l.competencia).startsWith(p)) continue;
+    if (!l || !/^\d{4}-\d{2}$/.test(String(l.competencia))) continue;
+    if (a.ate ? String(l.competencia) > limite : !String(l.competencia).startsWith(p)) continue;
     const conta = contaEscritorio(l.contaId);
     if (!conta) continue;
     const sinal = a.contas ? (a.contas.indexOf(conta.id) >= 0 ? 1 : 0)
@@ -6671,8 +6674,9 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancam
     <div style={{ display: "grid", gap: 12 }}>
       {abrindo && (
         <ComposicaoDoNumero titulo={abrindo.titulo} periodo={abrindo.periodo}
-          composicao={composicaoDoExtrato(lancamentos, abrindo.alvo, abrindo.periodo)}
-          mostrarConta={!abrindo.alvo.conta} clientes={clientes} aoFechar={() => setAbrindo(null)} aoReclassificar={aoReclassificar} />
+          composicao={composicaoDoExtrato(lancamentos, abrindo.alvo, abrindo.periodo)} ate={!!abrindo.alvo.ate}
+          mostrarConta={!abrindo.alvo.conta} clientes={clientes} aoFechar={() => setAbrindo(null)}
+          aoReclassificar={abrindo.alvo.ate ? null : aoReclassificar} />
       )}
       <div style={S.abas}>
         {anos.map((a) => (
@@ -6861,13 +6865,19 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancam
                       <td style={td}>{menos(de(ult).reservas)}</td>
                     </tr>
                   )}
-                  {temRes && verReservas && contasRes.map((c) => (
-                    <tr key={c.id} data-vk-reserva-conta={c.id}>
-                      <td style={{ ...tdNome, paddingLeft: 34, color: "#6b7280", fontSize: 12.5 }}>{c.nome}</td>
-                      {doAno.map((m) => <td key={m.mes} style={{ ...td, fontSize: 12.5, color: "#6b7280" }}>{menos(((de(m).reservasPorConta || {})[c.id]) || 0)}</td>)}
-                      <td style={{ ...td, fontSize: 12.5, color: "#6b7280" }}>{menos(((de(ult).reservasPorConta || {})[c.id]) || 0)}</td>
-                    </tr>
-                  ))}
+                  {temRes && verReservas && contasRes.map((c) => {
+                    // dois cliques: os lançamentos que formam o saldo da reserva até o mês
+                    const vr = (m) => ((de(m).reservasPorConta || {})[c.id]) || 0;
+                    const celRes = (k, periodo, v) => ({ style: { ...td, fontSize: 12.5, color: "#6b7280", ...clicavel(v) }, "data-vk-celula": k,
+                      onClick: abre(k, c.nome, { conta: c.id, ate: true }, periodo, v) });
+                    return (
+                      <tr key={c.id} data-vk-reserva-conta={c.id}>
+                        <td style={{ ...tdNome, paddingLeft: 34, color: "#6b7280", fontSize: 12.5 }}>{c.nome}</td>
+                        {doAno.map((m) => <td key={m.mes} {...celRes(`res:${c.id}:${m.mes}`, m.mes, vr(m))}>{menos(vr(m))}</td>)}
+                        <td {...celRes(`res:${c.id}:${ano}`, ano, vr(ult))}>{menos(vr(ult))}</td>
+                      </tr>
+                    );
+                  })}
                   <tr data-vk-linha-disponivel="1">
                     <td style={{ ...tdNome, fontWeight: 700 }}>= Saldo disponível</td>
                     {doAno.map((m) => <td key={m.mes} style={{ ...td, fontWeight: 700 }}>{cel(de(m).disponivel)}</td>)}
@@ -6884,7 +6894,7 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancam
 }
 
 // A janela com o que compõe um número do quadro. Fecha só pelo Fechar.
-function ComposicaoDoNumero({ titulo, periodo, composicao, mostrarConta, clientes, aoFechar, aoReclassificar }) {
+function ComposicaoDoNumero({ titulo, periodo, composicao, mostrarConta, clientes, aoFechar, aoReclassificar, ate }) {
   const S = EF_ESTILO;
   // Reclassificar: a linha aberta (id), a conta escolhida e o recado.
   const [reclass, setReclass] = useState(null);   // { id, contaId, trava, erro }
@@ -6897,7 +6907,9 @@ function ComposicaoDoNumero({ titulo, periodo, composicao, mostrarConta, cliente
     setReclass(null);
   }
   const { linhas, total } = composicao || { linhas: [], total: 0 };
-  const quando = /^\d{4}-\d{2}$/.test(String(periodo)) ? efMesPorExtenso(periodo) : `ano de ${periodo}`;
+  const quando = ate
+    ? `saldo até ${/^\d{4}-\d{2}$/.test(String(periodo)) ? efMesPorExtenso(periodo) : `dezembro de ${periodo}`}`
+    : /^\d{4}-\d{2}$/.test(String(periodo)) ? efMesPorExtenso(periodo) : `ano de ${periodo}`;
   const nomeCli = (id) => ((clientes || []).find((c) => c && c.id === id) || {}).nome || "";
   const unidade = (id) => (UNIDADES_NEGOCIO.find((u) => u.id === id) || {}).nome || "";
   useEffect(() => {
@@ -6938,8 +6950,9 @@ function ComposicaoDoNumero({ titulo, periodo, composicao, mostrarConta, cliente
                   <div style={{ fontSize: 13, color: "#111827", overflowWrap: "anywhere" }}>{l.descricao || "(sem descrição)"}</div>
                   {detalhe && <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 2, overflowWrap: "anywhere" }}>{detalhe}</div>}
                   <div style={{ fontSize: 11, marginTop: 3, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                    <span style={{ color: l.extratoId ? "#15803d" : "#92400e" }}>
-                      {l.extratoId ? "✓ ligado à linha do banco" : ((l.origem || {}).tipo === "faturaLinha" ? "compra da fatura do cartão" : "sem linha do banco")}
+                    <span style={{ color: l.extratoId ? "#15803d" : (l.contaBanco === "nao" ? "#6b7280" : "#92400e") }}>
+                      {l.extratoId ? "✓ ligado à linha do banco" : ((l.origem || {}).tipo === "faturaLinha" ? "compra da fatura do cartão"
+                        : l.contaBanco === "nao" ? "fora da conta corrente" : "sem linha do banco")}
                     </span>
                     {typeof LinksDeAnexo === "function" && <LinksDeAnexo transacao={l} compacto />}
                   </div>
