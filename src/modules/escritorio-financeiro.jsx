@@ -5495,6 +5495,33 @@ function lancamentosDaParcelaRecebida(p, dia, valor, ctx) {
   return { lancamentos: [{ ...principal, id, numeroDoc, criadoEm: agora },
     ...recebimentoExtras.map((x, i) => ({ ...x, id: id + "_" + (i + 1), parDe: id, numeroDoc, criadoEm: agora, conferidoEm: agora }))] };
 }
+// O orçamento ganho que volta atrás (perdido ou excluído): o que o ganho
+// lançou no escritório sai junto — a receita, o custo da engenharia, a
+// reserva e a passagem para a subconta Engenharia. Mês fechado trava.
+//   devolve { lancamentos, removidos, recebido, ligadoAoBanco, trava }
+function lancamentosSemOrcamento(data, orcId) {
+  const d = data || {};
+  const atuais = d.lancamentos || [];
+  const doOrc = (l) => !!l && (l.origem || {}).tipo === "projeto" && (l.origem || {}).orcId === orcId;
+  const ids = new Set(atuais.filter(doOrc).map((l) => l.id));
+  const sai = (l) => !!l && (ids.has(l.id) || (l.parDe && ids.has(l.parDe)));
+  const removidos = atuais.filter(sai);
+  if (!removidos.length) return { lancamentos: atuais, removidos: [], recebido: 0, ligadoAoBanco: false, trava: "" };
+  const fech = fechamentosDoEscritorio(d);
+  const meses = [...new Set(removidos.map((l) => String(l.competencia || "")).filter(Boolean))].sort();
+  const fechado = meses.find((m) => bloqueioPorMesFechado(m, fech));
+  const recebido = efCentavos(removidos.filter((l) => (l.origem || {}).parte === "recebido").reduce((t, l) => t + (Number(l.valor) || 0), 0));
+  return { lancamentos: atuais.filter((l) => !sai(l)), removidos, recebido,
+    ligadoAoBanco: removidos.some((l) => String(l.extratoId || "").trim()),
+    trava: fechado ? `O recebimento deste projeto está em ${efMesPorExtenso(fechado)}, que está fechado. Abra o mês antes.` : "" };
+}
+// O aviso da janela de confirmação (ou "" quando não há o que tirar).
+function avisoDoOrcamentoQueVolta(r) {
+  if (!r || !r.removidos || !r.removidos.length) return "";
+  return `O recebimento lançado no ganho sai do financeiro do escritório: R$ ${Number(r.recebido || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} de receita`
+    + ` e o que veio junto (engenharia, custo em Parceiros e reserva) — ${r.removidos.length} lançamentos.`
+    + (r.ligadoAoBanco ? " A linha do banco volta a ficar pendente no fechamento." : "");
+}
 // O mesmo, a partir do data inteiro — é o que as telas de "Marcar como Ganho"
 // chamam. Devolve a lista de lançamentos já com os novos (ou o erro).
 function lancamentosComGanhoRecebido(data, orcGanho) {

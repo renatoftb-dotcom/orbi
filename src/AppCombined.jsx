@@ -17509,6 +17509,33 @@ function lancamentosDaParcelaRecebida(p, dia, valor, ctx) {
   return { lancamentos: [{ ...principal, id, numeroDoc, criadoEm: agora },
     ...recebimentoExtras.map((x, i) => ({ ...x, id: id + "_" + (i + 1), parDe: id, numeroDoc, criadoEm: agora, conferidoEm: agora }))] };
 }
+// O orçamento ganho que volta atrás (perdido ou excluído): o que o ganho
+// lançou no escritório sai junto — a receita, o custo da engenharia, a
+// reserva e a passagem para a subconta Engenharia. Mês fechado trava.
+//   devolve { lancamentos, removidos, recebido, ligadoAoBanco, trava }
+function lancamentosSemOrcamento(data, orcId) {
+  const d = data || {};
+  const atuais = d.lancamentos || [];
+  const doOrc = (l) => !!l && (l.origem || {}).tipo === "projeto" && (l.origem || {}).orcId === orcId;
+  const ids = new Set(atuais.filter(doOrc).map((l) => l.id));
+  const sai = (l) => !!l && (ids.has(l.id) || (l.parDe && ids.has(l.parDe)));
+  const removidos = atuais.filter(sai);
+  if (!removidos.length) return { lancamentos: atuais, removidos: [], recebido: 0, ligadoAoBanco: false, trava: "" };
+  const fech = fechamentosDoEscritorio(d);
+  const meses = [...new Set(removidos.map((l) => String(l.competencia || "")).filter(Boolean))].sort();
+  const fechado = meses.find((m) => bloqueioPorMesFechado(m, fech));
+  const recebido = efCentavos(removidos.filter((l) => (l.origem || {}).parte === "recebido").reduce((t, l) => t + (Number(l.valor) || 0), 0));
+  return { lancamentos: atuais.filter((l) => !sai(l)), removidos, recebido,
+    ligadoAoBanco: removidos.some((l) => String(l.extratoId || "").trim()),
+    trava: fechado ? `O recebimento deste projeto está em ${efMesPorExtenso(fechado)}, que está fechado. Abra o mês antes.` : "" };
+}
+// O aviso da janela de confirmação (ou "" quando não há o que tirar).
+function avisoDoOrcamentoQueVolta(r) {
+  if (!r || !r.removidos || !r.removidos.length) return "";
+  return `O recebimento lançado no ganho sai do financeiro do escritório: R$ ${Number(r.recebido || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} de receita`
+    + ` e o que veio junto (engenharia, custo em Parceiros e reserva) — ${r.removidos.length} lançamentos.`
+    + (r.ligadoAoBanco ? " A linha do banco volta a ficar pendente no fechamento." : "");
+}
 // O mesmo, a partir do data inteiro — é o que as telas de "Marcar como Ganho"
 // chamam. Devolve a lista de lançamentos já com os novos (ou o erro).
 function lancamentosComGanhoRecebido(data, orcGanho) {
@@ -55257,9 +55284,14 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
       if (!ok) return;
       return gravar(todos.map(o => o.id === orc.id ? { ...o, status: "rascunho", concluidoEm: null } : o));
     }
-    const ok = await dialogo.confirmar({ titulo: `Marcar ${orc.id} como Perdido?`, confirmar: "Marcar como perdido" });
+    // era ganho com recebimento lançado: o lançamento sai junto
+    const volta = typeof lancamentosSemOrcamento === "function" ? lancamentosSemOrcamento(data, orc.id) : { removidos: [] };
+    if (volta.trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: volta.trava, tipo: "aviso" }); return; }
+    const avisoVolta = typeof avisoDoOrcamentoQueVolta === "function" ? avisoDoOrcamentoQueVolta(volta) : "";
+    const ok = await dialogo.confirmar({ titulo: `Marcar ${orc.id} como Perdido?`, ...(avisoVolta ? { mensagem: avisoVolta } : {}), confirmar: "Marcar como perdido" });
     if (!ok) return;
-    gravar(todos.map(o => o.id === orc.id ? { ...o, status: "perdido", concluidoEm: o.concluidoEm || agora } : o));
+    gravar(todos.map(o => o.id === orc.id ? { ...o, status: "perdido", concluidoEm: o.concluidoEm || agora } : o),
+      volta.removidos.length ? { lancamentos: volta.lancamentos } : undefined);
   }
 
   async function excluirProjeto(orc) {
@@ -55267,13 +55299,16 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
       dialogo.alertar({ titulo: "Acesso restrito", mensagem: "Apenas administradores podem excluir orçamentos.", tipo: "aviso" });
       return;
     }
+    const volta = typeof lancamentosSemOrcamento === "function" ? lancamentosSemOrcamento(data, orc.id) : { removidos: [] };
+    if (volta.trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: volta.trava, tipo: "aviso" }); return; }
+    const avisoVolta = typeof avisoDoOrcamentoQueVolta === "function" ? avisoDoOrcamentoQueVolta(volta) : "";
     const ok = await dialogo.confirmar({
       titulo: `Excluir orçamento ${orc.id}?`,
-      mensagem: "Esta ação não pode ser desfeita.",
+      mensagem: "Esta ação não pode ser desfeita." + (avisoVolta ? " " + avisoVolta : ""),
       confirmar: "Excluir", destrutivo: true,
     });
     if (!ok) return;
-    gravar((data.orcamentosProjeto || []).filter(o => o.id !== orc.id));
+    gravar((data.orcamentosProjeto || []).filter(o => o.id !== orc.id), volta.removidos.length ? { lancamentos: volta.lancamentos } : undefined);
   }
 
   // Ganhar abre o mesmo modal de fechamento da lista de Orçamentos — escopo,
@@ -68627,15 +68662,19 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         dialogo.alertar({ titulo: "Acesso restrito", mensagem: "Apenas administradores podem excluir orçamentos.", tipo: "aviso" });
         return;
       }
+      // ganho com recebimento lançado: o lançamento sai junto
+      const volta = typeof lancamentosSemOrcamento === "function" ? lancamentosSemOrcamento(data, orc.id) : { removidos: [] };
+      if (volta.trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: volta.trava, tipo: "aviso" }); return; }
+      const avisoVolta = typeof avisoDoOrcamentoQueVolta === "function" ? avisoDoOrcamentoQueVolta(volta) : "";
       const ok = await dialogo.confirmar({
         titulo: `Excluir orçamento ${orc.id}?`,
-        mensagem: "Esta ação não pode ser desfeita.",
+        mensagem: "Esta ação não pode ser desfeita." + (avisoVolta ? " " + avisoVolta : ""),
         confirmar: "Excluir",
         destrutivo: true,
       });
       if (!ok) return;
       const novos = todos.filter(o => o.id !== orc.id);
-      save({ ...data, orcamentosProjeto: novos }).catch(console.error);
+      save({ ...data, orcamentosProjeto: novos, ...(volta.removidos.length ? { lancamentos: volta.lancamentos } : {}) }).catch(console.error);
       return;
     }
 
@@ -68648,8 +68687,13 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         save({ ...data, orcamentosProjeto: novos }).catch(console.error);
         return;
       }
+      // era ganho com recebimento lançado: o lançamento sai junto
+      const volta = typeof lancamentosSemOrcamento === "function" ? lancamentosSemOrcamento(data, orc.id) : { removidos: [] };
+      if (volta.trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: volta.trava, tipo: "aviso" }); return; }
+      const avisoVolta = typeof avisoDoOrcamentoQueVolta === "function" ? avisoDoOrcamentoQueVolta(volta) : "";
       const okP = await dialogo.confirmar({
         titulo: `Marcar orçamento ${orc.id} como Perdido?`,
+        ...(avisoVolta ? { mensagem: avisoVolta } : {}),
         confirmar: "Marcar como perdido",
       });
       if (!okP) return;
@@ -68658,7 +68702,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
           ? { ...o, status: "perdido", concluidoEm: o.concluidoEm || agora }
           : o
       );
-      save({ ...data, orcamentosProjeto: novos }).catch(console.error);
+      save({ ...data, orcamentosProjeto: novos, ...(volta.removidos.length ? { lancamentos: volta.lancamentos } : {}) }).catch(console.error);
       return;
     }
 

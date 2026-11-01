@@ -347,15 +347,19 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         dialogo.alertar({ titulo: "Acesso restrito", mensagem: "Apenas administradores podem excluir orçamentos.", tipo: "aviso" });
         return;
       }
+      // ganho com recebimento lançado: o lançamento sai junto
+      const volta = typeof lancamentosSemOrcamento === "function" ? lancamentosSemOrcamento(data, orc.id) : { removidos: [] };
+      if (volta.trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: volta.trava, tipo: "aviso" }); return; }
+      const avisoVolta = typeof avisoDoOrcamentoQueVolta === "function" ? avisoDoOrcamentoQueVolta(volta) : "";
       const ok = await dialogo.confirmar({
         titulo: `Excluir orçamento ${orc.id}?`,
-        mensagem: "Esta ação não pode ser desfeita.",
+        mensagem: "Esta ação não pode ser desfeita." + (avisoVolta ? " " + avisoVolta : ""),
         confirmar: "Excluir",
         destrutivo: true,
       });
       if (!ok) return;
       const novos = todos.filter(o => o.id !== orc.id);
-      save({ ...data, orcamentosProjeto: novos }).catch(console.error);
+      save({ ...data, orcamentosProjeto: novos, ...(volta.removidos.length ? { lancamentos: volta.lancamentos } : {}) }).catch(console.error);
       return;
     }
 
@@ -368,8 +372,13 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         save({ ...data, orcamentosProjeto: novos }).catch(console.error);
         return;
       }
+      // era ganho com recebimento lançado: o lançamento sai junto
+      const volta = typeof lancamentosSemOrcamento === "function" ? lancamentosSemOrcamento(data, orc.id) : { removidos: [] };
+      if (volta.trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: volta.trava, tipo: "aviso" }); return; }
+      const avisoVolta = typeof avisoDoOrcamentoQueVolta === "function" ? avisoDoOrcamentoQueVolta(volta) : "";
       const okP = await dialogo.confirmar({
         titulo: `Marcar orçamento ${orc.id} como Perdido?`,
+        ...(avisoVolta ? { mensagem: avisoVolta } : {}),
         confirmar: "Marcar como perdido",
       });
       if (!okP) return;
@@ -378,7 +387,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
           ? { ...o, status: "perdido", concluidoEm: o.concluidoEm || agora }
           : o
       );
-      save({ ...data, orcamentosProjeto: novos }).catch(console.error);
+      save({ ...data, orcamentosProjeto: novos, ...(volta.removidos.length ? { lancamentos: volta.lancamentos } : {}) }).catch(console.error);
       return;
     }
 

@@ -1273,9 +1273,14 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
       if (!ok) return;
       return gravar(todos.map(o => o.id === orc.id ? { ...o, status: "rascunho", concluidoEm: null } : o));
     }
-    const ok = await dialogo.confirmar({ titulo: `Marcar ${orc.id} como Perdido?`, confirmar: "Marcar como perdido" });
+    // era ganho com recebimento lançado: o lançamento sai junto
+    const volta = typeof lancamentosSemOrcamento === "function" ? lancamentosSemOrcamento(data, orc.id) : { removidos: [] };
+    if (volta.trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: volta.trava, tipo: "aviso" }); return; }
+    const avisoVolta = typeof avisoDoOrcamentoQueVolta === "function" ? avisoDoOrcamentoQueVolta(volta) : "";
+    const ok = await dialogo.confirmar({ titulo: `Marcar ${orc.id} como Perdido?`, ...(avisoVolta ? { mensagem: avisoVolta } : {}), confirmar: "Marcar como perdido" });
     if (!ok) return;
-    gravar(todos.map(o => o.id === orc.id ? { ...o, status: "perdido", concluidoEm: o.concluidoEm || agora } : o));
+    gravar(todos.map(o => o.id === orc.id ? { ...o, status: "perdido", concluidoEm: o.concluidoEm || agora } : o),
+      volta.removidos.length ? { lancamentos: volta.lancamentos } : undefined);
   }
 
   async function excluirProjeto(orc) {
@@ -1283,13 +1288,16 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
       dialogo.alertar({ titulo: "Acesso restrito", mensagem: "Apenas administradores podem excluir orçamentos.", tipo: "aviso" });
       return;
     }
+    const volta = typeof lancamentosSemOrcamento === "function" ? lancamentosSemOrcamento(data, orc.id) : { removidos: [] };
+    if (volta.trava) { dialogo.alertar({ titulo: "Mês fechado", mensagem: volta.trava, tipo: "aviso" }); return; }
+    const avisoVolta = typeof avisoDoOrcamentoQueVolta === "function" ? avisoDoOrcamentoQueVolta(volta) : "";
     const ok = await dialogo.confirmar({
       titulo: `Excluir orçamento ${orc.id}?`,
-      mensagem: "Esta ação não pode ser desfeita.",
+      mensagem: "Esta ação não pode ser desfeita." + (avisoVolta ? " " + avisoVolta : ""),
       confirmar: "Excluir", destrutivo: true,
     });
     if (!ok) return;
-    gravar((data.orcamentosProjeto || []).filter(o => o.id !== orc.id));
+    gravar((data.orcamentosProjeto || []).filter(o => o.id !== orc.id), volta.removidos.length ? { lancamentos: volta.lancamentos } : undefined);
   }
 
   // Ganhar abre o mesmo modal de fechamento da lista de Orçamentos — escopo,
