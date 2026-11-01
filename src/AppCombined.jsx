@@ -4059,6 +4059,9 @@ function Etapas({ data, save }) {
   // — o cliente responde por link e o que ele grava não vem no loadAllData.
   const [briefings, setBriefings] = useState({});      // orcId → briefing
   const [briefingDe, setBriefingDe] = useState(null);  // projeto com o painel aberto
+  // Arrastar o card para outra etapa: { id, nome, x, y, sobre } enquanto arrasta
+  const [arrasto, setArrasto] = useState(null);
+  const kanbanRef = useRef(null);
   useEffect(() => {
     let vivo = true;
     const carregar = () => api.briefings.list()
@@ -4105,6 +4108,66 @@ function Etapas({ data, save }) {
 
   function projetosDaColuna(colKey) {
     return projetosFiltrados.filter(p => (p.colunaEtapa || "briefing") === colKey);
+  }
+
+  // ── Arrastar para mudar de etapa ──
+  // No mouse, arrasta-se o card inteiro; no toque, pela alça ⋮⋮ (o resto do
+  // card continua rolando a tela). Perto da borda, o quadro rola sozinho
+  // para alcançar as colunas que estão fora da vista.
+  function moverParaEtapa(projeto, destino) {
+    if (!destino || destino === (projeto.colunaEtapa || "briefing")) return;
+    if (!ETAPAS_COLS.some(c => c.key === destino)) return;
+    const novos = projetos.map(p => p.id === projeto.id ? { ...p, colunaEtapa: destino, etapaDesde: new Date().toISOString() } : p);
+    save({ ...data, projetos: novos }).catch(console.error);
+  }
+  function comecarArrasto(e, projeto, nome, pelaAlca) {
+    if (e.button != null && e.button !== 0) return;
+    if (!pelaAlca && e.pointerType !== "mouse") return;
+    if (!pelaAlca && e.target && e.target.closest && e.target.closest("button, a, input, select, textarea")) return;
+    const inicio = { x: e.clientX, y: e.clientY };
+    let ultimo = inicio;
+    let ativo = false;
+    const colunaEm = (x, y) => {
+      const el = document.elementFromPoint(x, y);
+      const c = el && el.closest ? el.closest("[data-vk-coluna-etapa]") : null;
+      return c ? c.getAttribute("data-vk-coluna-etapa") : null;
+    };
+    const ativar = (x, y) => { ativo = true; setArrasto({ id: projeto.id, nome, x, y, sobre: colunaEm(x, y) }); };
+    if (pelaAlca) { e.preventDefault(); ativar(e.clientX, e.clientY); }
+    let raf = 0;
+    const rolar = () => {
+      const k = kanbanRef.current;
+      if (k && ativo) {
+        const r = k.getBoundingClientRect();
+        const borda = Math.min(60, r.width / 5);
+        if (ultimo.x < r.left + borda) k.scrollLeft -= 14;
+        else if (ultimo.x > r.right - borda) k.scrollLeft += 14;
+      }
+      raf = requestAnimationFrame(rolar);
+    };
+    raf = requestAnimationFrame(rolar);
+    const mover = (ev) => {
+      ultimo = { x: ev.clientX, y: ev.clientY };
+      if (!ativo) {
+        if (Math.hypot(ev.clientX - inicio.x, ev.clientY - inicio.y) < 6) return;
+        ativar(ev.clientX, ev.clientY);
+      }
+      ev.preventDefault();
+      setArrasto({ id: projeto.id, nome, x: ev.clientX, y: ev.clientY, sobre: colunaEm(ev.clientX, ev.clientY) });
+    };
+    const fim = (ev, valeu) => {
+      window.removeEventListener("pointermove", mover);
+      window.removeEventListener("pointerup", soltar);
+      window.removeEventListener("pointercancel", cancelar);
+      cancelAnimationFrame(raf);
+      setArrasto(null);
+      if (valeu && ativo) moverParaEtapa(projeto, colunaEm(ev.clientX, ev.clientY));
+    };
+    const soltar = (ev) => fim(ev, true);
+    const cancelar = (ev) => fim(ev, false);
+    window.addEventListener("pointermove", mover, { passive: false });
+    window.addEventListener("pointerup", soltar);
+    window.addEventListener("pointercancel", cancelar);
   }
 
   // Finaliza projeto → move pra Obras
@@ -4162,15 +4225,29 @@ function Etapas({ data, save }) {
       </div>
 
       {/* Kanban */}
-      <div style={{ flex:1, display:"flex", gap:12, overflowX:"auto", overflowY:"hidden", paddingBottom:8 }}>
+      <div ref={kanbanRef} style={{ flex:1, display:"flex", gap:12, overflowX:"auto", overflowY:"hidden", paddingBottom:8,
+        ...(arrasto ? { userSelect:"none", WebkitUserSelect:"none" } : {}) }}>
         {ETAPAS_COLS.map(col => {
           const cards = projetosDaColuna(col.key);
           return (
             <KanbanColumn key={col.key} col={col} cards={cards} clientes={clientes} onFinalizar={finalizarProjeto}
-              briefings={briefings} onBriefing={setBriefingDe} />
+              briefings={briefings} onBriefing={setBriefingDe}
+              onArrastar={comecarArrasto} arrastandoId={arrasto && arrasto.id} destaque={!!arrasto && arrasto.sobre === col.key} />
           );
         })}
       </div>
+
+      {/* o card que vai na mão enquanto arrasta */}
+      {arrasto && (
+        <div data-vk-card-arrastado style={{ position:"fixed", left: arrasto.x - 110, top: arrasto.y - 18, width:220, pointerEvents:"none", zIndex:2000,
+          background:"#fff", border:"1.5px solid #0474f4", borderRadius:10, padding:"9px 12px", boxShadow:"0 12px 28px rgba(0,0,0,0.18)",
+          fontSize:12.5, fontWeight:600, color:"#111827", transform:"rotate(-2deg)" }}>
+          {arrasto.nome}
+          <div style={{ fontSize:11, fontWeight:400, color:"#6b7280", marginTop:2 }}>
+            {arrasto.sobre ? `→ ${(ETAPAS_COLS.find(c => c.key === arrasto.sobre) || {}).label || ""}` : "solte numa etapa"}
+          </div>
+        </div>
+      )}
 
       {briefingDe && (
         <BriefingDoProjeto
@@ -4227,14 +4304,14 @@ function FilterPill({ label, count, active, onClick, countColor }) {
 }
 
 // ─── Coluna do Kanban ──────────────────────────────────────
-function KanbanColumn({ col, cards, clientes, onFinalizar, briefings, onBriefing }) {
+function KanbanColumn({ col, cards, clientes, onFinalizar, briefings, onBriefing, onArrastar, arrastandoId, destaque }) {
   const wait = col.wait;
   return (
-    <div style={{
+    <div data-vk-coluna-etapa={col.key} style={{
       flex:"0 0 280px", display:"flex", flexDirection:"column",
-      background: wait ? "#fbfaf6" : "#fafafa",
-      border: wait ? "1px dashed #e5e7eb" : "1px solid #f0f0f0",
-      borderRadius: 14, maxHeight:"100%",
+      background: destaque ? "#eef5ff" : wait ? "#fbfaf6" : "#fafafa",
+      border: destaque ? "1.5px solid #0474f4" : wait ? "1px dashed #e5e7eb" : "1px solid #f0f0f0",
+      borderRadius: 14, maxHeight:"100%", transition:"background 0.1s",
     }}>
       <div style={{
         padding:"14px 14px 10px",
@@ -4259,7 +4336,8 @@ function KanbanColumn({ col, cards, clientes, onFinalizar, briefings, onBriefing
           </div>
         ) : cards.map(card => (
           <ProjetoCard key={card.id} projeto={card} clientes={clientes} col={col} onFinalizar={onFinalizar}
-            briefing={(briefings || {})[card.orcId] || null} onBriefing={onBriefing} />
+            briefing={(briefings || {})[card.orcId] || null} onBriefing={onBriefing}
+            onArrastar={onArrastar} arrastando={arrastandoId === card.id} />
         ))}
       </div>
     </div>
@@ -4267,7 +4345,7 @@ function KanbanColumn({ col, cards, clientes, onFinalizar, briefings, onBriefing
 }
 
 // ─── Card de projeto ───────────────────────────────────────
-function ProjetoCard({ projeto, clientes, col, onFinalizar, briefing, onBriefing }) {
+function ProjetoCard({ projeto, clientes, col, onFinalizar, briefing, onBriefing, onArrastar, arrastando }) {
   const cliente = clientes.find(c => c.id === projeto.clienteId);
   const nomeCli = cliente?.nome || projeto.clienteNome || "—";
   const ref = projeto.referencia || "";
@@ -4285,20 +4363,30 @@ function ProjetoCard({ projeto, clientes, col, onFinalizar, briefing, onBriefing
       background:"#fff",
       border: atrasado ? "1px solid #fecaca" : "1px solid rgba(38,36,33,0.14)",
       borderRadius: 12, padding:12,
-      cursor:"pointer", transition:"all 0.15s",
+      cursor: onArrastar ? "grab" : "pointer", transition:"all 0.15s",
       display:"flex", flexDirection:"column", gap:8,
       ...(atrasado ? { background:"#fffbfb" } : {}),
+      ...(arrastando ? { opacity:0.4 } : {}),
     }}
+    data-vk-card-projeto={projeto.id}
+    onPointerDown={onArrastar ? (e) => onArrastar(e, projeto, nomeCli, false) : undefined}
     onMouseEnter={e => { e.currentTarget.style.borderColor = atrasado ? "#fca5a5" : "#0474f4"; }}
     onMouseLeave={e => { e.currentTarget.style.borderColor = atrasado ? "#fecaca" : "rgba(38,36,33,0.14)"; }}>
-      {/* Tag de tipo */}
-      <span style={{
-        display:"inline-flex", alignItems:"center",
-        fontSize:9.5, fontWeight:600, textTransform:"uppercase", letterSpacing:0.6,
-        padding:"2px 7px", borderRadius:4,
-        width:"fit-content",
-        background: tag.bg, color: tag.color,
-      }}>{tag.label}</span>
+      {/* Tag de tipo + alça para arrastar (no celular, arrasta-se por ela) */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+        <span style={{
+          display:"inline-flex", alignItems:"center",
+          fontSize:9.5, fontWeight:600, textTransform:"uppercase", letterSpacing:0.6,
+          padding:"2px 7px", borderRadius:4,
+          width:"fit-content",
+          background: tag.bg, color: tag.color,
+        }}>{tag.label}</span>
+        {onArrastar && (
+          <span data-vk-alca-etapa={projeto.id} title="Arraste para outra etapa" aria-label="Arraste para outra etapa"
+            onPointerDown={(e) => { e.stopPropagation(); onArrastar(e, projeto, nomeCli, true); }}
+            style={{ touchAction:"none", cursor:"grab", color:"#9ca3af", fontSize:15, lineHeight:1, padding:"2px 4px", margin:"-4px -4px -4px 0", userSelect:"none" }}>⋮⋮</span>
+        )}
+      </div>
 
       {/* Nome cliente */}
       <div style={{ fontSize:13.5, fontWeight:600, color:"#111827", lineHeight:1.3 }}>{nomeCli}</div>
