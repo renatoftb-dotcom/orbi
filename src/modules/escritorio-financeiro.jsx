@@ -325,6 +325,20 @@ function contasReordenadasNoPlano(cfg, area, chave, ids) {
   c[plano] = p;
   return { cfg: c };
 }
+// A conta em que se lança: a própria, ou — se ela virou mãe (tem subconta
+// ativa) — a primeira subconta na ordem do plano. Ex.: o recebimento de
+// projeto vai para "Receita Projetos › Arquitetura" quando há subcontas.
+function contaLancavelDoEscritorio(id) {
+  const c = contaEscritorio(id);
+  if (!c || !contaSoTotaliza(c)) return id;
+  const f = PLANO_CONTAS_ESCRITORIO.find((x) => x && x.pai === c.id && !x.inativa);
+  return f ? f.id : id;
+}
+// A conta e as subcontas dela contam como a mesma família (mãe › filhas).
+function familiaDaContaEscritorio(id) {
+  const c = contaEscritorio(id);
+  return (c && c.pai) || id;
+}
 // Conta mãe: com subconta ativa, ela só totaliza — lança-se nas subcontas.
 // `tipo` (contas de obra): a filha tem de valer no tipo da obra.
 function contaSoTotaliza(c, tipo) {
@@ -5327,7 +5341,7 @@ function parcelaDeProjetoParaALinha(movimento, lancamentos, ctx) {
   if (b && b.t === a.t && b.d === a.d) return null;
   const p = a.p;
   return { parcelaProjeto: p, daObra: false,
-    campos: { unidadeId: "projetos", contaId: "rec_projetos", clienteId: p.clienteId, cliente: p.cliente, projeto: p.referencia,
+    campos: { unidadeId: "projetos", contaId: contaLancavelDoEscritorio("rec_projetos"), clienteId: p.clienteId, cliente: p.cliente, projeto: p.referencia,
       descricao: `Recebimento de projeto — ${p.rotulo}` },
     motivos: [`parcela ${p.numero}/${p.totalParcelas} do projeto ${p.cliente}${p.referencia ? " · " + p.referencia : ""}`] };
 }
@@ -5397,7 +5411,7 @@ function lancamentosDoRecebimento(movimento, mes, sug, fechamentos) {
   const comum = { tipo: "escritorio", unidadeId: "projetos", clienteId: p.clienteId, cliente: p.cliente, projeto: p.referencia,
     competencia, lancadoEm: String(m.data || "").slice(0, 10), fornecedor: "" };
   const orig = (parte) => ({ tipo: "projeto", orcId: p.orcId, parcela: p.numero, parte });
-  const principal = { ...comum, contaId: "rec_projetos", valor, contaBanco: "sim",
+  const principal = { ...comum, contaId: contaLancavelDoEscritorio("rec_projetos"), valor, contaBanco: "sim",
     descricao: `Recebimento de projeto — ${p.rotulo}`, origem: orig("recebido"),
     extratoId: m.id || "", historicoBanco: m.historico || "" };
   const eng = efCentavos(Math.min(p.eng, valor));

@@ -4020,6 +4020,22 @@ teste("plano de contas da empresa: criar, renomear e desativar sem perder o hist
   assert.strictEqual(M.contaEscritorio("rec_financeira").nome, "Receita Financeira");
 });
 
+teste("recebimento de projeto com Receita Projetos dividida: entra na primeira subconta, não na mãe", () => {
+  let cfg = {};
+  let r = M.contaNovaNoPlano(cfg, "escritorio", { nome: "Arquitetura", pai: "rec_projetos" }); cfg = r.cfg; const arq = r.conta.id;
+  M.aplicarPlanoDeContas(cfg);
+  r = M.contaNovaNoPlano(cfg, "escritorio", { nome: "Engenharia", pai: "rec_projetos" }); cfg = r.cfg; const eng = r.conta.id;
+  M.aplicarPlanoDeContas(cfg);
+  const p = { orcId: "O1", numero: 1, totalParcelas: 1, valor: 1000, eng: 0, clienteId: "c1", cliente: "Cli", referencia: "R", rotulo: "parcela única" };
+  const l = M.lancamentosDoRecebimento({ id: "b", data: "2026-10-05", valor: 1000, historico: "" }, "2026-10", { parcelaProjeto: p }, {}).lancamento;
+  assert.strictEqual(l.contaId, arq);
+  assert.deepStrictEqual(M.validarLancamentoEscritorio({ ...l, clienteId: "c1" }, {}), []);
+  assert.ok(eng && eng !== arq);
+  M.aplicarPlanoDeContas({});
+  // sem subconta, continua na Receita Projetos
+  assert.strictEqual(M.lancamentosDoRecebimento({ id: "b", data: "2026-10-05", valor: 1000, historico: "" }, "2026-10", { parcelaProjeto: p }, {}).lancamento.contaId, "rec_projetos");
+});
+
 teste("plano de contas: subcontas (Pai › Sub) e ordem arrastada", () => {
   let cfg = {};
   let r = M.contaNovaNoPlano(cfg, "escritorio", { nome: "Residencial", pai: "rec_projetos" });

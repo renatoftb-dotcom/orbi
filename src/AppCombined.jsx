@@ -12339,6 +12339,20 @@ function contasReordenadasNoPlano(cfg, area, chave, ids) {
   c[plano] = p;
   return { cfg: c };
 }
+// A conta em que se lança: a própria, ou — se ela virou mãe (tem subconta
+// ativa) — a primeira subconta na ordem do plano. Ex.: o recebimento de
+// projeto vai para "Receita Projetos › Arquitetura" quando há subcontas.
+function contaLancavelDoEscritorio(id) {
+  const c = contaEscritorio(id);
+  if (!c || !contaSoTotaliza(c)) return id;
+  const f = PLANO_CONTAS_ESCRITORIO.find((x) => x && x.pai === c.id && !x.inativa);
+  return f ? f.id : id;
+}
+// A conta e as subcontas dela contam como a mesma família (mãe › filhas).
+function familiaDaContaEscritorio(id) {
+  const c = contaEscritorio(id);
+  return (c && c.pai) || id;
+}
 // Conta mãe: com subconta ativa, ela só totaliza — lança-se nas subcontas.
 // `tipo` (contas de obra): a filha tem de valer no tipo da obra.
 function contaSoTotaliza(c, tipo) {
@@ -17341,7 +17355,7 @@ function parcelaDeProjetoParaALinha(movimento, lancamentos, ctx) {
   if (b && b.t === a.t && b.d === a.d) return null;
   const p = a.p;
   return { parcelaProjeto: p, daObra: false,
-    campos: { unidadeId: "projetos", contaId: "rec_projetos", clienteId: p.clienteId, cliente: p.cliente, projeto: p.referencia,
+    campos: { unidadeId: "projetos", contaId: contaLancavelDoEscritorio("rec_projetos"), clienteId: p.clienteId, cliente: p.cliente, projeto: p.referencia,
       descricao: `Recebimento de projeto — ${p.rotulo}` },
     motivos: [`parcela ${p.numero}/${p.totalParcelas} do projeto ${p.cliente}${p.referencia ? " · " + p.referencia : ""}`] };
 }
@@ -17411,7 +17425,7 @@ function lancamentosDoRecebimento(movimento, mes, sug, fechamentos) {
   const comum = { tipo: "escritorio", unidadeId: "projetos", clienteId: p.clienteId, cliente: p.cliente, projeto: p.referencia,
     competencia, lancadoEm: String(m.data || "").slice(0, 10), fornecedor: "" };
   const orig = (parte) => ({ tipo: "projeto", orcId: p.orcId, parcela: p.numero, parte });
-  const principal = { ...comum, contaId: "rec_projetos", valor, contaBanco: "sim",
+  const principal = { ...comum, contaId: contaLancavelDoEscritorio("rec_projetos"), valor, contaBanco: "sim",
     descricao: `Recebimento de projeto — ${p.rotulo}`, origem: orig("recebido"),
     extratoId: m.id || "", historicoBanco: m.historico || "" };
   const eng = efCentavos(Math.min(p.eng, valor));
@@ -61364,7 +61378,8 @@ function itensAReceber(data, opcoes) {
       out.push({ id: `proj:${p.orcId}:${p.numero}`, origem: "projeto", quem: p.cliente || "—", referencia: p.referencia || "",
         rotulo: p.rotulo.charAt(0).toUpperCase() + p.rotulo.slice(1), vencimento: p.data || "", valor: p.valor,
         recebido: !!p.recebida, recebidoEm: l ? String(l.lancadoEm || "").slice(0, 10) : "", lancamentoId: p.lancamentoId || "",
-        contaId: "rec_projetos", parcela: p });
+        // recebida: a conta em que o recebimento está (pode ter sido reclassificado)
+        contaId: (l && l.contaId) || (typeof contaLancavelDoEscritorio === "function" ? contaLancavelDoEscritorio("rec_projetos") : "rec_projetos"), parcela: p });
     }
   }
   // honorários de gerenciamento (a conta da obra que vira Receita Gestão)
@@ -61429,7 +61444,8 @@ function candidatosDoRecebimento(item, data) {
   const dias = (a, b) => (/^\d{4}-\d{2}-\d{2}$/.test(a) && /^\d{4}-\d{2}-\d{2}$/.test(b)
     ? Math.abs((new Date(a + "T12:00:00") - new Date(b + "T12:00:00")) / 86400000) : 0);
   return lancs.filter((l) => l && l.tipo === "escritorio" && !usados.has(l.id)
-    && l.contaId === it.contaId && Math.abs(Math.abs(Number(l.valor) || 0) - Number(it.valor || 0)) < 0.01
+    && (l.contaId === it.contaId || (typeof familiaDaContaEscritorio === "function"
+      && familiaDaContaEscritorio(l.contaId) === familiaDaContaEscritorio(it.contaId))) && Math.abs(Math.abs(Number(l.valor) || 0) - Number(it.valor || 0)) < 0.01
     && !(l.origem && (l.origem.tipo === "projeto" || l.origem.tipo === "receber" || l.origem.obraId))
     && dias(String(l.lancadoEm || (l.competencia ? l.competencia + "-15" : "")).slice(0, 10), venc) <= 60)
     .slice(0, 5);

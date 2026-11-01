@@ -127,7 +127,8 @@ function itensAReceber(data, opcoes) {
       out.push({ id: `proj:${p.orcId}:${p.numero}`, origem: "projeto", quem: p.cliente || "—", referencia: p.referencia || "",
         rotulo: p.rotulo.charAt(0).toUpperCase() + p.rotulo.slice(1), vencimento: p.data || "", valor: p.valor,
         recebido: !!p.recebida, recebidoEm: l ? String(l.lancadoEm || "").slice(0, 10) : "", lancamentoId: p.lancamentoId || "",
-        contaId: "rec_projetos", parcela: p });
+        // recebida: a conta em que o recebimento está (pode ter sido reclassificado)
+        contaId: (l && l.contaId) || (typeof contaLancavelDoEscritorio === "function" ? contaLancavelDoEscritorio("rec_projetos") : "rec_projetos"), parcela: p });
     }
   }
   // honorários de gerenciamento (a conta da obra que vira Receita Gestão)
@@ -192,7 +193,8 @@ function candidatosDoRecebimento(item, data) {
   const dias = (a, b) => (/^\d{4}-\d{2}-\d{2}$/.test(a) && /^\d{4}-\d{2}-\d{2}$/.test(b)
     ? Math.abs((new Date(a + "T12:00:00") - new Date(b + "T12:00:00")) / 86400000) : 0);
   return lancs.filter((l) => l && l.tipo === "escritorio" && !usados.has(l.id)
-    && l.contaId === it.contaId && Math.abs(Math.abs(Number(l.valor) || 0) - Number(it.valor || 0)) < 0.01
+    && (l.contaId === it.contaId || (typeof familiaDaContaEscritorio === "function"
+      && familiaDaContaEscritorio(l.contaId) === familiaDaContaEscritorio(it.contaId))) && Math.abs(Math.abs(Number(l.valor) || 0) - Number(it.valor || 0)) < 0.01
     && !(l.origem && (l.origem.tipo === "projeto" || l.origem.tipo === "receber" || l.origem.obraId))
     && dias(String(l.lancadoEm || (l.competencia ? l.competencia + "-15" : "")).slice(0, 10), venc) <= 60)
     .slice(0, 5);
