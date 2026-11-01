@@ -624,6 +624,7 @@ function faltasDaTransacao(t) {
   const faltas = [];
   if (e.obra && !tem(c.obraId)) faltas.push("a obra");
   if (e.conta && !tem(c.contaId)) faltas.push("a conta contábil");
+  else if (tem(c.contaId) && typeof contaSoTotaliza === "function" && contaSoTotaliza(PLANO_CONTAS.find((x) => x.id === c.contaId))) faltas.push("a subconta (a conta escolhida tem subcontas)");
   if (e.valor && !(n(c.valorPago || c.valor) > 0)) faltas.push("o valor");
   if (e.data && !tem(c.pagoEm || c.vencimento)) faltas.push("a data");
   if (e.fornecedor && !tem(c.prestadorId) && !tem(c.favorecido)) faltas.push("o fornecedor");
@@ -803,7 +804,8 @@ function contaPorId(id) {
 // aparecem em PLANO_CONTAS.
 function contasDoGrupo(grupoId) {
   // desativada no Plano de contas da empresa (ou só no tipo desta obra): some da escolha
-  return PLANO_CONTAS.filter(c => c.grupo === grupoId && contaValeNoTipo(c));
+  return PLANO_CONTAS.filter(c => c.grupo === grupoId && contaValeNoTipo(c)
+    && !(typeof contaSoTotaliza === "function" && contaSoTotaliza(c)));   // conta mãe só totaliza
 }
 // ── Empreendimento × gestão de obra: planos de conta separados ──
 // A obra de empreendimento tem compra de terreno, venda de unidade e o IR da

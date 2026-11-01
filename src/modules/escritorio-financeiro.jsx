@@ -204,6 +204,12 @@ function planoDeContasMontado(base, cfg, daObra) {
     return y;
   });
   const porId = new Map(lista.map((x) => [x.id, x]));
+  for (const x of lista) delete x.filhas;
+  for (const x of lista) {
+    if (!x.pai || !porId.has(x.pai)) continue;
+    const mae = porId.get(x.pai);
+    mae.filhas = (mae.filhas || []).concat([x.id]);
+  }
   for (const x of lista) {
     if (!x.pai) continue;
     const pai = porId.get(x.pai);
@@ -319,6 +325,17 @@ function contasReordenadasNoPlano(cfg, area, chave, ids) {
   c[plano] = p;
   return { cfg: c };
 }
+// Conta mãe: com subconta ativa, ela só totaliza — lança-se nas subcontas.
+// `tipo` (contas de obra): a filha tem de valer no tipo da obra.
+function contaSoTotaliza(c, tipo) {
+  if (!c || !(c.filhas || []).length) return false;
+  const daObra = typeof PLANO_CONTAS !== "undefined" && PLANO_CONTAS.indexOf(c) >= 0;
+  return c.filhas.some((id) => {
+    const f = daObra ? PLANO_CONTAS.find((x) => x.id === id) : contaEscritorio(id);
+    if (!f) return false;
+    return daObra && typeof contaValeNoTipo === "function" ? contaValeNoTipo(f, tipo) : !f.inativa;
+  });
+}
 // Onde a conta é usada: lançamentos do escritório (plano do escritório) ou
 // contas, estimativas e entradas das obras (plano da obra), e as subcontas.
 function usoDaContaNoPlano(data, area, id, atuais) {
@@ -406,6 +423,7 @@ function validarLancamentoEscritorio(l, opcoes) {
   if (trava) erros.push(trava);
   const conta = contaEscritorio(lan.contaId);
   if (!conta) erros.push("Escolha a conta.");
+  else if (contaSoTotaliza(conta)) erros.push(`A conta “${conta.nome}” tem subcontas: escolha uma delas.`);
   if (!lan.competencia || !/^\d{4}-\d{2}$/.test(String(lan.competencia))) erros.push("Informe o mês de competência.");
   const valor = Number(lan.valor);
   if (!Number.isFinite(valor) || valor === 0) erros.push("Informe o valor.");
@@ -537,7 +555,8 @@ function composicaoDoExtrato(lancamentos, alvo, periodo) {
     if (!l || !/^\d{4}-\d{2}$/.test(String(l.competencia)) || !String(l.competencia).startsWith(p)) continue;
     const conta = contaEscritorio(l.contaId);
     if (!conta) continue;
-    const sinal = a.conta ? (conta.id === a.conta ? 1 : 0)
+    const sinal = a.contas ? (a.contas.indexOf(conta.id) >= 0 ? 1 : 0)
+      : a.conta ? (conta.id === a.conta ? 1 : 0)
       : a.grupo ? (conta.grupo === a.grupo ? 1 : 0)
       : pesos ? (pesos[conta.grupo] || 0) : 0;
     if (!sinal) continue;
@@ -557,7 +576,7 @@ function composicaoDoExtrato(lancamentos, alvo, periodo) {
 function contasParaReclassificar(l) {
   const atual = contaEscritorio((l || {}).contaId);
   if (!atual) return [];
-  return PLANO_CONTAS_ESCRITORIO.filter((c) => c.grupo === atual.grupo && !c.interna && !c.inativa && c.id !== atual.id
+  return PLANO_CONTAS_ESCRITORIO.filter((c) => c.grupo === atual.grupo && !c.interna && !c.inativa && !contaSoTotaliza(c) && c.id !== atual.id
     && (!(c.unidades || []).length || c.unidades.indexOf(l.unidadeId) >= 0));
 }
 // O que impede reclassificar por aqui (texto) — ou "" quando pode.
@@ -4410,12 +4429,13 @@ function contaEscolhida(valor) {
 
 function contasDoLancamento(unidadeId, opcoes) {
   const escritorio = PLANO_CONTAS_ESCRITORIO
-    .filter((c) => c && !c.interna && !c.inativa && (!(c.unidades || []).length || c.unidades.indexOf(unidadeId) >= 0))
+    .filter((c) => c && !c.interna && !c.inativa && !contaSoTotaliza(c) && (!(c.unidades || []).length || c.unidades.indexOf(unidadeId) >= 0))
     .map((c) => ({ valor: valorDaConta(c.id, "escritorio"), id: c.id, nome: c.nome, grupo: c.grupo, fonte: "escritorio" }));
   if (!unidadePedeObra(unidadeId)) return { obra: [], escritorio: escritorio };
   const obra = pontePlanoDaObra(opcoes)
     .filter((c) => c && EF_GRUPOS_CUSTO_OBRA.indexOf(c.grupo) >= 0
-      && (typeof contaValeNoTipo === "function" ? contaValeNoTipo(c, unidadeId === "empreendimento" ? "empreendimento" : unidadeId === "gestao_obras" ? "gestao" : "") : !c.inativa))
+      && (typeof contaValeNoTipo === "function" ? contaValeNoTipo(c, unidadeId === "empreendimento" ? "empreendimento" : unidadeId === "gestao_obras" ? "gestao" : "") : !c.inativa)
+      && !contaSoTotaliza(c, unidadeId === "empreendimento" ? "empreendimento" : unidadeId === "gestao_obras" ? "gestao" : ""))
     .map((c) => ({ valor: valorDaConta(c.id, "obra"), id: c.id, nome: c.nome, grupo: c.grupo, fonte: "obra" }));
   return { obra: obra, escritorio: escritorio };
 }
@@ -6589,7 +6609,12 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancam
                 pelo saldo — o total do grupo seria o mesmo número. */}
             {blocos.map((b) => {
               const contas = b.grupos.flatMap((g) => PLANO_CONTAS_ESCRITORIO.filter((c) => c.grupo === g));
-              const usadas = contas.filter((c) => doAno.some((m) => (m.contas[c.id] || 0) !== 0));
+              // conta mãe: o valor dela é o dela + o das subcontas; as subcontas
+              // vêm logo abaixo, recuadas (o que ficou na mãe, "sem subconta")
+              const idsDe = (c) => [c.id].concat(c.filhas || []);
+              const vDe = (c, m, so) => (so ? (m.contas[c.id] || 0) : idsDe(c).reduce((t, id) => t + (m.contas[id] || 0), 0));
+              const usada = (c, so) => doAno.some((m) => vDe(c, m, so) !== 0);
+              const usadas = contas.filter((c) => (c.pai && contas.some((x) => x.id === c.pai)) ? usada(c, true) : usada(c, false));
               if (!usadas.length && !doAno.some((m) => m[b.saldo])) return null;
               const grupos = b.grupos.filter((g) => usadas.some((c) => c.grupo === g));
               const umSo = grupos.length <= 1;
@@ -6597,15 +6622,43 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancam
               const tdGrupo = { ...td, fontWeight: 600, fontSize: 13, color: "#262421", paddingTop: 10, paddingBottom: 4 };
               const tdItem = { ...td, fontSize: 11.5, color: "#6b7280", paddingTop: 3, paddingBottom: 3 };
               const tdSaldo = { ...td, fontWeight: 700, fontSize: 13, borderTop: "1px solid rgba(38,36,33,0.14)", background: "#fbfcfd", paddingTop: 9, paddingBottom: 9 };
-              const itens = (lista) => lista.map((c, k) => (
-                <tr key={c.id} data-vk-item-conta={c.id}>
-                  <td style={{ ...tdNome, ...tdItem, textAlign: "left", whiteSpace: "normal", paddingLeft: 30, paddingBottom: k === lista.length - 1 ? 8 : 3 }}>{c.nome}</td>
-                  {doAno.map((m) => <td key={m.mes} style={{ ...tdItem, paddingBottom: k === lista.length - 1 ? 8 : 3, ...clicavel(m.contas[c.id]) }}
-                    data-vk-celula={`conta:${c.id}:${m.mes}`} onClick={abre(`conta:${c.id}:${m.mes}`, c.nome, { conta: c.id }, m.mes, m.contas[c.id])}>{cel(m.contas[c.id] || 0)}</td>)}
-                  <td style={{ ...tdItem, paddingBottom: k === lista.length - 1 ? 8 : 3, ...clicavel(soma((m) => m.contas[c.id] || 0)) }}
-                    data-vk-celula={`conta:${c.id}:${ano}`} onClick={abre(`conta:${c.id}:${ano}`, c.nome, { conta: c.id }, ano, soma((m) => m.contas[c.id] || 0))}>{cel(soma((m) => m.contas[c.id] || 0))}</td>
-                </tr>
-              ));
+              const itens = (lista0) => {
+                const lista = [];
+                for (const c of lista0) {
+                  const ehFilha = !!(c.pai && lista0.some((x) => x.id === c.pai));
+                  const ehMae = !ehFilha && (c.filhas || []).length > 0;
+                  lista.push({ c, ids: ehMae ? idsDe(c) : [c.id], nivel: ehFilha ? 2 : 1, mae: ehMae, rotulo: ehFilha ? (c.nomeProprio || c.nome) : c.nome });
+                  // o que foi lançado na própria mãe aparece como uma linha dela
+                  const filhasUsadas = ehMae ? lista0.filter((x) => x.pai === c.id) : [];
+                  if (ehMae && filhasUsadas.length && usada(c, true)) {
+                    const ultima = filhasUsadas[filhasUsadas.length - 1];
+                    lista.push({ depoisDe: ultima.id, c, ids: [c.id], nivel: 2, rotulo: "sem subconta", semSub: true });
+                  }
+                }
+                // a linha "sem subconta" vai depois da última filha da mãe
+                const ordenada = [];
+                for (const it of lista.filter((x) => !x.semSub)) {
+                  ordenada.push(it);
+                  for (const x of lista.filter((y) => y.semSub && y.depoisDe === it.c.id && it.nivel === 2)) ordenada.push(x);
+                }
+                return ordenada.map((it, k) => {
+                  const ult = k === ordenada.length - 1;
+                  const v = (m) => it.ids.reduce((t, id) => t + (m.contas[id] || 0), 0);
+                  const alvo = it.ids.length > 1 ? { contas: it.ids } : { conta: it.ids[0] };
+                  const chave = it.semSub ? it.c.id + ":so" : it.c.id;
+                  const estilo = { ...tdItem, paddingBottom: ult ? 8 : 3, ...(it.nivel === 2 ? { fontSize: 11 } : {}), ...(it.mae ? { color: "#374151", fontWeight: 600 } : {}) };
+                  return (
+                    <tr key={chave} data-vk-item-conta={chave}>
+                      <td style={{ ...tdNome, ...estilo, textAlign: "left", whiteSpace: "normal", paddingLeft: it.nivel === 2 ? 46 : 30 }}>
+                        {it.nivel === 2 ? <span style={{ color: "#c0c4cc" }}>↳ </span> : null}{it.semSub ? <i>{it.rotulo}</i> : it.rotulo}</td>
+                      {doAno.map((m) => <td key={m.mes} style={{ ...estilo, ...clicavel(v(m)) }}
+                        data-vk-celula={`conta:${chave}:${m.mes}`} onClick={abre(`conta:${chave}:${m.mes}`, it.c.nome, alvo, m.mes, v(m))}>{cel(v(m))}</td>)}
+                      <td style={{ ...estilo, ...clicavel(soma(v)) }}
+                        data-vk-celula={`conta:${chave}:${ano}`} onClick={abre(`conta:${chave}:${ano}`, it.c.nome, alvo, ano, soma(v))}>{cel(soma(v))}</td>
+                    </tr>
+                  );
+                });
+              };
               const sinalDe = (g) => ((grupoEscritorio(g) || {}).sinal < 0 ? "−" : "+");
               return (
                 <Fragment key={b.titulo}>

@@ -26,7 +26,7 @@ const M = new Function(src + `
            lancamentoDoExtrato, efValorDeTexto, efEhData, efLinhaDoCabecalho,
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
-           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte, parcelaDaVendaParaALinha, lancamentosDaContaBancaria, provisaoNoEscritorio, provisaoReservadaNoEscritorio, saldosDoPeDoExtrato, contaMudouNaPonte, contaMudouNoDinheiro, reclassificacaoMexeNoSaldo, aplicarPlanoDeContas, contaNovaNoPlano, contaRenomeadaNoPlano, contaAtivadaNoPlano, contasReordenadasNoPlano, usoDaContaNoPlano, contaExcluidaNoPlano, contasDoLancamento, contaPeloApelido,
+           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte, parcelaDaVendaParaALinha, lancamentosDaContaBancaria, provisaoNoEscritorio, provisaoReservadaNoEscritorio, saldosDoPeDoExtrato, contaMudouNaPonte, contaMudouNoDinheiro, reclassificacaoMexeNoSaldo, aplicarPlanoDeContas, contaNovaNoPlano, contaRenomeadaNoPlano, contaAtivadaNoPlano, contasReordenadasNoPlano, usoDaContaNoPlano, contaExcluidaNoPlano, contaSoTotaliza, composicaoDoExtrato, contasDoLancamento, contaPeloApelido,
            fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
@@ -4056,6 +4056,25 @@ teste("plano de contas: excluir só conta sem uso; empreendimento × gestão na 
   assert.ok(M.contaExcluidaNoPlano(c2, "escritorio", "rec_projetos", M.usoDaContaNoPlano({}, "escritorio", "rec_projetos")).erro);
   M.aplicarPlanoDeContas({});
   assert.ok(M.contaEscritorio("rec_comissoes"));
+});
+
+teste("conta mãe: com subconta só totaliza — lança-se na subconta", () => {
+  let cfg = M.contaNovaNoPlano({}, "escritorio", { nome: "Arquitetura", pai: "rec_projetos" }).cfg;
+  cfg = M.contaNovaNoPlano(cfg, "escritorio", { nome: "Engenharia", pai: "rec_projetos" }, { atuais: (M.aplicarPlanoDeContas(cfg), M.PLANO_CONTAS_ESCRITORIO) }).cfg;
+  M.aplicarPlanoDeContas(cfg);
+  const [arq, eng] = cfg.escritorio.novas.map((x) => x.id);
+  assert.ok(M.contaSoTotaliza(M.contaEscritorio("rec_projetos")));
+  const lista = M.contasDoLancamento("projetos").escritorio.map((c) => c.id);
+  assert.ok(lista.indexOf("rec_projetos") < 0 && lista.indexOf(arq) >= 0 && lista.indexOf(eng) >= 0);
+  const erros = M.validarLancamentoEscritorio({ contaId: "rec_projetos", unidadeId: "projetos", valor: 100, competencia: "2026-10", lancadoEm: "2026-10-01", descricao: "x" });
+  assert.ok(erros.some((e) => /subcontas/.test(e)), JSON.stringify(erros));
+  // a composição da mãe soma a dela e a das filhas
+  const lancs = [{ tipo: "escritorio", contaId: "rec_projetos", valor: 100, competencia: "2026-10" }, { tipo: "escritorio", contaId: arq, valor: 50, competencia: "2026-10" }];
+  assert.strictEqual(M.composicaoDoExtrato(lancs, { contas: ["rec_projetos", arq, eng] }, "2026-10").total, 150);
+  // as duas filhas desativadas: a mãe volta a receber lançamento
+  cfg = M.contaAtivadaNoPlano(M.contaAtivadaNoPlano(cfg, "escritorio", arq, false).cfg, "escritorio", eng, false).cfg; M.aplicarPlanoDeContas(cfg);
+  assert.ok(!M.contaSoTotaliza(M.contaEscritorio("rec_projetos")));
+  M.aplicarPlanoDeContas({});
 });
 
 for (const [nome, fn] of testes) {

@@ -5207,7 +5207,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   ? trocarContaComPadrao(formConta, e.target.value) : { ...formConta, contaId: e.target.value })}>
                   {GRUPOS_PL.filter(g => g.id !== "receitas").map(g => (
                     <optgroup key={g.id} label={g.titulo}>
-                      {PLANO_CONTAS.filter(c => c.grupo === g.id && (typeof contaValeNoTipo === "function" ? contaValeNoTipo(c) : !c.inativa)).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                      {PLANO_CONTAS.filter(c => c.grupo === g.id && (typeof contaValeNoTipo === "function" ? contaValeNoTipo(c) : !c.inativa) && !(typeof contaSoTotaliza === "function" && contaSoTotaliza(c))).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                     </optgroup>
                   ))}
                 </Selecao>
