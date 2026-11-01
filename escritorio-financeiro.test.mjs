@@ -26,7 +26,7 @@ const M = new Function(src + `
            lancamentoDoExtrato, efValorDeTexto, efEhData, efLinhaDoCabecalho,
            layoutsDoEscritorio, layoutSalvo,
            ehEmpreendimento, empreendimentosDoData, nomeDoEmpreendimento, cartoesDaObra, obraEhDoEscritorio, validarCartaoDoCliente, cartaoDoClienteNovo,
-           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte, parcelaDaVendaParaALinha, lancamentosDaContaBancaria, provisaoNoEscritorio, provisaoReservadaNoEscritorio, saldosDoPeDoExtrato, contaMudouNaPonte, contaMudouNoDinheiro, reclassificacaoMexeNoSaldo, aplicarPlanoDeContas, contaNovaNoPlano, contaRenomeadaNoPlano, contaAtivadaNoPlano, contasReordenadasNoPlano, contasDoLancamento, contaPeloApelido,
+           modoDaPonte, destinoNoEscritorio, lancamentosDaObraParaEscritorio, idDaPonte, parcelaDaVendaParaALinha, lancamentosDaContaBancaria, provisaoNoEscritorio, provisaoReservadaNoEscritorio, saldosDoPeDoExtrato, contaMudouNaPonte, contaMudouNoDinheiro, reclassificacaoMexeNoSaldo, aplicarPlanoDeContas, contaNovaNoPlano, contaRenomeadaNoPlano, contaAtivadaNoPlano, contasReordenadasNoPlano, usoDaContaNoPlano, contaExcluidaNoPlano, contasDoLancamento, contaPeloApelido,
            fontesDasContasPagas, arquivoDoColar, saldoAplicacaoDoMes, comSaldoAplicacao, saldoBancoDoMes, comSaldoBanco, receitaFinanceiraDoMes, lancamentoDoRendimento, rendimentoLancadoNoMes, checagemDebitoCredito, rendimentoPelaAplicacao, ehLinhaDeEstorno, originalDoEstorno, sugestaoDeEstorno, lancamentoDoEstornoDoExtrato, contasDaObraSemLigacao, obrasDoDonoDoLancamento, contasIguaisNaObra, contaDaObraParaALinha, lancamentoDaLigacaoComObra, parcelaDoLancamento, investidoDoEmpreendimento, parcelasDosProjetos, parcelaDeProjetoParaALinha, rotuloDaParcelaDeProjeto, lancamentosDoRecebimento, lancamentosDoGanhoRecebido, lancamentosDaParcelaRecebida, lancamentosComGanhoRecebido, saldoDaReservaEngenharia, comoPagamentoDaReserva, lancamentoRapidoDoExtrato, valorBRDigitado, valorBRDeFora, valorBRNaTela, valorBRCompleto,
            cartaoVazio, cartaoPorId, faturaDaCompra, somarCompetencia, parcelasDoCartao,
            pagamentoNoCartao, linhasDaFatura, totalDaFatura, idDaFatura, lancamentoDaFatura,
@@ -4035,6 +4035,27 @@ teste("plano de contas: subcontas (Pai › Sub) e ordem arrastada", () => {
   cfg = M.contasReordenadasNoPlano(cfg, "escritorio", "receitas", ["rec_financeira", "rec_gestao", "rec_projetos", "rec_comissoes"]).cfg; M.aplicarPlanoDeContas(cfg);
   assert.deepStrictEqual(ids().slice(0, 4), ["rec_financeira", "rec_gestao", "rec_projetos", sub]);
   M.aplicarPlanoDeContas({});
+});
+
+teste("plano de contas: excluir só conta sem uso; empreendimento × gestão na obra", () => {
+  let cfg = M.contaNovaNoPlano({}, "escritorio", { nome: "Software", grupo: "despesas" }).cfg;
+  M.aplicarPlanoDeContas(cfg);
+  const id = cfg.escritorio.novas[0].id;
+  // com lançamento: não
+  const comUso = M.usoDaContaNoPlano({ lancamentos: [{ contaId: id }] }, "escritorio", id);
+  assert.ok(M.contaExcluidaNoPlano(cfg, "escritorio", id, comUso).erro);
+  // sem uso: a criada sai
+  cfg = M.contaExcluidaNoPlano(cfg, "escritorio", id, M.usoDaContaNoPlano({ lancamentos: [] }, "escritorio", id)).cfg;
+  assert.strictEqual(cfg.escritorio.novas.length, 0);
+  // a de sempre sem uso: some do plano
+  cfg = M.contaExcluidaNoPlano(cfg, "escritorio", "rec_comissoes", M.usoDaContaNoPlano({}, "escritorio", "rec_comissoes")).cfg;
+  M.aplicarPlanoDeContas(cfg);
+  assert.strictEqual(M.contaEscritorio("rec_comissoes"), null);
+  // conta com subconta: não
+  let c2 = M.contaNovaNoPlano({}, "escritorio", { nome: "Residencial", pai: "rec_projetos" }).cfg; M.aplicarPlanoDeContas(c2);
+  assert.ok(M.contaExcluidaNoPlano(c2, "escritorio", "rec_projetos", M.usoDaContaNoPlano({}, "escritorio", "rec_projetos")).erro);
+  M.aplicarPlanoDeContas({});
+  assert.ok(M.contaEscritorio("rec_comissoes"));
 });
 
 for (const [nome, fn] of testes) {

@@ -11979,8 +11979,30 @@ function contaPorId(id) {
 // contasDoGrupo(grupoId) → array de contas daquele grupo, na ordem em que
 // aparecem em PLANO_CONTAS.
 function contasDoGrupo(grupoId) {
-  // desativada no Plano de contas da empresa: some da escolha
-  return PLANO_CONTAS.filter(c => c.grupo === grupoId && !c.inativa);
+  // desativada no Plano de contas da empresa (ou só no tipo desta obra): some da escolha
+  return PLANO_CONTAS.filter(c => c.grupo === grupoId && contaValeNoTipo(c));
+}
+// ── Empreendimento × gestão de obra: planos de conta separados ──
+// A obra de empreendimento tem compra de terreno, venda de unidade e o IR da
+// venda; a de gestão (obra de cliente) tem o gerenciamento cobrado. Cada
+// conta diz em que tipo vale (`tipos`); sem dizer, vale nos dois. O tipo da
+// obra aberta fica aqui, para as listas de conta da obra mostrarem só as dela.
+const TIPOS_DE_OBRA = ["empreendimento", "gestao"];
+const TIPOS_PADRAO_DA_CONTA = { venda_imovel: ["empreendimento"], ir_receita: ["empreendimento"], taxa_admin_obra: ["gestao"] };
+function tiposPadraoDaContaObra(c) {
+  if (!c) return TIPOS_DE_OBRA.slice();
+  if (TIPOS_PADRAO_DA_CONTA[c.id]) return TIPOS_PADRAO_DA_CONTA[c.id].slice();
+  if (c.grupo === "terreno") return ["empreendimento"];
+  return TIPOS_DE_OBRA.slice();
+}
+let TIPO_DE_OBRA_ATUAL = "";
+function definirTipoDeObraAtual(tipo) { TIPO_DE_OBRA_ATUAL = TIPOS_DE_OBRA.indexOf(tipo) >= 0 ? tipo : ""; }
+function contaValeNoTipo(c, tipo) {
+  if (!c || c.inativa) return false;
+  const t = tipo === undefined ? TIPO_DE_OBRA_ATUAL : tipo;
+  if (!t) return true;
+  if ((c.tipos || tiposPadraoDaContaObra(c)).indexOf(t) < 0) return false;
+  return !((c.inativaEm || []).indexOf(t) >= 0);
 }
 
 
@@ -12173,16 +12195,24 @@ function planosOriginaisDeContas() {
 // sistema mostra é "Pai › Sub" — trocar o nome do pai troca o das filhas.
 // A ordem (arrastar na Configuração) fica em `ordem`: por grupo, as contas
 // de cima; por "pai:<id>", as subcontas daquela conta.
-function planoDeContasMontado(base, cfg) {
+function planoDeContasMontado(base, cfg, daObra) {
   const c = cfg || {};
   const nomes = c.nomes || {};
   const inativas = new Set(c.inativas || []);
+  const inativasPorTipo = c.inativasPorTipo || {};
+  const excluidas = new Set(c.excluidas || []);
   const ordem = c.ordem || {};
-  const lista = (base || []).map((x) => ({ ...x })).concat((c.novas || []).map((x) => ({ ...x, nova: true }))).map((x) => {
+  const lista = (base || []).filter((x) => !excluidas.has(x.id)).map((x) => ({ ...x })).concat((c.novas || []).filter((x) => !excluidas.has(x.id)).map((x) => ({ ...x, nova: true }))).map((x) => {
     const y = { ...x };
     const nome = String(nomes[x.id] || "").trim();
     if (nome && nome !== x.nome) { y.apelidos = (x.apelidos || []).concat([x.nome]); y.nome = nome; }
     if (inativas.has(x.id)) y.inativa = true; else delete y.inativa;
+    if (daObra) {
+      // em que tipo de obra a conta vale (empreendimento, gestão) e em qual foi desativada
+      if (!Array.isArray(y.tipos)) y.tipos = typeof tiposPadraoDaContaObra === "function" ? tiposPadraoDaContaObra(y) : ["empreendimento", "gestao"];
+      const em = Object.keys(inativasPorTipo).filter((t) => (inativasPorTipo[t] || []).indexOf(x.id) >= 0);
+      if (em.length) y.inativaEm = em; else delete y.inativaEm;
+    }
     return y;
   });
   const porId = new Map(lista.map((x) => [x.id, x]));
@@ -12218,7 +12248,7 @@ function aplicarPlanoDeContas(cfg) {
   if (chave === EF_PLANO_APLICADO) return false;
   const o = planosOriginaisDeContas();
   const c = cfg || {};
-  const obra = planoDeContasMontado(o.obra, c.obra);
+  const obra = planoDeContasMontado(o.obra, c.obra, true);
   const esc = planoDeContasMontado(o.escritorio, c.escritorio);
   if (typeof PLANO_CONTAS !== "undefined") PLANO_CONTAS.splice(0, PLANO_CONTAS.length, ...obra);
   PLANO_CONTAS_ESCRITORIO.splice(0, PLANO_CONTAS_ESCRITORIO.length, ...esc);
@@ -12227,9 +12257,10 @@ function aplicarPlanoDeContas(cfg) {
 }
 // Os grupos em que se pode criar conta, por área.
 const EF_GRUPOS_DO_PLANO = {
-  escritorio: ["receitas", "despesas", "gestao_entradas", "gestao_saidas", "socios", "socios_entradas", "reservas"],
+  escritorio: ["receitas", "despesas", "socios", "socios_entradas", "reservas"],
   empreendimentos: ["emp_entradas", "emp_aportes", "emp_saidas"],
-  obra: ["materiais", "maoDeObra", "servicos", "terreno", "receitas"],
+  gestao: ["gestao_entradas", "gestao_saidas"],
+  obra: ["receitas", "terreno", "materiais", "maoDeObra", "servicos"],
 };
 function efSlugDaConta(t) {
   return efSemAcento(t).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 32) || "conta";
@@ -12243,6 +12274,7 @@ function contaNovaNoPlano(cfg, area, dados, opcoes) {
   const pai = (dados || {}).pai ? atuais.find((c) => c && c.id === dados.pai) : null;
   if ((dados || {}).pai && !pai) return { erro: "Conta de cima não encontrada." };
   if (pai && pai.pai) return { erro: "Subconta não tem subconta: crie na conta de cima." };
+  const tipoObra = (dados || {}).tipo || "";
   const grupo = pai ? pai.grupo : String((dados || {}).grupo || "");
   if (!nome) return { erro: "Dê um nome à conta." };
   if ((EF_GRUPOS_DO_PLANO[area] || []).indexOf(grupo) < 0) return { erro: "Escolha o grupo da conta." };
@@ -12252,6 +12284,8 @@ function contaNovaNoPlano(cfg, area, dados, opcoes) {
   let id = base, k = 2;
   while (atuais.some((c) => c && c.id === id)) id = base + "_" + (k++);
   const conta = { id, nome, grupo, ...(pai ? { pai: pai.id, nomeProprio: nome } : {}) };
+  // conta de obra: vale no tipo em que foi criada (a subconta, nos tipos da de cima)
+  if (plano === "obra") conta.tipos = pai ? (pai.tipos || ["empreendimento", "gestao"]).slice() : (tipoObra ? [tipoObra] : ["empreendimento", "gestao"]);
   if (plano === "escritorio" && pai) { conta.unidades = (pai.unidades || []).slice(); conta.apelidos = []; }
   else if (plano === "escritorio") {
     const us = new Set();
@@ -12297,13 +12331,58 @@ function contasReordenadasNoPlano(cfg, area, chave, ids) {
   c[plano] = p;
   return { cfg: c };
 }
-function contaAtivadaNoPlano(cfg, area, id, ativa) {
+// Onde a conta é usada: lançamentos do escritório (plano do escritório) ou
+// contas, estimativas e entradas das obras (plano da obra), e as subcontas.
+function usoDaContaNoPlano(data, area, id, atuais) {
+  const d = data || {};
+  const plano = area === "obra" ? "obra" : "escritorio";
+  let lancamentos = 0;
+  if (plano === "escritorio") lancamentos = (d.lancamentos || []).filter((l) => l && l.contaId === id).length;
+  else for (const o of d.obras || []) {
+    if (!o) continue;
+    lancamentos += (o.contasPagar || []).filter((c) => c && c.contaId === id).length
+      + (o.estimativaPL || []).filter((i) => i && i.contaId === id).length
+      + (o.entradas || []).filter((e) => e && e.contaId === id).length;
+  }
+  const lista = atuais || (plano === "obra" ? (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []) : PLANO_CONTAS_ESCRITORIO);
+  const subcontas = lista.filter((c) => c && c.pai === id).length;
+  return { lancamentos, subcontas, livre: !lancamentos && !subcontas };
+}
+// Excluir: só a conta sem uso (sem lançamento e sem subconta). A criada sai
+// da configuração; a de sempre fica marcada como excluída e some do plano.
+function contaExcluidaNoPlano(cfg, area, id, uso) {
+  if (uso && !uso.livre) {
+    return { erro: uso.subcontas ? "A conta tem subcontas: exclua as subcontas antes."
+      : `A conta tem ${uso.lancamentos} ${uso.lancamentos === 1 ? "lançamento" : "lançamentos"}: não dá para excluir — desative, que ela some das listas e o histórico fica.` };
+  }
   const plano = area === "obra" ? "obra" : "escritorio";
   const c = { ...(cfg || {}) };
   const p = { ...(c[plano] || {}) };
-  const s = new Set(p.inativas || []);
-  if (ativa) s.delete(id); else s.add(id);
-  p.inativas = [...s];
+  if ((p.novas || []).some((x) => x.id === id)) p.novas = p.novas.filter((x) => x.id !== id);
+  else p.excluidas = [...new Set((p.excluidas || []).concat([id]))];
+  if (p.nomes && p.nomes[id]) { const n = { ...p.nomes }; delete n[id]; p.nomes = n; }
+  c[plano] = p;
+  return { cfg: c };
+}
+// `tipo` (só nas contas de obra): desativa só no empreendimento ou só na
+// gestão — a conta continua valendo no outro tipo.
+function contaAtivadaNoPlano(cfg, area, id, ativa, tipo) {
+  const plano = area === "obra" ? "obra" : "escritorio";
+  const c = { ...(cfg || {}) };
+  const p = { ...(c[plano] || {}) };
+  if (plano === "obra" && tipo) {
+    const porTipo = { ...(p.inativasPorTipo || {}) };
+    const s = new Set(porTipo[tipo] || []);
+    if (ativa) s.delete(id); else s.add(id);
+    porTipo[tipo] = [...s];
+    p.inativasPorTipo = porTipo;
+    // a desativação geral antiga também sai, se a pessoa reativou aqui
+    if (ativa && (p.inativas || []).indexOf(id) >= 0) p.inativas = p.inativas.filter((x) => x !== id);
+  } else {
+    const s = new Set(p.inativas || []);
+    if (ativa) s.delete(id); else s.add(id);
+    p.inativas = [...s];
+  }
   c[plano] = p;
   return { cfg: c };
 }
@@ -16347,7 +16426,8 @@ function contasDoLancamento(unidadeId, opcoes) {
     .map((c) => ({ valor: valorDaConta(c.id, "escritorio"), id: c.id, nome: c.nome, grupo: c.grupo, fonte: "escritorio" }));
   if (!unidadePedeObra(unidadeId)) return { obra: [], escritorio: escritorio };
   const obra = pontePlanoDaObra(opcoes)
-    .filter((c) => c && !c.inativa && EF_GRUPOS_CUSTO_OBRA.indexOf(c.grupo) >= 0)
+    .filter((c) => c && EF_GRUPOS_CUSTO_OBRA.indexOf(c.grupo) >= 0
+      && (typeof contaValeNoTipo === "function" ? contaValeNoTipo(c, unidadeId === "empreendimento" ? "empreendimento" : unidadeId === "gestao_obras" ? "gestao" : "") : !c.inativa))
     .map((c) => ({ valor: valorDaConta(c.id, "obra"), id: c.id, nome: c.nome, grupo: c.grupo, fonte: "obra" }));
   return { obra: obra, escritorio: escritorio };
 }
@@ -24653,29 +24733,26 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
 }
 
 // ── Configuração → Plano de contas ──────────────────────────────
-// Três áreas: o escritório (receitas, despesas, gestão, sócios, reservas),
-// os empreendimentos (vendas, aportes, investimento — no extrato do
-// escritório) e as obras (as contas de cada obra e empreendimento: material,
-// mão de obra, serviços, terreno, entradas). Criar, renomear e desativar.
+// Três planos: o do escritório (receitas, despesas, sócios, reservas), o de
+// empreendimento e o de gestão de obra. Empreendimento e gestão têm duas
+// partes: as contas da obra (contas a pagar, Físico-Financeiro) — o
+// empreendimento com terreno e venda de unidades, a gestão sem — e as do
+// extrato do escritório. Criar, criar subconta, renomear, ordenar
+// arrastando e desativar.
 function PlanoDeContasConfig({ data, save, podeEditar }) {
   const S = EF_ESTILO;
-  const [area, setArea] = useState("escritorio");
-  const [nova, setNova] = useState(null);       // { grupo, pai?, nome, erro }
-  // arrastar para ordenar (mouse e dedo): { chave, id, irmaos, sobre }
-  const [arrasto, setArrasto] = useState(null);
+  const [aba, setAba] = useState("escritorio");
+  const [nova, setNova] = useState(null);             // { chaveForm, area, tipo, grupo, pai?, nome, erro }
+  const [renomeando, setRenomeando] = useState(null); // { id, area, nome, erro }
+  const [verInativas, setVerInativas] = useState(true);
+  const [arrasto, setArrasto] = useState(null);       // { area, chave, id, irmaos, sobre }
   const arrastoRef = useRef(null);
   arrastoRef.current = arrasto;
-  const [renomeando, setRenomeando] = useState(null); // { id, nome, erro }
-  const [verInativas, setVerInativas] = useState(true);
   const esc = (data || {}).escritorio || {};
   const cfg = esc.planoContas || {};
   if (typeof aplicarPlanoDeContas === "function") aplicarPlanoDeContas(cfg);
-  const plano = area === "obra" ? (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []) : PLANO_CONTAS_ESCRITORIO;
+  const planoObra = typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [];
   const gruposDaObra = typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : [];
-  const tituloDoGrupo = (g) => {
-    if (area === "obra") { const x = gruposDaObra.find((y) => y.id === g); return x ? x.titulo : g; }
-    const x = grupoEscritorio(g); return x ? x.titulo : g;
-  };
   const gravar = (novoCfg) => {
     aplicarPlanoDeContas(novoCfg);
     return save({ ...data, escritorio: { ...esc, planoContas: novoCfg } }).catch(console.error);
@@ -24687,7 +24764,7 @@ function PlanoDeContasConfig({ data, save, podeEditar }) {
       const el = document.elementFromPoint(e.clientX, e.clientY);
       const linha = el && el.closest ? el.closest("[data-vk-conta-plano]") : null;
       const id = linha && linha.getAttribute("data-vk-conta-plano");
-      if (id && linha.getAttribute("data-vk-chave") === a.chave && id !== a.sobre) setArrasto({ ...a, sobre: id });
+      if (id && linha.getAttribute("data-vk-chave") === a.chaveDom && id !== a.sobre) setArrasto({ ...a, sobre: id });
       if (e.cancelable) e.preventDefault();
     };
     const soltar = () => {
@@ -24695,9 +24772,8 @@ function PlanoDeContasConfig({ data, save, podeEditar }) {
       if (!a || !a.sobre || a.sobre === a.id) return;
       const de = a.irmaos.indexOf(a.id), para = a.irmaos.indexOf(a.sobre);
       const resto = a.irmaos.filter((x) => x !== a.id);
-      const i = resto.indexOf(a.sobre) + (de < para ? 1 : 0);
-      resto.splice(i, 0, a.id);
-      gravar(contasReordenadasNoPlano(cfg, area, a.chave, resto).cfg);
+      resto.splice(resto.indexOf(a.sobre) + (de < para ? 1 : 0), 0, a.id);
+      gravar(contasReordenadasNoPlano(cfg, a.area, a.chave, resto).cfg);
     };
     window.addEventListener("pointermove", mover, { passive: false });
     window.addEventListener("pointerup", soltar);
@@ -24705,135 +24781,176 @@ function PlanoDeContasConfig({ data, save, podeEditar }) {
     return () => { window.removeEventListener("pointermove", mover); window.removeEventListener("pointerup", soltar); window.removeEventListener("pointercancel", soltar); };
   }, [!!arrasto]);
   function criar() {
-    const r = contaNovaNoPlano(cfg, area, { nome: nova.nome, grupo: nova.grupo, ...(nova.pai ? { pai: nova.pai } : {}) });
+    const r = contaNovaNoPlano(cfg, nova.area, { nome: nova.nome, grupo: nova.grupo, ...(nova.pai ? { pai: nova.pai } : {}), ...(nova.tipo ? { tipo: nova.tipo } : {}) });
     if (r.erro) { setNova({ ...nova, erro: r.erro }); return; }
     gravar(r.cfg); setNova(null);
   }
   function renomear() {
-    const r = contaRenomeadaNoPlano(cfg, area, renomeando.id, renomeando.nome);
+    const r = contaRenomeadaNoPlano(cfg, renomeando.area, renomeando.id, renomeando.nome);
     if (r.erro) { setRenomeando({ ...renomeando, erro: r.erro }); return; }
     gravar(r.cfg); setRenomeando(null);
   }
-  const ativar = (c, ativa) => gravar(contaAtivadaNoPlano(cfg, area, c.id, ativa).cfg);
-  const abas = [["escritorio", "Escritório"], ["empreendimentos", "Empreendimentos"], ["obra", "Obras"]];
-  const nomeAba = { escritorio: "Escritório", empreendimentos: "Empreendimentos", obra: "Obras" };
+  async function excluir(area, c) {
+    const uso = usoDaContaNoPlano(data, area, c.id);
+    const r0 = contaExcluidaNoPlano(cfg, area, c.id, uso);
+    if (r0.erro) { dialogo.alertar({ titulo: "Não dá para excluir", tipo: "aviso", mensagem: r0.erro }); return; }
+    const ok = await dialogo.confirmar({ titulo: "Excluir a conta?", confirmar: "Excluir", destrutivo: true,
+      mensagem: `${c.nome}. Ela não tem lançamentos e sai do plano de contas.` });
+    if (ok) gravar(r0.cfg);
+  }
   const btn = { ...(S.btnSec || {}), padding: "4px 10px", fontSize: 12 };
   const inp = { ...(S.input || {}), width: "100%" };
+  const nomeTipo = { empreendimento: "Empreendimento", gestao: "Gestão de obra" };
+
+  // Um grupo do plano. `area`: "obra" (contas da obra, num `tipo`) ou a área
+  // do escritório ("escritorio", "empreendimentos", "gestao").
+  const grupo = (area, g, tipo) => {
+    const ehObra = area === "obra";
+    const plano = ehObra ? planoObra : PLANO_CONTAS_ESCRITORIO;
+    const valeAqui = (c) => !ehObra || (c.tipos || ["empreendimento", "gestao"]).indexOf(tipo) >= 0;
+    const desativada = (c) => !!(c.inativa || (ehObra && (c.inativaEm || []).indexOf(tipo) >= 0));
+    const contas = plano.filter((c) => c && c.grupo === g && !c.interna && valeAqui(c) && (verInativas || !desativada(c)));
+    const chaveForm = area + ":" + (tipo || "") + ":" + g;
+    const titulo = ehObra ? ((gruposDaObra.find((y) => y.id === g) || {}).titulo || g) : ((grupoEscritorio(g) || {}).titulo || g);
+    return (
+      <div key={chaveForm} data-vk-grupo-plano={g} data-vk-area-grupo={area + (tipo ? ":" + tipo : "")} style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 12px", background: "#fafafa" }}>
+          <span style={{ flex: 1, fontSize: 11, fontWeight: 700, color: "#4b5563", letterSpacing: .4, textTransform: "uppercase" }}>{titulo}</span>
+          {podeEditar && !(nova && nova.chaveForm === chaveForm && !nova.pai) && (
+            <button type="button" data-vk-nova-conta-plano={g} style={btn} onClick={() => { setRenomeando(null); setNova({ chaveForm, area, tipo, grupo: g, nome: "", erro: "" }); }}>+ Conta</button>
+          )}
+        </div>
+        {nova && nova.chaveForm === chaveForm && !nova.pai && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: "8px 12px", borderTop: "1px solid rgba(38,36,33,0.07)", background: "#f7fbff" }}>
+            <input data-vk-nome-conta-nova="1" autoFocus style={{ ...inp, flex: "1 1 220px", width: "auto" }} value={nova.nome} placeholder="Digite o nome da conta"
+              onChange={(e) => setNova({ ...nova, nome: e.target.value, erro: "" })} onKeyDown={(e) => { if (e.key === "Enter") criar(); }} />
+            <button type="button" data-vk-criar-conta="1" style={{ ...(S.btn || {}), padding: "7px 14px", fontSize: 12.5 }} onClick={criar}>Criar</button>
+            <button type="button" style={{ ...btn, padding: "7px 14px" }} onClick={() => setNova(null)}>Cancelar</button>
+            {nova.erro && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{nova.erro}</div>}
+          </div>
+        )}
+        {contas.map((c) => {
+          const aqui = renomeando && renomeando.id === c.id;
+          const chave = c.pai ? "pai:" + c.pai : g;
+          const chaveDom = chaveForm + "|" + chave;
+          const irmaos = plano.filter((x) => x && x.grupo === g && !x.interna && valeAqui(x) && (c.pai ? x.pai === c.pai : !x.pai)).map((x) => x.id);
+          const arrastando = arrasto && arrasto.id === c.id;
+          const alvo = arrasto && arrasto.chaveDom === chaveDom && arrasto.sobre === c.id && arrasto.id !== c.id;
+          const desce = alvo && arrasto.irmaos.indexOf(arrasto.id) < arrasto.irmaos.indexOf(c.id);
+          const off = desativada(c);
+          const outros = ehObra ? (c.tipos || []).filter((t) => t !== tipo) : [];
+          return (
+            <Fragment key={c.id}>
+              <div data-vk-conta-plano={c.id} data-vk-chave={chaveDom} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center",
+                padding: c.pai ? "6px 12px 6px 34px" : "7px 12px", background: arrastando ? "#eef5ff" : c.pai ? "#fcfcfd" : "#fff",
+                borderTop: alvo && !desce ? "2px solid #0474f4" : "1px solid rgba(38,36,33,0.07)",
+                borderBottom: alvo && desce ? "2px solid #0474f4" : "none", opacity: off ? 0.55 : 1, userSelect: arrasto ? "none" : "auto" }}>
+                {podeEditar && !aqui && (
+                  <span data-vk-arrastar-conta={c.id} title="Arraste para ordenar"
+                    onPointerDown={(e) => { e.preventDefault(); setArrasto({ area, chave, chaveDom, id: c.id, irmaos, sobre: c.id }); }}
+                    style={{ cursor: "grab", touchAction: "none", color: "#9ca3af", fontSize: 14, lineHeight: 1, padding: "4px 2px", userSelect: "none" }}>⋮⋮</span>
+                )}
+                {aqui ? (
+                  <>
+                    <input data-vk-renomear-campo="1" autoFocus style={{ ...inp, flex: "1 1 220px", width: "auto" }} value={renomeando.nome}
+                      onChange={(e) => setRenomeando({ ...renomeando, nome: e.target.value, erro: "" })} onKeyDown={(e) => { if (e.key === "Enter") renomear(); }} />
+                    <button type="button" data-vk-salvar-nome="1" style={{ ...(S.btn || {}), padding: "6px 12px", fontSize: 12.5 }} onClick={renomear}>Salvar</button>
+                    <button type="button" style={{ ...btn, padding: "6px 12px" }} onClick={() => setRenomeando(null)}>Cancelar</button>
+                    {renomeando.erro && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{renomeando.erro}</div>}
+                  </>
+                ) : (
+                  <>
+                    <span style={{ flex: "1 1 140px", minWidth: 0, fontSize: c.pai ? 12.5 : 13, color: c.pai ? "#374151" : "#111827" }}>
+                      {c.pai ? <><span style={{ color: "#9ca3af" }}>↳ </span>{c.nomeProprio || c.nome}</> : c.nome}
+                      {c.nova && <span style={{ fontSize: 10.5, marginLeft: 6, padding: "1px 7px", borderRadius: 999, background: "#eef5ff", color: "#0474f4" }}>criada</span>}
+                      {off && <span style={{ fontSize: 10.5, marginLeft: 6, padding: "1px 7px", borderRadius: 999, background: "#f3f4f6", color: "#4b5563" }}>desativada</span>}
+                      {outros.length > 0 && <span title="O nome é o mesmo nos dois planos" style={{ fontSize: 10.5, marginLeft: 6, color: "#9ca3af" }}>também em {outros.map((t) => nomeTipo[t]).join(", ")}</span>}
+                    </span>
+                    {podeEditar && (
+                      <span style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                        {!c.pai && <button type="button" data-vk-nova-subconta={c.id} style={btn} title="Criar uma subconta dentro desta"
+                          onClick={() => { setRenomeando(null); setNova({ chaveForm, area, tipo, grupo: g, pai: c.id, nome: "", erro: "" }); }}>+ Sub</button>}
+                        <button type="button" data-vk-renomear-conta={c.id} style={btn} onClick={() => { setNova(null); setRenomeando({ id: c.id, area, nome: c.pai ? (c.nomeProprio || c.nome) : c.nome, erro: "" }); }}>Renomear</button>
+                        <button type="button" data-vk-excluir-conta={c.id} style={{ ...btn, color: "#b91c1c" }} onClick={() => excluir(area, c)}>Excluir</button>
+                        {off
+                          ? <button type="button" data-vk-reativar-conta={c.id} style={btn} onClick={() => gravar(contaAtivadaNoPlano(cfg, area, c.id, true, ehObra ? tipo : undefined).cfg)}>Reativar</button>
+                          : <button type="button" data-vk-desativar-conta={c.id} style={{ ...btn, color: "#b91c1c" }} onClick={() => gravar(contaAtivadaNoPlano(cfg, area, c.id, false, ehObra ? tipo : undefined).cfg)}>Desativar</button>}
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+              {nova && nova.pai && nova.chaveForm === chaveForm && (() => {
+                const filhas = contas.filter((x) => x.pai === nova.pai);
+                const ultima = filhas.length ? filhas[filhas.length - 1].id : nova.pai;
+                if (ultima !== c.id) return null;
+                return (
+                  <div data-vk-form-subconta="1" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: "8px 12px 8px 34px", borderTop: "1px solid rgba(38,36,33,0.07)", background: "#f7fbff" }}>
+                    <span style={{ fontSize: 12, color: "#4b5563", flexBasis: "100%" }}>Subconta de <b>{(plano.find((x) => x.id === nova.pai) || {}).nome}</b></span>
+                    <input data-vk-nome-subconta="1" autoFocus style={{ ...inp, flex: "1 1 200px", width: "auto" }} value={nova.nome} placeholder="Digite o nome da subconta"
+                      onChange={(e) => setNova({ ...nova, nome: e.target.value, erro: "" })} onKeyDown={(e) => { if (e.key === "Enter") criar(); }} />
+                    <button type="button" data-vk-criar-subconta="1" style={{ ...(S.btn || {}), padding: "7px 14px", fontSize: 12.5 }} onClick={criar}>Criar</button>
+                    <button type="button" style={{ ...btn, padding: "7px 14px" }} onClick={() => setNova(null)}>Cancelar</button>
+                    {nova.erro && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{nova.erro}</div>}
+                  </div>
+                );
+              })()}
+            </Fragment>
+          );
+        })}
+        {!contas.length && <div style={{ padding: "8px 12px", fontSize: 12, color: "#6b7280", borderTop: "1px solid rgba(38,36,33,0.07)" }}>Nenhuma conta neste grupo.</div>}
+      </div>
+    );
+  };
+  const secao = (titulo, texto, filhos) => (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: "#111827" }}>{titulo}</div>
+        {texto && <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2 }}>{texto}</div>}
+      </div>
+      {filhos}
+    </div>
+  );
+  const gruposDaObraNoTipo = (tipo) => EF_GRUPOS_DO_PLANO.obra.filter((g) => tipo === "empreendimento" || g !== "terreno");
+  const abas = [["escritorio", "Escritório"], ["empreendimento", "Empreendimento"], ["gestao", "Gestão de obra"]];
   return (
-    <div data-vk-plano-contas="1" style={{ display: "grid", gap: 14 }}>
+    <div data-vk-plano-contas="1" style={{ display: "grid", gap: 16 }}>
       <div>
         <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Plano de contas</div>
         <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 2 }}>
-          As contas do escritório, dos empreendimentos e das obras. Crie contas e subcontas, troque nomes, arraste pelo ⋮⋮ para
-          ordenar e desative as que não usa — conta desativada some das listas de escolha, e o que já foi lançado nela continua como está.
+          Um plano para o escritório, um para empreendimento e um para gestão de obra. Crie contas e subcontas, troque nomes,
+          arraste pelo ⋮⋮ para ordenar e desative as que não usa — conta desativada some das listas de escolha, e o que já foi lançado nela continua como está.
         </div>
       </div>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
         {abas.map(([v, r]) => (
-          <button key={v} type="button" data-vk-area-plano={v} onClick={() => { setArea(v); setNova(null); setRenomeando(null); }}
+          <button key={v} type="button" data-vk-area-plano={v} onClick={() => { setAba(v); setNova(null); setRenomeando(null); }}
             style={{ fontFamily: "inherit", fontSize: 12.5, padding: "6px 12px", borderRadius: 999, cursor: "pointer",
-              border: `1px solid ${area === v ? "#0474f4" : "rgba(38,36,33,0.16)"}`, background: area === v ? "#eef5ff" : "#fff",
-              color: area === v ? "#0474f4" : "#4b5563", fontWeight: area === v ? 600 : 500 }}>{r}</button>
+              border: `1px solid ${aba === v ? "#0474f4" : "rgba(38,36,33,0.16)"}`, background: aba === v ? "#eef5ff" : "#fff",
+              color: aba === v ? "#0474f4" : "#4b5563", fontWeight: aba === v ? 600 : 500 }}>{r}</button>
         ))}
         <label style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center", fontSize: 12, color: "#4b5563" }}>
           <input type="checkbox" checked={verInativas} onChange={(e) => setVerInativas(e.target.checked)} /> mostrar desativadas
         </label>
       </div>
-      {area === "obra" && (
-        <div style={{ fontSize: 12, color: "#4b5563", background: "#f8fafc", borderRadius: 10, padding: "8px 12px" }}>
-          São as contas de cada obra e empreendimento (contas a pagar, Físico-Financeiro). A conta nova chega ao escritório pelo grupo:
-          material e mão de obra viram Construção (ou Pagamentos e compras na gestão), serviços viram Taxas e registros, terreno vira Aquisição de terreno.
-        </div>
+      {aba === "escritorio" && secao("Escritório", "Receitas, despesas, sócios e reservas do escritório.",
+        EF_GRUPOS_DO_PLANO.escritorio.map((g) => grupo("escritorio", g)))}
+      {aba === "empreendimento" && (
+        <>
+          {secao("Contas da obra do empreendimento", "As contas de cada obra de empreendimento (contas a pagar, Físico-Financeiro, Resultado): terreno, construção, venda das unidades.",
+            gruposDaObraNoTipo("empreendimento").map((g) => grupo("obra", g, "empreendimento")))}
+          {secao("No extrato do escritório", "Como o empreendimento aparece no extrato: vendas, aportes e o investido. As contas da obra chegam aqui pelo grupo.",
+            EF_GRUPOS_DO_PLANO.empreendimentos.map((g) => grupo("empreendimentos", g)))}
+        </>
       )}
-      {(EF_GRUPOS_DO_PLANO[area] || []).map((g) => {
-        const contas = plano.filter((c) => c && c.grupo === g && !c.interna && (verInativas || !c.inativa));
-        return (
-          <div key={g} data-vk-grupo-plano={g} style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, overflow: "hidden" }}>
-            <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 12px", background: "#fafafa" }}>
-              <span style={{ flex: 1, fontSize: 11, fontWeight: 700, color: "#4b5563", letterSpacing: .4, textTransform: "uppercase" }}>{tituloDoGrupo(g)}</span>
-              {podeEditar && !(nova && nova.grupo === g && !nova.pai) && (
-                <button type="button" data-vk-nova-conta-plano={g} style={btn} onClick={() => { setRenomeando(null); setNova({ grupo: g, nome: "", erro: "" }); }}>+ Conta</button>
-              )}
-            </div>
-            {nova && nova.grupo === g && !nova.pai && (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: "8px 12px", borderTop: "1px solid rgba(38,36,33,0.07)", background: "#f7fbff" }}>
-                <input data-vk-nome-conta-nova="1" autoFocus style={{ ...inp, flex: "1 1 220px", width: "auto" }} value={nova.nome} placeholder="Digite o nome da conta"
-                  onChange={(e) => setNova({ ...nova, nome: e.target.value, erro: "" })} onKeyDown={(e) => { if (e.key === "Enter") criar(); }} />
-                <button type="button" data-vk-criar-conta="1" style={{ ...(S.btn || {}), padding: "7px 14px", fontSize: 12.5 }} onClick={criar}>Criar</button>
-                <button type="button" style={{ ...btn, padding: "7px 14px" }} onClick={() => setNova(null)}>Cancelar</button>
-                {nova.erro && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{nova.erro}</div>}
-              </div>
-            )}
-            {contas.map((c) => {
-              const aqui = renomeando && renomeando.id === c.id;
-              const chave = c.pai ? "pai:" + c.pai : g;
-              const irmaos = plano.filter((x) => x && x.grupo === g && !x.interna && (c.pai ? x.pai === c.pai : !x.pai)).map((x) => x.id);
-              const arrastando = arrasto && arrasto.id === c.id;
-              const alvo = arrasto && arrasto.sobre === c.id && arrasto.id !== c.id;
-              const desce = alvo && arrasto.irmaos.indexOf(arrasto.id) < arrasto.irmaos.indexOf(c.id);
-              return (
-                <Fragment key={c.id}>
-                <div data-vk-conta-plano={c.id} data-vk-chave={chave} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center",
-                  padding: c.pai ? "6px 12px 6px 34px" : "7px 12px", background: arrastando ? "#eef5ff" : c.pai ? "#fcfcfd" : "#fff",
-                  borderTop: alvo && !desce ? "2px solid #0474f4" : "1px solid rgba(38,36,33,0.07)",
-                  borderBottom: alvo && desce ? "2px solid #0474f4" : "none", opacity: c.inativa ? 0.55 : 1, userSelect: arrasto ? "none" : "auto" }}>
-                  {podeEditar && !aqui && (
-                    <span data-vk-arrastar-conta={c.id} title="Arraste para ordenar"
-                      onPointerDown={(e) => { e.preventDefault(); setArrasto({ chave, id: c.id, irmaos, sobre: c.id }); }}
-                      style={{ cursor: "grab", touchAction: "none", color: "#9ca3af", fontSize: 14, lineHeight: 1, padding: "4px 2px", userSelect: "none" }}>⋮⋮</span>
-                  )}
-                  {aqui ? (
-                    <>
-                      <input data-vk-renomear-campo="1" autoFocus style={{ ...inp, flex: "1 1 220px", width: "auto" }} value={renomeando.nome}
-                        onChange={(e) => setRenomeando({ ...renomeando, nome: e.target.value, erro: "" })} onKeyDown={(e) => { if (e.key === "Enter") renomear(); }} />
-                      <button type="button" data-vk-salvar-nome="1" style={{ ...(S.btn || {}), padding: "6px 12px", fontSize: 12.5 }} onClick={renomear}>Salvar</button>
-                      <button type="button" style={{ ...btn, padding: "6px 12px" }} onClick={() => setRenomeando(null)}>Cancelar</button>
-                      {renomeando.erro && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{renomeando.erro}</div>}
-                    </>
-                  ) : (
-                    <>
-                      <span style={{ flex: "1 1 140px", minWidth: 0, fontSize: c.pai ? 12.5 : 13, color: c.pai ? "#374151" : "#111827" }}>
-                        {c.pai ? <><span style={{ color: "#9ca3af" }}>↳ </span>{c.nomeProprio || c.nome}</> : c.nome}
-                        {c.nova && <span style={{ fontSize: 10.5, marginLeft: 6, padding: "1px 7px", borderRadius: 999, background: "#eef5ff", color: "#0474f4" }}>criada</span>}
-                        {c.inativa && <span style={{ fontSize: 10.5, marginLeft: 6, padding: "1px 7px", borderRadius: 999, background: "#f3f4f6", color: "#4b5563" }}>desativada</span>}
-                      </span>
-                      {podeEditar && (
-                        <span style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                          {!c.pai && <button type="button" data-vk-nova-subconta={c.id} style={btn} title="Criar uma subconta dentro desta"
-                            onClick={() => { setRenomeando(null); setNova({ grupo: g, pai: c.id, nome: "", erro: "" }); }}>+ Sub</button>}
-                          <button type="button" data-vk-renomear-conta={c.id} style={btn} onClick={() => { setNova(null); setRenomeando({ id: c.id, nome: c.pai ? (c.nomeProprio || c.nome) : c.nome, erro: "" }); }}>Renomear</button>
-                          {c.inativa
-                            ? <button type="button" data-vk-reativar-conta={c.id} style={btn} onClick={() => ativar(c, true)}>Reativar</button>
-                            : <button type="button" data-vk-desativar-conta={c.id} style={{ ...btn, color: "#b91c1c" }} onClick={() => ativar(c, false)}>Desativar</button>}
-                        </span>
-                      )}
-                    </>
-                  )}
-                </div>
-                {nova && nova.pai && (() => {
-                  // o campo da subconta nova aparece depois da última filha desta conta (ou dela mesma)
-                  const filhas = contas.filter((x) => x.pai === nova.pai);
-                  const ultima = filhas.length ? filhas[filhas.length - 1].id : nova.pai;
-                  if (ultima !== c.id) return null;
-                  return (
-                    <div data-vk-form-subconta="1" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: "8px 12px 8px 34px", borderTop: "1px solid rgba(38,36,33,0.07)", background: "#f7fbff" }}>
-                      <span style={{ fontSize: 12, color: "#4b5563", flexBasis: "100%" }}>Subconta de <b>{(plano.find((x) => x.id === nova.pai) || {}).nome}</b></span>
-                      <input data-vk-nome-subconta="1" autoFocus style={{ ...inp, flex: "1 1 200px", width: "auto" }} value={nova.nome} placeholder="Digite o nome da subconta"
-                        onChange={(e) => setNova({ ...nova, nome: e.target.value, erro: "" })} onKeyDown={(e) => { if (e.key === "Enter") criar(); }} />
-                      <button type="button" data-vk-criar-subconta="1" style={{ ...(S.btn || {}), padding: "7px 14px", fontSize: 12.5 }} onClick={criar}>Criar</button>
-                      <button type="button" style={{ ...btn, padding: "7px 14px" }} onClick={() => setNova(null)}>Cancelar</button>
-                      {nova.erro && <div style={{ flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{nova.erro}</div>}
-                    </div>
-                  );
-                })()}
-                </Fragment>
-              );
-            })}
-            {!contas.length && <div style={{ padding: "8px 12px", fontSize: 12, color: "#6b7280", borderTop: "1px solid rgba(38,36,33,0.07)" }}>Nenhuma conta neste grupo.</div>}
-          </div>
-        );
-      })}
-      <div style={{ fontSize: 11, color: "#6b7280" }}>{nomeAba[area]}: as mudanças valem para toda a empresa e aparecem na hora nas listas de conta.</div>
+      {aba === "gestao" && (
+        <>
+          {secao("Contas da obra de gestão", "As contas de cada obra de cliente (gestão de obra): sem terreno nem venda de unidade.",
+            gruposDaObraNoTipo("gestao").map((g) => grupo("obra", g, "gestao")))}
+          {secao("No extrato do escritório", "O dinheiro do cliente que passa pela conta do escritório na gestão.",
+            EF_GRUPOS_DO_PLANO.gestao.map((g) => grupo("gestao", g)))}
+        </>
+      )}
     </div>
   );
 }
@@ -56754,6 +56871,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Para ler qualquer coisa da obra (contas, cronograma, estimativa) use
   // `obraAtual`, o registro fresco da coleção; a cópia do estado é só reserva.
   const obraAtual = obraSelecionada ? (obras.find(o => o.id === obraSelecionada.id) || obraSelecionada) : null;
+  // o plano de contas da obra aberta: o de empreendimento ou o de gestão
+  if (typeof definirTipoDeObraAtual === "function") definirTipoDeObraAtual(obraAtual ? (typeof ehEmpreendimento === "function" && ehEmpreendimento(cliente) ? "empreendimento" : "gestao") : "");
   obraAtualRef.current = obraAtual;
   const entradaDiretaFeita = useRef(false);
   useEffect(() => {
@@ -58959,7 +59078,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   ? trocarContaComPadrao(formConta, e.target.value) : { ...formConta, contaId: e.target.value })}>
                   {GRUPOS_PL.filter(g => g.id !== "receitas").map(g => (
                     <optgroup key={g.id} label={g.titulo}>
-                      {PLANO_CONTAS.filter(c => c.grupo === g.id && !c.inativa).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                      {PLANO_CONTAS.filter(c => c.grupo === g.id && (typeof contaValeNoTipo === "function" ? contaValeNoTipo(c) : !c.inativa)).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                     </optgroup>
                   ))}
                 </Selecao>

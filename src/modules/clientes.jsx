@@ -3000,6 +3000,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Para ler qualquer coisa da obra (contas, cronograma, estimativa) use
   // `obraAtual`, o registro fresco da coleção; a cópia do estado é só reserva.
   const obraAtual = obraSelecionada ? (obras.find(o => o.id === obraSelecionada.id) || obraSelecionada) : null;
+  // o plano de contas da obra aberta: o de empreendimento ou o de gestão
+  if (typeof definirTipoDeObraAtual === "function") definirTipoDeObraAtual(obraAtual ? (typeof ehEmpreendimento === "function" && ehEmpreendimento(cliente) ? "empreendimento" : "gestao") : "");
   obraAtualRef.current = obraAtual;
   const entradaDiretaFeita = useRef(false);
   useEffect(() => {
@@ -5205,7 +5207,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   ? trocarContaComPadrao(formConta, e.target.value) : { ...formConta, contaId: e.target.value })}>
                   {GRUPOS_PL.filter(g => g.id !== "receitas").map(g => (
                     <optgroup key={g.id} label={g.titulo}>
-                      {PLANO_CONTAS.filter(c => c.grupo === g.id && !c.inativa).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                      {PLANO_CONTAS.filter(c => c.grupo === g.id && (typeof contaValeNoTipo === "function" ? contaValeNoTipo(c) : !c.inativa)).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                     </optgroup>
                   ))}
                 </Selecao>

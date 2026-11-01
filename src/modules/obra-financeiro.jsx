@@ -802,6 +802,28 @@ function contaPorId(id) {
 // contasDoGrupo(grupoId) → array de contas daquele grupo, na ordem em que
 // aparecem em PLANO_CONTAS.
 function contasDoGrupo(grupoId) {
-  // desativada no Plano de contas da empresa: some da escolha
-  return PLANO_CONTAS.filter(c => c.grupo === grupoId && !c.inativa);
+  // desativada no Plano de contas da empresa (ou só no tipo desta obra): some da escolha
+  return PLANO_CONTAS.filter(c => c.grupo === grupoId && contaValeNoTipo(c));
+}
+// ── Empreendimento × gestão de obra: planos de conta separados ──
+// A obra de empreendimento tem compra de terreno, venda de unidade e o IR da
+// venda; a de gestão (obra de cliente) tem o gerenciamento cobrado. Cada
+// conta diz em que tipo vale (`tipos`); sem dizer, vale nos dois. O tipo da
+// obra aberta fica aqui, para as listas de conta da obra mostrarem só as dela.
+const TIPOS_DE_OBRA = ["empreendimento", "gestao"];
+const TIPOS_PADRAO_DA_CONTA = { venda_imovel: ["empreendimento"], ir_receita: ["empreendimento"], taxa_admin_obra: ["gestao"] };
+function tiposPadraoDaContaObra(c) {
+  if (!c) return TIPOS_DE_OBRA.slice();
+  if (TIPOS_PADRAO_DA_CONTA[c.id]) return TIPOS_PADRAO_DA_CONTA[c.id].slice();
+  if (c.grupo === "terreno") return ["empreendimento"];
+  return TIPOS_DE_OBRA.slice();
+}
+let TIPO_DE_OBRA_ATUAL = "";
+function definirTipoDeObraAtual(tipo) { TIPO_DE_OBRA_ATUAL = TIPOS_DE_OBRA.indexOf(tipo) >= 0 ? tipo : ""; }
+function contaValeNoTipo(c, tipo) {
+  if (!c || c.inativa) return false;
+  const t = tipo === undefined ? TIPO_DE_OBRA_ATUAL : tipo;
+  if (!t) return true;
+  if ((c.tipos || tiposPadraoDaContaObra(c)).indexOf(t) < 0) return false;
+  return !((c.inativaEm || []).indexOf(t) >= 0);
 }
