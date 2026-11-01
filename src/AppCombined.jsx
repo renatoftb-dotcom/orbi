@@ -18513,6 +18513,8 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancam
   // vira zoom.
   const [abrindo, setAbrindo] = useState(null);       // { titulo, alvo, periodo }
   const [verReservas, setVerReservas] = useState(false); // o que compõe as provisões e reservas, no pé
+  const [maesFechadas, setMaesFechadas] = useState({});   // conta mãe recolhida (abre aberta)
+  const alternarMae = (id) => setMaesFechadas((f) => ({ ...f, [id]: !f[id] }));
   const ultimoToque = useRef({ k: "", t: 0 });
   const podeAbrir = Array.isArray(lancamentos);
   const toque = (k, abrir) => (e) => {
@@ -18602,8 +18604,16 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancam
         <style>{`[data-vk-extrato-quadro="1"]::-webkit-scrollbar{width:12px;height:12px}
 [data-vk-extrato-quadro="1"]::-webkit-scrollbar-track{background:#f3f4f6}
 [data-vk-extrato-quadro="1"]::-webkit-scrollbar-thumb{background:#9ca3af;border-radius:8px;border:3px solid #f3f4f6}
-[data-vk-extrato-quadro="1"]::-webkit-scrollbar-thumb:hover{background:#6b7280}`}</style>
-        <table style={{ borderCollapse: "separate", borderSpacing: 0, width: "100%", fontSize: 12.5 }}>
+[data-vk-extrato-quadro="1"]::-webkit-scrollbar-thumb:hover{background:#6b7280}
+[data-vk-extrato-quadro="1"] tr[data-vk-linha-sel="1"] > td{background:#e8f1fe !important}`}</style>
+        {/* um clique marca a linha (como no Excel); clicar noutra passa a marca para ela */}
+        <table style={{ borderCollapse: "separate", borderSpacing: 0, width: "100%", fontSize: 12.5 }}
+          onClick={(e) => {
+            const tr = e.target && e.target.closest ? e.target.closest("tbody tr, tfoot tr") : null;
+            if (!tr) return;
+            e.currentTarget.querySelectorAll('tr[data-vk-linha-sel="1"]').forEach((x) => { if (x !== tr) x.removeAttribute("data-vk-linha-sel"); });
+            tr.setAttribute("data-vk-linha-sel", "1");
+          }}>
           <thead>
             <tr style={{ color: "#6b7280" }}>
               <th style={{ ...th, ...tdNome, fontSize: 11, textTransform: "uppercase", letterSpacing: .4, top: 0, zIndex: 3,
@@ -18655,8 +18665,10 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancam
                   ordenada.push(it);
                   for (const x of lista.filter((y) => y.semSub && y.depoisDe === it.c.id && it.nivel === 2)) ordenada.push(x);
                 }
-                return ordenada.map((it, k) => {
-                  const ult = k === ordenada.length - 1;
+                const visiveis = ordenada.filter((it) => !(it.nivel === 2 && maesFechadas[it.semSub ? it.c.id : it.c.pai]));
+                return visiveis.map((it, k) => {
+                  const ult = k === visiveis.length - 1;
+                  const fechada = it.mae && !!maesFechadas[it.c.id];
                   const v = (m) => it.ids.reduce((t, id) => t + (m.contas[id] || 0), 0);
                   const alvo = it.ids.length > 1 ? { contas: it.ids } : { conta: it.ids[0] };
                   const chave = it.semSub ? it.c.id + ":so" : it.c.id;
@@ -18664,6 +18676,12 @@ function ExtratoEscritorioQuadro({ linhas, ano, aoTrocarAno, fechamentos, lancam
                   return (
                     <tr key={chave} data-vk-item-conta={chave}>
                       <td style={{ ...tdNome, ...estilo, textAlign: "left", whiteSpace: "normal", paddingLeft: it.nivel === 2 ? 46 : 30 }}>
+                        {it.mae ? (
+                          <button type="button" data-vk-recolher-mae={it.c.id} aria-expanded={!fechada}
+                            onClick={(e) => { e.stopPropagation(); alternarMae(it.c.id); }}
+                            style={{ border: "none", background: "none", padding: "0 4px 0 0", marginLeft: -16, width: 16, cursor: "pointer", color: "#0474f4", fontSize: 11, fontFamily: "inherit" }}
+                            title={fechada ? "Mostrar as subcontas" : "Esconder as subcontas"}>{fechada ? "▸" : "▾"}</button>
+                        ) : null}
                         {it.nivel === 2 ? <span style={{ color: "#c0c4cc" }}>↳ </span> : null}{it.semSub ? <i>{it.rotulo}</i> : it.rotulo}</td>
                       {doAno.map((m) => <td key={m.mes} style={{ ...estilo, ...clicavel(v(m)) }}
                         data-vk-celula={`conta:${chave}:${m.mes}`} onClick={abre(`conta:${chave}:${m.mes}`, it.c.nome, alvo, m.mes, v(m))}>{cel(v(m))}</td>)}
