@@ -6215,21 +6215,36 @@ function faturaParaALinhaDoBanco(movimento, contaDaLinha, cartoes, obras, lancam
   const mesLinha = mesDoMovimento(m);
   const conta = contaDaLinha || CONTA_BANCARIA_PRINCIPAL;
   const pareceFatura = /fatura|cartao|cartoes|card|visa|master/.test(efSemAcento(m.historico || ""));
-  let exata = null, perto = null;
+  let exata = null, perto = null, peloArquivo = null;
+  const o = opcoes || {};
   for (const c of (cartoes || []).filter((x) => x && x.ativo !== false)) {
     if ((c.contaBancariaId || CONTA_BANCARIA_PRINCIPAL) !== conta) continue;
     const fechadas = faturasFechadas(lancamentos, c.id);
-    for (const comp of competenciasDoCartao(obras, lancamentos, c.id)) {
+    // o arquivo da fatura já trazido no Fechamento (a entrada do mês) conta:
+    // ele diz o que falta lançar — não se pede o arquivo de novo
+    const guardadas = o.fin ? faturasGuardadasDoCartao(o.fin, c.id) : {};
+    const comps = new Set(competenciasDoCartao(obras, lancamentos, c.id).concat(Object.keys(guardadas).filter((k) => /^\d{4}-\d{2}$/.test(k))));
+    for (const comp of comps) {
       if (fechadas.has(comp) || mesDoPagamentoDaFatura(c, comp) > mesLinha) continue;
-      const f = faturaParaFechar(c, obras, lancamentos, comp, { clientes: (opcoes || {}).clientes || [] });
-      if (!f.linhas.length || f.jaFechada) continue;
+      const f = faturaParaFechar(c, obras, lancamentos, comp, { clientes: o.clientes || [] });
+      if (f.jaFechada) continue;
+      const conf = guardadas[comp] ? conferenciaDaFatura(c, guardadas[comp], obras, lancamentos, comp, { clientes: o.clientes || [] }) : null;
+      const arquivo = conf && conf.temArquivo ? { total: conf.totalArquivo, faltam: conf.faltam.length,
+        valorFaltam: efCentavos(conf.faltam.reduce((t, m) => t - (Number(m.valor) || 0), 0)), soNoVicke: conf.soNoVicke.length,
+        bateComODebito: Math.abs(conf.totalArquivo - v) < 0.01 } : null;
+      if (!f.linhas.length && !arquivo) continue;
       const dif = efCentavos(v - f.total);
-      const achada = { cartao: c, competencia: comp, total: f.total, compras: f.linhas.length, diferenca: dif };
-      if (Math.abs(dif) < 0.01) { if (!exata || comp > exata.competencia) exata = achada; }
-      else if (!perto || Math.abs(dif) < Math.abs(perto.diferenca)) perto = achada;
+      const achada = { cartao: c, competencia: comp, total: f.total, compras: f.linhas.length, diferenca: dif, ...(arquivo ? { arquivo } : {}) };
+      if (f.linhas.length && Math.abs(dif) < 0.01) { if (!exata || comp > exata.competencia) exata = achada; }
+      else {
+        if (arquivo && arquivo.bateComODebito && (!peloArquivo || comp > peloArquivo.competencia)) peloArquivo = achada;
+        if (!perto || Math.abs(dif) < Math.abs(perto.diferenca)) perto = achada;
+      }
     }
   }
   if (exata) return { ...exata, exata: true };
+  // o arquivo guardado soma exatamente este débito: é esta fatura
+  if (peloArquivo) return { ...peloArquivo, exata: false };
   return pareceFatura && perto ? { ...perto, exata: false } : null;
 }
 
@@ -9003,7 +9018,12 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                       <div data-vk-fatura-da-linha="1" style={{ fontSize: 11.5, color: sug.faturaDoCartao.exata ? "#0474f4" : "#b45309", marginTop: 2, lineHeight: 1.4 }}>
                         💳 {sug.faturaDoCartao.exata
                           ? `${(sug.motivos || [])[0]} — fecha a fatura ligada a este débito; no resultado, cada compra vai para a linha dela`
-                          : `parece a fatura de ${mesAnoPorExtenso(sug.faturaDoCartao.competencia)} do ${sug.faturaDoCartao.cartao.nome}, mas no VICKE ela soma ${efDinheiro(sug.faturaDoCartao.total)} (${sug.faturaDoCartao.diferenca > 0 ? "faltam" : "sobram"} ${efDinheiro(Math.abs(sug.faturaDoCartao.diferenca))}) — traga o arquivo da fatura para ver o que falta`}
+                          : sug.faturaDoCartao.arquivo
+                            ? `fatura de ${mesAnoPorExtenso(sug.faturaDoCartao.competencia)} do ${sug.faturaDoCartao.cartao.nome}: o arquivo soma ${efDinheiro(sug.faturaDoCartao.arquivo.total)}${sug.faturaDoCartao.arquivo.bateComODebito ? " (igual a este débito)" : ""}, o VICKE ${efDinheiro(sug.faturaDoCartao.total)}`
+                              + (sug.faturaDoCartao.arquivo.faltam ? ` — falta lançar ${sug.faturaDoCartao.arquivo.faltam === 1 ? "1 compra" : sug.faturaDoCartao.arquivo.faltam + " compras"} do arquivo (${efDinheiro(sug.faturaDoCartao.arquivo.valorFaltam)}), na fila abaixo` : "")
+                              + (sug.faturaDoCartao.arquivo.soNoVicke ? ` — ${sug.faturaDoCartao.arquivo.soNoVicke} no VICKE não ${sug.faturaDoCartao.arquivo.soNoVicke === 1 ? "veio" : "vieram"} no arquivo (veja em Contas e cartões no mês)` : "")
+                              + `; depois disso, este débito fecha a fatura`
+                            : `parece a fatura de ${mesAnoPorExtenso(sug.faturaDoCartao.competencia)} do ${sug.faturaDoCartao.cartao.nome}, mas no VICKE ela soma ${efDinheiro(sug.faturaDoCartao.total)} (${sug.faturaDoCartao.diferenca > 0 ? "faltam" : "sobram"} ${efDinheiro(Math.abs(sug.faturaDoCartao.diferenca))}) — traga o arquivo da fatura para ver o que falta`}
                       </div>
                     )}
                     {sug && sug.parcelaAPagar && (
@@ -12163,7 +12183,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       // o débito que paga a fatura de um cartão desta conta: fecha a fatura
       // (no resultado, cada compra vai para a linha dela) — nunca "Cartão de
       // crédito" inteiro como despesa do escritório
-      const fat = faturaParaALinhaDoBanco(m, contaDaLinha(m), cartoesAtivos, (data || {}).obras || [], lancs, { clientes: (data || {}).clientes || [] });
+      const fat = faturaParaALinhaDoBanco(m, contaDaLinha(m), cartoesAtivos, (data || {}).obras || [], lancs, { clientes: (data || {}).clientes || [], fin: cfgFin });
       if (fat && fat.exata) return { campos: {}, faturaDoCartao: fat,
         motivos: [`fatura de ${mesAnoPorExtenso(fat.competencia)} do ${fat.cartao.nome}: ${efDinheiro(fat.total)}, ${fat.compras === 1 ? "1 compra" : fat.compras + " compras"}`] };
       // a parcela de um boleto que estava a pagar: a linha é ela

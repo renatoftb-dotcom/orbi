@@ -3470,6 +3470,15 @@ teste("débito do banco que paga a fatura: acha a fatura aberta do cartão pago 
   assert.strictEqual(p.exata, false); assert.strictEqual(p.diferenca, 65.52);
   // sem cara de fatura e valor diferente: nada
   assert.strictEqual(M.faturaParaALinhaDoBanco({ ...m, valor: -700, historico: "PIX FULANO" }, "cora", [CORA], [OBRA_JAC], [], {}), null);
+  // o arquivo da fatura já trazido no Fechamento: diz o que falta lançar (não pede o arquivo de novo)
+  const fin = { faturasArquivo: { kc: { "2026-09": { movimentos: [
+    { id: "a1", data: "2026-08-28", valor: -634.48, historico: "LOJA OBRA", competencia: "2026-09" },
+    { id: "a2", data: "2026-08-30", valor: -65.52, historico: "PAPELARIA", competencia: "2026-09" }] } } } };
+  const pa = M.faturaParaALinhaDoBanco({ ...m, valor: -700 }, "cora", [CORA], [OBRA_JAC], [], { fin });
+  assert.strictEqual(pa.exata, false);
+  assert.deepStrictEqual([pa.arquivo.total, pa.arquivo.faltam, pa.arquivo.valorFaltam, pa.arquivo.bateComODebito], [700, 1, 65.52, true]);
+  // mesmo sem "cara de fatura" no histórico, o arquivo que soma o débito acha a fatura
+  assert.strictEqual(M.faturaParaALinhaDoBanco({ ...m, valor: -700, historico: "DEBITO 123" }, "cora", [CORA], [OBRA_JAC], [], { fin }).competencia, "2026-09");
   // fatura já fechada: nada
   const fechada = { id: M.idDaFatura("kc", "2026-09"), tipo: "escritorio", origem: { tipo: "fatura", cartaoId: "kc", competencia: "2026-09" } };
   assert.strictEqual(M.faturaParaALinhaDoBanco(m, "cora", [CORA], [OBRA_JAC], [fechada], {}), null);
