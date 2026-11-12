@@ -6276,6 +6276,39 @@ function faturaParaALinhaDoBanco(movimento, contaDaLinha, cartoes, obras, lancam
   return pareceFatura && perto ? { ...perto, exata: false } : null;
 }
 
+// Trava contra a fatura em dobro: o débito do banco lançado À MÃO em
+// "Cartão de crédito" quando o cartão pago por essa conta tem fatura aberta
+// naquele mês com compras já no VICKE. As compras já são despesa (cada uma
+// na obra ou na conta dela); o débito é só o pagamento — fecha-se a fatura.
+// Devolve a fatura (para a mensagem) ou null.
+function faturaPagaPeloLancamento(l, cartoes, obras, lancamentos, opcoes) {
+  const x = l || {};
+  if (!efDaFamilia(x.contaId, "cartao_credito") || x.cartaoId || x.formaPagamento === "cartao") return null;
+  if ((x.origem || {}).tipo === "fatura" || (x.origem || {}).tipo === "faturaLinha" || !efPassouPeloBanco(x)) return null;
+  if (!(efValorDoCampo(x.valor) > 0)) return null;
+  const conta = contaBancariaDoLancamento(x);
+  const mes = String(x.competencia || "");
+  for (const c of (cartoes || []).filter((k) => k && k.ativo !== false)) {
+    if ((c.contaBancariaId || CONTA_BANCARIA_PRINCIPAL) !== conta) continue;
+    const fechadas = faturasFechadas(lancamentos, c.id);
+    for (const comp of competenciasDoCartao(obras, lancamentos, c.id)) {
+      if (fechadas.has(comp) || mesDoPagamentoDaFatura(c, comp) !== mes) continue;
+      const f = faturaParaFechar(c, obras, lancamentos, comp, { clientes: (opcoes || {}).clientes || [] });
+      if (f.linhas.length && !f.jaFechada) return { cartao: c, competencia: comp, total: f.total, compras: f.linhas.length };
+    }
+  }
+  return null;
+}
+function avisoDaFaturaEmDobro(f) {
+  if (!f) return "";
+  return `Este débito é o pagamento da fatura de ${mesAnoPorExtenso(f.competencia)} do ${f.cartao.nome || "cartão"}: `
+    + `${f.compras === 1 ? "1 compra já está" : f.compras + " compras já estão"} no VICKE (${efDinheiroPuro(f.total)}), cada uma na obra ou na conta dela. `
+    + "Lançá-lo em Cartão de crédito somaria a despesa duas vezes. Feche a fatura: no Fechamento, a linha do débito tem o botão “Fechar a fatura”.";
+}
+function efDinheiroPuro(v) {
+  return "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 // A fatura que já estava no extrato do jeito antigo: o débito do banco
 // lançado inteiro em "Cartão de crédito", sem as compras. Fechar a fatura
 // agora SUBSTITUI esse lançamento (fica a mesma linha do banco, o mesmo
@@ -8829,6 +8862,7 @@ function MapaDeColunas({ mapa, aoCorrigir }) {
 function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
   const S = EF_ESTILO;
   const [aberto, setAberto] = useState("");
+  const [formMesmoAssim, setFormMesmoAssim] = useState({});   // linha com cara de fatura que a pessoa diz não ser
   const [motivo, setMotivo] = useState({});      // id → por que não foi direto
   const [marcados, setMarcados] = useState({});
   const [contaLote, setContaLote] = useState("");
@@ -9176,7 +9210,21 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                         Não deu para lançar direto: {motivo[m.id]}
                       </div>
                     )}
-                    {sug && sug.faturaDoCartao && sug.faturaDoCartao.exata ? (
+                    {sug && sug.faturaDoCartao && !sug.faturaDoCartao.exata && !formMesmoAssim[m.id] ? (
+                      <div data-vk-fatura-incompleta="1" style={{ border: "1px solid rgba(180,83,9,0.35)", background: "#fffbf5", borderRadius: 12,
+                        padding: "12px 14px", display: "grid", gap: 10, fontSize: 12.5, color: "#1f2937", lineHeight: 1.45 }}>
+                        <div>💳 <b>Este débito parece a fatura de {mesAnoPorExtenso(sug.faturaDoCartao.competencia)} do {sug.faturaDoCartao.cartao.nome}</b>, mas no VICKE ela ainda soma {efDinheiro(sug.faturaDoCartao.total)}.</div>
+                        <div style={{ color: "#4b5563" }}>
+                          Lance antes as compras que faltam (na fila, nas linhas do cartão). Quando a fatura bater, este débito fecha a fatura — sem despesa nova.
+                          Lançar o débito como despesa somaria duas vezes as compras que já estão no VICKE.
+                        </div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
+                          <button style={{ background: "none", border: "none", padding: "5px 2px", fontSize: 11.5, color: "#6b7280", cursor: "pointer", textDecoration: "underline", fontFamily: "inherit" }}
+                            onClick={() => setFormMesmoAssim((x) => ({ ...x, [m.id]: true }))}>Não é esta fatura — lançar pelo formulário</button>
+                          <button style={{ ...S.btnSec, padding: "7px 14px", fontSize: 12.5 }} onClick={() => setAberto("")}>Fechar</button>
+                        </div>
+                      </div>
+                    ) : sug && sug.faturaDoCartao && sug.faturaDoCartao.exata ? (
                       // O débito que paga a fatura NÃO se lança pelo formulário:
                       // as compras já são despesa (cada uma na obra ou na conta
                       // dela) — lançar o débito somaria a despesa duas vezes.
@@ -11479,6 +11527,11 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     // conta (mudar a competência de agosto, fechado, para setembro mudava o
     // saldo conferido de agosto).
     const antesDaEdicao = l && l.id ? lancs.find((x) => x && x.id === l.id) : null;
+    // o débito da fatura em Cartão de crédito, com as compras já no VICKE
+    if (!antesDaEdicao || antesDaEdicao.contaId !== (l || {}).contaId) {
+      const emDobro = faturaPagaPeloLancamento(l, cartoesAtivos, (data || {}).obras || [], lancs, { clientes: (data || {}).clientes || [] });
+      if (emDobro) { dialogo.alertar({ titulo: "Isso é o pagamento da fatura", tipo: "aviso", mensagem: avisoDaFaturaEmDobro(emDobro) }); return; }
+    }
     if (antesDaEdicao && lancamentoMexeuNoDinheiro(antesDaEdicao, l)) {
       const travaAntes = bloqueioPorMesFechado(antesDaEdicao.competencia, fechamentos);
       if (travaAntes) {
@@ -12475,6 +12528,9 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   // banco guardado — é ele que ensina a próxima linha igual.
   function lancarLinhaDoExtrato(l) {
     const agora = new Date().toISOString();
+    const emDobro = l && !l.id ? faturaPagaPeloLancamento({ ...l, contaBancariaId: l.contaBancariaId || (marcaDaContaBancaria() || {}).contaBancariaId },
+      cartoesAtivos, (data || {}).obras || [], lancs, { clientes: (data || {}).clientes || [] }) : null;
+    if (emDobro) { dialogo.alertar({ titulo: "Isso é o pagamento da fatura", tipo: "aviso", mensagem: avisoDaFaturaEmDobro(emDobro) }); return false; }
     // a conta bancária vem na linha (o "Tudo" sabe de qual extrato ela é);
     // a compra no cartão não tem conta: quem passa pelo banco é a fatura
     const marca = { extratoId: l.extratoId || "", historicoBanco: l.historicoBanco || "",
@@ -12533,6 +12589,10 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         valor: Math.round(Math.abs(Number(m.valor) || 0) * 100) / 100, ...marcaDaLinha(m) });
       // a linha da fatura vira compra no cartão, com o plano de parcelas
       const cartaoDela = cartaoDaLinha(m);
+      if (!cartaoDela) {
+        const emDobro = faturaPagaPeloLancamento(l0, cartoesAtivos, (data || {}).obras || [], lancs, { clientes: (data || {}).clientes || [] });
+        if (emDobro) return { erro: avisoDaFaturaEmDobro(emDobro) };
+      }
       if (m && m._cartao && (!cartaoDela || Number(m.valor) > 0)) return { erro: "Crédito na fatura: lance uma linha por vez." };
       const l = cartaoDela ? compraNoCartaoDaLinha(l0, m, cartaoDela) : l0;
       const erros = validarLancamentoEscritorio(l, { fechamentos });
