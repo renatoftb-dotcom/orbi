@@ -9288,10 +9288,12 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
   );
 }
 
-function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcarCasados, aoConfirmarPar, aoDescartar, aoExcluir, ocupado, fila }) {
+function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcarCasados, aoConfirmarPar, aoDescartar, aoExcluir, ocupado, fila, semResumo, esconder }) {
   const S = EF_ESTILO;
   const [escolha, setEscolha] = useState({});
   if (!resultado) return null;
+  // o débito que é a fatura do cartão fica em "Faturas dos cartões" (uma vez só)
+  const noBanco = (resultado.noBancoSemPar || []).filter((m) => !(esconder && esconder(m)));
   const r = resultado.resumo;
   const casados = (resultado.casados || []).filter((c) => c && c.lancamento);
   const certosAbertos = casados.filter((c) => casamentoCerto(c) && !c.lancamento.conferido).length;
@@ -9312,12 +9314,12 @@ function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcar
     <div style={{ display: "grid", gap: 14 }}>
       <MapaDeColunas mapa={mapa} aoCorrigir={aoCorrigir} />
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
+      {!semResumo && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
         {cartao("Casaram", r.casados, `de ${r.movimentos} movimentos do banco`, "#0474f4")}
         {cartao(fila && fila.meioDaLinha ? "Falta lançar" : "No banco, falta lançar", r.noBanco, efDinheiro(r.valorNoBanco))}
         {cartao("Lançado, não veio no banco", r.contabilizado, efDinheiro(r.valorContabilizado))}
         {cartao("Fora da conta", r.ignoradas + (r.naoLancar || 0), "saldo, aplicação, o que não é lançamento")}
-      </div>
+      </div>}
 
       {/* O que casou sem dúvida não pede clique: conta como conferido e é
           gravado assim no fechamento do mês. Só a dúvida vem para a pessoa. */}
@@ -9381,14 +9383,14 @@ function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcar
       )}
 
       {fila ? (
-        <FilaDoExtrato linhas={resultado.noBancoSemPar} naoLancar={resultado.naoLancar} fila={fila} ocupado={ocupado} />
-      ) : resultado.noBancoSemPar.length > 0 && (
+        <FilaDoExtrato linhas={noBanco} naoLancar={resultado.naoLancar} fila={fila} ocupado={ocupado} />
+      ) : noBanco.length > 0 && (
         <div style={{ display: "grid", gap: 6 }}>
           <div style={{ fontSize: 13, fontWeight: 700 }}>No extrato e ainda não contabilizado</div>
           <div style={S.quadro}>
             <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
               <tbody>
-                {resultado.noBancoSemPar.map((m, i) => (
+                {noBanco.map((m, i) => (
                   <tr key={i} style={{ borderTop: "1px solid rgba(38,36,33,0.06)" }}>
                     <td style={{ padding: "7px 12px", whiteSpace: "nowrap", color: "#6b7280" }}>
                       {String(m.data || "").split("-").reverse().join("/")}
@@ -9464,6 +9466,91 @@ function ConferenciaComExtrato({ resultado, mapa, aoCorrigir, aoLancar, aoMarcar
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── As faturas dos cartões no Fechamento ────────────────────────
+// Cada fatura aparece UMA vez, com o que foi conferido (arquivo do banco ×
+// VICKE, o débito no extrato) e uma ação só: fechar a fatura. Fechar liga o
+// débito do banco às compras — não cria despesa nova. O débito que paga a
+// fatura não aparece de novo na lista do banco.
+function FaturasDoMes({ faturas, linhas, fila, lancs, aoFecharFatura, ocupado, fechado }) {
+  const S = EF_ESTILO;
+  const [aberta, setAberta] = useState("");
+  const dia = (d) => String(d || "").slice(0, 10).split("-").reverse().join("/");
+  const sug = (m) => (fila && fila.sugestao ? fila.sugestao(m) : null);
+  const debitoDa = (f) => (linhas || []).find((m) => {
+    if (!m || m._cartao) return false;
+    const g = sug(m);
+    const fc = g && g.faturaDoCartao;
+    return !!(fc && fc.exata && fc.cartao && fc.cartao.id === (f.cartao || {}).id && fc.competencia === f.competencia);
+  }) || null;
+  const fecharPelaLinha = (m) => {
+    const r = fila && fila.rapido ? fila.rapido(m) : null;
+    if (r && r.lancamento && fila.lancar) fila.lancar(r.lancamento);
+  };
+  const ok = (t) => <div style={{ fontSize: 12.5, color: "#166534", background: "#f0fdf4", borderRadius: 8, padding: "7px 10px", lineHeight: 1.4 }}>✓ {t}</div>;
+  const falta = (t) => <div style={{ fontSize: 12.5, color: "#92400e", background: "#fffbeb", borderRadius: 8, padding: "7px 10px", lineHeight: 1.4 }}>{t}</div>;
+  return (
+    <div data-vk-faturas-do-mes="1" style={{ ...S.card, display: "grid", gap: 10 }}>
+      <div style={{ fontSize: 13, fontWeight: 700 }}>Faturas dos cartões</div>
+      {(faturas || []).map((f) => {
+        const chave = (f.cartao || {}).id + f.competencia;
+        const deb = !f.jaFechada ? debitoDa(f) : null;
+        const antigo = !f.jaFechada && !deb ? lancamentoAntigoDaFatura(lancs, f.cartao, f.competencia, f.totalVicke) : null;
+        const pelaLinha = !!deb;
+        const pelaConferencia = !deb && f.pronta && !!aoFecharFatura;
+        const pode = !fechado && !f.jaFechada && (pelaLinha || pelaConferencia);
+        const nCompras = (f.linhasVicke || []).length;
+        return (
+          <div key={chave} data-vk-fatura-do-mes={chave} style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, padding: "12px 14px", display: "grid", gap: 8 }}>
+            <div style={{ display: "flex", gap: "4px 12px", alignItems: "baseline", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>💳 {(f.cartao || {}).nome || "Cartão"}</span>
+              <span style={{ fontSize: 12.5, color: "#4b5563" }}>fatura de {mesAnoPorExtenso(f.competencia)}</span>
+              <span style={{ marginLeft: "auto", fontSize: 15, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{efDinheiro(f.temArquivo ? f.totalArquivo : f.totalVicke)}</span>
+            </div>
+            {f.jaFechada ? ok("Fatura fechada") : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 8 }}>
+                {!f.temArquivo ? (deb ? ok(`Sem o arquivo da fatura, mas o débito do banco é igual ao VICKE (${nCompras === 1 ? "1 compra" : nCompras + " compras"})`)
+                    : falta("Falta o arquivo da fatura (etapa 1) para conferir as compras."))
+                  : f.faltam.length ? falta(`Faltam lançar ${f.faltam.length === 1 ? "1 compra" : f.faltam.length + " compras"} do arquivo — estão abaixo, nas linhas do cartão.`)
+                  : f.soNoVicke.length ? falta(`${f.soNoVicke.length === 1 ? "1 compra está" : f.soNoVicke.length + " compras estão"} no VICKE e não ${f.soNoVicke.length === 1 ? "veio" : "vieram"} no arquivo.`)
+                  : Math.abs(f.totalArquivo - f.totalVicke) >= 0.01 ? falta(`Arquivo ${efDinheiro(f.totalArquivo)} × VICKE ${efDinheiro(f.totalVicke)}: diferença de ${efDinheiro(efCentavos(f.totalArquivo - f.totalVicke))}.`)
+                  : ok(`Arquivo do banco = VICKE (${nCompras === 1 ? "1 compra" : nCompras + " compras"})`)}
+                {deb ? ok(`Débito no banco em ${dia(deb.data)}, mesmo valor`)
+                  : antigo ? ok(`O débito de ${dia(antigo.lancadoEm)} já estava lançado em Cartão de crédito: ao fechar, a fatura entra no lugar dele — a despesa não conta duas vezes`)
+                  : f.pronta ? falta("O débito desta fatura ainda não apareceu no extrato do banco.") : null}
+              </div>
+            )}
+            {f.temArquivo && f.soNoVicke.length > 0 && !f.jaFechada && (
+              <button type="button" onClick={() => setAberta(aberta === chave ? "" : chave)}
+                style={{ justifySelf: "start", background: "none", border: "none", padding: 0, fontSize: 12, color: "#0474f4", cursor: "pointer", fontFamily: "inherit" }}>
+                {aberta === chave ? "esconder" : "ver"} as que estão só no VICKE</button>
+            )}
+            {aberta === chave && (
+              <div style={{ ...S.quadro, fontSize: 12 }}>
+                {f.soNoVicke.map((l, i) => (
+                  <div key={i} style={{ display: "flex", gap: 10, flexWrap: "wrap", padding: "6px 10px", borderTop: i ? "1px solid rgba(38,36,33,0.06)" : "none" }}>
+                    <span style={{ color: "#6b7280", whiteSpace: "nowrap" }}>{dia(l.compraEm)}</span>
+                    <span style={{ flex: "1 1 200px", minWidth: 0 }}>{[l.obra, l.descricao || l.fornecedor].filter(Boolean).join(" · ") || "—"}{l.de > 1 ? ` · ${l.parcela}/${l.de}` : ""}</span>
+                    <span style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{efDinheiro(l.valor)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!f.jaFechada && (
+              <div style={{ display: "flex", gap: "6px 12px", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                <span style={{ fontSize: 12, color: "#4b5563", marginRight: "auto" }}>
+                  {pode ? "Fechar liga o débito do banco às compras. Não cria despesa nova."
+                    : "Fecha quando o arquivo e o VICKE baterem."}</span>
+                <button data-vk-fechar-fatura-mes={chave} style={{ ...S.btn, opacity: pode && !ocupado ? 1 : .45 }} disabled={!pode || !!ocupado}
+                  onClick={() => { if (pelaLinha) fecharPelaLinha(deb); else if (pelaConferencia) aoFecharFatura(f); }}>Fechar a fatura</button>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -9567,7 +9654,7 @@ function SaldoDaContaNoMes({ meio, mes, fechado, aoGuardar }) {
   );
 }
 
-function QuadroDosMeios({ unificado, mes, fechado, ocupado }) {
+function QuadroDosMeios({ unificado, mes, fechado, ocupado, semCartoes }) {
   const S = EF_ESTILO;
   const [aberta, setAberta] = useState("");
   const u = unificado || {};
@@ -9577,14 +9664,14 @@ function QuadroDosMeios({ unificado, mes, fechado, ocupado }) {
     padding: "6px 0", whiteSpace: "nowrap" };
   const corDif = (d) => (d == null ? "#6b7280" : d === 0 ? "#0474f4" : "#b45309");
   const contas = (u.lista || []).filter((x) => x.tipo === "conta");
-  const cartoes = (u.lista || []).filter((x) => x.tipo === "cartao");
+  const cartoes = semCartoes ? [] : (u.lista || []).filter((x) => x.tipo === "cartao");
   const totalDif = u.totalBanco == null ? null : efCentavos(u.totalBanco + (u.totalAplicacao || 0) - u.totalCalculado);
   const largo = typeof window === "undefined" || window.innerWidth >= 700;
   return (
     <div data-vk-meios="1" style={{ ...S.card, display: "grid", gap: 10, minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 13, fontWeight: 700 }}>Contas e cartões no mês</div>
-        <div style={{ fontSize: 12, color: "#6b7280" }}>cada extrato e cada fatura conferidos juntos</div>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>{semCartoes ? "Saldo de cada conta" : "Contas e cartões no mês"}</div>
+        <div style={{ fontSize: 12, color: "#6b7280" }}>{semCartoes ? "o saldo do banco no fim do mês contra o calculado" : "cada extrato e cada fatura conferidos juntos"}</div>
       </div>
       {/* uma linha por conta que quebra no celular: o nome e o extrato em
           cima, banco, calculado e diferença embaixo — sem rolar de lado */}
@@ -9883,6 +9970,11 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
   // A conferência é feita ao longo do mês, com o extrato parcial: por isso
   // a tela abre mostrando só o que ainda falta bater.
   const [soPendentes, setSoPendentes] = useState(true);
+  // O fechamento em quatro etapas — arquivos, pendências, saldos, fechar.
+  // "" = a tela escolhe: a primeira que ainda não está certa.
+  const [etapaEscolhida, setEtapaEscolhida] = useState("");
+  const [verConferencia, setVerConferencia] = useState(false);
+  useEffect(() => { setEtapaEscolhida(""); }, [mes]);
   const meses = (linhas || []).map((l) => l.mes);
   const linha = (linhas || []).find((l) => l.mes === mes);
   const certos = useMemo(() => new Set(((extrato && extrato.resultado && extrato.resultado.casados) || [])
@@ -9959,6 +10051,76 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
   };
   const outraSit = (id) => ((contas && contas.outras) || []).find((x) => x.conta.id === id) || null;
 
+  // ── As verificações do mês: cada etapa tem a sua, e o mês só fecha com
+  // todas certas. O que falta aparece por extenso, com o caminho.
+  const res = extrato && extrato.resultado;
+  const fila = extrato && extrato.fila;
+  const sugDe = (m) => (fila && fila.sugestao ? fila.sugestao(m) : null);
+  // o débito que é a fatura (valor igual ao VICKE) sai da lista do banco: a
+  // fatura aparece uma vez só, em "Faturas dos cartões", com o botão dela
+  const ehDebitoDeFatura = (m) => {
+    if (!modoTodas || !m || m._cartao) return false;
+    const sg = sugDe(m);
+    return !!(sg && sg.faturaDoCartao && sg.faturaDoCartao.exata);
+  };
+  const itensArq = modoTodas ? itensDoChecklist((unificado && unificado.lista) || [], mes) : [];
+  const arqObrig = itensArq.filter((x) => !x.opcional);
+  const semDono = modoTodas ? ((unificado && unificado.pendentes) || []).length : 0;
+  const arquivosOk = modoTodas ? (arqObrig.length > 0 && arqObrig.every((x) => x.feito) && !semDono)
+    : !!(res && ((extrato.guardado) || (extrato.origem) || (res.resumo && res.resumo.movimentos > 0)));
+  const faturasDoMes = modoTodas ? ((unificado && unificado.faturas) || []).filter((f) => f && (f.temArquivo || (f.linhasVicke || []).length || f.lancamentoDaFatura)) : [];
+  const faturasAbertas = faturasDoMes.filter((f) => !f.jaFechada);
+  const linhasBanco = res ? (res.noBancoSemPar || []).filter((m) => !ehDebitoDeFatura(m)) : [];
+  const duvidasN = res ? (res.casados || []).filter((c) => c && c.lancamento && !casamentoCerto(c) && !c.lancamento.conferido
+    && !((c.lancamento.origem || {}).parte === "recebido-eng")).length : 0;
+  const semBancoN = res ? (res.contabilizadoSemPar || []).length : 0;
+  const pendenciasN = linhasBanco.length + faturasAbertas.length + duvidasN + semBancoN;
+  const pendenciasOk = !!res && pendenciasN === 0;
+  const checagemOk = !(extrato && extrato.checagem) || !!extrato.checagem.bate;
+  const temAplicacaoNoMes = !!(extrato && extrato.checagem && ((extrato.checagem.extrato || {}).aplicacoes || (extrato.checagem.extrato || {}).resgates));
+  const aplicacaoOk = !temAplicacaoNoMes || aplicacaoGravada != null;
+  const saldoOk = diferenca === 0;
+  const saldosOk = saldoOk && checagemOk && aplicacaoOk;
+  const lugarOk = naPrincipal || modoTodas;
+  const verificacoes = [
+    { id: "arquivos", ok: arquivosOk, texto: modoTodas ? `Extratos e faturas do mês trazidos (${itensArq.filter((x) => x.feito).length} de ${itensArq.length})` : "Extrato do mês trazido" },
+    { id: "pendencias", ok: pendenciasOk, texto: !res ? "Pendências: traga o extrato para conferir" : pendenciasN ? `Pendências resolvidas — ${pendenciasN === 1 ? "falta 1" : "faltam " + pendenciasN}` : "Pendências resolvidas" },
+    { id: "saldos", ok: saldoOk, texto: diferenca == null ? "Saldo do banco informado e igual ao calculado" : saldoOk ? "Saldo do banco igual ao calculado" : `Saldo do banco igual ao calculado — diferença de ${efDinheiro(diferenca)}` },
+    { id: "saldos", ok: checagemOk, texto: "Débitos × créditos do mês batem com o banco" },
+    ...(temAplicacaoNoMes ? [{ id: "saldos", ok: aplicacaoOk, texto: "Saldo da aplicação do mês informado" }] : []),
+  ];
+  const tudoCerto = verificacoes.every((v) => v.ok) && lugarOk;
+  const etapas = [
+    { id: "arquivos", n: 1, nome: "Arquivos", ok: arquivosOk,
+      status: modoTodas ? `${itensArq.filter((x) => x.feito).length} de ${itensArq.length} trazidos${semDono ? ` · ${semDono} sem dono` : ""}` : (arquivosOk ? "extrato trazido" : "falta o extrato") },
+    { id: "pendencias", n: 2, nome: "Pendências", ok: pendenciasOk,
+      status: !res ? "depois dos arquivos" : pendenciasN ? (pendenciasN === 1 ? "1 pendência" : `${pendenciasN} pendências`) : "tudo resolvido" },
+    { id: "saldos", n: 3, nome: "Saldos", ok: saldosOk,
+      status: saldosOk ? "tudo confere" : diferenca == null ? "informe o saldo" : !saldoOk ? `diferença ${efDinheiro(diferenca)}` : !checagemOk ? "débito × crédito não bate" : "informe a aplicação" },
+    { id: "fechar", n: 4, nome: "Fechar o mês", ok: fechado,
+      status: fechado ? "mês fechado" : tudoCerto ? "pronto para fechar" : "bloqueado" },
+  ];
+  const etapaAtual = etapaEscolhida || (fechado ? "fechar" : ((etapas.find((e) => !e.ok) || etapas[3]).id));
+  const irPara = (id) => setEtapaEscolhida(id);
+  const proxima = (id) => { const i = etapas.findIndex((e) => e.id === id); return etapas[i + 1] || null; };
+  const rodapeDaEtapa = (id, ok, aviso) => {
+    const px = proxima(id);
+    if (!px) return null;
+    return (
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+        {!ok && aviso && <span style={{ fontSize: 12.5, color: "#b45309", marginRight: "auto" }}>{aviso}</span>}
+        <button data-vk-proxima-etapa={px.id} style={{ ...S.btn, opacity: ok ? 1 : .45 }} disabled={!ok} onClick={() => irPara(px.id)}>
+          Próximo: {px.nome.toLowerCase()} →</button>
+      </div>
+    );
+  };
+  const cabecalhoDaEtapa = (titulo, explica) => (
+    <div style={{ display: "grid", gap: 3 }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>{titulo}</div>
+      <div style={{ fontSize: 12.5, color: "#4b5563", lineHeight: 1.5 }}>{explica}</div>
+    </div>
+  );
+
   return (
     <div style={{ display: "grid", gap: 14 }}>
       {/* As contas bancárias do escritório: cada uma confere com o extrato
@@ -10017,9 +10179,7 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
           )}
           {modoTodas ? (
             <div style={{ fontSize: 11.5, color: "#6b7280", lineHeight: 1.45 }}>
-              Traga de uma vez os extratos das contas e as faturas dos cartões: cada arquivo vai para o lugar dele, e a fila abaixo
-              mostra tudo o que está no banco ou na fatura e ainda não está na base. Dinheiro de uma conta sua para outra é
-              <b> transferência entre contas</b> e fica fora do débito × crédito e do resultado.
+              Todas as contas e cartões juntos. Dinheiro de uma conta sua para outra é <b>transferência</b>: fica fora do resultado.
             </div>
           ) : variasContas && (
             <div style={{ fontSize: 11.5, color: "#6b7280", lineHeight: 1.45 }}>
@@ -10029,10 +10189,55 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
           )}
         </div>
       )}
+      {/* O mês e as quatro etapas. Cada etapa diz o que falta; o mês só
+          fecha com todas certas. */}
+      <div data-vk-fecho-cabecalho="1" style={{ ...S.card, display: "grid", gap: 12 }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <Selecao value={mes} onChange={(e) => aoTrocarMes(e.target.value)} aria-label="Mês do fechamento"
+            style={{ ...S.input, padding: "7px 10px", width: 200, cursor: "pointer", fontWeight: 600 }}>
+            {meses.slice().sort((a, b) => String(b).localeCompare(String(a)))
+              .map((m) => <option key={m} value={m}>{efMesPorExtenso(m) + (mesEstaFechado(m, fechamentos) ? " ✓" : "")}</option>)}
+          </Selecao>
+          <span style={{ fontSize: 12.5, color: fechado ? "#15803d" : "#4b5563", fontWeight: fechado ? 600 : 400 }}>
+            {fechado ? `✓ Fechado em ${String(registro.fechadoEm || "").slice(0, 10).split("-").reverse().join("/")}`
+              : "Quatro etapas, uma de cada vez. O mês só fecha com tudo conferido."}
+          </span>
+          {ocupado && <span style={{ fontSize: 12, color: "#6b7280", marginLeft: "auto" }}>{ocupado}</span>}
+        </div>
+        <nav aria-label="Etapas do fechamento" data-vk-etapas-fecho="1"
+          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
+          {etapas.map((e) => {
+            const ativa = etapaAtual === e.id;
+            const corStatus = e.ok ? "#15803d" : (e.id === "pendencias" && res) || (e.id === "saldos" && pendenciasOk) ? "#b45309" : "#6b7280";
+            return (
+              <button key={e.id} type="button" data-vk-etapa={e.id} data-vk-etapa-ok={e.ok ? "1" : "0"} aria-current={ativa ? "step" : undefined}
+                onClick={() => irPara(e.id)}
+                style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", minHeight: 52, borderRadius: 12, cursor: "pointer",
+                  fontFamily: "inherit", textAlign: "left", background: ativa ? "#fff" : "#f8fafc",
+                  border: ativa ? "2px solid #0474f4" : "1px solid rgba(38,36,33,0.12)" }}>
+                <span aria-hidden="true" style={{ flex: "0 0 26px", width: 26, height: 26, borderRadius: 999, display: "inline-flex", alignItems: "center",
+                  justifyContent: "center", fontSize: 12.5, fontWeight: 700,
+                  background: e.ok ? "#15803d" : ativa ? "#0474f4" : "#e5e7eb", color: e.ok || ativa ? "#fff" : "#374151" }}>{e.ok ? "✓" : e.n}</span>
+                <span style={{ display: "grid", gap: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{e.nome}</span>
+                  <span style={{ fontSize: 11.5, color: corStatus, fontWeight: e.ok ? 600 : 500 }}>{e.status}</span>
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {/* ── Etapa 3 · Saldos ── */}
+      {etapaAtual === "saldos" && (
+        <div style={{ ...S.card, display: "grid", gap: 6 }}>
+          {cabecalhoDaEtapa("3 · Saldos", "O saldo de cada conta no último dia do mês, como o banco mostra, contra o que o VICKE calcula. Com a aplicação informada, a régua é banco + aplicação.")}
+        </div>
+      )}
       {/* Todos os blocos com a mesma régua: rótulo, campo (38px) e uma linha
           de apoio embaixo. Assim os campos e os números ficam sempre na mesma
           altura, tenham ou não a linha de apoio. */}
-      {(() => {
+      {etapaAtual === "saldos" && (() => {
         const rot = { fontSize: 10.5, textTransform: "uppercase", letterSpacing: .5, color: "#6b7280", lineHeight: "14px", height: 14, whiteSpace: "nowrap" };
         const apoio = { fontSize: 10.5, color: "#6b7280", lineHeight: "14px", minHeight: 14, whiteSpace: "nowrap" };
         const caixa = { height: 38, boxSizing: "border-box" };
@@ -10047,13 +10252,6 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
         const totalComBanco = aplicacaoGravada != null && saldoBanco != null ? efCentavos(saldoBanco + aplicacaoGravada) : null;
         return (
           <div style={{ ...S.card, display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-            {bloco("mes", "Mês", (
-              <Selecao value={mes} onChange={(e) => aoTrocarMes(e.target.value)}
-                style={{ ...S.input, ...caixa, padding: "7px 10px", width: 190, cursor: "pointer" }}>
-                {meses.slice().sort((a, b) => String(b).localeCompare(String(a)))
-                  .map((m) => <option key={m} value={m}>{efMesPorExtenso(m) + (mesEstaFechado(m, fechamentos) ? " ✓" : "")}</option>)}
-              </Selecao>
-            ))}
             {modoTodas ? bloco("banco", "Saldo dos bancos", (
               <div data-vk-total-bancos="1" style={numero}>{saldoBanco == null
                 ? <span style={{ fontSize: 13, fontWeight: 500, color: "#6b7280" }}>informe na tabela</span> : efDinheiro(saldoBanco)}</div>
@@ -10091,37 +10289,45 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
             {aoGuardarAplicacao && aplicacaoGravada != null && bloco("total", "Conta + aplicação", (
               <div data-vk-total-disponivel="1" style={numero}>{totalComBanco == null ? <span style={{ fontSize: 13, fontWeight: 500, color: "#6b7280" }}>informe o saldo do banco</span> : efDinheiro(totalComBanco)}</div>
             ))}
-            {bloco("acao", "", (
+            {!fechado && comAplicacao && diferenca > 0 && aoLancarRendimento && bloco("acao", "", (
               <div style={{ ...caixa, display: "flex", gap: 8, alignItems: "center" }}>
-                {ocupado && <span style={{ fontSize: 12, color: "#6b7280" }}>{ocupado}</span>}
                 {/* O rendimento apurado vira lançamento em Receita Financeira:
                     com ele, o calculado chega em banco + aplicação e o mês fecha. */}
-                {!fechado && comAplicacao && diferenca > 0 && aoLancarRendimento && (
-                  <button data-vk-lancar-rendimento="1" style={{ ...S.btn, ...caixa, background: "#047857", borderColor: "#047857" }}
-                    disabled={!!ocupado} onClick={() => aoLancarRendimento(mes, diferenca)}>
-                    Lançar receita financeira
-                  </button>
-                )}
-                {fechado ? (
-                  <button style={{ ...S.btnSec, ...caixa }} onClick={() => aoReabrir(mes)}>Reabrir mês</button>
-                ) : !naPrincipal && !modoTodas ? (
-                  <span data-vk-fecha-na-principal="1" style={{ fontSize: 12, color: diferenca === 0 ? "#0474f4" : "#6b7280", maxWidth: 220, lineHeight: 1.35 }}>
-                    {diferenca === 0 ? "✓ esta conta bate. " : ""}O mês fecha na {nomePrincipal}, conferindo esta junto.
-                  </span>
-                ) : (
-                  <button style={{ ...S.btn, ...caixa, opacity: podeFechar ? 1 : .45 }} disabled={!podeFechar}
-                    onClick={() => aoFechar(mes, saldoParaFechar)}>Fechar {efMesPorExtenso(mes, true)}</button>
-                )}
+                <button data-vk-lancar-rendimento="1" style={{ ...S.btn, ...caixa, background: "#047857", borderColor: "#047857" }}
+                  disabled={!!ocupado} onClick={() => aoLancarRendimento(mes, diferenca)}>
+                  Lançar receita financeira
+                </button>
               </div>
+            ), "", { marginLeft: "auto" })}
+            {!fechado && !naPrincipal && !modoTodas && bloco("onde", "", (
+              <span data-vk-fecha-na-principal="1" style={{ fontSize: 12, color: diferenca === 0 ? "#0474f4" : "#6b7280", maxWidth: 220, lineHeight: 1.35 }}>
+                {diferenca === 0 ? "✓ esta conta bate. " : ""}O mês fecha na {nomePrincipal}, conferindo esta junto.
+              </span>
             ), "", { marginLeft: "auto" })}
           </div>
         );
       })()}
 
-      {/* Trazer o extrato do banco: o arquivo vem como o banco manda e o
+      {/* ── Etapa 1 · Arquivos ──
+          Trazer o extrato do banco: o arquivo vem como o banco manda e o
           reconhecimento das colunas é por conteúdo. */}
-      {extrato && (
-        <div style={{ ...S.card, display: "grid", gap: 10 }}>
+      {etapaAtual === "arquivos" && extrato && (
+        <div style={{ ...S.card, display: "grid", gap: 12 }}>
+          {cabecalhoDaEtapa("1 · Extratos e faturas do mês", "Tudo o que o banco e os cartões dizem sobre o mês. Sem todos os arquivos, as pendências não ficam completas.")}
+          {modoTodas && itensArq.length > 0 && (
+            <div data-vk-arquivos-do-mes="1" style={{ display: "grid", border: "1px solid rgba(38,36,33,0.10)", borderRadius: 12 }}>
+              {itensArq.map((x, k) => (
+                <div key={x.id} data-vk-arquivo-item={x.id} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "9px 12px",
+                  borderTop: k ? "1px solid rgba(38,36,33,0.06)" : "none" }}>
+                  <span aria-hidden="true" style={{ width: 20, height: 20, borderRadius: 999, flex: "0 0 20px", display: "inline-flex", alignItems: "center",
+                    justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff",
+                    background: x.feito ? "#15803d" : "#fff", border: `2px solid ${x.feito ? "#15803d" : x.opcional ? "rgba(38,36,33,0.15)" : "#d97706"}` }}>{x.feito ? "✓" : ""}</span>
+                  <span style={{ flex: "1 1 200px", fontSize: 13, fontWeight: 600 }}>{x.tipo === "cartao" ? "💳 " : ""}{x.nome}</span>
+                  <span style={{ fontSize: 12, color: x.feito ? "#4b5563" : x.opcional ? "#6b7280" : "#b45309" }}>{x.detalhe}</span>
+                </div>
+              ))}
+            </div>
+          )}
           <div
             onDragOver={(e) => { e.preventDefault(); extrato.setArrastando(true); }}
             onDragLeave={(e) => { if (e.currentTarget === e.target) extrato.setArrastando(false); }}
@@ -10155,21 +10361,16 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
               if (extrato.receberVarios) extrato.receberVarios(fs); else extrato.receber(fs[0]);
             }} />
           {modoTodas && <ArquivosEsperando unificado={unificado} contas={(contas && contas.lista) || []} />}
-          {modoTodas && unificado.aoAbrirChecklist && (
-            <button data-vk-abrir-checklist="1" onClick={unificado.aoAbrirChecklist}
-              style={{ justifySelf: "start", background: "none", border: "none", padding: 0, fontSize: 12, color: "#0474f4", cursor: "pointer", fontFamily: "inherit" }}>
-              Ver o checklist dos extratos do mês
-            </button>
-          )}
+          {rodapeDaEtapa("arquivos", arquivosOk, semDono ? "Diga de onde é cada arquivo acima." : "Traga os arquivos que faltam.")}
         </div>
       )}
 
-      {modoTodas && <QuadroDosMeios unificado={unificado} mes={mes} fechado={fechado} ocupado={ocupado} />}
+      {etapaAtual === "saldos" && modoTodas && <QuadroDosMeios unificado={unificado} mes={mes} fechado={fechado} ocupado={ocupado} semCartoes />}
 
       {/* O "check" da planilha de análise: débitos × saídas e créditos ×
           entradas. As duas diferenças têm que ser iguais — o que foi
           contabilizado fora do extrato entra nos dois lados. */}
-      {extrato && extrato.checagem && (() => {
+      {etapaAtual === "saldos" && extrato && extrato.checagem && (() => {
         const ch = extrato.checagem;
         const ant = (() => { const [a, m] = String(mes).split("-").map(Number); const d = new Date(Date.UTC(a, m - 2, 1)); return d.toISOString().slice(0, 7); })();
         const aplAnterior = saldoAplicacaoDoMes(fechamentos, ant);
@@ -10246,32 +10447,94 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
         );
       })()}
 
-      {/* Fila vazia e diferença zero: não sobra nada para fazer além de
-          fechar — a tela oferece isso no alto, em vez de esperar que se
-          procure o botão. */}
-      {extrato && extrato.resultado && !fechado && diferenca === 0 && (naPrincipal || modoTodas)
-        && !(extrato.resultado.noBancoSemPar || []).length && (
-        <div style={{ ...S.card, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap",
-          borderColor: "rgba(4,116,244,0.45)", background: "#eef5ff" }}>
-          <div style={{ display: "grid", gap: 2 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#0474f4" }}>Tudo bateu com o banco</div>
-            <div style={{ fontSize: 12.5, color: "#1e3a5f" }}>
-              Nenhuma linha do extrato falta lançar e o saldo fecha em {efDinheiro(calculado)}.
-              {conf.pendentes > 0 ? ` Ainda há ${conf.pendentes} sem conferir — dá para fechar assim mesmo.` : ""}
-            </div>
-          </div>
-          <button style={{ ...S.btn, marginLeft: "auto", opacity: ocupado ? .45 : 1 }} disabled={!!ocupado}
-            onClick={() => aoFechar(mes, saldoParaFechar)}>Fechar {efMesPorExtenso(mes)}</button>
+      {etapaAtual === "saldos" && (
+        <div style={{ ...S.card, display: "grid", gap: 8 }}>
+          {rodapeDaEtapa("saldos", saldosOk, diferenca == null ? "Informe o saldo do banco."
+            : !saldoOk ? "O saldo calculado ainda não bate com o banco: resolva as pendências ou confira os lançamentos."
+            : !checagemOk ? "Débitos × créditos não batem." : "Informe o saldo da aplicação.")}
         </div>
       )}
 
-      {extrato && extrato.resultado && (
+      {/* ── Etapa 2 · Pendências ── tudo o que falta resolver, num lugar só,
+          cada item com uma ação; cada coisa aparece uma vez. */}
+      {etapaAtual === "pendencias" && (
+        <div style={{ ...S.card, display: "grid", gap: 6 }}>
+          {cabecalhoDaEtapa("2 · Pendências", !res ? "Traga o extrato do mês (etapa 1) para ver o que falta."
+            : pendenciasN ? "Tudo o que falta resolver, num lugar só. Cada item tem a sua ação — e o VICKE trava o que lançaria em dobro."
+            : "✓ Nada pendente: tudo o que está no banco e nas faturas já está no VICKE.")}
+        </div>
+      )}
+      {etapaAtual === "pendencias" && modoTodas && faturasDoMes.length > 0 && (
+        <FaturasDoMes faturas={faturasDoMes} linhas={(res && res.noBancoSemPar) || []} fila={fila} lancs={lancs}
+          aoFecharFatura={unificado && unificado.aoFecharFatura} ocupado={ocupado} fechado={fechado} />
+      )}
+      {etapaAtual === "pendencias" && res && (
         <ConferenciaComExtrato
-          resultado={extrato.resultado} mapa={extrato.mapa} aoCorrigir={extrato.corrigir}
+          resultado={res} mapa={extrato.mapa} aoCorrigir={extrato.corrigir}
           aoLancar={extrato.lancar} aoMarcarCasados={extrato.marcarCasados} aoConfirmarPar={extrato.confirmarPar}
-          aoDescartar={extrato.descartar} aoExcluir={extrato.excluir} ocupado={ocupado} fila={extrato.fila} />
+          aoDescartar={extrato.descartar} aoExcluir={extrato.excluir} ocupado={ocupado} fila={fila}
+          semResumo esconder={modoTodas ? ehDebitoDeFatura : null} />
+      )}
+      {etapaAtual === "pendencias" && (
+        <div style={{ ...S.card, display: "grid", gap: 8 }}>
+          {conf.total > 0 && (
+            <button type="button" data-vk-ver-conferencia="1" onClick={() => setVerConferencia((v) => !v)}
+              style={{ justifySelf: "start", background: "none", border: "none", padding: "4px 0", fontSize: 12.5, color: "#0474f4", cursor: "pointer", fontFamily: "inherit" }}>
+              {verConferencia ? "▾" : "▸"} Lançamentos do mês: {conf.conferidos} de {conf.total} conferidos
+              {conf.pendentes > 0 ? ` — ${conf.pendentes} sem conferir` : ""}
+            </button>
+          )}
+          {rodapeDaEtapa("pendencias", pendenciasOk, !res ? "Traga o extrato do mês." : `Resolva ${pendenciasN === 1 ? "a pendência" : "as " + pendenciasN + " pendências"} acima.`)}
+        </div>
       )}
 
+      {/* ── Etapa 4 · Fechar ── a lista de verificação; o botão só libera com
+          tudo verde. Fechado, o mês não aceita lançamento novo. */}
+      {etapaAtual === "fechar" && (
+        <div data-vk-etapa-fechar="1" style={{ ...S.card, display: "grid", gap: 12 }}>
+          {cabecalhoDaEtapa(`4 · Fechar ${efMesPorExtenso(mes)}`, "Fechado, o mês não aceita lançamento novo nem mudança de valor, data ou conta. Para mexer de novo, é preciso reabrir.")}
+          <div style={{ display: "grid", border: "1px solid rgba(38,36,33,0.10)", borderRadius: 12 }}>
+            {verificacoes.map((v, k) => (
+              <div key={k} data-vk-verificacao={v.id} data-vk-ok={v.ok ? "1" : "0"} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap",
+                padding: "10px 12px", borderTop: k ? "1px solid rgba(38,36,33,0.06)" : "none" }}>
+                <span aria-hidden="true" style={{ flex: "0 0 22px", width: 22, height: 22, borderRadius: 999, display: "inline-flex", alignItems: "center",
+                  justifyContent: "center", fontSize: 11.5, fontWeight: 700, background: v.ok ? "#dcfce7" : "#ffedd5", color: v.ok ? "#166534" : "#9a3412" }}>{v.ok ? "✓" : "✕"}</span>
+                <span style={{ flex: "1 1 240px", fontSize: 13 }}>{v.texto}</span>
+                {!v.ok && !fechado && (
+                  <button type="button" onClick={() => irPara(v.id)}
+                    style={{ background: "none", border: "none", padding: "6px 0", fontSize: 12.5, color: "#0474f4", textDecoration: "underline", cursor: "pointer", fontFamily: "inherit" }}>
+                    Resolver</button>
+                )}
+              </div>
+            ))}
+            {!lugarOk && (
+              <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", borderTop: "1px solid rgba(38,36,33,0.06)", fontSize: 13, color: "#9a3412" }}>
+                ✕ O mês fecha na {nomePrincipal} (ou em “Tudo”), conferindo as outras contas junto.
+              </div>
+            )}
+          </div>
+          {conf.pendentes > 0 && !fechado && (
+            <div style={{ fontSize: 12, color: "#4b5563", lineHeight: 1.5 }}>
+              {conf.pendentes === 1 ? "1 lançamento" : conf.pendentes + " lançamentos"} sem marca de conferido (fora do banco ou da fatura) — não impede o fechamento;
+              o que passou pelo banco já foi conferido pelo extrato.
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {fechado ? (
+              <button style={S.btnSec} onClick={() => aoReabrir(mes)}>Reabrir {efMesPorExtenso(mes)}</button>
+            ) : (
+              <>
+                <span style={{ fontSize: 12.5, color: tudoCerto ? "#15803d" : "#b45309", marginRight: "auto" }}>
+                  {tudoCerto ? "✓ Tudo conferido." : "Bloqueado até todos os itens ficarem verdes."}</span>
+                <button data-vk-fechar-mes="1" style={{ ...S.btn, opacity: tudoCerto && !ocupado ? 1 : .45 }} disabled={!tudoCerto || !!ocupado}
+                  onClick={() => { if (tudoCerto) aoFechar(mes, saldoParaFechar); }}>Fechar {efMesPorExtenso(mes)}</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {etapaAtual === "pendencias" && verConferencia && (<>
       <div style={{ ...S.card, display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", fontSize: 12.5, color: "#4b5563" }}>
         <span><strong style={{ color: "#262421" }}>{conf.conferidos}</strong> de {conf.total} conferidos
           {conf.peloExtrato > 0 && <span style={{ color: "#6b7280" }}> ({conf.peloExtrato} pelo extrato)</span>}</span>
@@ -10350,6 +10613,7 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
           </table>
         </div>
       )}
+      </>)}
     </div>
   );
 }
@@ -11227,7 +11491,8 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   // extratos do mês, com o checklist. Dá para pular.
   const [entradaDoMes, setEntradaDoMes] = useState(false);
   useEffect(() => {
-    if (vista === "fechamento" && unificavel) { setContaFecho(""); setAviso(""); setEntradaDoMes(true); }
+    // a entrada dos arquivos agora é a etapa 1 da própria tela (sem janela por cima)
+    if (vista === "fechamento" && unificavel) { setContaFecho(""); setAviso(""); }
   }, [vista]);
   const ehPrincipal = contaAtual.id === CONTA_BANCARIA_PRINCIPAL;
   // na conferência, só os lançamentos que passam por esta conta
