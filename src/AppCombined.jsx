@@ -13353,6 +13353,13 @@ function linhasDaFatura(obras, lancamentos, cartaoId, competencia, opcoes) {
           compraEm: String(c.compraEm || c.pagoEm || "").slice(0, 10),
           parcela: p.parcela, de: p.de, valor: Math.round((Number(p.valor) || 0) * 100) / 100,
           refId: c.id,
+          // a nota da compra: os itens de uma nota (concreto + bomba) são
+          // contas separadas na obra, mas o cartão cobra a nota inteira
+          nota: (() => {
+            const ped = String(c.pedidoId || "").replace(/~p\d+$/, "");
+            const k = ped || (c.doc ? "doc:" + c.doc : "");
+            return k ? `${o.id || ""}|${k}` : "";
+          })(),
           // o papel da compra de obra fica na obra — a fatura não o copia
           anexos: [],
           ...(() => {
@@ -18229,8 +18236,29 @@ function conferenciaDaFatura(cartao, guardada, obras, lancamentos, competencia, 
   const linhas = fatura.linhas.map((l, i) => ({ l, i, usado: false }));
   const casadas = [], faltam = [], naoLancar = [];
   const ordem = doArquivo.slice().sort((a, b) => String(a.data).localeCompare(String(b.data)));
+  // Primeiro, a nota inteira: o banco cobra numa linha só (887,81) a nota
+  // que na obra tem dois itens (concreto 634,48 + bomba 253,33). Só junta
+  // itens da MESMA nota e da mesma parcela, e só quando a soma bate.
+  const juntas = new Set();
+  for (const m of ordem) {
+    if (ign[m.id] || !(Number(m.valor) < 0)) continue;
+    const v = Math.abs(Number(m.valor) || 0);
+    const grupos = {};
+    for (const x of linhas) {
+      if (x.usado || !x.l.nota || Number(x.l.valor) < 0) continue;
+      if (m.parcela && (x.l.parcela !== m.parcela || x.l.de !== m.de)) continue;
+      const k = x.l.nota + "|" + x.l.parcela;
+      (grupos[k] = grupos[k] || []).push(x);
+    }
+    const grupo = Object.values(grupos).find((g) => g.length > 1
+      && Math.abs(efCentavos(g.reduce((t, x) => t + (Number(x.l.valor) || 0), 0)) - v) <= 0.011);
+    if (!grupo) continue;
+    for (const x of grupo) { x.usado = true; casadas.push({ movimento: m, linha: x.l, parteDaNota: grupo.length }); }
+    juntas.add(m);
+  }
   for (const m of ordem) {
     if (ign[m.id]) { naoLancar.push({ ...m, motivo: ign[m.id].motivo || "" }); continue; }
+    if (juntas.has(m)) continue;
     const v = Math.abs(Number(m.valor) || 0);
     const credito = Number(m.valor) > 0;
     const cands = linhas.filter((x) => !x.usado && Math.abs(Math.abs(Number(x.l.valor) || 0) - v) <= 0.011

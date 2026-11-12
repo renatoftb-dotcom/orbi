@@ -3458,6 +3458,24 @@ teste("conferência unificada: junta as contas, tira a transferência do débito
   assert.strictEqual(u2.meios[1].conciliacao, null);
 });
 
+teste("fatura: a nota cobrada numa linha só casa com os itens dela na obra (concreto + bomba)", () => {
+  const K = { id: "kv", nome: "Visa", diaFechamento: 10, diaVencimento: 15, contaBancariaId: "cora" };
+  const conta = (id, valor, ped, doc, k) => ({ id: id + (k > 1 ? "~p" + k : ""), contaId: "material", descricao: id, favorecido: "Votorantim", valor, pago: false,
+    formaPagamento: "cartao", cartaoId: "kv", doc, ...(ped ? { pedidoId: ped + (k > 1 ? "~p" + k : "") } : {}),
+    parcelasCartao: [{ competencia: "2026-10", parcela: k, de: 6, valor }], parcelaCartao: { grupo: id, k, de: 6 } });
+  const obra = { id: "oj", nome: "Jac", clienteId: "e1", contasPagar: [
+    conta("fund", 648.78, "", "4176", 2), conta("fck77", 634.48, "nota-4177", "4177", 2), conta("bomba77", 253.33, "nota-4177", "4177", 2),
+    conta("fck78", 648.78, "nota-4178", "4178", 2), conta("bomba78", 239.03, "nota-4178", "4178", 2)] };
+  const mov = (id, data, valor) => ({ id, data, valor, historico: "ENGEMIX 2/6", parcela: 2, de: 6, competencia: "2026-10" });
+  const guardada = { movimentos: [mov("a", "2026-08-20", -648.78), mov("b", "2026-09-01", -887.81), mov("c", "2026-09-08", -887.81)] };
+  const f = M.conferenciaDaFatura(K, guardada, [obra], [], "2026-10", {});
+  assert.deepStrictEqual([f.faltam.length, f.soNoVicke.length, f.casadas.length], [0, 0, 5]);
+  assert.ok(f.pronta);
+  // soma que não bate não junta: continua faltando
+  const g2 = { movimentos: [mov("b", "2026-09-01", -880.00)] };
+  assert.strictEqual(M.conferenciaDaFatura(K, g2, [obra], [], "2026-10", {}).faltam.length, 1);
+});
+
 teste("débito do banco que paga a fatura: acha a fatura aberta do cartão pago pela conta", () => {
   const m = { id: "x", data: "2026-09-15", valor: -634.48, historico: "Pagamento da fatura · Cora SCFI" };
   const f = M.faturaParaALinhaDoBanco(m, "cora", [CORA], [OBRA_JAC], [], {});
