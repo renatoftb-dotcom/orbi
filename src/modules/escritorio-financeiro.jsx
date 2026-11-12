@@ -9176,11 +9176,34 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                         Não deu para lançar direto: {motivo[m.id]}
                       </div>
                     )}
+                    {sug && sug.faturaDoCartao && sug.faturaDoCartao.exata ? (
+                      // O débito que paga a fatura NÃO se lança pelo formulário:
+                      // as compras já são despesa (cada uma na obra ou na conta
+                      // dela) — lançar o débito somaria a despesa duas vezes.
+                      // Fechar a fatura faz dele a linha do extrato, sem despesa nova.
+                      <div data-vk-fatura-sem-formulario="1" style={{ border: "1px solid rgba(4,116,244,0.35)", background: "#f5f9ff", borderRadius: 12,
+                        padding: "12px 14px", display: "grid", gap: 10, fontSize: 12.5, color: "#1f2937", lineHeight: 1.45 }}>
+                        <div>
+                          💳 <b>Este débito é a fatura de {mesAnoPorExtenso(sug.faturaDoCartao.competencia)} do {sug.faturaDoCartao.cartao.nome}</b>
+                          {" "}({efDinheiro(sug.faturaDoCartao.total)}, {sug.faturaDoCartao.compras === 1 ? "1 compra" : sug.faturaDoCartao.compras + " compras"}).
+                        </div>
+                        <div style={{ color: "#4b5563" }}>
+                          As compras já estão lançadas, cada uma na obra ou na conta dela. Lançar este débito pelo formulário somaria a despesa duas vezes.
+                          Feche a fatura: ela vira a linha deste débito no extrato e não aumenta a despesa.
+                        </div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                          <button style={{ ...S.btnSec, padding: "7px 14px", fontSize: 12.5 }} onClick={() => setAberto("")}>Cancelar</button>
+                          <button data-vk-fechar-fatura-painel="1" style={{ ...S.btn, padding: "7px 14px", fontSize: 12.5 }} disabled={!!ocupado}
+                            onClick={() => { setAberto(""); rapido(m); }}>✓ Fechar a fatura</button>
+                        </div>
+                      </div>
+                    ) : (
                     <FormLancamentoEscritorio key={m.id} {...fila.formProps}
                       inicial={fila.inicial(m)} competenciaFixa={fila.mes} motivos={(sug && sug.motivos) || []}
                       titulo={m._cartao ? `Compra no cartão${meio && meio.nome ? " " + meio.nome : ""} · ${dataBR(m.data)}${m.de > 1 ? ` · parcela ${m.parcela}/${m.de} — o valor é o da compra inteira, confira na nota` : ""}` : `Lançar · ${dataBR(m.data)}`}
                       rotuloSalvar="Lançar e seguir" atalhos
                       aoSalvar={(l) => lancar(m, l, true)} aoCancelar={() => setAberto("")} />
+                    )}
                   </div>
                 )}
               </div>
