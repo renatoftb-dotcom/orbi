@@ -10108,9 +10108,17 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
     if (!px) return null;
     return (
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-        {!ok && aviso && <span style={{ fontSize: 12.5, color: "#b45309", marginRight: "auto" }}>{aviso}</span>}
-        <button data-vk-proxima-etapa={px.id} style={{ ...S.btn, opacity: ok ? 1 : .45 }} disabled={!ok} onClick={() => irPara(px.id)}>
-          Próximo: {px.nome.toLowerCase()} →</button>
+        {!ok && aviso && (
+          <span style={{ fontSize: 12.5, color: "#b45309", marginRight: "auto", lineHeight: 1.5 }}>
+            {aviso}{px.id !== "fechar" && <span style={{ color: "#4b5563" }}> Dá para seguir e ir conferindo o que já chegou; o mês só fecha com tudo completo.</span>}
+          </span>
+        )}
+        {/* Fechamento parcial: as etapas 1 a 3 não travam a seguinte — só o
+            "Fechar o mês" exige tudo verde. */}
+        <button data-vk-proxima-etapa={px.id} data-vk-parcial={ok ? undefined : "1"}
+          style={ok || px.id !== "fechar" ? (ok ? S.btn : { ...S.btnSec, minHeight: 40 }) : { ...S.btn, opacity: .45 }}
+          disabled={!ok && px.id === "fechar"} onClick={() => irPara(px.id)}>
+          {ok || px.id === "fechar" ? `Próximo: ${px.nome.toLowerCase()} →` : `Seguir para ${px.nome.toLowerCase()} assim mesmo →`}</button>
       </div>
     );
   };
@@ -10200,7 +10208,7 @@ function FechamentoEscritorioTela({ lancs, linhas, fechamentos, mes, aoTrocarMes
           </Selecao>
           <span style={{ fontSize: 12.5, color: fechado ? "#15803d" : "#4b5563", fontWeight: fechado ? 600 : 400 }}>
             {fechado ? `✓ Fechado em ${String(registro.fechadoEm || "").slice(0, 10).split("-").reverse().join("/")}`
-              : "Quatro etapas, uma de cada vez. O mês só fecha com tudo conferido."}
+              : "Quatro etapas. Dá para ir conferindo aos poucos; o mês só fecha com tudo conferido."}
           </span>
           {ocupado && <span style={{ fontSize: 12, color: "#6b7280", marginLeft: "auto" }}>{ocupado}</span>}
         </div>
@@ -12414,8 +12422,13 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
           { fechadas: faturasFechadas(lancs, cartao.id) });
         fin = financeiroComFaturas(fin, cartao.id, r.faturas);
         meses.push(...r.competencias.map((c) => mesDoPagamentoDaFatura(cartao, c)));
-        feitos.push(`${cartao.nome}: ${movs.length} ${movs.length === 1 ? "linha" : "linhas"} da fatura de ${r.competencias.map((c) => mesAnoPorExtenso(c)).join(", ") || "—"}`
-          + (r.fechadas.length ? ` (fatura de ${r.fechadas.map((c) => mesAnoPorExtenso(c)).join(" e ")} já fechada: ficou como estava)` : ""));
+        const fechadasTxt = r.fechadas.map((c) => mesAnoPorExtenso(c)).join(" e ");
+        // Arquivo só com fatura já fechada: não entrou nada — dizer isso, e
+        // não "linhas da fatura de —", que parecia que tinha guardado.
+        feitos.push(!r.competencias.length && r.fechadas.length
+          ? `${cartao.nome}: este arquivo é a fatura de ${fechadasTxt}, que já está fechada — nada mudou. Confira se trouxe a fatura do mês certo.`
+          : `${cartao.nome}: ${movs.length} ${movs.length === 1 ? "linha" : "linhas"} da fatura de ${r.competencias.map((c) => mesAnoPorExtenso(c)).join(", ") || "—"}`
+            + (r.fechadas.length ? ` (fatura de ${fechadasTxt} já fechada: ficou como estava)` : ""));
         continue;
       }
       // extrato de banco
