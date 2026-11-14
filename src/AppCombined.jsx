@@ -90958,7 +90958,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const [vis3d, setVis3d] = useState("todos");
   const [cortes, setCortes] = useState(() => (Array.isArray(projeto.cortes) ? projeto.cortes : [])); // cortes AA, BB… (linha na planta)
   const [verCorte, setVerCorte] = useState(() => (Array.isArray(projeto.cortes) && projeto.cortes[0] ? projeto.cortes[0].id : null));
-  const corteRef = useRef(null), corteBox = useRef(null);  // 3D: todos os pavimentos, até o ativo, ou só o ativo
+  const corteRef = useRef(null), corteBox = useRef(null), corteAlvos = useRef([]);  // 3D: todos os pavimentos, até o ativo, ou só o ativo
   const [novaEscada, setNovaEscada] = useState({ forma: "reta", largura: 0.9, giro: 1 }); // opções da próxima escada // id do pavimento a excluir (confirmação)
   const [tipoEsq, setTipoEsq] = useState("porta_giro");  // tipo da próxima porta/janela
   const [dimsEsq, setDimsEsq] = useState(() => Object.fromEntries(TP_ESQ.map((t) => [t.id, { larg: t.larg, alt: t.alt, peit: t.peit, mat: t.mat }])));
@@ -93225,12 +93225,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // limites do desenho
     // telhados cortados pela linha: em cada água o corte é um segmento reto
     const cortesTel = [];
-    for (const p of pavs) for (const a of (p.areas || [])) {
+    for (const p of pavs) for (const [ia, a] of (p.areas || []).entries()) {
       if (a.tipo !== "telhado" || !a.pts || a.pts.length < 3) continue;
       let g; try { g = tpTelhadoGeo({ ...a, cota: tpApoioTelhado(a, p.paredes, p.areas, altM) }); } catch (err) { continue; }
       for (const f of g.facetas || []) for (const [x0, x1] of tpIntervalosLinha(f.pts, a0, u, n)) {
         const P = (sv) => ({ x: a0.x + u.x * sv, y: a0.y + u.y * sv });
-        cortesTel.push({ sa: x0, sb: x1, za: p.nivel + g.z(P(x0)), zb: p.nivel + g.z(P(x1)) });
+        cortesTel.push({ sa: x0, sb: x1, za: p.nivel + g.z(P(x0)), zb: p.nivel + g.z(P(x1)), al: { pav: p.id, key: "a" + ia } });
       }
     }
     let zMax = 3; for (const p of pavs) { zMax = Math.max(zMax, p.nivel + Math.max(0, ...(p.paredes || []).map((w) => w.h || 0)) + 0.3); }
@@ -93239,7 +93239,13 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const k = Math.min((W - 2 * mg) / (s1 - s0), (Hc - 2 * mg) / (z1 - z0));
     const ox = (W - (s1 - s0) * k) / 2 - s0 * k, oy = Hc - (Hc - (z1 - z0) * k) / 2 + z0 * k;
     const X = (sv) => ox + sv * k, Y = (zv) => oy - zv * k;
-    const ret = (sa, sb, za, zb, fill, stroke, lw) => { const x = X(Math.min(sa, sb)), y = Y(Math.max(za, zb)), w = Math.abs(sb - sa) * k, h = Math.abs(zb - za) * k; if (fill) { ctx.fillStyle = fill; ctx.fillRect(x, y, w, h); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = (lw || 1) * dpr; ctx.strokeRect(x, y, w, h); } };
+    // alvos de clique: cada peça desenhada guarda o retângulo (px do canvas),
+    // o pavimento e a chave de seleção ("p3", "a5", "o<id>"); selecionada sai em azul
+    const alvos = []; corteAlvos.current = alvos;
+    const marcC = (al) => !!al && (al.pav === pavAtivo ? sel.includes(al.key) : (selOutros[al.pav] || []).includes(al.key));
+    const ret = (sa, sb, za, zb, fill, stroke, lw, al) => { const x = X(Math.min(sa, sb)), y = Y(Math.max(za, zb)), w = Math.abs(sb - sa) * k, h = Math.abs(zb - za) * k;
+      if (al) { alvos.push({ ...al, x0: x, y0: y, x1: x + w, y1: y + h }); if (marcC(al)) { fill = fill ? "#8dbbff" : fill; stroke = TP_AZUL; lw = Math.max(lw || 1, 1.6); } }
+      if (fill) { ctx.fillStyle = fill; ctx.fillRect(x, y, w, h); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = (lw || 1) * dpr; ctx.strokeRect(x, y, w, h); } };
     // terreno
     ctx.fillStyle = "#eef2ea"; ctx.fillRect(X(s0), Y(0), (s1 - s0) * k, 0.45 * k);
     ctx.strokeStyle = "#111827"; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.moveTo(X(s0), Y(0)); ctx.lineTo(X(s1), Y(0)); ctx.stroke();
@@ -93250,33 +93256,33 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const da = D(w.a), db = D(w.b); if (da <= 0.02 && db <= 0.02) continue; if (Math.min(da, db) > prof) continue;
       if ((da > 0.02) !== (db > 0.02)) continue; // cortada: vai depois
       const sa = S(w.a), sb = S(w.b); if (Math.max(sa, sb) < s0 || Math.min(sa, sb) > s1) continue;
-      vistas.push({ p, w, d: (da + db) / 2, sa, sb });
+      vistas.push({ p, w, iw: p.paredes.indexOf(w), d: (da + db) / 2, sa, sb });
     }
     // degraus vistos além da linha (não cortados): a face de cada degrau
-    for (const p of pavs) for (const e of (p.areas || [])) {
+    for (const p of pavs) for (const [ie, e] of (p.areas || []).entries()) {
       if (e.tipo !== "escada") continue;
       const g = tpEscadaGeo(e);
       for (const dg of [...g.degraus, ...g.patamares]) {
         const ds = dg.pts.map(D); if (Math.min(...ds) <= 0.01 || Math.min(...ds) > prof) continue;
-        const ss = dg.pts.map(S); vistas.push({ p, deg: dg, esp: g.esp, d: Math.min(...ds), sa: Math.min(...ss), sb: Math.max(...ss) });
+        const ss = dg.pts.map(S); vistas.push({ p, deg: dg, ie, esp: g.esp, d: Math.min(...ds), sa: Math.min(...ss), sb: Math.max(...ss) });
       }
     }
     vistas.sort((x, y) => y.d - x.d);
-    for (const { p, w, deg, esp, sa, sb } of vistas) {
-      if (deg) { ret(Math.max(s0, sa), Math.min(s1, sb), p.nivel, p.nivel + deg.z, "#f3f1ed", "#9ca3af", 1); continue; }
+    for (const { p, w, iw, deg, ie, esp, sa, sb } of vistas) {
+      if (deg) { ret(Math.max(s0, sa), Math.min(s1, sb), p.nivel, p.nivel + deg.z, "#f3f1ed", "#9ca3af", 1, { pav: p.id, key: "a" + ie }); continue; }
       const h2 = (w.t || 0.14) / 2, Lw = tpLen(w) || 1, ux = (w.b.x - w.a.x) / Lw, uy = (w.b.y - w.a.y) / Lw;
       const cs = [[h2, 0], [-h2, 0]].flatMap(([o]) => [w.a, w.b].map((q, kk) => S({ x: q.x - uy * o + (kk ? ux : -ux) * h2, y: q.y + ux * o + (kk ? uy : -uy) * h2 })));
       const smin = Math.max(s0, Math.min(...cs)), smax = Math.min(s1, Math.max(...cs));
-      ret(smin, smax, p.nivel, p.nivel + (w.h || 0), "#ffffff", "#9ca3af", 1);
+      ret(smin, smax, p.nivel, p.nivel + (w.h || 0), "#ffffff", "#9ca3af", 1, { pav: p.id, key: "p" + iw });
       for (const o of tpAbsVisiveis(w)) {
         const e0 = S({ x: w.a.x + ux * (o.x - o.larg / 2), y: w.a.y + uy * (o.x - o.larg / 2) }), e1 = S({ x: w.a.x + ux * (o.x + o.larg / 2), y: w.a.y + uy * (o.x + o.larg / 2) });
         if (Math.abs(e1 - e0) < 0.05) continue;
         const porta = String(o.tipo).startsWith("porta") || o.tipo === "vao";
-        ret(e0, e1, p.nivel + (o.peit || 0), p.nivel + (o.peit || 0) + o.alt, porta ? "#ffffff" : "#e6f0fb", "#9ca3af", 1);
+        ret(e0, e1, p.nivel + (o.peit || 0), p.nivel + (o.peit || 0) + o.alt, porta ? "#ffffff" : "#e6f0fb", "#9ca3af", 1, { pav: p.id, key: "o" + o.id });
       }
     }
     // 2) lajes e pisos cortados
-    for (const p of pavs) for (const a of (p.areas || [])) {
+    for (const p of pavs) for (const [ia, a] of (p.areas || []).entries()) {
       if (!a.pts || a.pts.length < 3) continue;
       if (a.tipo === "laje" || a.tipo === "contrapiso") {
         // laje com a abertura da escada descontada
@@ -93285,28 +93291,30 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           let partes = [[ia, ib]];
           for (const f of furos) for (const [fa, fb] of tpIntervalosLinha(f, a0, u, n)) partes = partes.flatMap(([x0, x1]) => (fb <= x0 || fa >= x1 ? [[x0, x1]] : [[x0, Math.max(x0, fa)], [Math.min(x1, fb), x1]].filter(([m0, m1]) => m1 - m0 > 1e-3)));
           const zb = p.nivel + (a.cota || 0), ze = zb + Math.max(0.03, a.esp || TP_AREA_TIPOS[a.tipo].esp || 0.05);
-          for (const [x0, x1] of partes) ret(x0, x1, zb, ze, a.tipo === "laje" ? "#3f3f3f" : "#bdbdbd", "#111827", 1);
+          for (const [x0, x1] of partes) ret(x0, x1, zb, ze, a.tipo === "laje" ? "#3f3f3f" : "#bdbdbd", "#111827", 1, { pav: p.id, key: "a" + ia });
         }
       }
     }
     // 3) escadas cortadas: cada degrau atravessado vira um bloco até a altura dele
-    for (const p of pavs) for (const e of (p.areas || [])) {
+    for (const p of pavs) for (const [ie, e] of (p.areas || []).entries()) {
       if (e.tipo !== "escada") continue;
       const g = tpEscadaGeo(e);
-      for (const d of [...g.degraus, ...g.patamares]) for (const [x0, x1] of tpIntervalosLinha(d.pts, a0, u, n)) ret(x0, x1, p.nivel, p.nivel + d.z, "#cfcac2", "#4b5563", 1);
+      for (const d of [...g.degraus, ...g.patamares]) for (const [x0, x1] of tpIntervalosLinha(d.pts, a0, u, n)) ret(x0, x1, p.nivel, p.nivel + d.z, "#cfcac2", "#4b5563", 1, { pav: p.id, key: "a" + ie });
     }
     // 4) paredes cortadas (preto), com portas/janelas abertas
     const cotasEsq = [];
-    for (const p of pavs) for (const w of (p.paredes || [])) {
+    for (const p of pavs) for (const [iw, w] of (p.paredes || []).entries()) {
       const da = D(w.a), db = D(w.b); if ((da > 0) === (db > 0)) continue;
+      const alP = { pav: p.id, key: "p" + iw };
       const t = da / (da - db), q = { x: w.a.x + (w.b.x - w.a.x) * t, y: w.a.y + (w.b.y - w.a.y) * t }, sv = S(q); if (!dentroS(sv)) continue;
       const Lw = tpLen(w) || 1, ux = (w.b.x - w.a.x) / Lw, uy = (w.b.y - w.a.y) / Lw, sn = Math.abs(ux * u.y - uy * u.x) || 0.05;
       const larg = Math.min(1.2, (w.t || 0.14) / sn), xa = sv - larg / 2, xb = sv + larg / 2, zb = p.nivel, zt = zb + (w.h || 0);
       const pos = t * Lw, o = tpAbsVisiveis(w).find((oo) => Math.abs(pos - oo.x) <= oo.larg / 2);
-      if (!o) { ret(xa, xb, zb, zt, "#3f3f3f", "#111827", 1.4); continue; }
+      if (!o) { ret(xa, xb, zb, zt, "#3f3f3f", "#111827", 1.4, alP); continue; }
       const zp = zb + (o.peit || 0), zv = Math.min(zt, zp + o.alt);
-      if (zp > zb + 1e-3) ret(xa, xb, zb, zp, "#3f3f3f", "#111827", 1.4);
-      if (zt > zv + 1e-3) ret(xa, xb, zv, zt, "#3f3f3f", "#111827", 1.4);
+      if (zp > zb + 1e-3) ret(xa, xb, zb, zp, "#3f3f3f", "#111827", 1.4, alP);
+      if (zt > zv + 1e-3) ret(xa, xb, zv, zt, "#3f3f3f", "#111827", 1.4, alP);
+      { const alO = { pav: p.id, key: "o" + o.id }; if (marcC(alO)) ret(xa, xb, zp, zv, "rgba(4,116,244,0.15)", TP_AZUL, 1.4, alO); else alvos.push({ ...alO, x0: X(xa), y0: Y(zv), x1: X(xb), y1: Y(zp) }); }
       const porta = String(o.tipo).startsWith("porta") || o.tipo === "vao";
       const sCota = sv > Lc / 2 ? xb + 0.3 : xa - 0.3; // pelo lado de fora da casa
       cotasEsq.push({ s: sCota, zb, zp: porta ? zb : zp, zv, dir: sv > Lc / 2 });
@@ -93315,8 +93323,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     }
     // 4b) telhado cortado (telha + estrutura numa faixa só)
     for (const t of cortesTel) {
-      const e = 0.07;
-      ctx.fillStyle = "#7c3f22"; ctx.strokeStyle = "#3b1d0e"; ctx.lineWidth = 1 * dpr;
+      const e = 0.07, mt = marcC(t.al);
+      alvos.push({ ...t.al, x0: X(Math.min(t.sa, t.sb)), x1: X(Math.max(t.sa, t.sb)), y0: Y(Math.max(t.za, t.zb)) - 4 * dpr, y1: Y(Math.min(t.za, t.zb) - e) + 4 * dpr, tel: t, X, Y });
+      ctx.fillStyle = mt ? "#5b8fd6" : "#7c3f22"; ctx.strokeStyle = mt ? TP_AZUL : "#3b1d0e"; ctx.lineWidth = 1 * dpr;
       ctx.beginPath(); ctx.moveTo(X(t.sa), Y(t.za)); ctx.lineTo(X(t.sb), Y(t.zb)); ctx.lineTo(X(t.sb), Y(t.zb - e)); ctx.lineTo(X(t.sa), Y(t.za - e)); ctx.closePath(); ctx.fill(); ctx.stroke();
     }
     // cotas verticais: linha com traço a 45° nas pontas e o número deitado
@@ -93356,12 +93365,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     for (const p of pavs) {
       const pd = Math.max(0, ...(p.paredes || []).map((w) => w.h || 0));
-      for (const a of (p.areas || [])) {
+      for (const [ia, a] of (p.areas || []).entries()) {
         if (a.tipo !== "ambiente" || !a.pts || a.pts.length < 3) continue;
         for (const [x0, x1] of tpIntervalosLinha(a.pts, a0, u, n)) {
           if ((x1 - x0) * k < 40 * dpr) continue;
           const halo = (t, x, y) => { ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(255,255,255,0.92)"; ctx.lineWidth = 4 * dpr; ctx.strokeText(t, x, y); ctx.fillText(t, x, y); };
-          ctx.font = `600 ${11 * dpr}px system-ui, sans-serif`; ctx.fillStyle = "#b65b3d"; halo(a.nome || "Ambiente", X((x0 + x1) / 2), Y(p.nivel + Math.max(0.6, pd / 2)));
+          ctx.font = `600 ${11 * dpr}px system-ui, sans-serif`; const alA = { pav: p.id, key: "a" + ia }; ctx.fillStyle = marcC(alA) ? TP_AZUL : "#b65b3d";
+          const xn = X((x0 + x1) / 2), yn = Y(p.nivel + Math.max(0.6, pd / 2)), tn = a.nome || "Ambiente", wn = ctx.measureText(tn).width;
+          halo(tn, xn, yn); alvos.push({ ...alA, x0: xn - wn / 2 - 4 * dpr, x1: xn + wn / 2 + 4 * dpr, y0: yn - 9 * dpr, y1: yn + 9 * dpr, nome: true });
 
         }
       }
@@ -93453,7 +93464,20 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // o círculo do aviso some sozinho
   useEffect(() => { if (!focoEst) return; const t = setTimeout(() => setFocoEst(null), 4000); return () => clearTimeout(t); }, [focoEst]);
   useEffect(() => { const t = setTimeout(() => atual.current.desenharPlanta(), 230); return () => clearTimeout(t); }, [painelOculto]); // escala gráfica acompanha o painel
-  useEffect(() => { if (modo !== "corte") return; const id = requestAnimationFrame(() => desenharCorte()); return () => cancelAnimationFrame(id); }, [modo, cortes, verCorte, paredes, areas, dadosPav, pavimentos, pavAtivo]);
+  useEffect(() => { if (modo !== "corte") return; const id = requestAnimationFrame(() => desenharCorte()); return () => cancelAnimationFrame(id); }, [modo, cortes, verCorte, paredes, areas, dadosPav, pavimentos, pavAtivo, sel, selOutros]);
+  // clique no corte: seleciona a peça (Ctrl soma, Shift tira); em outro pavimento, vai para ele
+  const cliqueCorte = (e) => {
+    const c = corteRef.current; if (!c) return;
+    const r = c.getBoundingClientRect(), kx = c.width / r.width, x = (e.clientX - r.left) * kx, y = (e.clientY - r.top) * kx;
+    const ok = (a) => x >= Math.min(a.x0, a.x1) - 2 && x <= Math.max(a.x0, a.x1) + 2 && y >= Math.min(a.y0, a.y1) - 2 && y <= Math.max(a.y0, a.y1) + 2;
+    // o que foi desenhado por último fica por cima; nome de ambiente ganha de tudo
+    const lista = corteAlvos.current, achou = lista.find((a) => a.nome && ok(a)) || [...lista].reverse().find((a) => !a.nome && ok(a));
+    if (ferramenta !== "selecionar") trocarFerramenta("selecionar");
+    if (!achou) { if (!e.ctrlKey && !e.metaKey && !e.shiftKey) setSel([]); return; }
+    const aplicar = (base) => (e.shiftKey ? base.filter((k) => k !== achou.key) : (e.ctrlKey || e.metaKey) ? [...new Set([...base, achou.key])] : [achou.key]);
+    if (achou.pav !== pavAtivo) { irParaPav(achou.pav); setTimeout(() => setSel([achou.key]), 0); return; }
+    setSel((base) => aplicar(base));
+  };
   // ambiente acompanha as paredes: mexeu numa parede, o contorno e a área se refazem
   useEffect(() => {
     if (!areas.some((a) => a.tipo === "ambiente" && a.ponto)) return;
@@ -95670,7 +95694,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 ))}
               </div>
             )}
-            <canvas ref={corteRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
+            <canvas ref={corteRef} onClick={cliqueCorte} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "pointer" }} />
             {!cortes.length && (
               <div style={{ position: "absolute", left: "50%", bottom: 16, transform: "translateX(-50%)" }}>
                 <button style={{ ...btn, minHeight: 32, padding: "4px 12px", fontSize: 13, fontWeight: 600 }} onClick={() => trocarFerramenta("corte")}>Desenhar linha de corte</button>
