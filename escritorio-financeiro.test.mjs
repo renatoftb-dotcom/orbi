@@ -4308,6 +4308,34 @@ teste("fornecedor → conta: só quem foi SEMPRE para a mesma conta; sem histór
   } finally { delete globalThis.TIPOS_PROFISSIONAL; delete globalThis.contaDoTipo; }
 });
 
+teste("linha do banco: só copia o que foi SEMPRE igual; conta variada vira opções", () => {
+  const h = (doc) => "PIX EMITIDO OUTRA IF · Pagamento Pix 47.508.411/0001-90 LOJA EXEMPLO " + (doc || "");
+  const base = { tipo: "escritorio", fornecedor: "Loja Exemplo", unidadeId: "escritorio" };
+  // sempre Utensílios: "Lançar assim", com quantas vezes
+  const sempre = [
+    { ...base, id: "a", contaId: "utensilios", valor: 50, historicoBanco: h(), criadoEm: "2026-10-01" },
+    { ...base, id: "b", contaId: "utensilios", valor: 80, historicoBanco: h(), criadoEm: "2026-10-10" },
+  ];
+  const s1 = M.sugestaoDoExtrato({ valor: -60, historico: h() }, sempre);
+  assert.strictEqual(s1.campos.contaId, "utensilios"); assert.strictEqual(s1.vezes, 2); assert.ok(!s1.opcoes);
+  // já foi para duas contas: nenhuma vira "Lançar assim"; as duas viram opções,
+  // a de valor mais perto primeiro
+  const misto = sempre.concat([{ ...base, id: "c", contaId: "taxas_impostos", valor: 900, historicoBanco: h(), criadoEm: "2026-11-01" }]);
+  const s2 = M.sugestaoDoExtrato({ valor: -880, historico: h() }, misto);
+  assert.ok(!s2.campos.contaId, "conta variada não é sugerida sozinha");
+  assert.strictEqual(s2.campos.fornecedor, "Loja Exemplo", "o que foi sempre igual continua vindo");
+  assert.deepStrictEqual(s2.opcoes.map((o) => [o.contaId, o.vezes]), [["taxas_impostos", 1], ["utensilios", 2]]);
+  const s3 = M.sugestaoDoExtrato({ valor: -55, historico: h() }, misto);
+  assert.strictEqual(s3.opcoes[0].contaId, "utensilios");
+  // cliente que variou não é copiado do último
+  const rec = (cli, d) => ({ tipo: "escritorio", contaId: "reembolsos", unidadeId: "escritorio", valor: 100, historicoBanco: "PIX RECEBIDO MARIA EXEMPLO", cliente: cli, clienteId: cli, criadoEm: d });
+  const s4 = M.sugestaoDoExtrato({ valor: 100, historico: "PIX RECEBIDO MARIA EXEMPLO" }, [rec("c1", "2026-10-01"), rec("c2", "2026-10-05")]);
+  assert.strictEqual(s4.campos.contaId, "reembolsos"); assert.ok(!s4.campos.clienteId);
+  // "DEB.TIT.COMPE EFETIVADO" é todo boleto: não ensina nada
+  const bol = [{ ...base, contaId: "emp_taxas", valor: 10, historicoBanco: "DEB.TIT.COMPE EFETIVADO", criadoEm: "2026-10-01" }];
+  assert.strictEqual(M.sugestaoDoExtrato({ valor: -10, historico: "DEB.TIT.COMPE EFETIVADO" }, bol), null);
+});
+
 for (const [nome, fn] of testes) {
   try { await fn(); console.log("  ok   " + nome); }
   catch (e) { falhas++; console.log("  FALHOU " + nome + "\n         " + e.message); }

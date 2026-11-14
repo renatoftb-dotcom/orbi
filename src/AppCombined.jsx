@@ -15934,7 +15934,11 @@ function sugestaoDoExtrato(movimento, lancamentos) {
   const chave = chaveDoHistorico(m.historico);
   const lado = Number(m.valor) < 0 ? -1 : 1;
   const quando = (l) => String(l.criadoEm || l.lancadoEm || "");
-  const lista = (lancamentos || []).filter((l) => l && l.historicoBanco && l.contaId)
+  // só a linha do banco ensina: as partes fora do banco de um recebimento
+  // (engenharia em Parceiros, a reserva) têm o mesmo histórico, mas não são
+  // a escolha de quem lançou
+  const lista = (lancamentos || []).filter((l) => l && l.historicoBanco && l.contaId && l.contaBanco !== "nao"
+      && !(l.origem && l.origem.parte && l.origem.parte !== "recebido"))
     .slice().sort((a, b) => quando(b).localeCompare(quando(a)));
   const ladoDe = (l) => {
     const c = contaEscritorio(l.contaId); const g = c && grupoEscritorio(c.grupo);
@@ -15946,17 +15950,52 @@ function sugestaoDoExtrato(movimento, lancamentos) {
   // mais de um fornecedor não identifica ninguém: não vale como pista.
   const comDoc = doc ? lista.filter((l) => mesmoLado(l) && documentoDoHistorico(l.historicoBanco) === doc) : [];
   const docUnico = new Set(comDoc.map((l) => efSemAcento(l.fornecedorId || l.fornecedor || l.contaId))).size === 1;
-  const achado = (docUnico && comDoc[0])
-    || (chave && lista.find((l) => mesmoLado(l) && chaveDoHistorico(l.historicoBanco) === chave))
-    || null;
-  if (!achado) return null;
-  const campos = ["contaId", "unidadeId", "cliente", "clienteId", "empreendimentoId", "projeto", "obraId", "fornecedor", "fornecedorId"];
-  const r = {};
-  for (const k of campos) if (achado[k] != null && achado[k] !== "") r[k] = achado[k];
+  // "DEB.TIT.COMPE EFETIVADO" é todo boleto: a chave só com jargão do banco
+  // não identifica ninguém e não ensina nada.
+  const chaveBoa = chave && !efChaveGenerica(chave);
+  const iguais = docUnico && comDoc.length ? comDoc
+    : chaveBoa ? lista.filter((l) => mesmoLado(l) && chaveDoHistorico(l.historicoBanco) === chave) : [];
+  if (!iguais.length) return null;
+  const achado = iguais[0];
+  const porDocumento = !!doc && documentoDoHistorico(achado.historicoBanco) === doc;
+  // Só se copia o que foi SEMPRE igual nas linhas iguais de antes. O CNPJ
+  // que já foi para Utensílios e para Taxas não vira "Lançar assim" numa
+  // das duas (a última acertava metade das vezes): as contas por que ele já
+  // passou viram opções de um clique, a mais provável primeiro.
+  const r = efCamposConstantes(iguais, achado);
   // O que veio de uma obra (pela ponte) se relança pela obra: a sugestão
   // abre o formulário, nunca vira lançamento direto no plano do escritório.
-  return { campos: r, de: achado, porDocumento: !!doc && documentoDoHistorico(achado.historicoBanco) === doc,
-    daObra: !!achado.origem };
+  if (r.contaId) return { campos: r, de: achado, porDocumento, daObra: !!achado.origem, vezes: iguais.length };
+  const v = Math.abs(Number(m.valor) || 0);
+  const grupos = new Map();
+  for (const l of iguais) { const k = EF_MESMA_ESCOLHA[l.contaId] || l.contaId; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(l); }
+  const opcoes = [...grupos.entries()].map(([contaId, ls]) => ({
+    contaId, vezes: ls.length, de: ls[0], daObra: !!ls[0].origem, campos: efCamposConstantes(ls, ls[0]),
+    perto: Math.min(...ls.map((l) => Math.abs(Math.abs(Number(l.valor) || 0) - v))) }))
+    // o valor mais perto do desta linha acerta mais que a mais frequente
+    // (65% contra 52% no histórico do escritório); empate, a mais usada
+    .sort((a, b) => (a.perto - b.perto) || (b.vezes - a.vezes))
+    .slice(0, 3);
+  return { campos: r, de: achado, porDocumento, daObra: false, vezes: iguais.length, opcoes };
+}
+const EF_CAMPOS_DA_LINHA = ["contaId", "unidadeId", "cliente", "clienteId", "empreendimentoId", "projeto", "obraId", "fornecedor", "fornecedorId"];
+// Contas que são a mesma escolha: o pagamento ao engenheiro foi lançado em
+// Parceiros e o VICKE o passou para a Reserva engenharia (comoPagamentoDaReserva
+// decide de novo a cada lançamento) — não é conta "variada".
+const EF_MESMA_ESCOLHA = { res_engenharia: "parceiros" };
+function efCamposConstantes(lista, base) {
+  const r = {};
+  for (const k of EF_CAMPOS_DA_LINHA) {
+    const vals = new Set((lista || []).map((l) => (l && l[k] != null ? String(k === "contaId" ? (EF_MESMA_ESCOLHA[l[k]] || l[k]) : l[k]) : "")));
+    if (vals.size === 1 && base && base[k] != null && base[k] !== "") r[k] = base[k];
+  }
+  return r;
+}
+const EF_JARGAO_DO_BANCO = new Set(["efetivado", "efetivada", "realizada", "realizado", "recebimento", "fav", "dep", "transf",
+  "contas", "dif", "titular", "cheque", "bloq", "saque", "pagto", "pgto", "boleto", "liquidacao", "cobranca", "automatico",
+  "sicoob", "cora", "itau", "bradesco", "santander", "caixa", "inter", "nubank"]);
+function efChaveGenerica(chave) {
+  return !String(chave || "").split(" ").some((w) => w.length >= 3 && !EF_JARGAO_DO_BANCO.has(w) && !EF_PALAVRAS_DO_BANCO.has(w));
 }
 
 // ── A conta de costume ──────────────────────────────────────────
@@ -21202,6 +21241,8 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
   const [aberto, setAberto] = useState("");
   const [formMesmoAssim, setFormMesmoAssim] = useState({});   // linha com cara de fatura que a pessoa diz não ser
   const [motivo, setMotivo] = useState({});      // id → por que não foi direto
+  // id → a opção (conta) escolhida entre as que a linha igual já teve
+  const [escolhaDaLinha, setEscolhaDaLinha] = useState({});
   const [marcados, setMarcados] = useState({});
   const [contaLote, setContaLote] = useState("");
   const [erroLote, setErroLote] = useState("");
@@ -21245,6 +21286,15 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
   function rapido(m) {
     const r = fila.rapido(m);
     if (r && r.lancamento) { lancar(m, r.lancamento, false); return; }
+    setMotivo((x) => ({ ...x, [m.id]: (r && r.erro) || "" }));
+    setAberto(m.id);
+  }
+  // Uma das contas por que a linha igual já passou: lança direto com ela;
+  // se faltar algo, abre o formulário já com ela escolhida.
+  function escolherOpcao(m, op) {
+    const r = fila.escolher ? fila.escolher(m, op) : null;
+    if (r && r.lancamento) { lancar(m, r.lancamento, false); return; }
+    setEscolhaDaLinha((x) => ({ ...x, [m.id]: op }));
     setMotivo((x) => ({ ...x, [m.id]: (r && r.erro) || "" }));
     setAberto(m.id);
   }
@@ -21453,8 +21503,26 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                     )}
                     {contaSug && !(sug && (sug.palpite || sug.estorno || sug.parcelaProjeto || sug.parcelaAPagar || sug.parcelaDaVenda)) && (
                       <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 2 }}>
-                        como em {dataBR(sug.de.lancadoEm) || "lançamento anterior"}: <b style={{ color: "#374151" }}>{contaSug.nome}</b>
+                        {sug.vezes > 1 ? `sempre assim (${sug.vezes} vezes)` : `como em ${dataBR(sug.de.lancadoEm) || "lançamento anterior"}`}: <b style={{ color: "#374151" }}>{contaSug.nome}</b>
                         {sug.campos.cliente ? ` · ${sug.campos.cliente}` : ""}
+                      </div>
+                    )}
+                    {sug && !contaSug && Array.isArray(sug.opcoes) && sug.opcoes.length > 0 && !m._cartao && !aberta
+                      && !(sug.estorno || sug.parcelaProjeto || sug.parcelaAPagar || sug.parcelaDaVenda || sug.faturaDoCartao) && (
+                      <div data-vk-opcoes-da-linha="1" onClick={(e) => e.stopPropagation()}
+                        style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 4, fontSize: 11.5, color: "#6b7280" }}>
+                        <span>esta linha já foi para contas diferentes:</span>
+                        {sug.opcoes.map((op) => {
+                          const c = contaEscritorio(op.contaId);
+                          const nome = c ? c.nome : ((typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((x) => x.id === op.contaId) || {}).nome || op.contaId;
+                          return (
+                            <button key={op.contaId} type="button" data-vk-opcao-conta={op.contaId} disabled={!!ocupado}
+                              onClick={(e) => { e.stopPropagation(); escolherOpcao(m, op); }}
+                              style={{ ...S.btnSec, padding: "4px 10px", fontSize: 11.5, color: "#0474f4", borderColor: "rgba(4,116,244,0.4)", minHeight: 30 }}>
+                              {nome}{op.campos.cliente ? ` · ${op.campos.cliente}` : ""} <span style={{ color: "#6b7280" }}>· {op.vezes}x</span>
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -21585,7 +21653,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                       </div>
                     ) : (
                     <FormLancamentoEscritorio key={m.id} {...fila.formProps}
-                      inicial={fila.inicial(m)} competenciaFixa={fila.mes} motivos={(sug && sug.motivos) || []}
+                      inicial={fila.inicial(m, escolhaDaLinha[m.id])} competenciaFixa={fila.mes} motivos={(sug && sug.motivos) || []}
                       titulo={m._cartao ? `Compra no cartão${meio && meio.nome ? " " + meio.nome : ""} · ${dataBR(m.data)}${m.de > 1 ? ` · parcela ${m.parcela}/${m.de} — o valor é o da compra inteira, confira na nota` : ""}` : `Lançar · ${dataBR(m.data)}`}
                       rotuloSalvar="Lançar e seguir" atalhos
                       aoSalvar={(l) => lancar(m, l, true)} aoCancelar={() => setAberto("")} />
@@ -24957,8 +25025,10 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     if (r.lancamento.naObra || r.lancamento.ligarObra || r.lancamento.recebimentoExtras) return { erro: "Escolha onde lançar." };
     return { lancamento: compraNoCartaoDaLinha(r.lancamento, m, cartao) };
   }
-  function inicialDaLinha(m) {
-    const sug = daMemoDaFila("sugestao", m, () => sugestaoDaLinha(m));
+  function inicialDaLinha(m, escolha) {
+    const sug0 = daMemoDaFila("sugestao", m, () => sugestaoDaLinha(m));
+    // conta escolhida entre as opções da linha: vem com os campos dela
+    const sug = escolha ? { ...(sug0 || {}), campos: { ...((sug0 || {}).campos || {}), ...(escolha.campos || {}) }, opcoes: null } : sug0;
     const base = lancamentoDaLinhaDoExtrato(m, mesEmConferencia, sug && sug.cartaoObra ? null : sug);
     // Parcela da venda achada: o formulário já vem com o empreendimento, a
     // obra e a parcela — e lançar daqui dá baixa nela, como o "Receber
@@ -25561,6 +25631,13 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
               sugestao: (m) => daMemoDaFila("sugestao", m, () => sugestaoDaLinha(m)),
               lancar: lancarLinhaDoExtrato,
               rapido: (m) => daMemoDaFila("rapido", m, () => rapidoDaLinha(m)),
+              escolher: (m, op) => {
+                if (!m || m._cartao || !op) return null;
+                const sug = daMemoDaFila("sugestao", m, () => sugestaoDaLinha(m)) || {};
+                const r = lancamentoRapidoDoExtrato(m, mesEmConferencia, { campos: { ...(sug.campos || {}), ...(op.campos || {}) }, de: op.de, daObra: op.daObra },
+                  fechamentos, (data || {}).obras || [], lancs);
+                return r && r.lancamento ? { lancamento: { ...r.lancamento, ...marcaDaLinha(m) } } : r;
+              },
               lancarVarias: lancarVariasDoExtrato,
               lancarSugeridas: lancarSugeridasDoExtrato,
               naoE: naoELancamento,
