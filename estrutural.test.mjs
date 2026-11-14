@@ -8,7 +8,7 @@ import assert from "assert";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(join(__dirname, "src", "modules", "estrutural.jsx"), "utf-8");
-const M = new Function(`${src}\nreturn { esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao };`)();
+const M = new Function(`${src}\nreturn { esLancarPavimentos, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao };`)();
 
 let ok = 0, falhou = 0;
 const t = (nome, fn) => { try { fn(); ok++; } catch (e) { falhou++; console.log("FALHOU:", nome, "\n ", e.message); } };
@@ -59,7 +59,7 @@ t("pilar não sai da parede: cantos entram na parede, T fica ao longo da parede 
   for (const p of M.esLancar(casa, [], { ...V6, pilar: { b: 0.14, h: 0.40 } }).pilares) for (const c of M.esCantosPilar(p)) assert.ok(dentro(c), `${p.id} (14×40) sai da parede`);
 });
 t("19 × 19 em parede de 14: canto alinhado com as duas faces de fora, T com a face de fora", () => {
-  const e = M.esLancar(casa, [], V6), achar = (x, y) => e.pilares.find((p) => p.no.x === x && p.no.y === y);
+  const e = M.esLancar(casa, [], { ...V6, pilar: { auto: false, b: 0.19, h: 0.19 } }), achar = (x, y) => e.pilares.find((p) => p.no.x === x && p.no.y === y);
   const c = achar(0, 0); assert.ok(Math.abs(c.x - 0.025) < 1e-6 && Math.abs(c.y - 0.025) < 1e-6, `${c.x},${c.y}`);
   const t = achar(5, 0); assert.ok(Math.abs(t.x - 5) < 1e-6 && Math.abs(t.y - 0.025) < 1e-6, `${t.x},${t.y}`);
   // nenhuma face de pilar passa da face de fora da casa
@@ -95,10 +95,16 @@ t("verificação: pilar 14 × 20 tem menos de 360 cm²", () => {
   const av = M.esVerificar(e, casa, { pilar: { b: 0.14, h: 0.20 } });
   assert.ok(av.some((a) => a.tipo === "nbr" && /280 cm²/.test(a.texto)));
 });
-t("padrão da norma: pilar 19 × 19 (sem γn, 361 cm²)", () => {
-  assert.deepStrictEqual(M.ES_PADRAO.pilar, { b: 0.19, h: 0.19 });
-  const av = M.esVerificar(M.esLancar(casa, [], {}), casa, {});
-  assert.ok(!av.some((a) => a.tipo === "nbr")); assert.ok(!av.some((a) => /γn/.test(a.texto)));
+t("seção automática: a menor que a norma aceita e cabe na parede", () => {
+  assert.strictEqual(M.ES_PADRAO.pilar.auto, true);
+  const e = M.esLancar(casa, [], {});
+  assert.ok(e.pilares.every((p) => p.b === 0.14 && p.h === 0.30), "parede de 14 → 14 × 30");
+  const av = M.esVerificar(e, casa, {});
+  assert.ok(!av.some((a) => a.tipo === "nbr")); assert.ok(av.some((a) => /γn = 1,25/.test(a.texto)), "avisa o γn");
+  const grossa = casa.map((w) => ({ ...w, t: 0.19 }));
+  assert.ok(M.esLancar(grossa, [], {}).pilares.every((p) => p.b === 0.19 && p.h === 0.19), "parede de 19 → 19 × 19");
+  const fina = casa.map((w) => ({ ...w, t: 0.09 }));
+  assert.ok(M.esLancar(fina, [], {}).pilares.every((p) => p.b === 0.14 && p.h === 0.30), "parede de 9 → 14 × 30 (mínimo absoluto)");
 });
 t("verificação: pilar 14 cm pede γn (atenção, não erro)", () => {
   const P14 = { pilar: { b: 0.14, h: 0.30 } };
@@ -142,13 +148,13 @@ t("quantitativos: concreto e fôrma", () => {
   const laje = { tipo: "laje", pts: [P(0, 0), P(8, 0), P(8, 6), P(0, 6)], esp: 0.1, carga: { tipo: "macica" } };
   const e = M.esLancar(casa, [laje], V6);
   const q = M.esQuantitativos(e, 2.8);
-  // pilares: 6 × 0,19 × 0,19 × 2,8 = 0,60648 m³
-  assert.ok(Math.abs(q.pilares.concreto - 0.60648) < 1e-9);
+  // pilares: 6 × 0,14 × 0,30 × 2,8 = 0,7056 m³
+  assert.ok(Math.abs(q.pilares.concreto - 0.7056) < 1e-9);
   // vigas: 34 m × 0,14 × 0,40 = 1,904 m³
   assert.ok(Math.abs(q.vigas.concreto - 1.904) < 1e-9);
   // laje: 48 m² × 0,10 = 4,8 m³
   assert.ok(Math.abs(q.lajes.concreto - 4.8) < 1e-9);
-  assert.ok(Math.abs(q.concreto - (0.60648 + 1.904 + 4.8)) < 1e-9);
+  assert.ok(Math.abs(q.concreto - (0.7056 + 1.904 + 4.8)) < 1e-9);
 });
 t("cargas: parede de 14 sem escolha = bloco cerâmico 11,5 + 1 cm por face (1,3 kN/m²)", () => {
   const c = M.esCargaParede({ a: P(0, 0), b: P(4, 0), t: 0.14, h: 2.8 }, 0.4);
@@ -180,6 +186,34 @@ t("cargas: telhado cerâmico com madeira até 40% = 0,7; fibrocimento 6 mm pede 
   const f = M.esCargaTelhado({ telha: "Telha Fibrocimento 6mm" }, 15); assert.strictEqual(f.falta, "estrutura");
   const f2 = M.esCargaTelhado({ telha: "Telha Fibrocimento 6mm", pesoEstrutura: 0.2 }, 15); assert.ok(Math.abs(f2.g - (0.18 * Math.sqrt(1 + 0.15 ** 2) + 0.2)) < 1e-9);
   assert.strictEqual(M.esCargaTelhado({ telha: "Telha Plana Concreto", pesoEstrutura: 0.2 }, 30).falta, "telha");
+});
+t("continuidade: pilar do térreo sobre parede do pavimento de cima sobe junto (sem transição)", () => {
+  const terreo = M.esLancar(casa, [], {});           // tem pilares em x = 5 (encontros em T)
+  const cima = [W(P(0, 0), P(8, 0)), W(P(8, 0), P(8, 6)), W(P(8, 6), P(0, 6)), W(P(0, 6), P(0, 0))]; // sem a parede do meio
+  const sem = M.esLancar(cima, [], {});
+  assert.ok(sem.pilares.some((p) => Math.abs(p.no.x - 4) < 1e-6), "sem continuidade, o intermediário fica em x = 4");
+  const com = M.esLancar(cima, [], {}, { pilaresAbaixo: terreo.pilares });
+  assert.ok(com.pilares.some((p) => Math.abs(p.no.x - 5) < 1e-6 && p.no.y === 0) && com.pilares.some((p) => Math.abs(p.no.x - 5) < 1e-6 && p.no.y === 6));
+  assert.ok(!com.pilares.some((p) => Math.abs(p.no.x - 4) < 1e-6), "não sobra intermediário em x = 4");
+  const av = M.esVerificar(com, cima, {}, { pilaresAbaixo: terreo.pilares });
+  assert.ok(!av.some((a) => /transição/.test(a.texto)), JSON.stringify(av.filter((a) => /transição/.test(a.texto))));
+});
+t("continuidade nos dois sentidos: encontro de cima desce quando há parede embaixo", () => {
+  // térreo: caixa 10 × 6 (pilar intermediário cairia em x = 5); em cima: parede interna em x = 4
+  const ter = [W(P(0, 0), P(10, 0)), W(P(10, 0), P(10, 6)), W(P(10, 6), P(0, 6)), W(P(0, 6), P(0, 0))];
+  const cim = [...ter, W(P(4, 0), P(4, 6))];
+  const [a, b] = M.esLancarPavimentos([{ paredes: ter }, { paredes: cim }], { vaoMax: 6 });
+  assert.ok(a.pilares.some((p) => Math.abs(p.no.x - 4) < 1e-6 && p.no.y === 0), "o encontro x = 4 de cima desceu para o térreo");
+  const av = M.esVerificar(b, cim, { vaoMax: 6 }, { pilaresAbaixo: a.pilares });
+  assert.ok(!av.some((x) => /transição/.test(x.texto)), JSON.stringify(av.map((x) => x.texto)));
+});
+t("pilar contínuo: vai do fundo do baldrame ao piso de cima; viga com topo no piso de cima", () => {
+  const laje = { tipo: "laje", pts: [P(0, 0), P(8, 0), P(8, 6), P(0, 6)], esp: 0.1, cota: 2.8 };
+  const [a, b] = M.esLancarPavimentos([{ paredes: casa, areas: [laje], nivel: 0 }, { paredes: casa, areas: [laje], nivel: 2.9 }], V6);
+  assert.ok(a.pilares.every((p) => p.base === -0.3 && p.topo === 2.9), JSON.stringify(a.pilares[0]));
+  assert.ok(a.vigas.filter((v) => !v.baldrame).every((v) => v.topo === 2.9));
+  // último pavimento: até o topo da laje dele (2,8 + 0,1)
+  assert.ok(b.pilares.every((p) => p.base === 0 && p.topo === 2.9));
 });
 console.log(`${ok} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

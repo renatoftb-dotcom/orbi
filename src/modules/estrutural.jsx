@@ -61,7 +61,11 @@ const ES_NBR = {
 const ES_PADRAO = {
   caa: 2,                   // área urbana
   fck: 25,                  // MPa
-  pilar: { b: 0.19, h: 0.19 }, // menor seção sem γn: 19 cm e 361 cm² (NBR 6118 13.2.3)
+  // auto: a menor seção que a NBR 6118 (13.2.3) aceita e que cabe na parede —
+  // largura = espessura da parede (mín. 14 cm, com γn abaixo de 19 cm) e
+  // comprimento até 360 cm², em múltiplos de 5 cm (14 → 14 × 30; 19 → 19 × 19).
+  // A carga (etapas 3 e 4) aumenta a seção onde for preciso.
+  pilar: { auto: true, b: 0.14, h: 0.30 },
   viga: { b: 0.14, h: 0.40 },
   baldrame: { b: 0.14, h: 0.30 },
   lajeEsp: 0.10,            // m
@@ -144,6 +148,15 @@ function esVaoEm(w, s, folga) {
     if (s > o.x - l / 2 - folga && s < o.x + l / 2 + folga) return o;
   }
   return null;
+}
+
+// menor seção de pilar que a NBR 6118 13.2.3 aceita numa parede de t cm:
+// menor dimensão ≥ 14 cm (entre 14 e 19 com γn), área ≥ 360 cm²; o lado
+// maior em múltiplos de 5 cm
+function esSecaoMinimaPilar(tcm) {
+  const b = Math.max(ES_NBR.pilarDimAbsoluta, Math.min(ES_NBR.pilarDimMin, Math.round(tcm || 0)));
+  const h = b * b >= ES_NBR.pilarAreaMin ? b : Math.max(b, Math.ceil(ES_NBR.pilarAreaMin / b / 5) * 5);
+  return { b: b / 100, h: h / 100 };
 }
 
 // meia extensão do pilar (retângulo b × h girado em ang) na direção v
@@ -254,14 +267,23 @@ function esEncaixarPilar(p, ws, interno) {
 function esLancar(paredes, areas, params, opts = {}) {
   const P = { ...ES_PADRAO, ...(params || {}) };
   const pil = P.pilar, vg = P.viga;
+  // seção do pilar: fixa (parâmetro) ou automática pela parede em que ele está
+  const secao = (dirs) => {
+    if (!pil.auto) return { b: pil.b, h: pil.h };
+    const t = Math.round(Math.max(0, ...(dirs || []).map((d) => (ws[d.i] && ws[d.i].t) || 0)) * 100);
+    return esSecaoMinimaPilar(t);
+  };
   const ws = (paredes || []).filter((w) => esLen(w) > 0.05);
   const nos = esNos(ws);
   const pilares = [];
   // no = ponto da rede de paredes onde o pilar está (é por ele que as vigas
   // se apoiam); x,y = centro da seção, acertado depois (esEncaixarPilar)
-  const juntar = (no, ang, dirs) => {
-    if (pilares.some((q) => esDist(q.no, no) < Math.max(pil.h, pil.b, 0.3))) return;
-    pilares.push({ x: esR3(no.x), y: esR3(no.y), b: pil.b, h: pil.h, ang: esR3(ang), no: { x: esR3(no.x), y: esR3(no.y) }, _dirs: dirs });
+  // origem: "encontro" (canto, T, ponta), "continuidade" (veio de outro
+  // pavimento) ou "vao" (intermediário por vão máximo)
+  const juntar = (no, ang, dirs, origem) => {
+    const sc = secao(dirs);
+    if (pilares.some((q) => esDist(q.no, no) < Math.max(q.h, sc.h, 0.3))) return;
+    pilares.push({ x: esR3(no.x), y: esR3(no.y), b: sc.b, h: sc.h, ang: esR3(ang), no: { x: esR3(no.x), y: esR3(no.y) }, origem, _dirs: dirs });
   };
   // 1) cantos, encontros e pontas
   for (const n of nos) {
@@ -271,7 +293,24 @@ function esLancar(paredes, areas, params, opts = {}) {
     const passa = (d) => n.dirs.some((o) => o !== d && o.x * d.x + o.y * d.y < -0.985);
     let melhor = null, Lm = -1;
     for (const d of n.dirs) { const L = esLen(ws[d.i]) + (passa(d) ? 1e6 : 0); if (L > Lm) { Lm = L; melhor = d; } }
-    juntar(n, Math.atan2(melhor.y, melhor.x), n.dirs.map((d) => ({ x: d.x, y: d.y, i: d.i })));
+    juntar(n, Math.atan2(melhor.y, melhor.x), n.dirs.map((d) => ({ x: d.x, y: d.y, i: d.i })), "encontro");
+  }
+  // 1b) continuidade: pilar do pavimento de baixo que cai sobre uma parede
+  // deste (fora de porta e janela) sobe junto, mesmo sem canto ou encontro
+  // ali; e pilar de encontro do pavimento de cima que cai sobre uma parede
+  // deste desce junto (até a fundação). Evita transição (pilar nascendo em
+  // viga) e já divide os vãos.
+  for (const pb of [...(opts.pilaresAbaixo || []), ...(opts.pilaresAcima || [])]) {
+    const q = pb.no || pb;
+    for (const w of ws) {
+      const L = esLen(w), ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
+      const sv = (q.x - w.a.x) * ux + (q.y - w.a.y) * uy, d = Math.abs((q.x - w.a.x) * -uy + (q.y - w.a.y) * ux);
+      if (d > Math.max(0.1, (w.t || 0) / 2 + 0.02) || sv < -0.1 || sv > L + 0.1) continue;
+      if (esVaoEm(w, sv, secao([{ i: ws.indexOf(w) }]).h / 2)) continue; // em cima de porta/janela não sobe
+      const iw = ws.indexOf(w);
+      juntar({ x: w.a.x + ux * Math.min(L, Math.max(0, sv)), y: w.a.y + uy * Math.min(L, Math.max(0, sv)) }, Math.atan2(uy, ux), [{ x: ux, y: uy, i: iw }, { x: -ux, y: -uy, i: iw }], "continuidade");
+      break;
+    }
   }
   // 2) pilares intermediários onde o trecho entre pilares passa do vão máximo
   const naParede = (w) => {
@@ -289,13 +328,13 @@ function esLancar(paredes, areas, params, opts = {}) {
       for (let j = 1; j < n; j++) {
         let s = s0 + passo * j;
         // fora de porta/janela: empurra para a ombreira mais próxima
-        const o = esVaoEm(w, s, pil.h / 2);
+        const meio = secao([{ i: ws.indexOf(w) }]).h / 2, o = esVaoEm(w, s, meio);
         if (o) {
-          const e = o.x - o.larg / 2 - pil.h / 2 - 0.02, d = o.x + o.larg / 2 + pil.h / 2 + 0.02;
+          const e = o.x - o.larg / 2 - meio - 0.02, d = o.x + o.larg / 2 + meio + 0.02;
           s = Math.abs(e - s) <= Math.abs(d - s) && e > s0 + 0.3 ? e : d;
         }
         const iw = ws.indexOf(w);
-        juntar({ x: w.a.x + ux * s, y: w.a.y + uy * s }, ang, [{ x: ux, y: uy, i: iw }, { x: -ux, y: -uy, i: iw }]);
+        juntar({ x: w.a.x + ux * s, y: w.a.y + uy * s }, ang, [{ x: ux, y: uy, i: iw }, { x: -ux, y: -uy, i: iw }], "vao");
       }
     }
   }
@@ -303,6 +342,11 @@ function esLancar(paredes, areas, params, opts = {}) {
   const interno = esLadoInternoFn(ws, areas);
   for (const p of pilares) { esEncaixarPilar(p, ws, interno); delete p._dirs; }
   pilares.forEach((p, k) => { p.id = "P" + (k + 1); });
+  // altura do pilar neste pavimento: do piso (ou do fundo do baldrame, no
+  // primeiro) até o topo da estrutura (piso de cima) — o pilar é contínuo
+  const topoPil = opts.topo != null ? opts.topo : Math.max(0, ...ws.map((w) => w.h || 0)) || 2.8;
+  const basePil = opts.baldrames && P.baldrames ? -P.baldrame.h : 0;
+  for (const p of pilares) { p.base = esR3(basePil); p.topo = esR3(topoPil); }
   // 3) vigas: cada parede dividida nos pilares que estão sobre ela
   const vigas = [], baldrames = [];
   for (const w of ws) {
@@ -319,7 +363,9 @@ function esLancar(paredes, areas, params, opts = {}) {
         apoioA: marcos[k].p ? marcos[k].p.id : null, apoioB: marcos[k + 1].p ? marcos[k + 1].p.id : null,
         parede: paredes.indexOf(w), s0: esR3(s0), s1: esR3(s1),
       };
-      vigas.push({ ...trecho, b_: vg.b, h: vg.h, topo: w.h || 2.8 });
+      // topo da viga = topo da laje de cima (piso do pavimento de cima): a
+      // laje apoia em cima da viga, e o pilar vai até esse nível
+      vigas.push({ ...trecho, b_: vg.b, h: vg.h, topo: opts.topo != null ? opts.topo : (w.h || 2.8) });
       if (opts.baldrames && P.baldrames) baldrames.push({ ...trecho, b_: P.baldrame.b, h: P.baldrame.h, topo: 0, baldrame: true });
     }
   }
@@ -328,6 +374,31 @@ function esLancar(paredes, areas, params, opts = {}) {
   const lajes = (areas || []).map((a, i) => ({ a, i })).filter(({ a }) => a.tipo === "laje" && a.pts && a.pts.length >= 3)
     .map(({ a, i }, k) => { const c = esCargaLaje(a, opts.usoPadrao); return { id: "L" + (k + 1), area: i, pts: a.pts, esp: c.pre ? c.pre.hTotal : (a.esp || P.lajeEsp), uso: c.piso ? "piso" : "cobertura", tipo: c.tipo, concretoM2: c.concreto, capa: c.pre ? c.pre.capa : null }; });
   return { pilares, vigas: [...vigas, ...baldrames], lajes };
+}
+
+// Lança todos os pavimentos (lista de { paredes, areas, usoPadrao }, de baixo
+// para cima) com continuidade de pilares: 1ª passada sobe os pilares de
+// baixo; 2ª passada também desce os pilares de encontro de cima (os que a
+// arquitetura de cima exige) quando há parede embaixo.
+// topo da estrutura de cada pavimento (em relação ao piso dele): o nível do
+// pavimento de cima; no último, o topo da laje de cobertura/forro, se houver,
+// senão o topo das paredes.
+function esTopoPavimento(pavs, k) {
+  const p = pavs[k], cima = pavs[k + 1];
+  if (cima && cima.nivel != null && p.nivel != null) return esR3(cima.nivel - p.nivel);
+  const lajes = (p.areas || []).filter((a) => a.tipo === "laje" && a.pts && a.pts.length >= 3).map((a) => (a.cota || 0) + (a.esp || 0.1));
+  const hp = Math.max(0, ...(p.paredes || []).map((w) => w.h || 0));
+  return esR3(lajes.length ? Math.max(...lajes) : (hp || 2.8));
+}
+function esLancarPavimentos(pavs, params) {
+  const passada = (acimaDe) => {
+    const r = [];
+    pavs.forEach((p, k) => r.push(esLancar(p.paredes || [], p.areas || [], params, { baldrames: k === 0, usoPadrao: p.usoPadrao, topo: esTopoPavimento(pavs, k),
+      pilaresAbaixo: k > 0 ? r[k - 1].pilares : null,
+      pilaresAcima: acimaDe && acimaDe[k + 1] ? acimaDe[k + 1].pilares.filter((q) => q.origem === "encontro") : null })));
+    return r;
+  };
+  return passada(passada(null));
 }
 
 // cantos do pilar (retângulo b × h girado em ang, centrado em x,y)
@@ -417,7 +488,7 @@ function esQuantitativos(est, alturaPav) {
   let concreto = 0, forma = 0;
   const q = { pilares: { n: 0, concreto: 0, forma: 0 }, vigas: { n: 0, comprimento: 0, concreto: 0, forma: 0 }, baldrames: { n: 0, comprimento: 0, concreto: 0, forma: 0 }, lajes: { n: 0, area: 0, concreto: 0, forma: 0 } };
   for (const p of est.pilares || []) {
-    const H = alturaPav || 2.8; q.pilares.n++; q.pilares.concreto += p.b * p.h * H; q.pilares.forma += 2 * (p.b + p.h) * H;
+    const H = p.topo != null ? p.topo - (p.base || 0) : (alturaPav || 2.8); q.pilares.n++; q.pilares.concreto += p.b * p.h * H; q.pilares.forma += 2 * (p.b + p.h) * H;
   }
   for (const v of est.vigas || []) {
     const L = esDist(v.a, v.b), g = v.baldrame ? q.baldrames : q.vigas;

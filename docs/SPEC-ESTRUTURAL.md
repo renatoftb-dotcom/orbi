@@ -58,8 +58,8 @@ O motor fica em `src/modules/estrutural.jsx` (JS puro, sem React) e é testado p
 - A viga fica sobre cada parede, entre os pilares, com o topo no topo da
   parede. No pavimento mais baixo entram baldrames sob as mesmas paredes.
 - As lajes são as que o arquiteto desenhou no pavimento.
-- As seções padrão são pilar 14 × 30, viga 14 × 40, baldrame 14 × 30 e laje de
-  10 cm, com C25 e CAA II (urbana).
+- As seções padrão são pilar 19 × 19 (mínimo da norma sem γn), viga 14 × 40,
+  baldrame 14 × 30 e laje de 10 cm, com C25 e CAA II (urbana).
 
 ## Compatibilização (avisos `compat`)
 
@@ -67,3 +67,25 @@ O motor fica em `src/modules/estrutural.jsx` (JS puro, sem React) e é testado p
 - Fundo da viga abaixo do topo de porta ou janela da parede que está embaixo dela.
 - Pilar mais grosso que a parede (fica aparente). Este aviso é do tipo `atencao`.
 - Pilar sem pilar embaixo, que vira transição sobre viga. Também é do tipo `atencao`.
+
+## Critérios de lançamento (o que o engenheiro faria) — regras do motor
+
+Cada critério diz se já está no motor (feito) ou pendente. Origem: análise da
+CASA TESTE (Márcio Viezzer, 2 pavimentos) em 14/11/2026.
+
+| # | Critério | Por quê | Situação |
+|---|---|---|---|
+| 1 | Pilar na seção mínima da norma (19 × 19) | NBR 6118 13.2.3 sem γn | feito |
+| 2 | Pilar nos cantos, encontros e pontas; intermediário pelo vão adotado | concepção usual de casa em alvenaria de vedação | feito |
+| 3 | Pilar nunca em porta, janela ou vão (desliza até a ombreira) | compatibilização com a arquitetura | feito |
+| 4 | Fachada: face de fora alinhada; sobra para dentro | fachada lisa | feito |
+| 5 | Pilar contínuo entre pavimentos (sobe e desce onde há parede) | evita transição, carga desce direto à fundação | feito |
+| 6 | Pilar contínuo na altura: do fundo do baldrame ao piso de cima, sem interrupção na laje | é assim que se executa e calcula | feito |
+| 7 | Viga com topo no piso de cima (a laje apoia em cima) | é assim que se executa | feito |
+| 8 | Parede de cima sem parede embaixo: viga de apoio no piso, sob a parede (ou verificar a laje para a carga linear) | parede apoiada só na laje treliçada/protendida pede verificação; normalmente vai viga | pendente |
+| 9 | Laje em balanço (beiral de laje além das paredes): espessura ≥ 10 cm e engaste na laje vizinha; pré-fabricada em balanço só com armadura negativa | NBR 6118 13.2.4.1 (maciça); detalhe de balanço | pendente |
+| 10 | Direção das vigotas pelo menor vão de cada painel; vão máximo por tipo de laje (do fabricante) | eficiência e flecha | pendente |
+| 11 | Escada: apoio do patamar e do lance (viga de apoio ou laje da escada nas vigas) e furo da laje com borda apoiada | caminho de carga da escada | pendente |
+| 12 | Elementos sem laje (muro, jardineira): cinta de amarração em vez de viga de 40 | não há carga de laje; economia | pendente |
+| 13 | Vão grande de porta/janela (≥ 2,5 m): viga sobre o vão verificada para flecha e pilares nas ombreiras | vão livre | pendente |
+| 14 | Transição inevitável: viga de transição marcada para dimensionamento especial | carga concentrada na viga | aviso feito; dimensionamento pendente |

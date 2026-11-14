@@ -2179,7 +2179,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const estPorPav = useMemo(() => {
     if (!estrutura.ativa) return {};
     const r = {};
-    pavsOrd.forEach((p, k) => { const d = dadosDe(p.id), acima = pavsOrd[k + 1]; r[p.id] = esLancar(d.paredes || [], d.areas || [], estrutura.params, { baldrames: k === 0, usoPadrao: acima && (dadosDe(acima.id).paredes || []).length ? "residencial" : "forro" }); });
+    // todos os pavimentos juntos: pilares contínuos de baixo para cima (estrutural.jsx)
+    const lista = pavsOrd.map((p, k) => { const d = dadosDe(p.id), acima = pavsOrd[k + 1]; return { paredes: d.paredes || [], areas: d.areas || [], nivel: p.nivel || 0, usoPadrao: acima && (dadosDe(acima.id).paredes || []).length ? "residencial" : "forro" }; });
+    esLancarPavimentos(lista, estrutura.params).forEach((e, k) => { r[pavsOrd[k].id] = e; });
     return r;
   }, [estrutura, paredes, areas, dadosPav, pavimentos, pavAtivo]); // eslint-disable-line react-hooks/exhaustive-deps
   const estAvisos = useMemo(() => {
@@ -4075,8 +4077,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       // cada peça é selecionável: chave "e" + nome (eP1, eV3, eVB2)
       const matE = new THREE.MeshLambertMaterial({ color: 0xc4c9d0 }), matEs = new THREE.MeshLambertMaterial({ color: 0x8dbbff });
       for (const pl of estP.pilares) {
-        const mk = marcadas.has("e" + pl.id), g = new THREE.BoxGeometry(pl.h, Hp, pl.b), m = new THREE.Mesh(g, mk ? matEs : matE);
-        m.position.set(pl.x - cx, Hp / 2, pl.y - cz); m.rotation.y = -(pl.ang || 0); m.userData.est = pl.id; m.userData.chave = "e" + pl.id; G.add(m); contorno(g, m, mk ? 0x0474f4 : 0x4b5563);
+        // contínuo: do fundo do baldrame (1º pavimento) até o piso de cima
+        const z0 = pl.base != null ? pl.base : 0, z1 = pl.topo != null ? pl.topo : Hp;
+        const mk = marcadas.has("e" + pl.id), g = new THREE.BoxGeometry(pl.h, z1 - z0, pl.b), m = new THREE.Mesh(g, mk ? matEs : matE);
+        m.position.set(pl.x - cx, (z0 + z1) / 2, pl.y - cz); m.rotation.y = -(pl.ang || 0); m.userData.est = pl.id; m.userData.chave = "e" + pl.id; G.add(m); contorno(g, m, mk ? 0x0474f4 : 0x4b5563);
       }
       for (const v of estP.vigas) {
         const L = Math.hypot(v.b.x - v.a.x, v.b.y - v.a.y); if (L < 0.05) continue;
@@ -5612,9 +5616,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           const linhas = sel.map((k) => {
             const id = k.slice(1), pl = est.pilares.find((x) => x.id === id), v = est.vigas.find((x) => x.id === id);
             if (pl) {
-              const H = Math.max(0, ...(paredes.map((w) => w.h || 0))) || altM;
+              const H = pl.topo != null ? pl.topo - (pl.base || 0) : (Math.max(0, ...(paredes.map((w) => w.h || 0))) || altM);
               const vigasNele = est.vigas.filter((x) => x.apoioA === id || x.apoioB === id).map((x) => x.id);
-              return { id, tipo: "Pilar", dados: [["Seção", `${Math.round(pl.b * 100)} × ${Math.round(pl.h * 100)} cm`], ["Área", `${Math.round(pl.b * 100) * Math.round(pl.h * 100)} cm²`], ["Altura", `${tpFmt(H)} m`], ["Concreto", `${tpFmt(pl.b * pl.h * H, 3)} m³`], ["Vigas apoiadas", vigasNele.join(", ") || "nenhuma"], ...(pl.deslocado ? [["Ajuste", `deslocado ${tpFmt(pl.deslocado * 100, 0)} cm para sair de porta/janela`]] : [])] };
+              return { id, tipo: "Pilar", dados: [["Seção", `${Math.round(pl.b * 100)} × ${Math.round(pl.h * 100)} cm`], ["Área", `${Math.round(pl.b * 100) * Math.round(pl.h * 100)} cm²`], ["Altura", `${tpFmt(H)} m${pl.base ? ` (de ${tpFmt(pl.base)} a ${tpFmt(pl.topo)})` : ""}`], ["Concreto", `${tpFmt(pl.b * pl.h * H, 3)} m³`], ["Vigas apoiadas", vigasNele.join(", ") || "nenhuma"], ...(pl.deslocado ? [["Ajuste", `deslocado ${tpFmt(pl.deslocado * 100, 0)} cm para sair de porta/janela`]] : [])] };
             }
             if (v) {
               const Lv = Math.hypot(v.b.x - v.a.x, v.b.y - v.a.y);
@@ -6450,7 +6454,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                     <select id="tp-est-fck" value={P.fck} onChange={(e) => mudarParam("fck", +e.target.value)} style={selCss}>
                       {[20, 25, 30, 35, 40, 45, 50].map((f) => <option key={f} value={f}>C{f} (fck {f} MPa)</option>)}
                     </select>
-                    {secao("pilar", "Pilar")}
+                    <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12.5, color: "#374151", cursor: "pointer", marginTop: 10, lineHeight: 1.4 }}>
+                      <input type="checkbox" checked={P.pilar.auto !== false} onChange={(e) => mudarParam("pilar", { ...P.pilar, auto: e.target.checked })} style={{ marginTop: 2 }} />
+                      <span>Pilar com a menor seção da norma que cabe na parede<span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>Parede de 14 → 14 × 30 (com γn); de 19 → 19 × 19. O cálculo da carga aumenta onde precisar.</span></span>
+                    </label>
+                    {P.pilar.auto === false && secao("pilar", "Pilar")}
                     {secao("viga", "Viga")}
                     {secao("baldrame", "Baldrame")}
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 6 }}>
