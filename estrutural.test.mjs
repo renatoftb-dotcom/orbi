@@ -8,7 +8,7 @@ import assert from "assert";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(join(__dirname, "src", "modules", "estrutural.jsx"), "utf-8");
-const M = new Function(`${src}\nreturn { esLancarPavimentos, esDescidaCargas, esTopoPavimento, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao, esLinhaContinua, esPaineisLaje, esDimViga, esDimPilar, esDimensionar, esMRd, esConcreto };`)();
+const M = new Function(`${src}\nreturn { esLancarPavimentos, esDescidaCargas, esTopoPavimento, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao, esLinhaContinua, esPaineisLaje, esDimViga, esDimPilar, esDimensionar, esMRd, esConcreto, esPlacaApoiada, esDimLaje, esCalcularEstrutura, esParaOrcamento };`)();
 
 let ok = 0, falhou = 0;
 const t = (nome, fn) => { try { fn(); ok++; } catch (e) { falhou++; console.log("FALHOU:", nome, "\n ", e.message); } };
@@ -311,6 +311,36 @@ t("dimensionamento de pilar: γn, momento mínimo, 2ª ordem e armadura mínima"
   // carga que esmaga o 14 × 30: falha e sugere seção maior
   const g = M.esDimPilar({ b: 0.14, h: 0.30 }, { Ng: 700, Nq: 100 }, 2.9, {});
   assert.ok(!g.ok && (g.hSugerida == null || g.hSugerida > 0.30));
+});
+t("placa quadrada apoiada (diferenças finitas) bate com Timoshenko", () => {
+  const vigas = [{ a: P(0, 0), b: P(4, 0) }, { a: P(4, 0), b: P(4, 4) }, { a: P(4, 4), b: P(0, 4) }, { a: P(0, 4), b: P(0, 0) }];
+  const pn = M.esPaineisLaje([P(0, 0), P(4, 0), P(4, 4), P(0, 4)], vigas, "auto", true).paineis[0];
+  const r = M.esPlacaApoiada(pn.malha);
+  // ν = 0,2: m = 0,0442 q a²; w·D = 0,00406 q a⁴ (malha de 10 cm, painel ~3,9 m entre faces bloqueadas)
+  const a = 4 - 0.1; // a malha apoia a 5 cm do eixo (esDimLajeMacica corrige para o vão teórico)
+  assert.ok(Math.abs(r.mx / (a * a) - 0.0442) < 0.003 && Math.abs(r.my / (a * a) - 0.0442) < 0.003, `mx/a² ${r.mx / a / a}`);
+  assert.ok(Math.abs(r.u / a ** 4 - 0.00406) < 0.0003, `u/a⁴ ${r.u / a ** 4}`);
+});
+t("laje treliçada: vão curto passa, 5 m com 8 + 4 não passa na flecha e pede enchimento maior", () => {
+  const vigas = (L) => [{ a: P(0, 0), b: P(8, 0) }, { a: P(8, 0), b: P(8, L) }, { a: P(8, L), b: P(0, L) }, { a: P(0, L), b: P(0, 0) }];
+  const laje = (L) => ({ tipo: "laje", pts: [P(0, 0), P(8, 0), P(8, L), P(0, L)], esp: 0.12, carga: { tipo: "trelicada", uso: "forro" } });
+  const pn = (L) => { const c = M.esCargaLaje(laje(L), "forro"), p0 = M.esPaineisLaje(laje(L).pts, vigas(L), "auto", false).paineis[0]; return { ...p0, tipo: "trelicada", g: c.g, q: c.q, pre: c.pre, esp: 0.12 }; };
+  const curta = M.esDimLaje(pn(3), {}); assert.ok(curta.ok && Math.abs(curta.l - 3) < 0.05, JSON.stringify(curta.motivos));
+  const longa = M.esDimLaje(pn(5.2), {}); assert.ok(!longa.ok && longa.heSugerido > 0.08, `he ${longa.heSugerido}`);
+});
+t("cálculo completo: viga que não passa sobe de altura e o orçamento recebe metros por bitola", () => {
+  const caixa = [W(P(0, 0), P(5, 0)), W(P(5, 0), P(5, 4)), W(P(5, 4), P(0, 4)), W(P(0, 4), P(0, 0))].map((w) => ({ ...w, t: 0.19 }));
+  const pavs = [{ paredes: caixa, areas: [{ tipo: "laje", pts: [P(0, 0), P(5, 0), P(5, 4), P(0, 4)], esp: 0.16, carga: { tipo: "protendida", uso: "residencial" } }], nivel: 0, usoPadrao: "residencial" },
+    { paredes: caixa, areas: [{ tipo: "laje", pts: [P(0, 0), P(5, 0), P(5, 4), P(0, 4)], esp: 0.12, carga: { tipo: "trelicada", uso: "forro" } }], nivel: 2.9, usoPadrao: "forro" }];
+  const c = M.esCalcularEstrutura(pavs, { vaoMax: 6 });
+  for (const a of c.ajustes) assert.ok(a.para > a.de);
+  c.dim.pavimentos.forEach((p) => Object.values(p.vigas).forEach((r) => assert.ok(r.ok, r.motivos.join(";"))));
+  const o = M.esParaOrcamento(pavs, c);
+  assert.strictEqual(o.colunasTerreo[20], c.lanc[0].pilares.length);
+  const kgOrc = Object.entries(o.colunasTerreo.ferro).reduce((t, [k, m]) => t + m * { CA60_5MM: 0.154, CA50_6MM: 0.245, CA50_8MM: 0.395, CA50_10MM: 0.617, CA50_12MM: 0.963, CA50_16MM: 1.578 }[k], 0);
+  const kgDim = Object.values(c.dim.pavimentos[0].pilares).reduce((t, r) => t + Object.values(r.aco).reduce((a, b) => a + b, 0), 0);
+  assert.ok(Math.abs(kgOrc - kgDim) < 0.5, `${kgOrc} × ${kgDim}`);
+  assert.ok(o.baldrames.concreto > 0 && o.vigaRespaldoPav1.concreto > 0);
 });
 console.log(`${ok} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

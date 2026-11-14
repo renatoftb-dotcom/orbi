@@ -880,15 +880,15 @@ function esDescidaCargas(pavs, lanc, params) {
     // peso próprio das vigas e baldrames
     for (const v of [...vigas, ...bald]) add(v.id, gc * v.b_ * v.h * esDist(v.a, v.b), 0);
     // lajes deste pavimento (teto) nas vigas deste pavimento
-    for (const a of pavs[k].areas || []) {
-      if (!a.pts || a.pts.length < 3) continue;
+    (pavs[k].areas || []).forEach((a, lajeIdx) => {
+      if (!a.pts || a.pts.length < 3) return;
       if (a.tipo === "laje") {
         // pré-fabricada trabalha numa direção (vigotas); maciça com ly/lx ≤ 2 nas duas
         const c = esCargaLaje(a, pavs[k].usoPadrao), duas = c.tipo === "macica" || c.tipo === "informada";
         const pl = esPaineisLaje(a.pts, vigas, (a.carga || {}).vigotas || "auto", duas);
         pl.porViga.forEach((A, i) => { if (A) add(vigas[i].id, c.g * A, c.q * A); });
         for (const pn of pl.paineis) {
-          res[k].paineis.push({ ...pn, laje: a.id != null ? a.id : null, tipo: c.tipo });
+          res[k].paineis.push({ ...pn, laje: lajeIdx, tipo: c.tipo, g: c.g, q: c.q, pre: c.pre, esp: a.esp || 0.1, piso: c.piso });
           if (pn.forcado && pn.outro < pn.vao - 0.05) res[k].avisos.push(`Laje com vigotas no maior vão (${String(Math.round(pn.vao * 100) / 100).replace(".", ",")} m em vez de ${String(Math.round(pn.outro * 100) / 100).replace(".", ",")} m): confira com o fabricante.`);
         }
       } else if (a.tipo === "telhado") {
@@ -897,7 +897,7 @@ function esDescidaCargas(pavs, lanc, params) {
         if (c.falta) res[k].avisos.push(`Telhado sem ${c.falta === "telha" ? "peso da telha" : "peso da estrutura"}: a carga dele não entrou.`);
         inf.forEach((A, i) => { if (A) add(vigas[i].id, c.g * A, 0); });
       }
-    }
+    });
     // paredes do pavimento de cima sobre as vigas deste; paredes deste sobre os baldrames (no 1º)
     const sobre = (paredesAcima, alvo, hLivre) => {
       for (const w of paredesAcima || []) {
@@ -984,29 +984,53 @@ function esAnguloBase(vigas) {
 }
 // primeira viga que o raio q + s·d encontra
 function esRaioViga(q, d, vigas) {
-  let best = -1, dm = Infinity;
-  vigas.forEach((v, i) => {
-    const ex = v.b.x - v.a.x, ey = v.b.y - v.a.y, den = d.x * ey - d.y * ex, Le = Math.hypot(ex, ey); if (Math.abs(den) < 1e-9 || !Le) return;
-    const wx = v.a.x - q.x, wy = v.a.y - q.y, s = (wx * ey - wy * ex) / den, t = (wx * d.y - wy * d.x) / den, tol = 0.1 / Le;
+  const S = vigas._seg || esSegs(vigas); let best = -1, dm = Infinity;
+  for (let i = 0; i < S.n; i++) {
+    const ex = S.ex[i], ey = S.ey[i], den = d.x * ey - d.y * ex, Le = S.L[i]; if (Math.abs(den) < 1e-9 || !Le) continue;
+    const wx = S.ax[i] - q.x, wy = S.ay[i] - q.y, s = (wx * ey - wy * ex) / den, t = (wx * d.y - wy * d.x) / den, tol = 0.1 / Le;
     if (s > 1e-6 && t >= -tol && t <= 1 + tol && s < dm) { dm = s; best = i; }
-  });
+  }
   return best < 0 ? null : { i: best, d: dm };
 }
+// vigas em arrays (laços rápidos na malha da laje)
+function esSegs(vigas) {
+  const n = vigas.length, S = { n, ax: new Float64Array(n), ay: new Float64Array(n), ex: new Float64Array(n), ey: new Float64Array(n), L: new Float64Array(n) };
+  vigas.forEach((v, i) => { S.ax[i] = v.a.x; S.ay[i] = v.a.y; S.ex[i] = v.b.x - v.a.x; S.ey[i] = v.b.y - v.a.y; S.L[i] = Math.hypot(S.ex[i], S.ey[i]); });
+  return S;
+}
+function esDistSegs(S, x, y, out) { // distância do ponto a cada viga (em out)
+  for (let i = 0; i < S.n; i++) {
+    const L2 = S.L[i] * S.L[i]; let t = L2 ? ((x - S.ax[i]) * S.ex[i] + (y - S.ay[i]) * S.ey[i]) / L2 : 0; t = t < 0 ? 0 : t > 1 ? 1 : t;
+    out[i] = Math.hypot(x - S.ax[i] - t * S.ex[i], y - S.ay[i] - t * S.ey[i]);
+  }
+  return out;
+}
+// mesma laje e mesmas vigas → mesmos painéis (a altura da viga não muda o painel)
+const ES_CACHE_PAINEIS = new Map();
 function esMediana(xs) { if (!xs.length) return null; const o = [...xs].sort((a, b) => a - b); return o[Math.floor(o.length / 2)]; }
 function esPaineisLaje(pts, vigas, sentido = "auto", duasDir = false, passo = 0.1) {
+  const chave = JSON.stringify([pts.map((p) => [+p.x.toFixed(4), +p.y.toFixed(4)]), vigas.map((v) => [+v.a.x.toFixed(4), +v.a.y.toFixed(4), +v.b.x.toFixed(4), +v.b.y.toFixed(4)]), sentido, duasDir, passo]);
+  const em = ES_CACHE_PAINEIS.get(chave); if (em) return { porViga: [...em.porViga], paineis: em.paineis };
+  const r = esPaineisLajeCalc(pts, vigas, sentido, duasDir, passo);
+  ES_CACHE_PAINEIS.set(chave, r); if (ES_CACHE_PAINEIS.size > 60) ES_CACHE_PAINEIS.delete(ES_CACHE_PAINEIS.keys().next().value);
+  return { porViga: [...r.porViga], paineis: r.paineis };
+}
+function esPaineisLajeCalc(pts, vigas, sentido, duasDir, passo) {
   const porViga = new Array(vigas.length).fill(0), paineis = [];
   if (!vigas.length || !pts || pts.length < 3) return { porViga, paineis };
+  vigas = [...vigas]; vigas._seg = esSegs(vigas); const S = vigas._seg, dist = new Float64Array(S.n);
   const ang = esAnguloBase(vigas), U = { x: Math.cos(ang), y: Math.sin(ang) }, V = { x: -U.y, y: U.x }, A = passo * passo;
   const loc = pts.map((p) => ({ s: p.x * U.x + p.y * U.y, r: p.x * V.x + p.y * V.y }));
   const s0 = Math.min(...loc.map((p) => p.s)), s1 = Math.max(...loc.map((p) => p.s)), r0 = Math.min(...loc.map((p) => p.r)), r1 = Math.max(...loc.map((p) => p.r));
   const ni = Math.max(1, Math.ceil((s1 - s0) / passo)), nj = Math.max(1, Math.ceil((r1 - r0) / passo));
   const W = (i, j) => { const s = s0 + (i + 0.5) * passo, r = r0 + (j + 0.5) * passo; return { x: U.x * s + V.x * r, y: U.y * s + V.y * r }; };
-  const perto = (q) => { let dm = Infinity, m = -1; vigas.forEach((v, i) => { const d = esPontoNoSeg(q, v.a, v.b).d; if (d < dm) { dm = d; m = i; } }); return { i: m, d: dm }; };
+  const perto = (q) => { esDistSegs(S, q.x, q.y, dist); let dm = Infinity, m = -1; for (let i = 0; i < S.n; i++) if (dist[i] < dm) { dm = dist[i]; m = i; } return { i: m, d: dm }; };
+  const empate = (dm) => { const ms = []; for (let i = 0; i < S.n; i++) if (dist[i] <= dm + 1e-9) ms.push(i); return ms; }; // depois de perto()
   const est = new Int32Array(ni * nj).fill(-2); // -2 fora, -1 sobre viga, 0 livre, >0 painel
   for (let i = 0; i < ni; i++) for (let j = 0; j < nj; j++) {
     const q = W(i, j); if (!esDentroPoli(q, pts)) continue;
     const pv = perto(q);
-    if (pv.d < 0.08) { est[i * nj + j] = -1; const ms = vigas.map((v, m) => m).filter((m) => esPontoNoSeg(q, vigas[m].a, vigas[m].b).d <= pv.d + 1e-9); for (const m of ms) porViga[m] += A / ms.length; }
+    if (pv.d < 0.08) { est[i * nj + j] = -1; const ms = empate(pv.d); for (const m of ms) porViga[m] += A / ms.length; }
     else est[i * nj + j] = 0;
   }
   let np = 0;
@@ -1027,7 +1051,7 @@ function esPaineisLaje(pts, vigas, sentido = "auto", duasDir = false, passo = 0.
     let soUm = 0;
     for (const c of info) {
       if (!duas && !((naU ? c.un : c.vn) && (naU ? c.up : c.vp))) soUm++;
-      if (duas) { const pv = perto(c.q), ms = vigas.map((v, m) => m).filter((m) => esPontoNoSeg(c.q, vigas[m].a, vigas[m].b).d <= pv.d + 1e-9); for (const m of ms) porViga[m] += A / ms.length; continue; }
+      if (duas) { const pv = perto(c.q), ms = empate(pv.d); for (const m of ms) porViga[m] += A / ms.length; continue; }
       const h1 = naU ? c.un : c.vn, h2 = naU ? c.up : c.vp;
       if (h1 && h2) { porViga[h1.i] += A * h2.d / (h1.d + h2.d); porViga[h2.i] += A * h1.d / (h1.d + h2.d); }
       else if (h1 || h2) porViga[(h1 || h2).i] += A;
@@ -1038,7 +1062,8 @@ function esPaineisLaje(pts, vigas, sentido = "auto", duasDir = false, passo = 0.
     const vao = naU ? lU : lV, outro = naU ? lV : lU;
     // ponto dentro do painel mais perto do centro (painel em L ou anel de balanço)
     let pc = info[0].q, dpc = Infinity; for (const c of info) { const dd = (c.q.x - cx) ** 2 + (c.q.y - cy) ** 2; if (dd < dpc) { dpc = dd; pc = c.q; } }
-    paineis.push({ centro: pc, dir: naU ? U : V, vao: isFinite(vao) ? vao : null, outro: isFinite(outro) ? outro : null, duas, area, forcado, balanco: soUm > info.length / 2 });
+    const malha = { passo, U, V, s0, r0, cel };
+    paineis.push({ malha, centro: pc, dir: naU ? U : V, vao: isFinite(vao) ? vao : null, outro: isFinite(outro) ? outro : null, duas, area, forcado, balanco: soUm > info.length / 2 });
   }
   return { porViga, paineis };
 }
@@ -1235,7 +1260,7 @@ function esDimPilar(p, N, l, params) {
 }
 // dimensiona tudo: descida = esDescidaCargas(...), lanc = esLancarPavimentos(...)
 function esDimensionar(pavs, lanc, descida, params) {
-  const out = descida.pavimentos.map(() => ({ vigas: {}, pilares: {} })), aco = {};
+  const out = descida.pavimentos.map(() => ({ vigas: {}, pilares: {}, lajes: [] })), aco = {};
   const soma = (o) => { for (const [d, kg] of Object.entries(o || {})) aco[d] = (aco[d] || 0) + kg; };
   descida.pavimentos.forEach((pv, k) => {
     for (const t of pv.tramos) { if (!t.L) continue; const r = esDimViga(t, params); r.tramo = t.ids.join("+"); for (const id of t.ids) out[k].vigas[id] = r; soma(r.aco); }
@@ -1245,6 +1270,219 @@ function esDimensionar(pavs, lanc, descida, params) {
       const r = p._sem ? null : esDimPilar(p, N, l, params); if (!r) continue; out[k].pilares[p.id] = r; soma(r.aco);
     }
   });
+  // lajes (painéis)
+  descida.pavimentos.forEach((pv, k) => { out[k].lajes = (pv.paineis || []).map((pn) => { const r = esDimLaje(pn, params); if (r && r.aco) soma(r.aco); return r; }); });
   const kg = (filtro) => Object.entries(aco).filter(([d]) => filtro(+d)).reduce((t, [, v]) => t + v, 0);
   return { pavimentos: out, aco, ca50: kg((d) => d > 5), ca60: kg((d) => d <= 5) };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LAJES (etapa 4, lajes) — por painel (região entre vigas)
+// ═══════════════════════════════════════════════════════════════
+// Treliçada: nervura em T (mesa = intereixo × capa), bi-apoiada no vão das
+// vigotas (NBR 6118, 14.7.7 lajes nervuradas; NBR 14859): flexão, cortante
+// sem estribo (19.4.1, VRd1) e flecha com fissuração (α = 1,2 em T) e
+// fluência. Banzo inferior da treliça admitido 2 φ4,2 CA-60; o que faltar vira
+// barra adicional CA-50 por nervura. Contraflecha até ℓ/350 (Tabela 13.3).
+// Protendida: o aço vem pronto da fábrica — o resultado é o que vai para a
+// tabela do fabricante (vão e carga) e o momento por vigota.
+// Maciça: placa apoiada nas bordas, resolvida por diferenças finitas na
+// própria malha do painel (Marcus: ∇²M = −p, ∇²u = −M; ν = 0,2), flexão nas
+// duas direções por metro, As,mín 0,67 ρmín nas duas direções (Tabela 19.1),
+// s ≤ 2h e 20 cm, flecha com Branson. Balanço: pendente (critério 9).
+const ES_LAJE = { banzoTrelica: 2 * Math.PI * 0.0042 ** 2 / 4, fyCA60: 600, contraflecha: 350, alfaT: 1.2, nu: 0.2 };
+function esLinhaNeutraII(bf, hf, bw, As, d, ae) {
+  // estádio II: momento estático da parte comprimida = ae·As·(d − x)
+  const f = (x) => (x <= hf ? bf * x * x / 2 : bw * x * x / 2 + (bf - bw) * hf * (x - hf / 2)) - ae * As * (d - x);
+  let lo = 0, hi = d; for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (f(m) > 0) hi = m; else lo = m; }
+  const x = (lo + hi) / 2;
+  const I = x <= hf ? bf * x ** 3 / 3 : bw * x ** 3 / 3 + (bf - bw) * hf ** 3 / 12 + (bf - bw) * hf * (x - hf / 2) ** 2;
+  return { x, I: I + ae * As * (d - x) ** 2 };
+}
+function esFlexaoT(Md, bf, hf, bw, d, fcd, fyd) {
+  const k = Md / (0.425 * bf * d * d * fcd); if (k >= 1) return null;
+  let x = 1.25 * d * (1 - Math.sqrt(1 - k));
+  if (0.8 * x <= hf) return { x, As: Md / (fyd * (d - 0.4 * x)) };
+  const Mf = 0.85 * fcd * (bf - bw) * hf * (d - hf / 2), Mw = Md - Mf, kw = Mw / (0.425 * bw * d * d * fcd); if (kw >= 1) return null;
+  x = 1.25 * d * (1 - Math.sqrt(1 - kw));
+  return { x, As: Mf / (fyd * (d - hf / 2)) + Mw / (fyd * (d - 0.4 * x)) };
+}
+function esDimLajePre(pn, params, heTeste) {
+  const P = { ...ES_PADRAO, ...(params || {}) }, C = esConcreto(P.fck), kPa = 1000;
+  const pre0 = pn.pre, he = heTeste || pre0.he, pre = { ...pre0, he, hTotal: he + pre0.capa };
+  const ppNovo = ES_CARGAS.pesos.concretoArmado * (pre.capa + pre.bw * he / pre.intereixo) + ES_LAJES_PRE.enchimentos[pre.ench].gama * (pre.intereixo - pre.bw) * he / pre.intereixo;
+  const g = pn.g - pre0.pp + ppNovo, q = pn.q, i = pre.intereixo, bw = pre.bw, hf = pre.capa, h = pre.hTotal, l = pn.vao;
+  const r = { tipo: pn.tipo, l, g, q, h, he, i, ok: true, motivos: [] };
+  const w = (g + q) * i; r.Mk = w * l * l / 8; r.Md = ES_DIM.gamaF * r.Mk; r.Vd = ES_DIM.gamaF * w * l / 2;
+  if (pn.tipo === "protendida") { r.consultar = true; r.cargaAlem = g - pre0.pp + q; return r; }
+  const c = Math.max(0.015, ES_NBR.cobrimento.laje[P.caa] / 1000 - 0.005), d = h - c - 0.005, fcd = C.fcd * kPa, fyd = C.fyd * kPa;
+  const fl = esFlexaoT(r.Md, i, hf, bw, d, fcd, fyd);
+  if (!fl) { r.ok = false; r.motivos.push("flexão: a nervura não resiste"); return r; }
+  const Ac = bw * h + (i - bw) * hf, AsMin = (ES_DIM.rhoMin[P.fck] || 0.15) / 100 * Ac;
+  r.As = Math.max(fl.As, AsMin); r.xd = fl.x / d;
+  if (r.xd > ES_DIM.xdMax) { r.ok = false; r.motivos.push(`flexão: x/d = ${r.xd.toFixed(2).replace(".", ",")} > 0,45`); }
+  const banzo = ES_LAJE.banzoTrelica * ES_LAJE.fyCA60 / ES_DIM.fyk; // em área equivalente CA-50
+  const falta = r.As - banzo; r.adicional = null;
+  if (falta > 1e-7) {
+    for (const dd of [6.3, 8, 10, 12.5]) { for (const n of [1, 2]) { const A = n * esAreaBarra(dd); if (A >= falta && (!r.adicional || A < r.adicional.area)) r.adicional = { n, d: dd, area: A }; } }
+    if (!r.adicional) { r.ok = false; r.motivos.push("flexão: aço adicional não cabe na nervura"); }
+  }
+  const Asef = banzo + (r.adicional ? r.adicional.area : 0);
+  // cortante sem estribo (19.4.1)
+  const tauRd = 0.25 * C.fctd * kPa, kk = Math.max(1, 1.6 - d), rho = Math.min(0.02, Asef / (bw * d));
+  r.VRd1 = tauRd * kk * (1.2 + 40 * rho) * bw * d;
+  if (r.Vd > r.VRd1) { r.ok = false; r.motivos.push("cortante na nervura acima de VRd1 (pede faixa maciça no apoio ou nervura mais larga)"); }
+  // flecha
+  const ycg = ((i - bw) * hf * hf / 2 + bw * h * h / 2) / Ac;
+  const Ic = (i - bw) * hf ** 3 / 12 + (i - bw) * hf * (ycg - hf / 2) ** 2 + bw * h ** 3 / 12 + bw * h * (h / 2 - ycg) ** 2;
+  const Mr = ES_LAJE.alfaT * C.fctm * kPa * Ic / (h - ycg), ws = (g + ES_DIM.psi2 * q) * i, Ma = ws * l * l / 8;
+  const II = esLinhaNeutraII(i, hf, bw, Asef, d, ES_DIM.Es / C.Ecs);
+  const Ie = Ma <= Mr ? Ic : Math.min(Ic, (Mr / Ma) ** 3 * Ic + (1 - (Mr / Ma) ** 3) * II.I);
+  const fi = 5 * ws * l ** 4 / (384 * C.Ecs * kPa * Ie);
+  r.flecha = { total: fi * (1 + ES_DIM.alfaF), lim: l / ES_DIM.flechaTotal, contraflecha: 0 };
+  if (r.flecha.total > r.flecha.lim) {
+    const cf = Math.min(l / ES_LAJE.contraflecha, r.flecha.total - r.flecha.lim);
+    if (r.flecha.total - cf <= r.flecha.lim + 1e-12) r.flecha.contraflecha = Math.ceil(cf * 1000) / 1000;
+    else { r.ok = false; r.motivos.push(`flecha ${(Math.ceil(r.flecha.total * 1000) / 10).toFixed(1).replace(".", ",")} cm > ${(Math.floor(r.flecha.lim * 1000) / 10).toFixed(1).replace(".", ",")} cm mesmo com contraflecha de ℓ/350`); }
+  }
+  return r;
+}
+// placa apoiada: resolve na malha do painel e devolve mx, my máximos (por kN/m²)
+// e u máximo (flecha × D, por kN/m²)
+const ES_CACHE_PLACA = new WeakMap();
+function esPlacaApoiada(malha) {
+  if (ES_CACHE_PLACA.has(malha)) return ES_CACHE_PLACA.get(malha);
+  const r = esPlacaApoiadaCalc(malha); ES_CACHE_PLACA.set(malha, r); return r;
+}
+function esPlacaApoiadaCalc(malha) {
+  const { passo: h, cel } = malha, idx = new Map(cel.map(([i, j], n) => [i + "," + j, n])), N = cel.length;
+  const viz = cel.map(([i, j]) => [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]].map(([a, b]) => idx.has(a + "," + b) ? idx.get(a + "," + b) : -1));
+  const sor = (rhs) => {
+    const x = new Float64Array(N), om = 1.9, V = new Int32Array(4 * N); viz.forEach((v, n) => v.forEach((m, k) => { V[4 * n + k] = m; }));
+    for (let it = 0; it < 3000; it++) {
+      let dmax = 0, xmax = 1e-30;
+      for (let n = 0; n < N; n++) { let s = rhs[n] * h * h; for (let k = 0; k < 4; k++) { const m = V[4 * n + k]; if (m >= 0) s += x[m]; } const dx = s / 4 - x[n]; x[n] += om * dx; if (Math.abs(dx) > dmax) dmax = Math.abs(dx); if (x[n] > xmax) xmax = x[n]; }
+      if (dmax < 1e-7 * xmax) break;
+    }
+    return x;
+  };
+  const M = sor(new Float64Array(N).fill(1)), u = sor(M);
+  let mx = 0, my = 0, um = 0;
+  for (let n = 0; n < N; n++) {
+    const v = viz[n], g = (m) => (m >= 0 ? u[m] : 0), uxx = (g(v[0]) + g(v[1]) - 2 * u[n]) / (h * h), uyy = (g(v[2]) + g(v[3]) - 2 * u[n]) / (h * h);
+    mx = Math.max(mx, -(uxx + ES_LAJE.nu * uyy)); my = Math.max(my, -(uyy + ES_LAJE.nu * uxx)); um = Math.max(um, u[n]);
+  }
+  return { mx, my, u: um };
+}
+function esArmaduraLaje(As, h) {
+  let melhor = null; const smax = Math.min(2 * h, 0.20);
+  for (const d of [5, 6.3, 8, 10, 12.5]) {
+    if (d / 1000 > h / 8) continue; // φ ≤ h/8 (20.1)
+    let s = Math.floor(esAreaBarra(d) / As * 100) / 100; s = Math.min(s, smax); if (s < 0.07) continue;
+    const kg = esAreaBarra(d) / s; if (!melhor || kg < melhor.areaM - 1e-12) melhor = { d, s, areaM: esAreaBarra(d) / s };
+  }
+  return melhor;
+}
+function esDimLajeMacica(pn, params) {
+  const P = { ...ES_PADRAO, ...(params || {}) }, C = esConcreto(P.fck), kPa = 1000, h = pn.esp, c = ES_NBR.cobrimento.laje[P.caa] / 1000;
+  const r = { tipo: "macica", l: pn.vao, h, ok: true, motivos: [] };
+  if (pn.balanco) { r.ok = false; r.motivos.push("laje em balanço: dimensionar com armadura negativa e engaste na laje vizinha (critério 9, pendente)"); return r; }
+  // a malha apoia no centro da primeira célula sobre a viga (~5 cm do eixo de
+  // cada lado): corrige para o vão teórico (eixo a eixo) — M ∝ ℓ², flecha ∝ ℓ⁴
+  const pl0 = esPlacaApoiada(pn.malha), fv = pn.vao ? pn.vao / Math.max(0.5, pn.vao - 0.1) : 1;
+  const pl = { mx: pl0.mx * fv * fv, my: pl0.my * fv * fv, u: pl0.u * fv ** 4 }, pd = ES_DIM.gamaF * (pn.g + pn.q), ps = pn.g + ES_DIM.psi2 * pn.q;
+  const fcd = C.fcd * kPa, fyd = C.fyd * kPa, AsMin = 0.67 * (ES_DIM.rhoMin[P.fck] || 0.15) / 100 * h;
+  r.dir = [];
+  [[pl.mx, 0], [pl.my, 1]].forEach(([m, k]) => {
+    const Md = pd * m, d = h - c - 0.005 - k * 0.008, kk = Md / (0.425 * 1 * d * d * fcd);
+    if (kk >= 1) { r.ok = false; r.motivos.push("flexão: a laje não resiste (aumente a espessura)"); r.dir.push({ Md }); return; }
+    const x = 1.25 * d * (1 - Math.sqrt(1 - kk)), As = Math.max(Md / (fyd * (d - 0.4 * x)), AsMin), arm = esArmaduraLaje(As, h);
+    if (x / d > ES_DIM.xdMax) { r.ok = false; r.motivos.push("flexão: x/d > 0,45"); }
+    if (!arm) { r.ok = false; r.motivos.push("armadura não cabe"); }
+    r.dir.push({ Md, d, As, arm });
+  });
+  // flecha: Branson na faixa de 1 m da direção principal
+  const d0 = r.dir[0].d || h - c - 0.005, As0 = r.dir[0].arm ? r.dir[0].arm.areaM : AsMin, Ic = h ** 3 / 12, Mr = 1.5 * C.fctm * kPa * Ic / (h / 2), Ma = ps * Math.max(pl.mx, pl.my);
+  const II = esLinhaNeutraII(1, h, 1, As0, d0, ES_DIM.Es / C.Ecs), Ie = Ma <= Mr ? Ic : Math.min(Ic, (Mr / Ma) ** 3 * Ic + (1 - (Mr / Ma) ** 3) * II.I);
+  const D = C.Ecs * kPa * Ie / (1 - ES_LAJE.nu ** 2), fi = ps * pl.u / D;
+  r.flecha = { total: fi * (1 + ES_DIM.alfaF), lim: (pn.vao || 1) / ES_DIM.flechaTotal };
+  if (r.flecha.total > r.flecha.lim) { r.ok = false; r.motivos.push(`flecha ${(Math.ceil(r.flecha.total * 1000) / 10).toFixed(1).replace(".", ",")} cm > ${(Math.floor(r.flecha.lim * 1000) / 10).toFixed(1).replace(".", ",")} cm`); }
+  r.aco = {}; for (const dd of r.dir) if (dd.arm) r.aco[dd.arm.d] = (r.aco[dd.arm.d] || 0) + pn.area / dd.arm.s * 1.1 * esKgBarra(dd.arm.d);
+  return r;
+}
+function esDimLaje(pn, params) {
+  if (pn.area < 1 || (!pn.vao && !pn.balanco)) return null; // sobra pequena de laje além da viga
+  if (pn.tipo === "trelicada" || pn.tipo === "protendida") {
+    if (pn.balanco) return { tipo: pn.tipo, ok: false, motivos: ["laje pré-fabricada em balanço: só com armadura negativa na capa e vigota engastada na laje vizinha (critério 9, pendente)"] };
+    const r = esDimLajePre(pn, params);
+    if (pn.tipo === "trelicada") {
+      if (!r.ok) for (const he of [0.08, 0.12, 0.16, 0.20, 0.25]) { if (he <= pn.pre.he + 1e-9) continue; const t = esDimLajePre(pn, params, he); if (t.ok) { r.heSugerido = he; break; } }
+      if (r.adicional) { const nNerv = pn.area / (r.i * r.l); r.aco = { [r.adicional.d]: nNerv * r.adicional.n * (r.l + 0.2) * esKgBarra(r.adicional.d) }; }
+    }
+    return r;
+  }
+  if (pn.tipo === "macica") return esDimLajeMacica(pn, params);
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CÁLCULO COMPLETO: lança, desce cargas, dimensiona e ajusta as vigas
+// ═══════════════════════════════════════════════════════════════
+// Viga que não passa vai para a menor altura que passa (como o engenheiro
+// faria antes de mudar a concepção) e o cálculo é refeito com o novo peso
+// próprio e a nova rigidez. A altura nova passa pela verificação de
+// compatibilização (fundo da viga × porta/janela embaixo).
+function esCalcularEstrutura(pavs, params) {
+  const lanc = esLancarPavimentos(pavs, params), ajustes = [];
+  let desc = null, dim = null;
+  for (let it = 0; it < 4; it++) {
+    desc = esDescidaCargas(pavs, lanc, params); dim = esDimensionar(pavs, lanc, desc, params);
+    let mudou = false;
+    dim.pavimentos.forEach((p, k) => {
+      for (const v of lanc[k].vigas) {
+        const r = p.vigas[v.id]; if (!r || r.ok || !r.hMin || r.hMin <= v.h + 1e-9) continue;
+        if (!ajustes.some((a) => a.k === k && a.id === v.id)) ajustes.push({ k, id: v.id, de: v.h, para: r.hMin });
+        else ajustes.find((a) => a.k === k && a.id === v.id).para = r.hMin;
+        v.h = r.hMin; v.hPeloCalculo = true; mudou = true;
+      }
+    });
+    if (!mudou) break;
+  }
+  return { lanc, desc, dim, ajustes };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PARA O ORÇAMENTO DE OBRA (orcamento-obra.jsx): metros de barra por bitola
+// e m³ de concreto por grupo, nos campos que o orçamento já lê
+// ═══════════════════════════════════════════════════════════════
+const ES_BITOLA_ORC = { 5: "CA60_5MM", 6.3: "CA50_6MM", 8: "CA50_8MM", 10: "CA50_10MM", 12.5: "CA50_12MM", 16: "CA50_16MM" };
+function esParaOrcamento(pavs, calc) {
+  const { lanc, dim } = calc, vazio = () => ({}), grupos = { colunasTerreo: vazio(), colunasPav1: vazio(), vigasTerreo: vazio(), vigasPav1: vazio(), baldrames: vazio() };
+  const conc = { colunasTerreo: 0, colunasPav1: 0, vigasTerreo: 0, vigasPav1: 0, baldrames: 0 }, cont = { terreo: { 15: 0, 20: 0, 30: 0, forma: 0 }, pav1: { 15: 0, 20: 0, 30: 0, forma: 0 } };
+  const foraCatalogo = new Set();
+  const somaM = (g, aco) => { for (const [d, kg] of Object.entries(aco || {})) { const k = ES_BITOLA_ORC[+d]; if (!k) { foraCatalogo.add(+d); continue; } g[k] = (g[k] || 0) + kg / esKgBarra(+d); } };
+  dim.pavimentos.forEach((p, k) => {
+    const gc = k === 0 ? "colunasTerreo" : "colunasPav1", gv = k === 0 ? "vigasTerreo" : "vigasPav1", ct = k === 0 ? cont.terreo : cont.pav1;
+    const vistos = new Set();
+    for (const v of lanc[k].vigas) {
+      const r = p.vigas[v.id], L = esDist(v.a, v.b);
+      if (v.baldrame) conc.baldrames += v.b_ * v.h * L; else conc[gv] += v.b_ * v.h * L;
+      if (r && !vistos.has(r.tramo)) { vistos.add(r.tramo); somaM(grupos[v.baldrame ? "baldrames" : gv], r.aco); }
+    }
+    for (const pl of lanc[k].pilares) {
+      const H = (pl.topo != null ? pl.topo : 2.8) - (pl.base || 0), b = Math.min(pl.b, pl.h), hh = Math.max(pl.b, pl.h);
+      conc[gc] += pl.b * pl.h * H; ct[b <= 0.165 ? 15 : b <= 0.225 ? 20 : 30]++;
+      if (hh > 0.25) ct.forma += 2 * (pl.b + pl.h) * H;
+      somaM(grupos[gc], (p.pilares[pl.id] || {}).aco);
+    }
+  });
+  const r2 = (x) => Math.round(x * 100) / 100, arred = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, r2(v)]));
+  return {
+    colunasTerreo: { 15: cont.terreo[15], 20: cont.terreo[20], 30: cont.terreo[30], areaFormaMaior25cm: r2(cont.terreo.forma), concreto: r2(conc.colunasTerreo), ferro: arred(grupos.colunasTerreo) },
+    colunasPav1: pavs.length > 1 ? { 15: cont.pav1[15], 20: cont.pav1[20], 30: cont.pav1[30], areaFormaMaior25cm: r2(cont.pav1.forma), concreto: r2(conc.colunasPav1), ferro: arred(grupos.colunasPav1) } : null,
+    vigaRespaldoTerreo: { concreto: r2(conc.vigasTerreo), ferro: arred(grupos.vigasTerreo) },
+    vigaRespaldoPav1: pavs.length > 1 ? { concreto: r2(conc.vigasPav1), ferro: arred(grupos.vigasPav1) } : null,
+    baldrames: { concreto: r2(conc.baldrames), ferro: arred(grupos.baldrames) },
+    foraCatalogo: [...foraCatalogo],
+  };
 }

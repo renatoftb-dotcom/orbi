@@ -130,8 +130,10 @@ Valores em `ES_DIM` (NBR 6118:2023, a conferir no texto oficial).
 - Flecha: quase permanente (ψ2 = 0,3), Branson com Mr = 1,5 fctm Ic/yt e a
   armadura adotada, Ecs da 8.2.8, fluência αf = 1,32. Limites L/250 total e,
   com parede em cima (ou baldrame), L/500 e 10 mm depois da parede (Tabela 13.3).
-- Se não passa, diz a menor altura (de 5 em 5 cm) que passa. Não muda o
-  lançamento sozinho: a mudança de seção é decisão de projeto (porta/janela embaixo).
+- Se não passa, a viga sobe para a menor altura (de 5 em 5 cm, até 80) que passa
+  e o cálculo é refeito com o novo peso e a nova rigidez (`esCalcularEstrutura`).
+  A tela lista as vigas aumentadas; o fundo novo passa pela verificação de
+  porta/janela embaixo.
 
 **Pilares** (`esDimPilar`), por lance:
 - Nd = 1,4 γn Nk. Momento mínimo M1d,mín = Nd(0,015 + 0,03h) em cada direção
@@ -147,5 +149,26 @@ Valores em `ES_DIM` (NBR 6118:2023, a conferir no texto oficial).
 (0,25 L para dentro do tramo). O detalhamento (etapa 5) refaz com comprimentos
 de ancoragem e emendas da norma.
 
-**Lajes pré-fabricadas**: dimensionadas pela tabela do fabricante (NBR 14859);
-pendente. Maciça: pendente.
+**Lajes** (`esDimLaje`), por painel:
+- Treliçada: nervura em T (mesa = intereixo × capa), bi-apoiada no vão das
+  vigotas; flexão (banzo da treliça admitido 2 φ4,2 CA-60 + barra adicional
+  CA-50), cortante sem estribo (VRd1, 19.4.1), flecha com α = 1,2 (seção T) e
+  contraflecha até ℓ/350. Se não passa, sugere o enchimento que passa.
+- Protendida: o aço vem da fábrica; o resultado é o que se manda ao fabricante
+  (vão, carga além do peso próprio, momento por vigota).
+- Maciça: placa apoiada nas bordas por diferenças finitas na malha do painel
+  (∇²M = −p, ∇²u = −M, ν = 0,2), corrigida para o vão teórico; As nas duas
+  direções (mín. 0,67 ρmín), s ≤ 2h e 20 cm, φ ≤ h/8, flecha com Branson.
+  Conferido com Timoshenko (placa quadrada: m = 0,0442 q a²).
+- Balanço (critério 9) e negativas de continuidade entre painéis: pendentes.
+
+**Orçamento de obra** (`esParaOrcamento` → `tpComEstrutura`): com a estrutura
+lançada, o Projetar grava nos campos que o orçamento já lê: pilares
+(`engenharia.colunasTerreo/colunasPav1`: quantidade por largura, concreto e
+metros de barra por bitola), vigas (`terreo/pav1.vigaRespaldo` e
+`concretoVigaRespaldo`) e baldrames (`engenharia.fundacao` baldrames). Sapatas,
+estacas e lajes continuam como estavam. Retirar a estrutura limpa só o que o
+cálculo escreveu. φ20 e φ25 não existem na lista do orçamento (aviso).
+
+**Desempenho**: lançamento na hora; cargas e dimensionamento 0,3 s depois da
+última alteração. Painéis de laje e placas ficam em cache.
