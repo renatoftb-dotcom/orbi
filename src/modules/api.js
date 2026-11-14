@@ -99,6 +99,13 @@ const api = {
     delete: (id)     => del(`/api/obras/${id}`),
   },
 
+  // Projetar: o desenho de cada projeto (paredes, pavimentos, estrutura…)
+  projetosDesenho: {
+    list:   ()       => get("/api/projetos-desenho"),
+    save:   (p)      => post("/api/projetos-desenho", p),
+    delete: (id)     => del(`/api/projetos-desenho/${encodeURIComponent(id)}`),
+  },
+
   lancamentos: {
     list:   ()       => get("/api/lancamentos"),
     save:   (l)      => post("/api/lancamentos", l),

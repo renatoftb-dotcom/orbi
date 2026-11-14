@@ -3144,6 +3144,13 @@ const api = {
     delete: (id)     => del(`/api/obras/${id}`),
   },
 
+  // Projetar: o desenho de cada projeto (paredes, pavimentos, estrutura…)
+  projetosDesenho: {
+    list:   ()       => get("/api/projetos-desenho"),
+    save:   (p)      => post("/api/projetos-desenho", p),
+    delete: (id)     => del(`/api/projetos-desenho/${encodeURIComponent(id)}`),
+  },
+
   lancamentos: {
     list:   ()       => get("/api/lancamentos"),
     save:   (l)      => post("/api/lancamentos", l),
@@ -95877,9 +95884,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
 
 // ───────────────────────────────────────────────────────────────
-// Lista de projetos + novo projeto (nome + cliente). Fase de teste:
-// guardado no localStorage deste navegador, separado por empresa — nada
-// é gravado no servidor nem no cadastro do cliente.
+// Lista de projetos + novo projeto (nome + cliente). Os projetos ficam no
+// servidor (/api/projetos-desenho, por empresa) e numa cópia no navegador
+// (localStorage), que serve de segurança e para continuar sem internet:
+// o que muda grava na hora aqui e sobe ao servidor alguns segundos depois.
 // ───────────────────────────────────────────────────────────────
 // Obra criada junto com o projeto: mesmo nome, mesmo cliente, ainda sem
 // orçamento — o botão "Atualizar orçamento da obra" do editor preenche.
@@ -95899,6 +95907,108 @@ function tpGravar(empresaId, lista) {
   try { localStorage.setItem(tpChave(empresaId), JSON.stringify(lista)); } catch {}
 }
 
+// ---------- servidor ----------
+// Na cópia local cada projeto leva _sinc (já esteve no servidor) e _pend
+// (tem mudança que ainda não subiu). Projeto com _sinc que sumiu do servidor
+// foi excluído em outro lugar; sem _sinc, ainda não subiu (migração do tempo
+// em que tudo ficava só no navegador).
+const tpServ = { versoes: {}, timers: {}, estado: "local", ouvintes: new Set(), aviso: "" };
+function tpApi() { return typeof api !== "undefined" && api && api.projetosDesenho ? api.projetosDesenho : null; }
+function tpEstado(estado, aviso) { tpServ.estado = estado; if (aviso !== undefined) tpServ.aviso = aviso; tpServ.ouvintes.forEach((f) => f()); }
+function useTpServidor() {
+  const [, setN] = useState(0);
+  useEffect(() => { const f = () => setN((n) => n + 1); tpServ.ouvintes.add(f); return () => tpServ.ouvintes.delete(f); }, []);
+  return tpServ;
+}
+const tpLimpo = (p) => { const { _sinc, _pend, _versao, ...r } = p || {}; return r; };
+function tpChaveApagar(empresaId) { return "vicke-teste-projetos-apagar-" + (empresaId || "x"); }
+function tpLerApagar(empresaId) { try { const v = JSON.parse(localStorage.getItem(tpChaveApagar(empresaId)) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } }
+function tpGravarApagar(empresaId, l) { try { localStorage.setItem(tpChaveApagar(empresaId), JSON.stringify(l)); } catch {} }
+// sobe um projeto (o que está na cópia local agora); conflito: fica valendo esta tela
+async function tpEnviarAgora(empresaId, id, tentativa = 0) {
+  const A = tpApi(); if (!A) return;
+  clearTimeout(tpServ.timers[id]); delete tpServ.timers[id]; // este envio cobre o que estava agendado
+  const p = tpLer(empresaId).find((x) => x.id === id); if (!p) return;
+  tpEstado("enviando");
+  try {
+    const r = await A.save({ ...tpLimpo(p), ...(tpServ.versoes[id] != null ? { _versao: tpServ.versoes[id] } : {}) });
+    tpServ.versoes[id] = r && r._versao;
+    // marca como gravado só se ninguém mudou de novo enquanto subia
+    tpGravar(empresaId, tpLer(empresaId).map((x) => (x.id === id ? (x.atualizadoEm === p.atualizadoEm ? { ...x, _sinc: true, _pend: false } : { ...x, _sinc: true }) : x)));
+    tpEstado(Object.keys(tpServ.timers).length ? "enviando" : "ok");
+  } catch (e) {
+    if (e && e.conflito && tentativa < 1) {
+      tpServ.versoes[id] = e.atual && e.atual._versao;
+      tpEstado("enviando", "Este projeto também foi alterado em outra tela; ficou valendo a gravação desta.");
+      return tpEnviarAgora(empresaId, id, tentativa + 1);
+    }
+    tpEstado("offline");
+    // sem conexão (ou servidor fora): tenta de novo daqui a pouco
+    tpAgendarEnvio(empresaId, id, 15000);
+  }
+}
+function tpAgendarEnvio(empresaId, id, atraso = 2500) {
+  clearTimeout(tpServ.timers[id]);
+  tpServ.timers[id] = setTimeout(() => { delete tpServ.timers[id]; tpEnviarAgora(empresaId, id); }, atraso);
+}
+// grava na cópia local (marcado como pendente) e agenda a subida
+function tpSalvarProjeto(empresaId, p, atraso) {
+  const lista = tpLer(empresaId), existe = lista.some((x) => x.id === p.id);
+  const nova = existe ? lista.map((x) => (x.id === p.id ? { ...p, _sinc: x._sinc, _pend: true } : x)) : [{ ...p, _pend: true }, ...lista];
+  tpGravar(empresaId, nova);
+  tpAgendarEnvio(empresaId, p.id, atraso);
+  return nova;
+}
+async function tpApagarProjeto(empresaId, id) {
+  clearTimeout(tpServ.timers[id]); delete tpServ.timers[id];
+  const lista = tpLer(empresaId).filter((x) => x.id !== id);
+  tpGravar(empresaId, lista);
+  tpGravarApagar(empresaId, [...new Set([...tpLerApagar(empresaId), id])]);
+  const A = tpApi();
+  if (A) { try { await A.delete(id); tpGravarApagar(empresaId, tpLerApagar(empresaId).filter((x) => x !== id)); } catch { tpEstado("offline"); } }
+  return lista;
+}
+// junta servidor e cópia local; devolve a lista para a tela
+async function tpSincronizar(empresaId) {
+  const A = tpApi(); if (!A) return tpLer(empresaId);
+  tpEstado("carregando");
+  try {
+    for (const id of tpLerApagar(empresaId)) { try { await A.delete(id); tpGravarApagar(empresaId, tpLerApagar(empresaId).filter((x) => x !== id)); } catch {} }
+    const srv = await A.list(), local = tpLer(empresaId), noSrv = new Set(srv.map((p) => p.id)), subir = [];
+    const final = [];
+    for (const p of srv) {
+      tpServ.versoes[p.id] = p._versao;
+      const l = local.find((x) => x.id === p.id);
+      if (l && l._pend && String(l.atualizadoEm || "") >= String(p.atualizadoEm || "")) { final.push(l); subir.push(l.id); }
+      else final.push({ ...tpLimpo(p), _sinc: true, _pend: false });
+    }
+    for (const l of local) {
+      if (noSrv.has(l.id)) continue;
+      if (l._sinc) continue;           // excluído em outro lugar
+      final.push(l); subir.push(l.id); // ainda não subiu
+    }
+    final.sort((a, b) => String(b.atualizadoEm || "").localeCompare(String(a.atualizadoEm || "")));
+    tpGravar(empresaId, final);
+    tpEstado(subir.length ? "enviando" : "ok", "");
+    for (const id of subir) await tpEnviarAgora(empresaId, id);
+    return tpLer(empresaId);
+  } catch (e) {
+    tpEstado("offline");
+    return tpLer(empresaId);
+  }
+}
+// linha discreta: onde o projeto está guardado
+function TpEstadoServidor() {
+  const sv = useTpServidor();
+  if (!tpApi()) return null;
+  const txt = { carregando: "Carregando do servidor…", enviando: "Salvando no servidor…", ok: "Salvo no servidor", offline: "Sem conexão com o servidor: as mudanças ficam neste navegador e sobem quando voltar", local: "" }[sv.estado] || "";
+  return (
+    <div style={{ fontSize: 12, color: sv.estado === "offline" ? "#b91c1c" : "#6b7280" }} role="status">
+      {txt}{sv.aviso ? <span style={{ display: "block", color: "#4b5563" }}>{sv.aviso}</span> : null}
+    </div>
+  );
+}
+
 function TesteProjeto({ data, usuario, save }) {
   const empresaId = usuario?.empresa_id;
   const [projetos, setProjetos] = useState(() => tpLer(empresaId));
@@ -95906,16 +96016,16 @@ function TesteProjeto({ data, usuario, save }) {
   const [novo, setNovo] = useState(null);       // { nome, clienteId } enquanto o formulário está aberto
   const [excluir, setExcluir] = useState(null); // projeto aguardando confirmação
   const [busca, setBusca] = useState("");
+  useEffect(() => { let vivo = true; tpSincronizar(empresaId).then((l) => { if (vivo) setProjetos(l); }); return () => { vivo = false; }; }, [empresaId]);
 
   const clientes = (data?.clientes || []).slice().sort((a, b) => String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR"));
   const nomeCliente = (id) => (clientes.find((c) => c.id === id) || {}).nome || "";
-  const salvarLista = (lista) => { setProjetos(lista); tpGravar(empresaId, lista); };
 
   const aberto = projetos.find((p) => p.id === abertoId);
   if (aberto) {
     return (
       <TpEditor key={aberto.id} projeto={aberto} nomeCliente={nomeCliente(aberto.clienteId)} data={data} save={save}
-        onAlterar={(p) => salvarLista(tpLer(empresaId).map((x) => (x.id === p.id ? p : x)))}
+        onAlterar={(p) => setProjetos(tpSalvarProjeto(empresaId, p))}
         onVoltar={() => { setProjetos(tpLer(empresaId)); setAbertoId(null); }} />
     );
   }
@@ -95931,7 +96041,7 @@ function TesteProjeto({ data, usuario, save }) {
     }
     // base = o que está gravado agora, não a lista lida ao abrir a tela: outra
     // aba pode ter desenhado nesse meio-tempo (igual a TpProjetosDoCliente)
-    salvarLista([p, ...tpLer(empresaId)]);
+    setProjetos(tpSalvarProjeto(empresaId, p, 0));
     setNovo(null); setAbertoId(p.id);
   };
 
@@ -95954,6 +96064,7 @@ function TesteProjeto({ data, usuario, save }) {
         <div>
           <div style={{ fontSize: 22, fontWeight: 700, color: "#111827" }}>Projetar</div>
           <div style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>Projetos desenhados no VICKE. Fase de teste.</div>
+          <TpEstadoServidor />
         </div>
         <button style={btnAzul} onClick={() => setNovo({ nome: "", clienteId: "", criarObra: true })}>+ Novo projeto</button>
       </div>
@@ -96020,10 +96131,10 @@ function TesteProjeto({ data, usuario, save }) {
         <div style={fundo}>
           <div style={caixa} role="dialog" aria-modal="true">
             <div style={{ fontSize: 17, fontWeight: 700, color: "#111827" }}>Excluir projeto?</div>
-            <div style={{ fontSize: 14, color: "#374151", margin: "8px 0 18px" }}>"{excluir.nome}" e todo o desenho serão apagados deste navegador.</div>
+            <div style={{ fontSize: 14, color: "#374151", margin: "8px 0 18px" }}>"{excluir.nome}" e todo o desenho serão apagados.</div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
               <button style={btn} onClick={() => setExcluir(null)}>Cancelar</button>
-              <button style={{ ...btn, background: "#b91c1c", borderColor: "#b91c1c", color: "#fff" }} onClick={() => { salvarLista(tpLer(empresaId).filter((p) => p.id !== excluir.id)); setExcluir(null); }}>Excluir</button>
+              <button style={{ ...btn, background: "#b91c1c", borderColor: "#b91c1c", color: "#fff" }} onClick={() => { const id = excluir.id; setProjetos(tpLer(empresaId).filter((p) => p.id !== id)); tpApagarProjeto(empresaId, id).then(setProjetos); setExcluir(null); }}>Excluir</button>
             </div>
           </div>
         </div>
@@ -96050,9 +96161,9 @@ function TpProjetosDoCliente({ cliente, data, save }) {
   const [novoNome, setNovoNome] = useState(null);  // string enquanto a janela está aberta
   const [criarObra, setCriarObra] = useState(true);
   const [excluir, setExcluir] = useState(null);
+  useEffect(() => { if (empresaId !== TP_EMPRESA_PILOTO) return; let vivo = true; tpSincronizar(empresaId).then((l) => { if (vivo) setTodos(l); }); return () => { vivo = false; }; }, [empresaId]);
   if (empresaId !== TP_EMPRESA_PILOTO || !cliente) return null;
 
-  const salvarLista = (lista) => { setTodos(lista); tpGravar(empresaId, lista); };
   const meus = todos.filter((p) => p.clienteId === cliente.id);
   const aberto = meus.find((p) => p.id === abertoId);
 
@@ -96065,7 +96176,7 @@ function TpProjetosDoCliente({ cliente, data, save }) {
   if (aberto) {
     return (
       <TpEditor key={aberto.id} projeto={aberto} nomeCliente={cliente.nome} data={data} save={save}
-        onAlterar={(p) => salvarLista(tpLer(empresaId).map((x) => (x.id === p.id ? p : x)))}
+        onAlterar={(p) => setTodos(tpSalvarProjeto(empresaId, p))}
         onVoltar={() => { setTodos(tpLer(empresaId)); setAbertoId(null); }} />
     );
   }
@@ -96078,7 +96189,7 @@ function TpProjetosDoCliente({ cliente, data, save }) {
       const obra = tpObraDoProjeto(p); p.obraId = obra.id;
       save({ ...data, obras: [...(data.obras || []), obra] });
     }
-    salvarLista([p, ...tpLer(empresaId)]);
+    setTodos(tpSalvarProjeto(empresaId, p, 0));
     setNovoNome(null); setAbertoId(p.id);
   };
 
@@ -96127,10 +96238,10 @@ function TpProjetosDoCliente({ cliente, data, save }) {
         <div style={fundo}>
           <div style={caixa} role="dialog" aria-modal="true">
             <div style={{ fontSize: 17, fontWeight: 700, color: "#111827" }}>Excluir projeto?</div>
-            <div style={{ fontSize: 14, color: "#374151", margin: "8px 0 18px" }}>"{excluir.nome}" e todo o desenho serão apagados deste navegador.</div>
+            <div style={{ fontSize: 14, color: "#374151", margin: "8px 0 18px" }}>"{excluir.nome}" e todo o desenho serão apagados.</div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
               <button style={btn} onClick={() => setExcluir(null)}>Cancelar</button>
-              <button style={{ ...btn, background: "#b91c1c", borderColor: "#b91c1c", color: "#fff" }} onClick={() => { salvarLista(tpLer(empresaId).filter((p) => p.id !== excluir.id)); setExcluir(null); }}>Excluir</button>
+              <button style={{ ...btn, background: "#b91c1c", borderColor: "#b91c1c", color: "#fff" }} onClick={() => { const id = excluir.id; setTodos(tpLer(empresaId).filter((p) => p.id !== id)); tpApagarProjeto(empresaId, id).then(setTodos); setExcluir(null); }}>Excluir</button>
             </div>
           </div>
         </div>
