@@ -12829,6 +12829,19 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   function inicialDaLinha(m) {
     const sug = daMemoDaFila("sugestao", m, () => sugestaoDaLinha(m));
     const base = lancamentoDaLinhaDoExtrato(m, mesEmConferencia, sug && sug.cartaoObra ? null : sug);
+    // Parcela da venda achada: o formulário já vem com o empreendimento, a
+    // obra e a parcela — e lançar daqui dá baixa nela, como o "Receber
+    // parcela" (sem isso, a receita entrava solta e a parcela ficava aberta).
+    if (m && !m._cartao && sug && sug.parcelaDaVenda) {
+      const pv = sug.parcelaDaVenda;
+      const cli = ((data || {}).clientes || []).find((c) => c && c.id === pv.obra.clienteId) || null;
+      return { ...base, ...marcaDaLinha(m), ...sug.campos,
+        clienteId: cli ? cli.id : (pv.obra.clienteId || ""), cliente: cli ? cli.nome || "" : "",
+        empreendimentoId: cli && ehEmpreendimento(cli) ? cli.id : "",
+        projeto: pv.obra.nome || "",
+        descricao: [pv.conta.descricao, pv.conta.favorecido].filter(Boolean).join(" · ") || base.descricao,
+        receberVenda: { obraId: pv.obra.id, contaId: pv.conta.id, m } };
+    }
     if (!m || !m._cartao) return { ...base, ...marcaDaLinha(m) };
     const cartao = cartaoDaLinha(m);
     if (!cartao) return base;
@@ -13029,7 +13042,14 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     if (l && l.ligarCartao) return ligarCompraDoCartao(l.ligarCartao);
     if (l && l.fecharFaturaDaLinha) return fecharFaturaPelaLinha(l.fecharFaturaDaLinha);
     if (l && l.baixarParcela) return baixarParcelaAPagar(l.baixarParcela);
-    if (l && l.receberVenda) return receberParcelaDaVenda(l.receberVenda);
+    // Do formulário: dá baixa na parcela se ele continua sendo a venda; se a
+    // pessoa trocou a conta, é outro lançamento — sem a ligação.
+    if (l && l.receberVenda && (!l.contaId || ["emp_venda", "res_documentacao"].includes(l.contaId))) {
+      const x = l.receberVenda;
+      return receberParcelaDaVenda(l.contaId ? { ...x, m: { ...x.m, data: l.lancadoEm || x.m.data,
+        valor: efValorDoCampo(l.valor) > 0 ? efValorDoCampo(l.valor) : x.m.valor } } : x);
+    }
+    if (l && l.receberVenda) { const { receberVenda: _rv, ...semVenda } = l; l = semVenda; }
     if (l && l.parceladoNaConta) return lancarParceladoNaConta(l, marca);
     if (l && l.naObra) { const { sinalDoBanco, ...semSinal } = l; lancarCustoNaObra({ ...semSinal, ...marca }); return true; }
     if (l && l.gestaoAvulsaNaObra && lancarGestaoAvulsaNaObra(l, marca)) return true;
