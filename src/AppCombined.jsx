@@ -21483,7 +21483,11 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                     )}
                     {sug && sug.parcelaDaVenda && (
                       <div data-vk-parcela-da-venda="1" style={{ fontSize: 11.5, color: "#0474f4", marginTop: 2, lineHeight: 1.4 }}>
-                        🏠 {(sug.motivos || [])[0]} — a parcela da venda passa a recebida e vira o lançamento desta linha
+                        🏠 <b>Empreendimento {sug.parcelaDaVenda.obra.nome || "—"}</b> · {String((sug.motivos || [])[0] || "").replace((sug.parcelaDaVenda.obra.nome || "\u0000") + " · ", "")}
+                        <div data-vk-destino-da-venda="1" style={{ color: "#374151", marginTop: 1 }}>
+                          Ao receber: a parcela fica recebida em <b>Vendas do {sug.parcelaDaVenda.obra.nome || "empreendimento"}</b> e
+                          entra no extrato do escritório em <b>{(contaEscritorio(sug.parcelaDaVenda.contaNoEscritorio) || {}).nome || "Venda de imóvel"}</b> (Empreendimento), ligada a esta linha.
+                        </div>
                       </div>
                     )}
                     {sug && sug.cartaoObra && (
@@ -24981,8 +24985,11 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         motivos: [`fatura de ${mesAnoPorExtenso(fat.competencia)} do ${fat.cartao.nome}: ${efDinheiro(fat.total)}, ${fat.compras === 1 ? "1 compra" : fat.compras + " compras"}`] };
       // a parcela de um boleto que estava a pagar: a linha é ela
       const pv = parcelaDaVendaParaALinha(m, (data || {}).obras || []);
-      if (pv) return { campos: { contaId: pv.conta.contaId === "documentacao_comprador" ? "res_documentacao" : "emp_venda", unidadeId: "empreendimento" }, parcelaDaVenda: pv,
-        motivos: [`${pv.conta.descricao || "parcela da venda"}${pv.conta.favorecido ? " · " + pv.conta.favorecido : ""}, vence ${efDiaBR(pv.conta.vencimento)}`] };
+      if (pv) {
+        const contaVenda = pv.conta.contaId === "documentacao_comprador" ? "res_documentacao" : "emp_venda";
+        return { campos: { contaId: contaVenda, unidadeId: "empreendimento" }, parcelaDaVenda: { ...pv, contaNoEscritorio: contaVenda },
+          motivos: [`${pv.obra.nome ? pv.obra.nome + " · " : ""}${pv.conta.descricao || "parcela da venda"}${pv.conta.favorecido ? " · " + pv.conta.favorecido : ""}, vence ${efDiaBR(pv.conta.vencimento)}`] };
+      }
       const ap = parcelaAPagarParaALinha(m, contaDaLinha(m), aPagarDoEscritorio(cfgFin));
       if (ap) return { campos: { contaId: ap.contaId, unidadeId: ap.unidadeId }, parcelaAPagar: ap,
         motivos: [`parcela ${ap.parcela}/${ap.de}${ap.descricao ? " de " + ap.descricao : ""}, a pagar em ${efDiaBR(ap.vencimento)}`] };
