@@ -8,7 +8,7 @@ import assert from "assert";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(join(__dirname, "src", "modules", "estrutural.jsx"), "utf-8");
-const M = new Function(`${src}\nreturn { esLancarPavimentos, esDescidaCargas, esTopoPavimento, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao };`)();
+const M = new Function(`${src}\nreturn { esLancarPavimentos, esDescidaCargas, esTopoPavimento, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao, esLinhaContinua, esPaineisLaje, esDimViga, esDimPilar, esDimensionar, esMRd, esConcreto };`)();
 
 let ok = 0, falhou = 0;
 const t = (nome, fn) => { try { fn(); ok++; } catch (e) { falhou++; console.log("FALHOU:", nome, "\n ", e.message); } };
@@ -265,6 +265,52 @@ t("descida de cargas: o que chega na fundação é o peso de tudo (equilíbrio)"
     // caixa simétrica: os quatro pilares de canto recebem o mesmo
     const ns = d.fundacao.map((f) => f.Nk); assert.ok(Math.max(...ns) - Math.min(...ns) < 0.5, ns.join(" "));
   }
+});
+t("viga contínua de dois vãos iguais: apoio do meio 1,25 wL e momento -wL²/8", () => {
+  const r = M.esLinhaContinua([{ L: 4, I: 1, w: 10, pts: [] }, { L: 4, I: 1, w: 10, pts: [] }]);
+  assert.ok(Math.abs(r[0].Mb + 20) < 1e-6 && Math.abs(r[1].Ma + 20) < 1e-6, `${r[0].Mb} ${r[1].Ma}`);
+  assert.ok(Math.abs(r[0].RB + r[1].RA - 50) < 1e-6 && Math.abs(r[0].RA - 15) < 1e-6);
+  assert.ok(Math.abs(r[0].Ma) < 1e-9 && Math.abs(r[1].Mb) < 1e-9, "pontas apoiadas sem momento");
+});
+t("laje pré-fabricada: vigotas no menor vão, carga só nas vigas onde apoiam", () => {
+  const vigas = [{ a: P(0, 0), b: P(6, 0) }, { a: P(6, 0), b: P(6, 3) }, { a: P(6, 3), b: P(0, 3) }, { a: P(0, 3), b: P(0, 0) }];
+  const r = M.esPaineisLaje([P(0, 0), P(6, 0), P(6, 3), P(0, 3)], vigas, "auto", false);
+  assert.strictEqual(r.paineis.length, 1); const pn = r.paineis[0];
+  assert.ok(Math.abs(pn.dir.y) > 0.99 && Math.abs(pn.vao - 3) < 0.05, `vão ${pn.vao}`);
+  const tot = r.porViga.reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(tot - 18) < 0.01, "área toda distribuída");
+  assert.ok(r.porViga[1] + r.porViga[3] < 0.7, `bordas paralelas às vigotas quase sem carga: ${r.porViga[1]} ${r.porViga[3]}`);
+  // girar as vigotas: a carga vai para as vigas curtas
+  const g = M.esPaineisLaje([P(0, 0), P(6, 0), P(6, 3), P(0, 3)], vigas, "u", false);
+  assert.ok(g.porViga[1] + g.porViga[3] > 16 && g.paineis[0].forcado);
+  // maciça 6 × 3 (λ = 2): duas direções, as quatro vigas recebem
+  const m = M.esPaineisLaje([P(0, 0), P(6, 0), P(6, 3), P(0, 3)], vigas, "auto", true);
+  assert.ok(m.paineis[0].duas && m.porViga.every((a) => a > 1));
+});
+t("dimensionamento de viga: flexão, cisalhamento e flecha (conta à mão)", () => {
+  // 14 × 40, L = 4, g = q = 10 kN/m → Md = 1,4 × 20 × 16 / 8 = 56 kN·m
+  const r = M.esDimViga({ L: 4, g: 10, q: 10, b_: 0.14, h: 0.40, pontosTodos: [] }, {});
+  assert.ok(Math.abs(r.Md - 56) < 0.01, `Md ${r.Md}`);
+  // d = 0,40 - 0,03 - 0,005 - 0,00625; x = 1,25d(1 - √(1 - Md/(0,425 b d² fcd))); As = Md/(fyd(d - 0,4x))
+  const d = 0.40 - 0.03 - 0.005 - 0.00625, fcd = 25000 / 1.4, k = 56 / (0.425 * 0.14 * d * d * fcd), x = 1.25 * d * (1 - Math.sqrt(1 - k));
+  const As = 56 / (500000 / 1.15 * (d - 0.4 * x));
+  assert.ok(Math.abs(r.AsCalc - As) < 1e-8 && r.barras.area >= As, `${r.AsCalc} ${As}`);
+  assert.ok(r.estribo && r.estribo.s <= 0.6 * d + 1e-9);
+  assert.ok(r.flecha.total > 0 && r.ok === (r.flecha.total <= 4 / 250));
+  // 5 m com parede e carga alta não passa em 14 × 40 e diz a altura que passa
+  const f = M.esDimViga({ L: 5, g: 20, q: 2, b_: 0.14, h: 0.40, pontosTodos: [], comParede: true }, {});
+  assert.ok(!f.ok && f.hMin > 0.40, `hMin ${f.hMin}`);
+});
+t("dimensionamento de pilar: γn, momento mínimo, 2ª ordem e armadura mínima", () => {
+  const r = M.esDimPilar({ b: 0.14, h: 0.30 }, { Ng: 100, Nq: 20 }, 2.9, {});
+  assert.ok(Math.abs(r.Nd - 1.4 * 1.25 * 120) < 1e-6, `Nd ${r.Nd}`);
+  const fraca = r.direcoes[0]; assert.ok(Math.abs(fraca.M1min - r.Nd * (0.015 + 0.03 * 0.14)) < 1e-9 && fraca.lam > 35 && fraca.M2 > 0);
+  assert.ok(r.As >= 0.004 * 0.14 * 0.30 - 1e-12 && r.barras.n >= 4 && r.barras.d >= 10 && r.ok);
+  // a seção com a armadura escolhida resiste ao Md
+  assert.ok(M.esMRd(0.30, 0.14, 0.043, r.barras.area, r.Nd, M.esConcreto(25)) >= fraca.Md);
+  // carga que esmaga o 14 × 30: falha e sugere seção maior
+  const g = M.esDimPilar({ b: 0.14, h: 0.30 }, { Ng: 700, Nq: 100 }, 2.9, {});
+  assert.ok(!g.ok && (g.hSugerida == null || g.hSugerida > 0.30));
 });
 console.log(`${ok} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

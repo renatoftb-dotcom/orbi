@@ -121,6 +121,14 @@ const PLANO_CONTAS_ESCRITORIO = [
   { id: "emp_construcao", nome: "Construção",             grupo: "emp_saidas",   unidades: ["empreendimento"], apelidos: [] },
   { id: "emp_taxas",      nome: "Taxas e registros",      grupo: "emp_saidas",   unidades: ["empreendimento"], apelidos: [] },
   { id: "emp_corretagem", nome: "Corretagem",             grupo: "emp_saidas",   unidades: ["empreendimento"], apelidos: [] },
+  // A documentação que o comprador paga junto com o imóvel (ITBI, cartório,
+  // registro). Como a engenharia no projeto (custo em Parceiros e o dinheiro
+  // guardado na reserva): a Venda de imóvel entra inteira, este custo entra
+  // no mesmo mês e o dinheiro fica em Documentação Empreendimentos, fora do
+  // disponível. Nenhum dos dois passa pelo banco — é troca de bolso. As
+  // despesas de verdade (ITBI, cartório) saem depois da reserva, pelo banco,
+  // sem virar custo de novo. Nasce sozinho da provisão da venda.
+  { id: "emp_documentacao", nome: "Documentação do comprador", grupo: "emp_saidas", unidades: ["empreendimento"], apelidos: [], interna: true },
   { id: "emp_venda",      nome: "Venda de imóvel",        grupo: "emp_entradas", unidades: ["empreendimento"], apelidos: [] },
   { id: "emp_aporte",     nome: "Aporte no empreendimento", grupo: "emp_aportes", unidades: ["empreendimento"], apelidos: [] },
 
@@ -770,10 +778,11 @@ function destinoNoEscritorio(contaId0, modo, opcoes) {
 
 // ── Provisão de documentação da venda, no escritório ─────────────
 // Parte do que o comprador paga (o sinal, em geral) é para a documentação
-// dele: não é receita da venda. Ao registrar a venda, o valor da provisão
-// troca de bolso — sai de "Venda de imóvel" e entra em "Documentação
-// Empreendimentos" (Provisões e reservas). É um par fora da conta: o saldo do
-// banco não muda. As despesas pagas pela provisão (ITBI, cartório, registro)
+// dele. Como a engenharia no projeto: a Venda de imóvel fica inteira (é o
+// que entrou no banco), e no mesmo mês entra o custo "Documentação do
+// comprador" (Investimento em empreendimento) e o mesmo valor em
+// "Documentação Empreendimentos" (Provisões e reservas). É um par fora da
+// conta: o saldo do banco não muda, e o disponível já sai sem ele. As despesas pagas pela provisão (ITBI, cartório, registro)
 // e a devolução ao comprador saem dela, pelo banco, e casam com o extrato.
 //
 // Nada que já foi lançado é editado (pode estar num mês fechado): mudou a
@@ -817,7 +826,7 @@ function provisaoNoEscritorio(lancamentos, obra, cliente, opcoes) {
     // venda desfeita: a provisão de mês aberto simplesmente sai; a de mês
     // fechado é zerada por um par contrário (abaixo)
     if (v._saiu) for (const l of dela) if (l.origem.parte !== "mov" && aberto(l.competencia)) tirar.add(l.id);
-    // 1) a troca de bolso: venda → provisão
+    // 1) a troca de bolso, fora do banco: custo de documentação → provisão
     const reservado = cents(dela.filter((l) => l.origem.parte === "reserva" && !tirar.has(l.id)).reduce((t, l) => t + (Number(l.valor) || 0), 0));
     const alvo = cents(Number(v.provisaoDoc) || 0);
     const dif = cents(alvo - reservado);
@@ -829,8 +838,8 @@ function provisaoNoEscritorio(lancamentos, obra, cliente, opcoes) {
       const pre = `prov:${ob.id}:${v.id}:${n}`;
       const marca = { competencia: mesPar, lancadoEm: diaPar, contaBanco: "nao", conferido: true, conferidoEm: hoje, criadoEm: new Date().toISOString() };
       const { unidadeVenda: _u, comprador: _c, id: _i, origem: _o, contaId: _k, valor: _v, descricao: _d, ...resto } = base;
-      novos.push({ ...resto, ...marca, id: pre + ":venda", contaId: "emp_venda", valor: -dif,
-        descricao: `Provisão de documentação — ${rotulo} (sai da venda)`, origem: { obraId: ob.id, tipo: "provisao", refId: v.id, parte: "venda" } });
+      novos.push({ ...resto, ...marca, id: pre + ":venda", contaId: "emp_documentacao", valor: dif,
+        descricao: `Custo de documentação — ${rotulo} (vai para a reserva)`, origem: { obraId: ob.id, tipo: "provisao", refId: v.id, parte: "venda" } });
       novos.push({ ...resto, ...marca, id: pre + ":reserva", contaId: "res_documentacao", valor: dif,
         descricao: `Provisão de documentação — ${rotulo}`, origem: { obraId: ob.id, tipo: "provisao", refId: v.id, parte: "reserva" } });
     }

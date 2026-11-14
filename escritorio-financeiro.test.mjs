@@ -3940,8 +3940,11 @@ teste("provisão de documentação: sai da venda e entra em Documentação Empre
   let l = M.provisaoNoEscritorio([outro], obra, cliente, { fechamentos: fech, hoje: "2026-10-31" });
   const par = l.filter((x) => x.origem && x.origem.tipo === "provisao");
   assert.strictEqual(par.length, 2);
-  const v = par.find((x) => x.contaId === "emp_venda"), r = par.find((x) => x.contaId === "res_documentacao");
-  assert.strictEqual(v.valor, -6700); assert.strictEqual(r.valor, 6700);
+  // como a engenharia: a venda fica inteira, entra o custo de documentação e o mesmo valor na reserva
+  const v = par.find((x) => x.contaId === "emp_documentacao"), r = par.find((x) => x.contaId === "res_documentacao");
+  assert.ok(!par.some((x) => x.contaId === "emp_venda"), "Venda de imóvel não é mexida");
+  assert.strictEqual(v.valor, 6700); assert.strictEqual(r.valor, 6700);
+  assert.strictEqual(r.contaBanco, "nao", "a reserva também não passa pelo banco");
   assert.strictEqual(v.contaBanco, "nao"); assert.strictEqual(r.competencia, "2026-10"); assert.ok(r.conferido);
   assert.strictEqual(M.provisaoReservadaNoEscritorio(l, "obE", "v1"), 6700);
   // de novo, sem mudança: nada novo
@@ -3949,7 +3952,8 @@ teste("provisão de documentação: sai da venda e entra em Documentação Empre
   // grupos: vendas cai 6.700, provisões e reservas sobe 6.700, saldo do banco igual
   const ext = M.extratoEscritorio(l.concat([]), {});
   const out = ext.find((m) => m.mes === "2026-10");
-  assert.strictEqual(out.grupos.reservas, 6700); assert.strictEqual(out.grupos.emp_entradas, -6700);
+  assert.strictEqual(out.grupos.reservas, 6700); assert.strictEqual(out.grupos.emp_saidas, 6700);
+  assert.ok(!out.grupos.emp_entradas, "a venda não é mexida");
   // a provisão mudou para 7.000: um par com a diferença
   const obra2 = { ...obra, vendas: [{ ...venda, provisaoDoc: 7000 }] };
   l = M.provisaoNoEscritorio(l, obra2, cliente, { fechamentos: fech, hoje: "2026-11-05" });

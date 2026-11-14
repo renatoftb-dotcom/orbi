@@ -84,7 +84,7 @@ CASA TESTE (Márcio Viezzer, 2 pavimentos) em 14/11/2026.
 | 7 | Viga com topo no piso de cima (a laje apoia em cima) | é assim que se executa | feito |
 | 8 | Parede de cima sem parede embaixo: viga de piso sob a parede (VP), no nível do piso, apoiada nos pilares ou vigas que encontrar | NBR 6118 exige caminho de carga verificado; sobre laje pré-fabricada a parede de alvenaria praticamente sempre pede viga | feito |
 | 9 | Laje em balanço (beiral de laje além das paredes): espessura ≥ 10 cm e engaste na laje vizinha; pré-fabricada em balanço só com armadura negativa | NBR 6118 13.2.4.1 (maciça); detalhe de balanço | pendente |
-| 10 | Direção das vigotas pelo menor vão de cada painel; vão máximo por tipo de laje (do fabricante) | eficiência e flecha | pendente |
+| 10 | Direção das vigotas pelo menor vão de cada painel (painel = região da laje cercada por vigas; vão teórico entre eixos); a carga da pré-fabricada vai só às vigas onde as vigotas apoiam; maciça com ly/lx ≤ 2 nas duas direções; o usuário pode girar as vigotas da laje (aviso se ficarem no maior vão); vão máximo pela tabela do fabricante | eficiência, flecha e caminho de carga real | feito (vão máximo do fabricante pendente) |
 | 11 | Escada: apoio do patamar e do lance (viga de apoio ou laje da escada nas vigas) e furo da laje com borda apoiada | caminho de carga da escada | pendente |
 | 12 | Elementos sem laje (muro, jardineira): cinta de amarração em vez de viga de 40 | não há carga de laje; economia | pendente |
 | 13 | Vão grande de porta/janela (≥ 2,5 m): viga sobre o vão verificada para flecha e pilares nas ombreiras | vão livre | pendente |
@@ -108,7 +108,44 @@ Do pavimento de cima para o de baixo:
 6. Pilar: reações + peso próprio + pilar de cima no mesmo ponto. O do térreo
    dá a carga na fundação (Nk). Na tela, Nd = 1,4 × Nk × γn.
 
-Limitações desta versão (o dimensionamento vai refinar): área de influência em
-vez de charneiras da NBR 6118 14.7.6; tramos biapoiados em vez de viga
-contínua/pórtico; sem sobrecarga de manutenção do telhado; aberturas não
+Atualização: lajes pelo sentido das vigotas (critério 10) e vigas contínuas
+(14.6.7.1) — reações dos apoios internos maiores, das pontas menores.
+Limitações: maciça em duas direções ainda por área de influência (não pelas
+charneiras/tabelas); vigas sem engaste nos pilares de extremidade; sem sobrecarga de manutenção do telhado; aberturas não
 descontadas do peso das paredes (a favor da segurança).
+
+## Dimensionamento (etapa 4, primeira versão) — `esDimensionar`
+
+Valores em `ES_DIM` (NBR 6118:2023, a conferir no texto oficial).
+
+**Vigas** (`esDimViga`), por tramo da viga contínua:
+- ELU: γf = 1,4 em g e q; sem alternância de q (14.6.7.3, q ≤ 20% do total).
+  Positivo nunca menor que o de engaste perfeito (14.6.7.1).
+- Flexão: bloco retangular 0,8x, x/d ≤ 0,45 (14.6.4.3), As,min pela Tabela 17.3,
+  As ≤ 4% Ac. Negativa nos apoios com a mesma conta. Barras de uma bitola, até 2
+  camadas, espaçamento livre ≥ 20 mm, φ e 1,2 dmáx (brita 1); escolha pela menor
+  área com preferência por poucas barras e uma camada.
+- Cisalhamento: modelo I (17.4.2.2), VRd2 = 0,27 αv2 fcd bw d, Vc = 0,6 fctd bw d,
+  taxa mínima 0,2 fctm/fywk, smáx 0,6d ≤ 30 cm (ou 0,3d ≤ 20 cm).
+- Flecha: quase permanente (ψ2 = 0,3), Branson com Mr = 1,5 fctm Ic/yt e a
+  armadura adotada, Ecs da 8.2.8, fluência αf = 1,32. Limites L/250 total e,
+  com parede em cima (ou baldrame), L/500 e 10 mm depois da parede (Tabela 13.3).
+- Se não passa, diz a menor altura (de 5 em 5 cm) que passa. Não muda o
+  lançamento sozinho: a mudança de seção é decisão de projeto (porta/janela embaixo).
+
+**Pilares** (`esDimPilar`), por lance:
+- Nd = 1,4 γn Nk. Momento mínimo M1d,mín = Nd(0,015 + 0,03h) em cada direção
+  (11.3.3.4.3), le = comprimento do lance, λ1 = 35.
+- λ > 35: 2ª ordem pelo pilar-padrão com curvatura aproximada (15.8.3.3.2);
+  λ > 90 exige método mais preciso (aviso); λ > 140 não pode.
+- Flexo-compressão reta, armadura simétrica nas duas faces, domínios de
+  deformação (εcu 3,5‰, 2‰ a 3h/7). As,mín = 0,15 Nd/fyd ≥ 0,4% Ac; As ≤ 4% Ac.
+- Barras φ ≥ 10 e ≤ b/8, mínimo 4; estribo φ5 (≥ φl/4), s ≤ 20 cm, b e 12φl.
+- Se não passa, cresce no comprimento (dentro da parede) de 5 em 5 cm.
+
+**Aço**: kg por bitola com ganchos, ancoragens e negativas estimados
+(0,25 L para dentro do tramo). O detalhamento (etapa 5) refaz com comprimentos
+de ancoragem e emendas da norma.
+
+**Lajes pré-fabricadas**: dimensionadas pela tabela do fabricante (NBR 14859);
+pendente. Maciça: pendente.

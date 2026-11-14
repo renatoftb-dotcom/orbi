@@ -2184,8 +2184,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const lanc = esLancarPavimentos(lista, estrutura.params);
     lanc.forEach((e, k) => { r[pavsOrd[k].id] = e; });
     // descida de cargas (lajes → vigas → pilares → fundação), guardada à parte para não virar pilar/viga
-    let desc = null; try { desc = esDescidaCargas(lista, lanc, estrutura.params); } catch (err) { desc = null; }
+    let desc = null, dim = null; try { desc = esDescidaCargas(lista, lanc, estrutura.params); dim = esDimensionar(lista, lanc, desc, estrutura.params); } catch (err) { desc = desc || null; }
     Object.defineProperty(r, "_descida", { value: desc, enumerable: false });
+    Object.defineProperty(r, "_dim", { value: dim, enumerable: false });
     Object.defineProperty(r, "_ids", { value: pavsOrd.map((p) => p.id), enumerable: false });
     return r;
   }, [estrutura, paredes, areas, dadosPav, pavimentos, pavAtivo]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2236,9 +2237,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // cargas de cada pilar e viga, por pavimento (descida de cargas)
   const estDescida = useMemo(() => {
     const d = estPorPav._descida; if (!d) return null;
-    const porPav = {}; (estPorPav._ids || []).forEach((id, k) => { porPav[id] = d.pavimentos[k]; });
+    const porPav = {}, dimPav = {}, dm = estPorPav._dim; (estPorPav._ids || []).forEach((id, k) => { porPav[id] = d.pavimentos[k]; if (dm) dimPav[id] = dm.pavimentos[k]; });
     const fund = [...d.fundacao].sort((a, b) => a.id.localeCompare(b.id, "pt-BR", { numeric: true }));
-    return { porPav, fundacao: fund, total: fund.reduce((t, f) => t + f.Nk, 0), avisos: d.pavimentos.flatMap((p) => p.avisos || []) };
+    // peças que não passam no dimensionamento (uma linha por tramo)
+    const falhas = [];
+    if (dm) (estPorPav._ids || []).forEach((id, k) => {
+      const nome = (pavimentos.find((p) => p.id === id) || {}).nome, vistos = new Set();
+      for (const [vid, r] of Object.entries(dm.pavimentos[k].vigas)) { if (r.ok || vistos.has(r.tramo)) continue; vistos.add(r.tramo); falhas.push({ pav: id, pavNome: nome, id: vid, nome: r.tramo.replace(/\+/g, " + "), texto: r.motivos.join("; "), sugestao: r.hMin ? `passa com ${Math.round(r.b * 100)} × ${Math.round(r.hMin * 100)}` : "nem com 80 cm de altura: pede pilar no meio do vão" }); }
+      for (const [pid, r] of Object.entries(dm.pavimentos[k].pilares)) if (!r.ok) falhas.push({ pav: id, pavNome: nome, id: pid, nome: pid, texto: r.motivos.join("; "), sugestao: r.hSugerida ? `passa com ${Math.round(r.b * 100)} × ${Math.round(r.hSugerida * 100)}` : "pede seção mais larga (parede mais grossa)" });
+    });
+    const nV = dm ? dm.pavimentos.reduce((t, p) => t + new Set(Object.values(p.vigas).map((r) => r.tramo)).size, 0) : 0, nP = dm ? dm.pavimentos.reduce((t, p) => t + Object.keys(p.pilares).length, 0) : 0;
+    return { porPav, dimPav, fundacao: fund, total: fund.reduce((t, f) => t + f.Nk, 0), avisos: d.pavimentos.flatMap((p) => p.avisos || []), falhas, nV, nP, aco: dm ? dm.aco : {}, ca50: dm ? dm.ca50 : 0, ca60: dm ? dm.ca60 : 0 };
   }, [estPorPav]);
   // pavimento logo abaixo do ativo (referência em cinza na planta)
   const pavAbaixo = (() => { const k = pavsOrd.findIndex((p) => p.id === pavAtivo); return k > 0 ? pavsOrd[k - 1] : null; })();
@@ -3636,6 +3645,25 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         caminho(esCantosPilar(pl)); ctx.fillStyle = mkP ? TP_AZUL : "#111827"; ctx.fill();
         const [x, y] = T(pl), r = Math.max(pl.b, pl.h) * vista.current.s / 2 + 8 * dpr;
         ctx.fillStyle = mkP ? TP_AZUL : "#111827"; ctx.fillText(pl.id, x + r * 0.8, y - r * 0.8);
+      }
+      // sentido das lajes: seta dupla na direção das vigotas (vão que elas
+      // vencem); maciça em duas direções leva duas setas
+      const pns = estDescida && estDescida.porPav[pavAtivo] ? estDescida.porPav[pavAtivo].paineis || [] : [];
+      const seta = (c, d, Lm) => {
+        const [x0, y0] = T({ x: c.x - d.x * Lm / 2, y: c.y - d.y * Lm / 2 }), [x1, y1] = T({ x: c.x + d.x * Lm / 2, y: c.y + d.y * Lm / 2 });
+        const ang = Math.atan2(y1 - y0, x1 - x0), k = 7 * dpr;
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+        for (const [x, y, a0] of [[x1, y1, ang], [x0, y0, ang + Math.PI]]) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - k * Math.cos(a0 - 0.45), y - k * Math.sin(a0 - 0.45)); ctx.moveTo(x, y); ctx.lineTo(x - k * Math.cos(a0 + 0.45), y - k * Math.sin(a0 + 0.45)); ctx.stroke(); }
+      };
+      ctx.strokeStyle = "#5b8def"; ctx.lineWidth = 1.3 * dpr;
+      for (const pn of pns) {
+        if (pn.area < 1) continue;
+        const Lm = Math.min(1.4, Math.max(0.6, (pn.vao || 1.2) * 0.45)); if (Lm * vista.current.s < 28 * dpr) continue;
+        if (!pn.balanco) { seta(pn.centro, pn.dir, Lm); if (pn.duas) seta(pn.centro, { x: -pn.dir.y, y: pn.dir.x }, Lm); }
+        const txt = pn.balanco ? "laje em balanço" : pn.duas ? "2 direções" : `vão ${tpFmt(pn.vao)}`;
+        const [tx, ty] = T(pn.centro), w = ctx.measureText(txt).width + 6 * dpr, dy = pn.balanco ? 0 : fonteEst * 1.3;
+        ctx.fillStyle = "rgba(255,255,255,0.85)"; ctx.fillRect(tx - w / 2, ty + dy - fonteEst * 0.65, w, fonteEst * 1.3);
+        ctx.fillStyle = "#3b6fd8"; ctx.fillText(txt, tx, ty + dy);
       }
       ctx.restore();
     }
@@ -5633,14 +5661,23 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               return { id, tipo: "Pilar", dados: [["Seção", `${Math.round(pl.b * 100)} × ${Math.round(pl.h * 100)} cm`], ["Área", `${Math.round(pl.b * 100) * Math.round(pl.h * 100)} cm²`], ["Altura", `${tpFmt(H)} m${pl.base ? ` (de ${tpFmt(pl.base)} a ${tpFmt(pl.topo)})` : ""}`], ["Concreto", `${tpFmt(pl.b * pl.h * H, 3)} m³`], ["Vigas apoiadas", vigasNele.join(", ") || "nenhuma"], ...(() => {
                 const n = estDescida && estDescida.porPav[pavAtivo] && estDescida.porPav[pavAtivo].pilares[id]; if (!n) return [];
                 const bcm = Math.round(Math.min(pl.b, pl.h) * 100), gn = bcm < 19 ? ES_NBR.gamaN(bcm) : 1, Nd = 1.4 * (n.Ng + n.Nq) * gn;
-                return [["Carga (Nk)", `${tpFmt(n.Ng + n.Nq, 1)} kN (perm. ${tpFmt(n.Ng, 1)} + uso ${tpFmt(n.Nq, 1)})`], ["Cálculo (Nd)", `${tpFmt(Nd, 1)} kN (1,4${gn > 1 ? ` × γn ${tpFmt(gn)}` : ""})`]];
+                const dp = estDescida.dimPav[pavAtivo] && estDescida.dimPav[pavAtivo].pilares[id];
+                return [["Carga (Nk)", `${tpFmt(n.Ng + n.Nq, 1)} kN (perm. ${tpFmt(n.Ng, 1)} + uso ${tpFmt(n.Nq, 1)})`], ["Cálculo (Nd)", `${tpFmt(Nd, 1)} kN (1,4${gn > 1 ? ` × γn ${tpFmt(gn)}` : ""})`],
+                  ...(dp ? [["Esbeltez", `λ ${dp.direcoes.map((x) => Math.round(x.lam)).join(" / ")}`], ["Momento (Md)", `${dp.direcoes.map((x) => tpFmt(x.Md, 1)).join(" / ")} kN·m`],
+                    ["Armadura", dp.barras ? `${dp.barras.n} φ${esFmtBit(dp.barras.d)}${dp.estribo ? ` · estribo φ${esFmtBit(dp.estribo.d)} c/${Math.round(dp.estribo.s * 100)}` : ""}` : "—"],
+                    ["Situação", dp.ok ? "atende (NBR 6118)" : `não atende: ${dp.motivos.join("; ")}${dp.hSugerida ? ` — passa com ${Math.round(dp.b * 100)} × ${Math.round(dp.hSugerida * 100)}` : ""}`]] : [])];
               })(), ...(pl.deslocado ? [["Ajuste", `deslocado ${tpFmt(pl.deslocado * 100, 0)} cm para sair de porta/janela`]] : [])] };
             }
             if (v) {
               const Lv = Math.hypot(v.b.x - v.a.x, v.b.y - v.a.y);
               return { id, tipo: v.baldrame ? "Baldrame" : v.vigaPiso ? "Viga de piso" : "Viga", dados: [...(v.vigaPiso ? [["Função", `apoia a parede ${v.sobPavimento ? `do ${v.sobPavimento} ` : "de cima "}que não tem parede embaixo`]] : []), ["Seção", `${Math.round(v.b_ * 100)} × ${Math.round(v.h * 100)} cm`], ["Vão", `${tpFmt(Lv)} m`], ["Apoios", `${v.apoioA || "viga"} — ${v.apoioB || "viga"}`], ["Topo", `${tpFmt(v.baldrame ? 0 : v.topo)} m`], ["Concreto", `${tpFmt(v.b_ * v.h * Lv, 3)} m³`], ...(() => {
                 const c = estDescida && estDescida.porPav[pavAtivo] && estDescida.porPav[pavAtivo].vigas[id]; if (!c) return [];
-                return [["Carga", `${tpFmt(c.g + c.q, 1)} kN/m (perm. ${tpFmt(c.g, 1)} + uso ${tpFmt(c.q, 1)})`], ...(c.tramo.includes("+") ? [["Tramo", `${c.tramo.replace(/\+/g, " + ")} (${tpFmt(c.L)} m)`]] : []), ["Reações", `${tpFmt(c.RA.g + c.RA.q, 1)} kN (${c.apoioA || "viga"}) · ${tpFmt(c.RB.g + c.RB.q, 1)} kN (${c.apoioB || "viga"})`]];
+                return [["Carga", `${tpFmt(c.g + c.q, 1)} kN/m (perm. ${tpFmt(c.g, 1)} + uso ${tpFmt(c.q, 1)})`], ...(c.tramo.includes("+") ? [["Tramo", `${c.tramo.replace(/\+/g, " + ")} (${tpFmt(c.L)} m)`]] : []), ["Reações", `${tpFmt(c.RA.g + c.RA.q, 1)} kN (${c.apoioA || "viga"}) · ${tpFmt(c.RB.g + c.RB.q, 1)} kN (${c.apoioB || "viga"})`],
+                  ...(() => { const dv = estDescida.dimPav[pavAtivo] && estDescida.dimPav[pavAtivo].vigas[id]; if (!dv) return [];
+                    return [["Momento (Md)", `+${tpFmt(dv.Md, 1)}${dv.Mneg > 0.5 ? ` / −${tpFmt(dv.Mneg, 1)}` : ""} kN·m`], ["Embaixo", dv.barras ? `${dv.barras.n} φ${esFmtBit(dv.barras.d)}${dv.barras.camadas > 1 ? " (2 camadas)" : ""}` : "—"],
+                      ["Em cima", dv.barrasNeg ? `${dv.barrasNeg.n} φ${esFmtBit(dv.barrasNeg.d)} nos apoios` : "2 φ6,3 (porta-estribo)"], ["Estribo", dv.estribo ? `φ${esFmtBit(dv.estribo.d)} c/${Math.round(dv.estribo.s * 100)}` : "—"],
+                      ["Flecha", `${tpFmt(dv.flecha.total * 100, 1)} cm (limite ${tpFmt(dv.flecha.lim * 100, 1)})`],
+                      ["Situação", dv.ok ? `atende (NBR 6118)${dv.hMin && dv.hMin < dv.h - 1e-9 ? ` — bastaria ${Math.round(dv.b * 100)} × ${Math.round(dv.hMin * 100)}` : ""}` : `não atende: ${dv.motivos.join("; ")}${dv.hMin ? ` — passa com ${Math.round(dv.b * 100)} × ${Math.round(dv.hMin * 100)}` : ""}`]]; })()];
               })()] };
             }
             return { id, tipo: "Peça", dados: [["", "não encontrada (a estrutura mudou)"]] };
@@ -5998,7 +6035,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               // a escolha fica gravada; laje pré-fabricada leva a espessura (enchimento + capa) junto
               const mudar = (patch) => editarAreas(selA, (a) => {
                 const c0 = esCargaLaje(a, usoPadraoLaje);
-                const carga = { tipo: c0.tipo, uso: c0.uso, revPiso: c0.revPiso, forro: c0.forro, ...(c0.pre ? { ench: c0.pre.ench, he: c0.pre.he, capa: c0.pre.capa, intereixo: c0.pre.intereixo } : {}), ...(a.carga && a.carga.pp != null ? { pp: a.carga.pp } : {}), ...patch };
+                const carga = { tipo: c0.tipo, uso: c0.uso, revPiso: c0.revPiso, forro: c0.forro, ...(c0.pre ? { ench: c0.pre.ench, he: c0.pre.he, capa: c0.pre.capa, intereixo: c0.pre.intereixo } : {}), ...(a.carga && a.carga.pp != null ? { pp: a.carga.pp } : {}), ...(a.carga && a.carga.vigotas ? { vigotas: a.carga.vigotas } : {}), ...patch };
                 if (patch.tipo && patch.tipo !== c0.tipo) { delete carga.he; delete carga.intereixo; }
                 if (!c0.pre || !("he" in patch || "capa" in patch)) { if (!("he" in patch)) delete carga.he; }
                 const c1 = esCargaLaje({ ...a, carga }, usoPadraoLaje);
@@ -6017,6 +6054,15 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                   </select>
                 </div>
                 {preTodas && (<>
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <label htmlFor="tp-l-vig" style={lblCarga}>Sentido das vigotas</label>
+                    <select id="tp-l-vig" value={igualEm(selA, (i) => (areas[i].carga || {}).vigotas || "auto") || ""} onChange={(e) => mudar({ vigotas: e.target.value })} style={selCarga}>
+                      {!igualEm(selA, (i) => (areas[i].carga || {}).vigotas || "auto") && <option value="">vários</option>}
+                      <option value="auto">No menor vão de cada painel (recomendado)</option>
+                      <option value="u">Todas na horizontal da planta</option>
+                      <option value="v">Todas na vertical da planta</option>
+                    </select>
+                  </div>
                   <div style={{ gridColumn: "1 / -1" }}>
                     <label htmlFor="tp-l-ench" style={lblCarga}>Enchimento</label>
                     <select id="tp-l-ench" value={igualEm(pres, (q) => q.ench) || ""} onChange={(e) => mudar({ ench: e.target.value })} style={selCarga}>
@@ -6476,6 +6522,23 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                   })}
                   {estDescida.avisos.length > 0 && <div style={{ fontSize: 11.5, color: "#b45309", padding: "4px 0" }}>{[...new Set(estDescida.avisos)].join(" ")}</div>}
                   <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>Nk = permanente + uso, característica, no topo da fundação. Nd = 1,4 × Nk (× γn nos pilares abaixo de 19 cm). Lajes repartidas pelas áreas de influência e vigas biapoiadas: pré-cálculo para o dimensionamento.</div>
+                </>)}
+                {estDescida && estDescida.nV > 0 && grupoQ("est-d", "Dimensionamento (NBR 6118)", estDescida.falhas.length ? `${estDescida.falhas.length} não atende${estDescida.falhas.length === 1 ? "" : "m"}` : "tudo atende")}
+                {estDescida && estDescida.nV > 0 && !qFechado("est-d") && (<>
+                  <div style={{ fontSize: 11.5, color: "#6b7280", padding: "4px 0" }}>{estDescida.nV} trechos de viga e {estDescida.nP} lances de pilar verificados.</div>
+                  {estDescida.falhas.map((f, k) => (
+                    <button key={k} onClick={() => { if (f.pav !== pavAtivo) irParaPav(f.pav); setSel(["e" + f.id]); const e0 = estPorPav[f.pav], pc = e0 && (e0.pilares.find((x) => x.id === f.id) || e0.vigas.find((x) => x.id === f.id)); if (pc) { const pt = pc.no || { x: (pc.a.x + pc.b.x) / 2, y: (pc.a.y + pc.b.y) / 2 }; setFocoEst({ x: pt.x, y: pt.y, t: Date.now() }); } if (isMobile) setMenuAberto(false); }}
+                      style={{ display: "block", width: "100%", textAlign: "left", border: "none", borderBottom: "1px solid #f0f2f5", background: "none", padding: "5px 0", cursor: "pointer", fontFamily: "inherit" }}>
+                      <span style={{ fontSize: 10.5, fontWeight: 600, color: "#b91c1c", marginRight: 6 }}>{f.nome}</span>
+                      <span style={{ fontSize: 12.5, color: "#374151", lineHeight: 1.4 }}>{f.texto}</span>
+                      <span style={{ display: "block", fontSize: 11, color: "#9ca3af", marginTop: 1 }}>{[pavimentos.length > 1 ? f.pavNome : null, f.sugestao].filter(Boolean).join(" · ")}</span>
+                    </button>
+                  ))}
+                  {linhaTab("Aço CA-50", tpFmt(estDescida.ca50, 0), "kg")}
+                  {linhaTab("Aço CA-60 (estribo φ5)", tpFmt(estDescida.ca60, 0), "kg")}
+                  {Object.entries(estDescida.aco).sort((a, b) => +a[0] - +b[0]).map(([d, kg]) => <div key={d}>{linhaTab(`φ ${esFmtBit(+d)} mm`, tpFmt(kg, 0), "kg", true)}</div>)}
+                  {estQtd.concreto > 0 && linhaTab("Taxa (vigas e pilares)", `${tpFmt((estDescida.ca50 + estDescida.ca60) / Math.max(0.001, estQtd.pilares.concreto + estQtd.vigas.concreto + estQtd.baldrames.concreto), 0)} kg/m³`, "")}
+                  <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>Vigas contínuas apoiadas nos pilares (14.6.7.1), flexão, cisalhamento (modelo I) e flecha com fissuração e fluência. Pilares com momento mínimo e 2ª ordem pelo pilar-padrão (15.8.3.3.2). Aço com ganchos e ancoragens estimados; o detalhamento vem depois. Lajes pré-fabricadas: pela tabela do fabricante.</div>
                 </>)}
                 {grupoQ("est-p", "Parâmetros", `C${P.fck} · CAA ${["", "I", "II", "III", "IV"][P.caa]}`)}
                 {!qFechado("est-p") && (
