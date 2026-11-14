@@ -82,24 +82,43 @@ function esFckOk(params) {
 // ---------- nós da rede de paredes ----------
 // Agrupa pontas próximas e acha encontros em T (ponta de uma parede no meio
 // de outra). Cada nó guarda as direções das paredes que chegam nele.
+// No Projetar uma parede pode terminar no eixo da outra ou encostada na face
+// dela (meia espessura antes): as duas contam como o mesmo encontro, e o nó vai
+// para o cruzamento dos eixos — é ali que fica o pilar.
 function esNos(paredes, tol = 0.06) {
   const nos = [];
-  const achar = (p) => nos.find((n) => esDist(n, p) <= tol);
   const ws = paredes.map((w, i) => ({ ...w, i })).filter((w) => esLen(w) > 1e-6);
+  // até uma espessura de parede de folga: ponta que parou um pouco antes da
+  // outra parede (desenho impreciso) também é encontro
+  const tolW = (w) => Math.max(tol, (w.t || 0) + 0.01);
   for (const w of ws) for (const f of ["a", "b"]) {
     const p = w[f], o = f === "a" ? w.b : w.a, L = esLen(w);
-    let n = achar(p); if (!n) { n = { x: p.x, y: p.y, dirs: [], paredes: [] }; nos.push(n); }
-    n.dirs.push({ x: (o.x - p.x) / L, y: (o.y - p.y) / L, i: w.i, curva: w.curva || null });
-    n.paredes.push(w.i);
+    let n = nos.find((m) => esDist(m, p) <= tolW(w));
+    if (!n) { n = { x: p.x, y: p.y, dirs: [], paredes: [], pts: [] }; nos.push(n); }
+    n.dirs.push({ x: (o.x - p.x) / L, y: (o.y - p.y) / L, i: w.i, curva: w.curva || null, p });
+    n.paredes.push(w.i); n.pts.push(p);
   }
-  // encontros em T: ponta de uma parede sobre o eixo de outra
+  // pontas juntadas: o nó vai para o cruzamento dos eixos das duas primeiras
+  // paredes não paralelas
+  for (const n of nos) {
+    const ds = n.dirs; let feito = false;
+    for (let a = 0; a < ds.length && !feito; a++) for (let b = a + 1; b < ds.length && !feito; b++) {
+      const d1 = ds[a], d2 = ds[b], cr = d1.x * d2.y - d1.y * d2.x; if (Math.abs(cr) < 0.17) continue; // quase paralelas
+      const p1 = d1.p, p2 = d2.p, t = ((p2.x - p1.x) * d2.y - (p2.y - p1.y) * d2.x) / cr;
+      const q = { x: p1.x + d1.x * t, y: p1.y + d1.y * t };
+      if (esDist(q, n) <= 0.2) { n.x = q.x; n.y = q.y; feito = true; }
+    }
+  }
+  // encontros em T: ponta de uma parede no eixo de outra ou encostada na face
+  // dela; o nó vai para o eixo da parede que passa
   for (const n of nos) for (const w of ws) {
     if (n.paredes.includes(w.i)) continue;
     const L = esLen(w), ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
     const s = (n.x - w.a.x) * ux + (n.y - w.a.y) * uy, d = Math.abs((n.x - w.a.x) * -uy + (n.y - w.a.y) * ux);
-    if (s > tol && s < L - tol && d <= Math.max(tol, (w.t || 0) / 2)) {
+    if (s > tol && s < L - tol && d <= tolW(w)) {
       n.dirs.push({ x: ux, y: uy, i: w.i, passa: true }, { x: -ux, y: -uy, i: w.i, passa: true });
       n.paredes.push(w.i); n.emT = true;
+      n.x = w.a.x + ux * s; n.y = w.a.y + uy * s;
     }
   }
   return nos;
@@ -137,22 +156,36 @@ function esLancar(paredes, areas, params, opts = {}) {
   const ws = (paredes || []).filter((w) => esLen(w) > 0.05);
   const nos = esNos(ws);
   const pilares = [];
-  const juntar = (p, ang) => {
-    if (pilares.some((q) => esDist(q, p) < Math.max(pil.h, 0.3))) return;
-    pilares.push({ x: esR3(p.x), y: esR3(p.y), b: pil.b, h: pil.h, ang: esR3(ang) });
+  // no = ponto da rede de paredes onde o pilar está (é por ele que as vigas
+  // se apoiam); x,y = centro da seção, que pode ser deslocado do nó para o
+  // pilar ficar dentro da parede
+  const juntar = (no, ang, desl = 0) => {
+    if (pilares.some((q) => esDist(q.no, no) < Math.max(pil.h, 0.3))) return;
+    const c = { x: no.x + Math.cos(ang) * desl, y: no.y + Math.sin(ang) * desl };
+    pilares.push({ x: esR3(c.x), y: esR3(c.y), b: pil.b, h: pil.h, ang: esR3(ang), no: { x: esR3(no.x), y: esR3(no.y) } });
   };
   // 1) cantos, encontros e pontas
   for (const n of nos) {
     if (!esNoPedePilar(n)) continue;
-    // lado maior na direção da parede mais comprida que chega no nó
-    let melhor = n.dirs[0], Lm = -1;
-    for (const d of n.dirs) { const L = esLen(ws[d.i]); if (L > Lm) { Lm = L; melhor = d; } }
-    juntar(n, Math.atan2(melhor.y, melhor.x));
+    // lado maior ao longo de uma parede que atravessa o nó (encontro em T ou
+    // cruz); não havendo, ao longo da parede mais comprida que chega nele
+    const passa = (d) => n.dirs.some((o) => o !== d && o.x * d.x + o.y * d.y < -0.985);
+    let melhor = null, Lm = -1;
+    for (const d of n.dirs) { const L = esLen(ws[d.i]) + (passa(d) ? 1e6 : 0); if (L > Lm) { Lm = L; melhor = d; } }
+    // sem parede do outro lado (canto ou ponta), o pilar entra na parede para
+    // não sair pela face de fora: a ponta dele para na face da parede que cruza
+    let desl = 0;
+    if (!passa(melhor)) {
+      const outras = n.dirs.filter((d) => d !== melhor);
+      const meiaEsp = outras.length ? Math.max(...outras.map((d) => (ws[d.i].t || 0) / 2)) : 0;
+      desl = Math.max(0, pil.h / 2 - meiaEsp);
+    }
+    juntar(n, Math.atan2(melhor.y, melhor.x), desl);
   }
   // 2) pilares intermediários onde o trecho entre pilares passa do vão máximo
   const naParede = (w) => {
     const L = esLen(w), ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
-    return pilares.map((p) => ({ p, s: (p.x - w.a.x) * ux + (p.y - w.a.y) * uy, d: Math.abs((p.x - w.a.x) * -uy + (p.y - w.a.y) * ux) }))
+    return pilares.map((p) => { const q = p.no || p; return { p, s: (q.x - w.a.x) * ux + (q.y - w.a.y) * uy, d: Math.abs((q.x - w.a.x) * -uy + (q.y - w.a.y) * ux) }; })
       .filter((q) => q.d <= Math.max(0.1, (w.t || 0) / 2 + 0.02) && q.s > -0.1 && q.s < L + 0.1).sort((a, b) => a.s - b.s);
   };
   for (const w of ws) {

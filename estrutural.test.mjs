@@ -39,7 +39,7 @@ t("nós: 4 cantos + 2 encontros em T", () => {
 t("lançamento (vão 6 m): 6 pilares nos cantos e encontros", () => {
   const e = M.esLancar(casa, [], V6);
   assert.strictEqual(e.pilares.length, 6);
-  const ids = e.pilares.map((p) => `${p.x},${p.y}`).sort();
+  const ids = e.pilares.map((p) => `${p.no.x},${p.no.y}`).sort();
   assert.deepStrictEqual(ids, ["0,0", "0,6", "5,0", "5,6", "8,0", "8,6"].sort());
 });
 t("lançamento (vão 6 m): vigas entre pilares (5 + 3 em cima e embaixo, 6 nas laterais e no meio)", () => {
@@ -47,6 +47,16 @@ t("lançamento (vão 6 m): vigas entre pilares (5 + 3 em cima e embaixo, 6 nas l
   const comp = e.vigas.map((v) => Math.round(Math.hypot(v.b.x - v.a.x, v.b.y - v.a.y) * 100) / 100).sort((a, b) => a - b);
   assert.deepStrictEqual(comp, [3, 3, 5, 5, 6, 6, 6]);
   assert.ok(e.vigas.every((v) => v.apoioA && v.apoioB));
+});
+t("pilar não sai da parede: cantos entram na parede, T fica ao longo da parede que passa", () => {
+  const dentro = (q) => casa.some((w) => {
+    const L = Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y), ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
+    const s = (q.x - w.a.x) * ux + (q.y - w.a.y) * uy, d = (q.x - w.a.x) * -uy + (q.y - w.a.y) * ux;
+    return s >= -w.t / 2 - 1e-4 && s <= L + w.t / 2 + 1e-4 && Math.abs(d) <= w.t / 2 + 1e-4;
+  });
+  for (const p of M.esLancar(casa, [], V6).pilares) for (const c of M.esCantosPilar(p)) assert.ok(dentro(c), `${p.id} sai da parede em ${c.x.toFixed(3)},${c.y.toFixed(3)}`);
+  // pilar 14 × 40 também
+  for (const p of M.esLancar(casa, [], { ...V6, pilar: { b: 0.14, h: 0.40 } }).pilares) for (const c of M.esCantosPilar(p)) assert.ok(dentro(c), `${p.id} (14×40) sai da parede`);
 });
 t("baldrames só quando pedido", () => {
   assert.strictEqual(M.esLancar(casa, [], V6, { baldrames: true }).vigas.filter((v) => v.baldrame).length, 7);
