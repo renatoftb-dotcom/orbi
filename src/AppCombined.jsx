@@ -7263,6 +7263,8 @@ if (typeof window !== "undefined") {
 // LOC-050/LOC-051 (longe de LOC-029..032, que semeaduras antigas distribuíram
 // ao recodificar). Saíram LOC-012 (Betoneira) e LOC-018 (Container), repetidos
 // de LOC-005/LOC-004. O gerador precisa da mesma correção.
+// Inclusão à mão (nov/2026): ACO-035 (CA50 25 mm), pedido pelo cálculo
+// estrutural do Projetar (o 20 mm já existe: ACO-016). O gerador precisa incluí-lo.
 // ═══════════════════════════════════════════════════════════════
 
 var INSUMOS_SEED_CADASTRO = [
@@ -8050,6 +8052,7 @@ var INSUMOS_SEED_CADASTRO = [
   { codigo:"TIN-033", nome:"tintas - Cetol Deck", grupo:"Tintas", unidade:"Unidades", tipo:"material", precoReferencia:429.93, precoFonte:"compra_corrigida", precoData:"2024-11-20", precoNCompras:10, precoFatorInccAplicado:1.1317, aliases:["tintas - Cetol Deck"], observacao:"última compra fora da faixa; usada a mediana das 5 últimas" },
   { codigo:"TIN-034", nome:"tintas - Palha de aço", grupo:"Tintas", unidade:"Unidades", tipo:"material", precoReferencia:2.23, precoFonte:"compra_corrigida", precoData:"2025-09-10", precoNCompras:2, precoFatorInccAplicado:1.0769, aliases:["tintas - Palha de aço"] },
   { codigo:"TIN-035", nome:"tintas - Suporte para Rolo 23cm", grupo:"Tintas", unidade:"Unidades", tipo:"material", precoReferencia:14.65, precoFonte:"compra_corrigida", precoData:"2024-07-23", precoNCompras:6, precoFatorInccAplicado:1.1551, aliases:["tintas - Suporte para Rolo 23cm"] },
+  { codigo:"ACO-035", nome:"Aço - Barras de CA50 25mm 12mts", grupo:"Aço", unidade:"Unidades", tipo:"material", precoReferencia:244.92, precoFonte:"mercado", precoData:"2026-07-30", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Aço - Barras de CA50 25mm 12mts", "Aço - Barras de CA50 25.0mm 12mts"], observacao:"Nunca comprado: R$ 5.30/kg da última compra de CA50 10 mm (jul/2026, ACO-001) × 46.24 kg da barra (NBR 7480). Entrou para o cálculo estrutural do Projetar (nov/2026); confirme com o fornecedor." },
 ];
 
 
@@ -26241,6 +26244,8 @@ const PESOS_FERRO = {
   CA50_10MM: 7.56,
   CA50_12MM: 11.56,
   CA50_16MM: 18.94,
+  CA50_20MM: 29.59, // 2,466 kg/m × 12 m (NBR 7480)
+  CA50_25MM: 46.24, // 3,853 kg/m × 12 m (NBR 7480)
   CA60_5MM: 1.92,
 };
 
@@ -26423,9 +26428,11 @@ const LABEL_BARRA = {
   CA50_10MM: "Aço - Barras de CA50 10.0mm 12mts",
   CA50_12MM: "Aço - Barras de CA50 12.5mm 12mts",
   CA50_16MM: "Aço - Barras de CA50 16mm 12mts",
+  CA50_20MM: "Aço - Barras de CA50 20.0mm 12mts",
+  CA50_25MM: "Aço - Barras de CA50 25mm 12mts",
   CA60_5MM: "Aço - Barras de CA60 5.0mm 12mts",
 };
-// Emite as 8 bitolas padrão, na ordem do PESOS_FERRO — usado pelos módulos
+// Emite as bitolas padrão (todas as de PESOS_FERRO), na ordem do PESOS_FERRO — usado pelos módulos
 // que apenas somam elementos e emitem o conjunto completo (fundação, arrimo,
 // piscina). Módulos com bitolas ausentes/tratamento especial (paredesTerreo,
 // paredesPav1, supraCobertura) emitem manualmente, sem este helper.
@@ -26894,6 +26901,8 @@ function paredesTerreo(cp, out) {
   const ca50_10mm = teto(cp.ca50_10mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
   const ca50_12mm = teto(cp.ca50_12mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
   const ca50_16mm = teto(cp.ca50_16mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
+  const ca50_20mm = teto(cp.ca50_20mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
+  const ca50_25mm = teto(cp.ca50_25mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
   const ca60_5mm = teto(cp.ca60_5mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
 
   // Soma dos pesos SEM ceiling — o .bas guarda isso num Double cru, só o
@@ -26905,7 +26914,7 @@ function paredesTerreo(cp, out) {
     ca50_8mm * PESOS_FERRO.CA50_8MM +
     ca50_10mm * PESOS_FERRO.CA50_10MM +
     ca50_12mm * PESOS_FERRO.CA50_12MM +
-    ca50_16mm * PESOS_FERRO.CA50_16MM +
+    ca50_16mm * PESOS_FERRO.CA50_16MM + ca50_20mm * PESOS_FERRO.CA50_20MM + ca50_25mm * PESOS_FERRO.CA50_25MM +
     ca60_5mm * PESOS_FERRO.CA60_5MM;
 
   const arameColunasBruto = pesoFerroColunas * 0.06 * PERDA;
@@ -26944,6 +26953,8 @@ function paredesTerreo(cp, out) {
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 10.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_10mm, memoria: memoriaBitolaSimples("CA50_10MM", cp.ca50_10mmColunaTerreo, ca50_10mm, "nas colunas do térreo") });
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 12.5mm 12mts", unidade: "Barras 12mts", qtd: ca50_12mm, memoria: memoriaBitolaSimples("CA50_12MM", cp.ca50_12mmColunaTerreo, ca50_12mm, "nas colunas do térreo") });
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 16mm 12mts", unidade: "Barras 12mts", qtd: ca50_16mm, memoria: memoriaBitolaSimples("CA50_16MM", cp.ca50_16mmColunaTerreo, ca50_16mm, "nas colunas do térreo") });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 20.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_20mm, memoria: memoriaBitolaSimples("CA50_20MM", cp.ca50_20mmColunaTerreo, ca50_20mm, "nas colunas do térreo") });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 25mm 12mts", unidade: "Barras 12mts", qtd: ca50_25mm, memoria: memoriaBitolaSimples("CA50_25MM", cp.ca50_25mmColunaTerreo, ca50_25mm, "nas colunas do térreo") });
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA60 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca60_5mm, memoria: memoriaBitolaSimples("CA60_5MM", cp.ca60_5mmColunaTerreo, ca60_5mm, "nas colunas do térreo") });
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Arame Recozido", unidade: "KG", qtd: arameColunas, memoria: MEMB.arameDoPeso(pesoFerroColunas, arameColunasBruto, arameColunas) });
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Pregos 18x27", unidade: "KG", qtd: pregos18x27, memoria: MEMB.pregoDoArame(arameColunas, pregos18x27Bruto, pregos18x27) });
@@ -27309,10 +27320,12 @@ function vigaRespaldoLajeTerreo(cp, out) {
   const ca50_10mm = teto(ferro.CA50_10MM / BARRA_FERRO_MTS * PERDA);
   const ca50_12mm = teto(ferro.CA50_12MM / BARRA_FERRO_MTS * PERDA);
   const ca50_16mm = teto(ferro.CA50_16MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_20mm = teto(ferro.CA50_20MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_25mm = teto(ferro.CA50_25MM / BARRA_FERRO_MTS * PERDA);
   const ca60_5mm = teto(ferro.CA60_5MM / BARRA_FERRO_MTS * PERDA);
   const peso = ca60_4mm * PESOS_FERRO.CA60_4MM + ca50_5mm * PESOS_FERRO.CA50_5MM + ca50_6mm * PESOS_FERRO.CA50_6MM +
     ca50_8mm * PESOS_FERRO.CA50_8MM + ca50_10mm * PESOS_FERRO.CA50_10MM + ca50_12mm * PESOS_FERRO.CA50_12MM +
-    ca50_16mm * PESOS_FERRO.CA50_16MM + ca60_5mm * PESOS_FERRO.CA60_5MM;
+    ca50_16mm * PESOS_FERRO.CA50_16MM + ca50_20mm * PESOS_FERRO.CA50_20MM + ca50_25mm * PESOS_FERRO.CA50_25MM + ca60_5mm * PESOS_FERRO.CA60_5MM;
   const arameBruto = peso * 0.06 * PERDA;
   const arame = teto(arameBruto);
   const pregoBruto = arame * 0.55;
@@ -27342,7 +27355,7 @@ function vigaRespaldoLajeTerreo(cp, out) {
   const escorasLojeMacicaBruto = t.areaLojeMacica * mesesEscoras * PERDA;
   const escorasLojeMacica = teto(escorasLojeMacicaBruto);
 
-  const memViga = (k) => memoriaBitolaSimples(k, ferro[k], { CA60_4MM: ca60_4mm, CA50_5MM: ca50_5mm, CA50_6MM: ca50_6mm, CA50_8MM: ca50_8mm, CA50_10MM: ca50_10mm, CA50_12MM: ca50_12mm, CA50_16MM: ca50_16mm, CA60_5MM: ca60_5mm }[k], "na viga de respaldo do térreo");
+  const memViga = (k) => memoriaBitolaSimples(k, ferro[k], { CA60_4MM: ca60_4mm, CA50_5MM: ca50_5mm, CA50_6MM: ca50_6mm, CA50_8MM: ca50_8mm, CA50_10MM: ca50_10mm, CA50_12MM: ca50_12mm, CA50_16MM: ca50_16mm, CA50_20MM: ca50_20mm, CA50_25MM: ca50_25mm, CA60_5MM: ca60_5mm }[k], "na viga de respaldo do térreo");
   const memEscoras = (area, bruto, valor) => [
     MEM.nota(`Escoras alugadas por mês: ${mesesEscoras} ${mesesEscoras === 1 ? "mês" : "meses"} de escoramento (${sobradoEsc ? "sobrado: a laje do térreo fica escorada enquanto sobem as paredes do andar de cima" : "obra térrea: o tempo da própria laje"}).${t.tipoLoje === "Protendida" ? " Laje protendida usa 0,6 escora por m², menos que a treliçada." : ""}`),
     MEM.dado("Meses de escora", mesesEscoras, "meses", origemMesesEscoras),
@@ -27377,6 +27390,8 @@ function vigaRespaldoLajeTerreo(cp, out) {
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA50 10.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_10mm, memoria: memViga("CA50_10MM") });
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA50 12.5mm 12mts", unidade: "Barras 12mts", qtd: ca50_12mm, memoria: memViga("CA50_12MM") });
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA50 16mm 12mts", unidade: "Barras 12mts", qtd: ca50_16mm, memoria: memViga("CA50_16MM") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA50 20.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_20mm, memoria: memViga("CA50_20MM") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA50 25mm 12mts", unidade: "Barras 12mts", qtd: ca50_25mm, memoria: memViga("CA50_25MM") });
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA60 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca60_5mm, memoria: memViga("CA60_5MM") });
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Arame Recozido", unidade: "KG", qtd: arame, memoria: MEMB.arameDoPeso(peso, arameBruto, arame) });
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego, memoria: MEMB.pregoDoArame(arame, pregoBruto, prego) });
@@ -27536,10 +27551,12 @@ function paredesPav1(cp, out) {
   const ca50_10mm = teto(ferro.CA50_10MM / BARRA_FERRO_MTS * PERDA);
   const ca50_12mm = teto(ferro.CA50_12MM / BARRA_FERRO_MTS * PERDA);
   const ca50_16mm = teto(ferro.CA50_16MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_20mm = teto(ferro.CA50_20MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_25mm = teto(ferro.CA50_25MM / BARRA_FERRO_MTS * PERDA);
   const ca60_5mm = teto(ferro.CA60_5MM / BARRA_FERRO_MTS * PERDA);
   const pesoFerroColunas = ca60_4mm * PESOS_FERRO.CA60_4MM + ca50_5mm * PESOS_FERRO.CA50_5MM + ca50_6mm * PESOS_FERRO.CA50_6MM +
     ca50_8mm * PESOS_FERRO.CA50_8MM + ca50_10mm * PESOS_FERRO.CA50_10MM + ca50_12mm * PESOS_FERRO.CA50_12MM +
-    ca50_16mm * PESOS_FERRO.CA50_16MM + ca60_5mm * PESOS_FERRO.CA60_5MM;
+    ca50_16mm * PESOS_FERRO.CA50_16MM + ca50_20mm * PESOS_FERRO.CA50_20MM + ca50_25mm * PESOS_FERRO.CA50_25MM + ca60_5mm * PESOS_FERRO.CA60_5MM;
   const arameColunasBruto = pesoFerroColunas * 0.06 * PERDA;
   const arameColunas = teto(arameColunasBruto);
   const pregos18x27Bruto = arameColunas * 0.55;
@@ -27573,6 +27590,8 @@ function paredesPav1(cp, out) {
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 10.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_10mm, memoria: memoriaBitolaSimples("CA50_10MM", ferro.CA50_10MM, ca50_10mm, "nas colunas do pav. 1") });
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 12.5mm 12mts", unidade: "Barras 12mts", qtd: ca50_12mm, memoria: memoriaBitolaSimples("CA50_12MM", ferro.CA50_12MM, ca50_12mm, "nas colunas do pav. 1") });
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 16mm 12mts", unidade: "Barras 12mts", qtd: ca50_16mm, memoria: memoriaBitolaSimples("CA50_16MM", ferro.CA50_16MM, ca50_16mm, "nas colunas do pav. 1") });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 20.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_20mm, memoria: memoriaBitolaSimples("CA50_20MM", ferro.CA50_20MM, ca50_20mm, "nas colunas do pav. 1") });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 25mm 12mts", unidade: "Barras 12mts", qtd: ca50_25mm, memoria: memoriaBitolaSimples("CA50_25MM", ferro.CA50_25MM, ca50_25mm, "nas colunas do pav. 1") });
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA60 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca60_5mm, memoria: memoriaBitolaSimples("CA60_5MM", ferro.CA60_5MM, ca60_5mm, "nas colunas do pav. 1") });
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Arame Recozido", unidade: "KG", qtd: arameColunas, memoria: MEMB.arameDoPeso(pesoFerroColunas, arameColunasBruto, arameColunas) });
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Pregos 18x27", unidade: "KG", qtd: pregos18x27, memoria: MEMB.pregoDoArame(arameColunas, pregos18x27Bruto, pregos18x27) });
@@ -27600,9 +27619,11 @@ function vigaRespaldoLajePav1(cp, out) {
   const ca50_10mm = teto(ferro.CA50_10MM / BARRA_FERRO_MTS * PERDA);
   const ca50_12mm = teto(ferro.CA50_12MM / BARRA_FERRO_MTS * PERDA);
   const ca50_16mm = teto(ferro.CA50_16MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_20mm = teto(ferro.CA50_20MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_25mm = teto(ferro.CA50_25MM / BARRA_FERRO_MTS * PERDA);
   const ca60_5mm = teto(ferro.CA60_5MM / BARRA_FERRO_MTS * PERDA);
   const peso = ca50_5mm * PESOS_FERRO.CA50_5MM + ca50_6mm * PESOS_FERRO.CA50_6MM + ca50_8mm * PESOS_FERRO.CA50_8MM +
-    ca50_10mm * PESOS_FERRO.CA50_10MM + ca50_12mm * PESOS_FERRO.CA50_12MM + ca50_16mm * PESOS_FERRO.CA50_16MM + ca60_5mm * PESOS_FERRO.CA60_5MM;
+    ca50_10mm * PESOS_FERRO.CA50_10MM + ca50_12mm * PESOS_FERRO.CA50_12MM + ca50_16mm * PESOS_FERRO.CA50_16MM + ca50_20mm * PESOS_FERRO.CA50_20MM + ca50_25mm * PESOS_FERRO.CA50_25MM + ca60_5mm * PESOS_FERRO.CA60_5MM;
   const arameBruto = peso * 0.06 * PERDA;
   const arame = teto(arameBruto);
   const pregoBruto = arame * 0.55;
@@ -27651,7 +27672,7 @@ function vigaRespaldoLajePav1(cp, out) {
   const biancoMassiamBruto = areaBase / 60 * PERDA;
   const biancoMassiam = teto(biancoMassiamBruto);
 
-  const memVigaP1 = (k) => memoriaBitolaSimples(k, ferro[k], { CA50_5MM: ca50_5mm, CA50_6MM: ca50_6mm, CA50_8MM: ca50_8mm, CA50_10MM: ca50_10mm, CA50_12MM: ca50_12mm, CA50_16MM: ca50_16mm, CA60_5MM: ca60_5mm }[k], "na viga de respaldo do pav. 1");
+  const memVigaP1 = (k) => memoriaBitolaSimples(k, ferro[k], { CA50_5MM: ca50_5mm, CA50_6MM: ca50_6mm, CA50_8MM: ca50_8mm, CA50_10MM: ca50_10mm, CA50_12MM: ca50_12mm, CA50_16MM: ca50_16mm, CA50_20MM: ca50_20mm, CA50_25MM: ca50_25mm, CA60_5MM: ca60_5mm }[k], "na viga de respaldo do pav. 1");
   const notaMassiamP1 = MEM.nota("Massiamento do contrapiso do pav. 1: camada de 5 cm que nivela a laje para o piso. Usa a área construída do pav. 1 (em branco, a área da laje do térreo).");
   const etapa = "Viga Respaldo e Laje";
   const o = ORD.vigaLajePav1;
@@ -27679,6 +27700,8 @@ function vigaRespaldoLajePav1(cp, out) {
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA50 10.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_10mm, memoria: memVigaP1("CA50_10MM") });
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA50 12.5mm 12mts", unidade: "Barras 12mts", qtd: ca50_12mm, memoria: memVigaP1("CA50_12MM") });
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA50 16mm 12mts", unidade: "Barras 12mts", qtd: ca50_16mm, memoria: memVigaP1("CA50_16MM") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA50 20.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_20mm, memoria: memVigaP1("CA50_20MM") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA50 25mm 12mts", unidade: "Barras 12mts", qtd: ca50_25mm, memoria: memVigaP1("CA50_25MM") });
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA60 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca60_5mm, memoria: memVigaP1("CA60_5MM") });
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Arame Recozido", unidade: "KG", qtd: arame, memoria: MEMB.arameDoPeso(peso, arameBruto, arame) });
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego, memoria: MEMB.pregoDoArame(arame, pregoBruto, prego) });
@@ -27808,6 +27831,8 @@ function supraCobertura(cp, out) {
   emitir(out, { ...base, item: "Aço - Barras de CA50 10.0mm 12mts", unidade: "Barras 12mts", qtd: barras.CA50_10MM, memoria: memSupra("CA50_10MM") });
   emitir(out, { ...base, item: "Aço - Barras de CA50 12.5mm 12mts", unidade: "Barras 12mts", qtd: barras.CA50_12MM, memoria: memSupra("CA50_12MM") });
   emitir(out, { ...base, item: "Aço - Barras de CA50 16mm 12mts", unidade: "Barras 12mts", qtd: barras.CA50_16MM, memoria: memSupra("CA50_16MM") });
+  emitir(out, { ...base, item: "Aço - Barras de CA50 20.0mm 12mts", unidade: "Barras 12mts", qtd: barras.CA50_20MM, memoria: memSupra("CA50_20MM") });
+  emitir(out, { ...base, item: "Aço - Barras de CA50 25mm 12mts", unidade: "Barras 12mts", qtd: barras.CA50_25MM, memoria: memSupra("CA50_25MM") });
   emitir(out, { ...base, item: "Aço - Barras de CA60 5.0mm 12mts", unidade: "Barras 12mts", qtd: barras.CA60_5MM, memoria: memSupra("CA60_5MM") });
   emitir(out, { ...base, item: "Aço - Arame Recozido", unidade: "KG", qtd: arame, memoria: MEMB.arameDoPeso(peso, arameBruto, arame) });
   emitir(out, { ...base, item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego, memoria: MEMB.pregoDoArame(arame, pregoBruto, prego) });
@@ -28752,8 +28777,8 @@ function piscina(cp, out) {
 // normalizarProjeto — de obra.projeto (aninhado, §3.3) para cp (achatado +
 // alguns sub-objetos por elemento estrutural). Nomes espelham os CP_* do VBA
 // em camelCase. Mapa explícito abaixo, pra conferir contra a planilha;
-// campo ausente sempre vira 0. Os grupos "ferro" usam sempre as 8 chaves de
-// PESOS_FERRO (CA60_4MM, CA50_5MM...CA50_16MM, CA60_5MM) — mesmo quando o
+// campo ausente sempre vira 0. Os grupos "ferro" usam sempre as chaves de
+// PESOS_FERRO (CA60_4MM, CA50_5MM...CA50_16MM, CA50_20MM, CA50_25MM, CA60_5MM) — mesmo quando o
 // .bas daquele elemento não usa todas (ex.: colunas de Pav 1 e cobertura não
 // têm CA60_4MM; nesses casos o campo fica 0 e nunca é lido).
 //
@@ -30624,6 +30649,8 @@ function normalizarProjeto(projeto) {
     ca50_10mmColunaTerreo: numOrZero(ferroColunasTerreo.CA50_10MM),
     ca50_12mmColunaTerreo: numOrZero(ferroColunasTerreo.CA50_12MM),
     ca50_16mmColunaTerreo: numOrZero(ferroColunasTerreo.CA50_16MM),
+    ca50_20mmColunaTerreo: numOrZero(ferroColunasTerreo.CA50_20MM),
+    ca50_25mmColunaTerreo: numOrZero(ferroColunasTerreo.CA50_25MM),
     ca60_5mmColunaTerreo: numOrZero(ferroColunasTerreo.CA60_5MM),
     perimetroParedesTerreo: perimetroTerreo,
     areaTerreo: numOrZero(terreoIn.area),
@@ -31854,6 +31881,8 @@ const BITOLAS_FERRO = [
   { k: "CA50_10MM", label: "CA50 10" },
   { k: "CA50_12MM", label: "CA50 12.5" },
   { k: "CA50_16MM", label: "CA50 16" },
+  { k: "CA50_20MM", label: "CA50 20" },
+  { k: "CA50_25MM", label: "CA50 25" },
   { k: "CA60_5MM", label: "CA60 5.0" },
 ];
 
@@ -90280,7 +90309,7 @@ function esCalcularEstrutura(pavs, params) {
 // PARA O ORÇAMENTO DE OBRA (orcamento-obra.jsx): metros de barra por bitola
 // e m³ de concreto por grupo, nos campos que o orçamento já lê
 // ═══════════════════════════════════════════════════════════════
-const ES_BITOLA_ORC = { 5: "CA60_5MM", 6.3: "CA50_6MM", 8: "CA50_8MM", 10: "CA50_10MM", 12.5: "CA50_12MM", 16: "CA50_16MM" };
+const ES_BITOLA_ORC = { 5: "CA60_5MM", 6.3: "CA50_6MM", 8: "CA50_8MM", 10: "CA50_10MM", 12.5: "CA50_12MM", 16: "CA50_16MM", 20: "CA50_20MM", 25: "CA50_25MM" };
 function esParaOrcamento(pavs, calc) {
   const { lanc, dim } = calc, vazio = () => ({}), grupos = { colunasTerreo: vazio(), colunasPav1: vazio(), vigasTerreo: vazio(), vigasPav1: vazio(), baldrames: vazio() };
   const conc = { colunasTerreo: 0, colunasPav1: 0, vigasTerreo: 0, vigasPav1: 0, baldrames: 0 }, cont = { terreo: { 15: 0, 20: 0, 30: 0, forma: 0 }, pav1: { 15: 0, 20: 0, 30: 0, forma: 0 } };

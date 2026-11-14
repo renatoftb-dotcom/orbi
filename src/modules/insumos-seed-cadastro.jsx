@@ -18,6 +18,8 @@
 // LOC-050/LOC-051 (longe de LOC-029..032, que semeaduras antigas distribuíram
 // ao recodificar). Saíram LOC-012 (Betoneira) e LOC-018 (Container), repetidos
 // de LOC-005/LOC-004. O gerador precisa da mesma correção.
+// Inclusão à mão (nov/2026): ACO-035 (CA50 25 mm), pedido pelo cálculo
+// estrutural do Projetar (o 20 mm já existe: ACO-016). O gerador precisa incluí-lo.
 // ═══════════════════════════════════════════════════════════════
 
 var INSUMOS_SEED_CADASTRO = [
@@ -805,4 +807,5 @@ var INSUMOS_SEED_CADASTRO = [
   { codigo:"TIN-033", nome:"tintas - Cetol Deck", grupo:"Tintas", unidade:"Unidades", tipo:"material", precoReferencia:429.93, precoFonte:"compra_corrigida", precoData:"2024-11-20", precoNCompras:10, precoFatorInccAplicado:1.1317, aliases:["tintas - Cetol Deck"], observacao:"última compra fora da faixa; usada a mediana das 5 últimas" },
   { codigo:"TIN-034", nome:"tintas - Palha de aço", grupo:"Tintas", unidade:"Unidades", tipo:"material", precoReferencia:2.23, precoFonte:"compra_corrigida", precoData:"2025-09-10", precoNCompras:2, precoFatorInccAplicado:1.0769, aliases:["tintas - Palha de aço"] },
   { codigo:"TIN-035", nome:"tintas - Suporte para Rolo 23cm", grupo:"Tintas", unidade:"Unidades", tipo:"material", precoReferencia:14.65, precoFonte:"compra_corrigida", precoData:"2024-07-23", precoNCompras:6, precoFatorInccAplicado:1.1551, aliases:["tintas - Suporte para Rolo 23cm"] },
+  { codigo:"ACO-035", nome:"Aço - Barras de CA50 25mm 12mts", grupo:"Aço", unidade:"Unidades", tipo:"material", precoReferencia:244.92, precoFonte:"mercado", precoData:"2026-07-30", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Aço - Barras de CA50 25mm 12mts", "Aço - Barras de CA50 25.0mm 12mts"], observacao:"Nunca comprado: R$ 5.30/kg da última compra de CA50 10 mm (jul/2026, ACO-001) × 46.24 kg da barra (NBR 7480). Entrou para o cálculo estrutural do Projetar (nov/2026); confirme com o fornecedor." },
 ];

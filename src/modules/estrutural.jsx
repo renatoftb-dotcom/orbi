@@ -1455,7 +1455,7 @@ function esCalcularEstrutura(pavs, params) {
 // PARA O ORÇAMENTO DE OBRA (orcamento-obra.jsx): metros de barra por bitola
 // e m³ de concreto por grupo, nos campos que o orçamento já lê
 // ═══════════════════════════════════════════════════════════════
-const ES_BITOLA_ORC = { 5: "CA60_5MM", 6.3: "CA50_6MM", 8: "CA50_8MM", 10: "CA50_10MM", 12.5: "CA50_12MM", 16: "CA50_16MM" };
+const ES_BITOLA_ORC = { 5: "CA60_5MM", 6.3: "CA50_6MM", 8: "CA50_8MM", 10: "CA50_10MM", 12.5: "CA50_12MM", 16: "CA50_16MM", 20: "CA50_20MM", 25: "CA50_25MM" };
 function esParaOrcamento(pavs, calc) {
   const { lanc, dim } = calc, vazio = () => ({}), grupos = { colunasTerreo: vazio(), colunasPav1: vazio(), vigasTerreo: vazio(), vigasPav1: vazio(), baldrames: vazio() };
   const conc = { colunasTerreo: 0, colunasPav1: 0, vigasTerreo: 0, vigasPav1: 0, baldrames: 0 }, cont = { terreo: { 15: 0, 20: 0, 30: 0, forma: 0 }, pav1: { 15: 0, 20: 0, 30: 0, forma: 0 } };

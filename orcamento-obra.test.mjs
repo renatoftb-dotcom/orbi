@@ -167,6 +167,17 @@ teste("ceil(804/12 × 1.1) = 74 barras de CA50 8mm, peso 355.2kg", () => {
   assert.strictEqual(item.qtd * PESOS_FERRO.CA50_8MM, 355.2);
 });
 
+teste("CA50 20 e 25 mm (cálculo estrutural): barras, peso e arame das colunas do térreo", () => {
+  const cp = normalizarProjeto({ arquitetura: {}, terreo: {}, engenharia: { colunasTerreo: { ferro: { CA50_20MM: 120, CA50_25MM: 30 } } } });
+  const out = [];
+  paredesTerreo(cp, out);
+  const b20 = acharItem(out, "Aço - Barras de CA50 20.0mm 12mts"), b25 = acharItem(out, "Aço - Barras de CA50 25mm 12mts");
+  assert.strictEqual(b20.qtd, Math.ceil(120 / 12 * 1.1)); // 11
+  assert.strictEqual(b25.qtd, Math.ceil(30 / 12 * 1.1));  // 3
+  assert.ok(Math.abs(PESOS_FERRO.CA50_20MM - 2.466 * 12) < 0.01 && Math.abs(PESOS_FERRO.CA50_25MM - 3.853 * 12) < 0.01);
+  const arame = acharItem(out, "Aço - Arame Recozido");
+  assert.strictEqual(arame.qtd, Math.ceil((11 * PESOS_FERRO.CA50_20MM + 3 * PESOS_FERRO.CA50_25MM) * 0.06 * 1.1));
+});
 console.log("\n--- paredesTerreo() — caso de referência ---");
 const outParedes = [];
 paredesTerreo(cpReferencia, outParedes);
