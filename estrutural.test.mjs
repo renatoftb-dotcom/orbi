@@ -8,7 +8,7 @@ import assert from "assert";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(join(__dirname, "src", "modules", "estrutural.jsx"), "utf-8");
-const M = new Function(`${src}\nreturn { esLancarPavimentos, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao };`)();
+const M = new Function(`${src}\nreturn { esLancarPavimentos, esDescidaCargas, esTopoPavimento, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao };`)();
 
 let ok = 0, falhou = 0;
 const t = (nome, fn) => { try { fn(); ok++; } catch (e) { falhou++; console.log("FALHOU:", nome, "\n ", e.message); } };
@@ -241,6 +241,30 @@ t("pilar de cima a menos de 1 m de um pilar fixo de baixo, sobre porta: não ent
   assert.ok(!b.pilares.some((p) => Math.abs(p.no.x - 3.5) < 0.05 && p.no.y === 0), "sem pilar em (3,5; 0) em cima");
   const av = M.esVerificar(b, cim, V6, { pilaresAbaixo: a.pilares });
   assert.ok(!av.some((x) => /transição/.test(x.texto) && /\(3,5/.test(x.texto)));
+});
+t("descida de cargas: o que chega na fundação é o peso de tudo (equilíbrio)", () => {
+  const caixa = [W(P(0, 0), P(4, 0)), W(P(4, 0), P(4, 4)), W(P(4, 4), P(0, 4)), W(P(0, 4), P(0, 0))];
+  const laje = { tipo: "laje", pts: [P(0, 0), P(4, 0), P(4, 4), P(0, 4)], esp: 0.1, cota: 2.8, carga: { tipo: "macica", uso: "residencial" } };
+  for (const pavs of [
+    [{ paredes: caixa, areas: [laje], nivel: 0, usoPadrao: "residencial" }],
+    [{ paredes: caixa, areas: [laje], nivel: 0, usoPadrao: "residencial" }, { paredes: caixa, areas: [{ ...laje, carga: { tipo: "macica", uso: "forro" } }], nivel: 2.9, usoPadrao: "forro" }],
+  ]) {
+    const lanc = M.esLancarPavimentos(pavs, {});
+    const d = M.esDescidaCargas(pavs, lanc, {});
+    let esperadoG = 0, esperadoQ = 0;
+    pavs.forEach((p, k) => {
+      const topo = M.esTopoPavimento(pavs, k);
+      for (const a of p.areas) { const c = M.esCargaLaje(a, p.usoPadrao); esperadoG += c.g * 16; esperadoQ += c.q * 16; }
+      for (const v of lanc[k].vigas) esperadoG += 25 * v.b_ * v.h * Math.hypot(v.b.x - v.a.x, v.b.y - v.a.y);
+      for (const pl of lanc[k].pilares) esperadoG += 25 * pl.b * pl.h * (pl.topo - pl.base);
+      for (const w of p.paredes) esperadoG += M.esCargaParede(w, 0).g * Math.max(0, topo - 0.4) * 4;
+    });
+    const somaG = d.fundacao.reduce((t, f) => t + f.Ng, 0), somaQ = d.fundacao.reduce((t, f) => t + f.Nq, 0);
+    assert.ok(Math.abs(somaG - esperadoG) < 0.5, `g: ${somaG.toFixed(2)} × ${esperadoG.toFixed(2)}`);
+    assert.ok(Math.abs(somaQ - esperadoQ) < 0.2, `q: ${somaQ.toFixed(2)} × ${esperadoQ.toFixed(2)}`);
+    // caixa simétrica: os quatro pilares de canto recebem o mesmo
+    const ns = d.fundacao.map((f) => f.Nk); assert.ok(Math.max(...ns) - Math.min(...ns) < 0.5, ns.join(" "));
+  }
 });
 console.log(`${ok} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

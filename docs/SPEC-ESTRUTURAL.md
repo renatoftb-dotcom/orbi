@@ -90,3 +90,25 @@ CASA TESTE (Márcio Viezzer, 2 pavimentos) em 14/11/2026.
 | 13 | Vão grande de porta/janela (≥ 2,5 m): viga sobre o vão verificada para flecha e pilares nas ombreiras | vão livre | pendente |
 | 14 | Transição inevitável: viga de transição marcada para dimensionamento especial | carga concentrada na viga | aviso feito; dimensionamento pendente |
 | 15 | Pilar do pavimento de cima sem pilar embaixo só entra se não houver saída: sobre vão livre não entra (a parede vai na viga de piso e o encontro vira apoio de viga em viga); sobre porta/janela a menos de 1,0 m de um pilar fixo de baixo não entra (fica o de baixo); pilar intermediário tenta a outra ombreira antes de virar transição | evita transição e pilares colados | feito |
+
+## Descida de cargas (etapa 2, primeira versão) — `esDescidaCargas`
+
+Do pavimento de cima para o de baixo:
+
+1. Peso próprio de cada viga (25 kN/m³ × b × h × L).
+2. Lajes do pavimento repartidas entre as vigas que as cercam pela área de
+   influência (cada ponto da laje vai para a viga mais próxima; empate divide).
+   Permanente (g) e uso (q) separados. Telhado só com permanente.
+3. Paredes do pavimento de cima sobre as vigas do pavimento (altura da parede
+   menos a altura da viga); paredes do térreo sobre os baldrames.
+4. Trechos de viga alinhados sem pilar no meio viram um tramo. Pilar de
+   transição do pavimento de cima entra como carga concentrada no tramo.
+5. Tramo biapoiado: as reações vão para os pilares das pontas; ponta sem pilar
+   (viga apoiada em viga) passa a reação para a viga que a apoia.
+6. Pilar: reações + peso próprio + pilar de cima no mesmo ponto. O do térreo
+   dá a carga na fundação (Nk). Na tela, Nd = 1,4 × Nk × γn.
+
+Limitações desta versão (o dimensionamento vai refinar): área de influência em
+vez de charneiras da NBR 6118 14.7.6; tramos biapoiados em vez de viga
+contínua/pórtico; sem sobrecarga de manutenção do telhado; aberturas não
+descontadas do peso das paredes (a favor da segurança).

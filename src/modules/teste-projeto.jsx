@@ -2181,7 +2181,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const r = {};
     // todos os pavimentos juntos: pilares contínuos de baixo para cima (estrutural.jsx)
     const lista = pavsOrd.map((p, k) => { const d = dadosDe(p.id), acima = pavsOrd[k + 1]; return { paredes: d.paredes || [], areas: d.areas || [], nivel: p.nivel || 0, usoPadrao: acima && (dadosDe(acima.id).paredes || []).length ? "residencial" : "forro" }; });
-    esLancarPavimentos(lista, estrutura.params).forEach((e, k) => { r[pavsOrd[k].id] = e; });
+    const lanc = esLancarPavimentos(lista, estrutura.params);
+    lanc.forEach((e, k) => { r[pavsOrd[k].id] = e; });
+    // descida de cargas (lajes → vigas → pilares → fundação), guardada à parte para não virar pilar/viga
+    let desc = null; try { desc = esDescidaCargas(lista, lanc, estrutura.params); } catch (err) { desc = null; }
+    Object.defineProperty(r, "_descida", { value: desc, enumerable: false });
+    Object.defineProperty(r, "_ids", { value: pavsOrd.map((p) => p.id), enumerable: false });
     return r;
   }, [estrutura, paredes, areas, dadosPav, pavimentos, pavAtivo]); // eslint-disable-line react-hooks/exhaustive-deps
   const estAvisos = useMemo(() => {
@@ -2228,6 +2233,13 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     }
     return t;
   }, [estPorPav]); // eslint-disable-line react-hooks/exhaustive-deps
+  // cargas de cada pilar e viga, por pavimento (descida de cargas)
+  const estDescida = useMemo(() => {
+    const d = estPorPav._descida; if (!d) return null;
+    const porPav = {}; (estPorPav._ids || []).forEach((id, k) => { porPav[id] = d.pavimentos[k]; });
+    const fund = [...d.fundacao].sort((a, b) => a.id.localeCompare(b.id, "pt-BR", { numeric: true }));
+    return { porPav, fundacao: fund, total: fund.reduce((t, f) => t + f.Nk, 0), avisos: d.pavimentos.flatMap((p) => p.avisos || []) };
+  }, [estPorPav]);
   // pavimento logo abaixo do ativo (referência em cinza na planta)
   const pavAbaixo = (() => { const k = pavsOrd.findIndex((p) => p.id === pavAtivo); return k > 0 ? pavsOrd[k - 1] : null; })();
   const irParaPav = (id) => {
@@ -5618,11 +5630,18 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             if (pl) {
               const H = pl.topo != null ? pl.topo - (pl.base || 0) : (Math.max(0, ...(paredes.map((w) => w.h || 0))) || altM);
               const vigasNele = est.vigas.filter((x) => x.apoioA === id || x.apoioB === id).map((x) => x.id);
-              return { id, tipo: "Pilar", dados: [["Seção", `${Math.round(pl.b * 100)} × ${Math.round(pl.h * 100)} cm`], ["Área", `${Math.round(pl.b * 100) * Math.round(pl.h * 100)} cm²`], ["Altura", `${tpFmt(H)} m${pl.base ? ` (de ${tpFmt(pl.base)} a ${tpFmt(pl.topo)})` : ""}`], ["Concreto", `${tpFmt(pl.b * pl.h * H, 3)} m³`], ["Vigas apoiadas", vigasNele.join(", ") || "nenhuma"], ...(pl.deslocado ? [["Ajuste", `deslocado ${tpFmt(pl.deslocado * 100, 0)} cm para sair de porta/janela`]] : [])] };
+              return { id, tipo: "Pilar", dados: [["Seção", `${Math.round(pl.b * 100)} × ${Math.round(pl.h * 100)} cm`], ["Área", `${Math.round(pl.b * 100) * Math.round(pl.h * 100)} cm²`], ["Altura", `${tpFmt(H)} m${pl.base ? ` (de ${tpFmt(pl.base)} a ${tpFmt(pl.topo)})` : ""}`], ["Concreto", `${tpFmt(pl.b * pl.h * H, 3)} m³`], ["Vigas apoiadas", vigasNele.join(", ") || "nenhuma"], ...(() => {
+                const n = estDescida && estDescida.porPav[pavAtivo] && estDescida.porPav[pavAtivo].pilares[id]; if (!n) return [];
+                const bcm = Math.round(Math.min(pl.b, pl.h) * 100), gn = bcm < 19 ? ES_NBR.gamaN(bcm) : 1, Nd = 1.4 * (n.Ng + n.Nq) * gn;
+                return [["Carga (Nk)", `${tpFmt(n.Ng + n.Nq, 1)} kN (perm. ${tpFmt(n.Ng, 1)} + uso ${tpFmt(n.Nq, 1)})`], ["Cálculo (Nd)", `${tpFmt(Nd, 1)} kN (1,4${gn > 1 ? ` × γn ${tpFmt(gn)}` : ""})`]];
+              })(), ...(pl.deslocado ? [["Ajuste", `deslocado ${tpFmt(pl.deslocado * 100, 0)} cm para sair de porta/janela`]] : [])] };
             }
             if (v) {
               const Lv = Math.hypot(v.b.x - v.a.x, v.b.y - v.a.y);
-              return { id, tipo: v.baldrame ? "Baldrame" : v.vigaPiso ? "Viga de piso" : "Viga", dados: [...(v.vigaPiso ? [["Função", `apoia a parede ${v.sobPavimento ? `do ${v.sobPavimento} ` : "de cima "}que não tem parede embaixo`]] : []), ["Seção", `${Math.round(v.b_ * 100)} × ${Math.round(v.h * 100)} cm`], ["Vão", `${tpFmt(Lv)} m`], ["Apoios", `${v.apoioA || "viga"} — ${v.apoioB || "viga"}`], ["Topo", `${tpFmt(v.baldrame ? 0 : v.topo)} m`], ["Concreto", `${tpFmt(v.b_ * v.h * Lv, 3)} m³`]] };
+              return { id, tipo: v.baldrame ? "Baldrame" : v.vigaPiso ? "Viga de piso" : "Viga", dados: [...(v.vigaPiso ? [["Função", `apoia a parede ${v.sobPavimento ? `do ${v.sobPavimento} ` : "de cima "}que não tem parede embaixo`]] : []), ["Seção", `${Math.round(v.b_ * 100)} × ${Math.round(v.h * 100)} cm`], ["Vão", `${tpFmt(Lv)} m`], ["Apoios", `${v.apoioA || "viga"} — ${v.apoioB || "viga"}`], ["Topo", `${tpFmt(v.baldrame ? 0 : v.topo)} m`], ["Concreto", `${tpFmt(v.b_ * v.h * Lv, 3)} m³`], ...(() => {
+                const c = estDescida && estDescida.porPav[pavAtivo] && estDescida.porPav[pavAtivo].vigas[id]; if (!c) return [];
+                return [["Carga", `${tpFmt(c.g + c.q, 1)} kN/m (perm. ${tpFmt(c.g, 1)} + uso ${tpFmt(c.q, 1)})`], ...(c.tramo.includes("+") ? [["Tramo", `${c.tramo.replace(/\+/g, " + ")} (${tpFmt(c.L)} m)`]] : []), ["Reações", `${tpFmt(c.RA.g + c.RA.q, 1)} kN (${c.apoioA || "viga"}) · ${tpFmt(c.RB.g + c.RB.q, 1)} kN (${c.apoioB || "viga"})`]];
+              })()] };
             }
             return { id, tipo: "Peça", dados: [["", "não encontrada (a estrutura mudou)"]] };
           });
@@ -6440,7 +6459,23 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                       {c.falta.length > 0 && <div style={{ fontSize: 11.5, color: "#b45309", padding: "4px 0" }}>Falta informar: {[...new Set(c.falta)].join(", ")}.</div>}
                     </div>
                   ))}
-                  <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>Peso próprio de vigas e pilares entra no cálculo da etapa seguinte. Escolha a alvenaria de cada parede, o uso de cada laje e a estrutura do telhado clicando no elemento. Valores da NBR 6120 a conferir no texto oficial.</div>
+                  <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>Peso próprio de vigas e pilares entra em Cargas nos pilares. Escolha a alvenaria de cada parede, o uso de cada laje e a estrutura do telhado clicando no elemento. Valores da NBR 6120 a conferir no texto oficial.</div>
+                </>)}
+                {estDescida && grupoQ("est-f", "Cargas nos pilares (fundação)", `${tpFmt(estDescida.total, 1)} kN`)}
+                {estDescida && !qFechado("est-f") && (<>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", columnGap: 10, fontSize: 11, color: "#9ca3af", padding: "4px 0 2px" }}><span>Pilar</span><span style={{ textAlign: "right" }}>Nk</span><span style={{ textAlign: "right", minWidth: 54 }}>Nd</span></div>
+                  {estDescida.fundacao.map((f) => {
+                    const pl = (estPorPav[(estPorPav._ids || [])[0]] || { pilares: [] }).pilares.find((x) => x.id === f.id);
+                    const bcm = pl ? Math.round(Math.min(pl.b, pl.h) * 100) : 19, gn = bcm < 19 ? ES_NBR.gamaN(bcm) : 1;
+                    return (
+                      <button key={f.id} onClick={() => { const id0 = (estPorPav._ids || [])[0]; if (id0 && id0 !== pavAtivo) irParaPav(id0); if (pl) { setSel(["e" + f.id]); setFocoEst({ x: pl.no.x, y: pl.no.y, t: Date.now() }); } if (isMobile) setMenuAberto(false); }}
+                        style={{ display: "grid", gridTemplateColumns: "1fr auto auto", columnGap: 10, width: "100%", border: "none", borderBottom: "1px solid #f0f2f5", background: "none", padding: "4px 0", cursor: "pointer", fontFamily: "inherit", fontSize: 12.5, color: "#374151", textAlign: "left" }}>
+                        <span>{f.id}</span><span style={{ textAlign: "right" }}>{tpFmt(f.Nk, 1)} kN</span><span style={{ textAlign: "right", minWidth: 54, color: "#6b7280" }}>{tpFmt(1.4 * f.Nk * gn, 1)}</span>
+                      </button>
+                    );
+                  })}
+                  {estDescida.avisos.length > 0 && <div style={{ fontSize: 11.5, color: "#b45309", padding: "4px 0" }}>{[...new Set(estDescida.avisos)].join(" ")}</div>}
+                  <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>Nk = permanente + uso, característica, no topo da fundação. Nd = 1,4 × Nk (× γn nos pilares abaixo de 19 cm). Lajes repartidas pelas áreas de influência e vigas biapoiadas: pré-cálculo para o dimensionamento.</div>
                 </>)}
                 {grupoQ("est-p", "Parâmetros", `C${P.fck} · CAA ${["", "I", "II", "III", "IV"][P.caa]}`)}
                 {!qFechado("est-p") && (
