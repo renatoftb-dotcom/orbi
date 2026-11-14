@@ -35,7 +35,7 @@ const M = new Function(src + `
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas, ligaContaAoLancamento, lancamentosLigadosAsContas, contasLigadasAoLancamento,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
            obrasDoLancamento, validarLancamentoNaObra, destinoVisivelDoCusto,
-           efValorDoCampo, anexosDaTransacao, comAnexos, efConversaoAprendida, efCatalogoComConversoes, efEtapaDaUltimaCompra, efContaDoFornecedor,
+           efValorDoCampo, anexosDaTransacao, comAnexos, efConversaoAprendida, efCatalogoComConversoes, efEtapaAprendidaDoInsumo, efEtapaAprendidaDoFornecedor, efContaDoFornecedor,
            efNomeDoFornecedor, EF_FORNECEDOR_OUTROS,
            custoDoLancamento, validarCustoEmItens, itemUnicoDoCusto, itensDoCustoOuUnico, padraoDaContaDaObra,
            comIdsDosMovimentos, efMesmaLinhaDoBanco, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
@@ -4258,32 +4258,42 @@ teste("conta mãe: com subconta só totaliza — lança-se na subconta", () => {
       assert.strictEqual(M.efConversaoAprendida({ unidade: "m³", quantidade: 2, unitario: 130 }, r.insumos[0]), null);
     } finally { delete globalThis.unidadeCanonica; delete globalThis.divergenciaDeUnidade; }
   });
-  teste("etapa aprendida: a última compra do mesmo item na mesma obra", () => {
-    const obra = { contasPagar: [
-      { insumoCodigo: "A1", etapa: "fundacao", vencimento: "2026-10-05" },
-      { insumoCodigo: "A1", etapa: "alvenaria", vencimento: "2026-11-02", pagoEm: "2026-11-03" },
-      { insumoCodigo: "A1", etapa: "", vencimento: "2026-11-10" },
-      { insumoCodigo: "C1", etapa: "reboco", vencimento: "2026-11-12" },
-    ] };
-    assert.deepStrictEqual(M.efEtapaDaUltimaCompra(obra, "A1"), { etapa: "alvenaria", data: "2026-11-03" });
-    assert.strictEqual(M.efEtapaDaUltimaCompra(obra, "Z9"), null);
-    assert.strictEqual(M.efEtapaDaUltimaCompra(null, "A1"), null);
+  teste("etapa aprendida: só o item ou o fornecedor que foi SEMPRE para a mesma etapa", () => {
+    const obras = [{ contasPagar: [
+      { insumoCodigo: "D1", prestadorId: "ele", etapa: "eletrica", vencimento: "2026-10-05" },
+      { insumoCodigo: "D1", prestadorId: "ele", etapa: "eletrica", pagoEm: "2026-11-03" },
+      { insumoCodigo: "A1", prestadorId: "loja", etapa: "fundacao", vencimento: "2026-10-05" },
+      { insumoCodigo: "A1", prestadorId: "loja", etapa: "alvenaria", vencimento: "2026-11-02" },
+      { insumoCodigo: "A1", prestadorId: "loja", etapa: "", vencimento: "2026-11-10" },
+    ] }, { contasPagar: [{ insumoCodigo: "D1", prestadorId: "ele", etapa: "eletrica", pagoEm: "2026-11-12" }] }];
+    // o disjuntor foi sempre para a elétrica, em duas obras
+    assert.deepStrictEqual(M.efEtapaAprendidaDoInsumo(obras, "D1"), { etapa: "eletrica", vezes: 3, data: "2026-11-12" });
+    // a areia foi para a fundação e a alvenaria: não se liga
+    assert.strictEqual(M.efEtapaAprendidaDoInsumo(obras, "A1"), null);
+    assert.strictEqual(M.efEtapaAprendidaDoInsumo(obras, "Z9"), null);
+    // fornecedor: o eletricista é de uma etapa só; a loja vende para várias
+    assert.deepStrictEqual(M.efEtapaAprendidaDoFornecedor(obras, "ele"), { etapa: "eletrica", vezes: 3, data: "2026-11-12" });
+    assert.strictEqual(M.efEtapaAprendidaDoFornecedor(obras, "loja"), null);
+    assert.strictEqual(M.efEtapaAprendidaDoFornecedor(obras, ""), null);
   });
 }
 
-teste("fornecedor → conta: o último lançamento dele, na obra ou no escritório; sem histórico, o ofício", () => {
+teste("fornecedor → conta: só quem foi SEMPRE para a mesma conta; sem histórico, o ofício", () => {
   const obras = [{ id: "o1", contasPagar: [
     { prestadorId: "f1", contaId: "material", vencimento: "2026-09-01" },
     { prestadorId: "f1", contaId: "frete", pagoEm: "2026-10-05" },
     { prestadorId: "f2", contaId: "empreiteiro", pagoEm: "2026-10-01" },
+    { prestadorId: "f2", contaId: "empreiteiro", pagoEm: "2026-10-15" },
   ] }];
   const lancamentos = [
-    { fornecedorId: "f1", contaId: "utensilios", lancadoEm: "2026-11-02", tipo: "escritorio" },
+    { fornecedorId: "f3", contaId: "utensilios", lancadoEm: "2026-11-02", tipo: "escritorio" },
     // o que veio da obra pela ponte não conta duas vezes
     { fornecedorId: "f2", contaId: "custo_obra", lancadoEm: "2026-12-01", origem: { tipo: "conta", obraId: "o1" } },
   ];
-  assert.deepStrictEqual(M.efContaDoFornecedor("f1", { obras, lancamentos }), { contaId: "utensilios", fonte: "escritorio", data: "2026-11-02", origem: "historico" });
-  assert.deepStrictEqual(M.efContaDoFornecedor("f2", { obras, lancamentos }), { contaId: "empreiteiro", fonte: "obra", data: "2026-10-01", origem: "historico" });
+  // loja que vende material e frete: contas variadas, não se liga
+  assert.strictEqual(M.efContaDoFornecedor("f1", { obras, lancamentos }), null);
+  assert.deepStrictEqual(M.efContaDoFornecedor("f2", { obras, lancamentos }), { contaId: "empreiteiro", fonte: "obra", data: "2026-10-15", vezes: 2, origem: "historico" });
+  assert.deepStrictEqual(M.efContaDoFornecedor("f3", { obras, lancamentos }), { contaId: "utensilios", fonte: "escritorio", data: "2026-11-02", vezes: 1, origem: "historico" });
   assert.strictEqual(M.efContaDoFornecedor("f9", { obras, lancamentos }), null);
   assert.strictEqual(M.efContaDoFornecedor("", { obras, lancamentos }), null);
   // sem histórico: o ofício do cadastro
@@ -4293,6 +4303,8 @@ teste("fornecedor → conta: o último lançamento dele, na obra ou no escritór
     const r = M.efContaDoFornecedor("p1", { prestadores: [{ id: "p1", categoria: "Pedreiro" }] });
     assert.deepStrictEqual([r.contaId, r.fonte, r.origem], ["empreiteiro", "obra", "cadastro"]);
     assert.strictEqual(M.efContaDoFornecedor("p2", { prestadores: [{ id: "p2", categoria: "Loja / Comércio" }] }), null);
+    // com histórico variado, nem o cadastro manda
+    assert.strictEqual(M.efContaDoFornecedor("f1", { obras, prestadores: [{ id: "f1", categoria: "Pedreiro" }] }), null);
   } finally { delete globalThis.TIPOS_PROFISSIONAL; delete globalThis.contaDoTipo; }
 });
 

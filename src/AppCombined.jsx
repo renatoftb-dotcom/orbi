@@ -18807,41 +18807,56 @@ function efCatalogoComConversoes(lista, pares) {
   });
   return { insumos: out, mudou };
 }
-// A etapa da última compra do mesmo insumo na mesma obra — a areia desta
-// semana vai, quase sempre, para onde foi a da semana passada. É sugestão:
-// vem preenchida e com o aviso, e a pessoa troca se mudou de fase.
-function efEtapaDaUltimaCompra(obra, insumoCodigo) {
-  if (!obra || !insumoCodigo) return null;
-  let melhor = null;
-  for (const c of obra.contasPagar || []) {
-    if (!c || c.insumoCodigo !== insumoCodigo || !String(c.etapa || "").trim()) continue;
-    const d = String(c.pagoEm || c.vencimento || "").slice(0, 10);
-    if (!melhor || d > melhor.data) melhor = { etapa: c.etapa, data: d };
+// Só se liga o que é SEMPRE igual. O disjuntor vai sempre para a
+// elétrica; a areia vai para a fundação, a alvenaria e o reboco — essa não
+// se liga, e a etapa continua sendo perguntada. Com um valor só em todo o
+// histórico, ele vem preenchido (e com o aviso); com dois ou mais, nada.
+function efValorConstante(registros) {
+  const vals = (registros || []).filter((r) => r && String(r.valor == null ? "" : r.valor).trim());
+  if (!vals.length) return null;
+  if (new Set(vals.map((r) => r.valor)).size !== 1) return { varia: true, vezes: vals.length };
+  return { valor: vals[0].valor, vezes: vals.length, data: vals.reduce((m, r) => (String(r.data || "") > m ? String(r.data || "") : m), "") };
+}
+function efEtapaConstante(obras, filtro) {
+  const regs = [];
+  for (const o of obras || []) for (const c of (o && o.contasPagar) || []) {
+    if (c && filtro(c)) regs.push({ valor: String(c.etapa || "").trim(), data: String(c.pagoEm || c.vencimento || "").slice(0, 10) });
   }
-  return melhor;
+  const r = efValorConstante(regs);
+  return r && !r.varia ? { etapa: r.valor, vezes: r.vezes, data: r.data } : null;
+}
+// O item do catálogo: em todas as obras, sempre a mesma etapa?
+function efEtapaAprendidaDoInsumo(obras, insumoCodigo) {
+  if (!insumoCodigo) return null;
+  return efEtapaConstante(obras, (c) => c.insumoCodigo === insumoCodigo);
+}
+// O fornecedor: tudo o que ele vendeu foi sempre para a mesma etapa?
+function efEtapaAprendidaDoFornecedor(obras, prestadorId) {
+  if (!prestadorId) return null;
+  return efEtapaConstante(obras, (c) => c.prestadorId === prestadorId);
 }
 
-// Fornecedor → conta contábil. O que ele foi das últimas vezes (na obra ou
-// no escritório) é a melhor aposta; sem histórico, o ofício do cadastro
+// Fornecedor → conta contábil, quando ele foi SEMPRE para a mesma conta (na
+// obra ou no escritório); vende para contas variadas, não se liga. Sem
+// histórico, o ofício do cadastro
 // (empreiteiro → Empreiteiro, serralheiro → Serralheiro). Sugestão: vem
 // preenchida só quando a conta está em branco; senão aparece para um clique.
 function efContaDoFornecedor(prestadorId, ctx) {
   const id = String(prestadorId || "");
   if (!id) return null;
   const c = ctx || {};
-  let melhor = null;
-  const toma = (contaId, fonte, data) => {
-    if (!contaId) return;
-    if (!melhor || data > melhor.data) melhor = { contaId, fonte, data, origem: "historico" };
-  };
+  const regs = [];
   for (const o of c.obras || []) for (const k of (o && o.contasPagar) || []) {
-    if (k && k.prestadorId === id) toma(k.contaId, "obra", String(k.pagoEm || k.vencimento || "").slice(0, 10));
+    if (k && k.prestadorId === id && k.contaId) regs.push({ valor: "obra|" + k.contaId, data: String(k.pagoEm || k.vencimento || "").slice(0, 10) });
   }
   for (const l of c.lancamentos || []) {
-    if (!l || l.fornecedorId !== id || l.contaFonte === "obra" || lancamentoVeioDaObra(l)) continue;
-    toma(l.contaId, "escritorio", String(l.lancadoEm || "").slice(0, 10));
+    if (!l || l.fornecedorId !== id || !l.contaId || l.contaFonte === "obra" || lancamentoVeioDaObra(l)) continue;
+    regs.push({ valor: "escritorio|" + l.contaId, data: String(l.lancadoEm || "").slice(0, 10) });
   }
-  if (melhor) return melhor;
+  const r = efValorConstante(regs);
+  // vende para contas variadas (material, frete, ferramentas…): não se liga
+  if (r && r.varia) return null;
+  if (r) { const [fonte, contaId] = r.valor.split("|"); return { contaId, fonte, data: r.data, vezes: r.vezes, origem: "historico" }; }
   const p = (c.prestadores || []).find((x) => x && x.id === id) || null;
   const cat = p ? String(p.categoria || "").trim().toLowerCase() : "";
   if (cat && typeof TIPOS_PROFISSIONAL !== "undefined" && typeof contaDoTipo === "function") {
@@ -19709,31 +19724,40 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       ? { ...x, unidade: x.convertido.de, quantidade: x.convertido.quantidade, unitario: x.convertido.unitario, convertido: null, conversaoDesfeita: true }
       : x)) }));
   // O que já foi respondido antes entra sozinho: a unidade convertida pelo
-  // que o catálogo aprendeu e a etapa da última compra do item nesta obra.
-  // Cada item é olhado uma vez — desfeito ou trocado à mão, não volta.
+  // que o catálogo aprendeu e a etapa — a do item, se ele foi sempre para a
+  // mesma; senão a do fornecedor, se tudo o que ele vendeu foi para uma só.
+  // Item ou fornecedor de etapas variadas não se liga: a etapa é perguntada.
+  // Escolhida (ou apagada) à mão, não volta.
   useEffect(() => {
     if (!naObra) return;
-    const obra = f.obraIdAlvo ? (obras || []).find((o) => o && o.id === f.obraIdAlvo) || null : null;
     setF((p) => {
       let mudou = false;
       const itens = (p.itens || []).map((it) => {
-        if (!it || !it.insumoCodigo) return it;
+        if (!it) return it;
         let n = it;
-        if (!it.convertido && !it.conversaoDesfeita) {
+        if (it.insumoCodigo && !it.convertido && !it.conversaoDesfeita) {
           const ins = (insumos || []).find((m) => m && (m.codigo === it.insumoCodigo || m.id === it.insumoCodigo)) || null;
           const c = efConversaoAprendida(it, ins);
           if (c) { n = { ...n, ...c }; mudou = true; }
         }
-        if (obra && !n.etapaVista) {
-          const u = !String(n.etapa || "").trim() ? efEtapaDaUltimaCompra(obra, n.insumoCodigo) : null;
-          n = { ...n, etapaVista: true, ...(u ? { etapa: u.etapa, etapaDaUltima: u } : {}) };
-          mudou = true;
+        if (!String(n.etapa || "").trim() && !n.etapaEscolhida) {
+          const pi = efEtapaAprendidaDoInsumo(obras, n.insumoCodigo);
+          const u = pi ? { ...pi, por: "item" } : (p.fornecedorId && efEtapaAprendidaDoFornecedor(obras, p.fornecedorId)
+            ? { ...efEtapaAprendidaDoFornecedor(obras, p.fornecedorId), por: "fornecedor" } : null);
+          if (u) { n = { ...n, etapa: u.etapa, etapaDaUltima: u }; mudou = true; }
         }
         return n;
       });
-      return mudou ? { ...p, itens } : p;
+      // pagamento único, sem itens: a etapa do fornecedor, se for uma só
+      let extra = {};
+      const temItem = itens.some((i) => i && efBrutoDoItem(i) > 0);
+      if (!temItem && p.etapaUnica == null && !padraoDaContaDaObra(p.contaId).etapa && p.fornecedorId) {
+        const u = efEtapaAprendidaDoFornecedor(obras, p.fornecedorId);
+        if (u) { extra = { etapaUnica: u.etapa, etapaUnicaAprendida: u }; mudou = true; }
+      }
+      return mudou ? { ...p, itens, ...extra } : p;
     });
-  }, [naObra, f.obraIdAlvo, f.itens, insumos]);
+  }, [naObra, f.itens, f.fornecedorId, f.contaId, insumos]);
   // o item novo já vem com a etapa do pagamento único, se ela foi escolhida
   const novoItem = () => setF((p) => ({ ...p,
     itens: (p.itens || []).concat([{ ...(typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio()
@@ -19888,7 +19912,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
     const limpos = (f.itens || []).map((x) => { const y = { ...x }; delete y.sugestao; delete y.textoLido; return y; });
     const g = { ...f, itens: entradaNoForm ? [] : limpos };
     if (naObra) {
-      const { etapaUnica: _e, ...semEtapaUnica } = g;
+      const { etapaUnica: _e, etapaUnicaAprendida: _ea, ...semEtapaUnica } = g;
       aoSalvar(comCartao({ ...semEtapaUnica, naObra: true, valor: efValorDoCampo(g.valor), estornoNaObra,
         itens: custoUnico ? itensEfetivos : limpos }));
       return;
@@ -20216,12 +20240,12 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           {contaDoFornecedor && (contaDoFornecedor.aplicada ? (
             <div data-vk-conta-do-fornecedor="aplicada" style={{ fontSize: 11, color: "#1e40af", marginTop: 4, lineHeight: 1.4 }}>
               conta <b>{nomeDaContaSugerida(contaDoFornecedor)}</b> {contaDoFornecedor.origem === "cadastro"
-                ? `pelo ofício do cadastro (${contaDoFornecedor.tipo})` : "como no último lançamento deste fornecedor"} — confira
+                ? `pelo ofício do cadastro (${contaDoFornecedor.tipo})` : `este fornecedor foi sempre para esta conta (${contaDoFornecedor.vezes} ${contaDoFornecedor.vezes === 1 ? "lançamento" : "lançamentos"})`} — confira
             </div>
           ) : (
             <div data-vk-conta-do-fornecedor="sugerida" style={{ fontSize: 11.5, color: "#374151", marginTop: 4, lineHeight: 1.4,
               display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-              <span>{contaDoFornecedor.origem === "cadastro" ? "Pelo cadastro, este fornecedor é" : "Este fornecedor costuma ir em"} <b>{nomeDaContaSugerida(contaDoFornecedor)}</b></span>
+              <span>{contaDoFornecedor.origem === "cadastro" ? "Pelo cadastro, este fornecedor é" : "Este fornecedor foi sempre para"} <b>{nomeDaContaSugerida(contaDoFornecedor)}</b></span>
               <button type="button" style={{ ...S.btnSec, padding: "3px 10px", fontSize: 11.5, color: "#0474f4", borderColor: "rgba(4,116,244,0.4)" }}
                 onClick={() => { escolherConta(valorDaConta(contaDoFornecedor.contaId, contaDoFornecedor.fonte)); setContaDoFornecedor(null); }}>usar</button>
             </div>
@@ -20370,7 +20394,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
               <div data-vk-etapa-todos="1" style={{ minWidth: 220, flex: "0 1 280px", marginLeft: "auto",
                 ...(typeof window !== "undefined" && window.innerWidth < 640 ? { flex: "1 1 100%", marginLeft: 0 } : {}) }}>
                 <SelectBusca style={{ ...S.input, padding: "6px 10px", fontSize: 12 }} value=""
-                  onChange={(v) => { if (v) setF((p) => ({ ...p, itens: (p.itens || []).map((x) => ({ ...x, etapa: v, etapaDaUltima: null })) })); }}
+                  onChange={(v) => { if (v) setF((p) => ({ ...p, itens: (p.itens || []).map((x) => ({ ...x, etapa: v, etapaDaUltima: null, etapaEscolhida: true })) })); }}
                   placeholder="Procurar etapa…"
                   opcoes={(typeof opcoesDeEtapaDoLancamento === "function" ? opcoesDeEtapaDoLancamento(null, "Mesma etapa para todos…")
                     : [{ valor: "", rotulo: "Mesma etapa para todos…" }]
@@ -20391,11 +20415,16 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
               <div style={{ minWidth: 0 }}>
                 <div style={S.rot}>Etapa da obra</div>
                 <SelectBusca style={S.input} value={etapaUnicaEfetiva || ""}
-                  onChange={(v) => set("etapaUnica", v)}
+                  onChange={(v) => setF((p) => ({ ...p, etapaUnica: v, etapaUnicaAprendida: null }))}
                   placeholder="Procurar etapa…"
                   opcoes={typeof opcoesDeEtapaDoLancamento === "function" ? opcoesDeEtapaDoLancamento(null, "— escolha a etapa —")
                     : [{ valor: "", rotulo: "— escolha a etapa —" }]
                     .concat(etapasDaObra.map((e) => ({ valor: e.id, rotulo: e.nome || e.titulo || e.id })))} />
+                {f.etapaUnicaAprendida && f.etapaUnica === f.etapaUnicaAprendida.etapa && (
+                  <div data-vk-etapa-aprendida="fornecedor" style={{ fontSize: 11, color: "#1e40af", marginTop: 4, lineHeight: 1.4 }}>
+                    tudo o que este fornecedor vendeu foi para esta etapa ({f.etapaUnicaAprendida.vezes} {f.etapaUnicaAprendida.vezes === 1 ? "lançamento" : "lançamentos"}) — confira
+                  </div>
+                )}
               </div>
               <div style={{ fontSize: 12, color: "#4b5563", lineHeight: 1.45, paddingBottom: 4 }}>
                 Pagamento único: <b style={{ color: "#111827" }}>{efDinheiro(efValorDoCampo(f.valor))}</b> inteiro nesta etapa
@@ -20488,14 +20517,16 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                       <div style={{ minWidth: 0 }}>
                         <div style={{ ...S.rot, color: pedePav ? "#b45309" : S.rot.color }}>{pedePav ? "Etapa — escolha o pavimento" : "Etapa"}</div>
                         <SelectBusca style={pedePav ? { ...S.input, borderColor: "#f59e0b" } : S.input} value={it.etapa}
-                          onChange={(v) => mexerItem(i, { etapa: v, etapaDaUltima: null })}
+                          onChange={(v) => mexerItem(i, { etapa: v, etapaDaUltima: null, etapaEscolhida: true })}
                           placeholder={pedePav ? "Térreo, Pav 1 ou Pav 2…" : "Procurar etapa…"}
                           opcoes={typeof opcoesDeEtapaDoLancamento === "function" ? opcoesDeEtapaDoLancamento(insEt, "— escolha a etapa —")
                             : [{ valor: "", rotulo: "— escolha a etapa —" }]
                             .concat(etapasDaObra.map((e) => ({ valor: e.id, rotulo: e.nome || e.titulo || e.id })))} />
                         {it.etapaDaUltima && it.etapa === it.etapaDaUltima.etapa && (
                           <div data-vk-etapa-aprendida="1" style={{ fontSize: 11, color: "#1e40af", marginTop: 4, lineHeight: 1.4 }}>
-                            como na última compra deste item na obra{it.etapaDaUltima.data ? ` (${it.etapaDaUltima.data.split("-").reverse().join("/")})` : ""} — confira se a obra mudou de fase
+                            {it.etapaDaUltima.por === "fornecedor"
+                              ? `tudo o que este fornecedor vendeu foi para esta etapa (${it.etapaDaUltima.vezes} ${it.etapaDaUltima.vezes === 1 ? "lançamento" : "lançamentos"})`
+                              : it.etapaDaUltima.vezes > 1 ? `este item foi sempre para esta etapa (${it.etapaDaUltima.vezes} compras)` : "como na única compra anterior deste item"} — confira
                           </div>
                         )}
                       </div>
