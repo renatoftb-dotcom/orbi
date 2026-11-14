@@ -95589,9 +95589,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       ...(isMobile ? { position: "absolute", top: 0, left: 0, bottom: 0, zIndex: 3, width: "min(88vw, 320px)", background: "#fff", boxShadow: "4px 0 20px rgba(0,0,0,0.15)", transform: menuAberto ? "none" : "translateX(-105%)", transition: "transform .2s ease",
           paddingTop: "max(12px, env(safe-area-inset-top, 0px))", paddingBottom: "max(12px, env(safe-area-inset-bottom, 0px))", paddingLeft: "max(8px, env(safe-area-inset-left, 0px))", paddingRight: 10 }
         // desktop: trilho de ícones suspenso sobre o desenho; o conteúdo do ícone aberto aparece num cartão ao lado
-        : { position: "absolute", top: 10, left: 10, maxHeight: "calc(100% - 20px)", zIndex: 3, transform: painelOculto ? "translateX(calc(-100% - 20px))" : "none", transition: "transform .2s ease" }) }}>
+        : { position: "absolute", top: 10, left: 10, maxHeight: "calc(100% - 20px)", zIndex: 3, pointerEvents: "none", transform: painelOculto ? "translateX(calc(-100% - 20px))" : "none", transition: "transform .2s ease" }) }}>
       {/* trilho vertical: voltar, ferramentas, pavimentos, exibir, tabelas, obra, desfazer/refazer, mais */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: 6, flexShrink: 0, borderRadius: 14,
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: 6, flexShrink: 0, borderRadius: 14, pointerEvents: "auto",
         ...(isMobile ? {} : { background: "rgba(255,255,255,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", border: "1px solid rgba(229,231,235,0.8)" }) }}>
         <button onClick={onVoltar} aria-label="Voltar ao menu principal" title="Menu principal" style={icoLat}>
           <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 4 6 10l6 6" /></svg>
@@ -95618,7 +95618,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       {/* cartão ao lado do trilho: o que o ícone aberto mostra, as opções da
           ferramenta em uso e as propriedades do que está selecionado */}
       {(isMobile || temConteudo) && (
-      <div style={{ minWidth: 0, boxSizing: "border-box", overflowY: "auto", scrollbarWidth: "thin",
+      <div style={{ minWidth: 0, boxSizing: "border-box", overflowY: "auto", scrollbarWidth: "thin", pointerEvents: "auto",
         ...(isMobile ? { flex: 1, alignSelf: "stretch", paddingTop: 2 } : { width: 214, maxHeight: "calc(100vh - 40px)", padding: 10, borderRadius: 14, background: "rgba(255,255,255,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", border: "1px solid rgba(229,231,235,0.8)" }) }}>
       {listaFerr(false)}
       {listaPav(false)}
