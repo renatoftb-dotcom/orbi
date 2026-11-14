@@ -35,7 +35,7 @@ const M = new Function(src + `
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas, ligaContaAoLancamento, lancamentosLigadosAsContas, contasLigadasAoLancamento,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
            obrasDoLancamento, validarLancamentoNaObra, destinoVisivelDoCusto,
-           efValorDoCampo, anexosDaTransacao, comAnexos, efConversaoAprendida, efCatalogoComConversoes, efEtapaAprendidaDoInsumo, efEtapaAprendidaDoFornecedor, efContaDoFornecedor,
+           efValorDoCampo, anexosDaTransacao, comAnexos, efConversaoAprendida, efCatalogoComConversoes, parcelaDaObraParaALinha, efEtapaAprendidaDoInsumo, efEtapaAprendidaDoFornecedor, efContaDoFornecedor,
            efNomeDoFornecedor, EF_FORNECEDOR_OUTROS,
            custoDoLancamento, validarCustoEmItens, itemUnicoDoCusto, itensDoCustoOuUnico, padraoDaContaDaObra,
            comIdsDosMovimentos, efMesmaLinhaDoBanco, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
@@ -4334,6 +4334,30 @@ teste("linha do banco: só copia o que foi SEMPRE igual; conta variada vira opç
   // "DEB.TIT.COMPE EFETIVADO" é todo boleto: não ensina nada
   const bol = [{ ...base, contaId: "emp_taxas", valor: 10, historicoBanco: "DEB.TIT.COMPE EFETIVADO", criadoEm: "2026-10-01" }];
   assert.strictEqual(M.sugestaoDoExtrato({ valor: -10, historico: "DEB.TIT.COMPE EFETIVADO" }, bol), null);
+});
+
+teste("boleto da obra no banco: a linha é a parcela A PAGAR da obra (somadas as contas dela)", () => {
+  const cli = { id: "e1", nome: "Módulo Exemplo", servicos: { empreendimento: true } };
+  const k = (id, parcela, venc, valor, extra) => ({ id, pedidoId: "p1", parcela, parcelasTotal: 3, vencimento: venc, valor, contaId: "material",
+    favorecido: "Loja Exemplo", descricao: "Tubos", pago: false, ...(extra || {}) });
+  const obra = { id: "o1", nome: "Módulo Exemplo", clienteId: "e1", contasPagar: [
+    k("a2", 2, "2026-11-03", 1000), k("b2", 2, "2026-11-03", 886.66),          // parcela 2 rateada em dois itens
+    k("a3", 3, "2026-12-03", 1000), k("b3", 3, "2026-12-03", 886.66),
+    k("a1", 1, "2026-10-03", 1886.66, { pago: true, pagoEm: "2026-10-03" }),     // já paga: fora
+  ] };
+  const ctx = { obras: [obra], clientes: [cli], planoObra: [{ id: "material", nome: "Material", grupo: "materiais" }] };
+  const m = { id: "x", data: "2026-11-03", valor: -1886.66, historico: "DEB.TIT.COMPE EFETIVADO · Loja Exemplo" };
+  const r = M.parcelaDaObraParaALinha(m, ctx);
+  assert.ok(r, "achou a parcela");
+  assert.deepStrictEqual(r.contas.map((c) => c.id).sort(), ["a2", "b2"]);
+  assert.strictEqual(r.destino, "emp_construcao"); assert.strictEqual(r.parcela, 2); assert.strictEqual(r.de, 3);
+  // longe do vencimento, valor diferente ou crédito: não é ela
+  assert.strictEqual(M.parcelaDaObraParaALinha({ ...m, data: "2026-09-01" }, ctx), null);
+  assert.strictEqual(M.parcelaDaObraParaALinha({ ...m, valor: -1886.6 }, ctx), null);
+  assert.strictEqual(M.parcelaDaObraParaALinha({ ...m, valor: 1886.66 }, ctx), null);
+  // duas parcelas iguais na mesma data sem nada que separe: não escolhe sozinho
+  const dup = { ...obra, contasPagar: [k("a", 1, "2026-11-03", 500, { pedidoId: "q1" }), k("b", 1, "2026-11-03", 500, { pedidoId: "q2" })] };
+  assert.strictEqual(M.parcelaDaObraParaALinha({ ...m, valor: -500, historico: "DEB" }, { ...ctx, obras: [dup] }), null);
 });
 
 for (const [nome, fn] of testes) {

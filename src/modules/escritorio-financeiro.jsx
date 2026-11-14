@@ -6774,6 +6774,57 @@ function efContaDoFornecedor(prestadorId, ctx) {
   return null;
 }
 
+// ── O boleto da obra que o banco debitou ─────────────────────────
+// A compra parcelada no boleto (e a parcela do contrato) mora na obra como
+// conta A PAGAR. Quando o débito chega no extrato, a linha É essa parcela:
+// mesmo valor (somadas as contas da mesma parcela, quando a compra foi
+// rateada por item), vencimento perto do dia do banco, na obra cujo custo
+// passa pelo escritório. Dar baixa por aqui paga as contas na obra com a
+// data do banco e faz a ponte — um registro só, sem lançar de novo no
+// escritório (era assim que a parcela virava duas: a da obra, que seguia
+// aberta, e a lançada solta da linha do banco).
+function parcelaDaObraParaALinha(movimento, ctx) {
+  const m = movimento || {};
+  if (!(Number(m.valor) < 0)) return null;
+  const c = ctx || {};
+  const v = efCentavos(Math.abs(Number(m.valor)));
+  const hist = efPalavrasDaLinha(m.historico);
+  const cands = [];
+  for (const ob of c.obras || []) {
+    if (!ob) continue;
+    const cli = (c.clientes || []).find((x) => x && x.id === ob.clienteId) || null;
+    const modo = modoDaPonte(ob, cli);
+    if (!ponteAutomaticaNaBaixa(modo)) continue;
+    const grupos = new Map();
+    for (const k of ob.contasPagar || []) {
+      if (!k || k.pago || k.estorno || k.vendaId || k.formaPagamento === "cartao" || k.cartaoId || Array.isArray(k.movimentos)) continue;
+      if (!(Number(k.valor) > 0) || !k.vencimento) continue;
+      const chave = [k.pedidoId || k.contratoId || k.numeroNota || k.id, k.parcela || 0, String(k.vencimento).slice(0, 10)].join("|");
+      if (!grupos.has(chave)) grupos.set(chave, []);
+      grupos.get(chave).push(k);
+    }
+    for (const contas of grupos.values()) {
+      const total = efCentavos(contas.reduce((t, k) => t + (Number(k.valor) || 0), 0));
+      if (Math.abs(total - v) >= 0.01) continue;
+      const vencimento = String(contas[0].vencimento).slice(0, 10);
+      const dias = efDias(vencimento, m.data);
+      if (!(dias <= 15)) continue;
+      const destino = destinoNoEscritorio(contas[0].contaId, modo, c);
+      if (!destino || !contas.every((k) => destinoNoEscritorio(k.contaId, modo, c))) continue;
+      let texto = 0;
+      for (const w of efPalavrasDaLinha([contas[0].favorecido, contas[0].descricao, ob.nome].join(" "))) if (hist.has(w)) texto++;
+      cands.push({ obra: ob, cliente: cli, contas, total, vencimento, dias, texto, destino,
+        parcela: Number(contas[0].parcela) || 0, de: Number(contas[0].parcelasTotal) || 0 });
+    }
+  }
+  if (!cands.length) return null;
+  cands.sort((a, b) => (b.texto - a.texto) || (a.dias - b.dias));
+  const [a, b] = cands;
+  // dois iguais sem nada que os separe: não escolhe sozinho
+  if (b && b.texto === a.texto && b.dias === a.dias) return null;
+  return a;
+}
+
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
 
 // Os papéis da transação, cada um abrindo numa aba. É o mesmo componente
@@ -9183,7 +9234,7 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
   // as que têm o par na outra conta: transferência, não lançamento
   const comPar = fila.parTransferencia ? lista.map((m) => ({ m, par: fila.parTransferencia(m) })).filter((x) => x.par) : [];
   const idsComPar = new Set(comPar.map((x) => x.m.id));
-  const prontas = lista.filter((m) => { if (idsComPar.has(m.id)) return false; const r = fila.rapido(m); return r && r.lancamento && !r.lancamento.naObra && !r.lancamento.ligarObra && !r.lancamento.recebimentoExtras && !r.lancamento.ligarCartao && !r.lancamento.fecharFaturaDaLinha && !r.lancamento.baixarParcela && !r.lancamento.receberVenda; });
+  const prontas = lista.filter((m) => { if (idsComPar.has(m.id)) return false; const r = fila.rapido(m); return r && r.lancamento && !r.lancamento.naObra && !r.lancamento.ligarObra && !r.lancamento.recebimentoExtras && !r.lancamento.ligarCartao && !r.lancamento.fecharFaturaDaLinha && !r.lancamento.baixarParcela && !r.lancamento.receberVenda && !r.lancamento.baixarNaObra; });
   function lancarSugeridas() {
     setErroLote("");
     const r = fila.lancarSugeridas(prontas);
@@ -9359,6 +9410,15 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                         </div>
                       </div>
                     )}
+                    {sug && sug.parcelaDaObra && (
+                      <div data-vk-parcela-da-obra="1" style={{ fontSize: 11.5, color: "#0474f4", marginTop: 2, lineHeight: 1.4 }}>
+                        🧾 <b>{ehEmpreendimento(sug.parcelaDaObra.cliente) ? "Empreendimento" : "Obra"} {sug.parcelaDaObra.obra.nome || "—"}</b> · {(sug.motivos || [])[0]}
+                        <div data-vk-destino-da-obra="1" style={{ color: "#374151", marginTop: 1 }}>
+                          Ao dar baixa: {sug.parcelaDaObra.contas.length === 1 ? "a conta fica paga" : `as ${sug.parcelaDaObra.contas.length} contas desta parcela ficam pagas`} em {dataBR(m.data)} no <b>Contas a pagar da obra {sug.parcelaDaObra.obra.nome || ""}</b> e
+                          {" "}entra{sug.parcelaDaObra.contas.length === 1 ? "" : "m"} no extrato do escritório em <b>{(contaEscritorio(sug.parcelaDaObra.destino) || {}).nome || "custo da obra"}</b>, ligada{sug.parcelaDaObra.contas.length === 1 ? "" : "s"} a esta linha — sem lançar de novo.
+                        </div>
+                      </div>
+                    )}
                     {sug && sug.cartaoObra && (
                       <div data-vk-cartao-na-obra="1" style={{ fontSize: 11.5, color: "#0474f4", marginTop: 2 }}>
                         ⇄ {(sug.motivos || [])[0]} — vira compra no cartão em {sug.cartaoObra.parcelas}x, sem lançar de novo
@@ -9374,14 +9434,14 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                         ↺ {(sug.motivos || [])[0]}. {sug.bloqueio}
                       </div>
                     )}
-                    {contaSug && !(sug && (sug.palpite || sug.estorno || sug.parcelaProjeto || sug.parcelaAPagar || sug.parcelaDaVenda)) && (
+                    {contaSug && !(sug && (sug.palpite || sug.estorno || sug.parcelaProjeto || sug.parcelaAPagar || sug.parcelaDaVenda || sug.parcelaDaObra)) && (
                       <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 2 }}>
                         {sug.vezes > 1 ? `sempre assim (${sug.vezes} vezes)` : `como em ${dataBR(sug.de.lancadoEm) || "lançamento anterior"}`}: <b style={{ color: "#374151" }}>{contaSug.nome}</b>
                         {sug.campos.cliente ? ` · ${sug.campos.cliente}` : ""}
                       </div>
                     )}
                     {sug && !contaSug && Array.isArray(sug.opcoes) && sug.opcoes.length > 0 && !m._cartao && !aberta
-                      && !(sug.estorno || sug.parcelaProjeto || sug.parcelaAPagar || sug.parcelaDaVenda || sug.faturaDoCartao) && (
+                      && !(sug.estorno || sug.parcelaProjeto || sug.parcelaAPagar || sug.parcelaDaVenda || sug.parcelaDaObra || sug.faturaDoCartao) && (
                       <div data-vk-opcoes-da-linha="1" onClick={(e) => e.stopPropagation()}
                         style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 4, fontSize: 11.5, color: "#6b7280" }}>
                         <span>esta linha já foi para contas diferentes:</span>
@@ -9409,6 +9469,10 @@ function FilaDoExtrato({ linhas, naoLancar, fila, ocupado }) {
                       <button data-vk-baixar-parcela="1" style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#fff", background: "#0474f4", borderColor: "#0474f4" }}
                         disabled={!!ocupado}
                         onClick={(e) => { e.stopPropagation(); rapido(m); }}>✓ Baixar parcela</button>
+                    ) : sug && sug.parcelaDaObra && !aberta ? (
+                      <button data-vk-baixar-na-obra="1" style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#fff", background: "#0474f4", borderColor: "#0474f4" }}
+                        disabled={!!ocupado}
+                        onClick={(e) => { e.stopPropagation(); rapido(m); }}>✓ Dar baixa na obra</button>
                     ) : sug && sug.parcelaDaVenda && !aberta ? (
                       <button data-vk-receber-venda-linha="1" style={{ ...S.btnSec, padding: "5px 10px", fontSize: 12, color: "#fff", background: "#0474f4", borderColor: "#0474f4" }}
                         disabled={!!ocupado}
@@ -12859,6 +12923,12 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         return { campos: { contaId: contaVenda, unidadeId: "empreendimento" }, parcelaDaVenda: { ...pv, contaNoEscritorio: contaVenda },
           motivos: [`${pv.obra.nome ? pv.obra.nome + " · " : ""}${pv.conta.descricao || "parcela da venda"}${pv.conta.favorecido ? " · " + pv.conta.favorecido : ""}, vence ${efDiaBR(pv.conta.vencimento)}`] };
       }
+      const po = parcelaDaObraParaALinha(m, ctxDoPalpite);
+      if (po) {
+        const k0 = po.contas[0];
+        return { campos: { contaFonte: "obra", contaId: k0.contaId, obraIdAlvo: po.obra.id, projeto: po.obra.nome || "" }, parcelaDaObra: po,
+          motivos: [`${k0.descricao || "conta a pagar"}${k0.favorecido ? " · " + k0.favorecido : ""}${po.de > 1 ? ` · parcela ${po.parcela}/${po.de}` : ""}, vence ${efDiaBR(po.vencimento)}`] };
+      }
       const ap = parcelaAPagarParaALinha(m, contaDaLinha(m), aPagarDoEscritorio(cfgFin));
       if (ap) return { campos: { contaId: ap.contaId, unidadeId: ap.unidadeId }, parcelaAPagar: ap,
         motivos: [`parcela ${ap.parcela}/${ap.de}${ap.descricao ? " de " + ap.descricao : ""}, a pagar em ${efDiaBR(ap.vencimento)}`] };
@@ -12884,6 +12954,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       }
       if (sf && sf.parcelaAPagar) return { lancamento: { baixarParcela: { itemId: sf.parcelaAPagar.id, m } } };
       if (sf && sf.parcelaDaVenda) return { lancamento: { receberVenda: { obraId: sf.parcelaDaVenda.obra.id, contaId: sf.parcelaDaVenda.conta.id, m } } };
+      if (sf && sf.parcelaDaObra) return { lancamento: { baixarNaObra: { obraId: sf.parcelaDaObra.obra.id, contaIds: sf.parcelaDaObra.contas.map((k) => k.id), m } } };
       const r = rapidoDoExtrato(m);
       return r && r.lancamento ? { ...r, lancamento: { ...r.lancamento, ...marcaDaLinha(m) } } : r;
     }
@@ -12918,6 +12989,17 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         projeto: pv.obra.nome || "",
         descricao: [pv.conta.descricao, pv.conta.favorecido].filter(Boolean).join(" · ") || base.descricao,
         receberVenda: { obraId: pv.obra.id, contaId: pv.conta.id, m } };
+    }
+    if (m && !m._cartao && sug && sug.parcelaDaObra) {
+      const po = sug.parcelaDaObra;
+      const cli = po.cliente;
+      return { ...base, ...marcaDaLinha(m), ...sug.campos,
+        unidadeId: cli && ehEmpreendimento(cli) ? "empreendimento" : "gestao_obras",
+        clienteId: cli ? cli.id : (po.obra.clienteId || ""), cliente: cli ? cli.nome || "" : "",
+        empreendimentoId: cli && ehEmpreendimento(cli) ? cli.id : "",
+        fornecedor: po.contas[0].favorecido || "", fornecedorId: po.contas[0].prestadorId || "",
+        descricao: po.contas[0].descricao || base.descricao,
+        baixarNaObra: { obraId: po.obra.id, contaIds: po.contas.map((k) => k.id), m } };
     }
     if (!m || !m._cartao) return { ...base, ...marcaDaLinha(m) };
     const cartao = cartaoDaLinha(m);
@@ -13070,6 +13152,38 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   // conta da obra passa a recebida (no dia e na conta do banco) e a ponte
   // gera o lançamento, já ligado à linha — a mesma coisa que o Receber da
   // tela de Vendas faria, sem a linha ficar pendente.
+  // As contas a pagar da obra pagas pela linha do banco: pagas na obra com a
+  // data e a conta do banco, e a ponte leva para o escritório, ligada à linha.
+  function baixarContasDaObraPelaLinha(x) {
+    const obras = (data || {}).obras || [];
+    const obra = obras.find((o) => o && o.id === x.obraId);
+    const ids = new Set(x.contaIds || []);
+    const contas = obra ? (obra.contasPagar || []).filter((k) => k && ids.has(k.id)) : [];
+    if (!contas.length || contas.some((k) => k.pago) || !x.m) {
+      dialogo.alertar({ titulo: "Não deu para dar baixa", tipo: "aviso", mensagem: "A conta da obra mudou ou já foi paga. Abra a linha de novo." });
+      return false;
+    }
+    const agora = new Date().toISOString();
+    const quem = typeof nomeDeQuem === "function" ? nomeDeQuem(perm && perm.usuario) : "";
+    const dia = String(x.m.data || "").slice(0, 10);
+    const conta = marcaDaLinha(x.m).contaBancariaId || "";
+    const pagas = contas.map((k) => ({ ...contaPaga(k, { pagoEm: dia, valorPago: efCentavos(Number(k.valor) || 0) }, quem),
+      ...(conta ? { contaBancariaId: conta } : {}), passouPelaConta: true }));
+    const porId = new Map(pagas.map((k) => [k.id, k]));
+    const obraNova = { ...obra, contasPagar: (obra.contasPagar || []).map((k) => (k && porId.has(k.id) ? porId.get(k.id) : k)) };
+    const cliente = ((data || {}).clientes || []).find((k) => k && k.id === obra.clienteId) || null;
+    const ponte = lancamentosDaBaixa(obraNova, cliente, pagas, { fechamentos, lancamentos: lancs });
+    if (!ponte.lancamentos.length) {
+      const motivo = ((ponte.bloqueados || [])[0] || (ponte.ignorados || [])[0] || {}).motivo || "A conta não atravessa para o escritório.";
+      dialogo.alertar({ titulo: "Não deu para dar baixa", mensagem: motivo, tipo: "aviso" });
+      return false;
+    }
+    const marca = { extratoId: x.m.id || "", historicoBanco: x.m.historico || "", conferido: true, conferidoEm: agora, contaBanco: "sim", ...marcaDaLinha(x.m) };
+    save({ ...data, obras: obras.map((o) => (o && o.id === obra.id ? obraNova : o)),
+      lancamentos: [...outrosLancamentos, ...lancs, ...ponte.lancamentos.map((l) => ({ ...l, ...marca, competencia: String(mesEmConferencia) }))] }).catch(console.error);
+    setAviso(`${contas.length === 1 ? "Conta paga" : contas.length + " contas pagas"} na obra ${obra.nome || ""}: ${efDinheiro(Math.abs(Number(x.m.valor) || 0))}.`);
+    return true;
+  }
   function receberParcelaDaVenda(x) {
     const obras = (data || {}).obras || [];
     const obra = obras.find((o) => o && o.id === x.obraId);
@@ -13121,6 +13235,12 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
     if (l && l.baixarParcela) return baixarParcelaAPagar(l.baixarParcela);
     // Do formulário: dá baixa na parcela se ele continua sendo a venda; se a
     // pessoa trocou a conta, é outro lançamento — sem a ligação.
+    // do formulário: continua sendo a mesma conta da mesma obra → dá baixa nela
+    if (l && l.baixarNaObra && (!l.contaFonte || (l.contaFonte === "obra" && l.obraIdAlvo === l.baixarNaObra.obraId))) {
+      const x = l.baixarNaObra;
+      return baixarContasDaObraPelaLinha(l.contaFonte ? { ...x, m: { ...x.m, data: l.lancadoEm || x.m.data } } : x);
+    }
+    if (l && l.baixarNaObra) { const { baixarNaObra: _bo, ...semBaixa } = l; l = semBaixa; }
     if (l && l.receberVenda && (!l.contaId || ["emp_venda", "res_documentacao"].includes(l.contaId))) {
       const x = l.receberVenda;
       return receberParcelaDaVenda(l.contaId ? { ...x, m: { ...x.m, data: l.lancadoEm || x.m.data,
@@ -13219,7 +13339,7 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       // o mesmo caminho do botão da linha — o estorno com o original achado
       // vai como estorno; o que entra numa obra fica para lançar um a um
       const r = rapidoDaLinha(m);
-      if (!r.lancamento || r.lancamento.naObra || r.lancamento.ligarObra || r.lancamento.recebimentoExtras || r.lancamento.ligarCartao || r.lancamento.fecharFaturaDaLinha || r.lancamento.baixarParcela || r.lancamento.receberVenda) continue;
+      if (!r.lancamento || r.lancamento.naObra || r.lancamento.ligarObra || r.lancamento.recebimentoExtras || r.lancamento.ligarCartao || r.lancamento.fecharFaturaDaLinha || r.lancamento.baixarParcela || r.lancamento.receberVenda || r.lancamento.baixarNaObra) continue;
       const l = r.lancamento;
       novos.push({ ...l, id: (typeof uid === "function" ? uid() : String(Date.now())) + "_" + novos.length,
         numeroDoc: proximaReferencia((data || {}).obras || [], lancs.concat(novos)),
