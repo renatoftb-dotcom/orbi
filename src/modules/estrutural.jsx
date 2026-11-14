@@ -61,7 +61,7 @@ const ES_NBR = {
 const ES_PADRAO = {
   caa: 2,                   // área urbana
   fck: 25,                  // MPa
-  pilar: { b: 0.14, h: 0.30 }, // embutido na parede de 14 (exige γn — NBR 6118 13.2.3)
+  pilar: { b: 0.19, h: 0.19 }, // menor seção sem γn: 19 cm e 361 cm² (NBR 6118 13.2.3)
   viga: { b: 0.14, h: 0.40 },
   baldrame: { b: 0.14, h: 0.30 },
   lajeEsp: 0.10,            // m
@@ -146,6 +146,107 @@ function esVaoEm(w, s, folga) {
   return null;
 }
 
+// meia extensão do pilar (retângulo b × h girado em ang) na direção v
+function esMeiaExt(p, v) {
+  const c = Math.cos(p.ang || 0), s = Math.sin(p.ang || 0);
+  return Math.abs(v.x * c + v.y * s) * p.h / 2 + Math.abs(-v.x * s + v.y * c) * p.b / 2;
+}
+
+// porta, janela ou vão que a seção do pilar invade (em qualquer parede que
+// ele toca), ou null
+function esPilarNoVao(p, paredes) {
+  const cs = esCantosPilar(p);
+  for (const w of paredes || []) {
+    const L = esLen(w); if (!L || !(w.ab || []).length) continue;
+    const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
+    const ss = cs.map((q) => (q.x - w.a.x) * ux + (q.y - w.a.y) * uy), dd = cs.map((q) => (q.x - w.a.x) * -uy + (q.y - w.a.y) * ux);
+    const t2 = (w.t || 0) / 2;
+    if (Math.min(...dd) > t2 - 0.005 || Math.max(...dd) < -t2 + 0.005) continue; // não toca a parede
+    const s0 = Math.min(...ss), s1 = Math.max(...ss);
+    for (const o of w.ab) if (s1 > o.x - o.larg / 2 + 0.005 && s0 < o.x + o.larg / 2 - 0.005) return o;
+  }
+  return null;
+}
+
+// lado de dentro da casa de cada parede: +1 (lado da normal), -1, ou 0
+// (parede interna ou não dá para saber). Dentro = dentro de um ambiente ou
+// cercado de paredes por todos os lados.
+function esLadoInternoFn(ws, areas) {
+  const ambs = (areas || []).filter((a) => a.tipo === "ambiente" && a.pts && a.pts.length >= 3 && !a.aberto).map((a) => a.pts);
+  const dentroPoli = (q, pts) => { let d = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { const a = pts[i], b = pts[j]; if ((a.y > q.y) !== (b.y > q.y) && q.x < (b.x - a.x) * (q.y - a.y) / (b.y - a.y) + a.x) d = !d; } return d; };
+  // ponto fechado pelas paredes: um raio em cada uma de 8 direções bate numa parede
+  const fechado = (q) => {
+    for (let k = 0; k < 8; k++) {
+      const a = k * Math.PI / 4, rx = Math.cos(a), ry = Math.sin(a);
+      const bate = ws.some((w) => {
+        const ex = w.b.x - w.a.x, ey = w.b.y - w.a.y, den = rx * ey - ry * ex; if (Math.abs(den) < 1e-9) return false;
+        const t = ((w.a.x - q.x) * ey - (w.a.y - q.y) * ex) / den, u = ((w.a.x - q.x) * ry - (w.a.y - q.y) * rx) / den;
+        return t > 0 && u >= -0.02 && u <= 1.02;
+      });
+      if (!bate) return false;
+    }
+    return true;
+  };
+  const emAmb = (q) => ambs.some((pts) => dentroPoli(q, pts)) || fechado(q);
+  const cache = new Map();
+  return (i) => {
+    if (cache.has(i)) return cache.get(i);
+    const w = ws[i], L = esLen(w), nx = -(w.b.y - w.a.y) / L, ny = (w.b.x - w.a.x) / L, m = { x: (w.a.x + w.b.x) / 2, y: (w.a.y + w.b.y) / 2 };
+    let r = 0;
+    {
+      const dist = (w.t || 0) / 2 + 0.2, mais = emAmb({ x: m.x + nx * dist, y: m.y + ny * dist }), menos = emAmb({ x: m.x - nx * dist, y: m.y - ny * dist });
+      r = mais && !menos ? 1 : menos && !mais ? -1 : 0;
+    }
+    cache.set(i, r); return r;
+  };
+}
+
+// Encaixe do pilar no encontro (concepção, não norma):
+// - não passa da face de uma parede para o lado em que não há outra parede
+//   (canto: alinhado com as duas faces de fora; T: alinhado com a face oposta
+//   à parede que chega);
+// - parede sem nada dos dois lados (trecho corrido, ponta): na fachada,
+//   alinhado com a face de fora (a sobra vai para dentro); interna, centrado;
+// - ponta solta: o pilar fica todo sobre a parede;
+// - depois, se ainda invadir porta ou janela, desliza ao longo da parede até
+//   sair do vão (o ponto de apoio das vigas vai junto).
+function esEncaixarPilar(p, ws, interno) {
+  const dirs = p._dirs || [];
+  const unicas = [];
+  for (const d of dirs) if (!unicas.some((u) => u.i === d.i)) unicas.push(d);
+  let dx = 0, dy = 0;
+  const feitas = [];
+  for (const d of unicas) {
+    const w = ws[d.i]; if (!w) continue;
+    const L = esLen(w), ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, n = { x: -uy, y: ux };
+    if (feitas.some((m) => Math.abs(m.x * n.x + m.y * n.y) > 0.98)) continue; // paralela a uma já tratada
+    feitas.push(n);
+    const lado = (sg) => dirs.some((o) => o.i !== d.i && (o.x * n.x + o.y * n.y) * sg > 0.3);
+    const temMais = lado(1), temMenos = lado(-1), sobra = Math.max(0, esMeiaExt(p, n) - (w.t || 0) / 2);
+    let k = 0;
+    if (temMais && !temMenos) k = sobra; else if (temMenos && !temMais) k = -sobra;
+    else if (!temMais && !temMenos) k = interno(d.i) * sobra;
+    dx += n.x * k; dy += n.y * k;
+  }
+  // ponta solta: uma parede só, saindo do nó num sentido
+  if (dirs.length === 1) { const d = dirs[0], e = esMeiaExt(p, d); dx += d.x * e; dy += d.y * e; }
+  p.x = esR3(p.no.x + dx); p.y = esR3(p.no.y + dy);
+  // fora de porta e janela
+  if (!esPilarNoVao(p, ws)) return;
+  const base = { x: p.x, y: p.y }, no0 = { ...p.no };
+  for (let passo = 0.025; passo <= 1.2 + 1e-9; passo += 0.025) {
+    for (const d of unicas) for (const sg of [1, -1]) {
+      const w = ws[d.i], L = esLen(w), ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
+      const nx = base.x + ux * passo * sg, ny = base.y + uy * passo * sg;
+      const sAx = (no0.x + ux * passo * sg - w.a.x) * ux + (no0.y + uy * passo * sg - w.a.y) * uy;
+      if (sAx < -0.01 || sAx > L + 0.01) continue; // continua sobre a parede
+      p.x = esR3(nx); p.y = esR3(ny);
+      if (!esPilarNoVao(p, ws)) { p.no = { x: esR3(no0.x + ux * passo * sg), y: esR3(no0.y + uy * passo * sg) }; p.deslocado = esR3(passo); return; }
+    }
+  }
+  p.x = base.x; p.y = base.y; // não achou: fica e a verificação aponta
+}
+
 // ---------- lançamento ----------
 // paredes/areas: do pavimento; params: ES_PADRAO com o que o usuário mudou;
 // opts.baldrames: gera vigas baldrame (pavimento mais baixo).
@@ -157,12 +258,10 @@ function esLancar(paredes, areas, params, opts = {}) {
   const nos = esNos(ws);
   const pilares = [];
   // no = ponto da rede de paredes onde o pilar está (é por ele que as vigas
-  // se apoiam); x,y = centro da seção, que pode ser deslocado do nó para o
-  // pilar ficar dentro da parede
-  const juntar = (no, ang, desl = 0) => {
-    if (pilares.some((q) => esDist(q.no, no) < Math.max(pil.h, 0.3))) return;
-    const c = { x: no.x + Math.cos(ang) * desl, y: no.y + Math.sin(ang) * desl };
-    pilares.push({ x: esR3(c.x), y: esR3(c.y), b: pil.b, h: pil.h, ang: esR3(ang), no: { x: esR3(no.x), y: esR3(no.y) } });
+  // se apoiam); x,y = centro da seção, acertado depois (esEncaixarPilar)
+  const juntar = (no, ang, dirs) => {
+    if (pilares.some((q) => esDist(q.no, no) < Math.max(pil.h, pil.b, 0.3))) return;
+    pilares.push({ x: esR3(no.x), y: esR3(no.y), b: pil.b, h: pil.h, ang: esR3(ang), no: { x: esR3(no.x), y: esR3(no.y) }, _dirs: dirs });
   };
   // 1) cantos, encontros e pontas
   for (const n of nos) {
@@ -172,15 +271,7 @@ function esLancar(paredes, areas, params, opts = {}) {
     const passa = (d) => n.dirs.some((o) => o !== d && o.x * d.x + o.y * d.y < -0.985);
     let melhor = null, Lm = -1;
     for (const d of n.dirs) { const L = esLen(ws[d.i]) + (passa(d) ? 1e6 : 0); if (L > Lm) { Lm = L; melhor = d; } }
-    // sem parede do outro lado (canto ou ponta), o pilar entra na parede para
-    // não sair pela face de fora: a ponta dele para na face da parede que cruza
-    let desl = 0;
-    if (!passa(melhor)) {
-      const outras = n.dirs.filter((d) => d !== melhor);
-      const meiaEsp = outras.length ? Math.max(...outras.map((d) => (ws[d.i].t || 0) / 2)) : 0;
-      desl = Math.max(0, pil.h / 2 - meiaEsp);
-    }
-    juntar(n, Math.atan2(melhor.y, melhor.x), desl);
+    juntar(n, Math.atan2(melhor.y, melhor.x), n.dirs.map((d) => ({ x: d.x, y: d.y, i: d.i })));
   }
   // 2) pilares intermediários onde o trecho entre pilares passa do vão máximo
   const naParede = (w) => {
@@ -203,10 +294,14 @@ function esLancar(paredes, areas, params, opts = {}) {
           const e = o.x - o.larg / 2 - pil.h / 2 - 0.02, d = o.x + o.larg / 2 + pil.h / 2 + 0.02;
           s = Math.abs(e - s) <= Math.abs(d - s) && e > s0 + 0.3 ? e : d;
         }
-        juntar({ x: w.a.x + ux * s, y: w.a.y + uy * s }, ang);
+        const iw = ws.indexOf(w);
+        juntar({ x: w.a.x + ux * s, y: w.a.y + uy * s }, ang, [{ x: ux, y: uy, i: iw }, { x: -ux, y: -uy, i: iw }]);
       }
     }
   }
+  // 3) encaixe de cada pilar na parede e fora de portas e janelas
+  const interno = esLadoInternoFn(ws, areas);
+  for (const p of pilares) { esEncaixarPilar(p, ws, interno); delete p._dirs; }
   pilares.forEach((p, k) => { p.id = "P" + (k + 1); });
   // 3) vigas: cada parede dividida nos pilares que estão sobre ela
   const vigas = [], baldrames = [];
@@ -266,29 +361,28 @@ function esVerificar(est, paredes, params, ctx = {}) {
   const fk = esFckOk(P);
   if (!fk.ok) add("nbr", "geral", `Concreto C${P.fck} abaixo do mínimo C${fk.min} para a classe de agressividade ${ES_NBR.caa[P.caa].rotulo}.`, null, "NBR 6118, Tabela 7.1");
   // pilares (o γn, que vale para muitos de uma vez, sai num aviso só por espessura)
-  const comGamaN = new Map();
+  const comGamaN = new Map(), grossos = new Map();
   for (const p of est.pilares || []) {
     const b = Math.round(Math.min(p.b, p.h) * 100), area = Math.round(p.b * 100) * Math.round(p.h * 100);
     if (b < ES_NBR.pilarDimAbsoluta) add("nbr", p.id, `${p.id}: menor dimensão ${b} cm, abaixo de ${ES_NBR.pilarDimAbsoluta} cm.`, p, "NBR 6118, 13.2.3");
     else if (b < ES_NBR.pilarDimMin) { if (!comGamaN.has(b)) comGamaN.set(b, []); comGamaN.get(b).push(p); }
     if (area < ES_NBR.pilarAreaMin) add("nbr", p.id, `${p.id}: seção de ${area} cm², abaixo de ${ES_NBR.pilarAreaMin} cm².`, p, "NBR 6118, 13.2.3");
-    // pilar dentro de porta/janela
-    for (const w of paredes || []) {
-      const L = esLen(w); if (!L) continue;
-      const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
-      const s = (p.x - w.a.x) * ux + (p.y - w.a.y) * uy, d = Math.abs((p.x - w.a.x) * -uy + (p.y - w.a.y) * ux);
-      if (d > (w.t || 0) / 2 + Math.min(p.b, p.h) / 2) continue;
-      const meio = Math.max(p.b, p.h) / 2;
-      const o = esVaoEm(w, s, meio - 0.005);
-      if (o) add("compat", p.id, `${p.id} cai dentro de ${(o.tipo || "").startsWith("porta") ? "uma porta" : (o.tipo === "vao" ? "um vão" : "uma janela")}.`, p);
-      if (Math.min(p.b, p.h) > (w.t || 0) + 0.005 && d < 0.02) add("atencao", p.id, `${p.id} (${Math.round(Math.min(p.b, p.h) * 100)} cm) é mais grosso que a parede de ${Math.round((w.t || 0) * 100)} cm e vai aparecer.`, p);
-    }
+    // pilar invadindo porta/janela (pela seção inteira)
+    const o = esPilarNoVao(p, paredes);
+    if (o) add("compat", p.id, `${p.id} invade ${(o.tipo || "").startsWith("porta") ? "uma porta" : (o.tipo === "vao" ? "um vão" : "uma janela")}.`, p);
+    // mais grosso que a parede em que está: fica aparente (aviso único, abaixo)
+    const tParede = Math.min(...(paredes || []).filter((w) => { const L = esLen(w); if (!L) return false; const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, q = p.no || p; const s = (q.x - w.a.x) * ux + (q.y - w.a.y) * uy; return s > -0.1 && s < L + 0.1 && Math.abs((q.x - w.a.x) * -uy + (q.y - w.a.y) * ux) < 0.1; }).map((w) => w.t || 0), Infinity);
+    if (isFinite(tParede) && Math.min(p.b, p.h) > tParede + 0.005) { const k = `${Math.round(Math.min(p.b, p.h) * 100)}|${Math.round(tParede * 100)}`; if (!grossos.has(k)) grossos.set(k, []); grossos.get(k).push(p); }
     // continuidade: pilar sem pilar embaixo nasce numa viga (transição)
-    if (ctx.pilaresAbaixo && !ctx.pilaresAbaixo.some((q) => esDist(q, p) < 0.15)) add("atencao", p.id, `${p.id} não tem pilar embaixo: vai nascer numa viga (transição).`, p);
+    if (ctx.pilaresAbaixo && !ctx.pilaresAbaixo.some((q) => esDist(q.no || q, p.no || p) < 0.15)) add("atencao", p.id, `${p.id} não tem pilar embaixo: vai nascer numa viga (transição).`, p);
   }
   for (const [b, ps] of comGamaN) {
     const nomes = ps.length > 4 ? `${ps.slice(0, 3).map((p) => p.id).join(", ")} e mais ${ps.length - 3}` : ps.map((p) => p.id).join(", ");
     add("atencao", ps.map((p) => p.id).join(","), `${nomes}: ${b} cm é menor que ${ES_NBR.pilarDimMin} cm — permitido com γn = ${String(ES_NBR.gamaN(b)).replace(".", ",")} nos esforços.`, ps.length === 1 ? ps[0] : null, "NBR 6118, 13.2.3 e Tabela 13.1");
+  }
+  for (const [k, ps] of grossos) {
+    const [bp, tp] = k.split("|");
+    add("atencao", ps.map((p) => p.id).join(","), `${ps.length} pilar${ps.length === 1 ? "" : "es"} de ${bp} cm em parede de ${tp} cm: ficam aparentes. Na fachada a face de fora fica alinhada e a sobra vai para dentro.`, ps.length === 1 ? ps[0] : null);
   }
   // vigas
   for (const v of est.vigas || []) {
