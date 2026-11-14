@@ -8,7 +8,7 @@ import assert from "assert";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(join(__dirname, "src", "modules", "estrutural.jsx"), "utf-8");
-const M = new Function(`${src}\nreturn { ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao };`)();
+const M = new Function(`${src}\nreturn { esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao };`)();
 
 let ok = 0, falhou = 0;
 const t = (nome, fn) => { try { fn(); ok++; } catch (e) { falhou++; console.log("FALHOU:", nome, "\n ", e.message); } };
@@ -149,6 +149,25 @@ t("quantitativos: concreto e fôrma", () => {
   // laje: 48 m² × 0,10 = 4,8 m³
   assert.ok(Math.abs(q.lajes.concreto - 4.8) < 1e-9);
   assert.ok(Math.abs(q.concreto - (0.60648 + 1.904 + 4.8)) < 1e-9);
+});
+t("cargas: parede de 14 sem escolha = bloco cerâmico 11,5 + 1 cm por face (1,3 kN/m²)", () => {
+  const c = M.esCargaParede({ a: P(0, 0), b: P(4, 0), t: 0.14, h: 2.8 }, 0.4);
+  assert.strictEqual(c.g, 1.3); assert.ok(Math.abs(c.linha - 1.3 * 2.4) < 1e-9);
+  const c2 = M.esCargaParede({ a: P(0, 0), b: P(4, 0), t: 0.14, h: 2.8, alv: { sist: "concreto_estrutural", bloco: 14, rev: 2 } }, 0);
+  assert.strictEqual(c2.g, 2.7);
+});
+t("cargas: laje maciça 10 cm de piso = 2,5 + 1,0 + 0,285 e q = 1,5", () => {
+  const c = M.esCargaLaje({ esp: 0.1 }, "residencial");
+  assert.ok(Math.abs(c.g - 3.785) < 1e-9); assert.strictEqual(c.q, 1.5);
+  const f = M.esCargaLaje({ esp: 0.1 }, "forro"); assert.ok(Math.abs(f.g - 2.785) < 1e-9); assert.strictEqual(f.q, 0);
+  const s = M.esCargaLaje({ esp: 0.1, carga: { uso: "servico" } }, "forro"); assert.strictEqual(s.q, 2);
+});
+t("cargas: telhado cerâmico com madeira até 40% = 0,7; fibrocimento 6 mm pede o peso da estrutura", () => {
+  assert.strictEqual(M.esCargaTelhado({ telha: "Telha Barro Portuguesa" }, 30).g, 0.7);
+  assert.strictEqual(M.esCargaTelhado({ telha: "Telha Barro Portuguesa" }, 45).falta, "estrutura");
+  const f = M.esCargaTelhado({ telha: "Telha Fibrocimento 6mm" }, 15); assert.strictEqual(f.falta, "estrutura");
+  const f2 = M.esCargaTelhado({ telha: "Telha Fibrocimento 6mm", pesoEstrutura: 0.2 }, 15); assert.ok(Math.abs(f2.g - (0.18 * Math.sqrt(1 + 0.15 ** 2) + 0.2)) < 1e-9);
+  assert.strictEqual(M.esCargaTelhado({ telha: "Telha Plana Concreto", pesoEstrutura: 0.2 }, 30).falta, "telha");
 });
 console.log(`${ok} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

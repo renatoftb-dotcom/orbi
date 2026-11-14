@@ -32,7 +32,7 @@ function tpCarregarThree() {
 
 // Campo numérico que só confirma ao sair do campo ou apertar Enter — assim
 // cada edição vira um passo só no Desfazer. valor null = vários valores.
-function TpCampo({ id, rotulo, valor, casas = 2, onConfirmar, min = 0, somenteLeitura }) {
+function TpCampo({ id, rotulo, valor, casas = 2, onConfirmar, min = 0, somenteLeitura, vazio }) {
   const fmt = (v) => (v == null || !isFinite(v) ? "" : Number(v).toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas }));
   const [txt, setTxt] = useState(fmt(valor));
   const foco = useRef(false);
@@ -46,7 +46,7 @@ function TpCampo({ id, rotulo, valor, casas = 2, onConfirmar, min = 0, somenteLe
   return (
     <div style={{ minWidth: 0 }}>
       <label htmlFor={id} style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>{rotulo}</label>
-      <input id={id} inputMode="decimal" value={txt} placeholder={valor == null ? "vários" : ""} readOnly={somenteLeitura}
+      <input id={id} inputMode="decimal" value={txt} placeholder={valor == null ? (vazio || "vários") : ""} readOnly={somenteLeitura}
         onChange={(e) => setTxt(e.target.value)}
         onFocus={() => { foco.current = true; }}
         onBlur={() => { foco.current = false; if (!somenteLeitura) confirmar(); }}
@@ -2194,6 +2194,26 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     });
     return r;
   }, [estPorPav]); // eslint-disable-line react-hooks/exhaustive-deps
+  // cargas por pavimento (NBR 6120): paredes sobre as vigas, lajes, telhado
+  const estCargas = useMemo(() => {
+    if (!estrutura.ativa) return [];
+    const hV = ({ ...ES_PADRAO, ...(estrutura.params || {}) }).viga.h;
+    return pavsOrd.map((p, k) => {
+      const d = dadosDe(p.id), acima = pavsOrd[k + 1], usoP = acima && (dadosDe(acima.id).paredes || []).length ? "residencial" : "forro";
+      let par = 0, lg = 0, lq = 0, tel = 0; const falta = [];
+      for (const w of d.paredes || []) { const c = esCargaParede(w, hV); par += c.linha * c.L; }
+      for (const a of d.areas || []) {
+        if (!a.pts || a.pts.length < 3) continue;
+        if (a.tipo === "laje") { const c = esCargaLaje(a, usoP), A = tpAreaPoli(a.pts); lg += c.g * A; lq += c.q * A; }
+        if (a.tipo === "telhado") {
+          const ls = (a.lados || []).filter((l) => l && l.inclina !== false && l.pct != null), pct = ls.length ? ls.reduce((t, l) => t + (+l.pct || 0), 0) / ls.length : tpTelha(a.telha).pct;
+          const c = esCargaTelhado(a, pct); let Ap = 0; try { Ap = tpTelhadoGeo(a).areaProjecao || 0; } catch (err) { Ap = tpAreaPoli(a.pts); }
+          tel += c.g * Ap; if (c.falta) falta.push(c.falta === "telha" ? "peso da telha" : "peso da estrutura do telhado");
+        }
+      }
+      return { id: p.id, nome: p.nome, paredes: par, lajeG: lg, lajeQ: lq, telhado: tel, total: par + lg + lq + tel, falta };
+    });
+  }, [estrutura, paredes, areas, dadosPav, pavimentos, pavAtivo]); // eslint-disable-line react-hooks/exhaustive-deps
   const estQtd = useMemo(() => {
     const t = { pilares: { n: 0, concreto: 0, forma: 0 }, vigas: { n: 0, comprimento: 0, concreto: 0, forma: 0 }, baldrames: { n: 0, comprimento: 0, concreto: 0, forma: 0 }, lajes: { n: 0, area: 0, concreto: 0, forma: 0 }, concreto: 0, forma: 0 };
     for (const p of pavsOrd) {
@@ -5371,6 +5391,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     }
     return t;
   })();
+  // cargas (estrutural.jsx, NBR 6120): campos de seleção e leitura
+  const selCarga = { width: "100%", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit", background: "#fff" };
+  const lblCarga = { display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 };
+  const igualEm = (lista, f) => { if (!lista.length) return null; const v = f(lista[0]); return lista.every((x) => f(x) === v) ? v : null; };
+  const notaNorma = (fonte) => <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "#9ca3af", lineHeight: 1.35 }}>{fonte} — valor a conferir no texto oficial.</div>;
+  const hVigaEst = estrutura.ativa ? ({ ...ES_PADRAO, ...(estrutura.params || {}) }).viga.h : 0;
+  const usoPadraoLaje = (() => { const k = pavsOrd.findIndex((p) => p.id === pavAtivo), acima = pavsOrd[k + 1]; return acima && (dadosDe(acima.id).paredes || []).length ? "residencial" : "forro"; })();
+  const pctMedioTelhado = (a) => { const ls = (a.lados || []).filter((l) => l && l.inclina !== false && l.pct != null); return ls.length ? ls.reduce((t, l) => t + (+l.pct || 0), 0) / ls.length : tpTelha(a.telha).pct; };
   const comum = (lista, f) => { if (!lista.length) return null; const v0 = f(lista[0]); return lista.every((x) => Math.abs(f(x) - v0) < 1e-9) ? v0 : null; };
 
   // ---------- estilos ----------
@@ -5648,6 +5676,48 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             {selP.length === 1 && <div style={{ gridColumn: "1 / -1" }}><TpCampo id="tp-p-comp" rotulo="Comprimento (m)" valor={tpLen(paredes[selP[0]])} onConfirmar={(v) => mudarComprimento(selP[0], v)} /></div>}
             <TpCampo id="tp-p-alt" rotulo="Altura (m)" valor={comum(selP, (i) => paredes[i].h)} onConfirmar={(v) => editarParedes(selP, (w) => ({ ...w, h: v }))} />
             <TpCampo id="tp-p-esp" rotulo="Espessura (cm)" casas={0} valor={comum(selP, (i) => Math.round(paredes[i].t * 100))} onConfirmar={(v) => editarParedes(selP, (w) => ({ ...w, t: v / 100 }))} />
+            {(() => {
+              // tipo de alvenaria: dá o peso da parede (NBR 6120) para as cargas
+              const cs = selP.map((i) => esAlvenariaDe(paredes[i]));
+              const sist = igualEm(cs, (c) => c.sist), bloco = igualEm(cs, (c) => c.bloco), rev = igualEm(cs, (c) => c.rev);
+              const S = esAlvSistema(sist || cs[0].sist), blocos = Object.keys(S.esp).map(Number).sort((a, b) => a - b);
+              const mudar = (patch) => editarParedes(selP, (w) => {
+                const a = { ...esAlvenariaDe(w), ...patch }, s2 = esAlvSistema(a.sist), bs = Object.keys(s2.esp).map(Number);
+                if (!bs.includes(+a.bloco)) a.bloco = bs.reduce((m, b) => (Math.abs(b - a.bloco) < Math.abs(m - a.bloco) ? b : m), bs[0]);
+                return { ...w, alv: { sist: a.sist, bloco: +a.bloco, rev: +a.rev } };
+              });
+              const c1 = selP.length === 1 ? esCargaParede(paredes[selP[0]], hVigaEst) : null;
+              return (<>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label htmlFor="tp-p-alv" style={lblCarga}>Alvenaria</label>
+                  <select id="tp-p-alv" value={sist || ""} onChange={(e) => mudar({ sist: e.target.value })} style={selCarga}>
+                    {!sist && <option value="">vários</option>}
+                    {ES_CARGAS.alvenarias.sistemas.map((x) => <option key={x.id} value={x.id}>{x.rotulo}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="tp-p-bloco" style={lblCarga}>Bloco (cm)</label>
+                  <select id="tp-p-bloco" value={bloco == null ? "" : String(bloco)} onChange={(e) => mudar({ bloco: +e.target.value })} style={selCarga}>
+                    {bloco == null && <option value="">vários</option>}
+                    {blocos.map((b) => <option key={b} value={String(b)}>{tpFmt(b, b % 1 ? 1 : 0)}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="tp-p-rev" style={lblCarga}>Revest. por face</label>
+                  <select id="tp-p-rev" value={rev == null ? "" : String(rev)} onChange={(e) => mudar({ rev: +e.target.value })} style={selCarga}>
+                    {rev == null && <option value="">vários</option>}
+                    <option value="0">sem</option><option value="1">1 cm</option><option value="2">2 cm</option>
+                  </select>
+                </div>
+                {c1 && (
+                  <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#374151", lineHeight: 1.45 }}>
+                    Peso: <b style={{ fontWeight: 600 }}>{tpFmt(c1.g)} kN/m²</b> · {tpFmt(c1.linha)} kN/m sobre {hVigaEst ? "a viga" : "a base"} ({tpFmt(c1.hLivre)} m de parede)
+                    {c1.auto && <span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>Deduzido da espessura; escolha a alvenaria para fixar.</span>}
+                  </div>
+                )}
+                {notaNorma(ES_CARGAS.alvenarias.fonte)}
+              </>);
+            })()}
           </div>
         )}
         {selP.length > 0 && pavsOrd.findIndex((p) => p.id === pavAtivo) < pavsOrd.length - 1 && (
@@ -5736,6 +5806,26 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                   Usar {tpTelha(a.telha).pct}% nos lados inclinados
                 </button>
               </div>
+              {(() => {
+                const ct = esCargaTelhado(a, pctMedioTelhado(a));
+                return (<>
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <label htmlFor="tp-t-estr" style={lblCarga}>Estrutura do telhado</label>
+                    <select id="tp-t-estr" value={a.estrutura || "madeira"} onChange={(e) => editarAreas([ai], (x) => ({ ...x, estrutura: e.target.value }))} style={selCarga}>
+                      <option value="madeira">Madeira (tesouras, terças, caibros e ripas)</option>
+                      <option value="aco">Metálica (aço)</option>
+                    </select>
+                  </div>
+                  {ct.modo === "somado" && ct.telhaG == null && <div style={{ gridColumn: "1 / -1" }}><TpCampo id="tp-t-ptelha" rotulo="Peso da telha (kN/m², do fabricante)" vazio="Informe o peso" min={-0.0001} valor={a.pesoTelha != null ? +a.pesoTelha : null} onConfirmar={(v) => editarAreas([ai], (x) => ({ ...x, pesoTelha: v }))} /></div>}
+                  {ct.modo === "somado" && <div style={{ gridColumn: "1 / -1" }}><TpCampo id="tp-t-pestr" rotulo="Peso da estrutura (kN/m² em planta)" vazio="Informe o peso" min={-0.0001} valor={a.pesoEstrutura != null && a.pesoEstrutura !== "" ? +a.pesoEstrutura : null} onConfirmar={(v) => editarAreas([ai], (x) => ({ ...x, pesoEstrutura: v }))} /></div>}
+                  <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#374151", lineHeight: 1.45 }}>
+                    {ct.falta
+                      ? <span style={{ color: "#b45309" }}>Informe o peso {ct.falta === "telha" ? "da telha (não está na tabela da norma)" : "da estrutura (a tabela da norma não traz esta combinação)"}.</span>
+                      : <>Peso: <b style={{ fontWeight: 600 }}>{tpFmt(ct.g)} kN/m²</b> em planta {ct.modo === "pronto" ? <span style={{ color: "#6b7280" }}>(telhado pronto da tabela, com a estrutura)</span> : <span style={{ color: "#6b7280" }}>(telha {tpFmt(ct.telhaPlanta)} + estrutura {tpFmt(ct.estr)})</span>}{" "}· total {tpFmt(ct.g * (g.areaProjecao || 0), 1)} kN</>}
+                  </div>
+                  {notaNorma(ES_CARGAS.telhas.fonte)}
+                </>);
+              })()}
               <TpCampo id="tp-t-beiral" rotulo="Beiral (cm)" casas={0} min={-0.0001} valor={Math.round((a.beiral || 0) * 100)} onConfirmar={(v) => editarAreas([ai], (x) => ({ ...x, beiral: v / 100 }))} />
               <div style={{ minWidth: 0 }}>
                 <TpCampo id="tp-a-cota" rotulo="Nível do apoio (m)" min={-0.0001} valor={g.cota} onConfirmar={(v) => editarAreas([ai], (x) => ({ ...x, cota: v, cotaManual: true }))} />
@@ -5836,6 +5926,52 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             )}
             <TpCampo id="tp-a-esp" rotulo="Espessura (cm)" casas={0} valor={comum(selA, (i) => Math.round((areas[i].esp || 0) * 100))} onConfirmar={(v) => editarAreas(selA, (a) => ({ ...a, esp: v / 100 }))} />
             <TpCampo id="tp-a-cota" rotulo="Nível (m)" min={-0.0001} valor={comum(selA, (i) => areas[i].cota || 0)} onConfirmar={(v) => editarAreas(selA, (a) => ({ ...a, cota: v }))} />
+            {selA.every((i) => areas[i].tipo === "laje") && (() => {
+              // laje: peso próprio, revestimento, forro e uso (NBR 6120) para as cargas
+              const cs = selA.map((i) => esCargaLaje(areas[i], usoPadraoLaje));
+              const tipo = igualEm(cs, (c) => c.tipo), uso = igualEm(cs, (c) => c.uso), forro = igualEm(cs, (c) => c.forro);
+              const mudar = (patch) => editarAreas(selA, (a) => { const c = esCargaLaje(a, usoPadraoLaje); return { ...a, carga: { tipo: c.tipo, uso: c.uso, revPiso: c.revPiso, forro: c.forro, ...(a.carga && a.carga.pp != null ? { pp: a.carga.pp } : {}), ...patch } }; });
+              const c1 = cs.length === 1 ? cs[0] : null, A1 = selA.length === 1 ? tpAreaPoli(areas[selA[0]].pts) : 0;
+              const usoPiso = uso ? esUso(uso).piso : true;
+              return (<>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label htmlFor="tp-l-tipo" style={lblCarga}>Tipo de laje</label>
+                  <select id="tp-l-tipo" value={tipo || ""} onChange={(e) => mudar({ tipo: e.target.value })} style={selCarga}>
+                    {!tipo && <option value="">vários</option>}
+                    <option value="macica">Maciça de concreto armado</option>
+                    <option value="informada">Outra (pré-moldada etc.): informar peso próprio</option>
+                  </select>
+                </div>
+                {tipo === "informada" && (
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <TpCampo id="tp-l-pp" rotulo="Peso próprio (kN/m², do fabricante)" min={-0.0001} valor={comum(selA, (i) => +((areas[i].carga || {}).pp || 0))} onConfirmar={(v) => mudar({ pp: v })} />
+                  </div>
+                )}
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label htmlFor="tp-l-uso" style={lblCarga}>Uso (o que fica em cima)</label>
+                  <select id="tp-l-uso" value={uso || ""} onChange={(e) => mudar({ uso: e.target.value })} style={selCarga}>
+                    {!uso && <option value="">vários</option>}
+                    {ES_CARGAS.usos.tipos.map((u) => <option key={u.id} value={u.id}>{u.rotulo} · {tpFmt(u.q, 1)} kN/m²</option>)}
+                  </select>
+                </div>
+                {usoPiso && <TpCampo id="tp-l-rev" rotulo="Contrapiso + piso (cm)" casas={1} min={-0.0001} valor={comum(selA, (i) => Math.round(esCargaLaje(areas[i], usoPadraoLaje).revPiso * 1000) / 10)} onConfirmar={(v) => mudar({ revPiso: v / 100 })} />}
+                <div style={{ gridColumn: usoPiso ? "auto" : "1 / -1" }}>
+                  <label htmlFor="tp-l-forro" style={lblCarga}>Embaixo</label>
+                  <select id="tp-l-forro" value={forro || ""} onChange={(e) => mudar({ forro: e.target.value })} style={selCarga}>
+                    {!forro && <option value="">vários</option>}
+                    {ES_CARGAS.forros.tipos.map((f) => <option key={f.id} value={f.id}>{f.rotulo}</option>)}
+                  </select>
+                </div>
+                {c1 && (
+                  <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#374151", lineHeight: 1.5 }}>
+                    Permanente: <b style={{ fontWeight: 600 }}>{tpFmt(c1.g)} kN/m²</b> <span style={{ color: "#6b7280" }}>(laje {tpFmt(c1.pp)} + piso {tpFmt(c1.rev)} + embaixo {tpFmt(c1.gForro)})</span><br />
+                    Variável (uso): <b style={{ fontWeight: 600 }}>{tpFmt(c1.q)} kN/m²</b>{A1 > 0 && <span style={{ color: "#6b7280" }}> · total {tpFmt((c1.g + c1.q) * A1, 1)} kN em {tpFmt(A1)} m²</span>}
+                    {c1.auto && <span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>Uso deduzido ({usoPadraoLaje === "forro" ? "não há pavimento em cima" : "há pavimento em cima"}); escolha para fixar.</span>}
+                  </div>
+                )}
+                {notaNorma(`${ES_CARGAS.usos.fonte}; ${ES_CARGAS.forros.fonte}`)}
+              </>);
+            })()}
             {selA.every((i) => areas[i].tipo === "contrapiso") && (() => {
               const ac = comum(selA, (i) => ["pedra", "deck", "porcelanato"].indexOf(areas[i].acab || "pedra"));
               const atual = ac == null ? "" : ["pedra", "deck", "porcelanato"][ac];
@@ -6220,6 +6356,21 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                   {linhaTab("Concreto", tpFmt(estQtd.lajes.concreto), "m³", true)}
                   {linhaTab("Concreto total", tpFmt(estQtd.concreto), "m³")}
                   {linhaTab("Fôrma", tpFmt(estQtd.forma), "m²")}
+                </>)}
+                {grupoQ("est-c", "Cargas (NBR 6120)", `${tpFmt(estCargas.reduce((t, c) => t + c.total, 0), 1)} kN`)}
+                {!qFechado("est-c") && (<>
+                  {estCargas.map((c) => (
+                    <div key={c.id}>
+                      {pavimentos.length > 1 && <div style={{ fontSize: 11.5, fontWeight: 600, color: "#4b5563", padding: "6px 0 0" }}>{c.nome}</div>}
+                      {linhaTab("Paredes (sobre vigas)", tpFmt(c.paredes, 1), "kN")}
+                      {linhaTab("Lajes — permanente", tpFmt(c.lajeG, 1), "kN")}
+                      {linhaTab("Lajes — uso", tpFmt(c.lajeQ, 1), "kN", true)}
+                      {c.telhado > 0 && linhaTab("Telhado", tpFmt(c.telhado, 1), "kN")}
+                      {linhaTab("Total", tpFmt(c.total, 1), "kN")}
+                      {c.falta.length > 0 && <div style={{ fontSize: 11.5, color: "#b45309", padding: "4px 0" }}>Falta informar: {[...new Set(c.falta)].join(", ")}.</div>}
+                    </div>
+                  ))}
+                  <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>Peso próprio de vigas e pilares entra no cálculo da etapa seguinte. Escolha a alvenaria de cada parede, o uso de cada laje e a estrutura do telhado clicando no elemento. Valores da NBR 6120 a conferir no texto oficial.</div>
                 </>)}
                 {grupoQ("est-p", "Parâmetros", `C${P.fck} · CAA ${["", "I", "II", "III", "IV"][P.caa]}`)}
                 {!qFechado("est-p") && (

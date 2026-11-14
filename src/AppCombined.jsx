@@ -89243,6 +89243,124 @@ function esQuantitativos(est, alturaPav) {
   return { ...q, concreto, forma };
 }
 
+// ═══════════════════════════════════════════════════════════════
+// CARGAS (etapa 2) — NBR 6120:2019
+// ═══════════════════════════════════════════════════════════════
+// Valores transcritos de fontes que reproduzem a NBR 6120:2019 e do projeto de
+// revisão da norma (ABNT/CB-002, 2017), enquanto o texto oficial não é
+// conferido. Cada grupo diz de onde veio (fonte) e se já foi conferido.
+const ES_CARGAS = {
+  // Alvenarias: peso por m² de parede (kN/m²), por espessura nominal do bloco
+  // (cm), sem revestimento / com 1 cm / com 2 cm de revestimento em cada face
+  alvenarias: {
+    fonte: "NBR 6120:2019, tabela de alvenarias (via calculistadeaco.com.br)", conferido: false,
+    sistemas: [
+      { id: "ceramico_vedacao", rotulo: "Bloco cerâmico vazado — vedação (furo horizontal)", esp: { 9: [0.7, 1.1, 1.6], 11.5: [0.9, 1.3, 1.7], 14: [1.1, 1.5, 1.9], 19: [1.4, 1.8, 2.3] } },
+      { id: "concreto_vedacao", rotulo: "Bloco de concreto vazado — vedação (classe C)", esp: { 6.5: [1.0, 1.4, 1.8], 9: [1.1, 1.5, 1.9], 11.5: [1.3, 1.7, 2.1], 14: [1.4, 1.8, 2.2], 19: [1.8, 1.9, 2.6] } },
+      { id: "ceramico_estrutural", rotulo: "Bloco cerâmico estrutural (furo vertical, paredes vazadas)", esp: { 9: [1.1, 1.5, 1.9], 11.5: [1.4, 1.8, 2.2], 14: [1.7, 2.1, 2.5], 19: [3.4, 3.8, 4.2] } },
+      { id: "ceramico_estrutural_macico", rotulo: "Bloco cerâmico estrutural (furo vertical, paredes maciças)", esp: { 14: [2.0, 2.3, 2.7] } },
+      { id: "concreto_estrutural", rotulo: "Bloco de concreto estrutural (classes A e B)", esp: { 14: [2.0, 2.3, 2.7], 19: [2.7, 3.0, 3.4] } },
+      { id: "tijolo_macico", rotulo: "Tijolo cerâmico maciço", esp: { 9: [1.6, 2.0, 2.4], 11.5: [2.1, 2.5, 2.9], 14: [2.5, 2.9, 3.3], 19: [3.4, 3.8, 4.2] } },
+      { id: "concreto_celular", rotulo: "Concreto celular autoclavado (C25)", esp: { 7.5: [0.5, 0.9, 1.3], 10: [0.6, 1.0, 1.4], 12.5: [0.8, 1.2, 1.6], 15: [0.9, 1.3, 1.7], 17.5: [1.1, 1.5, 1.9], 20: [1.2, 1.6, 2.0] } },
+    ],
+  },
+  // Pesos específicos (kN/m³) e revestimento de piso
+  pesos: { fonte: "NBR 6120 (projeto de revisão 2017, Tabelas 5.1 e 5.4)", conferido: false, concretoArmado: 25, argamassa: 19, revestimentoPiso: 20 },
+  // Forros (kN/m², com a estrutura de suporte)
+  forros: {
+    fonte: "NBR 6120 (projeto de revisão 2017, Tabela 5.8); reboco = 1,5 cm de argamassa a 19 kN/m³", conferido: false,
+    tipos: [
+      { id: "nenhum", rotulo: "Sem forro / sem reboco", g: 0 },
+      { id: "reboco", rotulo: "Reboco na laje (1,5 cm)", g: 0.285 },
+      { id: "gesso_placas", rotulo: "Forro de gesso em placas", g: 0.15 },
+      { id: "gesso_acartonado", rotulo: "Forro de gesso acartonado", g: 0.25 },
+      { id: "pvc", rotulo: "Forro de PVC", g: 0.10 },
+      { id: "fibra_mineral", rotulo: "Forro de fibra mineral", g: 0.10 },
+    ],
+  },
+  // Cargas variáveis de uso (kN/m²) — edifícios residenciais
+  usos: {
+    fonte: "NBR 6120 (projeto de revisão 2017, Tabela 6.1)", conferido: false,
+    tipos: [
+      { id: "residencial", rotulo: "Piso residencial (dormitório, sala, cozinha, banheiro)", q: 1.5, piso: true },
+      { id: "servico", rotulo: "Área de serviço, lavanderia, despensa", q: 2.0, piso: true },
+      { id: "varanda", rotulo: "Varanda, sacada, terraço", q: 2.5, piso: true },
+      { id: "cobertura", rotulo: "Cobertura com acesso só para manutenção", q: 1.0, piso: false },
+      { id: "forro", rotulo: "Forro sem acesso e sem estoque", q: 0, piso: false },
+    ],
+  },
+  // Telhas (kN/m² de telhado inclinado) e telhados prontos (kN/m² em planta,
+  // com a estrutura). Chaves = ids das telhas do Projetar (TP_TELHAS).
+  telhas: {
+    fonte: "NBR 6120 (projeto de revisão 2017, Tabelas 5.5 e 5.6)", conferido: false,
+    porTelha: {
+      "Telha Barro Portuguesa": { g: 0.45, grupo: "ceramica" }, "Telha Barro Americana": { g: 0.45, grupo: "ceramica" },
+      "Telha Fibrocimento 6mm": { g: 0.18, grupo: "fibro6" }, "Telha Fibrocimento 8mm": { g: 0.24, grupo: "fibro8" },
+      "Telha Metálica Simples": { g: 0.06, grupo: "aco" },
+      // telha de concreto e telha termoacústica não estão na tabela: peso do fabricante
+    },
+    // telhado pronto (telha + estrutura) por m² em planta
+    prontos: [
+      { grupo: "ceramica", estrutura: "madeira", pctMax: 40, g: 0.7 },
+      { grupo: "fibro5", estrutura: "madeira", g: 0.4, obs: "fibrocimento ondulada até 5 mm (nenhuma telha do Projetar hoje)" },
+    ],
+  },
+};
+
+const esAlvSistema = (id) => ES_CARGAS.alvenarias.sistemas.find((s) => s.id === id) || ES_CARGAS.alvenarias.sistemas[0];
+// alvenaria de uma parede: a escolhida, ou a deduzida da espessura (bloco de
+// vedação cerâmico mais largo que deixa ao menos 1 cm de revestimento por face)
+function esAlvenariaDe(w) {
+  const t = Math.round((w.t || 0.14) * 1000) / 10; // cm
+  if (w.alv && w.alv.sist) {
+    const s = esAlvSistema(w.alv.sist), blocos = Object.keys(s.esp).map(Number);
+    const bloco = blocos.includes(+w.alv.bloco) ? +w.alv.bloco : blocos[0];
+    return { sist: s.id, bloco, rev: [0, 1, 2].includes(+w.alv.rev) ? +w.alv.rev : 1, auto: false };
+  }
+  const s = esAlvSistema("ceramico_vedacao"), blocos = Object.keys(s.esp).map(Number).sort((a, b) => a - b);
+  let bloco = blocos[0]; for (const b of blocos) if ((t - b) / 2 >= 0.99) bloco = b;
+  const sobra = Math.max(0, (t - bloco) / 2), rev = sobra < 0.5 ? 0 : sobra < 1.5 ? 1 : 2;
+  return { sist: s.id, bloco, rev, auto: true };
+}
+// peso da parede: g em kN/m² e a carga linear (kN/m) na altura que fica
+// embaixo da viga (altura da parede − altura da viga)
+function esCargaParede(w, hViga) {
+  const a = esAlvenariaDe(w), s = esAlvSistema(a.sist), g = s.esp[a.bloco][a.rev];
+  const hLivre = Math.max(0, (w.h || 0) - (hViga || 0));
+  return { ...a, g, hLivre, linha: g * hLivre, L: esLen(w) };
+}
+
+const esUso = (id) => ES_CARGAS.usos.tipos.find((u) => u.id === id) || null;
+const esForro = (id) => ES_CARGAS.forros.tipos.find((f) => f.id === id) || ES_CARGAS.forros.tipos[0];
+// laje: permanente (peso próprio + revestimento do piso + forro) e variável
+// (uso). usoPadrao: "residencial" se há pavimento em cima, "forro" se não.
+function esCargaLaje(a, usoPadrao) {
+  const c = a.carga || {};
+  const uso = esUso(c.uso) || esUso(usoPadrao) || esUso("residencial");
+  const esp = a.esp || 0.10;
+  const pp = c.tipo === "informada" ? (+c.pp || 0) : ES_CARGAS.pesos.concretoArmado * esp;
+  const revPiso = uso.piso ? (c.revPiso != null ? +c.revPiso : 0.05) : 0;
+  const rev = revPiso * ES_CARGAS.pesos.revestimentoPiso;
+  const forro = esForro(c.forro || "reboco").g;
+  const g = pp + rev + forro;
+  return { tipo: c.tipo === "informada" ? "informada" : "macica", uso: uso.id, usoRotulo: uso.rotulo, pp, revPiso, rev, forro: c.forro || "reboco", gForro: forro, g, q: uso.q, auto: !c.uso };
+}
+// telhado: carga permanente por m² em planta. Telhado pronto da tabela quando
+// a combinação existe; senão, telha (convertida para planta) + estrutura
+// informada. pctMedio = inclinação média em %.
+function esCargaTelhado(a, pctMedio) {
+  const T = ES_CARGAS.telhas, tel = T.porTelha[a.telha] || null, estrutura = a.estrutura || "madeira";
+  const pct = pctMedio || 0, cos = 1 / Math.sqrt(1 + (pct / 100) ** 2);
+  if (tel) {
+    const pronto = T.prontos.find((p) => p.grupo === tel.grupo && p.estrutura === estrutura && (p.pctMax == null || pct <= p.pctMax + 1e-9));
+    if (pronto) return { g: pronto.g, modo: "pronto", estrutura, telhaG: tel.g, falta: null };
+  }
+  const telhaPlanta = tel ? tel.g / cos : (a.pesoTelha != null ? +a.pesoTelha / cos : null);
+  const estr = a.pesoEstrutura != null && a.pesoEstrutura !== "" ? +a.pesoEstrutura : null;
+  const falta = telhaPlanta == null ? "telha" : estr == null ? "estrutura" : null;
+  return { g: (telhaPlanta || 0) + (estr || 0), modo: "somado", estrutura, telhaG: tel ? tel.g : (a.pesoTelha != null ? +a.pesoTelha : null), telhaPlanta, estr, falta };
+}
+
 
 // ════════════════════════════════════════════════════════════
 // teste-projeto.jsx
@@ -89282,7 +89400,7 @@ function tpCarregarThree() {
 
 // Campo numérico que só confirma ao sair do campo ou apertar Enter — assim
 // cada edição vira um passo só no Desfazer. valor null = vários valores.
-function TpCampo({ id, rotulo, valor, casas = 2, onConfirmar, min = 0, somenteLeitura }) {
+function TpCampo({ id, rotulo, valor, casas = 2, onConfirmar, min = 0, somenteLeitura, vazio }) {
   const fmt = (v) => (v == null || !isFinite(v) ? "" : Number(v).toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas }));
   const [txt, setTxt] = useState(fmt(valor));
   const foco = useRef(false);
@@ -89296,7 +89414,7 @@ function TpCampo({ id, rotulo, valor, casas = 2, onConfirmar, min = 0, somenteLe
   return (
     <div style={{ minWidth: 0 }}>
       <label htmlFor={id} style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>{rotulo}</label>
-      <input id={id} inputMode="decimal" value={txt} placeholder={valor == null ? "vários" : ""} readOnly={somenteLeitura}
+      <input id={id} inputMode="decimal" value={txt} placeholder={valor == null ? (vazio || "vários") : ""} readOnly={somenteLeitura}
         onChange={(e) => setTxt(e.target.value)}
         onFocus={() => { foco.current = true; }}
         onBlur={() => { foco.current = false; if (!somenteLeitura) confirmar(); }}
@@ -91444,6 +91562,26 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     });
     return r;
   }, [estPorPav]); // eslint-disable-line react-hooks/exhaustive-deps
+  // cargas por pavimento (NBR 6120): paredes sobre as vigas, lajes, telhado
+  const estCargas = useMemo(() => {
+    if (!estrutura.ativa) return [];
+    const hV = ({ ...ES_PADRAO, ...(estrutura.params || {}) }).viga.h;
+    return pavsOrd.map((p, k) => {
+      const d = dadosDe(p.id), acima = pavsOrd[k + 1], usoP = acima && (dadosDe(acima.id).paredes || []).length ? "residencial" : "forro";
+      let par = 0, lg = 0, lq = 0, tel = 0; const falta = [];
+      for (const w of d.paredes || []) { const c = esCargaParede(w, hV); par += c.linha * c.L; }
+      for (const a of d.areas || []) {
+        if (!a.pts || a.pts.length < 3) continue;
+        if (a.tipo === "laje") { const c = esCargaLaje(a, usoP), A = tpAreaPoli(a.pts); lg += c.g * A; lq += c.q * A; }
+        if (a.tipo === "telhado") {
+          const ls = (a.lados || []).filter((l) => l && l.inclina !== false && l.pct != null), pct = ls.length ? ls.reduce((t, l) => t + (+l.pct || 0), 0) / ls.length : tpTelha(a.telha).pct;
+          const c = esCargaTelhado(a, pct); let Ap = 0; try { Ap = tpTelhadoGeo(a).areaProjecao || 0; } catch (err) { Ap = tpAreaPoli(a.pts); }
+          tel += c.g * Ap; if (c.falta) falta.push(c.falta === "telha" ? "peso da telha" : "peso da estrutura do telhado");
+        }
+      }
+      return { id: p.id, nome: p.nome, paredes: par, lajeG: lg, lajeQ: lq, telhado: tel, total: par + lg + lq + tel, falta };
+    });
+  }, [estrutura, paredes, areas, dadosPav, pavimentos, pavAtivo]); // eslint-disable-line react-hooks/exhaustive-deps
   const estQtd = useMemo(() => {
     const t = { pilares: { n: 0, concreto: 0, forma: 0 }, vigas: { n: 0, comprimento: 0, concreto: 0, forma: 0 }, baldrames: { n: 0, comprimento: 0, concreto: 0, forma: 0 }, lajes: { n: 0, area: 0, concreto: 0, forma: 0 }, concreto: 0, forma: 0 };
     for (const p of pavsOrd) {
@@ -94621,6 +94759,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     }
     return t;
   })();
+  // cargas (estrutural.jsx, NBR 6120): campos de seleção e leitura
+  const selCarga = { width: "100%", padding: "7px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit", background: "#fff" };
+  const lblCarga = { display: "block", fontSize: 12, color: "#4b5563", marginBottom: 4 };
+  const igualEm = (lista, f) => { if (!lista.length) return null; const v = f(lista[0]); return lista.every((x) => f(x) === v) ? v : null; };
+  const notaNorma = (fonte) => <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "#9ca3af", lineHeight: 1.35 }}>{fonte} — valor a conferir no texto oficial.</div>;
+  const hVigaEst = estrutura.ativa ? ({ ...ES_PADRAO, ...(estrutura.params || {}) }).viga.h : 0;
+  const usoPadraoLaje = (() => { const k = pavsOrd.findIndex((p) => p.id === pavAtivo), acima = pavsOrd[k + 1]; return acima && (dadosDe(acima.id).paredes || []).length ? "residencial" : "forro"; })();
+  const pctMedioTelhado = (a) => { const ls = (a.lados || []).filter((l) => l && l.inclina !== false && l.pct != null); return ls.length ? ls.reduce((t, l) => t + (+l.pct || 0), 0) / ls.length : tpTelha(a.telha).pct; };
   const comum = (lista, f) => { if (!lista.length) return null; const v0 = f(lista[0]); return lista.every((x) => Math.abs(f(x) - v0) < 1e-9) ? v0 : null; };
 
   // ---------- estilos ----------
@@ -94898,6 +95044,48 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             {selP.length === 1 && <div style={{ gridColumn: "1 / -1" }}><TpCampo id="tp-p-comp" rotulo="Comprimento (m)" valor={tpLen(paredes[selP[0]])} onConfirmar={(v) => mudarComprimento(selP[0], v)} /></div>}
             <TpCampo id="tp-p-alt" rotulo="Altura (m)" valor={comum(selP, (i) => paredes[i].h)} onConfirmar={(v) => editarParedes(selP, (w) => ({ ...w, h: v }))} />
             <TpCampo id="tp-p-esp" rotulo="Espessura (cm)" casas={0} valor={comum(selP, (i) => Math.round(paredes[i].t * 100))} onConfirmar={(v) => editarParedes(selP, (w) => ({ ...w, t: v / 100 }))} />
+            {(() => {
+              // tipo de alvenaria: dá o peso da parede (NBR 6120) para as cargas
+              const cs = selP.map((i) => esAlvenariaDe(paredes[i]));
+              const sist = igualEm(cs, (c) => c.sist), bloco = igualEm(cs, (c) => c.bloco), rev = igualEm(cs, (c) => c.rev);
+              const S = esAlvSistema(sist || cs[0].sist), blocos = Object.keys(S.esp).map(Number).sort((a, b) => a - b);
+              const mudar = (patch) => editarParedes(selP, (w) => {
+                const a = { ...esAlvenariaDe(w), ...patch }, s2 = esAlvSistema(a.sist), bs = Object.keys(s2.esp).map(Number);
+                if (!bs.includes(+a.bloco)) a.bloco = bs.reduce((m, b) => (Math.abs(b - a.bloco) < Math.abs(m - a.bloco) ? b : m), bs[0]);
+                return { ...w, alv: { sist: a.sist, bloco: +a.bloco, rev: +a.rev } };
+              });
+              const c1 = selP.length === 1 ? esCargaParede(paredes[selP[0]], hVigaEst) : null;
+              return (<>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label htmlFor="tp-p-alv" style={lblCarga}>Alvenaria</label>
+                  <select id="tp-p-alv" value={sist || ""} onChange={(e) => mudar({ sist: e.target.value })} style={selCarga}>
+                    {!sist && <option value="">vários</option>}
+                    {ES_CARGAS.alvenarias.sistemas.map((x) => <option key={x.id} value={x.id}>{x.rotulo}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="tp-p-bloco" style={lblCarga}>Bloco (cm)</label>
+                  <select id="tp-p-bloco" value={bloco == null ? "" : String(bloco)} onChange={(e) => mudar({ bloco: +e.target.value })} style={selCarga}>
+                    {bloco == null && <option value="">vários</option>}
+                    {blocos.map((b) => <option key={b} value={String(b)}>{tpFmt(b, b % 1 ? 1 : 0)}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="tp-p-rev" style={lblCarga}>Revest. por face</label>
+                  <select id="tp-p-rev" value={rev == null ? "" : String(rev)} onChange={(e) => mudar({ rev: +e.target.value })} style={selCarga}>
+                    {rev == null && <option value="">vários</option>}
+                    <option value="0">sem</option><option value="1">1 cm</option><option value="2">2 cm</option>
+                  </select>
+                </div>
+                {c1 && (
+                  <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#374151", lineHeight: 1.45 }}>
+                    Peso: <b style={{ fontWeight: 600 }}>{tpFmt(c1.g)} kN/m²</b> · {tpFmt(c1.linha)} kN/m sobre {hVigaEst ? "a viga" : "a base"} ({tpFmt(c1.hLivre)} m de parede)
+                    {c1.auto && <span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>Deduzido da espessura; escolha a alvenaria para fixar.</span>}
+                  </div>
+                )}
+                {notaNorma(ES_CARGAS.alvenarias.fonte)}
+              </>);
+            })()}
           </div>
         )}
         {selP.length > 0 && pavsOrd.findIndex((p) => p.id === pavAtivo) < pavsOrd.length - 1 && (
@@ -94986,6 +95174,26 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                   Usar {tpTelha(a.telha).pct}% nos lados inclinados
                 </button>
               </div>
+              {(() => {
+                const ct = esCargaTelhado(a, pctMedioTelhado(a));
+                return (<>
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <label htmlFor="tp-t-estr" style={lblCarga}>Estrutura do telhado</label>
+                    <select id="tp-t-estr" value={a.estrutura || "madeira"} onChange={(e) => editarAreas([ai], (x) => ({ ...x, estrutura: e.target.value }))} style={selCarga}>
+                      <option value="madeira">Madeira (tesouras, terças, caibros e ripas)</option>
+                      <option value="aco">Metálica (aço)</option>
+                    </select>
+                  </div>
+                  {ct.modo === "somado" && ct.telhaG == null && <div style={{ gridColumn: "1 / -1" }}><TpCampo id="tp-t-ptelha" rotulo="Peso da telha (kN/m², do fabricante)" vazio="Informe o peso" min={-0.0001} valor={a.pesoTelha != null ? +a.pesoTelha : null} onConfirmar={(v) => editarAreas([ai], (x) => ({ ...x, pesoTelha: v }))} /></div>}
+                  {ct.modo === "somado" && <div style={{ gridColumn: "1 / -1" }}><TpCampo id="tp-t-pestr" rotulo="Peso da estrutura (kN/m² em planta)" vazio="Informe o peso" min={-0.0001} valor={a.pesoEstrutura != null && a.pesoEstrutura !== "" ? +a.pesoEstrutura : null} onConfirmar={(v) => editarAreas([ai], (x) => ({ ...x, pesoEstrutura: v }))} /></div>}
+                  <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#374151", lineHeight: 1.45 }}>
+                    {ct.falta
+                      ? <span style={{ color: "#b45309" }}>Informe o peso {ct.falta === "telha" ? "da telha (não está na tabela da norma)" : "da estrutura (a tabela da norma não traz esta combinação)"}.</span>
+                      : <>Peso: <b style={{ fontWeight: 600 }}>{tpFmt(ct.g)} kN/m²</b> em planta {ct.modo === "pronto" ? <span style={{ color: "#6b7280" }}>(telhado pronto da tabela, com a estrutura)</span> : <span style={{ color: "#6b7280" }}>(telha {tpFmt(ct.telhaPlanta)} + estrutura {tpFmt(ct.estr)})</span>}{" "}· total {tpFmt(ct.g * (g.areaProjecao || 0), 1)} kN</>}
+                  </div>
+                  {notaNorma(ES_CARGAS.telhas.fonte)}
+                </>);
+              })()}
               <TpCampo id="tp-t-beiral" rotulo="Beiral (cm)" casas={0} min={-0.0001} valor={Math.round((a.beiral || 0) * 100)} onConfirmar={(v) => editarAreas([ai], (x) => ({ ...x, beiral: v / 100 }))} />
               <div style={{ minWidth: 0 }}>
                 <TpCampo id="tp-a-cota" rotulo="Nível do apoio (m)" min={-0.0001} valor={g.cota} onConfirmar={(v) => editarAreas([ai], (x) => ({ ...x, cota: v, cotaManual: true }))} />
@@ -95086,6 +95294,52 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             )}
             <TpCampo id="tp-a-esp" rotulo="Espessura (cm)" casas={0} valor={comum(selA, (i) => Math.round((areas[i].esp || 0) * 100))} onConfirmar={(v) => editarAreas(selA, (a) => ({ ...a, esp: v / 100 }))} />
             <TpCampo id="tp-a-cota" rotulo="Nível (m)" min={-0.0001} valor={comum(selA, (i) => areas[i].cota || 0)} onConfirmar={(v) => editarAreas(selA, (a) => ({ ...a, cota: v }))} />
+            {selA.every((i) => areas[i].tipo === "laje") && (() => {
+              // laje: peso próprio, revestimento, forro e uso (NBR 6120) para as cargas
+              const cs = selA.map((i) => esCargaLaje(areas[i], usoPadraoLaje));
+              const tipo = igualEm(cs, (c) => c.tipo), uso = igualEm(cs, (c) => c.uso), forro = igualEm(cs, (c) => c.forro);
+              const mudar = (patch) => editarAreas(selA, (a) => { const c = esCargaLaje(a, usoPadraoLaje); return { ...a, carga: { tipo: c.tipo, uso: c.uso, revPiso: c.revPiso, forro: c.forro, ...(a.carga && a.carga.pp != null ? { pp: a.carga.pp } : {}), ...patch } }; });
+              const c1 = cs.length === 1 ? cs[0] : null, A1 = selA.length === 1 ? tpAreaPoli(areas[selA[0]].pts) : 0;
+              const usoPiso = uso ? esUso(uso).piso : true;
+              return (<>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label htmlFor="tp-l-tipo" style={lblCarga}>Tipo de laje</label>
+                  <select id="tp-l-tipo" value={tipo || ""} onChange={(e) => mudar({ tipo: e.target.value })} style={selCarga}>
+                    {!tipo && <option value="">vários</option>}
+                    <option value="macica">Maciça de concreto armado</option>
+                    <option value="informada">Outra (pré-moldada etc.): informar peso próprio</option>
+                  </select>
+                </div>
+                {tipo === "informada" && (
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <TpCampo id="tp-l-pp" rotulo="Peso próprio (kN/m², do fabricante)" min={-0.0001} valor={comum(selA, (i) => +((areas[i].carga || {}).pp || 0))} onConfirmar={(v) => mudar({ pp: v })} />
+                  </div>
+                )}
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label htmlFor="tp-l-uso" style={lblCarga}>Uso (o que fica em cima)</label>
+                  <select id="tp-l-uso" value={uso || ""} onChange={(e) => mudar({ uso: e.target.value })} style={selCarga}>
+                    {!uso && <option value="">vários</option>}
+                    {ES_CARGAS.usos.tipos.map((u) => <option key={u.id} value={u.id}>{u.rotulo} · {tpFmt(u.q, 1)} kN/m²</option>)}
+                  </select>
+                </div>
+                {usoPiso && <TpCampo id="tp-l-rev" rotulo="Contrapiso + piso (cm)" casas={1} min={-0.0001} valor={comum(selA, (i) => Math.round(esCargaLaje(areas[i], usoPadraoLaje).revPiso * 1000) / 10)} onConfirmar={(v) => mudar({ revPiso: v / 100 })} />}
+                <div style={{ gridColumn: usoPiso ? "auto" : "1 / -1" }}>
+                  <label htmlFor="tp-l-forro" style={lblCarga}>Embaixo</label>
+                  <select id="tp-l-forro" value={forro || ""} onChange={(e) => mudar({ forro: e.target.value })} style={selCarga}>
+                    {!forro && <option value="">vários</option>}
+                    {ES_CARGAS.forros.tipos.map((f) => <option key={f.id} value={f.id}>{f.rotulo}</option>)}
+                  </select>
+                </div>
+                {c1 && (
+                  <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#374151", lineHeight: 1.5 }}>
+                    Permanente: <b style={{ fontWeight: 600 }}>{tpFmt(c1.g)} kN/m²</b> <span style={{ color: "#6b7280" }}>(laje {tpFmt(c1.pp)} + piso {tpFmt(c1.rev)} + embaixo {tpFmt(c1.gForro)})</span><br />
+                    Variável (uso): <b style={{ fontWeight: 600 }}>{tpFmt(c1.q)} kN/m²</b>{A1 > 0 && <span style={{ color: "#6b7280" }}> · total {tpFmt((c1.g + c1.q) * A1, 1)} kN em {tpFmt(A1)} m²</span>}
+                    {c1.auto && <span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>Uso deduzido ({usoPadraoLaje === "forro" ? "não há pavimento em cima" : "há pavimento em cima"}); escolha para fixar.</span>}
+                  </div>
+                )}
+                {notaNorma(`${ES_CARGAS.usos.fonte}; ${ES_CARGAS.forros.fonte}`)}
+              </>);
+            })()}
             {selA.every((i) => areas[i].tipo === "contrapiso") && (() => {
               const ac = comum(selA, (i) => ["pedra", "deck", "porcelanato"].indexOf(areas[i].acab || "pedra"));
               const atual = ac == null ? "" : ["pedra", "deck", "porcelanato"][ac];
@@ -95470,6 +95724,21 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                   {linhaTab("Concreto", tpFmt(estQtd.lajes.concreto), "m³", true)}
                   {linhaTab("Concreto total", tpFmt(estQtd.concreto), "m³")}
                   {linhaTab("Fôrma", tpFmt(estQtd.forma), "m²")}
+                </>)}
+                {grupoQ("est-c", "Cargas (NBR 6120)", `${tpFmt(estCargas.reduce((t, c) => t + c.total, 0), 1)} kN`)}
+                {!qFechado("est-c") && (<>
+                  {estCargas.map((c) => (
+                    <div key={c.id}>
+                      {pavimentos.length > 1 && <div style={{ fontSize: 11.5, fontWeight: 600, color: "#4b5563", padding: "6px 0 0" }}>{c.nome}</div>}
+                      {linhaTab("Paredes (sobre vigas)", tpFmt(c.paredes, 1), "kN")}
+                      {linhaTab("Lajes — permanente", tpFmt(c.lajeG, 1), "kN")}
+                      {linhaTab("Lajes — uso", tpFmt(c.lajeQ, 1), "kN", true)}
+                      {c.telhado > 0 && linhaTab("Telhado", tpFmt(c.telhado, 1), "kN")}
+                      {linhaTab("Total", tpFmt(c.total, 1), "kN")}
+                      {c.falta.length > 0 && <div style={{ fontSize: 11.5, color: "#b45309", padding: "4px 0" }}>Falta informar: {[...new Set(c.falta)].join(", ")}.</div>}
+                    </div>
+                  ))}
+                  <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>Peso próprio de vigas e pilares entra no cálculo da etapa seguinte. Escolha a alvenaria de cada parede, o uso de cada laje e a estrutura do telhado clicando no elemento. Valores da NBR 6120 a conferir no texto oficial.</div>
                 </>)}
                 {grupoQ("est-p", "Parâmetros", `C${P.fck} · CAA ${["", "I", "II", "III", "IV"][P.caa]}`)}
                 {!qFechado("est-p") && (

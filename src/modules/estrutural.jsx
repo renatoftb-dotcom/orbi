@@ -426,3 +426,121 @@ function esQuantitativos(est, alturaPav) {
   for (const g of Object.values(q)) { concreto += g.concreto; forma += g.forma; }
   return { ...q, concreto, forma };
 }
+
+// ═══════════════════════════════════════════════════════════════
+// CARGAS (etapa 2) — NBR 6120:2019
+// ═══════════════════════════════════════════════════════════════
+// Valores transcritos de fontes que reproduzem a NBR 6120:2019 e do projeto de
+// revisão da norma (ABNT/CB-002, 2017), enquanto o texto oficial não é
+// conferido. Cada grupo diz de onde veio (fonte) e se já foi conferido.
+const ES_CARGAS = {
+  // Alvenarias: peso por m² de parede (kN/m²), por espessura nominal do bloco
+  // (cm), sem revestimento / com 1 cm / com 2 cm de revestimento em cada face
+  alvenarias: {
+    fonte: "NBR 6120:2019, tabela de alvenarias (via calculistadeaco.com.br)", conferido: false,
+    sistemas: [
+      { id: "ceramico_vedacao", rotulo: "Bloco cerâmico vazado — vedação (furo horizontal)", esp: { 9: [0.7, 1.1, 1.6], 11.5: [0.9, 1.3, 1.7], 14: [1.1, 1.5, 1.9], 19: [1.4, 1.8, 2.3] } },
+      { id: "concreto_vedacao", rotulo: "Bloco de concreto vazado — vedação (classe C)", esp: { 6.5: [1.0, 1.4, 1.8], 9: [1.1, 1.5, 1.9], 11.5: [1.3, 1.7, 2.1], 14: [1.4, 1.8, 2.2], 19: [1.8, 1.9, 2.6] } },
+      { id: "ceramico_estrutural", rotulo: "Bloco cerâmico estrutural (furo vertical, paredes vazadas)", esp: { 9: [1.1, 1.5, 1.9], 11.5: [1.4, 1.8, 2.2], 14: [1.7, 2.1, 2.5], 19: [3.4, 3.8, 4.2] } },
+      { id: "ceramico_estrutural_macico", rotulo: "Bloco cerâmico estrutural (furo vertical, paredes maciças)", esp: { 14: [2.0, 2.3, 2.7] } },
+      { id: "concreto_estrutural", rotulo: "Bloco de concreto estrutural (classes A e B)", esp: { 14: [2.0, 2.3, 2.7], 19: [2.7, 3.0, 3.4] } },
+      { id: "tijolo_macico", rotulo: "Tijolo cerâmico maciço", esp: { 9: [1.6, 2.0, 2.4], 11.5: [2.1, 2.5, 2.9], 14: [2.5, 2.9, 3.3], 19: [3.4, 3.8, 4.2] } },
+      { id: "concreto_celular", rotulo: "Concreto celular autoclavado (C25)", esp: { 7.5: [0.5, 0.9, 1.3], 10: [0.6, 1.0, 1.4], 12.5: [0.8, 1.2, 1.6], 15: [0.9, 1.3, 1.7], 17.5: [1.1, 1.5, 1.9], 20: [1.2, 1.6, 2.0] } },
+    ],
+  },
+  // Pesos específicos (kN/m³) e revestimento de piso
+  pesos: { fonte: "NBR 6120 (projeto de revisão 2017, Tabelas 5.1 e 5.4)", conferido: false, concretoArmado: 25, argamassa: 19, revestimentoPiso: 20 },
+  // Forros (kN/m², com a estrutura de suporte)
+  forros: {
+    fonte: "NBR 6120 (projeto de revisão 2017, Tabela 5.8); reboco = 1,5 cm de argamassa a 19 kN/m³", conferido: false,
+    tipos: [
+      { id: "nenhum", rotulo: "Sem forro / sem reboco", g: 0 },
+      { id: "reboco", rotulo: "Reboco na laje (1,5 cm)", g: 0.285 },
+      { id: "gesso_placas", rotulo: "Forro de gesso em placas", g: 0.15 },
+      { id: "gesso_acartonado", rotulo: "Forro de gesso acartonado", g: 0.25 },
+      { id: "pvc", rotulo: "Forro de PVC", g: 0.10 },
+      { id: "fibra_mineral", rotulo: "Forro de fibra mineral", g: 0.10 },
+    ],
+  },
+  // Cargas variáveis de uso (kN/m²) — edifícios residenciais
+  usos: {
+    fonte: "NBR 6120 (projeto de revisão 2017, Tabela 6.1)", conferido: false,
+    tipos: [
+      { id: "residencial", rotulo: "Piso residencial (dormitório, sala, cozinha, banheiro)", q: 1.5, piso: true },
+      { id: "servico", rotulo: "Área de serviço, lavanderia, despensa", q: 2.0, piso: true },
+      { id: "varanda", rotulo: "Varanda, sacada, terraço", q: 2.5, piso: true },
+      { id: "cobertura", rotulo: "Cobertura com acesso só para manutenção", q: 1.0, piso: false },
+      { id: "forro", rotulo: "Forro sem acesso e sem estoque", q: 0, piso: false },
+    ],
+  },
+  // Telhas (kN/m² de telhado inclinado) e telhados prontos (kN/m² em planta,
+  // com a estrutura). Chaves = ids das telhas do Projetar (TP_TELHAS).
+  telhas: {
+    fonte: "NBR 6120 (projeto de revisão 2017, Tabelas 5.5 e 5.6)", conferido: false,
+    porTelha: {
+      "Telha Barro Portuguesa": { g: 0.45, grupo: "ceramica" }, "Telha Barro Americana": { g: 0.45, grupo: "ceramica" },
+      "Telha Fibrocimento 6mm": { g: 0.18, grupo: "fibro6" }, "Telha Fibrocimento 8mm": { g: 0.24, grupo: "fibro8" },
+      "Telha Metálica Simples": { g: 0.06, grupo: "aco" },
+      // telha de concreto e telha termoacústica não estão na tabela: peso do fabricante
+    },
+    // telhado pronto (telha + estrutura) por m² em planta
+    prontos: [
+      { grupo: "ceramica", estrutura: "madeira", pctMax: 40, g: 0.7 },
+      { grupo: "fibro5", estrutura: "madeira", g: 0.4, obs: "fibrocimento ondulada até 5 mm (nenhuma telha do Projetar hoje)" },
+    ],
+  },
+};
+
+const esAlvSistema = (id) => ES_CARGAS.alvenarias.sistemas.find((s) => s.id === id) || ES_CARGAS.alvenarias.sistemas[0];
+// alvenaria de uma parede: a escolhida, ou a deduzida da espessura (bloco de
+// vedação cerâmico mais largo que deixa ao menos 1 cm de revestimento por face)
+function esAlvenariaDe(w) {
+  const t = Math.round((w.t || 0.14) * 1000) / 10; // cm
+  if (w.alv && w.alv.sist) {
+    const s = esAlvSistema(w.alv.sist), blocos = Object.keys(s.esp).map(Number);
+    const bloco = blocos.includes(+w.alv.bloco) ? +w.alv.bloco : blocos[0];
+    return { sist: s.id, bloco, rev: [0, 1, 2].includes(+w.alv.rev) ? +w.alv.rev : 1, auto: false };
+  }
+  const s = esAlvSistema("ceramico_vedacao"), blocos = Object.keys(s.esp).map(Number).sort((a, b) => a - b);
+  let bloco = blocos[0]; for (const b of blocos) if ((t - b) / 2 >= 0.99) bloco = b;
+  const sobra = Math.max(0, (t - bloco) / 2), rev = sobra < 0.5 ? 0 : sobra < 1.5 ? 1 : 2;
+  return { sist: s.id, bloco, rev, auto: true };
+}
+// peso da parede: g em kN/m² e a carga linear (kN/m) na altura que fica
+// embaixo da viga (altura da parede − altura da viga)
+function esCargaParede(w, hViga) {
+  const a = esAlvenariaDe(w), s = esAlvSistema(a.sist), g = s.esp[a.bloco][a.rev];
+  const hLivre = Math.max(0, (w.h || 0) - (hViga || 0));
+  return { ...a, g, hLivre, linha: g * hLivre, L: esLen(w) };
+}
+
+const esUso = (id) => ES_CARGAS.usos.tipos.find((u) => u.id === id) || null;
+const esForro = (id) => ES_CARGAS.forros.tipos.find((f) => f.id === id) || ES_CARGAS.forros.tipos[0];
+// laje: permanente (peso próprio + revestimento do piso + forro) e variável
+// (uso). usoPadrao: "residencial" se há pavimento em cima, "forro" se não.
+function esCargaLaje(a, usoPadrao) {
+  const c = a.carga || {};
+  const uso = esUso(c.uso) || esUso(usoPadrao) || esUso("residencial");
+  const esp = a.esp || 0.10;
+  const pp = c.tipo === "informada" ? (+c.pp || 0) : ES_CARGAS.pesos.concretoArmado * esp;
+  const revPiso = uso.piso ? (c.revPiso != null ? +c.revPiso : 0.05) : 0;
+  const rev = revPiso * ES_CARGAS.pesos.revestimentoPiso;
+  const forro = esForro(c.forro || "reboco").g;
+  const g = pp + rev + forro;
+  return { tipo: c.tipo === "informada" ? "informada" : "macica", uso: uso.id, usoRotulo: uso.rotulo, pp, revPiso, rev, forro: c.forro || "reboco", gForro: forro, g, q: uso.q, auto: !c.uso };
+}
+// telhado: carga permanente por m² em planta. Telhado pronto da tabela quando
+// a combinação existe; senão, telha (convertida para planta) + estrutura
+// informada. pctMedio = inclinação média em %.
+function esCargaTelhado(a, pctMedio) {
+  const T = ES_CARGAS.telhas, tel = T.porTelha[a.telha] || null, estrutura = a.estrutura || "madeira";
+  const pct = pctMedio || 0, cos = 1 / Math.sqrt(1 + (pct / 100) ** 2);
+  if (tel) {
+    const pronto = T.prontos.find((p) => p.grupo === tel.grupo && p.estrutura === estrutura && (p.pctMax == null || pct <= p.pctMax + 1e-9));
+    if (pronto) return { g: pronto.g, modo: "pronto", estrutura, telhaG: tel.g, falta: null };
+  }
+  const telhaPlanta = tel ? tel.g / cos : (a.pesoTelha != null ? +a.pesoTelha / cos : null);
+  const estr = a.pesoEstrutura != null && a.pesoEstrutura !== "" ? +a.pesoEstrutura : null;
+  const falta = telhaPlanta == null ? "telha" : estr == null ? "estrutura" : null;
+  return { g: (telhaPlanta || 0) + (estr || 0), modo: "somado", estrutura, telhaG: tel ? tel.g : (a.pesoTelha != null ? +a.pesoTelha : null), telhaPlanta, estr, falta };
+}
