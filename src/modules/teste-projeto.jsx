@@ -1771,6 +1771,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const [exibirAberto, setExibirAberto] = useState(false);
   const [tabelasAberto, setTabelasAberto] = useState(false); // botão Tabelas: esquadrias, ambientes e quantitativo // botão Exibir: escala da planta e grade
   const [maisAberto, setMaisAberto] = useState(false); // trilho: ⋯ (projeto, atalhos, suporte, limpar)
+  // estrutura (estrutural.jsx, etapa 1): refeita da arquitetura; aqui só os parâmetros
+  const [estrutura, setEstrutura] = useState(() => (projeto.estrutura && typeof projeto.estrutura === "object" ? { params: {}, mostrar: true, so3d: false, ...projeto.estrutura } : { ativa: false, params: {}, mostrar: true, so3d: false }));
+  const [estAberta, setEstAberta] = useState(false);
+  const [focoEst, setFocoEst] = useState(null);
   const [mostrarGrade, setMostrarGrade] = useState(() => { try { return localStorage.getItem("vicke-projetar-grade") !== "0"; } catch (err) { return true; } });
   const [pavSolta, setPavSolta] = useState(() => { try { const v = JSON.parse(localStorage.getItem("vicke-projetar-pav-solta") || "null"); return v && v.x >= 0 && v.y >= 0 ? v : null; } catch (err) { return null; } });
   const arrastouMais = useRef(false);
@@ -1873,10 +1877,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const dados = { ...projeto, obraId, sincronizar, paredes: terreo.paredes, areas: terreo.areas, escala, atualizadoEm: new Date().toISOString() };
     if (lista.length > 1) dados.pavimentos = lista; else delete dados.pavimentos;
     if (cortes.length) dados.cortes = cortes; else delete dados.cortes;
+    if (estrutura.ativa) dados.estrutura = estrutura; else delete dados.estrutura;
     gravarPendente.current = () => { gravarPendente.current = null; onAlterar(dados); };
     const t = setTimeout(() => gravarPendente.current && gravarPendente.current(), 400);
     return () => clearTimeout(t);
-  }, [paredes, areas, obraId, sincronizar, escala, pavimentos, dadosPav, pavAtivo, cortes]);
+  }, [paredes, areas, obraId, sincronizar, escala, pavimentos, dadosPav, pavAtivo, cortes, estrutura]);
   useEffect(() => {
     const sair = () => gravarPendente.current && gravarPendente.current();
     window.addEventListener("beforeunload", sair);
@@ -1894,7 +1899,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // Histórico guarda a foto do projeto inteiro (pavimento ativo, todos os
   // pavimentos e os cortes): o Ctrl+Z atravessa a troca de pavimento e desfaz
   // também criar/excluir pavimento, levar parede para cima e os cortes.
-  const fotoAtual = () => ({ pavAtivo, paredes, areas, pavimentos, dadosPav, cortes });
+  const fotoAtual = () => ({ estrutura, pavAtivo, paredes, areas, pavimentos, dadosPav, cortes });
   const registrar = (extra) => {
     historico.current.push({ ...fotoAtual(), ...(extra || {}) });
     if (historico.current.length > 200) historico.current.shift();
@@ -1905,6 +1910,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     if (f.pavimentos) setPavimentos(f.pavimentos);
     if (f.dadosPav) setDadosPav(f.dadosPav);
     if (f.pavAtivo) setPavAtivo(f.pavAtivo);
+    if (f.estrutura) setEstrutura(f.estrutura);
     if (f.cortes) { setCortes(f.cortes); if (!f.cortes.some((c) => c.id === verCorte)) setVerCorte(f.cortes[0] ? f.cortes[0].id : null); }
     setParedes(f.paredes); setAreas(f.areas); setSel([]);
     if (outroPav) { setPoli([]); setAncora(null); setDividir(null); sepAnterior.current = null; ambientesFeitos.current = null; const pv = (f.pavimentos || pavimentos).find((p) => p.id === f.pavAtivo); if (pv) avisar(`Voltou para o ${pv.nome}.`); }
@@ -2168,6 +2174,37 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const pavsOrd = [...pavimentos].sort((a, b) => a.nivel - b.nivel);
   const pavAt = pavimentos.find((p) => p.id === pavAtivo) || pavsOrd[0];
   const dadosDe = (id) => (id === pavAtivo ? { paredes, areas } : (dadosPav[id] || { paredes: [], areas: [] }));
+  // estrutura de cada pavimento, refeita sempre que a arquitetura muda (compatibilização)
+  const estPorPav = useMemo(() => {
+    if (!estrutura.ativa) return {};
+    const r = {};
+    pavsOrd.forEach((p, k) => { const d = dadosDe(p.id); r[p.id] = esLancar(d.paredes || [], d.areas || [], estrutura.params, { baldrames: k === 0 }); });
+    return r;
+  }, [estrutura, paredes, areas, dadosPav, pavimentos, pavAtivo]); // eslint-disable-line react-hooks/exhaustive-deps
+  const estAvisos = useMemo(() => {
+    if (!estrutura.ativa) return [];
+    const r = [];
+    pavsOrd.forEach((p, k) => {
+      const est = estPorPav[p.id]; if (!est) return;
+      const abaixo = k > 0 && estPorPav[pavsOrd[k - 1].id] ? estPorPav[pavsOrd[k - 1].id].pilares : null;
+      for (const a of esVerificar(est, dadosDe(p.id).paredes || [], estrutura.params, { pilaresAbaixo: abaixo })) {
+        if (a.ref === "geral" && k > 0) continue;
+        r.push({ ...a, pav: p.id, pavNome: p.nome });
+      }
+    });
+    return r;
+  }, [estPorPav]); // eslint-disable-line react-hooks/exhaustive-deps
+  const estQtd = useMemo(() => {
+    const t = { pilares: { n: 0, concreto: 0, forma: 0 }, vigas: { n: 0, comprimento: 0, concreto: 0, forma: 0 }, baldrames: { n: 0, comprimento: 0, concreto: 0, forma: 0 }, lajes: { n: 0, area: 0, concreto: 0, forma: 0 }, concreto: 0, forma: 0 };
+    for (const p of pavsOrd) {
+      const est = estPorPav[p.id]; if (!est) continue;
+      const ps = dadosDe(p.id).paredes || [], H = ps.length ? Math.max(...ps.map((w) => w.h || 0)) : altM;
+      const q = esQuantitativos(est, H || altM);
+      for (const g of ["pilares", "vigas", "baldrames", "lajes"]) for (const k of Object.keys(q[g])) t[g][k] += q[g][k];
+      t.concreto += q.concreto; t.forma += q.forma;
+    }
+    return t;
+  }, [estPorPav]); // eslint-disable-line react-hooks/exhaustive-deps
   // pavimento logo abaixo do ativo (referência em cinza na planta)
   const pavAbaixo = (() => { const k = pavsOrd.findIndex((p) => p.id === pavAtivo); return k > 0 ? pavsOrd[k - 1] : null; })();
   const irParaPav = (id) => {
@@ -3538,6 +3575,37 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         desenharEsq(w, o, marc ? TP_AZUL : "#111827", { marc: marcadas.has("o" + o.id), codigo: quadroPl.codigoDe.get(o.id), cotas: marcadas.has("o" + o.id) && sel.length === 1, eq: marcadas.has("o" + o.id) && sel.length === 1, i });
       });
     });
+    // estrutura (estrutural.jsx): vigas tracejadas nas duas faces (estão acima
+    // do plano de corte), pilares cheios, nomes pequenos; foco do aviso clicado
+    const estAt = estrutura.ativa && estrutura.mostrar !== false ? estPorPav[pavAtivo] : null;
+    if (estAt) {
+      ctx.save();
+      const fonteEst = Math.max(9, Math.min(12, vista.current.s * 0.09)) * dpr;
+      ctx.font = `600 ${fonteEst}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      for (const v of estAt.vigas) {
+        if (v.baldrame) continue;
+        const L = Math.hypot(v.b.x - v.a.x, v.b.y - v.a.y); if (!L) continue;
+        const nx = -(v.b.y - v.a.y) / L * v.b_ / 2, ny = (v.b.x - v.a.x) / L * v.b_ / 2;
+        ctx.strokeStyle = "#6b7280"; ctx.lineWidth = 1 * dpr; ctx.setLineDash([5 * dpr, 3 * dpr]);
+        for (const sg of [1, -1]) { const [x0, y0] = T({ x: v.a.x + nx * sg, y: v.a.y + ny * sg }), [x1, y1] = T({ x: v.b.x + nx * sg, y: v.b.y + ny * sg }); ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
+        ctx.setLineDash([]);
+        if (L * vista.current.s > 70 * dpr) {
+          const [mx, my] = T({ x: (v.a.x + v.b.x) / 2 + nx * 2.6, y: (v.a.y + v.b.y) / 2 + ny * 2.6 });
+          const txt = `${v.id} ${Math.round(v.b_ * 100)}×${Math.round(v.h * 100)}`, w = ctx.measureText(txt).width + 6 * dpr;
+          ctx.fillStyle = "rgba(255,255,255,0.85)"; ctx.fillRect(mx - w / 2, my - fonteEst * 0.65, w, fonteEst * 1.3);
+          ctx.fillStyle = "#4b5563"; ctx.fillText(txt, mx, my);
+        }
+      }
+      for (const pl of estAt.pilares) {
+        caminho(esCantosPilar(pl)); ctx.fillStyle = "#111827"; ctx.fill();
+        const [x, y] = T(pl), r = Math.max(pl.b, pl.h) * vista.current.s / 2 + 8 * dpr;
+        ctx.fillStyle = "#111827"; ctx.fillText(pl.id, x + r * 0.8, y - r * 0.8);
+      }
+      ctx.restore();
+    }
+    if (focoEst && Date.now() - focoEst.t < 4000) {
+      const [x, y] = T(focoEst); ctx.strokeStyle = TP_AZUL; ctx.lineWidth = 2.5 * dpr; ctx.beginPath(); ctx.arc(x, y, Math.max(16 * dpr, 0.45 * vista.current.s), 0, Math.PI * 2); ctx.stroke();
+    }
     // cotas do desenho (padrão de prancha): linha fina passando um pouco das
     // pontas, traço oblíquo a 45° em cada ponta e o número deitado no sentido
     // da medida, do lado de dentro (cota de ambiente) ou do lado da linha
@@ -3799,7 +3867,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const marcadas0 = new Set(sel);
     // cada pavimento num grupo no seu nível; só o ativo fica selecionável
     // filtro: "semTel" tira os telhados (pavimento escolhido); "soTel" deixa só eles (Cobertura)
-    const camada = (paredes, areas, G, marcadas, analise, filtro) => {
+    const camada = (paredes, areas, G, marcadas, analise, filtro, estP) => {
     const apoioT = (a) => {
       if (a.cotaManual) return a.cota || 0;
       const pts = a.pts || []; let topo = 0, achou = false;
@@ -3973,6 +4041,27 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const tel = new Set(G.children.slice(nTel0, nTel1));
       for (const o of [...G.children]) if (tel.has(o) === (filtro === "semTel")) G.remove(o);
     }
+    // só a estrutura: das peças da arquitetura ficam as lajes (e o contorno delas)
+    if (filtro === "soEst") {
+      let manter = false;
+      for (const o of [...G.children]) { const k = o.userData && o.userData.chave; if (k) manter = k[0] === "a" && !!areas[+k.slice(1)] && areas[+k.slice(1)].tipo === "laje"; if (!manter) G.remove(o); }
+    }
+    // estrutura (estrutural.jsx): pilares do piso ao topo das paredes, vigas
+    // com o topo no topo da parede, baldrames com o topo no piso
+    if (estP) {
+      const Hp = paredes.length ? Math.max(...paredes.map((w) => w.h || 0)) : altM;
+      const matE = new THREE.MeshLambertMaterial({ color: 0xc4c9d0 });
+      for (const pl of estP.pilares) {
+        const g = new THREE.BoxGeometry(pl.h, Hp, pl.b), m = new THREE.Mesh(g, matE);
+        m.position.set(pl.x - cx, Hp / 2, pl.y - cz); m.rotation.y = -(pl.ang || 0); m.userData.est = pl.id; G.add(m); contorno(g, m, 0x4b5563);
+      }
+      for (const v of estP.vigas) {
+        const L = Math.hypot(v.b.x - v.a.x, v.b.y - v.a.y); if (L < 0.05) continue;
+        const g = new THREE.BoxGeometry(L, v.h, v.b_), m = new THREE.Mesh(g, matE);
+        m.position.set((v.a.x + v.b.x) / 2 - cx, v.baldrame ? -v.h / 2 : (v.topo || Hp) - v.h / 2, (v.a.y + v.b.y) / 2 - cz);
+        m.rotation.y = -Math.atan2(v.b.y - v.a.y, v.b.x - v.a.x); m.userData.est = v.id; G.add(m); contorno(g, m, 0x4b5563);
+      }
+    }
     };
     for (const p of pavsOrd) {
       if (vis3d === "so" && p.id !== pavAtivo) continue;
@@ -3981,7 +4070,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       const G = new THREE.Group(); G.position.y = p.nivel || 0; G.userData.pav = p.id; T.group.add(G);
       const ativo = p.id === pavAtivo, d = dadosDe(p.id);
       if (ativo) T.grupoAtivo = G;
-      camada(d.paredes || [], d.areas || [], G, ativo ? marcadas0 : new Set(selOutros[p.id] || []), ativo ? analise : tpAnaliseAreas(d.areas || [], d.paredes || []), vis3d === "so" ? "semTel" : vis3d === "cob" ? "soTel" : null);
+      const estP = estrutura.ativa && estrutura.mostrar !== false ? estPorPav[p.id] : null;
+      camada(d.paredes || [], d.areas || [], G, ativo ? marcadas0 : new Set(selOutros[p.id] || []), ativo ? analise : tpAnaliseAreas(d.areas || [], d.paredes || []),
+        estP && estrutura.so3d ? "soEst" : vis3d === "so" ? "semTel" : vis3d === "cob" ? "soTel" : null, estP);
     }
     T.camera.aspect = c.width / c.height; T.camera.updateProjectionMatrix();
     const alvo = T.alvo || { x: 0, y: 1, z: 0 };
@@ -4235,7 +4326,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   }, []);
 
   // desenha antes da tela pintar (no mesmo quadro da mudança), não depois
-  tpUseLayoutEffect(() => { desenharPlanta(); }, [mostrarGrade, paredes, areas, inicio, poli, hover, espM, sel, caixa, ferramenta, ancora, modoTraco, previaEsq, editNome, escala, pavAtivo, dadosPav, cortes]);
+  tpUseLayoutEffect(() => { desenharPlanta(); }, [mostrarGrade, paredes, areas, inicio, poli, hover, espM, sel, caixa, ferramenta, ancora, modoTraco, previaEsq, editNome, escala, pavAtivo, dadosPav, cortes, estPorPav, estrutura, focoEst]);
+  // o círculo do aviso some sozinho
+  useEffect(() => { if (!focoEst) return; const t = setTimeout(() => setFocoEst(null), 4000); return () => clearTimeout(t); }, [focoEst]);
   useEffect(() => { const t = setTimeout(() => atual.current.desenharPlanta(), 230); return () => clearTimeout(t); }, [painelOculto]); // escala gráfica acompanha o painel
   useEffect(() => { if (modo !== "corte") return; const id = requestAnimationFrame(() => desenharCorte()); return () => cancelAnimationFrame(id); }, [modo, cortes, verCorte, paredes, areas, dadosPav, pavimentos, pavAtivo]);
   // ambiente acompanha as paredes: mexeu numa parede, o contorno e a área se refazem
@@ -4274,7 +4367,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       return;
     }
     clearTimeout(tempo3d.current); tempo3d.current = null; desenhar3d();
-  }, [paredes, areas, sel, selOutros, pavAtivo, dadosPav, pavimentos, vis3d, modo]);
+  }, [paredes, areas, sel, selOutros, pavAtivo, dadosPav, pavimentos, vis3d, modo, estPorPav, estrutura]);
 
   useEffect(() => {
     const k = (e) => {
@@ -5795,7 +5888,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // bloco de ferramentas: no menu ou solto na prancheta (o "+" arrasta de um lugar para o outro)
   const botaoMais = (noCanvas) => { const ferrAberto = noCanvas ? ferrAbertoC : ferrAbertoM, setFerrAberto = noCanvas ? setFerrAbertoC : setFerrAbertoM; return (
             <button aria-label={ferrAberto ? "Fechar a lista de ferramentas" : "Abrir a lista de ferramentas"} aria-expanded={ferrAberto}
-              onPointerDown={iniciarArraste("ferr")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setFerrAberto((x) => !x); if (!noCanvas) { setPavAbertoM(false); setExibirAberto(false); setTabelasAberto(false); setObraAberta(false); setMaisAberto(false); } }}
+              onPointerDown={iniciarArraste("ferr")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setFerrAberto((x) => !x); if (!noCanvas) { setPavAbertoM(false); setExibirAberto(false); setTabelasAberto(false); setObraAberta(false); setEstAberta(false); setMaisAberto(false); } }}
               title={ferrAberto ? "Fechar a lista" : noCanvas ? "Ferramentas (arraste para mover; solte no menu para tirar da prancheta)" : "Ferramentas (arraste para a prancheta para ter uma cópia à mão)"}
               style={{ width: 32, height: 32, borderRadius: "50%", touchAction: "none", border: `1px solid ${ferrAberto ? TP_AZUL : "#e5e7eb"}`, background: ferrAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "transform .15s", transform: ferrAberto ? "rotate(45deg)" : "none" }}>
               <svg width="14" height="14" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke={ferrAberto ? TP_AZUL : "#111827"} strokeWidth="2" strokeLinecap="round" /></svg>
@@ -5804,7 +5897,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // pavimentos: mesma dinâmica do "+" (abre a lista embaixo, arrasta para a prancheta)
   const botaoPav = (noCanvas) => { const pavAberto = noCanvas ? pavAbertoC : pavAbertoM, setPavAberto = noCanvas ? setPavAbertoC : setPavAbertoM; return (
             <button aria-label={pavAberto ? "Fechar a lista de pavimentos" : "Abrir a lista de pavimentos"} aria-expanded={pavAberto}
-              onPointerDown={iniciarArraste("pav")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setPavAberto((x) => !x); if (!noCanvas) { setFerrAbertoM(false); setExibirAberto(false); setTabelasAberto(false); setObraAberta(false); setMaisAberto(false); } }}
+              onPointerDown={iniciarArraste("pav")} onClick={() => { if (arrastouMais.current) { arrastouMais.current = false; return; } setPavAberto((x) => !x); if (!noCanvas) { setFerrAbertoM(false); setExibirAberto(false); setTabelasAberto(false); setObraAberta(false); setEstAberta(false); setMaisAberto(false); } }}
               title={pavAberto ? "Fechar a lista" : noCanvas ? "Pavimentos (arraste para mover; solte no menu para tirar da prancheta)" : "Pavimentos (arraste para a prancheta para ter uma cópia à mão)"}
               style={{ position: "relative", width: 32, height: 32, borderRadius: "50%", touchAction: "none", border: `1px solid ${pavAberto ? TP_AZUL : "#e5e7eb"}`, background: pavAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: pavAberto ? TP_AZUL : "#111827" }}>
               {!noCanvas && pavsOrd.length > 1 && (
@@ -5818,22 +5911,31 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // exibir: escala das anotações e prancha com/sem grade
   const botaoExibir = (
     <button aria-label={exibirAberto ? "Fechar as opções de exibição" : "Exibir: escala e grade"} aria-expanded={exibirAberto} title="Exibir: escala da planta e grade"
-      onClick={() => { setExibirAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setTabelasAberto(false); setObraAberta(false); setMaisAberto(false); }}
+      onClick={() => { setExibirAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setTabelasAberto(false); setObraAberta(false); setEstAberta(false); setMaisAberto(false); }}
       style={{ width: 32, height: 32, borderRadius: "50%", border: `1px solid ${exibirAberto ? TP_AZUL : "#e5e7eb"}`, background: exibirAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: exibirAberto ? TP_AZUL : "#111827" }}>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" /><circle cx="8" cy="8" r="2" /></svg>
     </button>
   );
   const botaoTabelas = (
     <button aria-label={tabelasAberto ? "Fechar as tabelas" : "Tabelas: esquadrias e ambientes"} aria-expanded={tabelasAberto} title="Tabelas: esquadrias e ambientes"
-      onClick={() => { setTabelasAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setExibirAberto(false); setObraAberta(false); setMaisAberto(false); }}
+      onClick={() => { setTabelasAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setExibirAberto(false); setObraAberta(false); setEstAberta(false); setMaisAberto(false); }}
       style={{ width: 32, height: 32, borderRadius: "50%", border: `1px solid ${tabelasAberto ? TP_AZUL : "#e5e7eb"}`, background: tabelasAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: tabelasAberto ? TP_AZUL : "#111827" }}>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M2 6h12M2 9.5h12M6.5 6v7.5" /></svg>
     </button>
   );
   // obra: gerar/atualizar o orçamento e o preencher sozinho (capacete de obra)
+  // estrutura: pilares, vigas e lajes (estrutural.jsx)
+  const botaoEstrutura = (
+    <button aria-label={estAberta ? "Fechar estrutura" : "Estrutura: pilares, vigas e lajes"} aria-expanded={estAberta} title="Estrutura: pilares, vigas e lajes (NBR 6118)"
+      onClick={() => { setEstAberta((x) => !x); setObraAberta(false); setFerrAbertoM(false); setPavAbertoM(false); setExibirAberto(false); setTabelasAberto(false); setMaisAberto(false); }}
+      style={{ position: "relative", width: 32, height: 32, borderRadius: "50%", border: `1px solid ${estAberta ? TP_AZUL : "#e5e7eb"}`, background: estAberta ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: estAberta ? TP_AZUL : "#111827" }}>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" aria-hidden="true"><rect x="1.75" y="2.5" width="12.5" height="2.5" rx="0.4" /><rect x="3" y="5" width="2.25" height="8.75" /><rect x="10.75" y="5" width="2.25" height="8.75" /></svg>
+      {estrutura.ativa && estAvisos.some((a) => a.tipo !== "atencao") && <span aria-hidden="true" style={{ position: "absolute", right: -1, top: -1, width: 8, height: 8, borderRadius: "50%", background: "#b91c1c", border: "1.5px solid #fff" }} />}
+    </button>
+  );
   const botaoObra = (
     <button aria-label={obraAberta ? "Fechar obra" : "Obra: quantitativo e orçamento"} aria-expanded={obraAberta} title={obraLigada ? `Obra "${obraLigada.nome}": quantitativo e orçamento` : "Obra: quantitativo e orçamento"}
-      onClick={() => { setObraAberta((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setExibirAberto(false); setTabelasAberto(false); setMaisAberto(false); }}
+      onClick={() => { setObraAberta((x) => !x); setEstAberta(false); setFerrAbertoM(false); setPavAbertoM(false); setExibirAberto(false); setTabelasAberto(false); setMaisAberto(false); }}
       style={{ width: 32, height: 32, borderRadius: "50%", border: `1px solid ${obraAberta ? TP_AZUL : "#e5e7eb"}`, background: obraAberta ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: obraAberta ? TP_AZUL : "#111827" }}>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2.5 14.5h5" /><path d="M5 14.5V2" /><path d="M1.5 5h13" /><path d="M2 5 5 2l6.5 3" /><path d="M11.5 5v3.5" /><path d="M10 8.5h3v2.5h-3z" /></svg>
     </button>
@@ -5953,7 +6055,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
 
     </>
   ); };
-  const temConteudo = ferrAbertoM || ferramenta !== "selecionar" || pavAbertoM || editPav || exibirAberto || tabelasAberto || obraAberta || maisAberto || sel.length > 0 || !!inicio || poli.length > 0 || confirmarLimpar;
+  const temConteudo = ferrAbertoM || ferramenta !== "selecionar" || pavAbertoM || editPav || exibirAberto || tabelasAberto || obraAberta || estAberta || maisAberto || sel.length > 0 || !!inicio || poli.length > 0 || confirmarLimpar;
   const menu = (
     <aside ref={asideRef} style={{ display: "flex", alignItems: "flex-start", gap: 6, boxSizing: "border-box",
       ...(isMobile ? { position: "absolute", top: 0, left: 0, bottom: 0, zIndex: 3, width: "min(88vw, 320px)", background: "#fff", boxShadow: "4px 0 20px rgba(0,0,0,0.15)", transform: menuAberto ? "none" : "translateX(-105%)", transition: "transform .2s ease",
@@ -5967,7 +6069,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 4 6 10l6 6" /></svg>
         </button>
         <span aria-hidden="true" style={{ width: 18, height: 1, background: "#e5e7eb" }} />
-        {botaoMais(false)}{botaoPav(false)}{botaoExibir}{botaoTabelas}{botaoObra}
+        {botaoMais(false)}{botaoPav(false)}{botaoExibir}{botaoTabelas}{botaoEstrutura}{botaoObra}
         <span aria-hidden="true" style={{ width: 18, height: 1, background: "#e5e7eb" }} />
         <button onClick={desfazer} disabled={!historico.current.length} aria-label="Desfazer" title="Desfazer (Ctrl+Z)" style={{ ...icoLat, opacity: historico.current.length ? 1 : 0.4 }}>
           <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 5 3 9l4 4" /><path d="M3 9h9a5 5 0 0 1 0 10h-2" /></svg>
@@ -5975,7 +6077,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         <button onClick={refazer} disabled={!futuro.current.length} aria-label="Refazer" title="Refazer (Ctrl+Y)" style={{ ...icoLat, opacity: futuro.current.length ? 1 : 0.4 }}>
           <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M13 5l4 4-4 4" /><path d="M17 9H8a5 5 0 0 0 0 10h2" /></svg>
         </button>
-        <button onClick={() => { setMaisAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setExibirAberto(false); setTabelasAberto(false); setObraAberta(false); }} aria-label="Mais: projeto, atalhos, suporte e limpar" aria-expanded={maisAberto} title="Mais"
+        <button onClick={() => { setMaisAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setExibirAberto(false); setTabelasAberto(false); setObraAberta(false); setEstAberta(false); }} aria-label="Mais: projeto, atalhos, suporte e limpar" aria-expanded={maisAberto} title="Mais"
           style={{ ...icoLat, borderColor: maisAberto ? TP_AZUL : "#e5e7eb", background: maisAberto ? "#eef5ff" : "#fff", color: maisAberto ? TP_AZUL : "#374151" }}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="3.5" cy="8" r="1.3" /><circle cx="8" cy="8" r="1.3" /><circle cx="12.5" cy="8" r="1.3" /></svg>
         </button>
@@ -6038,6 +6140,92 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       </div>
         </div>
       )}
+      {estAberta && (() => {
+        const P = { ...ES_PADRAO, ...(estrutura.params || {}) };
+        const mudarParam = (k, v) => { registrar(); setEstrutura((e) => ({ ...e, params: { ...(e.params || {}), [k]: v } })); };
+        const secao = (k, rot) => (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 6 }}>
+            <TpCampo id={"tp-est-" + k + "b"} rotulo={`${rot} b (cm)`} casas={0} valor={Math.round(P[k].b * 100)} onConfirmar={(v) => mudarParam(k, { ...P[k], b: v / 100 })} />
+            <TpCampo id={"tp-est-" + k + "h"} rotulo={`${rot} h (cm)`} casas={0} valor={Math.round(P[k].h * 100)} onConfirmar={(v) => mudarParam(k, { ...P[k], h: v / 100 })} />
+          </div>
+        );
+        const nNbr = estAvisos.filter((a) => a.tipo === "nbr").length, nComp = estAvisos.filter((a) => a.tipo === "compat").length, nAt = estAvisos.filter((a) => a.tipo === "atencao").length;
+        const corTipo = { nbr: "#b91c1c", compat: "#b45309", atencao: "#6b7280" }, rotTipo = { nbr: "NBR", compat: "Conflito", atencao: "Atenção" };
+        const selCss = { width: "100%", padding: "6px 8px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13, fontFamily: "inherit", background: "#fff" };
+        return (
+          <div style={{ marginTop: 2 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "#9ca3af", padding: "4px 0 6px" }}>Estrutura</div>
+            {!estrutura.ativa ? (
+              <>
+                <div style={{ fontSize: 12.5, color: "#4b5563", lineHeight: 1.45 }}>Lança pilares, vigas, baldrames e lajes a partir das paredes de todos os pavimentos e confere com a NBR 6118. A estrutura acompanha o desenho: mudou a parede, ela se refaz.</div>
+                <button style={{ ...btn, width: "100%", minHeight: 32, fontSize: 12.5, marginTop: 10, background: "#111827", borderColor: "#111827", color: "#fff" }}
+                  onClick={() => { registrar(); setEstrutura((e) => ({ ...e, ativa: true, mostrar: true })); }}>Lançar estrutura</button>
+              </>
+            ) : (
+              <>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#374151", cursor: "pointer" }}>
+                  <input type="checkbox" checked={estrutura.mostrar !== false} onChange={(e) => setEstrutura((x) => ({ ...x, mostrar: e.target.checked }))} /> Mostrar na planta e no 3D
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#374151", cursor: "pointer", marginTop: 6 }}>
+                  <input type="checkbox" checked={!!estrutura.so3d} onChange={(e) => setEstrutura((x) => ({ ...x, so3d: e.target.checked, mostrar: true }))} /> Só a estrutura no 3D
+                </label>
+                {grupoQ("est-av", `Verificações${estAvisos.length ? ` (${estAvisos.length})` : ""}`, nNbr + nComp ? `${nNbr + nComp} a resolver` : "ok")}
+                {!qFechado("est-av") && (
+                  <div>
+                    {!estAvisos.length && <div style={{ fontSize: 12.5, color: "#4b5563", padding: "4px 0" }}>Nada a apontar nas verificações desta etapa.</div>}
+                    {estAvisos.length > 0 && <div style={{ fontSize: 11.5, color: "#6b7280", padding: "2px 0 4px" }}>{nNbr} NBR · {nComp} conflito{nComp === 1 ? "" : "s"} · {nAt} atenção</div>}
+                    {estAvisos.slice(0, 60).map((a, k) => (
+                      <button key={k} onClick={() => { if (a.pav !== pavAtivo) irParaPav(a.pav); if (a.ponto) setFocoEst({ x: a.ponto.x, y: a.ponto.y, t: Date.now() }); if (isMobile) setMenuAberto(false); }}
+                        style={{ display: "block", width: "100%", textAlign: "left", border: "none", borderBottom: "1px solid #f0f2f5", background: "none", padding: "5px 0", cursor: a.ponto ? "pointer" : "default", fontFamily: "inherit" }}>
+                        <span style={{ fontSize: 10.5, fontWeight: 600, color: corTipo[a.tipo], marginRight: 6 }}>{rotTipo[a.tipo]}</span>
+                        <span style={{ fontSize: 12.5, color: "#374151", lineHeight: 1.4 }}>{a.texto}</span>
+                        {(a.norma || pavimentos.length > 1) && <span style={{ display: "block", fontSize: 11, color: "#9ca3af", marginTop: 1 }}>{[pavimentos.length > 1 ? a.pavNome : null, a.norma].filter(Boolean).join(" · ")}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {grupoQ("est-q", "Quantitativo", `${tpFmt(estQtd.concreto)} m³`)}
+                {!qFechado("est-q") && (<>
+                  {linhaTab("Pilares", estQtd.pilares.n, "un")}
+                  {linhaTab("Concreto", tpFmt(estQtd.pilares.concreto), "m³", true)}
+                  {linhaTab("Vigas", tpFmt(estQtd.vigas.comprimento), "m")}
+                  {linhaTab("Concreto", tpFmt(estQtd.vigas.concreto), "m³", true)}
+                  {estQtd.baldrames.n > 0 && linhaTab("Baldrames", tpFmt(estQtd.baldrames.comprimento), "m")}
+                  {estQtd.baldrames.n > 0 && linhaTab("Concreto", tpFmt(estQtd.baldrames.concreto), "m³", true)}
+                  {linhaTab("Lajes", tpFmt(estQtd.lajes.area), "m²")}
+                  {linhaTab("Concreto", tpFmt(estQtd.lajes.concreto), "m³", true)}
+                  {linhaTab("Concreto total", tpFmt(estQtd.concreto), "m³")}
+                  {linhaTab("Fôrma", tpFmt(estQtd.forma), "m²")}
+                </>)}
+                {grupoQ("est-p", "Parâmetros", `C${P.fck} · CAA ${["", "I", "II", "III", "IV"][P.caa]}`)}
+                {!qFechado("est-p") && (
+                  <div style={{ paddingTop: 4 }}>
+                    <label htmlFor="tp-est-caa" style={{ display: "block", fontSize: 12, color: "#4b5563", margin: "4px 0" }}>Agressividade do ambiente</label>
+                    <select id="tp-est-caa" value={P.caa} onChange={(e) => mudarParam("caa", +e.target.value)} style={selCss}>
+                      {[1, 2, 3, 4].map((c) => <option key={c} value={c}>{ES_NBR.caa[c].rotulo} ({ES_NBR.caa[c].ambiente})</option>)}
+                    </select>
+                    <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 4, lineHeight: 1.4 }}>Cobrimento: laje {ES_NBR.cobrimento.laje[P.caa]} mm, viga e pilar {ES_NBR.cobrimento.vigaPilar[P.caa]} mm, em contato com o solo {ES_NBR.cobrimento.contatoSolo[P.caa]} mm. Concreto mínimo C{ES_NBR.classeMinima[P.caa]}, a/c até {tpFmt(ES_NBR.acMaxima[P.caa])}.</div>
+                    <label htmlFor="tp-est-fck" style={{ display: "block", fontSize: 12, color: "#4b5563", margin: "8px 0 4px" }}>Concreto</label>
+                    <select id="tp-est-fck" value={P.fck} onChange={(e) => mudarParam("fck", +e.target.value)} style={selCss}>
+                      {[20, 25, 30, 35, 40, 45, 50].map((f) => <option key={f} value={f}>C{f} (fck {f} MPa)</option>)}
+                    </select>
+                    {secao("pilar", "Pilar")}
+                    {secao("viga", "Viga")}
+                    {secao("baldrame", "Baldrame")}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 6 }}>
+                      <TpCampo id="tp-est-laje" rotulo="Laje (cm)" casas={0} valor={Math.round(P.lajeEsp * 100)} onConfirmar={(v) => mudarParam("lajeEsp", v / 100)} />
+                      <TpCampo id="tp-est-vao" rotulo="Vão entre pilares (m)" valor={P.vaoMax} onConfirmar={(v) => mudarParam("vaoMax", v)} />
+                    </div>
+                    <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>Seções e vão são escolhas de projeto (não são norma); as verificações dizem onde a NBR pede outra coisa.</div>
+                    <button style={{ ...btn, width: "100%", minHeight: 30, fontSize: 12.5, marginTop: 10, color: "#b91c1c" }} onClick={() => { registrar(); setEstrutura((e) => ({ ...e, ativa: false })); }}>Retirar a estrutura</button>
+                  </div>
+                )}
+              </>
+            )}
+            <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 10, lineHeight: 1.4 }}>Apoio ao projeto estrutural. Para executar, a estrutura precisa de projeto de engenheiro com ART.</div>
+          </div>
+        );
+      })()}
       {podeOrcar && obraAberta && (
         <div style={{ marginTop: 12, padding: 8, border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff" }}>
           <button style={{ ...btn, width: "100%", minHeight: 32, fontSize: 12.5, marginTop: 0, background: "#111827", borderColor: "#111827", color: "#fff" }} onClick={() => setPainelObra("confirmar")}>

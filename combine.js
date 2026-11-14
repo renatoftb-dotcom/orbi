@@ -89,6 +89,9 @@ const ORDER = [
   // whatsapp-piloto.jsx: tela do teste grátis da WhatsApp Cloud API (só a
   // empresa piloto). Antes de app.jsx, que monta o menu e a aba.
   "whatsapp-piloto.jsx",
+  // estrutural.jsx: motor da estrutura (lançamento e verificações da NBR 6118)
+  // usado pelo Projetar. JS puro; vem antes de teste-projeto.jsx.
+  "estrutural.jsx",
   // teste-projeto.jsx: protótipo isolado de traço de parede (planta + 3D +
   // quantitativo). Só no menu da Padovan. Antes de app.jsx, que monta a aba.
   "teste-projeto.jsx",
