@@ -11922,10 +11922,11 @@ function frasesDasFaltas(faltas) {
 // escritório): a conta escolhida já traz a etapa e o grupo, e a pessoa
 // só mexe se quiser outra coisa. ──
 const PADRAO_MAO_DE_OBRA = { etapa: "prestadores", grupoMaterial: "Prestadores de serviços" };
-// O ofício que tem etapa própria (revisão do catálogo, out/26) leva a
-// conta para ela: o empreiteiro pago cai na mesma etapa do empreiteiro
-// orçado. Os demais (pedreiro avulso, ajudante, encarregado, gesseiro...)
-// continuam na etapa genérica de prestadores.
+// As etapas por ofício (revisão do catálogo, out/26) continuam na lista
+// para quem quiser escolher, mas NÃO são mais o padrão da conta: sem etapa
+// escolhida, toda mão de obra vai para "Prestadores de serviços" — a etapa
+// que o planejamento da obra usa (nov/26). Este mapa só serve para
+// reconhecer, ao trocar a conta, a etapa que foi posta pelo padrão antigo.
 const ETAPA_DA_CONTA_MAO_DE_OBRA = {
   empreiteiro: "prest_empreiteiro",
   pintor: "prest_pintor",
@@ -11941,7 +11942,7 @@ const ETAPA_DA_CONTA_MAO_DE_OBRA = {
 function padraoDaContaObra(contaId) {
   const c = (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((x) => x && x.id === contaId);
   if (!c || c.grupo !== "maoDeObra") return { etapa: "", grupoMaterial: "" };
-  return { ...PADRAO_MAO_DE_OBRA, etapa: ETAPA_DA_CONTA_MAO_DE_OBRA[c.id] || PADRAO_MAO_DE_OBRA.etapa };
+  return { ...PADRAO_MAO_DE_OBRA };
 }
 
 // Preenche o que está em branco. Nunca troca o que a pessoa escolheu.
@@ -11968,7 +11969,10 @@ function trocarContaComPadrao(obj, novaConta) {
   const o = obj || {};
   const antes = padraoDaContaObra(o.contaId);
   const r = { ...o, contaId: novaConta };
-  if (antes.etapa && r.etapa === antes.etapa) r.etapa = "";
+  // a etapa do ofício posta pelo padrão antigo (Empreiteiro → "Empreiteiro")
+  // também conta como padrão, e não como escolha
+  const antiga = ETAPA_DA_CONTA_MAO_DE_OBRA[o.contaId] || "";
+  if (antes.etapa && (r.etapa === antes.etapa || (antiga && r.etapa === antiga))) r.etapa = "";
   if (antes.grupoMaterial && r.grupoMaterial === antes.grupoMaterial) r.grupoMaterial = "";
   return comPadraoDaConta(r);
 }

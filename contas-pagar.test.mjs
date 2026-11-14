@@ -2589,8 +2589,8 @@ teste("parcela de contrato leva a etapa quando o contrato e de uma etapa so", ()
     etapa: "portoes" };
   assert.ok(modulo.contasDoContrato(ct).every(c => c.etapa === "portoes"));
   const civil = { ...ct, etapa: "" };
-  // sem etapa no contrato, a conta de mao de obra leva para a etapa do oficio (serralheiro)
-  assert.ok(modulo.contasDoContrato(civil).every(c => c.etapa === "prest_serralheiro"), "mao de obra entra na etapa do oficio");
+  // sem etapa no contrato, a mao de obra vai para Prestadores de servicos (nov/26)
+  assert.ok(modulo.contasDoContrato(civil).every(c => c.etapa === "prestadores"), "mao de obra sem etapa vai para Prestadores");
 });
 
 teste("a conferencia nao chama de furo o que a regra dispensa", () => {
@@ -3327,8 +3327,9 @@ teste("o papel do pedido final vai junto para cada conta do pedido", () => {
 
 // ── Conta → etapa/grupo: tudo ligado, em todas as portas ───────
 teste("mao de obra traz etapa e grupo Prestadores; material nao", () => {
-  assert.deepStrictEqual(modulo.padraoDaContaObra("empreiteiro"), { etapa: "prest_empreiteiro", grupoMaterial: "Prestadores de serviços" });
-  // oficio sem etapa propria fica na etapa generica
+  // sem etapa escolhida, todo oficio vai para a etapa de Prestadores de servicos (nov/26)
+  assert.deepStrictEqual(modulo.padraoDaContaObra("empreiteiro"), { etapa: "prestadores", grupoMaterial: "Prestadores de serviços" });
+  assert.deepStrictEqual(modulo.padraoDaContaObra("pintor"), { etapa: "prestadores", grupoMaterial: "Prestadores de serviços" });
   assert.deepStrictEqual(modulo.padraoDaContaObra("pedreiros"), { etapa: "prestadores", grupoMaterial: "Prestadores de serviços" });
   assert.deepStrictEqual(modulo.padraoDaContaObra("material"), { etapa: "", grupoMaterial: "" });
   assert.deepStrictEqual(modulo.padraoDaContaObra("taxa_admin_obra"), { etapa: "", grupoMaterial: "" });
@@ -3347,9 +3348,12 @@ teste("comPadraoDaConta so preenche o que esta em branco", () => {
 
 teste("trocar a conta troca o padrao, mas nao o que foi escolhido a mao", () => {
   const emp = modulo.trocarContaComPadrao({ contaId: "material", etapa: "", grupoMaterial: "" }, "empreiteiro");
-  assert.strictEqual(emp.etapa, "prest_empreiteiro");
-  // trocar de um oficio para outro troca a etapa do oficio
-  assert.strictEqual(modulo.trocarContaComPadrao(emp, "pintor").etapa, "prest_pintor");
+  assert.strictEqual(emp.etapa, "prestadores");
+  assert.strictEqual(modulo.trocarContaComPadrao(emp, "pintor").etapa, "prestadores");
+  // a etapa do oficio posta pelo padrao antigo tambem sai ao trocar a conta
+  const antigo = { contaId: "empreiteiro", etapa: "prest_empreiteiro", grupoMaterial: "Prestadores de serviços" };
+  assert.strictEqual(modulo.trocarContaComPadrao(antigo, "material").etapa, "");
+  assert.strictEqual(modulo.trocarContaComPadrao(antigo, "pintor").etapa, "prestadores");
   assert.strictEqual(emp.grupoMaterial, "Prestadores de serviços");
   const volta = modulo.trocarContaComPadrao(emp, "material");
   assert.strictEqual(volta.etapa, "");
@@ -3365,7 +3369,7 @@ teste("parcelas do contrato do empreiteiro nascem em Prestadores de servicos", (
   const cs = modulo.contasDoContrato(ct);
   assert.ok(cs.length >= 2);
   for (const c of cs) {
-    assert.strictEqual(c.etapa, "prest_empreiteiro");
+    assert.strictEqual(c.etapa, "prestadores");
     assert.strictEqual(c.grupoMaterial, "Prestadores de serviços");
   }
   // contrato de uma etapa so continua na etapa dele
@@ -3376,20 +3380,20 @@ teste("parcelas do contrato do empreiteiro nascem em Prestadores de servicos", (
   const depois = modulo.sincronizarContasDoContrato([paga, ...cs.slice(1)], ct);
   const p1 = depois.find(c => c.id === paga.id);
   assert.strictEqual(p1.pago, true);
-  assert.strictEqual(p1.etapa, "prest_empreiteiro");
+  assert.strictEqual(p1.etapa, "prestadores");
 });
 
 teste("pedido, compra, entregas e entrada ligam a mao de obra", () => {
   const ped = modulo.contasDoPedidoDaLoja({ obraId: "o1", contaId: "eletricista" },
     { id: "p1", vencimento: "2026-10-10", itens: [{ descricao: "Instalação", quantidade: 1, unitario: 500, bruto: 500 }] });
-  assert.strictEqual(ped[0].etapa, "prest_eletricista");
+  assert.strictEqual(ped[0].etapa, "prestadores");
   const cot = modulo.contasDaCotacao({ obraId: "o1", contaId: "pintor", valor: 900, descricao: "Pintura", primeiroVencimento: "2026-10-10" });
   assert.ok(cot.length >= 1);
-  assert.ok(cot.every(c => c.etapa === "prest_pintor" && c.grupoMaterial === "Prestadores de serviços"));
+  assert.ok(cot.every(c => c.etapa === "prestadores" && c.grupoMaterial === "Prestadores de serviços"));
   const ent = modulo.contasDaEntrada({ situacao: "apagar", prestadorId: "f1", favorecido: "ADRIANO",
     apagar: { vencimento: "2026-10-28", parcelas: 1 },
     itens: [{ descricao: "Empreiteiro", contaId: "empreiteiro", total: 400 }] }, { obraId: "o1" });
-  assert.strictEqual(ent[0].etapa, "prest_empreiteiro");
+  assert.strictEqual(ent[0].etapa, "prestadores");
   assert.strictEqual(ent[0].grupoMaterial, "Prestadores de serviços");
   const mat = modulo.contasDaEntrada({ situacao: "apagar", prestadorId: "f1", apagar: { vencimento: "2026-10-28" },
     itens: [{ descricao: "Cimento", contaId: "material", total: 40, etapa: "alvenaria" }] }, { obraId: "o1" });
