@@ -91401,6 +91401,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const excluirSelecao = () => {
     if (!sel.length && Object.keys(selOutros).length) { const n = excluirOutros(); if (n) { registrar(); setDadosPav(n); } setSelOutros({}); return; }
     if (!sel.length) return;
+    if (sel.every((k) => k[0] === "e")) { avisar("A estrutura é refeita a partir das paredes; apagar ou mover peça a peça entra na próxima etapa."); return; }
     if (sel.every((k) => k[0] === "x")) { const fx = new Set(sel.map((k) => +k.slice(1))); const resto = cortes.filter((_, i) => !fx.has(i)); registrar(); setCortes(resto); if (!resto.some((c) => c.id === verCorte)) setVerCorte(resto[0] ? resto[0].id : null); setSel([]); return; }
     const fl = new Set(sel.filter((k) => k[0] === "l").map((k) => +k.slice(1)));
     if (fl.size && sel.every((k) => k[0] === "l")) { mudar(paredes.map((w, i) => (fl.has(i) ? { ...w, semCota: true } : w))); setSel([]); return; }
@@ -93013,8 +93014,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       for (const v of estAt.vigas) {
         if (v.baldrame) continue;
         const L = Math.hypot(v.b.x - v.a.x, v.b.y - v.a.y); if (!L) continue;
-        const nx = -(v.b.y - v.a.y) / L * v.b_ / 2, ny = (v.b.x - v.a.x) / L * v.b_ / 2;
-        ctx.strokeStyle = "#6b7280"; ctx.lineWidth = 1 * dpr; ctx.setLineDash([5 * dpr, 3 * dpr]);
+        const nx = -(v.b.y - v.a.y) / L * v.b_ / 2, ny = (v.b.x - v.a.x) / L * v.b_ / 2, mkV = marcadas.has("e" + v.id);
+        ctx.strokeStyle = mkV ? TP_AZUL : "#6b7280"; ctx.lineWidth = (mkV ? 2 : 1) * dpr; ctx.setLineDash([5 * dpr, 3 * dpr]);
         for (const sg of [1, -1]) { const [x0, y0] = T({ x: v.a.x + nx * sg, y: v.a.y + ny * sg }), [x1, y1] = T({ x: v.b.x + nx * sg, y: v.b.y + ny * sg }); ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
         ctx.setLineDash([]);
         if (L * vista.current.s > 70 * dpr) {
@@ -93025,9 +93026,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         }
       }
       for (const pl of estAt.pilares) {
-        caminho(esCantosPilar(pl)); ctx.fillStyle = "#111827"; ctx.fill();
+        const mkP = marcadas.has("e" + pl.id);
+        caminho(esCantosPilar(pl)); ctx.fillStyle = mkP ? TP_AZUL : "#111827"; ctx.fill();
         const [x, y] = T(pl), r = Math.max(pl.b, pl.h) * vista.current.s / 2 + 8 * dpr;
-        ctx.fillStyle = "#111827"; ctx.fillText(pl.id, x + r * 0.8, y - r * 0.8);
+        ctx.fillStyle = mkP ? TP_AZUL : "#111827"; ctx.fillText(pl.id, x + r * 0.8, y - r * 0.8);
       }
       ctx.restore();
     }
@@ -93478,16 +93480,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // com o topo no topo da parede, baldrames com o topo no piso
     if (estP) {
       const Hp = paredes.length ? Math.max(...paredes.map((w) => w.h || 0)) : altM;
-      const matE = new THREE.MeshLambertMaterial({ color: 0xc4c9d0 });
+      // cada peça é selecionável: chave "e" + nome (eP1, eV3, eVB2)
+      const matE = new THREE.MeshLambertMaterial({ color: 0xc4c9d0 }), matEs = new THREE.MeshLambertMaterial({ color: 0x8dbbff });
       for (const pl of estP.pilares) {
-        const g = new THREE.BoxGeometry(pl.h, Hp, pl.b), m = new THREE.Mesh(g, matE);
-        m.position.set(pl.x - cx, Hp / 2, pl.y - cz); m.rotation.y = -(pl.ang || 0); m.userData.est = pl.id; G.add(m); contorno(g, m, 0x4b5563);
+        const mk = marcadas.has("e" + pl.id), g = new THREE.BoxGeometry(pl.h, Hp, pl.b), m = new THREE.Mesh(g, mk ? matEs : matE);
+        m.position.set(pl.x - cx, Hp / 2, pl.y - cz); m.rotation.y = -(pl.ang || 0); m.userData.est = pl.id; m.userData.chave = "e" + pl.id; G.add(m); contorno(g, m, mk ? 0x0474f4 : 0x4b5563);
       }
       for (const v of estP.vigas) {
         const L = Math.hypot(v.b.x - v.a.x, v.b.y - v.a.y); if (L < 0.05) continue;
-        const g = new THREE.BoxGeometry(L, v.h, v.b_), m = new THREE.Mesh(g, matE);
+        const mk = marcadas.has("e" + v.id), g = new THREE.BoxGeometry(L, v.h, v.b_), m = new THREE.Mesh(g, mk ? matEs : matE);
         m.position.set((v.a.x + v.b.x) / 2 - cx, v.baldrame ? -v.h / 2 : (v.topo || Hp) - v.h / 2, (v.a.y + v.b.y) / 2 - cz);
-        m.rotation.y = -Math.atan2(v.b.y - v.a.y, v.b.x - v.a.x); m.userData.est = v.id; G.add(m); contorno(g, m, 0x4b5563);
+        m.rotation.y = -Math.atan2(v.b.y - v.a.y, v.b.x - v.a.x); m.userData.est = v.id; m.userData.chave = "e" + v.id; G.add(m); contorno(g, m, mk ? 0x0474f4 : 0x4b5563);
       }
     }
     };
@@ -93934,6 +93937,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   };
   const elementoNoPonto = (d) => {
     const v = vista.current, p = paraMundoLivre(d), tol = 7 * (window.devicePixelRatio || 1) / v.s;
+    // pilar da estrutura (desenhado por cima de tudo) vem primeiro
+    { const ea = estrutura.ativa && estrutura.mostrar !== false ? estPorPav[pavAtivo] : null;
+      if (ea) for (const pl of ea.pilares) { const c = Math.cos(pl.ang || 0), sn = Math.sin(pl.ang || 0), dx = p.x - pl.x, dy = p.y - pl.y;
+        if (Math.abs(dx * c + dy * sn) <= pl.h / 2 + tol && Math.abs(-dx * sn + dy * c) <= pl.b / 2 + tol) return "e" + pl.id; } }
     let melhor = null, menor = Infinity;
     // porta/janela primeiro (está dentro da parede); a porta de giro pega
     // também o quarto de círculo da folha
@@ -95004,8 +95011,43 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             : selA.length && !selP.length ? (selA.length === 1 ? TP_AREA_TIPOS[areas[selA[0]].tipo].nome : `${selA.length} áreas`)
             : sel.every((k) => k[0] === "x") ? (sel.length === 1 && cortes[+sel[0].slice(1)] ? `Corte ${tpNomeCorte(cortes[+sel[0].slice(1)])}` : `${sel.length} cortes`)
             : sel.every((k) => k[0] === "l") ? (sel.length === 1 ? "Comprimento da parede" : `${sel.length} comprimentos`)
+            : sel.every((k) => k[0] === "e") ? (sel.length === 1 ? (() => { const id = sel[0].slice(1); return id.startsWith("P") ? `Pilar ${id}` : id.startsWith("VB") ? `Baldrame ${id}` : `Viga ${id}`; })() : `${sel.length} peças da estrutura`)
             : `${sel.length} elementos`}
         </div>
+        {sel.length > 0 && sel.every((k) => k[0] === "e") && (() => {
+          // peça da estrutura: nome, seção e o que ela liga (estrutural.jsx)
+          const est = estPorPav[pavAtivo] || { pilares: [], vigas: [] };
+          const linhas = sel.map((k) => {
+            const id = k.slice(1), pl = est.pilares.find((x) => x.id === id), v = est.vigas.find((x) => x.id === id);
+            if (pl) {
+              const H = Math.max(0, ...(paredes.map((w) => w.h || 0))) || altM;
+              const vigasNele = est.vigas.filter((x) => x.apoioA === id || x.apoioB === id).map((x) => x.id);
+              return { id, tipo: "Pilar", dados: [["Seção", `${Math.round(pl.b * 100)} × ${Math.round(pl.h * 100)} cm`], ["Área", `${Math.round(pl.b * 100) * Math.round(pl.h * 100)} cm²`], ["Altura", `${tpFmt(H)} m`], ["Concreto", `${tpFmt(pl.b * pl.h * H, 3)} m³`], ["Vigas apoiadas", vigasNele.join(", ") || "nenhuma"], ...(pl.deslocado ? [["Ajuste", `deslocado ${tpFmt(pl.deslocado * 100, 0)} cm para sair de porta/janela`]] : [])] };
+            }
+            if (v) {
+              const Lv = Math.hypot(v.b.x - v.a.x, v.b.y - v.a.y);
+              return { id, tipo: v.baldrame ? "Baldrame" : "Viga", dados: [["Seção", `${Math.round(v.b_ * 100)} × ${Math.round(v.h * 100)} cm`], ["Vão", `${tpFmt(Lv)} m`], ["Apoios", `${v.apoioA || "viga"} — ${v.apoioB || "viga"}`], ["Topo", `${tpFmt(v.baldrame ? 0 : v.topo)} m`], ["Concreto", `${tpFmt(v.b_ * v.h * Lv, 3)} m³`]] };
+            }
+            return { id, tipo: "Peça", dados: [["", "não encontrada (a estrutura mudou)"]] };
+          });
+          const avs = estAvisos.filter((a) => a.pav === pavAtivo && sel.some((k) => String(a.ref || "").split(",").includes(k.slice(1))));
+          return (
+            <div>
+              {linhas.map((l) => (
+                <div key={l.id} style={{ marginBottom: 8 }}>
+                  {linhas.length > 1 && <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", margin: "4px 0 2px" }}>{l.tipo} {l.id}</div>}
+                  {l.dados.map(([r, val]) => (
+                    <div key={r} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "4px 0", borderBottom: "1px solid #f0f2f5", fontSize: 12.5 }}>
+                      <span style={{ color: "#6b7280" }}>{r}</span><span style={{ color: "#111827", textAlign: "right" }}>{val}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              {avs.map((a, k) => <div key={k} style={{ fontSize: 12, color: a.tipo === "nbr" ? "#b91c1c" : a.tipo === "compat" ? "#b45309" : "#4b5563", lineHeight: 1.4, marginTop: 4 }}>{a.texto}</div>)}
+              <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>Seção e posição vêm do lançamento automático; a edição peça a peça entra na próxima etapa.</div>
+            </div>
+          );
+        })()}
         {selO.length > 0 && sel.length === selO.length && (() => {
           const ids = selO.map((x) => x.o.id), um = selO.length === 1 ? selO[0] : null;
           const tipoComum = comum(selO, (x) => TP_ESQ.indexOf(tpEsq(x.o.tipo)));
