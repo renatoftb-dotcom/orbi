@@ -35,7 +35,7 @@ const M = new Function(src + `
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas, ligaContaAoLancamento, lancamentosLigadosAsContas, contasLigadasAoLancamento,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
            obrasDoLancamento, validarLancamentoNaObra, destinoVisivelDoCusto,
-           efValorDoCampo, anexosDaTransacao, comAnexos, efConversaoAprendida, efCatalogoComConversoes, efEtapaDaUltimaCompra,
+           efValorDoCampo, anexosDaTransacao, comAnexos, efConversaoAprendida, efCatalogoComConversoes, efEtapaDaUltimaCompra, efContaDoFornecedor,
            efNomeDoFornecedor, EF_FORNECEDOR_OUTROS,
            custoDoLancamento, validarCustoEmItens, itemUnicoDoCusto, itensDoCustoOuUnico, padraoDaContaDaObra,
            comIdsDosMovimentos, efMesmaLinhaDoBanco, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
@@ -4270,6 +4270,31 @@ teste("conta mãe: com subconta só totaliza — lança-se na subconta", () => {
     assert.strictEqual(M.efEtapaDaUltimaCompra(null, "A1"), null);
   });
 }
+
+teste("fornecedor → conta: o último lançamento dele, na obra ou no escritório; sem histórico, o ofício", () => {
+  const obras = [{ id: "o1", contasPagar: [
+    { prestadorId: "f1", contaId: "material", vencimento: "2026-09-01" },
+    { prestadorId: "f1", contaId: "frete", pagoEm: "2026-10-05" },
+    { prestadorId: "f2", contaId: "empreiteiro", pagoEm: "2026-10-01" },
+  ] }];
+  const lancamentos = [
+    { fornecedorId: "f1", contaId: "utensilios", lancadoEm: "2026-11-02", tipo: "escritorio" },
+    // o que veio da obra pela ponte não conta duas vezes
+    { fornecedorId: "f2", contaId: "custo_obra", lancadoEm: "2026-12-01", origem: { tipo: "conta", obraId: "o1" } },
+  ];
+  assert.deepStrictEqual(M.efContaDoFornecedor("f1", { obras, lancamentos }), { contaId: "utensilios", fonte: "escritorio", data: "2026-11-02", origem: "historico" });
+  assert.deepStrictEqual(M.efContaDoFornecedor("f2", { obras, lancamentos }), { contaId: "empreiteiro", fonte: "obra", data: "2026-10-01", origem: "historico" });
+  assert.strictEqual(M.efContaDoFornecedor("f9", { obras, lancamentos }), null);
+  assert.strictEqual(M.efContaDoFornecedor("", { obras, lancamentos }), null);
+  // sem histórico: o ofício do cadastro
+  globalThis.TIPOS_PROFISSIONAL = [{ id: "empreiteiro", nome: "Empreiteiro", categorias: ["Empreiteiro", "Pedreiro"] }, { id: "outro", nome: "Outro", categorias: [] }];
+  globalThis.contaDoTipo = (t) => (t === "empreiteiro" ? "empreiteiro" : "mo_diversos");
+  try {
+    const r = M.efContaDoFornecedor("p1", { prestadores: [{ id: "p1", categoria: "Pedreiro" }] });
+    assert.deepStrictEqual([r.contaId, r.fonte, r.origem], ["empreiteiro", "obra", "cadastro"]);
+    assert.strictEqual(M.efContaDoFornecedor("p2", { prestadores: [{ id: "p2", categoria: "Loja / Comércio" }] }), null);
+  } finally { delete globalThis.TIPOS_PROFISSIONAL; delete globalThis.contaDoTipo; }
+});
 
 for (const [nome, fn] of testes) {
   try { await fn(); console.log("  ok   " + nome); }

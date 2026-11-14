@@ -14,7 +14,7 @@ const M = new Function(`
     return isNaN(n) ? 0 : n;
   }
   ${mod("obra-financeiro.jsx")}
-  return { exigenciasDaTransacao, faltasDaTransacao, frasesDasFaltas, comPadraoDoInsumo, ligarAoCatalogo, ligarObrasAoCatalogo };
+  return { exigenciasDaTransacao, faltasDaTransacao, frasesDasFaltas, comPadraoDoInsumo, ligarAoCatalogo, ligarObrasAoCatalogo, etapaIncoerenteComConta, etapaDePrestadores };
 `)();
 
 let passou = 0, falhou = 0;
@@ -23,6 +23,19 @@ function teste(nome, fn) {
   catch (e) { falhou++; console.log(`FALHOU ${nome}`); console.log(`       ${e.message}`); }
 }
 const base = { obraId: "o1", valor: 100, vencimento: "2026-10-01" };
+
+teste("material nao vai na etapa Prestadores de servicos; mao de obra vai", () => {
+  assert.ok(M.etapaDePrestadores("prestadores"));
+  assert.ok(M.etapaDePrestadores("prest_empreiteiro"), "as etapas de oficio ficam debaixo de Prestadores");
+  assert.ok(!M.etapaDePrestadores("fundacao"));
+  assert.ok(M.etapaIncoerenteComConta("material", "prestadores"));
+  assert.ok(!M.etapaIncoerenteComConta("material", "fundacao"));
+  assert.ok(!M.etapaIncoerenteComConta("empreiteiro", "prestadores"));
+  assert.ok(!M.etapaIncoerenteComConta("empreiteiro", "fundacao"), "empreiteiro da fundacao vale");
+  const ok = { ...base, contaId: "material", favorecido: "Loja", insumoCodigo: "CIM-1", quantidade: 10 };
+  assert.deepStrictEqual(M.faltasDaTransacao({ ...ok, etapa: "prestadores" }), ["a etapa da obra (material não vai em Prestadores de serviços)"]);
+  assert.deepStrictEqual(M.faltasDaTransacao({ ...ok, etapa: "alvenaria" }), []);
+});
 
 teste("material pede item, quantidade, etapa e fornecedor", () => {
   const f = M.faltasDaTransacao({ ...base, contaId: "material" });

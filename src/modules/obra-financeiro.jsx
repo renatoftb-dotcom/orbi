@@ -621,6 +621,23 @@ function exigenciasDaTransacao(t) {
   };
 }
 
+// Conta × etapa: material não vai em "Prestadores de serviços". A etapa
+// de prestadores (e as de ofício, debaixo dela) é de mão de obra; o
+// cimento comprado vai para a etapa onde foi usado. É a trava que liga a
+// conta contábil à lista de etapas em toda porta de entrada.
+function etapaDePrestadores(etapaId) {
+  const id = String(etapaId || "").trim();
+  if (!id) return false;
+  if (id === PADRAO_MAO_DE_OBRA.etapa) return true;
+  const e = ETAPAS_OBRA.find((x) => x && x.id === id);
+  return !!(e && e.macro === "Prestadores de serviços");
+}
+function etapaIncoerenteComConta(contaId, etapaId) {
+  const raiz = typeof contaRaizDaObra === "function" ? contaRaizDaObra(contaId) : contaId;
+  const conta = (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((x) => x && x.id === raiz) || null;
+  return !!(conta && conta.grupo === "materiais" && etapaDePrestadores(etapaId));
+}
+
 // O que falta, em português, na ordem em que a pessoa preenche. Lista
 // vazia = transação fechada.
 function faltasDaTransacao(t) {
@@ -638,6 +655,7 @@ function faltasDaTransacao(t) {
   if (e.item && !tem(c.insumoCodigo)) faltas.push("o item do catálogo");
   if (e.quantidade && !(n(c.quantidade) > 0)) faltas.push("a quantidade");
   if (e.etapa && !tem(c.etapa || c.etapaId)) faltas.push("a etapa");
+  else if (etapaIncoerenteComConta(c.contaId, c.etapa || c.etapaId)) faltas.push("a etapa da obra (material não vai em Prestadores de serviços)");
   if (e.formaPagamento && !tem(c.formaPagamento)) faltas.push("a forma de pagamento");
   return faltas;
 }

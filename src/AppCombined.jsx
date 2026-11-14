@@ -11886,6 +11886,23 @@ function exigenciasDaTransacao(t) {
   };
 }
 
+// Conta × etapa: material não vai em "Prestadores de serviços". A etapa
+// de prestadores (e as de ofício, debaixo dela) é de mão de obra; o
+// cimento comprado vai para a etapa onde foi usado. É a trava que liga a
+// conta contábil à lista de etapas em toda porta de entrada.
+function etapaDePrestadores(etapaId) {
+  const id = String(etapaId || "").trim();
+  if (!id) return false;
+  if (id === PADRAO_MAO_DE_OBRA.etapa) return true;
+  const e = ETAPAS_OBRA.find((x) => x && x.id === id);
+  return !!(e && e.macro === "Prestadores de serviços");
+}
+function etapaIncoerenteComConta(contaId, etapaId) {
+  const raiz = typeof contaRaizDaObra === "function" ? contaRaizDaObra(contaId) : contaId;
+  const conta = (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((x) => x && x.id === raiz) || null;
+  return !!(conta && conta.grupo === "materiais" && etapaDePrestadores(etapaId));
+}
+
 // O que falta, em português, na ordem em que a pessoa preenche. Lista
 // vazia = transação fechada.
 function faltasDaTransacao(t) {
@@ -11903,6 +11920,7 @@ function faltasDaTransacao(t) {
   if (e.item && !tem(c.insumoCodigo)) faltas.push("o item do catálogo");
   if (e.quantidade && !(n(c.quantidade) > 0)) faltas.push("a quantidade");
   if (e.etapa && !tem(c.etapa || c.etapaId)) faltas.push("a etapa");
+  else if (etapaIncoerenteComConta(c.contaId, c.etapa || c.etapaId)) faltas.push("a etapa da obra (material não vai em Prestadores de serviços)");
   if (e.formaPagamento && !tem(c.formaPagamento)) faltas.push("a forma de pagamento");
   return faltas;
 }
@@ -16487,6 +16505,11 @@ function validarCustoEmItens(valorPago, itens, obraId) {
   if (!r.itens) erros.push("Lance pelo menos um item com quantidade e preço.");
   const semEtapa = (itens || []).filter((i) => i && efBrutoDoItem(i) > 0 && !String(i.etapa || "").trim()).length;
   if (semEtapa) erros.push(semEtapa === 1 ? "1 item está sem etapa." : semEtapa + " itens estão sem etapa.");
+  // material na etapa de mão de obra: a etapa tem que ser onde ele foi usado
+  const incoerentes = typeof etapaIncoerenteComConta === "function"
+    ? (itens || []).filter((i) => i && efBrutoDoItem(i) > 0 && etapaIncoerenteComConta(i.contaId, i.etapa)).length : 0;
+  if (incoerentes) erros.push((incoerentes === 1 ? "1 item de material está" : incoerentes + " itens de material estão")
+    + " na etapa Prestadores de serviços — escolha a etapa da obra onde foi usado.");
   if (!(r.pago > 0)) erros.push("Informe o valor pago.");
   else if (r.falta >= 0.005) {
     erros.push("A soma dos itens é menor que o valor pago — falta item, e o que falta não pode virar desconto.");
@@ -18798,6 +18821,36 @@ function efEtapaDaUltimaCompra(obra, insumoCodigo) {
   return melhor;
 }
 
+// Fornecedor → conta contábil. O que ele foi das últimas vezes (na obra ou
+// no escritório) é a melhor aposta; sem histórico, o ofício do cadastro
+// (empreiteiro → Empreiteiro, serralheiro → Serralheiro). Sugestão: vem
+// preenchida só quando a conta está em branco; senão aparece para um clique.
+function efContaDoFornecedor(prestadorId, ctx) {
+  const id = String(prestadorId || "");
+  if (!id) return null;
+  const c = ctx || {};
+  let melhor = null;
+  const toma = (contaId, fonte, data) => {
+    if (!contaId) return;
+    if (!melhor || data > melhor.data) melhor = { contaId, fonte, data, origem: "historico" };
+  };
+  for (const o of c.obras || []) for (const k of (o && o.contasPagar) || []) {
+    if (k && k.prestadorId === id) toma(k.contaId, "obra", String(k.pagoEm || k.vencimento || "").slice(0, 10));
+  }
+  for (const l of c.lancamentos || []) {
+    if (!l || l.fornecedorId !== id || l.contaFonte === "obra" || lancamentoVeioDaObra(l)) continue;
+    toma(l.contaId, "escritorio", String(l.lancadoEm || "").slice(0, 10));
+  }
+  if (melhor) return melhor;
+  const p = (c.prestadores || []).find((x) => x && x.id === id) || null;
+  const cat = p ? String(p.categoria || "").trim().toLowerCase() : "";
+  if (cat && typeof TIPOS_PROFISSIONAL !== "undefined" && typeof contaDoTipo === "function") {
+    const t = TIPOS_PROFISSIONAL.find((x) => (x.categorias || []).some((y) => String(y).toLowerCase() === cat));
+    if (t && t.id !== "outro") return { contaId: contaDoTipo(t.id), fonte: "obra", data: "", origem: "cadastro", tipo: t.nome };
+  }
+  return null;
+}
+
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
 
 // Os papéis da transação, cada um abrindo numa aba. É o mesmo componente
@@ -19531,6 +19584,32 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   // devolveu): é estorno — abate o custo, não soma.
   const estornoNaObra = naObra && Number(f.sinalDoBanco) > 0;
   const opcoesConta = contasDoLancamento(f.unidadeId, {});
+  const escolherConta = (valor) => {
+    const esc = contaEscolhida(valor);
+    const c = esc.fonte === "escritorio" ? contaEscritorio(esc.id) : null;
+    const us = c && (c.unidades || []).length ? c.unidades : [];
+    setF((p) => ({ ...p, contaId: esc.id, contaFonte: esc.fonte,
+      unidadeId: us.length && !us.includes(p.unidadeId) ? us[0] : p.unidadeId,
+      obraIdAlvo: esc.fonte === "obra" ? p.obraIdAlvo : "" }));
+  };
+  // Fornecedor → conta: { contaId, fonte, origem, aplicada } — aplicada
+  // quando a conta estava em branco; senão fica como sugestão de um clique.
+  const [contaDoFornecedor, setContaDoFornecedor] = useState(null);
+  const nomeDaContaSugerida = (sug) => {
+    if (!sug) return "";
+    if (sug.fonte === "obra") return ((typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []).find((c) => c && c.id === sug.contaId) || {}).nome || sug.contaId;
+    return (contaEscritorio(sug.contaId) || {}).nome || sug.contaId;
+  };
+  const ligarContaAoFornecedor = (prestadorId) => {
+    const sug = efContaDoFornecedor(prestadorId, { obras, lancamentos, prestadores });
+    if (!sug) { setContaDoFornecedor(null); return; }
+    const valor = valorDaConta(sug.contaId, sug.fonte);
+    const existe = (opcoesConta.obra || []).concat(opcoesConta.escritorio || []).some((o) => o && o.valor === valor);
+    if (!existe) { setContaDoFornecedor(null); return; }
+    if (f.contaId && valorDaConta(f.contaId, f.contaFonte || "escritorio") === valor) { setContaDoFornecedor(null); return; }
+    if (!f.contaId) { escolherConta(valor); setContaDoFornecedor({ ...sug, aplicada: true }); return; }
+    setContaDoFornecedor({ ...sug, aplicada: false });
+  };
   const obrasDoCliente = obrasDoLancamento({ obras: obras || [] }, f.clienteId);
   // Cliente com uma obra só não é uma escolha: é a resposta. Perguntar
   // seria pedir que ele confirmasse o óbvio em todo lançamento.
@@ -19907,14 +19986,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
         {campo("Conta", (
           <Selecao style={{ ...S.input, cursor: "pointer" }}
             value={f.contaId ? valorDaConta(f.contaId, f.contaFonte || "escritorio") : ""}
-            onChange={(e) => {
-              const esc = contaEscolhida(e.target.value);
-              const c = esc.fonte === "escritorio" ? contaEscritorio(esc.id) : null;
-              const us = c && (c.unidades || []).length ? c.unidades : [];
-              setF((p) => ({ ...p, contaId: esc.id, contaFonte: esc.fonte,
-                unidadeId: us.length && !us.includes(p.unidadeId) ? us[0] : p.unidadeId,
-                obraIdAlvo: esc.fonte === "obra" ? p.obraIdAlvo : "" }));
-            }}>
+            onChange={(e) => { escolherConta(e.target.value); setContaDoFornecedor(null); }}>
             <option value="">— escolha —</option>
             {/* Primeiro o que é custo de uma obra: é o caso mais comum vindo
                 do extrato, e é o que não existia aqui até agora. */}
@@ -20119,7 +20191,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                       grupo: ((clientes || []).find((c) => c && c.id === o.clienteId) || {}).nome || "" })))} />
               ), "obra")
             : campo("Projeto", <input style={S.input} value={f.projeto} onChange={(e) => set("projeto", e.target.value)} />)}
-        {!entradaSemFornecedor && campo("Fornecedor", (
+        {!entradaSemFornecedor && campo("Fornecedor", (<>
           <SelectBusca style={S.input}
             /* Campo em branco já é "Outros" no fim, então ele diz isso desde
                o começo: o que está escrito ali é o que vai ser gravado. */
@@ -20127,10 +20199,11 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
               || (nomeEscritorio && f.fornecedor === nomeEscritorio ? EF_OPCAO_ESCRITORIO
                 : f.fornecedor && f.fornecedor !== EF_FORNECEDOR_OUTROS ? "" : EF_OPCAO_OUTROS)}
             onChange={(v) => {
-              if (v === EF_OPCAO_OUTROS) { setF((p) => ({ ...p, fornecedorId: "", fornecedor: EF_FORNECEDOR_OUTROS })); return; }
-              if (v === EF_OPCAO_ESCRITORIO) { setF((p) => ({ ...p, fornecedorId: "", fornecedor: nomeEscritorio })); return; }
+              if (v === EF_OPCAO_OUTROS) { setF((p) => ({ ...p, fornecedorId: "", fornecedor: EF_FORNECEDOR_OUTROS })); setContaDoFornecedor(null); return; }
+              if (v === EF_OPCAO_ESCRITORIO) { setF((p) => ({ ...p, fornecedorId: "", fornecedor: nomeEscritorio })); setContaDoFornecedor(null); return; }
               const pr = (prestadores || []).find((x) => x && x.id === v) || null;
               setF((p) => ({ ...p, fornecedorId: v, fornecedor: pr ? pr.nome : "" }));
+              ligarContaAoFornecedor(v);
             }}
             placeholder="Procurar fornecedor…"
             aoCriar={(termo) => { setErroPrest(""); setNovoPrest({ nome: termo || "", categoria: "Loja / Comércio" }); }}
@@ -20140,7 +20213,20 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
               .concat(f.fornecedor && !f.fornecedorId && f.fornecedor !== EF_FORNECEDOR_OUTROS && f.fornecedor !== nomeEscritorio
                 ? [{ valor: "", rotulo: f.fornecedor }] : [])
               .concat((prestadores || []).map((x) => ({ valor: x.id, rotulo: x.nome, grupo: x.categoria || "" })))} />
-        ))}
+          {contaDoFornecedor && (contaDoFornecedor.aplicada ? (
+            <div data-vk-conta-do-fornecedor="aplicada" style={{ fontSize: 11, color: "#1e40af", marginTop: 4, lineHeight: 1.4 }}>
+              conta <b>{nomeDaContaSugerida(contaDoFornecedor)}</b> {contaDoFornecedor.origem === "cadastro"
+                ? `pelo ofício do cadastro (${contaDoFornecedor.tipo})` : "como no último lançamento deste fornecedor"} — confira
+            </div>
+          ) : (
+            <div data-vk-conta-do-fornecedor="sugerida" style={{ fontSize: 11.5, color: "#374151", marginTop: 4, lineHeight: 1.4,
+              display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+              <span>{contaDoFornecedor.origem === "cadastro" ? "Pelo cadastro, este fornecedor é" : "Este fornecedor costuma ir em"} <b>{nomeDaContaSugerida(contaDoFornecedor)}</b></span>
+              <button type="button" style={{ ...S.btnSec, padding: "3px 10px", fontSize: 11.5, color: "#0474f4", borderColor: "rgba(4,116,244,0.4)" }}
+                onClick={() => { escolherConta(valorDaConta(contaDoFornecedor.contaId, contaDoFornecedor.fonte)); setContaDoFornecedor(null); }}>usar</button>
+            </div>
+          ))}
+        </>))}
         {novoPrest && (
           <div style={{ gridColumn: "1 / -1" }}>
             <CadastroRapidoDePrestador form={novoPrest} aoMudar={setNovoPrest} erro={erroPrest} fornecedores={prestadores}
