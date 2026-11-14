@@ -12452,7 +12452,7 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
 // a unidade da nota é outra — areia fina em "Mts" quando o catálogo vende em
 // m3 —, o aviso aparece na hora, com a troca a um clique: R$ 130 o metro e
 // R$ 130 o metro cúbico são compras muito diferentes.
-function CampoUnidadeDoItem({ valor, unidades, insumo, aoMudar, estilo, semAviso, quantidade, unitario, aoConverter }) {
+function CampoUnidadeDoItem({ valor, unidades, insumo, aoMudar, estilo, semAviso, quantidade, unitario, aoConverter, aoTrocarNome }) {
   const divUn = typeof divergenciaDeUnidade === "function" && insumo ? divergenciaDeUnidade(valor, insumo) : null;
   const est = estilo || COT_ESTILO.input;
   return (
@@ -12461,7 +12461,7 @@ function CampoUnidadeDoItem({ valor, unidades, insumo, aoMudar, estilo, semAviso
         estilo={divUn ? { ...est, borderColor: "#d97706", background: "#fff7ed" } : est} />
       {divUn && !semAviso && (
         <AvisoDeUnidade div={divUn} aoMudar={aoMudar} insumo={insumo}
-          quantidade={quantidade} unitario={unitario} aoConverter={aoConverter} />
+          quantidade={quantidade} unitario={unitario} aoConverter={aoConverter} aoTrocarNome={aoTrocarNome} />
       )}
     </div>
   );
@@ -12469,7 +12469,7 @@ function CampoUnidadeDoItem({ valor, unidades, insumo, aoMudar, estilo, semAviso
 
 // O aviso sozinho: na linha estreita da tabela ele vai para baixo da linha
 // inteira, em vez de espremer a coluna da unidade.
-function AvisoDeUnidade({ div, aoMudar, prefixo, insumo, quantidade, unitario, aoConverter }) {
+function AvisoDeUnidade({ div, aoMudar, prefixo, insumo, quantidade, unitario, aoConverter, aoTrocarNome }) {
   // Trocar só o nome da unidade erra a conta: 3 m de cano não são 3 barras.
   // Com o fator (barra de 6 m, saco de 50 kg) a troca vira conversão — a
   // quantidade vai para a unidade do catálogo e o preço acompanha.
@@ -12506,7 +12506,8 @@ function AvisoDeUnidade({ div, aoMudar, prefixo, insumo, quantidade, unitario, a
       </span>
       {conv ? (
         <button type="button" data-vk-converter="1"
-          onClick={() => aoConverter({ unidade: div.doCatalogo, quantidade: conv.quantidade, unitario: conv.unitario })}
+          onClick={() => aoConverter({ unidade: div.doCatalogo, quantidade: conv.quantidade, unitario: conv.unitario },
+            { fator: f, daLoja: div.daLoja })}
           style={{ ...bt, fontSize: 11 }}>
           converter: {n(conv.quantidade, 4)} {div.doCatalogo} a R$ {n(conv.unitario, 2)}
         </button>
@@ -12514,7 +12515,7 @@ function AvisoDeUnidade({ div, aoMudar, prefixo, insumo, quantidade, unitario, a
         <span>— diga quantos {div.daLoja} tem 1 {div.doCatalogo.replace(/s$/, "")}.</span>
       )}
       {" · "}
-      <button type="button" onClick={() => aoMudar(div.doCatalogo)} style={{ ...bt, fontWeight: 400 }}>só trocar o nome</button>
+      <button type="button" onClick={() => (aoTrocarNome ? aoTrocarNome(div) : aoMudar(div.doCatalogo))} style={{ ...bt, fontWeight: 400 }}>só trocar o nome</button>
     </div>
   );
 }

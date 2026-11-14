@@ -18742,6 +18742,58 @@ function conferenciaUnificada(opcoes) {
   return { meios, resultado: res, checagem: checagens.length ? somarChecagens(checagens) : null, faturas };
 }
 
+// ── O que a pessoa já respondeu uma vez volta sozinho ──────────────
+// A loja escreve "Mts" para a areia que o catálogo conta em m3, e "SACO"
+// para o cimento que o catálogo conta em Unidades. Respondido uma vez
+// ("1 m3 = 1 Mts", "só trocar o nome"), a resposta fica no insumo
+// (insumo.conversoes, pela unidade da loja) e a próxima nota já entra
+// convertida — o total do item não muda, só a unidade e o preço unitário.
+function efConversaoAprendida(item, insumo) {
+  if (!item || !insumo || typeof divergenciaDeUnidade !== "function" || typeof unidadeCanonica !== "function") return null;
+  const div = divergenciaDeUnidade(item.unidade, insumo);
+  if (!div) return null;
+  const fator = Number((insumo.conversoes || {})[unidadeCanonica(div.daLoja)]) || 0;
+  if (!(fator > 0)) return null;
+  const q = efValorDoCampo(item.quantidade), u = efValorDoCampo(item.unitario);
+  const conv = fator === 1 ? { quantidade: item.quantidade, unitario: item.unitario }
+    : { quantidade: Math.round((q / fator) * 10000) / 10000, unitario: Math.round(u * fator * 1e6) / 1e6 };
+  return { unidade: div.doCatalogo, quantidade: conv.quantidade, unitario: conv.unitario,
+    convertido: { de: div.daLoja, para: div.doCatalogo, fator, quantidade: item.quantidade, unitario: item.unitario } };
+}
+// As conversões confirmadas no lançamento vão para o catálogo junto com a
+// gravação dele (como os apelidos da loja).
+function efCatalogoComConversoes(lista, pares) {
+  let mudou = false;
+  const out = (lista || []).map((ins) => {
+    if (!ins) return ins;
+    const meus = (pares || []).filter((x) => x && (x.codigo === ins.codigo || x.codigo === ins.id) && Number(x.fator) > 0);
+    if (!meus.length) return ins;
+    const conv = { ...(ins.conversoes || {}) };
+    let aqui = false;
+    for (const x of meus) {
+      const k = typeof unidadeCanonica === "function" ? unidadeCanonica(x.unidade) : String(x.unidade || "");
+      if (k && conv[k] !== Number(x.fator)) { conv[k] = Number(x.fator); aqui = true; }
+    }
+    if (!aqui) return ins;
+    mudou = true;
+    return { ...ins, conversoes: conv };
+  });
+  return { insumos: out, mudou };
+}
+// A etapa da última compra do mesmo insumo na mesma obra — a areia desta
+// semana vai, quase sempre, para onde foi a da semana passada. É sugestão:
+// vem preenchida e com o aviso, e a pessoa troca se mudou de fase.
+function efEtapaDaUltimaCompra(obra, insumoCodigo) {
+  if (!obra || !insumoCodigo) return null;
+  let melhor = null;
+  for (const c of obra.contasPagar || []) {
+    if (!c || c.insumoCodigo !== insumoCodigo || !String(c.etapa || "").trim()) continue;
+    const d = String(c.pagoEm || c.vencimento || "").slice(0, 10);
+    if (!melhor || d > melhor.data) melhor = { etapa: c.etapa, data: d };
+  }
+  return melhor;
+}
+
 // UI — daqui para baixo é tela (JSX). Os testes cortam neste marcador.
 
 // Os papéis da transação, cada um abrindo numa aba. É o mesmo componente
@@ -19561,6 +19613,44 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       return { ...n, bruto: q > 0 && u > 0 ? Math.round(q * u * 100) / 100 : "" };
     }) }));
   const tirarItem = (i) => setF((p) => ({ ...p, itens: (p.itens || []).filter((x, j) => j !== i) }));
+  // A resposta dada aqui ("1 m3 = 1 Mts") vai para o catálogo ao gravar.
+  const lembrarConversao = (i, unidadeDaLoja, fator) => setF((p) => {
+    const it = (p.itens || [])[i] || {};
+    if (!it.insumoCodigo || !(Number(fator) > 0) || !String(unidadeDaLoja || "").trim()) return p;
+    return { ...p, aprenderConv: (p.aprenderConv || [])
+      .filter((x) => !(x.codigo === it.insumoCodigo && x.unidade === unidadeDaLoja))
+      .concat([{ codigo: it.insumoCodigo, unidade: unidadeDaLoja, fator: Number(fator) }]) };
+  });
+  const desfazerConversao = (i) => setF((p) => ({ ...p,
+    itens: (p.itens || []).map((x, j) => (j === i && x.convertido
+      ? { ...x, unidade: x.convertido.de, quantidade: x.convertido.quantidade, unitario: x.convertido.unitario, convertido: null, conversaoDesfeita: true }
+      : x)) }));
+  // O que já foi respondido antes entra sozinho: a unidade convertida pelo
+  // que o catálogo aprendeu e a etapa da última compra do item nesta obra.
+  // Cada item é olhado uma vez — desfeito ou trocado à mão, não volta.
+  useEffect(() => {
+    if (!naObra) return;
+    const obra = f.obraIdAlvo ? (obras || []).find((o) => o && o.id === f.obraIdAlvo) || null : null;
+    setF((p) => {
+      let mudou = false;
+      const itens = (p.itens || []).map((it) => {
+        if (!it || !it.insumoCodigo) return it;
+        let n = it;
+        if (!it.convertido && !it.conversaoDesfeita) {
+          const ins = (insumos || []).find((m) => m && (m.codigo === it.insumoCodigo || m.id === it.insumoCodigo)) || null;
+          const c = efConversaoAprendida(it, ins);
+          if (c) { n = { ...n, ...c }; mudou = true; }
+        }
+        if (obra && !n.etapaVista) {
+          const u = !String(n.etapa || "").trim() ? efEtapaDaUltimaCompra(obra, n.insumoCodigo) : null;
+          n = { ...n, etapaVista: true, ...(u ? { etapa: u.etapa, etapaDaUltima: u } : {}) };
+          mudou = true;
+        }
+        return n;
+      });
+      return mudou ? { ...p, itens } : p;
+    });
+  }, [naObra, f.obraIdAlvo, f.itens, insumos]);
   // o item novo já vem com a etapa do pagamento único, se ela foi escolhida
   const novoItem = () => setF((p) => ({ ...p,
     itens: (p.itens || []).concat([{ ...(typeof itemDoPedidoVazio === "function" ? itemDoPedidoVazio()
@@ -20190,7 +20280,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
               <div data-vk-etapa-todos="1" style={{ minWidth: 220, flex: "0 1 280px", marginLeft: "auto",
                 ...(typeof window !== "undefined" && window.innerWidth < 640 ? { flex: "1 1 100%", marginLeft: 0 } : {}) }}>
                 <SelectBusca style={{ ...S.input, padding: "6px 10px", fontSize: 12 }} value=""
-                  onChange={(v) => { if (v) setF((p) => ({ ...p, itens: (p.itens || []).map((x) => ({ ...x, etapa: v })) })); }}
+                  onChange={(v) => { if (v) setF((p) => ({ ...p, itens: (p.itens || []).map((x) => ({ ...x, etapa: v, etapaDaUltima: null })) })); }}
                   placeholder="Procurar etapa…"
                   opcoes={(typeof opcoesDeEtapaDoLancamento === "function" ? opcoesDeEtapaDoLancamento(null, "Mesma etapa para todos…")
                     : [{ valor: "", rotulo: "Mesma etapa para todos…" }]
@@ -20275,8 +20365,21 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                       unidades={typeof unidadesDoCatalogo === "function" ? unidadesDoCatalogo(insumos || []) : []}
                       insumo={it.insumoCodigo ? (insumos || []).find((m) => m && m.codigo === it.insumoCodigo) : null}
                       quantidade={it.quantidade} unitario={it.unitario}
-                      aoConverter={(c) => mexerItem(i, { unidade: c.unidade, quantidade: c.quantidade, unitario: c.unitario })}
-                      aoMudar={(v) => mexerItem(i, { unidade: v })} />
+                      aoConverter={(c, info) => { mexerItem(i, { unidade: c.unidade, quantidade: c.quantidade, unitario: c.unitario, convertido: null });
+                        if (info && info.fator > 0) lembrarConversao(i, info.daLoja, info.fator); }}
+                      aoTrocarNome={(div) => { mexerItem(i, { unidade: div.doCatalogo, convertido: null }); lembrarConversao(i, div.daLoja, 1); }}
+                      aoMudar={(v) => mexerItem(i, { unidade: v, convertido: null })} />
+                    {it.convertido && (
+                      <div data-vk-unidade-aprendida="1" style={{ fontSize: 11, color: "#166534", marginTop: 4, lineHeight: 1.45,
+                        background: "#f0fdf4", border: "1px solid rgba(21,128,61,0.25)", borderRadius: 8, padding: "6px 8px" }}>
+                        ✓ na nota: {String(it.convertido.quantidade).replace(".", ",")} {it.convertido.de}
+                        {it.convertido.fator === 1 ? ` — ${it.convertido.de} é ${it.convertido.para}, como da última vez`
+                          : ` — convertido como da última vez (1 ${String(it.convertido.para).replace(/s$/, "")} = ${String(it.convertido.fator).replace(".", ",")} ${it.convertido.de})`}
+                        {" · "}
+                        <button type="button" onClick={() => desfazerConversao(i)}
+                          style={{ background: "none", border: "none", padding: 0, color: "#166534", cursor: "pointer", fontFamily: "inherit", fontSize: 11, textDecoration: "underline" }}>desfazer</button>
+                      </div>
+                    )}
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={S.rot}>Preço unitário</div>
@@ -20295,11 +20398,16 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
                       <div style={{ minWidth: 0 }}>
                         <div style={{ ...S.rot, color: pedePav ? "#b45309" : S.rot.color }}>{pedePav ? "Etapa — escolha o pavimento" : "Etapa"}</div>
                         <SelectBusca style={pedePav ? { ...S.input, borderColor: "#f59e0b" } : S.input} value={it.etapa}
-                          onChange={(v) => mexerItem(i, { etapa: v })}
+                          onChange={(v) => mexerItem(i, { etapa: v, etapaDaUltima: null })}
                           placeholder={pedePav ? "Térreo, Pav 1 ou Pav 2…" : "Procurar etapa…"}
                           opcoes={typeof opcoesDeEtapaDoLancamento === "function" ? opcoesDeEtapaDoLancamento(insEt, "— escolha a etapa —")
                             : [{ valor: "", rotulo: "— escolha a etapa —" }]
                             .concat(etapasDaObra.map((e) => ({ valor: e.id, rotulo: e.nome || e.titulo || e.id })))} />
+                        {it.etapaDaUltima && it.etapa === it.etapaDaUltima.etapa && (
+                          <div data-vk-etapa-aprendida="1" style={{ fontSize: 11, color: "#1e40af", marginTop: 4, lineHeight: 1.4 }}>
+                            como na última compra deste item na obra{it.etapaDaUltima.data ? ` (${it.etapaDaUltima.data.split("-").reverse().join("/")})` : ""} — confira se a obra mudou de fase
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
@@ -23685,16 +23793,21 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
   // sozinha. Vai junto na gravada do lançamento, nunca numa separada.
   function catalogoQueAprendeu(l) {
     const pares = (l && Array.isArray(l.aprender)) ? l.aprender : [];
-    if (!pares.length || typeof comApelidoDaLoja !== "function") return {};
+    // as unidades respondidas ("1 m3 = 1 Mts") também ficam no catálogo
+    const convs = (l && Array.isArray(l.aprenderConv)) ? l.aprenderConv : [];
+    if (!pares.length && !convs.length) return {};
     let lista = (data || {}).materiais || [];
     let mudou = false;
-    for (const par of pares) {
-      const r = comApelidoDaLoja(lista, par.codigo, par.descricao);
-      lista = r.insumos; if (r.mudou) mudou = true;
+    if (typeof comApelidoDaLoja === "function") {
+      for (const par of pares) {
+        const r = comApelidoDaLoja(lista, par.codigo, par.descricao);
+        lista = r.insumos; if (r.mudou) mudou = true;
+      }
     }
+    if (convs.length) { const r = efCatalogoComConversoes(lista, convs); lista = r.insumos; if (r.mudou) mudou = true; }
     return mudou ? { materiais: lista } : {};
   }
-  const semAprender = (l) => { const x = { ...(l || {}) }; delete x.aprender; return x; };
+  const semAprender = (l) => { const x = { ...(l || {}) }; delete x.aprender; delete x.aprenderConv; return x; };
 
   // Custo de uma obra lançado a partir do extrato. Ele NÃO vira lançamento
   // do escritório escrito à mão: vira conta a pagar na obra, já baixada, e
@@ -53922,7 +54035,7 @@ function PainelPedidoLoja({ cotacao, pedido, insumos, isMobile, dinheiro, editan
 // a unidade da nota é outra — areia fina em "Mts" quando o catálogo vende em
 // m3 —, o aviso aparece na hora, com a troca a um clique: R$ 130 o metro e
 // R$ 130 o metro cúbico são compras muito diferentes.
-function CampoUnidadeDoItem({ valor, unidades, insumo, aoMudar, estilo, semAviso, quantidade, unitario, aoConverter }) {
+function CampoUnidadeDoItem({ valor, unidades, insumo, aoMudar, estilo, semAviso, quantidade, unitario, aoConverter, aoTrocarNome }) {
   const divUn = typeof divergenciaDeUnidade === "function" && insumo ? divergenciaDeUnidade(valor, insumo) : null;
   const est = estilo || COT_ESTILO.input;
   return (
@@ -53931,7 +54044,7 @@ function CampoUnidadeDoItem({ valor, unidades, insumo, aoMudar, estilo, semAviso
         estilo={divUn ? { ...est, borderColor: "#d97706", background: "#fff7ed" } : est} />
       {divUn && !semAviso && (
         <AvisoDeUnidade div={divUn} aoMudar={aoMudar} insumo={insumo}
-          quantidade={quantidade} unitario={unitario} aoConverter={aoConverter} />
+          quantidade={quantidade} unitario={unitario} aoConverter={aoConverter} aoTrocarNome={aoTrocarNome} />
       )}
     </div>
   );
@@ -53939,7 +54052,7 @@ function CampoUnidadeDoItem({ valor, unidades, insumo, aoMudar, estilo, semAviso
 
 // O aviso sozinho: na linha estreita da tabela ele vai para baixo da linha
 // inteira, em vez de espremer a coluna da unidade.
-function AvisoDeUnidade({ div, aoMudar, prefixo, insumo, quantidade, unitario, aoConverter }) {
+function AvisoDeUnidade({ div, aoMudar, prefixo, insumo, quantidade, unitario, aoConverter, aoTrocarNome }) {
   // Trocar só o nome da unidade erra a conta: 3 m de cano não são 3 barras.
   // Com o fator (barra de 6 m, saco de 50 kg) a troca vira conversão — a
   // quantidade vai para a unidade do catálogo e o preço acompanha.
@@ -53976,7 +54089,8 @@ function AvisoDeUnidade({ div, aoMudar, prefixo, insumo, quantidade, unitario, a
       </span>
       {conv ? (
         <button type="button" data-vk-converter="1"
-          onClick={() => aoConverter({ unidade: div.doCatalogo, quantidade: conv.quantidade, unitario: conv.unitario })}
+          onClick={() => aoConverter({ unidade: div.doCatalogo, quantidade: conv.quantidade, unitario: conv.unitario },
+            { fator: f, daLoja: div.daLoja })}
           style={{ ...bt, fontSize: 11 }}>
           converter: {n(conv.quantidade, 4)} {div.doCatalogo} a R$ {n(conv.unitario, 2)}
         </button>
@@ -53984,7 +54098,7 @@ function AvisoDeUnidade({ div, aoMudar, prefixo, insumo, quantidade, unitario, a
         <span>— diga quantos {div.daLoja} tem 1 {div.doCatalogo.replace(/s$/, "")}.</span>
       )}
       {" · "}
-      <button type="button" onClick={() => aoMudar(div.doCatalogo)} style={{ ...bt, fontWeight: 400 }}>só trocar o nome</button>
+      <button type="button" onClick={() => (aoTrocarNome ? aoTrocarNome(div) : aoMudar(div.doCatalogo))} style={{ ...bt, fontWeight: 400 }}>só trocar o nome</button>
     </div>
   );
 }

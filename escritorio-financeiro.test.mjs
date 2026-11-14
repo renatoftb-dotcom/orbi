@@ -35,7 +35,7 @@ const M = new Function(src + `
            lancamentosDaBaixa, ponteAutomaticaNaBaixa, semLancamentosDasContas, ligaContaAoLancamento, lancamentosLigadosAsContas, contasLigadasAoLancamento,
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
            obrasDoLancamento, validarLancamentoNaObra, destinoVisivelDoCusto,
-           efValorDoCampo, anexosDaTransacao, comAnexos,
+           efValorDoCampo, anexosDaTransacao, comAnexos, efConversaoAprendida, efCatalogoComConversoes, efEtapaDaUltimaCompra,
            efNomeDoFornecedor, EF_FORNECEDOR_OUTROS,
            custoDoLancamento, validarCustoEmItens, itemUnicoDoCusto, itensDoCustoOuUnico, padraoDaContaDaObra,
            comIdsDosMovimentos, efMesmaLinhaDoBanco, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
@@ -4217,6 +4217,59 @@ teste("conta mãe: com subconta só totaliza — lança-se na subconta", () => {
   assert.ok(!M.contaSoTotaliza(M.contaEscritorio("rec_projetos")));
   M.aplicarPlanoDeContas({});
 });
+
+// ── O que já foi respondido volta sozinho (unidade e etapa) ─────────
+{
+  // as funções de unidade moram em insumos.jsx: entram como globais, como no app
+  const ins = readFileSync(join(raiz, "src", "modules", "insumos.jsx"), "utf8");
+  const pega = (nome) => { const a = ins.indexOf("function " + nome + "("); let d = 0, j = ins.indexOf("{", a);
+    for (; j < ins.length; j++) { if (ins[j] === "{") d++; else if (ins[j] === "}") { d--; if (!d) break; } } return ins.slice(a, j + 1); };
+  const sin = ins.slice(ins.indexOf("var UNIDADE_SINONIMOS = {"), ins.indexOf("};", ins.indexOf("var UNIDADE_SINONIMOS = {")) + 2);
+  const U = new Function(sin + pega("chaveUnidade") + pega("unidadeCanonica") + pega("mesmaUnidade") + pega("divergenciaDeUnidade")
+    + "\nreturn { unidadeCanonica, divergenciaDeUnidade };")();
+  teste("unidade aprendida: areia em Mts e cimento em SACO entram convertidos na próxima nota", () => {
+    globalThis.unidadeCanonica = U.unidadeCanonica; globalThis.divergenciaDeUnidade = U.divergenciaDeUnidade;
+    try {
+      const areia = { codigo: "A1", nome: "Areia Fina", unidade: "m3" };
+      const cimento = { codigo: "C1", nome: "Sacos de cimento 50kg", unidade: "Unidades" };
+      // antes de responder: nada muda sozinho
+      assert.strictEqual(M.efConversaoAprendida({ insumoCodigo: "A1", unidade: "Mts", quantidade: 2, unitario: 130 }, areia), null);
+      // respondeu "1 m3 = 1 Mts" e "só trocar o nome" do SACO: vai para o catálogo
+      const r = M.efCatalogoComConversoes([areia, cimento, { codigo: "X" }],
+        [{ codigo: "A1", unidade: "Mts", fator: 1 }, { codigo: "C1", unidade: "SACO", fator: 1 }]);
+      assert.ok(r.mudou);
+      assert.deepStrictEqual(r.insumos[0].conversoes, { Mts: 1 });
+      assert.deepStrictEqual(r.insumos[1].conversoes, { saco: 1 });
+      assert.strictEqual(r.insumos[2], r.insumos[2], "quem não aprendeu fica igual");
+      // a mesma resposta de novo não regrava o catálogo
+      assert.ok(!M.efCatalogoComConversoes(r.insumos, [{ codigo: "A1", unidade: "mts", fator: 1 }]).mudou);
+      // próxima nota: entra na unidade do catálogo, mesmo total
+      const a2 = M.efConversaoAprendida({ insumoCodigo: "A1", unidade: "Mts", quantidade: 2, unitario: 130 }, r.insumos[0]);
+      assert.strictEqual(a2.unidade, "m3"); assert.strictEqual(a2.quantidade, 2); assert.strictEqual(a2.unitario, 130);
+      assert.deepStrictEqual([a2.convertido.de, a2.convertido.fator], ["Mts", 1]);
+      const c2 = M.efConversaoAprendida({ insumoCodigo: "C1", unidade: "SACO", quantidade: "10", unitario: "38,00" }, r.insumos[1]);
+      assert.strictEqual(c2.unidade, "Unidades");
+      // fator diferente de 1: quantidade e preço acompanham, o total fica
+      const cano = { codigo: "T1", nome: "Tubo PVC", unidade: "Unidades", conversoes: { Mts: 6 } };
+      const t2 = M.efConversaoAprendida({ unidade: "m", quantidade: 12, unitario: "10,00" }, cano);
+      assert.strictEqual(t2.quantidade, 2); assert.strictEqual(t2.unitario, 60);
+      assert.strictEqual(Math.round(t2.quantidade * t2.unitario * 100) / 100, 120);
+      // já na unidade do catálogo: nada a fazer
+      assert.strictEqual(M.efConversaoAprendida({ unidade: "m³", quantidade: 2, unitario: 130 }, r.insumos[0]), null);
+    } finally { delete globalThis.unidadeCanonica; delete globalThis.divergenciaDeUnidade; }
+  });
+  teste("etapa aprendida: a última compra do mesmo item na mesma obra", () => {
+    const obra = { contasPagar: [
+      { insumoCodigo: "A1", etapa: "fundacao", vencimento: "2026-10-05" },
+      { insumoCodigo: "A1", etapa: "alvenaria", vencimento: "2026-11-02", pagoEm: "2026-11-03" },
+      { insumoCodigo: "A1", etapa: "", vencimento: "2026-11-10" },
+      { insumoCodigo: "C1", etapa: "reboco", vencimento: "2026-11-12" },
+    ] };
+    assert.deepStrictEqual(M.efEtapaDaUltimaCompra(obra, "A1"), { etapa: "alvenaria", data: "2026-11-03" });
+    assert.strictEqual(M.efEtapaDaUltimaCompra(obra, "Z9"), null);
+    assert.strictEqual(M.efEtapaDaUltimaCompra(null, "A1"), null);
+  });
+}
 
 for (const [nome, fn] of testes) {
   try { await fn(); console.log("  ok   " + nome); }
