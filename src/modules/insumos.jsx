@@ -1242,7 +1242,7 @@ function InsumoForm({ insumo, insumos, onSalvar, onCancelar, isMobile }) {
           {!(f.aliases || []).length && <span style={{ fontSize: 12, color: "#6b7280" }}>Nenhum ainda — o nome principal é usado.</span>}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <input style={INS_S.input} value={novoAlias} placeholder="Ex.: CIMENTO CP II 50KG"
+          <input style={INS_S.input} value={novoAlias} placeholder="Digite outro nome do insumo"
             onChange={e => setNovoAlias(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addAlias(); } }} />
           <button style={INS_S.btnSec} onClick={addAlias}>Adicionar</button>

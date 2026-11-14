@@ -3016,15 +3016,24 @@ function novoInsumoDoPedido(campos, insumos, gerarCodigo, novoId) {
   const nome = String(c.nome || "").trim();
   if (!nome) return null;
   const grupo = c.grupo || "Outros";
+  // Do cadastro completo (a ficha do módulo Insumos) vêm também a etapa, a
+  // conta, o tipo, o preço manual e os apelidos — o código e o id são
+  // sempre gerados aqui, no mesmo padrão de todo cadastro de dentro da compra.
+  const k = c.completo || {};
   const aliases = [nome];
-  const escrito = String(c.escrito || "").trim();
-  if (escrito && cotSemAcento(escrito) !== cotSemAcento(nome)) aliases.push(escrito);
+  const somar = (t) => { const v = String(t || "").trim(); if (v && !aliases.some((a) => cotSemAcento(a) === cotSemAcento(v))) aliases.push(v); };
+  (k.aliases || []).forEach(somar);
+  somar(c.escrito);
+  const manual = k.precoManual != null && k.precoManual !== "" && Number.isFinite(Number(k.precoManual)) ? Number(k.precoManual) : null;
   return {
     id: novoId || (typeof uid === "function" ? uid() : String(Date.now())),
     codigo: typeof gerarCodigo === "function" ? gerarCodigo(grupo, insumos || []) : "",
-    nome, grupo, unidade: c.unidade || "Unidades", tipo: "material",
-    precoManual: null, precoFonte: null, precoNCompras: 0, precoFatorInccAplicado: 1,
-    observacao: "", ativo: true, aliases,
+    nome, grupo, unidade: c.unidade || "Unidades", tipo: k.tipo === "prestador" ? "prestador" : "material",
+    precoManual: manual, precoFonte: manual != null ? "manual" : null, precoNCompras: 0, precoFatorInccAplicado: 1,
+    observacao: String(k.observacao || ""), ativo: k.ativo !== false, aliases,
+    ...(String(k.etapaPadrao || "").trim() ? { etapaPadrao: String(k.etapaPadrao).trim() } : {}),
+    ...(String(k.contaPadrao || "").trim() ? { contaPadrao: String(k.contaPadrao).trim() } : {}),
+    ...(k.conversoes && typeof k.conversoes === "object" && Object.keys(k.conversoes).length ? { conversoes: { ...k.conversoes } } : {}),
     precoAtualizadoEm: new Date().toISOString(),
   };
 }
@@ -8995,6 +9004,10 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
   const [termo, setTermo] = useState("");
   const [marcado, setMarcado] = useState(-1);
   const [novo, setNovo] = useState(null);      // { nome, grupo, unidade } quando cadastrando
+  // Cadastro completo (a mesma ficha do módulo Insumos: etapa, conta, tipo,
+  // apelidos…), aberto numa janela por cima — o item já sai pronto para
+  // ligar a etapa e a conta nas próximas compras.
+  const [completo, setCompleto] = useState(null);
   const campo = useRef(null);
   const lista = useRef(null);
 
@@ -9016,10 +9029,11 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
   // achado, começa no cadastrar. -1 = "o padrão do momento".
   const opcoes = [
     { tipo: "novo" },
+    { tipo: "completo" },
     ...achados.map((i) => ({ tipo: "item", i })),
     ...(aoDeixarFora ? [{ tipo: "fora" }] : []),
   ];
-  const marcadoEf = marcado >= 0 ? Math.min(marcado, opcoes.length - 1) : (achados.length ? 1 : 0);
+  const marcadoEf = marcado >= 0 ? Math.min(marcado, opcoes.length - 1) : (achados.length ? 2 : 0);
   // Na última linha a lista abria abaixo da dobra: rola o painel até ela.
   const abrir = () => {
     setAberto(true); setTermo(""); setMarcado(-1);
@@ -9050,12 +9064,58 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
       unidade: x.unidade || "Unidades" });
     fechar();
   };
+  const abrirCompleto = (base) => {
+    const b = base || {};
+    let grupo = b.grupo || (familias.length ? familias[0].grupo : (typeof grupoInferido === "function" ? grupoInferido(nomeSugerido) : "Outros"));
+    if (grupo === "Prestadores de serviços" && !b.grupo) grupo = "Outros";
+    setCompleto({ nome: b.nome != null ? b.nome : nomeSugerido, grupo, unidade: b.unidade || (familias.length ? familias[0].unidade : "") || x.unidade || "Unidades",
+      aliases: [] });
+    setNovo(null); fechar();
+  };
+  // Um item que já existe como modelo: "Tubo de 25mm" vira "Tubo de 40mm"
+  // trocando só a medida — grupo, unidade, tipo, etapa, conta e conversões
+  // de unidade vêm dele. Preço, compras, código e apelidos, não: são do outro.
+  const abrirComoModelo = (ins) => {
+    if (!ins) return;
+    setCompleto({ nome: ins.nome || "", grupo: ins.grupo || "Outros", unidade: ins.unidade || "Unidades",
+      tipo: ins.tipo === "prestador" ? "prestador" : "material",
+      etapaPadrao: ins.etapaPadrao || "", contaPadrao: ins.contaPadrao || "",
+      ...(ins.conversoes ? { conversoes: { ...ins.conversoes } } : {}),
+      aliases: [], observacao: "", _modelo: ins.nome || "" });
+    setNovo(null); fechar();
+  };
   const usar = (o) => {
     if (!o) return;
     if (o.tipo === "item") { aoEscolher(o.i); fechar(); }
     else if (o.tipo === "novo") comecarCadastro();
+    else if (o.tipo === "completo") abrirCompleto();
     else { aoDeixarFora(); fechar(); }
   };
+  const janelaCompleta = completo && typeof InsumoForm === "function" ? (
+    <div data-vk-cadastro-completo-insumo="1" style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.35)", zIndex: 80,
+      display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 12, overflowY: "auto" }}>
+      <div style={{ width: "100%", maxWidth: 720, margin: "24px 0", background: "#fff", borderRadius: 16,
+        boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
+        {completo._modelo && (
+          <div data-vk-insumo-modelo="1" style={{ margin: "14px 16px 0", padding: "8px 12px", borderRadius: 10, background: "#eef5ff",
+            border: "1px solid rgba(4,116,244,0.25)", fontSize: 12.5, color: "#1e3a8a", lineHeight: 1.45 }}>
+            Novo a partir de <b>{completo._modelo}</b>: altere o nome. Grupo, unidade, tipo, etapa e conta vieram dele — confira.
+          </div>
+        )}
+        <InsumoForm insumo={(() => { const { _modelo, ...semModelo } = completo; return semModelo; })()} insumos={insumos || []}
+          isMobile={typeof window !== "undefined" && window.innerWidth < 640}
+          onCancelar={() => setCompleto(null)}
+          onSalvar={(out) => {
+            // nome que já está no catálogo: usa o que existe, sem duplicar
+            const igual = (insumos || []).find((i) => i && i.tipo !== "prestador" && cotSemAcento(i.nome) === cotSemAcento(out.nome));
+            if (igual) { aoEscolher(igual); setCompleto(null); return; }
+            const r = aoCadastrar({ nome: out.nome, grupo: out.grupo, unidade: out.unidade,
+              escrito: !apelidoSe || apelidoSe(out.nome) ? x.termo : "", completo: out });
+            if (r) setCompleto(null);
+          }} />
+      </div>
+    </div>
+  ) : null;
 
   const grupos = gruposDoCatalogo(insumos, typeof INSUMO_GRUPOS !== "undefined" ? INSUMO_GRUPOS : []);
 
@@ -9101,7 +9161,7 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
             {fam && (
               <div style={{ minWidth: 0 }}>
                 <div style={rot}>Medida / complemento</div>
-                <input style={E.input} value={novo.complemento} autoFocus placeholder="32×25mm"
+                <input style={E.input} value={novo.complemento} autoFocus placeholder="Digite a medida"
                   onChange={(e) => setNovo({ ...novo, complemento: e.target.value })} />
               </div>
             )}
@@ -9137,7 +9197,10 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
             “{x.termo}” fica guardado como apelido: da próxima vez que escreverem assim, o VICKE já acha.
           </div>
         ) : null}
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+          <button type="button" data-vk-abrir-cadastro-completo="1" style={{ ...E.btnSec, marginRight: "auto", color: "#0474f4" }}
+            onClick={() => abrirCompleto({ nome: nomeFinal || novo.nomeLivre || nomeSugerido, grupo: novo.grupo, unidade: novo.unidade })}>
+            Cadastro completo (etapa, conta…)</button>
           <button type="button" style={E.btnSec} onClick={() => setNovo(null)}>Cancelar</button>
           <button type="button" style={{ ...E.btn, opacity: nomeFinal && !jaExiste ? 1 : 0.45 }} disabled={!nomeFinal || !!jaExiste}
             onClick={() => { const r = aoCadastrar({ nome: nomeFinal, grupo: novo.grupo, unidade: novo.unidade,
@@ -9156,7 +9219,8 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
   const semNadaNoCatalogo = !x.insumo && !x.rotuloVazio;
 
   if (!aberto) {
-    return (
+    return (<>
+      {janelaCompleta}
       <button type="button" onClick={abrir} title="Trocar o material"
         style={{ ...E.input, cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 8,
           border: semNadaNoCatalogo ? "1.5px solid rgba(220,38,38,0.45)" : E.input.border,
@@ -9165,12 +9229,12 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
         <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rotulo}</span>
         <span aria-hidden="true" style={{ fontSize: 10, color: semNadaNoCatalogo ? "#dc2626" : "#6b7280" }}>▼</span>
       </button>
-    );
+    </>);
   }
 
   return (
     <div>
-      <input ref={campo} style={E.input} value={termo} placeholder="Digite para buscar — luva, cabo, cimento…"
+      <input ref={campo} style={E.input} value={termo} placeholder="Digite para buscar no catálogo"
         onChange={(e) => { setTermo(e.target.value); setMarcado(-1); }}
         onBlur={() => setTimeout(fechar, 150)}
         onKeyDown={(e) => {
@@ -9190,14 +9254,26 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
         </div>
         {linha(<span data-cat-criar="1" style={{ fontSize: 12.5, color: "#0474f4", fontWeight: 600 }}>
           ＋ {nomePadrao ? <>Cadastrar “{nomePadrao}” no catálogo</> : "Cadastrar item novo no catálogo"}</span>,
-          0, { borderBottom: "1px solid rgba(38,36,33,0.10)" })}
+          0)}
+        {linha(<span data-cat-criar-completo="1" style={{ fontSize: 12.5, color: "#0474f4", fontWeight: 600 }}>
+          ＋ Cadastro completo — etapa, unidade, conta…</span>,
+          1, { borderBottom: "1px solid rgba(38,36,33,0.10)" })}
         {achados.map((i, k) => linha(
-          <>
-            <div style={{ fontSize: 12.5, color: "#111827" }}>{i.nome}</div>
-            <div style={{ fontSize: 11, color: "#6b7280" }}>{[i.codigo, i.grupo, i.unidade].filter(Boolean).join(" · ")}</div>
-          </>, k + 1))}
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12.5, color: "#111827" }}>{i.nome}</div>
+              <div style={{ fontSize: 11, color: "#6b7280" }}>{[i.codigo, i.grupo, i.unidade].filter(Boolean).join(" · ")}</div>
+            </div>
+            {i.tipo !== "prestador" && (
+              <button type="button" data-vk-insumo-como-modelo={i.codigo || i.id} title="Cadastrar um novo a partir deste"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); abrirComoModelo(i); }}
+                style={{ flex: "none", background: "#fff", border: "1px solid rgba(4,116,244,0.4)", color: "#0474f4", borderRadius: 8,
+                  padding: "4px 8px", minHeight: 30, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+                ＋ novo a partir deste</button>
+            )}
+          </div>, k + 2))}
         {aoDeixarFora && linha(<span style={{ fontSize: 12, color: "#4b5563" }}>Deixar fora do catálogo, como “{x.termo}”</span>,
-          achados.length + 1)}
+          achados.length + 2)}
       </div>
     </div>
   );

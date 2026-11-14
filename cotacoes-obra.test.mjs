@@ -2105,6 +2105,25 @@ teste("item novo entra no catálogo com código do grupo e o texto dele como ape
   assert.strictEqual(igual.grupo, "Outros");
 });
 
+teste("cadastro completo de dentro da compra: etapa, conta, tipo, preço e apelidos vão juntos", () => {
+  const n = M.novoInsumoDoPedido({ nome: "Areia Média", grupo: "Agregados", unidade: "m3", escrito: "AREIA MEDIA LAVADA",
+    completo: { etapaPadrao: "alvenaria", contaPadrao: "material", tipo: "material", precoManual: "130.5",
+      observacao: "lavada", aliases: ["Areia Média", "AREIA MEDIA"], id: "ignorado", codigo: "IGN-1" } },
+    [], () => "AGR-009", "novo2");
+  assert.strictEqual(n.id, "novo2"); assert.strictEqual(n.codigo, "AGR-009", "código e id sempre gerados aqui");
+  assert.strictEqual(n.etapaPadrao, "alvenaria"); assert.strictEqual(n.contaPadrao, "material");
+  assert.strictEqual(n.precoManual, 130.5); assert.strictEqual(n.precoFonte, "manual");
+  assert.strictEqual(n.observacao, "lavada");
+  assert.deepStrictEqual(n.aliases, ["Areia Média", "AREIA MEDIA LAVADA"], "apelido que é o nome sem acento não duplica");
+  // a partir de um modelo: as conversões de unidade vêm junto
+  const tubo = M.novoInsumoDoPedido({ nome: "Hidráulica - Tubo de 40mm", grupo: "Hidráulica", unidade: "Barras",
+    completo: { etapaPadrao: "hidraulica", contaPadrao: "material", conversoes: { Mts: 6 } } }, [], () => "HID-050", "t40");
+  assert.deepStrictEqual(tubo.conversoes, { Mts: 6 }); assert.strictEqual(tubo.etapaPadrao, "hidraulica");
+  // sem o completo, nada de etapa/conta inventada
+  const s = M.novoInsumoDoPedido({ nome: "Prego 18x27" }, [], null, "y");
+  assert.ok(!("etapaPadrao" in s) && !("contaPadrao" in s)); assert.strictEqual(s.precoManual, null);
+});
+
 // ── Item novo no padrão do catálogo ─────────────────────────────
 const CAT_FAM = [
   ...["Luva 25mm C/ Bucha latão", "Luva 25×20mm C/ Bucha latão", "Luva 25×50mm Roscável", "Luva 32mm", "Luva 50mm", "Luva União 50mm"]

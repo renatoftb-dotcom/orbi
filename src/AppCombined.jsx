@@ -44834,6 +44834,7 @@ function novoInsumoDoPedido(campos, insumos, gerarCodigo, novoId) {
     observacao: String(k.observacao || ""), ativo: k.ativo !== false, aliases,
     ...(String(k.etapaPadrao || "").trim() ? { etapaPadrao: String(k.etapaPadrao).trim() } : {}),
     ...(String(k.contaPadrao || "").trim() ? { contaPadrao: String(k.contaPadrao).trim() } : {}),
+    ...(k.conversoes && typeof k.conversoes === "object" && Object.keys(k.conversoes).length ? { conversoes: { ...k.conversoes } } : {}),
     precoAtualizadoEm: new Date().toISOString(),
   };
 }
@@ -50872,6 +50873,18 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
       aliases: [] });
     setNovo(null); fechar();
   };
+  // Um item que já existe como modelo: "Tubo de 25mm" vira "Tubo de 40mm"
+  // trocando só a medida — grupo, unidade, tipo, etapa, conta e conversões
+  // de unidade vêm dele. Preço, compras, código e apelidos, não: são do outro.
+  const abrirComoModelo = (ins) => {
+    if (!ins) return;
+    setCompleto({ nome: ins.nome || "", grupo: ins.grupo || "Outros", unidade: ins.unidade || "Unidades",
+      tipo: ins.tipo === "prestador" ? "prestador" : "material",
+      etapaPadrao: ins.etapaPadrao || "", contaPadrao: ins.contaPadrao || "",
+      ...(ins.conversoes ? { conversoes: { ...ins.conversoes } } : {}),
+      aliases: [], observacao: "", _modelo: ins.nome || "" });
+    setNovo(null); fechar();
+  };
   const usar = (o) => {
     if (!o) return;
     if (o.tipo === "item") { aoEscolher(o.i); fechar(); }
@@ -50884,7 +50897,13 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
       display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 12, overflowY: "auto" }}>
       <div style={{ width: "100%", maxWidth: 720, margin: "24px 0", background: "#fff", borderRadius: 16,
         boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
-        <InsumoForm insumo={completo} insumos={insumos || []}
+        {completo._modelo && (
+          <div data-vk-insumo-modelo="1" style={{ margin: "14px 16px 0", padding: "8px 12px", borderRadius: 10, background: "#eef5ff",
+            border: "1px solid rgba(4,116,244,0.25)", fontSize: 12.5, color: "#1e3a8a", lineHeight: 1.45 }}>
+            Novo a partir de <b>{completo._modelo}</b>: altere o nome. Grupo, unidade, tipo, etapa e conta vieram dele — confira.
+          </div>
+        )}
+        <InsumoForm insumo={(() => { const { _modelo, ...semModelo } = completo; return semModelo; })()} insumos={insumos || []}
           isMobile={typeof window !== "undefined" && window.innerWidth < 640}
           onCancelar={() => setCompleto(null)}
           onSalvar={(out) => {
@@ -51041,10 +51060,19 @@ function EscolhaInsumoPedido({ x, parecidos, insumos, unidades, aoEscolher, aoDe
           ＋ Cadastro completo — etapa, unidade, conta…</span>,
           1, { borderBottom: "1px solid rgba(38,36,33,0.10)" })}
         {achados.map((i, k) => linha(
-          <>
-            <div style={{ fontSize: 12.5, color: "#111827" }}>{i.nome}</div>
-            <div style={{ fontSize: 11, color: "#6b7280" }}>{[i.codigo, i.grupo, i.unidade].filter(Boolean).join(" · ")}</div>
-          </>, k + 2))}
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12.5, color: "#111827" }}>{i.nome}</div>
+              <div style={{ fontSize: 11, color: "#6b7280" }}>{[i.codigo, i.grupo, i.unidade].filter(Boolean).join(" · ")}</div>
+            </div>
+            {i.tipo !== "prestador" && (
+              <button type="button" data-vk-insumo-como-modelo={i.codigo || i.id} title="Cadastrar um novo a partir deste"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); abrirComoModelo(i); }}
+                style={{ flex: "none", background: "#fff", border: "1px solid rgba(4,116,244,0.4)", color: "#0474f4", borderRadius: 8,
+                  padding: "4px 8px", minHeight: 30, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+                ＋ novo a partir deste</button>
+            )}
+          </div>, k + 2))}
         {aoDeixarFora && linha(<span style={{ fontSize: 12, color: "#4b5563" }}>Deixar fora do catálogo, como “{x.termo}”</span>,
           achados.length + 2)}
       </div>
