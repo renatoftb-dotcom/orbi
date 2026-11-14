@@ -215,5 +215,32 @@ t("pilar contínuo: vai do fundo do baldrame ao piso de cima; viga com topo no p
   // último pavimento: até o topo da laje dele (2,8 + 0,1)
   assert.ok(b.pilares.every((p) => p.base === 0 && p.topo === 2.9));
 });
+t("viga de piso sob parede de cima sem parede embaixo; sem pilar sobre vão livre", () => {
+  // térreo: casa 8 × 6 com parede em x = 5; em cima: parede em x = 2,5 (sobre a sala) e parede y = 3 de 0 a 2,5
+  const cima = [W(P(0, 0), P(8, 0)), W(P(8, 0), P(8, 6)), W(P(8, 6), P(0, 6)), W(P(0, 6), P(0, 0)), W(P(2.5, 0), P(2.5, 6)), W(P(0, 3), P(2.5, 3))];
+  const [a, b] = M.esLancarPavimentos([{ paredes: casa, nivel: 0 }, { paredes: cima, nivel: 2.9 }], V6);
+  const vps = a.vigas.filter((v) => v.vigaPiso);
+  assert.strictEqual(vps.length, 2, JSON.stringify(vps.map((v) => [v.a, v.b])));
+  assert.ok(vps.every((v) => v.topo === 2.9));
+  // o encontro (2,5; 3) fica sobre a sala: não tem pilar em cima nem embaixo
+  assert.ok(!b.pilares.some((p) => Math.abs(p.no.x - 2.5) < 0.05 && Math.abs(p.no.y - 3) < 0.05));
+  // os encontros na fachada (2,5; 0) e (2,5; 6) descem até a fundação e apoiam a viga de piso
+  for (const y of [0, 6]) assert.ok(a.pilares.some((p) => Math.abs(p.no.x - 2.5) < 0.05 && p.no.y === y), `pilar em 2,5; ${y} no térreo`);
+  const vx = vps.find((v) => Math.abs(v.a.x - 2.5) < 0.05 && Math.abs(v.b.x - 2.5) < 0.05);
+  assert.ok(vx && vx.apoioA && vx.apoioB, "viga de piso em x = 2,5 apoiada nos dois pilares");
+  const av = M.esVerificar(b, cima, V6, { pilaresAbaixo: a.pilares });
+  assert.ok(!av.some((x) => /transição/.test(x.texto)), JSON.stringify(av.map((x) => x.texto)));
+});
+t("pilar de cima a menos de 1 m de um pilar fixo de baixo, sobre porta: não entra (fica o de baixo)", () => {
+  // térreo: fachada de 8 m com porta de 2 m em x = 3..5 e parede interna em x = 2,9 → T em (2,9; 0)
+  const porta = { id: "p", tipo: "porta_giro", x: 4, larg: 2, alt: 2.1, peit: 0 };
+  const ter = [W(P(0, 0), P(8, 0), [porta]), W(P(8, 0), P(8, 6)), W(P(8, 6), P(0, 6)), W(P(0, 6), P(0, 0)), W(P(2.9, 0), P(2.9, 6))];
+  // em cima: parede interna em x = 3,5 (cai sobre a porta de baixo, a 0,6 m do T de baixo)
+  const cim = [W(P(0, 0), P(8, 0)), W(P(8, 0), P(8, 6)), W(P(8, 6), P(0, 6)), W(P(0, 6), P(0, 0)), W(P(3.5, 0), P(3.5, 6))];
+  const [a, b] = M.esLancarPavimentos([{ paredes: ter, nivel: 0 }, { paredes: cim, nivel: 2.9 }], V6);
+  assert.ok(!b.pilares.some((p) => Math.abs(p.no.x - 3.5) < 0.05 && p.no.y === 0), "sem pilar em (3,5; 0) em cima");
+  const av = M.esVerificar(b, cim, V6, { pilaresAbaixo: a.pilares });
+  assert.ok(!av.some((x) => /transição/.test(x.texto) && /\(3,5/.test(x.texto)));
+});
 console.log(`${ok} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

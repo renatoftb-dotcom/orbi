@@ -89097,9 +89097,11 @@ function esLancar(paredes, areas, params, opts = {}) {
   // origem: "encontro" (canto, T, ponta), "continuidade" (veio de outro
   // pavimento) ou "vao" (intermediário por vão máximo)
   const juntar = (no, ang, dirs, origem) => {
+    if (opts.pisoAbaixo && origem !== "continuidade" && !esPilarSemTransicao(no, dirs, ws, opts.pisoAbaixo)) return false;
     const sc = secao(dirs);
-    if (pilares.some((q) => esDist(q.no, no) < Math.max(q.h, sc.h, 0.3))) return;
+    if (pilares.some((q) => esDist(q.no, no) < Math.max(q.h, sc.h, 0.3))) return true; // já tem pilar aqui
     pilares.push({ x: esR3(no.x), y: esR3(no.y), b: sc.b, h: sc.h, ang: esR3(ang), no: { x: esR3(no.x), y: esR3(no.y) }, origem, _dirs: dirs });
+    return true;
   };
   // 1) cantos, encontros e pontas
   for (const n of nos) {
@@ -89142,15 +89144,18 @@ function esLancar(paredes, areas, params, opts = {}) {
       if (vao <= P.vaoMax + 1e-9) continue;
       const n = Math.ceil(vao / P.vaoMax), passo = vao / n;
       for (let j = 1; j < n; j++) {
-        let s = s0 + passo * j;
-        // fora de porta/janela: empurra para a ombreira mais próxima
+        const s = s0 + passo * j;
+        // fora de porta/janela: vai para uma das ombreiras (a mais perto
+        // primeiro; se ela der transição evitável, tenta a outra)
         const meio = secao([{ i: ws.indexOf(w) }]).h / 2, o = esVaoEm(w, s, meio);
+        let cands = [s];
         if (o) {
           const e = o.x - o.larg / 2 - meio - 0.02, d = o.x + o.larg / 2 + meio + 0.02;
-          s = Math.abs(e - s) <= Math.abs(d - s) && e > s0 + 0.3 ? e : d;
+          cands = [e, d].filter((c) => c > s0 + 0.3 && c < s1 - 0.3).sort((a, b) => Math.abs(a - s) - Math.abs(b - s));
+          if (!cands.length) cands = [Math.abs(e - s) <= Math.abs(d - s) ? e : d];
         }
         const iw = ws.indexOf(w);
-        juntar({ x: w.a.x + ux * s, y: w.a.y + uy * s }, ang, [{ x: ux, y: uy, i: iw }, { x: -ux, y: -uy, i: iw }], "vao");
+        for (const c of cands) if (juntar({ x: w.a.x + ux * c, y: w.a.y + uy * c }, ang, [{ x: ux, y: uy, i: iw }, { x: -ux, y: -uy, i: iw }], "vao")) break;
       }
     }
   }
@@ -89211,10 +89216,82 @@ function esLancarPavimentos(pavs, params) {
     const r = [];
     pavs.forEach((p, k) => r.push(esLancar(p.paredes || [], p.areas || [], params, { baldrames: k === 0, usoPadrao: p.usoPadrao, topo: esTopoPavimento(pavs, k),
       pilaresAbaixo: k > 0 ? r[k - 1].pilares : null,
-      pilaresAcima: acimaDe && acimaDe[k + 1] ? acimaDe[k + 1].pilares.filter((q) => q.origem === "encontro") : null })));
+      pisoAbaixo: k > 0 ? { paredes: pavs[k - 1].paredes || [], pilares: r[k - 1].pilares } : null,
+      pilaresAcima: acimaDe && acimaDe[k + 1] ? acimaDe[k + 1].pilares.filter((q) => q.origem !== "continuidade") : null })));
     return r;
   };
-  return passada(passada(null));
+  const r = passada(passada(null));
+  // vigas de piso: sob cada trecho de parede de cima que não tem parede
+  // embaixo, no nível do piso dela (topo da estrutura do pavimento de baixo)
+  const P = { ...ES_PADRAO, ...(params || {}) };
+  for (let k = 1; k < pavs.length; k++) {
+    const baixo = r[k - 1], topo = esTopoPavimento(pavs, k - 1);
+    let n = 0;
+    for (const w of pavs[k].paredes || []) {
+      for (const [s0, s1] of esTrechosSemApoio(w, pavs[k - 1].paredes || [])) {
+        const L = esLen(w), ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
+        const a = { x: esR3(w.a.x + ux * s0), y: esR3(w.a.y + uy * s0) }, b = { x: esR3(w.a.x + ux * s1), y: esR3(w.a.y + uy * s1) };
+        const apoio = (q) => { const pl = baixo.pilares.find((pp) => esDist(pp.no, q) <= 0.3); return pl ? pl.id : null; };
+        baixo.vigas.push({ id: "VP" + (++n), a, b, apoioA: apoio(a), apoioB: apoio(b), parede: null, s0: 0, s1: esR3(s1 - s0), b_: P.viga.b, h: P.viga.h, topo, vigaPiso: true, sobPavimento: pavs[k].nome || null });
+      }
+    }
+  }
+  return r;
+}
+
+// trechos (s0, s1 ao longo da parede w) sem parede embaixo: tira da parede os
+// trechos cobertos por paredes alinhadas do pavimento de baixo
+function esTrechosSemApoio(w, paredesBaixo) {
+  const L = esLen(w); if (L < 0.05) return [];
+  const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, cob = [];
+  for (const o of paredesBaixo || []) {
+    const Lo = esLen(o); if (Lo < 0.05) continue;
+    const vx = (o.b.x - o.a.x) / Lo, vy = (o.b.y - o.a.y) / Lo;
+    if (Math.abs(ux * vx + uy * vy) < 0.996) continue; // não alinhada (> ~5°)
+    const d = Math.abs((o.a.x - w.a.x) * -uy + (o.a.y - w.a.y) * ux);
+    if (d > ((w.t || 0) + (o.t || 0)) / 2) continue;
+    const sa = (o.a.x - w.a.x) * ux + (o.a.y - w.a.y) * uy, sb = (o.b.x - w.a.x) * ux + (o.b.y - w.a.y) * uy;
+    cob.push([Math.min(sa, sb) - (o.t || 0) / 2, Math.max(sa, sb) + (o.t || 0) / 2]);
+  }
+  cob.sort((a, b) => a[0] - b[0]);
+  const livres = []; let s = 0;
+  for (const [c0, c1] of cob) { if (c0 > s + 1e-6) livres.push([s, Math.min(c0, L)]); s = Math.max(s, c1); if (s >= L) break; }
+  if (s < L) livres.push([s, L]);
+  return livres.map(([a, b]) => [Math.max(0, a), Math.min(L, b)]).filter(([a, b]) => b - a >= 0.3);
+}
+
+// Pilar do pavimento de cima que não tem pilar embaixo (transição) só entra
+// quando não há saída melhor:
+// - em cima de vão livre (sem parede embaixo): não entra — a parede de cima
+//   apoia numa viga de piso e o encontro vira apoio de viga em viga;
+// - a menos de 1,0 m de um pilar contínuo (que tem pilar embaixo) na mesma
+//   parede: não entra — fica o contínuo, e o encontro vira apoio de viga em
+//   viga perto dele (critério de concepção, não de norma).
+function esPilarSemTransicao(no, dirs, ws, baixo) {
+  const temPilar = (baixo.pilares || []).some((q) => esDist(q.no || q, no) < 0.15);
+  if (temPilar) return true;
+  const sobreParede = (baixo.paredes || []).some((w) => {
+    const L = esLen(w); if (!L) return false; const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
+    const sv = (no.x - w.a.x) * ux + (no.y - w.a.y) * uy, d = Math.abs((no.x - w.a.x) * -uy + (no.y - w.a.y) * ux);
+    return sv > -0.1 && sv < L + 0.1 && d <= (w.t || 0) / 2 + 0.05;
+  });
+  if (!sobreParede) return false;
+  // em cima de parede sem porta/janela embaixo: o pilar desce (2ª passada) — entra
+  const sobreVao = (baixo.paredes || []).some((w) => {
+    const L = esLen(w); if (!L) return false; const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
+    const sv = (no.x - w.a.x) * ux + (no.y - w.a.y) * uy, d = Math.abs((no.x - w.a.x) * -uy + (no.y - w.a.y) * ux);
+    return sv > -0.1 && sv < L + 0.1 && d <= (w.t || 0) / 2 + 0.05 && !!esVaoEm(w, sv, 0.1);
+  });
+  // ... a não ser que fique colado (até 1,0 m) a um pilar fixo de baixo (de
+  // encontro ou contínuo) na mesma parede: aí não entra, e o vizinho é que serve
+  if (!sobreVao) return !(baixo.pilares || []).some((q) => q.origem !== "vao" && esDist(q.no || q, no) <= 1.0);
+  for (const d of dirs || []) {
+    const w = ws[d.i]; if (!w) continue;
+    const L = esLen(w), ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
+    const perto = (baixo.pilares || []).some((q) => { const c = q.no || q, sv = (c.x - w.a.x) * ux + (c.y - w.a.y) * uy, dd = Math.abs((c.x - w.a.x) * -uy + (c.y - w.a.y) * ux); return dd <= (w.t || 0) / 2 + 0.05 && sv > -0.1 && sv < L + 0.1 && esDist(c, no) <= 1.0; });
+    if (perto) return false;
+  }
+  return true;
 }
 
 // cantos do pilar (retângulo b × h girado em ang, centrado em x,y)
@@ -89277,6 +89354,7 @@ function esVerificar(est, paredes, params, ctx = {}) {
     if (bw < ES_NBR.vigaLarguraExcepcional) add("nbr", v.id, `${v.id}: largura ${bw} cm, abaixo de ${ES_NBR.vigaLarguraExcepcional} cm.`, meio, "NBR 6118, 13.2.2");
     else if (bw < ES_NBR.vigaLarguraMin) add("atencao", v.id, `${v.id}: largura ${bw} cm (menor que ${ES_NBR.vigaLarguraMin} cm) só nos casos excepcionais do item.`, meio, "NBR 6118, 13.2.2");
     if (!v.baldrame && (!v.apoioA || !v.apoioB)) add("atencao", v.id, `${v.id}: ${!v.apoioA && !v.apoioB ? "sem pilar nas pontas" : "uma ponta sem pilar"} — apoia em outra viga.`, meio);
+    if (v.vigaPiso) add("atencao", v.id, `${v.id}: viga de piso sob parede${v.sobPavimento ? ` do ${v.sobPavimento}` : " de cima"} que não tem parede embaixo — fica aparente no teto.`, meio);
     if (!v.baldrame && L > P.vaoMax + 0.01) add("atencao", v.id, `${v.id}: vão de ${String(L.toFixed(2)).replace(".", ",")} m, maior que o vão adotado de ${String(P.vaoMax.toFixed(2)).replace(".", ",")} m.`, meio);
     // fundo da viga dentro da altura de porta/janela que fica embaixo dela
     if (!v.baldrame && v.parede != null && paredes[v.parede]) {
@@ -95086,7 +95164,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             : selA.length && !selP.length ? (selA.length === 1 ? TP_AREA_TIPOS[areas[selA[0]].tipo].nome : `${selA.length} áreas`)
             : sel.every((k) => k[0] === "x") ? (sel.length === 1 && cortes[+sel[0].slice(1)] ? `Corte ${tpNomeCorte(cortes[+sel[0].slice(1)])}` : `${sel.length} cortes`)
             : sel.every((k) => k[0] === "l") ? (sel.length === 1 ? "Comprimento da parede" : `${sel.length} comprimentos`)
-            : sel.every((k) => k[0] === "e") ? (sel.length === 1 ? (() => { const id = sel[0].slice(1); return id.startsWith("P") ? `Pilar ${id}` : id.startsWith("VB") ? `Baldrame ${id}` : `Viga ${id}`; })() : `${sel.length} peças da estrutura`)
+            : sel.every((k) => k[0] === "e") ? (sel.length === 1 ? (() => { const id = sel[0].slice(1); return id.startsWith("P") ? `Pilar ${id}` : id.startsWith("VB") ? `Baldrame ${id}` : id.startsWith("VP") ? `Viga de piso ${id}` : `Viga ${id}`; })() : `${sel.length} peças da estrutura`)
             : `${sel.length} elementos`}
         </div>
         {sel.length > 0 && sel.every((k) => k[0] === "e") && (() => {
@@ -95101,7 +95179,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             }
             if (v) {
               const Lv = Math.hypot(v.b.x - v.a.x, v.b.y - v.a.y);
-              return { id, tipo: v.baldrame ? "Baldrame" : "Viga", dados: [["Seção", `${Math.round(v.b_ * 100)} × ${Math.round(v.h * 100)} cm`], ["Vão", `${tpFmt(Lv)} m`], ["Apoios", `${v.apoioA || "viga"} — ${v.apoioB || "viga"}`], ["Topo", `${tpFmt(v.baldrame ? 0 : v.topo)} m`], ["Concreto", `${tpFmt(v.b_ * v.h * Lv, 3)} m³`]] };
+              return { id, tipo: v.baldrame ? "Baldrame" : v.vigaPiso ? "Viga de piso" : "Viga", dados: [...(v.vigaPiso ? [["Função", `apoia a parede ${v.sobPavimento ? `do ${v.sobPavimento} ` : "de cima "}que não tem parede embaixo`]] : []), ["Seção", `${Math.round(v.b_ * 100)} × ${Math.round(v.h * 100)} cm`], ["Vão", `${tpFmt(Lv)} m`], ["Apoios", `${v.apoioA || "viga"} — ${v.apoioB || "viga"}`], ["Topo", `${tpFmt(v.baldrame ? 0 : v.topo)} m`], ["Concreto", `${tpFmt(v.b_ * v.h * Lv, 3)} m³`]] };
             }
             return { id, tipo: "Peça", dados: [["", "não encontrada (a estrutura mudou)"]] };
           });

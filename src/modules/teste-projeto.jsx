@@ -5607,7 +5607,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             : selA.length && !selP.length ? (selA.length === 1 ? TP_AREA_TIPOS[areas[selA[0]].tipo].nome : `${selA.length} áreas`)
             : sel.every((k) => k[0] === "x") ? (sel.length === 1 && cortes[+sel[0].slice(1)] ? `Corte ${tpNomeCorte(cortes[+sel[0].slice(1)])}` : `${sel.length} cortes`)
             : sel.every((k) => k[0] === "l") ? (sel.length === 1 ? "Comprimento da parede" : `${sel.length} comprimentos`)
-            : sel.every((k) => k[0] === "e") ? (sel.length === 1 ? (() => { const id = sel[0].slice(1); return id.startsWith("P") ? `Pilar ${id}` : id.startsWith("VB") ? `Baldrame ${id}` : `Viga ${id}`; })() : `${sel.length} peças da estrutura`)
+            : sel.every((k) => k[0] === "e") ? (sel.length === 1 ? (() => { const id = sel[0].slice(1); return id.startsWith("P") ? `Pilar ${id}` : id.startsWith("VB") ? `Baldrame ${id}` : id.startsWith("VP") ? `Viga de piso ${id}` : `Viga ${id}`; })() : `${sel.length} peças da estrutura`)
             : `${sel.length} elementos`}
         </div>
         {sel.length > 0 && sel.every((k) => k[0] === "e") && (() => {
@@ -5622,7 +5622,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             }
             if (v) {
               const Lv = Math.hypot(v.b.x - v.a.x, v.b.y - v.a.y);
-              return { id, tipo: v.baldrame ? "Baldrame" : "Viga", dados: [["Seção", `${Math.round(v.b_ * 100)} × ${Math.round(v.h * 100)} cm`], ["Vão", `${tpFmt(Lv)} m`], ["Apoios", `${v.apoioA || "viga"} — ${v.apoioB || "viga"}`], ["Topo", `${tpFmt(v.baldrame ? 0 : v.topo)} m`], ["Concreto", `${tpFmt(v.b_ * v.h * Lv, 3)} m³`]] };
+              return { id, tipo: v.baldrame ? "Baldrame" : v.vigaPiso ? "Viga de piso" : "Viga", dados: [...(v.vigaPiso ? [["Função", `apoia a parede ${v.sobPavimento ? `do ${v.sobPavimento} ` : "de cima "}que não tem parede embaixo`]] : []), ["Seção", `${Math.round(v.b_ * 100)} × ${Math.round(v.h * 100)} cm`], ["Vão", `${tpFmt(Lv)} m`], ["Apoios", `${v.apoioA || "viga"} — ${v.apoioB || "viga"}`], ["Topo", `${tpFmt(v.baldrame ? 0 : v.topo)} m`], ["Concreto", `${tpFmt(v.b_ * v.h * Lv, 3)} m³`]] };
             }
             return { id, tipo: "Peça", dados: [["", "não encontrada (a estrutura mudou)"]] };
           });

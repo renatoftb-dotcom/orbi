@@ -82,10 +82,11 @@ CASA TESTE (Márcio Viezzer, 2 pavimentos) em 14/11/2026.
 | 5 | Pilar contínuo entre pavimentos (sobe e desce onde há parede) | evita transição, carga desce direto à fundação | feito |
 | 6 | Pilar contínuo na altura: do fundo do baldrame ao piso de cima, sem interrupção na laje | é assim que se executa e calcula | feito |
 | 7 | Viga com topo no piso de cima (a laje apoia em cima) | é assim que se executa | feito |
-| 8 | Parede de cima sem parede embaixo: viga de apoio no piso, sob a parede (ou verificar a laje para a carga linear) | parede apoiada só na laje treliçada/protendida pede verificação; normalmente vai viga | pendente |
+| 8 | Parede de cima sem parede embaixo: viga de piso sob a parede (VP), no nível do piso, apoiada nos pilares ou vigas que encontrar | NBR 6118 exige caminho de carga verificado; sobre laje pré-fabricada a parede de alvenaria praticamente sempre pede viga | feito |
 | 9 | Laje em balanço (beiral de laje além das paredes): espessura ≥ 10 cm e engaste na laje vizinha; pré-fabricada em balanço só com armadura negativa | NBR 6118 13.2.4.1 (maciça); detalhe de balanço | pendente |
 | 10 | Direção das vigotas pelo menor vão de cada painel; vão máximo por tipo de laje (do fabricante) | eficiência e flecha | pendente |
 | 11 | Escada: apoio do patamar e do lance (viga de apoio ou laje da escada nas vigas) e furo da laje com borda apoiada | caminho de carga da escada | pendente |
 | 12 | Elementos sem laje (muro, jardineira): cinta de amarração em vez de viga de 40 | não há carga de laje; economia | pendente |
 | 13 | Vão grande de porta/janela (≥ 2,5 m): viga sobre o vão verificada para flecha e pilares nas ombreiras | vão livre | pendente |
 | 14 | Transição inevitável: viga de transição marcada para dimensionamento especial | carga concentrada na viga | aviso feito; dimensionamento pendente |
+| 15 | Pilar do pavimento de cima sem pilar embaixo só entra se não houver saída: sobre vão livre não entra (a parede vai na viga de piso e o encontro vira apoio de viga em viga); sobre porta/janela a menos de 1,0 m de um pilar fixo de baixo não entra (fica o de baixo); pilar intermediário tenta a outra ombreira antes de virar transição | evita transição e pilares colados | feito |
