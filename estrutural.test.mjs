@@ -120,8 +120,8 @@ t("verificação: pilar desenhado sobre porta", () => {
   const av = M.esVerificar({ pilares: [{ id: "P9", x: 2, y: 0, b: 0.14, h: 0.3, ang: 0 }], vigas: [], lajes: [] }, ps, {});
   assert.ok(av.some((a) => a.tipo === "compat" && /P9 invade uma porta/.test(a.texto)));
 });
-t("verificação: laje de piso com 7 cm (mínimo 8)", () => {
-  const laje = { tipo: "laje", pts: [P(0, 0), P(4, 0), P(4, 4), P(0, 4)], esp: 0.07 };
+t("verificação: laje maciça de piso com 7 cm (mínimo 8)", () => {
+  const laje = { tipo: "laje", pts: [P(0, 0), P(4, 0), P(4, 4), P(0, 4)], esp: 0.07, carga: { tipo: "macica", uso: "residencial" } };
   const e = M.esLancar([], [laje], {});
   const av = M.esVerificar(e, [], {});
   assert.ok(av.some((a) => a.tipo === "nbr" && /mínimo de 8 cm/.test(a.texto)));
@@ -139,7 +139,7 @@ t("verificação: pilar sem pilar embaixo (transição)", () => {
   assert.strictEqual(av.filter((a) => /transição/.test(a.texto)).length, 2);
 });
 t("quantitativos: concreto e fôrma", () => {
-  const laje = { tipo: "laje", pts: [P(0, 0), P(8, 0), P(8, 6), P(0, 6)], esp: 0.1 };
+  const laje = { tipo: "laje", pts: [P(0, 0), P(8, 0), P(8, 6), P(0, 6)], esp: 0.1, carga: { tipo: "macica" } };
   const e = M.esLancar(casa, [laje], V6);
   const q = M.esQuantitativos(e, 2.8);
   // pilares: 6 × 0,19 × 0,19 × 2,8 = 0,60648 m³
@@ -157,10 +157,22 @@ t("cargas: parede de 14 sem escolha = bloco cerâmico 11,5 + 1 cm por face (1,3 
   assert.strictEqual(c2.g, 2.7);
 });
 t("cargas: laje maciça 10 cm de piso = 2,5 + 1,0 + 0,285 e q = 1,5", () => {
-  const c = M.esCargaLaje({ esp: 0.1 }, "residencial");
+  const c = M.esCargaLaje({ esp: 0.1, carga: { tipo: "macica" } }, "residencial");
   assert.ok(Math.abs(c.g - 3.785) < 1e-9); assert.strictEqual(c.q, 1.5);
-  const f = M.esCargaLaje({ esp: 0.1 }, "forro"); assert.ok(Math.abs(f.g - 2.785) < 1e-9); assert.strictEqual(f.q, 0);
-  const s = M.esCargaLaje({ esp: 0.1, carga: { uso: "servico" } }, "forro"); assert.strictEqual(s.q, 2);
+  const s = M.esCargaLaje({ esp: 0.1, carga: { tipo: "macica", uso: "servico" } }, "forro"); assert.strictEqual(s.q, 2);
+});
+t("cargas: sem escolha, forro = treliçada EPS 8+4 e piso = protendida EPS 12+4 (peso pela geometria)", () => {
+  const f = M.esCargaLaje({ esp: 0.12 }, "forro");
+  assert.strictEqual(f.tipo, "trelicada"); assert.strictEqual(f.q, 0); assert.strictEqual(f.pre.he, 0.08); // 12 desenhada = 8 + 4
+  // 25 × (0,04 + 0,12 × 0,08 / 0,42) + 0,2 × (0,30 × 0,08 / 0,42)
+  const ppT = 25 * (0.04 + 0.12 * 0.08 / 0.42) + 0.2 * (0.30 * 0.08 / 0.42);
+  assert.ok(Math.abs(f.pp - ppT) < 1e-9, f.pp);
+  const p = M.esCargaLaje({ esp: 0.16 }, "residencial");
+  assert.strictEqual(p.tipo, "protendida"); assert.strictEqual(p.pre.hTotal, 0.16);
+  const ppP = 25 * (0.04 + 0.12 * 0.12 / 0.42) + 0.2 * (0.30 * 0.12 / 0.42);
+  assert.ok(Math.abs(p.pp - ppP) < 1e-9);
+  const cer = M.esCargaLaje({ esp: 0.12, carga: { tipo: "trelicada", ench: "ceramica" } }, "forro");
+  assert.ok(Math.abs(cer.pp - (25 * (0.04 + 0.12 * 0.08 / 0.42) + 6 * (0.30 * 0.08 / 0.42))) < 1e-9);
 });
 t("cargas: telhado cerâmico com madeira até 40% = 0,7; fibrocimento 6 mm pede o peso da estrutura", () => {
   assert.strictEqual(M.esCargaTelhado({ telha: "Telha Barro Portuguesa" }, 30).g, 0.7);

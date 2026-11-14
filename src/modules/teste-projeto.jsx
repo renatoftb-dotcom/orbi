@@ -2178,7 +2178,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const estPorPav = useMemo(() => {
     if (!estrutura.ativa) return {};
     const r = {};
-    pavsOrd.forEach((p, k) => { const d = dadosDe(p.id); r[p.id] = esLancar(d.paredes || [], d.areas || [], estrutura.params, { baldrames: k === 0 }); });
+    pavsOrd.forEach((p, k) => { const d = dadosDe(p.id), acima = pavsOrd[k + 1]; r[p.id] = esLancar(d.paredes || [], d.areas || [], estrutura.params, { baldrames: k === 0, usoPadrao: acima && (dadosDe(acima.id).paredes || []).length ? "residencial" : "forro" }); });
     return r;
   }, [estrutura, paredes, areas, dadosPav, pavimentos, pavAtivo]); // eslint-disable-line react-hooks/exhaustive-deps
   const estAvisos = useMemo(() => {
@@ -5930,7 +5930,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
               // laje: peso próprio, revestimento, forro e uso (NBR 6120) para as cargas
               const cs = selA.map((i) => esCargaLaje(areas[i], usoPadraoLaje));
               const tipo = igualEm(cs, (c) => c.tipo), uso = igualEm(cs, (c) => c.uso), forro = igualEm(cs, (c) => c.forro);
-              const mudar = (patch) => editarAreas(selA, (a) => { const c = esCargaLaje(a, usoPadraoLaje); return { ...a, carga: { tipo: c.tipo, uso: c.uso, revPiso: c.revPiso, forro: c.forro, ...(a.carga && a.carga.pp != null ? { pp: a.carga.pp } : {}), ...patch } }; });
+              // a escolha fica gravada; laje pré-fabricada leva a espessura (enchimento + capa) junto
+              const mudar = (patch) => editarAreas(selA, (a) => {
+                const c0 = esCargaLaje(a, usoPadraoLaje);
+                const carga = { tipo: c0.tipo, uso: c0.uso, revPiso: c0.revPiso, forro: c0.forro, ...(c0.pre ? { ench: c0.pre.ench, he: c0.pre.he, capa: c0.pre.capa, intereixo: c0.pre.intereixo } : {}), ...(a.carga && a.carga.pp != null ? { pp: a.carga.pp } : {}), ...patch };
+                if (patch.tipo && patch.tipo !== c0.tipo) { delete carga.he; delete carga.intereixo; }
+                if (!c0.pre || !("he" in patch || "capa" in patch)) { if (!("he" in patch)) delete carga.he; }
+                const c1 = esCargaLaje({ ...a, carga }, usoPadraoLaje);
+                // enchimento ou capa mudados: a espessura desenhada acompanha (enchimento + capa)
+                return { ...a, carga, ...(c1.pre && ("he" in patch || "capa" in patch) ? { esp: Math.round(c1.pre.hTotal * 1000) / 1000 } : {}) };
+              });
+              const pres = cs.filter((c) => c.pre).map((c) => c.pre), preTodas = pres.length === cs.length;
               const c1 = cs.length === 1 ? cs[0] : null, A1 = selA.length === 1 ? tpAreaPoli(areas[selA[0]].pts) : 0;
               const usoPiso = uso ? esUso(uso).piso : true;
               return (<>
@@ -5938,10 +5948,22 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                   <label htmlFor="tp-l-tipo" style={lblCarga}>Tipo de laje</label>
                   <select id="tp-l-tipo" value={tipo || ""} onChange={(e) => mudar({ tipo: e.target.value })} style={selCarga}>
                     {!tipo && <option value="">vários</option>}
-                    <option value="macica">Maciça de concreto armado</option>
-                    <option value="informada">Outra (pré-moldada etc.): informar peso próprio</option>
+                    {Object.entries(ES_TIPOS_LAJE).map(([k, r]) => <option key={k} value={k}>{r}</option>)}
                   </select>
                 </div>
+                {preTodas && (<>
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <label htmlFor="tp-l-ench" style={lblCarga}>Enchimento</label>
+                    <select id="tp-l-ench" value={igualEm(pres, (q) => q.ench) || ""} onChange={(e) => mudar({ ench: e.target.value })} style={selCarga}>
+                      {!igualEm(pres, (q) => q.ench) && <option value="">vários</option>}
+                      {Object.entries(ES_LAJES_PRE.enchimentos).filter(([k]) => k !== "fonte" && k !== "conferido").map(([k, v]) => <option key={k} value={k}>{v.rotulo}</option>)}
+                    </select>
+                  </div>
+                  <TpCampo id="tp-l-he" rotulo="Enchimento (cm)" casas={1} valor={igualEm(pres, (q) => Math.round(q.he * 1000) / 10)} onConfirmar={(v) => mudar({ he: v / 100 })} />
+                  <TpCampo id="tp-l-capa" rotulo="Capa (cm)" casas={1} valor={igualEm(pres, (q) => Math.round(q.capa * 1000) / 10)} onConfirmar={(v) => mudar({ capa: v / 100 })} />
+                  <TpCampo id="tp-l-ie" rotulo="Intereixo (cm)" casas={0} valor={igualEm(pres, (q) => Math.round(q.intereixo * 100))} onConfirmar={(v) => mudar({ intereixo: v / 100 })} />
+                  <TpCampo id="tp-l-alt" rotulo="Altura total (cm)" casas={1} somenteLeitura valor={igualEm(pres, (q) => Math.round(q.hTotal * 1000) / 10)} onConfirmar={() => {}} />
+                </>)}
                 {tipo === "informada" && (
                   <div style={{ gridColumn: "1 / -1" }}>
                     <TpCampo id="tp-l-pp" rotulo="Peso próprio (kN/m², do fabricante)" min={-0.0001} valor={comum(selA, (i) => +((areas[i].carga || {}).pp || 0))} onConfirmar={(v) => mudar({ pp: v })} />
@@ -5964,7 +5986,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 </div>
                 {c1 && (
                   <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#374151", lineHeight: 1.5 }}>
-                    Permanente: <b style={{ fontWeight: 600 }}>{tpFmt(c1.g)} kN/m²</b> <span style={{ color: "#6b7280" }}>(laje {tpFmt(c1.pp)} + piso {tpFmt(c1.rev)} + embaixo {tpFmt(c1.gForro)})</span><br />
+                    Permanente: <b style={{ fontWeight: 600 }}>{tpFmt(c1.g)} kN/m²</b> <span style={{ color: "#6b7280" }}>(laje {tpFmt(c1.pp)}{c1.piso ? ` + piso ${tpFmt(c1.rev)}` : ""} + embaixo {tpFmt(c1.gForro)})</span><br />
+                    {c1.pre && <span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>Peso da laje calculado pela seção (capa e nervuras de concreto + {ES_LAJES_PRE.enchimentos[c1.pre.ench].rotulo.toLowerCase()}); confira com o fabricante.</span>}
+                    {c1.tipoAuto && <span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>Tipo pelo padrão: {c1.piso ? "piso = protendida" : "forro = treliçada"}.</span>}
                     Variável (uso): <b style={{ fontWeight: 600 }}>{tpFmt(c1.q)} kN/m²</b>{A1 > 0 && <span style={{ color: "#6b7280" }}> · total {tpFmt((c1.g + c1.q) * A1, 1)} kN em {tpFmt(A1)} m²</span>}
                     {c1.auto && <span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>Uso deduzido ({usoPadraoLaje === "forro" ? "não há pavimento em cima" : "há pavimento em cima"}); escolha para fixar.</span>}
                   </div>

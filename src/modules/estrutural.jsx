@@ -326,7 +326,7 @@ function esLancar(paredes, areas, params, opts = {}) {
   [...vigas, ...baldrames].forEach((v, k) => { v.id = (v.baldrame ? "VB" : "V") + (v.baldrame ? k - vigas.length + 1 : k + 1); });
   // 4) lajes: as que o arquiteto desenhou neste pavimento
   const lajes = (areas || []).map((a, i) => ({ a, i })).filter(({ a }) => a.tipo === "laje" && a.pts && a.pts.length >= 3)
-    .map(({ a, i }, k) => ({ id: "L" + (k + 1), area: i, pts: a.pts, esp: a.esp || P.lajeEsp, uso: a.uso || "piso" }));
+    .map(({ a, i }, k) => { const c = esCargaLaje(a, opts.usoPadrao); return { id: "L" + (k + 1), area: i, pts: a.pts, esp: c.pre ? c.pre.hTotal : (a.esp || P.lajeEsp), uso: c.piso ? "piso" : "cobertura", tipo: c.tipo, concretoM2: c.concreto, capa: c.pre ? c.pre.capa : null }; });
   return { pilares, vigas: [...vigas, ...baldrames], lajes };
 }
 
@@ -403,6 +403,7 @@ function esVerificar(est, paredes, params, ctx = {}) {
   }
   // lajes
   for (const l of est.lajes || []) {
+    if (l.tipo && l.tipo !== "macica") continue; // pré-fabricada: NBR 14859 (verificação própria, etapa seguinte)
     const esp = Math.round(l.esp * 100), min = ES_NBR.lajeEspMin[l.uso] || ES_NBR.lajeEspMin.piso;
     const c = { x: l.pts.reduce((t, q) => t + q.x, 0) / l.pts.length, y: l.pts.reduce((t, q) => t + q.y, 0) / l.pts.length };
     if (esp < min) add("nbr", l.id, `${l.id}: ${esp} cm, abaixo do mínimo de ${min} cm para laje de ${l.uso === "cobertura" ? "cobertura" : l.uso === "balanco" ? "balanço" : "piso"}.`, c, "NBR 6118, 13.2.4.1");
@@ -422,7 +423,8 @@ function esQuantitativos(est, alturaPav) {
     const L = esDist(v.a, v.b), g = v.baldrame ? q.baldrames : q.vigas;
     g.n++; g.comprimento += L; g.concreto += v.b_ * v.h * L; g.forma += (v.baldrame ? 2 * v.h : v.b_ + 2 * v.h) * L;
   }
-  for (const l of est.lajes || []) { const A = esAreaPoli(l.pts); q.lajes.n++; q.lajes.area += A; q.lajes.concreto += A * l.esp; q.lajes.forma += A; }
+  // laje pré-fabricada: concreto da capa e das nervuras; não leva fôrma (só escoramento)
+  for (const l of est.lajes || []) { const A = esAreaPoli(l.pts), pre = l.tipo === "trelicada" || l.tipo === "protendida"; q.lajes.n++; q.lajes.area += A; q.lajes.concreto += A * (l.concretoM2 != null ? l.concretoM2 : l.esp); q.lajes.forma += pre ? 0 : A; }
   for (const g of Object.values(q)) { concreto += g.concreto; forma += g.forma; }
   return { ...q, concreto, forma };
 }
@@ -518,16 +520,54 @@ const esUso = (id) => ES_CARGAS.usos.tipos.find((u) => u.id === id) || null;
 const esForro = (id) => ES_CARGAS.forros.tipos.find((f) => f.id === id) || ES_CARGAS.forros.tipos[0];
 // laje: permanente (peso próprio + revestimento do piso + forro) e variável
 // (uso). usoPadrao: "residencial" se há pavimento em cima, "forro" se não.
+// Lajes pré-fabricadas (NBR 14859): vigotas + enchimento + capa. O peso
+// próprio sai da geometria da seção (por intereixo): concreto da capa e das
+// nervuras a 25 kN/m³ e o enchimento pelo peso aparente. Padrão do escritório:
+// forro = treliçada com EPS (8 + 4), piso = protendida com EPS (12 + 4).
+const ES_LAJES_PRE = {
+  enchimentos: {
+    fonte: "pesos aparentes do enchimento: manual de lajes treliçadas (Belgo) — confirmar com o fornecedor", conferido: false,
+    eps: { rotulo: "EPS (isopor)", gama: 0.2 },        // 12 a 25 kgf/m³
+    ceramica: { rotulo: "Lajota cerâmica", gama: 6.0 }, // 600 kgf/m³
+  },
+  padrao: {
+    trelicada: { ench: "eps", he: 0.08, capa: 0.04, intereixo: 0.42, bw: 0.12 },
+    protendida: { ench: "eps", he: 0.12, capa: 0.04, intereixo: 0.42, bw: 0.12 },
+  },
+};
+const ES_TIPOS_LAJE = {
+  trelicada: "Treliçada (vigota treliçada + enchimento)",
+  protendida: "Protendida (vigota protendida + enchimento)",
+  macica: "Maciça de concreto armado",
+  informada: "Outra: informar o peso próprio",
+};
+// geometria de laje pré-fabricada: peso próprio (kN/m²) e concreto (m³/m²)
+// esp = espessura desenhada: sem enchimento informado, ele é o que sobra da capa
+function esLajePre(tipo, c, esp) {
+  const d = ES_LAJES_PRE.padrao[tipo] || ES_LAJES_PRE.padrao.trelicada;
+  const ench = ES_LAJES_PRE.enchimentos[c.ench] ? c.ench : d.ench;
+  const capa = c.capa != null ? +c.capa : d.capa;
+  const he = c.he != null ? +c.he : (esp ? Math.max(0.05, Math.round((esp - capa) * 1000) / 1000) : d.he);
+  const i = c.intereixo != null ? +c.intereixo : d.intereixo, bw = Math.min(i, c.bw != null ? +c.bw : d.bw);
+  const concreto = capa + bw * he / i, vazio = (i - bw) * he / i;
+  const pp = ES_CARGAS.pesos.concretoArmado * concreto + ES_LAJES_PRE.enchimentos[ench].gama * vazio;
+  return { ench, he, capa, intereixo: i, bw, concreto, pp, hTotal: he + capa };
+}
 function esCargaLaje(a, usoPadrao) {
   const c = a.carga || {};
   const uso = esUso(c.uso) || esUso(usoPadrao) || esUso("residencial");
+  // sem escolha: piso = protendida, forro/cobertura = treliçada
+  const tipo = ES_TIPOS_LAJE[c.tipo] ? c.tipo : (uso.piso ? "protendida" : "trelicada");
   const esp = a.esp || 0.10;
-  const pp = c.tipo === "informada" ? (+c.pp || 0) : ES_CARGAS.pesos.concretoArmado * esp;
+  let pp, concreto, pre = null;
+  if (tipo === "trelicada" || tipo === "protendida") { pre = esLajePre(tipo, c, a.esp); pp = pre.pp; concreto = pre.concreto; }
+  else if (tipo === "informada") { pp = +c.pp || 0; concreto = esp; }
+  else { pp = ES_CARGAS.pesos.concretoArmado * esp; concreto = esp; }
   const revPiso = uso.piso ? (c.revPiso != null ? +c.revPiso : 0.05) : 0;
   const rev = revPiso * ES_CARGAS.pesos.revestimentoPiso;
   const forro = esForro(c.forro || "reboco").g;
   const g = pp + rev + forro;
-  return { tipo: c.tipo === "informada" ? "informada" : "macica", uso: uso.id, usoRotulo: uso.rotulo, pp, revPiso, rev, forro: c.forro || "reboco", gForro: forro, g, q: uso.q, auto: !c.uso };
+  return { tipo, tipoRotulo: ES_TIPOS_LAJE[tipo], pre, concreto, uso: uso.id, usoRotulo: uso.rotulo, piso: uso.piso, pp, revPiso, rev, forro: c.forro || "reboco", gForro: forro, g, q: uso.q, auto: !c.uso, tipoAuto: !ES_TIPOS_LAJE[c.tipo] };
 }
 // telhado: carga permanente por m² em planta. Telhado pronto da tabela quando
 // a combinação existe; senão, telha (convertida para planta) + estrutura
