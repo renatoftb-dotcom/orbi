@@ -36,7 +36,7 @@ const M = new Function(src + `
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
            obrasDoLancamento, validarLancamentoNaObra, destinoVisivelDoCusto,
            efValorDoCampo, anexosDaTransacao, comAnexos, efConversaoAprendida, efCatalogoComConversoes, parcelaDaObraParaALinha, efEtapaAprendidaDoInsumo, efEtapaAprendidaDoFornecedor, efContaDoFornecedor,
-           efNomeDoFornecedor, EF_FORNECEDOR_OUTROS, receitasDaPermuta, errosDaPermuta, permutaServicosNormalizados,
+           efNomeDoFornecedor, EF_FORNECEDOR_OUTROS, receitasDaPermuta, errosDaPermuta, permutaServicosNormalizados, fechamentosComLiberacao, mesFechadoQueTrava,
            custoDoLancamento, validarCustoEmItens, itemUnicoDoCusto, itensDoCustoOuUnico, padraoDaContaDaObra,
            comIdsDosMovimentos, efMesmaLinhaDoBanco, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
            sugestaoDoExtrato, palpiteDoExtrato, sugestaoCompletaDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao, fornecedorPadraoDaConta, contaDeEntradaNoEscritorio, semFornecedorNaEntrada, clienteRapidoDoLancamento, ehLigacaoDaGestao, gestaoSemContratoVaiParaObra,
@@ -1024,6 +1024,17 @@ teste("empreendimento: aporte (depósito próprio) atravessa fora da conta e nã
   assert.strictEqual(ch.difDebito, 0);
   const c = M.conciliarExtrato([{ id: "b1", data: "2026-10-05", valor: -20000, historico: "PIX" }], r.lancamentos, {});
   assert.ok(!c.contabilizadoSemPar.some((l) => l.contaId === "emp_aporte"), "não aparece como 'não veio no banco'");
+});
+
+teste("mês fechado liberado com senha: só este lançamento enxerga o mês aberto", () => {
+  const fech = { "2026-06": { fechadoEm: "2026-07-05T10:00:00Z" }, "2026-07": { fechadoEm: "2026-08-05T10:00:00Z" } };
+  assert.ok(M.bloqueioPorMesFechado("2026-06", fech));
+  const lib = M.fechamentosComLiberacao(fech, "2026-06");
+  assert.strictEqual(M.bloqueioPorMesFechado("2026-06", lib), "");
+  assert.ok(M.bloqueioPorMesFechado("2026-07", lib), "os outros meses continuam fechados");
+  assert.ok(fech["2026-06"], "o fechamento guardado não muda");
+  assert.strictEqual(M.mesFechadoQueTrava({ lancadoEm: "2026-06-15" }, fech), "2026-06");
+  assert.strictEqual(M.mesFechadoQueTrava({ competencia: "2026-09", lancadoEm: "2026-09-02" }, fech), "");
 });
 
 teste("permuta: custo na obra, par fora da conta no escritório (custo + receita de projeto) e nada no extrato", () => {

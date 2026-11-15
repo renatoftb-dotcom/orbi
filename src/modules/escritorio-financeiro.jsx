@@ -2746,6 +2746,21 @@ function bloqueioPorMesFechado(competencia, fechamentos) {
   if (!competencia || !mesEstaFechado(competencia, fechamentos)) return "";
   return `${efMesPorExtenso(competencia)} já está fechado: não dá para lançar nesse mês.`;
 }
+// Lançar num mês fechado, com senha: o mês continua fechado para tudo o
+// mais — só a gravação deste lançamento enxerga o mês como aberto.
+function fechamentosComLiberacao(fechamentos, mes) {
+  if (!mes || !fechamentos || !fechamentos[mes]) return fechamentos;
+  const copia = { ...fechamentos };
+  delete copia[mes];
+  return copia;
+}
+// O mês fechado que trava o formulário (competência, data do pagamento ou
+// 1º vencimento), para o botão de liberar saber qual pedir.
+function mesFechadoQueTrava(campos, fechamentos) {
+  const c = campos || {};
+  const meses = [c.competenciaFixa, c.competencia, String(c.lancadoEm || "").slice(0, 7), String(c.primeiroVencimento || "").slice(0, 7)];
+  return meses.find((m) => /^\d{4}-\d{2}$/.test(String(m || "")) && mesEstaFechado(m, fechamentos)) || "";
+}
 
 
 
@@ -7496,6 +7511,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   }));
   const lancNovo = !(inicial && inicial.id);
   const [tentou, setTentou] = useState(false);
+  const [pedindoSenha, setPedindoSenha] = useState("");
   const [outroPagamento, setOutroPagamento] = useState(false);
   const [pagarDaReserva, setPagarDaReserva] = useState(true);
   const [erroAnexo, setErroAnexo] = useState("");
@@ -7849,6 +7865,10 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   };
 
   const conta = naObra ? null : contaEscritorio(f.contaId);
+  // Mês fechado liberado com senha só para este lançamento
+  const liberado = f.liberadoNoMesFechado && f.liberadoNoMesFechado.mes;
+  const fechamentosDoForm = liberado ? fechamentosComLiberacao(fechamentos, liberado) : fechamentos;
+  const mesQueTrava = mesFechadoQueTrava({ ...f, competenciaFixa }, fechamentosDoForm);
   const unidadesOk = conta && (conta.unidades || []).length ? conta.unidades : UNIDADES_NEGOCIO.map((u) => u.id);
   // Empreendimento é cliente com tique: quando a unidade é Empreendimento, a
   // lista de escolha só traz esses, e o id escolhido vale pelos dois campos.
@@ -7858,7 +7878,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const obraAntiga = podeObraAntiga && !!f.obraEncerrada;
   const doCadastro = (clientes || []).filter((c) => c && (ehEmp ? ehEmpreendimento(c) : true));
   const erros = naObra
-    ? validarLancamentoNaObra({ ...f, valor: efValorDoCampo(f.valor) }, { fechamentos })
+    ? validarLancamentoNaObra({ ...f, valor: efValorDoCampo(f.valor) }, { fechamentos: fechamentosDoForm })
         .concat(validarCustoEmItens(efValorDoCampo(f.valor), itensEfetivos, f.obraIdAlvo).erros
           .filter((e) => !/Escolha a obra|Informe o valor pago/.test(e))
           .map((e) => (custoUnico && /sem etapa/.test(e) ? "Escolha a etapa da obra." : e)))
@@ -7869,7 +7889,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
         // na gestão, a obra é escolhida da lista (o id); lançamento antigo,
         // de antes da lista, segue valendo pelo nome
         obraId: f.unidadeId === "gestao_obras" ? (f.obraId || (lancNovo ? "" : f.projeto)) : f.projeto,
-        empreendimentoId: ehEmp ? f.empreendimentoId : f.projeto }, { fechamentos });
+        empreendimentoId: ehEmp ? f.empreendimentoId : f.projeto }, { fechamentos: fechamentosDoForm });
 
   // ── Pago no cartão ──
   // A compra entra integral, na data dela, na conta escolhida (ou na obra);
@@ -8825,9 +8845,25 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
           extrato do escritório recebe quando você fechar a fatura, em Cartões.
         </div>
       )}
+      {liberado && (
+        <div data-vk-mes-liberado="1" style={{ fontSize: 12, color: "#166534" }}>
+          🔓 Liberado com senha para lançar em {efMesPorExtenso(liberado)} — o mês continua fechado para todo o resto.
+        </div>
+      )}
+      {pedindoSenha && (
+        <JanelaSenhaMesFechado mes={pedindoSenha} aoCancelar={() => setPedindoSenha("")}
+          aoConfirmar={() => { const mes = pedindoSenha; setPedindoSenha("");
+            setF((p) => ({ ...p, liberadoNoMesFechado: { mes, em: new Date().toISOString() } })); }} />
+      )}
       {tentou && todosErros.length > 0 && (
         <div style={{ fontSize: 12, color: "#b91c1c" }}>
           {todosErros.join(" · ")}
+          {mesQueTrava && todosErros.some((e) => /já está fechado/.test(e)) && (
+            <button type="button" data-vk-liberar-mes="1" onClick={() => setPedindoSenha(mesQueTrava)}
+              style={{ ...S.btnSec, marginLeft: 10, padding: "4px 10px", fontSize: 12 }}>
+              🔒 Lançar mesmo assim (pede senha)
+            </button>
+          )}
           {/* A trava de cliente e obra fica no pé; a saída dela (obra
               encerrada) mora lá em cima, junto dos campos. O atalho fica aqui,
               onde o olho já está. */}
@@ -10023,6 +10059,54 @@ function FaturasDoMes({ faturas, linhas, fila, lancs, aoFecharFatura, ocupado, f
 // não zera, o mês não fecha; depois de fechado, não entra lançamento nele.
 // O campo de valor da tela: pontos de milhar e vírgula aparecem enquanto
 // se digita; o cursor fica onde estava, contado pelos números.
+// Lançar num mês fechado: pede a senha de quem está logado (conferida no
+// servidor, que registra quem liberou). Não reabre o mês: só este
+// lançamento passa. Fecha só por Cancelar.
+function JanelaSenhaMesFechado({ mes, aoConfirmar, aoCancelar }) {
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+  async function confirmar() {
+    if (!senha) { setErro("Digite sua senha."); return; }
+    setOcupado(true); setErro("");
+    try {
+      await api.auth.conferirSenha(senha, "lancar_mes_fechado:" + mes);
+      setSenha(""); aoConfirmar();
+    } catch (e) {
+      setErro((e && e.message) || "Não deu para conferir a senha.");
+    } finally { setOcupado(false); }
+  }
+  return (
+    <div role="dialog" aria-modal="true" data-vk-janela-senha-mes="1"
+      style={{ position: "fixed", inset: 0, zIndex: 1200, background: "rgba(17,24,39,0.45)", display: "flex",
+        alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ background: "#fff", borderRadius: 14, padding: 20, width: "100%", maxWidth: 420, boxSizing: "border-box",
+        boxShadow: "0 18px 40px rgba(0,0,0,0.18)", fontFamily: "inherit" }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Lançar em {efMesPorExtenso(mes)}</div>
+        <div style={{ fontSize: 13, color: "#4b5563", lineHeight: 1.5, marginTop: 6 }}>
+          O mês está fechado. Com a sua senha, só este lançamento entra nele — o mês continua fechado para todo o resto,
+          e fica registrado quem liberou.
+        </div>
+        <form onSubmit={(e) => { e.preventDefault(); confirmar(); }} style={{ marginTop: 14 }}>
+          <input type="password" autoComplete="current-password" autoFocus value={senha} data-vk-senha-mes="1"
+            onChange={(e) => { setSenha(e.target.value); setErro(""); }} placeholder="Digite sua senha"
+            style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 10,
+              border: "1px solid rgba(38,36,33,0.2)", fontSize: 14, fontFamily: "inherit" }} />
+          {erro && <div data-vk-senha-erro="1" style={{ fontSize: 12, color: "#b91c1c", marginTop: 6 }}>{erro}</div>}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+            <button type="button" onClick={aoCancelar} style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(38,36,33,0.2)",
+              background: "#fff", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Cancelar</button>
+            <button type="submit" disabled={ocupado} data-vk-confirmar-senha-mes="1" style={{ padding: "8px 14px", borderRadius: 10, border: "none",
+              background: "#0474f4", color: "#fff", fontSize: 13, fontWeight: 600, cursor: ocupado ? "wait" : "pointer", fontFamily: "inherit" }}>
+              {ocupado ? "Conferindo…" : "Liberar este lançamento"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // Permuta: quais serviços do escritório foram dados em troca, e quanto de
 // cada um. Um só leva o valor todo; mais de um, a soma tem que fechar.
 // Usado no lançamento do escritório, na Entrada e na baixa da obra.
@@ -12189,8 +12273,10 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
       ? numerarPapeisDasPagas(novas, proximoNumeroDePapel(todas, lancamentosDoEscritorio(data)), () => true).contas
       : novas;
     const obraNova = { ...obra, contasPagar: (obra.contasPagar || []).concat(numeradas) };
-    const ponte = lancamentosDaBaixa(obraNova, cliente, numeradas,
-      { fechamentos: fechamentosDoEscritorio(data), lancamentos: lancamentosDoEscritorio(data) });
+    const liberado = l.liberadoNoMesFechado && l.liberadoNoMesFechado.mes;
+    const ponte0 = lancamentosDaBaixa(obraNova, cliente, numeradas,
+      { fechamentos: fechamentosComLiberacao(fechamentosDoEscritorio(data), liberado), lancamentos: lancamentosDoEscritorio(data) });
+    const ponte = liberado ? { ...ponte0, lancamentos: ponte0.lancamentos.map((x) => ({ ...x, liberadoNoMesFechado: l.liberadoNoMesFechado })) } : ponte0;
     // Vindo da fila do extrato, o que atravessa leva a marca da linha do banco.
     const marca = l.extratoId ? { extratoId: l.extratoId, historicoBanco: l.historicoBanco || "",
       conferido: true, conferidoEm: l.conferidoEm || new Date().toISOString(),
