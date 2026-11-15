@@ -6919,6 +6919,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   // Persistido em orcBase.templateId (snapshot) ou começa null (mostra tela
   // de escolha). Pulado em modo read-only ou quando já foi escolhido antes.
   const [modeloEscolhido, setModeloEscolhido] = useState(orcBase?.templateId || null);
+  // Edição do orçamento completo (textos e valores): só pelo botão Editar
+  // da proposta gerada, numa janela por cima dela.
+  const [editandoTudo, setEditandoTudo] = useState(false);
   // previewRemountKey: incrementa a cada vez que o usuário sai da Etapa 5 pra
   // o Preview. Isso força o React a remontar o PropostaPreview (e seus
   // useState internos), garantindo que valores stale não persistam quando o
@@ -8794,7 +8797,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   });
   const passoAtual = !propostaData ? (definicoesOk && referencia ? 2 : 1)
     : !etapaPagamentoConfirmada ? 3
-    : !templateEdicaoConfirmada ? 4 : 5;
+    : 5;
   // Voltar a uma etapa já feita, sem perder o que foi preenchido nas outras.
   const irParaEtapa = (n) => {
     if (n <= 2) { setEtapaPagamentoConfirmada(false); setPropostaData(null); return; }
@@ -9079,43 +9082,36 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       </>);
     }
 
-    // Template de Edição (Fase 4) — tela intermediária entre Etapa 5 e Preview.
-    // Pulada em modo read-only (templateEdicaoConfirmada já vem true) e quando
-    // o usuário clicou "Pular esta etapa" no template anterior.
-    if (!templateEdicaoConfirmada) {
-      // Mescla textos + valores atuais em liveData pro template re-popular
-      // ao reabrir (preserva edições anteriores).
-      const liveDataComTemplate = {
-        ...liveData,
-        template: {
-          textos: templateTextos || undefined,
-          valores: templateValores || undefined,
-          formaPagamento: templateFormaPagamento || undefined,
-        },
-      };
-      return (<>
-        {etapasEl}
+    // Template de Edição (Fase 4): não é mais etapa do fluxo. Abre só pelo
+    // botão "Editar" da proposta gerada, numa janela por cima do documento
+    // (Cancelar fecha sem mexer; Salvar refaz a proposta com os textos).
+    const liveDataComTemplate = {
+      ...liveData,
+      template: {
+        textos: templateTextos || undefined,
+        valores: templateValores || undefined,
+        formaPagamento: templateFormaPagamento || undefined,
+      },
+    };
+    const janelaEditarTudo = editandoTudo ? (
+      <div role="dialog" aria-modal="true" aria-label="Editar o orçamento" data-vk-janela-editar-orcamento="1"
+        style={{ position: "fixed", inset: 0, zIndex: 1000, background: "#f5f7fa", overflowY: "auto" }}>
         <TemplateEdicao
+          modoEditar
           data={liveDataComTemplate}
           escritorio={esc}
-          onVoltar={() => {
-            // Volta pra Etapa 5 (Forma de Pagamento)
-            setEtapaPagamentoConfirmada(false);
-          }}
+          onVoltar={() => setEditandoTudo(false)}
+          onPular={() => setEditandoTudo(false)}
           onProsseguir={(payload) => {
-            // payload = { textos, valores, formaPagamento } — Fase 6b/6c/6d.1
             setTemplateTextos(payload.textos);
             setTemplateValores(payload.valores);
             if (payload.formaPagamento) setTemplateFormaPagamento(payload.formaPagamento);
-            setTemplateEdicaoConfirmada(true);
-          }}
-          onPular={() => {
-            // Avança sem salvar — modelo usa defaults internos
-            setTemplateEdicaoConfirmada(true);
+            setPreviewRemountKey((k) => k + 1);
+            setEditandoTudo(false);
           }}
         />
-      </>);
-    }
+      </div>
+    ) : null;
 
     // Componente do modelo escolhido pela empresa (esc.modelo_default).
     // Fallback pro Padrão quando não definido. Permite que cada escritório
@@ -9154,7 +9150,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       lockEdicao={propostaReadOnlyForce}
       conferenciaBase={mostrarEtapas ? conferencia : null}
       aoIrEtapa={irParaEtapa}
-    /></>;
+      aoEditarTudo={propostaReadOnlyForce ? null : () => setEditandoTudo(true)}
+    />{janelaEditarTudo}</>;
   }
 
   return (

@@ -174,7 +174,7 @@ function TplInputMoeda({ valor, onChange, style, ...rest }) {
 // Componente principal
 // ─────────────────────────────────────────────────────────────
 
-function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
+function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, modoEditar }) {
   const safeData = data || {};
   const esc = escritorio || {};
 
@@ -584,17 +584,23 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M9 11L5 7l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          Voltar
+          {modoEditar ? "Cancelar" : "Voltar"}
         </button>
         <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8 }}>
-          VICKE · Template de edição
+          {modoEditar ? "VICKE · Editar o orçamento" : "VICKE · Template de edição"}
         </div>
         <div style={{ fontSize: 22, fontWeight: 300, color: "#262421", letterSpacing: -0.4, lineHeight: 1.2 }}>
-          Ajustes finais antes de gerar o orçamento
+          {modoEditar ? "Editar o orçamento completo" : "Ajustes finais antes de gerar o orçamento"}
         </div>
+        {modoEditar ? (
+        <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.55, marginTop: 10, maxWidth: 600 }}>
+          Edite os textos e valores da proposta. Ao salvar, a proposta é refeita com as alterações; Cancelar volta sem mudar nada.
+        </div>
+        ) : (
         <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.55, marginTop: 10, maxWidth: 600 }}>
           Os dados do projeto já estão preenchidos. Edite livremente os textos abaixo — escopo, prazos, não inclusos e termo de aceite vêm pré-preenchidos com o conteúdo padrão da proposta. Você pode pular esta etapa pra usar os textos padrão sem alterações.
         </div>
+        )}
       </div>
 
       {/* Grid: sidebar + conteúdo. Em mobile (<720px), sidebar vira tabs
@@ -695,7 +701,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           value={descricaoProjeto}
           onChange={e => setDescricaoProjeto(e.target.value)}
           onKeyDown={e => tplHandleEnterBullet(e, descricaoProjeto, setDescricaoProjeto)}
-          placeholder="Construção nova de uma residência..."
+          placeholder="Digite a descrição do projeto"
           style={{ ...textareaBase, minHeight: 90 }}
           rows={3}
         />
@@ -713,7 +719,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           value={apresentacao}
           onChange={e => setApresentacao(e.target.value)}
           onKeyDown={e => tplHandleEnterBullet(e, apresentacao, setApresentacao)}
-          placeholder="Olá, [nome]! Apresentamos esta proposta para..."
+          placeholder="Digite a apresentação ao cliente"
           style={{ ...textareaBase, minHeight: 100 }}
           rows={4}
         />
@@ -728,7 +734,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           value={observacoes}
           onChange={e => setObservacoes(e.target.value)}
           onKeyDown={e => tplHandleEnterBullet(e, observacoes, setObservacoes)}
-          placeholder="Considerações finais, prazos especiais, condições particulares..."
+          placeholder="Digite as observações finais"
           style={{ ...textareaBase, minHeight: 100 }}
           rows={4}
         />
@@ -1372,24 +1378,26 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
         display: "flex", justifyContent: "space-between", alignItems: "center",
         marginTop: 24, gap: 16, flexWrap: "wrap",
       }}>
+        {modoEditar ? <span /> : (
         <button
           className="vk-tpl-btn-ghost"
           onClick={onPular}
           style={btnGhost}>
           Pular esta etapa
         </button>
+        )}
         <div style={{ display: "flex", gap: 10 }}>
           <button
             className="vk-tpl-btn-secondary"
             onClick={onVoltar}
             style={btnSecondary}>
-            Voltar
+            {modoEditar ? "Cancelar" : "Voltar"}
           </button>
           <button
             className="vk-tpl-btn-primary"
             onClick={handleProsseguir}
             style={btnPrimary}>
-            Gerar orçamento
+            {modoEditar ? "Salvar alterações" : "Gerar orçamento"}
           </button>
         </div>
       </div>

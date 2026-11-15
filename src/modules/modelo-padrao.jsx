@@ -165,7 +165,7 @@ function sincronizarEscopoComEtapas(prev, etapasPct) {
 }
 // ── Escopo: fim da parte pura ──────────────────────────────────
 
-function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, propostaReadOnly, propostaSnapshot, lockEdicao, templateId, conferenciaBase, aoIrEtapa }) {
+function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, propostaReadOnly, propostaSnapshot, lockEdicao, templateId, conferenciaBase, aoIrEtapa, aoEditarTudo }) {
   // NOTA: NÃO fazer `if (!data) return null` aqui — os hooks abaixo precisam ser
   // chamados em todo render (regra do React). Em vez disso, usamos optional chaining
   // e defaults em cada acesso a `data.xxx` e retornamos null só DEPOIS dos hooks.
@@ -1474,6 +1474,13 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
           <button onClick={voltar} style={{ background:"none", border:"2px solid #d1d5db", borderRadius: 12, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:"#6b7280" }}>
             {rotuloVoltar}
           </button>
+          <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
+          {aoEditarTudo && !lockEdicao && !propostaInfo && (
+            <button type="button" data-vk-editar-orcamento="1" onClick={aoEditarTudo}
+              style={{ background:"#fff", border:"1px solid rgba(38,36,33,0.2)", borderRadius: 12, padding:"7px 14px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit", color:"#262421" }}>
+              ✎ Editar
+            </button>
+          )}
           {(propostaInfo || lockEdicao) ? (
             <button data-tutorial-id="botao-gerar-pdf" onClick={handlePdf} style={{ background:"#111", border:"none", borderRadius: 12, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
               Gerar PDF
@@ -1485,6 +1492,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
               {onSalvarProposta ? "Salvar e Gerar PDF" : "Gerar PDF"}
             </button>
           )}
+          </div>
         </div>
 
         <div style={D.page} className={`${lockEdicao ? "proposta-locked lockEdicao-active" : ""}`}>
@@ -2091,6 +2099,13 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
           <button onClick={voltar} style={{ background:"none", border:`1px solid ${LN}`, borderRadius: 12, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:MD }}>
             {rotuloVoltar}
           </button>
+          <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
+          {aoEditarTudo && !lockEdicao && !propostaInfo && (
+            <button type="button" data-vk-editar-orcamento="1" onClick={aoEditarTudo}
+              style={{ background:"#fff", border:"1px solid rgba(38,36,33,0.2)", borderRadius: 12, padding:"7px 14px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit", color:"#262421" }}>
+              ✎ Editar
+            </button>
+          )}
           {(propostaInfo || lockEdicao) ? (
             <button data-tutorial-id="botao-gerar-pdf" onClick={handlePdf} style={{ background:C, border:"none", borderRadius: 12, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
               Gerar PDF
@@ -2102,6 +2117,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
               {onSalvarProposta ? "Salvar e Gerar PDF" : "Gerar PDF"}
             </button>
           )}
+          </div>
         </div>
 
         {/* Modal de confirmação */}
