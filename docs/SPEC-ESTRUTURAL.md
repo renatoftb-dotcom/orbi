@@ -176,8 +176,11 @@ cálculo escreveu. φ20 e φ25 não existem na lista do orçamento (aviso).
 ## Fundação (etapa 6, primeira versão) — `esFundacaoObra` / `esDimFundacao`
 
 - Estacas escavadas (brocas) com bloco, ou sapatas. A carga admissível vem da
-  sondagem (NBR 6122); sem ela, estimativa para orçamento: atrito lateral 30
-  kPa, ponta 300 kPa, FS 2; sapata 150 kPa. A tela avisa que é estimativa.
+  sondagem (NBR 6122); sem ela, estimativa para orçamento: só atrito lateral
+  30 kPa, FS 2, sem a ponta (fundo da broca manual mal limpo) — ~1 t por metro
+  em Ø20–25, como a regra de obra; sapata 150 kPa. A tela avisa que é
+  estimativa e que solo poroso/colapsível, comum no interior de SP, só a
+  sondagem mostra.
 - Um diâmetro para a obra toda (o de menor volume com até 4 estacas por bloco),
   a partir do mínimo informado. Estacas a 3Ø, 15 cm da estaca à face.
 - Blocos pelo método das bielas (Blévot), biela a 45°: Rs = (Nd/n)(r − c)/d,
