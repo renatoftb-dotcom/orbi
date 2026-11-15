@@ -5081,18 +5081,18 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   }
   // 9. as notas, uma a uma
   const colsNotas = [{ t: "Nº", w: 12, alinhar: "center" }, { t: "Data", w: 16, alinhar: "center" }, { t: "Fornecedor", w: 38 },
-    { t: "Descrição", w: 52 }, { t: "Conta", w: 32 }, { t: "NF", w: 14, alinhar: "center" }, { t: "Valor", w: 22, alinhar: "right" }];
-  const linhaDaNota = (n) => ({ celulas: [n.numero || "—", dia(n.data), n.fornecedor || "—", n.descricao, n.conta, n.nf || "", moeda(n.valor)],
+    { t: "Descrição", w: 66 }, { t: "Conta", w: 32 }, { t: "Valor", w: 22, alinhar: "right" }];
+  const linhaDaNota = (n) => ({ celulas: [n.numero || "—", dia(n.data), n.fornecedor || "—", n.descricao, n.conta, moeda(n.valor)],
     vermelho: [].concat(n.semNumero || n.semArquivo ? [0] : []) });
   const notasSaida = pc.notas.filter((n) => !n.entrada);
   if (notasSaida.length) {
     secao("Notas e comprovantes", "O número de cada nota é o nome do arquivo na pasta Papeis (nota 4226 = arquivo 4226.pdf). Em vermelho: sem arquivo ou sem número.");
-    tabela(colsNotas, notasSaida.map(linhaDaNota).concat([{ total: true, celulas: ["", "", "", "Total das saídas", "", "", moeda(pc.total)] }]), { compacta: true });
+    tabela(colsNotas, notasSaida.map(linhaDaNota).concat([{ total: true, celulas: ["", "", "", "Total das saídas", "", moeda(pc.total)] }]), { compacta: true });
   }
   const notasEntrada = pc.notas.filter((n) => n.entrada);
   if (notasEntrada.length) {
     secao("Entradas — lançamentos");
-    tabela(colsNotas, notasEntrada.map(linhaDaNota).concat([{ total: true, celulas: ["", "", "", "Total das entradas", "", "", moeda(pc.entradas)] }]), { compacta: true });
+    tabela(colsNotas, notasEntrada.map(linhaDaNota).concat([{ total: true, celulas: ["", "", "", "Total das entradas", "", moeda(pc.entradas)] }]), { compacta: true });
   }
   // 10. pendências
   const pend = pc.notas.filter((n) => n.semArquivo || n.semNumero);
