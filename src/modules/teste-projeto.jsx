@@ -1898,7 +1898,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // cotas no corte: ferramenta (pontos já clicados e o cursor), cota selecionada e o mapa tela → corte
   const [cotaC, setCotaC] = useState(null); // { pts: [{x,y,z}...], hover: {x,y,z} } enquanto desenha
   const [cotaCSel, setCotaCSel] = useState(null); // índice da cota selecionada no corte aberto
-  const corteMapa = useRef(null);  // 3D: todos os pavimentos, até o ativo, ou só o ativo
+  const corteMapa = useRef(null);
+  // zoom (roda do mouse / pinça) e arraste do desenho do corte; dx, dy em px CSS
+  const corteVista = useRef({ ct: null, z: 1, dx: 0, dy: 0 }), [vistaCorteN, setVistaCorteN] = useState(0), arrasteCorte = useRef(null);  // 3D: todos os pavimentos, até o ativo, ou só o ativo
   const [novaEscada, setNovaEscada] = useState({ forma: "reta", largura: 0.9, giro: 1 }); // opções da próxima escada // id do pavimento a excluir (confirmação)
   const [tipoEsq, setTipoEsq] = useState("porta_giro");  // tipo da próxima porta/janela
   const [dimsEsq, setDimsEsq] = useState(() => Object.fromEntries(TP_ESQ.map((t) => [t.id, { larg: t.larg, alt: t.alt, peit: t.peit, mat: t.mat }])));
@@ -4312,8 +4314,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     const zFund = fundC.length ? -Math.max(...fundC.map((f) => (f.bloco || f.sapata || { h: 0 }).h)) - 0.30 - (fundC.some((f) => f.estacas) ? 1.2 : 0.2) : 0;
     // zFund: até onde as estacas são desenhadas (com quebra); embaixo, espaço para o título
     const s0 = -2.4, s1 = Lc + 2.2, z0 = fundC.length ? Math.min(-1.1, zFund - 1.0) : -1.1, z1 = zMax + 0.6, mg = 36 * dpr;
-    const k = Math.min((W - 2 * mg) / (s1 - s0), (Hc - 2 * mg) / (z1 - z0));
-    const ox = (W - (s1 - s0) * k) / 2 - s0 * k, oy = Hc - (Hc - (z1 - z0) * k) / 2 + z0 * k;
+    // encaixe na janela × zoom/arraste do usuário (corteVista: tela = encaixe·z + d)
+    const k0 = Math.min((W - 2 * mg) / (s1 - s0), (Hc - 2 * mg) / (z1 - z0));
+    const vz = corteVista.current.ct === ct.id ? corteVista.current : { z: 1, dx: 0, dy: 0 };
+    const k = k0 * vz.z, ox = ((W - (s1 - s0) * k0) / 2 - s0 * k0) * vz.z + vz.dx * dpr, oy = (Hc - (Hc - (z1 - z0) * k0) / 2 + z0 * k0) * vz.z + vz.dy * dpr;
     const X = (sv) => ox + sv * k, Y = (zv) => oy - zv * k;
     // alvos de clique: cada peça desenhada guarda o retângulo (px do canvas),
     // o pavimento e a chave de seleção ("p3", "a5", "o<id>"); selecionada sai em azul
@@ -4629,7 +4633,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // o círculo do aviso some sozinho
   useEffect(() => { if (!focoEst) return; const t = setTimeout(() => setFocoEst(null), 4000); return () => clearTimeout(t); }, [focoEst]);
   useEffect(() => { const t = setTimeout(() => atual.current.desenharPlanta(), 230); return () => clearTimeout(t); }, [painelOculto]); // escala gráfica acompanha o painel
-  useEffect(() => { if (modo !== "corte") return; const id = requestAnimationFrame(() => desenharCorte()); return () => cancelAnimationFrame(id); }, [modo, cortes, verCorte, paredes, areas, dadosPav, pavimentos, pavAtivo, sel, selOutros, estPorPav, estrutura.noCorte, cotaC, cotaCSel]);
+  useEffect(() => { if (modo !== "corte") return; const id = requestAnimationFrame(() => desenharCorte()); return () => cancelAnimationFrame(id); }, [modo, cortes, verCorte, paredes, areas, dadosPav, pavimentos, pavAtivo, sel, selOutros, estPorPav, estrutura.noCorte, cotaC, cotaCSel, vistaCorteN]);
   // clique no corte: seleciona a peça (Ctrl soma, Shift tira); em outro pavimento, vai para ele
   // ponto do clique no corte, encaixado nas bordas das peças e nos níveis (8 px)
   const pontoCorte = (e) => {
@@ -4656,9 +4660,44 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     };
     window.addEventListener("keydown", tecla, true); return () => window.removeEventListener("keydown", tecla, true);
   }, [cotaC, cotaCSel, cortes, verCorte]); // eslint-disable-line react-hooks/exhaustive-deps
-  const moverCorte = (e) => { if (!cotaC) return; const q = pontoCorte(e); if (q) setCotaC((cc) => (cc ? { ...cc, hover: q } : cc)); };
+  const ctAtualId = () => verCorte || (cortes[0] && cortes[0].id);
+  const zoomCorte = (fator, cx, cy) => { // cx, cy: px CSS dentro do canvas
+    const v0 = corteVista.current.ct === ctAtualId() ? corteVista.current : { z: 1, dx: 0, dy: 0 };
+    const z2 = Math.max(0.5, Math.min(12, v0.z * fator)), f = z2 / v0.z;
+    corteVista.current = { ct: ctAtualId(), z: z2, dx: cx - (cx - v0.dx) * f, dy: cy - (cy - v0.dy) * f }; setVistaCorteN((n) => n + 1);
+  };
+  const ajustarCorte = () => { corteVista.current = { ct: null, z: 1, dx: 0, dy: 0 }; setVistaCorteN((n) => n + 1); };
+  useEffect(() => { // roda do mouse: zoom no ponto do cursor (listener não passivo para segurar a rolagem da página)
+    const c = corteRef.current; if (!c) return undefined;
+    const roda = (e) => { e.preventDefault(); const r = c.getBoundingClientRect(); zoomCorte(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top); };
+    c.addEventListener("wheel", roda, { passive: false }); return () => c.removeEventListener("wheel", roda);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+  // arraste com um dedo/botão: move o desenho; dois dedos: pinça
+  const descerCorte = (e) => {
+    const A = arrasteCorte.current || { pts: new Map(), moveu: false };
+    A.pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (A.pts.size === 1) { A.moveu = false; A.ini = { x: e.clientX, y: e.clientY }; } arrasteCorte.current = A;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { /* sem captura */ }
+  };
+  const soltarCorte = (e) => { const A = arrasteCorte.current; if (!A) return; A.pts.delete(e.pointerId); if (!A.pts.size) setTimeout(() => { if (arrasteCorte.current && !arrasteCorte.current.pts.size) arrasteCorte.current.moveu = false; }, 0); };
+  const moverCorte = (e) => {
+    const A = arrasteCorte.current;
+    if (A && A.pts.has(e.pointerId)) {
+      const ant = A.pts.get(e.pointerId), r = corteRef.current.getBoundingClientRect();
+      if (A.pts.size === 2) {
+        const [o] = [...A.pts.entries()].filter(([id]) => id !== e.pointerId).map(([, p]) => p);
+        const d0 = Math.hypot(ant.x - o.x, ant.y - o.y), d1 = Math.hypot(e.clientX - o.x, e.clientY - o.y);
+        if (d0 > 5) zoomCorte(d1 / d0, (e.clientX + o.x) / 2 - r.left, (e.clientY + o.y) / 2 - r.top); A.moveu = true;
+      } else if (A.moveu || Math.hypot(e.clientX - A.ini.x, e.clientY - A.ini.y) > 4) {
+        const v0 = corteVista.current.ct === ctAtualId() ? corteVista.current : { z: 1, dx: 0, dy: 0 };
+        corteVista.current = { ct: ctAtualId(), z: v0.z, dx: v0.dx + (e.clientX - ant.x), dy: v0.dy + (e.clientY - ant.y) }; A.moveu = true; setVistaCorteN((n) => n + 1);
+      } else return; // ainda não arrastou: o clique decide
+      A.pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); return;
+    }
+    if (!cotaC) return; const q = pontoCorte(e); if (q) setCotaC((cc) => (cc ? { ...cc, hover: q } : cc));
+  };
   const cliqueCorte = (e) => {
     const c = corteRef.current; if (!c) return;
+    if (arrasteCorte.current && arrasteCorte.current.moveu) { arrasteCorte.current.moveu = false; return; } // foi arraste, não clique
     const r = c.getBoundingClientRect(), kx = c.width / r.width, x = (e.clientX - r.left) * kx, y = (e.clientY - r.top) * kx;
     const ci = cortes.findIndex((cc) => cc.id === (verCorte || (cortes[0] && cortes[0].id)));
     if (cotaC && ci >= 0) {
@@ -7239,7 +7278,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 )}
               </div>
             )}
-            <canvas ref={corteRef} onClick={cliqueCorte} onPointerMove={moverCorte} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: cotaC ? "crosshair" : "pointer", touchAction: cotaC ? "none" : "auto" }} />
+            <canvas ref={corteRef} onClick={cliqueCorte} onPointerDown={descerCorte} onPointerMove={moverCorte} onPointerUp={soltarCorte} onPointerCancel={soltarCorte} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: cotaC ? "crosshair" : "pointer", touchAction: "none" }} />
+            {corteVista.current.ct === (verCorte || (cortes[0] && cortes[0].id)) && (corteVista.current.z !== 1 || corteVista.current.dx || corteVista.current.dy) && (
+              <button onClick={ajustarCorte} title="Voltar o corte inteiro na tela" style={{ ...btn, position: "absolute", right: 10, bottom: 10, zIndex: 1, minHeight: 30, padding: "2px 12px", fontSize: 12.5, fontWeight: 600 }}>Ajustar à tela</button>
+            )}
             {cotaC && (
               <div style={{ position: "absolute", left: "50%", bottom: 12, transform: "translateX(-50%)", background: "rgba(17,24,39,0.85)", color: "#fff", fontSize: 12, padding: "5px 10px", borderRadius: 999, pointerEvents: "none", whiteSpace: "nowrap" }}>
                 {cotaC.pts.length === 0 ? "Cota: clique o 1º ponto" : cotaC.pts.length === 1 ? "Clique o 2º ponto" : "Clique onde fica a linha da cota"}
