@@ -41300,8 +41300,11 @@ function custosMensais(obra, opcoes) {
 // ainda vão pagar, o que se espera dos contratos a assinar e da venda
 // futura (o cronograma digitado na obra). No caixa, a parcela paga cai no
 // dia em que entrou; na competência, no vencimento dela.
-const CP_FAIXAS_RECEB = [["recebido", "#cbd5e1", "Recebido"], ["assinado", "#0474f4", "Contrato assinado"],
-  ["assinar", "#111827", "Contrato a assinar"], ["estimativa", "#93c5fd", "Venda futura (estimativa)"]];
+// No gráfico e nas tabelas: contrato firme é a venda feita (assinada ou com o
+// contrato pendente, que o cliente já está pagando) e o cronograma marcado como
+// contrato; venda estimada é a projeção das unidades e o resto do cronograma.
+const CP_FAIXAS_RECEB = [["recebido", "#cbd5e1", "Recebido"], ["firme", "#0474f4", "Contratos firmes"],
+  ["estimativa", "#93c5fd", "Vendas estimadas"]];
 function recebimentosMensais(obra, opcoes) {
   const o = opcoes || {};
   const ob = obra || {};
@@ -41331,9 +41334,12 @@ function recebimentosMensais(obra, opcoes) {
     if (!p || !/^\d{4}-\d{2}$/.test(String(p.mes || ""))) continue;
     somar(cpBalde(p.mes + "-01", o.inicio), p.tipo === "assinar" ? "assinar" : "estimativa", Number(p.valor) || 0);
   }
-  const meses = cpMesesDaSerie(Object.keys(por), o.inicio ? [o.inicio.slice(0, 7)] : []).map((k) => ({ chave: k, rotulo: cpRotuloBalde(k), ...(por[k] || { recebido: 0, assinado: 0, assinar: 0, estimativa: 0 }) }));
+  const meses = cpMesesDaSerie(Object.keys(por), o.inicio ? [o.inicio.slice(0, 7)] : []).map((k) => {
+    const m = por[k] || { recebido: 0, assinado: 0, assinar: 0, estimativa: 0 };
+    return { chave: k, rotulo: cpRotuloBalde(k), ...m, firme: red(m.assinado + m.assinar) };
+  });
   const soma = (k) => red(meses.reduce((t, m) => t + (m[k] || 0), 0));
-  const total = { recebido: soma("recebido"), assinado: soma("assinado"), assinar: soma("assinar"), estimativa: soma("estimativa") };
+  const total = { recebido: soma("recebido"), assinado: soma("assinado"), assinar: soma("assinar"), firme: soma("firme"), estimativa: soma("estimativa") };
   total.geral = red(total.recebido + total.assinado + total.assinar + total.estimativa);
   return { regime, meses, total, temCronograma: (ob.cronogramaRecebimento || []).length > 0 || temProjecao };
 }
@@ -41400,13 +41406,17 @@ function obraDoEmpreendimento(modulos, nome) {
     dataInicio: ini[0] || "", dataFim: fim[fim.length - 1] || "", modulos: ms.map((o) => o.id) };
 }
 // O quadro por módulo: o custo e o recebimento de cada um, lado a lado.
+// As colunas da tabela "Por módulo" (prévia e PDF): custo e vendas, nesta ordem.
+const CP_COLUNAS_POR_MODULO = [["estimado", "Custo estimado"], ["realizado", "Custo realizado"],
+  ["vendasEstimadas", "Vendas estimadas"], ["recebido", "Vendas recebidas"], ["aReceber", "Vendas a receber"]];
 function resumoPorModulo(modulos, opcoes) {
   const o = opcoes || {};
   return (modulos || []).filter(Boolean).map((m) => {
     const ff = fisicoFinanceiroDaPrestacao(m, { ...o, regime: o.despesa });
     const rm = recebimentosMensais(m, { ...o, regime: o.entrada });
     return { id: m.id, nome: m.nome || "Módulo", estimado: ff.total.estimado, realizado: ff.total.realizado, aPagar: ff.total.aPagar,
-      saldo: ff.total.saldo, recebido: rm.total.recebido, aReceber: Math.round((rm.total.geral - rm.total.recebido) * 100) / 100 };
+      saldo: ff.total.saldo, vendasEstimadas: Math.round(rm.total.geral * 100) / 100,
+      recebido: rm.total.recebido, aReceber: Math.round((rm.total.geral - rm.total.recebido) * 100) / 100 };
   });
 }
 // O recebimento do cliente na tela da obra usa o mesmo cálculo.
@@ -41670,7 +41680,7 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   const ff = i.ff, cf = i.conferencia, cm = i.custos, rm = i.recebimentos, fc = i.fluxoCaixa;
   const comp = ff && ff.regime === "competencia";
   // 1. resumo
-  const caixas = ff ? [["Custo estimado", moeda(ff.total.estimado)], [comp ? "Custo lançado" : "Custo pago", moeda(ff.total.realizado)]]
+  const caixas = ff ? [["Custo estimado", moeda(ff.total.estimado)], [comp ? "Custo realizado" : "Custo pago", moeda(ff.total.realizado)]]
     .concat(comp ? [] : [["A pagar", moeda(ff.total.aPagar)]])
     .concat(rm ? [["Recebido", moeda(rm.total.recebido)]] : [])
     .concat(fc && !fc.erro ? [["Resultado projetado", moeda(fc.total.resultado)]] : [["Pendências", String(pc.semArquivo + pc.semNumero)]])
@@ -41692,14 +41702,12 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   // por módulo (o empreendimento inteiro)
   const mods = i.modulos;
   if (mods && mods.length) {
-    secao("Por módulo", "Cada módulo é uma obra do empreendimento; a última linha é o empreendimento inteiro.");
-    const ks = ["estimado", "realizado"].concat(comp ? [] : ["aPagar"]).concat(["saldo", "recebido", "aReceber"]);
+    secao("Por módulo", "Cada módulo é uma obra do empreendimento; a última linha é o empreendimento inteiro. Vendas estimadas = recebidas + a receber.");
+    const ks = CP_COLUNAS_POR_MODULO.map((c) => c[0]);
     const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
-    tabela([{ t: "Módulo", w: 44 }, { t: "Custo estimado", w: 24, alinhar: "right" }, { t: comp ? "Custo lançado" : "Custo pago", w: 24, alinhar: "right" }]
-      .concat(comp ? [] : [{ t: "A pagar", w: 22, alinhar: "right" }])
-      .concat([{ t: "Saldo", w: 24, alinhar: "right" }, { t: "Recebido", w: 24, alinhar: "right" }, { t: "A receber", w: 24, alinhar: "right" }]),
-      mods.map((m) => ({ celulas: [m.nome].concat(ks.map((k) => vlr(m[k]))), vermelho: m.saldo < -0.004 ? [ks.indexOf("saldo") + 1] : [] }))
-        .concat([{ total: true, celulas: ["Empreendimento"].concat(ks.map((k) => moeda(mods.reduce((t, m) => t + m[k], 0)))) }]));
+    tabela([{ t: "Módulo", w: 47 }].concat(CP_COLUNAS_POR_MODULO.map((c) => ({ t: c[1], w: 27, alinhar: "right" }))),
+      mods.map((m) => ({ celulas: [m.nome].concat(ks.map((k) => vlr(m[k]))) }))
+        .concat([{ total: true, celulas: ["Empreendimento"].concat(ks.map((k) => moeda(mods.reduce((t, m) => t + (Number(m[k]) || 0), 0)))) }]));
   }
   // 2. físico-financeiro
   if (ff) {
@@ -41720,10 +41728,10 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   }
   // 3. custos mês a mês
   if (cm && cm.meses.length) {
-    cartao("Custos mês a mês", (comp ? "Competência: cada despesa no mês do vencimento." : "Caixa: pago no mês em que saiu; vencido e a pagar no mês do vencimento.")
+    cartao(comp ? "Custos realizados mês a mês" : "Custos mês a mês", (comp ? "Competência: cada despesa no mês do vencimento." : "Caixa: pago no mês em que saiu; vencido e a pagar no mês do vencimento.")
       + (par && par.inicio ? ` O que veio antes de ${dia(par.inicio)} está em Pré-obra.` : ""), alturaDoGrafico(ALT_BARRAS),
-      (x0, y0, lg) => barras(cm.meses, comp ? [["custo", "#0474f4", "Custo lançado"]] : CP_FAIXAS, x0, y0, lg, { mesHoje: (fc && fc.mesHoje) || "" }));
-    const cols = [{ t: "Mês", w: 22 }].concat(comp ? [{ t: "Custo lançado", w: 40, alinhar: "right" }]
+      (x0, y0, lg) => barras(cm.meses, comp ? [["custo", "#0474f4", "Custo realizado"]] : CP_FAIXAS, x0, y0, lg, { mesHoje: (fc && fc.mesHoje) || "" }));
+    const cols = [{ t: "Mês", w: 22 }].concat(comp ? [{ t: "Custo realizado", w: 40, alinhar: "right" }]
       : [{ t: "Pago", w: 30, alinhar: "right" }, { t: "Vencido", w: 30, alinhar: "right" }, { t: "A pagar", w: 30, alinhar: "right" }]).concat([{ t: "Total do mês", w: 34, alinhar: "right" }]);
     const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
     tabela(cols, cm.meses.map((m) => ({ celulas: [m.rotulo].concat(comp ? [vlr(m.custo)] : [vlr(m.pago), vlr(m.vencido), vlr(m.aberto)])
@@ -41734,13 +41742,13 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   // 4. recebimentos mês a mês
   if (rm && rm.meses.length) {
     cartao("Recebimentos mês a mês", (rm.regime === "competencia" ? "Competência: cada parcela no mês do vencimento." : "Caixa: recebido no mês em que entrou; o resto no vencimento.")
-      + " Contrato a assinar: vendas com o contrato pendente e o cronograma da obra. Venda futura: as projeções de venda das unidades e o cronograma.", alturaDoGrafico(ALT_BARRAS),
+      + " Contratos firmes: as vendas feitas (assinadas ou com o contrato pendente) e o cronograma marcado como contrato. Vendas estimadas: as projeções de venda das unidades e o cronograma.", alturaDoGrafico(ALT_BARRAS),
       (x0, y0, lg) => barras(rm.meses, CP_FAIXAS_RECEB, x0, y0, lg, { mesHoje: (fc && fc.mesHoje) || "" }));
     const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
-    tabela([{ t: "Mês", w: 20 }, { t: "Recebido", w: 28, alinhar: "right" }, { t: "Contrato assinado", w: 30, alinhar: "right" },
-      { t: "A assinar", w: 28, alinhar: "right" }, { t: "Venda futura", w: 28, alinhar: "right" }, { t: "Total do mês", w: 30, alinhar: "right" }],
-      rm.meses.map((m) => ({ celulas: [m.rotulo, vlr(m.recebido), vlr(m.assinado), vlr(m.assinar), vlr(m.estimativa), vlr(m.recebido + m.assinado + m.assinar + m.estimativa)] }))
-        .concat([{ total: true, celulas: ["Total", moeda(rm.total.recebido), moeda(rm.total.assinado), moeda(rm.total.assinar), moeda(rm.total.estimativa), moeda(rm.total.geral)] }]),
+    tabela([{ t: "Mês", w: 34 }, { t: "Recebido", w: 37, alinhar: "right" }, { t: "Contratos firmes", w: 37, alinhar: "right" },
+      { t: "Vendas estimadas", w: 37, alinhar: "right" }, { t: "Total do mês", w: 37, alinhar: "right" }],
+      rm.meses.map((m) => ({ celulas: [m.rotulo, vlr(m.recebido), vlr(m.firme), vlr(m.estimativa), vlr(m.recebido + m.firme + m.estimativa)] }))
+        .concat([{ total: true, celulas: ["Total", moeda(rm.total.recebido), moeda(rm.total.firme), moeda(rm.total.estimativa), moeda(rm.total.geral)] }]),
       { compacta: true });
   }
   // 5. fluxo de caixa
@@ -41749,7 +41757,7 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
       secao("Fluxo de caixa", "Sem o término estimado da obra não há como distribuir o custo que falta. Informe o término nos parâmetros da prestação.");
     } else {
       cartao("Fluxo de caixa até o término",
-        `Custo a realizar: ${moeda(fc.aRealizar)} (o custo previsto menos o pago) dividido em ${fc.mesesRestantes} ${fc.mesesRestantes === 1 ? "mês" : "meses"} até o término. Recebimento: o que entrou e, deste mês em diante, os contratos assinados (o atrasado entra no mês atual), os a assinar e a venda futura. Barras: resultado do mês (recebimentos - custos); linha: saldo acumulado do dinheiro.`,
+        `Custo a realizar: ${moeda(fc.aRealizar)} (o custo previsto menos o pago) dividido em ${fc.mesesRestantes} ${fc.mesesRestantes === 1 ? "mês" : "meses"} até o término. Recebimento: o que entrou e, deste mês em diante, os contratos firmes (o atrasado entra no mês atual) e as vendas estimadas. Barras: resultado do mês (recebimentos - custos); linha: saldo acumulado do dinheiro.`,
         alturaDoGrafico(38), (x0, y0, lg) => graficoFluxo(fc.linhas, x0, y0, lg, fc.mesHoje));
       const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
       tabela([{ t: "Mês", w: 18 }, { t: "Custo realizado", w: 26, alinhar: "right" }, { t: "Custo a realizar", w: 26, alinhar: "right" },
@@ -42267,7 +42275,7 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
         {ff && (
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(5, minmax(0, 1fr))", gap: 10 }}>
             {cartao("Custo estimado", ff.total.estimado)}
-            {cartao(comp ? "Custo lançado" : "Custo pago", ff.total.realizado)}
+            {cartao(comp ? "Custo realizado" : "Custo pago", ff.total.realizado)}
             {!comp && cartao("A pagar", ff.total.aPagar, "#0474f4")}
             {rm && cartao("Recebido", rm.total.recebido)}
             {fc && !fc.erro && cartao("Resultado projetado", fc.total.resultado, fc.total.resultado < 0 ? "#b91c1c" : "#166534")}
@@ -42275,25 +42283,22 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
         )}
         {mods && mods.length > 0 && (
           <div style={caixa} data-vk-previa-modulos="1">
-            {titulo(++k, "Por módulo", "Cada módulo é uma obra do empreendimento; abaixo, todos juntos.")}
+            {titulo(++k, "Por módulo", "Cada módulo é uma obra do empreendimento; abaixo, todos juntos. Vendas estimadas = recebidas + a receber.")}
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", minWidth: 680, borderCollapse: "collapse" }}>
-                <thead><tr>{["Módulo", "Custo estimado", comp ? "Custo lançado" : "Custo pago"].concat(comp ? [] : ["A pagar"]).concat(["Saldo", "Recebido", "A receber"]).map((t, j) =>
+                <thead><tr>{["Módulo"].concat(CP_COLUNAS_POR_MODULO.map((c) => c[1])).map((t, j) =>
                   <th key={t} style={{ ...th, textAlign: j ? "right" : "left" }}>{t}</th>)}</tr></thead>
                 <tbody>
                   {mods.map((m) => (
-                    <tr key={m.id}>
+                    <tr key={m.id} data-vk-modulo-linha={m.id}>
                       <td style={td}>{m.nome}</td>
-                      {[m.estimado, m.realizado].concat(comp ? [] : [m.aPagar]).map((v, j) => <td key={j} style={{ ...td, textAlign: "right" }}>{n(v)}</td>)}
-                      <td style={{ ...td, textAlign: "right", color: m.saldo < -0.004 ? "#b91c1c" : "#111827" }}>{n(m.saldo)}</td>
-                      <td style={{ ...td, textAlign: "right" }}>{n(m.recebido)}</td>
-                      <td style={{ ...td, textAlign: "right" }}>{n(m.aReceber)}</td>
+                      {CP_COLUNAS_POR_MODULO.map((c) => <td key={c[0]} style={{ ...td, textAlign: "right" }}>{n(m[c[0]])}</td>)}
                     </tr>
                   ))}
                   <tr style={{ background: "#f6f8fb" }}>
                     <td style={{ ...td, fontWeight: 700 }}>Empreendimento</td>
-                    {["estimado", "realizado"].concat(comp ? [] : ["aPagar"]).concat(["saldo", "recebido", "aReceber"]).map((key) =>
-                      <td key={key} style={{ ...td, textAlign: "right", fontWeight: 700 }}>{moeda(mods.reduce((t, m) => t + m[key], 0))}</td>)}
+                    {CP_COLUNAS_POR_MODULO.map((c) =>
+                      <td key={c[0]} style={{ ...td, textAlign: "right", fontWeight: 700 }}>{moeda(mods.reduce((t, m) => t + (Number(m[c[0]]) || 0), 0))}</td>)}
                   </tr>
                 </tbody>
               </table>
@@ -42302,15 +42307,15 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
         )}
         {cm && cm.meses.length > 0 && (
           <div style={caixa} data-vk-previa-custos="1">
-            {titulo(++k, "Custos mês a mês", comp ? "Competência: cada despesa no mês do vencimento." : "Caixa: pago no mês em que saiu; vencido e a pagar no mês do vencimento.")}
+            {titulo(++k, comp ? "Custos realizados mês a mês" : "Custos mês a mês", comp ? "Competência: cada despesa no mês do vencimento." : "Caixa: pago no mês em que saiu; vencido e a pagar no mês do vencimento.")}
             <GraficoFluxoMensal fluxo={{ meses: cm.meses }} hojeIso={hoje} series={cm.series}
-              faixas={comp ? [["custo", "#0474f4", "Custo lançado"]] : CP_FAIXAS} />
-            {legenda(comp ? [["custo", "#0474f4", "Custo lançado"]] : CP_FAIXAS, cm.meses)}
+              faixas={comp ? [["custo", "#0474f4", "Custo realizado"]] : CP_FAIXAS} />
+            {legenda(comp ? [["custo", "#0474f4", "Custo realizado"]] : CP_FAIXAS, cm.meses)}
           </div>
         )}
         {rm && rm.meses.length > 0 && (
           <div style={caixa} data-vk-previa-receb="1">
-            {titulo(++k, "Recebimentos mês a mês", (rm.regime === "competencia" ? "Competência: cada parcela no vencimento." : "Caixa: recebido no mês em que entrou; o resto no vencimento.") + " Contrato a assinar: vendas com o contrato pendente e o cronograma. Venda futura: as projeções das unidades e o cronograma.")}
+            {titulo(++k, "Recebimentos mês a mês", (rm.regime === "competencia" ? "Competência: cada parcela no vencimento." : "Caixa: recebido no mês em que entrou; o resto no vencimento.") + " Contratos firmes: as vendas feitas (assinadas ou com o contrato pendente) e o cronograma marcado como contrato. Vendas estimadas: as projeções das unidades e o cronograma.")}
             <GraficoFluxoMensal fluxo={{ meses: rm.meses }} hojeIso={hoje} faixas={CP_FAIXAS_RECEB} />
             {legenda(CP_FAIXAS_RECEB, rm.meses)}
           </div>
@@ -42429,13 +42434,12 @@ function RecebimentoDaObraView({ obra, podeEditar, aoSalvar, isMobile, fmtBRL })
   return (
     <div data-vk-recebimento-obra="1" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 14 }}>
       <div style={{ fontSize: 12.5, color: "#4b5563", lineHeight: 1.5 }}>
-        O que já entrou na obra, o que os contratos assinados ainda vão pagar, e a previsão dos contratos a assinar e da venda futura. Vai junto na prestação de contas.
+        O que já entrou na obra, o que os contratos firmes ainda vão pagar e a previsão das vendas estimadas. Vai junto na prestação de contas.
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))", gap: 10 }}>
         {cartao("Recebido", rm.total.recebido)}
-        {cartao("Contrato assinado", rm.total.assinado, "#0474f4")}
-        {cartao("A assinar", rm.total.assinar)}
-        {cartao("Venda futura", rm.total.estimativa, "#3b82f6")}
+        {cartao("Contratos firmes", rm.total.firme, "#0474f4")}
+        {cartao("Vendas estimadas", rm.total.estimativa, "#3b82f6")}
       </div>
       {rm.meses.length > 0 && (
         <div style={caixa}>
@@ -42453,7 +42457,7 @@ function RecebimentoDaObraView({ obra, podeEditar, aoSalvar, isMobile, fmtBRL })
       )}
       <div style={caixa}>
         <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Cronograma de recebimento previsto</div>
-        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10 }}>As vendas registradas entram sozinhas (com o contrato pendente, como "a assinar"), e as unidades com projeção de venda entram como venda futura. Aqui vai o que não está em nenhuma delas.</div>
+        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10 }}>As vendas registradas entram sozinhas como contrato firme, e as unidades com projeção de venda entram como venda estimada. Aqui vai o que não está em nenhuma delas.</div>
         {lista.length === 0 && <div style={{ fontSize: 12.5, color: "#6b7280", marginBottom: 8 }}>Nenhum mês previsto ainda.</div>}
         <div style={{ display: "grid", gap: 8 }}>
           {lista.map((x, k) => (
@@ -42461,8 +42465,8 @@ function RecebimentoDaObraView({ obra, podeEditar, aoSalvar, isMobile, fmtBRL })
               <input type="month" style={inp} value={x.mes || ""} disabled={!podeEditar} onChange={(e) => mudar(k, "mes", e.target.value)} />
               <select style={inp} value={x.tipo === "assinar" ? "assinar" : "estimativa"} disabled={!podeEditar} data-vk-receb-tipo={k}
                 onChange={(e) => mudar(k, "tipo", e.target.value)}>
-                <option value="assinar">Contrato a assinar</option>
-                <option value="estimativa">Venda futura (estimativa)</option>
+                <option value="assinar">Contrato firme</option>
+                <option value="estimativa">Venda estimada</option>
               </select>
               <input style={{ ...inp, textAlign: "right" }} inputMode="decimal" placeholder="0,00"
                 value={x.valor == null ? "" : typeof x.valor === "number" ? x.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : String(x.valor)}
@@ -42915,14 +42919,14 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       const mesXL = (k) => (k === "pre" ? "Pré-obra" : data(k + "-01"));
       if (cmPC && cmPC.meses.length) {
         const comp = cmPC.regime === "competencia";
-        folhaMensal("Custos mensais", ["Mês"].concat(comp ? ["Custo lançado"] : ["Pago", "Vencido", "A pagar"]).concat(["Total"]),
+        folhaMensal("Custos mensais", ["Mês"].concat(comp ? ["Custo realizado"] : ["Pago", "Vencido", "A pagar"]).concat(["Total"]),
           cmPC.meses.map((m) => [mesXL(m.chave)].concat(comp ? [m.custo] : [m.pago, m.vencido, m.aberto]).concat([m.pago + m.vencido + m.aberto + m.custo])),
           ["Total"].concat(comp ? [cmPC.total.custo] : [cmPC.total.pago, cmPC.total.vencido, cmPC.total.aberto]).concat([cmPC.total.geral]));
       }
       if (rmPC && rmPC.meses.length) {
-        folhaMensal("Recebimentos", ["Mês", "Recebido", "Contrato assinado", "A assinar", "Venda futura", "Total"],
-          rmPC.meses.map((m) => [mesXL(m.chave), m.recebido, m.assinado, m.assinar, m.estimativa, m.recebido + m.assinado + m.assinar + m.estimativa]),
-          ["Total", rmPC.total.recebido, rmPC.total.assinado, rmPC.total.assinar, rmPC.total.estimativa, rmPC.total.geral]);
+        folhaMensal("Recebimentos", ["Mês", "Recebido", "Contratos firmes", "Vendas estimadas", "Total"],
+          rmPC.meses.map((m) => [mesXL(m.chave), m.recebido, m.firme, m.estimativa, m.recebido + m.firme + m.estimativa]),
+          ["Total", rmPC.total.recebido, rmPC.total.firme, rmPC.total.estimativa, rmPC.total.geral]);
       }
       if (fcPC && !fcPC.erro) {
         folhaMensal("Fluxo de caixa", ["Mês", "Custo realizado", "Custo a realizar", "Recebido", "A receber previsto", "Resultado do mês", "Acumulado"],
@@ -65279,7 +65283,7 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                     onChange={(e) => setNota({ ...nota, observacao: e.target.value })} /></label>
                 <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12.5, cursor: "pointer" }}>
                   <input type="checkbox" data-vk-nota-pendente="1" checked={!!nota.contratoPendente} onChange={(e) => setNota({ ...nota, contratoPendente: e.target.checked })} />
-                  Contrato pendente de assinatura <span style={{ color: "#6b7280" }}>— o que falta receber entra como "contrato a assinar" no recebimento e na prestação de contas</span>
+                  Contrato pendente de assinatura <span style={{ color: "#6b7280" }}>— continua como contrato firme no recebimento e na prestação de contas</span>
                 </label>
                 <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                   <button style={btn} onClick={() => setNota(null)}>Cancelar</button>
@@ -65556,7 +65560,7 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                   <div data-vk-venda-conferencia="1" style={{ fontSize: 12.5, padding: "8px 12px", borderRadius: 10, background: okP ? "#eef5ff" : "#fffbeb", color: okP ? "#1e40af" : "#92400e" }}>
                     {somaVenda === 0 ? <>Sem forma de pagamento: os <b>{dinheiro(crValor(fv.valor))}</b> entram de uma vez na data prevista.</>
                       : <>Sinal + parcelas + financiamento = <b>{dinheiro(somaVenda)}</b> · venda prevista {dinheiro(crValor(fv.valor))}{confP.faltam > 0 ? ` · faltam ${dinheiro(confP.faltam)}` : " ✓"}</>}
-                    {" "}Entra como venda futura no recebimento e na prestação de contas; não cria contas a receber.
+                    {" "}Entra como venda estimada no recebimento e na prestação de contas; não cria contas a receber.
                   </div>
                 );
               }

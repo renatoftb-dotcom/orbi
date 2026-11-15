@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, fisicoFinanceiroDaPrestacao, conferenciaDaPrestacao, fluxoDeRecebimento, custosMensais, recebimentosMensais, fluxoDeCaixaDaObra, obraDoEmpreendimento, resumoPorModulo, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, linhasParaExportar, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, fisicoFinanceiroDaPrestacao, conferenciaDaPrestacao, fluxoDeRecebimento, custosMensais, recebimentosMensais, fluxoDeCaixaDaObra, obraDoEmpreendimento, resumoPorModulo, CP_COLUNAS_POR_MODULO, CP_FAIXAS_RECEB, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, linhasParaExportar, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -3771,6 +3771,15 @@ teste("empreendimento com módulos: junta tudo numa obra só e resume por módul
   assert.strictEqual(ff.total.estimado, 14000); assert.strictEqual(ff.total.realizado, 3000); assert.strictEqual(ff.total.aPagar, 1000);
   const r = modulo.resumoPorModulo([m1, m2], { despesa: "caixa", entrada: "caixa", hoje: "2026-11-16" });
   assert.deepStrictEqual(r.map((x) => [x.nome, x.estimado, x.realizado, x.aPagar, x.recebido]), [["Módulo 1", 10000, 3000, 0, 5000], ["Módulo 2", 4000, 0, 1000, 0]]);
+  for (const x of r) assert.strictEqual(Math.round((x.recebido + x.aReceber) * 100), Math.round(x.vendasEstimadas * 100));
+  const rmF = modulo.recebimentosMensais({ vendas: [{ id: "vA", unidadeId: "u1", contratoPendente: true }, { id: "vB", unidadeId: "u2" }],
+    contasPagar: [{ id: "a", contaId: "venda_imovel", vendaId: "vA", valor: 100, pago: false, vencimento: "2026-12-10" },
+      { id: "b", contaId: "venda_imovel", vendaId: "vB", valor: 50, pago: false, vencimento: "2026-12-10" }],
+    unidadesVenda: [{ id: "u3", projecao: { parcelas: [{ vencimento: "2027-01-10", valor: 70 }] } }] }, { regime: "caixa" });
+  assert.strictEqual(rmF.total.firme, 150); assert.strictEqual(rmF.total.estimativa, 70); assert.strictEqual(rmF.total.geral, 220);
+  assert.strictEqual(rmF.meses.find((m) => m.chave === "2026-12").firme, 150);
+  assert.deepStrictEqual(modulo.CP_FAIXAS_RECEB.map((f) => f[2]), ["Recebido", "Contratos firmes", "Vendas estimadas"]);
+  assert.deepStrictEqual(modulo.CP_COLUNAS_POR_MODULO.map((c) => c[1]), ["Custo estimado", "Custo realizado", "Vendas estimadas", "Vendas recebidas", "Vendas a receber"]);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

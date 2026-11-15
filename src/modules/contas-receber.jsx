@@ -1226,7 +1226,7 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                     onChange={(e) => setNota({ ...nota, observacao: e.target.value })} /></label>
                 <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12.5, cursor: "pointer" }}>
                   <input type="checkbox" data-vk-nota-pendente="1" checked={!!nota.contratoPendente} onChange={(e) => setNota({ ...nota, contratoPendente: e.target.checked })} />
-                  Contrato pendente de assinatura <span style={{ color: "#6b7280" }}>— o que falta receber entra como "contrato a assinar" no recebimento e na prestação de contas</span>
+                  Contrato pendente de assinatura <span style={{ color: "#6b7280" }}>— continua como contrato firme no recebimento e na prestação de contas</span>
                 </label>
                 <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                   <button style={btn} onClick={() => setNota(null)}>Cancelar</button>
@@ -1503,7 +1503,7 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                   <div data-vk-venda-conferencia="1" style={{ fontSize: 12.5, padding: "8px 12px", borderRadius: 10, background: okP ? "#eef5ff" : "#fffbeb", color: okP ? "#1e40af" : "#92400e" }}>
                     {somaVenda === 0 ? <>Sem forma de pagamento: os <b>{dinheiro(crValor(fv.valor))}</b> entram de uma vez na data prevista.</>
                       : <>Sinal + parcelas + financiamento = <b>{dinheiro(somaVenda)}</b> · venda prevista {dinheiro(crValor(fv.valor))}{confP.faltam > 0 ? ` · faltam ${dinheiro(confP.faltam)}` : " ✓"}</>}
-                    {" "}Entra como venda futura no recebimento e na prestação de contas; não cria contas a receber.
+                    {" "}Entra como venda estimada no recebimento e na prestação de contas; não cria contas a receber.
                   </div>
                 );
               }
