@@ -4301,7 +4301,13 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     }
     let zMax = 3; for (const p of pavs) { zMax = Math.max(zMax, p.nivel + Math.max(0, ...(p.paredes || []).map((w) => w.h || 0)) + 0.3); }
     for (const t of cortesTel) zMax = Math.max(zMax, t.za + 0.3, t.zb + 0.3);
-    const s0 = -2.4, s1 = Lc + 2.2, z0 = -1.1, z1 = zMax + 0.6, mg = 36 * dpr;
+    // estrutura no corte (opção do painel Estrutura): pilares, vigas, baldrames,
+    // blocos/sapatas e o começo das estacas (com quebra)
+    const estC = estrutura.ativa && estrutura.noCorte && estPorPav._calc ? estPorPav : null;
+    const fundC = estC && estDescida ? estDescida.fundacao || [] : [];
+    const zFund = fundC.length ? -Math.max(...fundC.map((f) => (f.bloco || f.sapata || { h: 0 }).h)) - 0.30 - (fundC.some((f) => f.estacas) ? 1.2 : 0.2) : 0;
+    // zFund: até onde as estacas são desenhadas (com quebra); embaixo, espaço para o título
+    const s0 = -2.4, s1 = Lc + 2.2, z0 = fundC.length ? Math.min(-1.1, zFund - 1.0) : -1.1, z1 = zMax + 0.6, mg = 36 * dpr;
     const k = Math.min((W - 2 * mg) / (s1 - s0), (Hc - 2 * mg) / (z1 - z0));
     const ox = (W - (s1 - s0) * k) / 2 - s0 * k, oy = Hc - (Hc - (z1 - z0) * k) / 2 + z0 * k;
     const X = (sv) => ox + sv * k, Y = (zv) => oy - zv * k;
@@ -4347,6 +4353,36 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         ret(e0, e1, p.nivel + (o.peit || 0), p.nivel + (o.peit || 0) + o.alt, porta ? "#ffffff" : "#e6f0fb", "#9ca3af", 1, { pav: p.id, key: "o" + o.id });
       }
     }
+    // estrutura: peças além da linha (vistas, em contorno) e peças cortadas (hachura de concreto)
+    const pecasEst = [];
+    if (estC) {
+      const id0 = (estC._ids || [])[0];
+      for (const p of pavs) {
+        const e = estC[p.id]; if (!e) continue;
+        for (const pl of e.pilares || []) pecasEst.push({ pts: esCantosPilar(pl), za: p.nivel + (pl.base || 0), zb: p.nivel + (pl.topo != null ? pl.topo : 2.8), al: { pav: p.id, key: "e" + pl.id } });
+        for (const v of e.vigas || []) {
+          const L = Math.hypot(v.b.x - v.a.x, v.b.y - v.a.y); if (L < 0.05) continue;
+          const nx = -(v.b.y - v.a.y) / L * v.b_ / 2, ny = (v.b.x - v.a.x) / L * v.b_ / 2, topo = v.baldrame ? 0 : (v.topo || 2.8);
+          pecasEst.push({ pts: [{ x: v.a.x + nx, y: v.a.y + ny }, { x: v.b.x + nx, y: v.b.y + ny }, { x: v.b.x - nx, y: v.b.y - ny }, { x: v.a.x - nx, y: v.a.y - ny }], za: p.nivel + topo - v.h, zb: p.nivel + topo, al: { pav: p.id, key: "e" + v.id }, viga: true });
+        }
+        if (p.id === id0) for (const f of fundC) {
+          const pl = (e.pilares || []).find((x) => x.id === f.id), bl = f.bloco || f.sapata; if (!pl || !bl) continue;
+          const c0 = Math.cos(pl.ang || 0), s0_ = Math.sin(pl.ang || 0), loc = (uu, vv) => ({ x: pl.x + uu * c0 - vv * s0_, y: pl.y + uu * s0_ + vv * c0 });
+          const zt = p.nivel + (pl.base || 0);
+          pecasEst.push({ pts: [loc(-bl.L / 2, -bl.B / 2), loc(bl.L / 2, -bl.B / 2), loc(bl.L / 2, bl.B / 2), loc(-bl.L / 2, bl.B / 2)], za: zt - bl.h, zb: zt, al: { pav: p.id, key: "e" + pl.id } });
+          for (const ec of f.estacas || []) {
+            const q = loc(ec.x, ec.y), r = f.D / 2;
+            pecasEst.push({ pts: [{ x: q.x - r, y: q.y - r }, { x: q.x + r, y: q.y - r }, { x: q.x + r, y: q.y + r }, { x: q.x - r, y: q.y + r }], za: Math.max(zFund, zt - bl.h - f.L), zb: zt - bl.h, al: { pav: p.id, key: "e" + pl.id }, estaca: f, quebra: zt - bl.h - f.L < zFund });
+          }
+        }
+      }
+      // vistas: atrás da linha, até a profundidade do corte, do mais longe ao mais perto
+      const vistasE = pecasEst.filter((pc) => !tpIntervalosLinha(pc.pts, a0, u, n).length).map((pc) => ({ pc, d: Math.min(...pc.pts.map(D)) })).filter((x) => x.d > 0 && x.d <= prof).sort((x, y) => y.d - x.d);
+      for (const { pc } of vistasE) {
+        const ss = pc.pts.map(S), sa = Math.max(s0, Math.min(...ss)), sb = Math.min(s1, Math.max(...ss)); if (sb <= sa) continue;
+        ctx.setLineDash(pc.za < 0 ? [4 * dpr, 3 * dpr] : []); ret(sa, sb, pc.za, pc.zb, null, "#64748b", 1, pc.al); ctx.setLineDash([]);
+      }
+    }
     // 2) lajes e pisos cortados
     for (const p of pavs) for (const [ia, a] of (p.areas || []).entries()) {
       if (!a.pts || a.pts.length < 3) continue;
@@ -4386,6 +4422,28 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       cotasEsq.push({ s: sCota, zb, zp: porta ? zb : zp, zv, dir: sv > Lc / 2 });
       ctx.strokeStyle = "#111827"; ctx.lineWidth = 1 * dpr;
       if (!porta) { ctx.beginPath(); for (const f of [0.4, 0.6]) { ctx.moveTo(X(xa + larg * f), Y(zp)); ctx.lineTo(X(xa + larg * f), Y(zv)); } ctx.stroke(); }
+    }
+    // 4a) estrutura cortada: concreto com hachura; estaca com quebra e legenda
+    if (estC) {
+      const hach = (sa, sb, za, zb) => {
+        const x0 = X(sa), x1 = X(sb), y0 = Y(zb), y1 = Y(za); ctx.save(); ctx.beginPath(); ctx.rect(x0, y0, x1 - x0, y1 - y0); ctx.clip();
+        ctx.strokeStyle = "rgba(55,65,81,0.55)"; ctx.lineWidth = 0.8 * dpr; ctx.beginPath(); const p6 = 6 * dpr;
+        for (let t = x0 - (y1 - y0); t < x1; t += p6) { ctx.moveTo(t, y1); ctx.lineTo(t + (y1 - y0), y0); } ctx.stroke(); ctx.restore();
+      };
+      const legendas = [];
+      for (const pc of pecasEst) for (const [sa, sb] of tpIntervalosLinha(pc.pts, a0, u, n)) {
+        if (sb < s0 || sa > s1) continue;
+        ret(sa, sb, pc.za, pc.zb, "#d6dae0", "#374151", 1.2, pc.al); hach(sa, sb, pc.za, pc.zb);
+        if (pc.quebra) { // zigue-zague de quebra no pé da estaca
+          const xm = X((sa + sb) / 2), w2 = Math.max(6 * dpr, (sb - sa) * k * 0.7), y = Y(pc.za);
+          ctx.fillStyle = "#ffffff"; ctx.fillRect(xm - w2, y - 1 * dpr, 2 * w2, 4 * dpr); ctx.strokeStyle = "#374151"; ctx.lineWidth = 1 * dpr;
+          ctx.beginPath(); ctx.moveTo(xm - w2, y); ctx.lineTo(xm - w2 / 3, y - 4 * dpr); ctx.lineTo(xm + w2 / 3, y + 4 * dpr); ctx.lineTo(xm + w2, y); ctx.stroke();
+        }
+        if (pc.estaca && !legendas.some((l) => Math.abs(l.s - sb) < 0.6)) legendas.push({ s: sb, z: pc.za, t: `Ø${Math.round(pc.estaca.D * 100)} × ${tpFmt(pc.estaca.L, 1)} m` });
+      }
+      ctx.font = `500 ${10 * dpr}px system-ui, sans-serif`; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+      for (const l of legendas) { const x = X(l.s) + 4 * dpr, y = Y(l.z) - 8 * dpr; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(255,255,255,0.95)"; ctx.lineWidth = 3 * dpr; ctx.strokeText(l.t, x, y); ctx.fillStyle = "#374151"; ctx.fillText(l.t, x, y); }
+      ctx.textBaseline = "alphabetic";
     }
     // 4b) telhado cortado (telha + estrutura numa faixa só)
     for (const t of cortesTel) {
@@ -4454,7 +4512,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     ctx.textBaseline = "alphabetic";
     // título
     ctx.font = `700 ${13 * dpr}px system-ui, sans-serif`; ctx.fillStyle = "#111827"; ctx.textAlign = "center";
-    const yt = Math.min(Hc - 12 * dpr, Y(0) + 0.45 * k + 26 * dpr), tt = `CORTE ${tpNomeCorte(ct)}`, xt = X((0 + Lc) / 2);
+    const yt = Math.min(Hc - 12 * dpr, Y(fundC.length ? zFund : -0.45) + 26 * dpr), tt = `CORTE ${tpNomeCorte(ct)}`, xt = X((0 + Lc) / 2);
     ctx.fillText(tt, xt, yt); const wt = ctx.measureText(tt).width; ctx.fillRect(xt - wt / 2, yt + 4 * dpr, wt, 1.5 * dpr);
     ctx.font = `500 ${10 * dpr}px system-ui, sans-serif`; ctx.fillStyle = "#6b7280"; ctx.fillText("sem escala", xt, yt + 18 * dpr); ctx.textAlign = "start";
   };
@@ -4530,7 +4588,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // o círculo do aviso some sozinho
   useEffect(() => { if (!focoEst) return; const t = setTimeout(() => setFocoEst(null), 4000); return () => clearTimeout(t); }, [focoEst]);
   useEffect(() => { const t = setTimeout(() => atual.current.desenharPlanta(), 230); return () => clearTimeout(t); }, [painelOculto]); // escala gráfica acompanha o painel
-  useEffect(() => { if (modo !== "corte") return; const id = requestAnimationFrame(() => desenharCorte()); return () => cancelAnimationFrame(id); }, [modo, cortes, verCorte, paredes, areas, dadosPav, pavimentos, pavAtivo, sel, selOutros]);
+  useEffect(() => { if (modo !== "corte") return; const id = requestAnimationFrame(() => desenharCorte()); return () => cancelAnimationFrame(id); }, [modo, cortes, verCorte, paredes, areas, dadosPav, pavimentos, pavAtivo, sel, selOutros, estPorPav, estrutura.noCorte]);
   // clique no corte: seleciona a peça (Ctrl soma, Shift tira); em outro pavimento, vai para ele
   const cliqueCorte = (e) => {
     const c = corteRef.current; if (!c) return;
@@ -6586,6 +6644,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 </label>
                 <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#374151", cursor: "pointer", marginTop: 6 }}>
                   <input type="checkbox" checked={!!estrutura.so3d} onChange={(e) => setEstrutura((x) => ({ ...x, so3d: e.target.checked, mostrar: true }))} /> Só a estrutura no 3D
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#374151", cursor: "pointer", marginTop: 6 }}>
+                  <input type="checkbox" checked={!!estrutura.noCorte} onChange={(e) => setEstrutura((x) => ({ ...x, noCorte: e.target.checked }))} /> Mostrar nos cortes
                 </label>
                 {grupoQ("est-av", `Verificações${estAvisos.length ? ` (${estAvisos.length})` : ""}`, nNbr + nComp ? `${nNbr + nComp} a resolver` : "ok")}
                 {!qFechado("est-av") && (
