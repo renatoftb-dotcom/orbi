@@ -4222,6 +4222,21 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         m.position.set((v.a.x + v.b.x) / 2 - cx, v.baldrame ? -v.h / 2 : (v.topo || Hp) - v.h / 2, (v.a.y + v.b.y) / 2 - cz);
         m.rotation.y = -Math.atan2(v.b.y - v.a.y, v.b.x - v.a.x); m.userData.est = v.id; m.userData.chave = "e" + v.id; G.add(m); contorno(g, m, mk ? 0x0474f4 : 0x4b5563);
       }
+      // fundação (pavimento mais baixo): bloco ou sapata com o topo no fundo do
+      // baldrame e as estacas (brocas) descendo dele; clicar seleciona o pilar
+      if (estDescida && estP === estPorPav[(estPorPav._ids || [])[0]]) {
+        const matF = new THREE.MeshLambertMaterial({ color: 0xa8a29e }), matFs = new THREE.MeshLambertMaterial({ color: 0x8dbbff });
+        for (const f of estDescida.fundacao || []) {
+          const pl = estP.pilares.find((x) => x.id === f.id), bl = f.bloco || f.sapata; if (!pl || !bl) continue;
+          const mk = marcadas.has("e" + pl.id), z0 = pl.base != null ? pl.base : 0, ang = pl.ang || 0, c = Math.cos(ang), sn = Math.sin(ang);
+          const gb = new THREE.BoxGeometry(bl.L, bl.h, bl.B), mb = new THREE.Mesh(gb, mk ? matFs : matF);
+          mb.position.set(pl.x - cx, z0 - bl.h / 2, pl.y - cz); mb.rotation.y = -ang; mb.userData.est = pl.id; mb.userData.chave = "e" + pl.id; G.add(mb); contorno(gb, mb, mk ? 0x0474f4 : 0x57534e);
+          for (const e of f.estacas || []) {
+            const ge = new THREE.CylinderGeometry(f.D / 2, f.D / 2, f.L, 16), me = new THREE.Mesh(ge, mk ? matFs : matF);
+            me.position.set(pl.x + e.x * c - e.y * sn - cx, z0 - bl.h - f.L / 2 + 0.05, pl.y + e.x * sn + e.y * c - cz); me.userData.est = pl.id; me.userData.chave = "e" + pl.id; G.add(me);
+          }
+        }
+      }
     }
     };
     for (const p of pavsOrd) {

@@ -65493,70 +65493,39 @@ const TEMPLATES_PROPOSTA = [
 // Quando só há 1 modelo ativo a barra ainda é mostrada — feedback visual
 // de qual modelo está ativo, mesmo sem opção de troca.
 //
-// Cada botão tem:
-//   - Thumbnail visual (40×52) com mini-representação do layout
-//   - Nome curto do modelo (Padrão, Direto, etc.)
-// Indicação visual de modelo ativo: borda preta 2px + fundo cinza claro.
+// Cada botão é um chip pequeno: marca de cor do modelo + nome curto.
+// Ativo: borda e texto azuis. Substitui a antiga tela de escolha de modelo.
 function TemplateBarProposta({ templateId, onChange, lockEdicao }) {
   if (lockEdicao) return null;
+  // Barra pequena: é aqui (e só aqui) que se troca o modelo da proposta.
   return (
-    <div style={{
+    <div className="no-print" data-tutorial-id="modelo-barra" data-vk-modelo-barra="1" style={{
       position:"sticky", top:0, zIndex:20, background:"#fff",
-      borderBottom:"2px solid #d1d5db", padding:"10px 16px",
-      display:"flex", alignItems:"center", gap:10, overflowX:"auto",
+      borderBottom:"1px solid rgba(38,36,33,0.12)", padding:"6px 16px",
+      display:"flex", alignItems:"center", gap:6, overflowX:"auto",
       fontFamily:"'Inter', system-ui, -apple-system, sans-serif",
     }}>
-      <span style={{
-        fontSize:10, fontWeight:700, color:"#9ca3af",
-        textTransform:"uppercase", letterSpacing:"0.1em",
-        flexShrink:0, marginRight:4,
-      }}>
-        Modelo:
-      </span>
+      <span style={{ fontSize:11, color:"#828a98", flexShrink:0, marginRight:2 }}>Modelo</span>
       {TEMPLATES_PROPOSTA.map(t => {
         const ativo = templateId === t.id;
         return (
           <button
             key={t.id}
+            type="button"
+            data-vk-modelo={t.id}
+            aria-pressed={ativo}
+            title={t.desc}
             onClick={() => onChange(t.id)}
             style={{
-              flexShrink:0,
-              padding: ativo ? "5px 9px 4px" : "6px 10px 5px",
-              border: ativo ? "2px solid #111" : "2px solid #d1d5db",
-              background: ativo ? "#fafbfc" : "#fff",
-              borderRadius: 12, cursor:"pointer", fontFamily:"inherit",
-              display:"flex", flexDirection:"column", alignItems:"center", gap:3,
-              minWidth:78, transition:"all 0.15s",
+              flexShrink:0, display:"inline-flex", alignItems:"center", gap:6,
+              padding:"3px 10px", borderRadius:999, cursor:"pointer", fontFamily:"inherit",
+              fontSize:12, fontWeight: ativo ? 600 : 500, lineHeight:"18px",
+              border: ativo ? "1px solid #0474f4" : "1px solid rgba(38,36,33,0.16)",
+              background: ativo ? "#eaf3ff" : "#fff",
+              color: ativo ? "#0474f4" : "#374151",
             }}>
-            {/* Thumbnail visual de cada modelo. SVG mini-mockup. */}
-            <span aria-hidden="true" style={{ display:"inline-block", width:40, height:52 }}>
-              {t.id === "01-editorial" && (
-                <svg viewBox="0 0 40 52" width="40" height="52" style={{ borderRadius:3, border:"0.5px solid #e5e7eb", background:"#fff" }}>
-                  <rect x="3" y="3" width="11" height="6" fill="#111" rx="1"/>
-                  <line x1="3" y1="14" x2="37" y2="14" stroke="#111" strokeWidth="1"/>
-                  <line x1="3" y1="20" x2="32" y2="20" stroke="#9ca3af" strokeWidth="0.5"/>
-                  <line x1="3" y1="24" x2="34" y2="24" stroke="#9ca3af" strokeWidth="0.5"/>
-                  <line x1="3" y1="32" x2="20" y2="32" stroke="#9ca3af" strokeWidth="0.7"/>
-                  <line x1="3" y1="38" x2="30" y2="38" stroke="#9ca3af" strokeWidth="0.5"/>
-                  <line x1="3" y1="42" x2="28" y2="42" stroke="#9ca3af" strokeWidth="0.5"/>
-                  <line x1="3" y1="46" x2="32" y2="46" stroke="#9ca3af" strokeWidth="0.5"/>
-                </svg>
-              )}
-              {t.id === "02-direto" && (
-                <svg viewBox="0 0 40 52" width="40" height="52" style={{ borderRadius:3, border:"0.5px solid #e5e7eb", background:"#fff" }}>
-                  <rect x="0" y="0" width="40" height="18" fill="#fbbf24"/>
-                  <text x="3" y="13" fontSize="6" fontWeight="800" fill="#111">PROPOSTA</text>
-                  <line x1="3" y1="24" x2="34" y2="24" stroke="#fbbf24" strokeWidth="1"/>
-                  <line x1="3" y1="29" x2="28" y2="29" stroke="#374151" strokeWidth="0.5"/>
-                  <line x1="3" y1="33" x2="32" y2="33" stroke="#9ca3af" strokeWidth="0.5"/>
-                  <line x1="3" y1="40" x2="30" y2="40" stroke="#fbbf24" strokeWidth="1"/>
-                  <line x1="3" y1="45" x2="34" y2="45" stroke="#9ca3af" strokeWidth="0.5"/>
-                </svg>
-              )}
-            </span>
-            <span style={{ fontSize:11, fontWeight: ativo ? 600 : 500, color: ativo ? "#111" : "#374151" }}>
-              {t.label}
-            </span>
+            <span aria-hidden="true" style={{ width:8, height:8, borderRadius:2, background:t.accent, flexShrink:0 }} />
+            {t.label}
           </button>
         );
       })}
@@ -78426,12 +78395,13 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   });
   const passoAtual = !propostaData ? (definicoesOk && referencia ? 2 : 1)
     : !etapaPagamentoConfirmada ? 3
-    : (!modeloEscolhido || !templateEdicaoConfirmada) ? 4 : 5;
+    : !templateEdicaoConfirmada ? 4 : 5;
   // Voltar a uma etapa já feita, sem perder o que foi preenchido nas outras.
   const irParaEtapa = (n) => {
     if (n <= 2) { setEtapaPagamentoConfirmada(false); setPropostaData(null); return; }
     if (n === 3) { setEtapaPagamentoConfirmada(false); return; }
-    if (n === 4) { setModeloEscolhido(null); setEtapaPagamentoConfirmada(true); }
+    // a proposta (etapa 4) é o próprio documento: sobe para o topo dele
+    if (n === 4) { try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) { /* sem janela */ } }
   };
   const mostrarEtapas = !modoVer && !propostaReadOnlyForce && modoAbertura !== "ver";
   const travaAtePagamento = conferencia.some((c) => c.etapa <= 2 && c.bloqueia && !c.ok);
@@ -78676,6 +78646,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             // useStates internos, que ficariam stale com o snapshot anterior).
             gerarProposta();
             setPreviewRemountKey(k => k + 1);
+            // sem tela de escolha de modelo: vai direto para a proposta, no
+            // modelo já usado (ou o Padrão); a troca fica na barrinha do topo
+            setModeloEscolhido((m) => m || "01-editorial");
+            setTemplateEdicaoConfirmada(true);
             setEtapaPagamentoConfirmada(true);
           }}
         />
@@ -78686,7 +78660,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     // entre os templates disponíveis. Aparece UMA vez por orçamento (após
     // etapa de pagamento, antes do template de edição). Pulada quando já
     // tem modeloEscolhido (vindo do snapshot) ou em modo read-only.
-    if (!modeloEscolhido && !propostaReadOnlyForce) {
+    // Não há mais tela própria: a escolha fica na barra pequena no topo da
+    // proposta. Este bloco só segura algum caminho antigo sem modelo.
+    if (false && !modeloEscolhido && !propostaReadOnlyForce) {
       return (<>
         {etapasEl}
         <EscolhaModeloOrcamento
@@ -78751,7 +78727,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     // Também passa o templateId escolhido na tela de seleção (Fase 6e).
     const liveDataParaModelo = {
       ...liveData,
-      ...(modeloEscolhido ? { templateId: modeloEscolhido } : {}),
+      templateId: modeloEscolhido || liveData.templateId || "01-editorial",
       ...(templateTextos || templateValores || templateFormaPagamento
         ? { template: { textos: templateTextos, valores: templateValores, formaPagamento: templateFormaPagamento } }
         : {}),
@@ -95158,6 +95134,21 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         m.position.set((v.a.x + v.b.x) / 2 - cx, v.baldrame ? -v.h / 2 : (v.topo || Hp) - v.h / 2, (v.a.y + v.b.y) / 2 - cz);
         m.rotation.y = -Math.atan2(v.b.y - v.a.y, v.b.x - v.a.x); m.userData.est = v.id; m.userData.chave = "e" + v.id; G.add(m); contorno(g, m, mk ? 0x0474f4 : 0x4b5563);
       }
+      // fundação (pavimento mais baixo): bloco ou sapata com o topo no fundo do
+      // baldrame e as estacas (brocas) descendo dele; clicar seleciona o pilar
+      if (estDescida && estP === estPorPav[(estPorPav._ids || [])[0]]) {
+        const matF = new THREE.MeshLambertMaterial({ color: 0xa8a29e }), matFs = new THREE.MeshLambertMaterial({ color: 0x8dbbff });
+        for (const f of estDescida.fundacao || []) {
+          const pl = estP.pilares.find((x) => x.id === f.id), bl = f.bloco || f.sapata; if (!pl || !bl) continue;
+          const mk = marcadas.has("e" + pl.id), z0 = pl.base != null ? pl.base : 0, ang = pl.ang || 0, c = Math.cos(ang), sn = Math.sin(ang);
+          const gb = new THREE.BoxGeometry(bl.L, bl.h, bl.B), mb = new THREE.Mesh(gb, mk ? matFs : matF);
+          mb.position.set(pl.x - cx, z0 - bl.h / 2, pl.y - cz); mb.rotation.y = -ang; mb.userData.est = pl.id; mb.userData.chave = "e" + pl.id; G.add(mb); contorno(gb, mb, mk ? 0x0474f4 : 0x57534e);
+          for (const e of f.estacas || []) {
+            const ge = new THREE.CylinderGeometry(f.D / 2, f.D / 2, f.L, 16), me = new THREE.Mesh(ge, mk ? matFs : matF);
+            me.position.set(pl.x + e.x * c - e.y * sn - cx, z0 - bl.h - f.L / 2 + 0.05, pl.y + e.x * sn + e.y * c - cz); me.userData.est = pl.id; me.userData.chave = "e" + pl.id; G.add(me);
+          }
+        }
+      }
     }
     };
     for (const p of pavsOrd) {
@@ -101244,32 +101235,12 @@ export default function ModuloClientesFornecedores() {
             posicao: "top", autoMs: 2400,
             acao: "click",
           },
-          // ── Tela de Escolha de Modelo de Orçamento ──
-          // Mostra um modelo de cada vez. Tutorial demonstra a navegação:
-          // clica seta direita (vê o "Direto"), volta com seta esquerda
-          // (volta pro "Padrão"), e confirma com "Usar este modelo".
+          // ── Modelo da proposta: barra pequena no topo do preview ──
           {
-            targetId: "modelo-preview-container",
-            titulo: "Escolha o modelo",
-            descricao: "Use as setas pra ver os modelos disponíveis.",
-            posicao: "top", autoMs: 3000,
-          },
-          {
-            targetId: "modelo-seta-direita",
-            cursorOnly: true, autoMs: 1800,
-            acao: "click",
-          },
-          {
-            targetId: "modelo-seta-esquerda",
-            cursorOnly: true, autoMs: 1800,
-            acao: "click",
-          },
-          {
-            targetId: "modelo-usar",
-            titulo: "Usar este modelo",
-            descricao: "Vamos seguir com o modelo Padrão.",
-            posicao: "top", autoMs: 2400,
-            acao: "click",
+            targetId: "modelo-barra",
+            titulo: "Modelo da proposta",
+            descricao: "O modelo se troca aqui em cima, a qualquer momento.",
+            posicao: "bottom", autoMs: 3000,
           },
           // ── Proposta Preview: gerar PDF ──
           {
