@@ -574,6 +574,9 @@ function Obras({ data, save, obraInicialId }) {
   const [filtro, setFiltro] = useState("andamento"); // "andamento" | "concluidas" | "todas"
   // obraInicialId: aberta direto de outra tela (Contas a receber)
   const [obraAbertaId, setObraAbertaId] = useState(obraInicialId || null);
+  // Empreendimento com mais de um módulo: uma linha só na lista; escolhida,
+  // abre a lista dos módulos dele
+  const [empAbertoId, setEmpAbertoId] = useState(null);
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
   // A Entrada aberta daqui, antes de escolher a obra: a nota chega na mão e
   // entra; de qual obra ela é se diz depois de ler. Quando a pessoa segue,
@@ -646,6 +649,53 @@ function Obras({ data, save, obraInicialId }) {
     );
   }
 
+  // os módulos de um empreendimento, para escolher qual abrir
+  const ehEmp = (c) => !!c && typeof ehEmpreendimento === "function" && ehEmpreendimento(c);
+  const modulosDe = (clienteId, lista) => (lista || obras).filter(o => o && o.clienteId === clienteId);
+  const empAberto = empAbertoId ? clientes.find(c => c.id === empAbertoId) : null;
+  if (empAberto) {
+    const mods = modulosDe(empAberto.id, obrasFiltradas.length ? obrasFiltradas : obras);
+    return (
+      <PageContainer>
+        <button onClick={() => setEmpAbertoId(null)} style={{ background: "none", border: "none", padding: 0, fontSize: 13, color: "#4b5563", cursor: "pointer", fontFamily: "inherit", marginBottom: 12 }}>← Obras</button>
+        <div style={{ marginBottom: 16 }}>
+          <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>{empAberto.nome}</h2>
+          <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>Empreendimento · {mods.length} módulo{mods.length !== 1 ? "s" : ""} — escolha o módulo</div>
+        </div>
+        <ListaDeSelecao isMobile={isMobile} nomeDoItem={["módulo", "módulos"]} placeholder="Procurar módulo…"
+          itens={mods.map(o => ({ id: o.id, titulo: o.nome || o.referencia || "Módulo",
+            etiqueta: o.status === "concluida" ? "Concluído" : "", corEtiqueta: "#16a34a", fundoEtiqueta: "#f0fdf4" }))}
+          aoEscolher={(it) => setObraAbertaId(it.id)} vazio="Nenhum módulo." />
+      </PageContainer>
+    );
+  }
+  // na lista: um empreendimento com vários módulos vira uma linha só
+  const itensDaLista = [];
+  const empJaListado = new Set();
+  for (const obra of obrasFiltradas) {
+    const cli = clientes.find(c => c.id === obra.clienteId) || null;
+    const mods = cli && ehEmp(cli) ? modulosDe(cli.id, obrasFiltradas) : [];
+    if (mods.length > 1) {
+      if (empJaListado.has(cli.id)) continue;
+      empJaListado.add(cli.id);
+      itensDaLista.push({ id: "emp:" + cli.id, titulo: cli.nome || "Empreendimento",
+        subtitulo: `${mods.length} módulos`,
+        busca: mods.map(o => [o.nome, o.referencia, o.cidade].filter(Boolean).join(" ")).join(" "),
+        etiqueta: "Empreendimento", corEtiqueta: "#0474f4", fundoEtiqueta: "#eef5ff" });
+      continue;
+    }
+    const cliente = nomeCliente(obra.clienteId);
+    const nomeObra = obra.nome || obra.referencia || "Obra";
+    const igual = String(nomeObra).trim().toLowerCase() === String(cliente).trim().toLowerCase();
+    const concluida = obra.status === "concluida";
+    itensDaLista.push({
+      id: obra.id, titulo: cliente, subtitulo: igual ? "" : nomeObra,
+      busca: [nomeObra, obra.referencia, obra.cidade].filter(Boolean).join(" "),
+      etiqueta: concluida ? "Concluída" : "", corEtiqueta: "#16a34a", fundoEtiqueta: "#f0fdf4",
+      apagado: !clientes.some(c => c.id === obra.clienteId),
+    });
+  }
+
   return (
     <PageContainer>
       <div style={{ marginBottom:16 }}>
@@ -666,19 +716,8 @@ function Obras({ data, save, obraInicialId }) {
           mesma ordem; a busca filtra enquanto se digita. */}
       <ListaDeSelecao isMobile={isMobile} nomeDoItem={["obra", "obras"]}
         placeholder={isMobile ? "Procurar obra ou cliente…" : "Procurar obra pelo nome, cliente ou cidade…"}
-        itens={obrasFiltradas.map(obra => {
-          const cliente = nomeCliente(obra.clienteId);
-          const nomeObra = obra.nome || obra.referencia || "Obra";
-          const igual = String(nomeObra).trim().toLowerCase() === String(cliente).trim().toLowerCase();
-          const concluida = obra.status === "concluida";
-          return {
-            id: obra.id, titulo: cliente, subtitulo: igual ? "" : nomeObra,
-            busca: [nomeObra, obra.referencia, obra.cidade].filter(Boolean).join(" "),
-            etiqueta: concluida ? "Concluída" : "", corEtiqueta: "#16a34a", fundoEtiqueta: "#f0fdf4",
-            apagado: !clientes.some(c => c.id === obra.clienteId),
-          };
-        })}
-        aoEscolher={(it) => setObraAbertaId(it.id)}
+        itens={itensDaLista}
+        aoEscolher={(it) => (String(it.id).indexOf("emp:") === 0 ? setEmpAbertoId(String(it.id).slice(4)) : setObraAbertaId(it.id))}
         topo={
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             <button onClick={() => setFiltro("andamento")} style={pillStyle(filtro==="andamento")}>
