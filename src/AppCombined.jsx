@@ -41498,6 +41498,33 @@ function prestacaoMensalDosModulos(modulos, opcoes) {
   }
   return { cm, rm, fc, datas, inicio: inicioEmp, termino: terminos[terminos.length - 1] || "" };
 }
+// Os contratos firmes (as vendas registradas): o resumo de cada um — valor,
+// desconto, juros e documentação, o total do contrato, o que já entrou e o
+// que falta, como se paga (sinal, parcelas, financiamento) e a próxima parcela.
+function contratosFirmes(obra, opcoes) {
+  const ob = obra || {};
+  const hoje = cpHoje(opcoes);
+  const red = (x) => Math.round(x * 100) / 100;
+  const unidade = (id) => ((ob.unidadesVenda || []).find((u) => u && u.id === id) || {}).nome || "";
+  return (ob.vendas || []).filter(Boolean).map((v) => {
+    const cs = (ob.contasPagar || []).filter((c) => c && c.vendaId === v.id && c.contaId !== "documentacao_comprador");
+    const val = (c) => (c.pago ? Number(c.valorPago) || Number(c.valor) || 0 : Number(c.valor) || 0);
+    const fin = cs.filter((c) => /financiamento/i.test(c.descricao || ""));
+    const parc = cs.filter((c) => !/financiamento/i.test(c.descricao || "") && /parcela\s*\d+\s*\/\s*\d+/i.test(c.descricao || ""));
+    const sinal = cs.filter((c) => fin.indexOf(c) < 0 && parc.indexOf(c) < 0);
+    const abertas = cs.filter((c) => !c.pago && c.vencimento).sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)));
+    const prox = abertas[0] || null;
+    const valor = Number(v.valor) || 0, desconto = Number(v.desconto) || 0, juros = Number(v.juros) || 0, doc = Number(v.provisaoDoc) || 0;
+    return { id: v.id, unidade: unidade(v.unidadeId), comprador: v.comprador || "", data: String(v.data || "").slice(0, 10),
+      valor, desconto, juros, documentacao: doc, liquido: red(valor - desconto),
+      total: red(cs.reduce((t, c) => t + val(c), 0)), recebido: red(cs.filter((c) => c.pago).reduce((t, c) => t + val(c), 0)),
+      aReceber: red(cs.filter((c) => !c.pago).reduce((t, c) => t + val(c), 0)),
+      sinal: red(sinal.reduce((t, c) => t + val(c), 0)), parcelas: { n: parc.length, soma: red(parc.reduce((t, c) => t + val(c), 0)) },
+      financiamento: red(fin.reduce((t, c) => t + val(c), 0)), financiamentoEm: fin.length ? String(fin[0].vencimento || "").slice(0, 10) : "",
+      proxima: prox ? { vencimento: String(prox.vencimento).slice(0, 10), valor: val(prox), atrasada: String(prox.vencimento).slice(0, 10) < hoje } : null,
+      pendente: !!v.contratoPendente, observacao: String(v.observacao || "").trim() };
+  });
+}
 // O percentual realizado de cada módulo (realizado ÷ estimado), só para
 // quem tem estimativa; o do empreendimento soma só esses módulos.
 function cpPercentualRealizado(mods) {
@@ -41648,6 +41675,12 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
     let zebra = 0;
     linhas.forEach((l) => {
       if (quebra(alt, () => { cab(); doc.setFontSize(fs); })) zebra = 0;
+      if (l.corrido != null) {
+        doc.setFillColor(255, 255, 255); doc.rect(M, y, LARG, alt, "F");
+        doc.setFontSize(fs - 0.6); cor(CINZA); doc.text(caber(l.corrido, LARG - 3), M + 1.5, y + alt / 2 + fs * 0.13); doc.setFontSize(fs);
+        doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.15); doc.line(M, y + alt, X1, y + alt);
+        y += alt; return;
+      }
       if (l.grupo) { doc.setFillColor(234, 240, 248); doc.rect(M, y, LARG, alt, "F"); doc.setFont("helvetica", "bold"); zebra = 0; }
       else if (l.total) { doc.setFont("helvetica", "bold"); doc.setFillColor(FUNDO[0], FUNDO[1], FUNDO[2]); doc.rect(M, y, LARG, alt, "F");
         doc.setDrawColor(AZUL[0], AZUL[1], AZUL[2]); doc.setLineWidth(0.3); doc.line(M, y, X1, y); }
@@ -41810,7 +41843,7 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
       doc.setFontSize(7.4); cor(TINTA); doc.text(t, lx + 4.2, ly - 0.2); lx += 4.2 + doc.getTextWidth(t) + 6;
     }
   };
-  const ff = i.ff, cf = i.conferencia, cm = i.custos, rm = i.recebimentos, fc = i.fluxoCaixa;
+  const ff = i.ff, cf = i.conferencia, cm = i.custos, rm = i.recebimentos, fc = i.fluxoCaixa, ct = i.contratos;
   const comp = ff && ff.regime === "competencia";
   // 1. resumo
   const caixas = ff ? [["Custo estimado", moeda(ff.total.estimado)], [comp ? "Custo realizado" : "Custo pago", moeda(ff.total.realizado)]]
@@ -41891,6 +41924,29 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
       rm.meses.map((m) => ({ celulas: [m.rotulo, vlr(m.recebido), vlr(m.firme), vlr(m.estimativa), vlr(m.recebido + m.firme + m.estimativa)] }))
         .concat([{ total: true, celulas: ["Total", moeda(rm.total.recebido), moeda(rm.total.firme), moeda(rm.total.estimativa), moeda(rm.total.geral)] }]),
       { compacta: true });
+  }
+  // 4b. os contratos firmes: um resumo de cada venda
+  if (ct && ct.length) {
+    secao("Contratos firmes", "As vendas feitas (assinadas ou com o contrato pendente). Total do contrato = venda - desconto + juros + documentação.");
+    const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
+    const linhasCT = [];
+    for (const c of ct) {
+      // no empreendimento inteiro a unidade vem com o módulo na frente: na
+      // coluna fica a unidade; o módulo vai na linha de baixo
+      const pu = String(c.unidade || "").split(" · "), uniCurta = pu.pop() || "—", moduloDaUni = pu.join(" · ");
+      linhasCT.push({ celulas: [uniCurta, c.comprador || "—", dia(c.data), vlr(c.liquido), vlr(c.total), vlr(c.recebido), vlr(c.aReceber),
+        c.proxima ? dia(c.proxima.vencimento) : "—", c.proxima ? moeda(c.proxima.valor) : "—"], vermelho: c.proxima && c.proxima.atrasada ? [7, 8] : [] });
+      const comp2 = [c.sinal > 0.004 ? `Sinal ${moeda(c.sinal)}` : "", c.parcelas.n ? `${c.parcelas.n} parcelas ${moeda(c.parcelas.soma)}` : "",
+        c.financiamento > 0.004 ? `Financiamento ${moeda(c.financiamento)}${c.financiamentoEm ? " em " + dia(c.financiamentoEm) : ""}` : "",
+        c.desconto > 0.004 ? `desconto ${moeda(c.desconto)}` : "", c.juros > 0.004 ? `juros ${moeda(c.juros)}` : "", c.documentacao > 0.004 ? `documentação ${moeda(c.documentacao)}` : ""].filter(Boolean).join(" · ");
+      linhasCT.push({ corrido: (moduloDaUni ? moduloDaUni + ". " : "") + (c.pendente ? "Contrato pendente de assinatura. " : "Contrato assinado. ") + comp2 + (c.observacao ? " — " + c.observacao : "") });
+    }
+    const soma = (k) => ct.reduce((t, c) => t + (Number(c[k]) || 0), 0);
+    linhasCT.push({ total: true, celulas: ["Total", `${ct.length} ${ct.length === 1 ? "contrato" : "contratos"}`, "", moeda(soma("liquido")), moeda(soma("total")), moeda(soma("recebido")), moeda(soma("aReceber")), "", ""] });
+    tabela([{ t: "Unidade", w: 34 }, { t: "Comprador", w: 30 }, { t: "Data", w: 18, alinhar: "center" }, { t: "Venda", w: 21, alinhar: "right" },
+      { t: "Total contrato", w: 22, alinhar: "right" }, { t: "Recebido", w: 21, alinhar: "right" }, { t: "A receber", w: 21, alinhar: "right" },
+      { t: "Próx. venc.", w: 18, alinhar: "center" }, { t: "Próx. valor", w: 19, alinhar: "right" }],
+      linhasCT, { compacta: true });
   }
   // 5. fluxo de caixa
   if (fc) {
@@ -42444,7 +42500,7 @@ function AnelRealizado({ pct, tam }) {
 }
 function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGerar, aoGerarPdf }) {
   const p = previa.param || {};
-  const { pc, ffPC: ff, cfPC: cf, cmPC: cm, rmPC: rm, fcPC: fc, modulosPC: mods } = previa.dados || {};
+  const { pc, ffPC: ff, cfPC: cf, cmPC: cm, rmPC: rm, fcPC: fc, modulosPC: mods, ctPC: ct } = previa.dados || {};
   const comp = ff && ff.regime === "competencia";
   const moeda = (v) => (v < -0.004 ? "-R$ " : "R$ ") + Math.abs(Number(v || 0)).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const dia = (iso) => { const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : "—"; };
@@ -42548,6 +42604,46 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
             {titulo(++k, "Recebimentos mês a mês", (rm.regime === "competencia" ? "Competência: cada parcela no vencimento." : "Caixa: recebido no mês em que entrou; o resto no vencimento.") + " Contratos firmes: as vendas feitas (assinadas ou com o contrato pendente) e o cronograma marcado como contrato. Vendas estimadas: as projeções das unidades e o cronograma.")}
             <GraficoFluxoMensal fluxo={{ meses: rm.meses }} hojeIso={hoje} faixas={CP_FAIXAS_RECEB} />
             {legenda(CP_FAIXAS_RECEB, rm.meses)}
+          </div>
+        )}
+        {ct && ct.length > 0 && (
+          <div style={caixa} data-vk-previa-contratos="1">
+            {titulo(++k, "Contratos firmes", "As vendas feitas (assinadas ou com o contrato pendente). Total do contrato = venda − desconto + juros + documentação.")}
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", minWidth: 820, borderCollapse: "collapse" }}>
+                <thead><tr>{["Unidade", "Comprador", "Data", "Venda", "Total do contrato", "Recebido", "A receber", "Próxima parcela"].map((t, j) =>
+                  <th key={t} style={{ ...th, textAlign: j > 2 ? "right" : j === 2 ? "center" : "left" }}>{t}</th>)}</tr></thead>
+                <tbody>
+                  {ct.map((c) => {
+                    const partes = [c.sinal > 0.004 ? `Sinal ${moeda(c.sinal)}` : "", c.parcelas.n ? `${c.parcelas.n} parcelas ${moeda(c.parcelas.soma)}` : "",
+                      c.financiamento > 0.004 ? `Financiamento ${moeda(c.financiamento)}${c.financiamentoEm ? " em " + dia(c.financiamentoEm) : ""}` : "",
+                      c.desconto > 0.004 ? `desconto ${moeda(c.desconto)}` : "", c.juros > 0.004 ? `juros ${moeda(c.juros)}` : "", c.documentacao > 0.004 ? `documentação ${moeda(c.documentacao)}` : ""].filter(Boolean).join(" · ");
+                    return [
+                      <tr key={c.id} data-vk-contrato={c.id}>
+                        <td style={{ ...td, fontWeight: 600 }}>{c.unidade || "—"}</td>
+                        <td style={td}>{c.comprador || "—"}</td>
+                        <td style={{ ...td, textAlign: "center" }}>{dia(c.data)}</td>
+                        {[c.liquido, c.total, c.recebido, c.aReceber].map((v, j) => <td key={j} style={{ ...td, textAlign: "right" }}>{n(v)}</td>)}
+                        <td style={{ ...td, textAlign: "right", color: c.proxima && c.proxima.atrasada ? "#b91c1c" : "#111827" }}>{c.proxima ? `${dia(c.proxima.vencimento)} · ${moeda(c.proxima.valor)}` : "—"}</td>
+                      </tr>,
+                      <tr key={c.id + ":n"}>
+                        <td colSpan={8} style={{ ...td, whiteSpace: "normal", color: "#6b7280", fontSize: 11, paddingTop: 0 }}>
+                          <span style={{ color: c.pendente ? "#b45309" : "#166534", fontWeight: 600 }}>{c.pendente ? "Contrato pendente de assinatura." : "Contrato assinado."}</span>
+                          {" "}{partes}{c.observacao ? " — " + c.observacao : ""}
+                        </td>
+                      </tr>,
+                    ];
+                  })}
+                  <tr style={{ background: "#f6f8fb" }}>
+                    <td style={{ ...td, fontWeight: 700 }}>Total</td>
+                    <td style={{ ...td, fontWeight: 700 }}>{ct.length} {ct.length === 1 ? "contrato" : "contratos"}</td>
+                    <td style={td}></td>
+                    {["liquido", "total", "recebido", "aReceber"].map((kk) => <td key={kk} style={{ ...td, textAlign: "right", fontWeight: 700 }}>{moeda(ct.reduce((t, c) => t + (Number(c[kk]) || 0), 0))}</td>)}
+                    <td style={td}></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
         {fc && (
@@ -43009,10 +43105,11 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       nomePC: todos ? (nomeEmpreendimento || "Empreendimento") + " — todos os módulos" : "",
       cmPC: mens ? mens.cm : obraDaPC ? custosMensais(obraDaPC, { ...opPC, regime: param.despesa }) : null,
       rmPC: mens ? mens.rm : obraDaPC ? recebimentosMensais(obraDaPC, { ...opPC, regime: param.entrada }) : null,
-      fcPC: mens ? mens.fc : obraDaPC ? fluxoDeCaixaDaObra(obraDaPC, { ...opPC, regime: param.despesa }) : null };
+      fcPC: mens ? mens.fc : obraDaPC ? fluxoDeCaixaDaObra(obraDaPC, { ...opPC, regime: param.despesa }) : null,
+      ctPC: obraDaPC ? contratosFirmes(obraDaPC) : null };
   }
   async function baixarPrestacao(param, opcoesPC) {
-    const { pc, obraDaPC, ffPC, cfPC, cmPC, rmPC, fcPC, modulosPC, nomePC } = dadosDaPrestacao(param);
+    const { pc, obraDaPC, ffPC, cfPC, cmPC, rmPC, fcPC, modulosPC, nomePC, ctPC } = dadosDaPrestacao(param);
     if (!pc.notas.length && !obraDaPC) { setPrestando({ erro: true, msg: "Nada pago no que está filtrado." }); return; }
     setPrestando({ fazendo: true, msg: "Montando a planilha…" });
     const obraNome = nomePC || (obraFixa && (obras || [])[0] ? (obras[0].nome || "obra") : (obraId ? nomeDe(obras, obraId) : "obras"));
@@ -43034,7 +43131,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       const ehEmp = !!cliObj && typeof ehEmpreendimento === "function" && ehEmpreendimento(cliObj);
       const esc = (completar && completar.data && completar.data.escritorio && completar.data.escritorio.nome) || "";
       return pdfDaPrestacaoDeContas(JsPDF, pc, { obra: obraNome, cliente: ehEmp ? "" : ((cliObj && cliObj.nome) || ""),
-        tipo: ehEmp ? "Empreendimento" : "", escritorio: esc, de, ate, ff: ffPC, conferencia: cfPC, custos: cmPC, recebimentos: rmPC, fluxoCaixa: fcPC, parametros: param || null, modulos: modulosPC }).output("blob");
+        tipo: ehEmp ? "Empreendimento" : "", escritorio: esc, de, ate, ff: ffPC, conferencia: cfPC, custos: cmPC, recebimentos: rmPC, fluxoCaixa: fcPC, parametros: param || null, modulos: modulosPC, contratos: ctPC }).output("blob");
     };
     // só o PDF: sem planilha e sem baixar os comprovantes (é rápido)
     if (opcoesPC && opcoesPC.soPdf) {
