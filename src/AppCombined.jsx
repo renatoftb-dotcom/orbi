@@ -41204,7 +41204,12 @@ function cpValorLancado(c) { return Math.round(((c && c.pago ? (Number(c.valorPa
 // A data da despesa em cada regime: caixa, quando saiu (ou sai) do banco;
 // competência, o vencimento — como a coluna Competência da base.
 function cpDataDaDespesa(c, regime) {
-  if (regime === "competencia") return String(c.vencimento || c.pagoEm || "").slice(0, 10);
+  // competência: o mês em que o custo foi contabilizado — a compra (no
+  // cartão, todas as parcelas no mês da compra); sem data de compra, o vencimento
+  if (regime === "competencia") {
+    const compra = String(c.compraEm || (c.parcelaCartao && c.parcelaCartao.compraEm) || "").slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(compra) ? compra : String(c.vencimento || c.pagoEm || "").slice(0, 10);
+  }
   return String((c.pago ? c.pagoEm : c.vencimento) || c.vencimento || c.pagoEm || "").slice(0, 10);
 }
 function fisicoFinanceiroDaPrestacao(obra, opcoes) {
@@ -41428,6 +41433,7 @@ function cpSomarMensais(lista, campos, extras) {
   const red = (x) => Math.round(x * 100) / 100;
   const por = {};
   for (const r of lista || []) for (const m of (r && r.meses) || []) {
+    if (!campos.some((c) => Math.abs(Number(m[c]) || 0) > 0.004)) continue;
     const t = por[m.chave] || (por[m.chave] = {});
     for (const c of campos) t[c] = red((t[c] || 0) + (Number(m[c]) || 0));
   }
@@ -41815,7 +41821,7 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   }
   // 3. custos mês a mês
   if (cm && cm.meses.length) {
-    cartao(comp ? "Custos realizados mês a mês" : "Custos mês a mês", (comp ? "Competência: cada despesa no mês do vencimento." : "Caixa: pago no mês em que saiu; vencido e a pagar no mês do vencimento.")
+    cartao(comp ? "Custos realizados mês a mês" : "Custos mês a mês", (comp ? "Competência: cada despesa no mês em que foi contabilizada (a compra no cartão, com todas as parcelas, no mês da compra)." : "Caixa: pago no mês em que saiu; vencido e a pagar no mês do vencimento.")
       + (par && par.inicio ? ` O que veio antes de ${dia(par.inicio)} está em Pré-obra.` : ""), alturaDoGrafico(ALT_BARRAS),
       (x0, y0, lg) => barras(cm.meses, comp ? [["custo", "#0474f4", "Custo realizado"]] : CP_FAIXAS, x0, y0, lg, { mesHoje: (fc && fc.mesHoje) || "" }));
     const cols = [{ t: "Mês", w: 22 }].concat(comp ? [{ t: "Custo realizado", w: 40, alinhar: "right" }]
@@ -42222,7 +42228,7 @@ function JanelaParametrosPrestacao({ valor, obra, aoMudar, aoCancelar, aoGerar, 
         <div style={rot}>Despesas</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
           {opcao("despesa", "caixa", "Regime de caixa", "Pela data em que o dinheiro saiu. Mostra o que ainda está a pagar.")}
-          {opcao("despesa", "competencia", "Competência", "Pelo vencimento, pago ou não. Sem a coluna A pagar.")}
+          {opcao("despesa", "competencia", "Competência", "Pelo mês em que o custo foi contabilizado (a compra), pago ou não. Sem a coluna A pagar.")}
         </div>
         <div style={rot}>Entradas</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
@@ -42434,7 +42440,7 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
         )}
         {cm && cm.meses.length > 0 && (
           <div style={caixa} data-vk-previa-custos="1">
-            {titulo(++k, comp ? "Custos realizados mês a mês" : "Custos mês a mês", comp ? "Competência: cada despesa no mês do vencimento." : "Caixa: pago no mês em que saiu; vencido e a pagar no mês do vencimento.")}
+            {titulo(++k, comp ? "Custos realizados mês a mês" : "Custos mês a mês", comp ? "Competência: cada despesa no mês em que foi contabilizada (a compra no cartão, com todas as parcelas, no mês da compra)." : "Caixa: pago no mês em que saiu; vencido e a pagar no mês do vencimento.")}
             <GraficoFluxoMensal fluxo={{ meses: cm.meses }} hojeIso={hoje} series={cm.series}
               faixas={comp ? [["custo", "#0474f4", "Custo realizado"]] : CP_FAIXAS} />
             {legenda(comp ? [["custo", "#0474f4", "Custo realizado"]] : CP_FAIXAS, cm.meses)}

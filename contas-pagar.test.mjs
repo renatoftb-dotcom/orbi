@@ -3804,6 +3804,11 @@ teste("empreendimento com módulos: junta tudo numa obra só e resume por módul
   const pc2 = modulo.prestacaoMensalDosModulos([A, C], { despesa: "caixa", entrada: "caixa", hoje: "2026-04-15", datas: { C: { inicio: "2026-08-01", termino: "2026-10-31" } } });
   const lc = (k) => (pc2.fc.linhas.find((l) => l.chave === k) || {}).custoARealizar;
   assert.strictEqual(lc("2026-07"), 0); assert.strictEqual(lc("2026-08"), 100); assert.strictEqual(lc("2026-10"), 100);
+  // competência: parcela do cartão no mês da compra
+  const cc = modulo.custosMensais({ contasPagar: [{ id: "k1", contaId: "material", valor: 50, pago: false, vencimento: "2027-02-15", formaPagamento: "cartao",
+    compraEm: "2026-09-01", parcelaCartao: { k: 6, de: 6, compraEm: "2026-09-01" } }, { id: "k2", contaId: "material", valor: 30, pago: true, valorPago: 30, pagoEm: "2026-10-05", vencimento: "2026-10-05" }] },
+    { regime: "competencia", hoje: "2026-11-16" });
+  assert.deepStrictEqual(cc.meses.map((m) => [m.chave, m.custo]), [["2026-09", 50], ["2026-10", 30]]);
   // A: 900 até jun (3 meses: abr, mai, jun = 300); B: 550 até mai (2 meses: abr, mai = 275)
   const lin = (k) => pm.fc.linhas.find((l) => l.chave === k);
   assert.strictEqual(lin("2026-04").custoARealizar, 575); assert.strictEqual(lin("2026-05").custoARealizar, 575); assert.strictEqual(lin("2026-06").custoARealizar, 300);
