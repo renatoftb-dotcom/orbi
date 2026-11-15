@@ -399,7 +399,9 @@ t("fundação: estacas pela carga admissível, um diâmetro só na obra; sapata 
   assert.ok(s2.sapata.L * s2.sapata.B >= 1.05 * 120 / 150 - 1e-9 && s2.sapata.h >= (s2.sapata.L - 0.19) / 3);
   const obra = M.esFundacaoObra([{ pl, N: { Ng: 60, Nq: 10 }, dimPilar: dp }, { pl, N: { Ng: 200, Nq: 30 }, dimPilar: dp }], { fundacao: { tipo: "estaca", diam: 0.25, prof: 4 } });
   assert.ok(obra.every((x) => x.ok) && obra[0].D === obra[1].D && obra.every((x) => x.estimado));
-  assert.ok(Math.abs(M.esPadmEstaca(0.25, 4) - (Math.PI * 0.25 * 4 * 30 + Math.PI * 0.0625 / 4 * 300) / 2) < 1e-9);
+  // sem sondagem: só atrito lateral (ponta da broca não conta) → ~1 t por metro em Ø20–25
+  assert.ok(Math.abs(M.esPadmEstaca(0.25, 4) - Math.PI * 0.25 * 4 * 30 / 2) < 1e-9);
+  assert.ok(Math.abs(M.esPadmEstaca(0.20, 1) - 9.42) < 0.01 && Math.abs(M.esPadmEstaca(0.25, 1) - 11.78) < 0.01);
 });
 console.log(`${ok} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

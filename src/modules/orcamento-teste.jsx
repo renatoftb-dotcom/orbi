@@ -6709,11 +6709,11 @@ function EscolhaModeloOrcamento({ data, escritorio, onVoltar, onSelecionar }) {
 // O passo a passo do orçamento, no topo de cada tela: onde se está, o que
 // cada etapa tem em aberto. Volta-se a qualquer etapa já feita; para frente
 // é pelo botão da própria tela (é ele que confere o que a etapa precisa).
-function EtapasDoOrcamento({ atual, checks, aoIr }) {
+function EtapasDoOrcamento({ atual, checks, aoIr, centro }) {
   const etapas = orcEtapasDaConferencia(checks);
   return (
     <nav aria-label="Etapas do orçamento" data-vk-etapas-orcamento="1" className="no-print"
-      style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, maxWidth: 1100, margin: "0 auto 16px" }}>
+      style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, maxWidth: centro ? 1100 : 1140, margin: centro ? "0 auto 16px" : "0 0 16px" }}>
       {etapas.map((e) => {
         const ativa = e.n === atual;
         const feita = e.n < atual && !e.bloqueios;
@@ -8210,7 +8210,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   }, []);
 
   const C = {
-    wrap:       { fontFamily:"inherit", color:"#262421", background:"#fff", padding:"24px 28px", position:"relative", margin:0 },
+    wrap:       { fontFamily:"inherit", color:"#262421", background:"#f5f7fa", padding:"24px 28px", position:"relative", margin:0, minHeight:"100vh", boxSizing:"border-box" },
     fieldBox:   { background:"#f5f5f5", border:"1px solid #333", borderRadius: 14, padding:"12px 16px", fontSize:14, color:"#6b7280" },
     fieldLabel: { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:6, display:"block" },
     input:      { width:"100%", border:"1px solid #333", borderRadius: 14, padding:"12px 16px", fontSize:14, color:"#262421", outline:"none", background:"#fff", boxSizing:"border-box", fontFamily:"inherit" },
@@ -8224,7 +8224,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     qtdBtn:     { width:26, height:26, borderRadius:6, border:"1px solid #888", background:"#fff", color:"#374151", fontSize:16, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 },
     qtdNum:     (q) => ({ width:24, textAlign:"center", fontSize:14, fontWeight: q > 0 ? 700 : 400, color: q > 0 ? "#262421" : "#828a98" }),
     qtdM2Tot:   { fontSize:12, color:"#6b7280", width:72, textAlign:"right", whiteSpace:"nowrap" },
-    resumoBox:  { background:"#fff", border:"1px solid #c8cdd6", borderRadius: 14, padding:"16px 18px" },
+    resumoBox:  { background:"#fff", border:"1px solid rgba(38,36,33,0.12)", borderRadius: 14, padding:"16px 18px" },
     resumoHdr:  { fontSize:11, color:"#555e6b", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center", marginBottom:12, paddingBottom:10, borderBottom:"2px solid #d1d5db" },
     resumoSec:  { fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, marginBottom:6, marginTop:14 },
     resumoVal:  { fontSize:19, fontWeight:700, color:"#262421" },
@@ -8804,7 +8804,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const mostrarEtapas = !modoVer && !propostaReadOnlyForce && modoAbertura !== "ver";
   const travaAtePagamento = conferencia.some((c) => c.etapa <= 2 && c.bloqueia && !c.ok);
   const etapasEl = mostrarEtapas
-    ? <div style={{ padding: "16px 16px 0" }}><EtapasDoOrcamento atual={passoAtual} checks={conferencia} aoIr={irParaEtapa} /></div>
+    ? <div style={{ padding: "16px 16px 0" }}><EtapasDoOrcamento atual={passoAtual} checks={conferencia} aoIr={irParaEtapa} centro /></div>
     : null;
 
   if (propostaData) {
@@ -9219,11 +9219,16 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         )}
       </div>
 
+      <section data-vk-orc-secao="projeto" style={{ background:"#fff", border:"1px solid rgba(38,36,33,0.12)", borderRadius:14, padding:"18px 18px 16px", marginBottom:16, maxWidth:1140, boxSizing:"border-box" }}>
+          <div style={{ display:"grid", gap:3, marginBottom:14 }}>
+            <div style={{ fontSize:15, fontWeight:700, color:"#111827" }}>1 · O projeto</div>
+            <div style={{ fontSize:12.5, color:"#4b5563", lineHeight:1.5 }}>O que vai ser projetado. Estas respostas escolhem os cômodos e o preço por m² da próxima etapa.</div>
+          </div>
       {/* ── Barra de toggles (Arq/Eng/Marc + Imposto + Repetição) — sempre visível ── */}
       <div data-vk-orc-toolbar style={{
         display:"flex", gap:16, flexWrap:"wrap", alignItems:"center",
         padding:"12px 16px", marginBottom:16, maxWidth:1100,
-        background:"#fafaf7", border:"2px solid #d1d5db", borderRadius: 14,
+        background:"#f8fafc", border:"1px solid rgba(38,36,33,0.10)", borderRadius: 12,
       }}>
         {[
           { key:"incluiArq",        val:incluiArq,        set:setIncluiArq,        label:"Arquitetura"  },
@@ -9506,7 +9511,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         className={"vk-flow2-input" + (opcaoEscolhida ? " is-chosen" : "")}
                         type="text"
                         data-tutorial-id="campo-referencia"
-                        placeholder="Ex: Casa de Praia, Residência Padovan, Bairro Vila Nova..."
+                        placeholder="Digite a referência do projeto"
                         value={referenciaTemp}
                         onChange={e => setReferenciaTemp(e.target.value)}
                         disabled={!!opcaoEscolhida}
@@ -9673,8 +9678,15 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       })()}
 
 
+      </section>
+
       {/* ── Cômodos + Resumo ── */}
       {!!(tamanho || isComercial) && !!configAtual && (
+        <section data-vk-orc-secao="comodos" style={{ background:"#fff", border:"1px solid rgba(38,36,33,0.12)", borderRadius:14, padding:"18px 18px 16px", marginBottom:16, maxWidth:1140, boxSizing:"border-box" }}>
+          <div style={{ display:"grid", gap:3, marginBottom:14 }}>
+            <div style={{ fontSize:15, fontWeight:700, color:"#111827" }}>2 · Cômodos e valor</div>
+            <div style={{ fontSize:12.5, color:"#4b5563", lineHeight:1.5 }}>Quantos de cada cômodo. A área e o valor ao lado mudam na hora; a conferência mostra o que ainda falta para a proposta.</div>
+          </div>
         <div data-vk-orc-comodos-shell data-tutorial-id="painel-comodos" style={{ display:"grid", gridTemplateColumns:"1.4fr 1fr", gap:20, alignItems:"start",
           animation:"slideUp 0.5s ease forwards",
           marginTop:0,
@@ -9683,7 +9695,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
           <div data-vk-orc-comodos-card style={{
             background:"#fff",
-            border:"2px solid #d1d5db",
+            border:"1px solid rgba(38,36,33,0.12)",
             borderRadius: 14,
             maxHeight: cardComodosRecolhido ? "none" : 560,
             overflowY: cardComodosRecolhido ? "visible" : "auto",
@@ -10273,12 +10285,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 </div>
                 <button
                   data-tutorial-id="botao-definir-pagamento"
-                  style={{ width:"100%", marginTop:10, background:"#262421", color:"#fff", border:"1px solid #111", borderRadius: 12, padding:"11px 16px", fontSize:14, opacity: travaAtePagamento ? 0.45 : 1, fontWeight:600, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.2, transition:"background 0.15s, border-color 0.15s" }}
-                  onMouseEnter={e => { e.currentTarget.style.background="#000"; }}
-                  onMouseLeave={e => { e.currentTarget.style.background="#262421"; }}
+                  style={{ width:"100%", marginTop:10, background:"#0474f4", color:"#fff", border:"1px solid #0474f4", borderRadius: 12, padding:"11px 16px", fontSize:14, opacity: travaAtePagamento ? 0.45 : 1, fontWeight:600, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.2, transition:"background 0.15s, border-color 0.15s" }}
+                  onMouseEnter={e => { e.currentTarget.style.background="#0358bd"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background="#0474f4"; }}
                   disabled={travaAtePagamento}
                   onClick={() => { if (!travaAtePagamento) gerarProposta(); }}>
-                  Definir forma de pagamento →
+                  Próximo: forma de pagamento →
                 </button>
                 {travaAtePagamento && (
                   <div style={{ fontSize:12, color:"#b45309", marginTop:6 }}>Falta: {conferencia.filter((c) => c.etapa <= 2 && c.bloqueia && !c.ok).map((c) => c.texto).join("; ")}.</div>
@@ -10293,6 +10305,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           </div>
 
         </div>
+        </section>
       )}
 
       {(() => {

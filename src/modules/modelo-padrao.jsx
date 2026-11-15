@@ -1491,7 +1491,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
             Largura limitada a maxWidth:860 e centralizado (mesmo eixo do header). */}
 {conferenciaPdf && !lockEdicao && !propostaInfo && typeof ConferenciaDoOrcamento === "function" && (
           <div className="no-print" data-vk-conferencia-pdf="1" style={{ maxWidth:860, margin:"16px auto 0" }}>
-            {typeof EtapasDoOrcamento === "function" && <EtapasDoOrcamento atual={5} checks={conferenciaPdf} aoIr={aoIrEtapa} />}
+            {typeof EtapasDoOrcamento === "function" && <EtapasDoOrcamento atual={5} checks={conferenciaPdf} aoIr={aoIrEtapa} centro />}
             <ConferenciaDoOrcamento checks={conferenciaPdf} atual={4} titulo="Antes de gerar o PDF" soPendentes aoIr={aoIrEtapa} />
             {travaPdf && (
               <div style={{ fontSize:12.5, color:"#b45309", marginTop:8, lineHeight:1.5 }}>
@@ -2108,7 +2108,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
 
 {conferenciaPdf && !lockEdicao && !propostaInfo && typeof ConferenciaDoOrcamento === "function" && (
           <div className="no-print" data-vk-conferencia-pdf="1" style={{ maxWidth:860, margin:"0 0 16px" }}>
-            {typeof EtapasDoOrcamento === "function" && <EtapasDoOrcamento atual={5} checks={conferenciaPdf} aoIr={aoIrEtapa} />}
+            {typeof EtapasDoOrcamento === "function" && <EtapasDoOrcamento atual={5} checks={conferenciaPdf} aoIr={aoIrEtapa} centro />}
             <ConferenciaDoOrcamento checks={conferenciaPdf} atual={4} titulo="Antes de gerar o PDF" soPendentes aoIr={aoIrEtapa} />
             {travaPdf && (
               <div style={{ fontSize:12.5, color:"#b45309", marginTop:8, lineHeight:1.5 }}>

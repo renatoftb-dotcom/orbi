@@ -66921,7 +66921,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
             Largura limitada a maxWidth:860 e centralizado (mesmo eixo do header). */}
 {conferenciaPdf && !lockEdicao && !propostaInfo && typeof ConferenciaDoOrcamento === "function" && (
           <div className="no-print" data-vk-conferencia-pdf="1" style={{ maxWidth:860, margin:"16px auto 0" }}>
-            {typeof EtapasDoOrcamento === "function" && <EtapasDoOrcamento atual={5} checks={conferenciaPdf} aoIr={aoIrEtapa} />}
+            {typeof EtapasDoOrcamento === "function" && <EtapasDoOrcamento atual={5} checks={conferenciaPdf} aoIr={aoIrEtapa} centro />}
             <ConferenciaDoOrcamento checks={conferenciaPdf} atual={4} titulo="Antes de gerar o PDF" soPendentes aoIr={aoIrEtapa} />
             {travaPdf && (
               <div style={{ fontSize:12.5, color:"#b45309", marginTop:8, lineHeight:1.5 }}>
@@ -67538,7 +67538,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
 
 {conferenciaPdf && !lockEdicao && !propostaInfo && typeof ConferenciaDoOrcamento === "function" && (
           <div className="no-print" data-vk-conferencia-pdf="1" style={{ maxWidth:860, margin:"0 0 16px" }}>
-            {typeof EtapasDoOrcamento === "function" && <EtapasDoOrcamento atual={5} checks={conferenciaPdf} aoIr={aoIrEtapa} />}
+            {typeof EtapasDoOrcamento === "function" && <EtapasDoOrcamento atual={5} checks={conferenciaPdf} aoIr={aoIrEtapa} centro />}
             <ConferenciaDoOrcamento checks={conferenciaPdf} atual={4} titulo="Antes de gerar o PDF" soPendentes aoIr={aoIrEtapa} />
             {travaPdf && (
               <div style={{ fontSize:12.5, color:"#b45309", marginTop:8, lineHeight:1.5 }}>
@@ -76341,11 +76341,11 @@ function EscolhaModeloOrcamento({ data, escritorio, onVoltar, onSelecionar }) {
 // O passo a passo do orçamento, no topo de cada tela: onde se está, o que
 // cada etapa tem em aberto. Volta-se a qualquer etapa já feita; para frente
 // é pelo botão da própria tela (é ele que confere o que a etapa precisa).
-function EtapasDoOrcamento({ atual, checks, aoIr }) {
+function EtapasDoOrcamento({ atual, checks, aoIr, centro }) {
   const etapas = orcEtapasDaConferencia(checks);
   return (
     <nav aria-label="Etapas do orçamento" data-vk-etapas-orcamento="1" className="no-print"
-      style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, maxWidth: 1100, margin: "0 auto 16px" }}>
+      style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, maxWidth: centro ? 1100 : 1140, margin: centro ? "0 auto 16px" : "0 0 16px" }}>
       {etapas.map((e) => {
         const ativa = e.n === atual;
         const feita = e.n < atual && !e.bloqueios;
@@ -78436,7 +78436,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const mostrarEtapas = !modoVer && !propostaReadOnlyForce && modoAbertura !== "ver";
   const travaAtePagamento = conferencia.some((c) => c.etapa <= 2 && c.bloqueia && !c.ok);
   const etapasEl = mostrarEtapas
-    ? <div style={{ padding: "16px 16px 0" }}><EtapasDoOrcamento atual={passoAtual} checks={conferencia} aoIr={irParaEtapa} /></div>
+    ? <div style={{ padding: "16px 16px 0" }}><EtapasDoOrcamento atual={passoAtual} checks={conferencia} aoIr={irParaEtapa} centro /></div>
     : null;
 
   if (propostaData) {
@@ -79143,7 +79143,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         className={"vk-flow2-input" + (opcaoEscolhida ? " is-chosen" : "")}
                         type="text"
                         data-tutorial-id="campo-referencia"
-                        placeholder="Ex: Casa de Praia, Residência Padovan, Bairro Vila Nova..."
+                        placeholder="Digite a referência do projeto"
                         value={referenciaTemp}
                         onChange={e => setReferenciaTemp(e.target.value)}
                         disabled={!!opcaoEscolhida}

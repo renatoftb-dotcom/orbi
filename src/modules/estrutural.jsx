@@ -1342,16 +1342,17 @@ function esDimPilar(p, N, l, params) {
 // ═══════════════════════════════════════════════════════════════
 // Projeto de fundação exige investigação do solo (sondagem SPT, NBR 6122 e
 // NBR 8036). Sem a carga admissível informada, o sistema estima para
-// orçamento: estaca escavada com atrito lateral médio de 30 kPa e ponta de
-// 300 kPa, fator de segurança 2; sapata com σadm de 150 kPa. Valores típicos
-// de solo de média resistência — a conferir com a sondagem.
+// orçamento: estaca escavada só pelo atrito lateral médio de 30 kPa, fator de
+// segurança 2 — a ponta da broca manual fica mal limpa e não se conta (dá
+// ~1 t por metro em Ø20–25, a regra de obra); sapata com σadm de 150 kPa.
+// Valores típicos de solo de média resistência — a conferir com a sondagem.
 // Blocos sobre estacas pelo método das bielas (Blévot): biela entre 45° e
 // 55°, tirante Rs = (Nd/n)·(r − c)/d na direção de cada estaca (c = 0,25ap
 // para 2 estacas, 0,30ap para 3, 0,354ap para 4), majorado 1,15; 1 estaca:
 // fretagem 0,25·Nd·(1 − ap/B)/fyd. Espaçamento 3D (escavadas), 15 cm da
 // estaca à face. Estaca: armadura de ligação 4 φ10 × 2,5 m + estribo φ5 c/20.
 // Sapata rígida (h ≥ (A − ap)/3), tirante Nd(A − ap)/(8d) em cada direção.
-const ES_FUND = { fsLateral: 30, qPonta: 300, FS: 2, sigmaPadrao: 150, espacamento: 3, folga: 0.15, pesoBloco: 1.05,
+const ES_FUND = { fsLateral: 30, qPonta: 0, FS: 2, sigmaPadrao: 150, espacamento: 3, folga: 0.15, pesoBloco: 1.05,
   estaca: { n: 4, d: 10, comp: 2.5, estribo: 5, s: 0.20 }, cobrimento: 0.05 };
 function esPadmEstaca(D, L) { return (Math.PI * D * L * ES_FUND.fsLateral + Math.PI * D * D / 4 * ES_FUND.qPonta) / ES_FUND.FS; }
 function esBarrasTirante(As) {
