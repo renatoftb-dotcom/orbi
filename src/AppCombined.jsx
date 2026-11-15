@@ -89576,7 +89576,7 @@ function esLancarPavimentos(pavs, params) {
   }
   // vigas de borda do furo da escada (critério 11): cada lado do furo que não
   // cai sobre viga vira viga, esticada até as vigas que encontrar
-  pavs.forEach((p, k) => esVigasDeEscada(p, r[k], P, esTopoPavimento(pavs, k)));
+  pavs.forEach((p, k) => esVigasDeEscada(p, r[k], P, esTopoPavimento(pavs, k), k));
   return r;
 }
 // furo da escada: o contorno (caracol: o quadrado que o envolve)
@@ -89585,28 +89585,112 @@ function esFuroEscada(e) {
   const xs = e.contorno.map((q) => q.x), ys = e.contorno.map((q) => q.y), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
   return [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
 }
-function esVigasDeEscada(p, est, P, topo) {
+function esVigasDeEscada(p, est, P, topo, k) {
   const lajes = (p.areas || []).filter((a) => a.tipo === "laje" && a.pts && a.pts.length >= 3);
-  let n = 0;
+  let n = est.vigas.filter((v) => v.vigaEscada).length;
   for (const e of p.escadas || []) {
     const furo = esFuroEscada(e); if (!furo || furo.length < 3) continue;
     const c = { x: furo.reduce((t, q) => t + q.x, 0) / furo.length, y: furo.reduce((t, q) => t + q.y, 0) / furo.length };
     if (!lajes.some((a) => esDentroPoli(c, a.pts))) continue; // sem laje em cima: não há furo
+    const off = P.viga.b / 2 + 0.005, dentro = (q) => esDentroPoli(q, furo);
+    // primeiro ponto em que o raio (de q, na direção d) entra no furo
+    const entraFuro = (q, d, ate) => {
+      let best = null;
+      for (let i = 0; i < furo.length; i++) {
+        const A = furo[i], B = furo[(i + 1) % furo.length], ex = B.x - A.x, ey = B.y - A.y, den = d.x * ey - d.y * ex; if (Math.abs(den) < 1e-9) continue;
+        const wx = A.x - q.x, wy = A.y - q.y, t = (wx * ey - wy * ex) / den, sg = (wx * d.y - wy * d.x) / den;
+        if (t > 1e-4 && t < ate && sg >= -1e-6 && sg <= 1 + 1e-6 && dentro({ x: q.x + d.x * (t + 0.02), y: q.y + d.y * (t + 0.02) }) && (best == null || t < best)) best = t;
+      }
+      return best;
+    };
     // lados curtos primeiro (cabeceiras, esticadas até as vigas); os compridos
     // apoiam nas cabeceiras — como o engenheiro arma o furo
     const lados = furo.map((A, i) => [A, furo[(i + 1) % furo.length]]).filter(([A, B]) => esDist(A, B) >= 0.3).sort((x, y) => esDist(x[0], x[1]) - esDist(y[0], y[1]));
-    for (const [A, B] of lados) {
-      const L = esDist(A, B), vigas = est.vigas.filter((v) => !v.baldrame), m = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
-      if (vigas.some((v) => esPontoNoSeg(m, v.a, v.b).d < 0.15)) continue; // já tem viga (ou parede) ali
-      const u = { x: (B.x - A.x) / L, y: (B.y - A.y) / L }, emViga = (q) => vigas.some((v) => esPontoNoSeg(q, v.a, v.b).d < 0.05);
-      const ra = emViga(A) ? { d: 0 } : esRaioViga(A, { x: -u.x, y: -u.y }, vigas), rb = emViga(B) ? { d: 0 } : esRaioViga(B, u, vigas);
-      const a = ra && ra.d < 6 ? { x: A.x - u.x * ra.d, y: A.y - u.y * ra.d } : A, b = rb && rb.d < 6 ? { x: B.x + u.x * rb.d, y: B.y + u.y * rb.d } : B;
+    const novas = [];
+    for (const [A0, B0] of lados) {
+      // a viga fica do lado de FORA do furo, com a face no limite da escada —
+      // centrada na borda, metade dela ficaria em cima dos degraus (altura livre)
+      const L = esDist(A0, B0), u = { x: (B0.x - A0.x) / L, y: (B0.y - A0.y) / L }, m0 = { x: (A0.x + B0.x) / 2, y: (A0.y + B0.y) / 2 };
+      let nn = { x: -u.y, y: u.x }; if (dentro({ x: m0.x + nn.x * 0.05, y: m0.y + nn.y * 0.05 })) nn = { x: -nn.x, y: -nn.y };
+      const A = { x: A0.x + nn.x * off, y: A0.y + nn.y * off }, B = { x: B0.x + nn.x * off, y: B0.y + nn.y * off };
+      const vigas = est.vigas.filter((v) => !v.baldrame), m = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
+      if (vigas.some((v) => esPontoNoSeg(m, v.a, v.b).d < 0.15 || esPontoNoSeg(m0, v.a, v.b).d < 0.15)) continue; // já tem viga (ou parede) ali
+      const emViga = (q) => vigas.some((v) => esPontoNoSeg(q, v.a, v.b).d < 0.05);
+      // estica até a viga mais perto, mas nunca por cima da escada: parando
+      // na borda do furo (canto interno de escada em L/U), a ponta fica no
+      // alinhamento da outra viga de borda
+      const esticar = (Q, d) => {
+        if (emViga(Q)) return { q: Q, apoiada: true };
+        const r = esRaioViga(Q, d, vigas), ate = r && r.d < 6 ? r.d : 6, tf = dentro({ x: Q.x + d.x * 0.02, y: Q.y + d.y * 0.02 }) ? 0 : entraFuro(Q, d, ate);
+        if (tf != null) return { q: { x: Q.x + d.x * (tf - off), y: Q.y + d.y * (tf - off) }, apoiada: false, canto: true };
+        return r && r.d < 6 ? { q: { x: Q.x + d.x * r.d, y: Q.y + d.y * r.d }, apoiada: true } : { q: Q, apoiada: false };
+      };
+      const ea = esticar(A, { x: -u.x, y: -u.y }), eb = esticar(B, u);
       const apoio = (q) => { const pl = est.pilares.find((pp) => esDist(pp.no, q) <= 0.3); return pl ? pl.id : null; };
-      est.vigas.push({ id: "VE" + (++n), a: { x: esR3(a.x), y: esR3(a.y) }, b: { x: esR3(b.x), y: esR3(b.y) }, apoioA: apoio(a), apoioB: apoio(b), parede: null, s0: 0, s1: esR3(esDist(a, b)), b_: P.viga.b, h: P.viga.h, topo, vigaEscada: true, semApoio: !(ra && ra.d < 6) || !(rb && rb.d < 6) });
+      const v = { id: "VE" + (++n), a: { x: esR3(ea.q.x), y: esR3(ea.q.y) }, b: { x: esR3(eb.q.x), y: esR3(eb.q.y) }, apoioA: apoio(ea.q), apoioB: apoio(eb.q), parede: null, s0: 0, s1: esR3(esDist(ea.q, eb.q)), b_: P.viga.b, h: P.viga.h, topo, vigaEscada: true, _soltaA: !ea.apoiada, _soltaB: !eb.apoiada, _nn: nn };
+      est.vigas.push(v); novas.push(v);
     }
+    // ponta sem apoio de verdade (canto interno do furo, ou viga de borda que
+    // só encontra a ponta de outra viga de borda): pilar no canto, fora da
+    // escada — o "pilar do patamar", como o engenheiro resolve escada em L/U
+    for (const v of novas) for (const lado of ["a", "b"]) {
+      const q = v[lado], Ap = "apoio" + (lado === "a" ? "A" : "B");
+      if (v[Ap]) continue;
+      const outras = est.vigas.filter((o) => o !== v && !o.baldrame && esPontoNoSeg(q, o.a, o.b).d < 0.06);
+      const soPonta = outras.length > 0 && outras.every((o) => o.vigaEscada && (esDist(o.a, q) < 0.12 || esDist(o.b, q) < 0.12));
+      if (outras.length && !soPonta) continue; // apoia no meio de outra viga: ok
+      const pb = 0.19, lado2 = outras.find((o) => o.vigaEscada && o._nn) || null;
+      // centro do pilar: fora do furo nas duas direções (face no limite da escada)
+      let cx = q.x + v._nn.x * (pb / 2 + 0.005 - off), cy = q.y + v._nn.y * (pb / 2 + 0.005 - off);
+      if (lado2) { cx += lado2._nn.x * (pb / 2 + 0.005 - off); cy += lado2._nn.y * (pb / 2 + 0.005 - off); }
+      let pl = est.pilares.find((pp) => esDist(pp.no, { x: cx, y: cy }) <= 0.3);
+      if (!pl) {
+        const base = k === 0 && P.baldrames ? -P.baldrame.h : 0;
+        pl = { x: esR3(cx), y: esR3(cy), b: pb, h: pb, ang: esR3(Math.atan2(v.b.y - v.a.y, v.b.x - v.a.x)), no: { x: esR3(cx), y: esR3(cy) }, origem: "escada", id: "P" + (est.pilares.length + 1), base: esR3(base), topo: esR3(topo), escada: true };
+        est.pilares.push(pl);
+      }
+      v[Ap] = pl.id; // a ponta fica no alinhamento da viga (dentro do pilar)
+      for (const o of outras) for (const lo of ["a", "b"]) if (esDist(o[lo], q) < 0.15) o["apoio" + (lo === "a" ? "A" : "B")] = pl.id;
+    }
+    for (const v of novas) { v.semApoio = !v.apoioA && !est.vigas.some((o) => o !== v && !o.baldrame && esPontoNoSeg(v.a, o.a, o.b).d < 0.06) || !v.apoioB && !est.vigas.some((o) => o !== v && !o.baldrame && esPontoNoSeg(v.b, o.a, o.b).d < 0.06); delete v._soltaA; delete v._soltaB; delete v._nn; }
   }
 }
 
+// ALTURA LIVRE SOBRE A ESCADA: nenhuma viga pode passar em cima dos degraus
+// com menos que o mínimo de altura livre (2,10 m, valor usual de código de
+// obras e da NBR 9077 — a conferir na legislação do município).
+// escadas: [{ degraus: [{ pts, z }] }] do pavimento; est: o lançamento dele.
+const ES_ALTURA_LIVRE_ESCADA = 2.10;
+function esSegCruza(p1, p2, q1, q2) {
+  const d = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  return d(p1, p2, q1) * d(p1, p2, q2) < 0 && d(q1, q2, p1) * d(q1, q2, p2) < 0;
+}
+function esPoligonosTocam(A, B) {
+  if (A.some((q) => esDentroPoli(q, B)) || B.some((q) => esDentroPoli(q, A))) return true;
+  for (let i = 0; i < A.length; i++) for (let j = 0; j < B.length; j++) if (esSegCruza(A[i], A[(i + 1) % A.length], B[j], B[(j + 1) % B.length])) return true;
+  return false;
+}
+function esAlturaLivreEscada(est, escadas, minimo = ES_ALTURA_LIVRE_ESCADA) {
+  const r = [];
+  // viga em cima de parede fica dentro da parede: ninguém passa embaixo dela
+  for (const e of escadas || []) for (const v of (est.vigas || []).filter((x) => !x.baldrame && x.parede == null)) {
+    const L = esDist(v.a, v.b); if (L < 0.05) continue;
+    const nx = -(v.b.y - v.a.y) / L * v.b_ / 2, ny = (v.b.x - v.a.x) / L * v.b_ / 2;
+    const ret = [{ x: v.a.x + nx, y: v.a.y + ny }, { x: v.b.x + nx, y: v.b.y + ny }, { x: v.b.x - nx, y: v.b.y - ny }, { x: v.a.x - nx, y: v.a.y - ny }];
+    const fundo = (v.topo || 2.8) - v.h;
+    let pior = null;
+    for (const d of e.degraus || []) {
+      if (!d.pts || d.pts.length < 3) continue;
+      const cc = d.pts.reduce((t, q) => ({ x: t.x + q.x / d.pts.length, y: t.y + q.y / d.pts.length }), { x: 0, y: 0 });
+      const enc = d.pts.map((q) => { const dd = esDist(q, cc) || 1, f = Math.max(0, dd - 0.02) / dd; return { x: cc.x + (q.x - cc.x) * f, y: cc.y + (q.y - cc.y) * f }; }); // encostar não conta
+      if (!esPoligonosTocam(ret, enc)) continue; const livre = fundo - d.z; if (!pior || livre < pior.livre) pior = { livre, d }; }
+    if (pior && pior.livre < minimo - 1e-6) {
+      const c = pior.d.pts.reduce((t, q) => ({ x: t.x + q.x / pior.d.pts.length, y: t.y + q.y / pior.d.pts.length }), { x: 0, y: 0 });
+      r.push({ viga: v.id, livre: pior.livre, ponto: c });
+    }
+  }
+  return r;
+}
 // trechos (s0, s1 ao longo da parede w) sem parede embaixo: tira da parede os
 // trechos cobertos por paredes alinhadas do pavimento de baixo
 function esTrechosSemApoio(w, paredesBaixo) {
@@ -91995,7 +92079,7 @@ function tpEscadasEstrutura(areas) {
       const ult = ds[ds.length - 1].pts, ant = ds[ds.length - 2].pts, c = { x: ant.reduce((t, q) => t + q.x, 0) / ant.length, y: ant.reduce((t, q) => t + q.y, 0) / ant.length };
       let dm = -1; for (let i = 0; i < ult.length; i++) { const A = ult[i], B = ult[(i + 1) % ult.length], m = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 }, d = Math.hypot(m.x - c.x, m.y - c.y); if (d > dm) { dm = d; chegada = [A, B]; } }
     }
-    return { contorno: g.contorno, chegada, esp: g.esp, piso: g.piso, comp: g.comp, forma: g.forma };
+    return { contorno: g.contorno, chegada, esp: g.esp, piso: g.piso, comp: g.comp, forma: g.forma, degraus: [...(g.degraus || []), ...(g.patamares || [])].map((d) => ({ pts: d.pts, z: d.z })) };
   });
 }
 // Estrutura calculada no Projetar (estrutural.jsx, esParaOrcamento) nos campos
@@ -93257,6 +93341,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       for (const a of esVerificar(est, dadosDe(p.id).paredes || [], estrutura.params, { pilaresAbaixo: abaixo })) {
         if (a.ref === "geral" && k > 0) continue;
         r.push({ ...a, pav: p.id, pavNome: p.nome });
+      }
+      // altura livre sobre a escada (viga em cima dos degraus)
+      for (const x of esAlturaLivreEscada(est, tpEscadasEstrutura(dadosDe(p.id).areas || []))) {
+        r.push({ tipo: "compat", ref: x.viga, texto: `${x.viga} passa a ${tpFmt(x.livre)} m do degrau da escada — a altura livre mínima usual é ${tpFmt(ES_ALTURA_LIVRE_ESCADA)} m. Mude a viga de lugar ou aumente o furo da laje.`, ponto: x.ponto, norma: "código de obras / NBR 9077 (a conferir)", pav: p.id, pavNome: p.nome });
       }
     });
     return r;

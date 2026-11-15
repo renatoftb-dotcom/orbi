@@ -8,7 +8,7 @@ import assert from "assert";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(join(__dirname, "src", "modules", "estrutural.jsx"), "utf-8");
-const M = new Function(`${src}\nreturn { esLancarPavimentos, esDescidaCargas, esTopoPavimento, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao, esLinhaContinua, esPaineisLaje, esDimViga, esDimPilar, esDimensionar, esMRd, esConcreto, esPlacaApoiada, esDimLaje, esCalcularEstrutura, esParaOrcamento, esDimFundacao, esFundacaoObra, esPadmEstaca, esCargaEscada, esResumoMateriais };`)();
+const M = new Function(`${src}\nreturn { esLancarPavimentos, esDescidaCargas, esTopoPavimento, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao, esLinhaContinua, esPaineisLaje, esDimViga, esDimPilar, esDimensionar, esMRd, esConcreto, esPlacaApoiada, esDimLaje, esCalcularEstrutura, esParaOrcamento, esDimFundacao, esFundacaoObra, esPadmEstaca, esCargaEscada, esResumoMateriais, esAlturaLivreEscada };`)();
 
 let ok = 0, falhou = 0;
 const t = (nome, fn) => { try { fn(); ok++; } catch (e) { falhou++; console.log("FALHOU:", nome, "\n ", e.message); } };
@@ -411,6 +411,24 @@ t("resumo de materiais: barras de 12 m com 10% de perda e o aço todo do cálcul
   const kgCalc = Object.values(c.dim.aco).reduce((t, v) => t + v, 0), kgM = r.aco.reduce((t, a) => t + a.m * { 5: 0.154, 6.3: 0.245, 8: 0.395, 10: 0.617, 12.5: 0.963, 16: 1.578, 20: 2.466, 25: 3.853 }[a.d], 0);
   assert.ok(Math.abs(kgCalc - kgM) < 0.01, `${kgCalc} × ${kgM}`);
   assert.ok(r.grupos.some((g) => g.nome === "Estacas" || g.nome === "Sapatas") && r.concreto > 0);
+});
+t("escada em L: viga de borda fora do furo, nunca por cima dos degraus; pilar no canto do patamar", () => {
+  const caixa = [W(P(-5.14, -1), P(0, -1)), W(P(0, -1), P(0, 2.66)), W(P(0, 2.66), P(-5.14, 2.66)), W(P(-5.14, 2.66), P(-5.14, -1))];
+  // 1º lance indo para -x (y -0,92..-0,03), patamar no canto, 2º lance indo para +y (x -5,09..-4,19)
+  const degraus = []; let z = 0;
+  for (let i = 0; i < 8; i++) { z += 0.17; const x0 = -1.87 - i * 0.29; degraus.push({ pts: [P(x0, -0.92), P(x0 - 0.29, -0.92), P(x0 - 0.29, -0.03), P(x0, -0.03)], z }); }
+  z += 0.17; degraus.push({ pts: [P(-4.19, -0.92), P(-5.09, -0.92), P(-5.09, -0.03), P(-4.19, -0.03)], z });
+  for (let i = 0; i < 7; i++) { z += 0.17; const y0 = -0.03 + i * 0.29; degraus.push({ pts: [P(-5.09, y0), P(-4.19, y0), P(-4.19, y0 + 0.29), P(-5.09, y0 + 0.29)], z }); }
+  const contorno = [P(-1.87, -0.92), P(-5.09, -0.92), P(-5.09, 2), P(-4.19, 2), P(-4.19, -0.03), P(-1.87, -0.03)];
+  const esc = { contorno, chegada: [P(-5.09, 2), P(-4.19, 2)], esp: 0.17, piso: 0.29, comp: 3.2, forma: "L", degraus };
+  const pavs = [{ paredes: caixa, areas: [{ tipo: "laje", pts: [P(-5.14, -1), P(0, -1), P(0, 2.66), P(-5.14, 2.66)], esp: 0.12, carga: { tipo: "macica", uso: "residencial" } }], escadas: [esc], nivel: 0, usoPadrao: "residencial" }];
+  const c = M.esCalcularEstrutura(pavs, { vaoMax: 9 });
+  assert.deepStrictEqual(M.esAlturaLivreEscada(c.lanc[0], [esc]).map((x) => x.viga), [], "nenhuma viga em cima dos degraus");
+  const pl = c.lanc[0].pilares.find((p) => p.escada); assert.ok(pl, "pilar no canto interno");
+  assert.ok(!degraus.some((d) => M.esLancar ? false : false) && pl.x > -4.19 && pl.y > -0.03, `pilar fora da escada: ${pl.x} ${pl.y}`);
+  // a viga de borda tem a face no limite do furo (eixo a b/2 da borda), do lado de fora
+  const ve = c.lanc[0].vigas.filter((v) => v.vigaEscada);
+  assert.ok(ve.some((v) => Math.abs(v.a.x - v.b.x) < 0.05 && Math.abs(v.a.x + 4.115) < 0.01), JSON.stringify(ve.map((v) => [v.a, v.b])));
 });
 console.log(`${ok} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

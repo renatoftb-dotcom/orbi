@@ -1013,7 +1013,7 @@ function tpEscadasEstrutura(areas) {
       const ult = ds[ds.length - 1].pts, ant = ds[ds.length - 2].pts, c = { x: ant.reduce((t, q) => t + q.x, 0) / ant.length, y: ant.reduce((t, q) => t + q.y, 0) / ant.length };
       let dm = -1; for (let i = 0; i < ult.length; i++) { const A = ult[i], B = ult[(i + 1) % ult.length], m = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 }, d = Math.hypot(m.x - c.x, m.y - c.y); if (d > dm) { dm = d; chegada = [A, B]; } }
     }
-    return { contorno: g.contorno, chegada, esp: g.esp, piso: g.piso, comp: g.comp, forma: g.forma };
+    return { contorno: g.contorno, chegada, esp: g.esp, piso: g.piso, comp: g.comp, forma: g.forma, degraus: [...(g.degraus || []), ...(g.patamares || [])].map((d) => ({ pts: d.pts, z: d.z })) };
   });
 }
 // Estrutura calculada no Projetar (estrutural.jsx, esParaOrcamento) nos campos
@@ -2275,6 +2275,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       for (const a of esVerificar(est, dadosDe(p.id).paredes || [], estrutura.params, { pilaresAbaixo: abaixo })) {
         if (a.ref === "geral" && k > 0) continue;
         r.push({ ...a, pav: p.id, pavNome: p.nome });
+      }
+      // altura livre sobre a escada (viga em cima dos degraus)
+      for (const x of esAlturaLivreEscada(est, tpEscadasEstrutura(dadosDe(p.id).areas || []))) {
+        r.push({ tipo: "compat", ref: x.viga, texto: `${x.viga} passa a ${tpFmt(x.livre)} m do degrau da escada — a altura livre mínima usual é ${tpFmt(ES_ALTURA_LIVRE_ESCADA)} m. Mude a viga de lugar ou aumente o furo da laje.`, ponto: x.ponto, norma: "código de obras / NBR 9077 (a conferir)", pav: p.id, pavNome: p.nome });
       }
     });
     return r;
