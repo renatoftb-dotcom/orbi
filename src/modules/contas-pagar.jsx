@@ -4573,9 +4573,13 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   };
   const par = i.parametros || null;
   let y = M;
+  // a página no fundo cinza da tela; os blocos em cartões brancos
+  const PAPEL = [245, 247, 250], BRANCO = [255, 255, 255];
+  const fundo = () => { doc.setFillColor(PAPEL[0], PAPEL[1], PAPEL[2]); doc.rect(0, 0, W, 297, "F"); };
+  fundo();
   const quebra = (alt, aoAbrir) => {
     if (y + alt <= 282) return false;
-    doc.addPage(); y = M + 2;
+    doc.addPage(); fundo(); y = M + 2;
     if (aoAbrir) aoAbrir();
     return true;
   };
@@ -4595,8 +4599,8 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   if (sub) doc.text(caber(sub, LARG), M, y + 4.6);
   y += 8;
   if (par) {
-    doc.setFillColor(FUNDO[0], FUNDO[1], FUNDO[2]); doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.2);
-    doc.roundedRect(M, y, LARG, 7, 1.2, 1.2, "FD");
+    doc.setFillColor(BRANCO[0], BRANCO[1], BRANCO[2]); doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.2);
+    doc.roundedRect(M, y, LARG, 7, 1.6, 1.6, "FD");
     doc.setFontSize(7.6); cor(TINTA);
     const reg = (r) => (r === "competencia" ? "competência" : "caixa");
     const itens = [`Despesas: regime de ${reg(par.despesa)}`, `Entradas: regime de ${reg(par.entrada)}`,
@@ -4604,20 +4608,42 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
     doc.text(caber(itens.join("     ·     "), LARG - 6), M + 3, y + 4.6);
     y += 11;
   } else y += 3;
-  // ── títulos numerados
+  // ── títulos numerados: o selo azul com o número e o título, como na tela
   let nSec = 0;
-  const secao = (titulo, nota, reservar) => {
-    quebra(reservar || 24);
+  const selo = (x, yy, titulo) => {
     nSec += 1;
-    doc.setFillColor(AZUL_VK[0], AZUL_VK[1], AZUL_VK[2]); doc.roundedRect(M, y - 3.6, 5.2, 5.2, 1, 1, "F");
-    doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(255, 255, 255); doc.text(String(nSec), M + 2.6, y + 0.2, { align: "center" });
-    doc.setFontSize(11.5); cor(TINTA); doc.text(titulo, M + 7.5, y + 0.6);
+    doc.setFillColor(AZUL_VK[0], AZUL_VK[1], AZUL_VK[2]); doc.roundedRect(x, yy, 5.4, 5.4, 1.1, 1.1, "F");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(255, 255, 255); doc.text(String(nSec), x + 2.7, yy + 3.85, { align: "center" });
+    doc.setFontSize(11.5); cor(TINTA); doc.text(titulo, x + 7.6, yy + 4.1);
     doc.setFont("helvetica", "normal");
-    y += 3;
-    doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.3); doc.line(M, y, X1, y);
-    y += 2;
-    if (nota) { doc.setFontSize(7.3); cor(CINZA); const ls = doc.splitTextToSize(nota, LARG); doc.text(ls, M, y + 2.6); y += ls.length * 3.1 + 2; }
-    else y += 1.5;
+  };
+  const linhasDaNota = (nota, larg) => { if (!nota) return []; doc.setFontSize(7.6); return doc.splitTextToSize(nota, larg); };
+  // cartão branco com título, nota e um conteúdo de altura conhecida (o gráfico)
+  const cartao = (titulo, nota, alturaConteudo, desenhar) => {
+    const PAD = 5, IW = LARG - 2 * PAD;
+    const ls = linhasDaNota(nota, IW);
+    const h = PAD + 6 + (ls.length ? ls.length * 3.3 + 2 : 1) + alturaConteudo + PAD;
+    quebra(h + 2);
+    doc.setFillColor(BRANCO[0], BRANCO[1], BRANCO[2]); doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.25);
+    doc.roundedRect(M, y, LARG, h, 2.6, 2.6, "FD");
+    selo(M + PAD, y + PAD, titulo);
+    let yy = y + PAD + 6;
+    if (ls.length) { doc.setFontSize(7.6); cor(CINZA); doc.text(ls, M + PAD, yy + 2.8); yy += ls.length * 3.3 + 2; } else yy += 1;
+    desenhar(M + PAD, yy, IW);
+    y += h + 4;
+  };
+  // seção de tabela: o topo do cartão (título e nota), e a tabela encosta embaixo
+  const secao = (titulo, nota, reservar) => {
+    const PAD = 5;
+    const ls = linhasDaNota(nota, LARG - 2 * PAD);
+    const h = PAD + 6 + (ls.length ? ls.length * 3.3 + 2.5 : 1.5);
+    quebra(Math.max(reservar || 24, h + 14));
+    doc.setFillColor(BRANCO[0], BRANCO[1], BRANCO[2]); doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.25);
+    doc.roundedRect(M, y, LARG, h + 3, 2.6, 2.6, "FD");
+    doc.rect(M, y + h - 0.2, LARG, 3.4, "F");
+    selo(M + PAD, y + PAD, titulo);
+    if (ls.length) { doc.setFontSize(7.6); cor(CINZA); doc.text(ls, M + PAD, y + PAD + 6 + 2.8); }
+    y += h;
   };
   const notaPe = (t) => { doc.setFontSize(6.8); cor(CINZA); const ls = doc.splitTextToSize(t, LARG); quebra(ls.length * 3 + 2); doc.text(ls, M, y + 2.4); y += ls.length * 3 + 3; };
   // ── a tabela: compacta nas listas longas (fonte e linha menores)
@@ -4648,7 +4674,7 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
       if (l.grupo) { doc.setFillColor(234, 240, 248); doc.rect(M, y, LARG, alt, "F"); doc.setFont("helvetica", "bold"); zebra = 0; }
       else if (l.total) { doc.setFont("helvetica", "bold"); doc.setFillColor(FUNDO[0], FUNDO[1], FUNDO[2]); doc.rect(M, y, LARG, alt, "F");
         doc.setDrawColor(AZUL[0], AZUL[1], AZUL[2]); doc.setLineWidth(0.3); doc.line(M, y, X1, y); }
-      else { if (zebra % 2 === 1) { doc.setFillColor(250, 251, 253); doc.rect(M, y, LARG, alt, "F"); } zebra += 1; }
+      else { if (zebra % 2 === 1) doc.setFillColor(248, 250, 252); else doc.setFillColor(255, 255, 255); doc.rect(M, y, LARG, alt, "F"); zebra += 1; }
       let x = M;
       cs.forEach((c, j) => {
         const v = l.celulas[j];
@@ -4662,58 +4688,72 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
       y += alt;
     });
     doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.2); doc.line(M, y, X1, y);
-    y += o.depois != null ? o.depois : 6;
+    y += o.depois != null ? o.depois : 7;
   };
-  // ── as barras, no formato do gráfico do contas a pagar: empilhadas, topo
-  // arredondado, o valor do mês em cima e o mês embaixo
+  // ── as barras, como na tela (o gráfico do contas a pagar): barras de
+  // largura fixa a partir da esquerda, empilhadas, topo arredondado, o valor
+  // do mês em negrito em cima, o mês embaixo (o atual em negrito) e a
+  // legenda em quadradinhos. Muitos meses: as barras estreitam para caber.
   const curto = (v) => { const a = Math.abs(v); const t = a >= 1000000 ? (a / 1000000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + "mi" : a >= 1000 ? Math.round(a / 1000) + "k" : a > 0 ? String(Math.round(a)) : ""; return v < 0 && t ? "-" + t : t; };
-  const barras = (meses, faixas, opcoes) => {
+  const ALT_BARRAS = 32;
+  const alturaDoGrafico = (alt) => alt + 5 + 7 + 8;
+  const barras = (meses, faixas, x0, y0, larg, opcoes) => {
     const o = opcoes || {};
     const n = meses.length;
-    if (!n) return;
-    const ALT = o.altura || 34;
-    quebra(ALT + 22);
+    const ALT = o.altura || ALT_BARRAS;
+    // proporção da tela: barra larga (40 de barra para 16 de vão)
+    const slot = Math.min(14, larg / Math.max(1, n)), bw = slot * 0.71;
     const valor = (m) => faixas.reduce((t, f) => t + (Number(m[f[0]]) || 0), 0);
-    const maior = Math.max(1, ...meses.map((m) => Math.abs(valor(m))));
-    const temNeg = meses.some((m) => valor(m) < 0);
-    const passo = LARG / n, bw = Math.min(11, passo * 0.62);
-    const topo = y + 5, base = topo + ALT * (temNeg ? 0.62 : 1);
-    const escala = (ALT * (temNeg ? 0.62 : 1)) / maior;
-    doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.25); doc.line(M, base, X1, base);
-    const fsVal = n > 24 ? 5 : n > 14 ? 5.6 : 6.4;
+    const vals = meses.map(valor);
+    const maxPos = Math.max(0, ...vals), maxNeg = Math.max(0, ...vals.map((v) => -v));
+    const total = Math.max(1, maxPos + maxNeg);
+    const hPos = maxNeg > 0 && maxPos > 0 ? ALT * 0.62 : maxNeg > 0 ? 0 : ALT;
+    const hNeg = ALT - hPos;
+    const base = y0 + 5 + hPos;
+    // o valor negativo vai embaixo da barra: sobra lugar para ele antes do mês
+    const escP = maxPos > 0 ? hPos / maxPos : 0, escN = maxNeg > 0 ? Math.max(1, hNeg - 4.5) / maxNeg : 0;
+    void total;
+    doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.3); doc.line(x0, base, x0 + Math.min(larg, slot * n + 2), base);
+    const fsVal = slot < 6 ? 5 : slot < 8 ? 5.8 : slot < 11 ? 6.6 : 7.2, fsMes = slot < 6 ? 5 : slot < 8 ? 5.8 : slot < 11 ? 6.6 : 7.2;
+    // muitos meses: o rótulo (mês e valor) vai a cada tantos, para não encavalar
+    const pulo = Math.max(1, Math.ceil(6.4 / slot));
+    const mostra = (k, m) => pulo === 1 || k % pulo === 0 || m.chave === (o.mesHoje || "") || m.chave === "pre";
     meses.forEach((m, k) => {
-      const cx = M + passo * k + passo / 2, x = cx - bw / 2;
-      let yy = base, yn = base;
-      const segs = faixas.map((f) => ({ cor: hex(f[1]), v: Number(m[f[0]]) || 0 })).filter((sg) => Math.abs(sg.v) > 0.004);
-      segs.forEach((sg, j) => {
-        const h = Math.max(0.4, Math.abs(sg.v) * escala);
-        doc.setFillColor(sg.cor[0], sg.cor[1], sg.cor[2]);
-        if (sg.v >= 0) {
+      const x = x0 + k * slot + (slot - bw) / 2, cx = x + bw / 2;
+      const v = vals[k];
+      if (o.sinal) {
+        const h = v > 0 ? Math.max(0.6, v * escP) : v < 0 ? Math.max(0.6, -v * escN) : 0;
+        if (h > 0) { const c = v < 0 ? VERM : AZUL_VK; doc.setFillColor(c[0], c[1], c[2]); doc.roundedRect(x, v > 0 ? base - h : base, bw, h, Math.min(0.9, bw * 0.12), Math.min(0.9, bw * 0.12), "F"); }
+        if (Math.abs(v) > 0.004 && mostra(k, m)) { doc.setFont("helvetica", "bold"); doc.setFontSize(fsVal); cor(v < 0 ? VERM : TINTA);
+          doc.text(curto(v), cx, v >= 0 ? base - h - 1.2 : base + h + 2.6, { align: "center" }); doc.setFont("helvetica", "normal"); }
+      } else {
+        let yy = base;
+        const segs = faixas.map((f) => ({ cor: hex(f[1]), v: Number(m[f[0]]) || 0 })).filter((sg) => sg.v > 0.004);
+        segs.forEach((sg, j) => {
+          const h = Math.max(0.5, sg.v * escP);
           yy -= h;
-          const ultimoPos = segs.slice(j + 1).every((z) => z.v < 0);
-          if (ultimoPos && h > 1.4) { doc.roundedRect(x, yy, bw, h, Math.min(1.2, bw * 0.15), Math.min(1.2, bw * 0.15), "F"); doc.rect(x, yy + h / 2, bw, h / 2, "F"); }
+          doc.setFillColor(sg.cor[0], sg.cor[1], sg.cor[2]);
+          const r = Math.min(0.9, bw * 0.12, h / 2);
+          if (j === segs.length - 1 && r > 0.2) { doc.roundedRect(x, yy, bw, h, r, r, "F"); doc.rect(x, yy + h / 2, bw, h / 2, "F"); }
           else doc.rect(x, yy, bw, h, "F");
-        } else { doc.rect(x, yn, bw, h, "F"); yn += h; }
-      });
-      const v = valor(m);
-      if (Math.abs(v) > 0.004) {
-        doc.setFont("helvetica", "bold"); doc.setFontSize(fsVal); cor(v < 0 ? VERM : TINTA);
-        doc.text(curto(v), cx, v < 0 ? yn + 2.6 : yy - 1, { align: "center" });
-        doc.setFont("helvetica", "normal");
+        });
+        if (v > 0.004 && mostra(k, m)) { doc.setFont("helvetica", "bold"); doc.setFontSize(fsVal); cor(TINTA); doc.text(curto(v), cx, yy - 1.2, { align: "center" }); doc.setFont("helvetica", "normal"); }
       }
-      if (n <= 26 || k % Math.ceil(n / 26) === 0) {
-        doc.setFontSize(n > 18 ? 5.2 : 6); cor(m.chave === (o.mesHoje || "") ? TINTA : CINZA);
-        doc.text(m.rotulo, cx, (temNeg ? topo + ALT : base) + 3.6, { align: "center" });
+      const atual = m.chave === (o.mesHoje || "");
+      if (mostra(k, m) && !(pulo > 1 && !atual && meses.some((z, j) => z.chave === (o.mesHoje || "") && j !== k && Math.abs(j - k) < pulo))) {
+        doc.setFont("helvetica", atual ? "bold" : "normal"); doc.setFontSize(fsMes); cor(atual ? TINTA : CINZA);
+        doc.text(m.rotulo, cx, y0 + 5 + ALT + 4.2, { align: "center" });
       }
+      doc.setFont("helvetica", "normal");
     });
-    y = (temNeg ? topo + ALT : base) + 9.5;
-    let lx = M;
-    for (const f of faixas.filter((f) => meses.some((m) => Math.abs(Number(m[f[0]]) || 0) > 0.004))) {
+    let lx = x0;
+    const ly = y0 + 5 + ALT + 11;
+    const usadas = o.sinal ? faixas : faixas.filter((f) => meses.some((m) => (Number(m[f[0]]) || 0) > 0.004));
+    for (const f of usadas) {
       const c = hex(f[1]);
-      doc.setFillColor(c[0], c[1], c[2]); doc.roundedRect(lx, y - 2.3, 2.6, 2.6, 0.5, 0.5, "F");
-      doc.setFontSize(6.8); cor(TINTA); doc.text(f[2], lx + 3.6, y - 0.2); lx += 3.6 + doc.getTextWidth(f[2]) + 5;
+      doc.setFillColor(c[0], c[1], c[2]); doc.roundedRect(lx, ly - 2.5, 2.8, 2.8, 0.6, 0.6, "F");
+      doc.setFontSize(7.4); cor(TINTA); doc.text(f[2], lx + 4, ly - 0.2); lx += 4 + doc.getTextWidth(f[2]) + 6;
     }
-    y += 4;
   };
   const ff = i.ff, cf = i.conferencia, cm = i.custos, rm = i.recebimentos, fc = i.fluxoCaixa;
   const comp = ff && ff.regime === "competencia";
@@ -4724,12 +4764,11 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
     .concat(fc && !fc.erro ? [["Resultado projetado", moeda(fc.total.resultado)]] : [["Pendências", String(pc.semArquivo + pc.semNumero)]])
     : [["Total das saídas", moeda(pc.total)], ...(pc.nEntradas ? [["Total das entradas", moeda(pc.entradas)]] : []), ["Notas", String(pc.notas.length)],
       ["Arquivos", String(pc.arquivos.length)], ["Pendências", String(pc.semArquivo + pc.semNumero)]];
-  secao("Resumo");
   const lc = (LARG - (caixas.length - 1) * 2.5) / caixas.length;
   caixas.forEach(([rot, val], k) => {
     const x = M + k * (lc + 2.5);
-    doc.setFillColor(FUNDO[0], FUNDO[1], FUNDO[2]); doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.2);
-    doc.roundedRect(x, y, lc, 14, 1.5, 1.5, "FD");
+    doc.setFillColor(BRANCO[0], BRANCO[1], BRANCO[2]); doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.25);
+    doc.roundedRect(x, y, lc, 14, 2, 2, "FD");
     doc.setFontSize(6.6); cor(CINZA); doc.text(rot.toUpperCase(), x + 2.8, y + 4.6);
     doc.setFont("helvetica", "bold"); doc.setFontSize(10.5);
     const neg = /^-R\$/.test(val);
@@ -4737,7 +4776,7 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
     doc.text(caber(val, lc - 4), x + 2.8, y + 10.6);
     doc.setFont("helvetica", "normal");
   });
-  y += 20;
+  y += 19;
   // 2. físico-financeiro
   if (ff) {
     secao("Físico-financeiro (obra inteira)", comp
@@ -4757,9 +4796,9 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   }
   // 3. custos mês a mês
   if (cm && cm.meses.length) {
-    secao("Custos mês a mês", (comp ? "Regime de competência: cada despesa no mês do vencimento." : "Regime de caixa: pago no mês em que saiu do banco; vencido e a pagar no mês do vencimento.")
-      + (par && par.inicio ? ` O que veio antes de ${dia(par.inicio)} está em Pré-obra.` : ""), 78);
-    barras(cm.meses, comp ? [["custo", "#0474f4", "Custo lançado"]] : CP_FAIXAS, { mesHoje: (fc && fc.mesHoje) || "" });
+    cartao("Custos mês a mês", (comp ? "Competência: cada despesa no mês do vencimento." : "Caixa: pago no mês em que saiu; vencido e a pagar no mês do vencimento.")
+      + (par && par.inicio ? ` O que veio antes de ${dia(par.inicio)} está em Pré-obra.` : ""), alturaDoGrafico(ALT_BARRAS),
+      (x0, y0, lg) => barras(cm.meses, comp ? [["custo", "#0474f4", "Custo lançado"]] : CP_FAIXAS, x0, y0, lg, { mesHoje: (fc && fc.mesHoje) || "" }));
     const cols = [{ t: "Mês", w: 22 }].concat(comp ? [{ t: "Custo lançado", w: 40, alinhar: "right" }]
       : [{ t: "Pago", w: 30, alinhar: "right" }, { t: "Vencido", w: 30, alinhar: "right" }, { t: "A pagar", w: 30, alinhar: "right" }]).concat([{ t: "Total do mês", w: 34, alinhar: "right" }]);
     const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
@@ -4770,9 +4809,9 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   }
   // 4. recebimentos mês a mês
   if (rm && rm.meses.length) {
-    secao("Recebimentos mês a mês", (rm.regime === "competencia" ? "Regime de competência: cada parcela no mês do vencimento." : "Regime de caixa: recebido no mês em que entrou; o que os contratos ainda vão pagar, no vencimento.")
-      + " Contrato a assinar e venda futura vêm do cronograma de recebimento da obra." + (rm.temCronograma ? "" : " (Sem cronograma cadastrado.)"), 78);
-    barras(rm.meses, CP_FAIXAS_RECEB, { mesHoje: (fc && fc.mesHoje) || "" });
+    cartao("Recebimentos mês a mês", (rm.regime === "competencia" ? "Competência: cada parcela no mês do vencimento." : "Caixa: recebido no mês em que entrou; o resto no vencimento.")
+      + (rm.temCronograma ? " Contrato a assinar e venda futura vêm do cronograma de recebimento da obra." : " Sem cronograma de contrato a assinar ou venda futura na obra."), alturaDoGrafico(ALT_BARRAS),
+      (x0, y0, lg) => barras(rm.meses, CP_FAIXAS_RECEB, x0, y0, lg, { mesHoje: (fc && fc.mesHoje) || "" }));
     const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
     tabela([{ t: "Mês", w: 20 }, { t: "Recebido", w: 28, alinhar: "right" }, { t: "Contrato assinado", w: 30, alinhar: "right" },
       { t: "A assinar", w: 28, alinhar: "right" }, { t: "Venda futura", w: 28, alinhar: "right" }, { t: "Total do mês", w: 30, alinhar: "right" }],
@@ -4785,9 +4824,10 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
     if (fc.erro) {
       secao("Fluxo de caixa", "Sem o término estimado da obra não há como distribuir o custo que falta. Informe o término nos parâmetros da prestação.");
     } else {
-      secao("Fluxo de caixa até o término",
-        `Custo realizado: o que já foi pago, mês a mês. Custo a realizar: o custo previsto (o maior entre o estimado e o já lançado) menos o pago — ${moeda(fc.aRealizar)} — dividido igual pelos ${fc.mesesRestantes} ${fc.mesesRestantes === 1 ? "mês" : "meses"} até o término. Recebimento: o que entrou e, deste mês em diante, os contratos assinados (o atrasado entra no mês atual), os a assinar e a venda futura.`, 80);
-      barras(fc.linhas.map((l) => ({ chave: l.chave, rotulo: l.rotulo, acumulado: l.acumulado })), [["acumulado", "#0474f4", "Saldo acumulado (recebimentos - custos)"]], { altura: 30, mesHoje: fc.mesHoje });
+      cartao("Fluxo de caixa até o término",
+        `Custo a realizar: ${moeda(fc.aRealizar)} (o custo previsto menos o pago) dividido em ${fc.mesesRestantes} ${fc.mesesRestantes === 1 ? "mês" : "meses"} até o término. Recebimento: o que entrou e, deste mês em diante, os contratos assinados (o atrasado entra no mês atual), os a assinar e a venda futura. Barras: saldo acumulado (recebimentos - custos).`,
+        alturaDoGrafico(30), (x0, y0, lg) => barras(fc.linhas.map((l) => ({ chave: l.chave, rotulo: l.rotulo, acumulado: l.acumulado })),
+          [["acumulado", "#0474f4", "Saldo positivo"], ["neg", "#b91c1c", "Saldo negativo"]].slice(0, fc.linhas.some((l) => l.acumulado < 0) ? 2 : 1), x0, y0, lg, { altura: 30, mesHoje: fc.mesHoje, sinal: true }));
       const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
       tabela([{ t: "Mês", w: 18 }, { t: "Custo realizado", w: 26, alinhar: "right" }, { t: "Custo a realizar", w: 26, alinhar: "right" },
         { t: "Recebido", w: 26, alinhar: "right" }, { t: "A receber previsto", w: 28, alinhar: "right" }, { t: "Resultado do mês", w: 27, alinhar: "right" }, { t: "Acumulado", w: 27, alinhar: "right" }],
