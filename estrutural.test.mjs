@@ -8,7 +8,7 @@ import assert from "assert";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(join(__dirname, "src", "modules", "estrutural.jsx"), "utf-8");
-const M = new Function(`${src}\nreturn { esLancarPavimentos, esDescidaCargas, esTopoPavimento, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao, esLinhaContinua, esPaineisLaje, esDimViga, esDimPilar, esDimensionar, esMRd, esConcreto, esPlacaApoiada, esDimLaje, esCalcularEstrutura, esParaOrcamento, esDimFundacao, esFundacaoObra, esPadmEstaca, esCargaEscada, esResumoMateriais, esAlturaLivreEscada, esCompatibilizar, esSepararBlocos };`)();
+const M = new Function(`${src}\nreturn { esLancarPavimentos, esDescidaCargas, esTopoPavimento, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao, esLinhaContinua, esPaineisLaje, esDimViga, esDimPilar, esDimensionar, esMRd, esConcreto, esPlacaApoiada, esDimLaje, esCalcularEstrutura, esParaOrcamento, esDimFundacao, esFundacaoObra, esPadmEstaca, esCargaEscada, esResumoMateriais, esAlturaLivreEscada, esCompatibilizar, esSepararBlocos, esApoiosIndiretos };`)();
 
 let ok = 0, falhou = 0;
 const t = (nome, fn) => { try { fn(); ok++; } catch (e) { falhou++; console.log("FALHOU:", nome, "\n ", e.message); } };
@@ -470,6 +470,30 @@ t("compatibilização: viga de piso invertida quando a parede de cima não tem p
   const cima2 = [...baixo, W(P(3, 0), P(3, 4), [{ id: "p", tipo: "porta_giro", x: 2, larg: 0.8, alt: 2.1, peit: 0 }])];
   const c2 = M.esCalcularEstrutura([pavs[0], { ...pavs[1], paredes: cima2 }], { vaoMax: 7 });
   assert.ok(!c2.lanc[0].vigas.find((v) => v.vigaPiso).invertida);
+});
+t("apoio indireto: viga de piso que recebe viga normal não inverte; sem dente no encontro", () => {
+  const baixo = [W(P(0, 0), P(6, 0)), W(P(6, 0), P(6, 4)), W(P(6, 4), P(0, 4)), W(P(0, 4), P(0, 0))];
+  const cima = [...baixo, W(P(3, 0), P(3, 4))];
+  const laje = { tipo: "laje", pts: [P(0, 0), P(6, 0), P(6, 4), P(0, 4)], esp: 0.12, carga: { tipo: "macica", uso: "residencial" } };
+  const pavs = [{ paredes: baixo, areas: [laje], nivel: 0, usoPadrao: "residencial" }, { paredes: cima, areas: [{ ...laje, carga: { tipo: "macica", uso: "forro" } }], nivel: 2.9, usoPadrao: "forro" }];
+  const lanc = M.esLancarPavimentos(pavs, { vaoMax: 7 }), vp = lanc[0].vigas.find((v) => v.vigaPiso);
+  const meio = { x: (vp.a.x + vp.b.x) / 2, y: (vp.a.y + vp.b.y) / 2 };
+  lanc[0].vigas.push({ id: "VX", a: P(0, meio.y), b: meio, apoioA: null, apoioB: null, parede: null, b_: 0.14, h: 0.4, topo: vp.topo });
+  const ac = M.esCompatibilizar(pavs, lanc, { pavimentos: [{ tramos: [] }, { tramos: [] }] }, { vaoMax: 7 });
+  assert.ok(!vp.invertida && ac.some((a) => a.tipo === "mantida" && a.id === vp.id), JSON.stringify(ac));
+  // no cálculo completo: nenhuma viga que recebe fica com o fundo acima da apoiada, nem invertida sob viga normal
+  for (const c of [M.esCalcularEstrutura(pavs, { vaoMax: 7 })]) for (const e of c.lanc) for (const x of M.esApoiosIndiretos(e)) {
+    const f = (v) => v.topo - v.h;
+    assert.ok(x.apoiada.invertida || f(x.apoiada) >= f(x.apoio) - 0.005, `${x.apoiada.id} em ${x.apoio.id}`);
+    assert.ok(!x.apoio.invertida || x.apoiada.invertida, `${x.apoiada.id} pendurada em ${x.apoio.id}`);
+  }
+});
+t("apoio indireto: viga funda apoiada em viga mais baixa iguala a altura (VE1 50 em V13 40)", () => {
+  const caixa = [W(P(-5.14, -1), P(0, -1)), W(P(0, -1), P(0, 2.66)), W(P(0, 2.66), P(-5.14, 2.66)), W(P(-5.14, 2.66), P(-5.14, -1))];
+  const pavs = [{ paredes: caixa, areas: [{ tipo: "laje", pts: [P(-5.14, -1), P(0, -1), P(0, 2.66), P(-5.14, 2.66)], esp: 0.12, carga: { tipo: "macica", uso: "residencial" } }], escadas: [], nivel: 0, usoPadrao: "residencial" }];
+  const lanc = M.esLancarPavimentos(pavs, { vaoMax: 9 });
+  lanc[0].vigas.push({ id: "VZ", a: P(-5.14, 1), b: P(0, 1), apoioA: null, apoioB: null, parede: null, b_: 0.14, h: 0.5, topo: lanc[0].vigas[0].topo });
+  const xs = M.esApoiosIndiretos(lanc[0]).filter((x) => x.apoiada.id === "VZ"); assert.strictEqual(xs.length, 2, JSON.stringify(xs.map((x) => x.apoio.id)));
 });
 t("fundação: blocos que se encostam são girados ou viram bloco conjunto", () => {
   const dp = { barras: { n: 4, d: 10 } };

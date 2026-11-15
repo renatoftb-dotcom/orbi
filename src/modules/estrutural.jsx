@@ -575,14 +575,14 @@ function esTentarBalanco(grupo, est, P, k, furos, onde) {
   let nova = null;
   if (ja) { const lj = esDist(ja.a, S) < 0.05 ? "A" : "B"; if (!pl) ja["no" + lj] = Bs.id; ja.equilibrio = X.id; }
   else {
-    const pre = X.vigaEscada ? "VE" : "V", n = est.vigas.filter((o) => o.id.startsWith(pre) && /^\d+$/.test(o.id.slice(pre.length))).reduce((m, o) => Math.max(m, +o.id.slice(pre.length)), 0) + 1;
+    // é a mesma viga contínua (balanço + tramo de equilíbrio): mesmo nome, tramo 2
     const pF = pilarEm(F);
-    nova = { id: pre + n, a: { x: esR3(S.x), y: esR3(S.y) }, b: { x: esR3(F.x), y: esR3(F.y) }, apoioA: pl ? pl.id : null, apoioB: pF ? pF.id : null, noA: pl ? null : Bs.id, parede: null, s0: 0, s1: esR3(Lb), b_: X.b_, h: X.h, topo: X.topo, vigaEscada: !!X.vigaEscada, equilibrio: X.id };
+    nova = { id: X.id + "-2", a: { x: esR3(S.x), y: esR3(S.y) }, b: { x: esR3(F.x), y: esR3(F.y) }, apoioA: pl ? pl.id : null, apoioB: pF ? pF.id : null, noA: pl ? null : Bs.id, parede: null, s0: 0, s1: esR3(Lb), b_: X.b_, h: X.h, topo: X.topo, vigaEscada: !!X.vigaEscada, equilibrio: X.id };
     est.vigas.push(nova);
   }
   for (const g of grupo) if (g.v !== X) { g.v["apoio" + (g.lado === "a" ? "A" : "B")] = null; (g.v._pontaNaViga = g.v._pontaNaViga || {})[g.lado] = true; g.v.naPontaDe = X.id; g.v.naPontaLado = g.lado; }
   const f2 = (x) => String(Math.round(x * 100) / 100).replace(".", ",");
-  (est.resolvidos = est.resolvidos || []).push({ k, id: X.id, tipo: "balanco", texto: `${X.id} em balanço de ${f2(Lc)} m segura ${onde} sem pilar (o pilar ficaria fora das paredes)${grupo.length > 1 ? `; ${grupo.filter((g) => g.v !== X).map((g) => g.v.id).join(", ")} apoia na ponta dele` : ""}. ${ja ? `Continua na ${ja.id}` : `Continua ${f2(Lb)} m além do apoio (${nova.id})`} para equilibrar.` });
+  (est.resolvidos = est.resolvidos || []).push({ k, id: X.id, tipo: "balanco", texto: `${X.id} em balanço de ${f2(Lc)} m segura ${onde} sem pilar (o pilar ficaria fora das paredes)${grupo.length > 1 ? `; ${grupo.filter((g) => g.v !== X).map((g) => g.v.id).join(", ")} apoia na ponta dele` : ""}. ${ja ? `Continua na ${ja.id}` : `Continua ${f2(Lb)} m além do apoio (tramo ${nova.id}, mesma viga contínua)`} para equilibrar.` });
   return true;
 }
 // mesma regra para qualquer viga com ponta solta (sem pilar e sem viga
@@ -1197,6 +1197,7 @@ function esDescidaCargas(pavs, lanc, params) {
         res[k].tramos[res[k].tramos.length - 1].comLaje = t.ids.some((id) => comLaje.has(id));
         res[k].tramos[res[k].tramos.length - 1].apoiaOutra = extra[i].length > 0 || pontos[i].length > 0;
         res[k].tramos[res[k].tramos.length - 1].especial = t.pecas.some((v) => v.vigaPiso || v.vigaEscada);
+        res[k].tramos[res[k].tramos.length - 1].equilibrio = t.pecas.some((v) => v.equilibrio);
         for (const id of t.ids) res[k].vigas[id] = { tramo: t.ids.join("+"), L: t.L, g: w.g / (t.L || 1), q: w.q / (t.L || 1), RA: R[i].A, RB: R[i].B, apoioA: t.apoioA, apoioB: t.apoioB };
         // tramo de equilíbrio de balanço curto: a outra ponta é puxada para cima
         const eq = t.pecas.find((v) => v.equilibrio);
@@ -1367,13 +1368,16 @@ function esEsforcos(L, w, pontos, Ma = 0, Mb = 0, livre = null, lBack = 0) {
   const M = (x) => RA0 * x - w * x * x / 2 - pontos.reduce((t, p) => t + (x > p.t ? p.P * (x - p.t) : 0), 0) + Ma * (1 - x / L) + Mb * x / L;
   const xs = []; for (let i = 0; i <= 60; i++) xs.push(L * i / 60); for (const p of pontos) xs.push(Math.min(L, Math.max(0, p.t)));
   let Mmax = 0; for (const x of xs) Mmax = Math.max(Mmax, M(x));
+  // onde o momento negativo da ponta acaba (para o comprimento da negativa)
+  let x0A = 0, x0B = 0; for (let i = 0; i <= 200; i++) { const x = L * i / 200; if (M(x) < -1e-9) x0A = x; else break; }
+  for (let i = 200; i >= 0; i--) { const x = L * i / 200; if (M(x) < -1e-9) x0B = L - x; else break; }
   // flecha no meio por trabalho virtual (EI = 1): ∫ M·m dx, m da carga unitária no meio
   const n = 200, h = L / n; let I = 0;
   for (let i = 0; i <= n; i++) { const x = i * h, m = livre === "B" ? -(L - x) : livre === "A" ? -x : x <= L / 2 ? x / 2 : (L - x) / 2, f = i === 0 || i === n ? 1 : i % 2 ? 4 : 2; I += f * M(x) * m; }
   // balanço: flecha na ponta = engastado + giro da raiz (tramo de equilíbrio
   // bi-apoiado com o momento da raiz, sem o alívio da carga dele)
   if (livre) I += Math.abs(livre === "B" ? Ma : Mb) * (lBack || 0) / 3 * L * 3 / h;
-  return { RA, RB, Vmax: Math.max(Math.abs(RA), Math.abs(RB)), Mmax, Mneg: Math.max(0, -Ma, -Mb), MnegA: Math.max(0, -Ma), MnegB: Math.max(0, -Mb), flechaEI: I * h / 3 };
+  return { RA, RB, Vmax: Math.max(Math.abs(RA), Math.abs(RB)), Mmax, Mneg: Math.max(0, -Ma, -Mb), MnegA: Math.max(0, -Ma), MnegB: Math.max(0, -Mb), flechaEI: I * h / 3, x0A, x0B };
 }
 // armadura longitudinal de viga: barras de mesma bitola, até 2 camadas
 function esBarrasViga(As, b, c) {
@@ -1465,7 +1469,9 @@ function esDimViga(t, params, hTeste) {
     r.aco[6.3] = (r.aco[6.3] || 0) + 2 * (L + 0.2) * esKgBarra(6.3);
     // negativa: em cada apoio com momento, 0,25 L para dentro do tramo + ancoragem
     // balanço: a negativa corre o balanço inteiro (a ancoragem no tramo de equilíbrio entra nele)
-    if (r.barrasNeg) for (const Mn of [ed.MnegA, ed.MnegB]) if (Mn > 0.5) r.aco[r.barrasNeg.d] = (r.aco[r.barrasNeg.d] || 0) + r.barrasNeg.n * ((t.livre ? L : 0.25 * L) + 10 * r.barrasNeg.d / 1000) * esKgBarra(r.barrasNeg.d);
+    // tramo de equilíbrio: até onde o negativo acaba + ancoragem (lb ≈ 38φ,
+    // CA-50 nervurada, boa aderência, C25 — 9.4.2.4), nunca menos que 0,25 L
+    if (r.barrasNeg) for (const [Mn, x0] of [[ed.MnegA, ed.x0A], [ed.MnegB, ed.x0B]]) if (Mn > 0.5) r.aco[r.barrasNeg.d] = (r.aco[r.barrasNeg.d] || 0) + r.barrasNeg.n * ((t.livre ? L : t.equilibrio ? Math.min(L, Math.max(0.25 * L, x0 + 38 * r.barrasNeg.d / 1000)) : 0.25 * L) + 10 * r.barrasNeg.d / 1000) * esKgBarra(r.barrasNeg.d);
     if (r.estribo) r.aco[r.estribo.d] = (r.aco[r.estribo.d] || 0) + nE * compE * esKgBarra(r.estribo.d);
   }
   return r;
@@ -1960,6 +1966,25 @@ function esDimLaje(pn, params) {
 // 3) viga de piso (sob parede de cima sem parede embaixo): invertida sempre
 //    que der — some do teto de baixo.
 // Viga invertida: o fundo fica no fundo da laje e o topo sobe h − e.
+// APOIO INDIRETO (viga apoiada em viga, sem pilar no encontro): a armadura de
+// baixo da viga apoiada tem de passar por cima da armadura de baixo da que
+// recebe, e a carga sobe pela armadura de suspensão (NBR 6118, 18.3.6). Por
+// isso a viga que recebe nunca pode ter o fundo mais alto que a apoiada (o
+// "dente" para baixo no encontro) e não pode ser invertida se a apoiada não
+// for: a apoiada ficaria pendurada abaixo dela, presa só pela espessura da laje.
+function esApoiosIndiretos(est) {
+  const vs = (est.vigas || []).filter((v) => !v.baldrame), r = [];
+  for (const v of vs) for (const q of [v.a, v.b]) {
+    if ((est.pilares || []).some((p) => esDist(p.no, q) <= 0.3)) continue;
+    for (const o of vs) if (o !== v && esPontoNoSeg(q, o.a, o.b).d < 0.06 && !(esDist(o.a, q) < 0.05 && esDist(o.b, v.a) + esDist(o.b, v.b) > 0 && esColinear(o, v))) r.push({ apoiada: v, apoio: o, q });
+  }
+  return r;
+}
+function esColinear(o, v) {
+  const L1 = esDist(o.a, o.b), L2 = esDist(v.a, v.b); if (!L1 || !L2) return false;
+  return Math.abs(((o.b.x - o.a.x) * (v.b.x - v.a.x) + (o.b.y - o.a.y) * (v.b.y - v.a.y)) / (L1 * L2)) > 0.996;
+}
+const esFundo = (v) => (v.topo != null ? v.topo : 2.8) - v.h;
 function esCompatibilizar(pavs, lanc, desc, params) {
   const P = { ...ES_PADRAO, ...(params || {}) }, acoes = [];
   const espLaje = (k, q) => {
@@ -1982,7 +2007,9 @@ function esCompatibilizar(pavs, lanc, desc, params) {
     }
     return { cobre: coberto / L, vaos };
   };
-  const podeInverter = (k, v) => {
+  const recebeNormal = (k, v, invertendo) => esApoiosIndiretos(lanc[k]).some((x) => x.apoio === v && !x.apoiada.invertida && !(invertendo && invertendo.has(x.apoiada)));
+  const podeInverter = (k, v, invertendo) => {
+    if (recebeNormal(k, v, invertendo)) return false; // a apoiada ficaria pendurada embaixo dela
     const pa = paredesAcima(k, v); if (!pa || pa.cobre < 0.95) return false;
     const sobe = v.h - espLaje(k, { x: (v.a.x + v.b.x) / 2, y: (v.a.y + v.b.y) / 2 });
     return !pa.vaos.some((o) => (o.peit || 0) < sobe + 0.02); // porta ou janela baixa em cima: não dá
@@ -2004,14 +2031,25 @@ function esCompatibilizar(pavs, lanc, desc, params) {
         const fundo = (v.topo || 2.8) - v.h;
         if (qual && topoVao > fundo + 0.005) {
           const disp = Math.floor(((v.topo || 2.8) - topoVao) * 20 + 1e-9) / 20, t = tramoDe(v.id), nome = (qual.tipo || "").startsWith("porta") ? "porta" : "janela";
-          const r = t && disp >= 0.25 ? esDimViga(t, params, disp) : null;
+          // não pode ficar com o fundo acima do fundo das vigas que apoiam nela
+          const hApoiadas = esApoiosIndiretos(est).filter((x) => x.apoio === v && !x.apoiada.invertida).reduce((m, x) => Math.max(m, (v.topo || 2.8) - esFundo(x.apoiada)), 0);
+          const r = t && disp >= 0.25 && disp >= hApoiadas - 1e-6 ? esDimViga(t, params, disp) : null;
           if (r && r.ok) { acoes.push({ k, id: v.id, tipo: "altura", texto: `${v.id} baixada de ${Math.round(v.h * 100)} para ${Math.round(disp * 100)} cm para não invadir a ${nome} (o cálculo passa).` }); v.h = disp; }
           else if (podeInverter(k, v)) inverter(k, v, `não cabe acima da ${nome}`);
           else acoes.push({ k, id: v.id, tipo: "pendente", texto: `${v.id} não cabe acima da ${nome} e não dá para inverter: suba o vão da ${nome} até ${String((fundo).toFixed(2)).replace(".", ",")} m ou mude a viga.` });
         }
       }
-      // 3) viga de piso: invertida quando a parede de cima permite
-      if (v.vigaPiso && podeInverter(k, v)) inverter(k, v, "some do teto de baixo");
+    }
+    // 3) vigas de piso: invertidas quando a parede de cima permite e nenhuma
+    // viga normal se apoia nelas (decide o conjunto junto: VP sobre VP pode)
+    let cand = new Set(est.vigas.filter((v) => v.vigaPiso && !v.invertida && !v.baldrame && !v.cinta && podeInverter(k, v, new Set(est.vigas.filter((x) => x.vigaPiso)))));
+    for (let it = 0; it < 10; it++) { const n = new Set([...cand].filter((v) => podeInverter(k, v, cand))); if (n.size === cand.size) break; cand = n; }
+    for (const v of est.vigas.filter((x) => x.vigaPiso && !x.invertida && !x.baldrame && !x.cinta)) {
+      if (cand.has(v)) inverter(k, v, "some do teto de baixo");
+      else if (podeInverter(k, v, new Set(est.vigas.filter((x) => x.vigaPiso))) || (paredesAcima(k, v) || {}).cobre >= 0.95 && recebeNormal(k, v)) {
+        const quem = esApoiosIndiretos(est).filter((x) => x.apoio === v && !x.apoiada.invertida && !cand.has(x.apoiada)).map((x) => x.apoiada.id);
+        if (quem.length) acoes.push({ k, id: v.id, tipo: "mantida", texto: `${v.id} não foi invertida: recebe a ${[...new Set(quem)].join(", ")}, que ficaria pendurada embaixo dela (apoio indireto, NBR 6118 18.3.6).` });
+      }
     }
     // 2) altura livre sobre a escada
     for (const x of esAlturaLivreEscada(est, pavs[k].escadas || [])) {
@@ -2023,7 +2061,7 @@ function esCompatibilizar(pavs, lanc, desc, params) {
   return acoes;
 }
 function esCalcularEstrutura(pavs, params) {
-  const P = { ...ES_PADRAO, ...(params || {}) }, lanc = esLancarPavimentos(pavs, params), ajustes = [];
+  const P = { ...ES_PADRAO, ...(params || {}) }, lanc = esLancarPavimentos(pavs, params), ajustes = [], igualadas = [];
   let desc = null, dim = null;
   // critério 12: trecho sem laje, sem parede em cima e sem viga apoiada nele
   // (muro, jardineira, parede de varanda sem cobertura) vira cinta de amarração
@@ -2044,6 +2082,17 @@ function esCalcularEstrutura(pavs, params) {
         else ajustes.find((a) => a.k === k && a.id === v.id).para = r.hMin;
         v.h = r.hMin; v.hPeloCalculo = true; mudou = true;
       }
+      // apoio indireto: a viga que recebe desce até o fundo da apoiada (sem dente)
+      for (const { apoiada, apoio } of esApoiosIndiretos(lanc[k])) {
+        if (apoiada.invertida || apoio.invertida || esFundo(apoiada) >= esFundo(apoio) - 0.005) continue;
+        const h = Math.ceil(((apoio.topo != null ? apoio.topo : 2.8) - esFundo(apoiada)) * 20 - 1e-6) / 20;
+        if (h <= apoio.h + 1e-9) continue;
+        const aj = ajustes.find((a) => a.k === k && a.id === apoio.id);
+        if (!aj) ajustes.push({ k, id: apoio.id, de: apoio.h, para: h, igualada: apoiada.id }); else { aj.para = h; aj.igualada = apoiada.id; }
+        if (!igualadas.some((x) => x.k === k && x.id === apoio.id)) igualadas.push({ k, id: apoio.id, tipo: "igualada", de: apoio.h, apoiada: apoiada.id });
+        const g = igualadas.find((x) => x.k === k && x.id === apoio.id); g.para = h; g.apoiada = apoiada.id;
+        apoio.h = h; mudou = true;
+      }
     });
     if (!mudou) break;
   }
@@ -2051,7 +2100,8 @@ function esCalcularEstrutura(pavs, params) {
   const compat = esCompatibilizar(pavs, lanc, desc, params);
   if (compat.some((a) => a.tipo !== "pendente")) { desc = esDescidaCargas(pavs, lanc, params); dim = esDimensionar(pavs, lanc, desc, params); }
   const doLanc = lanc.flatMap((e) => e.resolvidos || []);
-  return { lanc, desc, dim, ajustes, compat: [...doLanc, ...compat, ...(dim.compatFundacao || [])] };
+  const txtIg = igualadas.map((g) => ({ k: g.k, id: g.id, tipo: "igualada", texto: `${g.id} passou de ${Math.round(g.de * 100)} para ${Math.round(g.para * 100)} cm para receber a ${g.apoiada} sem dente embaixo (a armadura da ${g.apoiada} passa por cima da dela).` }));
+  return { lanc, desc, dim, ajustes, compat: [...doLanc, ...txtIg, ...compat, ...(dim.compatFundacao || [])] };
 }
 
 // ═══════════════════════════════════════════════════════════════
