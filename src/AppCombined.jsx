@@ -3486,9 +3486,7 @@ const api = {
     // Troca da própria senha. Exige senha atual pra prevenir abuso de
     // sessão sequestrada. Zera precisa_trocar_senha se a flag estiver setada.
     trocarSenha:  (senha_atual, senha_nova)   => post("/auth/trocar-senha", { senha_atual, senha_nova }),
-    // Confere a senha de quem está logado, para liberar uma ação sensível
-    // (ex.: lançar num mês já fechado). Não troca nada; fica na auditoria.
-    conferirSenha: (senha, motivo)          => post("/auth/conferir-senha", { senha, motivo }),
+
     // Recuperação de senha self-service (público — sem token JWT).
     // recuperar: usuário pede via email; backend manda link com token único.
     // redefinir: usuário usa o token do link pra setar senha nova.
@@ -3510,6 +3508,13 @@ const api = {
   },
 
   // Histórico: a versão de antes de cada gravação (admin). Ver server.js.
+  // Senha de liberação (só administrador): separada do login, para lançar
+  // num mês já fechado sem reabri-lo. Definir/trocar pede a senha de login.
+  liberacao: {
+    status:   ()                       => get("/api/senha-liberacao"),
+    definir:  (senha_login, senha_nova) => post("/api/senha-liberacao", { senha_login, senha_nova }),
+    conferir: (senha, motivo)          => post("/api/senha-liberacao/conferir", { senha, motivo }),
+  },
   historico: {
     listar:    (tabela, registro) => get(`/api/historico?tabela=${encodeURIComponent(tabela || "escritorio")}${registro ? `&registro=${encodeURIComponent(registro)}` : ""}`),
     ler:       (id)               => get(`/api/historico/${encodeURIComponent(id)}`),
@@ -20013,6 +20018,9 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const liberado = f.liberadoNoMesFechado && f.liberadoNoMesFechado.mes;
   const fechamentosDoForm = liberado ? fechamentosComLiberacao(fechamentos, liberado) : fechamentos;
   const mesQueTrava = mesFechadoQueTrava({ ...f, competenciaFixa }, fechamentosDoForm);
+  // só o administrador libera lançamento em mês fechado
+  const podeLiberarMes = (() => { const pm = typeof getPermissoes === "function" ? getPermissoes() : null;
+    return !!(pm && (pm.isAdmin || pm.isMaster)); })();
   const unidadesOk = conta && (conta.unidades || []).length ? conta.unidades : UNIDADES_NEGOCIO.map((u) => u.id);
   // Empreendimento é cliente com tique: quando a unidade é Empreendimento, a
   // lista de escolha só traz esses, e o id escolhido vale pelos dois campos.
@@ -20991,7 +20999,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       )}
       {liberado && (
         <div data-vk-mes-liberado="1" style={{ fontSize: 12, color: "#166534" }}>
-          🔓 Liberado com senha para lançar em {efMesPorExtenso(liberado)} — o mês continua fechado para todo o resto.
+          🔓 Liberado com a senha de liberação para lançar em {efMesPorExtenso(liberado)} — o mês continua fechado para todo o resto.
         </div>
       )}
       {pedindoSenha && (
@@ -21002,12 +21010,14 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       {tentou && todosErros.length > 0 && (
         <div style={{ fontSize: 12, color: "#b91c1c" }}>
           {todosErros.join(" · ")}
-          {mesQueTrava && todosErros.some((e) => /já está fechado/.test(e)) && (
+          {mesQueTrava && todosErros.some((e) => /já está fechado/.test(e)) && (podeLiberarMes ? (
             <button type="button" data-vk-liberar-mes="1" onClick={() => setPedindoSenha(mesQueTrava)}
               style={{ ...S.btnSec, marginLeft: 10, padding: "4px 10px", fontSize: 12 }}>
-              🔒 Lançar mesmo assim (pede senha)
+              🔒 Lançar mesmo assim (senha de liberação)
             </button>
-          )}
+          ) : (
+            <span data-vk-liberar-so-admin="1" style={{ marginLeft: 8, color: "#6b7280" }}>Só o administrador pode lançar em mês fechado.</span>
+          ))}
           {/* A trava de cliente e obra fica no pé; a saída dela (obra
               encerrada) mora lá em cima, junto dos campos. O atalho fica aqui,
               onde o olho já está. */}
@@ -22203,18 +22213,18 @@ function FaturasDoMes({ faturas, linhas, fila, lancs, aoFecharFatura, ocupado, f
 // não zera, o mês não fecha; depois de fechado, não entra lançamento nele.
 // O campo de valor da tela: pontos de milhar e vírgula aparecem enquanto
 // se digita; o cursor fica onde estava, contado pelos números.
-// Lançar num mês fechado: pede a senha de quem está logado (conferida no
-// servidor, que registra quem liberou). Não reabre o mês: só este
-// lançamento passa. Fecha só por Cancelar.
+// Lançar num mês fechado: só o administrador, com a senha de liberação do
+// escritório (separada do login, conferida no servidor, que registra quem
+// liberou). Não reabre o mês: só este lançamento passa. Fecha só por Cancelar.
 function JanelaSenhaMesFechado({ mes, aoConfirmar, aoCancelar }) {
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
   async function confirmar() {
-    if (!senha) { setErro("Digite sua senha."); return; }
+    if (!senha) { setErro("Digite a senha de liberação."); return; }
     setOcupado(true); setErro("");
     try {
-      await api.auth.conferirSenha(senha, "lancar_mes_fechado:" + mes);
+      await api.liberacao.conferir(senha, "lancar_mes_fechado:" + mes);
       setSenha(""); aoConfirmar();
     } catch (e) {
       setErro((e && e.message) || "Não deu para conferir a senha.");
@@ -22228,12 +22238,12 @@ function JanelaSenhaMesFechado({ mes, aoConfirmar, aoCancelar }) {
         boxShadow: "0 18px 40px rgba(0,0,0,0.18)", fontFamily: "inherit" }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Lançar em {efMesPorExtenso(mes)}</div>
         <div style={{ fontSize: 13, color: "#4b5563", lineHeight: 1.5, marginTop: 6 }}>
-          O mês está fechado. Com a sua senha, só este lançamento entra nele — o mês continua fechado para todo o resto,
-          e fica registrado quem liberou.
+          O mês está fechado. Com a senha de liberação, só este lançamento entra nele — o mês continua fechado para
+          todo o resto, e fica registrado quem liberou.
         </div>
         <form onSubmit={(e) => { e.preventDefault(); confirmar(); }} style={{ marginTop: 14 }}>
-          <input type="password" autoComplete="current-password" autoFocus value={senha} data-vk-senha-mes="1"
-            onChange={(e) => { setSenha(e.target.value); setErro(""); }} placeholder="Digite sua senha"
+          <input type="password" autoComplete="off" autoFocus value={senha} data-vk-senha-mes="1"
+            onChange={(e) => { setSenha(e.target.value); setErro(""); }} placeholder="Digite a senha de liberação"
             style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 10,
               border: "1px solid rgba(38,36,33,0.2)", fontSize: 14, fontFamily: "inherit" }} />
           {erro && <div data-vk-senha-erro="1" style={{ fontSize: 12, color: "#b91c1c", marginTop: 6 }}>{erro}</div>}
@@ -81571,6 +81581,7 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba, aoAbrirObra
 
   const renderSistema = () => (
     <div style={E.body}>
+      {perm.podeGerenciarUsuarios && <SenhaDeLiberacao E={E} />}
       {perm.podeGerenciarUsuarios && <HistoricoGravacoes E={E} onReload={onReload} />}
       <div style={E.secao}>
         <div style={E.secTitulo}>Manutenção automática</div>
@@ -81672,6 +81683,64 @@ const HIST_MOTIVO = { gravacao: "gravação", lote: "importação", exclusao: "e
 function histTamanho(b) {
   const n = Number(b) || 0;
   return n >= 1024 * 1024 ? (n / 1024 / 1024).toFixed(1).replace(".", ",") + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+}
+
+// Senha de liberação: separada do login, só do administrador. É ela que
+// deixa lançar num mês já fechado sem reabri-lo. Criar ou trocar pede a
+// senha de login de quem está fazendo; o servidor guarda só o hash.
+function SenhaDeLiberacao({ E }) {
+  const [status, setStatus] = useState(null);
+  const [login, setLogin] = useState("");
+  const [nova, setNova] = useState("");
+  const [repete, setRepete] = useState("");
+  const [msg, setMsg] = useState({ texto: "", ok: false });
+  const [ocupado, setOcupado] = useState(false);
+  const carregar = async () => {
+    try { setStatus(await api.liberacao.status()); } catch (e) { setStatus({ erro: (e && e.message) || "Não deu para ler." }); }
+  };
+  useEffect(() => { carregar(); }, []);
+  async function gravar(ev) {
+    ev.preventDefault();
+    if (!login || !nova) { setMsg({ texto: "Preencha a senha de login e a nova senha de liberação.", ok: false }); return; }
+    if (nova.length < 6) { setMsg({ texto: "A senha de liberação deve ter no mínimo 6 caracteres.", ok: false }); return; }
+    if (nova !== repete) { setMsg({ texto: "A repetição não confere com a nova senha.", ok: false }); return; }
+    setOcupado(true); setMsg({ texto: "", ok: false });
+    try {
+      await api.liberacao.definir(login, nova);
+      setLogin(""); setNova(""); setRepete("");
+      setMsg({ texto: "Senha de liberação gravada.", ok: true });
+      carregar();
+    } catch (e) { setMsg({ texto: (e && e.message) || "Não deu para gravar.", ok: false }); }
+    finally { setOcupado(false); }
+  }
+  const inp = { width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 10, border: "1px solid rgba(38,36,33,0.2)",
+    fontSize: 14, fontFamily: "inherit" };
+  const definida = status && status.definida;
+  return (
+    <div style={E.secao} data-vk-senha-liberacao="1">
+      <div style={E.secTitulo}>Senha de liberação (mês fechado)</div>
+      <div style={{ fontSize: 13, color: "#4b5563", lineHeight: 1.6, marginBottom: 12 }}>
+        Separada da senha de login. Só administrador usa: com ela, um lançamento entra num mês já fechado sem reabrir o mês.
+        {" "}{status == null ? "Lendo…" : status.erro ? status.erro
+          : definida ? `Criada em ${new Date(status.definida_em).toLocaleDateString("pt-BR")}.` : "Ainda não foi criada."}
+      </div>
+      <form onSubmit={gravar} style={{ display: "grid", gap: 10, maxWidth: 420 }}>
+        <input type="password" autoComplete="current-password" value={login} onChange={(e) => setLogin(e.target.value)}
+          placeholder="Digite a sua senha de login" style={inp} data-vk-lib-login="1" />
+        <input type="password" autoComplete="new-password" value={nova} onChange={(e) => setNova(e.target.value)}
+          placeholder="Digite a nova senha de liberação" style={inp} data-vk-lib-nova="1" />
+        <input type="password" autoComplete="new-password" value={repete} onChange={(e) => setRepete(e.target.value)}
+          placeholder="Repita a nova senha de liberação" style={inp} data-vk-lib-repete="1" />
+        {msg.texto && <div style={{ fontSize: 12.5, color: msg.ok ? "#166534" : "#b91c1c" }}>{msg.texto}</div>}
+        <div>
+          <button type="submit" disabled={ocupado} data-vk-lib-gravar="1" style={{ padding: "8px 16px", borderRadius: 10, border: "none",
+            background: "#0474f4", color: "#fff", fontSize: 13, fontWeight: 600, cursor: ocupado ? "wait" : "pointer", fontFamily: "inherit" }}>
+            {ocupado ? "Gravando…" : definida ? "Trocar a senha de liberação" : "Criar a senha de liberação"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 function HistoricoGravacoes({ E, onReload }) {
@@ -89786,9 +89855,11 @@ function esLancar(paredes, areas, params, opts = {}) {
       }
     }
   }
+  // 2b) alterações à mão (lançadas pelo usuário, reaplicadas por posição)
+  const orfas = esAplicarEdicoesPilares(pilares, ws, opts.edicoes || [], secao);
   // 3) encaixe de cada pilar na parede e fora de portas e janelas
   const interno = esLadoInternoFn(ws, areas);
-  for (const p of pilares) { esEncaixarPilar(p, ws, interno); delete p._dirs; }
+  for (const p of pilares) { if (!p.manual) esEncaixarPilar(p, ws, interno); delete p._dirs; }
   pilares.forEach((p, k) => { p.id = "P" + (k + 1); });
   // altura do pilar neste pavimento: do piso (ou do fundo do baldrame, no
   // primeiro) até o topo da estrutura (piso de cima) — o pilar é contínuo
@@ -89821,7 +89892,7 @@ function esLancar(paredes, areas, params, opts = {}) {
   // 4) lajes: as que o arquiteto desenhou neste pavimento
   const lajes = (areas || []).map((a, i) => ({ a, i })).filter(({ a }) => a.tipo === "laje" && a.pts && a.pts.length >= 3)
     .map(({ a, i }, k) => { const c = esCargaLaje(a, opts.usoPadrao); return { id: "L" + (k + 1), area: i, pts: a.pts, esp: c.pre ? c.pre.hTotal : (a.esp || P.lajeEsp), uso: c.piso ? "piso" : "cobertura", tipo: c.tipo, concretoM2: c.concreto, capa: c.pre ? c.pre.capa : null }; });
-  return { pilares, vigas: [...vigas, ...baldrames], lajes };
+  return { pilares, vigas: [...vigas, ...baldrames], lajes, edicoesOrfas: orfas };
 }
 
 // Lança todos os pavimentos (lista de { paredes, areas, usoPadrao }, de baixo
@@ -89838,10 +89909,80 @@ function esTopoPavimento(pavs, k) {
   const hp = Math.max(0, ...(p.paredes || []).map((w) => w.h || 0));
   return esR3(lajes.length ? Math.max(...lajes) : (hp || 2.8));
 }
+// ═══════════════════════════════════════════════════════════════
+// ALTERAÇÕES À MÃO (como nos programas de cálculo): o lançamento automático
+// roda sempre e as alterações do usuário são reaplicadas por POSIÇÃO — se a
+// arquitetura mudar, continuam valendo onde o elemento ainda existe; a que
+// não acha mais o elemento vira aviso. Por pavimento, em ordem:
+//   { tipo: "pilar+", x, y, b, h, ang }        pilar novo (na parede: no eixo dela)
+//   { tipo: "pilar-", x, y }                   apaga o pilar nesse ponto (o nó)
+//   { tipo: "pilar~", x, y, nx, ny }           move
+//   { tipo: "pilarSec", x, y, b, h, ang }      seção / giro
+//   { tipo: "viga+", a, b, b_, h }             viga nova
+//   { tipo: "viga-", m, ang }                  apaga a viga que passa em m
+//   { tipo: "vigaSec", m, ang, b_, h }         seção fixa (o cálculo não muda)
+// ═══════════════════════════════════════════════════════════════
+const ES_TOL_EDICAO = { pilar: 0.4, viga: 0.12 };
+function esNoNaParede(q, ws) {
+  let melhor = null;
+  for (const w of ws) {
+    const L = esLen(w); if (!L) continue; const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
+    const s = (q.x - w.a.x) * ux + (q.y - w.a.y) * uy, d = Math.abs((q.x - w.a.x) * -uy + (q.y - w.a.y) * ux);
+    if (s < -0.05 || s > L + 0.05 || d > (w.t || 0.14) / 2 + 0.06) continue;
+    if (!melhor || d < melhor.d) melhor = { d, q: { x: esR3(w.a.x + ux * Math.min(L, Math.max(0, s))), y: esR3(w.a.y + uy * Math.min(L, Math.max(0, s))) }, ang: Math.atan2(uy, ux), t: w.t };
+  }
+  return melhor;
+}
+function esAplicarEdicoesPilares(pilares, ws, eds, secao) {
+  const orfas = [];
+  const achar = (q) => { let m = null, dm = ES_TOL_EDICAO.pilar; for (const p of pilares) { const d = Math.min(esDist(p.no, q), esDist(p, q)); if (d < dm) { dm = d; m = p; } } return m; };
+  // na parede: no eixo dela e alinhado com ela (mover para outra parede gira junto)
+  const colocar = (p, q) => { const nw = esNoNaParede(q, ws); p.no = nw ? nw.q : { x: esR3(q.x), y: esR3(q.y) }; p.x = p.no.x; p.y = p.no.y; if (nw) p.ang = esR3(nw.ang); };
+  eds.forEach((e, i) => {
+    if (e.tipo === "pilar+") {
+      const sc = secao([]), p = { b: e.b || sc.b, h: e.h || sc.h, ang: null, origem: "manual", manual: "novo", edicao: i };
+      colocar(p, e); if (e.ang != null) p.ang = e.ang; if (p.ang == null) p.ang = 0; pilares.push(p);
+    } else if (e.tipo === "pilar-" || e.tipo === "pilar~" || e.tipo === "pilarSec") {
+      const p = achar(e); if (!p) { orfas.push({ ...e, i }); return; }
+      if (e.tipo === "pilar-") { pilares.splice(pilares.indexOf(p), 1); return; }
+      if (e.tipo === "pilar~") { colocar(p, { x: e.nx, y: e.ny }); p.manual = p.manual || "movido"; p.edicao = i; return; }
+      if (e.b) p.b = e.b; if (e.h) p.h = e.h; if (e.ang != null) p.ang = e.ang; p.secManual = true; p.edicaoSec = i;
+    }
+  });
+  return orfas;
+}
+// vigas: antes das vigas automáticas de escada/balanço (fase 1: o que já
+// existe e as novas) e depois delas (fase 2: o que sobrou, p. ex. VE)
+function esAplicarEdicoesVigas(est, eds, P, topo, fase, feitas) {
+  const acharViga = (e) => {
+    let m = null, dm = ES_TOL_EDICAO.viga;
+    for (const v of est.vigas) {
+      if (!!v.baldrame !== !!e.baldrame) continue; const L = esDist(v.a, v.b); if (!L) continue;
+      if (e.ang != null && Math.abs(Math.cos(Math.atan2(v.b.y - v.a.y, v.b.x - v.a.x) - e.ang)) < 0.985) continue;
+      const d = esPontoNoSeg(e.m, v.a, v.b).d; if (d < dm) { dm = d; m = v; }
+    }
+    return m;
+  };
+  eds.forEach((e, i) => {
+    if (feitas.has(i)) return;
+    if (e.tipo === "viga+") {
+      if (fase !== 1) return;
+      const pil = (q) => { const p = est.pilares.find((pp) => esDist(pp.no, q) <= 0.3); return p ? p.id : null; };
+      const n = est.vigas.filter((v) => /^V\d+$/.test(v.id)).reduce((mx, v) => Math.max(mx, +v.id.slice(1)), 0) + 1, L = esDist(e.a, e.b); if (L < 0.2) return;
+      est.vigas.push({ id: "V" + n, a: { x: esR3(e.a.x), y: esR3(e.a.y) }, b: { x: esR3(e.b.x), y: esR3(e.b.y) }, apoioA: pil(e.a), apoioB: pil(e.b), parede: null, s0: 0, s1: esR3(L), b_: e.b_ || P.viga.b, h: e.h || P.viga.h, topo, manual: "novo", hFixo: !!e.h, edicao: i });
+      feitas.add(i);
+    } else if (e.tipo === "viga-" || e.tipo === "vigaSec") {
+      const v = acharViga(e); if (!v) return;
+      if (e.tipo === "viga-") est.vigas.splice(est.vigas.indexOf(v), 1);
+      else { if (e.b_) v.b_ = e.b_; if (e.h) { v.h = e.h; v.hFixo = true; } v.secManual = true; v.edicaoSec = i; }
+      feitas.add(i);
+    }
+  });
+}
 function esLancarPavimentos(pavs, params) {
   const passada = (acimaDe) => {
     const r = [];
-    pavs.forEach((p, k) => r.push(esLancar(p.paredes || [], p.areas || [], params, { baldrames: k === 0, usoPadrao: p.usoPadrao, topo: esTopoPavimento(pavs, k),
+    pavs.forEach((p, k) => r.push(esLancar(p.paredes || [], p.areas || [], params, { edicoes: p.edicoes || [], baldrames: k === 0, usoPadrao: p.usoPadrao, topo: esTopoPavimento(pavs, k),
       pilaresAbaixo: k > 0 ? r[k - 1].pilares : null,
       pisoAbaixo: k > 0 ? { paredes: pavs[k - 1].paredes || [], pilares: r[k - 1].pilares } : null,
       pilaresAcima: acimaDe && acimaDe[k + 1] ? acimaDe[k + 1].pilares.filter((q) => q.origem !== "continuidade") : null })));
@@ -89865,8 +90006,17 @@ function esLancarPavimentos(pavs, params) {
   }
   // vigas de borda do furo da escada (critério 11): cada lado do furo que não
   // cai sobre viga vira viga, esticada até as vigas que encontrar
+  const feitas = pavs.map(() => new Set());
+  pavs.forEach((p, k) => esAplicarEdicoesVigas(r[k], p.edicoes || [], P, esTopoPavimento(pavs, k), 1, feitas[k]));
   pavs.forEach((p, k) => esVigasDeEscada(p, r[k], P, esTopoPavimento(pavs, k), k));
   pavs.forEach((p, k) => esBalancosSoltos(p, r[k], P, k));
+  pavs.forEach((p, k) => {
+    esAplicarEdicoesVigas(r[k], p.edicoes || [], P, esTopoPavimento(pavs, k), 2, feitas[k]);
+    // alteração que não achou mais o elemento (a arquitetura mudou)
+    const orf = [...(r[k].edicoesOrfas || []), ...(p.edicoes || []).map((e, i) => ({ ...e, i })).filter((e) => /^viga[-S]/.test(e.tipo) && !feitas[k].has(e.i))];
+    r[k].edicoesOrfas = orf;
+    for (const e of orf) (r[k].resolvidos = r[k].resolvidos || []).push({ k, id: null, tipo: "pendente", edicao: e.i, texto: `Alteração à mão sem o elemento (${{ "pilar-": "pilar apagado", "pilar~": "pilar movido", pilarSec: "seção de pilar", "viga-": "viga apagada", vigaSec: "seção de viga" }[e.tipo] || e.tipo}): a arquitetura mudou ali — confira ou desfaça a alteração.` });
+  });
   return r;
 }
 // furo da escada: o contorno (caracol: o quadrado que o envolve)
@@ -91457,7 +91607,7 @@ function esCompatibilizar(pavs, lanc, desc, params) {
           const disp = Math.floor(((v.topo || 2.8) - topoVao) * 20 + 1e-9) / 20, t = tramoDe(v.id), nome = (qual.tipo || "").startsWith("porta") ? "porta" : "janela";
           // não pode ficar com o fundo acima do fundo das vigas que apoiam nela
           const hApoiadas = esApoiosIndiretos(est).filter((x) => x.apoio === v && !x.apoiada.invertida).reduce((m, x) => Math.max(m, (v.topo || 2.8) - esFundo(x.apoiada)), 0);
-          const r = t && disp >= 0.25 && disp >= hApoiadas - 1e-6 ? esDimViga(t, params, disp) : null;
+          const r = t && !v.hFixo && disp >= 0.25 && disp >= hApoiadas - 1e-6 ? esDimViga(t, params, disp) : null;
           if (r && r.ok) { acoes.push({ k, id: v.id, tipo: "altura", texto: `${v.id} baixada de ${Math.round(v.h * 100)} para ${Math.round(disp * 100)} cm para não invadir a ${nome} (o cálculo passa).` }); v.h = disp; }
           else if (podeInverter(k, v)) inverter(k, v, `não cabe acima da ${nome}`);
           else acoes.push({ k, id: v.id, tipo: "pendente", texto: `${v.id} não cabe acima da ${nome} e não dá para inverter: suba o vão da ${nome} até ${String((fundo).toFixed(2)).replace(".", ",")} m ou mude a viga.` });
@@ -91493,7 +91643,7 @@ function esCalcularEstrutura(pavs, params) {
   desc.pavimentos.forEach((pv, k) => {
     for (const t of pv.tramos) {
       if (t.baldrame || t.comLaje || t.comParede || t.apoiaOutra || t.especial) continue;
-      for (const v of lanc[k].vigas) if (t.ids.includes(v.id)) { v.h = P.cinta; v.cinta = true; }
+      for (const v of lanc[k].vigas) if (t.ids.includes(v.id) && !v.hFixo) { v.h = P.cinta; v.cinta = true; }
     }
   });
   for (let it = 0; it < 4; it++) {
@@ -91501,14 +91651,14 @@ function esCalcularEstrutura(pavs, params) {
     let mudou = false;
     dim.pavimentos.forEach((p, k) => {
       for (const v of lanc[k].vigas) {
-        const r = p.vigas[v.id]; if (!r || r.ok || !r.hMin || r.hMin <= v.h + 1e-9) continue;
+        const r = p.vigas[v.id]; if (!r || r.ok || !r.hMin || r.hMin <= v.h + 1e-9 || v.hFixo) continue;
         if (!ajustes.some((a) => a.k === k && a.id === v.id)) ajustes.push({ k, id: v.id, de: v.h, para: r.hMin, cinta: !!v.cinta });
         else ajustes.find((a) => a.k === k && a.id === v.id).para = r.hMin;
         v.h = r.hMin; v.hPeloCalculo = true; mudou = true;
       }
       // apoio indireto: a viga que recebe desce até o fundo da apoiada (sem dente)
       for (const { apoiada, apoio } of esApoiosIndiretos(lanc[k])) {
-        if (apoiada.invertida || apoio.invertida || esFundo(apoiada) >= esFundo(apoio) - 0.005) continue;
+        if (apoiada.invertida || apoio.invertida || apoio.hFixo || esFundo(apoiada) >= esFundo(apoio) - 0.005) continue;
         const h = Math.ceil(((apoio.topo != null ? apoio.topo : 2.8) - esFundo(apoiada)) * 20 - 1e-6) / 20;
         if (h <= apoio.h + 1e-9) continue;
         const aj = ajustes.find((a) => a.k === k && a.id === apoio.id);
@@ -93470,6 +93620,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // estrutura (estrutural.jsx, etapa 1): refeita da arquitetura; aqui só os parâmetros
   const [estrutura, setEstrutura] = useState(() => (projeto.estrutura && typeof projeto.estrutura === "object" ? { params: {}, mostrar: true, so3d: false, ...projeto.estrutura } : { ativa: false, params: {}, mostrar: true, so3d: false }));
   const [estAberta, setEstAberta] = useState(false);
+  const [estMover, setEstMover] = useState(null); // pilar sendo movido (ferramenta "estMover")
   const [focoEst, setFocoEst] = useState(null);
   const [mostrarGrade, setMostrarGrade] = useState(() => { try { return localStorage.getItem("vicke-projetar-grade") !== "0"; } catch (err) { return true; } });
   const [pavSolta, setPavSolta] = useState(() => { try { const v = JSON.parse(localStorage.getItem("vicke-projetar-pav-solta") || "null"); return v && v.x >= 0 && v.y >= 0 ? v : null; } catch (err) { return null; } });
@@ -93692,10 +93843,60 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     }
     return novos;
   };
+  // ---------- alterações à mão na estrutura (estrutural.jsx: esAplicarEdicoes*) ----------
+  // ficam em estrutura.edicoes[pavimento], por posição; o lançamento automático
+  // roda sempre e reaplica as alterações (as que perdem o alvo viram aviso)
+  const mudarEdicoes = (fn, pid = pavAtivo) => { registrar(); setEstrutura((e) => ({ ...e, edicoes: { ...(e.edicoes || {}), [pid]: fn([...(((e.edicoes || {})[pid]) || [])]) } })); };
+  const estMeio = (v) => ({ x: r3((v.a.x + v.b.x) / 2), y: r3((v.a.y + v.b.y) / 2) }), estAng = (v) => r3(Math.atan2(v.b.y - v.a.y, v.b.x - v.a.x));
+  // cada alteração devolve { rem: [índices a tirar], add: [novas] } — juntadas num passo só (um desfazer)
+  const estOpApagar = (id) => {
+    const ea = estPorPav[pavAtivo] || { pilares: [], vigas: [] }, pl = ea.pilares.find((x) => x.id === id), v = ea.vigas.find((x) => x.id === id);
+    if (pl) return pl.manual === "novo" ? { rem: [pl.edicao, pl.edicaoSec], add: [] } : { rem: [], add: [{ tipo: "pilar-", x: pl.no.x, y: pl.no.y }] };
+    if (v) return v.manual === "novo" ? { rem: [v.edicao], add: [] } : { rem: [], add: [{ tipo: "viga-", m: estMeio(v), ang: estAng(v), ...(v.baldrame ? { baldrame: true } : {}) }] };
+    return { rem: [], add: [] };
+  };
+  const estAplicarOps = (ops) => mudarEdicoes((l) => { const rem = new Set(ops.flatMap((o) => o.rem).filter((i) => i != null)); return [...l.filter((_, i) => !rem.has(i)), ...ops.flatMap((o) => o.add)]; });
+  const estPilarSecao = (pl, mud) => mudarEdicoes((l) => {
+    if (pl.manual === "novo" && l[pl.edicao]) { l[pl.edicao] = { ...l[pl.edicao], ...mud }; return l; }
+    if (pl.edicaoSec != null && l[pl.edicaoSec]) { l[pl.edicaoSec] = { ...l[pl.edicaoSec], ...mud }; return l; }
+    return [...l, { tipo: "pilarSec", x: pl.no.x, y: pl.no.y, b: pl.b, h: pl.h, ang: r3(pl.ang || 0), ...mud }];
+  });
+  const estPilarMover = (pl, q) => mudarEdicoes((l) => {
+    if (pl.manual === "novo" && l[pl.edicao]) { l[pl.edicao] = { ...l[pl.edicao], x: q.x, y: q.y, ang: null }; return l; }
+    if (pl.manual === "movido" && l[pl.edicao] && l[pl.edicao].tipo === "pilar~") {
+      l[pl.edicao] = { ...l[pl.edicao], nx: q.x, ny: q.y };
+      if (pl.edicaoSec != null && pl.edicaoSec > pl.edicao && l[pl.edicaoSec]) l[pl.edicaoSec] = { ...l[pl.edicaoSec], x: q.x, y: q.y };
+      return l;
+    }
+    return [...l, { tipo: "pilar~", x: pl.no.x, y: pl.no.y, nx: q.x, ny: q.y }];
+  });
+  const estVigaSecao = (v, mud) => mudarEdicoes((l) => {
+    if (v.manual === "novo" && l[v.edicao]) { l[v.edicao] = { ...l[v.edicao], ...mud }; return l; }
+    if (v.edicaoSec != null && l[v.edicaoSec]) { l[v.edicaoSec] = { ...l[v.edicaoSec], ...mud }; return l; }
+    return [...l, { tipo: "vigaSec", m: estMeio(v), ang: estAng(v), b_: v.b_, h: v.h, ...(v.baldrame ? { baldrame: true } : {}), ...mud }];
+  });
+  const estRestaurar = (x) => estAplicarOps([{ rem: x.manual === "movido" ? [x.edicao, x.edicaoSec] : [x.edicaoSec], add: [] }]);
+  // ímã da ferramenta: centro de pilar, ponta de viga, eixo da parede
+  const estIma = (p) => {
+    const ea = estPorPav[pavAtivo];
+    if (ea) {
+      for (const pl of ea.pilares) if (Math.hypot(p.x - pl.x, p.y - pl.y) < 0.35) return { x: pl.no.x, y: pl.no.y, pilar: pl.id };
+      for (const v of ea.vigas) if (!v.baldrame) for (const q of [v.a, v.b]) if (Math.hypot(p.x - q.x, p.y - q.y) < 0.3) return { x: q.x, y: q.y };
+    }
+    let melhor = null;
+    for (const w of paredes) { const L = tpLen(w); if (!L) continue; const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, sv = (p.x - w.a.x) * ux + (p.y - w.a.y) * uy, d = Math.abs(-(p.x - w.a.x) * uy + (p.y - w.a.y) * ux);
+      if (sv < -0.05 || sv > L + 0.05 || d > (w.t || 0.14) / 2 + 0.12 || (melhor && melhor.d <= d)) continue;
+      melhor = { d, x: r3(w.a.x + ux * Math.min(L, Math.max(0, sv))), y: r3(w.a.y + uy * Math.min(L, Math.max(0, sv))) }; }
+    return melhor ? { x: melhor.x, y: melhor.y } : { x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100 };
+  };
   const excluirSelecao = () => {
     if (!sel.length && Object.keys(selOutros).length) { const n = excluirOutros(); if (n) { registrar(); setDadosPav(n); } setSelOutros({}); return; }
     if (!sel.length) return;
-    if (sel.every((k) => k[0] === "e")) { avisar("A estrutura é refeita a partir das paredes; apagar ou mover peça a peça entra na próxima etapa."); return; }
+    if (sel.every((k) => k[0] === "e")) {
+      const ids = sel.map((k) => k.slice(1)).filter((id) => !id.startsWith("BL:") && !id.startsWith("ES:"));
+      if (!ids.length) { avisar("A fundação sai do pilar: apague ou mude o pilar."); return; }
+      estAplicarOps(ids.map(estOpApagar)); setSel([]); avisar(`${ids.join(", ")} ${ids.length > 1 ? "apagados" : "apagado"} (alteração à mão; "Voltar ao automático" no painel da estrutura desfaz).`); return;
+    }
     if (sel.every((k) => k[0] === "x")) { const fx = new Set(sel.map((k) => +k.slice(1))); const resto = cortes.filter((_, i) => !fx.has(i)); registrar(); setCortes(resto); if (!resto.some((c) => c.id === verCorte)) setVerCorte(resto[0] ? resto[0].id : null); setSel([]); return; }
     const fl = new Set(sel.filter((k) => k[0] === "l").map((k) => +k.slice(1)));
     if (fl.size && sel.every((k) => k[0] === "l")) { mudar(paredes.map((w, i) => (fl.has(i) ? { ...w, semCota: true } : w))); setSel([]); return; }
@@ -93881,8 +94082,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // todos os pavimentos juntos: pilares contínuos de baixo para cima (estrutural.jsx)
   const estLista = useMemo(() => {
     if (!estrutura.ativa) return null;
-    return pavsOrd.map((p, k) => { const d = dadosDe(p.id), acima = pavsOrd[k + 1]; return { paredes: d.paredes || [], areas: d.areas || [], nivel: p.nivel || 0, nome: p.nome, usoPadrao: acima && (dadosDe(acima.id).paredes || []).length ? "residencial" : "forro", escadas: tpEscadasEstrutura(d.areas || []) }; });
-  }, [estrutura.ativa, paredes, areas, dadosPav, pavimentos, pavAtivo]); // eslint-disable-line react-hooks/exhaustive-deps
+    return pavsOrd.map((p, k) => { const d = dadosDe(p.id), acima = pavsOrd[k + 1]; return { paredes: d.paredes || [], areas: d.areas || [], nivel: p.nivel || 0, nome: p.nome, usoPadrao: acima && (dadosDe(acima.id).paredes || []).length ? "residencial" : "forro", escadas: tpEscadasEstrutura(d.areas || []), edicoes: (estrutura.edicoes || {})[p.id] || [] }; });
+  }, [estrutura.ativa, estrutura.edicoes, paredes, areas, dadosPav, pavimentos, pavAtivo]); // eslint-disable-line react-hooks/exhaustive-deps
   // lançamento na hora (planta); cargas e dimensionamento logo depois de parar de
   // mexer (são mais pesados) — enquanto isso a planta mostra o lançamento
   const estLancRapido = useMemo(() => (estLista ? esLancarPavimentos(estLista, estrutura.params) : null), [estLista, estrutura.params]);
@@ -95379,7 +95580,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         ctx.setLineDash([]);
         if (L * vista.current.s > 70 * dpr) {
           const [mx, my] = T({ x: (v.a.x + v.b.x) / 2 + nx * 2.6, y: (v.a.y + v.b.y) / 2 + ny * 2.6 });
-          const txt = `${v.cinta ? "cinta " : ""}${v.id} ${Math.round(v.b_ * 100)}×${Math.round(v.h * 100)}${v.invertida ? " inv." : ""}${v.balanco ? " bal." : ""}`, w = ctx.measureText(txt).width + 6 * dpr;
+          const txt = `${v.cinta ? "cinta " : ""}${v.id} ${Math.round(v.b_ * 100)}×${Math.round(v.h * 100)}${v.invertida ? " inv." : ""}${v.balanco ? " bal." : ""}${v.manual || v.secManual ? " *" : ""}`, w = ctx.measureText(txt).width + 6 * dpr;
           ctx.fillStyle = "rgba(255,255,255,0.85)"; ctx.fillRect(mx - w / 2, my - fonteEst * 0.65, w, fonteEst * 1.3);
           ctx.fillStyle = "#4b5563"; ctx.fillText(txt, mx, my);
         }
@@ -95388,7 +95589,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const mkP = marcadas.has("e" + pl.id);
         caminho(esCantosPilar(pl)); ctx.fillStyle = mkP ? TP_AZUL : "#111827"; ctx.fill();
         const [x, y] = T(pl), r = Math.max(pl.b, pl.h) * vista.current.s / 2 + 8 * dpr;
-        ctx.fillStyle = mkP ? TP_AZUL : "#111827"; ctx.fillText(pl.id, x + r * 0.8, y - r * 0.8);
+        ctx.fillStyle = mkP ? TP_AZUL : "#111827"; ctx.fillText(pl.id + (pl.manual || pl.secManual ? "*" : ""), x + r * 0.8, y - r * 0.8);
       }
       // fundação (no pavimento mais baixo): bloco/sapata tracejado e estacas
       if (estDescida && (estPorPav._ids || [])[0] === pavAtivo) for (const f of estDescida.fundacao || []) {
@@ -95543,6 +95744,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     };
     cortes.forEach((ct, i) => linhaCorte(ct, marcadas.has("x" + i), false));
     if (ferramenta === "corte" && inicio && hover) linhaCorte({ a: inicio, b: hover, lado: 1 }, true, true);
+    if ((ferramenta === "estPilar" || ferramenta === "estMover" || ferramenta === "estViga") && hover) {
+      ctx.save(); ctx.strokeStyle = TP_AZUL; ctx.lineWidth = 2 * dpr; ctx.setLineDash([4 * dpr, 3 * dpr]);
+      if (ferramenta === "estViga" && inicio) { const [x0, y0] = T(inicio), [x1, y1] = T(hover); ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
+      const Pp = { ...ES_PADRAO, ...(estrutura.params || {}) }.pilar, ea = estPorPav[pavAtivo], plm = ferramenta === "estMover" && ea ? ea.pilares.find((x) => x.id === estMover) : null;
+      if (ferramenta !== "estViga") { const bb = (plm ? plm.b : Pp.b || 0.19), hh = (plm ? plm.h : Pp.h || 0.19); caminho(esCantosPilar({ x: hover.x, y: hover.y, b: bb, h: hh, ang: plm ? plm.ang || 0 : 0 })); ctx.stroke(); }
+      else { const [hx, hy] = T(hover); ctx.setLineDash([]); ctx.beginPath(); ctx.arc(hx, hy, 4 * dpr, 0, Math.PI * 2); ctx.fillStyle = TP_AZUL; ctx.fill(); }
+      ctx.restore();
+    }
     if (ferramenta === "cota" && hover) {
       if (ancora && ancora.cotaB) {
         const p = ancora.cotaA, q = ancora.cotaB, l = Math.hypot(q.x - p.x, q.y - p.y) || 1, off = (hover.x - p.x) * -(q.y - p.y) / l + (hover.y - p.y) * (q.x - p.x) / l;
@@ -96517,6 +96726,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     { const ea = estrutura.ativa && estrutura.mostrar !== false ? estPorPav[pavAtivo] : null;
       if (ea) for (const pl of ea.pilares) { const c = Math.cos(pl.ang || 0), sn = Math.sin(pl.ang || 0), dx = p.x - pl.x, dy = p.y - pl.y;
         if (Math.abs(dx * c + dy * sn) <= pl.h / 2 + tol && Math.abs(-dx * sn + dy * c) <= pl.b / 2 + tol) return "e" + pl.id; }
+      // com o painel da estrutura aberto, a viga vem antes da parede
+      if (ea && estAberta) { let mv = null, dm = Infinity; for (const vg of ea.vigas) { if (vg.baldrame) continue; const dd = distSeg(p, vg.a, vg.b); if (dd <= vg.b_ / 2 + tol && dd < dm) { dm = dd; mv = vg; } } if (mv) return "e" + mv.id; }
       if (ea && estDescida && (estPorPav._ids || [])[0] === pavAtivo) {
         let bloco = null;
         for (const f of estDescida.fundacao || []) {
@@ -97032,7 +97243,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: { tipo: "rotulo", chave: "a" + rq.ai, ai: rq.ai, ja, off: desvioCliente(tpRotuloAmb(areas[rq.ai]), e) }, orig: { paredes, areas } };
         e.currentTarget.setPointerCapture(e.pointerId); return;
       }
-      const al = alcaNoPonto(d) || (!e.ctrlKey && !e.metaKey && !e.shiftKey ? pontaPerto(d) : null);
+      // painel da estrutura aberto: pilar e viga vêm antes da ponta da parede (o pilar de canto fica em cima dela)
+      const kEst = estAberta ? elementoNoPonto(d) : null, ehEst = !!kEst && kEst[0] === "e";
+      const al = ehEst ? null : alcaNoPonto(d) || (!e.ctrlKey && !e.metaKey && !e.shiftKey ? pontaPerto(d) : null);
       if (al) {
         if (al.chave && !sel.includes(al.chave)) setSel([al.chave]);
         gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: al, orig: { paredes, areas } }; e.currentTarget.setPointerCapture(e.pointerId); return;
@@ -97040,7 +97253,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       // Arrastar uma parede ou linha de separação (ou uma área já selecionada)
       // move o elemento — e o que estiver selecionado junto. Os ambientes em
       // volta refazem a área sozinhos. Ctrl/Shift continuam sendo seleção.
-      if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !ehEst) {
         const k = elementoNoPonto(d);
         if (k && k[0] === "o") {
           const loc = tpAcharAbertura(paredes, k.slice(1));
@@ -97112,6 +97325,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       }
     }
     if (ferramenta === "parede" || ferramenta === "separador" || ferramenta === "cota" || ferramenta === "escada" || ferramenta === "corte" || tpEhPoli(ferramenta)) setHover(pontoDoCursor(e));
+    if (ferramenta === "estPilar" || ferramenta === "estViga" || ferramenta === "estMover") setHover(estIma(paraMundoLivre(devPx(e))));
     if (ferramenta === "esquadria") setPreviaEsq(previaEsqEm(paraMundoLivre(d)));
   };
   const planUp = (e) => {
@@ -97163,6 +97377,24 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       return;
     }
     if (ferramenta === "ambiente") { inserirAmbienteEm(paraMundoLivre(devPx(e))); return; }
+    if (ferramenta === "estPilar") {
+      const q = estIma(paraMundoLivre(devPx(e))); if (q.pilar) { avisar(`Já tem o ${q.pilar} aí.`); return; }
+      const Pp = { ...ES_PADRAO, ...(estrutura.params || {}) }.pilar;
+      mudarEdicoes((l) => [...l, { tipo: "pilar+", x: q.x, y: q.y, b: Pp.b || 0.19, h: Pp.h || 0.19 }]); avisar(isMobile ? "Pilar inserido. Toque para inserir outro; Selecionar termina." : "Pilar inserido. Clique para inserir outro; Esc termina."); return;
+    }
+    if (ferramenta === "estViga") {
+      const q = estIma(paraMundoLivre(devPx(e))); setHover(q);
+      if (!inicio) { setInicio({ x: q.x, y: q.y }); return; }
+      if (Math.hypot(q.x - inicio.x, q.y - inicio.y) < 0.3) return;
+      mudarEdicoes((l) => [...l, { tipo: "viga+", a: inicio, b: { x: q.x, y: q.y } }]); setInicio(null); avisar(isMobile ? "Viga inserida. Toque o início de outra; Selecionar termina." : "Viga inserida. Clique o início de outra; Esc termina."); return;
+    }
+    if (ferramenta === "estMover") {
+      const ea = estPorPav[pavAtivo], pl = ea && estMover && ea.pilares.find((x) => x.id === estMover);
+      const q = estIma(paraMundoLivre(devPx(e)));
+      if (pl && !(q.pilar && q.pilar !== pl.id)) { estPilarMover(pl, q); avisar(`${pl.id} movido.`); }
+      else if (q.pilar) avisar(`Já tem o ${q.pilar} aí.`);
+      setEstMover(null); setFerramenta("selecionar"); return;
+    }
     if (ferramenta === "escada") {
       // 1º clique: pé do primeiro degrau (no caracol, o centro); 2º: direção em que sobe
       const pc = pontoDoCursor(e), p2 = limpo(pc); setHover(pc);
@@ -97558,6 +97790,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const desenhoAtivo = ferramenta === "parede" || tpEhPoli(ferramenta);
   const status = (ferramenta === "separador" && dividir) ? `Dividindo "${(areas[dividir.ai] || {}).nome || "ambiente"}": clique de uma parede até a outra (pode quebrar a linha). Esc cancela.`
     : ferramenta === "separador" ? (inicio ? "Clique o fim da linha. Esc cancela." : "Separador: linha que divide ambientes sem parede. Clique de uma parede até a outra.")
+    : ferramenta === "estPilar" ? "Inserir pilar: clique onde ele fica (gruda no eixo da parede). Esc termina."
+    : ferramenta === "estViga" ? (inicio ? "Clique o fim da viga (gruda em pilar, ponta de viga e parede). Esc cancela." : "Inserir viga: clique o início (gruda em pilar, ponta de viga e parede).")
+    : ferramenta === "estMover" ? `Mover ${estMover || "pilar"}: clique a nova posição (gruda no eixo da parede). Esc cancela.`
     : ferramenta === "corte" ? (inicio ? "Clique o fim da linha de corte. Esc cancela." : "Corte: clique o início da linha que atravessa a casa (passe pela escada e pelas janelas que quer mostrar).")
     : ferramenta === "escada" ? (inicio ? "Aponte para onde a escada sobe e clique. Esc cancela." : "Escada: clique o pé do primeiro degrau (no caracol, o centro). Forma e largura no painel ao lado.")
     : ferramenta === "cota" ? (ancora && ancora.cotaB ? "Clique onde fica a linha de cota. Esc cancela." : inicio ? "Clique o segundo ponto a medir. Esc cancela." : "Cota: clique o primeiro ponto a medir (gruda nas quinas e faces das paredes).")
@@ -97668,7 +97903,35 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 </div>
               ))}
               {avs.map((a, k) => <div key={k} style={{ fontSize: 12, color: a.tipo === "nbr" ? "#b91c1c" : a.tipo === "compat" ? "#b45309" : "#4b5563", lineHeight: 1.4, marginTop: 4 }}>{a.texto}</div>)}
-              <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>Seção e posição vêm do lançamento automático; a edição peça a peça entra na próxima etapa.</div>
+              {sel.length === 1 && (() => {
+                const id = sel[0].slice(1), pl = est.pilares.find((x) => x.id === id), v = est.vigas.find((x) => x.id === id);
+                if (!pl && !v) return null;
+                const bt = { ...btn, minHeight: 30, fontSize: 12.5, padding: "4px 10px" };
+                const alterado = pl ? pl.manual === "movido" || pl.secManual : v.secManual;
+                return (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                      {pl ? (<>
+                        <TpCampo id="tp-estpl-b" rotulo="b (cm)" casas={0} valor={Math.round(pl.b * 100)} onConfirmar={(x) => x >= 12 && x <= 100 && estPilarSecao(pl, { b: x / 100 })} />
+                        <TpCampo id="tp-estpl-h" rotulo="h (cm)" casas={0} valor={Math.round(pl.h * 100)} onConfirmar={(x) => x >= 12 && x <= 200 && estPilarSecao(pl, { h: x / 100 })} />
+                      </>) : (<>
+                        <TpCampo id="tp-estvg-b" rotulo="b (cm)" casas={0} valor={Math.round(v.b_ * 100)} onConfirmar={(x) => x >= 10 && x <= 60 && estVigaSecao(v, { b_: x / 100 })} />
+                        <TpCampo id="tp-estvg-h" rotulo="h (cm, fixa)" casas={0} valor={Math.round(v.h * 100)} onConfirmar={(x) => x >= 15 && x <= 150 && estVigaSecao(v, { h: x / 100 })} />
+                      </>)}
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                      {pl && <button style={bt} onClick={() => estPilarSecao(pl, { ang: r3(((pl.ang || 0) + Math.PI / 2) % Math.PI) })}>Girar 90°</button>}
+                      {pl && <button style={bt} onClick={() => { setEstMover(pl.id); setSel([]); setFerramenta("estMover"); if (isMobile) setMenuAberto(false); }}>Mover</button>}
+                      <button style={{ ...bt, color: "#b91c1c" }} onClick={() => { estAplicarOps([estOpApagar(id)]); setSel([]); }}>Apagar</button>
+                      {alterado && <button style={bt} onClick={() => estRestaurar(pl || v)}>Voltar ao automático</button>}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>
+                      {pl && pl.manual === "novo" ? "Pilar lançado à mão. " : v && v.manual === "novo" ? "Viga lançada à mão. " : alterado ? "Alterado à mão (marcado com * na planta). " : "Do lançamento automático. "}
+                      {v ? "A altura digitada fica fixa: o cálculo avisa se não passar, em vez de aumentar." : "Se a arquitetura mudar, a alteração continua valendo no mesmo lugar."}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           );
         })()}
@@ -98439,6 +98702,26 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#374151", cursor: "pointer", marginTop: 6 }}>
                   <input type="checkbox" checked={!!estrutura.noCorte} onChange={(e) => setEstrutura((x) => ({ ...x, noCorte: e.target.checked }))} /> Mostrar nos cortes
                 </label>
+                {(() => {
+                  const nEd = Object.values(estrutura.edicoes || {}).reduce((t, l) => t + (l || []).length, 0), nAqui = ((estrutura.edicoes || {})[pavAtivo] || []).length;
+                  const bt = (ativo) => ({ ...btn, flex: 1, minHeight: 32, fontSize: 12.5, background: ativo ? "#eef5ff" : "#fff", color: ativo ? TP_AZUL : "#111827", borderColor: ativo ? TP_AZUL : "#d1d5db" });
+                  return (
+                    <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid #f0f2f5" }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>Lançar e alterar à mão</div>
+                      <div style={{ fontSize: 11.5, color: "#6b7280", lineHeight: 1.4, margin: "2px 0 6px" }}>Clique num pilar ou numa viga na planta para mudar a seção, mover ou apagar. As alterações ficam marcadas com * e continuam valendo se a arquitetura mudar.</div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button style={bt(ferramenta === "estPilar")} onClick={() => { trocarFerramenta(ferramenta === "estPilar" ? "selecionar" : "estPilar"); if (isMobile) setMenuAberto(false); }}>Inserir pilar</button>
+                        <button style={bt(ferramenta === "estViga")} onClick={() => { trocarFerramenta(ferramenta === "estViga" ? "selecionar" : "estViga"); if (isMobile) setMenuAberto(false); }}>Inserir viga</button>
+                      </div>
+                      {nEd > 0 && (
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 6, fontSize: 12, color: "#4b5563" }}>
+                          <span>{nAqui} alteraç{nAqui === 1 ? "ão" : "ões"} neste pavimento{nEd > nAqui ? ` · ${nEd} no total` : ""}</span>
+                          {nAqui > 0 && <button style={{ ...btn, minHeight: 28, fontSize: 12, padding: "2px 10px" }} onClick={() => { registrar(); setEstrutura((e) => { const ed = { ...(e.edicoes || {}) }; delete ed[pavAtivo]; return { ...e, edicoes: ed }; }); }}>Voltar tudo ao automático</button>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 {grupoQ("est-av", `Verificações${estAvisos.length ? ` (${estAvisos.length})` : ""}`, nNbr + nComp ? `${nNbr + nComp} a resolver` : "ok")}
                 {!qFechado("est-av") && (
                   <div>

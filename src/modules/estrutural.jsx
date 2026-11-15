@@ -362,9 +362,11 @@ function esLancar(paredes, areas, params, opts = {}) {
       }
     }
   }
+  // 2b) alterações à mão (lançadas pelo usuário, reaplicadas por posição)
+  const orfas = esAplicarEdicoesPilares(pilares, ws, opts.edicoes || [], secao);
   // 3) encaixe de cada pilar na parede e fora de portas e janelas
   const interno = esLadoInternoFn(ws, areas);
-  for (const p of pilares) { esEncaixarPilar(p, ws, interno); delete p._dirs; }
+  for (const p of pilares) { if (!p.manual) esEncaixarPilar(p, ws, interno); delete p._dirs; }
   pilares.forEach((p, k) => { p.id = "P" + (k + 1); });
   // altura do pilar neste pavimento: do piso (ou do fundo do baldrame, no
   // primeiro) até o topo da estrutura (piso de cima) — o pilar é contínuo
@@ -397,7 +399,7 @@ function esLancar(paredes, areas, params, opts = {}) {
   // 4) lajes: as que o arquiteto desenhou neste pavimento
   const lajes = (areas || []).map((a, i) => ({ a, i })).filter(({ a }) => a.tipo === "laje" && a.pts && a.pts.length >= 3)
     .map(({ a, i }, k) => { const c = esCargaLaje(a, opts.usoPadrao); return { id: "L" + (k + 1), area: i, pts: a.pts, esp: c.pre ? c.pre.hTotal : (a.esp || P.lajeEsp), uso: c.piso ? "piso" : "cobertura", tipo: c.tipo, concretoM2: c.concreto, capa: c.pre ? c.pre.capa : null }; });
-  return { pilares, vigas: [...vigas, ...baldrames], lajes };
+  return { pilares, vigas: [...vigas, ...baldrames], lajes, edicoesOrfas: orfas };
 }
 
 // Lança todos os pavimentos (lista de { paredes, areas, usoPadrao }, de baixo
@@ -414,10 +416,80 @@ function esTopoPavimento(pavs, k) {
   const hp = Math.max(0, ...(p.paredes || []).map((w) => w.h || 0));
   return esR3(lajes.length ? Math.max(...lajes) : (hp || 2.8));
 }
+// ═══════════════════════════════════════════════════════════════
+// ALTERAÇÕES À MÃO (como nos programas de cálculo): o lançamento automático
+// roda sempre e as alterações do usuário são reaplicadas por POSIÇÃO — se a
+// arquitetura mudar, continuam valendo onde o elemento ainda existe; a que
+// não acha mais o elemento vira aviso. Por pavimento, em ordem:
+//   { tipo: "pilar+", x, y, b, h, ang }        pilar novo (na parede: no eixo dela)
+//   { tipo: "pilar-", x, y }                   apaga o pilar nesse ponto (o nó)
+//   { tipo: "pilar~", x, y, nx, ny }           move
+//   { tipo: "pilarSec", x, y, b, h, ang }      seção / giro
+//   { tipo: "viga+", a, b, b_, h }             viga nova
+//   { tipo: "viga-", m, ang }                  apaga a viga que passa em m
+//   { tipo: "vigaSec", m, ang, b_, h }         seção fixa (o cálculo não muda)
+// ═══════════════════════════════════════════════════════════════
+const ES_TOL_EDICAO = { pilar: 0.4, viga: 0.12 };
+function esNoNaParede(q, ws) {
+  let melhor = null;
+  for (const w of ws) {
+    const L = esLen(w); if (!L) continue; const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
+    const s = (q.x - w.a.x) * ux + (q.y - w.a.y) * uy, d = Math.abs((q.x - w.a.x) * -uy + (q.y - w.a.y) * ux);
+    if (s < -0.05 || s > L + 0.05 || d > (w.t || 0.14) / 2 + 0.06) continue;
+    if (!melhor || d < melhor.d) melhor = { d, q: { x: esR3(w.a.x + ux * Math.min(L, Math.max(0, s))), y: esR3(w.a.y + uy * Math.min(L, Math.max(0, s))) }, ang: Math.atan2(uy, ux), t: w.t };
+  }
+  return melhor;
+}
+function esAplicarEdicoesPilares(pilares, ws, eds, secao) {
+  const orfas = [];
+  const achar = (q) => { let m = null, dm = ES_TOL_EDICAO.pilar; for (const p of pilares) { const d = Math.min(esDist(p.no, q), esDist(p, q)); if (d < dm) { dm = d; m = p; } } return m; };
+  // na parede: no eixo dela e alinhado com ela (mover para outra parede gira junto)
+  const colocar = (p, q) => { const nw = esNoNaParede(q, ws); p.no = nw ? nw.q : { x: esR3(q.x), y: esR3(q.y) }; p.x = p.no.x; p.y = p.no.y; if (nw) p.ang = esR3(nw.ang); };
+  eds.forEach((e, i) => {
+    if (e.tipo === "pilar+") {
+      const sc = secao([]), p = { b: e.b || sc.b, h: e.h || sc.h, ang: null, origem: "manual", manual: "novo", edicao: i };
+      colocar(p, e); if (e.ang != null) p.ang = e.ang; if (p.ang == null) p.ang = 0; pilares.push(p);
+    } else if (e.tipo === "pilar-" || e.tipo === "pilar~" || e.tipo === "pilarSec") {
+      const p = achar(e); if (!p) { orfas.push({ ...e, i }); return; }
+      if (e.tipo === "pilar-") { pilares.splice(pilares.indexOf(p), 1); return; }
+      if (e.tipo === "pilar~") { colocar(p, { x: e.nx, y: e.ny }); p.manual = p.manual || "movido"; p.edicao = i; return; }
+      if (e.b) p.b = e.b; if (e.h) p.h = e.h; if (e.ang != null) p.ang = e.ang; p.secManual = true; p.edicaoSec = i;
+    }
+  });
+  return orfas;
+}
+// vigas: antes das vigas automáticas de escada/balanço (fase 1: o que já
+// existe e as novas) e depois delas (fase 2: o que sobrou, p. ex. VE)
+function esAplicarEdicoesVigas(est, eds, P, topo, fase, feitas) {
+  const acharViga = (e) => {
+    let m = null, dm = ES_TOL_EDICAO.viga;
+    for (const v of est.vigas) {
+      if (!!v.baldrame !== !!e.baldrame) continue; const L = esDist(v.a, v.b); if (!L) continue;
+      if (e.ang != null && Math.abs(Math.cos(Math.atan2(v.b.y - v.a.y, v.b.x - v.a.x) - e.ang)) < 0.985) continue;
+      const d = esPontoNoSeg(e.m, v.a, v.b).d; if (d < dm) { dm = d; m = v; }
+    }
+    return m;
+  };
+  eds.forEach((e, i) => {
+    if (feitas.has(i)) return;
+    if (e.tipo === "viga+") {
+      if (fase !== 1) return;
+      const pil = (q) => { const p = est.pilares.find((pp) => esDist(pp.no, q) <= 0.3); return p ? p.id : null; };
+      const n = est.vigas.filter((v) => /^V\d+$/.test(v.id)).reduce((mx, v) => Math.max(mx, +v.id.slice(1)), 0) + 1, L = esDist(e.a, e.b); if (L < 0.2) return;
+      est.vigas.push({ id: "V" + n, a: { x: esR3(e.a.x), y: esR3(e.a.y) }, b: { x: esR3(e.b.x), y: esR3(e.b.y) }, apoioA: pil(e.a), apoioB: pil(e.b), parede: null, s0: 0, s1: esR3(L), b_: e.b_ || P.viga.b, h: e.h || P.viga.h, topo, manual: "novo", hFixo: !!e.h, edicao: i });
+      feitas.add(i);
+    } else if (e.tipo === "viga-" || e.tipo === "vigaSec") {
+      const v = acharViga(e); if (!v) return;
+      if (e.tipo === "viga-") est.vigas.splice(est.vigas.indexOf(v), 1);
+      else { if (e.b_) v.b_ = e.b_; if (e.h) { v.h = e.h; v.hFixo = true; } v.secManual = true; v.edicaoSec = i; }
+      feitas.add(i);
+    }
+  });
+}
 function esLancarPavimentos(pavs, params) {
   const passada = (acimaDe) => {
     const r = [];
-    pavs.forEach((p, k) => r.push(esLancar(p.paredes || [], p.areas || [], params, { baldrames: k === 0, usoPadrao: p.usoPadrao, topo: esTopoPavimento(pavs, k),
+    pavs.forEach((p, k) => r.push(esLancar(p.paredes || [], p.areas || [], params, { edicoes: p.edicoes || [], baldrames: k === 0, usoPadrao: p.usoPadrao, topo: esTopoPavimento(pavs, k),
       pilaresAbaixo: k > 0 ? r[k - 1].pilares : null,
       pisoAbaixo: k > 0 ? { paredes: pavs[k - 1].paredes || [], pilares: r[k - 1].pilares } : null,
       pilaresAcima: acimaDe && acimaDe[k + 1] ? acimaDe[k + 1].pilares.filter((q) => q.origem !== "continuidade") : null })));
@@ -441,8 +513,17 @@ function esLancarPavimentos(pavs, params) {
   }
   // vigas de borda do furo da escada (critério 11): cada lado do furo que não
   // cai sobre viga vira viga, esticada até as vigas que encontrar
+  const feitas = pavs.map(() => new Set());
+  pavs.forEach((p, k) => esAplicarEdicoesVigas(r[k], p.edicoes || [], P, esTopoPavimento(pavs, k), 1, feitas[k]));
   pavs.forEach((p, k) => esVigasDeEscada(p, r[k], P, esTopoPavimento(pavs, k), k));
   pavs.forEach((p, k) => esBalancosSoltos(p, r[k], P, k));
+  pavs.forEach((p, k) => {
+    esAplicarEdicoesVigas(r[k], p.edicoes || [], P, esTopoPavimento(pavs, k), 2, feitas[k]);
+    // alteração que não achou mais o elemento (a arquitetura mudou)
+    const orf = [...(r[k].edicoesOrfas || []), ...(p.edicoes || []).map((e, i) => ({ ...e, i })).filter((e) => /^viga[-S]/.test(e.tipo) && !feitas[k].has(e.i))];
+    r[k].edicoesOrfas = orf;
+    for (const e of orf) (r[k].resolvidos = r[k].resolvidos || []).push({ k, id: null, tipo: "pendente", edicao: e.i, texto: `Alteração à mão sem o elemento (${{ "pilar-": "pilar apagado", "pilar~": "pilar movido", pilarSec: "seção de pilar", "viga-": "viga apagada", vigaSec: "seção de viga" }[e.tipo] || e.tipo}): a arquitetura mudou ali — confira ou desfaça a alteração.` });
+  });
   return r;
 }
 // furo da escada: o contorno (caracol: o quadrado que o envolve)
@@ -2033,7 +2114,7 @@ function esCompatibilizar(pavs, lanc, desc, params) {
           const disp = Math.floor(((v.topo || 2.8) - topoVao) * 20 + 1e-9) / 20, t = tramoDe(v.id), nome = (qual.tipo || "").startsWith("porta") ? "porta" : "janela";
           // não pode ficar com o fundo acima do fundo das vigas que apoiam nela
           const hApoiadas = esApoiosIndiretos(est).filter((x) => x.apoio === v && !x.apoiada.invertida).reduce((m, x) => Math.max(m, (v.topo || 2.8) - esFundo(x.apoiada)), 0);
-          const r = t && disp >= 0.25 && disp >= hApoiadas - 1e-6 ? esDimViga(t, params, disp) : null;
+          const r = t && !v.hFixo && disp >= 0.25 && disp >= hApoiadas - 1e-6 ? esDimViga(t, params, disp) : null;
           if (r && r.ok) { acoes.push({ k, id: v.id, tipo: "altura", texto: `${v.id} baixada de ${Math.round(v.h * 100)} para ${Math.round(disp * 100)} cm para não invadir a ${nome} (o cálculo passa).` }); v.h = disp; }
           else if (podeInverter(k, v)) inverter(k, v, `não cabe acima da ${nome}`);
           else acoes.push({ k, id: v.id, tipo: "pendente", texto: `${v.id} não cabe acima da ${nome} e não dá para inverter: suba o vão da ${nome} até ${String((fundo).toFixed(2)).replace(".", ",")} m ou mude a viga.` });
@@ -2069,7 +2150,7 @@ function esCalcularEstrutura(pavs, params) {
   desc.pavimentos.forEach((pv, k) => {
     for (const t of pv.tramos) {
       if (t.baldrame || t.comLaje || t.comParede || t.apoiaOutra || t.especial) continue;
-      for (const v of lanc[k].vigas) if (t.ids.includes(v.id)) { v.h = P.cinta; v.cinta = true; }
+      for (const v of lanc[k].vigas) if (t.ids.includes(v.id) && !v.hFixo) { v.h = P.cinta; v.cinta = true; }
     }
   });
   for (let it = 0; it < 4; it++) {
@@ -2077,14 +2158,14 @@ function esCalcularEstrutura(pavs, params) {
     let mudou = false;
     dim.pavimentos.forEach((p, k) => {
       for (const v of lanc[k].vigas) {
-        const r = p.vigas[v.id]; if (!r || r.ok || !r.hMin || r.hMin <= v.h + 1e-9) continue;
+        const r = p.vigas[v.id]; if (!r || r.ok || !r.hMin || r.hMin <= v.h + 1e-9 || v.hFixo) continue;
         if (!ajustes.some((a) => a.k === k && a.id === v.id)) ajustes.push({ k, id: v.id, de: v.h, para: r.hMin, cinta: !!v.cinta });
         else ajustes.find((a) => a.k === k && a.id === v.id).para = r.hMin;
         v.h = r.hMin; v.hPeloCalculo = true; mudou = true;
       }
       // apoio indireto: a viga que recebe desce até o fundo da apoiada (sem dente)
       for (const { apoiada, apoio } of esApoiosIndiretos(lanc[k])) {
-        if (apoiada.invertida || apoio.invertida || esFundo(apoiada) >= esFundo(apoio) - 0.005) continue;
+        if (apoiada.invertida || apoio.invertida || apoio.hFixo || esFundo(apoiada) >= esFundo(apoio) - 0.005) continue;
         const h = Math.ceil(((apoio.topo != null ? apoio.topo : 2.8) - esFundo(apoiada)) * 20 - 1e-6) / 20;
         if (h <= apoio.h + 1e-9) continue;
         const aj = ajustes.find((a) => a.k === k && a.id === apoio.id);

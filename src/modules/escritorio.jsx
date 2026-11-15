@@ -1252,6 +1252,7 @@ function Escritorio({ data, save, onReload, abaInicial, aoTrocarAba, aoAbrirObra
 
   const renderSistema = () => (
     <div style={E.body}>
+      {perm.podeGerenciarUsuarios && <SenhaDeLiberacao E={E} />}
       {perm.podeGerenciarUsuarios && <HistoricoGravacoes E={E} onReload={onReload} />}
       <div style={E.secao}>
         <div style={E.secTitulo}>Manutenção automática</div>
@@ -1353,6 +1354,64 @@ const HIST_MOTIVO = { gravacao: "gravação", lote: "importação", exclusao: "e
 function histTamanho(b) {
   const n = Number(b) || 0;
   return n >= 1024 * 1024 ? (n / 1024 / 1024).toFixed(1).replace(".", ",") + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+}
+
+// Senha de liberação: separada do login, só do administrador. É ela que
+// deixa lançar num mês já fechado sem reabri-lo. Criar ou trocar pede a
+// senha de login de quem está fazendo; o servidor guarda só o hash.
+function SenhaDeLiberacao({ E }) {
+  const [status, setStatus] = useState(null);
+  const [login, setLogin] = useState("");
+  const [nova, setNova] = useState("");
+  const [repete, setRepete] = useState("");
+  const [msg, setMsg] = useState({ texto: "", ok: false });
+  const [ocupado, setOcupado] = useState(false);
+  const carregar = async () => {
+    try { setStatus(await api.liberacao.status()); } catch (e) { setStatus({ erro: (e && e.message) || "Não deu para ler." }); }
+  };
+  useEffect(() => { carregar(); }, []);
+  async function gravar(ev) {
+    ev.preventDefault();
+    if (!login || !nova) { setMsg({ texto: "Preencha a senha de login e a nova senha de liberação.", ok: false }); return; }
+    if (nova.length < 6) { setMsg({ texto: "A senha de liberação deve ter no mínimo 6 caracteres.", ok: false }); return; }
+    if (nova !== repete) { setMsg({ texto: "A repetição não confere com a nova senha.", ok: false }); return; }
+    setOcupado(true); setMsg({ texto: "", ok: false });
+    try {
+      await api.liberacao.definir(login, nova);
+      setLogin(""); setNova(""); setRepete("");
+      setMsg({ texto: "Senha de liberação gravada.", ok: true });
+      carregar();
+    } catch (e) { setMsg({ texto: (e && e.message) || "Não deu para gravar.", ok: false }); }
+    finally { setOcupado(false); }
+  }
+  const inp = { width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 10, border: "1px solid rgba(38,36,33,0.2)",
+    fontSize: 14, fontFamily: "inherit" };
+  const definida = status && status.definida;
+  return (
+    <div style={E.secao} data-vk-senha-liberacao="1">
+      <div style={E.secTitulo}>Senha de liberação (mês fechado)</div>
+      <div style={{ fontSize: 13, color: "#4b5563", lineHeight: 1.6, marginBottom: 12 }}>
+        Separada da senha de login. Só administrador usa: com ela, um lançamento entra num mês já fechado sem reabrir o mês.
+        {" "}{status == null ? "Lendo…" : status.erro ? status.erro
+          : definida ? `Criada em ${new Date(status.definida_em).toLocaleDateString("pt-BR")}.` : "Ainda não foi criada."}
+      </div>
+      <form onSubmit={gravar} style={{ display: "grid", gap: 10, maxWidth: 420 }}>
+        <input type="password" autoComplete="current-password" value={login} onChange={(e) => setLogin(e.target.value)}
+          placeholder="Digite a sua senha de login" style={inp} data-vk-lib-login="1" />
+        <input type="password" autoComplete="new-password" value={nova} onChange={(e) => setNova(e.target.value)}
+          placeholder="Digite a nova senha de liberação" style={inp} data-vk-lib-nova="1" />
+        <input type="password" autoComplete="new-password" value={repete} onChange={(e) => setRepete(e.target.value)}
+          placeholder="Repita a nova senha de liberação" style={inp} data-vk-lib-repete="1" />
+        {msg.texto && <div style={{ fontSize: 12.5, color: msg.ok ? "#166534" : "#b91c1c" }}>{msg.texto}</div>}
+        <div>
+          <button type="submit" disabled={ocupado} data-vk-lib-gravar="1" style={{ padding: "8px 16px", borderRadius: 10, border: "none",
+            background: "#0474f4", color: "#fff", fontSize: 13, fontWeight: 600, cursor: ocupado ? "wait" : "pointer", fontFamily: "inherit" }}>
+            {ocupado ? "Gravando…" : definida ? "Trocar a senha de liberação" : "Criar a senha de liberação"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 function HistoricoGravacoes({ E, onReload }) {

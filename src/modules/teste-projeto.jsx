@@ -1838,6 +1838,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // estrutura (estrutural.jsx, etapa 1): refeita da arquitetura; aqui só os parâmetros
   const [estrutura, setEstrutura] = useState(() => (projeto.estrutura && typeof projeto.estrutura === "object" ? { params: {}, mostrar: true, so3d: false, ...projeto.estrutura } : { ativa: false, params: {}, mostrar: true, so3d: false }));
   const [estAberta, setEstAberta] = useState(false);
+  const [estMover, setEstMover] = useState(null); // pilar sendo movido (ferramenta "estMover")
   const [focoEst, setFocoEst] = useState(null);
   const [mostrarGrade, setMostrarGrade] = useState(() => { try { return localStorage.getItem("vicke-projetar-grade") !== "0"; } catch (err) { return true; } });
   const [pavSolta, setPavSolta] = useState(() => { try { const v = JSON.parse(localStorage.getItem("vicke-projetar-pav-solta") || "null"); return v && v.x >= 0 && v.y >= 0 ? v : null; } catch (err) { return null; } });
@@ -2060,10 +2061,60 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     }
     return novos;
   };
+  // ---------- alterações à mão na estrutura (estrutural.jsx: esAplicarEdicoes*) ----------
+  // ficam em estrutura.edicoes[pavimento], por posição; o lançamento automático
+  // roda sempre e reaplica as alterações (as que perdem o alvo viram aviso)
+  const mudarEdicoes = (fn, pid = pavAtivo) => { registrar(); setEstrutura((e) => ({ ...e, edicoes: { ...(e.edicoes || {}), [pid]: fn([...(((e.edicoes || {})[pid]) || [])]) } })); };
+  const estMeio = (v) => ({ x: r3((v.a.x + v.b.x) / 2), y: r3((v.a.y + v.b.y) / 2) }), estAng = (v) => r3(Math.atan2(v.b.y - v.a.y, v.b.x - v.a.x));
+  // cada alteração devolve { rem: [índices a tirar], add: [novas] } — juntadas num passo só (um desfazer)
+  const estOpApagar = (id) => {
+    const ea = estPorPav[pavAtivo] || { pilares: [], vigas: [] }, pl = ea.pilares.find((x) => x.id === id), v = ea.vigas.find((x) => x.id === id);
+    if (pl) return pl.manual === "novo" ? { rem: [pl.edicao, pl.edicaoSec], add: [] } : { rem: [], add: [{ tipo: "pilar-", x: pl.no.x, y: pl.no.y }] };
+    if (v) return v.manual === "novo" ? { rem: [v.edicao], add: [] } : { rem: [], add: [{ tipo: "viga-", m: estMeio(v), ang: estAng(v), ...(v.baldrame ? { baldrame: true } : {}) }] };
+    return { rem: [], add: [] };
+  };
+  const estAplicarOps = (ops) => mudarEdicoes((l) => { const rem = new Set(ops.flatMap((o) => o.rem).filter((i) => i != null)); return [...l.filter((_, i) => !rem.has(i)), ...ops.flatMap((o) => o.add)]; });
+  const estPilarSecao = (pl, mud) => mudarEdicoes((l) => {
+    if (pl.manual === "novo" && l[pl.edicao]) { l[pl.edicao] = { ...l[pl.edicao], ...mud }; return l; }
+    if (pl.edicaoSec != null && l[pl.edicaoSec]) { l[pl.edicaoSec] = { ...l[pl.edicaoSec], ...mud }; return l; }
+    return [...l, { tipo: "pilarSec", x: pl.no.x, y: pl.no.y, b: pl.b, h: pl.h, ang: r3(pl.ang || 0), ...mud }];
+  });
+  const estPilarMover = (pl, q) => mudarEdicoes((l) => {
+    if (pl.manual === "novo" && l[pl.edicao]) { l[pl.edicao] = { ...l[pl.edicao], x: q.x, y: q.y, ang: null }; return l; }
+    if (pl.manual === "movido" && l[pl.edicao] && l[pl.edicao].tipo === "pilar~") {
+      l[pl.edicao] = { ...l[pl.edicao], nx: q.x, ny: q.y };
+      if (pl.edicaoSec != null && pl.edicaoSec > pl.edicao && l[pl.edicaoSec]) l[pl.edicaoSec] = { ...l[pl.edicaoSec], x: q.x, y: q.y };
+      return l;
+    }
+    return [...l, { tipo: "pilar~", x: pl.no.x, y: pl.no.y, nx: q.x, ny: q.y }];
+  });
+  const estVigaSecao = (v, mud) => mudarEdicoes((l) => {
+    if (v.manual === "novo" && l[v.edicao]) { l[v.edicao] = { ...l[v.edicao], ...mud }; return l; }
+    if (v.edicaoSec != null && l[v.edicaoSec]) { l[v.edicaoSec] = { ...l[v.edicaoSec], ...mud }; return l; }
+    return [...l, { tipo: "vigaSec", m: estMeio(v), ang: estAng(v), b_: v.b_, h: v.h, ...(v.baldrame ? { baldrame: true } : {}), ...mud }];
+  });
+  const estRestaurar = (x) => estAplicarOps([{ rem: x.manual === "movido" ? [x.edicao, x.edicaoSec] : [x.edicaoSec], add: [] }]);
+  // ímã da ferramenta: centro de pilar, ponta de viga, eixo da parede
+  const estIma = (p) => {
+    const ea = estPorPav[pavAtivo];
+    if (ea) {
+      for (const pl of ea.pilares) if (Math.hypot(p.x - pl.x, p.y - pl.y) < 0.35) return { x: pl.no.x, y: pl.no.y, pilar: pl.id };
+      for (const v of ea.vigas) if (!v.baldrame) for (const q of [v.a, v.b]) if (Math.hypot(p.x - q.x, p.y - q.y) < 0.3) return { x: q.x, y: q.y };
+    }
+    let melhor = null;
+    for (const w of paredes) { const L = tpLen(w); if (!L) continue; const ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, sv = (p.x - w.a.x) * ux + (p.y - w.a.y) * uy, d = Math.abs(-(p.x - w.a.x) * uy + (p.y - w.a.y) * ux);
+      if (sv < -0.05 || sv > L + 0.05 || d > (w.t || 0.14) / 2 + 0.12 || (melhor && melhor.d <= d)) continue;
+      melhor = { d, x: r3(w.a.x + ux * Math.min(L, Math.max(0, sv))), y: r3(w.a.y + uy * Math.min(L, Math.max(0, sv))) }; }
+    return melhor ? { x: melhor.x, y: melhor.y } : { x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100 };
+  };
   const excluirSelecao = () => {
     if (!sel.length && Object.keys(selOutros).length) { const n = excluirOutros(); if (n) { registrar(); setDadosPav(n); } setSelOutros({}); return; }
     if (!sel.length) return;
-    if (sel.every((k) => k[0] === "e")) { avisar("A estrutura é refeita a partir das paredes; apagar ou mover peça a peça entra na próxima etapa."); return; }
+    if (sel.every((k) => k[0] === "e")) {
+      const ids = sel.map((k) => k.slice(1)).filter((id) => !id.startsWith("BL:") && !id.startsWith("ES:"));
+      if (!ids.length) { avisar("A fundação sai do pilar: apague ou mude o pilar."); return; }
+      estAplicarOps(ids.map(estOpApagar)); setSel([]); avisar(`${ids.join(", ")} ${ids.length > 1 ? "apagados" : "apagado"} (alteração à mão; "Voltar ao automático" no painel da estrutura desfaz).`); return;
+    }
     if (sel.every((k) => k[0] === "x")) { const fx = new Set(sel.map((k) => +k.slice(1))); const resto = cortes.filter((_, i) => !fx.has(i)); registrar(); setCortes(resto); if (!resto.some((c) => c.id === verCorte)) setVerCorte(resto[0] ? resto[0].id : null); setSel([]); return; }
     const fl = new Set(sel.filter((k) => k[0] === "l").map((k) => +k.slice(1)));
     if (fl.size && sel.every((k) => k[0] === "l")) { mudar(paredes.map((w, i) => (fl.has(i) ? { ...w, semCota: true } : w))); setSel([]); return; }
@@ -2249,8 +2300,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // todos os pavimentos juntos: pilares contínuos de baixo para cima (estrutural.jsx)
   const estLista = useMemo(() => {
     if (!estrutura.ativa) return null;
-    return pavsOrd.map((p, k) => { const d = dadosDe(p.id), acima = pavsOrd[k + 1]; return { paredes: d.paredes || [], areas: d.areas || [], nivel: p.nivel || 0, nome: p.nome, usoPadrao: acima && (dadosDe(acima.id).paredes || []).length ? "residencial" : "forro", escadas: tpEscadasEstrutura(d.areas || []) }; });
-  }, [estrutura.ativa, paredes, areas, dadosPav, pavimentos, pavAtivo]); // eslint-disable-line react-hooks/exhaustive-deps
+    return pavsOrd.map((p, k) => { const d = dadosDe(p.id), acima = pavsOrd[k + 1]; return { paredes: d.paredes || [], areas: d.areas || [], nivel: p.nivel || 0, nome: p.nome, usoPadrao: acima && (dadosDe(acima.id).paredes || []).length ? "residencial" : "forro", escadas: tpEscadasEstrutura(d.areas || []), edicoes: (estrutura.edicoes || {})[p.id] || [] }; });
+  }, [estrutura.ativa, estrutura.edicoes, paredes, areas, dadosPav, pavimentos, pavAtivo]); // eslint-disable-line react-hooks/exhaustive-deps
   // lançamento na hora (planta); cargas e dimensionamento logo depois de parar de
   // mexer (são mais pesados) — enquanto isso a planta mostra o lançamento
   const estLancRapido = useMemo(() => (estLista ? esLancarPavimentos(estLista, estrutura.params) : null), [estLista, estrutura.params]);
@@ -3747,7 +3798,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         ctx.setLineDash([]);
         if (L * vista.current.s > 70 * dpr) {
           const [mx, my] = T({ x: (v.a.x + v.b.x) / 2 + nx * 2.6, y: (v.a.y + v.b.y) / 2 + ny * 2.6 });
-          const txt = `${v.cinta ? "cinta " : ""}${v.id} ${Math.round(v.b_ * 100)}×${Math.round(v.h * 100)}${v.invertida ? " inv." : ""}${v.balanco ? " bal." : ""}`, w = ctx.measureText(txt).width + 6 * dpr;
+          const txt = `${v.cinta ? "cinta " : ""}${v.id} ${Math.round(v.b_ * 100)}×${Math.round(v.h * 100)}${v.invertida ? " inv." : ""}${v.balanco ? " bal." : ""}${v.manual || v.secManual ? " *" : ""}`, w = ctx.measureText(txt).width + 6 * dpr;
           ctx.fillStyle = "rgba(255,255,255,0.85)"; ctx.fillRect(mx - w / 2, my - fonteEst * 0.65, w, fonteEst * 1.3);
           ctx.fillStyle = "#4b5563"; ctx.fillText(txt, mx, my);
         }
@@ -3756,7 +3807,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const mkP = marcadas.has("e" + pl.id);
         caminho(esCantosPilar(pl)); ctx.fillStyle = mkP ? TP_AZUL : "#111827"; ctx.fill();
         const [x, y] = T(pl), r = Math.max(pl.b, pl.h) * vista.current.s / 2 + 8 * dpr;
-        ctx.fillStyle = mkP ? TP_AZUL : "#111827"; ctx.fillText(pl.id, x + r * 0.8, y - r * 0.8);
+        ctx.fillStyle = mkP ? TP_AZUL : "#111827"; ctx.fillText(pl.id + (pl.manual || pl.secManual ? "*" : ""), x + r * 0.8, y - r * 0.8);
       }
       // fundação (no pavimento mais baixo): bloco/sapata tracejado e estacas
       if (estDescida && (estPorPav._ids || [])[0] === pavAtivo) for (const f of estDescida.fundacao || []) {
@@ -3911,6 +3962,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     };
     cortes.forEach((ct, i) => linhaCorte(ct, marcadas.has("x" + i), false));
     if (ferramenta === "corte" && inicio && hover) linhaCorte({ a: inicio, b: hover, lado: 1 }, true, true);
+    if ((ferramenta === "estPilar" || ferramenta === "estMover" || ferramenta === "estViga") && hover) {
+      ctx.save(); ctx.strokeStyle = TP_AZUL; ctx.lineWidth = 2 * dpr; ctx.setLineDash([4 * dpr, 3 * dpr]);
+      if (ferramenta === "estViga" && inicio) { const [x0, y0] = T(inicio), [x1, y1] = T(hover); ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
+      const Pp = { ...ES_PADRAO, ...(estrutura.params || {}) }.pilar, ea = estPorPav[pavAtivo], plm = ferramenta === "estMover" && ea ? ea.pilares.find((x) => x.id === estMover) : null;
+      if (ferramenta !== "estViga") { const bb = (plm ? plm.b : Pp.b || 0.19), hh = (plm ? plm.h : Pp.h || 0.19); caminho(esCantosPilar({ x: hover.x, y: hover.y, b: bb, h: hh, ang: plm ? plm.ang || 0 : 0 })); ctx.stroke(); }
+      else { const [hx, hy] = T(hover); ctx.setLineDash([]); ctx.beginPath(); ctx.arc(hx, hy, 4 * dpr, 0, Math.PI * 2); ctx.fillStyle = TP_AZUL; ctx.fill(); }
+      ctx.restore();
+    }
     if (ferramenta === "cota" && hover) {
       if (ancora && ancora.cotaB) {
         const p = ancora.cotaA, q = ancora.cotaB, l = Math.hypot(q.x - p.x, q.y - p.y) || 1, off = (hover.x - p.x) * -(q.y - p.y) / l + (hover.y - p.y) * (q.x - p.x) / l;
@@ -4885,6 +4944,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     { const ea = estrutura.ativa && estrutura.mostrar !== false ? estPorPav[pavAtivo] : null;
       if (ea) for (const pl of ea.pilares) { const c = Math.cos(pl.ang || 0), sn = Math.sin(pl.ang || 0), dx = p.x - pl.x, dy = p.y - pl.y;
         if (Math.abs(dx * c + dy * sn) <= pl.h / 2 + tol && Math.abs(-dx * sn + dy * c) <= pl.b / 2 + tol) return "e" + pl.id; }
+      // com o painel da estrutura aberto, a viga vem antes da parede
+      if (ea && estAberta) { let mv = null, dm = Infinity; for (const vg of ea.vigas) { if (vg.baldrame) continue; const dd = distSeg(p, vg.a, vg.b); if (dd <= vg.b_ / 2 + tol && dd < dm) { dm = dd; mv = vg; } } if (mv) return "e" + mv.id; }
       if (ea && estDescida && (estPorPav._ids || [])[0] === pavAtivo) {
         let bloco = null;
         for (const f of estDescida.fundacao || []) {
@@ -5400,7 +5461,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: { tipo: "rotulo", chave: "a" + rq.ai, ai: rq.ai, ja, off: desvioCliente(tpRotuloAmb(areas[rq.ai]), e) }, orig: { paredes, areas } };
         e.currentTarget.setPointerCapture(e.pointerId); return;
       }
-      const al = alcaNoPonto(d) || (!e.ctrlKey && !e.metaKey && !e.shiftKey ? pontaPerto(d) : null);
+      // painel da estrutura aberto: pilar e viga vêm antes da ponta da parede (o pilar de canto fica em cima dela)
+      const kEst = estAberta ? elementoNoPonto(d) : null, ehEst = !!kEst && kEst[0] === "e";
+      const al = ehEst ? null : alcaNoPonto(d) || (!e.ctrlKey && !e.metaKey && !e.shiftKey ? pontaPerto(d) : null);
       if (al) {
         if (al.chave && !sel.includes(al.chave)) setSel([al.chave]);
         gesto.current = { x: d.x, y: d.y, x0: d.x, y0: d.y, moveu: false, grip: al, orig: { paredes, areas } }; e.currentTarget.setPointerCapture(e.pointerId); return;
@@ -5408,7 +5471,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       // Arrastar uma parede ou linha de separação (ou uma área já selecionada)
       // move o elemento — e o que estiver selecionado junto. Os ambientes em
       // volta refazem a área sozinhos. Ctrl/Shift continuam sendo seleção.
-      if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !ehEst) {
         const k = elementoNoPonto(d);
         if (k && k[0] === "o") {
           const loc = tpAcharAbertura(paredes, k.slice(1));
@@ -5480,6 +5543,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       }
     }
     if (ferramenta === "parede" || ferramenta === "separador" || ferramenta === "cota" || ferramenta === "escada" || ferramenta === "corte" || tpEhPoli(ferramenta)) setHover(pontoDoCursor(e));
+    if (ferramenta === "estPilar" || ferramenta === "estViga" || ferramenta === "estMover") setHover(estIma(paraMundoLivre(devPx(e))));
     if (ferramenta === "esquadria") setPreviaEsq(previaEsqEm(paraMundoLivre(d)));
   };
   const planUp = (e) => {
@@ -5531,6 +5595,24 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       return;
     }
     if (ferramenta === "ambiente") { inserirAmbienteEm(paraMundoLivre(devPx(e))); return; }
+    if (ferramenta === "estPilar") {
+      const q = estIma(paraMundoLivre(devPx(e))); if (q.pilar) { avisar(`Já tem o ${q.pilar} aí.`); return; }
+      const Pp = { ...ES_PADRAO, ...(estrutura.params || {}) }.pilar;
+      mudarEdicoes((l) => [...l, { tipo: "pilar+", x: q.x, y: q.y, b: Pp.b || 0.19, h: Pp.h || 0.19 }]); avisar(isMobile ? "Pilar inserido. Toque para inserir outro; Selecionar termina." : "Pilar inserido. Clique para inserir outro; Esc termina."); return;
+    }
+    if (ferramenta === "estViga") {
+      const q = estIma(paraMundoLivre(devPx(e))); setHover(q);
+      if (!inicio) { setInicio({ x: q.x, y: q.y }); return; }
+      if (Math.hypot(q.x - inicio.x, q.y - inicio.y) < 0.3) return;
+      mudarEdicoes((l) => [...l, { tipo: "viga+", a: inicio, b: { x: q.x, y: q.y } }]); setInicio(null); avisar(isMobile ? "Viga inserida. Toque o início de outra; Selecionar termina." : "Viga inserida. Clique o início de outra; Esc termina."); return;
+    }
+    if (ferramenta === "estMover") {
+      const ea = estPorPav[pavAtivo], pl = ea && estMover && ea.pilares.find((x) => x.id === estMover);
+      const q = estIma(paraMundoLivre(devPx(e)));
+      if (pl && !(q.pilar && q.pilar !== pl.id)) { estPilarMover(pl, q); avisar(`${pl.id} movido.`); }
+      else if (q.pilar) avisar(`Já tem o ${q.pilar} aí.`);
+      setEstMover(null); setFerramenta("selecionar"); return;
+    }
     if (ferramenta === "escada") {
       // 1º clique: pé do primeiro degrau (no caracol, o centro); 2º: direção em que sobe
       const pc = pontoDoCursor(e), p2 = limpo(pc); setHover(pc);
@@ -5926,6 +6008,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const desenhoAtivo = ferramenta === "parede" || tpEhPoli(ferramenta);
   const status = (ferramenta === "separador" && dividir) ? `Dividindo "${(areas[dividir.ai] || {}).nome || "ambiente"}": clique de uma parede até a outra (pode quebrar a linha). Esc cancela.`
     : ferramenta === "separador" ? (inicio ? "Clique o fim da linha. Esc cancela." : "Separador: linha que divide ambientes sem parede. Clique de uma parede até a outra.")
+    : ferramenta === "estPilar" ? "Inserir pilar: clique onde ele fica (gruda no eixo da parede). Esc termina."
+    : ferramenta === "estViga" ? (inicio ? "Clique o fim da viga (gruda em pilar, ponta de viga e parede). Esc cancela." : "Inserir viga: clique o início (gruda em pilar, ponta de viga e parede).")
+    : ferramenta === "estMover" ? `Mover ${estMover || "pilar"}: clique a nova posição (gruda no eixo da parede). Esc cancela.`
     : ferramenta === "corte" ? (inicio ? "Clique o fim da linha de corte. Esc cancela." : "Corte: clique o início da linha que atravessa a casa (passe pela escada e pelas janelas que quer mostrar).")
     : ferramenta === "escada" ? (inicio ? "Aponte para onde a escada sobe e clique. Esc cancela." : "Escada: clique o pé do primeiro degrau (no caracol, o centro). Forma e largura no painel ao lado.")
     : ferramenta === "cota" ? (ancora && ancora.cotaB ? "Clique onde fica a linha de cota. Esc cancela." : inicio ? "Clique o segundo ponto a medir. Esc cancela." : "Cota: clique o primeiro ponto a medir (gruda nas quinas e faces das paredes).")
@@ -6036,7 +6121,35 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 </div>
               ))}
               {avs.map((a, k) => <div key={k} style={{ fontSize: 12, color: a.tipo === "nbr" ? "#b91c1c" : a.tipo === "compat" ? "#b45309" : "#4b5563", lineHeight: 1.4, marginTop: 4 }}>{a.texto}</div>)}
-              <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>Seção e posição vêm do lançamento automático; a edição peça a peça entra na próxima etapa.</div>
+              {sel.length === 1 && (() => {
+                const id = sel[0].slice(1), pl = est.pilares.find((x) => x.id === id), v = est.vigas.find((x) => x.id === id);
+                if (!pl && !v) return null;
+                const bt = { ...btn, minHeight: 30, fontSize: 12.5, padding: "4px 10px" };
+                const alterado = pl ? pl.manual === "movido" || pl.secManual : v.secManual;
+                return (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                      {pl ? (<>
+                        <TpCampo id="tp-estpl-b" rotulo="b (cm)" casas={0} valor={Math.round(pl.b * 100)} onConfirmar={(x) => x >= 12 && x <= 100 && estPilarSecao(pl, { b: x / 100 })} />
+                        <TpCampo id="tp-estpl-h" rotulo="h (cm)" casas={0} valor={Math.round(pl.h * 100)} onConfirmar={(x) => x >= 12 && x <= 200 && estPilarSecao(pl, { h: x / 100 })} />
+                      </>) : (<>
+                        <TpCampo id="tp-estvg-b" rotulo="b (cm)" casas={0} valor={Math.round(v.b_ * 100)} onConfirmar={(x) => x >= 10 && x <= 60 && estVigaSecao(v, { b_: x / 100 })} />
+                        <TpCampo id="tp-estvg-h" rotulo="h (cm, fixa)" casas={0} valor={Math.round(v.h * 100)} onConfirmar={(x) => x >= 15 && x <= 150 && estVigaSecao(v, { h: x / 100 })} />
+                      </>)}
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                      {pl && <button style={bt} onClick={() => estPilarSecao(pl, { ang: r3(((pl.ang || 0) + Math.PI / 2) % Math.PI) })}>Girar 90°</button>}
+                      {pl && <button style={bt} onClick={() => { setEstMover(pl.id); setSel([]); setFerramenta("estMover"); if (isMobile) setMenuAberto(false); }}>Mover</button>}
+                      <button style={{ ...bt, color: "#b91c1c" }} onClick={() => { estAplicarOps([estOpApagar(id)]); setSel([]); }}>Apagar</button>
+                      {alterado && <button style={bt} onClick={() => estRestaurar(pl || v)}>Voltar ao automático</button>}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>
+                      {pl && pl.manual === "novo" ? "Pilar lançado à mão. " : v && v.manual === "novo" ? "Viga lançada à mão. " : alterado ? "Alterado à mão (marcado com * na planta). " : "Do lançamento automático. "}
+                      {v ? "A altura digitada fica fixa: o cálculo avisa se não passar, em vez de aumentar." : "Se a arquitetura mudar, a alteração continua valendo no mesmo lugar."}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           );
         })()}
@@ -6807,6 +6920,26 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#374151", cursor: "pointer", marginTop: 6 }}>
                   <input type="checkbox" checked={!!estrutura.noCorte} onChange={(e) => setEstrutura((x) => ({ ...x, noCorte: e.target.checked }))} /> Mostrar nos cortes
                 </label>
+                {(() => {
+                  const nEd = Object.values(estrutura.edicoes || {}).reduce((t, l) => t + (l || []).length, 0), nAqui = ((estrutura.edicoes || {})[pavAtivo] || []).length;
+                  const bt = (ativo) => ({ ...btn, flex: 1, minHeight: 32, fontSize: 12.5, background: ativo ? "#eef5ff" : "#fff", color: ativo ? TP_AZUL : "#111827", borderColor: ativo ? TP_AZUL : "#d1d5db" });
+                  return (
+                    <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid #f0f2f5" }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>Lançar e alterar à mão</div>
+                      <div style={{ fontSize: 11.5, color: "#6b7280", lineHeight: 1.4, margin: "2px 0 6px" }}>Clique num pilar ou numa viga na planta para mudar a seção, mover ou apagar. As alterações ficam marcadas com * e continuam valendo se a arquitetura mudar.</div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button style={bt(ferramenta === "estPilar")} onClick={() => { trocarFerramenta(ferramenta === "estPilar" ? "selecionar" : "estPilar"); if (isMobile) setMenuAberto(false); }}>Inserir pilar</button>
+                        <button style={bt(ferramenta === "estViga")} onClick={() => { trocarFerramenta(ferramenta === "estViga" ? "selecionar" : "estViga"); if (isMobile) setMenuAberto(false); }}>Inserir viga</button>
+                      </div>
+                      {nEd > 0 && (
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 6, fontSize: 12, color: "#4b5563" }}>
+                          <span>{nAqui} alteraç{nAqui === 1 ? "ão" : "ões"} neste pavimento{nEd > nAqui ? ` · ${nEd} no total` : ""}</span>
+                          {nAqui > 0 && <button style={{ ...btn, minHeight: 28, fontSize: 12, padding: "2px 10px" }} onClick={() => { registrar(); setEstrutura((e) => { const ed = { ...(e.edicoes || {}) }; delete ed[pavAtivo]; return { ...e, edicoes: ed }; }); }}>Voltar tudo ao automático</button>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 {grupoQ("est-av", `Verificações${estAvisos.length ? ` (${estAvisos.length})` : ""}`, nNbr + nComp ? `${nNbr + nComp} a resolver` : "ok")}
                 {!qFechado("est-av") && (
                   <div>

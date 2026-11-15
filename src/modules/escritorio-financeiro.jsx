@@ -7869,6 +7869,9 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const liberado = f.liberadoNoMesFechado && f.liberadoNoMesFechado.mes;
   const fechamentosDoForm = liberado ? fechamentosComLiberacao(fechamentos, liberado) : fechamentos;
   const mesQueTrava = mesFechadoQueTrava({ ...f, competenciaFixa }, fechamentosDoForm);
+  // só o administrador libera lançamento em mês fechado
+  const podeLiberarMes = (() => { const pm = typeof getPermissoes === "function" ? getPermissoes() : null;
+    return !!(pm && (pm.isAdmin || pm.isMaster)); })();
   const unidadesOk = conta && (conta.unidades || []).length ? conta.unidades : UNIDADES_NEGOCIO.map((u) => u.id);
   // Empreendimento é cliente com tique: quando a unidade é Empreendimento, a
   // lista de escolha só traz esses, e o id escolhido vale pelos dois campos.
@@ -8847,7 +8850,7 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       )}
       {liberado && (
         <div data-vk-mes-liberado="1" style={{ fontSize: 12, color: "#166534" }}>
-          🔓 Liberado com senha para lançar em {efMesPorExtenso(liberado)} — o mês continua fechado para todo o resto.
+          🔓 Liberado com a senha de liberação para lançar em {efMesPorExtenso(liberado)} — o mês continua fechado para todo o resto.
         </div>
       )}
       {pedindoSenha && (
@@ -8858,12 +8861,14 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
       {tentou && todosErros.length > 0 && (
         <div style={{ fontSize: 12, color: "#b91c1c" }}>
           {todosErros.join(" · ")}
-          {mesQueTrava && todosErros.some((e) => /já está fechado/.test(e)) && (
+          {mesQueTrava && todosErros.some((e) => /já está fechado/.test(e)) && (podeLiberarMes ? (
             <button type="button" data-vk-liberar-mes="1" onClick={() => setPedindoSenha(mesQueTrava)}
               style={{ ...S.btnSec, marginLeft: 10, padding: "4px 10px", fontSize: 12 }}>
-              🔒 Lançar mesmo assim (pede senha)
+              🔒 Lançar mesmo assim (senha de liberação)
             </button>
-          )}
+          ) : (
+            <span data-vk-liberar-so-admin="1" style={{ marginLeft: 8, color: "#6b7280" }}>Só o administrador pode lançar em mês fechado.</span>
+          ))}
           {/* A trava de cliente e obra fica no pé; a saída dela (obra
               encerrada) mora lá em cima, junto dos campos. O atalho fica aqui,
               onde o olho já está. */}
@@ -10059,18 +10064,18 @@ function FaturasDoMes({ faturas, linhas, fila, lancs, aoFecharFatura, ocupado, f
 // não zera, o mês não fecha; depois de fechado, não entra lançamento nele.
 // O campo de valor da tela: pontos de milhar e vírgula aparecem enquanto
 // se digita; o cursor fica onde estava, contado pelos números.
-// Lançar num mês fechado: pede a senha de quem está logado (conferida no
-// servidor, que registra quem liberou). Não reabre o mês: só este
-// lançamento passa. Fecha só por Cancelar.
+// Lançar num mês fechado: só o administrador, com a senha de liberação do
+// escritório (separada do login, conferida no servidor, que registra quem
+// liberou). Não reabre o mês: só este lançamento passa. Fecha só por Cancelar.
 function JanelaSenhaMesFechado({ mes, aoConfirmar, aoCancelar }) {
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
   async function confirmar() {
-    if (!senha) { setErro("Digite sua senha."); return; }
+    if (!senha) { setErro("Digite a senha de liberação."); return; }
     setOcupado(true); setErro("");
     try {
-      await api.auth.conferirSenha(senha, "lancar_mes_fechado:" + mes);
+      await api.liberacao.conferir(senha, "lancar_mes_fechado:" + mes);
       setSenha(""); aoConfirmar();
     } catch (e) {
       setErro((e && e.message) || "Não deu para conferir a senha.");
@@ -10084,12 +10089,12 @@ function JanelaSenhaMesFechado({ mes, aoConfirmar, aoCancelar }) {
         boxShadow: "0 18px 40px rgba(0,0,0,0.18)", fontFamily: "inherit" }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Lançar em {efMesPorExtenso(mes)}</div>
         <div style={{ fontSize: 13, color: "#4b5563", lineHeight: 1.5, marginTop: 6 }}>
-          O mês está fechado. Com a sua senha, só este lançamento entra nele — o mês continua fechado para todo o resto,
-          e fica registrado quem liberou.
+          O mês está fechado. Com a senha de liberação, só este lançamento entra nele — o mês continua fechado para
+          todo o resto, e fica registrado quem liberou.
         </div>
         <form onSubmit={(e) => { e.preventDefault(); confirmar(); }} style={{ marginTop: 14 }}>
-          <input type="password" autoComplete="current-password" autoFocus value={senha} data-vk-senha-mes="1"
-            onChange={(e) => { setSenha(e.target.value); setErro(""); }} placeholder="Digite sua senha"
+          <input type="password" autoComplete="off" autoFocus value={senha} data-vk-senha-mes="1"
+            onChange={(e) => { setSenha(e.target.value); setErro(""); }} placeholder="Digite a senha de liberação"
             style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 10,
               border: "1px solid rgba(38,36,33,0.2)", fontSize: 14, fontFamily: "inherit" }} />
           {erro && <div data-vk-senha-erro="1" style={{ fontSize: 12, color: "#b91c1c", marginTop: 6 }}>{erro}</div>}

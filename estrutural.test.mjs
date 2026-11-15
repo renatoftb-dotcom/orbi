@@ -495,6 +495,36 @@ t("apoio indireto: viga funda apoiada em viga mais baixa iguala a altura (VE1 50
   lanc[0].vigas.push({ id: "VZ", a: P(-5.14, 1), b: P(0, 1), apoioA: null, apoioB: null, parede: null, b_: 0.14, h: 0.5, topo: lanc[0].vigas[0].topo });
   const xs = M.esApoiosIndiretos(lanc[0]).filter((x) => x.apoiada.id === "VZ"); assert.strictEqual(xs.length, 2, JSON.stringify(xs.map((x) => x.apoio.id)));
 });
+t("alterações à mão: pilar novo divide a viga, apagar/mover/seção por posição; órfã vira aviso", () => {
+  const ps = [W(P(0, 0), P(8, 0)), W(P(8, 0), P(8, 4)), W(P(8, 4), P(0, 4)), W(P(0, 4), P(0, 0))];
+  const laje = { tipo: "laje", pts: [P(0, 0), P(8, 0), P(8, 4), P(0, 4)], esp: 0.12, carga: { tipo: "macica", uso: "forro" } };
+  const base = (eds) => M.esLancarPavimentos([{ paredes: ps, areas: [laje], nivel: 0, usoPadrao: "forro", edicoes: eds }], { vaoMax: 9 })[0];
+  const sem = base([]), vSul = (e) => e.vigas.filter((v) => !v.baldrame && Math.abs(v.a.y) < 0.01 && Math.abs(v.b.y) < 0.01);
+  assert.strictEqual(vSul(sem).length, 1);
+  // pilar novo no meio da parede de baixo (clicado 3 cm fora do eixo): vai para o eixo e divide a viga
+  const com = base([{ tipo: "pilar+", x: 4, y: 0.03, b: 0.19, h: 0.3 }]), pn = com.pilares.find((p) => p.manual === "novo");
+  assert.ok(pn && Math.abs(pn.no.y) < 1e-9 && pn.h === 0.3, JSON.stringify(pn));
+  assert.strictEqual(vSul(com).length, 2, "a viga foi dividida no pilar novo");
+  // apaga um canto, move outro, troca a seção de outro
+  const c0 = sem.pilares.find((p) => esPerto(p.no, P(0, 0))), c1 = sem.pilares.find((p) => esPerto(p.no, P(8, 0))), c2 = sem.pilares.find((p) => esPerto(p.no, P(8, 4)));
+  function esPerto(a, b) { return Math.hypot(a.x - b.x, a.y - b.y) < 0.05; }
+  const ed = base([{ tipo: "pilar-", x: c0.no.x, y: c0.no.y }, { tipo: "pilar~", x: c1.no.x, y: c1.no.y, nx: 7, ny: 0 }, { tipo: "pilarSec", x: c2.no.x, y: c2.no.y, b: 0.2, h: 0.4 }]);
+  assert.ok(!ed.pilares.some((p) => esPerto(p.no, P(0, 0))) && ed.pilares.some((p) => esPerto(p.no, P(7, 0)) && p.manual === "movido"));
+  assert.ok(ed.pilares.some((p) => esPerto(p.no, P(8, 4)) && p.h === 0.4 && p.b === 0.2));
+  // viga: apaga e troca seção (fixa); viga nova entre dois pilares
+  const vN = sem.vigas.find((v) => !v.baldrame && Math.abs(v.a.y - 4) < 0.01 && Math.abs(v.b.y - 4) < 0.01);
+  const ev = base([{ tipo: "viga-", m: P(4, 0), ang: 0 }, { tipo: "vigaSec", m: P(4, 4), ang: 0, b_: 0.14, h: 0.5 }, { tipo: "viga+", a: P(0, 2), b: P(8, 2), h: 0.45 }]);
+  assert.strictEqual(vSul(ev).length, 0);
+  assert.ok(ev.vigas.find((v) => esPerto({ x: (v.a.x + v.b.x) / 2, y: (v.a.y + v.b.y) / 2 }, P(4, 4)) && !v.baldrame).hFixo);
+  assert.ok(ev.vigas.some((v) => v.manual === "novo" && v.h === 0.45));
+  assert.ok(vN);
+  // órfã: pilar apagado num ponto onde não há pilar
+  const orf = base([{ tipo: "pilar-", x: 3, y: 2 }]);
+  assert.strictEqual(orf.edicoesOrfas.length, 1); assert.ok((orf.resolvidos || []).some((r) => r.tipo === "pendente"));
+  // o cálculo não muda a altura fixada à mão
+  const c = M.esCalcularEstrutura([{ paredes: ps, areas: [laje], nivel: 0, usoPadrao: "forro", edicoes: [{ tipo: "vigaSec", m: P(4, 4), ang: 0, h: 0.3 }] }], { vaoMax: 9 });
+  assert.strictEqual(c.lanc[0].vigas.find((v) => !v.baldrame && Math.abs(v.a.y - 4) < 0.01).h, 0.3);
+});
 t("fundação: blocos que se encostam são girados ou viram bloco conjunto", () => {
   const dp = { barras: { n: 4, d: 10 } };
   const itens = [{ id: "P1", pl: { x: 0, y: 0, b: 0.19, h: 0.19, ang: 0 }, N: { Ng: 90, Nq: 10 }, dimPilar: dp }, { id: "P2", pl: { x: 0.9, y: 0, b: 0.19, h: 0.19, ang: 0 }, N: { Ng: 90, Nq: 10 }, dimPilar: dp }];

@@ -441,9 +441,7 @@ const api = {
     // Troca da própria senha. Exige senha atual pra prevenir abuso de
     // sessão sequestrada. Zera precisa_trocar_senha se a flag estiver setada.
     trocarSenha:  (senha_atual, senha_nova)   => post("/auth/trocar-senha", { senha_atual, senha_nova }),
-    // Confere a senha de quem está logado, para liberar uma ação sensível
-    // (ex.: lançar num mês já fechado). Não troca nada; fica na auditoria.
-    conferirSenha: (senha, motivo)          => post("/auth/conferir-senha", { senha, motivo }),
+
     // Recuperação de senha self-service (público — sem token JWT).
     // recuperar: usuário pede via email; backend manda link com token único.
     // redefinir: usuário usa o token do link pra setar senha nova.
@@ -465,6 +463,13 @@ const api = {
   },
 
   // Histórico: a versão de antes de cada gravação (admin). Ver server.js.
+  // Senha de liberação (só administrador): separada do login, para lançar
+  // num mês já fechado sem reabri-lo. Definir/trocar pede a senha de login.
+  liberacao: {
+    status:   ()                       => get("/api/senha-liberacao"),
+    definir:  (senha_login, senha_nova) => post("/api/senha-liberacao", { senha_login, senha_nova }),
+    conferir: (senha, motivo)          => post("/api/senha-liberacao/conferir", { senha, motivo }),
+  },
   historico: {
     listar:    (tabela, registro) => get(`/api/historico?tabela=${encodeURIComponent(tabela || "escritorio")}${registro ? `&registro=${encodeURIComponent(registro)}` : ""}`),
     ler:       (id)               => get(`/api/historico/${encodeURIComponent(id)}`),
