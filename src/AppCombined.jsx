@@ -94948,9 +94948,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       if (estDescida && (estPorPav._ids || [])[0] === pavAtivo) for (const f of estDescida.fundacao || []) {
         const pl = estAt.pilares.find((x) => x.id === f.id), bl = f.bloco || f.sapata; if (!pl || !bl) continue;
         const fa = f.ang != null ? f.ang : (pl.ang || 0), fc = f.centro || pl, c = Math.cos(fa), sn = Math.sin(fa), loc = (u, v) => ({ x: fc.x + u * c - v * sn, y: fc.y + u * sn + v * c });
-        ctx.strokeStyle = f.ok ? "#8b98a9" : "#b91c1c"; ctx.lineWidth = 1 * dpr; ctx.setLineDash([4 * dpr, 3 * dpr]);
-        caminho([loc(-bl.L / 2, -bl.B / 2), loc(bl.L / 2, -bl.B / 2), loc(bl.L / 2, bl.B / 2), loc(-bl.L / 2, bl.B / 2)]); ctx.stroke(); ctx.setLineDash([]);
-        for (const e of f.estacas || []) { const [ex, ey] = T(loc(e.x, e.y)); ctx.beginPath(); ctx.arc(ex, ey, Math.max(2 * dpr, f.D / 2 * vista.current.s), 0, Math.PI * 2); ctx.stroke(); }
+        const mkB = marcadas.has("eBL:" + f.id), corF = f.ok ? "#8b98a9" : "#b91c1c";
+        ctx.strokeStyle = mkB ? TP_AZUL : corF; ctx.lineWidth = (mkB ? 2 : 1) * dpr; ctx.setLineDash([4 * dpr, 3 * dpr]);
+        caminho([loc(-bl.L / 2, -bl.B / 2), loc(bl.L / 2, -bl.B / 2), loc(bl.L / 2, bl.B / 2), loc(-bl.L / 2, bl.B / 2)]);
+        if (mkB) { ctx.fillStyle = "rgba(4,116,244,0.10)"; ctx.fill(); } ctx.stroke(); ctx.setLineDash([]);
+        (f.estacas || []).forEach((e, ie) => { const mkE = marcadas.has("eES:" + f.id + ":" + ie), [ex, ey] = T(loc(e.x, e.y)); ctx.strokeStyle = mkE ? TP_AZUL : corF; ctx.lineWidth = (mkE ? 2 : 1) * dpr; ctx.beginPath(); ctx.arc(ex, ey, Math.max(2 * dpr, f.D / 2 * vista.current.s), 0, Math.PI * 2); if (mkE) { ctx.fillStyle = "rgba(4,116,244,0.18)"; ctx.fill(); } ctx.stroke(); });
       }
       // sentido das lajes: seta dupla na direção das vigotas (vão que elas
       // vencem); maciça em duas direções leva duas setas
@@ -95442,13 +95444,13 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const matF = new THREE.MeshLambertMaterial({ color: 0xa8a29e }), matFs = new THREE.MeshLambertMaterial({ color: 0x8dbbff });
         for (const f of estDescida.fundacao || []) {
           const pl = estP.pilares.find((x) => x.id === f.id), bl = f.bloco || f.sapata; if (!pl || !bl) continue;
-          const mk = marcadas.has("e" + pl.id), z0 = pl.base != null ? pl.base : 0, ang = f.ang != null ? f.ang : (pl.ang || 0), c = Math.cos(ang), sn = Math.sin(ang), fc = f.centro || pl;
+          const mk = marcadas.has("eBL:" + f.id), z0 = pl.base != null ? pl.base : 0, ang = f.ang != null ? f.ang : (pl.ang || 0), c = Math.cos(ang), sn = Math.sin(ang), fc = f.centro || pl;
           const gb = new THREE.BoxGeometry(bl.L, bl.h, bl.B), mb = new THREE.Mesh(gb, mk ? matFs : matF);
-          mb.position.set(fc.x - cx, z0 - bl.h / 2, fc.y - cz); mb.rotation.y = -ang; mb.userData.est = pl.id; mb.userData.chave = "e" + pl.id; G.add(mb); contorno(gb, mb, mk ? 0x0474f4 : 0x57534e);
-          for (const e of f.estacas || []) {
-            const ge = new THREE.CylinderGeometry(f.D / 2, f.D / 2, f.L, 16), me = new THREE.Mesh(ge, mk ? matFs : matF);
-            me.position.set(fc.x + e.x * c - e.y * sn - cx, z0 - bl.h - f.L / 2 + 0.05, fc.y + e.x * sn + e.y * c - cz); me.userData.est = pl.id; me.userData.chave = "e" + pl.id; G.add(me);
-          }
+          mb.position.set(fc.x - cx, z0 - bl.h / 2, fc.y - cz); mb.rotation.y = -ang; mb.userData.est = pl.id; mb.userData.chave = "eBL:" + f.id; G.add(mb); contorno(gb, mb, mk ? 0x0474f4 : 0x57534e);
+          (f.estacas || []).forEach((e, ie) => {
+            const mkE = marcadas.has("eES:" + f.id + ":" + ie), ge = new THREE.CylinderGeometry(f.D / 2, f.D / 2, f.L, 16), me = new THREE.Mesh(ge, mkE ? matFs : matF);
+            me.position.set(fc.x + e.x * c - e.y * sn - cx, z0 - bl.h - f.L / 2 + 0.05, fc.y + e.x * sn + e.y * c - cz); me.userData.est = pl.id; me.userData.chave = "eES:" + f.id + ":" + ie; G.add(me);
+          });
         }
       }
     }
@@ -95572,10 +95574,10 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           const pl = (e.pilares || []).find((x) => x.id === f.id), bl = f.bloco || f.sapata; if (!pl || !bl) continue;
           const fa = f.ang != null ? f.ang : (pl.ang || 0), fc = f.centro || pl, c0 = Math.cos(fa), s0_ = Math.sin(fa), loc = (uu, vv) => ({ x: fc.x + uu * c0 - vv * s0_, y: fc.y + uu * s0_ + vv * c0 });
           const zt = p.nivel + (pl.base || 0);
-          pecasEst.push({ pts: [loc(-bl.L / 2, -bl.B / 2), loc(bl.L / 2, -bl.B / 2), loc(bl.L / 2, bl.B / 2), loc(-bl.L / 2, bl.B / 2)], za: zt - bl.h, zb: zt, al: { pav: p.id, key: "e" + pl.id } });
-          for (const ec of f.estacas || []) {
+          pecasEst.push({ pts: [loc(-bl.L / 2, -bl.B / 2), loc(bl.L / 2, -bl.B / 2), loc(bl.L / 2, bl.B / 2), loc(-bl.L / 2, bl.B / 2)], za: zt - bl.h, zb: zt, al: { pav: p.id, key: "eBL:" + f.id } });
+          for (const [iec, ec] of (f.estacas || []).entries()) {
             const q = loc(ec.x, ec.y), r = f.D / 2;
-            pecasEst.push({ pts: [{ x: q.x - r, y: q.y - r }, { x: q.x + r, y: q.y - r }, { x: q.x + r, y: q.y + r }, { x: q.x - r, y: q.y + r }], za: Math.max(zFund, zt - bl.h - f.L), zb: zt - bl.h, al: { pav: p.id, key: "e" + pl.id }, estaca: f, quebra: zt - bl.h - f.L < zFund });
+            pecasEst.push({ pts: [{ x: q.x - r, y: q.y - r }, { x: q.x + r, y: q.y - r }, { x: q.x + r, y: q.y + r }, { x: q.x - r, y: q.y + r }], za: Math.max(zFund, zt - bl.h - f.L), zb: zt - bl.h, al: { pav: p.id, key: "eES:" + f.id + ":" + iec }, estaca: f, quebra: zt - bl.h - f.L < zFund });
           }
         }
       }
@@ -96068,7 +96070,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     // pilar da estrutura (desenhado por cima de tudo) vem primeiro
     { const ea = estrutura.ativa && estrutura.mostrar !== false ? estPorPav[pavAtivo] : null;
       if (ea) for (const pl of ea.pilares) { const c = Math.cos(pl.ang || 0), sn = Math.sin(pl.ang || 0), dx = p.x - pl.x, dy = p.y - pl.y;
-        if (Math.abs(dx * c + dy * sn) <= pl.h / 2 + tol && Math.abs(-dx * sn + dy * c) <= pl.b / 2 + tol) return "e" + pl.id; } }
+        if (Math.abs(dx * c + dy * sn) <= pl.h / 2 + tol && Math.abs(-dx * sn + dy * c) <= pl.b / 2 + tol) return "e" + pl.id; }
+      if (ea && estDescida && (estPorPav._ids || [])[0] === pavAtivo) {
+        let bloco = null;
+        for (const f of estDescida.fundacao || []) {
+          const pl = ea.pilares.find((x) => x.id === f.id), bl = f.bloco || f.sapata; if (!pl || !bl) continue;
+          const fa = f.ang != null ? f.ang : (pl.ang || 0), fc = f.centro || pl, c = Math.cos(fa), sn = Math.sin(fa), dx = p.x - fc.x, dy = p.y - fc.y, u = dx * c + dy * sn, w = -dx * sn + dy * c;
+          for (let ie = 0; ie < (f.estacas || []).length; ie++) { const e = f.estacas[ie]; if (Math.hypot(u - e.x, w - e.y) <= f.D / 2 + tol) return "eES:" + f.id + ":" + ie; }
+          if (!bloco && Math.abs(u) <= bl.L / 2 + tol && Math.abs(w) <= bl.B / 2 + tol) bloco = "eBL:" + f.id;
+        }
+        if (bloco) return bloco;
+      } }
     let melhor = null, menor = Infinity;
     // porta/janela primeiro (está dentro da parede); a porta de giro pega
     // também o quarto de círculo da folha
@@ -97139,7 +97151,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
             : selA.length && !selP.length ? (selA.length === 1 ? TP_AREA_TIPOS[areas[selA[0]].tipo].nome : `${selA.length} áreas`)
             : sel.every((k) => k[0] === "x") ? (sel.length === 1 && cortes[+sel[0].slice(1)] ? `Corte ${tpNomeCorte(cortes[+sel[0].slice(1)])}` : `${sel.length} cortes`)
             : sel.every((k) => k[0] === "l") ? (sel.length === 1 ? "Comprimento da parede" : `${sel.length} comprimentos`)
-            : sel.every((k) => k[0] === "e") ? (sel.length === 1 ? (() => { const id = sel[0].slice(1); return id.startsWith("P") ? `Pilar ${id}` : id.startsWith("VB") ? `Baldrame ${id}` : id.startsWith("VP") ? `Viga de piso ${id}` : id.startsWith("VE") ? `Viga da escada ${id}` : `Viga ${id}`; })() : `${sel.length} peças da estrutura`)
+            : sel.every((k) => k[0] === "e") ? (sel.length === 1 ? (() => { const id = sel[0].slice(1); if (id.startsWith("BL:")) { const f = ((estDescida || {}).fundacao || []).find((x) => x.id === id.slice(3)); return `${f && f.sapata ? "Sapata" : "Bloco"} do ${id.slice(3)}`; }
+              if (id.startsWith("ES:")) { const [, pid, ie] = id.split(":"); return `Estaca ${+ie + 1} do ${pid}`; }
+              return id.startsWith("P") ? `Pilar ${id}` : id.startsWith("VB") ? `Baldrame ${id}` : id.startsWith("VP") ? `Viga de piso ${id}` : id.startsWith("VE") ? `Viga da escada ${id}` : `Viga ${id}`; })() : `${sel.length} peças da estrutura`)
             : `${sel.length} elementos`}
         </div>
         {sel.length > 0 && sel.every((k) => k[0] === "e") && (() => {
@@ -97172,6 +97186,25 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                       ["Flecha", `${tpFmt(dv.flecha.total * 100, 1)} cm (limite ${tpFmt(dv.flecha.lim * 100, 1)})`],
                       ["Situação", dv.ok ? `atende (NBR 6118)${dv.hMin && dv.hMin < dv.h - 1e-9 ? ` — bastaria ${Math.round(dv.b * 100)} × ${Math.round(dv.hMin * 100)}` : ""}` : `não atende: ${dv.motivos.join("; ")}${dv.hMin ? ` — passa com ${Math.round(dv.b * 100)} × ${Math.round(dv.hMin * 100)}` : ""}`]]; })()];
               })()] };
+            }
+            // fundação: bloco/sapata ou uma estaca (chaves BL:P3 e ES:P3:0)
+            if (id.startsWith("BL:") || id.startsWith("ES:")) {
+              const pid = id.split(":")[1], f = ((estDescida || {}).fundacao || []).find((x) => x.id === pid);
+              if (f && id.startsWith("ES:")) {
+                const A = f.estacaArm || ES_FUND.estaca, ie = +id.split(":")[2];
+                return { id, tipo: "Estaca", dados: [["Pilar", pid], ["Tipo", "escavada (broca)"], ["Diâmetro", `Ø${Math.round(f.D * 100)} cm`], ["Profundidade", `${tpFmt(f.L, 1)} m`],
+                  ["Carga admissível", `${tpFmt(f.padm, 0)} kN${f.estimado ? " (estimada, sem sondagem)" : ""}`], ["Carga nesta estaca", `${tpFmt(1.05 * f.Nk / Math.max(1, f.n), 1)} kN (${f.n} no bloco)`],
+                  ["Concreto", `${tpFmt(Math.PI * f.D * f.D / 4 * f.L, 3)} m³`], ["Armadura", `${A.n} Ø${esFmtBit(A.d)} × ${tpFmt(A.comp, 1)} m · estribo Ø${esFmtBit(A.estribo)} c/${Math.round(A.s * 100)}`], ["Estaca", `${ie + 1} de ${f.n}`]] };
+              }
+              if (f) {
+                const bl = f.bloco || f.sapata;
+                if (!bl) return { id, tipo: "Bloco", dados: [["Bloco", tpTextoFundacao(f)]] };
+                return { id, tipo: f.sapata ? "Sapata" : "Bloco", dados: [["Pilar", (f.conjunto || [pid]).join(" + ")], ["Medidas", `${tpFmt(bl.L)} × ${tpFmt(bl.B)} × ${tpFmt(bl.h)} m`], ["Carga (Nk)", `${tpFmt(f.Nk, 1)} kN`],
+                  ...(f.sapata ? [["Tensão no solo", `${tpFmt(f.sigma, 0)} kPa${f.estimado ? " (estimada)" : ""}`], ["Armadura", (f.malha || []).map((m) => `Ø${esFmtBit(m.d)} c/${Math.round(m.s * 100)}`).join(" e ")]]
+                    : [["Estacas", `${f.n} × Ø${Math.round(f.D * 100)} cm, ${tpFmt(f.L, 1)} m`], ["Tirante", f.tirante ? `${f.tirante.n} Ø${esFmtBit(f.tirante.d)}${f.n > 1 ? " em cada lado" : " (fretagem, nas 2 direções)"}` : "—"]]),
+                  ["Concreto", `${tpFmt((f.concreto.blocos || 0) + (f.concreto.sapatas || 0), 3)} m³`], ...(f.girado ? [["Ajuste", "girado 90° para não encostar no vizinho"]] : []),
+                  ["Situação", f.ok ? "atende" : f.motivos.join("; ")]] };
+              }
             }
             return { id, tipo: "Peça", dados: [["", "não encontrada (a estrutura mudou)"]] };
           });
