@@ -442,6 +442,7 @@ function esLancarPavimentos(pavs, params) {
   // vigas de borda do furo da escada (critério 11): cada lado do furo que não
   // cai sobre viga vira viga, esticada até as vigas que encontrar
   pavs.forEach((p, k) => esVigasDeEscada(p, r[k], P, esTopoPavimento(pavs, k), k));
+  pavs.forEach((p, k) => esBalancosSoltos(p, r[k], P, k));
   return r;
 }
 // furo da escada: o contorno (caracol: o quadrado que o envolve)
@@ -500,7 +501,7 @@ function esVigasDeEscada(p, est, P, topo, k) {
     // escada — o "pilar do patamar", como o engenheiro resolve escada em L/U
     for (const v of novas) for (const lado of ["a", "b"]) {
       const q = v[lado], Ap = "apoio" + (lado === "a" ? "A" : "B");
-      if (v[Ap]) continue;
+      if (v[Ap] || v.balanco === lado || (v._pontaNaViga || {})[lado]) continue;
       const outras = est.vigas.filter((o) => o !== v && !o.baldrame && esPontoNoSeg(q, o.a, o.b).d < 0.06);
       const soPonta = outras.length > 0 && outras.every((o) => o.vigaEscada && (esDist(o.a, q) < 0.12 || esDist(o.b, q) < 0.12));
       if (outras.length && !soPonta) continue; // apoia no meio de outra viga: ok
@@ -509,6 +510,14 @@ function esVigasDeEscada(p, est, P, topo, k) {
       let cx = q.x + v._nn.x * (pb / 2 + 0.005 - off), cy = q.y + v._nn.y * (pb / 2 + 0.005 - off);
       if (lado2) { cx += lado2._nn.x * (pb / 2 + 0.005 - off); cy += lado2._nn.y * (pb / 2 + 0.005 - off); }
       let pl = est.pilares.find((pp) => esDist(pp.no, { x: cx, y: cy }) <= 0.3);
+      // escada sem parede nas laterais: o pilar ficaria solto no meio do
+      // ambiente. A regra é a viga em balanço (uma das vigas de borda passa
+      // do apoio e segura o canto); pilar só se nenhuma der
+      if (!pl && !esPontoEmParede({ x: cx, y: cy }, p.paredes)) {
+        const grupo = [{ v, lado }, ...outras.filter((o) => esDist(o.a, q) < 0.12 || esDist(o.b, q) < 0.12).map((o) => ({ v: o, lado: esDist(o.a, q) < 0.12 ? "a" : "b" }))];
+        if (esTentarBalanco(grupo, est, P, k, [furo], "o canto da escada")) continue;
+        (est.resolvidos = est.resolvidos || []).push({ k, id: v.id, tipo: "pendente", texto: `Canto da escada sem parede e sem viga que possa ir em balanço: ficou um pilar aparente no canto — confira com o engenheiro.` });
+      }
       if (!pl) {
         const base = k === 0 && P.baldrames ? -P.baldrame.h : 0;
         pl = { x: esR3(cx), y: esR3(cy), b: pb, h: pb, ang: esR3(Math.atan2(v.b.y - v.a.y, v.b.x - v.a.x)), no: { x: esR3(cx), y: esR3(cy) }, origem: "escada", id: "P" + (est.pilares.length + 1), base: esR3(base), topo: esR3(topo), escada: true };
@@ -517,8 +526,80 @@ function esVigasDeEscada(p, est, P, topo, k) {
       v[Ap] = pl.id; // a ponta fica no alinhamento da viga (dentro do pilar)
       for (const o of outras) for (const lo of ["a", "b"]) if (esDist(o[lo], q) < 0.15) o["apoio" + (lo === "a" ? "A" : "B")] = pl.id;
     }
-    for (const v of novas) { v.semApoio = !v.apoioA && !est.vigas.some((o) => o !== v && !o.baldrame && esPontoNoSeg(v.a, o.a, o.b).d < 0.06) || !v.apoioB && !est.vigas.some((o) => o !== v && !o.baldrame && esPontoNoSeg(v.b, o.a, o.b).d < 0.06); delete v._soltaA; delete v._soltaB; delete v._nn; }
+    for (const v of novas) { v.semApoio = !v.apoioA && !est.vigas.some((o) => o !== v && !o.baldrame && esPontoNoSeg(v.a, o.a, o.b).d < 0.06) || !v.apoioB && !est.vigas.some((o) => o !== v && !o.baldrame && esPontoNoSeg(v.b, o.a, o.b).d < 0.06); if (v.balanco) v.semApoio = false; delete v._soltaA; delete v._soltaB; delete v._nn; delete v._pontaNaViga; }
   }
+}
+
+// ponto dentro de alguma parede (o pilar fica escondido nela)
+function esPontoEmParede(q, paredes) {
+  return (paredes || []).some((w) => { const r = esPontoNoSeg(q, w.a, w.b); return r.d <= (w.t || 0.14) / 2 + 0.03 && r.t >= -0.05 && r.t <= esLen(w) + 0.05; });
+}
+// VIGA EM BALANÇO (regra para ponta de viga sem apoio onde um pilar ficaria
+// fora das paredes): uma das vigas do grupo (as que terminam juntas no ponto
+// solto) passa a ser balanço — a ponta fica livre e a outra ponta tem de ser
+// apoio com continuidade: a viga segue além dele (tramo de equilíbrio) até a
+// próxima viga, contrabalançando o momento. As outras do grupo apoiam na ponta
+// do balanço. Escolhe a de menor balanço com tramo de equilíbrio ≥ balanço
+// (sem arrancamento na outra ponta). grupo: [{ v, lado }]; furos: onde a
+// viga não pode passar. Devolve true se resolveu.
+const ES_BALANCO_VIGA = { max: 3.0, maxTramo: 6.0 };
+function esTentarBalanco(grupo, est, P, k, furos, onde) {
+  const vigas = est.vigas.filter((v) => !v.baldrame), pilarEm = (q) => est.pilares.find((pp) => esDist(pp.no, q) <= 0.3) || null;
+  const dentroFuro = (q) => (furos || []).some((f) => f && esDentroPoli(q, f));
+  let melhor = null;
+  for (const { v: X, lado } of grupo) {
+    const Q = X[lado], oL = lado === "a" ? "b" : "a", S = X[oL], Lc = esDist(Q, S); if (Lc < 0.2 || Lc > ES_BALANCO_VIGA.max) continue;
+    const d = { x: (S.x - Q.x) / Lc, y: (S.y - Q.y) / Lc };
+    // apoio na raiz: pilar, ou o meio de outra viga (não só a ponta dela)
+    const pl = pilarEm(S), Bs = pl ? null : vigas.find((o) => o !== X && esPontoNoSeg(S, o.a, o.b).d < 0.06 && esDist(o.a, S) > 0.12 && esDist(o.b, S) > 0.12);
+    if (!pl && !Bs) continue;
+    // tramo de equilíbrio: viga já existente na mesma linha, ou nova até a próxima viga
+    const ja = vigas.find((o) => o !== X && (esDist(o.a, S) < 0.05 || esDist(o.b, S) < 0.05) && (() => { const far = esDist(o.a, S) < 0.05 ? o.b : o.a, Lo = esDist(far, S); return Lo > 0.2 && ((far.x - S.x) * d.x + (far.y - S.y) * d.y) / Lo > 0.996; })());
+    let Lb, F = null;
+    if (ja) Lb = esDist(ja.a, ja.b);
+    else {
+      const r = esRaioViga({ x: S.x + d.x * 0.03, y: S.y + d.y * 0.03 }, d, vigas.filter((o) => o !== X && o !== Bs)); if (!r || r.d + 0.03 > ES_BALANCO_VIGA.maxTramo) continue;
+      Lb = r.d + 0.03; F = { x: S.x + d.x * Lb, y: S.y + d.y * Lb };
+      let cruza = false; for (let i = 1; i < 20; i++) if (dentroFuro({ x: S.x + d.x * Lb * i / 20, y: S.y + d.y * Lb * i / 20 })) cruza = true;
+      if (cruza) continue;
+    }
+    if (Lb < 0.3) continue;
+    // custo: balanço (pesa o dobro) + viga nova; arrancamento se o tramo de equilíbrio é curto
+    const custo = 2 * Lc + (ja ? 0 : 0.5 * Lb) + (Lb < Lc ? 3 : 0) + (pl ? -0.2 : 0);
+    if (!melhor || custo < melhor.custo) melhor = { X, lado, oL, S, Lc, Lb, F, ja, pl, Bs, custo };
+  }
+  if (!melhor) return false;
+  const { X, lado, oL, S, Lc, Lb, F, ja, pl, Bs } = melhor, OL = oL === "a" ? "A" : "B";
+  X.balanco = lado; X["apoio" + (lado === "a" ? "A" : "B")] = null;
+  if (!pl) X["no" + OL] = Bs.id; else X["apoio" + OL] = pl.id;
+  let nova = null;
+  if (ja) { const lj = esDist(ja.a, S) < 0.05 ? "A" : "B"; if (!pl) ja["no" + lj] = Bs.id; ja.equilibrio = X.id; }
+  else {
+    const pre = X.vigaEscada ? "VE" : "V", n = est.vigas.filter((o) => o.id.startsWith(pre) && /^\d+$/.test(o.id.slice(pre.length))).reduce((m, o) => Math.max(m, +o.id.slice(pre.length)), 0) + 1;
+    const pF = pilarEm(F);
+    nova = { id: pre + n, a: { x: esR3(S.x), y: esR3(S.y) }, b: { x: esR3(F.x), y: esR3(F.y) }, apoioA: pl ? pl.id : null, apoioB: pF ? pF.id : null, noA: pl ? null : Bs.id, parede: null, s0: 0, s1: esR3(Lb), b_: X.b_, h: X.h, topo: X.topo, vigaEscada: !!X.vigaEscada, equilibrio: X.id };
+    est.vigas.push(nova);
+  }
+  for (const g of grupo) if (g.v !== X) { g.v["apoio" + (g.lado === "a" ? "A" : "B")] = null; (g.v._pontaNaViga = g.v._pontaNaViga || {})[g.lado] = true; g.v.naPontaDe = X.id; g.v.naPontaLado = g.lado; }
+  const f2 = (x) => String(Math.round(x * 100) / 100).replace(".", ",");
+  (est.resolvidos = est.resolvidos || []).push({ k, id: X.id, tipo: "balanco", texto: `${X.id} em balanço de ${f2(Lc)} m segura ${onde} sem pilar (o pilar ficaria fora das paredes)${grupo.length > 1 ? `; ${grupo.filter((g) => g.v !== X).map((g) => g.v.id).join(", ")} apoia na ponta dele` : ""}. ${ja ? `Continua na ${ja.id}` : `Continua ${f2(Lb)} m além do apoio (${nova.id})`} para equilibrar.` });
+  return true;
+}
+// mesma regra para qualquer viga com ponta solta (sem pilar e sem viga
+// embaixo), fora da escada — sacada, canto de varanda, viga que chega no vazio
+function esBalancosSoltos(p, est, P, k) {
+  const vigas = est.vigas.filter((v) => !v.baldrame), furos = (p.escadas || []).map(esFuroEscada);
+  const solta = (v, q) => !est.pilares.some((pp) => esDist(pp.no, q) <= 0.3) && !vigas.some((o) => o !== v && esPontoNoSeg(q, o.a, o.b).d < 0.06 && esDist(o.a, q) > 0.12 && esDist(o.b, q) > 0.12) && !vigas.some((o) => o !== v && o.balanco && esDist(o[o.balanco], q) < 0.12);
+  const feitos = new Set();
+  for (const v of vigas) for (const lado of ["a", "b"]) {
+    if (v.balanco || feitos.has(v.id + lado) || (v._pontaNaViga || {})[lado] || v.naPontaLado === lado) continue;
+    const q = v[lado]; if (!solta(v, q)) continue;
+    const grupo = [{ v, lado }, ...vigas.filter((o) => o !== v && !o.balanco && (esDist(o.a, q) < 0.12 || esDist(o.b, q) < 0.12)).map((o) => ({ v: o, lado: esDist(o.a, q) < 0.12 ? "a" : "b" }))];
+    for (const g of grupo) feitos.add(g.v.id + g.lado);
+    if (grupo.some((g) => !solta(g.v, g.v[g.lado]))) continue;
+    esTentarBalanco(grupo, est, P, k, furos, "a ponta");
+  }
+  for (const v of est.vigas) delete v._pontaNaViga;
 }
 
 // ALTURA LIVRE SOBRE A ESCADA: nenhuma viga pode passar em cima dos degraus
@@ -909,6 +990,8 @@ function esAreasDeInfluencia(pts, vigas, passo = 0.1) {
 // tramos: trechos de viga alinhados e encadeados sem pilar entre eles
 function esTramos(vigas, pilares) {
   const temPilar = (q) => pilares.find((p) => esDist(p.no || p, q) <= 0.3) || null;
+  // nó de viga em balanço apoiado no meio de outra viga: separa os tramos
+  const temNo = (q) => vigas.some((v) => (v.noA && esDist(v.a, q) < 0.05) || (v.noB && esDist(v.b, q) < 0.05));
   const ts = vigas.map((v) => ({ ids: [v.id], a: v.a, b: v.b, pecas: [v] }));
   let mudou = true;
   while (mudou) {
@@ -919,12 +1002,13 @@ function esTramos(vigas, pilares) {
       const ua = { x: (A.b.x - A.a.x) / LA, y: (A.b.y - A.a.y) / LA }, ub = { x: (B.b.x - B.a.x) / LB, y: (B.b.y - B.a.y) / LB };
       if (Math.abs(ua.x * ub.x + ua.y * ub.y) < 0.996) continue;
       for (const [pa, pb, na, nb] of [[A.b, B.a, A.a, B.b], [A.b, B.b, A.a, B.a], [A.a, B.a, A.b, B.b], [A.a, B.b, A.b, B.a]]) {
-        if (esDist(pa, pb) > 0.05 || temPilar(pa)) continue;
+        if (esDist(pa, pb) > 0.05 || temPilar(pa) || temNo(pa)) continue;
         ts[i] = { ids: [...A.ids, ...B.ids], a: na, b: nb, pecas: [...A.pecas, ...B.pecas] }; ts.splice(j, 1); mudou = true; break;
       }
     }
   }
-  return ts.map((t) => { const pA = temPilar(t.a), pB = temPilar(t.b); return { ...t, L: esDist(t.a, t.b), apoioA: pA ? pA.id : null, apoioB: pB ? pB.id : null }; });
+  const fim = (t, q) => { for (const v of t.pecas) { if (esDist(v.a, q) < 0.05) return { no: v.noA || null, livre: v.balanco === "a" }; if (esDist(v.b, q) < 0.05) return { no: v.noB || null, livre: v.balanco === "b" }; } return { no: null, livre: false }; };
+  return ts.map((t) => { const pA = temPilar(t.a), pB = temPilar(t.b), fA = fim(t, t.a), fB = fim(t, t.b); return { ...t, L: esDist(t.a, t.b), apoioA: pA && !fA.livre ? pA.id : null, apoioB: pB && !fB.livre ? pB.id : null, noA: fA.no, noB: fB.no, livreA: fA.livre, livreB: fB.livre }; });
 }
 // ESCADA (critério 11): laje inclinada maciça de 12 cm + degraus + revestimento
 // + reboco embaixo; uso de escada sem acesso público 2,5 kN/m² (NBR 6120:2019,
@@ -948,14 +1032,22 @@ function esFEM(L, w, pts) { // momentos de engaste perfeito (horário +)
   return { l, r };
 }
 // spans: [{ L, I, w, pts: [{ t, P }] }] em sequência → [{ Ma, Mb, RA, RB }]
+// balanço (livre "A" ou "B", só na ponta da linha): rigidez zero e o momento
+// na raiz é isostático — entra no nó como carga
+function esFEMBalanco(s) {
+  const L = s.L || 1;
+  if (s.livre === "B") return { l: -(s.w * L * L / 2 + s.pts.reduce((t, p) => t + p.P * Math.min(L, Math.max(0, p.t)), 0)), r: 0 };
+  return { l: 0, r: s.w * L * L / 2 + s.pts.reduce((t, p) => t + p.P * (L - Math.min(L, Math.max(0, p.t))), 0) };
+}
 function esLinhaContinua(spans) {
-  const n = spans.length, k = spans.map((s) => 2 * (s.I || 1) / (s.L || 1)), F = spans.map((s) => esFEM(s.L, s.w, s.pts));
+  const n = spans.length, k = spans.map((s) => s.livre ? 0 : 2 * (s.I || 1) / (s.L || 1)), F = spans.map((s) => s.livre ? esFEMBalanco(s) : esFEM(s.L, s.w, s.pts));
   // nó j: k(j-1)(θj-1 + 2θj) + k(j)(2θj + θj+1) = -FEMr(j-1) - FEMl(j)
   const a = new Array(n + 1).fill(0), b = new Array(n + 1).fill(0), c = new Array(n + 1).fill(0), d = new Array(n + 1).fill(0);
   for (let j = 0; j <= n; j++) {
     if (j > 0) { a[j] = k[j - 1]; b[j] += 2 * k[j - 1]; d[j] -= F[j - 1].r; }
     if (j < n) { c[j] = k[j]; b[j] += 2 * k[j]; d[j] -= F[j].l; }
   }
+  for (let j = 0; j <= n; j++) if (Math.abs(b[j]) < 1e-12) { a[j] = 0; c[j] = 0; b[j] = 1; d[j] = 0; } // ponta livre do balanço
   for (let j = 1; j <= n; j++) { const m = a[j] / b[j - 1]; b[j] -= m * c[j - 1]; d[j] -= m * d[j - 1]; }
   const th = new Array(n + 1).fill(0); th[n] = d[n] / b[n]; for (let j = n - 1; j >= 0; j--) th[j] = (d[j] - c[j] * th[j + 1]) / b[j];
   return spans.map((s, i) => {
@@ -971,8 +1063,8 @@ function esLinhasDeTramos(ts) {
   ts.forEach((t, i) => ts.forEach((o, j) => {
     if (j <= i) return; const u = dir(t), v = dir(o); if (Math.abs(u.x * v.x + u.y * v.y) < 0.996) return;
     for (const [lt, lo] of [["A", "A"], ["A", "B"], ["B", "A"], ["B", "B"]]) {
-      const pt = lt === "A" ? t.a : t.b, po = lo === "A" ? o.a : o.b, ap = t["apoio" + lt];
-      if (!ap || ap !== o["apoio" + lo] || esDist(pt, po) > 0.3 || viz[i][lt] || viz[j][lo]) continue;
+      const pt = lt === "A" ? t.a : t.b, po = lo === "A" ? o.a : o.b, ap = t["apoio" + lt] || (t["no" + lt] ? "V:" + t["no" + lt] : null), apo = o["apoio" + lo] || (o["no" + lo] ? "V:" + o["no" + lo] : null);
+      if (!ap || ap !== apo || esDist(pt, po) > 0.3 || viz[i][lt] || viz[j][lo]) continue;
       viz[i][lt] = { j, lado: lo }; viz[j][lo] = { j: i, lado: lt };
     }
   }));
@@ -997,14 +1089,15 @@ function esResolverContinuas(ts, carga, pontos, extra) {
     for (const comp of ["g", "q"]) {
       const spans = lin.map(({ i, inv }) => {
         const t = ts[i], L = t.L || 1, w = t.pecas.reduce((s, v) => s + ((carga.get(v.id) || {})[comp] || 0), 0) / L, h = t.pecas[0].h || 0.4, bb = t.pecas[0].b_ || 0.14;
-        return { L, I: bb * h ** 3 / 12, w, pts: [...pontos[i], ...extra[i]].map((p) => ({ t: inv ? L - p.t : p.t, P: p[comp] })) };
+        return { L, I: bb * h ** 3 / 12, w, livre: t.livreA ? (inv ? "B" : "A") : t.livreB ? (inv ? "A" : "B") : null, pts: [...pontos[i], ...extra[i]].map((p) => ({ t: inv ? L - p.t : p.t, P: p[comp] })) };
       });
       sol[comp] = esLinhaContinua(spans);
     }
     lin.forEach(({ i, inv }, m) => {
       const g = sol.g[m], q = sol.q[m];
       const A = inv ? { R: [g.RB, q.RB], M: [g.Mb, q.Mb] } : { R: [g.RA, q.RA], M: [g.Ma, q.Ma] }, B = inv ? { R: [g.RA, q.RA], M: [g.Ma, q.Ma] } : { R: [g.RB, q.RB], M: [g.Mb, q.Mb] };
-      R[i] = { A: { g: A.R[0], q: A.R[1] }, B: { g: B.R[0], q: B.R[1] }, Ma: { g: A.M[0], q: A.M[1] }, Mb: { g: B.M[0], q: B.M[1] }, continua: lin.length > 1 };
+      const viz = ts[(lin[m - 1] || lin[m + 1] || {}).i];
+      R[i] = { A: { g: A.R[0], q: A.R[1] }, B: { g: B.R[0], q: B.R[1] }, Ma: { g: A.M[0], q: A.M[1] }, Mb: { g: B.M[0], q: B.M[1] }, continua: lin.length > 1, lBack: (ts[i].livreA || ts[i].livreB) && viz ? viz.L : null };
     });
   }
   return R;
@@ -1088,8 +1181,9 @@ function esDescidaCargas(pavs, lanc, params) {
         extra = ts.map(() => []);
         ts.forEach((t, i) => {
           for (const lado of ["A", "B"]) {
-            if (t["apoio" + lado]) continue;
-            const q = lado === "A" ? t.a : t.b;
+            if (t["apoio" + lado] || t["livre" + lado]) continue;
+            const q = lado === "A" ? t.a : t.b, no = t["no" + lado];
+            if (no) { const j = ts.findIndex((o) => o.ids.includes(no)); if (j >= 0) { extra[j].push({ t: esPontoNoSeg(q, ts[j].a, ts[j].b).t, g: R[i][lado].g, q: R[i][lado].q }); continue; } }
             let melhor = -1, dm = 0.2; ts.forEach((o, j) => { if (j === i) return; const r = esPontoNoSeg(q, o.a, o.b); if (r.d < dm) { dm = r.d; melhor = j; } });
             if (melhor >= 0) extra[melhor].push({ t: esPontoNoSeg(q, ts[melhor].a, ts[melhor].b).t, g: R[i][lado].g, q: R[i][lado].q });
           }
@@ -1098,14 +1192,20 @@ function esDescidaCargas(pavs, lanc, params) {
       }
       ts.forEach((t, i) => {
         const w = t.pecas.reduce((s, v) => { const c = carga.get(v.id) || { g: 0, q: 0 }; return { g: s.g + c.g, q: s.q + c.q }; }, { g: 0, q: 0 });
-        res[k].tramos.push({ ids: t.ids, L: t.L, apoioA: t.apoioA, apoioB: t.apoioB, g: w.g / (t.L || 1), q: w.q / (t.L || 1), RA: R[i].A, RB: R[i].B, Ma: R[i].Ma, Mb: R[i].Mb, continua: R[i].continua, pontos: pontos[i], pontosTodos: [...pontos[i], ...extra[i]], b_: t.pecas[0].b_, h: t.pecas[0].h, baldrame: grupo === bald, comParede: false });
+        res[k].tramos.push({ ids: t.ids, L: t.L, apoioA: t.apoioA, apoioB: t.apoioB, g: w.g / (t.L || 1), q: w.q / (t.L || 1), RA: R[i].A, RB: R[i].B, Ma: R[i].Ma, Mb: R[i].Mb, continua: R[i].continua, pontos: pontos[i], pontosTodos: [...pontos[i], ...extra[i]], livre: t.livreA ? "A" : t.livreB ? "B" : null, lBack: R[i].lBack, b_: t.pecas[0].b_, h: t.pecas[0].h, baldrame: grupo === bald, comParede: false });
         res[k].tramos[res[k].tramos.length - 1].comParede = t.ids.some((id) => comParede.has(id));
         res[k].tramos[res[k].tramos.length - 1].comLaje = t.ids.some((id) => comLaje.has(id));
         res[k].tramos[res[k].tramos.length - 1].apoiaOutra = extra[i].length > 0 || pontos[i].length > 0;
         res[k].tramos[res[k].tramos.length - 1].especial = t.pecas.some((v) => v.vigaPiso || v.vigaEscada);
         for (const id of t.ids) res[k].vigas[id] = { tramo: t.ids.join("+"), L: t.L, g: w.g / (t.L || 1), q: w.q / (t.L || 1), RA: R[i].A, RB: R[i].B, apoioA: t.apoioA, apoioB: t.apoioB };
-        if (!t.apoioA && !ts.some((o, j) => j !== i && esPontoNoSeg(t.a, o.a, o.b).d < 0.2)) res[k].avisos.push(`${t.ids.join("+")}: ponta sem apoio (nem pilar nem viga).`);
-        if (!t.apoioB && !ts.some((o, j) => j !== i && esPontoNoSeg(t.b, o.a, o.b).d < 0.2)) res[k].avisos.push(`${t.ids.join("+")}: ponta sem apoio (nem pilar nem viga).`);
+        // tramo de equilíbrio de balanço curto: a outra ponta é puxada para cima
+        const eq = t.pecas.find((v) => v.equilibrio);
+        if (eq) for (const [lado, Rr] of [["A", R[i].A], ["B", R[i].B]]) if (Rr.g < -0.5 && !t["no" + lado]) {
+          const q = lado === "A" ? t.a : t.b, raiz = t.pecas.some((v) => (v.noA && esDist(v.a, q) < 0.05) || (v.noB && esDist(v.b, q) < 0.05)); if (raiz) continue;
+          res[k].avisos.push(`${t.ids.join("+")}: a ponta é puxada para cima (${String(Math.round(-Rr.g * 10) / 10).replace(".", ",")} kN) pelo balanço da ${eq.equilibrio} — amarrar na viga/pilar de apoio com armadura de suspensão.`);
+        }
+        if (!t.apoioA && !t.livreA && !t.noA && !ts.some((o, j) => j !== i && esPontoNoSeg(t.a, o.a, o.b).d < 0.2)) res[k].avisos.push(`${t.ids.join("+")}: ponta sem apoio (nem pilar nem viga).`);
+        if (!t.apoioB && !t.livreB && !t.noB && !ts.some((o, j) => j !== i && esPontoNoSeg(t.b, o.a, o.b).d < 0.2)) res[k].avisos.push(`${t.ids.join("+")}: ponta sem apoio (nem pilar nem viga).`);
       });
     }
     // pilares: reações + peso próprio + pilar de cima
@@ -1261,7 +1361,7 @@ function esConcreto(fck) {
 }
 // esforços de um tramo: w (kN/m) uniforme + cargas P (kN) em t (m) e os
 // momentos nas pontas Ma, Mb (negativo = tração em cima; 0 = bi-apoiada)
-function esEsforcos(L, w, pontos, Ma = 0, Mb = 0) {
+function esEsforcos(L, w, pontos, Ma = 0, Mb = 0, livre = null, lBack = 0) {
   const RB0 = (w * L * L / 2 + pontos.reduce((t, p) => t + p.P * p.t, 0)) / L, RA0 = w * L + pontos.reduce((t, p) => t + p.P, 0) - RB0;
   const RA = RA0 + (Mb - Ma) / L, RB = RB0 - (Mb - Ma) / L;
   const M = (x) => RA0 * x - w * x * x / 2 - pontos.reduce((t, p) => t + (x > p.t ? p.P * (x - p.t) : 0), 0) + Ma * (1 - x / L) + Mb * x / L;
@@ -1269,7 +1369,10 @@ function esEsforcos(L, w, pontos, Ma = 0, Mb = 0) {
   let Mmax = 0; for (const x of xs) Mmax = Math.max(Mmax, M(x));
   // flecha no meio por trabalho virtual (EI = 1): ∫ M·m dx, m da carga unitária no meio
   const n = 200, h = L / n; let I = 0;
-  for (let i = 0; i <= n; i++) { const x = i * h, m = x <= L / 2 ? x / 2 : (L - x) / 2, f = i === 0 || i === n ? 1 : i % 2 ? 4 : 2; I += f * M(x) * m; }
+  for (let i = 0; i <= n; i++) { const x = i * h, m = livre === "B" ? -(L - x) : livre === "A" ? -x : x <= L / 2 ? x / 2 : (L - x) / 2, f = i === 0 || i === n ? 1 : i % 2 ? 4 : 2; I += f * M(x) * m; }
+  // balanço: flecha na ponta = engastado + giro da raiz (tramo de equilíbrio
+  // bi-apoiado com o momento da raiz, sem o alívio da carga dele)
+  if (livre) I += Math.abs(livre === "B" ? Ma : Mb) * (lBack || 0) / 3 * L * 3 / h;
   return { RA, RB, Vmax: Math.max(Math.abs(RA), Math.abs(RB)), Mmax, Mneg: Math.max(0, -Ma, -Mb), MnegA: Math.max(0, -Ma), MnegB: Math.max(0, -Mb), flechaEI: I * h / 3 };
 }
 // armadura longitudinal de viga: barras de mesma bitola, até 2 camadas
@@ -1305,9 +1408,11 @@ function esDimViga(t, params, hTeste) {
   // de engaste perfeito nos apoios (14.6.7.1)
   const Mx = (o, fg, fq) => o ? fg * (o.g || 0) + fq * (o.q || 0) : 0, gf = ES_DIM.gamaF;
   const ptsD = pts.map((p) => ({ t: p.t, P: gf * (p.g + p.q) })), wD = gf * (t.g + t.q);
-  const ed = esEsforcos(L, wD, ptsD, Mx(t.Ma, gf, gf), Mx(t.Mb, gf, gf));
-  if (t.continua) { const fe = esFEM(L, wD, ptsD), ff = esEsforcos(L, wD, ptsD, fe.l, -fe.r); ed.Mmax = Math.max(ed.Mmax, ff.Mmax); }
-  const es = esEsforcos(L, t.g + ES_DIM.psi2 * t.q, pts.map((p) => ({ t: p.t, P: p.g + ES_DIM.psi2 * p.q })), Mx(t.Ma, 1, ES_DIM.psi2), Mx(t.Mb, 1, ES_DIM.psi2));
+  const ed = esEsforcos(L, wD, ptsD, Mx(t.Ma, gf, gf), Mx(t.Mb, gf, gf), t.livre, t.lBack);
+  if (t.continua && !t.livre) { const fe = esFEM(L, wD, ptsD), ff = esEsforcos(L, wD, ptsD, fe.l, -fe.r); ed.Mmax = Math.max(ed.Mmax, ff.Mmax); }
+  const es = esEsforcos(L, t.g + ES_DIM.psi2 * t.q, pts.map((p) => ({ t: p.t, P: p.g + ES_DIM.psi2 * p.q })), Mx(t.Ma, 1, ES_DIM.psi2), Mx(t.Mb, 1, ES_DIM.psi2), t.livre, t.lBack);
+  // balanço: vão de referência da flecha é o dobro do comprimento (Tabela 13.3)
+  const Lf = t.livre ? 2 * L : L, rotL = t.livre ? "2L/250, balanço" : "L/250";
   const verificar = (h) => {
     const d = h - c - 0.005 - 0.00625, r = { h, d, Md: ed.Mmax, Vd: ed.Vmax, ok: true, motivos: [] };
     const k = ed.Mmax / (0.425 * b * d * d * fcd);
@@ -1339,12 +1444,12 @@ function esDimViga(t, params, hTeste) {
     r.estribo = esEstribo(AswS, smax); r.AswS = AswS;
     if (!r.estribo) { r.ok = false; r.motivos.push("cisalhamento: estribo não cabe"); }
     // flecha (17.3.2.1): Branson com a armadura adotada; diferida αf = 1,32
-    const Asef = r.barras ? r.barras.area : r.As, Ic = b * h ** 3 / 12, Mr = 1.5 * fctm * Ic / (h / 2), ae = ES_DIM.Es / C.Ecs;
+    const Asef = t.livre ? (r.barrasNeg ? r.barrasNeg.area : r.AsNeg || r.As) : r.barras ? r.barras.area : r.As, Ic = b * h ** 3 / 12, Mr = 1.5 * fctm * Ic / (h / 2), ae = ES_DIM.Es / C.Ecs;
     const xII = (-ae * Asef + Math.sqrt((ae * Asef) ** 2 + 2 * b * ae * Asef * d)) / b, III = b * xII ** 3 / 3 + ae * Asef * (d - xII) ** 2;
-    const Ma = es.Mmax, Ie = Ma <= Mr ? Ic : Math.min(Ic, (Mr / Ma) ** 3 * Ic + (1 - (Mr / Ma) ** 3) * III);
+    const Ma = t.livre ? Math.max(es.Mmax, es.Mneg) : es.Mmax, Ie = Ma <= Mr ? Ic : Math.min(Ic, (Mr / Ma) ** 3 * Ic + (1 - (Mr / Ma) ** 3) * III);
     const fi = es.flechaEI / (Ecs * Ie);
-    r.flecha = { imediata: fi, total: fi * (1 + ES_DIM.alfaF), lim: L / ES_DIM.flechaTotal, aposParede: fi * ES_DIM.alfaF, limParede: Math.min(L / ES_DIM.flechaParede, ES_DIM.flechaParedeMax) };
-    if (r.flecha.total > r.flecha.lim) { r.ok = false; r.motivos.push(`flecha ${(Math.ceil(r.flecha.total * 1000) / 10).toFixed(1).replace(".", ",")} cm > ${(Math.floor(r.flecha.lim * 1000) / 10).toFixed(1).replace(".", ",")} cm (L/250)`); }
+    r.flecha = { imediata: fi, total: fi * (1 + ES_DIM.alfaF), lim: Lf / ES_DIM.flechaTotal, aposParede: fi * ES_DIM.alfaF, limParede: Math.min(Lf / ES_DIM.flechaParede, ES_DIM.flechaParedeMax) };
+    if (r.flecha.total > r.flecha.lim) { r.ok = false; r.motivos.push(`flecha ${(Math.ceil(r.flecha.total * 1000) / 10).toFixed(1).replace(".", ",")} cm > ${(Math.floor(r.flecha.lim * 1000) / 10).toFixed(1).replace(".", ",")} cm (${rotL})`); }
     if ((t.comParede || t.baldrame) && r.flecha.aposParede > r.flecha.limParede) { r.ok = false; r.motivos.push(`flecha depois da parede ${(Math.ceil(r.flecha.aposParede * 10000) / 10).toFixed(1).replace(".", ",")} mm > ${(Math.floor(r.flecha.limParede * 10000) / 10).toFixed(1).replace(".", ",")} mm (L/500 e até 10 mm; fissura na alvenaria)`); }
     return r;
   };
@@ -1359,7 +1464,8 @@ function esDimViga(t, params, hTeste) {
     r.aco = { [r.barras.d]: r.barras.n * comp * esKgBarra(r.barras.d) };
     r.aco[6.3] = (r.aco[6.3] || 0) + 2 * (L + 0.2) * esKgBarra(6.3);
     // negativa: em cada apoio com momento, 0,25 L para dentro do tramo + ancoragem
-    if (r.barrasNeg) for (const Mn of [ed.MnegA, ed.MnegB]) if (Mn > 0.5) r.aco[r.barrasNeg.d] = (r.aco[r.barrasNeg.d] || 0) + r.barrasNeg.n * (0.25 * L + 10 * r.barrasNeg.d / 1000) * esKgBarra(r.barrasNeg.d);
+    // balanço: a negativa corre o balanço inteiro (a ancoragem no tramo de equilíbrio entra nele)
+    if (r.barrasNeg) for (const Mn of [ed.MnegA, ed.MnegB]) if (Mn > 0.5) r.aco[r.barrasNeg.d] = (r.aco[r.barrasNeg.d] || 0) + r.barrasNeg.n * ((t.livre ? L : 0.25 * L) + 10 * r.barrasNeg.d / 1000) * esKgBarra(r.barrasNeg.d);
     if (r.estribo) r.aco[r.estribo.d] = (r.aco[r.estribo.d] || 0) + nE * compE * esKgBarra(r.estribo.d);
   }
   return r;
@@ -1944,7 +2050,8 @@ function esCalcularEstrutura(pavs, params) {
   // compatibilização com a arquitetura (baixar, inverter) e cálculo de novo
   const compat = esCompatibilizar(pavs, lanc, desc, params);
   if (compat.some((a) => a.tipo !== "pendente")) { desc = esDescidaCargas(pavs, lanc, params); dim = esDimensionar(pavs, lanc, desc, params); }
-  return { lanc, desc, dim, ajustes, compat: [...compat, ...(dim.compatFundacao || [])] };
+  const doLanc = lanc.flatMap((e) => e.resolvidos || []);
+  return { lanc, desc, dim, ajustes, compat: [...doLanc, ...compat, ...(dim.compatFundacao || [])] };
 }
 
 // ═══════════════════════════════════════════════════════════════

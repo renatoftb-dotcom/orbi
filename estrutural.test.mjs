@@ -412,7 +412,7 @@ t("resumo de materiais: barras de 12 m com 10% de perda e o aço todo do cálcul
   assert.ok(Math.abs(kgCalc - kgM) < 0.01, `${kgCalc} × ${kgM}`);
   assert.ok(r.grupos.some((g) => g.nome === "Estacas" || g.nome === "Sapatas") && r.concreto > 0);
 });
-t("escada em L: viga de borda fora do furo, nunca por cima dos degraus; pilar no canto do patamar", () => {
+t("escada em L: viga de borda fora do furo, nunca por cima dos degraus; canto sem parede vira viga em balanço", () => {
   const caixa = [W(P(-5.14, -1), P(0, -1)), W(P(0, -1), P(0, 2.66)), W(P(0, 2.66), P(-5.14, 2.66)), W(P(-5.14, 2.66), P(-5.14, -1))];
   // 1º lance indo para -x (y -0,92..-0,03), patamar no canto, 2º lance indo para +y (x -5,09..-4,19)
   const degraus = []; let z = 0;
@@ -424,11 +424,30 @@ t("escada em L: viga de borda fora do furo, nunca por cima dos degraus; pilar no
   const pavs = [{ paredes: caixa, areas: [{ tipo: "laje", pts: [P(-5.14, -1), P(0, -1), P(0, 2.66), P(-5.14, 2.66)], esp: 0.12, carga: { tipo: "macica", uso: "residencial" } }], escadas: [esc], nivel: 0, usoPadrao: "residencial" }];
   const c = M.esCalcularEstrutura(pavs, { vaoMax: 9 });
   assert.deepStrictEqual(M.esAlturaLivreEscada(c.lanc[0], [esc]).map((x) => x.viga), [], "nenhuma viga em cima dos degraus");
-  const pl = c.lanc[0].pilares.find((p) => p.escada); assert.ok(pl, "pilar no canto interno");
-  assert.ok(!degraus.some((d) => M.esLancar ? false : false) && pl.x > -4.19 && pl.y > -0.03, `pilar fora da escada: ${pl.x} ${pl.y}`);
+  // sem parede nas laterais da escada: nada de pilar solto no canto
+  assert.ok(!c.lanc[0].pilares.some((p) => p.escada), "sem pilar no canto");
+  const bal = c.lanc[0].vigas.filter((v) => v.balanco); assert.strictEqual(bal.length, 1, "uma viga em balanço");
+  const X = bal[0], ponta = X[X.balanco]; assert.ok(Math.abs(ponta.x + 4.11) < 0.02 && Math.abs(ponta.y - 0.05) < 0.03, JSON.stringify(ponta));
+  assert.ok(c.lanc[0].vigas.some((v) => v.naPontaDe === X.id), "a outra viga de borda apoia na ponta");
+  assert.ok(c.lanc[0].vigas.some((v) => v.equilibrio === X.id), "tramo de equilíbrio além do apoio");
+  const tb = c.desc.pavimentos[0].tramos.find((t) => t.ids.includes(X.id)); assert.ok(tb.livre && tb.lBack > 0.3, JSON.stringify(tb.livre));
+  // tramo de equilíbrio curto (0,59 m) contra balanço de 2 m: arrancamento avisado
+  if (tb.lBack < tb.L) assert.ok(c.desc.pavimentos[0].avisos.some((a) => /puxada para cima/.test(a)), JSON.stringify(c.desc.pavimentos[0].avisos));
+  const tot = (r) => r.g + r.q; assert.ok(Math.abs(tot(tb.livre === "A" ? tb.RA : tb.RB)) < 1e-6, "ponta livre sem reação");
+  assert.ok(c.dim.pavimentos[0].vigas[X.id].ok && c.dim.pavimentos[0].vigas[X.id].barrasNeg, "balanço dimensionado, com negativa");
+  assert.ok(!c.desc.pavimentos[0].avisos.some((a) => /ponta sem apoio/.test(a)), JSON.stringify(c.desc.pavimentos[0].avisos));
+  assert.ok(c.compat.some((a) => a.tipo === "balanco" && a.id === X.id));
   // a viga de borda tem a face no limite do furo (eixo a b/2 da borda), do lado de fora
   const ve = c.lanc[0].vigas.filter((v) => v.vigaEscada);
   assert.ok(ve.some((v) => Math.abs(v.a.x - v.b.x) < 0.05 && Math.abs(v.a.x + 4.115) < 0.01), JSON.stringify(ve.map((v) => [v.a, v.b])));
+});
+t("viga contínua com balanço: momento na raiz isostático, ponta sem reação", () => {
+  const r = M.esLinhaContinua([{ L: 4, I: 1, w: 10, pts: [] }, { L: 2, I: 1, w: 10, pts: [{ t: 2, P: 5 }], livre: "B" }]);
+  assert.ok(Math.abs(r[1].Ma + (10 * 4 / 2 + 5 * 2)) < 1e-9 && Math.abs(r[0].Mb - r[1].Ma) < 1e-9, JSON.stringify(r));
+  assert.ok(Math.abs(r[1].RA - 25) < 1e-9 && Math.abs(r[1].RB) < 1e-9);
+  assert.ok(Math.abs(r[0].RA - (20 - 30 / 4)) < 1e-9, "tramo de equilíbrio: alívio na outra ponta");
+  const d = M.esDimViga({ L: 2, g: 6, q: 4, pontosTodos: [{ t: 2, g: 3, q: 2 }], Ma: { g: -18, q: -12 }, Mb: { g: 0, q: 0 }, livre: "B", lBack: 4, b_: 0.14, h: 0.4 }, {});
+  assert.ok(d.barrasNeg && d.flecha.lim === 4 / 250, JSON.stringify(d.flecha));
 });
 t("compatibilização: viga que invade a janela é baixada (o cálculo passa)", () => {
   const ps = [W(P(0, 0), P(4, 0), [{ id: "j", tipo: "janela_correr", x: 2, larg: 1.5, alt: 1.5, peit: 1.1 }]), W(P(4, 0), P(4, 3)), W(P(4, 3), P(0, 3)), W(P(0, 3), P(0, 0))];
