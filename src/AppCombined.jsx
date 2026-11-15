@@ -41826,6 +41826,8 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
       for (const l of b.linhas) linhasFF.push(lin("    " + l.conta, l));
     }
     linhasFF.push(lin("Custo da obra", ff.total, { total: true }));
+    // no caixa: o realizado mais o a pagar é o custo lançado
+    if (!comp && ff.total.aPagar > 0.004) linhasFF.push({ total: true, celulas: ["Custo lançado (pago + a pagar)", "", moeda(ff.total.realizado + ff.total.aPagar), "", ""] });
     tabela(cols, linhasFF, { compacta: linhasFF.length > 22 });
   }
   // 3. custos mês a mês
@@ -41877,7 +41879,9 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
       { t: "Parcela", w: 13, alinhar: "center" }, { t: "Conta", w: 32 }, { t: "Valor", w: 24, alinhar: "right" }],
       ff.aPagarLista.map((x) => ({ celulas: [dia(x.vencimento) || "—", x.fornecedor || "—", x.descricao + (x.foraDoFF ? " (fora do custo)" : ""), x.parcela, x.conta, moeda(x.valor)],
         vermelho: x.atrasada ? [0] : [] }))
-        .concat([{ total: true, celulas: ["", "", "Total a pagar", "", "", moeda(ff.totalAPagar)] }]), { compacta: true });
+        .concat([{ total: true, celulas: ["", "", "Total a pagar", "", "", moeda(ff.totalAPagar)] },
+          ...(pc && pc.total > 0.004 ? [{ celulas: ["", "", "+ Já pago (notas e comprovantes)", "", "", moeda(pc.total)] },
+            { total: true, celulas: ["", "", "Custo lançado (pago + a pagar)", "", "", moeda(pc.total + ff.totalAPagar)] }] : [])]), { compacta: true });
   }
   // 7. conferência
   if (cf) {
@@ -41889,12 +41893,33 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
       ...(cf.foraDoFF ? [{ celulas: ["- notas fora do custo do físico-financeiro (terreno, IR, excluídas…)", moeda(cf.foraDoFF)] }] : []),
       { total: true, celulas: ["Realizado no físico-financeiro", moeda(cf.realizado)] },
       { celulas: [cf.confere ? "Confere." : "Diferença sem explicação", cf.confere ? "" : moeda(cf.diferenca)], vermelho: cf.confere ? [] : [0, 1], verde: cf.confere ? [0] : [] },
+      // no caixa, o que foi lançado e não pago fica fora do realizado: soma
+      // aqui para chegar no custo lançado (o mesmo total das outras tabelas)
+      ...(!comp && ff && ff.total.aPagar > 0.004 ? [{ celulas: ["+ contas a pagar (lançado e ainda não pago)", moeda(ff.total.aPagar)] },
+        { total: true, celulas: ["Custo lançado (pago + a pagar)", moeda(cf.realizado + ff.total.aPagar)] }] : []),
     ]);
   }
   // 8. resumo por conta (das notas)
   const saidas = pc.resumo.filter((r) => !r.entrada);
   const pct = (v) => (pc.total > 0 ? (v / pc.total * 100).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%" : "");
-  if (saidas.length) {
+  // com a obra: o que está a pagar entra junto, por conta, para o total
+  // chegar no custo lançado (pago + a pagar)
+  const aPagarPorConta = {};
+  for (const x of (ff && ff.aPagarLista) || []) aPagarPorConta[x.conta || "—"] = Math.round(((aPagarPorConta[x.conta || "—"] || 0) + (Number(x.valor) || 0)) * 100) / 100;
+  const totalAPagarPC = ff ? ff.totalAPagar || 0 : 0;
+  if (saidas.length && totalAPagarPC > 0.004) {
+    const nomes = saidas.map((r) => r.conta).concat(Object.keys(aPagarPorConta).filter((c) => !saidas.some((r) => r.conta === c)));
+    const geral = pc.total + totalAPagarPC;
+    const pctG = (v) => (geral > 0 ? (v / geral * 100).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%" : "");
+    const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
+    secao("Custos por conta contábil", "Pago: as notas desta prestação. A pagar: o que foi lançado e ainda não foi pago (quadro Contas a pagar).");
+    tabela([{ t: "Conta contábil", w: 64 }, { t: "Notas", w: 14, alinhar: "center" }, { t: "Pago", w: 30, alinhar: "right" }, { t: "A pagar", w: 28, alinhar: "right" },
+      { t: "Total", w: 30, alinhar: "right" }, { t: "%", w: 16, alinhar: "right" }],
+      nomes.map((c) => { const r = saidas.find((z) => z.conta === c) || { transacoes: 0, valor: 0 }; const ap = aPagarPorConta[c] || 0;
+        return { celulas: [c, r.transacoes ? String(r.transacoes) : "—", vlr(r.valor), vlr(ap), moeda(r.valor + ap), pctG(r.valor + ap)] }; })
+        .concat([{ total: true, celulas: ["Custo lançado", String(pc.nSaidas), moeda(pc.total), moeda(totalAPagarPC), moeda(geral), geral > 0 ? "100,0%" : ""] }]),
+      { compacta: nomes.length > 20 });
+  } else if (saidas.length) {
     secao("Notas pagas por conta contábil");
     tabela([{ t: "Conta contábil", w: 96 }, { t: "Notas", w: 24, alinhar: "center" }, { t: "Valor", w: 40, alinhar: "right" }, { t: "% das saídas", w: 26, alinhar: "right" }],
       saidas.map((r) => ({ celulas: [r.conta, String(r.transacoes), moeda(r.valor), pct(r.valor)] }))
@@ -41914,7 +41939,9 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   const notasSaida = pc.notas.filter((n) => !n.entrada);
   if (notasSaida.length) {
     secao("Notas e comprovantes", "O número de cada nota é o nome do arquivo na pasta Papeis (nota 4226 = arquivo 4226.pdf). Em vermelho: sem arquivo ou sem número.");
-    tabela(colsNotas, notasSaida.map(linhaDaNota).concat([{ total: true, celulas: ["", "", "", "Total das saídas", "", moeda(pc.total)] }]), { compacta: true });
+    tabela(colsNotas, notasSaida.map(linhaDaNota).concat([{ total: true, celulas: ["", "", "", totalAPagarPC > 0.004 ? "Total pago (notas)" : "Total das saídas", "", moeda(pc.total)] }])
+      .concat(totalAPagarPC > 0.004 ? [{ celulas: ["", "", "", "+ Contas a pagar (lançado e ainda não pago)", "", moeda(totalAPagarPC)] },
+        { total: true, celulas: ["", "", "", "Custo lançado (pago + a pagar)", "", moeda(pc.total + totalAPagarPC)] }] : []), { compacta: true });
   }
   const notasEntrada = pc.notas.filter((n) => n.entrada);
   if (notasEntrada.length) {
