@@ -7140,11 +7140,17 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
           <div ref={corteBox} style={{ ...estiloVista("corte"), display: mostraCorte ? "block" : "none" }}>
             {vistaSegunda === "corte" && barraSegunda}{vistaSegunda === "corte" && alcasJanela}
             {cortes.length > 0 && (
-              <div style={{ position: "absolute", top: 6, left: "50%", transform: "translateX(-50%)", zIndex: 1, display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "center", maxWidth: "60%" }}>
+              <div style={{ position: "absolute", top: isMobile && vistaSegunda === "corte" ? 50 : 6, left: "50%", transform: "translateX(-50%)", zIndex: 1, display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "center", maxWidth: isMobile ? "94%" : "60%" }}>
                 {cortes.map((c, i) => (
                   <button key={c.id} onClick={() => { setVerCorte(c.id); setSel(["x" + i]); }}
                     style={{ ...btn, minHeight: 28, padding: "2px 10px", fontSize: 12, fontWeight: 700, background: (verCorte || cortes[0].id) === c.id ? "#111827" : "#fff", color: (verCorte || cortes[0].id) === c.id ? "#fff" : "#111827", borderRadius: 999 }}>{tpNomeCorte(c)}</button>
                 ))}
+                {estrutura.ativa && (
+                  <button onClick={() => setEstrutura((x) => ({ ...x, noCorte: !x.noCorte }))} aria-pressed={!!estrutura.noCorte} title="Mostrar a estrutura (pilares, vigas e fundação) no corte"
+                    style={{ ...btn, minHeight: 28, padding: "2px 10px", fontSize: 12, fontWeight: 600, borderRadius: 999, marginLeft: 6, background: estrutura.noCorte ? "#eef5ff" : "#fff", color: estrutura.noCorte ? TP_AZUL : "#4b5563", borderColor: estrutura.noCorte ? TP_AZUL : "#d1d5db" }}>
+                    {estrutura.noCorte ? "✓ Estrutura" : "Estrutura"}
+                  </button>
+                )}
               </div>
             )}
             <canvas ref={corteRef} onClick={cliqueCorte} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "pointer" }} />
