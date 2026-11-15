@@ -7048,6 +7048,21 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2, marginBottom: 14 }}>{obraAtual.nome} · cada item de cada nota, com etapa, conta e datas</div>
         <BaseDeDados obras={[obraAtual]} clientes={data.clientes || []} prestadores={prestadores}
           modulos={ehEmpDoPainel ? obras : null} nomeEmpreendimento={(cliente && cliente.nome) || ""}
+          aoGuardarDatas={perm.podeGerenciarObra ? (porObra, inicioEmp) => gravarObrasFrescas((minhas) => {
+            // só grava se alguma data mudou (início e término de cada obra; o
+            // início do empreendimento fica em todos os módulos)
+            let mudou = false;
+            const novas = minhas.map((o) => {
+              if (!o) return o;
+              const d = porObra[o.id];
+              let n = o;
+              if (d && (String(o.dataInicio || "") !== d.dataInicio || String(o.dataFim || "") !== d.dataFim)) n = { ...n, dataInicio: d.dataInicio, dataFim: d.dataFim };
+              if (inicioEmp != null && ehEmpDoPainel && String(o.inicioEmpreendimento || "") !== inicioEmp) n = { ...n, inicioEmpreendimento: inicioEmp };
+              if (n !== o) mudou = true;
+              return n;
+            });
+            return mudou ? novas : null;
+          }) : null}
           insumos={insumosDoCatalogo(data)} lancamentos={typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : []}
           isMobile={isMobile} obraFixa nomeDoArquivo={"base " + (obraAtual.nome || "obra")}
           acoes={perm.podeGerenciarObra ? { daObra: true, excluir: excluirDaBaseDaObra,

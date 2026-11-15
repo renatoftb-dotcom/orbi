@@ -42682,7 +42682,7 @@ function carregarExcelJS() {
   return cpCargaExcel;
 }
 
-function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMobile, obraFixa, nomeDoArquivo, completar, doEscritorio, acoes, meioDoLancamento, modulos, nomeEmpreendimento }) {
+function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMobile, obraFixa, nomeDoArquivo, completar, doEscritorio, acoes, meioDoLancamento, modulos, nomeEmpreendimento, aoGuardarDatas }) {
   // no escritório a linha é a transação, com as colunas da planilha do escritório
   const COLS_TAB = doEscritorio ? BASE_COLUNAS_ESCRITORIO : BASE_COLUNAS;
   const COLS_REL = doEscritorio ? BASE_RELATORIO_ESCRITORIO : BASE_RELATORIO;
@@ -42878,12 +42878,16 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
     let salvo = null;
     try { salvo = JSON.parse(localStorage.getItem(chaveParam) || "null"); } catch (e) { salvo = null; }
     const padrao = cpParametrosPadrao(obraDaPrestacao);
-    // as datas de cada módulo: as guardadas; sem elas, as do cadastro
+    // as datas: quando dá para gravar na obra, valem as do cadastro (as
+    // mesmas em qualquer navegador); senão, as guardadas neste navegador
+    const doCadastro = !!aoGuardarDatas;
     const datasModulos = {};
-    for (const d of cpDatasDosModulos(listaModulos, (salvo && salvo.datasModulos) || {})) datasModulos[d.id] = { inicio: d.inicio, termino: d.termino };
-    const inicio = (salvo && salvo.inicio) || padrao.inicio;
-    setParamPC({ ...padrao, abrangencia: "modulo", ...(salvo || {}), inicio, termino: (salvo && salvo.termino) || padrao.termino,
-      inicioEmp: (salvo && salvo.inicioEmp) || inicio || "", datasModulos, erro: "" });
+    for (const d of cpDatasDosModulos(listaModulos, doCadastro ? {} : (salvo && salvo.datasModulos) || {})) datasModulos[d.id] = { inicio: d.inicio, termino: d.termino };
+    const inicio = doCadastro ? padrao.inicio : (salvo && salvo.inicio) || padrao.inicio;
+    const termino = doCadastro ? padrao.termino : (salvo && salvo.termino) || padrao.termino;
+    const inicioEmpCad = (listaModulos.find((m) => m && /^\d{4}-\d{2}-\d{2}$/.test(String(m.inicioEmpreendimento || ""))) || {}).inicioEmpreendimento || "";
+    setParamPC({ ...padrao, abrangencia: "modulo", ...(salvo || {}), inicio, termino,
+      inicioEmp: inicioEmpCad || (salvo && salvo.inicioEmp) || inicio || "", datasModulos, erro: "" });
   }
   function gerarComParametros() {
     const p = paramPC || {};
@@ -42897,6 +42901,14 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
     const limpo = { despesa: p.despesa, entrada: p.entrada, inicio: p.inicio || "", termino: p.termino || "",
       abrangencia: todos ? "todos" : "modulo", ...(todos ? { datasModulos, inicioEmp: p.inicioEmp || "" } : {}) };
     try { localStorage.setItem(chaveParam, JSON.stringify({ ...limpo, datasModulos: p.datasModulos || {}, inicioEmp: p.inicioEmp || "" })); } catch (e) { /* sem armazenamento */ }
+    // as datas vão para o cadastro da obra (e de cada módulo): em outro
+    // navegador ou computador, a prestação abre com as mesmas
+    if (aoGuardarDatas) {
+      const porObra = {};
+      if (todos) for (const d of datas) porObra[d.id] = { dataInicio: d.inicio, dataFim: d.termino };
+      else if (obraDaPrestacao) porObra[obraDaPrestacao.id] = { dataInicio: p.inicio || "", dataFim: p.termino || "" };
+      try { aoGuardarDatas(porObra, todos ? (p.inicioEmp || "") : null); } catch (e) { /* a prévia segue mesmo sem gravar */ }
+    }
     // antes do pacote com os comprovantes (demorado), a prévia dos números
     // e dos gráficos; confirmada, gera
     setParamPC(null);
@@ -63929,6 +63941,21 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2, marginBottom: 14 }}>{obraAtual.nome} · cada item de cada nota, com etapa, conta e datas</div>
         <BaseDeDados obras={[obraAtual]} clientes={data.clientes || []} prestadores={prestadores}
           modulos={ehEmpDoPainel ? obras : null} nomeEmpreendimento={(cliente && cliente.nome) || ""}
+          aoGuardarDatas={perm.podeGerenciarObra ? (porObra, inicioEmp) => gravarObrasFrescas((minhas) => {
+            // só grava se alguma data mudou (início e término de cada obra; o
+            // início do empreendimento fica em todos os módulos)
+            let mudou = false;
+            const novas = minhas.map((o) => {
+              if (!o) return o;
+              const d = porObra[o.id];
+              let n = o;
+              if (d && (String(o.dataInicio || "") !== d.dataInicio || String(o.dataFim || "") !== d.dataFim)) n = { ...n, dataInicio: d.dataInicio, dataFim: d.dataFim };
+              if (inicioEmp != null && ehEmpDoPainel && String(o.inicioEmpreendimento || "") !== inicioEmp) n = { ...n, inicioEmpreendimento: inicioEmp };
+              if (n !== o) mudou = true;
+              return n;
+            });
+            return mudou ? novas : null;
+          }) : null}
           insumos={insumosDoCatalogo(data)} lancamentos={typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : []}
           isMobile={isMobile} obraFixa nomeDoArquivo={"base " + (obraAtual.nome || "obra")}
           acoes={perm.podeGerenciarObra ? { daObra: true, excluir: excluirDaBaseDaObra,
