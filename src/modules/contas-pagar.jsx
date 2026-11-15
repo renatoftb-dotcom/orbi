@@ -4351,9 +4351,11 @@ function cpHoje(o) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String((o || {}).hoje || "")) ? o.hoje : new Date().toISOString().slice(0, 10);
 }
 // Em que coluna do mês cai uma data: antes do início da obra, "pré-obra".
-function cpBalde(dataIso, inicio) {
+// Com `hoje`, só o que já passou vira pré-obra: o que ainda vai vencer antes
+// do início (obra que começa no futuro) fica no mês dele.
+function cpBalde(dataIso, inicio, hoje) {
   const d = String(dataIso || "").slice(0, 10);
-  if (inicio && d && d < inicio) return "pre";
+  if (inicio && d && d < inicio && !(hoje && d.slice(0, 7) >= String(hoje).slice(0, 7))) return "pre";
   return cpMesDe(d);
 }
 function cpRotuloBalde(chave) {
@@ -4455,7 +4457,7 @@ function custosMensais(obra, opcoes) {
   const red = (x) => Math.round(x * 100) / 100;
   const por = {};
   for (const c of cpContasDoCusto(obra, plano)) {
-    const k = cpBalde(cpDataDaDespesa(c, regime), o.inicio);
+    const k = cpBalde(cpDataDaDespesa(c, regime), o.inicio, hoje);
     if (!k) continue;
     const m = por[k] || (por[k] = { pago: 0, vencido: 0, aberto: 0, custo: 0 });
     const v = cpValorLancado(c);
@@ -4483,29 +4485,30 @@ function recebimentosMensais(obra, opcoes) {
   const ob = obra || {};
   const regime = o.regime === "competencia" ? "competencia" : "caixa";
   const red = (x) => Math.round(x * 100) / 100;
+  const hoje = cpHoje(o);
   const por = {};
   const somar = (k, faixa, v) => { if (!k || !v) return; const m = por[k] || (por[k] = { recebido: 0, assinado: 0, assinar: 0, estimativa: 0 }); m[faixa] = red(m[faixa] + v); };
   // venda com o contrato ainda sem assinatura: o que falta receber dela é "a assinar"
   const pendentes = new Set((ob.vendas || []).filter((v) => v && v.contratoPendente).map((v) => v.id));
-  for (const e of ob.entradas || []) if (e) somar(cpBalde(e.data, o.inicio), "recebido", Number(e.valor) || 0);
+  for (const e of ob.entradas || []) if (e) somar(cpBalde(e.data, o.inicio, hoje), "recebido", Number(e.valor) || 0);
   for (const c of ob.contasPagar || []) {
     if (!c || !cpContaEhEntrada(c.contaId) || c.contaId === "documentacao_comprador") continue;
     const v = cpValorLancado(c);
     const aReceber = pendentes.has(c.vendaId) ? "assinar" : "assinado";
-    if (regime === "competencia") somar(cpBalde(c.vencimento || c.pagoEm, o.inicio), c.pago ? "recebido" : aReceber, v);
-    else if (c.pago) somar(cpBalde(c.pagoEm || c.vencimento, o.inicio), "recebido", v);
-    else somar(cpBalde(c.vencimento, o.inicio), aReceber, v);
+    if (regime === "competencia") somar(cpBalde(c.vencimento || c.pagoEm, o.inicio, hoje), c.pago ? "recebido" : aReceber, v);
+    else if (c.pago) somar(cpBalde(c.pagoEm || c.vencimento, o.inicio, hoje), "recebido", v);
+    else somar(cpBalde(c.vencimento, o.inicio, hoje), aReceber, v);
   }
   // a projeção de venda das unidades ainda disponíveis: venda futura
   const vendidas = new Set((ob.vendas || []).filter(Boolean).map((v) => v.unidadeId));
   let temProjecao = false;
   for (const u of ob.unidadesVenda || []) {
     if (!u || vendidas.has(u.id) || !u.projecao) continue;
-    for (const p of u.projecao.parcelas || []) { somar(cpBalde(p.vencimento, o.inicio), "estimativa", Number(p.valor) || 0); temProjecao = true; }
+    for (const p of u.projecao.parcelas || []) { somar(cpBalde(p.vencimento, o.inicio, hoje), "estimativa", Number(p.valor) || 0); temProjecao = true; }
   }
   for (const p of ob.cronogramaRecebimento || []) {
     if (!p || !/^\d{4}-\d{2}$/.test(String(p.mes || ""))) continue;
-    somar(cpBalde(p.mes + "-01", o.inicio), p.tipo === "assinar" ? "assinar" : "estimativa", Number(p.valor) || 0);
+    somar(cpBalde(p.mes + "-01", o.inicio, hoje), p.tipo === "assinar" ? "assinar" : "estimativa", Number(p.valor) || 0);
   }
   const meses = cpMesesDaSerie(Object.keys(por), o.inicio ? [o.inicio.slice(0, 7)] : []).map((k) => {
     const m = por[k] || { recebido: 0, assinado: 0, assinar: 0, estimativa: 0 };
@@ -4532,7 +4535,11 @@ function fluxoDeCaixaDaObra(obra, opcoes) {
   const custo = custosMensais(obra, { ...o, regime: "caixa" });
   const receb = recebimentosMensais(obra, { ...o, regime: "caixa" });
   const aRealizar = red(Math.max(0, ff.custoPrevisto - ff.pago));
-  const futuros = cpMesesEntre(mesHoje, mesFim);
+  // obra que ainda não começou: o custo que falta é dividido do início dela
+  // até o término (e não de hoje)
+  const comeco0 = String(o.comecoDoCusto != null ? o.comecoDoCusto : o.inicio || "").slice(0, 7);
+  const comeco = /^\d{4}-\d{2}$/.test(comeco0) && comeco0 > mesHoje && comeco0 <= mesFim ? comeco0 : mesHoje;
+  const futuros = cpMesesEntre(comeco, mesFim);
   const parcela = futuros.length ? Math.floor(aRealizar * 100 / futuros.length) / 100 : 0;
   const porMesC = {}, porMesR = {};
   let atraso = 0;
@@ -4548,7 +4555,7 @@ function fluxoDeCaixaDaObra(obra, opcoes) {
   const linhas = chaves.map((k) => {
     const futuro = k !== "pre" && k >= mesHoje;
     const realizado = red(porMesC[k] || 0);
-    const noPrazo = futuro && k <= mesFim;
+    const noPrazo = futuro && k >= comeco && k <= mesFim;
     const aRealizarMes = noPrazo ? (k === futuros[futuros.length - 1] ? red(aRealizar - parcela * (futuros.length - 1)) : parcela) : 0;
     const r = porMesR[k] || { recebido: 0, previsto: 0 };
     const previsto = red(r.previsto + (k === mesHoje ? atraso : 0));
@@ -4613,8 +4620,14 @@ function prestacaoMensalDosModulos(modulos, opcoes) {
   const ms = (modulos || []).filter(Boolean);
   const inicios = datas.map((d) => d.inicio).filter(Boolean).sort();
   const terminos = datas.map((d) => d.termino).filter(Boolean).sort();
-  const extras = inicios.length ? [inicios[0].slice(0, 7)] : [];
-  const op = (m) => { const d = datas.find((x) => x.id === m.id) || {}; return { hoje, inicio: d.inicio || "", termino: d.termino || "" }; };
+  // o início do empreendimento: o que veio antes é pré-obra (sem ele, o
+  // primeiro início entre os módulos)
+  const inicioEmp = /^\d{4}-\d{2}-\d{2}$/.test(String(o.inicio || "")) ? o.inicio : (inicios[0] || "");
+  const extras = inicioEmp ? [inicioEmp.slice(0, 7)] : [];
+  // os gráficos do empreendimento: uma linha do tempo só, com pré-obra antes
+  // do primeiro módulo; o início de cada módulo vale para dividir o custo
+  // que falta dele (do início ao término)
+  const op = (m) => { const d = datas.find((x) => x.id === m.id) || {}; return { hoje, inicio: inicioEmp, comecoDoCusto: d.inicio || "", termino: d.termino || "" }; };
   const despesa = o.despesa === "competencia" ? "competencia" : "caixa";
   const entrada = o.entrada === "competencia" ? "competencia" : "caixa";
   const cms = ms.map((m) => custosMensais(m, { ...op(m), regime: despesa }));
@@ -4646,7 +4659,7 @@ function prestacaoMensalDosModulos(modulos, opcoes) {
     fc = { linhas, mesHoje, mesFim: fcs.map((f) => f.mesFim).sort().pop() || mesHoje, aRealizar: red(fcs.reduce((t, f) => t + f.aRealizar, 0)),
       mesesRestantes: Math.max(0, ...fcs.map((f) => f.mesesRestantes)), porModulo: true, total: somado.total };
   }
-  return { cm, rm, fc, datas, inicio: inicios[0] || "", termino: terminos[terminos.length - 1] || "" };
+  return { cm, rm, fc, datas, inicio: inicioEmp, termino: terminos[terminos.length - 1] || "" };
 }
 // O quadro por módulo: o custo e o recebimento de cada um, lado a lado.
 // As colunas da tabela "Por módulo" (prévia e PDF): custo e vendas, nesta ordem.
@@ -4720,7 +4733,7 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
     doc.setFontSize(7.6); cor(TINTA);
     const reg = (r) => (r === "competencia" ? "competência" : "caixa");
     const itens = [`Despesas: regime de ${reg(par.despesa)}`, `Entradas: regime de ${reg(par.entrada)}`,
-      ...(par.datasModulos ? ["Datas de cada módulo: no quadro Por módulo"]
+      ...(par.datasModulos ? [par.inicio ? `Início do empreendimento: ${dia(par.inicio)}` : "", "Datas de cada módulo: no quadro Por módulo"]
         : [par.inicio ? `Início da obra: ${dia(par.inicio)}` : "", par.termino ? `Término estimado: ${dia(par.termino)}` : ""])].filter(Boolean);
     doc.text(caber(itens.join("     ·     "), LARG - 6), M + 3, y + 4.6);
     y += 11;
@@ -5391,9 +5404,14 @@ function JanelaParametrosPrestacao({ valor, obra, aoMudar, aoCancelar, aoGerar, 
         </div>
         {todos && (
           <div data-vk-param-datas-modulos="1">
+            <label style={{ display: "block", marginBottom: 14 }}>
+              <div style={rot}>Início do empreendimento</div>
+              <input type="date" style={{ ...inp, maxWidth: 260 }} value={v.inicioEmp || ""} data-vk-param-inicio-emp="1" onChange={(e) => mudar("inicioEmp", e.target.value)} />
+              <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>O que veio antes entra junto, em Despesas pré-obra; daí em diante, mês a mês.</div>
+            </label>
             <div style={rot}>Datas de cada módulo</div>
             <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 8, lineHeight: 1.4 }}>
-              O que veio antes do início de cada módulo entra em Despesas pré-obra; o custo que falta de cada um é dividido até o término dele.
+              O custo que falta de cada módulo é dividido do início ao término dele (o que já começou, de hoje ao término).
             </div>
             <div style={{ display: "grid", gap: 8 }}>
               {datasMods.map((d) => (
@@ -5548,7 +5566,7 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 19, fontWeight: 700, color: "#111827" }}>Prévia da prestação de contas</div>
-            <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 3 }}>{(obra && obra.nome) || ""} · Despesas: {reg(p.despesa)} · Entradas: {reg(p.entrada)} · {p.datasModulos ? "Datas de cada módulo (no quadro Por módulo)" : `Início: ${dia(p.inicio)} · Término: ${dia(p.termino)}`}</div>
+            <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 3 }}>{(obra && obra.nome) || ""} · Despesas: {reg(p.despesa)} · Entradas: {reg(p.entrada)} · {p.datasModulos ? `Início do empreendimento: ${dia(p.inicio)} · datas de cada módulo no quadro Por módulo` : `Início: ${dia(p.inicio)} · Término: ${dia(p.termino)}`}</div>
             <div style={{ fontSize: 12, color: "#6b7280", marginTop: 3 }}>Confira os números. Gerar PDF baixa só o relatório (rápido); Gerar com comprovantes baixa o pacote completo, com a planilha e os arquivos.</div>
           </div>
           {botoes}
@@ -5994,8 +6012,9 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
     // as datas de cada módulo: as guardadas; sem elas, as do cadastro
     const datasModulos = {};
     for (const d of cpDatasDosModulos(listaModulos, (salvo && salvo.datasModulos) || {})) datasModulos[d.id] = { inicio: d.inicio, termino: d.termino };
-    setParamPC({ ...padrao, abrangencia: "modulo", ...(salvo || {}), inicio: (salvo && salvo.inicio) || padrao.inicio, termino: (salvo && salvo.termino) || padrao.termino,
-      datasModulos, erro: "" });
+    const inicio = (salvo && salvo.inicio) || padrao.inicio;
+    setParamPC({ ...padrao, abrangencia: "modulo", ...(salvo || {}), inicio, termino: (salvo && salvo.termino) || padrao.termino,
+      inicioEmp: (salvo && salvo.inicioEmp) || inicio || "", datasModulos, erro: "" });
   }
   function gerarComParametros() {
     const p = paramPC || {};
@@ -6007,15 +6026,15 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
     const datasModulos = {};
     for (const d of datas) datasModulos[d.id] = { inicio: d.inicio, termino: d.termino };
     const limpo = { despesa: p.despesa, entrada: p.entrada, inicio: p.inicio || "", termino: p.termino || "",
-      abrangencia: todos ? "todos" : "modulo", ...(todos ? { datasModulos } : {}) };
-    try { localStorage.setItem(chaveParam, JSON.stringify({ ...limpo, datasModulos: p.datasModulos || {} })); } catch (e) { /* sem armazenamento */ }
+      abrangencia: todos ? "todos" : "modulo", ...(todos ? { datasModulos, inicioEmp: p.inicioEmp || "" } : {}) };
+    try { localStorage.setItem(chaveParam, JSON.stringify({ ...limpo, datasModulos: p.datasModulos || {}, inicioEmp: p.inicioEmp || "" })); } catch (e) { /* sem armazenamento */ }
     // antes do pacote com os comprovantes (demorado), a prévia dos números
     // e dos gráficos; confirmada, gera
     setParamPC(null);
     // no empreendimento inteiro, o cabeçalho mostra do primeiro início ao
     // último término; cada módulo usa as datas dele
     const ini = datas.map((d) => d.inicio).filter(Boolean).sort(), fim = datas.map((d) => d.termino).filter(Boolean).sort();
-    const exibir = todos ? { ...limpo, inicio: ini[0] || "", termino: fim[fim.length - 1] || "" } : limpo;
+    const exibir = todos ? { ...limpo, inicio: p.inicioEmp || ini[0] || "", termino: fim[fim.length - 1] || "" } : limpo;
     setPrevia({ param: exibir, dados: dadosDaPrestacao(exibir) });
   }
   const [previa, setPrevia] = useState(null);
@@ -6033,7 +6052,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
     const opPC = param ? { inicio: param.inicio || "", termino: param.termino || "" } : {};
     const ffPC = obraDaPC ? fisicoFinanceiroDaPrestacao(obraDaPC, { ...opPC, regime: param.despesa }) : null;
     // todo o empreendimento: cada módulo com as datas dele, somados mês a mês
-    const mens = todos ? prestacaoMensalDosModulos(listaModulos, { despesa: param.despesa, entrada: param.entrada, datas: param.datasModulos }) : null;
+    const mens = todos ? prestacaoMensalDosModulos(listaModulos, { despesa: param.despesa, entrada: param.entrada, datas: param.datasModulos, inicio: param.inicioEmp || "" }) : null;
     const datasPorId = {};
     if (mens) for (const d of mens.datas) datasPorId[d.id] = d;
     return { pc, obraDaPC, ffPC,

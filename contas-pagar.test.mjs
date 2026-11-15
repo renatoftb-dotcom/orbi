@@ -3789,9 +3789,21 @@ teste("empreendimento com módulos: junta tudo numa obra só e resume por módul
   const semB = modulo.prestacaoMensalDosModulos([A, Bm], { despesa: "caixa", entrada: "caixa", hoje: "2026-04-15" });
   assert.ok(semB.fc.erro && semB.fc.erro.includes("Módulo B"));
   const pm = modulo.prestacaoMensalDosModulos([A, Bm], { despesa: "caixa", entrada: "caixa", hoje: "2026-04-15", datas: { B: { termino: "2026-05-31" } } });
-  // os dois gastos antes do início de cada módulo caem juntos em pré-obra
-  assert.strictEqual(pm.cm.meses.find((m) => m.chave === "pre").pago, 150);
+  // sem o início do empreendimento: pré-obra antes do primeiro início; o resto mês a mês
+  assert.strictEqual(pm.cm.meses.find((m) => m.chave === "pre").pago, 100);
+  assert.strictEqual(pm.cm.meses.find((m) => m.chave === "2026-02").pago, 50);
   assert.strictEqual(pm.inicio, "2026-01-01"); assert.strictEqual(pm.termino, "2026-06-30");
+  // com o início do empreendimento: tudo antes dele é pré-obra
+  const pe = modulo.prestacaoMensalDosModulos([A, Bm], { despesa: "caixa", entrada: "caixa", hoje: "2026-04-15", inicio: "2026-03-01", datas: { B: { termino: "2026-05-31" } } });
+  assert.strictEqual(pe.cm.meses.find((m) => m.chave === "pre").pago, 150); assert.strictEqual(pe.cm.meses[1].chave, "2026-03");
+  // recebimento futuro antes do início não vai para pré-obra
+  const rf = modulo.recebimentosMensais({ cronogramaRecebimento: [{ id: "r", mes: "2026-08", valor: 10 }] }, { regime: "caixa", inicio: "2027-01-01", hoje: "2026-04-15" });
+  assert.ok(!rf.meses.some((m) => m.chave === "pre")); assert.strictEqual(rf.meses.find((m) => m.chave === "2026-08").estimativa, 10);
+  // módulo que começa no futuro: o custo que falta vai do início ao término dele
+  const C = { id: "C", nome: "Módulo C", estimativaPL: [{ contaId: "material", valor: 300 }], contasPagar: [] };
+  const pc2 = modulo.prestacaoMensalDosModulos([A, C], { despesa: "caixa", entrada: "caixa", hoje: "2026-04-15", datas: { C: { inicio: "2026-08-01", termino: "2026-10-31" } } });
+  const lc = (k) => (pc2.fc.linhas.find((l) => l.chave === k) || {}).custoARealizar;
+  assert.strictEqual(lc("2026-07"), 0); assert.strictEqual(lc("2026-08"), 100); assert.strictEqual(lc("2026-10"), 100);
   // A: 900 até jun (3 meses: abr, mai, jun = 300); B: 550 até mai (2 meses: abr, mai = 275)
   const lin = (k) => pm.fc.linhas.find((l) => l.chave === k);
   assert.strictEqual(lin("2026-04").custoARealizar, 575); assert.strictEqual(lin("2026-05").custoARealizar, 575); assert.strictEqual(lin("2026-06").custoARealizar, 300);
