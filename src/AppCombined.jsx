@@ -41553,6 +41553,56 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
       doc.setFontSize(7.4); cor(TINTA); doc.text(f[2], lx + 4, ly - 0.2); lx += 4 + doc.getTextWidth(f[2]) + 6;
     }
   };
+  // o fluxo de caixa: barras = resultado do mês (azul / vermelho vivo),
+  // linha = saldo acumulado do dinheiro, com o valor em cada ponto
+  const VIVO = [239, 68, 68], NAVY = [17, 24, 39];
+  const graficoFluxo = (linhas, x0, y0, larg, mesHoje) => {
+    const n = linhas.length;
+    const ALT = 38;
+    const slot = Math.min(14, larg / Math.max(1, n)), bw = slot * 0.6;
+    const vals = linhas.reduce((t, l) => t.concat([l.resultado, l.acumulado]), []);
+    const maxPos = Math.max(0, ...vals), maxNeg = Math.max(0, ...vals.map((v) => -v));
+    const tot = Math.max(1, maxPos + maxNeg);
+    // o lado negativo tem um mínimo, senão some quando o positivo é bem maior
+    const hNeg = maxNeg > 0 ? Math.max(ALT * maxNeg / tot, 13) : 0, hPos = ALT - hNeg;
+    const base = y0 + 5 + hPos;
+    // o valor do ponto negativo vai embaixo dele: sobra lugar antes do mês
+    const esc = (v) => (v >= 0 ? (maxPos ? v / maxPos * hPos : 0) : (maxNeg ? v / maxNeg * Math.max(0, hNeg - 4) : 0));
+    const pulo = Math.max(1, Math.ceil(7 / slot));
+    doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.3); doc.line(x0, base, x0 + Math.min(larg, slot * n + 2), base);
+    const cx = (k) => x0 + k * slot + slot / 2;
+    linhas.forEach((l, k) => {
+      const v = l.resultado, h = Math.abs(esc(v));
+      if (h > 0.2) { const c = v < 0 ? VIVO : AZUL_VK; doc.setFillColor(c[0], c[1], c[2]);
+        doc.roundedRect(cx(k) - bw / 2, v >= 0 ? base - h : base, bw, h, Math.min(0.8, bw * 0.12), Math.min(0.8, bw * 0.12), "F"); }
+      const atual = l.chave === mesHoje;
+      if (pulo === 1 || k % pulo === 0 || atual || l.chave === "pre") {
+        doc.setFont("helvetica", atual ? "bold" : "normal"); doc.setFontSize(slot < 8 ? 5.6 : 6.6); cor(atual ? TINTA : CINZA);
+        doc.text(l.rotulo, cx(k), y0 + 5 + ALT + 4.2, { align: "center" }); doc.setFont("helvetica", "normal");
+      }
+    });
+    // a linha do acumulado por cima
+    doc.setDrawColor(NAVY[0], NAVY[1], NAVY[2]); doc.setLineWidth(0.55);
+    for (let k = 1; k < n; k++) doc.line(cx(k - 1), base - esc(linhas[k - 1].acumulado), cx(k), base - esc(linhas[k].acumulado));
+    linhas.forEach((l, k) => {
+      const py = base - esc(l.acumulado);
+      doc.setFillColor(255, 255, 255); doc.circle(cx(k), py, 0.95, "F");
+      const c = l.acumulado < 0 ? VIVO : NAVY; doc.setFillColor(c[0], c[1], c[2]); doc.circle(cx(k), py, 0.65, "F");
+      if (pulo === 1 || k % pulo === 0 || k === n - 1) {
+        doc.setFont("helvetica", "bold"); doc.setFontSize(slot < 8 ? 5.2 : 6.2); cor(l.acumulado < 0 ? VIVO : NAVY);
+        doc.text(curto(l.acumulado), cx(k), l.acumulado < 0 ? py + 3.2 : py - 1.6, { align: "center" }); doc.setFont("helvetica", "normal");
+      }
+    });
+    let lx = x0;
+    const ly = y0 + 5 + ALT + 11;
+    const legenda = [[AZUL_VK, "Resultado do mês (positivo)", "q"], [VIVO, "Resultado do mês (negativo)", "q"], [NAVY, "Saldo acumulado do dinheiro", "l"]];
+    for (const [c, t, tipo] of legenda) {
+      doc.setFillColor(c[0], c[1], c[2]);
+      if (tipo === "q") doc.roundedRect(lx, ly - 2.5, 2.8, 2.8, 0.6, 0.6, "F");
+      else { doc.setDrawColor(c[0], c[1], c[2]); doc.setLineWidth(0.55); doc.line(lx - 0.5, ly - 1.1, lx + 3.3, ly - 1.1); doc.circle(lx + 1.4, ly - 1.1, 0.65, "F"); }
+      doc.setFontSize(7.4); cor(TINTA); doc.text(t, lx + 4.2, ly - 0.2); lx += 4.2 + doc.getTextWidth(t) + 6;
+    }
+  };
   const ff = i.ff, cf = i.conferencia, cm = i.custos, rm = i.recebimentos, fc = i.fluxoCaixa;
   const comp = ff && ff.regime === "competencia";
   // 1. resumo
@@ -41623,9 +41673,8 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
       secao("Fluxo de caixa", "Sem o término estimado da obra não há como distribuir o custo que falta. Informe o término nos parâmetros da prestação.");
     } else {
       cartao("Fluxo de caixa até o término",
-        `Custo a realizar: ${moeda(fc.aRealizar)} (o custo previsto menos o pago) dividido em ${fc.mesesRestantes} ${fc.mesesRestantes === 1 ? "mês" : "meses"} até o término. Recebimento: o que entrou e, deste mês em diante, os contratos assinados (o atrasado entra no mês atual), os a assinar e a venda futura. Barras: saldo acumulado (recebimentos - custos).`,
-        alturaDoGrafico(30), (x0, y0, lg) => barras(fc.linhas.map((l) => ({ chave: l.chave, rotulo: l.rotulo, acumulado: l.acumulado })),
-          [["acumulado", "#0474f4", "Saldo positivo"], ["neg", "#b91c1c", "Saldo negativo"]].slice(0, fc.linhas.some((l) => l.acumulado < 0) ? 2 : 1), x0, y0, lg, { altura: 30, mesHoje: fc.mesHoje, sinal: true }));
+        `Custo a realizar: ${moeda(fc.aRealizar)} (o custo previsto menos o pago) dividido em ${fc.mesesRestantes} ${fc.mesesRestantes === 1 ? "mês" : "meses"} até o término. Recebimento: o que entrou e, deste mês em diante, os contratos assinados (o atrasado entra no mês atual), os a assinar e a venda futura. Barras: resultado do mês (recebimentos - custos); linha: saldo acumulado do dinheiro.`,
+        alturaDoGrafico(38), (x0, y0, lg) => graficoFluxo(fc.linhas, x0, y0, lg, fc.mesHoje));
       const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
       tabela([{ t: "Mês", w: 18 }, { t: "Custo realizado", w: 26, alinhar: "right" }, { t: "Custo a realizar", w: 26, alinhar: "right" },
         { t: "Recebido", w: 26, alinhar: "right" }, { t: "A receber previsto", w: 28, alinhar: "right" }, { t: "Resultado do mês", w: 27, alinhar: "right" }, { t: "Acumulado", w: 27, alinhar: "right" }],
@@ -42024,31 +42073,54 @@ function JanelaParametrosPrestacao({ valor, obra, aoMudar, aoCancelar, aoGerar }
 // Confirmada, gera o pacote. Voltar reabre os parâmetros; Cancelar fecha.
 function GraficoSaldoAcumulado({ linhas, mesHoje }) {
   if (!linhas || !linhas.length) return null;
-  const LARG = 40, ESPACO = 16, ALT = 120;
-  const max = Math.max(1, ...linhas.map((l) => Math.abs(l.acumulado)));
-  const temNeg = linhas.some((l) => l.acumulado < 0), temPos = linhas.some((l) => l.acumulado > 0);
-  const hPos = temNeg && temPos ? ALT * 0.62 : temNeg ? 0 : ALT, hNeg = ALT - hPos;
-  const base = 18 + hPos;
+  // barras: o resultado do mês (azul / vermelho vivo); linha: o saldo
+  // acumulado do dinheiro, com o valor em cada ponto
+  const LARG = 40, ESPACO = 16, ALT = 170, TOPO = 22;
+  const vals = linhas.reduce((t, l) => t.concat([l.resultado, l.acumulado]), []);
+  const maxPos = Math.max(0, ...vals), maxNeg = Math.max(0, ...vals.map((v) => -v));
+  const tot = Math.max(1, maxPos + maxNeg);
+  // o lado negativo tem um mínimo, senão some quando o positivo é bem maior
+  const hNeg = maxNeg > 0 ? Math.max(ALT * maxNeg / tot, 60) : 0, hPos = ALT - hNeg;
+  const base = TOPO + hPos;
+  const esc = (v) => (v >= 0 ? (maxPos ? v / maxPos * hPos : 0) : (maxNeg ? v / maxNeg * Math.max(0, hNeg - 14) : 0));
   const largura = Math.max(linhas.length * (LARG + ESPACO), 220);
-  const curto = (v) => { const a = Math.abs(v); const t = a >= 1000 ? Math.round(a / 1000) + "k" : a > 0 ? String(Math.round(a)) : ""; return v < 0 && t ? "-" + t : t; };
+  const cx = (i) => i * (LARG + ESPACO) + ESPACO / 2 + LARG / 2;
+  const curto = (v) => { const a = Math.abs(v); const t = a >= 1000 ? Math.round(a / 1000) + "k" : a > 0 ? String(Math.round(a)) : "0"; return v < 0 && a > 0 ? "-" + t : t; };
+  const VIVO = "#ef4444", NAVY = "#111827";
   return (
-    <div style={{ overflowX: "auto" }}>
-      <svg width={largura} height={ALT + 50} role="img" style={{ display: "block" }}>
-        {linhas.map((l, i) => {
-          const x = i * (LARG + ESPACO) + ESPACO / 2;
-          const v = l.acumulado;
-          const h = v > 0 ? Math.max(2, (v / max) * (hPos || ALT)) : v < 0 ? Math.max(2, (-v / max) * (hNeg || ALT)) : 0;
-          return (
-            <g key={l.chave}>
-              <title>{`${l.rotulo} — saldo acumulado ${fmtMoedaCtr(v)}`}</title>
-              {h > 0 && <rect x={x} y={v > 0 ? base - h : base} width={LARG} height={h} rx="4" fill={v < 0 ? "#b91c1c" : "#0474f4"} />}
-              <text x={x + LARG / 2} y={v >= 0 ? base - h - 5 : base + h + 12} textAnchor="middle" fontSize="10.5" fontWeight="700" fill={v < 0 ? "#b91c1c" : "#111827"}>{curto(v)}</text>
-              <text x={x + LARG / 2} y={ALT + 40} textAnchor="middle" fontSize="11" fill={l.chave === mesHoje ? "#111827" : "#4b5563"} fontWeight={l.chave === mesHoje ? 700 : 400}>{l.rotulo}</text>
-            </g>
-          );
-        })}
-        <line x1="0" y1={base + 0.5} x2={largura} y2={base + 0.5} stroke="rgba(38,36,33,0.25)" strokeWidth="1" />
-      </svg>
+    <div>
+      <div style={{ overflowX: "auto" }}>
+        <svg width={largura} height={TOPO + ALT + 34} role="img" style={{ display: "block" }}>
+          {linhas.map((l, i) => {
+            const h = Math.abs(esc(l.resultado));
+            return (
+              <g key={l.chave}>
+                <title>{`${l.rotulo} — resultado do mês ${fmtMoedaCtr(l.resultado)} · saldo acumulado ${fmtMoedaCtr(l.acumulado)}`}</title>
+                {h > 0.5 && <rect x={cx(i) - LARG * 0.42} y={l.resultado >= 0 ? base - h : base} width={LARG * 0.84} height={h} rx="4" fill={l.resultado < 0 ? VIVO : "#0474f4"} opacity="0.9" />}
+                <text x={cx(i)} y={TOPO + ALT + 22} textAnchor="middle" fontSize="11" fill={l.chave === mesHoje ? "#111827" : "#4b5563"} fontWeight={l.chave === mesHoje ? 700 : 400}>{l.rotulo}</text>
+              </g>
+            );
+          })}
+          <line x1="0" y1={base + 0.5} x2={largura} y2={base + 0.5} stroke="rgba(38,36,33,0.25)" strokeWidth="1" />
+          <polyline fill="none" stroke={NAVY} strokeWidth="2.2" strokeLinejoin="round" points={linhas.map((l, i) => `${cx(i)},${base - esc(l.acumulado)}`).join(" ")} />
+          {linhas.map((l, i) => {
+            const py = base - esc(l.acumulado);
+            const cor = l.acumulado < 0 ? VIVO : NAVY;
+            return (
+              <g key={"p" + l.chave}>
+                <circle cx={cx(i)} cy={py} r="4" fill="#fff" stroke={cor} strokeWidth="2" />
+                <text x={cx(i)} y={l.acumulado < 0 ? py + 17 : py - 9} textAnchor="middle" fontSize="10.5" fontWeight="700" fill={cor}
+                  stroke="#fff" strokeWidth="3" paintOrder="stroke">{curto(l.acumulado)}</text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 11.5, color: "#374151", marginTop: 6 }}>
+        <span><span style={{ display: "inline-block", width: 10, height: 10, background: "#0474f4", borderRadius: 2, marginRight: 5 }} />Resultado do mês (positivo)</span>
+        <span><span style={{ display: "inline-block", width: 10, height: 10, background: VIVO, borderRadius: 2, marginRight: 5 }} />Resultado do mês (negativo)</span>
+        <span><span style={{ display: "inline-block", width: 16, height: 2.5, background: NAVY, marginRight: 5, verticalAlign: "middle" }} />Saldo acumulado do dinheiro</span>
+      </div>
     </div>
   );
 }
@@ -42136,7 +42208,7 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
         {fc && (
           <div style={caixa} data-vk-previa-fluxo="1">
             {fc.erro ? titulo(++k, "Fluxo de caixa", fc.erro + " Volte aos parâmetros para informar.") : <>
-              {titulo(++k, "Fluxo de caixa até o término", `Custo a realizar: ${moeda(fc.aRealizar)} dividido em ${fc.mesesRestantes} ${fc.mesesRestantes === 1 ? "mês" : "meses"}. Barras: saldo acumulado (recebimentos − custos).`)}
+              {titulo(++k, "Fluxo de caixa até o término", `Custo a realizar: ${moeda(fc.aRealizar)} dividido em ${fc.mesesRestantes} ${fc.mesesRestantes === 1 ? "mês" : "meses"}. Barras: resultado do mês (recebimentos − custos); linha: saldo acumulado do dinheiro.`)}
               <GraficoSaldoAcumulado linhas={fc.linhas} mesHoje={fc.mesHoje} />
               <div style={{ overflowX: "auto", marginTop: 10 }}>
                 <table style={{ width: "100%", minWidth: 760, borderCollapse: "collapse" }}>
