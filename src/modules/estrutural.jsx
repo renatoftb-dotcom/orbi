@@ -1650,6 +1650,7 @@ function esDimEscada(e, params) {
   return ult;
 }
 function esDimEscadaH(e, params, h) {
+  // (e.esp: espelho; e.A: área em planta)
   const P = { ...ES_PADRAO, ...(params || {}) }, C = esConcreto(P.fck), kPa = 1000, c = ES_NBR.cobrimento.laje[P.caa] / 1000, d = h - c - 0.005, l = e.l;
   const r = { l, h, ok: true, motivos: [], g: e.g, q: e.q, viga: e.viga };
   r.Md = ES_DIM.gamaF * (e.g + e.q) * l * l / 8;
@@ -1662,6 +1663,7 @@ function esDimEscadaH(e, params, h) {
   r.flecha = { total: fi * (1 + ES_DIM.alfaF), lim: l / ES_DIM.flechaTotal };
   if (r.flecha.total > r.flecha.lim) { r.ok = false; r.motivos.push(`escada: flecha acima de ℓ/250 mesmo com ${Math.round(h * 100)} cm (ponha viga no patamar)`); }
   const larg = e.A / Math.max(0.5, l);
+  r.concreto = e.A * (h / (e.cos || 1) + (e.esp || 0.175) / 2); // laje inclinada + degraus
   r.aco = { [f.arm.d]: larg / f.arm.s * (l / (e.cos || 1) + 0.4) * esKgBarra(f.arm.d), 5: (l / (e.cos || 1) / 0.20 + 1) * larg * esKgBarra(5) };
   return r;
 }
@@ -1790,5 +1792,50 @@ function esParaOrcamento(pavs, calc) {
         ferro: { estacas: arred(g.estacas), sapatas: arred(g.blocos), arranques: arred(arr) } };
     })(),
     foraCatalogo: [...foraCatalogo],
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RESUMO DE MATERIAIS: barras por bitola e concreto, por elemento
+// ═══════════════════════════════════════════════════════════════
+// Barras de 12 m com 10% de perda, arredondadas para cima — a mesma conta do
+// orçamento de obra (orcamento-obra.jsx: teto(m ÷ 12 × 1,10)).
+const ES_BARRA = { m: 12, perda: 1.10 };
+function esResumoMateriais(pavs, calc) {
+  const { lanc, dim } = calc, grupos = [];
+  const g = (nome) => { let x = grupos.find((y) => y.nome === nome); if (!x) { x = { nome, m: {}, concreto: 0 }; grupos.push(x); } return x; };
+  const somaKg = (x, aco) => { for (const [d, kg] of Object.entries(aco || {})) if (kg > 1e-9) x.m[+d] = (x.m[+d] || 0) + kg / esKgBarra(+d); };
+  // fundação: estacas, blocos/sapatas e arranques separados
+  for (const f of dim.fundacao || []) {
+    const a = { ...f.aco };
+    if (f.estacaArm) { const A = f.estacaArm, kgL = f.n * A.n * (A.comp + 0.3) * esKgBarra(A.d), kgE = f.n * (A.comp / A.s + 1) * (Math.PI * (f.D - 0.10) + 0.10) * esKgBarra(A.estribo);
+      somaKg(g("Estacas"), { [A.d]: kgL, [A.estribo]: kgE }); a[A.d] -= kgL; a[A.estribo] -= kgE; }
+    if (f.arranque) { const b = f.arranque, hb = (f.bloco || f.sapata).h, kg = b.n * (hb - ES_FUND.cobrimento + 0.20 + 40 * b.d / 1000) * esKgBarra(b.d); somaKg(g("Arranques"), { [b.d]: kg }); a[b.d] -= kg; }
+    const gb = g(f.sapata ? "Sapatas" : "Blocos"); somaKg(gb, a); gb.concreto += f.concreto.blocos + f.concreto.sapatas;
+    g("Estacas").concreto += f.concreto.estacas;
+  }
+  dim.pavimentos.forEach((p, k) => {
+    const nome = (x) => pavs.length > 1 ? `${x} — ${pavs[k].nome || (k ? "Pavimento " + k : "Térreo")}` : x;
+    const vistos = new Set();
+    for (const v of lanc[k].vigas) {
+      const L = esDist(v.a, v.b), gv = g(v.baldrame ? "Baldrames" : nome("Vigas"));
+      gv.concreto += v.b_ * v.h * L;
+      const r = p.vigas[v.id]; if (r && !vistos.has(r.tramo)) { vistos.add(r.tramo); somaKg(gv, r.aco); }
+    }
+    for (const pl of lanc[k].pilares) { const gp = g(nome("Pilares")); gp.concreto += pl.b * pl.h * ((pl.topo != null ? pl.topo : 2.8) - (pl.base || 0)); somaKg(gp, (p.pilares[pl.id] || {}).aco); }
+    const gl = g(nome("Lajes"));
+    for (const l of lanc[k].lajes || []) gl.concreto += esAreaPoli(l.pts) * (l.concretoM2 != null ? l.concretoM2 : l.esp);
+    for (const r of p.lajes || []) if (r) somaKg(gl, r.aco);
+    for (const n of p.negativas || []) somaKg(gl, n.aco);
+    for (const e of p.escadas || []) { const ge = g(nome("Escada")); somaKg(ge, e.aco); ge.concreto += e.concreto || 0; }
+  });
+  const bitolas = [...new Set(grupos.flatMap((x) => Object.keys(x.m).map(Number)))].sort((a, b) => a - b);
+  const barras = (m) => Math.ceil(m / ES_BARRA.m * ES_BARRA.perda - 1e-9);
+  const total = {}; for (const x of grupos) for (const [d, m] of Object.entries(x.m)) total[d] = (total[d] || 0) + m;
+  return {
+    grupos: grupos.filter((x) => x.concreto > 1e-6 || Object.keys(x.m).length).map((x) => ({ ...x, barras: Object.fromEntries(Object.entries(x.m).map(([d, m]) => [d, barras(m)])) })),
+    bitolas,
+    aco: bitolas.map((d) => ({ d, aco: d <= 5 ? "CA-60" : "CA-50", m: total[d], barras: barras(total[d]), kg: barras(total[d]) * ES_BARRA.m * esKgBarra(d) })),
+    concreto: grupos.reduce((t, x) => t + x.concreto, 0),
   };
 }

@@ -8,7 +8,7 @@ import assert from "assert";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(join(__dirname, "src", "modules", "estrutural.jsx"), "utf-8");
-const M = new Function(`${src}\nreturn { esLancarPavimentos, esDescidaCargas, esTopoPavimento, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao, esLinhaContinua, esPaineisLaje, esDimViga, esDimPilar, esDimensionar, esMRd, esConcreto, esPlacaApoiada, esDimLaje, esCalcularEstrutura, esParaOrcamento, esDimFundacao, esFundacaoObra, esPadmEstaca, esCargaEscada };`)();
+const M = new Function(`${src}\nreturn { esLancarPavimentos, esDescidaCargas, esTopoPavimento, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao, esLinhaContinua, esPaineisLaje, esDimViga, esDimPilar, esDimensionar, esMRd, esConcreto, esPlacaApoiada, esDimLaje, esCalcularEstrutura, esParaOrcamento, esDimFundacao, esFundacaoObra, esPadmEstaca, esCargaEscada, esResumoMateriais };`)();
 
 let ok = 0, falhou = 0;
 const t = (nome, fn) => { try { fn(); ok++; } catch (e) { falhou++; console.log("FALHOU:", nome, "\n ", e.message); } };
@@ -402,6 +402,15 @@ t("fundação: estacas pela carga admissível, um diâmetro só na obra; sapata 
   // sem sondagem: só atrito lateral (ponta da broca não conta) → ~1 t por metro em Ø20–25
   assert.ok(Math.abs(M.esPadmEstaca(0.25, 4) - Math.PI * 0.25 * 4 * 30 / 2) < 1e-9);
   assert.ok(Math.abs(M.esPadmEstaca(0.20, 1) - 9.42) < 0.01 && Math.abs(M.esPadmEstaca(0.25, 1) - 11.78) < 0.01);
+});
+t("resumo de materiais: barras de 12 m com 10% de perda e o aço todo do cálculo", () => {
+  const caixa = [W(P(0, 0), P(5, 0)), W(P(5, 0), P(5, 4)), W(P(5, 4), P(0, 4)), W(P(0, 4), P(0, 0))];
+  const pavs = [{ paredes: caixa, areas: [{ tipo: "laje", pts: [P(0, 0), P(5, 0), P(5, 4), P(0, 4)], esp: 0.12, carga: { tipo: "macica", uso: "residencial" } }], nivel: 0, usoPadrao: "residencial" }];
+  const c = M.esCalcularEstrutura(pavs, { vaoMax: 6 }), r = M.esResumoMateriais(pavs, c);
+  for (const a of r.aco) assert.strictEqual(a.barras, Math.ceil(a.m / 12 * 1.1 - 1e-9));
+  const kgCalc = Object.values(c.dim.aco).reduce((t, v) => t + v, 0), kgM = r.aco.reduce((t, a) => t + a.m * { 5: 0.154, 6.3: 0.245, 8: 0.395, 10: 0.617, 12.5: 0.963, 16: 1.578, 20: 2.466, 25: 3.853 }[a.d], 0);
+  assert.ok(Math.abs(kgCalc - kgM) < 0.01, `${kgCalc} × ${kgM}`);
+  assert.ok(r.grupos.some((g) => g.nome === "Estacas" || g.nome === "Sapatas") && r.concreto > 0);
 });
 console.log(`${ok} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

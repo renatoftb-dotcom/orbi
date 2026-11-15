@@ -2332,6 +2332,18 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   }, [estPorPav]);
   // estrutura calculada → campos do orçamento de obra (colunas, vigas de respaldo, baldrames)
   const estOrc = useMemo(() => { const c = estPorPav._calc; if (!c) return null; try { return esParaOrcamento(c.lista, c); } catch (err) { return null; } }, [estPorPav]);
+  // resumo de aço (barras de 12 m por bitola) e concreto por elemento — Tabelas
+  const estResumo = useMemo(() => { const c = estPorPav._calc; if (!c) return null; try { return esResumoMateriais(c.lista, c); } catch (err) { return null; } }, [estPorPav]);
+  const [copiouResumo, setCopiouResumo] = useState(false);
+  const copiarResumo = () => {
+    if (!estResumo) return;
+    const f = (x, k = 2) => tpFmt(x, k), L = [["Aço", "Bitola", "Metros", "Barras 12 m", "kg"].join("\t"), ...estResumo.aco.map((a) => [a.aco, `φ ${String(a.d).replace(".", ",")} mm`, f(a.m, 0), a.barras, f(a.kg, 0)].join("\t")),
+      ["", "Total", "", estResumo.aco.reduce((t, a) => t + a.barras, 0), f(estResumo.aco.reduce((t, a) => t + a.kg, 0), 0)].join("\t"), "",
+      ["Elemento", "Concreto (m³)", ...estResumo.bitolas.map((d) => `φ ${String(d).replace(".", ",")} (barras)`)].join("\t"),
+      ...estResumo.grupos.map((g) => [g.nome, f(g.concreto), ...estResumo.bitolas.map((d) => g.barras[d] || "")].join("\t")),
+      ["Total", f(estResumo.concreto), ...estResumo.bitolas.map(() => "")].join("\t")];
+    try { navigator.clipboard.writeText(L.join("\n")).then(() => { setCopiouResumo(true); setTimeout(() => setCopiouResumo(false), 2000); }); } catch (err) { /* sem área de transferência */ }
+  };
   const convObra = () => tpComEstrutura(tpDesenhoParaObraPavs(pavsOrd.map((p) => ({ ...dadosDe(p.id), nome: p.nome }))), estOrc);
   // pavimento logo abaixo do ativo (referência em cinza na planta)
   const pavAbaixo = (() => { const k = pavsOrd.findIndex((p) => p.id === pavAtivo); return k > 0 ? pavsOrd[k - 1] : null; })();
@@ -6322,7 +6334,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     </button>
   );
   const botaoTabelas = (
-    <button aria-label={tabelasAberto ? "Fechar as tabelas" : "Tabelas: esquadrias e ambientes"} aria-expanded={tabelasAberto} title="Tabelas: esquadrias e ambientes"
+    <button aria-label={tabelasAberto ? "Fechar as tabelas" : "Tabelas: esquadrias, ambientes e estrutura"} aria-expanded={tabelasAberto} title="Tabelas: esquadrias, ambientes e estrutura"
       onClick={() => { setTabelasAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setExibirAberto(false); setObraAberta(false); setEstAberta(false); setMaisAberto(false); }}
       style={{ width: 32, height: 32, borderRadius: "50%", border: `1px solid ${tabelasAberto ? TP_AZUL : "#e5e7eb"}`, background: tabelasAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: tabelasAberto ? TP_AZUL : "#111827" }}>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M2 6h12M2 9.5h12M6.5 6v7.5" /></svg>
@@ -6798,6 +6810,30 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 </div>
               );
             })}
+          </div>
+      ))}
+      {estResumo && estResumo.aco.length > 0 && dobra("estmat", "Estrutura: aço e concreto", `${tpFmt(estResumo.aco.reduce((t, a) => t + a.kg, 0), 0)} kg · ${tpFmt(estResumo.concreto, 1)} m³`, (
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", columnGap: 12, fontSize: 11, color: "#9ca3af", padding: "4px 0 2px" }}><span>Bitola</span><span style={{ textAlign: "right" }}>Barras 12 m</span><span style={{ textAlign: "right", minWidth: 48 }}>kg</span></div>
+            {estResumo.aco.map((a) => (
+              <div key={a.d} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", columnGap: 12, padding: "5px 0", borderBottom: "1px solid #f0f2f5", fontSize: 13, alignItems: "baseline" }}>
+                <span>φ {esFmtBit(a.d)} mm<span style={{ display: "block", fontSize: 11, color: "#9ca3af" }}>{a.aco} · {tpFmt(a.m, 0)} m</span></span>
+                <span style={{ ...numQ, textAlign: "right" }}>{a.barras}</span><span style={{ ...numQ, textAlign: "right", minWidth: 48 }}>{tpFmt(a.kg, 0)}</span>
+              </div>
+            ))}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", columnGap: 12, padding: "6px 0", borderBottom: "1px solid #f0f2f5", fontSize: 13, fontWeight: 600 }}>
+              <span>Total</span><span style={{ ...numQ, fontWeight: 600, textAlign: "right" }}>{estResumo.aco.reduce((t, a) => t + a.barras, 0)}</span><span style={{ ...numQ, fontWeight: 600, textAlign: "right", minWidth: 48 }}>{tpFmt(estResumo.aco.reduce((t, a) => t + a.kg, 0), 0)}</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", columnGap: 12, fontSize: 11, color: "#9ca3af", padding: "10px 0 2px" }}><span>Elemento</span><span style={{ textAlign: "right" }}>Concreto</span></div>
+            {estResumo.grupos.map((g) => (
+              <div key={g.nome} style={{ padding: "5px 0", borderBottom: "1px solid #f0f2f5", fontSize: 13 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}><span>{g.nome}</span><span style={numQ}>{g.concreto > 0.005 ? `${tpFmt(g.concreto)} m³` : "—"}</span></div>
+                {Object.keys(g.barras).length > 0 && <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 1 }}>{Object.entries(g.barras).sort((x, y) => +x[0] - +y[0]).map(([d, n]) => `${n} φ${esFmtBit(+d)}`).join(" · ")}</div>}
+              </div>
+            ))}
+            <div style={{ ...linhaQ, fontWeight: 600 }}><span>Concreto total</span><span style={numQ}>{tpFmt(estResumo.concreto)} m³</span></div>
+            <button onClick={copiarResumo} style={{ ...btn, width: "100%", minHeight: 30, fontSize: 12.5, marginTop: 8 }}>{copiouResumo ? "Copiado" : "Copiar a tabela (para colar no Excel)"}</button>
+            <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>Barras de 12 m com 10% de perda, arredondadas para cima — a mesma conta do orçamento de obra. Concreto sem perda. Lajes pré-fabricadas: só o concreto da capa e das nervuras; vigota e treliça vêm do fabricante.</div>
           </div>
       ))}
         </div>

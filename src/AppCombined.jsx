@@ -65595,7 +65595,7 @@ function sincronizarEscopoComEtapas(prev, etapasPct) {
 }
 // ── Escopo: fim da parte pura ──────────────────────────────────
 
-function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, propostaReadOnly, propostaSnapshot, lockEdicao, templateId, conferenciaBase, aoIrEtapa }) {
+function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, propostaReadOnly, propostaSnapshot, lockEdicao, templateId, conferenciaBase, aoIrEtapa, aoEditarTudo }) {
   // NOTA: NÃO fazer `if (!data) return null` aqui — os hooks abaixo precisam ser
   // chamados em todo render (regra do React). Em vez disso, usamos optional chaining
   // e defaults em cada acesso a `data.xxx` e retornamos null só DEPOIS dos hooks.
@@ -66904,6 +66904,13 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
           <button onClick={voltar} style={{ background:"none", border:"2px solid #d1d5db", borderRadius: 12, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:"#6b7280" }}>
             {rotuloVoltar}
           </button>
+          <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
+          {aoEditarTudo && !lockEdicao && !propostaInfo && (
+            <button type="button" data-vk-editar-orcamento="1" onClick={aoEditarTudo}
+              style={{ background:"#fff", border:"1px solid rgba(38,36,33,0.2)", borderRadius: 12, padding:"7px 14px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit", color:"#262421" }}>
+              ✎ Editar
+            </button>
+          )}
           {(propostaInfo || lockEdicao) ? (
             <button data-tutorial-id="botao-gerar-pdf" onClick={handlePdf} style={{ background:"#111", border:"none", borderRadius: 12, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
               Gerar PDF
@@ -66915,6 +66922,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
               {onSalvarProposta ? "Salvar e Gerar PDF" : "Gerar PDF"}
             </button>
           )}
+          </div>
         </div>
 
         <div style={D.page} className={`${lockEdicao ? "proposta-locked lockEdicao-active" : ""}`}>
@@ -67521,6 +67529,13 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
           <button onClick={voltar} style={{ background:"none", border:`1px solid ${LN}`, borderRadius: 12, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:MD }}>
             {rotuloVoltar}
           </button>
+          <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
+          {aoEditarTudo && !lockEdicao && !propostaInfo && (
+            <button type="button" data-vk-editar-orcamento="1" onClick={aoEditarTudo}
+              style={{ background:"#fff", border:"1px solid rgba(38,36,33,0.2)", borderRadius: 12, padding:"7px 14px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit", color:"#262421" }}>
+              ✎ Editar
+            </button>
+          )}
           {(propostaInfo || lockEdicao) ? (
             <button data-tutorial-id="botao-gerar-pdf" onClick={handlePdf} style={{ background:C, border:"none", borderRadius: 12, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
               Gerar PDF
@@ -67532,6 +67547,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
               {onSalvarProposta ? "Salvar e Gerar PDF" : "Gerar PDF"}
             </button>
           )}
+          </div>
         </div>
 
         {/* Modal de confirmação */}
@@ -68324,7 +68340,7 @@ function TplInputMoeda({ valor, onChange, style, ...rest }) {
 // Componente principal
 // ─────────────────────────────────────────────────────────────
 
-function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
+function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular, modoEditar }) {
   const safeData = data || {};
   const esc = escritorio || {};
 
@@ -68734,17 +68750,23 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M9 11L5 7l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          Voltar
+          {modoEditar ? "Cancelar" : "Voltar"}
         </button>
         <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8 }}>
-          VICKE · Template de edição
+          {modoEditar ? "VICKE · Editar o orçamento" : "VICKE · Template de edição"}
         </div>
         <div style={{ fontSize: 22, fontWeight: 300, color: "#262421", letterSpacing: -0.4, lineHeight: 1.2 }}>
-          Ajustes finais antes de gerar o orçamento
+          {modoEditar ? "Editar o orçamento completo" : "Ajustes finais antes de gerar o orçamento"}
         </div>
+        {modoEditar ? (
+        <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.55, marginTop: 10, maxWidth: 600 }}>
+          Edite os textos e valores da proposta. Ao salvar, a proposta é refeita com as alterações; Cancelar volta sem mudar nada.
+        </div>
+        ) : (
         <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.55, marginTop: 10, maxWidth: 600 }}>
           Os dados do projeto já estão preenchidos. Edite livremente os textos abaixo — escopo, prazos, não inclusos e termo de aceite vêm pré-preenchidos com o conteúdo padrão da proposta. Você pode pular esta etapa pra usar os textos padrão sem alterações.
         </div>
+        )}
       </div>
 
       {/* Grid: sidebar + conteúdo. Em mobile (<720px), sidebar vira tabs
@@ -68845,7 +68867,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           value={descricaoProjeto}
           onChange={e => setDescricaoProjeto(e.target.value)}
           onKeyDown={e => tplHandleEnterBullet(e, descricaoProjeto, setDescricaoProjeto)}
-          placeholder="Construção nova de uma residência..."
+          placeholder="Digite a descrição do projeto"
           style={{ ...textareaBase, minHeight: 90 }}
           rows={3}
         />
@@ -68863,7 +68885,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           value={apresentacao}
           onChange={e => setApresentacao(e.target.value)}
           onKeyDown={e => tplHandleEnterBullet(e, apresentacao, setApresentacao)}
-          placeholder="Olá, [nome]! Apresentamos esta proposta para..."
+          placeholder="Digite a apresentação ao cliente"
           style={{ ...textareaBase, minHeight: 100 }}
           rows={4}
         />
@@ -68878,7 +68900,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           value={observacoes}
           onChange={e => setObservacoes(e.target.value)}
           onKeyDown={e => tplHandleEnterBullet(e, observacoes, setObservacoes)}
-          placeholder="Considerações finais, prazos especiais, condições particulares..."
+          placeholder="Digite as observações finais"
           style={{ ...textareaBase, minHeight: 100 }}
           rows={4}
         />
@@ -69522,24 +69544,26 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
         display: "flex", justifyContent: "space-between", alignItems: "center",
         marginTop: 24, gap: 16, flexWrap: "wrap",
       }}>
+        {modoEditar ? <span /> : (
         <button
           className="vk-tpl-btn-ghost"
           onClick={onPular}
           style={btnGhost}>
           Pular esta etapa
         </button>
+        )}
         <div style={{ display: "flex", gap: 10 }}>
           <button
             className="vk-tpl-btn-secondary"
             onClick={onVoltar}
             style={btnSecondary}>
-            Voltar
+            {modoEditar ? "Cancelar" : "Voltar"}
           </button>
           <button
             className="vk-tpl-btn-primary"
             onClick={handleProsseguir}
             style={btnPrimary}>
-            Gerar orçamento
+            {modoEditar ? "Salvar alterações" : "Gerar orçamento"}
           </button>
         </div>
       </div>
@@ -76520,6 +76544,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   // Persistido em orcBase.templateId (snapshot) ou começa null (mostra tela
   // de escolha). Pulado em modo read-only ou quando já foi escolhido antes.
   const [modeloEscolhido, setModeloEscolhido] = useState(orcBase?.templateId || null);
+  // Edição do orçamento completo (textos e valores): só pelo botão Editar
+  // da proposta gerada, numa janela por cima dela.
+  const [editandoTudo, setEditandoTudo] = useState(false);
   // previewRemountKey: incrementa a cada vez que o usuário sai da Etapa 5 pra
   // o Preview. Isso força o React a remontar o PropostaPreview (e seus
   // useState internos), garantindo que valores stale não persistam quando o
@@ -78395,7 +78422,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   });
   const passoAtual = !propostaData ? (definicoesOk && referencia ? 2 : 1)
     : !etapaPagamentoConfirmada ? 3
-    : !templateEdicaoConfirmada ? 4 : 5;
+    : 5;
   // Voltar a uma etapa já feita, sem perder o que foi preenchido nas outras.
   const irParaEtapa = (n) => {
     if (n <= 2) { setEtapaPagamentoConfirmada(false); setPropostaData(null); return; }
@@ -78680,43 +78707,36 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       </>);
     }
 
-    // Template de Edição (Fase 4) — tela intermediária entre Etapa 5 e Preview.
-    // Pulada em modo read-only (templateEdicaoConfirmada já vem true) e quando
-    // o usuário clicou "Pular esta etapa" no template anterior.
-    if (!templateEdicaoConfirmada) {
-      // Mescla textos + valores atuais em liveData pro template re-popular
-      // ao reabrir (preserva edições anteriores).
-      const liveDataComTemplate = {
-        ...liveData,
-        template: {
-          textos: templateTextos || undefined,
-          valores: templateValores || undefined,
-          formaPagamento: templateFormaPagamento || undefined,
-        },
-      };
-      return (<>
-        {etapasEl}
+    // Template de Edição (Fase 4): não é mais etapa do fluxo. Abre só pelo
+    // botão "Editar" da proposta gerada, numa janela por cima do documento
+    // (Cancelar fecha sem mexer; Salvar refaz a proposta com os textos).
+    const liveDataComTemplate = {
+      ...liveData,
+      template: {
+        textos: templateTextos || undefined,
+        valores: templateValores || undefined,
+        formaPagamento: templateFormaPagamento || undefined,
+      },
+    };
+    const janelaEditarTudo = editandoTudo ? (
+      <div role="dialog" aria-modal="true" aria-label="Editar o orçamento" data-vk-janela-editar-orcamento="1"
+        style={{ position: "fixed", inset: 0, zIndex: 1000, background: "#f5f7fa", overflowY: "auto" }}>
         <TemplateEdicao
+          modoEditar
           data={liveDataComTemplate}
           escritorio={esc}
-          onVoltar={() => {
-            // Volta pra Etapa 5 (Forma de Pagamento)
-            setEtapaPagamentoConfirmada(false);
-          }}
+          onVoltar={() => setEditandoTudo(false)}
+          onPular={() => setEditandoTudo(false)}
           onProsseguir={(payload) => {
-            // payload = { textos, valores, formaPagamento } — Fase 6b/6c/6d.1
             setTemplateTextos(payload.textos);
             setTemplateValores(payload.valores);
             if (payload.formaPagamento) setTemplateFormaPagamento(payload.formaPagamento);
-            setTemplateEdicaoConfirmada(true);
-          }}
-          onPular={() => {
-            // Avança sem salvar — modelo usa defaults internos
-            setTemplateEdicaoConfirmada(true);
+            setPreviewRemountKey((k) => k + 1);
+            setEditandoTudo(false);
           }}
         />
-      </>);
-    }
+      </div>
+    ) : null;
 
     // Componente do modelo escolhido pela empresa (esc.modelo_default).
     // Fallback pro Padrão quando não definido. Permite que cada escritório
@@ -78755,7 +78775,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       lockEdicao={propostaReadOnlyForce}
       conferenciaBase={mostrarEtapas ? conferencia : null}
       aoIrEtapa={irParaEtapa}
-    /></>;
+      aoEditarTudo={propostaReadOnlyForce ? null : () => setEditandoTudo(true)}
+    />{janelaEditarTudo}</>;
   }
 
   return (
@@ -90764,6 +90785,7 @@ function esDimEscada(e, params) {
   return ult;
 }
 function esDimEscadaH(e, params, h) {
+  // (e.esp: espelho; e.A: área em planta)
   const P = { ...ES_PADRAO, ...(params || {}) }, C = esConcreto(P.fck), kPa = 1000, c = ES_NBR.cobrimento.laje[P.caa] / 1000, d = h - c - 0.005, l = e.l;
   const r = { l, h, ok: true, motivos: [], g: e.g, q: e.q, viga: e.viga };
   r.Md = ES_DIM.gamaF * (e.g + e.q) * l * l / 8;
@@ -90776,6 +90798,7 @@ function esDimEscadaH(e, params, h) {
   r.flecha = { total: fi * (1 + ES_DIM.alfaF), lim: l / ES_DIM.flechaTotal };
   if (r.flecha.total > r.flecha.lim) { r.ok = false; r.motivos.push(`escada: flecha acima de ℓ/250 mesmo com ${Math.round(h * 100)} cm (ponha viga no patamar)`); }
   const larg = e.A / Math.max(0.5, l);
+  r.concreto = e.A * (h / (e.cos || 1) + (e.esp || 0.175) / 2); // laje inclinada + degraus
   r.aco = { [f.arm.d]: larg / f.arm.s * (l / (e.cos || 1) + 0.4) * esKgBarra(f.arm.d), 5: (l / (e.cos || 1) / 0.20 + 1) * larg * esKgBarra(5) };
   return r;
 }
@@ -90904,6 +90927,51 @@ function esParaOrcamento(pavs, calc) {
         ferro: { estacas: arred(g.estacas), sapatas: arred(g.blocos), arranques: arred(arr) } };
     })(),
     foraCatalogo: [...foraCatalogo],
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RESUMO DE MATERIAIS: barras por bitola e concreto, por elemento
+// ═══════════════════════════════════════════════════════════════
+// Barras de 12 m com 10% de perda, arredondadas para cima — a mesma conta do
+// orçamento de obra (orcamento-obra.jsx: teto(m ÷ 12 × 1,10)).
+const ES_BARRA = { m: 12, perda: 1.10 };
+function esResumoMateriais(pavs, calc) {
+  const { lanc, dim } = calc, grupos = [];
+  const g = (nome) => { let x = grupos.find((y) => y.nome === nome); if (!x) { x = { nome, m: {}, concreto: 0 }; grupos.push(x); } return x; };
+  const somaKg = (x, aco) => { for (const [d, kg] of Object.entries(aco || {})) if (kg > 1e-9) x.m[+d] = (x.m[+d] || 0) + kg / esKgBarra(+d); };
+  // fundação: estacas, blocos/sapatas e arranques separados
+  for (const f of dim.fundacao || []) {
+    const a = { ...f.aco };
+    if (f.estacaArm) { const A = f.estacaArm, kgL = f.n * A.n * (A.comp + 0.3) * esKgBarra(A.d), kgE = f.n * (A.comp / A.s + 1) * (Math.PI * (f.D - 0.10) + 0.10) * esKgBarra(A.estribo);
+      somaKg(g("Estacas"), { [A.d]: kgL, [A.estribo]: kgE }); a[A.d] -= kgL; a[A.estribo] -= kgE; }
+    if (f.arranque) { const b = f.arranque, hb = (f.bloco || f.sapata).h, kg = b.n * (hb - ES_FUND.cobrimento + 0.20 + 40 * b.d / 1000) * esKgBarra(b.d); somaKg(g("Arranques"), { [b.d]: kg }); a[b.d] -= kg; }
+    const gb = g(f.sapata ? "Sapatas" : "Blocos"); somaKg(gb, a); gb.concreto += f.concreto.blocos + f.concreto.sapatas;
+    g("Estacas").concreto += f.concreto.estacas;
+  }
+  dim.pavimentos.forEach((p, k) => {
+    const nome = (x) => pavs.length > 1 ? `${x} — ${pavs[k].nome || (k ? "Pavimento " + k : "Térreo")}` : x;
+    const vistos = new Set();
+    for (const v of lanc[k].vigas) {
+      const L = esDist(v.a, v.b), gv = g(v.baldrame ? "Baldrames" : nome("Vigas"));
+      gv.concreto += v.b_ * v.h * L;
+      const r = p.vigas[v.id]; if (r && !vistos.has(r.tramo)) { vistos.add(r.tramo); somaKg(gv, r.aco); }
+    }
+    for (const pl of lanc[k].pilares) { const gp = g(nome("Pilares")); gp.concreto += pl.b * pl.h * ((pl.topo != null ? pl.topo : 2.8) - (pl.base || 0)); somaKg(gp, (p.pilares[pl.id] || {}).aco); }
+    const gl = g(nome("Lajes"));
+    for (const l of lanc[k].lajes || []) gl.concreto += esAreaPoli(l.pts) * (l.concretoM2 != null ? l.concretoM2 : l.esp);
+    for (const r of p.lajes || []) if (r) somaKg(gl, r.aco);
+    for (const n of p.negativas || []) somaKg(gl, n.aco);
+    for (const e of p.escadas || []) { const ge = g(nome("Escada")); somaKg(ge, e.aco); ge.concreto += e.concreto || 0; }
+  });
+  const bitolas = [...new Set(grupos.flatMap((x) => Object.keys(x.m).map(Number)))].sort((a, b) => a - b);
+  const barras = (m) => Math.ceil(m / ES_BARRA.m * ES_BARRA.perda - 1e-9);
+  const total = {}; for (const x of grupos) for (const [d, m] of Object.entries(x.m)) total[d] = (total[d] || 0) + m;
+  return {
+    grupos: grupos.filter((x) => x.concreto > 1e-6 || Object.keys(x.m).length).map((x) => ({ ...x, barras: Object.fromEntries(Object.entries(x.m).map(([d, m]) => [d, barras(m)])) })),
+    bitolas,
+    aco: bitolas.map((d) => ({ d, aco: d <= 5 ? "CA-60" : "CA-50", m: total[d], barras: barras(total[d]), kg: barras(total[d]) * ES_BARRA.m * esKgBarra(d) })),
+    concreto: grupos.reduce((t, x) => t + x.concreto, 0),
   };
 }
 
@@ -93246,6 +93314,18 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   }, [estPorPav]);
   // estrutura calculada → campos do orçamento de obra (colunas, vigas de respaldo, baldrames)
   const estOrc = useMemo(() => { const c = estPorPav._calc; if (!c) return null; try { return esParaOrcamento(c.lista, c); } catch (err) { return null; } }, [estPorPav]);
+  // resumo de aço (barras de 12 m por bitola) e concreto por elemento — Tabelas
+  const estResumo = useMemo(() => { const c = estPorPav._calc; if (!c) return null; try { return esResumoMateriais(c.lista, c); } catch (err) { return null; } }, [estPorPav]);
+  const [copiouResumo, setCopiouResumo] = useState(false);
+  const copiarResumo = () => {
+    if (!estResumo) return;
+    const f = (x, k = 2) => tpFmt(x, k), L = [["Aço", "Bitola", "Metros", "Barras 12 m", "kg"].join("\t"), ...estResumo.aco.map((a) => [a.aco, `φ ${String(a.d).replace(".", ",")} mm`, f(a.m, 0), a.barras, f(a.kg, 0)].join("\t")),
+      ["", "Total", "", estResumo.aco.reduce((t, a) => t + a.barras, 0), f(estResumo.aco.reduce((t, a) => t + a.kg, 0), 0)].join("\t"), "",
+      ["Elemento", "Concreto (m³)", ...estResumo.bitolas.map((d) => `φ ${String(d).replace(".", ",")} (barras)`)].join("\t"),
+      ...estResumo.grupos.map((g) => [g.nome, f(g.concreto), ...estResumo.bitolas.map((d) => g.barras[d] || "")].join("\t")),
+      ["Total", f(estResumo.concreto), ...estResumo.bitolas.map(() => "")].join("\t")];
+    try { navigator.clipboard.writeText(L.join("\n")).then(() => { setCopiouResumo(true); setTimeout(() => setCopiouResumo(false), 2000); }); } catch (err) { /* sem área de transferência */ }
+  };
   const convObra = () => tpComEstrutura(tpDesenhoParaObraPavs(pavsOrd.map((p) => ({ ...dadosDe(p.id), nome: p.nome }))), estOrc);
   // pavimento logo abaixo do ativo (referência em cinza na planta)
   const pavAbaixo = (() => { const k = pavsOrd.findIndex((p) => p.id === pavAtivo); return k > 0 ? pavsOrd[k - 1] : null; })();
@@ -97236,7 +97316,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
     </button>
   );
   const botaoTabelas = (
-    <button aria-label={tabelasAberto ? "Fechar as tabelas" : "Tabelas: esquadrias e ambientes"} aria-expanded={tabelasAberto} title="Tabelas: esquadrias e ambientes"
+    <button aria-label={tabelasAberto ? "Fechar as tabelas" : "Tabelas: esquadrias, ambientes e estrutura"} aria-expanded={tabelasAberto} title="Tabelas: esquadrias, ambientes e estrutura"
       onClick={() => { setTabelasAberto((x) => !x); setFerrAbertoM(false); setPavAbertoM(false); setExibirAberto(false); setObraAberta(false); setEstAberta(false); setMaisAberto(false); }}
       style={{ width: 32, height: 32, borderRadius: "50%", border: `1px solid ${tabelasAberto ? TP_AZUL : "#e5e7eb"}`, background: tabelasAberto ? "#eef5ff" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, color: tabelasAberto ? TP_AZUL : "#111827" }}>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M2 6h12M2 9.5h12M6.5 6v7.5" /></svg>
@@ -97712,6 +97792,30 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 </div>
               );
             })}
+          </div>
+      ))}
+      {estResumo && estResumo.aco.length > 0 && dobra("estmat", "Estrutura: aço e concreto", `${tpFmt(estResumo.aco.reduce((t, a) => t + a.kg, 0), 0)} kg · ${tpFmt(estResumo.concreto, 1)} m³`, (
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", columnGap: 12, fontSize: 11, color: "#9ca3af", padding: "4px 0 2px" }}><span>Bitola</span><span style={{ textAlign: "right" }}>Barras 12 m</span><span style={{ textAlign: "right", minWidth: 48 }}>kg</span></div>
+            {estResumo.aco.map((a) => (
+              <div key={a.d} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", columnGap: 12, padding: "5px 0", borderBottom: "1px solid #f0f2f5", fontSize: 13, alignItems: "baseline" }}>
+                <span>φ {esFmtBit(a.d)} mm<span style={{ display: "block", fontSize: 11, color: "#9ca3af" }}>{a.aco} · {tpFmt(a.m, 0)} m</span></span>
+                <span style={{ ...numQ, textAlign: "right" }}>{a.barras}</span><span style={{ ...numQ, textAlign: "right", minWidth: 48 }}>{tpFmt(a.kg, 0)}</span>
+              </div>
+            ))}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", columnGap: 12, padding: "6px 0", borderBottom: "1px solid #f0f2f5", fontSize: 13, fontWeight: 600 }}>
+              <span>Total</span><span style={{ ...numQ, fontWeight: 600, textAlign: "right" }}>{estResumo.aco.reduce((t, a) => t + a.barras, 0)}</span><span style={{ ...numQ, fontWeight: 600, textAlign: "right", minWidth: 48 }}>{tpFmt(estResumo.aco.reduce((t, a) => t + a.kg, 0), 0)}</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", columnGap: 12, fontSize: 11, color: "#9ca3af", padding: "10px 0 2px" }}><span>Elemento</span><span style={{ textAlign: "right" }}>Concreto</span></div>
+            {estResumo.grupos.map((g) => (
+              <div key={g.nome} style={{ padding: "5px 0", borderBottom: "1px solid #f0f2f5", fontSize: 13 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}><span>{g.nome}</span><span style={numQ}>{g.concreto > 0.005 ? `${tpFmt(g.concreto)} m³` : "—"}</span></div>
+                {Object.keys(g.barras).length > 0 && <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 1 }}>{Object.entries(g.barras).sort((x, y) => +x[0] - +y[0]).map(([d, n]) => `${n} φ${esFmtBit(+d)}`).join(" · ")}</div>}
+              </div>
+            ))}
+            <div style={{ ...linhaQ, fontWeight: 600 }}><span>Concreto total</span><span style={numQ}>{tpFmt(estResumo.concreto)} m³</span></div>
+            <button onClick={copiarResumo} style={{ ...btn, width: "100%", minHeight: 30, fontSize: 12.5, marginTop: 8 }}>{copiouResumo ? "Copiado" : "Copiar a tabela (para colar no Excel)"}</button>
+            <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>Barras de 12 m com 10% de perda, arredondadas para cima — a mesma conta do orçamento de obra. Concreto sem perda. Lajes pré-fabricadas: só o concreto da capa e das nervuras; vigota e treliça vêm do fabricante.</div>
           </div>
       ))}
         </div>
