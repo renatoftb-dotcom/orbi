@@ -90460,7 +90460,7 @@ function esDimPilar(p, N, l, params) {
     r.direcoes.push({ h: hd, le, lam, M1min, M2, Md, nu });
   }
   r.AsMin = AsMin; r.As = As; r.barras = esBarrasPilar(As, b);
-  if (!r.barras) { r.ok = false; r.motivos.push("armadura não cabe com φ ≤ b/8"); }
+  if (!r.barras) { r.ok = false; r.motivos.push("armadura não cabe com Ø ≤ b/8"); }
   if (r.barras) {
     // estribo: φt ≥ 5 e φl/4; s ≤ 20 cm, menor dimensão e 12φl (CA-50) — 18.4.3
     const dt = Math.max(5, r.barras.d / 4) <= 5 ? 5 : 6.3, s = Math.floor(Math.min(0.20, b, 12 * r.barras.d / 1000) * 100) / 100;
@@ -91981,9 +91981,9 @@ function tpMesclarProjetoObra(ant, conv, projetoId) {
 }
 // fundação de um pilar em uma linha (painel e card do pilar)
 function tpTextoFundacao(f) {
-  if (f.sapata) return `sapata ${tpFmt(f.sapata.L)} × ${tpFmt(f.sapata.B)} × ${tpFmt(f.sapata.h)} m${f.malha ? ` · φ${String(f.malha[0].d).replace(".", ",")} c/${Math.round(f.malha[0].s * 100)}` : ""}`;
+  if (f.sapata) return `sapata ${tpFmt(f.sapata.L)} × ${tpFmt(f.sapata.B)} × ${tpFmt(f.sapata.h)} m${f.malha ? ` · Ø${String(f.malha[0].d).replace(".", ",")} c/${Math.round(f.malha[0].s * 100)}` : ""}`;
   if (!f.bloco) return "—";
-  return `${f.n} estaca${f.n > 1 ? "s" : ""} Ø${Math.round(f.D * 100)} × ${tpFmt(f.L, 1)} m · bloco ${tpFmt(f.bloco.L)} × ${tpFmt(f.bloco.B)} × ${tpFmt(f.bloco.h)} m${f.tirante ? ` · ${f.tirante.n} φ${String(f.tirante.d).replace(".", ",")}` : ""}`;
+  return `${f.n} estaca${f.n > 1 ? "s" : ""} Ø${Math.round(f.D * 100)} × ${tpFmt(f.L, 1)} m · bloco ${tpFmt(f.bloco.L)} × ${tpFmt(f.bloco.B)} × ${tpFmt(f.bloco.h)} m${f.tirante ? ` · ${f.tirante.n} Ø${String(f.tirante.d).replace(".", ",")}` : ""}`;
 }
 // escadas do pavimento para o cálculo estrutural (estrutural.jsx): contorno
 // (furo da laje), lado onde chega em cima, espelho, piso e vão em planta
@@ -92022,7 +92022,7 @@ function tpComEstrutura(conv, eo) {
     ...(eo.vigaRespaldoPav1 && pr.pav1 ? [["Estrutura — vigas de cima", `${tpFmt(eo.vigaRespaldoPav1.concreto)} m³ · ${tpFmt(m(eo.vigaRespaldoPav1.ferro), 0)} m de barra`]] : []),
     ["Estrutura — baldrames", `${tpFmt(eo.baldrames.concreto)} m³ · ${tpFmt(m(eo.baldrames.ferro), 0)} m de barra`],
     ...(eo.fundacao.tipo ? [["Estrutura — fundação", `${eo.fundacao.tipo === "sapata" ? "sapatas" : `${eo.fundacao.qtdEstacas} estacas Ø${Math.round(eo.fundacao.diametro * 100)} × ${tpFmt(eo.fundacao.profEstacas, 1)} m e blocos`} · ${tpFmt(eo.fundacao.concreto.estacas + eo.fundacao.concreto.sapatas)} m³ · ${tpFmt(m(eo.fundacao.ferro.estacas) + m(eo.fundacao.ferro.sapatas) + m(eo.fundacao.ferro.arranques), 0)} m de barra${eo.fundacao.estimado ? " (estimativa sem sondagem)" : ""}`]] : []),
-    ...(eo.foraCatalogo.length ? [["Barras fora da lista do orçamento", eo.foraCatalogo.map((d) => `φ${String(d).replace(".", ",")}`).join(", ") + " (lance na obra)"]] : []),
+    ...(eo.foraCatalogo.length ? [["Barras fora da lista do orçamento", eo.foraCatalogo.map((d) => `Ø${String(d).replace(".", ",")}`).join(", ") + " (lance na obra)"]] : []),
   ];
   return { ...conv, projeto, linhas };
 }
@@ -93317,11 +93317,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // resumo de aço (barras de 12 m por bitola) e concreto por elemento — Tabelas
   const estResumo = useMemo(() => { const c = estPorPav._calc; if (!c) return null; try { return esResumoMateriais(c.lista, c); } catch (err) { return null; } }, [estPorPav]);
   const [copiouResumo, setCopiouResumo] = useState(false);
+  const [resumoAberto, setResumoAberto] = useState(false); // tabela de aço e concreto em tela grande
   const copiarResumo = () => {
     if (!estResumo) return;
-    const f = (x, k = 2) => tpFmt(x, k), L = [["Aço", "Bitola", "Metros", "Barras 12 m", "kg"].join("\t"), ...estResumo.aco.map((a) => [a.aco, `φ ${String(a.d).replace(".", ",")} mm`, f(a.m, 0), a.barras, f(a.kg, 0)].join("\t")),
+    const f = (x, k = 2) => tpFmt(x, k), L = [["Aço", "Bitola", "Metros", "Barras 12 m", "kg"].join("\t"), ...estResumo.aco.map((a) => [a.aco, `Ø${String(a.d).replace(".", ",")} mm`, f(a.m, 0), a.barras, f(a.kg, 0)].join("\t")),
       ["", "Total", "", estResumo.aco.reduce((t, a) => t + a.barras, 0), f(estResumo.aco.reduce((t, a) => t + a.kg, 0), 0)].join("\t"), "",
-      ["Elemento", "Concreto (m³)", ...estResumo.bitolas.map((d) => `φ ${String(d).replace(".", ",")} (barras)`)].join("\t"),
+      ["Elemento", "Concreto (m³)", ...estResumo.bitolas.map((d) => `Ø${String(d).replace(".", ",")} (barras)`)].join("\t"),
       ...estResumo.grupos.map((g) => [g.nome, f(g.concreto), ...estResumo.bitolas.map((d) => g.barras[d] || "")].join("\t")),
       ["Total", f(estResumo.concreto), ...estResumo.bitolas.map(() => "")].join("\t")];
     try { navigator.clipboard.writeText(L.join("\n")).then(() => { setCopiouResumo(true); setTimeout(() => setCopiouResumo(false), 2000); }); } catch (err) { /* sem área de transferência */ }
@@ -96767,7 +96768,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 const dp = estDescida.dimPav[pavAtivo] && estDescida.dimPav[pavAtivo].pilares[id];
                 return [["Carga (Nk)", `${tpFmt(n.Ng + n.Nq, 1)} kN (perm. ${tpFmt(n.Ng, 1)} + uso ${tpFmt(n.Nq, 1)})`], ["Cálculo (Nd)", `${tpFmt(Nd, 1)} kN (1,4${gn > 1 ? ` × γn ${tpFmt(gn)}` : ""})`],
                   ...(dp ? [["Esbeltez", `λ ${dp.direcoes.map((x) => Math.round(x.lam)).join(" / ")}`], ["Momento (Md)", `${dp.direcoes.map((x) => tpFmt(x.Md, 1)).join(" / ")} kN·m`],
-                    ["Armadura", dp.barras ? `${dp.barras.n} φ${esFmtBit(dp.barras.d)}${dp.estribo ? ` · estribo φ${esFmtBit(dp.estribo.d)} c/${Math.round(dp.estribo.s * 100)}` : ""}` : "—"],
+                    ["Armadura", dp.barras ? `${dp.barras.n} Ø${esFmtBit(dp.barras.d)}${dp.estribo ? ` · estribo Ø${esFmtBit(dp.estribo.d)} c/${Math.round(dp.estribo.s * 100)}` : ""}` : "—"],
                     ["Situação", dp.ok ? "atende (NBR 6118)" : `não atende: ${dp.motivos.join("; ")}${dp.hSugerida ? ` — passa com ${Math.round(dp.b * 100)} × ${Math.round(dp.hSugerida * 100)}` : ""}`]] : []),
                   ...(() => { const fd = (estDescida.fundacao || []).find((f) => f.id === id); return fd && (estPorPav._ids || [])[0] === pavAtivo ? [["Fundação", tpTextoFundacao(fd)]] : []; })()];
               })(), ...(pl.deslocado ? [["Ajuste", `deslocado ${tpFmt(pl.deslocado * 100, 0)} cm para sair de porta/janela`]] : [])] };
@@ -96778,8 +96779,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 const c = estDescida && estDescida.porPav[pavAtivo] && estDescida.porPav[pavAtivo].vigas[id]; if (!c) return [];
                 return [["Carga", `${tpFmt(c.g + c.q, 1)} kN/m (perm. ${tpFmt(c.g, 1)} + uso ${tpFmt(c.q, 1)})`], ...(c.tramo.includes("+") ? [["Tramo", `${c.tramo.replace(/\+/g, " + ")} (${tpFmt(c.L)} m)`]] : []), ["Reações", `${tpFmt(c.RA.g + c.RA.q, 1)} kN (${c.apoioA || "viga"}) · ${tpFmt(c.RB.g + c.RB.q, 1)} kN (${c.apoioB || "viga"})`],
                   ...(() => { const dv = estDescida.dimPav[pavAtivo] && estDescida.dimPav[pavAtivo].vigas[id]; if (!dv) return [];
-                    return [["Momento (Md)", `+${tpFmt(dv.Md, 1)}${dv.Mneg > 0.5 ? ` / −${tpFmt(dv.Mneg, 1)}` : ""} kN·m`], ["Embaixo", dv.barras ? `${dv.barras.n} φ${esFmtBit(dv.barras.d)}${dv.barras.camadas > 1 ? " (2 camadas)" : ""}` : "—"],
-                      ["Em cima", dv.barrasNeg ? `${dv.barrasNeg.n} φ${esFmtBit(dv.barrasNeg.d)} nos apoios` : "2 φ6,3 (porta-estribo)"], ["Estribo", dv.estribo ? `φ${esFmtBit(dv.estribo.d)} c/${Math.round(dv.estribo.s * 100)}` : "—"],
+                    return [["Momento (Md)", `+${tpFmt(dv.Md, 1)}${dv.Mneg > 0.5 ? ` / −${tpFmt(dv.Mneg, 1)}` : ""} kN·m`], ["Embaixo", dv.barras ? `${dv.barras.n} Ø${esFmtBit(dv.barras.d)}${dv.barras.camadas > 1 ? " (2 camadas)" : ""}` : "—"],
+                      ["Em cima", dv.barrasNeg ? `${dv.barrasNeg.n} Ø${esFmtBit(dv.barrasNeg.d)} nos apoios` : "2 Ø6,3 (porta-estribo)"], ["Estribo", dv.estribo ? `Ø${esFmtBit(dv.estribo.d)} c/${Math.round(dv.estribo.s * 100)}` : "—"],
                       ["Flecha", `${tpFmt(dv.flecha.total * 100, 1)} cm (limite ${tpFmt(dv.flecha.lim * 100, 1)})`],
                       ["Situação", dv.ok ? `atende (NBR 6118)${dv.hMin && dv.hMin < dv.h - 1e-9 ? ` — bastaria ${Math.round(dv.b * 100)} × ${Math.round(dv.hMin * 100)}` : ""}` : `não atende: ${dv.motivos.join("; ")}${dv.hMin ? ` — passa com ${Math.round(dv.b * 100)} × ${Math.round(dv.hMin * 100)}` : ""}`]]; })()];
               })()] };
@@ -97656,7 +97657,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                     ))}
                     {!sap && linhaTab("Estacas", `${ne} × ${tpFmt(fs[0].L, 1)} m`, "")}
                     {linhaTab("Concreto da fundação", tpFmt(vol), "m³")}
-                    <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>{sap ? "Sapata rígida (h ≥ (A − ap)/3), armadura pelo método das bielas." : "Um diâmetro para a obra toda (o de menor volume com até 4 estacas por bloco). Blocos pelo método das bielas (Blévot), estacas a 3Ø. Estaca com armadura de ligação 4 φ10 × 2,5 m."} Arranques do pilar com 40φ de emenda.</div>
+                    <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>{sap ? "Sapata rígida (h ≥ (A − ap)/3), armadura pelo método das bielas." : "Um diâmetro para a obra toda (o de menor volume com até 4 estacas por bloco). Blocos pelo método das bielas (Blévot), estacas a 3Ø. Estaca com armadura de ligação 4 Ø10 × 2,5 m."} Arranques do pilar com 40Ø de emenda.</div>
                   </>);
                 })()}
                 {estDescida && estDescida.nV > 0 && grupoQ("est-d", "Dimensionamento (NBR 6118)", estDescida.falhas.length ? `${estDescida.falhas.length} não atende${estDescida.falhas.length === 1 ? "" : "m"}` : "tudo atende")}
@@ -97682,27 +97683,27 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                       style={{ display: "block", width: "100%", textAlign: "left", border: "none", borderBottom: "1px solid #f0f2f5", background: "none", padding: "5px 0", cursor: "pointer", fontFamily: "inherit", fontSize: 12.5, color: "#374151", lineHeight: 1.4 }}>
                       <span style={{ color: r.ok ? "#111827" : "#b91c1c", fontWeight: 600 }}>{r.balanco ? `Balanço de ${tpFmt(r.l)} m` : `${r.tipo === "macica" ? "Maciça" : r.tipo === "trelicada" ? "Treliçada" : "Protendida"} · vão ${tpFmt(r.l)} m`}</span>
                       <span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>{[pavimentos.length > 1 ? pavNome : null,
-                        r.balanco && r.ok ? `${r.macicar ? `faixa maciça de ${Math.round(r.h * 100)} cm · ` : ""}negativa φ${esFmtBit(r.arm.d)} c/${Math.round(r.arm.s * 100)}, entra ${tpFmt(r.ancoragem)} m na laje de dentro · γn ${tpFmt(r.gn)}` : null,
+                        r.balanco && r.ok ? `${r.macicar ? `faixa maciça de ${Math.round(r.h * 100)} cm · ` : ""}negativa Ø${esFmtBit(r.arm.d)} c/${Math.round(r.arm.s * 100)}, entra ${tpFmt(r.ancoragem)} m na laje de dentro · γn ${tpFmt(r.gn)}` : null,
                         r.consultar ? `fabricante: ${tpFmt(r.cargaAlem, 2)} kN/m² além do peso próprio · Mk ${tpFmt(r.Mk, 2)} kN·m/vigota` : null,
-                        r.tipo === "trelicada" && r.ok ? `${r.adicional ? `${r.adicional.n} φ${esFmtBit(r.adicional.d)} adicional por nervura` : "só a treliça"} · flecha ${tpFmt(r.flecha.total * 100, 1)} cm${r.flecha.contraflecha ? ` com contraflecha de ${tpFmt(r.flecha.contraflecha * 100, 1)} cm` : ""}` : null,
-                        r.tipo === "macica" && r.ok ? r.dir.map((dd, i) => dd.arm ? `${i ? "y" : "x"}: φ${esFmtBit(dd.arm.d)} c/${Math.round(dd.arm.s * 100)}` : "").join(" · ") + ` · flecha ${tpFmt(r.flecha.total * 100, 1)} cm` : null,
+                        r.tipo === "trelicada" && r.ok ? `${r.adicional ? `${r.adicional.n} Ø${esFmtBit(r.adicional.d)} adicional por nervura` : "só a treliça"} · flecha ${tpFmt(r.flecha.total * 100, 1)} cm${r.flecha.contraflecha ? ` com contraflecha de ${tpFmt(r.flecha.contraflecha * 100, 1)} cm` : ""}` : null,
+                        r.tipo === "macica" && r.ok ? r.dir.map((dd, i) => dd.arm ? `${i ? "y" : "x"}: Ø${esFmtBit(dd.arm.d)} c/${Math.round(dd.arm.s * 100)}` : "").join(" · ") + ` · flecha ${tpFmt(r.flecha.total * 100, 1)} cm` : null,
                         !r.ok ? "não atende (veja acima)" : null].filter(Boolean).join(" · ")}</span>
                     </button>
                   ))}
                   {estDescida.negativas.length > 0 && <div style={{ fontSize: 12, color: "#374151", padding: "6px 0", borderBottom: "1px solid #f0f2f5", lineHeight: 1.45 }}>
-                    <span style={{ fontWeight: 600 }}>Negativas entre lajes maciças: </span>{estDescida.negativas.map((n) => n.arm ? `${n.viga} φ${esFmtBit(n.arm.d)} c/${Math.round(n.arm.s * 100)} (${tpFmt(n.extensao)} m para cada lado)` : `${n.viga}: não cabe`).join(" · ")}
+                    <span style={{ fontWeight: 600 }}>Negativas entre lajes maciças: </span>{estDescida.negativas.map((n) => n.arm ? `${n.viga} Ø${esFmtBit(n.arm.d)} c/${Math.round(n.arm.s * 100)} (${tpFmt(n.extensao)} m para cada lado)` : `${n.viga}: não cabe`).join(" · ")}
                   </div>}
                   {estDescida.escadas.map((e, k) => (
                     <div key={"es" + k} style={{ fontSize: 12, color: "#374151", padding: "6px 0", borderBottom: "1px solid #f0f2f5", lineHeight: 1.45 }}>
                       <span style={{ fontWeight: 600, color: e.ok ? "#111827" : "#b91c1c" }}>Escada · vão {tpFmt(e.l)} m</span>
-                      <span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>{e.ok ? `laje de ${Math.round(e.h * 100)} cm · φ${esFmtBit(e.arm.d)} c/${Math.round(e.arm.s * 100)} · chega na ${e.viga || "—"} (vigas VE na borda do furo)` : "não atende (veja acima)"}</span>
+                      <span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>{e.ok ? `laje de ${Math.round(e.h * 100)} cm · Ø${esFmtBit(e.arm.d)} c/${Math.round(e.arm.s * 100)} · chega na ${e.viga || "—"} (vigas VE na borda do furo)` : "não atende (veja acima)"}</span>
                     </div>
                   ))}
                   {linhaTab("Aço CA-50", tpFmt(estDescida.ca50, 0), "kg")}
-                  {linhaTab("Aço CA-60 (estribo φ5)", tpFmt(estDescida.ca60, 0), "kg")}
-                  {Object.entries(estDescida.aco).sort((a, b) => +a[0] - +b[0]).map(([d, kg]) => <div key={d}>{linhaTab(`φ ${esFmtBit(+d)} mm`, tpFmt(kg, 0), "kg", true)}</div>)}
+                  {linhaTab("Aço CA-60 (estribo Ø5)", tpFmt(estDescida.ca60, 0), "kg")}
+                  {Object.entries(estDescida.aco).sort((a, b) => +a[0] - +b[0]).map(([d, kg]) => <div key={d}>{linhaTab(`Ø ${esFmtBit(+d)} mm`, tpFmt(kg, 0), "kg", true)}</div>)}
                   {estQtd.concreto > 0 && linhaTab("Taxa (vigas e pilares)", `${tpFmt((estDescida.ca50 + estDescida.ca60) / Math.max(0.001, estQtd.pilares.concreto + estQtd.vigas.concreto + estQtd.baldrames.concreto), 0)} kg/m³`, "")}
-                  <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>Vigas contínuas apoiadas nos pilares (14.6.7.1), flexão, cisalhamento (modelo I) e flecha com fissuração e fluência. Pilares com momento mínimo e 2ª ordem pelo pilar-padrão (15.8.3.3.2). Lajes: treliçada como nervura em T (banzo da treliça 2 φ4,2 + adicional), protendida pela tabela do fabricante, maciça como placa apoiada nas bordas. Aço com ganchos e ancoragens estimados; o detalhamento vem depois.</div>
+                  <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>Vigas contínuas apoiadas nos pilares (14.6.7.1), flexão, cisalhamento (modelo I) e flecha com fissuração e fluência. Pilares com momento mínimo e 2ª ordem pelo pilar-padrão (15.8.3.3.2). Lajes: treliçada como nervura em T (banzo da treliça 2 Ø4,2 + adicional), protendida pela tabela do fabricante, maciça como placa apoiada nas bordas. Aço com ganchos e ancoragens estimados; o detalhamento vem depois.</div>
                 </>)}
                 {grupoQ("est-p", "Parâmetros", `C${P.fck} · CAA ${["", "I", "II", "III", "IV"][P.caa]}`)}
                 {!qFechado("est-p") && (
@@ -97796,26 +97797,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       ))}
       {estResumo && estResumo.aco.length > 0 && dobra("estmat", "Estrutura: aço e concreto", `${tpFmt(estResumo.aco.reduce((t, a) => t + a.kg, 0), 0)} kg · ${tpFmt(estResumo.concreto, 1)} m³`, (
           <div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", columnGap: 12, fontSize: 11, color: "#9ca3af", padding: "4px 0 2px" }}><span>Bitola</span><span style={{ textAlign: "right" }}>Barras 12 m</span><span style={{ textAlign: "right", minWidth: 48 }}>kg</span></div>
-            {estResumo.aco.map((a) => (
-              <div key={a.d} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", columnGap: 12, padding: "5px 0", borderBottom: "1px solid #f0f2f5", fontSize: 13, alignItems: "baseline" }}>
-                <span>φ {esFmtBit(a.d)} mm<span style={{ display: "block", fontSize: 11, color: "#9ca3af" }}>{a.aco} · {tpFmt(a.m, 0)} m</span></span>
-                <span style={{ ...numQ, textAlign: "right" }}>{a.barras}</span><span style={{ ...numQ, textAlign: "right", minWidth: 48 }}>{tpFmt(a.kg, 0)}</span>
-              </div>
+            {[["CA-50", estResumo.aco.filter((a) => a.d > 5)], ["CA-60", estResumo.aco.filter((a) => a.d <= 5)]].filter(([, l]) => l.length).map(([t, l]) => (
+              <div key={t} style={linhaQ}><span style={{ minWidth: 0 }}>Aço {t}<span style={{ display: "block", fontSize: 11.5, color: "#9ca3af" }}>{l.map((a) => "Ø" + esFmtBit(a.d)).join(" · ")}</span></span><span style={{ ...numQ, textAlign: "right" }}>{tpFmt(l.reduce((x, a) => x + a.kg, 0), 0)} kg<span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>{l.reduce((x, a) => x + a.barras, 0)} barras</span></span></div>
             ))}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", columnGap: 12, padding: "6px 0", borderBottom: "1px solid #f0f2f5", fontSize: 13, fontWeight: 600 }}>
-              <span>Total</span><span style={{ ...numQ, fontWeight: 600, textAlign: "right" }}>{estResumo.aco.reduce((t, a) => t + a.barras, 0)}</span><span style={{ ...numQ, fontWeight: 600, textAlign: "right", minWidth: 48 }}>{tpFmt(estResumo.aco.reduce((t, a) => t + a.kg, 0), 0)}</span>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", columnGap: 12, fontSize: 11, color: "#9ca3af", padding: "10px 0 2px" }}><span>Elemento</span><span style={{ textAlign: "right" }}>Concreto</span></div>
-            {estResumo.grupos.map((g) => (
-              <div key={g.nome} style={{ padding: "5px 0", borderBottom: "1px solid #f0f2f5", fontSize: 13 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}><span>{g.nome}</span><span style={numQ}>{g.concreto > 0.005 ? `${tpFmt(g.concreto)} m³` : "—"}</span></div>
-                {Object.keys(g.barras).length > 0 && <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 1 }}>{Object.entries(g.barras).sort((x, y) => +x[0] - +y[0]).map(([d, n]) => `${n} φ${esFmtBit(+d)}`).join(" · ")}</div>}
-              </div>
-            ))}
-            <div style={{ ...linhaQ, fontWeight: 600 }}><span>Concreto total</span><span style={numQ}>{tpFmt(estResumo.concreto)} m³</span></div>
-            <button onClick={copiarResumo} style={{ ...btn, width: "100%", minHeight: 30, fontSize: 12.5, marginTop: 8 }}>{copiouResumo ? "Copiado" : "Copiar a tabela (para colar no Excel)"}</button>
-            <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>Barras de 12 m com 10% de perda, arredondadas para cima — a mesma conta do orçamento de obra. Concreto sem perda. Lajes pré-fabricadas: só o concreto da capa e das nervuras; vigota e treliça vêm do fabricante.</div>
+            <div style={linhaQ}><span>Concreto</span><span style={numQ}>{tpFmt(estResumo.concreto)} m³</span></div>
+            <button onClick={() => { setResumoAberto(true); if (isMobile) setMenuAberto(false); }} style={{ ...btn, width: "100%", minHeight: 32, fontSize: 13, marginTop: 8, fontWeight: 600, color: TP_AZUL, borderColor: TP_AZUL }}>Abrir a tabela completa</button>
           </div>
       ))}
         </div>
@@ -98111,6 +98097,72 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         )}
       </main>
 
+      {resumoAberto && estResumo && (() => {
+        const R = estResumo, kgTot = R.aco.reduce((t, a) => t + a.kg, 0), barTot = R.aco.reduce((t, a) => t + a.barras, 0);
+        const th = { padding: "8px 10px", fontSize: 11.5, fontWeight: 600, color: "#4b5563", background: "#f7f7f8", borderBottom: "1px solid #e5e7eb", whiteSpace: "nowrap", textAlign: "right" };
+        const td = { padding: "7px 10px", fontSize: 13, borderBottom: "1px solid #f0f2f5", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", textAlign: "right", color: "#111827" };
+        const esq = { textAlign: "left" }, fixa = { position: "sticky", left: 0, background: "#fff", zIndex: 1 }, tot = { fontWeight: 700, background: "#fafafa" };
+        const kgDe = (g) => Object.entries(g.m).reduce((t, [d, m]) => t + m * esKgBarra(+d), 0);
+        const caixa = { border: "1px solid #e5e7eb", borderRadius: 10, overflowX: "auto", marginTop: 8 };
+        return (
+          <div style={{ position: "fixed", inset: 0, zIndex: 30, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: isMobile ? "stretch" : "center", justifyContent: "center", padding: isMobile ? 0 : 24 }} onClick={() => setResumoAberto(false)}>
+            <div role="dialog" aria-modal="true" aria-label="Resumo de aço e concreto" onClick={(e) => e.stopPropagation()}
+              style={{ background: "#fff", borderRadius: isMobile ? 0 : 12, width: "100%", maxWidth: 980, maxHeight: isMobile ? "100%" : "90vh", overflowY: "auto", padding: isMobile ? "16px 14px 24px" : "20px 24px 24px", boxShadow: "0 10px 30px rgba(0,0,0,0.25)", boxSizing: "border-box" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>Resumo de aço e concreto</div>
+                  <div style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>{projeto.nome}{pavimentos.length > 1 ? ` · ${pavimentos.length} pavimentos` : ""}</div>
+                </div>
+                <button onClick={copiarResumo} style={{ ...btn, minHeight: 34, fontSize: 13, whiteSpace: "nowrap" }}>{copiouResumo ? "Copiado" : isMobile ? "Copiar" : "Copiar para o Excel"}</button>
+                <button onClick={() => setResumoAberto(false)} aria-label="Fechar" style={{ ...btn, minHeight: 34, width: 34, padding: 0, fontSize: 16 }}>✕</button>
+              </div>
+
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", marginTop: 18 }}>Aço — barras de 12 m</div>
+              <div style={caixa}>
+                <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                  <thead><tr>{!isMobile && <th style={{ ...th, ...esq }}>Aço</th>}<th style={{ ...th, ...esq }}>Bitola</th><th style={th}>{isMobile ? "Metros" : "Comprimento (m)"}</th><th style={th}>Barras</th><th style={th}>Peso (kg)</th></tr></thead>
+                  <tbody>
+                    {R.aco.map((a) => (
+                      <tr key={a.d}>{!isMobile && <td style={{ ...td, ...esq, color: "#6b7280" }}>{a.aco}</td>}<td style={{ ...td, ...esq, fontWeight: 600 }}>Ø{esFmtBit(a.d)} mm{isMobile && <span style={{ display: "block", fontSize: 11, fontWeight: 400, color: "#9ca3af" }}>{a.aco}</span>}</td><td style={td}>{tpFmt(a.m, 0)}</td><td style={td}>{a.barras}</td><td style={td}>{tpFmt(a.kg, 0)}</td></tr>
+                    ))}
+                    {[["CA-50", R.aco.filter((a) => a.d > 5)], ["CA-60", R.aco.filter((a) => a.d <= 5)]].filter(([, l]) => l.length).map(([t, l]) => (
+                      <tr key={t}><td style={{ ...td, ...esq, color: "#4b5563" }} colSpan={isMobile ? 2 : 3}>Subtotal {t}</td><td style={td}>{l.reduce((x, a) => x + a.barras, 0)}</td><td style={td}>{tpFmt(l.reduce((x, a) => x + a.kg, 0), 0)}</td></tr>
+                    ))}
+                    <tr><td style={{ ...td, ...esq, ...tot }} colSpan={isMobile ? 2 : 3}>Total</td><td style={{ ...td, ...tot }}>{barTot}</td><td style={{ ...td, ...tot }}>{tpFmt(kgTot, 0)}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", marginTop: 20 }}>Por elemento — concreto e barras de 12 m</div>
+              <div style={caixa}>
+                <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 260 + 70 * R.bitolas.length }}>
+                  <thead><tr>
+                    <th style={{ ...th, ...esq, ...fixa, background: "#f7f7f8" }}>Elemento</th><th style={th}>Concreto (m³)</th>
+                    {R.bitolas.map((d) => <th key={d} style={th}>Ø{esFmtBit(d)}</th>)}<th style={th}>Aço (kg)</th>
+                  </tr></thead>
+                  <tbody>
+                    {R.grupos.map((g) => (
+                      <tr key={g.nome}>
+                        <td style={{ ...td, ...esq, ...fixa }}>{g.nome}</td><td style={td}>{g.concreto > 0.005 ? tpFmt(g.concreto) : "—"}</td>
+                        {R.bitolas.map((d) => <td key={d} style={{ ...td, color: g.barras[d] ? "#111827" : "#d1d5db" }}>{g.barras[d] || "—"}</td>)}
+                        <td style={td}>{kgDe(g) > 0.5 ? tpFmt(kgDe(g), 0) : "—"}</td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td style={{ ...td, ...esq, ...fixa, ...tot }}>Total</td><td style={{ ...td, ...tot }}>{tpFmt(R.concreto)}</td>
+                      {R.bitolas.map((d) => <td key={d} style={{ ...td, ...tot }}>{(R.aco.find((a) => a.d === d) || {}).barras || "—"}</td>)}
+                      <td style={{ ...td, ...tot }}>{tpFmt(kgTot, 0)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 12, lineHeight: 1.5 }}>
+                Barras de 12 m com 10% de perda, arredondadas para cima (a mesma conta do orçamento de obra; o total pode dar uma barra a menos que a soma dos elementos, que arredonda cada um). Peso pela massa nominal da NBR 7480. Concreto sem perda. Lajes pré-fabricadas: só o concreto da capa e das nervuras — vigota e treliça vêm do fabricante. {estDescida && (estDescida.fundacao || []).some((f) => f.estimado) ? "Fundação estimada sem sondagem (informe a sondagem no painel Estrutura)." : ""}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {painelObra && (() => {
         const conv = convObra();
         const vazio = !paredes.length && !areas.length;

@@ -1325,7 +1325,7 @@ function esDimPilar(p, N, l, params) {
     r.direcoes.push({ h: hd, le, lam, M1min, M2, Md, nu });
   }
   r.AsMin = AsMin; r.As = As; r.barras = esBarrasPilar(As, b);
-  if (!r.barras) { r.ok = false; r.motivos.push("armadura não cabe com φ ≤ b/8"); }
+  if (!r.barras) { r.ok = false; r.motivos.push("armadura não cabe com Ø ≤ b/8"); }
   if (r.barras) {
     // estribo: φt ≥ 5 e φl/4; s ≤ 20 cm, menor dimensão e 12φl (CA-50) — 18.4.3
     const dt = Math.max(5, r.barras.d / 4) <= 5 ? 5 : 6.3, s = Math.floor(Math.min(0.20, b, 12 * r.barras.d / 1000) * 100) / 100;
