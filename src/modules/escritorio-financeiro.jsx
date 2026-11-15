@@ -873,7 +873,7 @@ function provisaoReservadaNoEscritorio(lancamentos, obraId, vendaId) {
 // A conta paga mudou no que o lançamento do escritório leva? (valor, conta
 // contábil, descrição, fornecedor, data, papel). Etapa, grupo e item do
 // catálogo são da obra: o escritório não os vê.
-const PONTE_CAMPOS_DA_CONTA = ["valor", "valorPago", "contaId", "descricao", "favorecido", "prestadorId", "pagoEm", "vencimento", "doc", "numeroNota", "numeroLoja", "numeroDoc"];
+const PONTE_CAMPOS_DA_CONTA = ["valor", "valorPago", "contaId", "descricao", "favorecido", "prestadorId", "pagoEm", "vencimento", "doc", "numeroNota", "numeroLoja", "numeroDoc", "formaPagamento"];
 function contaMudouNaPonte(antes, depois) {
   const a = antes || {}, d = depois || {};
   const v = (x) => (x == null ? "" : String(x));
@@ -968,12 +968,15 @@ function fontesDasContasPagas(contas) {
     anexos: anexosDaTransacao(c),
     // recebimento que entrou numa conta que não é a principal (a Cora)
     ...(c.contaBancariaId ? { contaBancariaId: c.contaBancariaId } : {}),
+    ...(c.formaPagamento === "permuta" ? { permuta: true } : {}),
   });
   for (const c of pagas) {
     if (!c.pedidoId && !c.pagamentoConjunto) { soltas.push(fonteDaConta(c)); continue; }
     // vários pedidos pagos de uma vez (um débito só no banco) viram uma
     // linha só no extrato, como o banco mostra
-    const chave = (c.pagamentoConjunto ? "pg:" + c.pagamentoConjunto : c.pedidoId) + "|" + (c.contaId || "") + "|" + dataDe(c);
+    // permuta não se junta com o que saiu em dinheiro da mesma nota
+    const chave = (c.pagamentoConjunto ? "pg:" + c.pagamentoConjunto : c.pedidoId) + "|" + (c.contaId || "") + "|" + dataDe(c)
+      + (c.formaPagamento === "permuta" ? "|permuta" : "");
     if (!porChave[chave]) {
       porChave[chave] = { chave, itens: [], contas: [] };
       grupos.push(porChave[chave]);
@@ -1005,6 +1008,7 @@ function fontesDasContasPagas(contas) {
       documento: p.doc || p.numeroNota || p.numeroLoja || "",
       numeroDoc: p.numeroDoc || "",
       anexos: anexos,
+      ...(p.formaPagamento === "permuta" ? { permuta: true } : {}),
       // Os ids que ESTES itens teriam tido um a um. O que já atravessou
       // assim continua valendo: sem isto, a primeira ponte depois desta
       // mudança mandaria a mesma compra de novo, agora agrupada, e o
@@ -1013,6 +1017,26 @@ function fontesDasContasPagas(contas) {
     };
   };
   return soltas.concat(grupos.map(doGrupo));
+}
+
+// ── Permuta ─────────────────────────────────────────────────────
+// O escritório pagou com um serviço dele (um projeto, em geral) em vez de
+// dinheiro. Na obra o custo entra inteiro, como qualquer outro. No
+// escritório entra um par FORA DA CONTA, como a provisão: o custo (a saída
+// para a obra) e, no mesmo valor e no mesmo mês, a Receita de projetos —
+// o escritório recebeu em serviço e aplicou na obra. Nada sai do banco, o
+// saldo não muda, e o fechamento não procura essas linhas no extrato. A
+// receita leva a mesma origem do custo: desfazer, apagar ou editar a conta
+// na obra leva os dois juntos.
+function receitaDaPermuta(custo) {
+  const c = custo || {};
+  const quem = String(c.fornecedor || "").trim();
+  return { ...c, id: c.id + ":permuta", unidadeId: "projetos", contaId: "rec_projetos",
+    empreendimentoId: "", clienteId: "", cliente: quem, projeto: "Permuta" + (c.projeto ? " — " + c.projeto : ""),
+    fornecedor: "", fornecedorId: "", parDe: c.id,
+    descricao: "Projeto dado em permuta" + (quem ? " a " + quem : "") + (c.descricao ? " — " + c.descricao : ""),
+    origem: { ...(c.origem || {}), parte: "permuta" },
+    contaBanco: "nao", formaPagamento: "permuta", conferido: true };
 }
 
 // Monta o que a obra tem para mandar. NÃO grava: devolve as três listas e quem
@@ -1090,13 +1114,15 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
       // dele (todo custo do empreendimento sai da conta do escritório): troca
       // de bolso, sem linha no banco. Com "sim", a checagem de débito × crédito
       // contava como entrada e a conferência o dava como "não veio no banco".
-      contaBanco: destino === "emp_aporte" ? "nao" : "sim",
-      ...(fonte.contaBancariaId && fonte.contaBancariaId !== CONTA_BANCARIA_PRINCIPAL ? { contaBancariaId: fonte.contaBancariaId } : {}),
+      contaBanco: destino === "emp_aporte" || fonte.permuta ? "nao" : "sim",
+      ...(!fonte.permuta && fonte.contaBancariaId && fonte.contaBancariaId !== CONTA_BANCARIA_PRINCIPAL ? { contaBancariaId: fonte.contaBancariaId } : {}),
+      ...(fonte.permuta ? { formaPagamento: "permuta", conferido: true, conferidoEm: new Date().toISOString().slice(0, 10) } : {}),
       // Quando ele nasceu, para a lista pôr o mais novo na frente dentro do
       // mês. Sem isto, o lançamento recém-criado cai no meio dos outros de
       // setembro e parece que não entrou.
       criadoEm: new Date().toISOString(),
     });
+    if (fonte.permuta) lancamentos.push(receitaDaPermuta(lancamentos[lancamentos.length - 1]));
   };
 
   // Paga no cartão não atravessa: o banco não debitou esta compra, vai
@@ -1131,8 +1157,9 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
   }
 
   const soma = (lista) => Math.round(lista.reduce((t, x) => t + (Number(x.valor) || 0), 0) * 100) / 100;
+  // a receita da permuta não é dinheiro a mais da obra: fica fora do total
   return { modo, lancamentos, existentes, bloqueados, ignorados,
-    total: soma(lancamentos), totalBloqueado: soma(bloqueados) };
+    total: soma(lancamentos.filter((l) => !((l.origem || {}).parte === "permuta"))), totalBloqueado: soma(bloqueados) };
 }
 
 // ══════════════════════════════════════════════════════════════

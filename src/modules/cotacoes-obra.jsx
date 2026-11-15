@@ -1597,7 +1597,7 @@ function entradaPronta(destino, lojaId, itens, obras, obraId) {
 const SITUACOES_DA_ENTRADA = [
   { id: "cotacao", nome: "Cotação", resumo: "Comparar preços: guarda a proposta que já veio com preço, ou pede preço às lojas no WhatsApp." },
   { id: "apagar", nome: "A pagar", resumo: "Vira conta a pagar com vencimento — um boleto ou várias parcelas." },
-  { id: "pago", nome: "Pago", resumo: "O dinheiro já saiu: entra baixado, na data do pagamento, à vista ou no cartão." },
+  { id: "pago", nome: "Pago", resumo: "O dinheiro já saiu: entra baixado, na data do pagamento, à vista, no cartão ou em permuta." },
 ];
 
 const COLS_ENTRADA = "minmax(0,2.2fr) 62px 84px 92px 100px minmax(0,1.3fr) minmax(0,1.3fr) 24px";
@@ -2884,7 +2884,7 @@ function despesaPronta(d, obras, obraId) {
     const faltas = faltasDaTransacao({
       obraId: obraId || "(esta obra)", contaId: dd.contaId, valor: dd.valor, pagoEm: dd.pagoEm, pago: true,
       favorecido: dd.favorecidoId, insumoCodigo: dd.insumoCodigo, quantidade: dd.quantidade,
-      etapa: dd.etapa, formaPagamento: dd.forma === "cartao" ? (dd.cartaoId ? "cartao" : "") : "avista",
+      etapa: dd.etapa, formaPagamento: dd.forma === "cartao" ? (dd.cartaoId ? "cartao" : "") : (dd.forma === "permuta" ? "permuta" : "avista"),
     });
     if (dd.forma === "cartao" && !dd.cartaoId) faltas.push("o cartão");
     if (faltas.length) return { ok: false, motivo: frasesDasFaltas(faltas) };
@@ -10296,7 +10296,8 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const cartoesDaEntrada = typeof cartoes === "function" ? (cartoes(obraEfetivaId) || []) : (cartoes || []);
   const doClienteNaEntrada = typeof cartaoDoCliente === "function" ? !!cartaoDoCliente(obraEfetivaId) : false;
   const aceitaCartao = !!obraEfetivaId && (cartoesDaEntrada.length > 0 || doClienteNaEntrada);
-  const pagamentoEfetivo = aceitaCartao ? pagamento : { ...pagamento, forma: "avista", cartaoId: "", novoCartao: null };
+  const pagamentoEfetivo = aceitaCartao || pagamento.forma === "permuta" ? (pagamento.forma === "permuta" ? { ...pagamento, cartaoId: "", novoCartao: null } : pagamento)
+    : { ...pagamento, forma: "avista", cartaoId: "", novoCartao: null };
   const faltasDoItemDaEntrada = (it) => faltasDoItemNaEntrada(it, situacao, pagamentoEfetivo);
   const previaAPagar = situacao === "apagar" ? previaDosBoletos(totalDaEntrada, apagar) : [];
   const cartaoDaEntrada = cartoesDaEntrada.find((c) => c && c.id === pagamento.cartaoId) || null;
@@ -11522,10 +11523,10 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                       <div>
                         <label style={E.label}>Como foi pago</label>
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          {[["avista", "À vista / transferência"], ["cartao", doClienteNaEntrada ? "Cartão do cliente" : "Cartão de crédito"]].filter(([k]) => aceitaCartao || k !== "cartao").map(([k, r]) => {
+                          {[["avista", "À vista / transferência"], ["cartao", doClienteNaEntrada ? "Cartão do cliente" : "Cartão de crédito"], ["permuta", "Permuta (sem dinheiro)"]].filter(([k]) => aceitaCartao || k !== "cartao").map(([k, r]) => {
                             const on = (pagamentoEfetivo.forma || "avista") === k;
                             return (
-                              <button key={k} type="button"
+                              <button key={k} type="button" data-vk-forma-entrada={k}
                                 onClick={() => setPagamento((p) => ({ ...p, forma: k,
                                   cartaoId: k === "cartao" ? (p.cartaoId || (cartoesDaEntrada[0] || {}).id || "") : "",
                                   parcelas: p.parcelas || 1 }))}
@@ -11538,6 +11539,12 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                         </div>
                       </div>
                     </div>
+                    {pagamentoEfetivo.forma === "permuta" && (
+                      <div data-vk-nota-permuta="1" style={{ marginTop: 10, padding: "8px 12px", borderRadius: 10, background: "#f7fbff",
+                        border: "1px solid rgba(4,116,244,0.18)", fontSize: 12, color: "#374151", lineHeight: 1.5 }}>
+                        Permuta: o custo entra na obra, mas nada sai do banco. No escritório entram, fora da conta e no mesmo valor, a Receita de projetos e o custo da obra — o fechamento não procura essa linha no extrato.
+                      </div>
+                    )}
                     {pagamentoEfetivo.forma === "cartao" && typeof CampoCartaoDoPagamento === "function" && (
                       <CampoCartaoDoPagamento cartoes={cartoesDaEntrada} doCliente={doClienteNaEntrada} isMobile={isMobile}
                         valor={{ cartaoId: pagamento.cartaoId, parcelas: pagamento.parcelas, novoCartao: pagamento.novoCartao || null }}

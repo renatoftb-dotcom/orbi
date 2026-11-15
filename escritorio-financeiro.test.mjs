@@ -1026,6 +1026,44 @@ teste("empreendimento: aporte (depósito próprio) atravessa fora da conta e nã
   assert.ok(!c.contabilizadoSemPar.some((l) => l.contaId === "emp_aporte"), "não aparece como 'não veio no banco'");
 });
 
+teste("permuta: custo na obra, par fora da conta no escritório (custo + receita de projeto) e nada no extrato", () => {
+  const obra = { id: "obE", clienteId: "e1", nome: "Jacarezinho Módulo 1" };
+  const cliente = { id: "e1", nome: "Jacarezinho Módulo 1", servicos: { empreendimento: true } };
+  const contas = [
+    { id: "s1", contaId: "pedreiros", valor: 8000, pago: true, valorPago: 8000, pagoEm: "2026-11-10", formaPagamento: "permuta",
+      favorecido: "Serralheria Exemplo", descricao: "Portões" },
+    { id: "m1", contaId: "material", valor: 1000, pago: true, valorPago: 1000, pagoEm: "2026-11-10", formaPagamento: "avista" },
+  ];
+  const r = M.lancamentosDaObraParaEscritorio(obra, cliente, { planoObra: PLANO_OBRA, contasPagar: contas, entradas: [] });
+  const custo = r.lancamentos.find((l) => l.origem.refId === "s1" && l.origem.parte !== "permuta");
+  const rec = r.lancamentos.find((l) => l.origem.parte === "permuta");
+  assert.ok(custo && rec, JSON.stringify(r.lancamentos.map((l) => l.id)));
+  assert.strictEqual(custo.contaId, "emp_construcao");
+  assert.strictEqual(custo.contaBanco, "nao");
+  assert.strictEqual(custo.valor, 8000);
+  assert.strictEqual(rec.contaId, "rec_projetos");
+  assert.strictEqual(rec.unidadeId, "projetos");
+  assert.strictEqual(rec.valor, 8000);
+  assert.strictEqual(rec.contaBanco, "nao");
+  assert.strictEqual(rec.competencia, "2026-11");
+  assert.strictEqual(rec.parDe, custo.id);
+  assert.ok(/Serralheria Exemplo/.test(rec.descricao), rec.descricao);
+  assert.strictEqual(r.total, 9000, "a receita da permuta não soma no total da obra");
+  // o fechamento: só a compra à vista é procurada no banco
+  const banco = [{ id: "b1", data: "2026-11-10", valor: -1000, historico: "PIX" }];
+  const ch = M.checagemDebitoCredito(banco, r.lancamentos, "2026-11");
+  assert.strictEqual(ch.difDebito, 0); assert.strictEqual(ch.difCredito, 0);
+  const c = M.conciliarExtrato(banco, r.lancamentos, {});
+  assert.ok(!c.contabilizadoSemPar.some((l) => l.origem && l.origem.refId === "s1"), "permuta não aparece como 'não veio no banco'");
+  // a obra investiu o custo inteiro
+  assert.strictEqual(M.resultadoEmpreendimento(r.lancamentos, "e1", {}).investido, 9000);
+  // desfazer a conta na obra leva o par junto
+  const sem = M.semLancamentosDasContas(r.lancamentos, "obE", [contas[0]], [contas[1]]);
+  assert.strictEqual(sem.removidos, 2);
+  // trocar à vista ↔ permuta refaz o lançamento
+  assert.strictEqual(M.contaMudouNaPonte(contas[1], { ...contas[1], formaPagamento: "permuta" }), true);
+});
+
 teste("a obra manda o que pagou, com a compet\u00eancia do pagamento", () => {
   const obra = { id: "ob1", clienteId: "c1", nome: "Reforma Loja Cobop" };
   const cliente = { id: "c1", nome: "COBOP", servicos: {} };

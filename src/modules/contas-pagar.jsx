@@ -1072,7 +1072,7 @@ function contasDaEntrada(lanc, op) {
         c = contaPaga(c, { pagoEm: primeiro, valorPago: valor, comprovante: o.anexo || null }, o.quem || "", agora);
         const plano = pg.forma === "cartao" && o.cartao && typeof o.planoDoCartao === "function"
           ? o.planoDoCartao(c, o.cartao, { pagoEm: primeiro, valorPago: valor, parcelas: pg.parcelas }) : null;
-        c = plano ? { ...c, ...plano } : { ...c, formaPagamento: "avista" };
+        c = plano ? { ...c, ...plano } : { ...c, formaPagamento: pg.forma === "permuta" ? "permuta" : "avista" };
       } else if (anexos.length) {
         c = { ...c, anexos };
       }

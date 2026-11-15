@@ -3170,7 +3170,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const semVazios = (o) => { const x = {}; for (const k in o) if (o[k] !== undefined && o[k] !== null && o[k] !== "") x[k] = o[k]; return x; };
     const daPonte = editouNoEscritorio ? ponte.lancamentos.map(l => {
       const m = marcasDaEdicao[l.id] || (idsMarcas.length === 1 ? marcasDaEdicao[idsMarcas[0]] : null);
-      return m ? { ...l, ...semVazios(m) } : l;
+      // permuta é fora da conta: não herda a linha do banco do lançamento antigo
+      const m2 = m && l.contaBanco === "nao" ? { ...m, extratoId: "", historicoBanco: "", contaBancariaId: "" } : m;
+      return m2 ? { ...l, ...semVazios(m2) } : l;
     }) : ponte.lancamentos;
     const extras = {};
     if (r.materiais !== data.materiais) extras.materiais = r.materiais;
@@ -3697,7 +3699,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       return !!trava;
     };
     const noCartao = (conta, valor) => {
-      if (!cartao) return { ...conta, formaPagamento: "avista" };
+      if (!cartao) return { ...conta, formaPagamento: f.forma === "permuta" ? "permuta" : "avista" };
       const p = pagamentoNoCartao(conta, cartao, { pagoEm: f.dataContab, valorPago: valor, parcelas: f.parcelas });
       return p ? { ...conta, ...p } : conta;
     };
@@ -5792,7 +5794,6 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               {(() => {
                 const cartoesAqui = cartoesDaObra(data, obraAtual);
                 const doCliente = !!obraAtual && !obraEhDoEscritorio(data, obraAtual);
-                if (!doCliente && !cartoesAqui.length) return null;
                 const total = formPagamento.pedido
                   ? Number(formPagamento.pedido.aberto) || 0
                   : (numeroDeCampo(formPagamento.valorPago) || Number((formPagamento.conta || {}).valor) || 0);
@@ -5800,7 +5801,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   <div style={{ marginTop: 14, borderTop: "1px solid rgba(38,36,33,0.1)", paddingTop: 12 }}>
                     <label style={C.label}>Como foi pago</label>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
-                      {[["avista", "À vista / transferência"], ["cartao", doCliente ? "Cartão do cliente" : "Cartão de crédito"]].map(([k, r]) => (
+                      {[["avista", "À vista / transferência"], ["cartao", doCliente ? "Cartão do cliente" : "Cartão de crédito"], ["permuta", "Permuta (sem dinheiro)"]]
+                        .filter(([k]) => k !== "cartao" || doCliente || cartoesAqui.length > 0).map(([k, r]) => (
                         <button key={k} type="button" data-vk-forma-pagamento={k}
                           onClick={() => setFormPagamento({ ...formPagamento, forma: k,
                             cartaoId: k === "cartao" ? (formPagamento.cartaoId || (cartoesAqui[0] || {}).id || "") : "",
@@ -5813,6 +5815,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                         </button>
                       ))}
                     </div>
+                    {formPagamento.forma === "permuta" && (
+                      <div data-vk-nota-permuta="1" style={{ marginTop: 8, padding: "8px 12px", borderRadius: 10, background: "#f7fbff",
+                        border: "1px solid rgba(4,116,244,0.18)", fontSize: 12, color: "#374151", lineHeight: 1.5 }}>
+                        Permuta: o custo entra na obra, mas nada sai do banco. No escritório entram, fora da conta e no mesmo valor, a Receita de projetos e o custo da obra — o fechamento não procura essa linha no extrato.
+                      </div>
+                    )}
                     {formPagamento.forma === "cartao" && (
                       <CampoCartaoDoPagamento cartoes={cartoesAqui} doCliente={doCliente} isMobile={isMobile}
                         valor={{ cartaoId: formPagamento.cartaoId, parcelas: formPagamento.parcelas, novoCartao: formPagamento.novoCartao || null }}
@@ -6734,7 +6742,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       const rcP = cartaoDoPagamento(d.forma, d.cartaoId, d.novoCartao);
       if (rcP.erro) return { erro: rcP.erro };
       const cartaoP = rcP.cartao;
-      let pagaP = { ...contaPaga(alvo, baixa, quem), formaPagamento: cartaoP ? "cartao" : "avista" };
+      let pagaP = { ...contaPaga(alvo, baixa, quem), formaPagamento: cartaoP ? "cartao" : (d.forma === "permuta" ? "permuta" : "avista") };
       if (cartaoP) {
         const plano = pagamentoNoCartao(pagaP, cartaoP, { pagoEm: d.pagoEm, valorPago: valor, parcelas: d.parcelas });
         if (plano) pagaP = { ...pagaP, ...plano };
@@ -6769,7 +6777,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const rcD = cartaoDoPagamento(d.forma, d.cartaoId, d.novoCartao);
     if (rcD.erro) return { erro: rcD.erro };
     const cartao = rcD.cartao;
-    let paga = { ...contaPaga(nova, baixa, quem), formaPagamento: cartao ? "cartao" : "avista" };
+    let paga = { ...contaPaga(nova, baixa, quem), formaPagamento: cartao ? "cartao" : (d.forma === "permuta" ? "permuta" : "avista") };
     if (cartao) {
       const plano = pagamentoNoCartao(paga, cartao, { pagoEm: d.pagoEm, valorPago: valor, parcelas: d.parcelas });
       if (plano) paga = { ...paga, ...plano };
