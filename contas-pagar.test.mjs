@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, linhasParaExportar, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, fisicoFinanceiroDaPrestacao, conferenciaDaPrestacao, fluxoDeRecebimento, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, linhasParaExportar, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -3605,8 +3605,6 @@ teste("global antigo sem entradaEscopo paga item a item, como o texto", () => {
     ["Portão — entrada", "Portão — conclusão", "Grade — entrada", "Grade — conclusão"]);
 });
 
-console.log(`\n${passou} passou, ${falhou} falhou`);
-if (falhou) process.exit(1);
 teste("Entrada a pagar de loja com conta: vira pedido da conta, com o nº do PEDIDO (não de nota) e o desconto", () => {
   const l = { situacao: "apagar", prestadorId: "f1", numeroLoja: "24893-120", numeroNota: "", emitido: "2026-10-09", desconto: 15,
     apagar: { vencimento: "", parcelas: "1" },
@@ -3678,3 +3676,51 @@ teste("planejamento por etapa: os ofícios (empreiteiro, pintor…) somam em Pre
   assert.strictEqual(p.realizado, 25643.18); assert.strictEqual(p.notas, 2); assert.strictEqual(p.nome, "Prestadores de serviços");
   assert.ok(!pe.linhas.some((l) => l.etapaId === "prest_empreiteiro"));
 });
+
+teste("prestação da obra: físico-financeiro igual à Execução, a pagar e a conferência com as notas", () => {
+  const obra = { id: "o1", nome: "Obra", estimativaPL: [{ contaId: "material", valor: 10000 }, { contaId: "pedreiros", valor: 5000 }],
+    contasPagar: [
+      { id: "m1", contaId: "material", valor: 1200, pago: true, valorPago: 1200, pagoEm: "2026-09-10", favorecido: "Loja" },
+      { id: "m2", contaId: "material", valor: 800, pago: true, valorPago: 800, pagoEm: "2026-10-05" },
+      { id: "k1", contaId: "material", valor: 300, pago: false, parcelaCartao: { grupo: "k1", k: 1, de: 2 }, vencimento: "2026-11-10" },
+      { id: "p1", contaId: "pedreiros", valor: 2000, pago: false, vencimento: "2026-11-20", favorecido: "Pedreiro", descricao: "Parcela 2", parcela: 2, parcelasTotal: 3 },
+      { id: "t1", contaId: "terreno_aquisicao", valor: 50000, pago: true, valorPago: 50000, pagoEm: "2026-09-01" },
+      { id: "t2", contaId: "terreno_aquisicao", valor: 1000, pago: false, vencimento: "2026-12-01" },
+    ],
+    entradas: [{ id: "e1", contaId: "deposito_proprio", valor: 5000, data: "2026-09-02" }, { id: "e2", contaId: "deposito_proprio", valor: 3000, data: "2026-10-02" }],
+    cronogramaRecebimento: [{ mes: "2026-09", valor: 5000 }, { mes: "2026-10", valor: 4000 }, { mes: "2026-11", valor: 4000 }, { mes: "2026-12", valor: 3000 }],
+  };
+  const ff = modulo.fisicoFinanceiroDaPrestacao(obra, { hoje: "2026-11-16" });
+  // igual à tela: o realizado é o do planejamento (pago + compra no cartão)
+  const pl = modulo.plDaObra(obra.estimativaPL, obra.contasPagar.filter((c) => c.contaId !== "terreno_aquisicao"),
+    modulo.GRUPOS_PL.filter((g) => g.id !== "receitas" && g.id !== "terreno"), modulo.PLANO_CONTAS);
+  assert.strictEqual(ff.total.realizado, pl.custo.realizado, "o realizado bate com a tela Execução");
+  assert.strictEqual(ff.total.realizado, 2300);
+  assert.strictEqual(ff.total.aPagar, 2000);
+  assert.strictEqual(ff.total.estimado, 15000);
+  assert.strictEqual(ff.total.saldo, 10700);
+  // o a pagar: a parcela do pedreiro e a do terreno (fora do físico-financeiro), por vencimento
+  assert.deepStrictEqual(ff.aPagarLista.map((x) => [x.id, x.foraDoFF]), [["p1", false], ["t2", true]]);
+  assert.strictEqual(ff.aPagarLista[0].parcela, "2/3");
+  // as notas de outubro só: o resto do realizado tem motivo
+  const linhas = [
+    { id: "m2", pago: true, total: 800, contaId: "material" },
+  ];
+  const cf = modulo.conferenciaDaPrestacao(ff, linhas);
+  assert.strictEqual(cf.foraDoPeriodo, 1200); assert.strictEqual(cf.noCartao, 300); assert.strictEqual(cf.foraDoFF, 0);
+  assert.strictEqual(cf.confere, true, JSON.stringify(cf));
+  // a obra inteira, com o terreno nas notas: sai como fora do físico-financeiro
+  const cf2 = modulo.conferenciaDaPrestacao(ff, [{ id: "m1", pago: true, total: 1200, contaId: "material" },
+    { id: "m2", pago: true, total: 800, contaId: "material" }, { id: "t1", pago: true, total: 50000, contaId: "terreno_aquisicao" }]);
+  assert.strictEqual(cf2.foraDoFF, 50000); assert.strictEqual(cf2.confere, true);
+  // o recebimento: previsto × recebido e a projeção
+  const fl = modulo.fluxoDeRecebimento(obra, { hoje: "2026-11-16" });
+  assert.deepStrictEqual(fl.linhas.map((l) => l.mes), ["2026-09", "2026-10", "2026-11", "2026-12"]);
+  assert.deepStrictEqual(fl.linhas.map((l) => [l.previsto, l.recebido, l.projetado]), [[5000, 5000, 5000], [4000, 3000, 3000], [4000, 0, 4000], [3000, 0, 3000]]);
+  assert.strictEqual(fl.total.recebido, 8000); assert.strictEqual(fl.total.previsto, 16000); assert.strictEqual(fl.total.projetado, 15000);
+  assert.strictEqual(fl.total.custo, 4300, "custo do físico-financeiro: realizado + a pagar");
+  assert.deepStrictEqual(fl.linhas.map((l) => l.custo), [1200, 800, 2300, 0]);
+});
+
+console.log(`\n${passou} passou, ${falhou} falhou`);
+if (falhou) process.exit(1);

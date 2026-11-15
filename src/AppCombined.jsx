@@ -41062,6 +41062,154 @@ function prestacaoDeContas(linhas) {
   };
 }
 
+// ── Prestação de contas da obra: físico-financeiro, a pagar, recebimento ──
+// A prestação de UMA obra leva, além das notas, o que a tela Execução do
+// Físico-Financeiro mostra — pelas mesmas regras, para os números baterem:
+// só o custo de executar (sem venda, terreno e IR sobre a receita), o
+// realizado como a tela conta (pago, e a compra no cartão desde a compra),
+// e o que ainda falta pagar. E o fluxo de recebimento: o que o cliente já
+// depositou e o cronograma que se espera dele, mês a mês.
+const CP_FF_CONTAS_FORA = ["ir_receita"];
+function cpContaForaDoFF(contaId, plano) {
+  const c = (plano || (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [])).find((x) => x && x.id === contaId);
+  if (CP_FF_CONTAS_FORA.indexOf((c && c.pai) || contaId) >= 0) return true;
+  return !!c && (c.grupo === "receitas" || c.grupo === "terreno");
+}
+function cpGruposDoFF() {
+  return (typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : []).filter((g) => g.id !== "receitas" && g.id !== "terreno");
+}
+// O topo do eixo do gráfico num número redondo (1, 2, 2,5 ou 5 × 10ⁿ)
+function cpTopoDoEixo(v) {
+  const x = Math.max(1, Number(v) || 0);
+  const p = Math.pow(10, Math.floor(Math.log10(x)));
+  for (const f of [1, 2, 2.5, 5, 10]) if (x <= f * p) return f * p;
+  return 10 * p;
+}
+// quantas divisões dão passos redondos (25 mil → 5 de 5 mil; 20 mil → 4 de 5 mil)
+function cpDivisoesDoEixo(topo) {
+  const p = Math.pow(10, Math.floor(Math.log10(Math.max(1, topo))));
+  const f = Math.round(topo / p * 10) / 10;
+  return f === 2 ? 4 : 5;
+}
+function cpRotuloDoEixo(v) {
+  return v >= 1000 ? (v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " mil" : String(Math.round(v));
+}
+function cpMesDe(iso) { const m = String(iso || "").match(/^(\d{4})-(\d{2})/); return m ? m[1] + "-" + m[2] : ""; }
+function cpMesesEntre(de, ate) {
+  const out = [];
+  if (!de || !ate || de > ate) return out;
+  let [a, m] = de.split("-").map(Number);
+  for (let i = 0; i < 600; i++) {
+    const k = a + "-" + String(m).padStart(2, "0");
+    out.push(k);
+    if (k === ate) break;
+    m += 1; if (m > 12) { m = 1; a += 1; }
+  }
+  return out;
+}
+function fisicoFinanceiroDaPrestacao(obra, opcoes) {
+  const o = opcoes || {};
+  const ob = obra || {};
+  const plano = o.plano || (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []);
+  const grupos = o.grupos || cpGruposDoFF();
+  const hoje = /^\d{4}-\d{2}-\d{2}$/.test(String(o.hoje || "")) ? o.hoje : new Date().toISOString().slice(0, 10);
+  const red = (x) => Math.round(x * 100) / 100;
+  const itens = (ob.estimativaPL || []).filter((i) => i && !cpContaForaDoFF(i.contaId, plano));
+  const contas = (ob.contasPagar || []).filter((c) => c && !c.vendaId && !cpContaForaDoFF(c.contaId, plano));
+  const est = estimativaPorConta(itens);
+  const real = realizadoPorConta(contas);
+  const aPagar = {};
+  for (const c of contas) {
+    if (contaNoRealizado(c)) continue;
+    const k = c.contaId || "mo_diversos";
+    aPagar[k] = red((aPagar[k] || 0) + (Number(c.valor) || 0));
+  }
+  const blocos = [];
+  for (const g of grupos) {
+    const linhas = [];
+    for (const c of plano.filter((x) => x && x.grupo === g.id)) {
+      const e = Number(est[c.id]) || 0, r = Number(real[c.id]) || 0, p = Number(aPagar[c.id]) || 0;
+      if (!e && !r && !p) continue;
+      linhas.push({ contaId: c.id, conta: c.nome || c.id, estimado: red(e), realizado: red(r), aPagar: red(p), saldo: red(e - r - p) });
+    }
+    if (!linhas.length) continue;
+    const soma = (k) => red(linhas.reduce((t, l) => t + l[k], 0));
+    blocos.push({ grupoId: g.id, titulo: g.titulo || g.id, noTotal: g.sinal < 0 && g.entra_no_resultado !== false, linhas,
+      estimado: soma("estimado"), realizado: soma("realizado"), aPagar: soma("aPagar"), saldo: soma("saldo") });
+  }
+  const noTotal = blocos.filter((b) => b.noTotal);
+  const tot = (k) => red(noTotal.reduce((t, b) => t + b[k], 0));
+  const contaNoTotal = new Set(noTotal.reduce((t, b) => t.concat(b.linhas.map((l) => l.contaId)), []));
+  // o a pagar da obra inteira: o custo e o que fica fora dele (terreno…),
+  // menos o dinheiro que entra
+  const nomeDaConta = (id) => ((plano.find((x) => x && x.id === id) || {}).nome) || id || "";
+  const aPagarLista = (ob.contasPagar || []).filter((c) => c && !c.vendaId && !contaNoRealizado(c) && !cpContaEhEntrada(c.contaId))
+    .map((c) => ({ id: c.id, vencimento: String(c.vencimento || "").slice(0, 10), fornecedor: c.favorecido || "",
+      descricao: c.descricao || "", conta: nomeDaConta(c.contaId), valor: red(Number(c.valor) || 0),
+      parcela: Number(c.parcelasTotal) > 1 ? `${c.parcela}/${c.parcelasTotal}` : "",
+      foraDoFF: !contaNoTotal.has(c.contaId || "mo_diversos"), atrasada: !!c.vencimento && String(c.vencimento).slice(0, 10) < hoje }))
+    .sort((a, b) => String(a.vencimento || "9999").localeCompare(String(b.vencimento || "9999")) || b.valor - a.valor);
+  return { blocos, total: { estimado: tot("estimado"), realizado: tot("realizado"), aPagar: tot("aPagar"), saldo: tot("saldo") },
+    aPagarLista, totalAPagar: red(aPagarLista.reduce((t, x) => t + x.valor, 0)),
+    // as contas que formam o realizado do total — para a conferência com as notas
+    realizadas: contas.filter((c) => contaNoRealizado(c) && contaNoTotal.has(c.contaId || "mo_diversos"))
+      .map((c) => ({ id: c.id, valor: red(valorNoRealizado(c)), pago: !!c.pago })) };
+}
+// A conferência: o realizado do físico-financeiro e as notas pagas desta
+// prestação são o mesmo dinheiro visto de dois lados. O que difere tem
+// motivo, e a diferença que sobra sem motivo aparece (em vermelho).
+function conferenciaDaPrestacao(ff, linhas) {
+  const red = (x) => Math.round(x * 100) / 100;
+  const notas = (linhas || []).filter((l) => l && l.pago && !cpContaEhEntrada(l.contaId || (l.conta_ || {}).contaId));
+  const idsNotas = new Set(notas.map((l) => l.id));
+  const idsFF = new Set(((ff || {}).realizadas || []).map((c) => c.id));
+  const totalNotas = red(notas.reduce((t, l) => t + (Number(l.total) || 0), 0));
+  const soNoFF = ((ff || {}).realizadas || []).filter((c) => !idsNotas.has(c.id));
+  const foraDoPeriodo = red(soNoFF.filter((c) => c.pago).reduce((t, c) => t + c.valor, 0));
+  const noCartao = red(soNoFF.filter((c) => !c.pago).reduce((t, c) => t + c.valor, 0));
+  const foraDoFF = red(notas.filter((l) => !idsFF.has(l.id)).reduce((t, l) => t + (Number(l.total) || 0), 0));
+  const realizado = red(((ff || {}).total || {}).realizado || 0);
+  const explicado = red(totalNotas + foraDoPeriodo + noCartao - foraDoFF);
+  return { realizado, totalNotas, foraDoPeriodo, noCartao, foraDoFF, diferenca: red(realizado - explicado), confere: Math.abs(realizado - explicado) < 0.01 };
+}
+// O fluxo de recebimento: previsto (o cronograma digitado na obra),
+// recebido (as entradas), e o custo do mês (realizado + a pagar, pelo
+// vencimento). A projeção usa o recebido até o mês passado e, do mês atual
+// em diante, o previsto — ou o recebido, se já passou dele.
+function fluxoDeRecebimento(obra, opcoes) {
+  const o = opcoes || {};
+  const ob = obra || {};
+  const plano = o.plano || (typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : []);
+  const hoje = /^\d{4}-\d{2}-\d{2}$/.test(String(o.hoje || "")) ? o.hoje : new Date().toISOString().slice(0, 10);
+  const mesHoje = hoje.slice(0, 7);
+  const red = (x) => Math.round(x * 100) / 100;
+  const previsto = {}, recebido = {}, custo = {};
+  const soma = (mapa, mes, v) => { if (mes && v) mapa[mes] = red((mapa[mes] || 0) + v); };
+  for (const p of ob.cronogramaRecebimento || []) soma(previsto, cpMesDe(p && p.mes), Number(p && p.valor) || 0);
+  for (const e of ob.entradas || []) if (e && !cpContaForaDoRecebimento(e.contaId)) soma(recebido, cpMesDe(e.data), Number(e.valor) || 0);
+  for (const c of ob.contasPagar || []) {
+    if (!c || c.vendaId) continue;
+    if (cpContaEhEntrada(c.contaId)) { if (c.pago) soma(recebido, cpMesDe(c.pagoEm || c.vencimento), Number(c.valorPago) || Number(c.valor) || 0); continue; }
+    if (cpContaForaDoFF(c.contaId, plano)) continue;
+    soma(custo, cpMesDe(contaNoRealizado(c) && c.pagoEm ? c.pagoEm : (c.vencimento || c.pagoEm)), contaNoRealizado(c) ? valorNoRealizado(c) : Number(c.valor) || 0);
+  }
+  const todos = Object.keys(previsto).concat(Object.keys(recebido), Object.keys(custo)).filter(Boolean).sort();
+  const meses = todos.length ? cpMesesEntre(todos[0], todos[todos.length - 1]) : [];
+  let aPrev = 0, aRec = 0, aProj = 0, aCusto = 0;
+  const linhas = meses.map((mes) => {
+    const pv = previsto[mes] || 0, rc = recebido[mes] || 0, cs = custo[mes] || 0;
+    const proj = mes < mesHoje ? rc : Math.max(rc, pv);
+    aPrev = red(aPrev + pv); aRec = red(aRec + rc); aProj = red(aProj + proj); aCusto = red(aCusto + cs);
+    return { mes, previsto: red(pv), recebido: red(rc), custo: red(cs), projetado: red(proj),
+      acumPrevisto: aPrev, acumRecebido: aRec, acumProjetado: aProj, acumCusto: aCusto, saldoProjetado: red(aProj - aCusto), passado: mes < mesHoje };
+  });
+  return { linhas, mesHoje, total: { previsto: aPrev, recebido: aRec, projetado: aProj, custo: aCusto, saldo: red(aProj - aCusto) },
+    temPrevisto: Object.keys(previsto).length > 0 };
+}
+// Entrada que não é dinheiro do cliente para a obra (a venda do
+// empreendimento tem a tela dela): fica fora do recebimento.
+function cpContaForaDoRecebimento(contaId) { return contaId === "venda_imovel"; }
+
 // O relatório da prestação de contas, em PDF (A4 em pé): o cabeçalho com a
 // obra e o período, os totais, o resumo por conta contábil, as notas uma a
 // uma pelo número do papel (o mesmo nome do arquivo na pasta Papeis) e, no
@@ -41105,6 +41253,8 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   const caixas = [["Total das saídas", moeda(pc.total)], ["Notas", String(pc.notas.length)],
     ["Arquivos", String(pc.arquivos.length)], ["Pendências", String(pc.semArquivo + pc.semNumero)]];
   if (pc.nEntradas) caixas.splice(1, 0, ["Total das entradas", moeda(pc.entradas)]);
+  if (i.ff) caixas.splice(0, caixas.length, ["Custo estimado", moeda(i.ff.total.estimado)], ["Realizado", moeda(i.ff.total.realizado)],
+    ["A pagar", moeda(i.ff.totalAPagar)], ["Recebido do cliente", moeda(i.fluxo ? i.fluxo.total.recebido : pc.entradas)], ["Pendências", String(pc.semArquivo + pc.semNumero)]);
   const lc = (X1 - M - (caixas.length - 1) * 3) / caixas.length;
   caixas.forEach(([rot, val], k) => {
     const x = M + k * (lc + 3);
@@ -41136,7 +41286,8 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
     doc.setFont("helvetica", "normal"); doc.setFontSize(7.8);
     linhas.forEach((l, k) => {
       if (quebra(5.6, () => { cab(); doc.setFont("helvetica", "normal"); doc.setFontSize(7.8); })) { /* cabeçalho repetido */ }
-      if (k % 2 === 1 && !l.total) { doc.setFillColor(248, 250, 252); doc.rect(M, y, X1 - M, 5.6, "F"); }
+      if (k % 2 === 1 && !l.total && !l.grupo) { doc.setFillColor(248, 250, 252); doc.rect(M, y, X1 - M, 5.6, "F"); }
+      if (l.grupo) { doc.setFillColor(232, 238, 247); doc.rect(M, y, X1 - M, 5.6, "F"); doc.setFont("helvetica", "bold"); }
       if (l.total) { doc.setFont("helvetica", "bold"); doc.setDrawColor(AZUL[0], AZUL[1], AZUL[2]); doc.setLineWidth(0.3); doc.line(M, y, X1, y); }
       let x = M;
       cols.forEach((c, j) => {
@@ -41147,12 +41298,127 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
         doc.text(t, tx, y + 3.9, { align: c.alinhar || "left" });
         x += c.w;
       });
-      if (l.total) doc.setFont("helvetica", "normal");
+      if (l.total || l.grupo) doc.setFont("helvetica", "normal");
       y += 5.6;
     });
     doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.2); doc.line(M, y, X1, y);
     y += o.depois != null ? o.depois : 8;
   };
+  // 0. a obra: físico-financeiro, conferência, a pagar e recebimento
+  const ff = i.ff, cf = i.conferencia, fl = i.fluxo;
+  const mesBR = (m) => { const x = String(m || "").match(/^(\d{4})-(\d{2})/); return x ? `${x[2]}/${x[1]}` : ""; };
+  if (ff) {
+    const linhasFF = [];
+    for (const b of ff.blocos) {
+      linhasFF.push({ grupo: true, celulas: [b.titulo + (b.noTotal ? "" : " (fora do custo)"), moeda(b.estimado), moeda(b.realizado), moeda(b.aPagar), moeda(b.saldo)] });
+      for (const l of b.linhas) linhasFF.push({ celulas: ["   " + l.conta, moeda(l.estimado), moeda(l.realizado), moeda(l.aPagar), moeda(l.saldo)], vermelho: l.saldo < -0.005 ? [4] : [] });
+    }
+    linhasFF.push({ total: true, celulas: ["Custo da obra", moeda(ff.total.estimado), moeda(ff.total.realizado), moeda(ff.total.aPagar), moeda(ff.total.saldo)],
+      vermelho: ff.total.saldo < -0.005 ? [4] : [] });
+    tabela("Físico-financeiro (obra inteira)", [{ t: "Conta contábil", w: 66 }, { t: "Estimado", w: 30, alinhar: "right" },
+      { t: "Realizado", w: 30, alinhar: "right" }, { t: "A pagar", w: 30, alinhar: "right" }, { t: "Saldo", w: 30, alinhar: "right" }], linhasFF, { depois: 4 });
+    doc.setFontSize(7.5); cor(CINZA); quebra(6);
+    doc.text("Mesmas regras da tela Execução: só o custo de executar (sem venda, terreno e IR). Realizado = pago + compras no cartão. Saldo = estimado - realizado - a pagar.", M, y + 1, { maxWidth: X1 - M });
+    y += 9;
+  }
+  if (cf) {
+    tabela("Conferência: físico-financeiro × notas desta prestação", [{ t: "", w: 140 }, { t: "Valor", w: 46, alinhar: "right" }], [
+      { celulas: ["Notas pagas desta prestação (saídas)", moeda(cf.totalNotas)] },
+      ...(cf.foraDoPeriodo ? [{ celulas: ["+ pago fora do período ou do filtro escolhido", moeda(cf.foraDoPeriodo)] }] : []),
+      ...(cf.noCartao ? [{ celulas: ["+ compras no cartão ainda na fatura (já contam como realizado)", moeda(cf.noCartao)] }] : []),
+      ...(cf.foraDoFF ? [{ celulas: ["- notas fora do custo do físico-financeiro (terreno, IR, excluídas…)", moeda(cf.foraDoFF)] }] : []),
+      { total: true, celulas: ["Realizado no físico-financeiro", moeda(cf.realizado)] },
+      { celulas: [cf.confere ? "Confere: as duas pontas são o mesmo dinheiro." : "Diferença sem explicação", cf.confere ? "" : moeda(cf.diferenca)],
+        vermelho: cf.confere ? [] : [0, 1] },
+    ]);
+  }
+  if (ff && ff.aPagarLista.length) {
+    tabela("Contas a pagar", [{ t: "Vencimento", w: 20, alinhar: "center" }, { t: "Fornecedor", w: 40 }, { t: "Descrição", w: 58 },
+      { t: "Parcela", w: 14, alinhar: "center" }, { t: "Conta", w: 30 }, { t: "Valor", w: 24, alinhar: "right" }],
+      ff.aPagarLista.map((x) => ({ celulas: [dia(x.vencimento) || "—", x.fornecedor || "—", x.descricao + (x.foraDoFF ? " (fora do custo)" : ""), x.parcela, x.conta, moeda(x.valor)],
+        vermelho: x.atrasada ? [0] : [] }))
+        .concat([{ total: true, celulas: ["", "", "Total a pagar", "", "", moeda(ff.totalAPagar)] }]), { depois: 4 });
+    doc.setFontSize(7.5); cor(CINZA); quebra(6);
+    doc.text("Em vermelho: vencimento já passou.", M, y + 1); y += 8;
+  }
+  if (fl && fl.linhas.length) {
+    quebra(110);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11); cor(TINTA); doc.text("Fluxo de recebimento", M, y); y += 3;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); cor(CINZA);
+    doc.text(fl.temPrevisto ? "Recebido do cliente × cronograma previsto, e o custo da obra (realizado + a pagar) no mesmo mês."
+      : "Recebido do cliente e custo da obra. Sem cronograma previsto cadastrado na obra.", M, y + 3); y += 7;
+    // gráfico 1: mês a mês (barras: previsto, recebido; ponto: custo)
+    const grafico = (titulo, alt, series, tipo) => {
+      const gx = M + 14, gw = X1 - gx, gy = y + 4, gh = alt;
+      const max = cpTopoDoEixo(Math.max(1, ...series.reduce((t, s) => t.concat(s.valores), [])));
+      doc.setFontSize(8); cor(TINTA); doc.setFont("helvetica", "bold"); doc.text(titulo, M, y + 1); doc.setFont("helvetica", "normal");
+      doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.15);
+      const div = cpDivisoesDoEixo(max);
+      for (let k = 0; k <= div; k++) {
+        const yy = gy + gh - (gh * k / div);
+        doc.line(gx, yy, X1, yy);
+        doc.setFontSize(6); cor(CINZA);
+        const v = max * k / div;
+        doc.text(cpRotuloDoEixo(v), gx - 1.5, yy + 1, { align: "right" });
+      }
+      const n = fl.linhas.length, passo = gw / n;
+      fl.linhas.forEach((l, k) => {
+        if (n <= 18 || k % Math.ceil(n / 18) === 0) { doc.setFontSize(6); cor(CINZA); doc.text(mesBR(l.mes), gx + passo * k + passo / 2, gy + gh + 3.5, { align: "center" }); }
+      });
+      if (tipo === "barras") {
+        const barras = series.filter((s) => s.tipo !== "linha");
+        const bw = Math.min(6, passo * 0.8 / Math.max(1, barras.length));
+        fl.linhas.forEach((l, k) => {
+          barras.forEach((s, j) => {
+            const v = s.valores[k] || 0; if (!(v > 0)) return;
+            const h = gh * v / max;
+            doc.setFillColor(s.cor[0], s.cor[1], s.cor[2]);
+            doc.rect(gx + passo * k + passo / 2 - (barras.length * bw) / 2 + j * bw, gy + gh - h, bw * 0.92, h, "F");
+          });
+        });
+      }
+      for (const s of series.filter((x) => tipo === "linhas" || x.tipo === "linha")) {
+        doc.setDrawColor(s.cor[0], s.cor[1], s.cor[2]); doc.setLineWidth(0.6);
+        let ant = null;
+        s.valores.forEach((v, k) => {
+          const px = gx + passo * k + passo / 2, py = gy + gh - gh * (v || 0) / max;
+          if (ant) doc.line(ant[0], ant[1], px, py);
+          doc.setFillColor(s.cor[0], s.cor[1], s.cor[2]); doc.circle(px, py, 0.6, "F");
+          ant = [px, py];
+        });
+      }
+      // legenda
+      let lx = M;
+      const ly = gy + gh + 8;
+      for (const s of series) {
+        doc.setFillColor(s.cor[0], s.cor[1], s.cor[2]); doc.rect(lx, ly - 2.4, 3, 3, "F");
+        doc.setFontSize(7); cor(TINTA); doc.text(s.nome, lx + 4, ly); lx += 6 + doc.getTextWidth(s.nome) + 4;
+      }
+      y = ly + 5;
+    };
+    const AZ_CLARO = [167, 191, 222], AZ = [4, 116, 244], LARANJA = [234, 140, 0], VERDE = [22, 128, 61];
+    grafico("Mês a mês", 38, [
+      { nome: "Previsto", cor: AZ_CLARO, valores: fl.linhas.map((l) => l.previsto) },
+      { nome: "Recebido", cor: AZ, valores: fl.linhas.map((l) => l.recebido) },
+      { nome: "Custo do mês", cor: LARANJA, tipo: "linha", valores: fl.linhas.map((l) => l.custo) },
+    ], "barras");
+    quebra(55);
+    grafico("Acumulado", 38, [
+      { nome: "Recebido + previsto daqui em diante", cor: VERDE, valores: fl.linhas.map((l) => l.acumProjetado) },
+      { nome: "Recebido", cor: AZ, valores: fl.linhas.map((l) => l.acumRecebido) },
+      { nome: "Custo (realizado + a pagar)", cor: LARANJA, valores: fl.linhas.map((l) => l.acumCusto) },
+    ], "linhas");
+    tabela("Recebimento mês a mês", [{ t: "Mês", w: 18, alinhar: "center" }, { t: "Previsto", w: 28, alinhar: "right" },
+      { t: "Recebido", w: 28, alinhar: "right" }, { t: "Custo do mês", w: 28, alinhar: "right" }, { t: "Recebido acum.*", w: 30, alinhar: "right" },
+      { t: "Custo acum.", w: 28, alinhar: "right" }, { t: "Saldo*", w: 26, alinhar: "right" }],
+      fl.linhas.map((l) => ({ celulas: [mesBR(l.mes), l.previsto ? moeda(l.previsto) : "—", l.recebido ? moeda(l.recebido) : "—", l.custo ? moeda(l.custo) : "—",
+        moeda(l.acumProjetado), moeda(l.acumCusto), moeda(l.saldoProjetado)], vermelho: l.saldoProjetado < -0.005 ? [6] : [] }))
+        .concat([{ total: true, celulas: ["Total", moeda(fl.total.previsto), moeda(fl.total.recebido), moeda(fl.total.custo), moeda(fl.total.projetado), moeda(fl.total.custo), moeda(fl.total.saldo)] }]),
+      { depois: 4 });
+    doc.setFontSize(7.5); cor(CINZA); quebra(6);
+    doc.text("* Até o mês passado vale o recebido; deste mês em diante, o previsto (ou o recebido, se já passou dele). Saldo = recebido acumulado - custo acumulado.", M, y + 1, { maxWidth: X1 - M });
+    y += 10;
+  }
   // 1. resumo por conta
   const saidas = pc.resumo.filter((r) => !r.entrada);
   const pct = (v) => (pc.total > 0 ? (v / pc.total * 100).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%" : "");
@@ -41447,6 +41713,142 @@ function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid
   );
 }
 
+// ── UI — o recebimento da obra ───────────────────────────────────
+// O cronograma de recebimento que se espera do cliente, digitado mês a
+// mês, contra o que ele já depositou e o custo da obra no mesmo mês. É o
+// mesmo cálculo que vai na prestação de contas.
+function RecebimentoDaObraView({ obra, podeEditar, aoSalvar, isMobile, fmtBRL }) {
+  const inicial = (obra && obra.cronogramaRecebimento) || [];
+  const [lista, setLista] = useState(inicial.map((x) => ({ ...x })));
+  const [aviso, setAviso] = useState("");
+  const numero = (v) => (typeof numeroDeCampo === "function" ? numeroDeCampo(v) : Number(String(v).replace(/\./g, "").replace(",", "."))) || 0;
+  const sujo = JSON.stringify(lista.map((x) => [x.mes, numero(x.valor), x.obs || ""]))
+    !== JSON.stringify(inicial.map((x) => [x.mes, numero(x.valor), x.obs || ""]));
+  const limpa = lista.filter((x) => /^\d{4}-\d{2}$/.test(String(x.mes || "")) && numero(x.valor) > 0)
+    .map((x) => ({ id: x.id, mes: x.mes, valor: Math.round(numero(x.valor) * 100) / 100, ...(String(x.obs || "").trim() ? { obs: String(x.obs).trim() } : {}) }));
+  const fl = fluxoDeRecebimento({ ...(obra || {}), cronogramaRecebimento: limpa });
+  const moeda = fmtBRL || ((v) => "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  const mesBR = (m) => { const x = String(m || "").match(/^(\d{4})-(\d{2})/); return x ? ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"][Number(x[2]) - 1] + "/" + x[1].slice(2) : ""; };
+  const proxMes = () => {
+    const ult = lista.map((x) => x.mes).filter(Boolean).sort().pop() || new Date().toISOString().slice(0, 7);
+    let [a, m] = ult.split("-").map(Number); m += lista.length ? 1 : 0; if (m > 12) { m = 1; a += 1; }
+    return a + "-" + String(m).padStart(2, "0");
+  };
+  const mudar = (k, campo, v) => setLista((l) => l.map((x, i) => (i === k ? { ...x, [campo]: v } : x)));
+  const salvar = () => {
+    const meses = limpa.map((x) => x.mes);
+    if (new Set(meses).size !== meses.length) { setAviso("Há mês repetido no cronograma: junte os valores numa linha só."); return; }
+    setAviso("");
+    aoSalvar(limpa.map((x) => ({ ...x, id: x.id || (typeof uid === "function" ? uid() : String(Date.now() + Math.random())) })).sort((a, b) => a.mes.localeCompare(b.mes)));
+  };
+  // gráfico: barras previsto × recebido, linha do custo do mês
+  const W = 720, H = 200, ML = 48, MB = 24, MT = 10;
+  const n = fl.linhas.length;
+  const max = cpTopoDoEixo(Math.max(1, ...fl.linhas.map((l) => Math.max(l.previsto, l.recebido, l.custo))));
+  const passo = n ? (W - ML - 8) / n : 1;
+  const yv = (v) => MT + (H - MT - MB) * (1 - v / max);
+  const bw = Math.min(16, passo * 0.38);
+  const caixa = { border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, padding: "12px 14px", background: "#fff" };
+  const inp = { border: "1px solid rgba(38,36,33,0.2)", borderRadius: 9, padding: "7px 9px", fontSize: 13, fontFamily: "inherit", width: "100%", boxSizing: "border-box" };
+  const cartao = (rot, v, cor) => (
+    <div style={{ ...caixa, padding: "10px 12px" }}>
+      <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4 }}>{rot}</div>
+      <div style={{ fontSize: 16, fontWeight: 700, color: cor || "#111827", marginTop: 2 }}>{moeda(v)}</div>
+    </div>
+  );
+  return (
+    <div data-vk-recebimento-obra="1" style={{ display: "grid", gap: 14 }}>
+      <div style={{ fontSize: 12.5, color: "#4b5563", lineHeight: 1.5 }}>
+        O que o cliente já depositou na obra, contra o cronograma previsto e o custo (realizado + a pagar) de cada mês. Vai junto na prestação de contas.
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))", gap: 10 }}>
+        {cartao("Previsto", fl.total.previsto)}
+        {cartao("Recebido", fl.total.recebido, "#0474f4")}
+        {cartao("Custo da obra", fl.total.custo, "#c2410c")}
+        {cartao("Saldo projetado", fl.total.saldo, fl.total.saldo < -0.005 ? "#b91c1c" : "#166534")}
+      </div>
+      {n > 0 && (
+        <div style={{ ...caixa, overflowX: "auto" }}>
+          <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ minWidth: Math.max(isMobile ? 560 : 320, n * 40), maxWidth: 860, margin: "0 auto", display: "block" }} role="img" aria-label="Recebimento mês a mês">
+            {Array.from({ length: cpDivisoesDoEixo(max) + 1 }, (_, k) => k / cpDivisoesDoEixo(max)).map((f) => (
+              <g key={f}>
+                <line x1={ML} x2={W - 4} y1={yv(max * f)} y2={yv(max * f)} stroke="#e5e7eb" strokeWidth="1" />
+                <text x={ML - 6} y={yv(max * f) + 4} fontSize="10" fill="#6b7280" textAnchor="end">{cpRotuloDoEixo(max * f)}</text>
+              </g>
+            ))}
+            {fl.linhas.map((l, k) => {
+              const cx = ML + passo * k + passo / 2;
+              return (
+                <g key={l.mes}>
+                  {l.previsto > 0 && <rect x={cx - bw - 1} y={yv(l.previsto)} width={bw} height={H - MB - yv(l.previsto)} fill="#a7bfde" rx="2"><title>{`Previsto ${mesBR(l.mes)}: ${moeda(l.previsto)}`}</title></rect>}
+                  {l.recebido > 0 && <rect x={cx + 1} y={yv(l.recebido)} width={bw} height={H - MB - yv(l.recebido)} fill="#0474f4" rx="2"><title>{`Recebido ${mesBR(l.mes)}: ${moeda(l.recebido)}`}</title></rect>}
+                  {(n <= 14 || k % Math.ceil(n / 14) === 0) && <text x={cx} y={H - 8} fontSize="10" fill="#6b7280" textAnchor="middle">{mesBR(l.mes)}</text>}
+                </g>
+              );
+            })}
+            <polyline fill="none" stroke="#ea8c00" strokeWidth="2" points={fl.linhas.map((l, k) => `${ML + passo * k + passo / 2},${yv(l.custo)}`).join(" ")} />
+            {fl.linhas.map((l, k) => <circle key={l.mes} cx={ML + passo * k + passo / 2} cy={yv(l.custo)} r="3" fill="#ea8c00"><title>{`Custo ${mesBR(l.mes)}: ${moeda(l.custo)}`}</title></circle>)}
+          </svg>
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 11.5, color: "#374151", marginTop: 6 }}>
+            <span><span style={{ display: "inline-block", width: 10, height: 10, background: "#a7bfde", borderRadius: 2, marginRight: 5 }} />Previsto</span>
+            <span><span style={{ display: "inline-block", width: 10, height: 10, background: "#0474f4", borderRadius: 2, marginRight: 5 }} />Recebido</span>
+            <span><span style={{ display: "inline-block", width: 10, height: 3, background: "#ea8c00", marginRight: 5, verticalAlign: "middle" }} />Custo do mês</span>
+          </div>
+        </div>
+      )}
+      <div style={caixa}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", marginBottom: 8 }}>Cronograma de recebimento previsto</div>
+        {lista.length === 0 && <div style={{ fontSize: 12.5, color: "#6b7280", marginBottom: 8 }}>Nenhum mês previsto ainda.</div>}
+        <div style={{ display: "grid", gap: 8 }}>
+          {lista.map((x, k) => (
+            <div key={x.id || k} data-vk-receb-linha={k} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "150px 170px minmax(0, 1fr) auto", gap: 8, alignItems: "center" }}>
+              <input type="month" style={inp} value={x.mes || ""} disabled={!podeEditar} onChange={(e) => mudar(k, "mes", e.target.value)} />
+              <input style={{ ...inp, textAlign: "right" }} inputMode="decimal" placeholder="0,00" value={x.valor == null ? "" : typeof x.valor === "number" ? x.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : String(x.valor)}
+                disabled={!podeEditar} onChange={(e) => mudar(k, "valor", e.target.value.replace(/[^\d,.]/g, ""))} />
+              <input style={inp} placeholder="Digite uma observação" value={x.obs || ""} disabled={!podeEditar} onChange={(e) => mudar(k, "obs", e.target.value)} />
+              {podeEditar && <button type="button" onClick={() => setLista((l) => l.filter((_, i) => i !== k))}
+                style={{ border: "1px solid rgba(185,28,28,0.35)", color: "#b91c1c", background: "#fff", borderRadius: 9, padding: "6px 10px", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>Tirar</button>}
+            </div>
+          ))}
+        </div>
+        {podeEditar && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 10 }}>
+            <button type="button" data-vk-receb-mais="1" onClick={() => setLista((l) => l.concat([{ mes: proxMes(), valor: "" }]))}
+              style={{ border: "1px solid rgba(38,36,33,0.2)", background: "#fff", borderRadius: 10, padding: "7px 12px", fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>＋ Mês</button>
+            {sujo && <>
+              <button type="button" onClick={() => { setLista(inicial.map((x) => ({ ...x }))); setAviso(""); }}
+                style={{ border: "1px solid rgba(38,36,33,0.2)", background: "#fff", borderRadius: 10, padding: "7px 12px", fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>Cancelar</button>
+              <button type="button" data-vk-receb-salvar="1" onClick={salvar}
+                style={{ border: "none", background: "#0474f4", color: "#fff", borderRadius: 10, padding: "7px 14px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Salvar cronograma</button>
+            </>}
+            {aviso && <span style={{ fontSize: 12, color: "#b91c1c" }}>{aviso}</span>}
+          </div>
+        )}
+      </div>
+      {n > 0 && (
+        <div style={{ ...caixa, overflowX: "auto" }}>
+          <table style={{ width: "100%", minWidth: 620, borderCollapse: "collapse", fontSize: 12 }}>
+            <thead><tr style={{ color: "#6b7280", textAlign: "right" }}>
+              {["Mês", "Previsto", "Recebido", "Custo do mês", "Recebido acum.*", "Custo acum.", "Saldo*"].map((t, j) =>
+                <th key={t} style={{ padding: "6px 8px", fontWeight: 600, whiteSpace: "nowrap", textAlign: j ? "right" : "left", borderBottom: "1px solid #e5e7eb" }}>{t}</th>)}
+            </tr></thead>
+            <tbody>
+              {fl.linhas.map((l) => (
+                <tr key={l.mes} style={{ borderBottom: "1px solid #f3f4f6", color: l.passado ? "#374151" : "#111827" }}>
+                  <td style={{ padding: "5px 8px" }}>{mesBR(l.mes)}</td>
+                  {[l.previsto, l.recebido, l.custo, l.acumProjetado, l.acumCusto].map((v, j) => <td key={j} style={{ padding: "5px 8px", textAlign: "right", whiteSpace: "nowrap" }}>{v ? moeda(v) : "—"}</td>)}
+                  <td style={{ padding: "5px 8px", textAlign: "right", whiteSpace: "nowrap", color: l.saldoProjetado < -0.005 ? "#b91c1c" : "#166534", fontWeight: 600 }}>{moeda(l.saldoProjetado)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>* Até o mês passado vale o recebido; deste mês em diante, o previsto (ou o recebido, se já passou dele).</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── UI — a Base de dados ─────────────────────────────────────────
 // A planilha de controle dentro do VICKE: uma linha por item, as colunas
 // de sempre, os filtros por cima e o botão de baixar em Excel. Na obra
@@ -41649,7 +42051,13 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   const [prestando, setPrestando] = useState(null); // { fazendo, msg, erro }
   async function baixarPrestacao() {
     const pc = prestacaoDeContas(filtradas);
-    if (!pc.notas.length) { setPrestando({ erro: true, msg: "Nada pago no que está filtrado." }); return; }
+    // uma obra só (a da tela, ou a do filtro): leva o físico-financeiro, o
+    // a pagar e o fluxo de recebimento dela
+    const obraDaPC = obraFixa ? (obras || [])[0] : (obraId ? (obras || []).find((o) => o && o.id === obraId) : null);
+    const ffPC = obraDaPC ? fisicoFinanceiroDaPrestacao(obraDaPC) : null;
+    const cfPC = ffPC ? conferenciaDaPrestacao(ffPC, filtradas) : null;
+    const flPC = obraDaPC ? fluxoDeRecebimento(obraDaPC) : null;
+    if (!pc.notas.length && !obraDaPC) { setPrestando({ erro: true, msg: "Nada pago no que está filtrado." }); return; }
     setPrestando({ fazendo: true, msg: "Montando a planilha…" });
     const obraNome = obraFixa && (obras || [])[0] ? (obras[0].nome || "obra") : (obraId ? nomeDe(obras, obraId) : "obras");
     // sem acento no nome dos arquivos de dentro do .zip: o Windows abre zip
@@ -41740,6 +42148,56 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
         });
       });
       cabecalho(r3);
+      // 4-6. a obra: físico-financeiro, a pagar e recebimento
+      if (ffPC) {
+        const r4 = wb.addWorksheet("Fisico-financeiro", { views: [{ state: "frozen", ySplit: 1 }] });
+        r4.columns = [{ header: "Grupo / conta", width: 40 }, { header: "Estimado", width: 16 }, { header: "Realizado", width: 16 },
+          { header: "A pagar", width: 16 }, { header: "Saldo", width: 16 }];
+        const negr = [];
+        for (const b of ffPC.blocos) {
+          negr.push(r4.addRow([b.titulo + (b.noTotal ? "" : " (fora do custo)"), b.estimado, b.realizado, b.aPagar, b.saldo]));
+          for (const l of b.linhas) r4.addRow(["   " + l.conta, l.estimado, l.realizado, l.aPagar, l.saldo]);
+        }
+        negr.push(r4.addRow(["Custo da obra", ffPC.total.estimado, ffPC.total.realizado, ffPC.total.aPagar, ffPC.total.saldo]));
+        if (cfPC) {
+          r4.addRow([]);
+          r4.addRow(["Notas pagas desta prestação", cfPC.totalNotas]);
+          if (cfPC.foraDoPeriodo) r4.addRow(["+ pago fora do período/filtro", cfPC.foraDoPeriodo]);
+          if (cfPC.noCartao) r4.addRow(["+ compras no cartão ainda na fatura", cfPC.noCartao]);
+          if (cfPC.foraDoFF) r4.addRow(["− notas fora do custo (terreno, IR, excluídas…)", cfPC.foraDoFF]);
+          negr.push(r4.addRow(["= Realizado no físico-financeiro", cfPC.realizado]));
+          r4.addRow([cfPC.confere ? "Confere" : "Diferença sem explicação", cfPC.confere ? null : cfPC.diferenca]);
+        }
+        r4.eachRow((row, k) => row.eachCell((cel, j) => {
+          if (k > 1) cel.font = { ...fonte, bold: negr.indexOf(row) >= 0 };
+          if (j > 1 && k > 1) cel.numFmt = CP_MOEDA_XL;
+        }));
+        cabecalho(r4);
+        const r5 = wb.addWorksheet("A pagar", { views: [{ state: "frozen", ySplit: 1 }] });
+        r5.columns = [{ header: "Vencimento", width: 13 }, { header: "Fornecedor", width: 30 }, { header: "Descrição", width: 40 },
+          { header: "Parcela", width: 9 }, { header: "Conta contábil", width: 26 }, { header: "Valor", width: 14 }, { header: "No custo da obra", width: 15 }];
+        ffPC.aPagarLista.forEach((x) => r5.addRow([data(x.vencimento), x.fornecedor, x.descricao, x.parcela, x.conta, x.valor, x.foraDoFF ? "não" : "sim"]));
+        const t5 = r5.addRow([null, "", "Total a pagar", "", "", ffPC.totalAPagar, ""]);
+        r5.eachRow((row, k) => row.eachCell({ includeEmpty: true }, (cel, j) => {
+          if (k > 1) cel.font = { ...fonte, bold: row === t5 };
+          if (j === 1) cel.numFmt = "dd/mm/yyyy";
+          if (j === 6 && k > 1) cel.numFmt = CP_MOEDA_XL;
+        }));
+        cabecalho(r5);
+      }
+      if (flPC && flPC.linhas.length) {
+        const r6 = wb.addWorksheet("Recebimento", { views: [{ state: "frozen", ySplit: 1 }] });
+        r6.columns = [{ header: "Mês", width: 10 }, { header: "Previsto", width: 15 }, { header: "Recebido", width: 15 }, { header: "Custo do mês", width: 15 },
+          { header: "Recebido acum. (projetado)", width: 24 }, { header: "Custo acum.", width: 15 }, { header: "Saldo", width: 15 }];
+        flPC.linhas.forEach((l) => r6.addRow([data(l.mes + "-01"), l.previsto, l.recebido, l.custo, l.acumProjetado, l.acumCusto, l.saldoProjetado]));
+        const t6 = r6.addRow([null, flPC.total.previsto, flPC.total.recebido, flPC.total.custo, flPC.total.projetado, flPC.total.custo, flPC.total.saldo]);
+        r6.eachRow((row, k) => row.eachCell({ includeEmpty: true }, (cel, j) => {
+          if (k > 1) cel.font = { ...fonte, bold: row === t6 };
+          if (j === 1) cel.numFmt = "mm/yyyy";
+          if (j > 1 && k > 1) cel.numFmt = CP_MOEDA_XL;
+        }));
+        cabecalho(r6);
+      }
       const xlsx = await wb.xlsx.writeBuffer();
       // o relatório em PDF — é ele a prestação; a planilha vai de apoio
       setPrestando({ fazendo: true, msg: "Montando o relatório…" });
@@ -41749,7 +42207,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       const ehEmp = !!cliObj && typeof ehEmpreendimento === "function" && ehEmpreendimento(cliObj);
       const esc = (completar && completar.data && completar.data.escritorio && completar.data.escritorio.nome) || "";
       const pdf = pdfDaPrestacaoDeContas(JsPDF, pc, { obra: obraNome, cliente: ehEmp ? "" : ((cliObj && cliObj.nome) || ""),
-        tipo: ehEmp ? "Empreendimento" : "", escritorio: esc, de, ate }).output("blob");
+        tipo: ehEmp ? "Empreendimento" : "", escritorio: esc, de, ate, ff: ffPC, conferencia: cfPC, fluxo: flPC }).output("blob");
       // a pasta dos papéis
       const JSZip = await carregarJSZip();
       const z = new JSZip();
@@ -59782,7 +60240,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         {/* Toggle de visão — quebra linha no celular: sem isto a última aba
             fica fora da tela, inalcançável, e ninguém descobre que existe */}
         <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-          {[["pl", "Execução"], ["quadro", "Preencher"], ["itens", "Item a item"], ["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"], ["ligacao", "Confer\u00eancia"], ["escritorio", "Para o escrit\u00f3rio"]].map(([v, l]) => (
+          {[["pl", "Execução"], ["quadro", "Preencher"], ["itens", "Item a item"], ["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"], ["recebimento", "Recebimento"], ["ligacao", "Confer\u00eancia"], ["escritorio", "Para o escrit\u00f3rio"]].map(([v, l]) => (
             <button key={v} onClick={() => setVisaoPL(v)}
               style={{ border: visaoPL === v ? `1.5px solid ${AZUL_VK}` : "1px solid rgba(38,36,33,0.16)", background: "#fff", color: visaoPL === v ? "#111827" : "#4b5563", borderRadius: 20, padding: "6px 16px", fontSize: 12.5, fontWeight: visaoPL === v ? 700 : 500, cursor: "pointer", fontFamily: "inherit" }}>
               {l}
@@ -59796,6 +60254,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         ) : visaoPL === "ligacao" ? (
           <ConferenciaDaObraView obra={{ ...obraAtual, contasPagar: contasDaObra }}
             insumos={data.materiais || []} isMobile={isMobile} fmtBRL={fmtBRL} aoVerItens={() => setVisaoPL("itens")} />
+        ) : visaoPL === "recebimento" && typeof RecebimentoDaObraView === "function" ? (
+          <RecebimentoDaObraView key={obraAtual.id} obra={{ ...obraAtual, contasPagar: contasDaObra, entradas: entradasDaObra }}
+            podeEditar={!!perm.podeGerenciarObra} isMobile={isMobile} fmtBRL={fmtBRL}
+            aoSalvar={(lista) => gravarObrasFrescas((minhas) => minhas.map((o) => (o && o.id === obraAtual.id ? { ...o, cronogramaRecebimento: lista } : o)))} />
         ) : visaoPL === "escritorio" ? (
           <PonteEscritorioView obra={obraAtual} cliente={cliente} contasPagar={contasDaObra}
             entradas={entradasDaObra} data={data} isMobile={isMobile} fmtBRL={fmtBRL} />

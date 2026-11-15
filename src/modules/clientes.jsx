@@ -4284,7 +4284,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         {/* Toggle de visão — quebra linha no celular: sem isto a última aba
             fica fora da tela, inalcançável, e ninguém descobre que existe */}
         <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-          {[["pl", "Execução"], ["quadro", "Preencher"], ["itens", "Item a item"], ["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"], ["ligacao", "Confer\u00eancia"], ["escritorio", "Para o escrit\u00f3rio"]].map(([v, l]) => (
+          {[["pl", "Execução"], ["quadro", "Preencher"], ["itens", "Item a item"], ["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"], ["recebimento", "Recebimento"], ["ligacao", "Confer\u00eancia"], ["escritorio", "Para o escrit\u00f3rio"]].map(([v, l]) => (
             <button key={v} onClick={() => setVisaoPL(v)}
               style={{ border: visaoPL === v ? `1.5px solid ${AZUL_VK}` : "1px solid rgba(38,36,33,0.16)", background: "#fff", color: visaoPL === v ? "#111827" : "#4b5563", borderRadius: 20, padding: "6px 16px", fontSize: 12.5, fontWeight: visaoPL === v ? 700 : 500, cursor: "pointer", fontFamily: "inherit" }}>
               {l}
@@ -4298,6 +4298,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         ) : visaoPL === "ligacao" ? (
           <ConferenciaDaObraView obra={{ ...obraAtual, contasPagar: contasDaObra }}
             insumos={data.materiais || []} isMobile={isMobile} fmtBRL={fmtBRL} aoVerItens={() => setVisaoPL("itens")} />
+        ) : visaoPL === "recebimento" && typeof RecebimentoDaObraView === "function" ? (
+          <RecebimentoDaObraView key={obraAtual.id} obra={{ ...obraAtual, contasPagar: contasDaObra, entradas: entradasDaObra }}
+            podeEditar={!!perm.podeGerenciarObra} isMobile={isMobile} fmtBRL={fmtBRL}
+            aoSalvar={(lista) => gravarObrasFrescas((minhas) => minhas.map((o) => (o && o.id === obraAtual.id ? { ...o, cronogramaRecebimento: lista } : o)))} />
         ) : visaoPL === "escritorio" ? (
           <PonteEscritorioView obra={obraAtual} cliente={cliente} contasPagar={contasDaObra}
             entradas={entradasDaObra} data={data} isMobile={isMobile} fmtBRL={fmtBRL} />
