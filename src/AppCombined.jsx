@@ -56685,7 +56685,8 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
           indiceVersao={ganhoVersao}
           aoTrocarVersao={setGanhoVersao}
           onClose={() => setGanhando(null)}
-          onConfirmar={confirmarGanho} />
+          onConfirmar={confirmarGanho}
+          fechamentos={typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {}} />
       )}
 
       {vendo && typeof PropostaVisualizer === "function" && (
@@ -65625,7 +65626,7 @@ function sincronizarEscopoComEtapas(prev, etapasPct) {
 }
 // ── Escopo: fim da parte pura ──────────────────────────────────
 
-function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, propostaReadOnly, propostaSnapshot, lockEdicao, templateId }) {
+function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, propostaReadOnly, propostaSnapshot, lockEdicao, templateId, conferenciaBase, aoIrEtapa }) {
   // NOTA: NÃO fazer `if (!data) return null` aqui — os hooks abaixo precisam ser
   // chamados em todo render (regra do React). Em vez disso, usamos optional chaining
   // e defaults em cada acesso a `data.xxx` e retornamos null só DEPOIS dos hooks.
@@ -65866,6 +65867,17 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
   // Snapshot tem prioridade pra preservar proposta histórica mesmo se o
   // escritório trocar o logo depois.
   const [logoPreview, setLogoPreview]       = useState(snap?.logoPreview ?? (escritorio.logo || null));
+
+  // A conferência do orçamento com o que está NESTE documento: cidade,
+  // responsável e CAU se editam aqui mesmo (cabeçalho e assinatura), e é o
+  // que vai impresso que conta. Faltando o que bloqueia, o PDF não sai.
+  const conferenciaPdf = Array.isArray(conferenciaBase)
+    ? conferenciaBase.map((c) => (c.id === "cidade" ? { ...c, ok: !!String(cidadeEdit || "").trim() }
+      : c.id === "resp" ? { ...c, ok: !!String(responsavelEdit || "").trim() && /\d/.test(String(cauEdit || "")) }
+      : c.id === "logo" ? { ...c, ok: !!logoPreview } : c))
+    : null;
+  const pendenciasPdf = conferenciaPdf ? conferenciaPdf.filter((c) => c.bloqueia && !c.ok) : [];
+  const travaPdf = pendenciasPdf.length > 0;
 
   // Patch: logo agora vem APENAS do cadastro do escritório (data.escritorio.logo).
   // Removido upload/remoção inline no Preview — sem confusão sobre onde editar.
@@ -66907,7 +66919,19 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
             - Em edição com onSalvarProposta → "Salvar e Gerar PDF" (abre modal)
             - Em edição sem onSalvarProposta → "Gerar PDF" (chama handlePdf direto)
             Largura limitada a maxWidth:860 e centralizado (mesmo eixo do header). */}
-        <div className="no-print" style={{ maxWidth:860, margin:"16px auto 12px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
+{conferenciaPdf && !lockEdicao && !propostaInfo && typeof ConferenciaDoOrcamento === "function" && (
+          <div className="no-print" data-vk-conferencia-pdf="1" style={{ maxWidth:860, margin:"16px auto 0" }}>
+            {typeof EtapasDoOrcamento === "function" && <EtapasDoOrcamento atual={5} checks={conferenciaPdf} aoIr={aoIrEtapa} />}
+            <ConferenciaDoOrcamento checks={conferenciaPdf} atual={4} titulo="Antes de gerar o PDF" soPendentes aoIr={aoIrEtapa} />
+            {travaPdf && (
+              <div style={{ fontSize:12.5, color:"#b45309", marginTop:8, lineHeight:1.5 }}>
+                O PDF fica bloqueado até resolver: {pendenciasPdf.map((c) => c.texto).join("; ")}.
+                {pendenciasPdf.some((c) => c.etapa === 4) ? " Cidade, responsável e CAU se preenchem direto no documento abaixo (cabeçalho e assinatura) ou no cadastro do escritório." : ""}
+              </div>
+            )}
+          </div>
+        )}
+                <div className="no-print" style={{ maxWidth:860, margin:"16px auto 12px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
           <button onClick={voltar} style={{ background:"none", border:"2px solid #d1d5db", borderRadius: 12, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:"#6b7280" }}>
             {rotuloVoltar}
           </button>
@@ -66916,8 +66940,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
               Gerar PDF
             </button>
           ) : (
-            <button data-tutorial-id="botao-gerar-pdf" onClick={() => onSalvarProposta ? setConfirmSalvar(true) : handlePdf()}
-              style={{ background:"#111", border:"none", borderRadius: 12, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
+            <button data-tutorial-id="botao-gerar-pdf" data-vk-trava-pdf={travaPdf ? "1" : "0"} disabled={travaPdf}
+              onClick={() => { if (travaPdf) return; onSalvarProposta ? setConfirmSalvar(true) : handlePdf(); }}
+              style={{ background:"#111", border:"none", borderRadius: 12, padding:"8px 22px", fontSize:13, fontWeight:600, cursor: travaPdf ? "not-allowed" : "pointer", opacity: travaPdf ? 0.4 : 1, fontFamily:"inherit", color:"#fff" }}>
               {onSalvarProposta ? "Salvar e Gerar PDF" : "Gerar PDF"}
             </button>
           )}
@@ -67511,7 +67536,19 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
           </div>
         )}
 
-        <div className="no-print" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:36 }}>
+{conferenciaPdf && !lockEdicao && !propostaInfo && typeof ConferenciaDoOrcamento === "function" && (
+          <div className="no-print" data-vk-conferencia-pdf="1" style={{ maxWidth:860, margin:"0 0 16px" }}>
+            {typeof EtapasDoOrcamento === "function" && <EtapasDoOrcamento atual={5} checks={conferenciaPdf} aoIr={aoIrEtapa} />}
+            <ConferenciaDoOrcamento checks={conferenciaPdf} atual={4} titulo="Antes de gerar o PDF" soPendentes aoIr={aoIrEtapa} />
+            {travaPdf && (
+              <div style={{ fontSize:12.5, color:"#b45309", marginTop:8, lineHeight:1.5 }}>
+                O PDF fica bloqueado até resolver: {pendenciasPdf.map((c) => c.texto).join("; ")}.
+                {pendenciasPdf.some((c) => c.etapa === 4) ? " Cidade, responsável e CAU se preenchem direto no documento abaixo (cabeçalho e assinatura) ou no cadastro do escritório." : ""}
+              </div>
+            )}
+          </div>
+        )}
+                <div className="no-print" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:36 }}>
           <button onClick={voltar} style={{ background:"none", border:`1px solid ${LN}`, borderRadius: 12, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:MD }}>
             {rotuloVoltar}
           </button>
@@ -67520,8 +67557,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
               Gerar PDF
             </button>
           ) : (
-            <button data-tutorial-id="botao-gerar-pdf" onClick={() => onSalvarProposta ? setConfirmSalvar(true) : handlePdf()}
-              style={{ background:C, border:"none", borderRadius: 12, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
+            <button data-tutorial-id="botao-gerar-pdf" data-vk-trava-pdf={travaPdf ? "1" : "0"} disabled={travaPdf}
+              onClick={() => { if (travaPdf) return; onSalvarProposta ? setConfirmSalvar(true) : handlePdf(); }}
+              style={{ background:C, border:"none", borderRadius: 12, padding:"8px 22px", fontSize:13, fontWeight:600, cursor: travaPdf ? "not-allowed" : "pointer", opacity: travaPdf ? 0.4 : 1, fontFamily:"inherit", color:"#fff" }}>
               {onSalvarProposta ? "Salvar e Gerar PDF" : "Gerar PDF"}
             </button>
           )}
@@ -69874,6 +69912,43 @@ function orcMesclarComAtual(base, nosso, atual) {
   if (typeof mesclar3 !== "function") return nosso;
   return mesclar3(base, nosso, atual);
 }
+// ── Conferência do orçamento: as cinco etapas e o que falta ──────
+// Uma lista só, usada no formulário (coluna "Conferência"), no passo a
+// passo do topo e na trava do "Salvar e Gerar PDF". `bloqueia` = o PDF não
+// sai sem isso (o que sai impresso em branco ou errado); o resto é aviso.
+const ORC_ETAPAS = [
+  { n: 1, nome: "O projeto" },
+  { n: 2, nome: "Cômodos e valor" },
+  { n: 3, nome: "Pagamento" },
+  { n: 4, nome: "A proposta" },
+  { n: 5, nome: "Conferir e gerar" },
+];
+function orcConferencia(e) {
+  const x = e || {};
+  const tem = (v) => String(v == null ? "" : v).trim() !== "";
+  // "CAU A12345-6 · Ourinhos": sem o número, a assinatura sai sem registro
+  const cauOk = /\d/.test(String(x.cau || ""));
+  const desc = Math.max(Number(x.descArq) || 0, Number(x.descPac) || 0);
+  return [
+    { id: "ref", etapa: 1, bloqueia: true, ok: tem(x.referencia), texto: "Referência do projeto" },
+    { id: "escopo", etapa: 1, bloqueia: true, ok: !!(x.incluiArq || x.incluiEng), texto: "Arquitetura ou Engenharia incluída" },
+    { id: "definicoes", etapa: 1, bloqueia: true, ok: x.definicoesOk !== false, texto: "Tipo de obra, projeto, padrão e tamanho" },
+    { id: "comodos", etapa: 2, bloqueia: true, ok: !!x.temComodos && Number(x.total) > 0, texto: "Cômodos e valor calculado" },
+    { id: "formas", etapa: 3, bloqueia: true, ok: (x.formas || []).length > 0, texto: "Pelo menos uma forma de pagamento" },
+    { id: "desconto", etapa: 3, bloqueia: false, ok: desc <= 15, texto: desc > 15 ? `Desconto de ${desc}% — confira` : "Desconto até 15%" },
+    { id: "cidade", etapa: 4, bloqueia: true, ok: tem(x.cidade), texto: "Cidade do escritório (sai no cabeçalho)" },
+    { id: "resp", etapa: 4, bloqueia: true, ok: tem(x.responsavel) && cauOk, texto: "Responsável técnico e CAU (saem na assinatura)" },
+    { id: "logo", etapa: 4, bloqueia: false, ok: !!x.logo, texto: "Logo do escritório" },
+    { id: "whats", etapa: 4, bloqueia: false, ok: tem(x.whatsapp), texto: "WhatsApp do cliente (para enviar)" },
+  ];
+}
+// Por etapa: quantos bloqueios e avisos ficaram em aberto.
+function orcEtapasDaConferencia(checks) {
+  return ORC_ETAPAS.map((e) => {
+    const doPasso = (checks || []).filter((c) => c.etapa === e.n);
+    return { ...e, bloqueios: doPasso.filter((c) => c.bloqueia && !c.ok).length, avisos: doPasso.filter((c) => !c.bloqueia && !c.ok).length };
+  });
+}
 // ── Orçamento: fim da parte pura ───────────────────────────────
 
 // ═══════════════════════════════════════════════════════════════
@@ -70619,6 +70694,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
           aoTrocarVersao={setGanhoVersao}
           onClose={() => setOrcGanho(null)}
           onConfirmar={confirmarGanho}
+          fechamentos={typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {}}
         />
       )}
       </div>
@@ -71036,7 +71112,8 @@ function OrcCard({ orc, clientes, onAbrir, onAction, onChangeProb, perm }) {
               v{orc.propostas.length}
             </span>
           )}
-          {orc.expirouEm && (
+          {/* expirou e depois foi ganho: o aviso não vale mais */}
+          {orc.expirouEm && orc.status !== "ganho" && (
             <span
               onClick={(e) => { e.stopPropagation(); onAbrir("verProposta"); }}
               style={{
@@ -72381,7 +72458,7 @@ function InputQtdParcelas({ qtd, onCommit, style }) {
   );
 }
 
-function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocarVersao }) {
+function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocarVersao, fechamentos }) {
   // ── Valores base do orçamento (com/sem imposto conforme orçamento) ──
   // Prioridade: snapshot da proposta FECHADA > campos raiz. Com mais de uma
   // versão enviada, quem fecha é uma delas — e os valores do fechamento têm
@@ -72543,7 +72620,14 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
   const temDiferenca = Math.abs(diferencaParcelas) > 0.01;
   // Parcela zerada ou negativa também trava o Confirmar (orcTemParcelaSemValor).
   const temParcelaSemValor = orcTemParcelaSemValor(parcelas, totalFechado);
-  const bloqueiaConfirmar = temDiferenca || temParcelaSemValor;
+  // Toda parcela com data: é por ela que a parcela aparece no A receber e
+  // casa com o PIX no extrato.
+  const temParcelaSemData = parcelas.some((p) => !/^\d{4}-\d{2}-\d{2}$/.test(String((p && p.data) || "")));
+  // A 1ª já recebida vira lançamento agora, no mês da data dela: mês fechado
+  // não aceita lançamento novo — melhor dizer aqui do que falhar depois.
+  const travaMesRecebida = jaRecebida && parcelas[0] && typeof bloqueioPorMesFechado === "function"
+    ? bloqueioPorMesFechado(String(parcelas[0].data || "").slice(0, 7), fechamentos || {}) : "";
+  const bloqueiaConfirmar = temDiferenca || temParcelaSemValor || temParcelaSemData || !!travaMesRecebida;
 
   // ── Helpers ──
   // Gera N parcelas iguais, com a última absorvendo a diferença de arredondamento.
@@ -72799,6 +72883,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
   }
 
   function confirmar() {
+    if (temParcelaSemData || travaMesRecebida) return;
     // Bloqueia se houver diferença entre soma das parcelas e total fechado
     if (temDiferenca) {
       dialogo.alertar({
@@ -73280,6 +73365,72 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
           </div>
         </div>
 
+        {/* ── O que entra no financeiro e a conferência ──
+            Antes de gravar, o que cada parcela vai lançar quando for
+            recebida (a mesma divisão do recebimento pelo extrato) e o que
+            ainda impede de confirmar. */}
+        {!modoEtapas && parcelas.length > 0 && (() => {
+          const r2 = (v) => Math.round(v * 100) / 100;
+          const fracEng = inclEng && totalFechado > 0 ? fecEng / totalFechado : 0;
+          let engAntes = 0;
+          const linhas = parcelas.map((p, i) => {
+            const v = r2(parseFloat(p.valor) || 0);
+            const e = fracEng > 0 ? (i === parcelas.length - 1 ? r2(Math.max(0, Math.min(v, fecEng - engAntes))) : r2(v * fracEng)) : 0;
+            engAntes = r2(engAntes + e);
+            return { nome: p.nome || `Parcela ${i + 1}`, data: p.data, v, arq: r2(v - e), eng: e };
+          });
+          const checks = [
+            { ok: !temDiferenca, texto: `Soma das parcelas = total fechado (${fmtBRL(totalFechado)})` },
+            { ok: !temParcelaSemValor && !temParcelaSemData, texto: "Toda parcela com valor e data" },
+            ...(jaRecebida ? [{ ok: !travaMesRecebida, texto: travaMesRecebida ? `1ª parcela recebida em mês fechado — ${travaMesRecebida}` : "1ª parcela recebida em mês aberto" }] : []),
+          ];
+          const th = { padding:"6px 8px", fontWeight:600, fontSize:11, color:"#4b5563", textAlign:"right", whiteSpace:"nowrap" };
+          const td = { padding:"6px 8px", fontSize:12, textAlign:"right", whiteSpace:"nowrap", fontVariantNumeric:"tabular-nums" };
+          return (
+            <div data-vk-ganho-financeiro="1" style={{ padding:"0 24px 14px", display:"grid", gridTemplateColumns:"minmax(0, 1fr)", gap:10 }}>
+              <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:12, padding:"12px 14px", minWidth:0 }}>
+                <div style={SECTION_TITLE}>O que entra no financeiro</div>
+                <div style={{ fontSize:11.5, color:"#4b5563", lineHeight:1.45, marginBottom:8 }}>
+                  Cada parcela vira uma conta a receber. Quando o dinheiro cair no banco, ela se divide assim
+                  {fecEng > 0 ? " — a engenharia entra como receita e, no mesmo valor, como custo em Parceiros e reserva para pagar o engenheiro (fora do banco)" : ""}.
+                  O projeto vai para Em Andamento; marcar como perdido depois desfaz tudo.
+                </div>
+                <div style={{ overflowX:"auto" }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", minWidth: fecEng > 0 ? 520 : 320 }}>
+                    <thead><tr style={{ background:"#f9fafb" }}>
+                      <th style={{ ...th, textAlign:"left" }}>Parcela</th>
+                      <th style={th}>Arquitetura</th>
+                      {fecEng > 0 && <th style={th}>Engenharia</th>}
+                      {fecEng > 0 && <th style={th}>Parceiros (custo)</th>}
+                      {fecEng > 0 && <th style={th}>Reserva eng.</th>}
+                    </tr></thead>
+                    <tbody>
+                      {linhas.map((l, i) => (
+                        <tr key={i} style={{ borderTop:"1px solid #f3f4f6" }}>
+                          <td style={{ ...td, textAlign:"left" }}>{l.nome} · {fmtData(l.data) || "sem data"}</td>
+                          <td style={td}>{fmtBRL(l.arq)}</td>
+                          {fecEng > 0 && <td style={td}>{fmtBRL(l.eng)}</td>}
+                          {fecEng > 0 && <td style={{ ...td, color:"#6b7280" }}>{fmtBRL(l.eng)}</td>}
+                          {fecEng > 0 && <td style={{ ...td, color:"#6b7280" }}>{fmtBRL(l.eng)}</td>}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div data-vk-ganho-conferencia="1" style={{ display:"grid", gap:4 }}>
+                {checks.map((c, i) => (
+                  <div key={i} data-vk-ok={c.ok ? "1" : "0"} style={{ display:"flex", gap:8, alignItems:"center", fontSize:12.5, color: c.ok ? "#166534" : "#9a3412" }}>
+                    <span aria-hidden="true" style={{ width:20, height:20, borderRadius:999, display:"inline-flex", alignItems:"center", justifyContent:"center",
+                      fontSize:11, fontWeight:700, background: c.ok ? "#dcfce7" : "#ffedd5" }}>{c.ok ? "✓" : "!"}</span>
+                    {c.texto}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Footer */}
         <div style={{ padding:"14px 24px 18px", borderTop:"1px solid #f3f4f6", display:"flex", justifyContent:"flex-end", gap:8 }}>
           <button onClick={onClose}
@@ -73289,7 +73440,9 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar, indiceVersao, aoTrocar
           <button onClick={confirmar}
             disabled={bloqueiaConfirmar}
             title={temDiferenca ? `A soma das parcelas precisa bater com o total fechado (diferença: ${fmtBRL(diferencaParcelas)})`
-              : temParcelaSemValor ? "Toda parcela precisa ter valor maior que zero" : ""}
+              : temParcelaSemValor ? "Toda parcela precisa ter valor maior que zero"
+              : temParcelaSemData ? "Toda parcela precisa ter data"
+              : travaMesRecebida ? travaMesRecebida : ""}
             style={{
               padding:"8px 18px",
               background: bloqueiaConfirmar ? "#d1d5db" : "#262421",
@@ -76185,6 +76338,81 @@ function EscolhaModeloOrcamento({ data, escritorio, onVoltar, onSelecionar }) {
   );
 }
 
+// O passo a passo do orçamento, no topo de cada tela: onde se está, o que
+// cada etapa tem em aberto. Volta-se a qualquer etapa já feita; para frente
+// é pelo botão da própria tela (é ele que confere o que a etapa precisa).
+function EtapasDoOrcamento({ atual, checks, aoIr }) {
+  const etapas = orcEtapasDaConferencia(checks);
+  return (
+    <nav aria-label="Etapas do orçamento" data-vk-etapas-orcamento="1" className="no-print"
+      style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, maxWidth: 1100, margin: "0 auto 16px" }}>
+      {etapas.map((e) => {
+        const ativa = e.n === atual;
+        const feita = e.n < atual && !e.bloqueios;
+        const pode = e.n < atual && !!aoIr;
+        const status = e.bloqueios ? (e.bloqueios === 1 ? "falta 1" : `faltam ${e.bloqueios}`)
+          : e.n > atual ? "a seguir" : e.avisos ? `ok · ${e.avisos} aviso${e.avisos > 1 ? "s" : ""}` : (ativa ? "em andamento" : "ok");
+        const cor = e.bloqueios && e.n <= atual ? "#b45309" : feita ? "#15803d" : "#6b7280";
+        return (
+          <button key={e.n} type="button" data-vk-etapa-orc={e.n} aria-current={ativa ? "step" : undefined} disabled={!pode && !ativa}
+            onClick={() => { if (pode) aoIr(e.n); }}
+            style={{ display: "flex", gap: 10, alignItems: "center", padding: "9px 12px", minHeight: 50, borderRadius: 12, fontFamily: "inherit",
+              textAlign: "left", cursor: pode ? "pointer" : "default", background: ativa ? "#fff" : "#f8fafc",
+              border: ativa ? "2px solid #0474f4" : "1px solid rgba(38,36,33,0.12)", opacity: e.n > atual ? 0.75 : 1 }}>
+            <span aria-hidden="true" style={{ flex: "0 0 26px", width: 26, height: 26, borderRadius: 999, display: "inline-flex", alignItems: "center",
+              justifyContent: "center", fontSize: 12.5, fontWeight: 700,
+              background: feita ? "#15803d" : ativa ? "#0474f4" : "#e5e7eb", color: feita || ativa ? "#fff" : "#374151" }}>{feita ? "✓" : e.n}</span>
+            <span style={{ display: "grid", gap: 1, minWidth: 0 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{e.nome}</span>
+              <span style={{ fontSize: 11.5, color: cor, fontWeight: 500 }}>{status}</span>
+            </span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+// A conferência: cada item com o que falta e o caminho para resolver.
+function ConferenciaDoOrcamento({ checks, atual, aoIr, titulo, so, soPendentes }) {
+  const todos = (checks || []).filter((c) => !so || so.indexOf(c.etapa) >= 0);
+  // na última etapa, só o que falta: o resto já foi conferido no caminho
+  const lista = soPendentes ? todos.filter((c) => !c.ok) : todos;
+  const bloq = todos.filter((c) => c.bloqueia && !c.ok).length;
+  const avisos = todos.filter((c) => !c.bloqueia && !c.ok).length;
+  return (
+    <div data-vk-conferencia-orcamento="1" className="no-print"
+      style={{ background: "#fff", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 14, padding: 14, display: "grid", gap: 4 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline", marginBottom: 2 }}>
+        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.6, textTransform: "uppercase", color: "#4b5563" }}>{titulo || "Conferência"}</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: bloq ? "#b45309" : "#15803d" }}>
+          {bloq ? `${bloq} bloqueio${bloq > 1 ? "s" : ""}${avisos ? ` · ${avisos} aviso${avisos > 1 ? "s" : ""}` : ""}` : avisos ? `pronto · ${avisos} aviso${avisos > 1 ? "s" : ""}` : "tudo certo"}
+        </span>
+      </div>
+      {soPendentes && (
+        <div style={{ fontSize: 12, color: "#15803d" }}>✓ {todos.length - lista.length} de {todos.length} itens conferidos</div>
+      )}
+      {lista.map((c) => (
+        <div key={c.id} data-vk-check-orc={c.id} data-vk-ok={c.ok ? "1" : "0"}
+          style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "6px 0", borderTop: "1px solid #f1f3f5" }}>
+          <span aria-hidden="true" style={{ flex: "0 0 22px", width: 22, height: 22, borderRadius: 999, display: "inline-flex", alignItems: "center",
+            justifyContent: "center", fontSize: 11.5, fontWeight: 700,
+            background: c.ok ? "#dcfce7" : c.bloqueia ? "#ffedd5" : "#eef0f3", color: c.ok ? "#166534" : c.bloqueia ? "#9a3412" : "#374151" }}>
+            {c.ok ? "✓" : c.bloqueia ? "!" : "·"}</span>
+          <span style={{ flex: 1, minWidth: 0, display: "grid", gap: 1 }}>
+            <span style={{ fontSize: 13, color: "#111827" }}>{c.texto}</span>
+            <span style={{ fontSize: 11, color: "#6b7280" }}>{c.ok ? "ok" : (c.bloqueia ? "bloqueia o PDF" : "aviso") + " · etapa " + c.etapa}</span>
+          </span>
+          {!c.ok && aoIr && c.etapa < atual && (
+            <button type="button" onClick={() => aoIr(c.etapa)}
+              style={{ background: "none", border: "none", color: "#0474f4", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", minHeight: 32 }}>
+              Resolver</button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, onVoltar, modoVer, modoAbertura, escritorio, usuario, cub }) {
   // Normaliza escritorio (defaults vazios se algo faltar)
   const esc = escritorio || {};
@@ -78188,6 +78416,29 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     return { orcParaSalvar, formaPagamentoObj };
   }
 
+  // ── Passo a passo e conferência (as cinco etapas) ──
+  const definicoesOk = !!(tipoObra && tipoProjeto && (isComercial || (padrao && tipologia && tamanho)));
+  const conferencia = orcConferencia({
+    referencia, incluiArq, incluiEng, definicoesOk, temComodos, total: modalTotCI,
+    formas: formasSelecionadas, descArq, descPac: descPacote,
+    cidade: esc.cidade, responsavel: _respPrimeiro && _respPrimeiro.nome, cau: _respPrimeiro && _respPrimeiro.cau,
+    logo: esc.logo, whatsapp: clienteWA,
+  });
+  const passoAtual = !propostaData ? (definicoesOk && referencia ? 2 : 1)
+    : !etapaPagamentoConfirmada ? 3
+    : (!modeloEscolhido || !templateEdicaoConfirmada) ? 4 : 5;
+  // Voltar a uma etapa já feita, sem perder o que foi preenchido nas outras.
+  const irParaEtapa = (n) => {
+    if (n <= 2) { setEtapaPagamentoConfirmada(false); setPropostaData(null); return; }
+    if (n === 3) { setEtapaPagamentoConfirmada(false); return; }
+    if (n === 4) { setModeloEscolhido(null); setEtapaPagamentoConfirmada(true); }
+  };
+  const mostrarEtapas = !modoVer && !propostaReadOnlyForce && modoAbertura !== "ver";
+  const travaAtePagamento = conferencia.some((c) => c.etapa <= 2 && c.bloqueia && !c.ok);
+  const etapasEl = mostrarEtapas
+    ? <div style={{ padding: "16px 16px 0" }}><EtapasDoOrcamento atual={passoAtual} checks={conferencia} aoIr={irParaEtapa} /></div>
+    : null;
+
   if (propostaData) {
     // Fase 1 do refator — reconstrói formaPagamento dinamicamente. O propostaData
     // tem um snapshot antigo (de quando o usuário clicou "Continuar para proposta"),
@@ -78370,7 +78621,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       const _valorArqFP = propostaData.calculo?.precoArq || 0;
       const _valorEngFP = propostaData.calculo?.precoEng || 0;
 
-      return (
+      return (<>
+        {etapasEl}
         <EtapaFormaPagamento
           valorArq={_valorArqFP}
           valorEng={_valorEngFP}
@@ -78427,7 +78679,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             setEtapaPagamentoConfirmada(true);
           }}
         />
-      );
+      </>);
     }
 
     // Escolha do modelo de orçamento (Fase 6e) — tela de seleção visual
@@ -78435,7 +78687,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     // etapa de pagamento, antes do template de edição). Pulada quando já
     // tem modeloEscolhido (vindo do snapshot) ou em modo read-only.
     if (!modeloEscolhido && !propostaReadOnlyForce) {
-      return (
+      return (<>
+        {etapasEl}
         <EscolhaModeloOrcamento
           data={liveData}
           escritorio={esc}
@@ -78446,7 +78699,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             setTemplateEdicaoConfirmada(true);
           }}
         />
-      );
+      </>);
     }
 
     // Template de Edição (Fase 4) — tela intermediária entre Etapa 5 e Preview.
@@ -78463,7 +78716,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           formaPagamento: templateFormaPagamento || undefined,
         },
       };
-      return (
+      return (<>
+        {etapasEl}
         <TemplateEdicao
           data={liveDataComTemplate}
           escritorio={esc}
@@ -78483,7 +78737,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             setTemplateEdicaoConfirmada(true);
           }}
         />
-      );
+      </>);
     }
 
     // Componente do modelo escolhido pela empresa (esc.modelo_default).
@@ -78503,7 +78757,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         : {}),
     };
 
-    return <ModeloComponente
+    // na última etapa o passo a passo mora dentro do documento: é lá que
+    // cidade, responsável e CAU se editam, e a conferência acompanha
+    return <><ModeloComponente
       key={previewRemountKey}
       data={liveDataParaModelo}
       onVoltar={() => {
@@ -78519,7 +78775,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       propostaReadOnly={propostaAbertaReadOnly}
       propostaSnapshot={ultimaProposta}
       lockEdicao={propostaReadOnlyForce}
-    />;
+      conferenciaBase={mostrarEtapas ? conferencia : null}
+      aoIrEtapa={irParaEtapa}
+    /></>;
   }
 
   return (
@@ -78532,6 +78790,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           Voltar
         </button>
       </div>
+
+      {mostrarEtapas && <EtapasDoOrcamento atual={passoAtual} checks={conferencia} aoIr={irParaEtapa} />}
 
       {/* ── Identificação ── */}
       <div style={{ display:"flex", flexDirection:"column", gap:4, marginBottom:18, maxWidth:600 }} data-vk-orc-id-header>
@@ -79645,12 +79905,21 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 </div>
                 <button
                   data-tutorial-id="botao-definir-pagamento"
-                  style={{ width:"100%", marginTop:10, background:"#262421", color:"#fff", border:"1px solid #111", borderRadius: 12, padding:"11px 16px", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.2, transition:"background 0.15s, border-color 0.15s" }}
+                  style={{ width:"100%", marginTop:10, background:"#262421", color:"#fff", border:"1px solid #111", borderRadius: 12, padding:"11px 16px", fontSize:14, opacity: travaAtePagamento ? 0.45 : 1, fontWeight:600, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.2, transition:"background 0.15s, border-color 0.15s" }}
                   onMouseEnter={e => { e.currentTarget.style.background="#000"; }}
                   onMouseLeave={e => { e.currentTarget.style.background="#262421"; }}
-                  onClick={gerarProposta}>
+                  disabled={travaAtePagamento}
+                  onClick={() => { if (!travaAtePagamento) gerarProposta(); }}>
                   Definir forma de pagamento →
                 </button>
+                {travaAtePagamento && (
+                  <div style={{ fontSize:12, color:"#b45309", marginTop:6 }}>Falta: {conferencia.filter((c) => c.etapa <= 2 && c.bloqueia && !c.ok).map((c) => c.texto).join("; ")}.</div>
+                )}
+                {mostrarEtapas && (
+                  <div style={{ marginTop:12 }}>
+                    <ConferenciaDoOrcamento checks={conferencia} atual={passoAtual} aoIr={irParaEtapa} />
+                  </div>
+                )}
               </div>
             )}
           </div>

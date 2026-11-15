@@ -27,7 +27,8 @@ const mesclar = trecho(apiSrc, "function _igualJson", "// Grava um registro com 
 const O = new Function(mesclar + "\n" + puroOrc + `
   return { orcHojeLocal, orcSomarMeses, orcDividirIgual, orcGerarParcelasIguais, orcRedimensionarParcelas,
     orcRemoverParcelaIgual, orcCascataParcela, orcTemParcelaSemValor, orcMaiorNumeroUsado, proximoIdOrcamento,
-    orcValoresBase, orcValorTotal, orcOpcoesDoGanho, orcStatusAoSalvarRascunho, orcMesclarComAtual };`)();
+    orcValoresBase, orcValorTotal, orcOpcoesDoGanho, orcStatusAoSalvarRascunho, orcMesclarComAtual,
+    orcConferencia, orcEtapasDaConferencia };`)();
 
 const efArq = ler("escritorio-financeiro.jsx");
 const F = new Function(efArq.slice(0, efArq.indexOf("// UI — daqui para baixo")) +
@@ -281,6 +282,22 @@ teste("15. Template: valor com ponto decimal (2500.50) é 2.500,50, não 250.050
   assert.strictEqual(T.tplParseMoeda("1.234.567,89"), 1234567.89);
   assert.strictEqual(T.tplParseMoeda(""), 0);
   assert.strictEqual(T.tplParseMoeda("abc"), 0);
+});
+
+teste("conferência do orçamento: o que bloqueia o PDF e o que só avisa, por etapa", () => {
+  const base = { referencia: "Casa", incluiArq: true, incluiEng: false, definicoesOk: true, temComodos: true, total: 5000,
+    formas: ["antecipado"], descArq: 5, descPac: 10, cidade: "Cidade", responsavel: "Arq. Fulano", cau: "CAU A1234-5 · Cidade", logo: "x", whatsapp: "1" };
+  const ok = O.orcConferencia(base);
+  assert.ok(ok.every((c) => c.ok), JSON.stringify(ok.filter((c) => !c.ok)));
+  const falta = O.orcConferencia({ ...base, referencia: " ", cidade: "", cau: "Cidade", logo: "", descPac: 20 });
+  const ids = (f) => falta.filter(f).map((c) => c.id).sort();
+  assert.deepStrictEqual(ids((c) => c.bloqueia && !c.ok), ["cidade", "ref", "resp"], "CAU sem número também bloqueia");
+  assert.deepStrictEqual(ids((c) => !c.bloqueia && !c.ok), ["desconto", "logo"]);
+  const et = O.orcEtapasDaConferencia(falta);
+  assert.deepStrictEqual(et.map((e) => [e.n, e.bloqueios, e.avisos]), [[1, 1, 0], [2, 0, 0], [3, 0, 1], [4, 2, 1], [5, 0, 0]]);
+  // sem cômodo, sem forma, sem arquitetura nem engenharia
+  const vazio = O.orcConferencia({ ...base, incluiArq: false, temComodos: false, formas: [] });
+  assert.deepStrictEqual(vazio.filter((c) => !c.ok).map((c) => c.id).sort(), ["comodos", "escopo", "formas"]);
 });
 
 for (const [nome, fn] of testes) {

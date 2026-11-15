@@ -196,7 +196,7 @@ function sincronizarEscopoComEtapas(prev, etapasPct) {
 }
 // ── Escopo: fim da parte pura ──────────────────────────────────
 
-function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, propostaReadOnly, propostaSnapshot, lockEdicao, templateId }) {
+function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, propostaReadOnly, propostaSnapshot, lockEdicao, templateId, conferenciaBase, aoIrEtapa }) {
   // NOTA: NÃO fazer `if (!data) return null` aqui — os hooks abaixo precisam ser
   // chamados em todo render (regra do React). Em vez disso, usamos optional chaining
   // e defaults em cada acesso a `data.xxx` e retornamos null só DEPOIS dos hooks.
@@ -437,6 +437,17 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
   // Snapshot tem prioridade pra preservar proposta histórica mesmo se o
   // escritório trocar o logo depois.
   const [logoPreview, setLogoPreview]       = useState(snap?.logoPreview ?? (escritorio.logo || null));
+
+  // A conferência do orçamento com o que está NESTE documento: cidade,
+  // responsável e CAU se editam aqui mesmo (cabeçalho e assinatura), e é o
+  // que vai impresso que conta. Faltando o que bloqueia, o PDF não sai.
+  const conferenciaPdf = Array.isArray(conferenciaBase)
+    ? conferenciaBase.map((c) => (c.id === "cidade" ? { ...c, ok: !!String(cidadeEdit || "").trim() }
+      : c.id === "resp" ? { ...c, ok: !!String(responsavelEdit || "").trim() && /\d/.test(String(cauEdit || "")) }
+      : c.id === "logo" ? { ...c, ok: !!logoPreview } : c))
+    : null;
+  const pendenciasPdf = conferenciaPdf ? conferenciaPdf.filter((c) => c.bloqueia && !c.ok) : [];
+  const travaPdf = pendenciasPdf.length > 0;
 
   // Patch: logo agora vem APENAS do cadastro do escritório (data.escritorio.logo).
   // Removido upload/remoção inline no Preview — sem confusão sobre onde editar.
@@ -1478,7 +1489,19 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
             - Em edição com onSalvarProposta → "Salvar e Gerar PDF" (abre modal)
             - Em edição sem onSalvarProposta → "Gerar PDF" (chama handlePdf direto)
             Largura limitada a maxWidth:860 e centralizado (mesmo eixo do header). */}
-        <div className="no-print" style={{ maxWidth:860, margin:"16px auto 12px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
+{conferenciaPdf && !lockEdicao && !propostaInfo && typeof ConferenciaDoOrcamento === "function" && (
+          <div className="no-print" data-vk-conferencia-pdf="1" style={{ maxWidth:860, margin:"16px auto 0" }}>
+            {typeof EtapasDoOrcamento === "function" && <EtapasDoOrcamento atual={5} checks={conferenciaPdf} aoIr={aoIrEtapa} />}
+            <ConferenciaDoOrcamento checks={conferenciaPdf} atual={4} titulo="Antes de gerar o PDF" soPendentes aoIr={aoIrEtapa} />
+            {travaPdf && (
+              <div style={{ fontSize:12.5, color:"#b45309", marginTop:8, lineHeight:1.5 }}>
+                O PDF fica bloqueado até resolver: {pendenciasPdf.map((c) => c.texto).join("; ")}.
+                {pendenciasPdf.some((c) => c.etapa === 4) ? " Cidade, responsável e CAU se preenchem direto no documento abaixo (cabeçalho e assinatura) ou no cadastro do escritório." : ""}
+              </div>
+            )}
+          </div>
+        )}
+                <div className="no-print" style={{ maxWidth:860, margin:"16px auto 12px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
           <button onClick={voltar} style={{ background:"none", border:"2px solid #d1d5db", borderRadius: 12, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:"#6b7280" }}>
             {rotuloVoltar}
           </button>
@@ -1487,8 +1510,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
               Gerar PDF
             </button>
           ) : (
-            <button data-tutorial-id="botao-gerar-pdf" onClick={() => onSalvarProposta ? setConfirmSalvar(true) : handlePdf()}
-              style={{ background:"#111", border:"none", borderRadius: 12, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
+            <button data-tutorial-id="botao-gerar-pdf" data-vk-trava-pdf={travaPdf ? "1" : "0"} disabled={travaPdf}
+              onClick={() => { if (travaPdf) return; onSalvarProposta ? setConfirmSalvar(true) : handlePdf(); }}
+              style={{ background:"#111", border:"none", borderRadius: 12, padding:"8px 22px", fontSize:13, fontWeight:600, cursor: travaPdf ? "not-allowed" : "pointer", opacity: travaPdf ? 0.4 : 1, fontFamily:"inherit", color:"#fff" }}>
               {onSalvarProposta ? "Salvar e Gerar PDF" : "Gerar PDF"}
             </button>
           )}
@@ -2082,7 +2106,19 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
           </div>
         )}
 
-        <div className="no-print" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:36 }}>
+{conferenciaPdf && !lockEdicao && !propostaInfo && typeof ConferenciaDoOrcamento === "function" && (
+          <div className="no-print" data-vk-conferencia-pdf="1" style={{ maxWidth:860, margin:"0 0 16px" }}>
+            {typeof EtapasDoOrcamento === "function" && <EtapasDoOrcamento atual={5} checks={conferenciaPdf} aoIr={aoIrEtapa} />}
+            <ConferenciaDoOrcamento checks={conferenciaPdf} atual={4} titulo="Antes de gerar o PDF" soPendentes aoIr={aoIrEtapa} />
+            {travaPdf && (
+              <div style={{ fontSize:12.5, color:"#b45309", marginTop:8, lineHeight:1.5 }}>
+                O PDF fica bloqueado até resolver: {pendenciasPdf.map((c) => c.texto).join("; ")}.
+                {pendenciasPdf.some((c) => c.etapa === 4) ? " Cidade, responsável e CAU se preenchem direto no documento abaixo (cabeçalho e assinatura) ou no cadastro do escritório." : ""}
+              </div>
+            )}
+          </div>
+        )}
+                <div className="no-print" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:36 }}>
           <button onClick={voltar} style={{ background:"none", border:`1px solid ${LN}`, borderRadius: 12, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:MD }}>
             {rotuloVoltar}
           </button>
@@ -2091,8 +2127,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSair, onSalvarProposta, pr
               Gerar PDF
             </button>
           ) : (
-            <button data-tutorial-id="botao-gerar-pdf" onClick={() => onSalvarProposta ? setConfirmSalvar(true) : handlePdf()}
-              style={{ background:C, border:"none", borderRadius: 12, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
+            <button data-tutorial-id="botao-gerar-pdf" data-vk-trava-pdf={travaPdf ? "1" : "0"} disabled={travaPdf}
+              onClick={() => { if (travaPdf) return; onSalvarProposta ? setConfirmSalvar(true) : handlePdf(); }}
+              style={{ background:C, border:"none", borderRadius: 12, padding:"8px 22px", fontSize:13, fontWeight:600, cursor: travaPdf ? "not-allowed" : "pointer", opacity: travaPdf ? 0.4 : 1, fontFamily:"inherit", color:"#fff" }}>
               {onSalvarProposta ? "Salvar e Gerar PDF" : "Gerar PDF"}
             </button>
           )}

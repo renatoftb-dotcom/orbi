@@ -1461,7 +1461,8 @@ function ProjetosPanel({ cliente, data, save, onAbrirOrcamento }) {
           indiceVersao={ganhoVersao}
           aoTrocarVersao={setGanhoVersao}
           onClose={() => setGanhando(null)}
-          onConfirmar={confirmarGanho} />
+          onConfirmar={confirmarGanho}
+          fechamentos={typeof fechamentosDoEscritorio === "function" ? fechamentosDoEscritorio(data) : {}} />
       )}
 
       {vendo && typeof PropostaVisualizer === "function" && (
