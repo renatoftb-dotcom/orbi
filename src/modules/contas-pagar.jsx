@@ -4847,7 +4847,11 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
     const hNeg = ALT - hPos;
     const base = y0 + 5 + hPos;
     // o valor negativo vai embaixo da barra: sobra lugar para ele antes do mês
-    const escP = maxPos > 0 ? hPos / maxPos : 0, escN = maxNeg > 0 ? Math.max(1, hNeg - 4.5) / maxNeg : 0;
+    // muitos meses: o valor vai em pé em cima da barra (todas com valor), e
+    // a barra mais alta deixa lugar para ele
+    const vertical = Math.ceil(6.4 / Math.min(14, larg / Math.max(1, n))) > 1;
+    const topoV = vertical && !o.sinal ? 6.5 : 0;
+    const escP = maxPos > 0 ? Math.max(1, hPos - topoV) / maxPos : 0, escN = maxNeg > 0 ? Math.max(1, hNeg - 4.5) / maxNeg : 0;
     void total;
     doc.setDrawColor(LINHA[0], LINHA[1], LINHA[2]); doc.setLineWidth(0.3); doc.line(x0, base, x0 + Math.min(larg, slot * n + 2), base);
     const fsVal = slot < 6 ? 5 : slot < 8 ? 5.8 : slot < 11 ? 6.6 : 7.2, fsMes = slot < 6 ? 5 : slot < 8 ? 5.8 : slot < 11 ? 6.6 : 7.2;
@@ -4870,10 +4874,15 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
           yy -= h;
           doc.setFillColor(sg.cor[0], sg.cor[1], sg.cor[2]);
           const r = Math.min(0.9, bw * 0.12, h / 2);
-          if (j === segs.length - 1 && r > 0.2) { doc.roundedRect(x, yy, bw, h, r, r, "F"); doc.rect(x, yy + h / 2, bw, h / 2, "F"); }
+          // o topo arredondado e o corpo reto: a emenda fica junto do topo (no
+          // meio da barra aparecia uma linha fina)
+          if (j === segs.length - 1 && r > 0.2) { doc.roundedRect(x, yy, bw, h, r, r, "F"); doc.rect(x, yy + r, bw, h - r, "F"); }
           else doc.rect(x, yy, bw, h, "F");
         });
-        if (v > 0.004 && mostra(k, m)) { doc.setFont("helvetica", "bold"); doc.setFontSize(fsVal); cor(TINTA); doc.text(curto(v), cx, yy - 1.2, { align: "center" }); doc.setFont("helvetica", "normal"); }
+        if (v > 0.004 && vertical) {
+          doc.setFont("helvetica", "bold"); doc.setFontSize(fsVal); cor(TINTA);
+          doc.text(curto(v), cx + fsVal * 0.13, yy - 0.9, { angle: 90 }); doc.setFont("helvetica", "normal");
+        } else if (v > 0.004 && mostra(k, m)) { doc.setFont("helvetica", "bold"); doc.setFontSize(fsVal); cor(TINTA); doc.text(curto(v), cx, yy - 1.2, { align: "center" }); doc.setFont("helvetica", "normal"); }
       }
       const atual = m.chave === (o.mesHoje || "");
       if (mostra(k, m) && !(pulo > 1 && !atual && meses.some((z, j) => z.chave === (o.mesHoje || "") && j !== k && Math.abs(j - k) < pulo))) {
