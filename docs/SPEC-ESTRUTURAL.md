@@ -83,11 +83,11 @@ CASA TESTE (Márcio Viezzer, 2 pavimentos) em 14/11/2026.
 | 6 | Pilar contínuo na altura: do fundo do baldrame ao piso de cima, sem interrupção na laje | é assim que se executa e calcula | feito |
 | 7 | Viga com topo no piso de cima (a laje apoia em cima) | é assim que se executa | feito |
 | 8 | Parede de cima sem parede embaixo: viga de piso sob a parede (VP), no nível do piso, apoiada nos pilares ou vigas que encontrar | NBR 6118 exige caminho de carga verificado; sobre laje pré-fabricada a parede de alvenaria praticamente sempre pede viga | feito |
-| 9 | Laje em balanço (beiral de laje além das paredes): espessura ≥ 10 cm e engaste na laje vizinha; pré-fabricada em balanço só com armadura negativa | NBR 6118 13.2.4.1 (maciça); detalhe de balanço | pendente |
+| 9 | Laje em balanço (beiral de laje além das paredes): espessura ≥ 10 cm, γn = 1,95 − 0,05h, engaste na laje vizinha com a negativa entrando pelo menos o comprimento do balanço; pré-fabricada: faixa do beiral maciçada; flecha com vão equivalente 2ℓ | NBR 6118 13.2.4.1, Tabelas 13.2 e 13.3 | feito |
 | 10 | Direção das vigotas pelo menor vão de cada painel (painel = região da laje cercada por vigas; vão teórico entre eixos); a carga da pré-fabricada vai só às vigas onde as vigotas apoiam; maciça com ly/lx ≤ 2 nas duas direções; o usuário pode girar as vigotas da laje (aviso se ficarem no maior vão); vão máximo pela tabela do fabricante | eficiência, flecha e caminho de carga real | feito (vão máximo do fabricante pendente) |
-| 11 | Escada: apoio do patamar e do lance (viga de apoio ou laje da escada nas vigas) e furo da laje com borda apoiada | caminho de carga da escada | pendente |
-| 12 | Elementos sem laje (muro, jardineira): cinta de amarração em vez de viga de 40 | não há carga de laje; economia | pendente |
-| 13 | Vão grande de porta/janela (≥ 2,5 m): viga sobre o vão verificada para flecha e pilares nas ombreiras | vão livre | pendente |
+| 11 | Escada: furo na laje sem laje; vigas de borda (VE) nos lados do furo que não caem em viga — cabeceiras primeiro, esticadas até as vigas, lados compridos apoiados nelas; metade da carga da escada na viga onde ela chega; laje da escada com a menor espessura que passa | caminho de carga da escada | feito (caracol: estrutura pronta, fora) |
+| 12 | Trecho sem laje, sem parede em cima e sem viga apoiada nele: cinta de 20 cm (o cálculo aumenta se precisar) | não há carga de laje; economia | feito |
+| 13 | Vão grande de porta/janela (≥ 2,5 m): pilar nas duas ombreiras; a viga do vão é verificada como as outras | vão livre | feito |
 | 14 | Transição inevitável: viga de transição marcada para dimensionamento especial | carga concentrada na viga | aviso feito; dimensionamento pendente |
 | 15 | Pilar do pavimento de cima sem pilar embaixo só entra se não houver saída: sobre vão livre não entra (a parede vai na viga de piso e o encontro vira apoio de viga em viga); sobre porta/janela a menos de 1,0 m de um pilar fixo de baixo não entra (fica o de baixo); pilar intermediário tenta a outra ombreira antes de virar transição | evita transição e pilares colados | feito |
 
@@ -172,3 +172,23 @@ cálculo escreveu. φ20 e φ25 não existem na lista do orçamento (aviso).
 
 **Desempenho**: lançamento na hora; cargas e dimensionamento 0,3 s depois da
 última alteração. Painéis de laje e placas ficam em cache.
+
+## Fundação (etapa 6, primeira versão) — `esFundacaoObra` / `esDimFundacao`
+
+- Estacas escavadas (brocas) com bloco, ou sapatas. A carga admissível vem da
+  sondagem (NBR 6122); sem ela, estimativa para orçamento: atrito lateral 30
+  kPa, ponta 300 kPa, FS 2; sapata 150 kPa. A tela avisa que é estimativa.
+- Um diâmetro para a obra toda (o de menor volume com até 4 estacas por bloco),
+  a partir do mínimo informado. Estacas a 3Ø, 15 cm da estaca à face.
+- Blocos pelo método das bielas (Blévot), biela a 45°: Rs = (Nd/n)(r − c)/d,
+  majorado 1,15; 1 estaca: fretagem 0,25 Nd (1 − ap/B)/fyd.
+- Sapata rígida h ≥ (A − ap)/3, abas iguais, tirante Nd (A − ap)/(8d).
+- Estaca: armadura de ligação 4 φ10 × 2,5 m e estribo φ5 c/20 (construtiva).
+- Arranques do pilar com 40φ de emenda.
+- Orçamento: qtdEstacas, profEstacas, ferro e concreto de estacas, blocos
+  (campo "sapatas" do orçamento) e arranques.
+
+## Lajes — negativas entre maciças (14.7.6.2)
+
+Cada painel engastado na viga comum dá k·p·ℓ²/12; o apoio fica com o maior
+entre 0,8 do maior e a média; barras 0,25 do maior vão para cada lado.

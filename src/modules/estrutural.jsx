@@ -71,6 +71,11 @@ const ES_PADRAO = {
   lajeEsp: 0.10,            // m
   vaoMax: 5.0,              // m entre pilares ao longo de uma parede
   baldrames: true,          // vigas baldrame no pavimento mais baixo
+  vaoGrande: 2.5,           // m: porta/janela a partir disso leva pilar nas duas ombreiras
+  cinta: 0.20,              // m: altura da cinta onde não há laje nem parede em cima
+  // fundação: estacas escavadas (brocas) com bloco, ou sapatas. padm (kN por
+  // estaca) e sigma (kPa) vêm da sondagem (NBR 6122); vazios = estimativa
+  fundacao: { tipo: "estaca", diam: 0.25, prof: 4, padm: null, sigma: null },
 };
 
 const esR3 = (x) => Math.round(x * 1000) / 1000;
@@ -314,6 +319,20 @@ function esLancar(paredes, areas, params, opts = {}) {
       break;
     }
   }
+  // 2a) vão grande de porta/janela (≥ ES_PADRAO.vaoGrande): pilar nas duas
+  // ombreiras — a viga vence o vão livre entre eles (critério 13)
+  for (const w of ws) {
+    const L = esLen(w), ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L, iw = ws.indexOf(w), meio = secao([{ i: iw }]).h / 2;
+    for (const o of w.ab || []) {
+      if (!(+o.larg >= P.vaoGrande - 1e-9)) continue;
+      for (const c of [o.x - o.larg / 2 - meio - 0.02, o.x + o.larg / 2 + meio + 0.02]) {
+        if (c < 0.15 || c > L - 0.15) continue; // ombreira na ponta: o pilar do canto já serve
+        const q = { x: w.a.x + ux * c, y: w.a.y + uy * c };
+        if (pilares.some((pp) => esDist(pp.no, q) < 0.5)) continue;
+        juntar(q, Math.atan2(uy, ux), [{ x: ux, y: uy, i: iw }, { x: -ux, y: -uy, i: iw }], "vao");
+      }
+    }
+  }
   // 2) pilares intermediários onde o trecho entre pilares passa do vão máximo
   const naParede = (w) => {
     const L = esLen(w), ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
@@ -420,7 +439,37 @@ function esLancarPavimentos(pavs, params) {
       }
     }
   }
+  // vigas de borda do furo da escada (critério 11): cada lado do furo que não
+  // cai sobre viga vira viga, esticada até as vigas que encontrar
+  pavs.forEach((p, k) => esVigasDeEscada(p, r[k], P, esTopoPavimento(pavs, k)));
   return r;
+}
+// furo da escada: o contorno (caracol: o quadrado que o envolve)
+function esFuroEscada(e) {
+  if (e.forma !== "caracol") return e.contorno;
+  const xs = e.contorno.map((q) => q.x), ys = e.contorno.map((q) => q.y), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  return [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
+}
+function esVigasDeEscada(p, est, P, topo) {
+  const lajes = (p.areas || []).filter((a) => a.tipo === "laje" && a.pts && a.pts.length >= 3);
+  let n = 0;
+  for (const e of p.escadas || []) {
+    const furo = esFuroEscada(e); if (!furo || furo.length < 3) continue;
+    const c = { x: furo.reduce((t, q) => t + q.x, 0) / furo.length, y: furo.reduce((t, q) => t + q.y, 0) / furo.length };
+    if (!lajes.some((a) => esDentroPoli(c, a.pts))) continue; // sem laje em cima: não há furo
+    // lados curtos primeiro (cabeceiras, esticadas até as vigas); os compridos
+    // apoiam nas cabeceiras — como o engenheiro arma o furo
+    const lados = furo.map((A, i) => [A, furo[(i + 1) % furo.length]]).filter(([A, B]) => esDist(A, B) >= 0.3).sort((x, y) => esDist(x[0], x[1]) - esDist(y[0], y[1]));
+    for (const [A, B] of lados) {
+      const L = esDist(A, B), vigas = est.vigas.filter((v) => !v.baldrame), m = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
+      if (vigas.some((v) => esPontoNoSeg(m, v.a, v.b).d < 0.15)) continue; // já tem viga (ou parede) ali
+      const u = { x: (B.x - A.x) / L, y: (B.y - A.y) / L }, emViga = (q) => vigas.some((v) => esPontoNoSeg(q, v.a, v.b).d < 0.05);
+      const ra = emViga(A) ? { d: 0 } : esRaioViga(A, { x: -u.x, y: -u.y }, vigas), rb = emViga(B) ? { d: 0 } : esRaioViga(B, u, vigas);
+      const a = ra && ra.d < 6 ? { x: A.x - u.x * ra.d, y: A.y - u.y * ra.d } : A, b = rb && rb.d < 6 ? { x: B.x + u.x * rb.d, y: B.y + u.y * rb.d } : B;
+      const apoio = (q) => { const pl = est.pilares.find((pp) => esDist(pp.no, q) <= 0.3); return pl ? pl.id : null; };
+      est.vigas.push({ id: "VE" + (++n), a: { x: esR3(a.x), y: esR3(a.y) }, b: { x: esR3(b.x), y: esR3(b.y) }, apoioA: apoio(a), apoioB: apoio(b), parede: null, s0: 0, s1: esR3(esDist(a, b)), b_: P.viga.b, h: P.viga.h, topo, vigaEscada: true, semApoio: !(ra && ra.d < 6) || !(rb && rb.d < 6) });
+    }
+  }
 }
 
 // trechos (s0, s1 ao longo da parede w) sem parede embaixo: tira da parede os
@@ -792,6 +841,17 @@ function esTramos(vigas, pilares) {
   }
   return ts.map((t) => { const pA = temPilar(t.a), pB = temPilar(t.b); return { ...t, L: esDist(t.a, t.b), apoioA: pA ? pA.id : null, apoioB: pB ? pB.id : null }; });
 }
+// ESCADA (critério 11): laje inclinada maciça de 12 cm + degraus + revestimento
+// + reboco embaixo; uso de escada sem acesso público 2,5 kN/m² (NBR 6120:2019,
+// Tabela 10 — a conferir). e: { contorno, chegada [A, B], esp (espelho),
+// piso, comp (vão em planta), forma }. Caracol: estrutura pronta (fora).
+const ES_ESCADA = { h: 0.12, q: 2.5, revest: 1.0, reboco: 0.25 };
+function esCargaEscada(e) {
+  if (!e || e.forma === "caracol" || !e.contorno || e.contorno.length < 3) return null;
+  const esp = e.esp || 0.175, piso = e.piso || 0.28, cos = piso / Math.hypot(piso, esp);
+  const g = ES_CARGAS.pesos.concretoArmado * (ES_ESCADA.h / cos + esp / 2) + ES_ESCADA.revest + ES_ESCADA.reboco, A = esAreaPoli(e.contorno);
+  return { g, q: ES_ESCADA.q, A, G: g * A, Q: ES_ESCADA.q * A, l: e.comp || Math.sqrt(A), cos };
+}
 // VIGA CONTÍNUA (NBR 6118, 14.6.7.1): tramos alinhados que se encontram num
 // pilar formam uma linha contínua, apoiada (sem engaste) em todos os pilares e
 // nas vigas em que se apoia. Método dos deslocamentos (giro em cada apoio).
@@ -870,12 +930,12 @@ function esResolverContinuas(ts, carga, pontos, extra) {
 // { id: { Ng, Nq } (no pé do pilar, kN) }, e a lista da fundação.
 function esDescidaCargas(pavs, lanc, params) {
   const P = { ...ES_PADRAO, ...(params || {}) }, gc = ES_CARGAS.pesos.concretoArmado;
-  const res = pavs.map(() => ({ vigas: {}, tramos: [], pilares: {}, paineis: [], avisos: [] }));
+  const res = pavs.map(() => ({ vigas: {}, tramos: [], pilares: {}, paineis: [], escadas: [], avisos: [] }));
   const nPav = pavs.length;
   for (let k = nPav - 1; k >= 0; k--) {
     const est = lanc[k], topo = esTopoPavimento(pavs, k);
     const vigas = (est.vigas || []).filter((v) => !v.baldrame), bald = (est.vigas || []).filter((v) => v.baldrame);
-    const carga = new Map(), comParede = new Set(); // id -> { g, q } total (kN) distribuído na peça
+    const carga = new Map(), comParede = new Set(), comLaje = new Set(); // id -> { g, q } total (kN) distribuído na peça
     const add = (id, g, q) => { const c = carga.get(id) || { g: 0, q: 0 }; c.g += g; c.q += q; carga.set(id, c); };
     // peso próprio das vigas e baldrames
     for (const v of [...vigas, ...bald]) add(v.id, gc * v.b_ * v.h * esDist(v.a, v.b), 0);
@@ -885,10 +945,10 @@ function esDescidaCargas(pavs, lanc, params) {
       if (a.tipo === "laje") {
         // pré-fabricada trabalha numa direção (vigotas); maciça com ly/lx ≤ 2 nas duas
         const c = esCargaLaje(a, pavs[k].usoPadrao), duas = c.tipo === "macica" || c.tipo === "informada";
-        const pl = esPaineisLaje(a.pts, vigas, (a.carga || {}).vigotas || "auto", duas);
-        pl.porViga.forEach((A, i) => { if (A) add(vigas[i].id, c.g * A, c.q * A); });
+        const pl = esPaineisLaje(a.pts, vigas, (a.carga || {}).vigotas || "auto", duas, 0.1, (pavs[k].escadas || []).map(esFuroEscada));
+        pl.porViga.forEach((A, i) => { if (A) { add(vigas[i].id, c.g * A, c.q * A); comLaje.add(vigas[i].id); } });
         for (const pn of pl.paineis) {
-          res[k].paineis.push({ ...pn, laje: lajeIdx, tipo: c.tipo, g: c.g, q: c.q, pre: c.pre, esp: a.esp || 0.1, piso: c.piso });
+          res[k].paineis.push({ ...pn, laje: lajeIdx, tipo: c.tipo, g: c.g, q: c.q, pre: c.pre, esp: c.pre ? c.pre.hTotal : (a.esp || 0.1), piso: c.piso, vigaIds: pn.porVigaIdx.map(([i, A]) => [vigas[i].id, A]) });
           if (pn.forcado && pn.outro < pn.vao - 0.05) res[k].avisos.push(`Laje com vigotas no maior vão (${String(Math.round(pn.vao * 100) / 100).replace(".", ",")} m em vez de ${String(Math.round(pn.outro * 100) / 100).replace(".", ",")} m): confira com o fabricante.`);
         }
       } else if (a.tipo === "telhado") {
@@ -898,6 +958,15 @@ function esDescidaCargas(pavs, lanc, params) {
         inf.forEach((A, i) => { if (A) add(vigas[i].id, c.g * A, 0); });
       }
     });
+    // escada (critério 11): metade da carga na viga onde ela chega (em cima),
+    // metade no apoio de baixo (no térreo, direto no solo/contrapiso)
+    for (const e of pavs[k].escadas || []) {
+      const r = esCargaEscada(e); if (!r || !e.chegada) continue;
+      const m = { x: (e.chegada[0].x + e.chegada[1].x) / 2, y: (e.chegada[0].y + e.chegada[1].y) / 2 };
+      let melhor = null, dm = 0.4; for (const v of vigas) { const d = esPontoNoSeg(m, v.a, v.b).d; if (d < dm) { dm = d; melhor = v; } }
+      if (melhor) { add(melhor.id, r.G / 2, r.Q / 2); res[k].escadas.push({ ...r, viga: melhor.id }); }
+      else { res[k].escadas.push({ ...r, viga: null }); res[k].avisos.push("Escada sem viga onde ela chega em cima: confira o furo da laje."); }
+    }
     // paredes do pavimento de cima sobre as vigas deste; paredes deste sobre os baldrames (no 1º)
     const sobre = (paredesAcima, alvo, hLivre) => {
       for (const w of paredesAcima || []) {
@@ -946,6 +1015,9 @@ function esDescidaCargas(pavs, lanc, params) {
         const w = t.pecas.reduce((s, v) => { const c = carga.get(v.id) || { g: 0, q: 0 }; return { g: s.g + c.g, q: s.q + c.q }; }, { g: 0, q: 0 });
         res[k].tramos.push({ ids: t.ids, L: t.L, apoioA: t.apoioA, apoioB: t.apoioB, g: w.g / (t.L || 1), q: w.q / (t.L || 1), RA: R[i].A, RB: R[i].B, Ma: R[i].Ma, Mb: R[i].Mb, continua: R[i].continua, pontos: pontos[i], pontosTodos: [...pontos[i], ...extra[i]], b_: t.pecas[0].b_, h: t.pecas[0].h, baldrame: grupo === bald, comParede: false });
         res[k].tramos[res[k].tramos.length - 1].comParede = t.ids.some((id) => comParede.has(id));
+        res[k].tramos[res[k].tramos.length - 1].comLaje = t.ids.some((id) => comLaje.has(id));
+        res[k].tramos[res[k].tramos.length - 1].apoiaOutra = extra[i].length > 0 || pontos[i].length > 0;
+        res[k].tramos[res[k].tramos.length - 1].especial = t.pecas.some((v) => v.vigaPiso || v.vigaEscada);
         for (const id of t.ids) res[k].vigas[id] = { tramo: t.ids.join("+"), L: t.L, g: w.g / (t.L || 1), q: w.q / (t.L || 1), RA: R[i].A, RB: R[i].B, apoioA: t.apoioA, apoioB: t.apoioB };
         if (!t.apoioA && !ts.some((o, j) => j !== i && esPontoNoSeg(t.a, o.a, o.b).d < 0.2)) res[k].avisos.push(`${t.ids.join("+")}: ponta sem apoio (nem pilar nem viga).`);
         if (!t.apoioB && !ts.some((o, j) => j !== i && esPontoNoSeg(t.b, o.a, o.b).d < 0.2)) res[k].avisos.push(`${t.ids.join("+")}: ponta sem apoio (nem pilar nem viga).`);
@@ -1008,14 +1080,14 @@ function esDistSegs(S, x, y, out) { // distância do ponto a cada viga (em out)
 // mesma laje e mesmas vigas → mesmos painéis (a altura da viga não muda o painel)
 const ES_CACHE_PAINEIS = new Map();
 function esMediana(xs) { if (!xs.length) return null; const o = [...xs].sort((a, b) => a - b); return o[Math.floor(o.length / 2)]; }
-function esPaineisLaje(pts, vigas, sentido = "auto", duasDir = false, passo = 0.1) {
-  const chave = JSON.stringify([pts.map((p) => [+p.x.toFixed(4), +p.y.toFixed(4)]), vigas.map((v) => [+v.a.x.toFixed(4), +v.a.y.toFixed(4), +v.b.x.toFixed(4), +v.b.y.toFixed(4)]), sentido, duasDir, passo]);
+function esPaineisLaje(pts, vigas, sentido = "auto", duasDir = false, passo = 0.1, furos = []) {
+  const chave = JSON.stringify([pts.map((p) => [+p.x.toFixed(4), +p.y.toFixed(4)]), vigas.map((v) => [+v.a.x.toFixed(4), +v.a.y.toFixed(4), +v.b.x.toFixed(4), +v.b.y.toFixed(4)]), sentido, duasDir, passo, (furos || []).map((f) => f.map((q) => [+q.x.toFixed(4), +q.y.toFixed(4)]))]);
   const em = ES_CACHE_PAINEIS.get(chave); if (em) return { porViga: [...em.porViga], paineis: em.paineis };
-  const r = esPaineisLajeCalc(pts, vigas, sentido, duasDir, passo);
+  const r = esPaineisLajeCalc(pts, vigas, sentido, duasDir, passo, furos || []);
   ES_CACHE_PAINEIS.set(chave, r); if (ES_CACHE_PAINEIS.size > 60) ES_CACHE_PAINEIS.delete(ES_CACHE_PAINEIS.keys().next().value);
   return { porViga: [...r.porViga], paineis: r.paineis };
 }
-function esPaineisLajeCalc(pts, vigas, sentido, duasDir, passo) {
+function esPaineisLajeCalc(pts, vigas, sentido, duasDir, passo, furos) {
   const porViga = new Array(vigas.length).fill(0), paineis = [];
   if (!vigas.length || !pts || pts.length < 3) return { porViga, paineis };
   vigas = [...vigas]; vigas._seg = esSegs(vigas); const S = vigas._seg, dist = new Float64Array(S.n);
@@ -1028,7 +1100,7 @@ function esPaineisLajeCalc(pts, vigas, sentido, duasDir, passo) {
   const empate = (dm) => { const ms = []; for (let i = 0; i < S.n; i++) if (dist[i] <= dm + 1e-9) ms.push(i); return ms; }; // depois de perto()
   const est = new Int32Array(ni * nj).fill(-2); // -2 fora, -1 sobre viga, 0 livre, >0 painel
   for (let i = 0; i < ni; i++) for (let j = 0; j < nj; j++) {
-    const q = W(i, j); if (!esDentroPoli(q, pts)) continue;
+    const q = W(i, j); if (!esDentroPoli(q, pts) || furos.some((f) => esDentroPoli(q, f))) continue; // furo da escada: sem laje
     const pv = perto(q);
     if (pv.d < 0.08) { est[i * nj + j] = -1; const ms = empate(pv.d); for (const m of ms) porViga[m] += A / ms.length; }
     else est[i * nj + j] = 0;
@@ -1048,22 +1120,29 @@ function esPaineisLajeCalc(pts, vigas, sentido, duasDir, passo) {
     const lx = Math.min(lU, lV), ly = Math.max(lU, lV), duas = duasDir && isFinite(ly) && ly / lx <= 2;
     const forcado = sentido === "u" || sentido === "v";
     const naU = sentido === "u" ? true : sentido === "v" ? false : lU <= lV;
-    let soUm = 0;
+    // livre: sem viga dos dois lados em nenhuma direção (beiral, sacada)
+    let livres = 0; const dPerto = [], minha = new Map(), dar = (i, a) => { porViga[i] += a; minha.set(i, (minha.get(i) || 0) + a); };
     for (const c of info) {
-      if (!duas && !((naU ? c.un : c.vn) && (naU ? c.up : c.vp))) soUm++;
-      if (duas) { const pv = perto(c.q), ms = empate(pv.d); for (const m of ms) porViga[m] += A / ms.length; continue; }
+      if (!(c.up && c.un) && !(c.vp && c.vn)) livres++;
+      const pv0 = perto(c.q); dPerto.push(pv0.d);
+      if (duas) { const ms = empate(pv0.d); for (const m of ms) dar(m, A / ms.length); continue; }
       const h1 = naU ? c.un : c.vn, h2 = naU ? c.up : c.vp;
-      if (h1 && h2) { porViga[h1.i] += A * h2.d / (h1.d + h2.d); porViga[h2.i] += A * h1.d / (h1.d + h2.d); }
-      else if (h1 || h2) porViga[(h1 || h2).i] += A;
-      else porViga[perto(c.q).i] += A;
+      if (h1 && h2) { dar(h1.i, A * h2.d / (h1.d + h2.d)); dar(h2.i, A * h1.d / (h1.d + h2.d)); }
+      else if (h1 || h2) dar((h1 || h2).i, A);
+      else dar(pv0.i, A);
     }
+    const balanco = livres > info.length / 2;
+    dPerto.sort((a, b) => a - b);
     const area = cel.length * A; if (area < 0.25) continue;
     const cx = info.reduce((t, c) => t + c.q.x, 0) / info.length, cy = info.reduce((t, c) => t + c.q.y, 0) / info.length;
     const vao = naU ? lU : lV, outro = naU ? lV : lU;
     // ponto dentro do painel mais perto do centro (painel em L ou anel de balanço)
     let pc = info[0].q, dpc = Infinity; for (const c of info) { const dd = (c.q.x - cx) ** 2 + (c.q.y - cy) ** 2; if (dd < dpc) { dpc = dd; pc = c.q; } }
     const malha = { passo, U, V, s0, r0, cel };
-    paineis.push({ malha, centro: pc, dir: naU ? U : V, vao: isFinite(vao) ? vao : null, outro: isFinite(outro) ? outro : null, duas, area, forcado, balanco: soUm > info.length / 2 });
+    paineis.push({ malha, centro: pc, dir: naU ? U : V, vao: balanco ? null : isFinite(vao) ? vao : null, outro: isFinite(outro) ? outro : null, duas, area, forcado, balanco,
+      // balanço: comprimento = distância da borda à viga de apoio (95% dos pontos)
+      lBalanco: balanco ? esR3(dPerto[Math.floor(dPerto.length * 0.95)] + passo / 2) : null,
+      U, V, lU: isFinite(lU) ? lU : null, lV: isFinite(lV) ? lV : null, porVigaIdx: [...minha.entries()] });
   }
   return { porViga, paineis };
 }
@@ -1258,6 +1337,107 @@ function esDimPilar(p, N, l, params) {
   if (!r.ok && !r.hSugerida) { for (let h2 = hL + 0.05; h2 <= 0.801; h2 += 0.05) { const t = esDimPilar({ ...p, b, h: Math.round(h2 * 100) / 100, _sem: true }, N, l, params); if (t.ok) { r.hSugerida = t.h; break; } if (p._sem) break; } }
   return r;
 }
+// ═══════════════════════════════════════════════════════════════
+// FUNDAÇÃO (etapa 6) — NBR 6122:2019 e NBR 6118 (blocos e sapatas, 22.6/22.7)
+// ═══════════════════════════════════════════════════════════════
+// Projeto de fundação exige investigação do solo (sondagem SPT, NBR 6122 e
+// NBR 8036). Sem a carga admissível informada, o sistema estima para
+// orçamento: estaca escavada com atrito lateral médio de 30 kPa e ponta de
+// 300 kPa, fator de segurança 2; sapata com σadm de 150 kPa. Valores típicos
+// de solo de média resistência — a conferir com a sondagem.
+// Blocos sobre estacas pelo método das bielas (Blévot): biela entre 45° e
+// 55°, tirante Rs = (Nd/n)·(r − c)/d na direção de cada estaca (c = 0,25ap
+// para 2 estacas, 0,30ap para 3, 0,354ap para 4), majorado 1,15; 1 estaca:
+// fretagem 0,25·Nd·(1 − ap/B)/fyd. Espaçamento 3D (escavadas), 15 cm da
+// estaca à face. Estaca: armadura de ligação 4 φ10 × 2,5 m + estribo φ5 c/20.
+// Sapata rígida (h ≥ (A − ap)/3), tirante Nd(A − ap)/(8d) em cada direção.
+const ES_FUND = { fsLateral: 30, qPonta: 300, FS: 2, sigmaPadrao: 150, espacamento: 3, folga: 0.15, pesoBloco: 1.05,
+  estaca: { n: 4, d: 10, comp: 2.5, estribo: 5, s: 0.20 }, cobrimento: 0.05 };
+function esPadmEstaca(D, L) { return (Math.PI * D * L * ES_FUND.fsLateral + Math.PI * D * D / 4 * ES_FUND.qPonta) / ES_FUND.FS; }
+function esBarrasTirante(As) {
+  let m = null;
+  for (const d of [8, 10, 12.5, 16, 20]) { const n = Math.max(2, Math.ceil(As / esAreaBarra(d) - 1e-9)); const area = n * esAreaBarra(d), custo = area * (1 + 0.05 * (n - 2)); if (n <= 8 && (!m || custo < m.custo)) m = { n, d, area, custo }; }
+  return m;
+}
+// estacas: o diâmetro informado é o mínimo; sem carga admissível informada, o
+// engenheiro escolhe UM diâmetro para a obra toda (um trado só) — o que dá o
+// menor volume (estacas + blocos) com até 4 estacas em todos os pilares. Com
+// padm informada (da sondagem), fica o diâmetro dela.
+const ES_DIAMETROS = [0.20, 0.25, 0.30, 0.35, 0.40, 0.50, 0.60];
+function esFundacaoObra(itens, params) { // itens: [{ pl, N, dimPilar }]
+  const P = { ...ES_PADRAO, ...(params || {}) }, F = { ...ES_PADRAO.fundacao, ...(P.fundacao || {}) };
+  const com = (D) => itens.map(({ pl, N, dimPilar }) => esDimFundacao(pl, N, dimPilar, { ...P, fundacao: { ...F, diam: D } }));
+  if (F.tipo === "sapata" || +F.padm > 0) return com(+F.diam || 0.25);
+  let melhor = null;
+  for (const D of ES_DIAMETROS.filter((x) => x >= (+F.diam || 0.25) - 1e-9)) {
+    const rs = com(D), ok = rs.every((r) => r.ok), vol = rs.reduce((t, r) => t + r.concreto.estacas + r.concreto.blocos, 0);
+    if (ok && (!melhor || vol < melhor.vol - 1e-9)) melhor = { rs, vol };
+  }
+  return melhor ? melhor.rs : com(ES_DIAMETROS[ES_DIAMETROS.length - 1]);
+}
+function esDimFundacao(pl, N, dimPilar, params) {
+  const P = { ...ES_PADRAO, ...(params || {}) };
+  return esDimFundacaoCom(pl, N, dimPilar, { ...P, fundacao: { ...ES_PADRAO.fundacao, ...(P.fundacao || {}) } });
+}
+function esDimFundacaoCom(pl, N, dimPilar, P) {
+  const F = P.fundacao, C = esConcreto(P.fck), fyd = C.fyd * 1000;
+  const Nk = N.Ng + N.Nq, Nd = ES_DIM.gamaF * Nk, ap = Math.max(pl.b, pl.h), bp = Math.min(pl.b, pl.h);
+  const r = { tipo: F.tipo, Nk, ok: true, motivos: [], aco: {}, concreto: { estacas: 0, blocos: 0, sapatas: 0 }, ang: pl.ang || 0 };
+  const somaAco = (d, kg) => { r.aco[d] = (r.aco[d] || 0) + kg; };
+  // arranque: as barras do pilar entram no bloco/sapata e passam 40φ para a emenda
+  const arranque = (hb) => { const b = dimPilar && dimPilar.barras; if (!b) return; somaAco(b.d, b.n * (hb - ES_FUND.cobrimento + 0.20 + 40 * b.d / 1000) * esKgBarra(b.d)); r.arranque = b; };
+  if (F.tipo === "sapata") {
+    const sig = +F.sigma > 0 ? +F.sigma : ES_FUND.sigmaPadrao; r.sigma = sig; r.estimado = !(+F.sigma > 0);
+    const Areq = ES_FUND.pesoBloco * Nk / sig, dd = ap - bp; // mesmas abas nas duas direções
+    const B = Math.max(0.6, Math.ceil(((-dd + Math.sqrt(dd * dd + 4 * Areq)) / 2) * 20) / 20), L = Math.max(B, Math.ceil((B + dd) * 20) / 20);
+    const h = Math.max(0.30, Math.ceil(((L - ap) / 3 + 0.05) * 20) / 20), d = h - ES_FUND.cobrimento;
+    r.sapata = { L, B, h }; r.concreto.sapatas = L * B * h;
+    for (const [Lx, ax, Ly] of [[L, ap, B], [B, bp, L]]) {
+      const As = Math.max(1.15 * Nd * (Lx - ax) / (8 * d) / fyd, 0.0015 * Ly * h), arm = esArmaduraLaje(As / Ly, h);
+      const a = arm || { d: 10, s: 0.10 }; somaAco(a.d, (Ly / a.s + 1) * (Lx - 0.10 + 0.30) * esKgBarra(a.d));
+      (r.malha = r.malha || []).push(a);
+    }
+    arranque(h);
+    return r;
+  }
+  const D = +F.diam || 0.25, Lp = +F.prof || 4, padm = +F.padm > 0 ? +F.padm : esPadmEstaca(D, Lp);
+  r.D = D; r.L = Lp; r.padm = padm; r.estimado = !(+F.padm > 0);
+  const n = Math.max(1, Math.ceil(ES_FUND.pesoBloco * Nk / padm - 1e-9)); r.n = n;
+  if (n > 4) { r.ok = false; r.motivos.push(`${n} estacas de Ø${Math.round(D * 100)} cm: use diâmetro ou profundidade maiores (bloco de até 4)`); }
+  const e = ES_FUND.espacamento * D, f = ES_FUND.folga;
+  let bl, raio = 0, c = 0;
+  if (n === 1) bl = { L: Math.max(D + 2 * f, ap + 0.10), B: Math.max(D + 2 * f, bp + 0.10) };
+  else if (n === 2) { bl = { L: e + D + 2 * f, B: D + 2 * f }; raio = e / 2; c = 0.25 * ap; }
+  else if (n === 3) { bl = { L: e + D + 2 * f, B: e * Math.sqrt(3) / 2 + D + 2 * f }; raio = e / Math.sqrt(3); c = 0.30 * ap; }
+  else { bl = { L: e + D + 2 * f, B: e + D + 2 * f }; raio = e / Math.SQRT2; c = 0.354 * ap; }
+  // altura: biela a 45°–55° (d entre r − c e 1,43(r − c)); 1 estaca: h ≥ 1,2D
+  const d = n === 1 ? Math.max(0.30, 1.2 * D) : Math.max(0.30, raio - c);
+  const h = Math.ceil((d + 0.10) * 20) / 20; // 10 cm: cabeça da estaca dentro do bloco + cobrimento
+  bl.h = h; bl.L = Math.ceil(bl.L * 20) / 20; bl.B = Math.ceil(bl.B * 20) / 20; r.bloco = bl;
+  r.concreto.blocos = bl.L * bl.B * h * (n === 3 ? 0.8 : 1);
+  r.concreto.estacas = n * Math.PI * D * D / 4 * Lp;
+  // posição das estacas (no eixo do pilar: x ao longo do lado maior)
+  r.estacas = n === 1 ? [{ x: 0, y: 0 }] : n === 2 ? [{ x: -e / 2, y: 0 }, { x: e / 2, y: 0 }]
+    : n === 3 ? [{ x: -e / 2, y: -e * Math.sqrt(3) / 6 }, { x: e / 2, y: -e * Math.sqrt(3) / 6 }, { x: 0, y: e * Math.sqrt(3) / 3 }]
+    : [{ x: -e / 2, y: -e / 2 }, { x: e / 2, y: -e / 2 }, { x: e / 2, y: e / 2 }, { x: -e / 2, y: e / 2 }].concat(n > 4 ? [] : []);
+  if (n === 1) {
+    const As = Math.max(0.25 * Nd * (1 - ap / bl.L) / fyd, 2 * esAreaBarra(8)), t = esBarrasTirante(As);
+    r.tirante = t; somaAco(t.d, 2 * t.n * (2 * (bl.L + bl.B) - 0.2) * esKgBarra(t.d) / 2); // estribos horizontais nas duas direções
+  } else {
+    const H = (Nd / n) * (raio - c) / d, T = n === 2 ? H : n === 3 ? H / Math.sqrt(3) : H / Math.SQRT2; // força em cada tirante
+    const t = esBarrasTirante(1.15 * T / fyd); r.tirante = t; r.Rs = T;
+    const lados = n === 2 ? 1 : n === 3 ? 3 : 4, comp = (n === 2 ? bl.L : e) + 2 * (D / 2 + f) + 2 * 0.25;
+    somaAco(t.d, lados * t.n * comp * esKgBarra(t.d));
+  }
+  // armadura de pele/estribos construtivos do bloco: φ6,3 c/15 no contorno
+  somaAco(6.3, Math.ceil(h / 0.15) * (2 * (bl.L + bl.B)) * esKgBarra(6.3));
+  // estacas: armadura de ligação
+  const A = ES_FUND.estaca; somaAco(A.d, n * A.n * (A.comp + 0.3) * esKgBarra(A.d));
+  somaAco(A.estribo, n * (A.comp / A.s + 1) * (Math.PI * (D - 0.10) + 0.10) * esKgBarra(A.estribo));
+  r.estacaArm = A;
+  arranque(h);
+  return r;
+}
 // dimensiona tudo: descida = esDescidaCargas(...), lanc = esLancarPavimentos(...)
 function esDimensionar(pavs, lanc, descida, params) {
   const out = descida.pavimentos.map(() => ({ vigas: {}, pilares: {}, lajes: [] })), aco = {};
@@ -1271,9 +1451,18 @@ function esDimensionar(pavs, lanc, descida, params) {
     }
   });
   // lajes (painéis)
-  descida.pavimentos.forEach((pv, k) => { out[k].lajes = (pv.paineis || []).map((pn) => { const r = esDimLaje(pn, params); if (r && r.aco) soma(r.aco); return r; }); });
+  descida.pavimentos.forEach((pv, k) => {
+    out[k].lajes = (pv.paineis || []).map((pn) => { const r = esDimLaje(pn, params); if (r && r.aco) soma(r.aco); return r; });
+    out[k].negativas = esNegativasLaje(pv.paineis || [], lanc[k].vigas || [], params); for (const n of out[k].negativas) soma(n.aco);
+    out[k].escadas = (pv.escadas || []).map((e) => { const r = esDimEscada(e, params); soma(r.aco); return r; });
+  });
+  // fundação: um bloco (ou sapata) por pilar do pavimento mais baixo
+  const itens = (descida.fundacao || []).map((f) => ({ id: f.id, pl: (lanc[0].pilares || []).find((p) => p.id === f.id), N: f, dimPilar: out[0].pilares[f.id] })).filter((x) => x.pl);
+  const fund = esFundacaoObra(itens, params);
+  fund.forEach((r, i) => { r.id = itens[i].id; soma(r.aco); });
+  out.fundacao = fund;
   const kg = (filtro) => Object.entries(aco).filter(([d]) => filtro(+d)).reduce((t, [, v]) => t + v, 0);
-  return { pavimentos: out, aco, ca50: kg((d) => d > 5), ca60: kg((d) => d <= 5) };
+  return { pavimentos: out, fundacao: fund, aco, ca50: kg((d) => d > 5), ca60: kg((d) => d <= 5) };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1386,7 +1575,7 @@ function esArmaduraLaje(As, h) {
 function esDimLajeMacica(pn, params) {
   const P = { ...ES_PADRAO, ...(params || {}) }, C = esConcreto(P.fck), kPa = 1000, h = pn.esp, c = ES_NBR.cobrimento.laje[P.caa] / 1000;
   const r = { tipo: "macica", l: pn.vao, h, ok: true, motivos: [] };
-  if (pn.balanco) { r.ok = false; r.motivos.push("laje em balanço: dimensionar com armadura negativa e engaste na laje vizinha (critério 9, pendente)"); return r; }
+  if (pn.balanco) return esDimLajeBalanco(pn, params);
   // a malha apoia no centro da primeira célula sobre a viga (~5 cm do eixo de
   // cada lado): corrige para o vão teórico (eixo a eixo) — M ∝ ℓ², flecha ∝ ℓ⁴
   const pl0 = esPlacaApoiada(pn.malha), fv = pn.vao ? pn.vao / Math.max(0.5, pn.vao - 0.1) : 1;
@@ -1410,10 +1599,101 @@ function esDimLajeMacica(pn, params) {
   r.aco = {}; for (const dd of r.dir) if (dd.arm) r.aco[dd.arm.d] = (r.aco[dd.arm.d] || 0) + pn.area / dd.arm.s * 1.1 * esKgBarra(dd.arm.d);
   return r;
 }
+// faixa de 1 m de laje maciça (h, d) para o momento Md (kN·m/m): As e barras
+function esFaixaLaje(Md, h, d, C, AsMin) {
+  const fcd = C.fcd * 1000, fyd = C.fyd * 1000, k = Md / (0.425 * d * d * fcd);
+  if (k >= 1) return null;
+  const x = 1.25 * d * (1 - Math.sqrt(1 - k)), As = Math.max(Md / (fyd * (d - 0.4 * x)), AsMin);
+  return { x, xd: x / d, As, arm: esArmaduraLaje(As, h) };
+}
+// LAJE EM BALANÇO (critério 9; NBR 6118, 13.2.4.1): espessura ≥ 10 cm e
+// γn = 1,95 − 0,05h (h < 19 cm, Tabela 13.2) nos esforços; trabalha engastada
+// na laje vizinha. Pré-fabricada em balanço: o engenheiro maciça a faixa do
+// beiral (mesma altura total), com a negativa ancorada na laje de dentro.
+// Flecha: ℓ/250 com o vão equivalente 2ℓ (Tabela 13.3, nota).
+const ES_BALANCO = { hMin: 0.10, borda: 0 }; // carga na ponta (kN/m): platibanda/guarda-corpo, se houver
+function esDimLajeBalanco(pn, params) {
+  const P = { ...ES_PADRAO, ...(params || {}) }, C = esConcreto(P.fck), kPa = 1000, h = pn.esp, l = pn.lBalanco || 0.5;
+  const r = { tipo: pn.tipo, balanco: true, l, h, ok: true, motivos: [], macicar: pn.tipo !== "macica" };
+  const g = pn.pre ? pn.g - pn.pre.pp + ES_CARGAS.pesos.concretoArmado * h : pn.g, q = pn.q;
+  const hcm = Math.round(h * 100), gn = hcm < 19 ? Math.round((1.95 - 0.05 * hcm) * 100) / 100 : 1; r.gn = gn;
+  if (h < ES_BALANCO.hMin - 1e-9) { r.ok = false; r.motivos.push(`balanço com ${hcm} cm: a norma pede no mínimo 10 cm (13.2.4.1)`); }
+  const c = ES_NBR.cobrimento.laje[P.caa] / 1000, d = h - c - 0.005;
+  r.Md = gn * ES_DIM.gamaF * ((g + q) * l * l / 2 + ES_BALANCO.borda * l);
+  const f = esFaixaLaje(r.Md, h, d, C, (ES_DIM.rhoMin[P.fck] || 0.15) / 100 * h);
+  if (!f || !f.arm) { r.ok = false; r.motivos.push("flexão do balanço: a laje não resiste (aumente a espessura)"); return r; }
+  if (f.xd > ES_DIM.xdMax) { r.ok = false; r.motivos.push("flexão do balanço: x/d > 0,45"); }
+  r.As = f.As; r.arm = f.arm;
+  // a negativa entra na laje de dentro pelo menos o comprimento do balanço e a ancoragem
+  r.ancoragem = Math.max(l, 0.5, 40 * f.arm.d / 1000);
+  const Ic = h ** 3 / 12, Mr = 1.5 * C.fctm * kPa * Ic / (h / 2), ps = g + ES_DIM.psi2 * q, Ma = ps * l * l / 2;
+  const II = esLinhaNeutraII(1, h, 1, f.arm.areaM, d, ES_DIM.Es / C.Ecs), Ie = Ma <= Mr ? Ic : Math.min(Ic, (Mr / Ma) ** 3 * Ic + (1 - (Mr / Ma) ** 3) * II.I);
+  const fi = ps * l ** 4 / (8 * C.Ecs * kPa * Ie);
+  r.flecha = { total: fi * (1 + ES_DIM.alfaF), lim: 2 * l / ES_DIM.flechaTotal };
+  if (r.flecha.total > r.flecha.lim) { r.ok = false; r.motivos.push(`flecha do balanço ${(Math.ceil(r.flecha.total * 1000) / 10).toFixed(1).replace(".", ",")} cm > ${(Math.floor(r.flecha.lim * 1000) / 10).toFixed(1).replace(".", ",")} cm`); }
+  // aço: barras ao longo do balanço (borda ≈ área / ℓ) + distribuição φ5 c/20
+  const borda = pn.area / Math.max(0.2, l), comp = l + r.ancoragem + 0.10;
+  r.aco = { [f.arm.d]: borda / f.arm.s * comp * esKgBarra(f.arm.d) };
+  r.aco[5] = (r.aco[5] || 0) + (l / 0.20 + 1) * borda * esKgBarra(5);
+  return r;
+}
+// ESCADA: laje inclinada bi-apoiada (vão em planta), faixa de 1 m
+// espessura: a menor (de 1 em 1 cm, a partir de 12) que passa — a carga
+// própria acompanha a espessura
+function esDimEscada(e, params) {
+  let ult = null;
+  for (let hcm = Math.round(ES_ESCADA.h * 100); hcm <= 22; hcm++) {
+    const h = hcm / 100, dg = ES_CARGAS.pesos.concretoArmado * (h - ES_ESCADA.h) / (e.cos || 1);
+    ult = esDimEscadaH({ ...e, g: e.g + dg }, params, h); if (ult.ok) return ult;
+  }
+  return ult;
+}
+function esDimEscadaH(e, params, h) {
+  const P = { ...ES_PADRAO, ...(params || {}) }, C = esConcreto(P.fck), kPa = 1000, c = ES_NBR.cobrimento.laje[P.caa] / 1000, d = h - c - 0.005, l = e.l;
+  const r = { l, h, ok: true, motivos: [], g: e.g, q: e.q, viga: e.viga };
+  r.Md = ES_DIM.gamaF * (e.g + e.q) * l * l / 8;
+  const f = esFaixaLaje(r.Md, h, d, C, (ES_DIM.rhoMin[P.fck] || 0.15) / 100 * h);
+  if (!f || !f.arm) { r.ok = false; r.motivos.push(`escada: a laje de ${Math.round(h * 100)} cm não resiste (ponha viga no patamar)`); return r; }
+  r.arm = f.arm;
+  const Ic = h ** 3 / 12, Mr = 1.5 * C.fctm * kPa * Ic / (h / 2), ps = e.g + ES_DIM.psi2 * e.q, Ma = ps * l * l / 8;
+  const II = esLinhaNeutraII(1, h, 1, f.arm.areaM, d, ES_DIM.Es / C.Ecs), Ie = Ma <= Mr ? Ic : Math.min(Ic, (Mr / Ma) ** 3 * Ic + (1 - (Mr / Ma) ** 3) * II.I);
+  const fi = 5 * ps * l ** 4 / (384 * C.Ecs * kPa * Ie);
+  r.flecha = { total: fi * (1 + ES_DIM.alfaF), lim: l / ES_DIM.flechaTotal };
+  if (r.flecha.total > r.flecha.lim) { r.ok = false; r.motivos.push(`escada: flecha acima de ℓ/250 mesmo com ${Math.round(h * 100)} cm (ponha viga no patamar)`); }
+  const larg = e.A / Math.max(0.5, l);
+  r.aco = { [f.arm.d]: larg / f.arm.s * (l / (e.cos || 1) + 0.4) * esKgBarra(f.arm.d), 5: (l / (e.cos || 1) / 0.20 + 1) * larg * esKgBarra(5) };
+  return r;
+}
+// NEGATIVA ENTRE PAINÉIS DE LAJE MACIÇA (14.7.6.2): cada painel engastado na
+// viga comum dá M = k·p·ℓ²/12 (k = parte da carga na direção perpendicular à
+// viga: ℓy⁴/(ℓx⁴+ℓy⁴) em duas direções); o momento do apoio é o maior entre
+// 0,8 do maior e a média dos dois. Positivo segue o de placa apoiada (a favor).
+function esNegativasLaje(paineis, vigasPav, params) {
+  const P = { ...ES_PADRAO, ...(params || {}) }, C = esConcreto(P.fck), r = [];
+  const porViga = new Map();
+  paineis.forEach((pn) => { if (pn.tipo !== "macica" || pn.balanco || !pn.lU || !pn.lV) return; for (const [id, A] of pn.vigaIds || []) if (A > 0.05) { if (!porViga.has(id)) porViga.set(id, []); porViga.get(id).push(pn); } });
+  for (const [id, ps] of porViga) {
+    if (ps.length < 2) continue;
+    const v = vigasPav.find((x) => x.id === id); if (!v) continue;
+    const L = esDist(v.a, v.b), u = { x: (v.b.x - v.a.x) / L, y: (v.b.y - v.a.y) / L };
+    const Ms = ps.slice(0, 2).map((pn) => {
+      const paraleloV = Math.abs(u.x * pn.V.x + u.y * pn.V.y) > 0.7, lp = paraleloV ? pn.lU : pn.lV, lo = paraleloV ? pn.lV : pn.lU;
+      const k = pn.duas ? lo ** 4 / (lp ** 4 + lo ** 4) : (lp <= lo ? 1 : 0);
+      return { M: k * ES_DIM.gamaF * (pn.g + pn.q) * lp * lp / 12, lp, h: pn.esp };
+    });
+    const Mmax = Math.max(Ms[0].M, Ms[1].M), Md = Math.max(0.8 * Mmax, (Ms[0].M + Ms[1].M) / 2), h = Math.min(Ms[0].h, Ms[1].h);
+    const c = ES_NBR.cobrimento.laje[P.caa] / 1000, f = esFaixaLaje(Md, h, h - c - 0.005, C, (ES_DIM.rhoMin[P.fck] || 0.15) / 100 * h);
+    const ext = 0.25 * Math.max(Ms[0].lp, Ms[1].lp);
+    const item = { viga: id, L, Md, ok: !!(f && f.arm), arm: f ? f.arm : null, extensao: ext };
+    if (item.arm) item.aco = { [item.arm.d]: L / item.arm.s * (2 * ext + 0.2) * esKgBarra(item.arm.d) };
+    r.push(item);
+  }
+  return r;
+}
 function esDimLaje(pn, params) {
   if (pn.area < 1 || (!pn.vao && !pn.balanco)) return null; // sobra pequena de laje além da viga
   if (pn.tipo === "trelicada" || pn.tipo === "protendida") {
-    if (pn.balanco) return { tipo: pn.tipo, ok: false, motivos: ["laje pré-fabricada em balanço: só com armadura negativa na capa e vigota engastada na laje vizinha (critério 9, pendente)"] };
+    if (pn.balanco) return esDimLajeBalanco(pn, params);
     const r = esDimLajePre(pn, params);
     if (pn.tipo === "trelicada") {
       if (!r.ok) for (const he of [0.08, 0.12, 0.16, 0.20, 0.25]) { if (he <= pn.pre.he + 1e-9) continue; const t = esDimLajePre(pn, params, he); if (t.ok) { r.heSugerido = he; break; } }
@@ -1433,15 +1713,24 @@ function esDimLaje(pn, params) {
 // próprio e a nova rigidez. A altura nova passa pela verificação de
 // compatibilização (fundo da viga × porta/janela embaixo).
 function esCalcularEstrutura(pavs, params) {
-  const lanc = esLancarPavimentos(pavs, params), ajustes = [];
+  const P = { ...ES_PADRAO, ...(params || {}) }, lanc = esLancarPavimentos(pavs, params), ajustes = [];
   let desc = null, dim = null;
+  // critério 12: trecho sem laje, sem parede em cima e sem viga apoiada nele
+  // (muro, jardineira, parede de varanda sem cobertura) vira cinta de amarração
+  desc = esDescidaCargas(pavs, lanc, params);
+  desc.pavimentos.forEach((pv, k) => {
+    for (const t of pv.tramos) {
+      if (t.baldrame || t.comLaje || t.comParede || t.apoiaOutra || t.especial) continue;
+      for (const v of lanc[k].vigas) if (t.ids.includes(v.id)) { v.h = P.cinta; v.cinta = true; }
+    }
+  });
   for (let it = 0; it < 4; it++) {
     desc = esDescidaCargas(pavs, lanc, params); dim = esDimensionar(pavs, lanc, desc, params);
     let mudou = false;
     dim.pavimentos.forEach((p, k) => {
       for (const v of lanc[k].vigas) {
         const r = p.vigas[v.id]; if (!r || r.ok || !r.hMin || r.hMin <= v.h + 1e-9) continue;
-        if (!ajustes.some((a) => a.k === k && a.id === v.id)) ajustes.push({ k, id: v.id, de: v.h, para: r.hMin });
+        if (!ajustes.some((a) => a.k === k && a.id === v.id)) ajustes.push({ k, id: v.id, de: v.h, para: r.hMin, cinta: !!v.cinta });
         else ajustes.find((a) => a.k === k && a.id === v.id).para = r.hMin;
         v.h = r.hMin; v.hPeloCalculo = true; mudou = true;
       }
@@ -1483,6 +1772,22 @@ function esParaOrcamento(pavs, calc) {
     vigaRespaldoTerreo: { concreto: r2(conc.vigasTerreo), ferro: arred(grupos.vigasTerreo) },
     vigaRespaldoPav1: pavs.length > 1 ? { concreto: r2(conc.vigasPav1), ferro: arred(grupos.vigasPav1) } : null,
     baldrames: { concreto: r2(conc.baldrames), ferro: arred(grupos.baldrames) },
+    fundacao: (() => {
+      const fs = dim.fundacao || [], est = fs.filter((f) => f.tipo !== "sapata"), g = { estacas: {}, blocos: {} };
+      // aço de cada fundação separado: estaca (ligação + estribo), bloco/sapata (o resto), arranque
+      const arr = {};
+      for (const f of fs) {
+        const a = { ...f.aco };
+        if (f.estacaArm) { const A = f.estacaArm, n = f.n; const kgL = n * A.n * (A.comp + 0.3) * esKgBarra(A.d), kgE = n * (A.comp / A.s + 1) * (Math.PI * (f.D - 0.10) + 0.10) * esKgBarra(A.estribo);
+          somaM(g.estacas, { [A.d]: kgL, [A.estribo]: kgE }); a[A.d] -= kgL; a[A.estribo] -= kgE; }
+        if (f.arranque) { const b = f.arranque, hb = (f.bloco || f.sapata).h, kg = b.n * (hb - ES_FUND.cobrimento + 0.20 + 40 * b.d / 1000) * esKgBarra(b.d); somaM(arr, { [b.d]: kg }); a[b.d] -= kg; }
+        somaM(g.blocos, Object.fromEntries(Object.entries(a).filter(([, kg]) => kg > 1e-6)));
+      }
+      return { tipo: fs[0] ? fs[0].tipo : null, qtdEstacas: est.reduce((t, f) => t + (f.n || 0), 0), profEstacas: est[0] ? est[0].L : 0, diametro: est[0] ? est[0].D : 0,
+        estimado: fs.some((f) => f.estimado),
+        concreto: { estacas: r2(fs.reduce((t, f) => t + f.concreto.estacas, 0)), sapatas: r2(fs.reduce((t, f) => t + f.concreto.blocos + f.concreto.sapatas, 0)) },
+        ferro: { estacas: arred(g.estacas), sapatas: arred(g.blocos), arranques: arred(arr) } };
+    })(),
     foraCatalogo: [...foraCatalogo],
   };
 }

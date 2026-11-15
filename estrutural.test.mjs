@@ -8,7 +8,7 @@ import assert from "assert";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(join(__dirname, "src", "modules", "estrutural.jsx"), "utf-8");
-const M = new Function(`${src}\nreturn { esLancarPavimentos, esDescidaCargas, esTopoPavimento, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao, esLinhaContinua, esPaineisLaje, esDimViga, esDimPilar, esDimensionar, esMRd, esConcreto, esPlacaApoiada, esDimLaje, esCalcularEstrutura, esParaOrcamento };`)();
+const M = new Function(`${src}\nreturn { esLancarPavimentos, esDescidaCargas, esTopoPavimento, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao, esLinhaContinua, esPaineisLaje, esDimViga, esDimPilar, esDimensionar, esMRd, esConcreto, esPlacaApoiada, esDimLaje, esCalcularEstrutura, esParaOrcamento, esDimFundacao, esFundacaoObra, esPadmEstaca, esCargaEscada };`)();
 
 let ok = 0, falhou = 0;
 const t = (nome, fn) => { try { fn(); ok++; } catch (e) { falhou++; console.log("FALHOU:", nome, "\n ", e.message); } };
@@ -341,6 +341,65 @@ t("cálculo completo: viga que não passa sobe de altura e o orçamento recebe m
   const kgDim = Object.values(c.dim.pavimentos[0].pilares).reduce((t, r) => t + Object.values(r.aco).reduce((a, b) => a + b, 0), 0);
   assert.ok(Math.abs(kgOrc - kgDim) < 0.5, `${kgOrc} × ${kgDim}`);
   assert.ok(o.baldrames.concreto > 0 && o.vigaRespaldoPav1.concreto > 0);
+});
+t("critério 13: porta de 3 m no meio da parede leva pilar nas duas ombreiras", () => {
+  const ps = [W(P(0, 0), P(8, 0), [{ id: "p", tipo: "porta_giro", x: 4, larg: 3, alt: 2.1, peit: 0 }]), W(P(8, 0), P(8, 4)), W(P(8, 4), P(0, 4)), W(P(0, 4), P(0, 0))];
+  const e = M.esLancar(ps, [], { vaoMax: 9 }, {});
+  const emY0 = e.pilares.filter((p) => Math.abs(p.no.y) < 0.05).map((p) => p.no.x).sort((a, b) => a - b);
+  assert.ok(emY0.some((x) => x > 2.2 && x < 2.5) && emY0.some((x) => x > 5.5 && x < 5.8), emY0.join(" "));
+});
+t("critério 12: muro sem laje vira cinta de 20 cm; parede com laje segue viga", () => {
+  const caixa = [W(P(0, 0), P(4, 0)), W(P(4, 0), P(4, 4)), W(P(4, 4), P(0, 4)), W(P(0, 4), P(0, 0)), W(P(4, 0), P(8, 0))];
+  const pavs = [{ paredes: caixa, areas: [{ tipo: "laje", pts: [P(0, 0), P(4, 0), P(4, 4), P(0, 4)], esp: 0.12, carga: { tipo: "macica", uso: "residencial" } }], nivel: 0, usoPadrao: "forro" }];
+  const c = M.esCalcularEstrutura(pavs, {});
+  const muro = c.lanc[0].vigas.find((v) => !v.baldrame && Math.min(v.a.x, v.b.x) >= 3.9 && Math.max(v.a.x, v.b.x) > 7.9 && Math.abs(v.a.y) < 0.05 && Math.abs(v.b.y) < 0.05);
+  assert.ok(muro && muro.cinta && muro.h === 0.2, JSON.stringify(muro));
+  assert.ok(c.lanc[0].vigas.filter((v) => !v.baldrame && !v.cinta).length >= 4);
+});
+t("critério 9: beiral de laje maciça de 1 m vira balanço dimensionado", () => {
+  const caixa = [W(P(0, 0), P(4, 0)), W(P(4, 0), P(4, 4)), W(P(4, 4), P(0, 4)), W(P(0, 4), P(0, 0))];
+  const pavs = [{ paredes: caixa, areas: [{ tipo: "laje", pts: [P(0, 0), P(5, 0), P(5, 4), P(0, 4)], esp: 0.12, carga: { tipo: "macica", uso: "residencial" } }], nivel: 0, usoPadrao: "residencial" }];
+  const c = M.esCalcularEstrutura(pavs, {});
+  const i = c.desc.pavimentos[0].paineis.findIndex((p) => p.balanco); assert.ok(i >= 0);
+  const r = c.dim.pavimentos[0].lajes[i];
+  assert.ok(r.balanco && Math.abs(r.l - 1) < 0.12 && r.arm && r.gn === 1.35, JSON.stringify({ l: r.l, gn: r.gn }));
+  // momento com γn: 1,35 × 1,4 × (g + q) × ℓ²/2
+  const pn = c.desc.pavimentos[0].paineis[i];
+  assert.ok(Math.abs(r.Md - 1.35 * 1.4 * (pn.g + pn.q) * r.l * r.l / 2) < 1e-9);
+});
+t("negativa entre duas lajes maciças vizinhas (14.7.6.2)", () => {
+  const ps = [W(P(0, 0), P(8, 0)), W(P(8, 0), P(8, 4)), W(P(8, 4), P(0, 4)), W(P(0, 4), P(0, 0)), W(P(4, 0), P(4, 4))];
+  const pavs = [{ paredes: ps, areas: [{ tipo: "laje", pts: [P(0, 0), P(8, 0), P(8, 4), P(0, 4)], esp: 0.12, carga: { tipo: "macica", uso: "residencial" } }], nivel: 0, usoPadrao: "residencial" }];
+  const c = M.esCalcularEstrutura(pavs, { vaoMax: 9 });
+  const neg = c.dim.pavimentos[0].negativas;
+  assert.strictEqual(neg.length, 1); assert.ok(neg[0].Md > 0 && neg[0].arm && Math.abs(neg[0].extensao - 1) < 0.1, JSON.stringify(neg[0]));
+});
+t("escada: furo na laje com vigas de borda e metade da carga na viga de chegada", () => {
+  const caixa = [W(P(0, 0), P(6, 0)), W(P(6, 0), P(6, 5)), W(P(6, 5), P(0, 5)), W(P(0, 5), P(0, 0))];
+  const contorno = [P(1, 1), P(4, 1), P(4, 2), P(1, 2)];
+  const esc = { contorno, chegada: [P(4, 1), P(4, 2)], esp: 0.17, piso: 0.28, comp: 3, forma: "reta" };
+  const laje = { tipo: "laje", pts: [P(0, 0), P(6, 0), P(6, 5), P(0, 5)], esp: 0.12, carga: { tipo: "macica", uso: "residencial" } };
+  const pavs = [{ paredes: caixa, areas: [laje], escadas: [esc], nivel: 0, usoPadrao: "residencial" }];
+  const c = M.esCalcularEstrutura(pavs, { vaoMax: 9 });
+  const ve = c.lanc[0].vigas.filter((v) => v.vigaEscada);
+  assert.ok(ve.length === 4, `VE ${ve.length}`);
+  const e = c.desc.pavimentos[0].escadas[0]; assert.ok(e && e.viga && ve.some((v) => v.id === e.viga), JSON.stringify(e));
+  // o furo não tem laje: a área de laje distribuída é a da laje menos o furo
+  const areaPaineis = c.desc.pavimentos[0].paineis.reduce((t, p) => t + p.area, 0);
+  assert.ok(areaPaineis < 30 - 2.5, `${areaPaineis}`);
+  const r = c.dim.pavimentos[0].escadas[0]; assert.ok(r.arm && Math.abs(r.Md - 1.4 * (e.g + e.q) * 9 / 8) < 1e-9);
+});
+t("fundação: estacas pela carga admissível, um diâmetro só na obra; sapata pela tensão", () => {
+  const pl = { b: 0.19, h: 0.19 }, dp = { barras: { n: 4, d: 10 } };
+  const r = M.esDimFundacao(pl, { Ng: 120, Nq: 20 }, dp, { fundacao: { tipo: "estaca", diam: 0.30, prof: 6, padm: 100 } });
+  assert.strictEqual(r.n, 2); assert.ok(r.bloco.L >= 3 * 0.30 + 0.30 && r.tirante && r.ok);
+  // Blévot 2 estacas: Rs = Nd(2e − ap)/(8d)
+  const e = 0.9, d = Math.max(0.30, e / 2 - 0.25 * 0.19); // biela a 45° assert.ok(Math.abs(r.Rs - 1.4 * 140 * (2 * e - 0.19) / (8 * d)) < 1e-6, `${r.Rs}`);
+  const s2 = M.esDimFundacao(pl, { Ng: 100, Nq: 20 }, dp, { fundacao: { tipo: "sapata", sigma: 150 } });
+  assert.ok(s2.sapata.L * s2.sapata.B >= 1.05 * 120 / 150 - 1e-9 && s2.sapata.h >= (s2.sapata.L - 0.19) / 3);
+  const obra = M.esFundacaoObra([{ pl, N: { Ng: 60, Nq: 10 }, dimPilar: dp }, { pl, N: { Ng: 200, Nq: 30 }, dimPilar: dp }], { fundacao: { tipo: "estaca", diam: 0.25, prof: 4 } });
+  assert.ok(obra.every((x) => x.ok) && obra[0].D === obra[1].D && obra.every((x) => x.estimado));
+  assert.ok(Math.abs(M.esPadmEstaca(0.25, 4) - (Math.PI * 0.25 * 4 * 30 + Math.PI * 0.0625 / 4 * 300) / 2) < 1e-9);
 });
 console.log(`${ok} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);
