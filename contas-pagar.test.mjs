@@ -3809,6 +3809,14 @@ teste("empreendimento com módulos: junta tudo numa obra só e resume por módul
     compraEm: "2026-09-01", parcelaCartao: { k: 6, de: 6, compraEm: "2026-09-01" } }, { id: "k2", contaId: "material", valor: 30, pago: true, valorPago: 30, pagoEm: "2026-10-05", vencimento: "2026-10-05" }] },
     { regime: "competencia", hoje: "2026-11-16" });
   assert.deepStrictEqual(cc.meses.map((m) => [m.chave, m.custo]), [["2026-09", 50], ["2026-10", 30]]);
+  // fluxo na competência: o realizado é o lançado (pago ou não); o que falta é o previsto menos o lançado
+  const ob2 = { estimativaPL: [{ contaId: "material", valor: 500 }], contasPagar: [{ id: "p", contaId: "material", valor: 100, pago: true, valorPago: 100, pagoEm: "2026-09-10", vencimento: "2026-09-10" },
+    { id: "q", contaId: "material", valor: 60, pago: false, vencimento: "2026-12-10" }] };
+  const fCx = modulo.fluxoDeCaixaDaObra(ob2, { hoje: "2026-11-16", termino: "2027-01-31" });
+  const fCo = modulo.fluxoDeCaixaDaObra(ob2, { hoje: "2026-11-16", termino: "2027-01-31", regime: "competencia" });
+  assert.strictEqual(fCx.total.custoRealizado, 100); assert.strictEqual(fCx.aRealizar, 400);
+  assert.strictEqual(fCo.total.custoRealizado, 160); assert.strictEqual(fCo.aRealizar, 340);
+  assert.strictEqual(fCo.total.custoRealizado + fCo.total.custoARealizar, 500);
   // A: 900 até jun (3 meses: abr, mai, jun = 300); B: 550 até mai (2 meses: abr, mai = 275)
   const lin = (k) => pm.fc.linhas.find((l) => l.chave === k);
   assert.strictEqual(lin("2026-04").custoARealizar, 575); assert.strictEqual(lin("2026-05").custoARealizar, 575); assert.strictEqual(lin("2026-06").custoARealizar, 300);

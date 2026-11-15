@@ -4536,10 +4536,14 @@ function fluxoDeCaixaDaObra(obra, opcoes) {
   const termino = /^\d{4}-\d{2}-\d{2}$/.test(String(o.termino || "")) ? o.termino : "";
   if (!termino) return { erro: "Informe o término estimado da obra." };
   const mesFim = termino.slice(0, 7) < mesHoje ? mesHoje : termino.slice(0, 7);
-  const ff = o.ff || fisicoFinanceiroDaPrestacao(obra, { ...o, regime: "caixa" });
-  const custo = custosMensais(obra, { ...o, regime: "caixa" });
+  // custo no regime escolhido: no caixa, o pago no mês em que saiu (o a
+  // pagar fica no que falta realizar); na competência, o lançado no mês em que
+  // foi contabilizado (pago ou não) — o que falta é o previsto menos o lançado
+  const comp = o.regime === "competencia";
+  const ff = o.ff || fisicoFinanceiroDaPrestacao(obra, { ...o, regime: comp ? "competencia" : "caixa" });
+  const custo = custosMensais(obra, { ...o, regime: comp ? "competencia" : "caixa" });
   const receb = recebimentosMensais(obra, { ...o, regime: "caixa" });
-  const aRealizar = red(Math.max(0, ff.custoPrevisto - ff.pago));
+  const aRealizar = red(Math.max(0, ff.custoPrevisto - (comp ? ff.total.realizado : ff.pago)));
   // obra que ainda não começou: o custo que falta é dividido do início dela
   // até o término (e não de hoje)
   const comeco0 = String(o.comecoDoCusto != null ? o.comecoDoCusto : o.inicio || "").slice(0, 7);
@@ -4548,7 +4552,7 @@ function fluxoDeCaixaDaObra(obra, opcoes) {
   const parcela = futuros.length ? Math.floor(aRealizar * 100 / futuros.length) / 100 : 0;
   const porMesC = {}, porMesR = {};
   let atraso = 0;
-  for (const m of custo.meses) porMesC[m.chave] = m.pago;
+  for (const m of custo.meses) porMesC[m.chave] = comp ? m.custo : m.pago;
   for (const m of receb.meses) {
     const passado = m.chave === "pre" || m.chave < mesHoje;
     porMesR[m.chave] = { recebido: m.recebido, previsto: passado ? 0 : red(m.assinado + m.assinar + m.estimativa) };
@@ -4571,7 +4575,7 @@ function fluxoDeCaixaDaObra(obra, opcoes) {
       entradas: entra, saidas: sai, resultado: red(entra - sai), acumulado: acum };
   });
   const soma = (k) => red(linhas.reduce((t, l) => t + l[k], 0));
-  return { linhas, mesHoje, mesFim, aRealizar, mesesRestantes: futuros.length,
+  return { linhas, mesHoje, mesFim, aRealizar, mesesRestantes: futuros.length, regime: comp ? "competencia" : "caixa",
     total: { custoRealizado: soma("custoRealizado"), custoARealizar: soma("custoARealizar"), recebido: soma("recebido"),
       recebimentoPrevisto: soma("recebimentoPrevisto"), entradas: soma("entradas"), saidas: soma("saidas"), resultado: soma("resultado") } };
 }
@@ -4649,10 +4653,10 @@ function prestacaoMensalDosModulos(modulos, opcoes) {
   const faltam = [];
   const fcs = ms.map((m) => {
     const d = op(m);
-    if (d.termino) return fluxoDeCaixaDaObra(m, d);
-    const ff = fisicoFinanceiroDaPrestacao(m, { ...d, regime: "caixa" });
-    if (red(Math.max(0, ff.custoPrevisto - ff.pago)) > 0) { faltam.push(m.nome || "Módulo"); return null; }
-    return fluxoDeCaixaDaObra(m, { ...d, termino: hoje });
+    if (d.termino) return fluxoDeCaixaDaObra(m, { ...d, regime: despesa });
+    const ff = fisicoFinanceiroDaPrestacao(m, { ...d, regime: despesa });
+    if (red(Math.max(0, ff.custoPrevisto - (despesa === "competencia" ? ff.total.realizado : ff.pago))) > 0) { faltam.push(m.nome || "Módulo"); return null; }
+    return fluxoDeCaixaDaObra(m, { ...d, termino: hoje, regime: despesa });
   });
   let fc;
   if (faltam.length) fc = { erro: "Informe o término estimado de: " + faltam.join(", ") + "." };
@@ -4663,7 +4667,7 @@ function prestacaoMensalDosModulos(modulos, opcoes) {
     let acum = 0;
     const linhas = somado.meses.map((l) => { acum = red(acum + l.resultado); return { ...l, futuro: l.chave !== "pre" && l.chave >= mesHoje, acumulado: acum }; });
     fc = { linhas, mesHoje, mesFim: fcs.map((f) => f.mesFim).sort().pop() || mesHoje, aRealizar: red(fcs.reduce((t, f) => t + f.aRealizar, 0)),
-      mesesRestantes: Math.max(0, ...fcs.map((f) => f.mesesRestantes)), porModulo: true, total: somado.total };
+      mesesRestantes: Math.max(0, ...fcs.map((f) => f.mesesRestantes)), porModulo: true, regime: despesa, total: somado.total };
   }
   return { cm, rm, fc, datas, inicio: inicioEmp, termino: terminos[terminos.length - 1] || "" };
 }
@@ -5034,10 +5038,10 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   // 5. fluxo de caixa
   if (fc) {
     if (fc.erro) {
-      secao("Fluxo de caixa", "Sem o término estimado da obra não há como distribuir o custo que falta. Informe o término nos parâmetros da prestação.");
+      secao("Fluxo de Caixa Livre", "Sem o término estimado da obra não há como distribuir o custo que falta. Informe o término nos parâmetros da prestação.");
     } else {
-      cartao("Fluxo de caixa até o término",
-        `Custo a realizar: ${moeda(fc.aRealizar)} (o custo previsto menos o pago) dividido ${fc.porModulo ? "mês a mês até o término de cada módulo" : `em ${fc.mesesRestantes} ${fc.mesesRestantes === 1 ? "mês" : "meses"} até o término`}. Recebimento: o que entrou e, deste mês em diante, os contratos firmes (o atrasado entra no mês atual) e as vendas estimadas. Barras: resultado do mês (recebimentos - custos); linha: saldo acumulado do dinheiro.`,
+      cartao("Fluxo de Caixa Livre",
+        `Custo a realizar: ${moeda(fc.aRealizar)} (o custo previsto menos o ${fc.regime === "competencia" ? "lançado, pago ou não" : "pago"}) dividido ${fc.porModulo ? "mês a mês até o término de cada módulo" : `em ${fc.mesesRestantes} ${fc.mesesRestantes === 1 ? "mês" : "meses"} até o término`}. Recebimento: o que entrou e, deste mês em diante, os contratos firmes (o atrasado entra no mês atual) e as vendas estimadas. Barras: resultado do mês (recebimentos - custos); linha: saldo acumulado do dinheiro.`,
         alturaDoGrafico(38), (x0, y0, lg) => graficoFluxo(fc.linhas, x0, y0, lg, fc.mesHoje));
       const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
       tabela([{ t: "Mês", w: 18 }, { t: "Custo realizado", w: 26, alinhar: "right" }, { t: "Custo a realizar", w: 26, alinhar: "right" },
@@ -5080,20 +5084,27 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   const pct = (v) => (pc.total > 0 ? (v / pc.total * 100).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%" : "");
   // com a obra: o que está a pagar entra junto, por conta, para o total
   // chegar no custo lançado (pago + a pagar)
-  const aPagarPorConta = {};
-  for (const x of (ff && ff.aPagarLista) || []) aPagarPorConta[x.conta || "—"] = Math.round(((aPagarPorConta[x.conta || "—"] || 0) + (Number(x.valor) || 0)) * 100) / 100;
+  const aPagarPorConta = {}, aPagarQtd = {};
+  for (const x of (ff && ff.aPagarLista) || []) {
+    aPagarPorConta[x.conta || "—"] = Math.round(((aPagarPorConta[x.conta || "—"] || 0) + (Number(x.valor) || 0)) * 100) / 100;
+    aPagarQtd[x.conta || "—"] = (aPagarQtd[x.conta || "—"] || 0) + 1;
+  }
   const totalAPagarPC = ff ? ff.totalAPagar || 0 : 0;
   if (saidas.length && totalAPagarPC > 0.004) {
     const nomes = saidas.map((r) => r.conta).concat(Object.keys(aPagarPorConta).filter((c) => !saidas.some((r) => r.conta === c)));
     const geral = pc.total + totalAPagarPC;
     const pctG = (v) => (geral > 0 ? (v / geral * 100).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%" : "");
     const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
-    secao("Custos por conta contábil", "Pago: as notas desta prestação. A pagar: o que foi lançado e ainda não foi pago (quadro Contas a pagar).");
-    tabela([{ t: "Conta contábil", w: 64 }, { t: "Notas", w: 14, alinhar: "center" }, { t: "Pago", w: 30, alinhar: "right" }, { t: "A pagar", w: 28, alinhar: "right" },
-      { t: "Total", w: 30, alinhar: "right" }, { t: "%", w: 16, alinhar: "right" }],
+    // tudo como pago: as notas e o que foi lançado e ainda vai vencer (as
+    // parcelas do cartão e as outras) — o custo inteiro, numa coluna só
+    void vlr;
+    const nAPagar = Object.values(aPagarQtd).reduce((t, q) => t + q, 0);
+    secao("Custos por conta contábil", "Pago: as notas desta prestação e o que foi lançado e ainda vai vencer (parcelas do cartão e outras, no quadro Contas a pagar).");
+    tabela([{ t: "Conta contábil", w: 96 }, { t: "Notas", w: 24, alinhar: "center" }, { t: "Pago", w: 40, alinhar: "right" }, { t: "%", w: 22, alinhar: "right" }],
       nomes.map((c) => { const r = saidas.find((z) => z.conta === c) || { transacoes: 0, valor: 0 }; const ap = aPagarPorConta[c] || 0;
-        return { celulas: [c, r.transacoes ? String(r.transacoes) : "—", vlr(r.valor), vlr(ap), moeda(r.valor + ap), pctG(r.valor + ap)] }; })
-        .concat([{ total: true, celulas: ["Custo lançado", String(pc.nSaidas), moeda(pc.total), moeda(totalAPagarPC), moeda(geral), geral > 0 ? "100,0%" : ""] }]),
+        return { celulas: [c, String((r.transacoes || 0) + (aPagarQtd[c] || 0)), moeda(r.valor + ap), pctG(r.valor + ap)], _v: r.valor + ap }; })
+        .sort((a, b) => b._v - a._v)
+        .concat([{ total: true, celulas: ["Custo lançado", String(pc.nSaidas + nAPagar), moeda(geral), geral > 0 ? "100,0%" : ""] }]),
       { compacta: nomes.length > 20 });
   } else if (saidas.length) {
     secao("Notas pagas por conta contábil");
@@ -5667,8 +5678,8 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
         )}
         {fc && (
           <div style={caixa} data-vk-previa-fluxo="1">
-            {fc.erro ? titulo(++k, "Fluxo de caixa", fc.erro + " Volte aos parâmetros para informar.") : <>
-              {titulo(++k, "Fluxo de caixa até o término", `Custo a realizar: ${moeda(fc.aRealizar)} dividido ${fc.porModulo ? "até o término de cada módulo" : `em ${fc.mesesRestantes} ${fc.mesesRestantes === 1 ? "mês" : "meses"}`}. Barras: resultado do mês (recebimentos − custos); linha: saldo acumulado do dinheiro.`)}
+            {fc.erro ? titulo(++k, "Fluxo de Caixa Livre", fc.erro + " Volte aos parâmetros para informar.") : <>
+              {titulo(++k, "Fluxo de Caixa Livre", `Custo a realizar: ${moeda(fc.aRealizar)} dividido ${fc.porModulo ? "até o término de cada módulo" : `em ${fc.mesesRestantes} ${fc.mesesRestantes === 1 ? "mês" : "meses"}`}. Barras: resultado do mês (recebimentos − custos); linha: saldo acumulado do dinheiro.`)}
               <GraficoSaldoAcumulado linhas={fc.linhas} mesHoje={fc.mesHoje} />
               <div style={{ overflowX: "auto", marginTop: 10 }}>
                 <table style={{ width: "100%", minWidth: 760, borderCollapse: "collapse" }}>
@@ -5681,6 +5692,12 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
                       <td style={{ ...td, textAlign: "right", color: l.resultado < 0 ? "#b91c1c" : "#111827" }}>{moeda(l.resultado)}</td>
                       <td style={{ ...td, textAlign: "right", fontWeight: 600, color: l.acumulado < 0 ? "#b91c1c" : "#166534" }}>{moeda(l.acumulado)}</td>
                     </tr>))}
+                    <tr style={{ background: "#f6f8fb" }} data-vk-fluxo-total="1">
+                      <td style={{ ...td, fontWeight: 700 }}>Total</td>
+                      {[fc.total.custoRealizado, fc.total.custoARealizar, fc.total.recebido, fc.total.recebimentoPrevisto, fc.total.resultado].map((v, j) =>
+                        <td key={j} style={{ ...td, textAlign: "right", fontWeight: 700 }}>{moeda(v)}</td>)}
+                      <td style={td}></td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
@@ -6118,7 +6135,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       nomePC: todos ? (nomeEmpreendimento || "Empreendimento") + " — todos os módulos" : "",
       cmPC: mens ? mens.cm : obraDaPC ? custosMensais(obraDaPC, { ...opPC, regime: param.despesa }) : null,
       rmPC: mens ? mens.rm : obraDaPC ? recebimentosMensais(obraDaPC, { ...opPC, regime: param.entrada }) : null,
-      fcPC: mens ? mens.fc : obraDaPC ? fluxoDeCaixaDaObra(obraDaPC, opPC) : null };
+      fcPC: mens ? mens.fc : obraDaPC ? fluxoDeCaixaDaObra(obraDaPC, { ...opPC, regime: param.despesa }) : null };
   }
   async function baixarPrestacao(param, opcoesPC) {
     const { pc, obraDaPC, ffPC, cfPC, cmPC, rmPC, fcPC, modulosPC, nomePC } = dadosDaPrestacao(param);
@@ -6305,7 +6322,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
           ["Total", rmPC.total.recebido, rmPC.total.firme, rmPC.total.estimativa, rmPC.total.geral]);
       }
       if (fcPC && !fcPC.erro) {
-        folhaMensal("Fluxo de caixa", ["Mês", "Custo realizado", "Custo a realizar", "Recebido", "A receber previsto", "Resultado do mês", "Acumulado"],
+        folhaMensal("Fluxo de Caixa Livre", ["Mês", "Custo realizado", "Custo a realizar", "Recebido", "A receber previsto", "Resultado do mês", "Acumulado"],
           fcPC.linhas.map((l) => [mesXL(l.chave), l.custoRealizado, l.custoARealizar, l.recebido, l.recebimentoPrevisto, l.resultado, l.acumulado]),
           ["Total", fcPC.total.custoRealizado, fcPC.total.custoARealizar, fcPC.total.recebido, fcPC.total.recebimentoPrevisto, fcPC.total.resultado, null]);
       }
