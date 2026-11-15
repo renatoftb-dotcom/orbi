@@ -5264,7 +5264,7 @@ function GraficoSaldoAcumulado({ linhas, mesHoje }) {
     </div>
   );
 }
-function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGerar }) {
+function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGerar, aoGerarPdf }) {
   const p = previa.param || {};
   const { pc, ffPC: ff, cfPC: cf, cmPC: cm, rmPC: rm, fcPC: fc } = previa.dados || {};
   const comp = ff && ff.regime === "competencia";
@@ -5303,7 +5303,10 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
       <button type="button" onClick={aoCancelar} style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(38,36,33,0.2)", background: "#fff", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Cancelar</button>
       <button type="button" data-vk-previa-voltar="1" onClick={aoVoltar} style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(38,36,33,0.2)", background: "#fff", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>← Parâmetros</button>
-      <button type="button" data-vk-previa-gerar="1" onClick={aoGerar} style={{ padding: "8px 16px", borderRadius: 10, border: "none", background: "#0474f4", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Confirmar e gerar com os comprovantes</button>
+      {aoGerarPdf && <button type="button" data-vk-previa-pdf="1" onClick={aoGerarPdf} title="Só o relatório em PDF, sem baixar os comprovantes (rápido)"
+        style={{ padding: "8px 16px", borderRadius: 10, border: "1.5px solid #0474f4", background: "#fff", color: "#0474f4", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Gerar PDF</button>}
+      <button type="button" data-vk-previa-gerar="1" onClick={aoGerar} title="O pacote completo: o PDF, a planilha e todos os comprovantes"
+        style={{ padding: "8px 16px", borderRadius: 10, border: "none", background: "#0474f4", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Gerar com comprovantes</button>
     </div>
   );
   return (
@@ -5314,7 +5317,7 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 19, fontWeight: 700, color: "#111827" }}>Prévia da prestação de contas</div>
             <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 3 }}>{(obra && obra.nome) || ""} · Despesas: {reg(p.despesa)} · Entradas: {reg(p.entrada)} · Início: {dia(p.inicio)} · Término: {dia(p.termino)}</div>
-            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 3 }}>Confira os números. Os comprovantes só são baixados depois de confirmar.</div>
+            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 3 }}>Confira os números. Gerar PDF baixa só o relatório (rápido); Gerar com comprovantes baixa o pacote completo, com a planilha e os arquivos.</div>
           </div>
           {botoes}
         </div>
@@ -5755,7 +5758,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       rmPC: obraDaPC ? recebimentosMensais(obraDaPC, { ...opPC, regime: param.entrada }) : null,
       fcPC: obraDaPC ? fluxoDeCaixaDaObra(obraDaPC, opPC) : null };
   }
-  async function baixarPrestacao(param) {
+  async function baixarPrestacao(param, opcoesPC) {
     const { pc, obraDaPC, ffPC, cfPC, cmPC, rmPC, fcPC } = dadosDaPrestacao(param);
     if (!pc.notas.length && !obraDaPC) { setPrestando({ erro: true, msg: "Nada pago no que está filtrado." }); return; }
     setPrestando({ fazendo: true, msg: "Montando a planilha…" });
@@ -5769,6 +5772,32 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
     const ini = mesAno(de || pc.de), fim = mesAno(ate || pc.ate);
     const obraCurta = semAcento(obraNome).replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim().slice(0, 28).trim();
     const titulo = ("PC " + obraCurta + (ini ? " " + (ini === fim || !fim ? ini : ini + " a " + fim) : "")).trim();
+    // o relatório em PDF (o mesmo que vai dentro do pacote)
+    const montarPdf = async () => {
+      const JsPDF = await carregarJsPDF();
+      const cliObj = obraFixa && (obras || [])[0] ? ((clientes || []).find((c) => c && c.id === obras[0].clienteId) || null) : null;
+      // empreendimento próprio não tem cliente: o relatório diz o que é
+      const ehEmp = !!cliObj && typeof ehEmpreendimento === "function" && ehEmpreendimento(cliObj);
+      const esc = (completar && completar.data && completar.data.escritorio && completar.data.escritorio.nome) || "";
+      return pdfDaPrestacaoDeContas(JsPDF, pc, { obra: obraNome, cliente: ehEmp ? "" : ((cliObj && cliObj.nome) || ""),
+        tipo: ehEmp ? "Empreendimento" : "", escritorio: esc, de, ate, ff: ffPC, conferencia: cfPC, custos: cmPC, recebimentos: rmPC, fluxoCaixa: fcPC, parametros: param || null }).output("blob");
+    };
+    // só o PDF: sem planilha e sem baixar os comprovantes (é rápido)
+    if (opcoesPC && opcoesPC.soPdf) {
+      setPrestando({ fazendo: true, msg: "Montando o PDF…" });
+      try {
+        const blob = await montarPdf();
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = titulo + ".pdf";
+        document.body.appendChild(link); link.click();
+        setTimeout(() => { try { URL.revokeObjectURL(link.href); link.remove(); } catch (e) {} }, 1500);
+        setPrestando({ erro: false, msg: "PDF da prestação baixado (sem os comprovantes)." });
+      } catch (e) {
+        setPrestando({ erro: true, msg: "Não deu para montar o PDF: " + ((e && e.message) || "erro") });
+      }
+      return;
+    }
     try {
       const E = await carregarExcelJS();
       const wb = new E.Workbook();
@@ -5920,13 +5949,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       const xlsx = await wb.xlsx.writeBuffer();
       // o relatório em PDF — é ele a prestação; a planilha vai de apoio
       setPrestando({ fazendo: true, msg: "Montando o relatório…" });
-      const JsPDF = await carregarJsPDF();
-      const cliObj = obraFixa && (obras || [])[0] ? ((clientes || []).find((c) => c && c.id === obras[0].clienteId) || null) : null;
-      // empreendimento próprio não tem cliente: o relatório diz o que é
-      const ehEmp = !!cliObj && typeof ehEmpreendimento === "function" && ehEmpreendimento(cliObj);
-      const esc = (completar && completar.data && completar.data.escritorio && completar.data.escritorio.nome) || "";
-      const pdf = pdfDaPrestacaoDeContas(JsPDF, pc, { obra: obraNome, cliente: ehEmp ? "" : ((cliObj && cliObj.nome) || ""),
-        tipo: ehEmp ? "Empreendimento" : "", escritorio: esc, de, ate, ff: ffPC, conferencia: cfPC, custos: cmPC, recebimentos: rmPC, fluxoCaixa: fcPC, parametros: param || null }).output("blob");
+      const pdf = await montarPdf();
       // a pasta dos papéis
       const JSZip = await carregarJSZip();
       const z = new JSZip();
@@ -6144,7 +6167,8 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
         {previa && <PreviaDaPrestacao previa={previa} obra={obraDaPrestacao} isMobile={isMobile}
           aoVoltar={() => { setParamPC({ ...previa.param, erro: "" }); setPrevia(null); }}
           aoCancelar={() => setPrevia(null)}
-          aoGerar={() => { const p = previa.param; setPrevia(null); baixarPrestacao(p); }} />}
+          aoGerar={() => { const p = previa.param; setPrevia(null); baixarPrestacao(p); }}
+          aoGerarPdf={() => { const p = previa.param; setPrevia(null); baixarPrestacao(p, { soPdf: true }); }} />}
         {!doEscritorio && (
           <button type="button" data-vk-prestacao="1" onClick={abrirPrestacao} disabled={!filtradas.length || !!(prestando && prestando.fazendo)}
             title="Resumo por conta, lista das notas e os arquivos nota a nota, do que está filtrado (só o que foi pago)"
