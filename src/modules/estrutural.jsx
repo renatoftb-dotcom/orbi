@@ -76,6 +76,10 @@ const ES_PADRAO = {
   // fundação: estacas escavadas (brocas) com bloco, ou sapatas. padm (kN por
   // estaca) e sigma (kPa) vêm da sondagem (NBR 6122); vazios = estimativa
   fundacao: { tipo: "estaca", diam: 0.25, prof: 4, padm: null, sigma: null },
+  // vento (NBR 6123): V0 do mapa de isopletas do município, terreno plano
+  // (S1 = 1), categoria de rugosidade (IV: subúrbio com casas), residência
+  // (S3 = 1) e coeficiente de arrasto Ca (Fig. 4, edificação baixa)
+  vento: { V0: 45, S1: 1.0, categoria: 4, S3: 1.0, Ca: 1.2 },
 };
 
 const esR3 = (x) => Math.round(x * 1000) / 1000;
@@ -362,12 +366,17 @@ function esLancar(paredes, areas, params, opts = {}) {
       }
     }
   }
-  // 2b) alterações à mão (lançadas pelo usuário, reaplicadas por posição)
+  // 2b) alterações à mão (lançadas pelo usuário, reaplicadas por posição).
+  // Os nomes saem do lançamento automático ANTES das alterações: apagar ou
+  // inserir um pilar não renumera os outros (pilar novo: próximo número;
+  // viga dividida por pilar novo: V3a, V3b — como nos programas de cálculo)
+  pilares.forEach((p, k) => { p.id = "P" + (k + 1); });
+  const autoNos = pilares.map((p) => ({ x: p.no.x, y: p.no.y }));
   const orfas = esAplicarEdicoesPilares(pilares, ws, opts.edicoes || [], secao);
+  { let n = autoNos.length; for (const p of pilares) if (!p.id) p.id = "P" + (++n); }
   // 3) encaixe de cada pilar na parede e fora de portas e janelas
   const interno = esLadoInternoFn(ws, areas);
   for (const p of pilares) { if (!p.manual) esEncaixarPilar(p, ws, interno); delete p._dirs; }
-  pilares.forEach((p, k) => { p.id = "P" + (k + 1); });
   // altura do pilar neste pavimento: do piso (ou do fundo do baldrame, no
   // primeiro) até o topo da estrutura (piso de cima) — o pilar é contínuo
   const topoPil = opts.topo != null ? opts.topo : Math.max(0, ...ws.map((w) => w.h || 0)) || 2.8;
@@ -375,9 +384,14 @@ function esLancar(paredes, areas, params, opts = {}) {
   for (const p of pilares) { p.base = esR3(basePil); p.topo = esR3(topoPil); }
   // 3) vigas: cada parede dividida nos pilares que estão sobre ela
   const vigas = [], baldrames = [];
+  let nViga = 0;
   for (const w of ws) {
     const L = esLen(w), ux = (w.b.x - w.a.x) / L, uy = (w.b.y - w.a.y) / L;
     const sobre = naParede(w);
+    // trechos do lançamento automático (numeração estável)
+    const sA = autoNos.map((q) => ({ s: (q.x - w.a.x) * ux + (q.y - w.a.y) * uy, d: Math.abs((q.x - w.a.x) * -uy + (q.y - w.a.y) * ux) })).filter((q) => q.d <= Math.max(0.1, (w.t || 0) / 2 + 0.02) && q.s > 0.05 && q.s < L - 0.05).map((q) => q.s).sort((a, b) => a - b);
+    const mA = [0, ...sA, L], segA = []; for (let k = 0; k < mA.length - 1; k++) if (mA[k + 1] - mA[k] >= 0.05) segA.push({ s0: mA[k], s1: mA[k + 1], n: ++nViga });
+    const numDe = (sm) => (segA.find((g) => sm >= g.s0 - 1e-6 && sm <= g.s1 + 1e-6) || segA[segA.length - 1] || { n: ++nViga }).n;
     const marcos = [{ s: 0, p: null }, ...sobre.filter((q) => q.s > 0.05 && q.s < L - 0.05), { s: L, p: null }];
     // pontas da parede que caem num pilar contam como apoio
     const pIni = sobre.find((q) => Math.abs(q.s) <= 0.1), pFim = sobre.find((q) => Math.abs(q.s - L) <= 0.1);
@@ -391,11 +405,15 @@ function esLancar(paredes, areas, params, opts = {}) {
       };
       // topo da viga = topo da laje de cima (piso do pavimento de cima): a
       // laje apoia em cima da viga, e o pilar vai até esse nível
-      vigas.push({ ...trecho, b_: vg.b, h: vg.h, topo: opts.topo != null ? opts.topo : (w.h || 2.8) });
-      if (opts.baldrames && P.baldrames) baldrames.push({ ...trecho, b_: P.baldrame.b, h: P.baldrame.h, topo: 0, baldrame: true });
+      const num = numDe((s0 + s1) / 2);
+      vigas.push({ ...trecho, b_: vg.b, h: vg.h, topo: opts.topo != null ? opts.topo : (w.h || 2.8), _num: num });
+      if (opts.baldrames && P.baldrames) baldrames.push({ ...trecho, b_: P.baldrame.b, h: P.baldrame.h, topo: 0, baldrame: true, _num: num });
     }
   }
-  [...vigas, ...baldrames].forEach((v, k) => { v.id = (v.baldrame ? "VB" : "V") + (v.baldrame ? k - vigas.length + 1 : k + 1); });
+  for (const [lista, pre] of [[vigas, "V"], [baldrames, "VB"]]) {
+    const cont = new Map(); for (const v of lista) cont.set(v._num, (cont.get(v._num) || 0) + 1);
+    const usado = new Map(); for (const v of lista) { const c = cont.get(v._num), i = usado.get(v._num) || 0; usado.set(v._num, i + 1); v.id = pre + v._num + (c > 1 ? "abcdefghij"[i] || String(i + 1) : ""); delete v._num; }
+  }
   // 4) lajes: as que o arquiteto desenhou neste pavimento
   const lajes = (areas || []).map((a, i) => ({ a, i })).filter(({ a }) => a.tipo === "laje" && a.pts && a.pts.length >= 3)
     .map(({ a, i }, k) => { const c = esCargaLaje(a, opts.usoPadrao); return { id: "L" + (k + 1), area: i, pts: a.pts, esp: c.pre ? c.pre.hTotal : (a.esp || P.lajeEsp), uso: c.piso ? "piso" : "cobertura", tipo: c.tipo, concretoM2: c.concreto, capa: c.pre ? c.pre.capa : null }; });
@@ -475,7 +493,7 @@ function esAplicarEdicoesVigas(est, eds, P, topo, fase, feitas) {
     if (e.tipo === "viga+") {
       if (fase !== 1) return;
       const pil = (q) => { const p = est.pilares.find((pp) => esDist(pp.no, q) <= 0.3); return p ? p.id : null; };
-      const n = est.vigas.filter((v) => /^V\d+$/.test(v.id)).reduce((mx, v) => Math.max(mx, +v.id.slice(1)), 0) + 1, L = esDist(e.a, e.b); if (L < 0.2) return;
+      const n = est.vigas.filter((v) => /^V\d/.test(v.id)).reduce((mx, v) => Math.max(mx, parseInt(v.id.slice(1), 10) || 0), 0) + 1, L = esDist(e.a, e.b); if (L < 0.2) return;
       est.vigas.push({ id: "V" + n, a: { x: esR3(e.a.x), y: esR3(e.a.y) }, b: { x: esR3(e.b.x), y: esR3(e.b.y) }, apoioA: pil(e.a), apoioB: pil(e.b), parede: null, s0: 0, s1: esR3(L), b_: e.b_ || P.viga.b, h: e.h || P.viga.h, topo, manual: "novo", hFixo: !!e.h, edicao: i });
       feitas.add(i);
     } else if (e.tipo === "viga-" || e.tipo === "vigaSec") {
@@ -1580,27 +1598,37 @@ function esBarrasPilar(As, b) {
   return melhor;
 }
 // p: pilar do lançamento; N: { Ng, Nq } no pé do lance; l: comprimento do lance (m)
-function esDimPilar(p, N, l, params) {
+function esDimPilar(p, N, l, params, vento) {
   const P = { ...ES_PADRAO, ...(params || {}) }, C = esConcreto(P.fck), c = ES_NBR.cobrimento.vigaPilar[P.caa] / 1000;
   const b = Math.min(p.b, p.h), hL = Math.max(p.b, p.h), Ac = b * hL, bcm = Math.round(b * 100);
   const gn = bcm < ES_NBR.pilarDimMin ? ES_NBR.gamaN(bcm) : 1, Nd = ES_DIM.gamaF * gn * (N.Ng + N.Nq), fcd = C.fcd * 1000, fyd = C.fyd * 1000;
   const r = { b, h: hL, Nd, gn, ok: true, motivos: [], direcoes: [] }, dl = c + 0.005 + 0.008;
+  // vento: Mu (força ao longo do eixo do pilar, seção trabalhando com p.h) e Mv
+  const Mw = (hd) => { if (!vento) return 0; const comH = Math.abs(hd - p.h) < 1e-9 && p.h !== p.b ? true : Math.abs(hd - p.b) < 1e-9 && p.h !== p.b ? false : null; return comH === null ? Math.max(vento.Mu, vento.Mv) : comH ? vento.Mu : vento.Mv; };
+  // combinações (11.7): uso principal com vento ψ0 = 0,6; vento principal com uso ψ0 = 0,5
+  const combos = (hd) => { const w = Mw(hd); return w > 1e-6 ? [{ Nd, Mw: ES_DIM.gamaF * gn * 0.6 * w, nome: "uso + 0,6 vento" }, { Nd: ES_DIM.gamaF * gn * (N.Ng + 0.5 * N.Nq), Mw: ES_DIM.gamaF * gn * w, nome: "vento + 0,5 uso" }] : [{ Nd, Mw: 0, nome: "vertical" }]; };
+  r.vento = vento ? { Mu: vento.Mu, Mv: vento.Mv } : null;
   const AsMin = Math.max(0.15 * Nd / fyd, 0.004 * Ac), AsMax = 0.04 * Ac; let As = AsMin;
   for (const [hd, bd] of [[b, hL], [hL, b]]) {
     // 15.6 e 15.8: le = comprimento do lance; λ1 = 35 (αb = 1, momento mínimo)
-    const le = l, lam = 3.46 * le / hd, M1min = Nd * (0.015 + 0.03 * hd), nu = Nd / (Ac * fcd);
-    let Md = M1min, M2 = 0;
+    const le = l, lam = 3.46 * le / hd;
     if (lam > 140) { r.ok = false; r.motivos.push(`esbeltez λ = ${Math.round(lam)} > 140`); }
     else if (lam > 90) { r.ok = false; r.motivos.push(`esbeltez λ = ${Math.round(lam)} > 90 (pede análise mais precisa, 15.8.3.3)`); }
-    if (lam > 35) { const k = Math.min(0.005 / (hd * (nu + 0.5)), 0.005 / hd); M2 = Nd * le * le / 10 * k; Md = M1min + M2; }
-    // armadura para (Nd, Md) com As/2 em cada face perpendicular a esta direção
-    const resiste = (A) => { const m = esMRd(bd, hd, dl, A, Nd, C); return m != null && m >= Md; };
-    let need;
-    if (!resiste(AsMax)) { r.ok = false; r.motivos.push(`flexo-compressão (${Math.round(hd * 100)} cm): a seção não resiste nem com 4% de aço`); need = AsMax; }
-    else if (resiste(0)) need = 0;
-    else { let lo = 0, hi = AsMax; for (let i = 0; i < 50; i++) { const m = (lo + hi) / 2; if (resiste(m)) hi = m; else lo = m; } need = hi; }
-    As = Math.max(As, need);
-    r.direcoes.push({ h: hd, le, lam, M1min, M2, Md, nu });
+    let pior = null;
+    for (const cb of combos(hd)) {
+      const Ndc = cb.Nd, M1min = Ndc * (0.015 + 0.03 * hd), nu = Ndc / (Ac * fcd), M1 = Math.max(M1min, cb.Mw);
+      let Md = M1, M2 = 0;
+      if (lam > 35) { const k = Math.min(0.005 / (hd * (nu + 0.5)), 0.005 / hd); M2 = Ndc * le * le / 10 * k; Md = M1 + M2; }
+      // armadura para (Nd, Md) com As/2 em cada face perpendicular a esta direção
+      const resiste = (A) => { const m = esMRd(bd, hd, dl, A, Ndc, C); return m != null && m >= Md; };
+      let need;
+      if (!resiste(AsMax)) { r.ok = false; r.motivos.push(`flexo-compressão (${Math.round(hd * 100)} cm${cb.Mw ? `, ${cb.nome}` : ""}): a seção não resiste nem com 4% de aço`); need = AsMax; }
+      else if (resiste(0)) need = 0;
+      else { let lo = 0, hi = AsMax; for (let i = 0; i < 50; i++) { const m = (lo + hi) / 2; if (resiste(m)) hi = m; else lo = m; } need = hi; }
+      As = Math.max(As, need);
+      if (!pior || need > pior.need || (need === pior.need && Md > pior.Md)) pior = { need, h: hd, le, lam, M1min, M2, Md, nu, Mw: cb.Mw, combo: cb.nome, Nd: Ndc };
+    }
+    r.direcoes.push(pior);
   }
   r.AsMin = AsMin; r.As = As; r.barras = esBarrasPilar(As, b);
   if (!r.barras) { r.ok = false; r.motivos.push("armadura não cabe com Ø ≤ b/8"); }
@@ -1612,7 +1640,7 @@ function esDimPilar(p, N, l, params) {
     r.aco = { [r.barras.d]: r.barras.n * comp * esKgBarra(r.barras.d), [dt]: nE * compE * esKgBarra(dt) };
   }
   // seção que atende: cresce no comprimento (dentro da parede), de 5 em 5 cm
-  if (!r.ok && !r.hSugerida) { for (let h2 = hL + 0.05; h2 <= 0.801; h2 += 0.05) { const t = esDimPilar({ ...p, b, h: Math.round(h2 * 100) / 100, _sem: true }, N, l, params); if (t.ok) { r.hSugerida = t.h; break; } if (p._sem) break; } }
+  if (!r.ok && !r.hSugerida) { for (let h2 = hL + 0.05; h2 <= 0.801; h2 += 0.05) { const t = esDimPilar({ ...p, b, h: Math.round(h2 * 100) / 100, _sem: true }, N, l, params, vento); if (t.ok) { r.hSugerida = t.h; break; } if (p._sem) break; } }
   return r;
 }
 // ═══════════════════════════════════════════════════════════════
@@ -1759,15 +1787,107 @@ function esDimFundacaoCom(pl, N, dimPilar, P) {
   return r;
 }
 // dimensiona tudo: descida = esDescidaCargas(...), lanc = esLancarPavimentos(...)
+// ═══════════════════════════════════════════════════════════════
+// VENTO (NBR 6123) E ESTABILIDADE GLOBAL (NBR 6118, 15.5.3) — etapa 2
+// ═══════════════════════════════════════════════════════════════
+// Vk = V0·S1·S2·S3; S2 = b·Fr·(z/10)^p (Tabela 2, classe A até 20 m e B até
+// 50 m); q = 0,613·Vk² (N/m²); força em cada nível = Ca·q·(faixa de fachada
+// entre meias alturas), nas duas direções (X e Y da planta), mais a empena do
+// telhado no último nível. A alvenaria não entra na rigidez (a favor da
+// segurança). Pórtico de pilares e vigas pelo método de Muto (D): cada pilar
+// rígido 12·(0,8·Ec·Ic)/h³ vezes a = k̄/(2 + k̄), k̄ = Σ(0,4·Ec·Ib/L das vigas
+// nas pontas)/(2·0,8·Ec·Ic/h) — não linearidade física aproximada de 15.7.3;
+// base sem baldrame: rotulada, a = 0,5k̄/(1 + 2k̄). Deslocamento por andar =
+// cortante/ΣD. γz = 1/(1 − ΔMtot,d/M1,tot,d) com 1,4·(G + 0,5Q) e 1,4·W
+// (vento principal; ψ0 = 0,5 para uso residencial, Tabela 11.2): até 1,1 nós
+// fixos; até 1,3 os esforços do vento ×0,95γz (15.7.2); acima, não atende.
+// Deslocamentos em serviço (Tabela 13.3, vento frequente ψ1 = 0,3, rigidez
+// bruta): topo H/1700 e entre andares hi/850. Momento do vento em cada pilar:
+// cortante dele × h, dividido entre as pontas pela rigidez das vigas em cada uma.
+const ES_VENTO_S2 = { A: { 1: [1.10, 0.06], 2: [1.00, 0.085], 3: [0.94, 0.10], 4: [0.86, 0.12], 5: [0.74, 0.15] }, B: { 1: [1.11, 0.065], 2: [1.00, 0.09], 3: [0.94, 0.105], 4: [0.85, 0.125], 5: [0.73, 0.16] } };
+function esS2(z, cat, classe) { const [b, p] = ES_VENTO_S2[classe][cat] || ES_VENTO_S2[classe][4], Fr = classe === "A" ? 1.0 : 0.98; return b * Fr * Math.pow(Math.max(z, 1) / 10, p); }
+function esVento(pavs, lanc, descida, params) {
+  const P = { ...ES_PADRAO, ...(params || {}) }, W = { ...ES_PADRAO.vento, ...(P.vento || {}) }, C = esConcreto(P.fck), E = C.Ecs * 1000; // kPa
+  const nPav = pavs.length, avisos = [];
+  // níveis (topo de cada pavimento, absoluto) e caixas da planta
+  const caixa = (k) => { const ps = (pavs[k].paredes || []).flatMap((w) => [w.a, w.b]); if (!ps.length) return null; const xs = ps.map((q) => q.x), ys = ps.map((q) => q.y); return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) }; };
+  const andares = []; for (let k = 0; k < nPav; k++) { const cx = caixa(k); if (!cx || !(lanc[k].pilares || []).length) continue; andares.push({ k, cx, nivel: (pavs[k].nivel || 0), topo: (pavs[k].nivel || 0) + esTopoPavimento(pavs, k) }); }
+  if (!andares.length) return null;
+  const H = andares[andares.length - 1].topo, maior = Math.max(...andares.map((a) => Math.max(a.cx.x1 - a.cx.x0, a.cx.y1 - a.cx.y0)), H), classe = maior <= 20 ? "A" : "B";
+  // telhado em cima do último andar: empena (meia largura × inclinação média)
+  const ult = andares[andares.length - 1], telh = (pavs[ult.k + 1] ? (pavs[ult.k + 1].areas || []) : []).concat(pavs[ult.k].areas || []).filter((a) => a.tipo === "telhado" && a.pts && a.pts.length >= 3);
+  const pct = telh.length ? (() => { const ls = (telh[0].lados || []).filter((l) => l && l.inclina !== false && l.pct != null); return ls.length ? ls.reduce((t, l) => t + (+l.pct || 0), 0) / ls.length : 30; })() : 0;
+  const q = (z) => 0.613 * (W.V0 * W.S1 * esS2(z, W.categoria, classe) * W.S3) ** 2 / 1000; // kN/m²
+  // carga vertical aplicada em cada nível (diferença das normais nos pés)
+  const somaN = (k, c) => Object.values((descida.pavimentos[k] || {}).pilares || {}).reduce((t, n) => t + n[c], 0);
+  const vert = andares.map((a, i) => { const prox = andares[i + 1]; return { G: somaN(a.k, "Ng") - (prox ? somaN(prox.k, "Ng") : 0), Q: somaN(a.k, "Nq") - (prox ? somaN(prox.k, "Nq") : 0) }; });
+  const pilaresV = andares.map(() => ({})), dirs = {};
+  for (const [dn, ux, uy] of [["x", 1, 0], ["y", 0, 1]]) {
+    // força em cada nível (kN)
+    const F = andares.map((a, i) => {
+      const larg = dn === "x" ? a.cx.y1 - a.cx.y0 : a.cx.x1 - a.cx.x0, zb = i ? andares[i - 1].topo : 0, zt = andares[i + 1] ? andares[i + 1].topo : null;
+      const faixa = (a.topo - zb) / 2 + (zt != null ? (zt - a.topo) / 2 : 0);
+      let Fk = W.Ca * q(a.topo) * larg * faixa;
+      if (i === andares.length - 1 && pct) { const outra = dn === "x" ? a.cx.x1 - a.cx.x0 : a.cx.y1 - a.cx.y0, Hr = Math.min(larg, outra) / 2 * pct / 100; Fk += W.Ca * q(a.topo + Hr) * 0.5 * larg * Hr; }
+      return Fk;
+    });
+    // rigidez de cada andar (Muto)
+    const rig = andares.map((a, i) => {
+      const k = a.k, est = lanc[k], h0 = a.topo - (i ? andares[i - 1].topo : 0);
+      const vigasEm = (vs, no) => vs.filter((v) => esDist(v.a, no) <= 0.3 || esDist(v.b, no) <= 0.3);
+      const kb = (vs, no, fat) => vigasEm(vs, no).reduce((t, v) => { const L = esDist(v.a, v.b); if (L < 0.2) return t; const c = ((v.b.x - v.a.x) * ux + (v.b.y - v.a.y) * uy) / L; return t + fat * E * v.b_ * v.h ** 3 / 12 / L * c * c; }, 0);
+      const cima = (est.vigas || []).filter((v) => !v.baldrame), baixoV = i ? (lanc[andares[i - 1].k].vigas || []).filter((v) => !v.baldrame) : (est.vigas || []).filter((v) => v.baldrame);
+      const itens = (est.pilares || []).map((p) => {
+        const h = Math.max(0.5, (p.topo != null ? p.topo : h0) - (p.base || 0)); // no térreo, desde o fundo do baldrame
+        const c = Math.cos(p.ang || 0), sn = Math.sin(p.ang || 0), Iu = p.b * p.h ** 3 / 12, Iv = p.h * p.b ** 3 / 12, cu = c * ux + sn * uy, I = Iu * cu * cu + Iv * (1 - cu * cu);
+        const kc = 0.8 * E * I / h, kt = kb(cima, p.no, 0.4), kbt = kb(baixoV, p.no, 0.4);
+        let a_; if (i === 0 && kbt === 0) { const kk = kt / kc; a_ = 0.5 * kk / (1 + 2 * kk); } else { const kk = (kt + kbt) / (2 * kc); a_ = kk / (2 + kk); }
+        const D = a_ * 12 * 0.8 * E * I / h ** 3;
+        // ELS: rigidez bruta (sem as reduções 0,8 e 0,4)
+        const kcS = E * I / h, ktS = kt / 0.4, kbS = kbt / 0.4; let aS; if (i === 0 && kbS === 0) { const kk = ktS / kcS; aS = 0.5 * kk / (1 + 2 * kk); } else { const kk = (ktS + kbS) / (2 * kcS); aS = kk / (2 + kk); }
+        return { p, h, D, DS: aS * 12 * E * I / h ** 3, rt: kt, rb: i === 0 && kbt === 0 ? 0 : kbt };
+      });
+      return { itens, SD: itens.reduce((t, x) => t + x.D, 0), SDS: itens.reduce((t, x) => t + x.DS, 0), h: h0 };
+    });
+    // cortantes, deslocamentos e γz
+    const V = F.map((_, i) => F.slice(i).reduce((t, x) => t + x, 0));
+    if (rig.some((r) => r.SD <= 1e-9)) { avisos.push({ tipo: "nbr", texto: `Vento em ${dn.toUpperCase()}: um andar não tem rigidez lateral (pilares sem vigas que os travem nessa direção) — o vento não tem por onde descer.` }); dirs[dn] = { F, V, gz: null, ok: false }; continue; }
+    const drift = rig.map((r, i) => 1.4 * V[i] / r.SD), u = drift.map((_, i) => drift.slice(0, i + 1).reduce((t, x) => t + x, 0));
+    const M1 = andares.reduce((t, a, i) => t + 1.4 * F[i] * a.topo, 0), dM = andares.reduce((t, a, i) => t + 1.4 * (vert[i].G + 0.5 * vert[i].Q) * u[i], 0);
+    const gz = dM < M1 ? 1 / (1 - dM / M1) : Infinity, amp = gz > 1.1 ? 0.95 * gz : 1;
+    // serviço: vento frequente (ψ1 = 0,3), rigidez bruta
+    const driftS = rig.map((r, i) => 0.3 * V[i] / r.SDS), uS = driftS.map((_, i) => driftS.slice(0, i + 1).reduce((t, x) => t + x, 0));
+    const limTopo = H / 1700, okTopo = uS[uS.length - 1] <= limTopo + 1e-9, okAndar = driftS.every((d, i) => d <= rig[i].h / 850 + 1e-9);
+    const rot = dn.toUpperCase(), f3 = (x) => String(Math.round(x * 100) / 100).replace(".", ",");
+    if (gz > 1.3) avisos.push({ tipo: "nbr", texto: `Estabilidade global em ${rot}: γz = ${isFinite(gz) ? f3(gz) : "∞"} > 1,3 (NBR 6118, 15.5.3) — a estrutura é deslocável demais; aumente pilares ou vigas nessa direção.` });
+    else if (gz > 1.1) avisos.push({ tipo: "atencao", texto: `Estabilidade global em ${rot}: γz = ${f3(gz)} (nós móveis) — esforços do vento ampliados ×${f3(amp)} (15.7.2).` });
+    if (!okTopo) avisos.push({ tipo: "nbr", texto: `Deslocamento do topo com vento em ${rot}: ${f3(uS[uS.length - 1] * 1000)} mm > H/1700 = ${f3(limTopo * 1000)} mm (Tabela 13.3).` });
+    if (!okAndar) avisos.push({ tipo: "nbr", texto: `Deslocamento entre andares com vento em ${rot} acima de hi/850 (Tabela 13.3).` });
+    // momento do vento em cada pilar (característico, já ampliado por γz)
+    rig.forEach((r, i) => r.itens.forEach((x) => {
+      const Vi = x.D / r.SD * V[i] * amp, rt = x.rt, rb = x.rb, fT = rt + rb > 0 ? rt / (rt + rb) : 0.5;
+      const Mt = Vi * x.h * fT, Mb = Vi * x.h * (1 - fT), c = Math.cos(x.p.ang || 0), sn = Math.sin(x.p.ang || 0), cu = Math.abs(c * ux + sn * uy);
+      const o = pilaresV[i][x.p.id] = pilaresV[i][x.p.id] || { Mu: 0, Mv: 0, V: 0 };
+      // Mu: flexão pela força ao longo de u (a seção trabalha com a dimensão h)
+      o.Mu = Math.max(o.Mu, Math.max(Mt, Mb) * cu); o.Mv = Math.max(o.Mv, Math.max(Mt, Mb) * Math.sqrt(Math.max(0, 1 - cu * cu))); o.V = Math.max(o.V, Vi);
+      o.Mbase = i === 0 ? Math.max(o.Mbase || 0, Mb) : o.Mbase;
+    }));
+    dirs[dn] = { F, V, gz, amp, u, uS, limTopo, okTopo, okAndar, q: andares.map((a) => q(a.topo)), H };
+  }
+  // por pavimento (índice k do lançamento)
+  const porPav = pavs.map(() => ({})); andares.forEach((a, i) => { porPav[a.k] = pilaresV[i]; });
+  return { dirs, porPav, avisos, classe, andares: andares.map((a) => ({ k: a.k, topo: a.topo })), params: W };
+}
 function esDimensionar(pavs, lanc, descida, params) {
   const out = descida.pavimentos.map(() => ({ vigas: {}, pilares: {}, lajes: [] })), aco = {};
+  let vento = null; try { vento = esVento(pavs, lanc, descida, params); } catch (e) { vento = null; }
   const soma = (o) => { for (const [d, kg] of Object.entries(o || {})) aco[d] = (aco[d] || 0) + kg; };
   descida.pavimentos.forEach((pv, k) => {
     for (const t of pv.tramos) { if (!t.L) continue; const r = esDimViga(t, params); r.tramo = t.ids.join("+"); for (const id of t.ids) out[k].vigas[id] = r; soma(r.aco); }
     for (const p of lanc[k].pilares || []) {
       const N = pv.pilares[p.id]; if (!N) continue;
       const l = (p.topo != null ? p.topo : esTopoPavimento(pavs, k)) - (p.base || 0);
-      const r = p._sem ? null : esDimPilar(p, N, l, params); if (!r) continue; out[k].pilares[p.id] = r; soma(r.aco);
+      const r = p._sem ? null : esDimPilar(p, N, l, params, vento ? (vento.porPav[k] || {})[p.id] : null); if (!r) continue; out[k].pilares[p.id] = r; soma(r.aco);
     }
   });
   // lajes (painéis)
@@ -1782,7 +1902,7 @@ function esDimensionar(pavs, lanc, descida, params) {
   fund.forEach((r, i) => { r.id = itens[i].id; soma(r.aco); });
   out.fundacao = fund;
   const kg = (filtro) => Object.entries(aco).filter(([d]) => filtro(+d)).reduce((t, [, v]) => t + v, 0);
-  return { pavimentos: out, fundacao: fund, compatFundacao, aco, ca50: kg((d) => d > 5), ca60: kg((d) => d <= 5) };
+  return { pavimentos: out, fundacao: fund, compatFundacao, aco, ca50: kg((d) => d > 5), ca60: kg((d) => d <= 5), vento };
 }
 
 // ═══════════════════════════════════════════════════════════════

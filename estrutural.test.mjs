@@ -8,7 +8,7 @@ import assert from "assert";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(join(__dirname, "src", "modules", "estrutural.jsx"), "utf-8");
-const M = new Function(`${src}\nreturn { esLancarPavimentos, esDescidaCargas, esTopoPavimento, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao, esLinhaContinua, esPaineisLaje, esDimViga, esDimPilar, esDimensionar, esMRd, esConcreto, esPlacaApoiada, esDimLaje, esCalcularEstrutura, esParaOrcamento, esDimFundacao, esFundacaoObra, esPadmEstaca, esCargaEscada, esResumoMateriais, esAlturaLivreEscada, esCompatibilizar, esSepararBlocos, esApoiosIndiretos };`)();
+const M = new Function(`${src}\nreturn { esLancarPavimentos, esDescidaCargas, esTopoPavimento, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao, esLinhaContinua, esPaineisLaje, esDimViga, esDimPilar, esDimensionar, esMRd, esConcreto, esPlacaApoiada, esDimLaje, esCalcularEstrutura, esParaOrcamento, esDimFundacao, esFundacaoObra, esPadmEstaca, esCargaEscada, esResumoMateriais, esAlturaLivreEscada, esCompatibilizar, esSepararBlocos, esApoiosIndiretos, esVento, esS2 };`)();
 
 let ok = 0, falhou = 0;
 const t = (nome, fn) => { try { fn(); ok++; } catch (e) { falhou++; console.log("FALHOU:", nome, "\n ", e.message); } };
@@ -505,11 +505,17 @@ t("alterações à mão: pilar novo divide a viga, apagar/mover/seção por posi
   const com = base([{ tipo: "pilar+", x: 4, y: 0.03, b: 0.19, h: 0.3 }]), pn = com.pilares.find((p) => p.manual === "novo");
   assert.ok(pn && Math.abs(pn.no.y) < 1e-9 && pn.h === 0.3, JSON.stringify(pn));
   assert.strictEqual(vSul(com).length, 2, "a viga foi dividida no pilar novo");
+  // numeração estável: a viga dividida vira Vna/Vnb, as outras não mudam de nome; pilar novo ganha o próximo número
+  const idSul = vSul(sem)[0].id; assert.deepStrictEqual(vSul(com).map((v) => v.id).sort(), [idSul + "a", idSul + "b"]);
+  const outras = (e) => e.vigas.filter((v) => !(Math.abs(v.a.y) < 0.01 && Math.abs(v.b.y) < 0.01)).map((v) => v.id).sort(); assert.deepStrictEqual(outras(com), outras(sem));
+  assert.strictEqual(pn.id, "P" + (sem.pilares.length + 1));
   // apaga um canto, move outro, troca a seção de outro
   const c0 = sem.pilares.find((p) => esPerto(p.no, P(0, 0))), c1 = sem.pilares.find((p) => esPerto(p.no, P(8, 0))), c2 = sem.pilares.find((p) => esPerto(p.no, P(8, 4)));
   function esPerto(a, b) { return Math.hypot(a.x - b.x, a.y - b.y) < 0.05; }
   const ed = base([{ tipo: "pilar-", x: c0.no.x, y: c0.no.y }, { tipo: "pilar~", x: c1.no.x, y: c1.no.y, nx: 7, ny: 0 }, { tipo: "pilarSec", x: c2.no.x, y: c2.no.y, b: 0.2, h: 0.4 }]);
   assert.ok(!ed.pilares.some((p) => esPerto(p.no, P(0, 0))) && ed.pilares.some((p) => esPerto(p.no, P(7, 0)) && p.manual === "movido"));
+  // apagar um pilar não renumera os outros
+  for (const p of ed.pilares) { const o = sem.pilares.find((q) => q.id === p.id); assert.ok(o && (esPerto(o.no, p.no) || p.manual === "movido" || p.secManual), p.id); }
   assert.ok(ed.pilares.some((p) => esPerto(p.no, P(8, 4)) && p.h === 0.4 && p.b === 0.2));
   // viga: apaga e troca seção (fixa); viga nova entre dois pilares
   const vN = sem.vigas.find((v) => !v.baldrame && Math.abs(v.a.y - 4) < 0.01 && Math.abs(v.b.y - 4) < 0.01);
@@ -524,6 +530,25 @@ t("alterações à mão: pilar novo divide a viga, apagar/mover/seção por posi
   // o cálculo não muda a altura fixada à mão
   const c = M.esCalcularEstrutura([{ paredes: ps, areas: [laje], nivel: 0, usoPadrao: "forro", edicoes: [{ tipo: "vigaSec", m: P(4, 4), ang: 0, h: 0.3 }] }], { vaoMax: 9 });
   assert.strictEqual(c.lanc[0].vigas.find((v) => !v.baldrame && Math.abs(v.a.y - 4) < 0.01).h, 0.3);
+});
+t("vento (NBR 6123) e γz (NBR 6118 15.5.3): forças, deslocamentos e momento nos pilares", () => {
+  assert.ok(Math.abs(M.esS2(10, 4, "A") - 0.86) < 1e-9 && Math.abs(M.esS2(10, 2, "B") - 0.98) < 1e-9);
+  const ps = [W(P(0, 0), P(8, 0)), W(P(8, 0), P(8, 6)), W(P(8, 6), P(0, 6)), W(P(0, 6), P(0, 0)), W(P(4, 0), P(4, 6))];
+  const laje = (uso) => ({ tipo: "laje", pts: [P(0, 0), P(8, 0), P(8, 6), P(0, 6)], esp: 0.12, cota: 2.8, carga: { tipo: "macica", uso } });
+  const um = [{ paredes: ps, areas: [laje("forro")], nivel: 0, usoPadrao: "forro" }];
+  const c1 = M.esCalcularEstrutura(um, { vaoMax: 6 }), v1 = c1.dim.vento, x = v1.dirs.x;
+  // um andar: F = Ca·q(z)·largura·(h/2) com q = 0,613(V0·S2)²
+  const z = v1.andares[0].topo, q = 0.613 * (45 * M.esS2(z, 4, "A")) ** 2 / 1000;
+  assert.ok(Math.abs(x.F[0] - 1.2 * q * 6 * z / 2) < 1e-6, `${x.F[0]} × ${1.2 * q * 6 * z / 2}`);
+  assert.ok(x.gz >= 1 && x.gz < 1.1, String(x.gz));
+  const pl = Object.values(c1.dim.pavimentos[0].pilares)[0]; assert.ok(pl.vento && pl.vento.Mu + pl.vento.Mv > 0 && pl.direcoes.some((d) => d.Mw > 0));
+  // sobrado: γz maior que o da casa térrea e todos os pilares com momento de vento
+  const dois = [{ ...um[0], areas: [laje("residencial")], usoPadrao: "residencial" }, { paredes: ps, areas: [laje("forro")], nivel: 2.9, usoPadrao: "forro" }];
+  const c2 = M.esCalcularEstrutura(dois, { vaoMax: 6 }), v2 = c2.dim.vento;
+  assert.strictEqual(v2.andares.length, 2); assert.ok(v2.dirs.x.gz > x.gz && v2.dirs.y.gz > 1);
+  assert.ok(v2.dirs.x.uS[1] > v2.dirs.x.uS[0] && v2.dirs.x.okTopo !== undefined);
+  // V0 maior: forças crescem com V0²
+  const c3 = M.esCalcularEstrutura(um, { vaoMax: 6, vento: { V0: 50 } }); assert.ok(Math.abs(c3.dim.vento.dirs.x.F[0] / x.F[0] - (50 / 45) ** 2) < 1e-9);
 });
 t("fundação: blocos que se encostam são girados ou viram bloco conjunto", () => {
   const dp = { barras: { n: 4, d: 10 } };

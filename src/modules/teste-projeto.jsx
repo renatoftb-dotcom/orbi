@@ -2337,6 +2337,9 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         r.push({ tipo: "compat", ref: x.viga, texto: `${x.viga} passa a ${tpFmt(x.livre)} m do degrau da escada — a altura livre mínima usual é ${tpFmt(ES_ALTURA_LIVRE_ESCADA)} m. Mude a viga de lugar ou aumente o furo da laje.`, ponto: x.ponto, norma: "código de obras / NBR 9077 (a conferir)", pav: p.id, pavNome: p.nome });
       }
     });
+    // vento e estabilidade global (a estrutura toda)
+    const vt = estPorPav._dim && estPorPav._dim.vento;
+    if (vt && pavsOrd[0]) for (const a of vt.avisos || []) r.push({ ...a, ref: "vento", pav: pavsOrd[0].id, pavNome: pavsOrd[0].nome, norma: "NBR 6123 / NBR 6118" });
     return r;
   }, [estPorPav]); // eslint-disable-line react-hooks/exhaustive-deps
   // cargas por pavimento (NBR 6120): paredes sobre as vigas, lajes, telhado
@@ -2394,7 +2397,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       (estPorPav._ids || []).forEach((id, k) => (dm.pavimentos[k].escadas || []).forEach((e) => { if (!e.ok) falhas.push({ pav: id, pavNome: (pavimentos.find((p) => p.id === id) || {}).nome, nome: "Escada", texto: e.motivos.join("; "), sugestao: "" }); }));
     }
     const nV = dm ? dm.pavimentos.reduce((t, p) => t + new Set(Object.values(p.vigas).map((r) => r.tramo)).size, 0) : 0, nP = dm ? dm.pavimentos.reduce((t, p) => t + Object.keys(p.pilares).length, 0) : 0;
-    return { porPav, dimPav, fundacao: fund, total: fund.reduce((t, f) => t + f.Nk, 0), avisos: d.pavimentos.flatMap((p) => p.avisos || []), falhas, lajes, fundacao: dm ? dm.fundacao || [] : [], negativas: dm ? (estPorPav._ids || []).flatMap((id, k) => (dm.pavimentos[k].negativas || []).map((n) => ({ ...n, pav: id }))) : [], escadas: dm ? (estPorPav._ids || []).flatMap((id, k) => (dm.pavimentos[k].escadas || []).map((e) => ({ ...e, pav: id }))) : [], ajustes: ((estPorPav._calc || {}).ajustes || []).map((a) => ({ ...a, pav: (estPorPav._ids || [])[a.k], pavNome: (pavimentos.find((p) => p.id === (estPorPav._ids || [])[a.k]) || {}).nome })), nV, nP, aco: dm ? dm.aco : {}, ca50: dm ? dm.ca50 : 0, ca60: dm ? dm.ca60 : 0 };
+    return { porPav, dimPav, fundacao: fund, total: fund.reduce((t, f) => t + f.Nk, 0), avisos: d.pavimentos.flatMap((p) => p.avisos || []), falhas, lajes, fundacao: dm ? dm.fundacao || [] : [], negativas: dm ? (estPorPav._ids || []).flatMap((id, k) => (dm.pavimentos[k].negativas || []).map((n) => ({ ...n, pav: id }))) : [], escadas: dm ? (estPorPav._ids || []).flatMap((id, k) => (dm.pavimentos[k].escadas || []).map((e) => ({ ...e, pav: id }))) : [], ajustes: ((estPorPav._calc || {}).ajustes || []).map((a) => ({ ...a, pav: (estPorPav._ids || [])[a.k], pavNome: (pavimentos.find((p) => p.id === (estPorPav._ids || [])[a.k]) || {}).nome })), nV, nP, aco: dm ? dm.aco : {}, ca50: dm ? dm.ca50 : 0, ca60: dm ? dm.ca60 : 0, vento: dm ? dm.vento : null };
   }, [estPorPav]);
   // estrutura calculada → campos do orçamento de obra (colunas, vigas de respaldo, baldrames)
   const estOrc = useMemo(() => { const c = estPorPav._calc; if (!c) return null; try { return esParaOrcamento(c.lista, c); } catch (err) { return null; } }, [estPorPav]);
@@ -6068,7 +6071,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 const bcm = Math.round(Math.min(pl.b, pl.h) * 100), gn = bcm < 19 ? ES_NBR.gamaN(bcm) : 1, Nd = 1.4 * (n.Ng + n.Nq) * gn;
                 const dp = estDescida.dimPav[pavAtivo] && estDescida.dimPav[pavAtivo].pilares[id];
                 return [["Carga (Nk)", `${tpFmt(n.Ng + n.Nq, 1)} kN (perm. ${tpFmt(n.Ng, 1)} + uso ${tpFmt(n.Nq, 1)})`], ["Cálculo (Nd)", `${tpFmt(Nd, 1)} kN (1,4${gn > 1 ? ` × γn ${tpFmt(gn)}` : ""})`],
-                  ...(dp ? [["Esbeltez", `λ ${dp.direcoes.map((x) => Math.round(x.lam)).join(" / ")}`], ["Momento (Md)", `${dp.direcoes.map((x) => tpFmt(x.Md, 1)).join(" / ")} kN·m`],
+                  ...(dp ? [["Esbeltez", `λ ${dp.direcoes.map((x) => Math.round(x.lam)).join(" / ")}`], ["Momento (Md)", `${dp.direcoes.map((x) => tpFmt(x.Md, 1)).join(" / ")} kN·m`], ...(dp.vento && dp.vento.Mu + dp.vento.Mv > 0.01 ? [["Vento (Mk)", `${tpFmt(dp.vento.Mu, 1)} / ${tpFmt(dp.vento.Mv, 1)} kN·m${dp.direcoes.some((x) => /vento \+/.test(x.combo || "")) ? " · vale a combinação com vento" : ""}`]] : []),
                     ["Armadura", dp.barras ? `${dp.barras.n} Ø${esFmtBit(dp.barras.d)}${dp.estribo ? ` · estribo Ø${esFmtBit(dp.estribo.d)} c/${Math.round(dp.estribo.s * 100)}` : ""}` : "—"],
                     ["Situação", dp.ok ? "atende (NBR 6118)" : `não atende: ${dp.motivos.join("; ")}${dp.hSugerida ? ` — passa com ${Math.round(dp.b * 100)} × ${Math.round(dp.hSugerida * 100)}` : ""}`]] : []),
                   ...(() => { const fd = (estDescida.fundacao || []).find((f) => f.id === id); return fd && (estPorPav._ids || [])[0] === pavAtivo ? [["Fundação", tpTextoFundacao(fd)]] : []; })()];
@@ -7037,6 +7040,34 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                     {!sap && linhaTab("Estacas", `${ne} × ${tpFmt(fs[0].L, 1)} m`, "")}
                     {linhaTab("Concreto da fundação", tpFmt(vol), "m³")}
                     <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>{sap ? "Sapata rígida (h ≥ (A − ap)/3), armadura pelo método das bielas." : "Um diâmetro para a obra toda (o de menor volume com até 4 estacas por bloco). Blocos pelo método das bielas (Blévot), estacas a 3Ø. Estaca com armadura de ligação 4 Ø10 × 2,5 m."} Arranques do pilar com 40Ø de emenda.</div>
+                  </>);
+                })()}
+                {estDescida && estDescida.vento && (() => {
+                  const vt = estDescida.vento, Wp = { ...ES_PADRAO.vento, ...(P.vento || {}) }, dx = vt.dirs.x || {}, dy = vt.dirs.y || {};
+                  const mudarV = (k, x) => mudarParam("vento", { ...(P.vento || {}), [k]: x });
+                  const gzTxt = (d) => d.gz == null ? "—" : !isFinite(d.gz) ? "instável" : tpFmt(d.gz, 2);
+                  const pior = Math.max(dx.gz || 0, dy.gz || 0);
+                  return (<>
+                    {grupoQ("est-v", "Vento e estabilidade global", `γz ${gzTxt(dx)} / ${gzTxt(dy)}`)}
+                    {!qFechado("est-v") && (<>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 6 }}>
+                        <TpCampo id="tp-est-v0" rotulo="V0 (m/s)" casas={0} valor={Wp.V0} onConfirmar={(x) => x >= 25 && x <= 60 && mudarV("V0", x)} />
+                        <TpCampo id="tp-est-ca" rotulo="Ca (arrasto)" casas={2} valor={Wp.Ca} onConfirmar={(x) => x >= 0.5 && x <= 2.2 && mudarV("Ca", x)} />
+                      </div>
+                      <label style={{ display: "block", fontSize: 12, color: "#4b5563", margin: "8px 0 4px" }}>Rugosidade do terreno (categoria)</label>
+                      <select value={Wp.categoria} onChange={(e) => mudarV("categoria", +e.target.value)} style={selCss}>
+                        {[[1, "I — mar calmo, lagos"], [2, "II — campo aberto, poucas árvores"], [3, "III — chácaras, casas esparsas"], [4, "IV — bairro, casas próximas"], [5, "V — centro com prédios altos"]].map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+                      </select>
+                      {[["X", dx], ["Y", dy]].map(([rot, d]) => (
+                        <div key={rot} style={{ marginTop: 8, fontSize: 12.5, color: "#374151", lineHeight: 1.5 }}>
+                          <div style={{ fontWeight: 600 }}>Vento em {rot}</div>
+                          {d.F && <div>Forças: {d.F.map((f) => tpFmt(f, 1)).join(" · ")} kN (de baixo para cima)</div>}
+                          <div>γz = <b style={{ color: d.gz > 1.3 ? "#b91c1c" : d.gz > 1.1 ? "#b45309" : "#047857" }}>{gzTxt(d)}</b> {d.gz != null && isFinite(d.gz) ? (d.gz <= 1.1 ? "(nós fixos)" : d.gz <= 1.3 ? `(nós móveis: vento ×${tpFmt(d.amp, 2)})` : "(não atende)") : ""}</div>
+                          {d.uS && <div>Topo desloca {tpFmt(d.uS[d.uS.length - 1] * 1000, 2)} mm (limite H/1700 = {tpFmt(d.limTopo * 1000, 1)} mm){d.okTopo && d.okAndar ? " ✓" : " ✗"}</div>}
+                        </div>
+                      ))}
+                      <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>NBR 6123: V0 do mapa de isopletas do município (confira), terreno plano, residência; Ca a conferir na Fig. 4. Classe {vt.classe}. Rigidez dos pilares e vigas pelo método de Muto com 0,8 e 0,4 EI (NBR 6118, 15.7.3); a alvenaria não entra. O momento do vento soma nos pilares{pior > 1.1 ? ", ampliado por 0,95·γz" : ""}.</div>
+                    </>)}
                   </>);
                 })()}
                 {estDescida && estDescida.nV > 0 && grupoQ("est-d", "Dimensionamento (NBR 6118)", estDescida.falhas.length ? `${estDescida.falhas.length} não atende${estDescida.falhas.length === 1 ? "" : "m"}` : "tudo atende")}

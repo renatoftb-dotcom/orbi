@@ -195,3 +195,16 @@ cálculo escreveu. φ20 e φ25 não existem na lista do orçamento (aviso).
 
 Cada painel engastado na viga comum dá k·p·ℓ²/12; o apoio fica com o maior
 entre 0,8 do maior e a média; barras 0,25 do maior vão para cada lado.
+
+## Etapa 1 — lançar e alterar à mão
+- Alterações guardadas em `estrutura.edicoes[pavimento]`, por posição (pilar+, pilar-, pilar~, pilarSec, viga+, viga-, vigaSec), reaplicadas sobre o lançamento automático a cada cálculo; a que perde o alvo vira aviso.
+- Numeração estável: nomes saem do lançamento automático antes das alterações; viga dividida por pilar novo vira V3a/V3b; pilar novo ganha o próximo número.
+- Altura de viga digitada fica fixa (`hFixo`): o cálculo não aumenta nem iguala; avisa se não passar.
+
+## Etapa 2 — vento (NBR 6123) e estabilidade global (NBR 6118, 15.5.3)
+- Vk = V0·S1·S2·S3, S2 da Tabela 2 (classe A/B), q = 0,613 Vk², F = Ca·q·faixa de fachada por nível + empena do telhado. Parâmetros: V0 (padrão 45 m/s, conferir isopletas), categoria (IV), Ca (1,2, conferir Fig. 4).
+- Rigidez lateral pelo método de Muto com 0,8 EI nos pilares e 0,4 EI nas vigas (15.7.3); base sem baldrame rotulada; alvenaria desprezada.
+- γz com 1,4(G + 0,5Q) e 1,4W: ≤ 1,1 nós fixos; ≤ 1,3 vento ×0,95γz; > 1,3 não atende.
+- Serviço: vento frequente ψ1 = 0,3, rigidez bruta — topo H/1700, andar hi/850.
+- Pilares: duas combinações (uso + 0,6 vento; vento + 0,5 uso), M1d = máx(M1d,mín; Md,vento), mais a 2ª ordem local.
+- Pendente (etapa 3): momento do vento nas vigas e na fundação (baldrames).
