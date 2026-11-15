@@ -1894,7 +1894,11 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   const [vis3d, setVis3d] = useState("todos");
   const [cortes, setCortes] = useState(() => (Array.isArray(projeto.cortes) ? projeto.cortes : [])); // cortes AA, BB… (linha na planta)
   const [verCorte, setVerCorte] = useState(() => (Array.isArray(projeto.cortes) && projeto.cortes[0] ? projeto.cortes[0].id : null));
-  const corteRef = useRef(null), corteBox = useRef(null), corteAlvos = useRef([]);  // 3D: todos os pavimentos, até o ativo, ou só o ativo
+  const corteRef = useRef(null), corteBox = useRef(null), corteAlvos = useRef([]);
+  // cotas no corte: ferramenta (pontos já clicados e o cursor), cota selecionada e o mapa tela → corte
+  const [cotaC, setCotaC] = useState(null); // { pts: [{x,y,z}...], hover: {x,y,z} } enquanto desenha
+  const [cotaCSel, setCotaCSel] = useState(null); // índice da cota selecionada no corte aberto
+  const corteMapa = useRef(null);  // 3D: todos os pavimentos, até o ativo, ou só o ativo
   const [novaEscada, setNovaEscada] = useState({ forma: "reta", largura: 0.9, giro: 1 }); // opções da próxima escada // id do pavimento a excluir (confirmação)
   const [tipoEsq, setTipoEsq] = useState("porta_giro");  // tipo da próxima porta/janela
   const [dimsEsq, setDimsEsq] = useState(() => Object.fromEntries(TP_ESQ.map((t) => [t.id, { larg: t.larg, alt: t.alt, peit: t.peit, mat: t.mat }])));
@@ -4510,6 +4514,43 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       ctx.font = `600 ${11 * dpr}px system-ui, sans-serif`; ctx.fillText(`${p.nivel >= 0 ? "+" : ""}${tpFmt(p.nivel)}  ${p.nome}`, x + 10 * dpr, y - 9 * dpr);
     }
     ctx.textBaseline = "alphabetic";
+    // cotas do usuário neste corte: pontos guardados no mundo (x, y na linha do
+    // corte, z) — continuam certos se a linha for invertida
+    {
+      const P2 = (q) => ({ px: X(S(q)), py: Y(q.z) });
+      // pontos de encaixe (px): bordas das peças desenhadas, níveis e chão
+      const ex = [], ey = [Y(0), ...pavs.map((p) => Y(p.nivel))];
+      for (const a of alvos) { ex.push(a.x0, a.x1); ey.push(a.y0, a.y1); }
+      corteMapa.current = { dpr, k, ex, ey, paraMundo: (px, py) => { const sv = (px - ox) / k, zv = (oy - py) / k; return { x: a0.x + u.x * sv, y: a0.y + u.y * sv, z: zv }; }, paraTela: P2, ctId: ct.id };
+      const cotaDes = (A, B, Pl, marc, previa) => {
+        const a = P2(A), b = P2(B), pl = P2(Pl), hor = Math.abs(b.px - a.px) >= Math.abs(b.py - a.py);
+        const val = hor ? Math.abs(S(B) - S(A)) : Math.abs(B.z - A.z); if (val < 0.005) return null;
+        const cor = marc ? TP_AZUL : previa ? "#0369a1" : "#111827", tk = 4 * dpr;
+        ctx.strokeStyle = cor; ctx.lineWidth = (marc ? 1.6 : 1) * dpr; ctx.beginPath();
+        let L1, L2;
+        if (hor) { L1 = { x: a.px, y: pl.py }; L2 = { x: b.px, y: pl.py }; ctx.moveTo(a.px, a.py); ctx.lineTo(a.px, pl.py + Math.sign(pl.py - a.py) * 4 * dpr); ctx.moveTo(b.px, b.py); ctx.lineTo(b.px, pl.py + Math.sign(pl.py - b.py) * 4 * dpr); }
+        else { L1 = { x: pl.px, y: a.py }; L2 = { x: pl.px, y: b.py }; ctx.moveTo(a.px, a.py); ctx.lineTo(pl.px + Math.sign(pl.px - a.px) * 4 * dpr, a.py); ctx.moveTo(b.px, b.py); ctx.lineTo(pl.px + Math.sign(pl.px - b.px) * 4 * dpr, b.py); }
+        ctx.moveTo(L1.x, L1.y); ctx.lineTo(L2.x, L2.y);
+        for (const q of [L1, L2]) { ctx.moveTo(q.x - tk, q.y + tk); ctx.lineTo(q.x + tk, q.y - tk); }
+        ctx.stroke();
+        const txt = tpFmt(val), mx = (L1.x + L2.x) / 2, my = (L1.y + L2.y) / 2;
+        ctx.save(); ctx.translate(mx, my); if (!hor) ctx.rotate(-Math.PI / 2);
+        ctx.font = `600 ${10.5 * dpr}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+        ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(255,255,255,0.95)"; ctx.lineWidth = 3 * dpr; ctx.strokeText(txt, 0, -3 * dpr); ctx.fillStyle = cor; ctx.fillText(txt, 0, -3 * dpr);
+        ctx.restore();
+        return { x0: Math.min(L1.x, L2.x) - 5 * dpr, x1: Math.max(L1.x, L2.x) + 5 * dpr, y0: Math.min(L1.y, L2.y) - 14 * dpr, y1: Math.max(L1.y, L2.y) + 5 * dpr };
+      };
+      const hits = [];
+      (ct.cotas || []).forEach((cq, i) => { const r = cotaDes(cq.a, cq.b, cq.p, cotaCSel === i, false); if (r) hits.push({ ...r, i }); });
+      corteMapa.current.hits = hits;
+      // ferramenta Cota: pontos já clicados e a prévia até o cursor
+      if (cotaC && cotaC.ctId === ct.id) {
+        const pts = cotaC.pts, h = cotaC.hover;
+        ctx.fillStyle = "#0369a1"; for (const q of [...pts, ...(h ? [h] : [])]) { const t = P2(q); ctx.beginPath(); ctx.arc(t.px, t.py, 3.5 * dpr, 0, Math.PI * 2); ctx.fill(); }
+        if (pts.length === 1 && h) { const a = P2(pts[0]), b = P2(h); ctx.strokeStyle = "#0369a1"; ctx.setLineDash([4 * dpr, 3 * dpr]); ctx.lineWidth = 1 * dpr; ctx.beginPath(); ctx.moveTo(a.px, a.py); ctx.lineTo(b.px, b.py); ctx.stroke(); ctx.setLineDash([]); }
+        if (pts.length === 2) cotaDes(pts[0], pts[1], h || pts[1], false, true);
+      }
+    }
     // título
     ctx.font = `700 ${13 * dpr}px system-ui, sans-serif`; ctx.fillStyle = "#111827"; ctx.textAlign = "center";
     const yt = Math.min(Hc - 12 * dpr, Y(fundC.length ? zFund : -0.45) + 26 * dpr), tt = `CORTE ${tpNomeCorte(ct)}`, xt = X((0 + Lc) / 2);
@@ -4588,11 +4629,48 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
   // o círculo do aviso some sozinho
   useEffect(() => { if (!focoEst) return; const t = setTimeout(() => setFocoEst(null), 4000); return () => clearTimeout(t); }, [focoEst]);
   useEffect(() => { const t = setTimeout(() => atual.current.desenharPlanta(), 230); return () => clearTimeout(t); }, [painelOculto]); // escala gráfica acompanha o painel
-  useEffect(() => { if (modo !== "corte") return; const id = requestAnimationFrame(() => desenharCorte()); return () => cancelAnimationFrame(id); }, [modo, cortes, verCorte, paredes, areas, dadosPav, pavimentos, pavAtivo, sel, selOutros, estPorPav, estrutura.noCorte]);
+  useEffect(() => { if (modo !== "corte") return; const id = requestAnimationFrame(() => desenharCorte()); return () => cancelAnimationFrame(id); }, [modo, cortes, verCorte, paredes, areas, dadosPav, pavimentos, pavAtivo, sel, selOutros, estPorPav, estrutura.noCorte, cotaC, cotaCSel]);
   // clique no corte: seleciona a peça (Ctrl soma, Shift tira); em outro pavimento, vai para ele
+  // ponto do clique no corte, encaixado nas bordas das peças e nos níveis (8 px)
+  const pontoCorte = (e) => {
+    const c = corteRef.current, M = corteMapa.current; if (!c || !M) return null;
+    const r = c.getBoundingClientRect(), kx = c.width / r.width; let x = (e.clientX - r.left) * kx, y = (e.clientY - r.top) * kx;
+    const tol = 8 * M.dpr; let bx = null, by = null;
+    for (const v of M.ex) if (Math.abs(v - x) <= tol && (bx == null || Math.abs(v - x) < Math.abs(bx - x))) bx = v;
+    for (const v of M.ey) if (Math.abs(v - y) <= tol && (by == null || Math.abs(v - y) < Math.abs(by - y))) by = v;
+    if (bx != null) x = bx; if (by != null) y = by;
+    const q = M.paraMundo(x, y), r3 = (v) => Math.round(v * 1000) / 1000;
+    return { x: r3(q.x), y: r3(q.y), z: Math.round(q.z * 100) / 100 };
+  };
+  useEffect(() => { setCotaCSel(null); setCotaC((cc) => (cc ? { ctId: verCorte, pts: [], hover: null } : cc)); }, [verCorte]);
+  useEffect(() => { if (modo !== "corte") { setCotaC(null); setCotaCSel(null); } }, [modo]);
+  useEffect(() => {
+    if (!cotaC && cotaCSel == null) return undefined;
+    const tecla = (e) => {
+      const alvo = e.target && e.target.tagName; if (alvo === "INPUT" || alvo === "TEXTAREA" || alvo === "SELECT") return;
+      if (e.key === "Escape") { setCotaC(null); setCotaCSel(null); e.stopPropagation(); }
+      if ((e.key === "Delete" || e.key === "Backspace") && cotaCSel != null) {
+        const ci = cortes.findIndex((cc) => cc.id === (verCorte || (cortes[0] && cortes[0].id))); if (ci < 0) return;
+        e.preventDefault(); e.stopPropagation(); registrar(); setCortes((cs) => cs.map((cc, i) => (i === ci ? { ...cc, cotas: (cc.cotas || []).filter((_, j) => j !== cotaCSel) } : cc))); setCotaCSel(null);
+      }
+    };
+    window.addEventListener("keydown", tecla, true); return () => window.removeEventListener("keydown", tecla, true);
+  }, [cotaC, cotaCSel, cortes, verCorte]); // eslint-disable-line react-hooks/exhaustive-deps
+  const moverCorte = (e) => { if (!cotaC) return; const q = pontoCorte(e); if (q) setCotaC((cc) => (cc ? { ...cc, hover: q } : cc)); };
   const cliqueCorte = (e) => {
     const c = corteRef.current; if (!c) return;
     const r = c.getBoundingClientRect(), kx = c.width / r.width, x = (e.clientX - r.left) * kx, y = (e.clientY - r.top) * kx;
+    const ci = cortes.findIndex((cc) => cc.id === (verCorte || (cortes[0] && cortes[0].id)));
+    if (cotaC && ci >= 0) {
+      const q = pontoCorte(e); if (!q) return;
+      const pts = [...cotaC.pts, q];
+      if (pts.length < 3) { setCotaC({ ...cotaC, pts, hover: q }); return; }
+      registrar(); setCortes((cs) => cs.map((cc, i) => (i === ci ? { ...cc, cotas: [...(cc.cotas || []), { a: pts[0], b: pts[1], p: pts[2] }] } : cc)));
+      setCotaC({ ctId: cotaC.ctId, pts: [], hover: null }); return;
+    }
+    const hc = ((corteMapa.current || {}).hits || []).find((h) => x >= h.x0 && x <= h.x1 && y >= h.y0 && y <= h.y1);
+    if (hc) { setCotaCSel(hc.i); return; }
+    if (cotaCSel != null) setCotaCSel(null);
     const ok = (a) => x >= Math.min(a.x0, a.x1) - 2 && x <= Math.max(a.x0, a.x1) + 2 && y >= Math.min(a.y0, a.y1) - 2 && y <= Math.max(a.y0, a.y1) + 2;
     // o que foi desenhado por último fica por cima; nome de ambiente ganha de tudo
     const lista = corteAlvos.current, achou = lista.find((a) => a.nome && ok(a)) || [...lista].reverse().find((a) => !a.nome && ok(a));
@@ -7145,6 +7223,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                   <button key={c.id} onClick={() => { setVerCorte(c.id); setSel(["x" + i]); }}
                     style={{ ...btn, minHeight: 28, padding: "2px 10px", fontSize: 12, fontWeight: 700, background: (verCorte || cortes[0].id) === c.id ? "#111827" : "#fff", color: (verCorte || cortes[0].id) === c.id ? "#fff" : "#111827", borderRadius: 999 }}>{tpNomeCorte(c)}</button>
                 ))}
+                <button onClick={() => { setCotaCSel(null); setCotaC((cc) => (cc ? null : { ctId: verCorte || cortes[0].id, pts: [], hover: null })); }} aria-pressed={!!cotaC} title="Cota no corte: clique o 1º ponto, o 2º e onde fica a linha (Esc sai)"
+                  style={{ ...btn, minHeight: 28, padding: "2px 10px", fontSize: 12, fontWeight: 600, borderRadius: 999, marginLeft: 6, background: cotaC ? "#eef5ff" : "#fff", color: cotaC ? TP_AZUL : "#4b5563", borderColor: cotaC ? TP_AZUL : "#d1d5db" }}>
+                  {cotaC ? "✓ Cota" : "Cota"}
+                </button>
+                {cotaCSel != null && (
+                  <button onClick={() => { const ci = cortes.findIndex((cc) => cc.id === (verCorte || cortes[0].id)); if (ci < 0) return; registrar(); setCortes((cs) => cs.map((cc, i) => (i === ci ? { ...cc, cotas: (cc.cotas || []).filter((_, j) => j !== cotaCSel) } : cc))); setCotaCSel(null); }}
+                    style={{ ...btn, minHeight: 28, padding: "2px 10px", fontSize: 12, fontWeight: 600, borderRadius: 999, color: "#b91c1c", borderColor: "#fca5a5" }}>Excluir cota</button>
+                )}
                 {estrutura.ativa && (
                   <button onClick={() => setEstrutura((x) => ({ ...x, noCorte: !x.noCorte }))} aria-pressed={!!estrutura.noCorte} title="Mostrar a estrutura (pilares, vigas e fundação) no corte"
                     style={{ ...btn, minHeight: 28, padding: "2px 10px", fontSize: 12, fontWeight: 600, borderRadius: 999, marginLeft: 6, background: estrutura.noCorte ? "#eef5ff" : "#fff", color: estrutura.noCorte ? TP_AZUL : "#4b5563", borderColor: estrutura.noCorte ? TP_AZUL : "#d1d5db" }}>
@@ -7153,7 +7239,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 )}
               </div>
             )}
-            <canvas ref={corteRef} onClick={cliqueCorte} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "pointer" }} />
+            <canvas ref={corteRef} onClick={cliqueCorte} onPointerMove={moverCorte} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: cotaC ? "crosshair" : "pointer", touchAction: cotaC ? "none" : "auto" }} />
+            {cotaC && (
+              <div style={{ position: "absolute", left: "50%", bottom: 12, transform: "translateX(-50%)", background: "rgba(17,24,39,0.85)", color: "#fff", fontSize: 12, padding: "5px 10px", borderRadius: 999, pointerEvents: "none", whiteSpace: "nowrap" }}>
+                {cotaC.pts.length === 0 ? "Cota: clique o 1º ponto" : cotaC.pts.length === 1 ? "Clique o 2º ponto" : "Clique onde fica a linha da cota"}
+              </div>
+            )}
             {!cortes.length && (
               <div style={{ position: "absolute", left: "50%", bottom: 16, transform: "translateX(-50%)" }}>
                 <button style={{ ...btn, minHeight: 32, padding: "4px 12px", fontSize: 13, fontWeight: 600 }} onClick={() => trocarFerramenta("corte")}>Desenhar linha de corte</button>
