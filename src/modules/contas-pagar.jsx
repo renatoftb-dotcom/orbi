@@ -4671,6 +4671,16 @@ function prestacaoMensalDosModulos(modulos, opcoes) {
   }
   return { cm, rm, fc, datas, inicio: inicioEmp, termino: terminos[terminos.length - 1] || "" };
 }
+// O percentual realizado de cada módulo (realizado ÷ estimado), só para
+// quem tem estimativa; o do empreendimento soma só esses módulos.
+function cpPercentualRealizado(mods) {
+  const com = (mods || []).filter((m) => m && Number(m.estimado) > 0.004);
+  const porId = {};
+  for (const m of com) porId[m.id] = Math.round(Number(m.realizado || 0) / Number(m.estimado) * 1000) / 10;
+  const est = com.reduce((t, m) => t + Number(m.estimado), 0), real = com.reduce((t, m) => t + Number(m.realizado || 0), 0);
+  return { porId, total: est > 0.004 ? Math.round(real / est * 1000) / 10 : null };
+}
+const cpPctTexto = (p) => (p == null ? "" : p.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%");
 // O quadro por módulo: o custo e o recebimento de cada um, lado a lado.
 // As colunas da tabela "Por módulo" (prévia e PDF): custo e vendas, nesta ordem.
 const CP_COLUNAS_POR_MODULO = [["estimado", "Custo estimado"], ["realizado", "Custo realizado"],
@@ -4819,6 +4829,22 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
       cs.forEach((c, j) => {
         const v = l.celulas[j];
         cor(l.vermelho && l.vermelho.indexOf(j) >= 0 ? VERM : l.verde && l.verde.indexOf(j) >= 0 ? VERDE : l.cinza ? CINZA : TINTA);
+        // o anel do percentual: cinza por baixo, azul até o percentual
+        if (l.anel && l.anel.col === j && l.anel.pct != null) {
+          const r = alt * 0.3, cx0 = x + 1.5 + r, cy0 = y + alt / 2, f = Math.max(0, Math.min(1, l.anel.pct / 100));
+          doc.setLineWidth(0.75); doc.setDrawColor(229, 231, 235); doc.circle(cx0, cy0, r, "S");
+          if (f > 0) {
+            const c2 = l.anel.pct > 100 ? [239, 68, 68] : AZUL_VK; doc.setDrawColor(c2[0], c2[1], c2[2]);
+            const n2 = Math.max(2, Math.ceil(f * 48));
+            for (let q = 0; q < n2; q++) {
+              const a1 = -Math.PI / 2 + 2 * Math.PI * f * q / n2, a2 = -Math.PI / 2 + 2 * Math.PI * f * (q + 1) / n2;
+              doc.line(cx0 + r * Math.cos(a1), cy0 + r * Math.sin(a1), cx0 + r * Math.cos(a2), cy0 + r * Math.sin(a2));
+            }
+          }
+          doc.text(caber(v, c.w - 3 - 2 * r - 1.5), x + 1.5 + 2 * r + 1.5, y + alt / 2 + fs * 0.13);
+          x += c.w;
+          return;
+        }
         const t = caber(v, c.w - 3);
         const tx = c.alinhar === "right" ? x + c.w - 1.5 : c.alinhar === "center" ? x + c.w / 2 : x + 1.5;
         doc.text(t, tx, y + alt / 2 + fs * 0.13, { align: c.alinhar || "left" });
@@ -4983,13 +5009,17 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   const mods = i.modulos;
   if (mods && mods.length) {
     const datasTxt = mods.filter((m) => m.inicio || m.termino).map((m) => `${m.nome}: ${m.inicio ? dia(m.inicio) : "—"} a ${m.termino ? dia(m.termino) : "—"}`).join(" · ");
-    secao("Por módulo", "Cada módulo é uma obra do empreendimento; a última linha é o empreendimento inteiro. Vendas estimadas = recebidas + a receber."
+    secao("Por módulo", "Cada módulo é uma obra do empreendimento; a última linha é o empreendimento inteiro. % realizado = custo realizado ÷ estimado (só módulos com estimativa). Vendas estimadas = recebidas + a receber."
       + (datasTxt ? " Datas da obra — " + datasTxt + "." : ""));
     const ks = CP_COLUNAS_POR_MODULO.map((c) => c[0]);
     const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
-    tabela([{ t: "Módulo", w: 47 }].concat(CP_COLUNAS_POR_MODULO.map((c) => ({ t: c[1], w: 27, alinhar: "right" }))),
-      mods.map((m) => ({ celulas: [m.nome].concat(ks.map((k) => vlr(m[k]))) }))
-        .concat([{ total: true, celulas: ["Empreendimento"].concat(ks.map((k) => moeda(mods.reduce((t, m) => t + (Number(m[k]) || 0), 0)))) }]));
+    // % realizado (realizado ÷ estimado), com o anel, só para o módulo com estimativa
+    const pr = cpPercentualRealizado(mods);
+    tabela([{ t: "Módulo", w: 40 }, { t: "% realizado", w: 21 }].concat(CP_COLUNAS_POR_MODULO.map((c) => ({ t: c[1], w: 24.2, alinhar: "right" }))),
+      mods.map((m) => ({ celulas: [m.nome, pr.porId[m.id] != null ? cpPctTexto(pr.porId[m.id]) : "—"].concat(ks.map((k) => vlr(m[k]))),
+        anel: pr.porId[m.id] != null ? { col: 1, pct: pr.porId[m.id] } : null }))
+        .concat([{ total: true, celulas: ["Empreendimento", pr.total != null ? cpPctTexto(pr.total) : "—"].concat(ks.map((k) => moeda(mods.reduce((t, m) => t + (Number(m[k]) || 0), 0)))),
+          anel: pr.total != null ? { col: 1, pct: pr.total } : null }]));
   }
   // 2. físico-financeiro
   if (ff) {
@@ -5570,6 +5600,21 @@ function GraficoSaldoAcumulado({ linhas, mesHoje }) {
     </div>
   );
 }
+// O anel do percentual realizado (tela da prévia)
+function AnelRealizado({ pct, tam }) {
+  if (pct == null) return <span style={{ color: "#9ca3af" }}>—</span>;
+  const t = tam || 22, r = t / 2 - 3, c = 2 * Math.PI * r, f = Math.max(0, Math.min(1, pct / 100));
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }} data-vk-anel-realizado={pct}>
+      <svg width={t} height={t} viewBox={`0 0 ${t} ${t}`} style={{ flex: "0 0 auto" }} role="img" aria-label={cpPctTexto(pct) + " realizado"}>
+        <circle cx={t / 2} cy={t / 2} r={r} fill="none" stroke="#e5e7eb" strokeWidth="4" />
+        {f > 0 && <circle cx={t / 2} cy={t / 2} r={r} fill="none" stroke={pct > 100 ? "#ef4444" : "#0474f4"} strokeWidth="4"
+          strokeDasharray={`${c * f} ${c}`} transform={`rotate(-90 ${t / 2} ${t / 2})`} strokeLinecap="butt" />}
+      </svg>
+      <span>{cpPctTexto(pct)}</span>
+    </span>
+  );
+}
 function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGerar, aoGerarPdf }) {
   const p = previa.param || {};
   const { pc, ffPC: ff, cfPC: cf, cmPC: cm, rmPC: rm, fcPC: fc, modulosPC: mods } = previa.dados || {};
@@ -5638,21 +5683,23 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
         )}
         {mods && mods.length > 0 && (
           <div style={caixa} data-vk-previa-modulos="1">
-            {titulo(++k, "Por módulo", "Cada módulo é uma obra do empreendimento; abaixo, todos juntos. Vendas estimadas = recebidas + a receber."
+            {titulo(++k, "Por módulo", "Cada módulo é uma obra do empreendimento; abaixo, todos juntos. % realizado = custo realizado ÷ estimado (só módulos com estimativa). Vendas estimadas = recebidas + a receber."
               + ((() => { const t = mods.filter((m) => m.inicio || m.termino).map((m) => `${m.nome}: ${m.inicio ? dia(m.inicio) : "—"} a ${m.termino ? dia(m.termino) : "—"}`).join(" · "); return t ? " Datas da obra — " + t + "." : ""; })()))}
             <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", minWidth: 680, borderCollapse: "collapse" }}>
-                <thead><tr>{["Módulo"].concat(CP_COLUNAS_POR_MODULO.map((c) => c[1])).map((t, j) =>
-                  <th key={t} style={{ ...th, textAlign: j ? "right" : "left" }}>{t}</th>)}</tr></thead>
+              <table style={{ width: "100%", minWidth: 780, borderCollapse: "collapse" }}>
+                <thead><tr>{["Módulo", "% realizado"].concat(CP_COLUNAS_POR_MODULO.map((c) => c[1])).map((t, j) =>
+                  <th key={t} style={{ ...th, textAlign: j > 1 ? "right" : "left" }}>{t}</th>)}</tr></thead>
                 <tbody>
                   {mods.map((m) => (
                     <tr key={m.id} data-vk-modulo-linha={m.id}>
                       <td style={td}>{m.nome}</td>
+                      <td style={{ ...td, paddingTop: 3, paddingBottom: 3 }}><AnelRealizado pct={cpPercentualRealizado(mods).porId[m.id]} /></td>
                       {CP_COLUNAS_POR_MODULO.map((c) => <td key={c[0]} style={{ ...td, textAlign: "right" }}>{n(m[c[0]])}</td>)}
                     </tr>
                   ))}
                   <tr style={{ background: "#f6f8fb" }}>
                     <td style={{ ...td, fontWeight: 700 }}>Empreendimento</td>
+                    <td style={{ ...td, fontWeight: 700, paddingTop: 3, paddingBottom: 3 }}><AnelRealizado pct={cpPercentualRealizado(mods).total} /></td>
                     {CP_COLUNAS_POR_MODULO.map((c) =>
                       <td key={c[0]} style={{ ...td, textAlign: "right", fontWeight: 700 }}>{moeda(mods.reduce((t, m) => t + (Number(m[c[0]]) || 0), 0))}</td>)}
                   </tr>
