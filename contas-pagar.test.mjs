@@ -3738,5 +3738,23 @@ teste("prestação da obra: regimes, pré-obra, custos e recebimentos mensais, f
   assert.strictEqual(depois.linhas.find((l) => l.chave === "2027-04").custoARealizar, 0);
 });
 
+teste("recebimentos: contrato pendente vira 'a assinar' e a projeção da unidade vira venda futura", () => {
+  const obra = { vendas: [{ id: "va", unidadeId: "u1", contratoPendente: true }, { id: "vb", unidadeId: "u2" }],
+    unidadesVenda: [{ id: "u1" }, { id: "u2" }, { id: "u3", projecao: { parcelas: [{ valor: 20000, vencimento: "2027-02-20" }, { valor: 190000, vencimento: "2027-08-01" }] } },
+      { id: "u2b", projecao: null }],
+    contasPagar: [
+      { id: "a1", contaId: "venda_imovel", vendaId: "va", valor: 5000, pago: true, valorPago: 5000, pagoEm: "2026-11-05" },
+      { id: "a2", contaId: "venda_imovel", vendaId: "va", valor: 5000, pago: false, vencimento: "2026-12-05" },
+      { id: "b1", contaId: "venda_imovel", vendaId: "vb", valor: 7000, pago: false, vencimento: "2026-12-05" },
+    ] };
+  const rm = modulo.recebimentosMensais(obra, { regime: "caixa" });
+  const dez = rm.meses.find((m) => m.chave === "2026-12");
+  assert.strictEqual(dez.assinar, 5000); assert.strictEqual(dez.assinado, 7000);
+  assert.strictEqual(rm.total.recebido, 5000);
+  assert.strictEqual(rm.total.estimativa, 210000);
+  assert.strictEqual(rm.meses.find((m) => m.chave === "2027-08").estimativa, 190000);
+  assert.ok(rm.temCronograma);
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

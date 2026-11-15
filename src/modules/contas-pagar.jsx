@@ -4482,13 +4482,23 @@ function recebimentosMensais(obra, opcoes) {
   const red = (x) => Math.round(x * 100) / 100;
   const por = {};
   const somar = (k, faixa, v) => { if (!k || !v) return; const m = por[k] || (por[k] = { recebido: 0, assinado: 0, assinar: 0, estimativa: 0 }); m[faixa] = red(m[faixa] + v); };
+  // venda com o contrato ainda sem assinatura: o que falta receber dela é "a assinar"
+  const pendentes = new Set((ob.vendas || []).filter((v) => v && v.contratoPendente).map((v) => v.id));
   for (const e of ob.entradas || []) if (e) somar(cpBalde(e.data, o.inicio), "recebido", Number(e.valor) || 0);
   for (const c of ob.contasPagar || []) {
     if (!c || !cpContaEhEntrada(c.contaId) || c.contaId === "documentacao_comprador") continue;
     const v = cpValorLancado(c);
-    if (regime === "competencia") somar(cpBalde(c.vencimento || c.pagoEm, o.inicio), c.pago ? "recebido" : "assinado", v);
+    const aReceber = pendentes.has(c.vendaId) ? "assinar" : "assinado";
+    if (regime === "competencia") somar(cpBalde(c.vencimento || c.pagoEm, o.inicio), c.pago ? "recebido" : aReceber, v);
     else if (c.pago) somar(cpBalde(c.pagoEm || c.vencimento, o.inicio), "recebido", v);
-    else somar(cpBalde(c.vencimento, o.inicio), "assinado", v);
+    else somar(cpBalde(c.vencimento, o.inicio), aReceber, v);
+  }
+  // a projeção de venda das unidades ainda disponíveis: venda futura
+  const vendidas = new Set((ob.vendas || []).filter(Boolean).map((v) => v.unidadeId));
+  let temProjecao = false;
+  for (const u of ob.unidadesVenda || []) {
+    if (!u || vendidas.has(u.id) || !u.projecao) continue;
+    for (const p of u.projecao.parcelas || []) { somar(cpBalde(p.vencimento, o.inicio), "estimativa", Number(p.valor) || 0); temProjecao = true; }
   }
   for (const p of ob.cronogramaRecebimento || []) {
     if (!p || !/^\d{4}-\d{2}$/.test(String(p.mes || ""))) continue;
@@ -4498,7 +4508,7 @@ function recebimentosMensais(obra, opcoes) {
   const soma = (k) => red(meses.reduce((t, m) => t + (m[k] || 0), 0));
   const total = { recebido: soma("recebido"), assinado: soma("assinado"), assinar: soma("assinar"), estimativa: soma("estimativa") };
   total.geral = red(total.recebido + total.assinado + total.assinar + total.estimativa);
-  return { regime, meses, total, temCronograma: (ob.cronogramaRecebimento || []).length > 0 };
+  return { regime, meses, total, temCronograma: (ob.cronogramaRecebimento || []).length > 0 || temProjecao };
 }
 // O fluxo de caixa da obra até o término estimado: o custo pago mês a mês;
 // o que falta realizar (o custo previsto menos o pago) dividido igual
@@ -4810,7 +4820,7 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   // 4. recebimentos mês a mês
   if (rm && rm.meses.length) {
     cartao("Recebimentos mês a mês", (rm.regime === "competencia" ? "Competência: cada parcela no mês do vencimento." : "Caixa: recebido no mês em que entrou; o resto no vencimento.")
-      + (rm.temCronograma ? " Contrato a assinar e venda futura vêm do cronograma de recebimento da obra." : " Sem cronograma de contrato a assinar ou venda futura na obra."), alturaDoGrafico(ALT_BARRAS),
+      + " Contrato a assinar: vendas com o contrato pendente e o cronograma da obra. Venda futura: as projeções de venda das unidades e o cronograma.", alturaDoGrafico(ALT_BARRAS),
       (x0, y0, lg) => barras(rm.meses, CP_FAIXAS_RECEB, x0, y0, lg, { mesHoje: (fc && fc.mesHoje) || "" }));
     const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
     tabela([{ t: "Mês", w: 20 }, { t: "Recebido", w: 28, alinhar: "right" }, { t: "Contrato assinado", w: 30, alinhar: "right" },
@@ -5327,7 +5337,7 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
         )}
         {rm && rm.meses.length > 0 && (
           <div style={caixa} data-vk-previa-receb="1">
-            {titulo(++k, "Recebimentos mês a mês", (rm.regime === "competencia" ? "Competência: cada parcela no vencimento." : "Caixa: recebido no mês em que entrou; o resto no vencimento.") + (rm.temCronograma ? "" : " Sem cronograma de contrato a assinar ou venda futura na obra."))}
+            {titulo(++k, "Recebimentos mês a mês", (rm.regime === "competencia" ? "Competência: cada parcela no vencimento." : "Caixa: recebido no mês em que entrou; o resto no vencimento.") + " Contrato a assinar: vendas com o contrato pendente e o cronograma. Venda futura: as projeções das unidades e o cronograma.")}
             <GraficoFluxoMensal fluxo={{ meses: rm.meses }} hojeIso={hoje} faixas={CP_FAIXAS_RECEB} />
             {legenda(CP_FAIXAS_RECEB, rm.meses)}
           </div>
@@ -5470,7 +5480,7 @@ function RecebimentoDaObraView({ obra, podeEditar, aoSalvar, isMobile, fmtBRL })
       )}
       <div style={caixa}>
         <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Cronograma de recebimento previsto</div>
-        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10 }}>Os contratos assinados entram sozinhos, pelas parcelas da venda. Aqui vai o que ainda não tem contrato. Quando o contrato for assinado, tire a linha.</div>
+        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10 }}>As vendas registradas entram sozinhas (com o contrato pendente, como "a assinar"), e as unidades com projeção de venda entram como venda futura. Aqui vai o que não está em nenhuma delas.</div>
         {lista.length === 0 && <div style={{ fontSize: 12.5, color: "#6b7280", marginBottom: 8 }}>Nenhum mês previsto ainda.</div>}
         <div style={{ display: "grid", gap: 8 }}>
           {lista.map((x, k) => (

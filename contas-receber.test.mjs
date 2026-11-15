@@ -19,7 +19,7 @@ if (a < 0 || b < 0) throw new Error("marcadores da parte pura não encontrados")
 const M = new Function(puroEf + "\n" + cr.slice(a, b) + `
   return { crSomarMeses, crGerarParcelas, novasContasAReceber, itensAReceber, resumoAReceber, candidatosDoRecebimento,
     receberContaAReceber, desfazerRecebimento, ligarParcelaDeProjeto, extratoEscritorio, lancamentosDoEscritorio,
-    planoDaVenda, obraComVenda, obraSemVenda, contasRecebidasCriadasPelaVenda, resultadoDoEmpreendimento, resumoDasVendas, entradasDeVendaSoltas, contasDaVenda, gruposDeParcelas, conferenciaDaVenda, provisaoDaVenda, obraComProvisao, obraComDespesaDaProvisao, acertoDaProvisao, obraSemMovDaProvisao };`)();
+    planoDaVenda, planoDaProjecao, obraComProjecao, obraComNotaDaVenda, obraComVenda, obraSemVenda, contasRecebidasCriadasPelaVenda, resultadoDoEmpreendimento, resumoDasVendas, entradasDeVendaSoltas, contasDaVenda, gruposDeParcelas, conferenciaDaVenda, provisaoDaVenda, obraComProvisao, obraComDespesaDaProvisao, acertoDaProvisao, obraSemMovDaProvisao };`)();
 
 const testes = [];
 const teste = (nome, fn) => testes.push([nome, fn]);
@@ -265,6 +265,34 @@ teste("desconto na venda: sai do que o comprador paga e deduz a receita do resul
   assert.strictEqual(r.receita.vendida, 210000); assert.strictEqual(r.receita.descontos, 10000);
   assert.strictEqual(r.receita.total, 200000); assert.strictEqual(r.unidades[0].resultado, 200000);
   assert.strictEqual(M.resumoDasVendas(obra).descontos, 10000);
+});
+
+teste("projeção de venda e comentário/contrato pendente", () => {
+  const unidades = [{ id: "u3", nome: "Casa 03", precoEstimado: 210000 }];
+  const r = M.planoDaProjecao({ valor: "215.000,00", data: "2027-02-15", sinais: [{ valor: "15.000,00", data: "2027-02-20" }],
+    grupos: [{ ate: "10", valor: "2.000,00" }], primeiroVencimento: "2027-03-20", financiamento: "180.000,00", dataFinanciamento: "2027-08-01", observacao: "Interessado visitou" });
+  assert.ok(!r.erro, r.erro);
+  assert.strictEqual(r.projecao.parcelas.length, 12);
+  assert.strictEqual(r.projecao.parcelas.reduce((t, p) => t + p.valor, 0), 215000);
+  assert.strictEqual(r.projecao.parcelas[2].vencimento, "2027-04-20");
+  // sem forma de pagamento: tudo na data prevista
+  const r2 = M.planoDaProjecao({ valor: "210.000,00", data: "2027-05-10", grupos: [{ ate: "", valor: "" }] });
+  assert.deepStrictEqual(r2.projecao.parcelas, [{ parte: "venda", valor: 210000, vencimento: "2027-05-10" }]);
+  assert.ok(/faltam/.test(M.planoDaProjecao({ valor: "210.000,00", data: "2027-05-10", sinais: [{ valor: "10.000,00", data: "2027-05-10" }] }).erro));
+  let obra = M.obraComProjecao({ id: "o1", unidadesVenda: unidades, contasPagar: [] }, "u3", r.projecao);
+  assert.strictEqual(obra.unidadesVenda[0].projecao.valor, 215000);
+  assert.strictEqual(M.resultadoDoEmpreendimento(obra, { plano: [] }).receita.estoque, 215000, "a unidade a vender vale o preço projetado");
+  // vendeu de verdade: a projeção sai
+  const p = M.planoDaVenda({ unidadeId: "u3", comprador: "C", data: "2027-02-15", valor: "210.000,00", sinais: [{ valor: "210.000,00", data: "2027-02-15" }],
+    grupos: [{ ate: "", valor: "" }], contratoPendente: true, observacao: "Cliente pagando, pendente assinatura" }, { unidades, contas: [], obraId: "o1", novoId });
+  assert.ok(p.venda.contratoPendente); assert.strictEqual(p.venda.observacao, "Cliente pagando, pendente assinatura");
+  obra = M.obraComVenda(obra, p);
+  assert.ok(!obra.unidadesVenda[0].projecao);
+  // comentário e contrato assinado depois
+  obra = M.obraComNotaDaVenda(obra, p.venda.id, { observacao: "Contrato assinado", contratoPendente: false });
+  assert.strictEqual(obra.vendas[0].observacao, "Contrato assinado"); assert.ok(!obra.vendas[0].contratoPendente);
+  // tirar a projeção
+  assert.ok(!M.obraComProjecao({ unidadesVenda: [{ id: "u9", projecao: r.projecao }] }, "u9", null).unidadesVenda[0].projecao);
 });
 
 for (const [nome, fn] of testes) {

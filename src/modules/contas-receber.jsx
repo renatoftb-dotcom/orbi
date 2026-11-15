@@ -410,7 +410,8 @@ function planoDaVenda(f, ctx) {
   if (fin > 0) novas.push(base("financiamento", 1, 1, fin, d.dataFinanciamento));
   const venda = { id: vendaId, unidadeId: un.id, comprador, data: d.data, valor, criadoEm: agora, por: o.quem || "",
     ...(prov > 0 ? { provisaoDoc: prov } : {}), ...(desc > 0 ? { desconto: desc } : {}), ...(conf.juros > 0 ? { juros: conf.juros } : {}),
-    ...(String(d.observacao || "").trim() ? { observacao: String(d.observacao).trim() } : {}) };
+    ...(String(d.observacao || "").trim() ? { observacao: String(d.observacao).trim() } : {}),
+    ...(d.contratoPendente ? { contratoPendente: true } : {}) };
   return { venda, novas, ligar };
 }
 function obraComVenda(obra, plano) {
@@ -418,7 +419,13 @@ function obraComVenda(obra, plano) {
   const ligar = new Set(plano.ligar || []);
   const contas = (o.contasPagar || []).map((c) => (c && ligar.has(c.id) ? { ...c, vendaId: plano.venda.id, parteVenda: "sinal" } : c))
     .concat(plano.novas || []);
-  return { ...o, vendas: vendasDaObra(o).concat([plano.venda]), contasPagar: contas };
+  // vendida de verdade, a projeção da unidade sai
+  const unidades = unidadesDaObra(o).map((u) => {
+    if (u.id !== plano.venda.unidadeId || !u.projecao) return u;
+    const { projecao: _p, ...sem } = u;
+    return sem;
+  });
+  return { ...o, vendas: vendasDaObra(o).concat([plano.venda]), contasPagar: contas, ...(o.unidadesVenda ? { unidadesVenda: unidades } : {}) };
 }
 // Desfazer a venda: sai tudo o que a venda criou — parcelas, financiamento,
 // complemento, sinal lançado nela —, recebido ou não. O recebido sai com o
@@ -458,6 +465,58 @@ function provisaoDaVenda(venda) {
   const valor = crCent(Number(v.provisaoDoc) || 0);
   const gasto = soma("despesa"), devolvido = soma("devolucao"), complemento = soma("complemento");
   return { valor, gasto, devolvido, complemento, saldo: crCent(valor + complemento - gasto - devolvido), movs };
+}
+// ── Projeção de venda de uma unidade ainda disponível ───────────
+// O que se espera vender: quando, por quanto e como o dinheiro entra
+// (sinal, parcelas, financiamento). Não cria contas: vira a "venda futura"
+// do recebimento mês a mês (e da prestação de contas), e o preço da
+// unidade a vender no resultado. Registrada a venda de verdade, sai.
+function planoDaProjecao(f) {
+  const d = f || {};
+  const valor = crCent(crValor(d.valor));
+  if (!(valor > 0)) return { erro: "Informe o valor previsto da venda." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(d.data || ""))) return { erro: "Informe a data prevista da venda." };
+  const sinais = (d.sinais || []).filter((x) => x && !x.contaId).map((x) => ({ valor: crCent(crValor(x.valor)), data: String(x.data || "") })).filter((x) => x.valor > 0);
+  for (const x of sinais) if (!/^\d{4}-\d{2}-\d{2}$/.test(x.data)) return { erro: "Informe a data de cada sinal." };
+  const gp = gruposDeParcelas(d);
+  if (gp.erro) return { erro: gp.erro };
+  if (gp.n > 0 && !/^\d{4}-\d{2}-\d{2}$/.test(String(d.primeiroVencimento || ""))) return { erro: "Informe o 1º vencimento das parcelas." };
+  const fin = crCent(crValor(d.financiamento));
+  if (fin > 0 && !/^\d{4}-\d{2}-\d{2}$/.test(String(d.dataFinanciamento || ""))) return { erro: "Informe a data prevista da liberação do financiamento." };
+  const soma = crCent(sinais.reduce((t, x) => t + x.valor, 0) + gp.total + fin);
+  // sem forma de pagamento: o valor inteiro entra na data prevista
+  const parcelas = [];
+  if (soma === 0) parcelas.push({ parte: "venda", valor, vencimento: d.data });
+  else {
+    const conf = conferenciaDaVenda(soma, valor, 0, 0);
+    if (conf.faltam > 0) return { erro: `Sinal + parcelas + financiamento dão ${crBRL(soma)}; a venda prevista é ${crBRL(valor)} — faltam ${crBRL(conf.faltam)}.` };
+    sinais.forEach((x) => parcelas.push({ parte: "sinal", valor: x.valor, vencimento: x.data }));
+    for (const g of gp.grupos) for (let k = g.de; k <= g.ate; k++) parcelas.push({ parte: "parcela", valor: g.valor, vencimento: crSomarMeses(d.primeiroVencimento, k - 1), parcela: k, de: gp.n });
+    if (fin > 0) parcelas.push({ parte: "financiamento", valor: fin, vencimento: d.dataFinanciamento });
+  }
+  const interessado = String(d.comprador || "").trim();
+  return { projecao: { data: d.data, valor, ...(interessado ? { interessado } : {}),
+    sinais, grupos: gp.grupos.map((g) => ({ ate: g.ate, valor: g.valor })), primeiroVencimento: d.primeiroVencimento || "",
+    financiamento: fin, dataFinanciamento: fin > 0 ? d.dataFinanciamento : "", parcelas,
+    ...(String(d.observacao || "").trim() ? { observacao: String(d.observacao).trim() } : {}) } };
+}
+function obraComProjecao(obra, unidadeId, projecao) {
+  const o = obra || {};
+  return { ...o, unidadesVenda: unidadesDaObra(o).map((u) => {
+    if (u.id !== unidadeId) return u;
+    const { projecao: _p, ...sem } = u;
+    return projecao ? { ...sem, projecao } : sem;
+  }) };
+}
+// O comentário da venda e o contrato ainda sem assinatura: as parcelas
+// que faltam receber dela entram como "contrato a assinar".
+function obraComNotaDaVenda(obra, vendaId, nota) {
+  const n = nota || {};
+  return obraComVendaAlterada(obra, vendaId, (v) => {
+    const { observacao: _o, contratoPendente: _c, ...sem } = v;
+    const obs = String(n.observacao || "").trim();
+    return { ...sem, ...(obs ? { observacao: obs } : {}), ...(n.contratoPendente ? { contratoPendente: true } : {}) };
+  });
 }
 function obraComVendaAlterada(obra, vendaId, fn) {
   const o = obra || {};
@@ -578,7 +637,7 @@ function resultadoDoEmpreendimento(obra, ctx) {
   const linhas = unidades.map((u, i) => {
     const v = vendas.find((x) => x.unidadeId === u.id) || null;
     const peso = somaArea ? (comArea ? areas[i] : 1) / somaArea : 0;
-    const preco = v ? crCent(v.valor) : crCent(crValor(u.precoEstimado));
+    const preco = v ? crCent(v.valor) : crCent((u.projecao && u.projecao.valor) || crValor(u.precoEstimado));
     const desconto = v ? crCent(Number(v.desconto) || 0) : 0;
     const juros = v ? crCent(Number(v.juros) || 0) : 0;
     const custoU = crCent(custo.previsto * peso);
@@ -937,7 +996,37 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
     setFormVenda({ unidadeId: u.id, comprador: "", data: hoje, valor: u.precoEstimado ? Number(u.precoEstimado).toFixed(2).replace(".", ",") : "",
       provisao: "", sinais: [], grupos: [{ ate: "", valor: "" }], primeiroVencimento: "", financiamento: "", dataFinanciamento: "", observacao: "" });
   }
+  // projetar a venda de uma unidade disponível (o mesmo formulário, sem criar contas)
+  function abrirProjecao(u) {
+    setErroVenda("");
+    const p = u.projecao || null;
+    const br = (n) => (Number(n) > 0 ? Number(n).toFixed(2).replace(".", ",") : "");
+    setFormVenda({ modo: "projecao", unidadeId: u.id, comprador: (p && p.interessado) || "", data: (p && p.data) || hoje,
+      valor: br((p && p.valor) || u.precoEstimado), provisao: "", desconto: "",
+      sinais: p ? (p.sinais || []).map((x) => ({ valor: br(x.valor), data: x.data })) : [],
+      grupos: p && p.grupos && p.grupos.length ? p.grupos.map((g) => ({ ate: String(g.ate), valor: br(g.valor) })) : [{ ate: "", valor: "" }],
+      primeiroVencimento: (p && p.primeiroVencimento) || "", financiamento: br(p && p.financiamento), dataFinanciamento: (p && p.dataFinanciamento) || "",
+      observacao: (p && p.observacao) || "" });
+  }
+  function salvarProjecao() {
+    const r = planoDaProjecao(formVenda);
+    if (r.erro) { setErroVenda(r.erro); return; }
+    aoGravarObra(obraComProjecao(obra, formVenda.unidadeId, r.projecao));
+    setFormVenda(null);
+    if (typeof toast !== "undefined" && toast.sucesso) toast.sucesso("Projeção de venda salva");
+  }
+  async function tirarProjecao(u) {
+    const ok = await dialogo.confirmar({ titulo: "Tirar a projeção?", mensagem: `${u.nome}: a venda prevista sai do recebimento e da prestação de contas.`, confirmar: "Tirar", destrutivo: true });
+    if (ok) aoGravarObra(obraComProjecao(obra, u.id, null));
+  }
+  // o comentário da venda e o contrato pendente de assinatura
+  const [nota, setNota] = useState(null); // { vendaId, observacao, contratoPendente }
+  function salvarNota() {
+    aoGravarObra(obraComNotaDaVenda(obra, nota.vendaId, nota));
+    setNota(null);
+  }
   function salvarVenda() {
+    if (formVenda && formVenda.modo === "projecao") { salvarProjecao(); return; }
     const p = planoDaVenda(formVenda, { unidades: unidadesDaObra(obra), contas, obraId: obra.id, novoId, quem });
     if (p.erro) { setErroVenda(p.erro); return; }
     aoGravarObra(obraComVenda(obra, p));
@@ -1092,15 +1181,37 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
               <div style={{ flex: "1 1 220px", minWidth: 0 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 700, color: "#111827" }}>{u.nome}
                   <span style={{ fontSize: 11, fontWeight: 600, marginLeft: 8, padding: "2px 8px", borderRadius: 999,
-                    background: v ? "#eef5ff" : "#f3f4f6", color: v ? "#0474f4" : "#4b5563" }}>{v ? "Vendida" : "Disponível"}</span></div>
+                    background: v ? "#eef5ff" : "#f3f4f6", color: v ? "#0474f4" : "#4b5563" }}>{v ? "Vendida" : "Disponível"}</span>
+                  {v && v.contratoPendente && <span data-vk-contrato-pendente="1" style={{ fontSize: 11, fontWeight: 600, marginLeft: 6, padding: "2px 8px", borderRadius: 999,
+                    background: "#fff7ed", color: "#b45309" }}>Contrato a assinar</span>}
+                  {!v && u.projecao && <span style={{ fontSize: 11, fontWeight: 600, marginLeft: 6, padding: "2px 8px", borderRadius: 999,
+                    background: "#eef5ff", color: "#3b82f6" }}>Venda projetada</span>}</div>
                 <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>
                   {[u.area ? `${u.area} m²` : "", `estimado ${dinheiro(l.estimado)}`, v ? `vendida a ${v.comprador} em ${crDataBR(v.data)} por ${dinheiro(v.valor)}${Number(v.desconto) > 0 ? ` com desconto de ${dinheiro(v.desconto)}` : ""}` : ""].filter(Boolean).join(" · ")}
                 </div>
                 {v && <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>recebido <b>{dinheiro(l.recebido)}</b> · a receber <b>{dinheiro(l.aReceber)}</b></div>}
+                {!v && u.projecao && (() => {
+                  const pj = u.projecao;
+                  const parc = (pj.parcelas || []).filter((x) => x.parte === "parcela");
+                  const partes = [(pj.sinais || []).length ? `sinal ${dinheiro((pj.sinais || []).reduce((t, x) => t + x.valor, 0))}` : "",
+                    parc.length ? `${parc.length} parcela${parc.length > 1 ? "s" : ""} a partir de ${crDataBR(pj.primeiroVencimento)}` : "",
+                    pj.financiamento ? `financiamento ${dinheiro(pj.financiamento)} em ${crDataBR(pj.dataFinanciamento)}` : ""].filter(Boolean);
+                  return <div data-vk-projecao={u.id} style={{ fontSize: 11.5, color: "#1e40af", marginTop: 2 }}>
+                    Projeção: venda em {crDataBR(pj.data)} por <b>{dinheiro(pj.valor)}</b>{pj.interessado ? ` · interessado: ${pj.interessado}` : ""}{partes.length ? " · " + partes.join(" · ") : " · o valor entra na data prevista"}
+                  </div>;
+                })()}
+                {(v ? v.observacao : u.projecao && u.projecao.observacao) && nota?.vendaId !== (v && v.id) && (
+                  <div data-vk-comentario-venda="1" style={{ fontSize: 12, color: "#374151", marginTop: 5, padding: "5px 9px", borderRadius: 8, background: "#fffbeb", border: "1px solid #fde68a" }}>
+                    💬 {v ? v.observacao : u.projecao.observacao}
+                  </div>
+                )}
               </div>
               {podeEditar && (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {!v && <button data-vk-registrar-venda="1" style={{ ...btn, color: "#fff", background: "#0474f4", borderColor: "#0474f4" }} onClick={() => abrirVenda(u)}>Registrar venda</button>}
+                  {!v && <button data-vk-projetar-venda="1" style={btn} onClick={() => abrirProjecao(u)}>{u.projecao ? "Editar projeção" : "Projetar venda"}</button>}
+                  {!v && u.projecao && <button style={{ ...btn, color: "#b91c1c" }} onClick={() => tirarProjecao(u)}>Tirar projeção</button>}
+                  {v && <button data-vk-comentar-venda="1" style={btn} onClick={() => setNota({ vendaId: v.id, observacao: v.observacao || "", contratoPendente: !!v.contratoPendente })}>Comentário</button>}
                   {v && <button style={btn} onClick={() => setAberta({ ...aberta, [u.id]: !ab })}>{ab ? "Esconder" : "Ver recebimentos"}</button>}
                   <button style={btn} onClick={() => setFormUn({ id: u.id, nome: u.nome, area: u.area || "", precoEstimado: u.precoEstimado ? Number(u.precoEstimado).toFixed(2).replace(".", ",") : "" })}>Editar</button>
                   {v ? <button style={{ ...btn, color: "#b91c1c" }} onClick={() => desfazerVenda(l)}>Desfazer venda</button>
@@ -1108,6 +1219,21 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                 </div>
               )}
             </div>
+            {v && nota && nota.vendaId === v.id && (
+              <div data-vk-nota-venda="1" style={{ borderTop: "1px solid rgba(38,36,33,0.08)", padding: "10px 14px", display: "grid", gap: 8, background: "#fffdf5" }}>
+                <label style={{ display: "grid", gap: 4 }}><span style={rot}>Comentário</span>
+                  <textarea rows={2} style={{ ...inp, resize: "vertical", fontFamily: "inherit" }} value={nota.observacao} placeholder="Digite um comentário sobre a venda"
+                    onChange={(e) => setNota({ ...nota, observacao: e.target.value })} /></label>
+                <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12.5, cursor: "pointer" }}>
+                  <input type="checkbox" data-vk-nota-pendente="1" checked={!!nota.contratoPendente} onChange={(e) => setNota({ ...nota, contratoPendente: e.target.checked })} />
+                  Contrato pendente de assinatura <span style={{ color: "#6b7280" }}>— o que falta receber entra como "contrato a assinar" no recebimento e na prestação de contas</span>
+                </label>
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                  <button style={btn} onClick={() => setNota(null)}>Cancelar</button>
+                  <button data-vk-nota-salvar="1" style={{ ...btn, color: "#fff", background: "#0474f4", borderColor: "#0474f4" }} onClick={salvarNota}>Salvar</button>
+                </div>
+              </div>
+            )}
             {v && ab && (
               <div style={{ borderTop: "1px solid rgba(38,36,33,0.08)" }}>
                 {l.contas.map((c, i) => {
@@ -1263,19 +1389,20 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
           <div style={{ background: "#fff", borderRadius: 16, width: "min(720px, 100%)", boxShadow: "0 20px 50px rgba(0,0,0,0.25)", padding: 18, display: "grid", gap: 12 }}>
             <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 700 }}>Registrar venda</div>
+                <div style={{ fontSize: 15, fontWeight: 700 }}>{fv.modo === "projecao" ? "Projetar venda" : "Registrar venda"}</div>
                 <div style={{ fontSize: 12.5, color: "#6b7280" }}>{(unidadesDaObra(obra).find((u) => u.id === fv.unidadeId) || {}).nome} — sinal, parcelas e liberação do financiamento</div>
               </div>
               <button style={S.btnSec} onClick={() => setFormVenda(null)}>Fechar</button>
             </div>
             <div style={{ display: "grid", gap: 10, gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr" }}>
-              <label style={{ display: "grid", gap: 4 }}><span style={rot}>Comprador</span>
+              <label style={{ display: "grid", gap: 4 }}><span style={rot}>{fv.modo === "projecao" ? "Interessado (opcional)" : "Comprador"}</span>
                 <input data-vk-venda-comprador="1" style={inp} value={fv.comprador} placeholder="Digite o nome do comprador" onChange={(e) => setFormVenda({ ...fv, comprador: e.target.value })} /></label>
-              <label style={{ display: "grid", gap: 4 }}><span style={rot}>Data da venda</span>
+              <label style={{ display: "grid", gap: 4 }}><span style={rot}>{fv.modo === "projecao" ? "Data prevista da venda" : "Data da venda"}</span>
                 <input type="date" style={inp} value={fv.data} onChange={(e) => setFormVenda({ ...fv, data: e.target.value })} /></label>
               <label style={{ display: "grid", gap: 4 }}><span style={rot}>Valor da venda</span>
                 {campoDinheiro(fv.valor, (v) => setFormVenda({ ...fv, valor: v }), { "data-vk-venda-valor": "1" })}</label>
             </div>
+            {fv.modo !== "projecao" && (<>
             <div style={{ display: "grid", gap: 8, gridTemplateColumns: isMobile ? "1fr" : "200px 1fr", alignItems: "end" }}>
               <label style={{ display: "grid", gap: 4 }}><span style={rot}>Desconto na venda</span>
                 {campoDinheiro(fv.desconto || "", (v) => setFormVenda({ ...fv, desconto: v }), { "data-vk-venda-desconto": "1" })}</label>
@@ -1295,9 +1422,10 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
               </div>
             </div>
 
+            </>)}
             <div style={{ display: "grid", gap: 6 }}>
               <div style={{ fontSize: 12.5, fontWeight: 700 }}>Sinal</div>
-              {soltas.length > 0 && (
+              {fv.modo !== "projecao" && soltas.length > 0 && (
                 <div style={{ display: "grid", gap: 4, background: "#f8fafc", borderRadius: 10, padding: "8px 10px" }}>
                   <div style={{ fontSize: 11.5, color: "#4b5563" }}>Já recebido nesta obra (Venda de imóvel) — marque o que é sinal desta venda, sem lançar de novo:</div>
                   {soltas.map((c) => {
@@ -1368,6 +1496,17 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
             </div>
 
             {(() => {
+              if (fv.modo === "projecao") {
+                const confP = conferenciaDaVenda(somaVenda, crValor(fv.valor), 0, 0);
+                const okP = somaVenda === 0 || confP.faltam === 0;
+                return (
+                  <div data-vk-venda-conferencia="1" style={{ fontSize: 12.5, padding: "8px 12px", borderRadius: 10, background: okP ? "#eef5ff" : "#fffbeb", color: okP ? "#1e40af" : "#92400e" }}>
+                    {somaVenda === 0 ? <>Sem forma de pagamento: os <b>{dinheiro(crValor(fv.valor))}</b> entram de uma vez na data prevista.</>
+                      : <>Sinal + parcelas + financiamento = <b>{dinheiro(somaVenda)}</b> · venda prevista {dinheiro(crValor(fv.valor))}{confP.faltam > 0 ? ` · faltam ${dinheiro(confP.faltam)}` : " ✓"}</>}
+                    {" "}Entra como venda futura no recebimento e na prestação de contas; não cria contas a receber.
+                  </div>
+                );
+              }
               const conf = conferenciaDaVenda(somaVenda, crValor(fv.valor), provForm, descForm);
               const ok = conf.faltam === 0;
               return (
@@ -1380,10 +1519,19 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                 </div>
               );
             })()}
+            <label style={{ display: "grid", gap: 4 }}><span style={rot}>Comentário</span>
+              <textarea rows={2} data-vk-venda-comentario="1" style={{ ...inp, resize: "vertical", fontFamily: "inherit" }} value={fv.observacao || ""}
+                placeholder="Digite um comentário sobre a venda" onChange={(e) => setFormVenda({ ...fv, observacao: e.target.value })} /></label>
+            {fv.modo !== "projecao" && (
+              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12.5, cursor: "pointer" }}>
+                <input type="checkbox" data-vk-venda-pendente="1" checked={!!fv.contratoPendente} onChange={(e) => setFormVenda({ ...fv, contratoPendente: e.target.checked })} />
+                Contrato pendente de assinatura
+              </label>
+            )}
             {erroVenda && <div style={{ fontSize: 12.5, color: "#b91c1c" }}>{erroVenda}</div>}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
               <button style={S.btnSec} onClick={() => setFormVenda(null)}>Cancelar</button>
-              <button data-vk-salvar-venda="1" style={S.btn} onClick={salvarVenda}>Registrar venda</button>
+              <button data-vk-salvar-venda="1" style={S.btn} onClick={salvarVenda}>{fv.modo === "projecao" ? "Salvar projeção" : "Registrar venda"}</button>
             </div>
           </div>
         </div>
