@@ -10215,6 +10215,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   // Entrada só lê e monta a tabela para conferir.
   const inicioRef = useRef(inicio || null);
   const [pagamento, setPagamento] = useState({ data: "", forma: "avista", cartaoId: "", parcelas: 1 });
+  const [tentouPermuta, setTentouPermuta] = useState(false);
   const [apagar, setApagar] = useState({ vencimento: "", parcelas: "1", intervalo: "30" });
   // a prazo numa loja com conta aberta: vai para a conta dela, salvo se a
   // pessoa disser que não
@@ -10296,8 +10297,12 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   const cartoesDaEntrada = typeof cartoes === "function" ? (cartoes(obraEfetivaId) || []) : (cartoes || []);
   const doClienteNaEntrada = typeof cartaoDoCliente === "function" ? !!cartaoDoCliente(obraEfetivaId) : false;
   const aceitaCartao = !!obraEfetivaId && (cartoesDaEntrada.length > 0 || doClienteNaEntrada);
-  const pagamentoEfetivo = aceitaCartao || pagamento.forma === "permuta" ? (pagamento.forma === "permuta" ? { ...pagamento, cartaoId: "", novoCartao: null } : pagamento)
-    : { ...pagamento, forma: "avista", cartaoId: "", novoCartao: null };
+  const naPermutaEntrada = pagamento.forma === "permuta";
+  const servicosPermutaEntrada = naPermutaEntrada && typeof permutaServicosNormalizados === "function"
+    ? permutaServicosNormalizados((pagamento.permutaServicos || []).map((x) => ({ ...x, valor: typeof efValorDoCampo === "function" ? efValorDoCampo(x.valor) : Number(x.valor) || 0 })), totalDaEntrada) : [];
+  const pagamentoEfetivo = naPermutaEntrada ? { ...pagamento, cartaoId: "", novoCartao: null, permutaServicos: servicosPermutaEntrada }
+    : aceitaCartao ? pagamento : { ...pagamento, forma: "avista", cartaoId: "", novoCartao: null };
+  const errosPermutaEntrada = naPermutaEntrada && situacao === "pago" && typeof errosDaPermuta === "function" ? errosDaPermuta(servicosPermutaEntrada, totalDaEntrada) : [];
   const faltasDoItemDaEntrada = (it) => faltasDoItemNaEntrada(it, situacao, pagamentoEfetivo);
   const previaAPagar = situacao === "apagar" ? previaDosBoletos(totalDaEntrada, apagar) : [];
   const cartaoDaEntrada = cartoesDaEntrada.find((c) => c && c.id === pagamento.cartaoId) || null;
@@ -10747,6 +10752,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
   async function seguir() {
     if (situacao === "cotacao") { if (modo === "proposta") await guardarProposta(); else mandarParaAsLojas(); return; }
     if (!prova.ok) { setAviso(prova.motivo); return; }
+    if (situacao === "pago" && errosPermutaEntrada.length) { setTentouPermuta(true); setAviso(errosPermutaEntrada[0]); return; }
     const fav = (prestadores || []).find((f) => f && f.id === lojaId) || {};
     const pp = papel || {};
     const anexo = await enviarPapelDaEntrada();
@@ -10756,6 +10762,7 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
         favorecidoId: lojaId, favorecido: fav.nome || pp.lidoComo || "", lidoComo: pp.lidoComo || "",
         valor: totalDaEntrada, pagoEm: pagamento.data, parcelaId,
         forma: pagamentoEfetivo.forma, cartaoId: pagamentoEfetivo.cartaoId, parcelas: pagamentoEfetivo.parcelas,
+        permutaServicos: pagamentoEfetivo.forma === "permuta" ? servicosPermutaEntrada : undefined,
         novoCartao: pagamentoEfetivo.novoCartao || null,
         comprovante: anexo, notaDeServico: pp.tipo === "nfse", numeroNota: pp.numeroNota || "" } }) || {};
     } else {
@@ -11542,7 +11549,13 @@ function PainelEntrada({ insumos, prestadores, unidades, iaDisponivel, isMobile,
                     {pagamentoEfetivo.forma === "permuta" && (
                       <div data-vk-nota-permuta="1" style={{ marginTop: 10, padding: "8px 12px", borderRadius: 10, background: "#f7fbff",
                         border: "1px solid rgba(4,116,244,0.18)", fontSize: 12, color: "#374151", lineHeight: 1.5 }}>
-                        Permuta: o custo entra na obra, mas nada sai do banco. No escritório entram, fora da conta e no mesmo valor, a Receita de projetos e o custo da obra — o fechamento não procura essa linha no extrato.
+                        Permuta: o custo entra na obra, mas nada sai do banco. No escritório entram, fora da conta e no mesmo valor, a receita dos serviços dados em troca e o custo da obra — o fechamento não procura essas linhas no extrato.
+                      </div>
+                    )}
+                    {pagamentoEfetivo.forma === "permuta" && typeof CamposDaPermuta === "function" && (
+                      <div style={{ marginTop: 10, display: "grid" }}>
+                        <CamposDaPermuta servicos={pagamento.permutaServicos || []} total={totalDaEntrada} mostrarErros={tentouPermuta}
+                          estiloInput={E.input} aoMudar={(lista) => setPagamento((p) => ({ ...p, permutaServicos: lista }))} />
                       </div>
                     )}
                     {pagamentoEfetivo.forma === "cartao" && typeof CampoCartaoDoPagamento === "function" && (

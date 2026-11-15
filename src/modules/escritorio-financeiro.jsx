@@ -873,13 +873,14 @@ function provisaoReservadaNoEscritorio(lancamentos, obraId, vendaId) {
 // A conta paga mudou no que o lançamento do escritório leva? (valor, conta
 // contábil, descrição, fornecedor, data, papel). Etapa, grupo e item do
 // catálogo são da obra: o escritório não os vê.
-const PONTE_CAMPOS_DA_CONTA = ["valor", "valorPago", "contaId", "descricao", "favorecido", "prestadorId", "pagoEm", "vencimento", "doc", "numeroNota", "numeroLoja", "numeroDoc", "formaPagamento"];
+const PONTE_CAMPOS_DA_CONTA = ["valor", "valorPago", "contaId", "descricao", "favorecido", "prestadorId", "pagoEm", "vencimento", "doc", "numeroNota", "numeroLoja", "numeroDoc", "formaPagamento", "permutaServicos"];
 function contaMudouNaPonte(antes, depois) {
   const a = antes || {}, d = depois || {};
   const v = (x) => (x == null ? "" : String(x));
   return PONTE_CAMPOS_DA_CONTA.some((k) => {
     if (k === "valor" || k === "valorPago") return Math.abs((Number(a[k]) || 0) - (Number(d[k]) || 0)) > 0.005;
     if (k === "vencimento") return !a.pagoEm && !d.pagoEm && v(a[k]) !== v(d[k]);
+    if (k === "permutaServicos") return JSON.stringify(a[k] || []) !== JSON.stringify(d[k] || []);
     return v(a[k]) !== v(d[k]);
   });
 }
@@ -968,7 +969,7 @@ function fontesDasContasPagas(contas) {
     anexos: anexosDaTransacao(c),
     // recebimento que entrou numa conta que não é a principal (a Cora)
     ...(c.contaBancariaId ? { contaBancariaId: c.contaBancariaId } : {}),
-    ...(c.formaPagamento === "permuta" ? { permuta: true } : {}),
+    ...(c.formaPagamento === "permuta" ? { permuta: true, permutaServicos: c.permutaServicos || [] } : {}),
   });
   for (const c of pagas) {
     if (!c.pedidoId && !c.pagamentoConjunto) { soltas.push(fonteDaConta(c)); continue; }
@@ -1008,7 +1009,7 @@ function fontesDasContasPagas(contas) {
       documento: p.doc || p.numeroNota || p.numeroLoja || "",
       numeroDoc: p.numeroDoc || "",
       anexos: anexos,
-      ...(p.formaPagamento === "permuta" ? { permuta: true } : {}),
+      ...(p.formaPagamento === "permuta" ? { permuta: true, permutaServicos: p.permutaServicos || [] } : {}),
       // Os ids que ESTES itens teriam tido um a um. O que já atravessou
       // assim continua valendo: sem isto, a primeira ponte depois desta
       // mudança mandaria a mesma compra de novo, agora agrupada, e o
@@ -1020,23 +1021,86 @@ function fontesDasContasPagas(contas) {
 }
 
 // ── Permuta ─────────────────────────────────────────────────────
-// O escritório pagou com um serviço dele (um projeto, em geral) em vez de
-// dinheiro. Na obra o custo entra inteiro, como qualquer outro. No
-// escritório entra um par FORA DA CONTA, como a provisão: o custo (a saída
-// para a obra) e, no mesmo valor e no mesmo mês, a Receita de projetos —
-// o escritório recebeu em serviço e aplicou na obra. Nada sai do banco, o
-// saldo não muda, e o fechamento não procura essas linhas no extrato. A
-// receita leva a mesma origem do custo: desfazer, apagar ou editar a conta
-// na obra leva os dois juntos.
-function receitaDaPermuta(custo) {
+// O escritório pagou com serviço dele em vez de dinheiro. Na obra o custo
+// entra inteiro, como qualquer outro. No escritório entra um par FORA DA
+// CONTA, como a provisão: o custo (a saída para a obra) e, no mesmo valor e
+// no mesmo mês, a receita do serviço dado em troca — um ou mais: projeto de
+// arquitetura, de engenharia, acompanhamento, gestão. Nada sai do banco, o
+// saldo não muda, e o fechamento não procura essas linhas no extrato. As
+// receitas levam a mesma origem do custo: desfazer, apagar ou editar a
+// conta na obra leva tudo junto.
+const PERMUTA_SERVICOS = [
+  { id: "arquitetura",    nome: "Projeto de arquitetura" },
+  { id: "engenharia",     nome: "Projeto de engenharia" },
+  { id: "acompanhamento", nome: "Acompanhamento de obra" },
+  { id: "gestao",         nome: "Gestão de obra" },
+];
+function efFilhaPeloNome(pai, re, fora) {
+  return PLANO_CONTAS_ESCRITORIO.find((x) => x && x.pai === pai && !x.inativa
+    && re.test(efSemAcento(x.nomeProprio || x.nome)) && !(fora && fora.test(efSemAcento(x.nomeProprio || x.nome)))) || null;
+}
+// A conta de receita de cada serviço, no plano do escritório (com as
+// subcontas que ele tiver).
+function contaDoServicoDaPermuta(servico) {
+  const proj = contasDaReceitaDeProjeto();
+  if (servico === "engenharia") return proj.eng || proj.arq;
+  if (servico === "acompanhamento") {
+    const f = efFilhaPeloNome("rec_gestao", /acompanh/) || efFilhaPeloNome("rec_projetos", /acompanh/);
+    return f ? f.id : contaLancavelDoEscritorio("rec_gestao");
+  }
+  if (servico === "gestao") {
+    const f = efFilhaPeloNome("rec_gestao", /gest|gerenc|administr/, /acompanh/);
+    return f ? f.id : contaLancavelDoEscritorio("rec_gestao");
+  }
+  return proj.arq;
+}
+function nomeDoServicoDaPermuta(servico) {
+  const s = PERMUTA_SERVICOS.find((x) => x.id === servico);
+  return s ? s.nome : "Serviço do escritório";
+}
+// Os serviços como ficam gravados: só os marcados, com valor em centavos.
+// Um serviço só, sem valor, leva o total.
+function permutaServicosNormalizados(servicos, total) {
+  const lista = (servicos || []).filter((x) => x && PERMUTA_SERVICOS.some((s) => s.id === x.servico));
+  const cents = (v) => Math.round((Number(v) || 0) * 100) / 100;
+  if (lista.length === 1 && !(cents(lista[0].valor) > 0)) return [{ servico: lista[0].servico, valor: cents(total) }];
+  return lista.map((x) => ({ servico: x.servico, valor: cents(x.valor) }));
+}
+function errosDaPermuta(servicos, total) {
+  const lista = permutaServicosNormalizados(servicos, total);
+  if (!lista.length) return ["Permuta: marque o serviço do escritório dado em troca."];
+  if (lista.some((x) => !(x.valor > 0))) return ["Permuta: informe o valor de cada serviço."];
+  const soma = Math.round(lista.reduce((t, x) => t + x.valor, 0) * 100) / 100;
+  const alvo = Math.round(Math.abs(Number(total) || 0) * 100) / 100;
+  if (Math.abs(soma - alvo) > 0.005) {
+    const br = (v) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return [`Permuta: a soma dos serviços (${br(soma)}) tem que dar o valor do lançamento (${br(alvo)}).`];
+  }
+  return [];
+}
+// As receitas da permuta para um lançamento de custo da ponte. A nota
+// dividida em mais de uma linha leva os serviços na proporção (o último
+// fica com o centavo que sobra).
+function receitasDaPermuta(custo, servicos) {
   const c = custo || {};
   const quem = String(c.fornecedor || "").trim();
-  return { ...c, id: c.id + ":permuta", unidadeId: "projetos", contaId: "rec_projetos",
-    empreendimentoId: "", clienteId: "", cliente: quem, projeto: "Permuta" + (c.projeto ? " — " + c.projeto : ""),
-    fornecedor: "", fornecedorId: "", parDe: c.id,
-    descricao: "Projeto dado em permuta" + (quem ? " a " + quem : "") + (c.descricao ? " — " + c.descricao : ""),
-    origem: { ...(c.origem || {}), parte: "permuta" },
-    contaBanco: "nao", formaPagamento: "permuta", conferido: true };
+  const lista0 = permutaServicosNormalizados(servicos, c.valor);
+  const lista = lista0.length ? lista0 : [{ servico: "arquitetura", valor: Number(c.valor) || 0 }];
+  const soma = lista.reduce((t, x) => t + x.valor, 0) || 1;
+  const total = Math.round((Number(c.valor) || 0) * 100);
+  let usado = 0;
+  return lista.map((x, i) => {
+    const v = i === lista.length - 1 ? total - usado : Math.round(total * x.valor / soma);
+    usado += v;
+    const contaId = contaDoServicoDaPermuta(x.servico);
+    const deProjeto = efDaFamilia(contaId, "rec_projetos");
+    return { ...c, id: c.id + ":permuta" + (i ? ":" + x.servico : ""), unidadeId: deProjeto ? "projetos" : "gestao_obras", contaId,
+      valor: v / 100, empreendimentoId: "", clienteId: "", cliente: quem, projeto: "Permuta" + (c.projeto ? " — " + c.projeto : ""),
+      fornecedor: "", fornecedorId: "", parDe: c.id,
+      descricao: nomeDoServicoDaPermuta(x.servico) + " dado em permuta" + (quem ? " a " + quem : "") + (c.descricao ? " — " + c.descricao : ""),
+      origem: { ...(c.origem || {}), parte: "permuta", servico: x.servico },
+      contaBanco: "nao", formaPagamento: "permuta", conferido: true };
+  });
 }
 
 // Monta o que a obra tem para mandar. NÃO grava: devolve as três listas e quem
@@ -1122,7 +1186,7 @@ function lancamentosDaObraParaEscritorio(obra, cliente, opcoes) {
       // setembro e parece que não entrou.
       criadoEm: new Date().toISOString(),
     });
-    if (fonte.permuta) lancamentos.push(receitaDaPermuta(lancamentos[lancamentos.length - 1]));
+    if (fonte.permuta) lancamentos.push(...receitasDaPermuta(lancamentos[lancamentos.length - 1], fonte.permutaServicos));
   };
 
   // Paga no cartão não atravessa: o banco não debitou esta compra, vai
@@ -7862,7 +7926,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const cartaoEscolhido = noCartao ? cartaoPorId(cartoesAtivos, f.cartaoId) : null;
   const planoCartao = cartaoEscolhido
     ? parcelasDoCartao(cartaoEscolhido, f.lancadoEm, efValorDoCampo(f.valor), f.parcelas) : [];
-  const comoFoiPago = noCartao ? "cartao" : (f.contaBanco === "nao" ? "nao" : "sim");
+  const naPermuta = naObra && f.formaPagamento === "permuta";
+  const comoFoiPago = noCartao ? "cartao" : naPermuta ? "permuta" : (f.contaBanco === "nao" ? "nao" : "sim");
   const errosCartao = !noCartao ? []
     : [!cartaoEscolhido ? "Escolha o cartão." : "", !f.lancadoEm ? "Informe a data da compra." : ""].filter(Boolean);
   // Regra das duas pontas: cliente/empreendimento com obra no VICKE não
@@ -7892,9 +7957,12 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
   const passaDaReserva = saidaNaReserva ? efCentavos(Math.max(0, Math.abs(efValorDoCampo(f.valor)) - saldoDaReservaNaSaida)) : 0;
   const usaReserva = saldoReservaCli > 0 && pagarDaReserva;
   const excedeReserva = usaReserva ? efCentavos(Math.max(0, efValorDoCampo(f.valor) - saldoReservaCli)) : 0;
-  const todosErros = erros.concat(errosCartao).concat(errosGestao).concat(errosDuasPontas).concat(errosDobro).concat(errosParcelado);
+  const servicosDaPermuta = naPermuta ? permutaServicosNormalizados((f.permutaServicos || []).map((x) => ({ ...x, valor: efValorDoCampo(x.valor) })), efValorDoCampo(f.valor)) : [];
+  const errosPermuta = naPermuta ? errosDaPermuta(servicosDaPermuta, efValorDoCampo(f.valor)) : [];
+  const todosErros = erros.concat(errosCartao).concat(errosGestao).concat(errosDuasPontas).concat(errosDobro).concat(errosParcelado).concat(errosPermuta);
   const comCartao = (x) => {
-    if (!noCartao) return { ...x, formaPagamento: naObra ? "avista" : (x.formaPagamento === "cartao" ? "" : x.formaPagamento),
+    if (!noCartao) return { ...x, formaPagamento: naObra ? (naPermuta ? "permuta" : "avista") : (x.formaPagamento === "cartao" ? "" : x.formaPagamento),
+      permutaServicos: naPermuta ? servicosDaPermuta : undefined,
       cartaoId: "", parcelasCartao: undefined };
     return { ...x, formaPagamento: "cartao", cartaoId: cartaoEscolhido.id, contaBanco: "nao",
       parcelasCartao: planoAPartirDa(planoCartao, f.parcelaInicial) };
@@ -8068,6 +8136,8 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             if (v === "cartao") {
               setF((p) => ({ ...p, formaPagamento: "cartao", contaBanco: "nao",
                 cartaoId: p.cartaoId || (cartoesAtivos[0] ? cartoesAtivos[0].id : ""), parcelas: p.parcelas || 1 }));
+            } else if (v === "permuta") {
+              setF((p) => ({ ...p, formaPagamento: "permuta", contaBanco: "nao", cartaoId: "" }));
             } else {
               setF((p) => ({ ...p, formaPagamento: "", contaBanco: v, cartaoId: "" }));
             }
@@ -8075,8 +8145,17 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
             <option value="sim">Conta do escritório</option>
             {(cartoesAtivos.length > 0 || noCartao) && <option value="cartao">Cartão do escritório</option>}
             <option value="nao">Fora da conta do escritório</option>
+            {naObra && !f.extratoId && <option value="permuta">Permuta (sem dinheiro)</option>}
           </Selecao>
         )))}
+        {naPermuta && (
+          <div data-vk-nota-permuta="1" style={{ gridColumn: "1 / -1", padding: "8px 12px", borderRadius: 10, background: "#f7fbff",
+            border: "1px solid rgba(4,116,244,0.18)", fontSize: 12, color: "#374151", lineHeight: 1.5 }}>
+            Permuta: o custo entra na obra, mas nada sai do banco. No escritório entram, fora da conta e no mesmo valor, a receita dos serviços dados em troca e o custo da obra — o fechamento não procura essas linhas no extrato.
+          </div>
+        )}
+        {naPermuta && <CamposDaPermuta servicos={f.permutaServicos || []} total={efValorDoCampo(f.valor)} mostrarErros={tentou}
+          estiloInput={S.input} aoMudar={(lista) => set("permutaServicos", lista)} />}
         {noParcelado && campo("Parcelas", <input style={S.input} inputMode="numeric" value={f.parcelas} data-vk-parcelado-n="1"
           onChange={(e) => set("parcelas", e.target.value.replace(/\D/g, "").slice(0, 2))} />)}
         {noParcelado && f.extratoId && campo("Esta é a parcela", <input style={S.input} inputMode="numeric" value={f.parcelaAtual || ""} data-vk-parcelado-k="1"
@@ -8587,6 +8666,11 @@ function FormLancamentoEscritorio({ inicial, aoSalvar, aoCancelar, fechamentos, 
               <b>Estorno.</b> Dinheiro que entrou no banco numa conta de custo da obra: entra em <b>{(obraAlvo.nome || "obra")}</b> como
               <b> − {efDinheiro(Math.abs(efValorDoCampo(f.valor)))}</b> em <b>{nomeContaObra || "a conta"}</b>, abatendo o custo (na etapa escolhida),
               e no extrato do escritório como estorno em <b>{destinoDoCusto.conta}</b> — entrada, como no banco.
+            </span>
+          ) : destinoDoCusto && destinoDoCusto.conta && naPermuta ? (
+            <span data-vk-destino-permuta="1">
+              Entra em <b>{(obraAlvo.nome || "obra")}</b> como custo. No escritório, fora da conta: <b>{destinoDoCusto.conta}</b> e,
+              no mesmo valor, a receita dos serviços dados em troca ({servicosDaPermuta.length ? servicosDaPermuta.map((x) => nomeDoServicoDaPermuta(x.servico)).join(", ") : "marque os serviços acima"}). Nada sai do banco, e o fechamento não procura no extrato.
             </span>
           ) : destinoDoCusto && destinoDoCusto.conta ? (
             <>
@@ -9939,6 +10023,47 @@ function FaturasDoMes({ faturas, linhas, fila, lancs, aoFecharFatura, ocupado, f
 // não zera, o mês não fecha; depois de fechado, não entra lançamento nele.
 // O campo de valor da tela: pontos de milhar e vírgula aparecem enquanto
 // se digita; o cursor fica onde estava, contado pelos números.
+// Permuta: quais serviços do escritório foram dados em troca, e quanto de
+// cada um. Um só leva o valor todo; mais de um, a soma tem que fechar.
+// Usado no lançamento do escritório, na Entrada e na baixa da obra.
+function CamposDaPermuta({ servicos, total, aoMudar, mostrarErros, estiloInput }) {
+  const lista = Array.isArray(servicos) ? servicos : [];
+  const marcados = lista.map((x) => x.servico);
+  const varios = lista.length > 1;
+  const br = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const trocar = (id) => aoMudar(marcados.indexOf(id) >= 0 ? lista.filter((x) => x.servico !== id)
+    : PERMUTA_SERVICOS.filter((s) => s.id === id || marcados.indexOf(s.id) >= 0).map((s) => lista.find((x) => x.servico === s.id) || { servico: s.id, valor: "" }));
+  const valorDe = (id, v) => aoMudar(lista.map((x) => (x.servico === id ? { ...x, valor: v } : x)));
+  const erros = mostrarErros ? errosDaPermuta(lista.map((x) => ({ ...x, valor: efValorDoCampo(x.valor) })), total) : [];
+  return (
+    <div data-vk-permuta-servicos="1" style={{ gridColumn: "1 / -1", display: "grid", gap: 8, padding: "10px 12px", borderRadius: 10,
+      background: "#fff", border: "1px solid rgba(38,36,33,0.12)" }}>
+      <div style={{ fontSize: 12.5, fontWeight: 600, color: "#262421" }}>
+        Serviço do escritório dado em troca <span style={{ fontWeight: 400, color: "#6b7280" }}>· pode marcar mais de um</span>
+      </div>
+      {PERMUTA_SERVICOS.map((s) => {
+        const it = lista.find((x) => x.servico === s.id);
+        return (
+          <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minWidth: 0 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: "#262421", flex: "1 1 200px", minWidth: 0 }}>
+              <input type="checkbox" data-vk-permuta-servico={s.id} checked={!!it} onChange={() => trocar(s.id)} />
+              {s.nome}
+            </label>
+            {it && varios && (
+              <div style={{ flex: "0 1 160px", minWidth: 120 }}>
+                <CampoValorBR style={estiloInput} valor={it.valor} placeholder="0,00" data-vk-permuta-valor={s.id}
+                  aoMudar={(v) => valorDe(s.id, v)} />
+              </div>
+            )}
+            {it && !varios && <span style={{ fontSize: 12, color: "#6b7280" }}>leva o valor todo ({br(Math.abs(Number(total) || 0))})</span>}
+          </div>
+        );
+      })}
+      {erros.map((e) => <div key={e} data-vk-permuta-erro="1" style={{ fontSize: 12, color: "#b45309" }}>{e}</div>)}
+    </div>
+  );
+}
+
 function CampoValorBR({ valor, aoMudar, negativo, style, onBlur, casas, ...resto }) {
   const ref = useRef(null);
   const [foco, setFoco] = useState(false);
@@ -12050,7 +12175,9 @@ function FinanceiroEscritorio({ data, save, onReload, vista, aoIrPara }) {
         : null;
       // compra que já vinha sendo paga: só as parcelas de agora em diante
       if (plano && Number(l.parcelaInicial) > 1) { plano.parcelasCartao = planoAPartirDa(plano.parcelasCartao, l.parcelaInicial); plano.parcelaInicial = Number(l.parcelaInicial); }
-      paga = plano ? { ...paga, ...plano } : { ...paga, formaPagamento: "avista" };
+      const permuta = l.formaPagamento === "permuta" && !l.extratoId;
+      paga = plano ? { ...paga, ...plano } : { ...paga, formaPagamento: permuta ? "permuta" : "avista",
+        ...(permuta ? { permutaServicos: l.permutaServicos || [] } : {}) };
       return comAnexos(paga, papeis);
     });
     if (!novas.length) return;

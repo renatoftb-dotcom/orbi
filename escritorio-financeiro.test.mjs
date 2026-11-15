@@ -36,7 +36,7 @@ const M = new Function(src + `
            unidadePedeObra, contasDoLancamento, valorDaConta, contaEscolhida,
            obrasDoLancamento, validarLancamentoNaObra, destinoVisivelDoCusto,
            efValorDoCampo, anexosDaTransacao, comAnexos, efConversaoAprendida, efCatalogoComConversoes, parcelaDaObraParaALinha, efEtapaAprendidaDoInsumo, efEtapaAprendidaDoFornecedor, efContaDoFornecedor,
-           efNomeDoFornecedor, EF_FORNECEDOR_OUTROS,
+           efNomeDoFornecedor, EF_FORNECEDOR_OUTROS, receitasDaPermuta, errosDaPermuta, permutaServicosNormalizados,
            custoDoLancamento, validarCustoEmItens, itemUnicoDoCusto, itensDoCustoOuUnico, padraoDaContaDaObra,
            comIdsDosMovimentos, efMesmaLinhaDoBanco, extratoParaGuardar, saldoDoExtratoNoMes, documentoDoHistorico, chaveDoHistorico,
            sugestaoDoExtrato, palpiteDoExtrato, sugestaoCompletaDoExtrato, lancamentoDaLinhaDoExtrato, lancamentoRapidoDoExtrato, pareceEntreContas, ehEstornoNaConta, comSinalDeEstorno, contaBancoPelaRegra, obrasDaGestao, fornecedorPadraoDaConta, contaDeEntradaNoEscritorio, semFornecedorNaEntrada, clienteRapidoDoLancamento, ehLigacaoDaGestao, gestaoSemContratoVaiParaObra,
@@ -1031,19 +1031,24 @@ teste("permuta: custo na obra, par fora da conta no escritório (custo + receita
   const cliente = { id: "e1", nome: "Jacarezinho Módulo 1", servicos: { empreendimento: true } };
   const contas = [
     { id: "s1", contaId: "pedreiros", valor: 8000, pago: true, valorPago: 8000, pagoEm: "2026-11-10", formaPagamento: "permuta",
-      favorecido: "Serralheria Exemplo", descricao: "Portões" },
+      favorecido: "Serralheria Exemplo", descricao: "Portões",
+      permutaServicos: [{ servico: "arquitetura", valor: 5000 }, { servico: "engenharia", valor: 3000 }] },
     { id: "m1", contaId: "material", valor: 1000, pago: true, valorPago: 1000, pagoEm: "2026-11-10", formaPagamento: "avista" },
   ];
   const r = M.lancamentosDaObraParaEscritorio(obra, cliente, { planoObra: PLANO_OBRA, contasPagar: contas, entradas: [] });
   const custo = r.lancamentos.find((l) => l.origem.refId === "s1" && l.origem.parte !== "permuta");
-  const rec = r.lancamentos.find((l) => l.origem.parte === "permuta");
+  const recs = r.lancamentos.filter((l) => l.origem.parte === "permuta");
+  const rec = recs[0];
   assert.ok(custo && rec, JSON.stringify(r.lancamentos.map((l) => l.id)));
+  assert.strictEqual(recs.length, 2, "um lançamento por serviço");
+  assert.deepStrictEqual(recs.map((l) => [l.origem.servico, l.valor]), [["arquitetura", 5000], ["engenharia", 3000]]);
+  assert.ok(recs.every((l) => l.contaBanco === "nao" && l.parDe === custo.id));
   assert.strictEqual(custo.contaId, "emp_construcao");
   assert.strictEqual(custo.contaBanco, "nao");
   assert.strictEqual(custo.valor, 8000);
   assert.strictEqual(rec.contaId, "rec_projetos");
   assert.strictEqual(rec.unidadeId, "projetos");
-  assert.strictEqual(rec.valor, 8000);
+  assert.strictEqual(rec.valor, 5000);
   assert.strictEqual(rec.contaBanco, "nao");
   assert.strictEqual(rec.competencia, "2026-11");
   assert.strictEqual(rec.parDe, custo.id);
@@ -1059,7 +1064,19 @@ teste("permuta: custo na obra, par fora da conta no escritório (custo + receita
   assert.strictEqual(M.resultadoEmpreendimento(r.lancamentos, "e1", {}).investido, 9000);
   // desfazer a conta na obra leva o par junto
   const sem = M.semLancamentosDasContas(r.lancamentos, "obE", [contas[0]], [contas[1]]);
-  assert.strictEqual(sem.removidos, 2);
+  assert.strictEqual(sem.removidos, 3);
+  assert.strictEqual(M.contaMudouNaPonte(contas[0], { ...contas[0], permutaServicos: [{ servico: "gestao", valor: 8000 }] }), true);
+  // gestão e acompanhamento: Receita Gestão, unidade gestão de obras
+  const g = M.receitasDaPermuta({ id: "x", valor: 900, fornecedor: "F" }, [{ servico: "gestao", valor: 600 }, { servico: "acompanhamento", valor: 300 }]);
+  assert.deepStrictEqual(g.map((l) => [l.contaId, l.unidadeId, l.valor]), [["rec_gestao", "gestao_obras", 600], ["rec_gestao", "gestao_obras", 300]]);
+  // a nota dividida: proporção, e o centavo que sobra no último
+  const d = M.receitasDaPermuta({ id: "y", valor: 100, fornecedor: "F" }, [{ servico: "arquitetura", valor: 2 }, { servico: "engenharia", valor: 1 }]);
+  assert.deepStrictEqual(d.map((l) => l.valor), [66.67, 33.33]);
+  // validação
+  assert.deepStrictEqual(M.errosDaPermuta([{ servico: "arquitetura" }], 500), []);
+  assert.deepStrictEqual(M.permutaServicosNormalizados([{ servico: "arquitetura" }], 500), [{ servico: "arquitetura", valor: 500 }]);
+  assert.ok(/marque/.test(M.errosDaPermuta([], 500)[0]));
+  assert.ok(/soma/.test(M.errosDaPermuta([{ servico: "arquitetura", valor: 100 }, { servico: "gestao", valor: 100 }], 500)[0]));
   // trocar à vista ↔ permuta refaz o lançamento
   assert.strictEqual(M.contaMudouNaPonte(contas[1], { ...contas[1], formaPagamento: "permuta" }), true);
 });
