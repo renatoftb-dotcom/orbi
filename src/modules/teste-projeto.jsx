@@ -999,6 +999,11 @@ function tpMesclarProjetoObra(ant, conv, projetoId) {
 }
 // fundação de um pilar em uma linha (painel e card do pilar)
 function tpTextoFundacao(f) {
+  if (f.semBloco) return `no bloco conjunto com ${(f.conjunto || []).filter((x) => x !== f.id).join(", ")}`;
+  const conj = f.conjunto ? ` (bloco conjunto com ${f.conjunto.filter((x) => x !== f.id).join(", ")})` : "";
+  return tpTextoFundacao0(f) + conj + (f.girado ? " (bloco girado 90°)" : "");
+}
+function tpTextoFundacao0(f) {
   if (f.sapata) return `sapata ${tpFmt(f.sapata.L)} × ${tpFmt(f.sapata.B)} × ${tpFmt(f.sapata.h)} m${f.malha ? ` · Ø${String(f.malha[0].d).replace(".", ",")} c/${Math.round(f.malha[0].s * 100)}` : ""}`;
   if (!f.bloco) return "—";
   return `${f.n} estaca${f.n > 1 ? "s" : ""} Ø${Math.round(f.D * 100)} × ${tpFmt(f.L, 1)} m · bloco ${tpFmt(f.bloco.L)} × ${tpFmt(f.bloco.B)} × ${tpFmt(f.bloco.h)} m${f.tirante ? ` · ${f.tirante.n} Ø${String(f.tirante.d).replace(".", ",")}` : ""}`;
@@ -3742,7 +3747,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         ctx.setLineDash([]);
         if (L * vista.current.s > 70 * dpr) {
           const [mx, my] = T({ x: (v.a.x + v.b.x) / 2 + nx * 2.6, y: (v.a.y + v.b.y) / 2 + ny * 2.6 });
-          const txt = `${v.cinta ? "cinta " : ""}${v.id} ${Math.round(v.b_ * 100)}×${Math.round(v.h * 100)}`, w = ctx.measureText(txt).width + 6 * dpr;
+          const txt = `${v.cinta ? "cinta " : ""}${v.id} ${Math.round(v.b_ * 100)}×${Math.round(v.h * 100)}${v.invertida ? " inv." : ""}`, w = ctx.measureText(txt).width + 6 * dpr;
           ctx.fillStyle = "rgba(255,255,255,0.85)"; ctx.fillRect(mx - w / 2, my - fonteEst * 0.65, w, fonteEst * 1.3);
           ctx.fillStyle = "#4b5563"; ctx.fillText(txt, mx, my);
         }
@@ -3756,7 +3761,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       // fundação (no pavimento mais baixo): bloco/sapata tracejado e estacas
       if (estDescida && (estPorPav._ids || [])[0] === pavAtivo) for (const f of estDescida.fundacao || []) {
         const pl = estAt.pilares.find((x) => x.id === f.id), bl = f.bloco || f.sapata; if (!pl || !bl) continue;
-        const c = Math.cos(pl.ang || 0), sn = Math.sin(pl.ang || 0), loc = (u, v) => ({ x: pl.x + u * c - v * sn, y: pl.y + u * sn + v * c });
+        const fa = f.ang != null ? f.ang : (pl.ang || 0), fc = f.centro || pl, c = Math.cos(fa), sn = Math.sin(fa), loc = (u, v) => ({ x: fc.x + u * c - v * sn, y: fc.y + u * sn + v * c });
         ctx.strokeStyle = f.ok ? "#8b98a9" : "#b91c1c"; ctx.lineWidth = 1 * dpr; ctx.setLineDash([4 * dpr, 3 * dpr]);
         caminho([loc(-bl.L / 2, -bl.B / 2), loc(bl.L / 2, -bl.B / 2), loc(bl.L / 2, bl.B / 2), loc(-bl.L / 2, bl.B / 2)]); ctx.stroke(); ctx.setLineDash([]);
         for (const e of f.estacas || []) { const [ex, ey] = T(loc(e.x, e.y)); ctx.beginPath(); ctx.arc(ex, ey, Math.max(2 * dpr, f.D / 2 * vista.current.s), 0, Math.PI * 2); ctx.stroke(); }
@@ -4251,12 +4256,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const matF = new THREE.MeshLambertMaterial({ color: 0xa8a29e }), matFs = new THREE.MeshLambertMaterial({ color: 0x8dbbff });
         for (const f of estDescida.fundacao || []) {
           const pl = estP.pilares.find((x) => x.id === f.id), bl = f.bloco || f.sapata; if (!pl || !bl) continue;
-          const mk = marcadas.has("e" + pl.id), z0 = pl.base != null ? pl.base : 0, ang = pl.ang || 0, c = Math.cos(ang), sn = Math.sin(ang);
+          const mk = marcadas.has("e" + pl.id), z0 = pl.base != null ? pl.base : 0, ang = f.ang != null ? f.ang : (pl.ang || 0), c = Math.cos(ang), sn = Math.sin(ang), fc = f.centro || pl;
           const gb = new THREE.BoxGeometry(bl.L, bl.h, bl.B), mb = new THREE.Mesh(gb, mk ? matFs : matF);
-          mb.position.set(pl.x - cx, z0 - bl.h / 2, pl.y - cz); mb.rotation.y = -ang; mb.userData.est = pl.id; mb.userData.chave = "e" + pl.id; G.add(mb); contorno(gb, mb, mk ? 0x0474f4 : 0x57534e);
+          mb.position.set(fc.x - cx, z0 - bl.h / 2, fc.y - cz); mb.rotation.y = -ang; mb.userData.est = pl.id; mb.userData.chave = "e" + pl.id; G.add(mb); contorno(gb, mb, mk ? 0x0474f4 : 0x57534e);
           for (const e of f.estacas || []) {
             const ge = new THREE.CylinderGeometry(f.D / 2, f.D / 2, f.L, 16), me = new THREE.Mesh(ge, mk ? matFs : matF);
-            me.position.set(pl.x + e.x * c - e.y * sn - cx, z0 - bl.h - f.L / 2 + 0.05, pl.y + e.x * sn + e.y * c - cz); me.userData.est = pl.id; me.userData.chave = "e" + pl.id; G.add(me);
+            me.position.set(fc.x + e.x * c - e.y * sn - cx, z0 - bl.h - f.L / 2 + 0.05, fc.y + e.x * sn + e.y * c - cz); me.userData.est = pl.id; me.userData.chave = "e" + pl.id; G.add(me);
           }
         }
       }
@@ -4379,7 +4384,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         }
         if (p.id === id0) for (const f of fundC) {
           const pl = (e.pilares || []).find((x) => x.id === f.id), bl = f.bloco || f.sapata; if (!pl || !bl) continue;
-          const c0 = Math.cos(pl.ang || 0), s0_ = Math.sin(pl.ang || 0), loc = (uu, vv) => ({ x: pl.x + uu * c0 - vv * s0_, y: pl.y + uu * s0_ + vv * c0 });
+          const fa = f.ang != null ? f.ang : (pl.ang || 0), fc = f.centro || pl, c0 = Math.cos(fa), s0_ = Math.sin(fa), loc = (uu, vv) => ({ x: fc.x + uu * c0 - vv * s0_, y: fc.y + uu * s0_ + vv * c0 });
           const zt = p.nivel + (pl.base || 0);
           pecasEst.push({ pts: [loc(-bl.L / 2, -bl.B / 2), loc(bl.L / 2, -bl.B / 2), loc(bl.L / 2, bl.B / 2), loc(-bl.L / 2, bl.B / 2)], za: zt - bl.h, zb: zt, al: { pav: p.id, key: "e" + pl.id } });
           for (const ec of f.estacas || []) {
@@ -6772,6 +6777,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 {grupoQ("est-av", `Verificações${estAvisos.length ? ` (${estAvisos.length})` : ""}`, nNbr + nComp ? `${nNbr + nComp} a resolver` : "ok")}
                 {!qFechado("est-av") && (
                   <div>
+                    {((estPorPav._calc || {}).compat || []).length > 0 && (
+                      <div style={{ padding: "4px 0 6px", borderBottom: "1px solid #f0f2f5" }}>
+                        <div style={{ fontSize: 11.5, fontWeight: 600, color: "#047857", padding: "2px 0" }}>Resolvido automaticamente</div>
+                        {estPorPav._calc.compat.map((a, k) => (
+                          <div key={k} style={{ fontSize: 12.5, color: a.tipo === "pendente" ? "#b45309" : "#374151", lineHeight: 1.4, padding: "2px 0" }}>{a.tipo === "pendente" ? "⚠ " : "✓ "}{a.texto}{pavimentos.length > 1 && a.k != null ? <span style={{ color: "#9ca3af" }}> · {(pavsOrd[a.k] || {}).nome}</span> : null}</div>
+                        ))}
+                      </div>
+                    )}
                     {!estAvisos.length && <div style={{ fontSize: 12.5, color: "#4b5563", padding: "4px 0" }}>Nada a apontar nas verificações desta etapa.</div>}
                     {estAvisos.length > 0 && <div style={{ fontSize: 11.5, color: "#6b7280", padding: "2px 0 4px" }}>{nNbr} NBR · {nComp} conflito{nComp === 1 ? "" : "s"} · {nAt} atenção</div>}
                     {estAvisos.slice(0, 60).map((a, k) => (

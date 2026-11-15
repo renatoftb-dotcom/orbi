@@ -89806,7 +89806,8 @@ function esVerificar(est, paredes, params, ctx = {}) {
     if (bw < ES_NBR.vigaLarguraExcepcional) add("nbr", v.id, `${v.id}: largura ${bw} cm, abaixo de ${ES_NBR.vigaLarguraExcepcional} cm.`, meio, "NBR 6118, 13.2.2");
     else if (bw < ES_NBR.vigaLarguraMin) add("atencao", v.id, `${v.id}: largura ${bw} cm (menor que ${ES_NBR.vigaLarguraMin} cm) só nos casos excepcionais do item.`, meio, "NBR 6118, 13.2.2");
     if (!v.baldrame && (!v.apoioA || !v.apoioB)) add("atencao", v.id, `${v.id}: ${!v.apoioA && !v.apoioB ? "sem pilar nas pontas" : "uma ponta sem pilar"} — apoia em outra viga.`, meio);
-    if (v.vigaPiso) add("atencao", v.id, `${v.id}: viga de piso sob parede${v.sobPavimento ? ` do ${v.sobPavimento}` : " de cima"} que não tem parede embaixo — fica aparente no teto.`, meio);
+    if (v.vigaPiso && !v.invertida) add("atencao", v.id, `${v.id}: viga de piso sob parede${v.sobPavimento ? ` do ${v.sobPavimento}` : " de cima"} que não tem parede embaixo — fica aparente no teto.`, meio);
+    if (v.invertida) add("atencao", v.id, `${v.id}: viga invertida (sobe dentro da parede de cima) — a laje fica pendurada nela: armadura de suspensão no detalhamento.`, meio);
     if (!v.baldrame && L > P.vaoMax + 0.01) add("atencao", v.id, `${v.id}: vão de ${String(L.toFixed(2)).replace(".", ",")} m, maior que o vão adotado de ${String(P.vaoMax.toFixed(2)).replace(".", ",")} m.`, meio);
     // fundo da viga dentro da altura de porta/janela que fica embaixo dela
     if (!v.baldrame && v.parede != null && paredes[v.parede]) {
@@ -90587,13 +90588,54 @@ const ES_DIAMETROS = [0.20, 0.25, 0.30, 0.35, 0.40, 0.50, 0.60];
 function esFundacaoObra(itens, params) { // itens: [{ pl, N, dimPilar }]
   const P = { ...ES_PADRAO, ...(params || {}) }, F = { ...ES_PADRAO.fundacao, ...(P.fundacao || {}) };
   const com = (D) => itens.map(({ pl, N, dimPilar }) => esDimFundacao(pl, N, dimPilar, { ...P, fundacao: { ...F, diam: D } }));
-  if (F.tipo === "sapata" || +F.padm > 0) return com(+F.diam || 0.25);
+  if (F.tipo === "sapata" || +F.padm > 0) return esSepararBlocos(com(+F.diam || 0.25), itens, P);
   let melhor = null;
   for (const D of ES_DIAMETROS.filter((x) => x >= (+F.diam || 0.25) - 1e-9)) {
     const rs = com(D), ok = rs.every((r) => r.ok), vol = rs.reduce((t, r) => t + r.concreto.estacas + r.concreto.blocos, 0);
     if (ok && (!melhor || vol < melhor.vol - 1e-9)) melhor = { rs, vol };
   }
-  return melhor ? melhor.rs : com(ES_DIAMETROS[ES_DIAMETROS.length - 1]);
+  return esSepararBlocos(melhor ? melhor.rs : com(ES_DIAMETROS[ES_DIAMETROS.length - 1]), itens, P);
+}
+// blocos que se encostam: primeiro gira o bloco de 2 estacas (90°); se ainda
+// encosta, um bloco só para os dois pilares (bloco conjunto, carga somada)
+function esCantosBloco(f, pl) {
+  const bl = f.bloco || f.sapata; if (!bl) return null;
+  const c = f.centro || pl, a = f.ang != null ? f.ang : (pl.ang || 0), co = Math.cos(a), sn = Math.sin(a);
+  return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([i, j]) => ({ x: c.x + i * bl.L / 2 * co - j * bl.B / 2 * sn, y: c.y + i * bl.L / 2 * sn + j * bl.B / 2 * co }));
+}
+function esSepararBlocos(rs, itens, P) {
+  const acoes = [], ids = itens.map((x) => x.id || x.pl.id);
+  const toca = (i, j) => { const A = esCantosBloco(rs[i], itens[i].pl), B = esCantosBloco(rs[j], itens[j].pl); return A && B && esPoligonosTocam(A, B); };
+  for (let pass = 0; pass < 3; pass++) {
+    let mexeu = false;
+    for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) {
+      if (rs[i].semBloco || rs[j].semBloco || !toca(i, j)) continue;
+      // girar o de 2 estacas (o mais comprido) resolve na maioria
+      let resolvido = false;
+      for (const x of [i, j]) {
+        if (rs[x].n !== 2 || rs[x].girado) continue;
+        rs[x].ang = (itens[x].pl.ang || 0) + Math.PI / 2; rs[x].girado = true;
+        if (!toca(i, j)) { acoes.push({ k: 0, id: ids[x], tipo: "fundacao", texto: `Bloco de ${ids[x]} girado 90° para não encostar no de ${ids[x === i ? j : i]}.` }); resolvido = true; break; }
+        rs[x].ang = undefined; rs[x].girado = false;
+      }
+      if (resolvido) { mexeu = true; continue; }
+      // bloco conjunto: um bloco para os dois, no meio, com a carga somada
+      const pi = itens[i].pl, pj = itens[j].pl, d = esDist(pi, pj), ang = Math.atan2(pj.y - pi.y, pj.x - pi.x);
+      const pseudo = { b: Math.max(Math.min(pi.b, pi.h), Math.min(pj.b, pj.h)), h: d + Math.max(pi.b, pi.h, pj.b, pj.h), ang, x: (pi.x + pj.x) / 2, y: (pi.y + pj.y) / 2 };
+      const N = { Ng: itens[i].N.Ng + itens[j].N.Ng, Nq: itens[i].N.Nq + itens[j].N.Nq };
+      const r = esDimFundacaoCom(pseudo, N, itens[i].dimPilar, { ...P, fundacao: { ...ES_PADRAO.fundacao, ...(P.fundacao || {}), diam: rs[i].D || (P.fundacao || {}).diam } });
+      r.centro = { x: pseudo.x, y: pseudo.y }; r.ang = ang; r.conjunto = [ids[i], ids[j]]; r.Nk = N.Ng + N.Nq;
+      // arranque do segundo pilar dentro do mesmo bloco
+      const b2 = itens[j].dimPilar && itens[j].dimPilar.barras, hb = (r.bloco || r.sapata).h;
+      const f2 = { tipo: r.tipo, id: ids[j], Nk: itens[j].N.Ng + itens[j].N.Nq, ok: r.ok, motivos: [], aco: {}, concreto: { estacas: 0, blocos: 0, sapatas: 0 }, conjunto: [ids[i], ids[j]], semBloco: true, n: 0, hBloco: hb, D: r.D, L: r.L, estimado: r.estimado, padm: r.padm };
+      if (b2) { f2.arranque = b2; f2.aco[b2.d] = b2.n * (hb - ES_FUND.cobrimento + 0.20 + 40 * b2.d / 1000) * esKgBarra(b2.d); }
+      rs[i] = r; rs[j] = f2; mexeu = true;
+      acoes.push({ k: 0, id: ids[i], tipo: "fundacao", texto: `${ids[i]} e ${ids[j]} muito perto: um bloco só para os dois (${r.n} estaca${r.n === 1 ? "" : "s"}${r.D ? ` Ø${Math.round(r.D * 100)}` : ""}), a detalhar como bloco de duas colunas.` });
+    }
+    if (!mexeu) break;
+  }
+  rs.acoes = acoes;
+  return rs;
 }
 function esDimFundacao(pl, N, dimPilar, params) {
   const P = { ...ES_PADRAO, ...(params || {}) };
@@ -90678,11 +90720,11 @@ function esDimensionar(pavs, lanc, descida, params) {
   });
   // fundação: um bloco (ou sapata) por pilar do pavimento mais baixo
   const itens = (descida.fundacao || []).map((f) => ({ id: f.id, pl: (lanc[0].pilares || []).find((p) => p.id === f.id), N: f, dimPilar: out[0].pilares[f.id] })).filter((x) => x.pl);
-  const fund = esFundacaoObra(itens, params);
+  const fund = esFundacaoObra(itens, params), compatFundacao = fund.acoes || [];
   fund.forEach((r, i) => { r.id = itens[i].id; soma(r.aco); });
   out.fundacao = fund;
   const kg = (filtro) => Object.entries(aco).filter(([d]) => filtro(+d)).reduce((t, [, v]) => t + v, 0);
-  return { pavimentos: out, fundacao: fund, aco, ca50: kg((d) => d > 5), ca60: kg((d) => d <= 5) };
+  return { pavimentos: out, fundacao: fund, compatFundacao, aco, ca50: kg((d) => d > 5), ca60: kg((d) => d <= 5) };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -90934,6 +90976,81 @@ function esDimLaje(pn, params) {
 // faria antes de mudar a concepção) e o cálculo é refeito com o novo peso
 // próprio e a nova rigidez. A altura nova passa pela verificação de
 // compatibilização (fundo da viga × porta/janela embaixo).
+// ═══════════════════════════════════════════════════════════════
+// COMPATIBILIZAÇÃO AUTOMÁTICA — o que o engenheiro resolve antes de entregar
+// ═══════════════════════════════════════════════════════════════
+// Para cada viga, olha o que está embaixo e em volta e resolve na ordem do
+// que menos mexe na arquitetura:
+// 1) porta/janela embaixo e a viga invade o vão: baixa a viga até caber
+//    (se o cálculo ainda passa); senão, inverte a viga (ela sobe dentro da
+//    parede de cima, se houver parede sem porta ali);
+// 2) viga sobre os degraus da escada com altura livre menor que a mínima:
+//    inverte (mesma condição);
+// 3) viga de piso (sob parede de cima sem parede embaixo): invertida sempre
+//    que der — some do teto de baixo.
+// Viga invertida: o fundo fica no fundo da laje e o topo sobe h − e.
+function esCompatibilizar(pavs, lanc, desc, params) {
+  const P = { ...ES_PADRAO, ...(params || {}) }, acoes = [];
+  const espLaje = (k, q) => {
+    for (const a of pavs[k].areas || []) if (a.tipo === "laje" && a.pts && a.pts.length >= 3 && esDentroPoli(q, a.pts)) { const c = esCargaLaje(a, pavs[k].usoPadrao); return c.pre ? c.pre.hTotal : (a.esp || P.lajeEsp); }
+    return P.lajeEsp;
+  };
+  // paredes do pavimento de cima em cima da viga e o que elas têm de vão
+  const paredesAcima = (k, v) => {
+    if (k + 1 >= pavs.length) return null;
+    const L = esDist(v.a, v.b); if (L < 0.05) return null;
+    const ux = (v.b.x - v.a.x) / L, uy = (v.b.y - v.a.y) / L; let coberto = 0; const vaos = [];
+    for (const w of pavs[k + 1].paredes || []) {
+      const Lw = esLen(w); if (Lw < 0.05) continue;
+      const wx = (w.b.x - w.a.x) / Lw, wy = (w.b.y - w.a.y) / Lw; if (Math.abs(ux * wx + uy * wy) < 0.996) continue;
+      if (Math.abs((w.a.x - v.a.x) * -uy + (w.a.y - v.a.y) * ux) > ((w.t || 0) + v.b_) / 2 + 0.02) continue;
+      const sa = (w.a.x - v.a.x) * ux + (w.a.y - v.a.y) * uy, sb = (w.b.x - v.a.x) * ux + (w.b.y - v.a.y) * uy;
+      const ov = Math.min(L, Math.max(sa, sb)) - Math.max(0, Math.min(sa, sb)); if (ov <= 0.01) continue;
+      coberto += ov;
+      for (const o of w.ab || []) { const c0 = sa + (sb >= sa ? 1 : -1) * o.x, a0 = c0 - o.larg / 2, b0 = c0 + o.larg / 2; if (b0 > 0 && a0 < L) vaos.push(o); }
+    }
+    return { cobre: coberto / L, vaos };
+  };
+  const podeInverter = (k, v) => {
+    const pa = paredesAcima(k, v); if (!pa || pa.cobre < 0.95) return false;
+    const sobe = v.h - espLaje(k, { x: (v.a.x + v.b.x) / 2, y: (v.a.y + v.b.y) / 2 });
+    return !pa.vaos.some((o) => (o.peit || 0) < sobe + 0.02); // porta ou janela baixa em cima: não dá
+  };
+  const inverter = (k, v, motivo) => {
+    if (v.invertida) return;
+    const e = espLaje(k, { x: (v.a.x + v.b.x) / 2, y: (v.a.y + v.b.y) / 2 });
+    v.topo = esR3((v.topo || 2.8) - e + v.h); v.invertida = true;
+    acoes.push({ k, id: v.id, tipo: "invertida", texto: `${v.id} invertida (${motivo}): sobe ${Math.round((v.h - e) * 100)} cm dentro da parede de cima.` });
+  };
+  lanc.forEach((est, k) => {
+    const tramoDe = (id) => (desc.pavimentos[k].tramos || []).find((t) => t.ids.includes(id));
+    for (const v of est.vigas) {
+      if (v.baldrame || v.cinta) continue;
+      // 1) porta/janela embaixo
+      if (v.parede != null && (pavs[k].paredes || [])[v.parede]) {
+        const w = pavs[k].paredes[v.parede]; let topoVao = 0, qual = null;
+        for (const o of w.ab || []) { if (o.x + o.larg / 2 < v.s0 || o.x - o.larg / 2 > v.s1) continue; const tv = (o.peit || 0) + (o.alt || 0); if (tv > topoVao) { topoVao = tv; qual = o; } }
+        const fundo = (v.topo || 2.8) - v.h;
+        if (qual && topoVao > fundo + 0.005) {
+          const disp = Math.floor(((v.topo || 2.8) - topoVao) * 20 + 1e-9) / 20, t = tramoDe(v.id), nome = (qual.tipo || "").startsWith("porta") ? "porta" : "janela";
+          const r = t && disp >= 0.25 ? esDimViga(t, params, disp) : null;
+          if (r && r.ok) { acoes.push({ k, id: v.id, tipo: "altura", texto: `${v.id} baixada de ${Math.round(v.h * 100)} para ${Math.round(disp * 100)} cm para não invadir a ${nome} (o cálculo passa).` }); v.h = disp; }
+          else if (podeInverter(k, v)) inverter(k, v, `não cabe acima da ${nome}`);
+          else acoes.push({ k, id: v.id, tipo: "pendente", texto: `${v.id} não cabe acima da ${nome} e não dá para inverter: suba o vão da ${nome} até ${String((fundo).toFixed(2)).replace(".", ",")} m ou mude a viga.` });
+        }
+      }
+      // 3) viga de piso: invertida quando a parede de cima permite
+      if (v.vigaPiso && podeInverter(k, v)) inverter(k, v, "some do teto de baixo");
+    }
+    // 2) altura livre sobre a escada
+    for (const x of esAlturaLivreEscada(est, pavs[k].escadas || [])) {
+      const v = est.vigas.find((y) => y.id === x.viga); if (!v || v.invertida) continue;
+      if (podeInverter(k, v)) inverter(k, v, "altura livre da escada");
+      else acoes.push({ k, id: v.id, tipo: "pendente", texto: `${v.id} passa a ${String(x.livre.toFixed(2)).replace(".", ",")} m do degrau e não dá para inverter: mude a viga ou aumente o furo da escada.` });
+    }
+  });
+  return acoes;
+}
 function esCalcularEstrutura(pavs, params) {
   const P = { ...ES_PADRAO, ...(params || {}) }, lanc = esLancarPavimentos(pavs, params), ajustes = [];
   let desc = null, dim = null;
@@ -90959,7 +91076,10 @@ function esCalcularEstrutura(pavs, params) {
     });
     if (!mudou) break;
   }
-  return { lanc, desc, dim, ajustes };
+  // compatibilização com a arquitetura (baixar, inverter) e cálculo de novo
+  const compat = esCompatibilizar(pavs, lanc, desc, params);
+  if (compat.some((a) => a.tipo !== "pendente")) { desc = esDescidaCargas(pavs, lanc, params); dim = esDimensionar(pavs, lanc, desc, params); }
+  return { lanc, desc, dim, ajustes, compat: [...compat, ...(dim.compatFundacao || [])] };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -91002,7 +91122,7 @@ function esParaOrcamento(pavs, calc) {
         const a = { ...f.aco };
         if (f.estacaArm) { const A = f.estacaArm, n = f.n; const kgL = n * A.n * (A.comp + 0.3) * esKgBarra(A.d), kgE = n * (A.comp / A.s + 1) * (Math.PI * (f.D - 0.10) + 0.10) * esKgBarra(A.estribo);
           somaM(g.estacas, { [A.d]: kgL, [A.estribo]: kgE }); a[A.d] -= kgL; a[A.estribo] -= kgE; }
-        if (f.arranque) { const b = f.arranque, hb = (f.bloco || f.sapata).h, kg = b.n * (hb - ES_FUND.cobrimento + 0.20 + 40 * b.d / 1000) * esKgBarra(b.d); somaM(arr, { [b.d]: kg }); a[b.d] -= kg; }
+        if (f.arranque) { const b = f.arranque, hb = (f.bloco || f.sapata || { h: f.hBloco || 0.4 }).h, kg = b.n * (hb - ES_FUND.cobrimento + 0.20 + 40 * b.d / 1000) * esKgBarra(b.d); somaM(arr, { [b.d]: kg }); a[b.d] -= kg; }
         somaM(g.blocos, Object.fromEntries(Object.entries(a).filter(([, kg]) => kg > 1e-6)));
       }
       return { tipo: fs[0] ? fs[0].tipo : null, qtdEstacas: est.reduce((t, f) => t + (f.n || 0), 0), profEstacas: est[0] ? est[0].L : 0, diametro: est[0] ? est[0].D : 0,
@@ -91029,7 +91149,7 @@ function esResumoMateriais(pavs, calc) {
     const a = { ...f.aco };
     if (f.estacaArm) { const A = f.estacaArm, kgL = f.n * A.n * (A.comp + 0.3) * esKgBarra(A.d), kgE = f.n * (A.comp / A.s + 1) * (Math.PI * (f.D - 0.10) + 0.10) * esKgBarra(A.estribo);
       somaKg(g("Estacas"), { [A.d]: kgL, [A.estribo]: kgE }); a[A.d] -= kgL; a[A.estribo] -= kgE; }
-    if (f.arranque) { const b = f.arranque, hb = (f.bloco || f.sapata).h, kg = b.n * (hb - ES_FUND.cobrimento + 0.20 + 40 * b.d / 1000) * esKgBarra(b.d); somaKg(g("Arranques"), { [b.d]: kg }); a[b.d] -= kg; }
+    if (f.arranque) { const b = f.arranque, hb = (f.bloco || f.sapata || { h: f.hBloco || 0.4 }).h, kg = b.n * (hb - ES_FUND.cobrimento + 0.20 + 40 * b.d / 1000) * esKgBarra(b.d); somaKg(g("Arranques"), { [b.d]: kg }); a[b.d] -= kg; }
     const gb = g(f.sapata ? "Sapatas" : "Blocos"); somaKg(gb, a); gb.concreto += f.concreto.blocos + f.concreto.sapatas;
     g("Estacas").concreto += f.concreto.estacas;
   }
@@ -92065,6 +92185,11 @@ function tpMesclarProjetoObra(ant, conv, projetoId) {
 }
 // fundação de um pilar em uma linha (painel e card do pilar)
 function tpTextoFundacao(f) {
+  if (f.semBloco) return `no bloco conjunto com ${(f.conjunto || []).filter((x) => x !== f.id).join(", ")}`;
+  const conj = f.conjunto ? ` (bloco conjunto com ${f.conjunto.filter((x) => x !== f.id).join(", ")})` : "";
+  return tpTextoFundacao0(f) + conj + (f.girado ? " (bloco girado 90°)" : "");
+}
+function tpTextoFundacao0(f) {
   if (f.sapata) return `sapata ${tpFmt(f.sapata.L)} × ${tpFmt(f.sapata.B)} × ${tpFmt(f.sapata.h)} m${f.malha ? ` · Ø${String(f.malha[0].d).replace(".", ",")} c/${Math.round(f.malha[0].s * 100)}` : ""}`;
   if (!f.bloco) return "—";
   return `${f.n} estaca${f.n > 1 ? "s" : ""} Ø${Math.round(f.D * 100)} × ${tpFmt(f.L, 1)} m · bloco ${tpFmt(f.bloco.L)} × ${tpFmt(f.bloco.B)} × ${tpFmt(f.bloco.h)} m${f.tirante ? ` · ${f.tirante.n} Ø${String(f.tirante.d).replace(".", ",")}` : ""}`;
@@ -94808,7 +94933,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         ctx.setLineDash([]);
         if (L * vista.current.s > 70 * dpr) {
           const [mx, my] = T({ x: (v.a.x + v.b.x) / 2 + nx * 2.6, y: (v.a.y + v.b.y) / 2 + ny * 2.6 });
-          const txt = `${v.cinta ? "cinta " : ""}${v.id} ${Math.round(v.b_ * 100)}×${Math.round(v.h * 100)}`, w = ctx.measureText(txt).width + 6 * dpr;
+          const txt = `${v.cinta ? "cinta " : ""}${v.id} ${Math.round(v.b_ * 100)}×${Math.round(v.h * 100)}${v.invertida ? " inv." : ""}`, w = ctx.measureText(txt).width + 6 * dpr;
           ctx.fillStyle = "rgba(255,255,255,0.85)"; ctx.fillRect(mx - w / 2, my - fonteEst * 0.65, w, fonteEst * 1.3);
           ctx.fillStyle = "#4b5563"; ctx.fillText(txt, mx, my);
         }
@@ -94822,7 +94947,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
       // fundação (no pavimento mais baixo): bloco/sapata tracejado e estacas
       if (estDescida && (estPorPav._ids || [])[0] === pavAtivo) for (const f of estDescida.fundacao || []) {
         const pl = estAt.pilares.find((x) => x.id === f.id), bl = f.bloco || f.sapata; if (!pl || !bl) continue;
-        const c = Math.cos(pl.ang || 0), sn = Math.sin(pl.ang || 0), loc = (u, v) => ({ x: pl.x + u * c - v * sn, y: pl.y + u * sn + v * c });
+        const fa = f.ang != null ? f.ang : (pl.ang || 0), fc = f.centro || pl, c = Math.cos(fa), sn = Math.sin(fa), loc = (u, v) => ({ x: fc.x + u * c - v * sn, y: fc.y + u * sn + v * c });
         ctx.strokeStyle = f.ok ? "#8b98a9" : "#b91c1c"; ctx.lineWidth = 1 * dpr; ctx.setLineDash([4 * dpr, 3 * dpr]);
         caminho([loc(-bl.L / 2, -bl.B / 2), loc(bl.L / 2, -bl.B / 2), loc(bl.L / 2, bl.B / 2), loc(-bl.L / 2, bl.B / 2)]); ctx.stroke(); ctx.setLineDash([]);
         for (const e of f.estacas || []) { const [ex, ey] = T(loc(e.x, e.y)); ctx.beginPath(); ctx.arc(ex, ey, Math.max(2 * dpr, f.D / 2 * vista.current.s), 0, Math.PI * 2); ctx.stroke(); }
@@ -95317,12 +95442,12 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         const matF = new THREE.MeshLambertMaterial({ color: 0xa8a29e }), matFs = new THREE.MeshLambertMaterial({ color: 0x8dbbff });
         for (const f of estDescida.fundacao || []) {
           const pl = estP.pilares.find((x) => x.id === f.id), bl = f.bloco || f.sapata; if (!pl || !bl) continue;
-          const mk = marcadas.has("e" + pl.id), z0 = pl.base != null ? pl.base : 0, ang = pl.ang || 0, c = Math.cos(ang), sn = Math.sin(ang);
+          const mk = marcadas.has("e" + pl.id), z0 = pl.base != null ? pl.base : 0, ang = f.ang != null ? f.ang : (pl.ang || 0), c = Math.cos(ang), sn = Math.sin(ang), fc = f.centro || pl;
           const gb = new THREE.BoxGeometry(bl.L, bl.h, bl.B), mb = new THREE.Mesh(gb, mk ? matFs : matF);
-          mb.position.set(pl.x - cx, z0 - bl.h / 2, pl.y - cz); mb.rotation.y = -ang; mb.userData.est = pl.id; mb.userData.chave = "e" + pl.id; G.add(mb); contorno(gb, mb, mk ? 0x0474f4 : 0x57534e);
+          mb.position.set(fc.x - cx, z0 - bl.h / 2, fc.y - cz); mb.rotation.y = -ang; mb.userData.est = pl.id; mb.userData.chave = "e" + pl.id; G.add(mb); contorno(gb, mb, mk ? 0x0474f4 : 0x57534e);
           for (const e of f.estacas || []) {
             const ge = new THREE.CylinderGeometry(f.D / 2, f.D / 2, f.L, 16), me = new THREE.Mesh(ge, mk ? matFs : matF);
-            me.position.set(pl.x + e.x * c - e.y * sn - cx, z0 - bl.h - f.L / 2 + 0.05, pl.y + e.x * sn + e.y * c - cz); me.userData.est = pl.id; me.userData.chave = "e" + pl.id; G.add(me);
+            me.position.set(fc.x + e.x * c - e.y * sn - cx, z0 - bl.h - f.L / 2 + 0.05, fc.y + e.x * sn + e.y * c - cz); me.userData.est = pl.id; me.userData.chave = "e" + pl.id; G.add(me);
           }
         }
       }
@@ -95445,7 +95570,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
         }
         if (p.id === id0) for (const f of fundC) {
           const pl = (e.pilares || []).find((x) => x.id === f.id), bl = f.bloco || f.sapata; if (!pl || !bl) continue;
-          const c0 = Math.cos(pl.ang || 0), s0_ = Math.sin(pl.ang || 0), loc = (uu, vv) => ({ x: pl.x + uu * c0 - vv * s0_, y: pl.y + uu * s0_ + vv * c0 });
+          const fa = f.ang != null ? f.ang : (pl.ang || 0), fc = f.centro || pl, c0 = Math.cos(fa), s0_ = Math.sin(fa), loc = (uu, vv) => ({ x: fc.x + uu * c0 - vv * s0_, y: fc.y + uu * s0_ + vv * c0 });
           const zt = p.nivel + (pl.base || 0);
           pecasEst.push({ pts: [loc(-bl.L / 2, -bl.B / 2), loc(bl.L / 2, -bl.B / 2), loc(bl.L / 2, bl.B / 2), loc(-bl.L / 2, bl.B / 2)], za: zt - bl.h, zb: zt, al: { pav: p.id, key: "e" + pl.id } });
           for (const ec of f.estacas || []) {
@@ -97838,6 +97963,14 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 {grupoQ("est-av", `Verificações${estAvisos.length ? ` (${estAvisos.length})` : ""}`, nNbr + nComp ? `${nNbr + nComp} a resolver` : "ok")}
                 {!qFechado("est-av") && (
                   <div>
+                    {((estPorPav._calc || {}).compat || []).length > 0 && (
+                      <div style={{ padding: "4px 0 6px", borderBottom: "1px solid #f0f2f5" }}>
+                        <div style={{ fontSize: 11.5, fontWeight: 600, color: "#047857", padding: "2px 0" }}>Resolvido automaticamente</div>
+                        {estPorPav._calc.compat.map((a, k) => (
+                          <div key={k} style={{ fontSize: 12.5, color: a.tipo === "pendente" ? "#b45309" : "#374151", lineHeight: 1.4, padding: "2px 0" }}>{a.tipo === "pendente" ? "⚠ " : "✓ "}{a.texto}{pavimentos.length > 1 && a.k != null ? <span style={{ color: "#9ca3af" }}> · {(pavsOrd[a.k] || {}).nome}</span> : null}</div>
+                        ))}
+                      </div>
+                    )}
                     {!estAvisos.length && <div style={{ fontSize: 12.5, color: "#4b5563", padding: "4px 0" }}>Nada a apontar nas verificações desta etapa.</div>}
                     {estAvisos.length > 0 && <div style={{ fontSize: 11.5, color: "#6b7280", padding: "2px 0 4px" }}>{nNbr} NBR · {nComp} conflito{nComp === 1 ? "" : "s"} · {nAt} atenção</div>}
                     {estAvisos.slice(0, 60).map((a, k) => (

@@ -8,7 +8,7 @@ import assert from "assert";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(join(__dirname, "src", "modules", "estrutural.jsx"), "utf-8");
-const M = new Function(`${src}\nreturn { esLancarPavimentos, esDescidaCargas, esTopoPavimento, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao, esLinhaContinua, esPaineisLaje, esDimViga, esDimPilar, esDimensionar, esMRd, esConcreto, esPlacaApoiada, esDimLaje, esCalcularEstrutura, esParaOrcamento, esDimFundacao, esFundacaoObra, esPadmEstaca, esCargaEscada, esResumoMateriais, esAlturaLivreEscada };`)();
+const M = new Function(`${src}\nreturn { esLancarPavimentos, esDescidaCargas, esTopoPavimento, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao, esLinhaContinua, esPaineisLaje, esDimViga, esDimPilar, esDimensionar, esMRd, esConcreto, esPlacaApoiada, esDimLaje, esCalcularEstrutura, esParaOrcamento, esDimFundacao, esFundacaoObra, esPadmEstaca, esCargaEscada, esResumoMateriais, esAlturaLivreEscada, esCompatibilizar, esSepararBlocos };`)();
 
 let ok = 0, falhou = 0;
 const t = (nome, fn) => { try { fn(); ok++; } catch (e) { falhou++; console.log("FALHOU:", nome, "\n ", e.message); } };
@@ -429,6 +429,37 @@ t("escada em L: viga de borda fora do furo, nunca por cima dos degraus; pilar no
   // a viga de borda tem a face no limite do furo (eixo a b/2 da borda), do lado de fora
   const ve = c.lanc[0].vigas.filter((v) => v.vigaEscada);
   assert.ok(ve.some((v) => Math.abs(v.a.x - v.b.x) < 0.05 && Math.abs(v.a.x + 4.115) < 0.01), JSON.stringify(ve.map((v) => [v.a, v.b])));
+});
+t("compatibilização: viga que invade a janela é baixada (o cálculo passa)", () => {
+  const ps = [W(P(0, 0), P(4, 0), [{ id: "j", tipo: "janela_correr", x: 2, larg: 1.5, alt: 1.5, peit: 1.1 }]), W(P(4, 0), P(4, 3)), W(P(4, 3), P(0, 3)), W(P(0, 3), P(0, 0))];
+  const pavs = [{ paredes: ps, areas: [{ tipo: "laje", pts: [P(0, 0), P(4, 0), P(4, 3), P(0, 3)], esp: 0.10, cota: 2.8, carga: { tipo: "macica", uso: "forro" } }], nivel: 0, usoPadrao: "forro" }];
+  const c = M.esCalcularEstrutura(pavs, { vaoMax: 6 });
+  const v = c.lanc[0].vigas.find((x) => !x.baldrame && x.parede === 0);
+  assert.ok((v.topo - v.h) >= 2.6 - 1e-9, `fundo ${v.topo - v.h}`);
+  assert.ok(c.compat.some((a) => a.tipo === "altura" && a.id === v.id), JSON.stringify(c.compat));
+  assert.ok(c.dim.pavimentos[0].vigas[v.id].ok);
+});
+t("compatibilização: viga de piso invertida quando a parede de cima não tem porta ali", () => {
+  const baixo = [W(P(0, 0), P(6, 0)), W(P(6, 0), P(6, 4)), W(P(6, 4), P(0, 4)), W(P(0, 4), P(0, 0))];
+  const cima = [...baixo, W(P(3, 0), P(3, 4))];
+  const laje = { tipo: "laje", pts: [P(0, 0), P(6, 0), P(6, 4), P(0, 4)], esp: 0.12, carga: { tipo: "macica", uso: "residencial" } };
+  const pavs = [{ paredes: baixo, areas: [laje], nivel: 0, usoPadrao: "residencial" }, { paredes: cima, areas: [{ ...laje, carga: { tipo: "macica", uso: "forro" } }], nivel: 2.9, usoPadrao: "forro" }];
+  const c = M.esCalcularEstrutura(pavs, { vaoMax: 7 });
+  const vp = c.lanc[0].vigas.find((v) => v.vigaPiso);
+  assert.ok(vp && vp.invertida && Math.abs((vp.topo - vp.h) - (2.9 - 0.12)) < 1e-6, JSON.stringify(vp));
+  // com porta na parede de cima, não inverte
+  const cima2 = [...baixo, W(P(3, 0), P(3, 4), [{ id: "p", tipo: "porta_giro", x: 2, larg: 0.8, alt: 2.1, peit: 0 }])];
+  const c2 = M.esCalcularEstrutura([pavs[0], { ...pavs[1], paredes: cima2 }], { vaoMax: 7 });
+  assert.ok(!c2.lanc[0].vigas.find((v) => v.vigaPiso).invertida);
+});
+t("fundação: blocos que se encostam são girados ou viram bloco conjunto", () => {
+  const dp = { barras: { n: 4, d: 10 } };
+  const itens = [{ id: "P1", pl: { x: 0, y: 0, b: 0.19, h: 0.19, ang: 0 }, N: { Ng: 90, Nq: 10 }, dimPilar: dp }, { id: "P2", pl: { x: 0.9, y: 0, b: 0.19, h: 0.19, ang: 0 }, N: { Ng: 90, Nq: 10 }, dimPilar: dp }];
+  const rs = M.esFundacaoObra(itens, { fundacao: { tipo: "estaca", diam: 0.25, prof: 4, padm: 60 } });
+  assert.ok(rs.acoes.length >= 1, "algo foi resolvido");
+  const giro = rs.some((r) => r.girado), conj = rs.some((r) => r.conjunto);
+  assert.ok(giro || conj);
+  if (conj) { const a = rs.find((r) => r.conjunto && !r.semBloco); assert.ok(a.n >= 4 && Math.abs(a.Nk - 200) < 1e-9); }
 });
 console.log(`${ok} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);
