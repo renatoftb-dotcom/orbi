@@ -41405,6 +41405,76 @@ function obraDoEmpreendimento(modulos, nome) {
     vendas: junta("vendas"), cronogramaRecebimento: junta("cronogramaRecebimento"),
     dataInicio: ini[0] || "", dataFim: fim[fim.length - 1] || "", modulos: ms.map((o) => o.id) };
 }
+// As datas de cada módulo na prestação do empreendimento inteiro: as que
+// foram digitadas nos parâmetros; sem elas, as do cadastro do módulo.
+function cpDatasDosModulos(modulos, datas) {
+  const d = datas || {};
+  const dia = (v) => (/^\d{4}-\d{2}-\d{2}/.test(String(v || "")) ? String(v).slice(0, 10) : "");
+  return (modulos || []).filter(Boolean).map((m) => {
+    const x = d[m.id] || {};
+    return { id: m.id, nome: m.nome || "Módulo", inicio: dia(x.inicio != null ? x.inicio : m.dataInicio), termino: dia(x.termino != null ? x.termino : m.dataFim) };
+  });
+}
+// Junta as séries mês a mês de vários módulos: soma os campos pelo mês (a
+// pré-obra de cada um, com o início dele, cai junta em "pre").
+function cpSomarMensais(lista, campos, extras) {
+  const red = (x) => Math.round(x * 100) / 100;
+  const por = {};
+  for (const r of lista || []) for (const m of (r && r.meses) || []) {
+    const t = por[m.chave] || (por[m.chave] = {});
+    for (const c of campos) t[c] = red((t[c] || 0) + (Number(m[c]) || 0));
+  }
+  const vazio = () => campos.reduce((t, c) => { t[c] = 0; return t; }, {});
+  const meses = cpMesesDaSerie(Object.keys(por), extras || []).map((k) => ({ chave: k, rotulo: cpRotuloBalde(k), ...vazio(), ...(por[k] || {}) }));
+  const total = campos.reduce((t, c) => { t[c] = red(meses.reduce((a, m) => a + (m[c] || 0), 0)); return t; }, {});
+  return { meses, total };
+}
+// A prestação do empreendimento inteiro com as datas de cada módulo: os
+// custos, os recebimentos e o fluxo de caixa de cada um (pré-obra pelo
+// início dele, custo que falta dividido até o término dele), somados mês a mês.
+function prestacaoMensalDosModulos(modulos, opcoes) {
+  const o = opcoes || {};
+  const red = (x) => Math.round(x * 100) / 100;
+  const hoje = cpHoje(o);
+  const datas = cpDatasDosModulos(modulos, o.datas);
+  const ms = (modulos || []).filter(Boolean);
+  const inicios = datas.map((d) => d.inicio).filter(Boolean).sort();
+  const terminos = datas.map((d) => d.termino).filter(Boolean).sort();
+  const extras = inicios.length ? [inicios[0].slice(0, 7)] : [];
+  const op = (m) => { const d = datas.find((x) => x.id === m.id) || {}; return { hoje, inicio: d.inicio || "", termino: d.termino || "" }; };
+  const despesa = o.despesa === "competencia" ? "competencia" : "caixa";
+  const entrada = o.entrada === "competencia" ? "competencia" : "caixa";
+  const cms = ms.map((m) => custosMensais(m, { ...op(m), regime: despesa }));
+  const cmS = cpSomarMensais(cms, ["pago", "vencido", "aberto", "custo"], extras);
+  cmS.total.geral = red(cmS.total.pago + cmS.total.vencido + cmS.total.aberto + cmS.total.custo);
+  const cm = { regime: despesa, meses: cmS.meses, series: despesa === "competencia" ? ["custo"] : ["pago", "vencido", "aberto"], total: cmS.total };
+  const rms = ms.map((m) => recebimentosMensais(m, { ...op(m), regime: entrada }));
+  const rmS = cpSomarMensais(rms, ["recebido", "assinado", "assinar", "firme", "estimativa"], extras);
+  rmS.total.geral = red(rmS.total.recebido + rmS.total.assinado + rmS.total.assinar + rmS.total.estimativa);
+  const rm = { regime: entrada, meses: rmS.meses, total: rmS.total, temCronograma: rms.some((r) => r.temCronograma) };
+  // o fluxo: cada módulo até o término dele. Sem término, só passa se não
+  // houver custo a distribuir (nada a dividir); senão, pede o término.
+  const faltam = [];
+  const fcs = ms.map((m) => {
+    const d = op(m);
+    if (d.termino) return fluxoDeCaixaDaObra(m, d);
+    const ff = fisicoFinanceiroDaPrestacao(m, { ...d, regime: "caixa" });
+    if (red(Math.max(0, ff.custoPrevisto - ff.pago)) > 0) { faltam.push(m.nome || "Módulo"); return null; }
+    return fluxoDeCaixaDaObra(m, { ...d, termino: hoje });
+  });
+  let fc;
+  if (faltam.length) fc = { erro: "Informe o término estimado de: " + faltam.join(", ") + "." };
+  else {
+    const campos = ["custoRealizado", "custoARealizar", "recebido", "recebimentoPrevisto", "entradas", "saidas", "resultado"];
+    const somado = cpSomarMensais(fcs.map((f) => ({ meses: f.linhas })), campos, extras);
+    const mesHoje = hoje.slice(0, 7);
+    let acum = 0;
+    const linhas = somado.meses.map((l) => { acum = red(acum + l.resultado); return { ...l, futuro: l.chave !== "pre" && l.chave >= mesHoje, acumulado: acum }; });
+    fc = { linhas, mesHoje, mesFim: fcs.map((f) => f.mesFim).sort().pop() || mesHoje, aRealizar: red(fcs.reduce((t, f) => t + f.aRealizar, 0)),
+      mesesRestantes: Math.max(0, ...fcs.map((f) => f.mesesRestantes)), porModulo: true, total: somado.total };
+  }
+  return { cm, rm, fc, datas, inicio: inicios[0] || "", termino: terminos[terminos.length - 1] || "" };
+}
 // O quadro por módulo: o custo e o recebimento de cada um, lado a lado.
 // As colunas da tabela "Por módulo" (prévia e PDF): custo e vendas, nesta ordem.
 const CP_COLUNAS_POR_MODULO = [["estimado", "Custo estimado"], ["realizado", "Custo realizado"],
@@ -41414,7 +41484,8 @@ function resumoPorModulo(modulos, opcoes) {
   return (modulos || []).filter(Boolean).map((m) => {
     const ff = fisicoFinanceiroDaPrestacao(m, { ...o, regime: o.despesa });
     const rm = recebimentosMensais(m, { ...o, regime: o.entrada });
-    return { id: m.id, nome: m.nome || "Módulo", estimado: ff.total.estimado, realizado: ff.total.realizado, aPagar: ff.total.aPagar,
+    const d = (o.datas && o.datas[m.id]) || {};
+    return { id: m.id, nome: m.nome || "Módulo", inicio: d.inicio || "", termino: d.termino || "", estimado: ff.total.estimado, realizado: ff.total.realizado, aPagar: ff.total.aPagar,
       saldo: ff.total.saldo, vendasEstimadas: Math.round(rm.total.geral * 100) / 100,
       recebido: rm.total.recebido, aReceber: Math.round((rm.total.geral - rm.total.recebido) * 100) / 100 };
   });
@@ -41476,7 +41547,8 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
     doc.setFontSize(7.6); cor(TINTA);
     const reg = (r) => (r === "competencia" ? "competência" : "caixa");
     const itens = [`Despesas: regime de ${reg(par.despesa)}`, `Entradas: regime de ${reg(par.entrada)}`,
-      par.inicio ? `Início da obra: ${dia(par.inicio)}` : "", par.termino ? `Término estimado: ${dia(par.termino)}` : ""].filter(Boolean);
+      ...(par.datasModulos ? ["Datas de cada módulo: no quadro Por módulo"]
+        : [par.inicio ? `Início da obra: ${dia(par.inicio)}` : "", par.termino ? `Término estimado: ${dia(par.termino)}` : ""])].filter(Boolean);
     doc.text(caber(itens.join("     ·     "), LARG - 6), M + 3, y + 4.6);
     y += 11;
   } else y += 3;
@@ -41702,7 +41774,9 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
   // por módulo (o empreendimento inteiro)
   const mods = i.modulos;
   if (mods && mods.length) {
-    secao("Por módulo", "Cada módulo é uma obra do empreendimento; a última linha é o empreendimento inteiro. Vendas estimadas = recebidas + a receber.");
+    const datasTxt = mods.filter((m) => m.inicio || m.termino).map((m) => `${m.nome}: ${m.inicio ? dia(m.inicio) : "—"} a ${m.termino ? dia(m.termino) : "—"}`).join(" · ");
+    secao("Por módulo", "Cada módulo é uma obra do empreendimento; a última linha é o empreendimento inteiro. Vendas estimadas = recebidas + a receber."
+      + (datasTxt ? " Datas da obra — " + datasTxt + "." : ""));
     const ks = CP_COLUNAS_POR_MODULO.map((c) => c[0]);
     const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
     tabela([{ t: "Módulo", w: 47 }].concat(CP_COLUNAS_POR_MODULO.map((c) => ({ t: c[1], w: 27, alinhar: "right" }))),
@@ -41757,7 +41831,7 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
       secao("Fluxo de caixa", "Sem o término estimado da obra não há como distribuir o custo que falta. Informe o término nos parâmetros da prestação.");
     } else {
       cartao("Fluxo de caixa até o término",
-        `Custo a realizar: ${moeda(fc.aRealizar)} (o custo previsto menos o pago) dividido em ${fc.mesesRestantes} ${fc.mesesRestantes === 1 ? "mês" : "meses"} até o término. Recebimento: o que entrou e, deste mês em diante, os contratos firmes (o atrasado entra no mês atual) e as vendas estimadas. Barras: resultado do mês (recebimentos - custos); linha: saldo acumulado do dinheiro.`,
+        `Custo a realizar: ${moeda(fc.aRealizar)} (o custo previsto menos o pago) dividido ${fc.porModulo ? "mês a mês até o término de cada módulo" : `em ${fc.mesesRestantes} ${fc.mesesRestantes === 1 ? "mês" : "meses"} até o término`}. Recebimento: o que entrou e, deste mês em diante, os contratos firmes (o atrasado entra no mês atual) e as vendas estimadas. Barras: resultado do mês (recebimentos - custos); linha: saldo acumulado do dinheiro.`,
         alturaDoGrafico(38), (x0, y0, lg) => graficoFluxo(fc.linhas, x0, y0, lg, fc.mesHoje));
       const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
       tabela([{ t: "Mês", w: 18 }, { t: "Custo realizado", w: 26, alinhar: "right" }, { t: "Custo a realizar", w: 26, alinhar: "right" },
@@ -42097,6 +42171,14 @@ function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid
 function JanelaParametrosPrestacao({ valor, obra, aoMudar, aoCancelar, aoGerar, modulos, nomeEmpreendimento }) {
   const v = valor || {};
   const mudar = (campo, x) => aoMudar({ ...v, [campo]: x, erro: "" });
+  const todos = !!(modulos && modulos.length > 1 && v.abrangencia === "todos");
+  const datasMods = todos ? cpDatasDosModulos(modulos, v.datasModulos) : [];
+  const mudarData = (id, campo, x) => {
+    const atual = (v.datasModulos || {})[id] || {};
+    const d = datasMods.find((y) => y.id === id) || {};
+    aoMudar({ ...v, datasModulos: { ...(v.datasModulos || {}), [id]: { inicio: d.inicio, termino: d.termino, ...atual, [campo]: x } }, erro: "" });
+  };
+  const semTermino = datasMods.filter((d) => !d.termino);
   const opcao = (campo, id, rot, desc) => {
     const on = v[campo] === id;
     return (
@@ -42134,7 +42216,31 @@ function JanelaParametrosPrestacao({ valor, obra, aoMudar, aoCancelar, aoGerar, 
           {opcao("entrada", "caixa", "Regime de caixa", "Pela data em que o dinheiro entrou; o resto no vencimento.")}
           {opcao("entrada", "competencia", "Competência", "Cada parcela no mês do vencimento, recebida ou não.")}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+        {todos && (
+          <div data-vk-param-datas-modulos="1">
+            <div style={rot}>Datas de cada módulo</div>
+            <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 8, lineHeight: 1.4 }}>
+              O que veio antes do início de cada módulo entra em Despesas pré-obra; o custo que falta de cada um é dividido até o término dele.
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {datasMods.map((d) => (
+                <div key={d.id} data-vk-param-modulo={d.id} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 8,
+                  padding: "8px 10px", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10 }}>
+                  <div style={{ gridColumn: "1 / -1", fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{d.nome}</div>
+                  <label style={{ display: "block", minWidth: 0 }}>
+                    <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>Início</div>
+                    <input type="date" style={inp} value={d.inicio || ""} data-vk-param-modulo-inicio={d.id} onChange={(e) => mudarData(d.id, "inicio", e.target.value)} />
+                  </label>
+                  <label style={{ display: "block", minWidth: 0 }}>
+                    <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>Término estimado</div>
+                    <input type="date" style={inp} value={d.termino || ""} data-vk-param-modulo-termino={d.id} onChange={(e) => mudarData(d.id, "termino", e.target.value)} />
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {!todos && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
           <label style={{ display: "block" }}>
             <div style={rot}>Início da obra</div>
             <input type="date" style={inp} value={v.inicio || ""} data-vk-param-inicio="1" onChange={(e) => mudar("inicio", e.target.value)} />
@@ -42145,9 +42251,11 @@ function JanelaParametrosPrestacao({ valor, obra, aoMudar, aoCancelar, aoGerar, 
             <input type="date" style={inp} value={v.termino || ""} data-vk-param-termino="1" onChange={(e) => mudar("termino", e.target.value)} />
             <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>O fluxo de caixa divide o custo que falta até aqui.</div>
           </label>
-        </div>
-        {v.erro && <div style={{ fontSize: 12.5, color: "#b91c1c", marginTop: 12 }}>{v.erro}</div>}
-        {!v.termino && <div style={{ fontSize: 12, color: "#92400e", marginTop: 12 }}>Sem o término estimado, a prestação sai sem o fluxo de caixa.</div>}
+        </div>}
+        {v.erro && <div style={{ fontSize: 12.5, color: "#b91c1c", marginTop: 12 }} data-vk-param-erro="1">{v.erro}</div>}
+        {!todos && !v.termino && <div style={{ fontSize: 12, color: "#92400e", marginTop: 12 }}>Sem o término estimado, a prestação sai sem o fluxo de caixa.</div>}
+        {todos && semTermino.length > 0 && <div style={{ fontSize: 12, color: "#92400e", marginTop: 12 }}>
+          Sem término: {semTermino.map((d) => d.nome).join(", ")}. Se algum deles ainda tiver custo a realizar, a prestação sai sem o fluxo de caixa.</div>}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
           <button type="button" onClick={aoCancelar} style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(38,36,33,0.2)",
             background: "#fff", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Cancelar</button>
@@ -42267,7 +42375,7 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 19, fontWeight: 700, color: "#111827" }}>Prévia da prestação de contas</div>
-            <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 3 }}>{(obra && obra.nome) || ""} · Despesas: {reg(p.despesa)} · Entradas: {reg(p.entrada)} · Início: {dia(p.inicio)} · Término: {dia(p.termino)}</div>
+            <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 3 }}>{(obra && obra.nome) || ""} · Despesas: {reg(p.despesa)} · Entradas: {reg(p.entrada)} · {p.datasModulos ? "Datas de cada módulo (no quadro Por módulo)" : `Início: ${dia(p.inicio)} · Término: ${dia(p.termino)}`}</div>
             <div style={{ fontSize: 12, color: "#6b7280", marginTop: 3 }}>Confira os números. Gerar PDF baixa só o relatório (rápido); Gerar com comprovantes baixa o pacote completo, com a planilha e os arquivos.</div>
           </div>
           {botoes}
@@ -42283,7 +42391,8 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
         )}
         {mods && mods.length > 0 && (
           <div style={caixa} data-vk-previa-modulos="1">
-            {titulo(++k, "Por módulo", "Cada módulo é uma obra do empreendimento; abaixo, todos juntos. Vendas estimadas = recebidas + a receber.")}
+            {titulo(++k, "Por módulo", "Cada módulo é uma obra do empreendimento; abaixo, todos juntos. Vendas estimadas = recebidas + a receber."
+              + ((() => { const t = mods.filter((m) => m.inicio || m.termino).map((m) => `${m.nome}: ${m.inicio ? dia(m.inicio) : "—"} a ${m.termino ? dia(m.termino) : "—"}`).join(" · "); return t ? " Datas da obra — " + t + "." : ""; })()))}
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", minWidth: 680, borderCollapse: "collapse" }}>
                 <thead><tr>{["Módulo"].concat(CP_COLUNAS_POR_MODULO.map((c) => c[1])).map((t, j) =>
@@ -42323,7 +42432,7 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
         {fc && (
           <div style={caixa} data-vk-previa-fluxo="1">
             {fc.erro ? titulo(++k, "Fluxo de caixa", fc.erro + " Volte aos parâmetros para informar.") : <>
-              {titulo(++k, "Fluxo de caixa até o término", `Custo a realizar: ${moeda(fc.aRealizar)} dividido em ${fc.mesesRestantes} ${fc.mesesRestantes === 1 ? "mês" : "meses"}. Barras: resultado do mês (recebimentos − custos); linha: saldo acumulado do dinheiro.`)}
+              {titulo(++k, "Fluxo de caixa até o término", `Custo a realizar: ${moeda(fc.aRealizar)} dividido ${fc.porModulo ? "até o término de cada módulo" : `em ${fc.mesesRestantes} ${fc.mesesRestantes === 1 ? "mês" : "meses"}`}. Barras: resultado do mês (recebimentos − custos); linha: saldo acumulado do dinheiro.`)}
               <GraficoSaldoAcumulado linhas={fc.linhas} mesHoje={fc.mesHoje} />
               <div style={{ overflowX: "auto", marginTop: 10 }}>
                 <table style={{ width: "100%", minWidth: 760, borderCollapse: "collapse" }}>
@@ -42709,18 +42818,32 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
     let salvo = null;
     try { salvo = JSON.parse(localStorage.getItem(chaveParam) || "null"); } catch (e) { salvo = null; }
     const padrao = cpParametrosPadrao(obraDaPrestacao);
-    setParamPC({ ...padrao, abrangencia: "modulo", ...(salvo || {}), inicio: (salvo && salvo.inicio) || padrao.inicio, termino: (salvo && salvo.termino) || padrao.termino, erro: "" });
+    // as datas de cada módulo: as guardadas; sem elas, as do cadastro
+    const datasModulos = {};
+    for (const d of cpDatasDosModulos(listaModulos, (salvo && salvo.datasModulos) || {})) datasModulos[d.id] = { inicio: d.inicio, termino: d.termino };
+    setParamPC({ ...padrao, abrangencia: "modulo", ...(salvo || {}), inicio: (salvo && salvo.inicio) || padrao.inicio, termino: (salvo && salvo.termino) || padrao.termino,
+      datasModulos, erro: "" });
   }
   function gerarComParametros() {
     const p = paramPC || {};
-    if (p.inicio && p.termino && p.termino < p.inicio) { setParamPC({ ...p, erro: "O término não pode ser antes do início." }); return; }
+    const todos = temModulos && p.abrangencia === "todos";
+    const datas = todos ? cpDatasDosModulos(listaModulos, p.datasModulos) : [];
+    const errada = datas.find((d) => d.inicio && d.termino && d.termino < d.inicio);
+    if (errada) { setParamPC({ ...p, erro: `${errada.nome}: o término não pode ser antes do início.` }); return; }
+    if (!todos && p.inicio && p.termino && p.termino < p.inicio) { setParamPC({ ...p, erro: "O término não pode ser antes do início." }); return; }
+    const datasModulos = {};
+    for (const d of datas) datasModulos[d.id] = { inicio: d.inicio, termino: d.termino };
     const limpo = { despesa: p.despesa, entrada: p.entrada, inicio: p.inicio || "", termino: p.termino || "",
-      abrangencia: temModulos && p.abrangencia === "todos" ? "todos" : "modulo" };
-    try { localStorage.setItem(chaveParam, JSON.stringify(limpo)); } catch (e) { /* sem armazenamento */ }
+      abrangencia: todos ? "todos" : "modulo", ...(todos ? { datasModulos } : {}) };
+    try { localStorage.setItem(chaveParam, JSON.stringify({ ...limpo, datasModulos: p.datasModulos || {} })); } catch (e) { /* sem armazenamento */ }
     // antes do pacote com os comprovantes (demorado), a prévia dos números
     // e dos gráficos; confirmada, gera
     setParamPC(null);
-    setPrevia({ param: limpo, dados: dadosDaPrestacao(limpo) });
+    // no empreendimento inteiro, o cabeçalho mostra do primeiro início ao
+    // último término; cada módulo usa as datas dele
+    const ini = datas.map((d) => d.inicio).filter(Boolean).sort(), fim = datas.map((d) => d.termino).filter(Boolean).sort();
+    const exibir = todos ? { ...limpo, inicio: ini[0] || "", termino: fim[fim.length - 1] || "" } : limpo;
+    setPrevia({ param: exibir, dados: dadosDaPrestacao(exibir) });
   }
   const [previa, setPrevia] = useState(null);
   function dadosDaPrestacao(param) {
@@ -42736,13 +42859,17 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
     const obraDaPC = param ? (todos ? obraDoEmpreendimento(listaModulos, nomeEmpreendimento) : obraDaPrestacao) : null;
     const opPC = param ? { inicio: param.inicio || "", termino: param.termino || "" } : {};
     const ffPC = obraDaPC ? fisicoFinanceiroDaPrestacao(obraDaPC, { ...opPC, regime: param.despesa }) : null;
+    // todo o empreendimento: cada módulo com as datas dele, somados mês a mês
+    const mens = todos ? prestacaoMensalDosModulos(listaModulos, { despesa: param.despesa, entrada: param.entrada, datas: param.datasModulos }) : null;
+    const datasPorId = {};
+    if (mens) for (const d of mens.datas) datasPorId[d.id] = d;
     return { pc, obraDaPC, ffPC,
       cfPC: ffPC ? conferenciaDaPrestacao(ffPC, linhasPC) : null,
-      modulosPC: todos ? resumoPorModulo(listaModulos, { ...opPC, despesa: param.despesa, entrada: param.entrada }) : null,
+      modulosPC: todos ? resumoPorModulo(listaModulos, { ...opPC, despesa: param.despesa, entrada: param.entrada, datas: datasPorId }) : null,
       nomePC: todos ? (nomeEmpreendimento || "Empreendimento") + " — todos os módulos" : "",
-      cmPC: obraDaPC ? custosMensais(obraDaPC, { ...opPC, regime: param.despesa }) : null,
-      rmPC: obraDaPC ? recebimentosMensais(obraDaPC, { ...opPC, regime: param.entrada }) : null,
-      fcPC: obraDaPC ? fluxoDeCaixaDaObra(obraDaPC, opPC) : null };
+      cmPC: mens ? mens.cm : obraDaPC ? custosMensais(obraDaPC, { ...opPC, regime: param.despesa }) : null,
+      rmPC: mens ? mens.rm : obraDaPC ? recebimentosMensais(obraDaPC, { ...opPC, regime: param.entrada }) : null,
+      fcPC: mens ? mens.fc : obraDaPC ? fluxoDeCaixaDaObra(obraDaPC, opPC) : null };
   }
   async function baixarPrestacao(param, opcoesPC) {
     const { pc, obraDaPC, ffPC, cfPC, cmPC, rmPC, fcPC, modulosPC, nomePC } = dadosDaPrestacao(param);

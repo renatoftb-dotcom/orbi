@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, fisicoFinanceiroDaPrestacao, conferenciaDaPrestacao, fluxoDeRecebimento, custosMensais, recebimentosMensais, fluxoDeCaixaDaObra, obraDoEmpreendimento, resumoPorModulo, CP_COLUNAS_POR_MODULO, CP_FAIXAS_RECEB, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, linhasParaExportar, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, fisicoFinanceiroDaPrestacao, conferenciaDaPrestacao, fluxoDeRecebimento, custosMensais, recebimentosMensais, fluxoDeCaixaDaObra, obraDoEmpreendimento, resumoPorModulo, CP_COLUNAS_POR_MODULO, CP_FAIXAS_RECEB, prestacaoMensalDosModulos, cpDatasDosModulos, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, linhasParaExportar, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -3779,6 +3779,24 @@ teste("empreendimento com módulos: junta tudo numa obra só e resume por módul
   assert.strictEqual(rmF.total.firme, 150); assert.strictEqual(rmF.total.estimativa, 70); assert.strictEqual(rmF.total.geral, 220);
   assert.strictEqual(rmF.meses.find((m) => m.chave === "2026-12").firme, 150);
   assert.deepStrictEqual(modulo.CP_FAIXAS_RECEB.map((f) => f[2]), ["Recebido", "Contratos firmes", "Vendas estimadas"]);
+  // datas por módulo: pré-obra de cada um pelo início dele, custo que falta até o término dele
+  const A = { id: "A", nome: "Módulo A", dataInicio: "2026-01-01", dataFim: "2026-06-30", estimativaPL: [{ contaId: "material", valor: 1000 }],
+    contasPagar: [{ id: "a1", contaId: "material", valor: 100, pago: true, valorPago: 100, pagoEm: "2025-12-10" }] };
+  const Bm = { id: "B", nome: "Módulo B", dataInicio: "2026-03-01", dataFim: "", estimativaPL: [{ contaId: "material", valor: 600 }],
+    contasPagar: [{ id: "b1", contaId: "material", valor: 50, pago: true, valorPago: 50, pagoEm: "2026-02-10" }] };
+  assert.deepStrictEqual(modulo.cpDatasDosModulos([A, Bm], { B: { termino: "2026-05-31" } }).map((d) => [d.id, d.inicio, d.termino]),
+    [["A", "2026-01-01", "2026-06-30"], ["B", "2026-03-01", "2026-05-31"]]);
+  const semB = modulo.prestacaoMensalDosModulos([A, Bm], { despesa: "caixa", entrada: "caixa", hoje: "2026-04-15" });
+  assert.ok(semB.fc.erro && semB.fc.erro.includes("Módulo B"));
+  const pm = modulo.prestacaoMensalDosModulos([A, Bm], { despesa: "caixa", entrada: "caixa", hoje: "2026-04-15", datas: { B: { termino: "2026-05-31" } } });
+  // os dois gastos antes do início de cada módulo caem juntos em pré-obra
+  assert.strictEqual(pm.cm.meses.find((m) => m.chave === "pre").pago, 150);
+  assert.strictEqual(pm.inicio, "2026-01-01"); assert.strictEqual(pm.termino, "2026-06-30");
+  // A: 900 até jun (3 meses: abr, mai, jun = 300); B: 550 até mai (2 meses: abr, mai = 275)
+  const lin = (k) => pm.fc.linhas.find((l) => l.chave === k);
+  assert.strictEqual(lin("2026-04").custoARealizar, 575); assert.strictEqual(lin("2026-05").custoARealizar, 575); assert.strictEqual(lin("2026-06").custoARealizar, 300);
+  assert.strictEqual(pm.fc.aRealizar, 1450); assert.ok(pm.fc.porModulo);
+  assert.strictEqual(pm.fc.linhas[pm.fc.linhas.length - 1].acumulado, -1600);
   assert.deepStrictEqual(modulo.CP_COLUNAS_POR_MODULO.map((c) => c[1]), ["Custo estimado", "Custo realizado", "Vendas estimadas", "Vendas recebidas", "Vendas a receber"]);
 });
 
