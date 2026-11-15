@@ -41345,6 +41345,31 @@ function fluxoDeCaixaDaObra(obra, opcoes) {
     total: { custoRealizado: soma("custoRealizado"), custoARealizar: soma("custoARealizar"), recebido: soma("recebido"),
       recebimentoPrevisto: soma("recebimentoPrevisto"), entradas: soma("entradas"), saidas: soma("saidas"), resultado: soma("resultado") } };
 }
+// ── O empreendimento com vários módulos ─────────────────────────
+// Cada módulo é uma obra do mesmo empreendimento (o mesmo cadastro). Para a
+// prestação do empreendimento inteiro, os módulos viram uma obra só: as
+// contas, a estimativa, as entradas, as unidades e as vendas de todos.
+function obraDoEmpreendimento(modulos, nome) {
+  const ms = (modulos || []).filter(Boolean);
+  const junta = (k) => ms.reduce((t, o) => t.concat((o[k] || []).filter(Boolean)), []);
+  const datas = (k) => ms.map((o) => String(o[k] || "").slice(0, 10)).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+  const ini = datas("dataInicio"), fim = datas("dataFim");
+  return { id: "emp:" + ((ms[0] || {}).clienteId || "x"), nome: nome || "Empreendimento", clienteId: (ms[0] || {}).clienteId || "",
+    contasPagar: junta("contasPagar"), estimativaPL: junta("estimativaPL"), entradas: junta("entradas"),
+    unidadesVenda: ms.reduce((t, o) => t.concat((o.unidadesVenda || []).filter(Boolean).map((u) => (ms.length > 1 ? { ...u, nome: `${o.nome || "Módulo"} · ${u.nome || ""}` } : u))), []),
+    vendas: junta("vendas"), cronogramaRecebimento: junta("cronogramaRecebimento"),
+    dataInicio: ini[0] || "", dataFim: fim[fim.length - 1] || "", modulos: ms.map((o) => o.id) };
+}
+// O quadro por módulo: o custo e o recebimento de cada um, lado a lado.
+function resumoPorModulo(modulos, opcoes) {
+  const o = opcoes || {};
+  return (modulos || []).filter(Boolean).map((m) => {
+    const ff = fisicoFinanceiroDaPrestacao(m, { ...o, regime: o.despesa });
+    const rm = recebimentosMensais(m, { ...o, regime: o.entrada });
+    return { id: m.id, nome: m.nome || "Módulo", estimado: ff.total.estimado, realizado: ff.total.realizado, aPagar: ff.total.aPagar,
+      saldo: ff.total.saldo, recebido: rm.total.recebido, aReceber: Math.round((rm.total.geral - rm.total.recebido) * 100) / 100 };
+  });
+}
 // O recebimento do cliente na tela da obra usa o mesmo cálculo.
 function fluxoDeRecebimento(obra, opcoes) { return recebimentosMensais(obra, opcoes); }
 
@@ -41625,6 +41650,18 @@ function pdfDaPrestacaoDeContas(JsPDF, pc, info) {
     doc.setFont("helvetica", "normal");
   });
   y += 19;
+  // por módulo (o empreendimento inteiro)
+  const mods = i.modulos;
+  if (mods && mods.length) {
+    secao("Por módulo", "Cada módulo é uma obra do empreendimento; a última linha é o empreendimento inteiro.");
+    const ks = ["estimado", "realizado"].concat(comp ? [] : ["aPagar"]).concat(["saldo", "recebido", "aReceber"]);
+    const vlr = (v) => (Math.abs(v) > 0.004 ? moeda(v) : "—");
+    tabela([{ t: "Módulo", w: 44 }, { t: "Custo estimado", w: 24, alinhar: "right" }, { t: comp ? "Custo lançado" : "Custo pago", w: 24, alinhar: "right" }]
+      .concat(comp ? [] : [{ t: "A pagar", w: 22, alinhar: "right" }])
+      .concat([{ t: "Saldo", w: 24, alinhar: "right" }, { t: "Recebido", w: 24, alinhar: "right" }, { t: "A receber", w: 24, alinhar: "right" }]),
+      mods.map((m) => ({ celulas: [m.nome].concat(ks.map((k) => vlr(m[k]))), vermelho: m.saldo < -0.004 ? [ks.indexOf("saldo") + 1] : [] }))
+        .concat([{ total: true, celulas: ["Empreendimento"].concat(ks.map((k) => moeda(mods.reduce((t, m) => t + m[k], 0)))) }]));
+  }
   // 2. físico-financeiro
   if (ff) {
     secao("Físico-financeiro (obra inteira)", comp
@@ -42010,7 +42047,7 @@ function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid
 // entradas, o início da obra (o que veio antes vira "pré-obra") e o término
 // estimado (o fluxo de caixa distribui o que falta até lá). Fecha só por
 // Cancelar.
-function JanelaParametrosPrestacao({ valor, obra, aoMudar, aoCancelar, aoGerar }) {
+function JanelaParametrosPrestacao({ valor, obra, aoMudar, aoCancelar, aoGerar, modulos, nomeEmpreendimento }) {
   const v = valor || {};
   const mudar = (campo, x) => aoMudar({ ...v, [campo]: x, erro: "" });
   const opcao = (campo, id, rot, desc) => {
@@ -42033,6 +42070,13 @@ function JanelaParametrosPrestacao({ valor, obra, aoMudar, aoCancelar, aoGerar }
         boxSizing: "border-box", padding: 20, boxShadow: "0 18px 40px rgba(0,0,0,0.18)", fontFamily: "inherit" }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Prestação de contas</div>
         <div style={{ fontSize: 12.5, color: "#6b7280", marginTop: 4, marginBottom: 16 }}>{(obra && obra.nome) || ""} · defina como os números são montados.</div>
+        {modulos && modulos.length > 1 && <>
+          <div style={rot}>Abrangência</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+            {opcao("abrangencia", "modulo", "Só este módulo", (obra && obra.nome) || "")}
+            {opcao("abrangencia", "todos", "Todo o empreendimento", `${nomeEmpreendimento || "Empreendimento"} — ${modulos.length} módulos juntos, com um quadro por módulo`)}
+          </div>
+        </>}
         <div style={rot}>Despesas</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
           {opcao("despesa", "caixa", "Regime de caixa", "Pela data em que o dinheiro saiu. Mostra o que ainda está a pagar.")}
@@ -42126,7 +42170,7 @@ function GraficoSaldoAcumulado({ linhas, mesHoje }) {
 }
 function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGerar, aoGerarPdf }) {
   const p = previa.param || {};
-  const { pc, ffPC: ff, cfPC: cf, cmPC: cm, rmPC: rm, fcPC: fc } = previa.dados || {};
+  const { pc, ffPC: ff, cfPC: cf, cmPC: cm, rmPC: rm, fcPC: fc, modulosPC: mods } = previa.dados || {};
   const comp = ff && ff.regime === "competencia";
   const moeda = (v) => (v < -0.004 ? "-R$ " : "R$ ") + Math.abs(Number(v || 0)).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const dia = (iso) => { const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : "—"; };
@@ -42188,6 +42232,33 @@ function PreviaDaPrestacao({ previa, obra, isMobile, aoVoltar, aoCancelar, aoGer
             {!comp && cartao("A pagar", ff.total.aPagar, "#0474f4")}
             {rm && cartao("Recebido", rm.total.recebido)}
             {fc && !fc.erro && cartao("Resultado projetado", fc.total.resultado, fc.total.resultado < 0 ? "#b91c1c" : "#166534")}
+          </div>
+        )}
+        {mods && mods.length > 0 && (
+          <div style={caixa} data-vk-previa-modulos="1">
+            {titulo(++k, "Por módulo", "Cada módulo é uma obra do empreendimento; abaixo, todos juntos.")}
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", minWidth: 680, borderCollapse: "collapse" }}>
+                <thead><tr>{["Módulo", "Custo estimado", comp ? "Custo lançado" : "Custo pago"].concat(comp ? [] : ["A pagar"]).concat(["Saldo", "Recebido", "A receber"]).map((t, j) =>
+                  <th key={t} style={{ ...th, textAlign: j ? "right" : "left" }}>{t}</th>)}</tr></thead>
+                <tbody>
+                  {mods.map((m) => (
+                    <tr key={m.id}>
+                      <td style={td}>{m.nome}</td>
+                      {[m.estimado, m.realizado].concat(comp ? [] : [m.aPagar]).map((v, j) => <td key={j} style={{ ...td, textAlign: "right" }}>{n(v)}</td>)}
+                      <td style={{ ...td, textAlign: "right", color: m.saldo < -0.004 ? "#b91c1c" : "#111827" }}>{n(m.saldo)}</td>
+                      <td style={{ ...td, textAlign: "right" }}>{n(m.recebido)}</td>
+                      <td style={{ ...td, textAlign: "right" }}>{n(m.aReceber)}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ background: "#f6f8fb" }}>
+                    <td style={{ ...td, fontWeight: 700 }}>Empreendimento</td>
+                    {["estimado", "realizado"].concat(comp ? [] : ["aPagar"]).concat(["saldo", "recebido", "aReceber"]).map((key) =>
+                      <td key={key} style={{ ...td, textAlign: "right", fontWeight: 700 }}>{moeda(mods.reduce((t, m) => t + m[key], 0))}</td>)}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
         {cm && cm.meses.length > 0 && (
@@ -42399,7 +42470,7 @@ function carregarExcelJS() {
   return cpCargaExcel;
 }
 
-function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMobile, obraFixa, nomeDoArquivo, completar, doEscritorio, acoes, meioDoLancamento }) {
+function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMobile, obraFixa, nomeDoArquivo, completar, doEscritorio, acoes, meioDoLancamento, modulos, nomeEmpreendimento }) {
   // no escritório a linha é a transação, com as colunas da planilha do escritório
   const COLS_TAB = doEscritorio ? BASE_COLUNAS_ESCRITORIO : BASE_COLUNAS;
   const COLS_REL = doEscritorio ? BASE_RELATORIO_ESCRITORIO : BASE_RELATORIO;
@@ -42586,18 +42657,22 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   // neste navegador, por obra.
   const obraDaPrestacao = obraFixa ? (obras || [])[0] : (obraId ? (obras || []).find((o) => o && o.id === obraId) : null);
   const [paramPC, setParamPC] = useState(null);
+  // o empreendimento com mais de um módulo: a prestação pode juntar todos
+  const listaModulos = (modulos || []).filter(Boolean);
+  const temModulos = !!obraDaPrestacao && listaModulos.length > 1;
   const chaveParam = obraDaPrestacao ? "vk-pc-param:" + obraDaPrestacao.id : "";
   function abrirPrestacao() {
     if (!obraDaPrestacao) { baixarPrestacao(null); return; }
     let salvo = null;
     try { salvo = JSON.parse(localStorage.getItem(chaveParam) || "null"); } catch (e) { salvo = null; }
     const padrao = cpParametrosPadrao(obraDaPrestacao);
-    setParamPC({ ...padrao, ...(salvo || {}), inicio: (salvo && salvo.inicio) || padrao.inicio, termino: (salvo && salvo.termino) || padrao.termino, erro: "" });
+    setParamPC({ ...padrao, abrangencia: "modulo", ...(salvo || {}), inicio: (salvo && salvo.inicio) || padrao.inicio, termino: (salvo && salvo.termino) || padrao.termino, erro: "" });
   }
   function gerarComParametros() {
     const p = paramPC || {};
     if (p.inicio && p.termino && p.termino < p.inicio) { setParamPC({ ...p, erro: "O término não pode ser antes do início." }); return; }
-    const limpo = { despesa: p.despesa, entrada: p.entrada, inicio: p.inicio || "", termino: p.termino || "" };
+    const limpo = { despesa: p.despesa, entrada: p.entrada, inicio: p.inicio || "", termino: p.termino || "",
+      abrangencia: temModulos && p.abrangencia === "todos" ? "todos" : "modulo" };
     try { localStorage.setItem(chaveParam, JSON.stringify(limpo)); } catch (e) { /* sem armazenamento */ }
     // antes do pacote com os comprovantes (demorado), a prévia dos números
     // e dos gráficos; confirmada, gera
@@ -42606,23 +42681,31 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
   }
   const [previa, setPrevia] = useState(null);
   function dadosDaPrestacao(param) {
-    const pc = prestacaoDeContas(filtradas);
+    // todo o empreendimento: as notas e os números de todos os módulos, no
+    // mesmo período escolhido na base
+    const todos = !!(param && param.abrangencia === "todos" && temModulos);
+    const linhasPC = todos
+      ? filtrarBase(linhasDaBase(listaModulos, { clientes, prestadores, insumos, lancamentos, etapas, planoContas: plano }), { de, ate }, op)
+      : filtradas;
+    const pc = prestacaoDeContas(linhasPC);
     // uma obra só (a da tela, ou a do filtro): leva o físico-financeiro, os
     // custos e recebimentos mês a mês, o fluxo de caixa e o a pagar dela
-    const obraDaPC = param ? obraDaPrestacao : null;
+    const obraDaPC = param ? (todos ? obraDoEmpreendimento(listaModulos, nomeEmpreendimento) : obraDaPrestacao) : null;
     const opPC = param ? { inicio: param.inicio || "", termino: param.termino || "" } : {};
     const ffPC = obraDaPC ? fisicoFinanceiroDaPrestacao(obraDaPC, { ...opPC, regime: param.despesa }) : null;
     return { pc, obraDaPC, ffPC,
-      cfPC: ffPC ? conferenciaDaPrestacao(ffPC, filtradas) : null,
+      cfPC: ffPC ? conferenciaDaPrestacao(ffPC, linhasPC) : null,
+      modulosPC: todos ? resumoPorModulo(listaModulos, { ...opPC, despesa: param.despesa, entrada: param.entrada }) : null,
+      nomePC: todos ? (nomeEmpreendimento || "Empreendimento") + " — todos os módulos" : "",
       cmPC: obraDaPC ? custosMensais(obraDaPC, { ...opPC, regime: param.despesa }) : null,
       rmPC: obraDaPC ? recebimentosMensais(obraDaPC, { ...opPC, regime: param.entrada }) : null,
       fcPC: obraDaPC ? fluxoDeCaixaDaObra(obraDaPC, opPC) : null };
   }
   async function baixarPrestacao(param, opcoesPC) {
-    const { pc, obraDaPC, ffPC, cfPC, cmPC, rmPC, fcPC } = dadosDaPrestacao(param);
+    const { pc, obraDaPC, ffPC, cfPC, cmPC, rmPC, fcPC, modulosPC, nomePC } = dadosDaPrestacao(param);
     if (!pc.notas.length && !obraDaPC) { setPrestando({ erro: true, msg: "Nada pago no que está filtrado." }); return; }
     setPrestando({ fazendo: true, msg: "Montando a planilha…" });
-    const obraNome = obraFixa && (obras || [])[0] ? (obras[0].nome || "obra") : (obraId ? nomeDe(obras, obraId) : "obras");
+    const obraNome = nomePC || (obraFixa && (obras || [])[0] ? (obras[0].nome || "obra") : (obraId ? nomeDe(obras, obraId) : "obras"));
     // sem acento no nome dos arquivos de dentro do .zip: o Windows abre zip
     // com nome acentuado mostrando "PrestaÃ§Ã£o"
     const semAcento = (t) => String(t).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -42630,7 +42713,8 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
     // recusa caminho comprido. "PC Jacarezinho Modulo 1 09-2026 a 10-2026".
     const mesAno = (iso) => { const m = String(iso || "").match(/^(\d{4})-(\d{2})/); return m ? `${m[2]}-${m[1]}` : ""; };
     const ini = mesAno(de || pc.de), fim = mesAno(ate || pc.ate);
-    const obraCurta = semAcento(obraNome).replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim().slice(0, 28).trim();
+    const obraCurta = semAcento(nomePC ? (nomeEmpreendimento || "Empreendimento") + " todos" : obraNome).replace(/[\\/:*?"<>|]+/g, "-")
+      .replace(/[^\x20-\x7E]+/g, "-").replace(/\s+/g, " ").trim().slice(0, 28).trim();
     const titulo = ("PC " + obraCurta + (ini ? " " + (ini === fim || !fim ? ini : ini + " a " + fim) : "")).trim();
     // o relatório em PDF (o mesmo que vai dentro do pacote)
     const montarPdf = async () => {
@@ -42640,7 +42724,7 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
       const ehEmp = !!cliObj && typeof ehEmpreendimento === "function" && ehEmpreendimento(cliObj);
       const esc = (completar && completar.data && completar.data.escritorio && completar.data.escritorio.nome) || "";
       return pdfDaPrestacaoDeContas(JsPDF, pc, { obra: obraNome, cliente: ehEmp ? "" : ((cliObj && cliObj.nome) || ""),
-        tipo: ehEmp ? "Empreendimento" : "", escritorio: esc, de, ate, ff: ffPC, conferencia: cfPC, custos: cmPC, recebimentos: rmPC, fluxoCaixa: fcPC, parametros: param || null }).output("blob");
+        tipo: ehEmp ? "Empreendimento" : "", escritorio: esc, de, ate, ff: ffPC, conferencia: cfPC, custos: cmPC, recebimentos: rmPC, fluxoCaixa: fcPC, parametros: param || null, modulos: modulosPC }).output("blob");
     };
     // só o PDF: sem planilha e sem baixar os comprovantes (é rápido)
     if (opcoesPC && opcoesPC.soPdf) {
@@ -43023,8 +43107,9 @@ function BaseDeDados({ obras, clientes, prestadores, insumos, lancamentos, isMob
           </button>
         )}
         {paramPC && <JanelaParametrosPrestacao valor={paramPC} obra={obraDaPrestacao} aoMudar={setParamPC}
+          modulos={temModulos ? listaModulos : null} nomeEmpreendimento={nomeEmpreendimento}
           aoCancelar={() => setParamPC(null)} aoGerar={gerarComParametros} />}
-        {previa && <PreviaDaPrestacao previa={previa} obra={obraDaPrestacao} isMobile={isMobile}
+        {previa && <PreviaDaPrestacao previa={previa} obra={previa.dados && previa.dados.nomePC ? { nome: previa.dados.nomePC } : obraDaPrestacao} isMobile={isMobile}
           aoVoltar={() => { setParamPC({ ...previa.param, erro: "" }); setPrevia(null); }}
           aoCancelar={() => setPrevia(null)}
           aoGerar={() => { const p = previa.param; setPrevia(null); baixarPrestacao(p); }}
@@ -59479,6 +59564,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [contasAbertas, setContasAbertas] = useState({});
 
   const obras = (data.obras || []).filter(o => o.clienteId === cliente.id);
+  // empreendimento: as obras dele são os módulos
+  const ehEmpDoPainel = !!cliente && typeof ehEmpreendimento === "function" && ehEmpreendimento(cliente);
   const prestadores = data.fornecedores || [];
   // Os contratos moram DENTRO da obra (obra.contratos). A coleção
   // data.contratos nunca foi gravada pelo backend — o contrato ficava só na
@@ -60660,10 +60747,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("lista")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Gestão de Obra</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{ehEmpDoPainel ? `Módulo do empreendimento ${cliente.nome || ""}` : "Gestão de Obra"}</span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
-          <div><label style={C.label}>Nome da obra *</label><input style={C.input} value={formObra.nome} onChange={e => setFormObra({ ...formObra, nome: e.target.value })} /></div>
+          <div><label style={C.label}>{ehEmpDoPainel ? "Nome do módulo *" : "Nome da obra *"}</label><input style={C.input} value={formObra.nome} onChange={e => setFormObra({ ...formObra, nome: e.target.value })} /></div>
           <div><label style={C.label}>Status</label><Selecao style={{ ...C.input, cursor: "pointer" }} value={formObra.status} onChange={e => setFormObra({ ...formObra, status: e.target.value })}>{Object.entries(statusObra).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Selecao></div>
           <div><label style={C.label}>Data de início</label><input style={C.input} type="date" value={formObra.dataInicio} onChange={e => setFormObra({ ...formObra, dataInicio: e.target.value })} /></div>
           <div><label style={C.label}>Data de conclusão</label><input style={C.input} type="date" value={formObra.dataFim} onChange={e => setFormObra({ ...formObra, dataFim: e.target.value })} /></div>
@@ -63610,6 +63697,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Base de dados</div>
         <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2, marginBottom: 14 }}>{obraAtual.nome} · cada item de cada nota, com etapa, conta e datas</div>
         <BaseDeDados obras={[obraAtual]} clientes={data.clientes || []} prestadores={prestadores}
+          modulos={ehEmpDoPainel ? obras : null} nomeEmpreendimento={(cliente && cliente.nome) || ""}
           insumos={insumosDoCatalogo(data)} lancamentos={typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : []}
           isMobile={isMobile} obraFixa nomeDoArquivo={"base " + (obraAtual.nome || "obra")}
           acoes={perm.podeGerenciarObra ? { daObra: true, excluir: excluirDaBaseDaObra,
@@ -63814,15 +63902,17 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, gap: 10, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Obras</div>
-          <div style={{ fontSize: 12, color: "#4b5563" }}>{obras.length} obra{obras.length !== 1 ? "s" : ""}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{ehEmpDoPainel ? "Módulos do empreendimento" : "Obras"}</div>
+          <div style={{ fontSize: 12, color: "#4b5563" }}>{ehEmpDoPainel
+            ? `${obras.length} módulo${obras.length !== 1 ? "s" : ""} · cada módulo é uma obra, com custo, estimativa e vendas próprios`
+            : `${obras.length} obra${obras.length !== 1 ? "s" : ""}`}</div>
         </div>
-        {perm.podeGerenciarObra && <button style={C.btn} onClick={novaObra}>+ Nova obra</button>}
+        {perm.podeGerenciarObra && <button style={C.btn} onClick={novaObra}>{ehEmpDoPainel ? "+ Novo módulo" : "+ Nova obra"}</button>}
       </div>
 
       {obras.length === 0 ? (
         <div style={{ padding: "20px", textAlign: "center", color: "#4b5563", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
-          Nenhuma obra cadastrada.
+          {ehEmpDoPainel ? "Nenhum módulo cadastrado." : "Nenhuma obra cadastrada."}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

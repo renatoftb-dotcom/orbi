@@ -55,7 +55,7 @@ const modulo = new Function(`
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
-           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, fisicoFinanceiroDaPrestacao, conferenciaDaPrestacao, fluxoDeRecebimento, custosMensais, recebimentosMensais, fluxoDeCaixaDaObra, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, linhasParaExportar, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS, contasDaEntrada, pedidoDaEntrada, comPadraoDaConta, trocarContaComPadrao, padraoDaContaObra, CONTA_POR_TIPO, papelJaLancado, gruposDeContasPorRef, casarPapelComContas, distribuirPapeisDoLote, ligacaoDoCsv, numeroDoArquivo, buscarContas, temPapel, FILTROS_PAPEL, pedidoEhNotaPaga, rotuloDoPedido, pedidoEhServico, palavraDoPedido, prestacaoDeContas, fisicoFinanceiroDaPrestacao, conferenciaDaPrestacao, fluxoDeRecebimento, custosMensais, recebimentosMensais, fluxoDeCaixaDaObra, obraDoEmpreendimento, resumoPorModulo, linhasDaBase, filtrarBase, tabelaDaBase, planilhaDaBase, proximoNumeroDePapel, numerarPapeisDasPagas, completarBase, linhasDaPlanilhaDaObra, cpDiaDoIdImportado, textoDaCelula, alinhamentoDaCelula, filtrarPorColunas, valoresDaColuna, linhasDoEscritorio, linhasParaExportar, BASE_COLUNAS_ESCRITORIO, BASE_RELATORIO_ESCRITORIO,
            CP_MAX_REGISTROS,
            recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos, numerarContas, proximaReferencia, cpMedicaoEmUmaData,
            ajustarValores, ajustesDeValorDoContrato, totalDaRecalibragem, conciliarValorDaConta,
@@ -3754,6 +3754,23 @@ teste("recebimentos: contrato pendente vira 'a assinar' e a projeção da unidad
   assert.strictEqual(rm.total.estimativa, 210000);
   assert.strictEqual(rm.meses.find((m) => m.chave === "2027-08").estimativa, 190000);
   assert.ok(rm.temCronograma);
+});
+
+teste("empreendimento com módulos: junta tudo numa obra só e resume por módulo", () => {
+  const m1 = { id: "m1", nome: "Módulo 1", clienteId: "e", dataInicio: "2026-08-01", dataFim: "2027-06-30",
+    estimativaPL: [{ contaId: "material", valor: 10000 }], unidadesVenda: [{ id: "u1", nome: "Casa 01" }], vendas: [{ id: "v1", unidadeId: "u1" }],
+    contasPagar: [{ id: "a", contaId: "material", valor: 3000, pago: true, valorPago: 3000, pagoEm: "2026-09-01" },
+      { id: "v", contaId: "venda_imovel", vendaId: "v1", valor: 5000, pago: true, valorPago: 5000, pagoEm: "2026-09-10" }] };
+  const m2 = { id: "m2", nome: "Módulo 2", clienteId: "e", dataInicio: "2025-04-01",
+    estimativaPL: [{ contaId: "material", valor: 4000 }], contasPagar: [{ id: "b", contaId: "material", valor: 1000, pago: false, vencimento: "2026-12-01" }] };
+  const o = modulo.obraDoEmpreendimento([m1, m2], "Empreendimento Jacarezinho");
+  assert.strictEqual(o.nome, "Empreendimento Jacarezinho"); assert.strictEqual(o.contasPagar.length, 3);
+  assert.strictEqual(o.dataInicio, "2025-04-01"); assert.strictEqual(o.dataFim, "2027-06-30");
+  assert.strictEqual(o.unidadesVenda[0].nome, "Módulo 1 · Casa 01");
+  const ff = modulo.fisicoFinanceiroDaPrestacao(o, { regime: "caixa", hoje: "2026-11-16" });
+  assert.strictEqual(ff.total.estimado, 14000); assert.strictEqual(ff.total.realizado, 3000); assert.strictEqual(ff.total.aPagar, 1000);
+  const r = modulo.resumoPorModulo([m1, m2], { despesa: "caixa", entrada: "caixa", hoje: "2026-11-16" });
+  assert.deepStrictEqual(r.map((x) => [x.nome, x.estimado, x.realizado, x.aPagar, x.recebido]), [["Módulo 1", 10000, 3000, 0, 5000], ["Módulo 2", 4000, 0, 1000, 0]]);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

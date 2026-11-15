@@ -2914,6 +2914,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [contasAbertas, setContasAbertas] = useState({});
 
   const obras = (data.obras || []).filter(o => o.clienteId === cliente.id);
+  // empreendimento: as obras dele são os módulos
+  const ehEmpDoPainel = !!cliente && typeof ehEmpreendimento === "function" && ehEmpreendimento(cliente);
   const prestadores = data.fornecedores || [];
   // Os contratos moram DENTRO da obra (obra.contratos). A coleção
   // data.contratos nunca foi gravada pelo backend — o contrato ficava só na
@@ -4095,10 +4097,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("lista")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Gestão de Obra</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{ehEmpDoPainel ? `Módulo do empreendimento ${cliente.nome || ""}` : "Gestão de Obra"}</span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
-          <div><label style={C.label}>Nome da obra *</label><input style={C.input} value={formObra.nome} onChange={e => setFormObra({ ...formObra, nome: e.target.value })} /></div>
+          <div><label style={C.label}>{ehEmpDoPainel ? "Nome do módulo *" : "Nome da obra *"}</label><input style={C.input} value={formObra.nome} onChange={e => setFormObra({ ...formObra, nome: e.target.value })} /></div>
           <div><label style={C.label}>Status</label><Selecao style={{ ...C.input, cursor: "pointer" }} value={formObra.status} onChange={e => setFormObra({ ...formObra, status: e.target.value })}>{Object.entries(statusObra).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Selecao></div>
           <div><label style={C.label}>Data de início</label><input style={C.input} type="date" value={formObra.dataInicio} onChange={e => setFormObra({ ...formObra, dataInicio: e.target.value })} /></div>
           <div><label style={C.label}>Data de conclusão</label><input style={C.input} type="date" value={formObra.dataFim} onChange={e => setFormObra({ ...formObra, dataFim: e.target.value })} /></div>
@@ -7045,6 +7047,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Base de dados</div>
         <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2, marginBottom: 14 }}>{obraAtual.nome} · cada item de cada nota, com etapa, conta e datas</div>
         <BaseDeDados obras={[obraAtual]} clientes={data.clientes || []} prestadores={prestadores}
+          modulos={ehEmpDoPainel ? obras : null} nomeEmpreendimento={(cliente && cliente.nome) || ""}
           insumos={insumosDoCatalogo(data)} lancamentos={typeof lancamentosDoEscritorio === "function" ? lancamentosDoEscritorio(data) : []}
           isMobile={isMobile} obraFixa nomeDoArquivo={"base " + (obraAtual.nome || "obra")}
           acoes={perm.podeGerenciarObra ? { daObra: true, excluir: excluirDaBaseDaObra,
@@ -7249,15 +7252,17 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, gap: 10, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Obras</div>
-          <div style={{ fontSize: 12, color: "#4b5563" }}>{obras.length} obra{obras.length !== 1 ? "s" : ""}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{ehEmpDoPainel ? "Módulos do empreendimento" : "Obras"}</div>
+          <div style={{ fontSize: 12, color: "#4b5563" }}>{ehEmpDoPainel
+            ? `${obras.length} módulo${obras.length !== 1 ? "s" : ""} · cada módulo é uma obra, com custo, estimativa e vendas próprios`
+            : `${obras.length} obra${obras.length !== 1 ? "s" : ""}`}</div>
         </div>
-        {perm.podeGerenciarObra && <button style={C.btn} onClick={novaObra}>+ Nova obra</button>}
+        {perm.podeGerenciarObra && <button style={C.btn} onClick={novaObra}>{ehEmpDoPainel ? "+ Novo módulo" : "+ Nova obra"}</button>}
       </div>
 
       {obras.length === 0 ? (
         <div style={{ padding: "20px", textAlign: "center", color: "#4b5563", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
-          Nenhuma obra cadastrada.
+          {ehEmpDoPainel ? "Nenhum módulo cadastrado." : "Nenhuma obra cadastrada."}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
