@@ -248,6 +248,25 @@ teste("resultado do empreendimento: venda pelo contrato, estoque pelo estimado, 
   assert.strictEqual(r.vendidas.quantas, 1); assert.strictEqual(r.rateio, "área");
 });
 
+teste("desconto na venda: sai do que o comprador paga e deduz a receita do resultado", () => {
+  const unidades = [{ id: "u2", nome: "Casa 02", precoEstimado: 210000, area: "70" }];
+  const f = { unidadeId: "u2", comprador: "Compradora", data: "2026-11-10", valor: "210.000,00", desconto: "10.000,00", provisao: "6.700,00",
+    sinais: [{ valor: "40.300,00", data: "2026-11-23" }], grupos: [{ ate: "", valor: "" }], primeiroVencimento: "",
+    financiamento: "166.400,00", dataFinanciamento: "2027-03-01" };
+  const p = M.planoDaVenda(f, { unidades, contas: [], obraId: "o1", novoId });
+  assert.ok(!p.erro, p.erro);
+  assert.strictEqual(p.venda.desconto, 10000); assert.strictEqual(p.venda.valor, 210000); assert.ok(!p.venda.juros);
+  // sem o desconto, faltariam 10 mil
+  assert.ok(/faltam R\$ 10\.000,00/.test(M.planoDaVenda({ ...f, desconto: "" }, { unidades, contas: [] }).erro));
+  assert.ok(/menor/.test(M.planoDaVenda({ ...f, desconto: "210.000,00" }, { unidades, contas: [] }).erro));
+  assert.deepStrictEqual(M.conferenciaDaVenda(206700, 210000, 6700, 10000), { dif: 0, faltam: 0, juros: 0 });
+  const obra = M.obraComVenda({ id: "o1", unidadesVenda: unidades, contasPagar: [] }, p);
+  const r = M.resultadoDoEmpreendimento(obra, { plano: [] });
+  assert.strictEqual(r.receita.vendida, 210000); assert.strictEqual(r.receita.descontos, 10000);
+  assert.strictEqual(r.receita.total, 200000); assert.strictEqual(r.unidades[0].resultado, 200000);
+  assert.strictEqual(M.resumoDasVendas(obra).descontos, 10000);
+});
+
 for (const [nome, fn] of testes) {
   try { fn(); ok++; console.log("  ok  " + nome); }
   catch (e) { falhou++; console.log("  FALHOU  " + nome + "\n        " + (e && e.message)); }

@@ -4057,6 +4057,31 @@ teste("provisão de documentação: sai da venda e entra em Documentação Empre
   assert.strictEqual(M.destinoNoEscritorio("documentacao_comprador", "empreendimento"), "res_documentacao");
 });
 
+teste("desconto de venda: a venda pelo valor de tabela e o desconto deduzindo, fora do banco", () => {
+  const cliente = { id: "e1", nome: "Jacarezinho Módulo 1", servicos: { empreendimento: true } };
+  const venda = { id: "v2", unidadeId: "u2", comprador: "Compradora", valor: 210000, desconto: 10000, data: "2026-11-10" };
+  const obra = { id: "obE", clienteId: "e1", nome: "Jacarezinho Módulo 1", unidadesVenda: [{ id: "u2", nome: "Casa 02" }], vendas: [venda] };
+  let l = M.provisaoNoEscritorio([], obra, cliente, { fechamentos: {}, hoje: "2026-11-16" });
+  const tab = l.find((x) => x.origem.parte === "tabela"), des = l.find((x) => x.origem.parte === "desconto");
+  assert.ok(tab && des, JSON.stringify(l.map((x) => x.id)));
+  assert.strictEqual(tab.contaId, "emp_venda"); assert.strictEqual(tab.valor, 10000);
+  assert.strictEqual(des.contaId, "emp_desconto_venda"); assert.strictEqual(des.valor, -10000);
+  assert.ok(tab.contaBanco === "nao" && des.contaBanco === "nao" && des.conferido);
+  assert.strictEqual(des.competencia, "2026-11"); assert.ok(/Desconto de venda — Casa 02/.test(des.descricao));
+  // o grupo de vendas não muda (o par se anula) e nada vai para a conferência com o banco
+  const out = M.extratoEscritorio(l, {}).find((m) => m.mes === "2026-11");
+  assert.ok(!out.grupos.emp_entradas, JSON.stringify(out.grupos));
+  const ch = M.checagemDebitoCredito([], l, "2026-11");
+  assert.strictEqual(ch.difCredito, 0); assert.strictEqual(ch.difDebito, 0);
+  // sem mudança: nada novo; desconto mudou: par com a diferença
+  assert.strictEqual(M.provisaoNoEscritorio(l, obra, cliente, { fechamentos: {}, hoje: "2026-11-16" }), l);
+  l = M.provisaoNoEscritorio(l, { ...obra, vendas: [{ ...venda, desconto: 12000 }] }, cliente, { fechamentos: {}, hoje: "2026-11-16" });
+  assert.strictEqual(l.filter((x) => x.origem.parte === "desconto").reduce((t, x) => t + x.valor, 0), -12000);
+  // venda desfeita, mês aberto: sai tudo
+  l = M.provisaoNoEscritorio(l, { ...obra, vendas: [] }, cliente, { fechamentos: {}, hoje: "2026-11-16" });
+  assert.strictEqual(l.length, 0);
+});
+
 teste("pé do extrato: conta corrente sem a aplicação, menos provisões e reservas = disponível", () => {
   const linhas = [
     { mes: "2026-08", saldoExtrato: 160716.05, saldoReservas: 0 },

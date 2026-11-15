@@ -350,8 +350,9 @@ function gruposDeParcelas(d) {
 }
 // Sinal + parcelas + financiamento contra a venda e a provisão: o que falta,
 // ou o que passa (juros/correção das parcelas).
-function conferenciaDaVenda(soma, valor, provisao) {
-  const dif = crCent((Number(soma) || 0) - (Number(valor) || 0) - (Number(provisao) || 0));
+// O desconto sai do que o comprador paga: venda − desconto + provisão.
+function conferenciaDaVenda(soma, valor, provisao, desconto) {
+  const dif = crCent((Number(soma) || 0) - (Number(valor) || 0) + (Number(desconto) || 0) - (Number(provisao) || 0));
   return { dif, faltam: dif < -0.005 ? crCent(-dif) : 0, juros: dif > 0.005 ? dif : 0 };
 }
 // A venda e o que falta receber. `f`: { unidadeId, comprador, data, valor, provisao,
@@ -380,12 +381,15 @@ function planoDaVenda(f, ctx) {
   if (fin > 0 && !/^\d{4}-\d{2}-\d{2}$/.test(String(d.dataFinanciamento || ""))) return { erro: "Informe a data prevista da liberação do financiamento." };
   const prov = crCent(crValor(d.provisao));
   if (prov < 0) return { erro: "A provisão de documentação não pode ser negativa." };
+  const desc = crCent(crValor(d.desconto));
+  if (desc < 0) return { erro: "O desconto não pode ser negativo." };
+  if (desc >= valor) return { erro: "O desconto tem que ser menor que o valor da venda." };
   const soma = crCent(sinais.reduce((t, x) => t + x.valor, 0) + gp.total + fin);
   // O que o comprador paga = venda + provisão de documentação + juros/correção
   // das parcelas. A sobra além de venda + provisão é o juro/correção.
-  const conf = conferenciaDaVenda(soma, valor, prov);
+  const conf = conferenciaDaVenda(soma, valor, prov, desc);
   if (conf.faltam > 0) {
-    return { erro: `Sinal + parcelas + financiamento dão ${crBRL(soma)}; venda${prov ? " + provisão" : ""} é ${crBRL(valor + prov)} — faltam ${crBRL(conf.faltam)}.` };
+    return { erro: `Sinal + parcelas + financiamento dão ${crBRL(soma)}; venda${desc ? " − desconto" : ""}${prov ? " + provisão" : ""} é ${crBRL(valor - desc + prov)} — faltam ${crBRL(conf.faltam)}.` };
   }
   const vendaId = o.novoId ? o.novoId() : "v" + Date.now().toString(36);
   const agora = o.agora || new Date().toISOString();
@@ -405,7 +409,7 @@ function planoDaVenda(f, ctx) {
   for (const g of gp.grupos) for (let k = g.de; k <= g.ate; k++) novas.push(base("parcela", k, n, g.valor, crSomarMeses(d.primeiroVencimento, k - 1)));
   if (fin > 0) novas.push(base("financiamento", 1, 1, fin, d.dataFinanciamento));
   const venda = { id: vendaId, unidadeId: un.id, comprador, data: d.data, valor, criadoEm: agora, por: o.quem || "",
-    ...(prov > 0 ? { provisaoDoc: prov } : {}), ...(conf.juros > 0 ? { juros: conf.juros } : {}),
+    ...(prov > 0 ? { provisaoDoc: prov } : {}), ...(desc > 0 ? { desconto: desc } : {}), ...(conf.juros > 0 ? { juros: conf.juros } : {}),
     ...(String(d.observacao || "").trim() ? { observacao: String(d.observacao).trim() } : {}) };
   return { venda, novas, ligar };
 }
@@ -524,6 +528,7 @@ function resumoDasVendas(obra) {
   const soma = (k) => crCent(linhas.reduce((t, l) => t + (Number(l[k]) || 0), 0));
   return { linhas, unidades: linhas.length, vendidas: linhas.filter((l) => l.venda).length,
     estimado: soma("estimado"), vendido: crCent(linhas.reduce((t, l) => t + (l.venda ? l.venda.valor : 0), 0)),
+    descontos: crCent(linhas.reduce((t, l) => t + (l.venda ? Number(l.venda.desconto) || 0 : 0), 0)),
     recebido: soma("recebido"), aReceber: soma("aReceber") };
 }
 function crBRL(v) { return "R$ " + crCent(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -574,20 +579,23 @@ function resultadoDoEmpreendimento(obra, ctx) {
     const v = vendas.find((x) => x.unidadeId === u.id) || null;
     const peso = somaArea ? (comArea ? areas[i] : 1) / somaArea : 0;
     const preco = v ? crCent(v.valor) : crCent(crValor(u.precoEstimado));
+    const desconto = v ? crCent(Number(v.desconto) || 0) : 0;
     const juros = v ? crCent(Number(v.juros) || 0) : 0;
     const custoU = crCent(custo.previsto * peso);
-    const res = crCent(preco + juros - custoU);
-    return { unidade: u, venda: v, preco, juros, custo: custoU, resultado: res, margem: preco + juros > 0 ? res / (preco + juros) : null, peso };
+    const liquido = crCent(preco - desconto + juros);
+    const res = crCent(liquido - custoU);
+    return { unidade: u, venda: v, preco, desconto, juros, custo: custoU, resultado: res, margem: liquido > 0 ? res / liquido : null, peso };
   });
   const receita = {
     vendida: crCent(linhas.filter((l) => l.venda).reduce((t, l) => t + l.preco, 0)),
     estoque: crCent(linhas.filter((l) => !l.venda).reduce((t, l) => t + l.preco, 0)),
     juros: crCent(linhas.reduce((t, l) => t + l.juros, 0)),
+    descontos: crCent(linhas.reduce((t, l) => t + l.desconto, 0)),
   };
-  receita.total = crCent(receita.vendida + receita.estoque + receita.juros);
+  receita.total = crCent(receita.vendida - receita.descontos + receita.estoque + receita.juros);
   const resultado = crCent(receita.total - custo.previsto);
   const vend = linhas.filter((l) => l.venda);
-  const rv = crCent(vend.reduce((t, l) => t + l.preco + l.juros, 0));
+  const rv = crCent(vend.reduce((t, l) => t + l.preco - l.desconto + l.juros, 0));
   const cv = crCent(vend.reduce((t, l) => t + l.custo, 0));
   return {
     grupos, custo, receita, unidades: linhas,
@@ -1029,6 +1037,7 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
   );
   const fv = formVenda;
   const provForm = fv ? crCent(crValor(fv.provisao)) : 0;
+  const descForm = fv ? crCent(crValor(fv.desconto)) : 0;
   const somaVenda = fv ? crCent((fv.sinais || []).reduce((t, x) => t + (x.contaId
     ? ((c) => Number(c.valorPago) || Number(c.valor) || 0)(entradasDeVendaSoltas(contas).find((c) => c.id === x.contaId) || {}) : crValor(x.valor)), 0)
     + (gruposDeParcelas(fv).total || 0) + crValor(fv.financiamento)) : 0;
@@ -1085,7 +1094,7 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                   <span style={{ fontSize: 11, fontWeight: 600, marginLeft: 8, padding: "2px 8px", borderRadius: 999,
                     background: v ? "#eef5ff" : "#f3f4f6", color: v ? "#0474f4" : "#4b5563" }}>{v ? "Vendida" : "Disponível"}</span></div>
                 <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>
-                  {[u.area ? `${u.area} m²` : "", `estimado ${dinheiro(l.estimado)}`, v ? `vendida a ${v.comprador} em ${crDataBR(v.data)} por ${dinheiro(v.valor)}` : ""].filter(Boolean).join(" · ")}
+                  {[u.area ? `${u.area} m²` : "", `estimado ${dinheiro(l.estimado)}`, v ? `vendida a ${v.comprador} em ${crDataBR(v.data)} por ${dinheiro(v.valor)}${Number(v.desconto) > 0 ? ` com desconto de ${dinheiro(v.desconto)}` : ""}` : ""].filter(Boolean).join(" · ")}
                 </div>
                 {v && <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>recebido <b>{dinheiro(l.recebido)}</b> · a receber <b>{dinheiro(l.aReceber)}</b></div>}
               </div>
@@ -1268,6 +1277,15 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
                 {campoDinheiro(fv.valor, (v) => setFormVenda({ ...fv, valor: v }), { "data-vk-venda-valor": "1" })}</label>
             </div>
             <div style={{ display: "grid", gap: 8, gridTemplateColumns: isMobile ? "1fr" : "200px 1fr", alignItems: "end" }}>
+              <label style={{ display: "grid", gap: 4 }}><span style={rot}>Desconto na venda</span>
+                {campoDinheiro(fv.desconto || "", (v) => setFormVenda({ ...fv, desconto: v }), { "data-vk-venda-desconto": "1" })}</label>
+              <div data-vk-venda-desconto-aviso="1" style={{ fontSize: 11.5, color: descForm > 0 ? "#1e40af" : "#6b7280", paddingBottom: 6 }}>
+                {descForm > 0
+                  ? <>O comprador paga <b>{dinheiro(Math.max(0, crValor(fv.valor) - descForm))}</b>{provForm > 0 ? " mais a provisão" : ""}. No extrato do escritório entra a venda pelo valor cheio e, logo abaixo, <b>Desconto de venda − {dinheiro(descForm)}</b> deduzindo as vendas — fora do banco, no mês da venda.</>
+                  : "Valor da venda é o de tabela. Se houve desconto, informe aqui: ele sai do que o comprador paga e aparece deduzindo as vendas."}
+              </div>
+            </div>
+            <div style={{ display: "grid", gap: 8, gridTemplateColumns: isMobile ? "1fr" : "200px 1fr", alignItems: "end" }}>
               <label style={{ display: "grid", gap: 4 }}><span style={rot}>Provisão de documentação</span>
                 {campoDinheiro(fv.provisao, (v) => setFormVenda({ ...fv, provisao: v }), { "data-vk-venda-provisao": "1" })}</label>
               <div data-vk-venda-provisao-aviso="1" style={{ fontSize: 11.5, color: provForm > 0 ? "#1e40af" : "#6b7280", paddingBottom: 6 }}>
@@ -1350,12 +1368,13 @@ function VendasDoEmpreendimento({ obra, podeEditar, isMobile, quem, aoGravarObra
             </div>
 
             {(() => {
-              const conf = conferenciaDaVenda(somaVenda, crValor(fv.valor), provForm);
+              const conf = conferenciaDaVenda(somaVenda, crValor(fv.valor), provForm, descForm);
               const ok = conf.faltam === 0;
               return (
                 <div data-vk-venda-conferencia="1" style={{ fontSize: 12.5, padding: "8px 12px", borderRadius: 10,
                   background: ok ? "#ecfdf5" : "#fffbeb", color: ok ? "#047857" : "#92400e" }}>
                   Sinal + parcelas + financiamento = <b>{dinheiro(somaVenda)}</b> · venda {dinheiro(crValor(fv.valor))}
+                  {descForm > 0 ? ` − desconto ${dinheiro(descForm)}` : ""}
                   {provForm > 0 ? ` + provisão ${dinheiro(provForm)}` : ""}
                   {conf.faltam > 0 ? ` · faltam ${dinheiro(conf.faltam)}` : conf.juros > 0 ? <> · ✓ inclui <b>{dinheiro(conf.juros)}</b> de juros/correção das parcelas</> : " ✓"}
                 </div>
@@ -1415,6 +1434,7 @@ function ResultadoDoEmpreendimento({ obra, plano, estimativaPorConta, isMobile, 
       <div data-vk-dre="1" style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, overflow: "hidden" }}>
         <div style={{ padding: "8px 12px", fontSize: 10.5, fontWeight: 700, color: "#4b5563", letterSpacing: .4, background: "#fafafa" }}>DEMONSTRATIVO DO RESULTADO — PREVISTO</div>
         {linha("Vendas contratadas", r.receita.vendida)}
+        {r.receita.descontos ? linha("(−) Descontos de venda", -r.receita.descontos, { sub: true, texto: "− " + din(r.receita.descontos), cor: "#b91c1c" }) : null}
         {linha("Unidades a vender (preço estimado)", r.receita.estoque, { sub: true })}
         {r.receita.juros ? linha("Receita financeira (juros/correção das parcelas)", r.receita.juros, { sub: true }) : null}
         {linha("= Receita total", r.receita.total, { forte: true })}

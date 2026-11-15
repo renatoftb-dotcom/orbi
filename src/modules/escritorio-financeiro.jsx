@@ -130,6 +130,9 @@ const PLANO_CONTAS_ESCRITORIO = [
   // sem virar custo de novo. Nasce sozinho da provisão da venda.
   { id: "emp_documentacao", nome: "Documentação do comprador", grupo: "emp_saidas", unidades: ["empreendimento"], apelidos: [], interna: true },
   { id: "emp_venda",      nome: "Venda de imóvel",        grupo: "emp_entradas", unidades: ["empreendimento"], apelidos: [] },
+  // o desconto concedido na venda: entra negativo, deduzindo as vendas (par
+  // fora do banco com a venda pelo valor de tabela — ver provisaoNoEscritorio)
+  { id: "emp_desconto_venda", nome: "Desconto de venda", grupo: "emp_entradas", unidades: ["empreendimento"], apelidos: [], interna: true },
   { id: "emp_aporte",     nome: "Aporte no empreendimento", grupo: "emp_aportes", unidades: ["empreendimento"], apelidos: [] },
 
   // ── sócios (não é resultado; é conta corrente) ────────────
@@ -842,6 +845,22 @@ function provisaoNoEscritorio(lancamentos, obra, cliente, opcoes) {
         descricao: `Custo de documentação — ${rotulo} (vai para a reserva)`, origem: { obraId: ob.id, tipo: "provisao", refId: v.id, parte: "venda" } });
       novos.push({ ...resto, ...marca, id: pre + ":reserva", contaId: "res_documentacao", valor: dif,
         descricao: `Provisão de documentação — ${rotulo}`, origem: { obraId: ob.id, tipo: "provisao", refId: v.id, parte: "reserva" } });
+    }
+    // 1b) o desconto da venda, fora do banco: a venda pelo valor de tabela
+    // e, logo abaixo, o desconto que a deduz. O banco não muda (o par se
+    // anula) e o extrato mostra quanto se deixou de receber.
+    const descontado = cents(dela.filter((l) => l.origem.parte === "desconto" && !tirar.has(l.id)).reduce((t, l) => t + (Number(l.valor) || 0), 0));
+    const alvoD = -cents(Number(v.desconto) || 0);
+    const difD = cents(alvoD - descontado);
+    if (Math.abs(difD) > 0.005 && aberto(mesPar)) {
+      const n = dela.filter((l) => l.origem.parte === "desconto").length + 1;
+      const pre = `prov:${ob.id}:${v.id}:d${n}`;
+      const marca = { competencia: mesPar, lancadoEm: diaPar, contaBanco: "nao", conferido: true, conferidoEm: hoje, criadoEm: new Date().toISOString() };
+      const { unidadeVenda: _u, comprador: _c, id: _i, origem: _o, contaId: _k, valor: _v, descricao: _d, ...resto } = base;
+      novos.push({ ...resto, ...marca, id: pre + ":tabela", contaId: "emp_venda", valor: cents(-difD),
+        descricao: `Venda de imóvel pelo valor de tabela — ${rotulo} (o desconto vem abaixo)`, origem: { obraId: ob.id, tipo: "provisao", refId: v.id, parte: "tabela" } });
+      novos.push({ ...resto, ...marca, id: pre + ":desconto", contaId: "emp_desconto_venda", valor: difD,
+        descricao: `Desconto de venda — ${rotulo}`, origem: { obraId: ob.id, tipo: "provisao", refId: v.id, parte: "desconto" } });
     }
     // 2) as despesas e a devolução: saem da provisão, pelo banco
     const movs = (v.provisaoMovs || []).filter((m) => m && (m.tipo === "despesa" || m.tipo === "devolucao"));

@@ -207,4 +207,11 @@ entre 0,8 do maior e a média; barras 0,25 do maior vão para cada lado.
 - γz com 1,4(G + 0,5Q) e 1,4W: ≤ 1,1 nós fixos; ≤ 1,3 vento ×0,95γz; > 1,3 não atende.
 - Serviço: vento frequente ψ1 = 0,3, rigidez bruta — topo H/1700, andar hi/850.
 - Pilares: duas combinações (uso + 0,6 vento; vento + 0,5 uso), M1d = máx(M1d,mín; Md,vento), mais a 2ª ordem local.
-- Pendente (etapa 3): momento do vento nas vigas e na fundação (baldrames).
+
+## Etapa 3 — grelha, combinações completas e fissuração
+- Grelha por pavimento (e outra dos baldrames): nó em pilar, encontro de vigas, cruzamento e carga de pilar de cima; 3 GL por nó (w, θx, θy); flexão Ecs·Ic, torção 15% de G·J (14.6.7.2); pilares como apoio vertical + mola de giro de cada lance, k = 4·Ecs·I/(ℓ/2) (engaste elástico de 14.6.7.1). g e q separados. Instável → volta para a viga contínua isolada, com aviso.
+- Momentos da grelha nas molas vão para os lances (topo do de baixo, pé do de cima), proporcionais à rigidez; pilar dimensionado com máx(M1d,mín; gravidade + vento) nas combinações vertical, uso + 0,6 vento e vento + 0,5 uso.
+- Vento nas vigas: no nó, momento dos lances (topo de baixo + pé de cima; no térreo, o pé vai para os baldrames) repartido entre as vigas da direção por I/L; envoltória das combinações 1,4(g+q) ± 0,84W e 1,4(g+0,5q) ± 1,4W nos dois sentidos.
+- Fissuração (ELS-W, 17.3.3): combinação frequente g + 0,4q, σs no estádio II com αe = 15, wk = menor das duas expressões (η1 = 2,25, Acr até 7,5φ), limite da Tabela 13.4 (CAA I 0,4; II e III 0,3; IV 0,2 mm).
+- Fundação: com baldrames, o pé do pilar térreo é travado por eles (o momento do vento vai para os baldrames, não para o bloco); sem baldrames, base rotulada (sem momento).
+- Fora por ora: torção de equilíbrio dimensionada (só a de compatibilidade, reduzida), alternância de sobrecarga (q ≤ 20% do total em residências, 14.6.7.3).

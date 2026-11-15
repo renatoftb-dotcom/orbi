@@ -6086,6 +6086,8 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                     return [["Momento (Md)", `+${tpFmt(dv.Md, 1)}${dv.Mneg > 0.5 ? ` / −${tpFmt(dv.Mneg, 1)}` : ""} kN·m`], ["Embaixo", dv.barras ? `${dv.barras.n} Ø${esFmtBit(dv.barras.d)}${dv.barras.camadas > 1 ? " (2 camadas)" : ""}` : "—"],
                       ["Em cima", dv.barrasNeg ? `${dv.barrasNeg.n} Ø${esFmtBit(dv.barrasNeg.d)} nos apoios` : "2 Ø6,3 (porta-estribo)"], ["Estribo", dv.estribo ? `Ø${esFmtBit(dv.estribo.d)} c/${Math.round(dv.estribo.s * 100)}` : "—"],
                       ["Flecha", `${tpFmt(dv.flecha.total * 100, 1)} cm (limite ${tpFmt(dv.flecha.lim * 100, 1)})`],
+                      ...(dv.fissura && dv.fissura.wk > 0 ? [["Fissura (wk)", `${tpFmt(dv.fissura.wk, 2)} mm (limite ${tpFmt(dv.fissura.lim, 1)})`]] : []),
+                      ...(dv.Mw ? [["Vento (Mk)", `${tpFmt(dv.Mw.A, 1)} / ${tpFmt(dv.Mw.B, 1)} kN·m nas pontas`]] : []),
                       ["Situação", dv.ok ? `atende (NBR 6118)${dv.hMin && dv.hMin < dv.h - 1e-9 ? ` — bastaria ${Math.round(dv.b * 100)} × ${Math.round(dv.hMin * 100)}` : ""}` : `não atende: ${dv.motivos.join("; ")}${dv.hMin ? ` — passa com ${Math.round(dv.b * 100)} × ${Math.round(dv.hMin * 100)}` : ""}`]]; })()];
               })()] };
             }
@@ -7072,7 +7074,7 @@ function TpEditor({ projeto, nomeCliente, onAlterar, onVoltar, data, save }) {
                 })()}
                 {estDescida && estDescida.nV > 0 && grupoQ("est-d", "Dimensionamento (NBR 6118)", estDescida.falhas.length ? `${estDescida.falhas.length} não atende${estDescida.falhas.length === 1 ? "" : "m"}` : "tudo atende")}
                 {estDescida && estDescida.nV > 0 && !qFechado("est-d") && (<>
-                  <div style={{ fontSize: 11.5, color: "#6b7280", padding: "4px 0" }}>{estDescida.nV} trechos de viga e {estDescida.nP} lances de pilar verificados.</div>
+                  <div style={{ fontSize: 11.5, color: "#6b7280", padding: "4px 0" }}>{estDescida.nV} trechos de viga e {estDescida.nP} lances de pilar verificados.{Object.values(estDescida.porPav || {}).some((p) => p && p.grelha) ? " Vigas calculadas em grelha (todas juntas, com torção reduzida e os pilares como apoios elásticos — NBR 6118, 14.6.7); combinações com vento; fissura (ELS-W) conferida." : ""}</div>
                   {estDescida.falhas.map((f, k) => (
                     <button key={k} onClick={() => { if (f.pav !== pavAtivo) irParaPav(f.pav); if (f.id) setSel(["e" + f.id]); const e0 = estPorPav[f.pav], pc = f.id && e0 && (e0.pilares.find((x) => x.id === f.id) || e0.vigas.find((x) => x.id === f.id)); const pt = f.ponto || (pc ? pc.no || { x: (pc.a.x + pc.b.x) / 2, y: (pc.a.y + pc.b.y) / 2 } : null); if (pt) setFocoEst({ x: pt.x, y: pt.y, t: Date.now() }); if (isMobile) setMenuAberto(false); }}
                       style={{ display: "block", width: "100%", textAlign: "left", border: "none", borderBottom: "1px solid #f0f2f5", background: "none", padding: "5px 0", cursor: "pointer", fontFamily: "inherit" }}>

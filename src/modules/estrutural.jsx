@@ -1201,6 +1201,136 @@ function esResolverContinuas(ts, carga, pontos, extra) {
   }
   return R;
 }
+// ═══════════════════════════════════════════════════════════════
+// GRELHA DO PAVIMENTO (etapa 3) — NBR 6118, 14.6.7.2 (grelhas) e 14.6.7.1
+// ═══════════════════════════════════════════════════════════════
+// Todas as vigas do pavimento num modelo só: nó em cada pilar, em cada
+// encontro de viga com viga e em cada carga de pilar de cima; 3 graus de
+// liberdade por nó (deslocamento vertical w e giros θx, θy). Barra de grelha:
+// flexão Ecs·Ic e torção 15% de G·J (G = Ecs/2,4; rigidez reduzida de
+// 14.6.7.2). Pilar: apoio vertical e mola de giro de cada lance que chega no
+// nó (acima e abaixo), k = 4·Ecs·I/(ℓ/2) — a mesma rigidez do engaste
+// elástico de 14.6.7.1 (r = I/(ℓ/2)). Viga apoiada em viga deixa de ser
+// "carga na outra": as duas deformam juntas (o que a viga contínua isolada não
+// via). Cargas g e q resolvidas separadas (combinações depois).
+// vigas: [{ id, a, b, b_, h }]; carga: Map id → { g, q } (kN na peça toda);
+// nodais: [{ x, y, g, q }] (kN, para baixo); molas: Map idPilar → [{ k: { x, y } }]
+function esGrelha(vigas, pilares, carga, nodais, molas, E) {
+  const G = E / 2.4, nos = [], tolNo = 0.08;
+  const pilarEm = (q) => { let m = null, dm = 0.3; for (const p of pilares || []) { const d = esDist(p.no, q); if (d < dm) { dm = d; m = p; } } return m; };
+  const acharNo = (q, comPilar) => {
+    if (comPilar) { const p = pilarEm(q); if (p) { let n = nos.find((x) => x.pilar === p.id); if (!n) { n = { x: p.no.x, y: p.no.y, pilar: p.id }; nos.push(n); } return n; } }
+    let n = nos.find((x) => Math.hypot(x.x - q.x, x.y - q.y) < (x.pilar ? 0.3 : tolNo)); if (!n) { n = { x: q.x, y: q.y }; nos.push(n); } return n;
+  };
+  const vs = vigas.filter((v) => esDist(v.a, v.b) > 0.05);
+  const ends = vs.map((v) => [acharNo(v.a, true), acharNo(v.b, true)]);
+  // cargas de pilar de cima: nó no ponto da viga mais próxima
+  const nds = [];
+  for (const c of nodais || []) {
+    let m = null, dm = 0.3; for (const v of vs) { const r = esPontoNoSeg(c, v.a, v.b); if (r.d < dm) { dm = r.d; m = v; } }
+    if (!m) return null; const r = esPontoNoSeg(c, m.a, m.b), L = esDist(m.a, m.b), u = Math.min(1, Math.max(0, r.t / L));
+    nds.push({ no: acharNo({ x: m.a.x + (m.b.x - m.a.x) * u, y: m.a.y + (m.b.y - m.a.y) * u }, false), g: c.g, q: c.q });
+  }
+  // cruzamento no meio de duas vigas (sem ponta): nó também
+  for (let i = 0; i < vs.length; i++) for (let j = i + 1; j < vs.length; j++) {
+    const A = vs[i], B = vs[j], r = { x: A.b.x - A.a.x, y: A.b.y - A.a.y }, s = { x: B.b.x - B.a.x, y: B.b.y - B.a.y }, den = r.x * s.y - r.y * s.x; if (Math.abs(den) < 1e-9) continue;
+    const t = ((B.a.x - A.a.x) * s.y - (B.a.y - A.a.y) * s.x) / den, u = ((B.a.x - A.a.x) * r.y - (B.a.y - A.a.y) * r.x) / den;
+    if (t > 0.01 && t < 0.99 && u > 0.01 && u < 0.99) acharNo({ x: A.a.x + r.x * t, y: A.a.y + r.y * t }, false);
+  }
+  // barras: cada viga dividida nos nós que caem sobre ela
+  const barras = [], porViga = vs.map(() => []);
+  vs.forEach((v, iv) => {
+    const L = esDist(v.a, v.b), ux = (v.b.x - v.a.x) / L, uy = (v.b.y - v.a.y) / L;
+    const pts = [{ s: 0, n: ends[iv][0] }, { s: L, n: ends[iv][1] }];
+    for (const n of nos) { if (n === ends[iv][0] || n === ends[iv][1]) continue; const r = esPontoNoSeg(n, v.a, v.b); if (r.d < 0.06 && r.t > 0.05 && r.t < L - 0.05) pts.push({ s: r.t, n }); }
+    pts.sort((a, b) => a.s - b.s);
+    const c = carga.get(v.id) || { g: 0, q: 0 }, I = v.b_ * v.h ** 3 / 12, bb = Math.min(v.b_, v.h), hh = Math.max(v.b_, v.h), J = (1 / 3 - 0.21 * bb / hh * (1 - (bb / hh) ** 4 / 12)) * bb ** 3 * hh;
+    for (let k = 0; k < pts.length - 1; k++) {
+      const n1 = pts[k].n, n2 = pts[k + 1].n; if (n1 === n2) continue;
+      const Le = Math.hypot(n2.x - n1.x, n2.y - n1.y); if (Le < 0.02) continue;
+      const bi = barras.length; barras.push({ v, n1, n2, L: Le, c: (n2.x - n1.x) / Le, s: (n2.y - n1.y) / Le, EI: E * I, GJ: 0.15 * G * J, wg: c.g / L, wq: c.q / L, s0: pts[k].s, s1: pts[k + 1].s });
+      porViga[iv].push(bi);
+    }
+  });
+  if (!barras.length) return null;
+  nos.forEach((n, i) => { n.i = i; });
+  const nd = nos.length * 3, K = new Float64Array(nd * nd), Fg = new Float64Array(nd), Fq = new Float64Array(nd);
+  const T = (c, s) => [[1, 0, 0], [0, c, s], [0, s, -c]];
+  const kLocal = (b) => {
+    const L = b.L, k = b.EI / L ** 3, t = b.GJ / L, m = Array.from({ length: 6 }, () => new Array(6).fill(0));
+    const kb = [[12, 6 * L, -12, 6 * L], [6 * L, 4 * L * L, -6 * L, 2 * L * L], [-12, -6 * L, 12, -6 * L], [6 * L, 2 * L * L, -6 * L, 4 * L * L]], id = [0, 2, 3, 5];
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) m[id[i]][id[j]] = k * kb[i][j];
+    m[1][1] = t; m[1][4] = -t; m[4][1] = -t; m[4][4] = t; return m;
+  };
+  const Tb = (b) => { const t = T(b.c, b.s), R = Array.from({ length: 6 }, () => new Array(6).fill(0)); for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) { R[i][j] = t[i][j]; R[i + 3][j + 3] = t[i][j]; } return R; };
+  const fe = (b, w) => [-w * b.L / 2, 0, -w * b.L * b.L / 12, -w * b.L / 2, 0, w * b.L * b.L / 12]; // nodais equivalentes (local), w para baixo
+  for (const b of barras) {
+    const kl = kLocal(b), R = Tb(b), dofs = [b.n1.i * 3, b.n1.i * 3 + 1, b.n1.i * 3 + 2, b.n2.i * 3, b.n2.i * 3 + 1, b.n2.i * 3 + 2];
+    b.kl = kl; b.R = R; b.dofs = dofs;
+    // Kg = Rᵀ kl R
+    for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) { let sum = 0; for (let a = 0; a < 6; a++) { if (!R[a][i]) continue; for (let c2 = 0; c2 < 6; c2++) if (R[c2][j]) sum += R[a][i] * kl[a][c2] * R[c2][j]; } K[dofs[i] * nd + dofs[j]] += sum; }
+    for (const [F, w] of [[Fg, b.wg], [Fq, b.wq]]) { const f = fe(b, w); for (let i = 0; i < 6; i++) { let sum = 0; for (let a = 0; a < 6; a++) sum += R[a][i] * f[a]; F[dofs[i]] += sum; } }
+  }
+  for (const c of nds) { Fg[c.no.i * 3] -= c.g; Fq[c.no.i * 3] -= c.q; }
+  // apoios: w = 0 nos pilares; molas de giro dos lances
+  const fixo = new Uint8Array(nd);
+  for (const n of nos) if (n.pilar) {
+    fixo[n.i * 3] = 1; const m = molas.get(n.pilar);
+    if (m) { K[(n.i * 3 + 1) * nd + n.i * 3 + 1] += m.kx; K[(n.i * 3 + 2) * nd + n.i * 3 + 2] += m.ky; }
+  }
+  // giro sem nenhuma rigidez (nó solto só com torção zero): trava, é mecanismo de torção sem carga
+  const livres = []; for (let i = 0; i < nd; i++) if (!fixo[i]) livres.push(i);
+  const n = livres.length, A = new Float64Array(n * n), bg = new Float64Array(n), bq = new Float64Array(n);
+  let maxd = 0; for (let i = 0; i < n; i++) maxd = Math.max(maxd, K[livres[i] * nd + livres[i]]);
+  // giros: rigidez mínima (1e-8 da maior) — tira o mecanismo de torção sem
+  // carga (viga girando em torno do próprio eixo) sem mudar os resultados
+  for (let i = 0; i < n; i++) { for (let j = 0; j < n; j++) A[i * n + j] = K[livres[i] * nd + livres[j]]; bg[i] = Fg[livres[i]]; bq[i] = Fq[livres[i]]; if (livres[i] % 3 !== 0) A[i * n + i] += 1e-8 * maxd; }
+  // Cholesky (LLᵀ)
+  for (let j = 0; j < n; j++) {
+    let d = A[j * n + j]; for (let k = 0; k < j; k++) d -= A[j * n + k] ** 2;
+    if (!(d > 1e-12 * maxd)) return null; // instável (viga sem apoio suficiente)
+    d = Math.sqrt(d); A[j * n + j] = d;
+    for (let i = j + 1; i < n; i++) { let sum = A[i * n + j]; for (let k = 0; k < j; k++) sum -= A[i * n + k] * A[j * n + k]; A[i * n + j] = sum / d; }
+  }
+  const resolver = (b) => { const y = new Float64Array(n); for (let i = 0; i < n; i++) { let sum = b[i]; for (let k = 0; k < i; k++) sum -= A[i * n + k] * y[k]; y[i] = sum / A[i * n + i]; } const x = new Float64Array(n); for (let i = n - 1; i >= 0; i--) { let sum = y[i]; for (let k = i + 1; k < n; k++) sum -= A[k * n + i] * x[k]; x[i] = sum / A[i * n + i]; } return x; };
+  const dg = new Float64Array(nd), dq = new Float64Array(nd); { const xg = resolver(bg), xq = resolver(bq); livres.forEach((ii, k) => { dg[ii] = xg[k]; dq[ii] = xq[k]; }); }
+  // esforços nas pontas de cada barra (local): [V1, T1, m1, V2, T2, m2]; momento interno = −m1 e +m2
+  for (const b of barras) for (const [nome, d, w] of [["g", dg, b.wg], ["q", dq, b.wq]]) {
+    const dl = b.R.map((row) => row.reduce((t, r, j) => t + r * d[b.dofs[j]], 0)), f0 = fe(b, w);
+    const f = b.kl.map((row, i) => row.reduce((t, kk, j) => t + kk * dl[j], 0) - f0[i]);
+    b[nome] = { V1: f[0], T1: f[1], M1: -f[2], V2: f[3], T2: f[4], M2: f[5], w1: d[b.n1.i * 3], w2: d[b.n2.i * 3] };
+  }
+  // reações nos pilares e momentos nas molas (o que vai para os lances)
+  const reac = {};
+  for (const nn of nos) if (nn.pilar) {
+    const r = { g: 0, q: 0, Mxg: 0, Myg: 0, Mxq: 0, Myq: 0 };
+    for (const b of barras) for (const [lado, sg] of [["1", 1], ["2", 1]]) { if ((lado === "1" ? b.n1 : b.n2) !== nn) continue; r.g += b.g["V" + lado] * sg; r.q += b.q["V" + lado] * sg; }
+    for (const c of nds) if (c.no === nn) { r.g += c.g; r.q += c.q; }
+    const m = molas.get(nn.pilar); if (m) { r.Mxg = m.kx * dg[nn.i * 3 + 1]; r.Myg = m.ky * dg[nn.i * 3 + 2]; r.Mxq = m.kx * dq[nn.i * 3 + 1]; r.Myq = m.ky * dq[nn.i * 3 + 2]; }
+    reac[nn.pilar] = r;
+  }
+  return { nos, barras, porViga, vigas: vs, reac };
+}
+// esforços de um tramo (peças em sequência de t.a para t.b) a partir da grelha:
+// reações e momentos nas pontas e as forças nos nós do meio (viga que apoia,
+// viga apoiada, pilar de cima) como cargas concentradas
+function esTramoDaGrelha(t, gr) {
+  const L = t.L || esDist(t.a, t.b), ux = (t.b.x - t.a.x) / L, uy = (t.b.y - t.a.y) / L, els = [];
+  for (const pc of t.pecas) { const iv = gr.vigas.indexOf(pc); if (iv < 0) return null; for (const bi of gr.porViga[iv]) els.push(gr.barras[bi]); }
+  const sN = (n) => (n.x - t.a.x) * ux + (n.y - t.a.y) * uy;
+  const seg = els.map((b) => { const s1 = sN(b.n1), s2 = sN(b.n2), inv = s2 < s1; return { b, ini: inv ? s2 : s1, fim: inv ? s1 : s2, inv }; }).sort((a, b) => a.ini - b.ini);
+  if (!seg.length) return null;
+  const ponta = (x, c, lado) => { const r = x.b[c]; return lado === "ini" ? (x.inv ? { V: r.V2, M: r.M2 } : { V: r.V1, M: r.M1 }) : (x.inv ? { V: r.V1, M: r.M1 } : { V: r.V2, M: r.M2 }); };
+  const out = { A: {}, B: {}, Ma: {}, Mb: {}, pts: [] };
+  for (const c of ["g", "q"]) { const a = ponta(seg[0], c, "ini"), b = ponta(seg[seg.length - 1], c, "fim"); out.A[c] = a.V; out.B[c] = b.V; out.Ma[c] = a.M; out.Mb[c] = b.M; }
+  // ponta livre (balanço): o que chega nela é carga na ponta, não reação
+  for (const [lado, s0] of [["A", 0], ["B", L]]) if (t["livre" + lado]) { out.pts.push({ t: s0, g: -out[lado].g, q: -out[lado].q, grelha: true }); out[lado] = { g: 0, q: 0 }; }
+  for (let i = 0; i < seg.length - 1; i++) {
+    const e = ponta(seg[i], "g", "fim"), d = ponta(seg[i + 1], "g", "ini"), eq = ponta(seg[i], "q", "fim"), dq = ponta(seg[i + 1], "q", "ini");
+    const P = -(e.V + d.V), Pq = -(eq.V + dq.V); if (Math.abs(P) + Math.abs(Pq) > 1e-6) out.pts.push({ t: Math.min(L, Math.max(0, seg[i].fim)), g: P, q: Pq, grelha: true });
+  }
+  return out;
+}
 // pavs: [{ paredes, areas, nivel, usoPadrao, nome }] de baixo para cima;
 // lanc: resultado de esLancarPavimentos; params: os da estrutura.
 // Devolve por pavimento: vigas { id: { g, q (kN/m), L, RA, RB } }, pilares
@@ -1289,12 +1419,46 @@ function esDescidaCargas(pavs, lanc, params) {
         });
         R = esResolverContinuas(ts, carga, pontos, extra);
       }
+      // grelha do pavimento (substitui as vigas contínuas isoladas; se ficar
+      // instável, vale a viga contínua acima e o aviso)
+      const E = esConcreto(P.fck).Ecs * 1000, gr = (() => {
+        const molas = new Map(), lanceI = (p) => { const c = Math.cos(p.ang || 0), sn = Math.sin(p.ang || 0), Iu = p.b * p.h ** 3 / 12, Iv = p.h * p.b ** 3 / 12; return { x: Iu * sn * sn + Iv * c * c, y: Iu * c * c + Iv * sn * sn }; };
+        for (const p of est.pilares || []) {
+          const lances = [];
+          const lp = (p.topo != null ? p.topo : topo) - (p.base || 0);
+          if (grupo === vigas) { lances.push({ p, l: lp, onde: "abaixo" }); const pc = k + 1 < nPav ? (lanc[k + 1].pilares || []).find((x) => esDist(x.no, p.no) < 0.15) : null; if (pc) lances.push({ p: pc, l: (pc.topo != null ? pc.topo : esTopoPavimento(pavs, k + 1)) - (pc.base || 0), onde: "acima" }); }
+          else lances.push({ p, l: lp, onde: "acima" });
+          const ks = lances.map((x) => { const I = lanceI(x.p), f = 4 * E / Math.max(0.3, x.l / 2); return { onde: x.onde, id: x.p.id, kx: f * I.x, ky: f * I.y }; });
+          molas.set(p.id, { kx: ks.reduce((t, x) => t + x.kx, 0), ky: ks.reduce((t, x) => t + x.ky, 0), lances: ks });
+        }
+        const nodais = []; ts.forEach((t, i) => { const L = t.L || 1; for (const pt of pontos[i]) nodais.push({ x: t.a.x + (t.b.x - t.a.x) * pt.t / L, y: t.a.y + (t.b.y - t.a.y) * pt.t / L, g: pt.g, q: pt.q }); });
+        try { const r = esGrelha(grupo, est.pilares || [], carga, nodais, molas, E); if (r) r.molas = molas; return r; } catch (err) { return null; }
+      })();
+      if (gr) {
+        ts.forEach((t, i) => {
+          const o = esTramoDaGrelha(t, gr); if (!o) return;
+          R[i] = { ...R[i], A: o.A, B: o.B, Ma: o.Ma, Mb: o.Mb, continua: false, grelha: true, apoiaOutra: extra[i].length > 0 || pontos[i].length > 0 };
+          extra[i] = o.pts; pontos[i] = [];
+        });
+        // momentos que a grelha manda para os lances dos pilares (por lance: acima/abaixo do nó)
+        for (const [pid, r] of Object.entries(gr.reac)) {
+          const m = gr.molas.get(pid); if (!m) continue;
+          for (const l of m.lances) {
+            const fx = m.kx ? l.kx / m.kx : 0, fy = m.ky ? l.ky / m.ky : 0, alvo = l.onde === "abaixo" ? k : (grupo === vigas ? k + 1 : k);
+            const ext = (res[alvo].momentosPilar = res[alvo].momentosPilar || {}), o = (ext[l.id] = ext[l.id] || {});
+            o[l.onde === "abaixo" ? "topo" : "base"] = { gx: r.Mxg * fx, gy: r.Myg * fy, qx: r.Mxq * fx, qy: r.Myq * fy };
+          }
+          (res[k].reacoesGrelha = res[k].reacoesGrelha || {})[pid] = ((res[k].reacoesGrelha || {})[pid] || { g: 0, q: 0 });
+          res[k].reacoesGrelha[pid].g += r.g; res[k].reacoesGrelha[pid].q += r.q;
+        }
+        res[k].grelha = true;
+      } else if ((grupo === vigas ? vigas : bald).length) res[k].avisos.push(`${grupo === bald ? "Baldrames" : "Vigas"}: a grelha ficou instável (alguma viga sem apoio suficiente) — esforços pela viga contínua isolada.`);
       ts.forEach((t, i) => {
         const w = t.pecas.reduce((s, v) => { const c = carga.get(v.id) || { g: 0, q: 0 }; return { g: s.g + c.g, q: s.q + c.q }; }, { g: 0, q: 0 });
-        res[k].tramos.push({ ids: t.ids, L: t.L, apoioA: t.apoioA, apoioB: t.apoioB, g: w.g / (t.L || 1), q: w.q / (t.L || 1), RA: R[i].A, RB: R[i].B, Ma: R[i].Ma, Mb: R[i].Mb, continua: R[i].continua, pontos: pontos[i], pontosTodos: [...pontos[i], ...extra[i]], livre: t.livreA ? "A" : t.livreB ? "B" : null, lBack: R[i].lBack, b_: t.pecas[0].b_, h: t.pecas[0].h, baldrame: grupo === bald, comParede: false });
+        res[k].tramos.push({ ids: t.ids, L: t.L, apoioA: t.apoioA, apoioB: t.apoioB, g: w.g / (t.L || 1), q: w.q / (t.L || 1), RA: R[i].A, RB: R[i].B, Ma: R[i].Ma, Mb: R[i].Mb, continua: R[i].continua, pontos: pontos[i], pontosTodos: [...pontos[i], ...extra[i]], livre: t.livreA ? "A" : t.livreB ? "B" : null, lBack: R[i].lBack, grelha: !!R[i].grelha, b_: t.pecas[0].b_, h: t.pecas[0].h, baldrame: grupo === bald, comParede: false });
         res[k].tramos[res[k].tramos.length - 1].comParede = t.ids.some((id) => comParede.has(id));
         res[k].tramos[res[k].tramos.length - 1].comLaje = t.ids.some((id) => comLaje.has(id));
-        res[k].tramos[res[k].tramos.length - 1].apoiaOutra = extra[i].length > 0 || pontos[i].length > 0;
+        res[k].tramos[res[k].tramos.length - 1].apoiaOutra = R[i].apoiaOutra != null ? R[i].apoiaOutra : extra[i].length > 0 || pontos[i].length > 0;
         res[k].tramos[res[k].tramos.length - 1].especial = t.pecas.some((v) => v.vigaPiso || v.vigaEscada);
         res[k].tramos[res[k].tramos.length - 1].equilibrio = t.pecas.some((v) => v.equilibrio);
         for (const id of t.ids) res[k].vigas[id] = { tramo: t.ids.join("+"), L: t.L, g: w.g / (t.L || 1), q: w.q / (t.L || 1), RA: R[i].A, RB: R[i].B, apoioA: t.apoioA, apoioB: t.apoioB };
@@ -1311,7 +1475,9 @@ function esDescidaCargas(pavs, lanc, params) {
     // pilares: reações + peso próprio + pilar de cima
     for (const p of est.pilares || []) {
       let Ng = gc * p.b * p.h * ((p.topo != null ? p.topo : topo) - (p.base || 0)), Nq = 0;
-      for (const t of res[k].tramos) { if (t.apoioA === p.id) { Ng += t.RA.g; Nq += t.RA.q; } if (t.apoioB === p.id) { Ng += t.RB.g; Nq += t.RB.q; } }
+      const rg = (res[k].reacoesGrelha || {})[p.id];
+      if (res[k].grelha) { if (rg) { Ng += rg.g; Nq += rg.q; } for (const t of res[k].tramos) if (!t.grelha) { if (t.apoioA === p.id) { Ng += t.RA.g; Nq += t.RA.q; } if (t.apoioB === p.id) { Ng += t.RB.g; Nq += t.RB.q; } } }
+      else for (const t of res[k].tramos) { if (t.apoioA === p.id) { Ng += t.RA.g; Nq += t.RA.q; } if (t.apoioB === p.id) { Ng += t.RB.g; Nq += t.RB.q; } }
       if (k + 1 < nPav) { const pc = (lanc[k + 1].pilares || []).find((q) => esDist(q.no, p.no) < 0.15); if (pc && res[k + 1].pilares[pc.id]) { Ng += res[k + 1].pilares[pc.id].Ng; Nq += res[k + 1].pilares[pc.id].Nq; } }
       res[k].pilares[p.id] = { Ng, Nq };
     }
@@ -1513,6 +1679,18 @@ function esDimViga(t, params, hTeste) {
   const ptsD = pts.map((p) => ({ t: p.t, P: gf * (p.g + p.q) })), wD = gf * (t.g + t.q);
   const ed = esEsforcos(L, wD, ptsD, Mx(t.Ma, gf, gf), Mx(t.Mb, gf, gf), t.livre, t.lBack);
   if (t.continua && !t.livre) { const fe = esFEM(L, wD, ptsD), ff = esEsforcos(L, wD, ptsD, fe.l, -fe.r); ed.Mmax = Math.max(ed.Mmax, ff.Mmax); }
+  // vento (etapa 3): momentos antissimétricos nas pontas; combinações 11.7 —
+  // uso principal com 0,6 vento e vento principal com 0,5 uso (ψ0 residencial),
+  // nos dois sentidos; vale a envoltória
+  if (t.Mw && (t.Mw.A > 1e-6 || t.Mw.B > 1e-6)) {
+    for (const [fg, fq, fw] of [[gf, gf, gf * 0.6], [gf, gf * 0.5, gf]]) for (const sg of [1, -1]) {
+      const e = esEsforcos(L, fg * t.g + fq * t.q, pts.map((p) => ({ t: p.t, P: fg * p.g + fq * p.q })), Mx(t.Ma, fg, fq) - sg * fw * t.Mw.A, Mx(t.Mb, fg, fq) + sg * fw * t.Mw.B, t.livre, t.lBack);
+      ed.Mmax = Math.max(ed.Mmax, e.Mmax); ed.Vmax = Math.max(ed.Vmax, e.Vmax); ed.MnegA = Math.max(ed.MnegA, e.MnegA); ed.MnegB = Math.max(ed.MnegB, e.MnegB); ed.Mneg = Math.max(ed.Mneg, e.Mneg); ed.x0A = Math.max(ed.x0A, e.x0A); ed.x0B = Math.max(ed.x0B, e.x0B);
+    }
+    ed.vento = true;
+  }
+  // fissuração (ELS-W, 17.3.3): combinação frequente g + ψ1·q (ψ1 = 0,4 residencial)
+  const ef = esEsforcos(L, t.g + 0.4 * t.q, pts.map((p) => ({ t: p.t, P: p.g + 0.4 * p.q })), Mx(t.Ma, 1, 0.4), Mx(t.Mb, 1, 0.4), t.livre, t.lBack);
   const es = esEsforcos(L, t.g + ES_DIM.psi2 * t.q, pts.map((p) => ({ t: p.t, P: p.g + ES_DIM.psi2 * p.q })), Mx(t.Ma, 1, ES_DIM.psi2), Mx(t.Mb, 1, ES_DIM.psi2), t.livre, t.lBack);
   // balanço: vão de referência da flecha é o dobro do comprimento (Tabela 13.3)
   const Lf = t.livre ? 2 * L : L, rotL = t.livre ? "2L/250, balanço" : "L/250";
@@ -1552,13 +1730,23 @@ function esDimViga(t, params, hTeste) {
     const Ma = t.livre ? Math.max(es.Mmax, es.Mneg) : es.Mmax, Ie = Ma <= Mr ? Ic : Math.min(Ic, (Mr / Ma) ** 3 * Ic + (1 - (Mr / Ma) ** 3) * III);
     const fi = es.flechaEI / (Ecs * Ie);
     r.flecha = { imediata: fi, total: fi * (1 + ES_DIM.alfaF), lim: Lf / ES_DIM.flechaTotal, aposParede: fi * ES_DIM.alfaF, limParede: Math.min(Lf / ES_DIM.flechaParede, ES_DIM.flechaParedeMax) };
+    // abertura de fissura: σs no estádio II (αe = 15), wk = menor das duas
+    // expressões de 17.3.3.2 (η1 = 2,25), Acr até 7,5φ da barra; limite da Tabela 13.4
+    const wLim = { 1: 0.4, 2: 0.3, 3: 0.3, 4: 0.2 }[P.caa] || 0.3, fis = (M, br) => {
+      if (!br || M <= 0.5) return null; const As = br.area, fi = br.d / 1000, xf = (-15 * As + Math.sqrt((15 * As) ** 2 + 2 * b * 15 * As * d)) / b, Iii = b * xf ** 3 / 3 + 15 * As * (d - xf) ** 2;
+      const ss = 15 * M * (d - xf) / Iii / 1000, faixa = Math.min(c + 0.005 + fi / 2 + 7.5 * fi, h / 2), rr = As / (b * faixa), k1 = br.d / (12.5 * 2.25) * ss / ES_DIM.Es;
+      return { sigma: ss, wk: Math.min(k1 * 3 * ss / C.fctm, k1 * (4 / rr + 45)) };
+    };
+    const fp = fis(ef.Mmax, r.barras), fn = fis(ef.Mneg, r.barrasNeg);
+    r.fissura = { lim: wLim, pos: fp, neg: fn, wk: Math.max(fp ? fp.wk : 0, fn ? fn.wk : 0) };
+    if (r.fissura.wk > wLim + 1e-9) { r.ok = false; r.motivos.push(`fissura ${(Math.ceil(r.fissura.wk * 100) / 100).toFixed(2).replace(".", ",")} mm > ${String(wLim).replace(".", ",")} mm (ELS-W, 17.3.3 e Tabela 13.4)`); }
     if (r.flecha.total > r.flecha.lim) { r.ok = false; r.motivos.push(`flecha ${(Math.ceil(r.flecha.total * 1000) / 10).toFixed(1).replace(".", ",")} cm > ${(Math.floor(r.flecha.lim * 1000) / 10).toFixed(1).replace(".", ",")} cm (${rotL})`); }
     if ((t.comParede || t.baldrame) && r.flecha.aposParede > r.flecha.limParede) { r.ok = false; r.motivos.push(`flecha depois da parede ${(Math.ceil(r.flecha.aposParede * 10000) / 10).toFixed(1).replace(".", ",")} mm > ${(Math.floor(r.flecha.limParede * 10000) / 10).toFixed(1).replace(".", ",")} mm (L/500 e até 10 mm; fissura na alvenaria)`); }
     return r;
   };
   const r = verificar(hTeste || t.h || P.viga.h);
   let hMin = null; for (let h = 0.25; h <= 0.801; h += 0.05) { const v = verificar(Math.round(h * 100) / 100); if (v.ok) { hMin = v.h; break; } }
-  r.hMin = hMin; r.b = b; r.L = L;
+  r.hMin = hMin; r.b = b; r.L = L; r.vento = !!ed.vento; r.Mw = t.Mw || null;
   // aço (kg, estimativa): positivas com 10φ de gancho em cada ponta e 8 cm
   // dentro do apoio; 2φ6,3 porta-estribos; estribos fechados com ganchos
   if (r.barras) {
@@ -1586,7 +1774,7 @@ function esMRd(b, h, dl, As, Nd, C) {
     return { N: Fc + As / 2 * (s1 + s2), M: Fc * (h / 2 - a / 2) + As / 2 * (s1 - s2) * (h / 2 - dl) };
   };
   let lo = 1e-5, hi = 60 * h; if (calc(hi).N < Nd) return null;
-  for (let i = 0; i < 80; i++) { const m = (lo + hi) / 2; if (calc(m).N < Nd) lo = m; else hi = m; }
+  for (let i = 0; i < 44; i++) { const m = (lo + hi) / 2; if (calc(m).N < Nd) lo = m; else hi = m; }
   return calc(hi).M;
 }
 function esBarrasPilar(As, b) {
@@ -1598,7 +1786,7 @@ function esBarrasPilar(As, b) {
   return melhor;
 }
 // p: pilar do lançamento; N: { Ng, Nq } no pé do lance; l: comprimento do lance (m)
-function esDimPilar(p, N, l, params, vento) {
+function esDimPilar(p, N, l, params, vento, grav) {
   const P = { ...ES_PADRAO, ...(params || {}) }, C = esConcreto(P.fck), c = ES_NBR.cobrimento.vigaPilar[P.caa] / 1000;
   const b = Math.min(p.b, p.h), hL = Math.max(p.b, p.h), Ac = b * hL, bcm = Math.round(b * 100);
   const gn = bcm < ES_NBR.pilarDimMin ? ES_NBR.gamaN(bcm) : 1, Nd = ES_DIM.gamaF * gn * (N.Ng + N.Nq), fcd = C.fcd * 1000, fyd = C.fyd * 1000;
@@ -1606,7 +1794,11 @@ function esDimPilar(p, N, l, params, vento) {
   // vento: Mu (força ao longo do eixo do pilar, seção trabalhando com p.h) e Mv
   const Mw = (hd) => { if (!vento) return 0; const comH = Math.abs(hd - p.h) < 1e-9 && p.h !== p.b ? true : Math.abs(hd - p.b) < 1e-9 && p.h !== p.b ? false : null; return comH === null ? Math.max(vento.Mu, vento.Mv) : comH ? vento.Mu : vento.Mv; };
   // combinações (11.7): uso principal com vento ψ0 = 0,6; vento principal com uso ψ0 = 0,5
-  const combos = (hd) => { const w = Mw(hd); return w > 1e-6 ? [{ Nd, Mw: ES_DIM.gamaF * gn * 0.6 * w, nome: "uso + 0,6 vento" }, { Nd: ES_DIM.gamaF * gn * (N.Ng + 0.5 * N.Nq), Mw: ES_DIM.gamaF * gn * w, nome: "vento + 0,5 uso" }] : [{ Nd, Mw: 0, nome: "vertical" }]; };
+  // gravidade (grelha): Mu = momento com a seção trabalhando com p.h
+  const Mg = (hd) => { if (!grav) return { g: 0, q: 0 }; const comH = Math.abs(hd - p.h) < 1e-9 && p.h !== p.b ? true : Math.abs(hd - p.b) < 1e-9 && p.h !== p.b ? false : null; if (comH === null) return { g: Math.max(grav.Mu.g, grav.Mv.g), q: Math.max(grav.Mu.q, grav.Mv.q) }; return comH ? grav.Mu : grav.Mv; };
+  const combos = (hd) => { const w = Mw(hd), m = Mg(hd), f = ES_DIM.gamaF * gn; const base = [{ Nd, Mw: f * (m.g + m.q), nome: "vertical" }];
+    return w > 1e-6 ? [{ Nd, Mw: f * (m.g + m.q + 0.6 * w), nome: "uso + 0,6 vento" }, { Nd: f * (N.Ng + 0.5 * N.Nq), Mw: f * (m.g + 0.5 * m.q + w), nome: "vento + 0,5 uso" }] : base; };
+  r.grav = grav;
   r.vento = vento ? { Mu: vento.Mu, Mv: vento.Mv } : null;
   const AsMin = Math.max(0.15 * Nd / fyd, 0.004 * Ac), AsMax = 0.04 * Ac; let As = AsMin;
   for (const [hd, bd] of [[b, hL], [hL, b]]) {
@@ -1624,7 +1816,7 @@ function esDimPilar(p, N, l, params, vento) {
       let need;
       if (!resiste(AsMax)) { r.ok = false; r.motivos.push(`flexo-compressão (${Math.round(hd * 100)} cm${cb.Mw ? `, ${cb.nome}` : ""}): a seção não resiste nem com 4% de aço`); need = AsMax; }
       else if (resiste(0)) need = 0;
-      else { let lo = 0, hi = AsMax; for (let i = 0; i < 50; i++) { const m = (lo + hi) / 2; if (resiste(m)) hi = m; else lo = m; } need = hi; }
+      else { let lo = 0, hi = AsMax; for (let i = 0; i < 28; i++) { const m = (lo + hi) / 2; if (resiste(m)) hi = m; else lo = m; } need = hi; }
       As = Math.max(As, need);
       if (!pior || need > pior.need || (need === pior.need && Md > pior.Md)) pior = { need, h: hd, le, lam, M1min, M2, Md, nu, Mw: cb.Mw, combo: cb.nome, Nd: Ndc };
     }
@@ -1640,7 +1832,7 @@ function esDimPilar(p, N, l, params, vento) {
     r.aco = { [r.barras.d]: r.barras.n * comp * esKgBarra(r.barras.d), [dt]: nE * compE * esKgBarra(dt) };
   }
   // seção que atende: cresce no comprimento (dentro da parede), de 5 em 5 cm
-  if (!r.ok && !r.hSugerida) { for (let h2 = hL + 0.05; h2 <= 0.801; h2 += 0.05) { const t = esDimPilar({ ...p, b, h: Math.round(h2 * 100) / 100, _sem: true }, N, l, params, vento); if (t.ok) { r.hSugerida = t.h; break; } if (p._sem) break; } }
+  if (!r.ok && !r.hSugerida) { for (let h2 = hL + 0.05; h2 <= 0.801; h2 += 0.05) { const t = esDimPilar({ ...p, b, h: Math.round(h2 * 100) / 100, _sem: true }, N, l, params, vento, grav); if (t.ok) { r.hSugerida = t.h; break; } if (p._sem) break; } }
   return r;
 }
 // ═══════════════════════════════════════════════════════════════
@@ -1868,6 +2060,7 @@ function esVento(pavs, lanc, descida, params) {
       const Vi = x.D / r.SD * V[i] * amp, rt = x.rt, rb = x.rb, fT = rt + rb > 0 ? rt / (rt + rb) : 0.5;
       const Mt = Vi * x.h * fT, Mb = Vi * x.h * (1 - fT), c = Math.cos(x.p.ang || 0), sn = Math.sin(x.p.ang || 0), cu = Math.abs(c * ux + sn * uy);
       const o = pilaresV[i][x.p.id] = pilaresV[i][x.p.id] || { Mu: 0, Mv: 0, V: 0 };
+      (o.dir = o.dir || {})[dn] = { Mt, Mb, no: x.p.no };
       // Mu: flexão pela força ao longo de u (a seção trabalha com a dimensão h)
       o.Mu = Math.max(o.Mu, Math.max(Mt, Mb) * cu); o.Mv = Math.max(o.Mv, Math.max(Mt, Mb) * Math.sqrt(Math.max(0, 1 - cu * cu))); o.V = Math.max(o.V, Vi);
       o.Mbase = i === 0 ? Math.max(o.Mbase || 0, Mb) : o.Mbase;
@@ -1876,18 +2069,49 @@ function esVento(pavs, lanc, descida, params) {
   }
   // por pavimento (índice k do lançamento)
   const porPav = pavs.map(() => ({})); andares.forEach((a, i) => { porPav[a.k] = pilaresV[i]; });
-  return { dirs, porPav, avisos, classe, andares: andares.map((a) => ({ k: a.k, topo: a.topo })), params: W };
+  // vento nas vigas: no nó, o momento dos lances (topo do de baixo + pé do de
+  // cima) se divide entre as vigas daquela direção pela rigidez I/L de cada uma
+  const vigasV = pavs.map(() => ({}));
+  const repartir = (k, vs, no, M, dn) => {
+    const ux = dn === "x" ? 1 : 0, uy = 1 - ux, liga = vs.map((v) => { const L = esDist(v.a, v.b); if (L < 0.2) return null; const lado = esDist(v.a, no) <= 0.3 ? "A" : esDist(v.b, no) <= 0.3 ? "B" : null; if (!lado) return null; const c = ((v.b.x - v.a.x) * ux + (v.b.y - v.a.y) * uy) / L; return { v, lado, kb: v.b_ * v.h ** 3 / 12 / L * c * c }; }).filter((x) => x && x.kb > 1e-12);
+    const S = liga.reduce((t, x) => t + x.kb, 0); if (!S) return;
+    for (const x of liga) { const o = (vigasV[k][x.v.id] = vigasV[k][x.v.id] || { A: 0, B: 0 }); o[x.lado] = Math.max(o[x.lado], M * x.kb / S); }
+  };
+  andares.forEach((a, i) => {
+    const vs = (lanc[a.k].vigas || []).filter((v) => !v.baldrame), bald = (lanc[a.k].vigas || []).filter((v) => v.baldrame);
+    for (const [id, o] of Object.entries(pilaresV[i])) for (const [dn, d] of Object.entries(o.dir || {})) {
+      const cima = andares[i + 1] ? Object.values(pilaresV[i + 1]).find((x) => x.dir && x.dir[dn] && esDist(x.dir[dn].no, d.no) < 0.15) : null;
+      repartir(a.k, vs, d.no, d.Mt + (cima ? cima.dir[dn].Mb : 0), dn);
+      if (i === 0) repartir(a.k, bald, d.no, d.Mb, dn);
+    }
+  });
+  return { dirs, porPav, vigas: vigasV, avisos, classe, andares: andares.map((a) => ({ k: a.k, topo: a.topo })), params: W };
 }
 function esDimensionar(pavs, lanc, descida, params) {
   const out = descida.pavimentos.map(() => ({ vigas: {}, pilares: {}, lajes: [] })), aco = {};
   let vento = null; try { vento = esVento(pavs, lanc, descida, params); } catch (e) { vento = null; }
   const soma = (o) => { for (const [d, kg] of Object.entries(o || {})) aco[d] = (aco[d] || 0) + kg; };
   descida.pavimentos.forEach((pv, k) => {
-    for (const t of pv.tramos) { if (!t.L) continue; const r = esDimViga(t, params); r.tramo = t.ids.join("+"); for (const id of t.ids) out[k].vigas[id] = r; soma(r.aco); }
+    for (const t of pv.tramos) {
+      if (!t.L) continue;
+      // vento nas pontas do tramo (das peças que tocam t.a / t.b)
+      let Mw = null; const vv = vento && vento.vigas ? vento.vigas[k] : null;
+      if (vv) { const ponta = (q) => { let m = 0; for (const id of t.ids) { const o = vv[id], pc = (lanc[k].vigas || []).find((v) => v.id === id); if (!o || !pc) continue; if (esDist(pc.a, q) < 0.05) m = Math.max(m, o.A); if (esDist(pc.b, q) < 0.05) m = Math.max(m, o.B); } return m; };
+        const pa = (lanc[k].vigas || []).filter((v) => t.ids.includes(v.id));
+        const extremos = (() => { const ps = pa.flatMap((v) => [v.a, v.b]); let A = null, B = null, dm = -1; for (const p1 of ps) for (const p2 of ps) { const d = esDist(p1, p2); if (d > dm) { dm = d; A = p1; B = p2; } } return [A, B]; })();
+        if (extremos[0]) { const m1 = ponta(extremos[0]), m2 = ponta(extremos[1]); if (m1 + m2 > 1e-6) Mw = { A: m1, B: m2 }; } }
+      const r = esDimViga(Mw ? { ...t, Mw } : t, params); r.tramo = t.ids.join("+"); for (const id of t.ids) out[k].vigas[id] = r; soma(r.aco);
+    }
     for (const p of lanc[k].pilares || []) {
       const N = pv.pilares[p.id]; if (!N) continue;
       const l = (p.topo != null ? p.topo : esTopoPavimento(pavs, k)) - (p.base || 0);
-      const r = p._sem ? null : esDimPilar(p, N, l, params, vento ? (vento.porPav[k] || {})[p.id] : null); if (!r) continue; out[k].pilares[p.id] = r; soma(r.aco);
+      // momentos de gravidade que a grelha mandou para este lance (topo e pé), nos eixos do pilar
+      const mp = (pv.momentosPilar || {})[p.id], grav = mp ? (() => {
+        const c = Math.cos(p.ang || 0), sn = Math.sin(p.ang || 0), loc = (m, comp) => { if (!m) return { u: 0, v: 0 }; const Mx = m[comp + "x"], My = m[comp + "y"]; return { u: Math.abs(-Mx * sn + My * c), v: Math.abs(Mx * c + My * sn) }; };
+        const pior = (comp) => { const a = loc(mp.topo, comp), b = loc(mp.base, comp); return { u: Math.max(a.u, b.u), v: Math.max(a.v, b.v) }; };
+        const g = pior("g"), q = pior("q"); return { Mu: { g: g.u, q: q.u }, Mv: { g: g.v, q: q.v } };
+      })() : null;
+      const r = p._sem ? null : esDimPilar(p, N, l, params, vento ? (vento.porPav[k] || {})[p.id] : null, grav); if (!r) continue; out[k].pilares[p.id] = r; soma(r.aco);
     }
   });
   // lajes (painéis)

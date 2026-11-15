@@ -8,7 +8,7 @@ import assert from "assert";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(join(__dirname, "src", "modules", "estrutural.jsx"), "utf-8");
-const M = new Function(`${src}\nreturn { esLancarPavimentos, esDescidaCargas, esTopoPavimento, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao, esLinhaContinua, esPaineisLaje, esDimViga, esDimPilar, esDimensionar, esMRd, esConcreto, esPlacaApoiada, esDimLaje, esCalcularEstrutura, esParaOrcamento, esDimFundacao, esFundacaoObra, esPadmEstaca, esCargaEscada, esResumoMateriais, esAlturaLivreEscada, esCompatibilizar, esSepararBlocos, esApoiosIndiretos, esVento, esS2 };`)();
+const M = new Function(`${src}\nreturn { esLancarPavimentos, esDescidaCargas, esTopoPavimento, esCargaParede, esCargaLaje, esCargaTelhado, ES_NBR, ES_PADRAO, esNos, esNoPedePilar, esLancar, esVerificar, esQuantitativos, esCantosPilar, esMenorVao, esFckOk, esPilarNoVao, esLinhaContinua, esPaineisLaje, esDimViga, esDimPilar, esDimensionar, esMRd, esConcreto, esPlacaApoiada, esDimLaje, esCalcularEstrutura, esParaOrcamento, esDimFundacao, esFundacaoObra, esPadmEstaca, esCargaEscada, esResumoMateriais, esAlturaLivreEscada, esCompatibilizar, esSepararBlocos, esApoiosIndiretos, esVento, esS2, esGrelha, esTramoDaGrelha };`)();
 
 let ok = 0, falhou = 0;
 const t = (nome, fn) => { try { fn(); ok++; } catch (e) { falhou++; console.log("FALHOU:", nome, "\n ", e.message); } };
@@ -249,8 +249,10 @@ t("descida de cargas: o que chega na fundação é o peso de tudo (equilíbrio)"
     [{ paredes: caixa, areas: [laje], nivel: 0, usoPadrao: "residencial" }],
     [{ paredes: caixa, areas: [laje], nivel: 0, usoPadrao: "residencial" }, { paredes: caixa, areas: [{ ...laje, carga: { tipo: "macica", uso: "forro" } }], nivel: 2.9, usoPadrao: "forro" }],
   ]) {
-    const lanc = M.esLancarPavimentos(pavs, {});
-    const d = M.esDescidaCargas(pavs, lanc, {});
+    // pilares quadrados: com a grelha, pilar retangular girado atrai mais momento (e muda a reação)
+    const P19 = { pilar: { auto: false, b: 0.19, h: 0.19 } };
+    const lanc = M.esLancarPavimentos(pavs, P19);
+    const d = M.esDescidaCargas(pavs, lanc, P19);
     let esperadoG = 0, esperadoQ = 0;
     pavs.forEach((p, k) => {
       const topo = M.esTopoPavimento(pavs, k);
@@ -549,6 +551,38 @@ t("vento (NBR 6123) e γz (NBR 6118 15.5.3): forças, deslocamentos e momento no
   assert.ok(v2.dirs.x.uS[1] > v2.dirs.x.uS[0] && v2.dirs.x.okTopo !== undefined);
   // V0 maior: forças crescem com V0²
   const c3 = M.esCalcularEstrutura(um, { vaoMax: 6, vento: { V0: 50 } }); assert.ok(Math.abs(c3.dim.vento.dirs.x.F[0] / x.F[0] - (50 / 45) ** 2) < 1e-9);
+});
+t("grelha: bi-apoiada, engastada pelas molas, viga apoiada em viga (equilíbrio)", () => {
+  const V = (id, a, b) => ({ id, a, b, b_: 0.14, h: 0.4 }), Pl = (id, x, y) => ({ id, no: P(x, y), b: 0.19, h: 0.19 }), E = 2.5e7;
+  const viga = V("A", P(0, 0), P(4, 0)), pls = [Pl("P1", 0, 0), Pl("P2", 4, 0)], carga = new Map([["A", { g: 40, q: 8 }]]);
+  for (const [k, Mesp] of [[1e-6, 0], [1e12, 10 * 16 / 12]]) {
+    const molas = new Map(pls.map((p) => [p.id, { kx: k, ky: k, lances: [] }]));
+    const g = M.esGrelha([viga], pls, carga, [], molas, E); assert.ok(g, "resolveu");
+    assert.ok(Math.abs(g.reac.P1.g - 20) < 1e-6 && Math.abs(g.reac.P2.q - 4) < 1e-6, JSON.stringify(g.reac));
+    const t = M.esTramoDaGrelha({ a: viga.a, b: viga.b, L: 4, pecas: [viga] }, g);
+    assert.ok(Math.abs(t.Ma.g + Mesp) < 0.01 && Math.abs(t.Mb.g + Mesp) < 0.01, `${t.Ma.g} ${t.Mb.g}`);
+  }
+  // viga B apoiada no meio da A (sem pilar): a A recebe a reação da B como carga concentrada
+  const vb = V("B", P(2, 0), P(2, 3)), pls2 = [...pls, Pl("P3", 2, 3)], carga2 = new Map([["A", { g: 40, q: 0 }], ["B", { g: 30, q: 0 }]]);
+  const molas2 = new Map(pls2.map((p) => [p.id, { kx: 1e-6, ky: 1e-6, lances: [] }]));
+  const g2 = M.esGrelha([viga, vb], pls2, carga2, [], molas2, E);
+  const soma = Object.values(g2.reac).reduce((t, r) => t + r.g, 0); assert.ok(Math.abs(soma - 70) < 1e-6, String(soma));
+  const tA = M.esTramoDaGrelha({ a: viga.a, b: viga.b, L: 4, pecas: [viga] }, g2);
+  assert.ok(tA.pts.length === 1 && Math.abs(tA.pts[0].t - 2) < 1e-6 && tA.pts[0].g > 10 && tA.pts[0].g < 20, JSON.stringify(tA.pts));
+  // pilar de cima caindo no meio da viga (transição)
+  const g3 = M.esGrelha([viga], pls, new Map([["A", { g: 0, q: 0 }]]), [{ x: 1, y: 0, g: 12, q: 0 }], new Map(pls.map((p) => [p.id, { kx: 1e-6, ky: 1e-6, lances: [] }])), E);
+  assert.ok(Math.abs(g3.reac.P1.g - 9) < 1e-6 && Math.abs(g3.reac.P2.g - 3) < 1e-6, JSON.stringify(g3.reac));
+});
+t("etapa 3 no cálculo: grelha, vento nas vigas, momento de gravidade nos pilares e fissura", () => {
+  const ps = [W(P(0, 0), P(8, 0)), W(P(8, 0), P(8, 6)), W(P(8, 6), P(0, 6)), W(P(0, 6), P(0, 0)), W(P(4, 0), P(4, 6))];
+  const laje = (uso) => ({ tipo: "laje", pts: [P(0, 0), P(8, 0), P(8, 6), P(0, 6)], esp: 0.12, cota: 2.8, carga: { tipo: "macica", uso } });
+  const dois = [{ paredes: ps, areas: [laje("residencial")], nivel: 0, usoPadrao: "residencial" }, { paredes: ps, areas: [laje("forro")], nivel: 2.9, usoPadrao: "forro" }];
+  const c = M.esCalcularEstrutura(dois, { vaoMax: 6 });
+  assert.ok(c.desc.pavimentos.every((p) => p.grelha), "grelha nos dois pavimentos");
+  const vs = Object.values(c.dim.pavimentos[0].vigas); assert.ok(vs.some((r) => r.vento && r.Mw), "vento nas vigas");
+  assert.ok(vs.every((r) => r.fissura && r.fissura.lim === 0.3), "fissura verificada (CAA II: 0,3 mm)");
+  const pl = Object.values(c.dim.pavimentos[0].pilares); assert.ok(pl.some((r) => r.grav && r.grav.Mu.g + r.grav.Mv.g > 0.1), "momento de gravidade da grelha nos pilares");
+  // equilíbrio continua: soma na fundação = soma das cargas (casa de um pavimento, pilares quadrados)
 });
 t("fundação: blocos que se encostam são girados ou viram bloco conjunto", () => {
   const dp = { barras: { n: 4, d: 10 } };
