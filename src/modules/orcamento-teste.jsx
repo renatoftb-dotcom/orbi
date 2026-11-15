@@ -8794,12 +8794,13 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   });
   const passoAtual = !propostaData ? (definicoesOk && referencia ? 2 : 1)
     : !etapaPagamentoConfirmada ? 3
-    : (!modeloEscolhido || !templateEdicaoConfirmada) ? 4 : 5;
+    : !templateEdicaoConfirmada ? 4 : 5;
   // Voltar a uma etapa já feita, sem perder o que foi preenchido nas outras.
   const irParaEtapa = (n) => {
     if (n <= 2) { setEtapaPagamentoConfirmada(false); setPropostaData(null); return; }
     if (n === 3) { setEtapaPagamentoConfirmada(false); return; }
-    if (n === 4) { setModeloEscolhido(null); setEtapaPagamentoConfirmada(true); }
+    // a proposta (etapa 4) é o próprio documento: sobe para o topo dele
+    if (n === 4) { try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) { /* sem janela */ } }
   };
   const mostrarEtapas = !modoVer && !propostaReadOnlyForce && modoAbertura !== "ver";
   const travaAtePagamento = conferencia.some((c) => c.etapa <= 2 && c.bloqueia && !c.ok);
@@ -9044,7 +9045,13 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             // useStates internos, que ficariam stale com o snapshot anterior).
             gerarProposta();
             setPreviewRemountKey(k => k + 1);
+            // sem tela de escolha de modelo: vai direto para a proposta, no
+            // modelo já usado (ou o Padrão); a troca fica na barrinha do topo
+            setModeloEscolhido((m) => m || "01-editorial");
+            setTemplateEdicaoConfirmada(true);
             setEtapaPagamentoConfirmada(true);
+            // abre a proposta do topo: barra de modelo e passo a passo à vista
+            setTimeout(() => { try { window.scrollTo(0, 0); } catch (e) { /* sem janela */ } }, 0);
           }}
         />
       </>);
@@ -9054,7 +9061,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     // entre os templates disponíveis. Aparece UMA vez por orçamento (após
     // etapa de pagamento, antes do template de edição). Pulada quando já
     // tem modeloEscolhido (vindo do snapshot) ou em modo read-only.
-    if (!modeloEscolhido && !propostaReadOnlyForce) {
+    // Não há mais tela própria: a escolha fica na barra pequena no topo da
+    // proposta. Este bloco só segura algum caminho antigo sem modelo.
+    if (false && !modeloEscolhido && !propostaReadOnlyForce) {
       return (<>
         {etapasEl}
         <EscolhaModeloOrcamento
@@ -9119,7 +9128,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     // Também passa o templateId escolhido na tela de seleção (Fase 6e).
     const liveDataParaModelo = {
       ...liveData,
-      ...(modeloEscolhido ? { templateId: modeloEscolhido } : {}),
+      templateId: modeloEscolhido || liveData.templateId || "01-editorial",
       ...(templateTextos || templateValores || templateFormaPagamento
         ? { template: { textos: templateTextos, valores: templateValores, formaPagamento: templateFormaPagamento } }
         : {}),

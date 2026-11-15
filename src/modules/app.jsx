@@ -2672,32 +2672,12 @@ export default function ModuloClientesFornecedores() {
             posicao: "top", autoMs: 2400,
             acao: "click",
           },
-          // ── Tela de Escolha de Modelo de Orçamento ──
-          // Mostra um modelo de cada vez. Tutorial demonstra a navegação:
-          // clica seta direita (vê o "Direto"), volta com seta esquerda
-          // (volta pro "Padrão"), e confirma com "Usar este modelo".
+          // ── Modelo da proposta: barra pequena no topo do preview ──
           {
-            targetId: "modelo-preview-container",
-            titulo: "Escolha o modelo",
-            descricao: "Use as setas pra ver os modelos disponíveis.",
-            posicao: "top", autoMs: 3000,
-          },
-          {
-            targetId: "modelo-seta-direita",
-            cursorOnly: true, autoMs: 1800,
-            acao: "click",
-          },
-          {
-            targetId: "modelo-seta-esquerda",
-            cursorOnly: true, autoMs: 1800,
-            acao: "click",
-          },
-          {
-            targetId: "modelo-usar",
-            titulo: "Usar este modelo",
-            descricao: "Vamos seguir com o modelo Padrão.",
-            posicao: "top", autoMs: 2400,
-            acao: "click",
+            targetId: "modelo-barra",
+            titulo: "Modelo da proposta",
+            descricao: "O modelo se troca aqui em cima, a qualquer momento.",
+            posicao: "bottom", autoMs: 3000,
           },
           // ── Proposta Preview: gerar PDF ──
           {

@@ -63,70 +63,39 @@ const TEMPLATES_PROPOSTA = [
 // Quando só há 1 modelo ativo a barra ainda é mostrada — feedback visual
 // de qual modelo está ativo, mesmo sem opção de troca.
 //
-// Cada botão tem:
-//   - Thumbnail visual (40×52) com mini-representação do layout
-//   - Nome curto do modelo (Padrão, Direto, etc.)
-// Indicação visual de modelo ativo: borda preta 2px + fundo cinza claro.
+// Cada botão é um chip pequeno: marca de cor do modelo + nome curto.
+// Ativo: borda e texto azuis. Substitui a antiga tela de escolha de modelo.
 function TemplateBarProposta({ templateId, onChange, lockEdicao }) {
   if (lockEdicao) return null;
+  // Barra pequena: é aqui (e só aqui) que se troca o modelo da proposta.
   return (
-    <div style={{
+    <div className="no-print" data-tutorial-id="modelo-barra" data-vk-modelo-barra="1" style={{
       position:"sticky", top:0, zIndex:20, background:"#fff",
-      borderBottom:"2px solid #d1d5db", padding:"10px 16px",
-      display:"flex", alignItems:"center", gap:10, overflowX:"auto",
+      borderBottom:"1px solid rgba(38,36,33,0.12)", padding:"6px 16px",
+      display:"flex", alignItems:"center", gap:6, overflowX:"auto",
       fontFamily:"'Inter', system-ui, -apple-system, sans-serif",
     }}>
-      <span style={{
-        fontSize:10, fontWeight:700, color:"#9ca3af",
-        textTransform:"uppercase", letterSpacing:"0.1em",
-        flexShrink:0, marginRight:4,
-      }}>
-        Modelo:
-      </span>
+      <span style={{ fontSize:11, color:"#828a98", flexShrink:0, marginRight:2 }}>Modelo</span>
       {TEMPLATES_PROPOSTA.map(t => {
         const ativo = templateId === t.id;
         return (
           <button
             key={t.id}
+            type="button"
+            data-vk-modelo={t.id}
+            aria-pressed={ativo}
+            title={t.desc}
             onClick={() => onChange(t.id)}
             style={{
-              flexShrink:0,
-              padding: ativo ? "5px 9px 4px" : "6px 10px 5px",
-              border: ativo ? "2px solid #111" : "2px solid #d1d5db",
-              background: ativo ? "#fafbfc" : "#fff",
-              borderRadius: 12, cursor:"pointer", fontFamily:"inherit",
-              display:"flex", flexDirection:"column", alignItems:"center", gap:3,
-              minWidth:78, transition:"all 0.15s",
+              flexShrink:0, display:"inline-flex", alignItems:"center", gap:6,
+              padding:"3px 10px", borderRadius:999, cursor:"pointer", fontFamily:"inherit",
+              fontSize:12, fontWeight: ativo ? 600 : 500, lineHeight:"18px",
+              border: ativo ? "1px solid #0474f4" : "1px solid rgba(38,36,33,0.16)",
+              background: ativo ? "#eaf3ff" : "#fff",
+              color: ativo ? "#0474f4" : "#374151",
             }}>
-            {/* Thumbnail visual de cada modelo. SVG mini-mockup. */}
-            <span aria-hidden="true" style={{ display:"inline-block", width:40, height:52 }}>
-              {t.id === "01-editorial" && (
-                <svg viewBox="0 0 40 52" width="40" height="52" style={{ borderRadius:3, border:"0.5px solid #e5e7eb", background:"#fff" }}>
-                  <rect x="3" y="3" width="11" height="6" fill="#111" rx="1"/>
-                  <line x1="3" y1="14" x2="37" y2="14" stroke="#111" strokeWidth="1"/>
-                  <line x1="3" y1="20" x2="32" y2="20" stroke="#9ca3af" strokeWidth="0.5"/>
-                  <line x1="3" y1="24" x2="34" y2="24" stroke="#9ca3af" strokeWidth="0.5"/>
-                  <line x1="3" y1="32" x2="20" y2="32" stroke="#9ca3af" strokeWidth="0.7"/>
-                  <line x1="3" y1="38" x2="30" y2="38" stroke="#9ca3af" strokeWidth="0.5"/>
-                  <line x1="3" y1="42" x2="28" y2="42" stroke="#9ca3af" strokeWidth="0.5"/>
-                  <line x1="3" y1="46" x2="32" y2="46" stroke="#9ca3af" strokeWidth="0.5"/>
-                </svg>
-              )}
-              {t.id === "02-direto" && (
-                <svg viewBox="0 0 40 52" width="40" height="52" style={{ borderRadius:3, border:"0.5px solid #e5e7eb", background:"#fff" }}>
-                  <rect x="0" y="0" width="40" height="18" fill="#fbbf24"/>
-                  <text x="3" y="13" fontSize="6" fontWeight="800" fill="#111">PROPOSTA</text>
-                  <line x1="3" y1="24" x2="34" y2="24" stroke="#fbbf24" strokeWidth="1"/>
-                  <line x1="3" y1="29" x2="28" y2="29" stroke="#374151" strokeWidth="0.5"/>
-                  <line x1="3" y1="33" x2="32" y2="33" stroke="#9ca3af" strokeWidth="0.5"/>
-                  <line x1="3" y1="40" x2="30" y2="40" stroke="#fbbf24" strokeWidth="1"/>
-                  <line x1="3" y1="45" x2="34" y2="45" stroke="#9ca3af" strokeWidth="0.5"/>
-                </svg>
-              )}
-            </span>
-            <span style={{ fontSize:11, fontWeight: ativo ? 600 : 500, color: ativo ? "#111" : "#374151" }}>
-              {t.label}
-            </span>
+            <span aria-hidden="true" style={{ width:8, height:8, borderRadius:2, background:t.accent, flexShrink:0 }} />
+            {t.label}
           </button>
         );
       })}

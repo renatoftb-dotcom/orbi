@@ -78651,6 +78651,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             setModeloEscolhido((m) => m || "01-editorial");
             setTemplateEdicaoConfirmada(true);
             setEtapaPagamentoConfirmada(true);
+            // abre a proposta do topo: barra de modelo e passo a passo à vista
+            setTimeout(() => { try { window.scrollTo(0, 0); } catch (e) { /* sem janela */ } }, 0);
           }}
         />
       </>);
